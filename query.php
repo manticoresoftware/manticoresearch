@@ -81,7 +81,7 @@ for ( $i=0; $i<count($args); $i++ )
 		$group = (int)$args[++$i];
 	} else
 	{
-		$q .= $args[$i];
+		$q .= $args[$i] . " ";
 	}
 }
 

@@ -1552,8 +1552,8 @@ CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 
 			if ( docID<*pdocs[i] )
 			{
-				i = 0;
 				docID = *pdocs[i];
+				i = 0;
 				continue;
 			}
 			if (++i != nwords)
@@ -1563,8 +1563,8 @@ CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 			if ( pQuery->m_iGroup )
 				if ( pQuery->m_iGroup != int( ((docID-1) & iGroupMask) + m_tHeader.m_iMinGroupID ) )
 			{
-				i = 0;
 				docID++;
+				i = 0;
 				continue;
 			}
 

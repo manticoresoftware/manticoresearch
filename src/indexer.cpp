@@ -2,11 +2,14 @@
 // $Id$
 //
 
+#include "sphinx.h"
+
 #include <assert.h>
 #include <sys/stat.h>
+#if USE_WINDOWS
+#else
 #include <unistd.h>
-
-#include "sphinx.h"
+#endif
 
 // *** MAIN ***
 
@@ -56,6 +59,8 @@ int main(int argc, char **argv)
 	////////////////////
 
 	char * sType = confIndexer->get ( "type" );
+
+	#if USE_MYSQL
 	if ( !strcmp ( sType, "mysql" ) )
 	{
 		CHECK_CONF ( confIndexer, "indexer", "sql_host" );
@@ -83,8 +88,10 @@ int main(int argc, char **argv)
 		}
 
 		pSource = pSrcMysql;
+	}
+	#endif
 
-	} else if ( !strcmp ( sType, "xmlpipe" ) )
+	if ( !strcmp ( sType, "xmlpipe" ) )
 	{
 		CHECK_CONF ( confIndexer, "indexer", "xmlpipe_command" );
 
@@ -98,8 +105,9 @@ int main(int argc, char **argv)
 		}
 
 		pSource = pSrcXML;
+	}
 
-	} else
+	if ( !pSource )
 	{
 		fprintf ( stderr, "FATAL: unknown source type '%s'.", sType );
 	}

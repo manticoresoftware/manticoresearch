@@ -2,21 +2,25 @@
 // $Id$
 //
 
+#include "sphinx.h"
+
 #include <errno.h>
 #include <fcntl.h>
-#include <netinet/in.h>
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <time.h>
+
+#if !USE_WINDOWS
 #include <unistd.h>
+#include <netinet/in.h>
 #include <sys/file.h>
 #include <sys/socket.h>
-#include <sys/stat.h>
 #include <sys/time.h>
-#include <sys/types.h>
 #include <sys/wait.h>
-#include <time.h>
-#include "sphinx.h"
+#endif
 
 static int read_timeout = 5;
 static int children_count = 0;
@@ -233,44 +237,48 @@ int main(int argc, char **argv)
 					time(&now);
 					ctime_r(&now, tbuf);
 					tbuf[24] = '\0';
-					sprintf(buf, "[%s] %d.%02d sec: [%d %d] %s\n",
-						tbuf,
-						r->queryTime / 1000000,
-						(r->queryTime % 1000000) / 10000,
-						start, count,
-						query);
+					sprintf ( buf, "[%s] %.2f sec: [%d %d] %s\n",
+						tbuf, r->m_fQueryTime, start, count, query );
 					flock(log, LOCK_EX);
 					lseek(log, 0, SEEK_END);
 					write(log, buf, strlen(buf));
 					flock(log, LOCK_UN);
 
 					// serve the answer to client
-					rcount = Min(count, r->matches->count - start);
-					sprintf(buf, "MATCHES %d\n", rcount);
-					write(rsock, buf, strlen(buf));
+					rcount = Min ( count, r->m_pMatches->count - start );
+
+					sprintf ( buf, "MATCHES %d\n", rcount );
+					write ( rsock, buf, strlen(buf) );
+
 					for ( i=start; i<start+rcount; i++ )
 					{
 						sprintf ( buf, "MATCH %d %d %d\n",
-							r->matches->data[i].m_iGroupID,
-							r->matches->data[i].m_iDocID,
-							r->matches->data[i].m_iWeight );
-						write ( rsock, buf, strlen ( buf ) );
+							r->m_pMatches->data[i].m_iGroupID,
+							r->m_pMatches->data[i].m_iDocID,
+							r->m_pMatches->data[i].m_iWeight );
+						write ( rsock, buf, strlen(buf) );
 					}
-					sprintf(buf, "TOTAL %d\n", r->matches->count);
-					write(rsock, buf, strlen(buf));
-					sprintf(buf, "TIME %d.%02d\n",
-						r->queryTime / 1000000,
-						(r->queryTime % 1000000) / 10000);
-					write(rsock, buf, strlen(buf));
-					sprintf(buf, "WORDS %d\n", r->numWords);
-					write(rsock, buf, strlen(buf));
-					for (i = 0; i < r->numWords; i++) {
-						sprintf(buf, "WORD %s %d %d\n", r->wordStats[i].word,
-						r->wordStats[i].docs, r->wordStats[i].hits);
-						write(rsock, buf, strlen(buf));
+
+					sprintf ( buf, "TOTAL %d\n", r->m_pMatches->count );
+					write ( rsock, buf, strlen(buf) );
+
+					sprintf ( buf, "TIME %.2f\n", r->m_fQueryTime );
+					write ( rsock, buf, strlen(buf) );
+
+					sprintf ( buf, "WORDS %d\n", r->m_iNumWords );
+					write ( rsock, buf, strlen(buf) );
+
+					for ( i=0; i < r->m_iNumWords; i++ )
+					{
+						sprintf ( buf, "WORD %s %d %d\n",
+							r->m_tWordStats[i].m_sWord,
+							r->m_tWordStats[i].m_iDocs,
+							r->m_tWordStats[i].m_iHits );
+						write ( rsock, buf, strlen(buf) );
 					}
 					break;
 				}
+
 				// bail out
 				close(rsock);
 				exit(0);

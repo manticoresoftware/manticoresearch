@@ -41,13 +41,14 @@ int main ( int argc, char ** argv )
 
 	// get query
 	char sQuery [ 1024 ];
-	strcat ( sQuery, "" );
+	sQuery[0] = '\0';
 
 	for ( int i=1; i<argc; i++ )
 	{
 		if ( strlen(sQuery) + strlen(argv[i]) + 1 >= sizeof(sQuery) )
 			break;
 		strcat ( sQuery, argv[i] );
+		strcat ( sQuery, " " );
 	}
 
 	// build weights
@@ -64,26 +65,28 @@ int main ( int argc, char ** argv )
 		dWeights, SPH_MAX_FIELD_COUNT );
 
 	fprintf ( stdout, "query '%s': %d matches, %.2f sec\n",
-		sQuery, pResult->matches->count, pResult->queryTime/1000000.0f );
+		sQuery, pResult->m_pMatches->count, pResult->m_fQueryTime );
 
-	if ( pResult->matches->count )
+	if ( pResult->m_pMatches->count )
 	{
 		fprintf ( stdout, "\nmatches:\n" );
-		for ( int i=0; i<pResult->matches->count; i++ )
+		for ( int i=0; i<pResult->m_pMatches->count; i++ )
 		{
 			fprintf ( stdout, "%d. group=%d, title=%d, weight=%d\n",
-				i,
-				pResult->matches->data[i].m_iGroupID,
-				pResult->matches->data[i].m_iDocID,
-				pResult->matches->data[i].m_iWeight );
+				1+i,
+				pResult->m_pMatches->data[i].m_iGroupID,
+				pResult->m_pMatches->data[i].m_iDocID,
+				pResult->m_pMatches->data[i].m_iWeight );
 		}
 
 		fprintf ( stdout, "\nwords:\n" );
-		for ( int i=0; i<pResult->numWords; i++ )
+		for ( int i=0; i<pResult->m_iNumWords; i++ )
 		{
 			fprintf ( stdout, "%d. '%s': %d documents, %d hits\n",
-				i, pResult->wordStats[i].word,
-				pResult->wordStats[i].docs, pResult->wordStats[i].hits );
+				1+i,
+				pResult->m_tWordStats[i].m_sWord,
+				pResult->m_tWordStats[i].m_iDocs,
+				pResult->m_tWordStats[i].m_iHits );
 		}
 	}
 }

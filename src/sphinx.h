@@ -5,10 +5,30 @@
 #ifndef _sphinx_
 #define _sphinx_
 
+/////////////////////////////////////////////////////////////////////////////
+
+#define USE_MYSQL		1	/// whether to compile with MySQL support
+#define USE_WINDOWS		0	/// whether to compile for Windows
+
+/////////////////////////////////////////////////////////////////////////////
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#if USE_MYSQL
 #include <mysql/mysql.h>
+#endif
+
+#if USE_WINDOWS
+	#define WIN32_LEAN_AND_MEAN
+	#include <windows.h>
+#else
+	typedef unsigned int		DWORD;
+	typedef unsigned char		BYTE;
+#endif
+
+/////////////////////////////////////////////////////////////////////////////
 
 #define SPH_MAX_QUERY_WORDS		10
 #define SPH_MAX_WORD_LEN		64
@@ -28,19 +48,15 @@
 #define Min(a,b) ((a)<(b)?(a):(b))
 #define Max(a,b) ((a)>(b)?(a):(b))
 
-typedef unsigned int		DWORD;
-typedef unsigned char		BYTE;
+/////////////////////////////////////////////////////////////////////////////
 
-// ***
+#define SafeDelete(_x) { if (_x) { delete (_x); (_x) = NULL; } }
 
 void sphDie(char *message, ...);
 void *sphMalloc(size_t size);
 void *sphRealloc(void *ptr, size_t size);
 void sphFree(void *ptr);
 char *sphDup(char *s);
-
-/// time, in mcs
-int		sphTimer ();
 
 /// time, in seconds
 float	sphLongTimer ();
@@ -204,6 +220,7 @@ struct CSphSource_Text : CSphSource_Document
 };
 
 
+#if USE_MYSQL
 /// generic MySQL source
 /// multi-field plain-text documents fetched from given query
 struct CSphSource_MySQL : CSphSource_Document
@@ -221,6 +238,7 @@ private:
 	MYSQL_ROW			sqlRow;
 	MYSQL				sqlDriver;
 };
+#endif
 
 
 /// search query match
@@ -372,14 +390,20 @@ private:
 
 struct CSphQueryResult
 {
-	struct {
-		char *word;
-		int docs, hits;
-	} wordStats[SPH_MAX_QUERY_WORDS];
-	int numWords;
-	int queryTime;
+	struct
+	{
+		char *			m_sWord;
+		int				m_iDocs;
+		int				m_iHits;
+	}					m_tWordStats [ SPH_MAX_QUERY_WORDS ];
 
-	CSphList_Match *matches;
+	int					m_iNumWords;
+	float				m_fQueryTime;
+	CSphList_Match *	m_pMatches;
+
+public:
+						CSphQueryResult ();
+	virtual				~CSphQueryResult ();
 };
 
 struct CSphIndex

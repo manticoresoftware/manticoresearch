@@ -2,22 +2,32 @@
 // $Id$
 //
 
+#include "sphinx.h"
+#include "sphinxstem.h"
+
 #include <ctype.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
-#include <unistd.h>
-#include <mysql/mysql.h>
-#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <assert.h>
 #include <limits.h>
 
-#include "sphinx.h"
-#include "sphinxstem.h"
+#if USE_WINDOWS
+	#include <io.h> // for open()
+	#define popen _popen
+	#define pclose _pclose
+#else
+	#include <unistd.h>
+	#include <sys/time.h>
+#endif
+
+#if USE_MYSQL
+#include <mysql/mysql.h>
+#endif
 
 // *** LOWERCASING TABLE ***
 
@@ -76,25 +86,32 @@ void sphFree(void *ptr)
 }
 
 
-/// time, in mcs
-int sphTimer()
-{
-	static int s_sec = -1, s_usec = -1;
-	struct timeval tv;
-
-	if (s_sec == -1) {
-		gettimeofday(&tv, NULL);
-		s_sec = tv.tv_sec;
-		s_usec = tv.tv_usec;
-	}
-	gettimeofday(&tv, NULL);
-	return (tv.tv_sec - s_sec) * 1000000 + (tv.tv_usec - s_usec);
-}
-
-
 /// time, in seconds
 float sphLongTimer ()
 {
+#if USE_WINDOWS
+	// Windows time query
+	static float fFreq;
+	static INT64 iStart;
+	static bool bFirst = true;
+
+	LARGE_INTEGER iLarge;
+	if ( bFirst )
+	{
+		QueryPerformanceFrequency ( &iLarge );
+		fFreq = 1.0f/iLarge.QuadPart;
+
+		QueryPerformanceCounter ( &iLarge );
+		iStart = iLarge.QuadPart;
+
+		bFirst = false;
+	}
+
+	QueryPerformanceCounter ( &iLarge);
+	return ( iLarge.QuadPart-iStart )*fFreq;
+
+#else
+	// UNIX time query
 	static int s_sec = -1, s_usec = -1;
 	struct timeval tv;
 
@@ -106,6 +123,8 @@ float sphLongTimer ()
 	}
 	gettimeofday ( &tv, NULL );
 	return float(tv.tv_sec-s_sec) + float(tv.tv_usec-s_usec)/1000000.0f;
+
+#endif // USE_WINDOWS
 }
 
 
@@ -464,7 +483,36 @@ int CSphReader_VLN::decodeHits(CSphList_Int *hl)
 	return n;
 }
 
-// *** INDEX ***
+/////////////////////////////////////////////////////////////////////////////
+// QUERY RESULT
+/////////////////////////////////////////////////////////////////////////////
+
+CSphQueryResult::CSphQueryResult ()
+{
+	for ( int i=0; i<SPH_MAX_QUERY_WORDS; i++ )
+	{
+		m_tWordStats[i].m_sWord = NULL;
+		m_tWordStats[i].m_iDocs = 0;
+		m_tWordStats[i].m_iHits = 0;
+	}
+
+	m_iNumWords = 0;
+	m_fQueryTime = 0.0f;
+	m_pMatches = NULL;
+}
+
+
+CSphQueryResult::~CSphQueryResult ()
+{
+	for ( int i=0; i<SPH_MAX_QUERY_WORDS; i++ )
+		sphFree ( m_tWordStats[i].m_sWord );
+
+	SafeDelete ( m_pMatches );
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// INDEX
+/////////////////////////////////////////////////////////////////////////////
 
 CSphIndex_VLN::CSphIndex_VLN(char *filename)
 {
@@ -1100,20 +1148,22 @@ CSphQueryResult *CSphIndex_VLN::query(CSphDict *dict, char *query, int * pUserWe
 	int i, j, nwords, chunkPos, weights [ SPH_MAX_FIELD_COUNT ], imin, nweights;
 	DWORD *phits[SPH_MAX_QUERY_WORDS], *pdocs[SPH_MAX_QUERY_WORDS],
 		wordID, docID, pmin, k;
-	CSphQueryResult *result;
-	struct timeval tv1, tv2;
 
-	gettimeofday(&tv1, NULL);
+	// create result and start timing
+	CSphQueryResult * pResult = new CSphQueryResult();
+	pResult->m_pMatches = new CSphList_Match ();
+	pResult->m_fQueryTime = -sphLongTimer ();
+
+	// easy internal profiler
 	#ifdef SPH_SEARCH_TIMER
-	int t1, t2;
-
-	t1 = sphTimer();
-	#define SPH_TIMER(msg) \
-		t2 = sphTimer(); \
-		fprintf(stderr, "DEBUG: %s %.2f\n", msg, (float)(t2 - t1) / 1000000); \
-		t1 = t2;
+		float t1, t2;
+		t1 = sphLongTimer ();
+		#define SPH_TIMER(_msg) \
+			t2 = sphTimer(); \
+			fprintf ( stderr, "DEBUG: %s %.2f\n", msg, t2-t1 ); \
+			t1 = t2;
 	#else
-	#define SPH_TIMER(msg)
+		#define SPH_TIMER(_msg)
 	#endif
 
 	// open files
@@ -1152,8 +1202,6 @@ CSphQueryResult *CSphIndex_VLN::query(CSphDict *dict, char *query, int * pUserWe
 	delete qp;
 
 	// init lists
-	result = new CSphQueryResult();
-	result->matches = new CSphList_Match();
 	vIndexPage = new CSphList_Int();
 	vChunkHeader = new CSphList_Int();
 
@@ -1219,20 +1267,21 @@ CSphQueryResult *CSphIndex_VLN::query(CSphDict *dict, char *query, int * pUserWe
 	delete rdData;
 
 	// build word stats
-	result->numWords = nwords;
+	pResult->m_iNumWords = nwords;
 	for (i = 0; i < nwords; i++) {
-		result->wordStats[i].word = sphDup(qwords[i].word);
-		result->wordStats[i].docs = (qwords[i].docs->count - 2) / 2;
-		result->wordStats[i].hits = qwords[i].hits->count - 1;
+		pResult->m_tWordStats[i].m_sWord = sphDup(qwords[i].word);
+		pResult->m_tWordStats[i].m_iDocs = (qwords[i].docs->count - 2) / 2;
+		pResult->m_tWordStats[i].m_iHits = qwords[i].hits->count - 1;
 	}
 
 	// reorder hit lists and return if one of then is empty
 	qsort(qwords, nwords, sizeof(CSphQueryWord), cmpQueryWord);
-	if (!qwords[0].hits->count) return result;
+	if (!qwords[0].hits->count)
+		return pResult;
 
 	// build weights
 	nweights = m_tHeader.m_iFieldCount;
-	for ( int i=0; i<nweights; i++ ) // defaults
+	for ( i=0; i<nweights; i++ ) // defaults
 		weights[i] = 1;
 	if ( pUserWeights ) // user-supplied
 		for ( int i=0; i<Min ( nweights, iUserWeights ); i++ )
@@ -1305,7 +1354,7 @@ CSphQueryResult *CSphIndex_VLN::query(CSphDict *dict, char *query, int * pUserWe
 			j += weights[i] * ( matchWeight[i] + phraseWeight[i] );
 
 		// add match
-		result->matches->add (
+		pResult->m_pMatches->add (
 			((docID-1) & iGroupMask) + m_tHeader.m_iMinGroupID, // unpack group id
 			((docID-1) >> m_tHeader.m_iGroupBits) + m_tHeader.m_iMinDocID, // unpack document id
 			j ); // set weight
@@ -1317,14 +1366,14 @@ CSphQueryResult *CSphIndex_VLN::query(CSphDict *dict, char *query, int * pUserWe
 
 	SPH_TIMER("find matches");
 
-	qsort(result->matches->data, result->matches->count,
-		sizeof(CSphMatch), cmpMatch);
+	qsort ( pResult->m_pMatches->data, pResult->m_pMatches->count,
+		sizeof(CSphMatch), cmpMatch );
 
 	SPH_TIMER("weight sort");
 
-	gettimeofday(&tv2, NULL);
-	result->queryTime = (tv2.tv_sec - tv1.tv_sec) * 1000000 + (tv2.tv_usec - tv1.tv_usec);
-	return result;
+	// query timer
+	pResult->m_fQueryTime += sphLongTimer ();
+	return pResult;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1503,6 +1552,8 @@ BYTE **CSphSource_Text::NextDocument()
 // MYSQL SOURCE
 /////////////////////////////////////////////////////////////////////////////
 
+#if USE_MYSQL
+
 CSphSource_MySQL::CSphSource_MySQL(char *sqlQuery)
 {
 	this->sqlQuery = sphDup(sqlQuery);
@@ -1544,7 +1595,11 @@ BYTE **CSphSource_MySQL::NextDocument()
 	return (BYTE**)(&sqlRow[1]);
 }
 
-// *** HASH ***
+#endif // USE_MYSQL
+
+/////////////////////////////////////////////////////////////////////////////
+// HASH
+/////////////////////////////////////////////////////////////////////////////
 
 CSphHash::CSphHash()
 {
@@ -1618,8 +1673,8 @@ CSphHash *CSphConfig::loadSection ( const char * section )
 
 	// skip until we find the section
 	ls = strlen(section);
-	while ( (p = fgets(buf, sizeof(buf), fp)) ) {
-		l = l;
+	while ( (p = fgets(buf, sizeof(buf), fp)) )
+	{
 		CLEAN_CONFIG_LINE();
 		if (p[0] == '[' && p[l-1] == ']' && strncmp(p+1, section, ls) == 0)
 			break;

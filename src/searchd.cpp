@@ -1,3 +1,7 @@
+//
+// $Id$
+//
+
 #include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -280,3 +284,7 @@ int main(int argc, char **argv)
 		}
 	}
 }
+
+//
+// $Id$
+//

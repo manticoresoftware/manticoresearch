@@ -1,7 +1,7 @@
 CC         = cc
 PP         = cc
 LD         = cc
-BINARIES   = indexer searchd
+BINARIES   = indexer searchd search
 CCFLAGS    = -Wall -O3 -fomit-frame-pointer -I/usr/local/include
 #CCFLAGS    = -Wall -g -I/usr/local/include
 PPFLAGS    = $(CCFLAGS)
@@ -18,6 +18,9 @@ indexer: indexer.o $(OBJ_SPHINX)
 searchd: searchd.o $(OBJ_SPHINX)
 	$(LD) -o searchd searchd.o $(OBJ_SPHINX) $(LDFLAGS)
 
+search: search.o $(OBJ_SPHINX)
+	$(LD) -o search search.o $(OBJ_SPHINX) $(LDFLAGS)
+
 .cpp.o:
 	$(PP) $(PPFLAGS) -c -o $*.o $*.cpp
 
@@ -30,4 +33,5 @@ cl clean:
 
 indexer.o: Makefile indexer.cpp $(INC_SPHINX)
 searchd.o: Makefile searchd.cpp $(INC_SPHINX)
+search.o: Makefile search.cpp $(INC_SPHINX)
 $(OBJ_SPHINX): Makefile $(INC_SPHINX) $($*:.o=.cpp)

@@ -25,8 +25,6 @@
 
 #define SPH_CACHE_WRITE			1048576
 
-#define min(a,b) ((a)<(b)?(a):(b))
-#define max(a,b) ((a)>(b)?(a):(b))
 #define Min(a,b) ((a)<(b)?(a):(b))
 #define Max(a,b) ((a)>(b)?(a):(b))
 

@@ -579,7 +579,7 @@ int CSphIndex_VLN::binsReadByte(int b)
 			::lseek(fdRaw, bins[b]->filePos, SEEK_SET);
 			filePos = bins[b]->filePos;
 		}
-		n = min(bins[b]->fileLeft, SPH_RLOG_BIN_SIZE);
+		n = Min(bins[b]->fileLeft, SPH_RLOG_BIN_SIZE);
 		if (n == 0) {
 			bins[b]->done = 1;
 			bins[b]->left = 1;
@@ -1909,7 +1909,7 @@ bool CSphSource_XMLPipe::UpdateBuffer ()
 {
 	assert ( m_pBuffer!=&m_sBuffer[0] );
 
-	int iLeft = max ( m_pBufferEnd-m_pBuffer, 0 );
+	int iLeft = Max ( m_pBufferEnd-m_pBuffer, 0 );
 	if ( iLeft>0 )
 		memmove ( m_sBuffer, m_pBuffer, iLeft );
 
@@ -1973,7 +1973,7 @@ bool CSphSource_XMLPipe::CheckTag ( bool bOpen )
 	if ( !bOk )
 	{
 		char sGot [ 64 ];
-		int iCopy = min ( m_pBufferEnd-m_pBuffer, (int)sizeof(sGot)-1 );
+		int iCopy = Min ( m_pBufferEnd-m_pBuffer, (int)sizeof(sGot)-1 );
 
 		strncpy ( sGot, (char*)m_pBuffer, iCopy );
 		sGot [ iCopy ] = '\0';

@@ -211,7 +211,7 @@ int main(int argc, char **argv)
 					if (iread(rsock, &start, 4) != 4) break;
 					if (iread(rsock, &count, 4) != 4) break;
 					if (iread(rsock, &i, 4) != 4) break;
-					i = min(i, (int)sizeof(query)-1);
+					i = Min(i, (int)sizeof(query)-1);
 					if (iread(rsock, query, i) != i) break;
 					query[i] = '\0';
 
@@ -241,7 +241,7 @@ int main(int argc, char **argv)
 					flock(log, LOCK_UN);
 
 					// serve the answer to client
-					rcount = min(count, r->matches->count - start);
+					rcount = Min(count, r->matches->count - start);
 					sprintf(buf, "MATCHES %d\n", rcount);
 					write(rsock, buf, strlen(buf));
 					for ( i=start; i<start+rcount; i++ )

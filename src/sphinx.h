@@ -52,11 +52,11 @@
 
 #define SafeDelete(_x) { if (_x) { delete (_x); (_x) = NULL; } }
 
-void sphDie(char *message, ...);
-void *sphMalloc(size_t size);
-void *sphRealloc(void *ptr, size_t size);
-void sphFree(void *ptr);
-char *sphDup(char *s);
+void	sphDie ( char *message, ... );
+void *	sphMalloc ( size_t size );
+void *	sphRealloc ( void *ptr, size_t size );
+void 	sphFree ( void * ptr );
+char *	sphDup ( const char *s );
 
 /// time, in seconds
 float	sphLongTimer ();
@@ -357,6 +357,8 @@ private:
 	void cache();
 };
 
+/////////////////////////////////////////////////////////////////////////////
+
 struct CSphQueryWord
 {
 	int queryPos;
@@ -399,6 +401,7 @@ private:
 	int isLink;
 };
 
+
 struct CSphQueryResult
 {
 	struct
@@ -417,11 +420,32 @@ public:
 	virtual				~CSphQueryResult ();
 };
 
+/////////////////////////////////////////////////////////////////////////////
+
+/// search query
+class CSphQuery
+{
+public:
+	const char *	m_sQuery;	///< query string. MUST be not NULL
+	int *			m_pWeights;	///< user-supplied per-field weights. may be NULL. default is NULL
+	int				m_iWeights;	///< number of user-supplied weights. missing fields will be assigned weight 1. default is 0
+	bool			m_bAll;		///< match all words or any word. default is "match all"
+
+public:
+	/// ctor. fills defaults
+					CSphQuery ();
+};
+
+/////////////////////////////////////////////////////////////////////////////
+
+/// generic fulltext index interface
 struct CSphIndex
 {
-	virtual int						build ( CSphDict * dict, CSphSource * source ) = 0;
-	virtual CSphQueryResult *		query ( CSphDict * dict, char * query, int * pUserWeights, int iUserWeightCount ) = 0;
+	virtual int					build ( CSphDict * dict, CSphSource * source ) = 0;
+	virtual CSphQueryResult *	query ( CSphDict * dict, CSphQuery * pQuery ) = 0;
 };
+
+/////////////////////////////////////////////////////////////////////////////
 
 /// possible bin states
 enum ESphBinState
@@ -462,7 +486,7 @@ struct CSphIndex_VLN : CSphIndex
 	virtual						~CSphIndex_VLN();
 
 	virtual int					build ( CSphDict * dict, CSphSource * source );
-	virtual CSphQueryResult *	query ( CSphDict * dict, char * query, int * pUserWeights, int iUserWeightCount );
+	virtual CSphQueryResult *	query ( CSphDict * dict, CSphQuery * pQuery );
 
 private:
 	char *						filename;

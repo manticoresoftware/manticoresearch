@@ -214,10 +214,16 @@ int main(int argc, char **argv)
 
 			// child process, handle client
 			case 0:
-				while (1) {
-					// read query
-					if (iread(rsock, &start, 4) != 4) break;
-					if (iread(rsock, &count, 4) != 4) break;
+				for ( ;; )
+				{
+					int iAny;
+
+					// read mode/limits
+					if ( iread ( rsock, &start, 4 )!=4 ) break;
+					if ( iread ( rsock, &count, 4 )!=4 ) break;
+					if ( iread ( rsock, &iAny, 4 )!=4 ) break;
+
+					// read query string
 					if (iread(rsock, &i, 4) != 4) break;
 					i = Min(i, (int)sizeof(query)-1);
 					if (iread(rsock, query, i) != i) break;
@@ -232,13 +238,21 @@ int main(int argc, char **argv)
 					if ( iUserWeights )
 						if ( iread ( rsock, dUserWeights, iUserWeights*4 ) != iUserWeights*4 ) break;
 
-					// execute it and log
-					r = idx->query ( new CSphDict_CRC32 ( iMorph ), query, dUserWeights, iUserWeights );
+					// do query
+					CSphQuery tQuery;
+					tQuery.m_sQuery = query;
+					tQuery.m_pWeights = dUserWeights;
+					tQuery.m_iWeights = iUserWeights;
+					tQuery.m_bAll = ( iAny==0 );
+
+					r = idx->query ( new CSphDict_CRC32 ( iMorph ), &tQuery );
+
+					// log query
 					time(&now);
 					ctime_r(&now, tbuf);
 					tbuf[24] = '\0';
-					sprintf ( buf, "[%s] %.2f sec: [%d %d] %s\n",
-						tbuf, r->m_fQueryTime, start, count, query );
+					sprintf ( buf, "[%s] %.2f sec: [%d %d %s] %s\n",
+						tbuf, r->m_fQueryTime, start, count, tQuery.m_bAll ? "all" : "any", query );
 					flock(log, LOCK_EX);
 					lseek(log, 0, SEEK_END);
 					write(log, buf, strlen(buf));

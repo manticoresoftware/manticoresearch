@@ -1,0 +1,20 @@
+[+] 1. add UTF support
+[ ] 2. add searchd console detach
+[ ] 3. add results table support
+[+] 4. add stopwords support
+[ ] 5. add shadow copy to avoid taking searchd offline for reindexing
+[ ] 6. add PK ranges support to avoid MyISAM table locks
+[ ] 7. add memory constraints
+[ ] 8. add query for total count and save top N results
+[ ] 9. add query for pergroup count
+[ ] 10. add --verbose, --quiet switches
+[ ] 11. add loglevels
+[+] 12. add "match any word" mode
+[ ] 13. add groups support to mysql driver
+[ ] 14. fix stopword queries (totally ignore stops)
+[ ] 15. add multiple stopword files support
+
+ZelyonKa, 16.02.2005 17:32:
+12, 14, 15, 13  
+
+-- eof --

@@ -298,7 +298,7 @@ float sphLongTimer ()
 }
 
 
-char *sphDup(char *s)
+char *sphDup(const char *s)
 {
 	char *r;
 	if (s) {
@@ -429,7 +429,21 @@ void CSphList_Match::grow()
 	pData = data + count;
 }
 
-// *** INT VECTOR ***
+/////////////////////////////////////////////////////////////////////////////
+// QUERY
+/////////////////////////////////////////////////////////////////////////////
+
+CSphQuery::CSphQuery ()
+	: m_sQuery		( NULL )
+	, m_pWeights	( NULL )
+	, m_iWeights	( 0 )
+	, m_bAll		( true )
+{
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// INT VECTOR
+/////////////////////////////////////////////////////////////////////////////
 
 CSphList_Int::CSphList_Int()
 {
@@ -1359,7 +1373,7 @@ struct CSphQueryParser : CSphSource_Text
 	char *words[SPH_MAX_QUERY_WORDS];
 	int numWords;
 
-	CSphQueryParser(CSphDict *dict, char *query)
+	CSphQueryParser(CSphDict *dict, const char *query)
 	{
 		int i;
 
@@ -1397,13 +1411,16 @@ int cmpQueryWord(const void *a, const void *b)
 	return (((CSphQueryWord*)a)->docs->count - ((CSphQueryWord*)b)->docs->count);
 }
 
-CSphQueryResult *CSphIndex_VLN::query(CSphDict *dict, char *query, int * pUserWeights, int iUserWeights )
+CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 {
+	assert ( dict );
+	assert ( pQuery );
+
 	CSphQueryParser *qp;
 	CSphReader_VLN *rdIndex, *rdData;
 	CSphQueryWord qwords[SPH_MAX_QUERY_WORDS];
 	int i, j, nwords, chunkPos, weights [ SPH_MAX_FIELD_COUNT ], imin, nweights;
-	DWORD *phits[SPH_MAX_QUERY_WORDS], *pdocs[SPH_MAX_QUERY_WORDS],
+	DWORD *pHits[SPH_MAX_QUERY_WORDS], *pdocs[SPH_MAX_QUERY_WORDS],
 		wordID, docID, pmin, k;
 
 	// create result and start timing
@@ -1422,6 +1439,23 @@ CSphQueryResult *CSphIndex_VLN::query(CSphDict *dict, char *query, int * pUserWe
 	#else
 		#define SPH_TIMER(_msg)
 	#endif
+
+	// split query into words
+	qp = new CSphQueryParser ( dict, pQuery->m_sQuery );
+	nwords = qp->hits.count;
+	if (nwords > SPH_MAX_QUERY_WORDS) nwords = SPH_MAX_QUERY_WORDS; // FIXME
+	for (i = 0; i < nwords; i++) {
+		qwords[i].word = sphDup(qp->words[i]);
+		qwords[i].wordID = qp->hits.data[i].m_iWordID;
+		qwords[i].queryPos = 1 + i;
+	}
+	delete qp;
+
+	if ( !nwords )
+	{
+		pResult->m_fQueryTime += sphLongTimer ();
+		return pResult;
+	}
 
 	// open files
 	char *tmp = (char*)sphMalloc(strlen(this->filename) + 5);
@@ -1447,22 +1481,9 @@ CSphQueryResult *CSphIndex_VLN::query(CSphDict *dict, char *query, int * pUserWe
 
 	SPH_TIMER("load directory");
 
-	// split query into words
-	qp = new CSphQueryParser(dict, query);
-	nwords = qp->hits.count;
-	if (nwords > SPH_MAX_QUERY_WORDS) nwords = SPH_MAX_QUERY_WORDS; // FIXME
-	for (i = 0; i < nwords; i++) {
-		qwords[i].word = sphDup(qp->words[i]);
-		qwords[i].wordID = qp->hits.data[i].m_iWordID;
-		qwords[i].queryPos = 1 + i;
-	}
-	delete qp;
-
 	// init lists
 	vIndexPage = new CSphList_Int();
 	vChunkHeader = new CSphList_Int();
-
-	SPH_TIMER("parse query");
 
 	// load match list for each query word
 	for (i = 0; i < nwords; i++)
@@ -1540,85 +1561,221 @@ CSphQueryResult *CSphIndex_VLN::query(CSphDict *dict, char *query, int * pUserWe
 	nweights = m_tHeader.m_iFieldCount;
 	for ( i=0; i<nweights; i++ ) // defaults
 		weights[i] = 1;
-	if ( pUserWeights ) // user-supplied
-		for ( int i=0; i<Min ( nweights, iUserWeights ); i++ )
-			weights[i] = pUserWeights[i];
+	if ( pQuery->m_pWeights ) // user-supplied
+		for ( int i=0; i<Min ( nweights, pQuery->m_iWeights ); i++ )
+			weights[i] = pQuery->m_pWeights[i];
 
 	// find and proximity-weight matching documents
 	for (i = 0; i < nwords; i++) {
 		pdocs[i] = qwords[i].docs->data;
 	}
 	i = docID = 0;
-	while (1) {
-		while (*pdocs[i] && docID > *pdocs[i]) pdocs[i] += 2;
-		if (!*pdocs[i]) break;
-		if (docID < *pdocs[i]) {
-			docID = *pdocs[i];
+
+	if ( pQuery->m_bAll )
+	{
+		///////////////////
+		// match all words
+		///////////////////
+
+		while (1)
+		{
+			while (*pdocs[i] && docID > *pdocs[i]) pdocs[i] += 2;
+			if (!*pdocs[i]) break;
+			if (docID < *pdocs[i]) {
+				docID = *pdocs[i];
+				i = 0;
+				continue;
+			}
+			if (++i != nwords) continue;
+
+			// Houston, we have a match
+			for (i = 0; i < nwords; i++) {
+				pHits[i] = &qwords[i].hits->data[*(1 + pdocs[i])];
+			}
+
+			// init weighting
+			BYTE curPhraseWeight [ SPH_MAX_FIELD_COUNT ];
+			BYTE phraseWeight [ SPH_MAX_FIELD_COUNT ];
+			BYTE matchWeight [ SPH_MAX_FIELD_COUNT ];
+			for ( i=0; i<nweights; i++ )
+			{
+				curPhraseWeight[i] = 0;
+				phraseWeight[i] = 0;
+				matchWeight[i] = 0;
+			}
+
+			k = INT_MAX;
+			while ( 1 )
+			{
+				// scan until next hit in this document
+				pmin = INT_MAX;
+				imin = -1;
+				for ( i=0; i<nwords; i++ )
+				{
+					if ( !*pHits[i] ) continue;
+					if ( pmin>(*pHits[i]) ) { pmin = *pHits[i]; imin = i; }
+				}
+				if ( imin<0 ) break;
+				pHits[imin]++;
+
+				// get field number and mark a simple match
+				j = pmin >> 24;
+				matchWeight[j] = 1;
+
+				// find max proximity relevance
+				if ( qwords[imin].queryPos - pmin == k )
+				{
+					curPhraseWeight[j]++;
+					if ( phraseWeight[j] < curPhraseWeight[j] )
+						phraseWeight[j] = curPhraseWeight[j];
+				} else
+				{
+					curPhraseWeight[j] = 0;
+				}
+				k = qwords[imin].queryPos - pmin;
+			}
+
+			// sum simple match weights and phrase match weights
+			for ( i=0, j=0; i<nweights; i++ )
+				j += weights[i] * ( matchWeight[i] + phraseWeight[i] );
+
+			// add match
+			pResult->m_pMatches->add (
+				((docID-1) & iGroupMask) + m_tHeader.m_iMinGroupID, // unpack group id
+				((docID-1) >> m_tHeader.m_iGroupBits) + m_tHeader.m_iMinDocID, // unpack document id
+				j ); // set weight
+
+			// continue looking for next matches
 			i = 0;
-			continue;
-		}
-		if (++i != nwords) continue;
-
-		// Houston, we have a match
-		for (i = 0; i < nwords; i++) {
-			phits[i] = &qwords[i].hits->data[*(1 + pdocs[i])];
+			docID++;
 		}
 
-		// init weighting
-		BYTE curPhraseWeight [ SPH_MAX_FIELD_COUNT ];
-		BYTE phraseWeight [ SPH_MAX_FIELD_COUNT ];
-		BYTE matchWeight [ SPH_MAX_FIELD_COUNT ];
-		for ( i=0; i<nweights; i++ )
+	} else
+	{
+		//////////////////
+		// match any word
+		//////////////////
+
+		int iActive = nwords; // total number of words still active
+		DWORD iDocID = 0; // FIXME! make a macro like INVALID_DOCUMENT_ID or something
+
+		int dActive2Query [ SPH_MAX_QUERY_WORDS ]; // active word to original query word mapping
+		for ( i=0; i<SPH_MAX_QUERY_WORDS; i++ )
+			dActive2Query[i] = i;
+
+		for ( ;; )
 		{
-			curPhraseWeight[i] = 0;
-			phraseWeight[i] = 0;
-			matchWeight[i] = 0;
-		}
-
-		k = INT_MAX;
-		while ( 1 )
-		{
-			// scan until next hit in this document
-			pmin = INT_MAX;
-			imin = -1;
-			for ( i=0; i<nwords; i++ )
+			// update active pointers to document lists, kill empty ones,
+			// and get min current document id
+			DWORD iNewID = UINT_MAX;
+			for ( i=0; i<iActive; i++ )
 			{
-				if ( !*phits[i] ) continue;
-				if ( pmin>(*phits[i]) ) { pmin = *phits[i]; imin = i; }
+				// move to next document
+				if ( *pdocs[i]==iDocID )
+					pdocs[i] += 2;
+				assert ( (*pdocs[i])!=iDocID );
+
+				// remove empty pointers
+				if ( !*pdocs[i] )
+				{
+					pdocs[i] = pdocs[iActive-1];
+					dActive2Query[i] = dActive2Query[iActive-1];
+					i--;
+					iActive--;
+					continue;
+				}
+
+				// get new min id
+				if ( *pdocs[i]<iNewID )
+					iNewID = *pdocs[i];
 			}
-			if ( imin<0 ) break;
-			phits[imin]++;
+			if ( iActive==0 )
+				break;
+			iDocID = iNewID;
 
-			// get field number and mark a simple match
-			j = pmin >> 24;
-			matchWeight[j] = 1;
+			assert ( iDocID!=0 );
+			assert ( iDocID!=UINT_MAX );
 
-			// find max proximity relevance
-			if ( qwords[imin].queryPos - pmin == k )
+			// get the words we're matching current document against (let's call them "terms")
+			int dPos [ SPH_MAX_QUERY_WORDS ];
+			int iTerms = 0;
+
+			for ( i=0; i<iActive; i++ )
+				if ( *pdocs[i]==iDocID )
 			{
-				curPhraseWeight[j]++;
-				if ( phraseWeight[j] < curPhraseWeight[j] )
-					phraseWeight[j] = curPhraseWeight[j];
-			} else
-			{
-				curPhraseWeight[j] = 0;
+				dPos [ iTerms ] = qwords [ dActive2Query[i] ].queryPos;
+				pHits [ iTerms ] = &qwords [ dActive2Query[i] ].hits->data [ *(1+pdocs[i]) ];
+				iTerms++;
 			}
-			k = qwords[imin].queryPos - pmin;
+			assert ( iTerms>0 );
+
+			// init weighting
+			struct
+			{
+				int		m_iCurPhrase;	// current phrase-match weight
+				int		m_iMaxPhrase;	// max phrase-match weight
+				int		m_iMatch;		// max simple match weight
+			} dWeights [ SPH_MAX_FIELD_COUNT ];
+			memset ( dWeights, 0, sizeof(dWeights) ); // OPTIMIZE: only zero out nweights, not total
+
+			// do matching
+			// OPTIMIZE: implement simplified matching for iTerms==1 case
+			k = INT_MAX;
+			for ( ;; )
+			{
+				// get next good hit in this document
+				pmin = INT_MAX;
+				imin = -1;
+				for ( i=0; i<iTerms; i++ )
+				{
+					// if hit list for this term is no longer active, remove it
+					if ( !*pHits[i] )
+					{
+						pHits [ i ] = pHits [ iTerms-1 ];
+						dPos [ i ] = dPos [ iTerms-1 ];
+						i--;
+						iTerms--;
+						continue;
+					}
+
+					// my current best match
+					if ( pmin>(*pHits[i]) )
+					{
+						pmin = *pHits[i];
+						imin = i;
+					}
+				}
+				if ( imin<0 )
+					break;
+				pHits[imin]++;
+
+				// get field number and mark a simple match
+				int iField = pmin >> 24;
+				dWeights[iField].m_iMatch = 1; // FIXME! count matching words, maybe?
+
+				// find max proximity relevance
+				if ( dPos[imin] - pmin == k )
+				{
+					dWeights[iField].m_iCurPhrase++;
+					if ( dWeights[iField].m_iMaxPhrase < dWeights[iField].m_iCurPhrase )
+						dWeights[iField].m_iMaxPhrase = dWeights[iField].m_iCurPhrase;
+				} else
+				{
+					dWeights[iField].m_iCurPhrase = 0;
+				}
+				k = dPos[imin] - pmin;
+			}
+
+			// sum simple match weights and phrase match weights
+			for ( i=0, j=0; i<nweights; i++ )
+				j += weights[i] * ( dWeights[i].m_iMatch + dWeights[i].m_iMaxPhrase );
+
+			// add match
+			pResult->m_pMatches->add (
+				((iDocID-1) & iGroupMask) + m_tHeader.m_iMinGroupID, // unpack group id
+				((iDocID-1) >> m_tHeader.m_iGroupBits) + m_tHeader.m_iMinDocID, // unpack document id
+				j ); // set weight
 		}
-
-		// sum simple match weights and phrase match weights
-		for ( i=0, j=0; i<nweights; i++ )
-			j += weights[i] * ( matchWeight[i] + phraseWeight[i] );
-
-		// add match
-		pResult->m_pMatches->add (
-			((docID-1) & iGroupMask) + m_tHeader.m_iMinGroupID, // unpack group id
-			((docID-1) >> m_tHeader.m_iGroupBits) + m_tHeader.m_iMinDocID, // unpack document id
-			j ); // set weight
-
-		// continue looking for next matches
-		i = 0;
-		docID++;
 	}
 
 	SPH_TIMER("find matches");

@@ -7,7 +7,7 @@
 int main ( int argc, char ** argv )
 {
 	if ( argc<=1 )
-		sphDie ( "usage: search <word1> [word2 [word3 [...]]]\n" );
+		sphDie ( "usage: search [--any] <word1 [word2 [word3 [...]]]>\n" );
 
 	/////////////
 	// configure
@@ -43,8 +43,14 @@ int main ( int argc, char ** argv )
 	char sQuery [ 1024 ];
 	sQuery[0] = '\0';
 
+	bool bAny = false;
 	for ( int i=1; i<argc; i++ )
 	{
+		if ( i==1 && strcmp(argv[i], "--any")==0 )
+		{
+			bAny = true;
+			continue;
+		}
 		if ( strlen(sQuery) + strlen(argv[i]) + 1 >= sizeof(sQuery) )
 			break;
 		strcat ( sQuery, argv[i] );
@@ -55,9 +61,15 @@ int main ( int argc, char ** argv )
 	// search
 	//////////
 
+	CSphQuery tQuery;
+	tQuery.m_sQuery = sQuery;
+	tQuery.m_bAll = !bAny;
+
+	CSphDict * pDict = new CSphDict_CRC32 ( iMorph );
 	CSphIndex * pIndex = new CSphIndex_VLN ( pIndexPath );
-	CSphQueryResult * pResult = pIndex->query ( new CSphDict_CRC32 ( iMorph ), sQuery,
-		NULL, SPH_MAX_FIELD_COUNT );
+	CSphQueryResult * pResult = pIndex->query ( pDict, &tQuery );
+	delete pIndex;
+	delete pDict;
 
 	fprintf ( stdout, "query '%s': %d matches, %.2f sec\n",
 		sQuery, pResult->m_pMatches->count, pResult->m_fQueryTime );

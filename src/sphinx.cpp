@@ -1397,8 +1397,8 @@ CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 		float t1, t2;
 		t1 = sphLongTimer ();
 		#define SPH_TIMER(_msg) \
-			t2 = sphTimer(); \
-			fprintf ( stderr, "DEBUG: %s %.2f\n", msg, t2-t1 ); \
+			t2 = sphLongTimer(); \
+			fprintf ( stderr, "DEBUG: %s %.2f\n", _msg, t2-t1 ); \
 			t1 = t2;
 	#else
 		#define SPH_TIMER(_msg)

@@ -1927,10 +1927,8 @@ int CSphSource_MySQL::Connect ( const char * host, const char * user, const char
 			if ( mysql_query ( &m_tSqlDriver, m_sQueryPre ) )
 				SPH_ERROR ( "mysql_query_pre" );
 
-			if (!( m_pSqlResult = mysql_use_result ( &m_tSqlDriver ) ))
-				SPH_ERROR ( "mysql_use_result_pre" );
-
-			mysql_free_result ( m_pSqlResult );
+			if ( (m_pSqlResult = mysql_use_result ( &m_tSqlDriver )) )
+				mysql_free_result ( m_pSqlResult );
 		}
 
 		if ( mysql_query ( &m_tSqlDriver, m_sQuery ) )
@@ -1970,12 +1968,8 @@ BYTE ** CSphSource_MySQL::NextDocument ()
 				fprintf ( stderr, "WARNING: mysql_query_post: %s\n", mysql_error ( &m_tSqlDriver ) );
 				break;
 			}
-			if (!( m_pSqlResult = mysql_use_result ( &m_tSqlDriver ) ))
-			{
-				fprintf ( stderr, "WARNING: mysql_use_result_post: %s\n", mysql_error ( &m_tSqlDriver ) );
-				break;
-			}
-			mysql_free_result ( m_pSqlResult );
+			if ( (m_pSqlResult = mysql_use_result ( &m_tSqlDriver )) )
+				mysql_free_result ( m_pSqlResult );
 			break;
 		}
 

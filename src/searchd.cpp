@@ -11,7 +11,7 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include "sphinx.hpp"
+#include "sphinx.h"
 
 static int read_timeout = 5;
 static int children_count = 0;
@@ -143,6 +143,10 @@ int main(int argc, char **argv)
 	{
 		if ( !strcmp ( pMorph, "stem_en" ) )
 			iMorph = SPH_MORPH_STEM_EN;
+		else if ( !strcmp ( pMorph, "stem_ru" ) )
+			iMorph = SPH_MORPH_STEM_RU;
+		else if ( !strcmp ( pMorph, "stem_enru" ) )
+			iMorph = SPH_MORPH_STEM_EN | SPH_MORPH_STEM_RU;
 		else
 		{
 			fprintf ( stderr, "WARNING: unknown morphology type '%s' ignored.\n", pMorph );

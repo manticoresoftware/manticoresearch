@@ -14,9 +14,11 @@
 index_path			= /home/sphinx/data/testdb
 
 # morphology
-# default is not use any
+# default is not to use any
 #
 # morphology		= stem_en
+# morphology		= stem_ru
+# morphology		= stem_enru
 
 [indexer]
 

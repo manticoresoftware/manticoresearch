@@ -2,6 +2,9 @@
 // $Id$
 //
 
+#ifndef _sphinx_
+#define _sphinx_
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <mysql/mysql.h>
@@ -483,6 +486,8 @@ private:
 	/// scan for tag with string value
 	bool			ScanStr ( const char * sTag, char * pRes, int iMaxLength );
 };
+
+#endif // _sphinx_
 
 //
 // $Id$

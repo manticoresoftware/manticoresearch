@@ -3,6 +3,7 @@
 //
 
 #include "sphinx.h"
+#include "sphinxutils.h"
 #include <sys/stat.h>
 
 #if USE_WINDOWS
@@ -293,8 +294,8 @@ int main ( int argc, char ** argv )
 		fprintf ( stderr, "FATAL: unable to open config file '%s'.\n", sConfName );
 		return 1;
 	}
-	confCommon = conf.loadSection ( "common" );
-	confIndexer = conf.loadSection ( "indexer" );
+	confCommon = conf.loadSection ( "common", g_dSphKeysCommon );
+	confIndexer = conf.loadSection ( "indexer", g_dSphKeysIndexer );
 
 	#define CHECK_CONF(_hash,_sect,_key) \
 		if ( !_hash->get ( _key ) ) \

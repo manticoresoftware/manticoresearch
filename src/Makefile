@@ -7,7 +7,7 @@ CCFLAGS    = -Wall -O3 -fomit-frame-pointer -I/usr/local/include
 PPFLAGS    = $(CCFLAGS)
 LDFLAGS    = -L/usr/local/mysql/lib -lmysqlclient -lstdc++ -lm -lz
 SRC_SPHINX = sphinx.cpp sphinxstemen.cpp sphinxstemru.cpp
-INC_SPHINX = sphinx.h sphinxstem.h
+INC_SPHINX = sphinx.h sphinxstem.h sphinxutils.h
 OBJ_SPHINX = $(SRC_SPHINX:.cpp=.o)
 
 all : $(BINARIES)

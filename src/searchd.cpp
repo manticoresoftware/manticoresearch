@@ -3,6 +3,7 @@
 //
 
 #include "sphinx.h"
+#include "sphinxutils.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -244,8 +245,8 @@ int main ( int argc, char **argv )
 	if ( !conf.open ( sOptConfig ) )
 		sphFatal ( "failed to read config file '%s'", sOptConfig );
 
-	CSphHash * confCommon = conf.loadSection ( "common" );
-	CSphHash * confSearchd = conf.loadSection ( "searchd" );
+	CSphHash * confCommon = conf.loadSection ( "common", g_dSphKeysCommon );
+	CSphHash * confSearchd = conf.loadSection ( "searchd", g_dSphKeysSearchd );
 
 	// logs
 	if ( !bOptConsole )

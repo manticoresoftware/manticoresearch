@@ -1,5 +1,5 @@
 [+] 1. add UTF support
-[ ] 2. add searchd console detach
+[+] 2. add searchd console detach
 [ ] 3. add results table support
 [+] 4. add stopwords support
 [ ] 5. add shadow copy to avoid taking searchd offline for reindexing
@@ -13,9 +13,9 @@
 [+] 13. add groups support to mysql driver and searcher
 [+] 14. fix stopword queries (totally ignore stops)
 [+] 15. add multiple stopword files support
-[ ] 16. add strict config validation
+[+] 16. add strict config validation
 [ ] 17. add support for multiple sql_query's (UNION is too hairy)
 
-2, 6, 17, 16
+6, 17
 
 -- eof --

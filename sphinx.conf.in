@@ -104,8 +104,12 @@ stopwords			=
 port				= 3312
 
 # log file
-# all the queries are logged
+# searchd run info is logged here
 log					= /home/sphinx/logs/searchd.log
+
+# query log file
+# all the search queries are logged here
+query_log			= /home/sphinx/logs/query.log
 
 # client read timeout, seconds
 read_timeout		= 5

@@ -279,6 +279,7 @@ void sphDie(char *message, ...)
 	exit(1);
 }
 
+
 void *sphMalloc(size_t size)
 {
 	void *result;
@@ -287,6 +288,7 @@ void *sphMalloc(size_t size)
 		sphDie("FATAL: out of memory (unable to allocate %d bytes).\n", size);
 	return result;
 }
+
 
 void *sphRealloc(void *ptr, size_t size)
 {
@@ -297,9 +299,11 @@ void *sphRealloc(void *ptr, size_t size)
 	return result;
 }
 
-void sphFree(void *ptr)
+
+void sphFree ( void * ptr )
 {
-	free(ptr);
+	if ( ptr )
+		free ( ptr );
 }
 
 
@@ -345,14 +349,16 @@ float sphLongTimer ()
 }
 
 
-char *sphDup(const char *s)
+char * sphDup ( const char * s )
 {
-	char *r;
-	if (s) {
-		r = (char*)sphMalloc(1 + strlen(s));
-		strcpy(r, s);
+	char * r;
+	if ( s )
+	{
+		r = (char*)sphMalloc ( 1+strlen(s) );
+		strcpy ( r, s );
 		return r;
-	} else {
+	} else
+	{
 		return NULL;
 	}
 }
@@ -2299,107 +2305,217 @@ char *CSphHash::get(char *key)
 	return NULL;
 }
 
-// *** CONFIG ***
+/////////////////////////////////////////////////////////////////////////////
+// CONFIG FILE PARSER
+/////////////////////////////////////////////////////////////////////////////
 
-CSphConfig::CSphConfig()
+CSphConfig::CSphConfig ()
 {
 	fp = NULL;
+	m_sFileName = NULL;
 }
 
-CSphConfig::~CSphConfig()
+
+CSphConfig::~CSphConfig ()
 {
-	if (fp) fclose(fp);
+	if ( fp )
+	{
+		fclose ( fp );
+		fp = NULL;
+	}
+	sphFree ( m_sFileName );
 }
 
-int CSphConfig::open ( const char *file )
+
+int CSphConfig::open ( const char * file )
 {
-	if (!(fp = fopen(file, "r"))) return 0;	
-	return 1;
+	fp = fopen ( file, "r" );
+	if ( fp )
+	{
+		m_sFileName = sphDup ( file );
+		return 1;
+	} else
+	{
+		return 0;
+	}
 }
 
-CSphHash *CSphConfig::loadSection ( const char * section )
-{
-	char buf[2048], *p, *pp, *key, *value;
-	int l, ls;
-	CSphHash *result;
 
-	result = new CSphHash();
-	if (fseek(fp, 0, SEEK_SET) < 0) return result;
+static char * ltrim ( char * sLine )
+{
+	while ( *sLine && isspace(*sLine) )
+		sLine++;
+	return sLine;
+}
+
+
+static char * rtrim ( char * sLine )
+{
+	char * p = sLine + strlen(sLine) - 1;
+	while ( p>=sLine && isspace(*p) )
+		p--;
+	p[1] = '\0';
+	return sLine;
+}
+
+
+static char * trim ( char * sLine )
+{
+	return ltrim ( rtrim ( sLine ) );
+}
+
+
+static char * sphCat ( char * sDst, const char * sSrc )
+{
+	sDst = (char *) sphRealloc ( sDst, strlen(sDst) + strlen(sSrc) + 1 );
+	strcat ( sDst, sSrc );
+	return sDst;
+}
+
+
+bool CSphConfig::ValidateKey ( const char * sKey, const char ** dKnownKeys )
+{
+	// no validation requested
+	if ( dKnownKeys==NULL )
+		return true;
+
+	while ( *dKnownKeys )
+	{
+		if ( strcmp ( *dKnownKeys, sKey )==0 )
+			return true;
+		dKnownKeys++;
+	}
+
+	fprintf ( stderr, "WARNING: error in %s:%d, unknown key '%s' in section [%s]\n",
+			m_sFileName, m_iLine, sKey, m_sSection );
+	return false;
+}
+
+
+CSphHash * CSphConfig::loadSection ( const char * sSection, const char ** dKnownKeys )
+{
+	char buf[2048], *p, *pp, *sKey = NULL, *sValue = NULL;
+	int l;
+	CSphHash * pRes;
+
+	// alloc result set
+	pRes = new CSphHash ();
+	if ( fseek ( fp, 0, SEEK_SET )<0 )
+		 return pRes;
+
+	m_iLine = 0;
+	m_sSection = sSection;
 
 	#define CLEAN_CONFIG_LINE() \
-		l = strlen(buf); \
-		if ( (pp = strchr(buf, '#')) ) { *pp = '\0'; l = strlen(buf); } \
-		while (l && isspace(buf[l-1])) buf[--l] = '\0'; \
-		while (l && isspace(*p)) { p++; l--; }
+		p = trim ( buf ); \
+		l = strlen ( p ); \
+		pp = strchr ( p, '#' ); \
+		if ( pp ) \
+		{ \
+			*pp = '\0'; \
+			l = pp - p; \
+		}
 
 	// skip until we find the section
-	ls = strlen(section);
-	while ( (p = fgets(buf, sizeof(buf), fp)) )
+	while (( p = fgets ( buf, sizeof(buf), fp ) ))
 	{
-		CLEAN_CONFIG_LINE();
-		if (p[0] == '[' && p[l-1] == ']' && strncmp(p+1, section, ls) == 0)
+		m_iLine++;
+		CLEAN_CONFIG_LINE ();
+		if ( p[0]=='['
+			&& p[l-1] == ']'
+			&& strncmp ( p+1, sSection, strlen(sSection) )==0 )
+		{
 			break;
+		}
 	}
-	if (!p) return result;
+	if ( !p )
+	{
+		m_sSection = NULL;
+		return pRes;
+	}
 
 	// load all the config lines until next section or EOF
-	key = value = NULL;
-	while ( (p = fgets(buf, sizeof(buf), fp)) ) {
-		CLEAN_CONFIG_LINE();
-		if (p[0] == '[') break;
+	while (( p = fgets ( buf, sizeof(buf), fp ) ))
+	{
+		m_iLine++;
+		CLEAN_CONFIG_LINE ();
+
+		// handle empty strings
+		if ( !l )
+			continue;
+
+		// next section, bail out
+		// FIXME! add more validation
+		if ( p[0]=='[')
+			break;
 
 		// handle split strings
-		if (p[l-1] == '\\') {
-			p[l-1] = '\0';
-			if (key) {
-				value = (char*)sphRealloc(value, strlen(value) + strlen(p) + 1);
-				strcat(value, p);
+		if ( p[l-1]=='\\' )
+		{
+			if ( sKey )
+			{
+				p[l-1] = ' '; // insert space at the end of the split
+				sValue = sphCat ( sValue, p );
 				continue;
-			} else {
-				if ( (pp = strchr(p, '=')) ) {
+
+			} else
+			{
+				pp = strchr ( p, '=' );
+				if ( pp )
+				{
 					*pp++ = '\0';
-					key = p;
-					value = pp;
-					l = strlen(key); while (l && isspace(key[l-1])) key[--l] = '\0'; // rtrim key
-					while (*value && isspace(*value)) value++; // ltrim value
-					key = sphDup(key);
-					value = sphDup(value);
+					sKey = rtrim ( p );
+					if ( ValidateKey ( sKey, dKnownKeys ) )
+					{
+						p[l-1] = ' '; // insert space at the end of the split
+						sKey = sphDup ( p );
+						sValue = sphDup ( ltrim ( pp ) );
+					} else
+					{
+						sKey = NULL;
+					}
 					continue;
-				} else {
-					// FIXME: bad string, could bitch
+
+				} else
+				{
+					fprintf ( stderr, "WARNING: error in %s:%d, stray line '%s' in section [%s]\n",
+						m_sFileName, m_iLine, p, m_sSection );
 					continue;
 				}
 			}
-		} else if (key) {
+
+		} else if ( sKey )
+		{
 			// previous split-string just ended, so add it to result
-			value = (char*)sphRealloc(value, strlen(value) + strlen(p) + 1);
-			strcat(value, p);
-			result->add(key, value);
-			sphFree(key);
-			sphFree(value);
-			key = NULL;
-		}
+			sValue = sphCat ( sValue, p );
+			pRes->add ( sKey, sValue );
 
-		// handle empty strings
-		if (!l) continue;
-
-		// handle one-line pairs
-		if ( (pp = strchr(p, '=')) ) {
-			*pp++ = '\0';
-			key = p;
-			value = pp;
-			l = strlen(key); while (l && isspace(key[l-1])) key[--l] = '\0'; // rtrim key
-			while (*value && isspace(*value)) value++; // ltrim value
-			result->add(key, value);
-			key = NULL;
+			sphFree ( sKey );
+			sphFree ( sValue );
+			sKey = NULL;
 			continue;
 		}
 
-		// FIXME: bad string, could bitch
+		// handle one-line pairs
+		if ( (pp = strchr(p, '=')) )
+		{
+			*pp++ = '\0';
+			p = rtrim ( p );
+			if ( ValidateKey ( p, dKnownKeys ) )
+			{
+				pRes->add ( p, ltrim ( pp ) );
+				sKey = NULL;
+			}
+			continue;
+		}
+
+		fprintf ( stderr, "WARNING: error in %s:%d, stray line '%s' in section [%s]\n",
+			m_sFileName, m_iLine, p, m_sSection );
 	}
 
 	// return
-	return result;
+	m_sSection = NULL;
+	return pRes;
 }
 
 /////////////////////////////////////////////////////////////////////////////

@@ -606,14 +606,19 @@ private:
 
 struct CSphConfig
 {
-	CSphConfig();
-	~CSphConfig();
+					CSphConfig ();
+					~CSphConfig ();
+	int				open ( const char * file );
+	CSphHash *		loadSection ( const char * section, const char ** dKnownKeys=NULL );
 
-	int open ( const char *file );
-	CSphHash * loadSection ( const char *section );
+protected:
+	FILE *			fp;
+	char *			m_sFileName;
+	const char *	m_sSection;
+	int				m_iLine;
 
-private:
-	FILE *fp;
+protected:
+	bool			ValidateKey ( const char * sKey, const char ** dKnownKeys );
 };
 
 #endif // _sphinx_

@@ -3,6 +3,7 @@
 //
 
 #include "sphinx.h"
+#include "sphinxutils.h"
 
 int main ( int argc, char ** argv )
 {
@@ -18,7 +19,7 @@ int main ( int argc, char ** argv )
 	if ( !tConf.open ( "sphinx.conf" ) )
 		sphDie ( "FATAL: failed to open 'sphinx.conf'.\n" );
 
-	CSphHash * hCommonConf = tConf.loadSection ( "common" );
+	CSphHash * hCommonConf = tConf.loadSection ( "common", g_dSphKeysCommon );
 
 	// get index path
 	char * pIndexPath = hCommonConf->get ( "index_path" );

@@ -33,17 +33,37 @@ sql_user			= root
 sql_pass			= 
 sql_db				= testdb
 
+# pre-query, executed before the main fetch query
+# useful eg. to setup encoding or mark records
+# optional, default is empty
+#
+# sql_query_pre		= SET CHARACTER_SET_RESULTS=cp1251
+sql_query_pre		=
+
+# main document fetch query
 # you can specify any number of fields
-# document id MUST be the very first field
+# int32 document id MUST be the very first field
+# mandatory
 sql_query			= \
 	SELECT doc.id, doc.title, doc.data \
 	FROM documents doc
 sql_sock			= /tmp/mysql.sock
 
+# post-query, executed after the main fetch query
+# useful eg. to unmark records
+# optional, default is empty
+sql_query_post		=
+
 # mysql port
-# optional, defaults to 3306
+# optional, default is 3306
+sql_port			= 3306
+
+# stopwords file
+# format is plain cp-1251 or koi-8 text
+# optional, default is empty
 #
-# sql_port			= 3306
+# stopwords			= /home/sphinx/data/stopwords.txt
+stopwords			=
 
 #############################################################################
 

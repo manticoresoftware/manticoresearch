@@ -2138,86 +2138,77 @@ CSphSource_MySQL::~CSphSource_MySQL ()
 
 bool CSphSource_MySQL::RunQueryStep ()
 {
+	if ( m_iRangeStep<=0 )
+		return false;
+	if ( m_iCurrentID>m_iMaxID )
+		return false;
+
 	static const int iBufSize = 16;
-
 	char * sRes = NULL;
-	if ( m_iRangeStep>0 )
+
+	//////////////////////////////////////////////
+	// range query with $start/$end interpolation
+	//////////////////////////////////////////////
+
+	assert ( m_iMinID>0 );
+	assert ( m_iMaxID>0 );
+	assert ( m_iMinID<=m_iMaxID );
+	assert ( m_sQuery );
+
+	char sValues [ MACRO_COUNT ] [ iBufSize ];
+	snprintf ( sValues[0], iBufSize, "%d", m_iCurrentID );
+	snprintf ( sValues[1], iBufSize, "%d", m_iCurrentID+m_iRangeStep-1 );
+	m_iCurrentID += m_iRangeStep;
+
+	// OPTIMIZE? things can be precalculated
+	char * sCur = m_sQuery;
+	int iLen = 0;
+	while ( *sCur )
 	{
-		//////////////////////////////////////////////
-		// range query with $start/$end interpolation
-		//////////////////////////////////////////////
-
-		if ( m_iCurrentID>m_iMaxID )
-			return false;
-
-		assert ( m_iMinID>0 );
-		assert ( m_iMaxID>0 );
-		assert ( m_iMinID<=m_iMaxID );
-
-		char sValues [ MACRO_COUNT ] [ iBufSize ];
-		snprintf ( sValues[0], iBufSize, "%d", m_iCurrentID );
-		snprintf ( sValues[1], iBufSize, "%d", m_iCurrentID+m_iRangeStep-1 );
-		m_iCurrentID += m_iRangeStep;
-
-		// OPTIMIZE? things can be precalculated
-		char * sCur = m_sQuery;
-		int iLen = 0;
-		while ( *sCur )
+		if ( *sCur=='$' )
 		{
-			if ( *sCur=='$' )
+			int i;
+			for ( i=0; i<MACRO_COUNT; i++ )
+				if ( strncmp ( MACRO_VALUES[i], 1+sCur, strlen(MACRO_VALUES[i]) )==0 )
 			{
-				int i;
-				for ( i=0; i<MACRO_COUNT; i++ )
-					if ( strncmp ( MACRO_VALUES[i], 1+sCur, strlen(MACRO_VALUES[i]) )==0 )
-				{
-					sCur += 1+strlen ( MACRO_VALUES[i] );
-					iLen += strlen ( sValues[i] );
-					break;
-				}
-				if ( i<MACRO_COUNT )
-					continue;
+				sCur += 1+strlen ( MACRO_VALUES[i] );
+				iLen += strlen ( sValues[i] );
+				break;
 			}
-
-			sCur++;
-			iLen++;
+			if ( i<MACRO_COUNT )
+				continue;
 		}
-		iLen++; // trailing zero
 
-		// do interpolation
-		sRes = new char [ iLen ];
-		sCur = m_sQuery;
-
-		char * sDst = sRes;
-		while ( *sCur )
-		{
-			if ( *sCur=='$' )
-			{
-				int i;
-				for ( i=0; i<MACRO_COUNT; i++ )
-					if ( strncmp ( MACRO_VALUES[i], 1+sCur, strlen(MACRO_VALUES[i]) )==0 )
-				{
-					strcpy ( sDst, sValues[i] );
-					sCur += 1+strlen ( MACRO_VALUES[i] );
-					sDst += strlen ( sValues[i] );
-					break;
-				}
-				if ( i<MACRO_COUNT )
-					continue;
-			}
-			*sDst++ = *sCur++;
-		}
-		*sDst++ = '\0';
-		assert ( sDst-sRes==iLen );
-
-	} else
-	{
-		///////////////
-		// usual query
-		///////////////
-
-		sRes = m_sQuery;
+		sCur++;
+		iLen++;
 	}
-	assert ( sRes );
+	iLen++; // trailing zero
+
+	// do interpolation
+	sRes = new char [ iLen ];
+	sCur = m_sQuery;
+
+	char * sDst = sRes;
+	while ( *sCur )
+	{
+		if ( *sCur=='$' )
+		{
+			int i;
+			for ( i=0; i<MACRO_COUNT; i++ )
+				if ( strncmp ( MACRO_VALUES[i], 1+sCur, strlen(MACRO_VALUES[i]) )==0 )
+			{
+				strcpy ( sDst, sValues[i] );
+				sCur += 1+strlen ( MACRO_VALUES[i] );
+				sDst += strlen ( sValues[i] );
+				break;
+			}
+			if ( i<MACRO_COUNT )
+				continue;
+		}
+		*sDst++ = *sCur++;
+	}
+	*sDst++ = '\0';
+	assert ( sDst-sRes==iLen );
 
 	// run query
 	const char * sError = NULL;
@@ -2240,8 +2231,7 @@ bool CSphSource_MySQL::RunQueryStep ()
 		}
 	} while ( false );
 
-	if ( m_iRangeStep>0 )
-		SafeDeleteArray ( sRes );
+	SafeDeleteArray ( sRes );
 
 	// report errors, if any
 	if ( sError )
@@ -2318,9 +2308,13 @@ bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 			}
 		}
 
-		// range query
+		// issue first fetch query
 		if ( pParams->m_sQueryRange )
 		{
+			///////////////
+			// range query
+			///////////////
+
 			m_iRangeStep = pParams->m_iRangeStep;
 
 			// check step
@@ -2373,11 +2367,22 @@ bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 			m_iCurrentID = m_iMinID;
 			m_sQuery = sphDup ( pParams->m_sQuery );
 
-		}
+			// issue query
+			if ( !RunQueryStep () )
+				return 0;
 
-		// run query
-		if ( !RunQueryStep () )
-			return 0;
+		} else
+		{
+			////////////////
+			// normal query
+			////////////////
+
+			assert ( !m_pSqlResult );
+			if ( mysql_query ( &m_tSqlDriver, pParams->m_sQuery ) )
+				LOC_MYSQL_ERROR ( "mysql_query" );
+			if (!( m_pSqlResult = mysql_use_result ( &m_tSqlDriver ) ))
+				LOC_MYSQL_ERROR ( "mysql_use_result" );
+		}
 
 	} while ( false );
 

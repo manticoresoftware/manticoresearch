@@ -1,0 +1,97 @@
+OVERVIEW
+========
+
+Sphinx is a project to build a small, simple and fast,
+yet powerful enough and easily extensible search engine.
+
+Sphinx consists of the following:
+
+    - full-text indexing and searching library written in C++
+    - a set of generic utilities built on top of that library
+    - language bindings (PHP, Perl, etc)
+
+Sphinx name is an acronym, and stands for "SQL Phrase Index".
+
+Sphinx was started because I needed to add full-text search to
+my database driven site and didn't manage to find any acceptable
+solutions.
+
+TERMS
+=====
+
+Field
+    Document field.
+
+Record-level index
+    An index which only stores matching document lists for each word
+    and optionally attaches some document level statistics to each
+    document (such as word weight, views count, etc).
+
+Word-level index
+    An index which not only stores matching document lists for each
+    word but all stores all the word positions for all the documents.
+    This allows for phrase matching and proximity relevance ranking.
+
+Hit
+    An atomic document entry, represented as (docID, wordID, pos)
+    tuple. Every word in every document produces a single hit.
+
+Dictionary
+    An object which converts words to word IDs.
+
+Source
+    Document source. An object which is responsible for fetching
+    documents, parsing them, and splitting into hits.
+
+Proximity relevance
+    A document relevance measure based on calculating search query
+    words' proximity in a document. The closer the words from search
+    query are in a document, the higher is proximity relevance.
+    Exact phrase match yields the highest proximity relevance.
+
+Nibble
+    Four bits.
+
+VLN
+    Variable-length nibble coding. An integer coding scheme similar to
+    variable-length byte (VLB) coding, where each integer is represented
+    with minimum possible amount of bytes. With VNC, each integer is
+    stored with minimum possible amount of nibbles. While this does
+    not seemingly complicate nor slow down I/O, size gain compared
+    to VLB is significant (up to 20%). On my test VLN even yielded
+    compression ratio very close (difference was less than 1%) to
+    Golomb coding, while being times faster.
+
+CLASS TREE
+==========
+
+Generic public classes meant to form the base of Sphinx's
+extensibility:
+
+    CSphHit                         index hit (docID, wordID, pos)
+    CSphMatch                       match (docID, docWeight)
+
+    CSphList_Int                    list of integers
+    CSphList_Hit                    list of hits
+    CSphList_Match                  list of matches
+
+    CSphDict                        generic dictionary
+        CSphDict_CRC32              CRC32 dictionary
+
+    CSphSource                      generic document source
+        CSphSource_Document         generic multi-field document source
+            CSphSource_Text         generic text (one-field document) source
+            CSphSource_MySQL        reads documents from MySQL
+
+    CSphIndex                       generic index
+        CSphIndex_VLN               VLN-compressed index
+
+Internal classes used by VLN-compressed index (CSphIndex_VLN)
+implementation:
+
+    CSphWriter_VLN    VLN-compressed index writer
+    CSphReader_VLN    VLN-compressed index reader
+    CSphQueryWord
+    CSphQueryParser
+
+-- eof --

@@ -1,0 +1,25 @@
+#
+# Sphinx configuration file
+#
+
+[common]
+
+index_path   = /home/sphinx/data/testdb
+
+[indexer]
+
+sql_host     = localhost
+sql_user     = root
+sql_pass     = 
+sql_db       = testdb
+sql_query    = \
+    SELECT doc.id, doc.title, doc.data \
+    FROM documents doc
+sql_sock     = /tmp/mysql.sock
+
+[searchd]
+
+port         = 3312
+log          = /home/sphinx/logs/searchd.log
+read_timeout = 5
+max_children = 30

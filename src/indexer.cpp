@@ -5,6 +5,7 @@
 #include "sphinx.h"
 #include "sphinxutils.h"
 #include <sys/stat.h>
+#include <ctype.h>
 
 #if USE_WINDOWS
 #else
@@ -434,6 +435,36 @@ int main ( int argc, char ** argv )
 		// configure stops
 		pDict->LoadStopwords ( confCommon->get ( "stopwords" ) );
 
+		// configure memlimit
+		int iMemLimit = 0;
+		char * sMemLimit = confIndexer->get ( "mem_limit" );
+
+		int iLen = sMemLimit ? (int)strlen ( sMemLimit ) : 0;
+		if ( iLen )
+		{
+			iLen--;
+			int iScale = 1;
+			if ( toupper(sMemLimit[iLen])=='K' )
+			{
+				iScale = 1024;
+				sMemLimit[iLen] = '\0';
+			} else if ( toupper(sMemLimit[iLen])=='M' )
+			{
+				iScale = 1048576;
+				sMemLimit[iLen] = '\0';
+			}
+
+			char * sErr;
+			int iRes = strtol ( sMemLimit, &sErr, 10 );
+			if ( *sErr )
+			{
+				fprintf ( stderr, "WARNING: bad mem_limit value '%s', using default.\n", sMemLimit );
+			} else
+			{
+				iMemLimit = iScale*iRes;
+			}
+		}
+
 		//////////
 		// index!
 		//////////
@@ -445,7 +476,7 @@ int main ( int argc, char ** argv )
 		CSphIndex * pIndex = sphCreateIndexPhrase ( confCommon->get ( "index_path" ) );
 		assert ( pIndex );
 
-		pIndex->build ( pDict, pSource );
+		pIndex->build ( pDict, pSource, iMemLimit );
 
 		delete pIndex;
 		delete pDict;

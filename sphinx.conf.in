@@ -32,6 +32,14 @@ stopwords			=
 
 [indexer]
 
+# memory limit
+# can be specified in bytes, kilobytes (mem_limit=1000K) or megabytes (mem_limit=10M)
+# will grow if set unacceptably low
+# will warn if set too low, hurting the performance
+# optional, default if 32M
+mem_limit			= 32M
+
+
 # data source type
 # for now, known types are 'mysql' and 'xmlpipe'
 # MUST be defined

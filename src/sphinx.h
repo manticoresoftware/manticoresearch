@@ -43,10 +43,6 @@
 #define SPH_MAX_FILENAME_LEN	512
 #define SPH_MAX_FIELD_COUNT		32
 
-#define SPH_RLOG_MAX_BLOCKS		128
-#define SPH_RLOG_BIN_SIZE		262144
-#define SPH_RLOG_BLOCK_SIZE		1048576
-
 #define SPH_CLOG_BITS_DIR		10
 #define SPH_CLOG_BITS_PAGE		22
 #define SPH_CLOG_DIR_PAGES		(1 << SPH_CLOG_BITS_DIR)
@@ -67,10 +63,16 @@ void 	sphFree ( void * ptr );
 char *	sphDup ( const char *s );
 
 /// time, in seconds
-float	sphLongTimer ();
+float			sphLongTimer ();
 
 /// Sphinx CRC32 implementation
-DWORD	sphCRC32 ( const BYTE * pString );
+DWORD			sphCRC32 ( const BYTE * pString );
+
+/// new that never returns NULL (it crashes instead)
+void *			operator new ( size_t iSize );
+
+/// new that never returns NULL (it crashes instead)
+void *			operator new [] ( size_t iSize );
 
 /////////////////////////////////////////////////////////////////////////////
 // GENERICS
@@ -118,6 +120,12 @@ public:
 		if ( m_iLength>=m_iLimit )
 			Resize ( 1+m_iLength );
 		m_pData [ m_iLength++ ] = tValue;
+	}
+
+	/// get last entry
+	T & Last ()
+	{
+		return (*this) [ m_iLength-1 ];
 	}
 
 	/// resize
@@ -593,7 +601,7 @@ public:
 /// generic fulltext index interface
 struct CSphIndex
 {
-	virtual int					build ( CSphDict * dict, CSphSource * source ) = 0;
+	virtual int					build ( CSphDict * dict, CSphSource * source, int iMemoryLimit ) = 0;
 	virtual CSphQueryResult *	query ( CSphDict * dict, CSphQuery * pQuery ) = 0;
 };
 

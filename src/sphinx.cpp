@@ -116,22 +116,36 @@ enum ESphBinState
 
 struct CSphBin
 {
+	static const int	MIN_SIZE = 8192;
+	int					m_iSize;
+
 	BYTE *data, *pData;
 	int left, done, filePos, fileLeft, filePtr, state;
 	DWORD lastGroupID, lastDocID, lastWordID, lastPos; // FIXME! make it a hit
 
-	CSphBin()
+	CSphBin ()
 	{
-		data = (BYTE*) sphMalloc ( SPH_RLOG_BIN_SIZE );
-		pData = data; 
+		data = pData = NULL;
 		left = done = filePos = fileLeft = 0;
 		lastDocID = lastWordID = lastPos = 0;
 		state = BIN_POS;
 	}
 
-	~CSphBin()
+
+	void Init ( int iSize )
 	{
-		sphFree(data);
+		assert ( !data );
+		assert ( iSize>=MIN_SIZE );
+
+		m_iSize = iSize;
+		data = new BYTE [ iSize ];
+		pData = data; 
+	}
+
+
+	~CSphBin ()
+	{
+		SafeDeleteArray ( data );
 	}
 };
 
@@ -201,7 +215,7 @@ struct CSphIndex_VLN : CSphIndex
 								CSphIndex_VLN ( const char * filename );
 	virtual						~CSphIndex_VLN ();
 
-	virtual int					build ( CSphDict * dict, CSphSource * source );
+	virtual int					build ( CSphDict * dict, CSphSource * source, int iMemoryLimit );
 	virtual CSphQueryResult *	query ( CSphDict * dict, CSphQuery * pQuery );
 
 private:
@@ -210,7 +224,7 @@ private:
 	int							filePos;
 	CSphWriter_VLN *			fdIndex;
 	CSphWriter_VLN *			fdData;
-	CSphBin *					bins [ SPH_RLOG_MAX_BLOCKS ];
+	CSphVector<CSphBin *>		bins;
 
 	CSphVector<DWORD> *				vChunk;
 	CSphVector<DWORD> *				vChunkHeader;
@@ -228,8 +242,8 @@ private:
 
 	int							open ( char *ext, int mode );
 
-	int							binsInit ( int blocks );
-	void						binsDone ( int blocks );
+	int							binsInit ();
+	void						binsDone ();
 	DWORD						binsReadVLB ( int b );
 	int							binsReadByte ( int b );
 	int							binsRead ( int b, CSphHit * e );
@@ -284,7 +298,7 @@ void *sphMalloc(size_t size)
 {
 	void *result;
 
-	if (!(result = malloc(size)))
+	if (!(result = ::malloc(size)))
 		sphDie("FATAL: out of memory (unable to allocate %d bytes).\n", size);
 	return result;
 }
@@ -294,7 +308,7 @@ void *sphRealloc(void *ptr, size_t size)
 {
 	void *result;
 
-	if (!(result = realloc(ptr, size)))
+	if (!(result = ::realloc(ptr, size)))
 		sphDie("FATAL: out of memory (unable to reallocate %d bytes).\n", size);
 	return result;
 }
@@ -303,7 +317,19 @@ void *sphRealloc(void *ptr, size_t size)
 void sphFree ( void * ptr )
 {
 	if ( ptr )
-		free ( ptr );
+		::free ( ptr );
+}
+
+
+void * operator new ( size_t iSize )
+{
+	return sphMalloc ( iSize );
+}
+
+
+void * operator new [] ( size_t iSize )
+{
+	return sphMalloc ( iSize );
 }
 
 
@@ -826,18 +852,16 @@ int CSphIndex_VLN::open(char *ext, int mode)
 	return ::open(tmp, mode | SPH_BINARY, 0644);
 }
 
-int CSphIndex_VLN::binsInit(int blocks)
+int CSphIndex_VLN::binsInit ()
 {
-	::lseek(fdRaw, 0, SEEK_SET); // FIXME
+	::lseek ( fdRaw, 0, SEEK_SET ); // FIXME
 	filePos = 0;
 	return 1;
 }
 
-void CSphIndex_VLN::binsDone(int blocks)
+void CSphIndex_VLN::binsDone ()
 {
-	int i;
-
-	for (i = 0; i < blocks; i++) delete bins[i];
+	bins.Reset ();
 }
 
 int CSphIndex_VLN::binsReadByte(int b)
@@ -845,17 +869,23 @@ int CSphIndex_VLN::binsReadByte(int b)
 	int n;
 	BYTE r;
 
-	if (!bins[b]->left) {
-		if (filePos != bins[b]->filePos) {
+	if ( !bins[b]->left )
+	{
+		if (filePos != bins[b]->filePos)
+		{
 			::lseek(fdRaw, bins[b]->filePos, SEEK_SET);
 			filePos = bins[b]->filePos;
 		}
-		n = Min(bins[b]->fileLeft, SPH_RLOG_BIN_SIZE);
-		if (n == 0) {
+		n = Min ( bins[b]->fileLeft, bins[b]->m_iSize );
+		if (n == 0)
+		{
 			bins[b]->done = 1;
 			bins[b]->left = 1;
-		} else {
-			if (::read(fdRaw, bins[b]->data, n) != n) return -2;
+		} else
+		{
+			assert ( bins[b]->data );
+			if ( ::read(fdRaw, bins[b]->data, n) != n )
+				return -2;
 			bins[b]->left = n;
 			bins[b]->filePos += n;
 			bins[b]->fileLeft -= n;
@@ -863,7 +893,8 @@ int CSphIndex_VLN::binsReadByte(int b)
 			filePos += n;
 		}
 	}
-	if (bins[b]->done) return -1;
+	if ( bins[b]->done )
+		return -1;
 
 	bins[b]->left--;
 	r = *(bins[b]->pData);
@@ -1190,23 +1221,45 @@ static int iLog2 ( int iMin, int iMax )
 }
 
 
-int CSphIndex_VLN::build(CSphDict *dict, CSphSource *source)
+int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLimit )
 {
-	int i, n, docID, mini, rawBlockUsed, rawHits, rawBlockSize, rawBlocks;
-	CSphHit *hit, *rawBlock, *pRawBlock, cur[SPH_RLOG_MAX_BLOCKS];
+	/////////////////
+	// build raw log
+	/////////////////
 
-	source->setDict(dict);
+	// set dictionary
+	pSource->setDict ( pDict );
 
 	// create raw log
-	if (!(fdRaw = this->open(".spr", O_CREAT | O_RDWR | O_TRUNC))) return 0;
+	if (!( fdRaw = this->open ( ".spr", O_CREAT | O_RDWR | O_TRUNC ) )) return 0;
+
+	// adjust memory requirements
+	const int MIN_MEM_LIMIT = sizeof(CSphHit)*1048576;
+	bool bRelimit = false;
+	int iOldLimit = 0;
+
+	if ( iMemoryLimit<MIN_MEM_LIMIT )
+	{
+		iOldLimit = iMemoryLimit;
+		iMemoryLimit = MIN_MEM_LIMIT;
+		bRelimit = true;
+	}
+
+	iMemoryLimit = ( ( (iMemoryLimit+32768) >> 16 ) << 16 ); // round to 64K
+	int iRawBlockSize = iMemoryLimit / sizeof(CSphHit);
+
+	if ( bRelimit && iOldLimit )
+	{
+		fprintf ( stderr, "WARNING: collect_hits: mem_limit=%d kb too low, increasing to %d kb.\n",
+			iOldLimit/1024, iMemoryLimit/1024 );
+	}
 
 	// allocate raw block
-	rawBlockSize = SPH_RLOG_BLOCK_SIZE;
-	rawBlockUsed = 0;
-	rawBlocks = 0;
-	rawHits = 0;
-	rawBlock = (CSphHit*)sphMalloc(sizeof(CSphHit) * rawBlockSize);
-	pRawBlock = rawBlock;
+	int iRawBlockUsed = 0;
+	int iRawHits = 0;
+	CSphHit * dRawBlock = new CSphHit [ iRawBlockSize ];
+	CSphHit * pRawBlock = dRawBlock;
+	assert ( dRawBlock );
 
 	// accumulate group IDs range
 	DWORD iMinDocID = INT_MAX;
@@ -1215,77 +1268,84 @@ int CSphIndex_VLN::build(CSphDict *dict, CSphSource *source)
 	DWORD iMaxGroupID = 0;
 
 	// build raw log
-	while ( (docID = source->next()) )
-		if ( source->hits.GetLength() )
+	DWORD iDocID;
+	while (( iDocID = pSource->next() ))
 	{
-		hit = &source->hits[0];
-		for ( n=0; n<source->hits.GetLength(); n++ )
+		int iHitCount = pSource->hits.GetLength ();
+		if ( iHitCount<=0 )
+			continue;
+
+		CSphHit * pHit = &pSource->hits[0];
+		while ( iHitCount-- )
 		{
-			assert ( hit->m_iGroupID );
-			assert ( hit->m_iDocID );
-			assert ( hit->m_iWordID );
-			assert ( hit->m_iWordPos );
+			assert ( pHit->m_iGroupID );
+			assert ( pHit->m_iDocID );
+			assert ( pHit->m_iWordID );
+			assert ( pHit->m_iWordPos );
 
-			iMinGroupID = Min ( iMinGroupID, hit->m_iGroupID );
-			iMaxGroupID = Max ( iMaxGroupID, hit->m_iGroupID );
-			iMinDocID = Min ( iMinDocID, hit->m_iDocID );
-			iMaxDocID = Max ( iMaxDocID, hit->m_iDocID );
+			iMinGroupID = Min ( iMinGroupID, pHit->m_iGroupID );
+			iMaxGroupID = Max ( iMaxGroupID, pHit->m_iGroupID );
+			iMinDocID = Min ( iMinDocID, pHit->m_iDocID );
+			iMaxDocID = Max ( iMaxDocID, pHit->m_iDocID );
 
-			*pRawBlock++ = *hit++;
-			rawBlockUsed++;
-			rawHits++;
+			*pRawBlock++ = *pHit++;
+			iRawBlockUsed++;
+			iRawHits++;
 
-			if (rawBlockUsed == rawBlockSize)
+			if ( iRawBlockUsed==iRawBlockSize )
 			{
-				sphSortHits ( rawBlock, rawBlockUsed );
-				bins[rawBlocks] = new CSphBin();
-				bins[rawBlocks]->fileLeft = cidxWriteRawVLB ( fdRaw, rawBlock, rawBlockUsed );
-				if ( bins[rawBlocks]->fileLeft<0 )
+				sphSortHits ( dRawBlock, iRawBlockUsed );
+
+				bins.Add ( new CSphBin() );
+				CSphBin * pBin = bins.Last ();
+				pBin->fileLeft = cidxWriteRawVLB ( fdRaw, dRawBlock, iRawBlockUsed );
+				if ( pBin->fileLeft<0 )
 				{
-					fprintf(stderr, "ERROR: write() failed\n");
+					fprintf ( stderr, "ERROR: write() failed, out of disk space?\n" );
 					return 0;
 				}
 
-				rawBlocks++;
-				assert ( rawBlocks<=SPH_RLOG_MAX_BLOCKS );
-				assert ( rawHits>0 );
-
-				rawBlockUsed = 0;
-				pRawBlock = rawBlock;
+				iRawBlockUsed = 0;
+				pRawBlock = dRawBlock;
 			}
 		}
 	}
 
-	if ( rawBlockUsed )
+	if ( iRawBlockUsed )
 	{
-		sphSortHits ( rawBlock, rawBlockUsed );
+		sphSortHits ( dRawBlock, iRawBlockUsed );
 
-		bins[rawBlocks] = new CSphBin ();
-		if ( ( bins[rawBlocks]->fileLeft = cidxWriteRawVLB ( fdRaw, rawBlock, rawBlockUsed ) ) < 0 )
+		bins.Add ( new CSphBin() );
+		CSphBin * pBin = bins.Last ();
+		pBin->fileLeft = cidxWriteRawVLB ( fdRaw, dRawBlock, iRawBlockUsed );
+		if ( pBin->fileLeft<0 )
+		{
+			fprintf ( stderr, "ERROR: write() failed, out of disk space?\n" );
 			return 0;
-
-		rawBlocks++;
-		assert ( rawBlocks<=SPH_RLOG_MAX_BLOCKS );
-		assert ( rawHits>0 );
+		}
 	}
 
 	// calc bin positions from their lengths
-	for (i = 0; i < rawBlocks; i++)
+	ARRAY_FOREACH ( i, bins )
+	{
 		bins[i]->filePos = 0;
-	for (i = 1; i < rawBlocks; i++)
-		bins[i]->filePos = bins[i-1]->filePos + bins[i-1]->fileLeft;
+		if ( i )
+			bins[i]->filePos = bins[i-1]->filePos + bins[i-1]->fileLeft;
+	}
 
 	// deallocate raw block
-	free ( rawBlock );
-	close ( fdRaw );
+	SafeDeleteArray ( dRawBlock );
 
 	///////////////////////////////////
 	// sort and write compressed index
 	///////////////////////////////////
 
-	// open file, initialize indexer
+	// reopen raw log as read-only
+	::close ( fdRaw );
 	if ( !(fdRaw = this->open(".spr", O_RDONLY)) )
 		return 0;
+
+	// create new compressed index
 	if ( !cidxCreate() )
 		return 0;
 
@@ -1298,34 +1358,59 @@ int CSphIndex_VLN::build(CSphDict *dict, CSphSource *source)
 	m_tHeader.m_iMinDocID = iMinDocID;
 	m_tHeader.m_iMinGroupID = iMinGroupID;
 	m_tHeader.m_iGroupBits = iGidBits;
-	m_tHeader.m_iFieldCount = source->GetFieldCount ();
+	m_tHeader.m_iFieldCount = pSource->GetFieldCount ();
 
-	// do the sort
-	for ( i=0; i<rawBlocks; i++ )
-		binsRead ( i, &cur[i] );
-	while ( rawHits-- )
+	// initialize sorting
+	int iRawBlocks = bins.GetLength();
+	CSphHit * dCur = new CSphHit [ iRawBlocks ];
+
+	if ( bins.GetLength()>16 )
 	{
-		// find next sorted hit
-		mini = -1;
-		for ( i=0; i<rawBlocks; i++ )
-		{
-			if ( !cur[i].m_iWordID ) continue; // FIXME! can optimize out-blocks
-			if ( mini < 0) { mini = i; continue; }
-			if ( SPH_CMPHIT_LESS ( cur[i], cur[mini] ) ) mini = i;
-		}
-		assert ( mini>=0 );
-
-		// encode gid into docid
-		cur[mini].m_iDocID = 1 + ( (cur[mini].m_iDocID-iMinDocID) << iGidBits ) + ( cur[mini].m_iGroupID-iMinGroupID );
-
-		// write it
-		cidxHit ( &cur[mini] );
-
-		// update proper reader
-		binsRead ( mini, &cur[mini] );
+		fprintf ( stderr, "WARNING: sort_hits: merge_blocks=%d too high, increasing mem_limit may improve performance.\n",
+			bins.GetLength() );
 	}
 
-	binsDone ( rawBlocks );
+	int iBinSize = ( ( iMemoryLimit/iRawBlocks + 2048 ) >> 12 ) << 12; // round to 4k
+	if ( iBinSize<CSphBin::MIN_SIZE )
+	{
+		iBinSize = CSphBin::MIN_SIZE;
+		fprintf ( stderr, "WARNING: sort_hits: mem_limit=%d kb too low, increasing to %d kb.\n",
+			iMemoryLimit/1024, (iBinSize*iRawBlocks)/1024 );
+	}
+
+	ARRAY_FOREACH ( i, bins )
+	{
+		bins[i]->Init ( iBinSize );
+		binsRead ( i, &dCur[i] );
+	}
+
+	// sort
+	while ( iRawHits-- )
+	{
+		// find next sorted hit
+		// OPTIMIZE: can do priority queue here
+		int iMin = -1;
+		for ( int i=0; i<iRawBlocks; i++ )
+		{
+			if ( !dCur[i].m_iWordID ) continue; // OPTIMIZE: can throw away out-blocks
+			if ( iMin<0 ) { iMin=i; continue; }
+			if ( SPH_CMPHIT_LESS ( dCur[i], dCur[iMin] ) ) iMin = i;
+		}
+		assert ( iMin>=0 );
+
+		// encode gid into docid
+		dCur[iMin].m_iDocID = 1 +
+			( ( dCur[iMin].m_iDocID - iMinDocID ) << iGidBits ) +
+			( dCur[iMin].m_iGroupID - iMinGroupID );
+
+		// write it
+		cidxHit ( &dCur[iMin] );
+
+		// update proper reader
+		binsRead ( iMin, &dCur[iMin] );
+	}
+
+	binsDone ();
 	cidxFlushHitList ();
 	cidxFlushChunk ();
 	cidxFlushIndexPage ();

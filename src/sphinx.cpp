@@ -940,6 +940,11 @@ int CSphIndex_VLN::cidxCreate()
 	fdData = new CSphWriter_VLN(tmp);
 	if (!fdData->open()) return 0;
 
+	// put dummy byte (otherwise offset would start from 0, first delta would be 0
+	// and VLB encoding of offsets would fuckup)
+	BYTE bDummy = 1;
+	fdData->putbytes ( &bDummy, 1 );
+
 	free(tmp);
 
 	vChunk = new CSphList_Int();
@@ -1119,16 +1124,21 @@ int CSphIndex_VLN::build(CSphDict *dict, CSphSource *source)
 	pRawBlock = rawBlock;
 
 	// build raw log
-	while ( (docID = source->next()) ) {
+	while ( (docID = source->next()) )
+	{
 		hit = source->hits.data;
-		for (n = 0; n < source->hits.count; n++, hit++) {
+		for (n = 0; n < source->hits.count; n++, hit++)
+		{
+			assert ( hit->pos>0 );
+
 			pRawBlock->docID = docID;
 			pRawBlock->wordID = hit->wordID;
 			pRawBlock->pos = hit->pos;
 			pRawBlock++;
 			rawBlockUsed++;
 			rawHits++;
-			if (rawBlockUsed == rawBlockSize) {
+			if (rawBlockUsed == rawBlockSize)
+			{
 //				qsort(rawBlock, rawBlockUsed, sizeof(CSphHit), cmpHit);
 				sphSortHits_WordID(rawBlock, rawBlockUsed);
 				bins[rawBlocks] = new CSphBin();
@@ -1138,22 +1148,30 @@ int CSphIndex_VLN::build(CSphDict *dict, CSphSource *source)
 					fprintf(stderr, "ERROR: write() failed\n");
 					return 0;
 				}
-				rawBlockUsed = 0;
+
 				rawBlocks++;
+				assert ( rawBlocks<=SPH_RLOG_MAX_BLOCKS );
+
+				rawBlockUsed = 0;
 				pRawBlock = rawBlock;
 			}
 		}
 	}
-	if (rawBlockUsed) {
+
+	if (rawBlockUsed)
+	{
 //		qsort(rawBlock, rawBlockUsed, sizeof(CSphHit), cmpHit);
 		sphSortHits_WordID(rawBlock, rawBlockUsed);
+
 		bins[rawBlocks] = new CSphBin();
 		if ((bins[rawBlocks]->fileLeft = cidxWriteRawVLB(fdRaw,
 			rawBlock, rawBlockUsed)) < 0)
 		{
 			return 0;
 		}
+
 		rawBlocks++;
+		assert ( rawBlocks<=SPH_RLOG_MAX_BLOCKS );
 	}
 
 	// calc bin positions from their lengths
@@ -1184,6 +1202,7 @@ int CSphIndex_VLN::build(CSphDict *dict, CSphSource *source)
 //			if (cmpHit(&cur[i], &cur[mini]) < 0) mini = i;
 			if (SPH_CMPHIT_LESS(cur[i], cur[mini])) mini = i;
 		}
+
 		cidxHit(&cur[mini]);
 		binsRead(mini, &cur[mini]);
 	}
@@ -1445,11 +1464,20 @@ weights[3] = 1;
 	return result;
 }
 
-// *** DICTIONARY ***
+/////////////////////////////////////////////////////////////////////////////
+// CRC32 DICTIONARY
+/////////////////////////////////////////////////////////////////////////////
 
-uint CSphDict_CRC32::wordID(byte *word)
+CSphDict_CRC32::CSphDict_CRC32 ( DWORD iMorph )
 {
-	static const uint crc32tab[256] = {
+	m_iMorph = iMorph;
+}
+
+
+DWORD CSphDict_CRC32::wordID ( BYTE * pWord )
+{
+	static const DWORD crc32tab [ 256 ] =
+	{
 		0x00000000, 0x77073096, 0xee0e612c, 0x990951ba,
 		0x076dc419, 0x706af48f, 0xe963a535, 0x9e6495a3,
 		0x0edb8832, 0x79dcb8a4, 0xe0d5e91e, 0x97d2d988,
@@ -1515,12 +1543,14 @@ uint CSphDict_CRC32::wordID(byte *word)
 		0xb3667a2e, 0xc4614ab8, 0x5d681b02, 0x2a6f2b94,
 		0xb40bbe37, 0xc30c8ea1, 0x5a05df1b, 0x2d02ef8d,
 	};
-	
-	uint crc = (uint)~0;
-	byte *p;
 
-//	stem_en(word);
-	for (p = word; *p; p++)
+	DWORD crc = ~((DWORD)0);
+	BYTE * p;
+
+	if ( m_iMorph & SPH_MORPH_STEM_EN )
+		stem_en ( pWord );
+	
+	for ( p=pWord; *p; p++ )
 		crc = (crc >> 8) ^ crc32tab[(crc ^ (*p)) & 0xff];
 	return ~crc;
 }
@@ -1822,7 +1852,7 @@ int CSphSource_XMLPipe::next ()
 			return 0;
 
 		m_bBody = true;
-		m_iWordID = 0;
+		m_iWordPos = 0;
 	}
 
 	/////////////////////////////
@@ -1907,7 +1937,7 @@ int CSphSource_XMLPipe::next ()
 		}
 
 		// we found it, yes we did!
-		hits.add ( m_iDocID, dict->wordID ( sWord ), m_iWordID++ ); // field_id | (iPos++)
+		hits.add ( m_iDocID, dict->wordID ( sWord ), ++m_iWordPos ); // field_id | (iPos++)
 	}
 
 	// some tag was found

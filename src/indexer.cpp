@@ -94,9 +94,21 @@ int main(int argc, char **argv)
 	// index!
 	//////////
 
+	DWORD iMorph = SPH_MORPH_NONE;
+	char * pMorph = confCommon->get ( "morphology" );
+	if ( pMorph )
+	{
+		if ( !strcmp ( pMorph, "stem_en" ) )
+			iMorph = SPH_MORPH_STEM_EN;
+		else
+		{
+			fprintf ( stderr, "WARNING: unknown morphology type '%s' ignored.\n", pMorph );
+		}
+	}
+
 	assert ( pSource );
 	CSphIndex_VLN * pIndex = new CSphIndex_VLN ( confCommon->get ( "index_path" ) );
-	CSphDict_CRC32 * pDict = new CSphDict_CRC32 ();
+	CSphDict_CRC32 * pDict = new CSphDict_CRC32 ( iMorph );
 	pIndex->build ( pDict, pSource );
 
 	////////////////////

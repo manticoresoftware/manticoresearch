@@ -137,6 +137,18 @@ int main(int argc, char **argv)
 		max_children = (i >= 0) ? i : 0;
 	}
 
+	DWORD iMorph = SPH_MORPH_NONE;
+	char * pMorph = confCommon->get ( "morphology" );
+	if ( pMorph )
+	{
+		if ( !strcmp ( pMorph, "stem_en" ) )
+			iMorph = SPH_MORPH_STEM_EN;
+		else
+		{
+			fprintf ( stderr, "WARNING: unknown morphology type '%s' ignored.\n", pMorph );
+		}
+	}
+
 	// *** STARTUP ***
 
 	idx = new CSphIndex_VLN(confCommon->get("index_path"));
@@ -171,7 +183,8 @@ int main(int argc, char **argv)
 			continue;
 		}
 
-		switch (fork()) {
+		switch (fork()) 
+		{
 			// fork() failed
 			case -1: exit(1); // FIXME: fork() failed, should log
 
@@ -187,7 +200,7 @@ int main(int argc, char **argv)
 					query[i] = '\0';
 
 					// execute it and log
-					r = idx->query(new CSphDict_CRC32(), query);
+					r = idx->query ( new CSphDict_CRC32 ( iMorph ), query );
 					time(&now);
 					ctime_r(&now, tbuf);
 					tbuf[24] = '\0';

@@ -1,25 +1,82 @@
 #
-# Sphinx configuration file
+# sphinx configuration file sample
 #
 
 [common]
 
-index_path   = /home/sphinx/data/testdb
+# this is path and index file name without extension
+# files <indexpath>.spi/spd/spr will be created by indexer
+#
+# .spr is temporary raw log, it can be removed when indexer is done
+# .spi/.spd are fulltext index files (index index and index data)
+#
+# MUST be defined
+index_path			= /home/sphinx/data/testdb
+
+# morphology
+# default is not use any
+#
+# morphology		= stem_en
 
 [indexer]
 
-sql_host     = localhost
-sql_user     = root
-sql_pass     = 
-sql_db       = testdb
-sql_query    = \
-    SELECT doc.id, doc.title, doc.data \
-    FROM documents doc
-sql_sock     = /tmp/mysql.sock
+# data source type
+# for now, known types are 'mysql' and 'xmlpipe'
+# MUST be defined
+type				= mysql
+
+# some straightforward parameters for 'mysql' source type
+sql_host			= localhost
+sql_user			= root
+sql_pass			= 
+sql_db				= testdb
+
+# you can specify any number of fields
+# document id MUST be the very first field
+sql_query			= \
+	SELECT doc.id, doc.title, doc.data \
+	FROM documents doc
+sql_sock			= /tmp/mysql.sock
+
+# mysql port
+# optional, defaults to 3306
+#
+# sql_port			= 3306
+
+#############################################################################
+
+# demo config for 'xmlpipe' source type is a little below
+# with xmlpipe, sphinx opens a pipe to a given command, and reads documents from stdin
+#
+# sphinx expects one or more documents from xmlpipe stdin
+# each document must be formatted as follows:
+#
+# <document>
+# <id>123</id>
+# <group>1</group>
+# <title>test title</title>
+# <body>
+# this is my document body
+# </body>
+# </document>
+
+# type				= xmlpipe
+# xmlpipe_command	= cat /home/sphinx/test.xml
 
 [searchd]
 
-port         = 3312
-log          = /home/sphinx/logs/searchd.log
-read_timeout = 5
-max_children = 30
+# port on which search daemon will listen
+port				= 3312
+
+# log file
+# all the queries are logged
+log					= /home/sphinx/logs/searchd.log
+
+# client read timeout, seconds
+read_timeout		= 5
+
+# maximum amount of children to fork
+# useful to control server load
+max_children		= 30
+
+# --eof--

@@ -60,15 +60,38 @@ private:
 	CSphHit *pData;
 };
 
-struct CSphDict
+enum ESphMorphology
 {
-	virtual uint wordID(byte *word) = 0;
+	SPH_MORPH_NONE		= 0,
+	SPH_MORPH_STEM_EN	= (1<<1),
+	SPH_MORPH_STEM_RU	= (1<<2)
 };
 
+
+/// Generic word dictionary
+struct CSphDict
+{
+	/// get word ID by word
+	virtual DWORD		wordID ( BYTE * pWord ) = 0;
+};
+
+
+/// CRC32 dictionary
 struct CSphDict_CRC32 : CSphDict
 {
-	virtual uint wordID(byte *word);
+	/// ctor
+	/// iMorph is a combination of ESphMorphology flags
+						CSphDict_CRC32 ( DWORD iMorph );
+
+	/// get word ID by word
+	/// does requested morphology and returns CRC32
+	virtual DWORD		wordID ( BYTE * pWord );
+
+protected:
+	/// morphology flags
+	DWORD				m_iMorph;
 };
+
 
 struct CSphSource
 {
@@ -429,7 +452,7 @@ private:
 	int				m_iGroupID;
 
 	/// current word position
-	int				m_iWordID;
+	int				m_iWordPos;
 
 private:
 	/// set current tag

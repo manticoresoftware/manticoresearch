@@ -1,9 +1,11 @@
 <?php
 
-// *** SPHINX API ***
+/////////////////////////////////////////////////////////////////////////////
+// SPHINX "API"
+/////////////////////////////////////////////////////////////////////////////
 
-$sphinx_server = "192.168.0.3";
-$sphinx_port   = 3307;
+$sphinx_server = "127.0.0.1";
+$sphinx_port   = 3312;
 
 function sphinxQuery($server, $port, $query, $start = 0, $rpp = 20)
 {
@@ -39,6 +41,31 @@ function sphinxQuery($server, $port, $query, $start = 0, $rpp = 20)
 
 	fclose($fp);
 	return $result;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+unset ( $argv[0] );
+$q = "";
+foreach ( $argv as $arg )
+	$q .= "$arg ";
+
+$res = sphinxQuery ( $sphinx_server, $sphinx_port, $q );
+print "Query '$q' produced $res[total] matches in $res[time] sec.\n";
+print "Query stats:\n";
+foreach ( $res["words"] as $word => $info )
+	print "    '$word' found $info[hits] times in $info[docs] documents\n";
+print "\n";
+
+if ( isset($res["matches"]) )
+{
+	$n = 1;
+	print "Matches:\n";
+	foreach ( $res["matches"] as $doc => $weight )
+	{
+		print "$n. doc_id=$doc, weight=$weight\n";
+		$n++;
+	}
 }
 
 ?>

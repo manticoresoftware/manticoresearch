@@ -68,28 +68,33 @@ int main(int argc, char **argv)
 		CHECK_CONF ( confIndexer, "indexer", "sql_db" );
 		CHECK_CONF ( confIndexer, "indexer", "sql_query" );
 
-		CSphSource_MySQL * pSrcMysql = new CSphSource_MySQL (
-			confIndexer->get ( "sql_query" ),
-			confIndexer->get ( "sql_query_pre" ),
-			confIndexer->get ( "sql_query_post" ) );
-		if ( !pSrcMysql->Connect (
-			confIndexer->get ( "sql_host" ),
-			confIndexer->get ( "sql_user" ),
-			confIndexer->get ( "sql_pass" ),
-			confIndexer->get ( "sql_db" ),
-			confIndexer->get ( "sql_port" ) ? atoi ( confIndexer->get ( "sql_port" ) ) : 3306,
-			confIndexer->get ( "sql_sock" ) ) )
+		CSphSourceParams_MySQL tParams;
+
+		tParams.m_sQuery		= confIndexer->get ( "sql_query" );
+		tParams.m_sQueryPre		= confIndexer->get ( "sql_query_pre" );
+		tParams.m_sQueryPost	= confIndexer->get ( "sql_query_post" );
+		tParams.m_sGroupColumn	= confIndexer->get ( "sql_group_column" );
+
+		tParams.m_sHost			= confIndexer->get ( "sql_host" );
+		tParams.m_sUser			= confIndexer->get ( "sql_user" );
+		tParams.m_sPass			= confIndexer->get ( "sql_pass" );
+		tParams.m_sDB			= confIndexer->get ( "sql_db" );
+		tParams.m_sUsock		= confIndexer->get ( "sql_sock" );
+
+		char * pPort = confIndexer->get ( "sql_port" );
+		if ( pPort && atoi(pPort) )
+			tParams.m_iPort = atoi(pPort);
+
+		CSphSource_MySQL * pSrcMySQL = new CSphSource_MySQL ();
+		assert ( pSrcMySQL );
+
+		if ( !pSrcMySQL->Init ( &tParams ) )
 		{
-			fprintf ( stderr, "FATAL: CSphSource_MySql: unable to connect to MySQL at mysql://%s@%s:%d/%s.\n",
-				confIndexer->get ( "sql_user" ),
-				confIndexer->get ( "sql_host" ),
-				confIndexer->get ( "sql_port" ) ? atoi ( confIndexer->get ( "sql_port" ) ) : 3306,
-				confIndexer->get ( "sql_sock" ) ? confIndexer->get ( "sql_sock" ) : "" );
-			delete pSrcMysql;
+			delete pSrcMySQL;
 			return 1;
 		}
 
-		pSource = pSrcMysql;
+		pSource = pSrcMySQL;
 	}
 	#endif
 
@@ -145,11 +150,7 @@ int main(int argc, char **argv)
 	CSphDict_CRC32 * pDict = new CSphDict_CRC32 ( iMorph );
 
 	// configure stopwords
-	char * pStop = confIndexer->get ( "stopwords" );
-	if ( pStop )
-		if ( !pDict->LoadStopwords ( pStop ) )
-			sphDie ( "FATAL: unable to load stopwords from '%s'\n", pStop );
-
+	pDict->LoadStopwords ( confCommon->get ( "stopwords" ) );
 	pIndex->build ( pDict, pSource );
 
 	// trip report

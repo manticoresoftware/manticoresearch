@@ -25,7 +25,7 @@
 static int read_timeout = 5;
 static int children_count = 0;
 static int max_children = 0;
-static int sock;
+static int sock = 0;
 
 int createServerSocket_IP(int port)
 {
@@ -59,9 +59,10 @@ void sigchld(int arg)
 
 void sigterm(int arg)
 {
-	fprintf(stderr, "INFO: caught SIGTERM, shutting down\n");
-	close(sock);
-	exit(0);
+	fprintf ( stderr, "INFO: caught SIGTERM, shutting down\n" );
+	if ( sock )
+		close ( sock );
+	exit ( 0 );
 }
 
 int select_fd(int fd, int maxtime, int writep)
@@ -102,7 +103,6 @@ int iread(int fd, void *buf, int len)
 
 int main(int argc, char **argv)
 {
-	CSphIndex * idx;
 	CSphQueryResult *r;
 	int i, rsock, start = 0, count = 10, rcount, log, port;
 	struct sockaddr_in remote_iaddr;
@@ -173,13 +173,22 @@ int main(int argc, char **argv)
 		}
 	}
 
-	// *** STARTUP ***
+	///////////
+	// startup
+	///////////
 
-	idx = sphCreateIndexPhrase ( confCommon->get ( "index_path" ) );
+	// create index
+	CSphIndex * pIndex = sphCreateIndexPhrase ( confCommon->get ( "index_path" ) );
+	CSphDict * pDict = new CSphDict_CRC32 ( iMorph );
+	pDict->LoadStopwords ( confCommon->get ( "stopwords" ) );
+
+	// create and bind on socket
+	signal ( SIGCHLD, sigchld );
+	signal ( SIGTERM, sigterm );
+	signal ( SIGINT, sigterm );
+
 	sock = createServerSocket_IP(port);
-	listen(sock, 5);
-	signal(SIGCHLD, sigchld);
-	signal(SIGTERM, sigterm);
+	listen ( sock, 5 );
 	if ((log = open(logname, O_CREAT | O_RDWR | O_APPEND,
 		S_IREAD | S_IWRITE)) < 0)
 	{
@@ -187,7 +196,9 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
-	// *** SERVE CLIENTS ***
+	/////////////////
+	// serve clients
+	/////////////////
 
 	fprintf(stderr, "INFO: accepting connections\n");
 	while (1) {
@@ -216,12 +227,13 @@ int main(int argc, char **argv)
 			case 0:
 				for ( ;; )
 				{
-					int iAny;
+					int iAny, iGroup;
 
 					// read mode/limits
 					if ( iread ( rsock, &start, 4 )!=4 ) break;
 					if ( iread ( rsock, &count, 4 )!=4 ) break;
 					if ( iread ( rsock, &iAny, 4 )!=4 ) break;
+					if ( iread ( rsock, &iGroup, 4 )!=4 ) break;
 
 					// read query string
 					if (iread(rsock, &i, 4) != 4) break;
@@ -244,15 +256,16 @@ int main(int argc, char **argv)
 					tQuery.m_pWeights = dUserWeights;
 					tQuery.m_iWeights = iUserWeights;
 					tQuery.m_bAll = ( iAny==0 );
+					tQuery.m_iGroup = iGroup;
 
-					r = idx->query ( new CSphDict_CRC32 ( iMorph ), &tQuery );
+					r = pIndex->query ( pDict, &tQuery );
 
 					// log query
 					time(&now);
 					ctime_r(&now, tbuf);
 					tbuf[24] = '\0';
-					sprintf ( buf, "[%s] %.2f sec: [%d %d %s] %s\n",
-						tbuf, r->m_fQueryTime, start, count, tQuery.m_bAll ? "all" : "any", query );
+					sprintf ( buf, "[%s] %.2f sec: [%d %d %s %d] %s\n",
+						tbuf, r->m_fQueryTime, start, count, tQuery.m_bAll ? "all" : "any", iGroup, query );
 					flock(log, LOCK_EX);
 					lseek(log, 0, SEEK_END);
 					write(log, buf, strlen(buf));

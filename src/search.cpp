@@ -7,7 +7,7 @@
 int main ( int argc, char ** argv )
 {
 	if ( argc<=1 )
-		sphDie ( "usage: search [--any] <word1 [word2 [word3 [...]]]>\n" );
+		sphDie ( "usage: search [--any] [--group <id>] <word1 [word2 [word3 [...]]]>\n" );
 
 	/////////////
 	// configure
@@ -44,18 +44,26 @@ int main ( int argc, char ** argv )
 	sQuery[0] = '\0';
 
 	bool bAny = false;
+	int iGroup = 0;
 	for ( int i=1; i<argc; i++ )
 	{
-		if ( i==1 && strcmp(argv[i], "--any")==0 )
+		if ( strcmp(argv[i], "--any")==0 )
 		{
 			bAny = true;
-			continue;
+		} else if ( strcmp ( argv[i], "--group" )==0 )
+		{
+			if ( ++i<argc )
+				iGroup = atoi ( argv[i] );
+		} else if ( strlen(sQuery) + strlen(argv[i]) + 1 < sizeof(sQuery) )
+		{
+			strcat ( sQuery, argv[i] );
+			strcat ( sQuery, " " );
 		}
-		if ( strlen(sQuery) + strlen(argv[i]) + 1 >= sizeof(sQuery) )
-			break;
-		strcat ( sQuery, argv[i] );
-		strcat ( sQuery, " " );
 	}
+
+	// create dict and configure stopwords
+	CSphDict * pDict = new CSphDict_CRC32 ( iMorph );
+	pDict->LoadStopwords ( hCommonConf->get ( "stopwords" ) );
 
 	//////////
 	// search
@@ -64,10 +72,11 @@ int main ( int argc, char ** argv )
 	CSphQuery tQuery;
 	tQuery.m_sQuery = sQuery;
 	tQuery.m_bAll = !bAny;
+	tQuery.m_iGroup = iGroup;
 
-	CSphDict * pDict = new CSphDict_CRC32 ( iMorph );
 	CSphIndex * pIndex = sphCreateIndexPhrase ( pIndexPath );
 	CSphQueryResult * pResult = pIndex->query ( pDict, &tQuery );
+
 	delete pIndex;
 	delete pDict;
 

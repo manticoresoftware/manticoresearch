@@ -178,12 +178,12 @@ struct CSphReader_VLN
 	CSphReader_VLN(char *name);
 	virtual ~CSphReader_VLN();
 
-	int  open();
+	int open();
 	void GetRawBytes ( void * pData, int iSize );
 	void getbytes(void *data, int size);
-	int  unzipInt();
+	int unzipInt();
 	void unzipInts(CSphVector<DWORD> *data);
-	int  decodeHits(CSphVector<DWORD> *hl);
+	int decodeHits(CSphVector<DWORD> *hl);
 	void close();
 	void seek(int pos);
 
@@ -452,6 +452,7 @@ CSphQuery::CSphQuery ()
 	, m_pWeights	( NULL )
 	, m_iWeights	( 0 )
 	, m_bAll		( true )
+	, m_iGroup		( 0 )
 {
 }
 
@@ -741,8 +742,8 @@ CSphIndex_VLN::~CSphIndex_VLN()
 
 
 #define SPH_CMPHIT_LESS(a,b) \
-	(a.m_iWordID <  b.m_iWordID || \
-	(a.m_iWordID == b.m_iWordID && a.m_iDocID <  b.m_iDocID) || \
+	(a.m_iWordID < b.m_iWordID || \
+	(a.m_iWordID == b.m_iWordID && a.m_iDocID < b.m_iDocID) || \
 	(a.m_iWordID == b.m_iWordID && a.m_iDocID == b.m_iDocID && a.m_iWordPos < b.m_iWordPos))
 
 #define SPH_CMPHIT_MORE(a,b) SPM_CMPHIT_LESS(b,a)
@@ -1540,16 +1541,31 @@ CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 		// match all words
 		///////////////////
 
-		while (1)
+		for ( ;; )
 		{
-			while (*pdocs[i] && docID > *pdocs[i]) pdocs[i] += 2;
-			if (!*pdocs[i]) break;
-			if (docID < *pdocs[i]) {
-				docID = *pdocs[i];
+			// scan lists until *all* the ids match
+			while ( *pdocs[i] && docID>*pdocs[i] )
+				pdocs[i] += 2;
+			if ( !*pdocs[i] )
+				break;
+
+			if ( docID<*pdocs[i] )
+			{
 				i = 0;
+				docID = *pdocs[i];
 				continue;
 			}
-			if (++i != nwords) continue;
+			if (++i != nwords)
+				continue;
+
+			// early reject by group id
+			if ( pQuery->m_iGroup )
+				if ( pQuery->m_iGroup != int( ((docID-1) & iGroupMask) + m_tHeader.m_iMinGroupID ) )
+			{
+				i = 0;
+				docID++;
+				continue;
+			}
 
 			// Houston, we have a match
 			for (i = 0; i < nwords; i++)
@@ -1657,6 +1673,11 @@ CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 
 			assert ( iDocID!=0 );
 			assert ( iDocID!=UINT_MAX );
+
+			// early reject by group id
+			if ( pQuery->m_iGroup )
+				if ( pQuery->m_iGroup != int( ((iDocID-1) & iGroupMask) + m_tHeader.m_iMinGroupID ) )
+					continue;
 
 			// get the words we're matching current document against (let's call them "terms")
 			int dPos [ SPH_MAX_QUERY_WORDS ];
@@ -1844,7 +1865,7 @@ DWORD CSphDict_CRC32::GetWordID ( BYTE * pWord )
 	if ( m_iMorph & SPH_MORPH_STEM_RU )
 		stem_ru ( pWord );
 	
-    // calc CRC
+	// calc CRC
 	for ( p=pWord; *p; p++ )
 		crc = (crc >> 8) ^ crc32tab[(crc ^ (*p)) & 0xff];
 	crc = ~crc;
@@ -1889,43 +1910,65 @@ struct DwordCmp_fn
 };
 
 
-bool CSphDict_CRC32::LoadStopwords ( const char * sName )
+void CSphDict_CRC32::LoadStopwords ( const char * sFiles )
 {
 	static BYTE sBuffer [ 65536 ];
 
-	// open file
-	FILE * fp = fopen ( sName, "rb" );
-	if ( !fp )
-		return false;
+	// tokenize file list
+	if ( !sFiles )
+		return;
+	char * sList = sphDup ( sFiles );
+	char * pCur = sList;
+	char * sName = NULL;
 
-	// tokenize
-	CSphTokenizer tTokenizer;
-	CSphVector<DWORD> dStop;
-	int iLength;
-	do
+	for ( ;; )
 	{
-		iLength = fread ( sBuffer, 1, sizeof(sBuffer), fp );
-		tTokenizer.SetBuffer ( sBuffer, iLength );
+		// find next name start
+		while ( *pCur && isspace(*pCur) ) pCur++;
+		if ( !*pCur ) break;
+		sName = pCur;
 
-		BYTE * pToken;
-		while ( (pToken = tTokenizer.GetToken()) )
+		// find next name end
+		while ( *pCur && !isspace(*pCur) ) pCur++;
+		if ( *pCur ) *pCur++ = '\0';
+
+		// open file
+		FILE * fp = fopen ( sName, "rb" );
+		if ( !fp )
 		{
-			dStop.Add ( GetWordID ( pToken ) );
+			fprintf ( stderr, "WARNING: failed to load stopwords from '%s'.\n", sName );
+			continue;
 		}
-	} while ( iLength );
 
-	// sort
-	dStop.Sort ( DwordCmp_fn() );
+		// tokenize file
+		CSphTokenizer tTokenizer;
+		CSphVector<DWORD> dStop;
+		int iLength;
+		do
+		{
+			iLength = fread ( sBuffer, 1, sizeof(sBuffer), fp );
+			tTokenizer.SetBuffer ( sBuffer, iLength );
 
-	// store
-	m_iStopwords = dStop.GetLength ();
-	m_pStopwords = new DWORD [ m_iStopwords ];
-	memcpy ( m_pStopwords, &dStop[0], sizeof(DWORD)*m_iStopwords );
-	fprintf ( stdout, "- loaded %d stopwords\n", m_iStopwords ); // FIXME! do loglevels
+			BYTE * pToken;
+			while ( (pToken = tTokenizer.GetToken()) )
+				dStop.Add ( GetWordID ( pToken ) );
+		} while ( iLength );
 
-	// cleanup
-	fclose ( fp );
-	return true;
+		// sort stopwords
+		dStop.Sort ( DwordCmp_fn() );
+
+		// store IDs
+		m_iStopwords = dStop.GetLength ();
+		m_pStopwords = new DWORD [ m_iStopwords ];
+		memcpy ( m_pStopwords, &dStop[0], sizeof(DWORD)*m_iStopwords );
+		fprintf ( stderr, "- loaded %d stopwords from '%s'\n",
+			m_iStopwords, sName ); // FIXME! do loglevels
+
+		// close file
+		fclose ( fp );
+	}
+
+	sphFree ( sList );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1986,7 +2029,7 @@ int CSphSource_Document::next()
 			if ( iWord )
 			{
 				CSphHit & tHit = hits.Add ();
-				tHit.m_iGroupID = 1;
+				tHit.m_iGroupID = m_iLastGroupID;
 				tHit.m_iDocID = m_iLastID;
 				tHit.m_iWordID = iWord;
 				tHit.m_iWordPos = (j << 24) | pos++; // FIXME! add groups support here
@@ -2022,65 +2065,155 @@ BYTE **CSphSource_Text::NextDocument()
 
 #if USE_MYSQL
 
-CSphSource_MySQL::CSphSource_MySQL ( const char * sQuery, const char * sQueryPre, const char * sQueryPost )
-	: m_sQuery		( sQuery )
-	, m_sQueryPre	( sQueryPre ? sQueryPre : "" )
-	, m_sQueryPost	( sQueryPost ? sQueryPost : "" )
+CSphSourceParams_MySQL::CSphSourceParams_MySQL ()
+	: m_sQuery			( NULL )
+	, m_sQueryPre		( NULL )
+	, m_sQueryPost		( NULL )
+	, m_sGroupColumn	( NULL )
+
+	, m_sHost			( NULL )
+	, m_sUser			( NULL )
+	, m_sPass			( NULL )
+	, m_sDB				( NULL )
+	, m_iPort			( 3306 )
+	, m_sUsock			( NULL )
 {
-	assert ( sQuery );
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+CSphSource_MySQL::CSphSource_MySQL ()
+	: m_sQueryPost		( NULL )
+	, m_iGroupColumn	( 0 )
+{
 }
 
 
-int CSphSource_MySQL::Connect ( const char * host, const char * user, const char * pass,
-	const char * db, int port, const char * usock )
+bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 {
-	mysql_init ( &m_tSqlDriver );
-
 	#define SPH_ERROR(_arg) { sError = _arg; break; }
 	const char * sError = NULL;
 
+	// checks
+	assert ( pParams );
+	assert ( pParams->m_sQuery );
+
+	// defaults
+	#define CHECK_NULL(_arg) if ( !pParams->_arg ) pParams->_arg = "";
+
+	CHECK_NULL ( m_sQueryPre );
+	CHECK_NULL ( m_sQueryPost );
+	CHECK_NULL ( m_sGroupColumn );
+
+	CHECK_NULL ( m_sHost );
+	CHECK_NULL ( m_sUser );
+	CHECK_NULL ( m_sPass );
+	CHECK_NULL ( m_sDB );
+	CHECK_NULL ( m_sUsock );
+
+	// connect
 	do
 	{
-		if ( !mysql_real_connect ( &m_tSqlDriver, host, user, pass, db, port, usock, 0 ) )
-			SPH_ERROR ( "mysql_real_connect" );
+		// initialize mysql lib
+		mysql_init ( &m_tSqlDriver );
 
-		if ( strlen(m_sQueryPre) )
+		// do connect
+		if ( !mysql_real_connect ( &m_tSqlDriver,
+			pParams->m_sHost,
+			pParams->m_sUser,
+			pParams->m_sPass,
+			pParams->m_sDB,
+			pParams->m_iPort,
+			pParams->m_sUsock, 0 ) )
 		{
-			if ( mysql_query ( &m_tSqlDriver, m_sQueryPre ) )
+			SPH_ERROR ( "mysql_real_connect" );
+		}
+
+		// run pre-query
+		if ( pParams->m_sQueryPre && strlen(pParams->m_sQueryPre) )
+		{
+			if ( mysql_query ( &m_tSqlDriver, pParams->m_sQueryPre ) )
 				SPH_ERROR ( "mysql_query_pre" );
 
 			if ( (m_pSqlResult = mysql_use_result ( &m_tSqlDriver )) )
 				mysql_free_result ( m_pSqlResult );
 		}
 
-		if ( mysql_query ( &m_tSqlDriver, m_sQuery ) )
+		// run query
+		if ( mysql_query ( &m_tSqlDriver, pParams->m_sQuery ) )
 			SPH_ERROR ( "mysql_query" );
-
 		if (!( m_pSqlResult = mysql_use_result ( &m_tSqlDriver ) ))
 			SPH_ERROR ( "mysql_use_result" );
 
 	} while ( false );
 
+	// errors, anyone?
 	if ( sError )
 	{
-		fprintf ( stderr, "ERROR: %s: %s\n", sError, mysql_error ( &m_tSqlDriver ) );
+		fprintf ( stderr, "ERROR: %s: %s (DSN=mysql://%s:***@%s:%d/%s).\n",
+			sError, mysql_error ( &m_tSqlDriver ),
+			pParams->m_sUser, pParams->m_sHost, pParams->m_iPort,
+			pParams->m_sUsock + ( pParams->m_sUsock[0]=='/' ? 1 : 0 ) );
 		return 0;
 	}
-	#undef SPH_ERROR
 
+	// some post-query setup
 	m_iFieldCount = mysql_num_fields ( m_pSqlResult ) - 1;
+	m_sQueryPost = sphDup ( pParams->m_sQueryPost );
+
+	// group column
+	m_iGroupColumn = 0;
+	if ( strlen(pParams->m_sGroupColumn) )
+	{
+		m_iGroupColumn = atoi ( pParams->m_sGroupColumn );
+
+		if ( !m_iGroupColumn )
+		{
+			// if it's string, match by name
+			m_iGroupColumn = -1;
+			for ( int i=1; i<(int)mysql_num_fields(m_pSqlResult); i++ )
+				if ( strcasecmp ( m_pSqlResult->fields[i].name, pParams->m_sGroupColumn )==0 )
+			{
+				m_iGroupColumn = i;
+				break;
+			}
+		} else
+		{
+			// if it's number, reindex from base 1 to base 0
+			m_iGroupColumn--;
+		}
+
+		if ( m_iGroupColumn<=0 || m_iGroupColumn>=(int)mysql_num_fields(m_pSqlResult) )
+		{
+			fprintf ( stderr, "WARNING: bad group column index (name='%s', index=%d), GROUPS DISABLED.\n",
+				pParams->m_sGroupColumn, m_iGroupColumn );
+			m_iGroupColumn = 0;
+		} else
+		{
+			m_iFieldCount--;
+			assert ( m_iFieldCount>0 );
+		}
+	}
+
 	return 1;
+
+	#undef SPH_ERROR
+	#undef CHECK_NULL
 }
 
 
 CSphSource_MySQL::~CSphSource_MySQL ()
 {
+	if ( m_sQueryPost )
+		sphFree ( m_sQueryPost );
 }
 
 
 BYTE ** CSphSource_MySQL::NextDocument ()
 {
 	m_tSqlRow = mysql_fetch_row ( m_pSqlResult );
+
+	// when the party's over...
 	if ( !m_tSqlRow )
 	{
 		while ( strlen(m_sQueryPost) )
@@ -2098,8 +2231,25 @@ BYTE ** CSphSource_MySQL::NextDocument ()
 		return NULL;
 	}
 
+	// get him!
 	m_iLastID = atoi ( m_tSqlRow[0] );
-	return (BYTE**)( &m_tSqlRow[1] );
+	if ( m_iGroupColumn )
+	{
+		// there's group column, need to extract group ID and reorder
+		// OPTIMIZE: can prebuild field ID array once
+		m_iLastGroupID = atoi ( m_tSqlRow [ m_iGroupColumn ] );
+
+		memcpy ( &m_dFields[0], &m_tSqlRow[1], sizeof(BYTE*)*(m_iGroupColumn-1) );
+		memcpy ( &m_dFields[m_iGroupColumn-1], &m_tSqlRow[m_iGroupColumn+1],
+			sizeof(BYTE*)*(m_iFieldCount-m_iGroupColumn+1) );
+		return m_dFields;
+
+	} else
+	{
+		// no groups in this query
+		m_iLastGroupID = 1;
+		return (BYTE**)( &m_tSqlRow[1] );
+	}
 }
 
 #endif // USE_MYSQL
@@ -2330,14 +2480,14 @@ int CSphSource_XMLPipe::next ()
 				// skip non-whitespace
 				while ( (*pData) && i<iLen ) { pData++; i++; }
 		
-		        // add hit
-		        DWORD iWID = dict->GetWordID ( pWord );
-		        if ( iWID )
-		        {
-		        	CSphHit & tHit = hits.Add ();
-		        	tHit.m_iGroupID = m_iGroupID;
-		        	tHit.m_iDocID = m_iDocID;
-		        	tHit.m_iWordID = iWID;
+				// add hit
+				DWORD iWID = dict->GetWordID ( pWord );
+				if ( iWID )
+				{
+					CSphHit & tHit = hits.Add ();
+					tHit.m_iGroupID = m_iGroupID;
+					tHit.m_iDocID = m_iDocID;
+					tHit.m_iWordID = iWID;
 					tHit.m_iWordPos = iPos++;
 				}
 			}

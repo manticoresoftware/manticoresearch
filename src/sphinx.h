@@ -7,8 +7,13 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
-#define USE_MYSQL		1	/// whether to compile with MySQL support
-#define USE_WINDOWS		0	/// whether to compile for Windows
+#ifdef _WIN32
+	#define USE_MYSQL		0	/// whether to compile with MySQL support
+	#define USE_WINDOWS		1	/// whether to compile for Windows
+#else
+	#define USE_MYSQL		1	/// whether to compile with MySQL support
+	#define USE_WINDOWS		0	/// whether to compile for Windows
+#endif
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -142,6 +147,7 @@ public:
 	/// sort the array
 	template < typename F > void Sort ( F comp, int iStart=0, int iEnd=-1 )
 	{
+		if ( m_iLength<2 ) return;
 		if ( iStart<0 ) iStart = m_iLength+iStart;
 		if ( iEnd<0 ) iEnd = m_iLength+iEnd;
 		assert ( iStart<=iEnd );
@@ -231,8 +237,8 @@ struct CSphDict
 	/// get word ID by word
 	virtual DWORD		GetWordID ( BYTE * pWord ) = 0;
 
-	/// load stopwords from given file
-	virtual bool		LoadStopwords ( const char * sName ) = 0;
+	/// load stopwords from given files
+	virtual void		LoadStopwords ( const char * sFiles ) = 0;
 };
 
 
@@ -247,8 +253,8 @@ struct CSphDict_CRC32 : CSphDict
 	/// does requested morphology and returns CRC32
 	virtual DWORD		GetWordID ( BYTE * pWord );
 
-	/// load stopwords from given file
-	virtual bool		LoadStopwords ( const char * sName );
+	/// load stopwords from given files
+	virtual void		LoadStopwords ( const char * sFiles );
 
 protected:
 	DWORD				m_iMorph;		///< morphology flags
@@ -344,9 +350,13 @@ struct CSphSource_Document : CSphSource
 	virtual int				GetFieldCount ();
 
 protected:
+	/// last group id
+	/// MUST be filled by NextDocument ()
+	DWORD					m_iLastGroupID;
+
 	/// last document id
 	/// MUST be filled by NextDocument ()
-	int						m_iLastID;
+	DWORD					m_iLastID;
 
 	/// my field count
 	/// MUST be filled by NextDocument ()
@@ -368,14 +378,36 @@ struct CSphSource_Text : CSphSource_Document
 
 
 #if USE_MYSQL
+/// MySQL source params
+struct CSphSourceParams_MySQL
+{
+	// query params
+	const char *	m_sQuery;
+	const char *	m_sQueryPre;
+	const char *	m_sQueryPost;
+	const char *	m_sGroupColumn;
+
+	// connection params
+	const char *	m_sHost;
+	const char *	m_sUser;
+	const char *	m_sPass;
+	const char *	m_sDB;
+	int				m_iPort;
+	const char *	m_sUsock;
+
+	/// ctor which sets defaults
+					CSphSourceParams_MySQL ();
+};
+
+
 /// MySQL source implementation
 /// multi-field plain-text documents fetched from given query
 struct CSphSource_MySQL : CSphSource_Document
 {
-						CSphSource_MySQL ( const char * sqlQuery, const char * sQueryPre=NULL, const char * sQueryPost=NULL );
+						CSphSource_MySQL ();
 	virtual				~CSphSource_MySQL ();
 
-	virtual int			Connect ( const char * host, const char * user, const char * pass, const char * db, int port, const char * usock );
+	bool				Init ( CSphSourceParams_MySQL * pParams );
 	virtual BYTE **		NextDocument ();
 
 private:
@@ -383,9 +415,9 @@ private:
 	MYSQL_ROW			m_tSqlRow;
 	MYSQL				m_tSqlDriver;
 
-	const char *		m_sQuery;		///< query which is used to fetch data
-	const char *		m_sQueryPre;	///< query which is issued before main fetch
-	const char *		m_sQueryPost;	///< query which is issued after main fetch
+	char *				m_sQueryPost;	///< query which is issued after main fetch
+	int					m_iGroupColumn;
+	BYTE *				m_dFields [ SPH_MAX_FIELD_COUNT ];
 };
 #endif
 
@@ -505,6 +537,7 @@ public:
 	int *			m_pWeights;	///< user-supplied per-field weights. may be NULL. default is NULL
 	int				m_iWeights;	///< number of user-supplied weights. missing fields will be assigned weight 1. default is 0
 	bool			m_bAll;		///< match all words or any word. default is "match all"
+	int				m_iGroup;	///< match this group only. default is 0, which means "match all"
 
 public:
 	/// ctor. fills defaults

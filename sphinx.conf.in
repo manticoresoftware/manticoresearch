@@ -42,12 +42,25 @@ sql_query_pre		=
 
 # main document fetch query
 # you can specify any number of fields
-# int32 document id MUST be the very first field
+#
+# document_id MUST be the very first field
+# document_id MUST be positive (non-zero, non-negative)
+#
 # mandatory
 sql_query			= \
-	SELECT doc.id, doc.title, doc.data \
+	SELECT doc.id, doc.id AS group, doc.title, doc.data \
 	FROM documents doc
 sql_sock			= /tmp/mysql.sock
+
+# group_id column name or number
+# group_id id MUST be positive (non-zero, non-negative)
+#
+# columns are numbered starting from 1, ie. document_id is 1, next one is 2, etc
+# if group_id column is specified, it's removed from fulltext indexed fields,
+# therefore changing the field numbering
+#
+# optional, default is empty
+sql_group_column	= 2
 
 # post-query, executed after the main fetch query
 # useful eg. to unmark records
@@ -59,7 +72,7 @@ sql_query_post		=
 sql_port			= 3306
 
 # stopwords file
-# format is plain cp-1251 or koi-8 text
+# format is plain cp-1251 (or koi-8, depending on what you use) text
 # optional, default is empty
 #
 # stopwords			= /home/sphinx/data/stopwords.txt

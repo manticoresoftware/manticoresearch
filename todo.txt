@@ -10,11 +10,8 @@
 [ ] 10. add --verbose, --quiet switches
 [ ] 11. add loglevels
 [+] 12. add "match any word" mode
-[ ] 13. add groups support to mysql driver
-[ ] 14. fix stopword queries (totally ignore stops)
-[ ] 15. add multiple stopword files support
-
-ZelyonKa, 16.02.2005 17:32:
-12, 14, 15, 13  
+[+] 13. add groups support to mysql driver and searcher
+[+] 14. fix stopword queries (totally ignore stops)
+[+] 15. add multiple stopword files support
 
 -- eof --

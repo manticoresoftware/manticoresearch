@@ -160,7 +160,7 @@ struct Word_t
 
 struct WordCmp_fn
 {
-	inline operator () ( const Word_t & a, const Word_t & b)
+	inline int operator () ( const Word_t & a, const Word_t & b)
 	{
 		return a.m_iCount > b.m_iCount;
 	}
@@ -300,7 +300,7 @@ int main ( int argc, char ** argv )
 	#define CHECK_CONF(_hash,_sect,_key) \
 		if ( !_hash->get ( _key ) ) \
 		{ \
-			fprintf ( stderr, "FATAL: key '%s' not found in config file '%s' section '%s'.\n", sConfName, _key, _sect ); \
+			fprintf ( stderr, "FATAL: key '%s' not found in config file '%s' section '%s'.\n", _key, sConfName, _sect ); \
 			return 1; \
 		}
 

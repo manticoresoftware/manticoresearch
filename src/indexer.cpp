@@ -327,6 +327,7 @@ int main ( int argc, char ** argv )
 		tParams.m_sQuery		= confIndexer->get ( "sql_query" );
 		tParams.m_sQueryPre		= confIndexer->get ( "sql_query_pre" );
 		tParams.m_sQueryPost	= confIndexer->get ( "sql_query_post" );
+		tParams.m_sQueryRange	= confIndexer->get ( "sql_query_range" );
 		tParams.m_sGroupColumn	= confIndexer->get ( "sql_group_column" );
 
 		tParams.m_sHost			= confIndexer->get ( "sql_host" );
@@ -335,9 +336,15 @@ int main ( int argc, char ** argv )
 		tParams.m_sDB			= confIndexer->get ( "sql_db" );
 		tParams.m_sUsock		= confIndexer->get ( "sql_sock" );
 
-		char * pPort = confIndexer->get ( "sql_port" );
-		if ( pPort && atoi(pPort) )
-			tParams.m_iPort = atoi(pPort);
+		char * sTmp;
+		
+		sTmp = confIndexer->get ( "sql_port" );
+		if ( sTmp && atoi(sTmp) )
+			tParams.m_iPort = atoi(sTmp);
+
+		sTmp = confIndexer->get ( "sql_range_step" );
+		if ( sTmp && atoi(sTmp) )
+			tParams.m_iRangeStep = atoi(sTmp);
 
 		CSphSource_MySQL * pSrcMySQL = new CSphSource_MySQL ();
 		assert ( pSrcMySQL );

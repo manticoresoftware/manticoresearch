@@ -390,7 +390,9 @@ struct CSphSourceParams_MySQL
 	const char *	m_sQuery;
 	const char *	m_sQueryPre;
 	const char *	m_sQueryPost;
+	const char *	m_sQueryRange;
 	const char *	m_sGroupColumn;
+	int				m_iRangeStep;
 
 	// connection params
 	const char *	m_sHost;
@@ -415,14 +417,28 @@ struct CSphSource_MySQL : CSphSource_Document
 	bool				Init ( CSphSourceParams_MySQL * pParams );
 	virtual BYTE **		NextDocument ();
 
-private:
+protected:
 	MYSQL_RES *			m_pSqlResult;
 	MYSQL_ROW			m_tSqlRow;
 	MYSQL				m_tSqlDriver;
+	char *				m_sSqlDSN;
 
-	char *				m_sQueryPost;	///< query which is issued after main fetch
-	int					m_iGroupColumn;
+	char *				m_sQuery;		///< main fetch query
+	char *				m_sQueryPost;	///< post-fetch query
+	int					m_iGroupColumn;	///< group_id column number
+
 	BYTE *				m_dFields [ SPH_MAX_FIELD_COUNT ];
+
+	int					m_iRangeStep;	///< ID range step, -1 if not using ranges
+	int					m_iMinID;		///< grand min ID
+	int					m_iMaxID;		///< grand max ID
+	int					m_iCurrentID;	///< current min ID
+
+	static const int			MACRO_COUNT = 2;
+	static const char * const	MACRO_VALUES [ MACRO_COUNT ];
+
+protected:
+	bool				RunQueryStep ();
 };
 #endif
 

@@ -3,7 +3,7 @@
 [ ] 3. add results table support
 [+] 4. add stopwords support
 [ ] 5. add shadow copy to avoid taking searchd offline for reindexing
-[ ] 6. add PK ranges support to avoid MyISAM table locks
+[+] 6. add PK ranges support to avoid MyISAM table locks
 [ ] 7. add memory constraints
 [ ] 8. add query for total count and save top N results
 [ ] 9. add query for pergroup count
@@ -16,6 +16,6 @@
 [+] 16. add strict config validation
 [ ] 17. add support for multiple sql_query's (UNION is too hairy)
 
-6, 17
+17
 
 -- eof --

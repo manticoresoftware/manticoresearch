@@ -13,12 +13,22 @@
 # MUST be defined
 index_path			= /home/sphinx/data/testdb
 
+
 # morphology
 # default is not to use any
 #
 # morphology		= stem_en
 # morphology		= stem_ru
 # morphology		= stem_enru
+morphology			=
+
+
+# stopwords file
+# format is plain cp-1251 (or koi-8, depending on what you use) text
+# optional, default is empty
+#
+# stopwords			= /home/sphinx/data/stopwords.txt
+stopwords			=
 
 [indexer]
 
@@ -27,11 +37,15 @@ index_path			= /home/sphinx/data/testdb
 # MUST be defined
 type				= mysql
 
+
 # some straightforward parameters for 'mysql' source type
 sql_host			= localhost
 sql_user			= root
 sql_pass			= 
 sql_db				= testdb
+sql_sock			= /tmp/mysql.sock	# optional
+sql_port			= 3306				# optional, default is 3306
+
 
 # pre-query, executed before the main fetch query
 # useful eg. to setup encoding or mark records
@@ -39,6 +53,7 @@ sql_db				= testdb
 #
 # sql_query_pre		= SET CHARACTER_SET_RESULTS=cp1251
 sql_query_pre		=
+
 
 # main document fetch query
 # you can specify any number of fields
@@ -50,7 +65,42 @@ sql_query_pre		=
 sql_query			= \
 	SELECT doc.id, doc.id AS group, doc.title, doc.data \
 	FROM documents doc
-sql_sock			= /tmp/mysql.sock
+
+
+# query range setup
+#
+# useful to avoid MyISAM table locks and big result sets
+# when indexing lots of data
+#
+# to use query ranges, you should
+# 1) provide a query to fetch min and max id (ie. id range) from data set;
+# 2) configure step size in which this range will be walked;
+# 3) use $start and $end macros somewhere in the main fetch query.
+#
+# 'sql_query_range' must return exactly two integer fields
+# in exactly min_id, max_id order
+#
+# 'sql_range_step' must be a positive integer
+# optional, default is 1024
+#
+# 'sql_query' must contain both '$start' and '$end' macros
+# if you are using query ranges (because it obviously would be an
+# error to index the whole table many times)
+#
+# note that the intervals specified by $start/$end do not
+# overlap, so you should NOT remove document ids which are exactly
+# equal to $start or $end in your query
+#
+# here's an example which will index 'documents' table
+# fetching (at most) one thousand entries at a time:
+#
+# sql_query_range		= SELECT MIN(id),MAX(id) FROM documents
+# sql_range_step		= 1000
+# sql_query			= \
+#	SELECT doc.id, doc.id AS group, doc.title, doc.data \
+#	FROM documents doc \
+#	WHERE id>=$start AND id<=$end
+
 
 # group_id column name or number
 # group_id id MUST be positive (non-zero, non-negative)
@@ -62,21 +112,11 @@ sql_sock			= /tmp/mysql.sock
 # optional, default is empty
 sql_group_column	= 2
 
+
 # post-query, executed after the main fetch query
 # useful eg. to unmark records
 # optional, default is empty
 sql_query_post		=
-
-# mysql port
-# optional, default is 3306
-sql_port			= 3306
-
-# stopwords file
-# format is plain cp-1251 (or koi-8, depending on what you use) text
-# optional, default is empty
-#
-# stopwords			= /home/sphinx/data/stopwords.txt
-stopwords			=
 
 #############################################################################
 
@@ -103,16 +143,20 @@ stopwords			=
 # port on which search daemon will listen
 port				= 3312
 
+
 # log file
 # searchd run info is logged here
 log					= /home/sphinx/logs/searchd.log
+
 
 # query log file
 # all the search queries are logged here
 query_log			= /home/sphinx/logs/query.log
 
+
 # client read timeout, seconds
 read_timeout		= 5
+
 
 # maximum amount of children to fork
 # useful to control server load

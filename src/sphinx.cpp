@@ -235,7 +235,7 @@ private:
 	int							binsRead ( int b, CSphHit * e );
 
 	int							cidxCreate ();
-	int							cidxWriteRawVLB ( int fd, CSphHit *hit, int count );
+	int							cidxWriteRawVLB ( int fd, CSphHit * hit, int count );
 	void						cidxFlushHitList ();
 	void						cidxFlushChunk ();
 	void						cidxFlushIndexPage ();
@@ -899,7 +899,9 @@ int CSphIndex_VLN::binsRead ( int b, CSphHit * e )
 	{
 		// unexpected EOB
 		if ( (r = binsReadVLB(b)) == 0xffffffffUL )
+		{
 			return 0;
+		}
 
 		if ( r )
 		{
@@ -917,7 +919,9 @@ int CSphIndex_VLN::binsRead ( int b, CSphHit * e )
 					bins[b]->lastPos = 0;
 					bins[b]->state = BIN_POS;
 					if ( (bins[b]->lastGroupID = binsReadVLB(b)) == 0xffffffffUL )
+					{
 						return 0; // read unexpected EOB
+					}
 					break;
 
 				case BIN_POS: 
@@ -1103,8 +1107,10 @@ inline int encodeVLB(BYTE *buf, DWORD v)
 	return n;
 }
 
-int CSphIndex_VLN::cidxWriteRawVLB(int fd, CSphHit *hit, int count)
+int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphHit * hit, int count )
 {
+	assert ( hit );
+
 	BYTE buf[65536+1024], *pBuf, *maxP;
 	int n = 0, w;
 	DWORD d1, d2, d3, l1=0, l2=0, l3=0;
@@ -1134,6 +1140,8 @@ int CSphIndex_VLN::cidxWriteRawVLB(int fd, CSphHit *hit, int count)
 			pBuf += encodeVLB ( pBuf, d2 ); // encode doc id (whole or delta)
 			pBuf += encodeVLB ( pBuf, hit->m_iGroupID ); // encode group id
 		}
+
+		assert ( d3 );
 		pBuf += encodeVLB ( pBuf, d3 );
 
 		// update current state
@@ -1231,8 +1239,8 @@ int CSphIndex_VLN::build(CSphDict *dict, CSphSource *source)
 			{
 				sphSortHits ( rawBlock, rawBlockUsed );
 				bins[rawBlocks] = new CSphBin();
-				if ((bins[rawBlocks]->fileLeft = cidxWriteRawVLB(fdRaw,
-					rawBlock, rawBlockUsed)) < 0)
+				bins[rawBlocks]->fileLeft = cidxWriteRawVLB ( fdRaw, rawBlock, rawBlockUsed );
+				if ( bins[rawBlocks]->fileLeft<0 )
 				{
 					fprintf(stderr, "ERROR: write() failed\n");
 					return 0;
@@ -1240,6 +1248,7 @@ int CSphIndex_VLN::build(CSphDict *dict, CSphSource *source)
 
 				rawBlocks++;
 				assert ( rawBlocks<=SPH_RLOG_MAX_BLOCKS );
+				assert ( rawHits>0 );
 
 				rawBlockUsed = 0;
 				pRawBlock = rawBlock;
@@ -1257,6 +1266,7 @@ int CSphIndex_VLN::build(CSphDict *dict, CSphSource *source)
 
 		rawBlocks++;
 		assert ( rawBlocks<=SPH_RLOG_MAX_BLOCKS );
+		assert ( rawHits>0 );
 	}
 
 	// calc bin positions from their lengths
@@ -1303,6 +1313,7 @@ int CSphIndex_VLN::build(CSphDict *dict, CSphSource *source)
 			if ( mini < 0) { mini = i; continue; }
 			if ( SPH_CMPHIT_LESS ( cur[i], cur[mini] ) ) mini = i;
 		}
+		assert ( mini>=0 );
 
 		// encode gid into docid
 		cur[mini].m_iDocID = 1 + ( (cur[mini].m_iDocID-iMinDocID) << iGidBits ) + ( cur[mini].m_iGroupID-iMinGroupID );
@@ -2078,7 +2089,9 @@ CSphSourceParams_MySQL::CSphSourceParams_MySQL ()
 	: m_sQuery			( NULL )
 	, m_sQueryPre		( NULL )
 	, m_sQueryPost		( NULL )
+	, m_sQueryRange		( NULL )
 	, m_sGroupColumn	( NULL )
+	, m_iRangeStep		( 1024 )
 
 	, m_sHost			( NULL )
 	, m_sUser			( NULL )
@@ -2091,16 +2104,165 @@ CSphSourceParams_MySQL::CSphSourceParams_MySQL ()
 
 /////////////////////////////////////////////////////////////////////////////
 
-CSphSource_MySQL::CSphSource_MySQL ()
-	: m_sQueryPost		( NULL )
-	, m_iGroupColumn	( 0 )
+const char * const CSphSource_MySQL::MACRO_VALUES [ CSphSource_MySQL::MACRO_COUNT ] =
 {
+	"start",
+	"end"
+};
+
+
+CSphSource_MySQL::CSphSource_MySQL ()
+	: m_pSqlResult		( NULL )
+	, m_tSqlRow			( NULL )
+	, m_sSqlDSN			( NULL )
+
+	, m_sQuery			( NULL )
+	, m_sQueryPost		( NULL )
+	, m_iGroupColumn	( 0 )
+
+	, m_iRangeStep		( 0 )
+	, m_iMinID			( 0 )
+	, m_iMaxID			( 0 )
+	, m_iCurrentID		( 0 )
+{
+}
+
+
+CSphSource_MySQL::~CSphSource_MySQL ()
+{
+	sphFree ( m_sSqlDSN );
+	sphFree ( m_sQuery );
+	sphFree ( m_sQueryPost );
+}
+
+
+bool CSphSource_MySQL::RunQueryStep ()
+{
+	static const int iBufSize = 16;
+
+	char * sRes = NULL;
+	if ( m_iRangeStep>0 )
+	{
+		//////////////////////////////////////////////
+		// range query with $start/$end interpolation
+		//////////////////////////////////////////////
+
+		if ( m_iCurrentID>m_iMaxID )
+			return false;
+
+		assert ( m_iMinID>0 );
+		assert ( m_iMaxID>0 );
+		assert ( m_iMinID<=m_iMaxID );
+
+		char sValues [ MACRO_COUNT ] [ iBufSize ];
+		snprintf ( sValues[0], iBufSize, "%d", m_iCurrentID );
+		snprintf ( sValues[1], iBufSize, "%d", m_iCurrentID+m_iRangeStep-1 );
+		m_iCurrentID += m_iRangeStep;
+
+		// OPTIMIZE? things can be precalculated
+		char * sCur = m_sQuery;
+		int iLen = 0;
+		while ( *sCur )
+		{
+			if ( *sCur=='$' )
+			{
+				int i;
+				for ( i=0; i<MACRO_COUNT; i++ )
+					if ( strncmp ( MACRO_VALUES[i], 1+sCur, strlen(MACRO_VALUES[i]) )==0 )
+				{
+					sCur += 1+strlen ( MACRO_VALUES[i] );
+					iLen += strlen ( sValues[i] );
+					break;
+				}
+				if ( i<MACRO_COUNT )
+					continue;
+			}
+
+			sCur++;
+			iLen++;
+		}
+		iLen++; // trailing zero
+
+		// do interpolation
+		sRes = new char [ iLen ];
+		sCur = m_sQuery;
+
+		char * sDst = sRes;
+		while ( *sCur )
+		{
+			if ( *sCur=='$' )
+			{
+				int i;
+				for ( i=0; i<MACRO_COUNT; i++ )
+					if ( strncmp ( MACRO_VALUES[i], 1+sCur, strlen(MACRO_VALUES[i]) )==0 )
+				{
+					strcpy ( sDst, sValues[i] );
+					sCur += 1+strlen ( MACRO_VALUES[i] );
+					sDst += strlen ( sValues[i] );
+					break;
+				}
+				if ( i<MACRO_COUNT )
+					continue;
+			}
+			*sDst++ = *sCur++;
+		}
+		*sDst++ = '\0';
+		assert ( sDst-sRes==iLen );
+
+	} else
+	{
+		///////////////
+		// usual query
+		///////////////
+
+		sRes = m_sQuery;
+	}
+	assert ( sRes );
+
+	// run query
+	const char * sError = NULL;
+	do
+	{
+		if ( m_pSqlResult )
+		{
+			mysql_free_result ( m_pSqlResult );
+			m_pSqlResult = NULL;
+		}
+		if ( mysql_query ( &m_tSqlDriver, sRes ) )
+		{
+			sError = "mysql_query";
+			break;
+		}
+		if (!( m_pSqlResult = mysql_use_result ( &m_tSqlDriver ) ))
+		{
+			sError = "mysql_use_result";
+			break;
+		}
+	} while ( false );
+
+	if ( m_iRangeStep>0 )
+		SafeDeleteArray ( sRes );
+
+	// report errors, if any
+	if ( sError )
+	{
+		fprintf ( stderr, "ERROR: %s: %s (DSN=%s).\n",
+			sError, mysql_error ( &m_tSqlDriver ), m_sSqlDSN );
+		return false;
+	}
+
+	// all ok
+	return true;
 }
 
 
 bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 {
-	#define SPH_ERROR(_arg) { sError = _arg; break; }
+	#define LOC_FIX_NULL(_arg) if ( !pParams->_arg ) pParams->_arg = "";
+	#define LOC_ERROR(_msg,_arg) { fprintf ( stderr, _msg, _arg ); return 0; }
+	#define LOC_ERROR2(_msg,_arg,_arg2) { fprintf ( stderr, _msg, _arg, _arg2 ); return 0; }
+	#define LOC_MYSQL_ERROR(_msg) { sError = _msg; break; }
+
 	const char * sError = NULL;
 
 	// checks
@@ -2108,16 +2270,22 @@ bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 	assert ( pParams->m_sQuery );
 
 	// defaults
-	#define CHECK_NULL(_arg) if ( !pParams->_arg ) pParams->_arg = "";
+	LOC_FIX_NULL ( m_sQueryPre );
+	LOC_FIX_NULL ( m_sQueryPost );
+	LOC_FIX_NULL ( m_sGroupColumn );
+	LOC_FIX_NULL ( m_sHost );
+	LOC_FIX_NULL ( m_sUser );
+	LOC_FIX_NULL ( m_sPass );
+	LOC_FIX_NULL ( m_sDB );
 
-	CHECK_NULL ( m_sQueryPre );
-	CHECK_NULL ( m_sQueryPost );
-	CHECK_NULL ( m_sGroupColumn );
-
-	CHECK_NULL ( m_sHost );
-	CHECK_NULL ( m_sUser );
-	CHECK_NULL ( m_sPass );
-	CHECK_NULL ( m_sDB );
+	// build and store DSN for error reporting
+	char sBuf [ 1024 ];
+	snprintf ( sBuf, sizeof(sBuf), "mysql://%s:***@%s:%d/%s",
+		pParams->m_sUser, pParams->m_sHost, pParams->m_iPort,
+		pParams->m_sUsock
+			? ( pParams->m_sUsock + ( pParams->m_sUsock[0]=='/' ? 1 : 0 ) )
+			: "" );
+	m_sSqlDSN = sphDup ( sBuf );
 
 	// connect
 	do
@@ -2134,36 +2302,90 @@ bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 			pParams->m_iPort,
 			pParams->m_sUsock, 0 ) )
 		{
-			SPH_ERROR ( "mysql_real_connect" );
+			LOC_MYSQL_ERROR ( "mysql_real_connect" );
 		}
 
 		// run pre-query
 		if ( pParams->m_sQueryPre && strlen(pParams->m_sQueryPre) )
 		{
 			if ( mysql_query ( &m_tSqlDriver, pParams->m_sQueryPre ) )
-				SPH_ERROR ( "mysql_query_pre" );
+				LOC_MYSQL_ERROR ( "mysql_query_pre" );
 
 			if ( (m_pSqlResult = mysql_use_result ( &m_tSqlDriver )) )
+			{
 				mysql_free_result ( m_pSqlResult );
+				m_pSqlResult = NULL;
+			}
+		}
+
+		// range query
+		if ( pParams->m_sQueryRange )
+		{
+			m_iRangeStep = pParams->m_iRangeStep;
+
+			// check step
+			if ( m_iRangeStep<=0 )
+				LOC_ERROR ( "ERROR: mysql_range_step=%d: must be positive.\n", m_iRangeStep );
+			if ( m_iRangeStep<128 )
+				fprintf ( stderr, "WARNING: mysql_range_step=%d: too small, increase recommended.\n", m_iRangeStep );
+
+			// check query for macros
+			bool bError = false;
+			for ( int i=0; i<MACRO_COUNT; i++ )
+			{
+				if ( !strstr ( pParams->m_sQuery, MACRO_VALUES[i] ) )
+				{
+					fprintf ( stderr, "ERROR: mysql_ranged_query: macro '$%s' not found.\n",
+						MACRO_VALUES[i] );
+					bError = true;
+				}
+			}
+			if ( bError )
+				return 0;
+
+		    // run query
+			if ( mysql_query ( &m_tSqlDriver, pParams->m_sQueryRange ) )
+				LOC_MYSQL_ERROR ( "mysql_query_range" );
+
+			// fetch min/max
+			m_pSqlResult = mysql_use_result ( &m_tSqlDriver );
+			if ( !m_pSqlResult )
+				LOC_MYSQL_ERROR ( "mysql_use_result_range" );
+			if ( m_pSqlResult->field_count!=2 )
+				LOC_ERROR ( "ERROR: mysql_query_range: got %d columns, must be 2 (min_id/max_id).\n", m_pSqlResult->field_count );
+
+			m_tSqlRow = mysql_fetch_row ( m_pSqlResult );
+			if ( !m_tSqlRow )
+				LOC_MYSQL_ERROR ( "mysql_fetch_row_range" );
+
+			m_iMinID = atoi ( m_tSqlRow[0] );
+			m_iMaxID = atoi ( m_tSqlRow[1] );
+			if ( m_iMinID<=0 )
+				LOC_ERROR ( "ERROR: mysql_query_range: min_id=%d: must be positive.\n", m_iMinID );
+			if ( m_iMaxID<=0 )
+				LOC_ERROR ( "ERROR: mysql_query_range: max_id=%d: must be positive.\n", m_iMaxID );
+			if ( m_iMinID>m_iMaxID )
+				LOC_ERROR2 ( "ERROR: mysql_query_range: min_id=%d must not be greater than max_id=%d.\n", m_iMinID, m_iMaxID );
+
+			mysql_free_result ( m_pSqlResult );
+			m_pSqlResult = NULL;
+
+			m_iCurrentID = m_iMinID;
+			m_sQuery = sphDup ( pParams->m_sQuery );
+
 		}
 
 		// run query
-		if ( mysql_query ( &m_tSqlDriver, pParams->m_sQuery ) )
-			SPH_ERROR ( "mysql_query" );
-		if (!( m_pSqlResult = mysql_use_result ( &m_tSqlDriver ) ))
-			SPH_ERROR ( "mysql_use_result" );
+		if ( !RunQueryStep () )
+			return 0;
 
 	} while ( false );
 
 	// errors, anyone?
 	if ( sError )
 	{
-		fprintf ( stderr, "ERROR: %s: %s (DSN=mysql://%s:***@%s:%d/%s).\n",
-			sError, mysql_error ( &m_tSqlDriver ),
-			pParams->m_sUser, pParams->m_sHost, pParams->m_iPort,
-			pParams->m_sUsock
-				? ( pParams->m_sUsock + ( pParams->m_sUsock[0]=='/' ? 1 : 0 ) )
-				: "" );
+		fprintf ( stderr, "ERROR: %s: %s (DSN=%s).\n",
+			sError, mysql_error ( &m_tSqlDriver ), m_sSqlDSN );
 		return 0;
 	}
 
@@ -2207,15 +2429,9 @@ bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 
 	return 1;
 
-	#undef SPH_ERROR
-	#undef CHECK_NULL
-}
-
-
-CSphSource_MySQL::~CSphSource_MySQL ()
-{
-	if ( m_sQueryPost )
-		sphFree ( m_sQueryPost );
+	#undef LOC_FIX_NULL
+	#undef LOC_ERROR
+	#undef LOC_MYSQL_ERROR
 }
 
 
@@ -2224,8 +2440,16 @@ BYTE ** CSphSource_MySQL::NextDocument ()
 	m_tSqlRow = mysql_fetch_row ( m_pSqlResult );
 
 	// when the party's over...
-	if ( !m_tSqlRow )
+	while ( !m_tSqlRow )
 	{
+		// maybe we can do next step yet?
+		if ( RunQueryStep () )
+		{
+			m_tSqlRow = mysql_fetch_row ( m_pSqlResult );
+			continue;
+		}
+
+		// ok, we're over
 		while ( strlen(m_sQueryPost) )
 		{
 			if ( mysql_query ( &m_tSqlDriver, m_sQueryPost ) )
@@ -2234,7 +2458,10 @@ BYTE ** CSphSource_MySQL::NextDocument ()
 				break;
 			}
 			if ( (m_pSqlResult = mysql_use_result ( &m_tSqlDriver )) )
+			{
 				mysql_free_result ( m_pSqlResult );
+				m_pSqlResult = NULL;
+			}
 			break;
 		}
 

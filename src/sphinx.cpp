@@ -1,3 +1,7 @@
+//
+// $Id$
+//
+
 #include <ctype.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -9,6 +13,7 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <assert.h>
 #include "sphinx.hpp"
 
 // *** LOWERCASING TABLE ***
@@ -1130,7 +1135,7 @@ int CSphIndex_VLN::build(CSphDict *dict, CSphSource *source)
 				if ((bins[rawBlocks]->fileLeft = cidxWriteRawVLB(fdRaw,
 					rawBlock, rawBlockUsed)) < 0)
 				{
-					fprintf(stderr, "Error: write() failed\n");
+					fprintf(stderr, "ERROR: write() failed\n");
 					return 0;
 				}
 				rawBlockUsed = 0;
@@ -1580,17 +1585,17 @@ int CSphSource_MySQL::connect(char *host, char *user, char *pass, char *db,
 	if (!mysql_real_connect(&sqlDriver, host, user, pass, db,
 		port, usock, 0))
 	{
-		fprintf(stderr, "Error: %s\n", mysql_error(&sqlDriver));
+		fprintf(stderr, "ERROR: %s\n", mysql_error(&sqlDriver));
 		return 0;
 	}
 	if (mysql_query(&sqlDriver, sqlQuery))
 	{
-		fprintf(stderr, "Error: %s\n", mysql_error(&sqlDriver));
+		fprintf(stderr, "ERROR: %s\n", mysql_error(&sqlDriver));
 		return 0;
 	}
 	if (!(sqlResult = mysql_use_result(&sqlDriver)))
 	{
-		fprintf(stderr, "Error: %s\n", mysql_error(&sqlDriver));
+		fprintf(stderr, "ERROR: %s\n", mysql_error(&sqlDriver));
 		return 0;
 	}
 	numFields = mysql_num_fields(sqlResult) - 1;
@@ -1751,3 +1756,161 @@ CSphHash *CSphConfig::loadSection(char *section)
 	// return
 	return result;
 }
+
+/////////////////////////////////////////////////////////////////////////////
+
+CSphSource_XMLPipe::CSphSource_XMLPipe ()
+{
+	m_bExpectTag	= NULL;
+	m_pTag			= NULL;
+	m_iTagLength	= 0;
+	m_pPipe			= NULL;
+	m_pBuffer		= NULL;
+	m_pBufferEnd	= NULL;
+}
+
+
+CSphSource_XMLPipe::~CSphSource_XMLPipe ()
+{
+	if ( m_pPipe )
+	{
+		pclose ( m_pPipe );
+		m_pPipe = NULL;
+	}
+}
+
+
+bool CSphSource_XMLPipe::Init ( const char * sCommand )
+{
+	assert ( sCommand );
+
+	m_pPipe = popen ( sCommand, "r" );
+	if ( m_pPipe )
+		SetTag ( "document", TAG_DOCUMENT, true );
+	return ( m_pPipe!=NULL );
+}
+
+
+int CSphSource_XMLPipe::next ()
+{
+	assert ( m_pPipe );
+
+	// clear my hits chunk
+	hits.clear ();
+
+	// scan for tag
+	if ( m_bExpectTag )
+	{
+		assert ( m_pTag );
+
+		// skip whitespace
+		do
+		{
+			// suck in some data
+			if ( m_pBuffer>=m_pBufferEnd )
+			{
+				int iLen = fread ( m_sBuffer, 1, sizeof(m_sBuffer), m_pPipe );
+				if ( !iLen )
+				{
+					if ( strcmp ( m_pTag, "document" ) )
+						fprintf ( stderr, "WARNING: unexpected EOF while waiting for tag '%s' in input XML pipe.", m_pTag );
+					return 0;
+				}
+				m_pBuffer = m_sBuffer;
+				m_pBufferEnd = m_pBuffer+iLen;
+			}
+
+			// skip whitespace
+			while ( (m_pBuffer<m_pBufferEnd) && isspace ( *m_pBuffer ) )
+				m_pBuffer++;
+			if ( m_pBuffer!=m_pBufferEnd )
+				break; // we have found it
+
+		} while ( true );
+
+		// if tag is split, suck in some data
+		int iToEnd = m_pBufferEnd-m_pBuffer;
+		if ( iToEnd<m_iTagLength+2 )
+		{
+			memcpy ( m_sBuffer, m_pBuffer, iToEnd );
+			int iLen = fread ( &m_sBuffer [ iToEnd ], 1, sizeof(m_sBuffer)-iToEnd, m_pPipe );
+			if ( !iLen )
+			{
+				fprintf ( stderr, "WARNING: unexpected EOF while waiting for tag '%s' in input XML pipe.", m_pTag );
+				return 0;
+			}
+			m_pBuffer = m_sBuffer;
+			m_pBufferEnd = m_pBuffer+iLen;
+		}
+
+		// still no tag?
+		iToEnd = m_pBufferEnd-m_pBuffer;
+		if ( iToEnd<m_iTagLength+2 )
+		{
+			fprintf ( stderr, "WARNING: unexpected EOF while waiting for tag '%s' in input XML pipe.", m_pTag );
+			return 0;
+		}
+
+		// check tag
+		bool bOk = false;
+		do
+		{
+			if ( m_pBuffer[0] != '<' )
+				break;
+
+			if ( strncmp ( (char*)(m_pBuffer+1), m_pTag, m_iTagLength ) )
+				break;
+
+			if ( m_pBuffer[m_iTagLength+1] != '>' )
+				break;
+
+			bOk = true;
+		} while ( false );
+
+		if ( !bOk )
+		{
+			char sGot [ 64 ];
+			int iCopy = min ( m_pBufferEnd-m_pBuffer, (int)sizeof(sGot)-1 );
+
+			strncpy ( sGot, (char*)m_pBuffer, iCopy );
+			sGot [ iCopy ] = '\0';
+
+			fprintf ( stderr, "WARNING: expected '%s', got '%s' in input XML pipe.",
+				m_pTag, sGot );
+		}
+
+		// got tag, read its text now
+		m_pBuffer += 2+m_iTagLength;
+		assert ( m_pBuffer<=m_pBufferEnd );
+
+		m_bExpectTag = false;
+
+	} else
+	{
+		assert ( 0 && "unimplemented yet" );
+	}
+
+/*
+<document>
+<id>123</id>
+<group>1</group>
+<title>пра сабаку</title>
+<body>...</body>
+</document>
+*/
+
+	return 0;
+}
+
+
+void CSphSource_XMLPipe::SetTag ( const char * sTag, Tag_e eTag, bool bExp )
+{
+	m_pTag = sTag;
+	m_eTag = eTag;
+	m_bExpectTag = bExp;
+	m_iTagLength = strlen ( sTag );
+}
+
+//
+// $Id$
+//

@@ -2,9 +2,8 @@ CC         = cc
 PP         = cc
 LD         = cc
 BINARIES   = indexer searchd
-CCFLAGS    = -Wall -O3 -I/usr/local/include
+CCFLAGS    = -Wall -g -I/usr/local/include
 PPFLAGS    = $(CCFLAGS)
-#LDFLAGS    = -L/usr/local/mysql/lib -lc -lm -lz -lmysqlclient -static
 LDFLAGS    = -L/usr/local/mysql/lib -lc -lm -lz -lmysqlclient
 SRC_SPHINX = sphinx.cpp
 OBJ_SPHINX = $(SRC_SPHINX:.cpp=.o)

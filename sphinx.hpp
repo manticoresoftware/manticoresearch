@@ -1,3 +1,7 @@
+//
+// $Id$
+//
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <mysql/mysql.h>
@@ -17,9 +21,11 @@
 #define min(a,b) ((a)<(b)?(a):(b))
 #define max(a,b) ((a)>(b)?(a):(b))
 
-
 typedef unsigned int uint;
 typedef unsigned char byte;
+
+typedef unsigned int		DWORD;
+typedef unsigned char		BYTE;
 
 // ***
 
@@ -361,3 +367,64 @@ struct CSphConfig
 private:
 	FILE *fp;
 };
+
+/////////////////////////////////////////////////////////////////////////////
+
+class CSphSource_XMLPipe : public CSphSource
+{
+public:
+	/// ctor
+					CSphSource_XMLPipe ();
+
+	/// dtor
+					~CSphSource_XMLPipe ();
+
+	/// initializer
+	bool			Init ( const char * sCommand );
+
+	/// hit chunk getter
+	virtual int		next ();
+
+private:
+	enum Tag_e
+	{
+		TAG_DOCUMENT = 0,
+		TAG_ID,
+		TAG_GROUP,
+		TAG_TITLE,
+		TAG_BODY
+	};
+
+private:
+	/// we either expect some tag or are in tag 
+	bool			m_bExpectTag;
+
+	/// what's our current tag
+	Tag_e			m_eTag;
+
+	/// tag name
+	const char *	m_pTag;
+
+	/// tag name length
+	int				m_iTagLength;
+
+	/// incoming stream
+	FILE *			m_pPipe;
+
+	/// buffer
+	BYTE			m_sBuffer [ 4096 ];
+
+	/// current buffer pos
+	BYTE *			m_pBuffer;
+
+	/// buffered end pos
+	BYTE *			m_pBufferEnd;
+
+private:
+	/// set tag
+	void			SetTag ( const char * sTag, Tag_e eTag, bool bExp );
+};
+
+//
+// $Id$
+//

@@ -19,8 +19,8 @@ function sphinxQuery($server, $port, $query, $start = 0, $rpp = 20)
 	while (!feof($fp)) {
 		$s = trim(fgets($fp, 1024));
 		if (substr($s, 0, 6) == "MATCH ") {
-			list($dummy, $doc, $weight) = explode(" ", $s);
-			$result["matches"][$doc] = $weight;
+			list($dummy, $group, $doc, $weight) = explode(" ", $s);
+			$result["matches"][$doc] = array ( "weight" => $weight, "group" => $group );
 			continue;
 		}
 		if (substr($s, 0, 6) == "TOTAL ") {
@@ -61,9 +61,9 @@ if ( isset($res["matches"]) )
 {
 	$n = 1;
 	print "Matches:\n";
-	foreach ( $res["matches"] as $doc => $weight )
+	foreach ( $res["matches"] as $doc => $docinfo )
 	{
-		print "$n. doc_id=$doc, weight=$weight\n";
+		print "$n. doc_id=$doc, group=$docinfo[group], weight=$docinfo[weight]\n";
 		$n++;
 	}
 }

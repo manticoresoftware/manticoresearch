@@ -2,6 +2,7 @@
 // $Id$
 //
 
+#include <assert.h>
 #include "sphinx.h"
 
 // in cp-1251 encoding!

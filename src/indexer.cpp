@@ -3,6 +3,9 @@
 //
 
 #include <assert.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 #include "sphinx.h"
 
 // *** MAIN ***
@@ -10,6 +13,16 @@
 int main(int argc, char **argv)
 {
 	CSphSource *	pSource = NULL;
+	const char *	sConfName = "sphinx.conf";
+
+	struct stat tStat;
+	if ( argc>1 )
+	{
+		if ( !stat ( argv[1], &tStat ) )
+			sConfName = argv[1];
+		else
+			fprintf ( stderr, "WARNING: can not stat config file '%s', using default 'sphinx.conf'.\n", argv[1] );
+	}
 
 	///////////////
 	// load config
@@ -19,9 +32,10 @@ int main(int argc, char **argv)
 	CSphHash *		confCommon;
 	CSphHash *		confIndexer;
 
-	if ( !conf.open ( "sphinx.conf" ) )
+	fprintf ( stdout, "using config file '%s'...\n", sConfName );
+	if ( !conf.open ( sConfName ) )
 	{
-		fprintf ( stderr, "FATAL: unable to open 'sphinx.conf'.\n" );
+		fprintf ( stderr, "FATAL: unable to open config file '%s'.\n", sConfName );
 		return 1;
 	}
 	confCommon = conf.loadSection ( "common" );
@@ -30,7 +44,7 @@ int main(int argc, char **argv)
 	#define CHECK_CONF(_hash,_sect,_key) \
 		if ( !_hash->get ( _key ) ) \
 		{ \
-			fprintf ( stderr, "FATAL: key '%s' not found in 'sphinx.conf' section '%s'.\n", _key, _sect ); \
+			fprintf ( stderr, "FATAL: key '%s' not found in config file '%s' section '%s'.\n", sConfName, _key, _sect ); \
 			return 1; \
 		}
 

@@ -24,6 +24,8 @@
 
 #define min(a,b) ((a)<(b)?(a):(b))
 #define max(a,b) ((a)>(b)?(a):(b))
+#define Min(a,b) ((a)<(b)?(a):(b))
+#define Max(a,b) ((a)>(b)?(a):(b))
 
 typedef unsigned int uint;
 typedef unsigned char byte;
@@ -45,13 +47,18 @@ int		sphTimer ();
 /// time, in seconds
 float	sphLongTimer ();
 
-// ***
+/////////////////////////////////////////////////////////////////////////////
 
+/// hit info
 struct CSphHit
 {
-	uint docID, wordID, pos;
+	DWORD	m_iGroupID;		///< documents group ID (from data source)
+	DWORD	m_iDocID;		///< document ID (from data source)
+	DWORD	m_iWordID;		///< word ID (from dictionary)
+	DWORD	m_iWordPos;		///< word position in document
 };
 
+/// hit vector
 struct CSphList_Hit
 {
 	int count;
@@ -60,7 +67,7 @@ struct CSphList_Hit
 	CSphList_Hit();
 	virtual ~CSphList_Hit();
 
-	void add(int docID, uint wordID, int pos);
+	void add ( DWORD iGroupID, DWORD iDocID, DWORD iWordID, DWORD iWordPos );
 	void clear();
 	void grow(int entries);
 
@@ -183,14 +190,15 @@ private:
 	MYSQL sqlDriver;
 };
 
-// ***
-
+/// search query match
 struct CSphMatch
 {
-	int docID;
-	int weight;
+	DWORD		m_iGroupID;
+	DWORD		m_iDocID;
+	int			m_iWeight;
 };
 
+/// matches vector
 struct CSphList_Match
 {
 	int count;
@@ -199,7 +207,7 @@ struct CSphList_Match
 	CSphList_Match();
 	virtual ~CSphList_Match();
 
-	void add(int docID, int weight);
+	void add ( DWORD iGroupID, DWORD iDocID, int iWeight );
 
 private:
 	int max;
@@ -228,6 +236,16 @@ private:
 	void grow();
 };
 
+
+/// VLN index header
+struct CSphIndexHeader_VLN
+{
+	DWORD		m_iMinDocID;
+	DWORD		m_iMinGroupID;
+	DWORD		m_iGroupBits;
+};
+
+
 struct CSphWriter_VLN
 {
 	char *name;
@@ -238,6 +256,7 @@ struct CSphWriter_VLN
 
 	int open();
 	void putbytes(void *data, int size);
+	void PutRawBytes ( void * pData, int iSize );
 	void zipInts(CSphList_Int *data);
 	void close();
 	void seek(int pos);
@@ -258,6 +277,7 @@ struct CSphReader_VLN
 	virtual ~CSphReader_VLN();
 
 	int  open();
+	void GetRawBytes ( void * pData, int iSize );
 	void getbytes(void *data, int size);
 	int  unzipInt();
 	void unzipInts(CSphList_Int *data);
@@ -333,17 +353,22 @@ struct CSphIndex
 	virtual CSphQueryResult *query(CSphDict *dict, char *query) = 0;
 };
 
-#define BIN_ERR_READ -2 // bin read error
-#define BIN_ERR_END  -1 // bin end
-#define BIN_POS  0      // bin is in "expect pos delta" state
-#define BIN_DOC  1      // bin is in "expect doc delta" state
-#define BIN_WORD 2      // bin is in "expect word delta" state
+/// possible bin states
+enum ESphBinState
+{
+	BIN_ERR_READ	= -2,	///< bin read error
+	BIN_ERR_END		= -1,	///< bin end
+	BIN_POS			= 0,	///< bin is in "expects pos delta" state
+	BIN_DOC			= 1,	///< bin is in "expects doc delta" state
+	BIN_WORD		= 2,	///< bin is in "expects word delta" state
+	BIN_GROUP		= 3		///< bin is in "expects group delta" state
+};
 
 struct CSphBin
 {
 	byte *data, *pData;
 	int left, done, filePos, fileLeft, filePtr, state;
-	uint lastDocID, lastWordID, lastPos;
+	DWORD lastGroupID, lastDocID, lastWordID, lastPos; // FIXME! make it a hit
 
 	CSphBin()
 	{
@@ -384,6 +409,8 @@ private:
 	uint lastDocID;
 	int  lastDocHits;
 
+	CSphIndexHeader_VLN m_tHeader;
+
 	int  open(char *ext, int mode);
 
 	int  binsInit(int blocks);
@@ -423,8 +450,8 @@ struct CSphConfig
 	CSphConfig();
 	~CSphConfig();
 
-	int open(char *file);
-	CSphHash *loadSection(char *section);
+	int open ( const char *file );
+	CSphHash * loadSection ( const char *section );
 
 private:
 	FILE *fp;

@@ -3,6 +3,7 @@ PP         = cc
 LD         = cc
 BINARIES   = indexer searchd
 CCFLAGS    = -Wall -O3 -fomit-frame-pointer -I/usr/local/include
+#CCFLAGS    = -Wall -g -I/usr/local/include
 PPFLAGS    = $(CCFLAGS)
 LDFLAGS    = -L/usr/local/mysql/lib -lmysqlclient -lc -lm -lz
 SRC_SPHINX = sphinx.cpp sphinxstemen.cpp sphinxstemru.cpp
@@ -21,11 +22,12 @@ searchd: searchd.o $(OBJ_SPHINX)
 	$(PP) $(PPFLAGS) -c -o $*.o $*.cpp
 
 cl clean:
+	@rm -fr core
 	@rm -fr *.o
 	@for tmp in $(BINARIES); do rm -fr $$tmp; done
 
 # source deps
 
-sphinx.o: Makefile $(SRC_SPHINX) $(INC_SPHINX)
 indexer.o: Makefile indexer.cpp $(INC_SPHINX)
 searchd.o: Makefile searchd.cpp $(INC_SPHINX)
+$(OBJ_SPHINX): Makefile $(INC_SPHINX) $($*:.o=.cpp)

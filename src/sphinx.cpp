@@ -14,9 +14,12 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <assert.h>
+#include <limits.h>
 
 #include "sphinx.h"
 #include "sphinxstem.h"
+
+#define SPH_MAX_FILENAME_LEN 512
 
 // *** LOWERCASING TABLE ***
 
@@ -135,11 +138,12 @@ CSphList_Match::~CSphList_Match()
 	sphFree(data);
 }
 
-void CSphList_Match::add(int docID, int weight)
+void CSphList_Match::add ( DWORD iGroupID, DWORD iDocID, int iWeight )
 {
 	if (count >= max) grow();
-	pData->docID = docID;
-	pData->weight = weight;
+	pData->m_iGroupID = iGroupID;
+	pData->m_iDocID = iDocID;
+	pData->m_iWeight = iWeight;
 	pData++;
 	count++;
 }
@@ -201,12 +205,13 @@ CSphList_Hit::~CSphList_Hit()
 	sphFree(data);
 }
 
-void CSphList_Hit::add(int docID, uint wordID, int pos)
+void CSphList_Hit::add ( DWORD iGroupID, DWORD iDocID, DWORD iWordID, DWORD iWordPos )
 {
 	if (count >= max) grow(max);
-	pData->docID = docID;
-	pData->wordID = wordID;
-	pData->pos = pos;
+	pData->m_iGroupID = iGroupID;
+	pData->m_iDocID = iDocID;
+	pData->m_iWordID = iWordID;
+	pData->m_iWordPos = iWordPos;
 	pData++;
 	count++;
 }
@@ -235,6 +240,8 @@ void CSphList_Hit::grow(int entries)
 
 CSphWriter_VLN::CSphWriter_VLN(char *name)
 {
+	assert ( name );
+
 	this->name = sphDup(name);
 	pPool = &pool[0];
 	fd = 0;
@@ -291,6 +298,20 @@ void CSphWriter_VLN::putbytes(void *data, int size)
 		putNibble((*b) & 0x0f);
 		b++;
 	}
+}
+
+void CSphWriter_VLN::PutRawBytes ( void * pData, int iSize )
+{
+	assert ( !poolOdd );
+
+	if ( poolUsed+iSize>SPH_CACHE_WRITE )
+		flush ();
+	assert ( poolUsed+iSize<=SPH_CACHE_WRITE );
+
+	memcpy ( pPool, pData, iSize );
+	pPool += iSize;
+	poolUsed += iSize;
+	pos += 2*iSize;
 }
 
 void CSphWriter_VLN::zipInts(CSphList_Int *data)
@@ -393,6 +414,19 @@ int CSphReader_VLN::getNibble()
 	}
 }
 
+void CSphReader_VLN::GetRawBytes ( void * pData, int iSize )
+{
+	assert ( !bufOdd );
+
+	if ( bufPos+iSize>bufUsed )
+		cache ();
+	assert ( (bufPos+iSize)<bufUsed );
+
+	memcpy ( pData, buf+bufPos, iSize );
+	bufPos += iSize;
+	pos += 2*iSize;
+}
+
 void CSphReader_VLN::getbytes(void *data, int size)
 {
 	byte *b = (byte*)data;
@@ -448,32 +482,25 @@ CSphIndex_VLN::~CSphIndex_VLN()
 }
 
 #define SPH_CMPHIT_LESS(a,b) \
-	(a.wordID <  b.wordID || \
-	(a.wordID == b.wordID && a.docID <  b.docID) || \
-	(a.wordID == b.wordID && a.docID == b.docID && a.pos < b.pos))
+	(a.m_iWordID <  b.m_iWordID || \
+	(a.m_iWordID == b.m_iWordID && a.m_iGroupID <  b.m_iGroupID) || \
+	(a.m_iWordID == b.m_iWordID && a.m_iGroupID == b.m_iGroupID && a.m_iDocID <  b.m_iDocID) || \
+	(a.m_iWordID == b.m_iWordID && a.m_iGroupID == b.m_iGroupID && a.m_iDocID == b.m_iDocID && a.m_iWordPos < b.m_iWordPos))
 
 #define SPH_CMPHIT_MORE(a,b) SPM_CMPHIT_LESS(b,a)
 
-int cmpHitPos(const void *a, const void *b)
-{
-	register int r;
-
-	if (!(r = ((CSphHit*)a)->docID - ((CSphHit*)b)->docID))
-		r = ((CSphHit*)a)->pos - ((CSphHit*)b)->pos;
-	return r;
-}
-
 int cmpMatch(const void *a, const void *b)
 {
-	return ((CSphMatch*)b)->weight - ((CSphMatch*)a)->weight;
+	return ((CSphMatch*)b)->m_iWeight - ((CSphMatch*)a)->m_iWeight;
 }
 
-void sphSortHits_WordID(CSphHit *s, int n)
+/// sort hits by word/group/document/position
+void sphSortHits ( CSphHit * s, int n )
 {
 	int st0[32], st1[32];
 	int a, b, k, i, j;
 	CSphHit t;
-	uint x_word, x_doc, x_pos;
+	DWORD x_word, x_doc, x_pos, x_group;
 
 	k = 1;
 	st0[0] = 0;
@@ -482,21 +509,24 @@ void sphSortHits_WordID(CSphHit *s, int n)
 		k--;
 		i = a = st0[k];
 		j = b = st1[k];
-		x_word = s[(a+b) / 2].wordID;
-		x_doc = s[(a+b) / 2].docID;
-		x_pos = s[(a+b) / 2].pos;
+		x_word = s[(a+b) / 2].m_iWordID;
+		x_group = s[(a+b) / 2].m_iGroupID;
+		x_doc = s[(a+b) / 2].m_iDocID;
+		x_pos = s[(a+b) / 2].m_iWordPos;
 //		x = s[(a+b) / 2];
 		while (a < b) {
 			while (i <= j) {
 //				while (cmpHit(&s[i], &x) < 0) i++;
-				while (s[i].wordID < x_word ||
-					(s[i].wordID == x_word && s[i].docID < x_doc) ||
-					(s[i].wordID == x_word && s[i].docID == x_doc && s[i].pos < x_pos))
+				while (s[i].m_iWordID < x_word ||
+					(s[i].m_iWordID == x_word && s[i].m_iGroupID < x_group) ||
+					(s[i].m_iWordID == x_word && s[i].m_iGroupID == x_group && s[i].m_iDocID < x_doc) ||
+					(s[i].m_iWordID == x_word && s[i].m_iGroupID == x_group && s[i].m_iDocID == x_doc && s[i].m_iWordPos < x_pos))
 						i++;
 //				while (cmpHit(&x, &s[j]) < 0) j--;
-				while (x_word < s[j].wordID ||
-					(x_word == s[j].wordID && x_doc < s[j].docID) ||
-					(x_word == s[j].wordID && x_doc == s[j].docID && x_pos < s[j].pos))
+				while (x_word < s[j].m_iWordID ||
+					(x_word == s[j].m_iWordID && x_group < s[j].m_iGroupID) ||
+					(x_word == s[j].m_iWordID && x_group == s[j].m_iGroupID && x_doc < s[j].m_iDocID) ||
+					(x_word == s[j].m_iWordID && x_group == s[j].m_iGroupID && x_doc == s[j].m_iDocID && x_pos < s[j].m_iWordPos))
 						j--;
 				if (i <= j) {
 					t = s[i]; s[i] = s[j]; s[j] = t;
@@ -589,46 +619,65 @@ uint CSphIndex_VLN::binsReadVLB(int b)
 	return v;
 }
 
-int CSphIndex_VLN::binsRead(int b, CSphHit *e)
+int CSphIndex_VLN::binsRead ( int b, CSphHit * e )
 {
-	uint r;
+	DWORD r;
 
-	if (bins[b]->done) { // expected EOB
-		e->wordID = 0;
+	// expected EOB
+	if ( bins[b]->done )
+	{
+		e->m_iWordID = 0;
 		return 1;
 	}
 
-	while (1) {
-		if ((r = binsReadVLB(b)) == 0xffffffff) return 0; // unexpected EOB
-		if (r) switch (bins[b]->state) {
+	while ( true )
+	{
+		// unexpected EOB
+		if ( (r = binsReadVLB(b)) == 0xffffffffUL )
+			return 0;
 
-			case BIN_POS: 
-				bins[b]->lastPos += r;
-				e->docID = bins[b]->lastDocID;
-				e->wordID = bins[b]->lastWordID;
-				e->pos = bins[b]->lastPos;
-				return 1;
+		if ( r )
+		{
+			switch ( bins[b]->state )
+			{
+				case BIN_WORD:
+					bins[b]->lastWordID += r;
+					bins[b]->lastGroupID = bins[b]->lastDocID = bins[b]->lastPos = 0;
+					bins[b]->state = BIN_GROUP;
+					break;
 
-			case BIN_DOC:
-				bins[b]->lastDocID += r;
-				bins[b]->lastPos = 0;
-				bins[b]->state = BIN_POS;
-				break;
+				case BIN_GROUP:
+					bins[b]->lastGroupID += r;
+					bins[b]->lastDocID = bins[b]->lastPos = 0;
+					bins[b]->state = BIN_DOC;
+					break;
 
-			case BIN_WORD:
-				bins[b]->lastWordID += r;
-				bins[b]->lastDocID = bins[b]->lastPos = 0;
-				bins[b]->state = BIN_DOC;
-				break;
+				case BIN_DOC:
+					bins[b]->lastDocID += r;
+					bins[b]->lastPos = 0;
+					bins[b]->state = BIN_POS;
+					break;
 
-		} else switch (bins[b]->state) {
-
-			case BIN_POS: bins[b]->state = BIN_DOC; break;
-			case BIN_DOC: bins[b]->state = BIN_WORD; break;
-			case BIN_WORD:
-				bins[b]->done = 1;
-				e->wordID = 0;
-				return 1;
+				case BIN_POS: 
+					bins[b]->lastPos += r;
+					e->m_iGroupID = bins[b]->lastGroupID;
+					e->m_iDocID = bins[b]->lastDocID;
+					e->m_iWordID = bins[b]->lastWordID;
+					e->m_iWordPos = bins[b]->lastPos;
+					return 1;
+			}
+		} else
+		{
+			switch ( bins[b]->state )
+			{
+				case BIN_POS:	bins[b]->state = BIN_DOC; break;
+				case BIN_DOC:	bins[b]->state = BIN_GROUP; break;
+				case BIN_GROUP:	bins[b]->state = BIN_WORD; break;
+				case BIN_WORD:
+					bins[b]->done = 1;
+					e->m_iWordID = 0;
+					return 1;
+			}
 		}
 	}
 
@@ -669,7 +718,8 @@ int CSphIndex_VLN::cidxCreate()
 	lastDocDelta = 0;
 	lastDocHits = 0;
 
-	fdIndex->putbytes(cidxPagesDir, sizeof(cidxPagesDir));
+	fdIndex->PutRawBytes ( &m_tHeader, sizeof(m_tHeader) );
+	fdIndex->putbytes ( cidxPagesDir, sizeof(cidxPagesDir) );
 	return 1;
 }
 
@@ -709,43 +759,44 @@ void CSphIndex_VLN::cidxHit(CSphHit *hit)
 	static uint lastWordID = 0, lastPageID = 0xffffffff;
 	static int lastPos = 0, lastIndexPos = 0;
 
-	if (lastWordID != hit->wordID) {
+	if (lastWordID != hit->m_iWordID) {
 		cidxFlushHitList();
 		cidxFlushChunk();
 
-		if (lastPageID != (hit->wordID >> SPH_CLOG_BITS_PAGE)) {
+		if (lastPageID != (hit->m_iWordID >> SPH_CLOG_BITS_PAGE)) {
 			cidxFlushIndexPage();
-			lastPageID = hit->wordID >> SPH_CLOG_BITS_PAGE;
+			lastPageID = hit->m_iWordID >> SPH_CLOG_BITS_PAGE;
 			lastWordID = 0;
 			lastIndexPos = 0;
 			cidxPagesDir[lastPageID] = fdIndex->pos;
 		}
 
-		vIndexPage->add(hit->wordID - lastWordID);
+		vIndexPage->add(hit->m_iWordID - lastWordID);
 		vIndexPage->add(fdData->pos - lastIndexPos);
-		lastWordID = hit->wordID;
+		lastWordID = hit->m_iWordID;
 		lastIndexPos = fdData->pos;
 
 		lastDocID = 0;
 		lastDocDelta = 0;
 	}
 
-	if (lastDocID != hit->docID) {
+	if (lastDocID != hit->m_iDocID) {
 		cidxFlushHitList();
 
-		lastDocDelta = hit->docID - lastDocID;
-		lastDocID = hit->docID;
+		lastDocDelta = hit->m_iDocID - lastDocID;
+		lastDocID = hit->m_iDocID;
 		lastPos = 0;
 	}
 
-	vChunk->add(hit->pos - lastPos);
-	lastPos = hit->pos;
+	vChunk->add(hit->m_iWordPos - lastPos);
+	lastPos = hit->m_iWordPos;
 	lastDocHits++;
 }
 
 void CSphIndex_VLN::cidxDone()
 {
 	fdIndex->seek(0);
+	fdIndex->PutRawBytes ( &m_tHeader, sizeof(m_tHeader) );
 	fdIndex->putbytes(cidxPagesDir, sizeof(cidxPagesDir));
 	
 	fdIndex->close();
@@ -775,45 +826,84 @@ inline int encodeVLB(byte *buf, uint v)
 
 int CSphIndex_VLN::cidxWriteRawVLB(int fd, CSphHit *hit, int count)
 {
-	byte buf[65536+1024], *pBuf, *maxP;
+	BYTE buf[65536+1024], *pBuf, *maxP;
 	int n = 0, w;
-	uint d1, d2, d3, l1 = 0, l2 = 0, l3 = 0;
+	DWORD d1, d2, d3, d4, l1=0, l2=0, l3=0, l4=0;
 
 	pBuf = &buf[0];
 	maxP = &buf[65536-1];
-	while (count--) {
-		d1 = hit->wordID - l1;
-		d2 = hit->docID - l2;
-		d3 = hit->pos - l3;
-		if (d1) d2 = hit->docID;
-		if (d2) d3 = hit->pos;
-		if (d1) pBuf += encodeVLB(pBuf, 0);
-		if (d2) pBuf += encodeVLB(pBuf, 0);
-		if (d1) pBuf += encodeVLB(pBuf, d1);
-		if (d2) pBuf += encodeVLB(pBuf, d2);
-		pBuf += encodeVLB(pBuf, d3);
-		l1 = hit->wordID;
-		l2 = hit->docID;
-		l3 = hit->pos;
+	while ( count-- )
+	{
+		// calc deltas
+		d1 = hit->m_iWordID - l1;
+		d2 = hit->m_iGroupID - l2;
+		d3 = hit->m_iDocID - l3;
+		d4 = hit->m_iWordPos - l4;
+
+		// non-zero delta restarts all the fields after it
+		// because their deltas might be negative
+		if ( d1 ) d2 = hit->m_iGroupID;
+		if ( d2 ) d3 = hit->m_iDocID;
+		if ( d3 ) d4 = hit->m_iWordPos;
+
+		// encode enough restart markers
+		if ( d1 ) pBuf += encodeVLB ( pBuf, 0 );
+		if ( d2 ) pBuf += encodeVLB ( pBuf, 0 );
+		if ( d3 ) pBuf += encodeVLB ( pBuf, 0 );
+
+		// encode deltas
+		if ( d1 ) pBuf += encodeVLB ( pBuf, d1 );
+		if ( d2 ) pBuf += encodeVLB ( pBuf, d2 );
+		if ( d3 ) pBuf += encodeVLB ( pBuf, d3 );
+		pBuf += encodeVLB ( pBuf, d4 );
+
+		// update current state
+		l1 = hit->m_iWordID;
+		l2 = hit->m_iGroupID;
+		l3 = hit->m_iDocID;
+		l4 = hit->m_iWordPos;
 
 		hit++;
 
-		if (pBuf > maxP) {
+		if ( pBuf>maxP )
+		{
 			w = (int)(pBuf - buf);
 			if (::write(fd, buf, w) != w) return -1;
 			n += w;
 			pBuf = buf;
 		}
 	}
-	pBuf += encodeVLB(pBuf, 0);
-	pBuf += encodeVLB(pBuf, 0);
-	pBuf += encodeVLB(pBuf, 0);
+	pBuf += encodeVLB ( pBuf, 0 );
+	pBuf += encodeVLB ( pBuf, 0 );
+	pBuf += encodeVLB ( pBuf, 0 );
+	pBuf += encodeVLB ( pBuf, 0 );
 	w = (int)(pBuf - buf);
-	if (::write(fd, buf, w) != w) return -1;
+	if (::write(fd, buf, w) != w)
+		return -1;
 	n += w;
 
 	return n;
 }
+
+
+static int iLog2 ( int iMin, int iMax )
+{
+	if ( iMin<iMax )
+	{
+		int iBits = 0;
+		DWORD iRange = iMax-iMin;
+		while ( iRange )
+		{
+			iBits++;
+			iRange >>= 1;
+		}
+		return iBits;
+	} else
+	{
+		return 0;
+	}
+}
+
 
 int CSphIndex_VLN::build(CSphDict *dict, CSphSource *source)
 {
@@ -833,26 +923,35 @@ int CSphIndex_VLN::build(CSphDict *dict, CSphSource *source)
 	rawBlock = (CSphHit*)sphMalloc(sizeof(CSphHit) * rawBlockSize);
 	pRawBlock = rawBlock;
 
+	// accumulate group IDs range
+	DWORD iMinDocID = INT_MAX;
+	DWORD iMaxDocID = 0;
+	DWORD iMinGroupID = INT_MAX;
+	DWORD iMaxGroupID = 0;
+
 	// build raw log
 	while ( (docID = source->next()) )
 	{
 		hit = source->hits.data;
-		for (n = 0; n < source->hits.count; n++, hit++)
+		for (n = 0; n < source->hits.count; n++)
 		{
-			assert ( docID );
-			assert ( hit->wordID );
-			assert ( hit->pos );
+			assert ( hit->m_iGroupID );
+			assert ( hit->m_iDocID );
+			assert ( hit->m_iWordID );
+			assert ( hit->m_iWordPos );
 
-			pRawBlock->docID = docID;
-			pRawBlock->wordID = hit->wordID;
-			pRawBlock->pos = hit->pos;
-			pRawBlock++;
+			iMinGroupID = Min ( iMinGroupID, hit->m_iGroupID );
+			iMaxGroupID = Max ( iMaxGroupID, hit->m_iGroupID );
+			iMinDocID = Min ( iMinDocID, hit->m_iDocID );
+			iMaxDocID = Max ( iMaxDocID, hit->m_iDocID );
+
+			*pRawBlock++ = *hit++;
 			rawBlockUsed++;
 			rawHits++;
+
 			if (rawBlockUsed == rawBlockSize)
 			{
-//				qsort(rawBlock, rawBlockUsed, sizeof(CSphHit), cmpHit);
-				sphSortHits_WordID(rawBlock, rawBlockUsed);
+				sphSortHits ( rawBlock, rawBlockUsed );
 				bins[rawBlocks] = new CSphBin();
 				if ((bins[rawBlocks]->fileLeft = cidxWriteRawVLB(fdRaw,
 					rawBlock, rawBlockUsed)) < 0)
@@ -870,17 +969,13 @@ int CSphIndex_VLN::build(CSphDict *dict, CSphSource *source)
 		}
 	}
 
-	if (rawBlockUsed)
+	if ( rawBlockUsed )
 	{
-//		qsort(rawBlock, rawBlockUsed, sizeof(CSphHit), cmpHit);
-		sphSortHits_WordID(rawBlock, rawBlockUsed);
+		sphSortHits ( rawBlock, rawBlockUsed );
 
-		bins[rawBlocks] = new CSphBin();
-		if ((bins[rawBlocks]->fileLeft = cidxWriteRawVLB(fdRaw,
-			rawBlock, rawBlockUsed)) < 0)
-		{
+		bins[rawBlocks] = new CSphBin ();
+		if ( ( bins[rawBlocks]->fileLeft = cidxWriteRawVLB ( fdRaw, rawBlock, rawBlockUsed ) ) < 0 )
 			return 0;
-		}
 
 		rawBlocks++;
 		assert ( rawBlocks<=SPH_RLOG_MAX_BLOCKS );
@@ -893,36 +988,67 @@ int CSphIndex_VLN::build(CSphDict *dict, CSphSource *source)
 		bins[i]->filePos = bins[i-1]->filePos + bins[i-1]->fileLeft;
 
 	// deallocate raw block
-	free(rawBlock);
+	free ( rawBlock );
+	close ( fdRaw );
 
-	close(fdRaw);
-
-//rawHits = info.st_size / sizeof(CSphHit);
-//	rawBlocks = (int)((rawHits + SPH_RLOG_BLOCK_SIZE - 1) / SPH_RLOG_BLOCK_SIZE);
-	if (!(fdRaw = this->open(".spr", O_RDONLY))) return 0;
-
+	///////////////////////////////////
 	// sort and write compressed index
-	if (!(cidxCreate())) return 0;
-//	binsInit(rawBlocks);
-	for (i = 0; i < rawBlocks; i++)
-		binsRead(i, &cur[i]);
-	while (rawHits--) {
+	///////////////////////////////////
+
+	// open file, initialize indexer
+	if ( !(fdRaw = this->open(".spr", O_RDONLY)) )
+		return 0;
+	if ( !cidxCreate() )
+		return 0;
+
+	// calculate how much bits do we need for encoding gids
+	int iGidBits = iLog2 ( iMinGroupID, iMaxGroupID );
+	int iDocBits = iLog2 ( iMinDocID, iMaxDocID );
+	assert ( (iGidBits+iDocBits)<=32 );
+
+	// fill header
+	m_tHeader.m_iMinDocID = iMinDocID;
+	m_tHeader.m_iMinGroupID = iMinGroupID;
+	m_tHeader.m_iGroupBits = iGidBits;
+
+	// do the sort
+	for ( i=0; i<rawBlocks; i++ )
+		binsRead ( i, &cur[i] );
+	while ( rawHits-- )
+	{
+		// find next sorted hit
 		mini = -1;
-		for (i = 0; i < rawBlocks; i++) {
-			if (!cur[i].wordID) continue;
-			if (mini < 0) { mini = i; continue; }
-//			if (cmpHit(&cur[i], &cur[mini]) < 0) mini = i;
-			if (SPH_CMPHIT_LESS(cur[i], cur[mini])) mini = i;
+		for ( i=0; i<rawBlocks; i++ )
+		{
+			if ( !cur[i].m_iWordID ) continue; // FIXME! can optimize out-blocks
+			if ( mini < 0) { mini = i; continue; }
+			if ( SPH_CMPHIT_LESS ( cur[i], cur[mini] ) ) mini = i;
 		}
 
-		cidxHit(&cur[mini]);
-		binsRead(mini, &cur[mini]);
+		// encode gid into docid
+		cur[mini].m_iDocID = ( (cur[mini].m_iDocID-iMinDocID) << iGidBits ) + ( cur[mini].m_iGroupID-iMinGroupID );
+
+		// write it
+		cidxHit ( &cur[mini] );
+
+		// update proper reader
+		binsRead ( mini, &cur[mini] );
 	}
-	binsDone(rawBlocks);
-	cidxFlushHitList();
-	cidxFlushChunk();
-	cidxFlushIndexPage();
-	cidxDone();
+
+	binsDone ( rawBlocks );
+	cidxFlushHitList ();
+	cidxFlushChunk ();
+	cidxFlushIndexPage ();
+	cidxDone ();
+
+	// unlink raw log
+	char sTmp [ SPH_MAX_FILENAME_LEN+1 ];
+
+	strncpy ( sTmp, filename, SPH_MAX_FILENAME_LEN );
+	strncat ( sTmp, ".spr", SPH_MAX_FILENAME_LEN );
+	sTmp [ SPH_MAX_FILENAME_LEN ] = '\0';
+
+	unlink ( sTmp );
 
 	return 1;
 }
@@ -1014,7 +1140,9 @@ CSphQueryResult *CSphIndex_VLN::query(CSphDict *dict, char *query)
 	SPH_TIMER("open");
 
 	// load index pages directory
+	rdIndex->GetRawBytes ( &m_tHeader, sizeof(m_tHeader) );
 	rdIndex->getbytes(cidxPagesDir, sizeof(cidxPagesDir));
+	DWORD iGroupMask = (1<<m_tHeader.m_iGroupBits) - 1;
 
 	SPH_TIMER("load directory");
 
@@ -1024,7 +1152,7 @@ CSphQueryResult *CSphIndex_VLN::query(CSphDict *dict, char *query)
 	if (nwords > SPH_MAX_QUERY_WORDS) nwords = SPH_MAX_QUERY_WORDS; // FIXME
 	for (i = 0; i < nwords; i++) {
 		qwords[i].word = sphDup(qp->words[i]);
-		qwords[i].wordID = qp->hits.data[i].wordID;
+		qwords[i].wordID = qp->hits.data[i].m_iWordID;
 		qwords[i].queryPos = 1 + i;
 	}
 	delete qp;
@@ -1157,7 +1285,12 @@ weights[3] = 1;
 		}
 		for (i = 0, j = 1; i < nweights; i++)
 			j += weights[i] * weight[i];
-		result->matches->add(docID, j);
+
+		// add match
+		result->matches->add (
+			(docID & iGroupMask) + m_tHeader.m_iMinGroupID, // unpack group id
+			(docID >> m_tHeader.m_iGroupBits) + m_tHeader.m_iMinDocID, // unpack document id
+			j ); // set weight
 
 		// continue looking for next matches
 		i = 0;
@@ -1322,7 +1455,7 @@ int CSphSource_Document::next()
 			if (i >= len) break;
 			pWord = pData;
 			while ((*pData) && i < len) { pData++; i++; }
-			hits.add(lastID, dict->wordID(pWord), (j << 24) | pos++);
+			hits.add ( 1, lastID, dict->wordID(pWord), (j << 24) | pos++ ); // FIXME! add groups support here
 			if (callWordCallback) wordCallback((char*)pWord);
 		}
 	}
@@ -1435,13 +1568,13 @@ CSphConfig::~CSphConfig()
 	if (fp) fclose(fp);
 }
 
-int CSphConfig::open(char *file)
+int CSphConfig::open ( const char *file )
 {
 	if (!(fp = fopen(file, "r"))) return 0;	
 	return 1;
 }
 
-CSphHash *CSphConfig::loadSection(char *section)
+CSphHash *CSphConfig::loadSection ( const char * section )
 {
 	char buf[2048], *p, *pp, *key, *value;
 	int l, ls;
@@ -1681,7 +1814,7 @@ int CSphSource_XMLPipe::next ()
 		strcpy ( (char*)sWord2, (char*)sWord );
 		DWORD iWID = dict->wordID ( sWord );
 		if ( iWID )
-			hits.add ( m_iDocID, iWID, ++m_iWordPos ); // field_id | (iPos++)
+			hits.add ( m_iGroupID, m_iDocID, iWID, ++m_iWordPos ); // field_id | (iPos++)
 		else
 			fprintf ( stderr, "WARNING: word '%s' (stemmed to '%s') has zero CRC32.\n",
 				sWord2, sWord );

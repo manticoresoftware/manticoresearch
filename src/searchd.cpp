@@ -103,14 +103,25 @@ int main(int argc, char **argv)
 	CSphConfig conf;
 	CSphHash *confSearchd, *confCommon;
 
-	// *** CONFIGURE ***
+	// configure
+	const char * sConfName = "sphinx.conf";
+	struct stat tStat;
+	if ( argc>1 )
+	{
+		if ( !stat ( argv[1], &tStat ) )
+			sConfName = argv[1];
+		else
+			fprintf ( stderr, "WARNING: can not stat config file '%s', using default 'sphinx.conf'.\n", argv[1] );
+	}
 
-	if (!(conf.open("sphinx.conf"))) {
-		fprintf(stderr, "FATAL: unable to open '%s'\n", "sphinx.conf");
+	fprintf ( stdout, "using config file '%s'...\n", sConfName );
+	if ( !conf.open ( sConfName ) )
+	{
+		fprintf ( stderr, "FATAL: unable to open config file '%s'.\n", sConfName );
 		return 1;
 	}
-	confCommon = conf.loadSection("common");
-	confSearchd = conf.loadSection("searchd");
+	confCommon = conf.loadSection ( "common" );
+	confSearchd = conf.loadSection ( "searchd" );
 
 	#define CHECK_CONF(hash, key) \
 		if (!hash->get(key)) { \
@@ -223,10 +234,13 @@ int main(int argc, char **argv)
 					rcount = min(count, r->matches->count - start);
 					sprintf(buf, "MATCHES %d\n", rcount);
 					write(rsock, buf, strlen(buf));
-					for (i = start; i < start + rcount; i++) {
-						sprintf(buf, "MATCH %d %d\n", r->matches->data[i].docID,
-							r->matches->data[i].weight);
-						write(rsock, buf, strlen(buf));
+					for ( i=start; i<start+rcount; i++ )
+					{
+						sprintf ( buf, "MATCH %d %d %d\n",
+							r->matches->data[i].m_iGroupID,
+							r->matches->data[i].m_iDocID,
+							r->matches->data[i].m_iWeight );
+						write ( rsock, buf, strlen ( buf ) );
 					}
 					sprintf(buf, "TOTAL %d\n", r->matches->count);
 					write(rsock, buf, strlen(buf));

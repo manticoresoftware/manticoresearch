@@ -473,7 +473,7 @@ void stem_ru(BYTE *word)
 	while (1) {
 		if ( (i = stem_ru_dear_i(word, len)) ) { len -= i; break; }
 
-		if (C(1) == RUS_V) {
+		if ( C(1) == RUS_V && (len>=2) ) {
 			if (C(2) == RUS_I || C(2) == RUS_Y || C(2) == RUS_YA) { len -= 2; break; }
 			if (C(2) == RUS_A) {
 				if (C(3) == RUS_V && C(4) == RUS_A) { len -= 4; break; }

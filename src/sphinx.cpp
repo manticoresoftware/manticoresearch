@@ -819,7 +819,9 @@ int CSphIndex_VLN::build(CSphDict *dict, CSphSource *source)
 		hit = source->hits.data;
 		for (n = 0; n < source->hits.count; n++, hit++)
 		{
-			assert ( hit->pos>0 );
+			assert ( docID );
+			assert ( hit->wordID );
+			assert ( hit->pos );
 
 			pRawBlock->docID = docID;
 			pRawBlock->wordID = hit->wordID;

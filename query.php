@@ -58,7 +58,7 @@ $q = "";
 foreach ( $argv as $arg )
 	$q .= "$arg ";
 
-$res = sphinxQuery ( $sphinx_server, $sphinx_port, $q, 0, 20, array(5,5) );
+$res = sphinxQuery ( $sphinx_server, $sphinx_port, $q, 0, 20, array(100,1) );
 print "Query '$q' produced $res[total] matches in $res[time] sec.\n";
 print "Query stats:\n";
 foreach ( $res["words"] as $word => $info )

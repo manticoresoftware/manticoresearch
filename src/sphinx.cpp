@@ -1098,8 +1098,7 @@ CSphQueryResult *CSphIndex_VLN::query(CSphDict *dict, char *query, int * pUserWe
 	CSphQueryParser *qp;
 	CSphReader_VLN *rdIndex, *rdData;
 	CSphQueryWord qwords[SPH_MAX_QUERY_WORDS];
-	int i, j, nwords, chunkPos, weight [ SPH_MAX_FIELD_COUNT ], curWeight [ SPH_MAX_FIELD_COUNT ],
-		weights [ SPH_MAX_FIELD_COUNT ], imin, nweights;
+	int i, j, nwords, chunkPos, weights [ SPH_MAX_FIELD_COUNT ], imin, nweights;
 	uint *phits[SPH_MAX_QUERY_WORDS], *pdocs[SPH_MAX_QUERY_WORDS],
 		wordID, docID, pmin, k;
 	CSphQueryResult *result;
@@ -1259,29 +1258,52 @@ CSphQueryResult *CSphIndex_VLN::query(CSphDict *dict, char *query, int * pUserWe
 		for (i = 0; i < nwords; i++) {
 			phits[i] = &qwords[i].hits->data[*(1 + pdocs[i])];
 		}
-		for (i = 0; i < nweights; i++)
-			weight[i] = curWeight[i] = 0;
-		k = 2000000000;
-		while (1) {
-			pmin = 2000000000; imin = -1;
-			for (i = 0; i < nwords; i++) {
-				if (!*phits[i]) continue;
-				if (pmin > *phits[i]) { pmin = *phits[i]; imin = i; }
+
+		// init weighting
+		BYTE curPhraseWeight [ SPH_MAX_FIELD_COUNT ];
+		BYTE phraseWeight [ SPH_MAX_FIELD_COUNT ];
+		BYTE matchWeight [ SPH_MAX_FIELD_COUNT ];
+		for ( i=0; i<nweights; i++ )
+		{
+			curPhraseWeight[i] = 0;
+			phraseWeight[i] = 0;
+			matchWeight[i] = 0;
+		}
+
+		k = INT_MAX;
+		while ( 1 )
+		{
+			// scan until next hit in this document
+			pmin = INT_MAX;
+			imin = -1;
+			for ( i=0; i<nwords; i++ )
+			{
+				if ( !*phits[i] ) continue;
+				if ( pmin>(*phits[i]) ) { pmin = *phits[i]; imin = i; }
 			}
-			if (imin < 0) break;
+			if ( imin<0 ) break;
 			phits[imin]++;
 
+			// get field number and mark a simple match
 			j = pmin >> 24;
-			if (qwords[imin].queryPos - pmin == k) {
-				curWeight[j]++;
-				if (weight[j] < curWeight[j]) weight[j] = curWeight[j];
-			} else {
-				curWeight[j] = 0;
+			matchWeight[j] = 1;
+
+			// find max proximity relevance
+			if ( qwords[imin].queryPos - pmin == k )
+			{
+				curPhraseWeight[j]++;
+				if ( phraseWeight[j] < curPhraseWeight[j] )
+					phraseWeight[j] = curPhraseWeight[j];
+			} else
+			{
+				curPhraseWeight[j] = 0;
 			}
 			k = qwords[imin].queryPos - pmin;
 		}
-		for (i = 0, j = 1; i < nweights; i++)
-			j += weights[i] * (1+weight[i]);
+
+		// sum simple match weights and phrase match weights
+		for ( i=0, j=0; i<nweights; i++ )
+			j += weights[i] * ( matchWeight[i] + phraseWeight[i] );
 
 		// add match
 		result->matches->add (
@@ -1727,6 +1749,34 @@ int CSphSource_XMLPipe::next ()
 		if ( !ScanStr ( "title", sTitle, sizeof ( sTitle ) ) )
 			return 0;
 
+		// index title
+		{
+			int i, iLen, iPos=1;
+			i = iLen = strlen((char*)sTitle);
+
+			// tolower, remove non-chars
+			BYTE * pData = (BYTE*)sTitle;
+			while (i-- > 0) { *pData = sphLT_cp1251[*pData]; pData++; }
+
+			i = 0;
+			pData = (BYTE*)sTitle;
+			while ( i<iLen )
+			{
+				// skip whitespace
+				while ( !(*pData) && i<iLen ) { pData++; i++; }
+				if ( i>=iLen ) break;
+				BYTE * pWord = pData;
+
+				// skip non-whitespace
+				while ( (*pData) && i<iLen ) { pData++; i++; }
+		
+		        // add hit
+		        DWORD iWID = dict->wordID ( pWord );
+		        if ( iWID )
+					hits.add ( m_iGroupID, m_iDocID, iWID, iPos++ );
+			}
+		}
+
 		SetTag ( "body" );
 		if ( !SkipTag ( true ) )
 			return 0;
@@ -1820,8 +1870,9 @@ int CSphSource_XMLPipe::next ()
 		// we found it, yes we did!
 		strcpy ( (char*)sWord2, (char*)sWord );
 		DWORD iWID = dict->wordID ( sWord );
+
 		if ( iWID )
-			hits.add ( m_iGroupID, m_iDocID, iWID, ++m_iWordPos ); // field_id | (iPos++)
+			hits.add ( m_iGroupID, m_iDocID, iWID, (1<<24) | (++m_iWordPos) ); // field_id | (iPos++)
 		else
 			fprintf ( stderr, "WARNING: word '%s' (stemmed to '%s') has zero CRC32.\n",
 				sWord2, sWord );
@@ -2032,7 +2083,7 @@ bool CSphSource_XMLPipe::ScanStr ( const char * sTag, char * pRes, int iMaxLengt
 
 int CSphSource_XMLPipe::GetFieldCount ()
 {
-	return 1;
+	return 2;
 }
 
 //

@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 #if USE_MYSQL
 #include <mysql/mysql.h>
@@ -47,9 +48,10 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
-#define Min(a,b) ((a)<(b)?(a):(b))
-#define Max(a,b) ((a)>(b)?(a):(b))
-#define SafeDelete(_x) { if (_x) { delete (_x); (_x) = NULL; } }
+#define Min(a,b)			((a)<(b)?(a):(b))
+#define Max(a,b)			((a)>(b)?(a):(b))
+#define SafeDelete(_x)		{ if (_x) { delete (_x); (_x) = NULL; } }
+#define SafeDeleteArray(_x)	{ if (_x) { delete [] (_x); (_x) = NULL; } }
 
 void	sphDie ( char *message, ... );
 void *	sphMalloc ( size_t size );
@@ -59,6 +61,156 @@ char *	sphDup ( const char *s );
 
 /// time, in seconds
 float	sphLongTimer ();
+
+/////////////////////////////////////////////////////////////////////////////
+// GENERICS
+/////////////////////////////////////////////////////////////////////////////
+
+/// swap
+template < typename T > inline void Swap ( T & v1, T & v2 )
+{
+	T temp = v1;
+	v1 = v2;
+	v2 = temp;
+}
+
+
+/// generic vector
+/// (don't even ask why it's not std::vector)
+template < typename T, int INITIAL_LIMIT=1024 > class CSphVector
+{
+public:
+	/// ctor
+	CSphVector ()
+		: m_iLength	( 0 )
+		, m_iLimit	( 0 )
+		, m_pData	( NULL )
+	{
+	}
+
+	/// dtor
+	~CSphVector ()
+	{
+		Reset ();
+	}
+
+	/// add entry
+	T & Add ()
+	{
+		if ( m_iLength>=m_iLimit )
+			Resize ( 1+m_iLength );
+		return m_pData [ m_iLength++ ];
+	}
+
+	/// add entry
+	void Add ( const T & tValue )
+	{
+		if ( m_iLength>=m_iLimit )
+			Resize ( 1+m_iLength );
+		m_pData [ m_iLength++ ] = tValue;
+	}
+
+	/// resize
+	void Resize ( int iNewLimit )
+	{
+		// check that there'll be enough place
+		assert ( iNewLimit>m_iLength );
+
+		// calc new limit
+		if ( !m_iLimit )
+			m_iLimit = INITIAL_LIMIT;
+		while ( m_iLimit<iNewLimit )
+			m_iLimit *= 2;
+
+		// realloc
+		// FIXME! optimize for POD case
+		T * pNew = new T [ m_iLimit ];
+		for ( int i=0; i<m_iLength; i++ )
+			pNew[i] = m_pData[i];
+		delete [] m_pData;
+		m_pData = pNew;
+	}
+
+	/// reset
+	void Reset ()
+	{
+		m_iLength = 0;
+		m_iLimit = 0;
+		SafeDeleteArray ( m_pData );
+	}
+
+	/// sort the array
+	template < typename F > void Sort ( F comp, int iStart=0, int iEnd=-1 )
+	{
+		if ( iStart<0 ) iStart = m_iLength+iStart;
+		if ( iEnd<0 ) iEnd = m_iLength+iEnd;
+		assert ( iStart<=iEnd );
+
+		int st0[32], st1[32], a, b, k, i, j;
+		T x;
+
+		k = 1;
+		st0[0] = iStart;
+		st1[0] = iEnd;
+		while ( k )
+		{
+			k--;
+			i = a = st0[k];
+			j = b = st1[k];
+			x = m_pData [ (a+b)/2 ]; // FIXME! add better median at least
+			while ( a<b )
+			{
+				while ( i<=j )
+				{
+					while ( comp ( m_pData[i], x) > 0 ) i++;
+					while ( comp ( x, m_pData[j]) > 0 ) j--;
+					if (i <= j) { Swap ( m_pData[i], m_pData[j] ); i++; j--; }
+				}
+
+				if ( j-a>=b-i )
+				{
+					if ( a<j ) { st0[k] = a; st1[k] = j; k++; }
+					a = i;
+				} else
+				{
+					if ( i<b ) { st0[k] = i; st1[k] = b; k++; }
+					b = j;
+				}
+			}
+		}
+	}
+
+	/// query current length
+	int GetLength ()
+	{
+		return m_iLength;
+	}
+
+	/// access
+	/// FIXME! optimize for POD case
+	const T & operator [] ( int iIndex ) const
+	{
+		assert ( iIndex>=0 && iIndex<m_iLength );
+		return m_pData [ iIndex ];
+	}
+
+	/// access
+	/// FIXME! optimize for POD case
+	T & operator [] ( int iIndex )
+	{
+		assert ( iIndex>=0 && iIndex<m_iLength );
+		return m_pData [ iIndex ];
+	}
+
+private:
+	int		m_iLength;		///< entries actually used
+	int		m_iLimit;		///< entries allocated
+	T *		m_pData;		///< entries
+};
+
+
+#define ARRAY_FOREACH(_index,_array) \
+	for ( int _index=0; _index<_array.GetLength(); _index++ )
 
 /////////////////////////////////////////////////////////////////////////////
 // DICTIONARIES
@@ -118,25 +270,6 @@ struct CSphHit
 };
 
 
-/// hit vector
-struct CSphList_Hit
-{
-	int count;
-	CSphHit *data;
-
-	CSphList_Hit();
-	virtual ~CSphList_Hit();
-
-	void add ( DWORD iGroupID, DWORD iDocID, DWORD iWordID, DWORD iWordPos );
-	void clear();
-	void grow(int entries);
-
-private:
-	int max;
-	CSphHit *pData;
-};
-
-
 /// source statistics
 struct CSphSourceStats
 {
@@ -158,8 +291,8 @@ struct CSphSourceStats
 /// generic data source
 struct CSphSource
 {
-	CSphList_Hit						hits;
-	CSphDict *							dict;
+	CSphVector<CSphHit>		hits;
+	CSphDict *				dict;
 
 public:
 										CSphSource();
@@ -364,25 +497,6 @@ struct CSphMatch
 };
 
 
-/// matches vector
-struct CSphList_Match
-{
-	int count;
-	CSphMatch *data;
-
-	CSphList_Match();
-	virtual ~CSphList_Match();
-
-	void add ( DWORD iGroupID, DWORD iDocID, int iWeight );
-
-private:
-	int max;
-	CSphMatch *pData;
-
-	void grow();
-};
-
-
 /// search query
 class CSphQuery
 {
@@ -404,18 +518,18 @@ class CSphQueryResult
 public:
 	struct
 	{
-		char *			m_sWord;	///< i-th search term (normalized word form)
-		int				m_iDocs;	///< document count for this term
-		int				m_iHits;	///< hit count for this term
-	}					m_tWordStats [ SPH_MAX_QUERY_WORDS ];
+		char *				m_sWord;	///< i-th search term (normalized word form)
+		int					m_iDocs;	///< document count for this term
+		int					m_iHits;	///< hit count for this term
+	}						m_tWordStats [ SPH_MAX_QUERY_WORDS ];
 
-	int					m_iNumWords;	///< query word count
-	float				m_fQueryTime;	///< query time, seconds
-	CSphList_Match *	m_pMatches;		///< matching documents/weights vector
+	int						m_iNumWords;	///< query word count
+	float					m_fQueryTime;	///< query time, seconds
+	CSphVector<CSphMatch>	m_dMatches;		///< matching documents/weights vector
 
 public:
-						CSphQueryResult ();		///< ctor
-	virtual				~CSphQueryResult ();	///< dtor, which releases all owned stuff
+							CSphQueryResult ();		///< ctor
+	virtual					~CSphQueryResult ();	///< dtor, which releases all owned stuff
 };
 
 /////////////////////////////////////////////////////////////////////////////

@@ -2,7 +2,6 @@
 // $Id$
 //
 
-#include <assert.h>
 #include "sphinx.h"
 
 // in cp-1251 encoding!
@@ -434,7 +433,7 @@ void stem_ru_init()
 
 	#define STEM_RU_INIT_TABLE(table) \
 		for (i = 0; i < int(sizeof(table)/sizeof(stem_table_entry_t)); i++) \
-		   	table[i].len = strlen((char*)table[i].suffix)-1;
+		   	table[i].len = (int)strlen((char*)table[i].suffix)-1;
 
 	STEM_RU_INIT_TABLE(ru_adj)
 	STEM_RU_INIT_TABLE(ru_part)
@@ -454,7 +453,7 @@ void stem_ru(BYTE *word)
 
 	while (*word) if (IV(*word)) break; else word++;
 	if (*word) word++; else return;
-	len = strlen((char*)word);
+	len = (int)strlen((char*)word);
 
 	r1 = r2 = len;
 	for (i = -1; i < len-1; i++)

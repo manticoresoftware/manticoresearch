@@ -72,18 +72,20 @@ int main ( int argc, char ** argv )
 	delete pDict;
 
 	fprintf ( stdout, "query '%s': %d matches, %.2f sec\n",
-		sQuery, pResult->m_pMatches->count, pResult->m_fQueryTime );
+		sQuery, pResult->m_dMatches.GetLength(), pResult->m_fQueryTime );
 
-	if ( pResult->m_pMatches->count )
+	if ( pResult->m_dMatches.GetLength() )
 	{
 		fprintf ( stdout, "\nmatches:\n" );
-		for ( int i=0; i<pResult->m_pMatches->count; i++ )
+
+		ARRAY_FOREACH ( i, pResult->m_dMatches )
 		{
+			CSphMatch & tMatch = pResult->m_dMatches[i];
 			fprintf ( stdout, "%d. group=%d, document=%d, weight=%d\n",
 				1+i,
-				pResult->m_pMatches->data[i].m_iGroupID,
-				pResult->m_pMatches->data[i].m_iDocID,
-				pResult->m_pMatches->data[i].m_iWeight );
+				tMatch.m_iGroupID,
+				tMatch.m_iDocID,
+				tMatch.m_iWeight );
 		}
 
 		fprintf ( stdout, "\nwords:\n" );

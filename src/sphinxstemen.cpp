@@ -177,7 +177,7 @@ void stem_en ( BYTE * word )
 {
 	int i, j, len, r1, r2;
 
-	len = strlen((char*)word);
+	len = (int)strlen((char*)word);
 	if (len <= 2) return;
 
 	for (i = 0; i < (int)(sizeof(en_except)/sizeof(stem_table)); i++) {

@@ -259,21 +259,22 @@ int main(int argc, char **argv)
 					flock(log, LOCK_UN);
 
 					// serve the answer to client
-					rcount = Min ( count, r->m_pMatches->count - start );
+					rcount = Min ( count, r->m_dMatches.GetLength()-start );
 
 					sprintf ( buf, "MATCHES %d\n", rcount );
 					write ( rsock, buf, strlen(buf) );
 
 					for ( i=start; i<start+rcount; i++ )
 					{
+						CSphMatch & tMatch = r->m_dMatches[i];
 						sprintf ( buf, "MATCH %d %d %d\n",
-							r->m_pMatches->data[i].m_iGroupID,
-							r->m_pMatches->data[i].m_iDocID,
-							r->m_pMatches->data[i].m_iWeight );
+							tMatch.m_iGroupID,
+							tMatch.m_iDocID,
+							tMatch.m_iWeight );
 						write ( rsock, buf, strlen(buf) );
 					}
 
-					sprintf ( buf, "TOTAL %d\n", r->m_pMatches->count );
+					sprintf ( buf, "TOTAL %d\n", r->m_dMatches.GetLength() );
 					write ( rsock, buf, strlen(buf) );
 
 					sprintf ( buf, "TIME %.2f\n", r->m_fQueryTime );

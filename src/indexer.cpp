@@ -4,7 +4,6 @@
 
 #include "sphinx.h"
 
-#include <assert.h>
 #include <sys/stat.h>
 #if USE_WINDOWS
 #else

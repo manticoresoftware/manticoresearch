@@ -16,7 +16,7 @@ int main ( int argc, char ** argv )
 	// load config
 	CSphConfig tConf;
 	if ( !tConf.open ( "sphinx.conf" ) )
-		sphDie ( "FATAL: failed to open 'sphinx.conf'." );
+		sphDie ( "FATAL: failed to open 'sphinx.conf'.\n" );
 
 	CSphHash * hCommonConf = tConf.loadSection ( "common" );
 

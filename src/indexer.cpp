@@ -119,6 +119,7 @@ int main(int argc, char **argv)
 	// index!
 	//////////
 
+	// configure morphology
 	DWORD iMorph = SPH_MORPH_NONE;
 	char * pMorph = confCommon->get ( "morphology" );
 	if ( pMorph )
@@ -135,6 +136,7 @@ int main(int argc, char **argv)
 		}
 	}
 
+	// do index
 	float fTime = sphLongTimer ();
 	fprintf ( stdout, "indexing...\n" );
 	fflush ( stdout );
@@ -142,6 +144,13 @@ int main(int argc, char **argv)
 	assert ( pSource );
 	CSphIndex_VLN * pIndex = new CSphIndex_VLN ( confCommon->get ( "index_path" ) );
 	CSphDict_CRC32 * pDict = new CSphDict_CRC32 ( iMorph );
+
+	// configure stopwords
+	char * pStop = confIndexer->get ( "stopwords" );
+	if ( pStop )
+		if ( !pDict->LoadStopwords ( pStop ) )
+			sphDie ( "FATAL: unable to load stopwords from '%s'\n", pStop );
+
 	pIndex->build ( pDict, pSource );
 
 	// trip report

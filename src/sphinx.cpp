@@ -29,9 +29,177 @@
 #include <mysql/mysql.h>
 #endif
 
-// *** LOWERCASING TABLE ***
+/////////////////////////////////////////////////////////////////////////////
 
-static BYTE sphLT_cp1251[] = {
+/// generic tokenizer
+class CSphTokenizer
+{
+public:
+	/// max token size
+	static const int	TOKEN_SIZE		= 64;
+
+public:
+	/// create empty tokenizer
+						CSphTokenizer ();
+
+	/// pass next buffer
+	void				SetBuffer ( BYTE * sBuffer, int iLength );
+
+	/// get next token
+	BYTE *				GetToken ();
+
+protected:
+	BYTE *				m_pBuffer;					///< my buffer
+	BYTE *				m_pBufferMax;				///< max buffer ptr, exclusive (ie. this ptr is invalid, but every ptr below is ok)
+	BYTE *				m_pCur;						///< current position
+	BYTE				m_sAccum [ 4+TOKEN_SIZE ];	///< boundary token accumulator
+	int					m_iAccum;					///< boundary token size
+};
+
+/////////////////////////////////////////////////////////////////////////////
+
+/// swap
+template < typename T > inline void Swap ( T & v1, T & v2 )
+{
+	T temp = v1;
+	v1 = v2;
+	v2 = temp;
+}
+
+
+/// generic vector
+/// (don't even ask why it's not std::vector)
+template < typename T, int INITIAL_LIMIT=1024 > class CSphVector
+{
+public:
+	/// ctor
+	CSphVector ()
+		: m_iLength	( 0 )
+		, m_iLimit	( 0 )
+		, m_pData	( NULL )
+	{
+	}
+
+	/// dtor
+	~CSphVector ()
+	{
+		Reset ();
+	}
+
+	/// add entry
+	void Add ( const T & tValue )
+	{
+		if ( m_iLength>=m_iLimit )
+			Resize ( 1+m_iLength );
+		m_pData [ m_iLength++ ] = tValue;
+	}
+
+	/// resize
+	void Resize ( int iNewLimit )
+	{
+		// check that there'll be enough place
+		assert ( iNewLimit>m_iLength );
+
+		// calc new limit
+		if ( !m_iLimit )
+			m_iLimit = INITIAL_LIMIT;
+		while ( m_iLimit<iNewLimit )
+			m_iLimit *= 2;
+
+		// realloc
+		// FIXME! optimize for POD case
+		T * pNew = new T [ m_iLimit ];
+		for ( int i=0; i<m_iLength; i++ )
+			pNew[i] = m_pData[i];
+		delete [] m_pData;
+		m_pData = pNew;
+	}
+
+	/// reset
+	void Reset ()
+	{
+		m_iLength = 0;
+		m_iLimit = 0;
+		delete [] m_pData;
+	}
+
+	/// sort the array
+	template < typename F > void Sort ( F comp, int iStart=0, int iEnd=-1 )
+	{
+		if ( iStart<0 ) iStart = m_iLength+iStart;
+		if ( iEnd<0 ) iEnd = m_iLength+iEnd;
+		assert ( iStart<=iEnd );
+
+		int st0[32], st1[32], a, b, k, i, j;
+		T x;
+
+		k = 1;
+		st0[0] = iStart;
+		st1[0] = iEnd;
+		while ( k )
+		{
+			k--;
+			i = a = st0[k];
+			j = b = st1[k];
+			x = m_pData [ (a+b)/2 ]; // FIXME! add better median at least
+			while ( a<b )
+			{
+				while ( i<=j )
+				{
+					while ( comp ( m_pData[i], x) > 0 ) i++;
+					while ( comp ( x, m_pData[j]) > 0 ) j--;
+					if (i <= j) { Swap ( m_pData[i], m_pData[j] ); i++; j--; }
+				}
+
+				if ( j-a>=b-i )
+				{
+					if ( a<j ) { st0[k] = a; st1[k] = j; k++; }
+					a = i;
+				} else
+				{
+					if ( i<b ) { st0[k] = i; st1[k] = b; k++; }
+					b = j;
+				}
+			}
+		}
+	}
+
+	/// query current length
+	int GetLength ()
+	{
+		return m_iLength;
+	}
+
+	/// access
+	/// FIXME! optimize for POD case
+	const T & operator [] ( int iIndex ) const
+	{
+		assert ( iIndex>=0 && iIndex<m_iLength );
+		return m_pData [ iIndex ];
+	}
+
+	/// access
+	/// FIXME! optimize for POD case
+	T & operator [] ( int iIndex )
+	{
+		assert ( iIndex>=0 && iIndex<m_iLength );
+		return m_pData [ iIndex ];
+	}
+
+private:
+	int		m_iLength;		///< entries actually used
+	int		m_iLimit;		///< entries allocated
+	T *		m_pData;		///< entries
+};
+
+
+#define ARRAY_FOREACH(_index,_array) \
+	for ( int _index=0; _index<_array.GetLength(); _index++ )
+
+/////////////////////////////////////////////////////////////////////////////
+
+static BYTE sphLT_cp1251[] =
+{
 	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, // 0-10
 	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, // 10-20
 	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, // 20-30
@@ -50,7 +218,9 @@ static BYTE sphLT_cp1251[] = {
 	0xf0,0xf1,0xf2,0xf3,0xf4,0xf5,0xf6,0xf7,0xf8,0xf9,0xfa,0xfb,0xfc,0xfd,0xfe,0xff // f0-ff
 };
 
-// *** FUNCTIONS ***
+/////////////////////////////////////////////////////////////////////////////
+// UTILITY FUNCTIONS
+/////////////////////////////////////////////////////////////////////////////
 
 void sphDie(char *message, ...)
 {
@@ -67,7 +237,7 @@ void *sphMalloc(size_t size)
 	void *result;
 
 	if (!(result = malloc(size)))
-		sphDie("FATAL: out of memory (unable to allocate %d bytes)", size);
+		sphDie("FATAL: out of memory (unable to allocate %d bytes).\n", size);
 	return result;
 }
 
@@ -76,7 +246,7 @@ void *sphRealloc(void *ptr, size_t size)
 	void *result;
 
 	if (!(result = realloc(ptr, size)))
-		sphDie("FATAL: out of memory (unable to reallocate %d bytes)", size);
+		sphDie("FATAL: out of memory (unable to reallocate %d bytes).\n", size);
 	return result;
 }
 
@@ -140,7 +310,94 @@ char *sphDup(char *s)
 	}
 }
 
-// *** MATCH VECTOR ***
+/////////////////////////////////////////////////////////////////////////////
+// GENERIC TOKENIZER
+/////////////////////////////////////////////////////////////////////////////
+
+CSphTokenizer::CSphTokenizer ()
+	: m_pBuffer		( NULL )
+	, m_pBufferMax	( NULL )
+	, m_pCur		( NULL )
+	, m_iAccum		( 0 )
+{
+}
+
+
+void CSphTokenizer::SetBuffer ( BYTE * sBuffer, int iLength )
+{
+	// check that old one is over and that new length is sane
+	assert ( m_pCur>=m_pBufferMax );
+	assert ( iLength>=0 );
+
+	// set buffer
+	m_pBuffer = sBuffer;
+	m_pBufferMax = sBuffer + iLength;
+	m_pCur = sBuffer;
+
+	// do inplace case and non-char removal
+	BYTE * p = sBuffer;
+	while ( p<m_pBufferMax )
+	{
+		*p = sphLT_cp1251[*p];
+		p++;
+	}
+}
+
+
+BYTE * CSphTokenizer::GetToken ()
+{
+	// flush whatever accumulated from that last buffer
+	if ( m_iAccum )
+	{
+		// if it's not EOF
+		if ( m_pCur<m_pBufferMax )
+		{
+			// accumulate as much extra chars as possible
+			while ( m_pCur<m_pBufferMax && *m_pCur && m_iAccum<TOKEN_SIZE )
+				m_sAccum [ m_iAccum++ ] = *m_pCur++;
+
+			// through away everything which is over the token size limit
+			while ( m_pCur<m_pBufferMax && *m_pCur )
+				m_pCur++;
+
+			// if buffer is now over (wow, that's REAL big token),
+			// we need to get another bufer
+			if ( m_pCur>=m_pBufferMax )
+				return NULL;
+		}
+
+		// clear and return the accumulated token
+		m_sAccum [ m_iAccum ] = '\0';
+		m_iAccum = 0;
+		return m_sAccum;
+	}
+
+	// skip whitespace
+	while ( m_pCur<m_pBufferMax && !*m_pCur )
+		m_pCur++;
+	BYTE * pToken = m_pCur;
+
+	// skip non-whitespace
+	while ( m_pCur<m_pBufferMax && *m_pCur )
+		m_pCur++;
+
+	// if buffer's not over, we have a full token now
+	if ( m_pCur<m_pBufferMax )
+	{
+		if ( m_pCur-pToken>TOKEN_SIZE )
+			pToken [ TOKEN_SIZE ] = '\0';
+		return pToken;
+	}
+
+	// buffer's over, so we need to accumulate
+	m_iAccum = Min ( TOKEN_SIZE, m_pCur-pToken );
+	memcpy ( m_sAccum, pToken, m_iAccum );
+	return NULL;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// MATCH VECTOR
+/////////////////////////////////////////////////////////////////////////////
 
 CSphList_Match::CSphList_Match()
 {
@@ -1381,14 +1638,16 @@ CSphQueryResult *CSphIndex_VLN::query(CSphDict *dict, char *query, int * pUserWe
 /////////////////////////////////////////////////////////////////////////////
 
 CSphDict_CRC32::CSphDict_CRC32 ( DWORD iMorph )
+	: m_iMorph		( iMorph )
+	, m_iStopwords	( 0 )
+	, m_pStopwords	( NULL )
 {
-	m_iMorph = iMorph;
 	if ( m_iMorph & SPH_MORPH_STEM_RU )
 		stem_ru_init ();
 }
 
 
-DWORD CSphDict_CRC32::wordID ( BYTE * pWord )
+DWORD CSphDict_CRC32::GetWordID ( BYTE * pWord )
 {
 	static const DWORD crc32tab [ 256 ] =
 	{
@@ -1461,14 +1720,94 @@ DWORD CSphDict_CRC32::wordID ( BYTE * pWord )
 	DWORD crc = ~((DWORD)0);
 	BYTE * p;
 
+	// apply morphology
 	if ( m_iMorph & SPH_MORPH_STEM_EN )
 		stem_en ( pWord );
 	if ( m_iMorph & SPH_MORPH_STEM_RU )
 		stem_ru ( pWord );
 	
+    // calc CRC
 	for ( p=pWord; *p; p++ )
 		crc = (crc >> 8) ^ crc32tab[(crc ^ (*p)) & 0xff];
-	return ~crc;
+	crc = ~crc;
+
+	// apply stopwords
+	if ( m_iStopwords )
+	{
+		DWORD * pStart = m_pStopwords;
+		DWORD * pEnd = m_pStopwords + m_iStopwords - 1;
+
+		do
+		{
+			if ( crc==*pStart || crc==*pEnd )
+				return 0;
+			if ( crc<*pStart || crc>*pEnd )
+				break;
+
+			DWORD * pMid = pStart + (pEnd-pStart)/2;
+			if ( crc==*pMid )
+				return 0;
+			if ( crc<*pMid )
+				pEnd = pMid;
+			else
+				pStart = pMid;
+
+		} while ( pEnd-pStart>1 );
+	}
+
+	// done
+	return crc;
+}
+
+
+struct DwordCmp_fn
+{
+	inline int operator () ( DWORD b, DWORD a )
+	{
+		if ( a<b ) return -1;
+		else if ( a==b ) return 0;
+		else return 1;
+	}
+};
+
+
+bool CSphDict_CRC32::LoadStopwords ( const char * sName )
+{
+	static BYTE sBuffer [ 65536 ];
+
+	// open file
+	FILE * fp = fopen ( sName, "rb" );
+	if ( !fp )
+		return false;
+
+	// tokenize
+	CSphTokenizer tTokenizer;
+	CSphVector<DWORD> dStop;
+	int iLength;
+	do
+	{
+		iLength = fread ( sBuffer, 1, sizeof(sBuffer), fp );
+		tTokenizer.SetBuffer ( sBuffer, iLength );
+
+		BYTE * pToken;
+		while ( (pToken = tTokenizer.GetToken()) )
+		{
+			dStop.Add ( GetWordID ( pToken ) );
+		}
+	} while ( iLength );
+
+	// sort
+	dStop.Sort ( DwordCmp_fn() );
+
+	// store
+	m_iStopwords = dStop.GetLength ();
+	m_pStopwords = new DWORD [ m_iStopwords ];
+	memcpy ( m_pStopwords, &dStop[0], sizeof(DWORD)*m_iStopwords );
+	fprintf ( stdout, "- loaded %d stopwords\n", m_iStopwords ); // FIXME! do loglevels
+
+	// cleanup
+	fclose ( fp );
+	return true;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1505,8 +1844,10 @@ int CSphSource_Document::next()
 
 	m_iStats.m_iTotalDocuments++;
 	hits.clear();
-	for (j = 0; j < m_iFieldCount; j++) {
-		if (!(data = fields[j])) continue;
+	for (j = 0; j < m_iFieldCount; j++)
+	{
+		if (!(data = fields[j]))
+			continue;
 
 		i = len = strlen((char*)data);
 		m_iStats.m_iTotalBytes += len;
@@ -1522,9 +1863,14 @@ int CSphSource_Document::next()
 			if (i >= len) break;
 			pWord = pData;
 			while ((*pData) && i < len) { pData++; i++; }
-			hits.add ( 1, m_iLastID, dict->wordID(pWord), (j << 24) | pos++ ); // FIXME! add groups support here
-			if ( m_bCallWordCallback )
-				wordCallback ( (char*)pWord );
+
+			DWORD iWord = dict->GetWordID ( pWord );
+			if ( iWord )
+			{
+				hits.add ( 1, m_iLastID, iWord, (j << 24) | pos++ ); // FIXME! add groups support here
+				if ( m_bCallWordCallback )
+					wordCallback ( (char*) pWord );
+			}
 		}
 	}
 
@@ -1869,7 +2215,7 @@ int CSphSource_XMLPipe::next ()
 				while ( (*pData) && i<iLen ) { pData++; i++; }
 		
 		        // add hit
-		        DWORD iWID = dict->wordID ( pWord );
+		        DWORD iWID = dict->GetWordID ( pWord );
 		        if ( iWID )
 					hits.add ( m_iGroupID, m_iDocID, iWID, iPos++ );
 			}
@@ -1967,13 +2313,15 @@ int CSphSource_XMLPipe::next ()
 
 		// we found it, yes we did!
 		strcpy ( (char*)sWord2, (char*)sWord );
-		DWORD iWID = dict->wordID ( sWord );
+		DWORD iWID = dict->GetWordID ( sWord );
 
 		if ( iWID )
 			hits.add ( m_iGroupID, m_iDocID, iWID, (1<<24) | (++m_iWordPos) ); // field_id | (iPos++)
-		else
-			fprintf ( stderr, "WARNING: word '%s' in document %d (stemmed to '%s') has zero CRC32.\n",
-				sWord2, m_iDocID, sWord );
+
+// FIXME! do zero CRC warns in dict, in debug mode
+//		else
+//			fprintf ( stderr, "WARNING: word '%s' in document %d (stemmed to '%s') has zero CRC32.\n",
+//				sWord2, m_iDocID, sWord );
 	}
 
 	// some tag was found

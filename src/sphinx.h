@@ -90,6 +90,8 @@ private:
 	CSphHit *pData;
 };
 
+
+/// morphology flags
 enum ESphMorphology
 {
 	SPH_MORPH_NONE		= 0,
@@ -98,11 +100,14 @@ enum ESphMorphology
 };
 
 
-/// Generic word dictionary
+/// abstract word dictionary interface
 struct CSphDict
 {
 	/// get word ID by word
-	virtual DWORD		wordID ( BYTE * pWord ) = 0;
+	virtual DWORD		GetWordID ( BYTE * pWord ) = 0;
+
+	/// load stopwords from given file
+	virtual bool		LoadStopwords ( const char * sName ) = 0;
 };
 
 
@@ -115,11 +120,15 @@ struct CSphDict_CRC32 : CSphDict
 
 	/// get word ID by word
 	/// does requested morphology and returns CRC32
-	virtual DWORD		wordID ( BYTE * pWord );
+	virtual DWORD		GetWordID ( BYTE * pWord );
+
+	/// load stopwords from given file
+	virtual bool		LoadStopwords ( const char * sName );
 
 protected:
-	/// morphology flags
-	DWORD				m_iMorph;
+	DWORD				m_iMorph;		///< morphology flags
+	int					m_iStopwords;	///< stopwords count
+	DWORD *				m_pStopwords;	///< stopwords ID list
 };
 
 

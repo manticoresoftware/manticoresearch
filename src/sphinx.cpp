@@ -21,7 +21,7 @@
 
 // *** LOWERCASING TABLE ***
 
-static byte sphLT_cp1251[] = {
+static BYTE sphLT_cp1251[] = {
 	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, // 0-10
 	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, // 10-20
 	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, // 20-30
@@ -158,7 +158,7 @@ void CSphList_Match::grow()
 CSphList_Int::CSphList_Int()
 {
 	max = 4096;
-	data = (uint*)sphMalloc(sizeof(uint) * max);
+	data = (DWORD*) sphMalloc ( sizeof(DWORD)*max );
 	pData = data;
 	count = 0;
 }
@@ -168,7 +168,7 @@ CSphList_Int::~CSphList_Int()
 	sphFree(data);
 }
 
-void CSphList_Int::add(uint value)
+void CSphList_Int::add(DWORD value)
 {
 	if (count >= max) grow();
 	*pData++ = value;
@@ -184,7 +184,7 @@ void CSphList_Int::clear()
 void CSphList_Int::grow()
 {
 	max *= 2;
-	data = (uint*)sphRealloc(data, sizeof(uint) * max);
+	data = (DWORD*) sphRealloc ( data, sizeof(DWORD)*max );
 	pData = data + count;
 }
 
@@ -289,7 +289,7 @@ void CSphWriter_VLN::putNibble(int data)
 
 void CSphWriter_VLN::putbytes(void *data, int size)
 {
-	byte *b = (byte*)data;
+	BYTE *b = (BYTE*)data;
 
 	while (size-- > 0) {
 		putNibble((*b) >> 4);
@@ -314,9 +314,9 @@ void CSphWriter_VLN::PutRawBytes ( void * pData, int iSize )
 
 void CSphWriter_VLN::zipInts(CSphList_Int *data)
 {
-	register uint *p = data->data;
+	register DWORD *p = data->data;
 	register int n = data->count, b;
-	uint v;
+	DWORD v;
 
 	while (n-- > 0) {
 		v = *p++;
@@ -340,7 +340,7 @@ void CSphWriter_VLN::flush()
 
 void CSphWriter_VLN::seek(int pos)
 {
-	byte b;
+	BYTE b;
 
 	flush();
 	lseek(fd, pos >> 1, SEEK_SET);
@@ -358,7 +358,7 @@ CSphReader_VLN::CSphReader_VLN(char *name)
 {
 	this->name = sphDup(name);
 	this->bufSize = 4096; // FIXME?
-	this->buf = (byte*)sphMalloc(this->bufSize);
+	this->buf = (BYTE*) sphMalloc ( this->bufSize );
 	this->fd = this->pos = this->filePos = this->bufPos = this->bufOdd = this->bufUsed = 0;
 }
 
@@ -427,7 +427,7 @@ void CSphReader_VLN::GetRawBytes ( void * pData, int iSize )
 
 void CSphReader_VLN::getbytes(void *data, int size)
 {
-	byte *b = (byte*)data;
+	BYTE *b = (BYTE*)data;
 
 	while (size-- > 0) *b++ = (this->getNibble() << 4) + this->getNibble();
 }
@@ -435,7 +435,7 @@ void CSphReader_VLN::getbytes(void *data, int size)
 int CSphReader_VLN::unzipInt()
 {
 	register int b, offset = 0;
-	register uint v = 0;
+	register DWORD v = 0;
 
 	do {
 		b = getNibble();
@@ -572,7 +572,7 @@ void CSphIndex_VLN::binsDone(int blocks)
 int CSphIndex_VLN::binsReadByte(int b)
 {
 	int n;
-	byte r;
+	BYTE r;
 
 	if (!bins[b]->left) {
 		if (filePos != bins[b]->filePos) {
@@ -600,9 +600,9 @@ int CSphIndex_VLN::binsReadByte(int b)
 	return r;
 }
 
-uint CSphIndex_VLN::binsReadVLB(int b)
+DWORD CSphIndex_VLN::binsReadVLB(int b)
 {
-	uint v = 0, o = 0;
+	DWORD v = 0, o = 0;
 	int t;
 
 	do {
@@ -746,7 +746,7 @@ void CSphIndex_VLN::cidxFlushIndexPage()
 
 void CSphIndex_VLN::cidxHit(CSphHit *hit)
 {
-	static uint lastWordID = 0, lastPageID = 0xffffffff;
+	static DWORD lastWordID = 0, lastPageID = 0xffffffff;
 	static int lastPos = 0, lastIndexPos = 0;
 
 	assert ( hit->m_iWordID );
@@ -805,9 +805,9 @@ void CSphIndex_VLN::cidxDone()
 	delete fdData;
 }
 
-inline int encodeVLB(byte *buf, uint v)
+inline int encodeVLB(BYTE *buf, DWORD v)
 {
-	register byte b;
+	register BYTE b;
 	register int n = 0;
 
 	do {
@@ -1098,7 +1098,7 @@ CSphQueryResult *CSphIndex_VLN::query(CSphDict *dict, char *query, int * pUserWe
 	CSphReader_VLN *rdIndex, *rdData;
 	CSphQueryWord qwords[SPH_MAX_QUERY_WORDS];
 	int i, j, nwords, chunkPos, weights [ SPH_MAX_FIELD_COUNT ], imin, nweights;
-	uint *phits[SPH_MAX_QUERY_WORDS], *pdocs[SPH_MAX_QUERY_WORDS],
+	DWORD *phits[SPH_MAX_QUERY_WORDS], *pdocs[SPH_MAX_QUERY_WORDS],
 		wordID, docID, pmin, k;
 	CSphQueryResult *result;
 	struct timeval tv1, tv2;
@@ -1190,7 +1190,7 @@ CSphQueryResult *CSphIndex_VLN::query(CSphDict *dict, char *query, int * pUserWe
 			rdData->unzipInts(vChunkHeader);
 
 			docID = 0;
-			for (k = 0; k < (uint)vChunkHeader->count; k++)
+			for (k = 0; k < (DWORD)vChunkHeader->count; k++)
 			{
 				docID += (vChunkHeader->data[k] >> 1);
 				qwords[i].docs->add(docID);
@@ -1449,7 +1449,7 @@ const CSphSourceStats * CSphSource::GetStats ()
 
 int CSphSource_Document::next()
 {
-	byte **fields = NextDocument(), *data, *pData, *pWord;
+	BYTE **fields = NextDocument(), *data, *pData, *pWord;
 	int pos, i, j, len;
 
 	if (!fields || (m_iLastID <= 0)) return 0;
@@ -1491,9 +1491,9 @@ int CSphSource_Document::GetFieldCount ()
 // PLAIN TEXT SOURCE
 /////////////////////////////////////////////////////////////////////////////
 
-byte **CSphSource_Text::NextDocument()
+BYTE **CSphSource_Text::NextDocument()
 {
-	static byte *t;
+	static BYTE *t;
 
 	if (!(t = NextText())) return NULL;
 	return &t; 
@@ -1508,8 +1508,8 @@ CSphSource_MySQL::CSphSource_MySQL(char *sqlQuery)
 	this->sqlQuery = sphDup(sqlQuery);
 }
 
-int CSphSource_MySQL::connect(char *host, char *user, char *pass, char *db,
-	int port, char *usock)
+int CSphSource_MySQL::connect ( const char * host, const char * user, const char * pass,
+	const char * db, int port, const char * usock )
 {
 	mysql_init(&sqlDriver);
 	if (!mysql_real_connect(&sqlDriver, host, user, pass, db,
@@ -1534,15 +1534,14 @@ int CSphSource_MySQL::connect(char *host, char *user, char *pass, char *db,
 
 CSphSource_MySQL::~CSphSource_MySQL()
 {
-	free(sqlQuery);
 }
 
-byte **CSphSource_MySQL::NextDocument()
+BYTE **CSphSource_MySQL::NextDocument()
 {
 	sqlRow = mysql_fetch_row(sqlResult);
 	if (!sqlRow) return NULL;
 	m_iLastID = atoi(sqlRow[0]);
-	return (byte**)(&sqlRow[1]);
+	return (BYTE**)(&sqlRow[1]);
 }
 
 // *** HASH ***

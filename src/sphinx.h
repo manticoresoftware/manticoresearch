@@ -30,9 +30,6 @@
 #define Min(a,b) ((a)<(b)?(a):(b))
 #define Max(a,b) ((a)>(b)?(a):(b))
 
-typedef unsigned int uint;
-typedef unsigned char byte;
-
 typedef unsigned int		DWORD;
 typedef unsigned char		BYTE;
 
@@ -199,29 +196,34 @@ protected:
 };
 
 
+/// generic text source
+/// one-field plain-text documents
 struct CSphSource_Text : CSphSource_Document
 {
-	CSphSource_Text() { this->m_iFieldCount = 1; }
-	byte ** NextDocument();
-	virtual byte * NextText() = 0;
+					CSphSource_Text () { m_iFieldCount = 1; }
+	BYTE **			NextDocument ();
+	virtual BYTE *	NextText () = 0;
 };
 
+
+/// generic MySQL source
+/// multi-field plain-text documents fetched from given query
 struct CSphSource_MySQL : CSphSource_Document
 {
-	char *sqlQuery;
+	const char *		sqlQuery;
 
-	CSphSource_MySQL(char *sqlQuery);
-	virtual ~CSphSource_MySQL();
+						CSphSource_MySQL ( char *sqlQuery );
+	virtual				~CSphSource_MySQL ();
 
-	virtual int connect(char *host, char *user, char *pass, char *db,
-		int port, char *usock);
-	virtual byte ** NextDocument();
+	virtual int			connect ( const char * host, const char * user, const char * pass, const char * db, int port, const char * usock );
+	virtual BYTE **		NextDocument();
 
 private:
-	MYSQL_RES *sqlResult;
-	MYSQL_ROW sqlRow;
-	MYSQL sqlDriver;
+	MYSQL_RES *			sqlResult;
+	MYSQL_ROW			sqlRow;
+	MYSQL				sqlDriver;
 };
+
 
 /// search query match
 struct CSphMatch
@@ -230,6 +232,7 @@ struct CSphMatch
 	DWORD		m_iDocID;
 	int			m_iWeight;
 };
+
 
 /// matches vector
 struct CSphList_Match
@@ -253,17 +256,17 @@ private:
 
 struct CSphList_Int
 {
-	uint *data;
+	DWORD *data;
 	int count;
 
 	CSphList_Int();
 	virtual ~CSphList_Int();
 
-	void add(uint value);
+	void add(DWORD value);
 	void clear();
 
 private:
-	uint *pData;
+	DWORD *pData;
 	int max;
 
 	void grow();
@@ -297,7 +300,7 @@ struct CSphWriter_VLN
 
 private:
 	int fd, poolUsed, poolOdd;
-	byte pool[SPH_CACHE_WRITE], *pPool;
+	BYTE pool[SPH_CACHE_WRITE], *pPool;
 
 	void putNibble(int data);
 	void flush();
@@ -321,7 +324,7 @@ struct CSphReader_VLN
 
 private:
 	int fd, pos, filePos, bufPos, bufOdd, bufUsed, bufSize;
-	byte *buf;
+	BYTE *buf;
 
 	int getNibble();
 	void cache();
@@ -330,7 +333,7 @@ private:
 struct CSphQueryWord
 {
 	int queryPos;
-	uint wordID;
+	DWORD wordID;
 	char *word;
 	CSphList_Int *hits, *docs;
 
@@ -399,13 +402,13 @@ enum ESphBinState
 
 struct CSphBin
 {
-	byte *data, *pData;
+	BYTE *data, *pData;
 	int left, done, filePos, fileLeft, filePtr, state;
 	DWORD lastGroupID, lastDocID, lastWordID, lastPos; // FIXME! make it a hit
 
 	CSphBin()
 	{
-		data = (byte*)sphMalloc(SPH_RLOG_BIN_SIZE);
+		data = (BYTE*) sphMalloc ( SPH_RLOG_BIN_SIZE );
 		pData = data; 
 		left = done = filePos = fileLeft = 0;
 		lastDocID = lastWordID = lastPos = 0;
@@ -418,47 +421,53 @@ struct CSphBin
 	}
 };
 
+
+/// this is my actual VLN-compressed phrase index implementation
 struct CSphIndex_VLN : CSphIndex
 {
-	CSphIndex_VLN(char *filename);
-	virtual ~CSphIndex_VLN();
+								CSphIndex_VLN ( char *filename );
+	virtual						~CSphIndex_VLN();
 
 	virtual int					build ( CSphDict * dict, CSphSource * source );
 	virtual CSphQueryResult *	query ( CSphDict * dict, char * query, int * pUserWeights, int iUserWeightCount );
 
 private:
-	char *filename;
-	int fdRaw, filePos;
-	CSphWriter_VLN *fdIndex, *fdData;
-	CSphBin *bins[SPH_RLOG_MAX_BLOCKS];
+	char *						filename;
+	int							fdRaw;
+	int							filePos;
+	CSphWriter_VLN *			fdIndex;
+	CSphWriter_VLN *			fdData;
+	CSphBin *					bins [ SPH_RLOG_MAX_BLOCKS ];
 
-	CSphList_Int *vChunk, *vChunkHeader, *vIndexPage;
-	int  cidxPagesDir[SPH_CLOG_DIR_PAGES];
-	int  cidxDirUsed;
-	int  cidxPageUsed;
-	int  cidxIndexPos;
-	int  cidxDataPos;
-	int  lastDocDelta;
-	uint lastDocID;
-	int  lastDocHits;
+	CSphList_Int *				vChunk;
+	CSphList_Int *				vChunkHeader;
+	CSphList_Int *				vIndexPage;
+	int							cidxPagesDir [ SPH_CLOG_DIR_PAGES ];
+	int							cidxDirUsed;
+	int							cidxPageUsed;
+	int							cidxIndexPos;
+	int							cidxDataPos;
+	int							lastDocDelta;
+	DWORD						lastDocID;
+	int							lastDocHits;
 
-	CSphIndexHeader_VLN m_tHeader;
+	CSphIndexHeader_VLN			m_tHeader;
 
-	int  open(char *ext, int mode);
+	int							open ( char *ext, int mode );
 
-	int  binsInit(int blocks);
-	void binsDone(int blocks);
-	uint binsReadVLB(int b);
-	int  binsReadByte(int b);
-	int  binsRead(int b, CSphHit *e);
+	int							binsInit ( int blocks );
+	void						binsDone ( int blocks );
+	DWORD						binsReadVLB ( int b );
+	int							binsReadByte ( int b );
+	int							binsRead ( int b, CSphHit * e );
 
-	int  cidxCreate();
-	int  cidxWriteRawVLB(int fd, CSphHit *hit, int count);
-	void cidxFlushHitList();
-	void cidxFlushChunk();
-	void cidxFlushIndexPage();
-	void cidxHit(CSphHit *hit);
-	void cidxDone();
+	int							cidxCreate ();
+	int							cidxWriteRawVLB ( int fd, CSphHit *hit, int count );
+	void						cidxFlushHitList ();
+	void						cidxFlushChunk ();
+	void						cidxFlushIndexPage ();
+	void						cidxHit ( CSphHit * hit );
+	void						cidxDone ();
 };
 
 // ***

@@ -1927,8 +1927,8 @@ int CSphSource_XMLPipe::next ()
 		if ( iWID )
 			hits.add ( m_iGroupID, m_iDocID, iWID, (1<<24) | (++m_iWordPos) ); // field_id | (iPos++)
 		else
-			fprintf ( stderr, "WARNING: word '%s' (stemmed to '%s') has zero CRC32.\n",
-				sWord2, sWord );
+			fprintf ( stderr, "WARNING: word '%s' in document %d (stemmed to '%s') has zero CRC32.\n",
+				sWord2, m_iDocID, sWord );
 	}
 
 	// some tag was found

@@ -51,18 +51,13 @@ int main ( int argc, char ** argv )
 		strcat ( sQuery, " " );
 	}
 
-	// build weights
-	int dWeights [ SPH_MAX_FIELD_COUNT ];
-	for ( int i=0; i<SPH_MAX_FIELD_COUNT; i++ )
-		dWeights[i] = 0;
-
 	//////////
 	// search
 	//////////
 
 	CSphIndex * pIndex = new CSphIndex_VLN ( pIndexPath );
 	CSphQueryResult * pResult = pIndex->query ( new CSphDict_CRC32 ( iMorph ), sQuery,
-		dWeights, SPH_MAX_FIELD_COUNT );
+		NULL, SPH_MAX_FIELD_COUNT );
 
 	fprintf ( stdout, "query '%s': %d matches, %.2f sec\n",
 		sQuery, pResult->m_pMatches->count, pResult->m_fQueryTime );
@@ -72,7 +67,7 @@ int main ( int argc, char ** argv )
 		fprintf ( stdout, "\nmatches:\n" );
 		for ( int i=0; i<pResult->m_pMatches->count; i++ )
 		{
-			fprintf ( stdout, "%d. group=%d, title=%d, weight=%d\n",
+			fprintf ( stdout, "%d. group=%d, document=%d, weight=%d\n",
 				1+i,
 				pResult->m_pMatches->data[i].m_iGroupID,
 				pResult->m_pMatches->data[i].m_iDocID,

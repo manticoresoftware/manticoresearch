@@ -12,6 +12,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <time.h>
+#include <stdarg.h>
 
 #if !USE_WINDOWS
 #include <unistd.h>
@@ -22,10 +23,86 @@
 #include <sys/wait.h>
 #endif
 
-static int read_timeout = 5;
-static int children_count = 0;
-static int max_children = 0;
-static int sock = 0;
+/////////////////////////////////////////////////////////////////////////////
+
+enum ESphLogLevel
+{
+	LOG_FATAL	= 0,
+	LOG_WARNING	= 1,
+	LOG_INFO	= 2
+};
+
+static int				g_iLogFile		= STDIN_FILENO;
+static ESphLogLevel		g_eLogLevel		= LOG_INFO;
+
+static int				g_iReadTimeout	= 5;
+static int				g_iChildren		= 0;
+static int				g_iMaxChildren	= 0;
+static int				g_iSocket		= 0;
+static int				g_iQueryLogFile	= -1;
+
+/////////////////////////////////////////////////////////////////////////////
+
+void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
+{
+	if ( eLevel>g_eLogLevel || g_iLogFile<0 )
+		return;
+
+	time_t tNow;
+	char sTimeBuf[128];
+	time ( &tNow );
+	ctime_r ( &tNow, sTimeBuf );
+	sTimeBuf [ strlen(sTimeBuf)-1 ] = '\0';
+
+	const char * sBanner = "";
+	if ( eLevel==LOG_FATAL )	sBanner = "FATAL: ";
+	if ( eLevel==LOG_WARNING )	sBanner = "WARNING: ";
+
+	char sBuf [ 1024 ];
+	if ( !isatty ( g_iLogFile ) )
+		snprintf ( sBuf, sizeof(sBuf)-1, "[%s] [%5d] %s", sTimeBuf, getpid(), sBanner );
+	else
+		strcpy ( sBuf, sBanner );
+	int iLen = strlen(sBuf);
+
+	vsnprintf ( sBuf+iLen, sizeof(sBuf)-iLen-1, sFmt, ap );
+	strncat ( sBuf, "\n", sizeof(sBuf) );
+
+	flock ( g_iLogFile, LOCK_EX );
+	lseek ( g_iLogFile, 0, SEEK_END );
+	write ( g_iLogFile, sBuf, strlen(sBuf) );
+	flock ( g_iLogFile, LOCK_UN );
+}
+
+
+void sphFatal ( const char * sFmt, ... )
+{
+	va_list ap;
+	va_start ( ap, sFmt );
+	sphLog ( LOG_FATAL, sFmt, ap );
+	va_end ( ap );
+	exit ( 1 );
+}
+
+
+void sphWarning ( const char * sFmt, ... )
+{
+	va_list ap;
+	va_start ( ap, sFmt );
+	sphLog ( LOG_WARNING, sFmt, ap );
+	va_end ( ap );
+}
+
+
+void sphInfo ( const char * sFmt, ... )
+{
+	va_list ap;
+	va_start ( ap, sFmt );
+	sphLog ( LOG_INFO, sFmt, ap );
+	va_end ( ap );
+}
+
+/////////////////////////////////////////////////////////////////////////////
 
 int createServerSocket_IP(int port)
 {
@@ -35,59 +112,72 @@ int createServerSocket_IP(int port)
 	iaddr.sin_family = AF_INET;
 	iaddr.sin_addr.s_addr = htonl(INADDR_ANY);
 	iaddr.sin_port = htons(port);
-	fprintf(stderr, "INFO: creating a server socket on port %d\n", port);
+
+	sphInfo ( "creating a server socket on port %d", port );
 	if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+		sphFatal ( "unable to create socket on port %d", port );
+
+	int iTries = 12;
+	int iRes;
+	do
 	{
-		fprintf(stderr, "FATAL: unable to create socket on port %d\n", port);
-		exit(1);
-	}
-	while (bind(sock, (struct sockaddr *)&iaddr,
-		sizeof(struct sockaddr_in)) == -1)
-	{
-		fprintf(stderr, "INFO: failed to bind on port %d, retrying...\n", port);
-		sleep(1);
-	}
+		iRes = bind ( sock, (struct sockaddr *)&iaddr, sizeof(iaddr) );
+		if ( iRes==0 )
+			break;
+
+		sphInfo ( "failed to bind on port %d, retrying...", port );
+		sleep ( 15 );
+	} while ( --iTries>0 );
+	if ( iRes )
+		sphFatal ( "failed to bind on port %d" );
+
 	return sock;
 }
 
-void sigchld(int arg)
+
+void sigchld ( int arg )
 {
-	signal(SIGCHLD, sigchld);
-	while (waitpid(0, (int *)0, WNOHANG | WUNTRACED) > 0)
-		children_count--;
+	signal ( SIGCHLD, sigchld );
+	while ( waitpid ( 0, (int *)0, WNOHANG | WUNTRACED ) > 0 )
+		g_iChildren--;
 }
+
 
 void sigterm(int arg)
 {
-	fprintf ( stderr, "INFO: caught SIGTERM, shutting down\n" );
-	if ( sock )
-		close ( sock );
+	sphInfo ( "caught SIGTERM, shutting down" );
+	if ( g_iSocket )
+		close ( g_iSocket );
 	exit ( 0 );
 }
 
-int select_fd(int fd, int maxtime, int writep)
-{
-	fd_set fds, exceptfds;
-	struct timeval read_timeout;
 
-	FD_ZERO(&fds);
-	FD_SET(fd, &fds);
-	FD_ZERO(&exceptfds);
-	FD_SET(fd, &exceptfds);
-	read_timeout.tv_sec = maxtime;
-	read_timeout.tv_usec = 0;
-	return select (fd + 1, writep ? NULL : &fds, writep ? &fds : NULL,
-		&exceptfds, &read_timeout);
+int select_fd ( int fd, int maxtime, int writep )
+{
+	fd_set fds;
+	FD_ZERO ( &fds );
+	FD_SET ( fd, &fds );
+
+	fd_set exceptfds;
+	FD_ZERO ( &exceptfds );
+	FD_SET ( fd, &exceptfds );
+
+	struct timeval tv;
+	tv.tv_sec = maxtime;
+	tv.tv_usec = 0;
+
+	return select ( fd+1, writep ? NULL : &fds, writep ? &fds : NULL, &exceptfds, &tv );
 }
+
 
 int iread(int fd, void *buf, int len)
 {
 	int res;
 
 	do {
-		if (read_timeout) {
+		if (g_iReadTimeout) {
 			do {
-				res = select_fd (fd, read_timeout, 0);
+				res = select_fd (fd, g_iReadTimeout, 0);
 			} while (res == -1 && errno == EINTR);
 			if (res <= 0) {
 				if (res == 0) errno = ETIMEDOUT;
@@ -101,61 +191,105 @@ int iread(int fd, void *buf, int len)
 	return res;
 }
 
-int main(int argc, char **argv)
+/////////////////////////////////////////////////////////////////////////////
+
+int main ( int argc, char **argv )
 {
 	CSphQueryResult *r;
-	int i, rsock, start = 0, count = 10, rcount, log, port;
+	int rsock, start = 0, count = 10, rcount;
 	struct sockaddr_in remote_iaddr;
 	socklen_t len;
-	char query[1024], buf[2048], tbuf[26], *logname;
-	time_t now;
+	char query[1024], buf[2048];
 	CSphConfig conf;
-	CSphHash *confSearchd, *confCommon;
 
-	// configure
-	const char * sConfName = "sphinx.conf";
-	struct stat tStat;
-	if ( argc>1 )
+	//////////////////////
+	// parse command line
+	//////////////////////
+
+	const char *	sOptConfig		= "sphinx.conf";
+	bool			bOptConsole		= false;
+
+	int i;
+	for ( i=1; i<argc; i++ )
 	{
-		if ( !stat ( argv[1], &tStat ) )
-			sConfName = argv[1];
-		else
-			fprintf ( stderr, "WARNING: can not stat config file '%s', using default 'sphinx.conf'.\n", argv[1] );
-	}
+		if ( strcasecmp ( argv[i], "--config" )==0 && (i+1)<argc )
+		{
+			struct stat tStat;
+			if ( !stat ( argv[i+1], &tStat ) )
+				sOptConfig = argv[i+1];
+			else
+				sphWarning ( "failed to stat config file '%s', using default 'sphinx.conf'", argv[i+1] );
+			i++;
 
-	fprintf ( stdout, "using config file '%s'...\n", sConfName );
-	if ( !conf.open ( sConfName ) )
-	{
-		fprintf ( stderr, "FATAL: unable to open config file '%s'.\n", sConfName );
-		return 1;
-	}
-	confCommon = conf.loadSection ( "common" );
-	confSearchd = conf.loadSection ( "searchd" );
-
-	#define CHECK_CONF(hash, key) \
-		if (!hash->get(key)) { \
-			fprintf(stderr, "FATAL: '%s' is not specified in config file\n", key); \
-			return 1; \
+		} else if ( strcasecmp ( argv[i], "--console" )==0 )
+		{
+			bOptConsole = true;
+		} else
+		{
+			break;
 		}
-
-	CHECK_CONF(confCommon,  "index_path");
-	port = confSearchd->get("port")
-		? atoi(confSearchd->get("port"))
-		: 0;
-	if (!port) {
-		fprintf(stderr, "FATAL: 'port' is not configured or invalid\n");
+	}
+	if ( i!=argc )
+	{
+		fprintf ( stderr, "ERROR: malformed or unknown option near '%s'.\n\n", argv[i] );
+		fprintf ( stderr, "usage: searchd [--config file.conf] [--console]\n" );
 		return 1;
 	}
-	logname = confSearchd->get("log");
-	if (!logname) logname = sphDup("searchd.log");
-	if (confSearchd->get("read_timeout")) {
-		i = atoi(confSearchd->get("read_timeout"));
-		if (i >= 0) read_timeout = i;
+
+	/////////////////////
+	// parse config file
+	/////////////////////
+
+	sphInfo ( "using config file '%s'...", sOptConfig );
+	if ( !conf.open ( sOptConfig ) )
+		sphFatal ( "failed to read config file '%s'", sOptConfig );
+
+	CSphHash * confCommon = conf.loadSection ( "common" );
+	CSphHash * confSearchd = conf.loadSection ( "searchd" );
+
+	// logs
+	if ( !bOptConsole )
+	{
+		// create log
+		char * sLog = "searchd.log";
+		if ( confSearchd->get ( "log" ) )
+			sLog = confSearchd->get ( "log" );
+
+		umask ( 066 );
+		g_iLogFile = open ( sLog, O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
+		if ( g_iLogFile<0 )
+			sphFatal ( "failed to write log file '%s'", sLog );
+
+		// create query log
+		if ( confSearchd->get ( "query_log" ) )
+		{
+			g_iQueryLogFile = open ( confSearchd->get ( "query_log" ), O_CREAT | O_RDWR | O_APPEND,
+				S_IREAD | S_IWRITE );
+			if ( g_iQueryLogFile<0 )
+				sphFatal ( "failed to write query log file '%s'", confSearchd->get ( "query_log" ) );
+		}
+	} else
+	{
+		// if we're running in console mode, dump queries to tty as well
+		g_iQueryLogFile = g_iLogFile;
 	}
-	if (confSearchd->get("max_children")) {
-		i = atoi(confSearchd->get("max_children"));
-		max_children = (i >= 0) ? i : 0;
-	}
+
+	#define CHECK_CONF(_hash,_section,_key) \
+		if ( !_hash->get(_key) ) \
+			sphFatal ( "mandatory option '%s' not found in config file section '[%s]'", _key, _section );
+
+	CHECK_CONF ( confCommon, "common", "index_path" );
+	CHECK_CONF ( confSearchd, "searchd", "port" );
+
+	int iPort = atoi ( confSearchd->get ( "port" ) );
+	if ( !iPort )
+		sphFatal ( "expected valid 'port', got '%s'", confSearchd->get ( "port" ) );
+
+	if ( confSearchd->get ( "g_iReadTimeout") )
+		g_iReadTimeout = Max ( 0, atoi ( confSearchd->get ( "read_timeout" ) ) );
+
+	if ( confSearchd->get ( "max_children" ) )
+		g_iMaxChildren = Max ( 0, atoi ( confSearchd->get ( "max_children" ) ) );
 
 	DWORD iMorph = SPH_MORPH_NONE;
 	char * pMorph = confCommon->get ( "morphology" );
@@ -168,9 +302,7 @@ int main(int argc, char **argv)
 		else if ( !strcmp ( pMorph, "stem_enru" ) )
 			iMorph = SPH_MORPH_STEM_EN | SPH_MORPH_STEM_RU;
 		else
-		{
-			fprintf ( stderr, "WARNING: unknown morphology type '%s' ignored.\n", pMorph );
-		}
+			sphWarning ( "unknown morphology type '%s' ignored", pMorph );
 	}
 
 	///////////
@@ -182,46 +314,61 @@ int main(int argc, char **argv)
 	CSphDict * pDict = new CSphDict_CRC32 ( iMorph );
 	pDict->LoadStopwords ( confCommon->get ( "stopwords" ) );
 
-	// create and bind on socket
-	signal ( SIGCHLD, sigchld );
-	signal ( SIGTERM, sigterm );
-	signal ( SIGINT, sigterm );
-
-	sock = createServerSocket_IP(port);
-	listen ( sock, 5 );
-	if ((log = open(logname, O_CREAT | O_RDWR | O_APPEND,
-		S_IREAD | S_IWRITE)) < 0)
+	// daemonize
+	if ( !bOptConsole )
 	{
-		fprintf(stderr, "FATAL: unable to append to '%s'", logname);
-		exit(1);
+		signal ( SIGCHLD, sigchld );
+		signal ( SIGTERM, sigterm );
+		signal ( SIGINT, sigterm );
+		signal ( SIGHUP, SIG_IGN );
+
+		int iDevNull = open ( "/dev/null", O_RDWR );
+		close ( STDIN_FILENO );
+		close ( STDOUT_FILENO );
+		close ( STDERR_FILENO );
+		dup2 ( iDevNull, STDIN_FILENO );
+		dup2 ( iDevNull, STDOUT_FILENO );
+		dup2 ( iDevNull, STDERR_FILENO );
+
+		switch ( fork() )
+		{
+			case -1:	sphFatal ( "fork() failed (reason: %s)", strerror ( errno ) ); // error
+			case 0:		break; // daemonized child
+			default:	exit ( 0 ); // tty-controlled parent
+		}
 	}
+
+	// create and bind on socket
+	g_iSocket = createServerSocket_IP ( iPort );
+	listen ( g_iSocket, 5 );
 
 	/////////////////
 	// serve clients
 	/////////////////
 
-	fprintf(stderr, "INFO: accepting connections\n");
-	while (1) {
-		len = sizeof(remote_iaddr);
-		rsock = accept(sock, (struct sockaddr*)&remote_iaddr, &len);
-		if (rsock < 0 && (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK))
+	sphInfo ( "accepting connections" );
+	for ( ;; )
+	{
+		len = sizeof ( remote_iaddr );
+		rsock = accept ( g_iSocket, (struct sockaddr*)&remote_iaddr, &len );
+		if ( rsock<0 && ( errno==EINTR || errno==EAGAIN || errno==EWOULDBLOCK ) )
 			continue;
-		if (rsock < 0) {
-			fprintf(stderr, "FATAL: accept() failed (reason: %s)", strerror(errno));
-			exit(1);
+		if ( rsock<0 )
+			sphFatal ( "accept() failed (reason: %s)", strerror ( errno ) );
+
+		if ( g_iMaxChildren && g_iChildren>=g_iMaxChildren )
+		{
+			strcpy ( buf, "RETRY Server maxed out\n" );
+			write ( rsock, buf, strlen(buf) );
+			close ( rsock );
+			continue;
 		}
 
-		if (max_children && children_count >= max_children) {
-			strcpy(buf, "RETRY Server maxed out\n");
-			write(rsock, buf, strlen(buf));
-			close(rsock);
-			continue;
-		}
-
-		switch (fork()) 
+		switch ( fork() )
 		{
 			// fork() failed
-			case -1: exit(1); // FIXME: fork() failed, should log
+			case -1:
+				sphFatal ( "fork() failed (reason: %s)", strerror ( errno ) );
 
 			// child process, handle client
 			case 0:
@@ -261,15 +408,25 @@ int main(int argc, char **argv)
 					r = pIndex->query ( pDict, &tQuery );
 
 					// log query
-					time(&now);
-					ctime_r(&now, tbuf);
-					tbuf[24] = '\0';
-					sprintf ( buf, "[%s] %.2f sec: [%d %d %s %d] %s\n",
-						tbuf, r->m_fQueryTime, start, count, tQuery.m_bAll ? "all" : "any", iGroup, query );
-					flock(log, LOCK_EX);
-					lseek(log, 0, SEEK_END);
-					write(log, buf, strlen(buf));
-					flock(log, LOCK_UN);
+					if ( g_iQueryLogFile>=0 )
+					{
+						time_t tNow;
+						char sTimeBuf[128];
+
+						time ( &tNow );
+						ctime_r ( &tNow, sTimeBuf );
+						sTimeBuf [ strlen(sTimeBuf)-1 ] = '\0';
+
+						sprintf ( buf, "[%s] %.2f sec: [%d %d %s %d] %s\n",
+							sTimeBuf, r->m_fQueryTime,
+							start, count, tQuery.m_bAll ? "all" : "any", iGroup,
+							query );
+
+						flock ( g_iQueryLogFile, LOCK_EX );
+						lseek ( g_iQueryLogFile, 0, SEEK_END );
+						write ( g_iQueryLogFile, buf, strlen(buf) );
+						flock ( g_iQueryLogFile, LOCK_UN );
+					}
 
 					// serve the answer to client
 					rcount = Min ( count, r->m_dMatches.GetLength()-start );
@@ -314,7 +471,7 @@ int main(int argc, char **argv)
 
 			// parent process, continue accept()ing
 			default:
-				children_count++;
+				g_iChildren++;
 				close(rsock);
 				break;
 		}

@@ -21,7 +21,7 @@ template < typename T > struct CSphMTFHashEntry
 };
 
 
-template < typename T, int SIZE, typename HASHFUNC > class CSphMTFHash
+template < typename T, int SIZE, class HASHFUNC > class CSphMTFHash
 {
 public:
 	/// ctor
@@ -50,13 +50,13 @@ public:
 	/// accessor
 	T * operator [] ( const char * sKey )
 	{
-		return Find ( sKey )
+		return Find ( sKey );
 	}
 
 	/// accesor
 	T * Find ( const char * sKey )
 	{
-		DWORD uHash = ( HASHFUNC() ( sKey ) ) % SIZE;
+		DWORD uHash = HASHFUNC::Hash ( sKey ) % SIZE;
 
 		// find matching entry
 		CSphMTFHashEntry<T> * pEntry = m_pData [ uHash ];
@@ -82,7 +82,7 @@ public:
 	/// OPTIMIZE: should pass T not by reference for simple types
 	T & Add ( const char * sKey, T & tValue )
 	{
-		DWORD uHash = ( HASHFUNC() ( sKey ) ) % SIZE;
+		DWORD uHash = HASHFUNC::Hash ( sKey ) % SIZE;
 
 		// find matching entry
 		CSphMTFHashEntry<T> * pEntry = m_pData [ uHash ];
@@ -170,6 +170,7 @@ class CSphStopwordBuilderDict : public CSphDict_CRC32
 {
 public:
 						CSphStopwordBuilderDict ();
+	virtual				~CSphStopwordBuilderDict () {}
 	void				Save ( const char * sOutput, int iTop );
 
 public:
@@ -179,7 +180,7 @@ public:
 protected:
 	struct HashFunc_t
 	{
-		inline DWORD operator () ( const char * sKey )
+		static inline DWORD Hash ( const char * sKey )
 		{
 			return sphCRC32 ( (const BYTE*)sKey );
 		}
@@ -246,35 +247,32 @@ int main ( int argc, char ** argv )
 	const char * sBuildStops = NULL;
 	int iTopStops = 100;
 
-	bool bUsage = false;
 	int i;
 	for ( i=1; i<argc; i++ )
 	{
-		bUsage = true;
-		if ( strcasecmp ( argv[i], "--config" )==0 )
+		if ( strcasecmp ( argv[i], "--config" )==0 && (i+1)<argc )
 		{
-			if ( ++i>=argc )
-				break;
-
 			struct stat tStat;
-			if ( !stat ( argv[i], &tStat ) )
-				sConfName = argv[i];
+			if ( !stat ( argv[i+1], &tStat ) )
+				sConfName = argv[i+1];
 			else
-				fprintf ( stderr, "WARNING: can not stat config file '%s', using default 'sphinx.conf'.\n", argv[i] );
-		}
-		if ( strcasecmp ( argv[i], "--buildstops" )==0 )
+				fprintf ( stderr, "WARNING: can not stat config file '%s', using default 'sphinx.conf'.\n", argv[i+1] );
+			i++;
+		
+		} else if ( strcasecmp ( argv[i], "--buildstops" )==0 && (i+2)<argc )
 		{
-			if ( i+2>=argc )
-				break;
-
 			sBuildStops = argv[i+1];
 			iTopStops = atoi ( argv[i+2] );
 			if ( iTopStops<=0 )
 				break;
+			i += 2;
+
+		} else
+		{
+			break;
 		}
-		bUsage = false;
 	}
-	if ( bUsage )
+	if ( i!=argc )
 	{
 		fprintf ( stderr, "ERROR: malformed or unknown option near '%s'.\n\n", argv[i] );
 		fprintf ( stderr, "usage: indexer [--config file.conf] [--buildstops output.txt count]\n" );

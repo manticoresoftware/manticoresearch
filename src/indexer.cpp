@@ -142,7 +142,7 @@ int main(int argc, char **argv)
 	fflush ( stdout );
 
 	assert ( pSource );
-	CSphIndex_VLN * pIndex = new CSphIndex_VLN ( confCommon->get ( "index_path" ) );
+	CSphIndex * pIndex = sphCreateIndexPhrase ( confCommon->get ( "index_path" ) );
 	CSphDict_CRC32 * pDict = new CSphDict_CRC32 ( iMorph );
 
 	// configure stopwords

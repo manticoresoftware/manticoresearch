@@ -66,7 +66,7 @@ int main ( int argc, char ** argv )
 	tQuery.m_bAll = !bAny;
 
 	CSphDict * pDict = new CSphDict_CRC32 ( iMorph );
-	CSphIndex * pIndex = new CSphIndex_VLN ( pIndexPath );
+	CSphIndex * pIndex = sphCreateIndexPhrase ( pIndexPath );
 	CSphQueryResult * pResult = pIndex->query ( pDict, &tQuery );
 	delete pIndex;
 	delete pDict;

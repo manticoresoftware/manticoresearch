@@ -31,6 +31,27 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
+/// legacy stupidity
+struct CSphList_Int
+{
+	DWORD *data;
+	int count;
+
+	CSphList_Int();
+	virtual ~CSphList_Int();
+
+	void add(DWORD value);
+	void clear();
+
+private:
+	DWORD *pData;
+	int max;
+
+	void grow();
+};
+
+/////////////////////////////////////////////////////////////////////////////
+
 /// generic tokenizer
 class CSphTokenizer
 {
@@ -101,6 +122,148 @@ public:
 			if (this->docs) delete this->docs;
 		}
 	}
+};
+
+/////////////////////////////////////////////////////////////////////////////
+
+/// possible bin states
+enum ESphBinState
+{
+	BIN_ERR_READ	= -2,	///< bin read error
+	BIN_ERR_END		= -1,	///< bin end
+	BIN_POS			= 0,	///< bin is in "expects pos delta" state
+	BIN_DOC			= 1,	///< bin is in "expects doc delta" state
+	BIN_WORD		= 2		///< bin is in "expects word delta" state
+};
+
+
+struct CSphBin
+{
+	BYTE *data, *pData;
+	int left, done, filePos, fileLeft, filePtr, state;
+	DWORD lastGroupID, lastDocID, lastWordID, lastPos; // FIXME! make it a hit
+
+	CSphBin()
+	{
+		data = (BYTE*) sphMalloc ( SPH_RLOG_BIN_SIZE );
+		pData = data; 
+		left = done = filePos = fileLeft = 0;
+		lastDocID = lastWordID = lastPos = 0;
+		state = BIN_POS;
+	}
+
+	~CSphBin()
+	{
+		sphFree(data);
+	}
+};
+
+
+/// VLN index header
+struct CSphIndexHeader_VLN
+{
+	DWORD		m_iMinDocID;
+	DWORD		m_iMinGroupID;
+	DWORD		m_iGroupBits;
+	DWORD		m_iFieldCount;
+};
+
+
+struct CSphWriter_VLN
+{
+	char *name;
+	int pos;
+
+	CSphWriter_VLN(char *name);
+	virtual ~CSphWriter_VLN();
+
+	int open();
+	void putbytes(void *data, int size);
+	void PutRawBytes ( void * pData, int iSize );
+	void zipInts(CSphList_Int *data);
+	void close();
+	void seek(int pos);
+
+private:
+	int fd, poolUsed, poolOdd;
+	BYTE pool[SPH_CACHE_WRITE], *pPool;
+
+	void putNibble(int data);
+	void flush();
+};
+
+
+struct CSphReader_VLN
+{
+	char *name;
+
+	CSphReader_VLN(char *name);
+	virtual ~CSphReader_VLN();
+
+	int  open();
+	void GetRawBytes ( void * pData, int iSize );
+	void getbytes(void *data, int size);
+	int  unzipInt();
+	void unzipInts(CSphList_Int *data);
+	int  decodeHits(CSphList_Int *hl);
+	void close();
+	void seek(int pos);
+
+private:
+	int fd, pos, filePos, bufPos, bufOdd, bufUsed, bufSize;
+	BYTE *buf;
+
+	int getNibble();
+	void cache();
+};
+
+
+/// this is my actual VLN-compressed phrase index implementation
+struct CSphIndex_VLN : CSphIndex
+{
+								CSphIndex_VLN ( const char * filename );
+	virtual						~CSphIndex_VLN ();
+
+	virtual int					build ( CSphDict * dict, CSphSource * source );
+	virtual CSphQueryResult *	query ( CSphDict * dict, CSphQuery * pQuery );
+
+private:
+	char *						filename;
+	int							fdRaw;
+	int							filePos;
+	CSphWriter_VLN *			fdIndex;
+	CSphWriter_VLN *			fdData;
+	CSphBin *					bins [ SPH_RLOG_MAX_BLOCKS ];
+
+	CSphList_Int *				vChunk;
+	CSphList_Int *				vChunkHeader;
+	CSphList_Int *				vIndexPage;
+	int							cidxPagesDir [ SPH_CLOG_DIR_PAGES ];
+	int							cidxDirUsed;
+	int							cidxPageUsed;
+	int							cidxIndexPos;
+	int							cidxDataPos;
+	int							lastDocDelta;
+	DWORD						lastDocID;
+	int							lastDocHits;
+
+	CSphIndexHeader_VLN			m_tHeader;
+
+	int							open ( char *ext, int mode );
+
+	int							binsInit ( int blocks );
+	void						binsDone ( int blocks );
+	DWORD						binsReadVLB ( int b );
+	int							binsReadByte ( int b );
+	int							binsRead ( int b, CSphHit * e );
+
+	int							cidxCreate ();
+	int							cidxWriteRawVLB ( int fd, CSphHit *hit, int count );
+	void						cidxFlushHitList ();
+	void						cidxFlushChunk ();
+	void						cidxFlushIndexPage ();
+	void						cidxHit ( CSphHit * hit );
+	void						cidxDone ();
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -832,7 +995,13 @@ CSphQueryResult::~CSphQueryResult ()
 // INDEX
 /////////////////////////////////////////////////////////////////////////////
 
-CSphIndex_VLN::CSphIndex_VLN(char *filename)
+CSphIndex * sphCreateIndexPhrase ( const char * sFilename )
+{
+	return new CSphIndex_VLN ( sFilename );
+}
+
+
+CSphIndex_VLN::CSphIndex_VLN ( const char *filename )
 {
 	this->filename = sphDup(filename);
 	fdIndex = 0;
@@ -840,10 +1009,12 @@ CSphIndex_VLN::CSphIndex_VLN(char *filename)
 	fdRaw = 0;
 }
 
+
 CSphIndex_VLN::~CSphIndex_VLN()
 {
 	sphFree(filename);
 }
+
 
 #define SPH_CMPHIT_LESS(a,b) \
 	(a.m_iWordID <  b.m_iWordID || \

@@ -102,7 +102,7 @@ int iread(int fd, void *buf, int len)
 
 int main(int argc, char **argv)
 {
-	CSphIndex_VLN *idx;
+	CSphIndex * idx;
 	CSphQueryResult *r;
 	int i, rsock, start = 0, count = 10, rcount, log, port;
 	struct sockaddr_in remote_iaddr;
@@ -175,7 +175,7 @@ int main(int argc, char **argv)
 
 	// *** STARTUP ***
 
-	idx = new CSphIndex_VLN(confCommon->get("index_path"));
+	idx = sphCreateIndexPhrase ( confCommon->get ( "index_path" ) );
 	sock = createServerSocket_IP(port);
 	listen(sock, 5);
 	signal(SIGCHLD, sigchld);

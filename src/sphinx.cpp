@@ -41,6 +41,9 @@ enum ESphTimer
 	TIMER_collect_hits,
 	TIMER_sort_hits,
 	TIMER_write_hits,
+	TIMER_source_xmlpipe,
+	TIMER_invert_hits,
+	TIMER_read_hits,
 
 	TIMERS_TOTAL
 };
@@ -51,7 +54,10 @@ static const char * const g_dTimerNames [ TIMERS_TOTAL ] =
 	"root",
 	"collect_hits",
 	"sort_hits",
-	"write_hits"
+	"write_hits",
+	"source_xmlpipe",
+	"invert_hits",
+	"read_hits"
 };
 
 
@@ -173,15 +179,24 @@ void sphProfilerShow ( int iTimer=0, int iLevel=0 )
 	if ( iTimer==0 )
 		fprintf ( stderr, "--- PROFILE ---\n" );
 
+	CSphTimer & tTimer = g_dTimers[iTimer];
+
+	// calc me
+	int iChildren = 0;
+	float fSelf = tTimer.m_fStamp;
+	for ( int iChild=tTimer.m_iChild; iChild>0; iChild=g_dTimers[iChild].m_iNext, iChildren++ )
+		fSelf -= g_dTimers[iChild].m_fStamp;
+
 	// dump me
 	for ( int i=0; i<iLevel; i++ )
 		fprintf ( stderr, "  " );
-	fprintf ( stderr, "%s: %.2f\n",
-		g_dTimerNames[ g_dTimers[iTimer].m_eTimer ],
-		g_dTimers[iTimer].m_fStamp );
+	fprintf ( stderr, "%s: %.2f", g_dTimerNames [ tTimer.m_eTimer ], tTimer.m_fStamp );
+	if ( iChildren )
+		fprintf ( stderr, ", self: %.2f", fSelf );
+	fprintf ( stderr, "\n" );
 
 	// dump my children
-	for ( int iChild=g_dTimers[iTimer].m_iChild;
+	for ( int iChild=tTimer.m_iChild;
 		iChild>0;
 		iChild=g_dTimers[iChild].m_iNext )
 	{
@@ -193,11 +208,31 @@ void sphProfilerShow ( int iTimer=0, int iLevel=0 )
 }
 
 
+class CSphEasyTimer
+{
+public:
+	CSphEasyTimer ( ESphTimer eTimer )
+		: m_eTimer ( eTimer )
+	{
+		sphProfilerPush ( m_eTimer );
+	}
+
+	~CSphEasyTimer ()
+	{
+		sphProfilerPop ( m_eTimer );
+	}
+
+protected:
+	ESphTimer		m_eTimer;
+};
+
+
 #define PROFILER_INIT() sphProfilerInit()
 #define PROFILER_DONE() sphProfilerDone()
 #define PROFILE_BEGIN(_arg) sphProfilerPush(TIMER_##_arg)
 #define PROFILE_END(_arg) sphProfilerPop(TIMER_##_arg)
 #define PROFILE_SHOW() sphProfilerShow()
+#define PROFILE(_arg) CSphEasyTimer __t_##_arg ( TIMER_##_arg );
 
 #else
 
@@ -206,6 +241,7 @@ void sphProfilerShow ( int iTimer=0, int iLevel=0 )
 #define PROFILE_BEGIN(_arg)
 #define PROFILE_END(_arg)
 #define PROFILE_SHOW()
+#define PROFILE(_arg)
 
 #endif // SPH_INTERNAL_PROFILER
 
@@ -774,7 +810,8 @@ void CSphWriter_VLN::zipInts ( CSphVector<DWORD> * data )
 
 void CSphWriter_VLN::flush()
 {
-	write(fd, pool, poolUsed);
+	PROFILE ( write_hits );
+	::write(fd, pool, poolUsed);
 	if (poolOdd) pos++;
 	poolUsed = 0;
 	poolOdd = 0;
@@ -1067,6 +1104,7 @@ int CSphIndex_VLN::binsReadByte(int b)
 			bins[b]->left = 1;
 		} else
 		{
+			PROFILE ( read_hits );
 			assert ( bins[b]->data );
 			if ( ::read(fdRaw, bins[b]->data, n) != n )
 				return -2;
@@ -1522,6 +1560,7 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 	}
 
 	PROFILE_END ( collect_hits );
+	PROFILE_BEGIN ( invert_hits );
 
 	// calc bin positions from their lengths
 	ARRAY_FOREACH ( i, bins )
@@ -1623,6 +1662,7 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 
 	unlink ( sTmp );
 
+	PROFILE_END ( invert_hits );
 	PROFILER_DONE ();
 	PROFILE_SHOW ();
 	return 1;
@@ -3070,6 +3110,7 @@ bool CSphSource_XMLPipe::Init ( const char * sCommand )
 
 int CSphSource_XMLPipe::next ()
 {
+	PROFILE ( source_xmlpipe );
 	char sTitle [ 1024 ]; // FIXME?
 
 	assert ( m_pPipe );

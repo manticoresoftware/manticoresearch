@@ -15,7 +15,8 @@
 [+] 15. add multiple stopword files support
 [+] 16. add strict config validation
 [ ] 17. add support for multiple sql_query's (UNION is too hairy)
-[ ] 18. add multi-index support (avoid running lots of indexers/searchds)
+[ ] 18. add match count to query_log
+[ ] 19. add multi-index support (avoid running lots of indexers/searchds)
 
 17
 

@@ -56,11 +56,11 @@ struct stem_table_index_t
 };
 
 // TableStringN, where N is numbe of chars
-#define TS1(c1) { RUS_##c1## }
-#define TS2(c1,c2) { RUS_##c1##, RUS_##c2## }
-#define TS3(c1,c2,c3) { RUS_##c1##, RUS_##c2##, RUS_##c3## }
-#define TS4(c1,c2,c3,c4) { RUS_##c1##, RUS_##c2##, RUS_##c3##, RUS_##c4## }
-#define TS5(c1,c2,c3,c4,c5) { RUS_##c1##, RUS_##c2##, RUS_##c3##, RUS_##c4##, RUS_##c5## }
+#define TS1(c1) { RUS_##c1 }
+#define TS2(c1,c2) { RUS_##c1, RUS_##c2 }
+#define TS3(c1,c2,c3) { RUS_##c1, RUS_##c2, RUS_##c3 }
+#define TS4(c1,c2,c3,c4) { RUS_##c1, RUS_##c2, RUS_##c3, RUS_##c4 }
+#define TS5(c1,c2,c3,c4,c5) { RUS_##c1, RUS_##c2, RUS_##c3, RUS_##c4, RUS_##c5 }
 
 static stem_table_index_t ru_adj_i[] =
 {

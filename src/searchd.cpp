@@ -11,6 +11,7 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <time.h>
 #include "sphinx.h"
 
 static int read_timeout = 5;

@@ -7,6 +7,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <mysql/mysql.h>
 
 #define SPH_MAX_QUERY_WORDS		10

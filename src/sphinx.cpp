@@ -1204,6 +1204,7 @@ int CSphIndex_VLN::build(CSphDict *dict, CSphSource *source)
 
 	// build raw log
 	while ( (docID = source->next()) )
+		if ( source->hits.GetLength() )
 	{
 		hit = &source->hits[0];
 		for ( n=0; n<source->hits.GetLength(); n++ )

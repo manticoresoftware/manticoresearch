@@ -31,6 +31,10 @@
 // INTERNAL PROFILER
 /////////////////////////////////////////////////////////////////////////////
 
+#define SPH_INTERNAL_PROFILER 0
+
+#if SPH_INTERNAL_PROFILER
+
 enum ESphTimer
 {
 	TIMER_root = 0,
@@ -194,6 +198,16 @@ void sphProfilerShow ( int iTimer=0, int iLevel=0 )
 #define PROFILE_BEGIN(_arg) sphProfilerPush(TIMER_##_arg)
 #define PROFILE_END(_arg) sphProfilerPop(TIMER_##_arg)
 #define PROFILE_SHOW() sphProfilerShow()
+
+#else
+
+#define PROFILER_INIT()
+#define PROFILER_DONE()
+#define PROFILE_BEGIN(_arg)
+#define PROFILE_END(_arg)
+#define PROFILE_SHOW()
+
+#endif // SPH_INTERNAL_PROFILER
 
 /////////////////////////////////////////////////////////////////////////////
 // INTERNAL SPHINX CLASSES DECLARATIONS

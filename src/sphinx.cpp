@@ -56,6 +56,53 @@ protected:
 	int					m_iAccum;					///< boundary token size
 };
 
+
+/// query word from the searcher's point of view
+class CSphQueryWord
+{
+public:
+	int				queryPos;
+	DWORD			wordID;
+	char *			word;
+	CSphList_Int *	hits;
+	CSphList_Int *	docs;
+
+private:
+	int				isLink;
+
+public:
+	CSphQueryWord ()
+		: word ( NULL )
+		, hits ( NULL )
+		, docs ( NULL )
+		, isLink ( 0 )
+	{
+	}
+
+	void shareListsFrom ( CSphQueryWord *qw )
+	{
+		this->hits = qw->hits;
+		this->docs = qw->docs;
+		isLink = 1;
+	}
+
+	void newLists()
+	{
+		this->hits = new CSphList_Int();
+		this->docs = new CSphList_Int();
+		isLink = 0;
+	}
+
+	~CSphQueryWord()
+	{
+		if (this->word) sphFree(this->word);
+		if (!isLink) {
+			if (this->hits) delete this->hits;
+			if (this->docs) delete this->docs;
+		}
+	}
+};
+
 /////////////////////////////////////////////////////////////////////////////
 
 /// swap

@@ -29,6 +29,8 @@
 #if USE_WINDOWS
 	#define WIN32_LEAN_AND_MEAN
 	#include <windows.h>
+
+	#define strcasecmp			strcmpi
 #else
 	typedef unsigned int		DWORD;
 	typedef unsigned char		BYTE;
@@ -66,6 +68,9 @@ char *	sphDup ( const char *s );
 
 /// time, in seconds
 float	sphLongTimer ();
+
+/// Sphinx CRC32 implementation
+DWORD	sphCRC32 ( const BYTE * pString );
 
 /////////////////////////////////////////////////////////////////////////////
 // GENERICS

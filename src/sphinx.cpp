@@ -28,6 +28,176 @@
 #endif
 
 /////////////////////////////////////////////////////////////////////////////
+// INTERNAL PROFILER
+/////////////////////////////////////////////////////////////////////////////
+
+enum ESphTimer
+{
+	TIMER_root = 0,
+	TIMER_collect_hits,
+	TIMER_sort_hits,
+	TIMER_write_hits,
+
+	TIMERS_TOTAL
+};
+
+
+static const char * const g_dTimerNames [ TIMERS_TOTAL ] =
+{
+	"root",
+	"collect_hits",
+	"sort_hits",
+	"write_hits"
+};
+
+
+struct CSphTimer
+{
+	float			m_fStamp;
+	ESphTimer		m_eTimer;
+	int				m_iParent;
+	int				m_iChild;
+	int				m_iNext;
+
+	CSphTimer ()
+	{
+		Alloc ( TIMER_root, -1 );
+	}
+
+	void Alloc ( ESphTimer eTimer, int iParent )
+	{
+		m_iParent = iParent;
+		m_iChild = -1;
+		m_iNext = -1;
+		m_eTimer = eTimer;
+		m_fStamp = 0;
+	}
+
+	void Start ()
+	{
+		m_fStamp -= sphLongTimer ();
+	}
+
+	void Stop ()
+	{
+		m_fStamp += sphLongTimer ();
+	}
+};
+
+static const int	SPH_MAX_TIMERS					= 128;
+static int			g_iTimer						= -1;
+static int			g_iTimers						= 0;
+static CSphTimer	g_dTimers [ SPH_MAX_TIMERS ];
+
+
+void sphProfilerInit ()
+{
+	assert ( g_iTimers==0 );
+	assert ( g_iTimer==-1 );
+
+	// start root timer
+	g_iTimers = 1;
+	g_iTimer = 0;
+	g_dTimers[g_iTimer].Alloc ( TIMER_root, -1 );
+	g_dTimers[g_iTimer].Start ();
+}
+
+
+void sphProfilerPush ( ESphTimer eTimer )
+{
+	assert ( g_iTimer>=0 && g_iTimer<SPH_MAX_TIMERS );
+	assert ( eTimer!=TIMER_root );
+
+	// search for match timer in current timer's children list
+	int iTimer;
+	for ( iTimer=g_dTimers[g_iTimer].m_iChild;
+		iTimer>0;
+		iTimer=g_dTimers[iTimer].m_iNext )
+	{
+		if ( g_dTimers[iTimer].m_eTimer==eTimer )
+			break;
+	}
+
+	// not found? let's alloc
+	if ( iTimer<0 )
+	{
+		assert ( g_iTimers<SPH_MAX_TIMERS );
+		iTimer = g_iTimers++;
+
+		// create child and make current timer it's parent
+		g_dTimers[iTimer].Alloc ( eTimer, g_iTimer );
+
+		// make it new children list head
+		g_dTimers[iTimer].m_iNext = g_dTimers[g_iTimer].m_iChild;
+		g_dTimers[g_iTimer].m_iChild = iTimer;
+	}
+
+	// make it new current one
+	assert ( iTimer>0 );
+	g_dTimers[iTimer].Start ();
+	g_iTimer = iTimer;
+}
+
+
+void sphProfilerPop ( ESphTimer eTimer )
+{
+	assert ( g_iTimer>0 && g_iTimer<SPH_MAX_TIMERS );
+	assert ( g_dTimers[g_iTimer].m_eTimer==eTimer );
+
+	g_dTimers[g_iTimer].Stop ();
+	g_iTimer = g_dTimers[g_iTimer].m_iParent;
+	assert ( g_iTimer>=0 && g_iTimer<SPH_MAX_TIMERS );
+}
+
+
+void sphProfilerDone ()
+{
+	assert ( g_iTimers==1 );
+	assert ( g_iTimer==0 );
+
+	// stop root timer
+	g_iTimers = 0;
+	g_dTimers[0].Stop ();
+}
+
+
+void sphProfilerShow ( int iTimer=0, int iLevel=0 )
+{
+	assert ( g_iTimers==0 );
+	assert ( g_iTimer==0 );
+
+	if ( iTimer==0 )
+		fprintf ( stderr, "--- PROFILE ---\n" );
+
+	// dump me
+	for ( int i=0; i<iLevel; i++ )
+		fprintf ( stderr, "  " );
+	fprintf ( stderr, "%s: %.2f\n",
+		g_dTimerNames[ g_dTimers[iTimer].m_eTimer ],
+		g_dTimers[iTimer].m_fStamp );
+
+	// dump my children
+	for ( int iChild=g_dTimers[iTimer].m_iChild;
+		iChild>0;
+		iChild=g_dTimers[iChild].m_iNext )
+	{
+		sphProfilerShow ( iChild, 1+iLevel );
+	}
+
+	if ( iTimer==0 )
+		fprintf ( stderr, "---------------\n" );
+}
+
+
+#define PROFILER_INIT() sphProfilerInit()
+#define PROFILER_DONE() sphProfilerDone()
+#define PROFILE_BEGIN(_arg) sphProfilerPush(TIMER_##_arg)
+#define PROFILE_END(_arg) sphProfilerPop(TIMER_##_arg)
+#define PROFILE_SHOW() sphProfilerShow()
+
+/////////////////////////////////////////////////////////////////////////////
+// INTERNAL SPHINX CLASSES DECLARATIONS
+/////////////////////////////////////////////////////////////////////////////
 
 /// generic tokenizer
 class CSphTokenizer
@@ -1223,6 +1393,8 @@ static int iLog2 ( int iMin, int iMax )
 
 int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLimit )
 {
+	PROFILER_INIT ();
+
 	/////////////////
 	// build raw log
 	/////////////////
@@ -1268,6 +1440,8 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 	DWORD iMaxGroupID = 0;
 
 	// build raw log
+	PROFILE_BEGIN ( collect_hits );
+
 	DWORD iDocID;
 	while (( iDocID = pSource->next() ))
 	{
@@ -1294,8 +1468,11 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 
 			if ( iRawBlockUsed==iRawBlockSize )
 			{
+				PROFILE_BEGIN ( sort_hits );
 				sphSortHits ( dRawBlock, iRawBlockUsed );
+				PROFILE_END ( sort_hits );
 
+				PROFILE_BEGIN ( write_hits );
 				bins.Add ( new CSphBin() );
 				CSphBin * pBin = bins.Last ();
 				pBin->fileLeft = cidxWriteRawVLB ( fdRaw, dRawBlock, iRawBlockUsed );
@@ -1304,6 +1481,7 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 					fprintf ( stderr, "ERROR: write() failed, out of disk space?\n" );
 					return 0;
 				}
+				PROFILE_END ( write_hits );
 
 				iRawBlockUsed = 0;
 				pRawBlock = dRawBlock;
@@ -1313,8 +1491,11 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 
 	if ( iRawBlockUsed )
 	{
+		PROFILE_BEGIN ( sort_hits );
 		sphSortHits ( dRawBlock, iRawBlockUsed );
+		PROFILE_END ( sort_hits );
 
+		PROFILE_BEGIN ( write_hits );
 		bins.Add ( new CSphBin() );
 		CSphBin * pBin = bins.Last ();
 		pBin->fileLeft = cidxWriteRawVLB ( fdRaw, dRawBlock, iRawBlockUsed );
@@ -1323,7 +1504,10 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 			fprintf ( stderr, "ERROR: write() failed, out of disk space?\n" );
 			return 0;
 		}
+		PROFILE_END ( write_hits );
 	}
+
+	PROFILE_END ( collect_hits );
 
 	// calc bin positions from their lengths
 	ARRAY_FOREACH ( i, bins )
@@ -1425,6 +1609,8 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 
 	unlink ( sTmp );
 
+	PROFILER_DONE ();
+	PROFILE_SHOW ();
 	return 1;
 }
 

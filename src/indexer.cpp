@@ -69,8 +69,11 @@ int main(int argc, char **argv)
 		CHECK_CONF ( confIndexer, "indexer", "sql_db" );
 		CHECK_CONF ( confIndexer, "indexer", "sql_query" );
 
-		CSphSource_MySQL * pSrcMysql = new CSphSource_MySQL ( confIndexer->get ( "sql_query" ) );
-		if ( !pSrcMysql->connect (
+		CSphSource_MySQL * pSrcMysql = new CSphSource_MySQL (
+			confIndexer->get ( "sql_query" ),
+			confIndexer->get ( "sql_query_pre" ),
+			confIndexer->get ( "sql_query_post" ) );
+		if ( !pSrcMysql->Connect (
 			confIndexer->get ( "sql_host" ),
 			confIndexer->get ( "sql_user" ),
 			confIndexer->get ( "sql_pass" ),

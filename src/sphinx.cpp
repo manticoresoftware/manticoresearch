@@ -1554,45 +1554,90 @@ BYTE **CSphSource_Text::NextDocument()
 
 #if USE_MYSQL
 
-CSphSource_MySQL::CSphSource_MySQL(char *sqlQuery)
+CSphSource_MySQL::CSphSource_MySQL ( const char * sQuery, const char * sQueryPre, const char * sQueryPost )
+	: m_sQuery		( sQuery )
+	, m_sQueryPre	( sQueryPre ? sQueryPre : "" )
+	, m_sQueryPost	( sQueryPost ? sQueryPost : "" )
 {
-	this->sqlQuery = sphDup(sqlQuery);
+	assert ( sQuery );
 }
 
-int CSphSource_MySQL::connect ( const char * host, const char * user, const char * pass,
+
+int CSphSource_MySQL::Connect ( const char * host, const char * user, const char * pass,
 	const char * db, int port, const char * usock )
 {
-	mysql_init(&sqlDriver);
-	if (!mysql_real_connect(&sqlDriver, host, user, pass, db,
-		port, usock, 0))
+	mysql_init ( &m_tSqlDriver );
+
+	#define SPH_ERROR(_arg) { sError = _arg; break; }
+	const char * sError = NULL;
+
+	do
 	{
-		fprintf(stderr, "ERROR: %s\n", mysql_error(&sqlDriver));
+		if ( !mysql_real_connect ( &m_tSqlDriver, host, user, pass, db, port, usock, 0 ) )
+			SPH_ERROR ( "mysql_real_connect" );
+
+		if ( strlen(m_sQueryPre) )
+		{
+			if ( mysql_query ( &m_tSqlDriver, m_sQueryPre ) )
+				SPH_ERROR ( "mysql_query_pre" );
+
+			if (!( m_pSqlResult = mysql_use_result ( &m_tSqlDriver ) ))
+				SPH_ERROR ( "mysql_use_result_pre" );
+
+			mysql_free_result ( m_pSqlResult );
+		}
+
+		if ( mysql_query ( &m_tSqlDriver, m_sQuery ) )
+			SPH_ERROR ( "mysql_query" );
+
+		if (!( m_pSqlResult = mysql_use_result ( &m_tSqlDriver ) ))
+			SPH_ERROR ( "mysql_use_result" );
+
+	} while ( false );
+
+	if ( sError )
+	{
+		fprintf ( stderr, "ERROR: %s: %s\n", sError, mysql_error ( &m_tSqlDriver ) );
 		return 0;
 	}
-	if (mysql_query(&sqlDriver, sqlQuery))
-	{
-		fprintf(stderr, "ERROR: %s\n", mysql_error(&sqlDriver));
-		return 0;
-	}
-	if (!(sqlResult = mysql_use_result(&sqlDriver)))
-	{
-		fprintf(stderr, "ERROR: %s\n", mysql_error(&sqlDriver));
-		return 0;
-	}
-	m_iFieldCount = mysql_num_fields(sqlResult) - 1;
+	#undef SPH_ERROR
+
+	m_iFieldCount = mysql_num_fields ( m_pSqlResult ) - 1;
 	return 1;
 }
 
-CSphSource_MySQL::~CSphSource_MySQL()
+
+CSphSource_MySQL::~CSphSource_MySQL ()
 {
 }
 
-BYTE **CSphSource_MySQL::NextDocument()
+
+BYTE ** CSphSource_MySQL::NextDocument ()
 {
-	sqlRow = mysql_fetch_row(sqlResult);
-	if (!sqlRow) return NULL;
-	m_iLastID = atoi(sqlRow[0]);
-	return (BYTE**)(&sqlRow[1]);
+	m_tSqlRow = mysql_fetch_row ( m_pSqlResult );
+	if ( !m_tSqlRow )
+	{
+		while ( strlen(m_sQueryPost) )
+		{
+			if ( mysql_query ( &m_tSqlDriver, m_sQueryPost ) )
+			{
+				fprintf ( stderr, "WARNING: mysql_query_post: %s\n", mysql_error ( &m_tSqlDriver ) );
+				break;
+			}
+			if (!( m_pSqlResult = mysql_use_result ( &m_tSqlDriver ) ))
+			{
+				fprintf ( stderr, "WARNING: mysql_use_result_post: %s\n", mysql_error ( &m_tSqlDriver ) );
+				break;
+			}
+			mysql_free_result ( m_pSqlResult );
+			break;
+		}
+
+		return NULL;
+	}
+
+	m_iLastID = atoi ( m_tSqlRow[0] );
+	return (BYTE**)( &m_tSqlRow[1] );
 }
 
 #endif // USE_MYSQL

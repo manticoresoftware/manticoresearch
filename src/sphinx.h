@@ -225,18 +225,20 @@ struct CSphSource_Text : CSphSource_Document
 /// multi-field plain-text documents fetched from given query
 struct CSphSource_MySQL : CSphSource_Document
 {
-	const char *		sqlQuery;
-
-						CSphSource_MySQL ( char *sqlQuery );
+						CSphSource_MySQL ( const char * sqlQuery, const char * sQueryPre=NULL, const char * sQueryPost=NULL );
 	virtual				~CSphSource_MySQL ();
 
-	virtual int			connect ( const char * host, const char * user, const char * pass, const char * db, int port, const char * usock );
-	virtual BYTE **		NextDocument();
+	virtual int			Connect ( const char * host, const char * user, const char * pass, const char * db, int port, const char * usock );
+	virtual BYTE **		NextDocument ();
 
 private:
-	MYSQL_RES *			sqlResult;
-	MYSQL_ROW			sqlRow;
-	MYSQL				sqlDriver;
+	MYSQL_RES *			m_pSqlResult;
+	MYSQL_ROW			m_tSqlRow;
+	MYSQL				m_tSqlDriver;
+
+	const char *		m_sQuery;		///< query which is used to fetch data
+	const char *		m_sQueryPre;	///< query which is issued before main fetch
+	const char *		m_sQueryPost;	///< query which is issued after main fetch
 };
 #endif
 

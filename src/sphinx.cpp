@@ -2109,7 +2109,6 @@ bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 	CHECK_NULL ( m_sUser );
 	CHECK_NULL ( m_sPass );
 	CHECK_NULL ( m_sDB );
-	CHECK_NULL ( m_sUsock );
 
 	// connect
 	do

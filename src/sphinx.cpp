@@ -2980,7 +2980,8 @@ CSphHash * CSphConfig::loadSection ( const char * sSection, const char ** dKnown
 		CLEAN_CONFIG_LINE ();
 		if ( p[0]=='['
 			&& p[l-1] == ']'
-			&& strncmp ( p+1, sSection, strlen(sSection) )==0 )
+			&& strncmp ( p+1, sSection, strlen(sSection) )==0
+			&& 2+(int)strlen(sSection)==l )
 		{
 			break;
 		}

@@ -48,6 +48,13 @@ const char * g_dSphKeysSearchd[] =
 	NULL
 };
 
+
+const char * g_dSphKeysSearch[] =
+{
+	"sql_query_info",
+	NULL
+};
+
 #endif // _sphinxutils_
 
 //

@@ -170,4 +170,10 @@ read_timeout		= 5
 # useful to control server load
 max_children		= 30
 
+[search]
+
+# SQL query to load document info to show off in search results
+# NOTE: will use SQL credentials from indexer section for now!
+sql_query_info		= SELECT * FROM documents WHERE id=$id
+
 # --eof--

@@ -4,11 +4,83 @@
 
 #include "sphinx.h"
 #include "sphinxutils.h"
+#if USE_MYSQL
+#include <mysql/mysql.h>
+#endif
+
+
+#define CHECK_CONF(_hash,_sect,_key) \
+	if ( !_hash->get ( _key ) ) \
+	{ \
+		fprintf ( stderr, "FATAL: key '%s' not found in config file '%s' section '%s'.\n", _key, sConfName, _sect ); \
+		return 1; \
+	}
+
+
+char * strmacro ( const char * sTemplate, const char * sMacro, int iValue )
+{
+	// expand macro
+	char sExp [ 16 ];
+	sprintf ( sExp, "%d", iValue );
+
+	// calc lengths
+	int iExp = strlen ( sExp );
+	int iMacro = strlen ( sMacro );
+	int iDelta = iExp-iMacro;
+
+	// calc result length
+	int iRes = strlen ( sTemplate );
+	const char * sCur = sTemplate;
+	while ( ( sCur = strstr ( sCur, sMacro ) ) )
+	{
+		iRes += iDelta;
+		sCur++;
+	}
+
+	// build result
+	char * sRes = new char [ iRes+1 ];
+	char * sOut = sRes;
+	const char * sLast = sTemplate;
+	sCur = sTemplate;
+
+	while ( ( sCur = strstr ( sCur, sMacro ) ) )
+	{
+		strncpy ( sOut, sLast, sCur-sLast ); sOut += sCur-sLast;
+		strcpy ( sOut, sExp ); sOut += iExp;
+		sCur += iMacro;
+		sLast = sCur;
+	}
+
+	if ( *sLast )
+		strcpy ( sOut, sLast );
+
+	assert ( (int)strlen(sRes)==iRes );
+	return sRes;
+}
+
 
 int main ( int argc, char ** argv )
 {
+	const char * sConfName = "sphinx.conf";
+
 	if ( argc<=1 )
-		sphDie ( "usage: search [--any] [--group <id>] <word1 [word2 [word3 [...]]]>\n" );
+	{
+		sphDie (
+			"Usage: search [OPTIONS] <word1 [word2 [word3 [...]]]>\n"
+			"\n"
+			"Options are:\n"
+			"--any\t\t\tmatch document if any query word is matched\n"
+			"\t\t\t(default is to match all)\n"
+			"-g, -group <id>\t\tlimit matching documents to this group\n"
+			"\t\t\t(default is not to limit by group)\n"
+			"-s, --start <offset>\tstart matches list output from this offset\n"
+			"\t\t\t(default is 0)\n"
+			"-l, --limit <count>\tlimit matches list output size\n"
+			"\t\t\t(default is 20)\n"
+			"-q, --noinfo\t\tdo not output document info from SQL database\n"
+			"\t\t\t(default is to output)\n"
+		);
+	}
 
 	/////////////
 	// configure
@@ -16,8 +88,8 @@ int main ( int argc, char ** argv )
 
 	// load config
 	CSphConfig tConf;
-	if ( !tConf.open ( "sphinx.conf" ) )
-		sphDie ( "FATAL: failed to open 'sphinx.conf'.\n" );
+	if ( !tConf.open ( sConfName ) )
+		sphDie ( "FATAL: failed to open '%s'.\n", sConfName );
 
 	CSphHash * hCommonConf = tConf.loadSection ( "common", g_dSphKeysCommon );
 
@@ -40,27 +112,107 @@ int main ( int argc, char ** argv )
 		}
 	}
 
-	// get query
+	///////////////////////////////////////////
+	// get query and other commandline options
+	///////////////////////////////////////////
+
 	char sQuery [ 1024 ];
 	sQuery[0] = '\0';
 
 	bool bAny = false;
+	bool bNoInfo = false;
 	int iGroup = 0;
+	int iStart = 0;
+	int iLimit = 20;
+
 	for ( int i=1; i<argc; i++ )
 	{
-		if ( strcmp(argv[i], "--any")==0 )
+		if ( strcmp ( argv[i], "--any" )==0 )
 		{
 			bAny = true;
-		} else if ( strcmp ( argv[i], "--group" )==0 )
+
+		} else if ( strcmp ( argv[i], "--noinfo" )==0
+			|| strcmp ( argv[i], "-q" )==0 )
+		{
+			bNoInfo = true;
+
+		} else if ( strcmp ( argv[i], "--group" )==0
+			|| strcmp ( argv[i], "-g" )==0 )
 		{
 			if ( ++i<argc )
 				iGroup = atoi ( argv[i] );
+
+		} else if ( strcmp ( argv[i], "--start" )==0
+			|| strcmp ( argv[i], "-s" )==0 )
+		{
+			if ( ++i<argc )
+				iStart = atoi ( argv[i] );
+
+		} else if ( strcmp ( argv[i], "--limit" )==0
+			|| strcmp ( argv[i], "-l" )==0 )
+		{
+			if ( ++i<argc )
+				iLimit = atoi ( argv[i] );
+
 		} else if ( strlen(sQuery) + strlen(argv[i]) + 1 < sizeof(sQuery) )
 		{
 			strcat ( sQuery, argv[i] );
 			strcat ( sQuery, " " );
 		}
 	}
+	iStart = Max ( iStart, 0 );
+	iLimit = Min ( Max ( iLimit, 0 ), 1000 );
+
+	// do we want to show document info from database?
+	#if USE_MYSQL
+	MYSQL tSqlDriver;
+	const char * sQueryInfo = NULL;
+
+	while ( !bNoInfo )
+	{
+		CSphHash * hSearch = tConf.loadSection ( "search", g_dSphKeysSearch );
+		if ( !hSearch )
+			break;
+
+		sQueryInfo = hSearch->get ( "sql_query_info" );
+		if ( !sQueryInfo )
+			break;
+
+		if ( !strstr ( sQueryInfo, "$id" ) )
+			sphDie ( "FATAL: 'sql_query_info' value must contain '$id'." );
+
+		CSphHash * hIndexer = tConf.loadSection ( "indexer", g_dSphKeysIndexer );
+		if ( !hIndexer )
+			sphDie ( "FATAL: section 'indexer' not found in config file." );
+
+		CHECK_CONF ( hIndexer, "indexer", "sql_host" );
+		CHECK_CONF ( hIndexer, "indexer", "sql_user" );
+		CHECK_CONF ( hIndexer, "indexer", "sql_pass" );
+		CHECK_CONF ( hIndexer, "indexer", "sql_db" );
+
+		int iPort = 3306;
+		char * sTmp;
+		sTmp = hIndexer->get ( "sql_port" );
+		if ( sTmp && atoi(sTmp) )
+			iPort = atoi(sTmp);
+
+		mysql_init ( &tSqlDriver );
+		if ( !mysql_real_connect ( &tSqlDriver,
+			hIndexer->get ( "sql_host" ),
+			hIndexer->get ( "sql_user" ),
+			hIndexer->get ( "sql_pass" ),
+			hIndexer->get ( "sql_db" ),
+			iPort,
+			hIndexer->get ( "sql_sock" ), 0 ) )
+		{
+			sphDie ( "FATAL: failed to connect to MySQL (error='%s').",
+				mysql_error ( &tSqlDriver ) );
+		}
+
+		// all good
+		break;
+	}
+	#endif
 
 	// create dict and configure stopwords
 	CSphDict * pDict = new CSphDict_CRC32 ( iMorph );
@@ -88,7 +240,8 @@ int main ( int argc, char ** argv )
 	{
 		fprintf ( stdout, "\nmatches:\n" );
 
-		ARRAY_FOREACH ( i, pResult->m_dMatches )
+		int iMaxIndex = Min ( iStart+iLimit, pResult->m_dMatches.GetLength() );
+		for ( int i=iStart; i<iMaxIndex; i++ )
 		{
 			CSphMatch & tMatch = pResult->m_dMatches[i];
 			fprintf ( stdout, "%d. group=%d, document=%d, weight=%d\n",
@@ -96,6 +249,42 @@ int main ( int argc, char ** argv )
 				tMatch.m_iGroupID,
 				tMatch.m_iDocID,
 				tMatch.m_iWeight );
+
+			#if USE_MYSQL
+			if ( sQueryInfo )
+			{
+				char * sQuery = strmacro ( sQueryInfo, "$id", tMatch.m_iDocID );
+				const char * sError = NULL;
+
+				#define LOC_MYSQL_ERROR(_arg) { sError = _arg; break; }
+				do
+				{
+					if ( mysql_query ( &tSqlDriver, sQuery ) )
+						LOC_MYSQL_ERROR ( "mysql_query" );
+
+					MYSQL_RES * pSqlResult = mysql_use_result ( &tSqlDriver );
+					if ( !pSqlResult )
+						LOC_MYSQL_ERROR ( "mysql_use_result" );
+
+					MYSQL_ROW tRow = mysql_fetch_row ( pSqlResult );
+					if ( !tRow )
+						LOC_MYSQL_ERROR ( "mysql_fetch_row" );
+
+					fprintf ( stdout, "\n" );
+					for ( int iField=0; iField<(int)pSqlResult->field_count; iField++ )
+						fprintf ( stdout, "%s=%s\n", pSqlResult->fields[iField].name, tRow[iField] );
+					fprintf ( stdout, "\n" );
+
+					mysql_free_result ( pSqlResult );
+
+				} while ( false );
+
+				if ( sError )
+					sphDie ( "FATAL: sql_query_info: %s: %s.\n", sError, mysql_error ( &tSqlDriver ) );
+
+				delete [] sQuery;
+			}
+			#endif
 		}
 
 		fprintf ( stdout, "\nwords:\n" );

@@ -6,17 +6,18 @@
 #include <stdlib.h>
 #include <mysql/mysql.h>
 
-#define SPH_MAX_QUERY_WORDS 10
+#define SPH_MAX_QUERY_WORDS		10
+#define SPH_MAX_WORD_LEN		64
 
-#define SPH_RLOG_MAX_BLOCKS 128
-#define SPH_RLOG_BIN_SIZE   262144
-#define SPH_RLOG_BLOCK_SIZE 1048576
+#define SPH_RLOG_MAX_BLOCKS		128
+#define SPH_RLOG_BIN_SIZE		262144
+#define SPH_RLOG_BLOCK_SIZE		1048576
 
-#define SPH_CLOG_BITS_DIR   10
-#define SPH_CLOG_BITS_PAGE  22
-#define SPH_CLOG_DIR_PAGES  (1 << SPH_CLOG_BITS_DIR)
+#define SPH_CLOG_BITS_DIR		10
+#define SPH_CLOG_BITS_PAGE		22
+#define SPH_CLOG_DIR_PAGES		(1 << SPH_CLOG_BITS_DIR)
 
-#define SPH_CACHE_WRITE 1048576
+#define SPH_CACHE_WRITE			1048576
 
 #define min(a,b) ((a)<(b)?(a):(b))
 #define max(a,b) ((a)>(b)?(a):(b))
@@ -396,8 +397,8 @@ private:
 	};
 
 private:
-	/// we either expect some tag or are in tag 
-	bool			m_bExpectTag;
+	/// are we scanning body or expecting document?
+	bool			m_bBody;
 
 	/// what's our current tag
 	Tag_e			m_eTag;
@@ -421,8 +422,43 @@ private:
 	BYTE *			m_pBufferEnd;
 
 private:
-	/// set tag
-	void			SetTag ( const char * sTag, Tag_e eTag, bool bExp );
+	/// current document ID
+	int				m_iDocID;
+
+	/// current group ID
+	int				m_iGroupID;
+
+	/// current word position
+	int				m_iWordID;
+
+private:
+	/// set current tag
+	void			SetTag ( const char * sTag );
+
+	/// read in some more data
+	/// moves everything from current ptr (m_pBuffer) to the beginng
+	/// reads in as much data as possible to the end
+	/// returns false on EOF
+	bool			UpdateBuffer ();
+
+	/// skips whitespace
+	/// does buffer updates
+	/// returns false on EOF
+	bool			SkipWhitespace ();
+
+	/// check if what's at current pos is either opening/closing current tag (m_pTag)
+	/// return false on failure
+	bool			CheckTag ( bool bOpen );
+
+	/// skips whitespace and opening/closing current tag (m_pTag)
+	/// returns false on failure
+	bool			SkipTag ( bool bOpen, bool bWarnOnEOF=true );
+
+	/// scan for tag with integer value
+	bool			ScanInt ( const char * sTag, int * pRes );
+
+	/// scan for tag with string value
+	bool			ScanStr ( const char * sTag, char * pRes, int iMaxLength );
 };
 
 //

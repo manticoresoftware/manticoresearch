@@ -1761,7 +1761,7 @@ CSphHash *CSphConfig::loadSection(char *section)
 
 CSphSource_XMLPipe::CSphSource_XMLPipe ()
 {
-	m_bExpectTag	= NULL;
+	m_bBody			= false;
 	m_pTag			= NULL;
 	m_iTagLength	= 0;
 	m_pPipe			= NULL;
@@ -1785,130 +1785,330 @@ bool CSphSource_XMLPipe::Init ( const char * sCommand )
 	assert ( sCommand );
 
 	m_pPipe = popen ( sCommand, "r" );
-	if ( m_pPipe )
-		SetTag ( "document", TAG_DOCUMENT, true );
+	m_bBody = false;
 	return ( m_pPipe!=NULL );
 }
 
 
 int CSphSource_XMLPipe::next ()
 {
-	assert ( m_pPipe );
+	char sTitle [ 1024 ]; // FIXME?
 
-	// clear my hits chunk
+	assert ( m_pPipe );
 	hits.clear ();
 
-	// scan for tag
-	if ( m_bExpectTag )
-	{
-		assert ( m_pTag );
+	/////////////////////////
+	// parse document header
+	/////////////////////////
 
+	if ( !m_bBody )
+	{
+		// scan for opening '<document>' tag if necessary
+		SetTag ( "document" );
+		if ( !SkipTag ( true, false ) )
+			return 0;
+
+		if ( !ScanInt ( "id", &m_iDocID ) )
+			return 0;
+
+		if ( !ScanInt ( "group", &m_iGroupID ) )
+			return 0;
+
+		if ( !ScanStr ( "title", sTitle, sizeof ( sTitle ) ) )
+			return 0;
+
+		SetTag ( "body" );
+		if ( !SkipTag ( true ) )
+			return 0;
+
+		m_bBody = true;
+		m_iWordID = 0;
+	}
+
+	/////////////////////////////
+	// parse body chunk by chunk
+	/////////////////////////////
+
+	assert ( m_bBody );
+	bool bBodyEnd = false;
+
+	while ( hits.count<1024 ) // FIXME!
+	{
 		// skip whitespace
-		do
+		while ( true )
 		{
-			// suck in some data
+			// suck in some data if needed
 			if ( m_pBuffer>=m_pBufferEnd )
+				if ( !UpdateBuffer() )
 			{
-				int iLen = fread ( m_sBuffer, 1, sizeof(m_sBuffer), m_pPipe );
-				if ( !iLen )
-				{
-					if ( strcmp ( m_pTag, "document" ) )
-						fprintf ( stderr, "WARNING: unexpected EOF while waiting for tag '%s' in input XML pipe.", m_pTag );
-					return 0;
-				}
-				m_pBuffer = m_sBuffer;
-				m_pBufferEnd = m_pBuffer+iLen;
+				fprintf ( stderr, "WARNING: CSphSource_XMLPipe(): unexpected EOF while scanning doc '%d' body.\n",
+					m_iDocID );
+				return 0;
 			}
 
 			// skip whitespace
-			while ( (m_pBuffer<m_pBufferEnd) && isspace ( *m_pBuffer ) )
+			while ( (m_pBuffer<m_pBufferEnd) && (*m_pBuffer)!='<' && !sphLT_cp1251 [ *m_pBuffer ] )
 				m_pBuffer++;
-			if ( m_pBuffer!=m_pBufferEnd )
+
+			if ( m_pBuffer<m_pBufferEnd )
 				break; // we have found it
-
-		} while ( true );
-
-		// if tag is split, suck in some data
-		int iToEnd = m_pBufferEnd-m_pBuffer;
-		if ( iToEnd<m_iTagLength+2 )
+		}
+		if ( (*m_pBuffer)=='<' )
 		{
-			memcpy ( m_sBuffer, m_pBuffer, iToEnd );
-			int iLen = fread ( &m_sBuffer [ iToEnd ], 1, sizeof(m_sBuffer)-iToEnd, m_pPipe );
-			if ( !iLen )
+			bBodyEnd = true;
+			break;
+		}
+
+		// the word
+		BYTE sWord [ SPH_MAX_WORD_LEN+1 ];
+		BYTE * pWord = &sWord [ 0 ];
+		BYTE * pWordEnd = &sWord [ SPH_MAX_WORD_LEN ];
+
+		while ( true )
+		{
+			// suck in some data if needed
+			if ( m_pBuffer>=m_pBufferEnd )
+				if ( !UpdateBuffer() )
 			{
-				fprintf ( stderr, "WARNING: unexpected EOF while waiting for tag '%s' in input XML pipe.", m_pTag );
+				fprintf ( stderr, "WARNING: CSphSource_XMLPipe(): unexpected EOF while scanning doc '%d' body.\n",\
+					m_iDocID );
 				return 0;
 			}
-			m_pBuffer = m_sBuffer;
-			m_pBufferEnd = m_pBuffer+iLen;
+
+			// collect word
+			while ( pWord<pWordEnd && sphLT_cp1251 [ *m_pBuffer ] && m_pBuffer<m_pBufferEnd )
+				*pWord++ = sphLT_cp1251 [ *m_pBuffer++ ];
+
+			// enough?
+			if ( pWord==pWordEnd || m_pBuffer!=m_pBufferEnd )
+				break;
+		}
+		*pWord++ = '\0';
+
+		// if the word is too long, skip all the remaining non-whitespace
+		if ( pWord==pWordEnd )
+			while ( true )
+		{
+			// suck in some data if needed
+			if ( m_pBuffer>=m_pBufferEnd )
+				if ( !UpdateBuffer() )
+			{
+				fprintf ( stderr, "WARNING: CSphSource_XMLPipe(): unexpected EOF while scanning doc '%d' body starting at '%s'.\n",
+					m_iDocID, sWord );
+				return 0;
+			}
+
+			// skip non-whitespace
+			while ( (m_pBuffer<m_pBufferEnd) && sphLT_cp1251 [ *m_pBuffer ] )
+				m_pBuffer++;
+
+			if ( m_pBuffer!=m_pBufferEnd )
+				break; // we have found it
 		}
 
-		// still no tag?
-		iToEnd = m_pBufferEnd-m_pBuffer;
-		if ( iToEnd<m_iTagLength+2 )
-		{
-			fprintf ( stderr, "WARNING: unexpected EOF while waiting for tag '%s' in input XML pipe.", m_pTag );
-			return 0;
-		}
-
-		// check tag
-		bool bOk = false;
-		do
-		{
-			if ( m_pBuffer[0] != '<' )
-				break;
-
-			if ( strncmp ( (char*)(m_pBuffer+1), m_pTag, m_iTagLength ) )
-				break;
-
-			if ( m_pBuffer[m_iTagLength+1] != '>' )
-				break;
-
-			bOk = true;
-		} while ( false );
-
-		if ( !bOk )
-		{
-			char sGot [ 64 ];
-			int iCopy = min ( m_pBufferEnd-m_pBuffer, (int)sizeof(sGot)-1 );
-
-			strncpy ( sGot, (char*)m_pBuffer, iCopy );
-			sGot [ iCopy ] = '\0';
-
-			fprintf ( stderr, "WARNING: expected '%s', got '%s' in input XML pipe.",
-				m_pTag, sGot );
-		}
-
-		// got tag, read its text now
-		m_pBuffer += 2+m_iTagLength;
-		assert ( m_pBuffer<=m_pBufferEnd );
-
-		m_bExpectTag = false;
-
-	} else
-	{
-		assert ( 0 && "unimplemented yet" );
+		// we found it, yes we did!
+		hits.add ( m_iDocID, dict->wordID ( sWord ), m_iWordID++ ); // field_id | (iPos++)
 	}
 
-/*
-<document>
-<id>123</id>
-<group>1</group>
-<title>пра сабаку</title>
-<body>...</body>
-</document>
-*/
+	// some tag was found
+	if ( bBodyEnd )
+	{
+		// let's check if it's '</body>' which is the only allowed tag at this point
+		SetTag ( "body" );
+		if ( !SkipTag ( false ) )
+			return 0;
 
-	return 0;
+		// well, it is
+		m_bBody = false;
+
+		// let's check if it's '</document>' which is the only allowed tag at this point
+		SetTag ( "document" );
+		if ( !SkipTag ( false ) )
+			return 0;
+	}
+
+	// if it was all correct, we have to flush our hits
+	return m_iDocID;
 }
 
 
-void CSphSource_XMLPipe::SetTag ( const char * sTag, Tag_e eTag, bool bExp )
+void CSphSource_XMLPipe::SetTag ( const char * sTag )
 {
 	m_pTag = sTag;
-	m_eTag = eTag;
-	m_bExpectTag = bExp;
 	m_iTagLength = strlen ( sTag );
+}
+
+
+bool CSphSource_XMLPipe::UpdateBuffer ()
+{
+	assert ( m_pBuffer!=&m_sBuffer[0] );
+
+	int iLeft = max ( m_pBufferEnd-m_pBuffer, 0 );
+	if ( iLeft>0 )
+		memmove ( m_sBuffer, m_pBuffer, iLeft );
+
+	int iLen = fread ( &m_sBuffer [ iLeft ], 1, sizeof(m_sBuffer)-iLeft, m_pPipe );
+
+	m_pBuffer = m_sBuffer;
+	m_pBufferEnd = m_pBuffer+iLeft+iLen;
+
+	return ( iLen!=0 );
+}
+
+
+bool CSphSource_XMLPipe::SkipWhitespace ()
+{
+	while ( true )
+	{
+		// suck in some data if needed
+		if ( m_pBuffer>=m_pBufferEnd )
+			if ( !UpdateBuffer() )
+				return false;
+
+		// skip whitespace
+		while ( (m_pBuffer<m_pBufferEnd) && isspace ( *m_pBuffer ) )
+			m_pBuffer++;
+
+		// did we anything non-whitspace?
+		if ( m_pBuffer<m_pBufferEnd )
+			break;
+	}
+
+	assert ( m_pBuffer<m_pBufferEnd );
+	return true;
+}
+
+
+bool CSphSource_XMLPipe::CheckTag ( bool bOpen )
+{
+	int iAdd = bOpen ? 2 : 3;
+
+	// if case the tag is at buffer boundary, try to suck in some more data
+	if ( m_pBufferEnd-m_pBuffer < m_iTagLength+iAdd )
+		UpdateBuffer ();
+
+	if ( m_pBufferEnd-m_pBuffer < m_iTagLength+iAdd )
+	{
+		fprintf ( stderr, "WARNING: CSphSource_XMLPipe(): expected '<%s%s>', got EOF.\n",
+			bOpen ? "" : "/", m_pTag );
+		return false;
+	}
+
+	// check tag
+	bool bOk = bOpen
+		? ( ( m_pBuffer[0] == '<' )
+			&& ( m_pBuffer[m_iTagLength+1] == '>' )
+			&& strncmp ( (char*)(m_pBuffer+1), m_pTag, m_iTagLength ) == 0 )
+		: ( ( m_pBuffer[0] == '<' )
+			&& ( m_pBuffer[1] == '/' )
+			&& ( m_pBuffer[m_iTagLength+2] == '>' )
+			&& strncmp ( (char*)(m_pBuffer+2), m_pTag, m_iTagLength ) == 0 );
+	if ( !bOk )
+	{
+		char sGot [ 64 ];
+		int iCopy = min ( m_pBufferEnd-m_pBuffer, (int)sizeof(sGot)-1 );
+
+		strncpy ( sGot, (char*)m_pBuffer, iCopy );
+		sGot [ iCopy ] = '\0';
+
+		fprintf ( stderr, "WARNING: CSphSource_XMLPipe(): expected '<%s%s>', got '%s'.\n",
+			bOpen ? "" : "/", m_pTag, sGot );
+		return false;
+	}
+
+	// got tag
+	m_pBuffer += iAdd+m_iTagLength;
+	assert ( m_pBuffer<=m_pBufferEnd );
+	return true;
+}
+
+
+bool CSphSource_XMLPipe::SkipTag ( bool bOpen, bool bWarnOnEOF )
+{
+	if ( !SkipWhitespace() )
+	{
+		if ( bWarnOnEOF )
+			fprintf ( stderr, "WARNING: CSphSource_XMLPipe(): expected '<%s%s>', got EOF.\n",
+				bOpen ? "" : "/", m_pTag );
+		return false;
+	}
+
+	return CheckTag ( bOpen );
+}
+
+
+bool CSphSource_XMLPipe::ScanInt ( const char * sTag, int * pRes )
+{
+	assert ( sTag );
+	assert ( pRes );
+
+	// scan for <sTag>
+	SetTag ( sTag );
+	if ( !SkipTag ( true ) )
+		return false;
+
+	if ( !SkipWhitespace() )
+	{
+		fprintf ( stderr, "WARNING: CSphSource_XMLPipe(): expected <%s> data, got EOF.\n", m_pTag );
+		return false;
+	}
+
+	*pRes = 0;
+	while ( m_pBuffer<m_pBufferEnd )
+	{
+		// FIXME! could check for overflow
+		while ( isdigit(*m_pBuffer) && m_pBuffer<m_pBufferEnd )
+			(*pRes) = 10*(*pRes) + int( (*m_pBuffer++)-'0' );
+
+		if ( m_pBuffer<m_pBufferEnd )
+			break;
+		else
+			UpdateBuffer ();
+	}
+
+	// scan for </sTag>
+	if ( !SkipTag ( false ) )
+		return false;
+
+	return true;
+}
+
+
+bool CSphSource_XMLPipe::ScanStr ( const char * sTag, char * pRes, int iMaxLength )
+{
+	assert ( sTag );
+	assert ( pRes );
+	
+	char * pEnd = pRes+iMaxLength-1;
+
+	// scan for <sTag>
+	SetTag ( sTag );
+	if ( !SkipTag ( true ) )
+		return false;
+
+	if ( !SkipWhitespace() )
+	{
+		fprintf ( stderr, "WARNING: CSphSource_XMLPipe(): expected <%s> data, got EOF.\n", m_pTag );
+		return false;
+	}
+
+	while ( m_pBuffer<m_pBufferEnd )
+	{
+		while ( (*m_pBuffer)!='<' && pRes<pEnd && m_pBuffer<m_pBufferEnd )
+			*pRes++ = *m_pBuffer++;
+
+		if ( m_pBuffer<m_pBufferEnd )
+			break;
+		else
+			UpdateBuffer ();
+	}
+	*pRes++ = '\0';
+
+	// scan for </sTag>
+	if ( !SkipTag ( false ) )
+		return false;
+
+	return true;
 }
 
 //

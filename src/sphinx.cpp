@@ -751,7 +751,7 @@ CSphIndex_VLN::~CSphIndex_VLN()
 
 struct CmpMatch_fn
 {
-	inline operator () ( const CSphMatch & a, const CSphMatch & b )
+	inline int operator () ( const CSphMatch & a, const CSphMatch & b )
 	{
 		return a.m_iWeight - b.m_iWeight;
 	}

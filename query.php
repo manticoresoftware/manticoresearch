@@ -7,7 +7,7 @@
 $sphinx_server = "127.0.0.1";
 $sphinx_port   = 3312;
 
-function sphinxQuery ( $server, $port, $query, $start=0, $rpp=20, $weights=array() )
+function sphinxQuery ( $server, $port, $query, $start=0, $rpp=20, $weights=array(), $any=false )
 {
 	$start = (int)$start;
 	$rpp = (int)$rpp;
@@ -15,13 +15,15 @@ function sphinxQuery ( $server, $port, $query, $start=0, $rpp=20, $weights=array
 	if ( !($fp = fsockopen($server, $port)) )
 		return false;
 
-	// build weights request
-	$wreq = pack ( "V", count($weights) );
+	// build request
+	$mreq = pack ( "VVV", $start, $rpp, $any ? 1 : 0 ); // mode/limits part
+	$qreq = pack ( "V", strlen($query) ) . $query; // query string part
+	$wreq = pack ( "V", count($weights) ); // weights part
 	foreach ( $weights as $weight )
 		$wreq .= pack ( "V", (int)$weight );
 
 	// do query
-	fputs ( $fp, pack ( "VVV", $start, $rpp, strlen($query) ) . $query . $wreq );
+	fputs ( $fp, $mreq . $qreq . $wreq );
 
 	$result = array();
 	while (!feof($fp)) {
@@ -53,19 +55,38 @@ function sphinxQuery ( $server, $port, $query, $start=0, $rpp=20, $weights=array
 
 /////////////////////////////////////////////////////////////////////////////
 
-unset ( $argv[0] );
-$q = "";
-foreach ( $argv as $arg )
-	$q .= "$arg ";
+// for very old PHP versions, like at my home test server
+if ( is_array($argv) && !isset($_SERVER["argv"]) )
+	$_SERVER["argv"] = $argv;
 
-$res = sphinxQuery ( $sphinx_server, $sphinx_port, $q, 0, 20, array(100,1) );
+// build query
+unset ( $_SERVER["argv"][0] );
+if ( !is_array($_SERVER["argv"]) || empty($_SERVER["argv"]) )
+{
+	die ( "usage: php -f query.php [--any] <word [word [word [...]]]>\n" );
+}
+$q = "";
+$any = false;
+foreach ( $_SERVER["argv"] as $arg )
+{
+	if ( $arg=="--any" )
+		$any = true;
+	else
+		$q .= "$arg ";
+}
+
+// do query
+$res = sphinxQuery ( $sphinx_server, $sphinx_port, $q, 0, 20, array(100,1), $any );
+
+// print results
 print "Query '$q' produced $res[total] matches in $res[time] sec.\n";
 print "Query stats:\n";
-foreach ( $res["words"] as $word => $info )
-	print "    '$word' found $info[hits] times in $info[docs] documents\n";
+if ( is_array($res["words"]) )
+	foreach ( $res["words"] as $word => $info )
+		print "    '$word' found $info[hits] times in $info[docs] documents\n";
 print "\n";
 
-if ( isset($res["matches"]) )
+if ( is_array($res["matches"]) )
 {
 	$n = 1;
 	print "Matches:\n";

@@ -743,9 +743,9 @@ CSphIndex_VLN::~CSphIndex_VLN()
 
 #define SPH_CMPHIT_LESS(a,b) \
 	(a.m_iWordID < b.m_iWordID || \
-	(a.m_iWordID == b.m_iWordID && a.m_iGroupID < b.m_iGroupID) || \
-	(a.m_iWordID == b.m_iWordID && a.m_iGroupID == b.m_iGroupID && a.m_iDocID < b.m_iDocID) || \
-	(a.m_iWordID == b.m_iWordID && a.m_iGroupID == b.m_iGroupID && a.m_iDocID == b.m_iDocID && a.m_iWordPos < b.m_iWordPos))
+	(a.m_iWordID == b.m_iWordID && a.m_iDocID < b.m_iDocID) || \
+	(a.m_iWordID == b.m_iWordID && a.m_iDocID == b.m_iDocID && a.m_iGroupID < b.m_iGroupID) || \
+	(a.m_iWordID == b.m_iWordID && a.m_iDocID == b.m_iDocID && a.m_iGroupID == b.m_iGroupID && a.m_iWordPos < b.m_iWordPos))
 
 
 struct CmpMatch_fn

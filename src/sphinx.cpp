@@ -2153,7 +2153,9 @@ bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 		fprintf ( stderr, "ERROR: %s: %s (DSN=mysql://%s:***@%s:%d/%s).\n",
 			sError, mysql_error ( &m_tSqlDriver ),
 			pParams->m_sUser, pParams->m_sHost, pParams->m_iPort,
-			pParams->m_sUsock + ( pParams->m_sUsock[0]=='/' ? 1 : 0 ) );
+			pParams->m_sUsock
+				? ( pParams->m_sUsock + ( pParams->m_sUsock[0]=='/' ? 1 : 0 ) )
+				: "" );
 		return 0;
 	}
 

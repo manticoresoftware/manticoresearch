@@ -1631,6 +1631,7 @@ int CSphSource_XMLPipe::next ()
 
 		// the word
 		BYTE sWord [ SPH_MAX_WORD_LEN+1 ];
+		BYTE sWord2 [ SPH_MAX_WORD_LEN+1 ];
 		BYTE * pWord = &sWord [ 0 ];
 		BYTE * pWordEnd = &sWord [ SPH_MAX_WORD_LEN ];
 
@@ -1640,7 +1641,7 @@ int CSphSource_XMLPipe::next ()
 			if ( m_pBuffer>=m_pBufferEnd )
 				if ( !UpdateBuffer() )
 			{
-				fprintf ( stderr, "WARNING: CSphSource_XMLPipe(): unexpected EOF while scanning doc '%d' body.\n",\
+				fprintf ( stderr, "WARNING: CSphSource_XMLPipe(): unexpected EOF while scanning doc '%d' body.\n",
 					m_iDocID );
 				return 0;
 			}
@@ -1677,7 +1678,13 @@ int CSphSource_XMLPipe::next ()
 		}
 
 		// we found it, yes we did!
-		hits.add ( m_iDocID, dict->wordID ( sWord ), ++m_iWordPos ); // field_id | (iPos++)
+		strcpy ( (char*)sWord2, (char*)sWord );
+		DWORD iWID = dict->wordID ( sWord );
+		if ( iWID )
+			hits.add ( m_iDocID, iWID, ++m_iWordPos ); // field_id | (iPos++)
+		else
+			fprintf ( stderr, "WARNING: word '%s' (stemmed to '%s') has zero CRC32.\n",
+				sWord2, sWord );
 	}
 
 	// some tag was found

@@ -111,7 +111,7 @@ int main(int argc, char **argv)
 	}
 
 	float fTime = sphLongTimer ();
-	fprintf ( stdout, "indexing..." );
+	fprintf ( stdout, "indexing...\n" );
 	fflush ( stdout );
 
 	assert ( pSource );
@@ -123,7 +123,6 @@ int main(int argc, char **argv)
 	const CSphSourceStats * pStats = pSource->GetStats ();
 	fTime = sphLongTimer () - fTime;
 
-	fprintf ( stdout, " ok\n" );
 	fprintf ( stdout,
 		"indexed %d bytes, %d docs\n"
 		"indexed in %.3f sec, %.2f bytes/sec, %.2f docs/sec\n",

@@ -214,8 +214,17 @@ int main(int argc, char **argv)
 					if (iread(rsock, query, i) != i) break;
 					query[i] = '\0';
 
+					// read weights
+					int iUserWeights;
+					int dUserWeights [ SPH_MAX_FIELD_COUNT ];
+
+					if ( iread ( rsock, &iUserWeights, 4 ) != 4 ) break;
+					if ( iUserWeights<0 || iUserWeights>SPH_MAX_FIELD_COUNT ) break;
+					if ( iUserWeights )
+						if ( iread ( rsock, dUserWeights, iUserWeights*4 ) != iUserWeights*4 ) break;
+
 					// execute it and log
-					r = idx->query ( new CSphDict_CRC32 ( iMorph ), query );
+					r = idx->query ( new CSphDict_CRC32 ( iMorph ), query, dUserWeights, iUserWeights );
 					time(&now);
 					ctime_r(&now, tbuf);
 					tbuf[24] = '\0';

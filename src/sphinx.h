@@ -11,6 +11,8 @@
 
 #define SPH_MAX_QUERY_WORDS		10
 #define SPH_MAX_WORD_LEN		64
+#define SPH_MAX_FILENAME_LEN	512
+#define SPH_MAX_FIELD_COUNT		32
 
 #define SPH_RLOG_MAX_BLOCKS		128
 #define SPH_RLOG_BIN_SIZE		262144
@@ -127,7 +129,7 @@ struct CSphSourceStats
 };
 
 
-/// generic document source
+/// generic data source
 struct CSphSource
 {
 	CSphList_Hit						hits;
@@ -150,27 +152,57 @@ public:
 	/// to be implemented by descendants
 	virtual int							next() = 0;
 
+	/// field count getter
+	/// to be implemented by descendants
+	/// MUST be called AFTER the indexing is over
+	/// because at indexing stage, we might not be sure of the exact count
+	virtual int							GetFieldCount () = 0;
+
 protected:
 	/// my stats
 	CSphSourceStats						m_iStats;
 };
 
 
+/// generic document source
+/// provides multi-field support and generic tokenizer
 struct CSphSource_Document : CSphSource
 {
-	int lastID, numFields, callWordCallback;
+	/// ctor
+							CSphSource_Document () : m_bCallWordCallback ( false ) {}
 
-	CSphSource_Document() { callWordCallback = 0; }
-	virtual int next();
-	virtual void wordCallback(char *word) {}
-	virtual byte **nextDocument() = 0;
+	/// my generic tokenizer
+	virtual int				next ();
+
+	/// this is what we can call for my descendants
+	virtual void			wordCallback ( char * word ) {}
+
+	/// field data getter
+	/// to be implemented by descendants
+	virtual BYTE **			NextDocument () = 0;
+
+	/// field count getter
+	virtual int				GetFieldCount ();
+
+protected:
+	/// last document id
+	/// MUST be filled by NextDocument ()
+	int						m_iLastID;
+
+	/// my field count
+	/// MUST be filled by NextDocument ()
+	int						m_iFieldCount;
+
+	/// whether to call the callback
+	bool					m_bCallWordCallback;
 };
+
 
 struct CSphSource_Text : CSphSource_Document
 {
-	CSphSource_Text() { this->numFields = 1; }
-	byte **nextDocument();
-	virtual byte *nextText() = 0;
+	CSphSource_Text() { this->m_iFieldCount = 1; }
+	byte ** NextDocument();
+	virtual byte * NextText() = 0;
 };
 
 struct CSphSource_MySQL : CSphSource_Document
@@ -182,7 +214,7 @@ struct CSphSource_MySQL : CSphSource_Document
 
 	virtual int connect(char *host, char *user, char *pass, char *db,
 		int port, char *usock);
-	virtual byte **nextDocument();
+	virtual byte ** NextDocument();
 
 private:
 	MYSQL_RES *sqlResult;
@@ -243,6 +275,7 @@ struct CSphIndexHeader_VLN
 	DWORD		m_iMinDocID;
 	DWORD		m_iMinGroupID;
 	DWORD		m_iGroupBits;
+	DWORD		m_iFieldCount;
 };
 
 
@@ -349,8 +382,8 @@ struct CSphQueryResult
 
 struct CSphIndex
 {
-	virtual int build(CSphDict *dict, CSphSource *source) = 0;
-	virtual CSphQueryResult *query(CSphDict *dict, char *query) = 0;
+	virtual int						build ( CSphDict * dict, CSphSource * source ) = 0;
+	virtual CSphQueryResult *		query ( CSphDict * dict, char * query, int * pUserWeights, int iUserWeightCount ) = 0;
 };
 
 /// possible bin states
@@ -360,8 +393,7 @@ enum ESphBinState
 	BIN_ERR_END		= -1,	///< bin end
 	BIN_POS			= 0,	///< bin is in "expects pos delta" state
 	BIN_DOC			= 1,	///< bin is in "expects doc delta" state
-	BIN_WORD		= 2,	///< bin is in "expects word delta" state
-	BIN_GROUP		= 3		///< bin is in "expects group delta" state
+	BIN_WORD		= 2		///< bin is in "expects word delta" state
 };
 
 struct CSphBin
@@ -390,8 +422,8 @@ struct CSphIndex_VLN : CSphIndex
 	CSphIndex_VLN(char *filename);
 	virtual ~CSphIndex_VLN();
 
-	virtual int build(CSphDict *dict, CSphSource *source);
-	virtual CSphQueryResult *query(CSphDict *dict, char *query);
+	virtual int					build ( CSphDict * dict, CSphSource * source );
+	virtual CSphQueryResult *	query ( CSphDict * dict, char * query, int * pUserWeights, int iUserWeightCount );
 
 private:
 	char *filename;
@@ -473,6 +505,9 @@ public:
 
 	/// hit chunk getter
 	virtual int		next ();
+
+	/// field count getter
+	virtual int		GetFieldCount ();
 
 private:
 	enum Tag_e

@@ -19,8 +19,6 @@
 #include "sphinx.h"
 #include "sphinxstem.h"
 
-#define SPH_MAX_FILENAME_LEN 512
-
 // *** LOWERCASING TABLE ***
 
 static byte sphLT_cp1251[] = {
@@ -494,13 +492,13 @@ int cmpMatch(const void *a, const void *b)
 	return ((CSphMatch*)b)->m_iWeight - ((CSphMatch*)a)->m_iWeight;
 }
 
-/// sort hits by word/group/document/position
+/// sort hits by word/document/position
 void sphSortHits ( CSphHit * s, int n )
 {
 	int st0[32], st1[32];
 	int a, b, k, i, j;
 	CSphHit t;
-	DWORD x_word, x_doc, x_pos, x_group;
+	DWORD x_word, x_doc, x_pos;
 
 	k = 1;
 	st0[0] = 0;
@@ -510,7 +508,6 @@ void sphSortHits ( CSphHit * s, int n )
 		i = a = st0[k];
 		j = b = st1[k];
 		x_word = s[(a+b) / 2].m_iWordID;
-		x_group = s[(a+b) / 2].m_iGroupID;
 		x_doc = s[(a+b) / 2].m_iDocID;
 		x_pos = s[(a+b) / 2].m_iWordPos;
 //		x = s[(a+b) / 2];
@@ -518,15 +515,13 @@ void sphSortHits ( CSphHit * s, int n )
 			while (i <= j) {
 //				while (cmpHit(&s[i], &x) < 0) i++;
 				while (s[i].m_iWordID < x_word ||
-					(s[i].m_iWordID == x_word && s[i].m_iGroupID < x_group) ||
-					(s[i].m_iWordID == x_word && s[i].m_iGroupID == x_group && s[i].m_iDocID < x_doc) ||
-					(s[i].m_iWordID == x_word && s[i].m_iGroupID == x_group && s[i].m_iDocID == x_doc && s[i].m_iWordPos < x_pos))
+					(s[i].m_iWordID == x_word && s[i].m_iDocID < x_doc) ||
+					(s[i].m_iWordID == x_word && s[i].m_iDocID == x_doc && s[i].m_iWordPos < x_pos))
 						i++;
 //				while (cmpHit(&x, &s[j]) < 0) j--;
 				while (x_word < s[j].m_iWordID ||
-					(x_word == s[j].m_iWordID && x_group < s[j].m_iGroupID) ||
-					(x_word == s[j].m_iWordID && x_group == s[j].m_iGroupID && x_doc < s[j].m_iDocID) ||
-					(x_word == s[j].m_iWordID && x_group == s[j].m_iGroupID && x_doc == s[j].m_iDocID && x_pos < s[j].m_iWordPos))
+					(x_word == s[j].m_iWordID && x_doc < s[j].m_iDocID) ||
+					(x_word == s[j].m_iWordID && x_doc == s[j].m_iDocID && x_pos < s[j].m_iWordPos))
 						j--;
 				if (i <= j) {
 					t = s[i]; s[i] = s[j]; s[j] = t;
@@ -643,19 +638,16 @@ int CSphIndex_VLN::binsRead ( int b, CSphHit * e )
 				case BIN_WORD:
 					bins[b]->lastWordID += r;
 					bins[b]->lastGroupID = bins[b]->lastDocID = bins[b]->lastPos = 0;
-					bins[b]->state = BIN_GROUP;
-					break;
-
-				case BIN_GROUP:
-					bins[b]->lastGroupID += r;
-					bins[b]->lastDocID = bins[b]->lastPos = 0;
 					bins[b]->state = BIN_DOC;
 					break;
 
 				case BIN_DOC:
+					// doc id
 					bins[b]->lastDocID += r;
 					bins[b]->lastPos = 0;
 					bins[b]->state = BIN_POS;
+					if ( (bins[b]->lastGroupID = binsReadVLB(b)) == 0xffffffffUL )
+						return 0; // read unexpected EOB
 					break;
 
 				case BIN_POS: 
@@ -671,8 +663,7 @@ int CSphIndex_VLN::binsRead ( int b, CSphHit * e )
 			switch ( bins[b]->state )
 			{
 				case BIN_POS:	bins[b]->state = BIN_DOC; break;
-				case BIN_DOC:	bins[b]->state = BIN_GROUP; break;
-				case BIN_GROUP:	bins[b]->state = BIN_WORD; break;
+				case BIN_DOC:	bins[b]->state = BIN_WORD; break;
 				case BIN_WORD:
 					bins[b]->done = 1;
 					e->m_iWordID = 0;
@@ -759,6 +750,10 @@ void CSphIndex_VLN::cidxHit(CSphHit *hit)
 	static uint lastWordID = 0, lastPageID = 0xffffffff;
 	static int lastPos = 0, lastIndexPos = 0;
 
+	assert ( hit->m_iWordID );
+	assert ( hit->m_iDocID );
+	assert ( hit->m_iWordPos );
+
 	if (lastWordID != hit->m_iWordID) {
 		cidxFlushHitList();
 		cidxFlushChunk();
@@ -771,6 +766,7 @@ void CSphIndex_VLN::cidxHit(CSphHit *hit)
 			cidxPagesDir[lastPageID] = fdIndex->pos;
 		}
 
+		assert ( hit->m_iWordID>lastWordID );
 		vIndexPage->add(hit->m_iWordID - lastWordID);
 		vIndexPage->add(fdData->pos - lastIndexPos);
 		lastWordID = hit->m_iWordID;
@@ -783,6 +779,7 @@ void CSphIndex_VLN::cidxHit(CSphHit *hit)
 	if (lastDocID != hit->m_iDocID) {
 		cidxFlushHitList();
 
+		assert ( hit->m_iDocID>lastDocID );
 		lastDocDelta = hit->m_iDocID - lastDocID;
 		lastDocID = hit->m_iDocID;
 		lastPos = 0;
@@ -828,7 +825,7 @@ int CSphIndex_VLN::cidxWriteRawVLB(int fd, CSphHit *hit, int count)
 {
 	BYTE buf[65536+1024], *pBuf, *maxP;
 	int n = 0, w;
-	DWORD d1, d2, d3, d4, l1=0, l2=0, l3=0, l4=0;
+	DWORD d1, d2, d3, l1=0, l2=0, l3=0;
 
 	pBuf = &buf[0];
 	maxP = &buf[65536-1];
@@ -836,32 +833,31 @@ int CSphIndex_VLN::cidxWriteRawVLB(int fd, CSphHit *hit, int count)
 	{
 		// calc deltas
 		d1 = hit->m_iWordID - l1;
-		d2 = hit->m_iGroupID - l2;
-		d3 = hit->m_iDocID - l3;
-		d4 = hit->m_iWordPos - l4;
+		d2 = hit->m_iDocID - l2;
+		d3 = hit->m_iWordPos - l3;
 
 		// non-zero delta restarts all the fields after it
-		// because their deltas might be negative
-		if ( d1 ) d2 = hit->m_iGroupID;
-		if ( d2 ) d3 = hit->m_iDocID;
-		if ( d3 ) d4 = hit->m_iWordPos;
+		// because their deltas might now be negative
+		if ( d1 ) d2 = hit->m_iDocID;
+		if ( d2 ) d3 = hit->m_iWordPos;
 
 		// encode enough restart markers
 		if ( d1 ) pBuf += encodeVLB ( pBuf, 0 );
 		if ( d2 ) pBuf += encodeVLB ( pBuf, 0 );
-		if ( d3 ) pBuf += encodeVLB ( pBuf, 0 );
 
 		// encode deltas
-		if ( d1 ) pBuf += encodeVLB ( pBuf, d1 );
-		if ( d2 ) pBuf += encodeVLB ( pBuf, d2 );
-		if ( d3 ) pBuf += encodeVLB ( pBuf, d3 );
-		pBuf += encodeVLB ( pBuf, d4 );
+		if ( d1 ) pBuf += encodeVLB ( pBuf, d1 ); // encode word delta
+		if ( d2 )
+		{
+			pBuf += encodeVLB ( pBuf, d2 ); // encode doc id (whole or delta)
+			pBuf += encodeVLB ( pBuf, hit->m_iGroupID ); // encode group id
+		}
+		pBuf += encodeVLB ( pBuf, d3 );
 
 		// update current state
 		l1 = hit->m_iWordID;
-		l2 = hit->m_iGroupID;
-		l3 = hit->m_iDocID;
-		l4 = hit->m_iWordPos;
+		l2 = hit->m_iDocID;
+		l3 = hit->m_iWordPos;
 
 		hit++;
 
@@ -873,7 +869,6 @@ int CSphIndex_VLN::cidxWriteRawVLB(int fd, CSphHit *hit, int count)
 			pBuf = buf;
 		}
 	}
-	pBuf += encodeVLB ( pBuf, 0 );
 	pBuf += encodeVLB ( pBuf, 0 );
 	pBuf += encodeVLB ( pBuf, 0 );
 	pBuf += encodeVLB ( pBuf, 0 );
@@ -1010,6 +1005,7 @@ int CSphIndex_VLN::build(CSphDict *dict, CSphSource *source)
 	m_tHeader.m_iMinDocID = iMinDocID;
 	m_tHeader.m_iMinGroupID = iMinGroupID;
 	m_tHeader.m_iGroupBits = iGidBits;
+	m_tHeader.m_iFieldCount = source->GetFieldCount ();
 
 	// do the sort
 	for ( i=0; i<rawBlocks; i++ )
@@ -1026,7 +1022,7 @@ int CSphIndex_VLN::build(CSphDict *dict, CSphSource *source)
 		}
 
 		// encode gid into docid
-		cur[mini].m_iDocID = ( (cur[mini].m_iDocID-iMinDocID) << iGidBits ) + ( cur[mini].m_iGroupID-iMinGroupID );
+		cur[mini].m_iDocID = 1 + ( (cur[mini].m_iDocID-iMinDocID) << iGidBits ) + ( cur[mini].m_iGroupID-iMinGroupID );
 
 		// write it
 		cidxHit ( &cur[mini] );
@@ -1067,7 +1063,7 @@ struct CSphQueryParser : CSphSource_Text
 		this->numWords = 0;
 		this->query = sphDup(query);
 		this->dict = dict;
-		this->callWordCallback = 1;
+		m_bCallWordCallback = true;
 		this->next();
 	}
 
@@ -1085,10 +1081,10 @@ struct CSphQueryParser : CSphSource_Text
 			this->words[numWords++] = sphDup(word);
 	}
 
-	byte *nextText()
+	BYTE * NextText()
 	{
-		lastID = 1;
-		return (byte*)this->query;
+		m_iLastID = 1;
+		return (BYTE*)this->query;
 	}
 };
 
@@ -1097,13 +1093,13 @@ int cmpQueryWord(const void *a, const void *b)
 	return (((CSphQueryWord*)a)->docs->count - ((CSphQueryWord*)b)->docs->count);
 }
 
-CSphQueryResult *CSphIndex_VLN::query(CSphDict *dict, char *query)
+CSphQueryResult *CSphIndex_VLN::query(CSphDict *dict, char *query, int * pUserWeights, int iUserWeights )
 {
 	CSphQueryParser *qp;
 	CSphReader_VLN *rdIndex, *rdData;
 	CSphQueryWord qwords[SPH_MAX_QUERY_WORDS];
-	int i, j, nwords, chunkPos, weight[32], curWeight[32], weights[32],
-		imin, nweights;
+	int i, j, nwords, chunkPos, weight [ SPH_MAX_FIELD_COUNT ], curWeight [ SPH_MAX_FIELD_COUNT ],
+		weights [ SPH_MAX_FIELD_COUNT ], imin, nweights;
 	uint *phits[SPH_MAX_QUERY_WORDS], *pdocs[SPH_MAX_QUERY_WORDS],
 		wordID, docID, pmin, k;
 	CSphQueryResult *result;
@@ -1236,14 +1232,15 @@ CSphQueryResult *CSphIndex_VLN::query(CSphDict *dict, char *query)
 	qsort(qwords, nwords, sizeof(CSphQueryWord), cmpQueryWord);
 	if (!qwords[0].hits->count) return result;
 
-	// find and proximity-weight matching documents
-// FIXME!!!
-nweights = 4;
-weights[0] = 100;
-weights[1] = 1;
-weights[2] = 10;
-weights[3] = 1;
+	// build weights
+	nweights = m_tHeader.m_iFieldCount;
+	for ( int i=0; i<nweights; i++ ) // defaults
+		weights[i] = 1;
+	if ( pUserWeights ) // user-supplied
+		for ( int i=0; i<Min ( nweights, iUserWeights ); i++ )
+			weights[i] = pUserWeights[i];
 
+	// find and proximity-weight matching documents
 	for (i = 0; i < nwords; i++) {
 		pdocs[i] = qwords[i].docs->data;
 	}
@@ -1284,12 +1281,12 @@ weights[3] = 1;
 			k = qwords[imin].queryPos - pmin;
 		}
 		for (i = 0, j = 1; i < nweights; i++)
-			j += weights[i] * weight[i];
+			j += weights[i] * (1+weight[i]);
 
 		// add match
 		result->matches->add (
-			(docID & iGroupMask) + m_tHeader.m_iMinGroupID, // unpack group id
-			(docID >> m_tHeader.m_iGroupBits) + m_tHeader.m_iMinDocID, // unpack document id
+			((docID-1) & iGroupMask) + m_tHeader.m_iMinGroupID, // unpack group id
+			((docID-1) >> m_tHeader.m_iGroupBits) + m_tHeader.m_iMinDocID, // unpack document id
 			j ); // set weight
 
 		// continue looking for next matches
@@ -1431,14 +1428,14 @@ const CSphSourceStats * CSphSource::GetStats ()
 
 int CSphSource_Document::next()
 {
-	byte **fields = nextDocument(), *data, *pData, *pWord;
+	byte **fields = NextDocument(), *data, *pData, *pWord;
 	int pos, i, j, len;
 
-	if (!fields || (lastID <= 0)) return 0;
+	if (!fields || (m_iLastID <= 0)) return 0;
 
 	m_iStats.m_iTotalDocuments++;
 	hits.clear();
-	for (j = 0; j < numFields; j++) {
+	for (j = 0; j < m_iFieldCount; j++) {
 		if (!(data = fields[j])) continue;
 
 		i = len = strlen((char*)data);
@@ -1455,25 +1452,35 @@ int CSphSource_Document::next()
 			if (i >= len) break;
 			pWord = pData;
 			while ((*pData) && i < len) { pData++; i++; }
-			hits.add ( 1, lastID, dict->wordID(pWord), (j << 24) | pos++ ); // FIXME! add groups support here
-			if (callWordCallback) wordCallback((char*)pWord);
+			hits.add ( 1, m_iLastID, dict->wordID(pWord), (j << 24) | pos++ ); // FIXME! add groups support here
+			if ( m_bCallWordCallback )
+				wordCallback ( (char*)pWord );
 		}
 	}
 
-	return lastID;
+	return m_iLastID;
 }
 
-// *** PLAIN TEXT SOURCE ***
+int CSphSource_Document::GetFieldCount ()
+{
+	return m_iFieldCount;
+}
 
-byte **CSphSource_Text::nextDocument()
+/////////////////////////////////////////////////////////////////////////////
+// PLAIN TEXT SOURCE
+/////////////////////////////////////////////////////////////////////////////
+
+byte **CSphSource_Text::NextDocument()
 {
 	static byte *t;
 
-	if (!(t = nextText())) return NULL;
+	if (!(t = NextText())) return NULL;
 	return &t; 
 };
 
-// *** MYSQL SOURCE ***
+/////////////////////////////////////////////////////////////////////////////
+// MYSQL SOURCE
+/////////////////////////////////////////////////////////////////////////////
 
 CSphSource_MySQL::CSphSource_MySQL(char *sqlQuery)
 {
@@ -1500,7 +1507,7 @@ int CSphSource_MySQL::connect(char *host, char *user, char *pass, char *db,
 		fprintf(stderr, "ERROR: %s\n", mysql_error(&sqlDriver));
 		return 0;
 	}
-	numFields = mysql_num_fields(sqlResult) - 1;
+	m_iFieldCount = mysql_num_fields(sqlResult) - 1;
 	return 1;
 }
 
@@ -1509,11 +1516,11 @@ CSphSource_MySQL::~CSphSource_MySQL()
 	free(sqlQuery);
 }
 
-byte **CSphSource_MySQL::nextDocument()
+byte **CSphSource_MySQL::NextDocument()
 {
 	sqlRow = mysql_fetch_row(sqlResult);
 	if (!sqlRow) return NULL;
-	lastID = atoi(sqlRow[0]);
+	m_iLastID = atoi(sqlRow[0]);
 	return (byte**)(&sqlRow[1]);
 }
 
@@ -2020,6 +2027,12 @@ bool CSphSource_XMLPipe::ScanStr ( const char * sTag, char * pRes, int iMaxLengt
 		return false;
 
 	return true;
+}
+
+
+int CSphSource_XMLPipe::GetFieldCount ()
+{
+	return 1;
 }
 
 //

@@ -7,13 +7,21 @@
 $sphinx_server = "127.0.0.1";
 $sphinx_port   = 3312;
 
-function sphinxQuery($server, $port, $query, $start = 0, $rpp = 20)
+function sphinxQuery ( $server, $port, $query, $start=0, $rpp=20, $weights=array() )
 {
 	$start = (int)$start;
 	$rpp = (int)$rpp;
 
-	if (!($fp = fsockopen($server, $port))) return false;
-	fputs($fp, pack("VVV", $start, $rpp, strlen($query)) . $query);
+	if ( !($fp = fsockopen($server, $port)) )
+		return false;
+
+	// build weights request
+	$wreq = pack ( "V", count($weights) );
+	foreach ( $weights as $weight )
+		$wreq .= pack ( "V", (int)$weight );
+
+	// do query
+	fputs ( $fp, pack ( "VVV", $start, $rpp, strlen($query) ) . $query . $wreq );
 
 	$result = array();
 	while (!feof($fp)) {
@@ -50,7 +58,7 @@ $q = "";
 foreach ( $argv as $arg )
 	$q .= "$arg ";
 
-$res = sphinxQuery ( $sphinx_server, $sphinx_port, $q );
+$res = sphinxQuery ( $sphinx_server, $sphinx_port, $q, 0, 20, array(5,5) );
 print "Query '$q' produced $res[total] matches in $res[time] sec.\n";
 print "Query stats:\n";
 foreach ( $res["words"] as $word => $info )

@@ -39,6 +39,12 @@ void *sphRealloc(void *ptr, size_t size);
 void sphFree(void *ptr);
 char *sphDup(char *s);
 
+/// time, in mcs
+int		sphTimer ();
+
+/// time, in seconds
+float	sphLongTimer ();
+
 // ***
 
 struct CSphHit
@@ -96,23 +102,52 @@ protected:
 };
 
 
+/// source statistics
+struct CSphSourceStats
+{
+	/// how much documents
+	int		m_iTotalDocuments;
+
+	/// how much bytes
+	int		m_iTotalBytes;
+
+
+	/// ctor
+			CSphSourceStats () :
+				m_iTotalDocuments ( 0 ),
+				m_iTotalBytes ( 0 )
+			{};
+};
+
+
+/// generic document source
 struct CSphSource
 {
-	CSphList_Hit hits;
-	CSphDict *dict;
+	CSphList_Hit						hits;
+	CSphDict *							dict;
 
-	int fetchedDocs, fetchedBytes;
+public:
+										CSphSource();
 
-	CSphSource()
-	{
-		dict = NULL;
-		fetchedDocs = fetchedBytes = 0;
-	}
+	/// dtor
+	virtual								~CSphSource() {}
 
-	virtual ~CSphSource() {}
-	void setDict(CSphDict *dict) { this->dict = dict; }
-	virtual int next() = 0;
+	/// set dictionary
+	void								setDict ( CSphDict * dict );
+
+	/// get stats
+	virtual const CSphSourceStats *		GetStats ();
+
+public:
+	/// document getter
+	/// to be implemented by descendants
+	virtual int							next() = 0;
+
+protected:
+	/// my stats
+	CSphSourceStats						m_iStats;
 };
+
 
 struct CSphSource_Document : CSphSource
 {

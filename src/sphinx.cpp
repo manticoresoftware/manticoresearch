@@ -74,6 +74,8 @@ void sphFree(void *ptr)
 	free(ptr);
 }
 
+
+/// time, in mcs
 int sphTimer()
 {
 	static int s_sec = -1, s_usec = -1;
@@ -87,6 +89,24 @@ int sphTimer()
 	gettimeofday(&tv, NULL);
 	return (tv.tv_sec - s_sec) * 1000000 + (tv.tv_usec - s_usec);
 }
+
+
+/// time, in seconds
+float sphLongTimer ()
+{
+	static int s_sec = -1, s_usec = -1;
+	struct timeval tv;
+
+	if ( s_sec == -1 )
+	{
+		gettimeofday ( &tv, NULL );
+		s_sec = tv.tv_sec;
+		s_usec = tv.tv_usec;
+	}
+	gettimeofday ( &tv, NULL );
+	return float(tv.tv_sec-s_sec) + float(tv.tv_usec-s_usec)/1000000.0f;
+}
+
 
 char *sphDup(char *s)
 {
@@ -1251,7 +1271,30 @@ DWORD CSphDict_CRC32::wordID ( BYTE * pWord )
 	return ~crc;
 }
 
-// *** DOCUMENT SOURCE ***
+/////////////////////////////////////////////////////////////////////////////
+// GENERIC SOURCE
+/////////////////////////////////////////////////////////////////////////////
+
+CSphSource::CSphSource() :
+	dict ( NULL )
+{
+}
+
+
+void CSphSource::setDict ( CSphDict * pDict )
+{
+	this->dict = pDict;
+}
+
+
+const CSphSourceStats * CSphSource::GetStats ()
+{
+	return &m_iStats;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// DOCUMENT SOURCE
+/////////////////////////////////////////////////////////////////////////////
 
 int CSphSource_Document::next()
 {
@@ -1260,13 +1303,13 @@ int CSphSource_Document::next()
 
 	if (!fields || (lastID <= 0)) return 0;
 
-	fetchedDocs++;
+	m_iStats.m_iTotalDocuments++;
 	hits.clear();
 	for (j = 0; j < numFields; j++) {
 		if (!(data = fields[j])) continue;
 
 		i = len = strlen((char*)data);
-		fetchedBytes += len;
+		m_iStats.m_iTotalBytes += len;
 
 		pData = data;
 		while (i-- > 0) { *pData = sphLT_cp1251[*pData]; pData++; }
@@ -1536,6 +1579,7 @@ int CSphSource_XMLPipe::next ()
 
 		if ( !ScanInt ( "id", &m_iDocID ) )
 			return 0;
+		m_iStats.m_iTotalDocuments++;
 
 		if ( !ScanInt ( "group", &m_iGroupID ) )
 			return 0;
@@ -1674,6 +1718,7 @@ bool CSphSource_XMLPipe::UpdateBuffer ()
 		memmove ( m_sBuffer, m_pBuffer, iLeft );
 
 	int iLen = fread ( &m_sBuffer [ iLeft ], 1, sizeof(m_sBuffer)-iLeft, m_pPipe );
+	m_iStats.m_iTotalBytes += iLen;
 
 	m_pBuffer = m_sBuffer;
 	m_pBufferEnd = m_pBuffer+iLeft+iLen;

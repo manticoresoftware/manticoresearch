@@ -110,10 +110,26 @@ int main(int argc, char **argv)
 		}
 	}
 
+	float fTime = sphLongTimer ();
+	fprintf ( stdout, "indexing..." );
+	fflush ( stdout );
+
 	assert ( pSource );
 	CSphIndex_VLN * pIndex = new CSphIndex_VLN ( confCommon->get ( "index_path" ) );
 	CSphDict_CRC32 * pDict = new CSphDict_CRC32 ( iMorph );
 	pIndex->build ( pDict, pSource );
+
+	// trip report
+	const CSphSourceStats * pStats = pSource->GetStats ();
+	fTime = sphLongTimer () - fTime;
+
+	fprintf ( stdout, " ok\n" );
+	fprintf ( stdout,
+		"indexed %d bytes, %d docs\n"
+		"indexed in %.3f sec, %.2f bytes/sec, %.2f docs/sec\n",
+
+		pStats->m_iTotalBytes, pStats->m_iTotalDocuments, fTime, 
+		pStats->m_iTotalBytes/fTime, pStats->m_iTotalDocuments/fTime );
 
 	////////////////////
 	// cleanup/shutdown

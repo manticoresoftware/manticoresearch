@@ -423,7 +423,7 @@ static int stem_ru_verb_ov(BYTE *word, int len)
 	register int i;
 
 	if ( (i = stem_ru_verb_i(word, len)) )
-		if (word[len-i-2] == RUS_O && word[len-i-1] == RUS_V) return i+2;
+		if ((len>=i+2) && word[len-i-2] == RUS_O && word[len-i-1] == RUS_V) return i+2;
 	return i;
 }
 

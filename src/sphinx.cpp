@@ -2391,8 +2391,8 @@ CSphSourceParams_MySQL::CSphSourceParams_MySQL ()
 
 const char * const CSphSource_MySQL::MACRO_VALUES [ CSphSource_MySQL::MACRO_COUNT ] =
 {
-	"start",
-	"end"
+	"$start",
+	"$end"
 };
 
 
@@ -2454,9 +2454,9 @@ bool CSphSource_MySQL::RunQueryStep ()
 		{
 			int i;
 			for ( i=0; i<MACRO_COUNT; i++ )
-				if ( strncmp ( MACRO_VALUES[i], 1+sCur, strlen(MACRO_VALUES[i]) )==0 )
+				if ( strncmp ( MACRO_VALUES[i], sCur, strlen(MACRO_VALUES[i]) )==0 )
 			{
-				sCur += 1+strlen ( MACRO_VALUES[i] );
+				sCur += strlen ( MACRO_VALUES[i] );
 				iLen += strlen ( sValues[i] );
 				break;
 			}
@@ -2480,10 +2480,10 @@ bool CSphSource_MySQL::RunQueryStep ()
 		{
 			int i;
 			for ( i=0; i<MACRO_COUNT; i++ )
-				if ( strncmp ( MACRO_VALUES[i], 1+sCur, strlen(MACRO_VALUES[i]) )==0 )
+				if ( strncmp ( MACRO_VALUES[i], sCur, strlen(MACRO_VALUES[i]) )==0 )
 			{
 				strcpy ( sDst, sValues[i] );
-				sCur += 1+strlen ( MACRO_VALUES[i] );
+				sCur += strlen ( MACRO_VALUES[i] );
 				sDst += strlen ( sValues[i] );
 				break;
 			}
@@ -2614,7 +2614,7 @@ bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 			{
 				if ( !strstr ( pParams->m_sQuery, MACRO_VALUES[i] ) )
 				{
-					fprintf ( stderr, "ERROR: mysql_ranged_query: macro '$%s' not found.\n",
+					fprintf ( stderr, "ERROR: mysql_ranged_query: macro '%s' not found.\n",
 						MACRO_VALUES[i] );
 					bError = true;
 				}

@@ -16,16 +16,50 @@
 
 #if USE_WINDOWS
 	#include <io.h> // for open()
-	#define popen _popen
-	#define pclose _pclose
+
+	// workaround Windows quirks
+	#define popen		_popen
+	#define pclose		_pclose
+	#define snprintf	_vsnprintf
+
+	// 64-bit file IO
+	typedef __int64		SphOffset_t;
+	#define xlseek		_lseeki64
 #else
 	#include <unistd.h>
 	#include <sys/time.h>
+
+	// 64-bit file IO
+	typedef off_t		SphOffset_t;
+	#define xlseek		lseek
 #endif
 
 #if USE_MYSQL
 #include <mysql/mysql.h>
 #endif
+
+/////////////////////////////////////////////////////////////////////////////
+// COMPILE-TIME CHECKS
+/////////////////////////////////////////////////////////////////////////////
+
+/// compile time error struct
+template<int> struct CompileTimeError;
+template<> struct CompileTimeError<true> {};
+
+namespace Private
+{
+	template<int x>		struct static_assert_test{};
+	template<bool x>	struct SizeError;
+	template<>			struct SizeError<true>{};
+}
+
+#define STATIC_SIZE_ASSERT(_Type,_ExpSize)	\
+	typedef ::Private::static_assert_test<sizeof(::Private::SizeError \
+	< (bool) (sizeof(_Type) == (_ExpSize)) >)> static_assert_typedef_
+
+/////////////////////////////////////////////////////////////////////////////
+
+STATIC_SIZE_ASSERT ( SphOffset_t, 8 );
 
 /////////////////////////////////////////////////////////////////////////////
 // INTERNAL PROFILER
@@ -340,13 +374,18 @@ struct CSphBin
 	int					m_iSize;
 
 	BYTE *data, *pData;
-	int left, done, filePos, fileLeft, filePtr, state;
+	int left, done, state;
 	DWORD lastGroupID, lastDocID, lastWordID, lastPos; // FIXME! make it a hit
 
+	SphOffset_t		m_iFilePos;
+	SphOffset_t		m_iFileLeft;
+
 	CSphBin ()
+		: m_iFilePos ( 0 )
+		, m_iFileLeft ( 0 )
 	{
 		data = pData = NULL;
-		left = done = filePos = fileLeft = 0;
+		left = done = 0;
 		lastDocID = lastWordID = lastPos = 0;
 		state = BIN_POS;
 	}
@@ -380,52 +419,67 @@ struct CSphIndexHeader_VLN
 };
 
 
-struct CSphWriter_VLN
+class CSphWriter_VLN
 {
-	char *name;
-	int pos;
+public:
+	char *		m_sName;
+	SphOffset_t	m_iPos;
 
-	CSphWriter_VLN(char *name);
-	virtual ~CSphWriter_VLN();
+public:
+				CSphWriter_VLN ( char * sName );
+	virtual		~CSphWriter_VLN ();
 
-	int open();
-	void putbytes(void *data, int size);
-	void PutRawBytes ( void * pData, int iSize );
-	void zipInts(CSphVector<DWORD> *data);
-	void close();
-	void seek(int pos);
+	int			OpenFile ();
+	void		PutBytes ( void *data, int size );
+	void		PutRawBytes ( void * pData, int iSize );
+	void		ZipInts ( CSphVector<DWORD> * data );
+	void		CloseFile ();
+	void		SeekTo ( SphOffset_t pos );
 
 private:
-	int fd, poolUsed, poolOdd;
-	BYTE pool[SPH_CACHE_WRITE], *pPool;
+	int			m_iFD;
+	int			m_iPoolUsed;
+	int			m_iPoolOdd;
+	BYTE		m_dPool [ SPH_CACHE_WRITE ];
+	BYTE *		m_pPool;
 
-	void putNibble(int data);
-	void flush();
+	void		PutNibble ( int data );
+	void		Flush ();
 };
 
 
-struct CSphReader_VLN
+class CSphReader_VLN
 {
-	char *name;
+	char *		m_sName;
 
-	CSphReader_VLN(char *name);
-	virtual ~CSphReader_VLN();
+public:
 
-	int open();
-	void GetRawBytes ( void * pData, int iSize );
-	void getbytes(void *data, int size);
-	int unzipInt();
-	void unzipInts(CSphVector<DWORD> *data);
-	int decodeHits(CSphVector<DWORD> *hl);
-	void close();
-	void seek(int pos);
+				CSphReader_VLN ( char * sName );
+	virtual		~CSphReader_VLN ();
+
+	int			OpenFile ();
+	void		GetRawBytes ( void * pData, int iSize );
+	void		GetBytes ( void * data, int size );
+	int			UnzipInt ();
+	void		UnzipInts ( CSphVector<DWORD> * data);
+	int			DecodeHits ( CSphVector<DWORD> * hl );
+	void		CloseFile ();
+	void		SeekTo ( SphOffset_t iPos );
 
 private:
-	int fd, pos, filePos, bufPos, bufOdd, bufUsed, bufSize;
-	BYTE *buf;
+	int			m_iFD;
+	SphOffset_t	m_iPos;
+	SphOffset_t	m_iFilePos;
 
-	int getNibble();
-	void cache();
+	int			m_iBufPos;
+	int			m_iBufOdd;
+	int			m_iBufUsed;
+	int			m_iBufSize;
+	BYTE *		m_pBuf;
+
+private:
+	int			GetNibble ();
+	void		UpdateCache ();
 };
 
 
@@ -441,19 +495,17 @@ struct CSphIndex_VLN : CSphIndex
 private:
 	char *						filename;
 	int							fdRaw;
-	int							filePos;
+	SphOffset_t					m_iFilePos;
 	CSphWriter_VLN *			fdIndex;
 	CSphWriter_VLN *			fdData;
 	CSphVector<CSphBin *>		bins;
 
-	CSphVector<DWORD> *				vChunk;
-	CSphVector<DWORD> *				vChunkHeader;
-	CSphVector<DWORD> *				vIndexPage;
-	int							cidxPagesDir [ SPH_CLOG_DIR_PAGES ];
+	CSphVector<DWORD> *			vChunk;
+	CSphVector<DWORD> *			vChunkHeader;
+	CSphVector<DWORD> *			vIndexPage;
+	SphOffset_t					cidxPagesDir [ SPH_CLOG_DIR_PAGES ];
 	int							cidxDirUsed;
 	int							cidxPageUsed;
-	int							cidxIndexPos;
-	int							cidxDataPos;
 	int							lastDocDelta;
 	DWORD						lastDocID;
 	int							lastDocHits;
@@ -707,7 +759,9 @@ CSphQuery::CSphQuery ()
 {
 }
 
-// *** BIT OUTPUT TO FILE ***
+///////////////////////////////////////////////////////////////////////////////
+// BIT-ENCODED FILE OUTPUT
+///////////////////////////////////////////////////////////////////////////////
 
 #ifdef O_BINARY
 #define SPH_BINARY O_BINARY
@@ -715,233 +769,284 @@ CSphQuery::CSphQuery ()
 #define SPH_BINARY 0
 #endif
 
-CSphWriter_VLN::CSphWriter_VLN(char *name)
+CSphWriter_VLN::CSphWriter_VLN ( char * sName )
 {
-	assert ( name );
+	assert ( sizeof(m_iPos)==8 ); // FIXME! make this a compile-time assert
+	assert ( sName );
+	m_sName = sphDup ( sName );
 
-	this->name = sphDup(name);
-	pPool = &pool[0];
-	fd = 0;
-	pos = 0;
+	m_pPool = m_dPool;
+	m_iFD = 0;
+	m_iPos = 0;
 }
+
 
 CSphWriter_VLN::~CSphWriter_VLN()
 {
 //	close();
-	sphFree(name);
+	sphFree ( m_sName );
 }
 
-int CSphWriter_VLN::open()
+
+int CSphWriter_VLN::OpenFile ()
 {
-	if (fd) return 1;
-	fd = ::open(name, O_CREAT | O_RDWR | O_TRUNC | SPH_BINARY, 0644);
-	poolUsed = 0;
-	poolOdd = 0;
-	pos = 0;
-	if (fd) return 1; else return 0;
+	if ( m_iFD )
+		return 1;
+	m_iFD = ::open ( m_sName, O_CREAT | O_RDWR | O_TRUNC | SPH_BINARY, 0644 );
+	m_iPoolUsed = 0;
+	m_iPoolOdd = 0;
+	m_iPos = 0;
+	return m_iFD;
 }
 
-void CSphWriter_VLN::close()
+
+void CSphWriter_VLN::CloseFile() 
 {
-	if (fd) {
-		flush();
-		::close(fd);
-		fd = 0;
+	if ( m_iFD )
+	{
+		Flush ();
+		::close ( m_iFD );
+		m_iFD = 0;
 	}
 }
 
-void CSphWriter_VLN::putNibble(int data)
+
+void CSphWriter_VLN::PutNibble ( int data )
 {
 	data &= 0x0f;
-	if (poolOdd) {
-		poolOdd = 0;
-		*pPool |= data;
-		pPool++;
-		if (poolUsed == SPH_CACHE_WRITE) flush();
-	} else {
-		poolOdd = 1;
-		*pPool = (data << 4);
-		poolUsed++;
+	if ( m_iPoolOdd )
+	{
+		m_iPoolOdd = 0;
+		*m_pPool++ |= data;
+		if ( m_iPoolUsed==SPH_CACHE_WRITE )
+			Flush ();
+	} else
+	{
+		m_iPoolOdd = 1;
+		*m_pPool = data<<4;
+		m_iPoolUsed++;
 	}
-	pos++;
+	m_iPos++;
 }
 
-void CSphWriter_VLN::putbytes(void *data, int size)
-{
-	BYTE *b = (BYTE*)data;
 
-	while (size-- > 0) {
-		putNibble((*b) >> 4);
-		putNibble((*b) & 0x0f);
+void CSphWriter_VLN::PutBytes ( void * data, int size )
+{
+	BYTE * b = (BYTE*) data;
+
+	while ( size-->0 )
+	{
+		PutNibble ( (*b) >> 4 );
+		PutNibble ( (*b) & 0x0f );
 		b++;
 	}
 }
 
+
 void CSphWriter_VLN::PutRawBytes ( void * pData, int iSize )
 {
-	assert ( !poolOdd );
+	assert ( !m_iPoolOdd );
 
-	if ( poolUsed+iSize>SPH_CACHE_WRITE )
-		flush ();
-	assert ( poolUsed+iSize<=SPH_CACHE_WRITE );
+	if ( m_iPoolUsed+iSize>SPH_CACHE_WRITE )
+		Flush ();
+	assert ( m_iPoolUsed+iSize<=SPH_CACHE_WRITE );
 
-	memcpy ( pPool, pData, iSize );
-	pPool += iSize;
-	poolUsed += iSize;
-	pos += 2*iSize;
+	memcpy ( m_pPool, pData, iSize );
+	m_pPool += iSize;
+	m_iPoolUsed += iSize;
+	m_iPos += 2*iSize;
 }
 
-void CSphWriter_VLN::zipInts ( CSphVector<DWORD> * data )
+
+void CSphWriter_VLN::ZipInts ( CSphVector<DWORD> * data )
 {
 	register DWORD * p = &((*data)[0]);
 	register int n = data->GetLength (), b;
 	DWORD v;
 
-	while (n-- > 0) {
+	while ( n-->0 )
+	{
 		v = *p++;
-		do {
+		do
+		{
 			b = v & 0x07;
 			v >>= 3;
-			if (v) b |= 0x08;
-			putNibble(b);
-		} while (v);
+			if ( v )
+				b |= 0x08;
+			PutNibble ( b );
+		} while ( v );
 	}
 }
 
-void CSphWriter_VLN::flush()
+
+void CSphWriter_VLN::Flush()
 {
 	PROFILE ( write_hits );
-	::write(fd, pool, poolUsed);
-	if (poolOdd) pos++;
-	poolUsed = 0;
-	poolOdd = 0;
-	pPool = &pool[0];
+
+	::write ( m_iFD, m_dPool, m_iPoolUsed );
+
+	if ( m_iPoolOdd )
+		m_iPos++;
+	m_iPoolUsed = 0;
+	m_iPoolOdd = 0;
+	m_pPool = m_dPool;
 }
 
-void CSphWriter_VLN::seek(int pos)
+
+void CSphWriter_VLN::SeekTo ( SphOffset_t iPos )
 {
 	BYTE b;
 
-	flush();
-	lseek(fd, pos >> 1, SEEK_SET);
-	if (pos & 1) {
-		read(fd, &b, 1);
-		lseek(fd, pos >> 1, SEEK_SET);
-		putNibble(b & 0x0f);
+	Flush ();
+	::xlseek ( m_iFD, iPos>>1, SEEK_SET );
+	if ( iPos&1 )
+	{
+		::read ( m_iFD, &b, 1 );
+		::xlseek ( m_iFD, iPos>>1, SEEK_SET );
+		PutNibble ( b & 0x0f );
 	}
-	this->pos = pos;
+	m_iPos = iPos;
 }
 
-// *** BIT INPUT FROM FILE ***
+///////////////////////////////////////////////////////////////////////////////
+// BIT-ENCODED FILE INPUT
+///////////////////////////////////////////////////////////////////////////////
 
-CSphReader_VLN::CSphReader_VLN(char *name)
+CSphReader_VLN::CSphReader_VLN ( char * sName )
+	: m_iFD ( 0 )
+	, m_iPos ( 0 )
+	, m_iFilePos ( 0 )
+	, m_iBufPos ( 0 )
+	, m_iBufOdd ( 0 )
+	, m_iBufUsed ( 0 )
 {
-	this->name = sphDup(name);
-	this->bufSize = 4096; // FIXME?
-	this->buf = (BYTE*) sphMalloc ( this->bufSize );
-	this->fd = this->pos = this->filePos = this->bufPos = this->bufOdd = this->bufUsed = 0;
+	m_sName = sphDup ( sName );
+	m_iBufSize = 4096; // FIXME?
+	m_pBuf = new BYTE [ m_iBufSize ];
 }
 
-CSphReader_VLN::~CSphReader_VLN()
+
+CSphReader_VLN::~CSphReader_VLN ()
 {
-	sphFree(this->name);
+	SafeDeleteArray ( m_pBuf );
+	sphFree ( m_sName );
 }
 
-int CSphReader_VLN::open()
+
+int CSphReader_VLN::OpenFile ()
 {
-	if (this->fd) return 1;
-	this->fd = ::open(this->name, O_RDONLY | SPH_BINARY);
-	return this->fd ? 1 : 0;
+	if ( !m_iFD )
+		m_iFD = ::open ( m_sName, O_RDONLY | SPH_BINARY );
+	return m_iFD;
 }
 
-void CSphReader_VLN::close()
-{
-	if (!this->fd) return;
-	::close(this->fd);
-	this->fd = 0;
-}
 
-void CSphReader_VLN::seek(int pos)
+void CSphReader_VLN::CloseFile ()
 {
-	this->pos = pos;
-	this->bufUsed = 0;
-}
-
-void CSphReader_VLN::cache()
-{
-	if (this->filePos != (this->pos >> 1)) {
-		::lseek(fd, (this->pos >> 1), SEEK_SET);
-		this->filePos = (this->pos >> 1);
-	}
-	this->bufPos = 0;
-	this->bufUsed = ::read(fd, this->buf, this->bufSize);
-	this->bufOdd = (this->pos & 1);
-	this->filePos += this->bufUsed;
-}
-
-int CSphReader_VLN::getNibble()
-{
-	if (this->bufPos >= this->bufUsed) this->cache();
-	this->pos++;
-	if (this->bufOdd) {
-		this->bufOdd = 0;
-		return (this->buf[this->bufPos++] & 0x0f);
-	} else {
-		this->bufOdd = 1;
-		return (this->buf[this->bufPos] >> 4);
+	if ( m_iFD )
+	{
+		::close ( m_iFD );
+		m_iFD = 0;
 	}
 }
+
+
+void CSphReader_VLN::SeekTo ( SphOffset_t iPos )
+{
+	m_iPos = iPos;
+	m_iBufUsed = 0;
+}
+
+
+void CSphReader_VLN::UpdateCache ()
+{
+	if ( m_iFilePos != (m_iPos>>1) )
+	{
+		m_iFilePos = m_iPos>>1;
+		::xlseek ( m_iFD, m_iFilePos, SEEK_SET );
+	}
+	m_iBufPos = 0;
+	m_iBufUsed = ::read ( m_iFD, m_pBuf, m_iBufSize );
+	m_iBufOdd = ( m_iPos & 1 ) ? 1 : 0;
+	m_iFilePos += m_iBufUsed;
+}
+
+int CSphReader_VLN::GetNibble ()
+{
+	if ( m_iBufPos>=m_iBufUsed )
+		UpdateCache ();
+
+	m_iPos++;
+	if ( m_iBufOdd )
+	{
+		m_iBufOdd = 0;
+		return ( m_pBuf [ m_iBufPos++ ] & 0x0f );
+	} else
+	{
+		m_iBufOdd = 1;
+		return ( m_pBuf [ m_iBufPos ] >> 4 );
+	}
+}
+
 
 void CSphReader_VLN::GetRawBytes ( void * pData, int iSize )
 {
-	assert ( !bufOdd );
+	assert ( !m_iBufOdd );
 
-	if ( bufPos+iSize>bufUsed )
-		cache ();
-	assert ( (bufPos+iSize)<bufUsed );
+	if ( m_iBufPos+iSize>m_iBufUsed )
+		UpdateCache ();
+	assert ( (m_iBufPos+iSize)<m_iBufUsed );
 
-	memcpy ( pData, buf+bufPos, iSize );
-	bufPos += iSize;
-	pos += 2*iSize;
+	memcpy ( pData, m_pBuf+m_iBufPos, iSize );
+	m_iBufPos += iSize;
+	m_iPos += 2*iSize;
 }
 
-void CSphReader_VLN::getbytes(void *data, int size)
+
+void CSphReader_VLN::GetBytes ( void *data, int size )
 {
-	BYTE *b = (BYTE*)data;
+	BYTE * b = (BYTE*) data;
 
-	while (size-- > 0) *b++ = (this->getNibble() << 4) + this->getNibble();
+	while ( size-->0 )
+		*b++ = (GetNibble()<<4) + GetNibble();
 }
 
-int CSphReader_VLN::unzipInt()
+
+int CSphReader_VLN::UnzipInt ()
 {
 	register int b, offset = 0;
 	register DWORD v = 0;
 
-	do {
-		b = getNibble();
-		v += ((b & 0x07) << offset);
+	do
+	{
+		b = GetNibble ();
+		v += ( (b&0x07) << offset );
 		offset += 3;
-	} while (b & 0x08);
+	} while ( b&0x08 );
 	return v;
 }
 
-void CSphReader_VLN::unzipInts ( CSphVector<DWORD> *data )
+
+void CSphReader_VLN::UnzipInts ( CSphVector<DWORD> * pData )
 {
 	register int i = 0;
-
-	while ( (i = this->unzipInt()) ) data->Add(i);
+	while ( (i=UnzipInt()) )
+		pData->Add ( i );
 }
 
-int CSphReader_VLN::decodeHits(CSphVector<DWORD> *hl)
-{
-	register int i, v = 0, n = 0;
 
-	while ( (i = this->unzipInt()) ) {
+int CSphReader_VLN::DecodeHits ( CSphVector<DWORD> * pList )
+{
+	register int i, v = 0;
+	int iStart = pList->GetLength ();
+
+	while ( (i=UnzipInt()) )
+	{
 		v += i;
-		hl->Add(v);
-		n++;
+		pList->Add ( v );
 	}
-	return n;
+
+	return pList->GetLength() - iStart;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1075,8 +1180,8 @@ int CSphIndex_VLN::open(char *ext, int mode)
 
 int CSphIndex_VLN::binsInit ()
 {
-	::lseek ( fdRaw, 0, SEEK_SET ); // FIXME
-	filePos = 0;
+	::xlseek ( fdRaw, 0, SEEK_SET ); // FIXME
+	m_iFilePos = 0;
 	return 1;
 }
 
@@ -1087,17 +1192,19 @@ void CSphIndex_VLN::binsDone ()
 
 int CSphIndex_VLN::binsReadByte(int b)
 {
-	int n;
 	BYTE r;
 
 	if ( !bins[b]->left )
 	{
-		if (filePos != bins[b]->filePos)
+		if ( m_iFilePos!=bins[b]->m_iFilePos )
 		{
-			::lseek(fdRaw, bins[b]->filePos, SEEK_SET);
-			filePos = bins[b]->filePos;
+			::xlseek ( fdRaw, bins[b]->m_iFilePos, SEEK_SET );
+			m_iFilePos = bins[b]->m_iFilePos;
 		}
-		n = Min ( bins[b]->fileLeft, bins[b]->m_iSize );
+
+		int n = bins[b]->m_iFileLeft > bins[b]->m_iSize
+			? bins[b]->m_iSize
+			: (int)bins[b]->m_iFileLeft;
 		if (n == 0)
 		{
 			bins[b]->done = 1;
@@ -1106,13 +1213,15 @@ int CSphIndex_VLN::binsReadByte(int b)
 		{
 			PROFILE ( read_hits );
 			assert ( bins[b]->data );
-			if ( ::read(fdRaw, bins[b]->data, n) != n )
+
+			if ( ::read ( fdRaw, bins[b]->data, n )!=n )
 				return -2;
 			bins[b]->left = n;
-			bins[b]->filePos += n;
-			bins[b]->fileLeft -= n;
+
+			bins[b]->m_iFilePos += n;
+			bins[b]->m_iFileLeft -= n;
 			bins[b]->pData = bins[b]->data;
-			filePos += n;
+			m_iFilePos += n;
 		}
 	}
 	if ( bins[b]->done )
@@ -1202,33 +1311,34 @@ int CSphIndex_VLN::binsRead ( int b, CSphHit * e )
 	return 1;
 }
 
-int CSphIndex_VLN::cidxCreate()
+
+int CSphIndex_VLN::cidxCreate ()
 {
-	char *tmp = (char*)malloc(strlen(filename) + 5);
-	int i;
+	char sBuf [ SPH_MAX_FILENAME_LEN ];
 
-	strcpy(tmp, filename);
-	strcat(tmp, ".spi");
-	fdIndex = new CSphWriter_VLN(tmp);
-	if (!fdIndex->open()) return 0;
+	sprintf ( sBuf, "%s.spi", this->filename );
+	fdIndex = new CSphWriter_VLN ( sBuf );
+	if ( !fdIndex->OpenFile() )
+		return 0;
 
-	strcpy(tmp, filename);
-	strcat(tmp, ".spd");
-	fdData = new CSphWriter_VLN(tmp);
-	if (!fdData->open()) return 0;
+	sprintf ( sBuf, "%s.spd", this->filename );
+	fdData = new CSphWriter_VLN ( sBuf );
+	if ( !fdData->OpenFile() )
+	{
+		SafeDelete ( fdIndex );
+		return 0;
+	}
 
 	// put dummy byte (otherwise offset would start from 0, first delta would be 0
 	// and VLB encoding of offsets would fuckup)
 	BYTE bDummy = 1;
-	fdData->putbytes ( &bDummy, 1 );
-
-	free(tmp);
+	fdData->PutBytes ( &bDummy, 1 );
 
 	vChunk = new CSphVector<DWORD>();
 	vChunkHeader = new CSphVector<DWORD>();
 	vIndexPage = new CSphVector<DWORD>();
 
-	for (i = 0; i < SPH_CLOG_DIR_PAGES; i++)
+	for ( int i=0; i<SPH_CLOG_DIR_PAGES; i++ )
 		cidxPagesDir[i] = -1;
 	cidxDirUsed = 0;
 	cidxPageUsed = 0;
@@ -1237,7 +1347,7 @@ int CSphIndex_VLN::cidxCreate()
 	lastDocHits = 0;
 
 	fdIndex->PutRawBytes ( &m_tHeader, sizeof(m_tHeader) );
-	fdIndex->putbytes ( cidxPagesDir, sizeof(cidxPagesDir) );
+	fdIndex->PutBytes ( cidxPagesDir, sizeof(cidxPagesDir) );
 	return 1;
 }
 
@@ -1262,8 +1372,8 @@ void CSphIndex_VLN::cidxFlushChunk ()
 	if ( vChunk->GetLength() )
 	{
 		vChunkHeader->Add ( 0 );
-		fdData->zipInts ( vChunkHeader );
-		fdData->zipInts ( vChunk );
+		fdData->ZipInts ( vChunkHeader );
+		fdData->ZipInts ( vChunk );
 	}
 	vChunkHeader->Reset ();
 	vChunk->Reset ();
@@ -1275,7 +1385,7 @@ void CSphIndex_VLN::cidxFlushIndexPage ()
 	if ( vIndexPage->GetLength() )
 	{
 		vIndexPage->Add ( 0 );
-		fdIndex->zipInts ( vIndexPage );
+		fdIndex->ZipInts ( vIndexPage );
 	}
 	vIndexPage->Reset ();
 }
@@ -1284,7 +1394,8 @@ void CSphIndex_VLN::cidxFlushIndexPage ()
 void CSphIndex_VLN::cidxHit ( CSphHit * hit )
 {
 	static DWORD lastWordID = 0, lastPageID = 0xffffffff;
-	static int lastPos = 0, lastIndexPos = 0;
+	static int lastPos = 0;
+	static SphOffset_t lastIndexPos = 0;
 
 	assert ( hit->m_iWordID );
 	assert ( hit->m_iDocID );
@@ -1295,19 +1406,24 @@ void CSphIndex_VLN::cidxHit ( CSphHit * hit )
 		cidxFlushHitList();
 		cidxFlushChunk();
 
-		if (lastPageID != (hit->m_iWordID >> SPH_CLOG_BITS_PAGE)) {
+		if (lastPageID != (hit->m_iWordID >> SPH_CLOG_BITS_PAGE))
+		{
 			cidxFlushIndexPage();
 			lastPageID = hit->m_iWordID >> SPH_CLOG_BITS_PAGE;
 			lastWordID = 0;
 			lastIndexPos = 0;
-			cidxPagesDir[lastPageID] = fdIndex->pos;
+			cidxPagesDir [ lastPageID ] = fdIndex->m_iPos;
 		}
 
 		assert ( hit->m_iWordID>lastWordID );
 		vIndexPage->Add ( hit->m_iWordID - lastWordID );
-		vIndexPage->Add ( fdData->pos - lastIndexPos );
+
+		SphOffset_t iPosDelta = fdData->m_iPos - lastIndexPos;
+		assert ( iPosDelta>=0 && iPosDelta<UINT_MAX );
+		vIndexPage->Add ( (DWORD)iPosDelta );
+
 		lastWordID = hit->m_iWordID;
-		lastIndexPos = fdData->pos;
+		lastIndexPos = fdData->m_iPos;
 
 		lastDocID = 0;
 		lastDocDelta = 0;
@@ -1331,18 +1447,18 @@ void CSphIndex_VLN::cidxHit ( CSphHit * hit )
 
 void CSphIndex_VLN::cidxDone()
 {
-	fdIndex->seek(0);
+	fdIndex->SeekTo ( 0 );
 	fdIndex->PutRawBytes ( &m_tHeader, sizeof(m_tHeader) );
-	fdIndex->putbytes(cidxPagesDir, sizeof(cidxPagesDir));
+	fdIndex->PutBytes ( cidxPagesDir, sizeof(cidxPagesDir) );
 	
-	fdIndex->close();
-	fdData->close();
+	fdIndex->CloseFile ();
+	fdData->CloseFile ();
 
-	delete vChunk;
-	delete vChunkHeader;
-	delete vIndexPage;
-	delete fdIndex;
-	delete fdData;
+	SafeDelete ( vChunk );
+	SafeDelete ( vChunkHeader );
+	SafeDelete ( vIndexPage );
+	SafeDelete ( fdIndex );
+	SafeDelete ( fdData );
 }
 
 inline int encodeVLB(BYTE *buf, DWORD v)
@@ -1527,8 +1643,8 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 				PROFILE_BEGIN ( write_hits );
 				bins.Add ( new CSphBin() );
 				CSphBin * pBin = bins.Last ();
-				pBin->fileLeft = cidxWriteRawVLB ( fdRaw, dRawBlock, iRawBlockUsed );
-				if ( pBin->fileLeft<0 )
+				pBin->m_iFileLeft = cidxWriteRawVLB ( fdRaw, dRawBlock, iRawBlockUsed );
+				if ( pBin->m_iFileLeft<0 )
 				{
 					fprintf ( stderr, "ERROR: write() failed, out of disk space?\n" );
 					return 0;
@@ -1550,8 +1666,8 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 		PROFILE_BEGIN ( write_hits );
 		bins.Add ( new CSphBin() );
 		CSphBin * pBin = bins.Last ();
-		pBin->fileLeft = cidxWriteRawVLB ( fdRaw, dRawBlock, iRawBlockUsed );
-		if ( pBin->fileLeft<0 )
+		pBin->m_iFileLeft = cidxWriteRawVLB ( fdRaw, dRawBlock, iRawBlockUsed );
+		if ( pBin->m_iFileLeft<0 )
 		{
 			fprintf ( stderr, "ERROR: write() failed, out of disk space?\n" );
 			return 0;
@@ -1565,9 +1681,9 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 	// calc bin positions from their lengths
 	ARRAY_FOREACH ( i, bins )
 	{
-		bins[i]->filePos = 0;
+		bins[i]->m_iFilePos = 0;
 		if ( i )
-			bins[i]->filePos = bins[i-1]->filePos + bins[i-1]->fileLeft;
+			bins[i]->m_iFilePos = bins[i-1]->m_iFilePos + bins[i-1]->m_iFileLeft;
 	}
 
 	// deallocate raw block
@@ -1763,25 +1879,23 @@ CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 	}
 
 	// open files
-	char *tmp = (char*)sphMalloc(strlen(this->filename) + 5);
+	char sBuf [ SPH_MAX_FILENAME_LEN ];
 
-	strcpy(tmp, filename);
-	strcat(tmp, ".spi");
-	rdIndex = new CSphReader_VLN(tmp);
-	if (!rdIndex->open()) return NULL;
+	snprintf ( sBuf, sizeof(sBuf), "%s.spi", this->filename );
+	rdIndex = new CSphReader_VLN ( sBuf );
+	if ( !rdIndex->OpenFile() )
+		return NULL;
 
-	strcpy(tmp, filename);
-	strcat(tmp, ".spd");
-	rdData = new CSphReader_VLN(tmp);
-	if (!rdData->open()) return NULL;
-
-	free(tmp);
+	snprintf ( sBuf, sizeof(sBuf), "%s.spd", this->filename );
+	rdData = new CSphReader_VLN ( sBuf );
+	if ( !rdData->OpenFile() )
+		return NULL;
 
 	SPH_TIMER("open");
 
 	// load index pages directory
 	rdIndex->GetRawBytes ( &m_tHeader, sizeof(m_tHeader) );
-	rdIndex->getbytes(cidxPagesDir, sizeof(cidxPagesDir));
+	rdIndex->GetBytes ( cidxPagesDir, sizeof(cidxPagesDir) );
 	DWORD iGroupMask = (1<<m_tHeader.m_iGroupBits) - 1;
 
 	SPH_TIMER("load directory");
@@ -1805,8 +1919,8 @@ CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 
 		// check index
 		vIndexPage->Reset ();
-		rdIndex->seek ( cidxPagesDir[qwords[i].wordID >> SPH_CLOG_BITS_PAGE] );
-		rdIndex->unzipInts ( vIndexPage );
+		rdIndex->SeekTo ( cidxPagesDir[qwords[i].wordID >> SPH_CLOG_BITS_PAGE] );
+		rdIndex->UnzipInts ( vIndexPage );
 
 		wordID = chunkPos = 0;
 		for ( j=0; j<vIndexPage->GetLength()-1; )
@@ -1817,9 +1931,9 @@ CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 				continue;
 
 			// found chunk for this query word, load it
-			rdData->seek ( chunkPos );
+			rdData->SeekTo ( chunkPos );
 			vChunkHeader->Reset ();
-			rdData->unzipInts ( vChunkHeader );
+			rdData->UnzipInts ( vChunkHeader );
 
 			docID = 0;
 			for ( k=0; k<(DWORD)vChunkHeader->GetLength(); k++ )
@@ -1830,10 +1944,10 @@ CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 				switch ( (*vChunkHeader)[k] & 1)
 				{
 					case 0:
-						rdData->decodeHits ( qwords[i].hits );
+						rdData->DecodeHits ( qwords[i].hits );
 						break;
 					case 1:
-						qwords[i].hits->Add ( rdData->unzipInt() );
+						qwords[i].hits->Add ( rdData->UnzipInt() );
 						break;
 				}
 				qwords[i].hits->Add ( 0 );

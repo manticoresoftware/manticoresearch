@@ -20,7 +20,7 @@
 	// workaround Windows quirks
 	#define popen		_popen
 	#define pclose		_pclose
-	#define snprintf	_vsnprintf
+	#define snprintf	_snprintf
 
 	// 64-bit file IO
 	typedef __int64		SphOffset_t;
@@ -432,9 +432,10 @@ public:
 	int			OpenFile ();
 	void		PutBytes ( void *data, int size );
 	void		PutRawBytes ( void * pData, int iSize );
-	void		ZipInts ( CSphVector<DWORD> * data );
 	void		CloseFile ();
 	void		SeekTo ( SphOffset_t pos );
+
+	template < typename T > void ZipInts ( CSphVector<T> * data );
 
 private:
 	int			m_iFD;
@@ -460,9 +461,10 @@ public:
 	int			OpenFile ();
 	void		GetRawBytes ( void * pData, int iSize );
 	void		GetBytes ( void * data, int size );
-	int			UnzipInt ();
-	void		UnzipInts ( CSphVector<DWORD> * data);
-	int			DecodeHits ( CSphVector<DWORD> * hl );
+	DWORD		UnzipInt ();
+	SphOffset_t	UnzipOffset ();
+	void		UnzipInts ( CSphVector<DWORD> * pData );
+	int			UnzipHits ( CSphVector<DWORD> * pHits );
 	void		CloseFile ();
 	void		SeekTo ( SphOffset_t iPos );
 
@@ -493,7 +495,7 @@ struct CSphIndex_VLN : CSphIndex
 	virtual CSphQueryResult *	query ( CSphDict * dict, CSphQuery * pQuery );
 
 private:
-	char *						filename;
+	char *						m_sFilename;
 	int							fdRaw;
 	SphOffset_t					m_iFilePos;
 	CSphWriter_VLN *			fdIndex;
@@ -502,7 +504,7 @@ private:
 
 	CSphVector<DWORD> *			vChunk;
 	CSphVector<DWORD> *			vChunkHeader;
-	CSphVector<DWORD> *			vIndexPage;
+	CSphVector<SphOffset_t> *	vIndexPage;
 	SphOffset_t					cidxPagesDir [ SPH_CLOG_DIR_PAGES ];
 	int							cidxDirUsed;
 	int							cidxPageUsed;
@@ -512,7 +514,7 @@ private:
 
 	CSphIndexHeader_VLN			m_tHeader;
 
-	int							open ( char *ext, int mode );
+	int							OpenFile ( char * ext, int mode );
 
 	int							binsInit ();
 	void						binsDone ();
@@ -858,18 +860,18 @@ void CSphWriter_VLN::PutRawBytes ( void * pData, int iSize )
 }
 
 
-void CSphWriter_VLN::ZipInts ( CSphVector<DWORD> * data )
+template < typename T > void CSphWriter_VLN::ZipInts ( CSphVector<T> * data )
 {
-	register DWORD * p = &((*data)[0]);
-	register int n = data->GetLength (), b;
-	DWORD v;
+	register T * p = &((*data)[0]);
+	register int n = data->GetLength ();
+	T v;
 
 	while ( n-->0 )
 	{
 		v = *p++;
 		do
 		{
-			b = v & 0x07;
+			int b = (int)(v & 0x07);
 			v >>= 3;
 			if ( v )
 				b |= 0x08;
@@ -1014,10 +1016,26 @@ void CSphReader_VLN::GetBytes ( void *data, int size )
 }
 
 
-int CSphReader_VLN::UnzipInt ()
+DWORD CSphReader_VLN::UnzipInt ()
 {
-	register int b, offset = 0;
-	register DWORD v = 0;
+	register int offset = 0;
+	register DWORD b, v = 0;
+
+	do
+	{
+		b = GetNibble ();
+		v += ( (b&0x07) << offset );
+		offset += 3;
+	} while ( b&0x08 );
+	return v;
+}
+
+
+SphOffset_t CSphReader_VLN::UnzipOffset ()
+{
+	register int offset = 0;
+	register DWORD b = 0;
+	register SphOffset_t v = 0;
 
 	do
 	{
@@ -1031,13 +1049,13 @@ int CSphReader_VLN::UnzipInt ()
 
 void CSphReader_VLN::UnzipInts ( CSphVector<DWORD> * pData )
 {
-	register int i = 0;
+	register DWORD i = 0;
 	while ( (i=UnzipInt()) )
 		pData->Add ( i );
 }
 
 
-int CSphReader_VLN::DecodeHits ( CSphVector<DWORD> * pList )
+int CSphReader_VLN::UnzipHits ( CSphVector<DWORD> * pList )
 {
 	register int i, v = 0;
 	int iStart = pList->GetLength ();
@@ -1085,18 +1103,22 @@ CSphIndex * sphCreateIndexPhrase ( const char * sFilename )
 }
 
 
-CSphIndex_VLN::CSphIndex_VLN ( const char *filename )
+CSphIndex_VLN::CSphIndex_VLN ( const char * sName )
 {
-	this->filename = sphDup(filename);
+	m_sFilename = sphDup ( sName );
 	fdIndex = 0;
 	fdData = 0;
 	fdRaw = 0;
+
+	vChunk = NULL;
+	vChunkHeader = NULL;
+	vIndexPage = NULL;
 }
 
 
-CSphIndex_VLN::~CSphIndex_VLN()
+CSphIndex_VLN::~CSphIndex_VLN ()
 {
-	sphFree(filename);
+	sphFree ( m_sFilename );
 }
 
 
@@ -1171,13 +1193,11 @@ void sphSortHits ( CSphHit * s, int n )
 	}
 }
 
-int CSphIndex_VLN::open(char *ext, int mode)
+int CSphIndex_VLN::OpenFile ( char * ext, int mode )
 {
-	char *tmp = (char*)malloc(strlen(filename) + strlen(ext) + 1);
-
-	strcpy(tmp, filename);
-	strcat(tmp, ext);
-	return ::open(tmp, mode | SPH_BINARY, 0644);
+	char sBuf [ SPH_MAX_FILENAME_LEN ];
+	snprintf ( sBuf, sizeof(sBuf), "%s.%s", m_sFilename, ext );
+	return ::open ( sBuf, mode | SPH_BINARY, 0644 );
 }
 
 int CSphIndex_VLN::binsInit ()
@@ -1318,12 +1338,12 @@ int CSphIndex_VLN::cidxCreate ()
 {
 	char sBuf [ SPH_MAX_FILENAME_LEN ];
 
-	sprintf ( sBuf, "%s.spi", this->filename );
+	sprintf ( sBuf, "%s.spi", m_sFilename );
 	fdIndex = new CSphWriter_VLN ( sBuf );
 	if ( !fdIndex->OpenFile() )
 		return 0;
 
-	sprintf ( sBuf, "%s.spd", this->filename );
+	sprintf ( sBuf, "%s.spd", m_sFilename );
 	fdData = new CSphWriter_VLN ( sBuf );
 	if ( !fdData->OpenFile() )
 	{
@@ -1338,7 +1358,7 @@ int CSphIndex_VLN::cidxCreate ()
 
 	vChunk = new CSphVector<DWORD>();
 	vChunkHeader = new CSphVector<DWORD>();
-	vIndexPage = new CSphVector<DWORD>();
+	vIndexPage = new CSphVector<SphOffset_t>();
 
 	for ( int i=0; i<SPH_CLOG_DIR_PAGES; i++ )
 		cidxPagesDir[i] = -1;
@@ -1417,12 +1437,10 @@ void CSphIndex_VLN::cidxHit ( CSphHit * hit )
 			cidxPagesDir [ lastPageID ] = fdIndex->m_iPos;
 		}
 
-		assert ( hit->m_iWordID>lastWordID );
+		assert ( hit->m_iWordID > lastWordID );
+		assert ( fdData->m_iPos > lastIndexPos );
 		vIndexPage->Add ( hit->m_iWordID - lastWordID );
-
-		SphOffset_t iPosDelta = fdData->m_iPos - lastIndexPos;
-		assert ( iPosDelta>=0 && iPosDelta<UINT_MAX );
-		vIndexPage->Add ( (DWORD)iPosDelta );
+		vIndexPage->Add ( fdData->m_iPos - lastIndexPos );
 
 		lastWordID = hit->m_iWordID;
 		lastIndexPos = fdData->m_iPos;
@@ -1573,7 +1591,8 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 	pSource->setDict ( pDict );
 
 	// create raw log
-	if (!( fdRaw = this->open ( ".spr", O_CREAT | O_RDWR | O_TRUNC ) )) return 0;
+	if (!( fdRaw = OpenFile ( "spr", O_CREAT | O_RDWR | O_TRUNC ) ))
+		return 0;
 
 	// adjust memory requirements
 	const int MIN_MEM_LIMIT = sizeof(CSphHit)*1048576;
@@ -1697,7 +1716,7 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 
 	// reopen raw log as read-only
 	::close ( fdRaw );
-	if ( !(fdRaw = this->open(".spr", O_RDONLY)) )
+	if (!( fdRaw = OpenFile ( "spr", O_RDONLY ) ))
 		return 0;
 
 	// create new compressed index
@@ -1772,13 +1791,9 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 	cidxDone ();
 
 	// unlink raw log
-	char sTmp [ SPH_MAX_FILENAME_LEN+1 ];
-
-	strncpy ( sTmp, filename, SPH_MAX_FILENAME_LEN );
-	strncat ( sTmp, ".spr", SPH_MAX_FILENAME_LEN );
-	sTmp [ SPH_MAX_FILENAME_LEN ] = '\0';
-
-	unlink ( sTmp );
+	char sBuf [ SPH_MAX_FILENAME_LEN+1 ];
+	snprintf ( sBuf, sizeof(sBuf), "%s.spr", m_sFilename );
+	unlink ( sBuf );
 
 	PROFILE_END ( invert_hits );
 	PROFILER_DONE ();
@@ -1883,12 +1898,12 @@ CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 	// open files
 	char sBuf [ SPH_MAX_FILENAME_LEN ];
 
-	snprintf ( sBuf, sizeof(sBuf), "%s.spi", this->filename );
+	snprintf ( sBuf, sizeof(sBuf), "%s.spi", m_sFilename );
 	rdIndex = new CSphReader_VLN ( sBuf );
 	if ( !rdIndex->OpenFile() )
 		return NULL;
 
-	snprintf ( sBuf, sizeof(sBuf), "%s.spd", this->filename );
+	snprintf ( sBuf, sizeof(sBuf), "%s.spd", m_sFilename );
 	rdData = new CSphReader_VLN ( sBuf );
 	if ( !rdData->OpenFile() )
 		return NULL;
@@ -1903,7 +1918,7 @@ CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 	SPH_TIMER("load directory");
 
 	// init lists
-	vIndexPage = new CSphVector<DWORD>();
+	assert ( !vIndexPage );
 	vChunkHeader = new CSphVector<DWORD>();
 
 	// load match list for each query word
@@ -1920,16 +1935,23 @@ CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 		qwords[i].newLists();
 
 		// check index
-		vIndexPage->Reset ();
-		rdIndex->SeekTo ( cidxPagesDir[qwords[i].wordID >> SPH_CLOG_BITS_PAGE] );
-		rdIndex->UnzipInts ( vIndexPage );
-
 		wordID = 0;
 		SphOffset_t iChunkPos = 0;
-		for ( j=0; j<vIndexPage->GetLength()-1; )
+		rdIndex->SeekTo ( cidxPagesDir[qwords[i].wordID >> SPH_CLOG_BITS_PAGE] );
+
+		while ( 1 )
 		{
-			wordID += (*vIndexPage) [ j++ ];
-			iChunkPos += (*vIndexPage) [ j++ ];
+			// unpack next word ID
+			DWORD iDeltaWord = rdIndex->UnzipInt();
+			if ( !iDeltaWord )
+				break;
+			wordID += iDeltaWord;
+
+			// unpack next offset
+			SphOffset_t iDeltaOffset = rdIndex->UnzipOffset ();
+			assert ( iDeltaOffset );
+			iChunkPos += iDeltaOffset;
+
 			if ( wordID!=qwords[i].wordID )
 				continue;
 
@@ -1947,7 +1969,7 @@ CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 				switch ( (*vChunkHeader)[k] & 1)
 				{
 					case 0:
-						rdData->DecodeHits ( qwords[i].hits );
+						rdData->UnzipHits ( qwords[i].hits );
 						break;
 					case 1:
 						qwords[i].hits->Add ( rdData->UnzipInt() );

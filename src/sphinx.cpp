@@ -24,14 +24,14 @@
 
 	// 64-bit file IO
 	typedef __int64		SphOffset_t;
-	#define xlseek		_lseeki64
+	#define sphSeek		_lseeki64
 #else
 	#include <unistd.h>
 	#include <sys/time.h>
 
 	// 64-bit file IO
 	typedef off_t		SphOffset_t;
-	#define xlseek		lseek
+	#define sphSeek		lseek
 #endif
 
 #if USE_MYSQL
@@ -895,14 +895,15 @@ void CSphWriter_VLN::Flush()
 
 void CSphWriter_VLN::SeekTo ( SphOffset_t iPos )
 {
+	assert ( iPos>=0 );
 	BYTE b;
 
 	Flush ();
-	::xlseek ( m_iFD, iPos>>1, SEEK_SET );
+	sphSeek ( m_iFD, iPos>>1, SEEK_SET );
 	if ( iPos&1 )
 	{
 		::read ( m_iFD, &b, 1 );
-		::xlseek ( m_iFD, iPos>>1, SEEK_SET );
+		sphSeek ( m_iFD, iPos>>1, SEEK_SET );
 		PutNibble ( b & 0x0f );
 	}
 	m_iPos = iPos;
@@ -953,6 +954,7 @@ void CSphReader_VLN::CloseFile ()
 
 void CSphReader_VLN::SeekTo ( SphOffset_t iPos )
 {
+	assert ( iPos>=0 );
 	m_iPos = iPos;
 	m_iBufUsed = 0;
 }
@@ -963,7 +965,7 @@ void CSphReader_VLN::UpdateCache ()
 	if ( m_iFilePos != (m_iPos>>1) )
 	{
 		m_iFilePos = m_iPos>>1;
-		::xlseek ( m_iFD, m_iFilePos, SEEK_SET );
+		sphSeek ( m_iFD, m_iFilePos, SEEK_SET );
 	}
 	m_iBufPos = 0;
 	m_iBufUsed = ::read ( m_iFD, m_pBuf, m_iBufSize );
@@ -1180,7 +1182,7 @@ int CSphIndex_VLN::open(char *ext, int mode)
 
 int CSphIndex_VLN::binsInit ()
 {
-	::xlseek ( fdRaw, 0, SEEK_SET ); // FIXME
+	sphSeek ( fdRaw, 0, SEEK_SET ); // FIXME
 	m_iFilePos = 0;
 	return 1;
 }
@@ -1198,7 +1200,7 @@ int CSphIndex_VLN::binsReadByte(int b)
 	{
 		if ( m_iFilePos!=bins[b]->m_iFilePos )
 		{
-			::xlseek ( fdRaw, bins[b]->m_iFilePos, SEEK_SET );
+			sphSeek ( fdRaw, bins[b]->m_iFilePos, SEEK_SET );
 			m_iFilePos = bins[b]->m_iFilePos;
 		}
 
@@ -1840,7 +1842,7 @@ CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 	CSphQueryParser *qp;
 	CSphReader_VLN *rdIndex, *rdData;
 	CSphQueryWord qwords[SPH_MAX_QUERY_WORDS];
-	int i, j, nwords, chunkPos, weights [ SPH_MAX_FIELD_COUNT ], imin, nweights;
+	int i, j, nwords, weights [ SPH_MAX_FIELD_COUNT ], imin, nweights;
 	DWORD *pHits[SPH_MAX_QUERY_WORDS], *pdocs[SPH_MAX_QUERY_WORDS],
 		wordID, docID, pmin, k;
 
@@ -1922,16 +1924,17 @@ CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 		rdIndex->SeekTo ( cidxPagesDir[qwords[i].wordID >> SPH_CLOG_BITS_PAGE] );
 		rdIndex->UnzipInts ( vIndexPage );
 
-		wordID = chunkPos = 0;
+		wordID = 0;
+		SphOffset_t iChunkPos = 0;
 		for ( j=0; j<vIndexPage->GetLength()-1; )
 		{
 			wordID += (*vIndexPage) [ j++ ];
-			chunkPos += (*vIndexPage) [ j++ ];
+			iChunkPos += (*vIndexPage) [ j++ ];
 			if ( wordID!=qwords[i].wordID )
 				continue;
 
 			// found chunk for this query word, load it
-			rdData->SeekTo ( chunkPos );
+			rdData->SeekTo ( iChunkPos );
 			vChunkHeader->Reset ();
 			rdData->UnzipInts ( vChunkHeader );
 

@@ -864,7 +864,6 @@ template < typename T > void CSphWriter_VLN::ZipInts ( CSphVector<T> * data )
 	register int n = data->GetLength ();
 	T v;
 
-	assert ( data[n-1]==0 );
 	while ( n-->0 )
 	{
 		v = *p++;

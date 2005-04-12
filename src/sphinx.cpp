@@ -1036,7 +1036,7 @@ SphOffset_t CSphReader_VLN::UnzipOffset ()
 	do
 	{
 		b = GetNibble ();
-		v += ( (b&0x07) << offset );
+		v += ( SphOffset_t(b&0x07) << offset );
 		offset += 3;
 	} while ( b&0x08 );
 	return v;

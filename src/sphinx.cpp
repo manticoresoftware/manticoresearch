@@ -21,16 +21,11 @@
 	#define popen		_popen
 	#define pclose		_pclose
 	#define snprintf	_snprintf
-
-	// 64-bit file IO
-	typedef __int64		SphOffset_t;
 	#define sphSeek		_lseeki64
 #else
 	#include <unistd.h>
 	#include <sys/time.h>
 
-	// 64-bit file IO
-	typedef off_t		SphOffset_t;
 	#define sphSeek		lseek
 #endif
 

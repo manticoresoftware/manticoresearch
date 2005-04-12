@@ -488,7 +488,7 @@ int main ( int argc, char ** argv )
 	fTime = sphLongTimer () - fTime;
 
 	fprintf ( stdout,
-		"indexed %d bytes, %d docs\n"
+		"indexed %lld bytes, %d docs\n"
 		"indexed in %.3f sec, %.2f bytes/sec, %.2f docs/sec\n",
 		pStats->m_iTotalBytes, pStats->m_iTotalDocuments, fTime, 
 		pStats->m_iTotalBytes/fTime, pStats->m_iTotalDocuments/fTime );

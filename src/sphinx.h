@@ -31,9 +31,12 @@
 	#include <windows.h>
 
 	#define strcasecmp			strcmpi
+
+	typedef __int64				SphOffset_t;
 #else
 	typedef unsigned int		DWORD;
 	typedef unsigned char		BYTE;
+	typedef off_t				SphOffset_t;
 #endif
 
 /////////////////////////////////////////////////////////////////////////////
@@ -293,17 +296,17 @@ struct CSphHit
 struct CSphSourceStats
 {
 	/// how much documents
-	int		m_iTotalDocuments;
+	int				m_iTotalDocuments;
 
 	/// how much bytes
-	int		m_iTotalBytes;
+	SphOffset_t		m_iTotalBytes;
 
 
 	/// ctor
-			CSphSourceStats () :
-				m_iTotalDocuments ( 0 ),
-				m_iTotalBytes ( 0 )
-			{};
+	CSphSourceStats () :
+		m_iTotalDocuments ( 0 ),
+		m_iTotalBytes ( 0 )
+	{};
 };
 
 

@@ -506,8 +506,6 @@ private:
 	CSphVector<DWORD> *			vChunkHeader;
 	CSphVector<SphOffset_t> *	vIndexPage;
 	SphOffset_t					cidxPagesDir [ SPH_CLOG_DIR_PAGES ];
-	int							cidxDirUsed;
-	int							cidxPageUsed;
 	int							lastDocDelta;
 	DWORD						lastDocID;
 	int							lastDocHits;
@@ -866,6 +864,7 @@ template < typename T > void CSphWriter_VLN::ZipInts ( CSphVector<T> * data )
 	register int n = data->GetLength ();
 	T v;
 
+	assert ( data[n-1]==0 );
 	while ( n-->0 )
 	{
 		v = *p++;
@@ -1362,8 +1361,6 @@ int CSphIndex_VLN::cidxCreate ()
 
 	for ( int i=0; i<SPH_CLOG_DIR_PAGES; i++ )
 		cidxPagesDir[i] = -1;
-	cidxDirUsed = 0;
-	cidxPageUsed = 0;
 
 	lastDocDelta = 0;
 	lastDocHits = 0;

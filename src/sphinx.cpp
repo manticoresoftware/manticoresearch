@@ -72,12 +72,19 @@ STATIC_SIZE_ASSERT ( SphOffset_t, 8 );
 enum ESphTimer
 {
 	TIMER_root = 0,
+
 	TIMER_collect_hits,
 	TIMER_sort_hits,
 	TIMER_write_hits,
 	TIMER_source_xmlpipe,
 	TIMER_invert_hits,
 	TIMER_read_hits,
+
+	TIMER_query_init,
+	TIMER_query_load_dir,
+	TIMER_query_load_hits,
+	TIMER_query_match,
+	TIMER_query_sort,
 
 	TIMERS_TOTAL
 };
@@ -86,12 +93,21 @@ enum ESphTimer
 static const char * const g_dTimerNames [ TIMERS_TOTAL ] =
 {
 	"root",
+
+	// indexer
 	"collect_hits",
 	"sort_hits",
 	"write_hits",
 	"source_xmlpipe",
 	"invert_hits",
-	"read_hits"
+	"read_hits",
+
+	// searcher
+	"query_init",
+	"query_load_dir",
+	"query_load_hits",
+	"query_match",
+	"query_sort"
 };
 
 
@@ -196,7 +212,7 @@ void sphProfilerPop ( ESphTimer eTimer )
 
 void sphProfilerDone ()
 {
-	assert ( g_iTimers==1 );
+	assert ( g_iTimers>0 );
 	assert ( g_iTimer==0 );
 
 	// stop root timer
@@ -1857,21 +1873,12 @@ CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 	DWORD *pHits[SPH_MAX_QUERY_WORDS], *pdocs[SPH_MAX_QUERY_WORDS],
 		wordID, docID, pmin, k;
 
+	PROFILER_INIT ();
+	PROFILE_BEGIN ( query_init );
+
 	// create result and start timing
 	CSphQueryResult * pResult = new CSphQueryResult();
 	pResult->m_fQueryTime = -sphLongTimer ();
-
-	// easy internal profiler
-	#ifdef SPH_SEARCH_TIMER
-		float t1, t2;
-		t1 = sphLongTimer ();
-		#define SPH_TIMER(_msg) \
-			t2 = sphLongTimer(); \
-			fprintf ( stderr, "DEBUG: %s %.2f\n", _msg, t2-t1 ); \
-			t1 = t2;
-	#else
-		#define SPH_TIMER(_msg)
-	#endif
 
 	// split query into words
 	qp = new CSphQueryParser ( dict, pQuery->m_sQuery );
@@ -1904,14 +1911,16 @@ CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 	if ( !rdData->OpenFile() )
 		return NULL;
 
-	SPH_TIMER("open");
+	PROFILE_END ( query_init );
+	PROFILE_BEGIN ( query_load_dir );
 
 	// load index pages directory
 	rdIndex->GetRawBytes ( &m_tHeader, sizeof(m_tHeader) );
 	rdIndex->GetBytes ( cidxPagesDir, sizeof(cidxPagesDir) );
 	DWORD iGroupMask = (1<<m_tHeader.m_iGroupBits) - 1;
 
-	SPH_TIMER("load directory");
+	PROFILE_END ( query_load_dir );
+	PROFILE_BEGIN ( query_load_hits );
 
 	// init lists
 	assert ( !vIndexPage );
@@ -1979,8 +1988,6 @@ CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 		}
 	}
 
-	SPH_TIMER("load hit lists");
-
 	// close files
 	delete rdIndex;
 	delete rdData;
@@ -1997,6 +2004,9 @@ CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 	qsort ( qwords, nwords, sizeof(CSphQueryWord), cmpQueryWord );
 	if ( !qwords[0].hits->GetLength() )
 		return pResult;
+
+	PROFILE_END ( query_load_hits );
+	PROFILE_BEGIN ( query_match );
 
 	// build weights
 	nweights = m_tHeader.m_iFieldCount;
@@ -2237,11 +2247,15 @@ CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 		}
 	}
 
-	SPH_TIMER("find matches");
+	PROFILE_END ( query_match );
+	PROFILE_BEGIN ( query_sort );
 
 	pResult->m_dMatches.Sort ( CmpMatch_fn() );
 
-	SPH_TIMER("weight sort");
+	PROFILE_END ( query_sort );
+
+	PROFILER_DONE ();
+	PROFILE_SHOW ();
 
 	// query timer
 	pResult->m_fQueryTime += sphLongTimer ();

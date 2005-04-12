@@ -73,18 +73,9 @@ enum ESphTimer
 {
 	TIMER_root = 0,
 
-	TIMER_collect_hits,
-	TIMER_sort_hits,
-	TIMER_write_hits,
-	TIMER_source_xmlpipe,
-	TIMER_invert_hits,
-	TIMER_read_hits,
-
-	TIMER_query_init,
-	TIMER_query_load_dir,
-	TIMER_query_load_hits,
-	TIMER_query_match,
-	TIMER_query_sort,
+	#define DECLARE_TIMER(_arg) TIMER_##_arg
+	#include "sphinxtimers.h"
+	#undef DECLARE_TIMER
 
 	TIMERS_TOTAL
 };
@@ -94,20 +85,9 @@ static const char * const g_dTimerNames [ TIMERS_TOTAL ] =
 {
 	"root",
 
-	// indexer
-	"collect_hits",
-	"sort_hits",
-	"write_hits",
-	"source_xmlpipe",
-	"invert_hits",
-	"read_hits",
-
-	// searcher
-	"query_init",
-	"query_load_dir",
-	"query_load_hits",
-	"query_match",
-	"query_sort"
+	#define DECLARE_TIMER(_arg) #_arg
+	#include "sphinxtimers.h"
+	#undef DECLARE_TIMER
 };
 
 

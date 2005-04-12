@@ -229,7 +229,8 @@ void stem_en ( BYTE * word )
 	// *** STEP 1B ***
 
 	i = 0;
-	while (1) {
+	for ( ;; )
+	{
 		if (SUFF3('e','e','d')) {
 			if (len-3 >= r1) len--;
 			break;
@@ -270,7 +271,8 @@ void stem_en ( BYTE * word )
 
 	// *** STEP 2 ***
 
-	while (1) {
+	for ( ;; )
+	{
 		if (stem_en_suffix(word, &len, r1, en_step2, sizeof(en_step2)/sizeof(stem_table)))
 			break;
 		if (len-3 >= r1 && SUFF3('o','g','i')) { len -= 1; break; }

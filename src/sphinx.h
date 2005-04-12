@@ -353,7 +353,7 @@ struct CSphSource_Document : CSphSource
 	virtual int				next ();
 
 	/// this is what we can call for my descendants
-	virtual void			wordCallback ( char * word ) {}
+	virtual void			wordCallback ( char * word ) { word = word; }
 
 	/// field data getter
 	/// to be implemented by descendants

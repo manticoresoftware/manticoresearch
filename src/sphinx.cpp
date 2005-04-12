@@ -377,8 +377,8 @@ struct CSphBin
 	int left, done, state;
 	DWORD lastGroupID, lastDocID, lastWordID, lastPos; // FIXME! make it a hit
 
-	SphOffset_t		m_iFilePos;
-	SphOffset_t		m_iFileLeft;
+	SphOffset_t		m_iFilePos;		///< bin offset in raw hits log
+	int				m_iFileLeft;	///< how much data is still unread from raw log via this bin
 
 	CSphBin ()
 		: m_iFilePos ( 0 )
@@ -566,22 +566,20 @@ void sphDie(char *message, ...)
 }
 
 
-void *sphMalloc(size_t size)
+void * sphMalloc ( size_t size )
 {
-	void *result;
-
-	if (!(result = ::malloc(size)))
-		sphDie("FATAL: out of memory (unable to allocate %d bytes).\n", size);
+	void * result = ::malloc ( size );
+	if ( !result )
+		sphDie ( "FATAL: out of memory (unable to allocate %d bytes).\n", size );
 	return result;
 }
 
 
-void *sphRealloc(void *ptr, size_t size)
+void * sphRealloc ( void * ptr, size_t size )
 {
-	void *result;
-
-	if (!(result = ::realloc(ptr, size)))
-		sphDie("FATAL: out of memory (unable to reallocate %d bytes).\n", size);
+	void * result = ::realloc ( ptr, size );
+	if ( !result )
+		sphDie ( "FATAL: out of memory (unable to reallocate %d bytes).\n", size );
 	return result;
 }
 
@@ -823,7 +821,7 @@ void CSphWriter_VLN::PutNibble ( int data )
 	} else
 	{
 		m_iPoolOdd = 1;
-		*m_pPool = data<<4;
+		*m_pPool = (BYTE)(data<<4);
 		m_iPoolUsed++;
 	}
 	m_iPos++;
@@ -1010,7 +1008,7 @@ void CSphReader_VLN::GetBytes ( void *data, int size )
 	BYTE * b = (BYTE*) data;
 
 	while ( size-->0 )
-		*b++ = (GetNibble()<<4) + GetNibble();
+		*b++ = (BYTE)( (GetNibble()<<4) + GetNibble() );
 }
 
 
@@ -1048,7 +1046,7 @@ SphOffset_t CSphReader_VLN::UnzipOffset ()
 void CSphReader_VLN::UnzipInts ( CSphVector<DWORD> * pData )
 {
 	register DWORD i = 0;
-	while ( (i=UnzipInt()) )
+	while (( i=UnzipInt() ))
 		pData->Add ( i );
 }
 
@@ -1058,7 +1056,7 @@ int CSphReader_VLN::UnzipHits ( CSphVector<DWORD> * pList )
 	register int i, v = 0;
 	int iStart = pList->GetLength ();
 
-	while ( (i=UnzipInt()) )
+	while (( i=UnzipInt() ))
 	{
 		v += i;
 		pList->Add ( v );
@@ -1277,7 +1275,7 @@ int CSphIndex_VLN::binsRead ( int b, CSphHit * e )
 		return 1;
 	}
 
-	while ( true )
+	for ( ;; )
 	{
 		// unexpected EOB
 		if ( (r = binsReadVLB(b)) == 0xffffffffUL )
@@ -1587,7 +1585,8 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 	pSource->setDict ( pDict );
 
 	// create raw log
-	if (!( fdRaw = OpenFile ( "spr", O_CREAT | O_RDWR | O_TRUNC ) ))
+	fdRaw = OpenFile ( "spr", O_CREAT | O_RDWR | O_TRUNC );
+	if ( !fdRaw )
 		return 0;
 
 	// adjust memory requirements
@@ -1613,7 +1612,7 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 
 	// allocate raw block
 	int iRawBlockUsed = 0;
-	int iRawHits = 0;
+	SphOffset_t iRawHits = 0;
 	CSphHit * dRawBlock = new CSphHit [ iRawBlockSize ];
 	CSphHit * pRawBlock = dRawBlock;
 	assert ( dRawBlock );
@@ -1712,7 +1711,8 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 
 	// reopen raw log as read-only
 	::close ( fdRaw );
-	if (!( fdRaw = OpenFile ( "spr", O_RDONLY ) ))
+	fdRaw = OpenFile ( "spr", O_RDONLY );
+	if ( !fdRaw )
 		return 0;
 
 	// create new compressed index
@@ -1935,7 +1935,7 @@ CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 		SphOffset_t iChunkPos = 0;
 		rdIndex->SeekTo ( cidxPagesDir[qwords[i].wordID >> SPH_CLOG_BITS_PAGE] );
 
-		while ( 1 )
+		for ( ;; )
 		{
 			// unpack next word ID
 			DWORD iDeltaWord = rdIndex->UnzipInt();
@@ -2059,7 +2059,7 @@ CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 			}
 
 			k = INT_MAX;
-			while ( 1 )
+			for ( ;; )
 			{
 				// scan until next hit in this document
 				pmin = INT_MAX;
@@ -2426,11 +2426,11 @@ void CSphDict_CRC32::LoadStopwords ( const char * sFiles )
 		int iLength;
 		do
 		{
-			iLength = fread ( sBuffer, 1, sizeof(sBuffer), fp );
+			iLength = (int)fread ( sBuffer, 1, sizeof(sBuffer), fp );
 			tTokenizer.SetBuffer ( sBuffer, iLength );
 
 			BYTE * pToken;
-			while ( (pToken = tTokenizer.GetToken()) )
+			while (( pToken = tTokenizer.GetToken() ))
 				dStop.Add ( GetWordID ( pToken ) );
 		} while ( iLength );
 
@@ -2479,18 +2479,19 @@ const CSphSourceStats * CSphSource::GetStats ()
 int CSphSource_Document::next()
 {
 	BYTE **fields = NextDocument(), *data, *pData, *pWord;
-	int pos, i, j, len;
+	int pos, i, len;
 
 	if (!fields || (m_iLastID <= 0)) return 0;
 
 	m_iStats.m_iTotalDocuments++;
 	hits.Reset ();
-	for (j = 0; j < m_iFieldCount; j++)
+	for ( int j=0; j<m_iFieldCount; j++ )
 	{
-		if (!(data = fields[j]))
+		data = fields[j];
+		if ( !data )
 			continue;
 
-		i = len = strlen((char*)data);
+		i = len = (int)strlen((char*)data);
 		m_iStats.m_iTotalBytes += len;
 
 		pData = data;
@@ -2533,10 +2534,8 @@ int CSphSource_Document::GetFieldCount ()
 
 BYTE **CSphSource_Text::NextDocument()
 {
-	static BYTE *t;
-
-	if (!(t = NextText())) return NULL;
-	return &t; 
+	static BYTE * t = NextText ();
+	return t ? &t : NULL;
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -3190,7 +3189,8 @@ CSphHash * CSphConfig::loadSection ( const char * sSection, const char ** dKnown
 		}
 
 		// handle one-line pairs
-		if ( (pp = strchr(p, '=')) )
+		pp = strchr ( p, '=' );
+		if ( pp )
 		{
 			*pp++ = '\0';
 			p = rtrim ( p );
@@ -3276,7 +3276,7 @@ int CSphSource_XMLPipe::next ()
 		// index title
 		{
 			int i, iLen, iPos=1;
-			i = iLen = strlen((char*)sTitle);
+			i = iLen = (int)strlen((char*)sTitle);
 
 			// tolower, remove non-chars
 			BYTE * pData = (BYTE*)sTitle;
@@ -3325,7 +3325,7 @@ int CSphSource_XMLPipe::next ()
 	while ( hits.GetLength()<1024 ) // FIXME!
 	{
 		// skip whitespace
-		while ( true )
+		for ( ;; )
 		{
 			// suck in some data if needed
 			if ( m_pBuffer>=m_pBufferEnd )
@@ -3355,7 +3355,7 @@ int CSphSource_XMLPipe::next ()
 		BYTE * pWord = &sWord [ 0 ];
 		BYTE * pWordEnd = &sWord [ SPH_MAX_WORD_LEN ];
 
-		while ( true )
+		for ( ;; )
 		{
 			// suck in some data if needed
 			if ( m_pBuffer>=m_pBufferEnd )
@@ -3378,7 +3378,7 @@ int CSphSource_XMLPipe::next ()
 
 		// if the word is too long, skip all the remaining non-whitespace
 		if ( pWord==pWordEnd )
-			while ( true )
+			for ( ;; )
 		{
 			// suck in some data if needed
 			if ( m_pBuffer>=m_pBufferEnd )
@@ -3437,7 +3437,7 @@ int CSphSource_XMLPipe::next ()
 void CSphSource_XMLPipe::SetTag ( const char * sTag )
 {
 	m_pTag = sTag;
-	m_iTagLength = strlen ( sTag );
+	m_iTagLength = (int)strlen ( sTag );
 }
 
 
@@ -3449,7 +3449,7 @@ bool CSphSource_XMLPipe::UpdateBuffer ()
 	if ( iLeft>0 )
 		memmove ( m_sBuffer, m_pBuffer, iLeft );
 
-	int iLen = fread ( &m_sBuffer [ iLeft ], 1, sizeof(m_sBuffer)-iLeft, m_pPipe );
+	size_t iLen = fread ( &m_sBuffer [ iLeft ], 1, sizeof(m_sBuffer)-iLeft, m_pPipe );
 	m_iStats.m_iTotalBytes += iLen;
 
 	m_pBuffer = m_sBuffer;
@@ -3461,7 +3461,7 @@ bool CSphSource_XMLPipe::UpdateBuffer ()
 
 bool CSphSource_XMLPipe::SkipWhitespace ()
 {
-	while ( true )
+	for ( ;; )
 	{
 		// suck in some data if needed
 		if ( m_pBuffer>=m_pBufferEnd )

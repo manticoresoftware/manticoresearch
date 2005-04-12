@@ -238,6 +238,7 @@ DWORD CSphStopwordBuilderDict::GetWordID ( BYTE * pWord )
 
 void CSphStopwordBuilderDict::LoadStopwords ( const char * sFiles )
 {
+	sFiles = sFiles;
 }
 
 /////////////////////////////////////////////////////////////////////////////

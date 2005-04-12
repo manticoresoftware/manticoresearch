@@ -411,18 +411,16 @@ STEM_RU_FUNC_I(ru_noun)
 
 static int stem_ru_adjectival(BYTE *word, int len)
 {
-	register int i;
-
-	if ( (i = stem_ru_adj_i(word, len)) )
-		i += stem_ru_part_i(word, len-i);
+	register int i = stem_ru_adj_i(word, len);
+	if ( i )
+		i += stem_ru_part_i ( word, len-i );
 	return i;
 }
 
 static int stem_ru_verb_ov(BYTE *word, int len)
 {
-	register int i;
-
-	if ( (i = stem_ru_verb_i(word, len)) )
+	register int i = stem_ru_verb_i ( word, len );
+	if ( i )
 		if ((len>=i+2) && word[len-i-2] == RUS_O && word[len-i-1] == RUS_V) return i+2;
 	return i;
 }
@@ -470,8 +468,10 @@ void stem_ru(BYTE *word)
 	#define SUFF6(c6,c5,c4,c3,c2,c1) (len >= 6 && W(1,c1) && W(2,c2) && W(3,c3) && W(4,c4) && W(5,c5) && W(6,c6))
 	#define SUFF7(c7,c6,c5,c4,c3,c2,c1) (len >= 7 && W(1,c1) && W(2,c2) && W(3,c3) && W(4,c4) && W(5,c5) && W(6,c6) && W(7,c7))
 
-	while (1) {
-		if ( (i = stem_ru_dear_i(word, len)) ) { len -= i; break; }
+	for ( ;; )
+	{
+		i = stem_ru_dear_i ( word, len );
+		if ( i ) { len -= i; break; }
 
 		if ( C(1) == RUS_V && (len>=2) ) {
 			if (C(2) == RUS_I || C(2) == RUS_Y || C(2) == RUS_YA) { len -= 2; break; }
@@ -483,17 +483,20 @@ void stem_ru(BYTE *word)
 		if (SUFF3(RUS_V, RUS_SH, RUS_I) && (C(4) == RUS_A || C(4) == RUS_I || C(4) == RUS_Y || C(4) == RUS_YA)) { len -= 4; break; }
 		if (SUFF5(RUS_V, RUS_SH, RUS_I, RUS_S, RUS_MYA) && (C(6) == RUS_A || C(6) == RUS_I || C(6) == RUS_Y || C(6) == RUS_YA)) { len -= 6; break; }
 
-		if ( (i = stem_ru_adjectival(word, len)) ) { len -= i; break; }
+		i = stem_ru_adjectival ( word, len );
+		if ( i ) { len -= i; break; }
 
-		if (SUFF2(RUS_S, RUS_MYA) || SUFF2(RUS_S, RUS_YA)) {
+		if (SUFF2(RUS_S, RUS_MYA) || SUFF2(RUS_S, RUS_YA))
+		{
 			len -= 2;
-			if ( (i = stem_ru_adjectival(word, len)) ) { len -= i; break; }
-			if ( (i = stem_ru_verb_ov(word, len)) ) { len -= i; break; }
-		} else {
-			if ( (i = stem_ru_verb_ov(word, len)) ) { len -= i; break; }
+			i = stem_ru_adjectival ( word, len ); if ( i ) { len -= i; break; }
+			i = stem_ru_verb_ov ( word, len ); if ( i ) { len -= i; break; }
+		} else
+		{
+			i = stem_ru_verb_ov ( word, len ); if ( i ) { len -= i; break; }
 		}
 
-		if ( (i = stem_ru_noun_i(word, len)) ) { len -= i; break; }
+		i = stem_ru_noun_i ( word, len ); if ( i ) { len -= i; break; }
 		break;
 	}
 

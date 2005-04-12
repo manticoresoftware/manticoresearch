@@ -68,7 +68,7 @@ enum ESphTimer
 {
 	TIMER_root = 0,
 
-	#define DECLARE_TIMER(_arg) TIMER_##_arg
+	#define DECLARE_TIMER(_arg) TIMER_##_arg,
 	#include "sphinxtimers.h"
 	#undef DECLARE_TIMER
 
@@ -80,7 +80,7 @@ static const char * const g_dTimerNames [ TIMERS_TOTAL ] =
 {
 	"root",
 
-	#define DECLARE_TIMER(_arg) #_arg
+	#define DECLARE_TIMER(_arg) #_arg,
 	#include "sphinxtimers.h"
 	#undef DECLARE_TIMER
 };

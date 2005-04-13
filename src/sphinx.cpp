@@ -414,6 +414,8 @@ public:
 	void		UnzipInts ( CSphVector<DWORD> * pData );
 	int			UnzipHits ( CSphVector<DWORD> * pHits );
 
+	const CSphReader_VLN &	operator = ( const CSphReader_VLN & rhs );
+
 private:
 
 	int			m_iFD;
@@ -468,9 +470,18 @@ public:
 		sphFree ( m_sWord );
 	}
 
-	const CSphQueryWord & operator = ( const CSphQueryWord rhs )
+	const CSphQueryWord & operator = ( const CSphQueryWord & rhs )
 	{
-		assert ( 0 );
+		m_sWord			= sphDup ( rhs.m_sWord );
+		m_iQueryPos		= rhs.m_iQueryPos;
+		m_iWordID		= rhs.m_iWordID;
+		m_iDocs			= rhs.m_iDocs;
+		m_iHits			= rhs.m_iHits;
+		m_iDoc			= rhs.m_iDoc;
+		m_iHitPos		= rhs.m_iHitPos;
+		m_iHitlistPos	= rhs.m_iHitlistPos;
+		m_rdDoclist		= rhs.m_rdDoclist;
+		m_rdHitlist		= rhs.m_rdHitlist;
 		return *this;
 	}
 
@@ -972,6 +983,9 @@ void CSphReader_VLN::SetFile ( int iFD )
 	assert ( iFD>0 );
 	m_iFD = iFD;
 	m_iPos = 0;
+	m_iBufPos = 0;
+	m_iBufOdd = 0;
+	m_iBufUsed = 0;
 }
 
 
@@ -1089,6 +1103,14 @@ int CSphReader_VLN::UnzipHits ( CSphVector<DWORD> * pList )
 	}
 
 	return pList->GetLength() - iStart;
+}
+
+
+const CSphReader_VLN & CSphReader_VLN::operator = ( const CSphReader_VLN & rhs )
+{
+	SetFile ( rhs.m_iFD );
+	m_iPos = rhs.m_iPos;
+	return *this;
 }
 
 /////////////////////////////////////////////////////////////////////////////

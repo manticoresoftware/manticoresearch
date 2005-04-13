@@ -299,53 +299,6 @@ protected:
 	int					m_iAccum;					///< boundary token size
 };
 
-
-/// query word from the searcher's point of view
-class CSphQueryWord
-{
-public:
-	int				queryPos;
-	DWORD			wordID;
-	char *			word;
-	CSphVector<DWORD> *	hits;
-	CSphVector<DWORD> *	docs;
-
-private:
-	int				isLink;
-
-public:
-	CSphQueryWord ()
-		: word ( NULL )
-		, hits ( NULL )
-		, docs ( NULL )
-		, isLink ( 0 )
-	{
-	}
-
-	void shareListsFrom ( CSphQueryWord *qw )
-	{
-		this->hits = qw->hits;
-		this->docs = qw->docs;
-		isLink = 1;
-	}
-
-	void newLists()
-	{
-		this->hits = new CSphVector<DWORD>();
-		this->docs = new CSphVector<DWORD>();
-		isLink = 0;
-	}
-
-	~CSphQueryWord()
-	{
-		if (this->word) sphFree(this->word);
-		if (!isLink) {
-			if (this->hits) delete this->hits;
-			if (this->docs) delete this->docs;
-		}
-	}
-};
-
 /////////////////////////////////////////////////////////////////////////////
 
 /// possible bin states
@@ -426,7 +379,9 @@ public:
 	void		CloseFile ();
 	void		SeekTo ( SphOffset_t pos );
 
-	template < typename T > void ZipInts ( CSphVector<T> * data );
+	void		ZipInt ( DWORD uValue );
+	void		ZipOffset ( SphOffset_t uValue );
+	void		ZipOffsets ( CSphVector<SphOffset_t> * pData );
 
 private:
 	int			m_iFD;
@@ -442,27 +397,27 @@ private:
 
 class CSphReader_VLN
 {
-	char *		m_sName;
-
 public:
 
-				CSphReader_VLN ( char * sName );
+				CSphReader_VLN ();
 	virtual		~CSphReader_VLN ();
 
-	int			OpenFile ();
+	void		SetFile ( int iFD );
+
+	void		SeekTo ( SphOffset_t iPos );
+
 	void		GetRawBytes ( void * pData, int iSize );
 	void		GetBytes ( void * data, int size );
+
 	DWORD		UnzipInt ();
 	SphOffset_t	UnzipOffset ();
 	void		UnzipInts ( CSphVector<DWORD> * pData );
 	int			UnzipHits ( CSphVector<DWORD> * pHits );
-	void		CloseFile ();
-	void		SeekTo ( SphOffset_t iPos );
 
 private:
+
 	int			m_iFD;
 	SphOffset_t	m_iPos;
-	SphOffset_t	m_iFilePos;
 
 	int			m_iBufPos;
 	int			m_iBufOdd;
@@ -473,6 +428,79 @@ private:
 private:
 	int			GetNibble ();
 	void		UpdateCache ();
+};
+
+
+/// query word from the searcher's point of view
+class CSphQueryWord
+{
+public:
+	char *			m_sWord;		///< my copy of word
+	int				m_iQueryPos;	///< word position, from query
+	DWORD			m_iWordID;		///< word ID, from dictionary
+
+	int				m_iDocs;		///< document count, from wordlist
+	int				m_iHits;		///< hit count, from wordlist
+
+	DWORD			m_iDoc;			///< current document, from doclist
+	DWORD			m_iHitPos;		///< current hit postition, from hitlist
+
+	SphOffset_t		m_iHitlistPos;	///< current position in hitlist, from doclist
+
+	CSphReader_VLN	m_rdDoclist;	///< my doclist reader
+	CSphReader_VLN	m_rdHitlist;	///< my hitlist reader
+
+public:
+	CSphQueryWord ()
+		: m_sWord ( NULL )
+		, m_iQueryPos ( -1 )
+		, m_iWordID ( 0 )
+		, m_iDocs ( 0 )
+		, m_iHits ( 0 )
+		, m_iDoc ( 0 )
+		, m_iHitPos ( 0 )
+		, m_iHitlistPos ( 0 )
+	{
+	}
+
+	~CSphQueryWord ()
+	{	
+		sphFree ( m_sWord );
+	}
+
+	const CSphQueryWord & operator = ( const CSphQueryWord rhs )
+	{
+		assert ( 0 );
+		return *this;
+	}
+
+	void GetDoclistEntry ()
+	{
+		DWORD iDeltaDoc = m_rdDoclist.UnzipInt ();
+		if ( iDeltaDoc )
+		{
+			m_iDoc += iDeltaDoc;
+
+			SphOffset_t iDeltaPos = m_rdDoclist.UnzipOffset ();
+			assert ( iDeltaPos>0 );
+
+			m_iHitlistPos += iDeltaPos;
+			m_rdHitlist.SeekTo ( m_iHitlistPos );
+
+		} else
+		{
+			m_iDoc = 0;
+		}
+	}
+
+	void GetHitlistEntry ()
+	{
+		DWORD iDelta = m_rdHitlist.UnzipInt ();
+		if ( iDelta )
+			m_iHitPos += iDelta;
+		else
+			m_iHitPos = 0;
+	}
 };
 
 
@@ -493,13 +521,8 @@ private:
 	CSphWriter_VLN *			fdData;
 	CSphVector<CSphBin *>		bins;
 
-	CSphVector<DWORD> *			vChunk;
-	CSphVector<DWORD> *			vChunkHeader;
-	CSphVector<SphOffset_t> *	vIndexPage;
 	SphOffset_t					cidxPagesDir [ SPH_CLOG_DIR_PAGES ];
-	int							lastDocDelta;
-	DWORD						lastDocID;
-	int							lastDocHits;
+	CSphVector<SphOffset_t>		m_dDoclist;
 
 	CSphIndexHeader_VLN			m_tHeader;
 
@@ -513,9 +536,6 @@ private:
 
 	int							cidxCreate ();
 	int							cidxWriteRawVLB ( int fd, CSphHit * hit, int count );
-	void						cidxFlushHitList ();
-	void						cidxFlushChunk ();
-	void						cidxFlushIndexPage ();
 	void						cidxHit ( CSphHit * hit );
 	void						cidxDone ();
 };
@@ -847,23 +867,50 @@ void CSphWriter_VLN::PutRawBytes ( void * pData, int iSize )
 }
 
 
-template < typename T > void CSphWriter_VLN::ZipInts ( CSphVector<T> * data )
+void CSphWriter_VLN::ZipInt ( DWORD uValue )
 {
-	register T * p = &((*data)[0]);
-	register int n = data->GetLength ();
-	T v;
+	do
+	{
+		int b = (int)(uValue & 0x07);
+		uValue >>= 3;
+		if ( uValue )
+			b |= 0x08;
+		PutNibble ( b );
+	} while ( uValue );
+}
+
+
+void CSphWriter_VLN::ZipOffset ( SphOffset_t uValue )
+{
+	do
+	{
+		int b = (int)(uValue & 0x07);
+		uValue >>= 3;
+		if ( uValue )
+			b |= 0x08;
+		PutNibble ( b );
+	} while ( uValue );
+}
+
+
+void CSphWriter_VLN::ZipOffsets ( CSphVector<SphOffset_t> * pData )
+{
+	assert ( pData );
+
+	SphOffset_t * pValue = &((*pData)[0]);
+	int n = pData->GetLength ();
 
 	while ( n-->0 )
 	{
-		v = *p++;
+		SphOffset_t uValue = *pValue++;
 		do
 		{
-			int b = (int)(v & 0x07);
-			v >>= 3;
-			if ( v )
+			int b = (int)(uValue & 0x07);
+			uValue >>= 3;
+			if ( uValue )
 				b |= 0x08;
 			PutNibble ( b );
-		} while ( v );
+		} while ( uValue );
 	}
 }
 
@@ -902,15 +949,13 @@ void CSphWriter_VLN::SeekTo ( SphOffset_t iPos )
 // BIT-ENCODED FILE INPUT
 ///////////////////////////////////////////////////////////////////////////////
 
-CSphReader_VLN::CSphReader_VLN ( char * sName )
+CSphReader_VLN::CSphReader_VLN ()
 	: m_iFD ( 0 )
 	, m_iPos ( 0 )
-	, m_iFilePos ( 0 )
 	, m_iBufPos ( 0 )
 	, m_iBufOdd ( 0 )
 	, m_iBufUsed ( 0 )
 {
-	m_sName = sphDup ( sName );
 	m_iBufSize = 4096; // FIXME?
 	m_pBuf = new BYTE [ m_iBufSize ];
 }
@@ -919,25 +964,14 @@ CSphReader_VLN::CSphReader_VLN ( char * sName )
 CSphReader_VLN::~CSphReader_VLN ()
 {
 	SafeDeleteArray ( m_pBuf );
-	sphFree ( m_sName );
 }
 
 
-int CSphReader_VLN::OpenFile ()
+void CSphReader_VLN::SetFile ( int iFD )
 {
-	if ( !m_iFD )
-		m_iFD = ::open ( m_sName, O_RDONLY | SPH_BINARY );
-	return m_iFD;
-}
-
-
-void CSphReader_VLN::CloseFile ()
-{
-	if ( m_iFD )
-	{
-		::close ( m_iFD );
-		m_iFD = 0;
-	}
+	assert ( iFD>0 );
+	m_iFD = iFD;
+	m_iPos = 0;
 }
 
 
@@ -951,16 +985,17 @@ void CSphReader_VLN::SeekTo ( SphOffset_t iPos )
 
 void CSphReader_VLN::UpdateCache ()
 {
-	if ( m_iFilePos != (m_iPos>>1) )
-	{
-		m_iFilePos = m_iPos>>1;
-		sphSeek ( m_iFD, m_iFilePos, SEEK_SET );
-	}
+	assert ( m_iFD );
+
+	// stream position could be changed externally
+	// so let's just hope that the OS optimizes redundant seeks
+	sphSeek ( m_iFD, m_iPos>>1, SEEK_SET );
+
 	m_iBufPos = 0;
 	m_iBufUsed = ::read ( m_iFD, m_pBuf, m_iBufSize );
 	m_iBufOdd = ( m_iPos & 1 ) ? 1 : 0;
-	m_iFilePos += m_iBufUsed;
 }
+
 
 int CSphReader_VLN::GetNibble ()
 {
@@ -1096,10 +1131,6 @@ CSphIndex_VLN::CSphIndex_VLN ( const char * sName )
 	fdIndex = 0;
 	fdData = 0;
 	fdRaw = 0;
-
-	vChunk = NULL;
-	vChunkHeader = NULL;
-	vIndexPage = NULL;
 }
 
 
@@ -1343,15 +1374,8 @@ int CSphIndex_VLN::cidxCreate ()
 	BYTE bDummy = 1;
 	fdData->PutBytes ( &bDummy, 1 );
 
-	vChunk = new CSphVector<DWORD>();
-	vChunkHeader = new CSphVector<DWORD>();
-	vIndexPage = new CSphVector<SphOffset_t>();
-
 	for ( int i=0; i<SPH_CLOG_DIR_PAGES; i++ )
 		cidxPagesDir[i] = -1;
-
-	lastDocDelta = 0;
-	lastDocHits = 0;
 
 	fdIndex->PutRawBytes ( &m_tHeader, sizeof(m_tHeader) );
 	fdIndex->PutBytes ( cidxPagesDir, sizeof(cidxPagesDir) );
@@ -1359,94 +1383,126 @@ int CSphIndex_VLN::cidxCreate ()
 }
 
 
-void CSphIndex_VLN::cidxFlushHitList ()
-{
-	if (lastDocHits)
-	{
-		lastDocDelta <<= 1;
-		if ( lastDocHits==1)
-			lastDocDelta |= 1;
-		else
-			vChunk->Add ( 0 );
-		vChunkHeader->Add ( lastDocDelta );
-	}
-	lastDocHits = 0;
-}
-
-
-void CSphIndex_VLN::cidxFlushChunk ()
-{
-	if ( vChunk->GetLength() )
-	{
-		vChunkHeader->Add ( 0 );
-		fdData->ZipInts ( vChunkHeader );
-		fdData->ZipInts ( vChunk );
-	}
-	vChunkHeader->Reset ();
-	vChunk->Reset ();
-}
-
-
-void CSphIndex_VLN::cidxFlushIndexPage ()
-{
-	if ( vIndexPage->GetLength() )
-	{
-		vIndexPage->Add ( 0 );
-		fdIndex->ZipInts ( vIndexPage );
-	}
-	vIndexPage->Reset ();
-}
-
-
 void CSphIndex_VLN::cidxHit ( CSphHit * hit )
 {
-	static DWORD lastWordID = 0, lastPageID = 0xffffffff;
-	static int lastPos = 0;
-	static SphOffset_t lastIndexPos = 0;
+	static SphOffset_t	iLastDoclistPos = 0;
+	static SphOffset_t	iLastHitlistPos = 0;
+	static DWORD		iLastDocID = 0;
+	static DWORD		iLastWordID = 0;
+	static DWORD		iLastPageID = 0xffffffff;
+	static DWORD		iLastHitPos = 0;
+	static int			iLastWordDocs = 0;
+	static int			iLastWordHits = 0;
 
-	assert ( hit->m_iWordID );
-	assert ( hit->m_iDocID );
-	assert ( hit->m_iWordPos );
+	assert (
+		( hit->m_iWordID && hit->m_iWordPos && hit->m_iDocID ) || // it's either ok hit
+		( !hit->m_iWordID && !hit->m_iWordPos ) ); // or "flush-hit"
 
-	if ( lastWordID!=hit->m_iWordID )
+	/////////////
+	// next word
+	/////////////
+
+	if ( iLastWordID!=hit->m_iWordID )
 	{
-		cidxFlushHitList();
-		cidxFlushChunk();
-
-		if (lastPageID != (hit->m_iWordID >> SPH_CLOG_BITS_PAGE))
+		// close prev hitlist, if any
+		if ( iLastHitPos )
 		{
-			cidxFlushIndexPage();
-			lastPageID = hit->m_iWordID >> SPH_CLOG_BITS_PAGE;
-			lastWordID = 0;
-			lastIndexPos = 0;
-			cidxPagesDir [ lastPageID ] = fdIndex->m_iPos;
+			fdData->ZipInt ( 0 );
+			iLastHitPos = 0;
 		}
 
-		assert ( hit->m_iWordID > lastWordID );
-		assert ( fdData->m_iPos > lastIndexPos );
-		vIndexPage->Add ( hit->m_iWordID - lastWordID );
-		vIndexPage->Add ( fdData->m_iPos - lastIndexPos );
+		// flush prev doclist, if any
+		if ( m_dDoclist.GetLength() )
+		{
+			// finish writing wordlist entry
+			assert ( fdData->m_iPos > iLastDoclistPos );
+			assert ( iLastWordDocs );
+			assert ( iLastWordHits );
 
-		lastWordID = hit->m_iWordID;
-		lastIndexPos = fdData->m_iPos;
+			fdIndex->ZipOffset ( fdData->m_iPos - iLastDoclistPos );
+			fdIndex->ZipInt ( iLastWordDocs );
+			fdIndex->ZipInt ( iLastWordHits );
 
-		lastDocID = 0;
-		lastDocDelta = 0;
+			iLastDoclistPos = fdData->m_iPos;
+			iLastWordDocs = 0;
+			iLastWordHits = 0;
+
+			// write doclist
+			fdData->ZipOffsets ( &m_dDoclist );
+			fdData->ZipInt ( 0 );
+			m_dDoclist.Reset ();
+
+			// restart doclist deltas
+			iLastDocID = 0;
+			iLastHitlistPos = 0;
+		}
+
+		// flush last wordlist
+		if ( !hit->m_iWordPos )
+		{
+			// close wordlist
+			fdIndex->ZipInt ( 0 );
+			return;
+		}
+
+		// close prev wordlist, if next wordlist map page reached
+		DWORD iPageID = hit->m_iWordID >> SPH_CLOG_BITS_PAGE;
+		if ( iLastPageID!=iPageID )
+		{
+			// close wordlist
+			fdIndex->ZipInt ( 0 );
+
+			// restart wordlist deltas
+			iLastWordID = 0; 
+			iLastDoclistPos = 0;
+
+			// next map page
+			iLastPageID = iPageID;
+			cidxPagesDir [ iPageID ] = fdIndex->m_iPos;
+		}
+
+		// begin writing wordlist entry
+		assert ( hit->m_iWordID > iLastWordID );
+		fdIndex->ZipInt ( hit->m_iWordID - iLastWordID );
+		iLastWordID = hit->m_iWordID;
 	}
 
-	if ( lastDocID!=hit->m_iDocID )
+	////////////
+	// next doc
+	////////////
+
+	if ( iLastDocID!=hit->m_iDocID )
 	{
-		cidxFlushHitList();
+		// close prev hitlist, if any
+		if ( iLastHitPos )
+		{
+			fdData->ZipInt ( 0 );
+			iLastHitPos = 0;
+		}
 
-		assert ( hit->m_iDocID>lastDocID );
-		lastDocDelta = hit->m_iDocID - lastDocID;
-		lastDocID = hit->m_iDocID;
-		lastPos = 0;
+		// add new doclist entry for new doc id
+		assert ( hit->m_iDocID > iLastDocID );
+		assert ( fdData->m_iPos > iLastHitlistPos );
+
+		m_dDoclist.Add ( hit->m_iDocID - iLastDocID );
+		m_dDoclist.Add ( fdData->m_iPos - iLastHitlistPos );
+
+		iLastDocID = hit->m_iDocID;
+		iLastHitlistPos = fdData->m_iPos;
+
+		// update per-word stats
+		iLastWordDocs++;
 	}
 
-	vChunk->Add ( hit->m_iWordPos - lastPos );
-	lastPos = hit->m_iWordPos;
-	lastDocHits++;
+	///////////
+	// the hit
+	///////////
+
+	// add hit delta
+	assert ( hit->m_iWordPos > iLastHitPos );
+	fdData->ZipInt ( hit->m_iWordPos - iLastHitPos );
+	iLastHitPos = hit->m_iWordPos;
+	iLastWordHits++;
 }
 
 
@@ -1459,9 +1515,6 @@ void CSphIndex_VLN::cidxDone()
 	fdIndex->CloseFile ();
 	fdData->CloseFile ();
 
-	SafeDelete ( vChunk );
-	SafeDelete ( vChunkHeader );
-	SafeDelete ( vIndexPage );
 	SafeDelete ( fdIndex );
 	SafeDelete ( fdData );
 }
@@ -1772,9 +1825,13 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 	}
 
 	binsDone ();
-	cidxFlushHitList ();
-	cidxFlushChunk ();
-	cidxFlushIndexPage ();
+
+	CSphHit tFlush;
+	tFlush.m_iDocID = 0;
+	tFlush.m_iGroupID = 0;
+	tFlush.m_iWordID = 0;
+	tFlush.m_iWordPos =0;
+	cidxHit ( &tFlush );
 	cidxDone ();
 
 	// unlink raw log
@@ -1787,6 +1844,10 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 	PROFILE_SHOW ();
 	return 1;
 }
+
+/////////////////////////////////////////////////////////////////////////////
+// THE SEARCHER
+/////////////////////////////////////////////////////////////////////////////
 
 struct CSphQueryParser : CSphSource_Text
 {
@@ -1830,23 +1891,41 @@ struct CSphQueryParser : CSphSource_Text
 
 int cmpQueryWord ( const void * a, const void * b )
 {
-	return
-		((CSphQueryWord*)a)->docs->GetLength() -
-		((CSphQueryWord*)b)->docs->GetLength();
+	return ((CSphQueryWord*)a)->m_iDocs - ((CSphQueryWord*)b)->m_iDocs;
 }
 
 
-CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
+/// file which closes automatically when going out of scope
+class CSphAutofile
+{
+public:
+	/// my file descriptior
+	int m_iFD;
+
+	/// open
+	CSphAutofile ( const char * sName )
+	{
+		m_iFD = ::open ( sName, O_RDONLY | SPH_BINARY );
+	}
+
+	/// close
+	~CSphAutofile ()
+	{
+		if ( m_iFD>=0 )
+			::close ( m_iFD );
+	}
+};
+
+
+CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 {
 	assert ( dict );
 	assert ( pQuery );
 
 	CSphQueryParser *qp;
-	CSphReader_VLN *rdIndex, *rdData;
 	CSphQueryWord qwords[SPH_MAX_QUERY_WORDS];
 	int i, j, nwords, weights [ SPH_MAX_FIELD_COUNT ], imin, nweights;
-	DWORD *pHits[SPH_MAX_QUERY_WORDS], *pdocs[SPH_MAX_QUERY_WORDS],
-		wordID, docID, pmin, k;
+	DWORD wordID, docID, pmin, k;
 
 	PROFILER_INIT ();
 	PROFILE_BEGIN ( query_init );
@@ -1861,9 +1940,9 @@ CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 	if (nwords > SPH_MAX_QUERY_WORDS) nwords = SPH_MAX_QUERY_WORDS; // FIXME
 	for ( i=0; i<nwords; i++ )
 	{
-		qwords[i].word = sphDup ( qp->words[i] );
-		qwords[i].wordID = qp->hits[i].m_iWordID;
-		qwords[i].queryPos = 1+i;
+		qwords[i].m_sWord = sphDup ( qp->words[i] );
+		qwords[i].m_iWordID = qp->hits[i].m_iWordID;
+		qwords[i].m_iQueryPos = 1+i;
 	}
 	delete qp;
 
@@ -1874,113 +1953,105 @@ CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 	}
 
 	// open files
-	char sBuf [ SPH_MAX_FILENAME_LEN ];
+	char sTmp [ SPH_MAX_FILENAME_LEN ];
 
-	snprintf ( sBuf, sizeof(sBuf), "%s.spi", m_sFilename );
-	rdIndex = new CSphReader_VLN ( sBuf );
-	if ( !rdIndex->OpenFile() )
-		return NULL;
+	snprintf ( sTmp, sizeof(sTmp), "%s.spi", m_sFilename );
+	CSphAutofile tWordlist ( sTmp );
 
-	snprintf ( sBuf, sizeof(sBuf), "%s.spd", m_sFilename );
-	rdData = new CSphReader_VLN ( sBuf );
-	if ( !rdData->OpenFile() )
+	snprintf ( sTmp, sizeof(sTmp), "%s.spd", m_sFilename );
+	CSphAutofile tDoclist ( sTmp );
+
+	if ( tWordlist.m_iFD<0 || tDoclist.m_iFD<0 )
 		return NULL;
 
 	PROFILE_END ( query_init );
 	PROFILE_BEGIN ( query_load_dir );
 
 	// load index pages directory
-	rdIndex->GetRawBytes ( &m_tHeader, sizeof(m_tHeader) );
-	rdIndex->GetBytes ( cidxPagesDir, sizeof(cidxPagesDir) );
+	CSphReader_VLN rdIndex;
+	rdIndex.SetFile ( tWordlist.m_iFD );
+	rdIndex.GetRawBytes ( &m_tHeader, sizeof(m_tHeader) );
+	rdIndex.GetBytes ( cidxPagesDir, sizeof(cidxPagesDir) );
 	DWORD iGroupMask = (1<<m_tHeader.m_iGroupBits) - 1;
 
 	PROFILE_END ( query_load_dir );
-	PROFILE_BEGIN ( query_load_hits );
 
-	// init lists
-	assert ( !vIndexPage );
-	vChunkHeader = new CSphVector<DWORD>();
+	//////////////////////////////
+	// decode words from wordlist
+	//////////////////////////////
 
-	// load match list for each query word
-	for (i = 0; i < nwords; i++)
+	PROFILE_BEGIN ( query_load_words );
+
+	for ( i=0; i<nwords; i++ )
 	{
 		// if the word was already loaded, just link to it
-		for (j = 0; j < i; j++)
-			if (qwords[i].wordID == qwords[j].wordID)
+		for ( j=0; j<i; j++ )
+			if ( qwords[i].m_iWordID == qwords[j].m_iWordID )
 		{
-			qwords[i].shareListsFrom(&qwords[j]);
+			qwords[i] = qwords[j];
 			break;
 		}
-		if (qwords[i].hits) continue;
-		qwords[i].newLists();
+		if ( j<i )
+			continue;
 
-		// check index
-		wordID = 0;
-		SphOffset_t iChunkPos = 0;
-		rdIndex->SeekTo ( cidxPagesDir[qwords[i].wordID >> SPH_CLOG_BITS_PAGE] );
-
-		for ( ;; )
+		// lookup this wordlist page
+		// offset might be -1 if page is totally empty
+		SphOffset_t iWordlistOffset = cidxPagesDir [ qwords[i].m_iWordID >> SPH_CLOG_BITS_PAGE ];
+		if ( iWordlistOffset>0 )
 		{
-			// unpack next word ID
-			DWORD iDeltaWord = rdIndex->UnzipInt();
-			if ( !iDeltaWord )
-				break;
-			wordID += iDeltaWord;
+			// set doclist files
+			qwords[i].m_rdDoclist.SetFile ( tDoclist.m_iFD );
+			qwords[i].m_rdHitlist.SetFile ( tDoclist.m_iFD );
 
-			// unpack next offset
-			SphOffset_t iDeltaOffset = rdIndex->UnzipOffset ();
-			assert ( iDeltaOffset );
-			iChunkPos += iDeltaOffset;
+			// read wordlist
+			rdIndex.SeekTo ( iWordlistOffset );
 
-			if ( wordID!=qwords[i].wordID )
-				continue;
-
-			// found chunk for this query word, load it
-			rdData->SeekTo ( iChunkPos );
-			vChunkHeader->Reset ();
-			rdData->UnzipInts ( vChunkHeader );
-
-			docID = 0;
-			for ( k=0; k<(DWORD)vChunkHeader->GetLength(); k++ )
+			// restart delta decoding
+			wordID = 0;
+			SphOffset_t iDoclistOffset = 0;
+			for ( ;; )
 			{
-				docID += ( (*vChunkHeader)[k] >> 1 );
-				qwords[i].docs->Add ( docID );
-				qwords[i].docs->Add ( qwords[i].hits->GetLength() );
-				switch ( (*vChunkHeader)[k] & 1)
+				// unpack next word ID
+				DWORD iDeltaWord = rdIndex.UnzipInt();
+				if ( !iDeltaWord ) // wordlist chunk is over
+					break;
+				wordID += iDeltaWord;
+
+				// unpack next offset
+				SphOffset_t iDeltaOffset = rdIndex.UnzipOffset ();
+				iDoclistOffset += iDeltaOffset;
+				assert ( iDeltaOffset );
+
+				// unpack doc/hit count
+				qwords[i].m_iDocs = rdIndex.UnzipInt ();
+				qwords[i].m_iHits = rdIndex.UnzipInt ();
+				assert ( qwords[i].m_iDocs );
+				assert ( qwords[i].m_iHits );
+
+				// break on match
+				if ( wordID==qwords[i].m_iWordID )
 				{
-					case 0:
-						rdData->UnzipHits ( qwords[i].hits );
-						break;
-					case 1:
-						qwords[i].hits->Add ( rdData->UnzipInt() );
-						break;
+					qwords[i].m_rdDoclist.SeekTo ( iDoclistOffset );
+					break;
 				}
-				qwords[i].hits->Add ( 0 );
 			}
-			qwords[i].docs->Add ( 0 );
-			qwords[i].docs->Add ( 0 );
-			break;
 		}
 	}
-
-	// close files
-	delete rdIndex;
-	delete rdData;
 
 	// build word stats
 	pResult->m_iNumWords = nwords;
-	for (i = 0; i < nwords; i++) {
-		pResult->m_tWordStats[i].m_sWord = sphDup(qwords[i].word);
-		pResult->m_tWordStats[i].m_iDocs = (qwords[i].docs->GetLength() - 2) / 2;
-		pResult->m_tWordStats[i].m_iHits = qwords[i].hits->GetLength() - 1;
+	for ( i=0; i<nwords; i++ )
+	{
+		pResult->m_tWordStats[i].m_sWord = sphDup ( qwords[i].m_sWord );
+		pResult->m_tWordStats[i].m_iDocs = qwords[i].m_iDocs;
+		pResult->m_tWordStats[i].m_iHits = qwords[i].m_iHits;
 	}
 
-	// reorder hit lists and return if one of then is empty
+	// reorder hit lists
 	qsort ( qwords, nwords, sizeof(CSphQueryWord), cmpQueryWord );
-	if ( !qwords[0].hits->GetLength() )
-		return pResult;
 
-	PROFILE_END ( query_load_hits );
+	PROFILE_END ( query_load_words );
+
 	PROFILE_BEGIN ( query_match );
 
 	// build weights
@@ -1992,32 +2063,41 @@ CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 			weights[i] = pQuery->m_pWeights[i];
 
 	// find and proximity-weight matching documents
-	for ( i=0; i<nwords; i++ )
-		pdocs[i] = &((*qwords[i].docs)[0]);
 	i = docID = 0;
-
 	if ( pQuery->m_bAll )
 	{
 		///////////////////
 		// match all words
 		///////////////////
 
+		if ( !qwords[0].m_iDocs )
+			return pResult;
+
+		// preload doclist entries
+		for ( i=0; i<nwords; i++ )
+			qwords[i].GetDoclistEntry ();
+		i = 0;
+
 		for ( ;; )
 		{
 			// scan lists until *all* the ids match
-			while ( *pdocs[i] && docID>*pdocs[i] )
-				pdocs[i] += 2;
-			if ( !*pdocs[i] )
+			while ( qwords[i].m_iDoc && docID>qwords[i].m_iDoc )
+				qwords[i].GetDoclistEntry ();
+			if ( !qwords[i].m_iDoc )
 				break;
 
-			if ( docID<*pdocs[i] )
+			if ( docID<qwords[i].m_iDoc )
 			{
-				docID = *pdocs[i];
+				docID = qwords[i].m_iDoc;
 				i = 0;
 				continue;
 			}
 			if (++i != nwords)
 				continue;
+
+			// preload hitlist entries
+			for ( i=0; i<nwords; i++ )
+				qwords[i].GetHitlistEntry ();
 
 			// early reject by group id
 			if ( pQuery->m_iGroup )
@@ -2027,10 +2107,6 @@ CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 				i = 0;
 				continue;
 			}
-
-			// Houston, we have a match
-			for (i = 0; i < nwords; i++)
-				pHits[i] = &( (*qwords[i].hits) [ *(1 + pdocs[i]) ] );
 
 			// init weighting
 			BYTE curPhraseWeight [ SPH_MAX_FIELD_COUNT ];
@@ -2051,18 +2127,24 @@ CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 				imin = -1;
 				for ( i=0; i<nwords; i++ )
 				{
-					if ( !*pHits[i] ) continue;
-					if ( pmin>(*pHits[i]) ) { pmin = *pHits[i]; imin = i; }
+					if ( !qwords[i].m_iHitPos )
+						continue;
+					if ( pmin>qwords[i].m_iHitPos )
+					{
+						pmin = qwords[i].m_iHitPos;
+						imin = i;
+					}
 				}
-				if ( imin<0 ) break;
-				pHits[imin]++;
+				if ( imin<0 )
+					break;
+				qwords[imin].GetHitlistEntry ();
 
 				// get field number and mark a simple match
 				j = pmin >> 24;
 				matchWeight[j] = 1;
 
 				// find max proximity relevance
-				if ( qwords[imin].queryPos - pmin == k )
+				if ( qwords[imin].m_iQueryPos - pmin == k )
 				{
 					curPhraseWeight[j]++;
 					if ( phraseWeight[j] < curPhraseWeight[j] )
@@ -2071,7 +2153,7 @@ CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 				{
 					curPhraseWeight[j] = 0;
 				}
-				k = qwords[imin].queryPos - pmin;
+				k = qwords[imin].m_iQueryPos - pmin;
 			}
 
 			// sum simple match weights and phrase match weights
@@ -2098,10 +2180,6 @@ CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 		int iActive = nwords; // total number of words still active
 		DWORD iDocID = 0; // FIXME! make a macro like INVALID_DOCUMENT_ID or something
 
-		int dActive2Query [ SPH_MAX_QUERY_WORDS ]; // active word to original query word mapping
-		for ( i=0; i<SPH_MAX_QUERY_WORDS; i++ )
-			dActive2Query[i] = i;
-
 		for ( ;; )
 		{
 			// update active pointers to document lists, kill empty ones,
@@ -2110,23 +2188,25 @@ CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 			for ( i=0; i<iActive; i++ )
 			{
 				// move to next document
-				if ( *pdocs[i]==iDocID )
-					pdocs[i] += 2;
-				assert ( (*pdocs[i])!=iDocID );
-
-				// remove empty pointers
-				if ( !*pdocs[i] )
+				if ( qwords[i].m_iDoc==iDocID )
 				{
-					pdocs[i] = pdocs[iActive-1];
-					dActive2Query[i] = dActive2Query[iActive-1];
+					qwords[i].GetDoclistEntry ();
+					qwords[i].GetHitlistEntry ();
+				}
+				assert ( qwords[i].m_iDoc!=iDocID );
+
+				// remove emptied words
+				if ( !qwords[i].m_iDoc )
+				{
+					qwords[i] = qwords[iActive-1];
 					i--;
 					iActive--;
 					continue;
 				}
 
 				// get new min id
-				if ( *pdocs[i]<iNewID )
-					iNewID = *pdocs[i];
+				if ( qwords[i].m_iDoc<iNewID )
+					iNewID = qwords[i].m_iDoc;
 			}
 			if ( iActive==0 )
 				break;
@@ -2141,14 +2221,15 @@ CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 					continue;
 
 			// get the words we're matching current document against (let's call them "terms")
+			CSphQueryWord * pHit [ SPH_MAX_QUERY_WORDS ];
 			int dPos [ SPH_MAX_QUERY_WORDS ];
 			int iTerms = 0;
 
 			for ( i=0; i<iActive; i++ )
-				if ( *pdocs[i]==iDocID )
+				if ( qwords[i].m_iDoc==iDocID )
 			{
-				dPos [ iTerms ] = qwords [ dActive2Query[i] ].queryPos;
-				pHits [ iTerms ] = &( (*qwords [ dActive2Query[i] ].hits) [ *(1+pdocs[i]) ]);
+				pHit[iTerms] = &qwords[i];
+				dPos[iTerms] = qwords[i].m_iQueryPos;
 				iTerms++;
 			}
 			assert ( iTerms>0 );
@@ -2173,25 +2254,25 @@ CSphQueryResult *CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 				for ( i=0; i<iTerms; i++ )
 				{
 					// if hit list for this term is no longer active, remove it
-					if ( !*pHits[i] )
+					if ( !pHit[i]->m_iHitPos )
 					{
-						pHits [ i ] = pHits [ iTerms-1 ];
-						dPos [ i ] = dPos [ iTerms-1 ];
+						pHit[i] = pHit[iTerms-1];
+						dPos[i] = dPos[iTerms-1];
 						i--;
 						iTerms--;
 						continue;
 					}
 
 					// my current best match
-					if ( pmin>(*pHits[i]) )
+					if ( pmin>pHit[i]->m_iHitPos )
 					{
-						pmin = *pHits[i];
+						pmin = pHit[i]->m_iHitPos;
 						imin = i;
 					}
 				}
 				if ( imin<0 )
 					break;
-				pHits[imin]++;
+				pHit[imin]->GetHitlistEntry ();
 
 				// get field number and mark a simple match
 				int iField = pmin >> 24;

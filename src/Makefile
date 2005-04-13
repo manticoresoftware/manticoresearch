@@ -2,7 +2,7 @@ CC         = cc
 PP         = cc
 LD         = cc
 BINARIES   = indexer searchd search
-CCFLAGS    = -Wall -O3 -fomit-frame-pointer -I/usr/local/include -I/usr/local/mysql/include
+CCFLAGS    = -Wall -O3 -fomit-frame-pointer -I/usr/local/include -I/usr/local/mysql/include -D_FILE_OFFSET_BITS=64
 #CCFLAGS    = -Wall -g -I/usr/local/include
 PPFLAGS    = $(CCFLAGS)
 LDFLAGS    = -L/usr/local/mysql/lib -L/usr/local/mysql/lib/mysql -L/usr/local/lib/mysql -lmysqlclient -lstdc++ -lm -lz

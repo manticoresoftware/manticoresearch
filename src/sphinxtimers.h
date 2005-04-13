@@ -11,7 +11,7 @@ DECLARE_TIMER ( read_hits )
 
 DECLARE_TIMER ( query_init )
 DECLARE_TIMER ( query_load_dir )
-DECLARE_TIMER ( query_load_hits )
+DECLARE_TIMER ( query_load_words )
 DECLARE_TIMER ( query_match )
 DECLARE_TIMER ( query_sort )
 

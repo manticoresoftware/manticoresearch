@@ -967,7 +967,7 @@ CSphReader_VLN::CSphReader_VLN ()
 	, m_iBufOdd ( 0 )
 	, m_iBufUsed ( 0 )
 {
-	m_iBufSize = 4096; // FIXME?
+	m_iBufSize = 4096; // FIXME
 	m_pBuf = new BYTE [ m_iBufSize ];
 }
 
@@ -992,8 +992,16 @@ void CSphReader_VLN::SetFile ( int iFD )
 void CSphReader_VLN::SeekTo ( SphOffset_t iPos )
 {
 	assert ( iPos>=0 );
-	m_iPos = iPos;
-	m_iBufUsed = 0;
+	if ( iPos>=m_iPos && iPos<m_iPos+2*m_iBufUsed )
+	{
+		m_iBufPos = (int)( ( iPos>>1 ) - ( m_iPos>>1 ) ); // reposition to proper byte
+		m_iBufOdd = ( iPos & 1 ) ? 1 : 0; // reposition to proper nibble
+		assert ( m_iBufPos<m_iBufUsed );
+	} else
+	{
+		m_iPos = iPos;
+		m_iBufUsed = 0;
+	}
 }
 
 
@@ -1003,11 +1011,13 @@ void CSphReader_VLN::UpdateCache ()
 
 	// stream position could be changed externally
 	// so let's just hope that the OS optimizes redundant seeks
-	sphSeek ( m_iFD, m_iPos>>1, SEEK_SET );
-
+	SphOffset_t iNewPos = ( m_iPos>>1 ) + m_iBufUsed;
+	sphSeek ( m_iFD, iNewPos, SEEK_SET );
+	
 	m_iBufPos = 0;
 	m_iBufUsed = ::read ( m_iFD, m_pBuf, m_iBufSize );
 	m_iBufOdd = ( m_iPos & 1 ) ? 1 : 0;
+	m_iPos = iNewPos<<1;
 }
 
 
@@ -1015,8 +1025,8 @@ int CSphReader_VLN::GetNibble ()
 {
 	if ( m_iBufPos>=m_iBufUsed )
 		UpdateCache ();
+	assert ( m_iBufPos<m_iBufUsed );
 
-	m_iPos++;
 	if ( m_iBufOdd )
 	{
 		m_iBufOdd = 0;
@@ -1039,7 +1049,6 @@ void CSphReader_VLN::GetRawBytes ( void * pData, int iSize )
 
 	memcpy ( pData, m_pBuf+m_iBufPos, iSize );
 	m_iBufPos += iSize;
-	m_iPos += 2*iSize;
 }
 
 
@@ -2011,6 +2020,7 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 			if ( qwords[i].m_iWordID == qwords[j].m_iWordID )
 		{
 			qwords[i] = qwords[j];
+			qwords[i].m_iQueryPos = i;
 			break;
 		}
 		if ( j<i )
@@ -2045,15 +2055,20 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 				assert ( iDeltaOffset );
 
 				// unpack doc/hit count
-				qwords[i].m_iDocs = rdIndex.UnzipInt ();
-				qwords[i].m_iHits = rdIndex.UnzipInt ();
-				assert ( qwords[i].m_iDocs );
-				assert ( qwords[i].m_iHits );
+				int iDocs = rdIndex.UnzipInt ();
+				int iHits = rdIndex.UnzipInt ();
+				assert ( iDocs );
+				assert ( iHits );
 
-				// break on match
-				if ( wordID==qwords[i].m_iWordID )
+				// break on match or list end
+				if ( wordID>=qwords[i].m_iWordID )
 				{
-					qwords[i].m_rdDoclist.SeekTo ( iDoclistOffset );
+					if ( wordID==qwords[i].m_iWordID )
+					{
+						qwords[i].m_rdDoclist.SeekTo ( iDoclistOffset );
+						qwords[i].m_iDocs = iDocs;
+						qwords[i].m_iHits = iHits;
+					}
 					break;
 				}
 			}

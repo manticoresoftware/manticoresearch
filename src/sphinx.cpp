@@ -1628,6 +1628,7 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphHit * hit, int count )
 	return n;
 }
 
+/////////////////////////////////////////////////////////////////////////////
 
 static int iLog2 ( int iMin, int iMax )
 {
@@ -1646,6 +1647,104 @@ static int iLog2 ( int iMin, int iMax )
 		return 0;
 	}
 }
+
+
+/// hit priority queue entry
+struct CSphHitQueueEntry : public CSphHit
+{
+	int m_iBin;
+};
+
+
+/// hit priority queue
+struct CSphHitQueue
+{
+public:
+	CSphHitQueueEntry *		m_pData;
+	int						m_iSize;
+	int						m_iUsed;
+
+public:
+	/// create queue
+	CSphHitQueue ( int iSize )
+	{
+		assert ( iSize>0 );
+		m_iSize = iSize;
+		m_iUsed = 0;
+		m_pData = new CSphHitQueueEntry [ iSize ];
+	}
+
+	/// destory queue
+	~CSphHitQueue ()
+	{
+		SafeDeleteArray ( m_pData );
+	}
+
+	/// add entry to the queue
+	void Push ( CSphHit & tHit, int iBin )
+	{
+		// check for overflow and do add
+		assert ( m_iUsed<m_iSize );
+		m_pData [ m_iUsed ].m_iDocID = tHit.m_iDocID;
+		m_pData [ m_iUsed ].m_iGroupID = tHit.m_iGroupID;
+		m_pData [ m_iUsed ].m_iWordID = tHit.m_iWordID;
+		m_pData [ m_iUsed ].m_iWordPos = tHit.m_iWordPos;
+		m_pData [ m_iUsed ].m_iBin = iBin;
+
+		int iEntry = m_iUsed++;
+
+		// sift up if needed
+		while ( iEntry )
+		{
+			int iParent = ( iEntry-1 ) >> 1;
+			if ( SPH_CMPHIT_LESS ( m_pData[iEntry], m_pData[iParent] ) )
+			{
+				// entry is less than parent, should float to the top
+				Swap ( m_pData[iEntry], m_pData[iParent] );
+				iEntry = iParent;
+			} else
+			{
+				break;
+			}
+		}
+	}
+
+	/// remove root (ie. top priority) entry
+	void Pop ()
+	{
+		assert ( m_iUsed );
+		if ( !(--m_iUsed) ) // empty queue? just return
+			return;
+
+		// make the last entry my new root
+		m_pData[0] = m_pData[m_iUsed];
+
+		// sift down if needed
+		int iEntry = 0;
+		for ( ;; )
+		{
+			// select child
+			int iChild = (iEntry<<1) + 1;
+			if ( iChild>=m_iUsed )
+				break;
+
+			// select smallest child
+			if ( iChild+1<m_iUsed )
+				if ( SPH_CMPHIT_LESS ( m_pData[iChild+1], m_pData[iChild] ) )
+					iChild++;
+
+			// if smallest child is less than entry, do float it to the top
+			if ( SPH_CMPHIT_LESS ( m_pData[iChild], m_pData[iEntry] ) )
+			{
+				Swap ( m_pData[iChild], m_pData[iEntry] );
+				iEntry = iChild;
+				continue;
+			}
+
+			break;
+		}
+	}
+};
 
 
 int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLimit )
@@ -1807,9 +1906,7 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 
 	// initialize sorting
 	int iRawBlocks = bins.GetLength();
-	CSphHit * dCur = new CSphHit [ iRawBlocks ];
-
-	if ( bins.GetLength()>16 )
+	if ( iRawBlocks>16 )
 	{
 		fprintf ( stderr, "WARNING: sort_hits: merge_blocks=%d too high, increasing mem_limit may improve performance.\n",
 			bins.GetLength() );
@@ -1824,36 +1921,49 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 	}
 
 	ARRAY_FOREACH ( i, bins )
-	{
 		bins[i]->Init ( iBinSize );
-		binsRead ( i, &dCur[i] );
-	}
 
-	// sort
-	while ( iRawHits-- )
+	//////////////
+	// final sort
+	//////////////
+
+	CSphHitQueue tQueue ( iRawBlocks );
+	CSphHit tHit;
+
+	// initial fill
+	int * bActive = new int [ iRawBlocks ];
+	for ( int i=0; i<iRawBlocks; i++ )
 	{
-		// find next sorted hit
-		// OPTIMIZE: can do priority queue here
-		int iMin = -1;
-		for ( int i=0; i<iRawBlocks; i++ )
-		{
-			if ( !dCur[i].m_iWordID ) continue; // OPTIMIZE: can throw away out-blocks
-			if ( iMin<0 ) { iMin=i; continue; }
-			if ( SPH_CMPHIT_LESS ( dCur[i], dCur[iMin] ) ) iMin = i;
-		}
-		assert ( iMin>=0 );
-
-		// encode gid into docid
-		dCur[iMin].m_iDocID = 1 +
-			( ( dCur[iMin].m_iDocID - iMinDocID ) << iGidBits ) +
-			( dCur[iMin].m_iGroupID - iMinGroupID );
-
-		// write it
-		cidxHit ( &dCur[iMin] );
-
-		// update proper reader
-		binsRead ( iMin, &dCur[iMin] );
+		binsRead ( i, &tHit );
+		bActive[i] = tHit.m_iWordID;
+		if ( bActive[i] )
+			tQueue.Push ( tHit, i );
 	}
+
+	// while the queue has data for us
+	// FIXME! analyze binsRead return code
+	while ( tQueue.m_iUsed )
+	{
+		// pack and emit queue root
+		tQueue.m_pData->m_iDocID = 1 +
+			( ( tQueue.m_pData->m_iDocID - iMinDocID ) << iGidBits ) +
+			( tQueue.m_pData->m_iGroupID - iMinGroupID );
+		cidxHit ( tQueue.m_pData );
+
+		// pop queue root and push next hit from popped bin
+		int iBin = tQueue.m_pData->m_iBin;
+		tQueue.Pop ();
+		if ( bActive[iBin] )
+		{
+			binsRead ( iBin, &tHit );
+			bActive[iBin] = tHit.m_iWordID;
+			if ( bActive[iBin] )
+				tQueue.Push ( tHit, iBin );
+		}
+	}
+
+	// cleanup
+	SafeDeleteArray ( bActive );
 
 	binsDone ();
 

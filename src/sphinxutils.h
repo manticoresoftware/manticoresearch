@@ -45,6 +45,7 @@ const char * g_dSphKeysSearchd[] =
 	"query_log",
 	"read_timeout",
 	"max_children",
+	"pid_file",
 	NULL
 };
 

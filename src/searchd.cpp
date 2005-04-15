@@ -33,7 +33,8 @@ enum ESphLogLevel
 	LOG_INFO	= 2
 };
 
-static int				g_iLogFile		= STDIN_FILENO;
+static bool				g_bLogStdout	= true;
+static int				g_iLogFile		= STDOUT_FILENO;
 static ESphLogLevel		g_eLogLevel		= LOG_INFO;
 
 static int				g_iReadTimeout	= 5;
@@ -73,6 +74,11 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	lseek ( g_iLogFile, 0, SEEK_END );
 	write ( g_iLogFile, sBuf, strlen(sBuf) );
 	flock ( g_iLogFile, LOCK_UN );
+
+	if ( g_bLogStdout && g_iLogFile!=STDOUT_FILENO )
+	{
+		write ( STDOUT_FILENO, sBuf, strlen(sBuf) );
+	}
 }
 
 
@@ -281,6 +287,7 @@ int main ( int argc, char **argv )
 
 	CHECK_CONF ( confCommon, "common", "index_path" );
 	CHECK_CONF ( confSearchd, "searchd", "port" );
+	CHECK_CONF ( confSearchd, "searchd", "pid_file" );
 
 	int iPort = atoi ( confSearchd->get ( "port" ) );
 	if ( !iPort )
@@ -330,6 +337,7 @@ int main ( int argc, char **argv )
 		dup2 ( iDevNull, STDIN_FILENO );
 		dup2 ( iDevNull, STDOUT_FILENO );
 		dup2 ( iDevNull, STDERR_FILENO );
+		g_bLogStdout = false;
 
 		switch ( fork() )
 		{
@@ -338,6 +346,13 @@ int main ( int argc, char **argv )
 			default:	exit ( 0 ); // tty-controlled parent
 		}
 	}
+
+	// create pid
+	FILE * fp = fopen ( confSearchd->get ( "pid_file" ), "w" );
+	if ( !fp )
+		sphFatal ( "unable to write pid file '%s'", confSearchd->get ( "pid_file" ) );
+	fprintf ( fp, "%d", getpid() );	
+	fclose ( fp );
 
 	// create and bind on socket
 	g_iSocket = createServerSocket_IP ( iPort );

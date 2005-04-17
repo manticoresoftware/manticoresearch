@@ -6,6 +6,7 @@
 #include "sphinxstem.h"
 
 #include <ctype.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -55,6 +56,7 @@ namespace Private
 /////////////////////////////////////////////////////////////////////////////
 
 STATIC_SIZE_ASSERT ( SphOffset_t, 8 );
+STATIC_SIZE_ASSERT ( CSphHit, 16 );
 
 /////////////////////////////////////////////////////////////////////////////
 // INTERNAL PROFILER
@@ -93,6 +95,7 @@ struct CSphTimer
 	int				m_iParent;
 	int				m_iChild;
 	int				m_iNext;
+	int				m_iPrev;
 
 	CSphTimer ()
 	{
@@ -104,6 +107,7 @@ struct CSphTimer
 		m_iParent = iParent;
 		m_iChild = -1;
 		m_iNext = -1;
+		m_iPrev = -1;
 		m_eTimer = eTimer;
 		m_fStamp = 0;
 	}
@@ -164,6 +168,8 @@ void sphProfilerPush ( ESphTimer eTimer )
 
 		// make it new children list head
 		g_dTimers[iTimer].m_iNext = g_dTimers[g_iTimer].m_iChild;
+		if ( g_dTimers[g_iTimer].m_iChild>=0 )
+			g_dTimers [ g_dTimers[g_iTimer].m_iChild ].m_iPrev = iTimer;
 		g_dTimers[g_iTimer].m_iChild = iTimer;
 	}
 
@@ -205,11 +211,12 @@ void sphProfilerShow ( int iTimer=0, int iLevel=0 )
 		fprintf ( stderr, "--- PROFILE ---\n" );
 
 	CSphTimer & tTimer = g_dTimers[iTimer];
+	int iChild;
 
 	// calc me
 	int iChildren = 0;
 	float fSelf = tTimer.m_fStamp;
-	for ( int iChild=tTimer.m_iChild; iChild>0; iChild=g_dTimers[iChild].m_iNext, iChildren++ )
+	for ( iChild=tTimer.m_iChild; iChild>0; iChild=g_dTimers[iChild].m_iNext, iChildren++ )
 		fSelf -= g_dTimers[iChild].m_fStamp;
 
 	// dump me
@@ -221,11 +228,14 @@ void sphProfilerShow ( int iTimer=0, int iLevel=0 )
 	fprintf ( stderr, "\n" );
 
 	// dump my children
-	for ( int iChild=tTimer.m_iChild;
-		iChild>0;
-		iChild=g_dTimers[iChild].m_iNext )
+	iChild = tTimer.m_iChild;
+	while ( iChild>0 && g_dTimers[iChild].m_iNext>0 )
+		iChild = g_dTimers[iChild].m_iNext;
+
+	while ( iChild>0 )
 	{
 		sphProfilerShow ( iChild, 1+iLevel );
+		iChild = g_dTimers[iChild].m_iPrev;
 	}
 
 	if ( iTimer==0 )
@@ -681,6 +691,25 @@ char * sphDup ( const char * s )
 	}
 }
 
+
+int sphWrite ( int iFD, const void * pBuf, size_t iCount, const char * sName )
+{
+	int iWritten = ::write ( iFD, pBuf, iCount );
+	if ( iWritten!=(int)iCount )
+	{
+		if ( iWritten<0 )
+		{
+			fprintf ( stderr, "ERROR: %s: write error: %s.\n",
+				sName, strerror(errno) );
+		} else
+		{
+			fprintf ( stderr, "ERROR: %s: write error: %d of %d bytes written.\n",
+				sName, iWritten, iCount );
+		}
+	}
+	return iWritten;
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // GENERIC TOKENIZER
 /////////////////////////////////////////////////////////////////////////////
@@ -791,7 +820,6 @@ CSphQuery::CSphQuery ()
 
 CSphWriter_VLN::CSphWriter_VLN ( char * sName )
 {
-	assert ( sizeof(m_iPos)==8 ); // FIXME! make this a compile-time assert
 	assert ( sName );
 	m_sName = sphDup ( sName );
 
@@ -926,11 +954,11 @@ void CSphWriter_VLN::ZipOffsets ( CSphVector<SphOffset_t> * pData )
 }
 
 
-void CSphWriter_VLN::Flush()
+void CSphWriter_VLN::Flush ()
 {
 	PROFILE ( write_hits );
 
-	::write ( m_iFD, m_dPool, m_iPoolUsed );
+	sphWrite ( m_iFD, m_dPool, m_iPoolUsed, m_sName ); // FIXME! should return fail-code
 
 	if ( m_iPoolOdd )
 		m_iPos++;
@@ -1267,6 +1295,7 @@ int CSphIndex_VLN::binsReadByte(int b)
 
 	if ( !bins[b]->left )
 	{
+		PROFILE ( read_hits );
 		if ( m_iFilePos!=bins[b]->m_iFilePos )
 		{
 			sphSeek ( fdRaw, bins[b]->m_iFilePos, SEEK_SET );
@@ -1282,7 +1311,6 @@ int CSphIndex_VLN::binsReadByte(int b)
 			bins[b]->left = 1;
 		} else
 		{
-			PROFILE ( read_hits );
 			assert ( bins[b]->data );
 
 			if ( ::read ( fdRaw, bins[b]->data, n )!=n )
@@ -1612,7 +1640,8 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphHit * hit, int count )
 		if ( pBuf>maxP )
 		{
 			w = (int)(pBuf - buf);
-			if (::write(fd, buf, w) != w) return -1;
+			if ( sphWrite ( fd, buf, w, "rawlog" )!=w )
+				return -1;
 			n += w;
 			pBuf = buf;
 		}
@@ -1621,7 +1650,7 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphHit * hit, int count )
 	pBuf += encodeVLB ( pBuf, 0 );
 	pBuf += encodeVLB ( pBuf, 0 );
 	w = (int)(pBuf - buf);
-	if (::write(fd, buf, w) != w)
+	if ( sphWrite ( fd, buf, w, "rawlog" )!=w )
 		return -1;
 	n += w;
 
@@ -2695,6 +2724,8 @@ const CSphSourceStats * CSphSource::GetStats ()
 
 int CSphSource_Document::next()
 {
+	PROFILE ( src_document );
+
 	BYTE **fields = NextDocument(), *data, *pData, *pWord;
 	int pos, i, len;
 
@@ -3118,6 +3149,8 @@ bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 
 BYTE ** CSphSource_MySQL::NextDocument ()
 {
+	PROFILE ( src_mysql );
+
 	m_tSqlRow = mysql_fetch_row ( m_pSqlResult );
 
 	// when the party's over...
@@ -3463,7 +3496,7 @@ bool CSphSource_XMLPipe::Init ( const char * sCommand )
 
 int CSphSource_XMLPipe::next ()
 {
-	PROFILE ( source_xmlpipe );
+	PROFILE ( src_xmlpipe );
 	char sTitle [ 1024 ]; // FIXME?
 
 	assert ( m_pPipe );

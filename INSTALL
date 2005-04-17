@@ -1,0 +1,39 @@
+Sphinx 0.9.1 installation notes
+================================
+
+Supported operating systems
+----------------------------
+
+Most modern UNIX systems with a C++ compiler should be able
+to compile and run Sphinx without any modifications.
+
+Currently known systems Sphinx has been successfully compiled and
+tested on are:
+
+- FreeBSD 4.x, 5.x
+- Linux 2.x
+- Windows 2000, XP
+
+We hope Sphinx will work on other Unix platforms as well. 
+Please report successful platforms via http://shodan.ru/contact/
+
+Required tools
+---------------
+
+On UNIX, you will need the following tools to build
+and install Sphinx:
+
+- a working C++ compiler. GNU gcc is known to work.
+- a good make program. GNU make is known to work.
+
+On Windows, you will need Microsoft Visual C/C++ Studio .NET 2003.
+Other compilers/environments will probably work as well, but for the
+time being, you will have to build makefile or project file yourself.
+
+Installing Sphinx
+------------------
+
+Quick Sphinx usage guide
+-------------------------
+
+--eof--

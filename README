@@ -1,0 +1,72 @@
+Sphinx 0.9.1
+=============
+
+Copyright (c) 2001-2005, Andrew Aksyonoff
+Distributed under GPL; see the file COPYING for details
+
+Overview
+---------
+
+Sphinx is a search engine primarily intended to search through
+SQL databases, though generally applicable to searching anything else.
+
+Sphinx consists of the following parts:
+
+- full-text indexing/searching library written in C++
+- a set of generic utilities built on top of that library:
+  - indexer, an utility to creates full-text indices
+  - searchd, a daemon to run queries remotely (eg. from PHP/perl scripts)
+  - search, a console utility to run queries from command line
+- searchd APIs for different languages (currently, PHP)
+
+Features
+---------
+
+- high indexing speed (upto 4000-6000 KB/sec on modern CPUs);
+- high search speed (avg query is 0.1 sec on 2-4 GB text collections);
+- high scalability (upto 100 GB of text, upto 100 M documents on a single CPU);
+- supports MySQL natively (MyISAM and InnoDB tables are both supported);
+- supports phrase searching;
+- supports phrase proximity ranking, providing very good relevance;
+- supports English and Russian stemming;
+- supports any number of document fields (weights can be changed on the fly);
+- supports document groups;
+- supports stopwords;
+- supports "match all" and "match any" search modes;
+- generic XML interface which grealy simplifies custom integration.
+
+Where to get it?
+-----------------
+
+Sphinx can be obtained through official project website at
+http://shodan.ru/projects/sphinx/
+
+How do I use it?
+-----------------
+
+Please read the file INSTALL for installation instructions and
+a quick guide to using Sphinx.
+
+License
+--------
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, visit http://www.gnu.org/ or write
+to the Free Software Foundation, Inc., 59 Temple Place, Suite 330,
+Boston, MA 02111-1307 USA
+
+If you don't want to be restricted by GNU GPL terms,
+please contact the author through http://shodan.ru/contact/
+to obtain a commercial license.
+
+--eof--

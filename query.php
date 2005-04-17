@@ -1,7 +1,20 @@
 <?php
 
+//
+// $Id$
+//
+
+//
+// Copyright (c) 2001-2005, Andrew Aksyonoff. All rights reserved.
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU General Public License. You should have
+// received a copy of the GPL license along with this program; if you
+// did not, you can find it at http://www.gnu.org/
+//
+
 /////////////////////////////////////////////////////////////////////////////
-// SPHINX "API"
+// Sphinx PHP API
 /////////////////////////////////////////////////////////////////////////////
 
 $sphinx_server = "127.0.0.1";
@@ -106,5 +119,9 @@ if ( is_array($res["matches"]) )
 		$n++;
 	}
 }
+
+//
+// $Id$
+//
 
 ?>

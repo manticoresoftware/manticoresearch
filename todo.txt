@@ -1,7 +1,7 @@
 HIGH PRIORITY
 
 * add doc/hit count report to --buildstops
-* fix dumb ranking forumla in "match any" mode
+* fix dumb ranking formula in "match any" mode
 * add either int64 docid_t or id2group pool, 50k groups vs 500k documents
 * add support for multiple groups in query
 * add multi-index support (avoid running lots of indexers/searchds)

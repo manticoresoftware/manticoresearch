@@ -259,6 +259,8 @@ int main ( int argc, char ** argv )
 	const char * sBuildStops = NULL;
 	int iTopStops = 100;
 
+	fprintf ( stdout, SPHINX_BANNER );
+
 	int i;
 	for ( i=1; i<argc; i++ )
 	{

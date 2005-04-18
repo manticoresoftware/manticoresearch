@@ -218,6 +218,8 @@ int main ( int argc, char **argv )
 	char query[1024], buf[2048];
 	CSphConfig conf;
 
+	fprintf ( stdout, SPHINX_BANNER );
+
 	//////////////////////
 	// parse command line
 	//////////////////////

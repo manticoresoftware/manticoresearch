@@ -10,9 +10,9 @@ to compile and run Sphinx without any modifications.
 Currently known systems Sphinx has been successfully compiled and
 tested on are:
 
-- FreeBSD 4.x, 5.x
-- Linux 2.x
-- Windows 2000, XP
+   - FreeBSD 4.x, 5.x
+   - Linux 2.x
+   - Windows 2000, XP
 
 We hope Sphinx will work on other Unix platforms as well. 
 Please report successful platforms via http://shodan.ru/contact/
@@ -23,8 +23,8 @@ Required tools
 On UNIX, you will need the following tools to build
 and install Sphinx:
 
-- a working C++ compiler. GNU gcc is known to work.
-- a good make program. GNU make is known to work.
+   - a working C++ compiler. GNU gcc is known to work.
+   - a good make program. GNU make is known to work.
 
 On Windows, you will need Microsoft Visual C/C++ Studio .NET 2003.
 Other compilers/environments will probably work as well, but for the
@@ -33,7 +33,97 @@ time being, you will have to build makefile or project file yourself.
 Installing Sphinx
 ------------------
 
+1. Extract the distribution archive (haven't you already?)
+   and go to the "sphinx-0.9.1" subdirectory:
+
+   $ tar xzvf sphinx-0.9.1.tar.gz
+   $ cd sphinx-0.9.1
+
+2. Build the binaries from the source:
+
+   $ make
+
+3. Copy the binaries to the directory you plan to be using them from:
+
+   $ mkdir /usr/local/sphinx
+   $ cp indexer search searchd query.php /usr/local/sphinx
+
+Installation problems
+----------------------
+
+Compile-time errors like
+
+   In file included from indexer.cpp:14:
+   sphinx.h:35:25: mysql/mysql.h: No such file or directory
+
+and link-time errors like
+
+   /usr/bin/ld: cannot find -lmysqlclient
+
+are caused by MySQL include and library files either missing from your
+system, or installed in some system-specific directory.
+
+If you are getting compile time errors about missing MySQL include
+files, please edit Makefile and specify proper additional include
+directories in CCFLAGS variable with -I switch.
+
+If you are getting link time errors, please specify additional library
+directories in LDFLAGS variable with -L switch.
+
+Compile-time errors like
+
+   sphinx.cpp:67: error: invalid application of `sizeof' to
+      incomplete type `Private::SizeError< false>'
+
+mean that some compile-time type size check failed. This is most
+probably due to off_t type being less that 64-bit on your system.
+As a quick hack, you can edit sphinx.h and replace off_t with DWORD
+in a typedef for SphOffset_t, but note that this will prohibit you
+from using full-text indices larger than 2 GB. Even if the hack helps,
+please report such issues, providing the exact error message and
+compiler/OS details, so I could fix them in next releases.
+
+If the information above doesn't help you, don't hesitate to contact
+me via http://shodan.ru/contact/
+
 Quick Sphinx usage guide
 -------------------------
+
+To use Sphinx, you need to:
+
+1. Create a configuration file.
+
+   Default configuration file name is sphinx.conf. A sample configuration
+   file, sphinx.conf.in, which has all the options documented, is provided
+   with the distribution. Copy that file to your sphinx.conf and edit it:
+
+   $ cp sphinx.conf.in /usr/local/sphinx/sphinx.conf
+   $ vi /usr/local/sphinx/sphinx.conf
+
+2. Run the indexer to create full-text index from your data:
+
+   $ cd /usr/local/sphinx
+   $ ./indexer
+
+3. Run the command-line client to query the newly created index:
+
+   $ cd /usr/local/sphinx
+   $ ./search test
+
+To use Sphinx from your PHP scripts, you need to:
+
+1. Run the search daemon which your script will talk to:
+
+   $ cd /usr/local/sphinx
+   $ ./searchd
+
+2. Run the attached PHP API test script:
+
+   $ cd /usr/local/sphinx
+   $ php query.php test
+
+3. Copy the code from query.php to your own scripts.
+
+Happy searching!
 
 --eof--

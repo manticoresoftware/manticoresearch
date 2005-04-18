@@ -72,6 +72,7 @@ int main ( int argc, char ** argv )
 {
 	const char * sConfName = "sphinx.conf";
 
+	fprintf ( stdout, SPHINX_BANNER );
 	if ( argc<=1 )
 	{
 		sphDie (

@@ -51,6 +51,7 @@
 /////////////////////////////////////////////////////////////////////////////
 
 #define SPHINX_VERSION			"0.9.1"
+#define SPHINX_BANNER			"Sphinx 0.9.1\nCopyright (c) 2001-2005, Andrew Aksyonoff\n\n"
 
 #define SPH_MAX_QUERY_WORDS		10
 #define SPH_MAX_WORD_LEN		64

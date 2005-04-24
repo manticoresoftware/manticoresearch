@@ -275,6 +275,7 @@ void ShowProgress ( const CSphIndexProgress * pProgress )
 			fprintf ( stdout, "\n" );
 			break;
 	}
+	fflush ( stdout );
 }
 
 

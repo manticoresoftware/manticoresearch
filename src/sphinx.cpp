@@ -1845,7 +1845,7 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 	while (( iDocID = pSource->next() ))
 	{
 		if ( m_pProgress
-			&& ( ( pSource->GetStats()->m_iTotalDocuments % 100 )==0 ) )
+			&& ( ( pSource->GetStats()->m_iTotalDocuments % 1000 )==0 ) )
 		{
 			tProgress.m_iDocuments = pSource->GetStats()->m_iTotalDocuments;
 			tProgress.m_iBytes = pSource->GetStats()->m_iTotalBytes;

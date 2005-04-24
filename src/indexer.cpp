@@ -17,8 +17,11 @@
 #include <ctype.h>
 
 #if USE_WINDOWS
+	#define I64FMT "%I64d"
 #else
-#include <unistd.h>
+	#define I64FMT "%lld"
+
+	#include <unistd.h>
 #endif
 
 /////////////////////////////////////////////////////////////////////////////
@@ -251,6 +254,29 @@ void CSphStopwordBuilderDict::LoadStopwords ( const char * sFiles )
 }
 
 /////////////////////////////////////////////////////////////////////////////
+
+void ShowProgress ( const CSphIndexProgress * pProgress )
+{
+	switch ( pProgress->m_ePhase )
+	{
+		case CSphIndexProgress::PHASE_COLLECT:
+			fprintf ( stdout, "collected %d docs, %.1f MB\r",
+				pProgress->m_iDocuments, float(pProgress->m_iBytes)/1000000.0f );
+			break;
+
+		case CSphIndexProgress::PHASE_SORT:
+			fprintf ( stdout, "sorted %.1f Mhits, %.1f%% done\r",
+				float(pProgress->m_iHits)/1000000,
+				100.0f*float(pProgress->m_iHits) / float(pProgress->m_iHitsTotal) );
+			break;
+
+		case CSphIndexProgress::PHASE_COLLECT_END:
+		case CSphIndexProgress::PHASE_SORT_END:
+			fprintf ( stdout, "\n" );
+			break;
+	}
+}
+
 
 int main ( int argc, char ** argv )
 {
@@ -488,6 +514,7 @@ int main ( int argc, char ** argv )
 		CSphIndex * pIndex = sphCreateIndexPhrase ( confCommon->get ( "index_path" ) );
 		assert ( pIndex );
 
+		pIndex->SetProgressCallback ( ShowProgress );
 		pIndex->build ( pDict, pSource, iMemLimit );
 
 		delete pIndex;
@@ -498,11 +525,11 @@ int main ( int argc, char ** argv )
 	const CSphSourceStats * pStats = pSource->GetStats ();
 	fTime = sphLongTimer () - fTime;
 
-	fprintf ( stdout, "indexed %lld bytes, ", pStats->m_iTotalBytes );
-	fprintf ( stdout, "%d docs\n"
-		"indexed in %.3f sec, %.2f bytes/sec, %.2f docs/sec\n",
-		pStats->m_iTotalDocuments, fTime, 
-		pStats->m_iTotalBytes/fTime, pStats->m_iTotalDocuments/fTime );
+	fprintf ( stdout, "total %d docs, " I64FMT " bytes\n",
+		pStats->m_iTotalDocuments, pStats->m_iTotalBytes );
+
+	fprintf ( stdout, "total %.3f sec, %.2f bytes/sec, %.2f docs/sec\n",
+		fTime, pStats->m_iTotalBytes/fTime, pStats->m_iTotalDocuments/fTime );
 
 	////////////////////
 	// cleanup/shutdown

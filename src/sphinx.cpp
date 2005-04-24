@@ -1838,9 +1838,20 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 	// build raw log
 	PROFILE_BEGIN ( collect_hits );
 
+	CSphIndexProgress tProgress;
+	tProgress.m_ePhase = CSphIndexProgress::PHASE_COLLECT;
+
 	DWORD iDocID;
 	while (( iDocID = pSource->next() ))
 	{
+		if ( m_pProgress
+			&& ( ( pSource->GetStats()->m_iTotalDocuments % 100 )==0 ) )
+		{
+			tProgress.m_iDocuments = pSource->GetStats()->m_iTotalDocuments;
+			tProgress.m_iBytes = pSource->GetStats()->m_iTotalBytes;
+			m_pProgress ( &tProgress );
+		}
+
 		int iHitCount = pSource->hits.GetLength ();
 		if ( iHitCount<=0 )
 			continue;
@@ -1901,6 +1912,16 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 			return 0;
 		}
 		PROFILE_END ( write_hits );
+	}
+
+	if ( m_pProgress )
+	{
+		tProgress.m_iDocuments = pSource->GetStats()->m_iTotalDocuments;
+		tProgress.m_iBytes = pSource->GetStats()->m_iTotalBytes;
+		m_pProgress ( &tProgress );
+
+		tProgress.m_ePhase = CSphIndexProgress::PHASE_COLLECT_END;
+		m_pProgress ( &tProgress );
 	}
 
 	PROFILE_END ( collect_hits );
@@ -1978,8 +1999,14 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 			tQueue.Push ( tHit, i );
 	}
 
+	// init progress meter
+	tProgress.m_ePhase = CSphIndexProgress::PHASE_SORT;
+	tProgress.m_iHits = 0;
+	tProgress.m_iHitsTotal = iRawHits;
+
 	// while the queue has data for us
 	// FIXME! analyze binsRead return code
+	int iHitsSorted = 0;
 	while ( tQueue.m_iUsed )
 	{
 		// pack and emit queue root
@@ -1998,6 +2025,23 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 			if ( bActive[iBin] )
 				tQueue.Push ( tHit, iBin );
 		}
+
+		// progress
+		if ( m_pProgress && ++iHitsSorted==1000000 )
+		{
+			tProgress.m_iHits += iHitsSorted;
+			m_pProgress ( &tProgress );
+			iHitsSorted = 0;
+		}
+	}
+
+	if ( m_pProgress )
+	{
+		tProgress.m_iHits += iHitsSorted;
+		m_pProgress ( &tProgress );
+
+		tProgress.m_ePhase = CSphIndexProgress::PHASE_SORT_END;
+		m_pProgress ( &tProgress );
 	}
 
 	// cleanup

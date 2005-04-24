@@ -50,8 +50,8 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
-#define SPHINX_VERSION			"0.9.1"
-#define SPHINX_BANNER			"Sphinx 0.9.1\nCopyright (c) 2001-2005, Andrew Aksyonoff\n\n"
+#define SPHINX_VERSION			"0.9.2-dev"
+#define SPHINX_BANNER			"Sphinx " SPHINX_VERSION "\nCopyright (c) 2001-2005, Andrew Aksyonoff\n\n"
 
 #define SPH_MAX_QUERY_WORDS		10
 #define SPH_MAX_WORD_LEN		64
@@ -613,12 +613,45 @@ public:
 // FULLTEXT INDICES
 /////////////////////////////////////////////////////////////////////////////
 
-/// generic fulltext index interface
-struct CSphIndex
+/// progress info
+struct CSphIndexProgress
 {
+	enum Phase_e
+	{
+		PHASE_COLLECT,				///< document collection phase
+		PHASE_COLLECT_END,			///< document collection phase end
+		PHASE_SORT,					///< final sorting phase
+		PHASE_SORT_END				///< final sorting phase end
+	};
+
+	Phase_e			m_ePhase;		///< current indexing phase
+
+	int				m_iDocuments;	///< PHASE_COLLECT: documents collected so far
+	SphOffset_t		m_iBytes;		///< PHASE_COLLECT: bytes collected so far
+
+	SphOffset_t		m_iHits;		///< PHASE_SORT: hits sorted so far
+	SphOffset_t		m_iHitsTotal;	///< PHASE_SORT: hits total
+};
+
+
+/// generic fulltext index interface
+class CSphIndex
+{
+public:
+	typedef void ProgressCallback_t ( const CSphIndexProgress * pStat );
+
+public:
+								CSphIndex() : m_pProgress ( NULL ) {}
+	virtual	void				SetProgressCallback ( ProgressCallback_t * pfnProgress ) { m_pProgress = pfnProgress; }
+
+public:
 	virtual int					build ( CSphDict * dict, CSphSource * source, int iMemoryLimit ) = 0;
 	virtual CSphQueryResult *	query ( CSphDict * dict, CSphQuery * pQuery ) = 0;
+
+protected:
+	ProgressCallback_t *		m_pProgress;
 };
+
 
 /// create phrase fulltext index implemntation
 CSphIndex *		sphCreateIndexPhrase ( const char * sFilename );

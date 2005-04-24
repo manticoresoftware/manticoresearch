@@ -75,7 +75,7 @@ int main ( int argc, char ** argv )
 	fprintf ( stdout, SPHINX_BANNER );
 	if ( argc<=1 )
 	{
-		sphDie (
+		fprintf ( stdout,
 			"Usage: search [OPTIONS] <word1 [word2 [word3 [...]]]>\n"
 			"\n"
 			"Options are:\n"
@@ -90,6 +90,7 @@ int main ( int argc, char ** argv )
 			"-q, --noinfo\t\tdo not output document info from SQL database\n"
 			"\t\t\t(default is to output)\n"
 		);
+		exit ( 0 );
 	}
 
 	/////////////

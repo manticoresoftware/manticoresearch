@@ -377,7 +377,6 @@ struct CSphIndexHeader_VLN
 {
 	DWORD		m_iMinDocID;
 	DWORD		m_iMinGroupID;
-	DWORD		m_iGroupBits;
 	DWORD		m_iFieldCount;
 };
 
@@ -464,6 +463,7 @@ public:
 	int				m_iHits;		///< hit count, from wordlist
 
 	DWORD			m_iDoc;			///< current document, from doclist
+	DWORD			m_iGroup;		///< current group, from doclist
 	DWORD			m_iHitPos;		///< current hit postition, from hitlist
 
 	SphOffset_t		m_iHitlistPos;	///< current position in hitlist, from doclist
@@ -510,6 +510,9 @@ public:
 		if ( iDeltaDoc )
 		{
 			m_iDoc += iDeltaDoc;
+
+			m_iGroup = m_rdDoclist.UnzipInt ();
+			assert ( m_iGroup );
 
 			SphOffset_t iDeltaPos = m_rdDoclist.UnzipOffset ();
 			assert ( iDeltaPos>0 );
@@ -1462,7 +1465,7 @@ void CSphIndex_VLN::cidxHit ( CSphHit * hit )
 	static int			iLastWordHits = 0;
 
 	assert (
-		( hit->m_iWordID && hit->m_iWordPos && hit->m_iDocID ) || // it's either ok hit
+		( hit->m_iWordID && hit->m_iWordPos && hit->m_iDocID && hit->m_iGroupID ) || // it's either ok hit
 		( !hit->m_iWordID && !hit->m_iWordPos ) ); // or "flush-hit"
 
 	/////////////
@@ -1552,6 +1555,7 @@ void CSphIndex_VLN::cidxHit ( CSphHit * hit )
 		assert ( fdData->m_iPos > iLastHitlistPos );
 
 		m_dDoclist.Add ( hit->m_iDocID - iLastDocID );
+		m_dDoclist.Add ( hit->m_iGroupID ); // R&D: maybe some delta-coding would help here too
 		m_dDoclist.Add ( fdData->m_iPos - iLastHitlistPos );
 
 		iLastDocID = hit->m_iDocID;
@@ -1666,25 +1670,6 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphHit * hit, int count )
 }
 
 /////////////////////////////////////////////////////////////////////////////
-
-static int iLog2 ( int iMin, int iMax )
-{
-	if ( iMin<iMax )
-	{
-		int iBits = 0;
-		DWORD iRange = iMax-iMin;
-		while ( iRange )
-		{
-			iBits++;
-			iRange >>= 1;
-		}
-		return iBits;
-	} else
-	{
-		return 0;
-	}
-}
-
 
 /// hit priority queue entry
 struct CSphHitQueueEntry : public CSphHit
@@ -1830,9 +1815,7 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 
 	// accumulate group IDs range
 	DWORD iMinDocID = INT_MAX;
-	DWORD iMaxDocID = 0;
 	DWORD iMinGroupID = INT_MAX;
-	DWORD iMaxGroupID = 0;
 
 	// build raw log
 	PROFILE_BEGIN ( collect_hits );
@@ -1864,9 +1847,7 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 			assert ( pHit->m_iWordPos );
 
 			iMinGroupID = Min ( iMinGroupID, pHit->m_iGroupID );
-			iMaxGroupID = Max ( iMaxGroupID, pHit->m_iGroupID );
 			iMinDocID = Min ( iMinDocID, pHit->m_iDocID );
-			iMaxDocID = Max ( iMaxDocID, pHit->m_iDocID );
 
 			*pRawBlock++ = *pHit++;
 			iRawBlockUsed++;
@@ -1951,15 +1932,11 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 	if ( !cidxCreate() )
 		return 0;
 
-	// calculate how much bits do we need for encoding gids
-	int iGidBits = iLog2 ( iMinGroupID, iMaxGroupID );
-	int iDocBits = iLog2 ( iMinDocID, iMaxDocID );
-	assert ( (iGidBits+iDocBits)<=32 );
-
-	// fill header
-	m_tHeader.m_iMinDocID = iMinDocID;
-	m_tHeader.m_iMinGroupID = iMinGroupID;
-	m_tHeader.m_iGroupBits = iGidBits;
+	// adjust min IDs, and fill header
+	assert ( iMinDocID>0 );
+	assert ( iMinGroupID>0 );
+	m_tHeader.m_iMinDocID = --iMinDocID;
+	m_tHeader.m_iMinGroupID = --iMinGroupID;
 	m_tHeader.m_iFieldCount = pSource->GetFieldCount ();
 
 	// initialize sorting
@@ -2009,9 +1986,8 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 	while ( tQueue.m_iUsed )
 	{
 		// pack and emit queue root
-		tQueue.m_pData->m_iDocID = 1 +
-			( ( tQueue.m_pData->m_iDocID - iMinDocID ) << iGidBits ) +
-			( tQueue.m_pData->m_iGroupID - iMinGroupID );
+		tQueue.m_pData->m_iDocID -= iMinDocID;
+		tQueue.m_pData->m_iGroupID -= iMinGroupID;
 		cidxHit ( tQueue.m_pData );
 
 		// pop queue root and push next hit from popped bin
@@ -2139,6 +2115,18 @@ public:
 };
 
 
+inline int sphBitCount ( DWORD n )
+{
+	// MIT HACKMEM count
+	// works for 32-bit numbers only
+	// fix last line for 64-bit numbers
+
+	register DWORD tmp;
+	tmp = n - ((n >> 1) & 033333333333) - ((n >> 2) & 011111111111);
+	return ((tmp + (tmp >> 3)) & 030707070707) % 63;
+}
+
+
 CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 {
 	assert ( dict );
@@ -2194,7 +2182,6 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 	rdIndex.SetFile ( tWordlist.m_iFD );
 	rdIndex.GetRawBytes ( &m_tHeader, sizeof(m_tHeader) );
 	rdIndex.GetBytes ( cidxPagesDir, sizeof(cidxPagesDir) );
-	DWORD iGroupMask = (1<<m_tHeader.m_iGroupBits) - 1;
 
 	PROFILE_END ( query_load_dir );
 
@@ -2288,7 +2275,7 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 		weights[i] = 1;
 	if ( pQuery->m_pWeights ) // user-supplied
 		for ( int i=0; i<Min ( nweights, pQuery->m_iWeights ); i++ )
-			weights[i] = pQuery->m_pWeights[i];
+			weights[i] = Max ( 1, pQuery->m_pWeights[i] );
 
 	// find and proximity-weight matching documents
 	i = docID = 0;
@@ -2329,7 +2316,7 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 
 			// early reject by group id
 			if ( pQuery->m_iGroup )
-				if ( pQuery->m_iGroup != int( ((docID-1) & iGroupMask) + m_tHeader.m_iMinGroupID ) )
+				if ( pQuery->m_iGroup != (int)(qwords[0].m_iGroup + m_tHeader.m_iMinGroupID) )
 			{
 				docID++;
 				i = 0;
@@ -2390,8 +2377,8 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 
 			// add match
 			CSphMatch & tMatch = pResult->m_dMatches.Add ();
-			tMatch.m_iGroupID = ((docID-1) & iGroupMask) + m_tHeader.m_iMinGroupID; // unpack group id
-			tMatch.m_iDocID = ((docID-1) >> m_tHeader.m_iGroupBits) + m_tHeader.m_iMinDocID; // unpack document id
+			tMatch.m_iGroupID = qwords[0].m_iGroup + m_tHeader.m_iMinGroupID; // unpack group id
+			tMatch.m_iDocID = docID + m_tHeader.m_iMinDocID; // unpack document id
 			tMatch.m_iWeight = j; // set weight
 
 			// continue looking for next matches
@@ -2408,11 +2395,18 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 		int iActive = nwords; // total number of words still active
 		DWORD iDocID = 0; // FIXME! make a macro like INVALID_DOCUMENT_ID or something
 
+		// find a multiplier for phrase match
+		// so that it will weight more than any word match
+		int iPhraseK = 0;
+		for ( i=0; i<nweights; i++ )
+			iPhraseK += weights[i] * nwords;
+
 		for ( ;; )
 		{
 			// update active pointers to document lists, kill empty ones,
 			// and get min current document id
-			DWORD iNewID = UINT_MAX;
+			DWORD iMatchID = UINT_MAX;
+			DWORD iMatchGroup = 0;
 			for ( i=0; i<iActive; i++ )
 			{
 				// move to next document
@@ -2433,33 +2427,31 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 				}
 
 				// get new min id
-				if ( qwords[i].m_iDoc<iNewID )
-					iNewID = qwords[i].m_iDoc;
+				if ( qwords[i].m_iDoc<iMatchID )
+				{
+					iMatchID = qwords[i].m_iDoc;
+					iMatchGroup = qwords[i].m_iGroup;
+				}
 			}
 			if ( iActive==0 )
 				break;
-			iDocID = iNewID;
+			iDocID = iMatchID;
 
 			assert ( iDocID!=0 );
 			assert ( iDocID!=UINT_MAX );
 
 			// early reject by group id
 			if ( pQuery->m_iGroup )
-				if ( pQuery->m_iGroup != int( ((iDocID-1) & iGroupMask) + m_tHeader.m_iMinGroupID ) )
+				if ( pQuery->m_iGroup != (int)(iMatchGroup+m_tHeader.m_iMinGroupID) )
 					continue;
 
 			// get the words we're matching current document against (let's call them "terms")
 			CSphQueryWord * pHit [ SPH_MAX_QUERY_WORDS ];
-			int dPos [ SPH_MAX_QUERY_WORDS ];
 			int iTerms = 0;
 
 			for ( i=0; i<iActive; i++ )
 				if ( qwords[i].m_iDoc==iDocID )
-			{
-				pHit[iTerms] = &qwords[i];
-				dPos[iTerms] = qwords[i].m_iQueryPos;
-				iTerms++;
-			}
+					pHit[iTerms++] = &qwords[i];
 			assert ( iTerms>0 );
 
 			// init weighting
@@ -2467,7 +2459,7 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 			{
 				int		m_iCurPhrase;	// current phrase-match weight
 				int		m_iMaxPhrase;	// max phrase-match weight
-				int		m_iMatch;		// max simple match weight
+				DWORD	m_uMatch;		// matching terms bitmap
 			} dWeights [ SPH_MAX_FIELD_COUNT ];
 			memset ( dWeights, 0, sizeof(dWeights) ); // OPTIMIZE: only zero out nweights, not total
 
@@ -2485,7 +2477,6 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 					if ( !pHit[i]->m_iHitPos )
 					{
 						pHit[i] = pHit[iTerms-1];
-						dPos[i] = dPos[iTerms-1];
 						i--;
 						iTerms--;
 						continue;
@@ -2504,10 +2495,10 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 
 				// get field number and mark a simple match
 				int iField = pmin >> 24;
-				dWeights[iField].m_iMatch = 1; // FIXME! count matching words, maybe?
+				dWeights[iField].m_uMatch |= ( 1<<pHit[imin]->m_iQueryPos );
 
 				// find max proximity relevance
-				if ( dPos[imin] - pmin == k )
+				if ( pHit[imin]->m_iQueryPos - pmin == k )
 				{
 					dWeights[iField].m_iCurPhrase++;
 					if ( dWeights[iField].m_iMaxPhrase < dWeights[iField].m_iCurPhrase )
@@ -2516,17 +2507,17 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 				{
 					dWeights[iField].m_iCurPhrase = 0;
 				}
-				k = dPos[imin] - pmin;
+				k = pHit[imin]->m_iQueryPos - pmin;
 			}
 
 			// sum simple match weights and phrase match weights
 			for ( i=0, j=0; i<nweights; i++ )
-				j += weights[i] * ( dWeights[i].m_iMatch + dWeights[i].m_iMaxPhrase );
+				j += weights[i] * ( sphBitCount(dWeights[i].m_uMatch) + dWeights[i].m_iMaxPhrase*iPhraseK );
 
 			// add match
 			CSphMatch & tMatch = pResult->m_dMatches.Add ();
-			tMatch.m_iGroupID = ((iDocID-1) & iGroupMask) + m_tHeader.m_iMinGroupID; // unpack group id
-			tMatch.m_iDocID = ((iDocID-1) >> m_tHeader.m_iGroupBits) + m_tHeader.m_iMinDocID; // unpack document id
+			tMatch.m_iGroupID = iMatchGroup + m_tHeader.m_iMinGroupID; // unpack group id
+			tMatch.m_iDocID = iDocID + m_tHeader.m_iMinDocID; // unpack document id
 			tMatch.m_iWeight = j; // set weight
 		}
 	}

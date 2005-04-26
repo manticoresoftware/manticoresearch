@@ -20,7 +20,7 @@
 $sphinx_server = "127.0.0.1";
 $sphinx_port   = 3312;
 
-function sphinxQuery ( $server, $port, $query, $start=0, $rpp=20, $weights=array(), $any=false, $group=0 )
+function sphinxQuery ( $server, $port, $query, $start=0, $rpp=20, $weights=array(), $any=false, $groups=array() )
 {
 	$start = (int)$start;
 	$rpp = (int)$rpp;
@@ -29,14 +29,17 @@ function sphinxQuery ( $server, $port, $query, $start=0, $rpp=20, $weights=array
 		return false;
 
 	// build request
-	$mreq = pack ( "VVVV", $start, $rpp, $any ? 1 : 0, $group ); // mode/limits part
-	$qreq = pack ( "V", strlen($query) ) . $query; // query string part
-	$wreq = pack ( "V", count($weights) ); // weights part
+	$req = pack ( "VVV", $start, $rpp, $any ? 1 : 0 ); // mode/limits part
+	$req .= pack ( "V", count($groups) ); // groups
+	foreach ( $groups as $group )
+		$req .= pack ( "V", $group );
+	$req .= pack ( "V", strlen($query) ) . $query; // query string
+	$req .= pack ( "V", count($weights) ); // weights
 	foreach ( $weights as $weight )
-		$wreq .= pack ( "V", (int)$weight );
+		$req .= pack ( "V", (int)$weight );
 
 	// do query
-	fputs ( $fp, $mreq . $qreq . $wreq );
+	fputs ( $fp, $req );
 
 	$result = array();
 	while (!feof($fp)) {
@@ -83,7 +86,7 @@ foreach ( $_SERVER["argv"] as $arg )
 
 $q = "";
 $any = false;
-$group = 0;
+$groups = array();
 for ( $i=0; $i<count($args); $i++ )
 {
 	if ( $args[$i]=="--any" )
@@ -91,7 +94,7 @@ for ( $i=0; $i<count($args); $i++ )
 		$any = true;
 	} else if ( $args[$i]=="--group" )
 	{
-		$group = (int)$args[++$i];
+		$groups[] = (int)$args[++$i];
 	} else
 	{
 		$q .= $args[$i] . " ";
@@ -99,7 +102,7 @@ for ( $i=0; $i<count($args); $i++ )
 }
 
 // do query
-$res = sphinxQuery ( $sphinx_server, $sphinx_port, $q, 0, 20, array(100,1), $any, $group );
+$res = sphinxQuery ( $sphinx_server, $sphinx_port, $q, 0, 20, array(100,1), $any, $groups );
 
 // print results
 print "Query '$q' produced $res[total] matches in $res[time] sec.\n";

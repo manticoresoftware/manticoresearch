@@ -401,18 +401,29 @@ int main ( int argc, char **argv )
 			case 0:
 				for ( ;; )
 				{
-					int iAny, iGroup;
+					CSphQuery tQuery;
+					int iAny;
 
 					// read mode/limits
 					if ( iread ( rsock, &start, 4 )!=4 ) break;
 					if ( iread ( rsock, &count, 4 )!=4 ) break;
 					if ( iread ( rsock, &iAny, 4 )!=4 ) break;
-					if ( iread ( rsock, &iGroup, 4 )!=4 ) break;
+					if ( iread ( rsock, &tQuery.m_iGroups, 4 )!=4 ) break;
+
+					// read groups
+					if ( tQuery.m_iGroups<0 || tQuery.m_iGroups>256 ) break; // FIXME?
+					if ( tQuery.m_iGroups )
+					{
+						i = tQuery.m_iGroups*sizeof(DWORD);
+						tQuery.m_pGroups = new DWORD [ tQuery.m_iGroups ];
+						if ( iread ( rsock, tQuery.m_pGroups, i )!=i ) break;
+					}
 
 					// read query string
-					if (iread(rsock, &i, 4) != 4) break;
-					i = Min(i, (int)sizeof(query)-1);
-					if (iread(rsock, query, i) != i) break;
+					if ( iread ( rsock, &i, 4 )!=4 ) break;
+					if ( i<0 || i>(int)sizeof(query)-1 ) break;
+
+					if ( iread ( rsock, query, i )!=i ) break;
 					query[i] = '\0';
 
 					// read weights
@@ -425,12 +436,10 @@ int main ( int argc, char **argv )
 						if ( iread ( rsock, dUserWeights, iUserWeights*4 ) != iUserWeights*4 ) break;
 
 					// do query
-					CSphQuery tQuery;
 					tQuery.m_sQuery = query;
 					tQuery.m_pWeights = dUserWeights;
 					tQuery.m_iWeights = iUserWeights;
 					tQuery.m_bAll = ( iAny==0 );
-					tQuery.m_iGroup = iGroup;
 
 					r = pIndex->query ( pDict, &tQuery );
 
@@ -444,9 +453,9 @@ int main ( int argc, char **argv )
 						ctime_r ( &tNow, sTimeBuf );
 						sTimeBuf [ strlen(sTimeBuf)-1 ] = '\0';
 
-						sprintf ( buf, "[%s] %.2f sec: [%d %d %s %d] %s\n",
+						sprintf ( buf, "[%s] %.2f sec: [%d %d %s] %s\n",
 							sTimeBuf, r->m_fQueryTime,
-							start, count, tQuery.m_bAll ? "all" : "any", iGroup,
+							start, count, tQuery.m_bAll ? "all" : "any",
 							query );
 
 						flock ( g_iQueryLogFile, LOCK_EX );

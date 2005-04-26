@@ -101,9 +101,9 @@ int main ( int argc, char ** argv )
 	sQuery[0] = '\0';
 
 	const char * sConfName = "sphinx.conf";
+	CSphVector<DWORD> dGroups;
 	bool bAny = false;
 	bool bNoInfo = false;
-	int iGroup = 0;
 	int iStart = 0;
 	int iLimit = 20;
 
@@ -121,7 +121,7 @@ int main ( int argc, char ** argv )
 			else if ( (i+1)<argc )
 			{
 				if ( 0 );
-				OPT ( "-g", "--group")		iGroup = atoi ( argv[++i] );
+				OPT ( "-g", "--group")		{ if ( atoi ( argv[++i] ) ) dGroups.Add ( atoi ( argv[i] ) ); }
 				OPT ( "-s", "--start" )		iStart = atoi ( argv[++i] );
 				OPT ( "-l", "--limit" )		iLimit = atoi ( argv[++i] );
 				OPT ( "-c", "--config" )	sConfName = argv[++i];
@@ -239,7 +239,12 @@ int main ( int argc, char ** argv )
 	CSphQuery tQuery;
 	tQuery.m_sQuery = sQuery;
 	tQuery.m_bAll = !bAny;
-	tQuery.m_iGroup = iGroup;
+	if ( dGroups.GetLength() )
+	{
+		tQuery.m_pGroups = new DWORD [ dGroups.GetLength() ];
+		tQuery.m_iGroups = dGroups.GetLength();
+		memcpy ( tQuery.m_pGroups, &dGroups[0], sizeof(DWORD)*dGroups.GetLength() );
+	}
 
 	CSphIndex * pIndex = sphCreateIndexPhrase ( pIndexPath );
 	CSphQueryResult * pResult = pIndex->query ( pDict, &tQuery );

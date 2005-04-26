@@ -581,11 +581,12 @@ public:
 	int *			m_pWeights;	///< user-supplied per-field weights. may be NULL. default is NULL
 	int				m_iWeights;	///< number of user-supplied weights. missing fields will be assigned weight 1. default is 0
 	bool			m_bAll;		///< match all words or any word. default is "match all"
-	int				m_iGroup;	///< match this group only. default is 0, which means "match all"
+	DWORD *			m_pGroups;	///< groups to match. default is NULL, which means "match all"
+	int				m_iGroups;	///< count of groups to match
 
 public:
-	/// ctor. fills defaults
-					CSphQuery ();
+					CSphQuery ();	///< ctor, fills defaults
+					~CSphQuery ();	///< dtor, safely frees owned fields
 };
 
 

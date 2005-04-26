@@ -519,6 +519,7 @@ public:
 
 			m_iHitlistPos += iDeltaPos;
 			m_rdHitlist.SeekTo ( m_iHitlistPos );
+			m_iHitPos = 0;
 
 		} else
 		{
@@ -816,8 +817,16 @@ CSphQuery::CSphQuery ()
 	, m_pWeights	( NULL )
 	, m_iWeights	( 0 )
 	, m_bAll		( true )
-	, m_iGroup		( 0 )
+	, m_pGroups		( NULL )
+	, m_iGroups		( 0 )
 {
+}
+
+
+CSphQuery::~CSphQuery ()
+{
+	SafeDeleteArray ( m_pWeights );
+	SafeDeleteArray ( m_pGroups );
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -2093,6 +2102,12 @@ int cmpQueryWord ( const void * a, const void * b )
 }
 
 
+int cmpDword ( const void * a, const void * b )
+{
+	return *((DWORD*)a) - *((DWORD*)b);
+}
+
+
 /// file which closes automatically when going out of scope
 class CSphAutofile
 {
@@ -2120,10 +2135,32 @@ inline int sphBitCount ( DWORD n )
 	// MIT HACKMEM count
 	// works for 32-bit numbers only
 	// fix last line for 64-bit numbers
-
 	register DWORD tmp;
 	tmp = n - ((n >> 1) & 033333333333) - ((n >> 2) & 011111111111);
 	return ((tmp + (tmp >> 3)) & 030707070707) % 63;
+}
+
+
+inline int sphGroupMatch ( DWORD iGroup, DWORD * pGroups, int iGroups )
+{
+	if ( !pGroups ) return 1;
+
+	DWORD * pA = pGroups;
+	DWORD * pB = pGroups+iGroups-1;
+	if ( iGroup==*pA || iGroup==*pB ) return 1;
+	if ( iGroup<(*pA) || iGroup>(*pB) ) return 0;
+
+	while ( pB-pA>1 )
+	{
+		DWORD * pM = pA + ((pB-pA)/2);
+		if ( iGroup==(*pM) )
+			return 1;
+		if ( iGroup<(*pM) )
+			pB = pM;
+		else
+			pA = pM;
+	}
+	return 0;
 }
 
 
@@ -2268,6 +2305,10 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 	// reorder hit lists
 	qsort ( qwords, nwords, sizeof(CSphQueryWord), cmpQueryWord );
 
+	// reorder groups
+	if ( pQuery->m_pGroups )
+		qsort ( pQuery->m_pGroups, pQuery->m_iGroups, sizeof(DWORD), cmpDword );
+
 	PROFILE_END ( query_load_words );
 
 	PROFILE_BEGIN ( query_match );
@@ -2318,8 +2359,8 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 				qwords[i].GetHitlistEntry ();
 
 			// early reject by group id
-			if ( pQuery->m_iGroup )
-				if ( pQuery->m_iGroup != (int)(qwords[0].m_iGroup + m_tHeader.m_iMinGroupID) )
+			if ( !sphGroupMatch ( qwords[0].m_iGroup + m_tHeader.m_iMinGroupID,
+				pQuery->m_pGroups, pQuery->m_iGroups ) )
 			{
 				docID++;
 				i = 0;
@@ -2359,6 +2400,7 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 
 				// get field number and mark a simple match
 				j = pmin >> 24;
+				assert ( j>=0 && j<(int)m_tHeader.m_iFieldCount );
 				matchWeight[j] = 1;
 
 				// find max proximity relevance
@@ -2444,9 +2486,8 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 			assert ( iDocID!=UINT_MAX );
 
 			// early reject by group id
-			if ( pQuery->m_iGroup )
-				if ( pQuery->m_iGroup != (int)(iMatchGroup+m_tHeader.m_iMinGroupID) )
-					continue;
+			if ( !sphGroupMatch ( iMatchGroup+m_tHeader.m_iMinGroupID, pQuery->m_pGroups, pQuery->m_iGroups ) )
+				continue;
 
 			// get the words we're matching current document against (let's call them "terms")
 			CSphQueryWord * pHit [ SPH_MAX_QUERY_WORDS ];

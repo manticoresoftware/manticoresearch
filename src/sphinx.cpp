@@ -2172,7 +2172,10 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 	CSphAutofile tDoclist ( sTmp );
 
 	if ( tWordlist.m_iFD<0 || tDoclist.m_iFD<0 )
+	{
+		SafeDelete ( pResult );
 		return NULL;
+	}
 
 	PROFILE_END ( query_init );
 	PROFILE_BEGIN ( query_load_dir );

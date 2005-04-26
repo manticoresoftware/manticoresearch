@@ -70,8 +70,6 @@ char * strmacro ( const char * sTemplate, const char * sMacro, int iValue )
 
 int main ( int argc, char ** argv )
 {
-	const char * sConfName = "sphinx.conf";
-
 	fprintf ( stdout, SPHINX_BANNER );
 	if ( argc<=1 )
 	{
@@ -79,7 +77,9 @@ int main ( int argc, char ** argv )
 			"Usage: search [OPTIONS] <word1 [word2 [word3 [...]]]>\n"
 			"\n"
 			"Options are:\n"
-			"--any\t\t\tmatch document if any query word is matched\n"
+			"-c, --config <file>\tread configuration from specified file\n"
+			"\t\t\t(default is sphinx.conf)\n"
+			"-a, --any\t\tmatch document if any query word is matched\n"
 			"\t\t\t(default is to match all)\n"
 			"-g, -group <id>\t\tlimit matching documents to this group\n"
 			"\t\t\t(default is not to limit by group)\n"
@@ -93,6 +93,60 @@ int main ( int argc, char ** argv )
 		exit ( 0 );
 	}
 
+	///////////////////////////////////////////
+	// get query and other commandline options
+	///////////////////////////////////////////
+
+	char sQuery [ 1024 ];
+	sQuery[0] = '\0';
+
+	const char * sConfName = "sphinx.conf";
+	bool bAny = false;
+	bool bNoInfo = false;
+	int iGroup = 0;
+	int iStart = 0;
+	int iLimit = 20;
+
+	#define OPT(_a1,_a2) else if ( !strcmp(argv[i],_a1) || !strcmp(argv[i],_a2) )
+
+	int i;
+	for ( i=1; i<argc; i++ )
+	{
+		if ( argv[i][0]=='-' )
+		{
+			// this is an option
+			if ( 0 );
+			OPT ( "-a", "--any" )		bAny = true;
+			OPT ( "-q", "--noinfo" )	bNoInfo = true;
+			else if ( (i+1)<argc )
+			{
+				if ( 0 );
+				OPT ( "-g", "--group")		iGroup = atoi ( argv[++i] );
+				OPT ( "-s", "--start" )		iStart = atoi ( argv[++i] );
+				OPT ( "-l", "--limit" )		iLimit = atoi ( argv[++i] );
+				OPT ( "-c", "--config" )	sConfName = argv[++i];
+				else break; // unknown option
+			}
+			else break; // unknown option
+
+		} else if ( strlen(sQuery) + strlen(argv[i]) + 1 < sizeof(sQuery) )
+		{
+			// this is a search term
+			strcat ( sQuery, argv[i] );
+			strcat ( sQuery, " " );
+		}
+	}
+	iStart = Max ( iStart, 0 );
+	iLimit = Min ( Max ( iLimit, 0 ), 1000 );
+
+	if ( i!=argc )
+	{
+		fprintf ( stderr, "ERROR: malformed or unknown option near '%s'.\n", argv[i] );
+		return 1;
+	}
+
+	#undef OPT
+
 	/////////////
 	// configure
 	/////////////
@@ -100,7 +154,7 @@ int main ( int argc, char ** argv )
 	// load config
 	CSphConfig tConf;
 	if ( !tConf.open ( sConfName ) )
-		sphDie ( "FATAL: failed to open '%s'.\n", sConfName );
+		sphDie ( "FATAL: failed to open config file '%s'.\n", sConfName );
 
 	CSphHash * hCommonConf = tConf.loadSection ( "common", g_dSphKeysCommon );
 
@@ -122,57 +176,6 @@ int main ( int argc, char ** argv )
 			fprintf ( stderr, "WARNING: unknown morphology type '%s' ignored.\n", pMorph );
 		}
 	}
-
-	///////////////////////////////////////////
-	// get query and other commandline options
-	///////////////////////////////////////////
-
-	char sQuery [ 1024 ];
-	sQuery[0] = '\0';
-
-	bool bAny = false;
-	bool bNoInfo = false;
-	int iGroup = 0;
-	int iStart = 0;
-	int iLimit = 20;
-
-	for ( int i=1; i<argc; i++ )
-	{
-		if ( strcmp ( argv[i], "--any" )==0 )
-		{
-			bAny = true;
-
-		} else if ( strcmp ( argv[i], "--noinfo" )==0
-			|| strcmp ( argv[i], "-q" )==0 )
-		{
-			bNoInfo = true;
-
-		} else if ( strcmp ( argv[i], "--group" )==0
-			|| strcmp ( argv[i], "-g" )==0 )
-		{
-			if ( ++i<argc )
-				iGroup = atoi ( argv[i] );
-
-		} else if ( strcmp ( argv[i], "--start" )==0
-			|| strcmp ( argv[i], "-s" )==0 )
-		{
-			if ( ++i<argc )
-				iStart = atoi ( argv[i] );
-
-		} else if ( strcmp ( argv[i], "--limit" )==0
-			|| strcmp ( argv[i], "-l" )==0 )
-		{
-			if ( ++i<argc )
-				iLimit = atoi ( argv[i] );
-
-		} else if ( strlen(sQuery) + strlen(argv[i]) + 1 < sizeof(sQuery) )
-		{
-			strcat ( sQuery, argv[i] );
-			strcat ( sQuery, " " );
-		}
-	}
-	iStart = Max ( iStart, 0 );
-	iLimit = Min ( Max ( iLimit, 0 ), 1000 );
 
 	// do we want to show document info from database?
 	#if USE_MYSQL
@@ -243,6 +246,12 @@ int main ( int argc, char ** argv )
 
 	delete pIndex;
 	delete pDict;
+
+	if ( !pResult )
+	{
+		fprintf ( stdout, "query '%s': search error: can not open index.\n", sQuery );
+		return 1;
+	}
 
 	fprintf ( stdout, "query '%s': %d matches, %.2f sec\n",
 		sQuery, pResult->m_dMatches.GetLength(), pResult->m_fQueryTime );

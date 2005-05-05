@@ -44,6 +44,33 @@
 #endif
 
 /////////////////////////////////////////////////////////////////////////////
+
+#if USE_WINDOWS
+#ifndef NDEBUG
+
+void sphAssert ( const char * sExpr, const char * sFile, int iLine )
+{
+	char sBuffer [ 1024 ];
+	_snprintf ( sBuffer, sizeof(sBuffer), "%s(%d): assertion %s failed\n", sFile, iLine, sExpr );
+
+	if ( MessageBox ( NULL, sBuffer, "Assert failed! Cancel to debug.", 
+		MB_OKCANCEL | MB_TOPMOST | MB_SYSTEMMODAL | MB_ICONEXCLAMATION ) != IDOK )
+	{
+		__debugbreak ();
+	} else
+	{
+		fprintf ( stderr, "%s", sBuffer );
+		exit ( 1 );
+	}
+}
+
+#undef assert
+#define assert(_expr) { if ( !(_expr) ) sphAssert ( #_expr, __FILE__, __LINE__ ); }
+
+#endif // !NDEBUG
+#endif // USE_WINDOWS
+
+/////////////////////////////////////////////////////////////////////////////
 // COMPILE-TIME CHECKS
 /////////////////////////////////////////////////////////////////////////////
 
@@ -1656,30 +1683,35 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iCount )
 			// FIXME! OPTIMIZE! do ptr hashing instead of array binsearch
 			CSphDocInfo * pStart = &m_dDocinfos[0];
 			CSphDocInfo * pEnd = &m_dDocinfos.Last ();
-			pDoc = NULL;
-			do
+			if ( pHit->m_iDocID==pStart->m_iDocID )
 			{
-				if ( pHit->m_iDocID==pStart->m_iDocID )
+				pDoc = pStart;
+			} else if ( pHit->m_iDocID==pEnd->m_iDocID )
+			{
+				pDoc = pEnd;
+			} else
+			{
+				pDoc = NULL;
+				while ( pEnd-pStart>1 )
 				{
-					pDoc = pStart;
-					break;
-				}
-				if ( pHit->m_iDocID==pEnd->m_iDocID )
-				{
-					pDoc = pEnd;
-					break;
-				}
-				if ( pHit->m_iDocID<pStart->m_iDocID || pHit->m_iDocID>pEnd->m_iDocID )
-					break;
+					// check if nothing found
+					if ( pHit->m_iDocID<pStart->m_iDocID || pHit->m_iDocID>pEnd->m_iDocID )
+						break;
+					assert ( pHit->m_iDocID>pStart->m_iDocID );
+					assert ( pHit->m_iDocID<pEnd->m_iDocID );
 
-				CSphDocInfo * pMid = pStart + (pEnd-pStart)/2;
-				if ( pHit->m_iDocID==pMid->m_iDocID )
-					return 0;
-				if ( pHit->m_iDocID<pMid->m_iDocID )
-					pEnd = pMid;
-				else
-					pStart = pMid;
-			} while ( pEnd-pStart>1 );
+					CSphDocInfo * pMid = pStart + (pEnd-pStart)/2;
+					if ( pHit->m_iDocID==pMid->m_iDocID )
+					{
+						pDoc = pMid;
+						break;
+					}
+					if ( pHit->m_iDocID<pMid->m_iDocID )
+						pEnd = pMid;
+					else
+						pStart = pMid;
+				}
+			}
 		}
 		assert ( pDoc );
 		assert ( pDoc->m_iDocID==pHit->m_iDocID );
@@ -1915,7 +1947,8 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 		int iHitCount = pSource->m_dHits.GetLength ();
 		if ( iHitCount<=0 )
 			continue;
-		m_dDocinfos.Add ( pSource->m_tDocInfo );
+		if ( !m_dDocinfos.GetLength() || m_dDocinfos.Last().m_iDocID!=pSource->m_tDocInfo.m_iDocID )
+			m_dDocinfos.Add ( pSource->m_tDocInfo );
 	
 		// store hits
 		assert ( pSource->m_tDocInfo.m_iDocID );
@@ -1930,7 +1963,6 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 			assert ( pHit->m_iDocID==pSource->m_tDocInfo.m_iDocID );
 			assert ( pHit->m_iWordID );
 			assert ( pHit->m_iWordPos );
-
 
 			*pRawBlock++ = *pHit++;
 			iRawBlockUsed++;

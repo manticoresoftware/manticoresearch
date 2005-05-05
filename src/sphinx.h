@@ -295,12 +295,20 @@ protected:
 /////////////////////////////////////////////////////////////////////////////
 
 /// hit info
-struct CSphHit
+struct CSphWordHit
 {
-	DWORD	m_iGroupID;		///< documents group ID (from data source)
-	DWORD	m_iDocID;		///< document ID (from data source)
-	DWORD	m_iWordID;		///< word ID (from dictionary)
-	DWORD	m_iWordPos;		///< word position in document
+	DWORD	m_iDocID;		///< document ID
+	DWORD	m_iWordID;		///< word ID in current dictionary
+	DWORD	m_iWordPos;		///< word position in current document
+};
+
+
+/// document info
+struct CSphDocInfo
+{
+	DWORD	m_iDocID;		///< document ID
+	DWORD	m_iGroupID;		///< documents group ID
+	DWORD	m_iTimestamp;	///< document timestamp
 };
 
 
@@ -323,10 +331,12 @@ struct CSphSourceStats
 
 
 /// generic data source
-struct CSphSource
+class CSphSource
 {
-	CSphVector<CSphHit>		hits;
-	CSphDict *				dict;
+public:
+	CSphVector<CSphWordHit>				m_dHits;	///< current document split into words
+	CSphDocInfo							m_tDocInfo;
+
 
 public:
 										CSphSource();
@@ -352,8 +362,8 @@ public:
 	virtual int							GetFieldCount () = 0;
 
 protected:
-	/// my stats
-	CSphSourceStats						m_iStats;
+	CSphDict *							m_pDict;	///< my dict
+	CSphSourceStats						m_iStats;	///< my stats
 };
 
 
@@ -378,14 +388,6 @@ struct CSphSource_Document : CSphSource
 	virtual int				GetFieldCount ();
 
 protected:
-	/// last group id
-	/// MUST be filled by NextDocument ()
-	DWORD					m_iLastGroupID;
-
-	/// last document id
-	/// MUST be filled by NextDocument ()
-	DWORD					m_iLastID;
-
 	/// my field count
 	/// MUST be filled by NextDocument ()
 	int						m_iFieldCount;
@@ -521,12 +523,6 @@ private:
 	BYTE *			m_pBufferEnd;
 
 private:
-	/// current document ID
-	int				m_iDocID;
-
-	/// current group ID
-	int				m_iGroupID;
-
 	/// current word position
 	int				m_iWordPos;
 
@@ -554,7 +550,7 @@ private:
 	bool			SkipTag ( bool bOpen, bool bWarnOnEOF=true );
 
 	/// scan for tag with integer value
-	bool			ScanInt ( const char * sTag, int * pRes );
+	bool			ScanInt ( const char * sTag, DWORD * pRes );
 
 	/// scan for tag with string value
 	bool			ScanStr ( const char * sTag, char * pRes, int iMaxLength );

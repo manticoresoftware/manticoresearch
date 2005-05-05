@@ -561,10 +561,8 @@ private:
 /////////////////////////////////////////////////////////////////////////////
 
 /// search query match
-struct CSphMatch
+struct CSphMatch : public CSphDocInfo
 {
-	DWORD		m_iGroupID;
-	DWORD		m_iDocID;
 	int			m_iWeight;
 };
 

@@ -345,6 +345,18 @@ protected:
 
 /////////////////////////////////////////////////////////////////////////////
 
+/// fat hit, which is actually stored in VLN index
+struct CSphFatHit
+{
+	DWORD	m_iDocID;		///< document ID
+	DWORD	m_iGroupID;		///< documents group ID
+	DWORD	m_iTimestamp;	///< document timestamp
+	DWORD	m_iWordID;		///< word ID in current dictionary
+	DWORD	m_iWordPos;		///< word position in current document
+};
+STATIC_SIZE_ASSERT ( CSphFatHit, 20 );
+
+
 /// possible bin states
 enum ESphBinState
 {
@@ -361,38 +373,47 @@ struct CSphBin
 	static const int	MIN_SIZE = 8192;
 	int					m_iSize;
 
-	BYTE *data, *pData;
-	int left, done, state;
-	DWORD lastGroupID, lastDocID, lastWordID, lastPos; // FIXME! make it a hit
+	BYTE *				m_dBuffer;
+	BYTE *				m_pCurrent;
+	int					m_iLeft;
+	int					m_iDone;
+	ESphBinState		m_eState;
 
-	SphOffset_t		m_iFilePos;		///< bin offset in raw hits log
-	int				m_iFileLeft;	///< how much data is still unread from raw log via this bin
+	CSphFatHit			m_tLastHit;		///< last decoded hit
+	SphOffset_t			m_iFilePos;		///< bin offset in raw hits log
+	int					m_iFileLeft;	///< how much data is still unread from raw log via this bin
 
 	CSphBin ()
 		: m_iFilePos ( 0 )
 		, m_iFileLeft ( 0 )
+		, m_dBuffer ( NULL )
+		, m_pCurrent ( NULL )
+		, m_iLeft ( 0 )
+		, m_iDone ( 0 )
+		, m_eState ( BIN_POS )
 	{
-		data = pData = NULL;
-		left = done = 0;
-		lastDocID = lastWordID = lastPos = 0;
-		state = BIN_POS;
+		m_tLastHit.m_iDocID = 0;
+		m_tLastHit.m_iGroupID = 0;
+		m_tLastHit.m_iTimestamp = 0;
+		m_tLastHit.m_iWordID = 0;
+		m_tLastHit.m_iWordPos = 0;
 	}
 
 
 	void Init ( int iSize )
 	{
-		assert ( !data );
+		assert ( !m_dBuffer );
 		assert ( iSize>=MIN_SIZE );
 
 		m_iSize = iSize;
-		data = new BYTE [ iSize ];
-		pData = data; 
+		m_dBuffer = new BYTE [ iSize ];
+		m_pCurrent = m_dBuffer; 
 	}
 
 
 	~CSphBin ()
 	{
-		SafeDeleteArray ( data );
+		SafeDeleteArray ( m_dBuffer );
 	}
 };
 
@@ -400,9 +421,8 @@ struct CSphBin
 /// VLN index header
 struct CSphIndexHeader_VLN
 {
-	DWORD		m_iMinDocID;
-	DWORD		m_iMinGroupID;
-	DWORD		m_iFieldCount;
+	DWORD		m_iFieldCount;	///< document fields count
+	CSphDocInfo	m_tMin;			///< mind id/group/timestamp
 };
 
 
@@ -487,8 +507,7 @@ public:
 	int				m_iDocs;		///< document count, from wordlist
 	int				m_iHits;		///< hit count, from wordlist
 
-	DWORD			m_iDoc;			///< current document, from doclist
-	DWORD			m_iGroup;		///< current group, from doclist
+	CSphDocInfo		m_tDoc;			///< current document info, from doclist
 	DWORD			m_iHitPos;		///< current hit postition, from hitlist
 
 	SphOffset_t		m_iHitlistPos;	///< current position in hitlist, from doclist
@@ -503,10 +522,12 @@ public:
 		, m_iWordID ( 0 )
 		, m_iDocs ( 0 )
 		, m_iHits ( 0 )
-		, m_iDoc ( 0 )
 		, m_iHitPos ( 0 )
 		, m_iHitlistPos ( 0 )
 	{
+		m_tDoc.m_iDocID = 0;
+		m_tDoc.m_iGroupID = 0;
+		m_tDoc.m_iTimestamp = 0;
 	}
 
 	~CSphQueryWord ()
@@ -521,11 +542,11 @@ public:
 		m_iWordID		= rhs.m_iWordID;
 		m_iDocs			= rhs.m_iDocs;
 		m_iHits			= rhs.m_iHits;
-		m_iDoc			= rhs.m_iDoc;
 		m_iHitPos		= rhs.m_iHitPos;
 		m_iHitlistPos	= rhs.m_iHitlistPos;
 		m_rdDoclist		= rhs.m_rdDoclist;
 		m_rdHitlist		= rhs.m_rdHitlist;
+		m_tDoc			= rhs.m_tDoc;
 		return *this;
 	}
 
@@ -534,10 +555,12 @@ public:
 		DWORD iDeltaDoc = m_rdDoclist.UnzipInt ();
 		if ( iDeltaDoc )
 		{
-			m_iDoc += iDeltaDoc;
+			m_tDoc.m_iDocID += iDeltaDoc;
 
-			m_iGroup = m_rdDoclist.UnzipInt ();
-			assert ( m_iGroup );
+			m_tDoc.m_iGroupID = m_rdDoclist.UnzipInt ();
+			m_tDoc.m_iTimestamp = m_rdDoclist.UnzipInt ();
+			assert ( m_tDoc.m_iGroupID );
+			assert ( m_tDoc.m_iTimestamp );
 
 			SphOffset_t iDeltaPos = m_rdDoclist.UnzipOffset ();
 			assert ( iDeltaPos>0 );
@@ -548,7 +571,7 @@ public:
 
 		} else
 		{
-			m_iDoc = 0;
+			m_tDoc.m_iDocID = 0;
 		}
 	}
 
@@ -561,18 +584,6 @@ public:
 			m_iHitPos = 0;
 	}
 };
-
-
-/// fat hit, which is actually stored in VLN index
-struct CSphFatHit
-{
-	DWORD	m_iDocID;		///< document ID
-	DWORD	m_iGroupID;		///< documents group ID
-	DWORD	m_iTimestamp;	///< document timestamp
-	DWORD	m_iWordID;		///< word ID in current dictionary
-	DWORD	m_iWordPos;		///< word position in current document
-};
-STATIC_SIZE_ASSERT ( CSphFatHit, 20 );
 
 
 /// this is my actual VLN-compressed phrase index implementation
@@ -1369,7 +1380,7 @@ int CSphIndex_VLN::binsReadByte(int b)
 {
 	BYTE r;
 
-	if ( !bins[b]->left )
+	if ( !bins[b]->m_iLeft )
 	{
 		PROFILE ( read_hits );
 		if ( m_iFilePos!=bins[b]->m_iFilePos )
@@ -1383,28 +1394,28 @@ int CSphIndex_VLN::binsReadByte(int b)
 			: (int)bins[b]->m_iFileLeft;
 		if (n == 0)
 		{
-			bins[b]->done = 1;
-			bins[b]->left = 1;
+			bins[b]->m_iDone = 1;
+			bins[b]->m_iLeft = 1;
 		} else
 		{
-			assert ( bins[b]->data );
+			assert ( bins[b]->m_dBuffer );
 
-			if ( ::read ( fdRaw, bins[b]->data, n )!=n )
+			if ( ::read ( fdRaw, bins[b]->m_dBuffer, n )!=n )
 				return -2;
-			bins[b]->left = n;
+			bins[b]->m_iLeft = n;
 
 			bins[b]->m_iFilePos += n;
 			bins[b]->m_iFileLeft -= n;
-			bins[b]->pData = bins[b]->data;
+			bins[b]->m_pCurrent = bins[b]->m_dBuffer;
 			m_iFilePos += n;
 		}
 	}
-	if ( bins[b]->done )
+	if ( bins[b]->m_iDone )
 		return -1;
 
-	bins[b]->left--;
-	r = *(bins[b]->pData);
-	bins[b]->pData++;
+	bins[b]->m_iLeft--;
+	r = *(bins[b]->m_pCurrent);
+	bins[b]->m_pCurrent++;
 	return r;
 }
 
@@ -1414,7 +1425,7 @@ DWORD CSphIndex_VLN::binsReadVLB(int b)
 	int t;
 
 	do {
-		if ((t = binsReadByte(b)) < 0) return 0xffffffff;
+		if ((t = binsReadByte(b)) < 0) return 0xffffffff; // FIXME! replace with some other errcode
 		v += ((t & 0x7f) << o);
 		o += 7;
 	} while (t & 0x80);
@@ -1426,12 +1437,13 @@ int CSphIndex_VLN::binsRead ( int b, CSphFatHit * e )
 	DWORD r;
 
 	// expected EOB
-	if ( bins[b]->done )
+	if ( bins[b]->m_iDone )
 	{
 		e->m_iWordID = 0;
 		return 1;
 	}
 
+	CSphFatHit & tHit = bins[b]->m_tLastHit; // shortcut
 	for ( ;; )
 	{
 		// unexpected EOB
@@ -1442,43 +1454,40 @@ int CSphIndex_VLN::binsRead ( int b, CSphFatHit * e )
 
 		if ( r )
 		{
-			switch ( bins[b]->state )
+			switch ( bins[b]->m_eState )
 			{
 				case BIN_WORD:
-					bins[b]->lastWordID += r;
-					bins[b]->lastGroupID = bins[b]->lastDocID = bins[b]->lastPos = 0;
-					bins[b]->state = BIN_DOC;
+					tHit.m_iWordID += r;
+					tHit.m_iGroupID = 0;
+					tHit.m_iDocID = 0;
+					tHit.m_iWordPos = 0;
+					tHit.m_iTimestamp = 0;
+					bins[b]->m_eState = BIN_DOC;
 					break;
 
 				case BIN_DOC:
 					// doc id
-					bins[b]->lastDocID += r;
-					bins[b]->lastPos = 0;
-					bins[b]->state = BIN_POS;
-					if ( (bins[b]->lastGroupID = binsReadVLB(b)) == 0xffffffffUL )
-					{
+					bins[b]->m_eState = BIN_POS;
+					tHit.m_iDocID += r;
+					tHit.m_iWordPos = 0;
+					tHit.m_iGroupID = binsReadVLB ( b );
+					tHit.m_iTimestamp = binsReadVLB ( b );
+					if ( tHit.m_iGroupID==0xffffffffUL || tHit.m_iGroupID==0xffffffffUL )
 						return 0; // read unexpected EOB
-					}
 					break;
 
 				case BIN_POS: 
-					bins[b]->lastPos += r;
-					e->m_iGroupID = bins[b]->lastGroupID;
-					e->m_iDocID = bins[b]->lastDocID;
-					e->m_iWordID = bins[b]->lastWordID;
-					e->m_iWordPos = bins[b]->lastPos;
+					tHit.m_iWordPos += r;
+					*e = tHit;
 					return 1;
 			}
 		} else
 		{
-			switch ( bins[b]->state )
+			switch ( bins[b]->m_eState )
 			{
-				case BIN_POS:	bins[b]->state = BIN_DOC; break;
-				case BIN_DOC:	bins[b]->state = BIN_WORD; break;
-				case BIN_WORD:
-					bins[b]->done = 1;
-					e->m_iWordID = 0;
-					return 1;
+				case BIN_POS:	bins[b]->m_eState = BIN_DOC; break;
+				case BIN_DOC:	bins[b]->m_eState = BIN_WORD; break;
+				case BIN_WORD:	bins[b]->m_iDone = 1; e->m_iWordID = 0; return 1;
 			}
 		}
 	}
@@ -1612,6 +1621,7 @@ void CSphIndex_VLN::cidxHit ( CSphFatHit * hit )
 
 		m_dDoclist.Add ( hit->m_iDocID - m_tLastHit.m_iDocID );
 		m_dDoclist.Add ( hit->m_iGroupID ); // R&D: maybe some delta-coding would help here too
+		m_dDoclist.Add ( hit->m_iTimestamp );
 		m_dDoclist.Add ( fdData->m_iPos - m_iLastHitlistPos );
 
 		m_tLastHit.m_iDocID = hit->m_iDocID;
@@ -1736,6 +1746,7 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iCount )
 		{
 			pBuf += encodeVLB ( pBuf, d2 ); // encode doc id (whole or delta)
 			pBuf += encodeVLB ( pBuf, pDoc->m_iGroupID ); // encode group id
+			pBuf += encodeVLB ( pBuf, pDoc->m_iTimestamp ); // encode timestamp
 		}
 
 		assert ( d3 );
@@ -1921,9 +1932,10 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 	CSphWordHit * pRawBlock = dRawBlock;
 	assert ( dRawBlock );
 
-	// accumulate group IDs range
-	DWORD iMinDocID = INT_MAX;
-	DWORD iMinGroupID = INT_MAX;
+	// accumulate docinfo IDs range
+	m_tHeader.m_tMin.m_iDocID = UINT_MAX;
+	m_tHeader.m_tMin.m_iGroupID = UINT_MAX;
+	m_tHeader.m_tMin.m_iTimestamp = UINT_MAX;
 
 	// build raw log
 	PROFILE_BEGIN ( collect_hits );
@@ -1954,8 +1966,9 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 		assert ( pSource->m_tDocInfo.m_iDocID );
 		assert ( pSource->m_tDocInfo.m_iGroupID );
 		assert ( pSource->m_tDocInfo.m_iTimestamp );
-		iMinGroupID = Min ( iMinGroupID, pSource->m_tDocInfo.m_iGroupID );
-		iMinDocID = Min ( iMinDocID, pSource->m_tDocInfo.m_iDocID );
+		m_tHeader.m_tMin.m_iDocID = Min ( m_tHeader.m_tMin.m_iDocID, pSource->m_tDocInfo.m_iDocID );
+		m_tHeader.m_tMin.m_iGroupID = Min ( m_tHeader.m_tMin.m_iGroupID, pSource->m_tDocInfo.m_iGroupID );
+		m_tHeader.m_tMin.m_iTimestamp = Min ( m_tHeader.m_tMin.m_iTimestamp, pSource->m_tDocInfo.m_iTimestamp );
 
 		CSphWordHit * pHit = &pSource->m_dHits[0];
 		while ( iHitCount-- )
@@ -2051,11 +2064,14 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 		return 0;
 
 	// adjust min IDs, and fill header
-	assert ( iMinDocID>0 );
-	assert ( iMinGroupID>0 );
-	m_tHeader.m_iMinDocID = --iMinDocID;
-	m_tHeader.m_iMinGroupID = --iMinGroupID;
 	m_tHeader.m_iFieldCount = pSource->GetFieldCount ();
+
+	assert ( m_tHeader.m_tMin.m_iDocID>0 );
+	assert ( m_tHeader.m_tMin.m_iGroupID>0 );
+	assert ( m_tHeader.m_tMin.m_iTimestamp>0 );
+	m_tHeader.m_tMin.m_iDocID--;
+	m_tHeader.m_tMin.m_iGroupID--;
+	m_tHeader.m_tMin.m_iTimestamp--;
 
 	// initialize sorting
 	int iRawBlocks = bins.GetLength();
@@ -2104,8 +2120,9 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 	while ( tQueue.m_iUsed )
 	{
 		// pack and emit queue root
-		tQueue.m_pData->m_iDocID -= iMinDocID;
-		tQueue.m_pData->m_iGroupID -= iMinGroupID;
+		tQueue.m_pData->m_iDocID -= m_tHeader.m_tMin.m_iDocID;
+		tQueue.m_pData->m_iGroupID -= m_tHeader.m_tMin.m_iGroupID;
+		tQueue.m_pData->m_iTimestamp -= m_tHeader.m_tMin.m_iTimestamp;
 		cidxHit ( tQueue.m_pData );
 
 		// pop queue root and push next hit from popped bin
@@ -2450,14 +2467,14 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 		for ( ;; )
 		{
 			// scan lists until *all* the ids match
-			while ( qwords[i].m_iDoc && docID>qwords[i].m_iDoc )
+			while ( qwords[i].m_tDoc.m_iDocID && docID>qwords[i].m_tDoc.m_iDocID )
 				qwords[i].GetDoclistEntry ();
-			if ( !qwords[i].m_iDoc )
+			if ( !qwords[i].m_tDoc.m_iDocID )
 				break;
 
-			if ( docID<qwords[i].m_iDoc )
+			if ( docID<qwords[i].m_tDoc.m_iDocID )
 			{
-				docID = qwords[i].m_iDoc;
+				docID = qwords[i].m_tDoc.m_iDocID;
 				i = 0;
 				continue;
 			}
@@ -2469,7 +2486,7 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 				qwords[i].GetHitlistEntry ();
 
 			// early reject by group id
-			if ( !sphGroupMatch ( qwords[0].m_iGroup + m_tHeader.m_iMinGroupID,
+			if ( !sphGroupMatch ( qwords[0].m_tDoc.m_iGroupID + m_tHeader.m_tMin.m_iGroupID,
 				pQuery->m_pGroups, pQuery->m_iGroups ) )
 			{
 				docID++;
@@ -2532,8 +2549,8 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 
 			// add match
 			CSphMatch & tMatch = pResult->m_dMatches.Add ();
-			tMatch.m_iGroupID = qwords[0].m_iGroup + m_tHeader.m_iMinGroupID; // unpack group id
-			tMatch.m_iDocID = docID + m_tHeader.m_iMinDocID; // unpack document id
+			tMatch.m_iGroupID = qwords[0].m_tDoc.m_iGroupID + m_tHeader.m_tMin.m_iGroupID; // unpack group id
+			tMatch.m_iDocID = docID + m_tHeader.m_tMin.m_iDocID; // unpack document id
 			tMatch.m_iWeight = j; // set weight
 
 			// continue looking for next matches
@@ -2565,15 +2582,15 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 			for ( i=0; i<iActive; i++ )
 			{
 				// move to next document
-				if ( qwords[i].m_iDoc==iDocID )
+				if ( qwords[i].m_tDoc.m_iDocID==iDocID )
 				{
 					qwords[i].GetDoclistEntry ();
 					qwords[i].GetHitlistEntry ();
 				}
-				assert ( qwords[i].m_iDoc!=iDocID );
+				assert ( qwords[i].m_tDoc.m_iDocID!=iDocID );
 
 				// remove emptied words
-				if ( !qwords[i].m_iDoc )
+				if ( !qwords[i].m_tDoc.m_iDocID )
 				{
 					qwords[i] = qwords[iActive-1];
 					i--;
@@ -2582,10 +2599,10 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 				}
 
 				// get new min id
-				if ( qwords[i].m_iDoc<iMatchID )
+				if ( qwords[i].m_tDoc.m_iDocID<iMatchID )
 				{
-					iMatchID = qwords[i].m_iDoc;
-					iMatchGroup = qwords[i].m_iGroup;
+					iMatchID = qwords[i].m_tDoc.m_iDocID;
+					iMatchGroup = qwords[i].m_tDoc.m_iGroupID;
 				}
 			}
 			if ( iActive==0 )
@@ -2596,7 +2613,7 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 			assert ( iDocID!=UINT_MAX );
 
 			// early reject by group id
-			if ( !sphGroupMatch ( iMatchGroup+m_tHeader.m_iMinGroupID, pQuery->m_pGroups, pQuery->m_iGroups ) )
+			if ( !sphGroupMatch ( iMatchGroup+m_tHeader.m_tMin.m_iGroupID, pQuery->m_pGroups, pQuery->m_iGroups ) )
 				continue;
 
 			// get the words we're matching current document against (let's call them "terms")
@@ -2604,7 +2621,7 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 			int iTerms = 0;
 
 			for ( i=0; i<iActive; i++ )
-				if ( qwords[i].m_iDoc==iDocID )
+				if ( qwords[i].m_tDoc.m_iDocID==iDocID )
 					pHit[iTerms++] = &qwords[i];
 			assert ( iTerms>0 );
 
@@ -2670,8 +2687,8 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 
 			// add match
 			CSphMatch & tMatch = pResult->m_dMatches.Add ();
-			tMatch.m_iGroupID = iMatchGroup + m_tHeader.m_iMinGroupID; // unpack group id
-			tMatch.m_iDocID = iDocID + m_tHeader.m_iMinDocID; // unpack document id
+			tMatch.m_iGroupID = iMatchGroup + m_tHeader.m_tMin.m_iGroupID; // unpack group id
+			tMatch.m_iDocID = iDocID + m_tHeader.m_tMin.m_iDocID; // unpack document id
 			tMatch.m_iWeight = j; // set weight
 		}
 	}

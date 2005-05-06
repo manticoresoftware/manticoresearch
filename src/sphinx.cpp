@@ -2008,6 +2008,7 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 				iRawBlockUsed = 0;
 				pRawBlock = dRawBlock;
 				m_dDocinfos.Reset ();
+				m_dDocinfos.Add ( pSource->m_tDocInfo );
 			}
 		}
 	}

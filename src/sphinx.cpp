@@ -384,13 +384,13 @@ struct CSphBin
 	int					m_iFileLeft;	///< how much data is still unread from raw log via this bin
 
 	CSphBin ()
-		: m_iFilePos ( 0 )
-		, m_iFileLeft ( 0 )
-		, m_dBuffer ( NULL )
+		: m_dBuffer ( NULL )
 		, m_pCurrent ( NULL )
 		, m_iLeft ( 0 )
 		, m_iDone ( 0 )
 		, m_eState ( BIN_POS )
+		, m_iFilePos ( 0 )
+		, m_iFileLeft ( 0 )
 	{
 		m_tLastHit.m_iDocID = 0;
 		m_tLastHit.m_iGroupID = 0;
@@ -1480,6 +1480,9 @@ int CSphIndex_VLN::binsRead ( int b, CSphFatHit * e )
 					tHit.m_iWordPos += r;
 					*e = tHit;
 					return 1;
+
+				default:
+					assert ( 0 );
 			}
 		} else
 		{
@@ -1488,6 +1491,7 @@ int CSphIndex_VLN::binsRead ( int b, CSphFatHit * e )
 				case BIN_POS:	bins[b]->m_eState = BIN_DOC; break;
 				case BIN_DOC:	bins[b]->m_eState = BIN_WORD; break;
 				case BIN_WORD:	bins[b]->m_iDone = 1; e->m_iWordID = 0; return 1;
+				default:	assert ( 0 );
 			}
 		}
 	}
@@ -1725,6 +1729,8 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iCount )
 		}
 		assert ( pDoc );
 		assert ( pDoc->m_iDocID==pHit->m_iDocID );
+		assert ( pDoc->m_iGroupID );
+		assert ( pDoc->m_iTimestamp );
 
 		// calc deltas
 		d1 = pHit->m_iWordID - l1;
@@ -1819,6 +1825,7 @@ public:
 		assert ( m_iUsed<m_iSize );
 		m_pData [ m_iUsed ].m_iDocID = tHit.m_iDocID;
 		m_pData [ m_iUsed ].m_iGroupID = tHit.m_iGroupID;
+		m_pData [ m_iUsed ].m_iTimestamp = tHit.m_iTimestamp;
 		m_pData [ m_iUsed ].m_iWordID = tHit.m_iWordID;
 		m_pData [ m_iUsed ].m_iWordPos = tHit.m_iWordPos;
 		m_pData [ m_iUsed ].m_iBin = iBin;
@@ -1881,7 +1888,7 @@ public:
 
 struct DocinfoCmp_fn
 {
-	inline operator () ( const CSphDocInfo & a, const CSphDocInfo & b )
+	inline int operator () ( const CSphDocInfo & a, const CSphDocInfo & b )
 	{
 		return b.m_iDocID - a.m_iDocID;
 	};
@@ -3397,12 +3404,13 @@ BYTE ** CSphSource_MySQL::NextDocument ()
 	}
 
 	// get him!
-	m_iLastID = atoi ( m_tSqlRow[0] );
+	m_tDocInfo.m_iDocID = atoi ( m_tSqlRow[0] );
+	m_tDocInfo.m_iTimestamp = 1; // FIXME!
 	if ( m_iGroupColumn )
 	{
 		// there's group column, need to extract group ID and reorder
 		// OPTIMIZE: can prebuild field ID array once
-		m_iLastGroupID = atoi ( m_tSqlRow [ m_iGroupColumn ] );
+		m_tDocInfo.m_iGroupID = atoi ( m_tSqlRow [ m_iGroupColumn ] );
 
 		memcpy ( &m_dFields[0], &m_tSqlRow[1], sizeof(BYTE*)*(m_iGroupColumn-1) );
 		memcpy ( &m_dFields[m_iGroupColumn-1], &m_tSqlRow[m_iGroupColumn+1],
@@ -3412,7 +3420,7 @@ BYTE ** CSphSource_MySQL::NextDocument ()
 	} else
 	{
 		// no groups in this query
-		m_iLastGroupID = 1;
+		m_tDocInfo.m_iGroupID = 1;
 		return (BYTE**)( &m_tSqlRow[1] );
 	}
 }

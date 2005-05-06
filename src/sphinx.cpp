@@ -1268,7 +1268,7 @@ CSphIndex_VLN::CSphIndex_VLN ( const char * sName )
 	
 	fdIndex = NULL;
 	fdData = NULL;
-	fdRaw = NULL;
+	fdRaw = 0;
 
 	m_iLastDoclistPos = 0;
 	m_iLastHitlistPos = 0;

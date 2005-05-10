@@ -1677,11 +1677,71 @@ inline int encodeVLB(BYTE *buf, DWORD v)
 }
 
 
+static inline int iLog2 ( DWORD iValue )
+{
+	int iBits = 0;
+	while ( iValue )
+	{
+		iValue >>= 1;
+		iBits++;
+	}
+	return iBits;
+}
+
+
+struct DocinfoCmp_fn
+{
+	inline int operator () ( const CSphDocInfo & a, const CSphDocInfo & b )
+	{
+		return b.m_iDocID - a.m_iDocID;
+	};
+};
+
+
 int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iCount )
 {
 	assert ( pHit );
 	assert ( iCount>0 );
-	assert ( m_dDocinfos.GetLength() );
+
+	/////////////////////////////
+	// do simple bitwise hashing
+	/////////////////////////////
+
+	m_dDocinfos.Sort ( DocinfoCmp_fn() );
+	DWORD iStartID = m_dDocinfos[0].m_iDocID;
+
+	static const int HBITS = 11;
+	static const int HSIZE = (1<<HBITS);
+	static const int HMASK = (HSIZE-1);
+
+	int dHash [ HSIZE+1 ];
+	int iBits = iLog2 ( m_dDocinfos.Last().m_iDocID - iStartID );
+	int iShift = ( iBits<HBITS ) ? 0 : ( iBits-HBITS );
+
+	#ifndef NDEBUG
+	for ( int i=0; i<=HSIZE; i++ )
+		dHash[i] = -1;
+	#endif
+
+	dHash[0] = 0;
+	int iHashed = 0;
+	ARRAY_FOREACH ( i, m_dDocinfos )
+	{
+		int iHash = ( m_dDocinfos[i].m_iDocID - iStartID ) >> iShift;
+		assert ( iHash>=0 && iHash<HSIZE );
+
+		if ( iHash>iHashed )
+		{
+			dHash [ iHashed+1 ] = i-1; // right boundary for prev hash value
+			dHash [ iHash ] = i; // left boundary for next hash value
+			iHashed = iHash;
+		}
+	}
+	dHash [ iHashed+1 ] = m_dDocinfos.GetLength()-1; // right boundary for last hash value
+
+	///////////////////////////////////////
+	// encode through a small write buffer
+	///////////////////////////////////////
 
 	BYTE buf[65536+1024], *pBuf, *maxP;
 	int n = 0, w;
@@ -1694,9 +1754,12 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iCount )
 	{
 		if ( pDoc->m_iDocID!=pHit->m_iDocID )
 		{
-			// FIXME! OPTIMIZE! do ptr hashing instead of array binsearch
-			CSphDocInfo * pStart = &m_dDocinfos[0];
-			CSphDocInfo * pEnd = &m_dDocinfos.Last ();
+			int iHash = ( pHit->m_iDocID - iStartID ) >> iShift;
+			assert ( iHash>=0 && iHash<HSIZE );
+
+			CSphDocInfo * pStart = &m_dDocinfos [ dHash[iHash] ];
+			CSphDocInfo * pEnd = &m_dDocinfos [ dHash[iHash+1] ];
+
 			if ( pHit->m_iDocID==pStart->m_iDocID )
 			{
 				pDoc = pStart;
@@ -1769,7 +1832,10 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iCount )
 		{
 			w = (int)(pBuf - buf);
 			if ( sphWrite ( fd, buf, w, "rawlog" )!=w )
+			{
+				m_dDocinfos.Reset ();
 				return -1;
+			}
 			n += w;
 			pBuf = buf;
 		}
@@ -1779,9 +1845,13 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iCount )
 	pBuf += encodeVLB ( pBuf, 0 );
 	w = (int)(pBuf - buf);
 	if ( sphWrite ( fd, buf, w, "rawlog" )!=w )
+	{
+		m_dDocinfos.Reset ();
 		return -1;
+	}
 	n += w;
 
+	m_dDocinfos.Reset ();
 	return n;
 }
 
@@ -1883,15 +1953,6 @@ public:
 			break;
 		}
 	}
-};
-
-
-struct DocinfoCmp_fn
-{
-	inline int operator () ( const CSphDocInfo & a, const CSphDocInfo & b )
-	{
-		return b.m_iDocID - a.m_iDocID;
-	};
 };
 
 
@@ -2017,7 +2078,6 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 	{
 		PROFILE_BEGIN ( sort_hits );
 		sphSortHits ( dRawBlock, iRawBlockUsed );
-		m_dDocinfos.Sort ( DocinfoCmp_fn() );
 		PROFILE_END ( sort_hits );
 
 		PROFILE_BEGIN ( write_hits );

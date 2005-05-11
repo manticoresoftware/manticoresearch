@@ -571,6 +571,15 @@ struct CSphMatch : public CSphDocInfo
 };
 
 
+/// search query sorting orders
+enum ESphSortOrder
+{
+	SPH_SORT_RELEVANCE = 0,		///< sort by document relevance, descending
+	SPH_SORT_DATE_DESC,			///< sort by document date, descending
+	SPH_SORT_DETE_ASC			///< sort by document date, ascending
+};
+
+
 /// search query
 class CSphQuery
 {
@@ -581,6 +590,7 @@ public:
 	bool			m_bAll;		///< match all words or any word. default is "match all"
 	DWORD *			m_pGroups;	///< groups to match. default is NULL, which means "match all"
 	int				m_iGroups;	///< count of groups to match
+	ESphSortOrder	m_eSort;	///< sorting order
 
 public:
 					CSphQuery ();	///< ctor, fills defaults

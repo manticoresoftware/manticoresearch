@@ -876,6 +876,7 @@ CSphQuery::CSphQuery ()
 	, m_bAll		( true )
 	, m_pGroups		( NULL )
 	, m_iGroups		( 0 )
+	, m_eSort		( SPH_SORT_RELEVANCE )
 {
 }
 
@@ -2250,6 +2251,104 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 // THE SEARCHER
 /////////////////////////////////////////////////////////////////////////////
 
+/// generic comparator function
+template< typename T > struct Less_T
+{
+	bool operator() ( const T & x, const T & y ) const
+	{
+		return x<y;
+	}
+};
+
+
+/// generic priority queue
+template< typename T, int SIZE, class COMP=Less_T<T> > class CSphQueue
+{
+protected:
+	T		m_pData [ SIZE ];
+	int		m_iUsed;
+
+public:
+	/// create queue
+	CSphQueue ()
+		: m_iUsed ( 0 )
+	{
+	}
+
+	/// add entry to the queue
+	void Push ( const T & tEntry )
+	{
+		// check for overflow and do add
+		assert ( m_iUsed<SIZE );
+
+		m_pData [ m_iUsed ] = tEntry;
+		int iEntry = m_iUsed++;
+
+		// sift up if needed
+		while ( iEntry )
+		{
+			int iParent = ( iEntry-1 ) >> 1;
+			if ( !COMP() ( m_pData[iEntry], m_pData[iParent] ) )
+				break;
+
+			// entry is less than parent, should float to the top
+			Swap ( m_pData[iEntry], m_pData[iParent] );
+			iEntry = iParent;
+		}
+	}
+
+	/// remove root (ie. top priority) entry
+	void Pop ()
+	{
+		assert ( m_iUsed );
+		if ( !(--m_iUsed) ) // empty queue? just return
+			return;
+
+		// make the last entry my new root
+		m_pData[0] = m_pData[m_iUsed];
+
+		// sift down if needed
+		int iEntry = 0;
+		for ( ;; )
+		{
+			// select child
+			int iChild = (iEntry<<1) + 1;
+			if ( iChild>=m_iUsed )
+				break;
+
+			// select smallest child
+			if ( iChild+1<m_iUsed )
+				if ( COMP() ( m_pData[iChild+1], m_pData[iChild] ) )
+					iChild++;
+
+			// if smallest child is less than entry, do float it to the top
+			if ( COMP() ( m_pData[iChild], m_pData[iEntry] ) )
+			{
+				Swap ( m_pData[iChild], m_pData[iEntry] );
+				iEntry = iChild;
+				continue;
+			}
+
+			break;
+		}
+	}
+
+	/// get entries count
+	inline int GetLength () const
+	{
+		return m_iUsed;
+	};
+
+	/// get current root
+	inline const T & Root () const
+	{
+		assert ( m_iUsed );
+		return m_pData[0];
+	}
+};
+
+
+/// my simple query parser
 struct CSphQueryParser : CSphSource_Text
 {
 	char *query;
@@ -2292,12 +2391,24 @@ struct CSphQueryParser : CSphSource_Text
 };
 
 
+/// comparator for match sorting
+struct MatchRelevanceDesc_fn
+{
+	inline bool operator() ( const CSphMatch & a, const CSphMatch & b ) const
+	{
+		return ( a.m_iWeight > b.m_iWeight );
+	};
+};
+
+
+/// qsort query-word comparator
 int cmpQueryWord ( const void * a, const void * b )
 {
 	return ((CSphQueryWord*)a)->m_iDocs - ((CSphQueryWord*)b)->m_iDocs;
 }
 
 
+/// qsort dword comparator
 int cmpDword ( const void * a, const void * b )
 {
 	return *((DWORD*)a) - *((DWORD*)b);
@@ -2506,8 +2617,6 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 
 	PROFILE_END ( query_load_words );
 
-	PROFILE_BEGIN ( query_match );
-
 	// build weights
 	nweights = m_tHeader.m_iFieldCount;
 	for ( i=0; i<nweights; i++ ) // defaults
@@ -2517,7 +2626,10 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 			weights[i] = Max ( 1, pQuery->m_pWeights[i] );
 
 	// find and proximity-weight matching documents
+	CSphQueue < CSphMatch, 1000, MatchRelevanceDesc_fn > dTop; // FIXME! 1000 is magic, should conf
 	i = docID = 0;
+
+	PROFILE_BEGIN ( query_match );
 	if ( pQuery->m_bAll )
 	{
 		///////////////////
@@ -2616,10 +2728,11 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 				j += weights[i] * ( matchWeight[i] + phraseWeight[i] );
 
 			// add match
-			CSphMatch & tMatch = pResult->m_dMatches.Add ();
+			CSphMatch tMatch;
 			tMatch.m_iGroupID = qwords[0].m_tDoc.m_iGroupID + m_tHeader.m_tMin.m_iGroupID; // unpack group id
 			tMatch.m_iDocID = docID + m_tHeader.m_tMin.m_iDocID; // unpack document id
 			tMatch.m_iWeight = j; // set weight
+			dTop.Push ( tMatch );
 
 			// continue looking for next matches
 			i = 0;
@@ -2754,18 +2867,21 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 				j += weights[i] * ( sphBitCount(dWeights[i].m_uMatch) + dWeights[i].m_iMaxPhrase*iPhraseK );
 
 			// add match
-			CSphMatch & tMatch = pResult->m_dMatches.Add ();
+			CSphMatch tMatch;
 			tMatch.m_iGroupID = iMatchGroup + m_tHeader.m_tMin.m_iGroupID; // unpack group id
 			tMatch.m_iDocID = iDocID + m_tHeader.m_tMin.m_iDocID; // unpack document id
 			tMatch.m_iWeight = j; // set weight
+			dTop.Push ( tMatch );
 		}
 	}
-
 	PROFILE_END ( query_match );
+
 	PROFILE_BEGIN ( query_sort );
-
-	pResult->m_dMatches.Sort ( CmpMatch_fn() );
-
+	while ( dTop.GetLength () )
+	{
+		pResult->m_dMatches.Add ( dTop.Root () );
+		dTop.Pop ();
+	}
 	PROFILE_END ( query_sort );
 
 	PROFILER_DONE ();

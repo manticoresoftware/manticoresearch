@@ -40,6 +40,7 @@ const char * g_dSphKeysIndexer[] =
 	"sql_query",
 	"sql_query_post",
 	"sql_group_column",
+	"sql_date_column",
 	"sql_range_step",
 	"xmlpipe_command",
 	"mem_limit",

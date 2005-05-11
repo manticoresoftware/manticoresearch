@@ -369,6 +369,7 @@ int main ( int argc, char ** argv )
 		tParams.m_sQueryPost	= confIndexer->get ( "sql_query_post" );
 		tParams.m_sQueryRange	= confIndexer->get ( "sql_query_range" );
 		tParams.m_sGroupColumn	= confIndexer->get ( "sql_group_column" );
+		tParams.m_sDateColumn	= confIndexer->get ( "sql_date_column" );
 
 		tParams.m_sHost			= confIndexer->get ( "sql_host" );
 		tParams.m_sUser			= confIndexer->get ( "sql_user" );

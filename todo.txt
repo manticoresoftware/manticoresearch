@@ -1,9 +1,6 @@
 HIGH PRIORITY
 
 * add doc/hit count report to --buildstops
-* fix dumb ranking formula in "match any" mode
-* add either int64 docid_t or id2group pool, 50k groups vs 500k documents
-* add support for multiple groups in query
 * add multi-index support (avoid running lots of indexers/searchds)
 * add support for multiple sql_query's (UNION is too hairy)
 * add shadow copy to avoid taking searchd offline for reindexing
@@ -12,7 +9,6 @@ MEDIUM PRIORITY
 
 * add index update/mergeing
 * add word-storing dictionaries (to avoid collisions etc)
-* add limits support document (date, multiple groups, etc)
 * add external relevance metrics support
 
 LOW PRIORITY

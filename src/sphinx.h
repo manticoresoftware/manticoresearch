@@ -417,6 +417,7 @@ struct CSphSourceParams_MySQL
 	const char *	m_sQueryPost;
 	const char *	m_sQueryRange;
 	const char *	m_sGroupColumn;
+	const char *	m_sDateColumn;
 	int				m_iRangeStep;
 
 	// connection params
@@ -451,8 +452,10 @@ protected:
 	char *				m_sQuery;		///< main fetch query
 	char *				m_sQueryPost;	///< post-fetch query
 	int					m_iGroupColumn;	///< group_id column number
+	int					m_iDateColumn;	///< date column number
 
 	BYTE *				m_dFields [ SPH_MAX_FIELD_COUNT ];
+	int					m_dRemapFields [ SPH_MAX_FIELD_COUNT ];
 
 	int					m_iRangeStep;	///< ID range step, -1 if not using ranges
 	int					m_iMinID;		///< grand min ID
@@ -464,6 +467,7 @@ protected:
 
 protected:
 	bool				RunQueryStep ();
+	int					GetColumnIndex ( const char * sColumn );
 };
 #endif
 

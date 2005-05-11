@@ -3080,6 +3080,7 @@ CSphSourceParams_MySQL::CSphSourceParams_MySQL ()
 	, m_sQueryPost		( NULL )
 	, m_sQueryRange		( NULL )
 	, m_sGroupColumn	( NULL )
+	, m_sDateColumn		( NULL )
 	, m_iRangeStep		( 1024 )
 
 	, m_sHost			( NULL )
@@ -3108,6 +3109,7 @@ CSphSource_MySQL::CSphSource_MySQL ()
 	, m_sQuery			( NULL )
 	, m_sQueryPost		( NULL )
 	, m_iGroupColumn	( 0 )
+	, m_iDateColumn		( 0 )
 
 	, m_iRangeStep		( 0 )
 	, m_iMinID			( 0 )
@@ -3235,6 +3237,42 @@ bool CSphSource_MySQL::RunQueryStep ()
 }
 
 
+int CSphSource_MySQL::GetColumnIndex ( const char * sColumn )
+{
+	if ( !strlen(sColumn) )
+		return 0;
+
+	int iRes = atoi ( sColumn );
+	if ( !iRes )
+	{
+		// if it's string, match by name
+		iRes = -1;
+		for ( int i=1; i<(int)mysql_num_fields(m_pSqlResult); i++ )
+			if ( strcasecmp ( m_pSqlResult->fields[i].name, sColumn )==0 )
+		{
+			iRes = i;
+			break;
+		}
+	} else
+	{
+		// if it's number, reindex from base 1 to base 0
+		iRes--;
+	}
+
+	if ( iRes<=0 || iRes>=(int)mysql_num_fields(m_pSqlResult) )
+	{
+		fprintf ( stderr, "WARNING: bad column index (name='%s', index=%d), SUPPORT DISABLED.\n",
+			sColumn, iRes );
+		iRes = 0;
+	} else
+	{
+		m_iFieldCount--;
+		assert ( m_iFieldCount>0 );
+	}
+	return iRes;
+}
+
+
 bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 {
 	#define LOC_FIX_NULL(_arg) if ( !pParams->_arg ) pParams->_arg = "";
@@ -3252,6 +3290,7 @@ bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 	LOC_FIX_NULL ( m_sQueryPre );
 	LOC_FIX_NULL ( m_sQueryPost );
 	LOC_FIX_NULL ( m_sGroupColumn );
+	LOC_FIX_NULL ( m_sDateColumn );
 	LOC_FIX_NULL ( m_sHost );
 	LOC_FIX_NULL ( m_sUser );
 	LOC_FIX_NULL ( m_sPass );
@@ -3384,48 +3423,28 @@ bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 	}
 
 	// some post-query setup
-	m_iFieldCount = mysql_num_fields ( m_pSqlResult ) - 1;
+	int iFields = mysql_num_fields ( m_pSqlResult ) - 1;
+	m_iFieldCount = iFields; // will be changed by GetColumnIndex below
 	m_sQueryPost = sphDup ( pParams->m_sQueryPost );
 
-	// group column
-	m_iGroupColumn = 0;
-	if ( strlen(pParams->m_sGroupColumn) )
+	// group/date columns
+	m_iGroupColumn = GetColumnIndex ( pParams->m_sGroupColumn );
+	m_iDateColumn = GetColumnIndex ( pParams->m_sDateColumn );
+
+	// build field remap table
+	int j = 0;
+	for ( int i=1; i<=iFields; i++ )
 	{
-		m_iGroupColumn = atoi ( pParams->m_sGroupColumn );
-
-		if ( !m_iGroupColumn )
-		{
-			// if it's string, match by name
-			m_iGroupColumn = -1;
-			for ( int i=1; i<(int)mysql_num_fields(m_pSqlResult); i++ )
-				if ( strcasecmp ( m_pSqlResult->fields[i].name, pParams->m_sGroupColumn )==0 )
-			{
-				m_iGroupColumn = i;
-				break;
-			}
-		} else
-		{
-			// if it's number, reindex from base 1 to base 0
-			m_iGroupColumn--;
-		}
-
-		if ( m_iGroupColumn<=0 || m_iGroupColumn>=(int)mysql_num_fields(m_pSqlResult) )
-		{
-			fprintf ( stderr, "WARNING: bad group column index (name='%s', index=%d), GROUPS DISABLED.\n",
-				pParams->m_sGroupColumn, m_iGroupColumn );
-			m_iGroupColumn = 0;
-		} else
-		{
-			m_iFieldCount--;
-			assert ( m_iFieldCount>0 );
-		}
+		if ( i!=m_iGroupColumn && i!=m_iDateColumn )
+			m_dRemapFields [ j++ ] = i;
 	}
-
-	return 1;
+	assert ( j==m_iFieldCount );
 
 	#undef LOC_FIX_NULL
 	#undef LOC_ERROR
 	#undef LOC_MYSQL_ERROR
+
+	return 1;
 }
 
 
@@ -3466,24 +3485,17 @@ BYTE ** CSphSource_MySQL::NextDocument ()
 
 	// get him!
 	m_tDocInfo.m_iDocID = atoi ( m_tSqlRow[0] );
-	m_tDocInfo.m_iTimestamp = 1; // FIXME!
-	if ( m_iGroupColumn )
-	{
-		// there's group column, need to extract group ID and reorder
-		// OPTIMIZE: can prebuild field ID array once
-		m_tDocInfo.m_iGroupID = atoi ( m_tSqlRow [ m_iGroupColumn ] );
+	m_tDocInfo.m_iGroupID = m_iGroupColumn
+		? m_tDocInfo.m_iGroupID = atoi ( m_tSqlRow [ m_iGroupColumn ] )
+		: 1;
+	m_tDocInfo.m_iTimestamp = m_iDateColumn
+		? m_tDocInfo.m_iTimestamp = atoi ( m_tSqlRow [ m_iDateColumn ] )
+		: 1;
 
-		memcpy ( &m_dFields[0], &m_tSqlRow[1], sizeof(BYTE*)*(m_iGroupColumn-1) );
-		memcpy ( &m_dFields[m_iGroupColumn-1], &m_tSqlRow[m_iGroupColumn+1],
-			sizeof(BYTE*)*(m_iFieldCount-m_iGroupColumn+1) );
-		return m_dFields;
-
-	} else
-	{
-		// no groups in this query
-		m_tDocInfo.m_iGroupID = 1;
-		return (BYTE**)( &m_tSqlRow[1] );
-	}
+	// remap and return
+	for ( int i=0; i<m_iFieldCount; i++ )
+		m_dFields[i] = (BYTE*) m_tSqlRow [ m_dRemapFields[i] ];
+	return m_dFields;
 }
 
 #endif // USE_MYSQL

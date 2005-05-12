@@ -2251,32 +2251,61 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 // THE SEARCHER
 /////////////////////////////////////////////////////////////////////////////
 
-/// generic comparator function
+/// generic comparison functor
 template< typename T > struct Less_T
 {
-	bool operator() ( const T & x, const T & y ) const
+	inline bool operator() ( const T & x, const T & y ) const
 	{
 		return x<y;
 	}
 };
 
 
-/// generic priority queue
-template< typename T, int SIZE, class COMP=Less_T<T> > class CSphQueue
+/// generic comparison functor instantiation
+template< typename T> Less_T<T> Less_fn ( T & )
+{
+	return Less_T<T> ();
+}
+
+
+/// generic priority queue interface
+template< typename T, int SIZE> class ISphQueue
 {
 protected:
 	T		m_pData [ SIZE ];
 	int		m_iUsed;
 
 public:
-	/// create queue
-	CSphQueue ()
-		: m_iUsed ( 0 )
-	{
-	}
+	/// ctor
+						ISphQueue () : m_iUsed ( 0 ) {}
 
+	/// base push
+	virtual void		Push ( const T & tEntry ) = 0;
+
+	/// base pop
+	virtual void		Pop () = 0;
+
+	/// get entries count
+	inline int			GetLength () const
+	{
+		return m_iUsed;
+	};
+
+	/// get current root
+	inline const T &	Root () const
+	{
+		assert ( m_iUsed );
+		return m_pData[0];
+	}
+};
+
+
+/// generic priority queue
+template< typename T, int SIZE, class COMP > class CSphQueue : public ISphQueue<T, SIZE>
+{
+public:
 	/// add entry to the queue
-	void Push ( const T & tEntry )
+	virtual void Push ( const T & tEntry )
 	{
 		// check for overflow and do add
 		assert ( m_iUsed<SIZE );
@@ -2298,7 +2327,7 @@ public:
 	}
 
 	/// remove root (ie. top priority) entry
-	void Pop ()
+	virtual void Pop ()
 	{
 		assert ( m_iUsed );
 		if ( !(--m_iUsed) ) // empty queue? just return
@@ -2331,19 +2360,6 @@ public:
 
 			break;
 		}
-	}
-
-	/// get entries count
-	inline int GetLength () const
-	{
-		return m_iUsed;
-	};
-
-	/// get current root
-	inline const T & Root () const
-	{
-		assert ( m_iUsed );
-		return m_pData[0];
 	}
 };
 
@@ -2391,12 +2407,38 @@ struct CSphQueryParser : CSphSource_Text
 };
 
 
-/// comparator for match sorting
+/// match sorter
 struct MatchRelevanceDesc_fn
 {
 	inline bool operator() ( const CSphMatch & a, const CSphMatch & b ) const
 	{
-		return ( a.m_iWeight > b.m_iWeight );
+		return ( a.m_iWeight==b.m_iWeight )
+			? ( a.m_iTimestamp > b.m_iTimestamp )
+			: ( a.m_iWeight > b.m_iWeight );
+	};
+};
+
+
+/// match sorter
+struct MatchDateDesc_fn
+{
+	inline bool operator() ( const CSphMatch & a, const CSphMatch & b ) const
+	{
+		return ( a.m_iTimestamp==b.m_iTimestamp )
+			? ( a.m_iWeight > b.m_iWeight )
+			: ( a.m_iTimestamp > b.m_iTimestamp );
+	};
+};
+
+
+/// match sorter
+struct MatchDateAsc_fn
+{
+	inline bool operator() ( const CSphMatch & a, const CSphMatch & b ) const
+	{
+		return ( a.m_iTimestamp==b.m_iTimestamp )
+			? ( a.m_iWeight > b.m_iWeight )
+			: ( a.m_iTimestamp<b.m_iTimestamp );
 	};
 };
 
@@ -2625,10 +2667,18 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 		for ( int i=0; i<Min ( nweights, pQuery->m_iWeights ); i++ )
 			weights[i] = Max ( 1, pQuery->m_pWeights[i] );
 
-	// find and proximity-weight matching documents
-	CSphQueue < CSphMatch, 1000, MatchRelevanceDesc_fn > dTop; // FIXME! 1000 is magic, should conf
-	i = docID = 0;
+	// spawn proper queue
+	ISphQueue<CSphMatch, CSphQueryResult::MAX_MATCHES> * pTop = NULL;
+	switch ( pQuery->m_eSort )
+	{
+		case SPH_SORT_RELEVANCE:	pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchRelevanceDesc_fn > (); break;
+		case SPH_SORT_DATE_DESC:	pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchDateDesc_fn > (); break;
+		case SPH_SORT_DATE_ASC:		pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchDateAsc_fn > (); break;
+	}
+	assert ( pTop );
 
+	// find and proximity-weight matching documents
+	i = docID = 0;
 	PROFILE_BEGIN ( query_match );
 	if ( pQuery->m_bAll )
 	{
@@ -2729,10 +2779,11 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 
 			// add match
 			CSphMatch tMatch;
-			tMatch.m_iGroupID = qwords[0].m_tDoc.m_iGroupID + m_tHeader.m_tMin.m_iGroupID; // unpack group id
 			tMatch.m_iDocID = docID + m_tHeader.m_tMin.m_iDocID; // unpack document id
+			tMatch.m_iGroupID = qwords[0].m_tDoc.m_iGroupID + m_tHeader.m_tMin.m_iGroupID; // unpack group id
+			tMatch.m_iTimestamp = qwords[0].m_tDoc.m_iTimestamp;
 			tMatch.m_iWeight = j; // set weight
-			dTop.Push ( tMatch );
+			pTop->Push ( tMatch );
 
 			// continue looking for next matches
 			i = 0;
@@ -2758,8 +2809,9 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 		{
 			// update active pointers to document lists, kill empty ones,
 			// and get min current document id
-			DWORD iMatchID = UINT_MAX;
-			DWORD iMatchGroup = 0;
+			CSphDocInfo tMatchDoc;
+			tMatchDoc.m_iDocID = UINT_MAX;
+
 			for ( i=0; i<iActive; i++ )
 			{
 				// move to next document
@@ -2780,21 +2832,19 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 				}
 
 				// get new min id
-				if ( qwords[i].m_tDoc.m_iDocID<iMatchID )
-				{
-					iMatchID = qwords[i].m_tDoc.m_iDocID;
-					iMatchGroup = qwords[i].m_tDoc.m_iGroupID;
-				}
+				if ( qwords[i].m_tDoc.m_iDocID<tMatchDoc.m_iDocID )
+					tMatchDoc = qwords[i].m_tDoc;
 			}
 			if ( iActive==0 )
 				break;
-			iDocID = iMatchID;
+			iDocID = tMatchDoc.m_iDocID;
 
 			assert ( iDocID!=0 );
 			assert ( iDocID!=UINT_MAX );
 
 			// early reject by group id
-			if ( !sphGroupMatch ( iMatchGroup+m_tHeader.m_tMin.m_iGroupID, pQuery->m_pGroups, pQuery->m_iGroups ) )
+			tMatchDoc.m_iGroupID += m_tHeader.m_tMin.m_iGroupID;
+			if ( !sphGroupMatch ( tMatchDoc.m_iGroupID, pQuery->m_pGroups, pQuery->m_iGroups ) )
 				continue;
 
 			// get the words we're matching current document against (let's call them "terms")
@@ -2868,20 +2918,22 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 
 			// add match
 			CSphMatch tMatch;
-			tMatch.m_iGroupID = iMatchGroup + m_tHeader.m_tMin.m_iGroupID; // unpack group id
 			tMatch.m_iDocID = iDocID + m_tHeader.m_tMin.m_iDocID; // unpack document id
+			tMatch.m_iGroupID = tMatchDoc.m_iGroupID; // group id already unpacked
+			tMatch.m_iTimestamp = tMatchDoc.m_iTimestamp;
 			tMatch.m_iWeight = j; // set weight
-			dTop.Push ( tMatch );
+			pTop->Push ( tMatch );
 		}
 	}
 	PROFILE_END ( query_match );
 
 	PROFILE_BEGIN ( query_sort );
-	while ( dTop.GetLength () )
+	while ( pTop->GetLength () )
 	{
-		pResult->m_dMatches.Add ( dTop.Root () );
-		dTop.Pop ();
+		pResult->m_dMatches.Add ( pTop->Root () );
+		pTop->Pop ();
 	}
+	SafeDelete ( pTop );
 	PROFILE_END ( query_sort );
 
 	PROFILER_DONE ();
@@ -3930,7 +3982,7 @@ int CSphSource_XMLPipe::next ()
 
 		if ( !ScanInt ( "group", &m_tDocInfo.m_iGroupID ) )
 			return 0;
-		m_tDocInfo.m_iTimestamp = 1; // FIXME?
+		m_tDocInfo.m_iTimestamp = m_tDocInfo.m_iDocID; // FIXME? !COMMIT
 
 		if ( !ScanStr ( "title", sTitle, sizeof ( sTitle ) ) )
 			return 0;

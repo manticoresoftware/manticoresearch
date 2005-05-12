@@ -89,6 +89,8 @@ int main ( int argc, char ** argv )
 			"\t\t\t(default is 20)\n"
 			"-q, --noinfo\t\tdo not output document info from SQL database\n"
 			"\t\t\t(default is to output)\n"
+			"--sort=date\t\tsort by date\n"
+			"--rsort=date\t\treverse sort by date\n"
 		);
 		exit ( 0 );
 	}
@@ -106,8 +108,10 @@ int main ( int argc, char ** argv )
 	bool bNoInfo = false;
 	int iStart = 0;
 	int iLimit = 20;
+	ESphSortOrder eSort = SPH_SORT_RELEVANCE;
 
-	#define OPT(_a1,_a2) else if ( !strcmp(argv[i],_a1) || !strcmp(argv[i],_a2) )
+	#define OPT(_a1,_a2)	else if ( !strcmp(argv[i],_a1) || !strcmp(argv[i],_a2) )
+	#define OPT1(_a1)		else if ( !strcmp(argv[i],_a1) )
 
 	int i;
 	for ( i=1; i<argc; i++ )
@@ -118,6 +122,8 @@ int main ( int argc, char ** argv )
 			if ( 0 );
 			OPT ( "-a", "--any" )		bAny = true;
 			OPT ( "-q", "--noinfo" )	bNoInfo = true;
+			OPT1 ( "--sort=date" )		eSort = SPH_SORT_DATE_DESC;
+			OPT1 ( "--rsort=date" )		eSort = SPH_SORT_DATE_ASC;
 			else if ( (i+1)<argc )
 			{
 				if ( 0 );
@@ -239,6 +245,7 @@ int main ( int argc, char ** argv )
 	CSphQuery tQuery;
 	tQuery.m_sQuery = sQuery;
 	tQuery.m_bAll = !bAny;
+	tQuery.m_eSort = eSort;
 	if ( dGroups.GetLength() )
 	{
 		tQuery.m_pGroups = new DWORD [ dGroups.GetLength() ];

@@ -574,9 +574,9 @@ struct CSphMatch : public CSphDocInfo
 /// search query sorting orders
 enum ESphSortOrder
 {
-	SPH_SORT_RELEVANCE = 0,		///< sort by document relevance, descending
-	SPH_SORT_DATE_DESC,			///< sort by document date, descending
-	SPH_SORT_DETE_ASC			///< sort by document date, ascending
+	SPH_SORT_RELEVANCE = 0,		///< sort by document relevance desc, then by date
+	SPH_SORT_DATE_DESC,			///< sort by document date desc, then by relevance desc
+	SPH_SORT_DATE_ASC			///< sort by document date asc, then by relevance desc
 };
 
 
@@ -602,6 +602,8 @@ public:
 class CSphQueryResult
 {
 public:
+	static const int		MAX_MATCHES = 1000;
+
 	struct
 	{
 		char *				m_sWord;	///< i-th search term (normalized word form)
@@ -609,9 +611,10 @@ public:
 		int					m_iHits;	///< hit count for this term
 	}						m_tWordStats [ SPH_MAX_QUERY_WORDS ];
 
-	int						m_iNumWords;	///< query word count
-	float					m_fQueryTime;	///< query time, seconds
-	CSphVector<CSphMatch>	m_dMatches;		///< matching documents/weights vector
+	int						m_iNumWords;		///< query word count
+	float					m_fQueryTime;		///< query time, seconds
+	CSphVector<CSphMatch>	m_dMatches;			///< top matching documents, no more than MAX_MATCHES
+	int						m_iTotalMatches;	///< total matches count
 
 public:
 							CSphQueryResult ();		///< ctor

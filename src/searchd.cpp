@@ -207,15 +207,120 @@ int iread(int fd, void *buf, int len)
 	return res;
 }
 
+
+int iwrite ( int iFD, const char * sFmt, ... )
+{
+	char sBuf [ 2048 ];
+
+	va_list ap;
+	va_start ( ap, sFmt );
+	vsnprintf ( sBuf, sizeof(sBuf), sFmt, ap );
+	va_end ( ap );
+
+	return ::write ( iFD, sBuf, strlen(sBuf) );
+}
+
 /////////////////////////////////////////////////////////////////////////////
+
+void HandleClient ( int rsock, CSphIndex * pIndex, CSphDict * pDict )
+{
+	CSphQuery tQuery;
+	CSphQueryResult * pRes;
+	int i, iOffset, iLimit, iCount, iAny;
+	char sQuery [ 1024 ], sBuf [ 2048 ];
+
+	// read mode/limits
+	if ( iread ( rsock, &iOffset, 4 )!=4 ) return;
+	if ( iread ( rsock, &iLimit, 4 )!=4 ) return;
+	if ( iread ( rsock, &iAny, 4 )!=4 ) return;
+	if ( iread ( rsock, &tQuery.m_iGroups, 4 )!=4 ) return;
+
+	// read groups
+	if ( tQuery.m_iGroups<0 || tQuery.m_iGroups>256 ) return; // FIXME?
+	if ( tQuery.m_iGroups )
+	{
+		i = tQuery.m_iGroups*sizeof(DWORD);
+		tQuery.m_pGroups = new DWORD [ tQuery.m_iGroups ];
+		if ( iread ( rsock, tQuery.m_pGroups, i )!=i ) return;
+	}
+
+	// read query string
+	if ( iread ( rsock, &i, 4 )!=4 ) return;
+	if ( i<0 || i>(int)sizeof(sQuery)-1 ) return;
+
+	if ( iread ( rsock, sQuery, i )!=i ) return;
+	sQuery[i] = '\0';
+
+	// read weights
+	int iUserWeights;
+	int dUserWeights [ SPH_MAX_FIELD_COUNT ];
+
+	if ( iread ( rsock, &iUserWeights, 4 ) != 4 ) return;
+	if ( iUserWeights<0 || iUserWeights>SPH_MAX_FIELD_COUNT ) return;
+	if ( iUserWeights )
+		if ( iread ( rsock, dUserWeights, iUserWeights*4 ) != iUserWeights*4 ) return;
+
+	// do query
+	tQuery.m_sQuery = sQuery;
+	tQuery.m_pWeights = dUserWeights;
+	tQuery.m_iWeights = iUserWeights;
+	tQuery.m_bAll = ( iAny==0 );
+
+	pRes = pIndex->query ( pDict, &tQuery );
+
+	// log query
+	if ( g_iQueryLogFile>=0 )
+	{
+		time_t tNow;
+		char sTimeBuf[128];
+
+		time ( &tNow );
+		ctime_r ( &tNow, sTimeBuf );
+		sTimeBuf [ strlen(sTimeBuf)-1 ] = '\0';
+
+		snprintf ( sBuf, sizeof(sBuf), "[%s] %.2f sec: [%d %d %s] %s\n",
+			sTimeBuf, pRes->m_fQueryTime,
+			iOffset, iLimit, tQuery.m_bAll ? "all" : "any",
+			sQuery );
+
+		flock ( g_iQueryLogFile, LOCK_EX );
+		lseek ( g_iQueryLogFile, 0, SEEK_END );
+		write ( g_iQueryLogFile, sBuf, strlen(sBuf) );
+		flock ( g_iQueryLogFile, LOCK_UN );
+	}
+
+	// serve the answer to client
+	iCount = Min ( iLimit, pRes->m_dMatches.GetLength()-iOffset );
+
+	iwrite ( rsock, "MATCHES %d\n", iCount );
+	for ( i=iOffset; i<iOffset+iCount; i++ )
+	{
+		CSphMatch & tMatch = pRes->m_dMatches[i];
+		iwrite ( rsock, "MATCH %d %d %d\n",
+			tMatch.m_iGroupID,
+			tMatch.m_iDocID,
+			tMatch.m_iWeight );
+	}
+
+	iwrite ( rsock, "TOTAL %d\n", pRes->m_dMatches.GetLength() );
+	iwrite ( rsock, "TIME %.2f\n", pRes->m_fQueryTime );
+	iwrite ( rsock, "WORDS %d\n", pRes->m_iNumWords );
+
+	for ( i=0; i < pRes->m_iNumWords; i++ )
+	{
+		iwrite ( rsock, "WORD %s %d %d\n",
+			pRes->m_tWordStats[i].m_sWord,
+			pRes->m_tWordStats[i].m_iDocs,
+			pRes->m_tWordStats[i].m_iHits );
+	}
+}
+
 
 int main ( int argc, char **argv )
 {
-	CSphQueryResult *r;
-	int rsock, start = 0, count = 10, rcount;
+	int rsock;
 	struct sockaddr_in remote_iaddr;
 	socklen_t len;
-	char query[1024], buf[2048];
 	CSphConfig conf;
 
 	fprintf ( stdout, SPHINX_BANNER );
@@ -385,8 +490,7 @@ int main ( int argc, char **argv )
 
 		if ( g_iMaxChildren && g_iChildren>=g_iMaxChildren )
 		{
-			strcpy ( buf, "RETRY Server maxed out\n" );
-			write ( rsock, buf, strlen(buf) );
+			iwrite ( rsock, "RETRY Server maxed out\n" );
 			close ( rsock );
 			continue;
 		}
@@ -399,110 +503,9 @@ int main ( int argc, char **argv )
 
 			// child process, handle client
 			case 0:
-				for ( ;; )
-				{
-					CSphQuery tQuery;
-					int iAny;
-
-					// read mode/limits
-					if ( iread ( rsock, &start, 4 )!=4 ) break;
-					if ( iread ( rsock, &count, 4 )!=4 ) break;
-					if ( iread ( rsock, &iAny, 4 )!=4 ) break;
-					if ( iread ( rsock, &tQuery.m_iGroups, 4 )!=4 ) break;
-
-					// read groups
-					if ( tQuery.m_iGroups<0 || tQuery.m_iGroups>256 ) break; // FIXME?
-					if ( tQuery.m_iGroups )
-					{
-						i = tQuery.m_iGroups*sizeof(DWORD);
-						tQuery.m_pGroups = new DWORD [ tQuery.m_iGroups ];
-						if ( iread ( rsock, tQuery.m_pGroups, i )!=i ) break;
-					}
-
-					// read query string
-					if ( iread ( rsock, &i, 4 )!=4 ) break;
-					if ( i<0 || i>(int)sizeof(query)-1 ) break;
-
-					if ( iread ( rsock, query, i )!=i ) break;
-					query[i] = '\0';
-
-					// read weights
-					int iUserWeights;
-					int dUserWeights [ SPH_MAX_FIELD_COUNT ];
-
-					if ( iread ( rsock, &iUserWeights, 4 ) != 4 ) break;
-					if ( iUserWeights<0 || iUserWeights>SPH_MAX_FIELD_COUNT ) break;
-					if ( iUserWeights )
-						if ( iread ( rsock, dUserWeights, iUserWeights*4 ) != iUserWeights*4 ) break;
-
-					// do query
-					tQuery.m_sQuery = query;
-					tQuery.m_pWeights = dUserWeights;
-					tQuery.m_iWeights = iUserWeights;
-					tQuery.m_bAll = ( iAny==0 );
-
-					r = pIndex->query ( pDict, &tQuery );
-
-					// log query
-					if ( g_iQueryLogFile>=0 )
-					{
-						time_t tNow;
-						char sTimeBuf[128];
-
-						time ( &tNow );
-						ctime_r ( &tNow, sTimeBuf );
-						sTimeBuf [ strlen(sTimeBuf)-1 ] = '\0';
-
-						sprintf ( buf, "[%s] %.2f sec: [%d %d %s] %s\n",
-							sTimeBuf, r->m_fQueryTime,
-							start, count, tQuery.m_bAll ? "all" : "any",
-							query );
-
-						flock ( g_iQueryLogFile, LOCK_EX );
-						lseek ( g_iQueryLogFile, 0, SEEK_END );
-						write ( g_iQueryLogFile, buf, strlen(buf) );
-						flock ( g_iQueryLogFile, LOCK_UN );
-					}
-
-					// serve the answer to client
-					rcount = Min ( count, r->m_dMatches.GetLength()-start );
-
-					sprintf ( buf, "MATCHES %d\n", rcount );
-					write ( rsock, buf, strlen(buf) );
-
-					for ( i=start; i<start+rcount; i++ )
-					{
-						CSphMatch & tMatch = r->m_dMatches[i];
-						sprintf ( buf, "MATCH %d %d %d\n",
-							tMatch.m_iGroupID,
-							tMatch.m_iDocID,
-							tMatch.m_iWeight );
-						write ( rsock, buf, strlen(buf) );
-					}
-
-					sprintf ( buf, "TOTAL %d\n", r->m_dMatches.GetLength() );
-					write ( rsock, buf, strlen(buf) );
-
-					sprintf ( buf, "TIME %.2f\n", r->m_fQueryTime );
-					write ( rsock, buf, strlen(buf) );
-
-					sprintf ( buf, "WORDS %d\n", r->m_iNumWords );
-					write ( rsock, buf, strlen(buf) );
-
-					for ( i=0; i < r->m_iNumWords; i++ )
-					{
-						sprintf ( buf, "WORD %s %d %d\n",
-							r->m_tWordStats[i].m_sWord,
-							r->m_tWordStats[i].m_iDocs,
-							r->m_tWordStats[i].m_iHits );
-						write ( rsock, buf, strlen(buf) );
-					}
-					break;
-				}
-
-				// bail out
-				close(rsock);
-				exit(0);
+				HandleClient ( rsock, pIndex, pDict );
+				close ( rsock );
+				exit ( 0 );
 				break;
 
 			// parent process, continue accept()ing

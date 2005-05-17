@@ -313,6 +313,8 @@ void HandleClient ( int rsock, CSphIndex * pIndex, CSphDict * pDict )
 			pRes->m_tWordStats[i].m_iDocs,
 			pRes->m_tWordStats[i].m_iHits );
 	}
+
+	delete pRes;
 }
 
 

@@ -531,7 +531,7 @@ public:
 	}
 
 	~CSphQueryWord ()
-	{	
+	{
 		sphFree ( m_sWord );
 	}
 
@@ -883,7 +883,6 @@ CSphQuery::CSphQuery ()
 
 CSphQuery::~CSphQuery ()
 {
-	SafeDeleteArray ( m_pWeights );
 	SafeDeleteArray ( m_pGroups );
 }
 

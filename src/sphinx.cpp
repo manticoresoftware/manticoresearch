@@ -1713,7 +1713,6 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iCount )
 
 	static const int HBITS = 11;
 	static const int HSIZE = (1<<HBITS);
-	static const int HMASK = (HSIZE-1);
 
 	int dHash [ HSIZE+1 ];
 	int iBits = iLog2 ( m_dDocinfos.Last().m_iDocID - iStartID );
@@ -2271,14 +2270,7 @@ template< typename T> Less_T<T> Less_fn ( T & )
 /// generic priority queue interface
 template< typename T, int SIZE> class ISphQueue
 {
-protected:
-	T		m_pData [ SIZE ];
-	int		m_iUsed;
-
 public:
-	/// ctor
-						ISphQueue () : m_iUsed ( 0 ) {}
-
 	/// base push
 	virtual void		Push ( const T & tEntry ) = 0;
 
@@ -2286,24 +2278,24 @@ public:
 	virtual void		Pop () = 0;
 
 	/// get entries count
-	inline int			GetLength () const
-	{
-		return m_iUsed;
-	};
+	virtual int			GetLength () const = 0;
 
 	/// get current root
-	inline const T &	Root () const
-	{
-		assert ( m_iUsed );
-		return m_pData[0];
-	}
+	virtual const T &	Root () const = 0;
 };
 
 
 /// generic priority queue
 template< typename T, int SIZE, class COMP > class CSphQueue : public ISphQueue<T, SIZE>
 {
+protected:
+	T		m_pData [ SIZE ];
+	int		m_iUsed;
+
 public:
+	/// ctor
+	CSphQueue () : m_iUsed ( 0 ) {}
+
 	/// add entry to the queue
 	virtual void Push ( const T & tEntry )
 	{
@@ -2360,6 +2352,19 @@ public:
 
 			break;
 		}
+	}
+
+	/// get entries count
+	inline int GetLength () const
+	{
+		return m_iUsed;
+	};
+
+	/// get current root
+	inline const T & Root () const
+	{
+		assert ( m_iUsed );
+		return m_pData[0];
 	}
 };
 

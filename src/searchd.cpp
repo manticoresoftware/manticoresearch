@@ -229,6 +229,9 @@ void HandleClient ( int rsock, CSphIndex * pIndex, CSphDict * pDict )
 	int i, iOffset, iLimit, iCount, iAny;
 	char sQuery [ 1024 ], sBuf [ 2048 ];
 
+	// hello there
+	iwrite ( rsock, "VER %d\n", SPHINX_SEARCHD_PROTO );
+
 	// read mode/limits
 	if ( iread ( rsock, &iOffset, 4 )!=4 ) return;
 	if ( iread ( rsock, &iLimit, 4 )!=4 ) return;

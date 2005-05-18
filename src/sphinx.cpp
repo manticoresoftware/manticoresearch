@@ -2690,6 +2690,8 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 
 	// find and proximity-weight matching documents
 	i = docID = 0;
+	pResult->m_iTotalMatches = 0;
+
 	PROFILE_BEGIN ( query_match );
 	if ( pQuery->m_bAll )
 	{
@@ -2795,6 +2797,7 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 			tMatch.m_iTimestamp = qwords[0].m_tDoc.m_iTimestamp + m_tHeader.m_tMin.m_iTimestamp;
 			tMatch.m_iWeight = j; // set weight
 			pTop->Push ( tMatch );
+			pResult->m_iTotalMatches++;
 
 			// continue looking for next matches
 			i = 0;
@@ -2934,6 +2937,7 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 			tMatch.m_iTimestamp = tMatchDoc.m_iTimestamp + m_tHeader.m_tMin.m_iTimestamp;
 			tMatch.m_iWeight = j; // set weight
 			pTop->Push ( tMatch );
+			pResult->m_iTotalMatches++;
 		}
 	}
 	PROFILE_END ( query_match );

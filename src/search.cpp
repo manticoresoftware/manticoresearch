@@ -265,12 +265,12 @@ int main ( int argc, char ** argv )
 		return 1;
 	}
 
-	fprintf ( stdout, "query '%s': %d matches, %.2f sec\n",
-		sQuery, pResult->m_dMatches.GetLength(), pResult->m_fQueryTime );
+	fprintf ( stdout, "query '%s': returned %d matches of %d total in %.2f sec\n",
+		sQuery, pResult->m_dMatches.GetLength(), pResult->m_iTotalMatches, pResult->m_fQueryTime );
 
 	if ( pResult->m_dMatches.GetLength() )
 	{
-		fprintf ( stdout, "\nmatches:\n" );
+		fprintf ( stdout, "\ndisplaying matches:\n" );
 
 		int iMaxIndex = Min ( iStart+iLimit, pResult->m_dMatches.GetLength() );
 		for ( int i=iStart; i<iMaxIndex; i++ )

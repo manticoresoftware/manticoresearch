@@ -308,7 +308,7 @@ void HandleClient ( int rsock, CSphIndex * pIndex, CSphDict * pDict )
 			tMatch.m_iTimestamp );
 	}
 
-	iwrite ( rsock, "TOTAL %d\n", pRes->m_dMatches.GetLength() );
+	iwrite ( rsock, "TOTAL %d %d\n", pRes->m_dMatches.GetLength(), pRes->m_iTotalMatches );
 	iwrite ( rsock, "TIME %.2f\n", pRes->m_fQueryTime );
 	iwrite ( rsock, "WORDS %d\n", pRes->m_iNumWords );
 

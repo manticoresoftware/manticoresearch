@@ -114,7 +114,9 @@ class SphinxClient
 	///		"matches"
 	///			hash which maps found document_id to ( "weight", "group" ) hash
 	///		"total"
-	///			total matches count
+	///			total amount of matches retrieved (upto SPH_MAX_MATCHES, see sphinx.h)
+	///		"total_found"
+	///			total amount of matching documents in index
 	///		"time"
 	///			search time
 	///		"words"
@@ -170,7 +172,9 @@ class SphinxClient
 
 			} elseif ( substr ( $s, 0, 6 )=="TOTAL " )
 			{
-				$result["total"] = substr($s, 6);
+				list ( $dummy, $returned, $found ) = explode ( " ", $s );
+				$result["total"] = $returned;
+				$result["total_found"] = $found;
 
 			} elseif ( substr ( $s, 0, 5 )=="TIME " )
 			{

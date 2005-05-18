@@ -71,7 +71,7 @@ if ( !$res )
 
 } else
 {
-	print "Query '$q' produced $res[total] matches in $res[time] sec.\n";
+	print "Query '$q' retrieved $res[total] of $res[total_found] matches in $res[time] sec.\n";
 	print "Query stats:\n";
 	if ( is_array($res["words"]) )
 		foreach ( $res["words"] as $word => $info )

@@ -2266,7 +2266,7 @@ template< typename T> Less_T<T> Less_fn ( T & )
 }
 
 
-/// generic priority queue interface
+/// match-sorting priority min-queue interface
 template< typename T, int SIZE> class ISphQueue
 {
 public:
@@ -2284,7 +2284,7 @@ public:
 };
 
 
-/// generic priority queue
+/// match-sorting priority min-queue
 template< typename T, int SIZE, class COMP > class CSphQueue : public ISphQueue<T, SIZE>
 {
 protected:
@@ -2298,13 +2298,20 @@ public:
 	/// add entry to the queue
 	virtual void Push ( const T & tEntry )
 	{
-		// check for overflow and do add
-		assert ( m_iUsed<SIZE );
+		if ( m_iUsed==SIZE )
+		{
+			// if it's worse that current min, reject it, else pop off current min
+			if ( COMP() ( tEntry, m_pData[0] ) )
+				return;
+			else
+				Pop ();
+		}
 
+		// do add
 		m_pData [ m_iUsed ] = tEntry;
 		int iEntry = m_iUsed++;
 
-		// sift up if needed
+		// sift up if needed, so that worst (lesser) ones float to the top
 		while ( iEntry )
 		{
 			int iParent = ( iEntry-1 ) >> 1;
@@ -2412,37 +2419,37 @@ struct CSphQueryParser : CSphSource_Text
 
 
 /// match sorter
-struct MatchRelevanceDesc_fn
+struct MatchRelevanceLt_fn
 {
 	inline bool operator() ( const CSphMatch & a, const CSphMatch & b ) const
 	{
 		return ( a.m_iWeight==b.m_iWeight )
-			? ( a.m_iTimestamp > b.m_iTimestamp )
-			: ( a.m_iWeight > b.m_iWeight );
+			? ( a.m_iTimestamp < b.m_iTimestamp )
+			: ( a.m_iWeight < b.m_iWeight );
 	};
 };
 
 
 /// match sorter
-struct MatchDateDesc_fn
+struct MatchDateLt_fn
 {
 	inline bool operator() ( const CSphMatch & a, const CSphMatch & b ) const
 	{
 		return ( a.m_iTimestamp==b.m_iTimestamp )
-			? ( a.m_iWeight > b.m_iWeight )
+			? ( a.m_iWeight < b.m_iWeight )
+			: ( a.m_iTimestamp < b.m_iTimestamp );
+	};
+};
+
+
+/// match sorter
+struct MatchDateGt_fn
+{
+	inline bool operator() ( const CSphMatch & a, const CSphMatch & b ) const
+	{
+		return ( a.m_iTimestamp==b.m_iTimestamp )
+			? ( a.m_iWeight < b.m_iWeight )
 			: ( a.m_iTimestamp > b.m_iTimestamp );
-	};
-};
-
-
-/// match sorter
-struct MatchDateAsc_fn
-{
-	inline bool operator() ( const CSphMatch & a, const CSphMatch & b ) const
-	{
-		return ( a.m_iTimestamp==b.m_iTimestamp )
-			? ( a.m_iWeight > b.m_iWeight )
-			: ( a.m_iTimestamp<b.m_iTimestamp );
 	};
 };
 
@@ -2675,9 +2682,9 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 	ISphQueue<CSphMatch, CSphQueryResult::MAX_MATCHES> * pTop = NULL;
 	switch ( pQuery->m_eSort )
 	{
-		case SPH_SORT_RELEVANCE:	pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchRelevanceDesc_fn > (); break;
-		case SPH_SORT_DATE_DESC:	pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchDateDesc_fn > (); break;
-		case SPH_SORT_DATE_ASC:		pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchDateAsc_fn > (); break;
+		case SPH_SORT_RELEVANCE:	pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchRelevanceLt_fn > (); break;
+		case SPH_SORT_DATE_DESC:	pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchDateLt_fn > (); break;
+		case SPH_SORT_DATE_ASC:		pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchDateGt_fn > (); break;
 	}
 	assert ( pTop );
 
@@ -2932,9 +2939,11 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 	PROFILE_END ( query_match );
 
 	PROFILE_BEGIN ( query_sort );
-	while ( pTop->GetLength () )
+	pResult->m_dMatches.Resize ( pTop->GetLength() );
+	int iDest = pTop->GetLength();
+	while ( iDest-- )
 	{
-		pResult->m_dMatches.Add ( pTop->Root () );
+		pResult->m_dMatches [ iDest ] = pTop->Root ();
 		pTop->Pop ();
 	}
 	SafeDelete ( pTop );

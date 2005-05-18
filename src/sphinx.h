@@ -126,7 +126,7 @@ public:
 	T & Add ()
 	{
 		if ( m_iLength>=m_iLimit )
-			Resize ( 1+m_iLength );
+			Grow ( 1+m_iLength );
 		return m_pData [ m_iLength++ ];
 	}
 
@@ -134,7 +134,7 @@ public:
 	void Add ( const T & tValue )
 	{
 		if ( m_iLength>=m_iLimit )
-			Resize ( 1+m_iLength );
+			Grow ( 1+m_iLength );
 		m_pData [ m_iLength++ ] = tValue;
 	}
 
@@ -144,10 +144,10 @@ public:
 		return (*this) [ m_iLength-1 ];
 	}
 
-	/// resize
-	void Resize ( int iNewLimit )
+	/// grow enough to hold that much entries, if needed
+	void Grow ( int iNewLimit )
 	{
-		// check that there'll be enough place
+		// check that we really need to be called
 		assert ( iNewLimit>m_iLength );
 
 		// calc new limit
@@ -163,6 +163,16 @@ public:
 			pNew[i] = m_pData[i];
 		delete [] m_pData;
 		m_pData = pNew;
+	}
+
+	/// resize
+	void Resize ( int iNewLength )
+	{
+		// only resize up for now
+		assert ( iNewLength>=m_iLength );
+
+		Grow ( iNewLength );
+		m_iLength = iNewLength;
 	}
 
 	/// reset

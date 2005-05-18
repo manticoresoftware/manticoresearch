@@ -65,9 +65,9 @@ $res = $cl->Query ( $q );
 // print me out
 ////////////////
 
-if ( !$res )
+if ( $res===false )
 {
-	print "Query failed.\n";
+	print "Query failed: " . $cl->GetLastError() . ".\n";
 
 } else
 {

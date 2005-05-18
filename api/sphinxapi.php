@@ -38,6 +38,8 @@ class SphinxClient
 	var $_groups;	///< groups to limit searching to (default is not to limit)
 	var $_sort;		///< match sorting mode (default is SPH_SORT_RELEVANCE)
 
+	var $_error;	///< last error message
+
 	/// create a new client object and fill defaults
 	function SphinxClient ()
 	{
@@ -49,6 +51,14 @@ class SphinxClient
 		$this->_weights	= array ();
 		$this->_groups	= array ();
 		$this->_sort	= SPH_SORT_RELEVANCE;
+
+		$this->_error	= "";
+	}
+
+	/// get last error message (string)
+	function GetLastError ()
+	{
+		return $this->_error;
 	}
 
 	/// set searchd server
@@ -124,13 +134,24 @@ class SphinxClient
 	function Query ( $query )
 	{
 		if (!( $fp = @fsockopen ( $this->_host, $this->_port ) ) )
+		{
+			$this->_error = "connection to {$this->_host}:{$this->_port} failed";
 			return false;
+		}
 
 		// check version
 		$s = trim ( fgets ( $fp, 1024 ) );
-		if ( $s!="VER 1" )
+		if ( substr ( $s, 0, 4 )!="VER " )
 		{
 			fclose ( $fp );
+			$this->_error = "expected searchd protocol version, got '$s'";
+			return false;
+		}
+		$ver = (int)substr ( $s, 4 ); 
+		if ( $ver!=1 )
+		{
+			fclose ( $fp );
+			$this->_error = "expected protocol version 1, got $ver";
 			return false;
 		}
 

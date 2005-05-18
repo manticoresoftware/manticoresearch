@@ -171,8 +171,11 @@ public:
 		// only resize up for now
 		assert ( iNewLength>=m_iLength );
 
-		Grow ( iNewLength );
-		m_iLength = iNewLength;
+		if ( iNewLength!=m_iLength )
+		{
+			Grow ( iNewLength );
+			m_iLength = iNewLength;
+		}
 	}
 
 	/// reset

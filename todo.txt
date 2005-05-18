@@ -10,6 +10,7 @@ MEDIUM PRIORITY
 * add index update/mergeing
 * add word-storing dictionaries (to avoid collisions etc)
 * add external relevance metrics support
+* add limits support to words stats 
 
 LOW PRIORITY
 

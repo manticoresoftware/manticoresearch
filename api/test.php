@@ -16,7 +16,7 @@
 require ( "sphinxapi.php" );
 
 $cl = new SphinxClient ();
-$cl->SetServer ( "localhost", 7812 );
+$cl->SetServer ( "localhost", 3312 );
 $cl->SetWeights ( array ( 100, 1 ) );
 
 //////////////////////

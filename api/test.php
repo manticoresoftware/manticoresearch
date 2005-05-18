@@ -13,14 +13,15 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-///////////////////////////////////////////////////////////////////////////////
-
-$searchd_host	= "127.0.0.1";
-$searchd_port	= 7812;
-
-///////////////////////////////////////////////////////////////////////////////
-
 require ( "sphinxapi.php" );
+
+$cl = new SphinxClient ();
+$cl->SetServer ( "localhost", 7812 );
+$cl->SetWeights ( array ( 100, 1 ) );
+
+//////////////////////
+// parse command line
+//////////////////////
 
 // for very old PHP versions, like at my home test server
 if ( is_array($argv) && !isset($_SERVER["argv"]) )
@@ -52,11 +53,21 @@ for ( $i=0; $i<count($args); $i++ )
 	}
 }
 
+////////////
 // do query
-$res = sphinxQuery ( $searchd_host, $searchd_port, $q, 0, 20, array(100,1), $any, $groups );
+////////////
+
+$cl->SetMatchMode ( $any ? SPH_MATCH_ANY : SPH_MATCH_ALL );
+$cl->SetGroups ( $groups );
+$res = $cl->Query ( $q );
+
+////////////////
+// print me out
+////////////////
+
 if ( !$res )
 {
-	print "Query failed (searchd at $searchd_host:$searchd_port).\n";
+	print "Query failed.\n";
 
 } else
 {
@@ -73,7 +84,7 @@ if ( !$res )
 		print "Matches:\n";
 		foreach ( $res["matches"] as $doc => $docinfo )
 		{
-			print "$n. doc_id=$doc, group=$docinfo[group], weight=$docinfo[weight]\n";
+			print "$n. doc_id=$doc, group=$docinfo[group], timestamp=$docinfo[stamp], weight=$docinfo[weight]\n";
 			$n++;
 		}
 	}

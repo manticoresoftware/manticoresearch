@@ -17,88 +17,176 @@
 // Sphinx PHP API
 /////////////////////////////////////////////////////////////////////////////
 
-/// this functions connects to sphinx searchd server,
-/// executes given query, and returns search results as a hash
-///
-/// $server is searchd server IP address or hostname
-/// $port is searchd server port
-/// $query is query string
-/// $start is offset into the result set to start retrieveing from
-/// $rpp is result count to retrieve (Rows Per Page)
-/// $weights is an array of weights for each index field
-/// $any is search mode, false to match all words and true to match any word
-/// $groups is an array of groups to limit matching to
-///
-/// returns false on failure
-/// returns hash which has the following keys on success:
-///		"matches"
-///			hash which maps found document_id to ( "weight", "group" ) hash
-///		"total"
-///			total matches count
-///		"time"
-///			search time
-///		"words"
-///			hash which maps query terms (stemmed!) to ( "docs", "hits" ) hash
+/// known match modes
+define ( "SPH_MATCH_ALL",			0 );
+define ( "SPH_MATCH_ANY",			1 );
 
-function sphinxQuery ( $server, $port, $query, $start=0, $rpp=20,
-	$weights=array(), $any=false, $groups=array() )
+/// known sort modes
+define ( "SPH_SORT_RELEVANCE",		0 );
+define ( "SPH_SORT_DATE_DESC",		1 );
+define ( "SPH_SORT_DATE_ASC",		2 );
+
+/// sphinx searchd client class
+class SphinxClient
 {
-	$start = (int)$start;
-	$rpp = (int)$rpp;
+	var $_host;		///< searchd host (default is "localhost")
+	var $_port;		///< searchd port (default is 3312)
+	var $_offset;	///< how much records to seek from result-set start (default is 0)
+	var $_limit;	///< how much records to return from result-set starting at offset (default is 20)
+	var $_mode;		///< query matching mode (default is SPH_MATCH_ALL)
+	var $_weights;	///< per-field weights (default is 1 for all fields)
+	var $_groups;	///< groups to limit searching to (default is not to limit)
+	var $_sort;		///< match sorting mode (default is SPH_SORT_RELEVANCE)
 
-	if (!( $fp = @fsockopen ( $server, $port ) ) )
-		return false;
-
-	// check version
-	$s = trim ( fgets ( $fp, 1024 ) );
-	if ( $s!="VER 1" )
+	/// create a new client object and fill defaults
+	function SphinxClient ()
 	{
-		fclose ( $fp );
-		return false;
+		$this->_host	= "localhost";
+		$this->_port	= 3312;
+		$this->_offset	= 0;
+		$this->_limit	= 20;
+		$this->_mode	= SPH_MATCH_ALL;
+		$this->_weights	= array ();
+		$this->_groups	= array ();
+		$this->_sort	= SPH_SORT_RELEVANCE;
 	}
 
-	// build request
-	$req = pack ( "VVV", $start, $rpp, $any ? 1 : 0 ); // mode/limits part
-	$req .= pack ( "V", count($groups) ); // groups
-	foreach ( $groups as $group )
-		$req .= pack ( "V", $group );
-	$req .= pack ( "V", strlen($query) ) . $query; // query string
-	$req .= pack ( "V", count($weights) ); // weights
-	foreach ( $weights as $weight )
-		$req .= pack ( "V", (int)$weight );
-
-	// do query
-	fputs ( $fp, $req );
-
-	$result = array();
-	while ( !feof ( $fp ) )
+	/// set searchd server
+	function SetServer ( $host, $port )
 	{
+		assert ( is_string($host) );
+		assert ( is_int($port) );
+		$this->_host = $host;
+		$this->_port = $port;
+	}
+
+	/// set match offset/limits
+	function SetLimits ( $offset, $limit )
+	{
+		assert ( is_int($offset) );
+		assert ( is_int($limit) );
+		assert ( $offset>=0 );
+		assert ( $limit>0 );
+		$this->_offset = $offset;
+		$this->_limit = $limit;
+	}
+
+	/// set match mode
+	function SetMatchMode ( $mode )
+	{
+		assert ( $mode==SPH_MATCH_ALL || $mode==SPH_MATCH_ANY );
+		$this->_mode = $mode;
+	}
+
+	/// set match mode
+	function SetSortMode ( $sort )
+	{
+		assert ( $sort==SPH_SORT_RELEVANCE || $sort==SPH_SORT_DATE_DESC || $sort==SPH_SORT_DATE_ASC );
+		$this->_sort = $sort;
+	}
+
+	/// set per-field weights
+	function SetWeights ( $weights )
+	{
+		assert ( is_array($weights) );
+		foreach ( $weights as $weight )
+			assert ( is_int($weight) );
+
+		$this->_weights = $weights;
+	}
+
+	/// set groups
+	function SetGroups ( $groups )
+	{
+		assert ( is_array($groups) );
+		foreach ( $groups as $group )
+			assert ( is_int($group) );
+
+		$this->_groups = $groups;
+	}
+
+	/// connect to server and run given query
+	///
+	/// $query is query string
+	///
+	/// returns false on failure
+	/// returns hash which has the following keys on success:
+	///		"matches"
+	///			hash which maps found document_id to ( "weight", "group" ) hash
+	///		"total"
+	///			total matches count
+	///		"time"
+	///			search time
+	///		"words"
+	///			hash which maps query terms (stemmed!) to ( "docs", "hits" ) hash
+	function Query ( $query )
+	{
+		if (!( $fp = @fsockopen ( $this->_host, $this->_port ) ) )
+			return false;
+
+		// check version
 		$s = trim ( fgets ( $fp, 1024 ) );
-		if ( substr ( $s, 0, 6 )=="MATCH " )
+		if ( $s!="VER 1" )
 		{
-			list ( $dummy, $group, $doc, $weight ) = explode ( " ", $s );
-			$result["matches"][$doc] = array ( "weight" => $weight, "group" => $group );
-
-		} elseif ( substr ( $s, 0, 6 )=="TOTAL " )
-		{
-			$result["total"] = substr($s, 6);
-
-		} elseif ( substr ( $s, 0, 5 )=="TIME " )
-		{
-			$result["time"] = substr ( $s, 5 );
-
-		} elseif ( substr ( $s, 0, 5 ) == "WORD " )
-		{
-			list ( $dummy, $word, $docs, $hits ) = explode ( " ", $s );
-			$result["words"][$word]["docs"] = $docs;
-			$result["words"][$word]["hits"] = $hits;
+			fclose ( $fp );
+			return false;
 		}
 
-		// for now, simply ignore unknown response
-	}
+		/////////////////
+		// build request
+		/////////////////
 
-	fclose ( $fp );
-	return $result;
+		// mode/limits part
+		$req = pack ( "VVVV", $this->_offset, $this->_limit, $this->_mode, $this->_sort );
+
+		// groups
+		$req .= pack ( "V", count($this->_groups) );
+		foreach ( $this->_groups as $group )
+			$req .= pack ( "V", $group );
+
+		// query string
+		$req .= pack ( "V", strlen($query) ) . $query; 
+
+		// weights
+		$req .= pack ( "V", count($this->_weights) );
+		foreach ( $this->_weights as $weight )
+			$req .= pack ( "V", (int)$weight );
+
+		////////////
+		// do query
+		////////////
+
+		fputs ( $fp, $req );
+
+		$result = array();
+		while ( !feof ( $fp ) )
+		{
+			$s = trim ( fgets ( $fp, 1024 ) );
+			if ( substr ( $s, 0, 6 )=="MATCH " )
+			{
+				list ( $dummy, $group, $doc, $weight, $stamp ) = explode ( " ", $s );
+				$result["matches"][$doc] = array ( "weight"=>$weight, "group"=>$group,
+					"stamp"=>$stamp );
+
+			} elseif ( substr ( $s, 0, 6 )=="TOTAL " )
+			{
+				$result["total"] = substr($s, 6);
+
+			} elseif ( substr ( $s, 0, 5 )=="TIME " )
+			{
+				$result["time"] = substr ( $s, 5 );
+
+			} elseif ( substr ( $s, 0, 5 ) == "WORD " )
+			{
+				list ( $dummy, $word, $docs, $hits ) = explode ( " ", $s );
+				$result["words"][$word] = array ( "docs"=>$docs, "hits"=>$hits );
+			}
+			// for now, simply ignore unknown response
+		}
+
+		fclose ( $fp );
+		return $result;
+	}
 }
 
 //

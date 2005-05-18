@@ -233,9 +233,11 @@ void HandleClient ( int rsock, CSphIndex * pIndex, CSphDict * pDict )
 	iwrite ( rsock, "VER %d\n", SPHINX_SEARCHD_PROTO );
 
 	// read mode/limits
+	assert ( sizeof(tQuery.m_eSort)==4 );
 	if ( iread ( rsock, &iOffset, 4 )!=4 ) return;
 	if ( iread ( rsock, &iLimit, 4 )!=4 ) return;
 	if ( iread ( rsock, &iAny, 4 )!=4 ) return;
+	if ( iread ( rsock, &tQuery.m_eSort, 4)!=4 ) return;
 	if ( iread ( rsock, &tQuery.m_iGroups, 4 )!=4 ) return;
 
 	// read groups
@@ -299,10 +301,11 @@ void HandleClient ( int rsock, CSphIndex * pIndex, CSphDict * pDict )
 	for ( i=iOffset; i<iOffset+iCount; i++ )
 	{
 		CSphMatch & tMatch = pRes->m_dMatches[i];
-		iwrite ( rsock, "MATCH %d %d %d\n",
+		iwrite ( rsock, "MATCH %d %d %d %d\n",
 			tMatch.m_iGroupID,
 			tMatch.m_iDocID,
-			tMatch.m_iWeight );
+			tMatch.m_iWeight,
+			tMatch.m_iTimestamp );
 	}
 
 	iwrite ( rsock, "TOTAL %d\n", pRes->m_dMatches.GetLength() );

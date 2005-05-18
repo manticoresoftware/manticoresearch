@@ -129,17 +129,10 @@ sql_query			= \
 sql_group_column	= group
 sql_date_column		= date
 
-
-# date column name or number
-# date MUST be positive (non-zero, non-negative)
-# date MUST fit into 32 bits
+# by index:
 #
-# columns are numbered starting from 1, ie. document_id is 1, next one is 2, etc
-# if group_id column is specified, it's removed from fulltext indexed fields,
-# therefore changing the field numbering
-#
-# optional, default is empty
-sql_group_column	= 2
+# sql_group_column	= 2
+# sql_group_column	= 3
 
 
 # post-query, executed after the main fetch query

@@ -640,7 +640,7 @@ static BYTE sphLT_cp1251[] =
 	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, // 20-30
 	0x30,0x31,0x32,0x33, 0x34,0x35,0x36,0x37, 0x38,0x39,0,0, 0,0,0,0, // 30-40
 	0x00,0x61,0x62,0x63, 0x64,0x65,0x66,0x67, 0x68,0x69,0x6a,0x6b, 0x6c,0x6d,0x6e,0x6f, // 40-50
-	0x70,0x71,0x72,0x73, 0x74,0x75,0x76,0x77, 0x78,0x79,0x7a,0, 0,0,0,0, // 50-60
+	0x70,0x71,0x72,0x73, 0x74,0x75,0x76,0x77, 0x78,0x79,0x7a,0, 0,0,0,0x5f, // 50-60
 	0x00,0x61,0x62,0x63, 0x64,0x65,0x66,0x67, 0x68,0x69,0x6a,0x6b, 0x6c,0x6d,0x6e,0x6f, // 60-70
 	0x70,0x71,0x72,0x73, 0x74,0x75,0x76,0x77, 0x78,0x79,0x7a,0, 0,0,0,0, // 70-80
 	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, // 80-90
@@ -2781,11 +2781,11 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 			for ( i=0, j=0; i<nweights; i++ )
 				j += weights[i] * ( matchWeight[i] + phraseWeight[i] );
 
-			// add match
+			// unpack match, set weight and push it to the queue
 			CSphMatch tMatch;
-			tMatch.m_iDocID = docID + m_tHeader.m_tMin.m_iDocID; // unpack document id
-			tMatch.m_iGroupID = qwords[0].m_tDoc.m_iGroupID + m_tHeader.m_tMin.m_iGroupID; // unpack group id
-			tMatch.m_iTimestamp = qwords[0].m_tDoc.m_iTimestamp;
+			tMatch.m_iDocID = docID + m_tHeader.m_tMin.m_iDocID;
+			tMatch.m_iGroupID = qwords[0].m_tDoc.m_iGroupID + m_tHeader.m_tMin.m_iGroupID;
+			tMatch.m_iTimestamp = qwords[0].m_tDoc.m_iTimestamp + m_tHeader.m_tMin.m_iTimestamp;
 			tMatch.m_iWeight = j; // set weight
 			pTop->Push ( tMatch );
 
@@ -2920,11 +2920,11 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 			for ( i=0, j=0; i<nweights; i++ )
 				j += weights[i] * ( sphBitCount(dWeights[i].m_uMatch) + dWeights[i].m_iMaxPhrase*iPhraseK );
 
-			// add match
+			// unpack match, set weight and push it to the queue
 			CSphMatch tMatch;
-			tMatch.m_iDocID = iDocID + m_tHeader.m_tMin.m_iDocID; // unpack document id
+			tMatch.m_iDocID = iDocID + m_tHeader.m_tMin.m_iDocID;
 			tMatch.m_iGroupID = tMatchDoc.m_iGroupID; // group id already unpacked
-			tMatch.m_iTimestamp = tMatchDoc.m_iTimestamp;
+			tMatch.m_iTimestamp = tMatchDoc.m_iTimestamp + m_tHeader.m_tMin.m_iTimestamp;
 			tMatch.m_iWeight = j; // set weight
 			pTop->Push ( tMatch );
 		}

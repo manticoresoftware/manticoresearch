@@ -1,3 +1,7 @@
+FIXES:
+* fix that if searchd log is non-writeable, it should complain to console
+* fix that if there are two sql_query's in config, there's no warnings
+
 HIGH PRIORITY
 
 * add doc/hit count report to --buildstops

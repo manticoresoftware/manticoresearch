@@ -1,4 +1,5 @@
 FIXES:
+* fix that pid_file is undocumented
 * fix that if searchd log is non-writeable, it should complain to console
 * fix that if there are two sql_query's in config, there's no warnings
 

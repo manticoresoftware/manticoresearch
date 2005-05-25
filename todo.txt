@@ -40,7 +40,7 @@ ROADMAP
 * add searchd clustering
 * add HTML/SGML/PDF/ext parsers
 * add incremental indexing support
-* add query language
+* add query language (http://www.google.com/help/cheatsheet.html)
 * add fuzzy searching caps
 * add Perl/Python/Java APIs
  

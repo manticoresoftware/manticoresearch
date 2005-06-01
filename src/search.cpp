@@ -100,16 +100,15 @@ int main ( int argc, char ** argv )
 	// get query and other commandline options
 	///////////////////////////////////////////
 
+	CSphQuery tQuery;
 	char sQuery [ 1024 ];
 	sQuery[0] = '\0';
 
 	const char * sConfName = "sphinx.conf";
 	CSphVector<DWORD> dGroups;
-	bool bAny = false;
 	bool bNoInfo = false;
 	int iStart = 0;
 	int iLimit = 20;
-	ESphSortOrder eSort = SPH_SORT_RELEVANCE;
 
 	#define OPT(_a1,_a2)	else if ( !strcmp(argv[i],_a1) || !strcmp(argv[i],_a2) )
 	#define OPT1(_a1)		else if ( !strcmp(argv[i],_a1) )
@@ -121,11 +120,12 @@ int main ( int argc, char ** argv )
 		{
 			// this is an option
 			if ( 0 );
-			OPT ( "-a", "--any" )		bAny = true;
+			OPT ( "-a", "--any" )		tQuery.m_eMode = SPH_MATCH_ANY;
+			OPT ( "-p", "--phrase" )	tQuery.m_eMode = SPH_MATCH_PHRASE;
 			OPT ( "-q", "--noinfo" )	bNoInfo = true;
-			OPT1 ( "--sort=date" )		eSort = SPH_SORT_DATE_DESC;
-			OPT1 ( "--rsort=date" )		eSort = SPH_SORT_DATE_ASC;
-			OPT1 ( "--sort=ts" )		eSort = SPH_SORT_TIME_SEGMENTS;
+			OPT1 ( "--sort=date" )		tQuery.m_eSort = SPH_SORT_DATE_DESC;
+			OPT1 ( "--rsort=date" )		tQuery.m_eSort = SPH_SORT_DATE_ASC;
+			OPT1 ( "--sort=ts" )		tQuery.m_eSort = SPH_SORT_TIME_SEGMENTS;
 			else if ( (i+1)<argc )
 			{
 				if ( 0 );
@@ -244,10 +244,7 @@ int main ( int argc, char ** argv )
 	// search
 	//////////
 
-	CSphQuery tQuery;
 	tQuery.m_sQuery = sQuery;
-	tQuery.m_bAll = !bAny;
-	tQuery.m_eSort = eSort;
 	if ( dGroups.GetLength() )
 	{
 		tQuery.m_pGroups = new DWORD [ dGroups.GetLength() ];

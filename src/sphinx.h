@@ -591,7 +591,20 @@ enum ESphSortOrder
 	SPH_SORT_RELEVANCE = 0,		///< sort by document relevance desc, then by date
 	SPH_SORT_DATE_DESC,			///< sort by document date desc, then by relevance desc
 	SPH_SORT_DATE_ASC,			///< sort by document date asc, then by relevance desc
-	SPH_SORT_TIME_SEGMENTS		///< sort by time segments (hour/day/week/etc) desc, then by relevance desc
+	SPH_SORT_TIME_SEGMENTS,		///< sort by time segments (hour/day/week/etc) desc, then by relevance desc
+
+	SPH_SORT_TOTAL
+};
+
+
+/// search query matching mode
+enum ESphMatchMode
+{
+	SPH_MATCH_ALL = 0,			///< match all query words
+	SPH_MATCH_ANY,				///< match any query word
+	SPH_MATCH_PHRASE,			///< match this exact phrase
+
+	SPH_MATCH_TOTAL
 };
 
 
@@ -602,7 +615,7 @@ public:
 	const char *	m_sQuery;	///< query string. MUST be not NULL
 	int *			m_pWeights;	///< user-supplied per-field weights. may be NULL. default is NULL. WILL NOT BE FREED in dtor.
 	int				m_iWeights;	///< number of user-supplied weights. missing fields will be assigned weight 1. default is 0
-	bool			m_bAll;		///< match all words or any word. default is "match all"
+	ESphMatchMode	m_eMode;	///< match mode. default is "match all"
 	DWORD *			m_pGroups;	///< groups to match. default is NULL, which means "match all". WILL BE FREED in dtor.
 	int				m_iGroups;	///< count of groups to match
 	ESphSortOrder	m_eSort;	///< sorting order

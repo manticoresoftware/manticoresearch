@@ -873,7 +873,7 @@ CSphQuery::CSphQuery ()
 	: m_sQuery		( NULL )
 	, m_pWeights	( NULL )
 	, m_iWeights	( 0 )
-	, m_bAll		( true )
+	, m_eMode		( SPH_MATCH_ALL )
 	, m_pGroups		( NULL )
 	, m_iGroups		( 0 )
 	, m_eSort		( SPH_SORT_RELEVANCE )
@@ -2713,10 +2713,15 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 	ISphQueue<CSphMatch, CSphQueryResult::MAX_MATCHES> * pTop = NULL;
 	switch ( pQuery->m_eSort )
 	{
-		case SPH_SORT_RELEVANCE:	pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchRelevanceLt_fn > (); break;
 		case SPH_SORT_DATE_DESC:	pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchDateLt_fn > (); break;
 		case SPH_SORT_DATE_ASC:		pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchDateGt_fn > (); break;
 		case SPH_SORT_TIME_SEGMENTS:pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchTimeSegments_fn > (); break;
+		case SPH_SORT_RELEVANCE:	pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchRelevanceLt_fn > (); break;
+
+		default:
+			pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchRelevanceLt_fn > ();
+			fprintf ( stderr, "WARNING: unknown sorting mode '%d', using SPH_SORT_RELEVANCE\n", pQuery->m_eSort );
+			break;
 	}
 	assert ( pTop );
 
@@ -2725,7 +2730,7 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 	pResult->m_iTotalMatches = 0;
 
 	PROFILE_BEGIN ( query_match );
-	if ( pQuery->m_bAll )
+	if ( pQuery->m_eMode==SPH_MATCH_ALL || pQuery->m_eMode==SPH_MATCH_PHRASE )
 	{
 		///////////////////
 		// match all words
@@ -2818,6 +2823,23 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 				k = qwords[imin].m_iQueryPos - pmin;
 			}
 
+			// check if there was a perfect match
+			if ( pQuery->m_eMode==SPH_MATCH_PHRASE && nwords>1 )
+			{
+				for ( i=0; i<nweights; i++ )
+				{
+					if ( phraseWeight[i]==nwords-1 )
+						break;
+				}
+				if ( i==nweights )
+				{
+					// there was not. continue
+					i = 0;
+					docID++;
+					continue;
+				}
+			}
+
 			// sum simple match weights and phrase match weights
 			for ( i=0, j=0; i<nweights; i++ )
 				j += weights[i] * ( matchWeight[i] + phraseWeight[i] );
@@ -2836,7 +2858,7 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 			docID++;
 		}
 
-	} else
+	} else if ( pQuery->m_eMode==SPH_MATCH_ANY )
 	{
 		//////////////////
 		// match any word
@@ -2978,6 +3000,9 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 			pTop->Push ( tMatch );
 			pResult->m_iTotalMatches++;
 		}
+	} else
+	{
+		sphDie ( "FATAL: INTERNAL ERROR: unknown matching mode (mode=%d).\n", pQuery->m_eMode );
 	}
 	PROFILE_END ( query_match );
 

@@ -226,7 +226,7 @@ void HandleClient ( int rsock, CSphIndex * pIndex, CSphDict * pDict )
 {
 	CSphQuery tQuery;
 	CSphQueryResult * pRes;
-	int i, iOffset, iLimit, iCount, iAny;
+	int i, iOffset, iLimit, iCount, iMode;
 	char sQuery [ 1024 ], sBuf [ 2048 ];
 
 	// hello there
@@ -236,7 +236,7 @@ void HandleClient ( int rsock, CSphIndex * pIndex, CSphDict * pDict )
 	assert ( sizeof(tQuery.m_eSort)==4 );
 	if ( iread ( rsock, &iOffset, 4 )!=4 ) return;
 	if ( iread ( rsock, &iLimit, 4 )!=4 ) return;
-	if ( iread ( rsock, &iAny, 4 )!=4 ) return;
+	if ( iread ( rsock, &iMode, 4 )!=4 ) return;
 	if ( iread ( rsock, &tQuery.m_eSort, 4)!=4 ) return;
 	if ( iread ( rsock, &tQuery.m_iGroups, 4 )!=4 ) return;
 
@@ -269,7 +269,7 @@ void HandleClient ( int rsock, CSphIndex * pIndex, CSphDict * pDict )
 	tQuery.m_sQuery = sQuery;
 	tQuery.m_pWeights = dUserWeights;
 	tQuery.m_iWeights = iUserWeights;
-	tQuery.m_bAll = ( iAny==0 );
+	tQuery.m_eMode = (ESphMatchMode) Min ( Max ( iMode, 0 ), SPH_MATCH_TOTAL );
 
 	pRes = pIndex->query ( pDict, &tQuery );
 
@@ -283,9 +283,10 @@ void HandleClient ( int rsock, CSphIndex * pIndex, CSphDict * pDict )
 		ctime_r ( &tNow, sTimeBuf );
 		sTimeBuf [ strlen(sTimeBuf)-1 ] = '\0';
 
+		static const char * sModes [ SPH_MATCH_TOTAL ] = { "any", "all", "phr" };
 		snprintf ( sBuf, sizeof(sBuf), "[%s] %.2f sec: [%d %d %s] %s\n",
 			sTimeBuf, pRes->m_fQueryTime,
-			iOffset, iLimit, tQuery.m_bAll ? "all" : "any",
+			iOffset, iLimit, sModes [ tQuery.m_eMode ],
 			sQuery );
 
 		flock ( g_iQueryLogFile, LOCK_EX );

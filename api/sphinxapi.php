@@ -86,7 +86,7 @@ class SphinxClient
 	/// set match mode
 	function SetMatchMode ( $mode )
 	{
-		assert ( $mode==SPH_MATCH_ALL || $mode==SPH_MATCH_ANY );
+		assert ( $mode==SPH_MATCH_ALL || $mode==SPH_MATCH_ANY || $mode==SPH_MATCH_PHRASE );
 		$this->_mode = $mode;
 	}
 

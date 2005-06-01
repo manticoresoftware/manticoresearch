@@ -25,6 +25,7 @@ define ( "SPH_MATCH_ANY",			1 );
 define ( "SPH_SORT_RELEVANCE",		0 );
 define ( "SPH_SORT_DATE_DESC",		1 );
 define ( "SPH_SORT_DATE_ASC",		2 );
+define ( "SPH_SORT_TIME_SEGMENTS", 	3 );
 
 /// sphinx searchd client class
 class SphinxClient

@@ -2454,6 +2454,37 @@ struct MatchDateGt_fn
 };
 
 
+/// match sorter
+struct MatchTimeSegments_fn
+{
+public:
+	static DWORD m_iNow;
+
+public:
+	/// comparator
+	inline bool operator() ( const CSphMatch & a, const CSphMatch & b ) const
+	{
+		int iA = GetSegment ( a.m_iTimestamp );
+		int iB = GetSegment ( b.m_iTimestamp );
+		return ( iA==iB )
+			? ( a.m_iWeight < b.m_iWeight )
+			: ( iA > iB );
+	};
+
+protected:
+	/// calc time segment
+	inline int GetSegment ( DWORD iStamp ) const
+	{
+		if ( iStamp>=m_iNow-3600 ) return 0; // last hour
+		if ( iStamp>=m_iNow-24*3600 ) return 1; // last day
+		if ( iStamp>=m_iNow-7*24*3600 ) return 2; // last week
+		if ( iStamp>=m_iNow-30*7*24*3600 ) return 3; // last 30 days
+		return 4; // everything else
+	}
+};
+DWORD MatchTimeSegments_fn::m_iNow = time ( NULL );
+
+
 /// qsort query-word comparator
 int cmpQueryWord ( const void * a, const void * b )
 {
@@ -2685,6 +2716,7 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 		case SPH_SORT_RELEVANCE:	pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchRelevanceLt_fn > (); break;
 		case SPH_SORT_DATE_DESC:	pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchDateLt_fn > (); break;
 		case SPH_SORT_DATE_ASC:		pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchDateGt_fn > (); break;
+		case SPH_SORT_TIME_SEGMENTS:pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchTimeSegments_fn > (); break;
 	}
 	assert ( pTop );
 
@@ -2811,7 +2843,11 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 		//////////////////
 
 		int iActive = nwords; // total number of words still active
-		DWORD iDocID = 0; // FIXME! make a macro like INVALID_DOCUMENT_ID or something
+		DWORD iDocID = UINT_MAX; // FIXME! make a macro like INVALID_DOCUMENT_ID or something
+
+		// preload entries
+		for ( i=0; i<nwords; i++ )
+			qwords[i].GetDoclistEntry ();
 
 		// find a multiplier for phrase match
 		// so that it will weight more than any word match
@@ -2847,7 +2883,10 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 
 				// get new min id
 				if ( qwords[i].m_tDoc.m_iDocID<tMatchDoc.m_iDocID )
+				{
 					tMatchDoc = qwords[i].m_tDoc;
+					iDocID = tMatchDoc.m_iDocID;
+				}
 			}
 			if ( iActive==0 )
 				break;
@@ -3926,7 +3965,7 @@ CSphHash * CSphConfig::loadSection ( const char * sSection, const char ** dKnown
 			p = rtrim ( p );
 			if ( ValidateKey ( p, dKnownKeys ) )
 			{
-				pRes->add ( p, ltrim ( pp ) );
+				pRes->add ( p, trim ( pp ) );
 				sKey = NULL;
 			}
 			continue;

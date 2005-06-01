@@ -13,6 +13,7 @@
 
 #include "sphinx.h"
 #include "sphinxutils.h"
+#include <time.h>
 #if USE_MYSQL
 #include <mysql/mysql.h>
 #endif
@@ -124,6 +125,7 @@ int main ( int argc, char ** argv )
 			OPT ( "-q", "--noinfo" )	bNoInfo = true;
 			OPT1 ( "--sort=date" )		eSort = SPH_SORT_DATE_DESC;
 			OPT1 ( "--rsort=date" )		eSort = SPH_SORT_DATE_ASC;
+			OPT1 ( "--sort=ts" )		eSort = SPH_SORT_TIME_SEGMENTS;
 			else if ( (i+1)<argc )
 			{
 				if ( 0 );
@@ -276,11 +278,12 @@ int main ( int argc, char ** argv )
 		for ( int i=iStart; i<iMaxIndex; i++ )
 		{
 			CSphMatch & tMatch = pResult->m_dMatches[i];
-			fprintf ( stdout, "%d. group=%d, document=%d, weight=%d\n",
+			fprintf ( stdout, "%d. group=%d, document=%d, weight=%d, time=%s",
 				1+i,
 				tMatch.m_iGroupID,
 				tMatch.m_iDocID,
-				tMatch.m_iWeight );
+				tMatch.m_iWeight,
+				ctime ( (time_t*)&tMatch.m_iTimestamp ) );
 
 			#if USE_MYSQL
 			if ( sQueryInfo )

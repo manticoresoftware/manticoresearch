@@ -184,6 +184,13 @@ read_timeout		= 5
 # useful to control server load
 max_children		= 30
 
+
+# a file which will contain searchd process ID
+# used for different external automation scripts
+# MUST be present
+pid_file			= /home/sphinx/searchd.pid
+
+
 [search]
 
 # SQL query to load document info to show off in search results

@@ -50,7 +50,7 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
-#define SPHINX_VERSION			"0.9.2-dev"
+#define SPHINX_VERSION			"0.9.3-dev"
 #define SPHINX_BANNER			"Sphinx " SPHINX_VERSION "\nCopyright (c) 2001-2005, Andrew Aksyonoff\n\n"
 #define SPHINX_SEARCHD_PROTO	1
 
@@ -590,7 +590,8 @@ enum ESphSortOrder
 {
 	SPH_SORT_RELEVANCE = 0,		///< sort by document relevance desc, then by date
 	SPH_SORT_DATE_DESC,			///< sort by document date desc, then by relevance desc
-	SPH_SORT_DATE_ASC			///< sort by document date asc, then by relevance desc
+	SPH_SORT_DATE_ASC,			///< sort by document date asc, then by relevance desc
+	SPH_SORT_TIME_SEGMENTS		///< sort by time segments (hour/day/week/etc) desc, then by relevance desc
 };
 
 

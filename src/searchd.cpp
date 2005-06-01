@@ -378,33 +378,6 @@ int main ( int argc, char **argv )
 	CSphHash * confCommon = conf.loadSection ( "common", g_dSphKeysCommon );
 	CSphHash * confSearchd = conf.loadSection ( "searchd", g_dSphKeysSearchd );
 
-	// logs
-	if ( !bOptConsole )
-	{
-		// create log
-		char * sLog = "searchd.log";
-		if ( confSearchd->get ( "log" ) )
-			sLog = confSearchd->get ( "log" );
-
-		umask ( 066 );
-		g_iLogFile = open ( sLog, O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
-		if ( g_iLogFile<0 )
-			sphFatal ( "failed to write log file '%s'", sLog );
-
-		// create query log
-		if ( confSearchd->get ( "query_log" ) )
-		{
-			g_iQueryLogFile = open ( confSearchd->get ( "query_log" ), O_CREAT | O_RDWR | O_APPEND,
-				S_IREAD | S_IWRITE );
-			if ( g_iQueryLogFile<0 )
-				sphFatal ( "failed to write query log file '%s'", confSearchd->get ( "query_log" ) );
-		}
-	} else
-	{
-		// if we're running in console mode, dump queries to tty as well
-		g_iQueryLogFile = g_iLogFile;
-	}
-
 	#define CHECK_CONF(_hash,_section,_key) \
 		if ( !_hash->get(_key) ) \
 			sphFatal ( "mandatory option '%s' not found in config file section '[%s]'", _key, _section );
@@ -449,6 +422,29 @@ int main ( int argc, char **argv )
 	// daemonize
 	if ( !bOptConsole )
 	{
+		// create log
+		char * sLog = "searchd.log";
+		if ( confSearchd->get ( "log" ) )
+			sLog = confSearchd->get ( "log" );
+
+		umask ( 066 );
+		g_iLogFile = open ( sLog, O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
+		if ( g_iLogFile<0 )
+		{
+			g_iLogFile = STDOUT_FILENO;
+			sphFatal ( "failed to write log file '%s'", sLog );
+		}
+
+		// create query log if required
+		if ( confSearchd->get ( "query_log" ) )
+		{
+			g_iQueryLogFile = open ( confSearchd->get ( "query_log" ), O_CREAT | O_RDWR | O_APPEND,
+				S_IREAD | S_IWRITE );
+			if ( g_iQueryLogFile<0 )
+				sphFatal ( "failed to write query log file '%s'", confSearchd->get ( "query_log" ) );
+		}
+
+		// do daemonize
 		signal ( SIGCHLD, sigchld );
 		signal ( SIGTERM, sigterm );
 		signal ( SIGINT, sigterm );
@@ -469,6 +465,10 @@ int main ( int argc, char **argv )
 			case 0:		break; // daemonized child
 			default:	exit ( 0 ); // tty-controlled parent
 		}
+	} else
+	{
+		// if we're running in console mode, dump queries to tty as well
+		g_iQueryLogFile = g_iLogFile;
 	}
 
 	// create pid

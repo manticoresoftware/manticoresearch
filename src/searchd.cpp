@@ -284,9 +284,9 @@ void HandleClient ( int rsock, CSphIndex * pIndex, CSphDict * pDict )
 		sTimeBuf [ strlen(sTimeBuf)-1 ] = '\0';
 
 		static const char * sModes [ SPH_MATCH_TOTAL ] = { "any", "all", "phr" };
-		snprintf ( sBuf, sizeof(sBuf), "[%s] %.2f sec: [%d %d %s] %s\n",
+		snprintf ( sBuf, sizeof(sBuf), "[%s] %.2f sec: [%d %d %s %d] %s\n",
 			sTimeBuf, pRes->m_fQueryTime,
-			iOffset, iLimit, sModes [ tQuery.m_eMode ],
+			iOffset, iLimit, sModes [ tQuery.m_eMode ], pRes->m_iTotalMatches,
 			sQuery );
 
 		flock ( g_iQueryLogFile, LOCK_EX );

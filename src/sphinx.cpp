@@ -3727,6 +3727,10 @@ BYTE ** CSphSource_MySQL::NextDocument ()
 	// when the party's over...
 	while ( !m_tSqlRow )
 	{
+		// is that an error?
+		if ( mysql_errno ( &m_tSqlDriver ) )
+			sphDie ( "FATAL: mysql_fetch_row: %s.\n", mysql_error ( &m_tSqlDriver ) );
+
 		// maybe we can do next step yet?
 		if ( RunQueryStep () )
 		{

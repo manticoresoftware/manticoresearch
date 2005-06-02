@@ -1,7 +1,6 @@
 HIGH PRIORITY
 
 * fix that if there are two sql_query's in config, there's no warnings
-* fix socket REUSE in searchd
 * add an option to strip HTML to indexer
 * add shadow copy to avoid taking searchd offline for reindexing
 * add multi-index support (avoid running lots of indexers/searchds)

@@ -131,7 +131,11 @@ int createServerSocket_IP(int port)
 
 	sphInfo ( "creating a server socket on port %d", port );
 	if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-		sphFatal ( "unable to create socket on port %d", port );
+		sphFatal ( "unable to create socket on port %d: %s", port, strerror ( errno ) );
+
+	int iOn = 1;
+	if ( setsockopt ( sock, SOL_SOCKET,  SO_REUSEADDR, (char*)&iOn, sizeof(iOn) ) )
+		sphFatal ( "setsockopt failed: %s", strerror ( errno ) );
 
 	int iTries = 12;
 	int iRes;

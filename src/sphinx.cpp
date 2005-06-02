@@ -447,12 +447,15 @@ public:
 	void		ZipOffset ( SphOffset_t uValue );
 	void		ZipOffsets ( CSphVector<SphOffset_t> * pData );
 
+	bool		IsError ();
+
 private:
 	int			m_iFD;
 	int			m_iPoolUsed;
 	int			m_iPoolOdd;
 	BYTE		m_dPool [ SPH_CACHE_WRITE ];
 	BYTE *		m_pPool;
+	bool		m_bError;
 
 	void		PutNibble ( int data );
 	void		Flush ();
@@ -905,6 +908,7 @@ CSphWriter_VLN::CSphWriter_VLN ( char * sName )
 	m_pPool = m_dPool;
 	m_iFD = 0;
 	m_iPos = 0;
+	m_bError = false;
 }
 
 
@@ -1037,7 +1041,8 @@ void CSphWriter_VLN::Flush ()
 {
 	PROFILE ( write_hits );
 
-	sphWrite ( m_iFD, m_dPool, m_iPoolUsed, m_sName ); // FIXME! should return fail-code
+	if ( sphWrite ( m_iFD, m_dPool, m_iPoolUsed, m_sName )!=m_iPoolUsed )
+		m_bError = true;
 
 	if ( m_iPoolOdd )
 		m_iPos++;
@@ -1061,6 +1066,12 @@ void CSphWriter_VLN::SeekTo ( SphOffset_t iPos )
 		PutNibble ( b & 0x0f );
 	}
 	m_iPos = iPos;
+}
+
+
+bool CSphWriter_VLN::IsError ()
+{
+	return m_bError;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1657,6 +1668,9 @@ void CSphIndex_VLN::cidxDone()
 	fdIndex->CloseFile ();
 	fdData->CloseFile ();
 
+	if ( fdIndex->IsError() || fdData->IsError() )
+		fprintf ( stderr, "ERROR: write() failed, out of disk space?\n" );
+
 	SafeDelete ( fdIndex );
 	SafeDelete ( fdData );
 }
@@ -2192,6 +2206,11 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 		tQueue.m_pData->m_iGroupID -= m_tHeader.m_tMin.m_iGroupID;
 		tQueue.m_pData->m_iTimestamp -= m_tHeader.m_tMin.m_iTimestamp;
 		cidxHit ( tQueue.m_pData );
+		if ( fdIndex->IsError() || fdData->IsError() )
+		{
+			fprintf ( stderr, "ERROR: write() failed, out of disk space?\n" );
+			return 0;
+		}
 
 		// pop queue root and push next hit from popped bin
 		int iBin = tQueue.m_pData->m_iBin;

@@ -2,7 +2,6 @@ HIGH PRIORITY
 
 * fix that if there are two sql_query's in config, there's no warnings
 * fix that indexer should crash on mysql timeout
-* fix that indexer should crash on SPD write error (see sphWrite)
 * fix socket REUSE in searchd
 * add an option to strip HTML to indexer
 * add shadow copy to avoid taking searchd offline for reindexing

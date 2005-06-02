@@ -23,6 +23,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <limits.h>
+#include <time.h>
 
 #if USE_WINDOWS
 	#include <io.h> // for open()

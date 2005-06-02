@@ -2480,7 +2480,8 @@ protected:
 		if ( iStamp>=m_iNow-24*3600 ) return 1; // last day
 		if ( iStamp>=m_iNow-7*24*3600 ) return 2; // last week
 		if ( iStamp>=m_iNow-30*7*24*3600 ) return 3; // last 30 days
-		return 4; // everything else
+		if ( iStamp>=m_iNow-90*7*24*3600 ) return 4; // last 30 days
+		return 5; // everything else
 	}
 };
 DWORD MatchTimeSegments_fn::m_iNow = time ( NULL );

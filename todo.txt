@@ -1,18 +1,20 @@
-FIXES:
-* fix that pid_file is undocumented
-* fix that if searchd log is non-writeable, it should complain to console
-* fix that if there are two sql_query's in config, there's no warnings
-
 HIGH PRIORITY
 
-* add doc/hit count report to --buildstops
-* add multi-index support (avoid running lots of indexers/searchds)
-* add support for multiple sql_query's (UNION is too hairy)
+* fix that if there are two sql_query's in config, there's no warnings
+* fix that indexer should crash on mysql timeout
+* fix that indexer should crash on SPD write error (see sphWrite)
+* fix socket REUSE in searchd
+* add an option to strip HTML to indexer
 * add shadow copy to avoid taking searchd offline for reindexing
+* add multi-index support (avoid running lots of indexers/searchds)
+* add index update/mergeing
+* add in-place index inversion
+* add doc/hit count report to --buildstops
+* add support for multiple sql_query's (UNION is too hairy)
 
 MEDIUM PRIORITY
 
-* add index update/mergeing
+* try external docinfo storage (btree)
 * add word-storing dictionaries (to avoid collisions etc)
 * add external relevance metrics support
 * add limits support to words stats 

@@ -93,7 +93,8 @@ class SphinxClient
 	/// set match mode
 	function SetSortMode ( $sort )
 	{
-		assert ( $sort==SPH_SORT_RELEVANCE || $sort==SPH_SORT_DATE_DESC || $sort==SPH_SORT_DATE_ASC );
+		assert ( $sort==SPH_SORT_RELEVANCE || $sort==SPH_SORT_DATE_DESC || $sort==SPH_SORT_DATE_ASC
+			|| $sort==SPH_SORT_TIME_SEGMENTS );
 		$this->_sort = $sort;
 	}
 

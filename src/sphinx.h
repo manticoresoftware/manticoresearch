@@ -344,6 +344,37 @@ struct CSphSourceStats
 };
 
 
+/// generic tokenizer
+class CSphTokenizer
+{
+public:
+	/// create empty tokenizer
+						CSphTokenizer ();
+
+	/// pass next buffer
+	void				SetBuffer ( BYTE * sBuffer, int iLength, bool bLast );
+
+	/// get next token
+	BYTE *				GetToken ();
+
+	/// set new translation table
+	/// returns true on success, false on failure
+	bool				SetTranslationTable ( const char * sConfig );
+
+	/// set new translation table
+	void				SetTranslationTable ( const BYTE * dTable );
+
+protected:
+	BYTE				m_dTable [ 256 ];				///< my translation table
+	BYTE *				m_pBuffer;						///< my buffer
+	BYTE *				m_pBufferMax;					///< max buffer ptr, exclusive (ie. this ptr is invalid, but every ptr below is ok)
+	BYTE *				m_pCur;							///< current position
+	BYTE				m_sAccum [ 4+SPH_MAX_WORD_LEN];	///< boundary token accumulator
+	int					m_iAccum;						///< boundary token size
+	bool				m_bLast;						///< is this buffer the last one
+};
+
+
 /// generic data source
 class CSphSource
 {
@@ -376,8 +407,9 @@ public:
 	virtual int							GetFieldCount () = 0;
 
 protected:
-	CSphDict *							m_pDict;	///< my dict
-	CSphSourceStats						m_iStats;	///< my stats
+	CSphTokenizer						m_tTokenizer;	///< my tokenizer
+	CSphDict *							m_pDict;		///< my dict
+	CSphSourceStats						m_iStats;		///< my stats
 };
 
 

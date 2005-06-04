@@ -319,33 +319,6 @@ protected:
 // INTERNAL SPHINX CLASSES DECLARATIONS
 /////////////////////////////////////////////////////////////////////////////
 
-/// generic tokenizer
-class CSphTokenizer
-{
-public:
-	/// max token size
-	static const int	TOKEN_SIZE		= 64;
-
-public:
-	/// create empty tokenizer
-						CSphTokenizer ();
-
-	/// pass next buffer
-	void				SetBuffer ( BYTE * sBuffer, int iLength );
-
-	/// get next token
-	BYTE *				GetToken ();
-
-protected:
-	BYTE *				m_pBuffer;					///< my buffer
-	BYTE *				m_pBufferMax;				///< max buffer ptr, exclusive (ie. this ptr is invalid, but every ptr below is ok)
-	BYTE *				m_pCur;						///< current position
-	BYTE				m_sAccum [ 4+TOKEN_SIZE ];	///< boundary token accumulator
-	int					m_iAccum;					///< boundary token size
-};
-
-/////////////////////////////////////////////////////////////////////////////
-
 /// fat hit, which is actually stored in VLN index
 struct CSphFatHit
 {
@@ -636,28 +609,6 @@ private:
 };
 
 /////////////////////////////////////////////////////////////////////////////
-
-static BYTE sphLT_cp1251[] =
-{
-	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, // 0-10
-	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, // 10-20
-	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, // 20-30
-	0x30,0x31,0x32,0x33, 0x34,0x35,0x36,0x37, 0x38,0x39,0,0, 0,0,0,0, // 30-40
-	0x00,0x61,0x62,0x63, 0x64,0x65,0x66,0x67, 0x68,0x69,0x6a,0x6b, 0x6c,0x6d,0x6e,0x6f, // 40-50
-	0x70,0x71,0x72,0x73, 0x74,0x75,0x76,0x77, 0x78,0x79,0x7a,0, 0,0,0,0x5f, // 50-60
-	0x00,0x61,0x62,0x63, 0x64,0x65,0x66,0x67, 0x68,0x69,0x6a,0x6b, 0x6c,0x6d,0x6e,0x6f, // 60-70
-	0x70,0x71,0x72,0x73, 0x74,0x75,0x76,0x77, 0x78,0x79,0x7a,0, 0,0,0,0, // 70-80
-	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, // 80-90
-	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, // 90-a0
-	0,0,0,0, 0,0,0,0, 0xb8,0,0,0, 0,0,0,0, // a0-b0
-	0,0,0,0, 0,0,0,0, 0xb8,0,0,0, 0,0,0,0, // b0-c0
-	0xe0,0xe1,0xe2,0xe3,0xe4,0xe5,0xe6,0xe7,0xe8,0xe9,0xea,0xeb,0xec,0xed,0xee,0xef, // c0-d0
-	0xf0,0xf1,0xf2,0xf3,0xf4,0xf5,0xf6,0xf7,0xf8,0xf9,0xfa,0xfb,0xfc,0xfd,0xfe,0xff, // d0-e0
-	0xe0,0xe1,0xe2,0xe3,0xe4,0xe5,0xe6,0xe7,0xe8,0xe9,0xea,0xeb,0xec,0xed,0xee,0xef, // e0-f0
-	0xf0,0xf1,0xf2,0xf3,0xf4,0xf5,0xf6,0xf7,0xf8,0xf9,0xfa,0xfb,0xfc,0xfd,0xfe,0xff // f0-ff
-};
-
-/////////////////////////////////////////////////////////////////////////////
 // UTILITY FUNCTIONS
 /////////////////////////////////////////////////////////////////////////////
 
@@ -788,16 +739,216 @@ int sphWrite ( int iFD, const void * pBuf, size_t iCount, const char * sName )
 // GENERIC TOKENIZER
 /////////////////////////////////////////////////////////////////////////////
 
+#define LOC_SKIP_SPACES() while ( *p && isspace(*p) ) p++;
+#define LOC_CHECK_EOF() if ( !*p ) break;
+#define LOC_CHECK_NEOF() if ( !*p ) LOC_ERROR ( "unexpected end of line" );
+#define LOC_ERROR(_msg) \
+{ \
+	strncpy ( sErrorBuffer, p, sizeof(sErrorBuffer) ); \
+	sErrorBuffer [ sizeof(sErrorBuffer)-1 ] = '\0'; \
+	\
+	fprintf ( stderr, "ERROR: ParseCharsetDefinition(): %s near '%s'.\n", \
+	_msg, sErrorBuffer ); \
+	return -1; \
+}
+
+
+static int xdigit ( int c )
+{
+	if ( c>='0' && c<='9' ) return c-'0';
+	if ( c>='a' && c<='f' ) return c-'a'+10;
+	if ( c>='A' && c<='F' ) return c-'A'+10;
+	return 0;
+}
+
+
+static int ParseCharsetCode ( const char ** pp )
+{
+	char sErrorBuffer[32];
+	const char * p = (*pp);
+	int iCode = 0;
+
+	if ( *p=='\\' )
+	{
+		const char * q = ++p;
+		if ( *q!='x' )
+			LOC_ERROR ( "expected '\\x'" );
+		q++;
+
+		while ( isxdigit(*q) )
+		{
+			iCode = iCode*16 + xdigit(*q++);
+			if ( iCode>255 )
+				LOC_ERROR ( "invalid hex code (exceeds byte range)" );
+		}
+		while ( isspace(*q) )
+			q++;
+		p = q;
+
+	} else
+	{
+		if ( *p<32 || *p>127 )
+			LOC_ERROR ( "non-ASCII characters not allowed, use '\\xAB' syntax" );
+
+		iCode = *p++;
+		while ( isspace(*p) )
+			p++;
+	}
+
+	*pp = p;
+	return iCode;
+}
+
+
+/// returns 0 on success
+/// returns -1 on failure
+static int ParseCharsetDefinition ( const char * sConfig, BYTE * dTable )
+{
+	char sErrorBuffer[32];
+	const char * p = sConfig;
+
+	// zero out the table
+	memset ( dTable, 0, 0x100 );
+
+	// do parse
+	while ( *p )
+	{
+		LOC_SKIP_SPACES ();
+		LOC_CHECK_EOF ();
+
+		// check for stray comma
+		if ( *p==',' )
+			LOC_ERROR ( "stray ',' not allowed, use '\\x2C' syntax" );
+
+		// parse char code
+		const char * pStart = p;
+		int iStart = ParseCharsetCode ( &p );
+		if ( iStart<0 )
+			return -1;
+
+		// stray char?
+		if ( !*p || *p==',' )
+		{
+			// stray char
+			dTable[iStart] = (BYTE) iStart;
+			LOC_CHECK_EOF ();
+			p++;
+			continue;
+		}
+
+		// stray remap?
+		if ( p[0]=='-' && p[1]=='>' )
+		{
+			p += 2;
+			int iDest = ParseCharsetCode ( &p );
+			if ( iDest<0 )
+				return -1;
+
+			dTable[iStart] = (BYTE) iDest;
+
+			if ( *p!=',' )
+				LOC_ERROR ( "syntax error" );
+			p++;
+			continue;
+		}
+
+		// range start?
+		if (!( p[0]=='.' && p[1]=='.' ))
+			LOC_ERROR ( "syntax error" );
+		p += 2;
+		LOC_SKIP_SPACES ();
+		LOC_CHECK_NEOF ();
+
+		// parse range end char code
+		int iEnd = ParseCharsetCode ( &p );
+		if ( iEnd<0 )
+			return -1;
+		if ( iStart>iEnd )
+		{
+			p = pStart;
+			LOC_ERROR ( "range end less than range start" );
+		}
+
+		// stray range
+		if ( !*p || *p==',' )
+		{
+			for ( int i=iStart; i<=iEnd; i++ )
+				dTable[i] = (BYTE) i;
+			LOC_CHECK_EOF ();
+			p++;
+			continue;
+		}
+
+		// remapped range?
+		if (!( p[0]=='-' && p[1]=='>' ))
+			LOC_ERROR ( "expected end of line, ',' or '-><char>'" );
+		p += 2;
+		LOC_SKIP_SPACES ();
+		LOC_CHECK_NEOF ();
+
+		// parse dest start
+		const char * pRemapStart = p;
+		int iRemapStart = ParseCharsetCode ( &p );
+		if ( iRemapStart<0 )
+			return -1;
+
+		// expect '..'
+		LOC_CHECK_NEOF ();
+		if (!( p[0]=='.' && p[1]=='.' ))
+			LOC_ERROR ( "expected '..'" );
+		p += 2;
+
+		// parse dest end
+		int iRemapEnd = ParseCharsetCode ( &p );
+		if ( iRemapEnd<0 )
+			return -1;
+
+		// check dest range
+		if ( iRemapStart>iRemapEnd )
+		{
+			p = pRemapStart;
+			LOC_ERROR ( "dest range end less than dest range start" );
+		}
+
+		// check for length mismatch
+		if ( iRemapEnd-iRemapStart != iEnd-iStart )
+		{
+			p = pStart;
+			LOC_ERROR ( "dest range length must match src range length" );
+		}
+
+		// remapped ok
+		for ( int i=iStart; i<=iEnd; i++ )
+			dTable[i] = (BYTE) (i-iStart+iRemapStart);
+
+		LOC_CHECK_EOF ();
+		if ( *p!=',' )
+			LOC_ERROR ( "expected ','" );
+		p++;
+	}
+
+	return 0;
+}
+
+
+#undef LOC_SKIP_SPACES
+#undef LOC_CHECK_EOF
+#undef LOC_ERROR
+
+
 CSphTokenizer::CSphTokenizer ()
 	: m_pBuffer		( NULL )
 	, m_pBufferMax	( NULL )
 	, m_pCur		( NULL )
 	, m_iAccum		( 0 )
 {
+	SetTranslationTable (
+		"0..9, A..Z->a..z, _, a..z, "
+		"\\xa8->\\xb8, \\xb8, \\xc0..\\xdf->\\xe0..\\xff, \\xe0..\\xff" );
 }
 
 
-void CSphTokenizer::SetBuffer ( BYTE * sBuffer, int iLength )
+void CSphTokenizer::SetBuffer ( BYTE * sBuffer, int iLength, bool bLast )
 {
 	// check that old one is over and that new length is sane
 	assert ( m_pCur>=m_pBufferMax );
@@ -807,12 +958,13 @@ void CSphTokenizer::SetBuffer ( BYTE * sBuffer, int iLength )
 	m_pBuffer = sBuffer;
 	m_pBufferMax = sBuffer + iLength;
 	m_pCur = sBuffer;
+	m_bLast = bLast;
 
 	// do inplace case and non-char removal
 	BYTE * p = sBuffer;
 	while ( p<m_pBufferMax )
 	{
-		*p = sphLT_cp1251[*p];
+		*p = m_dTable[*p];
 		p++;
 	}
 }
@@ -827,7 +979,7 @@ BYTE * CSphTokenizer::GetToken ()
 		if ( m_pCur<m_pBufferMax )
 		{
 			// accumulate as much extra chars as possible
-			while ( m_pCur<m_pBufferMax && *m_pCur && m_iAccum<TOKEN_SIZE )
+			while ( m_pCur<m_pBufferMax && *m_pCur && m_iAccum<SPH_MAX_WORD_LEN )
 				m_sAccum [ m_iAccum++ ] = *m_pCur++;
 
 			// through away everything which is over the token size limit
@@ -846,6 +998,10 @@ BYTE * CSphTokenizer::GetToken ()
 		return m_sAccum;
 	}
 
+	// check for buffer overflow
+	if ( m_pCur>=m_pBufferMax )
+		return NULL;
+
 	// skip whitespace
 	while ( m_pCur<m_pBufferMax && !*m_pCur )
 		m_pCur++;
@@ -858,15 +1014,41 @@ BYTE * CSphTokenizer::GetToken ()
 	// if buffer's not over, we have a full token now
 	if ( m_pCur<m_pBufferMax )
 	{
-		if ( m_pCur-pToken>TOKEN_SIZE )
-			pToken [ TOKEN_SIZE ] = '\0';
+		if ( m_pCur-pToken>SPH_MAX_WORD_LEN )
+			pToken [ SPH_MAX_WORD_LEN ] = '\0';
 		return pToken;
 	}
 
 	// buffer's over, so we need to accumulate
-	m_iAccum = Min ( TOKEN_SIZE, m_pCur-pToken );
+	m_iAccum = Min ( SPH_MAX_WORD_LEN, m_pCur-pToken );
 	memcpy ( m_sAccum, pToken, m_iAccum );
-	return NULL;
+
+	if ( m_bLast && m_iAccum )
+	{
+		m_sAccum [ m_iAccum ] = '\0';
+		m_iAccum = 0;
+		return m_sAccum;
+	} else
+	{
+		return NULL;
+	}
+}
+
+
+bool CSphTokenizer::SetTranslationTable ( const char * sConfig )
+{
+	BYTE dTable[256];
+	if ( ParseCharsetDefinition ( sConfig, dTable ) )
+		return false;
+
+	SetTranslationTable ( dTable );
+	return true;
+}
+
+
+void CSphTokenizer::SetTranslationTable ( const BYTE * dTable )
+{
+	memcpy ( m_dTable, dTable, sizeof(m_dTable) );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -2084,6 +2266,14 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 				pRawBlock = dRawBlock;
 				m_dDocinfos.Reset ();
 				m_dDocinfos.Add ( pSource->m_tDocInfo );
+
+				// progress bar
+				if ( m_pProgress )
+				{
+					tProgress.m_iDocuments = pSource->GetStats()->m_iTotalDocuments;
+					tProgress.m_iBytes = pSource->GetStats()->m_iTotalBytes;
+					m_pProgress ( &tProgress );
+				}
 			}
 		}
 	}
@@ -3225,7 +3415,7 @@ void CSphDict_CRC32::LoadStopwords ( const char * sFiles )
 		do
 		{
 			iLength = (int)fread ( sBuffer, 1, sizeof(sBuffer), fp );
-			tTokenizer.SetBuffer ( sBuffer, iLength );
+			tTokenizer.SetBuffer ( sBuffer, iLength, false );
 
 			BYTE * pToken;
 			while (( pToken = tTokenizer.GetToken() ))
@@ -3278,44 +3468,39 @@ int CSphSource_Document::next()
 {
 	PROFILE ( src_document );
 
-	BYTE **fields = NextDocument(), *data, *pData, *pWord;
-	int pos, i, len;
+	BYTE ** dFields = NextDocument();
 
-	if ( !fields || m_tDocInfo.m_iDocID<=0 )
+	if ( !dFields || m_tDocInfo.m_iDocID<=0 )
 		return 0;
 
 	m_iStats.m_iTotalDocuments++;
 	m_dHits.Reset ();
+
 	for ( int j=0; j<m_iFieldCount; j++ )
 	{
-		data = fields[j];
-		if ( !data )
+		BYTE * sField = dFields[j];
+		if ( !sField )
 			continue;
 
-		i = len = (int)strlen((char*)data);
-		m_iStats.m_iTotalBytes += len;
+		int iLen = (int) strlen ( (char*)sField );
+		m_iStats.m_iTotalBytes += iLen;
 
-		pData = data;
-		while (i-- > 0) { *pData = sphLT_cp1251[*pData]; pData++; }
+		m_tTokenizer.SetBuffer ( sField, iLen, true );
 
-		i = 0;
-		pos = 1;
-		pData = data;
-		while (i < len) {
-			while (!(*pData) && i < len) { pData++; i++; }
-			if (i >= len) break;
-			pWord = pData;
-			while ((*pData) && i < len) { pData++; i++; }
+		BYTE * sWord;
+		int iPos = 1;
 
-			DWORD iWord = m_pDict->GetWordID ( pWord );
+		while (( sWord = m_tTokenizer.GetToken() ))
+		{
+			DWORD iWord = m_pDict->GetWordID ( sWord );
 			if ( iWord )
 			{
 				CSphWordHit & tHit = m_dHits.Add ();
 				tHit.m_iDocID = m_tDocInfo.m_iDocID;
 				tHit.m_iWordID = iWord;
-				tHit.m_iWordPos = (j << 24) | pos++; // FIXME! add groups support here
+				tHit.m_iWordPos = (j << 24) | iPos++;
 				if ( m_bCallWordCallback )
-					wordCallback ( (char*) pWord );
+					wordCallback ( (char*) sWord );
 			}
 		}
 	}
@@ -3700,6 +3885,14 @@ bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 	// group/date columns
 	m_iGroupColumn = GetColumnIndex ( pParams->m_sGroupColumn );
 	m_iDateColumn = GetColumnIndex ( pParams->m_sDateColumn );
+
+	// check it
+	if ( m_iFieldCount>SPH_MAX_FIELD_COUNT )
+	{
+		fprintf ( stderr, "ERROR: too many fields (fields=%d, max=%d), please increase SPH_MAX_FIELD_COUNT in sphinx.h and recompile.\n",
+			m_iFieldCount, SPH_MAX_FIELD_COUNT );
+		return 0;
+	}
 
 	// build field remap table
 	int j = 0;
@@ -4095,27 +4288,14 @@ int CSphSource_XMLPipe::next ()
 
 		// index title
 		{
-			int i, iLen, iPos=1;
-			i = iLen = (int)strlen((char*)sTitle);
+			int iLen = (int)strlen ( sTitle );
+			int iPos = 1;
+			BYTE * sWord;
 
-			// tolower, remove non-chars
-			BYTE * pData = (BYTE*)sTitle;
-			while (i-- > 0) { *pData = sphLT_cp1251[*pData]; pData++; }
-
-			i = 0;
-			pData = (BYTE*)sTitle;
-			while ( i<iLen )
+			m_tTokenizer.SetBuffer ( (BYTE*)sTitle, iLen, true );
+			while (( sWord = m_tTokenizer.GetToken() ))
 			{
-				// skip whitespace
-				while ( !(*pData) && i<iLen ) { pData++; i++; }
-				if ( i>=iLen ) break;
-				BYTE * pWord = pData;
-
-				// skip non-whitespace
-				while ( (*pData) && i<iLen ) { pData++; i++; }
-		
-				// add hit
-				DWORD iWID = m_pDict->GetWordID ( pWord );
+				DWORD iWID = m_pDict->GetWordID ( sWord );
 				if ( iWID )
 				{
 					CSphWordHit & tHit = m_dHits.Add ();
@@ -4139,94 +4319,42 @@ int CSphSource_XMLPipe::next ()
 	/////////////////////////////
 
 	assert ( m_bBody );
+
 	bool bBodyEnd = false;
-
-	while ( m_dHits.GetLength()<1024 ) // FIXME!
+	while ( m_dHits.GetLength()<1024 && !bBodyEnd ) // FIXME!
 	{
-		// skip whitespace
-		for ( ;; )
+		// suck in some data if needed
+		if ( m_pBuffer>=m_pBufferEnd )
+			if ( !UpdateBuffer() )
 		{
-			// suck in some data if needed
-			if ( m_pBuffer>=m_pBufferEnd )
-				if ( !UpdateBuffer() )
-			{
-				fprintf ( stderr, "WARNING: CSphSource_XMLPipe(): unexpected EOF while scanning doc '%d' body.\n",
-					m_tDocInfo.m_iDocID );
-				return 0;
-			}
-
-			// skip whitespace
-			while ( (m_pBuffer<m_pBufferEnd) && (*m_pBuffer)!='<' && !sphLT_cp1251 [ *m_pBuffer ] )
-				m_pBuffer++;
-
-			if ( m_pBuffer<m_pBufferEnd )
-				break; // we have found it
+			fprintf ( stderr, "WARNING: CSphSource_XMLPipe(): unexpected EOF while scanning doc '%d' body.\n",
+				m_tDocInfo.m_iDocID );
+			return 0;
 		}
-		if ( (*m_pBuffer)=='<' )
-		{
+
+		// check for body tag end in this buffer
+		BYTE * p = m_pBuffer;
+		while ( p<m_pBufferEnd && *p!='<' )
+			p++;
+		if ( p<m_pBufferEnd && *p=='<' )
 			bBodyEnd = true;
-			break;
-		}
 
-		// the word
-		BYTE sWord [ SPH_MAX_WORD_LEN+1 ];
-		BYTE sWord2 [ SPH_MAX_WORD_LEN+1 ];
-		BYTE * pWord = &sWord [ 0 ];
-		BYTE * pWordEnd = &sWord [ SPH_MAX_WORD_LEN ];
+		// set proper buffer part
+		m_tTokenizer.SetBuffer ( m_pBuffer, p-m_pBuffer, bBodyEnd );
+		m_pBuffer = p;
 
-		for ( ;; )
+		// tokenize
+		BYTE * sWord;
+		while (( sWord = m_tTokenizer.GetToken () ))
 		{
-			// suck in some data if needed
-			if ( m_pBuffer>=m_pBufferEnd )
-				if ( !UpdateBuffer() )
+			DWORD iWID = m_pDict->GetWordID ( sWord );
+			if ( iWID )
 			{
-				fprintf ( stderr, "WARNING: CSphSource_XMLPipe(): unexpected EOF while scanning doc '%d' body.\n",
-					m_tDocInfo.m_iDocID );
-				return 0;
+				CSphWordHit & tHit = m_dHits.Add ();
+				tHit.m_iDocID = m_tDocInfo.m_iDocID;
+				tHit.m_iWordID = iWID;
+				tHit.m_iWordPos = (1<<24) | (++m_iWordPos); // field_id | (iPos++)
 			}
-
-			// collect word
-			while ( pWord<pWordEnd && sphLT_cp1251 [ *m_pBuffer ] && m_pBuffer<m_pBufferEnd )
-				*pWord++ = sphLT_cp1251 [ *m_pBuffer++ ];
-
-			// enough?
-			if ( pWord==pWordEnd || m_pBuffer!=m_pBufferEnd )
-				break;
-		}
-		*pWord++ = '\0';
-
-		// if the word is too long, skip all the remaining non-whitespace
-		if ( pWord==pWordEnd )
-			for ( ;; )
-		{
-			// suck in some data if needed
-			if ( m_pBuffer>=m_pBufferEnd )
-				if ( !UpdateBuffer() )
-			{
-				fprintf ( stderr, "WARNING: CSphSource_XMLPipe(): unexpected EOF while scanning doc '%d' body starting at '%s'.\n",
-					m_tDocInfo.m_iDocID, sWord );
-				return 0;
-			}
-
-			// skip non-whitespace
-			while ( (m_pBuffer<m_pBufferEnd) && sphLT_cp1251 [ *m_pBuffer ] )
-				m_pBuffer++;
-
-			if ( m_pBuffer!=m_pBufferEnd )
-				break; // we have found it
-		}
-
-		// we found it, yes we did!
-		strcpy ( (char*)sWord2, (char*)sWord );
-		DWORD iWID = m_pDict->GetWordID ( sWord );
-
-		// FIXME! do zero CRC warns in dict, in debug mode
-		if ( iWID )
-		{
-			CSphWordHit & tHit = m_dHits.Add ();
-			tHit.m_iDocID = m_tDocInfo.m_iDocID;
-			tHit.m_iWordID = iWID;
-			tHit.m_iWordPos = (1<<24) | (++m_iWordPos); // field_id | (iPos++)
 		}
 	}
 

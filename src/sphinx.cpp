@@ -787,7 +787,7 @@ static int ParseCharsetCode ( const char ** pp )
 
 	} else
 	{
-		if ( *p<32 || *p>127 )
+		if ( (*(BYTE*)p)<32 || (*(BYTE*)p)>127 )
 			LOC_ERROR ( "non-ASCII characters not allowed, use '\\xAB' syntax" );
 
 		iCode = *p++;
@@ -1395,7 +1395,7 @@ SphOffset_t CSphReader_VLN::UnzipOffset ()
 void CSphReader_VLN::UnzipInts ( CSphVector<DWORD> * pData )
 {
 	register DWORD i = 0;
-	while (( i=UnzipInt() ))
+	while ( ( i=UnzipInt() )!=0 )
 		pData->Add ( i );
 }
 
@@ -1405,7 +1405,7 @@ int CSphReader_VLN::UnzipHits ( CSphVector<DWORD> * pList )
 	register int i, v = 0;
 	int iStart = pList->GetLength ();
 
-	while (( i=UnzipInt() ))
+	while ( ( i=UnzipInt() )!=0 )
 	{
 		v += i;
 		pList->Add ( v );
@@ -1676,7 +1676,7 @@ int CSphIndex_VLN::binsRead ( int b, CSphFatHit * e )
 					return 1;
 
 				default:
-					assert ( 0 );
+					sphDie ( "FATAL: INTERNAL ERROR: unknown bin state (state=%d).\n", bins[b]->m_eState );
 			}
 		} else
 		{
@@ -1685,12 +1685,10 @@ int CSphIndex_VLN::binsRead ( int b, CSphFatHit * e )
 				case BIN_POS:	bins[b]->m_eState = BIN_DOC; break;
 				case BIN_DOC:	bins[b]->m_eState = BIN_WORD; break;
 				case BIN_WORD:	bins[b]->m_iDone = 1; e->m_iWordID = 0; return 1;
-				default:	assert ( 0 );
+				default:		sphDie ( "FATAL: INTERNAL ERROR: unknown bin state (state=%d).\n", bins[b]->m_eState );
 			}
 		}
 	}
-
-	return 1;
 }
 
 
@@ -2208,7 +2206,7 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 	tProgress.m_ePhase = CSphIndexProgress::PHASE_COLLECT;
 
 	DWORD iDocID;
-	while (( iDocID = pSource->next() ))
+	while ( ( iDocID = pSource->next() )!=0 )
 	{
 		// progress bar
 		if ( m_pProgress
@@ -3094,6 +3092,8 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 			// and get min current document id
 			CSphDocInfo tMatchDoc;
 			tMatchDoc.m_iDocID = UINT_MAX;
+			tMatchDoc.m_iGroupID = 0;
+			tMatchDoc.m_iTimestamp = 0;
 
 			for ( i=0; i<iActive; i++ )
 			{
@@ -3418,7 +3418,7 @@ void CSphDict_CRC32::LoadStopwords ( const char * sFiles )
 			tTokenizer.SetBuffer ( sBuffer, iLength, false );
 
 			BYTE * pToken;
-			while (( pToken = tTokenizer.GetToken() ))
+			while ( ( pToken = tTokenizer.GetToken() )!=NULL )
 				dStop.Add ( GetWordID ( pToken ) );
 		} while ( iLength );
 
@@ -3490,7 +3490,7 @@ int CSphSource_Document::next()
 		BYTE * sWord;
 		int iPos = 1;
 
-		while (( sWord = m_tTokenizer.GetToken() ))
+		while ( ( sWord = m_tTokenizer.GetToken() )!=NULL )
 		{
 			DWORD iWord = m_pDict->GetWordID ( sWord );
 			if ( iWord )
@@ -3968,262 +3968,6 @@ BYTE ** CSphSource_MySQL::NextDocument ()
 #endif // USE_MYSQL
 
 /////////////////////////////////////////////////////////////////////////////
-// HASH
-/////////////////////////////////////////////////////////////////////////////
-
-CSphHash::CSphHash()
-{
-	max = 32;
-	count = 0;
-	keys = (char**)sphMalloc(max * sizeof(char*));
-	values = (char**)sphMalloc(max * sizeof(char*));
-}
-
-CSphHash::~CSphHash()
-{
-	sphFree(keys);
-	sphFree(values);
-}
-
-void CSphHash::add(char *key, char *value)
-{
-	if (max == count) {
-		max *= 2;
-		keys = (char**)sphRealloc(keys, max * sizeof(char*));
-		values = (char**)sphRealloc(values, max * sizeof(char*));
-	}
-	keys[count] = sphDup(key);
-	values[count] = sphDup(value);
-	count++;
-}
-
-char *CSphHash::get(char *key)
-{
-	int i;
-
-	// NOTE: linear search is ok here, because these hashes
-	// are intended to be rather tiny (config sections)
-	if (key) for (i = 0; i < count; i++)
-		if (strcmp(key, keys[i]) == 0) return values[i];
-	return NULL;
-}
-
-/////////////////////////////////////////////////////////////////////////////
-// CONFIG FILE PARSER
-/////////////////////////////////////////////////////////////////////////////
-
-CSphConfig::CSphConfig ()
-{
-	fp = NULL;
-	m_sFileName = NULL;
-}
-
-
-CSphConfig::~CSphConfig ()
-{
-	if ( fp )
-	{
-		fclose ( fp );
-		fp = NULL;
-	}
-	sphFree ( m_sFileName );
-}
-
-
-int CSphConfig::open ( const char * file )
-{
-	fp = fopen ( file, "r" );
-	if ( fp )
-	{
-		m_sFileName = sphDup ( file );
-		return 1;
-	} else
-	{
-		return 0;
-	}
-}
-
-
-static char * ltrim ( char * sLine )
-{
-	while ( *sLine && isspace(*sLine) )
-		sLine++;
-	return sLine;
-}
-
-
-static char * rtrim ( char * sLine )
-{
-	char * p = sLine + strlen(sLine) - 1;
-	while ( p>=sLine && isspace(*p) )
-		p--;
-	p[1] = '\0';
-	return sLine;
-}
-
-
-static char * trim ( char * sLine )
-{
-	return ltrim ( rtrim ( sLine ) );
-}
-
-
-static char * sphCat ( char * sDst, const char * sSrc )
-{
-	sDst = (char *) sphRealloc ( sDst, strlen(sDst) + strlen(sSrc) + 1 );
-	strcat ( sDst, sSrc );
-	return sDst;
-}
-
-
-bool CSphConfig::ValidateKey ( const char * sKey, const char ** dKnownKeys )
-{
-	// no validation requested
-	if ( dKnownKeys==NULL )
-		return true;
-
-	while ( *dKnownKeys )
-	{
-		if ( strcmp ( *dKnownKeys, sKey )==0 )
-			return true;
-		dKnownKeys++;
-	}
-
-	fprintf ( stderr, "WARNING: error in %s:%d, unknown key '%s' in section [%s]\n",
-			m_sFileName, m_iLine, sKey, m_sSection );
-	return false;
-}
-
-
-CSphHash * CSphConfig::loadSection ( const char * sSection, const char ** dKnownKeys )
-{
-	char buf[2048], *p, *pp, *sKey = NULL, *sValue = NULL;
-	int l;
-	CSphHash * pRes;
-
-	// alloc result set
-	pRes = new CSphHash ();
-	if ( fseek ( fp, 0, SEEK_SET )<0 )
-		 return pRes;
-
-	m_iLine = 0;
-	m_sSection = sSection;
-
-	#define CLEAN_CONFIG_LINE() \
-		p = trim ( buf ); \
-		l = strlen ( p ); \
-		pp = strchr ( p, '#' ); \
-		if ( pp ) \
-		{ \
-			*pp = '\0'; \
-			l = pp - p; \
-		}
-
-	// skip until we find the section
-	while (( p = fgets ( buf, sizeof(buf), fp ) ))
-	{
-		m_iLine++;
-		CLEAN_CONFIG_LINE ();
-		if ( p[0]=='['
-			&& p[l-1] == ']'
-			&& strncmp ( p+1, sSection, strlen(sSection) )==0
-			&& 2+(int)strlen(sSection)==l )
-		{
-			break;
-		}
-	}
-	if ( !p )
-	{
-		m_sSection = NULL;
-		return pRes;
-	}
-
-	// load all the config lines until next section or EOF
-	while (( p = fgets ( buf, sizeof(buf), fp ) ))
-	{
-		m_iLine++;
-		CLEAN_CONFIG_LINE ();
-
-		// handle empty strings
-		if ( !l )
-			continue;
-
-		// next section, bail out
-		// FIXME! add more validation
-		if ( p[0]=='[')
-			break;
-
-		// handle split strings
-		if ( p[l-1]=='\\' )
-		{
-			if ( sKey )
-			{
-				p[l-1] = ' '; // insert space at the end of the split
-				sValue = sphCat ( sValue, p );
-				continue;
-
-			} else
-			{
-				pp = strchr ( p, '=' );
-				if ( pp )
-				{
-					*pp++ = '\0';
-					sKey = rtrim ( p );
-					if ( ValidateKey ( sKey, dKnownKeys ) )
-					{
-						p[l-1] = ' '; // insert space at the end of the split
-						sKey = sphDup ( p );
-						sValue = sphDup ( ltrim ( pp ) );
-					} else
-					{
-						sKey = NULL;
-					}
-					continue;
-
-				} else
-				{
-					fprintf ( stderr, "WARNING: error in %s:%d, stray line '%s' in section [%s]\n",
-						m_sFileName, m_iLine, p, m_sSection );
-					continue;
-				}
-			}
-
-		} else if ( sKey )
-		{
-			// previous split-string just ended, so add it to result
-			sValue = sphCat ( sValue, p );
-			pRes->add ( sKey, sValue );
-
-			sphFree ( sKey );
-			sphFree ( sValue );
-			sKey = NULL;
-			continue;
-		}
-
-		// handle one-line pairs
-		pp = strchr ( p, '=' );
-		if ( pp )
-		{
-			*pp++ = '\0';
-			p = rtrim ( p );
-			if ( ValidateKey ( p, dKnownKeys ) )
-			{
-				pRes->add ( p, trim ( pp ) );
-				sKey = NULL;
-			}
-			continue;
-		}
-
-		fprintf ( stderr, "WARNING: error in %s:%d, stray line '%s' in section [%s]\n",
-			m_sFileName, m_iLine, p, m_sSection );
-	}
-
-	// return
-	m_sSection = NULL;
-	return pRes;
-}
-
-/////////////////////////////////////////////////////////////////////////////
 
 CSphSource_XMLPipe::CSphSource_XMLPipe ()
 {
@@ -4293,7 +4037,7 @@ int CSphSource_XMLPipe::next ()
 			BYTE * sWord;
 
 			m_tTokenizer.SetBuffer ( (BYTE*)sTitle, iLen, true );
-			while (( sWord = m_tTokenizer.GetToken() ))
+			while ( ( sWord = m_tTokenizer.GetToken() )!=NULL )
 			{
 				DWORD iWID = m_pDict->GetWordID ( sWord );
 				if ( iWID )
@@ -4345,7 +4089,7 @@ int CSphSource_XMLPipe::next ()
 
 		// tokenize
 		BYTE * sWord;
-		while (( sWord = m_tTokenizer.GetToken () ))
+		while ( ( sWord = m_tTokenizer.GetToken () )!=NULL )
 		{
 			DWORD iWID = m_pDict->GetWordID ( sWord );
 			if ( iWID )

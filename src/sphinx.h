@@ -724,46 +724,10 @@ protected:
 	ProgressCallback_t *		m_pProgress;
 };
 
+/////////////////////////////////////////////////////////////////////////////
 
 /// create phrase fulltext index implemntation
 CSphIndex *		sphCreateIndexPhrase ( const char * sFilename );
-
-/////////////////////////////////////////////////////////////////////////////
-// UTILITY CLASSES
-/////////////////////////////////////////////////////////////////////////////
-
-struct CSphHash
-{
-	int count;
-	char **keys, **values;
-
-	CSphHash();
-	~CSphHash();
-
-	void add(char *key, char *value);
-	char *get(char *key);
-
-private:
-	int max;
-};
-
-
-struct CSphConfig
-{
-					CSphConfig ();
-					~CSphConfig ();
-	int				open ( const char * file );
-	CSphHash *		loadSection ( const char * section, const char ** dKnownKeys=NULL );
-
-protected:
-	FILE *			fp;
-	char *			m_sFileName;
-	const char *	m_sSection;
-	int				m_iLine;
-
-protected:
-	bool			ValidateKey ( const char * sKey, const char ** dKnownKeys );
-};
 
 #endif // _sphinx_
 

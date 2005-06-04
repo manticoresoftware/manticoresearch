@@ -17,53 +17,51 @@
 #ifndef _sphinxutils_
 #define _sphinxutils_
 
-const char * g_dSphKeysCommon[] =
+/////////////////////////////////////////////////////////////////////////////
+
+/// known keys for different config sections
+extern const char * g_dSphKeysCommon[];
+extern const char * g_dSphKeysIndexer[];
+extern const char * g_dSphKeysSearchd[];
+extern const char * g_dSphKeysSearch[];
+
+/////////////////////////////////////////////////////////////////////////////
+
+/// simple "hash"
+class CSphHash
 {
-	"index_path",
-	"morphology",
-	"stopwords",
-	NULL
+public:
+					CSphHash ();
+					~CSphHash ();
+
+	void			Add ( const char * sKey, const char * sValue );
+	const char *	Get ( const char * sKey );
+
+private:
+	int				m_iCount;
+	char **			m_ppKeys;
+	char **			m_ppValues;
+	int				m_iMax;
 };
 
 
-const char * g_dSphKeysIndexer[] =
+/// simple config file
+class CSphConfig
 {
-	"type",
-	"sql_host",
-	"sql_port",
-	"sql_sock",
-	"sql_user",
-	"sql_pass",
-	"sql_db",
-	"sql_query_pre",
-	"sql_query_range",
-	"sql_query",
-	"sql_query_post",
-	"sql_group_column",
-	"sql_date_column",
-	"sql_range_step",
-	"xmlpipe_command",
-	"mem_limit",
-	NULL
-};
+public:
+					CSphConfig ();
+					~CSphConfig ();
+	int				Open ( const char * sFile );
+	CSphHash *		LoadSection ( const char * sSection, const char ** dKnownKeys=NULL );
 
+protected:
+	FILE *			m_pFP;
+	char *			m_sFileName;
+	const char *	m_sSection;
+	int				m_iLine;
 
-const char * g_dSphKeysSearchd[] =
-{
-	"port",
-	"log",
-	"query_log",
-	"read_timeout",
-	"max_children",
-	"pid_file",
-	NULL
-};
-
-
-const char * g_dSphKeysSearch[] =
-{
-	"sql_query_info",
-	NULL
+protected:
+	bool			ValidateKey ( const char * sKey, const char ** dKnownKeys );
 };
 
 #endif // _sphinxutils_

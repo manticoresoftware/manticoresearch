@@ -1,14 +1,14 @@
-CC         = cc
-PP         = cc
-LD         = cc
-BINARIES   = indexer searchd search
-CCFLAGS    = -Wall -O3 -fomit-frame-pointer -I/usr/local/include -I/usr/local/mysql/include -D_FILE_OFFSET_BITS=64
-#CCFLAGS    = -Wall -g -I/usr/local/include
-PPFLAGS    = $(CCFLAGS)
-LDFLAGS    = -L/usr/local/mysql/lib -L/usr/local/mysql/lib/mysql -L/usr/local/lib/mysql -lmysqlclient -lstdc++ -lm -lz
-SRC_SPHINX = sphinx.cpp sphinxstemen.cpp sphinxstemru.cpp
-INC_SPHINX = sphinx.h sphinxstem.h sphinxutils.h
-OBJ_SPHINX = $(SRC_SPHINX:.cpp=.o)
+CC			= cc
+PP			= cc
+LD			= cc
+BINARIES	= indexer searchd search
+CCFLAGS		= -Wall -O3 -fomit-frame-pointer -I/usr/local/include -I/usr/local/mysql/include -D_FILE_OFFSET_BITS=64
+#CCFLAGS	= -Wall -g -I/usr/local/include -D_FILE_OFFSET_BITS=64
+PPFLAGS		= $(CCFLAGS)
+LDFLAGS		= -L/usr/local/mysql/lib -L/usr/local/mysql/lib/mysql -L/usr/local/lib/mysql -lmysqlclient -lstdc++ -lm -lz
+SRC_SPHINX	= sphinx.cpp sphinxstemen.cpp sphinxstemru.cpp sphinxutils.cpp
+INC_SPHINX	= sphinx.h sphinxstem.h sphinxutils.h
+OBJ_SPHINX	= $(SRC_SPHINX:.cpp=.o)
 
 all : $(BINARIES)
 

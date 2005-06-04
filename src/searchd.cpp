@@ -377,32 +377,32 @@ int main ( int argc, char **argv )
 	/////////////////////
 
 	sphInfo ( "using config file '%s'...", sOptConfig );
-	if ( !conf.open ( sOptConfig ) )
+	if ( !conf.Open ( sOptConfig ) )
 		sphFatal ( "failed to read config file '%s'", sOptConfig );
 
-	CSphHash * confCommon = conf.loadSection ( "common", g_dSphKeysCommon );
-	CSphHash * confSearchd = conf.loadSection ( "searchd", g_dSphKeysSearchd );
+	CSphHash * confCommon = conf.LoadSection ( "common", g_dSphKeysCommon );
+	CSphHash * confSearchd = conf.LoadSection ( "searchd", g_dSphKeysSearchd );
 
 	#define CHECK_CONF(_hash,_section,_key) \
-		if ( !_hash->get(_key) ) \
+		if ( !_hash->Get(_key) ) \
 			sphFatal ( "mandatory option '%s' not found in config file section '[%s]'", _key, _section );
 
 	CHECK_CONF ( confCommon, "common", "index_path" );
 	CHECK_CONF ( confSearchd, "searchd", "port" );
 	CHECK_CONF ( confSearchd, "searchd", "pid_file" );
 
-	int iPort = atoi ( confSearchd->get ( "port" ) );
+	int iPort = atoi ( confSearchd->Get ( "port" ) );
 	if ( !iPort )
-		sphFatal ( "expected valid 'port', got '%s'", confSearchd->get ( "port" ) );
+		sphFatal ( "expected valid 'port', got '%s'", confSearchd->Get ( "port" ) );
 
-	if ( confSearchd->get ( "g_iReadTimeout") )
-		g_iReadTimeout = Max ( 0, atoi ( confSearchd->get ( "read_timeout" ) ) );
+	if ( confSearchd->Get ( "g_iReadTimeout") )
+		g_iReadTimeout = Max ( 0, atoi ( confSearchd->Get ( "read_timeout" ) ) );
 
-	if ( confSearchd->get ( "max_children" ) )
-		g_iMaxChildren = Max ( 0, atoi ( confSearchd->get ( "max_children" ) ) );
+	if ( confSearchd->Get ( "max_children" ) )
+		g_iMaxChildren = Max ( 0, atoi ( confSearchd->Get ( "max_children" ) ) );
 
 	DWORD iMorph = SPH_MORPH_NONE;
-	char * pMorph = confCommon->get ( "morphology" );
+	const char * pMorph = confCommon->Get ( "morphology" );
 	if ( pMorph )
 	{
 		if ( !strcmp ( pMorph, "stem_en" ) )
@@ -420,17 +420,17 @@ int main ( int argc, char **argv )
 	///////////
 
 	// create index
-	CSphIndex * pIndex = sphCreateIndexPhrase ( confCommon->get ( "index_path" ) );
+	CSphIndex * pIndex = sphCreateIndexPhrase ( confCommon->Get ( "index_path" ) );
 	CSphDict * pDict = new CSphDict_CRC32 ( iMorph );
-	pDict->LoadStopwords ( confCommon->get ( "stopwords" ) );
+	pDict->LoadStopwords ( confCommon->Get ( "stopwords" ) );
 
 	// daemonize
 	if ( !bOptConsole )
 	{
 		// create log
-		char * sLog = "searchd.log";
-		if ( confSearchd->get ( "log" ) )
-			sLog = confSearchd->get ( "log" );
+		const char * sLog = "searchd.log";
+		if ( confSearchd->Get ( "log" ) )
+			sLog = confSearchd->Get ( "log" );
 
 		umask ( 066 );
 		g_iLogFile = open ( sLog, O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
@@ -441,12 +441,12 @@ int main ( int argc, char **argv )
 		}
 
 		// create query log if required
-		if ( confSearchd->get ( "query_log" ) )
+		if ( confSearchd->Get ( "query_log" ) )
 		{
-			g_iQueryLogFile = open ( confSearchd->get ( "query_log" ), O_CREAT | O_RDWR | O_APPEND,
+			g_iQueryLogFile = open ( confSearchd->Get ( "query_log" ), O_CREAT | O_RDWR | O_APPEND,
 				S_IREAD | S_IWRITE );
 			if ( g_iQueryLogFile<0 )
-				sphFatal ( "failed to write query log file '%s'", confSearchd->get ( "query_log" ) );
+				sphFatal ( "failed to write query log file '%s'", confSearchd->Get ( "query_log" ) );
 		}
 
 		// do daemonize
@@ -477,9 +477,9 @@ int main ( int argc, char **argv )
 	}
 
 	// create pid
-	FILE * fp = fopen ( confSearchd->get ( "pid_file" ), "w" );
+	FILE * fp = fopen ( confSearchd->Get ( "pid_file" ), "w" );
 	if ( !fp )
-		sphFatal ( "unable to write pid file '%s'", confSearchd->get ( "pid_file" ) );
+		sphFatal ( "unable to write pid file '%s'", confSearchd->Get ( "pid_file" ) );
 	fprintf ( fp, "%d", getpid() );	
 	fclose ( fp );
 

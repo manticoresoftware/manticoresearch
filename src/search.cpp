@@ -20,7 +20,7 @@
 
 
 #define CHECK_CONF(_hash,_sect,_key) \
-	if ( !_hash->get ( _key ) ) \
+	if ( !_hash->Get ( _key ) ) \
 	{ \
 		fprintf ( stderr, "FATAL: key '%s' not found in config file '%s' section '%s'.\n", _key, sConfName, _sect ); \
 		return 1; \
@@ -41,7 +41,7 @@ char * strmacro ( const char * sTemplate, const char * sMacro, int iValue )
 	// calc result length
 	int iRes = strlen ( sTemplate );
 	const char * sCur = sTemplate;
-	while ( ( sCur = strstr ( sCur, sMacro ) ) )
+	while ( ( sCur = strstr ( sCur, sMacro ) )!=NULL )
 	{
 		iRes += iDelta;
 		sCur++;
@@ -53,7 +53,7 @@ char * strmacro ( const char * sTemplate, const char * sMacro, int iValue )
 	const char * sLast = sTemplate;
 	sCur = sTemplate;
 
-	while ( ( sCur = strstr ( sCur, sMacro ) ) )
+	while ( ( sCur = strstr ( sCur, sMacro ) )!=NULL )
 	{
 		strncpy ( sOut, sLast, sCur-sLast ); sOut += sCur-sLast;
 		strcpy ( sOut, sExp ); sOut += iExp;
@@ -119,7 +119,7 @@ int main ( int argc, char ** argv )
 		if ( argv[i][0]=='-' )
 		{
 			// this is an option
-			if ( 0 );
+			if ( i==0 );
 			OPT ( "-a", "--any" )		tQuery.m_eMode = SPH_MATCH_ANY;
 			OPT ( "-p", "--phrase" )	tQuery.m_eMode = SPH_MATCH_PHRASE;
 			OPT ( "-q", "--noinfo" )	bNoInfo = true;
@@ -128,7 +128,7 @@ int main ( int argc, char ** argv )
 			OPT1 ( "--sort=ts" )		tQuery.m_eSort = SPH_SORT_TIME_SEGMENTS;
 			else if ( (i+1)<argc )
 			{
-				if ( 0 );
+				if ( i==0 );
 				OPT ( "-g", "--group")		{ if ( atoi ( argv[++i] ) ) dGroups.Add ( atoi ( argv[i] ) ); }
 				OPT ( "-s", "--start" )		iStart = atoi ( argv[++i] );
 				OPT ( "-l", "--limit" )		iLimit = atoi ( argv[++i] );
@@ -161,19 +161,19 @@ int main ( int argc, char ** argv )
 
 	// load config
 	CSphConfig tConf;
-	if ( !tConf.open ( sConfName ) )
+	if ( !tConf.Open ( sConfName ) )
 		sphDie ( "FATAL: failed to open config file '%s'.\n", sConfName );
 
-	CSphHash * hCommonConf = tConf.loadSection ( "common", g_dSphKeysCommon );
+	CSphHash * hCommonConf = tConf.LoadSection ( "common", g_dSphKeysCommon );
 
 	// get index path
-	char * pIndexPath = hCommonConf->get ( "index_path" );
+	const char * pIndexPath = hCommonConf->Get ( "index_path" );
 	if ( !pIndexPath )
 			sphDie ( "FATAL: key 'index_path' not found in config file.\n" );
 
 	// get morphology type
 	DWORD iMorph = SPH_MORPH_NONE;
-	char * pMorph = hCommonConf ->get ( "morphology" );
+	const char * pMorph = hCommonConf ->Get ( "morphology" );
 	if ( pMorph )
 	{
 		if ( !strcmp ( pMorph, "stem_en" ) )		iMorph = SPH_MORPH_STEM_EN;
@@ -192,18 +192,18 @@ int main ( int argc, char ** argv )
 
 	while ( !bNoInfo )
 	{
-		CSphHash * hSearch = tConf.loadSection ( "search", g_dSphKeysSearch );
+		CSphHash * hSearch = tConf.LoadSection ( "search", g_dSphKeysSearch );
 		if ( !hSearch )
 			break;
 
-		sQueryInfo = hSearch->get ( "sql_query_info" );
+		sQueryInfo = hSearch->Get ( "sql_query_info" );
 		if ( !sQueryInfo )
 			break;
 
 		if ( !strstr ( sQueryInfo, "$id" ) )
 			sphDie ( "FATAL: 'sql_query_info' value must contain '$id'." );
 
-		CSphHash * hIndexer = tConf.loadSection ( "indexer", g_dSphKeysIndexer );
+		CSphHash * hIndexer = tConf.LoadSection ( "indexer", g_dSphKeysIndexer );
 		if ( !hIndexer )
 			sphDie ( "FATAL: section 'indexer' not found in config file." );
 
@@ -213,19 +213,18 @@ int main ( int argc, char ** argv )
 		CHECK_CONF ( hIndexer, "indexer", "sql_db" );
 
 		int iPort = 3306;
-		char * sTmp;
-		sTmp = hIndexer->get ( "sql_port" );
+		const char * sTmp = hIndexer->Get ( "sql_port" );
 		if ( sTmp && atoi(sTmp) )
 			iPort = atoi(sTmp);
 
 		mysql_init ( &tSqlDriver );
 		if ( !mysql_real_connect ( &tSqlDriver,
-			hIndexer->get ( "sql_host" ),
-			hIndexer->get ( "sql_user" ),
-			hIndexer->get ( "sql_pass" ),
-			hIndexer->get ( "sql_db" ),
+			hIndexer->Get ( "sql_host" ),
+			hIndexer->Get ( "sql_user" ),
+			hIndexer->Get ( "sql_pass" ),
+			hIndexer->Get ( "sql_db" ),
 			iPort,
-			hIndexer->get ( "sql_sock" ), 0 ) )
+			hIndexer->Get ( "sql_sock" ), 0 ) )
 		{
 			sphDie ( "FATAL: failed to connect to MySQL (error='%s').",
 				mysql_error ( &tSqlDriver ) );
@@ -238,7 +237,7 @@ int main ( int argc, char ** argv )
 
 	// create dict and configure stopwords
 	CSphDict * pDict = new CSphDict_CRC32 ( iMorph );
-	pDict->LoadStopwords ( hCommonConf->get ( "stopwords" ) );
+	pDict->LoadStopwords ( hCommonConf->Get ( "stopwords" ) );
 
 	//////////
 	// search

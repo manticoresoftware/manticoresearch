@@ -108,6 +108,9 @@
 			<File
 				RelativePath=".\sphinxstemru.cpp">
 			</File>
+			<File
+				RelativePath=".\sphinxutils.cpp">
+			</File>
 		</Filter>
 		<Filter
 			Name="Header Files"
@@ -118,6 +121,9 @@
 			</File>
 			<File
 				RelativePath=".\sphinxstem.h">
+			</File>
+			<File
+				RelativePath=".\sphinxutils.h">
 			</File>
 		</Filter>
 		<Filter

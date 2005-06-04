@@ -329,16 +329,16 @@ int main ( int argc, char ** argv )
 	CSphHash * confIndexer;
 
 	fprintf ( stdout, "using config file '%s'...\n", sConfName );
-	if ( !conf.open ( sConfName ) )
+	if ( !conf.Open ( sConfName ) )
 	{
 		fprintf ( stderr, "FATAL: unable to open config file '%s'.\n", sConfName );
 		return 1;
 	}
-	confCommon = conf.loadSection ( "common", g_dSphKeysCommon );
-	confIndexer = conf.loadSection ( "indexer", g_dSphKeysIndexer );
+	confCommon = conf.LoadSection ( "common", g_dSphKeysCommon );
+	confIndexer = conf.LoadSection ( "indexer", g_dSphKeysIndexer );
 
 	#define CHECK_CONF(_hash,_sect,_key) \
-		if ( !_hash->get ( _key ) ) \
+		if ( !_hash->Get(_key) ) \
 		{ \
 			fprintf ( stderr, "FATAL: key '%s' not found in config file '%s' section '%s'.\n", _key, sConfName, _sect ); \
 			return 1; \
@@ -351,7 +351,7 @@ int main ( int argc, char ** argv )
 	// spawn datasource
 	////////////////////
 
-	char * sType = confIndexer->get ( "type" );
+	const char * sType = confIndexer->Get ( "type" );
 
 	#if USE_MYSQL
 	if ( !strcmp ( sType, "mysql" ) )
@@ -364,26 +364,26 @@ int main ( int argc, char ** argv )
 
 		CSphSourceParams_MySQL tParams;
 
-		tParams.m_sQuery		= confIndexer->get ( "sql_query" );
-		tParams.m_sQueryPre		= confIndexer->get ( "sql_query_pre" );
-		tParams.m_sQueryPost	= confIndexer->get ( "sql_query_post" );
-		tParams.m_sQueryRange	= confIndexer->get ( "sql_query_range" );
-		tParams.m_sGroupColumn	= confIndexer->get ( "sql_group_column" );
-		tParams.m_sDateColumn	= confIndexer->get ( "sql_date_column" );
+		tParams.m_sQuery		= confIndexer->Get ( "sql_query" );
+		tParams.m_sQueryPre		= confIndexer->Get ( "sql_query_pre" );
+		tParams.m_sQueryPost	= confIndexer->Get ( "sql_query_post" );
+		tParams.m_sQueryRange	= confIndexer->Get ( "sql_query_range" );
+		tParams.m_sGroupColumn	= confIndexer->Get ( "sql_group_column" );
+		tParams.m_sDateColumn	= confIndexer->Get ( "sql_date_column" );
 
-		tParams.m_sHost			= confIndexer->get ( "sql_host" );
-		tParams.m_sUser			= confIndexer->get ( "sql_user" );
-		tParams.m_sPass			= confIndexer->get ( "sql_pass" );
-		tParams.m_sDB			= confIndexer->get ( "sql_db" );
-		tParams.m_sUsock		= confIndexer->get ( "sql_sock" );
+		tParams.m_sHost			= confIndexer->Get ( "sql_host" );
+		tParams.m_sUser			= confIndexer->Get ( "sql_user" );
+		tParams.m_sPass			= confIndexer->Get ( "sql_pass" );
+		tParams.m_sDB			= confIndexer->Get ( "sql_db" );
+		tParams.m_sUsock		= confIndexer->Get ( "sql_sock" );
 
-		char * sTmp;
+		const char * sTmp;
 		
-		sTmp = confIndexer->get ( "sql_port" );
+		sTmp = confIndexer->Get ( "sql_port" );
 		if ( sTmp && atoi(sTmp) )
 			tParams.m_iPort = atoi(sTmp);
 
-		sTmp = confIndexer->get ( "sql_range_step" );
+		sTmp = confIndexer->Get ( "sql_range_step" );
 		if ( sTmp && atoi(sTmp) )
 			tParams.m_iRangeStep = atoi(sTmp);
 
@@ -405,10 +405,10 @@ int main ( int argc, char ** argv )
 		CHECK_CONF ( confIndexer, "indexer", "xmlpipe_command" );
 
 		CSphSource_XMLPipe * pSrcXML = new CSphSource_XMLPipe ();
-		if ( !pSrcXML->Init ( confIndexer->get ( "xmlpipe_command" ) ) )
+		if ( !pSrcXML->Init ( confIndexer->Get ( "xmlpipe_command" ) ) )
 		{
 			fprintf ( stderr, "FATAL: CSphSource_XMLPipe: unable to popen '%s'.\n",
-				confIndexer->get ( "xmlpipe_command" ) );
+				confIndexer->Get ( "xmlpipe_command" ) );
 			delete pSrcXML;
 			return 1;
 		}
@@ -453,7 +453,7 @@ int main ( int argc, char ** argv )
 
 		// configure morphology
 		DWORD iMorph = SPH_MORPH_NONE;
-		char * pMorph = confCommon->get ( "morphology" );
+		const char * pMorph = confCommon->Get ( "morphology" );
 		if ( pMorph )
 		{
 			if ( !strcmp ( pMorph, "stem_en" ) )
@@ -473,11 +473,11 @@ int main ( int argc, char ** argv )
 		assert ( pDict );
 
 		// configure stops
-		pDict->LoadStopwords ( confCommon->get ( "stopwords" ) );
+		pDict->LoadStopwords ( confCommon->Get ( "stopwords" ) );
 
 		// configure memlimit
 		int iMemLimit = 0;
-		char * sMemLimit = confIndexer->get ( "mem_limit" );
+		char * sMemLimit = sphDup ( confIndexer->Get ( "mem_limit" ) );
 
 		int iLen = sMemLimit ? (int)strlen ( sMemLimit ) : 0;
 		if ( iLen )
@@ -504,6 +504,7 @@ int main ( int argc, char ** argv )
 				iMemLimit = iScale*iRes;
 			}
 		}
+		sphFree ( sMemLimit );
 
 		//////////
 		// index!
@@ -513,7 +514,7 @@ int main ( int argc, char ** argv )
 		fflush ( stdout );
 
 		// do it
-		CSphIndex * pIndex = sphCreateIndexPhrase ( confCommon->get ( "index_path" ) );
+		CSphIndex * pIndex = sphCreateIndexPhrase ( confCommon->Get ( "index_path" ) );
 		assert ( pIndex );
 
 		pIndex->SetProgressCallback ( ShowProgress );

@@ -1,5 +1,6 @@
 HIGH PRIORITY
 
+* fix indexer mem usage: 256M configured, 700M+ used
 * fix that if there are two sql_query's in config, there's no warnings
 * add an option to strip HTML to indexer
 * add shadow copy to avoid taking searchd offline for reindexing

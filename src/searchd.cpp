@@ -51,8 +51,24 @@ static int				g_iChildren		= 0;
 static int				g_iMaxChildren	= 0;
 static int				g_iSocket		= 0;
 static int				g_iQueryLogFile	= -1;
+static int				g_iHUP			= 0;
+
+static const char *		g_sPidFile		= NULL;
+static char				g_sLockFile [ SPH_MAX_FILENAME_LEN ] = "";
 
 /////////////////////////////////////////////////////////////////////////////
+
+void Shutdown ()
+{
+	if ( g_iSocket )
+		close ( g_iSocket );
+	if ( g_sPidFile )
+		unlink ( g_sPidFile );
+	if ( strlen(g_sLockFile) )
+		unlink ( g_sLockFile );
+}
+
+///////////////////////////////////////////////////////////////////////////////
 
 void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 {
@@ -97,6 +113,7 @@ void sphFatal ( const char * sFmt, ... )
 	va_start ( ap, sFmt );
 	sphLog ( LOG_FATAL, sFmt, ap );
 	va_end ( ap );
+	Shutdown ();
 	exit ( 1 );
 }
 
@@ -154,6 +171,7 @@ int createServerSocket_IP(int port)
 	return sock;
 }
 
+///////////////////////////////////////////////////////////////////////////////
 
 void sigchld ( int arg )
 {
@@ -166,11 +184,18 @@ void sigchld ( int arg )
 void sigterm(int arg)
 {
 	sphInfo ( "caught SIGTERM, shutting down" );
-	if ( g_iSocket )
-		close ( g_iSocket );
+	Shutdown ();
 	exit ( 0 );
 }
 
+
+void sighup ( int arg )
+{
+	sphInfo ( "rotating indices: caught SIGHUP, waiting for children to exit" );
+	g_iHUP = 1;
+}
+
+///////////////////////////////////////////////////////////////////////////////
 
 int select_fd ( int fd, int maxtime, int writep )
 {
@@ -329,6 +354,43 @@ void HandleClient ( int rsock, CSphIndex * pIndex, CSphDict * pDict )
 }
 
 
+bool IsReadable ( const char * sPath )
+{
+	int iFD = ::open ( sPath, O_RDONLY );
+
+	if ( iFD<0 )
+		return false;
+
+	::close ( iFD );
+	return true;
+}
+
+
+bool TryRename ( const char * sPrefix, const char * sFromPostfix, const char * sToPostfix, bool bFatal )
+{
+	char sFrom [ SPH_MAX_FILENAME_LEN ];
+	char sTo [ SPH_MAX_FILENAME_LEN ];
+
+	sprintf ( sFrom, "%s%s", sPrefix, sFromPostfix );
+	sprintf ( sTo, "%s%s", sPrefix, sToPostfix );
+	if ( rename ( sFrom, sTo ) )
+	{
+		if ( bFatal )
+		{
+			sphFatal ( "rotating indices: rollback rename '%s' to '%s' failed: %s",
+				sFrom, sTo, strerror(errno) );
+		} else
+		{
+			sphWarning ( "rotating indices: rename '%s' to '%s' failed: %s",
+				sFrom, sTo, strerror(errno) );
+		}
+		return false;
+	}
+
+	return true;
+}
+
+
 int main ( int argc, char **argv )
 {
 	int rsock;
@@ -419,6 +481,12 @@ int main ( int argc, char **argv )
 	// startup
 	///////////
 
+	// handle my signals
+	signal ( SIGCHLD, sigchld );
+	signal ( SIGTERM, sigterm );
+	signal ( SIGINT, sigterm );
+	signal ( SIGHUP, sighup );
+
 	// create index
 	CSphIndex * pIndex = sphCreateIndexPhrase ( confCommon->Get ( "index_path" ) );
 	CSphDict * pDict = new CSphDict_CRC32 ( iMorph );
@@ -450,11 +518,6 @@ int main ( int argc, char **argv )
 		}
 
 		// do daemonize
-		signal ( SIGCHLD, sigchld );
-		signal ( SIGTERM, sigterm );
-		signal ( SIGINT, sigterm );
-		signal ( SIGHUP, SIG_IGN );
-
 		int iDevNull = open ( "/dev/null", O_RDWR );
 		close ( STDIN_FILENO );
 		close ( STDOUT_FILENO );
@@ -477,10 +540,21 @@ int main ( int argc, char **argv )
 	}
 
 	// create pid
-	FILE * fp = fopen ( confSearchd->Get ( "pid_file" ), "w" );
+	g_sPidFile = confSearchd->Get ( "pid_file" );
+	FILE * fp = fopen ( g_sPidFile, "w" );
 	if ( !fp )
-		sphFatal ( "unable to write pid file '%s'", confSearchd->Get ( "pid_file" ) );
+		sphFatal ( "unable to write pid file '%s'", g_sPidFile );
 	fprintf ( fp, "%d", getpid() );	
+	fclose ( fp );
+
+	// create lock file
+	snprintf ( g_sLockFile, sizeof(g_sLockFile), "%s.spl", confCommon->Get ( "index_path" ) );
+	g_sLockFile [ sizeof(g_sLockFile)-1 ] = '\0';
+
+	fp = fopen ( g_sLockFile, "w" );
+	if ( !fp )
+		sphFatal ( "unable to create lock file '%s'", g_sLockFile );
+	fprintf ( fp, "%d", getpid() );
 	fclose ( fp );
 
 	// create and bind on socket
@@ -494,14 +568,107 @@ int main ( int argc, char **argv )
 	sphInfo ( "accepting connections" );
 	for ( ;; )
 	{
+		// try to rotate indices
+		if ( g_iHUP && !g_iChildren )
+		{
+			bool bSuccess = false;
+			for ( ;; )
+			{
+				char sFile [ SPH_MAX_FILENAME_LEN ];
+				const char * sPath = confCommon->Get ( "index_path" );
+
+				// whatever happens, we won't retry
+				g_iHUP = 0;
+				sphInfo ( "rotating indices: children exited, trying to rotate" );
+
+				// check files
+				sprintf ( sFile, "%s.new.spi", sPath );
+				if ( !IsReadable ( sFile ) )
+				{
+					sphWarning ( "rotating indices: '%s' unreadable: %s",
+						sFile, strerror(errno) );
+					break;
+				}
+				sprintf ( sFile, "%s.new.spd", sPath );
+				if ( !IsReadable ( sFile ) )
+				{
+					sphWarning ( "rotating indices: '%s' unreadable: %s",
+						sFile, strerror(errno) );
+					break;
+				}
+
+				// rename current to old
+				if ( !TryRename ( sPath, ".spi", ".old.spi", false ) )
+					break;
+				if ( !TryRename ( sPath, ".spd", ".old.spd", false ) )
+				{
+					TryRename ( sPath, ".old.spi", ".spi", true );
+					break;
+				}
+
+				// rename new to current
+				if ( !TryRename ( sPath, ".new.spi", ".spi", false ) )
+				{
+					TryRename ( sPath, ".old.spi", ".spi", true );
+					TryRename ( sPath, ".old.spd", ".spd", true );
+					break;
+				}
+				if ( !TryRename ( sPath, ".new.spd", ".spd", false ) )
+				{
+					TryRename ( sPath, ".spi", ".new.spi", true );
+					TryRename ( sPath, ".old.spi", ".spi", true );
+					TryRename ( sPath, ".old.spd", ".spd", true );
+					break;
+				}
+
+				// try to create new index
+				CSphIndex * pNewIndex = sphCreateIndexPhrase ( sPath );
+				if ( !pNewIndex )
+				{
+					sphWarning ( "rotating indices: failed to create new index object", sFile );
+
+					// try ro recover
+					TryRename ( sPath, ".spi", ".new.spi", true );
+					TryRename ( sPath, ".spd", ".new.spd", true );
+					TryRename ( sPath, ".old.spi", ".spi", true );
+					TryRename ( sPath, ".old.spd", ".spd", true );
+					break;
+				}
+
+				// uff. all done
+				SafeDelete ( pIndex );
+				pIndex = pNewIndex;
+
+				sphInfo ( "rotating indices: success" );
+				bSuccess = true;
+				break;
+			}
+			if ( !bSuccess )
+				sphWarning ( "rotating indices: using old index" );
+		}
+
+		// we can't simply accept, because of the need to react to HUPs
+		fd_set fdsAccept;
+		FD_ZERO ( &fdsAccept );
+		FD_SET ( g_iSocket, &fdsAccept );
+
+		struct timeval tvTimeout;
+		tvTimeout.tv_sec = 1;
+		tvTimeout.tv_usec = 0;
+
+		if ( select ( 1+g_iSocket, &fdsAccept, NULL, &fdsAccept, &tvTimeout )<=0 )
+			continue;
+
+		// select says something interesting happened, so let's accept
 		len = sizeof ( remote_iaddr );
 		rsock = accept ( g_iSocket, (struct sockaddr*)&remote_iaddr, &len );
+
 		if ( rsock<0 && ( errno==EINTR || errno==EAGAIN || errno==EWOULDBLOCK ) )
 			continue;
 		if ( rsock<0 )
 			sphFatal ( "accept() failed (reason: %s)", strerror ( errno ) );
 
-		if ( g_iMaxChildren && g_iChildren>=g_iMaxChildren )
+		if ( ( g_iMaxChildren && g_iChildren>=g_iMaxChildren ) || g_iHUP )
 		{
 			iwrite ( rsock, "RETRY Server maxed out\n" );
 			close ( rsock );

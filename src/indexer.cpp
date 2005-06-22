@@ -14,7 +14,10 @@
 #include "sphinx.h"
 #include "sphinxutils.h"
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <ctype.h>
+#include <errno.h>
+#include <signal.h>
 
 #if USE_WINDOWS
 	#define I64FMT "%I64d"
@@ -285,6 +288,7 @@ int main ( int argc, char ** argv )
 	const char * sConfName = "sphinx.conf";
 	const char * sBuildStops = NULL;
 	int iTopStops = 100;
+	bool bRotate = false;
 
 	fprintf ( stdout, SPHINX_BANNER );
 
@@ -308,6 +312,9 @@ int main ( int argc, char ** argv )
 				break;
 			i += 2;
 
+		} else if ( strcasecmp ( argv[i], "--rotate" )==0 )
+		{
+			bRotate = true;
 		} else
 		{
 			break;
@@ -316,7 +323,7 @@ int main ( int argc, char ** argv )
 	if ( i!=argc )
 	{
 		fprintf ( stderr, "ERROR: malformed or unknown option near '%s'.\n\n", argv[i] );
-		fprintf ( stderr, "usage: indexer [--config file.conf] [--buildstops output.txt count]\n" );
+		fprintf ( stderr, "usage: indexer [--config file.conf] [--buildstops output.txt count] [--rotate]\n" );
 		return 1;
 	}
 
@@ -346,6 +353,25 @@ int main ( int argc, char ** argv )
 
 	CHECK_CONF ( confIndexer, "indexer", "type" );
 	CHECK_CONF ( confCommon, "common", "index_path" );
+
+	/////////////////////////
+	// check index lock file
+	/////////////////////////
+	
+	if ( !bRotate )
+	{
+		char sLockFile [ SPH_MAX_FILENAME_LEN ];
+		snprintf ( sLockFile, sizeof(sLockFile), "%s.spl", confCommon->Get ( "index_path" ) );
+		sLockFile [ sizeof(sLockFile)-1 ] = '\0';
+
+		struct stat tStat;
+		if ( !stat ( sLockFile, &tStat ) )
+		{
+			fprintf ( stderr, "FATAL: index lock file '%s' exists, will not index. Try --rotate option.\n",
+				sLockFile );
+			return 1;
+		}
+	}
 
 	////////////////////
 	// spawn datasource
@@ -514,7 +540,13 @@ int main ( int argc, char ** argv )
 		fflush ( stdout );
 
 		// do it
-		CSphIndex * pIndex = sphCreateIndexPhrase ( confCommon->Get ( "index_path" ) );
+		char sIndexPath [ SPH_MAX_FILENAME_LEN ];
+		snprintf ( sIndexPath, sizeof(sIndexPath),
+			bRotate ? "%s.new" : "%s",
+			confCommon->Get ( "index_path" ) );
+		sIndexPath [ sizeof(sIndexPath)-1 ] = '\0';
+
+		CSphIndex * pIndex = sphCreateIndexPhrase ( sIndexPath );
 		assert ( pIndex );
 
 		pIndex->SetProgressCallback ( ShowProgress );
@@ -533,6 +565,72 @@ int main ( int argc, char ** argv )
 
 	fprintf ( stdout, "total %.3f sec, %.2f bytes/sec, %.2f docs/sec\n",
 		fTime, pStats->m_iTotalBytes/fTime, pStats->m_iTotalDocuments/fTime );
+
+	////////////////////////////
+	// rotating searchd indices
+	////////////////////////////
+
+	bool bOK = false;
+	CSphHash * confSearchd = NULL;
+
+	while ( bRotate )
+	{
+		// load config
+		confSearchd = conf.LoadSection ( "searchd", g_dSphKeysSearchd );
+		if ( !confSearchd )
+		{
+			fprintf ( stdout, "WARNING: 'searchd' section not found in config file.\n" );
+			break;
+		}
+		if ( !confSearchd->Get ( "pid_file" ) )
+		{
+			fprintf ( stdout, "WARNING: 'pid_file' parameter not found in 'searchd' config section.\n" );
+			break;
+		}
+
+		// read in PID
+		int iPID;
+		FILE * fp = fopen ( confSearchd->Get ( "pid_file" ), "r" );
+		if ( !fp )
+		{
+			fprintf ( stdout, "WARNING: failed to read pid_file '%s'.\n", confSearchd->Get ( "pid_file" ) );
+			break;
+		}
+		if ( fscanf ( fp, "%d", &iPID )!=1 || iPID<=0 )
+		{
+			fprintf ( stdout, "WARNING: failed to scanf pid from pid_file '%s'.\n", confSearchd->Get ( "pid_file" ) );
+			break;
+		}
+		fclose ( fp );
+
+		// signal
+		int iErr = kill ( iPID, SIGHUP );
+		if ( iErr==0 )
+		{
+			fprintf ( stdout, "rotating indices: succesfully sent SIGHUP to searchd.\n" );
+		} else
+		{
+			switch ( errno )
+			{
+				case ESRCH:	fprintf ( stdout, "WARNING: no process found by PID %d.\n", iPID ); break;
+				case EPERM:	fprintf ( stdout, "WARNING: access denied to PID %d.\n", iPID ); break;
+				default:	fprintf ( stdout, "WARNING: kill() error: %s.\n", strerror(errno) ); break;
+			}
+			break;
+		}
+
+		// all ok
+		bOK = true;
+		break;
+	}
+
+	if ( bRotate )
+	{
+		if ( !bOK )
+			fprintf ( stdout, "WARNING: indices NOT rotated.\n" );
+		if ( confSearchd )
+			delete confSearchd;
+	}
 
 	////////////////////
 	// cleanup/shutdown

@@ -3103,7 +3103,6 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 					qwords[i].GetDoclistEntry ();
 					qwords[i].GetHitlistEntry ();
 				}
-				assert ( qwords[i].m_tDoc.m_iDocID>iLastMatchID );
 
 				// remove emptied words
 				if ( !qwords[i].m_tDoc.m_iDocID )
@@ -3115,6 +3114,7 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 				}
 
 				// get new min id
+				assert ( qwords[i].m_tDoc.m_iDocID>iLastMatchID );
 				if ( qwords[i].m_tDoc.m_iDocID<tMatchDoc.m_iDocID )
 					tMatchDoc = qwords[i].m_tDoc;
 			}

@@ -1418,7 +1418,7 @@ int CSphReader_VLN::UnzipHits ( CSphVector<DWORD> * pList )
 const CSphReader_VLN & CSphReader_VLN::operator = ( const CSphReader_VLN & rhs )
 {
 	SetFile ( rhs.m_iFD );
-	m_iPos = rhs.m_iPos;
+	SeekTo ( rhs.m_iPos + rhs.m_iBufPos*2 + rhs.m_iBufOdd );
 	return *this;
 }
 
@@ -3078,7 +3078,10 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 
 		// preload entries
 		for ( i=0; i<nwords; i++ )
+		{
 			qwords[i].GetDoclistEntry ();
+			assert ( qwords[i].m_iDocID );
+		}
 
 		// find a multiplier for phrase match
 		// so that it will weight more than any word match

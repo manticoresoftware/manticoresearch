@@ -3080,7 +3080,7 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 		for ( i=0; i<nwords; i++ )
 		{
 			qwords[i].GetDoclistEntry ();
-			assert ( qwords[i].m_iDocID );
+			assert ( qwords[i].m_tDoc.m_iDocID );
 		}
 
 		// find a multiplier for phrase match

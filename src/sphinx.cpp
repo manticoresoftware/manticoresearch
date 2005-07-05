@@ -3074,7 +3074,7 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 		//////////////////
 
 		int iActive = nwords; // total number of words still active
-		DWORD iDocID = UINT_MAX; // FIXME! make a macro like INVALID_DOCUMENT_ID or something
+		DWORD iLastMatchID = 0;
 
 		// preload entries
 		for ( i=0; i<nwords; i++ )
@@ -3098,12 +3098,12 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 			for ( i=0; i<iActive; i++ )
 			{
 				// move to next document
-				if ( qwords[i].m_tDoc.m_iDocID==iDocID )
+				if ( qwords[i].m_tDoc.m_iDocID==iLastMatchID )
 				{
 					qwords[i].GetDoclistEntry ();
 					qwords[i].GetHitlistEntry ();
 				}
-				assert ( qwords[i].m_tDoc.m_iDocID!=iDocID );
+				assert ( qwords[i].m_tDoc.m_iDocID>iLastMatchID );
 
 				// remove emptied words
 				if ( !qwords[i].m_tDoc.m_iDocID )
@@ -3116,17 +3116,14 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 
 				// get new min id
 				if ( qwords[i].m_tDoc.m_iDocID<tMatchDoc.m_iDocID )
-				{
 					tMatchDoc = qwords[i].m_tDoc;
-					iDocID = tMatchDoc.m_iDocID;
-				}
 			}
 			if ( iActive==0 )
 				break;
-			iDocID = tMatchDoc.m_iDocID;
 
-			assert ( iDocID!=0 );
-			assert ( iDocID!=UINT_MAX );
+			iLastMatchID = tMatchDoc.m_iDocID;
+			assert ( iLastMatchID!=0 );
+			assert ( iLastMatchID!=UINT_MAX );
 
 			// early reject by group id
 			tMatchDoc.m_iGroupID += m_tHeader.m_tMin.m_iGroupID;
@@ -3138,7 +3135,7 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 			int iTerms = 0;
 
 			for ( i=0; i<iActive; i++ )
-				if ( qwords[i].m_tDoc.m_iDocID==iDocID )
+				if ( qwords[i].m_tDoc.m_iDocID==iLastMatchID )
 					pHit[iTerms++] = &qwords[i];
 			assert ( iTerms>0 );
 
@@ -3204,7 +3201,7 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 
 			// unpack match, set weight and push it to the queue
 			CSphMatch tMatch;
-			tMatch.m_iDocID = iDocID + m_tHeader.m_tMin.m_iDocID;
+			tMatch.m_iDocID = iLastMatchID + m_tHeader.m_tMin.m_iDocID;
 			tMatch.m_iGroupID = tMatchDoc.m_iGroupID; // group id already unpacked
 			tMatch.m_iTimestamp = tMatchDoc.m_iTimestamp + m_tHeader.m_tMin.m_iTimestamp;
 			tMatch.m_iWeight = j; // set weight

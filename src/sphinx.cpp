@@ -3078,10 +3078,7 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 
 		// preload entries
 		for ( i=0; i<nwords; i++ )
-		{
 			qwords[i].GetDoclistEntry ();
-			assert ( qwords[i].m_tDoc.m_iDocID );
-		}
 
 		// find a multiplier for phrase match
 		// so that it will weight more than any word match
@@ -3101,7 +3098,7 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 			for ( i=0; i<iActive; i++ )
 			{
 				// move to next document
-				if ( qwords[i].m_tDoc.m_iDocID==iLastMatchID )
+				if ( qwords[i].m_tDoc.m_iDocID==iLastMatchID && iLastMatchID )
 				{
 					qwords[i].GetDoclistEntry ();
 					qwords[i].GetHitlistEntry ();

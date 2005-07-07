@@ -50,7 +50,7 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
-#define SPHINX_VERSION			"0.9.3-dev"
+#define SPHINX_VERSION			"0.9.4-dev"
 #define SPHINX_BANNER			"Sphinx " SPHINX_VERSION "\nCopyright (c) 2001-2005, Andrew Aksyonoff\n\n"
 #define SPHINX_SEARCHD_PROTO	1
 

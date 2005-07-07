@@ -49,6 +49,7 @@ const char * g_dSphKeysIndexer[] =
 	"sql_range_step",
 	"xmlpipe_command",
 	"mem_limit",
+	"strip_html",
 	NULL
 };
 

@@ -390,7 +390,10 @@ public:
 	virtual								~CSphSource() {}
 
 	/// set dictionary
-	void								setDict ( CSphDict * dict );
+	void								SetDict ( CSphDict * dict );
+
+	/// set HTML stripping mode
+	void								SetStripHTML ( bool bStrip );
 
 	/// get stats
 	virtual const CSphSourceStats *		GetStats ();
@@ -398,7 +401,7 @@ public:
 public:
 	/// document getter
 	/// to be implemented by descendants
-	virtual int							next() = 0;
+	virtual int							Next () = 0;
 
 	/// field count getter
 	/// to be implemented by descendants
@@ -410,6 +413,7 @@ protected:
 	CSphTokenizer						m_tTokenizer;	///< my tokenizer
 	CSphDict *							m_pDict;		///< my dict
 	CSphSourceStats						m_iStats;		///< my stats
+	bool								m_bStripHTML;	///< whether to strip HTML
 };
 
 
@@ -421,10 +425,10 @@ struct CSphSource_Document : CSphSource
 							CSphSource_Document () : m_bCallWordCallback ( false ) {}
 
 	/// my generic tokenizer
-	virtual int				next ();
+	virtual int				Next ();
 
 	/// this is what we can call for my descendants
-	virtual void			wordCallback ( char * word ) { word = word; }
+	virtual void			WordCallback ( char * word ) { word = word; }
 
 	/// field data getter
 	/// to be implemented by descendants
@@ -532,7 +536,7 @@ public:
 	bool			Init ( const char * sCommand );
 
 	/// hit chunk getter
-	virtual int		next ();
+	virtual int		Next ();
 
 	/// field count getter
 	virtual int		GetFieldCount ();

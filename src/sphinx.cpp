@@ -2159,7 +2159,7 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 	/////////////////
 
 	// set dictionary
-	pSource->setDict ( pDict );
+	pSource->SetDict ( pDict );
 
 	// create raw log
 	fdRaw = OpenFile ( "spr", O_CREAT | O_RDWR | O_TRUNC );
@@ -2206,7 +2206,7 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 	tProgress.m_ePhase = CSphIndexProgress::PHASE_COLLECT;
 
 	DWORD iDocID;
-	while ( ( iDocID = pSource->next() )!=0 )
+	while ( ( iDocID = pSource->Next() )!=0 )
 	{
 		// progress bar
 		if ( m_pProgress
@@ -2599,7 +2599,7 @@ struct CSphQueryParser : CSphSource_Text
 		query = sphDup ( sQuery );
 		m_pDict = pDict;
 		m_bCallWordCallback = true;
-		next ();
+		Next ();
 	}
 
 	~CSphQueryParser()
@@ -3440,13 +3440,14 @@ void CSphDict_CRC32::LoadStopwords ( const char * sFiles )
 // GENERIC SOURCE
 /////////////////////////////////////////////////////////////////////////////
 
-CSphSource::CSphSource() :
-	m_pDict ( NULL )
+CSphSource::CSphSource()
+	: m_pDict ( NULL )
+	, m_bStripHTML ( false )
 {
 }
 
 
-void CSphSource::setDict ( CSphDict * pDict )
+void CSphSource::SetDict ( CSphDict * pDict )
 {
 	m_pDict = pDict;
 }
@@ -3457,11 +3458,40 @@ const CSphSourceStats * CSphSource::GetStats ()
 	return &m_iStats;
 }
 
+
+void CSphSource::SetStripHTML ( bool bStrip )
+{
+	m_bStripHTML = bStrip;
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // DOCUMENT SOURCE
 /////////////////////////////////////////////////////////////////////////////
 
-int CSphSource_Document::next()
+// remove html tags
+char * StripHTML ( char * sData )
+{
+	char * p = sData;
+	for ( ;; )
+	{
+		// tag beginning
+		while ( *p && *p!='<' )
+			p++;
+		if ( !*p )
+			break;
+
+		// spaces until tag end
+		while ( *p && *p!='>' )
+			*p++ = ' ';
+		if ( *p=='>' )
+			*p++ = ' ';
+	}
+
+	return sData;
+}
+
+
+int CSphSource_Document::Next()
 {
 	PROFILE ( src_document );
 
@@ -3478,6 +3508,9 @@ int CSphSource_Document::next()
 		BYTE * sField = dFields[j];
 		if ( !sField )
 			continue;
+
+		if ( m_bStripHTML )
+			StripHTML ( (char*)sField );
 
 		int iLen = (int) strlen ( (char*)sField );
 		m_iStats.m_iTotalBytes += iLen;
@@ -3497,7 +3530,7 @@ int CSphSource_Document::next()
 				tHit.m_iWordID = iWord;
 				tHit.m_iWordPos = (j << 24) | iPos++;
 				if ( m_bCallWordCallback )
-					wordCallback ( (char*) sWord );
+					WordCallback ( (char*) sWord );
 			}
 		}
 	}
@@ -3997,7 +4030,7 @@ bool CSphSource_XMLPipe::Init ( const char * sCommand )
 }
 
 
-int CSphSource_XMLPipe::next ()
+int CSphSource_XMLPipe::Next ()
 {
 	PROFILE ( src_xmlpipe );
 	char sTitle [ 1024 ]; // FIXME?

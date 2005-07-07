@@ -46,6 +46,16 @@ mem_limit			= 32M
 type				= mysql
 
 
+# whether to strip HTML
+# values can be 0 (don't strip) or 1 (do strip)
+# WARNING, only works with mysql source for now
+# WARNING, only works ok for PERFECTLY formed XHTML for now
+# WARNING, WILL BUG on normal everday HTML
+# optional, default is 0
+strip_html			= 0
+
+#############################################################################
+
 # some straightforward parameters for 'mysql' source type
 sql_host			= localhost
 sql_user			= root

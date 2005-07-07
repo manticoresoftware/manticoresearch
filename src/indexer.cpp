@@ -20,9 +20,10 @@
 #include <signal.h>
 
 #if USE_WINDOWS
-	#define I64FMT "%I64d"
+	#define I64FMT		"%I64d"
+	#define snprintf	_snprintf
 #else
-	#define I64FMT "%lld"
+	#define I64FMT		"%lld"
 
 	#include <unistd.h>
 #endif
@@ -312,9 +313,12 @@ int main ( int argc, char ** argv )
 				break;
 			i += 2;
 
+#if !USE_WINDOWS
 		} else if ( strcasecmp ( argv[i], "--rotate" )==0 )
 		{
 			bRotate = true;
+#endif
+
 		} else
 		{
 			break;
@@ -323,7 +327,11 @@ int main ( int argc, char ** argv )
 	if ( i!=argc )
 	{
 		fprintf ( stderr, "ERROR: malformed or unknown option near '%s'.\n\n", argv[i] );
-		fprintf ( stderr, "usage: indexer [--config file.conf] [--buildstops output.txt count] [--rotate]\n" );
+		fprintf ( stderr, "usage: indexer [--config file.conf] [--buildstops output.txt count]" );
+#if !USE_WINDOWS
+		fprintf ( stderr, " [--rotate]" );
+#endif
+		fprintf ( stderr, "\n" );
 		return 1;
 	}
 
@@ -442,6 +450,9 @@ int main ( int argc, char ** argv )
 		pSource = pSrcXML;
 	}
 
+	if ( confIndexer->Get ( "strip_html" ) )
+		pSource->SetStripHTML ( 1==atoi ( confIndexer->Get ( "strip_html" ) ) );
+
 	if ( !pSource )
 		sphDie ( "FATAL: unknown source type '%s'.", sType );
 
@@ -464,8 +475,8 @@ int main ( int argc, char ** argv )
 		CSphStopwordBuilderDict * pDict = new CSphStopwordBuilderDict ();
 		assert ( pDict );
 
-		pSource->setDict ( pDict );
-		while ( pSource->next() );
+		pSource->SetDict ( pDict );
+		while ( pSource->Next() );
 
 		pDict->Save ( sBuildStops, iTopStops );
 
@@ -570,6 +581,7 @@ int main ( int argc, char ** argv )
 	// rotating searchd indices
 	////////////////////////////
 
+#if !USE_WINDOWS
 	bool bOK = false;
 	CSphHash * confSearchd = NULL;
 
@@ -631,6 +643,7 @@ int main ( int argc, char ** argv )
 		if ( confSearchd )
 			delete confSearchd;
 	}
+#endif
 
 	////////////////////
 	// cleanup/shutdown

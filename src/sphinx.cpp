@@ -2610,7 +2610,7 @@ struct CSphQueryParser : CSphSource_Text
 			if (words[i]) sphFree(words[i]);
 	}
 
-	void wordCallback(char *word)
+	virtual void WordCallback ( char * word )
 	{
 		if (numWords < SPH_MAX_QUERY_WORDS)
 			this->words[numWords++] = sphDup(word);

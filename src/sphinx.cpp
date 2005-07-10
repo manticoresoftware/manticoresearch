@@ -255,6 +255,9 @@ void sphProfilerShow ( int iTimer=0, int iLevel=0 )
 		fSelf -= g_dTimers[iChild].m_fStamp;
 
 	// dump me
+	if ( tTimer.m_fStamp<0.005f )
+		return;
+
 	for ( int i=0; i<iLevel; i++ )
 		fprintf ( stderr, "  " );
 	fprintf ( stderr, "%s: %.2f", g_dTimerNames [ tTimer.m_eTimer ], tTimer.m_fStamp );
@@ -451,8 +454,6 @@ public:
 
 	DWORD		UnzipInt ();
 	SphOffset_t	UnzipOffset ();
-	void		UnzipInts ( CSphVector<DWORD> * pData );
-	int			UnzipHits ( CSphVector<DWORD> * pHits );
 
 	const CSphReader_VLN &	operator = ( const CSphReader_VLN & rhs );
 
@@ -1307,6 +1308,7 @@ void CSphReader_VLN::SeekTo ( SphOffset_t iPos )
 
 void CSphReader_VLN::UpdateCache ()
 {
+	PROFILE ( read_hits );
 	assert ( m_iFD );
 
 	// stream position could be changed externally
@@ -1390,30 +1392,6 @@ SphOffset_t CSphReader_VLN::UnzipOffset ()
 	} while ( b&0x08 );
 	return v;
 }
-
-
-void CSphReader_VLN::UnzipInts ( CSphVector<DWORD> * pData )
-{
-	register DWORD i = 0;
-	while ( ( i=UnzipInt() )!=0 )
-		pData->Add ( i );
-}
-
-
-int CSphReader_VLN::UnzipHits ( CSphVector<DWORD> * pList )
-{
-	register int i, v = 0;
-	int iStart = pList->GetLength ();
-
-	while ( ( i=UnzipInt() )!=0 )
-	{
-		v += i;
-		pList->Add ( v );
-	}
-
-	return pList->GetLength() - iStart;
-}
-
 
 const CSphReader_VLN & CSphReader_VLN::operator = ( const CSphReader_VLN & rhs )
 {

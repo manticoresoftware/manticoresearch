@@ -270,7 +270,7 @@ void HandleClient ( int rsock, CSphIndex * pIndex, CSphDict * pDict )
 	if ( iread ( rsock, &tQuery.m_iGroups, 4 )!=4 ) return;
 
 	// read groups
-	if ( tQuery.m_iGroups<0 || tQuery.m_iGroups>256 ) return; // FIXME?
+	if ( tQuery.m_iGroups<0 || tQuery.m_iGroups>4096 ) return; // FIXME?
 	if ( tQuery.m_iGroups )
 	{
 		i = tQuery.m_iGroups*sizeof(DWORD);

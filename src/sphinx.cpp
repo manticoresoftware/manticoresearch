@@ -737,24 +737,272 @@ int sphWrite ( int iFD, const void * pBuf, size_t iCount, const char * sName )
 }
 
 /////////////////////////////////////////////////////////////////////////////
-// GENERIC TOKENIZER
+// TOKENIZERS
 /////////////////////////////////////////////////////////////////////////////
 
-#define LOC_SKIP_SPACES() while ( *p && isspace(*p) ) p++;
-#define LOC_CHECK_EOF() if ( !*p ) break;
-#define LOC_CHECK_NEOF() if ( !*p ) LOC_ERROR ( "unexpected end of line" );
-#define LOC_ERROR(_msg) \
-{ \
-	strncpy ( sErrorBuffer, p, sizeof(sErrorBuffer) ); \
-	sErrorBuffer [ sizeof(sErrorBuffer)-1 ] = '\0'; \
-	\
-	fprintf ( stderr, "ERROR: ParseCharsetDefinition(): %s near '%s'.\n", \
-	_msg, sErrorBuffer ); \
-	return -1; \
+/// lowercaser remap range
+struct CSphRemapRange
+{
+	int			m_iStart;
+	int			m_iEnd;
+	int			m_iRemapStart;
+
+	CSphRemapRange ()
+		: m_iStart		( -1 )
+		, m_iEnd		( -1 )
+		, m_iRemapStart	( -1 )
+	{}
+
+	CSphRemapRange ( int iStart, int iEnd, int iRemapStart )
+		: m_iStart		( iStart )
+		, m_iEnd		( iEnd )
+		, m_iRemapStart	( iRemapStart )
+	{}
+
+	inline bool operator < ( const CSphRemapRange & b )
+	{
+		return m_iStart < b.m_iStart;
+	}
+};
+
+
+/// lowercaser
+class CSphLowercaser
+{
+public:
+				CSphLowercaser ();
+				~CSphLowercaser ();
+
+	void		SetRemap ( const CSphRemapRange * pRemaps, int iRemaps );
+
+public:
+	inline int	ToLower ( int iCode )
+	{
+		assert ( iCode>=0 && iCode<MAX_CODE );
+		register int * pChunk = m_ppTable [ iCode>>CHUNK_BITS ];
+		if ( pChunk )
+			return pChunk [ iCode & CHUNK_MASK ];
+		return 0;
+	}
+
+protected:
+	int **				m_ppTable;
+	int *				m_pTable;
+
+	static const int	CHUNK_COUNT	= 0x200;
+	static const int	CHUNK_BITS	= 8;
+
+	static const int	CHUNK_SIZE	= 1 << CHUNK_BITS;
+	static const int	CHUNK_MASK	= CHUNK_SIZE - 1;
+	static const int	MAX_CODE	= CHUNK_COUNT * CHUNK_SIZE;
+};
+
+
+/// parser to build lowercaser from textual config
+class CSphCharsetDefinitionParser
+{
+public:
+						CSphCharsetDefinitionParser ();
+	int					Parse ( const char * sConfig, CSphLowercaser & tLC );
+	const char *		GetLastError ();
+
+protected:
+	bool				m_bError;
+	char				m_sError [ 1024 ];
+	const char *		m_pCurrent;
+
+	int					Error ( const char * sMessage );
+	void				SkipSpaces ();
+	bool				IsEof ();
+	bool				CheckEof ();
+	int					HexDigit ( int c );
+	int					ParseCharsetCode ();
+};
+
+
+/// single-byte charset tokenizer
+class CSphTokenizer_SBCS : public ISphTokenizer
+{
+public:
+	CSphTokenizer_SBCS ();
+	virtual void		SetBuffer ( BYTE * sBuffer, int iLength, bool bLast );
+	virtual BYTE *		GetToken ();
+	virtual bool		SetCaseFolding ( const char * sConfig );
+
+protected:
+	CSphLowercaser		m_tLC;								///< my lowercaser
+	BYTE *				m_pBuffer;							///< my buffer
+	BYTE *				m_pBufferMax;						///< max buffer ptr, exclusive (ie. this ptr is invalid, but every ptr below is ok)
+	BYTE *				m_pCur;								///< current position
+	BYTE				m_sAccum [ 4+SPH_MAX_WORD_LEN ];	///< boundary token accumulator
+	int					m_iAccum;							///< boundary token size
+	bool				m_bLast;							///< is this buffer the last one
+};
+
+
+/// UTF-8 tokenizer
+class CSphTokenizer_UTF8 : public ISphTokenizer
+{
+public:
+	CSphTokenizer_UTF8 ();
+	virtual void		SetBuffer ( BYTE * sBuffer, int iLength, bool bLast );
+	virtual BYTE *		GetToken ();
+	virtual bool		SetCaseFolding ( const char * sConfig );
+
+protected:
+	inline int			IsEmpty () { return m_pCur>=m_pBufferMax; }
+	int					GetCodePoint ();
+	void				AccumCodePoint ( int iCode );
+	BYTE *				FlushAccum ();
+
+protected:
+	CSphLowercaser		m_tLC;								///< my lowercaser
+	BYTE *				m_pBuffer;							///< my buffer
+	BYTE *				m_pBufferMax;						///< max buffer ptr, exclusive (ie. this ptr is invalid, but every ptr below is ok)
+	BYTE *				m_pCur;								///< current position
+	BYTE				m_sAccum [ 3*SPH_MAX_WORD_LEN+3 ];	///< boundary token accumulator
+	BYTE *				m_pAccum;							///< current accumulator position
+	int					m_iAccum;							///< boundary token size
+	bool				m_bLast;							///< is this buffer the last one
+};
+
+/////////////////////////////////////////////////////////////////////////////
+
+ISphTokenizer * sphCreateSBCSTokenizer ()
+{
+	return new CSphTokenizer_SBCS ();
 }
 
 
-static int xdigit ( int c )
+ISphTokenizer * sphCreateUTF8Tokenizer ()
+{
+	return new CSphTokenizer_UTF8 ();
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+CSphLowercaser::CSphLowercaser ()
+	: m_ppTable ( NULL )
+	, m_pTable ( NULL )
+{
+}
+
+
+void CSphLowercaser::SetRemap ( const CSphRemapRange * pRemaps, int iRemaps )
+{
+	SafeDeleteArray ( m_ppTable );
+	SafeDeleteArray ( m_pTable );
+
+	#define LOC_CHECK_RANGE(_a) assert ( (_a)>=0 && (_a)<MAX_CODE );
+
+	// find out chunk count and build chunk usage bitmap
+	int dUsed [ CHUNK_COUNT ];
+	memset ( dUsed, 0, sizeof(dUsed) );
+
+	const CSphRemapRange * pRemap = pRemaps;
+	for ( int i=0; i<iRemaps; i++, pRemap++ )
+	{
+		LOC_CHECK_RANGE ( pRemap->m_iStart );
+		LOC_CHECK_RANGE ( pRemap->m_iEnd );
+		LOC_CHECK_RANGE ( pRemap->m_iRemapStart );
+		LOC_CHECK_RANGE ( pRemap->m_iRemapStart + pRemap->m_iEnd + pRemap->m_iStart );
+
+		for ( int j = pRemap->m_iStart>>CHUNK_BITS; j <= pRemap->m_iEnd>>CHUNK_BITS; j++ )
+			dUsed[j] = 1;
+	}
+
+	int iUsed = 0;
+	for ( int i=0; i<sizeof(dUsed)/sizeof(int); i++ )
+		if ( dUsed[i] ) iUsed++;
+
+	#undef LOC_CHECK_RANGE
+
+	// alloc
+	assert ( iUsed );
+
+	m_ppTable = new int * [ CHUNK_COUNT ];
+	m_pTable = new int [ iUsed*CHUNK_SIZE ];
+	memset ( m_ppTable, 0, sizeof(int*)*CHUNK_COUNT );
+	memset ( m_pTable, 0, sizeof(int)*iUsed*CHUNK_SIZE );
+
+	// build chunks hash
+	int * pChunk = m_pTable;
+	for ( int i=0; i<CHUNK_COUNT; i++ )
+		if ( dUsed[i] )
+	{
+		m_ppTable[i] = pChunk;
+		pChunk += CHUNK_SIZE;
+	}
+
+	// fill the actual remapping table chunks
+	pRemap = pRemaps;
+	for ( int i=0; i<iRemaps; i++, pRemap++ )
+	{
+		int iRemapped = pRemap->m_iRemapStart;
+		for ( int j = pRemap->m_iStart; j <= pRemap->m_iEnd; j++, iRemapped++ )
+		{
+			assert ( m_ppTable [ j>>CHUNK_BITS ] );
+			m_ppTable [ j>>CHUNK_BITS ] [ j & CHUNK_MASK ] = iRemapped;
+		}
+	}
+}
+
+
+CSphLowercaser::~CSphLowercaser ()
+{
+	SafeDeleteArray ( m_ppTable );
+	SafeDeleteArray ( m_pTable );
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+CSphCharsetDefinitionParser::CSphCharsetDefinitionParser ()
+	: m_bError ( false )
+{
+}
+
+
+const char * CSphCharsetDefinitionParser::GetLastError ()
+{
+	return m_bError ? m_sError : NULL;
+}
+
+
+bool CSphCharsetDefinitionParser::IsEof ()
+{
+	return (*m_pCurrent)==0;
+}
+
+
+bool CSphCharsetDefinitionParser::CheckEof ()
+{
+	if ( IsEof() )
+	{
+		Error ( "unexpected end of line" );
+		return true;
+	} else
+	{
+		return false;
+	}
+}
+
+
+int CSphCharsetDefinitionParser::Error ( const char * sMessage )
+{
+	char sErrorBuffer[32];
+	strncpy ( sErrorBuffer, m_pCurrent, sizeof(sErrorBuffer) );
+	sErrorBuffer [ sizeof(sErrorBuffer)-1 ] = '\0';
+
+	_snprintf ( m_sError, sizeof(m_sError), "CharsetDefinitionParser(): %s near '%s'.",
+		sMessage, sErrorBuffer );
+	m_sError [ sizeof(m_sError)-1 ] = '\0';
+
+	m_bError = true;
+	return -1;
+}
+
+
+int CSphCharsetDefinitionParser::HexDigit ( int c )
 {
 	if ( c>='0' && c<='9' ) return c-'0';
 	if ( c>='a' && c<='f' ) return c-'a'+10;
@@ -763,193 +1011,205 @@ static int xdigit ( int c )
 }
 
 
-static int ParseCharsetCode ( const char ** pp )
+void CSphCharsetDefinitionParser::SkipSpaces ()
 {
-	char sErrorBuffer[32];
-	const char * p = (*pp);
+	while ( (*m_pCurrent) && isspace(*m_pCurrent) )
+		m_pCurrent++;
+}
+
+
+int CSphCharsetDefinitionParser::ParseCharsetCode ()
+{
+	const char * p = m_pCurrent;
 	int iCode = 0;
 
-	if ( *p=='\\' )
+	if ( p[0]=='U' && p[1]=='+' )
 	{
-		const char * q = ++p;
-		if ( *q!='x' )
-			LOC_ERROR ( "expected '\\x'" );
-		q++;
-
-		while ( isxdigit(*q) )
+		p += 2;
+		while ( isxdigit(*p) )
 		{
-			iCode = iCode*16 + xdigit(*q++);
-			if ( iCode>255 )
-				LOC_ERROR ( "invalid hex code (exceeds byte range)" );
+			iCode = iCode*16 + HexDigit(*p++);
+//			if ( iCode>255 )
+//				return Error ( "invalid hex code (exceeds byte range)" );
 		}
-		while ( isspace(*q) )
-			q++;
-		p = q;
+		while ( isspace(*p) )
+			p++;
 
 	} else
 	{
 		if ( (*(BYTE*)p)<32 || (*(BYTE*)p)>127 )
-			LOC_ERROR ( "non-ASCII characters not allowed, use '\\xAB' syntax" );
+			return Error ( "non-ASCII characters not allowed, use 'U+00AB' syntax" );
 
 		iCode = *p++;
 		while ( isspace(*p) )
 			p++;
 	}
 
-	*pp = p;
+	m_pCurrent = p;
 	return iCode;
 }
 
 
-/// returns 0 on success
-/// returns -1 on failure
-static int ParseCharsetDefinition ( const char * sConfig, BYTE * dTable )
+int CSphCharsetDefinitionParser::Parse ( const char * sConfig, CSphLowercaser & tLC )
 {
-	char sErrorBuffer[32];
-	const char * p = sConfig;
+	m_pCurrent = sConfig;
 
-	// zero out the table
-	memset ( dTable, 0, 0x100 );
+	CSphVector<CSphRemapRange> dRanges;
 
 	// do parse
-	while ( *p )
+	while ( *m_pCurrent )
 	{
-		LOC_SKIP_SPACES ();
-		LOC_CHECK_EOF ();
+		SkipSpaces ();
+		if ( IsEof () )
+			break;
 
 		// check for stray comma
-		if ( *p==',' )
-			LOC_ERROR ( "stray ',' not allowed, use '\\x2C' syntax" );
+		if ( *m_pCurrent==',' )
+			return Error ( "stray ',' not allowed, use 'U+002C' instead" );
 
 		// parse char code
-		const char * pStart = p;
-		int iStart = ParseCharsetCode ( &p );
+		const char * pStart = m_pCurrent;
+		int iStart = ParseCharsetCode ();
 		if ( iStart<0 )
 			return -1;
 
 		// stray char?
-		if ( !*p || *p==',' )
+		if ( !*m_pCurrent || *m_pCurrent==',' )
 		{
 			// stray char
-			dTable[iStart] = (BYTE) iStart;
-			LOC_CHECK_EOF ();
-			p++;
+			dRanges.Add ( CSphRemapRange ( iStart, iStart, iStart ) );
+			if ( IsEof () )
+				break;
+			m_pCurrent++;
 			continue;
 		}
 
 		// stray remap?
-		if ( p[0]=='-' && p[1]=='>' )
+		if ( m_pCurrent[0]=='-' && m_pCurrent[1]=='>' )
 		{
-			p += 2;
-			int iDest = ParseCharsetCode ( &p );
+			m_pCurrent += 2;
+			int iDest = ParseCharsetCode ();
 			if ( iDest<0 )
 				return -1;
 
-			dTable[iStart] = (BYTE) iDest;
-
-			if ( *p!=',' )
-				LOC_ERROR ( "syntax error" );
-			p++;
+			dRanges.Add ( CSphRemapRange ( iStart, iStart, iDest ) );
+			if ( *m_pCurrent!=',' )
+				return Error ( "syntax error" );
+			m_pCurrent++;
 			continue;
 		}
 
 		// range start?
-		if (!( p[0]=='.' && p[1]=='.' ))
-			LOC_ERROR ( "syntax error" );
-		p += 2;
-		LOC_SKIP_SPACES ();
-		LOC_CHECK_NEOF ();
+		if (!( m_pCurrent[0]=='.' && m_pCurrent[1]=='.' ))
+			return Error ( "syntax error" );
+		m_pCurrent += 2;
+		
+		SkipSpaces ();
+		if ( CheckEof () )
+			return -1;
 
 		// parse range end char code
-		int iEnd = ParseCharsetCode ( &p );
+		int iEnd = ParseCharsetCode ();
 		if ( iEnd<0 )
 			return -1;
 		if ( iStart>iEnd )
 		{
-			p = pStart;
-			LOC_ERROR ( "range end less than range start" );
+			m_pCurrent = pStart;
+			return Error ( "range end less than range start" );
 		}
 
 		// stray range
-		if ( !*p || *p==',' )
+		if ( !*m_pCurrent || *m_pCurrent==',' )
 		{
-			for ( int i=iStart; i<=iEnd; i++ )
-				dTable[i] = (BYTE) i;
-			LOC_CHECK_EOF ();
-			p++;
+			dRanges.Add ( CSphRemapRange ( iStart, iEnd, iStart ) );
+			if ( IsEof () )
+				break;
+			m_pCurrent++;
 			continue;
 		}
 
 		// remapped range?
-		if (!( p[0]=='-' && p[1]=='>' ))
-			LOC_ERROR ( "expected end of line, ',' or '-><char>'" );
-		p += 2;
-		LOC_SKIP_SPACES ();
-		LOC_CHECK_NEOF ();
+		if (!( m_pCurrent[0]=='-' && m_pCurrent[1]=='>' ))
+			return Error ( "expected end of line, ',' or '-><char>'" );
+		m_pCurrent += 2;
+
+		SkipSpaces ();
+		if ( CheckEof () )
+			return -1;
 
 		// parse dest start
-		const char * pRemapStart = p;
-		int iRemapStart = ParseCharsetCode ( &p );
+		const char * pRemapStart = m_pCurrent;
+		int iRemapStart = ParseCharsetCode ();
 		if ( iRemapStart<0 )
 			return -1;
 
 		// expect '..'
-		LOC_CHECK_NEOF ();
-		if (!( p[0]=='.' && p[1]=='.' ))
-			LOC_ERROR ( "expected '..'" );
-		p += 2;
+		if ( CheckEof () )
+			return -1;
+		if (!( m_pCurrent[0]=='.' && m_pCurrent[1]=='.' ))
+			return Error ( "expected '..'" );
+		m_pCurrent += 2;
 
 		// parse dest end
-		int iRemapEnd = ParseCharsetCode ( &p );
+		int iRemapEnd = ParseCharsetCode ();
 		if ( iRemapEnd<0 )
 			return -1;
 
 		// check dest range
 		if ( iRemapStart>iRemapEnd )
 		{
-			p = pRemapStart;
-			LOC_ERROR ( "dest range end less than dest range start" );
+			m_pCurrent = pRemapStart;
+			return Error ( "dest range end less than dest range start" );
 		}
 
 		// check for length mismatch
 		if ( iRemapEnd-iRemapStart != iEnd-iStart )
 		{
-			p = pStart;
-			LOC_ERROR ( "dest range length must match src range length" );
+			m_pCurrent = pStart;
+			return Error ( "dest range length must match src range length" );
 		}
 
 		// remapped ok
-		for ( int i=iStart; i<=iEnd; i++ )
-			dTable[i] = (BYTE) (i-iStart+iRemapStart);
-
-		LOC_CHECK_EOF ();
-		if ( *p!=',' )
-			LOC_ERROR ( "expected ','" );
-		p++;
+		dRanges.Add ( CSphRemapRange ( iStart, iEnd, iRemapStart ) );
+		if ( IsEof () )
+			break;
+		if ( *m_pCurrent!=',' )
+			return Error ( "expected ','" );
+		m_pCurrent++;
 	}
 
+	dRanges.Sort ();
+	for ( int i=0; i<dRanges.GetLength()-1; i++ )
+	{
+		if ( dRanges[i].m_iEnd>=dRanges[i+1].m_iStart )
+		{
+			// FIXME! add an ambiguity check
+			dRanges[i].m_iEnd = Max ( dRanges[i].m_iEnd, dRanges[i+1].m_iEnd );
+			dRanges.Remove ( i+1 );
+			i--;
+		}
+	}
+
+	tLC.SetRemap ( &dRanges[0], dRanges.GetLength() );
 	return 0;
 }
 
+/////////////////////////////////////////////////////////////////////////////
 
-#undef LOC_SKIP_SPACES
-#undef LOC_CHECK_EOF
-#undef LOC_ERROR
-
-
-CSphTokenizer::CSphTokenizer ()
+CSphTokenizer_SBCS::CSphTokenizer_SBCS ()
 	: m_pBuffer		( NULL )
 	, m_pBufferMax	( NULL )
 	, m_pCur		( NULL )
 	, m_iAccum		( 0 )
+	, m_bLast		( false )
 {
-	SetTranslationTable (
+	SetCaseFolding (
 		"0..9, A..Z->a..z, _, a..z, "
-		"\\xa8->\\xb8, \\xb8, \\xc0..\\xdf->\\xe0..\\xff, \\xe0..\\xff" );
+		"U+a8->U+b8, U+b8, U+c0..U+df->U+e0..U+ff, U+e0..U+ff" );
 }
 
 
-void CSphTokenizer::SetBuffer ( BYTE * sBuffer, int iLength, bool bLast )
+void CSphTokenizer_SBCS::SetBuffer ( BYTE * sBuffer, int iLength, bool bLast )
 {
 	// check that old one is over and that new length is sane
 	assert ( m_pCur>=m_pBufferMax );
@@ -965,13 +1225,13 @@ void CSphTokenizer::SetBuffer ( BYTE * sBuffer, int iLength, bool bLast )
 	BYTE * p = sBuffer;
 	while ( p<m_pBufferMax )
 	{
-		*p = m_dTable[*p];
+		*p = (BYTE) m_tLC.ToLower ( *p ); // FIXME! !COMMIT
 		p++;
 	}
 }
 
 
-BYTE * CSphTokenizer::GetToken ()
+BYTE * CSphTokenizer_SBCS::GetToken ()
 {
 	// flush whatever accumulated from that last buffer
 	if ( m_iAccum )
@@ -1036,20 +1296,204 @@ BYTE * CSphTokenizer::GetToken ()
 }
 
 
-bool CSphTokenizer::SetTranslationTable ( const char * sConfig )
+bool CSphTokenizer_SBCS::SetCaseFolding ( const char * sConfig )
 {
-	BYTE dTable[256];
-	if ( ParseCharsetDefinition ( sConfig, dTable ) )
+	CSphCharsetDefinitionParser tParser;
+	if ( tParser.Parse ( sConfig, m_tLC )!=0 )
+	{
+		fprintf ( stderr, "ERROR: %s", tParser.GetLastError() );
 		return false;
-
-	SetTranslationTable ( dTable );
+	}
 	return true;
 }
 
+/////////////////////////////////////////////////////////////////////////////
 
-void CSphTokenizer::SetTranslationTable ( const BYTE * dTable )
+CSphTokenizer_UTF8::CSphTokenizer_UTF8 ()
+	: m_pBuffer		( NULL )
+	, m_pBufferMax	( NULL )
+	, m_pCur		( NULL )
+	, m_iAccum		( 0 )
+	, m_pAccum		( m_sAccum )
+	, m_bLast		( false )
 {
-	memcpy ( m_dTable, dTable, sizeof(m_dTable) );
+	SetCaseFolding ( "0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F" );
+}
+
+
+void CSphTokenizer_UTF8::SetBuffer ( BYTE * sBuffer, int iLength, bool bLast )
+{
+	// check that old one is over and that new length is sane
+	assert ( m_pCur>=m_pBufferMax );
+	assert ( iLength>=0 );
+
+	// set buffer
+	m_pBuffer = sBuffer;
+	m_pBufferMax = sBuffer + iLength;
+	m_pCur = sBuffer;
+	m_bLast = bLast;
+
+	// fixup embedded zeroes with spaces
+	for ( BYTE * p = m_pBuffer; p < m_pBufferMax; p++ )
+		if ( !*p )
+			*p = ' ';
+}
+
+
+BYTE * CSphTokenizer_UTF8::GetToken ()
+{
+	// flush whatever accumulated from that last buffer
+	if ( m_iAccum )
+	{
+		// if it's not EOF
+		if ( !IsEmpty() )
+		{
+			// accumulate as much extra chars as possible
+			int iCode = GetCodePoint();
+			while ( iCode && m_iAccum<SPH_MAX_WORD_LEN )
+			{
+				AccumCodePoint ( iCode );
+				iCode = GetCodePoint();
+			}
+
+			// through away everything which is over the token size limit
+			while ( GetCodePoint() );
+
+			// if buffer is now over (wow, that's REAL big token),
+			// we need to get another bufer
+			if ( IsEmpty() )
+				return NULL;
+		}
+
+		// clear and return the accumulated token
+		return FlushAccum ();
+	}
+
+	// check for buffer overflow
+	if ( IsEmpty() )
+		return NULL;
+
+	// skip whitespace
+	int iCode;
+	while ( ( iCode = GetCodePoint() )==0 && !IsEmpty() );
+	if ( IsEmpty() )
+		return NULL;
+
+	// accumulate non-whitespace
+	FlushAccum ();
+	AccumCodePoint ( iCode );
+
+	while ( ( iCode=GetCodePoint() )!=0 )
+		AccumCodePoint ( iCode );
+
+	// if buffer's not over,
+	// or if buffer's over but it's the last one,
+	// we have a full token now
+	if ( !IsEmpty() || ( m_bLast && m_iAccum ) )
+		return FlushAccum ();
+	return NULL;
+}
+
+
+int CSphTokenizer_UTF8::GetCodePoint ()
+{
+	if ( IsEmpty() )
+		return 0;
+
+	for ( ;; )
+	{
+		// check for eof
+		BYTE v = *m_pCur;
+		if ( !v )
+			return 0;
+		m_pCur++;
+
+		// check for 7-bit case
+		if ( v<128 )
+			return m_tLC.ToLower ( v );
+
+		// get number of bytes
+		int iBytes = 0;
+		while ( v & 0x80 )
+		{
+			iBytes++;
+			v <<= 1;
+		}
+
+		// check for valid number of bytes
+		if ( iBytes<2 || iBytes>4 )
+			continue;
+
+		int iCode = ( v>>iBytes );
+		iBytes--;
+		do
+		{
+			if ( !(*m_pCur) )
+				break;
+			if ( ((*m_pCur) & 0xC0)!=0x80 )
+				break;
+
+			iCode = ( iCode<<6 ) + ( (*m_pCur) & 0x3F );
+			iBytes--;
+		} while ( iBytes );
+
+		// return code point if there were no errors
+		// ignore and continue scanning otherwise
+		if ( !iBytes )
+			return m_tLC.ToLower ( iCode );
+	}
+}
+
+
+void CSphTokenizer_UTF8::AccumCodePoint ( int iCode )
+{
+	assert ( iCode>0 );
+	assert ( m_iAccum>=0 && m_iAccum<=SPH_MAX_WORD_LEN );
+
+	// do UTF-8 encoding here
+	if ( iCode<0x80 )
+	{
+		*m_pAccum++ = (BYTE)( iCode & 0x7F );
+
+	} else if ( iCode<0x800 )
+	{
+		*m_pAccum++ = (BYTE)( ( (iCode>>6) & 0x1F ) | 0xC0 );
+		*m_pAccum++ = (BYTE)( ( iCode & 0x3F ) | 0x80 );
+
+	} else
+	{
+		*m_pAccum++ = (BYTE)( ( (iCode>>12) & 0x0F ) | 0xC0 );
+		*m_pAccum++ = (BYTE)( ( (iCode>>6) & 0x3F ) | 0x80 );
+		*m_pAccum++ = (BYTE)( ( iCode & 0x3F ) | 0x80 );
+	}
+
+	assert ( m_pAccum>=m_sAccum && m_pAccum<m_sAccum+sizeof(m_sAccum) );
+	m_iAccum++;
+}
+
+
+BYTE * CSphTokenizer_UTF8::FlushAccum ()
+{
+	BYTE * pRes = m_sAccum;
+
+	assert ( m_pAccum-m_sAccum < sizeof(m_sAccum) );
+	*m_pAccum = 0;
+	m_iAccum = 0;
+	m_pAccum = m_sAccum;
+
+	return pRes;
+}
+
+
+bool CSphTokenizer_UTF8::SetCaseFolding ( const char * sConfig )
+{
+	CSphCharsetDefinitionParser tParser;
+	if ( tParser.Parse ( sConfig, m_tLC )!=0 )
+	{
+		fprintf ( stderr, "ERROR: %s", tParser.GetLastError() );
+		return false;
+	}
+	return true;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1064,6 +1508,7 @@ CSphQuery::CSphQuery ()
 	, m_pGroups		( NULL )
 	, m_iGroups		( 0 )
 	, m_eSort		( SPH_SORT_RELEVANCE )
+	, m_pTokenizer	( NULL )
 {
 }
 
@@ -1862,12 +2307,9 @@ static inline int iLog2 ( DWORD iValue )
 }
 
 
-struct DocinfoCmp_fn
+inline bool operator < ( const CSphDocInfo & a, const CSphDocInfo & b )
 {
-	inline int operator () ( const CSphDocInfo & a, const CSphDocInfo & b )
-	{
-		return b.m_iDocID - a.m_iDocID;
-	};
+	return a.m_iDocID < b.m_iDocID;
 };
 
 
@@ -1880,7 +2322,7 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iCount )
 	// do simple bitwise hashing
 	/////////////////////////////
 
-	m_dDocinfos.Sort ( DocinfoCmp_fn() );
+	m_dDocinfos.Sort();
 	DWORD iStartID = m_dDocinfos[0].m_iDocID;
 
 	static const int HBITS = 11;
@@ -2568,11 +3010,13 @@ struct CSphQueryParser : CSphSource_Text
 	char *words[SPH_MAX_QUERY_WORDS];
 	int numWords;
 
-	CSphQueryParser ( CSphDict * pDict, const char * sQuery )
+	CSphQueryParser ( CSphDict * pDict, const char * sQuery, ISphTokenizer * pTokenizer )
 	{
 		for ( int i=0; i<SPH_MAX_QUERY_WORDS; i++ )
 			words[i] = NULL;
-		
+
+		SetTokenizer ( pTokenizer );
+
 		numWords = 0;
 		query = sphDup ( sQuery );
 		m_pDict = pDict;
@@ -2746,8 +3190,8 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 {
 	assert ( dict );
 	assert ( pQuery );
+	assert ( pQuery->m_pTokenizer );
 
-	CSphQueryParser *qp;
 	CSphQueryWord qwords[SPH_MAX_QUERY_WORDS];
 	int i, j, nwords, weights [ SPH_MAX_FIELD_COUNT ], imin, nweights;
 	DWORD wordID, docID, pmin, k;
@@ -2760,15 +3204,18 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 	pResult->m_fQueryTime = -sphLongTimer ();
 
 	// split query into words
-	qp = new CSphQueryParser ( dict, pQuery->m_sQuery );
-	nwords = Min ( qp->m_dHits.GetLength (), SPH_MAX_QUERY_WORDS );
+	CSphQueryParser * pQueryParser = new CSphQueryParser ( dict, pQuery->m_sQuery,
+		pQuery->m_pTokenizer );
+	assert ( pQueryParser );
+
+	nwords = Min ( pQueryParser->m_dHits.GetLength (), SPH_MAX_QUERY_WORDS );
 	for ( i=0; i<nwords; i++ )
 	{
-		qwords[i].m_sWord = sphDup ( qp->words[i] );
-		qwords[i].m_iWordID = qp->m_dHits[i].m_iWordID;
+		qwords[i].m_sWord = sphDup ( pQueryParser->words[i] );
+		qwords[i].m_iWordID = pQueryParser->m_dHits[i].m_iWordID;
 		qwords[i].m_iQueryPos = 1+i;
 	}
-	delete qp;
+	SafeDelete ( pQueryParser );
 
 	if ( !nwords )
 	{
@@ -3384,21 +3831,21 @@ void CSphDict_CRC32::LoadStopwords ( const char * sFiles )
 		}
 
 		// tokenize file
-		CSphTokenizer tTokenizer;
+		ISphTokenizer * pTokenizer = new CSphTokenizer_SBCS (); // FIXME! !COMMIT
 		CSphVector<DWORD> dStop;
 		int iLength;
 		do
 		{
 			iLength = (int)fread ( sBuffer, 1, sizeof(sBuffer), fp );
-			tTokenizer.SetBuffer ( sBuffer, iLength, false );
+			pTokenizer->SetBuffer ( sBuffer, iLength, false );
 
 			BYTE * pToken;
-			while ( ( pToken = tTokenizer.GetToken() )!=NULL )
+			while ( ( pToken = pTokenizer->GetToken() )!=NULL )
 				dStop.Add ( GetWordID ( pToken ) );
 		} while ( iLength );
 
 		// sort stopwords
-		dStop.Sort ( DwordCmp_fn() );
+		dStop.Sort();
 
 		// store IDs
 		m_iStopwords = dStop.GetLength ();
@@ -3421,12 +3868,14 @@ void CSphDict_CRC32::LoadStopwords ( const char * sFiles )
 CSphSource::CSphSource()
 	: m_pDict ( NULL )
 	, m_bStripHTML ( false )
+	, m_pTokenizer ( NULL )
 {
 }
 
 
 void CSphSource::SetDict ( CSphDict * pDict )
 {
+	assert ( pDict );
 	m_pDict = pDict;
 }
 
@@ -3440,6 +3889,13 @@ const CSphSourceStats * CSphSource::GetStats ()
 void CSphSource::SetStripHTML ( bool bStrip )
 {
 	m_bStripHTML = bStrip;
+}
+
+
+void CSphSource::SetTokenizer ( ISphTokenizer * pTokenizer)
+{
+	assert ( pTokenizer );
+	m_pTokenizer = pTokenizer;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -3471,6 +3927,7 @@ char * StripHTML ( char * sData )
 
 int CSphSource_Document::Next()
 {
+	assert ( m_pTokenizer );
 	PROFILE ( src_document );
 
 	BYTE ** dFields = NextDocument();
@@ -3493,12 +3950,12 @@ int CSphSource_Document::Next()
 		int iLen = (int) strlen ( (char*)sField );
 		m_iStats.m_iTotalBytes += iLen;
 
-		m_tTokenizer.SetBuffer ( sField, iLen, true );
+		m_pTokenizer->SetBuffer ( sField, iLen, true );
 
 		BYTE * sWord;
 		int iPos = 1;
 
-		while ( ( sWord = m_tTokenizer.GetToken() )!=NULL )
+		while ( ( sWord = m_pTokenizer->GetToken() )!=NULL )
 		{
 			DWORD iWord = m_pDict->GetWordID ( sWord );
 			if ( iWord )
@@ -4014,6 +4471,7 @@ int CSphSource_XMLPipe::Next ()
 	char sTitle [ 1024 ]; // FIXME?
 
 	assert ( m_pPipe );
+	assert ( m_pTokenizer );
 	m_dHits.Reset ();
 
 	/////////////////////////
@@ -4044,8 +4502,8 @@ int CSphSource_XMLPipe::Next ()
 			int iPos = 1;
 			BYTE * sWord;
 
-			m_tTokenizer.SetBuffer ( (BYTE*)sTitle, iLen, true );
-			while ( ( sWord = m_tTokenizer.GetToken() )!=NULL )
+			m_pTokenizer->SetBuffer ( (BYTE*)sTitle, iLen, true );
+			while ( ( sWord = m_pTokenizer->GetToken() )!=NULL )
 			{
 				DWORD iWID = m_pDict->GetWordID ( sWord );
 				if ( iWID )
@@ -4092,12 +4550,12 @@ int CSphSource_XMLPipe::Next ()
 			bBodyEnd = true;
 
 		// set proper buffer part
-		m_tTokenizer.SetBuffer ( m_pBuffer, p-m_pBuffer, bBodyEnd );
+		m_pTokenizer->SetBuffer ( m_pBuffer, p-m_pBuffer, bBodyEnd );
 		m_pBuffer = p;
 
 		// tokenize
 		BYTE * sWord;
-		while ( ( sWord = m_tTokenizer.GetToken () )!=NULL )
+		while ( ( sWord = m_pTokenizer->GetToken () )!=NULL )
 		{
 			DWORD iWID = m_pDict->GetWordID ( sWord );
 			if ( iWID )

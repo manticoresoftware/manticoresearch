@@ -26,6 +26,8 @@ const char * g_dSphKeysCommon[] =
 	"index_path",
 	"morphology",
 	"stopwords",
+	"charset_type",
+	"charset_table",
 	NULL
 };
 

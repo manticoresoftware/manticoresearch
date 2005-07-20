@@ -235,9 +235,30 @@ int main ( int argc, char ** argv )
 	}
 	#endif
 
-	// create dict and configure stopwords
+	// configure stopwords
 	CSphDict * pDict = new CSphDict_CRC32 ( iMorph );
 	pDict->LoadStopwords ( hCommonConf->Get ( "stopwords" ) );
+
+	// configure charset_type
+	tQuery.m_pTokenizer = NULL;
+	if ( hCommonConf->Get ( "charset_type" ) )
+	{
+		if ( !strcmp ( hCommonConf->Get ( "charset_type" ), "sbcs" ) )
+			tQuery.m_pTokenizer = sphCreateSBCSTokenizer ();
+		else if ( !strcmp ( hCommonConf->Get ( "charset_type" ), "utf-8" ) )
+			tQuery.m_pTokenizer = sphCreateUTF8Tokenizer ();
+		else
+			sphDie ( "FATAL: unknown charset type '%s'.\n", hCommonConf->Get ( "charset_type" ) );
+	} else
+	{
+		tQuery.m_pTokenizer = sphCreateSBCSTokenizer ();
+	}
+
+	// configure charset_table
+	assert ( tQuery.m_pTokenizer );
+	if ( hCommonConf->Get ( "charset_table" ) )
+		if ( !tQuery.m_pTokenizer->SetCaseFolding ( hCommonConf->Get ( "charset_table" ) ) )
+			sphDie ( "FATAL: failed to parse 'charset_table', fix your configuration.\n" );
 
 	//////////
 	// search
@@ -254,8 +275,13 @@ int main ( int argc, char ** argv )
 	CSphIndex * pIndex = sphCreateIndexPhrase ( pIndexPath );
 	CSphQueryResult * pResult = pIndex->query ( pDict, &tQuery );
 
-	delete pIndex;
-	delete pDict;
+	SafeDelete ( pIndex );
+	SafeDelete ( pDict );
+	SafeDelete ( tQuery.m_pTokenizer );
+
+	/////////
+	// print
+	/////////
 
 	if ( !pResult )
 	{

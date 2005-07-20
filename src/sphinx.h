@@ -144,11 +144,23 @@ public:
 		return (*this) [ m_iLength-1 ];
 	}
 
+	/// remove element by index
+	void Remove ( int iIndex )
+	{
+		assert ( iIndex>=0 && iIndex<m_iLength );
+
+		m_iLength--;
+		for ( int i=iIndex; i<m_iLength; i++ )
+			m_pData[i] = m_pData[i+1];
+	}
+
 	/// grow enough to hold that much entries, if needed
 	void Grow ( int iNewLimit )
 	{
 		// check that we really need to be called
-		assert ( iNewLimit>m_iLength );
+		assert ( iNewLimit>=0 );
+		if ( iNewLimit<=m_iLimit )
+			return;
 
 		// calc new limit
 		if ( !m_iLimit )
@@ -168,14 +180,9 @@ public:
 	/// resize
 	void Resize ( int iNewLength )
 	{
-		// only resize up for now
-		assert ( iNewLength>=m_iLength );
-
-		if ( iNewLength!=m_iLength )
-		{
+		if ( iNewLength>=m_iLength )
 			Grow ( iNewLength );
-			m_iLength = iNewLength;
-		}
+		m_iLength = iNewLength;
 	}
 
 	/// reset
@@ -186,52 +193,22 @@ public:
 		SafeDeleteArray ( m_pData );
 	}
 
-	/// sort the array
-	template < typename F > void Sort ( F comp, int iStart=0, int iEnd=-1 )
-	{
-		if ( m_iLength<2 ) return;
-		if ( iStart<0 ) iStart = m_iLength+iStart;
-		if ( iEnd<0 ) iEnd = m_iLength+iEnd;
-		assert ( iStart<=iEnd );
-
-		int st0[32], st1[32], a, b, k, i, j;
-		T x;
-
-		k = 1;
-		st0[0] = iStart;
-		st1[0] = iEnd;
-		while ( k )
-		{
-			k--;
-			i = a = st0[k];
-			j = b = st1[k];
-			x = m_pData [ (a+b)/2 ]; // FIXME! add better median at least
-			while ( a<b )
-			{
-				while ( i<=j )
-				{
-					while ( comp ( m_pData[i], x) > 0 ) i++;
-					while ( comp ( x, m_pData[j]) > 0 ) j--;
-					if (i <= j) { Swap ( m_pData[i], m_pData[j] ); i++; j--; }
-				}
-
-				if ( j-a>=b-i )
-				{
-					if ( a<j ) { st0[k] = a; st1[k] = j; k++; }
-					a = i;
-				} else
-				{
-					if ( i<b ) { st0[k] = i; st1[k] = b; k++; }
-					b = j;
-				}
-			}
-		}
-	}
-
 	/// query current length
 	int GetLength ()
 	{
 		return m_iLength;
+	}
+
+	/// sort
+	void Sort ( int iStart=0, int iEnd=-1 )
+	{
+		_Sort<false> ( iStart, iEnd );
+	}
+
+	/// reverse sort
+	void RSort ( int iStart=0, int iEnd=-1 )
+	{
+		_Sort<true> ( iStart, iEnd );
 	}
 
 	/// access
@@ -254,6 +231,58 @@ private:
 	int		m_iLength;		///< entries actually used
 	int		m_iLimit;		///< entries allocated
 	T *		m_pData;		///< entries
+
+private:
+	/// sort the array
+	template < bool REVERSE > void _Sort ( int iStart, int iEnd )
+	{
+		if ( m_iLength<2 ) return;
+		if ( iStart<0 ) iStart = m_iLength+iStart;
+		if ( iEnd<0 ) iEnd = m_iLength+iEnd;
+		assert ( iStart<=iEnd );
+
+		int st0[32], st1[32], a, b, k, i, j;
+		T x;
+
+		k = 1;
+		st0[0] = iStart;
+		st1[0] = iEnd;
+		while ( k )
+		{
+			k--;
+			i = a = st0[k];
+			j = b = st1[k];
+			x = m_pData [ (a+b)/2 ]; // FIXME! add better median at least
+			while ( a<b )
+			{
+				while ( i<=j )
+				{
+					#pragma warning(disable:4127)
+					if ( !REVERSE )
+					#pragma warning(default:4127)
+					{
+						while ( m_pData[i]<x ) i++;
+						while ( x<m_pData[j] ) j--;
+					} else
+					{
+						while ( x<m_pData[i] ) i++;
+						while ( m_pData[j]<x ) j--;
+					}
+					if (i <= j) { Swap ( m_pData[i], m_pData[j] ); i++; j--; }
+				}
+
+				if ( j-a>=b-i )
+				{
+					if ( a<j ) { st0[k] = a; st1[k] = j; k++; }
+					a = i;
+				} else
+				{
+					if ( i<b ) { st0[k] = i; st1[k] = b; k++; }
+					b = j;
+				}
+			}
+		}
+	}
 };
 
 
@@ -305,6 +334,31 @@ protected:
 };
 
 /////////////////////////////////////////////////////////////////////////////
+// TOKENIZERS
+/////////////////////////////////////////////////////////////////////////////
+
+/// generic tokenizer
+class ISphTokenizer
+{
+public:
+	/// pass next buffer
+	virtual void		SetBuffer ( BYTE * sBuffer, int iLength, bool bLast ) = 0;
+
+	/// get next token
+	virtual BYTE *		GetToken () = 0;
+
+	/// set new translation table
+	/// returns true on success, false on failure
+	virtual bool		SetCaseFolding ( const char * sConfig ) = 0;
+};
+
+/// create SBCS tokenizer
+ISphTokenizer *			sphCreateSBCSTokenizer ();
+
+/// create UTF-8 tokenizer
+ISphTokenizer *			sphCreateUTF8Tokenizer ();
+
+/////////////////////////////////////////////////////////////////////////////
 // DATASOURCES
 /////////////////////////////////////////////////////////////////////////////
 
@@ -344,37 +398,6 @@ struct CSphSourceStats
 };
 
 
-/// generic tokenizer
-class CSphTokenizer
-{
-public:
-	/// create empty tokenizer
-						CSphTokenizer ();
-
-	/// pass next buffer
-	void				SetBuffer ( BYTE * sBuffer, int iLength, bool bLast );
-
-	/// get next token
-	BYTE *				GetToken ();
-
-	/// set new translation table
-	/// returns true on success, false on failure
-	bool				SetTranslationTable ( const char * sConfig );
-
-	/// set new translation table
-	void				SetTranslationTable ( const BYTE * dTable );
-
-protected:
-	BYTE				m_dTable [ 256 ];				///< my translation table
-	BYTE *				m_pBuffer;						///< my buffer
-	BYTE *				m_pBufferMax;					///< max buffer ptr, exclusive (ie. this ptr is invalid, but every ptr below is ok)
-	BYTE *				m_pCur;							///< current position
-	BYTE				m_sAccum [ 4+SPH_MAX_WORD_LEN];	///< boundary token accumulator
-	int					m_iAccum;						///< boundary token size
-	bool				m_bLast;						///< is this buffer the last one
-};
-
-
 /// generic data source
 class CSphSource
 {
@@ -395,6 +418,9 @@ public:
 	/// set HTML stripping mode
 	void								SetStripHTML ( bool bStrip );
 
+	/// set tokenizer
+	void								SetTokenizer ( ISphTokenizer * pTokenizer );
+
 	/// get stats
 	virtual const CSphSourceStats *		GetStats ();
 
@@ -410,7 +436,7 @@ public:
 	virtual int							GetFieldCount () = 0;
 
 protected:
-	CSphTokenizer						m_tTokenizer;	///< my tokenizer
+	ISphTokenizer *						m_pTokenizer;	///< my tokenizer
 	CSphDict *							m_pDict;		///< my dict
 	CSphSourceStats						m_iStats;		///< my stats
 	bool								m_bStripHTML;	///< whether to strip HTML
@@ -648,13 +674,14 @@ enum ESphMatchMode
 class CSphQuery
 {
 public:
-	const char *	m_sQuery;	///< query string. MUST be not NULL
-	int *			m_pWeights;	///< user-supplied per-field weights. may be NULL. default is NULL. WILL NOT BE FREED in dtor.
-	int				m_iWeights;	///< number of user-supplied weights. missing fields will be assigned weight 1. default is 0
-	ESphMatchMode	m_eMode;	///< match mode. default is "match all"
-	DWORD *			m_pGroups;	///< groups to match. default is NULL, which means "match all". WILL BE FREED in dtor.
-	int				m_iGroups;	///< count of groups to match
-	ESphSortOrder	m_eSort;	///< sorting order
+	const char *	m_sQuery;		///< query string. MUST be not NULL
+	int *			m_pWeights;		///< user-supplied per-field weights. may be NULL. default is NULL. OWNED, WILL NOT BE FREED in dtor.
+	int				m_iWeights;		///< number of user-supplied weights. missing fields will be assigned weight 1. default is 0
+	ESphMatchMode	m_eMode;		///< match mode. default is "match all"
+	DWORD *			m_pGroups;		///< groups to match. default is NULL, which means "match all". OWNED, WILL BE FREED in dtor.
+	int				m_iGroups;		///< count of groups to match
+	ESphSortOrder	m_eSort;		///< sorting order
+	ISphTokenizer *	m_pTokenizer;	///< tokenizer to use. NOT OWNED.
 
 public:
 					CSphQuery ();	///< ctor, fills defaults

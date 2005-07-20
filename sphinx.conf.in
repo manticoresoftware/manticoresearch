@@ -24,11 +24,26 @@ morphology			=
 
 
 # stopwords file
-# format is plain cp-1251 (or koi-8, depending on what you use) text
+# format is plain text in whatever encoding you use
 # optional, default is empty
 #
 # stopwords			= /home/sphinx/data/stopwords.txt
 stopwords			=
+
+
+# charset encoding type
+# known types are 'sbcs' (Single Byte CharSet) and 'utf-8'
+# optional, default is sbcs
+charset_type		= sbcs
+
+
+# charset definition and case folding rules "table"
+# optional, default is:
+#		0..9, A..Z->a..z, _, a..z, (to support Latin)
+#		U+A8->U+B8, U+B8, U+C0..U+DF->U+E0..U+FF, U+E0..U+FF (to support Russian)
+charset_table		=
+		0..9, A..Z->a..z, _, a..z, \
+		U+A8->U+B8, U+B8, U+C0..U+DF->U+E0..U+FF, U+E0..U+FF
 
 [indexer]
 
@@ -36,7 +51,7 @@ stopwords			=
 # can be specified in bytes, kilobytes (mem_limit=1000K) or megabytes (mem_limit=10M)
 # will grow if set unacceptably low
 # will warn if set too low, hurting the performance
-# optional, default if 32M
+# optional, default is 32M
 mem_limit			= 32M
 
 

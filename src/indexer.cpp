@@ -175,12 +175,9 @@ struct Word_t
 };
 
 
-struct WordCmp_fn
+inline bool operator < ( const Word_t & a, const Word_t & b)
 {
-	inline int operator () ( const Word_t & a, const Word_t & b)
-	{
-		return a.m_iCount > b.m_iCount;
-	}
+	return a.m_iCount < b.m_iCount;
 };
 
 
@@ -231,7 +228,7 @@ void CSphStopwordBuilderDict::Save ( const char * sOutput, int iTop )
 		dTop.Add ( t );
 	}
 
-	dTop.Sort ( WordCmp_fn() );
+	dTop.RSort ();
 
 	ARRAY_FOREACH ( i, dTop )
 	{
@@ -426,7 +423,7 @@ int main ( int argc, char ** argv )
 
 		if ( !pSrcMySQL->Init ( &tParams ) )
 		{
-			delete pSrcMySQL;
+			SafeDelete ( pSrcMySQL );
 			return 1;
 		}
 
@@ -443,24 +440,51 @@ int main ( int argc, char ** argv )
 		{
 			fprintf ( stderr, "FATAL: CSphSource_XMLPipe: unable to popen '%s'.\n",
 				confIndexer->Get ( "xmlpipe_command" ) );
-			delete pSrcXML;
+			SafeDelete ( pSrcXML );
 			return 1;
 		}
 
 		pSource = pSrcXML;
 	}
 
+	///////////////////////////////////
+	// check and configure data source
+	///////////////////////////////////
+
+	if ( !pSource )
+		sphDie ( "FATAL: unknown data source type '%s'.", sType );
+
+	// strip_html
 	if ( confIndexer->Get ( "strip_html" ) )
 		pSource->SetStripHTML ( 1==atoi ( confIndexer->Get ( "strip_html" ) ) );
 
-	if ( !pSource )
-		sphDie ( "FATAL: unknown source type '%s'.", sType );
+	// charset_type
+	ISphTokenizer * pTokenizer = NULL;
+	if ( confCommon->Get ( "charset_type" ) )
+	{
+		if ( !strcmp ( confCommon->Get ( "charset_type" ), "sbcs" ) )
+			pTokenizer = sphCreateSBCSTokenizer ();
+		else if ( !strcmp ( confCommon->Get ( "charset_type" ), "utf-8" ) )
+			pTokenizer = sphCreateUTF8Tokenizer ();
+		else
+			sphDie ( "FATAL: unknown charset type '%s'.\n", confCommon->Get ( "charset_type" ) );
+	} else
+	{
+		pTokenizer = sphCreateSBCSTokenizer ();
+	}
+
+	// charset_table
+	assert ( pTokenizer );
+	if ( confCommon->Get ( "charset_table" ) )
+		if ( !pTokenizer->SetCaseFolding ( confCommon->Get ( "charset_table" ) ) )
+			sphDie ( "FATAL: failed to parse 'charset_table', fix your configuration.\n" );
+
+	pSource->SetTokenizer ( pTokenizer );
 
 	///////////
 	// do work
 	///////////
 
-	assert ( pSource );
 	float fTime = sphLongTimer ();
 
 	if ( sBuildStops )
@@ -480,7 +504,7 @@ int main ( int argc, char ** argv )
 
 		pDict->Save ( sBuildStops, iTopStops );
 
-		delete pDict;
+		SafeDelete ( pDict );
 
 	} else
 	{
@@ -563,8 +587,8 @@ int main ( int argc, char ** argv )
 		pIndex->SetProgressCallback ( ShowProgress );
 		pIndex->build ( pDict, pSource, iMemLimit );
 
-		delete pIndex;
-		delete pDict;
+		SafeDelete ( pIndex );
+		SafeDelete ( pDict );
 	}
 
 	// trip report
@@ -640,8 +664,7 @@ int main ( int argc, char ** argv )
 	{
 		if ( !bOK )
 			fprintf ( stdout, "WARNING: indices NOT rotated.\n" );
-		if ( confSearchd )
-			delete confSearchd;
+		SafeDelete ( confSearchd );
 	}
 #endif
 
@@ -649,7 +672,8 @@ int main ( int argc, char ** argv )
 	// cleanup/shutdown
 	////////////////////
 
-	delete pSource;
+	SafeDelete ( pSource );
+	SafeDelete ( pTokenizer );
 	return 0;
 }
 

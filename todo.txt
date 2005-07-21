@@ -2,8 +2,6 @@ HIGH PRIORITY
 
 * fix indexer mem usage: 256M configured, 700M+ used
 * fix that if there are two sql_query's in config, there's no warnings
-* add an option to strip HTML to indexer
-* add shadow copy to avoid taking searchd offline for reindexing
 * add multi-index support (avoid running lots of indexers/searchds)
 * add index update/mergeing
 * add in-place index inversion
@@ -34,7 +32,6 @@ ROADMAP
 * add ispell/aspell support
 * add query term correction services (ie. "did you mean")
 
-* add UTF support
 * add HTTP/FTP/NTTP/localFS crawlers
 * add drivers for other DBs (eg. PostgreSQL, InterBase, DB2, Oracle, MS SQL)
 * add searchd clustering

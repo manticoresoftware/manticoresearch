@@ -38,12 +38,15 @@ charset_type		= sbcs
 
 
 # charset definition and case folding rules "table"
-# optional, default is:
-#		0..9, A..Z->a..z, _, a..z, (to support Latin)
-#		U+A8->U+B8, U+B8, U+C0..U+DF->U+E0..U+FF, U+E0..U+FF (to support Russian)
-charset_table		=
-		0..9, A..Z->a..z, _, a..z, \
-		U+A8->U+B8, U+B8, U+C0..U+DF->U+E0..U+FF, U+E0..U+FF
+# optional, default value depends on charset_type
+# for now, defaults are configured to support English and Russian
+# this behavior MAY change in future versions
+#
+# 'sbcs' default value is
+# charset_table		= 0..9, A..Z->a..z, _, a..z, U+A8->U+B8, U+B8, U+C0..U+DF->U+E0..U+FF, U+E0..U+FF
+#
+# 'utf-8' default value is
+# charset_table		= 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F
 
 [indexer]
 

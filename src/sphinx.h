@@ -257,9 +257,13 @@ private:
 			{
 				while ( i<=j )
 				{
+					#if USE_WINDOWS
 					#pragma warning(disable:4127)
+					#endif
 					if ( !REVERSE )
+					#if USE_WINDOWS
 					#pragma warning(default:4127)
+					#endif
 					{
 						while ( m_pData[i]<x ) i++;
 						while ( x<m_pData[j] ) j--;

@@ -824,7 +824,9 @@ protected:
 class CSphTokenizer_SBCS : public ISphTokenizer
 {
 public:
-	CSphTokenizer_SBCS ();
+						CSphTokenizer_SBCS ();
+	virtual				~CSphTokenizer_SBCS ();
+
 	virtual void		SetBuffer ( BYTE * sBuffer, int iLength, bool bLast );
 	virtual BYTE *		GetToken ();
 	virtual bool		SetCaseFolding ( const char * sConfig );
@@ -844,7 +846,9 @@ protected:
 class CSphTokenizer_UTF8 : public ISphTokenizer
 {
 public:
-	CSphTokenizer_UTF8 ();
+						CSphTokenizer_UTF8 ();
+	virtual				~CSphTokenizer_UTF8 ();
+
 	virtual void		SetBuffer ( BYTE * sBuffer, int iLength, bool bLast );
 	virtual BYTE *		GetToken ();
 	virtual bool		SetCaseFolding ( const char * sConfig );
@@ -912,7 +916,7 @@ void CSphLowercaser::SetRemap ( const CSphRemapRange * pRemaps, int iRemaps )
 	}
 
 	int iUsed = 0;
-	for ( int i=0; i<sizeof(dUsed)/sizeof(int); i++ )
+	for ( int i=0; i<CHUNK_COUNT; i++ )
 		if ( dUsed[i] ) iUsed++;
 
 	#undef LOC_CHECK_RANGE
@@ -993,7 +997,7 @@ int CSphCharsetDefinitionParser::Error ( const char * sMessage )
 	strncpy ( sErrorBuffer, m_pCurrent, sizeof(sErrorBuffer) );
 	sErrorBuffer [ sizeof(sErrorBuffer)-1 ] = '\0';
 
-	_snprintf ( m_sError, sizeof(m_sError), "CharsetDefinitionParser(): %s near '%s'.",
+	snprintf ( m_sError, sizeof(m_sError), "CharsetDefinitionParser(): %s near '%s'.",
 		sMessage, sErrorBuffer );
 	m_sError [ sizeof(m_sError)-1 ] = '\0';
 
@@ -1209,6 +1213,10 @@ CSphTokenizer_SBCS::CSphTokenizer_SBCS ()
 }
 
 
+CSphTokenizer_SBCS::~CSphTokenizer_SBCS ()
+{
+}
+
 void CSphTokenizer_SBCS::SetBuffer ( BYTE * sBuffer, int iLength, bool bLast )
 {
 	// check that old one is over and that new length is sane
@@ -1314,10 +1322,15 @@ CSphTokenizer_UTF8::CSphTokenizer_UTF8 ()
 	, m_pBufferMax	( NULL )
 	, m_pCur		( NULL )
 	, m_iAccum		( 0 )
-	, m_pAccum		( m_sAccum )
 	, m_bLast		( false )
 {
+	m_pAccum = m_sAccum;
 	SetCaseFolding ( "0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F" );
+}
+
+
+CSphTokenizer_UTF8::~CSphTokenizer_UTF8 ()
+{
 }
 
 
@@ -1476,7 +1489,7 @@ BYTE * CSphTokenizer_UTF8::FlushAccum ()
 {
 	BYTE * pRes = m_sAccum;
 
-	assert ( m_pAccum-m_sAccum < sizeof(m_sAccum) );
+	assert ( m_pAccum-m_sAccum < (int)sizeof(m_sAccum) );
 	*m_pAccum = 0;
 	m_iAccum = 0;
 	m_pAccum = m_sAccum;
@@ -3866,9 +3879,9 @@ void CSphDict_CRC32::LoadStopwords ( const char * sFiles )
 /////////////////////////////////////////////////////////////////////////////
 
 CSphSource::CSphSource()
-	: m_pDict ( NULL )
+	: m_pTokenizer ( NULL )
+	, m_pDict ( NULL )
 	, m_bStripHTML ( false )
-	, m_pTokenizer ( NULL )
 {
 }
 

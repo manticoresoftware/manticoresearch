@@ -1726,7 +1726,7 @@ CSphReader_VLN::CSphReader_VLN ()
 	, m_iBufOdd ( 0 )
 	, m_iBufUsed ( 0 )
 {
-	m_iBufSize = 4096; // FIXME
+	m_iBufSize = 262144; // FIXME
 	m_pBuf = new BYTE [ m_iBufSize ];
 }
 

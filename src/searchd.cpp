@@ -313,11 +313,11 @@ void HandleClient ( int rsock, CSphIndex * pIndex, CSphDict * pDict, ISphTokeniz
 		ctime_r ( &tNow, sTimeBuf );
 		sTimeBuf [ strlen(sTimeBuf)-1 ] = '\0';
 
-		static const char * sModes [ SPH_MATCH_TOTAL ] = { "any", "all", "phr" };
-		snprintf ( sBuf, sizeof(sBuf), "[%s] %.2f sec: [%d %d %s %d] %s\n",
+		static const char * sModes [ SPH_MATCH_TOTAL ] = { "all", "any", "phr" };
+		snprintf ( sBuf, sizeof(sBuf), "[%s] %.2f sec: [%d %d %s/%d/%d %d] %s\n",
 			sTimeBuf, pRes->m_fQueryTime,
-			iOffset, iLimit, sModes [ tQuery.m_eMode ], pRes->m_iTotalMatches,
-			sQuery );
+			iOffset, iLimit, sModes [ tQuery.m_eMode ], tQuery.m_eSort, tQuery.m_iGroups,
+			pRes->m_iTotalMatches, sQuery );
 
 		flock ( g_iQueryLogFile, LOCK_EX );
 		lseek ( g_iQueryLogFile, 0, SEEK_END );

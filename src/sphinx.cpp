@@ -3109,9 +3109,16 @@ public:
 	{
 		int iA = GetSegment ( a.m_iTimestamp );
 		int iB = GetSegment ( b.m_iTimestamp );
-		return ( iA==iB )
-			? ( a.m_iWeight < b.m_iWeight )
-			: ( iA > iB );
+		if ( iA==iB )
+		{
+			if ( a.m_iWeight==b.m_iWeight )
+				return ( a.m_iTimestamp < b.m_iTimestamp );
+			else
+				return ( a.m_iWeight < b.m_iWeight );
+		} else
+		{
+			return ( iA > iB );
+		}
 	};
 
 protected:
@@ -4298,7 +4305,7 @@ bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 			if ( bError )
 				return 0;
 
-		    // run query
+			// run query
 			if ( mysql_query ( &m_tSqlDriver, pParams->m_sQueryRange ) )
 				LOC_MYSQL_ERROR ( "mysql_query_range" );
 

@@ -251,7 +251,7 @@ int iwrite ( int iFD, const char * sFmt, ... )
 
 /////////////////////////////////////////////////////////////////////////////
 
-void HandleClient ( int rsock, CSphIndex * pIndex, CSphDict * pDict )
+void HandleClient ( int rsock, CSphIndex * pIndex, CSphDict * pDict, ISphTokenizer * pTokenizer )
 {
 	CSphQuery tQuery;
 	CSphQueryResult * pRes;
@@ -299,6 +299,7 @@ void HandleClient ( int rsock, CSphIndex * pIndex, CSphDict * pDict )
 	tQuery.m_pWeights = dUserWeights;
 	tQuery.m_iWeights = iUserWeights;
 	tQuery.m_eMode = (ESphMatchMode) Min ( Max ( iMode, 0 ), SPH_MATCH_TOTAL );
+	tQuery.m_pTokenizer = pTokenizer;
 
 	pRes = pIndex->query ( pDict, &tQuery );
 
@@ -463,6 +464,7 @@ int main ( int argc, char **argv )
 	if ( confSearchd->Get ( "max_children" ) )
 		g_iMaxChildren = Max ( 0, atoi ( confSearchd->Get ( "max_children" ) ) );
 
+	// configure morphology
 	DWORD iMorph = SPH_MORPH_NONE;
 	const char * pMorph = confCommon->Get ( "morphology" );
 	if ( pMorph )
@@ -476,6 +478,27 @@ int main ( int argc, char **argv )
 		else
 			sphWarning ( "unknown morphology type '%s' ignored", pMorph );
 	}
+
+	// configure charset_type
+	ISphTokenizer * pTokenizer = NULL;
+	if ( confCommon->Get ( "charset_type" ) )
+	{
+		if ( !strcmp ( confCommon->Get ( "charset_type" ), "sbcs" ) )
+			pTokenizer = sphCreateSBCSTokenizer ();
+		else if ( !strcmp ( confCommon->Get ( "charset_type" ), "utf-8" ) )
+			pTokenizer = sphCreateUTF8Tokenizer ();
+		else
+			sphFatal ( "unknown charset type '%s'", confCommon->Get ( "charset_type" ) );
+	} else
+	{
+		pTokenizer = sphCreateSBCSTokenizer ();
+	}
+
+	// configure charset_table
+	assert ( pTokenizer );
+	if ( confCommon->Get ( "charset_table" ) )
+		if ( !pTokenizer->SetCaseFolding ( confCommon->Get ( "charset_table" ) ) )
+			sphFatal ( "failed to parse 'charset_table', fix your configuration" );
 
 	///////////
 	// startup
@@ -683,7 +706,7 @@ int main ( int argc, char **argv )
 
 			// child process, handle client
 			case 0:
-				HandleClient ( rsock, pIndex, pDict );
+				HandleClient ( rsock, pIndex, pDict, pTokenizer );
 				close ( rsock );
 				exit ( 0 );
 				break;

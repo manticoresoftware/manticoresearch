@@ -573,23 +573,26 @@ int main ( int argc, char **argv )
 		g_iQueryLogFile = g_iLogFile;
 	}
 
-	// create pid
-	g_sPidFile = confSearchd->Get ( "pid_file" );
-	FILE * fp = fopen ( g_sPidFile, "w" );
-	if ( !fp )
-		sphFatal ( "unable to write pid file '%s'", g_sPidFile );
-	fprintf ( fp, "%d", getpid() );	
-	fclose ( fp );
+	if ( !bOptConsole )
+	{
+		// create pid
+		g_sPidFile = confSearchd->Get ( "pid_file" );
+		FILE * fp = fopen ( g_sPidFile, "w" );
+		if ( !fp )
+			sphFatal ( "unable to write pid file '%s'", g_sPidFile );
+		fprintf ( fp, "%d", getpid() );	
+		fclose ( fp );
 
-	// create lock file
-	snprintf ( g_sLockFile, sizeof(g_sLockFile), "%s.spl", confCommon->Get ( "index_path" ) );
-	g_sLockFile [ sizeof(g_sLockFile)-1 ] = '\0';
+		// create lock file
+		snprintf ( g_sLockFile, sizeof(g_sLockFile), "%s.spl", confCommon->Get ( "index_path" ) );
+		g_sLockFile [ sizeof(g_sLockFile)-1 ] = '\0';
 
-	fp = fopen ( g_sLockFile, "w" );
-	if ( !fp )
-		sphFatal ( "unable to create lock file '%s'", g_sLockFile );
-	fprintf ( fp, "%d", getpid() );
-	fclose ( fp );
+		fp = fopen ( g_sLockFile, "w" );
+		if ( !fp )
+			sphFatal ( "unable to create lock file '%s'", g_sLockFile );
+		fprintf ( fp, "%d", getpid() );
+		fclose ( fp );
+	}
 
 	// create and bind on socket
 	g_iSocket = createServerSocket_IP ( iPort );

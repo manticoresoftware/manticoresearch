@@ -3128,8 +3128,8 @@ protected:
 		if ( iStamp>=m_iNow-3600 ) return 0; // last hour
 		if ( iStamp>=m_iNow-24*3600 ) return 1; // last day
 		if ( iStamp>=m_iNow-7*24*3600 ) return 2; // last week
-		if ( iStamp>=m_iNow-30*7*24*3600 ) return 3; // last 30 days
-		if ( iStamp>=m_iNow-90*7*24*3600 ) return 4; // last 30 days
+		if ( iStamp>=m_iNow-30*24*3600 ) return 3; // last month
+		if ( iStamp>=m_iNow-90*24*3600 ) return 4; // last 3 months
 		return 5; // everything else
 	}
 };

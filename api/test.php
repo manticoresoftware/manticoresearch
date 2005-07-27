@@ -15,10 +15,6 @@
 
 require ( "sphinxapi.php" );
 
-$cl = new SphinxClient ();
-$cl->SetServer ( "localhost", 3312 );
-$cl->SetWeights ( array ( 100, 1 ) );
-
 //////////////////////
 // parse command line
 //////////////////////
@@ -30,7 +26,7 @@ unset ( $_SERVER["argv"][0] );
 
 // build query
 if ( !is_array($_SERVER["argv"]) || empty($_SERVER["argv"]) )
-	die ( "usage: php -f test.php [--any] <word [word [word [...]]]>\n" );
+	die ( "usage: php -f test.php [--any] <word [word [word [...]]]> [--group <group>] [-p <port>]\n" );
 
 $args = array();
 foreach ( $_SERVER["argv"] as $arg )
@@ -39,6 +35,7 @@ foreach ( $_SERVER["argv"] as $arg )
 $q = "";
 $any = false;
 $groups = array();
+$port = 3312;
 for ( $i=0; $i<count($args); $i++ )
 {
 	if ( $args[$i]=="--any" )
@@ -47,6 +44,9 @@ for ( $i=0; $i<count($args); $i++ )
 	} else if ( $args[$i]=="--group" )
 	{
 		$groups[] = (int)$args[++$i];
+	} else if ( $args[$i]=="-p" )
+	{
+		$port = (int)$args[++$i];
 	} else
 	{
 		$q .= $args[$i] . " ";
@@ -57,6 +57,9 @@ for ( $i=0; $i<count($args); $i++ )
 // do query
 ////////////
 
+$cl = new SphinxClient ();
+$cl->SetServer ( "localhost", $port );
+$cl->SetWeights ( array ( 100, 1 ) );
 $cl->SetMatchMode ( $any ? SPH_MATCH_ANY : SPH_MATCH_ALL );
 $cl->SetGroups ( $groups );
 $res = $cl->Query ( $q );
@@ -84,7 +87,8 @@ if ( $res===false )
 		print "Matches:\n";
 		foreach ( $res["matches"] as $doc => $docinfo )
 		{
-			print "$n. doc_id=$doc, group=$docinfo[group], timestamp=$docinfo[stamp], weight=$docinfo[weight]\n";
+			$d = date ( "Y-m-d H:i:s", $docinfo["stamp"] );
+			print "$n. doc_id=$doc, group=$docinfo[group], date=$d, weight=$docinfo[weight]\n";
 			$n++;
 		}
 	}

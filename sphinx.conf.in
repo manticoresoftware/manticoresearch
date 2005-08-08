@@ -99,6 +99,7 @@ sql_query_pre		=
 # document_id MUST be the very first field
 # document_id MUST be positive (non-zero, non-negative)
 # document_id MUST fit into 32 bits
+# document_id MUST be unique
 #
 # mandatory
 sql_query			= \

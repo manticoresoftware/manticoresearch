@@ -518,6 +518,14 @@ int main ( int argc, char **argv )
 	// daemonize
 	if ( !bOptConsole )
 	{
+		// check lock file
+		snprintf ( g_sLockFile, sizeof(g_sLockFile), "%s.spl", confCommon->Get ( "index_path" ) );
+		g_sLockFile [ sizeof(g_sLockFile)-1 ] = '\0';
+
+		struct stat tStat;
+		if ( !stat ( g_sLockFile, &tStat ) )
+			sphFatal ( "index lock file '%s' exists, exiting", g_sLockFile );
+
 		// create log
 		const char * sLog = "searchd.log";
 		if ( confSearchd->Get ( "log" ) )
@@ -584,9 +592,6 @@ int main ( int argc, char **argv )
 		fclose ( fp );
 
 		// create lock file
-		snprintf ( g_sLockFile, sizeof(g_sLockFile), "%s.spl", confCommon->Get ( "index_path" ) );
-		g_sLockFile [ sizeof(g_sLockFile)-1 ] = '\0';
-
 		fp = fopen ( g_sLockFile, "w" );
 		if ( !fp )
 			sphFatal ( "unable to create lock file '%s'", g_sLockFile );

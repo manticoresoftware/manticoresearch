@@ -4511,7 +4511,9 @@ int CSphSource_XMLPipe::Next ()
 
 		if ( !ScanInt ( "group", &m_tDocInfo.m_iGroupID ) )
 			return 0;
-		m_tDocInfo.m_iTimestamp = m_tDocInfo.m_iDocID; // FIXME? !COMMIT
+
+		if ( !ScanInt ( "timestamp", &m_tDocInfo.m_iTimestamp ) )
+			return 0;
 
 		if ( !ScanStr ( "title", sTitle, sizeof ( sTitle ) ) )
 			return 0;

@@ -717,6 +717,13 @@ int main ( int argc, char **argv )
 			continue;
 		}
 
+		if ( bOptConsole )
+		{
+			HandleClient ( rsock, pIndex, pDict );
+			close ( rsock );
+			continue;
+		}
+
 		switch ( fork() )
 		{
 			// fork() failed

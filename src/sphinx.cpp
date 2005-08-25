@@ -333,6 +333,7 @@ struct CSphFatHit
 };
 STATIC_SIZE_ASSERT ( CSphFatHit, 20 );
 
+/////////////////////////////////////////////////////////////////////////////
 
 /// possible bin states
 enum ESphBinState
@@ -344,6 +345,7 @@ enum ESphBinState
 	BIN_WORD		= 2		///< bin is in "expects word delta" state
 };
 
+/////////////////////////////////////////////////////////////////////////////
 
 struct CSphBin
 {
@@ -394,6 +396,7 @@ struct CSphBin
 	}
 };
 
+/////////////////////////////////////////////////////////////////////////////
 
 /// VLN index header
 struct CSphIndexHeader_VLN
@@ -402,6 +405,7 @@ struct CSphIndexHeader_VLN
 	CSphDocInfo	m_tMin;			///< mind id/group/timestamp
 };
 
+/////////////////////////////////////////////////////////////////////////////
 
 class CSphWriter_VLN
 {
@@ -437,6 +441,7 @@ private:
 	void		Flush ();
 };
 
+/////////////////////////////////////////////////////////////////////////////
 
 class CSphReader_VLN
 {
@@ -473,6 +478,7 @@ private:
 	void		UpdateCache ();
 };
 
+/////////////////////////////////////////////////////////////////////////////
 
 /// query word from the searcher's point of view
 class CSphQueryWord
@@ -563,6 +569,7 @@ public:
 	}
 };
 
+/////////////////////////////////////////////////////////////////////////////
 
 /// this is my actual VLN-compressed phrase index implementation
 struct CSphIndex_VLN : CSphIndex
@@ -607,6 +614,66 @@ private:
 	int							cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iCount );
 	void						cidxHit ( CSphFatHit * pHit );
 	void						cidxDone ();
+};
+
+/////////////////////////////////////////////////////////////////////////////
+
+class CSphHTMLStripper
+{
+public:
+						CSphHTMLStripper ();
+						~CSphHTMLStripper ();
+	void				AddAttr ( const char * sTag, const char * sAttr );
+	const char *		SetAttrs ( const char * sConfig );
+	BYTE *				Strip ( BYTE * sData );
+
+protected:
+	struct AttrLink_t
+	{
+		char *			m_sAttr;
+		AttrLink_t *	m_pNext;
+
+		AttrLink_t ( const char * sAttr )
+		{
+			m_sAttr = new char [ 1+strlen(sAttr) ];
+			m_pNext = NULL;
+			strcpy ( m_sAttr, sAttr );
+		}
+
+		~AttrLink_t ()
+		{
+			SafeDeleteArray ( m_sAttr );
+		}
+	};
+
+	struct TagLink_t
+	{
+		char *			m_sTag;
+		TagLink_t *		m_pNext;
+		AttrLink_t *	m_pAttrs;
+
+		TagLink_t ( const char * sTag )
+		{
+			m_sTag = new char [ 1+strlen(sTag) ];
+			m_pNext = NULL;
+			m_pAttrs = NULL;
+			strcpy ( m_sTag, sTag );
+		}
+
+		~TagLink_t ()
+		{
+			SafeDeleteArray ( m_sTag );
+
+			while ( m_pAttrs )
+			{
+				AttrLink_t * pKill = m_pAttrs;
+				m_pAttrs = m_pAttrs->m_pNext;
+				SafeDelete ( pKill );
+			}
+		}
+	};
+
+	TagLink_t *			m_pTags;
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -3882,6 +3949,278 @@ void CSphDict_CRC32::LoadStopwords ( const char * sFiles )
 }
 
 /////////////////////////////////////////////////////////////////////////////
+// HTML STRIPPER
+/////////////////////////////////////////////////////////////////////////////
+
+CSphHTMLStripper::CSphHTMLStripper ()
+	: m_pTags ( NULL )
+{
+}
+
+
+CSphHTMLStripper::~CSphHTMLStripper ()
+{
+	// kill tags list
+	while ( m_pTags )
+	{
+		TagLink_t * pKill = m_pTags;
+		m_pTags = m_pTags->m_pNext;
+		SafeDelete ( pKill );
+	}
+}
+
+
+void CSphHTMLStripper::AddAttr ( const char * sTag, const char * sAttr )
+{
+	// find matching tag in list
+	TagLink_t * pTag = m_pTags;
+	TagLink_t * pPrev = NULL;
+	while ( pTag && strcmpi ( pTag->m_sTag, sTag ) )
+	{
+		pPrev = pTag;
+		pTag = pTag->m_pNext;
+	}
+
+	// chain to the list if not found
+	if ( !pTag )
+	{
+		pTag = new TagLink_t ( sTag );
+		if ( pPrev )
+			pPrev->m_pNext = pTag;
+		else
+			m_pTags = pTag;
+	}
+
+	// find matching attr in list
+	AttrLink_t * pAttr = pTag->m_pAttrs;
+	AttrLink_t * pPrevA = NULL;
+	while ( pAttr && strcmpi ( pAttr->m_sAttr, sAttr ) )
+	{
+		pPrevA = pAttr;
+		pAttr = pAttr->m_pNext;
+	}
+
+	// chain to the list if not found
+	if ( !pAttr )
+	{
+		pAttr = new AttrLink_t ( sAttr );
+		if ( pPrevA )
+			pPrevA->m_pNext = pAttr;
+		else
+			pTag->m_pAttrs = pAttr;
+	}
+}
+
+
+const char * CSphHTMLStripper::SetAttrs ( const char * sConfig )
+{
+	char sTag[256], sAttr[256];
+
+	const char * p = sConfig, * s;
+	while ( *p )
+	{
+		// skip spaces
+		while ( *p && isspace(*p) ) p++;
+		if ( !*p ) break;
+
+		// check tag name
+		s = p; while ( isalpha(*p) ) p++;
+		if ( s==p ) return s; // error: non-alphas in tag name
+
+		// get tag name
+		if ( p-s>=sizeof(sTag) ) return s; // error: tag name too long
+		strncpy ( sTag, s, p-s );
+		sTag[p-s] = '\0';
+
+		// skip spaces
+		while ( *p && isspace(*p) ) p++;
+		if ( !*p ) break;
+
+		// check '='
+		if ( *p++!='=' ) return p-1; // error: '=' expected
+
+		// scan attributes
+		while ( *p )
+		{
+			// skip spaces
+			while ( *p && isspace(*p) ) p++;
+			if ( !*p ) break;
+
+			// check attr name
+			s = p; while ( isalpha(*p) ) p++;
+			if ( s==p ) return s; // error: non-alphas in attr name
+
+			// get attr name
+			if ( p-s>=sizeof(sAttr) ) return s; // error: attr name too long
+			strncpy ( sAttr, s, p-s );
+			sAttr[p-s] = '\0';
+
+			// add it
+			strlwr ( sTag );
+			strlwr ( sAttr );
+			AddAttr ( sTag, sAttr );
+
+			// skip spaces
+			while ( *p && isspace(*p) ) p++;
+			if ( !*p ) break;
+
+			// check if there's next attr or tag
+			if ( *p==',' ) { p++; continue; } // next attr
+			if ( *p==';' ) { p++; break; } // next tag
+			return p; // error: ',' or ';' or line end expected
+		}
+	}
+	return NULL;
+}
+
+
+BYTE * RemoveQuoted ( BYTE * p )
+{
+	BYTE cEnd = *p;
+	*p++ = ' ';
+	while ( *p && *p!=cEnd )
+		*p++ = ' ';
+	if ( *p==cEnd )
+		*p++ = ' ';
+	return p;
+}
+
+
+BYTE * CSphHTMLStripper::Strip ( BYTE * sData )
+{
+	BYTE * p = sData;
+	for ( ;; )
+	{
+		// scan for tag beginning
+		while ( *p && *p!='<' ) p++;
+		if ( !*p ) break;
+
+		if ( !isalpha(p[1]) && p[1]!='/' && p[1]!='!' )
+		{
+			p++;
+			continue;
+		}
+		*p++ = ' '; // remove '<'
+
+		// check if it's a comment
+		if ( p[0]=='!' && p[1]=='-' && p[2]=='-' )
+		{
+			// scan until comment end
+			p[0] = p[1] = p[2] = ' '; p += 3; // clear closing '!--'
+			while ( *p )
+			{
+				if ( p[0]=='-' && p[1]=='-' && p[2]=='>' )
+					break;
+				*p++ = ' ';
+			}
+			if ( !*p ) break;
+			p[0] = p[1] = p[2] = ' '; p += 3; // clear closing '-->'
+			continue;
+		}
+
+		// check if it's known tag or what
+		TagLink_t * pTag;
+		int iLen;
+		for ( pTag=m_pTags; pTag; pTag=pTag->m_pNext )
+		{
+			iLen = (int)strlen(pTag->m_sTag); // !COMMIT: OPTIMIZE
+			if ( _strnicmp ( pTag->m_sTag, (char*)p, iLen ) )
+				continue;
+			if ( !isalpha ( p[iLen] ) )
+				break;
+		}
+
+		// processing unknown tags is somewhat easy
+		if ( !pTag )
+		{
+			// we just scan until EOLN or tag end
+			while ( *p && *p!='>' )
+			{
+				if ( *p=='\'' || *p=='"' )
+					p = RemoveQuoted ( p );
+				else
+					*p++ = ' ';
+			}
+			if ( *p ) *p++ = ' ';
+			continue;;
+		}
+
+		// remove tag name
+		while ( iLen-- ) *p++ = ' ';
+		assert ( !isalpha(*p) );
+
+		while ( *p && *p!='>' )
+		{
+			// skip non-alphas
+			while ( *p && *p!='>' )
+			{
+				if ( *p=='\'' || *p=='"' )
+				{
+					p = RemoveQuoted ( p );
+					while ( isspace(*p) ) p++;
+				}
+				if ( isalpha(*p) )
+					break;
+				*p++ = ' ';
+			}
+			if ( !isalpha(*p) )
+			{
+				if ( *p ) *p++ = ' ';
+				break;
+			}
+
+			// check attribute name
+			AttrLink_t * pAttr;
+			int iLen2;
+			for ( pAttr=pTag->m_pAttrs; pAttr; pAttr=pAttr->m_pNext )
+			{
+				iLen2 = (int)strlen(pAttr->m_sAttr); // !COMMIT: OPTIMIZE
+				if ( _strnicmp ( pAttr->m_sAttr, (char*)p, iLen2 ) )
+					continue;
+				if ( p[iLen2]=='=' || isspace(p[iLen2]) )
+					break;
+			}
+
+			// if attribute is unknown or malformed, we just skip all alphas and rescan
+			if ( !pAttr )
+			{
+				while ( isalpha(*p) ) *p++ = ' ';
+				continue;
+			}
+
+			// attribute is known
+			while ( iLen2-- ) *p++ = ' ';
+
+			// skip spaces, check for '=', and skip spaces again
+			while ( isspace(*p) ) p++; if ( !*p ) break;
+			if ( *p!='=' )
+			{
+				*p++ = ' ';
+				break;
+			}
+			*p++ = ' ';
+			while ( isspace(*p) ) p++;
+
+			// handle quoted value
+			if ( *p=='\'' || *p=='"' )
+			{
+				char cEnd = *p;
+				*p++ = ' ';
+				while ( *p && *p!=cEnd ) p++;
+				if ( *p==cEnd ) *p++ = ' ';
+				continue;
+			}
+
+			// handle unquoted value
+			while ( *p && !isspace(*p) && *p!='>' ) p++;
+		}
+		if ( *p=='>' ) *p++ = ' ';
+	}
+
+	return sData;
+}
+
+/////////////////////////////////////////////////////////////////////////////
 // GENERIC SOURCE
 /////////////////////////////////////////////////////////////////////////////
 
@@ -3890,6 +4229,13 @@ CSphSource::CSphSource()
 	, m_pDict ( NULL )
 	, m_bStripHTML ( false )
 {
+	m_pStripper = new CSphHTMLStripper ();
+}
+
+
+CSphSource::~CSphSource()
+{
+	delete m_pStripper;
 }
 
 
@@ -3906,9 +4252,13 @@ const CSphSourceStats * CSphSource::GetStats ()
 }
 
 
-void CSphSource::SetStripHTML ( bool bStrip )
+const char * CSphSource::SetStripHTML ( const char * sExtractAttrs )
 {
-	m_bStripHTML = bStrip;
+	m_bStripHTML = ( sExtractAttrs!=NULL );
+	if ( m_bStripHTML )
+		return m_pStripper->SetAttrs ( sExtractAttrs );
+	else
+		return NULL;
 }
 
 
@@ -3921,29 +4271,6 @@ void CSphSource::SetTokenizer ( ISphTokenizer * pTokenizer)
 /////////////////////////////////////////////////////////////////////////////
 // DOCUMENT SOURCE
 /////////////////////////////////////////////////////////////////////////////
-
-// remove html tags
-char * StripHTML ( char * sData )
-{
-	char * p = sData;
-	for ( ;; )
-	{
-		// tag beginning
-		while ( *p && *p!='<' )
-			p++;
-		if ( !*p )
-			break;
-
-		// spaces until tag end
-		while ( *p && *p!='>' )
-			*p++ = ' ';
-		if ( *p=='>' )
-			*p++ = ' ';
-	}
-
-	return sData;
-}
-
 
 int CSphSource_Document::Next()
 {
@@ -3965,7 +4292,7 @@ int CSphSource_Document::Next()
 			continue;
 
 		if ( m_bStripHTML )
-			StripHTML ( (char*)sField );
+			m_pStripper->Strip ( sField );
 
 		int iLen = (int) strlen ( (char*)sField );
 		m_iStats.m_iTotalBytes += iLen;
@@ -4512,8 +4839,8 @@ int CSphSource_XMLPipe::Next ()
 		if ( !ScanInt ( "group", &m_tDocInfo.m_iGroupID ) )
 			return 0;
 
-		if ( !ScanInt ( "timestamp", &m_tDocInfo.m_iTimestamp ) )
-			return 0;
+		if ( !ScanInt ( "timestamp", &m_tDocInfo.m_iTimestamp, false ) )
+			m_tDocInfo.m_iTimestamp = 1;
 
 		if ( !ScanStr ( "title", sTitle, sizeof ( sTitle ) ) )
 			return 0;
@@ -4660,7 +4987,7 @@ bool CSphSource_XMLPipe::SkipWhitespace ()
 }
 
 
-bool CSphSource_XMLPipe::CheckTag ( bool bOpen )
+bool CSphSource_XMLPipe::CheckTag ( bool bOpen, bool bStrict )
 {
 	int iAdd = bOpen ? 2 : 3;
 
@@ -4670,8 +4997,9 @@ bool CSphSource_XMLPipe::CheckTag ( bool bOpen )
 
 	if ( m_pBufferEnd-m_pBuffer < m_iTagLength+iAdd )
 	{
-		fprintf ( stderr, "WARNING: CSphSource_XMLPipe(): expected '<%s%s>', got EOF.\n",
-			bOpen ? "" : "/", m_pTag );
+		if ( bStrict )
+			fprintf ( stderr, "WARNING: CSphSource_XMLPipe(): expected '<%s%s>', got EOF.\n",
+				bOpen ? "" : "/", m_pTag );
 		return false;
 	}
 
@@ -4692,8 +5020,9 @@ bool CSphSource_XMLPipe::CheckTag ( bool bOpen )
 		strncpy ( sGot, (char*)m_pBuffer, iCopy );
 		sGot [ iCopy ] = '\0';
 
-		fprintf ( stderr, "WARNING: CSphSource_XMLPipe(): expected '<%s%s>', got '%s'.\n",
-			bOpen ? "" : "/", m_pTag, sGot );
+		if ( bStrict )
+			fprintf ( stderr, "WARNING: CSphSource_XMLPipe(): expected '<%s%s>', got '%s'.\n",
+				bOpen ? "" : "/", m_pTag, sGot );
 		return false;
 	}
 
@@ -4704,7 +5033,7 @@ bool CSphSource_XMLPipe::CheckTag ( bool bOpen )
 }
 
 
-bool CSphSource_XMLPipe::SkipTag ( bool bOpen, bool bWarnOnEOF )
+bool CSphSource_XMLPipe::SkipTag ( bool bOpen, bool bWarnOnEOF, bool bStrict )
 {
 	if ( !SkipWhitespace() )
 	{
@@ -4714,18 +5043,18 @@ bool CSphSource_XMLPipe::SkipTag ( bool bOpen, bool bWarnOnEOF )
 		return false;
 	}
 
-	return CheckTag ( bOpen );
+	return CheckTag ( bOpen, bStrict );
 }
 
 
-bool CSphSource_XMLPipe::ScanInt ( const char * sTag, DWORD * pRes )
+bool CSphSource_XMLPipe::ScanInt ( const char * sTag, DWORD * pRes, bool bStrict )
 {
 	assert ( sTag );
 	assert ( pRes );
 
 	// scan for <sTag>
 	SetTag ( sTag );
-	if ( !SkipTag ( true ) )
+	if ( !SkipTag ( true, true, bStrict ) )
 		return false;
 
 	if ( !SkipWhitespace() )

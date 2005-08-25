@@ -454,9 +454,20 @@ int main ( int argc, char ** argv )
 	if ( !pSource )
 		sphDie ( "FATAL: unknown data source type '%s'.", sType );
 
-	// strip_html
+	// strip_html, index_html_attrs
 	if ( confIndexer->Get ( "strip_html" ) )
-		pSource->SetStripHTML ( 1==atoi ( confIndexer->Get ( "strip_html" ) ) );
+	{
+		const char * sAttrs = NULL;
+		if ( atoi ( confIndexer->Get ( "strip_html" ) )==1 )
+		{
+			sAttrs = confIndexer->Get ( "index_html_attrs" );
+			if ( !sAttrs )
+				sAttrs = "";
+		}
+		sAttrs = pSource->SetStripHTML ( sAttrs );
+		if ( sAttrs )
+			sphDie ( "FATAL: error in section [indexer] key 'index_html_attrs' syntax near '%s'.", sAttrs );
+	}
 
 	// charset_type
 	ISphTokenizer * pTokenizer = NULL;

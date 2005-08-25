@@ -72,6 +72,15 @@ type				= mysql
 # optional, default is 0
 strip_html			= 0
 
+
+# what HTML attributes to index if stripping HTML
+# format is as follows:
+#
+# index_html_attrs	= img=alt,title; a=title;
+#
+# optional, default is to not index anything
+index_html_attrs	=
+
 #############################################################################
 
 # some straightforward parameters for 'mysql' source type

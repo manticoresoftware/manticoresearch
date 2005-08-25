@@ -403,6 +403,7 @@ struct CSphSourceStats
 
 
 /// generic data source
+class CSphHTMLStripper;
 class CSphSource
 {
 public:
@@ -411,16 +412,23 @@ public:
 
 
 public:
-										CSphSource();
+	/// ctor
+										CSphSource ();
 
 	/// dtor
-	virtual								~CSphSource() {}
+	virtual								~CSphSource ();
 
 	/// set dictionary
 	void								SetDict ( CSphDict * dict );
 
 	/// set HTML stripping mode
-	void								SetStripHTML ( bool bStrip );
+	/// sExtractAttrs defines what attributes to store
+	/// sExtractAttrs format is "img=alt; a=alt,title"
+	/// sExtractAttrs can be empty, this means that all the HTML will be stripped
+	/// sExtractAttrs can be NULL, this means that no HTML stripping will be performed
+	/// returns NULL on success
+	/// returns error position on sConfig parsing failure
+	const char *						SetStripHTML ( const char * sExtractAttrs );
 
 	/// set tokenizer
 	void								SetTokenizer ( ISphTokenizer * pTokenizer );
@@ -444,6 +452,7 @@ protected:
 	CSphDict *							m_pDict;		///< my dict
 	CSphSourceStats						m_iStats;		///< my stats
 	bool								m_bStripHTML;	///< whether to strip HTML
+	CSphHTMLStripper *					m_pStripper;	///< my HTML stripper
 };
 
 
@@ -627,14 +636,14 @@ private:
 
 	/// check if what's at current pos is either opening/closing current tag (m_pTag)
 	/// return false on failure
-	bool			CheckTag ( bool bOpen );
+	bool			CheckTag ( bool bOpen, bool bStrict=true );
 
 	/// skips whitespace and opening/closing current tag (m_pTag)
 	/// returns false on failure
-	bool			SkipTag ( bool bOpen, bool bWarnOnEOF=true );
+	bool			SkipTag ( bool bOpen, bool bWarnOnEOF=true, bool bStrict=true );
 
 	/// scan for tag with integer value
-	bool			ScanInt ( const char * sTag, DWORD * pRes );
+	bool			ScanInt ( const char * sTag, DWORD * pRes, bool bStrict=true );
 
 	/// scan for tag with string value
 	bool			ScanStr ( const char * sTag, char * pRes, int iMaxLength );

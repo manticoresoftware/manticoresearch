@@ -52,6 +52,7 @@ const char * g_dSphKeysIndexer[] =
 	"xmlpipe_command",
 	"mem_limit",
 	"strip_html",
+	"index_html_attrs",
 	NULL
 };
 

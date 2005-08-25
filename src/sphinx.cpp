@@ -812,6 +812,7 @@ char * strlwr ( char * s )
 		*s = tolower ( *s );
 		s++;
 	}
+	return s;
 }
 #endif
 

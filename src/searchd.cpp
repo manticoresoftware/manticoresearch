@@ -719,7 +719,7 @@ int main ( int argc, char **argv )
 
 		if ( bOptConsole )
 		{
-			HandleClient ( rsock, pIndex, pDict );
+			HandleClient ( rsock, pIndex, pDict, pTokenizer );
 			close ( rsock );
 			continue;
 		}

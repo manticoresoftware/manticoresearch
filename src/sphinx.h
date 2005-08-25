@@ -40,6 +40,7 @@
 	#include <windows.h>
 
 	#define strcasecmp			strcmpi
+	#define strncasecmp			_strnicmp
 
 	typedef __int64				SphOffset_t;
 #else

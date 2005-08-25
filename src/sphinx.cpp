@@ -803,6 +803,18 @@ int sphWrite ( int iFD, const void * pBuf, size_t iCount, const char * sName )
 	return iWritten;
 }
 
+
+#if !USE_WINDOWS
+char * strlwr ( char * s )
+{
+	while ( *s )
+	{
+		*s = tolower ( *s );
+		s++;
+	}
+}
+#endif
+
 /////////////////////////////////////////////////////////////////////////////
 // TOKENIZERS
 /////////////////////////////////////////////////////////////////////////////
@@ -3975,7 +3987,7 @@ void CSphHTMLStripper::AddAttr ( const char * sTag, const char * sAttr )
 	// find matching tag in list
 	TagLink_t * pTag = m_pTags;
 	TagLink_t * pPrev = NULL;
-	while ( pTag && strcmpi ( pTag->m_sTag, sTag ) )
+	while ( pTag && strcasecmp ( pTag->m_sTag, sTag ) )
 	{
 		pPrev = pTag;
 		pTag = pTag->m_pNext;
@@ -3994,7 +4006,7 @@ void CSphHTMLStripper::AddAttr ( const char * sTag, const char * sAttr )
 	// find matching attr in list
 	AttrLink_t * pAttr = pTag->m_pAttrs;
 	AttrLink_t * pPrevA = NULL;
-	while ( pAttr && strcmpi ( pAttr->m_sAttr, sAttr ) )
+	while ( pAttr && strcasecmp ( pAttr->m_sAttr, sAttr ) )
 	{
 		pPrevA = pAttr;
 		pAttr = pAttr->m_pNext;
@@ -4028,7 +4040,7 @@ const char * CSphHTMLStripper::SetAttrs ( const char * sConfig )
 		if ( s==p ) return s; // error: non-alphas in tag name
 
 		// get tag name
-		if ( p-s>=sizeof(sTag) ) return s; // error: tag name too long
+		if ( p-s>=(int)sizeof(sTag) ) return s; // error: tag name too long
 		strncpy ( sTag, s, p-s );
 		sTag[p-s] = '\0';
 
@@ -4051,7 +4063,7 @@ const char * CSphHTMLStripper::SetAttrs ( const char * sConfig )
 			if ( s==p ) return s; // error: non-alphas in attr name
 
 			// get attr name
-			if ( p-s>=sizeof(sAttr) ) return s; // error: attr name too long
+			if ( p-s>=(int)sizeof(sAttr) ) return s; // error: attr name too long
 			strncpy ( sAttr, s, p-s );
 			sAttr[p-s] = '\0';
 
@@ -4124,7 +4136,7 @@ BYTE * CSphHTMLStripper::Strip ( BYTE * sData )
 		for ( pTag=m_pTags; pTag; pTag=pTag->m_pNext )
 		{
 			iLen = (int)strlen(pTag->m_sTag); // !COMMIT: OPTIMIZE
-			if ( _strnicmp ( pTag->m_sTag, (char*)p, iLen ) )
+			if ( strncasecmp ( pTag->m_sTag, (char*)p, iLen ) )
 				continue;
 			if ( !isalpha ( p[iLen] ) )
 				break;
@@ -4175,7 +4187,7 @@ BYTE * CSphHTMLStripper::Strip ( BYTE * sData )
 			for ( pAttr=pTag->m_pAttrs; pAttr; pAttr=pAttr->m_pNext )
 			{
 				iLen2 = (int)strlen(pAttr->m_sAttr); // !COMMIT: OPTIMIZE
-				if ( _strnicmp ( pAttr->m_sAttr, (char*)p, iLen2 ) )
+				if ( strncasecmp ( pAttr->m_sAttr, (char*)p, iLen2 ) )
 					continue;
 				if ( p[iLen2]=='=' || isspace(p[iLen2]) )
 					break;

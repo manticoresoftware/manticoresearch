@@ -186,7 +186,7 @@ class CSphStopwordBuilderDict : public CSphDict_CRC32
 public:
 						CSphStopwordBuilderDict ();
 	virtual				~CSphStopwordBuilderDict () {}
-	void				Save ( const char * sOutput, int iTop );
+	void				Save ( const char * sOutput, int iTop, bool bFreqs );
 
 public:
 	virtual DWORD		GetWordID ( BYTE * pWord );
@@ -212,7 +212,7 @@ CSphStopwordBuilderDict::CSphStopwordBuilderDict ()
 }
 
 
-void CSphStopwordBuilderDict::Save ( const char * sOutput, int iTop )
+void CSphStopwordBuilderDict::Save ( const char * sOutput, int iTop, bool bFreqs )
 {
 	FILE * fp = fopen ( sOutput, "w+" );
 	if ( !fp )
@@ -234,7 +234,10 @@ void CSphStopwordBuilderDict::Save ( const char * sOutput, int iTop )
 	{
 		if ( i>=iTop )
 			break;
-		fprintf ( fp, "%s\n", dTop[i].m_sWord );
+		if ( bFreqs )
+			fprintf ( fp, "%s %d\n", dTop[i].m_sWord, dTop[i].m_iCount );
+		else
+			fprintf ( fp, "%s\n", dTop[i].m_sWord );
 	}
 
 	fclose ( fp );
@@ -287,6 +290,7 @@ int main ( int argc, char ** argv )
 	const char * sBuildStops = NULL;
 	int iTopStops = 100;
 	bool bRotate = false;
+	bool bBuildFreqs = false;
 
 	fprintf ( stdout, SPHINX_BANNER );
 
@@ -316,6 +320,10 @@ int main ( int argc, char ** argv )
 			bRotate = true;
 #endif
 
+		} else if ( strcasecmp ( argv[i], "--buildfreqs" )==0 )
+		{
+			bBuildFreqs = true;
+
 		} else
 		{
 			break;
@@ -324,7 +332,7 @@ int main ( int argc, char ** argv )
 	if ( i!=argc )
 	{
 		fprintf ( stderr, "ERROR: malformed or unknown option near '%s'.\n\n", argv[i] );
-		fprintf ( stderr, "usage: indexer [--config file.conf] [--buildstops output.txt count]" );
+		fprintf ( stderr, "usage: indexer [--config file.conf] [--buildstops output.txt count] [--buildfreqs]" );
 #if !USE_WINDOWS
 		fprintf ( stderr, " [--rotate]" );
 #endif
@@ -513,7 +521,7 @@ int main ( int argc, char ** argv )
 		pSource->SetDict ( pDict );
 		while ( pSource->Next() );
 
-		pDict->Save ( sBuildStops, iTopStops );
+		pDict->Save ( sBuildStops, iTopStops, bBuildFreqs );
 
 		SafeDelete ( pDict );
 

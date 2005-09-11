@@ -371,7 +371,7 @@ int main ( int argc, char ** argv )
 	// check index lock file
 	/////////////////////////
 	
-	if ( !bRotate )
+	if ( !bRotate && !sBuildStops )
 	{
 		char sLockFile [ SPH_MAX_FILENAME_LEN ];
 		snprintf ( sLockFile, sizeof(sLockFile), "%s.spl", confCommon->Get ( "index_path" ) );

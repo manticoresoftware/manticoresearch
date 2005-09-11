@@ -521,6 +521,7 @@ public:
 
 	const CSphQueryWord & operator = ( const CSphQueryWord & rhs )
 	{
+		sphFree ( rhs.m_sWord );
 		m_sWord			= sphDup ( rhs.m_sWord );
 		m_iQueryPos		= rhs.m_iQueryPos;
 		m_iWordID		= rhs.m_iWordID;
@@ -1897,7 +1898,11 @@ void CSphReader_VLN::GetBytes ( void *data, int size )
 	BYTE * b = (BYTE*) data;
 
 	while ( size-->0 )
-		*b++ = (BYTE)( (GetNibble()<<4) + GetNibble() );
+	{
+		register int t = GetNibble()<<4;
+		t += GetNibble ();
+		*b++ = (BYTE)t;
+	}
 }
 
 
@@ -4133,7 +4138,7 @@ BYTE * CSphHTMLStripper::Strip ( BYTE * sData )
 
 		// check if it's known tag or what
 		TagLink_t * pTag;
-		int iLen;
+		int iLen = 0;
 		for ( pTag=m_pTags; pTag; pTag=pTag->m_pNext )
 		{
 			iLen = (int)strlen(pTag->m_sTag); // !COMMIT: OPTIMIZE
@@ -4184,7 +4189,7 @@ BYTE * CSphHTMLStripper::Strip ( BYTE * sData )
 
 			// check attribute name
 			AttrLink_t * pAttr;
-			int iLen2;
+			int iLen2 = 0;
 			for ( pAttr=pTag->m_pAttrs; pAttr; pAttr=pAttr->m_pNext )
 			{
 				iLen2 = (int)strlen(pAttr->m_sAttr); // !COMMIT: OPTIMIZE

@@ -30,6 +30,10 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
+bool g_bQuiet			= false;
+
+/////////////////////////////////////////////////////////////////////////////
+
 template < typename T > struct CSphMTFHashEntry
 {
 	char *					m_sKey;
@@ -261,6 +265,9 @@ void CSphStopwordBuilderDict::LoadStopwords ( const char * sFiles )
 
 void ShowProgress ( const CSphIndexProgress * pProgress )
 {
+	if ( g_bQuiet )
+		return;
+
 	switch ( pProgress->m_ePhase )
 	{
 		case CSphIndexProgress::PHASE_COLLECT:
@@ -292,8 +299,6 @@ int main ( int argc, char ** argv )
 	bool bRotate = false;
 	bool bBuildFreqs = false;
 
-	fprintf ( stdout, SPHINX_BANNER );
-
 	int i;
 	for ( i=1; i<argc; i++ )
 	{
@@ -324,15 +329,24 @@ int main ( int argc, char ** argv )
 		{
 			bBuildFreqs = true;
 
+		} else if ( strcasecmp ( argv[i], "--quiet" )==0 )
+		{
+			g_bQuiet = true;
+
 		} else
 		{
 			break;
 		}
 	}
+
+	if ( !g_bQuiet )
+		fprintf ( stdout, SPHINX_BANNER );
+
 	if ( i!=argc )
 	{
+
 		fprintf ( stderr, "ERROR: malformed or unknown option near '%s'.\n\n", argv[i] );
-		fprintf ( stderr, "usage: indexer [--config file.conf] [--buildstops output.txt count] [--buildfreqs]" );
+		fprintf ( stderr, "usage: indexer [--config file.conf] [--buildstops output.txt count] [--buildfreqs] [--quiet]" );
 #if !USE_WINDOWS
 		fprintf ( stderr, " [--rotate]" );
 #endif
@@ -348,7 +362,9 @@ int main ( int argc, char ** argv )
 	CSphHash * confCommon;
 	CSphHash * confIndexer;
 
-	fprintf ( stdout, "using config file '%s'...\n", sConfName );
+	if ( !g_bQuiet )
+		fprintf ( stdout, "using config file '%s'...\n", sConfName );
+
 	if ( !conf.Open ( sConfName ) )
 	{
 		fprintf ( stderr, "FATAL: unable to open config file '%s'.\n", sConfName );
@@ -512,8 +528,11 @@ int main ( int argc, char ** argv )
 		// build stopwords
 		///////////////////
 
-		fprintf ( stdout, "building stopwords list...\n" );
-		fflush ( stdout );
+		if ( !g_bQuiet )
+		{
+			fprintf ( stdout, "building stopwords list...\n" );
+			fflush ( stdout );
+		}
 
 		CSphStopwordBuilderDict * pDict = new CSphStopwordBuilderDict ();
 		assert ( pDict );
@@ -590,8 +609,11 @@ int main ( int argc, char ** argv )
 		// index!
 		//////////
 
-		fprintf ( stdout, "indexing...\n" );
-		fflush ( stdout );
+		if ( !g_bQuiet )
+		{
+			fprintf ( stdout, "indexing...\n" );
+			fflush ( stdout );
+		}
 
 		// do it
 		char sIndexPath [ SPH_MAX_FILENAME_LEN ];
@@ -614,11 +636,14 @@ int main ( int argc, char ** argv )
 	const CSphSourceStats * pStats = pSource->GetStats ();
 	fTime = sphLongTimer () - fTime;
 
-	fprintf ( stdout, "total %d docs, " I64FMT " bytes\n",
-		pStats->m_iTotalDocuments, pStats->m_iTotalBytes );
+	if ( !g_bQuiet )
+	{
+		fprintf ( stdout, "total %d docs, " I64FMT " bytes\n",
+			pStats->m_iTotalDocuments, pStats->m_iTotalBytes );
 
-	fprintf ( stdout, "total %.3f sec, %.2f bytes/sec, %.2f docs/sec\n",
-		fTime, pStats->m_iTotalBytes/fTime, pStats->m_iTotalDocuments/fTime );
+		fprintf ( stdout, "total %.3f sec, %.2f bytes/sec, %.2f docs/sec\n",
+			fTime, pStats->m_iTotalBytes/fTime, pStats->m_iTotalDocuments/fTime );
+	}
 
 	////////////////////////////
 	// rotating searchd indices
@@ -634,12 +659,12 @@ int main ( int argc, char ** argv )
 		confSearchd = conf.LoadSection ( "searchd", g_dSphKeysSearchd );
 		if ( !confSearchd )
 		{
-			fprintf ( stdout, "WARNING: 'searchd' section not found in config file.\n" );
+			fprintf ( stderr, "WARNING: 'searchd' section not found in config file.\n" );
 			break;
 		}
 		if ( !confSearchd->Get ( "pid_file" ) )
 		{
-			fprintf ( stdout, "WARNING: 'pid_file' parameter not found in 'searchd' config section.\n" );
+			fprintf ( stderr, "WARNING: 'pid_file' parameter not found in 'searchd' config section.\n" );
 			break;
 		}
 
@@ -648,12 +673,12 @@ int main ( int argc, char ** argv )
 		FILE * fp = fopen ( confSearchd->Get ( "pid_file" ), "r" );
 		if ( !fp )
 		{
-			fprintf ( stdout, "WARNING: failed to read pid_file '%s'.\n", confSearchd->Get ( "pid_file" ) );
+			fprintf ( stderr, "WARNING: failed to read pid_file '%s'.\n", confSearchd->Get ( "pid_file" ) );
 			break;
 		}
 		if ( fscanf ( fp, "%d", &iPID )!=1 || iPID<=0 )
 		{
-			fprintf ( stdout, "WARNING: failed to scanf pid from pid_file '%s'.\n", confSearchd->Get ( "pid_file" ) );
+			fprintf ( stderr, "WARNING: failed to scanf pid from pid_file '%s'.\n", confSearchd->Get ( "pid_file" ) );
 			break;
 		}
 		fclose ( fp );
@@ -662,14 +687,14 @@ int main ( int argc, char ** argv )
 		int iErr = kill ( iPID, SIGHUP );
 		if ( iErr==0 )
 		{
-			fprintf ( stdout, "rotating indices: succesfully sent SIGHUP to searchd.\n" );
+			fprintf ( stderr, "rotating indices: succesfully sent SIGHUP to searchd.\n" );
 		} else
 		{
 			switch ( errno )
 			{
-				case ESRCH:	fprintf ( stdout, "WARNING: no process found by PID %d.\n", iPID ); break;
-				case EPERM:	fprintf ( stdout, "WARNING: access denied to PID %d.\n", iPID ); break;
-				default:	fprintf ( stdout, "WARNING: kill() error: %s.\n", strerror(errno) ); break;
+				case ESRCH:	fprintf ( stderr, "WARNING: no process found by PID %d.\n", iPID ); break;
+				case EPERM:	fprintf ( stderr, "WARNING: access denied to PID %d.\n", iPID ); break;
+				default:	fprintf ( stderr, "WARNING: kill() error: %s.\n", strerror(errno) ); break;
 			}
 			break;
 		}
@@ -682,7 +707,7 @@ int main ( int argc, char ** argv )
 	if ( bRotate )
 	{
 		if ( !bOK )
-			fprintf ( stdout, "WARNING: indices NOT rotated.\n" );
+			fprintf ( stderr, "WARNING: indices NOT rotated.\n" );
 		SafeDelete ( confSearchd );
 	}
 #endif

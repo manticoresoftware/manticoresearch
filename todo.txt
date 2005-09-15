@@ -28,8 +28,7 @@ LOW PRIORITY
 * try external docinfo storage (btree)
 * try group hierarchy support 
 * add query for pergroup count
-* add --verbose, --quiet switches
-* add loglevels
+* add loglevels and corresp switches
 * add match count to query_log
 * add results table support
 * add query for total count and save top N results

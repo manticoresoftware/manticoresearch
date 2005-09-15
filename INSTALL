@@ -13,6 +13,7 @@ tested on are:
    - FreeBSD 4.x, 5.x
    - Linux 2.x
    - Windows 2000, XP
+   - NetBSD 1.6
 
 We hope Sphinx will work on other Unix platforms as well. 
 Please report successful platforms via http://shodan.ru/contact/
@@ -119,10 +120,11 @@ To use Sphinx from your PHP scripts, you need to:
 
 2. Run the attached PHP API test script:
 
-   $ cd /usr/local/sphinx
-   $ php query.php test
+   $ cd /usr/local/sphinx/api
+   $ php test.php test
 
-3. Copy the code from query.php to your own scripts.
+3. Include the API (it's located in api/sphinxapi.php) and use from
+   your own scripts.
 
 Happy searching!
 

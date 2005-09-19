@@ -332,6 +332,7 @@ int main ( int argc, char ** argv )
 		} else if ( strcasecmp ( argv[i], "--quiet" )==0 )
 		{
 			g_bQuiet = true;
+			sphSetQuiet ( true );
 
 		} else
 		{
@@ -687,7 +688,8 @@ int main ( int argc, char ** argv )
 		int iErr = kill ( iPID, SIGHUP );
 		if ( iErr==0 )
 		{
-			fprintf ( stderr, "rotating indices: succesfully sent SIGHUP to searchd.\n" );
+			if ( !g_bQuiet )
+				fprintf ( stdout, "rotating indices: succesfully sent SIGHUP to searchd.\n" );
 		} else
 		{
 			switch ( errno )

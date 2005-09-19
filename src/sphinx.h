@@ -774,6 +774,9 @@ protected:
 /// create phrase fulltext index implemntation
 CSphIndex *		sphCreateIndexPhrase ( const char * sFilename );
 
+/// tell libsphinx to be quiet or not (logs and loglevels to come later)
+void			sphSetQuiet ( bool bQuiet );
+
 #endif // _sphinx_
 
 //

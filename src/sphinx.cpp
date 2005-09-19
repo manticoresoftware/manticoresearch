@@ -72,6 +72,12 @@ void sphAssert ( const char * sExpr, const char * sFile, int iLine )
 #endif // USE_WINDOWS
 
 /////////////////////////////////////////////////////////////////////////////
+// GLOBALS
+/////////////////////////////////////////////////////////////////////////////
+
+static bool		g_bSphQuiet		= false;
+
+/////////////////////////////////////////////////////////////////////////////
 // COMPILE-TIME CHECKS
 /////////////////////////////////////////////////////////////////////////////
 
@@ -3956,8 +3962,9 @@ void CSphDict_CRC32::LoadStopwords ( const char * sFiles )
 		m_iStopwords = dStop.GetLength ();
 		m_pStopwords = new DWORD [ m_iStopwords ];
 		memcpy ( m_pStopwords, &dStop[0], sizeof(DWORD)*m_iStopwords );
-		fprintf ( stderr, "- loaded %d stopwords from '%s'\n",
-			m_iStopwords, sName ); // FIXME! do loglevels
+		if ( !g_bSphQuiet )
+			fprintf ( stdout, "- loaded %d stopwords from '%s'\n",
+				m_iStopwords, sName ); // FIXME! do loglevels
 
 		// close file
 		fclose ( fp );
@@ -5143,6 +5150,13 @@ bool CSphSource_XMLPipe::ScanStr ( const char * sTag, char * pRes, int iMaxLengt
 int CSphSource_XMLPipe::GetFieldCount ()
 {
 	return 2;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+void sphSetQuiet ( bool bQuiet )
+{
+	g_bSphQuiet = bQuiet;
 }
 
 //

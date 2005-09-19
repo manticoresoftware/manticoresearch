@@ -523,6 +523,7 @@ int main ( int argc, char ** argv )
 
 	float fTime = sphLongTimer ();
 
+	bool bIndexedOk = false;
 	if ( sBuildStops )
 	{
 		///////////////////
@@ -627,7 +628,8 @@ int main ( int argc, char ** argv )
 		assert ( pIndex );
 
 		pIndex->SetProgressCallback ( ShowProgress );
-		pIndex->build ( pDict, pSource, iMemLimit );
+		if ( pIndex->build ( pDict, pSource, iMemLimit ) )
+			bIndexedOk = true;
 
 		SafeDelete ( pIndex );
 		SafeDelete ( pDict );
@@ -651,66 +653,69 @@ int main ( int argc, char ** argv )
 	////////////////////////////
 
 #if !USE_WINDOWS
-	bool bOK = false;
-	CSphHash * confSearchd = NULL;
-
-	while ( bRotate )
+	if ( bIndexedOk )
 	{
-		// load config
-		confSearchd = conf.LoadSection ( "searchd", g_dSphKeysSearchd );
-		if ( !confSearchd )
-		{
-			fprintf ( stderr, "WARNING: 'searchd' section not found in config file.\n" );
-			break;
-		}
-		if ( !confSearchd->Get ( "pid_file" ) )
-		{
-			fprintf ( stderr, "WARNING: 'pid_file' parameter not found in 'searchd' config section.\n" );
-			break;
-		}
+		bool bOK = false;
+		CSphHash * confSearchd = NULL;
 
-		// read in PID
-		int iPID;
-		FILE * fp = fopen ( confSearchd->Get ( "pid_file" ), "r" );
-		if ( !fp )
+		while ( bRotate )
 		{
-			fprintf ( stderr, "WARNING: failed to read pid_file '%s'.\n", confSearchd->Get ( "pid_file" ) );
-			break;
-		}
-		if ( fscanf ( fp, "%d", &iPID )!=1 || iPID<=0 )
-		{
-			fprintf ( stderr, "WARNING: failed to scanf pid from pid_file '%s'.\n", confSearchd->Get ( "pid_file" ) );
-			break;
-		}
-		fclose ( fp );
-
-		// signal
-		int iErr = kill ( iPID, SIGHUP );
-		if ( iErr==0 )
-		{
-			if ( !g_bQuiet )
-				fprintf ( stdout, "rotating indices: succesfully sent SIGHUP to searchd.\n" );
-		} else
-		{
-			switch ( errno )
+			// load config
+			confSearchd = conf.LoadSection ( "searchd", g_dSphKeysSearchd );
+			if ( !confSearchd )
 			{
-				case ESRCH:	fprintf ( stderr, "WARNING: no process found by PID %d.\n", iPID ); break;
-				case EPERM:	fprintf ( stderr, "WARNING: access denied to PID %d.\n", iPID ); break;
-				default:	fprintf ( stderr, "WARNING: kill() error: %s.\n", strerror(errno) ); break;
+				fprintf ( stderr, "WARNING: 'searchd' section not found in config file.\n" );
+				break;
 			}
+			if ( !confSearchd->Get ( "pid_file" ) )
+			{
+				fprintf ( stderr, "WARNING: 'pid_file' parameter not found in 'searchd' config section.\n" );
+				break;
+			}
+
+			// read in PID
+			int iPID;
+			FILE * fp = fopen ( confSearchd->Get ( "pid_file" ), "r" );
+			if ( !fp )
+			{
+				fprintf ( stderr, "WARNING: failed to read pid_file '%s'.\n", confSearchd->Get ( "pid_file" ) );
+				break;
+			}
+			if ( fscanf ( fp, "%d", &iPID )!=1 || iPID<=0 )
+			{
+				fprintf ( stderr, "WARNING: failed to scanf pid from pid_file '%s'.\n", confSearchd->Get ( "pid_file" ) );
+				break;
+			}
+			fclose ( fp );
+
+			// signal
+			int iErr = kill ( iPID, SIGHUP );
+			if ( iErr==0 )
+			{
+				if ( !g_bQuiet )
+					fprintf ( stdout, "rotating indices: succesfully sent SIGHUP to searchd.\n" );
+			} else
+			{
+				switch ( errno )
+				{
+					case ESRCH:	fprintf ( stderr, "WARNING: no process found by PID %d.\n", iPID ); break;
+					case EPERM:	fprintf ( stderr, "WARNING: access denied to PID %d.\n", iPID ); break;
+					default:	fprintf ( stderr, "WARNING: kill() error: %s.\n", strerror(errno) ); break;
+				}
+				break;
+			}
+
+			// all ok
+			bOK = true;
 			break;
 		}
 
-		// all ok
-		bOK = true;
-		break;
-	}
-
-	if ( bRotate )
-	{
-		if ( !bOK )
-			fprintf ( stderr, "WARNING: indices NOT rotated.\n" );
-		SafeDelete ( confSearchd );
+		if ( bRotate )
+		{
+			if ( !bOK )
+				fprintf ( stderr, "WARNING: indices NOT rotated.\n" );
+			SafeDelete ( confSearchd );
+		}
 	}
 #endif
 

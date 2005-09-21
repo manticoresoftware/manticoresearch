@@ -1649,8 +1649,8 @@ CSphWriter_VLN::~CSphWriter_VLN()
 
 int CSphWriter_VLN::OpenFile ()
 {
-	if ( m_iFD )
-		return 1;
+	if ( m_iFD>=0 )
+		return m_iFD;
 	m_iFD = ::open ( m_sName, O_CREAT | O_RDWR | O_TRUNC | SPH_BINARY, 0644 );
 	m_iPoolUsed = 0;
 	m_iPoolOdd = 0;
@@ -2225,12 +2225,12 @@ int CSphIndex_VLN::cidxCreate ()
 
 	sprintf ( sBuf, "%s.spi", m_sFilename );
 	fdIndex = new CSphWriter_VLN ( sBuf );
-	if ( !fdIndex->OpenFile() )
+	if ( fdIndex->OpenFile()<0 )
 		return 0;
 
 	sprintf ( sBuf, "%s.spd", m_sFilename );
 	fdData = new CSphWriter_VLN ( sBuf );
-	if ( !fdData->OpenFile() )
+	if ( fdData->OpenFile()<0 )
 	{
 		SafeDelete ( fdIndex );
 		return 0;
@@ -2687,7 +2687,7 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 
 	// create raw log
 	fdRaw = OpenFile ( "spr", O_CREAT | O_RDWR | O_TRUNC );
-	if ( !fdRaw )
+	if ( fdRaw<0 )
 		return 0;
 
 	// adjust memory requirements
@@ -2850,7 +2850,7 @@ int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 	// reopen raw log as read-only
 	::close ( fdRaw );
 	fdRaw = OpenFile ( "spr", O_RDONLY );
-	if ( !fdRaw )
+	if ( fdRaw<0 )
 		return 0;
 
 	// create new compressed index

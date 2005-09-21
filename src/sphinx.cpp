@@ -2082,7 +2082,12 @@ int CSphIndex_VLN::OpenFile ( char * ext, int mode )
 {
 	char sBuf [ SPH_MAX_FILENAME_LEN ];
 	snprintf ( sBuf, sizeof(sBuf), "%s.%s", m_sFilename, ext );
-	return ::open ( sBuf, mode | SPH_BINARY, 0644 );
+
+	int iFD = ::open ( sBuf, mode | SPH_BINARY, 0644 );
+	if ( iFD<0 )
+		fprintf ( stderr, "ERROR: failed to open '%s': %s.\n", sBuf, strerror(errno) );
+
+	return iFD;
 }
 
 int CSphIndex_VLN::binsInit ()

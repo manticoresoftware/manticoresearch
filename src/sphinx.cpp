@@ -1634,7 +1634,7 @@ CSphWriter_VLN::CSphWriter_VLN ( char * sName )
 	m_sName = sphDup ( sName );
 
 	m_pPool = m_dPool;
-	m_iFD = 0;
+	m_iFD = -1;
 	m_iPos = 0;
 	m_bError = false;
 }
@@ -1661,11 +1661,11 @@ int CSphWriter_VLN::OpenFile ()
 
 void CSphWriter_VLN::CloseFile() 
 {
-	if ( m_iFD )
+	if ( m_iFD>=0 )
 	{
 		Flush ();
 		::close ( m_iFD );
-		m_iFD = 0;
+		m_iFD = -1;
 	}
 }
 
@@ -1807,7 +1807,7 @@ bool CSphWriter_VLN::IsError ()
 ///////////////////////////////////////////////////////////////////////////////
 
 CSphReader_VLN::CSphReader_VLN ()
-	: m_iFD ( 0 )
+	: m_iFD ( -1 )
 	, m_iPos ( 0 )
 	, m_iBufPos ( 0 )
 	, m_iBufOdd ( 0 )
@@ -1854,7 +1854,7 @@ void CSphReader_VLN::SeekTo ( SphOffset_t iPos )
 void CSphReader_VLN::UpdateCache ()
 {
 	PROFILE ( read_hits );
-	assert ( m_iFD );
+	assert ( m_iFD>=0 );
 
 	// stream position could be changed externally
 	// so let's just hope that the OS optimizes redundant seeks

@@ -120,7 +120,13 @@
 				RelativePath=".\sphinx.h">
 			</File>
 			<File
+				RelativePath=".\sphinxstd.h">
+			</File>
+			<File
 				RelativePath=".\sphinxstem.h">
+			</File>
+			<File
+				RelativePath=".\sphinxtimers.h">
 			</File>
 			<File
 				RelativePath=".\sphinxutils.h">

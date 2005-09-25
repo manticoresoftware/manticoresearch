@@ -4794,12 +4794,23 @@ BYTE ** CSphSource_MySQL::NextDocument ()
 
 	// get him!
 	m_tDocInfo.m_iDocID = atoi ( m_tSqlRow[0] );
-	m_tDocInfo.m_iGroupID = m_iGroupColumn
-		? m_tDocInfo.m_iGroupID = atoi ( m_tSqlRow [ m_iGroupColumn ] )
-		: 1;
-	m_tDocInfo.m_iTimestamp = m_iDateColumn
-		? m_tDocInfo.m_iTimestamp = atoi ( m_tSqlRow [ m_iDateColumn ] )
-		: 1;
+	m_tDocInfo.m_iGroupID = m_iGroupColumn ? atoi ( m_tSqlRow [ m_iGroupColumn ] ) : 1;
+	m_tDocInfo.m_iTimestamp = m_iDateColumn ? atoi ( m_tSqlRow [ m_iDateColumn ] ) : 1;
+
+	if ( !m_tDocInfo.m_iDocID )
+		fprintf ( stderr, "WARNING: zero/NULL document_id, aborting indexing\n" );
+
+	if ( !m_tDocInfo.m_iGroupID )
+	{
+		m_tDocInfo.m_iGroupID = 1;
+		fprintf ( stderr, "WARNING: zero/NULL group for document_id=%d, fixed up to 1\n", m_tDocInfo.m_iDocID );
+	}
+
+	if ( !m_tDocInfo.m_iTimestamp )
+	{
+		m_tDocInfo.m_iTimestamp = 1;
+		fprintf ( stderr, "WARNING: zero/NULL timestamp for document_id=%d, fixed up to 1\n", m_tDocInfo.m_iDocID );
+	}
 
 	// remap and return
 	for ( int i=0; i<m_iFieldCount; i++ )

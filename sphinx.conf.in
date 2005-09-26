@@ -2,237 +2,255 @@
 # sphinx configuration file sample
 #
 
-[common]
-
-# this is path and index file name without extension
-# files <indexpath>.spi/spd/spr will be created by indexer
-#
-# .spr is temporary raw log, it can be removed when indexer is done
-# .spi/.spd are fulltext index files (index index and index data)
-#
-# MUST be defined
-index_path			= /home/sphinx/data/testdb
-
-
-# morphology
-# default is not to use any
-#
-# morphology		= stem_en
-# morphology		= stem_ru
-# morphology		= stem_enru
-morphology			=
-
-
-# stopwords file
-# format is plain text in whatever encoding you use
-# optional, default is empty
-#
-# stopwords			= /home/sphinx/data/stopwords.txt
-stopwords			=
-
-
-# charset encoding type
-# known types are 'sbcs' (Single Byte CharSet) and 'utf-8'
-# optional, default is sbcs
-charset_type		= sbcs
-
-
-# charset definition and case folding rules "table"
-# optional, default value depends on charset_type
-# for now, defaults are configured to support English and Russian
-# this behavior MAY change in future versions
-#
-# 'sbcs' default value is
-# charset_table		= 0..9, A..Z->a..z, _, a..z, U+A8->U+B8, U+B8, U+C0..U+DF->U+E0..U+FF, U+E0..U+FF
-#
-# 'utf-8' default value is
-# charset_table		= 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F
-
-[indexer]
-
-# memory limit
-# can be specified in bytes, kilobytes (mem_limit=1000K) or megabytes (mem_limit=10M)
-# will grow if set unacceptably low
-# will warn if set too low, hurting the performance
-# optional, default is 32M
-mem_limit			= 32M
-
-
-# data source type
-# for now, known types are 'mysql' and 'xmlpipe'
-# MUST be defined
-type				= mysql
-
-
-# whether to strip HTML
-# values can be 0 (don't strip) or 1 (do strip)
-# WARNING, only works with mysql source for now
-# WARNING, only works ok for PERFECTLY formed XHTML for now
-# WARNING, WILL BUG on normal everday HTML
-# optional, default is 0
-strip_html			= 0
-
-
-# what HTML attributes to index if stripping HTML
-# format is as follows:
-#
-# index_html_attrs	= img=alt,title; a=title;
-#
-# optional, default is to not index anything
-index_html_attrs	=
-
+#############################################################################
+## data source definition
 #############################################################################
 
-# some straightforward parameters for 'mysql' source type
-sql_host			= localhost
-sql_user			= root
-sql_pass			= 
-sql_db				= testdb
-# sql_sock			= /tmp/mysql.sock	# optional,
+source src1
+{
+	# data source type
+	# for now, known types are 'mysql' and 'xmlpipe'
+	# MUST be defined
+	type				= mysql
+
+	# whether to strip HTML
+	# values can be 0 (don't strip) or 1 (do strip)
+	# WARNING, only works with mysql source for now
+	# WARNING, only works ok for PERFECTLY formed XHTML for now
+	# WARNING, WILL BUG on normal everday HTML
+	# optional, default is 0
+	strip_html			= 0
+
+	# what HTML attributes to index if stripping HTML
+	# format is as follows:
+	#
+	# index_html_attrs	= img=alt,title; a=title;
+	#
+	# optional, default is to not index anything
+	index_html_attrs	=
+
+	#############################################################################
+
+	# some straightforward parameters for 'mysql' source type
+	sql_host			= localhost
+	sql_user			= root
+	sql_pass			= 
+	sql_db				= testdb
+	# sql_sock			= /tmp/mysql.sock	# optional,
 										# usually '/var/lib/mysql/mysql.sock' on Linux,
 										# usually '/tmp/mysql.sock' on FreeBSD
-sql_port			= 3306				# optional, default is 3306
+	sql_port			= 3306				# optional, default is 3306
 
 
-# pre-query, executed before the main fetch query
-# useful eg. to setup encoding or mark records
-# optional, default is empty
-#
-# sql_query_pre		= SET CHARACTER_SET_RESULTS=cp1251
-sql_query_pre		=
+	# pre-query, executed before the main fetch query
+	# useful eg. to setup encoding or mark records
+	# optional, default is empty
+	#
+	# sql_query_pre		= SET CHARACTER_SET_RESULTS=cp1251
+	sql_query_pre		=
 
 
-# main document fetch query
-# you can specify any number of fields
-#
-# document_id MUST be the very first field
-# document_id MUST be positive (non-zero, non-negative)
-# document_id MUST fit into 32 bits
-# document_id MUST be unique
-#
-# mandatory
-sql_query			= \
-	SELECT id, group, date, title, data \
-	FROM documents doc
+	# main document fetch query
+	# you can specify any number of fields
+	#
+	# document_id MUST be the very first field
+	# document_id MUST be positive (non-zero, non-negative)
+	# document_id MUST fit into 32 bits
+	# document_id MUST be unique
+	#
+	# mandatory
+	sql_query			= \
+		SELECT id, group, date, title, data \
+		FROM documents doc
 
 
-# query range setup
-#
-# useful to avoid MyISAM table locks and big result sets
-# when indexing lots of data
-#
-# to use query ranges, you should
-# 1) provide a query to fetch min and max id (ie. id range) from data set;
-# 2) configure step size in which this range will be walked;
-# 3) use $start and $end macros somewhere in the main fetch query.
-#
-# 'sql_query_range' must return exactly two integer fields
-# in exactly min_id, max_id order
-#
-# 'sql_range_step' must be a positive integer
-# optional, default is 1024
-#
-# 'sql_query' must contain both '$start' and '$end' macros
-# if you are using query ranges (because it obviously would be an
-# error to index the whole table many times)
-#
-# note that the intervals specified by $start/$end do not
-# overlap, so you should NOT remove document ids which are exactly
-# equal to $start or $end in your query
-#
-# here's an example which will index 'documents' table
-# fetching (at most) one thousand entries at a time:
-#
-# sql_query_range		= SELECT MIN(id),MAX(id) FROM documents
-# sql_range_step		= 1000
-# sql_query			= \
-#	SELECT doc.id, doc.id AS group, doc.title, doc.data \
-#	FROM documents doc \
-#	WHERE id>=$start AND id<=$end
+	# query range setup
+	#
+	# useful to avoid MyISAM table locks and big result sets
+	# when indexing lots of data
+	#
+	# to use query ranges, you should
+	# 1) provide a query to fetch min and max id (ie. id range) from data set;
+	# 2) configure step size in which this range will be walked;
+	# 3) use $start and $end macros somewhere in the main fetch query.
+	#
+	# 'sql_query_range' must return exactly two integer fields
+	# in exactly min_id, max_id order
+	#
+	# 'sql_range_step' must be a positive integer
+	# optional, default is 1024
+	#
+	# 'sql_query' must contain both '$start' and '$end' macros
+	# if you are using query ranges (because it obviously would be an
+	# error to index the whole table many times)
+	#
+	# note that the intervals specified by $start/$end do not
+	# overlap, so you should NOT remove document ids which are exactly
+	# equal to $start or $end in your query
+	#
+	# here's an example which will index 'documents' table
+	# fetching (at most) one thousand entries at a time:
+	#
+	# sql_query_range		= SELECT MIN(id),MAX(id) FROM documents
+	# sql_range_step		= 1000
+	# sql_query			= \
+	#	SELECT doc.id, doc.id AS group, doc.title, doc.data \
+	#	FROM documents doc \
+	#	WHERE id>=$start AND id<=$end
 
 
-# group_id and date column names or numbers
-# these fields MUST be positive (non-zero, non-negative) integers
-# these fields MUST fit into 32 bits
-#
-# columns are numbered starting from 1, ie. document_id is 1, next one is 2, etc
-# if any of the columns is configured, it's removed from fulltext indexed fields,
-# therefore changing the field numbering
-#
-# for instance, in this example configuration, 'title' column will
-# number 1 and 'data' column will be number 2, because id/group/date
-# columns are removed
-#
-# optional, default is empty
-sql_group_column	= group
-sql_date_column		= date
+	# group_id and date column names or numbers
+	# these fields MUST be positive (non-zero, non-negative) integers
+	# these fields MUST fit into 32 bits
+	#
+	# columns are numbered starting from 1, ie. document_id is 1, next one is 2, etc
+	# if any of the columns is configured, it's removed from fulltext indexed fields,
+	# therefore changing the field numbering
+	#
+	# for instance, in this example configuration, 'title' column will
+	# number 1 and 'data' column will be number 2, because id/group/date
+	# columns are removed
+	#
+	# optional, default is empty
+	sql_group_column	= group
+	sql_date_column		= date
 
-# by index:
-#
-# sql_group_column	= 2
-# sql_group_column	= 3
+	# an example of specifying group/timestamp columns by index:
+	#
+	# sql_group_column	= 2
+	# sql_date_column	= 3
 
 
-# post-query, executed after the main fetch query
-# useful eg. to unmark records
-# optional, default is empty
-sql_query_post		=
+	# post-query, executed after the main fetch query
+	# useful eg. to unmark records
+	# optional, default is empty
+	sql_query_post		=
+
+	#############################################################################
+
+	# demo config for 'xmlpipe' source type is a little below
+	# with xmlpipe, sphinx opens a pipe to a given command, and reads documents from stdin
+	#
+	# sphinx expects one or more documents from xmlpipe stdin
+	# each document must be formatted as follows:
+	#
+	# <document>
+	# <id>123</id>
+	# <group>1</group>
+	# <title>test title</title>
+	# <body>
+	# this is my document body
+	# </body>
+	# </document>
+
+	# type				= xmlpipe
+	# xmlpipe_command	= cat /home/sphinx/test.xml
+}
 
 #############################################################################
+## index definition
+#############################################################################
 
-# demo config for 'xmlpipe' source type is a little below
-# with xmlpipe, sphinx opens a pipe to a given command, and reads documents from stdin
-#
-# sphinx expects one or more documents from xmlpipe stdin
-# each document must be formatted as follows:
-#
-# <document>
-# <id>123</id>
-# <group>1</group>
-# <title>test title</title>
-# <body>
-# this is my document body
-# </body>
-# </document>
+index test1
+{
+	# this is path and index file name without extension
+	# files <indexpath>.spi/spd/spr will be created by indexer
+	#
+	# .spr is temporary raw log, it can be removed when indexer is done
+	# .spi/.spd are fulltext index files (index index and index data)
+	#
+	# MUST be defined
+	path			= /home/sphinx/data/testdb
 
-# type				= xmlpipe
-# xmlpipe_command	= cat /home/sphinx/test.xml
+	# morphology
+	# default is not to use any
+	#
+	# morphology		= stem_en
+	# morphology		= stem_ru
+	# morphology		= stem_enru
+	morphology			=
 
-[searchd]
+	# stopwords file
+	# format is plain text in whatever encoding you use
+	# optional, default is empty
+	#
+	# stopwords			= /home/sphinx/data/stopwords.txt
+	stopwords			=
 
-# port on which search daemon will listen
-port				= 3312
+	# charset encoding type
+	# known types are 'sbcs' (Single Byte CharSet) and 'utf-8'
+	# optional, default is sbcs
+	charset_type		= sbcs
+
+	# charset definition and case folding rules "table"
+	# optional, default value depends on charset_type
+	# for now, defaults are configured to support English and Russian
+	# this behavior MAY change in future versions
+	#
+	# 'sbcs' default value is
+	# charset_table		= 0..9, A..Z->a..z, _, a..z, U+A8->U+B8, U+B8, U+C0..U+DF->U+E0..U+FF, U+E0..U+FF
+	#
+	# 'utf-8' default value is
+	# charset_table		= 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F
+}
+
+#############################################################################
+## indexer settings
+#############################################################################
+
+indexer
+{
+	# memory limit
+	# can be specified in bytes, kilobytes (mem_limit=1000K) or megabytes (mem_limit=10M)
+	# will grow if set unacceptably low
+	# will warn if set too low, hurting the performance
+	# optional, default is 32M
+	mem_limit			= 32M
+}
+
+#############################################################################
+## searchd settings
+#############################################################################
+searchd
+{
+	# port on which search daemon will listen
+	port				= 3312
 
 
-# log file
-# searchd run info is logged here
-log					= /home/sphinx/logs/searchd.log
+	# log file
+	# searchd run info is logged here
+	log					= /home/sphinx/logs/searchd.log
 
 
-# query log file
-# all the search queries are logged here
-query_log			= /home/sphinx/logs/query.log
+	# query log file
+	# all the search queries are logged here
+	query_log			= /home/sphinx/logs/query.log
 
 
-# client read timeout, seconds
-read_timeout		= 5
+	# client read timeout, seconds
+	read_timeout		= 5
 
 
-# maximum amount of children to fork
-# useful to control server load
-max_children		= 30
+	# maximum amount of children to fork
+	# useful to control server load
+	max_children		= 30
 
 
-# a file which will contain searchd process ID
-# used for different external automation scripts
-# MUST be present
-pid_file			= /home/sphinx/searchd.pid
+	# a file which will contain searchd process ID
+	# used for different external automation scripts
+	# MUST be present
+	pid_file			= /home/sphinx/searchd.pid
+}
 
+#############################################################################
+## search utility settings
+#############################################################################
 
-[search]
-
-# SQL query to load document info to show off in search results
-# NOTE: will use SQL credentials from indexer section for now!
-sql_query_info		= SELECT * FROM documents WHERE id=$id
+search
+{
+	# SQL query to load document info to show off in search results
+	# NOTE: will use SQL credentials from indexer section for now!
+	sql_query_info		= SELECT * FROM documents WHERE id=$id
+}
 
 # --eof--

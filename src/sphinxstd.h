@@ -24,6 +24,7 @@ template < typename T > inline void Swap ( T & v1, T & v2 )
 	v2 = temp;
 }
 
+/////////////////////////////////////////////////////////////////////////////
 
 /// generic vector
 /// (don't even ask why it's not std::vector)
@@ -214,6 +215,322 @@ private:
 
 #define ARRAY_FOREACH(_index,_array) \
 	for ( int _index=0; _index<_array.GetLength(); _index++ )
+
+/////////////////////////////////////////////////////////////////////////////
+
+/// simple generic hash
+template < typename T, typename KEY, typename HASHFUNC, int LENGTH, int INCREASE >
+class CSphGenericHash
+{
+protected:
+	struct HashEntry_t
+	{
+		T 			m_tData;				///< data, owned by the hash
+		KEY			m_tKey;					///< key, owned by the hash
+		bool		m_bDeleted;				///< is this entry deleted
+		bool		m_bEmpty;				///< is this entry empty
+	};
+
+protected:
+	HashEntry_t	*	m_pHash;				///< all the hash entries
+
+protected:
+	/// this function finds hash entry by it's key.
+	template < bool STOP_ON_DELETED >
+	const HashEntry_t * Search ( const KEY & key ) const
+	{
+		if ( !m_pHash )
+			return NULL;
+
+		int index = HASHFUNC() ( key ) ;
+		assert ( index >= 0 && index < LENGTH );
+
+		for ( int count = 0; count < LENGTH * 2 / 3; count++ )
+		{
+			// deleted slot
+			if ( m_pHash[index].m_bDeleted )
+			{
+				// found deleted slot
+				#if USE_WINDOWS
+				#pragma warning(disable:4127)
+				#endif
+				if ( STOP_ON_DELETED )
+				#if USE_WINDOWS
+				#pragma warning(default:4127)
+				#endif
+					return m_pHash + index;
+			}
+			else
+			{
+				// empty slot
+				if ( m_pHash[index].m_bEmpty )
+					return m_pHash + index;
+
+				// found the same
+				if ( m_pHash[index].m_tKey == key )
+					return m_pHash + index;
+			}
+
+			// next index
+			index = ( index+INCREASE ) & ( LENGTH-1 );
+		}
+
+		return NULL;
+	}
+
+public:
+	/// ctor
+	CSphGenericHash ()
+		: m_pHash ( NULL )
+		, m_pIterator ( NULL )
+	{
+	}
+
+	/// dtor
+	~CSphGenericHash ()
+	{
+		Reset ();
+	}
+
+	/// reset
+	void Reset ()
+	{
+		SafeDeleteArray ( m_pHash );
+	}
+
+	/// add new entry
+	void Add ( const T & tData, const KEY & tKey )
+	{
+		if ( !m_pHash )
+			Create ();
+
+		HashEntry_t * pEntry = const_cast<HashEntry_t *> ( Search<true> ( tKey ) );
+		assert ( pEntry && "hash overflow" );
+		assert ( pEntry->m_bEmpty && "already hashed" );
+
+		pEntry->m_tData		= tData;
+		pEntry->m_tKey		= tKey;
+		pEntry->m_bDeleted	= false;
+		pEntry->m_bEmpty	= false;
+	}
+
+	/// check if key exists
+	bool Exists ( const KEY & key ) const
+	{
+		const HashEntry_t * pEntry = Search<false> ( key );
+		return !( pEntry==NULL || pEntry->m_bEmpty );
+	}
+
+	/// get current value
+	T & operator [] ( const KEY & tKey ) const
+	{
+		HashEntry_t * pEntry = const_cast<HashEntry_t *> ( Search<false> ( tKey ) );
+		if ( pEntry && !pEntry->m_bEmpty )
+			return pEntry->m_tData;
+
+		assert ( 0 && "hash missing value in operator []" );
+		return m_pHash[0].m_tData;
+	}
+
+	/// copying
+	const CSphGenericHash<T,KEY,HASHFUNC,LENGTH,INCREASE> & operator = ( const CSphGenericHash<T,KEY,HASHFUNC,LENGTH,INCREASE> & rhs )
+	{
+		SafeDeleteArray ( m_pHash );
+		if ( rhs.m_pHash )
+		{
+			Create ();
+			for ( int i=0; i<LENGTH; i++ )
+			{
+				m_pHash[i].m_tKey = rhs.m_pHash[i].m_tKey;
+				m_pHash[i].m_tData = rhs.m_pHash[i].m_tData;
+				m_pHash[i].m_bDeleted = rhs.m_pHash[i].m_bDeleted;
+				m_pHash[i].m_bEmpty = rhs.m_pHash[i].m_bEmpty;
+			}
+		}
+		return *this;
+	}
+
+public:
+	/// start iterating
+	void IterateStart () const
+	{
+		m_pIterator = m_pHash-1;
+	}
+
+	/// go to next existing entry
+	bool IterateNext () const
+	{
+		if ( !m_pHash )
+			return false;
+
+		do
+		{
+			++m_pIterator;
+		} while ( m_pIterator!=m_pHash+LENGTH && ( m_pIterator->m_bDeleted || m_pIterator->m_bEmpty ) );
+		return m_pIterator!=( m_pHash+LENGTH );
+	}
+
+	/// get entry value
+	const T & IterateGet () const
+	{
+		assert ( m_pHash );
+		assert ( m_pIterator && m_pIterator>=m_pHash && m_pIterator<m_pHash+LENGTH );
+		return m_pIterator->m_tData;
+	}
+
+	/// get entry key
+	const KEY & IterateGetKey () const
+	{
+		assert ( m_pHash );
+		assert ( m_pIterator && m_pIterator>=m_pHash && m_pIterator<m_pHash+LENGTH );
+		return m_pIterator->m_tKey;
+	}
+
+protected:
+	/// allocate the hash on demand
+	void Create ()
+	{
+		assert ( !m_pHash );
+		m_pHash = new HashEntry_t [ LENGTH ];
+		for ( int i=0; i<LENGTH; i++ )
+		{
+			m_pHash[i].m_bEmpty = true;
+			m_pHash[i].m_bDeleted = false;
+		}
+	}
+
+private:
+	/// current iterator
+	mutable HashEntry_t * m_pIterator;
+};
+
+/////////////////////////////////////////////////////////////////////////////
+
+/// immutable C string proxy
+struct CSphString
+{
+protected:
+	char *	m_sValue;
+
+public:
+	CSphString ()
+		: m_sValue ( NULL )
+	{
+	}
+
+	CSphString ( const CSphString & rhs )
+		: m_sValue ( NULL )
+	{
+		*this = rhs;
+	}
+
+	virtual ~CSphString ()
+	{
+		SafeDeleteArray ( m_sValue );
+	}
+
+	const char * cstr () const
+	{
+		return m_sValue;
+	}
+
+	bool operator == ( const CSphString & t ) const
+	{
+		return strcmp ( m_sValue, t.m_sValue )==0;
+	}
+
+	bool operator == ( const char * t ) const
+	{
+		return strcmp ( m_sValue, t )==0;
+	}
+
+	bool operator != ( const CSphString & t ) const
+	{
+		return strcmp ( m_sValue, t.m_sValue )!=0;
+	}
+
+	bool operator != ( const char * t ) const
+	{
+		return strcmp ( m_sValue, t )!=0;
+	}
+
+	CSphString ( const char * sString )
+	{
+		m_sValue = new char [ 1+strlen(sString) ];
+		strcpy ( m_sValue, sString ); // FIXME! this is non-TS
+	}
+
+	const CSphString & operator = ( const CSphString & rhs )
+	{
+		SafeDeleteArray ( m_sValue );
+		if ( rhs.m_sValue )
+		{
+			m_sValue = new char [ 1+strlen(rhs.m_sValue) ];
+			strcpy ( m_sValue, rhs.m_sValue);
+		}
+		return *this;
+	}
+};
+
+/////////////////////////////////////////////////////////////////////////////
+
+/// immutable string/int variant proxy
+struct CSphVariant : public CSphString
+{
+protected:
+	int		m_iValue;
+
+public:
+	CSphVariant ()
+		: CSphString ()
+		, m_iValue ( 0)
+	{
+	}
+	
+	CSphVariant ( const char * sString )
+		: CSphString ( sString )
+		, m_iValue ( atoi ( m_sValue ) )
+	{
+	}
+
+	CSphVariant ( const CSphVariant & rhs )
+		: CSphString ()
+		, m_iValue ( 0 )
+	{
+		*this = rhs;
+	}
+
+	int intval () const
+	{
+		return m_iValue;
+	}
+
+	const CSphVariant & operator = ( const CSphVariant & rhs )
+	{
+		CSphString::operator = ( rhs );
+		m_iValue = rhs.m_iValue;
+		return *this;
+	}
+};
+
+/////////////////////////////////////////////////////////////////////////////
+
+/// match-sorting priority min-queue interface
+template< typename T, int SIZE> class ISphQueue
+{
+public:
+	/// base push
+	virtual void		Push ( const T & tEntry ) = 0;
+
+	/// base pop
+	virtual void		Pop () = 0;
+
+	/// get entries count
+	virtual int			GetLength () const = 0;
+
+	/// get current root
+	virtual const T &	Root () const = 0;
+};
 
 #endif // _sphinxstd_
 

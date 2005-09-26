@@ -26,7 +26,7 @@ unset ( $_SERVER["argv"][0] );
 
 // build query
 if ( !is_array($_SERVER["argv"]) || empty($_SERVER["argv"]) )
-	die ( "usage: php -f test.php [--any] <word [word [word [...]]]> [--group <group>] [-p <port>]\n" );
+	die ( "usage: php -f test.php [--any] <word [word [word [...]]]> [--group <group>] [-p <port>] [-i <index>]\n" );
 
 $args = array();
 foreach ( $_SERVER["argv"] as $arg )
@@ -36,6 +36,7 @@ $q = "";
 $any = false;
 $groups = array();
 $port = 3312;
+$index = "*";
 for ( $i=0; $i<count($args); $i++ )
 {
 	if ( $args[$i]=="--any" )
@@ -47,6 +48,9 @@ for ( $i=0; $i<count($args); $i++ )
 	} else if ( $args[$i]=="-p" )
 	{
 		$port = (int)$args[++$i];
+	} else if ( $args[$i]=="-i" )
+	{
+		$index = $args[++$i];
 	} else
 	{
 		$q .= $args[$i] . " ";
@@ -62,7 +66,7 @@ $cl->SetServer ( "localhost", $port );
 $cl->SetWeights ( array ( 100, 1 ) );
 $cl->SetMatchMode ( $any ? SPH_MATCH_ANY : SPH_MATCH_ALL );
 $cl->SetGroups ( $groups );
-$res = $cl->Query ( $q );
+$res = $cl->Query ( $q, $index );
 
 ////////////////
 // print me out

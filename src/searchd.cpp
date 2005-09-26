@@ -24,13 +24,27 @@
 #include <time.h>
 #include <stdarg.h>
 
-#if !USE_WINDOWS
-#include <unistd.h>
-#include <netinet/in.h>
-#include <sys/file.h>
-#include <sys/socket.h>
-#include <sys/time.h>
-#include <sys/wait.h>
+#if USE_WINDOWS
+	// Win-specific headers and calls
+	#include <io.h>
+	#include <winsock2.h>
+
+	#define sphSockRecv(_sock,_buf,_len,_flags)		::recv(_sock,_buf,_len,_flags)
+	#define sphSockSend(_sock,_buf,_len,_flags)		::send(_sock,_buf,_len,_flags)
+	#define sphSockClose(_sock)						::closesocket(_sock)
+
+#else
+	// UNIX-specific headers and calls
+	#include <unistd.h>
+	#include <netinet/in.h>
+	#include <sys/file.h>
+	#include <sys/socket.h>
+	#include <sys/time.h>
+	#include <sys/wait.h>
+
+	#define sphSockRecv(_sock,_buf,_len,_flags)		::recv(_sock,_buf,_len,_flags)
+	#define sphSockSend(_sock,_buf,_len,_flags)		::send(_sock,_buf,_len,_flags)
+	#define sphSockClose(_sock)						::close(_sock)
 #endif
 
 /////////////////////////////////////////////////////////////////////////////
@@ -52,20 +66,90 @@ static int				g_iMaxChildren	= 0;
 static int				g_iSocket		= 0;
 static int				g_iQueryLogFile	= -1;
 static int				g_iHUP			= 0;
-
 static const char *		g_sPidFile		= NULL;
-static char				g_sLockFile [ SPH_MAX_FILENAME_LEN ] = "";
+
+struct ServedIndex_t
+{
+	CSphIndex *			m_pIndex;
+	CSphDict *			m_pDict;
+	ISphTokenizer *		m_pTokenizer;
+	CSphString *		m_pLockFile; 
+
+	ServedIndex_t ()
+	{
+		Reset ();
+	}
+
+	void Reset ()
+	{
+		m_pIndex	= NULL;
+		m_pDict		= NULL;
+		m_pTokenizer= NULL;
+		m_pLockFile	= NULL;
+	}
+
+	~ServedIndex_t ()
+	{
+		if ( m_pLockFile )
+			unlink ( m_pLockFile->cstr() );
+
+		SafeDelete ( m_pIndex );
+		SafeDelete ( m_pDict );
+		SafeDelete ( m_pTokenizer );
+		SafeDelete ( m_pLockFile );
+	}
+};
+
+static SmallStringHash_T < ServedIndex_t >	g_hIndexes;
+
+///////////////////////////////////////////////////////////////////////////////
+
+#if USE_WINDOWS
+
+// Windows hacks
+#define LOCK_EX			0
+#define LOCK_UN			1
+#define STDIN_FILENO	fileno(stdin)
+#define STDOUT_FILENO	fileno(stdout)
+#define STDERR_FILENO	fileno(stderr)
+#define ETIMEDOUT		WSAETIMEDOUT
+#define EWOULDBLOCK		WSAEWOULDBLOCK
+#define socklen_t		int
+#define vsnprintf		_vsnprintf
+
+
+void flock ( int, int )
+{
+}
+
+
+void sleep ( int )
+{
+}
+
+
+void ctime_r ( time_t * tNow, char * sBuf )
+{
+	strcpy ( sBuf, ctime(tNow) );
+}
+
+
+int getpid ()
+{
+	return 0;
+}
+
+#endif // USE_WINDOWS
 
 /////////////////////////////////////////////////////////////////////////////
 
 void Shutdown ()
 {
 	if ( g_iSocket )
-		close ( g_iSocket );
+		sphSockClose ( g_iSocket );
 	if ( g_sPidFile )
 		unlink ( g_sPidFile );
-	if ( strlen(g_sLockFile) )
-		unlink ( g_sLockFile );
+	g_hIndexes.Reset ();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -144,7 +228,7 @@ int createServerSocket_IP(int port)
 
 	iaddr.sin_family = AF_INET;
 	iaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-	iaddr.sin_port = htons(port);
+	iaddr.sin_port = htons((short)port);
 
 	sphInfo ( "creating a server socket on port %d", port );
 	if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
@@ -173,7 +257,8 @@ int createServerSocket_IP(int port)
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void sigchld ( int arg )
+#if !USE_WINDOWS
+void sigchld ( int )
 {
 	signal ( SIGCHLD, sigchld );
 	while ( waitpid ( 0, (int *)0, WNOHANG | WUNTRACED ) > 0 )
@@ -181,7 +266,7 @@ void sigchld ( int arg )
 }
 
 
-void sigterm(int arg)
+void sigterm ( int )
 {
 	sphInfo ( "caught SIGTERM, shutting down" );
 	Shutdown ();
@@ -189,16 +274,22 @@ void sigterm(int arg)
 }
 
 
-void sighup ( int arg )
+void sighup ( int )
 {
 	sphInfo ( "rotating indices: caught SIGHUP, waiting for children to exit" );
 	g_iHUP = 1;
 }
+#endif // !USE_WINDOWS
 
 ///////////////////////////////////////////////////////////////////////////////
 
 int select_fd ( int fd, int maxtime, int writep )
 {
+	#if USE_WINDOWS
+	#pragma warning(disable:4127) // conditional expr is const
+	#pragma warning(disable:4389) // signed/unsigned mismatch
+	#endif // USE_WINDOWS
+
 	fd_set fds;
 	FD_ZERO ( &fds );
 	FD_SET ( fd, &fds );
@@ -212,6 +303,11 @@ int select_fd ( int fd, int maxtime, int writep )
 	tv.tv_usec = 0;
 
 	return select ( fd+1, writep ? NULL : &fds, writep ? &fds : NULL, &exceptfds, &tv );
+
+	#if USE_WINDOWS
+	#pragma warning(default:4127) // conditional expr is const
+	#pragma warning(default:4389) // signed/unsigned mismatch
+	#endif // USE_WINDOWS
 }
 
 
@@ -229,7 +325,7 @@ int iread(int fd, void *buf, int len)
 				return -1;
 			}
 		}
-		res = read(fd, buf, len);
+		res = sphSockRecv ( fd, (char*)buf, len, 0 );
 	}
 	while (res == -1 && errno == EINTR);
 
@@ -246,22 +342,22 @@ int iwrite ( int iFD, const char * sFmt, ... )
 	vsnprintf ( sBuf, sizeof(sBuf), sFmt, ap );
 	va_end ( ap );
 
-	return ::write ( iFD, sBuf, strlen(sBuf) );
+	return sphSockSend ( iFD, sBuf, strlen(sBuf), 0 );
 }
 
 /////////////////////////////////////////////////////////////////////////////
 
-void HandleClient ( int rsock, CSphIndex * pIndex, CSphDict * pDict, ISphTokenizer * pTokenizer )
+void HandleClient ( int rsock )
 {
 	CSphQuery tQuery;
 	CSphQueryResult * pRes;
 	int i, iOffset, iLimit, iCount, iMode;
-	char sQuery [ 1024 ], sBuf [ 2048 ];
+	char sQuery [ 1024 ], sIndex [ 1024 ], sBuf [ 2048 ];
 
 	// hello there
 	iwrite ( rsock, "VER %d\n", SPHINX_SEARCHD_PROTO );
 
-	// read mode/limits
+	// v1. read mode/limits
 	assert ( sizeof(tQuery.m_eSort)==4 );
 	if ( iread ( rsock, &iOffset, 4 )!=4 ) return;
 	if ( iread ( rsock, &iLimit, 4 )!=4 ) return;
@@ -269,7 +365,7 @@ void HandleClient ( int rsock, CSphIndex * pIndex, CSphDict * pDict, ISphTokeniz
 	if ( iread ( rsock, &tQuery.m_eSort, 4)!=4 ) return;
 	if ( iread ( rsock, &tQuery.m_iGroups, 4 )!=4 ) return;
 
-	// read groups
+	// v1. read groups
 	if ( tQuery.m_iGroups<0 || tQuery.m_iGroups>4096 ) return; // FIXME?
 	if ( tQuery.m_iGroups )
 	{
@@ -278,14 +374,13 @@ void HandleClient ( int rsock, CSphIndex * pIndex, CSphDict * pDict, ISphTokeniz
 		if ( iread ( rsock, tQuery.m_pGroups, i )!=i ) return;
 	}
 
-	// read query string
+	// v1. read query string
 	if ( iread ( rsock, &i, 4 )!=4 ) return;
 	if ( i<0 || i>(int)sizeof(sQuery)-1 ) return;
-
 	if ( iread ( rsock, sQuery, i )!=i ) return;
 	sQuery[i] = '\0';
 
-	// read weights
+	// v1. read weights
 	int iUserWeights;
 	int dUserWeights [ SPH_MAX_FIELD_COUNT ];
 
@@ -294,14 +389,65 @@ void HandleClient ( int rsock, CSphIndex * pIndex, CSphDict * pDict, ISphTokeniz
 	if ( iUserWeights )
 		if ( iread ( rsock, dUserWeights, iUserWeights*4 ) != iUserWeights*4 ) return;
 
-	// do query
+	// v2. read index name
+	if ( iread ( rsock, &i, 4 )!=4 ) return;
+	if ( i<0 || i>(int)sizeof(sIndex)-1 ) return;
+	if ( iread ( rsock, sIndex, i )!=i ) return;
+	sIndex[i] = '\0';
+
+	// configure query
 	tQuery.m_sQuery = sQuery;
 	tQuery.m_pWeights = dUserWeights;
 	tQuery.m_iWeights = iUserWeights;
 	tQuery.m_eMode = (ESphMatchMode) Min ( Max ( iMode, 0 ), SPH_MATCH_TOTAL );
-	tQuery.m_pTokenizer = pTokenizer;
 
-	pRes = pIndex->query ( pDict, &tQuery );
+	// do search
+	if ( strcmp ( sIndex, "*" )==0 )
+	{
+		// search through all indexes
+		g_hIndexes.IterateStart ();
+
+		pRes = new CSphQueryResult ();
+		ISphMatchQueue * pTop = sphCreateQueue ( &tQuery );
+
+		while ( g_hIndexes.IterateNext () )
+		{
+			const ServedIndex_t & tServed = g_hIndexes.IterateGet ();
+			assert ( tServed.m_pIndex );
+			assert ( tServed.m_pDict );
+			assert ( tServed.m_pTokenizer );
+
+			// do query
+			tQuery.m_pTokenizer = tServed.m_pTokenizer;
+			tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pTop );
+		}
+
+		sphFlattenQueue ( pTop, pRes );
+
+	} else
+	{
+		// search through specific index
+		if ( !g_hIndexes.Exists ( sIndex ) )
+		{
+			iwrite ( rsock, "ERROR Index '%s' not found\n", sIndex );
+			sphSockClose ( rsock );
+			return;
+		}
+
+		const ServedIndex_t & tServed = g_hIndexes[sIndex];
+		assert ( tServed.m_pIndex );
+		assert ( tServed.m_pDict );
+		assert ( tServed.m_pTokenizer );
+
+		// do query
+		tQuery.m_sQuery = sQuery;
+		tQuery.m_pWeights = dUserWeights;
+		tQuery.m_iWeights = iUserWeights;
+		tQuery.m_eMode = (ESphMatchMode) Min ( Max ( iMode, 0 ), SPH_MATCH_TOTAL );
+		tQuery.m_pTokenizer = tServed.m_pTokenizer;
+
+		pRes = tServed.m_pIndex->Query ( tServed.m_pDict, &tQuery );
+	}
 
 	// log query
 	if ( g_iQueryLogFile>=0 )
@@ -362,7 +508,7 @@ bool IsReadable ( const char * sPath )
 	if ( iFD<0 )
 		return false;
 
-	::close ( iFD );
+	close ( iFD );
 	return true;
 }
 
@@ -435,101 +581,165 @@ int main ( int argc, char **argv )
 		return 1;
 	}
 
+	#if USE_WINDOWS
+	sphWarning ( "forcing --console mode on Windows" );
+	bOptConsole = true;
+	#endif // USE_WINDOWS
+
 	/////////////////////
 	// parse config file
 	/////////////////////
 
+	CSphConfigParser cp;
 	sphInfo ( "using config file '%s'...", sOptConfig );
-	if ( !conf.Open ( sOptConfig ) )
-		sphFatal ( "failed to read config file '%s'", sOptConfig );
 
-	CSphHash * confCommon = conf.LoadSection ( "common", g_dSphKeysCommon );
-	CSphHash * confSearchd = conf.LoadSection ( "searchd", g_dSphKeysSearchd );
+	// FIXME! add key validation here. g_dSphKeysCommon, g_dSphKeysSearchd
+	if ( !cp.Parse ( sOptConfig ) )
+		sphFatal ( "failed to parse config file '%s'", sOptConfig );
 
-	#define CHECK_CONF(_hash,_section,_key) \
-		if ( !_hash->Get(_key) ) \
-			sphFatal ( "mandatory option '%s' not found in config file section '[%s]'", _key, _section );
+	const CSphConfig & hConf = cp.m_tConf;
 
-	CHECK_CONF ( confCommon, "common", "index_path" );
-	CHECK_CONF ( confSearchd, "searchd", "port" );
-	CHECK_CONF ( confSearchd, "searchd", "pid_file" );
+	if ( !hConf.Exists ( "searchd" ) || !hConf["searchd"].Exists ( "searchd" ) )
+		sphFatal ( "'searchd' config section not found in '%s'", sOptConfig );
 
-	int iPort = atoi ( confSearchd->Get ( "port" ) );
+	const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
+
+	if ( !hConf.Exists ( "index" ) )
+		sphFatal ( "no indexes found in '%s'", sOptConfig );
+
+	#define CONF_CHECK(_hash,_key,_msg,_add) \
+		if (!( _hash.Exists ( _key ) )) \
+			sphFatal ( "mandatory option '%s' not found " _msg, _key, _add );
+
+	CONF_CHECK ( hSearchd, "port", "in 'searchd' section", "" );
+	if ( !bOptConsole )
+		CONF_CHECK ( hSearchd, "pid_file", "in 'searchd' section", "" );
+
+	int iPort = hSearchd["port"].intval();
 	if ( !iPort )
-		sphFatal ( "expected valid 'port', got '%s'", confSearchd->Get ( "port" ) );
+		sphFatal ( "expected valid 'port', got '%s'", hSearchd["port"].cstr() );
 
-	if ( confSearchd->Get ( "g_iReadTimeout") )
-		g_iReadTimeout = Max ( 0, atoi ( confSearchd->Get ( "read_timeout" ) ) );
+	if ( hSearchd.Exists ( "read_timeout" ) && hSearchd["read_timeout"].intval()>=0 )
+		g_iReadTimeout = hSearchd["read_timeout"].intval();
 
-	if ( confSearchd->Get ( "max_children" ) )
-		g_iMaxChildren = Max ( 0, atoi ( confSearchd->Get ( "max_children" ) ) );
+	if ( hSearchd.Exists ( "max_children" ) && hSearchd["max_children"].intval()>=0 )
+		g_iMaxChildren = hSearchd["max_children"].intval();
 
-	// configure morphology
-	DWORD iMorph = SPH_MORPH_NONE;
-	const char * pMorph = confCommon->Get ( "morphology" );
-	if ( pMorph )
+	/////////////////////
+	// build index table
+	/////////////////////
+
+	int iValidIndexes = 0;
+
+	hConf["index"].IterateStart ();
+	while ( hConf["index"].IterateNext() )
 	{
-		if ( !strcmp ( pMorph, "stem_en" ) )
-			iMorph = SPH_MORPH_STEM_EN;
-		else if ( !strcmp ( pMorph, "stem_ru" ) )
-			iMorph = SPH_MORPH_STEM_RU;
-		else if ( !strcmp ( pMorph, "stem_enru" ) )
-			iMorph = SPH_MORPH_STEM_EN | SPH_MORPH_STEM_RU;
-		else
-			sphWarning ( "unknown morphology type '%s' ignored", pMorph );
-	}
+		const CSphConfigSection & hIndex = hConf["index"].IterateGet();
+		const char * sIndexName = hConf["index"].IterateGetKey().cstr();
 
-	// configure charset_type
-	ISphTokenizer * pTokenizer = NULL;
-	if ( confCommon->Get ( "charset_type" ) )
-	{
-		if ( !strcmp ( confCommon->Get ( "charset_type" ), "sbcs" ) )
+		// check path
+		if ( !hIndex.Exists ( "path" ) )
+		{
+			sphWarning ( "key 'path' not found in index '%s' - NOT SERVING", sIndexName );
+			continue;
+		}
+
+		// configure morphology
+		DWORD iMorph = SPH_MORPH_NONE;
+		if ( hIndex.Exists ( "morphology" ) )
+		{
+			if ( hIndex["morphology"]=="stem_en" )			iMorph = SPH_MORPH_STEM_EN;
+			else if ( hIndex["morphology"]=="stem_ru" )		iMorph = SPH_MORPH_STEM_RU;
+			else if ( hIndex["morphology"]=="stem_enru" )	iMorph = SPH_MORPH_STEM_EN | SPH_MORPH_STEM_RU;
+			else
+				sphWarning ( "unknown morphology type '%s' in index '%s' ignored", hIndex["morphology"], sIndexName );
+		}
+
+		// configure charset_type
+		ISphTokenizer * pTokenizer = NULL;
+		if ( hIndex.Exists ( "charset_type" ) )
+		{
+			if ( hIndex["charset_type"]=="sbcs" )
+				pTokenizer = sphCreateSBCSTokenizer ();
+			else if ( hIndex["charset_type"]=="utf-8" )
+				pTokenizer = sphCreateUTF8Tokenizer ();
+			else
+			{
+				sphWarning ( "unknown charset type '%s' in index '%s' - NOT SERVING", hIndex["charset_type"] );
+				continue;
+			}
+		} else
+		{
 			pTokenizer = sphCreateSBCSTokenizer ();
-		else if ( !strcmp ( confCommon->Get ( "charset_type" ), "utf-8" ) )
-			pTokenizer = sphCreateUTF8Tokenizer ();
-		else
-			sphFatal ( "unknown charset type '%s'", confCommon->Get ( "charset_type" ) );
-	} else
-	{
-		pTokenizer = sphCreateSBCSTokenizer ();
-	}
+		}
 
-	// configure charset_table
-	assert ( pTokenizer );
-	if ( confCommon->Get ( "charset_table" ) )
-		if ( !pTokenizer->SetCaseFolding ( confCommon->Get ( "charset_table" ) ) )
-			sphFatal ( "failed to parse 'charset_table', fix your configuration" );
+		// configure charset_table
+		assert ( pTokenizer );
+		if ( hIndex.Exists ( "charset_table" ) )
+			if ( !pTokenizer->SetCaseFolding ( hIndex["charset_table"].cstr() ) )
+		{
+			sphWarning ( "failed to parse 'charset_table' in index '%s' - NOT SERVING", sIndexName );
+			continue;
+		}
+
+		// create add this one to served hashes
+		ServedIndex_t tIdx;
+		tIdx.m_pIndex = sphCreateIndexPhrase ( hIndex["path"].cstr() );
+		tIdx.m_pDict = new CSphDict_CRC32 ( iMorph );
+		tIdx.m_pDict->LoadStopwords ( hIndex.Exists ( "stopwords" ) ? hIndex["stopwords"].cstr() : NULL );
+		tIdx.m_pTokenizer = pTokenizer;
+
+		if ( !bOptConsole )
+		{
+			// check lock file
+			char sTmp [ 1024 ];
+			snprintf ( sTmp, sizeof(sTmp), "%s.spl", hIndex["path"] );
+			sTmp [ sizeof(sTmp)-1 ] = '\0';
+
+			struct stat tStat;
+			if ( !stat ( sTmp, &tStat ) )
+			{
+				sphWarning ( "lock file '%s' for index '%s' exists - NOT SERVING", sIndexName, sTmp );
+				continue;
+			}
+
+			// create lock file
+			FILE * fp = fopen ( sTmp, "w" );
+			if ( !fp )
+				sphFatal ( "unable to create lock file '%s' for index '%s'", sTmp, sIndexName );
+			fprintf ( fp, "%d", getpid() );
+			fclose ( fp );
+
+			tIdx.m_pLockFile = new CSphString ( sTmp );
+		}
+
+		g_hIndexes.Add ( tIdx, sIndexName );
+		tIdx.Reset (); // so that the dtor wouln't delete everything
+
+		iValidIndexes++;
+	}
+	if ( !iValidIndexes )
+		sphFatal ( "no valid indexes to serve" );
 
 	///////////
 	// startup
 	///////////
 
 	// handle my signals
+	#if !USE_WINDOWS
 	signal ( SIGCHLD, sigchld );
 	signal ( SIGTERM, sigterm );
 	signal ( SIGINT, sigterm );
 	signal ( SIGHUP, sighup );
-
-	// create index
-	CSphIndex * pIndex = sphCreateIndexPhrase ( confCommon->Get ( "index_path" ) );
-	CSphDict * pDict = new CSphDict_CRC32 ( iMorph );
-	pDict->LoadStopwords ( confCommon->Get ( "stopwords" ) );
+	#endif // !USE_WINDOWS
 
 	// daemonize
 	if ( !bOptConsole )
 	{
-		// check lock file
-		snprintf ( g_sLockFile, sizeof(g_sLockFile), "%s.spl", confCommon->Get ( "index_path" ) );
-		g_sLockFile [ sizeof(g_sLockFile)-1 ] = '\0';
-
-		struct stat tStat;
-		if ( !stat ( g_sLockFile, &tStat ) )
-			sphFatal ( "index lock file '%s' exists, exiting", g_sLockFile );
-
 		// create log
 		const char * sLog = "searchd.log";
-		if ( confSearchd->Get ( "log" ) )
-			sLog = confSearchd->Get ( "log" );
+		if ( hSearchd.Exists ( "log" ) )
+			sLog = hSearchd["log"].cstr();
 
 		umask ( 066 );
 		g_iLogFile = open ( sLog, O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
@@ -540,12 +750,12 @@ int main ( int argc, char **argv )
 		}
 
 		// create query log if required
-		if ( confSearchd->Get ( "query_log" ) )
+		if ( hSearchd.Exists ( "query_log" ) )
 		{
-			g_iQueryLogFile = open ( confSearchd->Get ( "query_log" ), O_CREAT | O_RDWR | O_APPEND,
+			g_iQueryLogFile = open ( hSearchd["query_log"].cstr(), O_CREAT | O_RDWR | O_APPEND,
 				S_IREAD | S_IWRITE );
 			if ( g_iQueryLogFile<0 )
-				sphFatal ( "failed to write query log file '%s'", confSearchd->Get ( "query_log" ) );
+				sphFatal ( "failed to write query log file '%s'", hSearchd["query_log"] );
 		}
 
 		// do daemonize
@@ -558,6 +768,7 @@ int main ( int argc, char **argv )
 		dup2 ( iDevNull, STDERR_FILENO );
 		g_bLogStdout = false;
 
+		#if !USE_WINDOWS
 		switch ( fork() )
 		{
 			case -1:
@@ -574,6 +785,7 @@ int main ( int argc, char **argv )
 				// tty-controlled parent
 				exit ( 0 );
 		}
+		#endif
 
 	} else
 	{
@@ -584,18 +796,11 @@ int main ( int argc, char **argv )
 	if ( !bOptConsole )
 	{
 		// create pid
-		g_sPidFile = confSearchd->Get ( "pid_file" );
+		g_sPidFile = hSearchd["pid_file"].cstr();
 		FILE * fp = fopen ( g_sPidFile, "w" );
 		if ( !fp )
 			sphFatal ( "unable to write pid file '%s'", g_sPidFile );
 		fprintf ( fp, "%d", getpid() );	
-		fclose ( fp );
-
-		// create lock file
-		fp = fopen ( g_sLockFile, "w" );
-		if ( !fp )
-			sphFatal ( "unable to create lock file '%s'", g_sLockFile );
-		fprintf ( fp, "%d", getpid() );
 		fclose ( fp );
 	}
 
@@ -610,6 +815,7 @@ int main ( int argc, char **argv )
 	sphInfo ( "accepting connections" );
 	for ( ;; )
 	{
+		#if !USE_WINDOWS
 		// try to rotate indices
 		if ( g_iHUP && !g_iChildren )
 		{
@@ -688,11 +894,22 @@ int main ( int argc, char **argv )
 			if ( !bSuccess )
 				sphWarning ( "rotating indices: using old index" );
 		}
+		#endif // USE_WINDOWS
+
+		#if USE_WINDOWS
+		#pragma warning(disable:4127) // conditional expr is const
+		#pragma warning(disable:4389) // signed/unsigned mismatch
+		#endif // USE_WINDOWS
 
 		// we can't simply accept, because of the need to react to HUPs
 		fd_set fdsAccept;
 		FD_ZERO ( &fdsAccept );
 		FD_SET ( g_iSocket, &fdsAccept );
+
+		#if USE_WINDOWS
+		#pragma warning(default:4127) // conditional expr is const
+		#pragma warning(default:4389) // signed/unsigned mismatch
+		#endif // USE_WINDOWS
 
 		struct timeval tvTimeout;
 		tvTimeout.tv_sec = 1;
@@ -713,17 +930,18 @@ int main ( int argc, char **argv )
 		if ( ( g_iMaxChildren && g_iChildren>=g_iMaxChildren ) || g_iHUP )
 		{
 			iwrite ( rsock, "RETRY Server maxed out\n" );
-			close ( rsock );
+			sphSockClose ( rsock );
 			continue;
 		}
 
 		if ( bOptConsole )
 		{
-			HandleClient ( rsock, pIndex, pDict, pTokenizer );
-			close ( rsock );
+			HandleClient ( rsock );
+			sphSockClose ( rsock );
 			continue;
 		}
 
+		#if !USE_WINDOWS
 		switch ( fork() )
 		{
 			// fork() failed
@@ -732,17 +950,18 @@ int main ( int argc, char **argv )
 
 			// child process, handle client
 			case 0:
-				HandleClient ( rsock, pIndex, pDict, pTokenizer );
-				close ( rsock );
+				HandleClient ( rsock );
+				sphSockClose ( rsock );
 				exit ( 0 );
 				break;
 
 			// parent process, continue accept()ing
 			default:
 				g_iChildren++;
-				close(rsock);
+			sphSockClose ( rsock );
 				break;
 		}
+		#endif // !USE_WINDOWS
 	}
 }
 

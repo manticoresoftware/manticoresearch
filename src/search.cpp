@@ -14,16 +14,13 @@
 #include "sphinx.h"
 #include "sphinxutils.h"
 #include <time.h>
-#if USE_MYSQL
-#include <mysql/mysql.h>
-#endif
 
 
-#define CHECK_CONF(_hash,_sect,_key) \
-	if ( !_hash->Get ( _key ) ) \
+#define CONF_CHECK(_hash,_key,_msg,_add) \
+	if (!( _hash.Exists ( _key ) )) \
 	{ \
-		fprintf ( stderr, "FATAL: key '%s' not found in config file '%s' section '%s'.\n", _key, sConfName, _sect ); \
-		return 1; \
+		fprintf ( stderr, "ERROR: key '%s' not found " _msg, _key, _add ); \
+		continue; \
 	}
 
 
@@ -160,198 +157,209 @@ int main ( int argc, char ** argv )
 	/////////////
 
 	// load config
-	CSphConfig tConf;
-	if ( !tConf.Open ( sConfName ) )
-		sphDie ( "FATAL: failed to open config file '%s'.\n", sConfName );
+	CSphConfigParser cp;
+	CSphConfig hConf;
 
-	CSphHash * hCommonConf = tConf.LoadSection ( "common", g_dSphKeysCommon );
+	if ( !cp.Parse ( sConfName ) )
+		sphDie ( "FATAL: failed to parse config file '%s'.\n", sConfName );
 
-	// get index path
-	const char * pIndexPath = hCommonConf->Get ( "index_path" );
-	if ( !pIndexPath )
-			sphDie ( "FATAL: key 'index_path' not found in config file.\n" );
+	if ( !hConf.Exists ( "index" ) )
+		sphDie ( "FATAL: no indexes found in config file.\n" );
 
-	// get morphology type
-	DWORD iMorph = SPH_MORPH_NONE;
-	const char * pMorph = hCommonConf ->Get ( "morphology" );
-	if ( pMorph )
+	/////////////////////
+	// search each index
+	/////////////////////
+
+	hConf["index"].IterateStart ();
+	while ( hConf["index"].IterateNext () )
 	{
-		if ( !strcmp ( pMorph, "stem_en" ) )		iMorph = SPH_MORPH_STEM_EN;
-		else if ( !strcmp ( pMorph, "stem_ru" ) )	iMorph = SPH_MORPH_STEM_RU;
-		else if ( !strcmp ( pMorph, "stem_enru" ) )	iMorph = SPH_MORPH_STEM_EN | SPH_MORPH_STEM_RU;
-		else
+		const CSphConfigSection & hIndex = hConf["index"].IterateGet ();
+		const char * sIndexName = hConf["index"].IterateGetKey().cstr();
+
+		if ( !hIndex.Exists ( "path" ) )
+			sphDie ( "FATAL: key 'path' not found in index '%s'.\n", sIndexName );
+
+		// get morphology type
+		DWORD iMorph = SPH_MORPH_NONE;
+		if ( hIndex.Exists ( "morphology" ) )
 		{
-			fprintf ( stderr, "WARNING: unknown morphology type '%s' ignored.\n", pMorph );
-		}
-	}
-
-	// do we want to show document info from database?
-	#if USE_MYSQL
-	MYSQL tSqlDriver;
-	const char * sQueryInfo = NULL;
-
-	while ( !bNoInfo )
-	{
-		CSphHash * hSearch = tConf.LoadSection ( "search", g_dSphKeysSearch );
-		if ( !hSearch )
-			break;
-
-		sQueryInfo = hSearch->Get ( "sql_query_info" );
-		if ( !sQueryInfo )
-			break;
-
-		if ( !strstr ( sQueryInfo, "$id" ) )
-			sphDie ( "FATAL: 'sql_query_info' value must contain '$id'." );
-
-		CSphHash * hIndexer = tConf.LoadSection ( "indexer", g_dSphKeysIndexer );
-		if ( !hIndexer )
-			sphDie ( "FATAL: section 'indexer' not found in config file." );
-
-		CHECK_CONF ( hIndexer, "indexer", "sql_host" );
-		CHECK_CONF ( hIndexer, "indexer", "sql_user" );
-		CHECK_CONF ( hIndexer, "indexer", "sql_pass" );
-		CHECK_CONF ( hIndexer, "indexer", "sql_db" );
-
-		int iPort = 3306;
-		const char * sTmp = hIndexer->Get ( "sql_port" );
-		if ( sTmp && atoi(sTmp) )
-			iPort = atoi(sTmp);
-
-		mysql_init ( &tSqlDriver );
-		if ( !mysql_real_connect ( &tSqlDriver,
-			hIndexer->Get ( "sql_host" ),
-			hIndexer->Get ( "sql_user" ),
-			hIndexer->Get ( "sql_pass" ),
-			hIndexer->Get ( "sql_db" ),
-			iPort,
-			hIndexer->Get ( "sql_sock" ), 0 ) )
-		{
-			sphDie ( "FATAL: failed to connect to MySQL (error='%s').",
-				mysql_error ( &tSqlDriver ) );
+			if ( hIndex["morphology"]=="stem_en" )			iMorph = SPH_MORPH_STEM_EN;
+			else if ( hIndex["morphology"]=="stem_ru" )		iMorph = SPH_MORPH_STEM_RU;
+			else if ( hIndex["morphology"]=="stem_enru" )	iMorph = SPH_MORPH_STEM_EN | SPH_MORPH_STEM_RU;
+			else
+				fprintf ( stderr, "WARNING: unknown morphology type '%s' ignored.\n", hIndex["morphology"].cstr() );
 		}
 
-		// all good
-		break;
-	}
-	#endif
+		// do we want to show document info from database?
+		#if USE_MYSQL
+		MYSQL tSqlDriver;
+		const char * sQueryInfo = NULL;
 
-	// configure stopwords
-	CSphDict * pDict = new CSphDict_CRC32 ( iMorph );
-	pDict->LoadStopwords ( hCommonConf->Get ( "stopwords" ) );
-
-	// configure charset_type
-	tQuery.m_pTokenizer = NULL;
-	if ( hCommonConf->Get ( "charset_type" ) )
-	{
-		if ( !strcmp ( hCommonConf->Get ( "charset_type" ), "sbcs" ) )
-			tQuery.m_pTokenizer = sphCreateSBCSTokenizer ();
-		else if ( !strcmp ( hCommonConf->Get ( "charset_type" ), "utf-8" ) )
-			tQuery.m_pTokenizer = sphCreateUTF8Tokenizer ();
-		else
-			sphDie ( "FATAL: unknown charset type '%s'.\n", hCommonConf->Get ( "charset_type" ) );
-	} else
-	{
-		tQuery.m_pTokenizer = sphCreateSBCSTokenizer ();
-	}
-
-	// configure charset_table
-	assert ( tQuery.m_pTokenizer );
-	if ( hCommonConf->Get ( "charset_table" ) )
-		if ( !tQuery.m_pTokenizer->SetCaseFolding ( hCommonConf->Get ( "charset_table" ) ) )
-			sphDie ( "FATAL: failed to parse 'charset_table', fix your configuration.\n" );
-
-	//////////
-	// search
-	//////////
-
-	tQuery.m_sQuery = sQuery;
-	if ( dGroups.GetLength() )
-	{
-		tQuery.m_pGroups = new DWORD [ dGroups.GetLength() ];
-		tQuery.m_iGroups = dGroups.GetLength();
-		memcpy ( tQuery.m_pGroups, &dGroups[0], sizeof(DWORD)*dGroups.GetLength() );
-	}
-
-	CSphIndex * pIndex = sphCreateIndexPhrase ( pIndexPath );
-	CSphQueryResult * pResult = pIndex->query ( pDict, &tQuery );
-
-	SafeDelete ( pIndex );
-	SafeDelete ( pDict );
-	SafeDelete ( tQuery.m_pTokenizer );
-
-	/////////
-	// print
-	/////////
-
-	if ( !pResult )
-	{
-		fprintf ( stdout, "query '%s': search error: can not open index.\n", sQuery );
-		return 1;
-	}
-
-	fprintf ( stdout, "query '%s': returned %d matches of %d total in %.2f sec\n",
-		sQuery, pResult->m_dMatches.GetLength(), pResult->m_iTotalMatches, pResult->m_fQueryTime );
-
-	if ( pResult->m_dMatches.GetLength() )
-	{
-		fprintf ( stdout, "\ndisplaying matches:\n" );
-
-		int iMaxIndex = Min ( iStart+iLimit, pResult->m_dMatches.GetLength() );
-		for ( int i=iStart; i<iMaxIndex; i++ )
+		while ( !bNoInfo )
 		{
-			CSphMatch & tMatch = pResult->m_dMatches[i];
-			fprintf ( stdout, "%d. group=%d, document=%d, weight=%d, time=%s",
-				1+i,
-				tMatch.m_iGroupID,
-				tMatch.m_iDocID,
-				tMatch.m_iWeight,
-				ctime ( (time_t*)&tMatch.m_iTimestamp ) );
-
-			#if USE_MYSQL
-			if ( sQueryInfo )
+			if ( !hIndex.Exists ( "source" )
+				|| !hConf.Exists ( "source" )
+				|| !hConf["source"].Exists ( hIndex["source"] ) )
 			{
-				char * sQuery = strmacro ( sQueryInfo, "$id", tMatch.m_iDocID );
-				const char * sError = NULL;
-
-				#define LOC_MYSQL_ERROR(_arg) { sError = _arg; break; }
-				do
-				{
-					if ( mysql_query ( &tSqlDriver, sQuery ) )
-						LOC_MYSQL_ERROR ( "mysql_query" );
-
-					MYSQL_RES * pSqlResult = mysql_use_result ( &tSqlDriver );
-					if ( !pSqlResult )
-						LOC_MYSQL_ERROR ( "mysql_use_result" );
-
-					MYSQL_ROW tRow = mysql_fetch_row ( pSqlResult );
-					if ( !tRow )
-						LOC_MYSQL_ERROR ( "mysql_fetch_row" );
-
-					fprintf ( stdout, "\n" );
-					for ( int iField=0; iField<(int)pSqlResult->field_count; iField++ )
-						fprintf ( stdout, "%s=%s\n", pSqlResult->fields[iField].name, tRow[iField] );
-					fprintf ( stdout, "\n" );
-
-					mysql_free_result ( pSqlResult );
-
-				} while ( false );
-
-				if ( sError )
-					sphDie ( "FATAL: sql_query_info: %s: %s.\n", sError, mysql_error ( &tSqlDriver ) );
-
-				delete [] sQuery;
+				break;
 			}
-			#endif
+			const CSphConfigSection & hSource = hConf["source"][ hIndex["source"] ];
+
+			if ( !hSource.Exists ( "sql_host" )
+				|| !hSource.Exists ( "sql_user" )
+				|| !hSource.Exists ( "sql_db" )
+				|| !hSource.Exists ( "sql_pass" ) )
+			{
+				break;
+			}
+
+			if ( !hSource.Exists ( "sql_query_info" ) )
+				break;
+			sQueryInfo = hIndex["sql_query_info"].cstr();
+			if ( !strstr ( sQueryInfo, "$id" ) )
+				sphDie ( "FATAL: 'sql_query_info' value must contain '$id'." );
+
+			int iPort = 3306;
+			if ( hSource.Exists ( "sql_port" ) && hSource["sql_port"].intval() )
+				iPort = hSource["sql_port"].intval();
+
+			mysql_init ( &tSqlDriver );
+			if ( !mysql_real_connect ( &tSqlDriver,
+				hSource["sql_host"].cstr(),
+				hSource["sql_user"].cstr(),
+				hSource["sql_pass"].cstr(),
+				hSource["sql_db"].cstr(),
+				iPort,
+				hSource.Exists ( "sql_sock" ) ? hSource["sql_sock"].cstr() : NULL,
+				0 ) )
+			{
+				sphDie ( "FATAL: failed to connect to MySQL (error='%s').",
+					mysql_error ( &tSqlDriver ) );
+			}
+
+			// all good
+			break;
+		}
+		#endif
+
+		// configure stopwords
+		CSphDict * pDict = new CSphDict_CRC32 ( iMorph );
+		pDict->LoadStopwords ( hIndex.Exists ( "stopwords" ) ? hIndex["stopwords"].cstr() : NULL );
+
+		// configure charset_type
+		tQuery.m_pTokenizer = NULL;
+		if ( hIndex.Exists ( "charset_type" ) )
+		{
+			if ( hIndex["charset_type"]=="sbcs" )
+				tQuery.m_pTokenizer = sphCreateSBCSTokenizer ();
+			else if ( hIndex["charset_type"]=="utf-8" )
+				tQuery.m_pTokenizer = sphCreateUTF8Tokenizer ();
+			else
+				sphDie ( "FATAL: unknown charset type '%s' in index '%s'.\n", hIndex["charset_type"], sIndexName );
+		} else
+		{
+			tQuery.m_pTokenizer = sphCreateSBCSTokenizer ();
 		}
 
-		fprintf ( stdout, "\nwords:\n" );
-		for ( int i=0; i<pResult->m_iNumWords; i++ )
+		// configure charset_table
+		assert ( tQuery.m_pTokenizer );
+		if ( hIndex.Exists ( "charset_table" ) )
+			if ( !tQuery.m_pTokenizer->SetCaseFolding ( hIndex["charset_table"].cstr() ) )
+				sphDie ( "FATAL: failed to parse 'charset_table' in index '%s'.\n", sIndexName );
+
+		//////////
+		// search
+		//////////
+
+		tQuery.m_sQuery = sQuery;
+		if ( dGroups.GetLength() )
 		{
-			fprintf ( stdout, "%d. '%s': %d documents, %d hits\n",
-				1+i,
-				pResult->m_tWordStats[i].m_sWord,
-				pResult->m_tWordStats[i].m_iDocs,
-				pResult->m_tWordStats[i].m_iHits );
+			tQuery.m_pGroups = new DWORD [ dGroups.GetLength() ];
+			tQuery.m_iGroups = dGroups.GetLength();
+			memcpy ( tQuery.m_pGroups, &dGroups[0], sizeof(DWORD)*dGroups.GetLength() );
+		}
+
+		CSphIndex * pIndex = sphCreateIndexPhrase ( hIndex["path"].cstr() );
+		CSphQueryResult * pResult = pIndex->Query ( pDict, &tQuery );
+
+		SafeDelete ( pIndex );
+		SafeDelete ( pDict );
+		SafeDelete ( tQuery.m_pTokenizer );
+
+		/////////
+		// print
+		/////////
+
+		if ( !pResult )
+		{
+			fprintf ( stdout, "query '%s': search error: can not open index.\n", sQuery );
+			return 1;
+		}
+
+		fprintf ( stdout, "query '%s': returned %d matches of %d total in %.2f sec\n",
+			sQuery, pResult->m_dMatches.GetLength(), pResult->m_iTotalMatches, pResult->m_fQueryTime );
+
+		if ( pResult->m_dMatches.GetLength() )
+		{
+			fprintf ( stdout, "\ndisplaying matches:\n" );
+
+			int iMaxIndex = Min ( iStart+iLimit, pResult->m_dMatches.GetLength() );
+			for ( int i=iStart; i<iMaxIndex; i++ )
+			{
+				CSphMatch & tMatch = pResult->m_dMatches[i];
+				fprintf ( stdout, "%d. group=%d, document=%d, weight=%d, time=%s",
+					1+i,
+					tMatch.m_iGroupID,
+					tMatch.m_iDocID,
+					tMatch.m_iWeight,
+					ctime ( (time_t*)&tMatch.m_iTimestamp ) );
+
+				#if USE_MYSQL
+				if ( sQueryInfo )
+				{
+					char * sQuery = strmacro ( sQueryInfo, "$id", tMatch.m_iDocID );
+					const char * sError = NULL;
+
+					#define LOC_MYSQL_ERROR(_arg) { sError = _arg; break; }
+					for ( ;; )
+					{
+						if ( mysql_query ( &tSqlDriver, sQuery ) )
+							LOC_MYSQL_ERROR ( "mysql_query" );
+
+						MYSQL_RES * pSqlResult = mysql_use_result ( &tSqlDriver );
+						if ( !pSqlResult )
+							LOC_MYSQL_ERROR ( "mysql_use_result" );
+
+						MYSQL_ROW tRow = mysql_fetch_row ( pSqlResult );
+						if ( !tRow )
+							LOC_MYSQL_ERROR ( "mysql_fetch_row" );
+
+						fprintf ( stdout, "\n" );
+						for ( int iField=0; iField<(int)pSqlResult->field_count; iField++ )
+							fprintf ( stdout, "%s=%s\n", pSqlResult->fields[iField].name, tRow[iField] );
+						fprintf ( stdout, "\n" );
+
+						mysql_free_result ( pSqlResult );
+						break;
+					}
+
+					if ( sError )
+						sphDie ( "FATAL: sql_query_info: %s: %s.\n", sError, mysql_error ( &tSqlDriver ) );
+
+					delete [] sQuery;
+				}
+				#endif
+			}
+
+			fprintf ( stdout, "\nwords:\n" );
+			for ( int i=0; i<pResult->m_iNumWords; i++ )
+			{
+				fprintf ( stdout, "%d. '%s': %d documents, %d hits\n",
+					1+i,
+					pResult->m_tWordStats[i].m_sWord,
+					pResult->m_tWordStats[i].m_iDocs,
+					pResult->m_tWordStats[i].m_iHits );
+			}
 		}
 	}
 }

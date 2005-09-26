@@ -359,227 +359,34 @@ int main ( int argc, char ** argv )
 	// load config
 	///////////////
 
-	CSphConfig conf;
-	CSphHash * confCommon;
-	CSphHash * confIndexer;
-
 	if ( !g_bQuiet )
 		fprintf ( stdout, "using config file '%s'...\n", sConfName );
 
-	if ( !conf.Open ( sConfName ) )
+	// FIXME! add key validation here. g_dSphKeysCommon, g_dSphKeysIndexer
+	CSphConfigParser cp;
+	if ( !cp.Parse ( sConfName ) )
 	{
-		fprintf ( stderr, "FATAL: unable to open config file '%s'.\n", sConfName );
+		fprintf ( stderr, "FATAL: failed to parse config file '%s'.\n", sConfName );
 		return 1;
 	}
-	confCommon = conf.LoadSection ( "common", g_dSphKeysCommon );
-	confIndexer = conf.LoadSection ( "indexer", g_dSphKeysIndexer );
+	const CSphConfig & hConf = cp.m_tConf;
 
-	#define CHECK_CONF(_hash,_sect,_key) \
-		if ( !_hash->Get(_key) ) \
-		{ \
-			fprintf ( stderr, "FATAL: key '%s' not found in config file '%s' section '%s'.\n", _key, sConfName, _sect ); \
-			return 1; \
-		}
-
-	CHECK_CONF ( confIndexer, "indexer", "type" );
-	CHECK_CONF ( confCommon, "common", "index_path" );
-
-	/////////////////////////
-	// check index lock file
-	/////////////////////////
-	
-	if ( !bRotate && !sBuildStops )
+	if ( !hConf.Exists ( "source" ) )
 	{
-		char sLockFile [ SPH_MAX_FILENAME_LEN ];
-		snprintf ( sLockFile, sizeof(sLockFile), "%s.spl", confCommon->Get ( "index_path" ) );
-		sLockFile [ sizeof(sLockFile)-1 ] = '\0';
-
-		struct stat tStat;
-		if ( !stat ( sLockFile, &tStat ) )
-		{
-			fprintf ( stderr, "FATAL: index lock file '%s' exists, will not index. Try --rotate option.\n",
-				sLockFile );
-			return 1;
-		}
+		fprintf ( stderr, "FATAL: no sources found in config file.\n" );
+		return 1;
+	}
+	if ( !hConf.Exists ( "index" ) )
+	{
+		fprintf ( stderr, "FATAL: no indexes found in config file.\n" );
+		return 1;
 	}
 
-	////////////////////
-	// spawn datasource
-	////////////////////
-
-	const char * sType = confIndexer->Get ( "type" );
-
-	#if USE_MYSQL
-	if ( !strcmp ( sType, "mysql" ) )
+	// configure memlimit
+	int iMemLimit = 0;
+	if ( hConf.Exists ( "indexer" ) )
 	{
-		CHECK_CONF ( confIndexer, "indexer", "sql_host" );
-		CHECK_CONF ( confIndexer, "indexer", "sql_user" );
-		CHECK_CONF ( confIndexer, "indexer", "sql_pass" );
-		CHECK_CONF ( confIndexer, "indexer", "sql_db" );
-		CHECK_CONF ( confIndexer, "indexer", "sql_query" );
-
-		CSphSourceParams_MySQL tParams;
-
-		tParams.m_sQuery		= confIndexer->Get ( "sql_query" );
-		tParams.m_sQueryPre		= confIndexer->Get ( "sql_query_pre" );
-		tParams.m_sQueryPost	= confIndexer->Get ( "sql_query_post" );
-		tParams.m_sQueryRange	= confIndexer->Get ( "sql_query_range" );
-		tParams.m_sGroupColumn	= confIndexer->Get ( "sql_group_column" );
-		tParams.m_sDateColumn	= confIndexer->Get ( "sql_date_column" );
-
-		tParams.m_sHost			= confIndexer->Get ( "sql_host" );
-		tParams.m_sUser			= confIndexer->Get ( "sql_user" );
-		tParams.m_sPass			= confIndexer->Get ( "sql_pass" );
-		tParams.m_sDB			= confIndexer->Get ( "sql_db" );
-		tParams.m_sUsock		= confIndexer->Get ( "sql_sock" );
-
-		const char * sTmp;
-		
-		sTmp = confIndexer->Get ( "sql_port" );
-		if ( sTmp && atoi(sTmp) )
-			tParams.m_iPort = atoi(sTmp);
-
-		sTmp = confIndexer->Get ( "sql_range_step" );
-		if ( sTmp && atoi(sTmp) )
-			tParams.m_iRangeStep = atoi(sTmp);
-
-		CSphSource_MySQL * pSrcMySQL = new CSphSource_MySQL ();
-		assert ( pSrcMySQL );
-
-		if ( !pSrcMySQL->Init ( &tParams ) )
-		{
-			SafeDelete ( pSrcMySQL );
-			return 1;
-		}
-
-		pSource = pSrcMySQL;
-	}
-	#endif
-
-	if ( !strcmp ( sType, "xmlpipe" ) )
-	{
-		CHECK_CONF ( confIndexer, "indexer", "xmlpipe_command" );
-
-		CSphSource_XMLPipe * pSrcXML = new CSphSource_XMLPipe ();
-		if ( !pSrcXML->Init ( confIndexer->Get ( "xmlpipe_command" ) ) )
-		{
-			fprintf ( stderr, "FATAL: CSphSource_XMLPipe: unable to popen '%s'.\n",
-				confIndexer->Get ( "xmlpipe_command" ) );
-			SafeDelete ( pSrcXML );
-			return 1;
-		}
-
-		pSource = pSrcXML;
-	}
-
-	///////////////////////////////////
-	// check and configure data source
-	///////////////////////////////////
-
-	if ( !pSource )
-		sphDie ( "FATAL: unknown data source type '%s'.", sType );
-
-	// strip_html, index_html_attrs
-	if ( confIndexer->Get ( "strip_html" ) )
-	{
-		const char * sAttrs = NULL;
-		if ( atoi ( confIndexer->Get ( "strip_html" ) )==1 )
-		{
-			sAttrs = confIndexer->Get ( "index_html_attrs" );
-			if ( !sAttrs )
-				sAttrs = "";
-		}
-		sAttrs = pSource->SetStripHTML ( sAttrs );
-		if ( sAttrs )
-			sphDie ( "FATAL: error in section [indexer] key 'index_html_attrs' syntax near '%s'.", sAttrs );
-	}
-
-	// charset_type
-	ISphTokenizer * pTokenizer = NULL;
-	if ( confCommon->Get ( "charset_type" ) )
-	{
-		if ( !strcmp ( confCommon->Get ( "charset_type" ), "sbcs" ) )
-			pTokenizer = sphCreateSBCSTokenizer ();
-		else if ( !strcmp ( confCommon->Get ( "charset_type" ), "utf-8" ) )
-			pTokenizer = sphCreateUTF8Tokenizer ();
-		else
-			sphDie ( "FATAL: unknown charset type '%s'.\n", confCommon->Get ( "charset_type" ) );
-	} else
-	{
-		pTokenizer = sphCreateSBCSTokenizer ();
-	}
-
-	// charset_table
-	assert ( pTokenizer );
-	if ( confCommon->Get ( "charset_table" ) )
-		if ( !pTokenizer->SetCaseFolding ( confCommon->Get ( "charset_table" ) ) )
-			sphDie ( "FATAL: failed to parse 'charset_table', fix your configuration.\n" );
-
-	pSource->SetTokenizer ( pTokenizer );
-
-	///////////
-	// do work
-	///////////
-
-	float fTime = sphLongTimer ();
-
-	bool bIndexedOk = false;
-	if ( sBuildStops )
-	{
-		///////////////////
-		// build stopwords
-		///////////////////
-
-		if ( !g_bQuiet )
-		{
-			fprintf ( stdout, "building stopwords list...\n" );
-			fflush ( stdout );
-		}
-
-		CSphStopwordBuilderDict * pDict = new CSphStopwordBuilderDict ();
-		assert ( pDict );
-
-		pSource->SetDict ( pDict );
-		while ( pSource->Next() );
-
-		pDict->Save ( sBuildStops, iTopStops, bBuildFreqs );
-
-		SafeDelete ( pDict );
-
-	} else
-	{
-		///////////////
-		// create dict
-		///////////////
-
-		// configure morphology
-		DWORD iMorph = SPH_MORPH_NONE;
-		const char * pMorph = confCommon->Get ( "morphology" );
-		if ( pMorph )
-		{
-			if ( !strcmp ( pMorph, "stem_en" ) )
-				iMorph = SPH_MORPH_STEM_EN;
-			else if ( !strcmp ( pMorph, "stem_ru" ) )
-				iMorph = SPH_MORPH_STEM_RU;
-			else if ( !strcmp ( pMorph, "stem_enru" ) )
-				iMorph = SPH_MORPH_STEM_EN | SPH_MORPH_STEM_RU;
-			else
-			{
-				fprintf ( stderr, "WARNING: unknown morphology type '%s' ignored.\n", pMorph );
-			}
-		}
-
-		// create dict
-		CSphDict_CRC32 * pDict = new CSphDict_CRC32 ( iMorph );
-		assert ( pDict );
-
-		// configure stops
-		pDict->LoadStopwords ( confCommon->Get ( "stopwords" ) );
-
-		// configure memlimit
-		int iMemLimit = 0;
-		char * sMemLimit = sphDup ( confIndexer->Get ( "mem_limit" ) );
-
+		char * sMemLimit = sphDup ( hConf["indexer"]["indexer"]["mem_limit"].cstr() );
 		int iLen = sMemLimit ? (int)strlen ( sMemLimit ) : 0;
 		if ( iLen )
 		{
@@ -606,46 +413,273 @@ int main ( int argc, char ** argv )
 			}
 		}
 		sphFree ( sMemLimit );
+	}
 
-		//////////
-		// index!
-		//////////
+	/////////////////////
+	// index each index
+	////////////////////
+
+	#define CONF_CHECK(_hash,_key,_msg,_add) \
+		if (!( _hash.Exists ( _key ) )) \
+		{ \
+			fprintf ( stderr, "ERROR: key '%s' not found " _msg, _key, _add ); \
+			continue; \
+		}
+
+	hConf["index"].IterateStart ();
+	while ( hConf["index"].IterateNext() )
+	{
+		const CSphConfigSection & hIndex = hConf["index"].IterateGet ();
+		const char * sIndexName = hConf["index"].IterateGetKey ().cstr();
 
 		if ( !g_bQuiet )
 		{
-			fprintf ( stdout, "indexing...\n" );
+			fprintf ( stdout, "indexing index '%s'...\n", sIndexName );
 			fflush ( stdout );
 		}
 
-		// do it
-		char sIndexPath [ SPH_MAX_FILENAME_LEN ];
-		snprintf ( sIndexPath, sizeof(sIndexPath),
-			bRotate ? "%s.new" : "%s",
-			confCommon->Get ( "index_path" ) );
-		sIndexPath [ sizeof(sIndexPath)-1 ] = '\0';
+		// check config
+		CONF_CHECK ( hIndex, "path", "in index '%s'.\n", sIndexName );
+		CONF_CHECK ( hIndex, "source", "in index '%s'.\n", sIndexName );
+		CONF_CHECK ( hConf["source"], hIndex["source"].cstr(), "in config file '%s'.\n", sConfName );
 
-		CSphIndex * pIndex = sphCreateIndexPhrase ( sIndexPath );
-		assert ( pIndex );
+		const CSphConfigSection & hSource = hConf["source"][ hIndex["source"] ];
+		CSphString & sSourceName = hIndex["source"];
 
-		pIndex->SetProgressCallback ( ShowProgress );
-		if ( pIndex->build ( pDict, pSource, iMemLimit ) )
-			bIndexedOk = true;
+		/////////////////////////
+		// check index lock file
+		/////////////////////////
+	
+		if ( !bRotate && !sBuildStops )
+		{
+			char sLockFile [ SPH_MAX_FILENAME_LEN ];
+			snprintf ( sLockFile, sizeof(sLockFile), "%s.spl", hIndex["path"] );
+			sLockFile [ sizeof(sLockFile)-1 ] = '\0';
 
-		SafeDelete ( pIndex );
-		SafeDelete ( pDict );
-	}
+			struct stat tStat;
+			if ( !stat ( sLockFile, &tStat ) )
+			{
+				fprintf ( stderr, "FATAL: index lock file '%s' exists, will not index. Try --rotate option.\n",
+					sLockFile );
+				return 1;
+			}
+		}
 
-	// trip report
-	const CSphSourceStats * pStats = pSource->GetStats ();
-	fTime = sphLongTimer () - fTime;
+		////////////////////
+		// spawn datasource
+		////////////////////
 
-	if ( !g_bQuiet )
-	{
-		fprintf ( stdout, "total %d docs, " I64FMT " bytes\n",
-			pStats->m_iTotalDocuments, pStats->m_iTotalBytes );
+		if ( !hSource.Exists ( "type" ) )
+		{
+			fprintf ( stderr, "ERROR: source '%s': type not found.\n", sSourceName.cstr() );
+			continue;
+		}
 
-		fprintf ( stdout, "total %.3f sec, %.2f bytes/sec, %.2f docs/sec\n",
-			fTime, pStats->m_iTotalBytes/fTime, pStats->m_iTotalDocuments/fTime );
+		#if USE_MYSQL
+		if ( hSource["type"]=="mysql" )
+		{
+			CONF_CHECK ( hSource, "sql_host", "in source '%s'", hIndex["source"] );
+			CONF_CHECK ( hSource, "sql_user", "in source '%s'", hIndex["source"] );
+			CONF_CHECK ( hSource, "sql_pass", "in source '%s'", hIndex["source"] );
+			CONF_CHECK ( hSource, "sql_db", "in source '%s'", hIndex["source"] );
+			CONF_CHECK ( hSource, "sql_query", "in source '%s'", hIndex["source"] );
+
+			#define LOC_GET(_key) \
+				hSource.Exists(_key) ? hSource[_key].cstr() : NULL;
+
+			CSphSourceParams_MySQL tParams;
+
+			tParams.m_sQuery		= LOC_GET ( "sql_query" );
+			tParams.m_sQueryPre		= LOC_GET ( "sql_query_pre" );
+			tParams.m_sQueryPost	= LOC_GET ( "sql_query_post" );
+			tParams.m_sQueryRange	= LOC_GET ( "sql_query_range" );
+			tParams.m_sGroupColumn	= LOC_GET ( "sql_group_column" );
+			tParams.m_sDateColumn	= LOC_GET ( "sql_date_column" );
+			tParams.m_sHost			= LOC_GET ( "sql_host" );
+			tParams.m_sUser			= LOC_GET ( "sql_user" );
+			tParams.m_sPass			= LOC_GET ( "sql_pass" );
+			tParams.m_sDB			= LOC_GET ( "sql_db" );
+			tParams.m_sUsock		= LOC_GET ( "sql_sock" );
+
+			#undef LOC_GET
+			#define LOC_GET(_arg,_key) \
+				if ( hSource.Exists(_key) && hSource[_key].intval() ) \
+					_arg = hSource[_key].intval();
+
+			LOC_GET ( tParams.m_iPort,		"sql_port" );
+			LOC_GET ( tParams.m_iRangeStep,	"sql_range_step" );
+
+			#undef LOC_GET
+
+			CSphSource_MySQL * pSrcMySQL = new CSphSource_MySQL ();
+			assert ( pSrcMySQL );
+
+			if ( !pSrcMySQL->Init ( &tParams ) )
+			{
+				SafeDelete ( pSrcMySQL );
+				return 1;
+			}
+
+			pSource = pSrcMySQL;
+		}
+		#endif
+
+		if ( hSource["type"]=="xmlpipe" )
+		{
+			CONF_CHECK ( hSource, "xmlpipe_command", "in source '%s'.\n", hIndex["source"].cstr() );
+
+			CSphSource_XMLPipe * pSrcXML = new CSphSource_XMLPipe ();
+			if ( !pSrcXML->Init ( hSource["xmlpipe_command"].cstr() ) )
+			{
+				fprintf ( stderr, "FATAL: CSphSource_XMLPipe: unable to popen '%s'.\n", hSource["xmlpipe_command"] );
+				SafeDelete ( pSrcXML );
+				return 1;
+			}
+
+			pSource = pSrcXML;
+		}
+
+		///////////////////////////////////
+		// check and configure data source
+		///////////////////////////////////
+
+		if ( !pSource )
+			sphDie ( "FATAL: unknown data source type '%s' in source '%s'\n.", hSource["type"].cstr(), hIndex["source"].cstr() );
+
+		// strip_html, index_html_attrs
+		if ( hSource.Exists ( "strip_html" ) )
+		{
+			const char * sAttrs = NULL;
+			if ( hSource["strip_html"].intval() )
+			{
+				if ( hSource.Exists ( "index_html_attrs" ) )
+					sAttrs = hSource["index_html_attrs"].cstr();
+				if ( !sAttrs )
+					sAttrs = "";
+			}
+			sAttrs = pSource->SetStripHTML ( sAttrs );
+			if ( sAttrs )
+				sphDie ( "FATAL: error in section [indexer] key 'index_html_attrs' syntax near '%s'.", sAttrs );
+		}
+
+		// charset_type
+		ISphTokenizer * pTokenizer = NULL;
+		if ( hIndex.Exists ( "charset_type" ) )
+		{
+			if ( hIndex["charset_type"]=="sbcs" )
+				pTokenizer = sphCreateSBCSTokenizer ();
+			else if ( hIndex["charset_type"]=="utf-8" )
+				pTokenizer = sphCreateUTF8Tokenizer ();
+			else
+				sphDie ( "FATAL: unknown charset type '%s' in index '%s'.\n",
+					hIndex["charset_type"].cstr(), sIndexName );
+		} else
+		{
+			pTokenizer = sphCreateSBCSTokenizer ();
+		}
+
+		// charset_table
+		assert ( pTokenizer );
+		if ( hIndex.Exists ( "charset_table" ) )
+			if ( !pTokenizer->SetCaseFolding ( hIndex["charset_table"].cstr() ) )
+				sphDie ( "FATAL: failed to parse 'charset_table' in index '%s', fix your configuration.\n", sIndexName );
+
+		pSource->SetTokenizer ( pTokenizer );
+
+		///////////
+		// do work
+		///////////
+
+		float fTime = sphLongTimer ();
+
+		bool bIndexedOk = false;
+		if ( sBuildStops )
+		{
+			///////////////////
+			// build stopwords
+			///////////////////
+
+			if ( !g_bQuiet )
+			{
+				fprintf ( stdout, "building stopwords list...\n" );
+				fflush ( stdout );
+			}
+
+			CSphStopwordBuilderDict * pDict = new CSphStopwordBuilderDict ();
+			assert ( pDict );
+
+			pSource->SetDict ( pDict );
+			while ( pSource->Next() );
+
+			pDict->Save ( sBuildStops, iTopStops, bBuildFreqs );
+
+			SafeDelete ( pDict );
+
+		} else
+		{
+			///////////////
+			// create dict
+			///////////////
+
+			// configure morphology
+			DWORD iMorph = SPH_MORPH_NONE;
+			if ( hIndex.Exists ( "morphology" ) )
+			{
+				if ( hIndex["morphology"]=="stem_en" )
+					iMorph = SPH_MORPH_STEM_EN;
+				else if ( hIndex["morphology"]=="stem_ru" )
+					iMorph = SPH_MORPH_STEM_RU;
+				else if ( hIndex["morphology"]=="stem_enru" )
+					iMorph = SPH_MORPH_STEM_EN | SPH_MORPH_STEM_RU;
+				else
+					fprintf ( stderr, "WARNING: unknown morphology type '%s' ignored in index '%s'.\n",
+						hIndex["morphology"].cstr(), sIndexName );
+			}
+
+			// create dict
+			CSphDict_CRC32 * pDict = new CSphDict_CRC32 ( iMorph );
+			assert ( pDict );
+
+			// configure stops
+			if ( hIndex.Exists ( "stopwords" ) )
+				pDict->LoadStopwords ( hIndex["stopwords"].cstr() );
+
+			//////////
+			// index!
+			//////////
+
+			// do it
+			char sIndexPath [ SPH_MAX_FILENAME_LEN ];
+			snprintf ( sIndexPath, sizeof(sIndexPath), bRotate ? "%s.new" : "%s", hIndex["path"].cstr() );
+			sIndexPath [ sizeof(sIndexPath)-1 ] = '\0';
+
+			CSphIndex * pIndex = sphCreateIndexPhrase ( sIndexPath );
+			assert ( pIndex );
+
+			pIndex->SetProgressCallback ( ShowProgress );
+			if ( pIndex->Build ( pDict, pSource, iMemLimit ) )
+				bIndexedOk = true;
+
+			SafeDelete ( pIndex );
+			SafeDelete ( pDict );
+		}
+
+		// trip report
+		const CSphSourceStats * pStats = pSource->GetStats ();
+		fTime = sphLongTimer () - fTime;
+
+		if ( !g_bQuiet )
+		{
+			fprintf ( stdout, "total %d docs, " I64FMT " bytes\n",
+				pStats->m_iTotalDocuments, pStats->m_iTotalBytes );
+
+			fprintf ( stdout, "total %.3f sec, %.2f bytes/sec, %.2f docs/sec\n",
+				fTime, pStats->m_iTotalBytes/fTime, pStats->m_iTotalDocuments/fTime );
+		}
+
+		// cleanup and go on
+		SafeDelete ( pSource );
+		SafeDelete ( pTokenizer );
 	}
 
 	////////////////////////////
@@ -719,12 +753,6 @@ int main ( int argc, char ** argv )
 	}
 #endif
 
-	////////////////////
-	// cleanup/shutdown
-	////////////////////
-
-	SafeDelete ( pSource );
-	SafeDelete ( pTokenizer );
 	return 0;
 }
 

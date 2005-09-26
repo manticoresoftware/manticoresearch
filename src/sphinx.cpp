@@ -40,8 +40,9 @@
 	#define sphSeek		lseek
 #endif
 
-#if USE_MYSQL
-#include <mysql/mysql.h>
+#if ( USE_WINDOWS && USE_MYSQL )
+	#pragma comment(linker, "/defaultlib:libmysql.lib")
+	#pragma message("Automatically linking with libmysql.lib")
 #endif
 
 /////////////////////////////////////////////////////////////////////////////
@@ -584,8 +585,9 @@ struct CSphIndex_VLN : CSphIndex
 								CSphIndex_VLN ( const char * filename );
 	virtual						~CSphIndex_VLN ();
 
-	virtual int					build ( CSphDict * dict, CSphSource * source, int iMemoryLimit );
-	virtual CSphQueryResult *	query ( CSphDict * dict, CSphQuery * pQuery );
+	virtual int					Build ( CSphDict * dict, CSphSource * source, int iMemoryLimit );
+	virtual CSphQueryResult *	Query ( CSphDict * dict, CSphQuery * pQuery );
+	virtual bool				QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchQueue * pTop );
 
 private:
 	char *						m_sFilename;
@@ -2679,7 +2681,7 @@ public:
 };
 
 
-int CSphIndex_VLN::build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLimit )
+int CSphIndex_VLN::Build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLimit )
 {
 	PROFILER_INIT ();
 
@@ -3003,24 +3005,6 @@ template< typename T> Less_T<T> Less_fn ( T & )
 }
 
 
-/// match-sorting priority min-queue interface
-template< typename T, int SIZE> class ISphQueue
-{
-public:
-	/// base push
-	virtual void		Push ( const T & tEntry ) = 0;
-
-	/// base pop
-	virtual void		Pop () = 0;
-
-	/// get entries count
-	virtual int			GetLength () const = 0;
-
-	/// get current root
-	virtual const T &	Root () const = 0;
-};
-
-
 /// match-sorting priority min-queue
 template< typename T, int SIZE, class COMP > class CSphQueue : public ISphQueue<T, SIZE>
 {
@@ -3302,11 +3286,61 @@ inline int sphGroupMatch ( DWORD iGroup, DWORD * pGroups, int iGroups )
 }
 
 
-CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
+ISphMatchQueue * sphCreateQueue ( CSphQuery * pQuery )
+{
+	ISphMatchQueue * pTop = NULL;
+	switch ( pQuery->m_eSort )
+	{
+		case SPH_SORT_DATE_DESC:	pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchDateLt_fn > (); break;
+		case SPH_SORT_DATE_ASC:		pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchDateGt_fn > (); break;
+		case SPH_SORT_TIME_SEGMENTS:pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchTimeSegments_fn > (); break;
+		case SPH_SORT_RELEVANCE:	pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchRelevanceLt_fn > (); break;
+		default:
+			pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchRelevanceLt_fn > ();
+			fprintf ( stderr, "WARNING: unknown sorting mode '%d', using SPH_SORT_RELEVANCE\n", pQuery->m_eSort );
+			break;
+	}
+
+	assert ( pTop );
+	return pTop;
+}
+
+
+void sphFlattenQueue ( ISphMatchQueue * pQueue, CSphQueryResult * pResult )
+{
+	pResult->m_dMatches.Resize ( pQueue->GetLength() );
+	int iDest = pQueue->GetLength();
+	while ( iDest-- )
+	{
+		pResult->m_dMatches [ iDest ] = pQueue->Root ();
+		pQueue->Pop ();
+	}
+}
+
+
+CSphQueryResult * CSphIndex_VLN::Query ( CSphDict * pDict, CSphQuery * pQuery )
+{
+	// create result and queue
+	CSphQueryResult * pResult = new CSphQueryResult();
+	ISphMatchQueue * pTop = sphCreateQueue ( pQuery );
+
+	// run query
+	QueryEx ( pDict, pQuery, pResult, pTop );
+
+	// convert results and return
+	sphFlattenQueue ( pTop, pResult );
+	SafeDelete ( pTop );
+	return pResult;
+}
+
+
+bool CSphIndex_VLN::QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchQueue * pTop )
 {
 	assert ( dict );
 	assert ( pQuery );
 	assert ( pQuery->m_pTokenizer );
+	assert ( pResult );
+	assert ( pTop );
 
 	CSphQueryWord qwords[SPH_MAX_QUERY_WORDS];
 	int i, j, nwords, weights [ SPH_MAX_FIELD_COUNT ], imin, nweights;
@@ -3316,8 +3350,7 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 	PROFILE_BEGIN ( query_init );
 
 	// create result and start timing
-	CSphQueryResult * pResult = new CSphQueryResult();
-	pResult->m_fQueryTime = -sphLongTimer ();
+	pResult->m_fQueryTime -= sphLongTimer ();
 
 	// split query into words
 	CSphQueryParser * pQueryParser = new CSphQueryParser ( dict, pQuery->m_sQuery,
@@ -3336,7 +3369,7 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 	if ( !nwords )
 	{
 		pResult->m_fQueryTime += sphLongTimer ();
-		return pResult;
+		return true;
 	}
 
 	// open files
@@ -3349,10 +3382,7 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 	CSphAutofile tDoclist ( sTmp );
 
 	if ( tWordlist.m_iFD<0 || tDoclist.m_iFD<0 )
-	{
-		SafeDelete ( pResult );
-		return NULL;
-	}
+		return false;
 
 	PROFILE_END ( query_init );
 	PROFILE_BEGIN ( query_load_dir );
@@ -3459,22 +3489,6 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 		for ( int i=0; i<Min ( nweights, pQuery->m_iWeights ); i++ )
 			weights[i] = Max ( 1, pQuery->m_pWeights[i] );
 
-	// spawn proper queue
-	ISphQueue<CSphMatch, CSphQueryResult::MAX_MATCHES> * pTop = NULL;
-	switch ( pQuery->m_eSort )
-	{
-		case SPH_SORT_DATE_DESC:	pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchDateLt_fn > (); break;
-		case SPH_SORT_DATE_ASC:		pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchDateGt_fn > (); break;
-		case SPH_SORT_TIME_SEGMENTS:pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchTimeSegments_fn > (); break;
-		case SPH_SORT_RELEVANCE:	pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchRelevanceLt_fn > (); break;
-
-		default:
-			pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchRelevanceLt_fn > ();
-			fprintf ( stderr, "WARNING: unknown sorting mode '%d', using SPH_SORT_RELEVANCE\n", pQuery->m_eSort );
-			break;
-	}
-	assert ( pTop );
-
 	// find and proximity-weight matching documents
 	i = docID = 0;
 	pResult->m_iTotalMatches = 0;
@@ -3487,7 +3501,10 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 		///////////////////
 
 		if ( !qwords[0].m_iDocs )
-			return pResult;
+		{
+			pResult->m_fQueryTime += sphLongTimer ();
+			return true;
+		}
 
 		// preload doclist entries
 		for ( i=0; i<nwords; i++ )
@@ -3755,23 +3772,12 @@ CSphQueryResult * CSphIndex_VLN::query ( CSphDict * dict, CSphQuery * pQuery )
 	}
 	PROFILE_END ( query_match );
 
-	PROFILE_BEGIN ( query_sort );
-	pResult->m_dMatches.Resize ( pTop->GetLength() );
-	int iDest = pTop->GetLength();
-	while ( iDest-- )
-	{
-		pResult->m_dMatches [ iDest ] = pTop->Root ();
-		pTop->Pop ();
-	}
-	SafeDelete ( pTop );
-	PROFILE_END ( query_sort );
-
 	PROFILER_DONE ();
 	PROFILE_SHOW ();
 
 	// query timer
 	pResult->m_fQueryTime += sphLongTimer ();
-	return pResult;
+	return true;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -4500,7 +4506,7 @@ bool CSphSource_MySQL::RunQueryStep ()
 
 	// run query
 	const char * sError = NULL;
-	do
+	for ( ;; )
 	{
 		if ( m_pSqlResult )
 		{
@@ -4512,12 +4518,14 @@ bool CSphSource_MySQL::RunQueryStep ()
 			sError = "mysql_query";
 			break;
 		}
-		if (!( m_pSqlResult = mysql_use_result ( &m_tSqlDriver ) ))
+		m_pSqlResult = mysql_use_result ( &m_tSqlDriver );
+		if ( !m_pSqlResult )
 		{
 			sError = "mysql_use_result";
 			break;
 		}
-	} while ( false );
+		break;
+	}
 
 	SafeDeleteArray ( sRes );
 
@@ -4603,7 +4611,7 @@ bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 	m_sSqlDSN = sphDup ( sBuf );
 
 	// connect
-	do
+	for ( ;; )
 	{
 		// initialize mysql lib
 		mysql_init ( &m_tSqlDriver );
@@ -4626,7 +4634,8 @@ bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 			if ( mysql_query ( &m_tSqlDriver, pParams->m_sQueryPre ) )
 				LOC_MYSQL_ERROR ( "mysql_query_pre" );
 
-			if ( (m_pSqlResult = mysql_use_result ( &m_tSqlDriver )) )
+			m_pSqlResult = mysql_use_result ( &m_tSqlDriver );
+			if ( m_pSqlResult )
 			{
 				mysql_free_result ( m_pSqlResult );
 				m_pSqlResult = NULL;
@@ -4705,11 +4714,12 @@ bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 			assert ( !m_pSqlResult );
 			if ( mysql_query ( &m_tSqlDriver, pParams->m_sQuery ) )
 				LOC_MYSQL_ERROR ( "mysql_query" );
-			if (!( m_pSqlResult = mysql_use_result ( &m_tSqlDriver ) ))
+			m_pSqlResult = mysql_use_result ( &m_tSqlDriver );
+			if ( !m_pSqlResult )
 				LOC_MYSQL_ERROR ( "mysql_use_result" );
 		}
-
-	} while ( false );
+		break;
+	}
 
 	// errors, anyone?
 	if ( sError )
@@ -4781,7 +4791,8 @@ BYTE ** CSphSource_MySQL::NextDocument ()
 				fprintf ( stderr, "WARNING: mysql_query_post: %s\n", mysql_error ( &m_tSqlDriver ) );
 				break;
 			}
-			if ( (m_pSqlResult = mysql_use_result ( &m_tSqlDriver )) )
+			m_pSqlResult = mysql_use_result ( &m_tSqlDriver );
+			if ( m_pSqlResult )
 			{
 				mysql_free_result ( m_pSqlResult );
 				m_pSqlResult = NULL;

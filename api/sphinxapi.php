@@ -121,6 +121,7 @@ class SphinxClient
 	/// connect to server and run given query
 	///
 	/// $query is query string
+	/// $query is index name to query, default is "*" which means to query all indexes
 	///
 	/// returns false on failure
 	/// returns hash which has the following keys on success:
@@ -134,7 +135,7 @@ class SphinxClient
 	///			search time
 	///		"words"
 	///			hash which maps query terms (stemmed!) to ( "docs", "hits" ) hash
-	function Query ( $query )
+	function Query ( $query, $index="*" )
 	{
 		if (!( $fp = @fsockopen ( $this->_host, $this->_port ) ) )
 		{
@@ -151,7 +152,7 @@ class SphinxClient
 			return false;
 		}
 		$ver = (int)substr ( $s, 4 ); 
-		if ( $ver!=1 )
+		if ( $ver!=2 )
 		{
 			fclose ( $fp );
 			$this->_error = "expected protocol version 1, got $ver";
@@ -162,21 +163,24 @@ class SphinxClient
 		// build request
 		/////////////////
 
-		// mode/limits part
+		// v1. mode/limits part
 		$req = pack ( "VVVV", $this->_offset, $this->_limit, $this->_mode, $this->_sort );
 
-		// groups
+		// v1. groups
 		$req .= pack ( "V", count($this->_groups) );
 		foreach ( $this->_groups as $group )
 			$req .= pack ( "V", $group );
 
-		// query string
+		// v1. query string
 		$req .= pack ( "V", strlen($query) ) . $query; 
 
-		// weights
+		// v1. weights
 		$req .= pack ( "V", count($this->_weights) );
 		foreach ( $this->_weights as $weight )
 			$req .= pack ( "V", (int)$weight );
+
+		// v2. index name
+		$req .= pack ( "V", strlen($index) ) . $index; 
 
 		////////////
 		// do query
@@ -188,6 +192,16 @@ class SphinxClient
 		while ( !feof ( $fp ) )
 		{
 			$s = trim ( fgets ( $fp, 1024 ) );
+
+			// handle errors
+			if ( substr ( $s, 0, 5 )=="RETRY" || substr ( $s, 0, 5 )=="ERROR" )
+			{
+				$this->_error = $s;
+				$result = false;
+				break;
+			}
+
+			// handle results
 			if ( substr ( $s, 0, 6 )=="MATCH " )
 			{
 				list ( $dummy, $group, $doc, $weight, $stamp ) = explode ( " ", $s );
@@ -209,6 +223,7 @@ class SphinxClient
 				list ( $dummy, $word, $docs, $hits ) = explode ( " ", $s );
 				$result["words"][$word] = array ( "docs"=>$docs, "hits"=>$hits );
 			}
+
 			// for now, simply ignore unknown response
 		}
 

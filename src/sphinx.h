@@ -17,7 +17,7 @@
 /////////////////////////////////////////////////////////////////////////////
 
 #ifdef _WIN32
-	#define USE_MYSQL		0	/// whether to compile with MySQL support
+	#define USE_MYSQL		1	/// whether to compile with MySQL support
 	#define USE_WINDOWS		1	/// whether to compile for Windows
 #else
 	#define USE_MYSQL		1	/// whether to compile with MySQL support
@@ -31,9 +31,16 @@
 #include <string.h>
 #include <assert.h>
 
+
 #if USE_MYSQL
-#include <mysql/mysql.h>
-#endif
+#if USE_WINDOWS
+	#include <winsock2.h>
+	#include <mysql.h>
+#else
+	#include <mysql/mysql.h>
+#endif // USE_WINDOWS
+#endif // USE_MYSQL
+
 
 #if USE_WINDOWS
 	#define WIN32_LEAN_AND_MEAN
@@ -41,8 +48,10 @@
 
 	#define strcasecmp			strcmpi
 	#define strncasecmp			_strnicmp
+	#define snprintf			_snprintf
 
 	typedef __int64				SphOffset_t;
+	#define STDOUT_FILENO		fileno(stdout)
 #else
 	typedef unsigned int		DWORD;
 	typedef unsigned char		BYTE;
@@ -53,9 +62,9 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
-#define SPHINX_VERSION			"0.9.4-dev"
+#define SPHINX_VERSION			"0.9.5-dev"
 #define SPHINX_BANNER			"Sphinx " SPHINX_VERSION "\nCopyright (c) 2001-2005, Andrew Aksyonoff\n\n"
-#define SPHINX_SEARCHD_PROTO	1
+#define SPHINX_SEARCHD_PROTO	2
 
 #define SPH_MAX_QUERY_WORDS		10
 #define SPH_MAX_WORD_LEN		64
@@ -545,6 +554,10 @@ struct CSphIndexProgress
 };
 
 
+/// match queue interface
+typedef ISphQueue<CSphMatch, CSphQueryResult::MAX_MATCHES>	ISphMatchQueue;
+
+
 /// generic fulltext index interface
 class CSphIndex
 {
@@ -556,8 +569,9 @@ public:
 	virtual	void				SetProgressCallback ( ProgressCallback_t * pfnProgress ) { m_pProgress = pfnProgress; }
 
 public:
-	virtual int					build ( CSphDict * dict, CSphSource * source, int iMemoryLimit ) = 0;
-	virtual CSphQueryResult *	query ( CSphDict * dict, CSphQuery * pQuery ) = 0;
+	virtual int					Build ( CSphDict * dict, CSphSource * source, int iMemoryLimit ) = 0;
+	virtual CSphQueryResult *	Query ( CSphDict * dict, CSphQuery * pQuery ) = 0;
+	virtual bool				QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchQueue * pTop ) = 0;
 
 protected:
 	ProgressCallback_t *		m_pProgress;
@@ -566,10 +580,16 @@ protected:
 /////////////////////////////////////////////////////////////////////////////
 
 /// create phrase fulltext index implemntation
-CSphIndex *		sphCreateIndexPhrase ( const char * sFilename );
+CSphIndex *			sphCreateIndexPhrase ( const char * sFilename );
 
 /// tell libsphinx to be quiet or not (logs and loglevels to come later)
-void			sphSetQuiet ( bool bQuiet );
+void				sphSetQuiet ( bool bQuiet );
+
+/// create proper queue for given query
+ISphMatchQueue *	sphCreateQueue ( CSphQuery * pQuery );
+
+/// convert queue to linear matches array
+void				sphFlattenQueue ( ISphMatchQueue * pQueue, CSphQueryResult * pResult );
 
 #endif // _sphinx_
 

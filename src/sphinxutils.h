@@ -27,41 +27,55 @@ extern const char * g_dSphKeysSearch[];
 
 /////////////////////////////////////////////////////////////////////////////
 
-/// simple "hash"
-class CSphHash
+/// string hash function
+template < int LENGTH >
+struct CSphStrHashFunc
 {
-public:
-					CSphHash ();
-					~CSphHash ();
-
-	void			Add ( const char * sKey, const char * sValue );
-	const char *	Get ( const char * sKey );
-
-private:
-	int				m_iCount;
-	char **			m_ppKeys;
-	char **			m_ppValues;
-	int				m_iMax;
+	inline int operator () ( const CSphString & sKey )
+	{
+		return sphCRC32((const BYTE *)sKey.cstr()) & ( LENGTH-1 );
+	}
 };
 
+/// small hash with string keys
+template < typename T >
+class SmallStringHash_T : public CSphGenericHash < T, CSphString, CSphStrHashFunc<128>, 128, 13 > {};
+
+/////////////////////////////////////////////////////////////////////////////
+
+/// config section (hash of variant values)
+typedef SmallStringHash_T < CSphVariant >		CSphConfigSection;
+
+/// config section type (hash of sections)
+typedef SmallStringHash_T < CSphConfigSection >	CSphConfigType;
+
+/// config (hash of section types)
+typedef SmallStringHash_T < CSphConfigType >	CSphConfig;
 
 /// simple config file
-class CSphConfig
+class CSphConfigParser
 {
 public:
-					CSphConfig ();
-					~CSphConfig ();
-	int				Open ( const char * sFile );
-	CSphHash *		LoadSection ( const char * sSection, const char ** dKnownKeys=NULL );
+	CSphConfig		m_tConf;
+
+public:
+					CSphConfigParser ();
+					~CSphConfigParser ();
+	bool			Parse ( const char * sFile );
 
 protected:
-	FILE *			m_pFP;
 	char *			m_sFileName;
-	const char *	m_sSection;
 	int				m_iLine;
+	CSphString		m_sSectionType;
+	CSphString		m_sSectionName;
 
 protected:
 	bool			ValidateKey ( const char * sKey, const char ** dKnownKeys );
+
+	bool			IsPlainSection ( const char * sKey );
+	bool			IsNamedSection ( const char * sKey );
+	bool			AddSection ( const char * sType, const char * sSection );
+	bool			AddKey ( const char * sKey, char * sValue );
 };
 
 #endif // _sphinxutils_

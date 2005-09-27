@@ -419,6 +419,8 @@ int main ( int argc, char ** argv )
 	// index each index
 	////////////////////
 
+	bool bIndexedOk = false; // if any of the indexes are ok
+
 	#define CONF_CHECK(_hash,_key,_msg,_add) \
 		if (!( _hash.Exists ( _key ) )) \
 		{ \
@@ -453,7 +455,7 @@ int main ( int argc, char ** argv )
 		if ( !bRotate && !sBuildStops )
 		{
 			char sLockFile [ SPH_MAX_FILENAME_LEN ];
-			snprintf ( sLockFile, sizeof(sLockFile), "%s.spl", hIndex["path"] );
+			snprintf ( sLockFile, sizeof(sLockFile), "%s.spl", hIndex["path"].cstr() );
 			sLockFile [ sizeof(sLockFile)-1 ] = '\0';
 
 			struct stat tStat;
@@ -478,11 +480,11 @@ int main ( int argc, char ** argv )
 		#if USE_MYSQL
 		if ( hSource["type"]=="mysql" )
 		{
-			CONF_CHECK ( hSource, "sql_host", "in source '%s'", hIndex["source"] );
-			CONF_CHECK ( hSource, "sql_user", "in source '%s'", hIndex["source"] );
-			CONF_CHECK ( hSource, "sql_pass", "in source '%s'", hIndex["source"] );
-			CONF_CHECK ( hSource, "sql_db", "in source '%s'", hIndex["source"] );
-			CONF_CHECK ( hSource, "sql_query", "in source '%s'", hIndex["source"] );
+			CONF_CHECK ( hSource, "sql_host", "in source '%s'", hIndex["source"].cstr() );
+			CONF_CHECK ( hSource, "sql_user", "in source '%s'", hIndex["source"].cstr() );
+			CONF_CHECK ( hSource, "sql_pass", "in source '%s'", hIndex["source"].cstr() );
+			CONF_CHECK ( hSource, "sql_db", "in source '%s'", hIndex["source"].cstr() );
+			CONF_CHECK ( hSource, "sql_query", "in source '%s'", hIndex["source"].cstr() );
 
 			#define LOC_GET(_key) \
 				hSource.Exists(_key) ? hSource[_key].cstr() : NULL;
@@ -531,7 +533,7 @@ int main ( int argc, char ** argv )
 			CSphSource_XMLPipe * pSrcXML = new CSphSource_XMLPipe ();
 			if ( !pSrcXML->Init ( hSource["xmlpipe_command"].cstr() ) )
 			{
-				fprintf ( stderr, "FATAL: CSphSource_XMLPipe: unable to popen '%s'.\n", hSource["xmlpipe_command"] );
+				fprintf ( stderr, "FATAL: CSphSource_XMLPipe: unable to popen '%s'.\n", hSource["xmlpipe_command"].cstr() );
 				SafeDelete ( pSrcXML );
 				return 1;
 			}
@@ -592,7 +594,6 @@ int main ( int argc, char ** argv )
 
 		float fTime = sphLongTimer ();
 
-		bool bIndexedOk = false;
 		if ( sBuildStops )
 		{
 			///////////////////
@@ -690,18 +691,17 @@ int main ( int argc, char ** argv )
 	if ( bIndexedOk )
 	{
 		bool bOK = false;
-		CSphHash * confSearchd = NULL;
-
 		while ( bRotate )
 		{
 			// load config
-			confSearchd = conf.LoadSection ( "searchd", g_dSphKeysSearchd );
-			if ( !confSearchd )
+			if ( !hConf.Exists ( "searchd" ) )
 			{
 				fprintf ( stderr, "WARNING: 'searchd' section not found in config file.\n" );
 				break;
 			}
-			if ( !confSearchd->Get ( "pid_file" ) )
+
+			const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
+			if ( !hSearchd.Exists ( "pid_file" ) )
 			{
 				fprintf ( stderr, "WARNING: 'pid_file' parameter not found in 'searchd' config section.\n" );
 				break;
@@ -709,15 +709,15 @@ int main ( int argc, char ** argv )
 
 			// read in PID
 			int iPID;
-			FILE * fp = fopen ( confSearchd->Get ( "pid_file" ), "r" );
+			FILE * fp = fopen ( hSearchd["pid_file"].cstr(), "r" );
 			if ( !fp )
 			{
-				fprintf ( stderr, "WARNING: failed to read pid_file '%s'.\n", confSearchd->Get ( "pid_file" ) );
+				fprintf ( stderr, "WARNING: failed to read pid_file '%s'.\n", hSearchd["pid_file"].cstr() );
 				break;
 			}
 			if ( fscanf ( fp, "%d", &iPID )!=1 || iPID<=0 )
 			{
-				fprintf ( stderr, "WARNING: failed to scanf pid from pid_file '%s'.\n", confSearchd->Get ( "pid_file" ) );
+				fprintf ( stderr, "WARNING: failed to scanf pid from pid_file '%s'.\n", hSearchd["pid_file"].cstr() );
 				break;
 			}
 			fclose ( fp );
@@ -748,7 +748,6 @@ int main ( int argc, char ** argv )
 		{
 			if ( !bOK )
 				fprintf ( stderr, "WARNING: indices NOT rotated.\n" );
-			SafeDelete ( confSearchd );
 		}
 	}
 #endif

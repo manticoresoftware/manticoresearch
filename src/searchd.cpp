@@ -652,7 +652,7 @@ int main ( int argc, char **argv )
 			else if ( hIndex["morphology"]=="stem_ru" )		iMorph = SPH_MORPH_STEM_RU;
 			else if ( hIndex["morphology"]=="stem_enru" )	iMorph = SPH_MORPH_STEM_EN | SPH_MORPH_STEM_RU;
 			else
-				sphWarning ( "unknown morphology type '%s' in index '%s' ignored", hIndex["morphology"], sIndexName );
+				sphWarning ( "unknown morphology type '%s' in index '%s' ignored", hIndex["morphology"].cstr(), sIndexName );
 		}
 
 		// configure charset_type
@@ -665,7 +665,7 @@ int main ( int argc, char **argv )
 				pTokenizer = sphCreateUTF8Tokenizer ();
 			else
 			{
-				sphWarning ( "unknown charset type '%s' in index '%s' - NOT SERVING", hIndex["charset_type"] );
+				sphWarning ( "unknown charset type '%s' in index '%s' - NOT SERVING", hIndex["charset_type"].cstr() );
 				continue;
 			}
 		} else
@@ -693,7 +693,7 @@ int main ( int argc, char **argv )
 		{
 			// check lock file
 			char sTmp [ 1024 ];
-			snprintf ( sTmp, sizeof(sTmp), "%s.spl", hIndex["path"] );
+			snprintf ( sTmp, sizeof(sTmp), "%s.spl", hIndex["path"].cstr() );
 			sTmp [ sizeof(sTmp)-1 ] = '\0';
 
 			struct stat tStat;
@@ -755,7 +755,7 @@ int main ( int argc, char **argv )
 			g_iQueryLogFile = open ( hSearchd["query_log"].cstr(), O_CREAT | O_RDWR | O_APPEND,
 				S_IREAD | S_IWRITE );
 			if ( g_iQueryLogFile<0 )
-				sphFatal ( "failed to write query log file '%s'", hSearchd["query_log"] );
+				sphFatal ( "failed to write query log file '%s'", hSearchd["query_log"].cstr() );
 		}
 
 		// do daemonize

@@ -255,7 +255,7 @@ int main ( int argc, char ** argv )
 			else if ( hIndex["charset_type"]=="utf-8" )
 				tQuery.m_pTokenizer = sphCreateUTF8Tokenizer ();
 			else
-				sphDie ( "FATAL: unknown charset type '%s' in index '%s'.\n", hIndex["charset_type"], sIndexName );
+				sphDie ( "FATAL: unknown charset type '%s' in index '%s'.\n", hIndex["charset_type"].cstr(), sIndexName );
 		} else
 		{
 			tQuery.m_pTokenizer = sphCreateSBCSTokenizer ();

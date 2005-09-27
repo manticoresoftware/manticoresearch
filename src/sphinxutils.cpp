@@ -231,7 +231,7 @@ bool CSphConfigParser::Parse ( const char * file )
 	#define LOC_ERROR2(_msg,_a) { snprintf ( sError, sizeof(sError), _msg, _a ); iError = 1; break; }
 	#define LOC_ERROR3(_msg,_a,_b) { snprintf ( sError, sizeof(sError), _msg, _a, _b ); iError = 1; break; }
 	#define LOC_ERROR4(_msg,_a,_b,_c) { snprintf ( sError, sizeof(sError), _msg, _a, _b, _c ); iError = 1; break; }
-	#define LOC_PUSH(_new) { assert ( iStack<(sizeof(eStack)/sizeof(eState)) ); eStack[iStack++] = eState; eState = _new; }
+	#define LOC_PUSH(_new) { assert ( iStack<int(sizeof(eStack)/sizeof(eState)) ); eStack[iStack++] = eState; eState = _new; }
 	#define LOC_POP() { assert ( iStack>0 ); eState = eStack[--iStack]; }
 
 	for ( ; ; p++ )

@@ -74,6 +74,7 @@ struct ServedIndex_t
 	CSphDict *			m_pDict;
 	ISphTokenizer *		m_pTokenizer;
 	CSphString *		m_pLockFile; 
+	CSphString *		m_pIndexPath;
 
 	ServedIndex_t ()
 	{
@@ -86,17 +87,18 @@ struct ServedIndex_t
 		m_pDict		= NULL;
 		m_pTokenizer= NULL;
 		m_pLockFile	= NULL;
+		m_pIndexPath= NULL;
 	}
 
 	~ServedIndex_t ()
 	{
 		if ( m_pLockFile )
 			unlink ( m_pLockFile->cstr() );
-
 		SafeDelete ( m_pIndex );
 		SafeDelete ( m_pDict );
 		SafeDelete ( m_pTokenizer );
 		SafeDelete ( m_pLockFile );
+		SafeDelete ( m_pIndexPath );
 	}
 };
 
@@ -513,7 +515,7 @@ bool IsReadable ( const char * sPath )
 }
 
 
-bool TryRename ( const char * sPrefix, const char * sFromPostfix, const char * sToPostfix, bool bFatal )
+bool TryRename ( const char * sIndex, const char * sPrefix, const char * sFromPostfix, const char * sToPostfix, bool bFatal )
 {
 	char sFrom [ SPH_MAX_FILENAME_LEN ];
 	char sTo [ SPH_MAX_FILENAME_LEN ];
@@ -524,12 +526,12 @@ bool TryRename ( const char * sPrefix, const char * sFromPostfix, const char * s
 	{
 		if ( bFatal )
 		{
-			sphFatal ( "rotating indices: rollback rename '%s' to '%s' failed: %s",
-				sFrom, sTo, strerror(errno) );
+			sphFatal ( "rotating index '%s': rollback rename '%s' to '%s' failed: %s",
+				sIndex, sFrom, sTo, strerror(errno) );
 		} else
 		{
-			sphWarning ( "rotating indices: rename '%s' to '%s' failed: %s",
-				sFrom, sTo, strerror(errno) );
+			sphWarning ( "rotating index '%s': rename '%s' to '%s' failed: %s",
+				sIndex, sFrom, sTo, strerror(errno) );
 		}
 		return false;
 	}
@@ -711,6 +713,7 @@ int main ( int argc, char **argv )
 			fclose ( fp );
 
 			tIdx.m_pLockFile = new CSphString ( sTmp );
+			tIdx.m_pIndexPath = new CSphString ( hIndex["path"] );
 		}
 
 		g_hIndexes.Add ( tIdx, sIndexName );
@@ -815,86 +818,94 @@ int main ( int argc, char **argv )
 	sphInfo ( "accepting connections" );
 	for ( ;; )
 	{
-		#if !USE_WINDOWS
 		// try to rotate indices
 		if ( g_iHUP && !g_iChildren )
 		{
-			bool bSuccess = false;
-			for ( ;; )
+			g_hIndexes.IterateStart();
+			while ( g_hIndexes.IterateNext() )
 			{
-				char sFile [ SPH_MAX_FILENAME_LEN ];
-				const char * sPath = confCommon->Get ( "index_path" );
+				ServedIndex_t & tIndex = g_hIndexes.IterateGet();
+				const char * sIndex = g_hIndexes.IterateGetKey().cstr();
+				assert ( tIndex.m_pIndex );
+				assert ( tIndex.m_pLockFile );
+				assert ( tIndex.m_pIndexPath );
 
-				// whatever happens, we won't retry
-				g_iHUP = 0;
-				sphInfo ( "rotating indices: children exited, trying to rotate" );
-
-				// check files
-				sprintf ( sFile, "%s.new.spi", sPath );
-				if ( !IsReadable ( sFile ) )
+				bool bSuccess = false;
+				for ( ;; )
 				{
-					sphWarning ( "rotating indices: '%s' unreadable: %s",
-						sFile, strerror(errno) );
+					char sFile [ SPH_MAX_FILENAME_LEN ];
+					const char * sPath = tIndex.m_pIndexPath->cstr();
+
+					// whatever happens, we won't retry
+					g_iHUP = 0;
+					sphInfo ( "rotating index '%s': children exited, trying to rotate", sIndex );
+
+					// check files
+					sprintf ( sFile, "%s.new.spi", sPath );
+					if ( !IsReadable ( sFile ) )
+					{
+						sphWarning ( "rotating index '%s': '%s' unreadable: %s",
+							sIndex, sFile, strerror(errno) );
+						break;
+					}
+					sprintf ( sFile, "%s.new.spd", sPath );
+					if ( !IsReadable ( sFile ) )
+					{
+						sphWarning ( "rotating index '%s': '%s' unreadable: %s",
+							sIndex, sFile, strerror(errno) );
+						break;
+					}
+
+					// rename current to old
+					if ( !TryRename ( sIndex, sPath, ".spi", ".old.spi", false ) )
+						break;
+					if ( !TryRename ( sIndex, sPath, ".spd", ".old.spd", false ) )
+					{
+						TryRename ( sIndex, sPath, ".old.spi", ".spi", true );
+						break;
+					}
+
+					// rename new to current
+					if ( !TryRename ( sIndex, sPath, ".new.spi", ".spi", false ) )
+					{
+						TryRename ( sIndex, sPath, ".old.spi", ".spi", true );
+						TryRename ( sIndex, sPath, ".old.spd", ".spd", true );
+						break;
+					}
+					if ( !TryRename ( sIndex, sPath, ".new.spd", ".spd", false ) )
+					{
+						TryRename ( sIndex, sPath, ".spi", ".new.spi", true );
+						TryRename ( sIndex, sPath, ".old.spi", ".spi", true );
+						TryRename ( sIndex, sPath, ".old.spd", ".spd", true );
+						break;
+					}
+
+					// try to create new index
+					CSphIndex * pNewIndex = sphCreateIndexPhrase ( sPath );
+					if ( !pNewIndex )
+					{
+						sphWarning ( "rotating index '%s': failed to create new index object", sIndex, sFile );
+
+						// try ro recover
+						TryRename ( sIndex, sPath, ".spi", ".new.spi", true );
+						TryRename ( sIndex, sPath, ".spd", ".new.spd", true );
+						TryRename ( sIndex, sPath, ".old.spi", ".spi", true );
+						TryRename ( sIndex, sPath, ".old.spd", ".spd", true );
+						break;
+					}
+
+					// uff. all done
+					SafeDelete ( tIndex.m_pIndex );
+					tIndex.m_pIndex = pNewIndex;
+
+					sphInfo ( "rotating index '%s': success" );
+					bSuccess = true;
 					break;
 				}
-				sprintf ( sFile, "%s.new.spd", sPath );
-				if ( !IsReadable ( sFile ) )
-				{
-					sphWarning ( "rotating indices: '%s' unreadable: %s",
-						sFile, strerror(errno) );
-					break;
-				}
-
-				// rename current to old
-				if ( !TryRename ( sPath, ".spi", ".old.spi", false ) )
-					break;
-				if ( !TryRename ( sPath, ".spd", ".old.spd", false ) )
-				{
-					TryRename ( sPath, ".old.spi", ".spi", true );
-					break;
-				}
-
-				// rename new to current
-				if ( !TryRename ( sPath, ".new.spi", ".spi", false ) )
-				{
-					TryRename ( sPath, ".old.spi", ".spi", true );
-					TryRename ( sPath, ".old.spd", ".spd", true );
-					break;
-				}
-				if ( !TryRename ( sPath, ".new.spd", ".spd", false ) )
-				{
-					TryRename ( sPath, ".spi", ".new.spi", true );
-					TryRename ( sPath, ".old.spi", ".spi", true );
-					TryRename ( sPath, ".old.spd", ".spd", true );
-					break;
-				}
-
-				// try to create new index
-				CSphIndex * pNewIndex = sphCreateIndexPhrase ( sPath );
-				if ( !pNewIndex )
-				{
-					sphWarning ( "rotating indices: failed to create new index object", sFile );
-
-					// try ro recover
-					TryRename ( sPath, ".spi", ".new.spi", true );
-					TryRename ( sPath, ".spd", ".new.spd", true );
-					TryRename ( sPath, ".old.spi", ".spi", true );
-					TryRename ( sPath, ".old.spd", ".spd", true );
-					break;
-				}
-
-				// uff. all done
-				SafeDelete ( pIndex );
-				pIndex = pNewIndex;
-
-				sphInfo ( "rotating indices: success" );
-				bSuccess = true;
-				break;
+				if ( !bSuccess )
+					sphWarning ( "rotating index '%s': using old index" );
 			}
-			if ( !bSuccess )
-				sphWarning ( "rotating indices: using old index" );
 		}
-		#endif // USE_WINDOWS
 
 		#if USE_WINDOWS
 		#pragma warning(disable:4127) // conditional expr is const

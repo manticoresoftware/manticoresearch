@@ -371,7 +371,7 @@ public:
 	}
 
 	/// get entry value
-	const T & IterateGet () const
+	T & IterateGet () const
 	{
 		assert ( m_pHash );
 		assert ( m_pIterator && m_pIterator>=m_pHash && m_pIterator<m_pHash+LENGTH );

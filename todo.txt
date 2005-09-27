@@ -3,7 +3,6 @@ HIGH PRIORITY
 * add an option to specify fields to search (better if named)
 * fix indexer mem usage: 256M configured, 700M+ used (rarely)
 * fix that if there are two sql_query's in config, there's no warnings
-* add multi-index support (avoid running lots of indexers/searchds)
 * add index update/mergeing
 * add in-place index inversion
 * add doc/hit count report to --buildstops

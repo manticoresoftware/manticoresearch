@@ -25,8 +25,11 @@ void	stem_ru_init ();
 /// stem English word
 void	stem_en ( BYTE * pWord );
 
-/// stem Russian word
-void	stem_ru ( BYTE * pWord );
+/// stem Russian word in Windows-1251 encoding
+void	stem_ru_cp1251 ( BYTE * pWord );
+
+/// stem Russian word in UTF-8 encoding
+void	stem_ru_utf8 ( WORD * pWord );
 
 #endif // _sphinxstem_
 

@@ -3877,8 +3877,8 @@ DWORD CSphDict_CRC32::GetWordID ( BYTE * pWord )
 	if ( m_iMorph & SPH_MORPH_STEM_EN )
 		stem_en ( pWord );
 	if ( m_iMorph & SPH_MORPH_STEM_RU )
-		stem_ru ( pWord );
-	
+		stem_ru_cp1251 ( pWord ); // FIXME! !COMMIT
+
 	DWORD crc = sphCRC32 ( pWord );
 
 	// apply stopwords

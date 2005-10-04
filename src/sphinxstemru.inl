@@ -28,11 +28,11 @@ struct LOC_TABLE_INDEX
 #undef TS3
 #undef TS4
 #undef TS5
-#define TS1(c1) { RUS::##c1 }
-#define TS2(c1,c2) { RUS::##c1, RUS::##c2 }
-#define TS3(c1,c2,c3) { RUS::##c1, RUS::##c2, RUS::##c3 }
-#define TS4(c1,c2,c3,c4) { RUS::##c1, RUS::##c2, RUS::##c3, RUS::##c4 }
-#define TS5(c1,c2,c3,c4,c5) { RUS::##c1, RUS::##c2, RUS::##c3, RUS::##c4, RUS::##c5 }
+#define TS1(c1) { RUS::c1 }
+#define TS2(c1,c2) { RUS::c1, RUS::c2 }
+#define TS3(c1,c2,c3) { RUS::c1, RUS::c2, RUS::c3 }
+#define TS4(c1,c2,c3,c4) { RUS::c1, RUS::c2, RUS::c3, RUS::c4 }
+#define TS5(c1,c2,c3,c4,c5) { RUS::c1, RUS::c2, RUS::c3, RUS::c4, RUS::c5 }
 
 
 static LOC_TABLE_INDEX LOC_PREFIX(ru_adj_i)[] =

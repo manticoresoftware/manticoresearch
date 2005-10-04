@@ -519,6 +519,9 @@ public:
 template< typename T, int SIZE> class ISphQueue
 {
 public:
+	/// virtualizing dtor
+	virtual				~ISphQueue () {}
+
 	/// base push
 	virtual void		Push ( const T & tEntry ) = 0;
 

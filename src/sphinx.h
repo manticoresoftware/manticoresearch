@@ -113,6 +113,9 @@ enum ESphMorphology
 /// abstract word dictionary interface
 struct CSphDict
 {
+	/// virtualizing dtor
+	virtual				~CSphDict () {}
+
 	/// get word ID by word
 	virtual DWORD		GetWordID ( BYTE * pWord ) = 0;
 
@@ -127,6 +130,9 @@ struct CSphDict_CRC32 : CSphDict
 	/// ctor
 	/// iMorph is a combination of ESphMorphology flags
 						CSphDict_CRC32 ( DWORD iMorph );
+
+	/// virtualizing dtor
+	virtual				~CSphDict_CRC32 () {}
 
 	/// get word ID by word
 	/// does requested morphology and returns CRC32
@@ -149,6 +155,9 @@ protected:
 class ISphTokenizer
 {
 public:
+	/// virtualizing dtor
+	virtual				~ISphTokenizer () {}
+
 	/// pass next buffer
 	virtual void		SetBuffer ( BYTE * sBuffer, int iLength, bool bLast ) = 0;
 
@@ -566,6 +575,7 @@ public:
 
 public:
 								CSphIndex() : m_pProgress ( NULL ) {}
+	virtual						~CSphIndex () {}
 	virtual	void				SetProgressCallback ( ProgressCallback_t * pfnProgress ) { m_pProgress = pfnProgress; }
 
 public:

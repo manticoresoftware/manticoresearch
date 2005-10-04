@@ -158,13 +158,12 @@ int main ( int argc, char ** argv )
 
 	// load config
 	CSphConfigParser cp;
-	CSphConfig hConf;
-
 	if ( !cp.Parse ( sConfName ) )
 		sphDie ( "FATAL: failed to parse config file '%s'.\n", sConfName );
 
+	CSphConfig & hConf = cp.m_tConf;
 	if ( !hConf.Exists ( "index" ) )
-		sphDie ( "FATAL: no indexes found in config file.\n" );
+		sphDie ( "FATAL: no indexes found in config file '%s'.\n", sConfName );
 
 	/////////////////////
 	// search each index

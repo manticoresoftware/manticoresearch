@@ -1451,15 +1451,9 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 		if ( !IsEmpty() )
 		{
 			// accumulate as much extra chars as possible
-			int iCode = GetCodePoint();
-			while ( iCode && m_iAccum<SPH_MAX_WORD_LEN )
-			{
+			// AccumCodePoint will through away everything which is over the token size limit
+			for ( int iCode=GetCodePoint(); iCode; iCode=GetCodePoint() )
 				AccumCodePoint ( iCode );
-				iCode = GetCodePoint();
-			}
-
-			// through away everything which is over the token size limit
-			while ( GetCodePoint() );
 
 			// if buffer is now over (wow, that's REAL big token),
 			// we need to get another bufer
@@ -1550,7 +1544,11 @@ int CSphTokenizer_UTF8::GetCodePoint ()
 void CSphTokenizer_UTF8::AccumCodePoint ( int iCode )
 {
 	assert ( iCode>0 );
-	assert ( m_iAccum>=0 && m_iAccum<=SPH_MAX_WORD_LEN );
+	assert ( m_iAccum>=0 );
+
+	// throw away everything which is over the token size
+	if ( m_iAccum>SPH_MAX_WORD_LEN )
+		return;
 
 	// do UTF-8 encoding here
 	if ( iCode<0x80 )

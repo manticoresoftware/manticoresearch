@@ -54,6 +54,7 @@
 	#define STDOUT_FILENO		fileno(stdout)
 #else
 	typedef unsigned int		DWORD;
+	typedef unsigned short		WORD;
 	typedef unsigned char		BYTE;
 	typedef off_t				SphOffset_t;
 #endif

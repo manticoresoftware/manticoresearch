@@ -806,7 +806,7 @@ int sphWrite ( int iFD, const void * pBuf, size_t iCount, const char * sName )
 		} else
 		{
 			fprintf ( stderr, "ERROR: %s: write error: %d of %d bytes written.\n",
-				sName, iWritten, iCount );
+				sName, iWritten, int(iCount) );
 		}
 	}
 	return iWritten;

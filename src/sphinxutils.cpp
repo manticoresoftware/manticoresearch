@@ -393,7 +393,7 @@ bool CSphConfigParser::Parse ( const char * file )
 			sStepback[iCtx] = '\0';
 		}
 
-		fprintf ( stderr, "%s line %d col %d: %s near '%s'\n", m_sFileName, m_iLine, p-sLine+1, sError, sStepback );
+		fprintf ( stderr, "%s line %d col %d: %s near '%s'\n", m_sFileName, m_iLine, int(p-sLine+1), sError, sStepback );
 		return false;
 	}
 	return true;

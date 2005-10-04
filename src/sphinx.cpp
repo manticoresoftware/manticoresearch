@@ -867,7 +867,9 @@ public:
 public:
 	inline int	ToLower ( int iCode )
 	{
-		assert ( iCode>=0 && iCode<MAX_CODE );
+		assert ( iCode>=0 );
+		if ( iCode>=MAX_CODE )
+			return 0;
 		register int * pChunk = m_ppTable [ iCode>>CHUNK_BITS ];
 		if ( pChunk )
 			return pChunk [ iCode & CHUNK_MASK ];

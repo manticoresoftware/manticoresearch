@@ -459,11 +459,11 @@ void LOC_PREFIX(stem_ru) ( LOC_CHAR_TYPE * word )
 
 	// EndOfWord
 	#undef EOW
-	#define EOW (!(*((unsigned char*)word)))
+	#define EOW(_arg) (!(*((unsigned char*)(_arg))))
 
-	while ( !EOW ) if ( IV(*word) ) break; else word++;
-	if ( !EOW ) word++; else return;
-	len = 0; while ( !EOW ) len++;
+	while ( !EOW(word) ) if ( IV(*word) ) break; else word++;
+	if ( !EOW(word) ) word++; else return;
+	len = 0; while ( !EOW(word+len) ) len++;
 
 	r1 = r2 = len;
 	for ( i=-1; i<len-1; i++ ) if ( IV(word[i]) && !IV(word[i+1]) ) { r1 = i+2; break; }
@@ -538,7 +538,7 @@ void LOC_PREFIX(stem_ru) ( LOC_CHAR_TYPE * word )
 	if ( len && W(1,RUS::MYA) )
 		len--;
 
-	*((unsigned char*)word) = '\0';
+	*((unsigned char*)(word+len)) = '\0';
 }
 
 // undefine externally defined stuff

@@ -3922,7 +3922,7 @@ struct DwordCmp_fn
 };
 
 
-void CSphDict_CRC32::LoadStopwords ( const char * sFiles )
+void CSphDict_CRC32::LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer )
 {
 	static BYTE sBuffer [ 65536 ];
 
@@ -3953,7 +3953,6 @@ void CSphDict_CRC32::LoadStopwords ( const char * sFiles )
 		}
 
 		// tokenize file
-		ISphTokenizer * pTokenizer = new CSphTokenizer_SBCS (); // FIXME! !COMMIT
 		CSphVector<DWORD> dStop;
 		int iLength;
 		do

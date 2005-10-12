@@ -643,7 +643,7 @@ int main ( int argc, char ** argv )
 
 			// configure stops
 			if ( hIndex.Exists ( "stopwords" ) )
-				pDict->LoadStopwords ( hIndex["stopwords"].cstr() );
+				pDict->LoadStopwords ( hIndex["stopwords"].cstr(), pTokenizer );
 
 			//////////
 			// index!

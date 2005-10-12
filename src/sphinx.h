@@ -99,56 +99,6 @@ void *			operator new ( size_t iSize );
 void *			operator new [] ( size_t iSize );
 
 /////////////////////////////////////////////////////////////////////////////
-// DICTIONARIES
-/////////////////////////////////////////////////////////////////////////////
-
-/// morphology flags
-enum ESphMorphology
-{
-	SPH_MORPH_NONE		= 0,
-	SPH_MORPH_STEM_EN	= (1<<1),
-	SPH_MORPH_STEM_RU	= (1<<2)
-};
-
-
-/// abstract word dictionary interface
-struct CSphDict
-{
-	/// virtualizing dtor
-	virtual				~CSphDict () {}
-
-	/// get word ID by word
-	virtual DWORD		GetWordID ( BYTE * pWord ) = 0;
-
-	/// load stopwords from given files
-	virtual void		LoadStopwords ( const char * sFiles ) = 0;
-};
-
-
-/// CRC32 dictionary
-struct CSphDict_CRC32 : CSphDict
-{
-	/// ctor
-	/// iMorph is a combination of ESphMorphology flags
-						CSphDict_CRC32 ( DWORD iMorph );
-
-	/// virtualizing dtor
-	virtual				~CSphDict_CRC32 () {}
-
-	/// get word ID by word
-	/// does requested morphology and returns CRC32
-	virtual DWORD		GetWordID ( BYTE * pWord );
-
-	/// load stopwords from given files
-	virtual void		LoadStopwords ( const char * sFiles );
-
-protected:
-	DWORD				m_iMorph;		///< morphology flags
-	int					m_iStopwords;	///< stopwords count
-	DWORD *				m_pStopwords;	///< stopwords ID list
-};
-
-/////////////////////////////////////////////////////////////////////////////
 // TOKENIZERS
 /////////////////////////////////////////////////////////////////////////////
 
@@ -175,6 +125,56 @@ ISphTokenizer *			sphCreateSBCSTokenizer ();
 
 /// create UTF-8 tokenizer
 ISphTokenizer *			sphCreateUTF8Tokenizer ();
+
+/////////////////////////////////////////////////////////////////////////////
+// DICTIONARIES
+/////////////////////////////////////////////////////////////////////////////
+
+/// morphology flags
+enum ESphMorphology
+{
+	SPH_MORPH_NONE		= 0,
+	SPH_MORPH_STEM_EN	= (1<<1),
+	SPH_MORPH_STEM_RU	= (1<<2)
+};
+
+
+/// abstract word dictionary interface
+struct CSphDict
+{
+	/// virtualizing dtor
+	virtual				~CSphDict () {}
+
+	/// get word ID by word
+	virtual DWORD		GetWordID ( BYTE * pWord ) = 0;
+
+	/// load stopwords from given files
+	virtual void		LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer ) = 0;
+};
+
+
+/// CRC32 dictionary
+struct CSphDict_CRC32 : CSphDict
+{
+	/// ctor
+	/// iMorph is a combination of ESphMorphology flags
+						CSphDict_CRC32 ( DWORD iMorph );
+
+	/// virtualizing dtor
+	virtual				~CSphDict_CRC32 () {}
+
+	/// get word ID by word
+	/// does requested morphology and returns CRC32
+	virtual DWORD		GetWordID ( BYTE * pWord );
+
+	/// load stopwords from given files
+	virtual void		LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer );
+
+protected:
+	DWORD				m_iMorph;		///< morphology flags
+	int					m_iStopwords;	///< stopwords count
+	DWORD *				m_pStopwords;	///< stopwords ID list
+};
 
 /////////////////////////////////////////////////////////////////////////////
 // DATASOURCES

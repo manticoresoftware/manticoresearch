@@ -688,7 +688,7 @@ int main ( int argc, char **argv )
 		ServedIndex_t tIdx;
 		tIdx.m_pIndex = sphCreateIndexPhrase ( hIndex["path"].cstr() );
 		tIdx.m_pDict = new CSphDict_CRC32 ( iMorph );
-		tIdx.m_pDict->LoadStopwords ( hIndex.Exists ( "stopwords" ) ? hIndex["stopwords"].cstr() : NULL );
+		tIdx.m_pDict->LoadStopwords ( hIndex.Exists ( "stopwords" ) ? hIndex["stopwords"].cstr() : NULL, pTokenizer );
 		tIdx.m_pTokenizer = pTokenizer;
 
 		if ( !bOptConsole )

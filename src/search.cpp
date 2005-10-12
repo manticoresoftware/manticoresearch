@@ -241,10 +241,6 @@ int main ( int argc, char ** argv )
 		}
 		#endif
 
-		// configure stopwords
-		CSphDict * pDict = new CSphDict_CRC32 ( iMorph );
-		pDict->LoadStopwords ( hIndex.Exists ( "stopwords" ) ? hIndex["stopwords"].cstr() : NULL );
-
 		// configure charset_type
 		tQuery.m_pTokenizer = NULL;
 		if ( hIndex.Exists ( "charset_type" ) )
@@ -259,6 +255,11 @@ int main ( int argc, char ** argv )
 		{
 			tQuery.m_pTokenizer = sphCreateSBCSTokenizer ();
 		}
+
+		// configure stopwords
+		CSphDict * pDict = new CSphDict_CRC32 ( iMorph );
+		pDict->LoadStopwords ( hIndex.Exists ( "stopwords" ) ? hIndex["stopwords"].cstr() : NULL,
+			tQuery.m_pTokenizer );
 
 		// configure charset_table
 		assert ( tQuery.m_pTokenizer );

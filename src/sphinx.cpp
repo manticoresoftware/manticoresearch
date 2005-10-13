@@ -3180,10 +3180,16 @@ struct MatchDateGt_fn
 /// match sorter
 struct MatchTimeSegments_fn
 {
-public:
-	static DWORD m_iNow;
+protected:
+	DWORD m_iNow;
 
 public:
+	/// ctor
+	MatchTimeSegments_fn ()
+	{
+		m_iNow = time ( NULL );
+	}
+
 	/// comparator
 	inline bool operator() ( const CSphMatch & a, const CSphMatch & b ) const
 	{
@@ -3213,7 +3219,6 @@ protected:
 		return 5; // everything else
 	}
 };
-DWORD MatchTimeSegments_fn::m_iNow = time ( NULL );
 
 
 /// qsort query-word comparator

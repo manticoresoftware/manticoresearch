@@ -307,12 +307,13 @@ int main ( int argc, char ** argv )
 			for ( int i=iStart; i<iMaxIndex; i++ )
 			{
 				CSphMatch & tMatch = pResult->m_dMatches[i];
+				time_t tStamp = tMatch.m_iTimestamp; // for 64-bit
 				fprintf ( stdout, "%d. group=%d, document=%d, weight=%d, time=%s",
 					1+i,
 					tMatch.m_iGroupID,
 					tMatch.m_iDocID,
 					tMatch.m_iWeight,
-					ctime ( (time_t*)&tMatch.m_iTimestamp ) );
+					ctime ( &tStamp ) );
 
 				#if USE_MYSQL
 				if ( sQueryInfo )

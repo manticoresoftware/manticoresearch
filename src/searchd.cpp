@@ -898,7 +898,7 @@ int main ( int argc, char **argv )
 					SafeDelete ( tIndex.m_pIndex );
 					tIndex.m_pIndex = pNewIndex;
 
-					sphInfo ( "rotating index '%s': success" );
+					sphInfo ( "rotating index '%s': success", sIndex );
 					bSuccess = true;
 					break;
 				}

@@ -3131,7 +3131,7 @@ struct CSphQueryParser : CSphSource_Text
 			this->words[numWords++] = sphDup(word);
 	}
 
-	BYTE * NextText()
+	virtual BYTE * NextText()
 	{
 		m_tDocInfo.m_iDocID = 1;
 		m_tDocInfo.m_iGroupID = 1;
@@ -3356,6 +3356,8 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResu
 
 	// create result and start timing
 	pResult->m_fQueryTime -= sphLongTimer ();
+	pResult->m_iNumWords = 0;
+	pResult->m_iTotalMatches = 0;
 
 	// split query into words
 	CSphQueryParser * pQueryParser = new CSphQueryParser ( dict, pQuery->m_sQuery,
@@ -3387,7 +3389,10 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResu
 	CSphAutofile tDoclist ( sTmp );
 
 	if ( tWordlist.m_iFD<0 || tDoclist.m_iFD<0 )
+	{
+		pResult->m_fQueryTime += sphLongTimer ();
 		return false;
+	}
 
 	PROFILE_END ( query_init );
 	PROFILE_BEGIN ( query_load_dir );
@@ -4369,9 +4374,10 @@ int CSphSource_Document::GetFieldCount ()
 // PLAIN TEXT SOURCE
 /////////////////////////////////////////////////////////////////////////////
 
-BYTE **CSphSource_Text::NextDocument()
+BYTE ** CSphSource_Text::NextDocument()
 {
-	static BYTE * t = NextText ();
+	static BYTE * t;
+	t = NextText ();
 	return t ? &t : NULL;
 };
 

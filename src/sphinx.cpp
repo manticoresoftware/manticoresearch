@@ -528,7 +528,7 @@ public:
 
 	const CSphQueryWord & operator = ( const CSphQueryWord & rhs )
 	{
-		sphFree ( rhs.m_sWord );
+		sphFree ( m_sWord );
 		m_sWord			= sphDup ( rhs.m_sWord );
 		m_iQueryPos		= rhs.m_iQueryPos;
 		m_iWordID		= rhs.m_iWordID;

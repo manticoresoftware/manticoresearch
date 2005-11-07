@@ -298,6 +298,8 @@ int main ( int argc, char ** argv )
 	int iTopStops = 100;
 	bool bRotate = false;
 	bool bBuildFreqs = false;
+	CSphVector < const char *, 16 > dIndexes;
+	bool bIndexAll = false;
 
 	int i;
 	for ( i=1; i<argc; i++ )
@@ -334,6 +336,14 @@ int main ( int argc, char ** argv )
 			g_bQuiet = true;
 			sphSetQuiet ( true );
 
+		} else if ( strcasecmp ( argv[i], "--all" )==0 )
+		{
+			bIndexAll = true;
+
+		} else if ( isalpha(argv[i][0]) || isdigit(argv[i][0]) || argv[i][0]=='_' ) // myisalpha
+		{
+			dIndexes.Add ( argv[i] );
+
 		} else
 		{
 			break;
@@ -343,15 +353,36 @@ int main ( int argc, char ** argv )
 	if ( !g_bQuiet )
 		fprintf ( stdout, SPHINX_BANNER );
 
-	if ( i!=argc )
+	if ( i!=argc || argc<2 )
 	{
-
-		fprintf ( stderr, "ERROR: malformed or unknown option near '%s'.\n\n", argv[i] );
-		fprintf ( stderr, "usage: indexer [--config file.conf] [--buildstops output.txt count] [--buildfreqs] [--quiet]" );
+		if ( argc>1 )
+		{
+			fprintf ( stderr, "ERROR: malformed or unknown option near '%s'.\n", argv[i] );
+		
+		} else
+		{
+			fprintf ( stdout,
+				"Usage: indexer [OPTIONS] [indexname1 [indexname2 [...]]]\n"
+				"\n"
+				"Options are:\n"
+				"--config <file>\t\t\tread configuration from specified file\n"
+				"\t\t\t\t(default is sphinx.conf)\n"
+				"--all\t\t\t\treindex all configured indexes\n"
+				"--quiet\t\t\t\tbe quiet, only print errors\n"
 #if !USE_WINDOWS
-		fprintf ( stderr, " [--rotate]" );
+				"--rotate\t\t\tsend SIGHUP to searchd when indexing is over\n"
+				"\t\t\t\tto rotate updated indexes automatically\n"
 #endif
-		fprintf ( stderr, "\n" );
+				"--buildstops <output.txt> <N>\tbuild top N stopwords and write them\n"
+				"\t\t\t\tto specifed file\n"
+				"--buildfreqs\t\t\tstore words frequencies to output.txt\n"
+				"\t\t\t\t(used with --buildstops only)\n"
+				"\n"
+				"Examples:\n"
+				"indexer --quiet myidx1\t\treindex 'myidx1' defined in 'sphinx.conf'\n"
+				"indexer --all\t\t\treindex all indexes defined in 'sphinx.conf'\n" );
+		}
+
 		return 1;
 	}
 
@@ -433,6 +464,26 @@ int main ( int argc, char ** argv )
 	{
 		const CSphConfigSection & hIndex = hConf["index"].IterateGet ();
 		const char * sIndexName = hConf["index"].IterateGetKey ().cstr();
+
+		if ( !bIndexAll )
+		{
+			bool bIndex = false;
+			ARRAY_FOREACH ( i, dIndexes )
+				if ( strcasecmp ( sIndexName, dIndexes[i] )==0 )
+			{
+				bIndex = true;
+				break;
+			}
+			if ( !bIndex )
+			{
+				if ( !g_bQuiet )
+				{
+					fprintf ( stdout, "skipping index '%s'...\n", sIndexName );
+					fflush ( stdout );
+				}
+				continue;
+			}
+		}
 
 		if ( !g_bQuiet )
 		{

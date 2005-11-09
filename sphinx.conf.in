@@ -153,6 +153,10 @@ source src1
 
 index test1
 {
+	# which document source to index
+	# MUST be defined
+	source			= src1
+
 	# this is path and index file name without extension
 	# files <indexpath>.spi/spd/spr will be created by indexer
 	#

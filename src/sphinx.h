@@ -133,9 +133,10 @@ ISphTokenizer *			sphCreateUTF8Tokenizer ();
 /// morphology flags
 enum ESphMorphology
 {
-	SPH_MORPH_NONE		= 0,
-	SPH_MORPH_STEM_EN	= (1<<1),
-	SPH_MORPH_STEM_RU	= (1<<2)
+	SPH_MORPH_NONE				= 0,
+	SPH_MORPH_STEM_EN			= (1<<1),
+	SPH_MORPH_STEM_RU_CP1251	= (1<<2),
+	SPH_MORPH_STEM_RU_UTF8		= (1<<3),
 };
 
 

@@ -617,13 +617,18 @@ int main ( int argc, char ** argv )
 
 		// charset_type
 		ISphTokenizer * pTokenizer = NULL;
+		bool bUseUTF8 = false;
 		if ( hIndex.Exists ( "charset_type" ) )
 		{
 			if ( hIndex["charset_type"]=="sbcs" )
 				pTokenizer = sphCreateSBCSTokenizer ();
+
 			else if ( hIndex["charset_type"]=="utf-8" )
+			{
 				pTokenizer = sphCreateUTF8Tokenizer ();
-			else
+				bUseUTF8 = true;
+
+			} else
 				sphDie ( "FATAL: unknown charset type '%s' in index '%s'.\n",
 					hIndex["charset_type"].cstr(), sIndexName );
 		} else
@@ -680,9 +685,9 @@ int main ( int argc, char ** argv )
 				if ( hIndex["morphology"]=="stem_en" )
 					iMorph = SPH_MORPH_STEM_EN;
 				else if ( hIndex["morphology"]=="stem_ru" )
-					iMorph = SPH_MORPH_STEM_RU;
+					iMorph = ( bUseUTF8 ? SPH_MORPH_STEM_RU_UTF8 : SPH_MORPH_STEM_RU_CP1251 );
 				else if ( hIndex["morphology"]=="stem_enru" )
-					iMorph = SPH_MORPH_STEM_EN | SPH_MORPH_STEM_RU;
+					iMorph = SPH_MORPH_STEM_EN | ( bUseUTF8 ? SPH_MORPH_STEM_RU_UTF8 : SPH_MORPH_STEM_RU_CP1251 );
 				else
 					fprintf ( stderr, "WARNING: unknown morphology type '%s' ignored in index '%s'.\n",
 						hIndex["morphology"].cstr(), sIndexName );

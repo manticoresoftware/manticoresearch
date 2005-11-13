@@ -3876,7 +3876,8 @@ CSphDict_CRC32::CSphDict_CRC32 ( DWORD iMorph )
 	, m_iStopwords	( 0 )
 	, m_pStopwords	( NULL )
 {
-	if ( m_iMorph & SPH_MORPH_STEM_RU )
+	assert (!( ( m_iMorph & SPH_MORPH_STEM_RU_CP1251 ) && ( m_iMorph & SPH_MORPH_STEM_RU_UTF8 ) ));
+	if ( ( m_iMorph & SPH_MORPH_STEM_RU_CP1251 ) || ( m_iMorph & SPH_MORPH_STEM_RU_UTF8 ) )
 		stem_ru_init ();
 }
 
@@ -3886,8 +3887,10 @@ DWORD CSphDict_CRC32::GetWordID ( BYTE * pWord )
 	// apply morphology
 	if ( m_iMorph & SPH_MORPH_STEM_EN )
 		stem_en ( pWord );
-	if ( m_iMorph & SPH_MORPH_STEM_RU )
-		stem_ru_cp1251 ( pWord ); // FIXME! !COMMIT
+	if ( m_iMorph & SPH_MORPH_STEM_RU_CP1251 )
+		stem_ru_cp1251 ( pWord );
+	if ( m_iMorph & SPH_MORPH_STEM_RU_UTF8 )
+		stem_ru_utf8 ( (WORD*)pWord );
 
 	DWORD crc = sphCRC32 ( pWord );
 

@@ -178,13 +178,33 @@ int main ( int argc, char ** argv )
 		if ( !hIndex.Exists ( "path" ) )
 			sphDie ( "FATAL: key 'path' not found in index '%s'.\n", sIndexName );
 
+		// configure charset_type
+		tQuery.m_pTokenizer = NULL;
+		bool bUseUTF8 = false;
+		if ( hIndex.Exists ( "charset_type" ) )
+		{
+			if ( hIndex["charset_type"]=="sbcs" )
+				tQuery.m_pTokenizer = sphCreateSBCSTokenizer ();
+			else if ( hIndex["charset_type"]=="utf-8" )
+			{
+				tQuery.m_pTokenizer = sphCreateUTF8Tokenizer ();
+				bUseUTF8 = true;
+			}
+			else
+				sphDie ( "FATAL: unknown charset type '%s' in index '%s'.\n", hIndex["charset_type"].cstr(), sIndexName );
+		} else
+		{
+			tQuery.m_pTokenizer = sphCreateSBCSTokenizer ();
+		}
+
 		// get morphology type
 		DWORD iMorph = SPH_MORPH_NONE;
 		if ( hIndex.Exists ( "morphology" ) )
 		{
+			int iRuMorph = ( bUseUTF8 ? SPH_MORPH_STEM_RU_UTF8 : SPH_MORPH_STEM_RU_CP1251 );
 			if ( hIndex["morphology"]=="stem_en" )			iMorph = SPH_MORPH_STEM_EN;
-			else if ( hIndex["morphology"]=="stem_ru" )		iMorph = SPH_MORPH_STEM_RU;
-			else if ( hIndex["morphology"]=="stem_enru" )	iMorph = SPH_MORPH_STEM_EN | SPH_MORPH_STEM_RU;
+			else if ( hIndex["morphology"]=="stem_ru" )		iMorph = iRuMorph;
+			else if ( hIndex["morphology"]=="stem_enru" )	iMorph = SPH_MORPH_STEM_EN | iRuMorph;
 			else
 				fprintf ( stderr, "WARNING: unknown morphology type '%s' ignored.\n", hIndex["morphology"].cstr() );
 		}
@@ -240,21 +260,6 @@ int main ( int argc, char ** argv )
 			break;
 		}
 		#endif
-
-		// configure charset_type
-		tQuery.m_pTokenizer = NULL;
-		if ( hIndex.Exists ( "charset_type" ) )
-		{
-			if ( hIndex["charset_type"]=="sbcs" )
-				tQuery.m_pTokenizer = sphCreateSBCSTokenizer ();
-			else if ( hIndex["charset_type"]=="utf-8" )
-				tQuery.m_pTokenizer = sphCreateUTF8Tokenizer ();
-			else
-				sphDie ( "FATAL: unknown charset type '%s' in index '%s'.\n", hIndex["charset_type"].cstr(), sIndexName );
-		} else
-		{
-			tQuery.m_pTokenizer = sphCreateSBCSTokenizer ();
-		}
 
 		// configure stopwords
 		CSphDict * pDict = new CSphDict_CRC32 ( iMorph );

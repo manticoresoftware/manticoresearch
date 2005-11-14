@@ -503,7 +503,7 @@ class CSphQuery
 {
 public:
 	const char *	m_sQuery;		///< query string. MUST be not NULL
-	int *			m_pWeights;		///< user-supplied per-field weights. may be NULL. default is NULL. OWNED, WILL NOT BE FREED in dtor.
+	int *			m_pWeights;		///< user-supplied per-field weights. may be NULL. default is NULL. NOT OWNED, WILL NOT BE FREED in dtor.
 	int				m_iWeights;		///< number of user-supplied weights. missing fields will be assigned weight 1. default is 0
 	ESphMatchMode	m_eMode;		///< match mode. default is "match all"
 	DWORD *			m_pGroups;		///< groups to match. default is NULL, which means "match all". OWNED, WILL BE FREED in dtor.

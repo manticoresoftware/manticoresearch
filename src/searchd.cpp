@@ -646,26 +646,20 @@ int main ( int argc, char **argv )
 			continue;
 		}
 
-		// configure morphology
-		DWORD iMorph = SPH_MORPH_NONE;
-		if ( hIndex.Exists ( "morphology" ) )
-		{
-			if ( hIndex["morphology"]=="stem_en" )			iMorph = SPH_MORPH_STEM_EN;
-			else if ( hIndex["morphology"]=="stem_ru" )		iMorph = SPH_MORPH_STEM_RU;
-			else if ( hIndex["morphology"]=="stem_enru" )	iMorph = SPH_MORPH_STEM_EN | SPH_MORPH_STEM_RU;
-			else
-				sphWarning ( "unknown morphology type '%s' in index '%s' ignored", hIndex["morphology"].cstr(), sIndexName );
-		}
-
 		// configure charset_type
 		ISphTokenizer * pTokenizer = NULL;
+		bool bUseUTF8 = false;
 		if ( hIndex.Exists ( "charset_type" ) )
 		{
 			if ( hIndex["charset_type"]=="sbcs" )
 				pTokenizer = sphCreateSBCSTokenizer ();
+
 			else if ( hIndex["charset_type"]=="utf-8" )
+			{
 				pTokenizer = sphCreateUTF8Tokenizer ();
-			else
+				bUseUTF8 = true;
+
+			} else
 			{
 				sphWarning ( "unknown charset type '%s' in index '%s' - NOT SERVING", hIndex["charset_type"].cstr() );
 				continue;
@@ -673,6 +667,18 @@ int main ( int argc, char **argv )
 		} else
 		{
 			pTokenizer = sphCreateSBCSTokenizer ();
+		}
+
+		// configure morphology
+		DWORD iMorph = SPH_MORPH_NONE;
+		if ( hIndex.Exists ( "morphology" ) )
+		{
+			int iRuMorph = ( bUseUTF8 ? SPH_MORPH_STEM_RU_UTF8 : SPH_MORPH_STEM_RU_CP1251 );
+			if ( hIndex["morphology"]=="stem_en" )			iMorph = SPH_MORPH_STEM_EN;
+			else if ( hIndex["morphology"]=="stem_ru" )		iMorph = iRuMorph;
+			else if ( hIndex["morphology"]=="stem_enru" )	iMorph = SPH_MORPH_STEM_EN | iRuMorph;
+			else
+				sphWarning ( "unknown morphology type '%s' in index '%s' ignored", hIndex["morphology"].cstr(), sIndexName );
 		}
 
 		// configure charset_table

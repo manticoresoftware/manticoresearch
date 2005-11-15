@@ -890,7 +890,7 @@ int main ( int argc, char **argv )
 					CSphIndex * pNewIndex = sphCreateIndexPhrase ( sPath );
 					if ( !pNewIndex )
 					{
-						sphWarning ( "rotating index '%s': failed to create new index object", sIndex, sFile );
+						sphWarning ( "rotating index '%s': failed to create new index object", sIndex );
 
 						// try ro recover
 						TryRename ( sIndex, sPath, ".spi", ".new.spi", true );
@@ -909,7 +909,7 @@ int main ( int argc, char **argv )
 					break;
 				}
 				if ( !bSuccess )
-					sphWarning ( "rotating index '%s': using old index" );
+					sphWarning ( "rotating index '%s': using old index", sIndex );
 			}
 		}
 

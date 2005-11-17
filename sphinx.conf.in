@@ -136,12 +136,16 @@ source src1
 	#
 	# <document>
 	# <id>123</id>
-	# <group>1</group>
+	# <group>45</group>
+	# <timestamp>1132223498</timestamp>
 	# <title>test title</title>
 	# <body>
 	# this is my document body
 	# </body>
 	# </document>
+	#
+	# timestamp element is optional, default value 1
+	# all the other elements are mandatory
 
 	# type				= xmlpipe
 	# xmlpipe_command	= cat /home/sphinx/test.xml

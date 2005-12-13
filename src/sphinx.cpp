@@ -61,7 +61,7 @@ void sphAssert ( const char * sExpr, const char * sFile, int iLine )
 		__debugbreak ();
 	} else
 	{
-		fprintf ( stderr, "%s", sBuffer );
+		fprintf ( stdout, "%s", sBuffer );
 		exit ( 1 );
 	}
 }
@@ -250,7 +250,7 @@ void sphProfilerShow ( int iTimer=0, int iLevel=0 )
 	assert ( g_iTimer==0 );
 
 	if ( iTimer==0 )
-		fprintf ( stderr, "--- PROFILE ---\n" );
+		fprintf ( stdout, "--- PROFILE ---\n" );
 
 	CSphTimer & tTimer = g_dTimers[iTimer];
 	int iChild;
@@ -266,11 +266,11 @@ void sphProfilerShow ( int iTimer=0, int iLevel=0 )
 		return;
 
 	for ( int i=0; i<iLevel; i++ )
-		fprintf ( stderr, "  " );
-	fprintf ( stderr, "%s: %.2f", g_dTimerNames [ tTimer.m_eTimer ], tTimer.m_fStamp );
+		fprintf ( stdout, "  " );
+	fprintf ( stdout, "%s: %.2f", g_dTimerNames [ tTimer.m_eTimer ], tTimer.m_fStamp );
 	if ( iChildren )
-		fprintf ( stderr, ", self: %.2f", fSelf );
-	fprintf ( stderr, "\n" );
+		fprintf ( stdout, ", self: %.2f", fSelf );
+	fprintf ( stdout, "\n" );
 
 	// dump my children
 	iChild = tTimer.m_iChild;
@@ -284,7 +284,7 @@ void sphProfilerShow ( int iTimer=0, int iLevel=0 )
 	}
 
 	if ( iTimer==0 )
-		fprintf ( stderr, "---------------\n" );
+		fprintf ( stdout, "---------------\n" );
 }
 
 
@@ -694,7 +694,7 @@ void sphDie(char *message, ...)
 	va_list ap;
 
 	va_start(ap, message);
-	vfprintf(stderr, message, ap);
+	vfprintf(stdout, message, ap);
 	va_end(ap);
 	exit(1);
 }
@@ -801,11 +801,11 @@ int sphWrite ( int iFD, const void * pBuf, size_t iCount, const char * sName )
 	{
 		if ( iWritten<0 )
 		{
-			fprintf ( stderr, "ERROR: %s: write error: %s.\n",
+			fprintf ( stdout, "ERROR: %s: write error: %s.\n",
 				sName, strerror(errno) );
 		} else
 		{
-			fprintf ( stderr, "ERROR: %s: write error: %d of %d bytes written.\n",
+			fprintf ( stdout, "ERROR: %s: write error: %d of %d bytes written.\n",
 				sName, iWritten, int(iCount) );
 		}
 	}
@@ -1400,7 +1400,7 @@ bool CSphTokenizer_SBCS::SetCaseFolding ( const char * sConfig )
 	CSphCharsetDefinitionParser tParser;
 	if ( tParser.Parse ( sConfig, m_tLC )!=0 )
 	{
-		fprintf ( stderr, "ERROR: %s", tParser.GetLastError() );
+		fprintf ( stdout, "ERROR: %s", tParser.GetLastError() );
 		return false;
 	}
 	return true;
@@ -1592,7 +1592,7 @@ bool CSphTokenizer_UTF8::SetCaseFolding ( const char * sConfig )
 	CSphCharsetDefinitionParser tParser;
 	if ( tParser.Parse ( sConfig, m_tLC )!=0 )
 	{
-		fprintf ( stderr, "ERROR: %s", tParser.GetLastError() );
+		fprintf ( stdout, "ERROR: %s", tParser.GetLastError() );
 		return false;
 	}
 	return true;
@@ -2087,7 +2087,7 @@ int CSphIndex_VLN::OpenFile ( char * ext, int mode )
 
 	int iFD = ::open ( sBuf, mode | SPH_BINARY, 0644 );
 	if ( iFD<0 )
-		fprintf ( stderr, "ERROR: failed to open '%s': %s.\n", sBuf, strerror(errno) );
+		fprintf ( stdout, "ERROR: failed to open '%s': %s.\n", sBuf, strerror(errno) );
 
 	return iFD;
 }
@@ -2383,7 +2383,7 @@ void CSphIndex_VLN::cidxDone()
 	fdData->CloseFile ();
 
 	if ( fdIndex->IsError() || fdData->IsError() )
-		fprintf ( stderr, "ERROR: write() failed, out of disk space?\n" );
+		fprintf ( stdout, "ERROR: write() failed, out of disk space?\n" );
 
 	SafeDelete ( fdIndex );
 	SafeDelete ( fdData );
@@ -2714,7 +2714,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 
 	if ( bRelimit && iOldLimit )
 	{
-		fprintf ( stderr, "WARNING: collect_hits: mem_limit=%d kb too low, increasing to %d kb.\n",
+		fprintf ( stdout, "WARNING: collect_hits: mem_limit=%d kb too low, increasing to %d kb.\n",
 			iOldLimit/1024, iMemoryLimit/1024 );
 	}
 
@@ -2786,7 +2786,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 				pBin->m_iFileLeft = cidxWriteRawVLB ( fdRaw, dRawBlock, iRawBlockUsed );
 				if ( pBin->m_iFileLeft<0 )
 				{
-					fprintf ( stderr, "ERROR: write() failed, out of disk space?\n" );
+					fprintf ( stdout, "ERROR: write() failed, out of disk space?\n" );
 					return 0;
 				}
 				PROFILE_END ( write_hits );
@@ -2819,7 +2819,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 		pBin->m_iFileLeft = cidxWriteRawVLB ( fdRaw, dRawBlock, iRawBlockUsed );
 		if ( pBin->m_iFileLeft<0 )
 		{
-			fprintf ( stderr, "ERROR: write() failed, out of disk space?\n" );
+			fprintf ( stdout, "ERROR: write() failed, out of disk space?\n" );
 			return 0;
 		}
 		PROFILE_END ( write_hits );
@@ -2878,7 +2878,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 	int iRawBlocks = bins.GetLength();
 	if ( iRawBlocks>16 )
 	{
-		fprintf ( stderr, "WARNING: sort_hits: merge_blocks=%d too high, increasing mem_limit may improve performance.\n",
+		fprintf ( stdout, "WARNING: sort_hits: merge_blocks=%d too high, increasing mem_limit may improve performance.\n",
 			bins.GetLength() );
 	}
 
@@ -2886,7 +2886,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 	if ( iBinSize<CSphBin::MIN_SIZE )
 	{
 		iBinSize = CSphBin::MIN_SIZE;
-		fprintf ( stderr, "WARNING: sort_hits: mem_limit=%d kb too low, increasing to %d kb.\n",
+		fprintf ( stdout, "WARNING: sort_hits: mem_limit=%d kb too low, increasing to %d kb.\n",
 			iMemoryLimit/1024, (iBinSize*iRawBlocks)/1024 );
 	}
 
@@ -2927,7 +2927,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 		cidxHit ( tQueue.m_pData );
 		if ( fdIndex->IsError() || fdData->IsError() )
 		{
-			fprintf ( stderr, "ERROR: write() failed, out of disk space?\n" );
+			fprintf ( stdout, "ERROR: write() failed, out of disk space?\n" );
 			return 0;
 		}
 
@@ -3302,7 +3302,7 @@ ISphMatchQueue * sphCreateQueue ( CSphQuery * pQuery )
 		case SPH_SORT_RELEVANCE:	pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchRelevanceLt_fn > (); break;
 		default:
 			pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchRelevanceLt_fn > ();
-			fprintf ( stderr, "WARNING: unknown sorting mode '%d', using SPH_SORT_RELEVANCE\n", pQuery->m_eSort );
+			fprintf ( stdout, "WARNING: unknown sorting mode '%d', using SPH_SORT_RELEVANCE\n", pQuery->m_eSort );
 			break;
 	}
 
@@ -3961,7 +3961,7 @@ void CSphDict_CRC32::LoadStopwords ( const char * sFiles, ISphTokenizer * pToken
 		FILE * fp = fopen ( sName, "rb" );
 		if ( !fp )
 		{
-			fprintf ( stderr, "WARNING: failed to load stopwords from '%s'.\n", sName );
+			fprintf ( stdout, "WARNING: failed to load stopwords from '%s'.\n", sName );
 			continue;
 		}
 
@@ -4545,7 +4545,7 @@ bool CSphSource_MySQL::RunQueryStep ()
 	// report errors, if any
 	if ( sError )
 	{
-		fprintf ( stderr, "ERROR: %s: %s (DSN=%s).\n",
+		fprintf ( stdout, "ERROR: %s: %s (DSN=%s).\n",
 			sError, mysql_error ( &m_tSqlDriver ), m_sSqlDSN );
 		return false;
 	}
@@ -4579,7 +4579,7 @@ int CSphSource_MySQL::GetColumnIndex ( const char * sColumn )
 
 	if ( iRes<=0 || iRes>=(int)mysql_num_fields(m_pSqlResult) )
 	{
-		fprintf ( stderr, "WARNING: bad column index (name='%s', index=%d), SUPPORT DISABLED.\n",
+		fprintf ( stdout, "WARNING: bad column index (name='%s', index=%d), SUPPORT DISABLED.\n",
 			sColumn, iRes );
 		iRes = 0;
 	} else
@@ -4594,8 +4594,8 @@ int CSphSource_MySQL::GetColumnIndex ( const char * sColumn )
 bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 {
 	#define LOC_FIX_NULL(_arg) if ( !pParams->_arg ) pParams->_arg = "";
-	#define LOC_ERROR(_msg,_arg) { fprintf ( stderr, _msg, _arg ); return 0; }
-	#define LOC_ERROR2(_msg,_arg,_arg2) { fprintf ( stderr, _msg, _arg, _arg2 ); return 0; }
+	#define LOC_ERROR(_msg,_arg) { fprintf ( stdout, _msg, _arg ); return 0; }
+	#define LOC_ERROR2(_msg,_arg,_arg2) { fprintf ( stdout, _msg, _arg, _arg2 ); return 0; }
 	#define LOC_MYSQL_ERROR(_msg) { sError = _msg; break; }
 
 	const char * sError = NULL;
@@ -4668,7 +4668,7 @@ bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 			if ( m_iRangeStep<=0 )
 				LOC_ERROR ( "ERROR: mysql_range_step=%d: must be positive.\n", m_iRangeStep );
 			if ( m_iRangeStep<128 )
-				fprintf ( stderr, "WARNING: mysql_range_step=%d: too small, increase recommended.\n", m_iRangeStep );
+				fprintf ( stdout, "WARNING: mysql_range_step=%d: too small, increase recommended.\n", m_iRangeStep );
 
 			// check query for macros
 			bool bError = false;
@@ -4676,7 +4676,7 @@ bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 			{
 				if ( !strstr ( pParams->m_sQuery, MACRO_VALUES[i] ) )
 				{
-					fprintf ( stderr, "ERROR: mysql_ranged_query: macro '%s' not found.\n",
+					fprintf ( stdout, "ERROR: mysql_ranged_query: macro '%s' not found.\n",
 						MACRO_VALUES[i] );
 					bError = true;
 				}
@@ -4737,7 +4737,7 @@ bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 	// errors, anyone?
 	if ( sError )
 	{
-		fprintf ( stderr, "ERROR: %s: %s (DSN=%s).\n",
+		fprintf ( stdout, "ERROR: %s: %s (DSN=%s).\n",
 			sError, mysql_error ( &m_tSqlDriver ), m_sSqlDSN );
 		return 0;
 	}
@@ -4754,7 +4754,7 @@ bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 	// check it
 	if ( m_iFieldCount>SPH_MAX_FIELD_COUNT )
 	{
-		fprintf ( stderr, "ERROR: too many fields (fields=%d, max=%d), please increase SPH_MAX_FIELD_COUNT in sphinx.h and recompile.\n",
+		fprintf ( stdout, "ERROR: too many fields (fields=%d, max=%d), please increase SPH_MAX_FIELD_COUNT in sphinx.h and recompile.\n",
 			m_iFieldCount, SPH_MAX_FIELD_COUNT );
 		return 0;
 	}
@@ -4801,7 +4801,7 @@ BYTE ** CSphSource_MySQL::NextDocument ()
 		{
 			if ( mysql_query ( &m_tSqlDriver, m_sQueryPost ) )
 			{
-				fprintf ( stderr, "WARNING: mysql_query_post: %s\n", mysql_error ( &m_tSqlDriver ) );
+				fprintf ( stdout, "WARNING: mysql_query_post: %s\n", mysql_error ( &m_tSqlDriver ) );
 				break;
 			}
 			m_pSqlResult = mysql_use_result ( &m_tSqlDriver );
@@ -4822,18 +4822,18 @@ BYTE ** CSphSource_MySQL::NextDocument ()
 	m_tDocInfo.m_iTimestamp = m_iDateColumn ? atoi ( m_tSqlRow [ m_iDateColumn ] ) : 1;
 
 	if ( !m_tDocInfo.m_iDocID )
-		fprintf ( stderr, "WARNING: zero/NULL document_id, aborting indexing\n" );
+		fprintf ( stdout, "WARNING: zero/NULL document_id, aborting indexing\n" );
 
 	if ( !m_tDocInfo.m_iGroupID )
 	{
 		m_tDocInfo.m_iGroupID = 1;
-		fprintf ( stderr, "WARNING: zero/NULL group for document_id=%d, fixed up to 1\n", m_tDocInfo.m_iDocID );
+		fprintf ( stdout, "WARNING: zero/NULL group for document_id=%d, fixed up to 1\n", m_tDocInfo.m_iDocID );
 	}
 
 	if ( !m_tDocInfo.m_iTimestamp )
 	{
 		m_tDocInfo.m_iTimestamp = 1;
-		fprintf ( stderr, "WARNING: zero/NULL timestamp for document_id=%d, fixed up to 1\n", m_tDocInfo.m_iDocID );
+		fprintf ( stdout, "WARNING: zero/NULL timestamp for document_id=%d, fixed up to 1\n", m_tDocInfo.m_iDocID );
 	}
 
 	// remap and return
@@ -4951,7 +4951,7 @@ int CSphSource_XMLPipe::Next ()
 		if ( m_pBuffer>=m_pBufferEnd )
 			if ( !UpdateBuffer() )
 		{
-			fprintf ( stderr, "WARNING: CSphSource_XMLPipe(): unexpected EOF while scanning doc '%d' body.\n",
+			fprintf ( stdout, "WARNING: CSphSource_XMLPipe(): unexpected EOF while scanning doc '%d' body.\n",
 				m_tDocInfo.m_iDocID );
 			return 0;
 		}
@@ -5063,7 +5063,7 @@ bool CSphSource_XMLPipe::CheckTag ( bool bOpen, bool bStrict )
 	if ( m_pBufferEnd-m_pBuffer < m_iTagLength+iAdd )
 	{
 		if ( bStrict )
-			fprintf ( stderr, "WARNING: CSphSource_XMLPipe(): expected '<%s%s>', got EOF.\n",
+			fprintf ( stdout, "WARNING: CSphSource_XMLPipe(): expected '<%s%s>', got EOF.\n",
 				bOpen ? "" : "/", m_pTag );
 		return false;
 	}
@@ -5086,7 +5086,7 @@ bool CSphSource_XMLPipe::CheckTag ( bool bOpen, bool bStrict )
 		sGot [ iCopy ] = '\0';
 
 		if ( bStrict )
-			fprintf ( stderr, "WARNING: CSphSource_XMLPipe(): expected '<%s%s>', got '%s'.\n",
+			fprintf ( stdout, "WARNING: CSphSource_XMLPipe(): expected '<%s%s>', got '%s'.\n",
 				bOpen ? "" : "/", m_pTag, sGot );
 		return false;
 	}
@@ -5103,7 +5103,7 @@ bool CSphSource_XMLPipe::SkipTag ( bool bOpen, bool bWarnOnEOF, bool bStrict )
 	if ( !SkipWhitespace() )
 	{
 		if ( bWarnOnEOF )
-			fprintf ( stderr, "WARNING: CSphSource_XMLPipe(): expected '<%s%s>', got EOF.\n",
+			fprintf ( stdout, "WARNING: CSphSource_XMLPipe(): expected '<%s%s>', got EOF.\n",
 				bOpen ? "" : "/", m_pTag );
 		return false;
 	}
@@ -5124,7 +5124,7 @@ bool CSphSource_XMLPipe::ScanInt ( const char * sTag, DWORD * pRes, bool bStrict
 
 	if ( !SkipWhitespace() )
 	{
-		fprintf ( stderr, "WARNING: CSphSource_XMLPipe(): expected <%s> data, got EOF.\n", m_pTag );
+		fprintf ( stdout, "WARNING: CSphSource_XMLPipe(): expected <%s> data, got EOF.\n", m_pTag );
 		return false;
 	}
 
@@ -5163,7 +5163,7 @@ bool CSphSource_XMLPipe::ScanStr ( const char * sTag, char * pRes, int iMaxLengt
 
 	if ( !SkipWhitespace() )
 	{
-		fprintf ( stderr, "WARNING: CSphSource_XMLPipe(): expected <%s> data, got EOF.\n", m_pTag );
+		fprintf ( stdout, "WARNING: CSphSource_XMLPipe(): expected <%s> data, got EOF.\n", m_pTag );
 		return false;
 	}
 

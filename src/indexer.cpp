@@ -310,7 +310,7 @@ int main ( int argc, char ** argv )
 			if ( !stat ( argv[i+1], &tStat ) )
 				sConfName = argv[i+1];
 			else
-				fprintf ( stderr, "WARNING: can not stat config file '%s', using default 'sphinx.conf'.\n", argv[i+1] );
+				fprintf ( stdout, "WARNING: can not stat config file '%s', using default 'sphinx.conf'.\n", argv[i+1] );
 			i++;
 		
 		} else if ( strcasecmp ( argv[i], "--buildstops" )==0 && (i+2)<argc )
@@ -357,7 +357,7 @@ int main ( int argc, char ** argv )
 	{
 		if ( argc>1 )
 		{
-			fprintf ( stderr, "ERROR: malformed or unknown option near '%s'.\n", argv[i] );
+			fprintf ( stdout, "ERROR: malformed or unknown option near '%s'.\n", argv[i] );
 		
 		} else
 		{
@@ -397,19 +397,19 @@ int main ( int argc, char ** argv )
 	CSphConfigParser cp;
 	if ( !cp.Parse ( sConfName ) )
 	{
-		fprintf ( stderr, "FATAL: failed to parse config file '%s'.\n", sConfName );
+		fprintf ( stdout, "FATAL: failed to parse config file '%s'.\n", sConfName );
 		return 1;
 	}
 	const CSphConfig & hConf = cp.m_tConf;
 
 	if ( !hConf.Exists ( "source" ) )
 	{
-		fprintf ( stderr, "FATAL: no sources found in config file.\n" );
+		fprintf ( stdout, "FATAL: no sources found in config file.\n" );
 		return 1;
 	}
 	if ( !hConf.Exists ( "index" ) )
 	{
-		fprintf ( stderr, "FATAL: no indexes found in config file.\n" );
+		fprintf ( stdout, "FATAL: no indexes found in config file.\n" );
 		return 1;
 	}
 
@@ -437,7 +437,7 @@ int main ( int argc, char ** argv )
 			int iRes = strtol ( sMemLimit, &sErr, 10 );
 			if ( *sErr )
 			{
-				fprintf ( stderr, "WARNING: bad mem_limit value '%s', using default.\n", sMemLimit );
+				fprintf ( stdout, "WARNING: bad mem_limit value '%s', using default.\n", sMemLimit );
 			} else
 			{
 				iMemLimit = iScale*iRes;
@@ -455,7 +455,7 @@ int main ( int argc, char ** argv )
 	#define CONF_CHECK(_hash,_key,_msg,_add) \
 		if (!( _hash.Exists ( _key ) )) \
 		{ \
-			fprintf ( stderr, "ERROR: key '%s' not found " _msg, _key, _add ); \
+			fprintf ( stdout, "ERROR: key '%s' not found " _msg, _key, _add ); \
 			continue; \
 		}
 
@@ -512,7 +512,7 @@ int main ( int argc, char ** argv )
 			struct stat tStat;
 			if ( !stat ( sLockFile, &tStat ) )
 			{
-				fprintf ( stderr, "FATAL: index lock file '%s' exists, will not index. Try --rotate option.\n",
+				fprintf ( stdout, "FATAL: index lock file '%s' exists, will not index. Try --rotate option.\n",
 					sLockFile );
 				return 1;
 			}
@@ -524,7 +524,7 @@ int main ( int argc, char ** argv )
 
 		if ( !hSource.Exists ( "type" ) )
 		{
-			fprintf ( stderr, "ERROR: source '%s': type not found.\n", sSourceName.cstr() );
+			fprintf ( stdout, "ERROR: source '%s': type not found.\n", sSourceName.cstr() );
 			continue;
 		}
 
@@ -584,7 +584,7 @@ int main ( int argc, char ** argv )
 			CSphSource_XMLPipe * pSrcXML = new CSphSource_XMLPipe ();
 			if ( !pSrcXML->Init ( hSource["xmlpipe_command"].cstr() ) )
 			{
-				fprintf ( stderr, "FATAL: CSphSource_XMLPipe: unable to popen '%s'.\n", hSource["xmlpipe_command"].cstr() );
+				fprintf ( stdout, "FATAL: CSphSource_XMLPipe: unable to popen '%s'.\n", hSource["xmlpipe_command"].cstr() );
 				SafeDelete ( pSrcXML );
 				return 1;
 			}
@@ -689,7 +689,7 @@ int main ( int argc, char ** argv )
 				else if ( hIndex["morphology"]=="stem_enru" )
 					iMorph = SPH_MORPH_STEM_EN | ( bUseUTF8 ? SPH_MORPH_STEM_RU_UTF8 : SPH_MORPH_STEM_RU_CP1251 );
 				else
-					fprintf ( stderr, "WARNING: unknown morphology type '%s' ignored in index '%s'.\n",
+					fprintf ( stdout, "WARNING: unknown morphology type '%s' ignored in index '%s'.\n",
 						hIndex["morphology"].cstr(), sIndexName );
 			}
 
@@ -752,14 +752,14 @@ int main ( int argc, char ** argv )
 			// load config
 			if ( !hConf.Exists ( "searchd" ) )
 			{
-				fprintf ( stderr, "WARNING: 'searchd' section not found in config file.\n" );
+				fprintf ( stdout, "WARNING: 'searchd' section not found in config file.\n" );
 				break;
 			}
 
 			const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
 			if ( !hSearchd.Exists ( "pid_file" ) )
 			{
-				fprintf ( stderr, "WARNING: 'pid_file' parameter not found in 'searchd' config section.\n" );
+				fprintf ( stdout, "WARNING: 'pid_file' parameter not found in 'searchd' config section.\n" );
 				break;
 			}
 
@@ -768,12 +768,12 @@ int main ( int argc, char ** argv )
 			FILE * fp = fopen ( hSearchd["pid_file"].cstr(), "r" );
 			if ( !fp )
 			{
-				fprintf ( stderr, "WARNING: failed to read pid_file '%s'.\n", hSearchd["pid_file"].cstr() );
+				fprintf ( stdout, "WARNING: failed to read pid_file '%s'.\n", hSearchd["pid_file"].cstr() );
 				break;
 			}
 			if ( fscanf ( fp, "%d", &iPID )!=1 || iPID<=0 )
 			{
-				fprintf ( stderr, "WARNING: failed to scanf pid from pid_file '%s'.\n", hSearchd["pid_file"].cstr() );
+				fprintf ( stdout, "WARNING: failed to scanf pid from pid_file '%s'.\n", hSearchd["pid_file"].cstr() );
 				break;
 			}
 			fclose ( fp );
@@ -788,9 +788,9 @@ int main ( int argc, char ** argv )
 			{
 				switch ( errno )
 				{
-					case ESRCH:	fprintf ( stderr, "WARNING: no process found by PID %d.\n", iPID ); break;
-					case EPERM:	fprintf ( stderr, "WARNING: access denied to PID %d.\n", iPID ); break;
-					default:	fprintf ( stderr, "WARNING: kill() error: %s.\n", strerror(errno) ); break;
+					case ESRCH:	fprintf ( stdout, "WARNING: no process found by PID %d.\n", iPID ); break;
+					case EPERM:	fprintf ( stdout, "WARNING: access denied to PID %d.\n", iPID ); break;
+					default:	fprintf ( stdout, "WARNING: kill() error: %s.\n", strerror(errno) ); break;
 				}
 				break;
 			}
@@ -803,7 +803,7 @@ int main ( int argc, char ** argv )
 		if ( bRotate )
 		{
 			if ( !bOK )
-				fprintf ( stderr, "WARNING: indices NOT rotated.\n" );
+				fprintf ( stdout, "WARNING: indices NOT rotated.\n" );
 		}
 	}
 #endif

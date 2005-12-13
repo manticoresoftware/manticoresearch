@@ -132,7 +132,7 @@ bool CSphConfigParser::ValidateKey ( const char * sKey, const char ** dKnownKeys
 		dKnownKeys++;
 	}
 
-	fprintf ( stderr, "WARNING: error in %s:%d, unknown key '%s' in section [%s]\n",
+	fprintf ( stdout, "WARNING: error in %s:%d, unknown key '%s' in section [%s]\n",
 			m_sFileName, m_iLine, sKey, m_sSectionName.cstr() );
 	return false;
 }
@@ -393,7 +393,7 @@ bool CSphConfigParser::Parse ( const char * file )
 			sStepback[iCtx] = '\0';
 		}
 
-		fprintf ( stderr, "%s line %d col %d: %s near '%s'\n", m_sFileName, m_iLine, int(p-sLine+1), sError, sStepback );
+		fprintf ( stdout, "%s line %d col %d: %s near '%s'\n", m_sFileName, m_iLine, int(p-sLine+1), sError, sStepback );
 		return false;
 	}
 	return true;

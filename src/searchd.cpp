@@ -578,8 +578,8 @@ int main ( int argc, char **argv )
 	}
 	if ( i!=argc )
 	{
-		fprintf ( stderr, "ERROR: malformed or unknown option near '%s'.\n\n", argv[i] );
-		fprintf ( stderr, "usage: searchd [--config file.conf] [--console]\n" );
+		fprintf ( stdout, "ERROR: malformed or unknown option near '%s'.\n\n", argv[i] );
+		fprintf ( stdout, "usage: searchd [--config file.conf] [--console]\n" );
 		return 1;
 	}
 

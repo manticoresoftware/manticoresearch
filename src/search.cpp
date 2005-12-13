@@ -19,7 +19,7 @@
 #define CONF_CHECK(_hash,_key,_msg,_add) \
 	if (!( _hash.Exists ( _key ) )) \
 	{ \
-		fprintf ( stderr, "ERROR: key '%s' not found " _msg, _key, _add ); \
+		fprintf ( stdout, "ERROR: key '%s' not found " _msg, _key, _add ); \
 		continue; \
 	}
 
@@ -146,7 +146,7 @@ int main ( int argc, char ** argv )
 
 	if ( i!=argc )
 	{
-		fprintf ( stderr, "ERROR: malformed or unknown option near '%s'.\n", argv[i] );
+		fprintf ( stdout, "ERROR: malformed or unknown option near '%s'.\n", argv[i] );
 		return 1;
 	}
 
@@ -206,7 +206,7 @@ int main ( int argc, char ** argv )
 			else if ( hIndex["morphology"]=="stem_ru" )		iMorph = iRuMorph;
 			else if ( hIndex["morphology"]=="stem_enru" )	iMorph = SPH_MORPH_STEM_EN | iRuMorph;
 			else
-				fprintf ( stderr, "WARNING: unknown morphology type '%s' ignored.\n", hIndex["morphology"].cstr() );
+				fprintf ( stdout, "WARNING: unknown morphology type '%s' ignored.\n", hIndex["morphology"].cstr() );
 		}
 
 		// do we want to show document info from database?

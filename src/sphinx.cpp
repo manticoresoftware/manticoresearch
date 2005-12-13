@@ -240,6 +240,7 @@ void sphProfilerDone ()
 
 	// stop root timer
 	g_iTimers = 0;
+	g_iTimer = -1;
 	g_dTimers[0].Stop ();
 }
 
@@ -247,7 +248,7 @@ void sphProfilerDone ()
 void sphProfilerShow ( int iTimer=0, int iLevel=0 )
 {
 	assert ( g_iTimers==0 );
-	assert ( g_iTimer==0 );
+	assert ( g_iTimer==-1 );
 
 	if ( iTimer==0 )
 		fprintf ( stdout, "--- PROFILE ---\n" );

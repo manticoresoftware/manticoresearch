@@ -155,7 +155,7 @@ class SphinxClient
 		if ( $ver!=2 )
 		{
 			fclose ( $fp );
-			$this->_error = "expected protocol version 1, got $ver";
+			$this->_error = "expected protocol version 2, got $ver";
 			return false;
 		}
 

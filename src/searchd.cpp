@@ -397,6 +397,17 @@ void HandleClient ( int rsock )
 	if ( iread ( rsock, sIndex, i )!=i ) return;
 	sIndex[i] = '\0';
 
+	// v3. read group/TS limits
+	if ( iread ( rsock, &tQuery.m_iMinID, 4 )!=4 ) return;
+	if ( iread ( rsock, &tQuery.m_iMaxID, 4 )!=4 ) return;
+	if ( iread ( rsock, &tQuery.m_iMinTS, 4 )!=4 ) return;
+	if ( iread ( rsock, &tQuery.m_iMaxTS, 4 )!=4 ) return;
+	if ( tQuery.m_iMinID>tQuery.m_iMaxID || tQuery.m_iMinTS>tQuery.m_iMaxTS )
+	{
+		iwrite ( rsock, "ERROR Bad ID/TS range specified\n" );
+		return;
+	}
+
 	// configure query
 	tQuery.m_sQuery = sQuery;
 	tQuery.m_pWeights = dUserWeights;
@@ -432,7 +443,6 @@ void HandleClient ( int rsock )
 		if ( !g_hIndexes.Exists ( sIndex ) )
 		{
 			iwrite ( rsock, "ERROR Index '%s' not found\n", sIndex );
-			sphSockClose ( rsock );
 			return;
 		}
 
@@ -975,7 +985,7 @@ int main ( int argc, char **argv )
 			// parent process, continue accept()ing
 			default:
 				g_iChildren++;
-			sphSockClose ( rsock );
+				sphSockClose ( rsock );
 				break;
 		}
 		#endif // !USE_WINDOWS

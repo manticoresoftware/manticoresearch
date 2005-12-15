@@ -65,7 +65,7 @@
 
 #define SPHINX_VERSION			"0.9.5-dev"
 #define SPHINX_BANNER			"Sphinx " SPHINX_VERSION "\nCopyright (c) 2001-2005, Andrew Aksyonoff\n\n"
-#define SPHINX_SEARCHD_PROTO	2
+#define SPHINX_SEARCHD_PROTO	3
 
 #define SPH_MAX_QUERY_WORDS		10
 #define SPH_MAX_WORD_LEN		64
@@ -511,6 +511,11 @@ public:
 	ESphSortOrder	m_eSort;		///< sorting order
 	ISphTokenizer *	m_pTokenizer;	///< tokenizer to use. NOT OWNED.
 
+	DWORD			m_iMinID;		///< min ID to match, 0 by default
+	DWORD			m_iMaxID;		///< max ID to match, UINT_MAX by default
+	DWORD			m_iMinTS;		///< min timestamp to match, 0 by default
+	DWORD			m_iMaxTS;		///< max timestamp to match, UINT_MAX by default
+
 public:
 					CSphQuery ();	///< ctor, fills defaults
 					~CSphQuery ();	///< dtor, safely frees owned fields
@@ -523,7 +528,7 @@ class CSphQueryResult
 public:
 	static const int		MAX_MATCHES = 1000;
 
-	struct
+	struct WordStat_t
 	{
 		char *				m_sWord;	///< i-th search term (normalized word form)
 		int					m_iDocs;	///< document count for this term

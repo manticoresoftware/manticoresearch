@@ -1612,6 +1612,10 @@ CSphQuery::CSphQuery ()
 	, m_iGroups		( 0 )
 	, m_eSort		( SPH_SORT_RELEVANCE )
 	, m_pTokenizer	( NULL )
+	, m_iMinID		( 0 )
+	, m_iMaxID		( UINT_MAX )
+	, m_iMinTS		( 0 )
+	, m_iMaxTS		( UINT_MAX )
 {
 }
 
@@ -1967,6 +1971,7 @@ CSphQueryResult::CSphQueryResult ()
 
 	m_iNumWords = 0;
 	m_fQueryTime = 0.0f;
+	m_iTotalMatches = 0;
 }
 
 
@@ -3358,7 +3363,6 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResu
 	// create result and start timing
 	pResult->m_fQueryTime -= sphLongTimer ();
 	pResult->m_iNumWords = 0;
-	pResult->m_iTotalMatches = 0;
 
 	// split query into words
 	CSphQueryParser * pQueryParser = new CSphQueryParser ( dict, pQuery->m_sQuery,
@@ -3478,9 +3482,17 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResu
 	pResult->m_iNumWords = nwords;
 	for ( i=0; i<nwords; i++ )
 	{
-		pResult->m_tWordStats[i].m_sWord = sphDup ( qwords[i].m_sWord );
-		pResult->m_tWordStats[i].m_iDocs = qwords[i].m_iDocs;
-		pResult->m_tWordStats[i].m_iHits = qwords[i].m_iHits;
+		CSphQueryResult::WordStat_t & tWordStats = pResult->m_tWordStats[i];
+		if ( tWordStats.m_sWord )
+		{
+			tWordStats.m_iDocs += qwords[i].m_iDocs;
+			tWordStats.m_iHits += qwords[i].m_iHits;
+		} else
+		{
+			tWordStats.m_sWord = sphDup ( qwords[i].m_sWord );
+			tWordStats.m_iDocs = qwords[i].m_iDocs;
+			tWordStats.m_iHits = qwords[i].m_iHits;
+		}
 	}
 
 	// reorder hit lists
@@ -3502,7 +3514,6 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResu
 
 	// find and proximity-weight matching documents
 	i = docID = 0;
-	pResult->m_iTotalMatches = 0;
 
 	PROFILE_BEGIN ( query_match );
 	if ( pQuery->m_eMode==SPH_MATCH_ALL || pQuery->m_eMode==SPH_MATCH_PHRASE )
@@ -3539,18 +3550,27 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResu
 			if (++i != nwords)
 				continue;
 
-			// preload hitlist entries
-			for ( i=0; i<nwords; i++ )
-				qwords[i].GetHitlistEntry ();
+			// unpack match
+			CSphMatch tMatch;
+			tMatch.m_iDocID = qwords[0].m_tDoc.m_iDocID + m_tHeader.m_tMin.m_iDocID;
+			tMatch.m_iGroupID = qwords[0].m_tDoc.m_iGroupID + m_tHeader.m_tMin.m_iGroupID;
+			tMatch.m_iTimestamp = qwords[0].m_tDoc.m_iTimestamp + m_tHeader.m_tMin.m_iTimestamp;
 
-			// early reject by group id
-			if ( !sphGroupMatch ( qwords[0].m_tDoc.m_iGroupID + m_tHeader.m_tMin.m_iGroupID,
-				pQuery->m_pGroups, pQuery->m_iGroups ) )
+			// early reject by group id, doc id ot timestamp
+			if ( !sphGroupMatch ( tMatch.m_iGroupID, pQuery->m_pGroups, pQuery->m_iGroups )
+				|| tMatch.m_iDocID < pQuery->m_iMinID
+				|| tMatch.m_iDocID > pQuery->m_iMaxID
+				|| tMatch.m_iTimestamp < pQuery->m_iMinTS
+				|| tMatch.m_iTimestamp > pQuery->m_iMaxTS )
 			{
 				docID++;
 				i = 0;
 				continue;
 			}
+
+			// preload hitlist entries
+			for ( i=0; i<nwords; i++ )
+				qwords[i].GetHitlistEntry ();
 
 			// init weighting
 			BYTE curPhraseWeight [ SPH_MAX_FIELD_COUNT ];
@@ -3622,11 +3642,7 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResu
 			for ( i=0, j=0; i<nweights; i++ )
 				j += weights[i] * ( matchWeight[i] + phraseWeight[i] );
 
-			// unpack match, set weight and push it to the queue
-			CSphMatch tMatch;
-			tMatch.m_iDocID = docID + m_tHeader.m_tMin.m_iDocID;
-			tMatch.m_iGroupID = qwords[0].m_tDoc.m_iGroupID + m_tHeader.m_tMin.m_iGroupID;
-			tMatch.m_iTimestamp = qwords[0].m_tDoc.m_iTimestamp + m_tHeader.m_tMin.m_iTimestamp;
+			// set weight and push it to the queue
 			tMatch.m_iWeight = j; // set weight
 			pTop->Push ( tMatch );
 			pResult->m_iTotalMatches++;

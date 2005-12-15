@@ -39,6 +39,10 @@ class SphinxClient
 	var $_weights;	///< per-field weights (default is 1 for all fields)
 	var $_groups;	///< groups to limit searching to (default is not to limit)
 	var $_sort;		///< match sorting mode (default is SPH_SORT_RELEVANCE)
+	var $_min_id;	///< min ID to match (default is 0)
+	var $_max_id;	///< max ID to match (default is UINT_MAX)
+	var $_min_ts;	///< min timestamp to match (default is 0)
+	var $_max_ts;	///< max timestamp to match (default is UINT_MAX)
 
 	var $_error;	///< last error message
 
@@ -53,6 +57,10 @@ class SphinxClient
 		$this->_weights	= array ();
 		$this->_groups	= array ();
 		$this->_sort	= SPH_SORT_RELEVANCE;
+		$this->_min_id	= 0;
+		$this->_max_id	= 0xFFFFFFFF;
+		$this->_min_ts	= 0;
+		$this->_max_ts	= 0xFFFFFFFF;
 
 		$this->_error	= "";
 	}
@@ -118,6 +126,26 @@ class SphinxClient
 		$this->_groups = $groups;
 	}
 
+	/// set IDs range to match
+	function SetIDRange ( $min, $max )
+	{
+		assert ( is_int($min) );
+		assert ( is_int($max) );
+		assert ( $min<=$max );
+		$this->_min_id = $min;
+		$this->_max_id = $max;
+	}
+
+	/// set timestamps to match
+	function SetTimestampRange ( $min, $max )
+	{
+		assert ( is_int($min) );
+		assert ( is_int($max) );
+		assert ( $min<=$max );
+		$this->_min_ts = $min;
+		$this->_max_ts = $max;
+	}
+
 	/// connect to server and run given query
 	///
 	/// $query is query string
@@ -152,10 +180,10 @@ class SphinxClient
 			return false;
 		}
 		$ver = (int)substr ( $s, 4 ); 
-		if ( $ver!=2 )
+		if ( $ver!=3 )
 		{
 			fclose ( $fp );
-			$this->_error = "expected protocol version 2, got $ver";
+			$this->_error = "expected protocol version 3, got $ver";
 			return false;
 		}
 
@@ -181,6 +209,13 @@ class SphinxClient
 
 		// v2. index name
 		$req .= pack ( "V", strlen($index) ) . $index; 
+
+		// v3. id/ts limits
+		$req .=
+			pack ( "V", (int)$this->_min_id ) .
+			pack ( "V", (int)$this->_max_id ) .
+			pack ( "V", (int)$this->_min_ts ) .
+			pack ( "V", (int)$this->_max_ts );
 
 		////////////
 		// do query

@@ -415,13 +415,13 @@ void HandleClient ( int rsock )
 	tQuery.m_eMode = (ESphMatchMode) Min ( Max ( iMode, 0 ), SPH_MATCH_TOTAL );
 
 	// do search
+	pRes = new CSphQueryResult ();
+	ISphMatchQueue * pTop = sphCreateQueue ( &tQuery );
+
 	if ( strcmp ( sIndex, "*" )==0 )
 	{
 		// search through all indexes
 		g_hIndexes.IterateStart ();
-
-		pRes = new CSphQueryResult ();
-		ISphMatchQueue * pTop = sphCreateQueue ( &tQuery );
 
 		while ( g_hIndexes.IterateNext () )
 		{
@@ -435,31 +435,50 @@ void HandleClient ( int rsock )
 			tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pTop );
 		}
 
-		sphFlattenQueue ( pTop, pRes );
-
 	} else
 	{
-		// search through specific index
-		if ( !g_hIndexes.Exists ( sIndex ) )
+		// search through the specified indexes
+		int iSearched = 0;
+		char * p = sIndex;
+		while ( *p )
 		{
-			iwrite ( rsock, "ERROR Index '%s' not found\n", sIndex );
-			return;
+			// skip non-alphas
+			while ( (*p) && !sphIsAlpha(*p) ) p++;
+			if ( !(*p) ) break;
+
+			// this is my next index name
+			const char * sNext = p;
+			while ( sphIsAlpha(*p) ) p++;
+
+			assert ( sNext!=p );
+			if ( *p ) *p++ = '\0'; // if it was not the end yet, we'll continue from next char
+
+			// check that this one exists
+			if ( !g_hIndexes.Exists ( sNext ) )
+			{
+				iwrite ( rsock, "ERROR Invalid index '%s' specified in request\n", sNext );
+				return;
+			}
+
+			const ServedIndex_t & tServed = g_hIndexes[sNext];
+			assert ( tServed.m_pIndex );
+			assert ( tServed.m_pDict );
+			assert ( tServed.m_pTokenizer );
+
+			// do query
+			tQuery.m_pTokenizer = tServed.m_pTokenizer;
+			tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pTop );
+			iSearched++;
 		}
 
-		const ServedIndex_t & tServed = g_hIndexes[sIndex];
-		assert ( tServed.m_pIndex );
-		assert ( tServed.m_pDict );
-		assert ( tServed.m_pTokenizer );
-
-		// do query
-		tQuery.m_sQuery = sQuery;
-		tQuery.m_pWeights = dUserWeights;
-		tQuery.m_iWeights = iUserWeights;
-		tQuery.m_eMode = (ESphMatchMode) Min ( Max ( iMode, 0 ), SPH_MATCH_TOTAL );
-		tQuery.m_pTokenizer = tServed.m_pTokenizer;
-
-		pRes = tServed.m_pIndex->Query ( tServed.m_pDict, &tQuery );
+		if ( !iSearched )
+		{
+			iwrite ( rsock, "ERROR No valid indexes specified in request\n" );
+			return;
+		}
 	}
+
+	sphFlattenQueue ( pTop, pRes );
 
 	// log query
 	if ( g_iQueryLogFile>=0 )

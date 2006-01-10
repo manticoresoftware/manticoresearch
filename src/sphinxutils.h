@@ -17,6 +17,8 @@
 #ifndef _sphinxutils_
 #define _sphinxutils_
 
+#include <ctype.h>
+
 /////////////////////////////////////////////////////////////////////////////
 
 /// known keys for different config sections
@@ -24,6 +26,14 @@ extern const char * g_dSphKeysCommon[];
 extern const char * g_dSphKeysIndexer[];
 extern const char * g_dSphKeysSearchd[];
 extern const char * g_dSphKeysSearch[];
+
+/////////////////////////////////////////////////////////////////////////////
+
+/// let's build our own theme park!
+inline int sphIsAlpha ( int c )
+{
+	return isalpha(c) || isdigit(c) || c=='_';
+}
 
 /////////////////////////////////////////////////////////////////////////////
 

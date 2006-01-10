@@ -155,12 +155,6 @@ bool CSphConfigParser::IsNamedSection ( const char * sKey )
 }
 
 
-int myisalpha ( int c )
-{
-	return isalpha(c) || isdigit(c) || c=='_';
-}
-
-
 bool CSphConfigParser::AddSection ( const char * sType, const char * sName )
 {
 	m_sSectionType = sType;
@@ -262,7 +256,7 @@ bool CSphConfigParser::Parse ( const char * file )
 		{
 			if ( isspace(*p) )				continue;
 			if ( *p=='#' )					{ LOC_PUSH ( SKIP2NL ); continue; }
-			if ( !myisalpha(*p) )			LOC_ERROR ( "invalid token" );
+			if ( !sphIsAlpha(*p) )			LOC_ERROR ( "invalid token" );
 											iToken = 0; LOC_PUSH ( TYPE ); LOC_PUSH ( TOK ); p--; continue;
 		}
 
@@ -276,9 +270,9 @@ bool CSphConfigParser::Parse ( const char * file )
 		// handle TOK state
 		if ( eState==TOK )
 		{
-			if ( !iToken && !myisalpha(*p) )LOC_ERROR ( "internal error (non-alpha in TOK pos 0)" );
+			if ( !iToken && !sphIsAlpha(*p) )LOC_ERROR ( "internal error (non-alpha in TOK pos 0)" );
 			if ( iToken==sizeof(sToken) )	LOC_ERROR ( "token too long" );
-			if ( !myisalpha(*p) )			{ LOC_POP (); sToken [ iToken ] = '\0'; iToken = 0; p--; continue; }
+			if ( !sphIsAlpha(*p) )			{ LOC_POP (); sToken [ iToken ] = '\0'; iToken = 0; p--; continue; }
 			if ( !iToken )					{ sToken[0] = '\0'; }
 											sToken [ iToken++ ] = *p; continue;
 		}
@@ -309,7 +303,7 @@ bool CSphConfigParser::Parse ( const char * file )
 			if ( isspace(*p) )				continue;
 			if ( *p=='#' )					{ LOC_PUSH ( SKIP2NL ); continue; }
 			if ( *p=='}' )					{ LOC_POP (); continue; }
-			if ( myisalpha(*p) )			{ LOC_PUSH ( VALUE ); LOC_PUSH ( CHR ); iCh = '='; LOC_PUSH ( TOK ); p--; continue; }
+			if ( sphIsAlpha(*p) )			{ LOC_PUSH ( VALUE ); LOC_PUSH ( CHR ); iCh = '='; LOC_PUSH ( TOK ); p--; continue; }
 											LOC_ERROR2 ( "section contents: expected token, got '%c'", *p );
 
 		}
@@ -330,7 +324,7 @@ bool CSphConfigParser::Parse ( const char * file )
 		if ( eState==SECNAME )
 		{
 			if ( isspace(*p) )				{ continue; }
-			if ( !sToken[0]&&!myisalpha(*p)){ LOC_ERROR2 ( "named section: expected name, got '%c'", *p ); }
+			if ( !sToken[0]&&!sphIsAlpha(*p)){ LOC_ERROR2 ( "named section: expected name, got '%c'", *p ); }
 			if ( !sToken[0] )				{ LOC_PUSH ( TOK ); p--; continue; }
 											if ( !AddSection ( m_sSectionType.cstr(), sToken ) ) LOC_ERROR3 ( "section '%s' (type=%s) already exists", sToken, m_sSectionType.cstr() ); sToken[0] = '\0';
 
@@ -343,7 +337,7 @@ bool CSphConfigParser::Parse ( const char * file )
 		if ( eState==SECBASE )
 		{
 			if ( isspace(*p) )				{ continue; }
-			if ( !sToken[0]&&!myisalpha(*p)){ LOC_ERROR2 ( "named section: expected parent name, got '%c'", *p ); }
+			if ( !sToken[0]&&!sphIsAlpha(*p)){ LOC_ERROR2 ( "named section: expected parent name, got '%c'", *p ); }
 			if ( !sToken[0] )				{ LOC_PUSH ( TOK ); p--; continue; }
 
 			// copy the section

@@ -826,6 +826,48 @@ char * strlwr ( char * s )
 }
 #endif
 
+
+char * sphStrMacro ( const char * sTemplate, const char * sMacro, int iValue )
+{
+	// expand macro
+	char sExp [ 16 ];
+	sprintf ( sExp, "%d", iValue );
+
+	// calc lengths
+	int iExp = strlen ( sExp );
+	int iMacro = strlen ( sMacro );
+	int iDelta = iExp-iMacro;
+
+	// calc result length
+	int iRes = strlen ( sTemplate );
+	const char * sCur = sTemplate;
+	while ( ( sCur = strstr ( sCur, sMacro ) )!=NULL )
+	{
+		iRes += iDelta;
+		sCur++;
+	}
+
+	// build result
+	char * sRes = new char [ iRes+1 ];
+	char * sOut = sRes;
+	const char * sLast = sTemplate;
+	sCur = sTemplate;
+
+	while ( ( sCur = strstr ( sCur, sMacro ) )!=NULL )
+	{
+		strncpy ( sOut, sLast, sCur-sLast ); sOut += sCur-sLast;
+		strcpy ( sOut, sExp ); sOut += iExp;
+		sCur += iMacro;
+		sLast = sCur;
+	}
+
+	if ( *sLast )
+		strcpy ( sOut, sLast );
+
+	assert ( (int)strlen(sRes)==iRes );
+	return sRes;
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // TOKENIZERS
 /////////////////////////////////////////////////////////////////////////////
@@ -2985,6 +3027,10 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 	unlink ( sBuf );
 
 	PROFILE_END ( invert_hits );
+
+	// when the party's over..
+	pSource->PostIndex ();
+
 	PROFILER_DONE ();
 	PROFILE_SHOW ();
 	return 1;
@@ -4412,6 +4458,7 @@ CSphSourceParams_MySQL::CSphSourceParams_MySQL ()
 	, m_sQueryPre		( NULL )
 	, m_sQueryPost		( NULL )
 	, m_sQueryRange		( NULL )
+	, m_sQueryPostIndex	( NULL )
 	, m_sGroupColumn	( NULL )
 	, m_sDateColumn		( NULL )
 	, m_iRangeStep		( 1024 )
@@ -4448,6 +4495,11 @@ CSphSource_MySQL::CSphSource_MySQL ()
 	, m_iMinID			( 0 )
 	, m_iMaxID			( 0 )
 	, m_iCurrentID		( 0 )
+
+	, m_iMaxFetchedID	( 0 )
+
+	, m_bSqlConnected	( false )
+	, m_pParams			( NULL )
 {
 }
 
@@ -4620,6 +4672,7 @@ bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 	// checks
 	assert ( pParams );
 	assert ( pParams->m_sQuery );
+	m_pParams = pParams;
 
 	// defaults
 	LOC_FIX_NULL ( m_sQueryPre );
@@ -4657,6 +4710,7 @@ bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 		{
 			LOC_MYSQL_ERROR ( "mysql_real_connect" );
 		}
+		m_bSqlConnected = true;
 
 		// run pre-query
 		if ( pParams->m_sQueryPre && strlen(pParams->m_sQueryPre) )
@@ -4796,6 +4850,7 @@ bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 BYTE ** CSphSource_MySQL::NextDocument ()
 {
 	PROFILE ( src_mysql );
+	assert ( m_bSqlConnected );
 
 	m_tSqlRow = mysql_fetch_row ( m_pSqlResult );
 
@@ -4830,6 +4885,10 @@ BYTE ** CSphSource_MySQL::NextDocument ()
 			break;
 		}
 
+		// close connection and return
+		mysql_close ( &m_tSqlDriver );
+		m_bSqlConnected = false;
+
 		return NULL;
 	}
 
@@ -4837,6 +4896,8 @@ BYTE ** CSphSource_MySQL::NextDocument ()
 	m_tDocInfo.m_iDocID = atoi ( m_tSqlRow[0] );
 	m_tDocInfo.m_iGroupID = m_iGroupColumn ? atoi ( m_tSqlRow [ m_iGroupColumn ] ) : 1;
 	m_tDocInfo.m_iTimestamp = m_iDateColumn ? atoi ( m_tSqlRow [ m_iDateColumn ] ) : 1;
+
+	m_iMaxFetchedID = Max ( m_iMaxFetchedID, m_tDocInfo.m_iDocID );
 
 	if ( !m_tDocInfo.m_iDocID )
 		fprintf ( stdout, "WARNING: zero/NULL document_id, aborting indexing\n" );
@@ -4857,6 +4918,60 @@ BYTE ** CSphSource_MySQL::NextDocument ()
 	for ( int i=0; i<m_iFieldCount; i++ )
 		m_dFields[i] = (BYTE*) m_tSqlRow [ m_dRemapFields[i] ];
 	return m_dFields;
+}
+
+
+void CSphSource_MySQL::PostIndex ()
+{
+	if ( !m_pParams
+		|| !m_pParams->m_sQueryPostIndex
+		|| !strlen(m_pParams->m_sQueryPostIndex)
+		|| !m_iMaxFetchedID )
+	{
+		return;
+	}
+
+	assert ( !m_bSqlConnected );
+	assert ( m_pParams );
+
+	#define LOC_MYSQL_ERROR(_msg) { sError = _msg; break; }
+
+	const char * sError = NULL;
+	for ( ;; )
+	{
+		mysql_init ( &m_tSqlDriver );
+		if ( !mysql_real_connect ( &m_tSqlDriver,
+			m_pParams->m_sHost, m_pParams->m_sUser, m_pParams->m_sPass, m_pParams->m_sDB,
+			m_pParams->m_iPort, m_pParams->m_sUsock, 0 ) )
+		{
+			LOC_MYSQL_ERROR ( "mysql_real_connect" );
+		}
+
+	    char * sQuery = sphStrMacro ( m_pParams->m_sQueryPostIndex, "$maxid", m_iMaxFetchedID );
+	    int iRes = mysql_query ( &m_tSqlDriver, sQuery );
+	    delete [] sQuery;
+
+		if ( iRes )
+			LOC_MYSQL_ERROR ( "mysql_query_post_index" );
+
+		m_pSqlResult = mysql_use_result ( &m_tSqlDriver );
+		if ( m_pSqlResult )
+		{
+			mysql_free_result ( m_pSqlResult );
+			m_pSqlResult = NULL;
+		}
+
+	    break;
+	}
+	
+	if ( sError )
+		fprintf ( stdout, "ERROR: %s: %s (DSN=%s).\n",
+			sError, mysql_error ( &m_tSqlDriver ), m_sSqlDSN );
+
+	#undef LOC_MYSQL_ERROR
+
+	mysql_close ( &m_tSqlDriver );
+	m_bSqlConnected = false;
 }
 
 #endif // USE_MYSQL

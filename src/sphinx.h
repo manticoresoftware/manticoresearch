@@ -92,6 +92,9 @@ float			sphLongTimer ();
 /// Sphinx CRC32 implementation
 DWORD			sphCRC32 ( const BYTE * pString );
 
+/// replaces all occurences of sMacro in sTemplate with textual representation of iValue
+char *			sphStrMacro ( const char * sTemplate, const char * sMacro, int iValue );
+
 /// new that never returns NULL (it crashes instead)
 void *			operator new ( size_t iSize );
 
@@ -262,6 +265,10 @@ public:
 	/// because at indexing stage, we might not be sure of the exact count
 	virtual int							GetFieldCount () = 0;
 
+	/// post-index callback
+	/// gets called when the indexing is succesfully (!) over
+	virtual void						PostIndex () {}
+
 protected:
 	ISphTokenizer *						m_pTokenizer;	///< my tokenizer
 	CSphDict *							m_pDict;		///< my dict
@@ -320,6 +327,7 @@ struct CSphSourceParams_MySQL
 	const char *	m_sQueryPre;
 	const char *	m_sQueryPost;
 	const char *	m_sQueryRange;
+	const char *	m_sQueryPostIndex;
 	const char *	m_sGroupColumn;
 	const char *	m_sDateColumn;
 	int				m_iRangeStep;
@@ -346,6 +354,7 @@ struct CSphSource_MySQL : CSphSource_Document
 
 	bool				Init ( CSphSourceParams_MySQL * pParams );
 	virtual BYTE **		NextDocument ();
+	virtual void		PostIndex ();
 
 protected:
 	MYSQL_RES *			m_pSqlResult;
@@ -365,6 +374,11 @@ protected:
 	int					m_iMinID;		///< grand min ID
 	int					m_iMaxID;		///< grand max ID
 	int					m_iCurrentID;	///< current min ID
+
+	DWORD				m_iMaxFetchedID;///< max actually fetched ID
+
+	bool						m_bSqlConnected;
+	CSphSourceParams_MySQL *	m_pParams;
 
 	static const int			MACRO_COUNT = 2;
 	static const char * const	MACRO_VALUES [ MACRO_COUNT ];

@@ -121,10 +121,17 @@ source src1
 	# sql_date_column	= 3
 
 
-	# post-query, executed after the main fetch query
+	# post-query, executed immediately after the main fetch query is over
 	# useful eg. to unmark records
 	# optional, default is empty
 	sql_query_post		=
+
+
+	# post-index-query, executed after the indexing is succesfully completed
+	# $maxid macro is available, which is the max document ID actually fetched from DB
+	# optional, default is empty
+	#
+	# sql_query_post_index = REPLACE INTO counters ( id, val ) VALUES ( 'max_indexed_id', $maxid )
 
 	#############################################################################
 

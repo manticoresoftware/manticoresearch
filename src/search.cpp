@@ -24,48 +24,6 @@
 	}
 
 
-char * strmacro ( const char * sTemplate, const char * sMacro, int iValue )
-{
-	// expand macro
-	char sExp [ 16 ];
-	sprintf ( sExp, "%d", iValue );
-
-	// calc lengths
-	int iExp = strlen ( sExp );
-	int iMacro = strlen ( sMacro );
-	int iDelta = iExp-iMacro;
-
-	// calc result length
-	int iRes = strlen ( sTemplate );
-	const char * sCur = sTemplate;
-	while ( ( sCur = strstr ( sCur, sMacro ) )!=NULL )
-	{
-		iRes += iDelta;
-		sCur++;
-	}
-
-	// build result
-	char * sRes = new char [ iRes+1 ];
-	char * sOut = sRes;
-	const char * sLast = sTemplate;
-	sCur = sTemplate;
-
-	while ( ( sCur = strstr ( sCur, sMacro ) )!=NULL )
-	{
-		strncpy ( sOut, sLast, sCur-sLast ); sOut += sCur-sLast;
-		strcpy ( sOut, sExp ); sOut += iExp;
-		sCur += iMacro;
-		sLast = sCur;
-	}
-
-	if ( *sLast )
-		strcpy ( sOut, sLast );
-
-	assert ( (int)strlen(sRes)==iRes );
-	return sRes;
-}
-
-
 int main ( int argc, char ** argv )
 {
 	fprintf ( stdout, SPHINX_BANNER );
@@ -323,7 +281,7 @@ int main ( int argc, char ** argv )
 				#if USE_MYSQL
 				if ( sQueryInfo )
 				{
-					char * sQuery = strmacro ( sQueryInfo, "$id", tMatch.m_iDocID );
+					char * sQuery = sphStrMacro ( sQueryInfo, "$id", tMatch.m_iDocID );
 					const char * sError = NULL;
 
 					#define LOC_MYSQL_ERROR(_arg) { sError = _arg; break; }

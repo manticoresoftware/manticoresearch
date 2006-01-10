@@ -455,7 +455,7 @@ int main ( int argc, char ** argv )
 	#define CONF_CHECK(_hash,_key,_msg,_add) \
 		if (!( _hash.Exists ( _key ) )) \
 		{ \
-			fprintf ( stdout, "ERROR: key '%s' not found " _msg, _key, _add ); \
+			fprintf ( stdout, "ERROR: key '%s' not found " _msg "\n", _key, _add ); \
 			continue; \
 		}
 
@@ -542,17 +542,18 @@ int main ( int argc, char ** argv )
 
 			CSphSourceParams_MySQL tParams;
 
-			tParams.m_sQuery		= LOC_GET ( "sql_query" );
-			tParams.m_sQueryPre		= LOC_GET ( "sql_query_pre" );
-			tParams.m_sQueryPost	= LOC_GET ( "sql_query_post" );
-			tParams.m_sQueryRange	= LOC_GET ( "sql_query_range" );
-			tParams.m_sGroupColumn	= LOC_GET ( "sql_group_column" );
-			tParams.m_sDateColumn	= LOC_GET ( "sql_date_column" );
-			tParams.m_sHost			= LOC_GET ( "sql_host" );
-			tParams.m_sUser			= LOC_GET ( "sql_user" );
-			tParams.m_sPass			= LOC_GET ( "sql_pass" );
-			tParams.m_sDB			= LOC_GET ( "sql_db" );
-			tParams.m_sUsock		= LOC_GET ( "sql_sock" );
+			tParams.m_sQuery			= LOC_GET ( "sql_query" );
+			tParams.m_sQueryPre			= LOC_GET ( "sql_query_pre" );
+			tParams.m_sQueryPost		= LOC_GET ( "sql_query_post" );
+			tParams.m_sQueryRange		= LOC_GET ( "sql_query_range" );
+			tParams.m_sQueryPostIndex	= LOC_GET ( "sql_query_post_index" );
+			tParams.m_sGroupColumn		= LOC_GET ( "sql_group_column" );
+			tParams.m_sDateColumn		= LOC_GET ( "sql_date_column" );
+			tParams.m_sHost				= LOC_GET ( "sql_host" );
+			tParams.m_sUser				= LOC_GET ( "sql_user" );
+			tParams.m_sPass				= LOC_GET ( "sql_pass" );
+			tParams.m_sDB				= LOC_GET ( "sql_db" );
+			tParams.m_sUsock			= LOC_GET ( "sql_sock" );
 
 			#undef LOC_GET
 			#define LOC_GET(_arg,_key) \

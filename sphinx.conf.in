@@ -226,6 +226,7 @@ indexer
 #############################################################################
 ## searchd settings
 #############################################################################
+
 searchd
 {
 	# port on which search daemon will listen
@@ -255,6 +256,22 @@ searchd
 	# used for different external automation scripts
 	# MUST be present
 	pid_file			= /home/sphinx/searchd.pid
+
+
+	# distributed agents list
+	# an external searchd address to proxy each request to
+	# there may be more than one address defined
+	#
+	# default is none, which means working in non-distributed mode
+	#
+	# agent				= srv02:3312
+	# agent				= srv03:3312
+
+
+	# distributed agent query timeout
+	# default is 5 seconds
+	#
+	agent_timeout		= 5
 }
 
 #############################################################################

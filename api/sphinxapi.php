@@ -180,10 +180,10 @@ class SphinxClient
 			return false;
 		}
 		$ver = (int)substr ( $s, 4 ); 
-		if ( $ver!=3 )
+		if ( $ver!=4 )
 		{
 			fclose ( $fp );
-			$this->_error = "expected protocol version 3, got $ver";
+			$this->_error = "expected protocol version 4, got $ver";
 			return false;
 		}
 
@@ -216,6 +216,9 @@ class SphinxClient
 			pack ( "V", (int)$this->_max_id ) .
 			pack ( "V", (int)$this->_min_ts ) .
 			pack ( "V", (int)$this->_max_ts );
+
+		// v4. binary flag
+		$req .= pack ( "V", 0 );
 
 		////////////
 		// do query

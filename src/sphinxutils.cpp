@@ -179,9 +179,18 @@ bool CSphConfigParser::AddKey ( const char * sKey, char * sValue )
 	sValue = trim ( sValue );
 	CSphConfigSection & tSec = m_tConf[m_sSectionType][m_sSectionName];
 	if ( tSec.Exists ( sKey ) )
-		tSec [ sKey ] = sValue;
-	else
+	{
+		// chain to tail, to keep the order
+		CSphVariant * pTail = &tSec[sKey];
+		while ( pTail->m_pNext )
+			pTail = pTail->m_pNext;
+		pTail->m_pNext = new CSphVariant ( sValue );
+
+	} else
+	{
+		// just add
 		tSec.Add ( sValue, sKey );
+	}
 	return true;
 }
 

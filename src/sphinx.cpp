@@ -82,22 +82,6 @@ static bool		g_bSphQuiet		= false;
 // COMPILE-TIME CHECKS
 /////////////////////////////////////////////////////////////////////////////
 
-/// compile time error struct
-template<int> struct CompileTimeError;
-template<> struct CompileTimeError<true> {};
-
-namespace Private
-{
-	template<int x>		struct static_assert_test{};
-	template<bool x>	struct SizeError;
-	template<>			struct SizeError<true>{};
-}
-
-#define STATIC_SIZE_ASSERT(_Type,_ExpSize)	\
-	typedef ::Private::static_assert_test<sizeof(::Private::SizeError \
-	< (bool) (sizeof(_Type) == (_ExpSize)) >)> static_assert_typedef_
-
-
 STATIC_SIZE_ASSERT ( SphOffset_t, 8 );
 
 /////////////////////////////////////////////////////////////////////////////
@@ -2006,7 +1990,6 @@ CSphQueryResult::CSphQueryResult ()
 {
 	for ( int i=0; i<SPH_MAX_QUERY_WORDS; i++ )
 	{
-		m_tWordStats[i].m_sWord = NULL;
 		m_tWordStats[i].m_iDocs = 0;
 		m_tWordStats[i].m_iHits = 0;
 	}
@@ -2019,8 +2002,6 @@ CSphQueryResult::CSphQueryResult ()
 
 CSphQueryResult::~CSphQueryResult ()
 {
-	for ( int i=0; i<SPH_MAX_QUERY_WORDS; i++ )
-		sphFree ( m_tWordStats[i].m_sWord );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -3529,13 +3510,13 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResu
 	for ( i=0; i<nwords; i++ )
 	{
 		CSphQueryResult::WordStat_t & tWordStats = pResult->m_tWordStats[i];
-		if ( tWordStats.m_sWord )
+		if ( tWordStats.m_sWord.cstr() )
 		{
 			tWordStats.m_iDocs += qwords[i].m_iDocs;
 			tWordStats.m_iHits += qwords[i].m_iHits;
 		} else
 		{
-			tWordStats.m_sWord = sphDup ( qwords[i].m_sWord );
+			tWordStats.m_sWord = qwords[i].m_sWord;
 			tWordStats.m_iDocs = qwords[i].m_iDocs;
 			tWordStats.m_iHits = qwords[i].m_iHits;
 		}

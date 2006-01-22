@@ -32,6 +32,7 @@
 	#define sphSockRecv(_sock,_buf,_len,_flags)		::recv(_sock,_buf,_len,_flags)
 	#define sphSockSend(_sock,_buf,_len,_flags)		::send(_sock,_buf,_len,_flags)
 	#define sphSockClose(_sock)						::closesocket(_sock)
+	#define sphSockGetErrno()						WSAGetLastError()
 
 #else
 	// UNIX-specific headers and calls
@@ -45,7 +46,31 @@
 	#define sphSockRecv(_sock,_buf,_len,_flags)		::recv(_sock,_buf,_len,_flags)
 	#define sphSockSend(_sock,_buf,_len,_flags)		::send(_sock,_buf,_len,_flags)
 	#define sphSockClose(_sock)						::close(_sock)
+	#define sphSockGetErrno()						::errno
 #endif
+
+const char * sphSockError ( int iErr=0 )
+{
+	#ifdef USE_WINDOWS
+		if ( iErr==0 )
+			iErr = WSAGetLastError ();
+
+		static char sBuf [ 256 ];
+		_snprintf ( sBuf, sizeof(sBuf), "WSA error %d", iErr );
+		return sBuf;
+	#else
+		return strerror ( errno );
+	#endif
+}
+
+void sphSockSetErrno ( int iErr )
+{
+	#ifdef USE_WINDOWS
+		WSASetLastError ( iErr );
+	#else
+		errno = iErr;
+	#endif
+}
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -60,13 +85,18 @@ static bool				g_bLogStdout	= true;
 static int				g_iLogFile		= STDOUT_FILENO;
 static ESphLogLevel		g_eLogLevel		= LOG_INFO;
 
-static int				g_iReadTimeout	= 5;
+static int				g_iReadTimeout	= 5;	// sec
 static int				g_iChildren		= 0;
 static int				g_iMaxChildren	= 0;
 static int				g_iSocket		= 0;
 static int				g_iQueryLogFile	= -1;
 static int				g_iHUP			= 0;
 static const char *		g_sPidFile		= NULL;
+
+static int				g_iAgentConnectTimeout	= 1000;		// in msec. FIXME! make this per-dist-index
+static int				g_iAgentQueryTimeout	= 3000;		// in msec. FIXME! make this per-dist-index
+
+///////////////////////////////////////////////////////////////////////////////
 
 struct ServedIndex_t
 {
@@ -106,9 +136,67 @@ static SmallStringHash_T < ServedIndex_t >	g_hIndexes;
 
 ///////////////////////////////////////////////////////////////////////////////
 
+/// remote agent state
+enum AgentState_e
+{
+	AGENT_UNUSED,				///< agent is unused for this request
+	AGENT_CONNECT,				///< connecting to agent
+	AGENT_HELLO,				///< waiting for "VER x" hello
+	AGENT_QUERY					///< query sent, wating for reply
+};
+
+/// remote agent host/port
+struct Agent_t
+{
+	CSphString		m_sHost;		///< remote searchd host
+	int				m_iPort;		///< remote searchd port, 0 if local
+	CSphString		m_sIndexes;		///< remote index names to query
+
+	int				m_iSock;		///< socket number, -1 if not connected
+	AgentState_e	m_eState;		///< current state
+
+	int				m_iMatches;
+	CSphMatch *		m_pMatches;
+	int				m_iTotalMatches;
+	float			m_fQueryTime;
+
+	Agent_t ()
+		: m_iPort ( -1 )
+		, m_iSock ( -1 )
+		, m_eState ( AGENT_UNUSED )
+		, m_iMatches ( 0 )
+		, m_pMatches ( NULL )
+		, m_iTotalMatches ( NULL )
+		, m_fQueryTime ( 0.0f )
+	{
+	}
+
+	~Agent_t ()
+	{
+		Close ();
+		SafeDeleteArray ( m_pMatches );
+	}
+
+	void Close ()
+	{
+		if ( m_iSock>0 )
+		{
+			sphSockClose ( m_iSock );
+			m_iSock = -1;
+			m_eState = AGENT_UNUSED;
+		}
+	}
+};
+
+typedef CSphVector < Agent_t, 16 >					DistributedIndex_t;
+static SmallStringHash_T < DistributedIndex_t >		g_hDistIndexes;
+
+///////////////////////////////////////////////////////////////////////////////
+
 #if USE_WINDOWS
 
 // Windows hacks
+#undef EINTR
 #define LOCK_EX			0
 #define LOCK_UN			1
 #define STDIN_FILENO	fileno(stdin)
@@ -116,6 +204,8 @@ static SmallStringHash_T < ServedIndex_t >	g_hIndexes;
 #define STDERR_FILENO	fileno(stderr)
 #define ETIMEDOUT		WSAETIMEDOUT
 #define EWOULDBLOCK		WSAEWOULDBLOCK
+#define EINPROGRESS		WSAEINPROGRESS
+#define EINTR			WSAEINTR
 #define socklen_t		int
 #define vsnprintf		_vsnprintf
 
@@ -125,8 +215,9 @@ void flock ( int, int )
 }
 
 
-void sleep ( int )
+void sleep ( int iSec )
 {
+	Sleep ( iSec*1000 );
 }
 
 
@@ -234,11 +325,11 @@ int createServerSocket_IP(int port)
 
 	sphInfo ( "creating a server socket on port %d", port );
 	if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-		sphFatal ( "unable to create socket on port %d: %s", port, strerror ( errno ) );
+		sphFatal ( "unable to create server socket on port %d: %s", port, sphSockError() );
 
 	int iOn = 1;
 	if ( setsockopt ( sock, SOL_SOCKET,  SO_REUSEADDR, (char*)&iOn, sizeof(iOn) ) )
-		sphFatal ( "setsockopt failed: %s", strerror ( errno ) );
+		sphFatal ( "setsockopt() failed: %s", sphSockError() );
 
 	int iTries = 12;
 	int iRes;
@@ -318,18 +409,21 @@ int iread(int fd, void *buf, int len)
 	int res;
 
 	do {
-		if (g_iReadTimeout) {
-			do {
-				res = select_fd (fd, g_iReadTimeout, 0);
-			} while (res == -1 && errno == EINTR);
-			if (res <= 0) {
-				if (res == 0) errno = ETIMEDOUT;
+		if ( g_iReadTimeout )
+		{
+			do
+			{
+				res = select_fd ( fd, g_iReadTimeout, 0 );
+			} while ( res==-1 && sphSockGetErrno()==EINTR );
+			if ( res<=0 )
+			{
+				if ( res==0 )
+					sphSockSetErrno ( ETIMEDOUT );
 				return -1;
 			}
 		}
 		res = sphSockRecv ( fd, (char*)buf, len, 0 );
-	}
-	while (res == -1 && errno == EINTR);
+	} while ( res==-1 && sphSockGetErrno()==EINTR );
 
 	return res;
 }
@@ -346,6 +440,377 @@ int iwrite ( int iFD, const char * sFmt, ... )
 
 	return sphSockSend ( iFD, sBuf, strlen(sBuf), 0 );
 }
+
+/////////////////////////////////////////////////////////////////////////////
+
+int sphSetSockNB ( int iSock )
+{
+	#if USE_WINDOWS
+		u_long uMode = 1;
+		return ioctlsocket ( iSock, FIONBIO, &uMode );
+	#else
+		return fcntl ( iSock, F_SETFL, O_NONBLOCK );
+	#endif
+}
+
+
+void ConnectToRemoteAgent ( Agent_t * pAgent )
+{
+	assert ( pAgent );
+	assert ( pAgent->m_iSock<0 );
+
+	pAgent->m_eState = AGENT_UNUSED;
+	if ( pAgent->m_iPort==0 )
+		return;
+
+	struct sockaddr_in sa;
+	struct hostent * hp = gethostbyname ( pAgent->m_sHost.cstr() ); //!COMMIT this might be SLOW, precache
+	if ( !hp )
+	{
+		sphWarning ( "agent host '%s': gethostbyname() failed", pAgent->m_sHost.cstr() );
+		return;
+	}
+
+	memset ( &sa, 0, sizeof(sa) );
+	memcpy ( &sa.sin_addr, hp->h_addr, hp->h_length );
+	sa.sin_family = hp->h_addrtype;
+	sa.sin_port = htons ( (unsigned short)pAgent->m_iPort );
+
+	pAgent->m_iSock = socket ( hp->h_addrtype, SOCK_STREAM, 0 );
+	if ( pAgent->m_iSock<0 )
+	{
+		sphWarning ( "agent '%s:%d': socket() failed", pAgent->m_sHost.cstr(), pAgent->m_iPort );
+		return;
+	}
+
+	if ( sphSetSockNB ( pAgent->m_iSock )<0 )
+	{
+		sphWarning ( "agent '%s:%d': sphSetSockNB() failed", pAgent->m_sHost.cstr(), pAgent->m_iPort );
+		return;
+	}
+
+	if ( connect ( pAgent->m_iSock, (struct sockaddr*)&sa, sizeof(sa) )<0 )
+	{
+		int iErr = sphSockGetErrno();
+		if ( iErr!=EINPROGRESS && iErr!=EINTR && iErr!=EWOULDBLOCK ) // check for EWOULDBLOCK is for winsock only
+		{
+			pAgent->Close ();
+			sphWarning ( "agent '%s:%d': connect() failed: %s", pAgent->m_sHost.cstr(), pAgent->m_iPort,
+				sphSockError(iErr) );
+			return;
+		} else
+		{
+			// connection in progress
+			pAgent->m_eState = AGENT_CONNECT;
+		}
+	} else
+	{
+		// socket connected, ready to read hello message
+		pAgent->m_eState = AGENT_HELLO;
+	}
+}
+
+
+STATIC_SIZE_ASSERT ( DWORD, 4 );
+
+
+inline void NetPackDword ( BYTE * & pReq, DWORD uValue )
+{
+	*(DWORD *)pReq = uValue;
+	pReq += sizeof(DWORD);
+}
+
+
+inline void NetPackStr ( BYTE * & pReq, const char * sValue )
+{
+	int iLen = strlen(sValue);
+	NetPackDword ( pReq, iLen );
+	memcpy ( pReq, sValue, iLen );
+	pReq += iLen;
+}
+
+
+inline void NetPackArray ( BYTE * & pReq, int iNumValues, DWORD * sValues )
+{
+	NetPackDword ( pReq, iNumValues );
+	memcpy ( pReq, sValues, sizeof(DWORD)*iNumValues );
+	pReq += sizeof(DWORD)*iNumValues;
+}
+
+
+#if USE_WINDOWS
+#pragma warning(disable:4127) // conditional expr is const
+#pragma warning(disable:4389) // signed/unsigned mismatch
+#endif // USE_WINDOWS
+
+int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, const CSphQuery & tQuery, int iMode )
+{
+	int iTimeout = g_iAgentConnectTimeout;
+	int iAgents = 0;
+	assert ( iTimeout>=0 );
+
+	do
+	{
+		fd_set fdsRead, fdsWrite;
+		FD_ZERO ( &fdsRead );
+		FD_ZERO ( &fdsWrite );
+
+		int iMax = 0;
+		bool bDone = true;
+		ARRAY_FOREACH ( i, tDist )
+			if ( tDist[i].m_eState==AGENT_CONNECT || tDist[i].m_eState==AGENT_HELLO )
+		{
+			assert ( tDist[i].m_iPort>0 );
+			assert ( tDist[i].m_iSock>0 );
+
+			FD_SET ( tDist[i].m_iSock, ( tDist[i].m_eState==AGENT_CONNECT ) ? &fdsWrite : &fdsRead );
+			iMax = Max ( iMax, tDist[i].m_iSock );
+			bDone = false;
+		}
+		if ( bDone )
+			break;
+
+		struct timeval tvTimeout;
+		tvTimeout.tv_sec = 0;
+		tvTimeout.tv_usec = 100; // in chunks of 100 ms
+		iTimeout -= ( 1000*tvTimeout.tv_sec + tvTimeout.tv_usec );
+
+		if ( select ( 1+iMax, &fdsRead, &fdsWrite, NULL, &tvTimeout )<=0 )
+			continue;
+
+		ARRAY_FOREACH ( i, tDist )
+		{
+			// check if connection completed
+			if ( tDist[i].m_eState==AGENT_CONNECT && FD_ISSET ( tDist[i].m_iSock, &fdsWrite ) )
+			{
+				tDist[i].m_eState = AGENT_HELLO;
+				continue;
+			}
+
+			// check if hello was received
+			if ( tDist[i].m_eState==AGENT_HELLO && FD_ISSET ( tDist[i].m_iSock, &fdsRead ) )
+			{
+				// read reply
+				char sBuf [ 128 ];
+				int iRes = sphSockRecv ( tDist[i].m_iSock, sBuf, sizeof(sBuf)-1, 0 );
+
+				assert ( iRes>0 && iRes<sizeof(sBuf) );
+				sBuf[iRes] = '\0';
+
+				// check reply
+				bool bError = false;
+				if ( strncmp ( sBuf, "VER ", 4 )!=0 )
+				{
+					sphWarning ( "index '%s': agent '%s:%d': bad handshake reply",
+						sIndexName, tDist[i].m_sHost.cstr(), tDist[i].m_iPort );
+					bError = true;
+				}
+				if ( !bError && atoi(sBuf+4)!=SPHINX_SEARCHD_PROTO )
+				{
+					sphWarning ( "index '%s': agent '%s:%d': expected protocol v.%d, got v.%d",
+						sIndexName, tDist[i].m_sHost.cstr(), tDist[i].m_iPort,
+						SPHINX_SEARCHD_PROTO, atoi(sBuf+4) );
+					bError = true;
+				}
+
+				// bail out on error
+				if ( bError )
+				{
+					tDist[i].Close ();
+					continue;
+				}
+
+				// do query!
+				int iQueryLen = strlen ( tQuery.m_sQuery );
+				int iIndexesLen = strlen ( tDist[i].m_sIndexes.cstr() );
+
+				int iReqSize = 52 + 4*tQuery.m_iGroups + iQueryLen + 4*tQuery.m_iWeights + iIndexesLen;
+				BYTE * pReqBuffer = new BYTE [ iReqSize ];
+				BYTE * pReq = (BYTE *) pReqBuffer;
+
+				// v1. mode/limits part
+				NetPackDword ( pReq, 0 ); // offset is 0
+				NetPackDword ( pReq, CSphQueryResult::MAX_MATCHES ); // limit is MAX_MATCHES
+				NetPackDword ( pReq, iMode ); // match mode
+				NetPackDword ( pReq, tQuery.m_eSort ); // sort mode
+
+				// v1. groups
+				NetPackArray ( pReq, tQuery.m_iGroups, tQuery.m_pGroups );
+
+				// v1. query string
+				NetPackStr ( pReq, tQuery.m_sQuery );
+
+				// v1. weights
+				NetPackArray ( pReq, tQuery.m_iWeights, (DWORD*)tQuery.m_pWeights );
+
+				// v2. index name
+				NetPackStr ( pReq, tDist[i].m_sIndexes.cstr() );
+
+				// v3. id/ts limits
+				NetPackDword ( pReq, tQuery.m_iMinID );
+				NetPackDword ( pReq, tQuery.m_iMaxID );
+				NetPackDword ( pReq, tQuery.m_iMinTS );
+				NetPackDword ( pReq, tQuery.m_iMaxTS );
+
+				// v4. binary mode
+				NetPackDword ( pReq, 1 );
+
+				assert ( pReq-pReqBuffer==iReqSize );
+				sphSockSend ( tDist[i].m_iSock, (const char*)pReqBuffer, pReq-pReqBuffer, 0 );
+				SafeDeleteArray ( pReqBuffer );
+
+				tDist[i].m_eState = AGENT_QUERY;
+				iAgents++;
+			}
+		}
+	} while ( iTimeout>0 );
+
+	ARRAY_FOREACH ( i, tDist )
+	{
+		// check if connection timed out
+		if ( tDist[i].m_eState==AGENT_CONNECT )
+		{
+			sphSockClose ( tDist[i].m_iSock );
+			tDist[i].m_iSock = -1;
+			tDist[i].m_eState = AGENT_UNUSED;
+
+			sphWarning ( "index '%s': agent '%s:%d': connection timed out",
+				sIndexName, tDist[i].m_sHost.cstr(), tDist[i].m_iPort );
+		}
+	}
+
+	return iAgents;
+}
+
+
+int WaitForRemoteAgents ( DistributedIndex_t & tDist, CSphQueryResult * pRes )
+{
+	assert ( pRes );
+
+	int iTimeout = g_iAgentQueryTimeout;
+	int iAgents = 0;
+	assert ( iTimeout>=0 );
+
+	do
+	{
+		fd_set fdsRead;
+		FD_ZERO ( &fdsRead );
+
+		int iMax = 0;
+		bool bDone = true;
+		ARRAY_FOREACH ( iAgent, tDist )
+			if ( tDist[iAgent].m_eState==AGENT_QUERY )
+		{
+			Agent_t & tAgent = tDist[iAgent];
+
+			assert ( tAgent.m_iPort>0 );
+			assert ( tAgent.m_iSock>0 );
+
+			FD_SET ( tAgent.m_iSock, &fdsRead );
+			iMax = Max ( iMax, tAgent.m_iSock );
+		bDone = false;
+		}
+		if ( bDone )
+			break;
+
+		struct timeval tvTimeout;
+		tvTimeout.tv_sec = 0;
+		tvTimeout.tv_usec = 100; // in chunks of 100 ms
+		iTimeout -= ( 1000*tvTimeout.tv_sec + tvTimeout.tv_usec );
+
+		if ( select ( 1+iMax, &fdsRead, NULL, NULL, &tvTimeout )<=0 )
+			continue;
+
+		ARRAY_FOREACH ( iAgent, tDist )
+			if ( tDist[iAgent].m_eState==AGENT_QUERY && FD_ISSET ( tDist[iAgent].m_iSock, &fdsRead ) )
+		{
+			Agent_t & tAgent = tDist[iAgent];
+
+			// reply was received, let's parse it
+			bool bOK = false;
+			for ( ;; )
+			{
+				// read match count
+				if ( sphSockRecv ( tAgent.m_iSock, (char*)&tAgent.m_iMatches, 4, 0 )!=4 ) break;
+				if ( tAgent.m_iMatches<0 || tAgent.m_iMatches>CSphQueryResult::MAX_MATCHES ) break;
+
+				// read matches
+				assert ( !tAgent.m_pMatches );
+				tAgent.m_pMatches = new CSphMatch [ tAgent.m_iMatches ];
+
+				int iTmp = sizeof(CSphMatch)*tAgent.m_iMatches;
+				if ( sphSockRecv ( tAgent.m_iSock, (char*)tAgent.m_pMatches, iTmp, 0 )!=iTmp ) break;
+				
+				// read totals (retrieved count, total count, query time, word count)
+				if ( sphSockRecv ( tAgent.m_iSock, (char*)&iTmp, 4, 0 )!=4 ) break;
+				if ( iTmp!=tAgent.m_iMatches ) break;
+				if ( sphSockRecv ( tAgent.m_iSock, (char*)&tAgent.m_iTotalMatches, 4, 0 )!=4 ) break;
+				if ( sphSockRecv ( tAgent.m_iSock, (char*)&tAgent.m_fQueryTime, 4, 0 )!=4 ) break;
+				if ( sphSockRecv ( tAgent.m_iSock, (char*)&iTmp, 4, 0 )!=4 ) break;
+
+				bool bSetWords = false;
+				if ( pRes->m_iNumWords && iTmp!=pRes->m_iNumWords ) break;
+				if ( !pRes->m_iNumWords )
+				{
+					pRes->m_iNumWords = iTmp;
+					bSetWords = true;
+				}
+
+				// read words
+				int i;
+				for ( i=0; i<pRes->m_iNumWords; i++ )
+				{
+					char sBuf [ SPH_MAX_WORD_LEN ];
+
+					if ( sphSockRecv ( tAgent.m_iSock, (char*)&iTmp, 4, 0 )!=4 ) break;
+					if ( iTmp<0 || iTmp>SPH_MAX_WORD_LEN ) break;
+
+					if ( sphSockRecv ( tAgent.m_iSock, sBuf, iTmp, 0 )!=iTmp ) break;
+					if ( bSetWords )
+					{
+						pRes->m_tWordStats[i].m_sWord.SetBinary ( sBuf, iTmp );
+					} else
+					{
+						if ( pRes->m_tWordStats[i].m_sWord!=sBuf )
+							break;
+					}
+
+					if ( sphSockRecv ( tAgent.m_iSock, (char*)&iTmp, 4, 0 )!=4 ) break;
+					pRes->m_tWordStats[i].m_iDocs += iTmp;
+
+					if ( sphSockRecv ( tAgent.m_iSock, (char*)&iTmp, 4, 0 )!=4 ) break;
+					pRes->m_tWordStats[i].m_iHits += iTmp;
+				}
+				if ( i!=pRes->m_iNumWords ) break;
+
+				// all done
+				iAgents++;
+				bOK = true;
+				break;
+			}
+
+			tAgent.Close ();
+			if ( !bOK )
+			{
+				tAgent.m_iMatches = 0;
+				SafeDeleteArray ( tAgent.m_pMatches );
+			}
+		}
+
+	} while ( iTimeout>0 );
+
+	#if USE_WINDOWS
+	#pragma warning(default:4127) // conditional expr is const
+	#pragma warning(default:4389) // signed/unsigned mismatch
+	#endif // USE_WINDOWS
+
+	return iAgents;
+}
+
+#if USE_WINDOWS
+#pragma warning(default:4127) // conditional expr is const
+#pragma warning(default:4389) // signed/unsigned mismatch
+#endif // USE_WINDOWS
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -408,6 +873,10 @@ void HandleClient ( int rsock )
 		return;
 	}
 
+	// v4. binary flag
+	int iBinary;
+	if ( iread ( rsock, &iBinary, 4 )!=4 ) return;
+
 	// configure query
 	tQuery.m_sQuery = sQuery;
 	tQuery.m_pWeights = dUserWeights;
@@ -418,11 +887,68 @@ void HandleClient ( int rsock )
 	pRes = new CSphQueryResult ();
 	ISphMatchQueue * pTop = sphCreateQueue ( &tQuery );
 
-	if ( strcmp ( sIndex, "*" )==0 )
+	if ( g_hDistIndexes(sIndex) )
 	{
-		// search through all indexes
-		g_hIndexes.IterateStart ();
+		// search through specified distributed index
+		DistributedIndex_t & tDist = g_hDistIndexes[sIndex];
 
+		// start connecting to remote agents
+		ARRAY_FOREACH ( i, tDist )
+			ConnectToRemoteAgent ( &tDist[i] );
+
+		// connect to remote agents and query them first
+		int iRemote = QueryRemoteAgents ( sIndex, tDist, tQuery, iMode );
+		int iLocal = 0; // FIXME! should precalc
+
+		// while the remote queries are running, do local searches
+		// !COMMIT what if the remote agents finish early, could they timeout?
+		ARRAY_FOREACH ( i, tDist )
+			if ( tDist[i].m_iPort==0 )
+		{
+			iLocal++;
+
+			const ServedIndex_t & tServed = g_hIndexes [ tDist[i].m_sIndexes ];
+			assert ( tServed.m_pIndex );
+			assert ( tServed.m_pDict );
+			assert ( tServed.m_pTokenizer );
+
+			// do query
+			tQuery.m_pTokenizer = tServed.m_pTokenizer;
+			tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pTop );
+		}
+
+		if ( !iRemote && !iLocal )
+		{
+			iwrite ( rsock, "ERROR All remote agents are unreachable and no local indexes are configured\n" );
+			return;
+		}
+
+		// wait for remote queries to complete
+		if ( iRemote )
+		{
+			int iReplys = WaitForRemoteAgents ( tDist, pRes );
+			if ( !iReplys && !iLocal )
+			{
+				iwrite ( rsock, "ERROR All reachable remote agents timed out\n" );
+				return;
+			}
+
+			// merge local and remote results
+			ARRAY_FOREACH ( iAgent, tDist )
+				if ( tDist[iAgent].m_iMatches )
+			{
+				Agent_t & tAgent = tDist[iAgent];
+				assert ( tAgent.m_pMatches );
+
+				for ( int i=0; i<tAgent.m_iMatches; i++ )
+					pTop->Push ( tAgent.m_pMatches[i] );
+			}
+		}
+
+	} else if ( strcmp ( sIndex, "*" )==0 )
+	{
+		// search through all local indexes
+		g_hIndexes.IterateStart ();
 		while ( g_hIndexes.IterateNext () )
 		{
 			const ServedIndex_t & tServed = g_hIndexes.IterateGet ();
@@ -437,7 +963,7 @@ void HandleClient ( int rsock )
 
 	} else
 	{
-		// search through the specified indexes
+		// search through the specified local indexes
 		int iSearched = 0;
 		char * p = sIndex;
 		while ( *p )
@@ -504,28 +1030,63 @@ void HandleClient ( int rsock )
 
 	// serve the answer to client
 	iCount = Min ( iLimit, pRes->m_dMatches.GetLength()-iOffset );
-
-	iwrite ( rsock, "MATCHES %d\n", iCount );
-	for ( i=iOffset; i<iOffset+iCount; i++ )
+	if ( !iBinary )
 	{
-		CSphMatch & tMatch = pRes->m_dMatches[i];
-		iwrite ( rsock, "MATCH %d %d %d %d\n",
-			tMatch.m_iGroupID,
-			tMatch.m_iDocID,
-			tMatch.m_iWeight,
-			tMatch.m_iTimestamp );
-	}
+		// textual response
+		iwrite ( rsock, "MATCHES %d\n", iCount );
+		for ( i=iOffset; i<iOffset+iCount; i++ )
+		{
+			CSphMatch & tMatch = pRes->m_dMatches[i];
+			iwrite ( rsock, "MATCH %d %d %d %d\n",
+				tMatch.m_iGroupID,
+				tMatch.m_iDocID,
+				tMatch.m_iWeight,
+				tMatch.m_iTimestamp );
+		}
 
-	iwrite ( rsock, "TOTAL %d %d\n", pRes->m_dMatches.GetLength(), pRes->m_iTotalMatches );
-	iwrite ( rsock, "TIME %.2f\n", pRes->m_fQueryTime );
-	iwrite ( rsock, "WORDS %d\n", pRes->m_iNumWords );
+		iwrite ( rsock, "TOTAL %d %d\n", pRes->m_dMatches.GetLength(), pRes->m_iTotalMatches );
+		iwrite ( rsock, "TIME %.2f\n", pRes->m_fQueryTime );
+		iwrite ( rsock, "WORDS %d\n", pRes->m_iNumWords );
 
-	for ( i=0; i < pRes->m_iNumWords; i++ )
+		for ( i=0; i < pRes->m_iNumWords; i++ )
+		{
+			iwrite ( rsock, "WORD %s %d %d\n",
+				pRes->m_tWordStats[i].m_sWord.cstr(),
+				pRes->m_tWordStats[i].m_iDocs,
+				pRes->m_tWordStats[i].m_iHits );
+		}
+
+	} else
 	{
-		iwrite ( rsock, "WORD %s %d %d\n",
-			pRes->m_tWordStats[i].m_sWord,
-			pRes->m_tWordStats[i].m_iDocs,
-			pRes->m_tWordStats[i].m_iHits );
+		// binary response
+		int iRespLen = 20 + sizeof(CSphMatch)*iCount;
+		for ( i=0; i<pRes->m_iNumWords; i++ )
+			iRespLen += 12 + strlen ( pRes->m_tWordStats[i].m_sWord.cstr() );
+
+		BYTE * pRespBuffer = new BYTE [ iRespLen ];
+		BYTE * pResp = pRespBuffer;
+
+		// create response
+		NetPackDword ( pResp, iCount );
+
+        memcpy ( pResp, &pRes->m_dMatches[iOffset], sizeof(CSphMatch)*iCount );
+		pResp += sizeof(CSphMatch)*iCount;
+
+		NetPackDword ( pResp, pRes->m_dMatches.GetLength() );
+		NetPackDword ( pResp, pRes->m_iTotalMatches );
+		NetPackDword ( pResp, *(DWORD*)&pRes->m_fQueryTime );
+		NetPackDword ( pResp, pRes->m_iNumWords );
+
+		for ( i=0; i<pRes->m_iNumWords; i++ )
+		{
+			NetPackStr ( pResp, pRes->m_tWordStats[i].m_sWord.cstr() );
+			NetPackDword ( pResp, pRes->m_tWordStats[i].m_iDocs );
+			NetPackDword ( pResp, pRes->m_tWordStats[i].m_iHits );
+		}
+
+		assert ( pResp-pRespBuffer==iRespLen );
+		sphSockSend ( rsock, (const char*)pRespBuffer, pResp-pRespBuffer, 0 );
+		SafeDeleteArray ( pRespBuffer );
 	}
 
 	delete pRes;
@@ -656,103 +1217,208 @@ int main ( int argc, char **argv )
 	if ( hSearchd.Exists ( "max_children" ) && hSearchd["max_children"].intval()>=0 )
 		g_iMaxChildren = hSearchd["max_children"].intval();
 
-	/////////////////////
-	// build index table
-	/////////////////////
+	//////////////////////
+	// build indexes hash
+	//////////////////////
 
 	int iValidIndexes = 0;
-
 	hConf["index"].IterateStart ();
 	while ( hConf["index"].IterateNext() )
 	{
 		const CSphConfigSection & hIndex = hConf["index"].IterateGet();
 		const char * sIndexName = hConf["index"].IterateGetKey().cstr();
 
-		// check path
-		if ( !hIndex.Exists ( "path" ) )
+		if ( hIndex("type") && hIndex["type"]=="distributed" )
 		{
-			sphWarning ( "key 'path' not found in index '%s' - NOT SERVING", sIndexName );
-			continue;
-		}
+			///////////////////////////////
+			// configure distributed index
+			///////////////////////////////
 
-		// configure charset_type
-		ISphTokenizer * pTokenizer = NULL;
-		bool bUseUTF8 = false;
-		if ( hIndex.Exists ( "charset_type" ) )
-		{
-			if ( hIndex["charset_type"]=="sbcs" )
-				pTokenizer = sphCreateSBCSTokenizer ();
+			DistributedIndex_t tIdx;
 
-			else if ( hIndex["charset_type"]=="utf-8" )
+			// add local agents
+			for ( CSphVariant * pLocal = hIndex("local"); pLocal; pLocal = pLocal->m_pNext )
 			{
-				pTokenizer = sphCreateUTF8Tokenizer ();
-				bUseUTF8 = true;
+				if ( !g_hIndexes ( pLocal->cstr() ) )
+				{
+					sphWarning ( "index '%s': bad local index '%s', SKIPPING",
+						sIndexName, pLocal->cstr() );
+					continue;
+				}
+
+				Agent_t tAgent;
+				tAgent.m_iPort = 0;
+				tAgent.m_sIndexes = pLocal->cstr();
+
+				tIdx.Add ( tAgent );
+			}
+
+			// add remote agents
+			for ( CSphVariant * pAgent = hIndex("agent"); pAgent; pAgent = pAgent->m_pNext )
+			{
+				Agent_t tAgent;
+
+				// extract host name
+				const char * p = pAgent->cstr();
+				while ( sphIsAlpha(*p) || *p=='.' ) p++;
+				if ( p==pAgent->cstr() )
+				{
+					sphWarning ( "index '%s': agent '%s': host name expected, SKIPPING",
+						sIndexName, pAgent->cstr() );
+					continue;
+				}
+				if ( *p++!=':' )
+				{
+					sphWarning ( "index '%s': agent '%s': colon expected near '%s', SKIPPING",
+						sIndexName, pAgent->cstr(), p );
+					continue;
+				}
+				tAgent.m_sHost = pAgent->SubString ( 0, p-1-pAgent->cstr() );
+
+				// extract port
+				if ( !isdigit(*p) )
+				{
+					sphWarning ( "index '%s': agent '%s': port number expected near '%s', SKIPPING",
+						sIndexName, pAgent->cstr(), p );
+					continue;
+				}
+				tAgent.m_iPort = atoi(p);
+				if ( tAgent.m_iPort<=0 || tAgent.m_iPort>=65536 )
+				{
+					sphWarning ( "index '%s': agent '%s': bad port number near '%s', SKIPPING",
+						sIndexName, pAgent->cstr(), p );
+					continue;
+				}
+
+				// extract index list
+				while ( isdigit(*p) ) p++;
+				if ( *p++!=':' )
+				{
+					sphWarning ( "index '%s': agent '%s': colon expected near '%s', SKIPPING",
+						sIndexName, pAgent->cstr(), p );
+					continue;
+				}
+				while ( isspace(*p) )
+					p++;
+				const char * sIndexList = p;
+				while ( sphIsAlpha(*p) || isspace(*p) || *p==',' )
+					p++;
+				if ( *p )
+				{
+					sphWarning ( "index '%s': agent '%s': index list expected near '%s', SKIPPING",
+						sIndexName, pAgent->cstr(), p );
+					continue;
+				}
+				tAgent.m_sIndexes = sIndexList;
+
+				// done
+				tIdx.Add ( tAgent );
+			}
+
+			if ( !tIdx.GetLength() )
+			{
+				sphWarning ( "index '%s': no valid local/remote indexes in distributed index, SKIPPING",
+					sIndexName );
+				continue;
 
 			} else
 			{
-				sphWarning ( "unknown charset type '%s' in index '%s' - NOT SERVING", hIndex["charset_type"].cstr() );
-				continue;
+				g_hDistIndexes.Add ( tIdx, sIndexName );
+				iValidIndexes++;
 			}
+
 		} else
 		{
-			pTokenizer = sphCreateSBCSTokenizer ();
-		}
+			/////////////////////////
+			// configure local index
+			/////////////////////////
 
-		// configure morphology
-		DWORD iMorph = SPH_MORPH_NONE;
-		if ( hIndex.Exists ( "morphology" ) )
-		{
-			int iRuMorph = ( bUseUTF8 ? SPH_MORPH_STEM_RU_UTF8 : SPH_MORPH_STEM_RU_CP1251 );
-			if ( hIndex["morphology"]=="stem_en" )			iMorph = SPH_MORPH_STEM_EN;
-			else if ( hIndex["morphology"]=="stem_ru" )		iMorph = iRuMorph;
-			else if ( hIndex["morphology"]=="stem_enru" )	iMorph = SPH_MORPH_STEM_EN | iRuMorph;
-			else
-				sphWarning ( "unknown morphology type '%s' in index '%s' ignored", hIndex["morphology"].cstr(), sIndexName );
-		}
-
-		// configure charset_table
-		assert ( pTokenizer );
-		if ( hIndex.Exists ( "charset_table" ) )
-			if ( !pTokenizer->SetCaseFolding ( hIndex["charset_table"].cstr() ) )
-		{
-			sphWarning ( "failed to parse 'charset_table' in index '%s' - NOT SERVING", sIndexName );
-			continue;
-		}
-
-		// create add this one to served hashes
-		ServedIndex_t tIdx;
-		tIdx.m_pIndex = sphCreateIndexPhrase ( hIndex["path"].cstr() );
-		tIdx.m_pDict = new CSphDict_CRC32 ( iMorph );
-		tIdx.m_pDict->LoadStopwords ( hIndex.Exists ( "stopwords" ) ? hIndex["stopwords"].cstr() : NULL, pTokenizer );
-		tIdx.m_pTokenizer = pTokenizer;
-
-		if ( !bOptConsole )
-		{
-			// check lock file
-			char sTmp [ 1024 ];
-			snprintf ( sTmp, sizeof(sTmp), "%s.spl", hIndex["path"].cstr() );
-			sTmp [ sizeof(sTmp)-1 ] = '\0';
-
-			struct stat tStat;
-			if ( !stat ( sTmp, &tStat ) )
+			// check path
+			if ( !hIndex.Exists ( "path" ) )
 			{
-				sphWarning ( "lock file '%s' for index '%s' exists - NOT SERVING", sIndexName, sTmp );
+				sphWarning ( "key 'path' not found in index '%s' - NOT SERVING", sIndexName );
 				continue;
 			}
 
-			// create lock file
-			FILE * fp = fopen ( sTmp, "w" );
-			if ( !fp )
-				sphFatal ( "unable to create lock file '%s' for index '%s'", sTmp, sIndexName );
-			fprintf ( fp, "%d", getpid() );
-			fclose ( fp );
+			// configure charset_type
+			ISphTokenizer * pTokenizer = NULL;
+			bool bUseUTF8 = false;
+			if ( hIndex.Exists ( "charset_type" ) )
+			{
+				if ( hIndex["charset_type"]=="sbcs" )
+					pTokenizer = sphCreateSBCSTokenizer ();
 
-			tIdx.m_pLockFile = new CSphString ( sTmp );
-			tIdx.m_pIndexPath = new CSphString ( hIndex["path"] );
+				else if ( hIndex["charset_type"]=="utf-8" )
+				{
+					pTokenizer = sphCreateUTF8Tokenizer ();
+					bUseUTF8 = true;
+
+				} else
+				{
+					sphWarning ( "unknown charset type '%s' in index '%s' - NOT SERVING", hIndex["charset_type"].cstr() );
+					continue;
+				}
+			} else
+			{
+				pTokenizer = sphCreateSBCSTokenizer ();
+			}
+
+			// configure morphology
+			DWORD iMorph = SPH_MORPH_NONE;
+			if ( hIndex.Exists ( "morphology" ) )
+			{
+				int iRuMorph = ( bUseUTF8 ? SPH_MORPH_STEM_RU_UTF8 : SPH_MORPH_STEM_RU_CP1251 );
+				if ( hIndex["morphology"]=="stem_en" )			iMorph = SPH_MORPH_STEM_EN;
+				else if ( hIndex["morphology"]=="stem_ru" )		iMorph = iRuMorph;
+				else if ( hIndex["morphology"]=="stem_enru" )	iMorph = SPH_MORPH_STEM_EN | iRuMorph;
+				else
+					sphWarning ( "unknown morphology type '%s' in index '%s' ignored", hIndex["morphology"].cstr(), sIndexName );
+			}
+
+			// configure charset_table
+			assert ( pTokenizer );
+			if ( hIndex.Exists ( "charset_table" ) )
+				if ( !pTokenizer->SetCaseFolding ( hIndex["charset_table"].cstr() ) )
+			{
+				sphWarning ( "failed to parse 'charset_table' in index '%s' - NOT SERVING", sIndexName );
+				continue;
+			}
+
+			// create add this one to served hashes
+			ServedIndex_t tIdx;
+			tIdx.m_pIndex = sphCreateIndexPhrase ( hIndex["path"].cstr() );
+			tIdx.m_pDict = new CSphDict_CRC32 ( iMorph );
+			tIdx.m_pDict->LoadStopwords ( hIndex.Exists ( "stopwords" ) ? hIndex["stopwords"].cstr() : NULL, pTokenizer );
+			tIdx.m_pTokenizer = pTokenizer;
+
+			if ( !bOptConsole )
+			{
+				// check lock file
+				char sTmp [ 1024 ];
+				snprintf ( sTmp, sizeof(sTmp), "%s.spl", hIndex["path"].cstr() );
+				sTmp [ sizeof(sTmp)-1 ] = '\0';
+
+				struct stat tStat;
+				if ( !stat ( sTmp, &tStat ) )
+				{
+					sphWarning ( "lock file '%s' for index '%s' exists - NOT SERVING", sIndexName, sTmp );
+					continue;
+				}
+
+				// create lock file
+				FILE * fp = fopen ( sTmp, "w" );
+				if ( !fp )
+					sphFatal ( "unable to create lock file '%s' for index '%s'", sTmp, sIndexName );
+				fprintf ( fp, "%d", getpid() );
+				fclose ( fp );
+
+				tIdx.m_pLockFile = new CSphString ( sTmp );
+				tIdx.m_pIndexPath = new CSphString ( hIndex["path"] );
+			}
+
+			g_hIndexes.Add ( tIdx, sIndexName );
+			tIdx.Reset (); // so that the dtor wouln't delete everything
 		}
-
-		g_hIndexes.Add ( tIdx, sIndexName );
-		tIdx.Reset (); // so that the dtor wouln't delete everything
 
 		iValidIndexes++;
 	}
@@ -968,10 +1634,11 @@ int main ( int argc, char **argv )
 		len = sizeof ( remote_iaddr );
 		rsock = accept ( g_iSocket, (struct sockaddr*)&remote_iaddr, &len );
 
-		if ( rsock<0 && ( errno==EINTR || errno==EAGAIN || errno==EWOULDBLOCK ) )
+		int iErr = sphSockGetErrno();
+		if ( rsock<0 && ( iErr==EINTR || iErr==EAGAIN || iErr==EWOULDBLOCK ) )
 			continue;
 		if ( rsock<0 )
-			sphFatal ( "accept() failed (reason: %s)", strerror ( errno ) );
+			sphFatal ( "accept() failed (reason: %s)", sphSockError(iErr) );
 
 		if ( ( g_iMaxChildren && g_iChildren>=g_iMaxChildren ) || g_iHUP )
 		{

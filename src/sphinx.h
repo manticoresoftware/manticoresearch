@@ -63,9 +63,9 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
-#define SPHINX_VERSION			"0.9.5-dev"
+#define SPHINX_VERSION			"0.9.6-dev"
 #define SPHINX_BANNER			"Sphinx " SPHINX_VERSION "\nCopyright (c) 2001-2005, Andrew Aksyonoff\n\n"
-#define SPHINX_SEARCHD_PROTO	3
+#define SPHINX_SEARCHD_PROTO	4
 
 #define SPH_MAX_QUERY_WORDS		10
 #define SPH_MAX_WORD_LEN		64
@@ -544,7 +544,7 @@ public:
 
 	struct WordStat_t
 	{
-		char *				m_sWord;	///< i-th search term (normalized word form)
+		CSphString			m_sWord;	///< i-th search term (normalized word form)
 		int					m_iDocs;	///< document count for this term
 		int					m_iHits;	///< hit count for this term
 	}						m_tWordStats [ SPH_MAX_QUERY_WORDS ];

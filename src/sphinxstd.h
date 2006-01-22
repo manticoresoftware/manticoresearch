@@ -26,6 +26,23 @@ template < typename T > inline void Swap ( T & v1, T & v2 )
 
 /////////////////////////////////////////////////////////////////////////////
 
+/// compile time error struct
+template<int> struct CompileTimeError;
+template<> struct CompileTimeError<true> {};
+
+namespace Private
+{
+	template<int x>		struct static_assert_test{};
+	template<bool x>	struct SizeError;
+	template<>			struct SizeError<true>{};
+}
+
+#define STATIC_SIZE_ASSERT(_Type,_ExpSize)	\
+	typedef ::Private::static_assert_test<sizeof(::Private::SizeError \
+	< (bool) (sizeof(_Type) == (_ExpSize)) >)> static_assert_typedef_
+
+/////////////////////////////////////////////////////////////////////////////
+
 /// generic vector
 /// (don't even ask why it's not std::vector)
 template < typename T, int INITIAL_LIMIT=1024 > class CSphVector
@@ -117,7 +134,7 @@ public:
 	}
 
 	/// query current length
-	int GetLength ()
+	int GetLength () const
 	{
 		return m_iLength;
 	}
@@ -148,6 +165,20 @@ public:
 	{
 		assert ( iIndex>=0 && iIndex<m_iLength );
 		return m_pData [ iIndex ];
+	}
+
+	/// copy
+	const CSphVector < T, INITIAL_LIMIT > & operator = ( const CSphVector < T, INITIAL_LIMIT > & rhs )
+	{
+		Reset ();
+
+		m_iLength = rhs.m_iLength;
+		m_iLimit = rhs.m_iLimit;
+		m_pData = new T [ m_iLimit ];
+		for ( int i=0; i<rhs.m_iLength; i++ )
+			m_pData[i] = rhs.m_pData[i];
+
+		return *this;
 	}
 
 private:
@@ -321,7 +352,16 @@ public:
 		return !( pEntry==NULL || pEntry->m_bEmpty );
 	}
 
-	/// get current value
+	/// get value pointer by key
+	T * operator () ( const KEY & tKey ) const
+	{
+		HashEntry_t * pEntry = const_cast<HashEntry_t *> ( Search<false> ( tKey ) );
+		if ( pEntry && !pEntry->m_bEmpty )
+			return &pEntry->m_tData;
+		return NULL;
+	}
+
+	/// get value reference by key, asserting that the key exists in hash
 	T & operator [] ( const KEY & tKey ) const
 	{
 		HashEntry_t * pEntry = const_cast<HashEntry_t *> ( Search<false> ( tKey ) );
@@ -470,43 +510,89 @@ public:
 		}
 		return *this;
 	}
+
+	CSphString SubString ( int iStart, int iCount )
+	{
+		int iLen = strlen(m_sValue);
+		assert ( iStart>=0 && iStart<iLen );
+		assert ( iCount>0 );
+		assert ( (iStart+iCount)>=0 && (iStart+iCount)<=iLen );
+
+		CSphString sRes;
+		sRes.m_sValue = new char [ 1+iCount ];
+		strncpy ( sRes.m_sValue, m_sValue+iStart, iCount );
+		sRes.m_sValue[iCount] = '\0';
+		return sRes;
+	}
+
+	void SetBinary ( const char * sValue, int iLen )
+	{
+		SafeDeleteArray ( m_sValue );
+		if ( sValue )
+		{
+			m_sValue = new char [ 1+iLen ];
+			memcpy ( m_sValue, sValue, iLen );
+			m_sValue[iLen] = '\0';
+		}
+	}
 };
 
 /////////////////////////////////////////////////////////////////////////////
 
-/// immutable string/int variant proxy
+/// immutable string/int variant list proxy
 struct CSphVariant : public CSphString
 {
 protected:
-	int		m_iValue;
+	int				m_iValue;
 
 public:
+	CSphVariant *	m_pNext;
+
+public:
+	/// default ctor
 	CSphVariant ()
 		: CSphString ()
-		, m_iValue ( 0)
+		, m_iValue ( 0 )
+		, m_pNext ( NULL )
 	{
 	}
-	
+
+	/// ctor from C string
 	CSphVariant ( const char * sString )
 		: CSphString ( sString )
 		, m_iValue ( atoi ( m_sValue ) )
+		, m_pNext ( NULL )
 	{
 	}
 
+	/// copy ctor
 	CSphVariant ( const CSphVariant & rhs )
 		: CSphString ()
 		, m_iValue ( 0 )
+		, m_pNext ( NULL )
 	{
 		*this = rhs;
 	}
 
+	/// default dtor
+	/// WARNING: automatically frees linked items!
+	virtual ~CSphVariant ()
+	{
+		SafeDelete ( m_pNext );
+	}
+
+	/// int value getter
 	int intval () const
 	{
 		return m_iValue;
 	}
 
+	/// default copy operator
 	const CSphVariant & operator = ( const CSphVariant & rhs )
 	{
+		assert ( !m_pNext );
+		assert ( !rhs.m_pNext );
+
 		CSphString::operator = ( rhs );
 		m_iValue = rhs.m_iValue;
 		return *this;

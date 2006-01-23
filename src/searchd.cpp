@@ -148,6 +148,7 @@ enum AgentState_e
 /// remote agent host/port
 struct Agent_t
 {
+public:
 	CSphString		m_sHost;		///< remote searchd host
 	int				m_iPort;		///< remote searchd port, 0 if local
 	CSphString		m_sIndexes;		///< remote index names to query
@@ -160,6 +161,12 @@ struct Agent_t
 	int				m_iTotalMatches;
 	float			m_fQueryTime;
 
+protected:
+	int				m_iAddrType;
+	int				m_iAddrLen;
+	char *			m_pAddr;
+
+public:
 	Agent_t ()
 		: m_iPort ( -1 )
 		, m_iSock ( -1 )
@@ -168,6 +175,7 @@ struct Agent_t
 		, m_pMatches ( NULL )
 		, m_iTotalMatches ( NULL )
 		, m_fQueryTime ( 0.0f )
+		, m_pAddr ( NULL )
 	{
 	}
 
@@ -185,6 +193,32 @@ struct Agent_t
 			m_iSock = -1;
 			m_eState = AGENT_UNUSED;
 		}
+	}
+
+	void SetAddr ( int iAddrType, int iAddrLen, const char * pAddr )
+	{
+		assert ( pAddr );
+		SafeDeleteArray ( m_pAddr );
+
+		m_iAddrType = iAddrType;
+		m_iAddrLen = iAddrLen;
+		m_pAddr = new char [ iAddrLen ];
+		memcpy ( m_pAddr, pAddr, iAddrLen );
+	}
+
+	int GetAddrType () const
+	{
+		return m_iAddrType;
+	}
+
+	int GetAddrLen () const
+	{
+		return m_iAddrLen;
+	}
+
+	const char * GetAddr () const
+	{
+		return m_pAddr;
 	}
 };
 
@@ -464,19 +498,13 @@ void ConnectToRemoteAgent ( Agent_t * pAgent )
 		return;
 
 	struct sockaddr_in sa;
-	struct hostent * hp = gethostbyname ( pAgent->m_sHost.cstr() ); //!COMMIT this might be SLOW, precache
-	if ( !hp )
-	{
-		sphWarning ( "agent host '%s': gethostbyname() failed", pAgent->m_sHost.cstr() );
-		return;
-	}
 
 	memset ( &sa, 0, sizeof(sa) );
-	memcpy ( &sa.sin_addr, hp->h_addr, hp->h_length );
-	sa.sin_family = hp->h_addrtype;
+	memcpy ( &sa.sin_addr, pAgent->GetAddr(), pAgent->GetAddrLen() );
+	sa.sin_family = (short)pAgent->GetAddrType();
 	sa.sin_port = htons ( (unsigned short)pAgent->m_iPort );
 
-	pAgent->m_iSock = socket ( hp->h_addrtype, SOCK_STREAM, 0 );
+	pAgent->m_iSock = socket ( pAgent->GetAddrType(), SOCK_STREAM, 0 );
 	if ( pAgent->m_iSock<0 )
 	{
 		sphWarning ( "agent '%s:%d': socket() failed", pAgent->m_sHost.cstr(), pAgent->m_iPort );
@@ -735,11 +763,15 @@ int WaitForRemoteAgents ( DistributedIndex_t & tDist, CSphQueryResult * pRes )
 				if ( tAgent.m_iMatches<0 || tAgent.m_iMatches>CSphQueryResult::MAX_MATCHES ) break;
 
 				// read matches
-				assert ( !tAgent.m_pMatches );
-				tAgent.m_pMatches = new CSphMatch [ tAgent.m_iMatches ];
+				int iTmp;
+				if ( tAgent.m_iMatches>0 )
+				{
+					assert ( !tAgent.m_pMatches );
+					tAgent.m_pMatches = new CSphMatch [ tAgent.m_iMatches ];
 
-				int iTmp = sizeof(CSphMatch)*tAgent.m_iMatches;
-				if ( sphSockRecv ( tAgent.m_iSock, (char*)tAgent.m_pMatches, iTmp, 0 )!=iTmp ) break;
+					iTmp = sizeof(CSphMatch)*tAgent.m_iMatches;
+					if ( sphSockRecv ( tAgent.m_iSock, (char*)tAgent.m_pMatches, iTmp, 0 )!=iTmp ) break;
+				}
 				
 				// read totals (retrieved count, total count, query time, word count)
 				if ( sphSockRecv ( tAgent.m_iSock, (char*)&iTmp, 4, 0 )!=4 ) break;
@@ -937,11 +969,16 @@ void HandleClient ( int rsock )
 			ARRAY_FOREACH ( iAgent, tDist )
 				if ( tDist[iAgent].m_iMatches )
 			{
+				// merge this agent's results
 				Agent_t & tAgent = tDist[iAgent];
 				assert ( tAgent.m_pMatches );
 
 				for ( int i=0; i<tAgent.m_iMatches; i++ )
 					pTop->Push ( tAgent.m_pMatches[i] );
+
+				// free the set
+				tAgent.m_iMatches = 0;
+				SafeDeleteArray ( tAgent.m_pMatches );
 			}
 		}
 
@@ -1069,7 +1106,8 @@ void HandleClient ( int rsock )
 		// create response
 		NetPackDword ( pResp, iCount );
 
-        memcpy ( pResp, &pRes->m_dMatches[iOffset], sizeof(CSphMatch)*iCount );
+		if ( iCount )
+			memcpy ( pResp, &pRes->m_dMatches[iOffset], sizeof(CSphMatch)*iCount );
 		pResp += sizeof(CSphMatch)*iCount;
 
 		NetPackDword ( pResp, pRes->m_dMatches.GetLength() );
@@ -1310,6 +1348,16 @@ int main ( int argc, char **argv )
 					continue;
 				}
 				tAgent.m_sIndexes = sIndexList;
+
+				// lookup address
+				struct hostent * hp = gethostbyname ( tAgent.m_sHost.cstr() );
+				if ( !hp )
+				{
+					sphWarning ( "index '%s': agent '%s': failed to lookup host name, SKIPPING",
+						sIndexName, pAgent->cstr() );
+					continue;
+				}
+				tAgent.SetAddr ( hp->h_addrtype, hp->h_length, hp->h_addr_list[0] );
 
 				// done
 				tIdx.Add ( tAgent );

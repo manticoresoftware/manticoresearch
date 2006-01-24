@@ -24,6 +24,8 @@
 #include <time.h>
 #include <stdarg.h>
 
+/////////////////////////////////////////////////////////////////////////////
+
 #if USE_WINDOWS
 	// Win-specific headers and calls
 	#include <io.h>
@@ -49,29 +51,6 @@
 	#define sphSockGetErrno()						::errno
 #endif
 
-const char * sphSockError ( int iErr=0 )
-{
-	#ifdef USE_WINDOWS
-		if ( iErr==0 )
-			iErr = WSAGetLastError ();
-
-		static char sBuf [ 256 ];
-		_snprintf ( sBuf, sizeof(sBuf), "WSA error %d", iErr );
-		return sBuf;
-	#else
-		return strerror ( errno );
-	#endif
-}
-
-void sphSockSetErrno ( int iErr )
-{
-	#ifdef USE_WINDOWS
-		WSASetLastError ( iErr );
-	#else
-		errno = iErr;
-	#endif
-}
-
 /////////////////////////////////////////////////////////////////////////////
 
 enum ESphLogLevel
@@ -92,9 +71,6 @@ static int				g_iSocket		= 0;
 static int				g_iQueryLogFile	= -1;
 static int				g_iHUP			= 0;
 static const char *		g_sPidFile		= NULL;
-
-static int				g_iAgentConnectTimeout	= 1000;		// in msec. FIXME! make this per-dist-index
-static int				g_iAgentQueryTimeout	= 3000;		// in msec. FIXME! make this per-dist-index
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -222,7 +198,20 @@ public:
 	}
 };
 
-typedef CSphVector < Agent_t, 16 >					DistributedIndex_t;
+/// distributed index
+struct DistributedIndex_t
+{
+	CSphVector<Agent_t,16>	m_dAgents;					///< both local and remote agents
+	int						m_iAgentConnectTimeout;		///< in msec
+	int						m_iAgentQueryTimeout;		///< in msec
+
+	DistributedIndex_t ()
+		: m_iAgentConnectTimeout ( 1000 )
+		, m_iAgentQueryTimeout ( 3000 )
+	{
+	}
+};
+
 static SmallStringHash_T < DistributedIndex_t >		g_hDistIndexes;
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -347,6 +336,83 @@ void sphInfo ( const char * sFmt, ... )
 }
 
 /////////////////////////////////////////////////////////////////////////////
+// NETWORK STUFF
+/////////////////////////////////////////////////////////////////////////////
+
+const char * sphSockError ( int iErr=0 )
+{
+	#ifdef USE_WINDOWS
+		if ( iErr==0 )
+			iErr = WSAGetLastError ();
+
+		static char sBuf [ 256 ];
+		_snprintf ( sBuf, sizeof(sBuf), "WSA error %d", iErr );
+		return sBuf;
+	#else
+		return strerror ( errno );
+	#endif
+}
+
+
+void sphSockSetErrno ( int iErr )
+{
+	#ifdef USE_WINDOWS
+		WSASetLastError ( iErr );
+	#else
+		errno = iErr;
+	#endif
+}
+
+
+int sphSelect ( int iMax, fd_set * pRead, fd_set * pWrite, fd_set * pExcept, struct timeval * pTV )
+{
+	if ( !pTV )
+		return ::select ( iMax, pRead, pWrite, pExcept, pTV );
+
+	int iRes;
+	for ( ;; )
+	{
+		float fStart = sphLongTimer ();
+		int iTV = 1000*pTV->tv_sec + pTV->tv_usec;
+
+		iRes = ::select ( iMax, pRead, pWrite, pExcept, pTV );
+
+		// on Windows, we check for 0 and Sleep() manually, cause select() does not sleep enough
+		// on UNIX, we check for EINTR
+		#if USE_WINDOWS
+			if ( iRes!=0 )
+				return iRes;
+		#else
+			if ( iRes<0 )
+			{
+				int iErr = sphSockGetErrno();
+				sphSockSetErrno ( iErr ); // actually that'd be for Windows, but we're paranoid
+
+				if ( iErr!=EINTR )
+					return iRes;
+			}
+		#endif
+
+		// check if we need to wait for more
+		int iDT = Max ( int( 1000.0f*( sphLongTimer() - fStart ) ), 0 );
+		if ( iDT>=iTV )
+			return iRes;
+
+		// on Windows, we Sleep() manually and then return
+		// on UNIX, we adjust select() timeout and then reiterate
+		#if USE_WINDOWS
+			Sleep ( iTV-iDT );
+			return iRes;
+		#else
+			iTV -= iDT;
+			assert ( iTV>0 );
+
+			pTV->tv_sec = iTV / 1000;
+			pTV->tv_usec = iTV % 1000;
+		#endif
+	}
+}
+
 
 int createServerSocket_IP(int port)
 {
@@ -573,7 +639,7 @@ inline void NetPackArray ( BYTE * & pReq, int iNumValues, DWORD * sValues )
 
 int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, const CSphQuery & tQuery, int iMode )
 {
-	int iTimeout = g_iAgentConnectTimeout;
+	int iTimeout = tDist.m_iAgentConnectTimeout;
 	int iAgents = 0;
 	assert ( iTimeout>=0 );
 
@@ -585,15 +651,18 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 
 		int iMax = 0;
 		bool bDone = true;
-		ARRAY_FOREACH ( i, tDist )
-			if ( tDist[i].m_eState==AGENT_CONNECT || tDist[i].m_eState==AGENT_HELLO )
+		ARRAY_FOREACH ( i, tDist.m_dAgents )
 		{
-			assert ( tDist[i].m_iPort>0 );
-			assert ( tDist[i].m_iSock>0 );
+			const Agent_t & tAgent = tDist.m_dAgents[i];
+			if ( tAgent.m_eState==AGENT_CONNECT || tAgent.m_eState==AGENT_HELLO )
+			{
+				assert ( tAgent.m_iPort>0 );
+				assert ( tAgent.m_iSock>0 );
 
-			FD_SET ( tDist[i].m_iSock, ( tDist[i].m_eState==AGENT_CONNECT ) ? &fdsWrite : &fdsRead );
-			iMax = Max ( iMax, tDist[i].m_iSock );
-			bDone = false;
+				FD_SET ( tAgent.m_iSock, ( tAgent.m_eState==AGENT_CONNECT ) ? &fdsWrite : &fdsRead );
+				iMax = Max ( iMax, tAgent.m_iSock );
+				bDone = false;
+			}
 		}
 		if ( bDone )
 			break;
@@ -603,24 +672,28 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 		tvTimeout.tv_usec = 100; // in chunks of 100 ms
 		iTimeout -= ( 1000*tvTimeout.tv_sec + tvTimeout.tv_usec );
 
-		if ( select ( 1+iMax, &fdsRead, &fdsWrite, NULL, &tvTimeout )<=0 )
+		// FIXME! check exceptfds for connect() failure as well, so that actively refused
+		// connections would not stall for a full timeout
+		if ( sphSelect ( 1+iMax, &fdsRead, &fdsWrite, NULL, &tvTimeout )<=0 )
 			continue;
 
-		ARRAY_FOREACH ( i, tDist )
+		ARRAY_FOREACH ( i, tDist.m_dAgents )
 		{
+			Agent_t & tAgent = tDist.m_dAgents[i];
+
 			// check if connection completed
-			if ( tDist[i].m_eState==AGENT_CONNECT && FD_ISSET ( tDist[i].m_iSock, &fdsWrite ) )
+			if ( tAgent.m_eState==AGENT_CONNECT && FD_ISSET ( tAgent.m_iSock, &fdsWrite ) )
 			{
-				tDist[i].m_eState = AGENT_HELLO;
+				tAgent.m_eState = AGENT_HELLO;
 				continue;
 			}
 
 			// check if hello was received
-			if ( tDist[i].m_eState==AGENT_HELLO && FD_ISSET ( tDist[i].m_iSock, &fdsRead ) )
+			if ( tAgent.m_eState==AGENT_HELLO && FD_ISSET ( tAgent.m_iSock, &fdsRead ) )
 			{
 				// read reply
 				char sBuf [ 128 ];
-				int iRes = sphSockRecv ( tDist[i].m_iSock, sBuf, sizeof(sBuf)-1, 0 );
+				int iRes = sphSockRecv ( tAgent.m_iSock, sBuf, sizeof(sBuf)-1, 0 );
 
 				assert ( iRes>0 && iRes<sizeof(sBuf) );
 				sBuf[iRes] = '\0';
@@ -630,13 +703,13 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				if ( strncmp ( sBuf, "VER ", 4 )!=0 )
 				{
 					sphWarning ( "index '%s': agent '%s:%d': bad handshake reply",
-						sIndexName, tDist[i].m_sHost.cstr(), tDist[i].m_iPort );
+						sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort );
 					bError = true;
 				}
 				if ( !bError && atoi(sBuf+4)!=SPHINX_SEARCHD_PROTO )
 				{
 					sphWarning ( "index '%s': agent '%s:%d': expected protocol v.%d, got v.%d",
-						sIndexName, tDist[i].m_sHost.cstr(), tDist[i].m_iPort,
+						sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort,
 						SPHINX_SEARCHD_PROTO, atoi(sBuf+4) );
 					bError = true;
 				}
@@ -644,13 +717,13 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				// bail out on error
 				if ( bError )
 				{
-					tDist[i].Close ();
+					tAgent.Close ();
 					continue;
 				}
 
 				// do query!
 				int iQueryLen = strlen ( tQuery.m_sQuery );
-				int iIndexesLen = strlen ( tDist[i].m_sIndexes.cstr() );
+				int iIndexesLen = strlen ( tAgent.m_sIndexes.cstr() );
 
 				int iReqSize = 52 + 4*tQuery.m_iGroups + iQueryLen + 4*tQuery.m_iWeights + iIndexesLen;
 				BYTE * pReqBuffer = new BYTE [ iReqSize ];
@@ -672,7 +745,7 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				NetPackArray ( pReq, tQuery.m_iWeights, (DWORD*)tQuery.m_pWeights );
 
 				// v2. index name
-				NetPackStr ( pReq, tDist[i].m_sIndexes.cstr() );
+				NetPackStr ( pReq, tAgent.m_sIndexes.cstr() );
 
 				// v3. id/ts limits
 				NetPackDword ( pReq, tQuery.m_iMinID );
@@ -684,26 +757,24 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				NetPackDword ( pReq, 1 );
 
 				assert ( pReq-pReqBuffer==iReqSize );
-				sphSockSend ( tDist[i].m_iSock, (const char*)pReqBuffer, pReq-pReqBuffer, 0 );
+				sphSockSend ( tAgent.m_iSock, (const char*)pReqBuffer, pReq-pReqBuffer, 0 );
 				SafeDeleteArray ( pReqBuffer );
 
-				tDist[i].m_eState = AGENT_QUERY;
+				tAgent.m_eState = AGENT_QUERY;
 				iAgents++;
 			}
 		}
 	} while ( iTimeout>0 );
 
-	ARRAY_FOREACH ( i, tDist )
+	ARRAY_FOREACH ( i, tDist.m_dAgents )
 	{
 		// check if connection timed out
-		if ( tDist[i].m_eState==AGENT_CONNECT )
+		Agent_t & tAgent = tDist.m_dAgents[i];
+		if ( tAgent.m_eState!=AGENT_QUERY )
 		{
-			sphSockClose ( tDist[i].m_iSock );
-			tDist[i].m_iSock = -1;
-			tDist[i].m_eState = AGENT_UNUSED;
-
-			sphWarning ( "index '%s': agent '%s:%d': connection timed out",
-				sIndexName, tDist[i].m_sHost.cstr(), tDist[i].m_iPort );
+			tAgent.Close ();
+			sphWarning ( "index '%s': agent '%s:%d': connect() timed out",
+				sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort );
 		}
 	}
 
@@ -711,14 +782,12 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 }
 
 
-int WaitForRemoteAgents ( DistributedIndex_t & tDist, CSphQueryResult * pRes )
+int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, CSphQueryResult * pRes, int iTimeout )
 {
 	assert ( pRes );
-
-	int iTimeout = g_iAgentQueryTimeout;
-	int iAgents = 0;
 	assert ( iTimeout>=0 );
 
+	int iAgents = 0;
 	do
 	{
 		fd_set fdsRead;
@@ -726,17 +795,18 @@ int WaitForRemoteAgents ( DistributedIndex_t & tDist, CSphQueryResult * pRes )
 
 		int iMax = 0;
 		bool bDone = true;
-		ARRAY_FOREACH ( iAgent, tDist )
-			if ( tDist[iAgent].m_eState==AGENT_QUERY )
+		ARRAY_FOREACH ( iAgent, tDist.m_dAgents )
 		{
-			Agent_t & tAgent = tDist[iAgent];
+			Agent_t & tAgent = tDist.m_dAgents[iAgent];
+			if ( tAgent.m_eState==AGENT_QUERY )
+			{
+				assert ( tAgent.m_iPort>0 );
+				assert ( tAgent.m_iSock>0 );
 
-			assert ( tAgent.m_iPort>0 );
-			assert ( tAgent.m_iSock>0 );
-
-			FD_SET ( tAgent.m_iSock, &fdsRead );
-			iMax = Max ( iMax, tAgent.m_iSock );
-		bDone = false;
+				FD_SET ( tAgent.m_iSock, &fdsRead );
+				iMax = Max ( iMax, tAgent.m_iSock );
+				bDone = false;
+			}
 		}
 		if ( bDone )
 			break;
@@ -744,15 +814,16 @@ int WaitForRemoteAgents ( DistributedIndex_t & tDist, CSphQueryResult * pRes )
 		struct timeval tvTimeout;
 		tvTimeout.tv_sec = 0;
 		tvTimeout.tv_usec = 100; // in chunks of 100 ms
-		iTimeout -= ( 1000*tvTimeout.tv_sec + tvTimeout.tv_usec );
+		iTimeout -= ( 1000*tvTimeout.tv_sec + tvTimeout.tv_usec ); // because our sphSelect() wrapper handles EINTR
 
-		if ( select ( 1+iMax, &fdsRead, NULL, NULL, &tvTimeout )<=0 )
+		if ( sphSelect ( 1+iMax, &fdsRead, NULL, NULL, &tvTimeout )<=0 )
 			continue;
 
-		ARRAY_FOREACH ( iAgent, tDist )
-			if ( tDist[iAgent].m_eState==AGENT_QUERY && FD_ISSET ( tDist[iAgent].m_iSock, &fdsRead ) )
+		ARRAY_FOREACH ( iAgent, tDist.m_dAgents )
 		{
-			Agent_t & tAgent = tDist[iAgent];
+			Agent_t & tAgent = tDist.m_dAgents[iAgent];
+			if (!( tAgent.m_eState==AGENT_QUERY && FD_ISSET ( tAgent.m_iSock, &fdsRead ) ))
+				continue;
 
 			// reply was received, let's parse it
 			bool bOK = false;
@@ -831,10 +902,19 @@ int WaitForRemoteAgents ( DistributedIndex_t & tDist, CSphQueryResult * pRes )
 
 	} while ( iTimeout>0 );
 
-	#if USE_WINDOWS
-	#pragma warning(default:4127) // conditional expr is const
-	#pragma warning(default:4389) // signed/unsigned mismatch
-	#endif // USE_WINDOWS
+	// close timed-out agents
+	ARRAY_FOREACH ( iAgent, tDist.m_dAgents )
+	{
+		Agent_t & tAgent = tDist.m_dAgents[iAgent];
+		if ( tAgent.m_eState==AGENT_QUERY )
+		{
+			assert ( !tAgent.m_pMatches );
+			tAgent.Close ();
+
+			sphWarning ( "index '%s': agent '%s:%d': query timed out",
+				sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort );
+		}
+	}
 
 	return iAgents;
 }
@@ -925,8 +1005,8 @@ void HandleClient ( int rsock )
 		DistributedIndex_t & tDist = g_hDistIndexes[sIndex];
 
 		// start connecting to remote agents
-		ARRAY_FOREACH ( i, tDist )
-			ConnectToRemoteAgent ( &tDist[i] );
+		ARRAY_FOREACH ( i, tDist.m_dAgents )
+			ConnectToRemoteAgent ( &tDist.m_dAgents[i] );
 
 		// connect to remote agents and query them first
 		int iRemote = QueryRemoteAgents ( sIndex, tDist, tQuery, iMode );
@@ -934,12 +1014,13 @@ void HandleClient ( int rsock )
 
 		// while the remote queries are running, do local searches
 		// !COMMIT what if the remote agents finish early, could they timeout?
-		ARRAY_FOREACH ( i, tDist )
-			if ( tDist[i].m_iPort==0 )
+		float tmQuery = -sphLongTimer ();
+		ARRAY_FOREACH ( i, tDist.m_dAgents )
+			if ( tDist.m_dAgents[i].m_iPort==0 )
 		{
 			iLocal++;
 
-			const ServedIndex_t & tServed = g_hIndexes [ tDist[i].m_sIndexes ];
+			const ServedIndex_t & tServed = g_hIndexes [ tDist.m_dAgents[i].m_sIndexes ];
 			assert ( tServed.m_pIndex );
 			assert ( tServed.m_pDict );
 			assert ( tServed.m_pTokenizer );
@@ -948,6 +1029,7 @@ void HandleClient ( int rsock )
 			tQuery.m_pTokenizer = tServed.m_pTokenizer;
 			tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pTop );
 		}
+		tmQuery += sphLongTimer ();
 
 		if ( !iRemote && !iLocal )
 		{
@@ -958,7 +1040,8 @@ void HandleClient ( int rsock )
 		// wait for remote queries to complete
 		if ( iRemote )
 		{
-			int iReplys = WaitForRemoteAgents ( tDist, pRes );
+			int iMsecLeft = tDist.m_iAgentQueryTimeout - int(tmQuery*1000.0f);
+			int iReplys = WaitForRemoteAgents ( sIndex, tDist, pRes, Max ( iMsecLeft, 0 ) );
 			if ( !iReplys && !iLocal )
 			{
 				iwrite ( rsock, "ERROR All reachable remote agents timed out\n" );
@@ -966,11 +1049,11 @@ void HandleClient ( int rsock )
 			}
 
 			// merge local and remote results
-			ARRAY_FOREACH ( iAgent, tDist )
-				if ( tDist[iAgent].m_iMatches )
+			ARRAY_FOREACH ( iAgent, tDist.m_dAgents )
+				if ( tDist.m_dAgents[iAgent].m_iMatches )
 			{
 				// merge this agent's results
-				Agent_t & tAgent = tDist[iAgent];
+				Agent_t & tAgent = tDist.m_dAgents[iAgent];
 				assert ( tAgent.m_pMatches );
 
 				for ( int i=0; i<tAgent.m_iMatches; i++ )
@@ -1288,7 +1371,7 @@ int main ( int argc, char **argv )
 				tAgent.m_iPort = 0;
 				tAgent.m_sIndexes = pLocal->cstr();
 
-				tIdx.Add ( tAgent );
+				tIdx.m_dAgents.Add ( tAgent );
 			}
 
 			// add remote agents
@@ -1360,10 +1443,28 @@ int main ( int argc, char **argv )
 				tAgent.SetAddr ( hp->h_addrtype, hp->h_length, hp->h_addr_list[0] );
 
 				// done
-				tIdx.Add ( tAgent );
+				tIdx.m_dAgents.Add ( tAgent );
 			}
 
-			if ( !tIdx.GetLength() )
+			// configure options
+			if ( hIndex("agent_connect_timeout") )
+			{
+				if ( hIndex["agent_connect_timeout"].intval()<=0 )
+					sphWarning ( "index '%s': connect_timeout must be positive, ignored", sIndexName );
+				else
+					tIdx.m_iAgentConnectTimeout = hIndex["agent_connect_timeout"].intval();
+			}
+
+			if ( hIndex("agent_query_timeout") )
+			{
+				if ( hIndex["agent_query_timeout"].intval()<=0 )
+					sphWarning ( "index '%s': query_timeout must be positive, ignored", sIndexName );
+				else
+					tIdx.m_iAgentQueryTimeout = hIndex["agent_query_timeout"].intval();
+			}
+
+			// finally, check and add distributed index to global table
+			if ( !tIdx.m_dAgents.GetLength() )
 			{
 				sphWarning ( "index '%s': no valid local/remote indexes in distributed index, SKIPPING",
 					sIndexName );

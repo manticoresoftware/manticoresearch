@@ -34,7 +34,6 @@
 	#define sphSockRecv(_sock,_buf,_len,_flags)		::recv(_sock,_buf,_len,_flags)
 	#define sphSockSend(_sock,_buf,_len,_flags)		::send(_sock,_buf,_len,_flags)
 	#define sphSockClose(_sock)						::closesocket(_sock)
-	#define sphSockGetErrno()						WSAGetLastError()
 
 #else
 	// UNIX-specific headers and calls
@@ -48,7 +47,6 @@
 	#define sphSockRecv(_sock,_buf,_len,_flags)		::recv(_sock,_buf,_len,_flags)
 	#define sphSockSend(_sock,_buf,_len,_flags)		::send(_sock,_buf,_len,_flags)
 	#define sphSockClose(_sock)						::close(_sock)
-	#define sphSockGetErrno()						::errno
 #endif
 
 /////////////////////////////////////////////////////////////////////////////
@@ -351,6 +349,15 @@ const char * sphSockError ( int iErr=0 )
 	#else
 		return strerror ( errno );
 	#endif
+}
+
+
+int sphSockGetErrno ()
+{
+	#if USE_WINDOWS
+		return WSAGetLastError();
+	#else
+		return ::errno;
 }
 
 

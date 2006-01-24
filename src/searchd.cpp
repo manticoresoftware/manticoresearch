@@ -43,6 +43,7 @@
 	#include <sys/socket.h>
 	#include <sys/time.h>
 	#include <sys/wait.h>
+	#include <netdb.h>
 
 	#define sphSockRecv(_sock,_buf,_len,_flags)		::recv(_sock,_buf,_len,_flags)
 	#define sphSockSend(_sock,_buf,_len,_flags)		::send(_sock,_buf,_len,_flags)
@@ -703,7 +704,7 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				char sBuf [ 128 ];
 				int iRes = sphSockRecv ( tAgent.m_iSock, sBuf, sizeof(sBuf)-1, 0 );
 
-				assert ( iRes>0 && iRes<sizeof(sBuf) );
+				assert ( iRes>0 && iRes<(int)sizeof(sBuf) );
 				sBuf[iRes] = '\0';
 
 				// check reply

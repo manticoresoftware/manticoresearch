@@ -320,7 +320,7 @@ int main ( int argc, char ** argv )
 			{
 				fprintf ( stdout, "%d. '%s': %d documents, %d hits\n",
 					1+i,
-					pResult->m_tWordStats[i].m_sWord,
+					pResult->m_tWordStats[i].m_sWord.cstr(),
 					pResult->m_tWordStats[i].m_iDocs,
 					pResult->m_tWordStats[i].m_iHits );
 			}

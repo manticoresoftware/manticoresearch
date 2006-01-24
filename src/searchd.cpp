@@ -149,7 +149,7 @@ public:
 		, m_eState ( AGENT_UNUSED )
 		, m_iMatches ( 0 )
 		, m_pMatches ( NULL )
-		, m_iTotalMatches ( NULL )
+		, m_iTotalMatches ( 0 )
 		, m_fQueryTime ( 0.0f )
 		, m_pAddr ( NULL )
 	{
@@ -341,7 +341,7 @@ void sphInfo ( const char * sFmt, ... )
 
 const char * sphSockError ( int iErr=0 )
 {
-	#ifdef USE_WINDOWS
+	#if USE_WINDOWS
 		if ( iErr==0 )
 			iErr = WSAGetLastError ();
 
@@ -356,7 +356,7 @@ const char * sphSockError ( int iErr=0 )
 
 void sphSockSetErrno ( int iErr )
 {
-	#ifdef USE_WINDOWS
+	#if USE_WINDOWS
 		WSASetLastError ( iErr );
 	#else
 		errno = iErr;

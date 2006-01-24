@@ -357,7 +357,8 @@ int sphSockGetErrno ()
 	#if USE_WINDOWS
 		return WSAGetLastError();
 	#else
-		return ::errno;
+		return errno;
+	#endif
 }
 
 

@@ -200,7 +200,8 @@ public:
 /// distributed index
 struct DistributedIndex_t
 {
-	CSphVector<Agent_t,16>	m_dAgents;					///< both local and remote agents
+	CSphVector<Agent_t,16>	m_dAgents;					///< remote agents
+	CSphVector<CSphString>	m_dLocal;					///< local indexes
 	int						m_iAgentConnectTimeout;		///< in msec
 	int						m_iAgentQueryTimeout;		///< in msec
 
@@ -373,56 +374,6 @@ void sphSockSetErrno ( int iErr )
 }
 
 
-int sphSelect ( int iMax, fd_set * pRead, fd_set * pWrite, fd_set * pExcept, struct timeval * pTV )
-{
-	if ( !pTV )
-		return ::select ( iMax, pRead, pWrite, pExcept, pTV );
-
-	int iRes;
-	for ( ;; )
-	{
-		float fStart = sphLongTimer ();
-		int iTV = 1000*pTV->tv_sec + pTV->tv_usec;
-
-		iRes = ::select ( iMax, pRead, pWrite, pExcept, pTV );
-
-		// on Windows, we check for 0 and Sleep() manually, cause select() does not sleep enough
-		// on UNIX, we check for EINTR
-		#if USE_WINDOWS
-			if ( iRes!=0 )
-				return iRes;
-		#else
-			if ( iRes<0 )
-			{
-				int iErr = sphSockGetErrno();
-				sphSockSetErrno ( iErr ); // actually that'd be for Windows, but we're paranoid
-
-				if ( iErr!=EINTR )
-					return iRes;
-			}
-		#endif
-
-		// check if we need to wait for more
-		int iDT = Max ( int( 1000.0f*( sphLongTimer() - fStart ) ), 0 );
-		if ( iDT>=iTV )
-			return iRes;
-
-		// on Windows, we Sleep() manually and then return
-		// on UNIX, we adjust select() timeout and then reiterate
-		#if USE_WINDOWS
-			Sleep ( iTV-iDT );
-			return iRes;
-		#else
-			iTV -= iDT;
-			assert ( iTV>0 );
-
-			pTV->tv_sec = iTV / 1000;
-			pTV->tv_usec = iTV % 1000;
-		#endif
-	}
-}
-
-
 int createServerSocket_IP(int port)
 {
 	int sock;
@@ -566,11 +517,11 @@ int sphSetSockNB ( int iSock )
 void ConnectToRemoteAgent ( Agent_t * pAgent )
 {
 	assert ( pAgent );
+	assert ( pAgent->m_iPort>0 );
+	assert ( pAgent->GetAddr() );
 	assert ( pAgent->m_iSock<0 );
 
 	pAgent->m_eState = AGENT_UNUSED;
-	if ( pAgent->m_iPort==0 )
-		return;
 
 	struct sockaddr_in sa;
 
@@ -652,7 +603,9 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 	int iAgents = 0;
 	assert ( iTimeout>=0 );
 
-	do
+	int iPassed = 0;
+	float tmStart = sphLongTimer ();
+	while ( iPassed<=iTimeout )
 	{
 		fd_set fdsRead, fdsWrite;
 		FD_ZERO ( &fdsRead );
@@ -676,14 +629,16 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 		if ( bDone )
 			break;
 
+		iPassed = int ( 1000.0f*( sphLongTimer() - tmStart ) );
+		int iToWait = Max ( iTimeout-iPassed, 0 );
+
 		struct timeval tvTimeout;
-		tvTimeout.tv_sec = 0;
-		tvTimeout.tv_usec = 100; // in chunks of 100 ms
-		iTimeout -= ( 1000*tvTimeout.tv_sec + tvTimeout.tv_usec );
+		tvTimeout.tv_sec = iToWait / 1000; // full seconds
+		tvTimeout.tv_usec = ( iToWait % 1000 ) * 1000; // remainder is msec, so *1000 for usec
 
 		// FIXME! check exceptfds for connect() failure as well, so that actively refused
 		// connections would not stall for a full timeout
-		if ( sphSelect ( 1+iMax, &fdsRead, &fdsWrite, NULL, &tvTimeout )<=0 )
+		if ( select ( 1+iMax, &fdsRead, &fdsWrite, NULL, &tvTimeout )<=0 )
 			continue;
 
 		ARRAY_FOREACH ( i, tDist.m_dAgents )
@@ -773,7 +728,7 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				iAgents++;
 			}
 		}
-	} while ( iTimeout>0 );
+	}
 
 	ARRAY_FOREACH ( i, tDist.m_dAgents )
 	{
@@ -797,7 +752,9 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 	assert ( iTimeout>=0 );
 
 	int iAgents = 0;
-	do
+	int iPassed = 0;
+	float tmStart = sphLongTimer ();
+	while ( iPassed<=iTimeout )
 	{
 		fd_set fdsRead;
 		FD_ZERO ( &fdsRead );
@@ -820,12 +777,14 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 		if ( bDone )
 			break;
 
-		struct timeval tvTimeout;
-		tvTimeout.tv_sec = 0;
-		tvTimeout.tv_usec = 100; // in chunks of 100 ms
-		iTimeout -= ( 1000*tvTimeout.tv_sec + tvTimeout.tv_usec ); // because our sphSelect() wrapper handles EINTR
+		iPassed = int ( 1000.0f*( sphLongTimer() - tmStart ) );
+		int iToWait = Max ( iTimeout-iPassed, 0 );
 
-		if ( sphSelect ( 1+iMax, &fdsRead, NULL, NULL, &tvTimeout )<=0 )
+		struct timeval tvTimeout;
+		tvTimeout.tv_sec = iToWait / 1000; // full seconds
+		tvTimeout.tv_usec = ( iToWait % 1000 ) * 1000; // remainder is msec, so *1000 for usec
+
+		if ( select ( 1+iMax, &fdsRead, NULL, NULL, &tvTimeout )<=0 )
 			continue;
 
 		ARRAY_FOREACH ( iAgent, tDist.m_dAgents )
@@ -909,7 +868,7 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 			}
 		}
 
-	} while ( iTimeout>0 );
+	}
 
 	// close timed-out agents
 	ARRAY_FOREACH ( iAgent, tDist.m_dAgents )
@@ -1019,17 +978,13 @@ void HandleClient ( int rsock )
 
 		// connect to remote agents and query them first
 		int iRemote = QueryRemoteAgents ( sIndex, tDist, tQuery, iMode );
-		int iLocal = 0; // FIXME! should precalc
 
 		// while the remote queries are running, do local searches
 		// !COMMIT what if the remote agents finish early, could they timeout?
 		float tmQuery = -sphLongTimer ();
-		ARRAY_FOREACH ( i, tDist.m_dAgents )
-			if ( tDist.m_dAgents[i].m_iPort==0 )
+		ARRAY_FOREACH ( i, tDist.m_dLocal )
 		{
-			iLocal++;
-
-			const ServedIndex_t & tServed = g_hIndexes [ tDist.m_dAgents[i].m_sIndexes ];
+			const ServedIndex_t & tServed = g_hIndexes [ tDist.m_dLocal[i] ];
 			assert ( tServed.m_pIndex );
 			assert ( tServed.m_pDict );
 			assert ( tServed.m_pTokenizer );
@@ -1040,7 +995,7 @@ void HandleClient ( int rsock )
 		}
 		tmQuery += sphLongTimer ();
 
-		if ( !iRemote && !iLocal )
+		if ( !iRemote && !tDist.m_dLocal.GetLength() )
 		{
 			iwrite ( rsock, "ERROR All remote agents are unreachable and no local indexes are configured\n" );
 			return;
@@ -1051,7 +1006,7 @@ void HandleClient ( int rsock )
 		{
 			int iMsecLeft = tDist.m_iAgentQueryTimeout - int(tmQuery*1000.0f);
 			int iReplys = WaitForRemoteAgents ( sIndex, tDist, pRes, Max ( iMsecLeft, 0 ) );
-			if ( !iReplys && !iLocal )
+			if ( !iReplys && !tDist.m_dLocal.GetLength() )
 			{
 				iwrite ( rsock, "ERROR All reachable remote agents timed out\n" );
 				return;
@@ -1375,12 +1330,7 @@ int main ( int argc, char **argv )
 						sIndexName, pLocal->cstr() );
 					continue;
 				}
-
-				Agent_t tAgent;
-				tAgent.m_iPort = 0;
-				tAgent.m_sIndexes = pLocal->cstr();
-
-				tIdx.m_dAgents.Add ( tAgent );
+				tIdx.m_dLocal.Add ( pLocal->cstr() );
 			}
 
 			// add remote agents

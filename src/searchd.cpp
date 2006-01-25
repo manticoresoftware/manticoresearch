@@ -824,12 +824,17 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 				int i;
 				for ( i=0; i<pRes->m_iNumWords; i++ )
 				{
-					char sBuf [ SPH_MAX_WORD_LEN ];
+					char sBuf [ SPH_MAX_WORD_LEN+1 ];
 
+					// read word len
 					if ( sphSockRecv ( tAgent.m_iSock, (char*)&iTmp, 4, 0 )!=4 ) break;
 					if ( iTmp<0 || iTmp>SPH_MAX_WORD_LEN ) break;
 
+					// read word, and NULL-terminate it!
 					if ( sphSockRecv ( tAgent.m_iSock, sBuf, iTmp, 0 )!=iTmp ) break;
+					sBuf[iTmp] = '\0';
+
+					// set it in result if not yet, or check if already
 					if ( bSetWords )
 					{
 						pRes->m_tWordStats[i].m_sWord.SetBinary ( sBuf, iTmp );
@@ -839,9 +844,11 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 							break;
 					}
 
+					// read docs count
 					if ( sphSockRecv ( tAgent.m_iSock, (char*)&iTmp, 4, 0 )!=4 ) break;
 					pRes->m_tWordStats[i].m_iDocs += iTmp;
 
+					// read hits count
 					if ( sphSockRecv ( tAgent.m_iSock, (char*)&iTmp, 4, 0 )!=4 ) break;
 					pRes->m_tWordStats[i].m_iHits += iTmp;
 				}

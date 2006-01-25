@@ -1416,7 +1416,7 @@ int main ( int argc, char **argv )
 			}
 
 			// finally, check and add distributed index to global table
-			if ( !tIdx.m_dAgents.GetLength() )
+			if ( tIdx.m_dAgents.GetLength()==0 && tIdx.m_dLocal.GetLength()==0 )
 			{
 				sphWarning ( "index '%s': no valid local/remote indexes in distributed index, SKIPPING",
 					sIndexName );

@@ -131,10 +131,7 @@ public:
 	int				m_iSock;		///< socket number, -1 if not connected
 	AgentState_e	m_eState;		///< current state
 
-	int				m_iMatches;
-	CSphMatch *		m_pMatches;
-	int				m_iTotalMatches;
-	float			m_fQueryTime;
+	CSphQueryResult	m_tRes;			///< query result
 
 protected:
 	int				m_iAddrType;
@@ -146,10 +143,6 @@ public:
 		: m_iPort ( -1 )
 		, m_iSock ( -1 )
 		, m_eState ( AGENT_UNUSED )
-		, m_iMatches ( 0 )
-		, m_pMatches ( NULL )
-		, m_iTotalMatches ( 0 )
-		, m_fQueryTime ( 0.0f )
 		, m_pAddr ( NULL )
 	{
 	}
@@ -157,7 +150,6 @@ public:
 	~Agent_t ()
 	{
 		Close ();
-		SafeDeleteArray ( m_pMatches );
 	}
 
 	void Close ()
@@ -798,32 +790,33 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 			for ( ;; )
 			{
 				// read match count
-				if ( sphSockRecv ( tAgent.m_iSock, (char*)&tAgent.m_iMatches, 4, 0 )!=4 ) break;
-				if ( tAgent.m_iMatches<0 || tAgent.m_iMatches>CSphQueryResult::MAX_MATCHES ) break;
+				int iMatches;
+				if ( sphSockRecv ( tAgent.m_iSock, (char*)&iMatches, 4, 0 )!=4 ) break;
+				if ( iMatches<0 || iMatches>CSphQueryResult::MAX_MATCHES ) break;
 
 				// read matches
 				int iTmp;
-				if ( tAgent.m_iMatches>0 )
+				if ( iMatches>0 )
 				{
-					assert ( !tAgent.m_pMatches );
-					tAgent.m_pMatches = new CSphMatch [ tAgent.m_iMatches ];
+					assert ( !tAgent.m_tRes.m_dMatches.GetLength() );
+					tAgent.m_tRes.m_dMatches.Resize ( iMatches );
 
-					iTmp = sizeof(CSphMatch)*tAgent.m_iMatches;
-					if ( sphSockRecv ( tAgent.m_iSock, (char*)tAgent.m_pMatches, iTmp, 0 )!=iTmp ) break;
+					iTmp = sizeof(CSphMatch)*iMatches;
+					if ( sphSockRecv ( tAgent.m_iSock, (char*)&tAgent.m_tRes.m_dMatches[0], iTmp, 0 )!=iTmp ) break;
 				}
 				
 				// read totals (retrieved count, total count, query time, word count)
 				if ( sphSockRecv ( tAgent.m_iSock, (char*)&iTmp, 4, 0 )!=4 ) break;
-				if ( iTmp!=tAgent.m_iMatches ) break;
-				if ( sphSockRecv ( tAgent.m_iSock, (char*)&tAgent.m_iTotalMatches, 4, 0 )!=4 ) break;
-				if ( sphSockRecv ( tAgent.m_iSock, (char*)&tAgent.m_fQueryTime, 4, 0 )!=4 ) break;
-				if ( sphSockRecv ( tAgent.m_iSock, (char*)&iTmp, 4, 0 )!=4 ) break;
+				if ( iTmp!=iMatches ) break;
+				if ( sphSockRecv ( tAgent.m_iSock, (char*)&tAgent.m_tRes.m_iTotalMatches, 4, 0 )!=4 ) break;
+				if ( sphSockRecv ( tAgent.m_iSock, (char*)&tAgent.m_tRes.m_fQueryTime, 4, 0 )!=4 ) break;
+				if ( sphSockRecv ( tAgent.m_iSock, (char*)&tAgent.m_tRes.m_iNumWords, 4, 0 )!=4 ) break;
 
 				bool bSetWords = false;
-				if ( pRes->m_iNumWords && iTmp!=pRes->m_iNumWords ) break;
+				if ( pRes->m_iNumWords && tAgent.m_tRes.m_iNumWords!=pRes->m_iNumWords ) break;
 				if ( !pRes->m_iNumWords )
 				{
-					pRes->m_iNumWords = iTmp;
+					pRes->m_iNumWords = tAgent.m_tRes.m_iNumWords;
 					bSetWords = true;
 				}
 
@@ -862,10 +855,7 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 
 			tAgent.Close ();
 			if ( !bOK )
-			{
-				tAgent.m_iMatches = 0;
-				SafeDeleteArray ( tAgent.m_pMatches );
-			}
+				tAgent.m_tRes.m_dMatches.Reset ();
 		}
 
 	}
@@ -876,7 +866,7 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 		Agent_t & tAgent = tDist.m_dAgents[iAgent];
 		if ( tAgent.m_eState==AGENT_QUERY )
 		{
-			assert ( !tAgent.m_pMatches );
+			assert ( !tAgent.m_tRes.m_dMatches.GetLength() );
 			tAgent.Close ();
 
 			sphWarning ( "index '%s': agent '%s:%d': query timed out",
@@ -966,6 +956,7 @@ void HandleClient ( int rsock )
 	// do search
 	pRes = new CSphQueryResult ();
 	ISphMatchQueue * pTop = sphCreateQueue ( &tQuery );
+	float tmStart = sphLongTimer ();
 
 	if ( g_hDistIndexes(sIndex) )
 	{
@@ -1014,18 +1005,19 @@ void HandleClient ( int rsock )
 
 			// merge local and remote results
 			ARRAY_FOREACH ( iAgent, tDist.m_dAgents )
-				if ( tDist.m_dAgents[iAgent].m_iMatches )
+				if ( tDist.m_dAgents[iAgent].m_tRes.m_dMatches.GetLength() )
 			{
 				// merge this agent's results
 				Agent_t & tAgent = tDist.m_dAgents[iAgent];
-				assert ( tAgent.m_pMatches );
 
-				for ( int i=0; i<tAgent.m_iMatches; i++ )
-					pTop->Push ( tAgent.m_pMatches[i] );
+				ARRAY_FOREACH ( i, tAgent.m_tRes.m_dMatches )
+					pTop->Push ( tAgent.m_tRes.m_dMatches[i] );
+
+				// merge this agent's stats
+				pRes->m_iTotalMatches += tAgent.m_tRes.m_iTotalMatches;
 
 				// free the set
-				tAgent.m_iMatches = 0;
-				SafeDeleteArray ( tAgent.m_pMatches );
+				tAgent.m_tRes.m_dMatches.Reset ();
 			}
 		}
 
@@ -1089,6 +1081,7 @@ void HandleClient ( int rsock )
 	}
 
 	sphFlattenQueue ( pTop, pRes );
+	pRes->m_fQueryTime = sphLongTimer() - tmStart;
 
 	// log query
 	if ( g_iQueryLogFile>=0 )

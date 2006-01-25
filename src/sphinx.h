@@ -486,6 +486,11 @@ private:
 struct CSphMatch : public CSphDocInfo
 {
 	int			m_iWeight;
+
+	bool		operator == ( const CSphMatch & rhs ) const
+	{
+		return ( m_iDocID==rhs.m_iDocID );
+	}
 };
 
 

@@ -3061,6 +3061,24 @@ public:
 				Pop ();
 		}
 
+		// test for full dupes
+		// FIXME! could affect speed, should conditionally disable this
+#define REMOVE_DUPES 1
+#if REMOVE_DUPES
+		int iTest = m_iUsed;
+		while ( iTest )
+		{
+			int iParent = ( iTest-1 ) >> 1;
+			if ( !COMP() ( tEntry, m_pData[iParent] ) )
+			{
+				if ( tEntry==m_pData[iParent] )
+					return;
+				break;
+			}
+			iTest = iParent;
+		}
+#endif
+
 		// do add
 		m_pData [ m_iUsed ] = tEntry;
 		int iEntry = m_iUsed++;

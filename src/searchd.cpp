@@ -646,6 +646,8 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				if ( iErr )
 				{
 					// connect() failure
+					sphWarning ( "index '%s': agent '%s:%d': connect() failed (err=%d)",
+						sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort, iErr );
 					tAgent.Close ();
 				} else
 				{
@@ -669,8 +671,8 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				bool bError = false;
 				if ( strncmp ( sBuf, "VER ", 4 )!=0 )
 				{
-					sphWarning ( "index '%s': agent '%s:%d': bad handshake reply",
-						sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort );
+					sphWarning ( "index '%s': agent '%s:%d': bad handshake reply (len=%d reply='%s')",
+						sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort, iRes, sBuf );
 					bError = true;
 				}
 				if ( !bError && atoi(sBuf+4)!=SPHINX_SEARCHD_PROTO )
@@ -737,7 +739,7 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 	{
 		// check if connection timed out
 		Agent_t & tAgent = tDist.m_dAgents[i];
-		if ( tAgent.m_eState!=AGENT_QUERY )
+		if ( tAgent.m_eState!=AGENT_QUERY && tAgent.m_eState!=AGENT_UNUSED )
 		{
 			tAgent.Close ();
 			sphWarning ( "index '%s': agent '%s:%d': %s() timed out",
@@ -1794,6 +1796,7 @@ int main ( int argc, char **argv )
 		if ( ( g_iMaxChildren && g_iChildren>=g_iMaxChildren ) || g_iHUP )
 		{
 			iwrite ( rsock, "RETRY Server maxed out\n" );
+			sphWarning ( "maxed out, dismissing client" );
 			sphSockClose ( rsock );
 			continue;
 		}

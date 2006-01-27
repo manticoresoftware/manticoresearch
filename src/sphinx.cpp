@@ -3061,24 +3061,6 @@ public:
 				Pop ();
 		}
 
-		// test for full dupes
-		// FIXME! could affect speed, should conditionally disable this
-#define REMOVE_DUPES 1
-#if REMOVE_DUPES
-		int iTest = m_iUsed;
-		while ( iTest )
-		{
-			int iParent = ( iTest-1 ) >> 1;
-			if ( !COMP() ( tEntry, m_pData[iParent] ) )
-			{
-				if ( tEntry==m_pData[iParent] )
-					return;
-				break;
-			}
-			iTest = iParent;
-		}
-#endif
-
 		// do add
 		m_pData [ m_iUsed ] = tEntry;
 		int iEntry = m_iUsed++;
@@ -3364,11 +3346,13 @@ ISphMatchQueue * sphCreateQueue ( CSphQuery * pQuery )
 
 void sphFlattenQueue ( ISphMatchQueue * pQueue, CSphQueryResult * pResult )
 {
-	pResult->m_dMatches.Resize ( pQueue->GetLength() );
+	int iOffset = pResult->m_dMatches.GetLength ();
+	pResult->m_dMatches.Resize ( iOffset + pQueue->GetLength() );
+
 	int iDest = pQueue->GetLength();
 	while ( iDest-- )
 	{
-		pResult->m_dMatches [ iDest ] = pQueue->Root ();
+		pResult->m_dMatches [ iDest+iOffset ] = pQueue->Root ();
 		pQueue->Pop ();
 	}
 }
@@ -3384,6 +3368,7 @@ CSphQueryResult * CSphIndex_VLN::Query ( CSphDict * pDict, CSphQuery * pQuery )
 	QueryEx ( pDict, pQuery, pResult, pTop );
 
 	// convert results and return
+	pResult->m_dMatches.Reset ();
 	sphFlattenQueue ( pTop, pResult );
 	SafeDelete ( pTop );
 	return pResult;

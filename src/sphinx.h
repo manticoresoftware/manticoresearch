@@ -624,7 +624,7 @@ void				sphSetQuiet ( bool bQuiet );
 /// create proper queue for given query
 ISphMatchQueue *	sphCreateQueue ( CSphQuery * pQuery );
 
-/// convert queue to linear matches array
+/// convert queue to sorted array, and add its entries to result's matches array
 void				sphFlattenQueue ( ISphMatchQueue * pQueue, CSphQueryResult * pResult );
 
 #endif // _sphinx_

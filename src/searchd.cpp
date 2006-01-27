@@ -599,10 +599,9 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 	float tmStart = sphLongTimer ();
 	while ( iPassed<=iTimeout )
 	{
-		fd_set fdsRead, fdsWrite, fdsExcept;
+		fd_set fdsRead, fdsWrite;
 		FD_ZERO ( &fdsRead );
 		FD_ZERO ( &fdsWrite );
-		FD_ZERO ( &fdsExcept );
 
 		int iMax = 0;
 		bool bDone = true;
@@ -614,17 +613,7 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				assert ( tAgent.m_iPort>0 );
 				assert ( tAgent.m_iSock>0 );
 
-				if ( tAgent.m_eState==AGENT_CONNECT )
-				{
-					// if we're connecting, check for write (connect success) and except (connect failure)
-					FD_SET ( tAgent.m_iSock, &fdsWrite );
-					FD_SET ( tAgent.m_iSock, &fdsExcept );
-				} else
-				{
-					// we connected, lets wait until remote says hello
-					FD_SET ( tAgent.m_iSock, &fdsRead );
-				}
-
+				FD_SET ( tAgent.m_iSock, ( tAgent.m_eState==AGENT_CONNECT ) ? &fdsWrite : &fdsRead );
 				iMax = Max ( iMax, tAgent.m_iSock );
 				bDone = false;
 			}
@@ -649,14 +638,15 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 			Agent_t & tAgent = tDist.m_dAgents[i];
 
 			// check if connection completed
-			if ( tAgent.m_eState==AGENT_CONNECT &&
-				( FD_ISSET ( tAgent.m_iSock, &fdsWrite ) || FD_ISSET ( tAgent.m_iSock, &fdsExcept ) ) )
+			if ( tAgent.m_eState==AGENT_CONNECT && FD_ISSET ( tAgent.m_iSock, &fdsWrite ) )
 			{
-				if ( FD_ISSET ( tAgent.m_iSock, &fdsExcept ) )
+				int iErr = 0;
+				int iErrLen = sizeof(iErr);
+				getsockopt ( tAgent.m_iSock, SOL_SOCKET, SO_ERROR, (char*)&iErr, &iErrLen );
+				if ( iErr )
 				{
 					// connect() failure
 					tAgent.Close ();
-
 				} else
 				{
 					// connect() success
@@ -750,8 +740,9 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 		if ( tAgent.m_eState!=AGENT_QUERY )
 		{
 			tAgent.Close ();
-			sphWarning ( "index '%s': agent '%s:%d': connect() timed out",
-				sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort );
+			sphWarning ( "index '%s': agent '%s:%d': %s() timed out",
+				sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort,
+				tAgent.m_eState==AGENT_HELLO ? "read" : "connect" );
 		}
 	}
 
@@ -912,6 +903,12 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 
 /////////////////////////////////////////////////////////////////////////////
 
+inline bool operator < ( const CSphMatch & a, const const CSphMatch & b )
+{
+	return a.m_iDocID < b.m_iDocID;
+};
+
+
 void HandleClient ( int rsock )
 {
 	CSphQuery tQuery;
@@ -986,6 +983,8 @@ void HandleClient ( int rsock )
 	ISphMatchQueue * pTop = sphCreateQueue ( &tQuery );
 	float tmStart = sphLongTimer ();
 
+	#define REMOVE_DUPES 1
+
 	if ( g_hDistIndexes(sIndex) )
 	{
 		// search through specified distributed index
@@ -1011,6 +1010,10 @@ void HandleClient ( int rsock )
 			// do query
 			tQuery.m_pTokenizer = tServed.m_pTokenizer;
 			tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pTop );
+
+			#if REMOVE_DUPES
+			sphFlattenQueue ( pTop, pRes );
+			#endif
 		}
 		tmQuery += sphLongTimer ();
 
@@ -1037,15 +1040,12 @@ void HandleClient ( int rsock )
 			{
 				// merge this agent's results
 				Agent_t & tAgent = tDist.m_dAgents[iAgent];
-
 				ARRAY_FOREACH ( i, tAgent.m_tRes.m_dMatches )
-					pTop->Push ( tAgent.m_tRes.m_dMatches[i] );
+					pRes->m_dMatches.Add( tAgent.m_tRes.m_dMatches[i] );
+				tAgent.m_tRes.m_dMatches.Reset ();
 
 				// merge this agent's stats
 				pRes->m_iTotalMatches += tAgent.m_tRes.m_iTotalMatches;
-
-				// free the set
-				tAgent.m_tRes.m_dMatches.Reset ();
 			}
 		}
 
@@ -1063,6 +1063,10 @@ void HandleClient ( int rsock )
 			// do query
 			tQuery.m_pTokenizer = tServed.m_pTokenizer;
 			tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pTop );
+
+			#if REMOVE_DUPES
+			sphFlattenQueue ( pTop, pRes );
+			#endif
 		}
 
 	} else
@@ -1099,6 +1103,10 @@ void HandleClient ( int rsock )
 			tQuery.m_pTokenizer = tServed.m_pTokenizer;
 			tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pTop );
 			iSearched++;
+
+			#if REMOVE_DUPES
+			sphFlattenQueue ( pTop, pRes );
+			#endif
 		}
 
 		if ( !iSearched )
@@ -1108,7 +1116,21 @@ void HandleClient ( int rsock )
 		}
 	}
 
+	#if REMOVE_DUPES
+	{
+		pRes->m_dMatches.Sort ();
+
+		ARRAY_FOREACH ( i, pRes->m_dMatches )
+		{
+			if ( i==0 || pRes->m_dMatches[i].m_iDocID!=pRes->m_dMatches[i-1].m_iDocID )
+				pTop->Push ( pRes->m_dMatches[i] );
+		}
+		pRes->m_dMatches.Reset ();
+	}
+	#endif
+
 	sphFlattenQueue ( pTop, pRes );
+
 	pRes->m_fQueryTime = sphLongTimer() - tmStart;
 
 	// log query

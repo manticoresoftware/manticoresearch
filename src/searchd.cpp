@@ -599,9 +599,10 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 	float tmStart = sphLongTimer ();
 	while ( iPassed<=iTimeout )
 	{
-		fd_set fdsRead, fdsWrite;
+		fd_set fdsRead, fdsWrite, fdsExcept;
 		FD_ZERO ( &fdsRead );
 		FD_ZERO ( &fdsWrite );
+		FD_ZERO ( &fdsExcept );
 
 		int iMax = 0;
 		bool bDone = true;
@@ -613,7 +614,17 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				assert ( tAgent.m_iPort>0 );
 				assert ( tAgent.m_iSock>0 );
 
-				FD_SET ( tAgent.m_iSock, ( tAgent.m_eState==AGENT_CONNECT ) ? &fdsWrite : &fdsRead );
+				if ( tAgent.m_eState==AGENT_CONNECT )
+				{
+					// if we're connecting, check for write (connect success) and except (connect failure)
+					FD_SET ( tAgent.m_iSock, &fdsWrite );
+					FD_SET ( tAgent.m_iSock, &fdsExcept );
+				} else
+				{
+					// we connected, lets wait until remote says hello
+					FD_SET ( tAgent.m_iSock, &fdsRead );
+				}
+
 				iMax = Max ( iMax, tAgent.m_iSock );
 				bDone = false;
 			}
@@ -638,9 +649,19 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 			Agent_t & tAgent = tDist.m_dAgents[i];
 
 			// check if connection completed
-			if ( tAgent.m_eState==AGENT_CONNECT && FD_ISSET ( tAgent.m_iSock, &fdsWrite ) )
+			if ( tAgent.m_eState==AGENT_CONNECT &&
+				( FD_ISSET ( tAgent.m_iSock, &fdsWrite ) || FD_ISSET ( tAgent.m_iSock, &fdsExcept ) ) )
 			{
-				tAgent.m_eState = AGENT_HELLO;
+				if ( FD_ISSET ( tAgent.m_iSock, &fdsExcept ) )
+				{
+					// connect() failure
+					tAgent.Close ();
+
+				} else
+				{
+					// connect() success
+					tAgent.m_eState = AGENT_HELLO;
+				}
 				continue;
 			}
 

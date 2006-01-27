@@ -641,7 +641,7 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 			if ( tAgent.m_eState==AGENT_CONNECT && FD_ISSET ( tAgent.m_iSock, &fdsWrite ) )
 			{
 				int iErr = 0;
-				int iErrLen = sizeof(iErr);
+				socklen_t iErrLen = sizeof(iErr);
 				getsockopt ( tAgent.m_iSock, SOL_SOCKET, SO_ERROR, (char*)&iErr, &iErrLen );
 				if ( iErr )
 				{
@@ -903,7 +903,7 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 
 /////////////////////////////////////////////////////////////////////////////
 
-inline bool operator < ( const CSphMatch & a, const const CSphMatch & b )
+inline bool operator < ( const CSphMatch & a, const CSphMatch & b )
 {
 	return a.m_iDocID < b.m_iDocID;
 };

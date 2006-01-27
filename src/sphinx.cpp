@@ -3039,7 +3039,7 @@ template< typename T> Less_T<T> Less_fn ( T & )
 
 
 /// match-sorting priority min-queue
-template< typename T, int SIZE, class COMP > class CSphQueue : public ISphQueue<T, SIZE>
+template < typename T, int SIZE, typename COMP > class CSphQueue : public ISphQueue<T, SIZE>
 {
 protected:
 	T		m_pData [ SIZE ];
@@ -3055,7 +3055,7 @@ public:
 		if ( m_iUsed==SIZE )
 		{
 			// if it's worse that current min, reject it, else pop off current min
-			if ( COMP() ( tEntry, m_pData[0] ) )
+			if ( COMP::IsLess ( tEntry, m_pData[0] ) )
 				return;
 			else
 				Pop ();
@@ -3069,7 +3069,7 @@ public:
 		while ( iEntry )
 		{
 			int iParent = ( iEntry-1 ) >> 1;
-			if ( !COMP() ( m_pData[iEntry], m_pData[iParent] ) )
+			if ( !COMP::IsLess ( m_pData[iEntry], m_pData[iParent] ) )
 				break;
 
 			// entry is less than parent, should float to the top
@@ -3099,11 +3099,11 @@ public:
 
 			// select smallest child
 			if ( iChild+1<m_iUsed )
-				if ( COMP() ( m_pData[iChild+1], m_pData[iChild] ) )
+				if ( COMP::IsLess ( m_pData[iChild+1], m_pData[iChild] ) )
 					iChild++;
 
 			// if smallest child is less than entry, do float it to the top
-			if ( COMP() ( m_pData[iChild], m_pData[iEntry] ) )
+			if ( COMP::IsLess ( m_pData[iChild], m_pData[iEntry] ) )
 			{
 				Swap ( m_pData[iChild], m_pData[iEntry] );
 				iEntry = iChild;
@@ -3177,7 +3177,7 @@ struct CSphQueryParser : CSphSource_Text
 /// match sorter
 struct MatchRelevanceLt_fn
 {
-	inline bool operator() ( const CSphMatch & a, const CSphMatch & b ) const
+	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b )
 	{
 		return ( a.m_iWeight==b.m_iWeight )
 			? ( a.m_iTimestamp < b.m_iTimestamp )
@@ -3189,7 +3189,7 @@ struct MatchRelevanceLt_fn
 /// match sorter
 struct MatchDateLt_fn
 {
-	inline bool operator() ( const CSphMatch & a, const CSphMatch & b ) const
+	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b )
 	{
 		return ( a.m_iTimestamp==b.m_iTimestamp )
 			? ( a.m_iWeight < b.m_iWeight )
@@ -3201,7 +3201,7 @@ struct MatchDateLt_fn
 /// match sorter
 struct MatchDateGt_fn
 {
-	inline bool operator() ( const CSphMatch & a, const CSphMatch & b ) const
+	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b )
 	{
 		return ( a.m_iTimestamp==b.m_iTimestamp )
 			? ( a.m_iWeight < b.m_iWeight )
@@ -3214,17 +3214,16 @@ struct MatchDateGt_fn
 struct MatchTimeSegments_fn
 {
 protected:
-	DWORD m_iNow;
+	static DWORD m_iNow;
 
 public:
-	/// ctor
-	MatchTimeSegments_fn ()
+	static void SetNow ()
 	{
 		m_iNow = time ( NULL );
 	}
 
 	/// comparator
-	inline bool operator() ( const CSphMatch & a, const CSphMatch & b ) const
+	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b )
 	{
 		int iA = GetSegment ( a.m_iTimestamp );
 		int iB = GetSegment ( b.m_iTimestamp );
@@ -3242,7 +3241,7 @@ public:
 
 protected:
 	/// calc time segment
-	inline int GetSegment ( DWORD iStamp ) const
+	static inline int GetSegment ( DWORD iStamp )
 	{
 		if ( iStamp>=m_iNow-3600 ) return 0; // last hour
 		if ( iStamp>=m_iNow-24*3600 ) return 1; // last day
@@ -3252,6 +3251,9 @@ protected:
 		return 5; // everything else
 	}
 };
+
+
+DWORD MatchTimeSegments_fn::m_iNow = 0; // FIXME! not only kills threads, but kills two different concurrent comparators as well!
 
 
 /// qsort query-word comparator
@@ -3331,7 +3333,7 @@ ISphMatchQueue * sphCreateQueue ( CSphQuery * pQuery )
 	{
 		case SPH_SORT_DATE_DESC:	pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchDateLt_fn > (); break;
 		case SPH_SORT_DATE_ASC:		pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchDateGt_fn > (); break;
-		case SPH_SORT_TIME_SEGMENTS:pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchTimeSegments_fn > (); break;
+		case SPH_SORT_TIME_SEGMENTS:pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchTimeSegments_fn > (); MatchTimeSegments_fn::SetNow(); break;
 		case SPH_SORT_RELEVANCE:	pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchRelevanceLt_fn > (); break;
 		default:
 			pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchRelevanceLt_fn > ();

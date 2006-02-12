@@ -521,7 +521,7 @@ enum ESphMatchMode
 class CSphQuery
 {
 public:
-	const char *	m_sQuery;		///< query string. MUST be not NULL
+	CSphString		m_sQuery;		///< query string
 	int *			m_pWeights;		///< user-supplied per-field weights. may be NULL. default is NULL. NOT OWNED, WILL NOT BE FREED in dtor.
 	int				m_iWeights;		///< number of user-supplied weights. missing fields will be assigned weight 1. default is 0
 	ESphMatchMode	m_eMode;		///< match mode. default is "match all"

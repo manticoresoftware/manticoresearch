@@ -14,8 +14,16 @@
 //
 
 /////////////////////////////////////////////////////////////////////////////
-// Sphinx PHP API
+// Sphinx PHP searchd client API
 /////////////////////////////////////////////////////////////////////////////
+
+/// known searchd commands
+define ( "SEARCHD_COMMAND_SEARCH",	0 );
+define ( "SEARCHD_COMMAND_EXCERPT",	1 );
+
+/// known searchd status codes
+define ( "SEARCHD_OK",				0 );
+define ( "SEARCHD_ERROR",			1 );
 
 /// known match modes
 define ( "SPH_MATCH_ALL",			0 );
@@ -171,101 +179,95 @@ class SphinxClient
 			return false;
 		}
 
-		// check version
-		$s = trim ( fgets ( $fp, 1024 ) );
-		if ( substr ( $s, 0, 4 )!="VER " )
+		// check version, send my version
+		list(,$v) = unpack ( "V*", fread ( $fp, 4 ) );
+		$v = (int)$v;
+		if ( $v<1 )
 		{
 			fclose ( $fp );
-			$this->_error = "expected searchd protocol version, got '$s'";
+			$this->_error = "expected searchd protocol version 1+, got version '$v'";
 			return false;
 		}
-		$ver = (int)substr ( $s, 4 ); 
-		if ( $ver!=4 )
-		{
-			fclose ( $fp );
-			$this->_error = "expected protocol version 4, got $ver";
-			return false;
-		}
+		fwrite ( $fp, pack ( "V", 1 ) );
 
 		/////////////////
 		// build request
 		/////////////////
 
-		// v1. mode/limits part
-		$req = pack ( "VVVV", $this->_offset, $this->_limit, $this->_mode, $this->_sort );
-
-		// v1. groups
-		$req .= pack ( "V", count($this->_groups) );
+		// request v1
+		$req = pack ( "VVVV", $this->_offset, $this->_limit, $this->_mode, $this->_sort ); // mode and limits
+		$req .= pack ( "V", count($this->_groups) ); // groups 
 		foreach ( $this->_groups as $group )
 			$req .= pack ( "V", $group );
-
-		// v1. query string
-		$req .= pack ( "V", strlen($query) ) . $query; 
-
-		// v1. weights
-		$req .= pack ( "V", count($this->_weights) );
+		$req .= pack ( "V", strlen($query) ) . $query; // query itself
+		$req .= pack ( "V", count($this->_weights) ); // weights
 		foreach ( $this->_weights as $weight )
 			$req .= pack ( "V", (int)$weight );
-
-		// v2. index name
-		$req .= pack ( "V", strlen($index) ) . $index; 
-
-		// v3. id/ts limits
-		$req .=
+		$req .= pack ( "V", strlen($index) ) . $index; // indexes
+		$req .= // id/ts ranges
 			pack ( "V", (int)$this->_min_id ) .
 			pack ( "V", (int)$this->_max_id ) .
 			pack ( "V", (int)$this->_min_ts ) .
 			pack ( "V", (int)$this->_max_ts );
 
-		// v4. binary flag
-		$req .= pack ( "V", 0 );
+		//////////////
+		// send query
+		//////////////
 
-		////////////
-		// do query
-		////////////
+		$len = strlen($req);
+		$req = pack ( "VV", SEARCHD_COMMAND_SEARCH, $len ) . $req; // add header
+		fwrite ( $fp, $req, $len+8 );
 
-		fputs ( $fp, $req );
+		////////////////
+		// get response
+		////////////////
 
 		$result = array();
-		while ( !feof ( $fp ) )
+		$header = fread ( $fp, 8 );
+		list ( $status, $len ) = array_values ( unpack ( "V*V*", $header ) );
+		$response = fread ( $fp, $len );
+		fclose ( $fp );
+
+		// check status
+		if ( $status==SEARCHD_ERROR )
 		{
-			$s = trim ( fgets ( $fp, 1024 ) );
-
-			// handle errors
-			if ( substr ( $s, 0, 5 )=="RETRY" || substr ( $s, 0, 5 )=="ERROR" )
-			{
-				$this->_error = $s;
-				$result = false;
-				break;
-			}
-
-			// handle results
-			if ( substr ( $s, 0, 6 )=="MATCH " )
-			{
-				list ( $dummy, $group, $doc, $weight, $stamp ) = explode ( " ", $s );
-				$result["matches"][$doc] = array ( "weight"=>$weight, "group"=>$group,
-					"stamp"=>$stamp );
-
-			} elseif ( substr ( $s, 0, 6 )=="TOTAL " )
-			{
-				list ( $dummy, $returned, $found ) = explode ( " ", $s );
-				$result["total"] = $returned;
-				$result["total_found"] = $found;
-
-			} elseif ( substr ( $s, 0, 5 )=="TIME " )
-			{
-				$result["time"] = substr ( $s, 5 );
-
-			} elseif ( substr ( $s, 0, 5 ) == "WORD " )
-			{
-				list ( $dummy, $word, $docs, $hits ) = explode ( " ", $s );
-				$result["words"][$word] = array ( "docs"=>$docs, "hits"=>$hits );
-			}
-
-			// for now, simply ignore unknown response
+			$this->_error = "searchd error: " . substr ( $response, 12 );
+			return false;
+		}
+		if ( $status!=SEARCHD_OK )
+		{
+			$this->_error = "unknown status code '$status'";
+			return false;
 		}
 
-		fclose ( $fp );
+		// status is ok, parse response
+		list(,$count) = unpack ( "V*", substr ( $response, 0, 4 ) );
+		$p = 4;
+		while ( $count-->0 )
+		{
+			list ( $doc, $group, $stamp, $weight ) = array_values ( unpack ( "V*V*V*V*",
+				substr ( $response, $p ) ) );
+			$p += 16;
+
+			$result["matches"][$doc] = array (
+				"weight"	=> $weight,
+				"group"		=> $group,
+				"stamp"		=> $stamp );
+		}
+		list ( $result["total"], $result["total_found"], $result["time"], $words ) =
+			array_values ( unpack ( "V*V*V*V*", substr ( $response, $p, 16 ) ) );
+		$result["time"] = sprintf ( "%.2f", $result["time"]/1000 );
+		$p += 16;
+
+		while ( $words-->0 )
+		{
+			list(,$len) = unpack ( "V*", substr ( $response, $p, 4 ) ); $p += 4;
+			$word = substr ( $response, $p, $len ); $p += $len;
+			list ( $docs, $hits ) = array_values ( unpack ( "V*V*", substr ( $response, $p, 8 ) ) ); $p += 8;
+
+			$result["words"][$word] = array ( "docs"=>$docs, "hits"=>$hits );
+		}
+
 		return $result;
 	}
 }

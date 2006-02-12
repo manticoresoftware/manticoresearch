@@ -71,8 +71,6 @@ static int				g_iQueryLogFile	= -1;
 static int				g_iHUP			= 0;
 static const char *		g_sPidFile		= NULL;
 
-///////////////////////////////////////////////////////////////////////////////
-
 struct ServedIndex_t
 {
 	CSphIndex *			m_pIndex;
@@ -109,7 +107,403 @@ struct ServedIndex_t
 
 static SmallStringHash_T < ServedIndex_t >	g_hIndexes;
 
-///////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////
+// MACHINE-DEPENDENT STUFF
+/////////////////////////////////////////////////////////////////////////////
+
+#if USE_WINDOWS
+
+// Windows hacks
+#undef EINTR
+#define LOCK_EX			0
+#define LOCK_UN			1
+#define STDIN_FILENO	fileno(stdin)
+#define STDOUT_FILENO	fileno(stdout)
+#define STDERR_FILENO	fileno(stderr)
+#define ETIMEDOUT		WSAETIMEDOUT
+#define EWOULDBLOCK		WSAEWOULDBLOCK
+#define EINPROGRESS		WSAEINPROGRESS
+#define EINTR			WSAEINTR
+#define socklen_t		int
+#define vsnprintf		_vsnprintf
+
+
+void flock ( int, int )
+{
+}
+
+
+void sleep ( int iSec )
+{
+	Sleep ( iSec*1000 );
+}
+
+
+void ctime_r ( time_t * tNow, char * sBuf )
+{
+	strcpy ( sBuf, ctime(tNow) );
+}
+
+
+int getpid ()
+{
+	return 0;
+}
+
+#endif // USE_WINDOWS
+
+/////////////////////////////////////////////////////////////////////////////
+// MISC
+/////////////////////////////////////////////////////////////////////////////
+
+void Shutdown ()
+{
+	if ( g_iSocket )
+		sphSockClose ( g_iSocket );
+	if ( g_sPidFile )
+		unlink ( g_sPidFile );
+	g_hIndexes.Reset ();
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// LOGGING
+/////////////////////////////////////////////////////////////////////////////
+
+void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
+{
+	if ( eLevel>g_eLogLevel || g_iLogFile<0 )
+		return;
+
+	time_t tNow;
+	char sTimeBuf[128];
+	time ( &tNow );
+	ctime_r ( &tNow, sTimeBuf );
+	sTimeBuf [ strlen(sTimeBuf)-1 ] = '\0';
+
+	const char * sBanner = "";
+	if ( eLevel==LOG_FATAL )	sBanner = "FATAL: ";
+	if ( eLevel==LOG_WARNING )	sBanner = "WARNING: ";
+
+	char sBuf [ 1024 ];
+	if ( !isatty ( g_iLogFile ) )
+		snprintf ( sBuf, sizeof(sBuf)-1, "[%s] [%5d] %s", sTimeBuf, getpid(), sBanner );
+	else
+		strcpy ( sBuf, sBanner );
+	int iLen = strlen(sBuf);
+
+	vsnprintf ( sBuf+iLen, sizeof(sBuf)-iLen-1, sFmt, ap );
+	strncat ( sBuf, "\n", sizeof(sBuf) );
+
+	flock ( g_iLogFile, LOCK_EX );
+	lseek ( g_iLogFile, 0, SEEK_END );
+	write ( g_iLogFile, sBuf, strlen(sBuf) );
+	flock ( g_iLogFile, LOCK_UN );
+
+	if ( g_bLogStdout && g_iLogFile!=STDOUT_FILENO )
+	{
+		write ( STDOUT_FILENO, sBuf, strlen(sBuf) );
+	}
+}
+
+
+void sphFatal ( const char * sFmt, ... )
+{
+	va_list ap;
+	va_start ( ap, sFmt );
+	sphLog ( LOG_FATAL, sFmt, ap );
+	va_end ( ap );
+	Shutdown ();
+	exit ( 1 );
+}
+
+
+void sphWarning ( const char * sFmt, ... )
+{
+	va_list ap;
+	va_start ( ap, sFmt );
+	sphLog ( LOG_WARNING, sFmt, ap );
+	va_end ( ap );
+}
+
+
+void sphInfo ( const char * sFmt, ... )
+{
+	va_list ap;
+	va_start ( ap, sFmt );
+	sphLog ( LOG_INFO, sFmt, ap );
+	va_end ( ap );
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// NETWORK STUFF
+/////////////////////////////////////////////////////////////////////////////
+
+bool			g_bNetError				= false;
+const int		NET_MAX_STR_LEN			= 16384;
+const int		NET_MAX_REQ_LEN			= 131072;
+const int		NET_INT_SIZE			= 4;
+const int		SEARCHD_MAX_REQ_GROUPS	= 4096;
+
+const char * sphSockError ( int iErr=0 )
+{
+	#if USE_WINDOWS
+		if ( iErr==0 )
+			iErr = WSAGetLastError ();
+
+		static char sBuf [ 256 ];
+		_snprintf ( sBuf, sizeof(sBuf), "WSA error %d", iErr );
+		return sBuf;
+	#else
+		return strerror ( errno );
+	#endif
+}
+
+
+int sphSockGetErrno ()
+{
+	#if USE_WINDOWS
+		return WSAGetLastError();
+	#else
+		return errno;
+	#endif
+}
+
+
+void sphSockSetErrno ( int iErr )
+{
+	#if USE_WINDOWS
+		WSASetLastError ( iErr );
+	#else
+		errno = iErr;
+	#endif
+}
+
+
+int sphCreateServerSocket ( int port )
+{
+	int sock;
+	static struct sockaddr_in iaddr;
+
+	iaddr.sin_family = AF_INET;
+	iaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	iaddr.sin_port = htons((short)port);
+
+	sphInfo ( "creating a server socket on port %d", port );
+	if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+		sphFatal ( "unable to create server socket on port %d: %s", port, sphSockError() );
+
+	int iOn = 1;
+	if ( setsockopt ( sock, SOL_SOCKET,  SO_REUSEADDR, (char*)&iOn, sizeof(iOn) ) )
+		sphFatal ( "setsockopt() failed: %s", sphSockError() );
+
+	int iTries = 12;
+	int iRes;
+	do
+	{
+		iRes = bind ( sock, (struct sockaddr *)&iaddr, sizeof(iaddr) );
+		if ( iRes==0 )
+			break;
+
+		sphInfo ( "failed to bind on port %d, retrying...", port );
+		sleep ( 15 );
+	} while ( --iTries>0 );
+	if ( iRes )
+		sphFatal ( "failed to bind on port %d" );
+
+	return sock;
+}
+
+
+int sphSetSockNB ( int iSock )
+{
+	#if USE_WINDOWS
+		u_long uMode = 1;
+		return ioctlsocket ( iSock, FIONBIO, &uMode );
+	#else
+		return fcntl ( iSock, F_SETFL, O_NONBLOCK );
+	#endif
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+STATIC_SIZE_ASSERT ( DWORD, 4 );
+
+
+int NetSelect ( int fd, int maxtime, int writep )
+{
+	#if USE_WINDOWS
+	#pragma warning(disable:4127) // conditional expr is const
+	#pragma warning(disable:4389) // signed/unsigned mismatch
+	#endif // USE_WINDOWS
+
+	fd_set fds;
+	FD_ZERO ( &fds );
+	FD_SET ( fd, &fds );
+
+	fd_set exceptfds;
+	FD_ZERO ( &exceptfds );
+	FD_SET ( fd, &exceptfds );
+
+	struct timeval tv;
+	tv.tv_sec = maxtime;
+	tv.tv_usec = 0;
+
+	return select ( fd+1, writep ? NULL : &fds, writep ? &fds : NULL, &exceptfds, &tv );
+
+	#if USE_WINDOWS
+	#pragma warning(default:4127) // conditional expr is const
+	#pragma warning(default:4389) // signed/unsigned mismatch
+	#endif // USE_WINDOWS
+}
+
+
+int NetRawRead ( int fd, void * buf, int len )
+{
+	int res;
+
+	do {
+		if ( g_iReadTimeout )
+		{
+			do
+			{
+				res = NetSelect ( fd, g_iReadTimeout, 0 );
+			} while ( res==-1 && sphSockGetErrno()==EINTR );
+			if ( res<=0 )
+			{
+				if ( res==0 )
+					sphSockSetErrno ( ETIMEDOUT );
+				return -1;
+			}
+		}
+		res = sphSockRecv ( fd, (char*)buf, len, 0 );
+	} while ( res==-1 && sphSockGetErrno()==EINTR );
+
+	return res;
+}
+
+
+inline void NetPackDword ( BYTE * & pReq, DWORD uValue )
+{
+	*(DWORD *)pReq = uValue;
+	pReq += sizeof(DWORD);
+}
+
+
+inline void NetPackStr ( BYTE * & pReq, const char * sValue )
+{
+	int iLen = strlen(sValue);
+	NetPackDword ( pReq, iLen );
+	memcpy ( pReq, sValue, iLen );
+	pReq += iLen;
+}
+
+
+inline void NetPackArray ( BYTE * & pReq, int iNumValues, DWORD * sValues )
+{
+	NetPackDword ( pReq, iNumValues );
+	memcpy ( pReq, sValues, sizeof(DWORD)*iNumValues );
+	pReq += sizeof(DWORD)*iNumValues;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+bool NetWasError ()
+{
+	bool bRet = g_bNetError;
+	g_bNetError = false;
+	return bRet;
+}
+
+
+bool NetSetError ()
+{
+	g_bNetError = true;
+	return false;
+}
+
+
+bool NetSetOK ()
+{
+	g_bNetError = false;
+	return true;
+}
+
+
+bool NetRead ( int iSock, void * pBuf, int iLen )
+{
+	int iGot = sphSockRecv ( iSock, (char*)pBuf, iLen, 0 );
+	return ( iGot==iLen )
+		? NetSetOK()
+		: NetSetError();
+}
+
+
+bool NetReadString ( int iSock, char ** sStr )
+{
+	if ( g_bNetError )
+		return false;
+
+	*sStr = NULL;
+	int iLen;
+	if ( NetRawRead ( iSock, &iLen, sizeof(iLen) )!=sizeof(iLen) )
+		return NetSetError ();
+
+	if ( iLen<0 || iLen>NET_MAX_STR_LEN )
+		return NetSetError ();
+
+	*sStr = new char [ 1+iLen ];
+	if ( iLen>0 )
+		if ( NetRawRead ( iSock, *sStr, iLen )!=iLen )
+	{
+		SafeDeleteArray ( *sStr );
+		return NetSetError ();
+	}
+
+	(*sStr)[iLen] = '\0';
+	return NetSetOK ();
+}
+
+
+bool NetReadInt ( int iSock, int * iVal )
+{
+	if ( g_bNetError )
+		return false;
+
+	g_bNetError = ( NetRawRead ( iSock, iVal, sizeof(int) )!=sizeof(int) );
+	return !g_bNetError;
+}
+
+
+bool NetWrite ( int iSock, const void * sBuf, int iLen )
+{
+	if ( g_bNetError )
+		return false;
+
+	if ( sphSockSend ( iSock, (char*)sBuf, iLen, 0 )!=iLen )
+		return NetSetError ();
+
+	return NetSetOK ();
+}
+
+
+bool NetWriteString ( int iSock, const char * sStr )
+{
+	if ( g_bNetError )
+		return false;
+
+	int iLen = strlen(sStr);
+	if ( sphSockSend ( iSock, (char*)&iLen, sizeof(int), 0 )!=sizeof(int) )
+		return NetSetError ();
+
+	if ( sphSockSend ( iSock, sStr, iLen, 0 )!=iLen )
+		return NetSetError ();
+
+	return NetSetOK ();
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// DISTRIBUTED QUERIES
+/////////////////////////////////////////////////////////////////////////////
 
 /// remote agent state
 enum AgentState_e
@@ -206,305 +600,7 @@ struct DistributedIndex_t
 
 static SmallStringHash_T < DistributedIndex_t >		g_hDistIndexes;
 
-///////////////////////////////////////////////////////////////////////////////
-
-#if USE_WINDOWS
-
-// Windows hacks
-#undef EINTR
-#define LOCK_EX			0
-#define LOCK_UN			1
-#define STDIN_FILENO	fileno(stdin)
-#define STDOUT_FILENO	fileno(stdout)
-#define STDERR_FILENO	fileno(stderr)
-#define ETIMEDOUT		WSAETIMEDOUT
-#define EWOULDBLOCK		WSAEWOULDBLOCK
-#define EINPROGRESS		WSAEINPROGRESS
-#define EINTR			WSAEINTR
-#define socklen_t		int
-#define vsnprintf		_vsnprintf
-
-
-void flock ( int, int )
-{
-}
-
-
-void sleep ( int iSec )
-{
-	Sleep ( iSec*1000 );
-}
-
-
-void ctime_r ( time_t * tNow, char * sBuf )
-{
-	strcpy ( sBuf, ctime(tNow) );
-}
-
-
-int getpid ()
-{
-	return 0;
-}
-
-#endif // USE_WINDOWS
-
 /////////////////////////////////////////////////////////////////////////////
-
-void Shutdown ()
-{
-	if ( g_iSocket )
-		sphSockClose ( g_iSocket );
-	if ( g_sPidFile )
-		unlink ( g_sPidFile );
-	g_hIndexes.Reset ();
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
-void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
-{
-	if ( eLevel>g_eLogLevel || g_iLogFile<0 )
-		return;
-
-	time_t tNow;
-	char sTimeBuf[128];
-	time ( &tNow );
-	ctime_r ( &tNow, sTimeBuf );
-	sTimeBuf [ strlen(sTimeBuf)-1 ] = '\0';
-
-	const char * sBanner = "";
-	if ( eLevel==LOG_FATAL )	sBanner = "FATAL: ";
-	if ( eLevel==LOG_WARNING )	sBanner = "WARNING: ";
-
-	char sBuf [ 1024 ];
-	if ( !isatty ( g_iLogFile ) )
-		snprintf ( sBuf, sizeof(sBuf)-1, "[%s] [%5d] %s", sTimeBuf, getpid(), sBanner );
-	else
-		strcpy ( sBuf, sBanner );
-	int iLen = strlen(sBuf);
-
-	vsnprintf ( sBuf+iLen, sizeof(sBuf)-iLen-1, sFmt, ap );
-	strncat ( sBuf, "\n", sizeof(sBuf) );
-
-	flock ( g_iLogFile, LOCK_EX );
-	lseek ( g_iLogFile, 0, SEEK_END );
-	write ( g_iLogFile, sBuf, strlen(sBuf) );
-	flock ( g_iLogFile, LOCK_UN );
-
-	if ( g_bLogStdout && g_iLogFile!=STDOUT_FILENO )
-	{
-		write ( STDOUT_FILENO, sBuf, strlen(sBuf) );
-	}
-}
-
-
-void sphFatal ( const char * sFmt, ... )
-{
-	va_list ap;
-	va_start ( ap, sFmt );
-	sphLog ( LOG_FATAL, sFmt, ap );
-	va_end ( ap );
-	Shutdown ();
-	exit ( 1 );
-}
-
-
-void sphWarning ( const char * sFmt, ... )
-{
-	va_list ap;
-	va_start ( ap, sFmt );
-	sphLog ( LOG_WARNING, sFmt, ap );
-	va_end ( ap );
-}
-
-
-void sphInfo ( const char * sFmt, ... )
-{
-	va_list ap;
-	va_start ( ap, sFmt );
-	sphLog ( LOG_INFO, sFmt, ap );
-	va_end ( ap );
-}
-
-/////////////////////////////////////////////////////////////////////////////
-// NETWORK STUFF
-/////////////////////////////////////////////////////////////////////////////
-
-const char * sphSockError ( int iErr=0 )
-{
-	#if USE_WINDOWS
-		if ( iErr==0 )
-			iErr = WSAGetLastError ();
-
-		static char sBuf [ 256 ];
-		_snprintf ( sBuf, sizeof(sBuf), "WSA error %d", iErr );
-		return sBuf;
-	#else
-		return strerror ( errno );
-	#endif
-}
-
-
-int sphSockGetErrno ()
-{
-	#if USE_WINDOWS
-		return WSAGetLastError();
-	#else
-		return errno;
-	#endif
-}
-
-
-void sphSockSetErrno ( int iErr )
-{
-	#if USE_WINDOWS
-		WSASetLastError ( iErr );
-	#else
-		errno = iErr;
-	#endif
-}
-
-
-int createServerSocket_IP(int port)
-{
-	int sock;
-	static struct sockaddr_in iaddr;
-
-	iaddr.sin_family = AF_INET;
-	iaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-	iaddr.sin_port = htons((short)port);
-
-	sphInfo ( "creating a server socket on port %d", port );
-	if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-		sphFatal ( "unable to create server socket on port %d: %s", port, sphSockError() );
-
-	int iOn = 1;
-	if ( setsockopt ( sock, SOL_SOCKET,  SO_REUSEADDR, (char*)&iOn, sizeof(iOn) ) )
-		sphFatal ( "setsockopt() failed: %s", sphSockError() );
-
-	int iTries = 12;
-	int iRes;
-	do
-	{
-		iRes = bind ( sock, (struct sockaddr *)&iaddr, sizeof(iaddr) );
-		if ( iRes==0 )
-			break;
-
-		sphInfo ( "failed to bind on port %d, retrying...", port );
-		sleep ( 15 );
-	} while ( --iTries>0 );
-	if ( iRes )
-		sphFatal ( "failed to bind on port %d" );
-
-	return sock;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
-#if !USE_WINDOWS
-void sigchld ( int )
-{
-	signal ( SIGCHLD, sigchld );
-	while ( waitpid ( 0, (int *)0, WNOHANG | WUNTRACED ) > 0 )
-		g_iChildren--;
-}
-
-
-void sigterm ( int )
-{
-	sphInfo ( "caught SIGTERM, shutting down" );
-	Shutdown ();
-	exit ( 0 );
-}
-
-
-void sighup ( int )
-{
-	sphInfo ( "rotating indices: caught SIGHUP, waiting for children to exit" );
-	g_iHUP = 1;
-}
-#endif // !USE_WINDOWS
-
-///////////////////////////////////////////////////////////////////////////////
-
-int select_fd ( int fd, int maxtime, int writep )
-{
-	#if USE_WINDOWS
-	#pragma warning(disable:4127) // conditional expr is const
-	#pragma warning(disable:4389) // signed/unsigned mismatch
-	#endif // USE_WINDOWS
-
-	fd_set fds;
-	FD_ZERO ( &fds );
-	FD_SET ( fd, &fds );
-
-	fd_set exceptfds;
-	FD_ZERO ( &exceptfds );
-	FD_SET ( fd, &exceptfds );
-
-	struct timeval tv;
-	tv.tv_sec = maxtime;
-	tv.tv_usec = 0;
-
-	return select ( fd+1, writep ? NULL : &fds, writep ? &fds : NULL, &exceptfds, &tv );
-
-	#if USE_WINDOWS
-	#pragma warning(default:4127) // conditional expr is const
-	#pragma warning(default:4389) // signed/unsigned mismatch
-	#endif // USE_WINDOWS
-}
-
-
-int iread(int fd, void *buf, int len)
-{
-	int res;
-
-	do {
-		if ( g_iReadTimeout )
-		{
-			do
-			{
-				res = select_fd ( fd, g_iReadTimeout, 0 );
-			} while ( res==-1 && sphSockGetErrno()==EINTR );
-			if ( res<=0 )
-			{
-				if ( res==0 )
-					sphSockSetErrno ( ETIMEDOUT );
-				return -1;
-			}
-		}
-		res = sphSockRecv ( fd, (char*)buf, len, 0 );
-	} while ( res==-1 && sphSockGetErrno()==EINTR );
-
-	return res;
-}
-
-
-int iwrite ( int iFD, const char * sFmt, ... )
-{
-	char sBuf [ 2048 ];
-
-	va_list ap;
-	va_start ( ap, sFmt );
-	vsnprintf ( sBuf, sizeof(sBuf), sFmt, ap );
-	va_end ( ap );
-
-	return sphSockSend ( iFD, sBuf, strlen(sBuf), 0 );
-}
-
-/////////////////////////////////////////////////////////////////////////////
-
-int sphSetSockNB ( int iSock )
-{
-	#if USE_WINDOWS
-		u_long uMode = 1;
-		return ioctlsocket ( iSock, FIONBIO, &uMode );
-	#else
-		return fcntl ( iSock, F_SETFL, O_NONBLOCK );
-	#endif
-}
-
 
 void ConnectToRemoteAgent ( Agent_t * pAgent )
 {
@@ -557,33 +653,6 @@ void ConnectToRemoteAgent ( Agent_t * pAgent )
 }
 
 
-STATIC_SIZE_ASSERT ( DWORD, 4 );
-
-
-inline void NetPackDword ( BYTE * & pReq, DWORD uValue )
-{
-	*(DWORD *)pReq = uValue;
-	pReq += sizeof(DWORD);
-}
-
-
-inline void NetPackStr ( BYTE * & pReq, const char * sValue )
-{
-	int iLen = strlen(sValue);
-	NetPackDword ( pReq, iLen );
-	memcpy ( pReq, sValue, iLen );
-	pReq += iLen;
-}
-
-
-inline void NetPackArray ( BYTE * & pReq, int iNumValues, DWORD * sValues )
-{
-	NetPackDword ( pReq, iNumValues );
-	memcpy ( pReq, sValues, sizeof(DWORD)*iNumValues );
-	pReq += sizeof(DWORD)*iNumValues;
-}
-
-
 #if USE_WINDOWS
 #pragma warning(disable:4127) // conditional expr is const
 #pragma warning(disable:4389) // signed/unsigned mismatch
@@ -591,6 +660,8 @@ inline void NetPackArray ( BYTE * & pReq, int iNumValues, DWORD * sValues )
 
 int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, const CSphQuery & tQuery, int iMode )
 {
+	assert ( 0 && "not ported to new protocol yet" );
+
 	int iTimeout = tDist.m_iAgentConnectTimeout;
 	int iAgents = 0;
 	assert ( iTimeout>=0 );
@@ -691,7 +762,7 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				}
 
 				// do query!
-				int iQueryLen = strlen ( tQuery.m_sQuery );
+				int iQueryLen = strlen ( tQuery.m_sQuery.cstr() );
 				int iIndexesLen = strlen ( tAgent.m_sIndexes.cstr() );
 
 				int iReqSize = 52 + 4*tQuery.m_iGroups + iQueryLen + 4*tQuery.m_iWeights + iIndexesLen;
@@ -708,7 +779,7 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				NetPackArray ( pReq, tQuery.m_iGroups, tQuery.m_pGroups );
 
 				// v1. query string
-				NetPackStr ( pReq, tQuery.m_sQuery );
+				NetPackStr ( pReq, tQuery.m_sQuery.cstr() );
 
 				// v1. weights
 				NetPackArray ( pReq, tQuery.m_iWeights, (DWORD*)tQuery.m_pWeights );
@@ -754,6 +825,8 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 
 int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, CSphQueryResult * pRes, int iTimeout )
 {
+	assert ( 0 && "not ported to new protocol yet" );
+
 	assert ( pRes );
 	assert ( iTimeout>=0 );
 
@@ -904,6 +977,36 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 #endif // USE_WINDOWS
 
 /////////////////////////////////////////////////////////////////////////////
+// SIGNALS
+/////////////////////////////////////////////////////////////////////////////
+
+#if !USE_WINDOWS
+void sigchld ( int )
+{
+	signal ( SIGCHLD, sigchld );
+	while ( waitpid ( 0, (int *)0, WNOHANG | WUNTRACED ) > 0 )
+		g_iChildren--;
+}
+
+
+void sigterm ( int )
+{
+	sphInfo ( "caught SIGTERM, shutting down" );
+	Shutdown ();
+	exit ( 0 );
+}
+
+
+void sighup ( int )
+{
+	sphInfo ( "rotating indices: caught SIGHUP, waiting for children to exit" );
+	g_iHUP = 1;
+}
+#endif // !USE_WINDOWS
+
+/////////////////////////////////////////////////////////////////////////////
+// THE SERVER
+/////////////////////////////////////////////////////////////////////////////
 
 inline bool operator < ( const CSphMatch & a, const CSphMatch & b )
 {
@@ -911,81 +1014,392 @@ inline bool operator < ( const CSphMatch & a, const CSphMatch & b )
 };
 
 
-void HandleClient ( int rsock )
+/// std request header
+struct RequestHeader_t
 {
-	CSphQuery tQuery;
-	CSphQueryResult * pRes;
-	int i, iOffset, iLimit, iCount, iMode;
-	char sQuery [ 1024 ], sIndex [ 1024 ], sBuf [ 2048 ];
+	int			m_iCommand;			///< command code
+	int			m_iLength;			///< length, bytes
+};
 
-	// hello there
-	iwrite ( rsock, "VER %d\n", SPHINX_SEARCHD_PROTO );
 
-	// v1. read mode/limits
-	assert ( sizeof(tQuery.m_eSort)==4 );
-	if ( iread ( rsock, &iOffset, 4 )!=4 ) return;
-	if ( iread ( rsock, &iLimit, 4 )!=4 ) return;
-	if ( iread ( rsock, &iMode, 4 )!=4 ) return;
-	if ( iread ( rsock, &tQuery.m_eSort, 4)!=4 ) return;
-	if ( iread ( rsock, &tQuery.m_iGroups, 4 )!=4 ) return;
+/// known commands
+enum SearchdCommand_e
+{
+	CMD_SEARCH		= 0,
+	CMD_EXCERPT		= 1,
 
-	// v1. read groups
-	if ( tQuery.m_iGroups<0 || tQuery.m_iGroups>4096 ) return; // FIXME?
-	if ( tQuery.m_iGroups )
+	CMD_TOTAL
+};
+
+
+/// known status return codes
+enum SearchdStatus_e
+{
+	SEARCHD_OK		= 0,	///< general success, command-specific reply follows
+	SEARCHD_ERROR	= 1,	///< general failure, command-specific reply may follow
+	SEARCHD_RETRY	= 2		///< temporaty failure, client should retry later
+};
+
+/////////////////////////////////////////////////////////////////////////////
+
+/// fixed-memory response buffer
+/// tracks usage, and flushes to network when necessary
+class ResponseBuffer_c
+{
+public:
+				ResponseBuffer_c ( int iSock );
+				~ResponseBuffer_c ();
+
+	bool		SendInt ( int iValue );
+	bool		SendDword ( DWORD iValue );
+	bool		SendString ( const char * sStr );
+	bool		SendBytes ( const void * pBuf, int iLen );
+	bool		Flush ();
+	bool		GetError () { return m_bError; }
+	int			GetSentCount () { return m_iSent; }
+
+protected:
+	BYTE		m_dBuffer[8192];	///< my buffer
+	BYTE *		m_pBuffer;			///< my current buffer position
+	int			m_iSock;			///< my socket
+	bool		m_bError;			///< if there were any write errors
+	int			m_iSent;
+
+protected:
+	bool		SetError ( bool bValue );	///< set error flag
+	bool		FlushIf ( int iToAdd );		///< flush if there's not enough free space to add iToAdd bytes
+};
+
+
+ResponseBuffer_c::ResponseBuffer_c ( int iSock )
+	: m_pBuffer ( m_dBuffer )
+	, m_iSock ( iSock )
+	, m_bError ( false )
+	, m_iSent ( 0 )
+{
+	assert ( m_iSock>0 );
+}
+
+
+ResponseBuffer_c::~ResponseBuffer_c ()
+{
+}
+
+
+bool ResponseBuffer_c::SendInt ( int iValue )
+{
+	if ( m_bError )
+		return false;
+
+	FlushIf ( sizeof(int) );
+
+	*(int*)m_pBuffer = iValue;
+	m_pBuffer += sizeof(int);
+	assert ( m_pBuffer<m_dBuffer+sizeof(m_dBuffer) );
+	return true;
+}
+
+
+bool ResponseBuffer_c::SendDword ( DWORD iValue )
+{
+	if ( m_bError )
+		return false;
+
+	FlushIf ( sizeof(DWORD) );
+
+	*(DWORD*)m_pBuffer = iValue;
+	m_pBuffer += sizeof(DWORD);
+	assert ( m_pBuffer<m_dBuffer+sizeof(m_dBuffer) );
+	return true;
+}
+
+
+bool ResponseBuffer_c::SendString ( const char * sStr )
+{
+	if ( m_bError )
+		return false;
+
+	FlushIf ( sizeof(DWORD) );
+
+	int iLen = strlen(sStr);
+	*(int*)m_pBuffer = iLen;
+	m_pBuffer += sizeof(int);
+
+	return SendBytes ( sStr, iLen );
+}
+
+
+bool ResponseBuffer_c::SendBytes ( const void * pBuf, int iLen )
+{
+	BYTE * pMy = (BYTE*)pBuf;
+	while ( iLen>0 && !m_bError )
 	{
-		i = tQuery.m_iGroups*sizeof(DWORD);
-		tQuery.m_pGroups = new DWORD [ tQuery.m_iGroups ];
-		if ( iread ( rsock, tQuery.m_pGroups, i )!=i ) return;
+		int iLeft = sizeof(m_dBuffer) - ( m_pBuffer - m_dBuffer );
+		if ( iLen<=iLeft )
+		{
+			memcpy ( m_pBuffer, pMy, iLen );
+			m_pBuffer += iLen;
+			break;
+		}
+
+		memcpy ( m_pBuffer, pMy, iLeft );
+		m_pBuffer += iLeft;
+		Flush ();
+
+		pMy += iLeft;
+		iLen -= iLeft;
+	}
+	return !m_bError;
+}
+
+
+bool ResponseBuffer_c::Flush ()
+{
+	if ( m_bError )
+		return false;
+
+	int iLen = m_pBuffer-m_dBuffer;
+	if ( iLen==0 )
+		return true;
+
+	assert ( iLen>0 );
+	assert ( iLen<=sizeof(m_dBuffer) );
+
+	m_bError = !NetWrite ( m_iSock, m_dBuffer, iLen );
+	m_iSent += iLen;
+	return !m_bError;
+}
+
+
+bool ResponseBuffer_c::FlushIf ( int iToAdd )
+{
+	if ( m_pBuffer+iToAdd >= m_dBuffer+sizeof(m_dBuffer) )
+		return Flush ();
+
+	return !m_bError;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+bool SendErrorReply ( int iSock, const char * sTemplate, ... )
+{
+	char dBuf [ 2048 ];
+
+	const int iHeaderLen = 12;
+	const int iMaxStrLen = sizeof(dBuf) - iHeaderLen - 1;
+
+	// fill header
+	DWORD * pBuf = (DWORD*)&dBuf[0];
+	pBuf[0] = SEARCHD_ERROR;
+	pBuf[1] = 0; // reply length, to be filled later
+	pBuf[2] = 0; // error string length, to be filled later
+
+	// fill error string
+	char * sBuf = dBuf + iHeaderLen;
+
+	va_list ap;
+	va_start ( ap, sTemplate );
+	vsnprintf ( sBuf, iMaxStrLen, sTemplate, ap );
+	va_end ( ap );
+
+	sBuf[iMaxStrLen] = '\0';
+	int iStrLen = strlen(sBuf);
+
+	// fixup lengths
+	pBuf[1] = iHeaderLen+iStrLen;
+	pBuf[2] = iStrLen;
+
+	// send!
+	return NetWrite ( iSock, dBuf, iHeaderLen+iStrLen );
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+/// request buffer
+class RequestBuffer_c
+{
+public:
+					RequestBuffer_c ();
+					~RequestBuffer_c ();
+
+	bool			ReadFrom ( int iSock, int iLen );
+
+	int				GetInt ();
+	CSphString		GetString ();
+	bool			GetBytes ( void * pBuf, int iLen );
+	int				GetInts ( int ** pBuffer, int iMax, const char * sErrorTemplate );
+	bool			GetError () { return m_bError; }
+
+protected:
+	int				m_iSock;
+	bool			m_bError;
+
+	BYTE			m_dBuf [ NET_MAX_REQ_LEN ];
+	int				m_iLen;
+	BYTE *			m_pCur;
+
+protected:
+	void			SetError ( bool bError ) { m_bError = bError; }
+};
+
+
+RequestBuffer_c::RequestBuffer_c ()
+	: m_iSock ( -1 )
+	, m_bError ( true )
+	, m_iLen ( 0 )
+	, m_pCur ( m_dBuf )
+{
+}
+
+
+RequestBuffer_c ::~RequestBuffer_c ()
+{
+}
+
+
+bool RequestBuffer_c::ReadFrom ( int iSock, int iLen )
+{
+	assert ( iLen>0 );
+	assert ( iLen<=NET_MAX_REQ_LEN );
+
+	m_iSock = -1;
+	m_bError = true;
+	m_iLen = 0;
+	m_pCur = m_dBuf;
+
+	if ( !NetRead ( iSock, m_dBuf, iLen ) )
+		return false;
+
+	m_iSock = iSock;
+	m_bError = false;
+	m_iLen = iLen;
+	return true;
+}
+
+
+int RequestBuffer_c::GetInt ()
+{
+	if ( m_bError || ( m_pCur+sizeof(int) > m_dBuf+m_iLen ) )
+	{
+		SetError ( true );
+		return 0;
 	}
 
-	// v1. read query string
-	if ( iread ( rsock, &i, 4 )!=4 ) return;
-	if ( i<0 || i>(int)sizeof(sQuery)-1 ) return;
-	if ( iread ( rsock, sQuery, i )!=i ) return;
-	sQuery[i] = '\0';
+	int iRes = *(int*)m_pCur;
+	m_pCur += sizeof(int);
+	return iRes;
+}
 
-	// v1. read weights
-	int iUserWeights;
-	int dUserWeights [ SPH_MAX_FIELD_COUNT ];
 
-	if ( iread ( rsock, &iUserWeights, 4 ) != 4 ) return;
-	if ( iUserWeights<0 || iUserWeights>SPH_MAX_FIELD_COUNT ) return;
-	if ( iUserWeights )
-		if ( iread ( rsock, dUserWeights, iUserWeights*4 ) != iUserWeights*4 ) return;
+CSphString RequestBuffer_c::GetString ()
+{
+	CSphString sRes;
 
-	// v2. read index name
-	if ( iread ( rsock, &i, 4 )!=4 ) return;
-	if ( i<0 || i>(int)sizeof(sIndex)-1 ) return;
-	if ( iread ( rsock, sIndex, i )!=i ) return;
-	sIndex[i] = '\0';
+	int iLen = GetInt ();
+	if ( m_bError || iLen<0 || iLen>NET_MAX_STR_LEN || ( m_pCur+iLen > m_dBuf+m_iLen ) )
+	{
+		SetError ( true );
+		return sRes;
+	}
 
-	// v3. read group/TS limits
-	if ( iread ( rsock, &tQuery.m_iMinID, 4 )!=4 ) return;
-	if ( iread ( rsock, &tQuery.m_iMaxID, 4 )!=4 ) return;
-	if ( iread ( rsock, &tQuery.m_iMinTS, 4 )!=4 ) return;
-	if ( iread ( rsock, &tQuery.m_iMaxTS, 4 )!=4 ) return;
+	sRes.SetBinary ( (char*)m_pCur, iLen );
+	m_pCur += iLen;
+	return sRes;
+}
+
+
+bool RequestBuffer_c::GetBytes ( void * pBuf, int iLen )
+{
+	assert ( pBuf );
+	assert ( iLen>0 && iLen<=NET_MAX_REQ_LEN );
+
+	if ( m_bError || ( m_pCur+iLen > m_dBuf+m_iLen ) )
+	{
+		SetError ( true );
+		return false;
+	}
+
+	memcpy ( pBuf, m_pCur, iLen );
+	m_pCur += iLen;
+	return true;;
+}
+
+
+int RequestBuffer_c::GetInts ( int ** ppBuffer, int iMax, const char * sErrorTemplate )
+{
+	assert ( ppBuffer );
+	assert ( !(*ppBuffer) );
+
+	int iCount = GetInt ();
+	if ( iCount<0 || iCount>iMax )
+	{
+		SendErrorReply ( m_iSock, sErrorTemplate, iCount, iMax );
+		SetError ( true );
+		return -1;
+	}
+	if ( iCount )
+	{
+		(*ppBuffer) = new int [ iCount ];
+		if ( !GetBytes ( (*ppBuffer), sizeof(int)*iCount ) )
+		{
+			SafeDeleteArray ( (*ppBuffer) );
+			return -1;
+		}
+	}
+	return iCount;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+void HandleCommandSearch ( int iSock, RequestBuffer_c & tReq )
+{
+	CSphQuery tQuery;
+	assert ( sizeof(tQuery.m_eSort)==4 );
+
+	/////////////////
+	// parse request
+	/////////////////
+
+	// v1. mode, limits, weights, ID/TS ranges
+	int iOffset			= tReq.GetInt ();
+	int iLimit			= tReq.GetInt ();
+	int iMode			= tReq.GetInt ();
+	tQuery.m_eSort		= (ESphSortOrder) tReq.GetInt ();
+	tQuery.m_iGroups	= tReq.GetInts ( (int**)&tQuery.m_pGroups, SEARCHD_MAX_REQ_GROUPS, "invalid group count %d (should be in 0..%d range)" );
+	tQuery.m_sQuery		= tReq.GetString ();
+	tQuery.m_iWeights	= tReq.GetInts ( (int**)&tQuery.m_pWeights, SPH_MAX_FIELD_COUNT, "invalid weight count %d (should be in 0..%d range)" );
+	CSphString sIndex	= tReq.GetString ();
+	tQuery.m_iMinID		= tReq.GetInt ();
+	tQuery.m_iMaxID		= tReq.GetInt ();
+	tQuery.m_iMinTS		= tReq.GetInt ();
+	tQuery.m_iMaxTS		= tReq.GetInt ();
+
+	if ( tReq.GetError() )
+	{
+		SendErrorReply ( iSock, "bad request (too short)" );
+		return;
+	}
 	if ( tQuery.m_iMinID>tQuery.m_iMaxID || tQuery.m_iMinTS>tQuery.m_iMaxTS )
 	{
-		iwrite ( rsock, "ERROR Bad ID/TS range specified\n" );
+		SendErrorReply ( iSock, "bad ID/TS range specified in query" );
+		return;
+	}
+	if ( tQuery.m_eMode<0 || tQuery.m_eMode>SPH_MATCH_TOTAL )
+	{
+		SendErrorReply ( iSock, "bad match mode %d", tQuery.m_eMode );
 		return;
 	}
 
-	// v4. binary flag
-	int iBinary;
-	if ( iread ( rsock, &iBinary, 4 )!=4 ) return;
-
-	// configure query
-	tQuery.m_sQuery = sQuery;
-	tQuery.m_pWeights = dUserWeights;
-	tQuery.m_iWeights = iUserWeights;
-	tQuery.m_eMode = (ESphMatchMode) Min ( Max ( iMode, 0 ), SPH_MATCH_TOTAL );
+	////////////////
+	// do searching
+	////////////////
 
 	// do search
-	pRes = new CSphQueryResult ();
+	CSphQueryResult * pRes = new CSphQueryResult ();
 	ISphMatchQueue * pTop = sphCreateQueue ( &tQuery );
 	float tmStart = sphLongTimer ();
 
-	#define REMOVE_DUPES 1
+#define REMOVE_DUPES 1
 
 	if ( g_hDistIndexes(sIndex) )
 	{
@@ -997,7 +1411,7 @@ void HandleClient ( int rsock )
 			ConnectToRemoteAgent ( &tDist.m_dAgents[i] );
 
 		// connect to remote agents and query them first
-		int iRemote = QueryRemoteAgents ( sIndex, tDist, tQuery, iMode );
+		int iRemote = QueryRemoteAgents ( sIndex.cstr(), tDist, tQuery, iMode );
 
 		// while the remote queries are running, do local searches
 		// !COMMIT what if the remote agents finish early, could they timeout?
@@ -1013,15 +1427,15 @@ void HandleClient ( int rsock )
 			tQuery.m_pTokenizer = tServed.m_pTokenizer;
 			tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pTop );
 
-			#if REMOVE_DUPES
+#if REMOVE_DUPES
 			sphFlattenQueue ( pTop, pRes );
-			#endif
+#endif
 		}
 		tmQuery += sphLongTimer ();
 
 		if ( !iRemote && !tDist.m_dLocal.GetLength() )
 		{
-			iwrite ( rsock, "ERROR All remote agents are unreachable and no local indexes are configured\n" );
+			SendErrorReply ( iSock, "all remote agents unreachable, no local indexes configured" );
 			return;
 		}
 
@@ -1029,29 +1443,29 @@ void HandleClient ( int rsock )
 		if ( iRemote )
 		{
 			int iMsecLeft = tDist.m_iAgentQueryTimeout - int(tmQuery*1000.0f);
-			int iReplys = WaitForRemoteAgents ( sIndex, tDist, pRes, Max ( iMsecLeft, 0 ) );
+			int iReplys = WaitForRemoteAgents ( sIndex.cstr(), tDist, pRes, Max ( iMsecLeft, 0 ) );
 			if ( !iReplys && !tDist.m_dLocal.GetLength() )
 			{
-				iwrite ( rsock, "ERROR All reachable remote agents timed out\n" );
+				SendErrorReply ( iSock, "all reachable remote agents timed out" );
 				return;
 			}
 
 			// merge local and remote results
 			ARRAY_FOREACH ( iAgent, tDist.m_dAgents )
 				if ( tDist.m_dAgents[iAgent].m_tRes.m_dMatches.GetLength() )
-			{
-				// merge this agent's results
-				Agent_t & tAgent = tDist.m_dAgents[iAgent];
-				ARRAY_FOREACH ( i, tAgent.m_tRes.m_dMatches )
-					pRes->m_dMatches.Add( tAgent.m_tRes.m_dMatches[i] );
-				tAgent.m_tRes.m_dMatches.Reset ();
+				{
+					// merge this agent's results
+					Agent_t & tAgent = tDist.m_dAgents[iAgent];
+					ARRAY_FOREACH ( i, tAgent.m_tRes.m_dMatches )
+						pRes->m_dMatches.Add( tAgent.m_tRes.m_dMatches[i] );
+					tAgent.m_tRes.m_dMatches.Reset ();
 
-				// merge this agent's stats
-				pRes->m_iTotalMatches += tAgent.m_tRes.m_iTotalMatches;
-			}
+					// merge this agent's stats
+					pRes->m_iTotalMatches += tAgent.m_tRes.m_iTotalMatches;
+				}
 		}
 
-	} else if ( strcmp ( sIndex, "*" )==0 )
+	} else if ( sIndex=="*" )
 	{
 		// search through all local indexes
 		g_hIndexes.IterateStart ();
@@ -1066,16 +1480,16 @@ void HandleClient ( int rsock )
 			tQuery.m_pTokenizer = tServed.m_pTokenizer;
 			tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pTop );
 
-			#if REMOVE_DUPES
+#if REMOVE_DUPES
 			sphFlattenQueue ( pTop, pRes );
-			#endif
+#endif
 		}
 
 	} else
 	{
 		// search through the specified local indexes
 		int iSearched = 0;
-		char * p = sIndex;
+		char * p = (char*)sIndex.cstr();
 		while ( *p )
 		{
 			// skip non-alphas
@@ -1092,7 +1506,7 @@ void HandleClient ( int rsock )
 			// check that this one exists
 			if ( !g_hIndexes.Exists ( sNext ) )
 			{
-				iwrite ( rsock, "ERROR Invalid index '%s' specified in request\n", sNext );
+				SendErrorReply ( iSock, "invalid index '%s' specified in request", sNext );
 				return;
 			}
 
@@ -1106,19 +1520,19 @@ void HandleClient ( int rsock )
 			tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pTop );
 			iSearched++;
 
-			#if REMOVE_DUPES
+#if REMOVE_DUPES
 			sphFlattenQueue ( pTop, pRes );
-			#endif
+#endif
 		}
 
 		if ( !iSearched )
 		{
-			iwrite ( rsock, "ERROR No valid indexes specified in request\n" );
+			SendErrorReply ( iSock, "no valid indexes specified in request" );
 			return;
 		}
 	}
 
-	#if REMOVE_DUPES
+#if REMOVE_DUPES
 	{
 		pRes->m_dMatches.Sort ();
 
@@ -1129,7 +1543,7 @@ void HandleClient ( int rsock )
 		}
 		pRes->m_dMatches.Reset ();
 	}
-	#endif
+#endif
 
 	sphFlattenQueue ( pTop, pRes );
 
@@ -1140,6 +1554,7 @@ void HandleClient ( int rsock )
 	{
 		time_t tNow;
 		char sTimeBuf[128];
+		char sBuf[1024];
 
 		time ( &tNow );
 		ctime_r ( &tNow, sTimeBuf );
@@ -1149,7 +1564,7 @@ void HandleClient ( int rsock )
 		snprintf ( sBuf, sizeof(sBuf), "[%s] %.2f sec: [%d %d %s/%d/%d %d] %s\n",
 			sTimeBuf, pRes->m_fQueryTime,
 			iOffset, iLimit, sModes [ tQuery.m_eMode ], tQuery.m_eSort, tQuery.m_iGroups,
-			pRes->m_iTotalMatches, sQuery );
+			pRes->m_iTotalMatches, tQuery.m_sQuery.cstr() );
 
 		flock ( g_iQueryLogFile, LOCK_EX );
 		lseek ( g_iQueryLogFile, 0, SEEK_END );
@@ -1157,71 +1572,99 @@ void HandleClient ( int rsock )
 		flock ( g_iQueryLogFile, LOCK_UN );
 	}
 
-	// serve the answer to client
-	iCount = Min ( iLimit, pRes->m_dMatches.GetLength()-iOffset );
-	if ( !iBinary )
+	//////////////////////
+	// serve the response
+	//////////////////////
+
+	int iCount = Min ( iLimit, pRes->m_dMatches.GetLength()-iOffset );
+
+	int iRespLen = 20 + sizeof(CSphMatch)*iCount;
+	for ( int i=0; i<pRes->m_iNumWords; i++ )
+		iRespLen += 12 + strlen ( pRes->m_tWordStats[i].m_sWord.cstr() );
+
+	// create buffer, send header
+	ResponseBuffer_c tOut ( iSock );
+	tOut.SendInt ( SEARCHD_OK );
+	tOut.SendInt ( iRespLen );
+
+	// matches
+	tOut.SendInt ( iCount );
+	if ( iCount )
+		tOut.SendBytes ( &pRes->m_dMatches[iOffset], sizeof(CSphMatch)*iCount );
+
+	tOut.SendInt ( pRes->m_dMatches.GetLength() );
+	tOut.SendInt ( pRes->m_iTotalMatches );
+	tOut.SendInt ( Max ( int(pRes->m_fQueryTime*1000), 0 ) );
+	tOut.SendInt ( pRes->m_iNumWords );
+
+	for ( int i=0; i<pRes->m_iNumWords; i++ )
 	{
-		// textual response
-		iwrite ( rsock, "MATCHES %d\n", iCount );
-		for ( i=iOffset; i<iOffset+iCount; i++ )
-		{
-			CSphMatch & tMatch = pRes->m_dMatches[i];
-			iwrite ( rsock, "MATCH %d %d %d %d\n",
-				tMatch.m_iGroupID,
-				tMatch.m_iDocID,
-				tMatch.m_iWeight,
-				tMatch.m_iTimestamp );
-		}
-
-		iwrite ( rsock, "TOTAL %d %d\n", pRes->m_dMatches.GetLength(), pRes->m_iTotalMatches );
-		iwrite ( rsock, "TIME %.2f\n", pRes->m_fQueryTime );
-		iwrite ( rsock, "WORDS %d\n", pRes->m_iNumWords );
-
-		for ( i=0; i < pRes->m_iNumWords; i++ )
-		{
-			iwrite ( rsock, "WORD %s %d %d\n",
-				pRes->m_tWordStats[i].m_sWord.cstr(),
-				pRes->m_tWordStats[i].m_iDocs,
-				pRes->m_tWordStats[i].m_iHits );
-		}
-
-	} else
-	{
-		// binary response
-		int iRespLen = 20 + sizeof(CSphMatch)*iCount;
-		for ( i=0; i<pRes->m_iNumWords; i++ )
-			iRespLen += 12 + strlen ( pRes->m_tWordStats[i].m_sWord.cstr() );
-
-		BYTE * pRespBuffer = new BYTE [ iRespLen ];
-		BYTE * pResp = pRespBuffer;
-
-		// create response
-		NetPackDword ( pResp, iCount );
-
-		if ( iCount )
-			memcpy ( pResp, &pRes->m_dMatches[iOffset], sizeof(CSphMatch)*iCount );
-		pResp += sizeof(CSphMatch)*iCount;
-
-		NetPackDword ( pResp, pRes->m_dMatches.GetLength() );
-		NetPackDword ( pResp, pRes->m_iTotalMatches );
-		NetPackDword ( pResp, *(DWORD*)&pRes->m_fQueryTime );
-		NetPackDword ( pResp, pRes->m_iNumWords );
-
-		for ( i=0; i<pRes->m_iNumWords; i++ )
-		{
-			NetPackStr ( pResp, pRes->m_tWordStats[i].m_sWord.cstr() );
-			NetPackDword ( pResp, pRes->m_tWordStats[i].m_iDocs );
-			NetPackDword ( pResp, pRes->m_tWordStats[i].m_iHits );
-		}
-
-		assert ( pResp-pRespBuffer==iRespLen );
-		sphSockSend ( rsock, (const char*)pRespBuffer, pResp-pRespBuffer, 0 );
-		SafeDeleteArray ( pRespBuffer );
+		tOut.SendString ( pRes->m_tWordStats[i].m_sWord.cstr() );
+		tOut.SendInt ( pRes->m_tWordStats[i].m_iDocs );
+		tOut.SendInt ( pRes->m_tWordStats[i].m_iHits );
 	}
 
-	delete pRes;
+	tOut.Flush ();
+	assert ( tOut.GetError()==true || tOut.GetSentCount()==iRespLen+8 );
+
+	SafeDeleteArray ( pRes );
+	SafeDelete ( pTop );
 }
 
+
+void HandleCommandExcerpt ( int iSock, RequestBuffer_c & tReq )
+{
+}
+
+
+void HandleClient ( int iSock )
+{
+	// exchange versions
+	const DWORD SEARCHD_PROTO_VERSION = 1;
+	NetWrite ( iSock, &SEARCHD_PROTO_VERSION, sizeof(DWORD) );
+
+	DWORD uClient = 0;
+	NetReadInt ( iSock, (int*)&uClient );
+
+	if ( NetWasError() )
+		return;
+
+	// read request
+	RequestHeader_t tReq;
+	if ( !NetRead ( iSock, &tReq, sizeof(tReq) ) )
+		return;
+
+	if ( tReq.m_iCommand<0
+		|| tReq.m_iCommand>=CMD_TOTAL
+		|| tReq.m_iLength<0
+		|| tReq.m_iLength>NET_MAX_REQ_LEN )
+	{
+		// unknown command, default response header
+		SendErrorReply ( iSock, "unknown command (code=%d)", tReq.m_iCommand );
+
+		// if request length is insane, low level comm is broken, so we bail out
+		if ( tReq.m_iLength<0 || tReq.m_iLength>NET_MAX_REQ_LEN )
+			return;
+	}
+
+	// receive request
+	assert ( tReq.m_iLength>=0 && tReq.m_iCommand<=NET_MAX_REQ_LEN );
+
+	RequestBuffer_c tBuf;
+	if ( !tBuf.ReadFrom ( iSock, tReq.m_iLength ) )
+		return;
+
+	// handle known commands
+	if ( tReq.m_iCommand>=0 && tReq.m_iCommand<CMD_TOTAL )
+		switch ( tReq.m_iCommand )
+	{
+		case CMD_SEARCH:	HandleCommandSearch ( iSock, tBuf ); break;
+		case CMD_EXCERPT:	HandleCommandExcerpt ( iSock, tBuf ); break;
+		default:			assert ( 0 && "INTERNAL ERROR: unhandled command" ); break;
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////
 
 bool IsReadable ( const char * sPath )
 {
@@ -1662,7 +2105,7 @@ int main ( int argc, char **argv )
 	}
 
 	// create and bind on socket
-	g_iSocket = createServerSocket_IP ( iPort );
+	g_iSocket = sphCreateServerSocket ( iPort );
 	listen ( g_iSocket, 5 );
 
 	/////////////////
@@ -1795,7 +2238,15 @@ int main ( int argc, char **argv )
 
 		if ( ( g_iMaxChildren && g_iChildren>=g_iMaxChildren ) || g_iHUP )
 		{
-			iwrite ( rsock, "RETRY Server maxed out\n" );
+			const char * sMessage = "server maxed out, retry in a second";
+			int iRespLen = 4 + strlen(sMessage);
+
+			ResponseBuffer_c tOut ( rsock );
+			tOut.SendInt ( SEARCHD_RETRY );
+			tOut.SendInt ( iRespLen );
+			tOut.SendString ( sMessage );
+			tOut.Flush ();
+
 			sphWarning ( "maxed out, dismissing client" );
 			sphSockClose ( rsock );
 			continue;

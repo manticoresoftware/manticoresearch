@@ -1630,8 +1630,7 @@ bool CSphTokenizer_UTF8::SetCaseFolding ( const char * sConfig )
 /////////////////////////////////////////////////////////////////////////////
 
 CSphQuery::CSphQuery ()
-	: m_sQuery		( NULL )
-	, m_pWeights	( NULL )
+	: m_pWeights	( NULL )
 	, m_iWeights	( 0 )
 	, m_eMode		( SPH_MATCH_ALL )
 	, m_pGroups		( NULL )
@@ -3397,7 +3396,7 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResu
 	pResult->m_iNumWords = 0;
 
 	// split query into words
-	CSphQueryParser * pQueryParser = new CSphQueryParser ( dict, pQuery->m_sQuery,
+	CSphQueryParser * pQueryParser = new CSphQueryParser ( dict, pQuery->m_sQuery.cstr(),
 		pQuery->m_pTokenizer );
 	assert ( pQueryParser );
 

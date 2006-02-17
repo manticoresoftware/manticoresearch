@@ -852,6 +852,12 @@ char * sphStrMacro ( const char * sTemplate, const char * sMacro, int iValue )
 	return sRes;
 }
 
+
+int myatoi ( const char * nptr )
+{
+	return nptr ? atoi ( nptr ) : 0;
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // TOKENIZERS
 /////////////////////////////////////////////////////////////////////////////
@@ -4611,10 +4617,10 @@ bool CSphSource_MySQL::RunQueryStep ()
 
 int CSphSource_MySQL::GetColumnIndex ( const char * sColumn )
 {
-	if ( !strlen(sColumn) )
+	if ( !sColumn || !strlen(sColumn) )
 		return 0;
 
-	int iRes = atoi ( sColumn );
+	int iRes = myatoi ( sColumn );
 	if ( !iRes )
 	{
 		// if it's string, match by name
@@ -4755,8 +4761,8 @@ bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 			if ( !m_tSqlRow )
 				LOC_MYSQL_ERROR ( "mysql_fetch_row_range" );
 
-			m_iMinID = atoi ( m_tSqlRow[0] );
-			m_iMaxID = atoi ( m_tSqlRow[1] );
+			m_iMinID = myatoi ( m_tSqlRow[0] );
+			m_iMaxID = myatoi ( m_tSqlRow[1] );
 			if ( m_iMinID<=0 )
 				LOC_ERROR ( "ERROR: mysql_query_range: min_id=%d: must be positive.\n", m_iMinID );
 			if ( m_iMaxID<=0 )
@@ -4878,9 +4884,9 @@ BYTE ** CSphSource_MySQL::NextDocument ()
 	}
 
 	// get him!
-	m_tDocInfo.m_iDocID = atoi ( m_tSqlRow[0] );
-	m_tDocInfo.m_iGroupID = m_iGroupColumn ? atoi ( m_tSqlRow [ m_iGroupColumn ] ) : 1;
-	m_tDocInfo.m_iTimestamp = m_iDateColumn ? atoi ( m_tSqlRow [ m_iDateColumn ] ) : 1;
+	m_tDocInfo.m_iDocID = myatoi ( m_tSqlRow[0] );
+	m_tDocInfo.m_iGroupID = m_iGroupColumn ? myatoi ( m_tSqlRow [ m_iGroupColumn ] ) : 1;
+	m_tDocInfo.m_iTimestamp = m_iDateColumn ? myatoi ( m_tSqlRow [ m_iDateColumn ] ) : 1;
 
 	m_iMaxFetchedID = Max ( m_iMaxFetchedID, m_tDocInfo.m_iDocID );
 

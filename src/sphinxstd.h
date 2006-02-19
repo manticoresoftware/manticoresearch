@@ -526,7 +526,9 @@ public:
 
 	CSphString SubString ( int iStart, int iCount )
 	{
+		#ifndef NDEBUG
 		int iLen = strlen(m_sValue);
+		#endif
 		assert ( iStart>=0 && iStart<iLen );
 		assert ( iCount>0 );
 		assert ( (iStart+iCount)>=0 && (iStart+iCount)<=iLen );

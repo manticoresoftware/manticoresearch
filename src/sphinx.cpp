@@ -66,9 +66,6 @@ void sphAssert ( const char * sExpr, const char * sFile, int iLine )
 	}
 }
 
-#undef assert
-#define assert(_expr) { if ( !(_expr) ) sphAssert ( #_expr, __FILE__, __LINE__ ); }
-
 #endif // !NDEBUG
 #endif // USE_WINDOWS
 

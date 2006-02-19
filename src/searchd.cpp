@@ -108,6 +108,34 @@ struct ServedIndex_t
 static SmallStringHash_T < ServedIndex_t >	g_hIndexes;
 
 /////////////////////////////////////////////////////////////////////////////
+
+/// std request header
+struct RequestHeader_t
+{
+	int			m_iCommand;			///< command code
+	int			m_iLength;			///< length, bytes
+};
+
+
+/// known commands
+enum SearchdCommand_e
+{
+	CMD_SEARCH		= 0,
+	CMD_EXCERPT		= 1,
+
+	CMD_TOTAL
+};
+
+
+/// known status return codes
+enum SearchdStatus_e
+{
+	SEARCHD_OK		= 0,	///< general success, command-specific reply follows
+	SEARCHD_ERROR	= 1,	///< general failure, command-specific reply may follow
+	SEARCHD_RETRY	= 2		///< temporaty failure, client should retry later
+};
+
+/////////////////////////////////////////////////////////////////////////////
 // MACHINE-DEPENDENT STUFF
 /////////////////////////////////////////////////////////////////////////////
 
@@ -381,30 +409,6 @@ int NetRawRead ( int fd, void * buf, int len )
 	return res;
 }
 
-
-inline void NetPackDword ( BYTE * & pReq, DWORD uValue )
-{
-	*(DWORD *)pReq = uValue;
-	pReq += sizeof(DWORD);
-}
-
-
-inline void NetPackStr ( BYTE * & pReq, const char * sValue )
-{
-	int iLen = strlen(sValue);
-	NetPackDword ( pReq, iLen );
-	memcpy ( pReq, sValue, iLen );
-	pReq += iLen;
-}
-
-
-inline void NetPackArray ( BYTE * & pReq, int iNumValues, DWORD * sValues )
-{
-	NetPackDword ( pReq, iNumValues );
-	memcpy ( pReq, sValues, sizeof(DWORD)*iNumValues );
-	pReq += sizeof(DWORD)*iNumValues;
-}
-
 /////////////////////////////////////////////////////////////////////////////
 
 bool NetWasError ()
@@ -438,32 +442,6 @@ bool NetRead ( int iSock, void * pBuf, int iLen )
 }
 
 
-bool NetReadString ( int iSock, char ** sStr )
-{
-	if ( g_bNetError )
-		return false;
-
-	*sStr = NULL;
-	int iLen;
-	if ( NetRawRead ( iSock, &iLen, sizeof(iLen) )!=sizeof(iLen) )
-		return NetSetError ();
-
-	if ( iLen<0 || iLen>NET_MAX_STR_LEN )
-		return NetSetError ();
-
-	*sStr = new char [ 1+iLen ];
-	if ( iLen>0 )
-		if ( NetRawRead ( iSock, *sStr, iLen )!=iLen )
-	{
-		SafeDeleteArray ( *sStr );
-		return NetSetError ();
-	}
-
-	(*sStr)[iLen] = '\0';
-	return NetSetOK ();
-}
-
-
 bool NetReadInt ( int iSock, int * iVal )
 {
 	if ( g_bNetError )
@@ -485,20 +463,344 @@ bool NetWrite ( int iSock, const void * sBuf, int iLen )
 	return NetSetOK ();
 }
 
+/////////////////////////////////////////////////////////////////////////////
+// NETWORK BUFFERS
+/////////////////////////////////////////////////////////////////////////////
 
-bool NetWriteString ( int iSock, const char * sStr )
+/// fixed-memory response buffer
+/// tracks usage, and flushes to network when necessary
+class NetOutputBuffer_c
 {
-	if ( g_bNetError )
+public:
+				NetOutputBuffer_c ( int iSock );
+	bool		SendInt ( int iValue );
+	bool		SendDword ( DWORD iValue );
+	bool		SendString ( const char * sStr );
+	bool		SendBytes ( const void * pBuf, int iLen );
+	bool		Flush ();
+	bool		GetError () { return m_bError; }
+	int			GetSentCount () { return m_iSent; }
+
+protected:
+	BYTE		m_dBuffer[8192];	///< my buffer
+	BYTE *		m_pBuffer;			///< my current buffer position
+	int			m_iSock;			///< my socket
+	bool		m_bError;			///< if there were any write errors
+	int			m_iSent;
+
+protected:
+	bool		SetError ( bool bValue );	///< set error flag
+	bool		FlushIf ( int iToAdd );		///< flush if there's not enough free space to add iToAdd bytes
+};
+
+
+/// generic request buffer
+class InputBuffer_c
+{
+public:
+					InputBuffer_c ();
+	int				GetInt ();
+	CSphString		GetString ();
+	bool			GetBytes ( void * pBuf, int iLen );
+	int				GetInts ( int ** pBuffer, int iMax, const char * sErrorTemplate );
+	bool			GetError () { return m_bError; }
+
+	virtual void	SendErrorReply ( const char *, ... ) = 0;
+
+protected:
+	bool			m_bError;
+	BYTE			m_dBuf [ NET_MAX_REQ_LEN ];
+	int				m_iLen;
+	BYTE *			m_pCur;
+
+protected:
+	void			SetError ( bool bError ) { m_bError = bError; }
+};
+
+
+/// simple memory request buffer
+class MemInputBuffer_c : public InputBuffer_c
+{
+public:
+					MemInputBuffer_c ( const char * sFrom, int iLen );
+	virtual void	SendErrorReply ( const char *, ... ) {}
+};
+
+
+/// simple network request buffer
+class NetInputBuffer_c : public InputBuffer_c
+{
+public:
+					NetInputBuffer_c ( int iSock );
+	bool			ReadFrom ( int iSock, int iLen );
+	virtual void	SendErrorReply ( const char *, ... );
+
+protected:
+	int				m_iSock;
+};
+
+/////////////////////////////////////////////////////////////////////////////
+
+NetOutputBuffer_c::NetOutputBuffer_c ( int iSock )
+	: m_pBuffer ( m_dBuffer )
+	, m_iSock ( iSock )
+	, m_bError ( false )
+	, m_iSent ( 0 )
+{
+	assert ( m_iSock>0 );
+}
+
+
+bool NetOutputBuffer_c::SendInt ( int iValue )
+{
+	if ( m_bError )
 		return false;
 
+	FlushIf ( sizeof(int) );
+
+	*(int*)m_pBuffer = iValue;
+	m_pBuffer += sizeof(int);
+	assert ( m_pBuffer<m_dBuffer+sizeof(m_dBuffer) );
+	return true;
+}
+
+
+bool NetOutputBuffer_c::SendDword ( DWORD iValue )
+{
+	if ( m_bError )
+		return false;
+
+	FlushIf ( sizeof(DWORD) );
+
+	*(DWORD*)m_pBuffer = iValue;
+	m_pBuffer += sizeof(DWORD);
+	assert ( m_pBuffer<m_dBuffer+sizeof(m_dBuffer) );
+	return true;
+}
+
+
+bool NetOutputBuffer_c::SendString ( const char * sStr )
+{
+	if ( m_bError )
+		return false;
+
+	FlushIf ( sizeof(DWORD) );
+
 	int iLen = strlen(sStr);
-	if ( sphSockSend ( iSock, (char*)&iLen, sizeof(int), 0 )!=sizeof(int) )
-		return NetSetError ();
+	*(int*)m_pBuffer = iLen;
+	m_pBuffer += sizeof(int);
 
-	if ( sphSockSend ( iSock, sStr, iLen, 0 )!=iLen )
-		return NetSetError ();
+	return SendBytes ( sStr, iLen );
+}
 
-	return NetSetOK ();
+
+bool NetOutputBuffer_c::SendBytes ( const void * pBuf, int iLen )
+{
+	BYTE * pMy = (BYTE*)pBuf;
+	while ( iLen>0 && !m_bError )
+	{
+		int iLeft = sizeof(m_dBuffer) - ( m_pBuffer - m_dBuffer );
+		if ( iLen<=iLeft )
+		{
+			memcpy ( m_pBuffer, pMy, iLen );
+			m_pBuffer += iLen;
+			break;
+		}
+
+		memcpy ( m_pBuffer, pMy, iLeft );
+		m_pBuffer += iLeft;
+		Flush ();
+
+		pMy += iLeft;
+		iLen -= iLeft;
+	}
+	return !m_bError;
+}
+
+
+bool NetOutputBuffer_c::Flush ()
+{
+	if ( m_bError )
+		return false;
+
+	int iLen = m_pBuffer-m_dBuffer;
+	if ( iLen==0 )
+		return true;
+
+	assert ( iLen>0 );
+	assert ( iLen<=sizeof(m_dBuffer) );
+
+	m_bError = !NetWrite ( m_iSock, m_dBuffer, iLen );
+	m_iSent += iLen;
+	m_pBuffer = m_dBuffer;
+	return !m_bError;
+}
+
+
+bool NetOutputBuffer_c::FlushIf ( int iToAdd )
+{
+	if ( m_pBuffer+iToAdd >= m_dBuffer+sizeof(m_dBuffer) )
+		return Flush ();
+
+	return !m_bError;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+InputBuffer_c::InputBuffer_c ()
+	: m_bError ( true )
+	, m_iLen ( 0 )
+	, m_pCur ( m_dBuf )
+{
+}
+
+
+int InputBuffer_c::GetInt ()
+{
+	if ( m_bError || ( m_pCur+sizeof(int) > m_dBuf+m_iLen ) )
+	{
+		SetError ( true );
+		return 0;
+	}
+
+	int iRes = *(int*)m_pCur;
+	m_pCur += sizeof(int);
+	return iRes;
+}
+
+
+CSphString InputBuffer_c::GetString ()
+{
+	CSphString sRes;
+
+	int iLen = GetInt ();
+	if ( m_bError || iLen<0 || iLen>NET_MAX_STR_LEN || ( m_pCur+iLen > m_dBuf+m_iLen ) )
+	{
+		SetError ( true );
+		return sRes;
+	}
+
+	sRes.SetBinary ( (char*)m_pCur, iLen );
+	m_pCur += iLen;
+	return sRes;
+}
+
+
+bool InputBuffer_c::GetBytes ( void * pBuf, int iLen )
+{
+	assert ( pBuf );
+	assert ( iLen>0 && iLen<=NET_MAX_REQ_LEN );
+
+	if ( m_bError || ( m_pCur+iLen > m_dBuf+m_iLen ) )
+	{
+		SetError ( true );
+		return false;
+	}
+
+	memcpy ( pBuf, m_pCur, iLen );
+	m_pCur += iLen;
+	return true;;
+}
+
+
+int InputBuffer_c::GetInts ( int ** ppBuffer, int iMax, const char * sErrorTemplate )
+{
+	assert ( ppBuffer );
+	assert ( !(*ppBuffer) );
+
+	int iCount = GetInt ();
+	if ( iCount<0 || iCount>iMax )
+	{
+		SendErrorReply ( sErrorTemplate, iCount, iMax );
+		SetError ( true );
+		return -1;
+	}
+	if ( iCount )
+	{
+		(*ppBuffer) = new int [ iCount ];
+		if ( !GetBytes ( (*ppBuffer), sizeof(int)*iCount ) )
+		{
+			SafeDeleteArray ( (*ppBuffer) );
+			return -1;
+		}
+	}
+	return iCount;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+NetInputBuffer_c::NetInputBuffer_c ( int iSock )
+	: m_iSock ( iSock )
+{
+}
+
+
+bool NetInputBuffer_c::ReadFrom ( int iSock, int iLen )
+{
+	assert ( iLen>0 );
+	assert ( iLen<=NET_MAX_REQ_LEN );
+
+	m_iSock = -1;
+	m_bError = true;
+	m_iLen = 0;
+	m_pCur = m_dBuf;
+
+	if ( !NetRead ( iSock, m_dBuf, iLen ) )
+		return false;
+
+	m_iSock = iSock;
+	m_bError = false;
+	m_iLen = iLen;
+	return true;
+}
+
+
+void NetInputBuffer_c::SendErrorReply ( const char * sTemplate, ... )
+{
+	char dBuf [ 2048 ];
+
+	const int iHeaderLen = 12;
+	const int iMaxStrLen = sizeof(dBuf) - iHeaderLen - 1;
+
+	// fill header
+	DWORD * pBuf = (DWORD*)&dBuf[0];
+	pBuf[0] = SEARCHD_ERROR;
+	pBuf[1] = 0; // reply length, to be filled later
+	pBuf[2] = 0; // error string length, to be filled later
+
+	// fill error string
+	char * sBuf = dBuf + iHeaderLen;
+
+	va_list ap;
+	va_start ( ap, sTemplate );
+	vsnprintf ( sBuf, iMaxStrLen, sTemplate, ap );
+	va_end ( ap );
+
+	sBuf[iMaxStrLen] = '\0';
+	int iStrLen = strlen(sBuf);
+
+	// fixup lengths
+	pBuf[1] = iHeaderLen+iStrLen;
+	pBuf[2] = iStrLen;
+
+	// send!
+	NetWrite ( m_iSock, dBuf, iHeaderLen+iStrLen );
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+MemInputBuffer_c::MemInputBuffer_c ( const char * sFrom, int iLen )
+{
+	if ( iLen<0 || iLen>NET_MAX_STR_LEN )
+	{
+		m_bError = true;
+		return;
+	}
+
+	memcpy ( m_dBuf, sFrom, iLen );
+	m_iLen = iLen;
+	m_pCur = m_dBuf;
+	m_bError = false;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -511,7 +813,8 @@ enum AgentState_e
 	AGENT_UNUSED,				///< agent is unused for this request
 	AGENT_CONNECT,				///< connecting to agent
 	AGENT_HELLO,				///< waiting for "VER x" hello
-	AGENT_QUERY					///< query sent, wating for reply
+	AGENT_QUERY,				///< query sent, wating for reply
+	AGENT_REPLY					///< reading reply
 };
 
 /// remote agent host/port
@@ -527,22 +830,29 @@ public:
 
 	CSphQueryResult	m_tRes;			///< query result
 
+	int				m_iReplySize;	///< how many reply bytes are there
+	int				m_iReplyRead;	///< how many reply bytes are alredy received
+	char *			m_pReplyBuf;	///< reply buffer
+
 protected:
 	int				m_iAddrType;
-	int				m_iAddrLen;
-	char *			m_pAddr;
+	DWORD			m_uAddr;
 
 public:
 	Agent_t ()
 		: m_iPort ( -1 )
 		, m_iSock ( -1 )
 		, m_eState ( AGENT_UNUSED )
-		, m_pAddr ( NULL )
+		, m_iReplySize ( 0 )
+		, m_iReplyRead ( 0 )
+		, m_pReplyBuf ( NULL )
+		, m_uAddr ( 0 )
 	{
 	}
 
 	~Agent_t ()
 	{
+		SafeDeleteArray ( m_pReplyBuf );
 		Close ();
 	}
 
@@ -553,18 +863,18 @@ public:
 			sphSockClose ( m_iSock );
 			m_iSock = -1;
 			m_eState = AGENT_UNUSED;
+
+			SafeDeleteArray ( m_pReplyBuf );
 		}
 	}
 
 	void SetAddr ( int iAddrType, int iAddrLen, const char * pAddr )
 	{
 		assert ( pAddr );
-		SafeDeleteArray ( m_pAddr );
+		assert ( iAddrLen==sizeof(m_uAddr) );
 
 		m_iAddrType = iAddrType;
-		m_iAddrLen = iAddrLen;
-		m_pAddr = new char [ iAddrLen ];
-		memcpy ( m_pAddr, pAddr, iAddrLen );
+		memcpy ( &m_uAddr, pAddr, iAddrLen );
 	}
 
 	int GetAddrType () const
@@ -574,12 +884,12 @@ public:
 
 	int GetAddrLen () const
 	{
-		return m_iAddrLen;
+		return sizeof(m_uAddr);
 	}
 
 	const char * GetAddr () const
 	{
-		return m_pAddr;
+		return (const char *)&m_uAddr;
 	}
 };
 
@@ -660,8 +970,6 @@ void ConnectToRemoteAgent ( Agent_t * pAgent )
 
 int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, const CSphQuery & tQuery, int iMode )
 {
-	assert ( 0 && "not ported to new protocol yet" );
-
 	int iTimeout = tDist.m_iAgentConnectTimeout;
 	int iAgents = 0;
 	assert ( iTimeout>=0 );
@@ -732,31 +1040,13 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 			if ( tAgent.m_eState==AGENT_HELLO && FD_ISSET ( tAgent.m_iSock, &fdsRead ) )
 			{
 				// read reply
-				char sBuf [ 128 ];
-				int iRes = sphSockRecv ( tAgent.m_iSock, sBuf, sizeof(sBuf)-1, 0 );
-
-				assert ( iRes>0 && iRes<(int)sizeof(sBuf) );
-				sBuf[iRes] = '\0';
-
-				// check reply
-				bool bError = false;
-				if ( strncmp ( sBuf, "VER ", 4 )!=0 )
-				{
-					sphWarning ( "index '%s': agent '%s:%d': bad handshake reply (len=%d reply='%s')",
-						sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort, iRes, sBuf );
-					bError = true;
-				}
-				if ( !bError && atoi(sBuf+4)!=SPHINX_SEARCHD_PROTO )
+				int iRemoteVer;
+				int iRes = sphSockRecv ( tAgent.m_iSock, (char*)&iRemoteVer, sizeof(iRemoteVer), 0 );
+				if ( iRes!=sizeof(iRemoteVer) || iRemoteVer<=0 )
 				{
 					sphWarning ( "index '%s': agent '%s:%d': expected protocol v.%d, got v.%d",
 						sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort,
-						SPHINX_SEARCHD_PROTO, atoi(sBuf+4) );
-					bError = true;
-				}
-
-				// bail out on error
-				if ( bError )
-				{
+						SPHINX_SEARCHD_PROTO, iRemoteVer );
 					tAgent.Close ();
 					continue;
 				}
@@ -764,42 +1054,35 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				// do query!
 				int iQueryLen = strlen ( tQuery.m_sQuery.cstr() );
 				int iIndexesLen = strlen ( tAgent.m_sIndexes.cstr() );
+				int iReqSize = 60 + 4*tQuery.m_iGroups + iQueryLen + 4*tQuery.m_iWeights + iIndexesLen;
 
-				int iReqSize = 52 + 4*tQuery.m_iGroups + iQueryLen + 4*tQuery.m_iWeights + iIndexesLen;
-				BYTE * pReqBuffer = new BYTE [ iReqSize ];
-				BYTE * pReq = (BYTE *) pReqBuffer;
+				NetOutputBuffer_c tOut ( tAgent.m_iSock );
 
-				// v1. mode/limits part
-				NetPackDword ( pReq, 0 ); // offset is 0
-				NetPackDword ( pReq, CSphQueryResult::MAX_MATCHES ); // limit is MAX_MATCHES
-				NetPackDword ( pReq, iMode ); // match mode
-				NetPackDword ( pReq, tQuery.m_eSort ); // sort mode
+				// say hello
+				tOut.SendDword ( SPHINX_SEARCHD_PROTO );
 
-				// v1. groups
-				NetPackArray ( pReq, tQuery.m_iGroups, tQuery.m_pGroups );
+				// request header
+				tOut.SendInt ( CMD_SEARCH ); // command
+				tOut.SendInt ( iReqSize-12 ); // request body length
 
-				// v1. query string
-				NetPackStr ( pReq, tQuery.m_sQuery.cstr() );
+				// request v1
+				tOut.SendInt ( 0 ); // offset is 0
+				tOut.SendInt ( CSphQueryResult::MAX_MATCHES ); // limit is MAX_MATCHES
+				tOut.SendInt ( iMode ); // match mode
+				tOut.SendInt ( tQuery.m_eSort ); // sort mode
+				tOut.SendInt ( tQuery.m_iGroups );
+				tOut.SendBytes ( tQuery.m_pGroups, sizeof(DWORD)*tQuery.m_iGroups ); // groups
+				tOut.SendString ( tQuery.m_sQuery.cstr() ); // query
+				tOut.SendInt ( tQuery.m_iWeights );
+				tOut.SendBytes ( tQuery.m_pWeights, sizeof(DWORD)*tQuery.m_iWeights ); // weights
+				tOut.SendString ( tAgent.m_sIndexes.cstr() ); // indexes
+				tOut.SendInt ( tQuery.m_iMinID ); // id/ts ranges
+				tOut.SendInt ( tQuery.m_iMaxID );
+				tOut.SendInt ( tQuery.m_iMinTS );
+				tOut.SendInt ( tQuery.m_iMaxTS );
+				tOut.Flush ();
 
-				// v1. weights
-				NetPackArray ( pReq, tQuery.m_iWeights, (DWORD*)tQuery.m_pWeights );
-
-				// v2. index name
-				NetPackStr ( pReq, tAgent.m_sIndexes.cstr() );
-
-				// v3. id/ts limits
-				NetPackDword ( pReq, tQuery.m_iMinID );
-				NetPackDword ( pReq, tQuery.m_iMaxID );
-				NetPackDword ( pReq, tQuery.m_iMinTS );
-				NetPackDword ( pReq, tQuery.m_iMaxTS );
-
-				// v4. binary mode
-				NetPackDword ( pReq, 1 );
-
-				assert ( pReq-pReqBuffer==iReqSize );
-				sphSockSend ( tAgent.m_iSock, (const char*)pReqBuffer, pReq-pReqBuffer, 0 );
-				SafeDeleteArray ( pReqBuffer );
-
+				// FIXME! !COMMIT handle flush failure
 				tAgent.m_eState = AGENT_QUERY;
 				iAgents++;
 			}
@@ -825,8 +1108,6 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 
 int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, CSphQueryResult * pRes, int iTimeout )
 {
-	assert ( 0 && "not ported to new protocol yet" );
-
 	assert ( pRes );
 	assert ( iTimeout>=0 );
 
@@ -843,7 +1124,7 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 		ARRAY_FOREACH ( iAgent, tDist.m_dAgents )
 		{
 			Agent_t & tAgent = tDist.m_dAgents[iAgent];
-			if ( tAgent.m_eState==AGENT_QUERY )
+			if ( tAgent.m_eState==AGENT_QUERY || tAgent.m_eState==AGENT_REPLY )
 			{
 				assert ( tAgent.m_iPort>0 );
 				assert ( tAgent.m_iSock>0 );
@@ -869,89 +1150,177 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 		ARRAY_FOREACH ( iAgent, tDist.m_dAgents )
 		{
 			Agent_t & tAgent = tDist.m_dAgents[iAgent];
-			if (!( tAgent.m_eState==AGENT_QUERY && FD_ISSET ( tAgent.m_iSock, &fdsRead ) ))
+			if (!( tAgent.m_eState==AGENT_QUERY || tAgent.m_eState==AGENT_REPLY ))
+				continue;
+			if ( !FD_ISSET ( tAgent.m_iSock, &fdsRead ) )
 				continue;
 
-			// reply was received, let's parse it
-			bool bOK = false;
-			for ( ;; )
+			// if there was no reply yet, read reply header
+			bool bFailure = true;
+			do
 			{
-				// read match count
-				int iMatches;
-				if ( sphSockRecv ( tAgent.m_iSock, (char*)&iMatches, 4, 0 )!=4 ) break;
-				if ( iMatches<0 || iMatches>CSphQueryResult::MAX_MATCHES ) break;
-
-				// read matches
-				int iTmp;
-				if ( iMatches>0 )
+				if ( tAgent.m_eState==AGENT_QUERY )
 				{
-					assert ( !tAgent.m_tRes.m_dMatches.GetLength() );
-					tAgent.m_tRes.m_dMatches.Resize ( iMatches );
-
-					iTmp = sizeof(CSphMatch)*iMatches;
-					if ( sphSockRecv ( tAgent.m_iSock, (char*)&tAgent.m_tRes.m_dMatches[0], iTmp, 0 )!=iTmp ) break;
-				}
-				
-				// read totals (retrieved count, total count, query time, word count)
-				if ( sphSockRecv ( tAgent.m_iSock, (char*)&iTmp, 4, 0 )!=4 ) break;
-				if ( iTmp!=iMatches ) break;
-				if ( sphSockRecv ( tAgent.m_iSock, (char*)&tAgent.m_tRes.m_iTotalMatches, 4, 0 )!=4 ) break;
-				if ( sphSockRecv ( tAgent.m_iSock, (char*)&tAgent.m_tRes.m_fQueryTime, 4, 0 )!=4 ) break;
-				if ( sphSockRecv ( tAgent.m_iSock, (char*)&tAgent.m_tRes.m_iNumWords, 4, 0 )!=4 ) break;
-
-				bool bSetWords = false;
-				if ( pRes->m_iNumWords && tAgent.m_tRes.m_iNumWords!=pRes->m_iNumWords ) break;
-				if ( !pRes->m_iNumWords )
-				{
-					pRes->m_iNumWords = tAgent.m_tRes.m_iNumWords;
-					bSetWords = true;
-				}
-
-				// read words
-				int i;
-				for ( i=0; i<pRes->m_iNumWords; i++ )
-				{
-					char sBuf [ SPH_MAX_WORD_LEN+1 ];
-
-					// read word len
-					if ( sphSockRecv ( tAgent.m_iSock, (char*)&iTmp, 4, 0 )!=4 ) break;
-					if ( iTmp<0 || iTmp>SPH_MAX_WORD_LEN ) break;
-
-					// read word, and NULL-terminate it!
-					if ( sphSockRecv ( tAgent.m_iSock, sBuf, iTmp, 0 )!=iTmp ) break;
-					sBuf[iTmp] = '\0';
-
-					// set it in result if not yet, or check if already
-					if ( bSetWords )
+					// try to read
+					DWORD uReplyHeader[2];
+					if ( sphSockRecv ( tAgent.m_iSock, (char*)&uReplyHeader[0], sizeof(uReplyHeader), 0 )!=sizeof(uReplyHeader) )
 					{
-						pRes->m_tWordStats[i].m_sWord.SetBinary ( sBuf, iTmp );
-					} else
-					{
-						if ( pRes->m_tWordStats[i].m_sWord!=sBuf )
-							break;
+						// bail out if failed
+						sphWarning ( "index '%s': agent '%s:%d': failed to receive reply header",
+							sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort );
+						break;
 					}
 
-					// read docs count
-					if ( sphSockRecv ( tAgent.m_iSock, (char*)&iTmp, 4, 0 )!=4 ) break;
-					pRes->m_tWordStats[i].m_iDocs += iTmp;
+					// check the status
+					if ( uReplyHeader[0]!=SEARCHD_OK || uReplyHeader[1]<=0 )
+					{
+						if ( uReplyHeader[0]!=SEARCHD_OK && uReplyHeader[1]>0 )
+						{
+							char sAgentError[1024];
+							int iToRead = Min ( sizeof(sAgentError)-1, uReplyHeader[1] );
+							int iRes = sphSockRecv ( tAgent.m_iSock, sAgentError, iToRead, 0 );
+							sAgentError [ Max ( iRes, 0 ) ] = '\0';
 
-					// read hits count
-					if ( sphSockRecv ( tAgent.m_iSock, (char*)&iTmp, 4, 0 )!=4 ) break;
-					pRes->m_tWordStats[i].m_iHits += iTmp;
+							sphWarning ( "index '%s': agent '%s:%d': remote error (status=%d, error=%s)",
+								sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort,
+								uReplyHeader[0], sAgentError+4 );
+
+						} else
+						{
+							sphWarning ( "index '%s': agent '%s:%d': ill-formed reply length (status=%d, len=%d)",
+								sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort,
+								uReplyHeader[0], uReplyHeader[1] );
+						}
+						break;
+					}
+
+					// header received, switch the status
+					assert ( tAgent.m_pReplyBuf==NULL );
+					tAgent.m_eState = AGENT_REPLY;
+					tAgent.m_pReplyBuf = new char [ uReplyHeader[1] ];
+					tAgent.m_iReplySize = uReplyHeader[1];
+					tAgent.m_iReplyRead = 0;
+
+					if ( !tAgent.m_pReplyBuf )
+					{
+						// bail out if failed
+						sphWarning ( "index '%s': agent '%s:%d': failed to alloc %d bytes for reply buffer",
+							sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort,
+							tAgent.m_iReplySize );
+						break;
+					}
 				}
-				if ( i!=pRes->m_iNumWords ) break;
 
-				// all done
-				iAgents++;
-				bOK = true;
-				break;
-			}
+				// if we are reading reply, read another chunk
+				if ( tAgent.m_eState==AGENT_REPLY )
+				{
+					// do read
+					assert ( tAgent.m_iReplyRead<tAgent.m_iReplySize );
+					int iRes = sphSockRecv ( tAgent.m_iSock, tAgent.m_pReplyBuf+tAgent.m_iReplyRead,
+						tAgent.m_iReplySize-tAgent.m_iReplyRead, 0 );
 
-			tAgent.Close ();
-			if ( !bOK )
+					// bail out if read failed
+					if ( iRes<0 )
+					{
+						sphWarning ( "index '%s': agent '%s:%d': failed to receive reply body: %s",
+							sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort,
+							sphSockError() );
+						break;
+					}
+
+					assert ( iRes>0 );
+					assert ( tAgent.m_iReplyRead+iRes<=tAgent.m_iReplySize );
+					tAgent.m_iReplyRead += iRes;
+				}
+
+				// if reply was fully received, parse it
+				if ( tAgent.m_eState==AGENT_REPLY && tAgent.m_iReplyRead==tAgent.m_iReplySize )
+				{
+					MemInputBuffer_c tReq ( tAgent.m_pReplyBuf, tAgent.m_iReplySize );
+
+					int iMatches = tReq.GetInt ();
+					if ( iMatches<=0 || iMatches>CSphQueryResult::MAX_MATCHES )
+					{
+						sphWarning ( "index '%s': agent '%s:%d': invalid match count received (count=%d)",
+							sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort,
+							iMatches );
+						break;
+					}
+
+					assert ( !tAgent.m_tRes.m_dMatches.GetLength() );
+					tAgent.m_tRes.m_dMatches.Resize ( iMatches );
+					tReq.GetBytes ( &tAgent.m_tRes.m_dMatches[0], iMatches*sizeof(CSphMatch) );
+
+					// read totals (retrieved count, total count, query time, word count)
+					int iRetrieved = tReq.GetInt ();
+					tAgent.m_tRes.m_iTotalMatches = tReq.GetInt ();
+					tAgent.m_tRes.m_fQueryTime = (float)tReq.GetInt () / 1000.0f; // !COMMIT
+					tAgent.m_tRes.m_iNumWords = tReq.GetInt ();
+					if ( iRetrieved!=iMatches )
+					{
+						sphWarning ( "index '%s': agent '%s:%d': expected %d retrieved documents, got %d",
+							sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort,
+							iMatches, iRetrieved );
+						break;
+					}
+
+					bool bSetWords = false;
+					if ( pRes->m_iNumWords && tAgent.m_tRes.m_iNumWords!=pRes->m_iNumWords )
+					{
+						sphWarning ( "index '%s': agent '%s:%d': expected %d query words, got %d",
+							sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort,
+							pRes->m_iNumWords, tAgent.m_tRes.m_iNumWords );
+						break;
+					}
+
+					if ( !pRes->m_iNumWords )
+					{
+						pRes->m_iNumWords = tAgent.m_tRes.m_iNumWords;
+						bSetWords = true;
+					}
+
+					// read words
+					int i;
+					for ( i=0; i<pRes->m_iNumWords; i++ )
+					{
+						CSphString sWord = tReq.GetString ();
+
+						// set it in result if not yet, or check if already
+						if ( bSetWords )
+						{
+							pRes->m_tWordStats[i].m_sWord = sWord;
+						} else
+						{
+							if ( pRes->m_tWordStats[i].m_sWord!=sWord )
+								break;
+						}
+
+						pRes->m_tWordStats[i].m_iDocs += tReq.GetInt (); // update docs count
+						pRes->m_tWordStats[i].m_iHits += tReq.GetInt (); // update hits count
+					}
+
+					if ( i!=pRes->m_iNumWords || tReq.GetError() )
+					{
+						sphWarning ( "index '%s': agent '%s:%d': expected %d retrieved documents, got %d",
+							sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort,
+							iMatches, iRetrieved );
+						break;
+					}
+
+					// all done
+					iAgents++;
+					tAgent.Close ();
+				}
+
+				bFailure = false;
+			} while ( false );
+
+			if ( bFailure )
+			{
+				tAgent.Close ();
 				tAgent.m_tRes.m_dMatches.Reset ();
+			}
 		}
-
 	}
 
 	// close timed-out agents
@@ -1013,345 +1382,9 @@ inline bool operator < ( const CSphMatch & a, const CSphMatch & b )
 	return a.m_iDocID < b.m_iDocID;
 };
 
-
-/// std request header
-struct RequestHeader_t
-{
-	int			m_iCommand;			///< command code
-	int			m_iLength;			///< length, bytes
-};
-
-
-/// known commands
-enum SearchdCommand_e
-{
-	CMD_SEARCH		= 0,
-	CMD_EXCERPT		= 1,
-
-	CMD_TOTAL
-};
-
-
-/// known status return codes
-enum SearchdStatus_e
-{
-	SEARCHD_OK		= 0,	///< general success, command-specific reply follows
-	SEARCHD_ERROR	= 1,	///< general failure, command-specific reply may follow
-	SEARCHD_RETRY	= 2		///< temporaty failure, client should retry later
-};
-
 /////////////////////////////////////////////////////////////////////////////
 
-/// fixed-memory response buffer
-/// tracks usage, and flushes to network when necessary
-class ResponseBuffer_c
-{
-public:
-				ResponseBuffer_c ( int iSock );
-				~ResponseBuffer_c ();
-
-	bool		SendInt ( int iValue );
-	bool		SendDword ( DWORD iValue );
-	bool		SendString ( const char * sStr );
-	bool		SendBytes ( const void * pBuf, int iLen );
-	bool		Flush ();
-	bool		GetError () { return m_bError; }
-	int			GetSentCount () { return m_iSent; }
-
-protected:
-	BYTE		m_dBuffer[8192];	///< my buffer
-	BYTE *		m_pBuffer;			///< my current buffer position
-	int			m_iSock;			///< my socket
-	bool		m_bError;			///< if there were any write errors
-	int			m_iSent;
-
-protected:
-	bool		SetError ( bool bValue );	///< set error flag
-	bool		FlushIf ( int iToAdd );		///< flush if there's not enough free space to add iToAdd bytes
-};
-
-
-ResponseBuffer_c::ResponseBuffer_c ( int iSock )
-	: m_pBuffer ( m_dBuffer )
-	, m_iSock ( iSock )
-	, m_bError ( false )
-	, m_iSent ( 0 )
-{
-	assert ( m_iSock>0 );
-}
-
-
-ResponseBuffer_c::~ResponseBuffer_c ()
-{
-}
-
-
-bool ResponseBuffer_c::SendInt ( int iValue )
-{
-	if ( m_bError )
-		return false;
-
-	FlushIf ( sizeof(int) );
-
-	*(int*)m_pBuffer = iValue;
-	m_pBuffer += sizeof(int);
-	assert ( m_pBuffer<m_dBuffer+sizeof(m_dBuffer) );
-	return true;
-}
-
-
-bool ResponseBuffer_c::SendDword ( DWORD iValue )
-{
-	if ( m_bError )
-		return false;
-
-	FlushIf ( sizeof(DWORD) );
-
-	*(DWORD*)m_pBuffer = iValue;
-	m_pBuffer += sizeof(DWORD);
-	assert ( m_pBuffer<m_dBuffer+sizeof(m_dBuffer) );
-	return true;
-}
-
-
-bool ResponseBuffer_c::SendString ( const char * sStr )
-{
-	if ( m_bError )
-		return false;
-
-	FlushIf ( sizeof(DWORD) );
-
-	int iLen = strlen(sStr);
-	*(int*)m_pBuffer = iLen;
-	m_pBuffer += sizeof(int);
-
-	return SendBytes ( sStr, iLen );
-}
-
-
-bool ResponseBuffer_c::SendBytes ( const void * pBuf, int iLen )
-{
-	BYTE * pMy = (BYTE*)pBuf;
-	while ( iLen>0 && !m_bError )
-	{
-		int iLeft = sizeof(m_dBuffer) - ( m_pBuffer - m_dBuffer );
-		if ( iLen<=iLeft )
-		{
-			memcpy ( m_pBuffer, pMy, iLen );
-			m_pBuffer += iLen;
-			break;
-		}
-
-		memcpy ( m_pBuffer, pMy, iLeft );
-		m_pBuffer += iLeft;
-		Flush ();
-
-		pMy += iLeft;
-		iLen -= iLeft;
-	}
-	return !m_bError;
-}
-
-
-bool ResponseBuffer_c::Flush ()
-{
-	if ( m_bError )
-		return false;
-
-	int iLen = m_pBuffer-m_dBuffer;
-	if ( iLen==0 )
-		return true;
-
-	assert ( iLen>0 );
-	assert ( iLen<=sizeof(m_dBuffer) );
-
-	m_bError = !NetWrite ( m_iSock, m_dBuffer, iLen );
-	m_iSent += iLen;
-	return !m_bError;
-}
-
-
-bool ResponseBuffer_c::FlushIf ( int iToAdd )
-{
-	if ( m_pBuffer+iToAdd >= m_dBuffer+sizeof(m_dBuffer) )
-		return Flush ();
-
-	return !m_bError;
-}
-
-/////////////////////////////////////////////////////////////////////////////
-
-bool SendErrorReply ( int iSock, const char * sTemplate, ... )
-{
-	char dBuf [ 2048 ];
-
-	const int iHeaderLen = 12;
-	const int iMaxStrLen = sizeof(dBuf) - iHeaderLen - 1;
-
-	// fill header
-	DWORD * pBuf = (DWORD*)&dBuf[0];
-	pBuf[0] = SEARCHD_ERROR;
-	pBuf[1] = 0; // reply length, to be filled later
-	pBuf[2] = 0; // error string length, to be filled later
-
-	// fill error string
-	char * sBuf = dBuf + iHeaderLen;
-
-	va_list ap;
-	va_start ( ap, sTemplate );
-	vsnprintf ( sBuf, iMaxStrLen, sTemplate, ap );
-	va_end ( ap );
-
-	sBuf[iMaxStrLen] = '\0';
-	int iStrLen = strlen(sBuf);
-
-	// fixup lengths
-	pBuf[1] = iHeaderLen+iStrLen;
-	pBuf[2] = iStrLen;
-
-	// send!
-	return NetWrite ( iSock, dBuf, iHeaderLen+iStrLen );
-}
-
-/////////////////////////////////////////////////////////////////////////////
-
-/// request buffer
-class RequestBuffer_c
-{
-public:
-					RequestBuffer_c ();
-					~RequestBuffer_c ();
-
-	bool			ReadFrom ( int iSock, int iLen );
-
-	int				GetInt ();
-	CSphString		GetString ();
-	bool			GetBytes ( void * pBuf, int iLen );
-	int				GetInts ( int ** pBuffer, int iMax, const char * sErrorTemplate );
-	bool			GetError () { return m_bError; }
-
-protected:
-	int				m_iSock;
-	bool			m_bError;
-
-	BYTE			m_dBuf [ NET_MAX_REQ_LEN ];
-	int				m_iLen;
-	BYTE *			m_pCur;
-
-protected:
-	void			SetError ( bool bError ) { m_bError = bError; }
-};
-
-
-RequestBuffer_c::RequestBuffer_c ()
-	: m_iSock ( -1 )
-	, m_bError ( true )
-	, m_iLen ( 0 )
-	, m_pCur ( m_dBuf )
-{
-}
-
-
-RequestBuffer_c ::~RequestBuffer_c ()
-{
-}
-
-
-bool RequestBuffer_c::ReadFrom ( int iSock, int iLen )
-{
-	assert ( iLen>0 );
-	assert ( iLen<=NET_MAX_REQ_LEN );
-
-	m_iSock = -1;
-	m_bError = true;
-	m_iLen = 0;
-	m_pCur = m_dBuf;
-
-	if ( !NetRead ( iSock, m_dBuf, iLen ) )
-		return false;
-
-	m_iSock = iSock;
-	m_bError = false;
-	m_iLen = iLen;
-	return true;
-}
-
-
-int RequestBuffer_c::GetInt ()
-{
-	if ( m_bError || ( m_pCur+sizeof(int) > m_dBuf+m_iLen ) )
-	{
-		SetError ( true );
-		return 0;
-	}
-
-	int iRes = *(int*)m_pCur;
-	m_pCur += sizeof(int);
-	return iRes;
-}
-
-
-CSphString RequestBuffer_c::GetString ()
-{
-	CSphString sRes;
-
-	int iLen = GetInt ();
-	if ( m_bError || iLen<0 || iLen>NET_MAX_STR_LEN || ( m_pCur+iLen > m_dBuf+m_iLen ) )
-	{
-		SetError ( true );
-		return sRes;
-	}
-
-	sRes.SetBinary ( (char*)m_pCur, iLen );
-	m_pCur += iLen;
-	return sRes;
-}
-
-
-bool RequestBuffer_c::GetBytes ( void * pBuf, int iLen )
-{
-	assert ( pBuf );
-	assert ( iLen>0 && iLen<=NET_MAX_REQ_LEN );
-
-	if ( m_bError || ( m_pCur+iLen > m_dBuf+m_iLen ) )
-	{
-		SetError ( true );
-		return false;
-	}
-
-	memcpy ( pBuf, m_pCur, iLen );
-	m_pCur += iLen;
-	return true;;
-}
-
-
-int RequestBuffer_c::GetInts ( int ** ppBuffer, int iMax, const char * sErrorTemplate )
-{
-	assert ( ppBuffer );
-	assert ( !(*ppBuffer) );
-
-	int iCount = GetInt ();
-	if ( iCount<0 || iCount>iMax )
-	{
-		SendErrorReply ( m_iSock, sErrorTemplate, iCount, iMax );
-		SetError ( true );
-		return -1;
-	}
-	if ( iCount )
-	{
-		(*ppBuffer) = new int [ iCount ];
-		if ( !GetBytes ( (*ppBuffer), sizeof(int)*iCount ) )
-		{
-			SafeDeleteArray ( (*ppBuffer) );
-			return -1;
-		}
-	}
-	return iCount;
-}
-
-/////////////////////////////////////////////////////////////////////////////
-
-void HandleCommandSearch ( int iSock, RequestBuffer_c & tReq )
+void HandleCommandSearch ( int iSock, InputBuffer_c & tReq )
 {
 	CSphQuery tQuery;
 	assert ( sizeof(tQuery.m_eSort)==4 );
@@ -1376,17 +1409,17 @@ void HandleCommandSearch ( int iSock, RequestBuffer_c & tReq )
 
 	if ( tReq.GetError() )
 	{
-		SendErrorReply ( iSock, "bad request (too short)" );
+		tReq.SendErrorReply ( "bad request (too short)" );
 		return;
 	}
 	if ( tQuery.m_iMinID>tQuery.m_iMaxID || tQuery.m_iMinTS>tQuery.m_iMaxTS )
 	{
-		SendErrorReply ( iSock, "bad ID/TS range specified in query" );
+		tReq.SendErrorReply ( "bad ID/TS range specified in query" );
 		return;
 	}
 	if ( tQuery.m_eMode<0 || tQuery.m_eMode>SPH_MATCH_TOTAL )
 	{
-		SendErrorReply ( iSock, "bad match mode %d", tQuery.m_eMode );
+		tReq.SendErrorReply ( "bad match mode %d", tQuery.m_eMode );
 		return;
 	}
 
@@ -1435,7 +1468,7 @@ void HandleCommandSearch ( int iSock, RequestBuffer_c & tReq )
 
 		if ( !iRemote && !tDist.m_dLocal.GetLength() )
 		{
-			SendErrorReply ( iSock, "all remote agents unreachable, no local indexes configured" );
+			tReq.SendErrorReply ( "all remote agents unreachable, no local indexes configured" );
 			return;
 		}
 
@@ -1446,7 +1479,7 @@ void HandleCommandSearch ( int iSock, RequestBuffer_c & tReq )
 			int iReplys = WaitForRemoteAgents ( sIndex.cstr(), tDist, pRes, Max ( iMsecLeft, 0 ) );
 			if ( !iReplys && !tDist.m_dLocal.GetLength() )
 			{
-				SendErrorReply ( iSock, "all reachable remote agents timed out" );
+				tReq.SendErrorReply ( "all reachable remote agents timed out" );
 				return;
 			}
 
@@ -1506,7 +1539,7 @@ void HandleCommandSearch ( int iSock, RequestBuffer_c & tReq )
 			// check that this one exists
 			if ( !g_hIndexes.Exists ( sNext ) )
 			{
-				SendErrorReply ( iSock, "invalid index '%s' specified in request", sNext );
+				tReq.SendErrorReply ( "invalid index '%s' specified in request", sNext );
 				return;
 			}
 
@@ -1527,7 +1560,7 @@ void HandleCommandSearch ( int iSock, RequestBuffer_c & tReq )
 
 		if ( !iSearched )
 		{
-			SendErrorReply ( iSock, "no valid indexes specified in request" );
+			tReq.SendErrorReply ( "no valid indexes specified in request" );
 			return;
 		}
 	}
@@ -1583,7 +1616,7 @@ void HandleCommandSearch ( int iSock, RequestBuffer_c & tReq )
 		iRespLen += 12 + strlen ( pRes->m_tWordStats[i].m_sWord.cstr() );
 
 	// create buffer, send header
-	ResponseBuffer_c tOut ( iSock );
+	NetOutputBuffer_c tOut ( iSock );
 	tOut.SendInt ( SEARCHD_OK );
 	tOut.SendInt ( iRespLen );
 
@@ -1612,47 +1645,53 @@ void HandleCommandSearch ( int iSock, RequestBuffer_c & tReq )
 }
 
 
-void HandleCommandExcerpt ( int iSock, RequestBuffer_c & tReq )
+void HandleCommandExcerpt ( int iSock, InputBuffer_c & tReq )
 {
 }
 
 
 void HandleClient ( int iSock )
 {
-	// exchange versions
-	const DWORD SEARCHD_PROTO_VERSION = 1;
-	NetWrite ( iSock, &SEARCHD_PROTO_VERSION, sizeof(DWORD) );
+	// exchange versions and read request
+	RequestHeader_t tReq;
+	NetInputBuffer_c tBuf ( iSock );
 
 	DWORD uClient = 0;
+	DWORD uServer = SPHINX_SEARCHD_PROTO;
+
+	NetWrite ( iSock, &uServer, sizeof(DWORD) );
 	NetReadInt ( iSock, (int*)&uClient );
+	NetRead ( iSock, &tReq, sizeof(tReq) );
 
 	if ( NetWasError() )
+	{
+		sphWarning ( "handshake failed" );
 		return;
-
-	// read request
-	RequestHeader_t tReq;
-	if ( !NetRead ( iSock, &tReq, sizeof(tReq) ) )
-		return;
+	}
 
 	if ( tReq.m_iCommand<0
 		|| tReq.m_iCommand>=CMD_TOTAL
-		|| tReq.m_iLength<0
+		|| tReq.m_iLength<=0
 		|| tReq.m_iLength>NET_MAX_REQ_LEN )
 	{
 		// unknown command, default response header
-		SendErrorReply ( iSock, "unknown command (code=%d)", tReq.m_iCommand );
+		tBuf.SendErrorReply ( "unknown command (code=%d)", tReq.m_iCommand );
 
 		// if request length is insane, low level comm is broken, so we bail out
-		if ( tReq.m_iLength<0 || tReq.m_iLength>NET_MAX_REQ_LEN )
+		if ( tReq.m_iLength<=0 || tReq.m_iLength>NET_MAX_REQ_LEN )
+		{
+			sphWarning ( "ill-formed client request (length out of bounds)" );
 			return;
+		}
 	}
 
 	// receive request
 	assert ( tReq.m_iLength>=0 && tReq.m_iCommand<=NET_MAX_REQ_LEN );
-
-	RequestBuffer_c tBuf;
 	if ( !tBuf.ReadFrom ( iSock, tReq.m_iLength ) )
+	{
+		sphWarning ( "failed to receive client request body" );
 		return;
+	}
 
 	// handle known commands
 	if ( tReq.m_iCommand>=0 && tReq.m_iCommand<CMD_TOTAL )
@@ -2241,7 +2280,7 @@ int main ( int argc, char **argv )
 			const char * sMessage = "server maxed out, retry in a second";
 			int iRespLen = 4 + strlen(sMessage);
 
-			ResponseBuffer_c tOut ( rsock );
+			NetOutputBuffer_c tOut ( rsock );
 			tOut.SendInt ( SEARCHD_RETRY );
 			tOut.SendInt ( iRespLen );
 			tOut.SendString ( sMessage );

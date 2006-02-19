@@ -65,7 +65,7 @@
 
 #define SPHINX_VERSION			"0.9.6-dev"
 #define SPHINX_BANNER			"Sphinx " SPHINX_VERSION "\nCopyright (c) 2001-2005, Andrew Aksyonoff\n\n"
-#define SPHINX_SEARCHD_PROTO	4
+#define SPHINX_SEARCHD_PROTO	1
 
 #define SPH_MAX_QUERY_WORDS		10
 #define SPH_MAX_WORD_LEN		64

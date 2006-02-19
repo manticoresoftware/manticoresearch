@@ -109,14 +109,6 @@ static SmallStringHash_T < ServedIndex_t >	g_hIndexes;
 
 /////////////////////////////////////////////////////////////////////////////
 
-/// std request header
-struct RequestHeader_t
-{
-	int			m_iCommand;			///< command code
-	int			m_iLength;			///< length, bytes
-};
-
-
 /// known commands
 enum SearchdCommand_e
 {
@@ -266,7 +258,6 @@ void sphInfo ( const char * sFmt, ... )
 // NETWORK STUFF
 /////////////////////////////////////////////////////////////////////////////
 
-bool			g_bNetError				= false;
 const int		NET_MAX_STR_LEN			= 16384;
 const int		NET_MAX_REQ_LEN			= 131072;
 const int		NET_INT_SIZE			= 4;
@@ -357,110 +348,93 @@ int sphSetSockNB ( int iSock )
 STATIC_SIZE_ASSERT ( DWORD, 4 );
 
 
-int NetSelect ( int fd, int maxtime, int writep )
+int sphSockRead ( int iSock, void * buf, int iLen )
 {
+	assert ( iLen>0 );
+
 	#if USE_WINDOWS
 	#pragma warning(disable:4127) // conditional expr is const
 	#pragma warning(disable:4389) // signed/unsigned mismatch
 	#endif // USE_WINDOWS
 
-	fd_set fds;
-	FD_ZERO ( &fds );
-	FD_SET ( fd, &fds );
+	int iTimeout = 1000*Max ( 1, g_iReadTimeout ); // ms to wait total
+	int iLeftMs = iTimeout; // ms to wait left
+	int iLeftBytes = iLen; // bytes to read left
+	float tmStart = sphLongTimer ();
+	char * pBuf = (char*) buf;
 
-	fd_set exceptfds;
-	FD_ZERO ( &exceptfds );
-	FD_SET ( fd, &exceptfds );
+	int iRes = -1, iErr = 0;
+	while ( iLeftBytes>0 && iLeftMs>0 )
+	{
+		fd_set fdRead;
+		FD_ZERO ( &fdRead );
+		FD_SET ( iSock, &fdRead );
 
-	struct timeval tv;
-	tv.tv_sec = maxtime;
-	tv.tv_usec = 0;
+		fd_set fdExcept;
+		FD_ZERO ( &fdExcept );
+		FD_SET ( iSock, &fdExcept );
 
-	return select ( fd+1, writep ? NULL : &fds, writep ? &fds : NULL, &exceptfds, &tv );
+		struct timeval tv;
+		tv.tv_sec = iLeftMs / 1000;
+		tv.tv_usec = iLeftMs % 1000;
+
+		iRes = ::select ( iSock+1, &fdRead, NULL, &fdExcept, &tv );
+
+		// if there was EINTR, retry
+		if ( iRes==-1 )
+		{
+			iErr = sphSockGetErrno();
+			if ( iErr==EINTR )
+			{
+				iLeftMs = iTimeout - (int)( 1000.0f*( sphLongTimer() - tmStart ) );
+				continue;
+			}
+			sphSockSetErrno ( iErr );
+			return -1;
+		}
+
+		// if there was a timeout, report it as an error
+		if ( iRes==0 )
+		{
+			sphSockSetErrno ( ETIMEDOUT );
+			return -1;
+		}
+
+		// try to recv next chunk
+		iRes = sphSockRecv ( iSock, pBuf, iLeftBytes, 0 );
+
+		// if there was EINTR, retry
+		if ( iRes==-1 )
+		{
+			iErr = sphSockGetErrno();
+			if ( iErr==EINTR )
+			{
+				iLeftMs -= (int)( 1000.0f*( sphLongTimer() - tmStart ) );
+				continue;
+			}
+			sphSockSetErrno ( iErr );
+			return -1;
+		}
+
+		// update
+		pBuf += iRes;
+		iLeftBytes -= iRes;
+		iLeftMs = iTimeout - (int)( 1000.0f*( sphLongTimer() - tmStart ) );
+	}
+
+	// if there was a timeout, report it as an error
+	if ( iLeftBytes!=0 )
+	{
+		sphSockSetErrno ( ETIMEDOUT );
+		return -1;
+	}
+
+	return iLen;
 
 	#if USE_WINDOWS
 	#pragma warning(default:4127) // conditional expr is const
 	#pragma warning(default:4389) // signed/unsigned mismatch
 	#endif // USE_WINDOWS
-}
-
-
-int NetRawRead ( int fd, void * buf, int len )
-{
-	int res;
-
-	do {
-		if ( g_iReadTimeout )
-		{
-			do
-			{
-				res = NetSelect ( fd, g_iReadTimeout, 0 );
-			} while ( res==-1 && sphSockGetErrno()==EINTR );
-			if ( res<=0 )
-			{
-				if ( res==0 )
-					sphSockSetErrno ( ETIMEDOUT );
-				return -1;
-			}
-		}
-		res = sphSockRecv ( fd, (char*)buf, len, 0 );
-	} while ( res==-1 && sphSockGetErrno()==EINTR );
-
-	return res;
-}
-
-/////////////////////////////////////////////////////////////////////////////
-
-bool NetWasError ()
-{
-	bool bRet = g_bNetError;
-	g_bNetError = false;
-	return bRet;
-}
-
-
-bool NetSetError ()
-{
-	g_bNetError = true;
-	return false;
-}
-
-
-bool NetSetOK ()
-{
-	g_bNetError = false;
-	return true;
-}
-
-
-bool NetRead ( int iSock, void * pBuf, int iLen )
-{
-	int iGot = sphSockRecv ( iSock, (char*)pBuf, iLen, 0 );
-	return ( iGot==iLen )
-		? NetSetOK()
-		: NetSetError();
-}
-
-
-bool NetReadInt ( int iSock, int * iVal )
-{
-	if ( g_bNetError )
-		return false;
-
-	g_bNetError = ( NetRawRead ( iSock, iVal, sizeof(int) )!=sizeof(int) );
-	return !g_bNetError;
-}
-
-
-bool NetWrite ( int iSock, const void * sBuf, int iLen )
-{
-	if ( g_bNetError )
-		return false;
-
-	if ( sphSockSend ( iSock, (char*)sBuf, iLen, 0 )!=iLen )
-		return NetSetError ();
-
-	return NetSetOK ();
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -532,7 +506,7 @@ class NetInputBuffer_c : public InputBuffer_c
 {
 public:
 					NetInputBuffer_c ( int iSock );
-	bool			ReadFrom ( int iSock, int iLen );
+	bool			ReadFrom ( int iLen );
 	virtual void	SendErrorReply ( const char *, ... );
 
 protected:
@@ -630,7 +604,9 @@ bool NetOutputBuffer_c::Flush ()
 	assert ( iLen>0 );
 	assert ( iLen<=sizeof(m_dBuffer) );
 
-	m_bError = !NetWrite ( m_iSock, m_dBuffer, iLen );
+	int iRes = sphSockSend ( m_iSock, (char*)&m_dBuffer[0], iLen, 0 );
+	m_bError = ( iRes!=iLen );
+
 	m_iSent += iLen;
 	m_pBuffer = m_dBuffer;
 	return !m_bError;
@@ -735,20 +711,22 @@ NetInputBuffer_c::NetInputBuffer_c ( int iSock )
 }
 
 
-bool NetInputBuffer_c::ReadFrom ( int iSock, int iLen )
+bool NetInputBuffer_c::ReadFrom ( int iLen )
 {
 	assert ( iLen>0 );
 	assert ( iLen<=NET_MAX_REQ_LEN );
+	assert ( m_iSock>0 );
 
-	m_iSock = -1;
-	m_bError = true;
-	m_iLen = 0;
 	m_pCur = m_dBuf;
 
-	if ( !NetRead ( iSock, m_dBuf, iLen ) )
+	int iGot = sphSockRead ( m_iSock, &m_dBuf[0], iLen );
+	if ( iGot!=iLen )
+	{
+		m_bError = true;
+		m_iLen = 0;
 		return false;
+	}
 
-	m_iSock = iSock;
 	m_bError = false;
 	m_iLen = iLen;
 	return true;
@@ -784,7 +762,7 @@ void NetInputBuffer_c::SendErrorReply ( const char * sTemplate, ... )
 	pBuf[2] = iStrLen;
 
 	// send!
-	NetWrite ( m_iSock, dBuf, iHeaderLen+iStrLen );
+	sphSockSend ( m_iSock, dBuf, iHeaderLen+iStrLen, 0 );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1652,50 +1630,53 @@ void HandleCommandExcerpt ( int iSock, InputBuffer_c & tReq )
 
 void HandleClient ( int iSock )
 {
-	// exchange versions and read request
-	RequestHeader_t tReq;
 	NetInputBuffer_c tBuf ( iSock );
 
-	DWORD uClient = 0;
+	// send my version
 	DWORD uServer = SPHINX_SEARCHD_PROTO;
-
-	NetWrite ( iSock, &uServer, sizeof(DWORD) );
-	NetReadInt ( iSock, (int*)&uClient );
-	NetRead ( iSock, &tReq, sizeof(tReq) );
-
-	if ( NetWasError() )
+	if ( sphSockSend ( iSock, (char*)&uServer, sizeof(DWORD), 0 )!=sizeof(DWORD) )
 	{
-		sphWarning ( "handshake failed" );
+		sphWarning ( "failed to send server version" );
 		return;
 	}
 
-	if ( tReq.m_iCommand<0
-		|| tReq.m_iCommand>=CMD_TOTAL
-		|| tReq.m_iLength<=0
-		|| tReq.m_iLength>NET_MAX_REQ_LEN )
+	// get client version and request
+	tBuf.ReadFrom ( 3*sizeof(DWORD) );
+	DWORD uClient = tBuf.GetInt ();
+	int iCommand = tBuf.GetInt ();
+	int iLength = tBuf.GetInt ();
+	if ( tBuf.GetError() )
+	{
+		sphWarning ( "failed to receive client version and request" );
+		return;
+	}
+
+	// check request
+	if ( iCommand<0 || iCommand>=CMD_TOTAL
+		|| iLength<=0 || iLength>NET_MAX_REQ_LEN )
 	{
 		// unknown command, default response header
-		tBuf.SendErrorReply ( "unknown command (code=%d)", tReq.m_iCommand );
+		tBuf.SendErrorReply ( "unknown command (code=%d)", iCommand );
 
 		// if request length is insane, low level comm is broken, so we bail out
-		if ( tReq.m_iLength<=0 || tReq.m_iLength>NET_MAX_REQ_LEN )
+		if ( iLength<=0 || iLength>NET_MAX_REQ_LEN )
 		{
 			sphWarning ( "ill-formed client request (length out of bounds)" );
 			return;
 		}
 	}
 
-	// receive request
-	assert ( tReq.m_iLength>=0 && tReq.m_iCommand<=NET_MAX_REQ_LEN );
-	if ( !tBuf.ReadFrom ( iSock, tReq.m_iLength ) )
+	// get request body
+	assert ( iLength>0 && iLength<=NET_MAX_REQ_LEN );
+	if ( !tBuf.ReadFrom ( iLength ) )
 	{
 		sphWarning ( "failed to receive client request body" );
 		return;
 	}
 
 	// handle known commands
-	if ( tReq.m_iCommand>=0 && tReq.m_iCommand<CMD_TOTAL )
-		switch ( tReq.m_iCommand )
+	assert ( iCommand>=0 && iCommand<CMD_TOTAL );
+	switch ( iCommand )
 	{
 		case CMD_SEARCH:	HandleCommandSearch ( iSock, tBuf ); break;
 		case CMD_EXCERPT:	HandleCommandExcerpt ( iSock, tBuf ); break;

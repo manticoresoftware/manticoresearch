@@ -21,9 +21,14 @@
 define ( "SEARCHD_COMMAND_SEARCH",	0 );
 define ( "SEARCHD_COMMAND_EXCERPT",	1 );
 
+/// current client-side command implementation versions
+define ( "VER_COMMAND_SEARCH",		0x100 );
+define ( "VER_COMMAND_EXCERPT",		0x100 );
+
 /// known searchd status codes
 define ( "SEARCHD_OK",				0 );
 define ( "SEARCHD_ERROR",			1 );
+define ( "SEARCHD_RETRY",			1 );
 
 /// known match modes
 define ( "SPH_MATCH_ALL",			0 );
@@ -215,7 +220,7 @@ class SphinxClient
 		//////////////
 
 		$len = strlen($req);
-		$req = pack ( "VV", SEARCHD_COMMAND_SEARCH, $len ) . $req; // add header
+		$req = pack ( "vvV", SEARCHD_COMMAND_SEARCH, VER_COMMAND_SEARCH, $len ) . $req; // add header
 		fwrite ( $fp, $req, $len+8 );
 
 		////////////////

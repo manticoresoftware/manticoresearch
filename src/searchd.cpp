@@ -112,10 +112,18 @@ static SmallStringHash_T < ServedIndex_t >	g_hIndexes;
 /// known commands
 enum SearchdCommand_e
 {
-	CMD_SEARCH		= 0,
-	CMD_EXCERPT		= 1,
+	SEARCHD_COMMAND_SEARCH		= 0,
+	SEARCHD_COMMAND_EXCERPT		= 1,
 
-	CMD_TOTAL
+	SEARCHD_COMMAND_TOTAL
+};
+
+
+/// known command versions
+enum
+{
+	VER_COMMAND_SEARCH		= 0x100,
+	VER_COMMAND_EXCERPT		= 0x100
 };
 
 
@@ -260,7 +268,6 @@ void sphInfo ( const char * sFmt, ... )
 
 const int		NET_MAX_STR_LEN			= 16384;
 const int		NET_MAX_REQ_LEN			= 131072;
-const int		NET_INT_SIZE			= 4;
 const int		SEARCHD_MAX_REQ_GROUPS	= 4096;
 
 const char * sphSockError ( int iErr=0 )
@@ -447,8 +454,9 @@ class NetOutputBuffer_c
 {
 public:
 				NetOutputBuffer_c ( int iSock );
-	bool		SendInt ( int iValue );
-	bool		SendDword ( DWORD iValue );
+	bool		SendInt ( int iValue )		{ return SendT<int> ( iValue ); }
+	bool		SendDword ( DWORD iValue )	{ return SendT<DWORD> ( iValue ); }
+	bool		SendWord ( WORD iValue )	{ return SendT<WORD> ( iValue ); }
 	bool		SendString ( const char * sStr );
 	bool		SendBytes ( const void * pBuf, int iLen );
 	bool		Flush ();
@@ -465,6 +473,8 @@ protected:
 protected:
 	bool		SetError ( bool bValue );	///< set error flag
 	bool		FlushIf ( int iToAdd );		///< flush if there's not enough free space to add iToAdd bytes
+
+	template < typename T > bool	SendT ( T tValue );
 };
 
 
@@ -473,7 +483,8 @@ class InputBuffer_c
 {
 public:
 					InputBuffer_c ();
-	int				GetInt ();
+	int				GetInt () { return GetT<int> (); }
+	WORD			GetWord () { return GetT<WORD> (); }
 	CSphString		GetString ();
 	bool			GetBytes ( void * pBuf, int iLen );
 	int				GetInts ( int ** pBuffer, int iMax, const char * sErrorTemplate );
@@ -488,7 +499,9 @@ protected:
 	BYTE *			m_pCur;
 
 protected:
-	void			SetError ( bool bError ) { m_bError = bError; }
+	void						SetError ( bool bError ) { m_bError = bError; }
+
+	template < typename T > T	GetT ();
 };
 
 
@@ -525,29 +538,15 @@ NetOutputBuffer_c::NetOutputBuffer_c ( int iSock )
 }
 
 
-bool NetOutputBuffer_c::SendInt ( int iValue )
+template < typename T > bool NetOutputBuffer_c::SendT ( T tValue )
 {
 	if ( m_bError )
 		return false;
 
-	FlushIf ( sizeof(int) );
+	FlushIf ( sizeof(T) );
 
-	*(int*)m_pBuffer = iValue;
-	m_pBuffer += sizeof(int);
-	assert ( m_pBuffer<m_dBuffer+sizeof(m_dBuffer) );
-	return true;
-}
-
-
-bool NetOutputBuffer_c::SendDword ( DWORD iValue )
-{
-	if ( m_bError )
-		return false;
-
-	FlushIf ( sizeof(DWORD) );
-
-	*(DWORD*)m_pBuffer = iValue;
-	m_pBuffer += sizeof(DWORD);
+	*(T*)m_pBuffer = tValue;
+	m_pBuffer += sizeof(T);
 	assert ( m_pBuffer<m_dBuffer+sizeof(m_dBuffer) );
 	return true;
 }
@@ -631,16 +630,16 @@ InputBuffer_c::InputBuffer_c ()
 }
 
 
-int InputBuffer_c::GetInt ()
+template < typename T > T InputBuffer_c::GetT ()
 {
-	if ( m_bError || ( m_pCur+sizeof(int) > m_dBuf+m_iLen ) )
+	if ( m_bError || ( m_pCur+sizeof(T) > m_dBuf+m_iLen ) )
 	{
 		SetError ( true );
 		return 0;
 	}
 
-	int iRes = *(int*)m_pCur;
-	m_pCur += sizeof(int);
+	T iRes = *(T*)m_pCur;
+	m_pCur += sizeof(T);
 	return iRes;
 }
 
@@ -1040,7 +1039,8 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				tOut.SendDword ( SPHINX_SEARCHD_PROTO );
 
 				// request header
-				tOut.SendInt ( CMD_SEARCH ); // command
+				tOut.SendWord ( SEARCHD_COMMAND_SEARCH ); // command id
+				tOut.SendWord ( VER_COMMAND_SEARCH ); // command version
 				tOut.SendInt ( iReqSize-12 ); // request body length
 
 				// request v1
@@ -1362,7 +1362,7 @@ inline bool operator < ( const CSphMatch & a, const CSphMatch & b )
 
 /////////////////////////////////////////////////////////////////////////////
 
-void HandleCommandSearch ( int iSock, InputBuffer_c & tReq )
+void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 {
 	CSphQuery tQuery;
 	assert ( sizeof(tQuery.m_eSort)==4 );
@@ -1623,7 +1623,7 @@ void HandleCommandSearch ( int iSock, InputBuffer_c & tReq )
 }
 
 
-void HandleCommandExcerpt ( int iSock, InputBuffer_c & tReq )
+void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 {
 }
 
@@ -1641,9 +1641,10 @@ void HandleClient ( int iSock )
 	}
 
 	// get client version and request
-	tBuf.ReadFrom ( 3*sizeof(DWORD) );
-	DWORD uClient = tBuf.GetInt ();
-	int iCommand = tBuf.GetInt ();
+	tBuf.ReadFrom ( 12 ); // FIXME! magic
+	int iClientVer = tBuf.GetInt ();
+	int iCommand = tBuf.GetWord ();
+	int iCommandVer = tBuf.GetWord ();
 	int iLength = tBuf.GetInt ();
 	if ( tBuf.GetError() )
 	{
@@ -1652,7 +1653,7 @@ void HandleClient ( int iSock )
 	}
 
 	// check request
-	if ( iCommand<0 || iCommand>=CMD_TOTAL
+	if ( iCommand<0 || iCommand>=SEARCHD_COMMAND_TOTAL
 		|| iLength<=0 || iLength>NET_MAX_REQ_LEN )
 	{
 		// unknown command, default response header
@@ -1675,12 +1676,12 @@ void HandleClient ( int iSock )
 	}
 
 	// handle known commands
-	assert ( iCommand>=0 && iCommand<CMD_TOTAL );
+	assert ( iCommand>=0 && iCommand<SEARCHD_COMMAND_TOTAL );
 	switch ( iCommand )
 	{
-		case CMD_SEARCH:	HandleCommandSearch ( iSock, tBuf ); break;
-		case CMD_EXCERPT:	HandleCommandExcerpt ( iSock, tBuf ); break;
-		default:			assert ( 0 && "INTERNAL ERROR: unhandled command" ); break;
+		case SEARCHD_COMMAND_SEARCH:	HandleCommandSearch ( iSock, iCommandVer, tBuf ); break;
+		case SEARCHD_COMMAND_EXCERPT:	HandleCommandExcerpt ( iSock, iCommandVer, tBuf ); break;
+		default:						assert ( 0 && "INTERNAL ERROR: unhandled command" ); break;
 	}
 }
 

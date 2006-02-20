@@ -259,8 +259,9 @@ int main ( int argc, char ** argv )
 			return 1;
 		}
 
-		fprintf ( stdout, "query '%s': returned %d matches of %d total in %.2f sec\n",
-			sQuery, pResult->m_dMatches.GetLength(), pResult->m_iTotalMatches, pResult->m_fQueryTime );
+		fprintf ( stdout, "query '%s': returned %d matches of %d total in %d.%03d sec\n",
+			sQuery, pResult->m_dMatches.GetLength(), pResult->m_iTotalMatches,
+			pResult->m_iQueryTime/1000, pResult->m_iQueryTime%1000 );
 
 		if ( pResult->m_dMatches.GetLength() )
 		{

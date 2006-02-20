@@ -229,7 +229,7 @@ class SphinxClient
 
 		$result = array();
 		$header = fread ( $fp, 8 );
-		list ( $status, $len ) = array_values ( unpack ( "V*V*", $header ) );
+		list ( $status, $ver, $len ) = array_values ( unpack ( "v*v*V*", $header ) );
 		$response = fread ( $fp, $len );
 		fclose ( $fp );
 

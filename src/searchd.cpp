@@ -1140,8 +1140,15 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 				if ( tAgent.m_eState==AGENT_QUERY )
 				{
 					// try to read
-					DWORD uReplyHeader[2];
-					if ( sphSockRecv ( tAgent.m_iSock, (char*)&uReplyHeader[0], sizeof(uReplyHeader), 0 )!=sizeof(uReplyHeader) )
+					struct
+					{
+						WORD	m_iStatus;
+						WORD	m_iVer;
+						int		m_iLength;
+					} tReplyHeader;
+					STATIC_SIZE_ASSERT ( tReplyHeader, 8 );
+
+					if ( sphSockRecv ( tAgent.m_iSock, (char*)&tReplyHeader, sizeof(tReplyHeader), 0 )!=sizeof(tReplyHeader) )
 					{
 						// bail out if failed
 						sphWarning ( "index '%s': agent '%s:%d': failed to receive reply header",
@@ -1150,24 +1157,24 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 					}
 
 					// check the status
-					if ( uReplyHeader[0]!=SEARCHD_OK || uReplyHeader[1]<=0 )
+					if ( tReplyHeader.m_iStatus!=SEARCHD_OK || tReplyHeader.m_iLength<=0 )
 					{
-						if ( uReplyHeader[0]!=SEARCHD_OK && uReplyHeader[1]>0 )
+						if ( tReplyHeader.m_iStatus!=SEARCHD_OK && tReplyHeader.m_iLength>0 )
 						{
 							char sAgentError[1024];
-							int iToRead = Min ( sizeof(sAgentError)-1, uReplyHeader[1] );
+							int iToRead = Min ( sizeof(sAgentError)-1, tReplyHeader.m_iLength );
 							int iRes = sphSockRecv ( tAgent.m_iSock, sAgentError, iToRead, 0 );
 							sAgentError [ Max ( iRes, 0 ) ] = '\0';
 
 							sphWarning ( "index '%s': agent '%s:%d': remote error (status=%d, error=%s)",
 								sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort,
-								uReplyHeader[0], sAgentError+4 );
+								tReplyHeader.m_iStatus, sAgentError+4 );
 
 						} else
 						{
 							sphWarning ( "index '%s': agent '%s:%d': ill-formed reply length (status=%d, len=%d)",
 								sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort,
-								uReplyHeader[0], uReplyHeader[1] );
+								tReplyHeader.m_iStatus, tReplyHeader.m_iLength );
 						}
 						break;
 					}
@@ -1175,8 +1182,8 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 					// header received, switch the status
 					assert ( tAgent.m_pReplyBuf==NULL );
 					tAgent.m_eState = AGENT_REPLY;
-					tAgent.m_pReplyBuf = new char [ uReplyHeader[1] ];
-					tAgent.m_iReplySize = uReplyHeader[1];
+					tAgent.m_pReplyBuf = new char [ tReplyHeader.m_iLength ];
+					tAgent.m_iReplySize = tReplyHeader.m_iLength;
 					tAgent.m_iReplyRead = 0;
 
 					if ( !tAgent.m_pReplyBuf )
@@ -1595,7 +1602,8 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 	// create buffer, send header
 	NetOutputBuffer_c tOut ( iSock );
-	tOut.SendInt ( SEARCHD_OK );
+	tOut.SendWord ( SEARCHD_OK );
+	tOut.SendWord ( VER_COMMAND_SEARCH );
 	tOut.SendInt ( iRespLen );
 
 	// matches

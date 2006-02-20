@@ -261,7 +261,7 @@ class SphinxClient
 		}
 		list ( $result["total"], $result["total_found"], $result["time"], $words ) =
 			array_values ( unpack ( "V*V*V*V*", substr ( $response, $p, 16 ) ) );
-		$result["time"] = sprintf ( "%.2f", $result["time"]/1000 );
+		$result["time"] = sprintf ( "%.3f", $result["time"]/1000 );
 		$p += 16;
 
 		while ( $words-->0 )

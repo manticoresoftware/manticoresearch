@@ -1232,7 +1232,7 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 					// read totals (retrieved count, total count, query time, word count)
 					int iRetrieved = tReq.GetInt ();
 					tAgent.m_tRes.m_iTotalMatches = tReq.GetInt ();
-					tAgent.m_tRes.m_fQueryTime = (float)tReq.GetInt () / 1000.0f; // !COMMIT
+					tAgent.m_tRes.m_iQueryTime = tReq.GetInt ();
 					tAgent.m_tRes.m_iNumWords = tReq.GetInt ();
 					if ( iRetrieved!=iMatches )
 					{
@@ -1558,7 +1558,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 	sphFlattenQueue ( pTop, pRes );
 
-	pRes->m_fQueryTime = sphLongTimer() - tmStart;
+	pRes->m_iQueryTime = int ( 1000.0f*( sphLongTimer() - tmStart ) );
 
 	// log query
 	if ( g_iQueryLogFile>=0 )
@@ -1572,8 +1572,8 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		sTimeBuf [ strlen(sTimeBuf)-1 ] = '\0';
 
 		static const char * sModes [ SPH_MATCH_TOTAL ] = { "all", "any", "phr" };
-		snprintf ( sBuf, sizeof(sBuf), "[%s] %.2f sec: [%d %d %s/%d/%d %d] %s\n",
-			sTimeBuf, pRes->m_fQueryTime,
+		snprintf ( sBuf, sizeof(sBuf), "[%s] %d.%03d sec: [%d %d %s/%d/%d %d] %s\n",
+			sTimeBuf, pRes->m_iQueryTime/1000, pRes->m_iQueryTime%1000,
 			iOffset, iLimit, sModes [ tQuery.m_eMode ], tQuery.m_eSort, tQuery.m_iGroups,
 			pRes->m_iTotalMatches, tQuery.m_sQuery.cstr() );
 
@@ -1605,7 +1605,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 	tOut.SendInt ( pRes->m_dMatches.GetLength() );
 	tOut.SendInt ( pRes->m_iTotalMatches );
-	tOut.SendInt ( Max ( int(pRes->m_fQueryTime*1000), 0 ) );
+	tOut.SendInt ( pRes->m_iQueryTime );
 	tOut.SendInt ( pRes->m_iNumWords );
 
 	for ( int i=0; i<pRes->m_iNumWords; i++ )

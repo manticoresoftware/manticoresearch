@@ -555,7 +555,7 @@ public:
 	}						m_tWordStats [ SPH_MAX_QUERY_WORDS ];
 
 	int						m_iNumWords;		///< query word count
-	float					m_fQueryTime;		///< query time, seconds
+	int						m_iQueryTime;		///< query time, ms
 	CSphVector<CSphMatch>	m_dMatches;			///< top matching documents, no more than MAX_MATCHES
 	int						m_iTotalMatches;	///< total matches count
 

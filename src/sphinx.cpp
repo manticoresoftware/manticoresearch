@@ -1997,7 +1997,7 @@ CSphQueryResult::CSphQueryResult ()
 	}
 
 	m_iNumWords = 0;
-	m_fQueryTime = 0.0f;
+	m_iQueryTime = 0;
 	m_iTotalMatches = 0;
 }
 
@@ -3395,7 +3395,7 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResu
 	PROFILE_BEGIN ( query_init );
 
 	// create result and start timing
-	pResult->m_fQueryTime -= sphLongTimer ();
+	float tmQueryStart = sphLongTimer ();
 	pResult->m_iNumWords = 0;
 
 	// split query into words
@@ -3414,7 +3414,7 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResu
 
 	if ( !nwords )
 	{
-		pResult->m_fQueryTime += sphLongTimer ();
+		pResult->m_iQueryTime += int ( 1000.0f*( sphLongTimer() - tmQueryStart ) );
 		return true;
 	}
 
@@ -3429,7 +3429,7 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResu
 
 	if ( tWordlist.m_iFD<0 || tDoclist.m_iFD<0 )
 	{
-		pResult->m_fQueryTime += sphLongTimer ();
+		pResult->m_iQueryTime += int ( 1000.0f*( sphLongTimer() - tmQueryStart ) );
 		return false;
 	}
 
@@ -3558,7 +3558,7 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResu
 
 		if ( !qwords[0].m_iDocs )
 		{
-			pResult->m_fQueryTime += sphLongTimer ();
+			pResult->m_iQueryTime += int ( 1000.0f*( sphLongTimer() - tmQueryStart ) );
 			return true;
 		}
 
@@ -3837,7 +3837,7 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResu
 	PROFILE_SHOW ();
 
 	// query timer
-	pResult->m_fQueryTime += sphLongTimer ();
+	pResult->m_iQueryTime += int ( 1000.0f*( sphLongTimer() - tmQueryStart ) );
 	return true;
 }
 

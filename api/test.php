@@ -5,7 +5,7 @@
 //
 
 //
-// Copyright (c) 2001-2005, Andrew Aksyonoff. All rights reserved.
+// Copyright (c) 2001-2006, Andrew Aksyonoff. All rights reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License. You should have

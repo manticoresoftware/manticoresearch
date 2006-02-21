@@ -60,7 +60,7 @@ source src1
 	#
 	# mandatory
 	sql_query			= \
-		SELECT id, group_id, date_added, title, content \
+		SELECT id, group_id, UNIX_TIMESTAMP(date_added) AS date_added, title, content \
 		FROM documents
 
 

@@ -3590,7 +3590,7 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResu
 			tMatch.m_iGroupID = qwords[0].m_tDoc.m_iGroupID + m_tHeader.m_tMin.m_iGroupID;
 			tMatch.m_iTimestamp = qwords[0].m_tDoc.m_iTimestamp + m_tHeader.m_tMin.m_iTimestamp;
 
-			// early reject by group id, doc id ot timestamp
+			// early reject by group id, doc id or timestamp
 			if ( !sphGroupMatch ( tMatch.m_iGroupID, pQuery->m_pGroups, pQuery->m_iGroups )
 				|| tMatch.m_iDocID < pQuery->m_iMinID
 				|| tMatch.m_iDocID > pQuery->m_iMaxID
@@ -3744,10 +3744,14 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResu
 			assert ( iLastMatchID!=0 );
 			assert ( iLastMatchID!=UINT_MAX );
 
-			// early reject by group id
+			// early reject by group id, doc id or timestamp
 			tMatchDoc.m_iGroupID += m_tHeader.m_tMin.m_iGroupID;
-			if ( !sphGroupMatch ( tMatchDoc.m_iGroupID, pQuery->m_pGroups, pQuery->m_iGroups ) )
-				continue;
+			if ( !sphGroupMatch ( tMatchDoc.m_iGroupID, pQuery->m_pGroups, pQuery->m_iGroups )
+				|| tMatchDoc.m_iDocID < pQuery->m_iMinID
+				|| tMatchDoc.m_iDocID > pQuery->m_iMaxID
+				|| tMatchDoc.m_iTimestamp < pQuery->m_iMinTS
+				|| tMatchDoc.m_iTimestamp > pQuery->m_iMaxTS )
+					continue;
 
 			// get the words we're matching current document against (let's call them "terms")
 			CSphQueryWord * pHit [ SPH_MAX_QUERY_WORDS ];

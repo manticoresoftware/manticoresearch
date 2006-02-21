@@ -1,7 +1,7 @@
-Sphinx 0.9.1
+Sphinx 0.9.6
 =============
 
-Copyright (c) 2001-2005, Andrew Aksyonoff
+Copyright (c) 2001-2006, Andrew Aksyonoff
 Distributed under GPL; see the file COPYING for details
 
 Overview
@@ -22,9 +22,10 @@ Sphinx consists of the following parts:
 Features
 ---------
 
-- high indexing speed (upto 4000-6000 KB/sec on modern CPUs);
-- high search speed (avg query is 0.1 sec on 2-4 GB text collections);
+- high indexing speed (upto 10 MB/sec on modern CPUs);
+- high search speed (avg query is under 0.1 sec on 2-4 GB text collections);
 - high scalability (upto 100 GB of text, upto 100 M documents on a single CPU);
+- distributed searching;
 - supports MySQL natively (MyISAM and InnoDB tables are both supported);
 - supports phrase searching;
 - supports phrase proximity ranking, providing very good relevance;
@@ -32,7 +33,7 @@ Features
 - supports any number of document fields (weights can be changed on the fly);
 - supports document groups;
 - supports stopwords;
-- supports "match all" and "match any" search modes;
+- supports "match all", "match phrase" and "match any" search modes;
 - generic XML interface which grealy simplifies custom integration.
 
 Where to get it?

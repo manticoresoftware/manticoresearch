@@ -1,4 +1,4 @@
-Sphinx 0.9.1 installation notes
+Sphinx 0.9.6 installation notes
 ================================
 
 Supported operating systems
@@ -47,7 +47,7 @@ Installing Sphinx
 3. Copy the binaries to the directory you plan to be using them from:
 
    $ mkdir /usr/local/sphinx
-   $ cp indexer search searchd query.php /usr/local/sphinx
+   $ cp indexer search searchd /usr/local/sphinx
 
 Installation problems
 ----------------------

@@ -550,6 +550,13 @@ public:
 			m_sValue[iLen] = '\0';
 		}
 	}
+
+	bool IsEmpty ()
+	{
+		if ( !m_sValue )
+			return true;
+		return ( (*m_sValue)=='\0' );
+	}
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -562,6 +569,7 @@ protected:
 
 public:
 	CSphVariant *	m_pNext;
+	bool			m_bTag;
 
 public:
 	/// default ctor
@@ -569,6 +577,7 @@ public:
 		: CSphString ()
 		, m_iValue ( 0 )
 		, m_pNext ( NULL )
+		, m_bTag ( false )
 	{
 	}
 

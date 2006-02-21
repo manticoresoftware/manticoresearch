@@ -33,9 +33,9 @@ source src1
 
 	# some straightforward parameters for 'mysql' source type
 	sql_host			= localhost
-	sql_user			= root
-	sql_pass			= 
-	sql_db				= testdb
+	sql_user			= test
+	sql_pass			=
+	sql_db				= test
 	# sql_sock			= /tmp/mysql.sock	# optional,
 										# usually '/var/lib/mysql/mysql.sock' on Linux,
 										# usually '/tmp/mysql.sock' on FreeBSD
@@ -60,8 +60,8 @@ source src1
 	#
 	# mandatory
 	sql_query			= \
-		SELECT id, group, date, title, data \
-		FROM documents doc
+		SELECT id, group_id, date_added, title, content \
+		FROM documents
 
 
 	# query range setup
@@ -112,8 +112,8 @@ source src1
 	# columns are removed
 	#
 	# optional, default is empty
-	sql_group_column	= group
-	sql_date_column		= date
+	sql_group_column	= group_id
+	sql_date_column		= date_added
 
 	# an example of specifying group/timestamp columns by index:
 	#
@@ -132,6 +132,15 @@ source src1
 	# optional, default is empty
 	#
 	# sql_query_post_index = REPLACE INTO counters ( id, val ) VALUES ( 'max_indexed_id', $maxid )
+
+
+	# document info query
+	# optional, default is empty
+	#
+	# ONLY used by search utility to display document information
+	# MUST fetch desired document field by its id, therefore must contain '$id' macro 
+	#
+	sql_query_info		= SELECT * FROM documents WHERE id=$id
 
 	#############################################################################
 
@@ -158,10 +167,24 @@ source src1
 	# xmlpipe_command	= cat /home/sphinx/test.xml
 }
 
+
+# inherited source example
+#
+# all the parameters are copied from the parent source,
+# and may then be overridden in this source definition
+source src1stripped : src1
+{
+	strip_html			= 1
+}
+
 #############################################################################
 ## index definition
 #############################################################################
 
+# local index example
+#
+# this is an index which is stored locally in the filesystem
+# all indexing-time options (such as morphology and charsets) belong to the index
 index test1
 {
 	# which document source to index
@@ -175,15 +198,17 @@ index test1
 	# .spi/.spd are fulltext index files (index index and index data)
 	#
 	# MUST be defined
-	path			= /home/sphinx/data/testdb
+	path			= ./test1
+	# path			= /home/sphinx/data/test1
 
 	# morphology
 	# default is not to use any
 	#
+	# morphology		= none
 	# morphology		= stem_en
 	# morphology		= stem_ru
 	# morphology		= stem_enru
-	morphology			=
+	morphology			= none
 
 	# stopwords file
 	# format is plain text in whatever encoding you use
@@ -207,6 +232,63 @@ index test1
 	#
 	# 'utf-8' default value is
 	# charset_table		= 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F
+}
+
+
+# inherited index example
+#
+# all the parameters are copied from the parent index,
+# and may then be overridden in this index definition
+index test1stemmed : test1
+{
+	path			= ./test1stemmed
+	morphology		= stem_en
+}
+
+
+# distributed index example
+#
+# this is a virtual index which can NOT be directly indexed,
+# and only containts references to other local and/or remote indexes
+#
+# if searchd receives a query against this index,
+# it does the following:
+#
+# 1) connects to all the specified remote agents,
+# 2) issues the query,
+# 3) searches local indexes (while the remote agents are searching),
+# 4) collects remote search results,
+# 5) merges all the results together (removing the duplicates),
+# 6) sends the merged resuls to client.
+#
+# this index type is primarily intenteded to be able to split huge (100GB+)
+# datasets into chunks placed on different physical servers and them search
+# through those chunks in parallel, reducing response times and server load;
+# it seems, however, that it could also be used to take advantage of
+# multi-processor systems or to implement HA (high-availability) search.
+index dist1
+{
+	# 'distributed' index type MUST be specified
+	type				= distributed
+
+	# local index to be searched
+	# there can be many local indexes configured
+	local				= test1
+	local				= test1stemmed
+
+	# remote agent
+	# there can be many remote agents configured
+	# syntax is 'hostname:port:index1,[index2[,...]]
+	agent				= localhost:3313:remote1
+	agent				= localhost:3314:remote2,remote3
+
+	# remote agent connection timeout, milliseconds
+	# optional, default is 1000 ms, ie. 1 sec
+	agent_connect_timeout	= 1000
+
+	# remote agent query timeout, milliseconds
+	# optional, default is 3000 ms, ie. 3 sec
+	agent_query_timeout		= 3000
 }
 
 #############################################################################
@@ -256,33 +338,6 @@ searchd
 	# used for different external automation scripts
 	# MUST be present
 	pid_file			= /home/sphinx/searchd.pid
-
-
-	# distributed agents list
-	# an external searchd address to proxy each request to
-	# there may be more than one address defined
-	#
-	# default is none, which means working in non-distributed mode
-	#
-	# agent				= srv02:3312
-	# agent				= srv03:3312
-
-
-	# distributed agent query timeout
-	# default is 5 seconds
-	#
-	agent_timeout		= 5
-}
-
-#############################################################################
-## search utility settings
-#############################################################################
-
-search
-{
-	# SQL query to load document info to show off in search results
-	# NOTE: will use SQL credentials from indexer section for now!
-	sql_query_info		= SELECT * FROM documents WHERE id=$id
 }
 
 # --eof--

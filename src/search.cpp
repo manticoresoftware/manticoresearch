@@ -35,6 +35,7 @@ int main ( int argc, char ** argv )
 			"Options are:\n"
 			"-c, --config <file>\tread configuration from specified file\n"
 			"\t\t\t(default is sphinx.conf)\n"
+			"-i, --index <index>\tonly search through specified index\n"
 			"-a, --any\t\tmatch document if any query word is matched\n"
 			"\t\t\t(default is to match all)\n"
 			"-g, -group <id>\t\tlimit matching documents to this group\n"
@@ -60,6 +61,7 @@ int main ( int argc, char ** argv )
 	sQuery[0] = '\0';
 
 	const char * sConfName = "sphinx.conf";
+	const char * sIndex = NULL;
 	CSphVector<DWORD> dGroups;
 	bool bNoInfo = false;
 	int iStart = 0;
@@ -88,6 +90,7 @@ int main ( int argc, char ** argv )
 				OPT ( "-s", "--start" )		iStart = atoi ( argv[++i] );
 				OPT ( "-l", "--limit" )		iLimit = atoi ( argv[++i] );
 				OPT ( "-c", "--config" )	sConfName = argv[++i];
+				OPT ( "-i", "--index" )		sIndex = argv[++i];
 				else break; // unknown option
 			}
 			else break; // unknown option
@@ -133,6 +136,12 @@ int main ( int argc, char ** argv )
 		const CSphConfigSection & hIndex = hConf["index"].IterateGet ();
 		const char * sIndexName = hConf["index"].IterateGetKey().cstr();
 
+		if ( sIndex && strcmp ( sIndex, sIndexName ) )
+			continue;
+
+		if ( hIndex("type") && hIndex["type"]=="distributed" )
+			continue;
+
 		if ( !hIndex.Exists ( "path" ) )
 			sphDie ( "FATAL: key 'path' not found in index '%s'.\n", sIndexName );
 
@@ -163,6 +172,8 @@ int main ( int argc, char ** argv )
 			if ( hIndex["morphology"]=="stem_en" )			iMorph = SPH_MORPH_STEM_EN;
 			else if ( hIndex["morphology"]=="stem_ru" )		iMorph = iRuMorph;
 			else if ( hIndex["morphology"]=="stem_enru" )	iMorph = SPH_MORPH_STEM_EN | iRuMorph;
+			else if ( hIndex["morphology"]=="none" )		iMorph = SPH_MORPH_NONE;
+			else if ( hIndex["morphology"].IsEmpty() )		iMorph = SPH_MORPH_NONE;
 			else
 				fprintf ( stdout, "WARNING: unknown morphology type '%s' ignored.\n", hIndex["morphology"].cstr() );
 		}
@@ -192,7 +203,7 @@ int main ( int argc, char ** argv )
 
 			if ( !hSource.Exists ( "sql_query_info" ) )
 				break;
-			sQueryInfo = hIndex["sql_query_info"].cstr();
+			sQueryInfo = hSource["sql_query_info"].cstr();
 			if ( !strstr ( sQueryInfo, "$id" ) )
 				sphDie ( "FATAL: 'sql_query_info' value must contain '$id'." );
 
@@ -255,12 +266,12 @@ int main ( int argc, char ** argv )
 
 		if ( !pResult )
 		{
-			fprintf ( stdout, "query '%s': search error: can not open index.\n", sQuery );
+			fprintf ( stdout, "index '%s': query '%s': search error: can not open index.\n", sIndexName, sQuery );
 			return 1;
 		}
 
-		fprintf ( stdout, "query '%s': returned %d matches of %d total in %d.%03d sec\n",
-			sQuery, pResult->m_dMatches.GetLength(), pResult->m_iTotalMatches,
+		fprintf ( stdout, "index '%s': query '%s': returned %d matches of %d total in %d.%03d sec\n",
+			sIndexName, sQuery, pResult->m_dMatches.GetLength(), pResult->m_iTotalMatches,
 			pResult->m_iQueryTime/1000, pResult->m_iQueryTime%1000 );
 
 		if ( pResult->m_dMatches.GetLength() )
@@ -272,10 +283,10 @@ int main ( int argc, char ** argv )
 			{
 				CSphMatch & tMatch = pResult->m_dMatches[i];
 				time_t tStamp = tMatch.m_iTimestamp; // for 64-bit
-				fprintf ( stdout, "%d. group=%d, document=%d, weight=%d, time=%s",
+				fprintf ( stdout, "%d. document=%d, group=%d, weight=%d, time=%s",
 					1+i,
-					tMatch.m_iGroupID,
 					tMatch.m_iDocID,
+					tMatch.m_iGroupID,
 					tMatch.m_iWeight,
 					ctime ( &tStamp ) );
 
@@ -299,10 +310,8 @@ int main ( int argc, char ** argv )
 						if ( !tRow )
 							LOC_MYSQL_ERROR ( "mysql_fetch_row" );
 
-						fprintf ( stdout, "\n" );
 						for ( int iField=0; iField<(int)pSqlResult->field_count; iField++ )
-							fprintf ( stdout, "%s=%s\n", pSqlResult->fields[iField].name, tRow[iField] );
-						fprintf ( stdout, "\n" );
+							fprintf ( stdout, "\t%s=%s\n", pSqlResult->fields[iField].name, tRow[iField] );
 
 						mysql_free_result ( pSqlResult );
 						break;
@@ -325,6 +334,7 @@ int main ( int argc, char ** argv )
 					pResult->m_tWordStats[i].m_iDocs,
 					pResult->m_tWordStats[i].m_iHits );
 			}
+			fprintf ( stdout, "\n" );
 		}
 	}
 }

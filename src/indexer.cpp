@@ -18,6 +18,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <signal.h>
+#include <io.h>
 
 #if USE_WINDOWS
 	#define I64FMT		"%I64d"
@@ -31,6 +32,7 @@
 /////////////////////////////////////////////////////////////////////////////
 
 bool g_bQuiet			= false;
+bool g_bProgress		= false;
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -268,24 +270,25 @@ void ShowProgress ( const CSphIndexProgress * pProgress )
 	if ( g_bQuiet )
 		return;
 
-	switch ( pProgress->m_ePhase )
+	if (
+		( g_bProgress && pProgress->m_ePhase==CSphIndexProgress::PHASE_COLLECT ) ||
+		( pProgress->m_ePhase==CSphIndexProgress::PHASE_COLLECT_END ) )
 	{
-		case CSphIndexProgress::PHASE_COLLECT:
-			fprintf ( stdout, "collected %d docs, %.1f MB\r",
-				pProgress->m_iDocuments, float(pProgress->m_iBytes)/1000000.0f );
-			break;
-
-		case CSphIndexProgress::PHASE_SORT:
-			fprintf ( stdout, "sorted %.1f Mhits, %.1f%% done\r",
-				float(pProgress->m_iHits)/1000000,
-				100.0f*float(pProgress->m_iHits) / float(pProgress->m_iHitsTotal) );
-			break;
-
-		case CSphIndexProgress::PHASE_COLLECT_END:
-		case CSphIndexProgress::PHASE_SORT_END:
-			fprintf ( stdout, "\n" );
-			break;
+		fprintf ( stdout, "collected %d docs, %.1f MB",
+			pProgress->m_iDocuments, float(pProgress->m_iBytes)/1000000.0f );
+		fprintf ( stdout, pProgress->m_ePhase==CSphIndexProgress::PHASE_COLLECT_END ? "\n" : "\r" );
 	}
+
+	if (
+		( g_bProgress && pProgress->m_ePhase==CSphIndexProgress::PHASE_SORT ) ||
+		( pProgress->m_ePhase==CSphIndexProgress::PHASE_SORT_END ) )
+	{
+		fprintf ( stdout, "sorted %.1f Mhits, %.1f%% done\r",
+			float(pProgress->m_iHits)/1000000,
+			100.0f*float(pProgress->m_iHits) / float(pProgress->m_iHitsTotal) );
+		fprintf ( stdout, pProgress->m_ePhase==CSphIndexProgress::PHASE_SORT_END ? "\n" : "\r" );
+	}
+
 	fflush ( stdout );
 }
 
@@ -336,6 +339,10 @@ int main ( int argc, char ** argv )
 			g_bQuiet = true;
 			sphSetQuiet ( true );
 
+		} else if ( strcasecmp ( argv[i], "--noprogress" )==0 )
+		{
+			g_bProgress = false;
+
 		} else if ( strcasecmp ( argv[i], "--all" )==0 )
 		{
 			bIndexAll = true;
@@ -353,6 +360,9 @@ int main ( int argc, char ** argv )
 	if ( !g_bQuiet )
 		fprintf ( stdout, SPHINX_BANNER );
 
+	if ( !isatty ( fileno(stdout) ) )
+		g_bProgress = false;
+
 	if ( i!=argc || argc<2 )
 	{
 		if ( argc>1 )
@@ -369,6 +379,8 @@ int main ( int argc, char ** argv )
 				"\t\t\t\t(default is sphinx.conf)\n"
 				"--all\t\t\t\treindex all configured indexes\n"
 				"--quiet\t\t\t\tbe quiet, only print errors\n"
+				"--noprogress\t\t\tdo not display progress\n"
+				"\t\t\t\t(automatically on if output is not to a tty)\n"
 #if !USE_WINDOWS
 				"--rotate\t\t\tsend SIGHUP to searchd when indexing is over\n"
 				"\t\t\t\tto rotate updated indexes automatically\n"
@@ -465,6 +477,13 @@ int main ( int argc, char ** argv )
 		const CSphConfigSection & hIndex = hConf["index"].IterateGet ();
 		const char * sIndexName = hConf["index"].IterateGetKey ().cstr();
 
+		if ( hIndex("type") && hIndex["type"]=="distributed" )
+		{
+			fprintf ( stdout, "skipping index '%s' (distributed indexes can not be directly indexed)...\n", sIndexName );
+			fflush ( stdout );
+			continue;
+		}
+
 		if ( !bIndexAll )
 		{
 			bool bIndex = false;
@@ -478,7 +497,7 @@ int main ( int argc, char ** argv )
 			{
 				if ( !g_bQuiet )
 				{
-					fprintf ( stdout, "skipping index '%s'...\n", sIndexName );
+					fprintf ( stdout, "skipping index '%s' (not specified in command line)...\n", sIndexName );
 					fflush ( stdout );
 				}
 				continue;
@@ -492,9 +511,9 @@ int main ( int argc, char ** argv )
 		}
 
 		// check config
-		CONF_CHECK ( hIndex, "path", "in index '%s'.\n", sIndexName );
-		CONF_CHECK ( hIndex, "source", "in index '%s'.\n", sIndexName );
-		CONF_CHECK ( hConf["source"], hIndex["source"].cstr(), "in config file '%s'.\n", sConfName );
+		CONF_CHECK ( hIndex, "path", "in index '%s'.", sIndexName );
+		CONF_CHECK ( hIndex, "source", "in index '%s'.", sIndexName );
+		CONF_CHECK ( hConf["source"], hIndex["source"].cstr(), "in config file '%s'.", sConfName );
 
 		const CSphConfigSection & hSource = hConf["source"][ hIndex["source"] ];
 		CSphString & sSourceName = hIndex["source"];
@@ -580,7 +599,7 @@ int main ( int argc, char ** argv )
 
 		if ( hSource["type"]=="xmlpipe" )
 		{
-			CONF_CHECK ( hSource, "xmlpipe_command", "in source '%s'.\n", hIndex["source"].cstr() );
+			CONF_CHECK ( hSource, "xmlpipe_command", "in source '%s'.", hIndex["source"].cstr() );
 
 			CSphSource_XMLPipe * pSrcXML = new CSphSource_XMLPipe ();
 			if ( !pSrcXML->Init ( hSource["xmlpipe_command"].cstr() ) )
@@ -689,7 +708,7 @@ int main ( int argc, char ** argv )
 					iMorph = ( bUseUTF8 ? SPH_MORPH_STEM_RU_UTF8 : SPH_MORPH_STEM_RU_CP1251 );
 				else if ( hIndex["morphology"]=="stem_enru" )
 					iMorph = SPH_MORPH_STEM_EN | ( bUseUTF8 ? SPH_MORPH_STEM_RU_UTF8 : SPH_MORPH_STEM_RU_CP1251 );
-				else
+				else if ( !hIndex["morphology"].IsEmpty() && hIndex["morphology"]!="none" )
 					fprintf ( stdout, "WARNING: unknown morphology type '%s' ignored in index '%s'.\n",
 						hIndex["morphology"].cstr(), sIndexName );
 			}

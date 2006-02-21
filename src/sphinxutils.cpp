@@ -178,13 +178,23 @@ bool CSphConfigParser::AddKey ( const char * sKey, char * sValue )
 
 	sValue = trim ( sValue );
 	CSphConfigSection & tSec = m_tConf[m_sSectionType][m_sSectionName];
-	if ( tSec.Exists ( sKey ) )
+	if ( tSec(sKey) )
 	{
-		// chain to tail, to keep the order
-		CSphVariant * pTail = &tSec[sKey];
-		while ( pTail->m_pNext )
-			pTail = pTail->m_pNext;
-		pTail->m_pNext = new CSphVariant ( sValue );
+		if ( tSec[sKey].m_bTag )
+		{
+			// override value or list with a new value
+			SafeDelete ( tSec[sKey].m_pNext ); // only leave the first array element
+			tSec[sKey] = sValue; // update its value
+			tSec[sKey].m_bTag = false; // mark it as overridden
+
+		} else
+		{
+			// chain to tail, to keep the order
+			CSphVariant * pTail = &tSec[sKey];
+			while ( pTail->m_pNext )
+				pTail = pTail->m_pNext;
+			pTail->m_pNext = new CSphVariant ( sValue );
+		}
 
 	} else
 	{
@@ -355,7 +365,14 @@ bool CSphConfigParser::Parse ( const char * file )
 			if ( !m_tConf [ m_sSectionType ].Exists ( sToken ) )
 				LOC_ERROR4 ( "inherited section '%s': parent doesn't exist (parent name='%s', type='%s')", 
 					m_sSectionName.cstr(), sToken, m_sSectionType.cstr() );
-			m_tConf [ m_sSectionType ][ m_sSectionName ] = m_tConf [ m_sSectionType ][ sToken ];
+
+			CSphConfigSection & tDest = m_tConf [ m_sSectionType ][ m_sSectionName ];
+			tDest = m_tConf [ m_sSectionType ][ sToken ];
+
+			// mark all values in the target section as "to be overridden"
+			tDest.IterateStart ();
+			while ( tDest.IterateNext() )
+				tDest.IterateGet().m_bTag = true;
 
 			p--;
 			eState = SEC;

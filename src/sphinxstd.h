@@ -32,7 +32,7 @@ template < typename T > inline void Swap ( T & v1, T & v2 )
 void sphAssert ( const char * sExpr, const char * sFile, int iLine );
 
 #undef assert
-#define assert(_expr) { if ( !(_expr) ) sphAssert ( #_expr, __FILE__, __LINE__ ); }
+#define assert(_expr) (void)( (_expr) || ( sphAssert ( #_expr, __FILE__, __LINE__ ), 0 ) )
 
 #endif // !NDEBUG
 #endif // USE_WINDOWS

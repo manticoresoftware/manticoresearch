@@ -78,6 +78,9 @@ if ( $res===false )
 
 } else
 {
+	if ( $cl->GetLastWarning() )
+		print "WARNING: " . $cl->GetLastWarning() . "\n\n";
+
 	print "Query '$q' retrieved $res[total] of $res[total_found] matches in $res[time] sec.\n";
 	print "Query stats:\n";
 	if ( is_array($res["words"]) )

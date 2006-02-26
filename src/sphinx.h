@@ -534,6 +534,8 @@ public:
 	DWORD			m_iMaxID;		///< max ID to match, UINT_MAX by default
 	DWORD			m_iMinTS;		///< min timestamp to match, 0 by default
 	DWORD			m_iMaxTS;		///< max timestamp to match, UINT_MAX by default
+	DWORD			m_iMinGID;		///< min timestamp to match, 0 by default
+	DWORD			m_iMaxGID;		///< max timestamp to match, UINT_MAX by default
 
 public:
 					CSphQuery ();	///< ctor, fills defaults

@@ -1644,6 +1644,8 @@ CSphQuery::CSphQuery ()
 	, m_iMaxID		( UINT_MAX )
 	, m_iMinTS		( 0 )
 	, m_iMaxTS		( UINT_MAX )
+	, m_iMinGID		( 0 )
+	, m_iMaxGID		( UINT_MAX )
 {
 }
 
@@ -3379,6 +3381,18 @@ CSphQueryResult * CSphIndex_VLN::Query ( CSphDict * pDict, CSphQuery * pQuery )
 }
 
 
+static inline bool sphMatchEarlyReject ( const CSphDocInfo & tMatch, const CSphQuery * pQuery )
+{
+	return ( !sphGroupMatch ( tMatch.m_iGroupID, pQuery->m_pGroups, pQuery->m_iGroups )
+		|| tMatch.m_iDocID < pQuery->m_iMinID
+		|| tMatch.m_iDocID > pQuery->m_iMaxID
+		|| tMatch.m_iTimestamp < pQuery->m_iMinTS
+		|| tMatch.m_iTimestamp > pQuery->m_iMaxTS
+		|| tMatch.m_iGroupID < pQuery->m_iMinGID
+		|| tMatch.m_iGroupID > pQuery->m_iMaxGID );
+}
+
+
 bool CSphIndex_VLN::QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchQueue * pTop )
 {
 	assert ( dict );
@@ -3591,11 +3605,7 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResu
 			tMatch.m_iTimestamp = qwords[0].m_tDoc.m_iTimestamp + m_tHeader.m_tMin.m_iTimestamp;
 
 			// early reject by group id, doc id or timestamp
-			if ( !sphGroupMatch ( tMatch.m_iGroupID, pQuery->m_pGroups, pQuery->m_iGroups )
-				|| tMatch.m_iDocID < pQuery->m_iMinID
-				|| tMatch.m_iDocID > pQuery->m_iMaxID
-				|| tMatch.m_iTimestamp < pQuery->m_iMinTS
-				|| tMatch.m_iTimestamp > pQuery->m_iMaxTS )
+			if ( sphMatchEarlyReject ( tMatch, pQuery ) )
 			{
 				docID++;
 				i = 0;
@@ -3746,12 +3756,8 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResu
 
 			// early reject by group id, doc id or timestamp
 			tMatchDoc.m_iGroupID += m_tHeader.m_tMin.m_iGroupID;
-			if ( !sphGroupMatch ( tMatchDoc.m_iGroupID, pQuery->m_pGroups, pQuery->m_iGroups )
-				|| tMatchDoc.m_iDocID < pQuery->m_iMinID
-				|| tMatchDoc.m_iDocID > pQuery->m_iMaxID
-				|| tMatchDoc.m_iTimestamp < pQuery->m_iMinTS
-				|| tMatchDoc.m_iTimestamp > pQuery->m_iMaxTS )
-					continue;
+			if ( sphMatchEarlyReject ( tMatchDoc, pQuery ) )
+				continue;
 
 			// get the words we're matching current document against (let's call them "terms")
 			CSphQueryWord * pHit [ SPH_MAX_QUERY_WORDS ];

@@ -22,13 +22,13 @@ define ( "SEARCHD_COMMAND_SEARCH",	0 );
 define ( "SEARCHD_COMMAND_EXCERPT",	1 );
 
 /// current client-side command implementation versions
-define ( "VER_COMMAND_SEARCH",		0x100 );
+define ( "VER_COMMAND_SEARCH",		0x101 );
 define ( "VER_COMMAND_EXCERPT",		0x100 );
 
 /// known searchd status codes
 define ( "SEARCHD_OK",				0 );
 define ( "SEARCHD_ERROR",			1 );
-define ( "SEARCHD_RETRY",			1 );
+define ( "SEARCHD_RETRY",			2 );
 
 /// known match modes
 define ( "SPH_MATCH_ALL",			0 );
@@ -56,8 +56,11 @@ class SphinxClient
 	var $_max_id;	///< max ID to match (default is UINT_MAX)
 	var $_min_ts;	///< min timestamp to match (default is 0)
 	var $_max_ts;	///< max timestamp to match (default is UINT_MAX)
+	var $_min_gid;	///< min group id to match (default is 0)
+	var $_max_gid;	///< max group id to match (default is UINT_MAX)
 
 	var $_error;	///< last error message
+	var $_warning;	///< last warning message
 
 	/// create a new client object and fill defaults
 	function SphinxClient ()
@@ -82,6 +85,12 @@ class SphinxClient
 	function GetLastError ()
 	{
 		return $this->_error;
+	}
+
+	/// get last warning message (string)
+	function GetLastWarning ()
+	{
+		return $this->_warning;
 	}
 
 	/// set searchd server
@@ -159,6 +168,16 @@ class SphinxClient
 		$this->_max_ts = $max;
 	}
 
+	/// set groups range to match
+	function SetGroupsRange ( $min, $max )
+	{
+		assert ( is_int($min) );
+		assert ( is_int($max) );
+		assert ( $min<=$max );
+		$this->_min_gid = $min;
+		$this->_max_gid = $max;
+	}
+
 	/// connect to server and run given query
 	///
 	/// $query is query string
@@ -199,7 +218,7 @@ class SphinxClient
 		// build request
 		/////////////////
 
-		// request v1
+		// v.1.0
 		$req = pack ( "VVVV", $this->_offset, $this->_limit, $this->_mode, $this->_sort ); // mode and limits
 		$req .= pack ( "V", count($this->_groups) ); // groups 
 		foreach ( $this->_groups as $group )
@@ -214,6 +233,11 @@ class SphinxClient
 			pack ( "V", (int)$this->_max_id ) .
 			pack ( "V", (int)$this->_min_ts ) .
 			pack ( "V", (int)$this->_max_ts );
+
+		// v.1.1
+		$req .= // gid ranges
+			pack ( "V", (int)$this->_min_gid ) .
+			pack ( "V", (int)$this->_max_gid );
 
 		//////////////
 		// send query
@@ -236,13 +260,25 @@ class SphinxClient
 		// check status
 		if ( $status==SEARCHD_ERROR )
 		{
-			$this->_error = "searchd error: " . substr ( $response, 12 );
+			$this->_error = "searchd error: " . substr ( $response, 4 );
+			return false;
+		}
+		if ( $status==SEARCHD_RETRY )
+		{
+			$this->_error = "temporary searchd error: " . substr ( $response, 4 );
 			return false;
 		}
 		if ( $status!=SEARCHD_OK )
 		{
 			$this->_error = "unknown status code '$status'";
 			return false;
+		}
+
+		// check version
+		if ( $ver<VER_COMMAND_SEARCH )
+		{
+			$this->_warning = sprintf ( "searchd command v.%d.%d older than client's v.%d.%d, some options might not work",
+				$ver>>8, $ver&0xff, VER_COMMAND_SEARCH>>8, VER_COMMAND_SEARCH&0xff );
 		}
 
 		// status is ok, parse response

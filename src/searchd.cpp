@@ -122,7 +122,7 @@ enum SearchdCommand_e
 /// known command versions
 enum
 {
-	VER_COMMAND_SEARCH		= 0x100,
+	VER_COMMAND_SEARCH		= 0x101,
 	VER_COMMAND_EXCERPT		= 0x100
 };
 
@@ -1374,11 +1374,19 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	CSphQuery tQuery;
 	assert ( sizeof(tQuery.m_eSort)==4 );
 
+	// check major command version
+	if ( (iVer>>8)!=(VER_COMMAND_SEARCH>>8) )
+	{
+		tReq.SendErrorReply ( "major command version mismatch (expected v.%d.x, got v.%d.%d)",
+			VER_COMMAND_SEARCH>>8, iVer>>8, iVer&0xff );
+		return;
+	}
+
 	/////////////////
 	// parse request
 	/////////////////
 
-	// v1. mode, limits, weights, ID/TS ranges
+	// v.1.0. mode, limits, weights, ID/TS ranges
 	int iOffset			= tReq.GetInt ();
 	int iLimit			= tReq.GetInt ();
 	int iMode			= tReq.GetInt ();
@@ -1392,6 +1400,14 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	tQuery.m_iMinTS		= tReq.GetInt ();
 	tQuery.m_iMaxTS		= tReq.GetInt ();
 
+	// v.1.1
+	if ( iVer>=0x101 )
+	{
+		tQuery.m_iMinGID = tReq.GetInt ();
+		tQuery.m_iMaxGID = tReq.GetInt ();
+	}
+
+	// additional checks
 	if ( tReq.GetError() )
 	{
 		tReq.SendErrorReply ( "invalid or truncated request" );

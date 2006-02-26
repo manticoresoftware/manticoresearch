@@ -1394,17 +1394,17 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 	if ( tReq.GetError() )
 	{
-		tReq.SendErrorReply ( "bad request (too short)" );
+		tReq.SendErrorReply ( "invalid or truncated request" );
 		return;
 	}
 	if ( tQuery.m_iMinID>tQuery.m_iMaxID || tQuery.m_iMinTS>tQuery.m_iMaxTS )
 	{
-		tReq.SendErrorReply ( "bad ID/TS range specified in query" );
+		tReq.SendErrorReply ( "invalid ID/TS range specified in query" );
 		return;
 	}
 	if ( tQuery.m_eMode<0 || tQuery.m_eMode>SPH_MATCH_TOTAL )
 	{
-		tReq.SendErrorReply ( "bad match mode %d", tQuery.m_eMode );
+		tReq.SendErrorReply ( "invalid match mode %d", tQuery.m_eMode );
 		return;
 	}
 
@@ -1843,7 +1843,7 @@ int main ( int argc, char **argv )
 			{
 				if ( !g_hIndexes ( pLocal->cstr() ) )
 				{
-					sphWarning ( "index '%s': bad local index '%s', SKIPPING",
+					sphWarning ( "index '%s': no such local index '%s', SKIPPING",
 						sIndexName, pLocal->cstr() );
 					continue;
 				}
@@ -1882,7 +1882,7 @@ int main ( int argc, char **argv )
 				tAgent.m_iPort = atoi(p);
 				if ( tAgent.m_iPort<=0 || tAgent.m_iPort>=65536 )
 				{
-					sphWarning ( "index '%s': agent '%s': bad port number near '%s', SKIPPING",
+					sphWarning ( "index '%s': agent '%s': invalid port number near '%s', SKIPPING",
 						sIndexName, pAgent->cstr(), p );
 					continue;
 				}

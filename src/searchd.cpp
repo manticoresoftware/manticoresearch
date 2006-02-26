@@ -1996,6 +1996,8 @@ int main ( int argc, char **argv )
 				if ( hIndex["morphology"]=="stem_en" )			iMorph = SPH_MORPH_STEM_EN;
 				else if ( hIndex["morphology"]=="stem_ru" )		iMorph = iRuMorph;
 				else if ( hIndex["morphology"]=="stem_enru" )	iMorph = SPH_MORPH_STEM_EN | iRuMorph;
+				else if ( hIndex["morphology"]=="none" )		iMorph = SPH_MORPH_NONE;
+				else if ( hIndex["morphology"].IsEmpty() )		iMorph = SPH_MORPH_NONE;
 				else
 					sphWarning ( "unknown morphology type '%s' in index '%s' ignored", hIndex["morphology"].cstr(), sIndexName );
 			}

@@ -103,6 +103,9 @@
 				RelativePath=".\sphinx.cpp">
 			</File>
 			<File
+				RelativePath=".\sphinxexcerpt.cpp">
+			</File>
+			<File
 				RelativePath=".\sphinxstemen.cpp">
 			</File>
 			<File
@@ -118,6 +121,9 @@
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}">
 			<File
 				RelativePath=".\sphinx.h">
+			</File>
+			<File
+				RelativePath=".\sphinxexcerpt.h">
 			</File>
 			<File
 				RelativePath=".\sphinxstd.h">

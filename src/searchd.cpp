@@ -13,6 +13,7 @@
 
 #include "sphinx.h"
 #include "sphinxutils.h"
+#include "sphinxexcerpt.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -266,8 +267,8 @@ void sphInfo ( const char * sFmt, ... )
 // NETWORK STUFF
 /////////////////////////////////////////////////////////////////////////////
 
-const int		NET_MAX_STR_LEN			= 16384;
 const int		NET_MAX_REQ_LEN			= 131072;
+const int		NET_MAX_STR_LEN			= NET_MAX_REQ_LEN;
 const int		SEARCHD_MAX_REQ_GROUPS	= 4096;
 
 const char * sphSockError ( int iErr=0 )
@@ -485,6 +486,8 @@ public:
 					InputBuffer_c ();
 	int				GetInt () { return GetT<int> (); }
 	WORD			GetWord () { return GetT<WORD> (); }
+	DWORD			GetDword () { return GetT<DWORD> (); }
+	BYTE			GetByte () { return GetT<BYTE> (); }
 	CSphString		GetString ();
 	bool			GetBytes ( void * pBuf, int iLen );
 	int				GetInts ( int ** pBuffer, int iMax, const char * sErrorTemplate );
@@ -1395,16 +1398,16 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	tQuery.m_sQuery		= tReq.GetString ();
 	tQuery.m_iWeights	= tReq.GetInts ( (int**)&tQuery.m_pWeights, SPH_MAX_FIELD_COUNT, "invalid weight count %d (should be in 0..%d range)" );
 	CSphString sIndex	= tReq.GetString ();
-	tQuery.m_iMinID		= tReq.GetInt ();
-	tQuery.m_iMaxID		= tReq.GetInt ();
-	tQuery.m_iMinTS		= tReq.GetInt ();
-	tQuery.m_iMaxTS		= tReq.GetInt ();
+	tQuery.m_iMinID		= tReq.GetDword ();
+	tQuery.m_iMaxID		= tReq.GetDword ();
+	tQuery.m_iMinTS		= tReq.GetDword ();
+	tQuery.m_iMaxTS		= tReq.GetDword ();
 
 	// v.1.1
 	if ( iVer>=0x101 )
 	{
-		tQuery.m_iMinGID = tReq.GetInt ();
-		tQuery.m_iMaxGID = tReq.GetInt ();
+		tQuery.m_iMinGID = tReq.GetDword ();
+		tQuery.m_iMaxGID = tReq.GetDword ();
 	}
 
 	// additional checks
@@ -1646,9 +1649,74 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	SafeDelete ( pTop );
 }
 
+/////////////////////////////////////////////////////////////////////////////
 
 void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 {
+	// check major command version
+	if ( (iVer>>8)!=(VER_COMMAND_EXCERPT>>8) )
+	{
+		tReq.SendErrorReply ( "major command version mismatch (expected v.%d.x, got v.%d.%d)",
+			VER_COMMAND_EXCERPT>>8, iVer>>8, iVer&0xff );
+		return;
+	}
+
+	/////////////////////////////
+	// parse and process request
+	/////////////////////////////
+
+	const int EXCERPT_MAX_ENTRIES = 1024;
+
+	// v.1.0
+	int iCount = tReq.GetInt ();
+	if ( iCount<0 || iCount>EXCERPT_MAX_ENTRIES  )
+	{
+		tReq.SendErrorReply ( "invalid entries count %d", iCount );
+		return;
+	}
+
+	CSphVector < char *, 32 > dExcerpts;
+	for ( int i=0; i<iCount; i++ )
+	{
+		ExcerptQuery_t q;
+
+		q.m_sSource = tReq.GetString ();
+		q.m_sWords = tReq.GetString ();
+		q.m_sBeforeMatch = tReq.GetString ();
+		q.m_sAfterMatch = tReq.GetString ();
+		q.m_sChunkSeparator = tReq.GetString ();
+		q.m_iLimit = tReq.GetInt ();
+		q.m_bRemoveSpaces = tReq.GetByte ();
+
+		if ( tReq.GetError() )
+		{
+			tReq.SendErrorReply ( "invalid or truncated request" );
+			return;
+		}
+
+		dExcerpts.Add ( sphBuildExcerpt ( q ) );
+	}
+
+	////////////////
+	// serve result
+	////////////////
+
+	int iRespLen = 0;
+	ARRAY_FOREACH ( i, dExcerpts )
+		iRespLen += 4 + strlen ( dExcerpts[i] );
+
+	NetOutputBuffer_c tOut ( iSock );
+	tOut.SendWord ( SEARCHD_OK );
+	tOut.SendWord ( VER_COMMAND_EXCERPT );
+	tOut.SendInt ( iRespLen );
+	ARRAY_FOREACH ( i, dExcerpts )
+	{
+		tOut.SendString ( dExcerpts[i] );
+		SafeDeleteArray ( dExcerpts[i] );
+	}
+
+	tOut.Flush ();
+	assert ( tOut.GetError()==true || tOut.GetSentCount()==iRespLen+8 );
 }
 
 

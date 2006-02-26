@@ -62,6 +62,10 @@ class SphinxClient
 	var $_error;	///< last error message
 	var $_warning;	///< last warning message
 
+	/////////////////////////////////////////////////////////////////////////////
+	// common stuff
+	/////////////////////////////////////////////////////////////////////////////
+
 	/// create a new client object and fill defaults
 	function SphinxClient ()
 	{
@@ -77,6 +81,8 @@ class SphinxClient
 		$this->_max_id	= 0xFFFFFFFF;
 		$this->_min_ts	= 0;
 		$this->_max_ts	= 0xFFFFFFFF;
+		$this->_min_gid	= 0;
+		$this->_max_gid	= 0xFFFFFFFF;
 
 		$this->_error	= "";
 	}
@@ -101,6 +107,71 @@ class SphinxClient
 		$this->_host = $host;
 		$this->_port = $port;
 	}
+
+	/////////////////////////////////////////////////////////////////////////////
+
+	/// connect to searchd server
+	function _Connect ()
+	{
+		if (!( $fp = @fsockopen ( $this->_host, $this->_port ) ) )
+		{
+			$this->_error = "connection to {$this->_host}:{$this->_port} failed";
+			return false;
+		}
+
+		// check version
+		list(,$v) = unpack ( "V*", fread ( $fp, 4 ) );
+		$v = (int)$v;
+		if ( $v<1 )
+		{
+			fclose ( $fp );
+			$this->_error = "expected searchd protocol version 1+, got version '$v'";
+			return false;
+		}
+
+		// all ok, send my version
+		fwrite ( $fp, pack ( "V", 1 ) );
+		return $fp;
+	}
+
+	/// get and check response packet from searchd server
+	function _GetResponse ( $fp, $client_ver )
+	{
+		$header = fread ( $fp, 8 );
+		list ( $status, $ver, $len ) = array_values ( unpack ( "v*v*V*", $header ) );
+		$response = fread ( $fp, $len );
+		fclose ( $fp );
+
+		// check status
+		if ( $status==SEARCHD_ERROR )
+		{
+			$this->_error = "searchd error: " . substr ( $response, 4 );
+			return false;
+		}
+		if ( $status==SEARCHD_RETRY )
+		{
+			$this->_error = "temporary searchd error: " . substr ( $response, 4 );
+			return false;
+		}
+		if ( $status!=SEARCHD_OK )
+		{
+			$this->_error = "unknown status code '$status'";
+			return false;
+		}
+
+		// check version
+		if ( $ver<$client_ver )
+		{
+			$this->_warning = sprintf ( "searchd command v.%d.%d older than client's v.%d.%d, some options might not work",
+				$ver>>8, $ver&0xff, $client_ver>>8, $client_ver&0xff );
+		}
+
+		return $response;
+	}
+
+	/////////////////////////////////////////////////////////////////////////////
+	// searching
+	/////////////////////////////////////////////////////////////////////////////
 
 	/// set match offset/limits
 	function SetLimits ( $offset, $limit )
@@ -178,7 +249,7 @@ class SphinxClient
 		$this->_max_gid = $max;
 	}
 
-	/// connect to server and run given query
+	/// connect to searchd server and run given search query
 	///
 	/// $query is query string
 	/// $query is index name to query, default is "*" which means to query all indexes
@@ -197,22 +268,8 @@ class SphinxClient
 	///			hash which maps query terms (stemmed!) to ( "docs", "hits" ) hash
 	function Query ( $query, $index="*" )
 	{
-		if (!( $fp = @fsockopen ( $this->_host, $this->_port ) ) )
-		{
-			$this->_error = "connection to {$this->_host}:{$this->_port} failed";
+		if (!( $fp = $this->_Connect() ))
 			return false;
-		}
-
-		// check version, send my version
-		list(,$v) = unpack ( "V*", fread ( $fp, 4 ) );
-		$v = (int)$v;
-		if ( $v<1 )
-		{
-			fclose ( $fp );
-			$this->_error = "expected searchd protocol version 1+, got version '$v'";
-			return false;
-		}
-		fwrite ( $fp, pack ( "V", 1 ) );
 
 		/////////////////
 		// build request
@@ -239,49 +296,21 @@ class SphinxClient
 			pack ( "V", (int)$this->_min_gid ) .
 			pack ( "V", (int)$this->_max_gid );
 
-		//////////////
-		// send query
-		//////////////
+		////////////////////////////
+		// send query, get response
+		////////////////////////////
 
 		$len = strlen($req);
 		$req = pack ( "vvV", SEARCHD_COMMAND_SEARCH, VER_COMMAND_SEARCH, $len ) . $req; // add header
 		fwrite ( $fp, $req, $len+8 );
+		if (!( $response = $this->_GetResponse ( $fp, VER_COMMAND_SEARCH ) ))
+			return false;
 
-		////////////////
-		// get response
-		////////////////
+		//////////////////
+		// parse response
+		//////////////////
 
 		$result = array();
-		$header = fread ( $fp, 8 );
-		list ( $status, $ver, $len ) = array_values ( unpack ( "v*v*V*", $header ) );
-		$response = fread ( $fp, $len );
-		fclose ( $fp );
-
-		// check status
-		if ( $status==SEARCHD_ERROR )
-		{
-			$this->_error = "searchd error: " . substr ( $response, 4 );
-			return false;
-		}
-		if ( $status==SEARCHD_RETRY )
-		{
-			$this->_error = "temporary searchd error: " . substr ( $response, 4 );
-			return false;
-		}
-		if ( $status!=SEARCHD_OK )
-		{
-			$this->_error = "unknown status code '$status'";
-			return false;
-		}
-
-		// check version
-		if ( $ver<VER_COMMAND_SEARCH )
-		{
-			$this->_warning = sprintf ( "searchd command v.%d.%d older than client's v.%d.%d, some options might not work",
-				$ver>>8, $ver&0xff, VER_COMMAND_SEARCH>>8, VER_COMMAND_SEARCH&0xff );
-		}
-
-		// status is ok, parse response
 		list(,$count) = unpack ( "V*", substr ( $response, 0, 4 ) );
 		$p = 4;
 		while ( $count-->0 )
@@ -310,6 +339,69 @@ class SphinxClient
 		}
 
 		return $result;
+	}
+
+	/////////////////////////////////////////////////////////////////////////////
+	// excerpts generation
+	/////////////////////////////////////////////////////////////////////////////
+
+	/// connect to searchd server and generate exceprts
+	function BuildExcerpts ( $entries )
+	{
+		assert ( is_array($entries) );
+		if (!( $fp = $this->_Connect() ))
+			return false;
+
+		/////////////////
+		// build request
+		/////////////////
+
+		// v.1.0
+		// do request
+		$req = pack ( "V", count($entries) );
+		foreach ( $entries as $entry )
+		{
+			$req .= pack ( "V", strlen($entry["source"]) )			. $entry["source"];
+			$req .= pack ( "V", strlen($entry["words"]) )			. $entry["words"];
+			$req .= pack ( "V", strlen($entry["before_match"]) )	. $entry["before_match"];
+			$req .= pack ( "V", strlen($entry["after_match"]) )		. $entry["after_match"];
+			$req .= pack ( "V", strlen($entry["chunk_separator"]) )	. $entry["chunk_separator"];
+			$req .= pack ( "V", (int)$entry["limit"]>0 ? (int)$entry["limit"] : 256 );
+			$req .= pack ( "C", 1 ); // remove spaces
+		}
+
+		////////////////////////////
+		// send query, get response
+		////////////////////////////
+
+		$len = strlen($req);
+		$req = pack ( "vvV", SEARCHD_COMMAND_EXCERPT, VER_COMMAND_EXCERPT, $len ) . $req; // add header
+		$wrote = fwrite ( $fp, $req, $len+8 );
+		if (!( $response = $this->_GetResponse ( $fp, VER_COMMAND_SEARCH ) ))
+			return false;
+
+		//////////////////
+		// parse response
+		//////////////////
+
+		$pos = 0;
+		$res = array ();
+		$rlen = strlen($response);
+		for ( $i=0; $i<count($entries); $i++ )
+		{
+			list(,$len) = unpack ( "V*", substr ( $response, $pos, 4 ) );
+			$pos += 4;
+
+			if ( $pos+$len > $rlen )
+			{
+				$this->_error = "incomplete reply";
+				return false;
+			}
+			$res[] = substr ( $response, $pos, $len );
+			$pos += $len;
+		}
+
+		return $res;
 	}
 }
 

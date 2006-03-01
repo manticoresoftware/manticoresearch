@@ -484,6 +484,7 @@ class InputBuffer_c
 {
 public:
 					InputBuffer_c ();
+	virtual			~InputBuffer_c () {}
 	int				GetInt () { return GetT<int> (); }
 	WORD			GetWord () { return GetT<WORD> (); }
 	DWORD			GetDword () { return GetT<DWORD> (); }

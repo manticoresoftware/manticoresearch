@@ -604,7 +604,7 @@ bool NetOutputBuffer_c::Flush ()
 		return true;
 
 	assert ( iLen>0 );
-	assert ( iLen<=sizeof(m_dBuffer) );
+	assert ( iLen<=(int)sizeof(m_dBuffer) );
 
 	int iRes = sphSockSend ( m_iSock, (char*)&m_dBuffer[0], iLen, 0 );
 	m_bError = ( iRes!=iLen );
@@ -1165,7 +1165,7 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 						if ( tReplyHeader.m_iStatus!=SEARCHD_OK && tReplyHeader.m_iLength>0 )
 						{
 							char sAgentError[1024];
-							int iToRead = Min ( sizeof(sAgentError)-1, tReplyHeader.m_iLength );
+							int iToRead = Min ( (int)sizeof(sAgentError)-1, tReplyHeader.m_iLength );
 							int iRes = sphSockRecv ( tAgent.m_iSock, sAgentError, iToRead, 0 );
 							sAgentError [ Max ( iRes, 0 ) ] = '\0';
 

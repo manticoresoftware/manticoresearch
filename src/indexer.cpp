@@ -18,11 +18,12 @@
 #include <ctype.h>
 #include <errno.h>
 #include <signal.h>
-#include <io.h>
 
 #if USE_WINDOWS
 	#define I64FMT		"%I64d"
 	#define snprintf	_snprintf
+
+	#include <io.h>
 #else
 	#define I64FMT		"%lld"
 

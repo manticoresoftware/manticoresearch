@@ -13,6 +13,7 @@
 
 #include "sphinx.h"
 #include "sphinxexcerpt.h"
+#include <ctype.h>
 
 /////////////////////////////////////////////////////////////////////////////
 // THE EXCERPTS GENERATOR

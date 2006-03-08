@@ -271,8 +271,11 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q )
 		{
 			// no matches found. just show the starting tokens
 			int i = 0;
-			while ( m_iResultLen+m_dTokens[i].m_iLength < q.m_iLimit )
+			while ( i<m_dTokens.GetLength()
+				&& ( m_iResultLen+m_dTokens[i].m_iLength < q.m_iLimit ) )
+			{
 				ResultEmit ( m_dTokens[i++] );
+			}
 		}
 	}
 

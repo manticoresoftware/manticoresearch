@@ -27,11 +27,13 @@ struct ExcerptQuery_t
 	CSphString		m_sChunkSeparator;	///< string to insert between matching chunks (in limited mode only)
 	int				m_iLimit;			///< max chars in excerpt (0 if unlimited)
 	int				m_bRemoveSpaces;	///< whether to collapse whitespace
+	int				m_iAround;			///< how much words to highlight around each match
 
 public:
 	ExcerptQuery_t ()
 		: m_iLimit ( 256 )
 		, m_bRemoveSpaces ( false )
+		, m_iAround ( 5 )
 	{
 	}
 };

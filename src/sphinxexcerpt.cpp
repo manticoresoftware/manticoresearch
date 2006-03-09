@@ -192,7 +192,6 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q )
 		{
 			// matches found. we want to show the best ones while we can
 			int iLen = 0;
-			const int AROUND = 3;
 			CSphVector<Region_t,16> dToShow;
 
 			// find out what ones we may show while fitting in the limit (more or less)
@@ -205,7 +204,7 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q )
 				tReg.m_iMatchEnd = tReg.m_iStart;
 
 				// scan back AROUND words
-				int iScan = AROUND;
+				int iScan = q.m_iAround;
 				while ( tReg.m_iStart>0 && iScan>0 )
 				{
 					if ( m_dTokens [ --tReg.m_iStart ].m_eType==TOK_WORD )
@@ -213,11 +212,11 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q )
 				}
 
 				// scan forward length-1+AROUND words
-				iScan = dMatches[i].m_iLength - 1 + AROUND;
+				iScan = dMatches[i].m_iLength - 1 + q.m_iAround;
 				while ( tReg.m_iEnd<m_dTokens.GetLength()-1 && iScan>0 )
 				{
 					tReg.m_iEnd++;
-					if ( iScan>AROUND )
+					if ( iScan>q.m_iAround )
 						tReg.m_iMatchEnd++;
 					if ( m_dTokens [ tReg.m_iEnd ].m_eType==TOK_WORD )
 						iScan--;

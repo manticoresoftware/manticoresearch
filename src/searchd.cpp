@@ -1675,11 +1675,14 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	int iMode = tReq.GetInt ();
 	int iFlags = tReq.GetInt ();
 	CSphString sIndex = tReq.GetString ();
+
 	q.m_sWords = tReq.GetString ();
 	q.m_sBeforeMatch = tReq.GetString ();
 	q.m_sAfterMatch = tReq.GetString ();
 	q.m_sChunkSeparator = tReq.GetString ();
 	q.m_iLimit = tReq.GetInt ();
+	q.m_iAround = tReq.GetInt ();
+
 	q.m_bRemoveSpaces = ( iFlags & EXCERPT_FLAG_REMOVESPACES );
 
 	int iCount = tReq.GetInt ();

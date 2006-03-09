@@ -369,6 +369,8 @@ class SphinxClient
 	///			a string to insert between excerpts chunks, default is " ... "
 	///		"limit"
 	///			max excerpt size in symbols (codepoints), default is 256
+	///		"around"
+	///			how much words to highlight around each match, default is 5
 	///
 	/// returns false on failure
 	/// retrurns an array of string excerpts on success
@@ -390,6 +392,7 @@ class SphinxClient
 		if ( !isset($opts["after_match"]) )			$opts["after_match"] = "</b>";
 		if ( !isset($opts["chunk_separator"]) )		$opts["chunk_separator"] = " ... ";
 		if ( !isset($opts["limit"]) )				$opts["limit"] = 256;
+		if ( !isset($opts["around"]) )				$opts["around"] = 5;
 
 		/////////////////
 		// build request
@@ -405,6 +408,7 @@ class SphinxClient
 		$req .= pack ( "V", strlen($opts["after_match"]) ) . $opts["after_match"];
 		$req .= pack ( "V", strlen($opts["chunk_separator"]) ) . $opts["chunk_separator"];
 		$req .= pack ( "V", (int)$opts["limit"] );
+		$req .= pack ( "V", (int)$opts["around"] );
 
 		// documents
 		$req .= pack ( "V", count($docs) );

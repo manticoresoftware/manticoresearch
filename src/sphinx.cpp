@@ -73,6 +73,11 @@ void sphAssert ( const char * sExpr, const char * sFile, int iLine )
 // GLOBALS
 /////////////////////////////////////////////////////////////////////////////
 
+const char *	SPHINX_DEFAULT_SBCS_TABLE	= "0..9, A..Z->a..z, _, a..z, U+A8->U+B8, U+B8, U+C0..U+DF->U+E0..U+FF, U+E0..U+FF";
+const char *	SPHINX_DEFAULT_UTF8_TABLE	= "0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F";
+
+/////////////////////////////////////////////////////////////////////////////
+
 static bool		g_bSphQuiet		= false;
 
 /////////////////////////////////////////////////////////////////////////////
@@ -859,66 +864,6 @@ int myatoi ( const char * nptr )
 // TOKENIZERS
 /////////////////////////////////////////////////////////////////////////////
 
-/// lowercaser remap range
-struct CSphRemapRange
-{
-	int			m_iStart;
-	int			m_iEnd;
-	int			m_iRemapStart;
-
-	CSphRemapRange ()
-		: m_iStart		( -1 )
-		, m_iEnd		( -1 )
-		, m_iRemapStart	( -1 )
-	{}
-
-	CSphRemapRange ( int iStart, int iEnd, int iRemapStart )
-		: m_iStart		( iStart )
-		, m_iEnd		( iEnd )
-		, m_iRemapStart	( iRemapStart )
-	{}
-
-	inline bool operator < ( const CSphRemapRange & b )
-	{
-		return m_iStart < b.m_iStart;
-	}
-};
-
-
-/// lowercaser
-class CSphLowercaser
-{
-public:
-				CSphLowercaser ();
-				~CSphLowercaser ();
-
-	void		SetRemap ( const CSphRemapRange * pRemaps, int iRemaps );
-
-public:
-	inline int	ToLower ( int iCode )
-	{
-		assert ( iCode>=0 );
-		if ( iCode>=MAX_CODE )
-			return 0;
-		register int * pChunk = m_ppTable [ iCode>>CHUNK_BITS ];
-		if ( pChunk )
-			return pChunk [ iCode & CHUNK_MASK ];
-		return 0;
-	}
-
-protected:
-	int **				m_ppTable;
-	int *				m_pTable;
-
-	static const int	CHUNK_COUNT	= 0x200;
-	static const int	CHUNK_BITS	= 8;
-
-	static const int	CHUNK_SIZE	= 1 << CHUNK_BITS;
-	static const int	CHUNK_MASK	= CHUNK_SIZE - 1;
-	static const int	MAX_CODE	= CHUNK_COUNT * CHUNK_SIZE;
-};
-
-
 /// parser to build lowercaser from textual config
 class CSphCharsetDefinitionParser
 {
@@ -1013,6 +958,13 @@ CSphLowercaser::CSphLowercaser ()
 }
 
 
+CSphLowercaser::~CSphLowercaser ()
+{
+	SafeDeleteArray ( m_ppTable );
+	SafeDeleteArray ( m_pTable );
+}
+
+
 void CSphLowercaser::SetRemap ( const CSphRemapRange * pRemaps, int iRemaps )
 {
 	SafeDeleteArray ( m_ppTable );
@@ -1073,10 +1025,15 @@ void CSphLowercaser::SetRemap ( const CSphRemapRange * pRemaps, int iRemaps )
 }
 
 
-CSphLowercaser::~CSphLowercaser ()
+bool CSphLowercaser::SetRemap ( const char * sConfig )
 {
-	SafeDeleteArray ( m_ppTable );
-	SafeDeleteArray ( m_pTable );
+	CSphCharsetDefinitionParser tParser;
+	if ( tParser.Parse ( sConfig, *this )!=0 )
+	{
+		fprintf ( stdout, "ERROR: %s", tParser.GetLastError() );
+		return false;
+	}
+	return true;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1328,9 +1285,7 @@ CSphTokenizer_SBCS::CSphTokenizer_SBCS ()
 	, m_iAccum		( 0 )
 	, m_bLast		( false )
 {
-	SetCaseFolding (
-		"0..9, A..Z->a..z, _, a..z, "
-		"U+a8->U+b8, U+b8, U+c0..U+df->U+e0..U+ff, U+e0..U+ff" );
+	SetCaseFolding ( SPHINX_DEFAULT_SBCS_TABLE );
 }
 
 
@@ -1446,7 +1401,7 @@ CSphTokenizer_UTF8::CSphTokenizer_UTF8 ()
 	, m_bLast		( false )
 {
 	m_pAccum = m_sAccum;
-	SetCaseFolding ( "0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F" );
+	SetCaseFolding ( SPHINX_DEFAULT_UTF8_TABLE );
 }
 
 

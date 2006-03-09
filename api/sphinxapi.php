@@ -142,6 +142,15 @@ class SphinxClient
 		$response = fread ( $fp, $len );
 		fclose ( $fp );
 
+		// check response
+		if ( !$response )
+		{
+			$this->_error = $len
+				? "failed to read searchd response"
+				: "received zero-sized searchd response";
+			return false;
+		}
+
 		// check status
 		if ( $status==SEARCHD_ERROR )
 		{
@@ -345,29 +354,64 @@ class SphinxClient
 	// excerpts generation
 	/////////////////////////////////////////////////////////////////////////////
 
-	/// connect to searchd server and generate exceprts
-	function BuildExcerpts ( $entries )
+	/// connect to searchd server and generate exceprts from given documents
+	///
+	/// $index is a string specifiying the index which settings will be used
+	///		for stemming, lexing and case folding
+	/// $docs is an array of strings which represent the documents' contents
+	/// $words is a string which contains the words to highlight
+	/// $params is a hash which contains additional optional highlighting parameters:
+	///		"before_match"
+	///			a string to insert before a set of matching words, default is "<b>"
+	///		"after_match"
+	///			a string to insert after a set of matching words, default is "<b>"
+	///		"chunk_separator"
+	///			a string to insert between excerpts chunks, default is " ... "
+	///		"limit"
+	///			max excerpt size in symbols (codepoints), default is 256
+	///
+	/// returns false on failure
+	/// retrurns an array of string excerpts on success
+	function BuildExcerpts ( $docs, $index, $words, $opts=array() )
 	{
-		assert ( is_array($entries) );
+		assert ( is_array($docs) );
+		assert ( is_string($index) );
+		assert ( is_string($words) );
+		assert ( is_array($opts) );
+
 		if (!( $fp = $this->_Connect() ))
 			return false;
+
+		/////////////////
+		// fixup options
+		/////////////////
+
+		if ( !isset($opts["before_match"]) )		$opts["before_match"] = "<b>";
+		if ( !isset($opts["after_match"]) )			$opts["after_match"] = "</b>";
+		if ( !isset($opts["chunk_separator"]) )		$opts["chunk_separator"] = " ... ";
+		if ( !isset($opts["limit"]) )				$opts["limit"] = 256;
 
 		/////////////////
 		// build request
 		/////////////////
 
-		// v.1.0
-		// do request
-		$req = pack ( "V", count($entries) );
-		foreach ( $entries as $entry )
+		// v.1.0 req
+		$req = pack ( "VV", 0, 1 ); // mode=0, flags=1 (remove spaces)
+		$req .= pack ( "V", strlen($index) ) . $index; // req index
+		$req .= pack ( "V", strlen($words) ) . $words; // req words
+
+		// options
+		$req .= pack ( "V", strlen($opts["before_match"]) ) . $opts["before_match"];
+		$req .= pack ( "V", strlen($opts["after_match"]) ) . $opts["after_match"];
+		$req .= pack ( "V", strlen($opts["chunk_separator"]) ) . $opts["chunk_separator"];
+		$req .= pack ( "V", (int)$opts["limit"] );
+
+		// documents
+		$req .= pack ( "V", count($docs) );
+		foreach ( $docs as $doc )
 		{
-			$req .= pack ( "V", strlen($entry["source"]) )			. $entry["source"];
-			$req .= pack ( "V", strlen($entry["words"]) )			. $entry["words"];
-			$req .= pack ( "V", strlen($entry["before_match"]) )	. $entry["before_match"];
-			$req .= pack ( "V", strlen($entry["after_match"]) )		. $entry["after_match"];
-			$req .= pack ( "V", strlen($entry["chunk_separator"]) )	. $entry["chunk_separator"];
-			$req .= pack ( "V", (int)$entry["limit"]>0 ? (int)$entry["limit"] : 256 );
-			$req .= pack ( "C", 1 ); // remove spaces
+			assert ( is_string($doc) );
+			$req .= pack ( "V", strlen($doc) ) . $doc;
 		}
 
 		////////////////////////////
@@ -377,7 +421,7 @@ class SphinxClient
 		$len = strlen($req);
 		$req = pack ( "vvV", SEARCHD_COMMAND_EXCERPT, VER_COMMAND_EXCERPT, $len ) . $req; // add header
 		$wrote = fwrite ( $fp, $req, $len+8 );
-		if (!( $response = $this->_GetResponse ( $fp, VER_COMMAND_SEARCH ) ))
+		if (!( $response = $this->_GetResponse ( $fp, VER_COMMAND_EXCERPT ) ))
 			return false;
 
 		//////////////////
@@ -387,7 +431,7 @@ class SphinxClient
 		$pos = 0;
 		$res = array ();
 		$rlen = strlen($response);
-		for ( $i=0; $i<count($entries); $i++ )
+		for ( $i=0; $i<count($docs); $i++ )
 		{
 			list(,$len) = unpack ( "V*", substr ( $response, $pos, 4 ) );
 			$pos += 4;

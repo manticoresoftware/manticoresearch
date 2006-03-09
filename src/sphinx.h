@@ -105,6 +105,73 @@ void *			operator new [] ( size_t iSize );
 // TOKENIZERS
 /////////////////////////////////////////////////////////////////////////////
 
+extern const char *		SPHINX_DEFAULT_SBCS_TABLE;
+extern const char *		SPHINX_DEFAULT_UTF8_TABLE;
+
+/////////////////////////////////////////////////////////////////////////////
+
+/// lowercaser remap range
+struct CSphRemapRange
+{
+	int			m_iStart;
+	int			m_iEnd;
+	int			m_iRemapStart;
+
+	CSphRemapRange ()
+		: m_iStart		( -1 )
+		, m_iEnd		( -1 )
+		, m_iRemapStart	( -1 )
+	{}
+
+	CSphRemapRange ( int iStart, int iEnd, int iRemapStart )
+		: m_iStart		( iStart )
+		, m_iEnd		( iEnd )
+		, m_iRemapStart	( iRemapStart )
+	{}
+
+	inline bool operator < ( const CSphRemapRange & b )
+	{
+		return m_iStart < b.m_iStart;
+	}
+};
+
+
+/// lowercaser
+class CSphLowercaser
+{
+public:
+				CSphLowercaser ();
+				~CSphLowercaser ();
+
+	void		SetRemap ( const CSphRemapRange * pRemaps, int iRemaps );
+	bool		SetRemap ( const char * sConfig );
+
+public:
+	inline int	ToLower ( int iCode )
+	{
+		assert ( iCode>=0 );
+		if ( iCode>=MAX_CODE )
+			return 0;
+		register int * pChunk = m_ppTable [ iCode>>CHUNK_BITS ];
+		if ( pChunk )
+			return pChunk [ iCode & CHUNK_MASK ];
+		return 0;
+	}
+
+protected:
+	int **				m_ppTable;
+	int *				m_pTable;
+
+	static const int	CHUNK_COUNT	= 0x200;
+	static const int	CHUNK_BITS	= 8;
+
+	static const int	CHUNK_SIZE	= 1 << CHUNK_BITS;
+	static const int	CHUNK_MASK	= CHUNK_SIZE - 1;
+	static const int	MAX_CODE	= CHUNK_COUNT * CHUNK_SIZE;
+};
+
+/////////////////////////////////////////////////////////////////////////////
+
 /// generic tokenizer
 class ISphTokenizer
 {

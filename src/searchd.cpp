@@ -1666,9 +1666,22 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	// parse and process request
 	/////////////////////////////
 
-	const int EXCERPT_MAX_ENTRIES = 1024;
+	const int EXCERPT_MAX_ENTRIES			= 1024;
+	const int EXCERPT_FLAG_REMOVESPACES		= 1;
 
 	// v.1.0
+	ExcerptQuery_t q;
+
+	int iMode = tReq.GetInt ();
+	int iFlags = tReq.GetInt ();
+	CSphString sIndex = tReq.GetString ();
+	q.m_sWords = tReq.GetString ();
+	q.m_sBeforeMatch = tReq.GetString ();
+	q.m_sAfterMatch = tReq.GetString ();
+	q.m_sChunkSeparator = tReq.GetString ();
+	q.m_iLimit = tReq.GetInt ();
+	q.m_bRemoveSpaces = ( iFlags & EXCERPT_FLAG_REMOVESPACES );
+
 	int iCount = tReq.GetInt ();
 	if ( iCount<0 || iCount>EXCERPT_MAX_ENTRIES  )
 	{
@@ -1679,22 +1692,12 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	CSphVector < char *, 32 > dExcerpts;
 	for ( int i=0; i<iCount; i++ )
 	{
-		ExcerptQuery_t q;
-
 		q.m_sSource = tReq.GetString ();
-		q.m_sWords = tReq.GetString ();
-		q.m_sBeforeMatch = tReq.GetString ();
-		q.m_sAfterMatch = tReq.GetString ();
-		q.m_sChunkSeparator = tReq.GetString ();
-		q.m_iLimit = tReq.GetInt ();
-		q.m_bRemoveSpaces = tReq.GetByte ();
-
 		if ( tReq.GetError() )
 		{
 			tReq.SendErrorReply ( "invalid or truncated request" );
 			return;
 		}
-
 		dExcerpts.Add ( sphBuildExcerpt ( q ) );
 	}
 

@@ -24,6 +24,8 @@ class ExcerptGen_c
 public:
 							ExcerptGen_c ();
 							~ExcerptGen_c () {}
+
+	bool					SetCaseFolding ( const char * sConfig );
 	char *					BuildExcerpt ( const ExcerptQuery_t & q );
 
 public:
@@ -62,11 +64,11 @@ protected:
 	CSphVector<BYTE,16384>	m_dResult;		///< result holder
 	int						m_iResultLen;	///< result codepoints count
 
+	CSphLowercaser			m_tLC;
+
 protected:
 	template<int L> void	DecodeUtf8 ( const char * sText, CSphVector<Token_t,L> & dBuf );
 	template<int L> void	SubmitCodepoint ( CSphVector<Token_t,L> & dBuf, int iCode );
-	Token_e					GetCodepointType ( int iCode );
-	int						FoldCodepoint ( int iCode );
 	bool					TokensMatch ( const Token_t & a, const Token_t & b);
 	void					ResultEmit ( int iCode );
 	void					ResultEmit ( const char * sLine );
@@ -94,6 +96,14 @@ ExcerptGen_c::ExcerptGen_c ()
 	m_tTok.m_eType = TOK_NONE;
 	m_tTok.m_iStart = -1;
 	m_tTok.m_iLength = -1;
+
+	m_tLC.SetRemap ( SPHINX_DEFAULT_UTF8_TABLE );
+}
+
+
+bool ExcerptGen_c::SetCaseFolding ( const char * sConfig )
+{
+	return m_tLC.SetRemap ( sConfig );
 }
 
 
@@ -347,12 +357,24 @@ template<int L> void ExcerptGen_c::DecodeUtf8 ( const char * sText, CSphVector<T
 template<int L> void ExcerptGen_c::SubmitCodepoint ( CSphVector<Token_t,L> & dBuf, int iCode )
 {
 	// find out its type
-	Token_e eType = GetCodepointType ( iCode );
+	Token_e eType = TOK_NONE;
+	int iLC = 0;
+	if ( iCode )
+	{
+		if ( iCode<256 && isspace(iCode) )
+		{
+			eType = TOK_SPACE;
+		} else
+		{
+			iLC = m_tLC.ToLower ( iCode );
+			eType = iLC ? TOK_WORD : TOK_NONWORD;
+		}
+	}
 
 	// add the codepoint
 	int iPos = m_dCodes.GetLength ();
 	m_dCodes.Add ( iCode );
-	m_dFolded.Add ( FoldCodepoint ( iCode ) );
+	m_dFolded.Add ( iLC );
 
 	// do tokenizing
 	if ( m_tTok.m_eType==eType )
@@ -374,26 +396,6 @@ template<int L> void ExcerptGen_c::SubmitCodepoint ( CSphVector<Token_t,L> & dBu
 		if ( eType==TOK_NONE )
 			dBuf.Add ( m_tTok );
 	}
-}
-
-
-ExcerptGen_c::Token_e ExcerptGen_c::GetCodepointType ( int iCode )
-{
-	//!COMMIT
-	if ( !iCode ) return TOK_NONE;
-	if ( iCode>=256 ) return TOK_NONWORD;
-	if ( isspace(iCode) ) return TOK_SPACE;
-	if ( iCode>='a' && iCode<='z' ) return TOK_WORD;
-	if ( iCode>='A' && iCode<='Z' ) return TOK_WORD;
-	return TOK_NONWORD;
-}
-
-
-int ExcerptGen_c::FoldCodepoint ( int iCode )
-{
-	//!COMMIT
-	if ( iCode>='A' && iCode<='Z' ) return iCode-'A'+'a';
-	return iCode;
 }
 
 

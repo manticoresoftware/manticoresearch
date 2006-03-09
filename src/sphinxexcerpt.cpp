@@ -44,6 +44,13 @@ public:
 		int					m_iLength;		///< token length (in codepoints)
 	};
 
+	struct Match_t
+	{
+		int					m_iStart;		///< token start (index in codepoints array)
+		int					m_iLength;		///< token length (in codepoints)
+		int					m_iWeight;
+	};
+
 	struct Region_t
 	{
 		int					m_iStart;		///< index of the first token to be shown
@@ -69,7 +76,10 @@ protected:
 protected:
 	template<int L> void	DecodeUtf8 ( const char * sText, CSphVector<Token_t,L> & dBuf );
 	template<int L> void	SubmitCodepoint ( CSphVector<Token_t,L> & dBuf, int iCode );
+
 	bool					TokensMatch ( const Token_t & a, const Token_t & b);
+	int						TokenLen ( int iPos, bool bRemoveSpaces );
+
 	void					ResultEmit ( int iCode );
 	void					ResultEmit ( const char * sLine );
 	void					ResultEmit ( const Token_t & sTok );
@@ -82,13 +92,21 @@ inline bool operator < ( const ExcerptGen_c::Token_t & a, const ExcerptGen_c::To
 	if ( a.m_iLength==b.m_iLength )
 		return a.m_iStart > b.m_iStart;
 	return a.m_iLength < b.m_iLength;
-};
+}
+
+
+inline bool operator < ( const ExcerptGen_c::Match_t & a, const ExcerptGen_c::Match_t & b )
+{
+	if ( a.m_iWeight==b.m_iWeight )
+		return a.m_iLength < b.m_iLength;
+	return a.m_iWeight < b.m_iWeight;
+}
 
 
 inline bool operator < ( const ExcerptGen_c::Region_t & a, const ExcerptGen_c::Region_t & b )
 {
 	return a.m_iStart < b.m_iStart;
-};
+}
 
 
 ExcerptGen_c::ExcerptGen_c ()
@@ -145,14 +163,14 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q )
 
 	} else
 	{
-		Token_t tLast;
+		Match_t tLast;
 		bool bLastMatch = false;
 
-		tLast.m_eType = TOK_NONE;
 		tLast.m_iStart = -1;
 		tLast.m_iLength = -1;
+		tLast.m_iWeight = 0;
 
-		CSphVector<Token_t,128> dMatches;
+		CSphVector<Match_t,128> dMatches;
 
 		ARRAY_FOREACH ( iTok, m_dTokens )
 		{
@@ -160,11 +178,13 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q )
 				continue;
 
 			bool bMatch = false;
+			int iWeight = -1;
 			if ( m_dTokens[iTok].m_eType==TOK_WORD )
 				ARRAY_FOREACH ( iWord, m_dWords )
 					if ( TokensMatch ( m_dTokens[iTok], m_dWords[iWord] ) )
 			{
 				bMatch = true;
+				iWeight = m_dWords[iWord].m_iLength;
 				break;
 			}
 
@@ -173,10 +193,12 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q )
 				if ( bLastMatch )
 				{
 					tLast.m_iLength++;
+					tLast.m_iWeight = Max ( tLast.m_iWeight, iWeight );
 				} else
 				{
 					tLast.m_iStart = iTok;
 					tLast.m_iLength = 1;
+					tLast.m_iWeight = iWeight;
 				}
 			} else
 			{
@@ -195,6 +217,55 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q )
 			CSphVector<Region_t,16> dToShow;
 
 			// find out what ones we may show while fitting in the limit (more or less)
+#if 1
+			{
+				int i = 0;
+				Region_t tReg;
+				tReg.m_iStart = dMatches[i].m_iStart;
+				tReg.m_iEnd = dMatches[i].m_iStart;
+				tReg.m_iMatchStart = tReg.m_iStart;
+				tReg.m_iMatchEnd = tReg.m_iStart;
+
+				// scan back and forth, while the limit is not reached
+				int iLast = m_dTokens.GetLength() - 1;
+				int iMatchLen = dMatches[i].m_iLength;
+				while ( iLen<q.m_iLimit
+					&& ( tReg.m_iStart>0 || tReg.m_iEnd<iLast ) )
+				{
+					if ( tReg.m_iStart>0 )
+					{
+						int iAdd = TokenLen ( tReg.m_iStart-1, q.m_bRemoveSpaces );
+						if ( iLen+iAdd<=q.m_iLimit )
+						{
+							iLen += iAdd;
+							--tReg.m_iStart;
+						} else
+							break;
+					}
+
+					if ( tReg.m_iEnd<iLast )
+					{
+						int iAdd = TokenLen ( tReg.m_iEnd+1, q.m_bRemoveSpaces );
+						if ( iLen+iAdd<=q.m_iLimit )
+						{
+							iLen += iAdd;
+							tReg.m_iEnd++;
+							if ( iMatchLen>0 )
+							{
+								tReg.m_iMatchEnd++;
+								iMatchLen--;
+							}
+						} else
+							break;
+					}
+				}
+
+				// add it
+				dToShow.Add ( tReg );
+			}
+
+#else
+			// find out what ones we may show while fitting in the limit (more or less)
 			for ( int i=0; iLen<q.m_iLimit && i<dMatches.GetLength(); i++ )
 			{
 				Region_t tReg;
@@ -204,39 +275,51 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q )
 				tReg.m_iMatchEnd = tReg.m_iStart;
 
 				// scan back AROUND words
-				int iScan = q.m_iAround;
-				while ( tReg.m_iStart>0 && iScan>0 )
-				{
-					if ( m_dTokens [ --tReg.m_iStart ].m_eType==TOK_WORD )
-						iScan--;
-				}
-
 				// scan forward length-1+AROUND words
-				iScan = dMatches[i].m_iLength - 1 + q.m_iAround;
-				while ( tReg.m_iEnd<m_dTokens.GetLength()-1 && iScan>0 )
-				{
-					tReg.m_iEnd++;
-					if ( iScan>q.m_iAround )
-						tReg.m_iMatchEnd++;
-					if ( m_dTokens [ tReg.m_iEnd ].m_eType==TOK_WORD )
-						iScan--;
-				}
+				int iBack = q.m_iAround;
+				int iForth = dMatches[i].m_iLength - 1 + q.m_iAround;
+				int iLast = m_dTokens.GetLength() - 1;
 
-				// calc length
-				int iAddLen = 0;
-				for ( int iPos=tReg.m_iStart; iPos<=tReg.m_iEnd;iPos++ )
+				while ( tReg.m_iStart>0
+					&& ( iBack>0 || ( tReg.m_iEnd<iLast && iForth>0 ) )
+					&& iLen<q.m_iLimit )
 				{
-					iAddLen += ( m_dTokens[iPos].m_eType == TOK_SPACE && q.m_bRemoveSpaces )
-						? 1
-						: m_dTokens[iPos].m_iLength;
+					if ( iBack>0 )
+					{
+						int iAdd = TokenLen ( tReg.m_iStart-1, q.m_bRemoveSpaces );
+						if ( iLen+iAdd<=q.m_iLimit )
+						{
+							iLen += iAdd;
+							if ( m_dTokens[--tReg.m_iStart].m_eType==TOK_WORD )
+								iBack--;
+						} else
+						{
+							iBack = 0;
+						}
+					}
+
+					if ( tReg.m_iEnd<iLast && iForth>0 )
+					{
+						int iAdd = TokenLen ( tReg.m_iEnd+1, q.m_bRemoveSpaces );
+						if ( iLen+iAdd<=q.m_iLimit )
+						{
+							iLen += iAdd;
+							tReg.m_iEnd++;
+							if ( iForth>q.m_iAround )
+								tReg.m_iMatchEnd++;
+							if ( m_dTokens [ tReg.m_iEnd ].m_eType==TOK_WORD )
+								iForth--;
+						} else
+						{
+							iForth = 0;
+						}
+					}
 				}
-				if ( iLen+iAddLen>q.m_iLimit )
-					continue;
 
 				// add it
 				dToShow.Add ( tReg );
-				iLen += iAddLen;
 			}
+#endif
 
 			// do show
 			dToShow.Sort ();
@@ -280,10 +363,11 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q )
 		{
 			// no matches found. just show the starting tokens
 			int i = 0;
-			while ( i<m_dTokens.GetLength()
-				&& ( m_iResultLen+m_dTokens[i].m_iLength < q.m_iLimit ) )
+			while ( m_iResultLen+m_dTokens[i].m_iLength < q.m_iLimit )
 			{
 				ResultEmit ( m_dTokens[i++] );
+				if ( i>=m_dTokens.GetLength() )
+					break;
 			}
 		}
 	}
@@ -408,6 +492,14 @@ bool ExcerptGen_c::TokensMatch ( const Token_t & a, const Token_t & b )
 			return false;
 
 	return true;
+}
+
+
+int ExcerptGen_c::TokenLen ( int iPos, bool bRemoveSpaces )
+{
+	return ( m_dTokens[iPos].m_eType == TOK_SPACE && bRemoveSpaces )
+		? 1
+		: m_dTokens[iPos].m_iLength;
 }
 
 

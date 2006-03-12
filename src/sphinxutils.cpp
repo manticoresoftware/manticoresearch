@@ -237,8 +237,8 @@ bool CSphConfigParser::Parse ( const char * file )
 	enum { TOP, SKIP2NL, TOK, TYPE, SEC, CHR, VALUE, SECNAME, SECBASE } eState = TOP, eStack[8];
 	int iStack = 0;
 
-	char * sValue = NULL;
-	int iValue = 0, iValueMax = 0;
+	int iValue = 0, iValueMax = 256;
+	char * sValue = (char*) sphMalloc ( iValueMax );
 
 	#define LOC_ERROR(_msg) { strncpy ( sError, _msg, sizeof(sError) ); iError = 1; break; }
 	#define LOC_ERROR2(_msg,_a) { snprintf ( sError, sizeof(sError), _msg, _a ); iError = 1; break; }
@@ -322,7 +322,7 @@ bool CSphConfigParser::Parse ( const char * file )
 			if ( isspace(*p) )				continue;
 			if ( *p=='#' )					{ LOC_PUSH ( SKIP2NL ); continue; }
 			if ( *p=='}' )					{ LOC_POP (); continue; }
-			if ( sphIsAlpha(*p) )			{ LOC_PUSH ( VALUE ); LOC_PUSH ( CHR ); iCh = '='; LOC_PUSH ( TOK ); p--; continue; }
+			if ( sphIsAlpha(*p) )			{ LOC_PUSH ( VALUE ); LOC_PUSH ( CHR ); iCh = '='; LOC_PUSH ( TOK ); p--; iValue = 0; sValue[0] = '\0'; continue; }
 											LOC_ERROR2 ( "section contents: expected token, got '%c'", *p );
 
 		}
@@ -334,7 +334,6 @@ bool CSphConfigParser::Parse ( const char * file )
 			if ( *p=='#' )					{ AddKey ( sToken, sValue ); iValue = 0; LOC_POP (); LOC_PUSH ( SKIP2NL ); continue; }
 			if ( *p=='\\' )					{ LOC_PUSH ( SKIP2NL ); continue; }
 
-			if ( !sValue )					{ iValueMax = 256; iValue = 0; sValue = (char*) sphMalloc ( iValueMax ); }
 			if ( iValue==iValueMax )		{ iValueMax *= 2; sValue = (char*) sphRealloc ( sValue, iValueMax ); }
 											sValue[iValue++] = *p; sValue[iValue] = '\0'; continue;
 		}

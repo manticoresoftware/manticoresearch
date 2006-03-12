@@ -360,7 +360,7 @@ class SphinxClient
 	///		for stemming, lexing and case folding
 	/// $docs is an array of strings which represent the documents' contents
 	/// $words is a string which contains the words to highlight
-	/// $params is a hash which contains additional optional highlighting parameters:
+	/// $opts is a hash which contains additional optional highlighting parameters:
 	///		"before_match"
 	///			a string to insert before a set of matching words, default is "<b>"
 	///		"after_match"

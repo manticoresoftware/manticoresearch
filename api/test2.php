@@ -10,6 +10,14 @@ $docs = array
 );
 $words = "test text";
 $index = "test1";
+$opts = array
+(
+	"before_match"		=> "<b>",
+	"after_match"		=> "</b>",
+	"chunk_separator"	=> " ... ",
+	"limit"				=> 400,
+	"around"			=> 15
+);
 
 
 $cl = new SphinxClient ();

@@ -1393,7 +1393,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	// v.1.0. mode, limits, weights, ID/TS ranges
 	int iOffset			= tReq.GetInt ();
 	int iLimit			= tReq.GetInt ();
-	int iMode			= tReq.GetInt ();
+	tQuery.m_eMode			= (ESphMatchMode) tReq.GetInt ();
 	tQuery.m_eSort		= (ESphSortOrder) tReq.GetInt ();
 	tQuery.m_iGroups	= tReq.GetInts ( (int**)&tQuery.m_pGroups, SEARCHD_MAX_REQ_GROUPS, "invalid group count %d (should be in 0..%d range)" );
 	tQuery.m_sQuery		= tReq.GetString ();
@@ -1449,7 +1449,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			ConnectToRemoteAgent ( &tDist.m_dAgents[i] );
 
 		// connect to remote agents and query them first
-		int iRemote = QueryRemoteAgents ( sIndex.cstr(), tDist, tQuery, iMode );
+		int iRemote = QueryRemoteAgents ( sIndex.cstr(), tDist, tQuery, tQuery.m_eMode );
 
 		// while the remote queries are running, do local searches
 		// !COMMIT what if the remote agents finish early, could they timeout?

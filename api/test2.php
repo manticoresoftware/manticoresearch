@@ -21,7 +21,7 @@ $opts = array
 
 
 $cl = new SphinxClient ();
-$res = $cl->BuildExcerpts ( $docs, $index, $words );
+$res = $cl->BuildExcerpts ( $docs, $index, $words, $opts );
 if ( !$res )
 {
 	die ( "ERROR: " . $cl->GetLastError() . ".\n" );

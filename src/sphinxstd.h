@@ -263,20 +263,24 @@ private:
 /////////////////////////////////////////////////////////////////////////////
 
 /// simple generic hash
+/// keeps the order, so Iterate() return the entries in the order they was inserted
 template < typename T, typename KEY, typename HASHFUNC, int LENGTH, int INCREASE >
 class CSphGenericHash
 {
 protected:
 	struct HashEntry_t
 	{
-		T 			m_tData;				///< data, owned by the hash
-		KEY			m_tKey;					///< key, owned by the hash
-		bool		m_bDeleted;				///< is this entry deleted
-		bool		m_bEmpty;				///< is this entry empty
+		T 				m_tData;			///< data, owned by the hash
+		KEY				m_tKey;				///< key, owned by the hash
+		bool			m_bDeleted;			///< is this entry deleted
+		bool			m_bEmpty;			///< is this entry empty
+		int				m_iNext;			///< next entry in the insertion order
 	};
 
 protected:
 	HashEntry_t	*	m_pHash;				///< all the hash entries
+	int				m_iFirst;				///< first entry inserted
+	int				m_iLast;				///< last entry inserted
 
 protected:
 	/// this function finds hash entry by it's key.
@@ -326,7 +330,9 @@ public:
 	/// ctor
 	CSphGenericHash ()
 		: m_pHash ( NULL )
-		, m_pIterator ( NULL )
+		, m_iFirst ( -1 )
+		, m_iLast ( -1 )
+		, m_iIterator ( -1 )
 	{
 	}
 
@@ -345,8 +351,12 @@ public:
 	/// add new entry
 	void Add ( const T & tData, const KEY & tKey )
 	{
+		bool bFirst = false;
 		if ( !m_pHash )
+		{
 			Create ();
+			bFirst = true;
+		}
 
 		HashEntry_t * pEntry = const_cast<HashEntry_t *> ( Search<true> ( tKey ) );
 		assert ( pEntry && "hash overflow" );
@@ -356,6 +366,17 @@ public:
 		pEntry->m_tKey		= tKey;
 		pEntry->m_bDeleted	= false;
 		pEntry->m_bEmpty	= false;
+
+		if ( bFirst )
+		{
+			m_iFirst = pEntry-m_pHash;
+			m_iLast = m_iFirst;
+		} else
+		{
+			assert ( m_iLast>=0 && m_iLast<LENGTH );
+			m_pHash[m_iLast].m_iNext = pEntry-m_pHash;
+			m_iLast = pEntry-m_pHash;
+		}
 	}
 
 	/// check if key exists
@@ -394,12 +415,17 @@ public:
 			Create ();
 			for ( int i=0; i<LENGTH; i++ )
 			{
+				// FIXME! check if assignment operator gets called on key/data, and remove this
 				m_pHash[i].m_tKey = rhs.m_pHash[i].m_tKey;
 				m_pHash[i].m_tData = rhs.m_pHash[i].m_tData;
 				m_pHash[i].m_bDeleted = rhs.m_pHash[i].m_bDeleted;
 				m_pHash[i].m_bEmpty = rhs.m_pHash[i].m_bEmpty;
+				m_pHash[i].m_iNext = rhs.m_pHash[i].m_iNext;
 			}
 		}
+
+		m_iFirst = rhs.m_iFirst;
+		m_iLast = rhs.m_iLast;
 		return *this;
 	}
 
@@ -407,7 +433,7 @@ public:
 	/// start iterating
 	void IterateStart () const
 	{
-		m_pIterator = m_pHash-1;
+		m_iIterator = -1;
 	}
 
 	/// go to next existing entry
@@ -416,27 +442,35 @@ public:
 		if ( !m_pHash )
 			return false;
 
-		do
+		if ( m_iIterator<0 )
 		{
-			++m_pIterator;
-		} while ( m_pIterator!=m_pHash+LENGTH && ( m_pIterator->m_bDeleted || m_pIterator->m_bEmpty ) );
-		return m_pIterator!=( m_pHash+LENGTH );
+			assert ( m_iFirst>=0 );
+			m_iIterator = m_iFirst;
+		} else
+		{
+			assert ( m_iIterator>=0 && m_iIterator<LENGTH );
+			m_iIterator = m_pHash[m_iIterator].m_iNext;
+			if ( m_iIterator<0 )
+				return false;
+		}
+
+		return true;
 	}
 
 	/// get entry value
 	T & IterateGet () const
 	{
 		assert ( m_pHash );
-		assert ( m_pIterator && m_pIterator>=m_pHash && m_pIterator<m_pHash+LENGTH );
-		return m_pIterator->m_tData;
+		assert ( m_iIterator>=0 && m_iIterator<LENGTH );
+		return m_pHash[m_iIterator].m_tData;
 	}
 
 	/// get entry key
 	const KEY & IterateGetKey () const
 	{
 		assert ( m_pHash );
-		assert ( m_pIterator && m_pIterator>=m_pHash && m_pIterator<m_pHash+LENGTH );
-		return m_pIterator->m_tKey;
+		assert ( m_iIterator>=0 && m_iIterator<LENGTH );
+		return m_pHash[m_iIterator].m_tKey;
 	}
 
 protected:
@@ -449,12 +483,13 @@ protected:
 		{
 			m_pHash[i].m_bEmpty = true;
 			m_pHash[i].m_bDeleted = false;
+			m_pHash[i].m_iNext = -1;
 		}
 	}
 
 private:
 	/// current iterator
-	mutable HashEntry_t * m_pIterator;
+	mutable int		m_iIterator;
 };
 
 /////////////////////////////////////////////////////////////////////////////

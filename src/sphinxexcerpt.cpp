@@ -78,7 +78,7 @@ protected:
 	template<int L> void	SubmitCodepoint ( CSphVector<Token_t,L> & dBuf, int iCode );
 
 	bool					TokensMatch ( const Token_t & a, const Token_t & b);
-	int						TokenLen ( int iPos, bool bRemoveSpaces );
+	int						TokenLen ( int iPos, int bRemoveSpaces );
 
 	void					ResultEmit ( int iCode );
 	void					ResultEmit ( const char * sLine );
@@ -495,7 +495,7 @@ bool ExcerptGen_c::TokensMatch ( const Token_t & a, const Token_t & b )
 }
 
 
-int ExcerptGen_c::TokenLen ( int iPos, bool bRemoveSpaces )
+int ExcerptGen_c::TokenLen ( int iPos, int bRemoveSpaces )
 {
 	return ( m_dTokens[iPos].m_eType == TOK_SPACE && bRemoveSpaces )
 		? 1

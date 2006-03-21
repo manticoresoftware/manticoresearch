@@ -1646,7 +1646,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	tOut.Flush ();
 	assert ( tOut.GetError()==true || tOut.GetSentCount()==iRespLen+8 );
 
-	SafeDeleteArray ( pRes );
+	SafeDelete ( pRes );
 	SafeDelete ( pTop );
 }
 

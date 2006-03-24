@@ -1035,7 +1035,7 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				// do query!
 				int iQueryLen = strlen ( tQuery.m_sQuery.cstr() );
 				int iIndexesLen = strlen ( tAgent.m_sIndexes.cstr() );
-				int iReqSize = 60 + 4*tQuery.m_iGroups + iQueryLen + 4*tQuery.m_iWeights + iIndexesLen;
+				int iReqSize = 68 + 4*tQuery.m_iGroups + iQueryLen + 4*tQuery.m_iWeights + iIndexesLen;
 
 				NetOutputBuffer_c tOut ( tAgent.m_iSock );
 

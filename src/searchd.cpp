@@ -1047,7 +1047,7 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				tOut.SendWord ( VER_COMMAND_SEARCH ); // command version
 				tOut.SendInt ( iReqSize-12 ); // request body length
 
-				// request v1
+				// request v.1.1
 				tOut.SendInt ( 0 ); // offset is 0
 				tOut.SendInt ( CSphQueryResult::MAX_MATCHES ); // limit is MAX_MATCHES
 				tOut.SendInt ( iMode ); // match mode
@@ -1062,6 +1062,8 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				tOut.SendInt ( tQuery.m_iMaxID );
 				tOut.SendInt ( tQuery.m_iMinTS );
 				tOut.SendInt ( tQuery.m_iMaxTS );
+				tOut.SendInt ( tQuery.m_iMinGID );
+				tOut.SendInt ( tQuery.m_iMaxGID );
 				tOut.Flush ();
 
 				// FIXME! !COMMIT handle flush failure

@@ -1230,7 +1230,7 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 					MemInputBuffer_c tReq ( tAgent.m_pReplyBuf, tAgent.m_iReplySize );
 
 					int iMatches = tReq.GetInt ();
-					if ( iMatches<=0 || iMatches>CSphQueryResult::MAX_MATCHES )
+					if ( iMatches<0 || iMatches>CSphQueryResult::MAX_MATCHES )
 					{
 						sphWarning ( "index '%s': agent '%s:%d': invalid match count received (count=%d)",
 							sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort,

@@ -4588,7 +4588,8 @@ int CSphSource_MySQL::GetColumnIndex ( const char * sColumn )
 		// if it's string, match by name
 		iRes = -1;
 		for ( int i=1; i<(int)mysql_num_fields(m_pSqlResult); i++ )
-			if ( strcasecmp ( m_pSqlResult->fields[i].name, sColumn )==0 )
+			if ( m_pSqlResult->fields[i].name )
+				if ( strcasecmp ( m_pSqlResult->fields[i].name, sColumn )==0 )
 		{
 			iRes = i;
 			break;

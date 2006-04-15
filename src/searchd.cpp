@@ -1950,7 +1950,7 @@ int main ( int argc, char **argv )
 
 				// extract host name
 				const char * p = pAgent->cstr();
-				while ( sphIsAlpha(*p) || *p=='.' ) p++;
+				while ( sphIsAlpha(*p) || *p=='.' || *p=='-' ) p++;
 				if ( p==pAgent->cstr() )
 				{
 					sphWarning ( "index '%s': agent '%s': host name expected, SKIPPING",

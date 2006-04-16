@@ -1818,7 +1818,6 @@ CSphReader_VLN::~CSphReader_VLN ()
 
 void CSphReader_VLN::SetFile ( int iFD )
 {
-	assert ( iFD>0 );
 	m_iFD = iFD;
 	m_iPos = 0;
 	m_iBufPos = 0;

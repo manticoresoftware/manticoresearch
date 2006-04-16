@@ -1239,8 +1239,11 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 					}
 
 					assert ( !tAgent.m_tRes.m_dMatches.GetLength() );
-					tAgent.m_tRes.m_dMatches.Resize ( iMatches );
-					tReq.GetBytes ( &tAgent.m_tRes.m_dMatches[0], iMatches*sizeof(CSphMatch) );
+					if ( iMatches )
+					{
+						tAgent.m_tRes.m_dMatches.Resize ( iMatches );
+						tReq.GetBytes ( &tAgent.m_tRes.m_dMatches[0], iMatches*sizeof(CSphMatch) );
+					}
 
 					// read totals (retrieved count, total count, query time, word count)
 					int iRetrieved = tReq.GetInt ();

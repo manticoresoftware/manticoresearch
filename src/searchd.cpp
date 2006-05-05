@@ -455,11 +455,10 @@ class NetOutputBuffer_c
 {
 public:
 				NetOutputBuffer_c ( int iSock );
-	bool		SendInt ( int iValue )		{ return SendT<int> ( iValue ); }
-	bool		SendDword ( DWORD iValue )	{ return SendT<DWORD> ( iValue ); }
-	bool		SendWord ( WORD iValue )	{ return SendT<WORD> ( iValue ); }
+	bool		SendInt ( int iValue )		{ return SendT<int> ( htonl ( iValue ) ); }
+	bool		SendDword ( DWORD iValue )	{ return SendT<DWORD> ( htonl ( iValue ) ); }
+	bool		SendWord ( WORD iValue )	{ return SendT<WORD> ( htons ( iValue ) ); }
 	bool		SendString ( const char * sStr );
-	bool		SendBytes ( const void * pBuf, int iLen );
 	bool		Flush ();
 	bool		GetError () { return m_bError; }
 	int			GetSentCount () { return m_iSent; }
@@ -476,6 +475,7 @@ protected:
 	bool		FlushIf ( int iToAdd );		///< flush if there's not enough free space to add iToAdd bytes
 
 	template < typename T > bool	SendT ( T tValue );
+	bool							SendBytes ( const void * pBuf, int iLen );
 };
 
 
@@ -485,9 +485,9 @@ class InputBuffer_c
 public:
 					InputBuffer_c ();
 	virtual			~InputBuffer_c () {}
-	int				GetInt () { return GetT<int> (); }
-	WORD			GetWord () { return GetT<WORD> (); }
-	DWORD			GetDword () { return GetT<DWORD> (); }
+	int				GetInt () { return ntohl ( GetT<int> () ); }
+	WORD			GetWord () { return ntohs ( GetT<WORD> () ); }
+	DWORD			GetDword () { return ntohl ( GetT<DWORD> () ); }
 	BYTE			GetByte () { return GetT<BYTE> (); }
 	CSphString		GetString ();
 	bool			GetBytes ( void * pBuf, int iLen );
@@ -1053,10 +1053,12 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				tOut.SendInt ( iMode ); // match mode
 				tOut.SendInt ( tQuery.m_eSort ); // sort mode
 				tOut.SendInt ( tQuery.m_iGroups );
-				tOut.SendBytes ( tQuery.m_pGroups, sizeof(DWORD)*tQuery.m_iGroups ); // groups
+				for ( int j=0; j<tQuery.m_iGroups; j++ )
+					tOut.SendDword ( tQuery.m_pGroups[j] ); // groups
 				tOut.SendString ( tQuery.m_sQuery.cstr() ); // query
 				tOut.SendInt ( tQuery.m_iWeights );
-				tOut.SendBytes ( tQuery.m_pWeights, sizeof(DWORD)*tQuery.m_iWeights ); // weights
+				for ( int j=0; j<tQuery.m_iWeights; j++ )
+					tOut.SendInt ( tQuery.m_pWeights[j] ); // weights
 				tOut.SendString ( tAgent.m_sIndexes.cstr() ); // indexes
 				tOut.SendInt ( tQuery.m_iMinID ); // id/ts ranges
 				tOut.SendInt ( tQuery.m_iMaxID );
@@ -1621,7 +1623,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 	int iCount = Min ( iLimit, pRes->m_dMatches.GetLength()-iOffset );
 
-	int iRespLen = 20 + sizeof(CSphMatch)*iCount;
+	int iRespLen = 20 + 16*iCount;
 	for ( int i=0; i<pRes->m_iNumWords; i++ )
 		iRespLen += 12 + strlen ( pRes->m_tWordStats[i].m_sWord.cstr() );
 
@@ -1633,9 +1635,13 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 	// matches
 	tOut.SendInt ( iCount );
-	if ( iCount )
-		tOut.SendBytes ( &pRes->m_dMatches[iOffset], sizeof(CSphMatch)*iCount );
-
+	for ( int i=0; i<iCount; i++ )
+	{
+		tOut.SendDword ( pRes->m_dMatches[iOffset+i].m_iDocID );
+		tOut.SendDword ( pRes->m_dMatches[iOffset+i].m_iGroupID );
+		tOut.SendDword ( pRes->m_dMatches[iOffset+i].m_iTimestamp );
+		tOut.SendInt ( pRes->m_dMatches[iOffset+i].m_iWeight );
+	}
 	tOut.SendInt ( pRes->m_dMatches.GetLength() );
 	tOut.SendInt ( pRes->m_iTotalMatches );
 	tOut.SendInt ( pRes->m_iQueryTime );
@@ -2231,7 +2237,19 @@ int main ( int argc, char **argv )
 		fclose ( fp );
 	}
 
-	// create and bind on socket
+	////////////////////
+	// network startup
+	////////////////////
+
+	// init WSA on Windows
+	#if USE_WINDOWS
+	WSADATA tWSAData;
+	int iStartupErr = WSAStartup ( WINSOCK_VERSION, &tWSAData );
+	if ( iStartupErr )
+		sphFatal ( "failed to initialize WinSock2: %s", sphSockError(iStartupErr) );
+	#endif
+
+	// create and bind socket
 	g_iSocket = sphCreateServerSocket ( iPort );
 	listen ( g_iSocket, 5 );
 

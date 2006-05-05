@@ -120,7 +120,7 @@ class SphinxClient
 		}
 
 		// check version
-		list(,$v) = unpack ( "V*", fread ( $fp, 4 ) );
+		list(,$v) = unpack ( "N*", fread ( $fp, 4 ) );
 		$v = (int)$v;
 		if ( $v<1 )
 		{
@@ -130,7 +130,7 @@ class SphinxClient
 		}
 
 		// all ok, send my version
-		fwrite ( $fp, pack ( "V", 1 ) );
+		fwrite ( $fp, pack ( "N", 1 ) );
 		return $fp;
 	}
 
@@ -138,8 +138,8 @@ class SphinxClient
 	function _GetResponse ( $fp, $client_ver )
 	{
 		$header = fread ( $fp, 8 );
-		list ( $status, $ver, $len ) = array_values ( unpack ( "v*v*V*", $header ) );
-		$response = fread ( $fp, $len );
+		list ( $status, $ver, $len ) = array_values ( unpack ( "n2a/Nb", $header ) );
+		$response = $len ? fread ( $fp, $len ) : "";
 		fclose ( $fp );
 
 		// check response
@@ -285,32 +285,32 @@ class SphinxClient
 		/////////////////
 
 		// v.1.0
-		$req = pack ( "VVVV", $this->_offset, $this->_limit, $this->_mode, $this->_sort ); // mode and limits
-		$req .= pack ( "V", count($this->_groups) ); // groups 
+		$req = pack ( "NNNN", $this->_offset, $this->_limit, $this->_mode, $this->_sort ); // mode and limits
+		$req .= pack ( "N", count($this->_groups) ); // groups 
 		foreach ( $this->_groups as $group )
-			$req .= pack ( "V", $group );
-		$req .= pack ( "V", strlen($query) ) . $query; // query itself
-		$req .= pack ( "V", count($this->_weights) ); // weights
+			$req .= pack ( "N", $group );
+		$req .= pack ( "N", strlen($query) ) . $query; // query itself
+		$req .= pack ( "N", count($this->_weights) ); // weights
 		foreach ( $this->_weights as $weight )
-			$req .= pack ( "V", (int)$weight );
-		$req .= pack ( "V", strlen($index) ) . $index; // indexes
+			$req .= pack ( "N", (int)$weight );
+		$req .= pack ( "N", strlen($index) ) . $index; // indexes
 		$req .= // id/ts ranges
-			pack ( "V", (int)$this->_min_id ) .
-			pack ( "V", (int)$this->_max_id ) .
-			pack ( "V", (int)$this->_min_ts ) .
-			pack ( "V", (int)$this->_max_ts );
+			pack ( "N", (int)$this->_min_id ) .
+			pack ( "N", (int)$this->_max_id ) .
+			pack ( "N", (int)$this->_min_ts ) .
+			pack ( "N", (int)$this->_max_ts );
 
 		// v.1.1
 		$req .= // gid ranges
-			pack ( "V", (int)$this->_min_gid ) .
-			pack ( "V", (int)$this->_max_gid );
+			pack ( "N", (int)$this->_min_gid ) .
+			pack ( "N", (int)$this->_max_gid );
 
 		////////////////////////////
 		// send query, get response
 		////////////////////////////
 
 		$len = strlen($req);
-		$req = pack ( "vvV", SEARCHD_COMMAND_SEARCH, VER_COMMAND_SEARCH, $len ) . $req; // add header
+		$req = pack ( "nnN", SEARCHD_COMMAND_SEARCH, VER_COMMAND_SEARCH, $len ) . $req; // add header
 		fwrite ( $fp, $req, $len+8 );
 		if (!( $response = $this->_GetResponse ( $fp, VER_COMMAND_SEARCH ) ))
 			return false;
@@ -320,11 +320,11 @@ class SphinxClient
 		//////////////////
 
 		$result = array();
-		list(,$count) = unpack ( "V*", substr ( $response, 0, 4 ) );
+		list(,$count) = unpack ( "N*", substr ( $response, 0, 4 ) );
 		$p = 4;
 		while ( $count-->0 )
 		{
-			list ( $doc, $group, $stamp, $weight ) = array_values ( unpack ( "V*V*V*V*",
+			list ( $doc, $group, $stamp, $weight ) = array_values ( unpack ( "N*N*N*N*",
 				substr ( $response, $p ) ) );
 			$p += 16;
 
@@ -334,15 +334,15 @@ class SphinxClient
 				"stamp"		=> $stamp );
 		}
 		list ( $result["total"], $result["total_found"], $result["time"], $words ) =
-			array_values ( unpack ( "V*V*V*V*", substr ( $response, $p, 16 ) ) );
+			array_values ( unpack ( "N*N*N*N*", substr ( $response, $p, 16 ) ) );
 		$result["time"] = sprintf ( "%.3f", $result["time"]/1000 );
 		$p += 16;
 
 		while ( $words-->0 )
 		{
-			list(,$len) = unpack ( "V*", substr ( $response, $p, 4 ) ); $p += 4;
+			list(,$len) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
 			$word = substr ( $response, $p, $len ); $p += $len;
-			list ( $docs, $hits ) = array_values ( unpack ( "V*V*", substr ( $response, $p, 8 ) ) ); $p += 8;
+			list ( $docs, $hits ) = array_values ( unpack ( "N*N*", substr ( $response, $p, 8 ) ) ); $p += 8;
 
 			$result["words"][$word] = array ( "docs"=>$docs, "hits"=>$hits );
 		}
@@ -399,23 +399,23 @@ class SphinxClient
 		/////////////////
 
 		// v.1.0 req
-		$req = pack ( "VV", 0, 1 ); // mode=0, flags=1 (remove spaces)
-		$req .= pack ( "V", strlen($index) ) . $index; // req index
-		$req .= pack ( "V", strlen($words) ) . $words; // req words
+		$req = pack ( "NN", 0, 1 ); // mode=0, flags=1 (remove spaces)
+		$req .= pack ( "N", strlen($index) ) . $index; // req index
+		$req .= pack ( "N", strlen($words) ) . $words; // req words
 
 		// options
-		$req .= pack ( "V", strlen($opts["before_match"]) ) . $opts["before_match"];
-		$req .= pack ( "V", strlen($opts["after_match"]) ) . $opts["after_match"];
-		$req .= pack ( "V", strlen($opts["chunk_separator"]) ) . $opts["chunk_separator"];
-		$req .= pack ( "V", (int)$opts["limit"] );
-		$req .= pack ( "V", (int)$opts["around"] );
+		$req .= pack ( "N", strlen($opts["before_match"]) ) . $opts["before_match"];
+		$req .= pack ( "N", strlen($opts["after_match"]) ) . $opts["after_match"];
+		$req .= pack ( "N", strlen($opts["chunk_separator"]) ) . $opts["chunk_separator"];
+		$req .= pack ( "N", (int)$opts["limit"] );
+		$req .= pack ( "N", (int)$opts["around"] );
 
 		// documents
-		$req .= pack ( "V", count($docs) );
+		$req .= pack ( "N", count($docs) );
 		foreach ( $docs as $doc )
 		{
 			assert ( is_string($doc) );
-			$req .= pack ( "V", strlen($doc) ) . $doc;
+			$req .= pack ( "N", strlen($doc) ) . $doc;
 		}
 
 		////////////////////////////
@@ -423,7 +423,7 @@ class SphinxClient
 		////////////////////////////
 
 		$len = strlen($req);
-		$req = pack ( "vvV", SEARCHD_COMMAND_EXCERPT, VER_COMMAND_EXCERPT, $len ) . $req; // add header
+		$req = pack ( "nnN", SEARCHD_COMMAND_EXCERPT, VER_COMMAND_EXCERPT, $len ) . $req; // add header
 		$wrote = fwrite ( $fp, $req, $len+8 );
 		if (!( $response = $this->_GetResponse ( $fp, VER_COMMAND_EXCERPT ) ))
 			return false;
@@ -437,7 +437,7 @@ class SphinxClient
 		$rlen = strlen($response);
 		for ( $i=0; $i<count($docs); $i++ )
 		{
-			list(,$len) = unpack ( "V*", substr ( $response, $pos, 4 ) );
+			list(,$len) = unpack ( "N*", substr ( $response, $pos, 4 ) );
 			$pos += 4;
 
 			if ( $pos+$len > $rlen )

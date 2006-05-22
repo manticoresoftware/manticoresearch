@@ -74,7 +74,6 @@ public:
 	{
 		Reset ();
 	}
-
 	/// add entry
 	T & Add ()
 	{
@@ -105,6 +104,28 @@ public:
 		m_iLength--;
 		for ( int i=iIndex; i<m_iLength; i++ )
 			m_pData[i] = m_pData[i+1];
+	}
+
+	/// remove element by index, swapping it with the tail
+	void RemoveFast ( int iIndex )
+	{
+		assert ( iIndex>=0 && iIndex<m_iLength );
+		if ( iIndex!=--m_iLength )
+			Swap ( m_pData[iIndex], m_pData[m_iLength] );
+	}
+
+	/// remove element by value (warning, linear O(n) search)
+	bool RemoveValue ( T tValue )
+	{
+		for ( int i=0; i<m_iLength; i++ )
+		{
+			if ( m_pData[i]==tValue )
+			{
+				Remove ( i );
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/// grow enough to hold that much entries, if needed
@@ -162,6 +183,48 @@ public:
 	void RSort ( int iStart=0, int iEnd=-1 )
 	{
 		_Sort<true> ( iStart, iEnd );
+	}
+
+	/// sort
+	template < typename F > void Sort ( F COMP, int iStart=0, int iEnd=-1 )
+	{
+		if ( m_iLength<2 ) return;
+		if ( iStart<0 ) iStart = m_iLength+iStart;
+		if ( iEnd<0 ) iEnd = m_iLength+iEnd;
+		assert ( iStart<=iEnd );
+
+		int st0[32], st1[32], a, b, k, i, j;
+		T x;
+
+		k = 1;
+		st0[0] = iStart;
+		st1[0] = iEnd;
+		while ( k )
+		{
+			k--;
+			i = a = st0[k];
+			j = b = st1[k];
+			x = m_pData [ (a+b)/2 ]; // FIXME! add better median at least
+			while ( a<b )
+			{
+				while ( i<=j )
+				{
+					while ( COMP ( m_pData[i], x ) ) i++;
+					while ( COMP ( x, m_pData[j] ) ) j--;
+					if (i <= j) { Swap ( m_pData[i], m_pData[j] ); i++; j--; }
+				}
+
+				if ( j-a>=b-i )
+				{
+					if ( a<j ) { st0[k] = a; st1[k] = j; k++; }
+					a = i;
+				} else
+				{
+					if ( i<b ) { st0[k] = i; st1[k] = b; k++; }
+					b = j;
+				}
+			}
+		}
 	}
 
 	/// access

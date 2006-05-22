@@ -1023,6 +1023,7 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				// read reply
 				int iRemoteVer;
 				int iRes = sphSockRecv ( tAgent.m_iSock, (char*)&iRemoteVer, sizeof(iRemoteVer), 0 );
+				iRemoteVer = ntohl ( iRemoteVer );
 				if ( iRes!=sizeof(iRemoteVer) || iRemoteVer<=0 )
 				{
 					sphWarning ( "index '%s': agent '%s:%d': expected protocol v.%d, got v.%d",
@@ -1163,6 +1164,10 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 							sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort );
 						break;
 					}
+
+					tReplyHeader.m_iStatus = ntohs ( tReplyHeader.m_iStatus );
+					tReplyHeader.m_iVer = ntohs ( tReplyHeader.m_iVer );
+					tReplyHeader.m_iLength = ntohl ( tReplyHeader.m_iLength );
 
 					// check the status
 					if ( tReplyHeader.m_iStatus!=SEARCHD_OK || tReplyHeader.m_iLength<=0 )

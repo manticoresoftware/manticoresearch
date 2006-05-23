@@ -726,17 +726,62 @@ int main ( int argc, char ** argv )
 			// index!
 			//////////
 
-			// do it
+			// if searchd is running, we want to reindex to .tmp files
 			char sIndexPath [ SPH_MAX_FILENAME_LEN ];
-			snprintf ( sIndexPath, sizeof(sIndexPath), bRotate ? "%s.new" : "%s", hIndex["path"].cstr() );
+			snprintf ( sIndexPath, sizeof(sIndexPath), bRotate ? "%s.tmp" : "%s", hIndex["path"].cstr() );
 			sIndexPath [ sizeof(sIndexPath)-1 ] = '\0';
 
+			// do index
 			CSphIndex * pIndex = sphCreateIndexPhrase ( sIndexPath );
 			assert ( pIndex );
 
 			pIndex->SetProgressCallback ( ShowProgress );
 			if ( pIndex->Build ( pDict, pSource, iMemLimit ) )
-				bIndexedOk = true;
+			{
+				// if searchd is not running, we're good
+				if ( !bRotate )
+					bIndexedOk = true;
+
+				// if searchd is running, rename .tmp to .new which searchd will pick up
+				while ( bRotate )
+				{
+					const char * sPath = hIndex["path"].cstr();
+					char sFrom [ SPH_MAX_FILENAME_LEN ];
+					char sTo [ SPH_MAX_FILENAME_LEN ];
+
+					// .spi
+					snprintf ( sFrom, sizeof(sFrom), "%s.tmp.spi", sPath );
+					sFrom [ sizeof(sFrom)-1 ] = '\0';
+
+					snprintf ( sTo, sizeof(sTo), "%s.tmp.spi", sPath );
+					sTo [ sizeof(sTo)-1 ] = '\0';
+
+					if ( rename ( sFrom, sTo ) )
+					{
+						fprintf ( stdout, "WARNING: index '%s': rename '%s' to '%s' failed: %s",
+							sIndexName, sFrom, sTo, strerror(errno) );
+						break;
+					}
+
+					// .spd
+					snprintf ( sFrom, sizeof(sFrom), "%s.tmp.spd", sPath );
+					sFrom [ sizeof(sFrom)-1 ] = '\0';
+
+					snprintf ( sTo, sizeof(sTo), "%s.tmp.spd", sPath );
+					sTo [ sizeof(sTo)-1 ] = '\0';
+
+					if ( rename ( sFrom, sTo ) )
+					{
+						fprintf ( stdout, "WARNING: index '%s': rename '%s' to '%s' failed: %s",
+							sIndexName, sFrom, sTo, strerror(errno) );
+						break;
+					}
+
+					// all good
+					bIndexedOk = true;
+					break;
+				}
+			}
 
 			SafeDelete ( pIndex );
 			SafeDelete ( pDict );

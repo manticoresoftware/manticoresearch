@@ -31,12 +31,12 @@ struct ExcerptQuery_t
 
 public:
 	ExcerptQuery_t ()
-		: m_iLimit ( 256 )
-		, m_bRemoveSpaces ( false )
-		, m_iAround ( 5 )
-		, m_sBeforeMatch ( "<b>" )
+		: m_sBeforeMatch ( "<b>" )
 		, m_sAfterMatch ( "</b>" )
 		, m_sChunkSeparator ( " ... " )
+		, m_iLimit ( 256 )
+		, m_bRemoveSpaces ( false )
+		, m_iAround ( 5 )
 	{
 	}
 };

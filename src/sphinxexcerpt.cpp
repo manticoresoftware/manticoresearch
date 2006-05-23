@@ -144,7 +144,6 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q )
 
 	// FIXME! !COMMIT must return an error or truncate the array instead of crashing
 	assert ( m_dWords.GetLength()<=SPH_MAX_QUERY_WORDS );
-	assert ( m_dWords.GetLength()<=sizeof(ExcerptGen_c::Passage_t::m_uWords)*8 );
 
 	// reset result
 	m_dResult.Reset ();

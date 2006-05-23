@@ -753,7 +753,7 @@ int main ( int argc, char ** argv )
 					snprintf ( sFrom, sizeof(sFrom), "%s.tmp.spi", sPath );
 					sFrom [ sizeof(sFrom)-1 ] = '\0';
 
-					snprintf ( sTo, sizeof(sTo), "%s.tmp.spi", sPath );
+					snprintf ( sTo, sizeof(sTo), "%s.new.spi", sPath );
 					sTo [ sizeof(sTo)-1 ] = '\0';
 
 					if ( rename ( sFrom, sTo ) )
@@ -767,7 +767,7 @@ int main ( int argc, char ** argv )
 					snprintf ( sFrom, sizeof(sFrom), "%s.tmp.spd", sPath );
 					sFrom [ sizeof(sFrom)-1 ] = '\0';
 
-					snprintf ( sTo, sizeof(sTo), "%s.tmp.spd", sPath );
+					snprintf ( sTo, sizeof(sTo), "%s.new.spd", sPath );
 					sTo [ sizeof(sTo)-1 ] = '\0';
 
 					if ( rename ( sFrom, sTo ) )

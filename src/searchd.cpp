@@ -71,6 +71,7 @@ static int				g_iSocket		= 0;
 static int				g_iQueryLogFile	= -1;
 static int				g_iHUP			= 0;
 static const char *		g_sPidFile		= NULL;
+static bool				g_bHeadDaemon	= false;
 
 struct ServedIndex_t
 {
@@ -96,7 +97,7 @@ struct ServedIndex_t
 
 	~ServedIndex_t ()
 	{
-		if ( m_pLockFile )
+		if ( m_pLockFile && g_bHeadDaemon )
 			unlink ( m_pLockFile->cstr() );
 		SafeDelete ( m_pIndex );
 		SafeDelete ( m_pDict );
@@ -2233,6 +2234,9 @@ int main ( int argc, char **argv )
 
 	if ( !bOptConsole )
 	{
+		// i'm the main one
+		g_bHeadDaemon = true;
+
 		// create pid
 		g_sPidFile = hSearchd["pid_file"].cstr();
 		FILE * fp = fopen ( g_sPidFile, "w" );

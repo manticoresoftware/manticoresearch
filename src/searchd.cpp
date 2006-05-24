@@ -564,7 +564,7 @@ bool NetOutputBuffer_c::SendString ( const char * sStr )
 	FlushIf ( sizeof(DWORD) );
 
 	int iLen = strlen(sStr);
-	*(int*)m_pBuffer = iLen;
+	*(int*)m_pBuffer = htonl(iLen);
 	m_pBuffer += sizeof(int);
 
 	return SendBytes ( sStr, iLen );

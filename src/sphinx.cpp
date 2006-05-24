@@ -3364,7 +3364,6 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResu
 
 	// create result and start timing
 	float tmQueryStart = sphLongTimer ();
-	pResult->m_iNumWords = 0;
 
 	// split query into words
 	CSphQueryParser * pQueryParser = new CSphQueryParser ( dict, pQuery->m_sQuery.cstr(),

@@ -491,7 +491,6 @@ public:
 	DWORD			GetDword () { return ntohl ( GetT<DWORD> () ); }
 	BYTE			GetByte () { return GetT<BYTE> (); }
 	CSphString		GetString ();
-	bool			GetBytes ( void * pBuf, int iLen );
 	int				GetInts ( int ** pBuffer, int iMax, const char * sErrorTemplate );
 	bool			GetError () { return m_bError; }
 
@@ -505,7 +504,7 @@ protected:
 
 protected:
 	void						SetError ( bool bError ) { m_bError = bError; }
-
+	bool						GetBytes ( void * pBuf, int iLen );
 	template < typename T > T	GetT ();
 };
 
@@ -703,6 +702,8 @@ int InputBuffer_c::GetInts ( int ** ppBuffer, int iMax, const char * sErrorTempl
 			SafeDeleteArray ( (*ppBuffer) );
 			return -1;
 		}
+		for ( int i=0; i<iCount; i++ )
+			(*ppBuffer)[i] = htonl ( (*ppBuffer)[i] );
 	}
 	return iCount;
 }
@@ -1250,7 +1251,14 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 					if ( iMatches )
 					{
 						tAgent.m_tRes.m_dMatches.Resize ( iMatches );
-						tReq.GetBytes ( &tAgent.m_tRes.m_dMatches[0], iMatches*sizeof(CSphMatch) );
+						ARRAY_FOREACH ( i, tAgent.m_tRes.m_dMatches )
+						{
+							CSphMatch & tMatch = tAgent.m_tRes.m_dMatches[i];
+							tMatch.m_iDocID = tReq.GetInt ();
+							tMatch.m_iGroupID = tReq.GetInt ();
+							tMatch.m_iTimestamp = tReq.GetInt ();
+							tMatch.m_iWeight = tReq.GetInt ();
+						}
 					}
 
 					// read totals (retrieved count, total count, query time, word count)

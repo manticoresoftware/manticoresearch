@@ -26,7 +26,7 @@ public:
 							~ExcerptGen_c () {}
 
 	bool					SetCaseFolding ( const char * sConfig );
-	char *					BuildExcerpt ( const ExcerptQuery_t & q );
+	char *					BuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict );
 
 public:
 	enum Token_e
@@ -45,6 +45,7 @@ public:
 		int					m_iLength;		///< token length (in codepoints)
 		int					m_iWeight;		///< token weight
 		DWORD				m_uWords;		///< matching query words mask
+		DWORD				m_iWordID;		///< token word ID from dictionary
 	};
 
 	struct Passage_t
@@ -58,11 +59,14 @@ public:
 
 protected:
 	CSphVector<int,8192>	m_dCodes;		///< original source text codepoints
-	CSphVector<int,8192>	m_dFolded;		///< folded source text codepoints
 
 	CSphVector<Token_t,1024>m_dTokens;		///< source text tokens
 	CSphVector<Token_t,16>	m_dWords;		///< query words tokens
 
+	CSphDict *				m_pDict;
+	BYTE					m_sAccum [ 3*SPH_MAX_WORD_LEN+3 ];
+	BYTE *					m_pAccum;
+	int						m_iAccum;
 
 	Token_t					m_tTok;			///< currently decoded token
 
@@ -117,6 +121,10 @@ ExcerptGen_c::ExcerptGen_c ()
 	m_tTok.m_iLength = -1;
 
 	m_tLC.SetRemap ( SPHINX_DEFAULT_UTF8_TABLE );
+
+	m_pDict = NULL;
+	m_pAccum = m_sAccum;
+	m_iAccum = 0;
 }
 
 
@@ -126,8 +134,10 @@ bool ExcerptGen_c::SetCaseFolding ( const char * sConfig )
 }
 
 
-char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q )
+char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict )
 {
+	m_pDict = pDict;
+
 	// decode everything
 	// FIXME! should add SBCS support
 	DecodeUtf8 ( q.m_sSource.cstr(), m_dTokens );
@@ -135,7 +145,7 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q )
 
 	// remove non-words
 	ARRAY_FOREACH ( i, m_dWords )
-		if ( m_dWords[i].m_eType!=TOK_WORD )
+		if ( m_dWords[i].m_eType!=TOK_WORD || !m_dWords[i].m_iWordID )
 			m_dWords.Remove ( i-- );
 
 	// assign word weights
@@ -171,7 +181,6 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q )
 
 	// cleanup
 	m_dCodes.Reset ();
-	m_dFolded.Reset ();
 	m_dTokens.Reset ();
 	m_dWords.Reset ();
 
@@ -298,7 +307,6 @@ template<int L> void ExcerptGen_c::SubmitCodepoint ( CSphVector<Token_t,L> & dBu
 	// add the codepoint
 	int iPos = m_dCodes.GetLength ();
 	m_dCodes.Add ( iCode );
-	m_dFolded.Add ( iLC );
 
 	// do tokenizing
 	if ( m_tTok.m_eType==eType )
@@ -306,11 +314,44 @@ template<int L> void ExcerptGen_c::SubmitCodepoint ( CSphVector<Token_t,L> & dBu
 		// type did not change, continue accumulating
 		m_tTok.m_iLength++;
 
+		if ( m_iAccum<=SPH_MAX_WORD_LEN )
+		{
+			// do UTF-8 encoding here
+			if ( iCode<0x80 )
+			{
+				*m_pAccum++ = (BYTE)( iCode & 0x7F );
+
+			} else if ( iCode<0x800 )
+			{
+				*m_pAccum++ = (BYTE)( ( (iCode>>6) & 0x1F ) | 0xC0 );
+				*m_pAccum++ = (BYTE)( ( iCode & 0x3F ) | 0x80 );
+
+			} else
+			{
+				*m_pAccum++ = (BYTE)( ( (iCode>>12) & 0x0F ) | 0xC0 );
+				*m_pAccum++ = (BYTE)( ( (iCode>>6) & 0x3F ) | 0x80 );
+				*m_pAccum++ = (BYTE)( ( iCode & 0x3F ) | 0x80 );
+			}
+			assert ( m_pAccum>=m_sAccum && m_pAccum<m_sAccum+sizeof(m_sAccum) );
+			m_iAccum++;
+		}
+
 	} else
 	{
 		// type changed, do flush last one
 		if ( m_tTok.m_eType!=TOK_NONE )
+		{
+			m_tTok.m_iWordID = 0;
+			if ( m_tTok.m_eType==TOK_WORD )
+			{
+				*m_pAccum++ = '\0';
+				m_tTok.m_iWordID = m_pDict->GetWordID ( m_sAccum );
+
+				m_pAccum = m_sAccum;
+				m_iAccum = 0;
+			}
 			dBuf.Add ( m_tTok );
+		}
 
 		m_tTok.m_eType = eType;
 		m_tTok.m_iStart = iPos;
@@ -325,14 +366,7 @@ template<int L> void ExcerptGen_c::SubmitCodepoint ( CSphVector<Token_t,L> & dBu
 
 bool ExcerptGen_c::TokensMatch ( const Token_t & a, const Token_t & b )
 {
-	if ( a.m_iLength!=b.m_iLength )
-		return false;
-
-	for ( int i=0; i<a.m_iLength; i++ )
-		if ( m_dFolded [ a.m_iStart+i ] != m_dFolded [ b.m_iStart+i] )
-			return false;
-
-	return true;
+	return a.m_iWordID==b.m_iWordID;
 }
 
 
@@ -649,10 +683,10 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & q )
 
 /////////////////////////////////////////////////////////////////////////////
 
-char * sphBuildExcerpt ( const ExcerptQuery_t & q )
+char * sphBuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict )
 {
 	ExcerptGen_c tGen;
-	return tGen.BuildExcerpt ( q );
+	return tGen.BuildExcerpt ( q, pDict );
 }
 
 //

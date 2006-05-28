@@ -1701,6 +1701,13 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	int iFlags = tReq.GetInt ();
 	CSphString sIndex = tReq.GetString ();
 
+	if ( !g_hIndexes.Exists ( sIndex ) )
+	{
+		tReq.SendErrorReply ( "invalid index '%s' specified in request", sIndex.cstr() );
+		return;
+	}
+	CSphDict * pDict = g_hIndexes[sIndex].m_pDict;
+
 	q.m_sWords = tReq.GetString ();
 	q.m_sBeforeMatch = tReq.GetString ();
 	q.m_sAfterMatch = tReq.GetString ();
@@ -1726,7 +1733,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 			tReq.SendErrorReply ( "invalid or truncated request" );
 			return;
 		}
-		dExcerpts.Add ( sphBuildExcerpt ( q ) );
+		dExcerpts.Add ( sphBuildExcerpt ( q, pDict ) );
 	}
 
 	////////////////

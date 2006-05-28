@@ -268,7 +268,7 @@ void sphInfo ( const char * sFmt, ... )
 // NETWORK STUFF
 /////////////////////////////////////////////////////////////////////////////
 
-const int		NET_MAX_REQ_LEN			= 131072;
+const int		NET_MAX_REQ_LEN			= 1048576;
 const int		NET_MAX_STR_LEN			= NET_MAX_REQ_LEN;
 const int		SEARCHD_MAX_REQ_GROUPS	= 4096;
 
@@ -1701,9 +1701,9 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	int iFlags = tReq.GetInt ();
 	CSphString sIndex = tReq.GetString ();
 
-	if ( !g_hIndexes.Exists ( sIndex ) )
+	if ( !g_hIndexes ( sIndex ) )
 	{
-		tReq.SendErrorReply ( "invalid index '%s' specified in request", sIndex.cstr() );
+		tReq.SendErrorReply ( "invalid local index '%s' specified in request", sIndex.cstr() );
 		return;
 	}
 	CSphDict * pDict = g_hIndexes[sIndex].m_pDict;
@@ -1793,7 +1793,7 @@ void HandleClient ( int iSock )
 		// if request length is insane, low level comm is broken, so we bail out
 		if ( iLength<=0 || iLength>NET_MAX_REQ_LEN )
 		{
-			sphWarning ( "ill-formed client request (length out of bounds)" );
+			sphWarning ( "ill-formed client request (length=%d out of bounds)", iLength );
 			return;
 		}
 	}

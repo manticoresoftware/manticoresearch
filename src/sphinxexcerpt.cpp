@@ -80,7 +80,7 @@ protected:
 	bool					TokensMatch ( const Token_t & a, const Token_t & b);
 	int						TokenLen ( int iPos, int bRemoveSpaces );
 
-	void					CalcPassageWeight ( const CSphVector<int,16> & dPassage, Passage_t & tPass );
+	void					CalcPassageWeight ( const CSphVector<int,16> & dPassage, Passage_t & tPass, int iMaxWords );
 	bool					ExtractPassages ( const ExcerptQuery_t & q );
 
 	void					HighlightAll ( const ExcerptQuery_t & q );
@@ -390,24 +390,24 @@ void ExcerptGen_c::ResultEmit ( const Token_t & sTok )
 
 /////////////////////////////////////////////////////////////////////////////
 
-static const int PASSAGE_WORDS = 12;
-
-
-void ExcerptGen_c::CalcPassageWeight ( const CSphVector<int,16> & dPassage, Passage_t & tPass )
+void ExcerptGen_c::CalcPassageWeight ( const CSphVector<int,16> & dPassage, Passage_t & tPass, int iMaxWords )
 {
 	DWORD uLast = 0;
 	int iLCS = 1;
 	int iMaxLCS = 1;
 
-	// calc words mask and max longest common subsequence length
+	// calc everything
 	tPass.m_uWords = 0;
+	int iMinGap = iMaxWords-1;
 	ARRAY_FOREACH ( i, dPassage )
 	{
 		Token_t & tTok = m_dTokens[dPassage[i]];
 		assert ( tTok.m_eType==TOK_WORD );
 
+		// update mask
 		tPass.m_uWords |= tTok.m_uWords;
 
+		// update LCS
 		uLast = tTok.m_uWords & ( uLast<<1 );
 		if ( uLast )
 		{
@@ -418,7 +418,15 @@ void ExcerptGen_c::CalcPassageWeight ( const CSphVector<int,16> & dPassage, Pass
 			iLCS = 1;
 			uLast = tTok.m_uWords;
 		}
+
+		// update min gap
+		if ( tTok.m_uWords )
+		{
+			iMinGap = Min ( iMinGap, i );
+			iMinGap = Min ( iMinGap, dPassage.GetLength()-1-i );
+		}
 	}
+	assert ( iMinGap>=0 );
 
 	// calc final weight
 	tPass.m_iWeight = 0;
@@ -428,7 +436,7 @@ void ExcerptGen_c::CalcPassageWeight ( const CSphVector<int,16> & dPassage, Pass
 		if ( uWords & 1 )
 			tPass.m_iWeight += m_dWords[iWord].m_iWeight;
 
-	tPass.m_iWeight *= iMaxLCS;
+	tPass.m_iWeight = tPass.m_iWeight * iMaxLCS * iMaxWords + iMinGap;
 }
 
 
@@ -444,6 +452,8 @@ bool ExcerptGen_c::ExtractPassages ( const ExcerptQuery_t & q )
 	tPass.m_iTokens = 0;
 	tPass.m_iCodes = 0;
 	tPass.m_uWords = 0;
+
+	int iMaxWords = 2*q.m_iAround+1;
 
 	ARRAY_FOREACH ( iTok, m_dTokens )
 	{
@@ -466,13 +476,13 @@ bool ExcerptGen_c::ExtractPassages ( const ExcerptQuery_t & q )
 		tPass.m_uWords |= m_dTokens[iTok].m_uWords;
 
 		// check if we're done
-		if ( dPass.GetLength()>=PASSAGE_WORDS )
+		if ( dPass.GetLength()>=iMaxWords )
 			break;
 	}
 
 	if ( tPass.m_uWords )
 	{
-		CalcPassageWeight ( dPass, tPass );
+		CalcPassageWeight ( dPass, tPass, iMaxWords );
 		m_dPassages.Add ( tPass );
 	}
 
@@ -516,7 +526,7 @@ bool ExcerptGen_c::ExtractPassages ( const ExcerptQuery_t & q )
 		tPass.m_iCodes += m_dTokens[iAdd].m_iLength;
 
 		dPass.Add ( iAdd );
-		CalcPassageWeight ( dPass, tPass );
+		CalcPassageWeight ( dPass, tPass, iMaxWords );
 
 		// submit match, if it's any new and cool
 		if ( tPass.m_uWords )
@@ -526,13 +536,15 @@ bool ExcerptGen_c::ExtractPassages ( const ExcerptQuery_t & q )
 				m_dPassages.Add ( tPass );
 			} else
 			{
-				if ( m_dPassages.Last().m_uWords!=tPass.m_uWords )
+				Passage_t & tLast = m_dPassages.Last();
+				if ( tLast.m_uWords!=tPass.m_uWords
+					|| tLast.m_iStart+tLast.m_iTokens-1 < tPass.m_iStart )
 				{
 					m_dPassages.Add ( tPass );
 				} else
 				{
-					if ( m_dPassages.Last().m_iWeight<tPass.m_iWeight )
-						m_dPassages.Last() = tPass;
+					if ( tLast.m_iWeight<tPass.m_iWeight )
+						tLast = tPass;
 				}
 			}
 		}

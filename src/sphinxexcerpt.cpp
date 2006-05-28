@@ -80,6 +80,7 @@ protected:
 protected:
 	template<int L> void	DecodeUtf8 ( const char * sText, CSphVector<Token_t,L> & dBuf );
 	template<int L> void	SubmitCodepoint ( CSphVector<Token_t,L> & dBuf, int iCode );
+	void					AccumulateCodepoint ( int iCode );
 
 	bool					TokensMatch ( const Token_t & a, const Token_t & b);
 	int						TokenLen ( int iPos, int bRemoveSpaces );
@@ -282,6 +283,32 @@ bool myisbreak ( int c )
 }
 
 
+void ExcerptGen_c:: AccumulateCodepoint ( int iCode )
+{
+	if ( m_tTok.m_eType!=TOK_WORD || m_iAccum>SPH_MAX_WORD_LEN )
+		return;
+
+	// do UTF-8 encoding here
+	if ( iCode<0x80 )
+	{
+		*m_pAccum++ = (BYTE)( iCode & 0x7F );
+
+	} else if ( iCode<0x800 )
+	{
+		*m_pAccum++ = (BYTE)( ( (iCode>>6) & 0x1F ) | 0xC0 );
+		*m_pAccum++ = (BYTE)( ( iCode & 0x3F ) | 0x80 );
+
+	} else
+	{
+		*m_pAccum++ = (BYTE)( ( (iCode>>12) & 0x0F ) | 0xC0 );
+		*m_pAccum++ = (BYTE)( ( (iCode>>6) & 0x3F ) | 0x80 );
+		*m_pAccum++ = (BYTE)( ( iCode & 0x3F ) | 0x80 );
+	}
+	assert ( m_pAccum>=m_sAccum && m_pAccum<m_sAccum+sizeof(m_sAccum) );
+	m_iAccum++;
+}
+
+
 template<int L> void ExcerptGen_c::SubmitCodepoint ( CSphVector<Token_t,L> & dBuf, int iCode )
 {
 	// find out its type
@@ -312,29 +339,8 @@ template<int L> void ExcerptGen_c::SubmitCodepoint ( CSphVector<Token_t,L> & dBu
 	if ( m_tTok.m_eType==eType )
 	{
 		// type did not change, continue accumulating
+		AccumulateCodepoint ( iCode );
 		m_tTok.m_iLength++;
-
-		if ( m_iAccum<=SPH_MAX_WORD_LEN )
-		{
-			// do UTF-8 encoding here
-			if ( iCode<0x80 )
-			{
-				*m_pAccum++ = (BYTE)( iCode & 0x7F );
-
-			} else if ( iCode<0x800 )
-			{
-				*m_pAccum++ = (BYTE)( ( (iCode>>6) & 0x1F ) | 0xC0 );
-				*m_pAccum++ = (BYTE)( ( iCode & 0x3F ) | 0x80 );
-
-			} else
-			{
-				*m_pAccum++ = (BYTE)( ( (iCode>>12) & 0x0F ) | 0xC0 );
-				*m_pAccum++ = (BYTE)( ( (iCode>>6) & 0x3F ) | 0x80 );
-				*m_pAccum++ = (BYTE)( ( iCode & 0x3F ) | 0x80 );
-			}
-			assert ( m_pAccum>=m_sAccum && m_pAccum<m_sAccum+sizeof(m_sAccum) );
-			m_iAccum++;
-		}
 
 	} else
 	{
@@ -346,9 +352,6 @@ template<int L> void ExcerptGen_c::SubmitCodepoint ( CSphVector<Token_t,L> & dBu
 			{
 				*m_pAccum++ = '\0';
 				m_tTok.m_iWordID = m_pDict->GetWordID ( m_sAccum );
-
-				m_pAccum = m_sAccum;
-				m_iAccum = 0;
 			}
 			dBuf.Add ( m_tTok );
 		}
@@ -356,6 +359,10 @@ template<int L> void ExcerptGen_c::SubmitCodepoint ( CSphVector<Token_t,L> & dBu
 		m_tTok.m_eType = eType;
 		m_tTok.m_iStart = iPos;
 		m_tTok.m_iLength = 1;
+		
+		m_pAccum = m_sAccum;
+		m_iAccum = 0;
+		AccumulateCodepoint ( iCode );
 
 		// emit terminating token
 		if ( eType==TOK_NONE )

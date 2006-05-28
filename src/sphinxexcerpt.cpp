@@ -150,12 +150,13 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict, 
 		if ( m_dWords[i].m_eType!=TOK_WORD || !m_dWords[i].m_iWordID )
 			m_dWords.Remove ( i-- );
 
+	// truncate the array
+	if ( m_dWords.GetLength()>SPH_MAX_QUERY_WORDS )
+		m_dWords.Resize ( SPH_MAX_QUERY_WORDS );
+
 	// assign word weights
 	ARRAY_FOREACH ( i, m_dWords )
 		m_dWords[i].m_iWeight = m_dWords[i].m_iLength; // FIXME! should obtain freqs from dict
-
-	// FIXME! !COMMIT must return an error or truncate the array instead of crashing
-	assert ( m_dWords.GetLength()<=SPH_MAX_QUERY_WORDS );
 
 	// reset result
 	m_dResult.Reset ();

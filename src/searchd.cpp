@@ -746,10 +746,9 @@ void NetInputBuffer_c::SendErrorReply ( const char * sTemplate, ... )
 	const int iMaxStrLen = sizeof(dBuf) - iHeaderLen - 1;
 
 	// fill header
-	DWORD * pBuf = (DWORD*)&dBuf[0];
-	pBuf[0] = SEARCHD_ERROR;
-	pBuf[1] = 0; // reply length, to be filled later
-	pBuf[2] = 0; // error string length, to be filled later
+	WORD * p0 = (WORD*)&dBuf[0];
+	p0[0] = htons(SEARCHD_ERROR); // error code
+	p0[1] = 0; // version doesn't matter
 
 	// fill error string
 	char * sBuf = dBuf + iHeaderLen;
@@ -763,8 +762,9 @@ void NetInputBuffer_c::SendErrorReply ( const char * sTemplate, ... )
 	int iStrLen = strlen(sBuf);
 
 	// fixup lengths
-	pBuf[1] = iHeaderLen+iStrLen;
-	pBuf[2] = iStrLen;
+	DWORD * p4 = (DWORD*)&dBuf[4];
+	p4[0] = htonl(iHeaderLen+iStrLen);
+	p4[1] = htonl(iStrLen);
 
 	// send!
 	sphSockSend ( m_iSock, dBuf, iHeaderLen+iStrLen, 0 );

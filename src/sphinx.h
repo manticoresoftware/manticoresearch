@@ -31,6 +31,9 @@
 #include <string.h>
 #include <assert.h>
 
+#if USE_PGSQL
+	#include <libpq-fe.h>
+#endif
 
 #if USE_MYSQL
 #if USE_WINDOWS
@@ -383,6 +386,80 @@ struct CSphSource_Text : CSphSource_Document
 	BYTE **			NextDocument ();
 	virtual BYTE *	NextText () = 0;
 };
+
+
+#if USE_PGSQL
+/// PgSQL source params
+struct CSphSourceParams_PgSQL
+{
+	// query params
+	const char *	m_sQuery;
+	const char *	m_sQueryPre;
+	const char *	m_sQueryPost;
+	const char *	m_sQueryRange;
+	const char *	m_sQueryPostIndex;
+	const char *	m_sGroupColumn;
+	const char *	m_sDateColumn;
+	int				m_iRangeStep;
+
+	// connection params
+	const char *	m_sHost;
+	const char *	m_sUser;
+	const char *	m_sPass;
+	const char *	m_sDB;
+	const char *	m_sPort;	
+	const char *	m_sClientEncoding;
+	
+	/// ctor which sets defaults
+					CSphSourceParams_PgSQL ();
+};
+
+
+/// PgSQL source implementation
+/// multi-field plain-text documents fetched from given query
+struct CSphSource_PgSQL : CSphSource_Document
+{
+						CSphSource_PgSQL ();
+	virtual				~CSphSource_PgSQL ();
+
+	bool				Init ( CSphSourceParams_PgSQL * pParams );
+	virtual BYTE **		NextDocument ();
+	virtual void		PostIndex ();
+
+protected:
+	PGresult * 			m_pSqlResult;	///< postgresql execution restult context
+	PGconn *			m_tSqlDriver;	///< postgresql connection context
+	char *				m_sSqlDSN;
+
+	char *				m_sQuery;		///< main fetch query
+	char *				m_sQueryPost;	///< post-fetch query
+	int					m_iGroupColumn;	///< group_id column number
+	int					m_iDateColumn;	///< date column number
+
+	int					m_iSqlRows;		///< how much rows last step returned
+	int					m_iSqlRow;		///< current row (0 based, as in PQgetvalue)
+
+	BYTE *				m_dFields [ SPH_MAX_FIELD_COUNT ];
+	int					m_dRemapFields [ SPH_MAX_FIELD_COUNT ];
+
+	int					m_iRangeStep;	///< ID range step, -1 if not using ranges
+	int					m_iMinID;		///< grand min ID
+	int					m_iMaxID;		///< grand max ID
+	int					m_iCurrentID;	///< current min ID
+
+	DWORD				m_iMaxFetchedID;///< max actually fetched ID
+
+	bool						m_bSqlConnected;
+	CSphSourceParams_PgSQL *	m_pParams;
+
+	static const int			MACRO_COUNT = 2;
+	static const char * const	MACRO_VALUES [ MACRO_COUNT ];
+
+protected:
+	bool				RunQueryStep ();
+	int					GetColumnIndex ( const char * sColumn );
+};
+#endif
 
 
 #if USE_MYSQL

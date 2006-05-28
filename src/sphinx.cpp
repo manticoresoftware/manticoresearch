@@ -4398,6 +4398,533 @@ BYTE ** CSphSource_Text::NextDocument()
 	return t ? &t : NULL;
 };
 
+
+
+/////////////////////////////////////////////////////////////////////////////
+// PGSQL SOURCE
+/////////////////////////////////////////////////////////////////////////////
+
+#if USE_PGSQL
+
+CSphSourceParams_PgSQL::CSphSourceParams_PgSQL ()
+	: m_sQuery			( NULL )
+	, m_sQueryPre		( NULL )
+	, m_sQueryPost		( NULL )
+	, m_sQueryRange		( NULL )
+	, m_sQueryPostIndex	( NULL )
+	, m_sGroupColumn	( NULL )
+	, m_sDateColumn		( NULL )
+	, m_iRangeStep		( 1024 )
+
+	, m_sHost			( NULL )
+	, m_sUser			( NULL )
+	, m_sPass			( NULL )
+	, m_sDB				( NULL )
+	, m_sPort			( "5432" )
+{
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+const char * const CSphSource_PgSQL::MACRO_VALUES [ CSphSource_PgSQL::MACRO_COUNT ] =
+{
+	"$start",
+	"$end"
+};
+
+
+CSphSource_PgSQL::CSphSource_PgSQL ()
+	: m_pSqlResult		( NULL )
+	, m_sSqlDSN			( NULL )
+
+	, m_sQuery			( NULL )
+	, m_sQueryPost		( NULL )
+	, m_iGroupColumn	( 0 )
+	, m_iDateColumn		( 0 )
+
+	, m_iSqlRows		( 0 )
+	, m_iSqlRow			( 0 )
+
+	, m_iRangeStep		( 0 )
+	, m_iMinID			( 0 )
+	, m_iMaxID			( 0 )
+	, m_iCurrentID		( 0 )
+
+	, m_iMaxFetchedID	( 0 )
+
+	, m_bSqlConnected	( false )
+	, m_pParams			( NULL )
+{
+}
+
+
+CSphSource_PgSQL::~CSphSource_PgSQL ()
+{
+	sphFree ( m_sSqlDSN );
+	sphFree ( m_sQuery );
+	sphFree ( m_sQueryPost );
+}
+
+
+bool CSphSource_PgSQL::RunQueryStep ()
+{
+	if ( m_iRangeStep<=0 )
+		return false;
+	if ( m_iCurrentID>m_iMaxID )
+		return false;
+
+	static const int iBufSize = 16;
+	char * sRes = NULL;
+
+	//////////////////////////////////////////////
+	// range query with $start/$end interpolation
+	//////////////////////////////////////////////
+
+	assert ( m_iMinID>0 );
+	assert ( m_iMaxID>0 );
+	assert ( m_iMinID<=m_iMaxID );
+	assert ( m_sQuery );
+
+	char sValues [ MACRO_COUNT ] [ iBufSize ];
+	snprintf ( sValues[0], iBufSize, "%d", m_iCurrentID );
+	snprintf ( sValues[1], iBufSize, "%d", m_iCurrentID+m_iRangeStep-1 );
+	m_iCurrentID += m_iRangeStep;
+
+	// OPTIMIZE? things can be precalculated
+	char * sCur = m_sQuery;
+	int iLen = 0;
+	while ( *sCur )
+	{
+		if ( *sCur=='$' )
+		{
+			int i;
+			for ( i=0; i<MACRO_COUNT; i++ )
+				if ( strncmp ( MACRO_VALUES[i], sCur, strlen(MACRO_VALUES[i]) )==0 )
+			{
+				sCur += strlen ( MACRO_VALUES[i] );
+				iLen += strlen ( sValues[i] );
+				break;
+			}
+			if ( i<MACRO_COUNT )
+				continue;
+		}
+
+		sCur++;
+		iLen++;
+	}
+	iLen++; // trailing zero
+
+	// do interpolation
+	sRes = new char [ iLen ];
+	sCur = m_sQuery;
+
+	char * sDst = sRes;
+	while ( *sCur )
+	{
+		if ( *sCur=='$' )
+		{
+			int i;
+			for ( i=0; i<MACRO_COUNT; i++ )
+				if ( strncmp ( MACRO_VALUES[i], sCur, strlen(MACRO_VALUES[i]) )==0 )
+			{
+				strcpy ( sDst, sValues[i] );
+				sCur += strlen ( MACRO_VALUES[i] );
+				sDst += strlen ( sValues[i] );
+				break;
+			}
+			if ( i<MACRO_COUNT )
+				continue;
+		}
+		*sDst++ = *sCur++;
+	}
+	*sDst++ = '\0';
+	assert ( sDst-sRes==iLen );
+
+	// run query
+	const char * sError = NULL;
+	for ( ;; )
+	{
+		if ( m_pSqlResult )
+		{
+			PQclear ( m_pSqlResult );
+			m_pSqlResult = NULL;
+		}
+
+		m_pSqlResult = PQexec ( m_tSqlDriver, sRes );
+		ExecStatusType eRes = PQresultStatus ( m_pSqlResult );
+		if ( ( eRes!=PGRES_COMMAND_OK ) && ( eRes!=PGRES_TUPLES_OK ) )
+		{
+			sError = "pgsql_query";
+			break;
+		}
+		break;
+	}
+
+	SafeDeleteArray ( sRes );
+
+	// report errors, if any
+	if ( sError )
+	{
+		fprintf ( stdout, "ERROR: %s: %s (DSN=%s).\n",
+			sError, PQerrorMessage ( m_tSqlDriver ), m_sSqlDSN );
+		return false;
+	}
+
+	// all ok
+	m_iSqlRow = 0;
+	m_iSqlRows = PQntuples ( m_pSqlResult );
+	return true;
+}
+
+
+int CSphSource_PgSQL::GetColumnIndex ( const char * sColumn )
+{
+	if ( !strlen(sColumn) )
+		return 0;
+
+	int iRes = myatoi ( sColumn );
+	if ( !iRes )
+	{
+		// if it's string, match by name
+		iRes = -1;
+		for ( int i=1; i< (int) PQnfields(m_pSqlResult); i++ )
+		{
+			if ( strcasecmp ( PQfname(m_pSqlResult, i), sColumn ) == 0 )
+			{
+				iRes = i;
+				break;
+			}
+		}
+		
+	} else
+	{
+		// if it's number, reindex from base 1 to base 0
+		iRes--;
+	}
+
+	if ( iRes <= 0 || iRes >= (int) PQnfields(m_pSqlResult) )
+	{
+		fprintf ( stdout, "WARNING: bad column index (name='%s', index=%d), SUPPORT DISABLED.\n",
+			sColumn, iRes );
+		iRes = 0;
+	} else
+	{
+		m_iFieldCount--;
+		assert ( m_iFieldCount>0 );
+	}
+	return iRes;
+}
+
+
+bool CSphSource_PgSQL::Init ( CSphSourceParams_PgSQL * pParams )
+{
+	#define LOC_FIX_NULL(_arg) if ( !pParams->_arg ) pParams->_arg = "";
+	#define LOC_ERROR(_msg,_arg) { fprintf ( stdout, _msg, _arg ); return 0; }
+	#define LOC_ERROR2(_msg,_arg,_arg2) { fprintf ( stdout, _msg, _arg, _arg2 ); return 0; }
+	#define LOC_PGSQL_ERROR(_msg) { sError = _msg; break; }
+
+	const char * sError = NULL;
+
+	// checks
+	assert ( pParams );
+	assert ( pParams->m_sQuery );
+	m_pParams = pParams;
+
+	// defaults
+	LOC_FIX_NULL ( m_sQueryPre );
+	LOC_FIX_NULL ( m_sQueryPost );
+	LOC_FIX_NULL ( m_sGroupColumn );
+	LOC_FIX_NULL ( m_sDateColumn );
+	LOC_FIX_NULL ( m_sHost );
+	LOC_FIX_NULL ( m_sUser );
+	LOC_FIX_NULL ( m_sPass );
+	LOC_FIX_NULL ( m_sDB );
+	LOC_FIX_NULL ( m_sClientEncoding );
+
+	// build and store DSN for error reporting
+	char sBuf [ 1024 ];
+	snprintf ( sBuf, sizeof(sBuf), "pgsql://%s:***@%s:%s/%s",
+		pParams->m_sUser, pParams->m_sHost, pParams->m_sPort, pParams->m_sDB);
+	m_sSqlDSN = sphDup ( sBuf );
+
+	// connect
+	for ( ;; )
+	{
+		// do connect to database
+		m_tSqlDriver = PQsetdbLogin ( pParams->m_sHost, pParams->m_sPort, NULL, NULL,
+			pParams->m_sDB, pParams->m_sUser, pParams->m_sPass );
+
+		// get connection status
+		if ( PQstatus ( m_tSqlDriver )==CONNECTION_BAD )
+			LOC_PGSQL_ERROR ( "PQsetdbLogin" ); // could not connect
+
+		m_bSqlConnected = true;		
+
+		// set client encoding
+		if ( pParams->m_sClientEncoding && strlen ( pParams->m_sClientEncoding ) )
+			if ( -1==PQsetClientEncoding ( m_tSqlDriver, pParams->m_sClientEncoding ) )
+				LOC_PGSQL_ERROR ( "PQsetClientEncoding" );
+
+		// run pre-query
+		if ( pParams->m_sQueryPre && strlen(pParams->m_sQueryPre) )
+		{
+			m_pSqlResult = PQexec ( m_tSqlDriver, pParams->m_sQueryPre );
+
+			ExecStatusType eRes = PQresultStatus ( m_pSqlResult );
+			if ( ( eRes!=PGRES_COMMAND_OK ) && ( eRes!=PGRES_TUPLES_OK ) )
+				LOC_PGSQL_ERROR ( "PQexec_pre" );
+
+			PQclear ( m_pSqlResult );
+			m_pSqlResult = NULL;
+		}
+
+		// issue first fetch query
+		if ( pParams->m_sQueryRange )
+		{
+			///////////////
+			// range query
+			///////////////
+
+			m_iRangeStep = pParams->m_iRangeStep;
+
+			// check step
+			if ( m_iRangeStep<=0 )
+				LOC_ERROR ( "ERROR: sql_range_step=%d: must be positive.\n", m_iRangeStep );
+			if ( m_iRangeStep<128 )
+				fprintf ( stdout, "WARNING: sql_range_step=%d: too small, increase recommended.\n", m_iRangeStep );
+
+			// check query for macros
+			bool bError = false;
+			for ( int i=0; i<MACRO_COUNT; i++ )
+			{
+				if ( !strstr ( pParams->m_sQuery, MACRO_VALUES[i] ) )
+				{
+					fprintf ( stdout, "ERROR: sql_query_range: macro '%s' not found.\n",
+						MACRO_VALUES[i] );
+					bError = true;
+				}
+			}
+			if ( bError )
+				return 0;
+
+			// execute
+			m_pSqlResult = PQexec ( m_tSqlDriver, pParams->m_sQueryRange );
+			ExecStatusType eRes = PQresultStatus ( m_pSqlResult );
+			if ( ( eRes!=PGRES_COMMAND_OK ) && ( eRes!=PGRES_TUPLES_OK ) )
+				LOC_PGSQL_ERROR ( "sql_query_range" );
+
+			// check number of fields (must be exactly 2)
+			if ( PQnfields ( m_pSqlResult ) !=2 )
+				LOC_ERROR ( "ERROR: sql_query_range: got %d columns, must be 2 (min_id/max_id).\n", PQnfields(m_pSqlResult) );
+
+			// fetch min/max
+			m_iMinID = myatoi ( PQgetvalue ( m_pSqlResult, 0, 0 ) );
+			m_iMaxID = myatoi ( PQgetvalue ( m_pSqlResult, 0, 1 ) );
+			
+			// check the data integrity
+			if ( m_iMinID<=0 )
+				LOC_ERROR ( "ERROR: sql_query_range: min_id=%d: must be positive.\n", m_iMinID );
+			if ( m_iMaxID<=0 )
+				LOC_ERROR ( "ERROR: sql_query_range: max_id=%d: must be positive.\n", m_iMaxID );
+			if ( m_iMinID>m_iMaxID )
+				LOC_ERROR2 ( "ERROR: sql_query_range: min_id=%d must not be greater than max_id=%d.\n", m_iMinID, m_iMaxID );
+
+			// free result
+			PQclear ( m_pSqlResult );
+			m_pSqlResult = NULL;
+
+			m_iCurrentID = m_iMinID;
+			m_sQuery = sphDup ( pParams->m_sQuery );
+
+			// issue query
+			if ( !RunQueryStep () )
+				return 0;
+
+		} else
+		{
+			////////////////
+			// normal query
+			////////////////
+
+			assert ( !m_pSqlResult );
+			
+			m_pSqlResult = PQexec ( m_tSqlDriver, pParams->m_sQuery );
+			
+			ExecStatusType eRes = PQresultStatus ( m_pSqlResult );
+			if ( ( eRes!=PGRES_COMMAND_OK ) && ( eRes!=PGRES_TUPLES_OK ) )
+				LOC_PGSQL_ERROR ( "sql_query" );
+
+			m_iSqlRow = 0;
+			m_iSqlRows = PQntuples ( m_pSqlResult );
+		}
+		break;
+	}
+
+	// errors, anyone?
+	if ( sError )
+	{
+		fprintf ( stdout, "ERROR: %s: %s (DSN=%s).\n",
+			sError, PQerrorMessage ( m_tSqlDriver ), m_sSqlDSN );
+		return 0;
+	}
+
+	// some post-query setup
+	int iFields = PQnfields ( m_pSqlResult ) - 1;
+	m_iFieldCount = iFields; // will be changed by GetColumnIndex below
+	m_sQueryPost = sphDup ( pParams->m_sQueryPost );
+
+	// group/date columns
+	m_iGroupColumn = GetColumnIndex ( pParams->m_sGroupColumn );
+	m_iDateColumn = GetColumnIndex ( pParams->m_sDateColumn );
+
+	// check it
+	if ( m_iFieldCount>SPH_MAX_FIELD_COUNT )
+	{
+		fprintf ( stdout, "ERROR: too many fields (fields=%d, max=%d), please increase SPH_MAX_FIELD_COUNT in sphinx.h and recompile.\n",
+			m_iFieldCount, SPH_MAX_FIELD_COUNT );
+		return 0;
+	}
+
+	// build field remap table
+	int j = 0;
+	for ( int i=1; i<=iFields; i++ )
+	{
+		if ( i!=m_iGroupColumn && i!=m_iDateColumn )
+			m_dRemapFields [ j++ ] = i;
+	}
+	assert ( j==m_iFieldCount );
+
+	#undef LOC_FIX_NULL
+	#undef LOC_ERROR
+	#undef LOC_PGSQL_ERROR
+
+	return 1;
+}
+
+
+BYTE ** CSphSource_PgSQL::NextDocument ()
+{
+	PROFILE ( src_PgSQL );
+	assert ( m_bSqlConnected );
+
+	// check if we're finished	
+	while ( m_iSqlRow>=m_iSqlRows )
+	{
+		// maybe we can do next step yet?
+		if ( RunQueryStep () )
+			continue;
+
+		// ok, we're over
+		while ( m_sQueryPost && strlen(m_sQueryPost) )
+		{
+			m_pSqlResult = PQexec ( m_tSqlDriver, m_sQueryPost );
+
+			ExecStatusType eRes = PQresultStatus ( m_pSqlResult );
+			if ( ( eRes!=PGRES_COMMAND_OK ) && ( eRes!=PGRES_TUPLES_OK ) )
+			{
+				fprintf ( stdout, "WARNING: pgsql_query_post: %s\n", PQerrorMessage ( m_tSqlDriver ) );
+				break;
+			}
+
+			PQclear ( m_pSqlResult );
+			m_pSqlResult = NULL;
+			break;
+		}
+
+		// close connection and return
+		PQfinish ( m_tSqlDriver );
+		m_bSqlConnected = false;
+
+		return NULL;
+	}
+
+	// get him!
+	m_tDocInfo.m_iDocID = myatoi ( PQgetvalue ( m_pSqlResult, m_iSqlRow, 0 ) );
+	m_tDocInfo.m_iGroupID = m_iGroupColumn ? myatoi ( PQgetvalue ( m_pSqlResult, m_iSqlRow, m_iGroupColumn ) ) : 1;
+	m_tDocInfo.m_iTimestamp = m_iDateColumn ? myatoi ( PQgetvalue ( m_pSqlResult, m_iSqlRow, m_iDateColumn ) ) : 1;
+
+	m_iMaxFetchedID = Max ( m_iMaxFetchedID, m_tDocInfo.m_iDocID );
+
+	if ( !m_tDocInfo.m_iDocID )
+		fprintf ( stdout, "WARNING: zero/NULL document_id, aborting indexing\n" );
+
+	if ( !m_tDocInfo.m_iGroupID )
+	{
+		m_tDocInfo.m_iGroupID = 1;
+		fprintf ( stdout, "WARNING: zero/NULL group for document_id=%d, fixed up to 1\n", m_tDocInfo.m_iDocID );
+	}
+
+	if ( !m_tDocInfo.m_iTimestamp )
+	{
+		m_tDocInfo.m_iTimestamp = 1;
+		fprintf ( stdout, "WARNING: zero/NULL timestamp for document_id=%d, fixed up to 1\n", m_tDocInfo.m_iDocID );
+	}
+
+	// remap and return
+	for ( int i=0; i<m_iFieldCount; i++ )
+		m_dFields[i] = (BYTE*) PQgetvalue ( m_pSqlResult, m_iSqlRow, m_dRemapFields[i] );
+
+	// now, move to next row
+	m_iSqlRow++;
+	return m_dFields;
+}
+
+
+void CSphSource_PgSQL::PostIndex ()
+{
+	if ( !m_pParams
+		|| !m_pParams->m_sQueryPostIndex
+		|| !strlen(m_pParams->m_sQueryPostIndex)
+		|| !m_iMaxFetchedID )
+	{
+		return;
+	}
+
+	assert ( !m_bSqlConnected );
+	assert ( m_pParams );
+
+	#define LOC_PGSQL_ERROR(_msg) { sError = _msg; break; }
+
+	const char * sError = NULL;
+	for ( ;; )
+	{		
+		// do connect to database
+		m_tSqlDriver =  PQsetdbLogin ( m_pParams->m_sHost, m_pParams->m_sPort, NULL, NULL,
+			m_pParams->m_sDB, m_pParams->m_sUser, m_pParams->m_sPass);
+
+		// get connection status
+		if ( PQstatus ( m_tSqlDriver )==CONNECTION_BAD )
+			LOC_PGSQL_ERROR ( "PQsetdbLogin" );
+
+		m_bSqlConnected = true;
+		
+		// do execute query
+		char * sQuery = sphStrMacro ( m_pParams->m_sQueryPostIndex, "$maxid", m_iMaxFetchedID );	
+		m_pSqlResult = PQexec ( m_tSqlDriver, sQuery );
+
+		ExecStatusType eRes = PQresultStatus ( m_pSqlResult );
+		if ( ( eRes!=PGRES_COMMAND_OK ) && ( eRes!=PGRES_TUPLES_OK ) )
+			LOC_PGSQL_ERROR ( "PQexec_pre" );
+
+		PQclear ( m_pSqlResult );
+		m_pSqlResult = NULL;
+
+		delete [] sQuery;		
+		break;
+	}
+	
+	if ( sError )
+		fprintf ( stdout, "ERROR: %s: %s (DSN=%s).\n",
+			sError, PQerrorMessage ( m_tSqlDriver ), m_sSqlDSN );
+
+	#undef LOC_PGSQL_ERROR
+
+	PQfinish ( m_tSqlDriver );
+	m_bSqlConnected = false;
+}
+
+#endif // USE_PGSQL
+
 /////////////////////////////////////////////////////////////////////////////
 // MYSQL SOURCE
 /////////////////////////////////////////////////////////////////////////////
@@ -4821,7 +5348,7 @@ BYTE ** CSphSource_MySQL::NextDocument ()
 		}
 
 		// ok, we're over
-		while ( strlen(m_sQueryPost) )
+		while ( m_sQueryPost && strlen(m_sQueryPost) )
 		{
 			if ( mysql_query ( &m_tSqlDriver, m_sQueryPost ) )
 			{
@@ -4899,9 +5426,9 @@ void CSphSource_MySQL::PostIndex ()
 			LOC_MYSQL_ERROR ( "mysql_real_connect" );
 		}
 
-	    char * sQuery = sphStrMacro ( m_pParams->m_sQueryPostIndex, "$maxid", m_iMaxFetchedID );
-	    int iRes = mysql_query ( &m_tSqlDriver, sQuery );
-	    delete [] sQuery;
+		char * sQuery = sphStrMacro ( m_pParams->m_sQueryPostIndex, "$maxid", m_iMaxFetchedID );
+		int iRes = mysql_query ( &m_tSqlDriver, sQuery );
+		delete [] sQuery;
 
 		if ( iRes )
 			LOC_MYSQL_ERROR ( "mysql_query_post_index" );
@@ -4913,7 +5440,7 @@ void CSphSource_MySQL::PostIndex ()
 			m_pSqlResult = NULL;
 		}
 
-	    break;
+		break;
 	}
 	
 	if ( sError )

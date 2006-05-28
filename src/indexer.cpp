@@ -548,6 +548,56 @@ int main ( int argc, char ** argv )
 			continue;
 		}
 
+		#if USE_PGSQL
+		if ( hSource["type"]=="pgsql" )
+		{
+			CONF_CHECK ( hSource, "sql_host", "in source '%s'", hIndex["source"].cstr() );
+			CONF_CHECK ( hSource, "sql_user", "in source '%s'", hIndex["source"].cstr() );
+			CONF_CHECK ( hSource, "sql_pass", "in source '%s'", hIndex["source"].cstr() );
+			CONF_CHECK ( hSource, "sql_db", "in source '%s'", hIndex["source"].cstr() );
+			CONF_CHECK ( hSource, "sql_query", "in source '%s'", hIndex["source"].cstr() );
+
+			#define LOC_GET(_key) \
+				hSource.Exists(_key) ? hSource[_key].cstr() : NULL;
+
+			CSphSourceParams_PgSQL tParams;
+
+			tParams.m_sQuery			= LOC_GET ( "sql_query" );
+			tParams.m_sQueryPre			= LOC_GET ( "sql_query_pre" );
+			tParams.m_sQueryPost		= LOC_GET ( "sql_query_post" );
+			tParams.m_sQueryRange		= LOC_GET ( "sql_query_range" );
+			tParams.m_sQueryPostIndex	= LOC_GET ( "sql_query_post_index" );
+			tParams.m_sGroupColumn		= LOC_GET ( "sql_group_column" );
+			tParams.m_sDateColumn		= LOC_GET ( "sql_date_column" );
+			tParams.m_sHost				= LOC_GET ( "sql_host" );
+			tParams.m_sUser				= LOC_GET ( "sql_user" );
+			tParams.m_sPass				= LOC_GET ( "sql_pass" );
+			tParams.m_sDB				= LOC_GET ( "sql_db" );
+			tParams.m_sClientEncoding	= LOC_GET ( "sql_client_encoding" );
+			tParams.m_sPort				= LOC_GET ( "sql_port");
+
+			#undef LOC_GET
+			#define LOC_GET(_arg,_key) \
+				if ( hSource.Exists(_key) && hSource[_key].intval() ) \
+					_arg = hSource[_key].intval();
+
+			LOC_GET ( tParams.m_iRangeStep,	"sql_range_step" );
+
+			#undef LOC_GET
+
+			CSphSource_PgSQL * pSrcPgSQL = new CSphSource_PgSQL ();
+			assert ( pSrcPgSQL );
+
+			if ( !pSrcPgSQL->Init ( &tParams ) )
+			{
+				SafeDelete ( pSrcPgSQL );
+				return 1;
+			}
+
+			pSource = pSrcPgSQL;
+		}
+		#endif
+
 		#if USE_MYSQL
 		if ( hSource["type"]=="mysql" )
 		{

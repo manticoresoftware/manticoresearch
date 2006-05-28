@@ -147,6 +147,7 @@ public:
 				~CSphLowercaser ();
 
 	void		SetRemap ( const CSphRemapRange * pRemaps, int iRemaps );
+	void		SetRemap ( const CSphLowercaser * pLC );
 	bool		SetRemap ( const char * sConfig );
 
 public:
@@ -191,6 +192,9 @@ public:
 	/// set new translation table
 	/// returns true on success, false on failure
 	virtual bool		SetCaseFolding ( const char * sConfig ) = 0;
+
+	/// get lowercaser, if any
+	virtual const CSphLowercaser *	GetLowercaser () const { return NULL; }
 };
 
 /// create SBCS tokenizer

@@ -1707,6 +1707,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 		return;
 	}
 	CSphDict * pDict = g_hIndexes[sIndex].m_pDict;
+	ISphTokenizer * pTokenizer = g_hIndexes[sIndex].m_pTokenizer;
 
 	q.m_sWords = tReq.GetString ();
 	q.m_sBeforeMatch = tReq.GetString ();
@@ -1733,7 +1734,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 			tReq.SendErrorReply ( "invalid or truncated request" );
 			return;
 		}
-		dExcerpts.Add ( sphBuildExcerpt ( q, pDict ) );
+		dExcerpts.Add ( sphBuildExcerpt ( q, pDict, pTokenizer ) );
 	}
 
 	////////////////

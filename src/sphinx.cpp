@@ -896,6 +896,7 @@ public:
 	virtual void		SetBuffer ( BYTE * sBuffer, int iLength, bool bLast );
 	virtual BYTE *		GetToken ();
 	virtual bool		SetCaseFolding ( const char * sConfig );
+	virtual const CSphLowercaser *		GetLowercaser () const { return &m_tLC; }
 
 protected:
 	CSphLowercaser		m_tLC;								///< my lowercaser
@@ -918,6 +919,7 @@ public:
 	virtual void		SetBuffer ( BYTE * sBuffer, int iLength, bool bLast );
 	virtual BYTE *		GetToken ();
 	virtual bool		SetCaseFolding ( const char * sConfig );
+	virtual const CSphLowercaser *		GetLowercaser () const { return &m_tLC; }
 
 protected:
 	inline int			IsEmpty () { return m_pCur>=m_pBufferMax; }
@@ -962,6 +964,26 @@ CSphLowercaser::~CSphLowercaser ()
 {
 	SafeDeleteArray ( m_ppTable );
 	SafeDeleteArray ( m_pTable );
+}
+
+
+void CSphLowercaser::SetRemap ( const CSphLowercaser * pLC )
+{
+	if ( !pLC )
+		return;
+
+	SafeDeleteArray ( m_ppTable );
+	SafeDeleteArray ( m_pTable );
+
+	int iUsed = 0;
+	for ( int i=0; i<CHUNK_COUNT; i++ )
+		if ( pLC->m_ppTable[i] )
+			iUsed++;
+
+	m_ppTable = new int * [ CHUNK_COUNT ];
+	m_pTable = new int [ iUsed*CHUNK_SIZE ];
+	memcpy ( m_ppTable, pLC->m_ppTable, sizeof(int *)*CHUNK_COUNT );
+	memcpy ( m_pTable, pLC->m_pTable, sizeof(int)*iUsed*CHUNK_SIZE );
 }
 
 

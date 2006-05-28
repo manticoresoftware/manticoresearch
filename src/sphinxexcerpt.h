@@ -43,7 +43,7 @@ public:
 
 /// an excerpt generator
 /// returns a newly allocated UTF-8 string
-char *				sphBuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict );
+char *				sphBuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict, ISphTokenizer * pTokenizer );
 
 #endif // _sphinxexcerpt_
 

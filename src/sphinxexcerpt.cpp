@@ -26,7 +26,7 @@ public:
 							~ExcerptGen_c () {}
 
 	bool					SetCaseFolding ( const char * sConfig );
-	char *					BuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict );
+	char *					BuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict, ISphTokenizer * pTokenizer );
 
 public:
 	enum Token_e
@@ -135,9 +135,10 @@ bool ExcerptGen_c::SetCaseFolding ( const char * sConfig )
 }
 
 
-char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict )
+char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict, ISphTokenizer * pTokenizer )
 {
 	m_pDict = pDict;
+	m_tLC.SetRemap ( pTokenizer->GetLowercaser() );
 
 	// decode everything
 	// FIXME! should add SBCS support
@@ -339,7 +340,7 @@ template<int L> void ExcerptGen_c::SubmitCodepoint ( CSphVector<Token_t,L> & dBu
 	if ( m_tTok.m_eType==eType )
 	{
 		// type did not change, continue accumulating
-		AccumulateCodepoint ( iCode );
+		AccumulateCodepoint ( iLC );
 		m_tTok.m_iLength++;
 
 	} else
@@ -362,7 +363,7 @@ template<int L> void ExcerptGen_c::SubmitCodepoint ( CSphVector<Token_t,L> & dBu
 		
 		m_pAccum = m_sAccum;
 		m_iAccum = 0;
-		AccumulateCodepoint ( iCode );
+		AccumulateCodepoint ( iLC );
 
 		// emit terminating token
 		if ( eType==TOK_NONE )
@@ -690,10 +691,10 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & q )
 
 /////////////////////////////////////////////////////////////////////////////
 
-char * sphBuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict )
+char * sphBuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict, ISphTokenizer * pTokenizer )
 {
 	ExcerptGen_c tGen;
-	return tGen.BuildExcerpt ( q, pDict );
+	return tGen.BuildExcerpt ( q, pDict, pTokenizer );
 }
 
 //

@@ -72,6 +72,7 @@ static int				g_iQueryLogFile	= -1;
 static int				g_iHUP			= 0;
 static const char *		g_sPidFile		= NULL;
 static bool				g_bHeadDaemon	= false;
+static int				g_iMaxMatches	= 1000;
 
 struct ServedIndex_t
 {
@@ -1059,7 +1060,7 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 
 				// request v.1.1
 				tOut.SendInt ( 0 ); // offset is 0
-				tOut.SendInt ( CSphQueryResult::MAX_MATCHES ); // limit is MAX_MATCHES
+				tOut.SendInt ( g_iMaxMatches ); // limit is MAX_MATCHES
 				tOut.SendInt ( iMode ); // match mode
 				tOut.SendInt ( tQuery.m_eSort ); // sort mode
 				tOut.SendInt ( tQuery.m_iGroups );
@@ -1246,7 +1247,7 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 					MemInputBuffer_c tReq ( tAgent.m_pReplyBuf, tAgent.m_iReplySize );
 
 					int iMatches = tReq.GetInt ();
-					if ( iMatches<0 || iMatches>CSphQueryResult::MAX_MATCHES )
+					if ( iMatches<0 || iMatches>g_iMaxMatches )
 					{
 						sphWarning ( "index '%s': agent '%s:%d': invalid match count received (count=%d)",
 							sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort,
@@ -1413,6 +1414,9 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			VER_COMMAND_SEARCH>>8, iVer>>8, iVer&0xff );
 		return;
 	}
+
+	// per-server query settings
+	tQuery.m_iMaxMatches = g_iMaxMatches;
 
 	/////////////////
 	// parse request
@@ -1949,6 +1953,18 @@ int main ( int argc, char **argv )
 
 	if ( hSearchd.Exists ( "max_children" ) && hSearchd["max_children"].intval()>=0 )
 		g_iMaxChildren = hSearchd["max_children"].intval();
+
+	if ( hSearchd("max_matches") )
+	{
+		int iMax = hSearchd["max_matches"].intval();
+		if ( iMax<0 || iMax>10000000 )
+		{
+			sphWarning ( "max_matches=%d out of bounds; using default 1000", iMax );
+		} else
+		{
+			g_iMaxMatches = iMax;
+		}
+	}
 
 	//////////////////////
 	// build indexes hash

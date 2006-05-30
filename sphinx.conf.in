@@ -343,6 +343,17 @@ searchd
 	# used for different external automation scripts
 	# MUST be present
 	pid_file			= /home/sphinx/searchd.pid
+
+
+	# maximum amount of matches this daemon would retrieve from each index
+	# and serve to client
+	#
+	# this parameter affects per-client memory usage slightly (16 bytes per match)
+	# and CPU usage in match sorting phase; so blindly raising it to 1 million
+	# is definitely NOT recommended
+	#
+	# default is 1000 (just like with Google)
+	max_matches			= 1000
 }
 
 # --eof--

@@ -1617,6 +1617,7 @@ CSphQuery::CSphQuery ()
 	, m_iGroups		( 0 )
 	, m_eSort		( SPH_SORT_RELEVANCE )
 	, m_pTokenizer	( NULL )
+	, m_iMaxMatches	( 1000 )
 	, m_iMinID		( 0 )
 	, m_iMaxID		( UINT_MAX )
 	, m_iMinTS		( 0 )
@@ -3019,20 +3020,34 @@ template< typename T> Less_T<T> Less_fn ( T & )
 
 
 /// match-sorting priority min-queue
-template < typename T, int SIZE, typename COMP > class CSphQueue : public ISphQueue<T, SIZE>
+template < typename T, typename COMP > class CSphQueue : public ISphQueue<T>
 {
 protected:
-	T		m_pData [ SIZE ];
+	T *		m_pData;
 	int		m_iUsed;
+	int		m_iSize;
 
 public:
 	/// ctor
-	CSphQueue () : m_iUsed ( 0 ) {}
+	CSphQueue ( int iSize )
+		: m_iUsed ( 0 )
+		, m_iSize ( iSize )
+	{
+		assert ( iSize>0 );
+		m_pData = new T [ iSize ];
+		assert ( m_pData );
+	}
+
+	/// dtor
+	~CSphQueue ()
+	{
+		SafeDeleteArray ( m_pData );
+	}
 
 	/// add entry to the queue
 	virtual void Push ( const T & tEntry )
 	{
-		if ( m_iUsed==SIZE )
+		if ( m_iUsed==m_iSize )
 		{
 			// if it's worse that current min, reject it, else pop off current min
 			if ( COMP::IsLess ( tEntry, m_pData[0] ) )
@@ -3311,12 +3326,12 @@ ISphMatchQueue * sphCreateQueue ( CSphQuery * pQuery )
 	ISphMatchQueue * pTop = NULL;
 	switch ( pQuery->m_eSort )
 	{
-		case SPH_SORT_DATE_DESC:	pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchDateLt_fn > (); break;
-		case SPH_SORT_DATE_ASC:		pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchDateGt_fn > (); break;
-		case SPH_SORT_TIME_SEGMENTS:pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchTimeSegments_fn > (); MatchTimeSegments_fn::SetNow(); break;
-		case SPH_SORT_RELEVANCE:	pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchRelevanceLt_fn > (); break;
+		case SPH_SORT_DATE_DESC:	pTop = new CSphQueue < CSphMatch, MatchDateLt_fn > ( pQuery->m_iMaxMatches ); break;
+		case SPH_SORT_DATE_ASC:		pTop = new CSphQueue < CSphMatch, MatchDateGt_fn > ( pQuery->m_iMaxMatches ); break;
+		case SPH_SORT_TIME_SEGMENTS:pTop = new CSphQueue < CSphMatch, MatchTimeSegments_fn > ( pQuery->m_iMaxMatches ); MatchTimeSegments_fn::SetNow(); break;
+		case SPH_SORT_RELEVANCE:	pTop = new CSphQueue < CSphMatch, MatchRelevanceLt_fn > ( pQuery->m_iMaxMatches ); break;
 		default:
-			pTop = new CSphQueue < CSphMatch, CSphQueryResult::MAX_MATCHES, MatchRelevanceLt_fn > ();
+			pTop = new CSphQueue < CSphMatch, MatchRelevanceLt_fn > ( pQuery->m_iMaxMatches );
 			fprintf ( stdout, "WARNING: unknown sorting mode '%d', using SPH_SORT_RELEVANCE\n", pQuery->m_eSort );
 			break;
 	}

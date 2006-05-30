@@ -679,6 +679,7 @@ public:
 	int				m_iGroups;		///< count of groups to match
 	ESphSortOrder	m_eSort;		///< sorting order
 	ISphTokenizer *	m_pTokenizer;	///< tokenizer to use. NOT OWNED.
+	int				m_iMaxMatches;	///< max matches to retrieve, default is 1000. more matches use more memory and CPU time to hold and sort them
 
 	DWORD			m_iMinID;		///< min ID to match, 0 by default
 	DWORD			m_iMaxID;		///< max ID to match, UINT_MAX by default
@@ -697,8 +698,6 @@ public:
 class CSphQueryResult
 {
 public:
-	static const int		MAX_MATCHES = 1000;
-
 	struct WordStat_t
 	{
 		CSphString			m_sWord;	///< i-th search term (normalized word form)
@@ -742,7 +741,7 @@ struct CSphIndexProgress
 
 
 /// match queue interface
-typedef ISphQueue<CSphMatch, CSphQueryResult::MAX_MATCHES>	ISphMatchQueue;
+typedef ISphQueue<CSphMatch>	ISphMatchQueue;
 
 
 /// generic fulltext index interface

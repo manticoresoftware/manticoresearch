@@ -724,7 +724,7 @@ public:
 /////////////////////////////////////////////////////////////////////////////
 
 /// match-sorting priority min-queue interface
-template< typename T, int SIZE> class ISphQueue
+template < typename T > class ISphQueue
 {
 public:
 	/// virtualizing dtor

@@ -117,6 +117,8 @@ int main ( int argc, char ** argv )
 	// configure
 	/////////////
 
+	tQuery.m_iMaxMatches = iStart + iLimit;
+
 	// load config
 	CSphConfigParser cp;
 	if ( !cp.Parse ( sConfName ) )

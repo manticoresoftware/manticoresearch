@@ -199,19 +199,31 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict, 
 
 void ExcerptGen_c::HighlightAll ( const ExcerptQuery_t & q )
 {
-	ARRAY_FOREACH ( iTok, m_dTokens )
+	bool bOpen = false;
+	int iMaxTok = m_dTokens.GetLength()-1; // skip last one, it's TOK_NONE
+
+	for ( int iTok=0; iTok<iMaxTok; iTok++ )
 	{
-		// FIXME! glue consequent before/after tags
 		if ( m_dTokens[iTok].m_uWords )
 		{
-			ResultEmit ( q.m_sBeforeMatch.cstr() );
+			if ( !bOpen )
+			{
+				ResultEmit ( q.m_sBeforeMatch.cstr() );
+				bOpen = true;
+			}
 			ResultEmit ( m_dTokens[iTok] );
-			ResultEmit ( q.m_sAfterMatch.cstr() );
 		} else
 		{
+			if ( bOpen )
+			{
+				ResultEmit ( q.m_sAfterMatch.cstr() );
+				bOpen = false;
+			}
 			ResultEmit ( m_dTokens[iTok] );
 		}
 	}
+	if ( bOpen )
+		ResultEmit ( q.m_sAfterMatch.cstr() );
 }
 
 

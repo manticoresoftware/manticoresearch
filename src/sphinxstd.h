@@ -649,7 +649,7 @@ public:
 		}
 	}
 
-	bool IsEmpty ()
+	bool IsEmpty () const
 	{
 		if ( !m_sValue )
 			return true;

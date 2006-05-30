@@ -2114,16 +2114,12 @@ int main ( int argc, char **argv )
 
 			// configure morphology
 			DWORD iMorph = SPH_MORPH_NONE;
-			if ( hIndex.Exists ( "morphology" ) )
+			if ( hIndex ( "morphology" ) )
 			{
-				int iRuMorph = ( bUseUTF8 ? SPH_MORPH_STEM_RU_UTF8 : SPH_MORPH_STEM_RU_CP1251 );
-				if ( hIndex["morphology"]=="stem_en" )			iMorph = SPH_MORPH_STEM_EN;
-				else if ( hIndex["morphology"]=="stem_ru" )		iMorph = iRuMorph;
-				else if ( hIndex["morphology"]=="stem_enru" )	iMorph = SPH_MORPH_STEM_EN | iRuMorph;
-				else if ( hIndex["morphology"]=="none" )		iMorph = SPH_MORPH_NONE;
-				else if ( hIndex["morphology"].IsEmpty() )		iMorph = SPH_MORPH_NONE;
-				else
-					sphWarning ( "unknown morphology type '%s' in index '%s' ignored", hIndex["morphology"].cstr(), sIndexName );
+				iMorph = sphParseMorphology ( hIndex["morphology"], bUseUTF8 );
+				if ( iMorph==SPH_MORPH_UNKNOWN )
+					sphWarning ( "unknown morphology type '%s' ignored in index '%s'",
+						hIndex["morphology"].cstr(), sIndexName );
 			}
 
 			// configure charset_table

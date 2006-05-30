@@ -3927,6 +3927,8 @@ DWORD CSphDict_CRC32::GetWordID ( BYTE * pWord )
 		stem_ru_cp1251 ( pWord );
 	if ( m_iMorph & SPH_MORPH_STEM_RU_UTF8 )
 		stem_ru_utf8 ( (WORD*)pWord );
+	if ( m_iMorph & SPH_MORPH_SOUNDEX )
+		stem_soundex ( pWord );
 
 	DWORD crc = sphCRC32 ( pWord );
 

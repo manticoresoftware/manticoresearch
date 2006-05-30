@@ -204,10 +204,15 @@ index test1
 	# morphology
 	# default is not to use any
 	#
+	# currently supported morphology preprocessors are Porter stemmers
+	# for English and Russian, and Soundex. more stemmers could be added
+	# at users request.
+	#
 	# morphology		= none
 	# morphology		= stem_en
 	# morphology		= stem_ru
 	# morphology		= stem_enru
+	# morphology		= soundex
 	morphology			= none
 
 	# stopwords file

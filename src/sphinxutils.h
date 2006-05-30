@@ -88,6 +88,11 @@ protected:
 	bool			AddKey ( const char * sKey, char * sValue );
 };
 
+/////////////////////////////////////////////////////////////////////////////
+
+/// parse morphology option string to bit mask
+DWORD	sphParseMorphology ( const CSphString & sOption, bool bUseUTF8 );
+
 #endif // _sphinxutils_
 
 //

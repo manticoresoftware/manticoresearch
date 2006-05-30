@@ -106,6 +106,9 @@
 				RelativePath=".\sphinxexcerpt.cpp">
 			</File>
 			<File
+				RelativePath=".\sphinxsoundex.cpp">
+			</File>
+			<File
 				RelativePath=".\sphinxstemen.cpp">
 			</File>
 			<File

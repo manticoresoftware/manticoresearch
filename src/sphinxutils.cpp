@@ -418,6 +418,31 @@ bool CSphConfigParser::Parse ( const char * file )
 	return true;
 }
 
+/////////////////////////////////////////////////////////////////////////////
+
+DWORD sphParseMorphology ( const CSphString & sOption, bool bUseUTF8 )
+{
+	DWORD iMorph = SPH_MORPH_UNKNOWN;
+	DWORD iStemRu = ( bUseUTF8 ? SPH_MORPH_STEM_RU_UTF8 : SPH_MORPH_STEM_RU_CP1251 );
+
+	if ( sOption=="stem_en" )
+		iMorph = SPH_MORPH_STEM_EN;
+
+	else if ( sOption=="stem_ru" )
+		iMorph = iStemRu;
+
+	else if ( sOption=="stem_enru" )
+		iMorph = iStemRu | SPH_MORPH_STEM_EN;
+
+	else if ( sOption=="soundex" )
+		iMorph = SPH_MORPH_SOUNDEX;
+
+	else if ( sOption.IsEmpty() || sOption=="none" )
+		iMorph = SPH_MORPH_NONE;
+
+	return iMorph;
+}
+
 //
 // $Id$
 //

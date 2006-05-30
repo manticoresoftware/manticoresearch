@@ -211,9 +211,11 @@ ISphTokenizer *			sphCreateUTF8Tokenizer ();
 enum ESphMorphology
 {
 	SPH_MORPH_NONE				= 0,
-	SPH_MORPH_STEM_EN			= (1<<1),
-	SPH_MORPH_STEM_RU_CP1251	= (1<<2),
-	SPH_MORPH_STEM_RU_UTF8		= (1<<3),
+	SPH_MORPH_STEM_EN			= (1UL<<1),
+	SPH_MORPH_STEM_RU_CP1251	= (1UL<<2),
+	SPH_MORPH_STEM_RU_UTF8		= (1UL<<3),
+	SPH_MORPH_SOUNDEX			= (1UL<<4),
+	SPH_MORPH_UNKNOWN			= (1UL<<30)
 };
 
 

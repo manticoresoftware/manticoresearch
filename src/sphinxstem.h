@@ -22,14 +22,18 @@ void	stem_en_init ();
 /// initialize Russian stemmar
 void	stem_ru_init ();
 
-/// stem English word
+/// stem lowercase English word
 void	stem_en ( BYTE * pWord );
 
-/// stem Russian word in Windows-1251 encoding
+/// stem lowercase Russian word in Windows-1251 encoding
 void	stem_ru_cp1251 ( BYTE * pWord );
 
-/// stem Russian word in UTF-8 encoding
+/// stem lowercase Russian word in UTF-8 encoding
 void	stem_ru_utf8 ( WORD * pWord );
+
+/// calculate soundex in-place if the word is lowercase English letters only;
+/// do nothing if it's not
+void	stem_soundex ( BYTE * pWord );
 
 #endif // _sphinxstem_
 

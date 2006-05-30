@@ -751,15 +751,10 @@ int main ( int argc, char ** argv )
 
 			// configure morphology
 			DWORD iMorph = SPH_MORPH_NONE;
-			if ( hIndex.Exists ( "morphology" ) )
+			if ( hIndex ( "morphology" ) )
 			{
-				if ( hIndex["morphology"]=="stem_en" )
-					iMorph = SPH_MORPH_STEM_EN;
-				else if ( hIndex["morphology"]=="stem_ru" )
-					iMorph = ( bUseUTF8 ? SPH_MORPH_STEM_RU_UTF8 : SPH_MORPH_STEM_RU_CP1251 );
-				else if ( hIndex["morphology"]=="stem_enru" )
-					iMorph = SPH_MORPH_STEM_EN | ( bUseUTF8 ? SPH_MORPH_STEM_RU_UTF8 : SPH_MORPH_STEM_RU_CP1251 );
-				else if ( !hIndex["morphology"].IsEmpty() && hIndex["morphology"]!="none" )
+				iMorph = sphParseMorphology ( hIndex["morphology"], bUseUTF8 );
+				if ( iMorph==SPH_MORPH_UNKNOWN )
 					fprintf ( stdout, "WARNING: unknown morphology type '%s' ignored in index '%s'.\n",
 						hIndex["morphology"].cstr(), sIndexName );
 			}

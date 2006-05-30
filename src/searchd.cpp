@@ -485,7 +485,7 @@ class InputBuffer_c
 {
 public:
 					InputBuffer_c ();
-	virtual			~InputBuffer_c () {}
+	virtual			~InputBuffer_c ();
 	int				GetInt () { return ntohl ( GetT<int> () ); }
 	WORD			GetWord () { return ntohs ( GetT<WORD> () ); }
 	DWORD			GetDword () { return ntohl ( GetT<DWORD> () ); }
@@ -498,7 +498,7 @@ public:
 
 protected:
 	bool			m_bError;
-	BYTE			m_dBuf [ NET_MAX_REQ_LEN ];
+	BYTE *			m_pBuf;
 	int				m_iLen;
 	BYTE *			m_pCur;
 
@@ -629,14 +629,21 @@ bool NetOutputBuffer_c::FlushIf ( int iToAdd )
 InputBuffer_c::InputBuffer_c ()
 	: m_bError ( true )
 	, m_iLen ( 0 )
-	, m_pCur ( m_dBuf )
 {
+	m_pBuf = new BYTE [ NET_MAX_REQ_LEN ];
+	m_pCur = m_pBuf;
+}
+
+
+InputBuffer_c::~InputBuffer_c ()
+{
+	SafeDeleteArray ( m_pBuf );
 }
 
 
 template < typename T > T InputBuffer_c::GetT ()
 {
-	if ( m_bError || ( m_pCur+sizeof(T) > m_dBuf+m_iLen ) )
+	if ( m_bError || ( m_pCur+sizeof(T) > m_pBuf+m_iLen ) )
 	{
 		SetError ( true );
 		return 0;
@@ -653,7 +660,7 @@ CSphString InputBuffer_c::GetString ()
 	CSphString sRes;
 
 	int iLen = GetInt ();
-	if ( m_bError || iLen<0 || iLen>NET_MAX_STR_LEN || ( m_pCur+iLen > m_dBuf+m_iLen ) )
+	if ( m_bError || iLen<0 || iLen>NET_MAX_STR_LEN || ( m_pCur+iLen > m_pBuf+m_iLen ) )
 	{
 		SetError ( true );
 		return sRes;
@@ -670,7 +677,7 @@ bool InputBuffer_c::GetBytes ( void * pBuf, int iLen )
 	assert ( pBuf );
 	assert ( iLen>0 && iLen<=NET_MAX_REQ_LEN );
 
-	if ( m_bError || ( m_pCur+iLen > m_dBuf+m_iLen ) )
+	if ( m_bError || ( m_pCur+iLen > m_pBuf+m_iLen ) )
 	{
 		SetError ( true );
 		return false;
@@ -722,9 +729,9 @@ bool NetInputBuffer_c::ReadFrom ( int iLen )
 	assert ( iLen<=NET_MAX_REQ_LEN );
 	assert ( m_iSock>0 );
 
-	m_pCur = m_dBuf;
+	m_pCur = m_pBuf;
 
-	int iGot = sphSockRead ( m_iSock, &m_dBuf[0], iLen );
+	int iGot = sphSockRead ( m_iSock, m_pBuf, iLen );
 	if ( iGot!=iLen )
 	{
 		m_bError = true;
@@ -780,9 +787,9 @@ MemInputBuffer_c::MemInputBuffer_c ( const char * sFrom, int iLen )
 		return;
 	}
 
-	memcpy ( m_dBuf, sFrom, iLen );
+	memcpy ( m_pBuf, sFrom, iLen );
 	m_iLen = iLen;
-	m_pCur = m_dBuf;
+	m_pCur = m_pBuf;
 	m_bError = false;
 }
 

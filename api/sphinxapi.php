@@ -139,7 +139,16 @@ class SphinxClient
 	{
 		$header = fread ( $fp, 8 );
 		list ( $status, $ver, $len ) = array_values ( unpack ( "n2a/Nb", $header ) );
-		$response = ( $len>0 ) ? fread ( $fp, $len ) : "";
+		$response = "";
+		while ( $len>0 && !feof($fp) )
+		{
+			$chunk = fread ( $fp, $len );
+			if ( $chunk )
+			{
+				$response .= $chunk;
+				$len -= strlen($chunk);
+			}
+		}
 		fclose ( $fp );
 
 		// check response

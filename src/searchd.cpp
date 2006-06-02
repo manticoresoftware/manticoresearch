@@ -771,7 +771,7 @@ void NetInputBuffer_c::SendErrorReply ( const char * sTemplate, ... )
 
 	// fixup lengths
 	DWORD * p4 = (DWORD*)&dBuf[4];
-	p4[0] = htonl(iHeaderLen+iStrLen);
+	p4[0] = htonl(4+iStrLen);
 	p4[1] = htonl(iStrLen);
 
 	// send!

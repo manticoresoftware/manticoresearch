@@ -326,7 +326,7 @@ class SphinxClient
 		while ( $count-->0 )
 		{
 			list ( $doc, $group, $stamp, $weight ) = array_values ( unpack ( "N*N*N*N*",
-				substr ( $response, $p ) ) );
+				substr ( $response, $p, 16 ) ) );
 			$p += 16;
 
 			$result["matches"][$doc] = array (

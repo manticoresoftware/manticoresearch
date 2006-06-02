@@ -1646,7 +1646,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	// serve the response
 	//////////////////////
 
-	int iCount = Min ( iLimit, pRes->m_dMatches.GetLength()-iOffset );
+	int iCount = Max ( Min ( iLimit, pRes->m_dMatches.GetLength()-iOffset ), 0 );
 
 	int iRespLen = 20 + 16*iCount;
 	for ( int i=0; i<pRes->m_iNumWords; i++ )

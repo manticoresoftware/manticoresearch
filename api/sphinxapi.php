@@ -139,14 +139,15 @@ class SphinxClient
 	{
 		$header = fread ( $fp, 8 );
 		list ( $status, $ver, $len ) = array_values ( unpack ( "n2a/Nb", $header ) );
-		$response = ( $len>0 && $len<65536 ) ? fread ( $fp, $len ) : "";
+		$response = ( $len>0 ) ? fread ( $fp, $len ) : "";
 		fclose ( $fp );
 
 		// check response
-		if ( !$response )
+		$read = strlen ( $response );
+		if ( !$response || $read!=$len )
 		{
 			$this->_error = $len
-				? "failed to read searchd response (status=$status, ver=$ver, len=$len)"
+				? "failed to read searchd response (status=$status, ver=$ver, len=$len, read=$read)"
 				: "received zero-sized searchd response";
 			return false;
 		}

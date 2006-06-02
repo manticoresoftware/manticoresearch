@@ -103,7 +103,7 @@ int main ( int argc, char ** argv )
 		}
 	}
 	iStart = Max ( iStart, 0 );
-	iLimit = Min ( Max ( iLimit, 0 ), 1000 );
+	iLimit = Max ( iLimit, 0 );
 
 	if ( i!=argc )
 	{

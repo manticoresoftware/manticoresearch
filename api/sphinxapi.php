@@ -140,13 +140,14 @@ class SphinxClient
 		$header = fread ( $fp, 8 );
 		list ( $status, $ver, $len ) = array_values ( unpack ( "n2a/Nb", $header ) );
 		$response = "";
-		while ( $len>0 && !feof($fp) )
+		$left = $len;
+		while ( $left>0 && !feof($fp) )
 		{
-			$chunk = fread ( $fp, $len );
+			$chunk = fread ( $fp, $left );
 			if ( $chunk )
 			{
 				$response .= $chunk;
-				$len -= strlen($chunk);
+				$left -= strlen($chunk);
 			}
 		}
 		fclose ( $fp );

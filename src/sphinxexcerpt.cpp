@@ -665,9 +665,68 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & q )
 	// do show
 	///////////
 
+	// sort the passaged in the document order
 	dShow.Sort ( PassageOrder_fn() );
 
+	// estimate length, and grow it up to the limit
 	int iLast = -1;
+	int iLength = 0;
+	ARRAY_FOREACH ( i, dShow )
+	{
+		int iEnd = dShow[i].m_iStart + dShow[i].m_iTokens - 1;
+		for ( int iTok = dShow[i].m_iStart; iTok<=iEnd; iTok++ )
+			if ( iTok>iLast )
+				iLength += m_dTokens[iTok].m_iLength;
+		iLast = iEnd;
+	}
+	if ( iLength<q.m_iLimit )
+	{
+		// word id is no longer needed; we'll use it to store index into dShow
+		ARRAY_FOREACH ( i, m_dTokens )
+			m_dTokens[i].m_iWordID = 0;
+
+		ARRAY_FOREACH ( i, dShow )
+			for ( int iTok = dShow[i].m_iStart; iTok < dShow[i].m_iStart+dShow[i].m_iTokens; iTok++ )
+				if ( m_dTokens[iTok].m_iWordID==0 )
+					m_dTokens[iTok].m_iWordID = i;
+
+		int iLeft = q.m_iLimit - iLength;
+		int iLastLeft = 0;
+		while ( iLeft>0 && iLeft!=iLastLeft )
+		{
+			iLastLeft = iLeft;
+			for ( int iShow=0; iShow<dShow.GetLength() && iLeft>0; iShow++ )
+			{
+				Passage_t & tPass = dShow [ iShow ];
+
+				// the first one
+				int iTok = tPass.m_iStart - 1;
+				if ( iTok>=0
+					&& m_dTokens[iTok].m_iWordID==0
+					&& iLeft>=m_dTokens[iTok].m_iLength )
+				{
+					iLeft -= m_dTokens [ iTok ].m_iLength;
+					m_dTokens [ iTok ].m_iWordID = iShow;
+					tPass.m_iStart--;
+					tPass.m_iTokens++;
+				}
+
+				// the last one
+				iTok = tPass.m_iStart + tPass.m_iTokens;
+				if ( iTok<m_dTokens.GetLength()
+					&& m_dTokens[iTok].m_iWordID==0
+					&& iLeft>=m_dTokens[iTok].m_iLength )
+				{
+					iLeft -= m_dTokens [ iTok ].m_iLength;
+					m_dTokens [ iTok ].m_iWordID = iShow;
+					tPass.m_iTokens++;
+				}
+			}
+		}
+	}
+
+	// show everything
+	iLast = -1;
 	ARRAY_FOREACH ( i, dShow )
 	{
 		int iTok = dShow[i].m_iStart;

@@ -66,13 +66,14 @@ mysql> show engines;
    KEY on 5th column is mandatory;
    
    CONNECTION string:
-     "sphinx://HOST:PORT"
-   sphinx storage engine will try to connect to sphinx deamon on HOST:PORT;
-   if you skip CONNECTION option - default value is 127.0.0.1:3312
+     "sphinx://HOST:PORT/INDEXNAME"
+   sphinx storage engine will try to connect to sphinx deamon on HOST:PORT and use index INDEXNAME;
+   if you skip CONNECTION option - default value is 127.0.0.1:3312/*
    
    you can change the connection params later by command
    
-   ALTER TABLE t1 CONNECTION="sphinx://NEW_HOST:NEW_PORT";
+   ALTER TABLE t1 CONNECTION="sphinx://NEW_HOST:NEW_PORT/INDEXNAME";
+   
    
 5. Query to sphinx daemon
      

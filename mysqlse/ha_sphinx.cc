@@ -46,7 +46,7 @@
 #include <mysql/plugin.h>
 #endif
 
-#define SPHINX_DEBUG 1
+#define SPHINX_DEBUG 0
 
 #ifndef __WIN__
 #if SPHINX_DEBUG > 0
@@ -61,6 +61,7 @@ inline void DGPRINT (...) {}
 
 #define DEF_SPHINX_HOST "127.0.0.1"
 #define DEF_SPHINX_PORT 3312
+#define DEF_INDEX_NAME "*"
 
 #if MYSQL_VERSION_ID > 50100
 static handler* sphinx_create_handler(TABLE_SHARE *table);
@@ -348,12 +349,13 @@ static int parse_url(SPHINX_SHARE *share, TABLE *table,  uint table_create_flag)
 #define my_strndup my_strdup_with_length
 #endif
 
+  share->hostname= DEF_SPHINX_HOST;
+  share->port    = DEF_SPHINX_PORT;
+  share->indexname  = DEF_INDEX_NAME;
+
   if (table->s->connect_string.length == 0)
-  {
-    share->hostname= DEF_SPHINX_HOST;
-    share->port    = DEF_SPHINX_PORT;
     goto ok;    
-  }    
+
   share->scheme = my_strndup((const byte*)table->s->connect_string.str,
 			     table->s->connect_string.length, MYF(0));
 
@@ -370,20 +372,28 @@ static int parse_url(SPHINX_SHARE *share, TABLE *table,  uint table_create_flag)
   
   share->hostname+= 3; 
 
-
   if ((share->sport= strchr(share->hostname, ':')))
   {
     share->hostname[share->sport - share->hostname]= '\0';
     share->sport++;
     if (share->sport[0] == '\0')
       share->sport= NULL;
-    else
+    else 
+    {
+      if ((share->indexname= strchr(share->sport, '/')))
+      {
+        share->sport[share->indexname - share->sport]= '\0'; 
+        share->indexname++;
+      }
+      else
+        share->indexname= DEF_INDEX_NAME;
       share->port= atoi(share->sport);
+    }
   }
 
 ok:
   
-  DGPRINT("host:port %s:%d\n", share->hostname, share->port);
+  DGPRINT("host:port/index %s:%d/%s\n", share->hostname, share->port, share->indexname);
  
   DBUG_RETURN(0);
 
@@ -811,8 +821,8 @@ int ha_sphinx::parse_query(char *query, char *buffer_req)
   DGPRINT("got query: %s\n", query);
  
   memset(&query_fields, 0, sizeof(query_fields)); 
-  query_fields.index= "*"; // default value
-  query_fields.index_len= 1; // default value
+  query_fields.index= share->indexname; // default value
+  query_fields.index_len= strlen(share->indexname); // default value
   query_fields.limit= 20; 
   query_fields.max_id= 0xFFFFFFFF;
   query_fields.max_tid= 0xFFFFFFFF;

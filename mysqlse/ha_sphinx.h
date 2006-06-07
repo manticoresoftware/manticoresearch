@@ -45,6 +45,7 @@ typedef struct st_sphinx_share {
   char *hostname;
   char *socket;
   char *sport;
+  char *indexname;
   uint parse_error;
   ushort port;
   uint table_name_length,use_count;

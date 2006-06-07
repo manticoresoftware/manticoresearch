@@ -17,6 +17,13 @@ AC_ARG_WITH([mysql],
 )
 AC_CACHE_CHECK([whether to compile with MySQL support], [ac_cv_use_mysql], [ac_cv_use_mysql=no])
 
+# Check if we should compile with PostgreSQL support
+AC_ARG_WITH([pgsql],
+            AC_HELP_STRING([--with-pgsql], [compile with PostgreSQL support (default is disabled)]),
+            [ac_cv_use_pgsql=$withval], [ac_cv_use_pgsql=no]
+)
+AC_CACHE_CHECK([whether to compile with PostgreSQL support], [ac_cv_use_pgsql], [ac_cv_use_pgsql=yes])
+
 
 if test x$ac_cv_use_mysql != xno; then
     AC_CHECK_MYSQLR([$ac_cv_use_mysql])
@@ -25,6 +32,15 @@ if test x$ac_cv_use_mysql != xno; then
     AC_SUBST([MYSQL_CFLAGS])
 fi
 AM_CONDITIONAL(USE_MYSQL, test x$ac_cv_use_mysql != xno)
+
+if test x$ac_cv_use_pgsql != xno; then
+    AC_CHECK_PGSQL([$ac_cv_use_pgsql])
+    AC_DEFINE(USE_PGSQL,1,[Define to 1 if you want to compile with PostgreSQL support])
+    AC_SUBST([PGSQL_LIBS])
+    AC_SUBST([PGSQL_CFLAGS])
+fi
+AM_CONDITIONAL(USE_PGSQL, test x$ac_cv_use_pgsql != xno)
+
 
 
 AC_PROG_CC

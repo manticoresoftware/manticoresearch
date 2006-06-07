@@ -16,13 +16,13 @@ indexer_SOURCES= indexer.cpp
 searchd_SOURCES= searchd.cpp
 search_SOURCES= search.cpp
 
-searchd_CPPFLAGS= $(MYSQL_CFLAGS) $(CCFLAFS)
-indexer_CPPFLAGS= $(MYSQL_CFLAGS) $(CCFLAGS)
-search_CPPFLAGS= $(MYSQL_CFLAGS) $(CCFLAGS)
+searchd_CPPFLAGS= $(MYSQL_CFLAGS) $(PGSQL_CFLAGS) $(CCFLAFS)
+indexer_CPPFLAGS= $(MYSQL_CFLAGS) $(PGSQL_CFLAGS) $(CCFLAGS)
+search_CPPFLAGS= $(MYSQL_CFLAGS) $(PGSQL_CFLAGS) $(CCFLAGS)
 
-indexer_LDADD= libsphinx.a $(MYSQL_LIBS)
-searchd_LDADD= libsphinx.a $(MYSQL_LIBS)
-search_LDADD= libsphinx.a $(MYSQL_LIBS)
+indexer_LDADD= libsphinx.a $(MYSQL_LIBS) $(PGSQL_LIBS)
+searchd_LDADD= libsphinx.a $(MYSQL_LIBS) $(PGSQL_LIBS)
+search_LDADD= libsphinx.a $(MYSQL_LIBS) $(PGSQL_LIBS)
 
 
 EXTRA_DIST= indexer.vcproj  libsphinx.vcproj  searchd.vcproj  search.vcproj

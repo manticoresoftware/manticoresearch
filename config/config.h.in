@@ -175,6 +175,9 @@
 /* Define to 1 if you want to compile with MySQL support */
 #undef USE_MYSQL
 
+/* Define to 1 if you want to compile with PostgreSQL support */
+#undef USE_PGSQL
+
 /* Version number of package */
 #undef VERSION
 

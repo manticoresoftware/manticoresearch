@@ -311,7 +311,7 @@ ac_includes_default="\
 # include <unistd.h>
 #endif"
 
-ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS INSTALL_PROGRAM INSTALL_SCRIPT INSTALL_DATA CYGPATH_W PACKAGE VERSION ACLOCAL AUTOCONF AUTOMAKE AUTOHEADER MAKEINFO install_sh STRIP ac_ct_STRIP INSTALL_STRIP_PROGRAM mkdir_p AWK SET_MAKE am__leading_dot AMTAR am__tar am__untar mysqlconfig MYSQL_LIBS MYSQL_CFLAGS USE_MYSQL_TRUE USE_MYSQL_FALSE CC CFLAGS LDFLAGS CPPFLAGS ac_ct_CC EXEEXT OBJEXT DEPDIR am__include am__quote AMDEP_TRUE AMDEP_FALSE AMDEPBACKSLASH CCDEPMODE am__fastdepCC_TRUE am__fastdepCC_FALSE CXX CXXFLAGS ac_ct_CXX CXXDEPMODE am__fastdepCXX_TRUE am__fastdepCXX_FALSE RANLIB ac_ct_RANLIB CPP EGREP LIBOBJS LTLIBOBJS'
+ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS INSTALL_PROGRAM INSTALL_SCRIPT INSTALL_DATA CYGPATH_W PACKAGE VERSION ACLOCAL AUTOCONF AUTOMAKE AUTOHEADER MAKEINFO install_sh STRIP ac_ct_STRIP INSTALL_STRIP_PROGRAM mkdir_p AWK SET_MAKE am__leading_dot AMTAR am__tar am__untar mysqlconfig MYSQL_LIBS MYSQL_CFLAGS USE_MYSQL_TRUE USE_MYSQL_FALSE pgconfig PGSQL_LIBS PGSQL_CFLAGS USE_PGSQL_TRUE USE_PGSQL_FALSE CC CFLAGS LDFLAGS CPPFLAGS ac_ct_CC EXEEXT OBJEXT DEPDIR am__include am__quote AMDEP_TRUE AMDEP_FALSE AMDEPBACKSLASH CCDEPMODE am__fastdepCC_TRUE am__fastdepCC_FALSE CXX CXXFLAGS ac_ct_CXX CXXDEPMODE am__fastdepCXX_TRUE am__fastdepCXX_FALSE RANLIB ac_ct_RANLIB CPP EGREP LIBOBJS LTLIBOBJS'
 ac_subst_files=''
 
 # Initialize some variables set by options.
@@ -864,8 +864,12 @@ Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
   --without-PACKAGE       do not use PACKAGE (same as --with-PACKAGE=no)
   --with-mysql            compile with MySQL support (default is enabled)
+  --with-pgsql            compile with PostgreSQL support (default is
+                          disabled)
   --with-mysql-includes   path to MySQL header files
   --with-mysql-libs       path to MySQL libraries
+  --with-pgsql-includes   path to PostgreSQL header files
+  --with-pgsql-libs       path to PostgreSQL libraries
 
 Some influential environment variables:
   CC          C compiler command
@@ -1790,6 +1794,26 @@ fi
 echo "$as_me:$LINENO: result: $ac_cv_use_mysql" >&5
 echo "${ECHO_T}$ac_cv_use_mysql" >&6
 
+# Check if we should compile with PostgreSQL support
+
+# Check whether --with-pgsql or --without-pgsql was given.
+if test "${with_pgsql+set}" = set; then
+  withval="$with_pgsql"
+  ac_cv_use_pgsql=$withval
+else
+  ac_cv_use_pgsql=no
+
+fi;
+echo "$as_me:$LINENO: checking whether to compile with PostgreSQL support" >&5
+echo $ECHO_N "checking whether to compile with PostgreSQL support... $ECHO_C" >&6
+if test "${ac_cv_use_pgsql+set}" = set; then
+  echo $ECHO_N "(cached) $ECHO_C" >&6
+else
+  ac_cv_use_pgsql=yes
+fi
+echo "$as_me:$LINENO: result: $ac_cv_use_pgsql" >&5
+echo "${ECHO_T}$ac_cv_use_pgsql" >&6
+
 
 if test x$ac_cv_use_mysql != xno; then
 
@@ -1968,6 +1992,151 @@ else
   USE_MYSQL_TRUE='#'
   USE_MYSQL_FALSE=
 fi
+
+
+if test x$ac_cv_use_pgsql != xno; then
+
+
+# Check for custom includes path
+if test  -z "$ac_cv_pgsql_includes"
+then
+
+# Check whether --with-pgsql-includes or --without-pgsql-includes was given.
+if test "${with_pgsql_includes+set}" = set; then
+  withval="$with_pgsql_includes"
+  ac_cv_pgsql_includes=$withval
+fi;
+fi
+if test  -n "$ac_cv_pgsql_includes"
+then
+    echo "$as_me:$LINENO: checking PostgreSQL includes" >&5
+echo $ECHO_N "checking PostgreSQL includes... $ECHO_C" >&6
+if test "${ac_cv_pgsql_includes+set}" = set; then
+  echo $ECHO_N "(cached) $ECHO_C" >&6
+else
+  ac_cv_pgsql_includes=""
+fi
+echo "$as_me:$LINENO: result: $ac_cv_pgsql_includes" >&5
+echo "${ECHO_T}$ac_cv_pgsql_includes" >&6
+    MYSQL_CFLAGS="-I$ac_cv_mysql_includes"
+fi
+
+# Check for custom library path
+
+if test  -z "$ac_cv_pgsql_libs"
+then
+
+# Check whether --with-pgsql-libs or --without-pgsql-libs was given.
+if test "${with_pgsql_libs+set}" = set; then
+  withval="$with_pgsql_libs"
+  ac_cv_pgsql_libs=$withval
+fi;
+fi
+
+# If some path is missing, try to autodetermine with pgsql_config
+if test  -z "$ac_cv_pgsql_includes" -o -z "$ac_cv_pgsql_libs"
+then
+    if test  -z "$pgconfig"
+    then
+        # Extract the first word of "pg_config", so it can be a program name with args.
+set dummy pg_config; ac_word=$2
+echo "$as_me:$LINENO: checking for $ac_word" >&5
+echo $ECHO_N "checking for $ac_word... $ECHO_C" >&6
+if test "${ac_cv_path_pgconfig+set}" = set; then
+  echo $ECHO_N "(cached) $ECHO_C" >&6
+else
+  case $pgconfig in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_pgconfig="$pgconfig" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  test -z "$as_dir" && as_dir=.
+  for ac_exec_ext in '' $ac_executable_extensions; do
+  if $as_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
+    ac_cv_path_pgconfig="$as_dir/$ac_word$ac_exec_ext"
+    echo "$as_me:$LINENO: found $as_dir/$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+done
+
+  ;;
+esac
+fi
+pgconfig=$ac_cv_path_pgconfig
+
+if test -n "$pgconfig"; then
+  echo "$as_me:$LINENO: result: $pgconfig" >&5
+echo "${ECHO_T}$pgconfig" >&6
+else
+  echo "$as_me:$LINENO: result: no" >&5
+echo "${ECHO_T}no" >&6
+fi
+
+    fi
+    if test  -z "$pgconfig"
+    then
+        { { echo "$as_me:$LINENO: error: pg_config executable not found
+********************************************************************************
+ERROR: cannot find PostgreSQL libraries. If you want to compile with PosgregSQL support,
+       you must either specify file locations explicitly using
+       --with-pgsql-includes and --with-pgsql-libs options, or make sure path to
+       pg_config is listed in your PATH environment variable. If you want to
+       disable PostgreSQL support, use --without-pgsql option.
+********************************************************************************
+" >&5
+echo "$as_me: error: pg_config executable not found
+********************************************************************************
+ERROR: cannot find PostgreSQL libraries. If you want to compile with PosgregSQL support,
+       you must either specify file locations explicitly using
+       --with-pgsql-includes and --with-pgsql-libs options, or make sure path to
+       pg_config is listed in your PATH environment variable. If you want to
+       disable PostgreSQL support, use --without-pgsql option.
+********************************************************************************
+" >&2;}
+   { (exit 1); exit 1; }; }
+    else
+        if test  -z "$ac_cv_pgsql_includes"
+        then
+            echo "$as_me:$LINENO: checking PostgreSQL C flags" >&5
+echo $ECHO_N "checking PostgreSQL C flags... $ECHO_C" >&6
+            PGSQL_CFLAGS="-I`${pgconfig} --includedir`"
+            echo "$as_me:$LINENO: result: $PGSQL_CFLAGS" >&5
+echo "${ECHO_T}$PGSQL_CFLAGS" >&6
+        fi
+        if test  -z "$ac_cv_pgsql_libs"
+        then
+            echo "$as_me:$LINENO: checking PostgreSQL linker flags" >&5
+echo $ECHO_N "checking PostgreSQL linker flags... $ECHO_C" >&6
+            PGSQL_LIBS="-L`${pgconfig} --libdir` -lpq"
+            echo "$as_me:$LINENO: result: $PGSQL_LIBS" >&5
+echo "${ECHO_T}$PGSQL_LIBS" >&6
+        fi
+    fi
+fi
+
+
+cat >>confdefs.h <<\_ACEOF
+#define USE_PGSQL 1
+_ACEOF
+
+
+
+fi
+
+
+if test x$ac_cv_use_pgsql != xno; then
+  USE_PGSQL_TRUE=
+  USE_PGSQL_FALSE='#'
+else
+  USE_PGSQL_TRUE='#'
+  USE_PGSQL_FALSE=
+fi
+
 
 
 
@@ -6765,6 +6934,13 @@ echo "$as_me: error: conditional \"USE_MYSQL\" was never defined.
 Usually this means the macro was only invoked conditionally." >&2;}
    { (exit 1); exit 1; }; }
 fi
+if test -z "${USE_PGSQL_TRUE}" && test -z "${USE_PGSQL_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"USE_PGSQL\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"USE_PGSQL\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
 if test -z "${AMDEP_TRUE}" && test -z "${AMDEP_FALSE}"; then
   { { echo "$as_me:$LINENO: error: conditional \"AMDEP\" was never defined.
 Usually this means the macro was only invoked conditionally." >&5
@@ -7347,6 +7523,11 @@ s,@MYSQL_LIBS@,$MYSQL_LIBS,;t t
 s,@MYSQL_CFLAGS@,$MYSQL_CFLAGS,;t t
 s,@USE_MYSQL_TRUE@,$USE_MYSQL_TRUE,;t t
 s,@USE_MYSQL_FALSE@,$USE_MYSQL_FALSE,;t t
+s,@pgconfig@,$pgconfig,;t t
+s,@PGSQL_LIBS@,$PGSQL_LIBS,;t t
+s,@PGSQL_CFLAGS@,$PGSQL_CFLAGS,;t t
+s,@USE_PGSQL_TRUE@,$USE_PGSQL_TRUE,;t t
+s,@USE_PGSQL_FALSE@,$USE_PGSQL_FALSE,;t t
 s,@CC@,$CC,;t t
 s,@CFLAGS@,$CFLAGS,;t t
 s,@LDFLAGS@,$LDFLAGS,;t t

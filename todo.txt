@@ -10,10 +10,8 @@ HIGH PRIORITY
 
 MEDIUM PRIORITY
 
-* add distributed searching caps
 * add distributed indexing caps
 * add language guessers
-* add date range support
 * add word-storing dictionaries (to avoid collisions etc)
 * add external relevance metrics support
 * add limits support to words stats 
@@ -21,14 +19,12 @@ MEDIUM PRIORITY
 
 LOW PRIORITY
 
-* add excerpts and highlighting
 * add an option to terminate search at some time thresh
 * add 1-word query speed optimizations
 * try external docinfo storage (btree)
 * try group hierarchy support 
 * add query for pergroup count
 * add loglevels and corresp switches
-* add match count to query_log
 * add results table support
 * add query for total count and save top N results
 
@@ -47,6 +43,5 @@ ROADMAP
 * add query language (http://www.google.com/help/cheatsheet.html)
 * add fuzzy searching caps
 * add Perl/Python/Java APIs
- 
 
 --eof--

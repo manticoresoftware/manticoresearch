@@ -70,6 +70,8 @@ AC_FUNC_STAT
 AC_FUNC_VPRINTF
 AC_CHECK_FUNCS([dup2 gethostbyname gettimeofday memmove memset select socket strcasecmp strchr strerror strncasecmp strstr strtol])
 
+CONFDIR=`eval echo "${localstatedir}"`
+AC_SUBST(CONFDIR)
 
 AC_CONFIG_FILES([
     Makefile

@@ -58,6 +58,7 @@ AC_CHECK_FUNCS([dup2 gethostbyname gettimeofday memmove memset select socket str
 AC_CONFIG_FILES([
     Makefile
     src/Makefile
+    sphinx.conf.dist:sphinx.conf.in
 ])
 
 AC_OUTPUT

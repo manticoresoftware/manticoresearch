@@ -322,12 +322,12 @@ searchd
 
 	# log file
 	# searchd run info is logged here
-	log					= /home/sphinx/logs/searchd.log
+	log					= @prefix@/logs/searchd.log
 
 
 	# query log file
 	# all the search queries are logged here
-	query_log			= /home/sphinx/logs/query.log
+	query_log			= @prefix@/logs/query.log
 
 
 	# client read timeout, seconds
@@ -342,7 +342,7 @@ searchd
 	# a file which will contain searchd process ID
 	# used for different external automation scripts
 	# MUST be present
-	pid_file			= /home/sphinx/searchd.pid
+	pid_file			= @prefix@/pid/searchd.pid
 
 
 	# maximum amount of matches this daemon would retrieve from each index

@@ -35,9 +35,10 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 subdir = .
 DIST_COMMON = README $(am__configure_deps) $(srcdir)/Makefile.am \
-	$(srcdir)/Makefile.in $(top_srcdir)/config/config.h.in \
-	$(top_srcdir)/configure COPYING INSTALL config/depcomp \
-	config/install-sh config/missing
+	$(srcdir)/Makefile.in $(srcdir)/sphinx.conf.in \
+	$(top_srcdir)/config/config.h.in $(top_srcdir)/configure \
+	COPYING INSTALL config/depcomp config/install-sh \
+	config/missing
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/acinclude.m4 \
 	$(top_srcdir)/configure.ac
@@ -47,7 +48,7 @@ am__CONFIG_DISTCLEAN_FILES = config.status config.cache config.log \
  configure.lineno configure.status.lineno
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/config/config.h
-CONFIG_CLEAN_FILES =
+CONFIG_CLEAN_FILES = sphinx.conf.dist
 SOURCES =
 DIST_SOURCES =
 RECURSIVE_TARGETS = all-recursive check-recursive dvi-recursive \
@@ -148,7 +149,7 @@ mandir = ${prefix}/man
 mkdir_p = mkdir -p --
 mysqlconfig = /usr/local/mysql/bin/mysql_config
 oldincludedir = /usr/include
-prefix = /usr/local
+prefix = /usr/local/sphinx
 program_transform_name = s,x,x,
 sbindir = ${exec_prefix}/sbin
 sharedstatedir = ${prefix}/com
@@ -209,6 +210,8 @@ $(top_srcdir)/config/config.h.in:  $(am__configure_deps)
 
 distclean-hdr:
 	-rm -f config/config.h config/stamp-h1
+sphinx.conf.dist: $(top_builddir)/config.status $(srcdir)/sphinx.conf.in
+	cd $(top_builddir) && $(SHELL) ./config.status $@
 uninstall-info-am:
 
 # This directory's subdirectories are mostly independent; you can cd
@@ -334,7 +337,7 @@ distclean-tags:
 distdir: $(DISTFILES)
 	$(am__remove_distdir)
 	mkdir $(distdir)
-	$(mkdir_p) $(distdir)/config
+	$(mkdir_p) $(distdir)/. $(distdir)/config
 	@srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`; \
 	topsrcdirstrip=`echo "$(top_srcdir)" | sed 's|.|.|g'`; \
 	list='$(DISTFILES)'; for file in $$list; do \

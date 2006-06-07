@@ -20,7 +20,6 @@
 	#define USE_MYSQL		1	/// whether to compile with MySQL support
 	#define USE_WINDOWS		1	/// whether to compile for Windows
 #else
-	#define USE_MYSQL		1	/// whether to compile with MySQL support
 	#define USE_WINDOWS		0	/// whether to compile for Windows
 #endif
 
@@ -31,6 +30,10 @@
 #include <string.h>
 #include <assert.h>
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #if USE_PGSQL
 	#include <libpq-fe.h>
 #endif
@@ -38,10 +41,8 @@
 #if USE_MYSQL
 #if USE_WINDOWS
 	#include <winsock2.h>
-	#include <mysql.h>
-#else
-	#include <mysql/mysql.h>
 #endif // USE_WINDOWS
+	#include <mysql.h>
 #endif // USE_MYSQL
 
 

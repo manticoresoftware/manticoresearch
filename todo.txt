@@ -34,7 +34,6 @@ ROADMAP
 * add Okapi BM25 indices
 * add ispell/aspell support
 * add query term correction services (ie. "did you mean")
-
 * add HTTP/FTP/NTTP/localFS crawlers
 * add drivers for other DBs (eg. PostgreSQL, InterBase, DB2, Oracle, MS SQL)
 * add searchd clustering

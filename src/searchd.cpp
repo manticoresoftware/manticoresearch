@@ -1708,7 +1708,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	// v.1.0
 	ExcerptQuery_t q;
 
-	int iMode = tReq.GetInt ();
+	tReq.GetInt (); // mode field is for now reserved and ignored
 	int iFlags = tReq.GetInt ();
 	CSphString sIndex = tReq.GetString ();
 
@@ -1785,7 +1785,7 @@ void HandleClient ( int iSock )
 
 	// get client version and request
 	tBuf.ReadFrom ( 12 ); // FIXME! magic
-	int iClientVer = tBuf.GetInt ();
+	tBuf.GetInt (); // client version is for now unused
 	int iCommand = tBuf.GetWord ();
 	int iCommandVer = tBuf.GetWord ();
 	int iLength = tBuf.GetInt ();

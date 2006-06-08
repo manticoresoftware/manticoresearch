@@ -7,6 +7,16 @@ dnl -lmysqlclient_r, to enable threaded client library.
 dnl ---------------------------------------------------------------------------
 
 AC_DEFUN([AC_CHECK_MYSQLR],[
+    if test [ -d "/usr/local/mysql/include" -a \
+              -d "/usr/local/mysql/libmysql_r" ]
+    then
+        ac_cv_mysql_includes="/usr/local/mysql/include"
+        ac_cv_mysql_libs="/usr/local/mysql/libmysql_r"
+    elif test [ -x "/usr/local/mysql/bin/mysql_config" ]
+    then
+        mysqlconfig="/usr/local/mysql/bin/mysql_config"
+    fi
+    
 # Check for custom MySQL root directory
 if test [ x$1 != xyes -a x$1 != xno ] 
 then

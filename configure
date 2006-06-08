@@ -1817,6 +1817,16 @@ echo "${ECHO_T}$ac_cv_use_pgsql" >&6
 
 if test x$ac_cv_use_mysql != xno; then
 
+    if test  -d "/usr/local/mysql/include" -a \
+              -d "/usr/local/mysql/libmysql_r"
+    then
+        ac_cv_mysql_includes="/usr/local/mysql/include"
+        ac_cv_mysql_libs="/usr/local/mysql/libmysql_r"
+    elif test  -x "/usr/local/mysql/bin/mysql_config"
+    then
+        mysqlconfig="/usr/local/mysql/bin/mysql_config"
+    fi
+
 # Check for custom MySQL root directory
 if test  x$ac_cv_use_mysql != xyes -a x$ac_cv_use_mysql != xno
 then

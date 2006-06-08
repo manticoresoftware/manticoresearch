@@ -8373,3 +8373,19 @@ if test "$no_create" != yes; then
 fi
 
 
+
+
+	echo "$as_me:$LINENO: result: " >&5
+echo "${ECHO_T}" >&6
+	echo "$as_me:$LINENO: result: configuration done" >&5
+echo "${ECHO_T}configuration done" >&6
+	TMP=`echo configuration done | sed -e sX.X-Xg`
+	echo "$as_me:$LINENO: result: $TMP" >&5
+echo "${ECHO_T}$TMP" >&6
+	echo "$as_me:$LINENO: result: " >&5
+echo "${ECHO_T}" >&6
+
+
+echo You can now run \'make\' to build Sphinx binaries,
+echo and then run \'make install\' to install them.
+echo

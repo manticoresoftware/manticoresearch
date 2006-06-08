@@ -105,3 +105,10 @@ AC_CONFIG_FILES([
 
 AC_OUTPUT
 
+dnl --------------------------------------------------------------------------
+
+SPHINX_CONFIGURE_PART([configuration done])
+
+echo You can now run \'make\' to build Sphinx binaries,
+echo and then run \'make install\' to install them.
+echo

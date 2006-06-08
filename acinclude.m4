@@ -464,3 +464,18 @@ else
 fi
 AC_LANG_RESTORE
 ])
+
+dnl ---------------------------------------------------------------------------
+dnl Macro: SPHINX_CONFIGURE_PART
+dnl
+dnl Tells what stage is ./configure running now, nicely formatted
+dnl ---------------------------------------------------------------------------
+
+dnl SPHINX_CONFIGURE_PART(MESSAGE)
+AC_DEFUN([SPHINX_CONFIGURE_PART],[
+	AC_MSG_RESULT()
+	AC_MSG_RESULT([$1])
+	TMP=`echo $1 | sed -e sX.X-Xg`
+	AC_MSG_RESULT([$TMP])
+	AC_MSG_RESULT()
+])

@@ -6930,7 +6930,14 @@ echo "${ECHO_T}$TMP" >&6
 echo "${ECHO_T}" >&6
 
 
-CONFDIR=`eval echo "${localstatedir}"`
+if test "$prefix" = "NONE"; then
+	my_op_prefix="/var"
+else
+	my_op_prefix="$localstatedir"
+fi
+
+
+CONFDIR=`eval echo "${my_op_prefix}"`
 
 
                               ac_config_files="$ac_config_files Makefile src/Makefile sphinx.conf.dist:sphinx.conf.in"

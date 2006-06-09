@@ -94,7 +94,14 @@ dnl --------------------------------------------------------------------------
 
 SPHINX_CONFIGURE_PART([generating configuration files])
 
-CONFDIR=`eval echo "${localstatedir}"`
+if test "$prefix" = "NONE"; then
+	my_op_prefix="/var"
+else
+	my_op_prefix="$localstatedir"
+fi
+
+
+CONFDIR=`eval echo "${my_op_prefix}"`
 AC_SUBST(CONFDIR)
 
 AC_CONFIG_FILES([

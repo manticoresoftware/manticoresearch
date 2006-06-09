@@ -1070,7 +1070,9 @@ int  ha_sphinx::get_rec(byte * buf, const byte *key, uint keylen)
   byte *tmp1;
   TIME tmptime;
 
+#if MYSQL_VERSION_ID > 50100
   my_bitmap_map *org_bitmap;
+#endif
 
   DBUG_ENTER("ha_sphinx::get_rec");
 

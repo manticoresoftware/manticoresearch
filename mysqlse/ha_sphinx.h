@@ -156,7 +156,12 @@ public:
   /*
     Called in test_quick_select to determine if indexes should be used.
   */
-  virtual double scan_time() { return (double) (records+deleted) / 20.0+10; }
+#if MYSQL_VERSION_ID > 50100
+  virtual double scan_time() { return (double) (stats.records + stats.deleted) / 20.0+10; }
+#else
+  virtual double scan_time() { return (double) (records + deleted) / 20.0+10; }
+#endif
+
   /*
     The next method will never be called if you do not implement indexes.
   */

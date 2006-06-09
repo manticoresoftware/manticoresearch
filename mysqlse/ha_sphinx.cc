@@ -64,7 +64,7 @@ inline void DGPRINT (...) {}
 #define DEF_INDEX_NAME "*"
 
 #if MYSQL_VERSION_ID > 50100
-static handler* sphinx_create_handler(TABLE_SHARE *table);
+static handler* sphinx_create_handler(TABLE_SHARE *table, MEM_ROOT *mem_root);
 #endif
 static int sphinx_init_func();
 static bool sphinx_init_func_for_handlerton();
@@ -493,9 +493,9 @@ static int free_share(SPHINX_SHARE *share)
 }
 
 #if MYSQL_VERSION_ID > 50100
-static handler* sphinx_create_handler(TABLE_SHARE *table)
+static handler* sphinx_create_handler(TABLE_SHARE *table, MEM_ROOT *mem_root)
 {
-  return new ha_sphinx(table);
+  return new (mem_root) ha_sphinx(table);
 }
 #endif
 
@@ -1069,23 +1069,27 @@ int  ha_sphinx::get_rec(byte * buf, const byte *key, uint keylen)
   int tmp;
   byte *tmp1;
   TIME tmptime;
-  longlong ty=20060524010337;
-  //THD *thd = table->in_use;
+
+  my_bitmap_map *org_bitmap;
+
   DBUG_ENTER("ha_sphinx::get_rec");
+
 
   if (current_pos < count_of_found_recs)
   {
+#if MYSQL_VERSION_ID > 50100
+    org_bitmap= dbug_tmp_use_all_columns(table, table->write_set);
+#endif
     Field **field=table->field;
 
     /* read and store ID */    
+
     memcpy(&tmp, response + (1 + current_pos * 4) * 4, sizeof(int));  
     
     tmp1=(byte *)&tmp;
-//    DGPRINT("%02x,%02x,%02x,%02x\n",tmp1[0],tmp1[1],tmp1[2],tmp1[3]);
-    
     tmp= ntohl(tmp);
-//    DGPRINT("val 1 %d\n",tmp);
     field[0]->store(tmp, 1);
+
 
     /* read and store GID */
     memcpy(&tmp, response + (2 + current_pos * 4) * 4, sizeof(int));  
@@ -1121,6 +1125,11 @@ int  ha_sphinx::get_rec(byte * buf, const byte *key, uint keylen)
     
     memset(buf, 0, table->s->null_bytes);
     current_pos++;
+
+#if MYSQL_VERSION_ID > 50100
+  dbug_tmp_restore_column_map(table->write_set, org_bitmap);
+#endif
+
   }
   else
   {    
@@ -1220,7 +1229,13 @@ void ha_sphinx::info(uint flag)
   DBUG_ENTER("ha_sphinx::info");
   if (table->s->keys > 0)
     table->key_info[0].rec_per_key[0]=1;
+
+#if MYSQL_VERSION_ID > 50100
+  stats.records= 20;
+#else
   records= 20;
+#endif
+
   DBUG_VOID_RETURN;
 }
 

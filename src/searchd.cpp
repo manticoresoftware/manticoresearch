@@ -2431,7 +2431,9 @@ int main ( int argc, char **argv )
 			int iRespLen = 4 + strlen(sMessage);
 
 			NetOutputBuffer_c tOut ( rsock );
-			tOut.SendInt ( SEARCHD_RETRY );
+			tOut.SendInt ( SPHINX_SEARCHD_PROTO );
+			tOut.SendWord ( SEARCHD_RETRY );
+			tOut.SendWord ( 0 ); // version doesn't matter
 			tOut.SendInt ( iRespLen );
 			tOut.SendString ( sMessage );
 			tOut.Flush ();

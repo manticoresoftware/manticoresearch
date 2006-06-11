@@ -33,21 +33,18 @@ int main ( int argc, char ** argv )
 			"Usage: search [OPTIONS] <word1 [word2 [word3 [...]]]>\n"
 			"\n"
 			"Options are:\n"
-			"-c, --config <file>\tread configuration from specified file\n"
-			"\t\t\t(default is sphinx.conf)\n"
-			"-i, --index <index>\tonly search through specified index\n"
-			"-a, --any\t\tmatch document if any query word is matched\n"
-			"\t\t\t(default is to match all)\n"
-			"-g, -group <id>\t\tlimit matching documents to this group\n"
-			"\t\t\t(default is not to limit by group)\n"
-			"-s, --start <offset>\tstart matches list output from this offset\n"
-			"\t\t\t(default is 0)\n"
-			"-l, --limit <count>\tlimit matches list output size\n"
-			"\t\t\t(default is 20)\n"
-			"-q, --noinfo\t\tdo not output document info from SQL database\n"
-			"\t\t\t(default is to output)\n"
-			"--sort=date\t\tsort by date\n"
-			"--rsort=date\t\treverse sort by date\n"
+			"-c, --config <file>\tuse given config file (default: sphinx.conf)\n"
+			"-i, --index <index>\tsearch given index only (default: all indexes)\n"
+			"-a, --any\t\tmatch any query word (default: match all words)\n"
+			"-b, --boolean\t\tmatch in boolean mode\n"
+			"-g, --group <id>\tmatch this group only (default: match all groups)\n"
+			"-s, --start <offset>\tprint matches starting from this offset (default: 0)\n"
+			"-l, --limit <count>\tprint this many matches (default: 20)\n"
+			"-q, --noinfo\t\tdon't print document info from SQL database\n"
+			"--sort=date\t\tsort by date, descending\n"
+			"--rsort=date\t\tsort by date, ascending\n"
+			"--sort=ts\t\tsort by time segments\n"
+			"--stdin\t\t\tread query from stdin\n"
 		);
 		exit ( 0 );
 	}
@@ -64,6 +61,7 @@ int main ( int argc, char ** argv )
 	const char * sIndex = NULL;
 	CSphVector<DWORD> dGroups;
 	bool bNoInfo = false;
+	bool bStdin = false;
 	int iStart = 0;
 	int iLimit = 20;
 
@@ -78,11 +76,13 @@ int main ( int argc, char ** argv )
 			// this is an option
 			if ( i==0 );
 			OPT ( "-a", "--any" )		tQuery.m_eMode = SPH_MATCH_ANY;
+			OPT ( "-b", "--boolean" )	tQuery.m_eMode = SPH_MATCH_BOOLEAN;
 			OPT ( "-p", "--phrase" )	tQuery.m_eMode = SPH_MATCH_PHRASE;
 			OPT ( "-q", "--noinfo" )	bNoInfo = true;
 			OPT1 ( "--sort=date" )		tQuery.m_eSort = SPH_SORT_DATE_DESC;
 			OPT1 ( "--rsort=date" )		tQuery.m_eSort = SPH_SORT_DATE_ASC;
 			OPT1 ( "--sort=ts" )		tQuery.m_eSort = SPH_SORT_TIME_SEGMENTS;
+			OPT1 ( "--stdin" )			bStdin = true;
 			else if ( (i+1)<argc )
 			{
 				if ( i==0 );
@@ -112,6 +112,28 @@ int main ( int argc, char ** argv )
 	}
 
 	#undef OPT
+
+	if ( bStdin )
+	{
+		int iPos = 0, iLeft = sizeof(sQuery)-1;
+		char sThrowaway [ 256 ];
+
+		while ( !feof(stdin) )
+		{
+			if ( iLeft>0 )
+			{
+				int iLen = fread ( sQuery, 1, iLeft, stdin );
+				iPos += iLen;
+				iLeft -= iLen;
+			} else
+			{
+				fread ( sThrowaway, 1, sizeof(sThrowaway), stdin );
+			}
+		}
+
+		assert ( iPos<sizeof(sQuery) );
+		sQuery[iPos] = '\0';
+	}
 
 	/////////////
 	// configure

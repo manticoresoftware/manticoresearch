@@ -2,7 +2,7 @@
 
 autoheader \
 && aclocal \
-&& automake --gnu --add-missing \
+&& automake --gnu --ignore-deps \
 && autoconf
 
 

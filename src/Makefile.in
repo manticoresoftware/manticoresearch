@@ -78,8 +78,8 @@ searchd_OBJECTS = $(am_searchd_OBJECTS)
 searchd_DEPENDENCIES = libsphinx.a $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1)
 DEFAULT_INCLUDES = -I. -I$(srcdir) -I$(top_builddir)/config
-depcomp = $(SHELL) $(top_srcdir)/config/depcomp
-am__depfiles_maybe = depfiles
+depcomp =
+am__depfiles_maybe =
 CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
 	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS)
 CXXLD = $(CXX)
@@ -213,9 +213,9 @@ $(srcdir)/Makefile.in:  $(srcdir)/Makefile.am  $(am__configure_deps)
 	      exit 1;; \
 	  esac; \
 	done; \
-	echo ' cd $(top_srcdir) && $(AUTOMAKE) --foreign  src/Makefile'; \
+	echo ' cd $(top_srcdir) && $(AUTOMAKE) --foreign  --ignore-deps src/Makefile'; \
 	cd $(top_srcdir) && \
-	  $(AUTOMAKE) --foreign  src/Makefile
+	  $(AUTOMAKE) --foreign  --ignore-deps src/Makefile
 .PRECIOUS: Makefile
 Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	@case '$?' in \
@@ -279,155 +279,65 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/indexer-indexer.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libsphinx_a-sphinx.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libsphinx_a-sphinxexcerpt.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libsphinx_a-sphinxsoundex.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libsphinx_a-sphinxstemen.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libsphinx_a-sphinxstemru.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libsphinx_a-sphinxutils.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/search-search.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/searchd-searchd.Po@am__quote@
-
 .cpp.o:
-@am__fastdepCXX_TRUE@	if $(CXXCOMPILE) -MT $@ -MD -MP -MF "$(DEPDIR)/$*.Tpo" -c -o $@ $<; \
-@am__fastdepCXX_TRUE@	then mv -f "$(DEPDIR)/$*.Tpo" "$(DEPDIR)/$*.Po"; else rm -f "$(DEPDIR)/$*.Tpo"; exit 1; fi
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXXCOMPILE) -c -o $@ $<
+	$(CXXCOMPILE) -c -o $@ $<
 
 .cpp.obj:
-@am__fastdepCXX_TRUE@	if $(CXXCOMPILE) -MT $@ -MD -MP -MF "$(DEPDIR)/$*.Tpo" -c -o $@ `$(CYGPATH_W) '$<'`; \
-@am__fastdepCXX_TRUE@	then mv -f "$(DEPDIR)/$*.Tpo" "$(DEPDIR)/$*.Po"; else rm -f "$(DEPDIR)/$*.Tpo"; exit 1; fi
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXXCOMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
+	$(CXXCOMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
 
 libsphinx_a-sphinx.o: sphinx.cpp
-@am__fastdepCXX_TRUE@	if $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT libsphinx_a-sphinx.o -MD -MP -MF "$(DEPDIR)/libsphinx_a-sphinx.Tpo" -c -o libsphinx_a-sphinx.o `test -f 'sphinx.cpp' || echo '$(srcdir)/'`sphinx.cpp; \
-@am__fastdepCXX_TRUE@	then mv -f "$(DEPDIR)/libsphinx_a-sphinx.Tpo" "$(DEPDIR)/libsphinx_a-sphinx.Po"; else rm -f "$(DEPDIR)/libsphinx_a-sphinx.Tpo"; exit 1; fi
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='sphinx.cpp' object='libsphinx_a-sphinx.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinx.o `test -f 'sphinx.cpp' || echo '$(srcdir)/'`sphinx.cpp
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinx.o `test -f 'sphinx.cpp' || echo '$(srcdir)/'`sphinx.cpp
 
 libsphinx_a-sphinx.obj: sphinx.cpp
-@am__fastdepCXX_TRUE@	if $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT libsphinx_a-sphinx.obj -MD -MP -MF "$(DEPDIR)/libsphinx_a-sphinx.Tpo" -c -o libsphinx_a-sphinx.obj `if test -f 'sphinx.cpp'; then $(CYGPATH_W) 'sphinx.cpp'; else $(CYGPATH_W) '$(srcdir)/sphinx.cpp'; fi`; \
-@am__fastdepCXX_TRUE@	then mv -f "$(DEPDIR)/libsphinx_a-sphinx.Tpo" "$(DEPDIR)/libsphinx_a-sphinx.Po"; else rm -f "$(DEPDIR)/libsphinx_a-sphinx.Tpo"; exit 1; fi
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='sphinx.cpp' object='libsphinx_a-sphinx.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinx.obj `if test -f 'sphinx.cpp'; then $(CYGPATH_W) 'sphinx.cpp'; else $(CYGPATH_W) '$(srcdir)/sphinx.cpp'; fi`
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinx.obj `if test -f 'sphinx.cpp'; then $(CYGPATH_W) 'sphinx.cpp'; else $(CYGPATH_W) '$(srcdir)/sphinx.cpp'; fi`
 
 libsphinx_a-sphinxstemen.o: sphinxstemen.cpp
-@am__fastdepCXX_TRUE@	if $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT libsphinx_a-sphinxstemen.o -MD -MP -MF "$(DEPDIR)/libsphinx_a-sphinxstemen.Tpo" -c -o libsphinx_a-sphinxstemen.o `test -f 'sphinxstemen.cpp' || echo '$(srcdir)/'`sphinxstemen.cpp; \
-@am__fastdepCXX_TRUE@	then mv -f "$(DEPDIR)/libsphinx_a-sphinxstemen.Tpo" "$(DEPDIR)/libsphinx_a-sphinxstemen.Po"; else rm -f "$(DEPDIR)/libsphinx_a-sphinxstemen.Tpo"; exit 1; fi
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='sphinxstemen.cpp' object='libsphinx_a-sphinxstemen.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinxstemen.o `test -f 'sphinxstemen.cpp' || echo '$(srcdir)/'`sphinxstemen.cpp
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinxstemen.o `test -f 'sphinxstemen.cpp' || echo '$(srcdir)/'`sphinxstemen.cpp
 
 libsphinx_a-sphinxstemen.obj: sphinxstemen.cpp
-@am__fastdepCXX_TRUE@	if $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT libsphinx_a-sphinxstemen.obj -MD -MP -MF "$(DEPDIR)/libsphinx_a-sphinxstemen.Tpo" -c -o libsphinx_a-sphinxstemen.obj `if test -f 'sphinxstemen.cpp'; then $(CYGPATH_W) 'sphinxstemen.cpp'; else $(CYGPATH_W) '$(srcdir)/sphinxstemen.cpp'; fi`; \
-@am__fastdepCXX_TRUE@	then mv -f "$(DEPDIR)/libsphinx_a-sphinxstemen.Tpo" "$(DEPDIR)/libsphinx_a-sphinxstemen.Po"; else rm -f "$(DEPDIR)/libsphinx_a-sphinxstemen.Tpo"; exit 1; fi
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='sphinxstemen.cpp' object='libsphinx_a-sphinxstemen.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinxstemen.obj `if test -f 'sphinxstemen.cpp'; then $(CYGPATH_W) 'sphinxstemen.cpp'; else $(CYGPATH_W) '$(srcdir)/sphinxstemen.cpp'; fi`
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinxstemen.obj `if test -f 'sphinxstemen.cpp'; then $(CYGPATH_W) 'sphinxstemen.cpp'; else $(CYGPATH_W) '$(srcdir)/sphinxstemen.cpp'; fi`
 
 libsphinx_a-sphinxstemru.o: sphinxstemru.cpp
-@am__fastdepCXX_TRUE@	if $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT libsphinx_a-sphinxstemru.o -MD -MP -MF "$(DEPDIR)/libsphinx_a-sphinxstemru.Tpo" -c -o libsphinx_a-sphinxstemru.o `test -f 'sphinxstemru.cpp' || echo '$(srcdir)/'`sphinxstemru.cpp; \
-@am__fastdepCXX_TRUE@	then mv -f "$(DEPDIR)/libsphinx_a-sphinxstemru.Tpo" "$(DEPDIR)/libsphinx_a-sphinxstemru.Po"; else rm -f "$(DEPDIR)/libsphinx_a-sphinxstemru.Tpo"; exit 1; fi
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='sphinxstemru.cpp' object='libsphinx_a-sphinxstemru.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinxstemru.o `test -f 'sphinxstemru.cpp' || echo '$(srcdir)/'`sphinxstemru.cpp
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinxstemru.o `test -f 'sphinxstemru.cpp' || echo '$(srcdir)/'`sphinxstemru.cpp
 
 libsphinx_a-sphinxstemru.obj: sphinxstemru.cpp
-@am__fastdepCXX_TRUE@	if $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT libsphinx_a-sphinxstemru.obj -MD -MP -MF "$(DEPDIR)/libsphinx_a-sphinxstemru.Tpo" -c -o libsphinx_a-sphinxstemru.obj `if test -f 'sphinxstemru.cpp'; then $(CYGPATH_W) 'sphinxstemru.cpp'; else $(CYGPATH_W) '$(srcdir)/sphinxstemru.cpp'; fi`; \
-@am__fastdepCXX_TRUE@	then mv -f "$(DEPDIR)/libsphinx_a-sphinxstemru.Tpo" "$(DEPDIR)/libsphinx_a-sphinxstemru.Po"; else rm -f "$(DEPDIR)/libsphinx_a-sphinxstemru.Tpo"; exit 1; fi
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='sphinxstemru.cpp' object='libsphinx_a-sphinxstemru.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinxstemru.obj `if test -f 'sphinxstemru.cpp'; then $(CYGPATH_W) 'sphinxstemru.cpp'; else $(CYGPATH_W) '$(srcdir)/sphinxstemru.cpp'; fi`
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinxstemru.obj `if test -f 'sphinxstemru.cpp'; then $(CYGPATH_W) 'sphinxstemru.cpp'; else $(CYGPATH_W) '$(srcdir)/sphinxstemru.cpp'; fi`
 
 libsphinx_a-sphinxutils.o: sphinxutils.cpp
-@am__fastdepCXX_TRUE@	if $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT libsphinx_a-sphinxutils.o -MD -MP -MF "$(DEPDIR)/libsphinx_a-sphinxutils.Tpo" -c -o libsphinx_a-sphinxutils.o `test -f 'sphinxutils.cpp' || echo '$(srcdir)/'`sphinxutils.cpp; \
-@am__fastdepCXX_TRUE@	then mv -f "$(DEPDIR)/libsphinx_a-sphinxutils.Tpo" "$(DEPDIR)/libsphinx_a-sphinxutils.Po"; else rm -f "$(DEPDIR)/libsphinx_a-sphinxutils.Tpo"; exit 1; fi
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='sphinxutils.cpp' object='libsphinx_a-sphinxutils.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinxutils.o `test -f 'sphinxutils.cpp' || echo '$(srcdir)/'`sphinxutils.cpp
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinxutils.o `test -f 'sphinxutils.cpp' || echo '$(srcdir)/'`sphinxutils.cpp
 
 libsphinx_a-sphinxutils.obj: sphinxutils.cpp
-@am__fastdepCXX_TRUE@	if $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT libsphinx_a-sphinxutils.obj -MD -MP -MF "$(DEPDIR)/libsphinx_a-sphinxutils.Tpo" -c -o libsphinx_a-sphinxutils.obj `if test -f 'sphinxutils.cpp'; then $(CYGPATH_W) 'sphinxutils.cpp'; else $(CYGPATH_W) '$(srcdir)/sphinxutils.cpp'; fi`; \
-@am__fastdepCXX_TRUE@	then mv -f "$(DEPDIR)/libsphinx_a-sphinxutils.Tpo" "$(DEPDIR)/libsphinx_a-sphinxutils.Po"; else rm -f "$(DEPDIR)/libsphinx_a-sphinxutils.Tpo"; exit 1; fi
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='sphinxutils.cpp' object='libsphinx_a-sphinxutils.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinxutils.obj `if test -f 'sphinxutils.cpp'; then $(CYGPATH_W) 'sphinxutils.cpp'; else $(CYGPATH_W) '$(srcdir)/sphinxutils.cpp'; fi`
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinxutils.obj `if test -f 'sphinxutils.cpp'; then $(CYGPATH_W) 'sphinxutils.cpp'; else $(CYGPATH_W) '$(srcdir)/sphinxutils.cpp'; fi`
 
 libsphinx_a-sphinxexcerpt.o: sphinxexcerpt.cpp
-@am__fastdepCXX_TRUE@	if $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT libsphinx_a-sphinxexcerpt.o -MD -MP -MF "$(DEPDIR)/libsphinx_a-sphinxexcerpt.Tpo" -c -o libsphinx_a-sphinxexcerpt.o `test -f 'sphinxexcerpt.cpp' || echo '$(srcdir)/'`sphinxexcerpt.cpp; \
-@am__fastdepCXX_TRUE@	then mv -f "$(DEPDIR)/libsphinx_a-sphinxexcerpt.Tpo" "$(DEPDIR)/libsphinx_a-sphinxexcerpt.Po"; else rm -f "$(DEPDIR)/libsphinx_a-sphinxexcerpt.Tpo"; exit 1; fi
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='sphinxexcerpt.cpp' object='libsphinx_a-sphinxexcerpt.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinxexcerpt.o `test -f 'sphinxexcerpt.cpp' || echo '$(srcdir)/'`sphinxexcerpt.cpp
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinxexcerpt.o `test -f 'sphinxexcerpt.cpp' || echo '$(srcdir)/'`sphinxexcerpt.cpp
 
 libsphinx_a-sphinxexcerpt.obj: sphinxexcerpt.cpp
-@am__fastdepCXX_TRUE@	if $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT libsphinx_a-sphinxexcerpt.obj -MD -MP -MF "$(DEPDIR)/libsphinx_a-sphinxexcerpt.Tpo" -c -o libsphinx_a-sphinxexcerpt.obj `if test -f 'sphinxexcerpt.cpp'; then $(CYGPATH_W) 'sphinxexcerpt.cpp'; else $(CYGPATH_W) '$(srcdir)/sphinxexcerpt.cpp'; fi`; \
-@am__fastdepCXX_TRUE@	then mv -f "$(DEPDIR)/libsphinx_a-sphinxexcerpt.Tpo" "$(DEPDIR)/libsphinx_a-sphinxexcerpt.Po"; else rm -f "$(DEPDIR)/libsphinx_a-sphinxexcerpt.Tpo"; exit 1; fi
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='sphinxexcerpt.cpp' object='libsphinx_a-sphinxexcerpt.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinxexcerpt.obj `if test -f 'sphinxexcerpt.cpp'; then $(CYGPATH_W) 'sphinxexcerpt.cpp'; else $(CYGPATH_W) '$(srcdir)/sphinxexcerpt.cpp'; fi`
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinxexcerpt.obj `if test -f 'sphinxexcerpt.cpp'; then $(CYGPATH_W) 'sphinxexcerpt.cpp'; else $(CYGPATH_W) '$(srcdir)/sphinxexcerpt.cpp'; fi`
 
 libsphinx_a-sphinxsoundex.o: sphinxsoundex.cpp
-@am__fastdepCXX_TRUE@	if $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT libsphinx_a-sphinxsoundex.o -MD -MP -MF "$(DEPDIR)/libsphinx_a-sphinxsoundex.Tpo" -c -o libsphinx_a-sphinxsoundex.o `test -f 'sphinxsoundex.cpp' || echo '$(srcdir)/'`sphinxsoundex.cpp; \
-@am__fastdepCXX_TRUE@	then mv -f "$(DEPDIR)/libsphinx_a-sphinxsoundex.Tpo" "$(DEPDIR)/libsphinx_a-sphinxsoundex.Po"; else rm -f "$(DEPDIR)/libsphinx_a-sphinxsoundex.Tpo"; exit 1; fi
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='sphinxsoundex.cpp' object='libsphinx_a-sphinxsoundex.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinxsoundex.o `test -f 'sphinxsoundex.cpp' || echo '$(srcdir)/'`sphinxsoundex.cpp
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinxsoundex.o `test -f 'sphinxsoundex.cpp' || echo '$(srcdir)/'`sphinxsoundex.cpp
 
 libsphinx_a-sphinxsoundex.obj: sphinxsoundex.cpp
-@am__fastdepCXX_TRUE@	if $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT libsphinx_a-sphinxsoundex.obj -MD -MP -MF "$(DEPDIR)/libsphinx_a-sphinxsoundex.Tpo" -c -o libsphinx_a-sphinxsoundex.obj `if test -f 'sphinxsoundex.cpp'; then $(CYGPATH_W) 'sphinxsoundex.cpp'; else $(CYGPATH_W) '$(srcdir)/sphinxsoundex.cpp'; fi`; \
-@am__fastdepCXX_TRUE@	then mv -f "$(DEPDIR)/libsphinx_a-sphinxsoundex.Tpo" "$(DEPDIR)/libsphinx_a-sphinxsoundex.Po"; else rm -f "$(DEPDIR)/libsphinx_a-sphinxsoundex.Tpo"; exit 1; fi
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='sphinxsoundex.cpp' object='libsphinx_a-sphinxsoundex.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinxsoundex.obj `if test -f 'sphinxsoundex.cpp'; then $(CYGPATH_W) 'sphinxsoundex.cpp'; else $(CYGPATH_W) '$(srcdir)/sphinxsoundex.cpp'; fi`
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinxsoundex.obj `if test -f 'sphinxsoundex.cpp'; then $(CYGPATH_W) 'sphinxsoundex.cpp'; else $(CYGPATH_W) '$(srcdir)/sphinxsoundex.cpp'; fi`
 
 indexer-indexer.o: indexer.cpp
-@am__fastdepCXX_TRUE@	if $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(indexer_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT indexer-indexer.o -MD -MP -MF "$(DEPDIR)/indexer-indexer.Tpo" -c -o indexer-indexer.o `test -f 'indexer.cpp' || echo '$(srcdir)/'`indexer.cpp; \
-@am__fastdepCXX_TRUE@	then mv -f "$(DEPDIR)/indexer-indexer.Tpo" "$(DEPDIR)/indexer-indexer.Po"; else rm -f "$(DEPDIR)/indexer-indexer.Tpo"; exit 1; fi
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='indexer.cpp' object='indexer-indexer.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(indexer_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o indexer-indexer.o `test -f 'indexer.cpp' || echo '$(srcdir)/'`indexer.cpp
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(indexer_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o indexer-indexer.o `test -f 'indexer.cpp' || echo '$(srcdir)/'`indexer.cpp
 
 indexer-indexer.obj: indexer.cpp
-@am__fastdepCXX_TRUE@	if $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(indexer_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT indexer-indexer.obj -MD -MP -MF "$(DEPDIR)/indexer-indexer.Tpo" -c -o indexer-indexer.obj `if test -f 'indexer.cpp'; then $(CYGPATH_W) 'indexer.cpp'; else $(CYGPATH_W) '$(srcdir)/indexer.cpp'; fi`; \
-@am__fastdepCXX_TRUE@	then mv -f "$(DEPDIR)/indexer-indexer.Tpo" "$(DEPDIR)/indexer-indexer.Po"; else rm -f "$(DEPDIR)/indexer-indexer.Tpo"; exit 1; fi
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='indexer.cpp' object='indexer-indexer.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(indexer_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o indexer-indexer.obj `if test -f 'indexer.cpp'; then $(CYGPATH_W) 'indexer.cpp'; else $(CYGPATH_W) '$(srcdir)/indexer.cpp'; fi`
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(indexer_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o indexer-indexer.obj `if test -f 'indexer.cpp'; then $(CYGPATH_W) 'indexer.cpp'; else $(CYGPATH_W) '$(srcdir)/indexer.cpp'; fi`
 
 search-search.o: search.cpp
-@am__fastdepCXX_TRUE@	if $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(search_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT search-search.o -MD -MP -MF "$(DEPDIR)/search-search.Tpo" -c -o search-search.o `test -f 'search.cpp' || echo '$(srcdir)/'`search.cpp; \
-@am__fastdepCXX_TRUE@	then mv -f "$(DEPDIR)/search-search.Tpo" "$(DEPDIR)/search-search.Po"; else rm -f "$(DEPDIR)/search-search.Tpo"; exit 1; fi
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='search.cpp' object='search-search.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(search_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o search-search.o `test -f 'search.cpp' || echo '$(srcdir)/'`search.cpp
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(search_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o search-search.o `test -f 'search.cpp' || echo '$(srcdir)/'`search.cpp
 
 search-search.obj: search.cpp
-@am__fastdepCXX_TRUE@	if $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(search_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT search-search.obj -MD -MP -MF "$(DEPDIR)/search-search.Tpo" -c -o search-search.obj `if test -f 'search.cpp'; then $(CYGPATH_W) 'search.cpp'; else $(CYGPATH_W) '$(srcdir)/search.cpp'; fi`; \
-@am__fastdepCXX_TRUE@	then mv -f "$(DEPDIR)/search-search.Tpo" "$(DEPDIR)/search-search.Po"; else rm -f "$(DEPDIR)/search-search.Tpo"; exit 1; fi
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='search.cpp' object='search-search.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(search_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o search-search.obj `if test -f 'search.cpp'; then $(CYGPATH_W) 'search.cpp'; else $(CYGPATH_W) '$(srcdir)/search.cpp'; fi`
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(search_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o search-search.obj `if test -f 'search.cpp'; then $(CYGPATH_W) 'search.cpp'; else $(CYGPATH_W) '$(srcdir)/search.cpp'; fi`
 
 searchd-searchd.o: searchd.cpp
-@am__fastdepCXX_TRUE@	if $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(searchd_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT searchd-searchd.o -MD -MP -MF "$(DEPDIR)/searchd-searchd.Tpo" -c -o searchd-searchd.o `test -f 'searchd.cpp' || echo '$(srcdir)/'`searchd.cpp; \
-@am__fastdepCXX_TRUE@	then mv -f "$(DEPDIR)/searchd-searchd.Tpo" "$(DEPDIR)/searchd-searchd.Po"; else rm -f "$(DEPDIR)/searchd-searchd.Tpo"; exit 1; fi
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='searchd.cpp' object='searchd-searchd.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(searchd_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o searchd-searchd.o `test -f 'searchd.cpp' || echo '$(srcdir)/'`searchd.cpp
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(searchd_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o searchd-searchd.o `test -f 'searchd.cpp' || echo '$(srcdir)/'`searchd.cpp
 
 searchd-searchd.obj: searchd.cpp
-@am__fastdepCXX_TRUE@	if $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(searchd_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT searchd-searchd.obj -MD -MP -MF "$(DEPDIR)/searchd-searchd.Tpo" -c -o searchd-searchd.obj `if test -f 'searchd.cpp'; then $(CYGPATH_W) 'searchd.cpp'; else $(CYGPATH_W) '$(srcdir)/searchd.cpp'; fi`; \
-@am__fastdepCXX_TRUE@	then mv -f "$(DEPDIR)/searchd-searchd.Tpo" "$(DEPDIR)/searchd-searchd.Po"; else rm -f "$(DEPDIR)/searchd-searchd.Tpo"; exit 1; fi
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='searchd.cpp' object='searchd-searchd.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(searchd_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o searchd-searchd.obj `if test -f 'searchd.cpp'; then $(CYGPATH_W) 'searchd.cpp'; else $(CYGPATH_W) '$(srcdir)/searchd.cpp'; fi`
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(searchd_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o searchd-searchd.obj `if test -f 'searchd.cpp'; then $(CYGPATH_W) 'searchd.cpp'; else $(CYGPATH_W) '$(srcdir)/searchd.cpp'; fi`
 uninstall-info-am:
 
 ID: $(HEADERS) $(SOURCES) $(LISP) $(TAGS_FILES)
@@ -542,7 +452,6 @@ clean-am: clean-binPROGRAMS clean-generic clean-noinstLIBRARIES \
 	mostlyclean-am
 
 distclean: distclean-am
-	-rm -rf ./$(DEPDIR)
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
@@ -568,7 +477,6 @@ install-man:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-am
-	-rm -rf ./$(DEPDIR)
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 

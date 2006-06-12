@@ -1966,7 +1966,7 @@ else
 fi
 echo "$as_me:$LINENO: result: $ac_cv_mysql_libs" >&5
 echo "${ECHO_T}$ac_cv_mysql_libs" >&6
-	MYSQL_LIBS="-L$ac_cv_mysql_libs -lmysqlclient"
+	MYSQL_LIBS="-L$ac_cv_mysql_libs -lmysqlclient -lz"
 fi
 
 # if some path is missing, try to autodetermine with mysql_config

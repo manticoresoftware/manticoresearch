@@ -79,7 +79,7 @@ then
 	ac_cv_mysql_libs=`echo ${ac_cv_mysql_libs} | sed -e 's/.libs$//' \
 		-e 's+.libs/$++'`
 	AC_CACHE_CHECK([MySQL libraries], [ac_cv_mysql_libs], [ac_cv_mysql_libs=""])
-	MYSQL_LIBS="-L$ac_cv_mysql_libs -lmysqlclient"
+	MYSQL_LIBS="-L$ac_cv_mysql_libs -lmysqlclient -lz"
 fi
 
 # if some path is missing, try to autodetermine with mysql_config

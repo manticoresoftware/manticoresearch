@@ -279,6 +279,7 @@ template<int L> void ExcerptGen_c::DecodeUtf8 ( const char * sText, CSphVector<T
 
 			iCode = ( iCode<<6 ) + ( (*pCur) & 0x3F );
 			iBytes--;
+			pCur++;
 		} while ( iBytes );
 
 		// return code point if there were no errors

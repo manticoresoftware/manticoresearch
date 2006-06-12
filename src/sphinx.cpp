@@ -1540,6 +1540,7 @@ int CSphTokenizer_UTF8::GetCodePoint ()
 
 			iCode = ( iCode<<6 ) + ( (*m_pCur) & 0x3F );
 			iBytes--;
+			m_pCur++;
 		} while ( iBytes );
 
 		// return code point if there were no errors

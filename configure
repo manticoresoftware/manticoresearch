@@ -1842,36 +1842,57 @@ echo "${ECHO_T}$ac_cv_use_pgsql" >&6
 
 if test x$ac_cv_use_mysql != xno; then
 
-    if test  -d "/usr/local/mysql/include" -a \
-              -d "/usr/local/mysql/libmysql_r"
-    then
-        ac_cv_mysql_includes="/usr/local/mysql/include"
-        ac_cv_mysql_libs="/usr/local/mysql/libmysql_r"
-    elif test  -x "/usr/local/mysql/bin/mysql_config"
-    then
-        mysqlconfig="/usr/local/mysql/bin/mysql_config"
-    fi
 
-# Check for custom MySQL root directory
-if test  x$ac_cv_use_mysql != xyes -a x$ac_cv_use_mysql != xno
+# check well-known include paths
+for MYSQL_INCLUDE in "/usr/local/mysql/include" "/usr/include/mysql"
+do
+	if test  -d "$MYSQL_INCLUDE"
+	then
+		ac_cv_mysql_includes=$MYSQL_INCLUDE
+	fi
+done
+
+# check well-known library paths
+for MYSQL_LIB in "/usr/local/mysql" "/usr/lib/mysql"
+do
+	if test  -d "$MYSQL_LIB"
+	then
+		ac_cv_mysql_libs=$MYSQL_LIB
+	fi
+done
+
+# if includes and/or libs were not found,
+# check well-known mysqlconfig paths
+if test  -z "$ac_cv_mysql_includes" -o -z "$ac_cv_mysql_libs"
 then
-    ac_cv_mysql_root=`echo $ac_cv_use_mysql | sed -e 's+/$++'`
-    if test  -d "$ac_cv_mysql_root/include" -a \
-              -d "$ac_cv_mysql_root/libmysql_r"
-    then
-        ac_cv_mysql_includes="$ac_cv_mysql_root/include"
-        ac_cv_mysql_libs="$ac_cv_mysql_root/libmysql_r"
-    elif test  -x "$ac_cv_mysql_root/bin/mysql_config"
-    then
-        mysqlconfig="$ac_cv_mysql_root/bin/mysql_config"
-    else
-        { { echo "$as_me:$LINENO: error: invalid MySQL root directory: $ac_cv_mysql_root" >&5
-echo "$as_me: error: invalid MySQL root directory: $ac_cv_mysql_root" >&2;}
-   { (exit 1); exit 1; }; }
-    fi
+	for MYSQL_CONFIG in "/usr/local/mysql/bin"
+	do
+		if test  -x "$MYSQL_CONFIG/mysql_config"
+		then
+			mysqlconfig="$MYSQL_CONFIG/mysql_config"
+		fi
+	done
 fi
 
-# Check for custom includes path
+# check for custom user-specified MySQL root directory
+if test  x$ac_cv_use_mysql != xyes -a x$ac_cv_use_mysql != xno
+then
+	ac_cv_mysql_root=`echo $ac_cv_use_mysql | sed -e 's+/$++'`
+	if test  -d "$ac_cv_mysql_root/include" -a -d "$ac_cv_mysql_root/libmysql"
+	then
+		ac_cv_mysql_includes="$ac_cv_mysql_root/include"
+		ac_cv_mysql_libs="$ac_cv_mysql_root/libmysql"
+	elif test  -x "$ac_cv_mysql_root/bin/mysql_config"
+	then
+		mysqlconfig="$ac_cv_mysql_root/bin/mysql_config"
+	else
+		{ { echo "$as_me:$LINENO: error: invalid MySQL root directory: $ac_cv_mysql_root" >&5
+echo "$as_me: error: invalid MySQL root directory: $ac_cv_mysql_root" >&2;}
+   { (exit 1); exit 1; }; }
+	fi
+fi
+
+# check for custom includes path
 if test  -z "$ac_cv_mysql_includes"
 then
 
@@ -1883,7 +1904,7 @@ fi;
 fi
 if test  -n "$ac_cv_mysql_includes"
 then
-    echo "$as_me:$LINENO: checking MySQL includes" >&5
+	echo "$as_me:$LINENO: checking MySQL includes" >&5
 echo $ECHO_N "checking MySQL includes... $ECHO_C" >&6
 if test "${ac_cv_mysql_includes+set}" = set; then
   echo $ECHO_N "(cached) $ECHO_C" >&6
@@ -1892,11 +1913,10 @@ else
 fi
 echo "$as_me:$LINENO: result: $ac_cv_mysql_includes" >&5
 echo "${ECHO_T}$ac_cv_mysql_includes" >&6
-    MYSQL_CFLAGS="-I$ac_cv_mysql_includes"
+	MYSQL_CFLAGS="-I$ac_cv_mysql_includes"
 fi
 
-# Check for custom library path
-
+# check for custom library path
 if test  -z "$ac_cv_mysql_libs"
 then
 
@@ -1908,10 +1928,10 @@ fi;
 fi
 if test  -n "$ac_cv_mysql_libs"
 then
-    # Trim trailing '.libs' if user passed it in --with-mysql-libs option
-    ac_cv_mysql_libs=`echo ${ac_cv_mysql_libs} | sed -e 's/.libs$//' \
-                      -e 's+.libs/$++'`
-    echo "$as_me:$LINENO: checking MySQL libraries" >&5
+	# Trim trailing '.libs' if user passed it in --with-mysql-libs option
+	ac_cv_mysql_libs=`echo ${ac_cv_mysql_libs} | sed -e 's/.libs$//' \
+		-e 's+.libs/$++'`
+	echo "$as_me:$LINENO: checking MySQL libraries" >&5
 echo $ECHO_N "checking MySQL libraries... $ECHO_C" >&6
 if test "${ac_cv_mysql_libs+set}" = set; then
   echo $ECHO_N "(cached) $ECHO_C" >&6
@@ -1920,15 +1940,15 @@ else
 fi
 echo "$as_me:$LINENO: result: $ac_cv_mysql_libs" >&5
 echo "${ECHO_T}$ac_cv_mysql_libs" >&6
-    MYSQL_LIBS="-L$ac_cv_mysql_libs -lmysqlclient_r"
+	MYSQL_LIBS="-L$ac_cv_mysql_libs -lmysqlclient"
 fi
 
-# If some path is missing, try to autodetermine with mysql_config
+# if some path is missing, try to autodetermine with mysql_config
 if test  -z "$ac_cv_mysql_includes" -o -z "$ac_cv_mysql_libs"
 then
-    if test  -z "$mysqlconfig"
-    then
-        # Extract the first word of "mysql_config", so it can be a program name with args.
+	if test  -z "$mysqlconfig"
+	then
+		# Extract the first word of "mysql_config", so it can be a program name with args.
 set dummy mysql_config; ac_word=$2
 echo "$as_me:$LINENO: checking for $ac_word" >&5
 echo $ECHO_N "checking for $ac_word... $ECHO_C" >&6
@@ -1967,10 +1987,10 @@ else
 echo "${ECHO_T}no" >&6
 fi
 
-    fi
-    if test  -z "$mysqlconfig"
-    then
-        { { echo "$as_me:$LINENO: error: mysql_config executable not found
+	fi
+	if test  -z "$mysqlconfig"
+	then
+		{ { echo "$as_me:$LINENO: error: mysql_config executable not found
 ********************************************************************************
 ERROR: cannot find MySQL libraries. If you want to compile with MySQL support,
        you must either specify file locations explicitly using
@@ -1989,25 +2009,24 @@ ERROR: cannot find MySQL libraries. If you want to compile with MySQL support,
 ********************************************************************************
 " >&2;}
    { (exit 1); exit 1; }; }
-    else
-        if test  -z "$ac_cv_mysql_includes"
-        then
-            echo "$as_me:$LINENO: checking MySQL C flags" >&5
+	else
+		if test  -z "$ac_cv_mysql_includes"
+		then
+			echo "$as_me:$LINENO: checking MySQL C flags" >&5
 echo $ECHO_N "checking MySQL C flags... $ECHO_C" >&6
-            MYSQL_CFLAGS=`${mysqlconfig} --include`
-            echo "$as_me:$LINENO: result: $MYSQL_CFLAGS" >&5
+			MYSQL_CFLAGS=`${mysqlconfig} --include`
+			echo "$as_me:$LINENO: result: $MYSQL_CFLAGS" >&5
 echo "${ECHO_T}$MYSQL_CFLAGS" >&6
-        fi
-        if test  -z "$ac_cv_mysql_libs"
-        then
-            echo "$as_me:$LINENO: checking MySQL linker flags" >&5
+		fi
+		if test  -z "$ac_cv_mysql_libs"
+		then
+			echo "$as_me:$LINENO: checking MySQL linker flags" >&5
 echo $ECHO_N "checking MySQL linker flags... $ECHO_C" >&6
-            MYSQL_LIBS=`${mysqlconfig} --libs | sed -e \
-            's/-lmysqlclient /-lmysqlclient_r /' -e 's/-lmysqlclient$/-lmysqlclient_r/'`
-            echo "$as_me:$LINENO: result: $MYSQL_LIBS" >&5
+			MYSQL_LIBS=`${mysqlconfig} --libs`
+			echo "$as_me:$LINENO: result: $MYSQL_LIBS" >&5
 echo "${ECHO_T}$MYSQL_LIBS" >&6
-        fi
-    fi
+		fi
+	fi
 fi
 
 

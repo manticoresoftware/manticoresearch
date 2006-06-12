@@ -32,7 +32,7 @@ AC_CACHE_CHECK([whether to compile with PostgreSQL support], [ac_cv_use_pgsql], 
 
 
 if test x$ac_cv_use_mysql != xno; then
-    AC_CHECK_MYSQLR([$ac_cv_use_mysql])
+    AC_CHECK_MYSQL([$ac_cv_use_mysql])
     AC_DEFINE(USE_MYSQL,1,[Define to 1 if you want to compile with MySQL support])
     AC_SUBST([MYSQL_LIBS])
     AC_SUBST([MYSQL_CFLAGS])

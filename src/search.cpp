@@ -131,7 +131,7 @@ int main ( int argc, char ** argv )
 			}
 		}
 
-		assert ( iPos<sizeof(sQuery) );
+		assert ( iPos<(int)sizeof(sQuery) );
 		sQuery[iPos] = '\0';
 	}
 

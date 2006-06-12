@@ -561,7 +561,14 @@ private:
 struct CSphString
 {
 protected:
-	char *	m_sValue;
+	char *				m_sValue;
+
+private:
+	/// safety gap after the string end; for instance, UTF-8 Russian stemmer
+	/// which treats strings as 16-bit word sequences needs this in some cases.
+	/// note that this zero-filled gap does NOT include trailing C-string zero,
+	/// and does NOT affect strlen() as well.
+	static const int	SAFETY_GAP	= 4;
 
 public:
 	CSphString ()
@@ -607,8 +614,17 @@ public:
 
 	CSphString ( const char * sString )
 	{
-		m_sValue = new char [ 1+strlen(sString) ];
-		strcpy ( m_sValue, sString ); // FIXME! this is non-TS
+		if ( sString )
+		{
+			int iLen = 1+strlen(sString);
+			m_sValue = new char [ iLen+SAFETY_GAP ];
+
+			strcpy ( m_sValue, sString );
+			memset ( m_sValue+iLen, 0, SAFETY_GAP );
+		} else
+		{
+			m_sValue = NULL;
+		}
 	}
 
 	const CSphString & operator = ( const CSphString & rhs )
@@ -616,8 +632,11 @@ public:
 		SafeDeleteArray ( m_sValue );
 		if ( rhs.m_sValue )
 		{
-			m_sValue = new char [ 1+strlen(rhs.m_sValue) ];
-			strcpy ( m_sValue, rhs.m_sValue);
+			int iLen = 1+strlen(rhs.m_sValue);
+			m_sValue = new char [ iLen+SAFETY_GAP ];
+
+			strcpy ( m_sValue, rhs.m_sValue );
+			memset ( m_sValue+iLen, 0, SAFETY_GAP );
 		}
 		return *this;
 	}
@@ -632,9 +651,9 @@ public:
 		assert ( (iStart+iCount)>=0 && (iStart+iCount)<=iLen );
 
 		CSphString sRes;
-		sRes.m_sValue = new char [ 1+iCount ];
+		sRes.m_sValue = new char [ 1+SAFETY_GAP+iCount ];
 		strncpy ( sRes.m_sValue, m_sValue+iStart, iCount );
-		sRes.m_sValue[iCount] = '\0';
+		memset ( sRes.m_sValue+iCount, 0, 1+SAFETY_GAP );
 		return sRes;
 	}
 
@@ -643,9 +662,9 @@ public:
 		SafeDeleteArray ( m_sValue );
 		if ( sValue )
 		{
-			m_sValue = new char [ 1+iLen ];
+			m_sValue = new char [ 1+SAFETY_GAP+iLen ];
 			memcpy ( m_sValue, sValue, iLen );
-			m_sValue[iLen] = '\0';
+			memset ( m_sValue+iLen, 0, 1+SAFETY_GAP );
 		}
 	}
 

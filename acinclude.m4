@@ -7,16 +7,16 @@ dnl ---------------------------------------------------------------------------
 AC_DEFUN([AC_CHECK_MYSQL],[
 
 # check well-known include paths
-for MYSQL_INCLUDE in "/usr/local/mysql/include" "/usr/include/mysql"
+for MYSQL_INCLUDE in "/usr/local/mysql/include" "/usr/local/mysql/include/mysql" "/usr/include/mysql"
 do
-	if test [ -d "$MYSQL_INCLUDE" ]
+	if test [ -r "$MYSQL_INCLUDE/mysql.h" ]
 	then
 		ac_cv_mysql_includes=$MYSQL_INCLUDE
 	fi
 done
 
 # check well-known library paths
-for MYSQL_LIB in "/usr/local/mysql" "/usr/lib/mysql"
+for MYSQL_LIB in "/usr/local/mysql/lib" "/usr/local/mysql/lib/mysql" "/usr/lib/mysql"
 do
 	if test [ -d "$MYSQL_LIB" ]
 	then

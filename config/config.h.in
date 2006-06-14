@@ -136,6 +136,9 @@
    slash. */
 #undef LSTAT_FOLLOWS_SLASHED_SYMLINK
 
+/* Name of package */
+#undef PACKAGE
+
 /* Define to the address where bug reports for this package should be sent. */
 #undef PACKAGE_BUGREPORT
 
@@ -174,6 +177,9 @@
 
 /* Define to 1 if you want to compile with PostgreSQL support */
 #undef USE_PGSQL
+
+/* Version number of package */
+#undef VERSION
 
 /* Define to empty if `const' does not conform to ANSI C. */
 #undef const

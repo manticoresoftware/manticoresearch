@@ -1481,7 +1481,7 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 	// skip whitespace
 	int iCode;
 	while ( ( iCode = GetCodePoint() )==0 && !IsEmpty() );
-	if ( IsEmpty() )
+	if ( !iCode && IsEmpty() )
 		return NULL;
 
 	// accumulate non-whitespace

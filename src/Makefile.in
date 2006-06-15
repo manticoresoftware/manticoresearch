@@ -54,11 +54,12 @@ ARFLAGS = cru
 libsphinx_a_AR = $(AR) $(ARFLAGS)
 libsphinx_a_LIBADD =
 am__objects_1 = libsphinx_a-sphinx.$(OBJEXT) \
+	libsphinx_a-sphinxexcerpt.$(OBJEXT) \
+	libsphinx_a-sphinxquery.$(OBJEXT) \
+	libsphinx_a-sphinxsoundex.$(OBJEXT) \
 	libsphinx_a-sphinxstemen.$(OBJEXT) \
 	libsphinx_a-sphinxstemru.$(OBJEXT) \
-	libsphinx_a-sphinxutils.$(OBJEXT) \
-	libsphinx_a-sphinxexcerpt.$(OBJEXT) \
-	libsphinx_a-sphinxsoundex.$(OBJEXT)
+	libsphinx_a-sphinxutils.$(OBJEXT)
 am_libsphinx_a_OBJECTS = $(am__objects_1)
 libsphinx_a_OBJECTS = $(am_libsphinx_a_OBJECTS)
 am__installdirs = "$(DESTDIR)$(bindir)"
@@ -187,8 +188,8 @@ sharedstatedir = @sharedstatedir@
 sysconfdir = @sysconfdir@
 target_alias = @target_alias@
 CCFLAGS = -Wall -O3 -fomit-frame-pointer  -D_FILE_OFFSET_BITS=64
-SRC_SPHINX = sphinx.cpp sphinxstemen.cpp sphinxstemru.cpp sphinxutils.cpp sphinxexcerpt.cpp sphinxsoundex.cpp
-HEADERS_SPHINX = sphinxexcerpt.h  sphinx.h  sphinxstd.h  sphinxstem.h  sphinxtimers.h  sphinxutils.h sphinxstemru.inl
+SRC_SPHINX = sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp sphinxsoundex.cpp sphinxstemen.cpp sphinxstemru.cpp sphinxutils.cpp
+HEADERS_SPHINX = sphinx.h sphinxexcerpt.h sphinxquery.h sphinxstd.h sphinxstem.h sphinxtimers.h sphinxutils.h sphinxstemru.inl
 noinst_LIBRARIES = libsphinx.a
 libsphinx_a_SOURCES = $(SRC_SPHINX)
 libsphinx_a_CPPFLAGS = $(MYSQL_CFLAGS) $(CCFLAGS)
@@ -294,6 +295,24 @@ libsphinx_a-sphinx.o: sphinx.cpp
 libsphinx_a-sphinx.obj: sphinx.cpp
 	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinx.obj `if test -f 'sphinx.cpp'; then $(CYGPATH_W) 'sphinx.cpp'; else $(CYGPATH_W) '$(srcdir)/sphinx.cpp'; fi`
 
+libsphinx_a-sphinxexcerpt.o: sphinxexcerpt.cpp
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinxexcerpt.o `test -f 'sphinxexcerpt.cpp' || echo '$(srcdir)/'`sphinxexcerpt.cpp
+
+libsphinx_a-sphinxexcerpt.obj: sphinxexcerpt.cpp
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinxexcerpt.obj `if test -f 'sphinxexcerpt.cpp'; then $(CYGPATH_W) 'sphinxexcerpt.cpp'; else $(CYGPATH_W) '$(srcdir)/sphinxexcerpt.cpp'; fi`
+
+libsphinx_a-sphinxquery.o: sphinxquery.cpp
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinxquery.o `test -f 'sphinxquery.cpp' || echo '$(srcdir)/'`sphinxquery.cpp
+
+libsphinx_a-sphinxquery.obj: sphinxquery.cpp
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinxquery.obj `if test -f 'sphinxquery.cpp'; then $(CYGPATH_W) 'sphinxquery.cpp'; else $(CYGPATH_W) '$(srcdir)/sphinxquery.cpp'; fi`
+
+libsphinx_a-sphinxsoundex.o: sphinxsoundex.cpp
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinxsoundex.o `test -f 'sphinxsoundex.cpp' || echo '$(srcdir)/'`sphinxsoundex.cpp
+
+libsphinx_a-sphinxsoundex.obj: sphinxsoundex.cpp
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinxsoundex.obj `if test -f 'sphinxsoundex.cpp'; then $(CYGPATH_W) 'sphinxsoundex.cpp'; else $(CYGPATH_W) '$(srcdir)/sphinxsoundex.cpp'; fi`
+
 libsphinx_a-sphinxstemen.o: sphinxstemen.cpp
 	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinxstemen.o `test -f 'sphinxstemen.cpp' || echo '$(srcdir)/'`sphinxstemen.cpp
 
@@ -311,18 +330,6 @@ libsphinx_a-sphinxutils.o: sphinxutils.cpp
 
 libsphinx_a-sphinxutils.obj: sphinxutils.cpp
 	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinxutils.obj `if test -f 'sphinxutils.cpp'; then $(CYGPATH_W) 'sphinxutils.cpp'; else $(CYGPATH_W) '$(srcdir)/sphinxutils.cpp'; fi`
-
-libsphinx_a-sphinxexcerpt.o: sphinxexcerpt.cpp
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinxexcerpt.o `test -f 'sphinxexcerpt.cpp' || echo '$(srcdir)/'`sphinxexcerpt.cpp
-
-libsphinx_a-sphinxexcerpt.obj: sphinxexcerpt.cpp
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinxexcerpt.obj `if test -f 'sphinxexcerpt.cpp'; then $(CYGPATH_W) 'sphinxexcerpt.cpp'; else $(CYGPATH_W) '$(srcdir)/sphinxexcerpt.cpp'; fi`
-
-libsphinx_a-sphinxsoundex.o: sphinxsoundex.cpp
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinxsoundex.o `test -f 'sphinxsoundex.cpp' || echo '$(srcdir)/'`sphinxsoundex.cpp
-
-libsphinx_a-sphinxsoundex.obj: sphinxsoundex.cpp
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinxsoundex.obj `if test -f 'sphinxsoundex.cpp'; then $(CYGPATH_W) 'sphinxsoundex.cpp'; else $(CYGPATH_W) '$(srcdir)/sphinxsoundex.cpp'; fi`
 
 indexer-indexer.o: indexer.cpp
 	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(indexer_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o indexer-indexer.o `test -f 'indexer.cpp' || echo '$(srcdir)/'`indexer.cpp

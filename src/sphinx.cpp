@@ -1076,7 +1076,6 @@ void CSphLowercaser::AddSpecials ( const char * sSpecials )
 	int iNewChunks = m_iChunks;
 	for ( const BYTE * c = (const BYTE *) sSpecials; *c; c++ )
 	{
-		assert ( (*c)>=0 && (*c)<MAX_CODE );
 		int iChunk = ((int)(*c)) >> CHUNK_BITS;
 
 		if ( dUsed[iChunk]==0 )
@@ -4062,10 +4061,11 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 
 	PROFILE_BEGIN ( query_load_words );
 
-	for ( i=0; i<m_iQueryWords; i++ )
+	for ( int i=0; i<m_iQueryWords; i++ )
 	{
 		// if the word was already loaded, just link to it
-		for ( int j=0; j<i; j++ )
+		int j;
+		for ( j=0; j<i; j++ )
 			if ( m_dQueryWords[i].m_iWordID == m_dQueryWords[j].m_iWordID )
 		{
 			m_dQueryWords[i] = m_dQueryWords[j];
@@ -4082,7 +4082,7 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 
 	// build word stats
 	pResult->m_iNumWords = m_iQueryWords;
-	for ( i=0; i<m_iQueryWords; i++ )
+	for ( int i=0; i<m_iQueryWords; i++ )
 	{
 		CSphQueryResult::WordStat_t & tWordStats = pResult->m_tWordStats[i];
 		if ( tWordStats.m_sWord.cstr() )
@@ -4108,7 +4108,7 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 
 	// build weights
 	m_iWeights = m_tHeader.m_iFieldCount;
-	for ( i=0; i<m_iWeights; i++ ) // defaults
+	for ( int i=0; i<m_iWeights; i++ ) // defaults
 		m_dWeights[i] = 1;
 	if ( pQuery->m_pWeights ) // user-supplied
 		for ( int i=0; i<Min ( m_iWeights, pQuery->m_iWeights ); i++ )

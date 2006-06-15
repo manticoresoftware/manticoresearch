@@ -150,6 +150,10 @@ public:
 	void		SetRemap ( const CSphRemapRange * pRemaps, int iRemaps );
 	void		SetRemap ( const CSphLowercaser * pLC );
 	bool		SetRemap ( const char * sConfig );
+	void		AddSpecials ( const char * sSpecials );
+
+public:
+	const CSphLowercaser &		operator = ( const CSphLowercaser & rhs );
 
 public:
 	inline int	ToLower ( int iCode )
@@ -157,22 +161,23 @@ public:
 		assert ( iCode>=0 );
 		if ( iCode>=MAX_CODE )
 			return 0;
-		register int * pChunk = m_ppTable [ iCode>>CHUNK_BITS ];
+		register int * pChunk = m_pChunk [ iCode>>CHUNK_BITS ];
 		if ( pChunk )
 			return pChunk [ iCode & CHUNK_MASK ];
 		return 0;
 	}
 
 protected:
-	int **				m_ppTable;
-	int *				m_pTable;
-
 	static const int	CHUNK_COUNT	= 0x200;
 	static const int	CHUNK_BITS	= 8;
 
 	static const int	CHUNK_SIZE	= 1 << CHUNK_BITS;
 	static const int	CHUNK_MASK	= CHUNK_SIZE - 1;
 	static const int	MAX_CODE	= CHUNK_COUNT * CHUNK_SIZE;
+
+	int					m_iChunks;					///< how much chunks are actually allocated
+	int *				m_pData;					///< chunks themselves
+	int *				m_pChunk [ CHUNK_COUNT ];	///< pointers to non-empty chunks
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -182,20 +187,31 @@ class ISphTokenizer
 {
 public:
 	/// virtualizing dtor
-	virtual				~ISphTokenizer () {}
-
-	/// pass next buffer
-	virtual void		SetBuffer ( BYTE * sBuffer, int iLength, bool bLast ) = 0;
-
-	/// get next token
-	virtual BYTE *		GetToken () = 0;
+	virtual							~ISphTokenizer () {}
 
 	/// set new translation table
 	/// returns true on success, false on failure
-	virtual bool		SetCaseFolding ( const char * sConfig ) = 0;
+	virtual bool					SetCaseFolding ( const char * sConfig );
 
-	/// get lowercaser, if any
-	virtual const CSphLowercaser *	GetLowercaser () const { return NULL; }
+	/// add special chars to translation table (SBCS only, for now)
+	/// updates lowercaser so that these remap to -1
+	virtual void					AddSpecials ( const char * sSpecials );
+
+	/// get lowercaser
+	virtual const CSphLowercaser *	GetLowercaser () const { return &m_tLC; }
+
+public:
+	/// pass next buffer
+	virtual void					SetBuffer ( BYTE * sBuffer, int iLength, bool bLast ) = 0;
+
+	/// get next token
+	virtual BYTE *					GetToken () = 0;
+
+	/// spawn a clone of my own
+	virtual ISphTokenizer *			Clone () const = 0;
+
+protected:
+	CSphLowercaser		m_tLC;			///< my lowercaser
 };
 
 /// create SBCS tokenizer
@@ -663,6 +679,7 @@ enum ESphMatchMode
 	SPH_MATCH_ALL = 0,			///< match all query words
 	SPH_MATCH_ANY,				///< match any query word
 	SPH_MATCH_PHRASE,			///< match this exact phrase
+	SPH_MATCH_BOOLEAN,			///< match this boolean query
 
 	SPH_MATCH_TOTAL
 };

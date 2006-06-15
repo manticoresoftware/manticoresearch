@@ -1,7 +1,7 @@
 CCFLAGS         = -Wall -O3 -fomit-frame-pointer  -D_FILE_OFFSET_BITS=64
 
-SRC_SPHINX      = sphinx.cpp sphinxstemen.cpp sphinxstemru.cpp sphinxutils.cpp sphinxexcerpt.cpp sphinxsoundex.cpp
-HEADERS_SPHINX  = sphinxexcerpt.h  sphinx.h  sphinxstd.h  sphinxstem.h  sphinxtimers.h  sphinxutils.h sphinxstemru.inl
+SRC_SPHINX      = sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp sphinxsoundex.cpp sphinxstemen.cpp sphinxstemru.cpp sphinxutils.cpp
+HEADERS_SPHINX  = sphinx.h sphinxexcerpt.h sphinxquery.h sphinxstd.h sphinxstem.h sphinxtimers.h sphinxutils.h sphinxstemru.inl
 
 noinst_LIBRARIES = libsphinx.a
 libsphinx_a_SOURCES = $(SRC_SPHINX)

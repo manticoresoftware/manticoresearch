@@ -36,7 +36,7 @@ int main ( int argc, char ** argv )
 			"-c, --config <file>\tuse given config file (default: sphinx.conf)\n"
 			"-i, --index <index>\tsearch given index only (default: all indexes)\n"
 			"-a, --any\t\tmatch any query word (default: match all words)\n"
-//			"-b, --boolean\t\tmatch in boolean mode\n"
+			"-b, --boolean\t\tmatch in boolean mode\n"
 			"-g, --group <id>\tmatch this group only (default: match all groups)\n"
 			"-s, --start <offset>\tprint matches starting from this offset (default: 0)\n"
 			"-l, --limit <count>\tprint this many matches (default: 20)\n"
@@ -76,7 +76,7 @@ int main ( int argc, char ** argv )
 			// this is an option
 			if ( i==0 );
 			OPT ( "-a", "--any" )		tQuery.m_eMode = SPH_MATCH_ANY;
-//			OPT ( "-b", "--boolean" )	tQuery.m_eMode = SPH_MATCH_BOOLEAN;
+			OPT ( "-b", "--boolean" )	tQuery.m_eMode = SPH_MATCH_BOOLEAN;
 			OPT ( "-p", "--phrase" )	tQuery.m_eMode = SPH_MATCH_PHRASE;
 			OPT ( "-q", "--noinfo" )	bNoInfo = true;
 			OPT1 ( "--sort=date" )		tQuery.m_eSort = SPH_SORT_DATE_DESC;

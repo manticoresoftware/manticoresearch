@@ -34,6 +34,7 @@ define ( "SEARCHD_RETRY",			2 );
 define ( "SPH_MATCH_ALL",			0 );
 define ( "SPH_MATCH_ANY",			1 );
 define ( "SPH_MATCH_PHRASE",		2 );
+define ( "SPH_MATCH_BOOLEAN",		3 );
 
 /// known sort modes
 define ( "SPH_SORT_RELEVANCE",		0 );

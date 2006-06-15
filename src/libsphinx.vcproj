@@ -115,6 +115,9 @@
 				RelativePath=".\sphinxstemru.cpp">
 			</File>
 			<File
+				RelativePath=".\sphinxquery.cpp">
+			</File>
+			<File
 				RelativePath=".\sphinxutils.cpp">
 			</File>
 		</Filter>
@@ -136,6 +139,9 @@
 			</File>
 			<File
 				RelativePath=".\sphinxtimers.h">
+			</File>
+			<File
+				RelativePath=".\sphinxquery.h">
 			</File>
 			<File
 				RelativePath=".\sphinxutils.h">

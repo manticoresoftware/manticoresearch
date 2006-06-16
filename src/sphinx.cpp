@@ -4840,7 +4840,6 @@ bool CSphSource_PgSQL::RunQueryStep ()
 	assert ( m_iMinID>0 );
 	assert ( m_iMaxID>0 );
 	assert ( m_iMinID<=m_iMaxID );
-	assert ( m_sQuery );
 
 	char sValues [ MACRO_COUNT ] [ iBufSize ];
 	snprintf ( sValues[0], iBufSize, "%d", m_iCurrentID );
@@ -4923,7 +4922,7 @@ bool CSphSource_PgSQL::RunQueryStep ()
 	if ( sError )
 	{
 		fprintf ( stdout, "ERROR: %s: %s (DSN=%s).\n",
-			sError, PQerrorMessage ( m_tSqlDriver ), m_sSqlDSN );
+			sError, PQerrorMessage ( m_tSqlDriver ), m_sSqlDSN.cstr() );
 		return false;
 	}
 
@@ -5123,7 +5122,7 @@ bool CSphSource_PgSQL::Init ( const CSphSourceParams_PgSQL & tParams )
 	if ( sError )
 	{
 		fprintf ( stdout, "ERROR: %s: %s (DSN=%s).\n",
-			sError, PQerrorMessage ( m_tSqlDriver ), m_sSqlDSN );
+			sError, PQerrorMessage ( m_tSqlDriver ), m_sSqlDSN.cstr() );
 		return 0;
 	}
 
@@ -5266,7 +5265,7 @@ void CSphSource_PgSQL::PostIndex ()
 	
 	if ( sError )
 		fprintf ( stdout, "ERROR: %s: %s (DSN=%s).\n",
-			sError, PQerrorMessage ( m_tSqlDriver ), m_sSqlDSN );
+			sError, PQerrorMessage ( m_tSqlDriver ), m_sSqlDSN.cstr() );
 
 	#undef LOC_PGSQL_ERROR
 
@@ -5431,7 +5430,7 @@ bool CSphSource_MySQL::RunQueryStep ()
 	if ( sError )
 	{
 		fprintf ( stdout, "ERROR: %s: %s (DSN=%s).\n",
-			sError, mysql_error ( &m_tSqlDriver ), m_sSqlDSN );
+			sError, mysql_error ( &m_tSqlDriver ), m_sSqlDSN.cstr() );
 		return false;
 	}
 
@@ -5630,7 +5629,7 @@ bool CSphSource_MySQL::Init ( const CSphSourceParams_MySQL & tParams )
 	if ( sError )
 	{
 		fprintf ( stdout, "ERROR: %s: %s (DSN=%s).\n",
-			sError, mysql_error ( &m_tSqlDriver ), m_sSqlDSN );
+			sError, mysql_error ( &m_tSqlDriver ), m_sSqlDSN.cstr() );
 		return 0;
 	}
 
@@ -5779,7 +5778,7 @@ void CSphSource_MySQL::PostIndex ()
 	
 	if ( sError )
 		fprintf ( stdout, "ERROR: %s: %s (DSN=%s).\n",
-			sError, mysql_error ( &m_tSqlDriver ), m_sSqlDSN );
+			sError, mysql_error ( &m_tSqlDriver ), m_sSqlDSN.cstr() );
 
 	#undef LOC_MYSQL_ERROR
 

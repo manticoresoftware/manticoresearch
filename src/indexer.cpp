@@ -341,7 +341,7 @@ CSphSource * SpawnSourcePgSQL ( const CSphConfigSection & hSource, const char * 
 	LOC_GETI ( tParams.m_iRangeStep,		"sql_range_step" );
 
 	CSphSource_PgSQL * pSrcPgSQL = new CSphSource_PgSQL ();
-	if ( !pSrcPgSQL->Init ( &tParams ) )
+	if ( !pSrcPgSQL->Init ( tParams ) )
 		SafeDelete ( pSrcPgSQL );
 	return pSrcPgSQL;
 }

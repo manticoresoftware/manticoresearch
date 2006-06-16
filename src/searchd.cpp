@@ -1630,7 +1630,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		ctime_r ( &tNow, sTimeBuf );
 		sTimeBuf [ strlen(sTimeBuf)-1 ] = '\0';
 
-		static const char * sModes [ SPH_MATCH_TOTAL ] = { "all", "any", "phr" };
+		static const char * sModes [ SPH_MATCH_TOTAL ] = { "all", "any", "phr", "bool" };
 		snprintf ( sBuf, sizeof(sBuf), "[%s] %d.%03d sec: [%d %d %s/%d/%d %d] %s\n",
 			sTimeBuf, pRes->m_iQueryTime/1000, pRes->m_iQueryTime%1000,
 			iOffset, iLimit, sModes [ tQuery.m_eMode ], tQuery.m_eSort, tQuery.m_iGroups,

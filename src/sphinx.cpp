@@ -2911,12 +2911,18 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 	// deallocate raw block
 	SafeDeleteArray ( dRawBlock );
 
+	// close raw log
+	::close ( fdRaw );
+
 	///////////////////////////////////
 	// sort and write compressed index
 	///////////////////////////////////
 
+	int iRawBlocks = bins.GetLength();
+	if ( iRawBlocks==0 )
+		return 0;
+
 	// reopen raw log as read-only
-	::close ( fdRaw );
 	fdRaw = OpenFile ( "spr", O_RDONLY );
 	if ( fdRaw<0 )
 		return 0;
@@ -2936,7 +2942,6 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 	m_tHeader.m_tMin.m_iTimestamp--;
 
 	// initialize sorting
-	int iRawBlocks = bins.GetLength();
 	if ( iRawBlocks>16 )
 	{
 		fprintf ( stdout, "WARNING: sort_hits: merge_blocks=%d too high, increasing mem_limit may improve performance.\n",

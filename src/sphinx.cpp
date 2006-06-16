@@ -396,7 +396,7 @@ struct CSphBin
 /// VLN index header
 struct CSphIndexHeader_VLN
 {
-	DWORD		m_iFieldCount;	///< document fields count
+	int			m_iFieldCount;	///< document fields count
 	CSphDocInfo	m_tMin;			///< mind id/group/timestamp
 };
 
@@ -567,7 +567,7 @@ struct CSphIndex_VLN : CSphIndex
 								CSphIndex_VLN ( const char * filename );
 	virtual						~CSphIndex_VLN ();
 
-	virtual int					Build ( CSphDict * dict, CSphSource * source, int iMemoryLimit );
+	virtual int					Build ( CSphDict * dict, const CSphVector < CSphSource * > & dSources, int iMemoryLimit );
 	virtual CSphQueryResult *	Query ( CSphDict * dict, CSphQuery * pQuery );
 	virtual bool				QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchQueue * pTop );
 
@@ -2742,16 +2742,16 @@ public:
 };
 
 
-int CSphIndex_VLN::Build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLimit )
+int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > & dSources, int iMemoryLimit )
 {
 	PROFILER_INIT ();
+
+	assert ( pDict );
+	assert ( dSources.GetLength() );
 
 	/////////////////
 	// build raw log
 	/////////////////
-
-	// set dictionary
-	pSource->SetDict ( pDict );
 
 	// create raw log
 	fdRaw = OpenFile ( "spr", O_CREAT | O_RDWR | O_TRUNC );
@@ -2794,78 +2794,91 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 	// build raw log
 	PROFILE_BEGIN ( collect_hits );
 
-	CSphIndexProgress tProgress;
+	CSphSourceStats tComplete; // total stats for all the completed sources
+	CSphIndexProgress tProgress; // current progress
 	tProgress.m_ePhase = CSphIndexProgress::PHASE_COLLECT;
 
-	DWORD iDocID;
-	while ( ( iDocID = pSource->Next() )!=0 )
+	ARRAY_FOREACH ( iSource, dSources )
 	{
-		// progress bar
-		if ( m_pProgress
-			&& ( ( pSource->GetStats()->m_iTotalDocuments % 1000 )==0 ) )
+		CSphSource * pSource = dSources[iSource];
+		assert ( pSource );
+
+		pSource->SetDict ( pDict );
+
+		DWORD iDocID;
+		while ( ( iDocID = pSource->Next() )!=0 )
 		{
-			tProgress.m_iDocuments = pSource->GetStats()->m_iTotalDocuments;
-			tProgress.m_iBytes = pSource->GetStats()->m_iTotalBytes;
-			m_pProgress ( &tProgress );
-		}
-
-		// check/store docinfo
-		int iHitCount = pSource->m_dHits.GetLength ();
-		if ( iHitCount<=0 )
-			continue;
-		if ( !m_dDocinfos.GetLength() || m_dDocinfos.Last().m_iDocID!=pSource->m_tDocInfo.m_iDocID )
-			m_dDocinfos.Add ( pSource->m_tDocInfo );
-	
-		// store hits
-		assert ( pSource->m_tDocInfo.m_iDocID );
-		assert ( pSource->m_tDocInfo.m_iGroupID );
-		assert ( pSource->m_tDocInfo.m_iTimestamp );
-		m_tHeader.m_tMin.m_iDocID = Min ( m_tHeader.m_tMin.m_iDocID, pSource->m_tDocInfo.m_iDocID );
-		m_tHeader.m_tMin.m_iGroupID = Min ( m_tHeader.m_tMin.m_iGroupID, pSource->m_tDocInfo.m_iGroupID );
-		m_tHeader.m_tMin.m_iTimestamp = Min ( m_tHeader.m_tMin.m_iTimestamp, pSource->m_tDocInfo.m_iTimestamp );
-
-		CSphWordHit * pHit = &pSource->m_dHits[0];
-		while ( iHitCount-- )
-		{
-			assert ( pHit->m_iDocID==pSource->m_tDocInfo.m_iDocID );
-			assert ( pHit->m_iWordID );
-			assert ( pHit->m_iWordPos );
-
-			*pRawBlock++ = *pHit++;
-			iRawBlockUsed++;
-			iRawHits++;
-
-			if ( iRawBlockUsed==iRawBlockSize )
+			// progress bar
+			if ( m_pProgress
+				&& ( ( pSource->GetStats().m_iTotalDocuments % 1000 )==0 ) )
 			{
-				PROFILE_BEGIN ( sort_hits );
-				sphSortHits ( dRawBlock, iRawBlockUsed );
-				PROFILE_END ( sort_hits );
+				tProgress.m_iDocuments = tComplete.m_iTotalDocuments + pSource->GetStats().m_iTotalDocuments;
+				tProgress.m_iBytes = tComplete.m_iTotalBytes + pSource->GetStats().m_iTotalBytes;
+				m_pProgress ( &tProgress );
+			}
 
-				PROFILE_BEGIN ( write_hits );
-				bins.Add ( new CSphBin() );
-				CSphBin * pBin = bins.Last ();
-				pBin->m_iFileLeft = cidxWriteRawVLB ( fdRaw, dRawBlock, iRawBlockUsed );
-				if ( pBin->m_iFileLeft<0 )
-				{
-					fprintf ( stdout, "ERROR: write() failed, out of disk space?\n" );
-					return 0;
-				}
-				PROFILE_END ( write_hits );
-
-				iRawBlockUsed = 0;
-				pRawBlock = dRawBlock;
-				m_dDocinfos.Reset ();
+			// check/store docinfo
+			int iHitCount = pSource->m_dHits.GetLength ();
+			if ( iHitCount<=0 )
+				continue;
+			if ( !m_dDocinfos.GetLength() || m_dDocinfos.Last().m_iDocID!=pSource->m_tDocInfo.m_iDocID )
 				m_dDocinfos.Add ( pSource->m_tDocInfo );
+		
+			// store hits
+			assert ( pSource->m_tDocInfo.m_iDocID );
+			assert ( pSource->m_tDocInfo.m_iGroupID );
+			assert ( pSource->m_tDocInfo.m_iTimestamp );
+			m_tHeader.m_tMin.m_iDocID = Min ( m_tHeader.m_tMin.m_iDocID, pSource->m_tDocInfo.m_iDocID );
+			m_tHeader.m_tMin.m_iGroupID = Min ( m_tHeader.m_tMin.m_iGroupID, pSource->m_tDocInfo.m_iGroupID );
+			m_tHeader.m_tMin.m_iTimestamp = Min ( m_tHeader.m_tMin.m_iTimestamp, pSource->m_tDocInfo.m_iTimestamp );
 
-				// progress bar
-				if ( m_pProgress )
+			CSphWordHit * pHit = &pSource->m_dHits[0];
+			while ( iHitCount-- )
+			{
+				assert ( pHit->m_iDocID==pSource->m_tDocInfo.m_iDocID );
+				assert ( pHit->m_iWordID );
+				assert ( pHit->m_iWordPos );
+
+				*pRawBlock++ = *pHit++;
+				iRawBlockUsed++;
+				iRawHits++;
+
+				if ( iRawBlockUsed==iRawBlockSize )
 				{
-					tProgress.m_iDocuments = pSource->GetStats()->m_iTotalDocuments;
-					tProgress.m_iBytes = pSource->GetStats()->m_iTotalBytes;
-					m_pProgress ( &tProgress );
+					PROFILE_BEGIN ( sort_hits );
+					sphSortHits ( dRawBlock, iRawBlockUsed );
+					PROFILE_END ( sort_hits );
+
+					PROFILE_BEGIN ( write_hits );
+					bins.Add ( new CSphBin() );
+					CSphBin * pBin = bins.Last ();
+					pBin->m_iFileLeft = cidxWriteRawVLB ( fdRaw, dRawBlock, iRawBlockUsed );
+					if ( pBin->m_iFileLeft<0 )
+					{
+						fprintf ( stdout, "ERROR: write() failed, out of disk space?\n" );
+						return 0;
+					}
+					PROFILE_END ( write_hits );
+
+					iRawBlockUsed = 0;
+					pRawBlock = dRawBlock;
+					m_dDocinfos.Reset ();
+					m_dDocinfos.Add ( pSource->m_tDocInfo );
+
+					// progress bar
+					if ( m_pProgress )
+					{
+						tProgress.m_iDocuments = tComplete.m_iTotalDocuments + pSource->GetStats().m_iTotalDocuments;
+						tProgress.m_iBytes = tComplete.m_iTotalBytes + pSource->GetStats().m_iTotalBytes;
+						m_pProgress ( &tProgress );
+					}
 				}
 			}
 		}
+
+		// this source is over, update overall stats
+		tComplete.m_iTotalDocuments += pSource->GetStats().m_iTotalDocuments;
+		tComplete.m_iTotalBytes += pSource->GetStats().m_iTotalBytes;
 	}
 
 	if ( iRawBlockUsed )
@@ -2889,8 +2902,8 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 
 	if ( m_pProgress )
 	{
-		tProgress.m_iDocuments = pSource->GetStats()->m_iTotalDocuments;
-		tProgress.m_iBytes = pSource->GetStats()->m_iTotalBytes;
+		tProgress.m_iDocuments = tComplete.m_iTotalDocuments;
+		tProgress.m_iBytes = tComplete.m_iTotalBytes;
 		m_pProgress ( &tProgress );
 
 		tProgress.m_ePhase = CSphIndexProgress::PHASE_COLLECT_END;
@@ -2932,7 +2945,13 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 		return 0;
 
 	// adjust min IDs, and fill header
-	m_tHeader.m_iFieldCount = pSource->GetFieldCount ();
+	m_tHeader.m_iFieldCount = dSources[0]->GetFieldCount();
+	ARRAY_FOREACH ( i, dSources )
+		if ( m_tHeader.m_iFieldCount!=dSources[i]->GetFieldCount() )
+	{
+		fprintf ( stdout, "WARNING: source field count mismatch in multi-source index; using max count.\n" );
+		m_tHeader.m_iFieldCount = Max ( m_tHeader.m_iFieldCount, dSources[i]->GetFieldCount() );
+	}
 
 	assert ( m_tHeader.m_tMin.m_iDocID>0 );
 	assert ( m_tHeader.m_tMin.m_iGroupID>0 );
@@ -3047,7 +3066,8 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, CSphSource * pSource, int iMemoryLi
 	PROFILE_END ( invert_hits );
 
 	// when the party's over..
-	pSource->PostIndex ();
+	ARRAY_FOREACH ( i, dSources )
+		dSources[i]->PostIndex ();
 
 	PROFILER_DONE ();
 	PROFILE_SHOW ();
@@ -4658,9 +4678,9 @@ void CSphSource::SetDict ( CSphDict * pDict )
 }
 
 
-const CSphSourceStats * CSphSource::GetStats ()
+const CSphSourceStats & CSphSource::GetStats ()
 {
-	return &m_iStats;
+	return m_tStats;
 }
 
 
@@ -4694,7 +4714,7 @@ int CSphSource_Document::Next()
 	if ( !dFields || m_tDocInfo.m_iDocID<=0 )
 		return 0;
 
-	m_iStats.m_iTotalDocuments++;
+	m_tStats.m_iTotalDocuments++;
 	m_dHits.Reset ();
 
 	for ( int j=0; j<m_iFieldCount; j++ )
@@ -4707,7 +4727,7 @@ int CSphSource_Document::Next()
 			m_pStripper->Strip ( sField );
 
 		int iLen = (int) strlen ( (char*)sField );
-		m_iStats.m_iTotalBytes += iLen;
+		m_tStats.m_iTotalBytes += iLen;
 
 		m_pTokenizer->SetBuffer ( sField, iLen, true );
 
@@ -4785,17 +4805,13 @@ const char * const CSphSource_PgSQL::MACRO_VALUES [ CSphSource_PgSQL::MACRO_COUN
 
 CSphSource_PgSQL::CSphSource_PgSQL ()
 	: m_pSqlResult		( NULL )
-	, m_sSqlDSN			( NULL )
 
-	, m_sQuery			( NULL )
-	, m_sQueryPost		( NULL )
 	, m_iGroupColumn	( 0 )
 	, m_iDateColumn		( 0 )
 
 	, m_iSqlRows		( 0 )
 	, m_iSqlRow			( 0 )
 
-	, m_iRangeStep		( 0 )
 	, m_iMinID			( 0 )
 	, m_iMaxID			( 0 )
 	, m_iCurrentID		( 0 )
@@ -4803,22 +4819,13 @@ CSphSource_PgSQL::CSphSource_PgSQL ()
 	, m_iMaxFetchedID	( 0 )
 
 	, m_bSqlConnected	( false )
-	, m_pParams			( NULL )
 {
-}
-
-
-CSphSource_PgSQL::~CSphSource_PgSQL ()
-{
-	sphFree ( m_sSqlDSN );
-	sphFree ( m_sQuery );
-	sphFree ( m_sQueryPost );
 }
 
 
 bool CSphSource_PgSQL::RunQueryStep ()
 {
-	if ( m_iRangeStep<=0 )
+	if ( m_tParams.m_iRangeStep<=0 )
 		return false;
 	if ( m_iCurrentID>m_iMaxID )
 		return false;
@@ -4837,11 +4844,11 @@ bool CSphSource_PgSQL::RunQueryStep ()
 
 	char sValues [ MACRO_COUNT ] [ iBufSize ];
 	snprintf ( sValues[0], iBufSize, "%d", m_iCurrentID );
-	snprintf ( sValues[1], iBufSize, "%d", m_iCurrentID+m_iRangeStep-1 );
-	m_iCurrentID += m_iRangeStep;
+	snprintf ( sValues[1], iBufSize, "%d", m_iCurrentID+m_tParams.m_iRangeStep-1 );
+	m_iCurrentID += m_tParams.m_iRangeStep;
 
 	// OPTIMIZE? things can be precalculated
-	char * sCur = m_sQuery;
+	const char * sCur = m_tParams.m_sQuery.cstr();
 	int iLen = 0;
 	while ( *sCur )
 	{
@@ -4866,7 +4873,7 @@ bool CSphSource_PgSQL::RunQueryStep ()
 
 	// do interpolation
 	sRes = new char [ iLen ];
-	sCur = m_sQuery;
+	sCur = m_tParams.m_sQuery.cstr();
 
 	char * sDst = sRes;
 	while ( *sCur )
@@ -4966,9 +4973,8 @@ int CSphSource_PgSQL::GetColumnIndex ( const char * sColumn )
 }
 
 
-bool CSphSource_PgSQL::Init ( CSphSourceParams_PgSQL * pParams )
+bool CSphSource_PgSQL::Init ( const CSphSourceParams_PgSQL & tParams )
 {
-	#define LOC_FIX_NULL(_arg) if ( !pParams->_arg ) pParams->_arg = "";
 	#define LOC_ERROR(_msg,_arg) { fprintf ( stdout, _msg, _arg ); return 0; }
 	#define LOC_ERROR2(_msg,_arg,_arg2) { fprintf ( stdout, _msg, _arg, _arg2 ); return 0; }
 	#define LOC_PGSQL_ERROR(_msg) { sError = _msg; break; }
@@ -4976,11 +4982,11 @@ bool CSphSource_PgSQL::Init ( CSphSourceParams_PgSQL * pParams )
 	const char * sError = NULL;
 
 	// checks
-	assert ( pParams );
-	assert ( pParams->m_sQuery );
-	m_pParams = pParams;
+	assert ( !tParams.m_sQuery.IsEmpty() );
+	m_tParams = tParams;
 
 	// defaults
+	#define LOC_FIX_NULL(_arg) if ( !m_tParams._arg.cstr() ) m_tParams._arg = "";
 	LOC_FIX_NULL ( m_sQueryPre );
 	LOC_FIX_NULL ( m_sQueryPost );
 	LOC_FIX_NULL ( m_sGroupColumn );
@@ -4990,19 +4996,20 @@ bool CSphSource_PgSQL::Init ( CSphSourceParams_PgSQL * pParams )
 	LOC_FIX_NULL ( m_sPass );
 	LOC_FIX_NULL ( m_sDB );
 	LOC_FIX_NULL ( m_sClientEncoding );
+	#undef LOC_FIX_NULL
 
 	// build and store DSN for error reporting
 	char sBuf [ 1024 ];
 	snprintf ( sBuf, sizeof(sBuf), "pgsql://%s:***@%s:%s/%s",
-		pParams->m_sUser, pParams->m_sHost, pParams->m_sPort, pParams->m_sDB);
-	m_sSqlDSN = sphDup ( sBuf );
+		m_tParams.m_sUser.cstr(), m_tParams.m_sHost.cstr(), m_tParams.m_sPort.cstr(), m_tParams.m_sDB.cstr() );
+	m_sSqlDSN = sBuf;
 
 	// connect
 	for ( ;; )
 	{
 		// do connect to database
-		m_tSqlDriver = PQsetdbLogin ( pParams->m_sHost, pParams->m_sPort, NULL, NULL,
-			pParams->m_sDB, pParams->m_sUser, pParams->m_sPass );
+		m_tSqlDriver = PQsetdbLogin ( m_tParams.m_sHost.cstr(), m_tParams.m_sPort.cstr(), NULL, NULL,
+			m_tParams.m_sDB.cstr(), m_tParams.m_sUser.cstr(), m_tParams.m_sPass.cstr() );
 
 		// get connection status
 		if ( PQstatus ( m_tSqlDriver )==CONNECTION_BAD )
@@ -5011,14 +5018,14 @@ bool CSphSource_PgSQL::Init ( CSphSourceParams_PgSQL * pParams )
 		m_bSqlConnected = true;		
 
 		// set client encoding
-		if ( pParams->m_sClientEncoding && strlen ( pParams->m_sClientEncoding ) )
-			if ( -1==PQsetClientEncoding ( m_tSqlDriver, pParams->m_sClientEncoding ) )
+		if ( !m_tParams.m_sClientEncoding.IsEmpty() )
+			if ( -1==PQsetClientEncoding ( m_tSqlDriver, m_tParams.m_sClientEncoding.cstr() ) )
 				LOC_PGSQL_ERROR ( "PQsetClientEncoding" );
 
 		// run pre-query
-		if ( pParams->m_sQueryPre && strlen(pParams->m_sQueryPre) )
+		if ( !m_tParams.m_sQueryPre.IsEmpty() )
 		{
-			m_pSqlResult = PQexec ( m_tSqlDriver, pParams->m_sQueryPre );
+			m_pSqlResult = PQexec ( m_tSqlDriver, m_tParams.m_sQueryPre.cstr() );
 
 			ExecStatusType eRes = PQresultStatus ( m_pSqlResult );
 			if ( ( eRes!=PGRES_COMMAND_OK ) && ( eRes!=PGRES_TUPLES_OK ) )
@@ -5029,25 +5036,26 @@ bool CSphSource_PgSQL::Init ( CSphSourceParams_PgSQL * pParams )
 		}
 
 		// issue first fetch query
-		if ( pParams->m_sQueryRange )
+		if ( !m_tParams.m_sQueryRange.IsEmpty() )
 		{
 			///////////////
 			// range query
 			///////////////
 
-			m_iRangeStep = pParams->m_iRangeStep;
-
 			// check step
-			if ( m_iRangeStep<=0 )
-				LOC_ERROR ( "ERROR: sql_range_step=%d: must be positive.\n", m_iRangeStep );
-			if ( m_iRangeStep<128 )
-				fprintf ( stdout, "WARNING: sql_range_step=%d: too small, increase recommended.\n", m_iRangeStep );
+			if ( m_tParams.m_iRangeStep<=0 )
+				LOC_ERROR ( "ERROR: sql_range_step=%d: must be positive.\n", m_tParams.m_iRangeStep );
+			if ( m_tParams.m_iRangeStep<128 )
+			{
+				fprintf ( stdout, "WARNING: sql_range_step=%d: too small; increased to 128.\n", m_tParams.m_iRangeStep );
+				m_tParams.m_iRangeStep = 128;
+			}
 
 			// check query for macros
 			bool bError = false;
 			for ( int i=0; i<MACRO_COUNT; i++ )
 			{
-				if ( !strstr ( pParams->m_sQuery, MACRO_VALUES[i] ) )
+				if ( !strstr ( m_tParams.m_sQuery.cstr(), MACRO_VALUES[i] ) )
 				{
 					fprintf ( stdout, "ERROR: sql_query_range: macro '%s' not found.\n",
 						MACRO_VALUES[i] );
@@ -5058,7 +5066,7 @@ bool CSphSource_PgSQL::Init ( CSphSourceParams_PgSQL * pParams )
 				return 0;
 
 			// execute
-			m_pSqlResult = PQexec ( m_tSqlDriver, pParams->m_sQueryRange );
+			m_pSqlResult = PQexec ( m_tSqlDriver, m_tParams.m_sQueryRange.cstr() );
 			ExecStatusType eRes = PQresultStatus ( m_pSqlResult );
 			if ( ( eRes!=PGRES_COMMAND_OK ) && ( eRes!=PGRES_TUPLES_OK ) )
 				LOC_PGSQL_ERROR ( "sql_query_range" );
@@ -5084,7 +5092,6 @@ bool CSphSource_PgSQL::Init ( CSphSourceParams_PgSQL * pParams )
 			m_pSqlResult = NULL;
 
 			m_iCurrentID = m_iMinID;
-			m_sQuery = sphDup ( pParams->m_sQuery );
 
 			// issue query
 			if ( !RunQueryStep () )
@@ -5098,7 +5105,7 @@ bool CSphSource_PgSQL::Init ( CSphSourceParams_PgSQL * pParams )
 
 			assert ( !m_pSqlResult );
 			
-			m_pSqlResult = PQexec ( m_tSqlDriver, pParams->m_sQuery );
+			m_pSqlResult = PQexec ( m_tSqlDriver, m_tParams.m_sQuery.cstr() );
 			
 			ExecStatusType eRes = PQresultStatus ( m_pSqlResult );
 			if ( ( eRes!=PGRES_COMMAND_OK ) && ( eRes!=PGRES_TUPLES_OK ) )
@@ -5106,6 +5113,8 @@ bool CSphSource_PgSQL::Init ( CSphSourceParams_PgSQL * pParams )
 
 			m_iSqlRow = 0;
 			m_iSqlRows = PQntuples ( m_pSqlResult );
+
+			m_tParams.m_iRangeStep = 0;
 		}
 		break;
 	}
@@ -5121,11 +5130,10 @@ bool CSphSource_PgSQL::Init ( CSphSourceParams_PgSQL * pParams )
 	// some post-query setup
 	int iFields = PQnfields ( m_pSqlResult ) - 1;
 	m_iFieldCount = iFields; // will be changed by GetColumnIndex below
-	m_sQueryPost = sphDup ( pParams->m_sQueryPost );
 
 	// group/date columns
-	m_iGroupColumn = GetColumnIndex ( pParams->m_sGroupColumn );
-	m_iDateColumn = GetColumnIndex ( pParams->m_sDateColumn );
+	m_iGroupColumn = GetColumnIndex ( m_tParams.m_sGroupColumn.cstr() );
+	m_iDateColumn = GetColumnIndex ( m_tParams.m_sDateColumn.cstr() );
 
 	// check it
 	if ( m_iFieldCount>SPH_MAX_FIELD_COUNT )
@@ -5144,7 +5152,6 @@ bool CSphSource_PgSQL::Init ( CSphSourceParams_PgSQL * pParams )
 	}
 	assert ( j==m_iFieldCount );
 
-	#undef LOC_FIX_NULL
 	#undef LOC_ERROR
 	#undef LOC_PGSQL_ERROR
 
@@ -5165,9 +5172,9 @@ BYTE ** CSphSource_PgSQL::NextDocument ()
 			continue;
 
 		// ok, we're over
-		while ( m_sQueryPost && strlen(m_sQueryPost) )
+		while ( !m_tParams.m_sQueryPost.IsEmpty() )
 		{
-			m_pSqlResult = PQexec ( m_tSqlDriver, m_sQueryPost );
+			m_pSqlResult = PQexec ( m_tSqlDriver, m_tParams.m_sQueryPost.cstr() );
 
 			ExecStatusType eRes = PQresultStatus ( m_pSqlResult );
 			if ( ( eRes!=PGRES_COMMAND_OK ) && ( eRes!=PGRES_TUPLES_OK ) )
@@ -5222,16 +5229,10 @@ BYTE ** CSphSource_PgSQL::NextDocument ()
 
 void CSphSource_PgSQL::PostIndex ()
 {
-	if ( !m_pParams
-		|| !m_pParams->m_sQueryPostIndex
-		|| !strlen(m_pParams->m_sQueryPostIndex)
-		|| !m_iMaxFetchedID )
-	{
+	if ( m_tParams.m_sQueryPostIndex.IsEmpty() || !m_iMaxFetchedID )
 		return;
-	}
 
 	assert ( !m_bSqlConnected );
-	assert ( m_pParams );
 
 	#define LOC_PGSQL_ERROR(_msg) { sError = _msg; break; }
 
@@ -5239,8 +5240,8 @@ void CSphSource_PgSQL::PostIndex ()
 	for ( ;; )
 	{		
 		// do connect to database
-		m_tSqlDriver =  PQsetdbLogin ( m_pParams->m_sHost, m_pParams->m_sPort, NULL, NULL,
-			m_pParams->m_sDB, m_pParams->m_sUser, m_pParams->m_sPass);
+		m_tSqlDriver =  PQsetdbLogin ( m_tParams.m_sHost.cstr(), m_tParams.m_sPort.cstr(), NULL, NULL,
+			m_tParams.m_sDB.cstr(), m_tParams.m_sUser.cstr(), m_tParams.m_sPass.cstr() );
 
 		// get connection status
 		if ( PQstatus ( m_tSqlDriver )==CONNECTION_BAD )
@@ -5249,7 +5250,7 @@ void CSphSource_PgSQL::PostIndex ()
 		m_bSqlConnected = true;
 		
 		// do execute query
-		char * sQuery = sphStrMacro ( m_pParams->m_sQueryPostIndex, "$maxid", m_iMaxFetchedID );	
+		char * sQuery = sphStrMacro ( m_tParams.m_sQueryPostIndex.cstr(), "$maxid", m_iMaxFetchedID );	
 		m_pSqlResult = PQexec ( m_tSqlDriver, sQuery );
 
 		ExecStatusType eRes = PQresultStatus ( m_pSqlResult );
@@ -5312,14 +5313,10 @@ const char * const CSphSource_MySQL::MACRO_VALUES [ CSphSource_MySQL::MACRO_COUN
 CSphSource_MySQL::CSphSource_MySQL ()
 	: m_pSqlResult		( NULL )
 	, m_tSqlRow			( NULL )
-	, m_sSqlDSN			( NULL )
 
-	, m_sQuery			( NULL )
-	, m_sQueryPost		( NULL )
 	, m_iGroupColumn	( 0 )
 	, m_iDateColumn		( 0 )
 
-	, m_iRangeStep		( 0 )
 	, m_iMinID			( 0 )
 	, m_iMaxID			( 0 )
 	, m_iCurrentID		( 0 )
@@ -5327,22 +5324,13 @@ CSphSource_MySQL::CSphSource_MySQL ()
 	, m_iMaxFetchedID	( 0 )
 
 	, m_bSqlConnected	( false )
-	, m_pParams			( NULL )
 {
-}
-
-
-CSphSource_MySQL::~CSphSource_MySQL ()
-{
-	sphFree ( m_sSqlDSN );
-	sphFree ( m_sQuery );
-	sphFree ( m_sQueryPost );
 }
 
 
 bool CSphSource_MySQL::RunQueryStep ()
 {
-	if ( m_iRangeStep<=0 )
+	if ( m_tParams.m_iRangeStep<=0 )
 		return false;
 	if ( m_iCurrentID>m_iMaxID )
 		return false;
@@ -5357,15 +5345,15 @@ bool CSphSource_MySQL::RunQueryStep ()
 	assert ( m_iMinID>0 );
 	assert ( m_iMaxID>0 );
 	assert ( m_iMinID<=m_iMaxID );
-	assert ( m_sQuery );
+	assert ( m_tParams.m_sQuery.cstr() );
 
 	char sValues [ MACRO_COUNT ] [ iBufSize ];
 	snprintf ( sValues[0], iBufSize, "%d", m_iCurrentID );
-	snprintf ( sValues[1], iBufSize, "%d", m_iCurrentID+m_iRangeStep-1 );
-	m_iCurrentID += m_iRangeStep;
+	snprintf ( sValues[1], iBufSize, "%d", m_iCurrentID+m_tParams.m_iRangeStep-1 );
+	m_iCurrentID += m_tParams.m_iRangeStep;
 
 	// OPTIMIZE? things can be precalculated
-	char * sCur = m_sQuery;
+	const char * sCur = m_tParams.m_sQuery.cstr();
 	int iLen = 0;
 	while ( *sCur )
 	{
@@ -5390,7 +5378,7 @@ bool CSphSource_MySQL::RunQueryStep ()
 
 	// do interpolation
 	sRes = new char [ iLen ];
-	sCur = m_sQuery;
+	sCur = m_tParams.m_sQuery.cstr();
 
 	char * sDst = sRes;
 	while ( *sCur )
@@ -5489,9 +5477,8 @@ int CSphSource_MySQL::GetColumnIndex ( const char * sColumn )
 }
 
 
-bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
+bool CSphSource_MySQL::Init ( const CSphSourceParams_MySQL & tParams )
 {
-	#define LOC_FIX_NULL(_arg) if ( !pParams->_arg ) pParams->_arg = "";
 	#define LOC_ERROR(_msg,_arg) { fprintf ( stdout, _msg, _arg ); return 0; }
 	#define LOC_ERROR2(_msg,_arg,_arg2) { fprintf ( stdout, _msg, _arg, _arg2 ); return 0; }
 	#define LOC_MYSQL_ERROR(_msg) { sError = _msg; break; }
@@ -5499,11 +5486,11 @@ bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 	const char * sError = NULL;
 
 	// checks
-	assert ( pParams );
-	assert ( pParams->m_sQuery );
-	m_pParams = pParams;
+	assert ( !tParams.m_sQuery.IsEmpty() );
+	m_tParams = tParams;
 
 	// defaults
+	#define LOC_FIX_NULL(_arg) if ( !m_tParams._arg.cstr() ) m_tParams._arg = "";
 	LOC_FIX_NULL ( m_sQueryPre );
 	LOC_FIX_NULL ( m_sQueryPost );
 	LOC_FIX_NULL ( m_sGroupColumn );
@@ -5512,15 +5499,18 @@ bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 	LOC_FIX_NULL ( m_sUser );
 	LOC_FIX_NULL ( m_sPass );
 	LOC_FIX_NULL ( m_sDB );
+	#undef LOC_FIX_NULL
 
 	// build and store DSN for error reporting
 	char sBuf [ 1024 ];
 	snprintf ( sBuf, sizeof(sBuf), "mysql://%s:***@%s:%d/%s",
-		pParams->m_sUser, pParams->m_sHost, pParams->m_iPort,
-		pParams->m_sUsock
-			? ( pParams->m_sUsock + ( pParams->m_sUsock[0]=='/' ? 1 : 0 ) )
+		m_tParams.m_sUser.cstr(),
+		m_tParams.m_sHost.cstr(),
+		m_tParams.m_iPort,
+		m_tParams.m_sUsock.cstr()
+			? ( m_tParams.m_sUsock.cstr() + ( m_tParams.m_sUsock.cstr()[0]=='/' ? 1 : 0 ) )
 			: "" );
-	m_sSqlDSN = sphDup ( sBuf );
+	m_sSqlDSN = sBuf;
 
 	// connect
 	for ( ;; )
@@ -5530,21 +5520,21 @@ bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 
 		// do connect
 		if ( !mysql_real_connect ( &m_tSqlDriver,
-			pParams->m_sHost,
-			pParams->m_sUser,
-			pParams->m_sPass,
-			pParams->m_sDB,
-			pParams->m_iPort,
-			pParams->m_sUsock, 0 ) )
+			m_tParams.m_sHost.cstr(),
+			m_tParams.m_sUser.cstr(),
+			m_tParams.m_sPass.cstr(),
+			m_tParams.m_sDB.cstr(),
+			m_tParams.m_iPort,
+			m_tParams.m_sUsock.cstr(), 0 ) )
 		{
 			LOC_MYSQL_ERROR ( "mysql_real_connect" );
 		}
 		m_bSqlConnected = true;
 
 		// run pre-query
-		if ( pParams->m_sQueryPre && strlen(pParams->m_sQueryPre) )
+		if ( !m_tParams.m_sQueryPre.IsEmpty() )
 		{
-			if ( mysql_query ( &m_tSqlDriver, pParams->m_sQueryPre ) )
+			if ( mysql_query ( &m_tSqlDriver, m_tParams.m_sQueryPre.cstr() ) )
 				LOC_MYSQL_ERROR ( "mysql_query_pre" );
 
 			m_pSqlResult = mysql_use_result ( &m_tSqlDriver );
@@ -5556,25 +5546,26 @@ bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 		}
 
 		// issue first fetch query
-		if ( pParams->m_sQueryRange )
+		if ( !m_tParams.m_sQueryRange.IsEmpty() )
 		{
 			///////////////
 			// range query
 			///////////////
 
-			m_iRangeStep = pParams->m_iRangeStep;
-
 			// check step
-			if ( m_iRangeStep<=0 )
-				LOC_ERROR ( "ERROR: mysql_range_step=%d: must be positive.\n", m_iRangeStep );
-			if ( m_iRangeStep<128 )
-				fprintf ( stdout, "WARNING: mysql_range_step=%d: too small, increase recommended.\n", m_iRangeStep );
+			if ( m_tParams.m_iRangeStep<=0 )
+				LOC_ERROR ( "ERROR: mysql_range_step=%d: must be positive.\n", m_tParams.m_iRangeStep );
+			if ( m_tParams.m_iRangeStep<128 )
+			{
+				fprintf ( stdout, "WARNING: mysql_range_step=%d: too small; increased to 128.\n", m_tParams.m_iRangeStep );
+				m_tParams.m_iRangeStep = 128;
+			}
 
 			// check query for macros
 			bool bError = false;
 			for ( int i=0; i<MACRO_COUNT; i++ )
 			{
-				if ( !strstr ( pParams->m_sQuery, MACRO_VALUES[i] ) )
+				if ( !strstr ( m_tParams.m_sQuery.cstr(), MACRO_VALUES[i] ) )
 				{
 					fprintf ( stdout, "ERROR: mysql_ranged_query: macro '%s' not found.\n",
 						MACRO_VALUES[i] );
@@ -5585,7 +5576,7 @@ bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 				return 0;
 
 			// run query
-			if ( mysql_query ( &m_tSqlDriver, pParams->m_sQueryRange ) )
+			if ( mysql_query ( &m_tSqlDriver, m_tParams.m_sQueryRange.cstr() ) )
 				LOC_MYSQL_ERROR ( "mysql_query_range" );
 
 			// fetch min/max
@@ -5612,7 +5603,6 @@ bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 			m_pSqlResult = NULL;
 
 			m_iCurrentID = m_iMinID;
-			m_sQuery = sphDup ( pParams->m_sQuery );
 
 			// issue query
 			if ( !RunQueryStep () )
@@ -5625,11 +5615,13 @@ bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 			////////////////
 
 			assert ( !m_pSqlResult );
-			if ( mysql_query ( &m_tSqlDriver, pParams->m_sQuery ) )
+			if ( mysql_query ( &m_tSqlDriver, m_tParams.m_sQuery.cstr() ) )
 				LOC_MYSQL_ERROR ( "mysql_query" );
 			m_pSqlResult = mysql_use_result ( &m_tSqlDriver );
 			if ( !m_pSqlResult )
 				LOC_MYSQL_ERROR ( "mysql_use_result" );
+		
+			m_tParams.m_iRangeStep = 0;
 		}
 		break;
 	}
@@ -5645,11 +5637,10 @@ bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 	// some post-query setup
 	int iFields = mysql_num_fields ( m_pSqlResult ) - 1;
 	m_iFieldCount = iFields; // will be changed by GetColumnIndex below
-	m_sQueryPost = sphDup ( pParams->m_sQueryPost );
 
 	// group/date columns
-	m_iGroupColumn = GetColumnIndex ( pParams->m_sGroupColumn );
-	m_iDateColumn = GetColumnIndex ( pParams->m_sDateColumn );
+	m_iGroupColumn = GetColumnIndex ( m_tParams.m_sGroupColumn.cstr() );
+	m_iDateColumn = GetColumnIndex ( m_tParams.m_sDateColumn.cstr() );
 
 	// check it
 	if ( m_iFieldCount>SPH_MAX_FIELD_COUNT )
@@ -5668,7 +5659,6 @@ bool CSphSource_MySQL::Init ( CSphSourceParams_MySQL * pParams )
 	}
 	assert ( j==m_iFieldCount );
 
-	#undef LOC_FIX_NULL
 	#undef LOC_ERROR
 	#undef LOC_MYSQL_ERROR
 
@@ -5698,9 +5688,9 @@ BYTE ** CSphSource_MySQL::NextDocument ()
 		}
 
 		// ok, we're over
-		while ( m_sQueryPost && strlen(m_sQueryPost) )
+		while ( !m_tParams.m_sQueryPost.IsEmpty() )
 		{
-			if ( mysql_query ( &m_tSqlDriver, m_sQueryPost ) )
+			if ( mysql_query ( &m_tSqlDriver, m_tParams.m_sQueryPost.cstr() ) )
 			{
 				fprintf ( stdout, "WARNING: mysql_query_post: %s\n", mysql_error ( &m_tSqlDriver ) );
 				break;
@@ -5752,16 +5742,10 @@ BYTE ** CSphSource_MySQL::NextDocument ()
 
 void CSphSource_MySQL::PostIndex ()
 {
-	if ( !m_pParams
-		|| !m_pParams->m_sQueryPostIndex
-		|| !strlen(m_pParams->m_sQueryPostIndex)
-		|| !m_iMaxFetchedID )
-	{
+	if ( m_tParams.m_sQueryPostIndex.IsEmpty() || !m_iMaxFetchedID )
 		return;
-	}
 
 	assert ( !m_bSqlConnected );
-	assert ( m_pParams );
 
 	#define LOC_MYSQL_ERROR(_msg) { sError = _msg; break; }
 
@@ -5770,13 +5754,13 @@ void CSphSource_MySQL::PostIndex ()
 	{
 		mysql_init ( &m_tSqlDriver );
 		if ( !mysql_real_connect ( &m_tSqlDriver,
-			m_pParams->m_sHost, m_pParams->m_sUser, m_pParams->m_sPass, m_pParams->m_sDB,
-			m_pParams->m_iPort, m_pParams->m_sUsock, 0 ) )
+			m_tParams.m_sHost.cstr(), m_tParams.m_sUser.cstr(), m_tParams.m_sPass.cstr(), m_tParams.m_sDB.cstr(),
+			m_tParams.m_iPort, m_tParams.m_sUsock.cstr(), 0 ) )
 		{
 			LOC_MYSQL_ERROR ( "mysql_real_connect" );
 		}
 
-		char * sQuery = sphStrMacro ( m_pParams->m_sQueryPostIndex, "$maxid", m_iMaxFetchedID );
+		char * sQuery = sphStrMacro ( m_tParams.m_sQueryPostIndex.cstr(), "$maxid", m_iMaxFetchedID );
 		int iRes = mysql_query ( &m_tSqlDriver, sQuery );
 		delete [] sQuery;
 
@@ -5860,7 +5844,7 @@ int CSphSource_XMLPipe::Next ()
 
 		if ( !ScanInt ( "id", &m_tDocInfo.m_iDocID ) )
 			return 0;
-		m_iStats.m_iTotalDocuments++;
+		m_tStats.m_iTotalDocuments++;
 
 		if ( !ScanInt ( "group", &m_tDocInfo.m_iGroupID ) )
 			return 0;
@@ -5981,7 +5965,7 @@ bool CSphSource_XMLPipe::UpdateBuffer ()
 		memmove ( m_sBuffer, m_pBuffer, iLeft );
 
 	size_t iLen = fread ( &m_sBuffer [ iLeft ], 1, sizeof(m_sBuffer)-iLeft, m_pPipe );
-	m_iStats.m_iTotalBytes += iLen;
+	m_tStats.m_iTotalBytes += iLen;
 
 	m_pBuffer = m_sBuffer;
 	m_pBufferEnd = m_pBuffer+iLeft+iLen;

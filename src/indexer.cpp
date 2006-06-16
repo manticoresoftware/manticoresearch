@@ -293,10 +293,146 @@ void ShowProgress ( const CSphIndexProgress * pProgress )
 	fflush ( stdout );
 }
 
+/////////////////////////////////////////////////////////////////////////////
+
+#define LOC_CHECK(_hash,_key,_msg,_add) \
+	if (!( _hash.Exists ( _key ) )) \
+	{ \
+		fprintf ( stdout, "ERROR: key '%s' not found " _msg "\n", _key, _add ); \
+		return NULL; \
+	}
+
+
+#define LOC_GETS(_arg,_key) \
+	if ( hSource.Exists(_key) ) \
+		_arg = hSource[_key];
+
+
+#define LOC_GETI(_arg,_key) \
+	if ( hSource.Exists(_key) && hSource[_key].intval() ) \
+		_arg = hSource[_key].intval();
+
+
+#if USE_PGSQL
+CSphSource * SpawnSourcePgSQL ( const CSphConfigSection & hSource, const char * sSourceName )
+{
+	assert ( hSource["type"]=="pgsql" );
+
+	LOC_CHECK ( hSource, "sql_host", "in source '%s'", sSourceName );
+	LOC_CHECK ( hSource, "sql_user", "in source '%s'", sSourceName );
+	LOC_CHECK ( hSource, "sql_pass", "in source '%s'", sSourceName );
+	LOC_CHECK ( hSource, "sql_db", "in source '%s'", sSourceName );
+	LOC_CHECK ( hSource, "sql_query", "in source '%s'", sSourceName );
+
+	CSphSourceParams_PgSQL tParams;
+	LOC_GETS ( tParams.m_sQuery,			"sql_query" );
+	LOC_GETS ( tParams.m_sQueryPre,			"sql_query_pre" );
+	LOC_GETS ( tParams.m_sQueryPost,		"sql_query_post" );
+	LOC_GETS ( tParams.m_sQueryRange,		"sql_query_range" );
+	LOC_GETS ( tParams.m_sQueryPostIndex,	"sql_query_post_index" );
+	LOC_GETS ( tParams.m_sGroupColumn,		"sql_group_column" );
+	LOC_GETS ( tParams.m_sDateColumn,		"sql_date_column" );
+	LOC_GETS ( tParams.m_sHost,				"sql_host" );
+	LOC_GETS ( tParams.m_sUser,				"sql_user" );
+	LOC_GETS ( tParams.m_sPass,				"sql_pass" );
+	LOC_GETS ( tParams.m_sDB,				"sql_db" );
+	LOC_GETS ( tParams.m_sClientEncoding,	"sql_client_encoding" );
+	LOC_GETS ( tParams.m_sPort,				"sql_port");
+	LOC_GETI ( tParams.m_iRangeStep,		"sql_range_step" );
+
+	CSphSource_PgSQL * pSrcPgSQL = new CSphSource_PgSQL ();
+	if ( !pSrcPgSQL->Init ( &tParams ) )
+		SafeDelete ( pSrcPgSQL );
+	return pSrcPgSQL;
+}
+#endif // USE_PGSQL
+
+
+#if USE_MYSQL
+CSphSource * SpawnSourceMySQL ( const CSphConfigSection & hSource, const char * sSourceName )
+{
+	assert ( hSource["type"]=="mysql" );
+
+	LOC_CHECK ( hSource, "sql_host", "in source '%s'", sSourceName );
+	LOC_CHECK ( hSource, "sql_user", "in source '%s'", sSourceName );
+	LOC_CHECK ( hSource, "sql_pass", "in source '%s'", sSourceName );
+	LOC_CHECK ( hSource, "sql_db", "in source '%s'", sSourceName );
+	LOC_CHECK ( hSource, "sql_query", "in source '%s'", sSourceName );
+
+	CSphSourceParams_MySQL tParams;
+	LOC_GETS ( tParams.m_sQuery,			"sql_query" );
+	LOC_GETS ( tParams.m_sQueryPre,			"sql_query_pre" );
+	LOC_GETS ( tParams.m_sQueryPost,		"sql_query_post" );
+	LOC_GETS ( tParams.m_sQueryRange,		"sql_query_range" );
+	LOC_GETS ( tParams.m_sQueryPostIndex,	"sql_query_post_index" );
+	LOC_GETS ( tParams.m_sGroupColumn,		"sql_group_column" );
+	LOC_GETS ( tParams.m_sDateColumn,		"sql_date_column" );
+	LOC_GETS ( tParams.m_sHost,				"sql_host" );
+	LOC_GETS ( tParams.m_sUser,				"sql_user" );
+	LOC_GETS ( tParams.m_sPass,				"sql_pass" );
+	LOC_GETS ( tParams.m_sDB,				"sql_db" );
+	LOC_GETS ( tParams.m_sUsock,			"sql_sock" );
+	LOC_GETI ( tParams.m_iPort,				"sql_port" );
+	LOC_GETI ( tParams.m_iRangeStep,		"sql_range_step" );
+
+	CSphSource_MySQL * pSrcMySQL = new CSphSource_MySQL ();
+	if ( !pSrcMySQL->Init ( tParams ) )
+		SafeDelete ( pSrcMySQL );
+	return pSrcMySQL;
+}
+#endif // USE_MYSQL
+
+
+CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char * sSourceName )
+{
+	assert ( hSource["type"]=="xmlpipe" );
+	
+	LOC_CHECK ( hSource, "xmlpipe_command", "in source '%s'.", sSourceName );
+
+	CSphSource_XMLPipe * pSrcXML = new CSphSource_XMLPipe ();
+	if ( !pSrcXML->Init ( hSource["xmlpipe_command"].cstr() ) )
+	{
+		fprintf ( stdout, "FATAL: CSphSource_XMLPipe: unable to popen '%s'.\n", hSource["xmlpipe_command"].cstr() );
+		SafeDelete ( pSrcXML );
+	}
+	return pSrcXML;
+}
+
+
+CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSourceName )
+{
+	if ( !hSource.Exists ( "type" ) )
+	{
+		fprintf ( stdout, "ERROR: source '%s': type not found; skipping.\n", sSourceName );
+		return NULL;
+	}
+
+	#if USE_PGSQL
+	if ( hSource["type"]=="pgsql")
+		return SpawnSourcePgSQL ( hSource, sSourceName );
+	#endif
+
+	#if USE_MYSQL
+	if ( hSource["type"]=="mysql")
+		return SpawnSourceMySQL ( hSource, sSourceName );
+	#endif
+
+	if ( hSource["type"]=="xmlpipe")
+		return SpawnSourceXMLPipe ( hSource, sSourceName );
+
+	fprintf ( stdout, "ERROR: source '%s': unknown type '%s'; skipping.\n", sSourceName,
+		hSource["type"].cstr() );
+	return NULL;
+}
+
+#undef LOC_CHECK
+#undef LOC_GETS
+#undef LOC_GETI
+
+/////////////////////////////////////////////////////////////////////////////
 
 int main ( int argc, char ** argv )
 {
-	CSphSource * pSource = NULL;
 	const char * sConfName = "sphinx.conf";
 	const char * sBuildStops = NULL;
 	int iTopStops = 100;
@@ -513,16 +649,8 @@ int main ( int argc, char ** argv )
 
 		// check config
 		CONF_CHECK ( hIndex, "path", "in index '%s'.", sIndexName );
-		CONF_CHECK ( hIndex, "source", "in index '%s'.", sIndexName );
-		CONF_CHECK ( hConf["source"], hIndex["source"].cstr(), "in config file '%s'.", sConfName );
 
-		const CSphConfigSection & hSource = hConf["source"][ hIndex["source"] ];
-		CSphString & sSourceName = hIndex["source"];
-
-		/////////////////////////
 		// check index lock file
-		/////////////////////////
-	
 		if ( !bRotate && !sBuildStops )
 		{
 			char sLockFile [ SPH_MAX_FILENAME_LEN ];
@@ -538,153 +666,9 @@ int main ( int argc, char ** argv )
 			}
 		}
 
-		////////////////////
-		// spawn datasource
-		////////////////////
-
-		if ( !hSource.Exists ( "type" ) )
-		{
-			fprintf ( stdout, "ERROR: source '%s': type not found.\n", sSourceName.cstr() );
-			continue;
-		}
-
-		#if USE_PGSQL
-		if ( hSource["type"]=="pgsql" )
-		{
-			CONF_CHECK ( hSource, "sql_host", "in source '%s'", hIndex["source"].cstr() );
-			CONF_CHECK ( hSource, "sql_user", "in source '%s'", hIndex["source"].cstr() );
-			CONF_CHECK ( hSource, "sql_pass", "in source '%s'", hIndex["source"].cstr() );
-			CONF_CHECK ( hSource, "sql_db", "in source '%s'", hIndex["source"].cstr() );
-			CONF_CHECK ( hSource, "sql_query", "in source '%s'", hIndex["source"].cstr() );
-
-			#define LOC_GET(_key) \
-				hSource.Exists(_key) ? hSource[_key].cstr() : NULL;
-
-			CSphSourceParams_PgSQL tParams;
-
-			tParams.m_sQuery			= LOC_GET ( "sql_query" );
-			tParams.m_sQueryPre			= LOC_GET ( "sql_query_pre" );
-			tParams.m_sQueryPost		= LOC_GET ( "sql_query_post" );
-			tParams.m_sQueryRange		= LOC_GET ( "sql_query_range" );
-			tParams.m_sQueryPostIndex	= LOC_GET ( "sql_query_post_index" );
-			tParams.m_sGroupColumn		= LOC_GET ( "sql_group_column" );
-			tParams.m_sDateColumn		= LOC_GET ( "sql_date_column" );
-			tParams.m_sHost				= LOC_GET ( "sql_host" );
-			tParams.m_sUser				= LOC_GET ( "sql_user" );
-			tParams.m_sPass				= LOC_GET ( "sql_pass" );
-			tParams.m_sDB				= LOC_GET ( "sql_db" );
-			tParams.m_sClientEncoding	= LOC_GET ( "sql_client_encoding" );
-			tParams.m_sPort				= LOC_GET ( "sql_port");
-
-			#undef LOC_GET
-			#define LOC_GET(_arg,_key) \
-				if ( hSource.Exists(_key) && hSource[_key].intval() ) \
-					_arg = hSource[_key].intval();
-
-			LOC_GET ( tParams.m_iRangeStep,	"sql_range_step" );
-
-			#undef LOC_GET
-
-			CSphSource_PgSQL * pSrcPgSQL = new CSphSource_PgSQL ();
-			assert ( pSrcPgSQL );
-
-			if ( !pSrcPgSQL->Init ( &tParams ) )
-			{
-				SafeDelete ( pSrcPgSQL );
-				return 1;
-			}
-
-			pSource = pSrcPgSQL;
-		}
-		#endif
-
-		#if USE_MYSQL
-		if ( hSource["type"]=="mysql" )
-		{
-			CONF_CHECK ( hSource, "sql_host", "in source '%s'", hIndex["source"].cstr() );
-			CONF_CHECK ( hSource, "sql_user", "in source '%s'", hIndex["source"].cstr() );
-			CONF_CHECK ( hSource, "sql_pass", "in source '%s'", hIndex["source"].cstr() );
-			CONF_CHECK ( hSource, "sql_db", "in source '%s'", hIndex["source"].cstr() );
-			CONF_CHECK ( hSource, "sql_query", "in source '%s'", hIndex["source"].cstr() );
-
-			#define LOC_GET(_key) \
-				hSource.Exists(_key) ? hSource[_key].cstr() : NULL;
-
-			CSphSourceParams_MySQL tParams;
-
-			tParams.m_sQuery			= LOC_GET ( "sql_query" );
-			tParams.m_sQueryPre			= LOC_GET ( "sql_query_pre" );
-			tParams.m_sQueryPost		= LOC_GET ( "sql_query_post" );
-			tParams.m_sQueryRange		= LOC_GET ( "sql_query_range" );
-			tParams.m_sQueryPostIndex	= LOC_GET ( "sql_query_post_index" );
-			tParams.m_sGroupColumn		= LOC_GET ( "sql_group_column" );
-			tParams.m_sDateColumn		= LOC_GET ( "sql_date_column" );
-			tParams.m_sHost				= LOC_GET ( "sql_host" );
-			tParams.m_sUser				= LOC_GET ( "sql_user" );
-			tParams.m_sPass				= LOC_GET ( "sql_pass" );
-			tParams.m_sDB				= LOC_GET ( "sql_db" );
-			tParams.m_sUsock			= LOC_GET ( "sql_sock" );
-
-			#undef LOC_GET
-			#define LOC_GET(_arg,_key) \
-				if ( hSource.Exists(_key) && hSource[_key].intval() ) \
-					_arg = hSource[_key].intval();
-
-			LOC_GET ( tParams.m_iPort,		"sql_port" );
-			LOC_GET ( tParams.m_iRangeStep,	"sql_range_step" );
-
-			#undef LOC_GET
-
-			CSphSource_MySQL * pSrcMySQL = new CSphSource_MySQL ();
-			assert ( pSrcMySQL );
-
-			if ( !pSrcMySQL->Init ( &tParams ) )
-			{
-				SafeDelete ( pSrcMySQL );
-				return 1;
-			}
-
-			pSource = pSrcMySQL;
-		}
-		#endif
-
-		if ( hSource["type"]=="xmlpipe" )
-		{
-			CONF_CHECK ( hSource, "xmlpipe_command", "in source '%s'.", hIndex["source"].cstr() );
-
-			CSphSource_XMLPipe * pSrcXML = new CSphSource_XMLPipe ();
-			if ( !pSrcXML->Init ( hSource["xmlpipe_command"].cstr() ) )
-			{
-				fprintf ( stdout, "FATAL: CSphSource_XMLPipe: unable to popen '%s'.\n", hSource["xmlpipe_command"].cstr() );
-				SafeDelete ( pSrcXML );
-				return 1;
-			}
-
-			pSource = pSrcXML;
-		}
-
-		///////////////////////////////////
-		// check and configure data source
-		///////////////////////////////////
-
-		if ( !pSource )
-			sphDie ( "FATAL: unknown data source type '%s' in source '%s'\n.", hSource["type"].cstr(), hIndex["source"].cstr() );
-
-		// strip_html, index_html_attrs
-		if ( hSource.Exists ( "strip_html" ) )
-		{
-			const char * sAttrs = NULL;
-			if ( hSource["strip_html"].intval() )
-			{
-				if ( hSource.Exists ( "index_html_attrs" ) )
-					sAttrs = hSource["index_html_attrs"].cstr();
-				if ( !sAttrs )
-					sAttrs = "";
-			}
-			sAttrs = pSource->SetStripHTML ( sAttrs );
-			if ( sAttrs )
-				sphDie ( "FATAL: error in section [indexer] key 'index_html_attrs' syntax near '%s'.", sAttrs );
-		}
+		///////////////////
+		// spawn tokenizer
+		///////////////////
 
 		// charset_type
 		ISphTokenizer * pTokenizer = NULL;
@@ -701,7 +685,7 @@ int main ( int argc, char ** argv )
 
 			} else
 				sphDie ( "FATAL: unknown charset type '%s' in index '%s'.\n",
-					hIndex["charset_type"].cstr(), sIndexName );
+				hIndex["charset_type"].cstr(), sIndexName );
 		} else
 		{
 			pTokenizer = sphCreateSBCSTokenizer ();
@@ -713,7 +697,51 @@ int main ( int argc, char ** argv )
 			if ( !pTokenizer->SetCaseFolding ( hIndex["charset_table"].cstr() ) )
 				sphDie ( "FATAL: failed to parse 'charset_table' in index '%s', fix your configuration.\n", sIndexName );
 
-		pSource->SetTokenizer ( pTokenizer );
+		/////////////////////
+		// spawn datasources
+		/////////////////////
+
+		CSphVector < CSphSource * > dSources;
+
+		for ( CSphVariant * pSourceName = hIndex("source"); pSourceName; pSourceName = pSourceName->m_pNext )
+		{
+			if ( !hConf["source"]( pSourceName->cstr() ) )
+			{
+				fprintf ( stdout, "ERROR: index '%s': source '%s' not found.\n", sIndexName, pSourceName->cstr() );
+				continue;
+			}
+			const CSphConfigSection & hSource = hConf["source"][ pSourceName->cstr() ];
+
+			CSphSource * pSource = SpawnSource ( hSource, pSourceName->cstr() );
+			if ( !pSource )
+				continue;
+
+			// strip_html, index_html_attrs
+			if ( hSource("strip_html") )
+			{
+				const char * sAttrs = NULL;
+				if ( hSource["strip_html"].intval() )
+				{
+					if ( hSource("index_html_attrs") )
+						sAttrs = hSource["index_html_attrs"].cstr();
+					if ( !sAttrs )
+						sAttrs = "";
+				}
+				sAttrs = pSource->SetStripHTML ( sAttrs );
+				if ( sAttrs )
+					fprintf ( stdout, "ERROR: source '%s': syntax error in 'index_html_attrs' near '%s'.\n",
+						pSourceName->cstr(), sAttrs );
+			}
+
+			pSource->SetTokenizer ( pTokenizer );
+			dSources.Add ( pSource );
+		}
+
+		if ( !dSources.GetLength() )
+		{
+			fprintf ( stdout, "ERROR: index '%s': no valid sources configured; skipping.\n", sIndexName );
+			continue;
+		}
 
 		///////////
 		// do work
@@ -733,15 +761,13 @@ int main ( int argc, char ** argv )
 				fflush ( stdout );
 			}
 
-			CSphStopwordBuilderDict * pDict = new CSphStopwordBuilderDict ();
-			assert ( pDict );
-
-			pSource->SetDict ( pDict );
-			while ( pSource->Next() );
-
-			pDict->Save ( sBuildStops, iTopStops, bBuildFreqs );
-
-			SafeDelete ( pDict );
+			CSphStopwordBuilderDict tDict;
+			ARRAY_FOREACH ( i, dSources )
+			{
+				dSources[i]->SetDict ( &tDict );
+				while ( dSources[i]->Next() );
+			}
+			tDict.Save ( sBuildStops, iTopStops, bBuildFreqs );
 
 		} else
 		{
@@ -781,7 +807,7 @@ int main ( int argc, char ** argv )
 			assert ( pIndex );
 
 			pIndex->SetProgressCallback ( ShowProgress );
-			if ( pIndex->Build ( pDict, pSource, iMemLimit ) )
+			if ( pIndex->Build ( pDict, dSources, iMemLimit ) )
 			{
 				// if searchd is not running, we're good
 				if ( !bRotate )
@@ -833,20 +859,29 @@ int main ( int argc, char ** argv )
 		}
 
 		// trip report
-		const CSphSourceStats * pStats = pSource->GetStats ();
 		fTime = sphLongTimer () - fTime;
-
 		if ( !g_bQuiet )
 		{
+			fTime = Max ( fTime, 0.01f );
+
+			CSphSourceStats tTotal;
+			ARRAY_FOREACH ( i, dSources )
+			{
+				const CSphSourceStats & tSource = dSources[i]->GetStats();
+				tTotal.m_iTotalDocuments += tSource.m_iTotalDocuments;
+				tTotal.m_iTotalBytes += tSource.m_iTotalBytes;
+			}
+
 			fprintf ( stdout, "total %d docs, " I64FMT " bytes\n",
-				pStats->m_iTotalDocuments, pStats->m_iTotalBytes );
+				tTotal.m_iTotalDocuments, tTotal.m_iTotalBytes );
 
 			fprintf ( stdout, "total %.3f sec, %.2f bytes/sec, %.2f docs/sec\n",
-				fTime, pStats->m_iTotalBytes/fTime, pStats->m_iTotalDocuments/fTime );
+				fTime, tTotal.m_iTotalBytes/fTime, tTotal.m_iTotalDocuments/fTime );
 		}
 
 		// cleanup and go on
-		SafeDelete ( pSource );
+		ARRAY_FOREACH ( i, dSources )
+			SafeDelete ( dSources[i] );
 		SafeDelete ( pTokenizer );
 	}
 

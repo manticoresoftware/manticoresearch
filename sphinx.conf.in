@@ -188,7 +188,11 @@ source src1stripped : src1
 index test1
 {
 	# which document source to index
-	# MUST be defined
+	# at least one MUST be defined
+	#
+	# multiple sources may be specified; to do so, just add more
+	# "source = NAME" lines. in this case, ALL the document IDs
+	# in ALL the specified sources MUST be unique
 	source			= src1
 
 	# this is path and index file name without extension
@@ -282,7 +286,7 @@ index dist1
 	local				= test1stemmed
 
 	# remote agent
-	# there can be many remote agents configured
+	# multiple remote agents may be specified
 	# syntax is 'hostname:port:index1,[index2[,...]]
 	agent				= localhost:3313:remote1
 	agent				= localhost:3314:remote2,remote3

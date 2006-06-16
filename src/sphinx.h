@@ -45,7 +45,6 @@
 	#include <mysql.h>
 #endif // USE_MYSQL
 
-
 #if USE_WINDOWS
 	#define WIN32_LEAN_AND_MEAN
 	#include <windows.h>
@@ -345,7 +344,7 @@ public:
 	void								SetTokenizer ( ISphTokenizer * pTokenizer );
 
 	/// get stats
-	virtual const CSphSourceStats *		GetStats ();
+	virtual const CSphSourceStats &		GetStats ();
 
 public:
 	/// document getter
@@ -365,7 +364,7 @@ public:
 protected:
 	ISphTokenizer *						m_pTokenizer;	///< my tokenizer
 	CSphDict *							m_pDict;		///< my dict
-	CSphSourceStats						m_iStats;		///< my stats
+	CSphSourceStats						m_tStats;		///< my stats
 	bool								m_bStripHTML;	///< whether to strip HTML
 	CSphHTMLStripper *					m_pStripper;	///< my HTML stripper
 };
@@ -416,25 +415,25 @@ struct CSphSource_Text : CSphSource_Document
 struct CSphSourceParams_PgSQL
 {
 	// query params
-	const char *	m_sQuery;
-	const char *	m_sQueryPre;
-	const char *	m_sQueryPost;
-	const char *	m_sQueryRange;
-	const char *	m_sQueryPostIndex;
-	const char *	m_sGroupColumn;
-	const char *	m_sDateColumn;
-	int				m_iRangeStep;
+	CSphString	m_sQuery;
+	CSphString	m_sQueryPre;
+	CSphString	m_sQueryPost;
+	CSphString	m_sQueryRange;
+	CSphString	m_sQueryPostIndex;
+	CSphString	m_sGroupColumn;
+	CSphString	m_sDateColumn;
+	int			m_iRangeStep;
 
 	// connection params
-	const char *	m_sHost;
-	const char *	m_sUser;
-	const char *	m_sPass;
-	const char *	m_sDB;
-	const char *	m_sPort;	
-	const char *	m_sClientEncoding;
+	CSphString	m_sHost;
+	CSphString	m_sUser;
+	CSphString	m_sPass;
+	CSphString	m_sDB;
+	CSphString	m_sPort;	
+	CSphString	m_sClientEncoding;
 	
 	/// ctor which sets defaults
-					CSphSourceParams_PgSQL ();
+				CSphSourceParams_PgSQL ();
 };
 
 
@@ -443,19 +442,17 @@ struct CSphSourceParams_PgSQL
 struct CSphSource_PgSQL : CSphSource_Document
 {
 						CSphSource_PgSQL ();
-	virtual				~CSphSource_PgSQL ();
+	virtual				~CSphSource_PgSQL () {}
 
-	bool				Init ( CSphSourceParams_PgSQL * pParams );
+	bool				Init ( const CSphSourceParams_PgSQL & pParams );
 	virtual BYTE **		NextDocument ();
 	virtual void		PostIndex ();
 
 protected:
 	PGresult * 			m_pSqlResult;	///< postgresql execution restult context
 	PGconn *			m_tSqlDriver;	///< postgresql connection context
-	char *				m_sSqlDSN;
+	CSphString			m_sSqlDSN;
 
-	char *				m_sQuery;		///< main fetch query
-	char *				m_sQueryPost;	///< post-fetch query
 	int					m_iGroupColumn;	///< group_id column number
 	int					m_iDateColumn;	///< date column number
 
@@ -465,7 +462,6 @@ protected:
 	BYTE *				m_dFields [ SPH_MAX_FIELD_COUNT ];
 	int					m_dRemapFields [ SPH_MAX_FIELD_COUNT ];
 
-	int					m_iRangeStep;	///< ID range step, -1 if not using ranges
 	int					m_iMinID;		///< grand min ID
 	int					m_iMaxID;		///< grand max ID
 	int					m_iCurrentID;	///< current min ID
@@ -473,7 +469,7 @@ protected:
 	DWORD				m_iMaxFetchedID;///< max actually fetched ID
 
 	bool						m_bSqlConnected;
-	CSphSourceParams_PgSQL *	m_pParams;
+	CSphSourceParams_PgSQL		m_tParams;
 
 	static const int			MACRO_COUNT = 2;
 	static const char * const	MACRO_VALUES [ MACRO_COUNT ];
@@ -490,22 +486,22 @@ protected:
 struct CSphSourceParams_MySQL
 {
 	// query params
-	const char *	m_sQuery;
-	const char *	m_sQueryPre;
-	const char *	m_sQueryPost;
-	const char *	m_sQueryRange;
-	const char *	m_sQueryPostIndex;
-	const char *	m_sGroupColumn;
-	const char *	m_sDateColumn;
-	int				m_iRangeStep;
+	CSphString	m_sQuery;
+	CSphString	m_sQueryPre;
+	CSphString	m_sQueryPost;
+	CSphString	m_sQueryRange;
+	CSphString	m_sQueryPostIndex;
+	CSphString	m_sGroupColumn;
+	CSphString	m_sDateColumn;
+	int			m_iRangeStep;
 
 	// connection params
-	const char *	m_sHost;
-	const char *	m_sUser;
-	const char *	m_sPass;
-	const char *	m_sDB;
-	int				m_iPort;
-	const char *	m_sUsock;
+	CSphString	m_sHost;
+	CSphString	m_sUser;
+	CSphString	m_sPass;
+	CSphString	m_sDB;
+	int			m_iPort;
+	CSphString	m_sUsock;
 
 	/// ctor which sets defaults
 					CSphSourceParams_MySQL ();
@@ -517,9 +513,9 @@ struct CSphSourceParams_MySQL
 struct CSphSource_MySQL : CSphSource_Document
 {
 						CSphSource_MySQL ();
-	virtual				~CSphSource_MySQL ();
+	virtual				~CSphSource_MySQL () {}
 
-	bool				Init ( CSphSourceParams_MySQL * pParams );
+	bool				Init ( const CSphSourceParams_MySQL & tParams );
 	virtual BYTE **		NextDocument ();
 	virtual void		PostIndex ();
 
@@ -527,17 +523,14 @@ protected:
 	MYSQL_RES *			m_pSqlResult;
 	MYSQL_ROW			m_tSqlRow;
 	MYSQL				m_tSqlDriver;
-	char *				m_sSqlDSN;
+	CSphString			m_sSqlDSN;
 
-	char *				m_sQuery;		///< main fetch query
-	char *				m_sQueryPost;	///< post-fetch query
 	int					m_iGroupColumn;	///< group_id column number
 	int					m_iDateColumn;	///< date column number
 
 	BYTE *				m_dFields [ SPH_MAX_FIELD_COUNT ];
 	int					m_dRemapFields [ SPH_MAX_FIELD_COUNT ];
 
-	int					m_iRangeStep;	///< ID range step, -1 if not using ranges
 	int					m_iMinID;		///< grand min ID
 	int					m_iMaxID;		///< grand max ID
 	int					m_iCurrentID;	///< current min ID
@@ -545,7 +538,7 @@ protected:
 	DWORD				m_iMaxFetchedID;///< max actually fetched ID
 
 	bool						m_bSqlConnected;
-	CSphSourceParams_MySQL *	m_pParams;
+	CSphSourceParams_MySQL		m_tParams;
 
 	static const int			MACRO_COUNT = 2;
 	static const char * const	MACRO_VALUES [ MACRO_COUNT ];
@@ -774,7 +767,7 @@ public:
 	virtual	void				SetProgressCallback ( ProgressCallback_t * pfnProgress ) { m_pProgress = pfnProgress; }
 
 public:
-	virtual int					Build ( CSphDict * dict, CSphSource * source, int iMemoryLimit ) = 0;
+	virtual int					Build ( CSphDict * dict, const CSphVector < CSphSource * > & dSources, int iMemoryLimit ) = 0;
 	virtual CSphQueryResult *	Query ( CSphDict * dict, CSphQuery * pQuery ) = 0;
 	virtual bool				QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchQueue * pTop ) = 0;
 

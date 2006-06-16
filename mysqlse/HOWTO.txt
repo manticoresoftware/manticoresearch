@@ -87,7 +87,7 @@ mysql> show engines;
    
    Available params:
    query  - text of query
-   mode   - search mode; 0 - MATCH_ALL (default) ; 1 - MATCH_ANY; 2 - MATCH_PHRASE
+   mode   - search mode; 0 - MATCH_ALL (default) ; 1 - MATCH_ANY; 2 - MATCH_PHRASE; 3 - MATCH_BOOLEAN
    sort   - sort mode; 0 - RELEVANCE (default) ; 1 - DATE DESC; 2 - DATE ASC; 3 - TIME SEGMENTS
    limit  - limit of output records (default 20)
    offset - start from record from offset (default 0)

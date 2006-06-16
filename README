@@ -1,8 +1,9 @@
 Sphinx 0.9.6
 =============
 
-Copyright (c) 2001-2006, Andrew Aksyonoff
-Distributed under GPL; see the file COPYING for details
+Copyright (c) 2001-2006, Andrew Aksyonoff <shodan(at)shodan.ru>
+Distributed under GPL; see the file COPYING for details.
+See below for commerical licensing questions.
 
 Overview
 ---------
@@ -27,6 +28,7 @@ Features
 - high scalability (upto 100 GB of text, upto 100 M documents on a single CPU);
 - distributed searching;
 - supports MySQL natively (MyISAM and InnoDB tables are both supported);
+- supports PostgreSQL natively;
 - supports phrase searching;
 - supports phrase proximity ranking, providing very good relevance;
 - supports English and Russian stemming;
@@ -34,13 +36,14 @@ Features
 - supports document groups;
 - supports stopwords;
 - supports "match all", "match phrase" and "match any" search modes;
+- supports boolean queries;
 - generic XML interface which grealy simplifies custom integration.
 
 Where to get it?
 -----------------
 
 Sphinx can be obtained through official project website at
-http://shodan.ru/projects/sphinx/
+http://sphinxsearch.com/
 
 How do I use it?
 -----------------
@@ -66,8 +69,18 @@ along with this program; if not, visit http://www.gnu.org/ or write
 to the Free Software Foundation, Inc., 59 Temple Place, Suite 330,
 Boston, MA 02111-1307 USA
 
-If you don't want to be restricted by GNU GPL terms,
-please contact the author through http://shodan.ru/contact/
-to obtain a commercial license.
+Commercial licensing
+---------------------
+
+If you don't want to be bound by GNU GPL terms (for instance,
+if you would like to embed Sphinx in your software, but would not
+like to disclose its source code), please contact me to obtain
+a commercial license.
+
+Contacts
+---------
+
+E-mail: shodan(at)shodan.ru
+Web: http://shodan.ru/contact/
 
 --eof--

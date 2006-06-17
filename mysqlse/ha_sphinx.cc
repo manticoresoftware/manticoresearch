@@ -579,8 +579,7 @@ int ha_sphinx::do_open_connection()
 	  if (!hp)
 	  { 
 		  my_gethostbyname_r_free();
-		  push_warning(table->in_use, MYSQL_ERROR::WARN_LEVEL_WARN,
-				  ER_CONNECT_TO_FOREIGN_DATA_SOURCE, "Can't resolve hostname");
+		  my_error(ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), "Can't resolve hostname");
 		  DBUG_RETURN(1);
 	  }
 	  memcpy(&sa.sin_addr, hp->h_addr,
@@ -593,24 +592,21 @@ int ha_sphinx::do_open_connection()
   if ( (fd_socket = socket(AF_INET, SOCK_STREAM, 0)) < 0)
   {
 	  DGPRINT("%s", "client: can't open stream socket\n");
-          push_warning(table->in_use, MYSQL_ERROR::WARN_LEVEL_WARN,
-                       ER_CONNECT_TO_FOREIGN_DATA_SOURCE, "Can't open client socket");
+	  my_error(ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), "Can't open client socket");
           DBUG_RETURN(1);
   }
 
   if (connect(fd_socket, (struct sockaddr *) &sa, sizeof(sa)) < 0)
   {
 	  DGPRINT("%s","client: can't connect to sphinx\n");
-          push_warning(table->in_use, MYSQL_ERROR::WARN_LEVEL_WARN,
-                       ER_CONNECT_TO_FOREIGN_DATA_SOURCE, "Can't connect to sphinx server");
+	  my_error(ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), "Can't connect to sphinx server");
 	  DBUG_RETURN(1);
   }
 
   if (::recv(fd_socket, (char *)&version, sizeof(version), 0) != sizeof(version))
   {
 	  DGPRINT("%s","client: can't get version\n");
-          push_warning(table->in_use, MYSQL_ERROR::WARN_LEVEL_WARN,
-                       ER_CONNECT_TO_FOREIGN_DATA_SOURCE, "Can't get server version");
+	  my_error(ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), "Can't get sphinx server version");
 	  DBUG_RETURN(1);
   }  
 
@@ -618,8 +614,7 @@ int ha_sphinx::do_open_connection()
   if (::send(fd_socket, (char *)&my_version, sizeof(my_version), 0) != sizeof(my_version))
   {
 	  DGPRINT("%s","client: can't send version\n");
-          push_warning(table->in_use, MYSQL_ERROR::WARN_LEVEL_WARN,
-                       ER_CONNECT_TO_FOREIGN_DATA_SOURCE, "Can't send client version");
+	  my_error(ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), "Can't send client version");
 	  DBUG_RETURN(1);
   }
 
@@ -760,7 +755,15 @@ static int fill_temp_query_req(char *field, query_req *req)
      }
      else if (strncmp(field, "mode", flen)==0)
      {
-       req->mode= atoi(fs + 1);
+       // req->mode= atoi(fs + 1);
+       req->mode= 0;
+       if (strcmp(fs + 1, "any") == 0)
+         req->mode= 1;
+       else if (strcmp(fs + 1, "phrase") == 0)
+         req->mode= 2;
+       else if (strcmp(fs + 1, "boolean") == 0)	 
+         req->mode= 3;
+       	 
      }
      else if (strncmp(field, "sort", flen)==0)
      {
@@ -976,14 +979,15 @@ int ha_sphinx::index_read(byte *buf, const byte *key,
   if (resp_status)
   {
 
-	  ::recv(fd_socket,(char *)&resp_length,4,0);
+	  ::recv(fd_socket, (char *)&resp_length, 4, 0);
 	  resp_length= ntohl(resp_length);
 	  response =(char *)my_malloc(resp_length + 1, MYF(0));
           memset(response, 0, resp_length + 1);
-	  ::recv(fd_socket,response,resp_length,0);
-	  DGPRINT("res length: %d\n",resp_length); 
+	  ::recv(fd_socket, response, resp_length, 0);
+	  DGPRINT("res length: %d\n", resp_length); 
+	  my_error(ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), "SPHINX server returned error");
 
-          fprintf(stderr, "got error: %s\n", response); 
+          //fprintf(stderr, "got error: %s\n", response); 
 	  DBUG_RETURN(HA_ERR_END_OF_FILE);
 
   }  
@@ -1000,8 +1004,7 @@ int ha_sphinx::index_read(byte *buf, const byte *key,
 
   if (!response)
   {
-  	  push_warning(table->in_use, MYSQL_ERROR::WARN_LEVEL_WARN,
-				  ER_CONNECT_TO_FOREIGN_DATA_SOURCE, "Wrong response from SPHINX");
+	  my_error(ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), "Wrong response from SPHINX");
 
 	  DBUG_RETURN(HA_ERR_END_OF_FILE);
   }	  

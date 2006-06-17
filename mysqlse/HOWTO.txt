@@ -37,8 +37,8 @@ CXXLDFLAGS="" \
 gmake -j4
 
 3. Check installation
-   - run mysql
-   - SHOW ENGINES;
+   - run mysql client
+   - execute SHOW ENGINES;
      You should see something like:
      
 mysql> show engines;
@@ -52,17 +52,19 @@ mysql> show engines;
 +------------+----------+----------------------------------------------------------------+
 13 rows in set (0.00 sec)    
 
-   if you SPHINX - YES mysql is ready to use sphinx storage engine
+   if you see SPHINX - YES, mysql is ready to use sphinx storage engine
    
 4. Create SPHINX table:
 
    CREATE TABLE t1 (id INT, gid INT, doctime TIMESTAMP, weigth INT, search VARCHAR(255) NOT NULL, KEY qidx (search))
    ENGINE=SPHINX
-   CONNECTION="sphinx://localhost:3312";
+   CONNECTION="sphinx://localhost:3312/myindex";
    
-   table name doesn't matter, you can use any allowed;
-   column names doesn't matter, you can use any allowed;
-   column types are IMPORTANT especially 3rd column must be TIMESTAMP, and 5th column must be VARCHAR;
+   This statement declares table will access to sphinx daemon on localhost:3312 and will use index "myindex".
+   
+   Table name doesn't matter, you can use any allowed;
+   Column names doesn't matter, you can use any allowed;
+   Column types are IMPORTANT especially 3rd column must be TIMESTAMP, and 5th column must be VARCHAR;
    KEY on 5th column is mandatory;
    
    CONNECTION string:
@@ -70,16 +72,19 @@ mysql> show engines;
    sphinx storage engine will try to connect to sphinx deamon on HOST:PORT and use index INDEXNAME;
    if you skip CONNECTION option - default value is 127.0.0.1:3312/*
    
-   you can change the connection params later by command
+   You can change the connection params later by command
    
    ALTER TABLE t1 CONNECTION="sphinx://NEW_HOST:NEW_PORT/INDEXNAME";
    
    
 5. Query to sphinx daemon
      
+   
    All queries must be like:
    
    SELECT [ column_list | * ] FROM t1 WHERE search = "query_string";
+   
+   (table t1 can be joined with other tables)
  
    query_string has format:
    
@@ -98,15 +103,16 @@ mysql> show engines;
    groups - list of groups for lookup (formar groups=1,3,4,56)
    weights - use this weights for columns (format weights=1,10,4)
    
-   only query is mandatory, so simplest query_string is
+   only query field is mandatory, so simplest query_string is
    
    search="query=sphinx" or even search="sphinx"
    
    more complex examples:
    
-   search="sphinx mysql;mode=1"
-   search="sphinx oracle;offset=100;limit=50"
-   search="sphinx postgresql;groups=1,4,5;index=test1;"
+   search="sphinx mysql;mode=1" - match any of words 
+   search="sphinx oracle;offset=100;limit=50"; - fetch result starting with offset 100 and limit count of records = 50
+   search="sphinx postgresql;groups=1,4,5;index=test1;" - search only in groups 1,4,5 in index test1
+   search="sphinx & postgresql | (soft & java);mode=3" - boolean search
    
 
    example output:
@@ -131,7 +137,6 @@ mysql> show engine sphinx status;
 | SPHINX | words | sphinx:591:1256 soft:11076:15945                | 
 +--------+-------+-------------------------------------------------+
 2 rows in set (0.00 sec)
-   
    
    
    

@@ -78,21 +78,21 @@ mysql> show engines;
    
    
 5. Query to sphinx daemon
-     
+   You should always lookup sphix table by <search> key, typically joining it
+   with indexed documents table , like:
+
+
+   SELECT [columnt_list] FROM test.documents docs JOIN t1 fs ON (docs.id=fs.id) 
+       WHERE query="query_string"; 
    
-   All queries must be like:
    
-   SELECT [ column_list | * ] FROM t1 WHERE search = "query_string";
-   
-   (table t1 can be joined with other tables)
- 
    query_string has format:
    
    "param1=value;param2=value;param3=value;...";       
    
    Available params:
    query  - text of query
-   mode   - search mode; 0 - MATCH_ALL (default) ; 1 - MATCH_ANY; 2 - MATCH_PHRASE; 3 - MATCH_BOOLEAN
+   mode   - search mode; all - MATCH_ALL (default) ; any - MATCH_ANY; phrase - MATCH_PHRASE; boolean - MATCH_BOOLEAN
    sort   - sort mode; 0 - RELEVANCE (default) ; 1 - DATE DESC; 2 - DATE ASC; 3 - TIME SEGMENTS
    limit  - limit of output records (default 20)
    offset - start from record from offset (default 0)
@@ -109,10 +109,10 @@ mysql> show engines;
    
    more complex examples:
    
-   search="sphinx mysql;mode=1" - match any of words 
+   search="sphinx mysql;mode=any" - match any of words 
    search="sphinx oracle;offset=100;limit=50"; - fetch result starting with offset 100 and limit count of records = 50
    search="sphinx postgresql;groups=1,4,5;index=test1;" - search only in groups 1,4,5 in index test1
-   search="sphinx & postgresql | (soft & java);mode=3" - boolean search
+   search="sphinx & postgresql | (soft & java);mode=boolean" - boolean search
    
 
    example output:
@@ -142,7 +142,7 @@ mysql> show engine sphinx status;
   Assuming you have table "documents" from example.sql, and table fulltextsearch with SPHINX engine;
   
 mysql> SELECT content,docdate FROM test.documents docs JOIN fulltextsearch fs ON (docs.id=fs.id) 
-       WHERE query="one document;mode=1"; 
+       WHERE query="one document;mode=any"; 
        
 +-------------------------------------+---------------------+
 | content                             | docdate             |

@@ -1,5 +1,7 @@
 @echo off
-for /F "usebackq" %%i in (`pwd`) do set PWD=%%i
+pwd | sed -e s/\\/\//g > 1.tmp
+for /F "usebackq" %%i in (1.tmp) do set PWD=%%i
+rm 1.tmp
 xsltproc ^
 	--stringparam section.autolabel 1 ^
 	--stringparam output.html.stylesheets 1 ^

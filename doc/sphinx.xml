@@ -1,0 +1,673 @@
+<article>
+
+
+<articleinfo>
+<title>Sphinx 0.9.6 reference manual</title>
+<subtitle>Free open-source SQL full-text search engine</subtitle>
+<copyright>
+<year>2001-2006</year>
+<holder>Andrew Aksyonoff, <email>shodan(at)shodan.ru</email></holder>
+</copyright>
+</articleinfo>
+
+
+<sect1 id="intro"><title>Introduction</title>
+
+
+<sect2 id="about"><title>About</title>
+<para>
+Sphinx is a full-text search engine, distributed under GPL version 2.
+Commercial licensing is also available upon request. 
+</para>
+<para>
+Generally, it's a standalone search engine, meant to provide fast,
+size-efficient and relevant fulltext search functions to other
+applications. Sphinx was specially designed to integrate well with
+SQL databases and scripting languages. Currently built-in data
+source drivers support fetching data either via direct connection
+to MySQL, PostgreSQL, or from a pipe in a custom XML format. 
+</para>
+<para>
+As for the name, Sphinx is an acronym which is officially decoded
+as SQL Phrase Index. Yes, I know about CMU's Sphinx project. 
+</para>
+</sect2>
+
+
+<sect2 id="features"><title>Sphinx features</title>
+<para>
+<itemizedlist>
+<listitem>high indexing speed (upto 10 MB/sec on modern CPUs);</listitem>
+<listitem>high search speed (avg query is under 0.1 sec on 2-4 GB text collections);</listitem>
+<listitem>high scalability (upto 100 GB of text, upto 100 M documents on a single CPU);</listitem>
+<listitem>provides good relevance through phrase proximity ranking;</listitem>
+<listitem>provides distributed searching capabilities;</listitem>
+<listitem>provides document exceprts generation;</listitem>
+<listitem>supports MySQL natively (MyISAM and InnoDB tables are both supported);</listitem>
+<listitem>supports PostgreSQL natively;</listitem>
+<listitem>supports single-byte encodings and UTF-8;</listitem>
+<listitem>supports English stemming, Russian stemming, and Soundex for morphology;</listitem>
+<listitem>supports any number of document fields (weights can be changed on the fly);</listitem>
+<listitem>supports document groups;</listitem>
+<listitem>supports stopwords;</listitem>
+<listitem>supports "match all", "match phrase", "match any" and "boolean query" search modes.</listitem>
+</itemizedlist>
+</para>
+</sect2>
+
+
+<sect2 id="getting"><title>Where to get Sphinx</title>
+<para>Sphinx is available through its official Web site at <ulink url="http://www.sphinxsearch.com/">http://www.sphinxsearch.com/</ulink>.
+</para>
+<para>Currently, Sphinx distribution tarball includes the following software:
+<itemizedlist>
+<listitem><filename>indexer</filename>: an utility to create fulltext indexes;</listitem>
+<listitem><filename>search</filename>: a simple (test) utility to query fulltext indexes from command line;</listitem>
+<listitem><filename>searchd</filename>: a daemon to search through fulltext indexes from external software (such as Web scripts);</listitem>
+<listitem><filename>sphinxapi</filename>: a set of API libraries for popular Web scripting languages (currently, PHP).</listitem>
+</itemizedlist>
+</para>
+</sect2>
+
+
+<sect2 id="license"><title>License</title>
+<para>
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License,
+or (at your option) any later version. See COPYING file for details.
+</para>
+<para>
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+more details. 
+</para>
+<para>
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software Foundation, Inc.,
+59 Temple Place, Suite 330, Boston, MA 02111-1307 USA 
+</para>
+</sect2>
+
+
+<sect2 id="author"><title>Author and contributors</title>
+<bridgehead>Author</bridgehead>
+<para>
+Sphinx initial author and current primary developer is:
+<itemizedlist>
+<listitem>Andrew Aksyonoff, <email>shodan(at)shodan.ru</email></listitem>
+</itemizedlist>
+</para>
+<bridgehead>Contributors</bridgehead>
+<para>People who contributed to Sphinx and their contributions (in no particular order) are:
+<itemizedlist>
+<listitem>Robert Bengtsson, initial version of PostgreSQL data source;</listitem>
+</itemizedlist>
+</para>
+<para>
+Many other people have contributed ideas, bug reports, fixes, etc.
+Thank you!
+</para>
+</sect2>
+
+
+<sect2 id="history"><title>History</title>
+<para>
+Sphinx development was started back in 2001, because I didn't manage
+to find an acceptable search solution (for a database driven Web site)
+which would meet my requirements. Actually, each and every important aspect was a problem: 
+<itemizedlist>
+<listitem>search quality (ie. good relevance)
+<itemizedlist><listitem>statistical ranking methods performed rather bad, especially on large collections of small documents (forums, blogs, etc)</listitem></itemizedlist>
+</listitem>
+<listitem>search speed
+<itemizedlist><listitem>especially if searching for phrases which contain stopwords, as in "to be or not to be"</listitem></itemizedlist>
+</listitem>
+<listitem>moderate disk and CPU requirements when indexing
+<itemizedlist><listitem>important in shared hosting enivronment, not to mention the indexing speed.</listitem></itemizedlist>
+</listitem>
+</itemizedlist>
+</para>
+<para>
+Despite the amount of time passed and numerous improvements made in the
+other solutions, there's still no solution which I personally would
+be eager to migrate to. 
+</para>
+<para>
+Considering that and a lot of positive feedback received from Sphinx users
+during last years, the obvious decision is to continue developing Sphinx
+(and, eventually, to take over the world).
+</para>
+</sect2>
+
+
+</sect1>
+
+
+<sect1 id="installation">
+<title>Installation</title>
+
+
+<sect2 id="supported-system"><title>Supported systems</title>
+<para>
+Most modern UNIX systems with a C++ compiler should be able
+to compile and run Sphinx without any modifications.
+</para>
+<para>
+Currently known systems Sphinx has been successfully running on are:
+<itemizedlist>
+<listitem>Linux 2.4.x, 2.6.x (various distributions)</listitem>
+<listitem>Windows 2000, XP</listitem>
+<listitem>FreeBSD 4.x, 5.x, 6.x</listitem>
+<listitem>NetBSD 1.6</listitem>
+</itemizedlist>
+</para>
+<para>
+I hope Sphinx will work on other Unix platforms as well. 
+If the platform your run Sphinx on is not in this list,
+please do report it.
+</para>
+<para>
+At the moment, Windows version of Sphinx's <filename>searchd</filename>
+daemon is not intended to be used in production because it can only handle
+one client at a time.
+</para>
+</sect2>
+
+
+<sect2 id="required-tools"><title>Required tools</title>
+<para>
+On UNIX, you will need the following tools to build
+and install Sphinx:
+<itemizedlist>
+<listitem>a working C++ compiler. GNU gcc is known to work.</listitem>
+<listitem>a good make program. GNU make is known to work.</listitem>
+</itemizedlist>
+</para>
+<para>
+On Windows, you will need Microsoft Visual C/C++ Studio .NET 2003.
+Other compilers/environments will probably work as well, but for the
+time being, you will have to build makefile (or other environment
+specific project files) manually.
+</para>
+</sect2>
+
+
+<sect2 id="installing"><title>Installing Sphinx</title>
+<para><orderedlist>
+<listitem>
+	<para>
+	Extract everything from the distribution tarball (haven't you already?)
+	and go to the <filename>sphinx</filename> subdirectory:
+	</para>
+<para><userinput><literallayout>$ tar xzvf sphinx-0.9.6.tar.gz
+$ cd sphinx
+</literallayout></userinput></para>
+</listitem>
+<listitem>
+	<para>Run the configuration program:</para>
+	<para><userinput>$ ./configure</userinput></para>
+	<para>
+	There's a number of options to configure. The complete listing may
+	be obtained by using <option>--help</option> switch. The most important ones are:
+	<itemizedlist>
+		<listitem><option>--prefix</option>, which specifies where to install Sphinx;</listitem>
+		<listitem><option>--with-mysql</option>, which specifies where to look for MySQL
+			include and library files, if auto-detection fails;</listitem>
+		<listitem><option>--with-pgsql</option>, which specifies where to look for PostgreSQL
+			include and library files.</listitem>
+	</itemizedlist>
+	</para>
+</listitem>
+<listitem>
+	<para>Build the binaries:</para>
+	<para><userinput>$ make</userinput></para>
+</listitem>
+<listitem>
+	<para>Install the binaries in the directory of your choice:</para>
+	<para><userinput>$ make install</userinput></para>
+</listitem>
+</orderedlist></para>
+</sect2>
+
+
+<sect2 id="install-problems"><title>Known installation issues</title>
+<para>
+If <filename>configure</filename> fails to locate MySQL headers and/or libraries,
+try checking for and installing <filename>mysql-devel</filename> package. On some systems,
+it is not installed by default.
+</para>
+<para>
+If <filename>make</filename> fails with a message which look like
+<programlisting>
+/bin/sh: g++: command not found
+make[1]: *** [libsphinx_a-sphinx.o] Error 127
+</programlisting>
+try checking for and installing <filename>gcc-c++</filename> package.
+</para>
+<para>
+If you are getting compile-time errors which look like
+<programlisting>
+sphinx.cpp:67: error: invalid application of `sizeof' to
+    incomplete type `Private::SizeError&lt;false&gt;'
+</programlisting>
+this means that some compile-time type size check failed.
+The most probable reason is that off_t type is less than 64-bit
+on your system. As a quick hack, you can edit sphinx.h and replace off_t
+with DWORD in a typedef for SphOffset_t, but note that this will prohibit
+you from using full-text indexes larger than 2 GB. Even if the hack helps,
+please report such issues, providing the exact error message and
+compiler/OS details, so I could fix them in next releases.
+</para>
+<para>
+If you keep getting any other error, or the suggestions above
+do not seem to help you, please don't hesitate to contact me.
+</para>
+</sect2>
+
+
+<sect2 id="quick-tour"><title>Quick Sphinx usage tour</title>
+<para>
+All the example commands below assume that you installed Sphinx
+in <filename>/usr/local/sphinx</filename>.
+</para>
+<para>
+To use Sphinx, you will need to:
+</para>
+<orderedlist>
+<listitem>
+	<para>Create a configuration file.</para>
+	<para>
+	Default configuration file name is <filename>sphinx.conf</filename>.
+	All Sphinx programs look for this file in current working directory
+	by default.
+	</para>
+	<para>
+	Sample configuration file, <filename>sphinx.conf.dist</filename>, which has
+	all the options documented, is created by <filename>configure</filename>.
+	Copy and edit that sample file to make your own configuration:
+	</para>
+<para><userinput><literallayout>$ cd /usr/local/sphinx/etc
+$ cp sphinx.conf.dist sphinx.conf
+$ vi sphinx.conf</literallayout></userinput></para>
+	<para>
+	Sample configuration file is setup to index <filename>documents</filename>
+	table from MySQL database <filename>test</filename>; so there's <filename>example.sql</filename>
+	sample data file to populate that table with a few documents for testing purposes:
+	</para>
+	<para><userinput>$ mysql -u test &lt; /usr/local/sphinx/etc/example.sql</userinput></para>
+</listitem>
+<listitem>
+	<para>Run the indexer to create full-text index from your data:</para>
+<para><userinput><literallayout>$ cd /usr/local/sphinx/etc
+$ /usr/local/sphinx/bin/indexer</literallayout></userinput></para>
+</listitem>
+<listitem>
+	<para>Query your newly created index!</para>
+</listitem>
+</orderedlist>
+<para>
+To query the index from command line, use <filename>search</filename> utility:
+</para>
+<para><userinput><literallayout>$ cd /usr/local/sphinx/etc
+$ /usr/local/sphinx/bin/search test</literallayout></userinput></para>
+<para>
+To query the index from your PHP scripts, you need to:
+</para>
+<orderedlist>
+	<listitem>
+		<para>Run the search daemon which your script will talk to:</para>
+<para><userinput><literallayout>$ cd /usr/local/sphinx/etc
+$ /usr/local/sphinx/bin/searchd</literallayout></userinput></para>
+	</listitem>
+	<listitem>
+		<para>
+		Run the attached PHP API test script (to ensure that the daemon
+		was succesfully started and is ready to serve the queries):
+		</para>
+<para><userinput><literallayout>$ cd sphinx/api
+$ php test.php test</literallayout></userinput></para>
+	</listitem>
+	<listitem>
+		<para>
+		Include the API (it's located in <filename>api/sphinxapi.php</filename>)
+		into your own scripts and use it.
+		</para>
+	</listitem>
+</orderedlist>
+<para>
+Happy searching!
+</para>
+</sect2>
+
+
+</sect1>
+<sect1 id="indexing"><title>Indexing</title>
+
+
+<sect2 id="sources"><title>Data sources</title>
+<para>
+The data to be indexed can generally come from very different
+sources: SQL databases, plain text files, HTML files, mailboxes,
+and so on. From Sphinx point of view, the data it indexes is a
+set of structured <glossterm>documents</glossterm>, each of which has the
+same set of <glossterm>fields</glossterm>. This is biased towards SQL, where
+each row correspond to a document, and each column to a field.
+</para>
+<para>
+Depending on what source Sphinx should get the data from,
+different code is required to fetch the data and prepare it for indexing.
+This code is called <glossterm>data source driver</glossterm> (or simply
+<glossterm>driver</glossterm> or <glossterm>data source</glossterm> for brevity).
+</para>
+<para>
+At the time of this writing, there are drivers for MySQL and
+PostgreSQL databases, which can connect to the database using
+its native C/C++ API, run queries and fetch the data. There's
+also a driver called XMLpipe, which runs a specified command
+and reads the data from its <filename>stdout</filename>.
+See <xref linkend="xmlpipe"/> section for the format description.
+</para>
+<para>
+There can be as many sources per index as necessary. They will be
+sequentially processed in the very same order which was specifed in
+index definition. All the documents coming from those sources
+will be merged as if they were coming from a single source.
+</para>
+</sect2>
+
+<sect2 id="indexes"><title>Indexes</title>
+<para>
+To be able to answer full-text search queries fast, Sphinx needs
+to build a special data structure optimized for such queries from
+your text data. This structure is called <glossterm>index</glossterm>; and
+the process of building index from text is called <glossterm>indexing</glossterm>.
+</para>
+<para>
+Different index types are well suited for different tasks.
+For example, a disk-based tree-based index would be easy to
+update (ie. insert new documents to existing index), but rather
+slow to search. Therefore, Sphinx architecture allows for different
+<glossterm>index types</glossterm> to be implemented easily.
+</para>
+<para>
+The only index type which is implemented in Sphinx at the moment is
+designed for maximum indexing and searching speed. This comes at a cost
+of updates being really slow; theoretically, it might be slower to
+update this type of index than than to reindex it from scratch.
+However, this very frequently could be worked around with
+muiltiple indexes, see <xref linkend="live-updates"/> for details.
+</para>
+<para>
+It is planned to implement more index types, including the
+type which would be updateable in real time.
+</para>
+<para>
+There can be as many indexes per configuration file as necessary.
+<filename>indexer</filename> utility can reindex either all of them
+(if <option>--all</option> option is specified), or a certain explicitly
+specified subset. <filename>searchd</filename> utility will serve all
+the specified indexes, and the clients can specify what indexes to
+search in run time.
+</para>
+</sect2>
+
+
+<sect2 id="data-restrictions"><title>Restrictions on the source data</title>
+<para>
+There are a few different restrictions imposed on the source data
+which is going to be indexed by Sphinx, of which the single most
+important one is:
+</para>
+<para><emphasis role="bold">
+ALL DOCUMENT IDS MUST BE UNIQUE POSITIVE 32-BIT INTEGER NUMBERS.
+</emphasis></para>
+If this requirement is not met, different bad things can happen.
+For instance, Sphinx can crash with an internal assertion while indexing;
+or produce strange results when searching due to conflicting IDs.
+Also, a 1000-pound gorilla might eventually come out of your
+display and start throwing barrels at you. You've been warned.
+</sect2>
+
+
+<sect2 id="charsets"><title>Charsets, case folding, and translation tables</title>
+<para>
+When indexing some index, Sphinx fetches documents from
+the specified sources, splits the text into words, and does
+case folding so that "Abc", "ABC" and "abc" would be treated
+as the same word (or, to be pedantic, <glossterm>term</glossterm>).
+</para>
+<para>
+To do that properly, Sphinx needs to know
+<itemizedlist>
+<listitem>what encoding is the source text in;</listitem>
+<listitem>what characters are letters and what are not;</listitem>
+<listitem>what letters should be folded to what letters.</listitem>
+</itemizedlist>
+This should be configured on a per-index basis using
+<option><link linkend="ref-charset-type">charset_type</link></option> and 
+<option><link linkend="ref-charset-table">charset_table</link></option> options.
+With <option><link linkend="ref-charset-type">charset_type</link></option>,
+one would specify whether the document encoding is single-byte (SBCS) or UTF-8.
+<option><link linkend="ref-charset-table">charset_table</link></option> would
+then be used to specify the table which maps letter characters to their case
+folded versions. The characters which are not in the table are considered
+to be non-letters and will be treated as word separators when indexing
+or searching through this index.
+</para>
+<para>
+Note that while default tables do not include space character
+(ASCII code 0x20, Unicode U+0020) as a letter, it's in fact
+<emphasis>perfectly legal</emphasis> to do so. This can be
+useful, for instance, for indexing tag clouds, so that space-separated
+word sets would index as a <emphasis>single</emphasis> search query term.
+</para>
+<para>
+Default tables currently include English and Russian characters.
+Please do submit your tables for other languages!
+</para>
+</sect2>
+
+
+<sect2 id="datasources"><title>Built-in data source drivers</title>
+
+
+<sect3 id="sql"><title>SQL (MySQL, PostgreSQL)</title>
+(to be added)
+</sect3>
+
+
+<sect3 id="xmlpipe"><title>XMLpipe</title>
+<para>
+XMLpipe data source is designed to enable users to plug data into
+Sphinx without having to implement new data sources drivers themselves.
+</para>
+<para>
+To use XMLpipe, configure the data source in your configuration file
+as follows:
+<programlisting>
+source example_xmlpipe_source
+{
+    type = xmlpipe
+    xmlpipe_command = perl /www/mysite.com/bin/sphinxpipe.pl
+}
+</programlisting>
+The <filename>indexer</filename> will run the command specified
+in <option><link linkend="ref-xmlpipe-command">xmlpipe_command</link></option>,
+and then read, parse and index the data it prints to <filename>stdout</filename>.
+</para>
+<para>
+XMLpipe driver expects the data to be in special XML format.
+Here's the example document stream, consisting of two documents:
+<example id="ex-xmlpipe-document"><title>XMLpipe document stream</title>
+<programlisting>
+&lt;document&gt;
+&lt;id&gt;123&lt;/id&gt;
+&lt;group&gt;45&lt;/group&gt;
+&lt;timestamp&gt;1132223498&lt;/timestamp&gt;
+&lt;title&gt;test title&lt;/title&gt;
+&lt;body&gt;
+this is my document body
+&lt;/body&gt;
+&lt;/document&gt;
+
+&lt;document&gt;
+&lt;id&gt;124&lt;/id&gt;
+&lt;group&gt;46&lt;/group&gt;
+&lt;timestamp&gt;1132223498&lt;/timestamp&gt;
+&lt;title&gt;another test&lt;/title&gt;
+&lt;body&gt;
+this is another document
+&lt;/body&gt;
+&lt;/document&gt;
+</programlisting>
+</example>
+</para>
+<para>
+At the moment, the driver is using a custom manually written parser
+which is pretty fast but really strict; so almost all the fields <emphasis>must</emphasis>
+be present, formatted <emphasis>exactly</emphasis> as in this example, and
+occur <emphasis>exactly</emphasis> in this order. The only optional field
+is <option>timestamp</option>; it's set to 1 if it's missing.
+</para>
+</sect3>
+
+
+</sect2>
+
+
+<sect2 id="live-updates"><title>Live index updates</title>
+<para>
+There's a frequent situation when the total dataset is too big
+to be reindexed from scratch often, but the amount of new records
+is rather small. Example: a forum with a 1,000,000 archived posts,
+but only 1,000 new posts per day.
+</para>
+<para>
+In this case, "live" (almost real time) index updates could be
+implemented using so called "main+delta" scheme.
+</para>
+<para>
+The idea is to set up two sources and two indexes, with one
+"main" index for the data which only changes rarely (if ever),
+and one "delta" for the new documents. In the example above,
+1,000,000 archived posts would go to the main index, and newly
+inserted 1,000 posts/day would go to the delta index. Delta index
+could then be reindexed very frequently, and the documents can
+be made available to search in a matter of minutes.
+</para>
+<para>
+Specifying which documents should go to what index and
+reindexing main index could also be made fully automatical.
+One option would be to make a counter table which would track
+the ID which would split the documents, and update it
+whenever the main index is reindexed.
+<example id="ex-live-updates">
+<title>Fully automated live updates</title>
+<programlisting>
+# in MySQL
+CREATE TABLE sph_counter
+(
+    counter_id INTEGER PRIMARY KEY NOT NULL,
+    max_doc_id INTEGER NOT NULL
+);
+
+# in sphinx.conf
+source main
+{
+    # ...
+    sql_query_pre = REPLACE INTO sph_counter SELECT 1, MAX(id) FROM documents
+    sql_query = SELECT id, title, body FROM documents \
+                WHERE id&lt;=( SELECT sc.max_doc_id FROM sph_counter sc WHERE sc.counter_id=1 )
+}
+
+source delta : main
+{
+    sql_query_pre =
+    sql_query = SELECT id, title, body FROM documents \
+                WHERE id&gt;( SELECT sc.max_doc_id FROM sph_counter sc WHERE sc.counter_id=1 )
+}
+</programlisting>
+</example>
+</para>
+</sect2>
+
+
+</sect1>
+<sect1 id="searching"><title>Searching</title>
+
+
+<sect2 id="matching-modes"><title>Matching modes</title>
+(to be added)
+</sect2>
+
+
+<sect2 id="ranking-modes"><title>Ranking modes</title>
+(to be added)
+</sect2>
+
+
+<sect2 id="weighting"><title>Run-time weighting</title>
+(to be added)
+</sect2>
+
+
+<sect2 id="distributed"><title>Distributed searching</title>
+(to be added)
+</sect2>
+
+
+</sect1>
+<sect1 id="reference"><title><filename>sphinx.conf</filename> options reference</title>
+
+
+<sect2 id="ref-charset-table"><title>charset_table</title>
+<bridgehead>Description</bridgehead>
+<para>Everything one needs to know about charset_table is here</para>
+<bridgehead>Example</bridgehead>
+<programlisting>
+charset_table = A..Z->a..z
+</programlisting>
+</sect2>
+
+
+<sect2 id="ref-charset-type"><title>charset_type</title>
+<bridgehead>Description</bridgehead>
+<para>Everything one needs to know about charset_type is here</para>
+<bridgehead>Example</bridgehead>
+<programlisting>
+charset_type = sbcs
+# charset_type = utf-8
+</programlisting>
+</sect2>
+
+
+<sect2 id="ref-xmlpipe-command"><title>xmlpipe_command</title>
+<bridgehead>Description</bridgehead>
+<para>Everything one needs to know about xmlpipe_command is here</para>
+<bridgehead>Example</bridgehead>
+<programlisting>
+xmlpipe_command = perl /www/mysite.com/bin/sphinxpipe.pl
+</programlisting>
+</sect2>
+
+
+</sect1>
+<sect1 id="developers"><title>Developer's corner</title>
+
+
+<sect2 id="architecture-overview"><title>Sphinx architecture overview</title>
+(to be added)
+</sect2>
+
+
+<sect2 id="adding-data-sources"><title>Adding new data source drivers</title>
+(to be added)
+</sect2>
+
+
+</sect1>
+
+
+</article>

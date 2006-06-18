@@ -604,8 +604,6 @@ private:
 private:
 	int							OpenFile ( char * ext, int mode );
 
-	int							binsInit ();
-	void						binsDone ();
 	DWORD						binsReadVLB ( int b );
 	int							binsReadByte ( int b );
 	int							binsRead ( int b, CSphFatHit * e );
@@ -2153,17 +2151,6 @@ int CSphIndex_VLN::OpenFile ( char * ext, int mode )
 	return iFD;
 }
 
-int CSphIndex_VLN::binsInit ()
-{
-	sphSeek ( fdRaw, 0, SEEK_SET ); // FIXME
-	m_iFilePos = 0;
-	return 1;
-}
-
-void CSphIndex_VLN::binsDone ()
-{
-	bins.Reset ();
-}
 
 int CSphIndex_VLN::binsReadByte(int b)
 {
@@ -3048,7 +3035,9 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	// cleanup
 	SafeDeleteArray ( bActive );
 
-	binsDone ();
+	ARRAY_FOREACH ( i, bins )
+		SafeDelete ( bins[i] );
+	bins.Reset ();
 
 	CSphFatHit tFlush;
 	tFlush.m_iDocID = 0;

@@ -74,6 +74,7 @@ public:
 	{
 		Reset ();
 	}
+
 	/// add entry
 	T & Add ()
 	{

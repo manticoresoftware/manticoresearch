@@ -178,7 +178,7 @@ sysconfdir = @sysconfdir@
 target_alias = @target_alias@
 SUBDIRS = src
 EXTRA_DIST = api storage sphinx.conf.in sphinx.sln todo.txt example.sql
-sysconf_DATA = sphinx.conf.dist
+sysconf_DATA = sphinx.conf.dist example.sql
 all: all-recursive
 
 .SUFFIXES:

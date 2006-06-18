@@ -1,6 +1,6 @@
 SUBDIRS = src
 EXTRA_DIST = api storage sphinx.conf.in sphinx.sln todo.txt example.sql
-sysconf_DATA = sphinx.conf.dist
+sysconf_DATA = sphinx.conf.dist example.sql
 
 install-data-hook:
 	mkdir -p $(localstatedir)/data && mkdir -p $(localstatedir)/log

@@ -423,11 +423,13 @@ important one is:
 <para><emphasis role="bold">
 ALL DOCUMENT IDS MUST BE UNIQUE POSITIVE 32-BIT INTEGER NUMBERS.
 </emphasis></para>
+<para>
 If this requirement is not met, different bad things can happen.
 For instance, Sphinx can crash with an internal assertion while indexing;
 or produce strange results when searching due to conflicting IDs.
 Also, a 1000-pound gorilla might eventually come out of your
 display and start throwing barrels at you. You've been warned.
+</para>
 </sect2>
 
 
@@ -470,15 +472,71 @@ Please do submit your tables for other languages!
 </sect2>
 
 
-<sect2 id="datasources"><title>Built-in data source drivers</title>
+<sect2 id="sql"><title>SQL data sources (MySQL, PostgreSQL)</title>
+<para>
+With all the SQL drivers, indexing generally works as follows.
+<itemizedlist>
+<listitem>connection to the database is established;</listitem>
+<listitem>pre-query (see <xref linkend="ref-sql-query-pre"/>) is executed
+	to perform any necessary initial setup, such as setting per-connection encoding with MySQL;</listitem>
+<listitem>main query (see <xref linkend="ref-sql-query"/>) is executed and the rows it returns are indexed;</listitem>
+<listitem>post-query (see <xref linkend="ref-sql-query-post"/>) is executed
+	to perform any necessary cleanup;</listitem>
+<listitem>connection to the database is closed;</listitem>
+<listitem>indexer does the sorting phase (to be pedantic, index-type specific post-processing);</listitem>
+<listitem>connection to the database is established again;</listitem>
+<listitem>post-index query (see <xref linkend="ref-sql-query-post-index"/>) is executed
+	to perform any necessary final cleanup;</listitem>
+<listitem>connection to the database is closed again.</listitem>
+</itemizedlist>
+Most options, such as database user/host/password, are straightforward.
+However, there are a few subtle things, which are discussed in more detail here.
+</para>
+<bridgehead>Ranged queries</bridgehead>
+<para>
+Main query, which needs to fetch all the documents, can impose
+a read lock on the whole table and stall the concurrent queries
+(eg. INSERTs to MyISAM table), waste a lot of memory for result set, etc.
+To avoid this, Sphinx supports so-called <glossterm>ranged queries</glossterm>.
+With ranged queries, Sphinx first fetches min and max document IDs from
+the table, and then substitutes different ID intervals into main query text
+and runs the modified query to fetch another chunk of documents.
+Here's an example.
+</para>
+<example id="ex-ranged-queries"><title>Ranged query usage example</title>
+<programlisting>
+# in sphinx.conf
+
+sql_query_range	= SELECT MIN(id),MAX(id) FROM documents
+sql_range_step = 1000
+sql_query = SELECT * FROM documents WHERE id&gt;=$start AND id&lt;=$end
+</programlisting>
+</example>
+<para>
+If the table contains document IDs from 1 to, say, 2345, then sql_query would
+be run three times:
+<orderedlist>
+<listitem>with <option>$start</option> replaced with 1 and <option>$end</option> replaced with 1000;</listitem>
+<listitem>with <option>$start</option> replaced with 1001 and <option>$end</option> replaced with 2000;</listitem>
+<listitem>with <option>$start</option> replaced with 200 and <option>$end</option> replaced with 2345.</listitem>
+</orderedlist>
+Obviously, that's not much of a difference for 2000-row table,
+but when it comes to indexing 10-million-row MyISAM table,
+ranged queries might be of some help.
+</para>
+<bridgehead><option>sql_post</option> vs. <option>sql_post_index</option></bridgehead>
+<para>
+The difference between post-query and post-index query is in that post-query
+is run immediately when Sphinx received all the documents, but further indexing
+<emphasis role="bold">may</emphasis> still fail for some other reason. On the contrary,
+by the time the post-index query gets executed, it is <emphasis role="bold">guaranteed</emphasis>
+that the indexing was succesful. Database connection is dropped and re-established
+because sorting phase can be very lengthy and would just timeout otherwise.
+</para>
+</sect2>
 
 
-<sect3 id="sql"><title>SQL (MySQL, PostgreSQL)</title>
-(to be added)
-</sect3>
-
-
-<sect3 id="xmlpipe"><title>XMLpipe</title>
+<sect2 id="xmlpipe"><title>XMLpipe data source</title>
 <para>
 XMLpipe data source is designed to enable users to plug data into
 Sphinx without having to implement new data sources drivers themselves.
@@ -531,9 +589,6 @@ be present, formatted <emphasis>exactly</emphasis> as in this example, and
 occur <emphasis>exactly</emphasis> in this order. The only optional field
 is <option>timestamp</option>; it's set to 1 if it's missing.
 </para>
-</sect3>
-
-
 </sect2>
 
 

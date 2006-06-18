@@ -579,14 +579,14 @@ source main
     # ...
     sql_query_pre = REPLACE INTO sph_counter SELECT 1, MAX(id) FROM documents
     sql_query = SELECT id, title, body FROM documents \
-                WHERE id&lt;=( SELECT sc.max_doc_id FROM sph_counter sc WHERE sc.counter_id=1 )
+        WHERE id&lt;=( SELECT max_doc_id FROM sph_counter WHERE counter_id=1 )
 }
 
 source delta : main
 {
     sql_query_pre =
     sql_query = SELECT id, title, body FROM documents \
-                WHERE id&gt;( SELECT sc.max_doc_id FROM sph_counter sc WHERE sc.counter_id=1 )
+        WHERE id&gt;( SELECT max_doc_id FROM sph_counter WHERE counter_id=1 )
 }
 </programlisting>
 </example>

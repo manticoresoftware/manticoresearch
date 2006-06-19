@@ -514,6 +514,8 @@ public:
 	{
 		m_rdDoclist.Reset ();
 		m_rdHitlist.Reset ();
+		m_iDocs = 0;
+		m_iHits = 0;
 		m_iHitPos = 0;
 		m_iHitlistPos = 0;
 		m_tDoc.m_iDocID = 0;

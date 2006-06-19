@@ -3625,7 +3625,8 @@ void CSphIndex_VLN::MatchAny ( const CSphQuery * pQuery, ISphMatchQueue * pTop, 
 	// preload entries
 	int i;
 	for ( i=0; i<m_iQueryWords; i++ )
-		m_dQueryWords[i].GetDoclistEntry ();
+		if ( m_dQueryWords[i].m_iDocs )
+			m_dQueryWords[i].GetDoclistEntry ();
 
 	// find a multiplier for phrase match
 	// so that it will weight more than any word match

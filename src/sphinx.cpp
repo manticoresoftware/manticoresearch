@@ -446,6 +446,7 @@ public:
 	virtual		~CSphReader_VLN ();
 
 	void		SetFile ( int iFD );
+	void		Reset ();
 
 	void		SeekTo ( SphOffset_t iPos );
 
@@ -504,6 +505,17 @@ public:
 		, m_iHitPos ( 0 )
 		, m_iHitlistPos ( 0 )
 	{
+		m_tDoc.m_iDocID = 0;
+		m_tDoc.m_iGroupID = 0;
+		m_tDoc.m_iTimestamp = 0;
+	}
+
+	void Reset ()
+	{
+		m_rdDoclist.Reset ();
+		m_rdHitlist.Reset ();
+		m_iHitPos = 0;
+		m_iHitlistPos = 0;
 		m_tDoc.m_iDocID = 0;
 		m_tDoc.m_iGroupID = 0;
 		m_tDoc.m_iTimestamp = 0;
@@ -1895,6 +1907,12 @@ void CSphReader_VLN::SetFile ( int iFD )
 	m_iBufPos = 0;
 	m_iBufOdd = 0;
 	m_iBufUsed = 0;
+}
+
+
+void CSphReader_VLN::Reset ()
+{
+	SetFile ( -1 );
 }
 
 
@@ -4032,6 +4050,7 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 	m_iQueryWords = Min ( pQueryParser->m_dHits.GetLength (), SPH_MAX_QUERY_WORDS );
 	for ( int i=0; i<m_iQueryWords; i++ )
 	{
+		m_dQueryWords[i].Reset ();
 		m_dQueryWords[i].m_sWord = pQueryParser->words[i];
 		m_dQueryWords[i].m_iWordID = pQueryParser->m_dHits[i].m_iWordID;
 		m_dQueryWords[i].m_iQueryPos = 1+i;

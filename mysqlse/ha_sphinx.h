@@ -121,7 +121,11 @@ public:
     implements. The current table flags are documented in
     handler.h
   */
+#if MYSQL_VERSION_ID < 50100
   ulong table_flags() const
+#else
+  ulonglong table_flags() const
+#endif
   {
     return 0;
   }

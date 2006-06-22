@@ -51,6 +51,10 @@
 	#define sphSockClose(_sock)						::close(_sock)
 #endif
 
+#include <zlib.h>
+#include <sys/mman.h>
+#include <md5.h>
+
 /////////////////////////////////////////////////////////////////////////////
 
 enum ESphLogLevel
@@ -63,6 +67,11 @@ enum ESphLogLevel
 static bool				g_bLogStdout	= true;
 static int				g_iLogFile		= STDOUT_FILENO;
 static ESphLogLevel		g_eLogLevel		= LOG_INFO;
+
+static bool				g_bCacheEnable	= false;
+static CSphString		g_sCacheDir ( "qcache" );
+static int				g_iCacheTTL		= 300;
+static bool				g_bCacheGzip	= false;
 
 static int				g_iReadTimeout	= 5;	// sec
 static int				g_iChildren		= 0;
@@ -792,6 +801,347 @@ MemInputBuffer_c::MemInputBuffer_c ( const char * sFrom, int iLen )
 	m_iLen = iLen;
 	m_pCur = m_pBuf;
 	m_bError = false;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// SIMPLE FILE-BASED QUERY CACHE
+/////////////////////////////////////////////////////////////////////////////
+
+/// my simple cache
+class CSphCache
+{
+public:
+				CSphCache ( const char * sCacheDir, int iCacheTTL, bool bUseGzip );
+	bool		ReadFromFile ( const CSphQuery & tQuery, const char * sIndexName, const char * sIndexFileName, CSphQueryResult * pRes );
+	bool		StoreResult ( const CSphQuery & tQuery, const char * sIndexName, const CSphQueryResult * pRes );
+
+private:
+	char		m_sCacheFileName [ 16*2 + 1 ];
+	CSphString	m_sCacheDir;
+	int			m_iCacheTTL;
+	bool		m_bUseGzip;
+
+	void		GenerateCacheFileName ( const CSphQuery & tQuery );
+};
+
+
+CSphCache::CSphCache ( const char * sCacheDir, int iCacheTTL, bool bUseGzip )
+{
+	memset ( m_sCacheFileName, 0, sizeof(m_sCacheFileName) );
+	m_sCacheDir = sCacheDir;
+	m_iCacheTTL = iCacheTTL;
+	m_bUseGzip = bUseGzip;
+}
+
+
+bool CSphCache::ReadFromFile ( const CSphQuery & tQuery, const char * sIndexName, const char * sIndexFileName, CSphQueryResult * pRes )
+{
+	// build filename, and check the cached result file
+	GenerateCacheFileName ( tQuery );
+
+	char sBuf [ SPH_MAX_FILENAME_LEN ];
+	snprintf ( sBuf, sizeof(sBuf), "%s/%s/%c/%c/%s", m_sCacheDir.cstr(),
+		sIndexName, m_sCacheFileName[0], m_sCacheFileName[1], m_sCacheFileName );
+
+	struct stat stFileInfo;
+	if ( lstat ( sBuf, &stFileInfo) < 0 )
+		return false; // cache miss; uncached
+
+	if ( m_iCacheTTL>0 && tQuery.m_eSort==SPH_SORT_TIME_SEGMENTS )
+		if ( ( time(NULL) - stFileInfo.st_mtime ) > m_iCacheTTL )
+			return false; // cache miss; TTL expired
+
+	// check index modification time
+	// FIXME! should query this from index!
+	char sBufIndex [ SPH_MAX_FILENAME_LEN ];
+	snprintf ( sBufIndex, sizeof(sBufIndex), "%s.spi", sIndexFileName );
+
+	struct stat stIndexInfo;
+	if ( lstat ( sBufIndex, &stIndexInfo) < 0 )
+	{
+		sphWarning ( "failed to lstat '%s': errno=%d, err=%s", sBufIndex, errno, strerror(errno) );
+		return false;
+	}
+	if ( stIndexInfo.st_mtime>=stFileInfo.st_mtime )
+		return false; // cache miss; index is newer that the cached result
+
+	// read the data
+	int fCache = open ( sBuf, O_RDONLY );
+	if ( fCache<0 )
+	{
+		sphWarning ( "failed to open '%s': errno=%d, err=%s", sBuf, errno, strerror(errno) );
+		return false;
+	}
+
+	int * pMapFile = NULL;
+	int iFileSize = 0;
+
+	if ( m_bUseGzip )
+	{
+		gzFile fgzCache = gzdopen ( fCache, "r" );
+		if ( fgzCache==Z_NULL )
+		{
+			close ( fCache );
+			sphWarning ( "failed to gzdopen '%s': errno=%d, err=%s", errno, strerror(errno) ); 
+			return false;
+		}
+
+		int iGzipBuffer = 32768; // start with a 32K buffer
+		int iGzipLeft = iGzipBuffer;
+
+		pMapFile = new int [ iGzipBuffer/sizeof(int) ];
+		BYTE * pCur = (BYTE *)pMapFile;
+
+		for ( ;; )
+		{
+			// read next chunk
+			int iRead = gzread ( fgzCache, pCur, iGzipLeft );
+
+			// if it's EOF, we're done
+			if ( iRead==0 && gzeof ( fgzCache ) )
+				break;
+
+			// if it's error, bail out
+			if ( iRead<=0 )
+			{
+				sphWarning ( "failed to gzread '%s': gzread error", sBuf );
+				SafeDeleteArray ( pMapFile );
+				gzclose ( fgzCache );
+				close ( fCache );
+				return false;
+			}
+
+			// update counters
+			pCur += iRead;
+			iFileSize += iRead;
+			iGzipLeft -= iRead;
+			if ( iFileSize<iGzipBuffer )
+				continue;
+			assert ( iFileSize==iGzipBuffer );
+
+			// realloc the buffer, if necessary
+			if ( iGzipBuffer>=1048576 )
+			{
+				sphWarning ( "failed to gzread '%s': too big (over 1M)", sBuf );
+				SafeDeleteArray ( pMapFile );
+				gzclose ( fgzCache );
+				close ( fCache );
+				return false;
+			}
+
+			int * pNew = new int [ 2*iGzipBuffer/sizeof(int) ];
+			memcpy ( pNew, pMapFile, iGzipBuffer );
+
+			SafeDeleteArray ( pMapFile );
+			pMapFile = pNew;
+
+			pCur = ((BYTE*)pNew) + iGzipBuffer;
+			iGzipBuffer *= 2;
+		}
+		gzclose ( fgzCache );
+
+	} else
+	{
+		int iFileSize = lseek ( fCache, 0, SEEK_END );
+		pMapFile = (int*)mmap ( 0, (size_t)iFileSize, PROT_READ,
+			MAP_SHARED | MAP_NORESERVE, fCache, 0L );
+
+		if ( pMapFile==(int*)MAP_FAILED )
+		{
+			sphWarning ( "failed to mmap '%s': errno=%d, err=%s", sBuf, errno, strerror(errno) );
+			close ( fCache );
+			return false;
+		}
+	}
+
+	// parse cached result
+	assert ( pMapFile );
+	assert ( iFileSize>0 );
+
+	bool bOK = false;
+	for ( ;; )
+	{
+		if ( iFileSize<3*sizeof(int) )
+		{
+			sphWarning ( "failed to read header from '%s': file too short", sBuf );
+			break;
+		}
+
+		int * pCur = pMapFile;
+		char * pEnd = ((char*)pMapFile) + iFileSize;
+
+		pRes->m_iNumWords = *pCur++;
+		int iMatches = *pCur++; 
+		pRes->m_dMatches.Resize ( iMatches );
+		pRes->m_iTotalMatches = *pCur++; 
+
+		if ( iFileSize < sizeof(int)*( 3 + iMatches*4 ) )
+		{
+			sphWarning ( "failed to read matches from '%s': file too short", sBuf );
+			break;
+		}
+
+		for ( int i=0; i<iMatches; i++ )
+		{
+			pRes->m_dMatches[i].m_iDocID = *pCur++;
+			pRes->m_dMatches[i].m_iGroupID = *pCur++;
+			pRes->m_dMatches[i].m_iTimestamp = *pCur++;
+			pRes->m_dMatches[i].m_iWeight = *pCur++;
+		}
+
+		int i;
+		for ( i=0; i<pRes->m_iNumWords; i++ )
+		{
+			if ( ((char*)pCur) + sizeof(int) > pEnd )
+			{
+				sphWarning ( "failed to read query term length from '%s': file too short", sBuf );
+				break;
+			}
+			int iWordLen = *pCur++;
+
+			if ( ((char*)pCur) + iWordLen + 2*sizeof(int) > pEnd )
+			{
+				sphWarning ( "failed to read query term data from '%s': file too short", sBuf );
+				break;
+			}
+
+			pRes->m_tWordStats[i].m_sWord.SetBinary ( (char*)pCur, iWordLen );
+			pCur = (int*)( ((char*)pCur) + iWordLen );
+
+			pRes->m_tWordStats[i].m_iDocs = *pCur++; 
+			pRes->m_tWordStats[i].m_iHits = *pCur++; 
+		}
+		if ( i!=pRes->m_iNumWords )
+			break;
+
+		bOK = true;
+		break;
+	}
+
+	if ( m_bUseGzip )
+	{
+		SafeDeleteArray ( pMapFile );
+	} else
+	{
+		munmap ( pMapFile, iFileSize );
+	}
+	close ( fCache );
+	return bOK;
+}
+
+
+bool CSphCache::StoreResult ( const CSphQuery & tQuery, const char * sIndexName, const CSphQueryResult * pRes )
+{
+	GenerateCacheFileName ( tQuery );
+
+	// create the dir if it doesn't exist yet
+	char sBuf [ SPH_MAX_FILENAME_LEN ];
+	snprintf ( sBuf, sizeof(sBuf), "%s/%s/%c/%c", m_sCacheDir.cstr(), sIndexName, m_sCacheFileName[0], m_sCacheFileName[1] );
+
+	struct stat stDir;
+	if ( lstat ( sBuf, &stDir)!=0 )
+	{
+		snprintf ( sBuf, sizeof(sBuf), "%s/%s", m_sCacheDir.cstr(), sIndexName );
+		mkdir ( sBuf, 0644 );
+		snprintf ( sBuf, sizeof(sBuf), "%s/%s/%c", m_sCacheDir.cstr(), sIndexName, m_sCacheFileName[0] );
+		mkdir ( sBuf, 0644 );
+		snprintf ( sBuf, sizeof(sBuf), "%s/%s/%c/%c", m_sCacheDir.cstr(), sIndexName, m_sCacheFileName[0], m_sCacheFileName[1] );
+		mkdir ( sBuf, 0644 );
+	}
+
+	// create the file
+	snprintf ( sBuf, sizeof(sBuf), "%s/%s/%c/%c/%s", m_sCacheDir.cstr(), sIndexName,
+		m_sCacheFileName[0], m_sCacheFileName[1], m_sCacheFileName );
+	int fCache = open ( sBuf, O_CREAT | O_TRUNC | O_WRONLY, 0644 );
+	if ( fCache<0 )
+	{
+		sphWarning ( "failed to create '%s': errno=%d, err=%s", sBuf, errno, strerror(errno) );
+		return false;
+	}
+
+	// create the gzip stream
+	gzFile fgzCache = Z_NULL;
+	if ( m_bUseGzip )
+		fgzCache = gzdopen ( fCache, "wb" );
+
+	int iBufLen = sizeof(int)*( 3 + 4*pRes->m_dMatches.GetLength() + 3*pRes->m_iNumWords );
+	for ( int i=0; i<pRes->m_iNumWords; i++ )
+		iBufLen += strlen ( pRes->m_tWordStats[i].m_sWord.cstr() );
+
+	int * pBuf = new int [ 1 + iBufLen/sizeof(int) ];
+	int * pCur = pBuf;
+
+	*pCur++ = pRes->m_iNumWords;
+	*pCur++ = pRes->m_dMatches.GetLength();
+	*pCur++ = pRes->m_iTotalMatches;
+	ARRAY_FOREACH ( i, pRes->m_dMatches )
+	{
+		*pCur++ = pRes->m_dMatches[i].m_iDocID;
+		*pCur++ = pRes->m_dMatches[i].m_iGroupID;
+		*pCur++ = pRes->m_dMatches[i].m_iTimestamp;
+		*pCur++ = pRes->m_dMatches[i].m_iWeight;
+	}
+
+	for ( int i=0; i<pRes->m_iNumWords; i++ )
+	{
+		int iLen = strlen ( pRes->m_tWordStats[i].m_sWord.cstr() );
+		*pCur++ = iLen;
+
+		memcpy ( pCur, pRes->m_tWordStats[i].m_sWord.cstr(), iLen );
+		pCur = (int*)( ((char*)pCur) + iLen );
+
+		*pCur++ = pRes->m_tWordStats[i].m_iDocs;
+		*pCur++ = pRes->m_tWordStats[i].m_iHits;
+	}
+	assert ( ((char*)pCur)==((char*)pBuf) + iBufLen );
+
+	bool bOK = true;
+	if ( m_bUseGzip )
+	{
+		if ( gzwrite ( fgzCache, pBuf, iBufLen )<0 )
+		{
+			sphWarning ( "failed to gzwrite '%s': errno=%d, err=%s", errno, strerror(errno) ); // FIXME! should use gzerror everywhere
+			bOK = false;
+		}
+		gzclose ( fgzCache );
+	} else
+	{
+		if ( write ( fCache, pBuf, iBufLen )<0 )
+		{
+			sphWarning ( "failed to write '%s': errno=%d, err=%s", errno, strerror(errno) );
+			bOK = false;
+		}
+		close ( fCache );
+	}
+
+	SafeDeleteArray ( pBuf );
+	return true;
+}
+
+
+void CSphCache::GenerateCacheFileName ( const CSphQuery & tQuery )
+{
+	md5_state_t tState;
+	md5_byte_t tDigest[16];
+	char sBuf[2048];
+
+	int iLen = snprintf ( sBuf, sizeof(sBuf), "%s-%d-%d-%d-%d-%d-%d-%d-%d",
+		tQuery.m_sQuery.cstr(),tQuery.m_eMode, tQuery.m_eSort,
+		tQuery.m_iMinID, tQuery.m_iMaxID, tQuery.m_iMinTS, tQuery.m_iMaxTS,
+		tQuery.m_iMinGID, tQuery.m_iMaxGID );
+
+	md5_init ( &tState );
+	md5_append ( &tState, (md5_byte_t*)sBuf, iLen );
+
+	if ( tQuery.m_iGroups>0 )
+		md5_append ( &tState, (md5_byte_t*)tQuery.m_pGroups, tQuery.m_iGroups*sizeof(DWORD) );
+
+	if ( tQuery.m_iWeights>0 )
+		md5_append( &tState, (md5_byte_t*)tQuery.m_pWeights, tQuery.m_iWeights*sizeof(DWORD) );
+
+	md5_finish ( &tState, tDigest );
+	for ( int iDigest=0; iDigest<16; ++iDigest )
+		sprintf ( m_sCacheFileName + iDigest*2, "%02x", tDigest[iDigest] );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1585,14 +1935,24 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			assert ( tServed.m_pDict );
 			assert ( tServed.m_pTokenizer );
 
-			// do query
-			tQuery.m_pTokenizer = tServed.m_pTokenizer;
-			tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pTop );
-			iSearched++;
+			CSphCache tCache ( g_sCacheDir.cstr(), g_iCacheTTL, g_bCacheGzip );
+			if ( !g_bCacheEnable
+				|| !tCache.ReadFromFile ( tQuery, sNext, tServed.m_pIndexPath->cstr(), pRes ) )
+			{
+				// do query
+				tQuery.m_pTokenizer = tServed.m_pTokenizer;
+				tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pTop );
+				iSearched++;
 
-#if REMOVE_DUPES
-			sphFlattenQueue ( pTop, pRes );
-#endif
+				#if REMOVE_DUPES
+				sphFlattenQueue ( pTop, pRes );
+				#endif
+
+				if ( g_bCacheEnable )
+					tCache.StoreResult ( tQuery, sNext, pRes );
+			}
+
+			iSearched++;
 		}
 
 		if ( !iSearched )
@@ -1964,6 +2324,19 @@ int main ( int argc, char **argv )
 		{
 			g_iMaxMatches = iMax;
 		}
+	}
+
+	if ( hSearchd("cache_dir") )
+	{
+		// FIXME! add more validation
+		g_bCacheEnable = true;
+		g_sCacheDir = hSearchd["cache_dir"];
+
+		if ( hSearchd("cache_ttl") )
+			g_iCacheTTL = Max ( hSearchd["cache_ttl"].intval(), 1 );
+
+		if ( hSearchd("cache_gzip") && hSearchd["cache_gzip"].intval()!=0 )
+			g_bCacheGzip = true;
 	}
 
 	//////////////////////

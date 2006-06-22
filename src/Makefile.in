@@ -59,7 +59,7 @@ am__objects_1 = libsphinx_a-sphinx.$(OBJEXT) \
 	libsphinx_a-sphinxsoundex.$(OBJEXT) \
 	libsphinx_a-sphinxstemen.$(OBJEXT) \
 	libsphinx_a-sphinxstemru.$(OBJEXT) \
-	libsphinx_a-sphinxutils.$(OBJEXT)
+	libsphinx_a-sphinxutils.$(OBJEXT) libsphinx_a-md5.$(OBJEXT)
 am_libsphinx_a_OBJECTS = $(am__objects_1)
 libsphinx_a_OBJECTS = $(am_libsphinx_a_OBJECTS)
 am__installdirs = "$(DESTDIR)$(bindir)"
@@ -187,9 +187,9 @@ sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 sysconfdir = @sysconfdir@
 target_alias = @target_alias@
-CCFLAGS = -Wall -O3 -fomit-frame-pointer  -D_FILE_OFFSET_BITS=64
-SRC_SPHINX = sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp sphinxsoundex.cpp sphinxstemen.cpp sphinxstemru.cpp sphinxutils.cpp
-HEADERS_SPHINX = sphinx.h sphinxexcerpt.h sphinxquery.h sphinxstd.h sphinxstem.h sphinxtimers.h sphinxutils.h sphinxstemru.inl
+CCFLAGS = -Wall -O3 -fomit-frame-pointer -D_FILE_OFFSET_BITS=64
+SRC_SPHINX = sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp sphinxsoundex.cpp sphinxstemen.cpp sphinxstemru.cpp sphinxutils.cpp md5.cpp
+HEADERS_SPHINX = sphinx.h sphinxexcerpt.h sphinxquery.h sphinxstd.h sphinxstem.h sphinxtimers.h sphinxutils.h sphinxstemru.inl md5.h
 noinst_LIBRARIES = libsphinx.a
 libsphinx_a_SOURCES = $(SRC_SPHINX)
 libsphinx_a_CPPFLAGS = $(MYSQL_CFLAGS) $(PGSQL_CFLAGS) $(CCFLAGS)
@@ -330,6 +330,12 @@ libsphinx_a-sphinxutils.o: sphinxutils.cpp
 
 libsphinx_a-sphinxutils.obj: sphinxutils.cpp
 	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-sphinxutils.obj `if test -f 'sphinxutils.cpp'; then $(CYGPATH_W) 'sphinxutils.cpp'; else $(CYGPATH_W) '$(srcdir)/sphinxutils.cpp'; fi`
+
+libsphinx_a-md5.o: md5.cpp
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-md5.o `test -f 'md5.cpp' || echo '$(srcdir)/'`md5.cpp
+
+libsphinx_a-md5.obj: md5.cpp
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsphinx_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libsphinx_a-md5.obj `if test -f 'md5.cpp'; then $(CYGPATH_W) 'md5.cpp'; else $(CYGPATH_W) '$(srcdir)/md5.cpp'; fi`
 
 indexer-indexer.o: indexer.cpp
 	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(indexer_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o indexer-indexer.o `test -f 'indexer.cpp' || echo '$(srcdir)/'`indexer.cpp

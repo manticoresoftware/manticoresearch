@@ -942,7 +942,7 @@ bool CSphCache::ReadFromFile ( const CSphQuery & tQuery, const char * sIndexName
 
 	} else
 	{
-		int iFileSize = lseek ( fCache, 0, SEEK_END );
+		iFileSize = lseek ( fCache, 0, SEEK_END );
 		pMapFile = (int*)mmap ( 0, (size_t)iFileSize, PROT_READ,
 			MAP_SHARED | MAP_NORESERVE, fCache, 0L );
 

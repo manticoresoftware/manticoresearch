@@ -1042,11 +1042,11 @@ bool CSphCache::StoreResult ( const CSphQuery & tQuery, const char * sIndexName,
 	if ( lstat ( sBuf, &stDir)!=0 )
 	{
 		snprintf ( sBuf, sizeof(sBuf), "%s/%s", m_sCacheDir.cstr(), sIndexName );
-		mkdir ( sBuf, 0644 );
+		mkdir ( sBuf, 0755 );
 		snprintf ( sBuf, sizeof(sBuf), "%s/%s/%c", m_sCacheDir.cstr(), sIndexName, m_sCacheFileName[0] );
-		mkdir ( sBuf, 0644 );
+		mkdir ( sBuf, 0755 );
 		snprintf ( sBuf, sizeof(sBuf), "%s/%s/%c/%c", m_sCacheDir.cstr(), sIndexName, m_sCacheFileName[0], m_sCacheFileName[1] );
-		mkdir ( sBuf, 0644 );
+		mkdir ( sBuf, 0755 );
 	}
 
 	// create the file

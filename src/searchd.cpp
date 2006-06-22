@@ -2533,6 +2533,7 @@ int main ( int argc, char **argv )
 			tIdx.m_pDict = new CSphDict_CRC32 ( iMorph );
 			tIdx.m_pDict->LoadStopwords ( hIndex.Exists ( "stopwords" ) ? hIndex["stopwords"].cstr() : NULL, pTokenizer );
 			tIdx.m_pTokenizer = pTokenizer;
+			tIdx.m_pIndexPath = new CSphString ( hIndex["path"] );
 
 			if ( !bOptConsole )
 			{
@@ -2556,7 +2557,6 @@ int main ( int argc, char **argv )
 				fclose ( fp );
 
 				tIdx.m_pLockFile = new CSphString ( sTmp );
-				tIdx.m_pIndexPath = new CSphString ( hIndex["path"] );
 			}
 
 			g_hIndexes.Add ( tIdx, sIndexName );

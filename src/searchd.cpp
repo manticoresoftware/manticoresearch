@@ -322,7 +322,7 @@ int sphCreateServerSocket ( int port )
 		sphFatal ( "unable to create server socket on port %d: %s", port, sphSockError() );
 
 	int iOn = 1;
-	if ( setsockopt ( sock, SOL_SOCKET,  SO_REUSEADDR, (char*)&iOn, sizeof(iOn) ) )
+	if ( setsockopt ( sock, SOL_SOCKET, SO_REUSEADDR, (char*)&iOn, sizeof(iOn) ) )
 		sphFatal ( "setsockopt() failed: %s", sphSockError() );
 
 	int iTries = 12;
@@ -1730,7 +1730,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	q.m_bRemoveSpaces = ( iFlags & EXCERPT_FLAG_REMOVESPACES );
 
 	int iCount = tReq.GetInt ();
-	if ( iCount<0 || iCount>EXCERPT_MAX_ENTRIES  )
+	if ( iCount<0 || iCount>EXCERPT_MAX_ENTRIES )
 	{
 		tReq.SendErrorReply ( "invalid entries count %d", iCount );
 		return;

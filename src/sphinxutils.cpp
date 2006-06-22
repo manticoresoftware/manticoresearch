@@ -303,7 +303,7 @@ bool CSphConfigParser::Parse ( const char * file )
 			if ( *p=='#' )					{ LOC_PUSH ( SKIP2NL ); continue; }
 			if ( !sToken[0] )				{ LOC_ERROR ( "internal error (empty token in TYPE)" ); }
 			if ( IsPlainSection(sToken) )	{ AddSection ( sToken, sToken ); sToken[0] = '\0'; LOC_POP (); LOC_PUSH ( SEC ); LOC_PUSH ( CHR ); iCh = '{'; p--; continue; }
-			if ( IsNamedSection(sToken) )	{  m_sSectionType = sToken; sToken[0] = '\0'; LOC_POP (); LOC_PUSH ( SECNAME ); p--; continue; }
+			if ( IsNamedSection(sToken) )	{ m_sSectionType = sToken; sToken[0] = '\0'; LOC_POP (); LOC_PUSH ( SECNAME ); p--; continue; }
 											LOC_ERROR2 ( "invalid section type '%s'", sToken );
 		}
 

@@ -254,7 +254,7 @@ void sphProfilerShow ( int iTimer=0, int iLevel=0 )
 		return;
 
 	for ( int i=0; i<iLevel; i++ )
-		fprintf ( stdout, "  " );
+		fprintf ( stdout, " "" " );
 	fprintf ( stdout, "%s: %.2f", g_dTimerNames [ tTimer.m_eTimer ], tTimer.m_fStamp );
 	if ( iChildren )
 		fprintf ( stdout, ", self: %.2f", fSelf );
@@ -5250,7 +5250,7 @@ void CSphSource_PgSQL::PostIndex ()
 	for ( ;; )
 	{		
 		// do connect to database
-		m_tSqlDriver =  PQsetdbLogin ( m_tParams.m_sHost.cstr(), m_tParams.m_sPort.cstr(), NULL, NULL,
+		m_tSqlDriver = PQsetdbLogin ( m_tParams.m_sHost.cstr(), m_tParams.m_sPort.cstr(), NULL, NULL,
 			m_tParams.m_sDB.cstr(), m_tParams.m_sUser.cstr(), m_tParams.m_sPass.cstr() );
 
 		// get connection status

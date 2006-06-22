@@ -436,7 +436,7 @@ void LOC_PREFIX(stem_ru_init) ()
 	#undef STEM_RU_INIT_TABLE
 	#define STEM_RU_INIT_TABLE(table) \
 		for ( i=0; i<int(sizeof(LOC_PREFIX(table))/sizeof(LOC_TABLE_ENTRY)); i++ ) \
-		   	LOC_PREFIX(table)[i].len = (int)strlen((char*)LOC_PREFIX(table)[i].suffix)-1;
+			LOC_PREFIX(table)[i].len = (int)strlen((char*)LOC_PREFIX(table)[i].suffix)-1;
 
 	STEM_RU_INIT_TABLE(ru_adj)
 	STEM_RU_INIT_TABLE(ru_part)

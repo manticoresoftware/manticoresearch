@@ -470,6 +470,35 @@ static SphQueryExpr_t * RemoveRedundantNodes ( SphQueryExpr_t * pNode )
 }
 
 
+static void DumpTree ( SphQueryExpr_t * pNode, int iLevel=0 )
+{
+	for ( SphQueryExpr_t * pCur = pNode; pCur; pCur = pCur->m_pNext )
+	{
+		for ( int i=0; i<iLevel; i++ )
+			printf ( "\t" );
+
+		switch ( pCur->m_eType )
+		{
+			case NODE_AND:	printf ( "&& "); break;
+			case NODE_OR:	printf ( "|| "); break;
+			default:		printf ( "?? "); break;
+		}
+
+		if ( pCur->m_bInvert )
+			printf ( "!" );
+
+		if ( !pCur->m_pExpr )
+		{
+			printf ( "%s\n", pCur->m_sWord.cstr() );
+		} else
+		{
+			printf ( "\n" );
+			DumpTree ( pCur->m_pExpr, iLevel+1 );
+		}
+	}
+}
+
+
 static SphQueryExpr_t * SimplifyTree ( SphQueryExpr_t * pNode )
 {
 	if ( !pNode )

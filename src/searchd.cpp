@@ -840,8 +840,8 @@ bool CSphCache::ReadFromFile ( const CSphQuery & tQuery, const char * sIndexName
 	GenerateCacheFileName ( tQuery );
 
 	char sBuf [ SPH_MAX_FILENAME_LEN ];
-	snprintf ( sBuf, sizeof(sBuf), "%s/%s/%c/%c/%s", m_sCacheDir.cstr(),
-		sIndexName, m_sCacheFileName[0], m_sCacheFileName[1], m_sCacheFileName );
+	snprintf ( sBuf, sizeof(sBuf), "%s/%s/%c%c/%c%c/%s", m_sCacheDir.cstr(),
+		sIndexName, m_sCacheFileName[0], m_sCacheFileName[1],  m_sCacheFileName[2], m_sCacheFileName[3], m_sCacheFileName );
 
 	struct stat stFileInfo;
 	if ( lstat ( sBuf, &stFileInfo) < 0 )
@@ -1036,22 +1036,22 @@ bool CSphCache::StoreResult ( const CSphQuery & tQuery, const char * sIndexName,
 
 	// create the dir if it doesn't exist yet
 	char sBuf [ SPH_MAX_FILENAME_LEN ];
-	snprintf ( sBuf, sizeof(sBuf), "%s/%s/%c/%c", m_sCacheDir.cstr(), sIndexName, m_sCacheFileName[0], m_sCacheFileName[1] );
+	snprintf ( sBuf, sizeof(sBuf), "%s/%s/%c%c/%c%c", m_sCacheDir.cstr(), sIndexName, m_sCacheFileName[0], m_sCacheFileName[1],m_sCacheFileName[2], m_sCacheFileName[3] );
 
 	struct stat stDir;
 	if ( lstat ( sBuf, &stDir)!=0 )
 	{
 		snprintf ( sBuf, sizeof(sBuf), "%s/%s", m_sCacheDir.cstr(), sIndexName );
 		mkdir ( sBuf, 0755 );
-		snprintf ( sBuf, sizeof(sBuf), "%s/%s/%c", m_sCacheDir.cstr(), sIndexName, m_sCacheFileName[0] );
+		snprintf ( sBuf, sizeof(sBuf), "%s/%s/%c%c", m_sCacheDir.cstr(), sIndexName, m_sCacheFileName[0], m_sCacheFileName[1], );
 		mkdir ( sBuf, 0755 );
-		snprintf ( sBuf, sizeof(sBuf), "%s/%s/%c/%c", m_sCacheDir.cstr(), sIndexName, m_sCacheFileName[0], m_sCacheFileName[1] );
+		snprintf ( sBuf, sizeof(sBuf), "%s/%s/%c%c/%c%c", m_sCacheDir.cstr(), sIndexName, m_sCacheFileName[0], m_sCacheFileName[1],m_sCacheFileName[2], m_sCacheFileName[3] );
 		mkdir ( sBuf, 0755 );
 	}
 
 	// create the file
-	snprintf ( sBuf, sizeof(sBuf), "%s/%s/%c/%c/%s", m_sCacheDir.cstr(), sIndexName,
-		m_sCacheFileName[0], m_sCacheFileName[1], m_sCacheFileName );
+	snprintf ( sBuf, sizeof(sBuf), "%s/%s/%c%c/%c%c/%s", m_sCacheDir.cstr(), sIndexName,
+		m_sCacheFileName[0], m_sCacheFileName[1], m_sCacheFileName[2], m_sCacheFileName[3], m_sCacheFileName );
 	int fCache = open ( sBuf, O_CREAT | O_TRUNC | O_WRONLY, 0644 );
 	if ( fCache<0 )
 	{

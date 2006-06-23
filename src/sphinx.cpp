@@ -1461,15 +1461,11 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 				m_sAccum[1] = '\0';
 			} else
 			{
-				if ( iCode==0 )
-				{
-					// delimiting whitespace; just flush accum
-					m_sAccum[m_iAccum] = '\0';
-				} else
-				{
-					// we need to flush current accum and then redo special char again
+				// flush accum in any case
+				m_sAccum[m_iAccum] = '\0';
+				// we'll need to redo special char again
+				if ( iCode<0 )
 					m_pCur--;
-				}
 			}
 
 			m_iAccum = 0;

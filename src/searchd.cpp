@@ -46,14 +46,16 @@
 	#include <sys/wait.h>
 	#include <netdb.h>
 
+	// for cache
+	#include <zlib.h>
+	#include <sys/mman.h>
+	#include <md5.h>
+
 	#define sphSockRecv(_sock,_buf,_len,_flags)		::recv(_sock,_buf,_len,_flags)
 	#define sphSockSend(_sock,_buf,_len,_flags)		::send(_sock,_buf,_len,_flags)
 	#define sphSockClose(_sock)						::close(_sock)
-#endif
 
-#include <zlib.h>
-#include <sys/mman.h>
-#include <md5.h>
+#endif
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -807,6 +809,8 @@ MemInputBuffer_c::MemInputBuffer_c ( const char * sFrom, int iLen )
 // SIMPLE FILE-BASED QUERY CACHE
 /////////////////////////////////////////////////////////////////////////////
 
+#if !USE_WINDOWS
+
 /// my simple cache
 class CSphCache
 {
@@ -1143,6 +1147,8 @@ void CSphCache::GenerateCacheFileName ( const CSphQuery & tQuery )
 	for ( int iDigest=0; iDigest<16; ++iDigest )
 		sprintf ( m_sCacheFileName + iDigest*2, "%02x", tDigest[iDigest] );
 }
+
+#endif // !USE_WINDOWS
 
 /////////////////////////////////////////////////////////////////////////////
 // DISTRIBUTED QUERIES
@@ -1935,21 +1941,25 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			assert ( tServed.m_pDict );
 			assert ( tServed.m_pTokenizer );
 
+#if !USE_WINDOWS
 			CSphCache tCache ( g_sCacheDir.cstr(), g_iCacheTTL, g_bCacheGzip );
 			if ( !g_bCacheEnable
 				|| !tCache.ReadFromFile ( tQuery, sNext, tServed.m_pIndexPath->cstr(), pRes ) )
+#endif
 			{
 				// do query
 				tQuery.m_pTokenizer = tServed.m_pTokenizer;
 				tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pTop );
 				iSearched++;
 
-				#if REMOVE_DUPES
+#if REMOVE_DUPES
 				sphFlattenQueue ( pTop, pRes );
-				#endif
+#endif
 
+#if !USE_WINDOWS
 				if ( g_bCacheEnable )
 					tCache.StoreResult ( tQuery, sNext, pRes );
+#endif
 			}
 
 			iSearched++;

@@ -695,12 +695,16 @@ int main ( int argc, char ** argv )
 		{
 			pTokenizer = sphCreateSBCSTokenizer ();
 		}
+		assert ( pTokenizer );
 
 		// charset_table
-		assert ( pTokenizer );
 		if ( hIndex.Exists ( "charset_table" ) )
 			if ( !pTokenizer->SetCaseFolding ( hIndex["charset_table"].cstr() ) )
 				sphDie ( "FATAL: failed to parse 'charset_table' in index '%s', fix your configuration.\n", sIndexName );
+
+		// min word len
+		if ( hIndex("min_word_len") )
+			pTokenizer->SetMinWordLen ( hIndex["min_word_len"].intval() );
 
 		/////////////////////
 		// spawn datasources

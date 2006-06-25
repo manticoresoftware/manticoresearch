@@ -190,7 +190,10 @@ protected:
 class ISphTokenizer
 {
 public:
-	/// virtualizing dtor
+	/// trivial ctor
+									ISphTokenizer() : m_iMinWordLen ( 1 ) {}
+
+	/// trivial dtor
 	virtual							~ISphTokenizer () {}
 
 	/// set new translation table
@@ -204,6 +207,9 @@ public:
 	/// get lowercaser
 	virtual const CSphLowercaser *	GetLowercaser () const { return &m_tLC; }
 
+	/// set min word length
+	virtual void					SetMinWordLen ( int iLen ) { m_iMinWordLen = Max ( iLen, 1 ); }
+
 public:
 	/// pass next buffer
 	virtual void					SetBuffer ( BYTE * sBuffer, int iLength, bool bLast ) = 0;
@@ -216,6 +222,7 @@ public:
 
 protected:
 	CSphLowercaser		m_tLC;			///< my lowercaser
+	int					m_iMinWordLen;	///< minimal word length
 };
 
 /// create SBCS tokenizer

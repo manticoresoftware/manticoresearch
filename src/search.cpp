@@ -261,6 +261,10 @@ int main ( int argc, char ** argv )
 			if ( !tQuery.m_pTokenizer->SetCaseFolding ( hIndex["charset_table"].cstr() ) )
 				sphDie ( "FATAL: failed to parse 'charset_table' in index '%s'.\n", sIndexName );
 
+		// min word len
+		if ( hIndex("min_word_len") )
+			tQuery.m_pTokenizer->SetMinWordLen ( hIndex["min_word_len"].intval() );
+
 		//////////
 		// search
 		//////////

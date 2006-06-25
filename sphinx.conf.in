@@ -226,6 +226,12 @@ index test1
 	# stopwords			= /home/sphinx/data/stopwords.txt
 	stopwords			=
 
+	# minimum word length
+	# only the words that are of this length and above will be indexed;
+	# for example, if min_word_len is 4, "the" won't be indexed, but "they" will be.
+	# default is 1, which (obviously) means to index everything
+	min_word_len		= 1
+
 	# charset encoding type
 	# known types are 'sbcs' (Single Byte CharSet) and 'utf-8'
 	# optional, default is sbcs

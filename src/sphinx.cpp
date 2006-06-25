@@ -1419,20 +1419,27 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 		int iCode = 0;
 		if ( m_pCur>=m_pBufferMax )
 		{
-			if ( !m_bLast || !m_iAccum )
+			if ( !m_bLast || m_iAccum<m_iMinWordLen )
 				return NULL;
 		} else
 		{
 			iCode = m_tLC.ToLower ( *m_pCur++ );
 		}
 
-		// skip whitespace
-		if ( m_iAccum==0 && iCode==0 )
+		// skip whitespace and short words
+		if ( m_iAccum<m_iMinWordLen && iCode==0 )
+		{
+			m_iAccum = 0;
 			continue;
+		}
 
 		// handle whitespace and specials
 		if ( iCode<=0 )
 		{
+			// skip short words
+			if ( m_iAccum<m_iMinWordLen )
+				m_iAccum = 0;
+
 			if ( m_iAccum==0 )
 			{
 				// handle specials
@@ -1443,6 +1450,7 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 			{
 				// flush accum in any case
 				m_sAccum[m_iAccum] = '\0';
+
 				// we'll need to redo special char again
 				if ( iCode<0 )
 					m_pCur--;
@@ -1513,20 +1521,27 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 		BYTE * pCur = m_pCur; // to redo special char, if there's a token already
 		if ( m_pCur>=m_pBufferMax )
 		{
-			if ( !m_bLast || !m_iAccum )
+			if ( !m_bLast || m_iAccum<m_iMinWordLen )
 				return NULL;
 		} else
 		{
 			iCode = GetCodePoint(); // advances m_pCur
 		}
 
-		// skip whitespace
-		if ( m_iAccum==0 && iCode==0 )
+		// skip whitespaces and short words
+		if ( m_iAccum<m_iMinWordLen && iCode==0 )
+		{
+			FlushAccum ();
 			continue;
+		}
 
 		// handle whitespace and specials
 		if ( iCode<=0 )
 		{
+			// skip short words
+			if ( m_iAccum<m_iMinWordLen )
+				FlushAccum ();
+
 			if ( m_iAccum==0 )
 			{
 				assert ( iCode<0 );

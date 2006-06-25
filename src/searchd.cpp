@@ -2517,6 +2517,7 @@ int main ( int argc, char **argv )
 			{
 				pTokenizer = sphCreateSBCSTokenizer ();
 			}
+			assert ( pTokenizer );
 
 			// configure morphology
 			DWORD iMorph = SPH_MORPH_NONE;
@@ -2529,13 +2530,16 @@ int main ( int argc, char **argv )
 			}
 
 			// configure charset_table
-			assert ( pTokenizer );
 			if ( hIndex.Exists ( "charset_table" ) )
 				if ( !pTokenizer->SetCaseFolding ( hIndex["charset_table"].cstr() ) )
 			{
 				sphWarning ( "failed to parse 'charset_table' in index '%s' - NOT SERVING", sIndexName );
 				continue;
 			}
+
+			// min word len
+			if ( hIndex("min_word_len") )
+				pTokenizer->SetMinWordLen ( hIndex["min_word_len"].intval() );
 
 			// create add this one to served hashes
 			ServedIndex_t tIdx;

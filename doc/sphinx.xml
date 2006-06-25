@@ -88,6 +88,13 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software Foundation, Inc.,
 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA 
 </para>
+<para>
+If you don't want to be bound by GNU GPL terms (for instance,
+if you would like to embed Sphinx in your software, but would not
+like to disclose its source code), please contact
+<link linkend="author">the author</link> to obtain
+a commercial license.
+</para>
 </sect2>
 
 
@@ -102,7 +109,7 @@ Sphinx initial author and current primary developer is:
 <bridgehead>Contributors</bridgehead>
 <para>People who contributed to Sphinx and their contributions (in no particular order) are:
 <itemizedlist>
-<listitem>Robert Bengtsson, initial version of PostgreSQL data source;</listitem>
+<listitem>Robert "coredev" Bengtsson (Sweden), initial version of PostgreSQL data source;</listitem>
 </itemizedlist>
 </para>
 <para>
@@ -650,6 +657,8 @@ source delta : main
 
 
 </sect1>
+
+<!--
 <sect1 id="searching"><title>Searching</title>
 
 
@@ -723,7 +732,7 @@ xmlpipe_command = perl /www/mysite.com/bin/sphinxpipe.pl
 
 
 </sect1>
-
+-->
 
 <appendix id="changelog"><title>Sphinx revision history</title>
 <sect2 id="ver_0_9_6"><title>Version 0.9.6, 26 jun 2006</title>

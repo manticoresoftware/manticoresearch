@@ -1,0 +1,628 @@
+Sphinx 0.9.6 reference manual
+
+Free open-source SQL full-text search engine
+
+Copyright (c) 2001-2006 Andrew Aksyonoff, <shodan(at)shodan.ru>
+
+-----------------------------------------------------------------
+
+Table of Contents
+
+1. Introduction
+
+     1.1. About
+     1.2. Sphinx features
+     1.3. Where to get Sphinx
+     1.4. License
+     1.5. Author and contributors
+     1.6. History
+
+2. Installation
+
+     2.1. Supported systems
+     2.2. Required tools
+     2.3. Installing Sphinx
+     2.4. Known installation issues
+     2.5. Quick Sphinx usage tour
+
+3. Indexing
+
+     3.1. Data sources
+     3.2. Indexes
+     3.3. Restrictions on the source data
+     3.4. Charsets, case folding, and translation tables
+     3.5. SQL data sources (MySQL, PostgreSQL)
+     3.6. XMLpipe data source
+     3.7. Live index updates
+
+A. Sphinx revision history
+
+-----------------------------------------------------------------
+
+1. Introduction
+---------------
+
+1.1. About
+----------
+
+Sphinx is a full-text search engine, distributed under GPL version 2.
+Commercial licensing is also available upon request.
+
+Generally, it's a standalone search engine, meant to provide fast,
+size-efficient and relevant fulltext search functions to other
+applications. Sphinx was specially designed to integrate well with SQL
+databases and scripting languages. Currently built-in data source
+drivers support fetching data either via direct connection to MySQL,
+PostgreSQL, or from a pipe in a custom XML format.
+
+As for the name, Sphinx is an acronym which is officially decoded as
+SQL Phrase Index. Yes, I know about CMU's Sphinx project.
+
+1.2. Sphinx features
+--------------------
+
+  * high indexing speed (upto 10 MB/sec on modern CPUs);
+  * high search speed (avg query is under 0.1 sec on 2-4 GB text
+    collections);
+  * high scalability (upto 100 GB of text, upto 100 M documents on a
+    single CPU);
+  * provides good relevance through phrase proximity ranking;
+  * provides distributed searching capabilities;
+  * provides document exceprts generation;
+  * supports MySQL natively (MyISAM and InnoDB tables are both
+    supported);
+  * supports PostgreSQL natively;
+  * supports single-byte encodings and UTF-8;
+  * supports English stemming, Russian stemming, and Soundex for
+    morphology;
+  * supports any number of document fields (weights can be changed on
+    the fly);
+  * supports document groups;
+  * supports stopwords;
+  * supports "match all", "match phrase", "match any" and "boolean
+    query" search modes.
+
+1.3. Where to get Sphinx
+------------------------
+
+Sphinx is available through its official Web site at
+http://www.sphinxsearch.com/.
+
+Currently, Sphinx distribution tarball includes the following
+software:
+
+  * indexer: an utility to create fulltext indexes;
+  * search: a simple (test) utility to query fulltext indexes from
+    command line;
+  * searchd: a daemon to search through fulltext indexes from external
+    software (such as Web scripts);
+  * sphinxapi: a set of API libraries for popular Web scripting
+    languages (currently, PHP).
+
+1.4. License
+------------
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or (at
+your option) any later version. See COPYING file for details.
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
+USA
+
+If you don't want to be bound by GNU GPL terms (for instance, if you
+would like to embed Sphinx in your software, but would not like to
+disclose its source code), please contact [25]the author to obtain a
+commercial license.
+
+1.5. Author and contributors
+----------------------------
+
+Author
+------
+
+Sphinx initial author and current primary developer is:
+
+  * Andrew Aksyonoff, <shodan(at)shodan.ru>
+
+Contributors
+------------
+
+People who contributed to Sphinx and their contributions (in no
+particular order) are:
+
+  * Robert "coredev" Bengtsson (Sweden), initial version of PostgreSQL
+    data source;
+
+Many other people have contributed ideas, bug reports, fixes, etc.
+Thank you!
+
+1.6. History
+------------
+
+Sphinx development was started back in 2001, because I didn't manage
+to find an acceptable search solution (for a database driven Web site)
+which would meet my requirements. Actually, each and every important
+aspect was a problem:
+
+  * search quality (ie. good relevance)
+       + statistical ranking methods performed rather bad, especially
+         on large collections of small documents (forums, blogs, etc)
+  * search speed
+       + especially if searching for phrases which contain stopwords,
+         as in "to be or not to be"
+  * moderate disk and CPU requirements when indexing
+       + important in shared hosting enivronment, not to mention the
+         indexing speed.
+
+Despite the amount of time passed and numerous improvements made in
+the other solutions, there's still no solution which I personally
+would be eager to migrate to.
+
+Considering that and a lot of positive feedback received from Sphinx
+users during last years, the obvious decision is to continue
+developing Sphinx (and, eventually, to take over the world).
+
+2. Installation
+---------------
+
+2.1. Supported systems
+----------------------
+
+Most modern UNIX systems with a C++ compiler should be able to compile
+and run Sphinx without any modifications.
+
+Currently known systems Sphinx has been successfully running on are:
+
+  * Linux 2.4.x, 2.6.x (various distributions)
+  * Windows 2000, XP
+  * FreeBSD 4.x, 5.x, 6.x
+  * NetBSD 1.6
+
+I hope Sphinx will work on other Unix platforms as well. If the
+platform your run Sphinx on is not in this list, please do report it.
+
+At the moment, Windows version of Sphinx's searchd daemon is not
+intended to be used in production because it can only handle one
+client at a time.
+
+2.2. Required tools
+-------------------
+
+On UNIX, you will need the following tools to build and install
+Sphinx:
+
+  * a working C++ compiler. GNU gcc is known to work.
+  * a good make program. GNU make is known to work.
+
+On Windows, you will need Microsoft Visual C/C++ Studio .NET 2003.
+Other compilers/environments will probably work as well, but for the
+time being, you will have to build makefile (or other environment
+specific project files) manually.
+
+2.3. Installing Sphinx
+----------------------
+
+1. Extract everything from the distribution tarball (haven't you
+   already?) and go to the sphinx subdirectory:
+
+   $ tar xzvf sphinx-0.9.6.tar.gz
+   $ cd sphinx
+
+2. Run the configuration program:
+
+   $ ./configure
+
+   There's a number of options to configure. The complete listing may
+   be obtained by using --help switch. The most important ones are:
+
+      * --prefix, which specifies where to install Sphinx;
+      * --with-mysql, which specifies where to look for MySQL include
+        and library files, if auto-detection fails;
+      * --with-pgsql, which specifies where to look for PostgreSQL
+        include and library files.
+
+3. Build the binaries:
+
+   $ make
+
+4. Install the binaries in the directory of your choice:
+
+   $ make install
+
+2.4. Known installation issues
+------------------------------
+
+If configure fails to locate MySQL headers and/or libraries, try
+checking for and installing mysql-devel package. On some systems, it
+is not installed by default.
+
+If make fails with a message which look like
+
+   /bin/sh: g++: command not found
+   make[1]: *** [libsphinx_a-sphinx.o] Error 127
+
+try checking for and installing gcc-c++ package.
+
+If you are getting compile-time errors which look like
+
+   sphinx.cpp:67: error: invalid application of `sizeof' to
+       incomplete type `Private::SizeError<false>'
+
+this means that some compile-time type size check failed. The most
+probable reason is that off_t type is less than 64-bit on your system.
+As a quick hack, you can edit sphinx.h and replace off_t with DWORD in
+a typedef for SphOffset_t, but note that this will prohibit you from
+using full-text indexes larger than 2 GB. Even if the hack helps,
+please report such issues, providing the exact error message and
+compiler/OS details, so I could fix them in next releases.
+
+If you keep getting any other error, or the suggestions above do not
+seem to help you, please don't hesitate to contact me.
+
+2.5. Quick Sphinx usage tour
+----------------------------
+
+All the example commands below assume that you installed Sphinx in
+/usr/local/sphinx.
+
+To use Sphinx, you will need to:
+
+1. Create a configuration file.
+
+   Default configuration file name is sphinx.conf. All Sphinx
+   programs look for this file in current working directory by
+   default.
+
+   Sample configuration file, sphinx.conf.dist, which has all the
+   options documented, is created by configure. Copy and edit that
+   sample file to make your own configuration:
+
+   $ cd /usr/local/sphinx/etc
+   $ cp sphinx.conf.dist sphinx.conf
+   $ vi sphinx.conf
+
+   Sample configuration file is setup to index documents table from
+   MySQL database test; so there's example.sql sample data file to
+   populate that table with a few documents for testing purposes:
+
+   $ mysql -u test < /usr/local/sphinx/etc/example.sql
+
+2. Run the indexer to create full-text index from your data:
+
+   $ cd /usr/local/sphinx/etc
+   $ /usr/local/sphinx/bin/indexer
+
+3. Query your newly created index!
+
+To query the index from command line, use search utility:
+
+   $ cd /usr/local/sphinx/etc
+   $ /usr/local/sphinx/bin/search test
+
+To query the index from your PHP scripts, you need to:
+
+1. Run the search daemon which your script will talk to:
+
+   $ cd /usr/local/sphinx/etc
+   $ /usr/local/sphinx/bin/searchd
+
+2. Run the attached PHP API test script (to ensure that the daemon
+   was succesfully started and is ready to serve the queries):
+
+   $ cd sphinx/api
+   $ php test.php test
+
+3. Include the API (it's located in api/sphinxapi.php) into your own
+   scripts and use it.
+
+Happy searching!
+
+3. Indexing
+-----------
+
+3.1. Data sources
+-----------------
+
+The data to be indexed can generally come from very different sources:
+SQL databases, plain text files, HTML files, mailboxes, and so on.
+From Sphinx point of view, the data it indexes is a set of structured
+documents, each of which has the same set of fields. This is biased
+towards SQL, where each row correspond to a document, and each column
+to a field.
+
+Depending on what source Sphinx should get the data from, different
+code is required to fetch the data and prepare it for indexing. This
+code is called data source driver (or simply driver or data source for
+brevity).
+
+At the time of this writing, there are drivers for MySQL and
+PostgreSQL databases, which can connect to the database using its
+native C/C++ API, run queries and fetch the data. There's also a
+driver called XMLpipe, which runs a specified command and reads the
+data from its stdout. See Section 3.6, <<XMLpipe data source>>
+section for the format description.
+
+There can be as many sources per index as necessary. They will be
+sequentially processed in the very same order which was specifed in
+index definition. All the documents coming from those sources will be
+merged as if they were coming from a single source.
+
+3.2. Indexes
+------------
+
+To be able to answer full-text search queries fast, Sphinx needs to
+build a special data structure optimized for such queries from your
+text data. This structure is called index; and the process of building
+index from text is called indexing.
+
+Different index types are well suited for different tasks. For
+example, a disk-based tree-based index would be easy to update (ie.
+insert new documents to existing index), but rather slow to search.
+Therefore, Sphinx architecture allows for different index types to be
+implemented easily.
+
+The only index type which is implemented in Sphinx at the moment is
+designed for maximum indexing and searching speed. This comes at a
+cost of updates being really slow; theoretically, it might be slower
+to update this type of index than than to reindex it from scratch.
+However, this very frequently could be worked around with muiltiple
+indexes, see Section 3.7, <<Live index updates>> for details.
+
+It is planned to implement more index types, including the type which
+would be updateable in real time.
+
+There can be as many indexes per configuration file as necessary.
+indexer utility can reindex either all of them (if --all option is
+specified), or a certain explicitly specified subset. searchd utility
+will serve all the specified indexes, and the clients can specify what
+indexes to search in run time.
+
+3.3. Restrictions on the source data
+------------------------------------
+
+There are a few different restrictions imposed on the source data
+which is going to be indexed by Sphinx, of which the single most
+important one is:
+
+ALL DOCUMENT IDS MUST BE UNIQUE POSITIVE 32-BIT INTEGER NUMBERS.
+
+If this requirement is not met, different bad things can happen. For
+instance, Sphinx can crash with an internal assertion while indexing;
+or produce strange results when searching due to conflicting IDs.
+Also, a 1000-pound gorilla might eventually come out of your display
+and start throwing barrels at you. You've been warned.
+
+3.4. Charsets, case folding, and translation tables
+---------------------------------------------------
+
+When indexing some index, Sphinx fetches documents from the specified
+sources, splits the text into words, and does case folding so that
+"Abc", "ABC" and "abc" would be treated as the same word (or, to be
+pedantic, term).
+
+To do that properly, Sphinx needs to know
+
+  * what encoding is the source text in;
+  * what characters are letters and what are not;
+  * what letters should be folded to what letters.
+
+This should be configured on a per-index basis using charset_type
+and charset_table options. With charset_type, one would
+specify whether the document encoding is single-byte (SBCS) or UTF-8.
+charset_table would then be used to specify the table which maps
+letter characters to their case folded versions. The characters which
+are not in the table are considered to be non-letters and will be
+treated as word separators when indexing or searching through this
+index.
+
+Note that while default tables do not include space character (ASCII
+code 0x20, Unicode U+0020) as a letter, it's in fact perfectly legal
+to do so. This can be useful, for instance, for indexing tag clouds,
+so that space-separated word sets would index as a single search query
+term.
+
+Default tables currently include English and Russian characters.
+Please do submit your tables for other languages!
+
+3.5. SQL data sources (MySQL, PostgreSQL)
+-----------------------------------------
+
+With all the SQL drivers, indexing generally works as follows.
+
+  * connection to the database is established;
+  * pre-query (see ???) is executed to perform any necessary initial
+    setup, such as setting per-connection encoding with MySQL;
+  * main query (see ???) is executed and the rows it returns are
+    indexed;
+  * post-query (see ???) is executed to perform any necessary cleanup;
+  * connection to the database is closed;
+  * indexer does the sorting phase (to be pedantic, index-type
+    specific post-processing);
+  * connection to the database is established again;
+  * post-index query (see ???) is executed to perform any necessary
+    final cleanup;
+  * connection to the database is closed again.
+
+Most options, such as database user/host/password, are
+straightforward. However, there are a few subtle things, which are
+discussed in more detail here.
+
+Ranged queries
+--------------
+
+Main query, which needs to fetch all the documents, can impose a read
+lock on the whole table and stall the concurrent queries (eg. INSERTs
+to MyISAM table), waste a lot of memory for result set, etc. To avoid
+this, Sphinx supports so-called ranged queries. With ranged queries,
+Sphinx first fetches min and max document IDs from the table, and then
+substitutes different ID intervals into main query text and runs the
+modified query to fetch another chunk of documents. Here's an example.
+
+Example 1. Ranged query usage example
+
+   # in sphinx.conf
+
+   sql_query_range = SELECT MIN(id),MAX(id) FROM documents
+   sql_range_step = 1000
+   sql_query = SELECT * FROM documents WHERE id>=$start AND id<=$end
+
+If the table contains document IDs from 1 to, say, 2345, then
+sql_query would be run three times:
+
+1. with $start replaced with 1 and $end replaced with 1000;
+2. with $start replaced with 1001 and $end replaced with 2000;
+3. with $start replaced with 200 and $end replaced with 2345.
+
+Obviously, that's not much of a difference for 2000-row table, but
+when it comes to indexing 10-million-row MyISAM table, ranged queries
+might be of some help.
+
+sql_post vs. sql_post_index
+---------------------------
+
+The difference between post-query and post-index query is in that
+post-query is run immediately when Sphinx received all the documents,
+but further indexing may still fail for some other reason. On the
+contrary, by the time the post-index query gets executed, it is
+guaranteed that the indexing was succesful. Database connection is
+dropped and re-established because sorting phase can be very lengthy
+and would just timeout otherwise.
+
+3.6. XMLpipe data source
+------------------------
+
+XMLpipe data source is designed to enable users to plug data into
+Sphinx without having to implement new data sources drivers
+themselves.
+
+To use XMLpipe, configure the data source in your configuration file
+as follows:
+
+   source example_xmlpipe_source
+   {
+       type = xmlpipe
+       xmlpipe_command = perl /www/mysite.com/bin/sphinxpipe.pl
+   }
+
+The indexer will run the command specified in xmlpipe_command, and
+then read, parse and index the data it prints to stdout.
+
+XMLpipe driver expects the data to be in special XML format. Here's
+the example document stream, consisting of two documents:
+
+Example 2. XMLpipe document stream
+
+   <document>
+   <id>123</id>
+   <group>45</group>
+   <timestamp>1132223498</timestamp>
+   <title>test title</title>
+   <body>
+   this is my document body
+   </body>
+   </document>
+
+   <document>
+   <id>124</id>
+   <group>46</group>
+   <timestamp>1132223498</timestamp>
+   <title>another test</title>
+   <body>
+   this is another document
+   </body>
+   </document>
+
+At the moment, the driver is using a custom manually written parser
+which is pretty fast but really strict; so almost all the fields must
+be present, formatted exactly as in this example, and occur exactly in
+this order. The only optional field is timestamp; it's set to 1 if
+it's missing.
+
+3.7. Live index updates
+-----------------------
+
+There's a frequent situation when the total dataset is too big to be
+reindexed from scratch often, but the amount of new records is rather
+small. Example: a forum with a 1,000,000 archived posts, but only
+1,000 new posts per day.
+
+In this case, "live" (almost real time) index updates could be
+implemented using so called "main+delta" scheme.
+
+The idea is to set up two sources and two indexes, with one "main"
+index for the data which only changes rarely (if ever), and one
+"delta" for the new documents. In the example above, 1,000,000
+archived posts would go to the main index, and newly inserted 1,000
+posts/day would go to the delta index. Delta index could then be
+reindexed very frequently, and the documents can be made available to
+search in a matter of minutes.
+
+Specifying which documents should go to what index and reindexing main
+index could also be made fully automatical. One option would be to
+make a counter table which would track the ID which would split the
+documents, and update it whenever the main index is reindexed.
+
+Example 3. Fully automated live updates
+
+   # in MySQL
+   CREATE TABLE sph_counter
+   (
+       counter_id INTEGER PRIMARY KEY NOT NULL,
+       max_doc_id INTEGER NOT NULL
+   );
+
+   # in sphinx.conf
+   source main
+   {
+       # ...
+       sql_query_pre = REPLACE INTO sph_counter SELECT 1, MAX(id) FROM documents
+       sql_query = SELECT id, title, body FROM documents \
+           WHERE id<=( SELECT max_doc_id FROM sph_counter WHERE counter_id=1 )
+   }
+
+   source delta : main
+   {
+       sql_query_pre =
+       sql_query = SELECT id, title, body FROM documents \
+           WHERE id>( SELECT max_doc_id FROM sph_counter WHERE counter_id=1 )
+   }
+
+A. Sphinx revision history
+--------------------------
+
+A.1. Version 0.9.6, 26 jun 2006
+
+  * added boolean queries support (experimental, beta version)
+  * added simple file-based query cache (experimental, beta version)
+  * added storage engine for MySQL 5.0 and 5.1 (experimental, beta
+    version)
+  * added GNU style configure script
+  * added new searchd protocol (all binary, and should be backwards
+    compatible)
+  * added distributed searching support to searchd
+  * added PostgreSQL driver
+  * added excerpts generation
+  * added min_word_len option to index
+  * added max_matches option to searchd, removed hardcoded MAX_MATCHES
+    limit
+  * added initial documentation, and a working example.sql
+  * added support for multiple sources per index
+  * added soundex support
+  * added group ID ranges support
+  * added --stdin command-line option to search utility
+  * added --noprogress option to indexer
+  * added --index option to search
+  * fixed UTF-8 decoder (3-byte codepoints did not work)
+  * fixed PHP API to handle big result sets faster
+  * fixed config parser to handle empty values properly
+  * fixed redundant time(NULL) calls in time-segments mode
+
+--eof--

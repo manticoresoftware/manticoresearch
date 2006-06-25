@@ -3,7 +3,7 @@ pre.programlisting
 {
 	background-color:	#f0f0f0;
 }
-</style><meta name="generator" content="DocBook XSL Stylesheets V1.70.1"></head><body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="article" lang="en"><div class="titlepage"><div><div><h1 class="title"><a name="id94317"></a>Sphinx 0.9.6 reference manual</h1></div><div><h3 class="subtitle"><i>Free open-source SQL full-text search engine</i></h3></div><div><p class="copyright">Copyright &copy; 2001-2006 Andrew Aksyonoff, <code class="email">&lt;<a href="mailto:shodan(at)shodan.ru">shodan(at)shodan.ru</a>&gt;</code></p></div></div><hr></div><div class="toc"><p><b>Table of Contents</b></p><dl><dt><span class="sect1"><a href="#intro">1. Introduction</a></span></dt><dd><dl><dt><span class="sect2"><a href="#about">1.1. About</a></span></dt><dt><span class="sect2"><a href="#features">1.2. Sphinx features</a></span></dt><dt><span class="sect2"><a href="#getting">1.3. Where to get Sphinx</a></span></dt><dt><span class="sect2"><a href="#license">1.4. License</a></span></dt><dt><span class="sect2"><a href="#author">1.5. Author and contributors</a></span></dt><dt><span class="sect2"><a href="#history">1.6. History</a></span></dt></dl></dd><dt><span class="sect1"><a href="#installation">2. Installation</a></span></dt><dd><dl><dt><span class="sect2"><a href="#supported-system">2.1. Supported systems</a></span></dt><dt><span class="sect2"><a href="#required-tools">2.2. Required tools</a></span></dt><dt><span class="sect2"><a href="#installing">2.3. Installing Sphinx</a></span></dt><dt><span class="sect2"><a href="#install-problems">2.4. Known installation issues</a></span></dt><dt><span class="sect2"><a href="#quick-tour">2.5. Quick Sphinx usage tour</a></span></dt></dl></dd><dt><span class="sect1"><a href="#indexing">3. Indexing</a></span></dt><dd><dl><dt><span class="sect2"><a href="#sources">3.1. Data sources</a></span></dt><dt><span class="sect2"><a href="#indexes">3.2. Indexes</a></span></dt><dt><span class="sect2"><a href="#data-restrictions">3.3. Restrictions on the source data</a></span></dt><dt><span class="sect2"><a href="#charsets">3.4. Charsets, case folding, and translation tables</a></span></dt><dt><span class="sect2"><a href="#sql">3.5. SQL data sources (MySQL, PostgreSQL)</a></span></dt><dt><span class="sect2"><a href="#xmlpipe">3.6. XMLpipe data source</a></span></dt><dt><span class="sect2"><a href="#live-updates">3.7. Live index updates</a></span></dt></dl></dd><dt><span class="sect1"><a href="#searching">4. Searching</a></span></dt><dd><dl><dt><span class="sect2"><a href="#matching-modes">4.1. Matching modes</a></span></dt><dt><span class="sect2"><a href="#ranking-modes">4.2. Ranking modes</a></span></dt><dt><span class="sect2"><a href="#weighting">4.3. Run-time weighting</a></span></dt><dt><span class="sect2"><a href="#distributed">4.4. Distributed searching</a></span></dt></dl></dd><dt><span class="sect1"><a href="#reference">5. <code class="filename">sphinx.conf</code> options reference</a></span></dt><dd><dl><dt><span class="sect2"><a href="#ref-charset-table">5.1. charset_table</a></span></dt><dt><span class="sect2"><a href="#ref-charset-type">5.2. charset_type</a></span></dt><dt><span class="sect2"><a href="#ref-xmlpipe-command">5.3. xmlpipe_command</a></span></dt></dl></dd><dt><span class="sect1"><a href="#developers">6. Developer's corner</a></span></dt><dd><dl><dt><span class="sect2"><a href="#architecture-overview">6.1. Sphinx architecture overview</a></span></dt><dt><span class="sect2"><a href="#adding-data-sources">6.2. Adding new data source drivers</a></span></dt></dl></dd><dt><span class="appendix"><a href="#changelog">A. Sphinx revision history</a></span></dt></dl></div><div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="intro"></a>1.&nbsp;Introduction</h2></div></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="about"></a>1.1.&nbsp;About</h3></div></div></div><p>
+</style><meta name="generator" content="DocBook XSL Stylesheets V1.70.1"></head><body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="article" lang="en"><div class="titlepage"><div><div><h1 class="title"><a name="id94317"></a>Sphinx 0.9.6 reference manual</h1></div><div><h3 class="subtitle"><i>Free open-source SQL full-text search engine</i></h3></div><div><p class="copyright">Copyright &copy; 2001-2006 Andrew Aksyonoff, <code class="email">&lt;<a href="mailto:shodan(at)shodan.ru">shodan(at)shodan.ru</a>&gt;</code></p></div></div><hr></div><div class="toc"><p><b>Table of Contents</b></p><dl><dt><span class="sect1"><a href="#intro">1. Introduction</a></span></dt><dd><dl><dt><span class="sect2"><a href="#about">1.1. About</a></span></dt><dt><span class="sect2"><a href="#features">1.2. Sphinx features</a></span></dt><dt><span class="sect2"><a href="#getting">1.3. Where to get Sphinx</a></span></dt><dt><span class="sect2"><a href="#license">1.4. License</a></span></dt><dt><span class="sect2"><a href="#author">1.5. Author and contributors</a></span></dt><dt><span class="sect2"><a href="#history">1.6. History</a></span></dt></dl></dd><dt><span class="sect1"><a href="#installation">2. Installation</a></span></dt><dd><dl><dt><span class="sect2"><a href="#supported-system">2.1. Supported systems</a></span></dt><dt><span class="sect2"><a href="#required-tools">2.2. Required tools</a></span></dt><dt><span class="sect2"><a href="#installing">2.3. Installing Sphinx</a></span></dt><dt><span class="sect2"><a href="#install-problems">2.4. Known installation issues</a></span></dt><dt><span class="sect2"><a href="#quick-tour">2.5. Quick Sphinx usage tour</a></span></dt></dl></dd><dt><span class="sect1"><a href="#indexing">3. Indexing</a></span></dt><dd><dl><dt><span class="sect2"><a href="#sources">3.1. Data sources</a></span></dt><dt><span class="sect2"><a href="#indexes">3.2. Indexes</a></span></dt><dt><span class="sect2"><a href="#data-restrictions">3.3. Restrictions on the source data</a></span></dt><dt><span class="sect2"><a href="#charsets">3.4. Charsets, case folding, and translation tables</a></span></dt><dt><span class="sect2"><a href="#sql">3.5. SQL data sources (MySQL, PostgreSQL)</a></span></dt><dt><span class="sect2"><a href="#xmlpipe">3.6. XMLpipe data source</a></span></dt><dt><span class="sect2"><a href="#live-updates">3.7. Live index updates</a></span></dt></dl></dd><dt><span class="appendix"><a href="#changelog">A. Sphinx revision history</a></span></dt></dl></div><div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="intro"></a>1.&nbsp;Introduction</h2></div></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="about"></a>1.1.&nbsp;About</h3></div></div></div><p>
 Sphinx is a full-text search engine, distributed under GPL version 2.
 Commercial licensing is also available upon request. 
 </p><p>
@@ -35,11 +35,17 @@ more details.
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software Foundation, Inc.,
 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA 
-</p></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="author"></a>1.5.&nbsp;Author and contributors</h3></div></div></div><h4><a name="id347366"></a>Author</h4><p>
+</p><p>
+If you don't want to be bound by GNU GPL terms (for instance,
+if you would like to embed Sphinx in your software, but would not
+like to disclose its source code), please contact
+<a href="#author" title="1.5.&nbsp;Author and contributors">the author</a> to obtain
+a commercial license.
+</p></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="author"></a>1.5.&nbsp;Author and contributors</h3></div></div></div><h4><a name="id347321"></a>Author</h4><p>
 Sphinx initial author and current primary developer is:
 </p><div class="itemizedlist"><ul type="disc"><li>Andrew Aksyonoff, <code class="email">&lt;<a href="mailto:shodan(at)shodan.ru">shodan(at)shodan.ru</a>&gt;</code></li></ul></div><p>
-</p><h4><a name="id344130"></a>Contributors</h4><p>People who contributed to Sphinx and their contributions (in no particular order) are:
-</p><div class="itemizedlist"><ul type="disc"><li>Robert Bengtsson, initial version of PostgreSQL data source;</li></ul></div><p>
+</p><h4><a name="id344021"></a>Contributors</h4><p>People who contributed to Sphinx and their contributions (in no particular order) are:
+</p><div class="itemizedlist"><ul type="disc"><li>Robert "coredev" Bengtsson (Sweden), initial version of PostgreSQL data source;</li></ul></div><p>
 </p><p>
 Many other people have contributed ideas, bug reports, fixes, etc.
 Thank you!
@@ -228,11 +234,11 @@ as the same word (or, to be pedantic, <em class="glossterm">term</em>).
 To do that properly, Sphinx needs to know
 </p><div class="itemizedlist"><ul type="disc"><li>what encoding is the source text in;</li><li>what characters are letters and what are not;</li><li>what letters should be folded to what letters.</li></ul></div><p>
 This should be configured on a per-index basis using
-<code class="option"><a href="#ref-charset-type" title="5.2.&nbsp;charset_type">charset_type</a></code> and 
-<code class="option"><a href="#ref-charset-table" title="5.1.&nbsp;charset_table">charset_table</a></code> options.
-With <code class="option"><a href="#ref-charset-type" title="5.2.&nbsp;charset_type">charset_type</a></code>,
+<code class="option"><a href="#">charset_type</a></code> and 
+<code class="option"><a href="#">charset_table</a></code> options.
+With <code class="option"><a href="#">charset_type</a></code>,
 one would specify whether the document encoding is single-byte (SBCS) or UTF-8.
-<code class="option"><a href="#ref-charset-table" title="5.1.&nbsp;charset_table">charset_table</a></code> would
+<code class="option"><a href="#">charset_table</a></code> would
 then be used to specify the table which maps letter characters to their case
 folded versions. The characters which are not in the table are considered
 to be non-letters and will be treated as word separators when indexing
@@ -254,7 +260,7 @@ With all the SQL drivers, indexing generally works as follows.
 	to perform any necessary final cleanup;</li><li>connection to the database is closed again.</li></ul></div><p>
 Most options, such as database user/host/password, are straightforward.
 However, there are a few subtle things, which are discussed in more detail here.
-</p><h4><a name="id350889"></a>Ranged queries</h4><p>
+</p><h4><a name="id350897"></a>Ranged queries</h4><p>
 Main query, which needs to fetch all the documents, can impose
 a read lock on the whole table and stall the concurrent queries
 (eg. INSERTs to MyISAM table), waste a lot of memory for result set, etc.
@@ -276,7 +282,7 @@ be run three times:
 Obviously, that's not much of a difference for 2000-row table,
 but when it comes to indexing 10-million-row MyISAM table,
 ranged queries might be of some help.
-</p><h4><a name="id350981"></a><code class="option">sql_post</code> vs. <code class="option">sql_post_index</code></h4><p>
+</p><h4><a name="id350989"></a><code class="option">sql_post</code> vs. <code class="option">sql_post_index</code></h4><p>
 The difference between post-query and post-index query is in that post-query
 is run immediately when Sphinx received all the documents, but further indexing
 <span class="bold"><strong>may</strong></span> still fail for some other reason. On the contrary,
@@ -297,7 +303,7 @@ source example_xmlpipe_source
 }
 </pre><p>
 The <code class="filename">indexer</code> will run the command specified
-in <code class="option"><a href="#ref-xmlpipe-command" title="5.3.&nbsp;xmlpipe_command">xmlpipe_command</a></code>,
+in <code class="option"><a href="#">xmlpipe_command</a></code>,
 and then read, parse and index the data it prints to <code class="filename">stdout</code>.
 </p><p>
 XMLpipe driver expects the data to be in special XML format.
@@ -375,23 +381,4 @@ source delta : main
         WHERE id&gt;( SELECT max_doc_id FROM sph_counter WHERE counter_id=1 )
 }
 </pre></div></div><p><br class="example-break">
-</p></div></div><div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="searching"></a>4.&nbsp;Searching</h2></div></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="matching-modes"></a>4.1.&nbsp;Matching modes</h3></div></div></div>
-(to be added)
-</div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="ranking-modes"></a>4.2.&nbsp;Ranking modes</h3></div></div></div>
-(to be added)
-</div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="weighting"></a>4.3.&nbsp;Run-time weighting</h3></div></div></div>
-(to be added)
-</div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="distributed"></a>4.4.&nbsp;Distributed searching</h3></div></div></div>
-(to be added)
-</div></div><div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="reference"></a>5.&nbsp;<code class="filename">sphinx.conf</code> options reference</h2></div></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="ref-charset-table"></a>5.1.&nbsp;charset_table</h3></div></div></div><h4><a name="id351272"></a>Description</h4><p>Everything one needs to know about charset_table is here</p><h4><a name="id351281"></a>Example</h4><pre class="programlisting">
-charset_table = A..Z-&gt;a..z
-</pre></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="ref-charset-type"></a>5.2.&nbsp;charset_type</h3></div></div></div><h4><a name="id351298"></a>Description</h4><p>Everything one needs to know about charset_type is here</p><h4><a name="id351307"></a>Example</h4><pre class="programlisting">
-charset_type = sbcs
-# charset_type = utf-8
-</pre></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="ref-xmlpipe-command"></a>5.3.&nbsp;xmlpipe_command</h3></div></div></div><h4><a name="id351325"></a>Description</h4><p>Everything one needs to know about xmlpipe_command is here</p><h4><a name="id351334"></a>Example</h4><pre class="programlisting">
-xmlpipe_command = perl /www/mysite.com/bin/sphinxpipe.pl
-</pre></div></div><div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="developers"></a>6.&nbsp;Developer's corner</h2></div></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="architecture-overview"></a>6.1.&nbsp;Sphinx architecture overview</h3></div></div></div>
-(to be added)
-</div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="adding-data-sources"></a>6.2.&nbsp;Adding new data source drivers</h3></div></div></div>
-(to be added)
-</div></div><div class="appendix" lang="en"><h2 class="title" style="clear: both"><a name="changelog"></a>A.&nbsp;Sphinx revision history</h2><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="ver_0_9_6"></a>A.1.&nbsp;Version 0.9.6, 26 jun 2006</h3></div></div></div><div class="itemizedlist"><ul type="disc"><li>added boolean queries support (experimental, beta version)</li><li>added simple file-based query cache (experimental, beta version)</li><li>added storage engine for MySQL 5.0 and 5.1 (experimental, beta version)</li><li>added GNU style <code class="filename">configure</code> script</li><li>added new searchd protocol (all binary, and should be backwards compatible)</li><li>added distributed searching support to searchd</li><li>added PostgreSQL driver</li><li>added excerpts generation</li><li>added <code class="option">min_word_len</code> option to index</li><li>added <code class="option">max_matches</code> option to searchd, removed hardcoded MAX_MATCHES limit</li><li>added initial documentation, and a working <code class="filename">example.sql</code></li><li>added support for multiple sources per index</li><li>added soundex support</li><li>added group ID ranges support</li><li>added <code class="option">--stdin</code> command-line option to search utility</li><li>added <code class="option">--noprogress</code> option to indexer</li><li>added <code class="option">--index</code> option to search</li><li>fixed UTF-8 decoder (3-byte codepoints did not work)</li><li>fixed PHP API to handle big result sets faster</li><li>fixed config parser to handle empty values properly</li><li>fixed redundant <code class="code">time(NULL)</code> calls in time-segments mode</li></ul></div></div></div></div></body></html>
+</p></div></div><div class="appendix" lang="en"><h2 class="title" style="clear: both"><a name="changelog"></a>A.&nbsp;Sphinx revision history</h2><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="ver_0_9_6"></a>A.1.&nbsp;Version 0.9.6, 26 jun 2006</h3></div></div></div><div class="itemizedlist"><ul type="disc"><li>added boolean queries support (experimental, beta version)</li><li>added simple file-based query cache (experimental, beta version)</li><li>added storage engine for MySQL 5.0 and 5.1 (experimental, beta version)</li><li>added GNU style <code class="filename">configure</code> script</li><li>added new searchd protocol (all binary, and should be backwards compatible)</li><li>added distributed searching support to searchd</li><li>added PostgreSQL driver</li><li>added excerpts generation</li><li>added <code class="option">min_word_len</code> option to index</li><li>added <code class="option">max_matches</code> option to searchd, removed hardcoded MAX_MATCHES limit</li><li>added initial documentation, and a working <code class="filename">example.sql</code></li><li>added support for multiple sources per index</li><li>added soundex support</li><li>added group ID ranges support</li><li>added <code class="option">--stdin</code> command-line option to search utility</li><li>added <code class="option">--noprogress</code> option to indexer</li><li>added <code class="option">--index</code> option to search</li><li>fixed UTF-8 decoder (3-byte codepoints did not work)</li><li>fixed PHP API to handle big result sets faster</li><li>fixed config parser to handle empty values properly</li><li>fixed redundant <code class="code">time(NULL)</code> calls in time-segments mode</li></ul></div></div></div></div></body></html>

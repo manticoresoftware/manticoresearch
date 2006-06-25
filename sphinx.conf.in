@@ -164,7 +164,7 @@ source src1
 	# all the other elements are mandatory
 
 	# type				= xmlpipe
-	# xmlpipe_command	= cat /home/sphinx/test.xml
+	# xmlpipe_command	= cat @CONFDIR@/test.xml
 }
 
 
@@ -202,8 +202,8 @@ index test1
 	# .spi/.spd are fulltext index files (index index and index data)
 	#
 	# MUST be defined
-	path			= ./test1
-	# path			= /home/sphinx/data/test1
+	path			= @CONFDIR@/data/test1
+	# path			= @CONFDIR@/data/test1
 
 	# morphology
 	# default is not to use any
@@ -223,7 +223,7 @@ index test1
 	# format is plain text in whatever encoding you use
 	# optional, default is empty
 	#
-	# stopwords			= /home/sphinx/data/stopwords.txt
+	# stopwords			= @CONFDIR@/data/stopwords.txt
 	stopwords			=
 
 	# minimum word length
@@ -256,7 +256,7 @@ index test1
 # and may then be overridden in this index definition
 index test1stemmed : test1
 {
-	path			= ./test1stemmed
+	path			= @CONFDIR@/data/test1stemmed
 	morphology		= stem_en
 }
 

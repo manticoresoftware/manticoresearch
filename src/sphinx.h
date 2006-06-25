@@ -87,7 +87,6 @@ void	sphDie ( char *message, ... );
 void *	sphMalloc ( size_t size );
 void *	sphRealloc ( void *ptr, size_t size );
 void 	sphFree ( void * ptr );
-char *	sphDup ( const char *s );
 
 /// time, in seconds
 float			sphLongTimer ();

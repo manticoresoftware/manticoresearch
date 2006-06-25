@@ -70,11 +70,10 @@ public:
 
 public:
 					CSphConfigParser ();
-					~CSphConfigParser ();
 	bool			Parse ( const char * sFile );
 
 protected:
-	char *			m_sFileName;
+	CSphString		m_sFileName;
 	int				m_iLine;
 	CSphString		m_sSectionType;
 	CSphString		m_sSectionName;

@@ -39,7 +39,7 @@ bool g_bProgress		= true;
 
 template < typename T > struct CSphMTFHashEntry
 {
-	char *					m_sKey;
+	CSphString				m_sKey;
 	CSphMTFHashEntry<T> *	m_pNext;
 	int						m_iSlot;
 	T						m_tValue;
@@ -86,7 +86,7 @@ public:
 		// find matching entry
 		CSphMTFHashEntry<T> * pEntry = m_pData [ uHash ];
 		CSphMTFHashEntry<T> * pPrev = NULL;
-		while ( pEntry && strcmp ( sKey, pEntry->m_sKey ) )
+		while ( pEntry && strcmp ( sKey, pEntry->m_sKey.cstr() ) )
 		{
 			pPrev = pEntry;
 			pEntry = pEntry->pNext;
@@ -112,7 +112,7 @@ public:
 		// find matching entry
 		CSphMTFHashEntry<T> * pEntry = m_pData [ uHash ];
 		CSphMTFHashEntry<T> * pPrev = NULL;
-		while ( pEntry && strcmp ( sKey, pEntry->m_sKey ) )
+		while ( pEntry && strcmp ( sKey, pEntry->m_sKey.cstr() ) )
 		{
 			pPrev = pEntry;
 			pEntry = pEntry->m_pNext;
@@ -122,7 +122,7 @@ public:
 		{
 			// not found, add it, but don't MTF
 			pEntry = new CSphMTFHashEntry<T>;
-			pEntry->m_sKey = sphDup ( sKey );
+			pEntry->m_sKey = sKey;
 			pEntry->m_pNext = NULL;
 			pEntry->m_iSlot = (int)uHash;
 			pEntry->m_tValue = tValue;
@@ -230,7 +230,7 @@ void CSphStopwordBuilderDict::Save ( const char * sOutput, int iTop, bool bFreqs
 	HASH_FOREACH ( it, m_hWords )
 	{
 		Word_t t;
-		t.m_sWord = it->m_sKey;
+		t.m_sWord = it->m_sKey.cstr();
 		t.m_iCount = it->m_tValue;
 		dTop.Add ( t );
 	}
@@ -564,10 +564,16 @@ int main ( int argc, char ** argv )
 
 	// configure memlimit
 	int iMemLimit = 0;
-	if ( hConf.Exists ( "indexer" ) )
+	if ( hConf("indexer")
+		&& hConf["indexer"]("indexer")
+		&& hConf["indexer"]["indexer"]("mem_limit") )
 	{
-		char * sMemLimit = sphDup ( hConf["indexer"]["indexer"]["mem_limit"].cstr() );
-		int iLen = sMemLimit ? (int)strlen ( sMemLimit ) : 0;
+		CSphString sBuf = hConf["indexer"]["indexer"]["mem_limit"];
+
+		char * sMemLimit = sBuf.str();
+		assert ( sMemLimit );
+
+		int iLen = strlen ( sMemLimit );
 		if ( iLen )
 		{
 			iLen--;
@@ -592,7 +598,6 @@ int main ( int argc, char ** argv )
 				iMemLimit = iScale*iRes;
 			}
 		}
-		sphFree ( sMemLimit );
 	}
 
 	/////////////////////

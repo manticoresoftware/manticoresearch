@@ -405,12 +405,11 @@ struct CSphIndexHeader_VLN
 class CSphWriter_VLN
 {
 public:
-	char *		m_sName;
+	CSphString	m_sName;
 	SphOffset_t	m_iPos;
 
 public:
 				CSphWriter_VLN ( char * sName );
-	virtual		~CSphWriter_VLN ();
 
 	int			OpenFile ();
 	void		PutBytes ( void *data, int size );
@@ -579,14 +578,13 @@ public:
 struct CSphIndex_VLN : CSphIndex
 {
 								CSphIndex_VLN ( const char * filename );
-	virtual						~CSphIndex_VLN ();
 
 	virtual int					Build ( CSphDict * dict, const CSphVector < CSphSource * > & dSources, int iMemoryLimit );
 	virtual CSphQueryResult *	Query ( CSphDict * dict, CSphQuery * pQuery );
 	virtual bool				QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchQueue * pTop );
 
 private:
-	char *						m_sFilename;
+	CSphString					m_sFilename;
 	int							fdRaw;
 	SphOffset_t					m_iFilePos;
 	CSphWriter_VLN *			fdIndex;
@@ -787,21 +785,6 @@ float sphLongTimer ()
 	return float(tv.tv_sec-s_sec) + float(tv.tv_usec-s_usec)/1000000.0f;
 
 #endif // USE_WINDOWS
-}
-
-
-char * sphDup ( const char * s )
-{
-	char * r;
-	if ( s )
-	{
-		r = (char*)sphMalloc ( 1+strlen(s) );
-		strcpy ( r, s );
-		return r;
-	} else
-	{
-		return NULL;
-	}
 }
 
 
@@ -1705,7 +1688,7 @@ CSphQuery::~CSphQuery ()
 CSphWriter_VLN::CSphWriter_VLN ( char * sName )
 {
 	assert ( sName );
-	m_sName = sphDup ( sName );
+	m_sName = sName;
 
 	m_pPool = m_dPool;
 	m_iFD = -1;
@@ -1714,18 +1697,11 @@ CSphWriter_VLN::CSphWriter_VLN ( char * sName )
 }
 
 
-CSphWriter_VLN::~CSphWriter_VLN()
-{
-//	close();
-	sphFree ( m_sName );
-}
-
-
 int CSphWriter_VLN::OpenFile ()
 {
 	if ( m_iFD>=0 )
 		return m_iFD;
-	m_iFD = ::open ( m_sName, O_CREAT | O_RDWR | O_TRUNC | SPH_BINARY, 0644 );
+	m_iFD = ::open ( m_sName.cstr(), O_CREAT | O_RDWR | O_TRUNC | SPH_BINARY, 0644 );
 	m_iPoolUsed = 0;
 	m_iPoolOdd = 0;
 	m_iPos = 0;
@@ -1843,7 +1819,7 @@ void CSphWriter_VLN::Flush ()
 {
 	PROFILE ( write_hits );
 
-	if ( sphWrite ( m_iFD, m_dPool, m_iPoolUsed, m_sName )!=m_iPoolUsed )
+	if ( sphWrite ( m_iFD, m_dPool, m_iPoolUsed, m_sName.cstr() )!=m_iPoolUsed )
 		m_bError = true;
 
 	if ( m_iPoolOdd )
@@ -2062,8 +2038,8 @@ CSphIndex * sphCreateIndexPhrase ( const char * sFilename )
 
 CSphIndex_VLN::CSphIndex_VLN ( const char * sName )
 {
-	m_sFilename = sphDup ( sName );
-	
+	m_sFilename = sName;
+
 	fdIndex = NULL;
 	fdData = NULL;
 	fdRaw = 0;
@@ -2076,12 +2052,6 @@ CSphIndex_VLN::CSphIndex_VLN ( const char * sName )
 	m_tLastHit.m_iDocID = 0;
 	m_tLastHit.m_iWordID = 0;
 	m_tLastHit.m_iWordPos = 0;
-}
-
-
-CSphIndex_VLN::~CSphIndex_VLN ()
-{
-	sphFree ( m_sFilename );
 }
 
 
@@ -2158,7 +2128,7 @@ void sphSortHits ( CSphWordHit * s, int n )
 int CSphIndex_VLN::OpenFile ( char * ext, int mode )
 {
 	char sBuf [ SPH_MAX_FILENAME_LEN ];
-	snprintf ( sBuf, sizeof(sBuf), "%s.%s", m_sFilename, ext );
+	snprintf ( sBuf, sizeof(sBuf), "%s.%s", m_sFilename.cstr(), ext );
 
 	int iFD = ::open ( sBuf, mode | SPH_BINARY, 0644 );
 	if ( iFD<0 )
@@ -2294,12 +2264,12 @@ int CSphIndex_VLN::cidxCreate ()
 {
 	char sBuf [ SPH_MAX_FILENAME_LEN ];
 
-	snprintf ( sBuf, sizeof(sBuf), "%s.spi", m_sFilename );
+	snprintf ( sBuf, sizeof(sBuf), "%s.spi", m_sFilename.cstr() );
 	fdIndex = new CSphWriter_VLN ( sBuf );
 	if ( fdIndex->OpenFile()<0 )
 		return 0;
 
-	snprintf ( sBuf, sizeof(sBuf), "%s.spd", m_sFilename );
+	snprintf ( sBuf, sizeof(sBuf), "%s.spd", m_sFilename.cstr() );
 	fdData = new CSphWriter_VLN ( sBuf );
 	if ( fdData->OpenFile()<0 )
 	{
@@ -3065,7 +3035,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 
 	// unlink raw log
 	char sBuf [ SPH_MAX_FILENAME_LEN+1 ];
-	snprintf ( sBuf, sizeof(sBuf), "%s.spr", m_sFilename );
+	snprintf ( sBuf, sizeof(sBuf), "%s.spr", m_sFilename.cstr() );
 	unlink ( sBuf );
 
 	PROFILE_END ( invert_hits );
@@ -3208,36 +3178,25 @@ public:
 /// my simple query parser
 struct CSphQueryParser : CSphSource_Text
 {
-	char *query;
-	char *words[SPH_MAX_QUERY_WORDS];
-	int numWords;
+	CSphString	m_sQuery;
+	CSphString	m_sWords [ SPH_MAX_QUERY_WORDS ];
+	int			m_iNumWords;
 
 	CSphQueryParser ( CSphDict * pDict, const char * sQuery, ISphTokenizer * pTokenizer )
 	{
-		for ( int i=0; i<SPH_MAX_QUERY_WORDS; i++ )
-			words[i] = NULL;
-
 		SetTokenizer ( pTokenizer );
 
-		numWords = 0;
-		query = sphDup ( sQuery );
+		m_iNumWords = 0;
+		m_sQuery = sQuery;
 		m_pDict = pDict;
 		m_bCallWordCallback = true;
 		Next ();
 	}
 
-	~CSphQueryParser()
+	virtual void WordCallback ( char * sWord )
 	{
-		int i;
-
-		for (i = 0; i < SPH_MAX_QUERY_WORDS; i++)
-			if (words[i]) sphFree(words[i]);
-	}
-
-	virtual void WordCallback ( char * word )
-	{
-		if (numWords < SPH_MAX_QUERY_WORDS)
-			this->words[numWords++] = sphDup(word);
+		if ( m_iNumWords<SPH_MAX_QUERY_WORDS )
+			m_sWords [ m_iNumWords++ ] = sWord;
 	}
 
 	virtual BYTE * NextText()
@@ -3245,7 +3204,7 @@ struct CSphQueryParser : CSphSource_Text
 		m_tDocInfo.m_iDocID = 1;
 		m_tDocInfo.m_iGroupID = 1;
 		m_tDocInfo.m_iTimestamp = 1;
-		return (BYTE*)this->query;
+		return (BYTE*)m_sQuery.cstr();
 	}
 };
 
@@ -4050,7 +4009,7 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 	for ( int i=0; i<m_iQueryWords; i++ )
 	{
 		m_dQueryWords[i].Reset ();
-		m_dQueryWords[i].m_sWord = pQueryParser->words[i];
+		m_dQueryWords[i].m_sWord = pQueryParser->m_sWords[i];
 		m_dQueryWords[i].m_iWordID = pQueryParser->m_dHits[i].m_iWordID;
 		m_dQueryWords[i].m_iQueryPos = 1+i;
 	}
@@ -4065,10 +4024,10 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 	// open files
 	char sTmp [ SPH_MAX_FILENAME_LEN ];
 
-	snprintf ( sTmp, sizeof(sTmp), "%s.spi", m_sFilename );
+	snprintf ( sTmp, sizeof(sTmp), "%s.spi", m_sFilename.cstr() );
 	CSphAutofile tWordlist ( sTmp );
 
-	snprintf ( sTmp, sizeof(sTmp), "%s.spd", m_sFilename );
+	snprintf ( sTmp, sizeof(sTmp), "%s.spd", m_sFilename.cstr() );
 	CSphAutofile tDoclist ( sTmp );
 
 	if ( tWordlist.m_iFD<0 || tDoclist.m_iFD<0 )
@@ -4333,8 +4292,8 @@ void CSphDict_CRC32::LoadStopwords ( const char * sFiles, ISphTokenizer * pToken
 	// tokenize file list
 	if ( !sFiles )
 		return;
-	char * sList = sphDup ( sFiles );
-	char * pCur = sList;
+	CSphString sList = sFiles;
+	char * pCur = sList.str();
 	char * sName = NULL;
 
 	for ( ;; )
@@ -4383,8 +4342,6 @@ void CSphDict_CRC32::LoadStopwords ( const char * sFiles, ISphTokenizer * pToken
 		// close file
 		fclose ( fp );
 	}
-
-	sphFree ( sList );
 }
 
 /////////////////////////////////////////////////////////////////////////////

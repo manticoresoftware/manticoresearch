@@ -107,15 +107,9 @@ static char * trim ( char * sLine )
 /////////////////////////////////////////////////////////////////////////////
 
 CSphConfigParser::CSphConfigParser ()
-	: m_sFileName ( NULL )
+	: m_sFileName ( "" )
 	, m_iLine ( -1 )
 {
-}
-
-
-CSphConfigParser::~CSphConfigParser ()
-{
-	sphFree ( m_sFileName );
 }
 
 
@@ -133,7 +127,7 @@ bool CSphConfigParser::ValidateKey ( const char * sKey, const char ** dKnownKeys
 	}
 
 	fprintf ( stdout, "WARNING: error in %s:%d, unknown key '%s' in section [%s]\n",
-			m_sFileName, m_iLine, sKey, m_sSectionName.cstr() );
+		m_sFileName.cstr(), m_iLine, sKey, m_sSectionName.cstr() );
 	return false;
 }
 
@@ -205,7 +199,7 @@ bool CSphConfigParser::AddKey ( const char * sKey, char * sValue )
 }
 
 
-bool CSphConfigParser::Parse ( const char * file )
+bool CSphConfigParser::Parse ( const char * sFileName )
 {
 	const int L_STEPBACK	= 16;
 	const int L_TOKEN		= 64;
@@ -213,12 +207,12 @@ bool CSphConfigParser::Parse ( const char * file )
 	const int L_ERROR		= 1024;
 
 	// open file
-	FILE * fp = fopen ( file, "rb" );
+	FILE * fp = fopen ( sFileName, "rb" );
 	if ( !fp )
 		return 0;
 
 	// init parser
-	m_sFileName = sphDup ( file );
+	m_sFileName = sFileName;
 	m_iLine = 1;
 
 	char * p = NULL;
@@ -412,7 +406,7 @@ bool CSphConfigParser::Parse ( const char * file )
 			sStepback[iCtx] = '\0';
 		}
 
-		fprintf ( stdout, "%s line %d col %d: %s near '%s'\n", m_sFileName, m_iLine, int(p-sLine+1), sError, sStepback );
+		fprintf ( stdout, "%s line %d col %d: %s near '%s'\n", m_sFileName.cstr(), m_iLine, int(p-sLine+1), sError, sStepback );
 		return false;
 	}
 	return true;

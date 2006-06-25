@@ -593,6 +593,11 @@ public:
 		return m_sValue;
 	}
 
+	char * str ()
+	{
+		return m_sValue;
+	}
+
 	bool operator == ( const CSphString & t ) const
 	{
 		return strcmp ( m_sValue, t.m_sValue )==0;

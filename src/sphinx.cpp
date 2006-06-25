@@ -841,7 +841,7 @@ char * sphStrMacro ( const char * sTemplate, const char * sMacro, int iValue )
 {
 	// expand macro
 	char sExp [ 16 ];
-	sprintf ( sExp, "%d", iValue );
+	snprintf ( sExp, sizeof(sExp), "%d", iValue );
 
 	// calc lengths
 	int iExp = strlen ( sExp );
@@ -2294,12 +2294,12 @@ int CSphIndex_VLN::cidxCreate ()
 {
 	char sBuf [ SPH_MAX_FILENAME_LEN ];
 
-	sprintf ( sBuf, "%s.spi", m_sFilename );
+	snprintf ( sBuf, sizeof(sBuf), "%s.spi", m_sFilename );
 	fdIndex = new CSphWriter_VLN ( sBuf );
 	if ( fdIndex->OpenFile()<0 )
 		return 0;
 
-	sprintf ( sBuf, "%s.spd", m_sFilename );
+	snprintf ( sBuf, sizeof(sBuf), "%s.spd", m_sFilename );
 	fdData = new CSphWriter_VLN ( sBuf );
 	if ( fdData->OpenFile()<0 )
 	{

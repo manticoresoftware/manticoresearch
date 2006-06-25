@@ -1145,7 +1145,7 @@ void CSphCache::GenerateCacheFileName ( const CSphQuery & tQuery )
 
 	md5_finish ( &tState, tDigest );
 	for ( int iDigest=0; iDigest<16; ++iDigest )
-		sprintf ( m_sCacheFileName + iDigest*2, "%02x", tDigest[iDigest] );
+		snprintf ( m_sCacheFileName + iDigest*2, 3, "%02x", tDigest[iDigest] );
 }
 
 #endif // !USE_WINDOWS
@@ -2217,8 +2217,8 @@ bool TryRename ( const char * sIndex, const char * sPrefix, const char * sFromPo
 	char sFrom [ SPH_MAX_FILENAME_LEN ];
 	char sTo [ SPH_MAX_FILENAME_LEN ];
 
-	sprintf ( sFrom, "%s%s", sPrefix, sFromPostfix );
-	sprintf ( sTo, "%s%s", sPrefix, sToPostfix );
+	snprintf ( sFrom, sizeof(sFrom), "%s%s", sPrefix, sFromPostfix );
+	snprintf ( sTo, sizeof(sTo), "%s%s", sPrefix, sToPostfix );
 	if ( rename ( sFrom, sTo ) )
 	{
 		if ( bFatal )
@@ -2710,14 +2710,14 @@ int main ( int argc, char **argv )
 					sphInfo ( "rotating index '%s': children exited, trying to rotate", sIndex );
 
 					// check files
-					sprintf ( sFile, "%s.new.spi", sPath );
+					snprintf ( sFile, sizeof(sFile), "%s.new.spi", sPath );
 					if ( !IsReadable ( sFile ) )
 					{
 						sphWarning ( "rotating index '%s': '%s' unreadable: %s",
 							sIndex, sFile, strerror(errno) );
 						break;
 					}
-					sprintf ( sFile, "%s.new.spd", sPath );
+					snprintf ( sFile, sizeof(sFile), "%s.new.spd", sPath );
 					if ( !IsReadable ( sFile ) )
 					{
 						sphWarning ( "rotating index '%s': '%s' unreadable: %s",

@@ -695,6 +695,41 @@ protected:
 };
 
 /////////////////////////////////////////////////////////////////////////////
+// MEMORY MANAGEMENT
+/////////////////////////////////////////////////////////////////////////////
+
+void * operator new ( size_t iSize )
+{
+	void * pResult = ::malloc ( iSize );
+	if ( !pResult )
+		sphDie ( "FATAL: out of memory (unable to allocate %d bytes).\n", iSize ); // FIXME! this may fail with malloc error too
+	return pResult;
+}
+
+
+void * operator new [] ( size_t iSize )
+{
+	void * pResult = ::malloc ( iSize );
+	if ( !pResult )
+		sphDie ( "FATAL: out of memory (unable to allocate %d bytes).\n", iSize ); // FIXME! this may fail with malloc error too
+	return pResult;
+}
+
+
+void operator delete ( void * pPtr )
+{
+	if ( pPtr )
+		::free ( pPtr );
+}
+
+
+void operator delete [] ( void * pPtr )
+{
+	if ( pPtr )
+		::free ( pPtr );
+}
+
+/////////////////////////////////////////////////////////////////////////////
 // UTILITY FUNCTIONS
 /////////////////////////////////////////////////////////////////////////////
 
@@ -707,44 +742,6 @@ void sphDie(char *message, ...)
 	va_end(ap);
 	exit(1);
 }
-
-
-void * sphMalloc ( size_t size )
-{
-	void * result = ::malloc ( size );
-	if ( !result )
-		sphDie ( "FATAL: out of memory (unable to allocate %d bytes).\n", size );
-	return result;
-}
-
-
-void * sphRealloc ( void * ptr, size_t size )
-{
-	void * result = ::realloc ( ptr, size );
-	if ( !result )
-		sphDie ( "FATAL: out of memory (unable to reallocate %d bytes).\n", size );
-	return result;
-}
-
-
-void sphFree ( void * ptr )
-{
-	if ( ptr )
-		::free ( ptr );
-}
-
-
-void * operator new ( size_t iSize )
-{
-	return sphMalloc ( iSize );
-}
-
-
-void * operator new [] ( size_t iSize )
-{
-	return sphMalloc ( iSize );
-}
-
 
 /// time, in seconds
 float sphLongTimer ()

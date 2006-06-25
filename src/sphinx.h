@@ -83,10 +83,22 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
-void	sphDie ( char *message, ... );
-void *	sphMalloc ( size_t size );
-void *	sphRealloc ( void *ptr, size_t size );
-void 	sphFree ( void * ptr );
+/// new that never returns NULL (it crashes instead)
+void *			operator new ( size_t iSize );
+
+/// new that never returns NULL (it crashes instead)
+void *			operator new [] ( size_t iSize );
+
+/// delete for my new
+void			operator delete ( void * pPtr );
+
+/// delete for my new
+void			operator delete [] ( void * pPtr );
+
+/////////////////////////////////////////////////////////////////////////////
+
+/// crash with an error message
+void			sphDie ( char * sMessage, ... );
 
 /// time, in seconds
 float			sphLongTimer ();
@@ -96,12 +108,6 @@ DWORD			sphCRC32 ( const BYTE * pString );
 
 /// replaces all occurences of sMacro in sTemplate with textual representation of iValue
 char *			sphStrMacro ( const char * sTemplate, const char * sMacro, int iValue );
-
-/// new that never returns NULL (it crashes instead)
-void *			operator new ( size_t iSize );
-
-/// new that never returns NULL (it crashes instead)
-void *			operator new [] ( size_t iSize );
 
 /////////////////////////////////////////////////////////////////////////////
 // TOKENIZERS

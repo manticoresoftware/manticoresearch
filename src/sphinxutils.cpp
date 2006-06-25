@@ -231,8 +231,8 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 	enum { TOP, SKIP2NL, TOK, TYPE, SEC, CHR, VALUE, SECNAME, SECBASE } eState = TOP, eStack[8];
 	int iStack = 0;
 
-	int iValue = 0, iValueMax = 256;
-	char * sValue = (char*) sphMalloc ( iValueMax );
+	int iValue = 0, iValueMax = 65535;
+	char * sValue = new char [ iValueMax+1 ];
 
 	#define LOC_ERROR(_msg) { strncpy ( sError, _msg, sizeof(sError) ); iError = 1; break; }
 	#define LOC_ERROR2(_msg,_a) { snprintf ( sError, sizeof(sError), _msg, _a ); iError = 1; break; }
@@ -327,9 +327,8 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 			if ( *p=='\n' )					{ AddKey ( sToken, sValue ); iValue = 0; LOC_POP (); continue; }
 			if ( *p=='#' )					{ AddKey ( sToken, sValue ); iValue = 0; LOC_POP (); LOC_PUSH ( SKIP2NL ); continue; }
 			if ( *p=='\\' )					{ LOC_PUSH ( SKIP2NL ); continue; }
-
-			if ( iValue==iValueMax )		{ iValueMax *= 2; sValue = (char*) sphRealloc ( sValue, iValueMax ); }
-											sValue[iValue++] = *p; sValue[iValue] = '\0'; continue;
+			if ( iValue<iValueMax )			{ sValue[iValue++] = *p; sValue[iValue] = '\0'; }
+											continue;
 		}
 
 		// handle SECNAME state
@@ -382,7 +381,7 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 	#undef LOC_ERROR
 
 	fclose ( fp );
-	sphFree ( sValue );
+	SafeDeleteArray ( sValue );
 
 	if ( iError )
 	{

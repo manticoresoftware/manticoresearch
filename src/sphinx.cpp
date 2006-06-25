@@ -3724,16 +3724,19 @@ struct SphEvalNode_t : public CSphQueryWord
 	SphEvalNode_t *		m_pPrev;	///< prev expression at this level
 	SphEvalNode_t *		m_pNext;	///< next expression at this level
 
-	bool				m_bInvert;	///< whether to invert the matching logic
 	CSphDocInfo *		m_pLast;	///< last matched document at this node (may point to a subexpression or sibling); we only need to store this for NODE_OR type
+
+	bool				m_bInvert;		///< whether to invert the matching logic
+	bool				m_bEvaluable;	///< whether this node is for matching or for filtering
 
 public:
 						SphEvalNode_t ( const SphQueryExpr_t * pNode, CSphDict * pDict );
 						~SphEvalNode_t ();
 
 	void				SetFile ( CSphIndex_VLN * pIndex, int iFD );
-	CSphDocInfo *		MatchNode ( DWORD iMinID );
-	CSphDocInfo *		MatchLevel ( DWORD iMinID );
+	CSphDocInfo *		MatchNode ( DWORD iMinID );		///< get next match at this node, with ID greater than iMinID
+	CSphDocInfo *		MatchLevel ( DWORD iMinID );	///< get next match at this level, with ID greater than iMinID
+	bool				IsRejected ( DWORD iID );		///< check if this match should be rejected
 };
 
 
@@ -3744,6 +3747,7 @@ SphEvalNode_t::SphEvalNode_t ( const SphQueryExpr_t * pNode, CSphDict * pDict )
 
 	m_eType = pNode->m_eType;
 	m_bInvert = pNode->m_bInvert;
+	m_bEvaluable = pNode->m_bEvaluable;
 
 	m_sWord = pNode->m_sWord;
 	m_iWordID = 0;
@@ -3794,8 +3798,49 @@ void SphEvalNode_t::SetFile ( CSphIndex_VLN * pIndex, int iFD )
 }
 
 
+bool SphEvalNode_t::IsRejected ( DWORD iID )
+{
+	assert ( !m_bEvaluable );
+	assert ( m_pPrev ); // filter node can't start a level
+
+	// "done" mark
+	if ( !m_pLast )
+		return false;
+
+	// subexpr case
+	if ( m_pExpr )
+	{
+		if ( m_bInvert )
+		{
+			// subexpr is directly evaluable
+			m_pLast = m_pExpr->MatchNode ( iID );
+			return ( m_pLast && m_pLast->m_iDocID==iID );
+		} else
+		{
+			// subexpr is not evaluable as well
+			return m_pExpr->IsRejected ( iID );
+		}
+	}
+
+	// plain word case
+	assert ( m_bInvert );
+	while ( iID > m_tDoc.m_iDocID )
+	{
+		GetDoclistEntry ();
+		if ( !m_tDoc.m_iDocID )
+		{
+			m_pLast = NULL;
+			return false;
+		}
+	}
+	return ( iID==m_tDoc.m_iDocID );
+}
+
+
 CSphDocInfo * SphEvalNode_t::MatchNode ( DWORD iMinID )
 {
+	assert ( m_bEvaluable );
+
 	// "done" mark
 	if ( !m_pLast )
 		return NULL;
@@ -3817,32 +3862,50 @@ CSphDocInfo * SphEvalNode_t::MatchNode ( DWORD iMinID )
 
 CSphDocInfo * SphEvalNode_t::MatchLevel ( DWORD iMinID )
 {
+	assert ( m_bEvaluable );
 	if ( m_eType==NODE_AND )
 	{
 		// match all siblings
 		// search for min equal match ID through all the siblings
-
 		CSphDocInfo * pCur = NULL;
 		for ( SphEvalNode_t * pNode = this; pNode; )
 		{
-			// as all siblings matched last time, we are positive
-			// that it is time to advance the pointer and match next id
-			CSphDocInfo * pCandidate = pNode->MatchNode ( iMinID );
-			if ( !pCandidate )
-				return NULL;
-
-			DWORD iCandidate = pCandidate->m_iDocID;
-			assert ( iCandidate );
-
-			if ( iCandidate>=iMinID )
+			if ( pNode->m_bEvaluable )
 			{
-				if ( iCandidate>iMinID )
-					pNode = this;
-				else
-					pNode = pNode->m_pNext;
+				// as all evaluatable siblings matched last time,
+				// we are positive that it is time to advance the pointer
+				// and fetch the next id
+				CSphDocInfo * pCandidate = pNode->MatchNode ( iMinID );
+				if ( !pCandidate )
+					return NULL;
 
-				iMinID = iCandidate;
-				pCur = pCandidate;
+				DWORD iCandidate = pCandidate->m_iDocID;
+				assert ( iCandidate );
+
+				if ( iCandidate>=iMinID )
+				{
+					if ( iCandidate>iMinID )
+						pNode = this;
+					else
+						pNode = pNode->m_pNext;
+
+					iMinID = iCandidate;
+					pCur = pCandidate;
+				}
+			} else
+			{
+				// if this node is a filter, well, we need some value to pass through it!
+				assert ( pCur );
+				if ( pNode->IsRejected ( pCur->m_iDocID ) )
+				{
+					// oh, the doc's rejected. restart scanning
+					iMinID = 1+pCur->m_iDocID;
+					pNode = this;
+					pCur = NULL;
+				} else
+				{
+					pNode = pNode->m_pNext;
+				}
 			}
 		}
 
@@ -3859,6 +3922,8 @@ CSphDocInfo * SphEvalNode_t::MatchLevel ( DWORD iMinID )
 
 		for ( SphEvalNode_t * pNode = this; pNode; pNode = pNode->m_pNext )
 		{
+			assert ( pNode->m_bEvaluable );
+
 			// if the node match is not OK already, ask for next one
 			if ( pNode->m_pLast )
 			{

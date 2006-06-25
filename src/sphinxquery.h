@@ -28,13 +28,14 @@ enum SphQueryExpr_e
 /// Sphinx query expression
 struct SphQueryExpr_t
 {
-	SphQueryExpr_e		m_eType;	///< this node's type
-	CSphString			m_sWord;	///< used for simple, ie. 1-word, subexpressions
-	SphQueryExpr_t *	m_pExpr;	///< used for composite, ie. non-word, subexperssions
-	SphQueryExpr_t *	m_pPrev;	///< next node in the list
-	SphQueryExpr_t *	m_pNext;	///< prev node in the list
-	SphQueryExpr_t *	m_pParent;	///< parent node
-	bool				m_bInvert;	///< whether the documents matching the subexpression match this node or not
+	SphQueryExpr_e		m_eType;		///< this node's type
+	CSphString			m_sWord;		///< used for simple, ie. 1-word, subexpressions
+	SphQueryExpr_t *	m_pExpr;		///< used for composite, ie. non-word, subexperssions
+	SphQueryExpr_t *	m_pPrev;		///< next node in the list
+	SphQueryExpr_t *	m_pNext;		///< prev node in the list
+	SphQueryExpr_t *	m_pParent;		///< parent node
+	bool				m_bInvert;		///< whether to invert word/subexpr matching result
+	bool				m_bEvaluable;	///< whether this node evaluates to a document list or can only be used as a filter
 
 	/// ctor. zeroes out everything
 						SphQueryExpr_t ();

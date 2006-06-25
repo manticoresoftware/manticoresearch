@@ -34,6 +34,7 @@ SphQueryExpr_t::SphQueryExpr_t ()
 	, m_pNext ( NULL )
 	, m_pParent ( NULL )
 	, m_bInvert ( false )
+	, m_bEvaluable ( false )
 {
 }
 
@@ -360,115 +361,229 @@ SphQueryExpr_t * SphQueryParser_c::Parse ( const char * sQuery, const ISphTokeni
 // Query simplification
 /////////////////////////////////////////////////////////////////////////////
 
-static void InvertExpr ( SphQueryExpr_t * pNode )
+static void InvertExprLevel ( SphQueryExpr_t * pNode )
 {
+	assert ( pNode->m_eType!=NODE_UNDEF );
+	assert ( pNode->m_pPrev==NULL );
+
+	SphQueryExpr_e eOldType = pNode->m_eType;
 	SphQueryExpr_e eNewType = ( pNode->m_eType==NODE_AND ) ? NODE_OR : NODE_AND;
+
 	for ( SphQueryExpr_t * pFix = pNode; pFix; pFix = pFix->m_pNext )
 	{
-		assert ( pFix->m_eType!=eNewType );
+		assert ( pFix->m_eType==eOldType );
 		pFix->m_eType = eNewType;
 		pFix->m_bInvert = !pFix->m_bInvert;
+		pFix->m_bEvaluable = !pFix->m_bEvaluable;
 	}
 }
 
 
 static SphQueryExpr_t * RemoveRedundantNodes ( SphQueryExpr_t * pNode )
 {
-	// if there's a single subexpr, and the types match, this is it
-	while ( pNode->m_pExpr
-		&& ( pNode->IsAlone() || pNode->m_pExpr->IsAlone() )
-		&& ( pNode->m_eType==pNode->m_pExpr->m_eType
-			|| pNode->m_eType==NODE_UNDEF
-			|| pNode->m_pExpr->m_eType==NODE_UNDEF ) )
-	{
-		if ( pNode->m_eType==NODE_UNDEF )
-			pNode->m_eType = pNode->m_pExpr->m_eType;
-
-		if ( pNode->m_pExpr->m_pExpr )
-		{
-			SphQueryExpr_t * pKill = pNode->m_pExpr;
-
-			pNode->m_pExpr = pKill->m_pExpr;
-			pNode->m_pExpr->m_pParent = pNode;
-
-			if ( pNode->IsAlone() )
-			{
-				// replace node in the list
-				pNode->m_pNext = pKill->m_pNext;
-				pNode->m_pPrev = pKill->m_pPrev;
-				if ( pKill->m_pPrev )
-					pKill->m_pPrev->m_pNext = pNode;
-				if ( pKill->m_pNext )
-					pKill->m_pNext->m_pPrev = pNode;
-
-				// unchain node
-				pKill->m_pNext = NULL;
-				pKill->m_pPrev = NULL;
-
-				// if this node is inverted, do invert all expr tokens
-				if ( pNode->m_bInvert )
-				{
-					pNode->m_bInvert = false;
-					InvertExpr ( pNode );
-				}
-			}
-
-			pKill->m_pExpr = NULL;
-			assert ( pKill->IsAlone() );
-			pKill->Detach ();
-			SafeDelete ( pKill );
-
-		} else
-		{
-			assert ( strlen(pNode->m_pExpr->m_sWord.cstr()) > 0 );
-			pNode->m_sWord = pNode->m_pExpr->m_sWord;
-
-			if ( pNode->IsAlone() )
-			{
-				assert ( !pNode->m_pExpr->m_pPrev );
-
-				// move expr level up to this node
-				pNode->m_pNext = pNode->m_pExpr->m_pNext;
-				pNode->m_pExpr->m_pNext = NULL;
-				if ( pNode->m_pNext )
-					pNode->m_pNext->m_pPrev = pNode;
-				
-				// fixup expr level parents
-				for ( SphQueryExpr_t * pFix = pNode->m_pNext; pFix; pFix = pFix->m_pNext )
-				{
-					assert ( pFix->m_pParent==pNode );
-					pFix->m_pParent = pNode->m_pParent;
-				}
-
-				// if this node is inverted, do invert all expr tokens
-				if ( pNode->m_bInvert )
-				{
-					pNode->m_bInvert = false;
-					InvertExpr ( pNode );
-				}
-			}
-
-			assert ( pNode->m_pExpr->IsAlone() );
-			pNode->m_pExpr->Detach ();
-			SafeDelete ( pNode->m_pExpr );
-		}
-	}
-
-	// work the siblings and children
+	// optimize my subexpression
 	if ( pNode->m_pExpr )
 	{
 		pNode->m_pExpr = RemoveRedundantNodes ( pNode->m_pExpr );
+		if ( !pNode->m_pExpr )
+		{
+			// if i'm optimized out, so be it
+			pNode->Detach ();
+			SafeDelete ( pNode );
+			return NULL;
+		}
 		assert ( pNode->m_pExpr->m_pParent==pNode );
 	}
+
+	// update my type
+	if ( pNode->m_eType==NODE_UNDEF )
+	{
+		assert ( pNode->IsAlone() );
+		if ( pNode->m_pExpr )
+			pNode->m_eType = pNode->m_pExpr->m_eType;
+		else
+			pNode->m_eType = NODE_AND;
+	}
+	assert ( pNode->m_eType!=NODE_UNDEF ); // all types must be defined now
+	assert (!( pNode->m_pExpr && pNode->m_pExpr->m_eType==NODE_UNDEF )); // all types must be defined now
+	assert (!( pNode->IsAlone() && !pNode->m_pExpr && pNode->m_eType!=NODE_AND )); // there must be no single words with type OR 
+
+	// optimize redundant sublevels of matching type
+	while ( pNode->m_pExpr
+		&& !pNode->m_bInvert
+		&& pNode->m_pExpr->m_eType==pNode->m_eType )
+	{
+		// for each sublevel node, pull it up
+		SphQueryExpr_t * pSubFirst = pNode->m_pExpr;
+		SphQueryExpr_t * pSubLast = NULL;
+		for ( SphQueryExpr_t * pSub = pNode->m_pExpr; pSub; pSub = pSub->m_pNext )
+		{
+			pSub->m_pParent = pNode->m_pParent;
+			pSubLast = pSub;
+		}
+		assert ( pSubFirst );
+		assert ( pSubLast );
+
+		// chain sublevel start right after this node
+		assert ( !pSubFirst->m_pPrev );
+		pSubFirst->m_pPrev = pNode;
+
+		assert ( !pSubLast->m_pNext );
+		pSubLast->m_pNext = pNode->m_pNext;
+		if ( pNode->m_pNext )
+			pNode->m_pNext->m_pPrev = pSubLast;
+		pNode->m_pNext = pSubFirst;
+
+		// this node is no longer needed; sublevel start replaces it
+		pNode->m_pExpr = NULL;
+		pNode->Detach ();
+		SafeDelete ( pNode );
+		pNode = pSubFirst;
+	}
+
+	// optimze my siblings
 	if ( pNode->m_pNext )
 	{
 		pNode->m_pNext = RemoveRedundantNodes ( pNode->m_pNext );
 		assert ( pNode->m_pNext->m_pPrev==pNode );
 	}
-	
+
 	return pNode;
 }
 
+
+// place filters at the tail
+SphQueryExpr_t * ReorderLevel ( SphQueryExpr_t * pNode )
+{
+	assert ( !pNode->m_pPrev );
+
+	// detach filters
+	SphQueryExpr_t * pFilters = NULL;
+	for ( SphQueryExpr_t * pCur = pNode; pCur; )
+	{
+		SphQueryExpr_t * pNext = pCur->m_pNext;
+		if ( !pCur->m_bEvaluable )
+		{
+			// unchain from main list, and fixup its head, too
+			if ( pCur->m_pPrev )
+				pCur->m_pPrev->m_pNext = pCur->m_pNext;
+			else
+				pNode = pCur->m_pNext;
+			if ( pCur->m_pNext )
+				pCur->m_pNext->m_pPrev = pCur->m_pPrev;
+
+			// chain to the filters list head
+			pCur->m_pPrev = NULL;
+			pCur->m_pNext = pFilters;
+			if ( pFilters )
+			{
+				assert ( !pFilters->m_pPrev );
+				pFilters->m_pPrev = pCur;
+			}
+			pFilters = pCur;
+		}
+		pCur = pNext;
+	}
+	assert ( pNode );
+
+	// reattach filters
+	if ( pFilters )
+	{
+		// to the tail
+		SphQueryExpr_t * pTail = pNode;
+		while ( pTail->m_pNext )
+			pTail = pTail->m_pNext;
+
+		// from the tail
+		while ( pFilters->m_pNext )
+			pFilters = pFilters->m_pNext;
+
+		while ( pFilters )
+		{
+			assert ( !pTail->m_pNext );
+			assert ( !pFilters->m_pNext );
+
+			SphQueryExpr_t * pPrev = pFilters->m_pPrev;
+			if ( pPrev )
+				pPrev->m_pNext = NULL;
+
+			pTail->m_pNext = pFilters;
+			pFilters->m_pPrev = pTail;
+			pTail = pTail->m_pNext;
+			pFilters = pPrev;
+		}
+	}
+
+	return pNode;
+}
+
+
+static bool IsEvaluable ( SphQueryExpr_t * pNode )
+{
+	// find out if this node is evaluable
+	if ( !pNode->m_pExpr )
+	{
+		pNode->m_bEvaluable = !pNode->m_bInvert;
+	} else
+	{
+		// return code might be different from pNode->m_pExpr->m_bEvaluable,
+		// because the first node in a level might be evaluable,
+		// while the whole level is not
+		bool bRes = IsEvaluable ( pNode->m_pExpr );
+		pNode->m_bEvaluable = bRes ^ pNode->m_bInvert;
+
+		// if sublevel can be made directly evaluable, well, do it
+		// if it can't, convert it to AND type
+		if ( !bRes &&
+			( pNode->m_bInvert || pNode->m_eType==NODE_OR ) )
+		{
+			InvertExprLevel ( pNode->m_pExpr );
+			pNode->m_bInvert = !pNode->m_bInvert;
+			bRes = !bRes;
+		}
+
+		// if sublevel is evaluable, reorder it's nodes
+		if ( bRes )
+			pNode->m_pExpr = ReorderLevel ( pNode->m_pExpr );
+	}
+
+	// if it's not level start, we're done
+	if ( pNode->m_pPrev )
+		return pNode->m_bEvaluable;
+
+	// now, this node is a level start, so we need to check its type
+	// and all the siblings to find out if the level is evaluable
+	for ( SphQueryExpr_t * pCur = pNode->m_pNext; pCur; pCur = pCur->m_pNext )
+	{
+		bool bRes = IsEvaluable ( pCur );
+		assert ( bRes==pCur->m_bEvaluable );
+	}
+
+	switch ( pNode->m_eType )
+	{
+		case NODE_AND:
+			// there needs to be at least one directly evaluable node
+			for ( SphQueryExpr_t * pCur = pNode; pCur; pCur = pCur->m_pNext )
+				if ( pCur->m_bEvaluable )
+					return true;
+			return false;
+
+		case NODE_OR:
+			// all the nodes need to be directly evaluable
+			for ( SphQueryExpr_t * pCur = pNode; pCur; pCur = pCur->m_pNext )
+				if ( !pCur->m_bEvaluable )
+					return false;
+			return true;
+
+		default:
+			assert ( 0 && "INTERNAL ERROR: unhandled node type" );
+			return false;
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// Debugging stuff
+/////////////////////////////////////////////////////////////////////////////
 
 static void DumpTree ( SphQueryExpr_t * pNode, int iLevel=0 )
 {
@@ -483,7 +598,7 @@ static void DumpTree ( SphQueryExpr_t * pNode, int iLevel=0 )
 			case NODE_OR:	printf ( "|| "); break;
 			default:		printf ( "?? "); break;
 		}
-
+		printf ( "%c ", pCur->m_bEvaluable ? '+' : '-' );
 		if ( pCur->m_bInvert )
 			printf ( "!" );
 
@@ -498,20 +613,6 @@ static void DumpTree ( SphQueryExpr_t * pNode, int iLevel=0 )
 	}
 }
 
-
-static SphQueryExpr_t * SimplifyTree ( SphQueryExpr_t * pNode )
-{
-	if ( !pNode )
-		return pNode;
-	pNode = RemoveRedundantNodes ( pNode );
-
-	// fixup special one-word case
-	if ( !pNode->m_pExpr && pNode->IsAlone() && pNode->m_eType==NODE_UNDEF )
-		pNode->m_eType = NODE_AND;
-
-	return pNode;
-}
-
 /////////////////////////////////////////////////////////////////////////////
 // Entry point
 /////////////////////////////////////////////////////////////////////////////
@@ -520,7 +621,19 @@ SphQueryExpr_t * sphParseQuery ( const char * sQuery, const ISphTokenizer * pTok
 {
 	SphQueryParser_c qp;
 	SphQueryExpr_t * pTree = qp.Parse ( sQuery, pTokenizer );
-	pTree = SimplifyTree ( pTree );
+
+	if ( pTree )
+		pTree = RemoveRedundantNodes ( pTree );
+
+	if ( pTree && IsEvaluable ( pTree ) )
+	{
+		pTree = ReorderLevel ( pTree );
+	} else
+	{
+		// FIXME! warning here
+		SafeDelete ( pTree );
+	}
+
 	return pTree;
 }
 

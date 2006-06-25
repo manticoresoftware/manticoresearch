@@ -725,4 +725,32 @@ xmlpipe_command = perl /www/mysite.com/bin/sphinxpipe.pl
 </sect1>
 
 
+<appendix id="changelog"><title>Sphinx revision history</title>
+<sect2 id="ver_0_9_6"><title>Version 0.9.6, 26 jun 2006</title>
+<itemizedlist>
+<listitem>added boolean queries support (experimental, beta version)</listitem>
+<listitem>added simple file-based query cache (experimental, beta version)</listitem>
+<listitem>added storage engine for MySQL 5.0 and 5.1 (experimental, beta version)</listitem>
+<listitem>added GNU style <filename>configure</filename> script</listitem>
+<listitem>added new searchd protocol (all binary, and should be backwards compatible)</listitem>
+<listitem>added distributed searching support to searchd</listitem>
+<listitem>added PostgreSQL driver</listitem>
+<listitem>added excerpts generation</listitem>
+<listitem>added <option>min_word_len</option> option to index</listitem>
+<listitem>added <option>max_matches</option> option to searchd, removed hardcoded MAX_MATCHES limit</listitem>
+<listitem>added initial documentation, and a working <filename>example.sql</filename></listitem>
+<listitem>added support for multiple sources per index</listitem>
+<listitem>added soundex support</listitem>
+<listitem>added group ID ranges support</listitem>
+<listitem>added <option>--stdin</option> command-line option to search utility</listitem>
+<listitem>added <option>--noprogress</option> option to indexer</listitem>
+<listitem>added <option>--index</option> option to search</listitem>
+<listitem>fixed UTF-8 decoder (3-byte codepoints did not work)</listitem>
+<listitem>fixed PHP API to handle big result sets faster</listitem>
+<listitem>fixed config parser to handle empty values properly</listitem>
+<listitem>fixed redundant <code>time(NULL)</code> calls in time-segments mode</listitem>
+</itemizedlist>
+</sect2>
+</appendix>
+
 </article>

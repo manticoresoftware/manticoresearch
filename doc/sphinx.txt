@@ -392,7 +392,7 @@ There are a few different restrictions imposed on the source data
 which is going to be indexed by Sphinx, of which the single most
 important one is:
 
-ALL DOCUMENT IDS MUST BE UNIQUE POSITIVE 32-BIT INTEGER NUMBERS.
+ALL DOCUMENT IDS MUST BE UNIQUE UNSIGNED NON-ZERO 32-BIT INTEGER NUMBERS.
 
 If this requirement is not met, different bad things can happen. For
 instance, Sphinx can crash with an internal assertion while indexing;

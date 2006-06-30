@@ -228,7 +228,7 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 	int iStepback = 0;
 	int iError = 0;
 
-	enum { TOP, SKIP2NL, TOK, TYPE, SEC, CHR, VALUE, SECNAME, SECBASE } eState = TOP, eStack[8];
+	enum { S_TOP, S_SKIP2NL, S_TOK, S_TYPE, S_SEC, S_CHR, S_VALUE, S_SECNAME, S_SECBASE } eState = S_TOP, eStack[8];
 	int iStack = 0;
 
 	int iValue = 0, iValueMax = 65535;
@@ -264,92 +264,92 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 			m_iLine++;
 		}
 
-		// handle TOP state
-		if ( eState==TOP )
+		// handle S_TOP state
+		if ( eState==S_TOP )
 		{
 			if ( isspace(*p) )				continue;
-			if ( *p=='#' )					{ LOC_PUSH ( SKIP2NL ); continue; }
+			if ( *p=='#' )					{ LOC_PUSH ( S_SKIP2NL ); continue; }
 			if ( !sphIsAlpha(*p) )			LOC_ERROR ( "invalid token" );
-											iToken = 0; LOC_PUSH ( TYPE ); LOC_PUSH ( TOK ); p--; continue;
+											iToken = 0; LOC_PUSH ( S_TYPE ); LOC_PUSH ( S_TOK ); p--; continue;
 		}
 
-		// handle SKIP2NL state
-		if ( eState==SKIP2NL )
+		// handle S_SKIP2NL state
+		if ( eState==S_SKIP2NL )
 		{
 			if ( *p=='\n' )					{ LOC_POP (); continue; }
 											continue;
 		}
 
-		// handle TOK state
-		if ( eState==TOK )
+		// handle S_TOK state
+		if ( eState==S_TOK )
 		{
-			if ( !iToken && !sphIsAlpha(*p) )LOC_ERROR ( "internal error (non-alpha in TOK pos 0)" );
+			if ( !iToken && !sphIsAlpha(*p) )LOC_ERROR ( "internal error (non-alpha in S_TOK pos 0)" );
 			if ( iToken==sizeof(sToken) )	LOC_ERROR ( "token too long" );
 			if ( !sphIsAlpha(*p) )			{ LOC_POP (); sToken [ iToken ] = '\0'; iToken = 0; p--; continue; }
 			if ( !iToken )					{ sToken[0] = '\0'; }
 											sToken [ iToken++ ] = *p; continue;
 		}
 
-		// handle TYPE state
-		if ( eState==TYPE )
+		// handle S_TYPE state
+		if ( eState==S_TYPE )
 		{
 			if ( isspace(*p) )				continue;
-			if ( *p=='#' )					{ LOC_PUSH ( SKIP2NL ); continue; }
-			if ( !sToken[0] )				{ LOC_ERROR ( "internal error (empty token in TYPE)" ); }
-			if ( IsPlainSection(sToken) )	{ AddSection ( sToken, sToken ); sToken[0] = '\0'; LOC_POP (); LOC_PUSH ( SEC ); LOC_PUSH ( CHR ); iCh = '{'; p--; continue; }
-			if ( IsNamedSection(sToken) )	{ m_sSectionType = sToken; sToken[0] = '\0'; LOC_POP (); LOC_PUSH ( SECNAME ); p--; continue; }
+			if ( *p=='#' )					{ LOC_PUSH ( S_SKIP2NL ); continue; }
+			if ( !sToken[0] )				{ LOC_ERROR ( "internal error (empty token in S_TYPE)" ); }
+			if ( IsPlainSection(sToken) )	{ AddSection ( sToken, sToken ); sToken[0] = '\0'; LOC_POP (); LOC_PUSH ( S_SEC ); LOC_PUSH ( S_CHR ); iCh = '{'; p--; continue; }
+			if ( IsNamedSection(sToken) )	{ m_sSectionType = sToken; sToken[0] = '\0'; LOC_POP (); LOC_PUSH ( S_SECNAME ); p--; continue; }
 											LOC_ERROR2 ( "invalid section type '%s'", sToken );
 		}
 
-		// handle CHR state
-		if ( eState==CHR )
+		// handle S_CHR state
+		if ( eState==S_CHR )
 		{
 			if ( isspace(*p) )				continue;
-			if ( *p=='#' )					{ LOC_PUSH ( SKIP2NL ); continue; }
+			if ( *p=='#' )					{ LOC_PUSH ( S_SKIP2NL ); continue; }
 			if ( *p!=iCh )					LOC_ERROR3 ( "expected '%c', got '%c'", iCh, *p );
 											LOC_POP (); continue;
 		}
 
-		// handle SEC state
-		if ( eState==SEC )
+		// handle S_SEC state
+		if ( eState==S_SEC )
 		{
 			if ( isspace(*p) )				continue;
-			if ( *p=='#' )					{ LOC_PUSH ( SKIP2NL ); continue; }
+			if ( *p=='#' )					{ LOC_PUSH ( S_SKIP2NL ); continue; }
 			if ( *p=='}' )					{ LOC_POP (); continue; }
-			if ( sphIsAlpha(*p) )			{ LOC_PUSH ( VALUE ); LOC_PUSH ( CHR ); iCh = '='; LOC_PUSH ( TOK ); p--; iValue = 0; sValue[0] = '\0'; continue; }
+			if ( sphIsAlpha(*p) )			{ LOC_PUSH ( S_VALUE ); LOC_PUSH ( S_CHR ); iCh = '='; LOC_PUSH ( S_TOK ); p--; iValue = 0; sValue[0] = '\0'; continue; }
 											LOC_ERROR2 ( "section contents: expected token, got '%c'", *p );
 
 		}
 
-		// handle VALUE state
-		if ( eState==VALUE )
+		// handle S_VALUE state
+		if ( eState==S_VALUE )
 		{
 			if ( *p=='\n' )					{ AddKey ( sToken, sValue ); iValue = 0; LOC_POP (); continue; }
-			if ( *p=='#' )					{ AddKey ( sToken, sValue ); iValue = 0; LOC_POP (); LOC_PUSH ( SKIP2NL ); continue; }
-			if ( *p=='\\' )					{ LOC_PUSH ( SKIP2NL ); continue; }
+			if ( *p=='#' )					{ AddKey ( sToken, sValue ); iValue = 0; LOC_POP (); LOC_PUSH ( S_SKIP2NL ); continue; }
+			if ( *p=='\\' )					{ LOC_PUSH ( S_SKIP2NL ); continue; }
 			if ( iValue<iValueMax )			{ sValue[iValue++] = *p; sValue[iValue] = '\0'; }
 											continue;
 		}
 
-		// handle SECNAME state
-		if ( eState==SECNAME )
+		// handle S_SECNAME state
+		if ( eState==S_SECNAME )
 		{
 			if ( isspace(*p) )				{ continue; }
 			if ( !sToken[0]&&!sphIsAlpha(*p)){ LOC_ERROR2 ( "named section: expected name, got '%c'", *p ); }
-			if ( !sToken[0] )				{ LOC_PUSH ( TOK ); p--; continue; }
+			if ( !sToken[0] )				{ LOC_PUSH ( S_TOK ); p--; continue; }
 											if ( !AddSection ( m_sSectionType.cstr(), sToken ) ) LOC_ERROR3 ( "section '%s' (type=%s) already exists", sToken, m_sSectionType.cstr() ); sToken[0] = '\0';
 
-			if ( *p==':' )					{ eState = SECBASE; continue; }
-			if ( *p=='{' )					{ eState = SEC; continue; }
+			if ( *p==':' )					{ eState = S_SECBASE; continue; }
+			if ( *p=='{' )					{ eState = S_SEC; continue; }
 											LOC_ERROR2 ( "named section: expected ':' or '{', got '%c'", *p );
 		}
 
-		// handle SECBASE state
-		if ( eState==SECBASE )
+		// handle S_SECBASE state
+		if ( eState==S_SECBASE )
 		{
 			if ( isspace(*p) )				{ continue; }
 			if ( !sToken[0]&&!sphIsAlpha(*p)){ LOC_ERROR2 ( "named section: expected parent name, got '%c'", *p ); }
-			if ( !sToken[0] )				{ LOC_PUSH ( TOK ); p--; continue; }
+			if ( !sToken[0] )				{ LOC_PUSH ( S_TOK ); p--; continue; }
 
 			// copy the section
 			assert ( m_tConf.Exists ( m_sSectionType ) );
@@ -367,8 +367,8 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 				tDest.IterateGet().m_bTag = true;
 
 			p--;
-			eState = SEC;
-			LOC_PUSH ( CHR );
+			eState = S_SEC;
+			LOC_PUSH ( S_CHR );
 			iCh = '{';
 			continue;
 		}

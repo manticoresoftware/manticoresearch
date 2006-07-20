@@ -479,7 +479,7 @@ sql_query would be run three times:
 
 1. with $start replaced with 1 and $end replaced with 1000;
 2. with $start replaced with 1001 and $end replaced with 2000;
-3. with $start replaced with 200 and $end replaced with 2345.
+3. with $start replaced with 2000 and $end replaced with 2345.
 
 Obviously, that's not much of a difference for 2000-row table, but
 when it comes to indexing 10-million-row MyISAM table, ranged queries
@@ -598,7 +598,7 @@ Example 3. Fully automated live updates
 A. Sphinx revision history
 --------------------------
 
-A.1. Version 0.9.6, 26 jun 2006
+A.1. Version 0.9.6-RC1, 26 jun 2006
 
   * added boolean queries support (experimental, beta version)
   * added simple file-based query cache (experimental, beta version)

@@ -1009,7 +1009,7 @@ int ha_sphinx::index_read(byte *buf, const byte *key,
 	  DBUG_RETURN(HA_ERR_END_OF_FILE);
   }	  
 
-  ::recv(fd_socket, response, resp_length, 0);
+  ::recv(fd_socket, response, resp_length, MSG_WAITALL);
   
   memcpy(&count, response, 4);
   count_of_found_recs= ntohl(count);

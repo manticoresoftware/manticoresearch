@@ -211,6 +211,29 @@ void Shutdown ()
 // LOGGING
 /////////////////////////////////////////////////////////////////////////////
 
+void sphLockEx ( int iFile )
+{
+	#if HAVE_LOCK_EX || USE_WINDOWS
+		flock ( iFile, LOCK_EX );
+	#else
+		#ifdef HAVE_F_SETLKW
+			fcntl ( iFile, F_SETLKW, F_WRLCK );
+		#endif
+	#endif
+}
+
+
+void sphLockUn ( int iFile )
+{
+	#if HAVE_LOCK_EX || USE_WINDOWS
+		flock ( iFile, LOCK_UN );
+	#else
+		#ifdef HAVE_F_SETLK
+			fcntl ( iFile, F_SETLKW, F_UNLCK );
+		#endif
+	#endif
+}
+
 void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 {
 	if ( eLevel>g_eLogLevel || g_iLogFile<0 )
@@ -236,10 +259,10 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	vsnprintf ( sBuf+iLen, sizeof(sBuf)-iLen-1, sFmt, ap );
 	strncat ( sBuf, "\n", sizeof(sBuf) );
 
-	flock ( g_iLogFile, LOCK_EX );
+	sphLockEx ( g_iLogFile );
 	lseek ( g_iLogFile, 0, SEEK_END );
 	write ( g_iLogFile, sBuf, strlen(sBuf) );
-	flock ( g_iLogFile, LOCK_UN );
+	sphLockUn ( g_iLogFile );
 
 	if ( g_bLogStdout && g_iLogFile!=STDOUT_FILENO )
 	{
@@ -965,7 +988,7 @@ bool CSphCache::ReadFromFile ( const CSphQuery & tQuery, const char * sIndexName
 	bool bOK = false;
 	for ( ;; )
 	{
-		if ( iFileSize<3*sizeof(int) )
+		if ( iFileSize<3*(int)sizeof(int) )
 		{
 			sphWarning ( "failed to read header from '%s': file too short", sBuf );
 			break;
@@ -979,7 +1002,7 @@ bool CSphCache::ReadFromFile ( const CSphQuery & tQuery, const char * sIndexName
 		pRes->m_dMatches.Resize ( iMatches );
 		pRes->m_iTotalMatches = *pCur++; 
 
-		if ( iFileSize < sizeof(int)*( 3 + iMatches*4 ) )
+		if ( iFileSize < (int)sizeof(int)*( 3 + iMatches*4 ) )
 		{
 			sphWarning ( "failed to read matches from '%s': file too short", sBuf );
 			break;
@@ -2006,10 +2029,10 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			iOffset, iLimit, sModes [ tQuery.m_eMode ], tQuery.m_eSort, tQuery.m_iGroups,
 			pRes->m_iTotalMatches, tQuery.m_sQuery.cstr() );
 
-		flock ( g_iQueryLogFile, LOCK_EX );
+		sphLockEx ( g_iQueryLogFile );
 		lseek ( g_iQueryLogFile, 0, SEEK_END );
 		write ( g_iQueryLogFile, sBuf, strlen(sBuf) );
-		flock ( g_iQueryLogFile, LOCK_UN );
+		sphLockUn ( g_iQueryLogFile );
 	}
 
 	//////////////////////

@@ -52,9 +52,18 @@ dnl --------------------------------------------------------------------------
 
 SPHINX_CONFIGURE_PART([checking for compiler programs])
 
+if test x$ac_env_CPPFLAGS_set != xset; then
+	CPPFLAGS="-Wall -O3 -fomit-frame-pointer -D_FILE_OFFSET_BITS=64"
+fi
+
 AC_PROG_CC
 AC_PROG_CXX
 AC_PROG_RANLIB
+
+CPPFLAGS="$CPPFLAGS $MYSQL_CFLAGS $PGSQL_CFLAGS"
+if test x$ac_env_CXXFLAGS_set != set; then
+	CXXFLAGS=
+fi
 
 dnl --------------------------------------------------------------------------
 
@@ -89,7 +98,12 @@ AC_FUNC_SELECT_ARGTYPES
 AC_TYPE_SIGNAL
 AC_FUNC_STAT
 AC_FUNC_VPRINTF
+AC_SEARCH_LIBS([setsockopt],[socket])
+AC_SEARCH_LIBS([gethostbyname],[nsl socket resolv])
 AC_CHECK_FUNCS([dup2 gethostbyname gettimeofday memmove memset select socket strcasecmp strchr strerror strncasecmp strstr strtol])
+
+SPHINX_CHECK_DEFINE(LOCK_EX,sys/file.h)
+SPHINX_CHECK_DEFINE(F_SETLKW,fcntl.h)
 
 dnl --------------------------------------------------------------------------
 

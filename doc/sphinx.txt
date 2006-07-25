@@ -598,7 +598,15 @@ Example 3. Fully automated live updates
 A. Sphinx revision history
 --------------------------
 
-A.1. Version 0.9.6-RC1, 26 jun 2006
+A.1. Version 0.9.6, 24 jul 2006
+
+  * added support for empty indexes
+  * added support for multiple sql_query_pre/post/post_index
+  * fixed timestamp ranges filter in "match any" mode
+  * fixed configure issues with --without-mysql and --with-pgsql options
+  * fixed building on Solaris 9
+
+A.2. Version 0.9.6-RC1, 26 jun 2006
 
   * added boolean queries support (experimental, beta version)
   * added simple file-based query cache (experimental, beta version)

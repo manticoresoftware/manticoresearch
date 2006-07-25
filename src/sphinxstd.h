@@ -738,10 +738,12 @@ public:
 	const CSphVariant & operator = ( const CSphVariant & rhs )
 	{
 		assert ( !m_pNext );
-		assert ( !rhs.m_pNext );
+		if ( rhs.m_pNext )
+			m_pNext = new CSphVariant ( *rhs.m_pNext );
 
 		CSphString::operator = ( rhs );
 		m_iValue = rhs.m_iValue;
+
 		return *this;
 	}
 };

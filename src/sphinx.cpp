@@ -317,6 +317,29 @@ protected:
 // INTERNAL SPHINX CLASSES DECLARATIONS
 /////////////////////////////////////////////////////////////////////////////
 
+#ifdef O_BINARY
+#define SPH_BINARY O_BINARY
+#else
+#define SPH_BINARY 0
+#endif
+
+/// file which closes automatically when going out of scope
+class CSphAutofile
+{
+protected:
+	int		m_iFD;		///< my file descriptior
+
+public:
+	CSphAutofile ( const char * sName )	{ m_iFD = ::open ( sName, O_RDONLY | SPH_BINARY ); }
+	CSphAutofile ( int iFD )			{ m_iFD = iFD; }
+	~CSphAutofile ()					{ Close (); }
+
+	int		GetFD () const						{ return m_iFD; }
+	void	Close ()							{ if ( m_iFD>=0 ) ::close ( m_iFD ); }
+};
+
+/////////////////////////////////////////////////////////////////////////////
+
 /// fat hit, which is actually stored in VLN index
 struct CSphFatHit
 {
@@ -326,7 +349,7 @@ struct CSphFatHit
 	DWORD	m_iWordID;		///< word ID in current dictionary
 	DWORD	m_iWordPos;		///< word position in current document
 };
-STATIC_SIZE_ASSERT ( CSphFatHit, 20 );
+// STATIC_SIZE_ASSERT ( CSphFatHit, 20 );
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -1691,12 +1714,6 @@ CSphQuery::~CSphQuery ()
 // BIT-ENCODED FILE OUTPUT
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifdef O_BINARY
-#define SPH_BINARY O_BINARY
-#else
-#define SPH_BINARY 0
-#endif
-
 CSphWriter_VLN::CSphWriter_VLN ( char * sName )
 {
 	assert ( sName );
@@ -2916,9 +2933,14 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	// sort and write compressed index
 	///////////////////////////////////
 
+	// if there were no hits, create zero-length index files
 	int iRawBlocks = bins.GetLength();
 	if ( iRawBlocks==0 )
-		return 0;
+	{
+		CSphAutofile fdTruncSPI ( OpenFile ( "spi", O_CREAT | O_RDWR | O_TRUNC ) );
+		CSphAutofile fdTruncSPD ( OpenFile ( "spd", O_CREAT | O_RDWR | O_TRUNC ) );
+		return ( fdTruncSPI.GetFD()>=0 && fdTruncSPD.GetFD()>=0 ) ? 1 : 0;
+	}
 
 	// reopen raw log as read-only
 	fdRaw = OpenFile ( "spr", O_RDONLY );
@@ -3329,28 +3351,6 @@ int cmpDword ( const void * a, const void * b )
 }
 
 
-/// file which closes automatically when going out of scope
-class CSphAutofile
-{
-public:
-	/// my file descriptior
-	int m_iFD;
-
-	/// open
-	CSphAutofile ( const char * sName )
-	{
-		m_iFD = ::open ( sName, O_RDONLY | SPH_BINARY );
-	}
-
-	/// close
-	~CSphAutofile ()
-	{
-		if ( m_iFD>=0 )
-			::close ( m_iFD );
-	}
-};
-
-
 inline int sphBitCount ( DWORD n )
 {
 	// MIT HACKMEM count
@@ -3607,10 +3607,8 @@ void CSphIndex_VLN::MatchAny ( const CSphQuery * pQuery, ISphMatchQueue * pTop, 
 	{
 		// update active pointers to document lists, kill empty ones,
 		// and get min current document id
-		CSphDocInfo tMatchDoc;
-		tMatchDoc.m_iDocID = UINT_MAX;
-		tMatchDoc.m_iGroupID = 0;
-		tMatchDoc.m_iTimestamp = 0;
+		DWORD iMinID = UINT_MAX;
+		int iMinIndex = -1;
 
 		for ( i=0; i<iActive; i++ )
 		{
@@ -3631,20 +3629,29 @@ void CSphIndex_VLN::MatchAny ( const CSphQuery * pQuery, ISphMatchQueue * pTop, 
 			}
 
 			// get new min id
-			assert ( m_dQueryWords[i].m_tDoc.m_iDocID>iLastMatchID );
-			if ( m_dQueryWords[i].m_tDoc.m_iDocID<tMatchDoc.m_iDocID )
-				tMatchDoc = m_dQueryWords[i].m_tDoc;
+			assert ( m_dQueryWords[i].m_tDoc.m_iDocID > iLastMatchID );
+			if ( m_dQueryWords[i].m_tDoc.m_iDocID < iMinID )
+			{
+				iMinID = m_dQueryWords[i].m_tDoc.m_iDocID;
+				iMinIndex = i;
+			}
 		}
 		if ( iActive==0 )
 			break;
 
-		iLastMatchID = tMatchDoc.m_iDocID;
+		iLastMatchID = iMinID;
+		assert ( iMinIndex>=0 );
 		assert ( iLastMatchID!=0 );
 		assert ( iLastMatchID!=UINT_MAX );
 
+		// unpack match
+		CSphMatch tMatch;
+		tMatch.m_iDocID = m_dQueryWords[iMinIndex].m_tDoc.m_iDocID + m_tHeader.m_tMin.m_iDocID;
+		tMatch.m_iGroupID = m_dQueryWords[iMinIndex].m_tDoc.m_iGroupID + m_tHeader.m_tMin.m_iGroupID;
+		tMatch.m_iTimestamp = m_dQueryWords[iMinIndex].m_tDoc.m_iTimestamp + m_tHeader.m_tMin.m_iTimestamp;
+
 		// early reject by group id, doc id or timestamp
-		tMatchDoc.m_iGroupID += m_tHeader.m_tMin.m_iGroupID;
-		if ( sphMatchEarlyReject ( tMatchDoc, pQuery ) )
+		if ( sphMatchEarlyReject ( tMatch, pQuery ) )
 			continue;
 
 		// get the words we're matching current document against (let's call them "terms")
@@ -3717,11 +3724,7 @@ void CSphIndex_VLN::MatchAny ( const CSphQuery * pQuery, ISphMatchQueue * pTop, 
 		for ( i=0, j=0; i<m_iWeights; i++ )
 			j += m_dWeights[i] * ( sphBitCount(dWeights[i].m_uMatch) + dWeights[i].m_iMaxPhrase*iPhraseK );
 
-		// unpack match, set weight and push it to the queue
-		CSphMatch tMatch;
-		tMatch.m_iDocID = iLastMatchID + m_tHeader.m_tMin.m_iDocID;
-		tMatch.m_iGroupID = tMatchDoc.m_iGroupID; // group id already unpacked
-		tMatch.m_iTimestamp = tMatchDoc.m_iTimestamp + m_tHeader.m_tMin.m_iTimestamp;
+		// set weight and push it to the queue
 		tMatch.m_iWeight = j; // set weight
 		pTop->Push ( tMatch );
 		pResult->m_iTotalMatches++;
@@ -4107,17 +4110,30 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 	snprintf ( sTmp, sizeof(sTmp), "%s.spd", m_sFilename.cstr() );
 	CSphAutofile tDoclist ( sTmp );
 
-	if ( tWordlist.m_iFD<0 || tDoclist.m_iFD<0 )
+	if ( tWordlist.GetFD()<0 || tDoclist.GetFD()<0 )
 	{
 		pResult->m_iQueryTime += int ( 1000.0f*( sphLongTimer() - tmQueryStart ) );
 		return false;
+	}
+
+	snprintf ( sTmp, sizeof(sTmp), "%s.spi", m_sFilename.cstr() );
+	struct stat stWordlist;
+	if ( stat ( sTmp, &stWordlist)<0 )
+	{
+		pResult->m_iQueryTime += int ( 1000.0f*( sphLongTimer() - tmQueryStart ) );
+		return false;
+	}
+	if ( stWordlist.st_size==0 )
+	{
+		pResult->m_iQueryTime += int ( 1000.0f*( sphLongTimer() - tmQueryStart ) );
+		return true;
 	}
 
 	PROFILE_END ( query_init );
 	PROFILE_BEGIN ( query_load_dir );
 
 	// load index pages directory
-	m_rdIndex.SetFile ( tWordlist.m_iFD );
+	m_rdIndex.SetFile ( tWordlist.GetFD() );
 	m_rdIndex.GetRawBytes ( &m_tHeader, sizeof(m_tHeader) );
 	m_rdIndex.GetBytes ( cidxPagesDir, sizeof(cidxPagesDir) );
 
@@ -4145,7 +4161,7 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 
 		// lookup this wordlist page
 		// offset might be -1 if page is totally empty
-		SetupQueryWord ( m_dQueryWords[i], tDoclist.m_iFD );
+		SetupQueryWord ( m_dQueryWords[i], tDoclist.GetFD() );
 	}
 
 	// build word stats
@@ -4199,7 +4215,7 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 			break;
 
 		case SPH_MATCH_BOOLEAN:
-			MatchBoolean ( pQuery, pDict, pTop, pResult, tDoclist.m_iFD );
+			MatchBoolean ( pQuery, pDict, pTop, pResult, tDoclist.GetFD() );
 			break;
 
 		default:
@@ -4819,10 +4835,7 @@ BYTE ** CSphSource_Text::NextDocument()
 
 CSphSourceParams_PgSQL::CSphSourceParams_PgSQL ()
 	: m_sQuery			( NULL )
-	, m_sQueryPre		( NULL )
-	, m_sQueryPost		( NULL )
 	, m_sQueryRange		( NULL )
-	, m_sQueryPostIndex	( NULL )
 	, m_sGroupColumn	( NULL )
 	, m_sDateColumn		( NULL )
 	, m_iRangeStep		( 1024 )
@@ -5027,8 +5040,6 @@ bool CSphSource_PgSQL::Init ( const CSphSourceParams_PgSQL & tParams )
 
 	// defaults
 	#define LOC_FIX_NULL(_arg) if ( !m_tParams._arg.cstr() ) m_tParams._arg = "";
-	LOC_FIX_NULL ( m_sQueryPre );
-	LOC_FIX_NULL ( m_sQueryPost );
 	LOC_FIX_NULL ( m_sGroupColumn );
 	LOC_FIX_NULL ( m_sDateColumn );
 	LOC_FIX_NULL ( m_sHost );
@@ -5037,6 +5048,17 @@ bool CSphSource_PgSQL::Init ( const CSphSourceParams_PgSQL & tParams )
 	LOC_FIX_NULL ( m_sDB );
 	LOC_FIX_NULL ( m_sClientEncoding );
 	#undef LOC_FIX_NULL
+
+	#define LOC_FIX_QARRAY(_arg) \
+		ARRAY_FOREACH ( i, m_tParams._arg ) \
+			if ( m_tParams._arg[i].IsEmpty() ) \
+				m_tParams._arg.Remove ( i-- );
+
+	LOC_FIX_QARRAY ( m_dQueryPre );
+	LOC_FIX_QARRAY ( m_dQueryPost );
+	LOC_FIX_QARRAY ( m_dQueryPostIndex );
+
+	#undef LOC_FIX_QARRAY
 
 	// build and store DSN for error reporting
 	char sBuf [ 1024 ];
@@ -5063,9 +5085,9 @@ bool CSphSource_PgSQL::Init ( const CSphSourceParams_PgSQL & tParams )
 				LOC_PGSQL_ERROR ( "PQsetClientEncoding" );
 
 		// run pre-query
-		if ( !m_tParams.m_sQueryPre.IsEmpty() )
+		ARRAY_FOREACH ( i, m_tParams.m_dQueryPre )
 		{
-			m_pSqlResult = PQexec ( m_tSqlDriver, m_tParams.m_sQueryPre.cstr() );
+			m_pSqlResult = PQexec ( m_tSqlDriver, m_tParams.m_dQueryPre[i].cstr() );
 
 			ExecStatusType eRes = PQresultStatus ( m_pSqlResult );
 			if ( ( eRes!=PGRES_COMMAND_OK ) && ( eRes!=PGRES_TUPLES_OK ) )
@@ -5212,20 +5234,20 @@ BYTE ** CSphSource_PgSQL::NextDocument ()
 			continue;
 
 		// ok, we're over
-		while ( !m_tParams.m_sQueryPost.IsEmpty() )
+		ARRAY_FOREACH ( i, m_tParams.m_dQueryPost )
 		{
-			m_pSqlResult = PQexec ( m_tSqlDriver, m_tParams.m_sQueryPost.cstr() );
+			m_pSqlResult = PQexec ( m_tSqlDriver, m_tParams.m_dQueryPost[i].cstr() );
 
 			ExecStatusType eRes = PQresultStatus ( m_pSqlResult );
 			if ( ( eRes!=PGRES_COMMAND_OK ) && ( eRes!=PGRES_TUPLES_OK ) )
 			{
-				fprintf ( stdout, "WARNING: pgsql_query_post: %s\n", PQerrorMessage ( m_tSqlDriver ) );
+				fprintf ( stdout, "WARNING: pgsql_query_post(%d): error=%s, query=%s\n",
+					i, PQerrorMessage ( m_tSqlDriver ), m_tParams.m_dQueryPost[i].cstr() );
 				break;
 			}
 
 			PQclear ( m_pSqlResult );
 			m_pSqlResult = NULL;
-			break;
 		}
 
 		// close connection and return
@@ -5269,7 +5291,7 @@ BYTE ** CSphSource_PgSQL::NextDocument ()
 
 void CSphSource_PgSQL::PostIndex ()
 {
-	if ( m_tParams.m_sQueryPostIndex.IsEmpty() || !m_iMaxFetchedID )
+	if ( !m_tParams.m_dQueryPostIndex.GetLength() || !m_iMaxFetchedID )
 		return;
 
 	assert ( !m_bSqlConnected );
@@ -5290,17 +5312,19 @@ void CSphSource_PgSQL::PostIndex ()
 		m_bSqlConnected = true;
 		
 		// do execute query
-		char * sQuery = sphStrMacro ( m_tParams.m_sQueryPostIndex.cstr(), "$maxid", m_iMaxFetchedID );	
-		m_pSqlResult = PQexec ( m_tSqlDriver, sQuery );
+		ARRAY_FOREACH ( i, m_tParams.m_dQueryPostIndex )
+		{
+			char * sQuery = sphStrMacro ( m_tParams.m_dQueryPostIndex[i].cstr(), "$maxid", m_iMaxFetchedID );	
+			m_pSqlResult = PQexec ( m_tSqlDriver, sQuery );
+			delete [] sQuery;
 
-		ExecStatusType eRes = PQresultStatus ( m_pSqlResult );
-		if ( ( eRes!=PGRES_COMMAND_OK ) && ( eRes!=PGRES_TUPLES_OK ) )
-			LOC_PGSQL_ERROR ( "PQexec_pre" );
+			ExecStatusType eRes = PQresultStatus ( m_pSqlResult );
+			if ( ( eRes!=PGRES_COMMAND_OK ) && ( eRes!=PGRES_TUPLES_OK ) )
+				LOC_PGSQL_ERROR ( "PQexec_post_index" );
 
-		PQclear ( m_pSqlResult );
-		m_pSqlResult = NULL;
-
-		delete [] sQuery;		
+			PQclear ( m_pSqlResult );
+			m_pSqlResult = NULL;
+		}
 		break;
 	}
 	
@@ -5324,10 +5348,7 @@ void CSphSource_PgSQL::PostIndex ()
 
 CSphSourceParams_MySQL::CSphSourceParams_MySQL ()
 	: m_sQuery			( NULL )
-	, m_sQueryPre		( NULL )
-	, m_sQueryPost		( NULL )
 	, m_sQueryRange		( NULL )
-	, m_sQueryPostIndex	( NULL )
 	, m_sGroupColumn	( NULL )
 	, m_sDateColumn		( NULL )
 	, m_iRangeStep		( 1024 )
@@ -5531,8 +5552,6 @@ bool CSphSource_MySQL::Init ( const CSphSourceParams_MySQL & tParams )
 
 	// defaults
 	#define LOC_FIX_NULL(_arg) if ( !m_tParams._arg.cstr() ) m_tParams._arg = "";
-	LOC_FIX_NULL ( m_sQueryPre );
-	LOC_FIX_NULL ( m_sQueryPost );
 	LOC_FIX_NULL ( m_sGroupColumn );
 	LOC_FIX_NULL ( m_sDateColumn );
 	LOC_FIX_NULL ( m_sHost );
@@ -5540,6 +5559,17 @@ bool CSphSource_MySQL::Init ( const CSphSourceParams_MySQL & tParams )
 	LOC_FIX_NULL ( m_sPass );
 	LOC_FIX_NULL ( m_sDB );
 	#undef LOC_FIX_NULL
+
+	#define LOC_FIX_QARRAY(_arg) \
+		ARRAY_FOREACH ( i, m_tParams._arg ) \
+			if ( m_tParams._arg[i].IsEmpty() ) \
+				m_tParams._arg.Remove ( i-- );
+
+	LOC_FIX_QARRAY ( m_dQueryPre );
+	LOC_FIX_QARRAY ( m_dQueryPost );
+	LOC_FIX_QARRAY ( m_dQueryPostIndex );
+
+	#undef LOC_FIX_QARRAY
 
 	// build and store DSN for error reporting
 	char sBuf [ 1024 ];
@@ -5572,9 +5602,9 @@ bool CSphSource_MySQL::Init ( const CSphSourceParams_MySQL & tParams )
 		m_bSqlConnected = true;
 
 		// run pre-query
-		if ( !m_tParams.m_sQueryPre.IsEmpty() )
+		ARRAY_FOREACH ( i, m_tParams.m_dQueryPre )
 		{
-			if ( mysql_query ( &m_tSqlDriver, m_tParams.m_sQueryPre.cstr() ) )
+			if ( mysql_query ( &m_tSqlDriver, m_tParams.m_dQueryPre[i].cstr() ) )
 				LOC_MYSQL_ERROR ( "mysql_query_pre" );
 
 			m_pSqlResult = mysql_use_result ( &m_tSqlDriver );
@@ -5728,11 +5758,12 @@ BYTE ** CSphSource_MySQL::NextDocument ()
 		}
 
 		// ok, we're over
-		while ( !m_tParams.m_sQueryPost.IsEmpty() )
+		ARRAY_FOREACH ( i, m_tParams.m_dQueryPost )
 		{
-			if ( mysql_query ( &m_tSqlDriver, m_tParams.m_sQueryPost.cstr() ) )
+			if ( mysql_query ( &m_tSqlDriver, m_tParams.m_dQueryPost[i].cstr() ) )
 			{
-				fprintf ( stdout, "WARNING: mysql_query_post: %s\n", mysql_error ( &m_tSqlDriver ) );
+				fprintf ( stdout, "WARNING: mysql_query_post(%d): error=%s, query=%s\n",
+					i, mysql_error ( &m_tSqlDriver ), m_tParams.m_dQueryPost[i].cstr() );
 				break;
 			}
 			m_pSqlResult = mysql_use_result ( &m_tSqlDriver );
@@ -5741,7 +5772,6 @@ BYTE ** CSphSource_MySQL::NextDocument ()
 				mysql_free_result ( m_pSqlResult );
 				m_pSqlResult = NULL;
 			}
-			break;
 		}
 
 		// close connection and return
@@ -5782,7 +5812,7 @@ BYTE ** CSphSource_MySQL::NextDocument ()
 
 void CSphSource_MySQL::PostIndex ()
 {
-	if ( m_tParams.m_sQueryPostIndex.IsEmpty() || !m_iMaxFetchedID )
+	if ( !m_tParams.m_dQueryPostIndex.GetLength() || !m_iMaxFetchedID )
 		return;
 
 	assert ( !m_bSqlConnected );
@@ -5800,20 +5830,22 @@ void CSphSource_MySQL::PostIndex ()
 			LOC_MYSQL_ERROR ( "mysql_real_connect" );
 		}
 
-		char * sQuery = sphStrMacro ( m_tParams.m_sQueryPostIndex.cstr(), "$maxid", m_iMaxFetchedID );
-		int iRes = mysql_query ( &m_tSqlDriver, sQuery );
-		delete [] sQuery;
-
-		if ( iRes )
-			LOC_MYSQL_ERROR ( "mysql_query_post_index" );
-
-		m_pSqlResult = mysql_use_result ( &m_tSqlDriver );
-		if ( m_pSqlResult )
+		ARRAY_FOREACH ( i, m_tParams.m_dQueryPostIndex )
 		{
-			mysql_free_result ( m_pSqlResult );
-			m_pSqlResult = NULL;
-		}
+			char * sQuery = sphStrMacro ( m_tParams.m_dQueryPostIndex[i].cstr(), "$maxid", m_iMaxFetchedID );
+			int iRes = mysql_query ( &m_tSqlDriver, sQuery );
+			delete [] sQuery;
 
+			if ( iRes )
+				LOC_MYSQL_ERROR ( "mysql_query_post_index" );
+
+			m_pSqlResult = mysql_use_result ( &m_tSqlDriver );
+			if ( m_pSqlResult )
+			{
+				mysql_free_result ( m_pSqlResult );
+				m_pSqlResult = NULL;
+			}
+		}
 		break;
 	}
 	

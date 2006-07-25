@@ -35,15 +35,19 @@
 #endif
 
 #if USE_PGSQL
-	#include <libpq-fe.h>
+#include <libpq-fe.h>
+#endif
+
+#if USE_WINDOWS
+#include <winsock2.h>
+#else
+#include <sys/types.h>
+#include <unistd.h>
 #endif
 
 #if USE_MYSQL
-#if USE_WINDOWS
-	#include <winsock2.h>
-#endif // USE_WINDOWS
-	#include <mysql.h>
-#endif // USE_MYSQL
+#include <mysql.h>
+#endif
 
 #if USE_WINDOWS
 	#define WIN32_LEAN_AND_MEAN
@@ -428,13 +432,14 @@ struct CSphSourceParams_PgSQL
 {
 	// query params
 	CSphString	m_sQuery;
-	CSphString	m_sQueryPre;
-	CSphString	m_sQueryPost;
 	CSphString	m_sQueryRange;
-	CSphString	m_sQueryPostIndex;
 	CSphString	m_sGroupColumn;
 	CSphString	m_sDateColumn;
 	int			m_iRangeStep;
+
+	CSphVector<CSphString,4>	m_dQueryPre;
+	CSphVector<CSphString,4>	m_dQueryPost;
+	CSphVector<CSphString,4>	m_dQueryPostIndex;
 
 	// connection params
 	CSphString	m_sHost;
@@ -499,13 +504,14 @@ struct CSphSourceParams_MySQL
 {
 	// query params
 	CSphString	m_sQuery;
-	CSphString	m_sQueryPre;
-	CSphString	m_sQueryPost;
 	CSphString	m_sQueryRange;
-	CSphString	m_sQueryPostIndex;
 	CSphString	m_sGroupColumn;
 	CSphString	m_sDateColumn;
 	int			m_iRangeStep;
+
+	CSphVector<CSphString,4>	m_dQueryPre;
+	CSphVector<CSphString,4>	m_dQueryPost;
+	CSphVector<CSphString,4>	m_dQueryPostIndex;
 
 	// connection params
 	CSphString	m_sHost;

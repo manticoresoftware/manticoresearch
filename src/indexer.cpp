@@ -313,6 +313,11 @@ void ShowProgress ( const CSphIndexProgress * pProgress )
 		_arg = hSource[_key].intval();
 
 
+#define LOC_GETA(_arg,_key) \
+	for ( CSphVariant * pVal = hSource(_key); pVal; pVal = pVal->m_pNext ) \
+		_arg.Add ( pVal->cstr() );
+
+
 #if USE_PGSQL
 CSphSource * SpawnSourcePgSQL ( const CSphConfigSection & hSource, const char * sSourceName )
 {
@@ -326,10 +331,10 @@ CSphSource * SpawnSourcePgSQL ( const CSphConfigSection & hSource, const char * 
 
 	CSphSourceParams_PgSQL tParams;
 	LOC_GETS ( tParams.m_sQuery,			"sql_query" );
-	LOC_GETS ( tParams.m_sQueryPre,			"sql_query_pre" );
-	LOC_GETS ( tParams.m_sQueryPost,		"sql_query_post" );
+	LOC_GETA ( tParams.m_dQueryPre,			"sql_query_pre" );
+	LOC_GETA ( tParams.m_dQueryPost,		"sql_query_post" );
 	LOC_GETS ( tParams.m_sQueryRange,		"sql_query_range" );
-	LOC_GETS ( tParams.m_sQueryPostIndex,	"sql_query_post_index" );
+	LOC_GETA ( tParams.m_dQueryPostIndex,	"sql_query_post_index" );
 	LOC_GETS ( tParams.m_sGroupColumn,		"sql_group_column" );
 	LOC_GETS ( tParams.m_sDateColumn,		"sql_date_column" );
 	LOC_GETS ( tParams.m_sHost,				"sql_host" );
@@ -361,10 +366,10 @@ CSphSource * SpawnSourceMySQL ( const CSphConfigSection & hSource, const char * 
 
 	CSphSourceParams_MySQL tParams;
 	LOC_GETS ( tParams.m_sQuery,			"sql_query" );
-	LOC_GETS ( tParams.m_sQueryPre,			"sql_query_pre" );
-	LOC_GETS ( tParams.m_sQueryPost,		"sql_query_post" );
+	LOC_GETA ( tParams.m_dQueryPre,			"sql_query_pre" );
+	LOC_GETA ( tParams.m_dQueryPost,		"sql_query_post" );
 	LOC_GETS ( tParams.m_sQueryRange,		"sql_query_range" );
-	LOC_GETS ( tParams.m_sQueryPostIndex,	"sql_query_post_index" );
+	LOC_GETA ( tParams.m_dQueryPostIndex,	"sql_query_post_index" );
 	LOC_GETS ( tParams.m_sGroupColumn,		"sql_group_column" );
 	LOC_GETS ( tParams.m_sDateColumn,		"sql_date_column" );
 	LOC_GETS ( tParams.m_sHost,				"sql_host" );
@@ -428,6 +433,7 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 #undef LOC_CHECK
 #undef LOC_GETS
 #undef LOC_GETI
+#undef LOC_GETA
 
 /////////////////////////////////////////////////////////////////////////////
 

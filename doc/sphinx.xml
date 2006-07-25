@@ -735,6 +735,15 @@ xmlpipe_command = perl /www/mysite.com/bin/sphinxpipe.pl
 -->
 
 <appendix id="changelog"><title>Sphinx revision history</title>
+<sect2 id="ver_0_9_6"><title>Version 0.9.6, 24 jul 2006</title>
+<itemizedlist>
+<listitem>added support for empty indexes</listitem>
+<listitem>added support for multiple sql_query_pre/post/post_index</listitem>
+<listitem>fixed timestamp ranges filter in "match any" mode</listitem>
+<listitem>fixed configure issues with --without-mysql and --with-pgsql options</listitem>
+<listitem>fixed building on Solaris 9</listitem>
+</itemizedlist>
+</sect2>
 <sect2 id="ver_0_9_6_rc1"><title>Version 0.9.6-RC1, 26 jun 2006</title>
 <itemizedlist>
 <listitem>added boolean queries support (experimental, beta version)</listitem>

@@ -205,6 +205,31 @@ index test1
 	path			= @CONFDIR@/data/test1
 	# path			= @CONFDIR@/data/test1
 
+	# docinfo (ie. per-document attribute values) storage strategy
+	#
+	# defines how docinfo will be stored
+	# "none" means there'll be no docinfo (no groups, no dates, no nothing)
+	# "inline" means that the docinfo will be stored along with the doc IDs
+	# "extern" means that the docinfo will be stored separately
+	#
+	# externally stored docinfo should (basically) be kept in RAM
+	# when querying; therefore, "inline" may be the only viable option
+	# for really huge (50-100+ million docs) datasets. however, for
+	# smaller datasets "extern" storage makes both indexing and
+	# searching much more efficient.
+	#
+	# additional search-time memory requirements for extern storage are
+	#
+	#	( 1 + number_of_attrs )*number_of_docs*4 bytes
+	#
+	# so 10 million docs with 2 groups and 1 timestamp will take
+	# (1+2+1)*10M*4 = 160 MB of RAM. this is per daemon, ie. searchd
+	# will alloc 160 MB on startup, read the data and keep it shared
+	# between queries.
+	#
+	# default is "extern" (as most collections are smaller than 100M docs)
+	docinfo			= extern
+
 	# morphology
 	# default is not to use any
 	#

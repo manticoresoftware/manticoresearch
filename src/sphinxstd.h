@@ -169,7 +169,7 @@ public:
 	}
 
 	/// query current length
-	int GetLength () const
+	inline int GetLength () const
 	{
 		return m_iLength;
 	}
@@ -593,11 +593,6 @@ public:
 		return m_sValue;
 	}
 
-	char * str ()
-	{
-		return m_sValue;
-	}
-
 	bool operator == ( const CSphString & t ) const
 	{
 		return strcmp ( m_sValue, t.m_sValue )==0;
@@ -768,6 +763,13 @@ public:
 
 	/// get current root
 	virtual const T &	Root () const = 0;
+
+public:
+	/// set attr to sort by
+	virtual void		SetAttr ( int ) {};
+
+	/// get attr to sort by
+	virtual int			GetAttr () { return 0; }
 };
 
 #endif // _sphinxstd_

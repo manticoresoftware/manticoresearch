@@ -22,7 +22,7 @@ define ( "SEARCHD_COMMAND_SEARCH",	0 );
 define ( "SEARCHD_COMMAND_EXCERPT",	1 );
 
 /// current client-side command implementation versions
-define ( "VER_COMMAND_SEARCH",		0x101 );
+define ( "VER_COMMAND_SEARCH",		0x102 );
 define ( "VER_COMMAND_EXCERPT",		0x100 );
 
 /// known searchd status codes
@@ -38,9 +38,13 @@ define ( "SPH_MATCH_BOOLEAN",		3 );
 
 /// known sort modes
 define ( "SPH_SORT_RELEVANCE",		0 );
-define ( "SPH_SORT_DATE_DESC",		1 );
-define ( "SPH_SORT_DATE_ASC",		2 );
+define ( "SPH_SORT_ATTR_DESC",		1 );
+define ( "SPH_SORT_ATTR_ASC",		2 );
 define ( "SPH_SORT_TIME_SEGMENTS", 	3 );
+
+/// known attribute types
+define ( "SPH_ATTR_INTEGER",		1 );
+define ( "SPH_ATTR_TIMESTAMP",		2 );
 
 /// sphinx searchd client class
 class SphinxClient
@@ -51,14 +55,13 @@ class SphinxClient
 	var $_limit;	///< how much records to return from result-set starting at offset (default is 20)
 	var $_mode;		///< query matching mode (default is SPH_MATCH_ALL)
 	var $_weights;	///< per-field weights (default is 1 for all fields)
-	var $_groups;	///< groups to limit searching to (default is not to limit)
 	var $_sort;		///< match sorting mode (default is SPH_SORT_RELEVANCE)
+	var $_sortby;	///< attribute to sort by (defualt is "")
 	var $_min_id;	///< min ID to match (default is 0)
 	var $_max_id;	///< max ID to match (default is UINT_MAX)
-	var $_min_ts;	///< min timestamp to match (default is 0)
-	var $_max_ts;	///< max timestamp to match (default is UINT_MAX)
-	var $_min_gid;	///< min group id to match (default is 0)
-	var $_max_gid;	///< max group id to match (default is UINT_MAX)
+	var $_min;		///< attribute name to min-value hash (for range filters)
+	var $_max;		///< attribute name to max-value hash (for range filters)
+	var $_filter;	///< attribute name to values set hash (for values-set filters)
 
 	var $_error;	///< last error message
 	var $_warning;	///< last warning message
@@ -76,16 +79,16 @@ class SphinxClient
 		$this->_limit	= 20;
 		$this->_mode	= SPH_MATCH_ALL;
 		$this->_weights	= array ();
-		$this->_groups	= array ();
 		$this->_sort	= SPH_SORT_RELEVANCE;
+		$this->_sortby	= "";
 		$this->_min_id	= 0;
 		$this->_max_id	= 0xFFFFFFFF;
-		$this->_min_ts	= 0;
-		$this->_max_ts	= 0xFFFFFFFF;
-		$this->_min_gid	= 0;
-		$this->_max_gid	= 0xFFFFFFFF;
+		$this->_min		= array ();
+		$this->_max		= array ();
+		$this->_filter	= array ();
 
 		$this->_error	= "";
+		$this->_warning	= "";
 	}
 
 	/// get last error message (string)
@@ -216,11 +219,18 @@ class SphinxClient
 	}
 
 	/// set match mode
-	function SetSortMode ( $sort )
+	function SetSortMode ( $mode, $sortby="" )
 	{
-		assert ( $sort==SPH_SORT_RELEVANCE || $sort==SPH_SORT_DATE_DESC || $sort==SPH_SORT_DATE_ASC
-			|| $sort==SPH_SORT_TIME_SEGMENTS );
-		$this->_sort = $sort;
+		assert (
+			$mode==SPH_SORT_RELEVANCE ||
+			$mode==SPH_SORT_ATTR_DESC ||
+			$mode==SPH_SORT_ATTR_ASC ||
+			$mode==SPH_SORT_TIME_SEGMENTS );
+		assert ( is_string($sortby) );
+		assert ( $mode==SPH_SORT_RELEVANCE || strlen($sortby)>0 );
+
+		$this->_sort = $mode;
+		$this->_sortby = $sortby;
 	}
 
 	/// set per-field weights
@@ -233,17 +243,9 @@ class SphinxClient
 		$this->_weights = $weights;
 	}
 
-	/// set groups
-	function SetGroups ( $groups )
-	{
-		assert ( is_array($groups) );
-		foreach ( $groups as $group )
-			assert ( is_int($group) );
-
-		$this->_groups = $groups;
-	}
-
 	/// set IDs range to match
+	/// only match those records where document ID
+	/// is beetwen $min and $max (including $min and $max)
 	function SetIDRange ( $min, $max )
 	{
 		assert ( is_int($min) );
@@ -253,24 +255,33 @@ class SphinxClient
 		$this->_max_id = $max;
 	}
 
-	/// set timestamps to match
-	function SetTimestampRange ( $min, $max )
+	/// set values filter
+	/// only match those records where $attribute column values
+	/// are in specified set
+	function SetFilter ( $attribute, $values )
 	{
-		assert ( is_int($min) );
-		assert ( is_int($max) );
-		assert ( $min<=$max );
-		$this->_min_ts = $min;
-		$this->_max_ts = $max;
+		assert ( is_string($attribute) );
+		assert ( is_array($values) );
+		assert ( count($values) );
+
+		foreach ( $values as $value )
+			assert ( is_int($value) );
+
+		$this->_filter[$attribute] = $values;
 	}
 
-	/// set groups range to match
-	function SetGroupsRange ( $min, $max )
+	/// set range filter
+	/// only match those records where $attribute column value
+	/// is beetwen $min and $max (including $min and $max)
+	function SetFilterRange ( $attribute, $min, $max )
 	{
+		assert ( is_string($attribute) );
 		assert ( is_int($min) );
 		assert ( is_int($max) );
 		assert ( $min<=$max );
-		$this->_min_gid = $min;
-		$this->_max_gid = $max;
+
+		$this->_min[$attribute] = $min;
+		$this->_max[$attribute] = $max;
 	}
 
 	/// connect to searchd server and run given search query
@@ -299,26 +310,34 @@ class SphinxClient
 		// build request
 		/////////////////
 
-		// v.1.0
 		$req = pack ( "NNNN", $this->_offset, $this->_limit, $this->_mode, $this->_sort ); // mode and limits
-		$req .= pack ( "N", count($this->_groups) ); // groups 
-		foreach ( $this->_groups as $group )
-			$req .= pack ( "N", $group );
+		$req .= pack ( "N", strlen($this->_sortby) ) . $this->_sortby;
 		$req .= pack ( "N", strlen($query) ) . $query; // query itself
 		$req .= pack ( "N", count($this->_weights) ); // weights
 		foreach ( $this->_weights as $weight )
 			$req .= pack ( "N", (int)$weight );
 		$req .= pack ( "N", strlen($index) ) . $index; // indexes
-		$req .= // id/ts ranges
+		$req .= // id range
 			pack ( "N", (int)$this->_min_id ) .
-			pack ( "N", (int)$this->_max_id ) .
-			pack ( "N", (int)$this->_min_ts ) .
-			pack ( "N", (int)$this->_max_ts );
+			pack ( "N", (int)$this->_max_id );
 
-		// v.1.1
-		$req .= // gid ranges
-			pack ( "N", (int)$this->_min_gid ) .
-			pack ( "N", (int)$this->_max_gid );
+		// filters
+		$req .= pack ( "N", count($this->_min) + count($this->_filter) );
+
+		foreach ( $this->_min as $attr => $min )
+			$req .=
+				pack ( "N", strlen($attr) ) . $attr .
+				pack ( "NNN", 0, $min, $this->_max[$attr] );
+
+		foreach ( $this->_filter as $attr => $values )
+		{
+			$req .= 
+				pack ( "N", strlen($attr) ) . $attr .
+				pack ( "N", count($values) );
+
+			foreach ( $values as $value )
+				$req .= pack ( "N", $value );
+		}
 
 		////////////////////////////
 		// send query, get response
@@ -335,18 +354,47 @@ class SphinxClient
 		//////////////////
 
 		$result = array();
-		list(,$count) = unpack ( "N*", substr ( $response, 0, 4 ) );
-		$p = 4;
-		while ( $count-->0 )
-		{
-			list ( $doc, $group, $stamp, $weight ) = array_values ( unpack ( "N*N*N*N*",
-				substr ( $response, $p, 16 ) ) );
-			$p += 16;
+		$max = strlen($response); // protection from broken response
 
-			$result["matches"][$doc] = array (
-				"weight"	=> $weight,
-				"group"		=> $group,
-				"stamp"		=> $stamp );
+		// read schema
+		$p = 0;
+		$fields = array ();
+		$attrs = array ();
+
+		list(,$nfields) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
+		while ( $nfields-->0 && $p<$max )
+		{
+			list(,$len) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
+			$fields[] = substr ( $response, $p, $len ); $p += $len;
+		}
+		$result["fields"] = $fields;
+
+		list(,$nattrs) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
+		while ( $nattrs-->0 && $p<$max  )
+		{
+			list(,$len) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
+			$attr = substr ( $response, $p, $len ); $p += $len;
+			list(,$type) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
+			$attrs[$attr] = $type;
+		}
+		$result["attrs"] = $attrs;
+
+		// read match count
+		list(,$count) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
+
+		// read matches
+		while ( $count-->0 && $p<$max )
+		{
+			list ( $doc, $weight ) = array_values ( unpack ( "N*N*",
+				substr ( $response, $p, 8 ) ) );
+			$p += 8;
+
+			$result["matches"][$doc]["weight"] = $weight;
+			foreach ( $attrs as $attr=>$type )
+			{
+				list(,$val) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
+				$result["matches"][$doc]["attrs"][$attr] = $val;
+			}
 		}
 		list ( $result["total"], $result["total_found"], $result["time"], $words ) =
 			array_values ( unpack ( "N*N*N*N*", substr ( $response, $p, 16 ) ) );

@@ -24,6 +24,7 @@
 #include <sys/types.h>
 #include <time.h>
 #include <stdarg.h>
+#include <limits.h>
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -88,6 +89,7 @@ static int				g_iMaxMatches	= 1000;
 struct ServedIndex_t
 {
 	CSphIndex *			m_pIndex;
+	const CSphSchema *	m_pSchema;	///< pointer to index schema, managed by the index itself
 	CSphDict *			m_pDict;
 	ISphTokenizer *		m_pTokenizer;
 	CSphString *		m_pLockFile; 
@@ -136,7 +138,7 @@ enum SearchdCommand_e
 /// known command versions
 enum
 {
-	VER_COMMAND_SEARCH		= 0x101,
+	VER_COMMAND_SEARCH		= 0x102,
 	VER_COMMAND_EXCERPT		= 0x100
 };
 
@@ -305,7 +307,9 @@ void sphInfo ( const char * sFmt, ... )
 
 const int		NET_MAX_REQ_LEN			= 1048576;
 const int		NET_MAX_STR_LEN			= NET_MAX_REQ_LEN;
-const int		SEARCHD_MAX_REQ_GROUPS	= 4096;
+const int		SEARCHD_MAX_ATTRS		= 256;
+const int		SEARCHD_MAX_ATTR_VALUES	= 4096;
+
 
 const char * sphSockError ( int iErr=0 )
 {
@@ -353,7 +357,7 @@ int sphCreateServerSocket ( int port )
 
 	sphInfo ( "creating a server socket on port %d", port );
 	if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-		sphFatal ( "unable to create server socket on port %d: %s", port, sphSockError() );
+		sphFatal ( "failed to create server socket on port %d: %s", port, sphSockError() );
 
 	int iOn = 1;
 	if ( setsockopt ( sock, SOL_SOCKET, SO_REUSEADDR, (char*)&iOn, sizeof(iOn) ) )
@@ -526,7 +530,7 @@ public:
 	DWORD			GetDword () { return ntohl ( GetT<DWORD> () ); }
 	BYTE			GetByte () { return GetT<BYTE> (); }
 	CSphString		GetString ();
-	int				GetInts ( int ** pBuffer, int iMax, const char * sErrorTemplate );
+	int				GetDwords ( DWORD ** pBuffer, int iMax, const char * sErrorTemplate );
 	bool			GetError () { return m_bError; }
 
 	virtual void	SendErrorReply ( const char *, ... ) = 0;
@@ -724,7 +728,7 @@ bool InputBuffer_c::GetBytes ( void * pBuf, int iLen )
 }
 
 
-int InputBuffer_c::GetInts ( int ** ppBuffer, int iMax, const char * sErrorTemplate )
+int InputBuffer_c::GetDwords ( DWORD ** ppBuffer, int iMax, const char * sErrorTemplate )
 {
 	assert ( ppBuffer );
 	assert ( !(*ppBuffer) );
@@ -738,7 +742,7 @@ int InputBuffer_c::GetInts ( int ** ppBuffer, int iMax, const char * sErrorTempl
 	}
 	if ( iCount )
 	{
-		(*ppBuffer) = new int [ iCount ];
+		(*ppBuffer) = new DWORD [ iCount ];
 		if ( !GetBytes ( (*ppBuffer), sizeof(int)*iCount ) )
 		{
 			SafeDeleteArray ( (*ppBuffer) );
@@ -1423,9 +1427,19 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				}
 
 				// do query!
-				int iQueryLen = strlen ( tQuery.m_sQuery.cstr() );
-				int iIndexesLen = strlen ( tAgent.m_sIndexes.cstr() );
-				int iReqSize = 68 + 4*tQuery.m_iGroups + iQueryLen + 4*tQuery.m_iWeights + iIndexesLen;
+				int iReqSize = 56 + 4*tQuery.m_iWeights
+					+ strlen ( tQuery.m_sSortBy.cstr() )
+					+ strlen ( tQuery.m_sQuery.cstr() )
+					+ strlen ( tAgent.m_sIndexes.cstr() );
+				ARRAY_FOREACH ( j, tQuery.m_dFilters )
+				{
+					const CSphFilter & tFilter = tQuery.m_dFilters[j];
+					iReqSize +=
+						8
+						+ strlen ( tFilter.m_sAttrName.cstr() )
+						+ 4*tFilter.m_iValues
+						+ ( tFilter.m_iValues ? 0 : 8 );
+				}
 
 				NetOutputBuffer_c tOut ( tAgent.m_iSock );
 
@@ -1437,14 +1451,12 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				tOut.SendWord ( VER_COMMAND_SEARCH ); // command version
 				tOut.SendInt ( iReqSize-12 ); // request body length
 
-				// request v.1.1
+				// request v.1.2
 				tOut.SendInt ( 0 ); // offset is 0
 				tOut.SendInt ( g_iMaxMatches ); // limit is MAX_MATCHES
 				tOut.SendInt ( iMode ); // match mode
 				tOut.SendInt ( tQuery.m_eSort ); // sort mode
-				tOut.SendInt ( tQuery.m_iGroups );
-				for ( int j=0; j<tQuery.m_iGroups; j++ )
-					tOut.SendDword ( tQuery.m_pGroups[j] ); // groups
+				tOut.SendString ( tQuery.m_sSortBy.cstr() ); // sort attr
 				tOut.SendString ( tQuery.m_sQuery.cstr() ); // query
 				tOut.SendInt ( tQuery.m_iWeights );
 				for ( int j=0; j<tQuery.m_iWeights; j++ )
@@ -1452,13 +1464,23 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				tOut.SendString ( tAgent.m_sIndexes.cstr() ); // indexes
 				tOut.SendInt ( tQuery.m_iMinID ); // id/ts ranges
 				tOut.SendInt ( tQuery.m_iMaxID );
-				tOut.SendInt ( tQuery.m_iMinTS );
-				tOut.SendInt ( tQuery.m_iMaxTS );
-				tOut.SendInt ( tQuery.m_iMinGID );
-				tOut.SendInt ( tQuery.m_iMaxGID );
+				tOut.SendInt ( tQuery.m_dFilters.GetLength() );
+				ARRAY_FOREACH ( j, tQuery.m_dFilters )
+				{
+					const CSphFilter & tFilter = tQuery.m_dFilters[j];
+					tOut.SendString ( tFilter.m_sAttrName.cstr() );
+					tOut.SendInt ( tFilter.m_iValues );
+					for ( int k=0; k<tFilter.m_iValues; k++ )
+						tOut.SendInt ( tFilter.m_pValues[k] );
+					if ( !tFilter.m_iValues )
+					{
+						tOut.SendDword ( tFilter.m_uMinValue );
+						tOut.SendDword ( tFilter.m_uMaxValue );
+					}
+				}
 				tOut.Flush ();
 
-				// FIXME! !COMMIT handle flush failure
+				// FIXME! handle flush failure
 				tAgent.m_eState = AGENT_QUERY;
 				iAgents++;
 			}
@@ -1625,6 +1647,21 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 				{
 					MemInputBuffer_c tReq ( tAgent.m_pReplyBuf, tAgent.m_iReplySize );
 
+					// get schema
+					CSphSchema & tSchema = tAgent.m_tRes.m_tSchema;
+
+					tSchema.m_dFields.Resize ( tReq.GetInt() ); // FIXME! add a sanity check
+					ARRAY_FOREACH ( j, tSchema.m_dFields )
+						tSchema.m_dFields[j].m_sName = tReq.GetString ();
+
+					tSchema.m_dAttrs.Resize ( tReq.GetInt() ); // FIXME! add a sanity check
+					ARRAY_FOREACH ( j, tSchema.m_dAttrs )
+					{
+						tSchema.m_dAttrs[j].m_sName = tReq.GetString ();
+						tSchema.m_dAttrs[j].m_eAttrType = (ESphAttrType) tReq.GetDword (); // FIXME! add a sanity check
+					}
+
+					// get matches
 					int iMatches = tReq.GetInt ();
 					if ( iMatches<0 || iMatches>g_iMaxMatches )
 					{
@@ -1635,16 +1672,24 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 					}
 
 					assert ( !tAgent.m_tRes.m_dMatches.GetLength() );
+					int iAttrs = tSchema.m_dAttrs.GetLength();
 					if ( iMatches )
 					{
 						tAgent.m_tRes.m_dMatches.Resize ( iMatches );
 						ARRAY_FOREACH ( i, tAgent.m_tRes.m_dMatches )
 						{
 							CSphMatch & tMatch = tAgent.m_tRes.m_dMatches[i];
+							tMatch.Reset ();
+
 							tMatch.m_iDocID = tReq.GetInt ();
-							tMatch.m_iGroupID = tReq.GetInt ();
-							tMatch.m_iTimestamp = tReq.GetInt ();
 							tMatch.m_iWeight = tReq.GetInt ();
+							tMatch.m_iAttrs = iAttrs;
+							if ( iAttrs )
+							{
+								tMatch.m_pAttrs = new DWORD [ iAttrs ]; // !COMMIT pool these allocs
+								for ( int j=0; j<iAttrs; j++ )
+									tMatch.m_pAttrs[j] = tReq.GetDword ();
+							}
 						}
 					}
 
@@ -1781,6 +1826,43 @@ inline bool operator < ( const CSphMatch & a, const CSphMatch & b )
 
 /////////////////////////////////////////////////////////////////////////////
 
+bool CheckSortAndSchema ( const CSphSchema ** ppFirst,
+	const CSphSchema * pServed, const char * sServedName, const CSphQuery & tQuery,
+	InputBuffer_c & tReq, ISphMatchQueue * pTop )
+{
+	assert ( ppFirst );
+	assert ( pServed );
+
+	if ( !*ppFirst )
+	{
+		// lookup proper attribute index to sort by
+		*ppFirst = pServed;
+		int iAttr = pServed->GetAttrIndex ( tQuery.m_sSortBy.cstr() );
+		if ( iAttr<0 )
+		{
+			if ( tQuery.m_eSort!=SPH_SORT_RELEVANCE )
+			{
+				tReq.SendErrorReply ( "index '%s': sort-by attribute '%s' not found",
+					sServedName, tQuery.m_sSortBy.cstr() );
+				return false;
+			}
+			iAttr = 0;
+		}
+		pTop->SetAttr ( iAttr );
+
+	} else
+	{
+		// check schemas
+		CSphString sError;
+		if ( !pServed->IsEqual ( **ppFirst, sError ) )
+		{
+			tReq.SendErrorReply ( "index '%s': schema mismatch: %s", sServedName, sError.cstr() );
+			return false;
+		}
+	}
+	return true;
+}
+
 void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 {
 	CSphQuery tQuery;
@@ -1793,6 +1875,12 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			VER_COMMAND_SEARCH>>8, iVer>>8, iVer&0xff );
 		return;
 	}
+	if ( iVer>VER_COMMAND_SEARCH )
+	{
+		tReq.SendErrorReply ( "client version is higher than daemon version (client is v.%d.%d, daemon is v.%d.%d)",
+			iVer>>8, iVer&0xff, VER_COMMAND_SEARCH>>8, VER_COMMAND_SEARCH&0xff );
+		return;
+	}
 
 	// per-server query settings
 	tQuery.m_iMaxMatches = g_iMaxMatches;
@@ -1801,25 +1889,63 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	// parse request
 	/////////////////
 
+	DWORD iMinTS = 0, iMaxTS = UINT_MAX, iMinGID = 0, iMaxGID = UINT_MAX, * pGroups = NULL;
+	int iGroups = 0;
+
 	// v.1.0. mode, limits, weights, ID/TS ranges
 	int iOffset			= tReq.GetInt ();
 	int iLimit			= tReq.GetInt ();
-	tQuery.m_eMode			= (ESphMatchMode) tReq.GetInt ();
+	tQuery.m_eMode		= (ESphMatchMode) tReq.GetInt ();
 	tQuery.m_eSort		= (ESphSortOrder) tReq.GetInt ();
-	tQuery.m_iGroups	= tReq.GetInts ( (int**)&tQuery.m_pGroups, SEARCHD_MAX_REQ_GROUPS, "invalid group count %d (should be in 0..%d range)" );
+	if ( iVer<=0x101 )
+		iGroups			= tReq.GetDwords ( &pGroups, SEARCHD_MAX_ATTR_VALUES, "invalid group count %d (should be in 0..%d range)" );
+	if ( iVer>=0x102 )
+		tQuery.m_sSortBy= tReq.GetString ();
 	tQuery.m_sQuery		= tReq.GetString ();
-	tQuery.m_iWeights	= tReq.GetInts ( (int**)&tQuery.m_pWeights, SPH_MAX_FIELD_COUNT, "invalid weight count %d (should be in 0..%d range)" );
+	tQuery.m_iWeights	= tReq.GetDwords ( (DWORD**)&tQuery.m_pWeights, SPH_MAX_FIELDS, "invalid weight count %d (should be in 0..%d range)" );
 	CSphString sIndex	= tReq.GetString ();
 	tQuery.m_iMinID		= tReq.GetDword ();
 	tQuery.m_iMaxID		= tReq.GetDword ();
-	tQuery.m_iMinTS		= tReq.GetDword ();
-	tQuery.m_iMaxTS		= tReq.GetDword ();
 
-	// v.1.1
-	if ( iVer>=0x101 )
+	// upto v.1.1
+	if ( iVer<=0x101 )
 	{
-		tQuery.m_iMinGID = tReq.GetDword ();
-		tQuery.m_iMaxGID = tReq.GetDword ();
+		iMinTS = tReq.GetDword ();
+		iMaxTS = tReq.GetDword ();
+	}
+
+	// v.1.1 specific
+	if ( iVer==0x101 )
+	{
+		iMinGID = tReq.GetDword ();
+		iMaxGID = tReq.GetDword ();
+	}
+	// !COMMIT use min/max ts/gid
+
+	// v.1.2
+	if ( iVer>=0x102 )
+	{
+		int iAttrFilters = tReq.GetInt ();
+		if ( iAttrFilters>SEARCHD_MAX_ATTRS )
+		{
+			tReq.SendErrorReply ( "too much attribute filters (req=%d, max=%d)", iAttrFilters, SEARCHD_MAX_ATTRS );
+			return;
+		}
+
+		tQuery.m_dFilters.Resize ( iAttrFilters );
+		ARRAY_FOREACH ( i, tQuery.m_dFilters )
+		{
+			CSphFilter & tFilter = tQuery.m_dFilters[i];
+			tFilter.m_sAttrName = tReq.GetString ();
+			tFilter.m_iValues = tReq.GetDwords ( &tFilter.m_pValues, SEARCHD_MAX_ATTR_VALUES,
+				"invalid attribute set length %d (should be in 0..%d range)" );
+			if ( !tFilter.m_iValues )
+			{
+				// 0 length means this is range, not set
+				tFilter.m_uMinValue = tReq.GetDword ();
+				tFilter.m_uMaxValue = tReq.GetDword ();
+			}
+		}
 	}
 
 	// additional checks
@@ -1828,7 +1954,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		tReq.SendErrorReply ( "invalid or truncated request" );
 		return;
 	}
-	if ( tQuery.m_iMinID>tQuery.m_iMaxID || tQuery.m_iMinTS>tQuery.m_iMaxTS )
+	if ( tQuery.m_iMinID>tQuery.m_iMaxID || iMinTS>iMaxTS )
 	{
 		tReq.SendErrorReply ( "invalid ID/TS range specified in query" );
 		return;
@@ -1844,9 +1970,11 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	////////////////
 
 	// do search
+	float tmStart = sphLongTimer ();
+
+	const CSphSchema * pFirst = NULL;
 	CSphQueryResult * pRes = new CSphQueryResult ();
 	ISphMatchQueue * pTop = sphCreateQueue ( &tQuery );
-	float tmStart = sphLongTimer ();
 
 #define REMOVE_DUPES 1
 
@@ -1863,7 +1991,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		int iRemote = QueryRemoteAgents ( sIndex.cstr(), tDist, tQuery, tQuery.m_eMode );
 
 		// while the remote queries are running, do local searches
-		// !COMMIT what if the remote agents finish early, could they timeout?
+		// FIXME! what if the remote agents finish early, could they timeout?
 		float tmQuery = -sphLongTimer ();
 		ARRAY_FOREACH ( i, tDist.m_dLocal )
 		{
@@ -1871,6 +1999,10 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			assert ( tServed.m_pIndex );
 			assert ( tServed.m_pDict );
 			assert ( tServed.m_pTokenizer );
+
+			// check/set sort-by attr and schema
+			if ( !CheckSortAndSchema ( &pFirst, tServed.m_pSchema, tDist.m_dLocal[i].cstr(), tQuery, tReq, pTop ) )
+				return;
 
 			// do query
 			tQuery.m_pTokenizer = tServed.m_pTokenizer;
@@ -1902,16 +2034,25 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			// merge local and remote results
 			ARRAY_FOREACH ( iAgent, tDist.m_dAgents )
 				if ( tDist.m_dAgents[iAgent].m_tRes.m_dMatches.GetLength() )
-				{
-					// merge this agent's results
-					Agent_t & tAgent = tDist.m_dAgents[iAgent];
-					ARRAY_FOREACH ( i, tAgent.m_tRes.m_dMatches )
-						pRes->m_dMatches.Add( tAgent.m_tRes.m_dMatches[i] );
-					tAgent.m_tRes.m_dMatches.Reset ();
+			{
+				Agent_t & tAgent = tDist.m_dAgents[iAgent];
 
-					// merge this agent's stats
-					pRes->m_iTotalMatches += tAgent.m_tRes.m_iTotalMatches;
-				}
+				// check/set sort-by attr and schema
+				char sName [ 1024 ];
+				snprintf ( sName, sizeof(sName), "%s:%d:%s",
+					tAgent.m_sHost.cstr(), tAgent.m_iPort, tAgent.m_sIndexes.cstr() );
+
+				if ( !CheckSortAndSchema ( &pFirst, &tAgent.m_tRes.m_tSchema, sName, tQuery, tReq, pTop ) )
+					return;
+
+				// merge this agent's results
+				ARRAY_FOREACH ( i, tAgent.m_tRes.m_dMatches )
+					pRes->m_dMatches.Add( tAgent.m_tRes.m_dMatches[i] );
+				tAgent.m_tRes.m_dMatches.Reset ();
+
+				// merge this agent's stats
+				pRes->m_iTotalMatches += tAgent.m_tRes.m_iTotalMatches;
+			}
 		}
 
 	} else if ( sIndex=="*" )
@@ -1924,6 +2065,10 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			assert ( tServed.m_pIndex );
 			assert ( tServed.m_pDict );
 			assert ( tServed.m_pTokenizer );
+
+			// check/set sort-by attr and schema
+			if ( !CheckSortAndSchema ( &pFirst, tServed.m_pSchema, g_hIndexes.IterateGetKey().cstr(), tQuery, tReq, pTop ) )
+				return;
 
 			// do query
 			tQuery.m_pTokenizer = tServed.m_pTokenizer;
@@ -1970,6 +2115,10 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 				|| !tCache.ReadFromFile ( tQuery, sNext, tServed.m_pIndexPath->cstr(), pRes ) )
 #endif
 			{
+				// check/set sort-by attr and schema
+				if ( !CheckSortAndSchema ( &pFirst, tServed.m_pSchema, sNext, tQuery, tReq, pTop ) )
+					return;
+
 				// do query
 				tQuery.m_pTokenizer = tServed.m_pTokenizer;
 				tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pTop );
@@ -2024,9 +2173,9 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		sTimeBuf [ strlen(sTimeBuf)-1 ] = '\0';
 
 		static const char * sModes [ SPH_MATCH_TOTAL ] = { "all", "any", "phr", "bool" };
-		snprintf ( sBuf, sizeof(sBuf), "[%s] %d.%03d sec: [%d %d %s/%d/%d %d] %s\n",
+		snprintf ( sBuf, sizeof(sBuf), "[%s] %d.%03d sec: [%d %d %s/%d %d] %s\n",
 			sTimeBuf, pRes->m_iQueryTime/1000, pRes->m_iQueryTime%1000,
-			iOffset, iLimit, sModes [ tQuery.m_eMode ], tQuery.m_eSort, tQuery.m_iGroups,
+			iOffset, iLimit, sModes [ tQuery.m_eMode ], tQuery.m_eSort,
 			pRes->m_iTotalMatches, tQuery.m_sQuery.cstr() );
 
 		sphLockEx ( g_iQueryLogFile );
@@ -2039,26 +2188,78 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	// serve the response
 	//////////////////////
 
+	// calc response length
+	int iRespLen = 20; // header
+
+	if ( iVer>=0x102 ) // schema
+	{
+		iRespLen += 8; // 4 for field count, 4 for attr count
+		ARRAY_FOREACH ( i, pRes->m_tSchema.m_dFields )
+			iRespLen += 4 + strlen ( pRes->m_tSchema.m_dFields[i].m_sName.cstr() ); // namelen, name
+		ARRAY_FOREACH ( i, pRes->m_tSchema.m_dAttrs )
+			iRespLen += 8 + strlen ( pRes->m_tSchema.m_dFields[i].m_sName.cstr() ); // namelen, name, type
+	}
+
 	int iCount = Max ( Min ( iLimit, pRes->m_dMatches.GetLength()-iOffset ), 0 );
+	if ( iVer<=0x101 )
+		iRespLen += 16*iCount; // matches
+	else
+		iRespLen += ( 8+4*pRes->m_tSchema.m_dAttrs.GetLength() )*iCount; // matches
 
-	int iRespLen = 20 + 16*iCount;
-	for ( int i=0; i<pRes->m_iNumWords; i++ )
-		iRespLen += 12 + strlen ( pRes->m_tWordStats[i].m_sWord.cstr() );
+	for ( int i=0; i<pRes->m_iNumWords; i++ ) // per-word stats
+		iRespLen += 12 + strlen ( pRes->m_tWordStats[i].m_sWord.cstr() ); // wordlen, word, docs, hits
 
-	// create buffer, send header
+
+	// send header
 	NetOutputBuffer_c tOut ( iSock );
 	tOut.SendWord ( SEARCHD_OK );
 	tOut.SendWord ( VER_COMMAND_SEARCH );
 	tOut.SendInt ( iRespLen );
 
-	// matches
+	// send schema
+	if ( iVer>=0x102 )
+	{
+		tOut.SendInt ( pRes->m_tSchema.m_dFields.GetLength() );
+		ARRAY_FOREACH ( i, pRes->m_tSchema.m_dFields )
+			tOut.SendString ( pRes->m_tSchema.m_dFields[i].m_sName.cstr() );
+
+		tOut.SendInt ( pRes->m_tSchema.m_dAttrs.GetLength() );
+		ARRAY_FOREACH ( i, pRes->m_tSchema.m_dAttrs )
+		{
+			tOut.SendString ( pRes->m_tSchema.m_dAttrs[i].m_sName.cstr() );
+			tOut.SendDword ( (DWORD)pRes->m_tSchema.m_dAttrs[i].m_eAttrType );
+		}
+	}
+
+	// send matches
+	int iGIDIndex = -1;
+	int iTSIndex = -1;
+	if ( iVer<=0x101 )
+		ARRAY_FOREACH ( i, pRes->m_tSchema.m_dAttrs )
+	{
+		if ( iTSIndex<0 && pRes->m_tSchema.m_dAttrs[i].m_eAttrType==SPH_ATTR_TIMESTAMP )
+			iTSIndex = i;
+		if ( iGIDIndex<0 && pRes->m_tSchema.m_dAttrs[i].m_eAttrType==SPH_ATTR_INTEGER )
+			iGIDIndex = i;
+	}
+
 	tOut.SendInt ( iCount );
 	for ( int i=0; i<iCount; i++ )
 	{
-		tOut.SendDword ( pRes->m_dMatches[iOffset+i].m_iDocID );
-		tOut.SendDword ( pRes->m_dMatches[iOffset+i].m_iGroupID );
-		tOut.SendDword ( pRes->m_dMatches[iOffset+i].m_iTimestamp );
-		tOut.SendInt ( pRes->m_dMatches[iOffset+i].m_iWeight );
+		const CSphMatch & tMatch = pRes->m_dMatches[iOffset+i];
+		tOut.SendDword ( tMatch.m_iDocID );
+		if ( iVer<=0x101 )
+		{
+			tOut.SendDword ( iGIDIndex>=0 ? tMatch.m_pAttrs[iGIDIndex] : 1 );
+			tOut.SendDword ( iTSIndex>=0 ? tMatch.m_pAttrs[iTSIndex] : 1 );
+			tOut.SendInt ( tMatch.m_iWeight );
+		} else
+		{
+			tOut.SendInt ( tMatch.m_iWeight );
+			assert ( tMatch.m_iAttrs==pRes->m_tSchema.m_dAttrs.GetLength() );
+			for ( int j=0; j<tMatch.m_iAttrs; j++ )
+				tOut.SendDword ( tMatch.m_pAttrs[j] );
+		}
 	}
 	tOut.SendInt ( pRes->m_dMatches.GetLength() );
 	tOut.SendInt ( pRes->m_iTotalMatches );
@@ -2514,7 +2715,7 @@ int main ( int argc, char **argv )
 			// check path
 			if ( !hIndex.Exists ( "path" ) )
 			{
-				sphWarning ( "key 'path' not found in index '%s' - NOT SERVING", sIndexName );
+				sphWarning ( "index '%s': key 'path' not found' - NOT SERVING", sIndexName );
 				continue;
 			}
 
@@ -2533,7 +2734,8 @@ int main ( int argc, char **argv )
 
 				} else
 				{
-					sphWarning ( "unknown charset type '%s' in index '%s' - NOT SERVING", hIndex["charset_type"].cstr() );
+					sphWarning ( "index '%s': unknown charset type '%s' - NOT SERVING",
+						sIndexName, hIndex["charset_type"].cstr() );
 					continue;
 				}
 			} else
@@ -2548,15 +2750,16 @@ int main ( int argc, char **argv )
 			{
 				iMorph = sphParseMorphology ( hIndex["morphology"], bUseUTF8 );
 				if ( iMorph==SPH_MORPH_UNKNOWN )
-					sphWarning ( "unknown morphology type '%s' ignored in index '%s'",
-						hIndex["morphology"].cstr(), sIndexName );
+					sphWarning ( "index '%s': unknown morphology type '%s' ignored",
+						sIndexName, hIndex["morphology"].cstr() );
 			}
 
 			// configure charset_table
 			if ( hIndex.Exists ( "charset_table" ) )
 				if ( !pTokenizer->SetCaseFolding ( hIndex["charset_table"].cstr() ) )
 			{
-				sphWarning ( "failed to parse 'charset_table' in index '%s' - NOT SERVING", sIndexName );
+				sphWarning ( "index '%s': failed to parse 'charset_table' - NOT SERVING",
+					sIndexName );
 				continue;
 			}
 
@@ -2566,7 +2769,15 @@ int main ( int argc, char **argv )
 
 			// create add this one to served hashes
 			ServedIndex_t tIdx;
+
 			tIdx.m_pIndex = sphCreateIndexPhrase ( hIndex["path"].cstr() );
+			tIdx.m_pSchema = tIdx.m_pIndex->LoadSchema();
+			if ( !tIdx.m_pSchema )
+			{
+				sphWarning ( "index '%s': failed to load schema - NOT SERVING", sIndexName );
+				continue;
+			}
+
 			tIdx.m_pDict = new CSphDict_CRC32 ( iMorph );
 			tIdx.m_pDict->LoadStopwords ( hIndex.Exists ( "stopwords" ) ? hIndex["stopwords"].cstr() : NULL, pTokenizer );
 			tIdx.m_pTokenizer = pTokenizer;
@@ -2582,14 +2793,14 @@ int main ( int argc, char **argv )
 				struct stat tStat;
 				if ( !stat ( sTmp, &tStat ) )
 				{
-					sphWarning ( "lock file '%s' for index '%s' exists - NOT SERVING", sIndexName, sTmp );
+					sphWarning ( "index '%s': lock file '%s' exists - NOT SERVING", sIndexName, sTmp );
 					continue;
 				}
 
 				// create lock file
 				FILE * fp = fopen ( sTmp, "w" );
 				if ( !fp )
-					sphFatal ( "unable to create lock file '%s' for index '%s'", sTmp, sIndexName );
+					sphFatal ( "index '%s': failed to create lock file '%s''", sIndexName, sTmp );
 				fprintf ( fp, "%d", getpid() );
 				fclose ( fp );
 
@@ -2686,7 +2897,7 @@ int main ( int argc, char **argv )
 		g_sPidFile = hSearchd["pid_file"].cstr();
 		FILE * fp = fopen ( g_sPidFile, "w" );
 		if ( !fp )
-			sphFatal ( "unable to write pid file '%s'", g_sPidFile );
+			sphFatal ( "failed to write pid file '%s'", g_sPidFile );
 		fprintf ( fp, "%d", getpid() );	
 		fclose ( fp );
 	}

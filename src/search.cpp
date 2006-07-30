@@ -37,7 +37,7 @@ int main ( int argc, char ** argv )
 			"-i, --index <index>\tsearch given index only (default: all indexes)\n"
 			"-a, --any\t\tmatch any query word (default: match all words)\n"
 			"-b, --boolean\t\tmatch in boolean mode\n"
-			"-g, --group <id>\tmatch this group only (default: match all groups)\n"
+			"-f, --filter <attr> <v>\tonly match if attribute attr value is v\n"
 			"-s, --start <offset>\tprint matches starting from this offset (default: 0)\n"
 			"-l, --limit <count>\tprint this many matches (default: 20)\n"
 			"-q, --noinfo\t\tdon't print document info from SQL database\n"
@@ -59,7 +59,6 @@ int main ( int argc, char ** argv )
 
 	const char * sConfName = "sphinx.conf";
 	const char * sIndex = NULL;
-	CSphVector<DWORD> dGroups;
 	bool bNoInfo = false;
 	bool bStdin = false;
 	int iStart = 0;
@@ -79,20 +78,40 @@ int main ( int argc, char ** argv )
 			OPT ( "-b", "--boolean" )	tQuery.m_eMode = SPH_MATCH_BOOLEAN;
 			OPT ( "-p", "--phrase" )	tQuery.m_eMode = SPH_MATCH_PHRASE;
 			OPT ( "-q", "--noinfo" )	bNoInfo = true;
-			OPT1 ( "--sort=date" )		tQuery.m_eSort = SPH_SORT_DATE_DESC;
-			OPT1 ( "--rsort=date" )		tQuery.m_eSort = SPH_SORT_DATE_ASC;
+			OPT1 ( "--sort=date" )		tQuery.m_eSort = SPH_SORT_ATTR_DESC;
+			OPT1 ( "--rsort=date" )		tQuery.m_eSort = SPH_SORT_ATTR_ASC;
 			OPT1 ( "--sort=ts" )		tQuery.m_eSort = SPH_SORT_TIME_SEGMENTS;
 			OPT1 ( "--stdin" )			bStdin = true;
+
+			else if ( (i+2)<argc )
+			{
+				if ( i==0 );
+				OPT ( "-f", "--filter" )
+				{
+					if ( atoi ( argv[i+2] ) )
+					{
+						tQuery.m_dFilters.Reset ();
+						tQuery.m_dFilters.Resize ( 1 );
+						tQuery.m_dFilters[0].m_iValues = 1;
+						tQuery.m_dFilters[0].m_pValues = new DWORD [ 1 ];
+						tQuery.m_dFilters[0].m_pValues[0] = atoi ( argv[i+2] );
+						tQuery.m_dFilters[0].m_sAttrName = argv[i+1];
+						i += 2;
+					}
+				}
+				else break; // unknown option
+			}
+
 			else if ( (i+1)<argc )
 			{
 				if ( i==0 );
-				OPT ( "-g", "--group")		{ if ( atoi ( argv[++i] ) ) dGroups.Add ( atoi ( argv[i] ) ); }
 				OPT ( "-s", "--start" )		iStart = atoi ( argv[++i] );
 				OPT ( "-l", "--limit" )		iLimit = atoi ( argv[++i] );
 				OPT ( "-c", "--config" )	sConfName = argv[++i];
 				OPT ( "-i", "--index" )		sIndex = argv[++i];
 				else break; // unknown option
 			}
+
 			else break; // unknown option
 
 		} else if ( strlen(sQuery) + strlen(argv[i]) + 1 < sizeof(sQuery) )
@@ -270,15 +289,32 @@ int main ( int argc, char ** argv )
 		//////////
 
 		tQuery.m_sQuery = sQuery;
-		if ( dGroups.GetLength() )
-		{
-			tQuery.m_pGroups = new DWORD [ dGroups.GetLength() ];
-			tQuery.m_iGroups = dGroups.GetLength();
-			memcpy ( tQuery.m_pGroups, &dGroups[0], sizeof(DWORD)*dGroups.GetLength() );
-		}
+		CSphQueryResult * pResult = NULL;
 
 		CSphIndex * pIndex = sphCreateIndexPhrase ( hIndex["path"].cstr() );
-		CSphQueryResult * pResult = pIndex->Query ( pDict, &tQuery );
+		const CSphSchema * pSchema = pIndex->LoadSchema ();
+		if ( pSchema )
+		{
+			// if we're not sorting by relevance, lookup first timestamp column
+			if ( tQuery.m_eSort!=SPH_SORT_RELEVANCE )
+			{
+				int iTS = -1;
+				ARRAY_FOREACH ( i, pSchema->m_dAttrs )
+					if ( pSchema->m_dAttrs[i].m_eAttrType==SPH_ATTR_TIMESTAMP )
+				{
+					tQuery.m_sSortBy = pSchema->m_dAttrs[i].m_sName;
+					iTS = i;
+					break;
+				}
+				if ( iTS<0 )
+				{
+					fprintf ( stdout, "index '%s': no timestamp attributes found, sorting by relevance.\n", sIndexName );
+					tQuery.m_eSort = SPH_SORT_RELEVANCE;
+				}
+			}
+
+			pResult = pIndex->Query ( pDict, &tQuery );
+		}
 
 		SafeDelete ( pIndex );
 		SafeDelete ( pDict );
@@ -290,7 +326,7 @@ int main ( int argc, char ** argv )
 
 		if ( !pResult )
 		{
-			fprintf ( stdout, "index '%s': query '%s': search error: can not open index.\n", sIndexName, sQuery );
+			fprintf ( stdout, "index '%s': search error: can not open index.\n", sIndexName );
 			return 1;
 		}
 
@@ -306,13 +342,31 @@ int main ( int argc, char ** argv )
 			for ( int i=iStart; i<iMaxIndex; i++ )
 			{
 				CSphMatch & tMatch = pResult->m_dMatches[i];
-				time_t tStamp = tMatch.m_iTimestamp; // for 64-bit
-				fprintf ( stdout, "%d. document=%d, group=%d, weight=%d, time=%s",
-					1+i,
-					tMatch.m_iDocID,
-					tMatch.m_iGroupID,
-					tMatch.m_iWeight,
-					ctime ( &tStamp ) );
+				fprintf ( stdout, "%d. document=%d, weight=%d", 1+i, tMatch.m_iDocID, tMatch.m_iWeight );
+
+				if ( tMatch.m_pAttrs )
+					ARRAY_FOREACH ( j, pResult->m_tSchema.m_dAttrs )
+				{
+					const CSphColumnInfo & tAttr = pResult->m_tSchema.m_dAttrs[j];
+
+					if ( tAttr.m_eAttrType==SPH_ATTR_INTEGER )
+					{
+						fprintf ( stdout, ", %s=%d", tAttr.m_sName.cstr(), tMatch.m_pAttrs[j] );
+					
+					} else if ( tAttr.m_eAttrType==SPH_ATTR_TIMESTAMP )
+					{
+						char sBuf[256];
+						time_t tStamp = tMatch.m_pAttrs[j]; // for 64-bit
+						strncpy ( sBuf, ctime(&tStamp), sizeof(sBuf) );
+
+						char * p = sBuf;
+						while ( (*p) && (*p)!='\n' && (*p)!='\r' ) p++;
+						*p = '\0';
+
+						fprintf ( stdout, ", %s=%s", tAttr.m_sName.cstr(), sBuf );
+					}
+				}
+				fprintf ( stdout,"\n" );
 
 				#if USE_MYSQL
 				if ( sQueryInfo )

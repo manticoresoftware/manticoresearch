@@ -302,20 +302,25 @@ void ShowProgress ( const CSphIndexProgress * pProgress )
 		return NULL; \
 	}
 
-
+// get string
 #define LOC_GETS(_arg,_key) \
 	if ( hSource.Exists(_key) ) \
 		_arg = hSource[_key];
 
-
+// get int
 #define LOC_GETI(_arg,_key) \
 	if ( hSource.Exists(_key) && hSource[_key].intval() ) \
 		_arg = hSource[_key].intval();
 
-
-#define LOC_GETA(_arg,_key) \
+// get array of strings
+#define LOC_GETAS(_arg,_key) \
 	for ( CSphVariant * pVal = hSource(_key); pVal; pVal = pVal->m_pNext ) \
 		_arg.Add ( pVal->cstr() );
+
+// get array of attrs
+#define LOC_GETAA(_arg,_key,_type) \
+	for ( CSphVariant * pVal = hSource(_key); pVal; pVal = pVal->m_pNext ) \
+		_arg.Add ( CSphColumnInfo ( pVal->cstr(), _type ) );
 
 
 #if USE_PGSQL
@@ -331,12 +336,12 @@ CSphSource * SpawnSourcePgSQL ( const CSphConfigSection & hSource, const char * 
 
 	CSphSourceParams_PgSQL tParams;
 	LOC_GETS ( tParams.m_sQuery,			"sql_query" );
-	LOC_GETA ( tParams.m_dQueryPre,			"sql_query_pre" );
-	LOC_GETA ( tParams.m_dQueryPost,		"sql_query_post" );
+	LOC_GETAS( tParams.m_dQueryPre,			"sql_query_pre" );
+	LOC_GETAS( tParams.m_dQueryPost,		"sql_query_post" );
 	LOC_GETS ( tParams.m_sQueryRange,		"sql_query_range" );
-	LOC_GETA ( tParams.m_dQueryPostIndex,	"sql_query_post_index" );
-	LOC_GETS ( tParams.m_sGroupColumn,		"sql_group_column" );
-	LOC_GETS ( tParams.m_sDateColumn,		"sql_date_column" );
+	LOC_GETAS( tParams.m_dQueryPostIndex,	"sql_query_post_index" );
+	LOC_GETAA( tParams.m_dAttrs,			"sql_group_column",		SPH_ATTR_INTEGER );
+	LOC_GETAA( tParams.m_dAttrs,			"sql_date_column",		SPH_ATTR_TIMESTAMP );
 	LOC_GETS ( tParams.m_sHost,				"sql_host" );
 	LOC_GETS ( tParams.m_sUser,				"sql_user" );
 	LOC_GETS ( tParams.m_sPass,				"sql_pass" );
@@ -345,7 +350,7 @@ CSphSource * SpawnSourcePgSQL ( const CSphConfigSection & hSource, const char * 
 	LOC_GETS ( tParams.m_sPort,				"sql_port");
 	LOC_GETI ( tParams.m_iRangeStep,		"sql_range_step" );
 
-	CSphSource_PgSQL * pSrcPgSQL = new CSphSource_PgSQL ();
+	CSphSource_PgSQL * pSrcPgSQL = new CSphSource_PgSQL ( sSourceName );
 	if ( !pSrcPgSQL->Init ( tParams ) )
 		SafeDelete ( pSrcPgSQL );
 	return pSrcPgSQL;
@@ -366,12 +371,12 @@ CSphSource * SpawnSourceMySQL ( const CSphConfigSection & hSource, const char * 
 
 	CSphSourceParams_MySQL tParams;
 	LOC_GETS ( tParams.m_sQuery,			"sql_query" );
-	LOC_GETA ( tParams.m_dQueryPre,			"sql_query_pre" );
-	LOC_GETA ( tParams.m_dQueryPost,		"sql_query_post" );
+	LOC_GETAS( tParams.m_dQueryPre,			"sql_query_pre" );
+	LOC_GETAS( tParams.m_dQueryPost,		"sql_query_post" );
 	LOC_GETS ( tParams.m_sQueryRange,		"sql_query_range" );
-	LOC_GETA ( tParams.m_dQueryPostIndex,	"sql_query_post_index" );
-	LOC_GETS ( tParams.m_sGroupColumn,		"sql_group_column" );
-	LOC_GETS ( tParams.m_sDateColumn,		"sql_date_column" );
+	LOC_GETAS( tParams.m_dQueryPostIndex,	"sql_query_post_index" );
+	LOC_GETAA( tParams.m_dAttrs,			"sql_group_column",		SPH_ATTR_INTEGER );
+	LOC_GETAA( tParams.m_dAttrs,			"sql_date_column",		SPH_ATTR_TIMESTAMP );
 	LOC_GETS ( tParams.m_sHost,				"sql_host" );
 	LOC_GETS ( tParams.m_sUser,				"sql_user" );
 	LOC_GETS ( tParams.m_sPass,				"sql_pass" );
@@ -380,7 +385,7 @@ CSphSource * SpawnSourceMySQL ( const CSphConfigSection & hSource, const char * 
 	LOC_GETI ( tParams.m_iPort,				"sql_port" );
 	LOC_GETI ( tParams.m_iRangeStep,		"sql_range_step" );
 
-	CSphSource_MySQL * pSrcMySQL = new CSphSource_MySQL ();
+	CSphSource_MySQL * pSrcMySQL = new CSphSource_MySQL ( sSourceName );
 	if ( !pSrcMySQL->Init ( tParams ) )
 		SafeDelete ( pSrcMySQL );
 	return pSrcMySQL;
@@ -394,7 +399,7 @@ CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char 
 	
 	LOC_CHECK ( hSource, "xmlpipe_command", "in source '%s'.", sSourceName );
 
-	CSphSource_XMLPipe * pSrcXML = new CSphSource_XMLPipe ();
+	CSphSource_XMLPipe * pSrcXML = new CSphSource_XMLPipe ( sSourceName );
 	if ( !pSrcXML->Init ( hSource["xmlpipe_command"].cstr() ) )
 	{
 		fprintf ( stdout, "FATAL: CSphSource_XMLPipe: unable to popen '%s'.\n", hSource["xmlpipe_command"].cstr() );
@@ -576,8 +581,8 @@ int main ( int argc, char ** argv )
 	{
 		CSphString sBuf = hConf["indexer"]["indexer"]["mem_limit"];
 
-		char * sMemLimit = sBuf.str();
-		assert ( sMemLimit );
+		char sMemLimit[256];
+		strncpy ( sMemLimit, sBuf.cstr(), sizeof(sMemLimit) );
 
 		int iLen = strlen ( sMemLimit );
 		if ( iLen )
@@ -598,7 +603,7 @@ int main ( int argc, char ** argv )
 			int iRes = strtol ( sMemLimit, &sErr, 10 );
 			if ( *sErr )
 			{
-				fprintf ( stdout, "WARNING: bad mem_limit value '%s', using default.\n", sMemLimit );
+				fprintf ( stdout, "WARNING: bad mem_limit value '%s', using default.\n", sBuf.cstr() );
 			} else
 			{
 				iMemLimit = iScale*iRes;
@@ -758,6 +763,14 @@ int main ( int argc, char ** argv )
 			continue;
 		}
 
+		// configure docinfo storage
+		ESphDocinfo eDocinfo = SPH_DOCINFO_EXTERN;
+		if ( hIndex("docinfo") )
+		{
+			if ( hIndex["docinfo"]=="none" )	eDocinfo = SPH_DOCINFO_NONE;
+			if ( hIndex["docinfo"]=="inline" )	eDocinfo = SPH_DOCINFO_INLINE;
+		}
+
 		///////////
 		// do work
 		///////////
@@ -822,7 +835,7 @@ int main ( int argc, char ** argv )
 			assert ( pIndex );
 
 			pIndex->SetProgressCallback ( ShowProgress );
-			if ( pIndex->Build ( pDict, dSources, iMemLimit ) )
+			if ( pIndex->Build ( pDict, dSources, iMemLimit, eDocinfo ) )
 			{
 				// if searchd is not running, we're good
 				if ( !bRotate )

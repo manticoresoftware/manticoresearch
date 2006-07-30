@@ -77,7 +77,7 @@
 #define SPH_MAX_QUERY_WORDS		10
 #define SPH_MAX_WORD_LEN		64
 #define SPH_MAX_FILENAME_LEN	512
-#define SPH_MAX_FIELD_COUNT		32
+#define SPH_MAX_FIELDS			32
 
 #define SPH_CLOG_BITS_DIR		10
 #define SPH_CLOG_BITS_PAGE		22
@@ -304,9 +304,46 @@ struct CSphWordHit
 /// document info
 struct CSphDocInfo
 {
-	DWORD	m_iDocID;		///< document ID
-	DWORD	m_iGroupID;		///< documents group ID
-	DWORD	m_iTimestamp;	///< document timestamp
+	DWORD		m_iDocID;	///< document ID
+	int			m_iAttrs;	///< attribute count (FIXME! invariant over index; stored for assignment operator)
+	DWORD *		m_pAttrs;	///< attribute values
+
+	/// ctor. clears everything
+	CSphDocInfo ()
+		: m_iDocID ( 0 )
+		, m_iAttrs ( 0 )
+		, m_pAttrs ( NULL )
+	{
+	}
+
+	/// dtor. frees everything
+	~CSphDocInfo ()
+	{
+		SafeDeleteArray ( m_pAttrs );
+	}
+
+	/// reset
+	void Reset ()
+	{
+		m_iDocID = 0;
+		m_iAttrs = 0;
+		SafeDeleteArray ( m_pAttrs );
+	}
+
+	/// assignment
+	/// !COMMIT remove me
+	const CSphDocInfo & operator = ( const CSphDocInfo & rhs )
+	{
+		SafeDeleteArray ( m_pAttrs );
+		m_iDocID = rhs.m_iDocID;
+		m_iAttrs = rhs.m_iAttrs;
+		if ( m_iAttrs )
+		{
+			m_pAttrs = new DWORD [ m_iAttrs ]; // !COMMIT pool these allocs
+			memcpy ( m_pAttrs, rhs.m_pAttrs, sizeof(DWORD)*m_iAttrs );
+		}
+		return *this;
+	}
 };
 
 
@@ -328,18 +365,61 @@ struct CSphSourceStats
 };
 
 
+/// known attribute types
+enum ESphAttrType
+{
+	SPH_ATTR_NONE		= 0,	///< not an attribute at all
+	SPH_ATTR_INTEGER	= 1,	///< this attr is just an integer
+	SPH_ATTR_TIMESTAMP	= 2		///< this attr is a timestamp
+};
+
+
+/// source column info
+struct CSphColumnInfo
+{
+	CSphString		m_sName;		///< column name
+	ESphAttrType	m_eAttrType;	///< attribute type
+	int				m_iIndex;		///< index into the result set
+
+	/// handy ctor
+	CSphColumnInfo ( const char * sName=NULL, ESphAttrType eType=SPH_ATTR_NONE )
+		: m_sName ( sName )
+		, m_eAttrType ( eType )
+	{}
+};
+
+
+/// source schema
+struct CSphSchema
+{
+	CSphString									m_sName;		///< my human-readable name
+	CSphVector<CSphColumnInfo,SPH_MAX_FIELDS>	m_dFields;		///< my fulltext-searchable fields
+	CSphVector<CSphColumnInfo,8>				m_dAttrs;		///< my per-document attributes
+
+	/// ctor
+			CSphSchema ( const char * sName ) : m_sName ( sName ) {}
+
+	/// get attribute index by name
+	/// returns -1 if not found
+	int		GetAttrIndex ( const char * sName ) const;
+
+	/// checks if two schemas match
+	/// returns false and puts human-readable error message if they dont
+	bool	IsEqual ( const CSphSchema & rhs, CSphString & sError ) const;
+};
+
+
 /// generic data source
 class CSphHTMLStripper;
 class CSphSource
 {
 public:
 	CSphVector<CSphWordHit>				m_dHits;	///< current document split into words
-	CSphDocInfo							m_tDocInfo;
-
+	CSphDocInfo							m_tDocInfo;	///< current document info
 
 public:
 	/// ctor
-										CSphSource ();
+										CSphSource ( const char * sName );
 
 	/// dtor
 	virtual								~CSphSource ();
@@ -362,16 +442,15 @@ public:
 	/// get stats
 	virtual const CSphSourceStats &		GetStats ();
 
+	/// update field and attribute information
+	/// updates pInfo if it's empty; checks for match if it's not
+	/// must be called after Init()
+	virtual bool						UpdateSchema ( CSphSchema * pInfo );
+
 public:
 	/// document getter
 	/// to be implemented by descendants
 	virtual int							Next () = 0;
-
-	/// field count getter
-	/// to be implemented by descendants
-	/// MUST be called AFTER the indexing is over
-	/// because at indexing stage, we might not be sure of the exact count
-	virtual int							GetFieldCount () = 0;
 
 	/// post-index callback
 	/// gets called when the indexing is succesfully (!) over
@@ -380,7 +459,10 @@ public:
 protected:
 	ISphTokenizer *						m_pTokenizer;	///< my tokenizer
 	CSphDict *							m_pDict;		///< my dict
+	
 	CSphSourceStats						m_tStats;		///< my stats
+	CSphSchema							m_tSchema;		///< my schema
+
 	bool								m_bStripHTML;	///< whether to strip HTML
 	CSphHTMLStripper *					m_pStripper;	///< my HTML stripper
 };
@@ -391,7 +473,7 @@ protected:
 struct CSphSource_Document : CSphSource
 {
 	/// ctor
-							CSphSource_Document () : m_bCallWordCallback ( false ) {}
+							CSphSource_Document ( const char * sName ) : CSphSource ( sName ), m_bCallWordCallback ( false ) {}
 
 	/// my generic tokenizer
 	virtual int				Next ();
@@ -403,14 +485,7 @@ struct CSphSource_Document : CSphSource
 	/// to be implemented by descendants
 	virtual BYTE **			NextDocument () = 0;
 
-	/// field count getter
-	virtual int				GetFieldCount ();
-
 protected:
-	/// my field count
-	/// MUST be filled by NextDocument ()
-	int						m_iFieldCount;
-
 	/// whether to call the callback
 	bool					m_bCallWordCallback;
 };
@@ -420,8 +495,9 @@ protected:
 /// one-field plain-text documents
 struct CSphSource_Text : CSphSource_Document
 {
-					CSphSource_Text () { m_iFieldCount = 1; }
+					CSphSource_Text ( const char * sName ) : CSphSource_Document ( sName ) {};
 	BYTE **			NextDocument ();
+
 	virtual BYTE *	NextText () = 0;
 };
 
@@ -433,13 +509,12 @@ struct CSphSourceParams_PgSQL
 	// query params
 	CSphString	m_sQuery;
 	CSphString	m_sQueryRange;
-	CSphString	m_sGroupColumn;
-	CSphString	m_sDateColumn;
 	int			m_iRangeStep;
 
-	CSphVector<CSphString,4>	m_dQueryPre;
-	CSphVector<CSphString,4>	m_dQueryPost;
-	CSphVector<CSphString,4>	m_dQueryPostIndex;
+	CSphVector<CSphString,4>		m_dQueryPre;
+	CSphVector<CSphString,4>		m_dQueryPost;
+	CSphVector<CSphString,4>		m_dQueryPostIndex;
+	CSphVector<CSphColumnInfo,4>	m_dAttrs;
 
 	// connection params
 	CSphString	m_sHost;
@@ -458,7 +533,7 @@ struct CSphSourceParams_PgSQL
 /// multi-field plain-text documents fetched from given query
 struct CSphSource_PgSQL : CSphSource_Document
 {
-						CSphSource_PgSQL ();
+						CSphSource_PgSQL ( const char * sName );
 	virtual				~CSphSource_PgSQL () {}
 
 	bool				Init ( const CSphSourceParams_PgSQL & pParams );
@@ -470,14 +545,10 @@ protected:
 	PGconn *			m_tSqlDriver;	///< postgresql connection context
 	CSphString			m_sSqlDSN;
 
-	int					m_iGroupColumn;	///< group_id column number
-	int					m_iDateColumn;	///< date column number
-
 	int					m_iSqlRows;		///< how much rows last step returned
 	int					m_iSqlRow;		///< current row (0 based, as in PQgetvalue)
 
-	BYTE *				m_dFields [ SPH_MAX_FIELD_COUNT ];
-	int					m_dRemapFields [ SPH_MAX_FIELD_COUNT ];
+	BYTE *				m_dFields [ SPH_MAX_FIELDS ];
 
 	int					m_iMinID;		///< grand min ID
 	int					m_iMaxID;		///< grand max ID
@@ -493,7 +564,6 @@ protected:
 
 protected:
 	bool				RunQueryStep ();
-	int					GetColumnIndex ( const char * sColumn );
 };
 #endif
 
@@ -505,13 +575,12 @@ struct CSphSourceParams_MySQL
 	// query params
 	CSphString	m_sQuery;
 	CSphString	m_sQueryRange;
-	CSphString	m_sGroupColumn;
-	CSphString	m_sDateColumn;
 	int			m_iRangeStep;
 
-	CSphVector<CSphString,4>	m_dQueryPre;
-	CSphVector<CSphString,4>	m_dQueryPost;
-	CSphVector<CSphString,4>	m_dQueryPostIndex;
+	CSphVector<CSphString,4>		m_dQueryPre;
+	CSphVector<CSphString,4>		m_dQueryPost;
+	CSphVector<CSphString,4>		m_dQueryPostIndex;
+	CSphVector<CSphColumnInfo,4>	m_dAttrs;
 
 	// connection params
 	CSphString	m_sHost;
@@ -530,7 +599,7 @@ struct CSphSourceParams_MySQL
 /// multi-field plain-text documents fetched from given query
 struct CSphSource_MySQL : CSphSource_Document
 {
-						CSphSource_MySQL ();
+						CSphSource_MySQL ( const char * sName );
 	virtual				~CSphSource_MySQL () {}
 
 	bool				Init ( const CSphSourceParams_MySQL & tParams );
@@ -543,11 +612,7 @@ protected:
 	MYSQL				m_tSqlDriver;
 	CSphString			m_sSqlDSN;
 
-	int					m_iGroupColumn;	///< group_id column number
-	int					m_iDateColumn;	///< date column number
-
-	BYTE *				m_dFields [ SPH_MAX_FIELD_COUNT ];
-	int					m_dRemapFields [ SPH_MAX_FIELD_COUNT ];
+	BYTE *				m_dFields [ SPH_MAX_FIELDS ];
 
 	int					m_iMinID;		///< grand min ID
 	int					m_iMaxID;		///< grand max ID
@@ -563,7 +628,6 @@ protected:
 
 protected:
 	bool				RunQueryStep ();
-	int					GetColumnIndex ( const char * sColumn );
 };
 #endif
 
@@ -573,7 +637,7 @@ class CSphSource_XMLPipe : public CSphSource
 {
 public:
 	/// ctor
-					CSphSource_XMLPipe ();
+					CSphSource_XMLPipe ( const char * sName );
 
 	/// dtor
 					~CSphSource_XMLPipe ();
@@ -583,9 +647,6 @@ public:
 
 	/// hit chunk getter
 	virtual int		Next ();
-
-	/// field count getter
-	virtual int		GetFieldCount ();
 
 private:
 	enum Tag_e
@@ -663,11 +724,28 @@ private:
 /// search query match
 struct CSphMatch : public CSphDocInfo
 {
-	int			m_iWeight;
+	int m_iWeight;
 
-	bool		operator == ( const CSphMatch & rhs ) const
+	CSphMatch ()
+		: m_iWeight ( 0 )
+	{
+	}
+
+	CSphMatch ( const CSphMatch & rhs )
+	{
+		*this = rhs;
+	}
+
+	bool operator == ( const CSphMatch & rhs ) const
 	{
 		return ( m_iDocID==rhs.m_iDocID );
+	}
+
+	const CSphMatch & operator = ( const CSphMatch & rhs )
+	{
+		CSphDocInfo::operator = ( rhs );
+		m_iWeight = rhs.m_iWeight;
+		return *this;
 	}
 };
 
@@ -675,10 +753,10 @@ struct CSphMatch : public CSphDocInfo
 /// search query sorting orders
 enum ESphSortOrder
 {
-	SPH_SORT_RELEVANCE = 0,		///< sort by document relevance desc, then by date
-	SPH_SORT_DATE_DESC,			///< sort by document date desc, then by relevance desc
-	SPH_SORT_DATE_ASC,			///< sort by document date asc, then by relevance desc
-	SPH_SORT_TIME_SEGMENTS,		///< sort by time segments (hour/day/week/etc) desc, then by relevance desc
+	SPH_SORT_RELEVANCE		= 0,	///< sort by document relevance desc, then by date
+	SPH_SORT_ATTR_DESC		= 1,	///< sort by document date desc, then by relevance desc
+	SPH_SORT_ATTR_ASC		= 2,	///< sort by document date asc, then by relevance desc
+	SPH_SORT_TIME_SEGMENTS	= 3,	///< sort by time segments (hour/day/week/etc) desc, then by relevance desc
 
 	SPH_SORT_TOTAL
 };
@@ -696,6 +774,26 @@ enum ESphMatchMode
 };
 
 
+/// search query filter
+class CSphFilter
+{
+public:
+	CSphString		m_sAttrName;	///< filtered attribute name
+	int				m_iAttrIndex;	///< filtered attribute index
+	DWORD			m_uMinValue;	///< min value, only used when m_iValues==0
+	DWORD			m_uMaxValue;	///< max value, only used when m_iValues==0
+	int				m_iValues;		///< values set size, default is 0
+	DWORD *			m_pValues;		///< values set. OWNED, WILL BE FREED IN DTOR.
+
+public:
+					CSphFilter ();
+					~CSphFilter ();
+	void			SortValues ();	///< sort values in ascending order
+
+	const CSphFilter & operator = ( const CSphFilter & rhs );
+};
+
+
 /// search query
 class CSphQuery
 {
@@ -704,22 +802,18 @@ public:
 	int *			m_pWeights;		///< user-supplied per-field weights. may be NULL. default is NULL. NOT OWNED, WILL NOT BE FREED in dtor.
 	int				m_iWeights;		///< number of user-supplied weights. missing fields will be assigned weight 1. default is 0
 	ESphMatchMode	m_eMode;		///< match mode. default is "match all"
-	DWORD *			m_pGroups;		///< groups to match. default is NULL, which means "match all". OWNED, WILL BE FREED in dtor.
-	int				m_iGroups;		///< count of groups to match
-	ESphSortOrder	m_eSort;		///< sorting order
+	ESphSortOrder	m_eSort;		///< sort mode
+	CSphString		m_sSortBy;		///< attribute to sort by
 	ISphTokenizer *	m_pTokenizer;	///< tokenizer to use. NOT OWNED.
 	int				m_iMaxMatches;	///< max matches to retrieve, default is 1000. more matches use more memory and CPU time to hold and sort them
 
 	DWORD			m_iMinID;		///< min ID to match, 0 by default
 	DWORD			m_iMaxID;		///< max ID to match, UINT_MAX by default
-	DWORD			m_iMinTS;		///< min timestamp to match, 0 by default
-	DWORD			m_iMaxTS;		///< max timestamp to match, UINT_MAX by default
-	DWORD			m_iMinGID;		///< min timestamp to match, 0 by default
-	DWORD			m_iMaxGID;		///< max timestamp to match, UINT_MAX by default
+
+	CSphVector<CSphFilter,8>	m_dFilters;	///< filters
 
 public:
 					CSphQuery ();	///< ctor, fills defaults
-					~CSphQuery ();	///< dtor, safely frees owned fields
 };
 
 
@@ -738,6 +832,8 @@ public:
 	int						m_iQueryTime;		///< query time, ms
 	CSphVector<CSphMatch>	m_dMatches;			///< top matching documents, no more than MAX_MATCHES
 	int						m_iTotalMatches;	///< total matches count
+
+	CSphSchema				m_tSchema;			///< index schema
 
 public:
 							CSphQueryResult ();		///< ctor
@@ -773,6 +869,15 @@ struct CSphIndexProgress
 typedef ISphQueue<CSphMatch>	ISphMatchQueue;
 
 
+/// available docinfo storage strategies
+enum ESphDocinfo
+{
+	SPH_DOCINFO_NONE		= 0,	///< no docinfo available
+	SPH_DOCINFO_INLINE		= 1,	///< inline docinfo into index (specifically, into doclists)
+	SPH_DOCINFO_EXTERN		= 2		///< store docinfo separately
+};
+
+
 /// generic fulltext index interface
 class CSphIndex
 {
@@ -780,17 +885,20 @@ public:
 	typedef void ProgressCallback_t ( const CSphIndexProgress * pStat );
 
 public:
-								CSphIndex() : m_pProgress ( NULL ) {}
+								CSphIndex ( const char * sName ) : m_pProgress ( NULL ), m_tSchema ( sName ) {}
 	virtual						~CSphIndex () {}
 	virtual	void				SetProgressCallback ( ProgressCallback_t * pfnProgress ) { m_pProgress = pfnProgress; }
 
 public:
-	virtual int					Build ( CSphDict * dict, const CSphVector < CSphSource * > & dSources, int iMemoryLimit ) = 0;
+	virtual int					Build ( CSphDict * dict, const CSphVector < CSphSource * > & dSources, int iMemoryLimit, ESphDocinfo eDocinfo ) = 0;
 	virtual CSphQueryResult *	Query ( CSphDict * dict, CSphQuery * pQuery ) = 0;
 	virtual bool				QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchQueue * pTop ) = 0;
 
+	virtual const CSphSchema *	LoadSchema () = 0;
+
 protected:
 	ProgressCallback_t *		m_pProgress;
+	CSphSchema					m_tSchema;
 };
 
 /////////////////////////////////////////////////////////////////////////////

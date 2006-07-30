@@ -65,7 +65,8 @@ $cl = new SphinxClient ();
 $cl->SetServer ( "localhost", $port );
 $cl->SetWeights ( array ( 100, 1 ) );
 $cl->SetMatchMode ( $any ? SPH_MATCH_ANY : SPH_MATCH_ALL );
-$cl->SetGroups ( $groups );
+if ( count($groups) )
+	$cl->SetFilter ( "channel_id", $groups );//!COMMIT
 $res = $cl->Query ( $q, $index );
 
 ////////////////
@@ -94,8 +95,15 @@ if ( $res===false )
 		print "Matches:\n";
 		foreach ( $res["matches"] as $doc => $docinfo )
 		{
-			$d = date ( "Y-m-d H:i:s", $docinfo["stamp"] );
-			print "$n. doc_id=$doc, group=$docinfo[group], date=$d, weight=$docinfo[weight]\n";
+			print "$n. doc_id=$doc, weight=$docinfo[weight]";
+			foreach ( $res["attrs"] as $attrname => $attrtype )
+			{
+				$value = $docinfo["attrs"][$attrname];
+				if ( $attrtype==SPH_ATTR_TIMESTAMP )
+					$value = date ( "Y-m-d H:i:s", $value );
+				print ", $attrname=$value";
+			}
+			print "\n";
 			$n++;
 		}
 	}

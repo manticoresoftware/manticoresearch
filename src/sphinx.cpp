@@ -369,8 +369,33 @@ struct CSphMatchComparatorState
 };
 
 
+/// workaround for gcc braindamage
+/// full specialization of nested templates wouldn't work with gcc
+template < typename T, typename COMP, bool USE_STATE > struct CSphQueueTraits
+{};
+
+template < typename T, typename COMP > struct CSphQueueTraits < T, COMP, true >
+{
+	CSphMatchComparatorState	m_tState;
+
+	inline bool	IsLess ( const T & a, const T & b )
+	{
+		return COMP::IsLess ( a, b, m_tState );
+	}
+};
+
+template < typename T, typename COMP > struct CSphQueueTraits < T, COMP, false >
+{
+	inline bool	IsLess ( const T & a, const T & b )
+	{
+		return COMP::IsLess ( a, b );
+	}
+};
+
+
 /// my match-sorting priority queue
-template < typename T, typename COMP, bool USE_STATE=false > class CSphQueue : public ISphQueue<T>
+template < typename T, typename COMP, bool USE_STATE=false > class CSphQueue
+	: public ISphQueue<T>, public CSphQueueTraits<T,COMP,USE_STATE>
 {
 protected:
 	T *		m_pData;
@@ -405,7 +430,7 @@ public:
 		if ( m_iUsed==m_iSize )
 		{
 			// if it's worse that current min, reject it, else pop off current min
-			if ( IsLess<USE_STATE> ( tEntry, m_pData[0] ) )
+			if ( IsLess ( tEntry, m_pData[0] ) )
 				return;
 			else
 				Pop ();
@@ -419,7 +444,7 @@ public:
 		while ( iEntry )
 		{
 			int iParent = ( iEntry-1 ) >> 1;
-			if ( !IsLess<USE_STATE> ( m_pData[iEntry], m_pData[iParent] ) )
+			if ( !IsLess ( m_pData[iEntry], m_pData[iParent] ) )
 				break;
 
 			// entry is less than parent, should float to the top
@@ -449,11 +474,11 @@ public:
 
 			// select smallest child
 			if ( iChild+1<m_iUsed )
-				if ( IsLess<USE_STATE> ( m_pData[iChild+1], m_pData[iChild] ) )
+				if ( IsLess ( m_pData[iChild+1], m_pData[iChild] ) )
 					iChild++;
 
 			// if smallest child is less than entry, do float it to the top
-			if ( IsLess<USE_STATE> ( m_pData[iChild], m_pData[iEntry] ) )
+			if ( IsLess ( m_pData[iChild], m_pData[iEntry] ) )
 			{
 				Swap ( m_pData[iChild], m_pData[iEntry] );
 				iEntry = iChild;
@@ -487,19 +512,6 @@ public:
 	virtual int GetAttr ()
 	{
 		return m_tState.m_iAttr;
-	}
-
-protected:
-	template < bool > bool IsLess ( const T & a, const T & b );
-
-	template<> bool IsLess<true> ( const T & a, const T & b )
-	{
-		return COMP::IsLess ( a, b, m_tState );
-	}
-
-	template<> bool IsLess<false> ( const T & a, const T & b )
-	{
-		return COMP::IsLess ( a, b );
 	}
 };
 

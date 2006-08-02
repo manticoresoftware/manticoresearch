@@ -894,7 +894,7 @@ public:
 	virtual CSphQueryResult *	Query ( CSphDict * dict, CSphQuery * pQuery ) = 0;
 	virtual bool				QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchQueue * pTop ) = 0;
 
-	virtual const CSphSchema *	LoadSchema () = 0;
+	virtual const CSphSchema *	Preload () = 0;
 
 protected:
 	ProgressCallback_t *		m_pProgress;

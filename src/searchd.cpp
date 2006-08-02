@@ -2782,10 +2782,10 @@ int main ( int argc, char **argv )
 			ServedIndex_t tIdx;
 
 			tIdx.m_pIndex = sphCreateIndexPhrase ( hIndex["path"].cstr() );
-			tIdx.m_pSchema = tIdx.m_pIndex->LoadSchema();
+			tIdx.m_pSchema = tIdx.m_pIndex->Preload() ;
 			if ( !tIdx.m_pSchema )
 			{
-				sphWarning ( "index '%s': failed to load schema - NOT SERVING", sIndexName );
+				sphWarning ( "index '%s': failed to preload schema and docinfos - NOT SERVING", sIndexName );
 				continue;
 			}
 

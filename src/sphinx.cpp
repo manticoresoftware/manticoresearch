@@ -376,7 +376,7 @@ template < typename T, typename COMP, bool USE_STATE > struct CSphQueueTraits
 
 template < typename T, typename COMP > struct CSphQueueTraits < T, COMP, true >
 {
-	CSphMatchComparatorState	m_tState;
+	CSphMatchComparatorState m_tState;
 
 	inline bool	IsLess ( const T & a, const T & b )
 	{
@@ -386,6 +386,8 @@ template < typename T, typename COMP > struct CSphQueueTraits < T, COMP, true >
 
 template < typename T, typename COMP > struct CSphQueueTraits < T, COMP, false >
 {
+	CSphMatchComparatorState m_tState;
+
 	inline bool	IsLess ( const T & a, const T & b )
 	{
 		return COMP::IsLess ( a, b );
@@ -401,8 +403,6 @@ protected:
 	T *		m_pData;
 	int		m_iUsed;
 	int		m_iSize;
-
-	CSphMatchComparatorState	m_tState;
 
 public:
 	/// ctor
@@ -732,7 +732,7 @@ struct CSphIndex_VLN : CSphIndex
 	virtual int					Build ( CSphDict * pDict, const CSphVector < CSphSource * > & dSources, int iMemoryLimit, ESphDocinfo eDocinfo );
 	virtual CSphQueryResult *	Query ( CSphDict * pDict, CSphQuery * pQuery);
 	virtual bool				QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchQueue * pTop );
-	virtual const CSphSchema *	LoadSchema ();
+	virtual const CSphSchema *	Preload ();
 
 private:
 	CSphString					m_sFilename;
@@ -1890,18 +1890,18 @@ bool CSphSchema::IsEqual ( const CSphSchema & rhs, CSphString & sError ) const
 
 	if ( rhs.m_dFields.GetLength()!=m_dFields.GetLength() )
 	{
-		snprintf ( sTmp, sizeof(sTmp), "fulltext fields count mismatch: schema1=%s, fields1=%d, schema2=%s, fields2=%d",
-			rhs.m_sName.cstr(), rhs.m_dFields.GetLength(),
-			m_sName.cstr(), m_dFields.GetLength() );
+		snprintf ( sTmp, sizeof(sTmp), "fulltext fields count mismatch: %d in schema '%s', %d in schema '%s'",
+			m_dFields.GetLength(), m_sName.cstr(),
+			rhs.m_dFields.GetLength(), rhs.m_sName.cstr() );
 		sError = sTmp;
 		return false;
 	}
 
 	if ( rhs.m_dAttrs.GetLength()!=m_dAttrs.GetLength() )
 	{
-		snprintf ( sTmp, sizeof(sTmp), "attributes count mismatch: schema1=%s, attrs1=%d, schema2=%s, attrs2=%d",
-			rhs.m_sName.cstr(), rhs.m_dAttrs.GetLength(),
-			m_sName.cstr(), m_dAttrs.GetLength() );
+		snprintf ( sTmp, sizeof(sTmp), "attributes count mismatch: %d in schema '%s', %d in schema '%s'",
+			m_dAttrs.GetLength(), m_sName.cstr(),
+			rhs.m_dAttrs.GetLength(), rhs.m_sName.cstr() );
 		sError = sTmp;
 		return false;
 	}
@@ -1909,10 +1909,10 @@ bool CSphSchema::IsEqual ( const CSphSchema & rhs, CSphString & sError ) const
 	ARRAY_FOREACH ( i, rhs.m_dFields )
 		if ( rhs.m_dFields[i].m_sName!=m_dFields[i].m_sName )
 	{
-		snprintf ( sTmp, sizeof(sTmp), "field #%d name mismatch: schema1=%s, field1=%s, schema1=%s, field2=%s",
-			i,
-			rhs.m_sName.cstr(), rhs.m_dFields[i].m_sName.cstr(),
-			m_sName.cstr(), m_dFields[i].m_sName.cstr() );
+		snprintf ( sTmp, sizeof(sTmp), "field %d/%d name mismatch: '%s' in schema '%s', '%s' in schema '%s'",
+			i, m_dFields.GetLength(),
+			m_dFields[i].m_sName.cstr(), m_sName.cstr(),
+			rhs.m_dFields[i].m_sName.cstr(), rhs.m_sName.cstr() );
 		sError = sTmp;
 		return false;
 	}
@@ -1920,10 +1920,10 @@ bool CSphSchema::IsEqual ( const CSphSchema & rhs, CSphString & sError ) const
 	ARRAY_FOREACH ( i, rhs.m_dAttrs )
 		if ( rhs.m_dAttrs[i].m_sName!=m_dAttrs[i].m_sName )
 	{
-		snprintf ( sTmp, sizeof(sTmp), "attribute #%d name mismatch: schema1=%s, attr1=%s, schema2=%s, attr2=%s",
-			i,
-			rhs.m_sName.cstr(), rhs.m_dAttrs[i].m_sName.cstr(),
-			m_sName.cstr(), m_dAttrs[i].m_sName.cstr() );
+		snprintf ( sTmp, sizeof(sTmp), "attribute %d/%d name mismatch: '%s' in schema '%s', '%s' in schema '%s'",
+			i, m_dAttrs.GetLength(),
+			m_dAttrs[i].m_sName.cstr(), m_sName.cstr(),
+			rhs.m_dAttrs[i].m_sName.cstr(), rhs.m_sName.cstr() );
 		sError = sTmp;
 		return false;
 	}
@@ -4722,9 +4722,14 @@ bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, int iFD )
 }
 
 
-const CSphSchema * CSphIndex_VLN::LoadSchema ()
+const CSphSchema * CSphIndex_VLN::Preload ()
 {
 	char sTmp [ SPH_MAX_FILENAME_LEN ];
+
+	//////////////////
+	// preload schema
+	//////////////////
+
 	snprintf ( sTmp, sizeof(sTmp), "%s.sph", m_sFilename.cstr() );
 	CSphAutofile tIndexInfo ( sTmp );
 
@@ -4787,6 +4792,30 @@ const CSphSchema * CSphIndex_VLN::LoadSchema ()
 			rdInfo.GetRawBytes ( m_tMin.m_pAttrs, sizeof(DWORD)*m_tSchema.m_dAttrs.GetLength() );
 	}
 
+	////////////////////
+	// preload docinfos
+	////////////////////
+
+	if ( m_eDocinfo==SPH_DOCINFO_EXTERN )
+	{
+		SafeDeleteArray ( m_pDocinfo );
+		int iEntrySize = sizeof(DWORD)*(1+m_tSchema.m_dAttrs.GetLength());
+
+		snprintf ( sTmp, sizeof(sTmp), "%s.spa", m_sFilename.cstr() );
+		CSphAutofile tDocinfo ( sTmp );
+
+		struct stat stDocinfo;
+		if ( tDocinfo.GetFD()<0 || stat ( sTmp, &stDocinfo)<0 || stDocinfo.st_size<iEntrySize )
+			return NULL;
+
+		m_iDocinfo = stDocinfo.st_size / iEntrySize;
+		m_pDocinfo = new DWORD [ m_iDocinfo*iEntrySize/sizeof(DWORD) ]; // !COMMIT maybe use mmap
+
+		if ( ::read ( tDocinfo.GetFD(), m_pDocinfo, m_iDocinfo*iEntrySize )!=m_iDocinfo*iEntrySize )
+			return NULL;
+	}
+
+	// all done
 	return &m_tSchema;
 }
 
@@ -4807,7 +4836,7 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 	float tmQueryStart = sphLongTimer ();
 
 	// open files
-	if ( !LoadSchema() )
+	if ( !Preload() )
 		return false;
 	pResult->m_tSchema = m_tSchema;
 
@@ -4843,31 +4872,9 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 		m_rdIndex.GetRawBytes ( cidxPagesDir, sizeof(cidxPagesDir) );
 	}
 
-	if ( m_eDocinfo==SPH_DOCINFO_EXTERN )
-	{
-		SafeDeleteArray ( m_pDocinfo );
-		int iEntrySize = sizeof(DWORD)*(1+m_tSchema.m_dAttrs.GetLength());
+	// check that docinfo is preloaded
+	assert ( m_eDocinfo!=SPH_DOCINFO_EXTERN || m_pDocinfo );
 
-		snprintf ( sTmp, sizeof(sTmp), "%s.spa", m_sFilename.cstr() );
-		CSphAutofile tDocinfo ( sTmp );
-
-		struct stat stDocinfo;
-		if ( tDocinfo.GetFD()<0 || stat ( sTmp, &stDocinfo)<0 || stDocinfo.st_size<iEntrySize )
-		{
-			pResult->m_iQueryTime += int ( 1000.0f*( sphLongTimer() - tmQueryStart ) );
-			return false;
-		}
-
-		// !COMMIT load this once and share
-		m_iDocinfo = stDocinfo.st_size / iEntrySize;
-		m_pDocinfo = new DWORD [ m_iDocinfo*iEntrySize/sizeof(DWORD) ];
-
-		if ( ::read ( tDocinfo.GetFD(), m_pDocinfo, m_iDocinfo*iEntrySize )!=m_iDocinfo*iEntrySize )
-		{
-			pResult->m_iQueryTime += int ( 1000.0f*( sphLongTimer() - tmQueryStart ) );
-			return false;
-		}
-	}
 	PROFILE_END ( query_load_dir );
 
 	// split query into words

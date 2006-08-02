@@ -292,7 +292,7 @@ int main ( int argc, char ** argv )
 		CSphQueryResult * pResult = NULL;
 
 		CSphIndex * pIndex = sphCreateIndexPhrase ( hIndex["path"].cstr() );
-		const CSphSchema * pSchema = pIndex->LoadSchema ();
+		const CSphSchema * pSchema = pIndex->Preload ();
 		if ( pSchema )
 		{
 			// if we're not sorting by relevance, lookup first timestamp column

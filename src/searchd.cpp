@@ -1001,6 +1001,7 @@ bool CSphCache::ReadFromFile ( const CSphQuery & tQuery, const char * sIndexName
 		int * pCur = pMapFile;
 		char * pEnd = ((char*)pMapFile) + iFileSize;
 
+		int iAttrs = *pCur++; // !COMMIT serialize whole schema here
 		pRes->m_iNumWords = *pCur++;
 		int iMatches = *pCur++; 
 		pRes->m_dMatches.Resize ( iMatches );
@@ -1014,10 +1015,17 @@ bool CSphCache::ReadFromFile ( const CSphQuery & tQuery, const char * sIndexName
 
 		for ( int i=0; i<iMatches; i++ )
 		{
-			pRes->m_dMatches[i].m_iDocID = *pCur++;
-			pRes->m_dMatches[i].m_iGroupID = *pCur++;
-			pRes->m_dMatches[i].m_iTimestamp = *pCur++;
-			pRes->m_dMatches[i].m_iWeight = *pCur++;
+			CSphMatch & tMatch = pRes->m_dMatches[i];
+			tMatch.m_iDocID = *pCur++;
+			tMatch.m_iWeight = *pCur++;
+			if ( iAttrs )
+			{
+				assert ( !tMatch.m_pAttrs );
+				tMatch.m_iAttrs = iAttrs;
+				tMatch.m_pAttrs = new DWORD [ iAttrs ]; // !COMMIT pool these alloc
+				for ( int j=0; j<iAttrs; j++ )
+					tMatch.m_pAttrs[j] = *pCur++;
+			}
 		}
 
 		int i;
@@ -1095,22 +1103,27 @@ bool CSphCache::StoreResult ( const CSphQuery & tQuery, const char * sIndexName,
 	if ( m_bUseGzip )
 		fgzCache = gzdopen ( fCache, "wb" );
 
-	int iBufLen = sizeof(int)*( 3 + 4*pRes->m_dMatches.GetLength() + 3*pRes->m_iNumWords );
+	int iBufLen = sizeof(int)*( 4 + 4*pRes->m_dMatches.GetLength() + 3*pRes->m_iNumWords );
 	for ( int i=0; i<pRes->m_iNumWords; i++ )
 		iBufLen += strlen ( pRes->m_tWordStats[i].m_sWord.cstr() );
 
 	int * pBuf = new int [ 1 + iBufLen/sizeof(int) ];
 	int * pCur = pBuf;
 
+	int iAttrs = pRes->m_tSchema.m_dAttrs.GetLength ();
+	*pCur++ = iAttrs; // !COMMIT serialize whole schema here
 	*pCur++ = pRes->m_iNumWords;
 	*pCur++ = pRes->m_dMatches.GetLength();
 	*pCur++ = pRes->m_iTotalMatches;
 	ARRAY_FOREACH ( i, pRes->m_dMatches )
 	{
-		*pCur++ = pRes->m_dMatches[i].m_iDocID;
-		*pCur++ = pRes->m_dMatches[i].m_iGroupID;
-		*pCur++ = pRes->m_dMatches[i].m_iTimestamp;
-		*pCur++ = pRes->m_dMatches[i].m_iWeight;
+		const CSphMatch & tMatch = pRes->m_dMatches[i];
+		*pCur++ = tMatch.m_iDocID;
+		*pCur++ = tMatch.m_iWeight;
+
+		assert ( tMatch.m_iAttrs==iAttrs );
+		for ( int j=0; j<iAttrs; j++ )
+			*pCur++ = tMatch.m_pAttrs[j];
 	}
 
 	for ( int i=0; i<pRes->m_iNumWords; i++ )
@@ -1156,19 +1169,17 @@ void CSphCache::GenerateCacheFileName ( const CSphQuery & tQuery )
 	md5_byte_t tDigest[16];
 	char sBuf[2048];
 
-	int iLen = snprintf ( sBuf, sizeof(sBuf), "%s-%d-%d-%d-%d-%d-%d-%d-%d",
+	int iLen = snprintf ( sBuf, sizeof(sBuf), "%s-%d-%d-%d-%d",
 		tQuery.m_sQuery.cstr(),tQuery.m_eMode, tQuery.m_eSort,
-		tQuery.m_iMinID, tQuery.m_iMaxID, tQuery.m_iMinTS, tQuery.m_iMaxTS,
-		tQuery.m_iMinGID, tQuery.m_iMaxGID );
+		tQuery.m_iMinID, tQuery.m_iMaxID );
 
 	md5_init ( &tState );
 	md5_append ( &tState, (md5_byte_t*)sBuf, iLen );
 
-	if ( tQuery.m_iGroups>0 )
-		md5_append ( &tState, (md5_byte_t*)tQuery.m_pGroups, tQuery.m_iGroups*sizeof(DWORD) );
-
 	if ( tQuery.m_iWeights>0 )
 		md5_append( &tState, (md5_byte_t*)tQuery.m_pWeights, tQuery.m_iWeights*sizeof(DWORD) );
+
+	// !COMMIT pass all filters to md5 too
 
 	md5_finish ( &tState, tDigest );
 	for ( int iDigest=0; iDigest<16; ++iDigest )

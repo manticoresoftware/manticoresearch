@@ -369,40 +369,15 @@ struct CSphMatchComparatorState
 };
 
 
-/// workaround for gcc braindamage
-/// full specialization of nested templates wouldn't work with gcc
-template < typename T, typename COMP, bool USE_STATE > struct CSphQueueTraits
-{};
-
-template < typename T, typename COMP > struct CSphQueueTraits < T, COMP, true >
-{
-	CSphMatchComparatorState m_tState;
-
-	inline bool	IsLess ( const T & a, const T & b )
-	{
-		return COMP::IsLess ( a, b, m_tState );
-	}
-};
-
-template < typename T, typename COMP > struct CSphQueueTraits < T, COMP, false >
-{
-	CSphMatchComparatorState m_tState;
-
-	inline bool	IsLess ( const T & a, const T & b )
-	{
-		return COMP::IsLess ( a, b );
-	}
-};
-
-
 /// my match-sorting priority queue
-template < typename T, typename COMP, bool USE_STATE=false > class CSphQueue
-	: public ISphQueue<T>, public CSphQueueTraits<T,COMP,USE_STATE>
+template < typename T, typename COMP > class CSphQueue
+	: public ISphQueue<T>
 {
 protected:
 	T *		m_pData;
 	int		m_iUsed;
 	int		m_iSize;
+	CSphMatchComparatorState	m_tState;
 
 public:
 	/// ctor
@@ -414,7 +389,7 @@ public:
 		m_pData = new T [ iSize ];
 		assert ( m_pData );
 
-		m_tState.m_iAttr = USE_STATE ? -1 : 0;
+		m_tState.m_iAttr = 0;
 		m_tState.m_iNow = time ( NULL );
 	}
 
@@ -430,7 +405,7 @@ public:
 		if ( m_iUsed==m_iSize )
 		{
 			// if it's worse that current min, reject it, else pop off current min
-			if ( IsLess ( tEntry, m_pData[0] ) )
+			if ( COMP::IsLess ( tEntry, m_pData[0], m_tState ) )
 				return;
 			else
 				Pop ();
@@ -444,7 +419,7 @@ public:
 		while ( iEntry )
 		{
 			int iParent = ( iEntry-1 ) >> 1;
-			if ( !IsLess ( m_pData[iEntry], m_pData[iParent] ) )
+			if ( !COMP::IsLess ( m_pData[iEntry], m_pData[iParent], m_tState ) )
 				break;
 
 			// entry is less than parent, should float to the top
@@ -474,11 +449,11 @@ public:
 
 			// select smallest child
 			if ( iChild+1<m_iUsed )
-				if ( IsLess ( m_pData[iChild+1], m_pData[iChild] ) )
+				if ( COMP::IsLess ( m_pData[iChild+1], m_pData[iChild], m_tState ) )
 					iChild++;
 
 			// if smallest child is less than entry, do float it to the top
-			if ( IsLess ( m_pData[iChild], m_pData[iEntry] ) )
+			if ( COMP::IsLess ( m_pData[iChild], m_pData[iEntry], m_tState ) )
 			{
 				Swap ( m_pData[iChild], m_pData[iEntry] );
 				iEntry = iChild;
@@ -3222,7 +3197,7 @@ struct CmpQueuedDocinfo_fn
 	static DWORD *	m_pStorage;
 	static int		m_iStride;
 
-	static inline bool IsLess ( const int a, const int b )
+	static inline bool IsLess ( const int a, const int b, const CSphMatchComparatorState & )
 	{
 		return m_pStorage [ a*m_iStride ] < m_pStorage [ b*m_iStride ];
 	};
@@ -3822,7 +3797,7 @@ struct CSphQueryParser : CSphSource_Text
 /// match sorter
 struct MatchRelevanceLt_fn
 {
-	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b )
+	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & )
 	{
 		if ( a.m_iWeight!=b.m_iWeight )
 			return a.m_iWeight < b.m_iWeight;
@@ -3946,9 +3921,9 @@ ISphMatchQueue * sphCreateQueue ( CSphQuery * pQuery )
 
 	switch ( pQuery->m_eSort )
 	{
-		case SPH_SORT_ATTR_DESC:	pTop = new CSphQueue < CSphMatch, MatchAttrLt_fn, true > ( pQuery->m_iMaxMatches ); break;
-		case SPH_SORT_ATTR_ASC:		pTop = new CSphQueue < CSphMatch, MatchAttrGt_fn, true > ( pQuery->m_iMaxMatches ); break;
-		case SPH_SORT_TIME_SEGMENTS:pTop = new CSphQueue < CSphMatch, MatchTimeSegments_fn, true > ( pQuery->m_iMaxMatches ); break;
+		case SPH_SORT_ATTR_DESC:	pTop = new CSphQueue < CSphMatch, MatchAttrLt_fn > ( pQuery->m_iMaxMatches ); break;
+		case SPH_SORT_ATTR_ASC:		pTop = new CSphQueue < CSphMatch, MatchAttrGt_fn > ( pQuery->m_iMaxMatches ); break;
+		case SPH_SORT_TIME_SEGMENTS:pTop = new CSphQueue < CSphMatch, MatchTimeSegments_fn > ( pQuery->m_iMaxMatches ); break;
 		case SPH_SORT_RELEVANCE:	pTop = new CSphQueue < CSphMatch, MatchRelevanceLt_fn > ( pQuery->m_iMaxMatches ); break;
 		default:
 			pTop = new CSphQueue < CSphMatch, MatchRelevanceLt_fn > ( pQuery->m_iMaxMatches );

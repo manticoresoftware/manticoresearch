@@ -83,33 +83,25 @@ int main ( int argc, char ** argv )
 			OPT1 ( "--sort=ts" )		tQuery.m_eSort = SPH_SORT_TIME_SEGMENTS;
 			OPT1 ( "--stdin" )			bStdin = true;
 
-			else if ( (i+2)<argc )
-			{
-				if ( i==0 );
-				OPT ( "-f", "--filter" )
-				{
-					if ( atoi ( argv[i+2] ) )
-					{
-						tQuery.m_dFilters.Reset ();
-						tQuery.m_dFilters.Resize ( 1 );
-						tQuery.m_dFilters[0].m_iValues = 1;
-						tQuery.m_dFilters[0].m_pValues = new DWORD [ 1 ];
-						tQuery.m_dFilters[0].m_pValues[0] = atoi ( argv[i+2] );
-						tQuery.m_dFilters[0].m_sAttrName = argv[i+1];
-						i += 2;
-					}
-				}
-				else break; // unknown option
-			}
+			else if ( (i+1)>=argc )		break;
+			OPT ( "-s", "--start" )		iStart = atoi ( argv[++i] );
+			OPT ( "-l", "--limit" )		iLimit = atoi ( argv[++i] );
+			OPT ( "-c", "--config" )	sConfName = argv[++i];
+			OPT ( "-i", "--index" )		sIndex = argv[++i];
 
-			else if ( (i+1)<argc )
+			else if ( (i+2)>=argc )		break;
+			OPT ( "-f", "--filter" )
 			{
-				if ( i==0 );
-				OPT ( "-s", "--start" )		iStart = atoi ( argv[++i] );
-				OPT ( "-l", "--limit" )		iLimit = atoi ( argv[++i] );
-				OPT ( "-c", "--config" )	sConfName = argv[++i];
-				OPT ( "-i", "--index" )		sIndex = argv[++i];
-				else break; // unknown option
+				if ( atoi ( argv[i+2] ) )
+				{
+					tQuery.m_dFilters.Reset ();
+					tQuery.m_dFilters.Resize ( 1 );
+					tQuery.m_dFilters[0].m_iValues = 1;
+					tQuery.m_dFilters[0].m_pValues = new DWORD [ 1 ];
+					tQuery.m_dFilters[0].m_pValues[0] = atoi ( argv[i+2] );
+					tQuery.m_dFilters[0].m_sAttrName = argv[i+1];
+					i += 2;
+				}
 			}
 
 			else break; // unknown option

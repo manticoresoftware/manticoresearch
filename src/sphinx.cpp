@@ -634,6 +634,7 @@ public:
 	CSphReader_VLN	m_rdDoclist;	///< my doclist reader
 	CSphReader_VLN	m_rdHitlist;	///< my hitlist reader
 
+	DWORD			m_iMinID;		///< min ID to fixup
 	int				m_iInlineAttrs;	///< inline attributes count
 	DWORD *			m_pInlineFixup;	///< inline attributes fixup (POINTER TO EXTERNAL DATA, NOT MANAGED BY THIS CLASS!)
 
@@ -646,6 +647,7 @@ public:
 		, m_iHits ( 0 )
 		, m_iHitPos ( 0 )
 		, m_iHitlistPos ( 0 )
+		, m_iMinID ( 0 )
 		, m_iInlineAttrs ( 0 )
 		, m_pInlineFixup ( NULL )
 	{
@@ -682,7 +684,7 @@ public:
 
 		} else
 		{
-			m_tDoc.m_iDocID = 0;
+			m_tDoc.m_iDocID = m_iMinID;
 		}
 	}
 
@@ -2877,6 +2879,8 @@ bool CSphIndex_VLN::cidxDone()
 	ARRAY_FOREACH ( i, m_tSchema.m_dAttrs )
 		WriteSchemaColumn ( fdInfo, m_tSchema.m_dAttrs[i] );
 
+	fdInfo->PutDword ( m_tMin.m_iDocID );
+
 	if ( m_eDocinfo==SPH_DOCINFO_INLINE )
 		fdInfo->PutRawBytes ( m_tMin.m_pAttrs, m_tMin.m_iAttrs*sizeof(DWORD) );
 
@@ -4760,6 +4764,8 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 		ARRAY_FOREACH ( i, m_tSchema.m_dAttrs )
 			ReadSchemaColumn ( rdInfo, m_tSchema.m_dAttrs[i] );
 
+		m_tMin.m_iDocID = rdInfo.GetDword();
+
 		m_tMin.m_iAttrs = m_tSchema.m_dAttrs.GetLength();
 		m_tMin.m_pAttrs = new DWORD [ m_tSchema.m_dAttrs.GetLength() ];
 
@@ -4873,6 +4879,8 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 
 		m_dQueryWords[i].m_iInlineAttrs = m_tMin.m_iAttrs;
 		m_dQueryWords[i].m_pInlineFixup = m_tMin.m_pAttrs;
+		m_dQueryWords[i].m_iMinID = m_tMin.m_iDocID;
+		m_dQueryWords[i].m_tDoc.m_iDocID = m_tMin.m_iDocID;
 	}
 	SafeDelete ( pQueryParser );
 

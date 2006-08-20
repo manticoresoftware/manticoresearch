@@ -3000,9 +3000,12 @@ int main ( int argc, char **argv )
 
 					// try to create new index
 					CSphIndex * pNewIndex = sphCreateIndexPhrase ( sPath );
-					if ( !pNewIndex )
+					if ( !pNewIndex || !pNewIndex->Preload() )
 					{
-						sphWarning ( "rotating index '%s': failed to create new index object", sIndex );
+						if ( !pNewIndex )
+							sphWarning ( "rotating index '%s': failed to create new index object", sIndex );
+						else
+							sphWarning ( "rotating index '%s': failed to preload schema/docinfo", sIndex );
 
 						// try ro recover
 						TryRename ( sIndex, sPath, ".spi", ".new.spi", true );

@@ -670,6 +670,8 @@ public:
 		DWORD iDeltaDoc = m_rdDoclist.UnzipInt ();
 		if ( iDeltaDoc )
 		{
+			if ( !m_tDoc.m_iDocID )
+				m_tDoc.m_iDocID = m_iMinID;
 			m_tDoc.m_iDocID += iDeltaDoc;
 
 			for ( int i=0; i<m_iInlineAttrs; i++ )
@@ -684,7 +686,7 @@ public:
 
 		} else
 		{
-			m_tDoc.m_iDocID = m_iMinID;
+			m_tDoc.m_iDocID = 0;
 		}
 	}
 
@@ -744,6 +746,7 @@ private:
 	int							m_iDocinfo;			///< my docinfo cache size
 
 	bool						m_bNewSchema;		///< if there's .sph schema file available
+	bool						m_bPreloaded;		///< if schema/docinfos are preloaded
 
 private:
 	int							OpenFile ( char * ext, int mode );
@@ -2548,6 +2551,9 @@ CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename )
 
 	m_eDocinfo = SPH_DOCINFO_NONE;
 	m_pDocinfo = NULL;
+
+	m_bNewSchema = false;
+	m_bPreloaded = false;
 }
 
 
@@ -4703,12 +4709,13 @@ bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, int iFD )
 
 const CSphSchema * CSphIndex_VLN::Preload ()
 {
-	char sTmp [ SPH_MAX_FILENAME_LEN ];
+	m_bPreloaded = false;
 
 	//////////////////
 	// preload schema
 	//////////////////
 
+	char sTmp [ SPH_MAX_FILENAME_LEN ];
 	snprintf ( sTmp, sizeof(sTmp), "%s.sph", m_sFilename.cstr() );
 	CSphAutofile tIndexInfo ( sTmp );
 
@@ -4797,6 +4804,7 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 	}
 
 	// all done
+	m_bPreloaded = true;
 	return &m_tSchema;
 }
 
@@ -4817,7 +4825,7 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 	float tmQueryStart = sphLongTimer ();
 
 	// open files
-	if ( !Preload() )
+	if ( !m_bPreloaded )
 		return false;
 	pResult->m_tSchema = m_tSchema;
 
@@ -4877,8 +4885,15 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 		if ( m_tSchema.m_dAttrs.GetLength() )
 			m_dQueryWords[i].m_tDoc.m_pAttrs = new DWORD [ m_tSchema.m_dAttrs.GetLength() ];
 
-		m_dQueryWords[i].m_iInlineAttrs = m_tMin.m_iAttrs;
-		m_dQueryWords[i].m_pInlineFixup = m_tMin.m_pAttrs;
+		if ( m_eDocinfo==SPH_DOCINFO_INLINE )
+		{
+			m_dQueryWords[i].m_iInlineAttrs = m_tMin.m_iAttrs;
+			m_dQueryWords[i].m_pInlineFixup = m_tMin.m_pAttrs;
+		} else
+		{
+			m_dQueryWords[i].m_iInlineAttrs = 0;
+			m_dQueryWords[i].m_pInlineFixup = NULL;
+		}
 		m_dQueryWords[i].m_iMinID = m_tMin.m_iDocID;
 		m_dQueryWords[i].m_tDoc.m_iDocID = m_tMin.m_iDocID;
 	}

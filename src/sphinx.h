@@ -25,6 +25,8 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
+#include "sphinxstd.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -65,8 +67,6 @@
 	typedef unsigned char		BYTE;
 	typedef off_t				SphOffset_t;
 #endif
-
-#include "sphinxstd.h"
 
 /////////////////////////////////////////////////////////////////////////////
 

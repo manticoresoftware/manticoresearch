@@ -11,8 +11,8 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include <string.h>
 #include "sphinx.h"
+#include <string.h>
 
 struct stem_table
 {

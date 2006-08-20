@@ -2,8 +2,8 @@
 <VisualStudioProject
 	ProjectType="Visual C++"
 	Version="7.10"
-	Name="searchd"
-	ProjectGUID="{0BBD34CB-5891-477F-B665-3D7C9FC22A02}"
+	Name="libsphinx"
+	ProjectGUID="{6A1685DE-0265-4243-965F-96CB53EBBCA6}"
 	Keyword="Win32Proj">
 	<Platforms>
 		<Platform
@@ -14,12 +14,12 @@
 			Name="Debug|Win32"
 			OutputDirectory="$(SolutionDir)/bin/$(ConfigurationName)"
 			IntermediateDirectory="$(SolutionDir)/junk/$(ConfigurationName)"
-			ConfigurationType="1"
+			ConfigurationType="4"
 			CharacterSet="2">
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				PreprocessorDefinitions="WIN32;_DEBUG;_CONSOLE"
+				PreprocessorDefinitions="WIN32;_DEBUG;_LIB"
 				MinimalRebuild="TRUE"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="5"
@@ -31,14 +31,8 @@
 			<Tool
 				Name="VCCustomBuildTool"/>
 			<Tool
-				Name="VCLinkerTool"
-				AdditionalDependencies="wsock32.lib"
-				OutputFile="$(OutDir)/searchd.exe"
-				LinkIncremental="2"
-				GenerateDebugInformation="TRUE"
-				ProgramDatabaseFile="$(OutDir)/searchd.pdb"
-				SubSystem="1"
-				TargetMachine="1"/>
+				Name="VCLibrarianTool"
+				OutputFile="$(OutDir)/libsphinx.lib"/>
 			<Tool
 				Name="VCMIDLTool"/>
 			<Tool
@@ -53,8 +47,6 @@
 				Name="VCWebServiceProxyGeneratorTool"/>
 			<Tool
 				Name="VCXMLDataGeneratorTool"/>
-			<Tool
-				Name="VCWebDeploymentTool"/>
 			<Tool
 				Name="VCManagedWrapperGeneratorTool"/>
 			<Tool
@@ -64,11 +56,11 @@
 			Name="Release|Win32"
 			OutputDirectory="$(SolutionDir)/bin/$(ConfigurationName)"
 			IntermediateDirectory="$(SolutionDir)/junk/$(ConfigurationName)"
-			ConfigurationType="1"
+			ConfigurationType="4"
 			CharacterSet="2">
 			<Tool
 				Name="VCCLCompilerTool"
-				PreprocessorDefinitions="WIN32;NDEBUG;_CONSOLE"
+				PreprocessorDefinitions="WIN32;NDEBUG;_LIB"
 				RuntimeLibrary="4"
 				UsePrecompiledHeader="0"
 				ProgramDataBaseFileName="$(IntDir)/$(ProjectName).pdb"
@@ -78,15 +70,8 @@
 			<Tool
 				Name="VCCustomBuildTool"/>
 			<Tool
-				Name="VCLinkerTool"
-				AdditionalDependencies="wsock32.lib"
-				OutputFile="$(OutDir)/searchd.exe"
-				LinkIncremental="1"
-				GenerateDebugInformation="TRUE"
-				SubSystem="1"
-				OptimizeReferences="2"
-				EnableCOMDATFolding="2"
-				TargetMachine="1"/>
+				Name="VCLibrarianTool"
+				OutputFile="$(OutDir)/libsphinx.lib"/>
 			<Tool
 				Name="VCMIDLTool"/>
 			<Tool
@@ -101,8 +86,6 @@
 				Name="VCWebServiceProxyGeneratorTool"/>
 			<Tool
 				Name="VCXMLDataGeneratorTool"/>
-			<Tool
-				Name="VCWebDeploymentTool"/>
 			<Tool
 				Name="VCManagedWrapperGeneratorTool"/>
 			<Tool
@@ -117,13 +100,52 @@
 			Filter="cpp;c;cxx;def;odl;idl;hpj;bat;asm;asmx"
 			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}">
 			<File
-				RelativePath=".\searchd.cpp">
+				RelativePath="..\src\sphinx.cpp">
+			</File>
+			<File
+				RelativePath="..\src\sphinxexcerpt.cpp">
+			</File>
+			<File
+				RelativePath="..\src\sphinxsoundex.cpp">
+			</File>
+			<File
+				RelativePath="..\src\sphinxstemen.cpp">
+			</File>
+			<File
+				RelativePath="..\src\sphinxstemru.cpp">
+			</File>
+			<File
+				RelativePath="..\src\sphinxquery.cpp">
+			</File>
+			<File
+				RelativePath="..\src\sphinxutils.cpp">
 			</File>
 		</Filter>
 		<Filter
 			Name="Header Files"
 			Filter="h;hpp;hxx;hm;inl;inc;xsd"
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}">
+			<File
+				RelativePath="..\src\sphinx.h">
+			</File>
+			<File
+				RelativePath="..\src\sphinxexcerpt.h">
+			</File>
+			<File
+				RelativePath="..\src\sphinxstd.h">
+			</File>
+			<File
+				RelativePath="..\src\sphinxstem.h">
+			</File>
+			<File
+				RelativePath="..\src\sphinxtimers.h">
+			</File>
+			<File
+				RelativePath="..\src\sphinxquery.h">
+			</File>
+			<File
+				RelativePath="..\src\sphinxutils.h">
+			</File>
 		</Filter>
 		<Filter
 			Name="Resource Files"

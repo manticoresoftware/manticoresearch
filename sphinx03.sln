@@ -1,19 +1,19 @@
 Microsoft Visual Studio Solution File, Format Version 8.00
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "indexer", "src/indexer.vcproj", "{405619C7-CC22-4FB8-9237-B196CB897355}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "indexer", "win\indexer03.vcproj", "{405619C7-CC22-4FB8-9237-B196CB897355}"
 	ProjectSection(ProjectDependencies) = postProject
 		{6A1685DE-0265-4243-965F-96CB53EBBCA6} = {6A1685DE-0265-4243-965F-96CB53EBBCA6}
 	EndProjectSection
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libsphinx", "src/libsphinx.vcproj", "{6A1685DE-0265-4243-965F-96CB53EBBCA6}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libsphinx", "win\libsphinx03.vcproj", "{6A1685DE-0265-4243-965F-96CB53EBBCA6}"
 	ProjectSection(ProjectDependencies) = postProject
 	EndProjectSection
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "search", "src/search.vcproj", "{571DC41A-2665-476C-ABED-3899324E19AB}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "search", "win\search03.vcproj", "{571DC41A-2665-476C-ABED-3899324E19AB}"
 	ProjectSection(ProjectDependencies) = postProject
 		{6A1685DE-0265-4243-965F-96CB53EBBCA6} = {6A1685DE-0265-4243-965F-96CB53EBBCA6}
 	EndProjectSection
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "searchd", "src/searchd.vcproj", "{0BBD34CB-5891-477F-B665-3D7C9FC22A02}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "searchd", "win\searchd03.vcproj", "{0BBD34CB-5891-477F-B665-3D7C9FC22A02}"
 	ProjectSection(ProjectDependencies) = postProject
 		{6A1685DE-0265-4243-965F-96CB53EBBCA6} = {6A1685DE-0265-4243-965F-96CB53EBBCA6}
 	EndProjectSection

@@ -390,7 +390,7 @@ public:
 		assert ( m_pData );
 
 		m_tState.m_iAttr = 0;
-		m_tState.m_iNow = time ( NULL );
+		m_tState.m_iNow = (DWORD) time ( NULL );
 	}
 
 	/// dtor

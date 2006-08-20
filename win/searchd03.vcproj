@@ -2,8 +2,8 @@
 <VisualStudioProject
 	ProjectType="Visual C++"
 	Version="7.10"
-	Name="search"
-	ProjectGUID="{571DC41A-2665-476C-ABED-3899324E19AB}"
+	Name="searchd"
+	ProjectGUID="{0BBD34CB-5891-477F-B665-3D7C9FC22A02}"
 	Keyword="Win32Proj">
 	<Platforms>
 		<Platform
@@ -32,10 +32,11 @@
 				Name="VCCustomBuildTool"/>
 			<Tool
 				Name="VCLinkerTool"
-				OutputFile="$(OutDir)/search.exe"
+				AdditionalDependencies="wsock32.lib"
+				OutputFile="$(OutDir)/searchd.exe"
 				LinkIncremental="2"
 				GenerateDebugInformation="TRUE"
-				ProgramDatabaseFile="$(OutDir)/search.pdb"
+				ProgramDatabaseFile="$(OutDir)/searchd.pdb"
 				SubSystem="1"
 				TargetMachine="1"/>
 			<Tool
@@ -78,7 +79,8 @@
 				Name="VCCustomBuildTool"/>
 			<Tool
 				Name="VCLinkerTool"
-				OutputFile="$(OutDir)/search.exe"
+				AdditionalDependencies="wsock32.lib"
+				OutputFile="$(OutDir)/searchd.exe"
 				LinkIncremental="1"
 				GenerateDebugInformation="TRUE"
 				SubSystem="1"
@@ -115,7 +117,7 @@
 			Filter="cpp;c;cxx;def;odl;idl;hpj;bat;asm;asmx"
 			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}">
 			<File
-				RelativePath=".\search.cpp">
+				RelativePath="..\src\searchd.cpp">
 			</File>
 		</Filter>
 		<Filter

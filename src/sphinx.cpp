@@ -250,14 +250,14 @@ void sphProfilerShow ( int iTimer=0, int iLevel=0 )
 		fSelf -= g_dTimers[iChild].m_fStamp;
 
 	// dump me
-	if ( tTimer.m_fStamp<0.005f )
+	if ( tTimer.m_fStamp<0.00005f )
 		return;
 
 	for ( int i=0; i<iLevel; i++ )
 		fprintf ( stdout, " "" " );
-	fprintf ( stdout, "%s: %.2f", g_dTimerNames [ tTimer.m_eTimer ], tTimer.m_fStamp );
+	fprintf ( stdout, "%s: %.2f ms", g_dTimerNames [ tTimer.m_eTimer ], 1000.0f*tTimer.m_fStamp );
 	if ( iChildren )
-		fprintf ( stdout, ", self: %.2f", fSelf );
+		fprintf ( stdout, ", self: %.2f ms", 1000.0f*fSelf );
 	fprintf ( stdout, "\n" );
 
 	// dump my children
@@ -282,12 +282,14 @@ public:
 	CSphEasyTimer ( ESphTimer eTimer )
 		: m_eTimer ( eTimer )
 	{
-		sphProfilerPush ( m_eTimer );
+		if ( g_iTimer>=0 )
+			sphProfilerPush ( m_eTimer );
 	}
 
 	~CSphEasyTimer ()
 	{
-		sphProfilerPop ( m_eTimer );
+		if ( g_iTimer>=0 )
+			sphProfilerPop ( m_eTimer );
 	}
 
 protected:

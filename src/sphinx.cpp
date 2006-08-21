@@ -125,6 +125,7 @@ struct CSphTimer
 	int				m_iChild;
 	int				m_iNext;
 	int				m_iPrev;
+	int				m_iCalls;
 
 	CSphTimer ()
 	{
@@ -139,11 +140,13 @@ struct CSphTimer
 		m_iPrev = -1;
 		m_eTimer = eTimer;
 		m_fStamp = 0;
+		m_iCalls = 0;
 	}
 
 	void Start ()
 	{
 		m_fStamp -= sphLongTimer ();
+		m_iCalls++;
 	}
 
 	void Stop ()
@@ -253,12 +256,14 @@ void sphProfilerShow ( int iTimer=0, int iLevel=0 )
 	if ( tTimer.m_fStamp<0.00005f )
 		return;
 
+	char sName[32];
 	for ( int i=0; i<iLevel; i++ )
-		fprintf ( stdout, " "" " );
-	fprintf ( stdout, "%s: %.2f ms", g_dTimerNames [ tTimer.m_eTimer ], 1000.0f*tTimer.m_fStamp );
-	if ( iChildren )
-		fprintf ( stdout, ", self: %.2f ms", 1000.0f*fSelf );
-	fprintf ( stdout, "\n" );
+		sName[2*i] = sName[2*i+1] = ' ';
+	sName[2*iLevel] = '\0';
+	strncat ( sName, g_dTimerNames [ tTimer.m_eTimer ], sizeof(sName) );
+
+	fprintf ( stdout, "%-32s | %7.2f ms | %7.2f ms self | %d calls\n",
+		sName, 1000.0f*tTimer.m_fStamp, 1000.0f*fSelf, tTimer.m_iCalls );
 
 	// dump my children
 	iChild = tTimer.m_iChild;

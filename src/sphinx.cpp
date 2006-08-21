@@ -381,8 +381,9 @@ protected:
 
 public:
 	/// ctor
-	CSphQueue ( int iSize )
-		: m_iUsed ( 0 )
+	CSphQueue ( int iSize, bool bUsesAttrs )
+		: ISphQueue<T> ( bUsesAttrs )
+		, m_iUsed ( 0 )
 		, m_iSize ( iSize )
 	{
 		assert ( iSize>0 );
@@ -3543,7 +3544,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 
 		// docinfo queue
 		CSphAutoArray<DWORD> dDocinfoQueue ( iDocinfoBlocks*iDocinfoStride );
-		CSphQueue < int,CmpQueuedDocinfo_fn > qDocinfo ( iDocinfoBlocks );
+		CSphQueue < int,CmpQueuedDocinfo_fn > qDocinfo ( iDocinfoBlocks, false );
 
 		CmpQueuedDocinfo_fn::m_pStorage = dDocinfoQueue;
 		CmpQueuedDocinfo_fn::m_iStride = iDocinfoStride;
@@ -3931,12 +3932,12 @@ ISphMatchQueue * sphCreateQueue ( CSphQuery * pQuery )
 
 	switch ( pQuery->m_eSort )
 	{
-		case SPH_SORT_ATTR_DESC:	pTop = new CSphQueue < CSphMatch, MatchAttrLt_fn > ( pQuery->m_iMaxMatches ); break;
-		case SPH_SORT_ATTR_ASC:		pTop = new CSphQueue < CSphMatch, MatchAttrGt_fn > ( pQuery->m_iMaxMatches ); break;
-		case SPH_SORT_TIME_SEGMENTS:pTop = new CSphQueue < CSphMatch, MatchTimeSegments_fn > ( pQuery->m_iMaxMatches ); break;
-		case SPH_SORT_RELEVANCE:	pTop = new CSphQueue < CSphMatch, MatchRelevanceLt_fn > ( pQuery->m_iMaxMatches ); break;
+		case SPH_SORT_ATTR_DESC:	pTop = new CSphQueue < CSphMatch, MatchAttrLt_fn > ( pQuery->m_iMaxMatches, true ); break;
+		case SPH_SORT_ATTR_ASC:		pTop = new CSphQueue < CSphMatch, MatchAttrGt_fn > ( pQuery->m_iMaxMatches, true ); break;
+		case SPH_SORT_TIME_SEGMENTS:pTop = new CSphQueue < CSphMatch, MatchTimeSegments_fn > ( pQuery->m_iMaxMatches, true ); break;
+		case SPH_SORT_RELEVANCE:	pTop = new CSphQueue < CSphMatch, MatchRelevanceLt_fn > ( pQuery->m_iMaxMatches, false ); break;
 		default:
-			pTop = new CSphQueue < CSphMatch, MatchRelevanceLt_fn > ( pQuery->m_iMaxMatches );
+			pTop = new CSphQueue < CSphMatch, MatchRelevanceLt_fn > ( pQuery->m_iMaxMatches, false );
 			fprintf ( stdout, "WARNING: unknown sorting mode '%d', using SPH_SORT_RELEVANCE\n", pQuery->m_eSort );
 			break;
 	}
@@ -4089,7 +4090,7 @@ void CSphIndex_VLN::MatchAll ( const CSphQuery * pQuery, ISphMatchQueue * pTop, 
 		return;
 
 	bool bEarlyLookup = ( m_eDocinfo==SPH_DOCINFO_EXTERN ) && pQuery->m_dFilters.GetLength();
-	bool bLateLookup = ( m_eDocinfo==SPH_DOCINFO_EXTERN ) && !bEarlyLookup;
+	bool bLateLookup = ( m_eDocinfo==SPH_DOCINFO_EXTERN ) && !bEarlyLookup && pTop->UsesAttrs();
 
 	// preload doclist entries
 	int i;
@@ -4204,7 +4205,7 @@ void CSphIndex_VLN::MatchAll ( const CSphQuery * pQuery, ISphMatchQueue * pTop, 
 			tMatch.m_iWeight += m_dWeights[i] * ( matchWeight[i] + phraseWeight[i] );
 
 		// lookup externally stored docinfo
-		if ( bLateLookup ) // FIXME! optimize for cases when it's not needed to sort
+		if ( bLateLookup )
 			LookupDocinfo ( tMatch );
 
 		pTop->Push ( tMatch );
@@ -4227,7 +4228,7 @@ void CSphIndex_VLN::MatchAny ( const CSphQuery * pQuery, ISphMatchQueue * pTop, 
 	DWORD iLastMatchID = 0;
 
 	bool bEarlyLookup = ( m_eDocinfo==SPH_DOCINFO_EXTERN ) && pQuery->m_dFilters.GetLength();
-	bool bLateLookup = ( m_eDocinfo==SPH_DOCINFO_EXTERN ) && !bEarlyLookup;
+	bool bLateLookup = ( m_eDocinfo==SPH_DOCINFO_EXTERN ) && !bEarlyLookup && pTop->UsesAttrs();
 
 	// preload entries
 	int i;
@@ -4360,7 +4361,7 @@ void CSphIndex_VLN::MatchAny ( const CSphQuery * pQuery, ISphMatchQueue * pTop, 
 			tMatch.m_iWeight += m_dWeights[i] * ( sphBitCount(dWeights[i].m_uMatch) + dWeights[i].m_iMaxPhrase*iPhraseK );
 
 		// lookup externally stored docinfo
-		if ( bLateLookup ) // FIXME! optimize for cases when it's not needed to sort
+		if ( bLateLookup )
 			LookupDocinfo ( tMatch );
 
 		pTop->Push ( tMatch );
@@ -4624,7 +4625,7 @@ void CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, CSphDict * pDict, I
 	tTree.SetFile ( this, iDoclistFD );
 
 	bool bEarlyLookup = ( m_eDocinfo==SPH_DOCINFO_EXTERN ) && pQuery->m_dFilters.GetLength();
-	bool bLateLookup = ( m_eDocinfo==SPH_DOCINFO_EXTERN ) && !bEarlyLookup;
+	bool bLateLookup = ( m_eDocinfo==SPH_DOCINFO_EXTERN ) && !bEarlyLookup && pTop->UsesAttrs();
 
 	// do matching
 	DWORD iMinID = 1;
@@ -4645,7 +4646,7 @@ void CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, CSphDict * pDict, I
 		pMatch->m_iWeight = 1; // set weight
 
 		// lookup externally stored docinfo
-		if ( bLateLookup ) // FIXME! optimize for cases when it's not needed to sort
+		if ( bLateLookup )
 			LookupDocinfo ( *pMatch );
 
 		pTop->Push ( *pMatch );
@@ -5001,6 +5002,16 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 			sphDie ( "FATAL: INTERNAL ERROR: unknown matching mode (mode=%d).\n", pQuery->m_eMode );
 	}
 	PROFILE_END ( query_match );
+
+	if ( !pTop->UsesAttrs() )
+	{
+		// FIXME! hack
+		CSphMatch * pCur = const_cast < CSphMatch * > ( &pTop->Root() );
+		int iCount = pTop->GetLength ();
+		while ( iCount-- )
+			LookupDocinfo ( *pCur++ );
+	}
+
 
 	PROFILER_DONE ();
 	PROFILE_SHOW ();

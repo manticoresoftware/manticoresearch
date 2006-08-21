@@ -774,11 +774,20 @@ public:
 	virtual const T &	Root () const = 0;
 
 public:
-	/// set attr to sort by
+	/// match-queue specific, set if this queue needs attr values
+						ISphQueue ( bool bUsesAttrs ) : m_bUsesAttrs ( bUsesAttrs ) {}
+
+	/// match-queue specific, check if this queue needs attr values
+	bool				UsesAttrs () { return m_bUsesAttrs; }
+
+	/// match-queue specific, set attr to sort by
 	virtual void		SetAttr ( int ) {};
 
-	/// get attr to sort by
+	/// match-queue specific, get attr to sort by
 	virtual int			GetAttr () { return 0; }
+
+protected:
+	bool				m_bUsesAttrs;	///<  match-queue specific, whether this queue uses attrs
 };
 
 #endif // _sphinxstd_

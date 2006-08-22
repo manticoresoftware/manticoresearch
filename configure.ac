@@ -53,7 +53,7 @@ dnl --------------------------------------------------------------------------
 SPHINX_CONFIGURE_PART([checking for compiler programs])
 
 if test x$ac_env_CPPFLAGS_set != xset; then
-	CPPFLAGS="-Wall -O3 -fomit-frame-pointer -D_FILE_OFFSET_BITS=64"
+	CPPFLAGS="-Wall -O3 -fomit-frame-pointer -DNDEBUG -D_FILE_OFFSET_BITS=64"
 fi
 
 AC_PROG_CC

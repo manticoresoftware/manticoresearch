@@ -2244,7 +2244,7 @@ echo "${ECHO_T}" >&6
 
 
 if test x$ac_env_CPPFLAGS_set != xset; then
-	CPPFLAGS="-Wall -O3 -fomit-frame-pointer -D_FILE_OFFSET_BITS=64"
+	CPPFLAGS="-Wall -O3 -fomit-frame-pointer -DNDEBUG -D_FILE_OFFSET_BITS=64"
 fi
 
 ac_ext=c

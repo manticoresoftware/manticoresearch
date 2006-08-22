@@ -872,6 +872,7 @@ Optional Packages:
   --with-mysql-libs       path to MySQL libraries
   --with-pgsql-includes   path to PostgreSQL header files
   --with-pgsql-libs       path to PostgreSQL libraries
+  --with-debug            compile slower debug version (default is disabled)
 
 Some influential environment variables:
   CC          C compiler command
@@ -2243,8 +2244,28 @@ echo "${ECHO_T}$TMP" >&6
 echo "${ECHO_T}" >&6
 
 
-if test x$ac_env_CPPFLAGS_set != xset; then
-	CPPFLAGS="-Wall -O3 -fomit-frame-pointer -DNDEBUG -D_FILE_OFFSET_BITS=64"
+
+# Check whether --with-debug or --without-debug was given.
+if test "${with_debug+set}" = set; then
+  withval="$with_debug"
+  ac_cv_use_debug=$withval
+else
+  ac_cv_use_debug=no
+
+fi;
+
+echo "$as_me:$LINENO: checking whether to compile debug version" >&5
+echo $ECHO_N "checking whether to compile debug version... $ECHO_C" >&6
+if test x$ac_cv_use_debug != xno; then
+        CPPFLAGS="-Wall -g -D_FILE_OFFSET_BITS=64"
+	echo "$as_me:$LINENO: result: yes" >&5
+echo "${ECHO_T}yes" >&6
+else
+	if test x$ac_env_CPPFLAGS_set != xset; then
+		CPPFLAGS="-Wall -O3 -fomit-frame-pointer -DNDEBUG -D_FILE_OFFSET_BITS=64"
+	fi
+	echo "$as_me:$LINENO: result: no" >&5
+echo "${ECHO_T}no" >&6
 fi
 
 ac_ext=c

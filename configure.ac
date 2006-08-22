@@ -52,8 +52,20 @@ dnl --------------------------------------------------------------------------
 
 SPHINX_CONFIGURE_PART([checking for compiler programs])
 
-if test x$ac_env_CPPFLAGS_set != xset; then
-	CPPFLAGS="-Wall -O3 -fomit-frame-pointer -DNDEBUG -D_FILE_OFFSET_BITS=64"
+AC_ARG_WITH([debug],
+	AC_HELP_STRING([--with-debug], [compile slower debug version (default is disabled)]),
+	[ac_cv_use_debug=$withval], [ac_cv_use_debug=no]
+)
+
+AC_MSG_CHECKING([whether to compile debug version])
+if test x$ac_cv_use_debug != xno; then
+        CPPFLAGS="-Wall -g -D_FILE_OFFSET_BITS=64"
+	AC_MSG_RESULT([yes])
+else
+	if test x$ac_env_CPPFLAGS_set != xset; then
+		CPPFLAGS="-Wall -O3 -fomit-frame-pointer -DNDEBUG -D_FILE_OFFSET_BITS=64"
+	fi
+	AC_MSG_RESULT([no])
 fi
 
 AC_PROG_CC

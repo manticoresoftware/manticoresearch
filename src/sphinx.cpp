@@ -635,6 +635,7 @@ public:
 	int				m_iHits;		///< hit count, from wordlist
 
 	CSphMatch		m_tDoc;			///< current match (partial)
+	DWORD			m_uFields;		///< current match fields
 	DWORD			m_iHitPos;		///< current hit postition, from hitlist
 
 	SphOffset_t		m_iHitlistPos;	///< current position in hitlist, from doclist
@@ -652,6 +653,7 @@ public:
 		, m_iQueryPos ( -1 )
 		, m_iWordID ( 0 )
 		, m_iDocs ( 0 )
+		, m_uFields ( 0 )
 		, m_iHits ( 0 )
 		, m_iHitPos ( 0 )
 		, m_iHitlistPos ( 0 )
@@ -671,6 +673,7 @@ public:
 		m_iHitlistPos = 0;
 		m_iInlineAttrs = 0;
 		m_tDoc.Reset ();
+		m_uFields = 0;
 	}
 
 	void GetDoclistEntry ()
@@ -691,6 +694,9 @@ public:
 			m_iHitlistPos += iDeltaPos;
 			m_rdHitlist.SeekTo ( m_iHitlistPos );
 			m_iHitPos = 0;
+
+			// FIXME? incompatible with 096
+			m_uFields = m_rdDoclist.UnzipInt ();
 
 		} else
 		{
@@ -742,6 +748,7 @@ private:
 	DWORD						m_iLastPageID;		///< VLN writer state
 	int							m_iLastWordDocs;	///< VLN writer state
 	int							m_iLastWordHits;	///< VLN writer state
+	DWORD						m_uFields;			///< VLN writer state
 
 	CSphVector<CSphQueryWord,8>	m_dQueryWords;		///< search query words for "simple" query types (ie. match all/any/phrase)
 
@@ -2556,6 +2563,7 @@ CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename )
 	m_tLastHit.m_iDocID = 0;
 	m_tLastHit.m_iWordID = 0;
 	m_tLastHit.m_iWordPos = 0;
+	m_uFields = 0;
 
 	m_eDocinfo = SPH_DOCINFO_NONE;
 	m_pDocinfo = NULL;
@@ -2759,6 +2767,10 @@ void CSphIndex_VLN::cidxHit ( CSphWordHit * hit, DWORD * pAttrs )
 		// flush prev doclist, if any
 		if ( m_dDoclist.GetLength() )
 		{
+			// flush matched fields mask
+			m_dDoclist.Add ( m_uFields );
+			m_uFields = 0;
+
 			// finish writing wordlist entry
 			assert ( fdData->m_iPos > m_iLastDoclistPos );
 			assert ( m_iLastWordDocs );
@@ -2825,6 +2837,14 @@ void CSphIndex_VLN::cidxHit ( CSphWordHit * hit, DWORD * pAttrs )
 			m_tLastHit.m_iWordPos = 0;
 		}
 
+		// close prev doc, if any
+		if ( m_dDoclist.GetLength() )
+		{
+			// flush matched fields mask
+			m_dDoclist.Add ( m_uFields );
+			m_uFields = 0;
+		}
+
 		// add new doclist entry for new doc id
 		assert ( hit->m_iDocID > m_tLastHit.m_iDocID );
 		assert ( fdData->m_iPos > m_iLastHitlistPos );
@@ -2851,6 +2871,9 @@ void CSphIndex_VLN::cidxHit ( CSphWordHit * hit, DWORD * pAttrs )
 	fdData->ZipInt ( hit->m_iWordPos - m_tLastHit.m_iWordPos );
 	m_tLastHit.m_iWordPos = hit->m_iWordPos;
 	m_iLastWordHits++;
+
+	// update matched fields mask
+	m_uFields |= ( 1UL << (hit->m_iWordPos>>24) );
 }
 
 
@@ -4108,6 +4131,10 @@ void CSphIndex_VLN::MatchAll ( const CSphQuery * pQuery, ISphMatchQueue * pTop, 
 	DWORD docID = 0;
 	for ( ;; )
 	{
+		/////////////////////
+		// obtain next match
+		/////////////////////
+
 		// scan lists until *all* the ids match
 		while ( m_dQueryWords[i].m_tDoc.m_iDocID && docID>m_dQueryWords[i].m_tDoc.m_iDocID )
 			m_dQueryWords[i].GetDoclistEntry ();
@@ -4136,80 +4163,105 @@ void CSphIndex_VLN::MatchAll ( const CSphQuery * pQuery, ISphMatchQueue * pTop, 
 			continue;
 		}
 
-		// preload hitlist entries
-		for ( i=0; i<m_dQueryWords.GetLength(); i++ )
-			m_dQueryWords[i].GetHitlistEntry ();
+		//////////////
+		// rank match
+		//////////////
 
-		// init weighting
-		BYTE curPhraseWeight [ SPH_MAX_FIELDS ];
-		BYTE phraseWeight [ SPH_MAX_FIELDS ];
-		BYTE matchWeight [ SPH_MAX_FIELDS ];
-		for ( i=0; i<m_iWeights; i++ )
+		if ( m_dQueryWords.GetLength()==1 )
 		{
-			curPhraseWeight[i] = 0;
-			phraseWeight[i] = 0;
-			matchWeight[i] = 0;
-		}
+			// sum simple match weights and phrase match weights
+			tMatch.m_iWeight = 0;
 
-		DWORD k = INT_MAX;
-		for ( ;; )
+			// FIXME? incompatible with 096
+			DWORD uFields = m_dQueryWords[0].m_uFields;
+			for ( int iField = 0; uFields; iField++ )
+			{
+				if ( uFields & 1 )
+					tMatch.m_iWeight += m_dWeights[iField];
+				uFields >>= 1;
+			}
+
+		} else
 		{
-			// scan until next hit in this document
-			DWORD pmin = INT_MAX;
-			int imin = -1;
+			// preload hitlist entries
 			for ( i=0; i<m_dQueryWords.GetLength(); i++ )
-			{
-				if ( !m_dQueryWords[i].m_iHitPos )
-					continue;
-				if ( pmin>m_dQueryWords[i].m_iHitPos )
-				{
-					pmin = m_dQueryWords[i].m_iHitPos;
-					imin = i;
-				}
-			}
-			if ( imin<0 )
-				break;
-			m_dQueryWords[imin].GetHitlistEntry ();
+				m_dQueryWords[i].GetHitlistEntry ();
 
-			// get field number and mark a simple match
-			int j = pmin >> 24;
-			assert ( j>=0 && j<m_tSchema.m_dFields.GetLength() );
-			matchWeight[j] = 1;
-
-			// find max proximity relevance
-			if ( m_dQueryWords[imin].m_iQueryPos - pmin == k )
-			{
-				curPhraseWeight[j]++;
-				if ( phraseWeight[j] < curPhraseWeight[j] )
-					phraseWeight[j] = curPhraseWeight[j];
-			} else
-			{
-				curPhraseWeight[j] = 0;
-			}
-			k = m_dQueryWords[imin].m_iQueryPos - pmin;
-		}
-
-		// check if there was a perfect match
-		if ( pQuery->m_eMode==SPH_MATCH_PHRASE && m_dQueryWords.GetLength()>1 )
-		{
+			// init weighting
+			BYTE curPhraseWeight [ SPH_MAX_FIELDS ];
+			BYTE phraseWeight [ SPH_MAX_FIELDS ];
+			BYTE matchWeight [ SPH_MAX_FIELDS ];
 			for ( i=0; i<m_iWeights; i++ )
 			{
-				if ( phraseWeight[i]==m_dQueryWords.GetLength()-1 )
-					break;
+				curPhraseWeight[i] = 0;
+				phraseWeight[i] = 0;
+				matchWeight[i] = 0;
 			}
-			if ( i==m_iWeights )
+
+			DWORD k = INT_MAX;
+			for ( ;; )
 			{
-				// there was not. continue
-				i = 0;
-				docID++;
-				continue;
+				// scan until next hit in this document
+				DWORD pmin = INT_MAX;
+				int imin = -1;
+				for ( i=0; i<m_dQueryWords.GetLength(); i++ )
+				{
+					if ( !m_dQueryWords[i].m_iHitPos )
+						continue;
+					if ( pmin>m_dQueryWords[i].m_iHitPos )
+					{
+						pmin = m_dQueryWords[i].m_iHitPos;
+						imin = i;
+					}
+				}
+				if ( imin<0 )
+					break;
+				m_dQueryWords[imin].GetHitlistEntry ();
+
+				// get field number and mark a simple match
+				int j = pmin >> 24;
+				assert ( j>=0 && j<m_tSchema.m_dFields.GetLength() );
+				matchWeight[j] = 1;
+
+				// find max proximity relevance
+				if ( m_dQueryWords[imin].m_iQueryPos - pmin == k )
+				{
+					curPhraseWeight[j]++;
+					if ( phraseWeight[j] < curPhraseWeight[j] )
+						phraseWeight[j] = curPhraseWeight[j];
+				} else
+				{
+					curPhraseWeight[j] = 0;
+				}
+				k = m_dQueryWords[imin].m_iQueryPos - pmin;
 			}
+
+			// check if there was a perfect match
+			if ( pQuery->m_eMode==SPH_MATCH_PHRASE && m_dQueryWords.GetLength()>1 )
+			{
+				for ( i=0; i<m_iWeights; i++ )
+				{
+					if ( phraseWeight[i]==m_dQueryWords.GetLength()-1 )
+						break;
+				}
+				if ( i==m_iWeights )
+				{
+					// there was not. continue
+					i = 0;
+					docID++;
+					continue;
+				}
+			}
+
+			// sum simple match weights and phrase match weights
+			tMatch.m_iWeight = 0;
+			for ( i=0; i<m_iWeights; i++ )
+				tMatch.m_iWeight += m_dWeights[i] * ( matchWeight[i] + phraseWeight[i] );
 		}
 
-		// sum simple match weights and phrase match weights
-		tMatch.m_iWeight = 0;
-		for ( i=0; i<m_iWeights; i++ )
-			tMatch.m_iWeight += m_dWeights[i] * ( matchWeight[i] + phraseWeight[i] );
+		////////////////
+		// submit match
+		////////////////
 
 		// lookup externally stored docinfo
 		if ( bLateLookup )

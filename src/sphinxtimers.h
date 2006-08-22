@@ -27,6 +27,10 @@ DECLARE_TIMER ( query_load_words )
 DECLARE_TIMER ( query_match )
 DECLARE_TIMER ( query_sort )
 
+DECLARE_TIMER ( debug1 )
+DECLARE_TIMER ( debug2 )
+DECLARE_TIMER ( debug3 )
+
 //
 // $Id$
 //

@@ -3843,7 +3843,7 @@ struct MatchRelevanceLt_fn
 		if ( a.m_iWeight!=b.m_iWeight )
 			return a.m_iWeight < b.m_iWeight;
 
-		return a.m_iDocID < b.m_iDocID;
+		return a.m_iDocID > b.m_iDocID;
 	};
 };
 
@@ -3859,7 +3859,7 @@ struct MatchAttrLt_fn
 		if ( a.m_iWeight!=b.m_iWeight )
 			return a.m_iWeight < b.m_iWeight;
 
-		return a.m_iDocID < b.m_iDocID;
+		return a.m_iDocID > b.m_iDocID;
 	};
 };
 
@@ -3875,7 +3875,7 @@ struct MatchAttrGt_fn
 		if ( a.m_iWeight!=b.m_iWeight )
 			return a.m_iWeight < b.m_iWeight;
 
-		return a.m_iDocID < b.m_iDocID;
+		return a.m_iDocID > b.m_iDocID;
 	};
 };
 
@@ -3898,7 +3898,7 @@ public:
 		if ( a.m_pAttrs[t.m_iAttr]!=b.m_pAttrs[t.m_iAttr] )
 			return a.m_pAttrs[t.m_iAttr] < b.m_pAttrs[t.m_iAttr];
 
-		return a.m_iDocID < b.m_iDocID;
+		return a.m_iDocID > b.m_iDocID;
 	};
 
 protected:

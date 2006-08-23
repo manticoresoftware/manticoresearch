@@ -572,12 +572,11 @@ public:
 private:
 	int			m_iFD;
 	int			m_iPoolUsed;
-	int			m_iPoolOdd;
 	BYTE		m_dPool [ SPH_CACHE_WRITE ];
 	BYTE *		m_pPool;
 	bool		m_bError;
 
-	void		PutNibble ( int data );
+	void		PutByte ( int data );
 	void		Flush ();
 };
 
@@ -610,14 +609,13 @@ private:
 	int			m_iFD;
 	SphOffset_t	m_iPos;
 
-	int			m_iBufPos;
-	int			m_iBufOdd;
-	int			m_iBufUsed;
+	int			m_iBuffPos;
+	int			m_iBuffUsed;
 	int			m_iBufSize;
-	BYTE *		m_pBuf;
+	BYTE *		m_pBuff;
 
 private:
-	int			GetNibble ();
+	int			GetByte ();
 	void		UpdateCache ();
 };
 
@@ -1959,7 +1957,6 @@ int CSphWriter_VLN::OpenFile ()
 		return m_iFD;
 	m_iFD = ::open ( m_sName.cstr(), O_CREAT | O_RDWR | O_TRUNC | SPH_BINARY, 0644 );
 	m_iPoolUsed = 0;
-	m_iPoolOdd = 0;
 	m_iPos = 0;
 	return m_iFD;
 }
@@ -1976,21 +1973,12 @@ void CSphWriter_VLN::CloseFile()
 }
 
 
-void CSphWriter_VLN::PutNibble ( int data )
+void CSphWriter_VLN::PutByte ( int data )
 {
-	data &= 0x0f;
-	if ( m_iPoolOdd )
-	{
-		m_iPoolOdd = 0;
-		*m_pPool++ |= data;
-		if ( m_iPoolUsed==SPH_CACHE_WRITE )
-			Flush ();
-	} else
-	{
-		m_iPoolOdd = 1;
-		*m_pPool = (BYTE)(data<<4);
-		m_iPoolUsed++;
-	}
+	*m_pPool++ = BYTE( data & 0xff );
+	m_iPoolUsed++;
+	if ( m_iPoolUsed==SPH_CACHE_WRITE )
+		Flush ();
 	m_iPos++;
 }
 
@@ -1999,18 +1987,12 @@ void CSphWriter_VLN::PutBytes ( const void * pData, int iSize )
 {
 	const BYTE * b = (BYTE*) pData;
 	while ( iSize-->0 )
-	{
-		PutNibble ( (*b) >> 4 );
-		PutNibble ( (*b) & 0x0f );
-		b++;
-	}
+		PutByte ( *b++ );
 }
 
 
 void CSphWriter_VLN::PutRawBytes ( const void * pData, int iSize )
 {
-	assert ( !m_iPoolOdd );
-
 	if ( m_iPoolUsed+iSize>SPH_CACHE_WRITE )
 		Flush ();
 	assert ( m_iPoolUsed+iSize<=SPH_CACHE_WRITE );
@@ -2018,33 +2000,43 @@ void CSphWriter_VLN::PutRawBytes ( const void * pData, int iSize )
 	memcpy ( m_pPool, pData, iSize );
 	m_pPool += iSize;
 	m_iPoolUsed += iSize;
-	m_iPos += 2*iSize;
+	m_iPos += iSize;
 }
 
 
 void CSphWriter_VLN::ZipInt ( DWORD uValue )
 {
-	do
+	int iBytes = 1;
+
+	DWORD u = ( uValue>>7 );
+	while ( u )
 	{
-		int b = (int)(uValue & 0x07);
-		uValue >>= 3;
-		if ( uValue )
-			b |= 0x08;
-		PutNibble ( b );
-	} while ( uValue );
+		u >>= 7;
+		iBytes++;
+	}
+
+	while ( iBytes-- )
+		PutByte (
+			( 0x7f & ( uValue>>(7*iBytes) ) )
+			| ( iBytes ? 0x80 : 0 ) );
 }
 
 
 void CSphWriter_VLN::ZipOffset ( SphOffset_t uValue )
 {
-	do
+	int iBytes = 1;
+
+	SphOffset_t u = ( uValue>>7 );
+	while ( u )
 	{
-		int b = (int)(uValue & 0x07);
-		uValue >>= 3;
-		if ( uValue )
-			b |= 0x08;
-		PutNibble ( b );
-	} while ( uValue );
+		u >>= 7;
+		iBytes++;
+	}
+
+	while ( iBytes-- )
+		PutByte (
+			( 0x7f & ( uValue>>(7*iBytes) ) )
+			| ( iBytes ? 0x80 : 0 ) );
 }
 
 
@@ -2058,14 +2050,20 @@ void CSphWriter_VLN::ZipOffsets ( CSphVector<SphOffset_t> * pData )
 	while ( n-->0 )
 	{
 		SphOffset_t uValue = *pValue++;
-		do
+
+		int iBytes = 1;
+
+		SphOffset_t u = ( uValue>>7 );
+		while ( u )
 		{
-			int b = (int)(uValue & 0x07);
-			uValue >>= 3;
-			if ( uValue )
-				b |= 0x08;
-			PutNibble ( b );
-		} while ( uValue );
+			u >>= 7;
+			iBytes++;
+		}
+
+		while ( iBytes-- )
+			PutByte (
+				( 0x7f & ( uValue>>(7*iBytes) ) )
+				| ( iBytes ? 0x80 : 0 ) );
 	}
 }
 
@@ -2077,10 +2075,7 @@ void CSphWriter_VLN::Flush ()
 	if ( sphWrite ( m_iFD, m_dPool, m_iPoolUsed, m_sName.cstr() )!=m_iPoolUsed )
 		m_bError = true;
 
-	if ( m_iPoolOdd )
-		m_iPos++;
 	m_iPoolUsed = 0;
-	m_iPoolOdd = 0;
 	m_pPool = m_dPool;
 }
 
@@ -2088,16 +2083,9 @@ void CSphWriter_VLN::Flush ()
 void CSphWriter_VLN::SeekTo ( SphOffset_t iPos )
 {
 	assert ( iPos>=0 );
-	BYTE b;
 
 	Flush ();
-	sphSeek ( m_iFD, iPos>>1, SEEK_SET );
-	if ( iPos&1 )
-	{
-		::read ( m_iFD, &b, 1 );
-		sphSeek ( m_iFD, iPos>>1, SEEK_SET );
-		PutNibble ( b & 0x0f );
-	}
+	sphSeek ( m_iFD, iPos, SEEK_SET );
 	m_iPos = iPos;
 }
 
@@ -2114,18 +2102,17 @@ bool CSphWriter_VLN::IsError ()
 CSphReader_VLN::CSphReader_VLN ()
 	: m_iFD ( -1 )
 	, m_iPos ( 0 )
-	, m_iBufPos ( 0 )
-	, m_iBufOdd ( 0 )
-	, m_iBufUsed ( 0 )
+	, m_iBuffPos ( 0 )
+	, m_iBuffUsed ( 0 )
 	, m_iBufSize ( 262144 ) // FIXME!
-	, m_pBuf ( NULL )
+	, m_pBuff ( NULL )
 {
 }
 
 
 CSphReader_VLN::~CSphReader_VLN ()
 {
-	SafeDeleteArray ( m_pBuf );
+	SafeDeleteArray ( m_pBuff );
 }
 
 
@@ -2133,9 +2120,8 @@ void CSphReader_VLN::SetFile ( int iFD )
 {
 	m_iFD = iFD;
 	m_iPos = 0;
-	m_iBufPos = 0;
-	m_iBufOdd = 0;
-	m_iBufUsed = 0;
+	m_iBuffPos = 0;
+	m_iBuffUsed = 0;
 }
 
 
@@ -2148,15 +2134,14 @@ void CSphReader_VLN::Reset ()
 void CSphReader_VLN::SeekTo ( SphOffset_t iPos )
 {
 	assert ( iPos>=0 );
-	if ( iPos>=m_iPos && iPos<m_iPos+2*m_iBufUsed )
+	if ( iPos>=m_iPos && iPos<m_iPos+m_iBuffUsed )
 	{
-		m_iBufPos = (int)( ( iPos>>1 ) - ( m_iPos>>1 ) ); // reposition to proper byte
-		m_iBufOdd = ( iPos & 1 ) ? 1 : 0; // reposition to proper nibble
-		assert ( m_iBufPos<m_iBufUsed );
+		m_iBuffPos = (int)( iPos-m_iPos ); // reposition to proper byte
+		assert ( m_iBuffPos<m_iBuffUsed );
 	} else
 	{
 		m_iPos = iPos;
-		m_iBufUsed = 0;
+		m_iBuffUsed = 0;
 	}
 }
 
@@ -2167,49 +2152,38 @@ void CSphReader_VLN::UpdateCache ()
 	assert ( m_iFD>=0 );
 
 	// alloc buf on first actual read
-	if ( !m_pBuf )
-		m_pBuf = new BYTE [ m_iBufSize ];
+	if ( !m_pBuff )
+		m_pBuff = new BYTE [ m_iBufSize ];
 
 	// stream position could be changed externally
 	// so let's just hope that the OS optimizes redundant seeks
-	SphOffset_t iNewPos = ( m_iPos>>1 ) + m_iBufUsed;
+	SphOffset_t iNewPos = m_iPos + m_iBuffUsed;
 	sphSeek ( m_iFD, iNewPos, SEEK_SET );
 	
-	m_iBufPos = 0;
-	m_iBufUsed = ::read ( m_iFD, m_pBuf, m_iBufSize );
-	m_iBufOdd = ( m_iPos & 1 ) ? 1 : 0;
-	m_iPos = iNewPos<<1;
+	m_iBuffPos = 0;
+	m_iBuffUsed = ::read ( m_iFD, m_pBuff, m_iBufSize );
+	m_iPos = iNewPos;
 }
 
 
-int CSphReader_VLN::GetNibble ()
+int CSphReader_VLN::GetByte ()
 {
-	if ( m_iBufPos>=m_iBufUsed )
+	if ( m_iBuffPos>=m_iBuffUsed )
 		UpdateCache ();
-	assert ( m_iBufPos<m_iBufUsed );
+	assert ( m_iBuffPos<m_iBuffUsed );
 
-	if ( m_iBufOdd )
-	{
-		m_iBufOdd = 0;
-		return ( m_pBuf [ m_iBufPos++ ] & 0x0f );
-	} else
-	{
-		m_iBufOdd = 1;
-		return ( m_pBuf [ m_iBufPos ] >> 4 );
-	}
+	return m_pBuff [ m_iBuffPos++ ];
 }
 
 
 void CSphReader_VLN::GetRawBytes ( void * pData, int iSize )
 {
-	assert ( !m_iBufOdd );
-
-	if ( m_iBufPos+iSize>m_iBufUsed )
+	if ( m_iBuffPos+iSize>m_iBuffUsed )
 		UpdateCache ();
-	assert ( (m_iBufPos+iSize)<=m_iBufUsed );
+	assert ( (m_iBuffPos+iSize)<=m_iBuffUsed );
 
-	memcpy ( pData, m_pBuf+m_iBufPos, iSize );
-	m_iBufPos += iSize;
+	memcpy ( pData, m_pBuff+m_iBuffPos, iSize );
+	m_iBuffPos += iSize;
 }
 
 
@@ -2218,48 +2192,39 @@ void CSphReader_VLN::GetBytes ( void *data, int size )
 	BYTE * b = (BYTE*) data;
 
 	while ( size-->0 )
-	{
-		register int t = GetNibble()<<4;
-		t += GetNibble ();
-		*b++ = (BYTE)t;
-	}
+		*b++ = (BYTE) GetByte ();
 }
 
 
 DWORD CSphReader_VLN::UnzipInt ()
 {
-	register int offset = 0;
 	register DWORD b, v = 0;
-
 	do
 	{
-		b = GetNibble ();
-		v += ( (b&0x07) << offset );
-		offset += 3;
-	} while ( b&0x08 );
+		b = GetByte ();
+		v = ( v<<7 ) + ( b&0x7f );
+	} while ( b&0x80 );
 	return v;
 }
 
 
 SphOffset_t CSphReader_VLN::UnzipOffset ()
 {
-	register int offset = 0;
 	register DWORD b = 0;
 	register SphOffset_t v = 0;
 
 	do
 	{
-		b = GetNibble ();
-		v += ( SphOffset_t(b&0x07) << offset );
-		offset += 3;
-	} while ( b&0x08 );
+		b = GetByte ();
+		v = ( v<<7 ) + ( SphOffset_t(b&0x7f) );
+	} while ( b&0x80 );
 	return v;
 }
 
 const CSphReader_VLN & CSphReader_VLN::operator = ( const CSphReader_VLN & rhs )
 {
 	SetFile ( rhs.m_iFD );
-	SeekTo ( rhs.m_iPos + rhs.m_iBufPos*2 + rhs.m_iBufOdd );
+	SeekTo ( rhs.m_iPos + rhs.m_iBuffPos );
 	return *this;
 }
 

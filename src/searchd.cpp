@@ -1989,6 +1989,8 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 #define REMOVE_DUPES 1
 
+	int iSearched = 0;
+
 	if ( g_hDistIndexes(sIndex) )
 	{
 		// search through specified distributed index
@@ -2084,6 +2086,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			// do query
 			tQuery.m_pTokenizer = tServed.m_pTokenizer;
 			tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pTop );
+			iSearched++;
 
 #if REMOVE_DUPES
 			sphFlattenQueue ( pTop, pRes );
@@ -2093,7 +2096,6 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	} else
 	{
 		// search through the specified local indexes
-		int iSearched = 0;
 		char * p = (char*)sIndex.cstr();
 		while ( *p )
 		{
@@ -2133,7 +2135,6 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 				// do query
 				tQuery.m_pTokenizer = tServed.m_pTokenizer;
 				tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pTop );
-				iSearched++;
 
 #if REMOVE_DUPES
 				sphFlattenQueue ( pTop, pRes );
@@ -2156,6 +2157,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	}
 
 #if REMOVE_DUPES
+	if ( iSearched!=1 )
 	{
 		pRes->m_dMatches.Sort ();
 
@@ -2165,10 +2167,12 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 				pTop->Push ( pRes->m_dMatches[i] );
 		}
 		pRes->m_dMatches.Reset ();
-	}
-#endif
 
+		sphFlattenQueue ( pTop, pRes );
+	}
+#else
 	sphFlattenQueue ( pTop, pRes );
+#endif
 
 	pRes->m_iQueryTime = int ( 1000.0f*( sphLongTimer() - tmStart ) );
 

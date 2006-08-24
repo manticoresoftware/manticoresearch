@@ -150,7 +150,7 @@ int main ( int argc, char ** argv )
 	// configure
 	/////////////
 
-	tQuery.m_iMaxMatches = iStart + iLimit;
+	tQuery.m_iMaxMatches = 1000; // iStart + iLimit;
 
 	// load config
 	CSphConfigParser cp;

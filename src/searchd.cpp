@@ -2212,7 +2212,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		ARRAY_FOREACH ( i, pRes->m_tSchema.m_dFields )
 			iRespLen += 4 + strlen ( pRes->m_tSchema.m_dFields[i].m_sName.cstr() ); // namelen, name
 		ARRAY_FOREACH ( i, pRes->m_tSchema.m_dAttrs )
-			iRespLen += 8 + strlen ( pRes->m_tSchema.m_dFields[i].m_sName.cstr() ); // namelen, name, type
+			iRespLen += 8 + strlen ( pRes->m_tSchema.m_dAttrs[i].m_sName.cstr() ); // namelen, name, type
 	}
 
 	int iCount = Max ( Min ( iLimit, pRes->m_dMatches.GetLength()-iOffset ), 0 );

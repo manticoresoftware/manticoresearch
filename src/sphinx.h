@@ -78,10 +78,6 @@
 #define SPH_MAX_FILENAME_LEN	512
 #define SPH_MAX_FIELDS			32
 
-#define SPH_CLOG_BITS_DIR		10
-#define SPH_CLOG_BITS_PAGE		22
-#define SPH_CLOG_DIR_PAGES		(1 << SPH_CLOG_BITS_DIR)
-
 #define SPH_CACHE_WRITE			1048576
 
 /////////////////////////////////////////////////////////////////////////////

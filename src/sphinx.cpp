@@ -714,6 +714,12 @@ public:
 
 /////////////////////////////////////////////////////////////////////////////
 
+struct CSphWordlistCheckpoint
+{
+	DWORD	m_iWordID;
+	DWORD	m_iWordlistOffset;
+};
+
 /// this is my actual VLN-compressed phrase index implementation
 struct CSphIndex_VLN : CSphIndex
 {
@@ -726,40 +732,45 @@ struct CSphIndex_VLN : CSphIndex
 	virtual const CSphSchema *	Preload ();
 
 private:
+	static const int			WORDLIST_CHECKPOINT		= 1024;		///< wordlist checkpoints frequency
+	static const int			WRITE_BUFFER_SIZE		= 262144;	///< my write buffer size
+
 	CSphString					m_sFilename;
 	SphOffset_t					m_iFilePos;
-	CSphWriter_VLN *			fdIndex;
+	CSphWriter_VLN *			m_fdWordlist;
 	CSphWriter_VLN *			fdData;
 
-	SphOffset_t					cidxPagesDir [ SPH_CLOG_DIR_PAGES ];
 	CSphVector<SphOffset_t>		m_dDoclist;
 
 	ESphDocinfo					m_eDocinfo;
 	CSphDocInfo					m_tMin;				///< min attribute values tracker
 
-	const static int			WRITE_BUFFER_SIZE = 262144;		///< my write buffer size
 	BYTE *						m_pWriteBuffer;					///< my write buffer
 
-	CSphWordHit					m_tLastHit;			///< VLN writer state
-	SphOffset_t					m_iLastDoclistPos;	///< VLN writer state
-	SphOffset_t					m_iLastHitlistPos;	///< VLN writer state
-	DWORD						m_iLastPageID;		///< VLN writer state
-	int							m_iLastWordDocs;	///< VLN writer state
-	int							m_iLastWordHits;	///< VLN writer state
-	DWORD						m_uFields;			///< VLN writer state
+	CSphWordHit					m_tLastHit;			///< hitlist entry
+	SphOffset_t					m_iLastHitlistPos;	///< doclist entry
+	DWORD						m_uFields;			///< doclist entry
+	SphOffset_t					m_iLastDoclistPos;	///< wordlist entry
+	int							m_iLastWordDocs;	///< wordlist entry
+	int							m_iLastWordHits;	///< wordlist entry
+
+	int									m_iWordlistEntries;		///< wordlist entries written since last checkpoint
+	CSphVector<CSphWordlistCheckpoint>	m_dWordlistCheckpoints;	///< wordlist checkpoint offsets
 
 	CSphVector<CSphQueryWord,8>	m_dQueryWords;		///< search query words for "simple" query types (ie. match all/any/phrase)
 
 	int							m_iWeights;						///< search query field weights count
 	int							m_dWeights [ SPH_MAX_FIELDS ];	///< search query field weights count
 
-	CSphReader_VLN				m_rdIndex;
+private:
+	DWORD *						m_pDocinfo;				///< my docinfo cache
+	int							m_iDocinfo;				///< my docinfo cache size
 
-	DWORD *						m_pDocinfo;			///< my docinfo cache
-	int							m_iDocinfo;			///< my docinfo cache size
+	BYTE *						m_pWordlist;			///< my wordlist cache
+	CSphWordlistCheckpoint *	m_pWordlistCheckpoints;	///< my wordlist cache
+	int							m_iWordlistCheckpoints;	///< my wordlist cache
 
-	bool						m_bNewSchema;		///< if there's .sph schema file available
-	bool						m_bPreloaded;		///< if schema/docinfos are preloaded
+	bool						m_bPreloaded;			///< if schema/docinfos are preloaded
 
 private:
 	int							OpenFile ( char * ext, int mode );
@@ -2035,7 +2046,7 @@ void CSphWriter_VLN::ZipOffset ( SphOffset_t uValue )
 
 	while ( iBytes-- )
 		PutByte (
-			( 0x7f & ( uValue>>(7*iBytes) ) )
+			( 0x7f & (DWORD)( uValue>>(7*iBytes) ) )
 			| ( iBytes ? 0x80 : 0 ) );
 }
 
@@ -2062,7 +2073,7 @@ void CSphWriter_VLN::ZipOffsets ( CSphVector<SphOffset_t> * pData )
 
 		while ( iBytes-- )
 			PutByte (
-				( 0x7f & ( uValue>>(7*iBytes) ) )
+				( 0x7f & (DWORD)( uValue>>(7*iBytes) ) )
 				| ( iBytes ? 0x80 : 0 ) );
 	}
 }
@@ -2196,6 +2207,18 @@ void CSphReader_VLN::GetBytes ( void *data, int size )
 }
 
 
+DWORD sphUnzipInt ( BYTE * & pBuf )
+{
+	register DWORD b, v = 0;
+	do
+	{
+		b = *pBuf++;
+		v = ( v<<7 ) + ( b&0x7f );
+	} while ( b&0x80 );
+	return v;
+}
+
+
 DWORD CSphReader_VLN::UnzipInt ()
 {
 	register DWORD b, v = 0;
@@ -2208,9 +2231,22 @@ DWORD CSphReader_VLN::UnzipInt ()
 }
 
 
-SphOffset_t CSphReader_VLN::UnzipOffset ()
+SphOffset_t sphUnzipOffset ( BYTE * & pBuf )
 {
 	register DWORD b = 0;
+	register SphOffset_t v = 0;
+	do
+	{
+		b = *pBuf++;
+		v = ( v<<7 ) + ( b&0x7f );
+	} while ( b&0x80 );
+	return v;
+}
+
+
+SphOffset_t CSphReader_VLN::UnzipOffset ()
+{
+	register DWORD b;
 	register SphOffset_t v = 0;
 
 	do
@@ -2515,25 +2551,24 @@ CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename )
 {
 	m_sFilename = sFilename;
 
-	fdIndex = NULL;
+	m_fdWordlist = NULL;
 	fdData = NULL;
 
 	m_pWriteBuffer = NULL;
 
-	m_iLastDoclistPos = 0;
-	m_iLastHitlistPos = 0;
-	m_iLastWordDocs = 0;
-	m_iLastWordHits = 0;
-	m_iLastPageID = 0xffffffff;
 	m_tLastHit.m_iDocID = 0;
 	m_tLastHit.m_iWordID = 0;
 	m_tLastHit.m_iWordPos = 0;
+	m_iLastHitlistPos = 0;
 	m_uFields = 0;
+	m_iLastDoclistPos = 0;
+	m_iLastWordDocs = 0;
+	m_iLastWordHits = 0;
+	m_iWordlistEntries = 0;
 
 	m_eDocinfo = SPH_DOCINFO_NONE;
 	m_pDocinfo = NULL;
-
-	m_bNewSchema = false;
+	m_pWordlist = NULL;
 	m_bPreloaded = false;
 }
 
@@ -2541,6 +2576,7 @@ CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename )
 CSphIndex_VLN::~CSphIndex_VLN ()
 {
 	SafeDeleteArray ( m_pDocinfo );
+	SafeDeleteArray ( m_pWordlist );
 }
 
 
@@ -2681,10 +2717,10 @@ int CSphIndex_VLN::cidxCreate ()
 	char sBuf [ SPH_MAX_FILENAME_LEN ];
 
 	snprintf ( sBuf, sizeof(sBuf), "%s.spi", m_sFilename.cstr() );
-	fdIndex = new CSphWriter_VLN ( sBuf );
-	if ( fdIndex->OpenFile()<0 )
+	m_fdWordlist = new CSphWriter_VLN ( sBuf );
+	if ( m_fdWordlist->OpenFile()<0 )
 	{
-		SafeDelete ( fdIndex );
+		SafeDelete ( m_fdWordlist );
 		return 0;
 	}
 
@@ -2692,7 +2728,7 @@ int CSphIndex_VLN::cidxCreate ()
 	fdData = new CSphWriter_VLN ( sBuf );
 	if ( fdData->OpenFile()<0 )
 	{
-		SafeDelete ( fdIndex );
+		SafeDelete ( m_fdWordlist );
 		SafeDelete ( fdData );
 		return 0;
 	}
@@ -2701,11 +2737,8 @@ int CSphIndex_VLN::cidxCreate ()
 	// and VLB encoding of offsets would fuckup)
 	BYTE bDummy = 1;
 	fdData->PutBytes ( &bDummy, 1 );
+	m_fdWordlist->PutBytes ( &bDummy, 1 );
 
-	for ( int i=0; i<SPH_CLOG_DIR_PAGES; i++ )
-		cidxPagesDir[i] = -1;
-
-	fdIndex->PutRawBytes ( cidxPagesDir, sizeof(cidxPagesDir) );
 	return 1;
 }
 
@@ -2736,56 +2769,63 @@ void CSphIndex_VLN::cidxHit ( CSphWordHit * hit, DWORD * pAttrs )
 			m_dDoclist.Add ( m_uFields );
 			m_uFields = 0;
 
-			// finish writing wordlist entry
+			// flush wordlist entry
 			assert ( fdData->m_iPos > m_iLastDoclistPos );
 			assert ( m_iLastWordDocs );
 			assert ( m_iLastWordHits );
 
-			fdIndex->ZipOffset ( fdData->m_iPos - m_iLastDoclistPos );
-			fdIndex->ZipInt ( m_iLastWordDocs );
-			fdIndex->ZipInt ( m_iLastWordHits );
+			m_fdWordlist->ZipOffset ( fdData->m_iPos - m_iLastDoclistPos );
+			m_fdWordlist->ZipInt ( m_iLastWordDocs );
+			m_fdWordlist->ZipInt ( m_iLastWordHits );
 
 			m_iLastDoclistPos = fdData->m_iPos;
 			m_iLastWordDocs = 0;
 			m_iLastWordHits = 0;
 
-			// write doclist
+			m_iWordlistEntries++;
+
+			// flush doclist
 			fdData->ZipOffsets ( &m_dDoclist );
 			fdData->ZipInt ( 0 );
 			m_dDoclist.Reset ();
 
-			// restart doclist deltas
 			m_tLastHit.m_iDocID = 0;
 			m_iLastHitlistPos = 0;
 		}
 
-		// flush last wordlist
+		// flush wordlist, if this is the end
 		if ( !hit->m_iWordPos )
 		{
-			// close wordlist
-			fdIndex->ZipInt ( 0 );
+			m_fdWordlist->ZipInt ( 0 ); // indicate checkpoint
 			return;
 		}
 
-		// close prev wordlist, if next wordlist map page reached
-		DWORD iPageID = hit->m_iWordID >> SPH_CLOG_BITS_PAGE;
-		if ( m_iLastPageID!=iPageID )
+		// insert wordlist checkpoint (ie. restart delta coding) once per WORDLIST_CHECKPOINT entries
+		if ( m_iWordlistEntries==WORDLIST_CHECKPOINT )
 		{
-			// close wordlist
-			fdIndex->ZipInt ( 0 );
-
-			// restart wordlist deltas
-			m_tLastHit.m_iWordID = 0; 
+			m_fdWordlist->ZipInt ( 0 ); // indicate checkpoint
+			m_tLastHit.m_iWordID = 0;
 			m_iLastDoclistPos = 0;
+			m_iLastWordDocs = 0;
+			m_iLastWordHits = 0;
 
-			// next map page
-			m_iLastPageID = iPageID;
-			cidxPagesDir [ iPageID ] = fdIndex->m_iPos;
+			m_iWordlistEntries = 0;
 		}
 
-		// begin writing wordlist entry
+		// begin new wordlist entry
+		if ( m_iWordlistEntries==0 )
+		{
+			assert ( m_fdWordlist->m_iPos<=UINT_MAX );
+
+			CSphWordlistCheckpoint tCheckpoint;
+			tCheckpoint.m_iWordID = hit->m_iWordID;
+			tCheckpoint.m_iWordlistOffset = (DWORD) m_fdWordlist->m_iPos;
+
+			m_dWordlistCheckpoints.Add ( tCheckpoint );
+		}
+
 		assert ( hit->m_iWordID > m_tLastHit.m_iWordID );
-		fdIndex->ZipInt ( hit->m_iWordID - m_tLastHit.m_iWordID );
+		m_fdWordlist->ZipInt ( hit->m_iWordID - m_tLastHit.m_iWordID );
 		m_tLastHit.m_iWordID = hit->m_iWordID;
 	}
 
@@ -2860,7 +2900,15 @@ void CSphIndex_VLN::ReadSchemaColumn ( CSphReader_VLN & rdInfo, CSphColumnInfo &
 
 bool CSphIndex_VLN::cidxDone()
 {
+	// flush wordlist checkpoints
+	SphOffset_t iCheckpointsPos = m_fdWordlist->m_iPos;
+	if ( m_dWordlistCheckpoints.GetLength() )
+		m_fdWordlist->PutRawBytes ( &m_dWordlistCheckpoints[0], m_dWordlistCheckpoints.GetLength()*sizeof(CSphWordlistCheckpoint) );
+
+	/////////////////
 	// create header
+	/////////////////
+
 	char sBuf [ SPH_MAX_FILENAME_LEN ];
 	snprintf ( sBuf, sizeof(sBuf), "%s.sph", m_sFilename.cstr() );
 
@@ -2871,35 +2919,38 @@ bool CSphIndex_VLN::cidxDone()
 		return false;
 	}
 
+	// docinfo
 	fdInfo->PutDword ( m_eDocinfo );
 
+	// schema
 	fdInfo->PutDword ( m_tSchema.m_dFields.GetLength() );
 	ARRAY_FOREACH ( i, m_tSchema.m_dFields )
 		WriteSchemaColumn ( fdInfo, m_tSchema.m_dFields[i] );
-
 	fdInfo->PutDword ( m_tSchema.m_dAttrs.GetLength() );
 	ARRAY_FOREACH ( i, m_tSchema.m_dAttrs )
 		WriteSchemaColumn ( fdInfo, m_tSchema.m_dAttrs[i] );
 
+	// min doc
 	fdInfo->PutDword ( m_tMin.m_iDocID );
-
 	if ( m_eDocinfo==SPH_DOCINFO_INLINE )
 		fdInfo->PutRawBytes ( m_tMin.m_pAttrs, m_tMin.m_iAttrs*sizeof(DWORD) );
 
+	// wordlist checkpoints
+	fdInfo->PutRawBytes ( &iCheckpointsPos, sizeof(SphOffset_t) );
+	fdInfo->PutDword ( m_dWordlistCheckpoints.GetLength() );
+
+	////////////////////////
+	// close all data files
+	////////////////////////
+
 	fdInfo->CloseFile ();
-
-	// finalize doclist hash file
-	fdIndex->SeekTo ( 0 );
-	fdIndex->PutRawBytes ( cidxPagesDir, sizeof(cidxPagesDir) );
-	fdIndex->CloseFile ();
-
-	// finalize data file
 	fdData->CloseFile ();
+	m_fdWordlist->CloseFile ();
 
-	if ( fdIndex->IsError() || fdData->IsError() )
+	if ( m_fdWordlist->IsError() || fdData->IsError() )
 		fprintf ( stdout, "ERROR: write() failed, out of disk space?\n" );
 
-	SafeDelete ( fdIndex );
+	SafeDelete ( m_fdWordlist );
 	SafeDelete ( fdData );
 	SafeDelete ( fdInfo );
 	return true;
@@ -3515,7 +3566,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	// sort docinfos
 	/////////////////
 
-	if ( m_eDocinfo==SPH_DOCINFO_EXTERN )
+	if ( m_eDocinfo==SPH_DOCINFO_EXTERN && dHitBlocks.GetLength() )
 	{
 		// initialize writer
 		CSphAutofile fdDocinfo ( OpenFile ( "spa", O_CREAT | O_RDWR | O_TRUNC ) );
@@ -3624,9 +3675,8 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	int iRawBlocks = dBins.GetLength();
 	if ( iRawBlocks==0 )
 	{
-		CSphAutofile fdTruncSPI ( OpenFile ( "spi", O_CREAT | O_RDWR | O_TRUNC ) );
-		CSphAutofile fdTruncSPD ( OpenFile ( "spd", O_CREAT | O_RDWR | O_TRUNC ) );
-		return ( fdTruncSPI.GetFD()>=0 && fdTruncSPD.GetFD()>=0 ) ? 1 : 0;
+		// FIXME! should also unlink old .spa here
+		m_eDocinfo = SPH_DOCINFO_INLINE;
 	}
 
 	// initialize readers
@@ -3654,96 +3704,100 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	// final sort
 	//////////////
 
-	CSphHitQueue tQueue ( iRawBlocks );
-	CSphWordHit tHit;
-
-	m_tLastHit.m_iDocID = 0;
-	m_tLastHit.m_iWordID = 0;
-	m_tLastHit.m_iWordPos = 0;
-
-	// initial fill
-	int iAttrs = ( m_eDocinfo==SPH_DOCINFO_INLINE ) ? m_tSchema.m_dAttrs.GetLength() : 0;
-	CSphAutoArray<DWORD> dInlineAttrs ( iRawBlocks*iAttrs );
-
-	int * bActive = new int [ iRawBlocks ];
-	for ( int i=0; i<iRawBlocks; i++ )
+	if ( iRawBlocks )
 	{
-		if ( !dBins[i]->ReadHit ( &tHit, iAttrs, dInlineAttrs+i*iAttrs ) )
+		CSphHitQueue tQueue ( iRawBlocks );
+		CSphWordHit tHit;
+
+		m_tLastHit.m_iDocID = 0;
+		m_tLastHit.m_iWordID = 0;
+		m_tLastHit.m_iWordPos = 0;
+
+		// initial fill
+		int iAttrs = ( m_eDocinfo==SPH_DOCINFO_INLINE ) ? m_tSchema.m_dAttrs.GetLength() : 0;
+		CSphAutoArray<DWORD> dInlineAttrs ( iRawBlocks*iAttrs );
+
+		int * bActive = new int [ iRawBlocks ];
+		for ( int i=0; i<iRawBlocks; i++ )
 		{
-			fprintf ( stdout, "ERROR: sort_hits: warmup failed; I/O error?\n" );
-			return 0;
-		}
-		bActive[i] = tHit.m_iWordID;
-		if ( bActive[i] )
-			tQueue.Push ( tHit, i );
-	}
-
-	// init progress meter
-	tProgress.m_ePhase = CSphIndexProgress::PHASE_SORT;
-	tProgress.m_iHits = 0;
-
-	// while the queue has data for us
-	// FIXME! analyze binsRead return code
-	int iHitsSorted = 0;
-	while ( tQueue.m_iUsed )
-	{
-		int iBin = tQueue.m_pData->m_iBin;
-
-		// pack and emit queue root
-		tQueue.m_pData->m_iDocID -= m_tMin.m_iDocID;
-		cidxHit ( tQueue.m_pData, iAttrs ? dInlineAttrs+iBin*iAttrs : NULL );
-		if ( fdIndex->IsError() || fdData->IsError() )
-		{
-			fprintf ( stdout, "ERROR: write() failed, out of disk space?\n" );
-			return 0;
+			if ( !dBins[i]->ReadHit ( &tHit, iAttrs, dInlineAttrs+i*iAttrs ) )
+			{
+				fprintf ( stdout, "ERROR: sort_hits: warmup failed; I/O error?\n" );
+				return 0;
+			}
+			bActive[i] = tHit.m_iWordID;
+			if ( bActive[i] )
+				tQueue.Push ( tHit, i );
 		}
 
-		// pop queue root and push next hit from popped bin
+		// init progress meter
+		tProgress.m_ePhase = CSphIndexProgress::PHASE_SORT;
+		tProgress.m_iHits = 0;
 
-		tQueue.Pop ();
-		if ( bActive[iBin] )
+		// while the queue has data for us
+		// FIXME! analyze binsRead return code
+		int iHitsSorted = 0;
+		while ( tQueue.m_iUsed )
 		{
-			dBins[iBin]->ReadHit ( &tHit, iAttrs, dInlineAttrs+iBin*iAttrs );
-			bActive[iBin] = tHit.m_iWordID;
+			int iBin = tQueue.m_pData->m_iBin;
+
+			// pack and emit queue root
+			tQueue.m_pData->m_iDocID -= m_tMin.m_iDocID;
+			cidxHit ( tQueue.m_pData, iAttrs ? dInlineAttrs+iBin*iAttrs : NULL );
+			if ( m_fdWordlist->IsError() || fdData->IsError() )
+			{
+				fprintf ( stdout, "ERROR: write() failed, out of disk space?\n" );
+				return 0;
+			}
+
+			// pop queue root and push next hit from popped bin
+
+			tQueue.Pop ();
 			if ( bActive[iBin] )
-				tQueue.Push ( tHit, iBin );
+			{
+				dBins[iBin]->ReadHit ( &tHit, iAttrs, dInlineAttrs+iBin*iAttrs );
+				bActive[iBin] = tHit.m_iWordID;
+				if ( bActive[iBin] )
+					tQueue.Push ( tHit, iBin );
+			}
+
+			// progress
+			if ( m_pProgress && ++iHitsSorted==1000000 )
+			{
+				tProgress.m_iHits += iHitsSorted;
+				m_pProgress ( &tProgress );
+				iHitsSorted = 0;
+			}
 		}
 
-		// progress
-		if ( m_pProgress && ++iHitsSorted==1000000 )
+		if ( m_pProgress )
 		{
 			tProgress.m_iHits += iHitsSorted;
 			m_pProgress ( &tProgress );
-			iHitsSorted = 0;
+
+			tProgress.m_ePhase = CSphIndexProgress::PHASE_SORT_END;
+			m_pProgress ( &tProgress );
 		}
+
+		// cleanup
+		SafeDeleteArray ( bActive );
+
+		ARRAY_FOREACH ( i, dBins )
+			SafeDelete ( dBins[i] );
+		dBins.Reset ();
+
+		CSphWordHit tFlush;
+		tFlush.m_iDocID = 0;
+		tFlush.m_iWordID = 0;
+		tFlush.m_iWordPos = 0;
+		cidxHit ( &tFlush, NULL );
 	}
 
-	if ( m_pProgress )
-	{
-		tProgress.m_iHits += iHitsSorted;
-		m_pProgress ( &tProgress );
-
-		tProgress.m_ePhase = CSphIndexProgress::PHASE_SORT_END;
-		m_pProgress ( &tProgress );
-	}
-
-	// cleanup
-	SafeDeleteArray ( bActive );
-
-	ARRAY_FOREACH ( i, dBins )
-		SafeDelete ( dBins[i] );
-	dBins.Reset ();
-
-	CSphWordHit tFlush;
-	tFlush.m_iDocID = 0;
-	tFlush.m_iWordID = 0;
-	tFlush.m_iWordPos = 0;
-	cidxHit ( &tFlush, NULL );
 	if ( !cidxDone () )
 		return 0;
 
 	// close and unlink temp files
-	// !COMMIT should be unlinked on early-exit too
+	// FIXME! should be unlinked on early-exit too
 	fdTmpHits.Close ();
 	fdTmpDocinfos.Close ();
 
@@ -4030,9 +4084,9 @@ void CSphIndex_VLN::LookupDocinfo ( CSphDocInfo & tMatch )
 	assert ( tMatch.m_iAttrs==m_tSchema.m_dAttrs.GetLength() );
 
 	int iStride = 1 + m_tSchema.m_dAttrs.GetLength();
-	tMatch.m_pAttrs = new DWORD [ m_tSchema.m_dAttrs.GetLength() ]; // !COMMIT pool these allocs
+	tMatch.m_pAttrs = new DWORD [ m_tSchema.m_dAttrs.GetLength() ]; // OPTIMIZE! pool these allocs
 
-	// !COMMIT optimize this; binsearch can be slow if swaps
+	// OPTIMIZE! optimize this; binsearch can be slow if swaps
 	DWORD * pFound = NULL;
 
 	if ( tMatch.m_iDocID==*m_pDocinfo )
@@ -4684,50 +4738,93 @@ void CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, CSphDict * pDict, I
 
 bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, int iFD )
 {
-	SphOffset_t iWordlistOffset = cidxPagesDir [ tWord.m_iWordID >> SPH_CLOG_BITS_PAGE ];
-	if ( iWordlistOffset<0 )
+	// binary search through checkpoints for a one whose range matches word ID
+	assert ( m_bPreloaded && m_pWordlist );
+
+	// empty index?
+	if ( !m_iWordlistCheckpoints )
 		return false;
 
-	// read wordlist
-	m_rdIndex.SeekTo ( iWordlistOffset );
+	int iWordlistOffset = -1;
+	CSphWordlistCheckpoint * pStart = m_pWordlistCheckpoints;
+	CSphWordlistCheckpoint * pEnd = m_pWordlistCheckpoints + m_iWordlistCheckpoints - 1;
 
-	// restart delta decoding
-	DWORD wordID = 0;
+	if ( tWord.m_iWordID<pStart->m_iWordID )
+		return false;
+
+	if ( tWord.m_iWordID>=pEnd->m_iWordID )
+	{
+		iWordlistOffset = pEnd->m_iWordlistOffset;
+	} else
+	{
+		while ( pEnd-pStart>1 )
+		{
+			CSphWordlistCheckpoint * pMid = pStart + (pEnd-pStart)/2;
+
+			if ( tWord.m_iWordID==pMid->m_iWordID )
+			{
+				pStart = pEnd = pMid;
+				break;
+
+			} else if ( tWord.m_iWordID<pMid->m_iWordID )
+			{
+				pEnd = pMid;
+
+			} else
+			{
+				pStart = pMid;
+			}
+		}
+
+		assert ( pStart > m_pWordlistCheckpoints );
+		assert ( pStart < m_pWordlistCheckpoints+m_iWordlistCheckpoints-1 );
+		assert ( tWord.m_iWordID >= pStart[0].m_iWordID && tWord.m_iWordID < pStart[1].m_iWordID );
+		iWordlistOffset = pStart->m_iWordlistOffset;
+	}
+	assert ( iWordlistOffset>=0 );
+
+	// decode wordlist chunk
+	BYTE * pBuf = m_pWordlist + iWordlistOffset;
+
+	DWORD iWordID = 0;
 	SphOffset_t iDoclistOffset = 0;
+
 	for ( ;; )
 	{
 		// unpack next word ID
-		DWORD iDeltaWord = m_rdIndex.UnzipInt();
+		DWORD iDeltaWord = sphUnzipInt ( pBuf );
+
 		if ( !iDeltaWord ) // wordlist chunk is over
 			break;
-		wordID += iDeltaWord;
+		iWordID += iDeltaWord;
+
+		// list is sorted, so if there was no match, there's no such word
+		if ( iWordID>tWord.m_iWordID )
+			return false;
 
 		// unpack next offset
-		SphOffset_t iDeltaOffset = m_rdIndex.UnzipOffset ();
+		SphOffset_t iDeltaOffset = sphUnzipOffset ( pBuf );
 		iDoclistOffset += iDeltaOffset;
 		assert ( iDeltaOffset );
 
 		// unpack doc/hit count
-		int iDocs = m_rdIndex.UnzipInt ();
-		int iHits = m_rdIndex.UnzipInt ();
+		int iDocs = sphUnzipInt ( pBuf );
+		int iHits = sphUnzipInt ( pBuf );
 		assert ( iDocs );
 		assert ( iHits );
 
-		// break on match or list end
-		if ( wordID>=tWord.m_iWordID )
+		// it matches?!
+		if ( iWordID==tWord.m_iWordID )
 		{
-			if ( wordID==tWord.m_iWordID )
-			{
-				tWord.m_rdDoclist.SetFile ( iFD );
-				tWord.m_rdDoclist.SeekTo ( iDoclistOffset );
-				tWord.m_rdHitlist.SetFile ( iFD );
-				tWord.m_iDocs = iDocs;
-				tWord.m_iHits = iHits;
-				return true;
-			}
-			return false;
+			tWord.m_rdDoclist.SetFile ( iFD );
+			tWord.m_rdDoclist.SeekTo ( iDoclistOffset );
+			tWord.m_rdHitlist.SetFile ( iFD );
+			tWord.m_iDocs = iDocs;
+			tWord.m_iHits = iHits;
+			return true;
 		}
 	}
+
 	return false;
 }
 
@@ -4742,68 +4839,36 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 
 	char sTmp [ SPH_MAX_FILENAME_LEN ];
 	snprintf ( sTmp, sizeof(sTmp), "%s.sph", m_sFilename.cstr() );
+
 	CSphAutofile tIndexInfo ( sTmp );
-
 	if ( tIndexInfo.GetFD()<0 )
-	{
-		m_bNewSchema = false;
+		return false;
 
-		// read pre-0.9.7 indexes
-		m_eDocinfo = SPH_DOCINFO_INLINE;
+	CSphReader_VLN rdInfo;
+	rdInfo.SetFile ( tIndexInfo.GetFD() );
 
-		m_tMin.Reset ();
-		m_tMin.m_iAttrs = 2;
-		m_tMin.m_pAttrs = new DWORD [ 2 ];
+	// docinfo
+	m_eDocinfo = (ESphDocinfo) rdInfo.GetDword ();
 
-		snprintf ( sTmp, sizeof(sTmp), "%s.spi", m_sFilename.cstr() );
-		CSphAutofile tIndex ( sTmp );
-		if ( tIndex.GetFD()<0 )
-			return NULL;
+	// schema
+	m_tSchema.m_dFields.Resize ( rdInfo.GetDword() );
+	ARRAY_FOREACH ( i, m_tSchema.m_dFields )
+		ReadSchemaColumn ( rdInfo, m_tSchema.m_dFields[i] );
+	m_tSchema.m_dAttrs.Resize ( rdInfo.GetDword() );
+	ARRAY_FOREACH ( i, m_tSchema.m_dAttrs )
+		ReadSchemaColumn ( rdInfo, m_tSchema.m_dAttrs[i] );
 
-		CSphReader_VLN rdIndex;
-		rdIndex.SetFile ( tIndex.GetFD() );
+	// min doc
+	m_tMin.m_iDocID = rdInfo.GetDword();
+	m_tMin.m_iAttrs = m_tSchema.m_dAttrs.GetLength();
+	m_tMin.m_pAttrs = new DWORD [ m_tSchema.m_dAttrs.GetLength() ];
+	if ( m_eDocinfo==SPH_DOCINFO_INLINE )
+		rdInfo.GetRawBytes ( m_tMin.m_pAttrs, sizeof(DWORD)*m_tSchema.m_dAttrs.GetLength() );
 
-		m_tSchema.m_dFields.Resize ( rdIndex.GetDword () );
-		ARRAY_FOREACH ( i, m_tSchema.m_dFields )
-		{
-			snprintf ( sTmp, sizeof(sTmp), "field_%d", i );
-			m_tSchema.m_dFields[i].m_sName = sTmp;
-
-		}
-
-		m_tSchema.m_dAttrs.Reset ();
-		m_tSchema.m_dAttrs.Add ( CSphColumnInfo ( "gid", SPH_ATTR_INTEGER ) );
-		m_tSchema.m_dAttrs.Add ( CSphColumnInfo ( "ts", SPH_ATTR_TIMESTAMP ) );
-
-		m_tMin.m_iDocID = rdIndex.GetDword ();
-		m_tMin.m_pAttrs[0] = rdIndex.GetDword ();
-		m_tMin.m_pAttrs[1] = rdIndex.GetDword ();
-
-	} else
-	{
-		m_bNewSchema = true;
-
-		CSphReader_VLN rdInfo;
-		rdInfo.SetFile ( tIndexInfo.GetFD() );
-
-		m_eDocinfo = (ESphDocinfo) rdInfo.GetDword ();
-
-		m_tSchema.m_dFields.Resize ( rdInfo.GetDword() );
-		ARRAY_FOREACH ( i, m_tSchema.m_dFields )
-			ReadSchemaColumn ( rdInfo, m_tSchema.m_dFields[i] );
-
-		m_tSchema.m_dAttrs.Resize ( rdInfo.GetDword() );
-		ARRAY_FOREACH ( i, m_tSchema.m_dAttrs )
-			ReadSchemaColumn ( rdInfo, m_tSchema.m_dAttrs[i] );
-
-		m_tMin.m_iDocID = rdInfo.GetDword();
-
-		m_tMin.m_iAttrs = m_tSchema.m_dAttrs.GetLength();
-		m_tMin.m_pAttrs = new DWORD [ m_tSchema.m_dAttrs.GetLength() ];
-
-		if ( m_eDocinfo==SPH_DOCINFO_INLINE )
-			rdInfo.GetRawBytes ( m_tMin.m_pAttrs, sizeof(DWORD)*m_tSchema.m_dAttrs.GetLength() );
-	}
+	// wordlist checkpoints
+	SphOffset_t iCheckpointsPos;
+	rdInfo.GetRawBytes ( &iCheckpointsPos, sizeof(SphOffset_t) );
+	m_iWordlistCheckpoints = rdInfo.GetDword ();
 
 	////////////////////
 	// preload docinfos
@@ -4822,11 +4887,38 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 			return NULL;
 
 		m_iDocinfo = stDocinfo.st_size / iEntrySize;
-		m_pDocinfo = new DWORD [ m_iDocinfo*iEntrySize/sizeof(DWORD) ]; // !COMMIT maybe use mmap
+		m_pDocinfo = new DWORD [ m_iDocinfo*iEntrySize/sizeof(DWORD) ]; // OPTIMIZE? maybe use mmap
 
 		if ( ::read ( tDocinfo.GetFD(), m_pDocinfo, m_iDocinfo*iEntrySize )!=m_iDocinfo*iEntrySize )
+		{
+			SafeDeleteArray ( m_pDocinfo );
 			return NULL;
+		}
 	}
+
+	////////////////////
+	// preload wordlist
+	////////////////////
+
+	snprintf ( sTmp, sizeof(sTmp), "%s.spi", m_sFilename.cstr() );
+	CSphAutofile tWordlist ( sTmp );
+
+	struct stat stWordlist;
+	if ( tWordlist.GetFD()<0 || stat ( sTmp, &stWordlist)<0 || stWordlist.st_size<=0 )
+	{
+		SafeDeleteArray ( m_pDocinfo );
+		return NULL;
+	}
+
+	m_pWordlist = new BYTE [ stWordlist.st_size ];
+	if ( ::read ( tWordlist.GetFD(), m_pWordlist, stWordlist.st_size )!=stWordlist.st_size )
+	{
+		SafeDeleteArray ( m_pDocinfo );
+		SafeDeleteArray ( m_pWordlist );
+		return NULL;
+	}
+
+	m_pWordlistCheckpoints = (CSphWordlistCheckpoint *)( m_pWordlist + iCheckpointsPos );
 
 	// all done
 	m_bPreloaded = true;
@@ -4855,41 +4947,15 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 	pResult->m_tSchema = m_tSchema;
 
 	char sTmp [ SPH_MAX_FILENAME_LEN ];
-
-	snprintf ( sTmp, sizeof(sTmp), "%s.spi", m_sFilename.cstr() );
-	CSphAutofile tWordlist ( sTmp );
-
 	snprintf ( sTmp, sizeof(sTmp), "%s.spd", m_sFilename.cstr() );
 	CSphAutofile tDoclist ( sTmp );
-
-	if ( tWordlist.GetFD()<0 || tDoclist.GetFD()<0 )
+	if ( tDoclist.GetFD()<0 )
 		return false;
-
-	snprintf ( sTmp, sizeof(sTmp), "%s.spi", m_sFilename.cstr() );
-	struct stat stWordlist;
-	if ( stat ( sTmp, &stWordlist)<0 )
-		return false;
-	if ( stWordlist.st_size==0 )
-		return true;
 
 	PROFILE_END ( query_init );
-	PROFILE_BEGIN ( query_load_dir );
-
-	// load index pages directory
-	m_rdIndex.SetFile ( tWordlist.GetFD() );
-
-	if ( !m_bNewSchema )
-	{
-		m_rdIndex.GetBytes ( cidxPagesDir, sizeof(cidxPagesDir) );
-	} else
-	{
-		m_rdIndex.GetRawBytes ( cidxPagesDir, sizeof(cidxPagesDir) );
-	}
 
 	// check that docinfo is preloaded
 	assert ( m_eDocinfo!=SPH_DOCINFO_EXTERN || m_pDocinfo );
-
-	PROFILE_END ( query_load_dir );
 
 	// split query into words
 	CSphQueryParser * pQueryParser = new CSphQueryParser ( pDict, pQuery->m_sQuery.cstr(),
@@ -5027,7 +5093,7 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 	}
 	PROFILE_END ( query_match );
 
-	if ( !pTop->UsesAttrs() )
+	if ( !pTop->UsesAttrs() && pTop->GetLength() )
 	{
 		// FIXME! hack
 		CSphMatch * pCur = const_cast < CSphMatch * > ( &pTop->Root() );
@@ -6506,7 +6572,7 @@ bool CSphSource_MySQL::Init ( const CSphSourceParams_MySQL & tParams )
 		else
 			m_tSchema.m_dAttrs.Add ( tCol );
 	}
-	// FIXME! !COMMIT warn if some attrs went unmapped
+	// FIXME! should warn if some attrs went unmapped
 
 	m_tDocInfo.m_iAttrs = m_tSchema.m_dAttrs.GetLength();
 	SafeDeleteArray ( m_tDocInfo.m_pAttrs );

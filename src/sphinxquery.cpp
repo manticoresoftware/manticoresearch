@@ -366,7 +366,9 @@ static void InvertExprLevel ( SphQueryExpr_t * pNode )
 	assert ( pNode->m_eType!=NODE_UNDEF );
 	assert ( pNode->m_pPrev==NULL );
 
+#ifndef NDEBUG
 	SphQueryExpr_e eOldType = pNode->m_eType;
+#endif
 	SphQueryExpr_e eNewType = ( pNode->m_eType==NODE_AND ) ? NODE_OR : NODE_AND;
 
 	for ( SphQueryExpr_t * pFix = pNode; pFix; pFix = pFix->m_pNext )
@@ -553,11 +555,13 @@ static bool IsEvaluable ( SphQueryExpr_t * pNode )
 
 	// now, this node is a level start, so we need to check its type
 	// and all the siblings to find out if the level is evaluable
+#ifndef NDEBUG
 	for ( SphQueryExpr_t * pCur = pNode->m_pNext; pCur; pCur = pCur->m_pNext )
 	{
 		bool bRes = IsEvaluable ( pCur );
 		assert ( bRes==pCur->m_bEvaluable );
 	}
+#endif
 
 	switch ( pNode->m_eType )
 	{

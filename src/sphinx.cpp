@@ -4781,8 +4781,8 @@ bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, int iFD )
 			}
 		}
 
-		assert ( pStart > m_pWordlistCheckpoints );
-		assert ( pStart < m_pWordlistCheckpoints+m_iWordlistCheckpoints-1 );
+		assert ( pStart >= m_pWordlistCheckpoints );
+		assert ( pStart <= m_pWordlistCheckpoints+m_iWordlistCheckpoints-1 );
 		assert ( tWord.m_iWordID >= pStart[0].m_iWordID && tWord.m_iWordID < pStart[1].m_iWordID );
 		iWordlistOffset = pStart->m_iWordlistOffset;
 	}
@@ -5019,7 +5019,7 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 			m_dQueryWords[i].m_pInlineFixup = NULL;
 		}
 		m_dQueryWords[i].m_iMinID = m_tMin.m_iDocID;
-		m_dQueryWords[i].m_tDoc.m_iDocID = m_tMin.m_iDocID;
+		m_dQueryWords[i].m_tDoc.m_iDocID = 0;
 	}
 	SafeDelete ( pQueryParser );
 

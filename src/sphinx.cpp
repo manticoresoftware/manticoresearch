@@ -766,7 +766,7 @@ private:
 	DWORD *						m_pDocinfo;				///< my docinfo cache
 	int							m_iDocinfo;				///< my docinfo cache size
 
-	static const int			DOCINFO_HASH_BITS = 16;	// FIXME! make this configurable
+	static const int			DOCINFO_HASH_BITS = 18;	// FIXME! make this configurable
 	DWORD *						m_pDocinfoHash;
 	int							m_iDocinfoIdShift;
 

@@ -766,6 +766,10 @@ private:
 	DWORD *						m_pDocinfo;				///< my docinfo cache
 	int							m_iDocinfo;				///< my docinfo cache size
 
+	static const int			DOCINFO_HASH_BITS = 16;	// FIXME! make this configurable
+	DWORD *						m_pDocinfoHash;
+	int							m_iDocinfoIdShift;
+
 	BYTE *						m_pWordlist;			///< my wordlist cache
 	CSphWordlistCheckpoint *	m_pWordlistCheckpoints;	///< my wordlist cache
 	int							m_iWordlistCheckpoints;	///< my wordlist cache
@@ -2568,6 +2572,8 @@ CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename )
 
 	m_eDocinfo = SPH_DOCINFO_NONE;
 	m_pDocinfo = NULL;
+	m_pDocinfoHash = NULL;
+	m_iDocinfoIdShift = 0;
 	m_pWordlist = NULL;
 	m_bPreloaded = false;
 }
@@ -4083,23 +4089,23 @@ void CSphIndex_VLN::LookupDocinfo ( CSphDocInfo & tMatch )
 	assert ( tMatch.m_pAttrs );
 	assert ( tMatch.m_iAttrs==m_tSchema.m_dAttrs.GetLength() );
 
-	int iStride = 1 + m_tSchema.m_dAttrs.GetLength();
+	DWORD uHash = ( tMatch.m_iDocID - m_pDocinfo[0] ) >> m_iDocinfoIdShift;
+	int iStart = m_pDocinfoHash [ uHash ];
+	int iEnd = m_pDocinfoHash [ uHash+1 ] - 1;
 
-	// OPTIMIZE! optimize this; binsearch can be slow if swaps
+	int iStride = 1 + m_tSchema.m_dAttrs.GetLength();
 	DWORD * pFound = NULL;
 
-	if ( tMatch.m_iDocID==*m_pDocinfo )
+	if ( tMatch.m_iDocID==m_pDocinfo [ iStart*iStride ] )
 	{
 		pFound = m_pDocinfo;
 
-	} else if ( tMatch.m_iDocID==m_pDocinfo [ (m_iDocinfo-1)*iStride ] )
+	} else if ( tMatch.m_iDocID==m_pDocinfo [ iEnd*iStride ] )
 	{
-		pFound = m_pDocinfo + (m_iDocinfo-1)*iStride;
+		pFound = m_pDocinfo + iEnd*iStride;
 
 	} else
 	{
-		int iStart = 0;
-		int iEnd = m_iDocinfo-1;
 		while ( iEnd-iStart>1 )
 		{
 			// check if nothing found
@@ -4876,7 +4882,8 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 	if ( m_eDocinfo==SPH_DOCINFO_EXTERN )
 	{
 		SafeDeleteArray ( m_pDocinfo );
-		int iEntrySize = sizeof(DWORD)*(1+m_tSchema.m_dAttrs.GetLength());
+		int iStride = 1+m_tSchema.m_dAttrs.GetLength();
+		int iEntrySize = sizeof(DWORD)*iStride;
 
 		snprintf ( sTmp, sizeof(sTmp), "%s.spa", m_sFilename.cstr() );
 		CSphAutofile tDocinfo ( sTmp );
@@ -4886,13 +4893,40 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 			return NULL;
 
 		m_iDocinfo = stDocinfo.st_size / iEntrySize;
-		m_pDocinfo = new DWORD [ m_iDocinfo*iEntrySize/sizeof(DWORD) ]; // OPTIMIZE? maybe use mmap
+		m_pDocinfo = new DWORD [ m_iDocinfo*iStride ]; // OPTIMIZE? maybe use mmap
 
 		if ( ::read ( tDocinfo.GetFD(), m_pDocinfo, m_iDocinfo*iEntrySize )!=m_iDocinfo*iEntrySize )
 		{
 			SafeDeleteArray ( m_pDocinfo );
 			return NULL;
 		}
+
+		// build hash
+		m_pDocinfoHash = new DWORD [ (1<<DOCINFO_HASH_BITS) + 1 ];
+
+		DWORD uRange = m_pDocinfo [ (m_iDocinfo-1)*iStride ] - m_pDocinfo[0];
+		m_iDocinfoIdShift = 0;
+		while ( uRange >= (1<<DOCINFO_HASH_BITS) )
+		{
+			m_iDocinfoIdShift++;
+			uRange >>= 1;
+		}
+
+		DWORD uLastHash = 0;
+		m_pDocinfoHash[0] = 0;
+
+		for ( int i=1; i<m_iDocinfo; i++ )
+		{
+			DWORD uHash = ( m_pDocinfo [ i*iStride ] - m_pDocinfo[0] ) >> m_iDocinfoIdShift;
+			if ( uHash==uLastHash )
+				continue;
+
+			while ( uLastHash<uHash )
+				m_pDocinfoHash [ ++uLastHash ] = i;
+
+			uLastHash = uHash;
+		}
+		m_pDocinfoHash [ ++uLastHash ] = m_iDocinfo;
 	}
 
 	////////////////////

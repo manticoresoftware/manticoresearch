@@ -4084,7 +4084,6 @@ void CSphIndex_VLN::LookupDocinfo ( CSphDocInfo & tMatch )
 	assert ( tMatch.m_iAttrs==m_tSchema.m_dAttrs.GetLength() );
 
 	int iStride = 1 + m_tSchema.m_dAttrs.GetLength();
-	tMatch.m_pAttrs = new DWORD [ m_tSchema.m_dAttrs.GetLength() ]; // OPTIMIZE! pool these allocs
 
 	// OPTIMIZE! optimize this; binsearch can be slow if swaps
 	DWORD * pFound = NULL;

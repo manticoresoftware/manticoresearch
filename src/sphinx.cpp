@@ -592,7 +592,7 @@ public:
 	void		SetFile ( int iFD );
 	void		Reset ();
 
-	void		SeekTo ( SphOffset_t iPos );
+	void		SeekTo ( SphOffset_t iPos, int iSizeHint );
 
 	void		GetRawBytes ( void * pData, int iSize );
 	void		GetBytes ( void * data, int size );
@@ -611,13 +611,18 @@ private:
 
 	int			m_iBuffPos;
 	int			m_iBuffUsed;
-	int			m_iBufSize;
 	BYTE *		m_pBuff;
+	int			m_iSizeHint;	///< how much do we expect to read
+
+	static const int	READ_BUFFER_SIZE		= 262144;
+	static const int	READ_DEFAULT_BLOCK		= 32768;
 
 private:
 	int			GetByte ();
 	void		UpdateCache ();
 };
+
+#define READ_NO_SIZE_HINT 0
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -690,7 +695,7 @@ public:
 			assert ( iDeltaPos>0 );
 
 			m_iHitlistPos += iDeltaPos;
-			m_rdHitlist.SeekTo ( m_iHitlistPos );
+			m_rdHitlist.SeekTo ( m_iHitlistPos, READ_NO_SIZE_HINT );
 			m_iHitPos = 0;
 
 			// FIXME? incompatible with 096
@@ -2119,8 +2124,8 @@ CSphReader_VLN::CSphReader_VLN ()
 	, m_iPos ( 0 )
 	, m_iBuffPos ( 0 )
 	, m_iBuffUsed ( 0 )
-	, m_iBufSize ( 262144 ) // FIXME!
 	, m_pBuff ( NULL )
+	, m_iSizeHint ( 0 )
 {
 }
 
@@ -2146,17 +2151,19 @@ void CSphReader_VLN::Reset ()
 }
 
 
-void CSphReader_VLN::SeekTo ( SphOffset_t iPos )
+void CSphReader_VLN::SeekTo ( SphOffset_t iPos, int iSizeHint )
 {
 	assert ( iPos>=0 );
 	if ( iPos>=m_iPos && iPos<m_iPos+m_iBuffUsed )
 	{
 		m_iBuffPos = (int)( iPos-m_iPos ); // reposition to proper byte
+		m_iSizeHint = iSizeHint - ( m_iBuffUsed - m_iBuffPos ); // we already have some bytes cached, so let's adjust size hint
 		assert ( m_iBuffPos<m_iBuffUsed );
 	} else
 	{
 		m_iPos = iPos;
 		m_iBuffUsed = 0;
+		m_iSizeHint = iSizeHint;
 	}
 }
 
@@ -2168,16 +2175,21 @@ void CSphReader_VLN::UpdateCache ()
 
 	// alloc buf on first actual read
 	if ( !m_pBuff )
-		m_pBuff = new BYTE [ m_iBufSize ];
+		m_pBuff = new BYTE [ READ_BUFFER_SIZE ];
 
 	// stream position could be changed externally
 	// so let's just hope that the OS optimizes redundant seeks
 	SphOffset_t iNewPos = m_iPos + m_iBuffUsed;
 	sphSeek ( m_iFD, iNewPos, SEEK_SET );
-	
+
+	if ( m_iSizeHint<=0 )
+		m_iSizeHint = READ_DEFAULT_BLOCK;
+
 	m_iBuffPos = 0;
-	m_iBuffUsed = ::read ( m_iFD, m_pBuff, m_iBufSize );
+	m_iBuffUsed = ::read ( m_iFD, m_pBuff, Min ( m_iSizeHint, READ_BUFFER_SIZE ) );
 	m_iPos = iNewPos;
+
+	m_iSizeHint -= m_iBuffUsed;
 }
 
 
@@ -2264,7 +2276,7 @@ SphOffset_t CSphReader_VLN::UnzipOffset ()
 const CSphReader_VLN & CSphReader_VLN::operator = ( const CSphReader_VLN & rhs )
 {
 	SetFile ( rhs.m_iFD );
-	SeekTo ( rhs.m_iPos + rhs.m_iBuffPos );
+	SeekTo ( rhs.m_iPos + rhs.m_iBuffPos, rhs.m_iSizeHint );
 	return *this;
 }
 
@@ -2802,14 +2814,18 @@ void CSphIndex_VLN::cidxHit ( CSphWordHit * hit, DWORD * pAttrs )
 		// flush wordlist, if this is the end
 		if ( !hit->m_iWordPos )
 		{
+			assert ( fdData->m_iPos > m_iLastDoclistPos );
 			m_fdWordlist->ZipInt ( 0 ); // indicate checkpoint
+			m_fdWordlist->ZipOffset ( fdData->m_iPos - m_iLastDoclistPos ); // store last hitlist length
 			return;
 		}
 
 		// insert wordlist checkpoint (ie. restart delta coding) once per WORDLIST_CHECKPOINT entries
 		if ( m_iWordlistEntries==WORDLIST_CHECKPOINT )
 		{
+			assert ( fdData->m_iPos > m_iLastDoclistPos );
 			m_fdWordlist->ZipInt ( 0 ); // indicate checkpoint
+			m_fdWordlist->ZipOffset ( fdData->m_iPos - m_iLastDoclistPos ); // store last hitlist length
 			m_tLastHit.m_iWordID = 0;
 			m_iLastDoclistPos = 0;
 			m_iLastWordDocs = 0;
@@ -4821,8 +4837,12 @@ bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, int iFD )
 		// it matches?!
 		if ( iWordID==tWord.m_iWordID )
 		{
+			// unpack next word ID and offset delta (ie. hitlist length)
+			sphUnzipInt ( pBuf ); // might be 0 at checkpoint
+			SphOffset_t iDoclistLen = sphUnzipOffset ( pBuf );
+
 			tWord.m_rdDoclist.SetFile ( iFD );
-			tWord.m_rdDoclist.SeekTo ( iDoclistOffset );
+			tWord.m_rdDoclist.SeekTo ( iDoclistOffset, (int)iDoclistLen );
 			tWord.m_rdHitlist.SetFile ( iFD );
 			tWord.m_iDocs = iDocs;
 			tWord.m_iHits = iHits;

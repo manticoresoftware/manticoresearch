@@ -1350,7 +1350,7 @@ int CSphCharsetDefinitionParser::HexDigit ( int c )
 
 void CSphCharsetDefinitionParser::SkipSpaces ()
 {
-	while ( (*m_pCurrent) && isspace(*m_pCurrent) )
+	while ( (*m_pCurrent) && isspace((BYTE)*m_pCurrent) )
 		m_pCurrent++;
 }
 
@@ -1455,13 +1455,31 @@ int CSphCharsetDefinitionParser::Parse ( const char * sConfig, CSphLowercaser & 
 			return Error ( "range end less than range start" );
 		}
 
-		// stray range
+		// stray range?
 		if ( !*m_pCurrent || *m_pCurrent==',' )
 		{
 			dRanges.Add ( CSphRemapRange ( iStart, iEnd, iStart ) );
 			if ( IsEof () )
 				break;
 			m_pCurrent++;
+			continue;
+		}
+
+		// "checkerboard" range?
+		if ( m_pCurrent[0]=='/' && m_pCurrent[1]=='2' )
+		{
+			for ( int i=iStart; i<iEnd; i+=2 )
+			{
+				dRanges.Add ( CSphRemapRange ( i, i, i+1 ) );
+				dRanges.Add ( CSphRemapRange ( i+1, i+1, i+1 ) );
+			}
+
+			// skip "/2", expect ","
+			m_pCurrent += 2;
+			SkipSpaces ();
+			if ( *m_pCurrent )
+				if ( *m_pCurrent++!=',' )
+					return Error ( "expected end of line or ','" );
 			continue;
 		}
 

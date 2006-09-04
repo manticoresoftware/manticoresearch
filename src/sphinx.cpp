@@ -3606,13 +3606,13 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	// sort docinfos
 	/////////////////
 
+	// initialize writer
+	CSphAutofile fdDocinfo ( OpenFile ( "spa", O_CREAT | O_RDWR | O_TRUNC ) );
+	if ( fdDocinfo.GetFD()<0 )
+		return 0;
+
 	if ( m_eDocinfo==SPH_DOCINFO_EXTERN && dHitBlocks.GetLength() )
 	{
-		// initialize writer
-		CSphAutofile fdDocinfo ( OpenFile ( "spa", O_CREAT | O_RDWR | O_TRUNC ) );
-		if ( fdDocinfo.GetFD()<0 )
-			return 0;
-
 		// initialize readers
 		assert ( dBins.GetLength()==0 );
 		dBins.Grow ( iDocinfoBlocks );
@@ -3694,6 +3694,8 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	dDocinfos.Reset ();
 	pDocinfo = NULL;
 
+	fdDocinfo.Close (); // it might be zero-length, but it must exist
+
 	///////////////////////////////////
 	// sort and write compressed index
 	///////////////////////////////////
@@ -3714,10 +3716,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	// if there were no hits, create zero-length index files
 	int iRawBlocks = dBins.GetLength();
 	if ( iRawBlocks==0 )
-	{
-		// FIXME! should also unlink old .spa here
 		m_eDocinfo = SPH_DOCINFO_INLINE;
-	}
 
 	// initialize readers
 	fdTmpHits.Close ();

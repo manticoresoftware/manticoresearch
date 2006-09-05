@@ -848,36 +848,26 @@ int main ( int argc, char ** argv )
 					char sFrom [ SPH_MAX_FILENAME_LEN ];
 					char sTo [ SPH_MAX_FILENAME_LEN ];
 
-					// .spi
-					snprintf ( sFrom, sizeof(sFrom), "%s.tmp.spi", sPath );
-					sFrom [ sizeof(sFrom)-1 ] = '\0';
-
-					snprintf ( sTo, sizeof(sTo), "%s.new.spi", sPath );
-					sTo [ sizeof(sTo)-1 ] = '\0';
-
-					if ( rename ( sFrom, sTo ) )
+					int iExt;
+					const char * dExt[4] = { "sph", "spa", "spi", "spd" };
+					for ( iExt=0; iExt<4; iExt++ )
 					{
-						fprintf ( stdout, "WARNING: index '%s': rename '%s' to '%s' failed: %s",
-							sIndexName, sFrom, sTo, strerror(errno) );
-						break;
+						snprintf ( sFrom, sizeof(sFrom), "%s.tmp.%s", sPath, dExt[iExt] );
+						sFrom [ sizeof(sFrom)-1 ] = '\0';
+
+						snprintf ( sTo, sizeof(sTo), "%s.new.%s", sPath, dExt[iExt] );
+						sTo [ sizeof(sTo)-1 ] = '\0';
+
+						if ( rename ( sFrom, sTo ) )
+						{
+							fprintf ( stdout, "WARNING: index '%s': rename '%s' to '%s' failed: %s",
+								sIndexName, sFrom, sTo, strerror(errno) );
+							break;
+						}
 					}
 
-					// .spd
-					snprintf ( sFrom, sizeof(sFrom), "%s.tmp.spd", sPath );
-					sFrom [ sizeof(sFrom)-1 ] = '\0';
-
-					snprintf ( sTo, sizeof(sTo), "%s.new.spd", sPath );
-					sTo [ sizeof(sTo)-1 ] = '\0';
-
-					if ( rename ( sFrom, sTo ) )
-					{
-						fprintf ( stdout, "WARNING: index '%s': rename '%s' to '%s' failed: %s",
-							sIndexName, sFrom, sTo, strerror(errno) );
-						break;
-					}
-
-					// all good
-					bIndexedOk = true;
+					// all good?
+					bIndexedOk = ( i==4 );
 					break;
 				}
 			}

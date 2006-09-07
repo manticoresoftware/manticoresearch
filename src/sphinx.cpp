@@ -547,20 +547,20 @@ public:
 
 /////////////////////////////////////////////////////////////////////////////
 
-class CSphWriter_VLN
+class CSphWriter
 {
 public:
 	CSphString	m_sName;
 	SphOffset_t	m_iPos;
 
 public:
-				CSphWriter_VLN ( char * sName );
+				CSphWriter ( const char * sName );
+				~CSphWriter ();
 
-	int			OpenFile ();
+	void		CloseFile (); ///< note: calls Flush(), ie. IsError() might get true after this call
+
 	void		PutBytes ( const void * pData, int iSize );
-	void		PutRawBytes ( const void * pData, int iSize );
-	void		PutDword ( DWORD uValue ) { PutRawBytes ( &uValue, sizeof(DWORD) ); }
-	void		CloseFile ();
+	void		PutDword ( DWORD uValue ) { PutBytes ( &uValue, sizeof(DWORD) ); }
 	void		SeekTo ( SphOffset_t pos );
 
 	void		ZipInt ( DWORD uValue );
@@ -572,7 +572,7 @@ public:
 private:
 	int			m_iFD;
 	int			m_iPoolUsed;
-	BYTE		m_dPool [ SPH_CACHE_WRITE ];
+	BYTE *		m_pBuffer;
 	BYTE *		m_pPool;
 	bool		m_bError;
 
@@ -742,8 +742,6 @@ private:
 
 	CSphString					m_sFilename;
 	SphOffset_t					m_iFilePos;
-	CSphWriter_VLN *			m_fdWordlist;
-	CSphWriter_VLN *			fdData;
 
 	CSphVector<SphOffset_t>		m_dDoclist;
 
@@ -782,15 +780,15 @@ private:
 	bool						m_bPreloaded;			///< if schema/docinfos are preloaded
 
 private:
-	int							OpenFile ( char * ext, int mode );
+	const char *				GetIndexFileName ( const char * sExt );		///< WARNING, non-reenterable, static buffer!
+	int							OpenIndexFile ( char * ext, int mode );
 	int							AdjustMemoryLimit ( int iMemoryLimit );
 
-	int							cidxCreate ();
 	int							cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWORD * pDocinfo, int Docinfos, int iStride );
-	void						cidxHit ( CSphWordHit * pHit, DWORD * pDocinfos );
-	bool						cidxDone ();
+	void						cidxHit ( CSphWriter & fdWordlist, CSphWriter & fdData, CSphWordHit * pHit, DWORD * pDocinfos );
+	bool						cidxDone ( CSphWriter & fdWordlist, CSphWriter & fdData );
 
-	void						WriteSchemaColumn ( CSphWriter_VLN * fdInfo, const CSphColumnInfo & tCol );
+	void						WriteSchemaColumn ( CSphWriter & fdInfo, const CSphColumnInfo & tCol );
 	void						ReadSchemaColumn ( CSphReader_VLN & rdInfo, CSphColumnInfo & tCol );
 
 	void						MatchAll ( const CSphQuery * pQuery, ISphMatchQueue * pTop, CSphQueryResult * pResult );
@@ -1977,30 +1975,27 @@ int CSphSchema::GetAttrIndex ( const char * sName ) const
 // BIT-ENCODED FILE OUTPUT
 ///////////////////////////////////////////////////////////////////////////////
 
-CSphWriter_VLN::CSphWriter_VLN ( char * sName )
+CSphWriter::CSphWriter ( const char * sName )
 {
 	assert ( sName );
 	m_sName = sName;
 
-	m_pPool = m_dPool;
-	m_iFD = -1;
-	m_iPos = 0;
-	m_bError = false;
-}
-
-
-int CSphWriter_VLN::OpenFile ()
-{
-	if ( m_iFD>=0 )
-		return m_iFD;
+	m_pBuffer = new BYTE [ SPH_CACHE_WRITE ];
+	m_pPool = m_pBuffer;
 	m_iFD = ::open ( m_sName.cstr(), O_CREAT | O_RDWR | O_TRUNC | SPH_BINARY, 0644 );
 	m_iPoolUsed = 0;
 	m_iPos = 0;
-	return m_iFD;
+	m_bError = ( m_iFD<0 );
 }
 
 
-void CSphWriter_VLN::CloseFile() 
+CSphWriter::~CSphWriter ()
+{
+	CloseFile ();
+}
+
+
+void CSphWriter::CloseFile () 
 {
 	if ( m_iFD>=0 )
 	{
@@ -2011,7 +2006,7 @@ void CSphWriter_VLN::CloseFile()
 }
 
 
-void CSphWriter_VLN::PutByte ( int data )
+void CSphWriter::PutByte ( int data )
 {
 	*m_pPool++ = BYTE( data & 0xff );
 	m_iPoolUsed++;
@@ -2021,15 +2016,7 @@ void CSphWriter_VLN::PutByte ( int data )
 }
 
 
-void CSphWriter_VLN::PutBytes ( const void * pData, int iSize )
-{
-	const BYTE * b = (BYTE*) pData;
-	while ( iSize-->0 )
-		PutByte ( *b++ );
-}
-
-
-void CSphWriter_VLN::PutRawBytes ( const void * pData, int iSize )
+void CSphWriter::PutBytes ( const void * pData, int iSize )
 {
 	if ( m_iPoolUsed+iSize>SPH_CACHE_WRITE )
 		Flush ();
@@ -2042,7 +2029,7 @@ void CSphWriter_VLN::PutRawBytes ( const void * pData, int iSize )
 }
 
 
-void CSphWriter_VLN::ZipInt ( DWORD uValue )
+void CSphWriter::ZipInt ( DWORD uValue )
 {
 	int iBytes = 1;
 
@@ -2060,7 +2047,7 @@ void CSphWriter_VLN::ZipInt ( DWORD uValue )
 }
 
 
-void CSphWriter_VLN::ZipOffset ( SphOffset_t uValue )
+void CSphWriter::ZipOffset ( SphOffset_t uValue )
 {
 	int iBytes = 1;
 
@@ -2078,7 +2065,7 @@ void CSphWriter_VLN::ZipOffset ( SphOffset_t uValue )
 }
 
 
-void CSphWriter_VLN::ZipOffsets ( CSphVector<SphOffset_t> * pData )
+void CSphWriter::ZipOffsets ( CSphVector<SphOffset_t> * pData )
 {
 	assert ( pData );
 
@@ -2106,19 +2093,19 @@ void CSphWriter_VLN::ZipOffsets ( CSphVector<SphOffset_t> * pData )
 }
 
 
-void CSphWriter_VLN::Flush ()
+void CSphWriter::Flush ()
 {
 	PROFILE ( write_hits );
 
-	if ( sphWrite ( m_iFD, m_dPool, m_iPoolUsed, m_sName.cstr() )!=m_iPoolUsed )
+	if ( sphWrite ( m_iFD, m_pBuffer, m_iPoolUsed, m_sName.cstr() )!=m_iPoolUsed )
 		m_bError = true;
 
 	m_iPoolUsed = 0;
-	m_pPool = m_dPool;
+	m_pPool = m_pBuffer;
 }
 
 
-void CSphWriter_VLN::SeekTo ( SphOffset_t iPos )
+void CSphWriter::SeekTo ( SphOffset_t iPos )
 {
 	assert ( iPos>=0 );
 
@@ -2128,7 +2115,7 @@ void CSphWriter_VLN::SeekTo ( SphOffset_t iPos )
 }
 
 
-bool CSphWriter_VLN::IsError ()
+bool CSphWriter::IsError ()
 {
 	return m_bError;
 }
@@ -2585,9 +2572,6 @@ CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename )
 {
 	m_sFilename = sFilename;
 
-	m_fdWordlist = NULL;
-	fdData = NULL;
-
 	m_pWriteBuffer = NULL;
 
 	m_tLastHit.m_iDocID = 0;
@@ -2735,51 +2719,25 @@ void sphSortDocinfos ( DWORD * pBuf, int iCount, int iStride )
 }
 
 
-int CSphIndex_VLN::OpenFile ( char * ext, int mode )
+const char * CSphIndex_VLN::GetIndexFileName ( const char * sExt )
 {
-	char sBuf [ SPH_MAX_FILENAME_LEN ];
-	snprintf ( sBuf, sizeof(sBuf), "%s.%s", m_sFilename.cstr(), ext );
+	static char sBuf [ SPH_MAX_FILENAME_LEN ];
+	snprintf ( sBuf, sizeof(sBuf), "%s.%s", m_sFilename.cstr(), sExt );
+	return sBuf;
+}
 
-	int iFD = ::open ( sBuf, mode | SPH_BINARY, 0644 );
+
+int CSphIndex_VLN::OpenIndexFile ( char * ext, int mode )
+{
+	const char * sName = GetIndexFileName ( ext );
+	int iFD = ::open ( sName, mode | SPH_BINARY, 0644 );
 	if ( iFD<0 )
-		fprintf ( stdout, "ERROR: failed to open '%s': %s.\n", sBuf, strerror(errno) );
-
+		fprintf ( stdout, "ERROR: failed to open '%s': %s.\n", sName, strerror(errno) );
 	return iFD;
 }
 
 
-int CSphIndex_VLN::cidxCreate ()
-{
-	char sBuf [ SPH_MAX_FILENAME_LEN ];
-
-	snprintf ( sBuf, sizeof(sBuf), "%s.spi", m_sFilename.cstr() );
-	m_fdWordlist = new CSphWriter_VLN ( sBuf );
-	if ( m_fdWordlist->OpenFile()<0 )
-	{
-		SafeDelete ( m_fdWordlist );
-		return 0;
-	}
-
-	snprintf ( sBuf, sizeof(sBuf), "%s.spd", m_sFilename.cstr() );
-	fdData = new CSphWriter_VLN ( sBuf );
-	if ( fdData->OpenFile()<0 )
-	{
-		SafeDelete ( m_fdWordlist );
-		SafeDelete ( fdData );
-		return 0;
-	}
-
-	// put dummy byte (otherwise offset would start from 0, first delta would be 0
-	// and VLB encoding of offsets would fuckup)
-	BYTE bDummy = 1;
-	fdData->PutBytes ( &bDummy, 1 );
-	m_fdWordlist->PutBytes ( &bDummy, 1 );
-
-	return 1;
-}
-
-
-void CSphIndex_VLN::cidxHit ( CSphWordHit * hit, DWORD * pAttrs )
+void CSphIndex_VLN::cidxHit ( CSphWriter & fdWordlist, CSphWriter & fdData, CSphWordHit * hit, DWORD * pAttrs )
 {
 	assert (
 		( hit->m_iWordID && hit->m_iWordPos && hit->m_iDocID ) || // it's either ok hit
@@ -2794,7 +2752,7 @@ void CSphIndex_VLN::cidxHit ( CSphWordHit * hit, DWORD * pAttrs )
 		// close prev hitlist, if any
 		if ( m_tLastHit.m_iWordPos )
 		{
-			fdData->ZipInt ( 0 );
+			fdData.ZipInt ( 0 );
 			m_tLastHit.m_iWordPos = 0;
 		}
 
@@ -2806,23 +2764,23 @@ void CSphIndex_VLN::cidxHit ( CSphWordHit * hit, DWORD * pAttrs )
 			m_uFields = 0;
 
 			// flush wordlist entry
-			assert ( fdData->m_iPos > m_iLastDoclistPos );
+			assert ( fdData.m_iPos > m_iLastDoclistPos );
 			assert ( m_iLastWordDocs );
 			assert ( m_iLastWordHits );
 
-			m_fdWordlist->ZipOffset ( fdData->m_iPos - m_iLastDoclistPos );
-			m_fdWordlist->ZipInt ( m_iLastWordDocs );
-			m_fdWordlist->ZipInt ( m_iLastWordHits );
+			fdWordlist.ZipOffset ( fdData.m_iPos - m_iLastDoclistPos );
+			fdWordlist.ZipInt ( m_iLastWordDocs );
+			fdWordlist.ZipInt ( m_iLastWordHits );
 
-			m_iLastDoclistPos = fdData->m_iPos;
+			m_iLastDoclistPos = fdData.m_iPos;
 			m_iLastWordDocs = 0;
 			m_iLastWordHits = 0;
 
 			m_iWordlistEntries++;
 
 			// flush doclist
-			fdData->ZipOffsets ( &m_dDoclist );
-			fdData->ZipInt ( 0 );
+			fdData.ZipOffsets ( &m_dDoclist );
+			fdData.ZipInt ( 0 );
 			m_dDoclist.Reset ();
 
 			m_tLastHit.m_iDocID = 0;
@@ -2832,18 +2790,18 @@ void CSphIndex_VLN::cidxHit ( CSphWordHit * hit, DWORD * pAttrs )
 		// flush wordlist, if this is the end
 		if ( !hit->m_iWordPos )
 		{
-			assert ( fdData->m_iPos > m_iLastDoclistPos );
-			m_fdWordlist->ZipInt ( 0 ); // indicate checkpoint
-			m_fdWordlist->ZipOffset ( fdData->m_iPos - m_iLastDoclistPos ); // store last hitlist length
+			assert ( fdData.m_iPos > m_iLastDoclistPos );
+			fdWordlist.ZipInt ( 0 ); // indicate checkpoint
+			fdWordlist.ZipOffset ( fdData.m_iPos - m_iLastDoclistPos ); // store last hitlist length
 			return;
 		}
 
 		// insert wordlist checkpoint (ie. restart delta coding) once per WORDLIST_CHECKPOINT entries
 		if ( m_iWordlistEntries==WORDLIST_CHECKPOINT )
 		{
-			assert ( fdData->m_iPos > m_iLastDoclistPos );
-			m_fdWordlist->ZipInt ( 0 ); // indicate checkpoint
-			m_fdWordlist->ZipOffset ( fdData->m_iPos - m_iLastDoclistPos ); // store last hitlist length
+			assert ( fdData.m_iPos > m_iLastDoclistPos );
+			fdWordlist.ZipInt ( 0 ); // indicate checkpoint
+			fdWordlist.ZipOffset ( fdData.m_iPos - m_iLastDoclistPos ); // store last hitlist length
 			m_tLastHit.m_iWordID = 0;
 			m_iLastDoclistPos = 0;
 			m_iLastWordDocs = 0;
@@ -2855,17 +2813,17 @@ void CSphIndex_VLN::cidxHit ( CSphWordHit * hit, DWORD * pAttrs )
 		// begin new wordlist entry
 		if ( m_iWordlistEntries==0 )
 		{
-			assert ( m_fdWordlist->m_iPos<=UINT_MAX );
+			assert ( fdWordlist.m_iPos<=UINT_MAX );
 
 			CSphWordlistCheckpoint tCheckpoint;
 			tCheckpoint.m_iWordID = hit->m_iWordID;
-			tCheckpoint.m_iWordlistOffset = (DWORD) m_fdWordlist->m_iPos;
+			tCheckpoint.m_iWordlistOffset = (DWORD) fdWordlist.m_iPos;
 
 			m_dWordlistCheckpoints.Add ( tCheckpoint );
 		}
 
 		assert ( hit->m_iWordID > m_tLastHit.m_iWordID );
-		m_fdWordlist->ZipInt ( hit->m_iWordID - m_tLastHit.m_iWordID );
+		fdWordlist.ZipInt ( hit->m_iWordID - m_tLastHit.m_iWordID );
 		m_tLastHit.m_iWordID = hit->m_iWordID;
 	}
 
@@ -2878,7 +2836,7 @@ void CSphIndex_VLN::cidxHit ( CSphWordHit * hit, DWORD * pAttrs )
 		// close prev hitlist, if any
 		if ( m_tLastHit.m_iWordPos )
 		{
-			fdData->ZipInt ( 0 );
+			fdData.ZipInt ( 0 );
 			m_tLastHit.m_iWordPos = 0;
 		}
 
@@ -2892,16 +2850,16 @@ void CSphIndex_VLN::cidxHit ( CSphWordHit * hit, DWORD * pAttrs )
 
 		// add new doclist entry for new doc id
 		assert ( hit->m_iDocID > m_tLastHit.m_iDocID );
-		assert ( fdData->m_iPos > m_iLastHitlistPos );
+		assert ( fdData.m_iPos > m_iLastHitlistPos );
 
 		m_dDoclist.Add ( hit->m_iDocID - m_tLastHit.m_iDocID );
 		if ( pAttrs )
 			for ( int i=0; i<m_tSchema.m_dAttrs.GetLength(); i++ )
 				m_dDoclist.Add ( pAttrs[i] - m_tMin.m_pAttrs[i] );
-		m_dDoclist.Add ( fdData->m_iPos - m_iLastHitlistPos );
+		m_dDoclist.Add ( fdData.m_iPos - m_iLastHitlistPos );
 
 		m_tLastHit.m_iDocID = hit->m_iDocID;
-		m_iLastHitlistPos = fdData->m_iPos;
+		m_iLastHitlistPos = fdData.m_iPos;
 
 		// update per-word stats
 		m_iLastWordDocs++;
@@ -2913,7 +2871,7 @@ void CSphIndex_VLN::cidxHit ( CSphWordHit * hit, DWORD * pAttrs )
 
 	// add hit delta
 	assert ( hit->m_iWordPos > m_tLastHit.m_iWordPos );
-	fdData->ZipInt ( hit->m_iWordPos - m_tLastHit.m_iWordPos );
+	fdData.ZipInt ( hit->m_iWordPos - m_tLastHit.m_iWordPos );
 	m_tLastHit.m_iWordPos = hit->m_iWordPos;
 	m_iLastWordHits++;
 
@@ -2922,12 +2880,12 @@ void CSphIndex_VLN::cidxHit ( CSphWordHit * hit, DWORD * pAttrs )
 }
 
 
-void CSphIndex_VLN::WriteSchemaColumn ( CSphWriter_VLN * fdInfo, const CSphColumnInfo & tCol )
+void CSphIndex_VLN::WriteSchemaColumn ( CSphWriter & fdInfo, const CSphColumnInfo & tCol )
 {
 	int iLen = strlen ( tCol.m_sName.cstr() );
-	fdInfo->PutDword ( iLen );
-	fdInfo->PutRawBytes ( tCol.m_sName.cstr(), iLen );
-	fdInfo->PutDword ( tCol.m_eAttrType );
+	fdInfo.PutDword ( iLen );
+	fdInfo.PutBytes ( tCol.m_sName.cstr(), iLen );
+	fdInfo.PutDword ( tCol.m_eAttrType );
 }
 
 
@@ -2938,61 +2896,55 @@ void CSphIndex_VLN::ReadSchemaColumn ( CSphReader_VLN & rdInfo, CSphColumnInfo &
 }
 
 
-bool CSphIndex_VLN::cidxDone()
+bool CSphIndex_VLN::cidxDone ( CSphWriter & fdWordlist, CSphWriter & fdData )
 {
 	// flush wordlist checkpoints
-	SphOffset_t iCheckpointsPos = m_fdWordlist->m_iPos;
+	SphOffset_t iCheckpointsPos = fdWordlist.m_iPos;
 	if ( m_dWordlistCheckpoints.GetLength() )
-		m_fdWordlist->PutRawBytes ( &m_dWordlistCheckpoints[0], m_dWordlistCheckpoints.GetLength()*sizeof(CSphWordlistCheckpoint) );
+		fdWordlist.PutBytes ( &m_dWordlistCheckpoints[0], m_dWordlistCheckpoints.GetLength()*sizeof(CSphWordlistCheckpoint) );
 
 	/////////////////
 	// create header
 	/////////////////
 
-	char sBuf [ SPH_MAX_FILENAME_LEN ];
-	snprintf ( sBuf, sizeof(sBuf), "%s.sph", m_sFilename.cstr() );
-
-	CSphWriter_VLN * fdInfo = new CSphWriter_VLN ( sBuf );
-	if ( fdInfo->OpenFile()<0 )
-	{
-		SafeDelete ( fdInfo );
+	CSphWriter fdInfo ( GetIndexFileName ( "sph" ) );
+	if ( fdInfo.IsError() )
 		return false;
-	}
 
 	// docinfo
-	fdInfo->PutDword ( m_eDocinfo );
+	fdInfo.PutDword ( m_eDocinfo );
 
 	// schema
-	fdInfo->PutDword ( m_tSchema.m_dFields.GetLength() );
+	fdInfo.PutDword ( m_tSchema.m_dFields.GetLength() );
 	ARRAY_FOREACH ( i, m_tSchema.m_dFields )
 		WriteSchemaColumn ( fdInfo, m_tSchema.m_dFields[i] );
-	fdInfo->PutDword ( m_tSchema.m_dAttrs.GetLength() );
+	fdInfo.PutDword ( m_tSchema.m_dAttrs.GetLength() );
 	ARRAY_FOREACH ( i, m_tSchema.m_dAttrs )
 		WriteSchemaColumn ( fdInfo, m_tSchema.m_dAttrs[i] );
 
 	// min doc
-	fdInfo->PutDword ( m_tMin.m_iDocID );
+	fdInfo.PutDword ( m_tMin.m_iDocID );
 	if ( m_eDocinfo==SPH_DOCINFO_INLINE )
-		fdInfo->PutRawBytes ( m_tMin.m_pAttrs, m_tMin.m_iAttrs*sizeof(DWORD) );
+		fdInfo.PutBytes ( m_tMin.m_pAttrs, m_tMin.m_iAttrs*sizeof(DWORD) );
 
 	// wordlist checkpoints
-	fdInfo->PutRawBytes ( &iCheckpointsPos, sizeof(SphOffset_t) );
-	fdInfo->PutDword ( m_dWordlistCheckpoints.GetLength() );
+	fdInfo.PutBytes ( &iCheckpointsPos, sizeof(SphOffset_t) );
+	fdInfo.PutDword ( m_dWordlistCheckpoints.GetLength() );
 
 	////////////////////////
 	// close all data files
 	////////////////////////
 
-	fdInfo->CloseFile ();
-	fdData->CloseFile ();
-	m_fdWordlist->CloseFile ();
+	fdInfo.CloseFile ();
+	fdData.CloseFile ();
+	fdWordlist.CloseFile ();
 
-	if ( m_fdWordlist->IsError() || fdData->IsError() )
+	if ( fdInfo.IsError() || fdWordlist.IsError() || fdData.IsError() )
+	{
 		fprintf ( stdout, "ERROR: write() failed, out of disk space?\n" );
+		return false;
+	}
 
-	SafeDelete ( m_fdWordlist );
-	SafeDelete ( fdData );
-	SafeDelete ( fdInfo );
 	return true;
 }
 
@@ -3383,12 +3335,12 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	const DWORD * pDocinfoMax = dDocinfos + iDocinfoMax*iDocinfoStride;
 
 	// create temp hits file
-	CSphAutofile fdTmpHits ( OpenFile ( "tmp1", O_CREAT | O_RDWR | O_TRUNC ) );
+	CSphAutofile fdTmpHits ( OpenIndexFile ( "tmp1", O_CREAT | O_RDWR | O_TRUNC ) );
 	if ( fdTmpHits.GetFD()<0 )
 		return 0;
 
 	// create temp docinfos file
-	CSphAutofile fdTmpDocinfos ( OpenFile ( "tmp2", O_CREAT | O_RDWR | O_TRUNC ) );
+	CSphAutofile fdTmpDocinfos ( OpenIndexFile ( "tmp2", O_CREAT | O_RDWR | O_TRUNC ) );
 	if ( fdTmpDocinfos.GetFD()<0 )
 		return 0;
 
@@ -3607,7 +3559,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	/////////////////
 
 	// initialize writer
-	CSphAutofile fdDocinfo ( OpenFile ( "spa", O_CREAT | O_RDWR | O_TRUNC ) );
+	CSphAutofile fdDocinfo ( OpenIndexFile ( "spa", O_CREAT | O_RDWR | O_TRUNC ) );
 	if ( fdDocinfo.GetFD()<0 )
 		return 0;
 
@@ -3720,14 +3672,28 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 
 	// initialize readers
 	fdTmpHits.Close ();
-	fdTmpHits.SetFD ( OpenFile ( "tmp1", O_RDONLY ) );
+	fdTmpHits.SetFD ( OpenIndexFile ( "tmp1", O_RDONLY ) );
 	iSharedOffset = -1;
 	ARRAY_FOREACH ( i, dBins )
 		dBins[i]->Init ( fdTmpHits.GetFD(), &iSharedOffset, "sort_hits", iMemoryLimit, iRawBlocks );
 
-	// create new compressed index
-	if ( !cidxCreate() )
+	//////////////////////////////
+	// create new index files set
+	//////////////////////////////
+
+	CSphWriter fdWordlist ( GetIndexFileName ( "spi" ) );
+	if ( fdWordlist.IsError() )
 		return 0;
+
+	CSphWriter fdData ( GetIndexFileName ( "spd" ) );
+	if ( fdData.IsError() )
+		return 0;
+
+	// put dummy byte (otherwise offset would start from 0, first delta would be 0
+	// and VLB encoding of offsets would fuckup)
+	BYTE bDummy = 1;
+	fdData.PutBytes ( &bDummy, 1 );
+	fdWordlist.PutBytes ( &bDummy, 1 );
 
 	// adjust min IDs, and fill header
 	assert ( m_tMin.m_iDocID>0 );
@@ -3782,8 +3748,8 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 
 			// pack and emit queue root
 			tQueue.m_pData->m_iDocID -= m_tMin.m_iDocID;
-			cidxHit ( tQueue.m_pData, iAttrs ? dInlineAttrs+iBin*iAttrs : NULL );
-			if ( m_fdWordlist->IsError() || fdData->IsError() )
+			cidxHit ( fdWordlist, fdData, tQueue.m_pData, iAttrs ? dInlineAttrs+iBin*iAttrs : NULL );
+			if ( fdWordlist.IsError() || fdData.IsError() )
 			{
 				fprintf ( stdout, "ERROR: write() failed, out of disk space?\n" );
 				return 0;
@@ -3829,22 +3795,23 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 		tFlush.m_iDocID = 0;
 		tFlush.m_iWordID = 0;
 		tFlush.m_iWordPos = 0;
-		cidxHit ( &tFlush, NULL );
+		cidxHit ( fdWordlist, fdData, &tFlush, NULL );
 	}
 
-	if ( !cidxDone () )
-		return 0;
+	PROFILE_END ( invert_hits );
 
 	// close and unlink temp files
 	// FIXME! should be unlinked on early-exit too
 	fdTmpHits.Close ();
 	fdTmpDocinfos.Close ();
 
-	char sBuf [ SPH_MAX_FILENAME_LEN+1 ];
+	char sBuf [ SPH_MAX_FILENAME_LEN ];
 	snprintf ( sBuf, sizeof(sBuf), "%s.tmp1", m_sFilename.cstr() ); unlink ( sBuf );
 	snprintf ( sBuf, sizeof(sBuf), "%s.tmp2", m_sFilename.cstr() ); unlink ( sBuf );
 
-	PROFILE_END ( invert_hits );
+	// we're done
+	if ( !cidxDone ( fdWordlist, fdData ) )
+		return 0;
 
 	// when the party's over..
 	ARRAY_FOREACH ( i, dSources )

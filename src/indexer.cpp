@@ -867,7 +867,7 @@ int main ( int argc, char ** argv )
 					}
 
 					// all good?
-					bIndexedOk = ( i==4 );
+					bIndexedOk = ( iExt==4 );
 					break;
 				}
 			}

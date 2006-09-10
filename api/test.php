@@ -66,7 +66,7 @@ $cl->SetServer ( "localhost", $port );
 $cl->SetWeights ( array ( 100, 1 ) );
 $cl->SetMatchMode ( $any ? SPH_MATCH_ANY : SPH_MATCH_ALL );
 if ( count($groups) )
-	$cl->SetFilter ( "channel_id", $groups );//!COMMIT
+	$cl->SetFilter ( "group_id", $groups );
 $res = $cl->Query ( $q, $index );
 
 ////////////////

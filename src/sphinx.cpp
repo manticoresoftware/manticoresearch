@@ -376,7 +376,7 @@ struct CSphMatchComparatorState
 };
 
 
-/// my match-sorting priority queue
+/// simple match-sorting priority queue
 template < typename T, typename COMP > class CSphQueue
 	: public ISphQueue<T>
 {
@@ -408,13 +408,13 @@ public:
 	}
 
 	/// add entry to the queue
-	virtual void Push ( const T & tEntry )
+	virtual bool Push ( const T & tEntry )
 	{
 		if ( m_iUsed==m_iSize )
 		{
 			// if it's worse that current min, reject it, else pop off current min
 			if ( COMP::IsLess ( tEntry, m_pData[0], m_tState ) )
-				return;
+				return false;
 			else
 				Pop ();
 		}
@@ -434,6 +434,8 @@ public:
 			Swap ( m_pData[iEntry], m_pData[iParent] );
 			iEntry = iParent;
 		}
+
+		return true;
 	}
 
 	/// remove root (ie. top priority) entry
@@ -484,6 +486,393 @@ public:
 		assert ( m_iUsed );
 		return m_pData[0];
 	}
+
+	/// set attr
+	virtual void SetAttr ( int iAttr )
+	{
+		m_tState.m_iAttr = iAttr;
+	}
+
+	/// get attr
+	virtual int GetAttr ()
+	{
+		return m_tState.m_iAttr;
+	}
+};
+
+//////////////////////////////////////////////////////////////////////////////
+
+static inline int iLog2 ( DWORD iValue )
+{
+	int iBits = 0;
+	while ( iValue )
+	{
+		iValue >>= 1;
+		iBits++;
+	}
+	return iBits;
+}
+
+
+/// general-purpose hash
+#if USE_WINDOWS
+#pragma warning(disable:4127)
+#endif
+
+template < typename T, typename KEY, typename HASHFUNC, int STEP=117 >
+class CSphHash
+{
+protected:
+	struct HashEntry_t
+	{
+		T 				m_tValue;			///< data, owned by the hash
+		KEY				m_tKey;				///< key, owned by the hash
+		bool			m_bDeleted;			///< is this entry deleted
+		bool			m_bEmpty;			///< is this entry empty
+	};
+
+protected:
+	HashEntry_t	*	m_pHash;				///< hash entries storage
+	const int		m_iLength;				///< hash capacity, power of 2
+
+protected:
+	/// this function finds hash entry by it's key.
+	template < bool STOP_ON_DELETED >
+	const HashEntry_t * Search ( const KEY & key ) const
+	{
+		if ( !m_pHash )
+			return NULL;
+
+		DWORD uStart = DWORD ( HASHFUNC::Hash ( key ) ) & ( m_iLength-1 );
+		DWORD uHash = uStart;
+		do 
+		{
+			// deleted slot
+			if ( m_pHash[uHash].m_bDeleted )
+			{
+				// found deleted slot
+				if ( STOP_ON_DELETED )
+					return m_pHash + uHash;
+			}
+			else
+			{
+				// empty slot
+				if ( m_pHash[uHash].m_bEmpty )
+					return m_pHash + uHash;
+
+				// found the same
+				if ( m_pHash[uHash].m_tKey == key )
+					return m_pHash + uHash;
+			}
+
+			// next index
+			uHash = ( uHash+STEP ) & ( m_iLength-1 );
+		} while ( uHash!=uStart );
+		return NULL;
+	}
+
+public:
+	/// ctor
+	CSphHash ( int iLength )
+		: m_pHash ( NULL )
+		, m_iLength ( 1<<( 1 + iLog2(iLength-1) ) )
+	{
+		assert ( iLength>0 );
+		assert ( iLength<=m_iLength );
+
+		m_pHash = new HashEntry_t [ m_iLength ];
+		for ( int i=0; i<m_iLength; i++ )
+		{
+			m_pHash[i].m_bEmpty = true;
+			m_pHash[i].m_bDeleted = false;
+		}
+	}
+
+	/// dtor
+	~CSphHash ()
+	{
+		Reset ();
+	}
+
+	/// reset
+	void Reset ()
+	{
+		SafeDeleteArray ( m_pHash );
+	}
+
+	/// add new entry
+	/// returns NULL on success
+	/// returns pointer to value if already hashed
+	T * Add ( const T & tValue, const KEY & tKey )
+	{
+		assert ( m_pHash );
+
+		HashEntry_t * pEntry = const_cast<HashEntry_t *> ( Search<true> ( tKey ) );
+		assert ( pEntry && "hash overflow" );
+
+		// already hashed?
+		if ( !pEntry->m_bEmpty && !pEntry->m_bDeleted )
+			return &pEntry->m_tValue;
+
+		pEntry->m_tKey		= tKey;
+		pEntry->m_tValue	= tValue;
+		pEntry->m_bDeleted	= false;
+		pEntry->m_bEmpty	= false;
+		return NULL;
+	}
+
+	/// remove entry from hash
+	void Remove ( const KEY & tKey )
+	{
+		HashEntry_t * pEntry = const_cast<HashEntry_t *> ( Search<false> ( tKey ) );
+		if ( !pEntry || pEntry->m_bEmpty )
+			return;
+
+		assert ( !pEntry->m_bDeleted );
+		assert ( pEntry->m_tKey==tKey );
+		pEntry->m_bDeleted = true;
+	}
+
+	/// get value pointer by key
+	T * operator () ( const KEY & tKey ) const
+	{
+		HashEntry_t * pEntry = const_cast<HashEntry_t *> ( Search<false> ( tKey ) );
+		if ( pEntry && !pEntry->m_bEmpty )
+			return &pEntry->m_tValue;
+		return NULL;
+	}
+
+	/// copying
+	const CSphHash<T,KEY,HASHFUNC,STEP> & operator = ( const CSphHash<T,KEY,HASHFUNC,STEP> & rhs )
+	{
+		assert ( 0 );
+		return *this;
+	}
+};
+
+#if USE_WINDOWS
+#pragma warning(default:4127)
+#endif
+
+
+struct IdentityHash_fn
+{
+	static inline int Hash ( int iValue )
+	{
+		return iValue;
+	}
+};
+
+
+DWORD sphCalcPriority ( const CSphMatch & tMatch, ESphGroupBy eGroupBy, int iGroupBy )
+{
+	assert ( iGroupBy>=0 && iGroupBy<tMatch.m_iAttrs );
+
+	time_t tStamp = tMatch.m_pAttrs [ iGroupBy ];
+	struct tm * pSplit = localtime ( &tStamp ); // FIXME! use _r on UNIX
+
+	switch ( eGroupBy )
+	{
+		case SPH_GROUPBY_DAY:	return (pSplit->tm_year+1900)*10000 + (1+pSplit->tm_mon)*100 + (1+pSplit->tm_mday);
+		case SPH_GROUPBY_WEEK:	return (pSplit->tm_year+1900)*1000 + (1+pSplit->tm_yday) - pSplit->tm_wday;
+		case SPH_GROUPBY_MONTH:	return (pSplit->tm_year+1900)*100 + (1+pSplit->tm_mon);
+		case SPH_GROUPBY_YEAR:	return (pSplit->tm_year+1900);
+		default:				assert ( 0 ); return 0;
+	}
+}
+
+
+/// match-sorting priority queue with hashed priorities
+template < typename COMP > class CSphGroupQueue
+	: public ISphMatchQueue
+{
+protected:
+	int				m_iUsed;	///< current queue size
+	int				m_iLimit;	///< maximum queue capacity
+
+	CSphMatch *		m_dMatches;	///< matches storage
+	int *			m_dIndexes;	///< heap indexes into matches array
+
+	ESphGroupBy		m_eGroupBy;		///< group-by function
+	int				m_iGroupBy;		///< group-by argument attribute index
+
+	int				m_iAttrPriority;	///< group-by value virtual attribute index
+	int				m_iAttrCount;		///< grouped matches count virtual attribute index
+
+	CSphHash < CSphMatch *, DWORD, IdentityHash_fn >	m_hPriority2Match;
+
+	CSphMatchComparatorState	m_tState;
+
+protected:
+	inline DWORD	GetPriority ( int iIndex )
+	{
+		return m_dMatches [ m_dIndexes[iIndex] ].m_pAttrs [ m_iAttrPriority ];
+	}
+
+public:
+	/// ctor
+	CSphGroupQueue ( const CSphQuery * pQuery )
+		: ISphQueue ( true )
+		, m_iUsed ( 0 )
+		, m_iLimit ( pQuery->m_iMaxMatches )
+		, m_eGroupBy ( pQuery->m_eGroupFunc )
+		, m_iGroupBy ( pQuery->m_iGroupBy )
+		, m_iAttrPriority ( -1 )
+		, m_iAttrCount ( -1 )
+		, m_hPriority2Match ( pQuery->m_iMaxMatches )
+	{
+		assert ( m_iLimit>0 );
+		assert ( m_iGroupBy>=0 );
+
+		m_dMatches = new CSphMatch [ m_iLimit ];
+
+		m_dIndexes = new int [ m_iLimit ];
+		for ( int i=0; i<m_iLimit; i++ )
+			m_dIndexes[i] = i;
+
+		m_tState.m_iAttr = 0;
+		m_tState.m_iNow = (DWORD) time ( NULL );
+	}
+
+	/// dtor
+	~CSphGroupQueue ()
+	{
+		SafeDeleteArray ( m_dMatches );
+		SafeDeleteArray ( m_dIndexes );
+	}
+
+	/// add entry to the queue
+	virtual bool Push ( const CSphMatch & tEntry )
+	{
+		// calc priority
+		DWORD uPriority = sphCalcPriority ( tEntry, m_eGroupBy, m_iGroupBy );
+
+		// if this priority is already hashed, we only need to update the corresponding match
+		CSphMatch ** ppMatch = m_hPriority2Match ( uPriority );
+		if ( ppMatch )
+		{
+			CSphMatch * pMatch = (*ppMatch);
+			assert ( pMatch );
+
+			// increase grouped matches count
+			assert ( pMatch->m_pAttrs [ m_iAttrPriority ]==uPriority );
+			pMatch->m_pAttrs [ m_iAttrCount ]++;
+
+			// if new entry is more relevant, update from it
+			if ( COMP::IsLess ( *pMatch, tEntry, m_tState ) )
+			{
+				pMatch->m_iDocID = tEntry.m_iDocID;
+				pMatch->m_iWeight = tEntry.m_iWeight;
+				if ( tEntry.m_iAttrs )
+				{
+					assert ( pMatch->m_iAttrs==tEntry.m_iAttrs+2 );
+					memcpy ( pMatch->m_pAttrs, tEntry.m_pAttrs, sizeof(DWORD)*tEntry.m_iAttrs );
+				}
+			}
+			return false;
+		}
+
+		// the first one?
+		if ( !m_iUsed )
+		{
+			m_iAttrPriority = tEntry.m_iAttrs;
+			m_iAttrCount = tEntry.m_iAttrs+1;
+		}
+
+		if ( m_iUsed==m_iLimit )
+		{
+			// if it's worse that current min, reject it, else pop off current min
+			if ( uPriority < GetPriority(0) )
+				return false;
+			else
+				Pop ();
+		}
+
+		// do add
+		CSphMatch & tNew = m_dMatches [ m_dIndexes [ m_iUsed ] ];
+		assert ( tNew.m_iAttrs==0 || tNew.m_iAttrs==tEntry.m_iAttrs+2 );
+
+		tNew.m_iDocID = tEntry.m_iDocID;
+		tNew.m_iWeight = tEntry.m_iWeight;
+		if ( !tNew.m_iAttrs )
+		{
+			tNew.m_iAttrs = tEntry.m_iAttrs+2;
+			tNew.m_pAttrs = new DWORD [ tEntry.m_iAttrs+2 ];
+		}
+		memcpy ( tNew.m_pAttrs, tEntry.m_pAttrs, tEntry.m_iAttrs*sizeof(DWORD) );
+		tNew.m_pAttrs [ m_iAttrPriority ] = uPriority;
+		tNew.m_pAttrs [ m_iAttrCount ] = 1;
+
+		m_hPriority2Match.Add ( &tNew, uPriority );
+
+		// sift up if needed, so that worst (lesser) ones float to the top
+		int iEntry = m_iUsed++;
+		while ( iEntry )
+		{
+			int iParent = ( iEntry-1 ) >> 1;
+			if (!( GetPriority(iEntry) < GetPriority(iParent) ))
+				break;
+
+			// entry is less than parent, should float to the top
+			Swap ( m_dIndexes[iEntry], m_dIndexes[iParent] );
+			iEntry = iParent;
+		}
+
+		return true;
+	}
+
+	/// remove root (ie. top priority) entry
+	virtual void Pop ()
+	{
+		assert ( m_iUsed );
+
+		DWORD uPriority = GetPriority(0);
+		m_hPriority2Match.Remove ( uPriority );
+
+		if ( !--m_iUsed ) // empty queue? just return
+			return;
+
+		// make the last entry my new root
+		Swap ( m_dIndexes[0], m_dIndexes[m_iUsed] );
+
+		// sift down if needed
+		int iEntry = 0;
+		for ( ;; )
+		{
+			// select child
+			int iChild = (iEntry<<1) + 1;
+			if ( iChild>=m_iUsed )
+				break;
+
+			// select smallest child
+			if ( iChild+1<m_iUsed )
+				if ( GetPriority(iChild+1) < GetPriority(iChild) )
+					iChild++;
+
+			// if smallest child is less than entry, do float it to the top
+			if ( GetPriority(iChild) < GetPriority(iEntry) )
+			{
+				Swap ( m_dIndexes[iChild], m_dIndexes[iEntry] );
+				iEntry = iChild;
+				continue;
+			}
+
+			break;
+		}
+	}
+
+	/// get current root
+	inline const CSphMatch & Root () const
+	{
+		assert ( m_iUsed );
+		return m_dMatches [ m_dIndexes[0] ];
+	}
+
+	/// get entries count
+	inline int GetLength () const
+	{
+		return m_iUsed;
+	};
 
 	/// set attr
 	virtual void SetAttr ( int iAttr )
@@ -1907,6 +2296,7 @@ CSphQuery::CSphQuery ()
 	, m_iMaxMatches	( 1000 )
 	, m_iMinID		( 0 )
 	, m_iMaxID		( UINT_MAX )
+	, m_iGroupBy	( -1 )
 {}
 
 /////////////////////////////////////////////////////////////////////////////
@@ -2965,18 +3355,6 @@ inline int encodeVLB(BYTE *buf, DWORD v)
 }
 
 
-static inline int iLog2 ( DWORD iValue )
-{
-	int iBits = 0;
-	while ( iValue )
-	{
-		iValue >>= 1;
-		iBits++;
-	}
-	return iBits;
-}
-
-
 int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWORD * pDocinfo, int iDocinfos, int iStride )
 {
 	PROFILE ( write_hits );
@@ -3981,20 +4359,37 @@ inline int sphGroupMatch ( DWORD iGroup, DWORD * pGroups, int iGroups )
 }
 
 
-ISphMatchQueue * sphCreateQueue ( CSphQuery * pQuery )
+ISphMatchQueue * sphCreateQueue ( const CSphQuery * pQuery )
 {
+	assert ( pQuery->m_sGroupBy.IsEmpty() || pQuery->m_iGroupBy>=0 );
 	ISphMatchQueue * pTop = NULL;
 
-	switch ( pQuery->m_eSort )
+	if ( pQuery->m_iGroupBy<0 )
 	{
-		case SPH_SORT_ATTR_DESC:	pTop = new CSphQueue < CSphMatch, MatchAttrLt_fn > ( pQuery->m_iMaxMatches, true ); break;
-		case SPH_SORT_ATTR_ASC:		pTop = new CSphQueue < CSphMatch, MatchAttrGt_fn > ( pQuery->m_iMaxMatches, true ); break;
-		case SPH_SORT_TIME_SEGMENTS:pTop = new CSphQueue < CSphMatch, MatchTimeSegments_fn > ( pQuery->m_iMaxMatches, true ); break;
-		case SPH_SORT_RELEVANCE:	pTop = new CSphQueue < CSphMatch, MatchRelevanceLt_fn > ( pQuery->m_iMaxMatches, false ); break;
-		default:
-			pTop = new CSphQueue < CSphMatch, MatchRelevanceLt_fn > ( pQuery->m_iMaxMatches, false );
-			fprintf ( stdout, "WARNING: unknown sorting mode '%d', using SPH_SORT_RELEVANCE\n", pQuery->m_eSort );
-			break;
+		switch ( pQuery->m_eSort )
+		{
+			case SPH_SORT_ATTR_DESC:	pTop = new CSphQueue < CSphMatch, MatchAttrLt_fn > ( pQuery->m_iMaxMatches, true ); break;
+			case SPH_SORT_ATTR_ASC:		pTop = new CSphQueue < CSphMatch, MatchAttrGt_fn > ( pQuery->m_iMaxMatches, true ); break;
+			case SPH_SORT_TIME_SEGMENTS:pTop = new CSphQueue < CSphMatch, MatchTimeSegments_fn > ( pQuery->m_iMaxMatches, true ); break;
+			case SPH_SORT_RELEVANCE:	pTop = new CSphQueue < CSphMatch, MatchRelevanceLt_fn > ( pQuery->m_iMaxMatches, false ); break;
+			default:
+				pTop = new CSphQueue < CSphMatch, MatchRelevanceLt_fn > ( pQuery->m_iMaxMatches, false );
+				fprintf ( stdout, "WARNING: unknown sorting mode '%d', using SPH_SORT_RELEVANCE\n", pQuery->m_eSort );
+				break;
+		}
+	} else
+	{
+		switch ( pQuery->m_eSort )
+		{
+			case SPH_SORT_ATTR_DESC:	pTop = new CSphGroupQueue < MatchAttrLt_fn > ( pQuery ); break;
+			case SPH_SORT_ATTR_ASC:		pTop = new CSphGroupQueue < MatchAttrGt_fn > ( pQuery ); break;
+			case SPH_SORT_TIME_SEGMENTS:pTop = new CSphGroupQueue < MatchTimeSegments_fn > ( pQuery ); break;
+			case SPH_SORT_RELEVANCE:	pTop = new CSphGroupQueue < MatchRelevanceLt_fn > ( pQuery ); break;
+			default:
+				pTop = new CSphGroupQueue < MatchRelevanceLt_fn > ( pQuery );
+				fprintf ( stdout, "WARNING: unknown sorting mode '%d', using SPH_SORT_RELEVANCE\n", pQuery->m_eSort );
+				break;
+		}
 	}
 
 	assert ( pTop );
@@ -4004,6 +4399,9 @@ ISphMatchQueue * sphCreateQueue ( CSphQuery * pQuery )
 
 void sphFlattenQueue ( ISphMatchQueue * pQueue, CSphQueryResult * pResult )
 {
+	if ( !pQueue )
+		return;
+
 	int iOffset = pResult->m_dMatches.GetLength ();
 	pResult->m_dMatches.Resize ( iOffset + pQueue->GetLength() );
 
@@ -4291,8 +4689,8 @@ void CSphIndex_VLN::MatchAll ( const CSphQuery * pQuery, ISphMatchQueue * pTop, 
 		if ( bLateLookup )
 			LookupDocinfo ( tMatch );
 
-		pTop->Push ( tMatch );
-		pResult->m_iTotalMatches++;
+		if ( pTop->Push ( tMatch ) )
+			pResult->m_iTotalMatches++;
 
 		// continue looking for next matches
 		i = 0;
@@ -4983,9 +5381,7 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 		return false;
 	pResult->m_tSchema = m_tSchema;
 
-	char sTmp [ SPH_MAX_FILENAME_LEN ];
-	snprintf ( sTmp, sizeof(sTmp), "%s.spd", m_sFilename.cstr() );
-	CSphAutofile tDoclist ( sTmp );
+	CSphAutofile tDoclist ( GetIndexFileName ( "spd" ) );
 	if ( tDoclist.GetFD()<0 )
 		return false;
 
@@ -5032,6 +5428,9 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 		pResult->m_iQueryTime += int ( 1000.0f*( sphLongTimer() - tmQueryStart ) );
 		return true;
 	}
+
+	// lookup group-by attribute index
+	pQuery->m_iGroupBy = m_tSchema.GetAttrIndex ( pQuery->m_sSortBy.cstr() );
 
 	//////////////////////////////
 	// decode words from wordlist
@@ -5139,6 +5538,11 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 			LookupDocinfo ( *pCur++ );
 	}
 
+	if ( pQuery->m_iGroupBy )
+	{
+		pResult->m_tSchema.m_dAttrs.Add ( CSphColumnInfo ( "@groupby", SPH_ATTR_INTEGER ) );
+		pResult->m_tSchema.m_dAttrs.Add ( CSphColumnInfo ( "@count", SPH_ATTR_INTEGER ) );
+	}
 
 	PROFILER_DONE ();
 	PROFILE_SHOW ();

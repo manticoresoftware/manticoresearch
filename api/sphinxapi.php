@@ -22,7 +22,7 @@ define ( "SEARCHD_COMMAND_SEARCH",	0 );
 define ( "SEARCHD_COMMAND_EXCERPT",	1 );
 
 /// current client-side command implementation versions
-define ( "VER_COMMAND_SEARCH",		0x102 );
+define ( "VER_COMMAND_SEARCH",		0x103 );
 define ( "VER_COMMAND_EXCERPT",		0x100 );
 
 /// known searchd status codes
@@ -46,6 +46,12 @@ define ( "SPH_SORT_TIME_SEGMENTS", 	3 );
 define ( "SPH_ATTR_INTEGER",		1 );
 define ( "SPH_ATTR_TIMESTAMP",		2 );
 
+/// known grouping functions
+define ( "SPH_GROUPBY_DAY",			0 );
+define ( "SPH_GROUPBY_WEEK",		1 );
+define ( "SPH_GROUPBY_MONTH",		2 );
+define ( "SPH_GROUPBY_YEAR",		3 );
+
 /// sphinx searchd client class
 class SphinxClient
 {
@@ -62,6 +68,9 @@ class SphinxClient
 	var $_min;		///< attribute name to min-value hash (for range filters)
 	var $_max;		///< attribute name to max-value hash (for range filters)
 	var $_filter;	///< attribute name to values set hash (for values-set filters)
+
+	var $_groupby;	///< group-by attribute name
+	var $_groupfunc;///< function to pre-process group-by attribute value with
 
 	var $_error;	///< last error message
 	var $_warning;	///< last warning message
@@ -86,6 +95,9 @@ class SphinxClient
 		$this->_min		= array ();
 		$this->_max		= array ();
 		$this->_filter	= array ();
+
+		$this->_groupby		= "";
+		$this->_groupfunc	= SPH_GROUPBY_DAY;
 
 		$this->_error	= "";
 		$this->_warning	= "";
@@ -284,6 +296,20 @@ class SphinxClient
 		$this->_max[$attribute] = $max;
 	}
 
+	/// set grouping
+	/// if grouping
+	function SetGroupBy ( $attribute, $func )
+	{
+		assert ( is_string($attribute) );
+		assert ( $func==SPH_GROUPBY_DAY
+			|| $func==SPH_GROUPBY_WEEK
+			|| $func==SPH_GROUPBY_MONTH
+			|| $func==SPH_GROUPBY_YEAR );
+
+		$this->_groupby = $attribute;
+		$this->_groupfunc = $func;
+	}
+
 	/// connect to searchd server and run given search query
 	///
 	/// $query is query string
@@ -338,6 +364,9 @@ class SphinxClient
 			foreach ( $values as $value )
 				$req .= pack ( "N", $value );
 		}
+
+		// group-by
+		$req .= pack ( "NN", $this->_groupfunc, strlen($this->_groupby) ) . $this->_groupby;
 
 		////////////////////////////
 		// send query, get response

@@ -138,7 +138,7 @@ enum SearchdCommand_e
 /// known command versions
 enum
 {
-	VER_COMMAND_SEARCH		= 0x102,
+	VER_COMMAND_SEARCH		= 0x103,
 	VER_COMMAND_EXCERPT		= 0x100
 };
 
@@ -1837,9 +1837,8 @@ inline bool operator < ( const CSphMatch & a, const CSphMatch & b )
 
 /////////////////////////////////////////////////////////////////////////////
 
-bool CheckSortAndSchema ( const CSphSchema ** ppFirst,
-	const CSphSchema * pServed, const char * sServedName, const CSphQuery & tQuery,
-	InputBuffer_c & tReq, ISphMatchQueue * pTop )
+bool CheckSortAndSchema ( const CSphSchema ** ppFirst, ISphMatchQueue ** ppTop, CSphQuery & tQuery,
+	const CSphSchema * pServed, const char * sServedName, InputBuffer_c & tReq )
 {
 	assert ( ppFirst );
 	assert ( pServed );
@@ -1859,10 +1858,24 @@ bool CheckSortAndSchema ( const CSphSchema ** ppFirst,
 			}
 			iAttr = 0;
 		}
-		pTop->SetAttr ( iAttr );
+
+		// lookup proper attribute index to group by
+		tQuery.m_iGroupBy = pServed->GetAttrIndex ( tQuery.m_sGroupBy.cstr() );
+		if ( !tQuery.m_sGroupBy.IsEmpty() && tQuery.m_iGroupBy<0 )
+		{
+			tReq.SendErrorReply ( "index '%s': group-by attribute '%s' not found",
+				sServedName, tQuery.m_sSortBy.cstr() );
+		}
+
+		// spawn queue and set sort-by attribute
+		assert ( !*ppTop );
+		*ppTop = sphCreateQueue ( &tQuery );
+		(*ppTop)->SetAttr ( iAttr );
 
 	} else
 	{
+		assert ( *ppTop );
+
 		// check schemas
 		CSphString sError;
 		if ( !pServed->IsEqual ( **ppFirst, sError ) )
@@ -1959,6 +1972,13 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		}
 	}
 
+	// v.1.3
+	if ( iVer>=0x103 )
+	{
+		tQuery.m_eGroupFunc = (ESphGroupBy) tReq.GetDword ();
+		tQuery.m_sGroupBy = tReq.GetString ();
+	}
+
 	// additional checks
 	if ( tReq.GetError() )
 	{
@@ -1985,7 +2005,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 	const CSphSchema * pFirst = NULL;
 	CSphQueryResult * pRes = new CSphQueryResult ();
-	ISphMatchQueue * pTop = sphCreateQueue ( &tQuery );
+	ISphMatchQueue * pTop = NULL;
 
 #define REMOVE_DUPES 1
 
@@ -2014,7 +2034,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			assert ( tServed.m_pTokenizer );
 
 			// check/set sort-by attr and schema
-			if ( !CheckSortAndSchema ( &pFirst, tServed.m_pSchema, tDist.m_dLocal[i].cstr(), tQuery, tReq, pTop ) )
+			if ( !CheckSortAndSchema ( &pFirst, &pTop, tQuery, tServed.m_pSchema, tDist.m_dLocal[i].cstr(), tReq ) )
 				return;
 
 			// do query
@@ -2055,7 +2075,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 				snprintf ( sName, sizeof(sName), "%s:%d:%s",
 					tAgent.m_sHost.cstr(), tAgent.m_iPort, tAgent.m_sIndexes.cstr() );
 
-				if ( !CheckSortAndSchema ( &pFirst, &tAgent.m_tRes.m_tSchema, sName, tQuery, tReq, pTop ) )
+				if ( !CheckSortAndSchema ( &pFirst, &pTop, tQuery, &tAgent.m_tRes.m_tSchema, sName, tReq ) )
 					return;
 
 				// merge this agent's results
@@ -2080,7 +2100,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			assert ( tServed.m_pTokenizer );
 
 			// check/set sort-by attr and schema
-			if ( !CheckSortAndSchema ( &pFirst, tServed.m_pSchema, g_hIndexes.IterateGetKey().cstr(), tQuery, tReq, pTop ) )
+			if ( !CheckSortAndSchema ( &pFirst, &pTop, tQuery, tServed.m_pSchema, g_hIndexes.IterateGetKey().cstr(), tReq ) )
 				return;
 
 			// do query
@@ -2129,7 +2149,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 #endif
 			{
 				// check/set sort-by attr and schema
-				if ( !CheckSortAndSchema ( &pFirst, tServed.m_pSchema, sNext, tQuery, tReq, pTop ) )
+				if ( !CheckSortAndSchema ( &pFirst, &pTop, tQuery, tServed.m_pSchema, sNext, tReq ) )
 					return;
 
 				// do query

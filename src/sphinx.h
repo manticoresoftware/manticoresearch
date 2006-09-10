@@ -326,17 +326,22 @@ struct CSphDocInfo
 	}
 
 	/// assignment
-	/// !COMMIT remove me
 	const CSphDocInfo & operator = ( const CSphDocInfo & rhs )
 	{
-		SafeDeleteArray ( m_pAttrs );
 		m_iDocID = rhs.m_iDocID;
-		m_iAttrs = rhs.m_iAttrs;
+
+		if ( m_iAttrs!=rhs.m_iAttrs )
+		{
+			SafeDeleteArray ( m_pAttrs );
+			m_iAttrs = rhs.m_iAttrs;
+		}
+
 		if ( m_iAttrs )
 		{
-			m_pAttrs = new DWORD [ m_iAttrs ]; // !COMMIT pool these allocs
+			m_pAttrs = new DWORD [ m_iAttrs ]; // OPTIMIZE! pool these allocs
 			memcpy ( m_pAttrs, rhs.m_pAttrs, sizeof(DWORD)*m_iAttrs );
 		}
+
 		return *this;
 	}
 };
@@ -769,6 +774,16 @@ enum ESphMatchMode
 };
 
 
+/// search query grouping mode
+enum ESphGroupBy
+{
+	SPH_GROUPBY_DAY		= 0,	///< group by day
+	SPH_GROUPBY_WEEK	= 1,	///< group by week
+	SPH_GROUPBY_MONTH	= 2,	///< group by month
+	SPH_GROUPBY_YEAR	= 3		///< group by year
+};
+
+
 /// search query filter
 class CSphFilter
 {
@@ -807,6 +822,10 @@ public:
 
 	CSphVector<CSphFilter,8>	m_dFilters;	///< filters
 
+	int				m_iGroupBy;		///< group-by attribute index
+	CSphString		m_sGroupBy;		///< group-by attribute name
+	ESphGroupBy		m_eGroupFunc;	///< function to pre-process group-by attribute value with
+
 public:
 					CSphQuery ();	///< ctor, fills defaults
 };
@@ -828,7 +847,7 @@ public:
 	CSphVector<CSphMatch>	m_dMatches;			///< top matching documents, no more than MAX_MATCHES
 	int						m_iTotalMatches;	///< total matches count
 
-	CSphSchema				m_tSchema;			///< index schema
+	CSphSchema				m_tSchema;			///< result schema
 
 public:
 							CSphQueryResult ();		///< ctor
@@ -905,7 +924,7 @@ CSphIndex *			sphCreateIndexPhrase ( const char * sFilename );
 void				sphSetQuiet ( bool bQuiet );
 
 /// create proper queue for given query
-ISphMatchQueue *	sphCreateQueue ( CSphQuery * pQuery );
+ISphMatchQueue *	sphCreateQueue ( const CSphQuery * pQuery );
 
 /// convert queue to sorted array, and add its entries to result's matches array
 void				sphFlattenQueue ( ISphMatchQueue * pQueue, CSphQueryResult * pResult );

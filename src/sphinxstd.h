@@ -359,7 +359,7 @@ protected:
 	/// find entry by key
 	HashEntry_t * FindByKey ( const KEY & tKey ) const
 	{
-		DWORD uHash = DWORD ( HASHFUNC::Hash ( tKey ) ) % LENGTH;
+		unsigned int uHash = ( (unsigned int) HASHFUNC::Hash ( tKey ) ) % LENGTH;
 		HashEntry_t * pEntry = m_dHash [ uHash ];
 
 		while ( pEntry )
@@ -412,7 +412,7 @@ public:
 	/// returns false if this key is alredy hashed
 	bool Add ( const T & tValue, const KEY & tKey )
 	{
-		DWORD uHash = DWORD ( HASHFUNC::Hash ( tKey ) ) % LENGTH;
+		unsigned int uHash = ( (unsigned int) HASHFUNC::Hash ( tKey ) ) % LENGTH;
 
 		// check if this key is already hashed
 		HashEntry_t * pEntry = m_dHash [ uHash ];

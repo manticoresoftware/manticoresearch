@@ -2999,71 +2999,13 @@ CSphIndex_VLN::~CSphIndex_VLN ()
 	(a.m_iWordID == b.m_iWordID && a.m_iDocID == b.m_iDocID && a.m_iWordPos < b.m_iWordPos))
 
 
-struct CmpMatch_fn
+struct CmpHit_fn
 {
-	inline int operator () ( const CSphMatch & a, const CSphMatch & b )
+	inline int operator () ( const CSphWordHit & a, const CSphWordHit & b )
 	{
-		return a.m_iWeight - b.m_iWeight;
+		return SPH_CMPHIT_LESS ( a, b );
 	}
 };
-
-
-/// sort hits by word/document/position
-void sphSortHits ( CSphWordHit * s, int n )
-{
-	PROFILE ( sort_hits );
-
-	int st0[32], st1[32];
-	int a, b, k, i, j;
-	CSphWordHit t;
-	DWORD x_word, x_doc, x_pos;
-
-	k = 1;
-	st0[0] = 0;
-	st1[0] = n - 1;
-	while (k != 0) {
-		k--;
-		i = a = st0[k];
-		j = b = st1[k];
-		x_word = s[(a+b) / 2].m_iWordID;
-		x_doc = s[(a+b) / 2].m_iDocID;
-		x_pos = s[(a+b) / 2].m_iWordPos;
-//		x = s[(a+b) / 2];
-		while (a < b) {
-			while (i <= j) {
-//				while (cmpHit(&s[i], &x) < 0) i++;
-				while (s[i].m_iWordID < x_word ||
-					(s[i].m_iWordID == x_word && s[i].m_iDocID < x_doc) ||
-					(s[i].m_iWordID == x_word && s[i].m_iDocID == x_doc && s[i].m_iWordPos < x_pos))
-						i++;
-//				while (cmpHit(&x, &s[j]) < 0) j--;
-				while (x_word < s[j].m_iWordID ||
-					(x_word == s[j].m_iWordID && x_doc < s[j].m_iDocID) ||
-					(x_word == s[j].m_iWordID && x_doc == s[j].m_iDocID && x_pos < s[j].m_iWordPos))
-						j--;
-				if (i <= j) {
-					t = s[i]; s[i] = s[j]; s[j] = t;
-					i++; j--;
-				}
-			}
-			if (j - a >= b - i) {
-				if (a < j) {
-					st0[k] = a;
-					st1[k] = j;
-					k++;
-				}
-				a = i;
-			} else {
-				if (i < b) {
-					st0[k] = i;
-					st1[k] = b;
-					k++;
-				}
-				b = j;
-			}
-		}
-	}
-}
 
 
 /// sort baked docinfos by document ID
@@ -3836,7 +3778,10 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 
 				// sort hits
 				int iHits = pHits - dHits;
-				sphSortHits ( dHits, iHits );
+				{
+					PROFILE ( sort_hits );
+					sphSort ( &dHits[0], iHits, CmpHit_fn() );
+				}
 				pHits = dHits;
 
 				if ( m_eDocinfo==SPH_DOCINFO_INLINE )
@@ -3903,7 +3848,10 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	if ( pHits>dHits )
 	{
 		int iHits = pHits - dHits;
-		sphSortHits ( dHits, iHits );
+		{
+			PROFILE ( sort_hits );
+			sphSort ( &dHits[0], iHits, CmpHit_fn() );
+		}
 		tProgress.m_iHitsTotal += iHits;
 
 		if ( m_eDocinfo==SPH_DOCINFO_INLINE )

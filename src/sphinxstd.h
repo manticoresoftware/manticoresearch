@@ -65,6 +65,7 @@ namespace Private
 
 /////////////////////////////////////////////////////////////////////////////
 
+/// generic comparator
 template < typename T >
 struct SphLess_T
 {
@@ -75,6 +76,7 @@ struct SphLess_T
 };
 
 
+/// generic comparator
 template < typename T >
 struct SphGreater_T
 {
@@ -84,6 +86,45 @@ struct SphGreater_T
 	}
 };
 
+
+/// generic sort
+template < typename T, typename F > void sphSort ( T * pData, int iCount, F COMP )
+{
+	int st0[32], st1[32], a, b, k, i, j;
+	T x;
+
+	k = 1;
+	st0[0] = 0;
+	st1[0] = iCount-1;
+	while ( k )
+	{
+		k--;
+		i = a = st0[k];
+		j = b = st1[k];
+		x = pData [ (a+b)/2 ]; // FIXME! add better median at least
+		while ( a<b )
+		{
+			while ( i<=j )
+			{
+				while ( COMP ( pData[i], x ) ) i++;
+				while ( COMP ( x, pData[j] ) ) j--;
+				if (i <= j) { Swap ( pData[i], pData[j] ); i++; j--; }
+			}
+
+			if ( j-a>=b-i )
+			{
+				if ( a<j ) { st0[k] = a; st1[k] = j; k++; }
+				a = i;
+			} else
+			{
+				if ( i<b ) { st0[k] = i; st1[k] = b; k++; }
+				b = j;
+			}
+		}
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////////
 
 /// generic vector
 /// (don't even ask why it's not std::vector)
@@ -203,19 +244,20 @@ public:
 		return m_iLength;
 	}
 
-	/// sort
+public:
+	/// default sort
 	void Sort ( int iStart=0, int iEnd=-1 )
 	{
 		Sort ( SphLess_T<T>(), iStart, iEnd );
 	}
 
-	/// reverse sort
+	/// default reverse sort
 	void RSort ( int iStart=0, int iEnd=-1 )
 	{
 		Sort ( SphGreater_T<T>(), iStart, iEnd );
 	}
 
-	/// sort
+	/// generic sort
 	template < typename F > void Sort ( F COMP, int iStart=0, int iEnd=-1 )
 	{
 		if ( m_iLength<2 ) return;
@@ -223,38 +265,7 @@ public:
 		if ( iEnd<0 ) iEnd = m_iLength+iEnd;
 		assert ( iStart<=iEnd );
 
-		int st0[32], st1[32], a, b, k, i, j;
-		T x;
-
-		k = 1;
-		st0[0] = iStart;
-		st1[0] = iEnd;
-		while ( k )
-		{
-			k--;
-			i = a = st0[k];
-			j = b = st1[k];
-			x = m_pData [ (a+b)/2 ]; // FIXME! add better median at least
-			while ( a<b )
-			{
-				while ( i<=j )
-				{
-					while ( COMP ( m_pData[i], x ) ) i++;
-					while ( COMP ( x, m_pData[j] ) ) j--;
-					if (i <= j) { Swap ( m_pData[i], m_pData[j] ); i++; j--; }
-				}
-
-				if ( j-a>=b-i )
-				{
-					if ( a<j ) { st0[k] = a; st1[k] = j; k++; }
-					a = i;
-				} else
-				{
-					if ( i<b ) { st0[k] = i; st1[k] = b; k++; }
-					b = j;
-				}
-			}
-		}
+		sphSort ( m_pData+iStart, iEnd-iStart+1, COMP );
 	}
 
 	/// access

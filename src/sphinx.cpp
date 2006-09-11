@@ -514,13 +514,14 @@ static inline int iLog2 ( DWORD iValue )
 }
 
 
-/// general-purpose hash
 #if USE_WINDOWS
 #pragma warning(disable:4127)
 #endif
 
+/// simple fixed-size hash
+/// doesn't keep the order
 template < typename T, typename KEY, typename HASHFUNC, int STEP=117 >
-class CSphHash
+class CSphFixedHash
 {
 protected:
 	struct HashEntry_t
@@ -573,7 +574,7 @@ protected:
 
 public:
 	/// ctor
-	CSphHash ( int iLength )
+	CSphFixedHash ( int iLength )
 		: m_pHash ( NULL )
 		, m_iLength ( 1<<( 1 + iLog2(iLength-1) ) )
 	{
@@ -589,7 +590,7 @@ public:
 	}
 
 	/// dtor
-	~CSphHash ()
+	~CSphFixedHash ()
 	{
 		Reset ();
 	}
@@ -643,7 +644,7 @@ public:
 	}
 
 	/// copying
-	const CSphHash<T,KEY,HASHFUNC,STEP> & operator = ( const CSphHash<T,KEY,HASHFUNC,STEP> & rhs )
+	const CSphFixedHash<T,KEY,HASHFUNC,STEP> & operator = ( const CSphFixedHash<T,KEY,HASHFUNC,STEP> & rhs )
 	{
 		assert ( 0 );
 		return *this;
@@ -699,7 +700,7 @@ protected:
 	int				m_iAttrPriority;	///< group-by value virtual attribute index
 	int				m_iAttrCount;		///< grouped matches count virtual attribute index
 
-	CSphHash < CSphMatch *, DWORD, IdentityHash_fn >	m_hPriority2Match;
+	CSphFixedHash < CSphMatch *, DWORD, IdentityHash_fn >	m_hPriority2Match;
 
 	CSphMatchComparatorState	m_tState;
 

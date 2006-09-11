@@ -38,18 +38,17 @@ inline int sphIsAlpha ( int c )
 /////////////////////////////////////////////////////////////////////////////
 
 /// string hash function
-template < int LENGTH >
 struct CSphStrHashFunc
 {
-	inline int operator () ( const CSphString & sKey )
+	static inline int Hash ( const CSphString & sKey )
 	{
-		return sphCRC32((const BYTE *)sKey.cstr()) & ( LENGTH-1 );
+		return sphCRC32 ( (const BYTE *)sKey.cstr() );
 	}
 };
 
 /// small hash with string keys
 template < typename T >
-class SmallStringHash_T : public CSphGenericHash < T, CSphString, CSphStrHashFunc<128>, 128, 13 > {};
+class SmallStringHash_T : public CSphFixedOrderedHash < T, CSphString, CSphStrHashFunc, 128, 13 > {};
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -77,6 +76,7 @@ protected:
 	int				m_iLine;
 	CSphString		m_sSectionType;
 	CSphString		m_sSectionName;
+	char			m_sError [ 1024 ];
 
 protected:
 	bool			ValidateKey ( const char * sKey, const char ** dKnownKeys );

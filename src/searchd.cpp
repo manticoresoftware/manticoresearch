@@ -2713,7 +2713,7 @@ int main ( int argc, char **argv )
 			{
 				if ( !g_hIndexes ( pLocal->cstr() ) )
 				{
-					sphWarning ( "index '%s': no such local index '%s', SKIPPING",
+					sphWarning ( "index '%s': no such local index '%s' - NOT SERVING",
 						sIndexName, pLocal->cstr() );
 					continue;
 				}
@@ -2730,13 +2730,13 @@ int main ( int argc, char **argv )
 				while ( sphIsAlpha(*p) || *p=='.' || *p=='-' ) p++;
 				if ( p==pAgent->cstr() )
 				{
-					sphWarning ( "index '%s': agent '%s': host name expected, SKIPPING",
+					sphWarning ( "index '%s': agent '%s': host name expected - NOT SERVING",
 						sIndexName, pAgent->cstr() );
 					continue;
 				}
 				if ( *p++!=':' )
 				{
-					sphWarning ( "index '%s': agent '%s': colon expected near '%s', SKIPPING",
+					sphWarning ( "index '%s': agent '%s': colon expected near '%s' - NOT SERVING",
 						sIndexName, pAgent->cstr(), p );
 					continue;
 				}
@@ -2745,14 +2745,14 @@ int main ( int argc, char **argv )
 				// extract port
 				if ( !isdigit(*p) )
 				{
-					sphWarning ( "index '%s': agent '%s': port number expected near '%s', SKIPPING",
+					sphWarning ( "index '%s': agent '%s': port number expected near '%s' - NOT SERVING",
 						sIndexName, pAgent->cstr(), p );
 					continue;
 				}
 				tAgent.m_iPort = atoi(p);
 				if ( tAgent.m_iPort<=0 || tAgent.m_iPort>=65536 )
 				{
-					sphWarning ( "index '%s': agent '%s': invalid port number near '%s', SKIPPING",
+					sphWarning ( "index '%s': agent '%s': invalid port number near '%s' - NOT SERVING",
 						sIndexName, pAgent->cstr(), p );
 					continue;
 				}
@@ -2761,7 +2761,7 @@ int main ( int argc, char **argv )
 				while ( isdigit(*p) ) p++;
 				if ( *p++!=':' )
 				{
-					sphWarning ( "index '%s': agent '%s': colon expected near '%s', SKIPPING",
+					sphWarning ( "index '%s': agent '%s': colon expected near '%s' - NOT SERVING",
 						sIndexName, pAgent->cstr(), p );
 					continue;
 				}
@@ -2772,7 +2772,7 @@ int main ( int argc, char **argv )
 					p++;
 				if ( *p )
 				{
-					sphWarning ( "index '%s': agent '%s': index list expected near '%s', SKIPPING",
+					sphWarning ( "index '%s': agent '%s': index list expected near '%s' - NOT SERVING",
 						sIndexName, pAgent->cstr(), p );
 					continue;
 				}
@@ -2782,7 +2782,7 @@ int main ( int argc, char **argv )
 				struct hostent * hp = gethostbyname ( tAgent.m_sHost.cstr() );
 				if ( !hp )
 				{
-					sphWarning ( "index '%s': agent '%s': failed to lookup host name, SKIPPING",
+					sphWarning ( "index '%s': agent '%s': failed to lookup host name - NOT SERVING",
 						sIndexName, pAgent->cstr() );
 					continue;
 				}
@@ -2812,14 +2812,20 @@ int main ( int argc, char **argv )
 			// finally, check and add distributed index to global table
 			if ( tIdx.m_dAgents.GetLength()==0 && tIdx.m_dLocal.GetLength()==0 )
 			{
-				sphWarning ( "index '%s': no valid local/remote indexes in distributed index, SKIPPING",
+				sphWarning ( "index '%s': no valid local/remote indexes in distributed index - NOT SERVING",
 					sIndexName );
 				continue;
 
 			} else
 			{
-				g_hDistIndexes.Add ( tIdx, sIndexName );
-				iValidIndexes++;
+				ESphHashResult eRes = g_hDistIndexes.Add ( tIdx, sIndexName );
+				if ( eRes!=SPH_HASH_OK )
+				{
+					assert ( eRes==SPH_HASH_OVERFLOW );
+					sphWarning ( "index '%s': too many indexes, hash overflow - NOT SERVING",
+						sIndexName );
+					continue;
+				}
 			}
 
 		} else
@@ -2923,7 +2929,15 @@ int main ( int argc, char **argv )
 				tIdx.m_pLockFile = new CSphString ( sTmp );
 			}
 
-			g_hIndexes.Add ( tIdx, sIndexName );
+			ESphHashResult eRes = g_hIndexes.Add ( tIdx, sIndexName );
+			if ( eRes!=SPH_HASH_OK )
+			{
+				assert ( eRes==SPH_HASH_OVERFLOW );
+				sphWarning ( "index '%s': too many indexes, hash overflow - NOT SERVING",
+					sIndexName );
+				continue;
+			}
+
 			tIdx.Reset (); // so that the dtor wouln't delete everything
 		}
 

@@ -335,10 +335,18 @@ private:
 
 /////////////////////////////////////////////////////////////////////////////
 
-/// simple generic hash
+/// hash error codes
+enum ESphHashResult
+{
+	SPH_HASH_OK			= 0,
+	SPH_HASH_OVERFLOW	= 1,
+	SPH_HASH_EXISTS		= 2
+};
+
+/// simple fixed-size hash
 /// keeps the order, so Iterate() return the entries in the order they was inserted
 template < typename T, typename KEY, typename HASHFUNC, int LENGTH, int INCREASE >
-class CSphGenericHash
+class CSphFixedOrderedHash
 {
 protected:
 	struct HashEntry_t
@@ -363,9 +371,7 @@ protected:
 		if ( !m_pHash )
 			return NULL;
 
-		int index = HASHFUNC() ( key ) ;
-		assert ( index >= 0 && index < LENGTH );
-
+		int index = DWORD ( HASHFUNC::Hash ( key ) ) % LENGTH;
 		for ( int count = 0; count < LENGTH * 2 / 3; count++ )
 		{
 			// deleted slot
@@ -401,7 +407,7 @@ protected:
 
 public:
 	/// ctor
-	CSphGenericHash ()
+	CSphFixedOrderedHash ()
 		: m_pHash ( NULL )
 		, m_iFirst ( -1 )
 		, m_iLast ( -1 )
@@ -410,7 +416,7 @@ public:
 	}
 
 	/// dtor
-	~CSphGenericHash ()
+	~CSphFixedOrderedHash ()
 	{
 		Reset ();
 	}
@@ -422,7 +428,7 @@ public:
 	}
 
 	/// add new entry
-	void Add ( const T & tData, const KEY & tKey )
+	ESphHashResult Add ( const T & tData, const KEY & tKey )
 	{
 		bool bFirst = false;
 		if ( !m_pHash )
@@ -432,8 +438,10 @@ public:
 		}
 
 		HashEntry_t * pEntry = const_cast<HashEntry_t *> ( Search<true> ( tKey ) );
-		assert ( pEntry && "hash overflow" );
-		assert ( pEntry->m_bEmpty && "already hashed" );
+		if ( !pEntry )
+			return SPH_HASH_OVERFLOW; // no more room in hash
+		if ( !pEntry->m_bEmpty )
+			return SPH_HASH_EXISTS; // this key is already hashed
 
 		pEntry->m_tData		= tData;
 		pEntry->m_tKey		= tKey;
@@ -450,6 +458,8 @@ public:
 			m_pHash[m_iLast].m_iNext = pEntry-m_pHash;
 			m_iLast = pEntry-m_pHash;
 		}
+
+		return SPH_HASH_OK;
 	}
 
 	/// check if key exists
@@ -480,7 +490,7 @@ public:
 	}
 
 	/// copying
-	const CSphGenericHash<T,KEY,HASHFUNC,LENGTH,INCREASE> & operator = ( const CSphGenericHash<T,KEY,HASHFUNC,LENGTH,INCREASE> & rhs )
+	const CSphFixedOrderedHash<T,KEY,HASHFUNC,LENGTH,INCREASE> & operator = ( const CSphFixedOrderedHash<T,KEY,HASHFUNC,LENGTH,INCREASE> & rhs )
 	{
 		SafeDeleteArray ( m_pHash );
 		if ( rhs.m_pHash )

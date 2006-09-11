@@ -154,13 +154,33 @@ bool CSphConfigParser::AddSection ( const char * sType, const char * sName )
 	m_sSectionType = sType;
 	m_sSectionName = sName;
 
+	ESphHashResult eRes;
+
 	if ( !m_tConf.Exists ( m_sSectionType ) )
-		m_tConf.Add ( CSphConfigType(), m_sSectionType );
+	{
+		eRes = m_tConf.Add ( CSphConfigType(), m_sSectionType );
+		if ( eRes!=SPH_HASH_OK )
+		{
+			assert ( eRes==SPH_HASH_OVERFLOW );
+			snprintf ( m_sError, sizeof(m_sError), "too many section types, hash overflow" );
+			return false;
+		}
+	}
 
 	if ( m_tConf[m_sSectionType].Exists ( m_sSectionName ) )
+	{
+		snprintf ( m_sError, sizeof(m_sError), "section '%s' (type='%s') already exists", sName, sType );
 		return false;
+	}
 
-	m_tConf[m_sSectionType].Add ( CSphConfigSection(), m_sSectionName );
+	eRes = m_tConf[m_sSectionType].Add ( CSphConfigSection(), m_sSectionName );
+	if ( eRes!=SPH_HASH_OK )
+	{
+		assert ( eRes==SPH_HASH_OVERFLOW );
+		snprintf ( m_sError, sizeof(m_sError), "too many sections, hash overflow" );
+		return false;
+	}
+
 	return true;
 }
 
@@ -193,7 +213,13 @@ bool CSphConfigParser::AddKey ( const char * sKey, char * sValue )
 	} else
 	{
 		// just add
-		tSec.Add ( sValue, sKey );
+		ESphHashResult eRes = tSec.Add ( sValue, sKey );
+		if ( eRes!=SPH_HASH_OK )
+		{
+			assert ( eRes==SPH_HASH_OVERFLOW );
+			snprintf ( m_sError, sizeof(m_sError), "too many keys, hash overflow" );
+			return false;
+		}
 	}
 	return true;
 }
@@ -204,7 +230,6 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 	const int L_STEPBACK	= 16;
 	const int L_TOKEN		= 64;
 	const int L_BUFFER		= 256;
-	const int L_ERROR		= 1024;
 
 	// open file
 	FILE * fp = fopen ( sFileName, "rb" );
@@ -224,9 +249,7 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 	int iCh = -1;
 
 	const char * sLine = p;
-	char sError [ L_ERROR ];
 	int iStepback = 0;
-	int iError = 0;
 
 	enum { S_TOP, S_SKIP2NL, S_TOK, S_TYPE, S_SEC, S_CHR, S_VALUE, S_SECNAME, S_SECBASE } eState = S_TOP, eStack[8];
 	int iStack = 0;
@@ -234,12 +257,16 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 	int iValue = 0, iValueMax = 65535;
 	char * sValue = new char [ iValueMax+1 ];
 
-	#define LOC_ERROR(_msg) { strncpy ( sError, _msg, sizeof(sError) ); iError = 1; break; }
-	#define LOC_ERROR2(_msg,_a) { snprintf ( sError, sizeof(sError), _msg, _a ); iError = 1; break; }
-	#define LOC_ERROR3(_msg,_a,_b) { snprintf ( sError, sizeof(sError), _msg, _a, _b ); iError = 1; break; }
-	#define LOC_ERROR4(_msg,_a,_b,_c) { snprintf ( sError, sizeof(sError), _msg, _a, _b, _c ); iError = 1; break; }
+	#define LOC_ERROR(_msg) { strncpy ( m_sError, _msg, sizeof(m_sError) ); break; }
+	#define LOC_ERROR2(_msg,_a) { snprintf ( m_sError, sizeof(m_sError), _msg, _a ); break; }
+	#define LOC_ERROR3(_msg,_a,_b) { snprintf ( m_sError, sizeof(m_sError), _msg, _a, _b ); break; }
+	#define LOC_ERROR4(_msg,_a,_b,_c) { snprintf ( m_sError, sizeof(m_sError), _msg, _a, _b, _c ); break; }
+
 	#define LOC_PUSH(_new) { assert ( iStack<int(sizeof(eStack)/sizeof(eState)) ); eStack[iStack++] = eState; eState = _new; }
 	#define LOC_POP() { assert ( iStack>0 ); eState = eStack[--iStack]; }
+	#define LOC_BACK() { if ( *--p=='\n' ) m_iLine--; }
+
+	m_sError[0] = '\0';
 
 	for ( ; ; p++ )
 	{
@@ -270,7 +297,7 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 			if ( isspace(*p) )				continue;
 			if ( *p=='#' )					{ LOC_PUSH ( S_SKIP2NL ); continue; }
 			if ( !sphIsAlpha(*p) )			LOC_ERROR ( "invalid token" );
-											iToken = 0; LOC_PUSH ( S_TYPE ); LOC_PUSH ( S_TOK ); p--; continue;
+											iToken = 0; LOC_PUSH ( S_TYPE ); LOC_PUSH ( S_TOK ); LOC_BACK(); continue;
 		}
 
 		// handle S_SKIP2NL state
@@ -285,7 +312,7 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 		{
 			if ( !iToken && !sphIsAlpha(*p) )LOC_ERROR ( "internal error (non-alpha in S_TOK pos 0)" );
 			if ( iToken==sizeof(sToken) )	LOC_ERROR ( "token too long" );
-			if ( !sphIsAlpha(*p) )			{ LOC_POP (); sToken [ iToken ] = '\0'; iToken = 0; p--; continue; }
+			if ( !sphIsAlpha(*p) )			{ LOC_POP (); sToken [ iToken ] = '\0'; iToken = 0; LOC_BACK(); continue; }
 			if ( !iToken )					{ sToken[0] = '\0'; }
 											sToken [ iToken++ ] = *p; continue;
 		}
@@ -296,8 +323,8 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 			if ( isspace(*p) )				continue;
 			if ( *p=='#' )					{ LOC_PUSH ( S_SKIP2NL ); continue; }
 			if ( !sToken[0] )				{ LOC_ERROR ( "internal error (empty token in S_TYPE)" ); }
-			if ( IsPlainSection(sToken) )	{ AddSection ( sToken, sToken ); sToken[0] = '\0'; LOC_POP (); LOC_PUSH ( S_SEC ); LOC_PUSH ( S_CHR ); iCh = '{'; p--; continue; }
-			if ( IsNamedSection(sToken) )	{ m_sSectionType = sToken; sToken[0] = '\0'; LOC_POP (); LOC_PUSH ( S_SECNAME ); p--; continue; }
+			if ( IsPlainSection(sToken) )	{ if ( !AddSection ( sToken, sToken ) ) break; sToken[0] = '\0'; LOC_POP (); LOC_PUSH ( S_SEC ); LOC_PUSH ( S_CHR ); iCh = '{'; LOC_BACK(); continue; }
+			if ( IsNamedSection(sToken) )	{ m_sSectionType = sToken; sToken[0] = '\0'; LOC_POP (); LOC_PUSH ( S_SECNAME ); LOC_BACK(); continue; }
 											LOC_ERROR2 ( "invalid section type '%s'", sToken );
 		}
 
@@ -316,7 +343,7 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 			if ( isspace(*p) )				continue;
 			if ( *p=='#' )					{ LOC_PUSH ( S_SKIP2NL ); continue; }
 			if ( *p=='}' )					{ LOC_POP (); continue; }
-			if ( sphIsAlpha(*p) )			{ LOC_PUSH ( S_VALUE ); LOC_PUSH ( S_CHR ); iCh = '='; LOC_PUSH ( S_TOK ); p--; iValue = 0; sValue[0] = '\0'; continue; }
+			if ( sphIsAlpha(*p) )			{ LOC_PUSH ( S_VALUE ); LOC_PUSH ( S_CHR ); iCh = '='; LOC_PUSH ( S_TOK ); LOC_BACK(); iValue = 0; sValue[0] = '\0'; continue; }
 											LOC_ERROR2 ( "section contents: expected token, got '%c'", *p );
 
 		}
@@ -324,8 +351,8 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 		// handle S_VALUE state
 		if ( eState==S_VALUE )
 		{
-			if ( *p=='\n' )					{ AddKey ( sToken, sValue ); iValue = 0; LOC_POP (); continue; }
-			if ( *p=='#' )					{ AddKey ( sToken, sValue ); iValue = 0; LOC_POP (); LOC_PUSH ( S_SKIP2NL ); continue; }
+			if ( *p=='\n' )					{ if ( !AddKey ( sToken, sValue ) ) break; iValue = 0; LOC_POP (); continue; }
+			if ( *p=='#' )					{ if ( !AddKey ( sToken, sValue ) ) break; iValue = 0; LOC_POP (); LOC_PUSH ( S_SKIP2NL ); continue; }
 			if ( *p=='\\' )					{ LOC_PUSH ( S_SKIP2NL ); continue; }
 			if ( iValue<iValueMax )			{ sValue[iValue++] = *p; sValue[iValue] = '\0'; }
 											continue;
@@ -336,9 +363,8 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 		{
 			if ( isspace(*p) )				{ continue; }
 			if ( !sToken[0]&&!sphIsAlpha(*p)){ LOC_ERROR2 ( "named section: expected name, got '%c'", *p ); }
-			if ( !sToken[0] )				{ LOC_PUSH ( S_TOK ); p--; continue; }
-											if ( !AddSection ( m_sSectionType.cstr(), sToken ) ) LOC_ERROR3 ( "section '%s' (type=%s) already exists", sToken, m_sSectionType.cstr() ); sToken[0] = '\0';
-
+			if ( !sToken[0] )				{ LOC_PUSH ( S_TOK ); LOC_BACK(); continue; }
+											if ( !AddSection ( m_sSectionType.cstr(), sToken ) ) break; sToken[0] = '\0';
 			if ( *p==':' )					{ eState = S_SECBASE; continue; }
 			if ( *p=='{' )					{ eState = S_SEC; continue; }
 											LOC_ERROR2 ( "named section: expected ':' or '{', got '%c'", *p );
@@ -349,7 +375,7 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 		{
 			if ( isspace(*p) )				{ continue; }
 			if ( !sToken[0]&&!sphIsAlpha(*p)){ LOC_ERROR2 ( "named section: expected parent name, got '%c'", *p ); }
-			if ( !sToken[0] )				{ LOC_PUSH ( S_TOK ); p--; continue; }
+			if ( !sToken[0] )				{ LOC_PUSH ( S_TOK ); LOC_BACK(); continue; }
 
 			// copy the section
 			assert ( m_tConf.Exists ( m_sSectionType ) );
@@ -366,7 +392,7 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 			while ( tDest.IterateNext() )
 				tDest.IterateGet().m_bTag = true;
 
-			p--;
+			LOC_BACK();
 			eState = S_SEC;
 			LOC_PUSH ( S_CHR );
 			iCh = '{';
@@ -383,7 +409,7 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 	fclose ( fp );
 	SafeDeleteArray ( sValue );
 
-	if ( iError )
+	if ( strlen(m_sError) )
 	{
 		int iCtx = Min ( L_STEPBACK, p-sLine+1 ); // error context is upto L_STEPBACK chars back, but never going to prev line
 		const char * sCtx = p-iCtx+1;
@@ -405,7 +431,8 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 			sStepback[iCtx] = '\0';
 		}
 
-		fprintf ( stdout, "%s line %d col %d: %s near '%s'\n", m_sFileName.cstr(), m_iLine, int(p-sLine+1), sError, sStepback );
+		fprintf ( stdout, "%s line %d col %d: %s near '%s'\n", m_sFileName.cstr(), m_iLine, int(p-sLine+1),
+			m_sError, sStepback );
 		return false;
 	}
 	return true;

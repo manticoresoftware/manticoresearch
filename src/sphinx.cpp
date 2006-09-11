@@ -712,7 +712,7 @@ protected:
 public:
 	/// ctor
 	CSphGroupQueue ( const CSphQuery * pQuery )
-		: ISphQueue ( true )
+		: ISphMatchQueue ( true )
 		, m_iUsed ( 0 )
 		, m_iLimit ( pQuery->m_iMaxMatches )
 		, m_eGroupBy ( pQuery->m_eGroupFunc )

@@ -414,7 +414,7 @@ public:
 		{
 			// if it's worse that current min, reject it, else pop off current min
 			if ( COMP::IsLess ( tEntry, m_pData[0], m_tState ) )
-				return false;
+				return true;
 			else
 				Pop ();
 		}
@@ -769,6 +769,8 @@ public:
 					memcpy ( pMatch->m_pAttrs, tEntry.m_pAttrs, sizeof(DWORD)*tEntry.m_iAttrs );
 				}
 			}
+
+			// it's a dupe anyway, so we shouldn't update total matches count
 			return false;
 		}
 
@@ -783,7 +785,7 @@ public:
 		{
 			// if it's worse that current min, reject it, else pop off current min
 			if ( uPriority < GetPriority(0) )
-				return false;
+				return true;
 			else
 				Pop ();
 		}
@@ -4845,8 +4847,8 @@ void CSphIndex_VLN::MatchAny ( const CSphQuery * pQuery, ISphMatchQueue * pTop, 
 		if ( bLateLookup )
 			LookupDocinfo ( tMatch );
 
-		pTop->Push ( tMatch );
-		pResult->m_iTotalMatches++;
+		if ( pTop->Push ( tMatch ) )
+			pResult->m_iTotalMatches++;
 	}
 }
 
@@ -5130,8 +5132,8 @@ void CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, CSphDict * pDict, I
 		if ( bLateLookup )
 			LookupDocinfo ( *pMatch );
 
-		pTop->Push ( *pMatch );
-		pResult->m_iTotalMatches++;
+		if ( pTop->Push ( *pMatch ) )
+			pResult->m_iTotalMatches++;
 	}
 
 	// all done
@@ -5430,7 +5432,7 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 	}
 
 	// lookup group-by attribute index
-	pQuery->m_iGroupBy = m_tSchema.GetAttrIndex ( pQuery->m_sSortBy.cstr() );
+	pQuery->m_iGroupBy = m_tSchema.GetAttrIndex ( pQuery->m_sGroupBy.cstr() );
 
 	//////////////////////////////
 	// decode words from wordlist
@@ -5538,7 +5540,7 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 			LookupDocinfo ( *pCur++ );
 	}
 
-	if ( pQuery->m_iGroupBy )
+	if ( pQuery->m_iGroupBy>=0 )
 	{
 		pResult->m_tSchema.m_dAttrs.Add ( CSphColumnInfo ( "@groupby", SPH_ATTR_INTEGER ) );
 		pResult->m_tSchema.m_dAttrs.Add ( CSphColumnInfo ( "@count", SPH_ATTR_INTEGER ) );

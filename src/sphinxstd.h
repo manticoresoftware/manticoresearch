@@ -762,9 +762,9 @@ public:
 	virtual				~ISphQueue () {}
 
 	/// base push
-	/// returns false if the entry was rejected
-	/// returns true if the entry was actually inserted
-	virtual bool			Push ( const T & tEntry ) = 0;
+	/// returns false if the entry was rejected as duplicate
+	/// returns true otherwise (even if it was not actually inserted)
+	virtual bool		Push ( const T & tEntry ) = 0;
 
 	/// base pop
 	virtual void		Pop () = 0;

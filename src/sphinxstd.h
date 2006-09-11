@@ -335,88 +335,55 @@ private:
 
 /////////////////////////////////////////////////////////////////////////////
 
-/// hash error codes
-enum ESphHashResult
-{
-	SPH_HASH_OK			= 0,
-	SPH_HASH_OVERFLOW	= 1,
-	SPH_HASH_EXISTS		= 2
-};
-
-/// simple fixed-size hash
+/// simple dynamic hash
 /// keeps the order, so Iterate() return the entries in the order they was inserted
-template < typename T, typename KEY, typename HASHFUNC, int LENGTH, int INCREASE >
-class CSphFixedOrderedHash
+template < typename T, typename KEY, typename HASHFUNC, int LENGTH, int STEP >
+class CSphOrderedHash
 {
 protected:
 	struct HashEntry_t
 	{
-		T 				m_tData;			///< data, owned by the hash
 		KEY				m_tKey;				///< key, owned by the hash
-		bool			m_bDeleted;			///< is this entry deleted
-		bool			m_bEmpty;			///< is this entry empty
-		int				m_iNext;			///< next entry in the insertion order
+		T 				m_tValue;			///< data, owned by the hash
+		HashEntry_t *	m_pNextByHash;		///< next entry in hash list
+		HashEntry_t *	m_pNextByOrder;		///< next entry in the insertion order
 	};
 
-protected:
-	HashEntry_t	*	m_pHash;				///< all the hash entries
-	int				m_iFirst;				///< first entry inserted
-	int				m_iLast;				///< last entry inserted
 
 protected:
-	/// this function finds hash entry by it's key.
-	template < bool STOP_ON_DELETED >
-	const HashEntry_t * Search ( const KEY & key ) const
+	HashEntry_t *	m_dHash [ LENGTH ];		///< all the hash entries
+	HashEntry_t *	m_pFirstByOrder;		///< first entry in the insertion order
+	HashEntry_t *	m_pLastByOrder;			///< last entry in the insertion order
+
+protected:
+	/// find entry by key
+	HashEntry_t * FindByKey ( const KEY & tKey ) const
 	{
-		if ( !m_pHash )
-			return NULL;
+		DWORD uHash = DWORD ( HASHFUNC::Hash ( tKey ) ) % LENGTH;
+		HashEntry_t * pEntry = m_dHash [ uHash ];
 
-		int index = DWORD ( HASHFUNC::Hash ( key ) ) % LENGTH;
-		for ( int count = 0; count < LENGTH * 2 / 3; count++ )
+		while ( pEntry )
 		{
-			// deleted slot
-			if ( m_pHash[index].m_bDeleted )
-			{
-				// found deleted slot
-				#if USE_WINDOWS
-				#pragma warning(disable:4127)
-				#endif
-				if ( STOP_ON_DELETED )
-				#if USE_WINDOWS
-				#pragma warning(default:4127)
-				#endif
-					return m_pHash + index;
-			}
-			else
-			{
-				// empty slot
-				if ( m_pHash[index].m_bEmpty )
-					return m_pHash + index;
-
-				// found the same
-				if ( m_pHash[index].m_tKey == key )
-					return m_pHash + index;
-			}
-
-			// next index
-			index = ( index+INCREASE ) & ( LENGTH-1 );
+			if ( pEntry->m_tKey==tKey )
+				return pEntry;
+			pEntry = pEntry->m_pNextByHash;
 		}
-
 		return NULL;
 	}
 
 public:
 	/// ctor
-	CSphFixedOrderedHash ()
-		: m_pHash ( NULL )
-		, m_iFirst ( -1 )
-		, m_iLast ( -1 )
-		, m_iIterator ( -1 )
+	CSphOrderedHash ()
+		: m_pFirstByOrder ( NULL )
+		, m_pLastByOrder ( NULL )
+		, m_pIterator ( NULL )
 	{
+		for ( int i=0; i<LENGTH; i++ )
+			m_dHash[i] = NULL;
 	}
 
 	/// dtor
-	~CSphFixedOrderedHash ()
+	~CSphOrderedHash ()
 	{
 		Reset ();
 	}
@@ -424,91 +391,98 @@ public:
 	/// reset
 	void Reset ()
 	{
-		SafeDeleteArray ( m_pHash );
+		HashEntry_t * pKill = m_pFirstByOrder;
+		while ( pKill )
+		{
+			HashEntry_t * pNext = pKill->m_pNextByOrder;
+			SafeDelete ( pKill );
+			pKill = pNext;
+		}
+
+		for ( int i=0; i<LENGTH; i++ )
+			m_dHash[i] = 0;
+
+		m_pFirstByOrder = NULL;
+		m_pLastByOrder = NULL;
+		m_pIterator = NULL;
 	}
 
 	/// add new entry
-	ESphHashResult Add ( const T & tData, const KEY & tKey )
+	/// returns true on success
+	/// returns false if this key is alredy hashed
+	bool Add ( const T & tValue, const KEY & tKey )
 	{
-		bool bFirst = false;
-		if ( !m_pHash )
+		DWORD uHash = DWORD ( HASHFUNC::Hash ( tKey ) ) % LENGTH;
+
+		// check if this key is already hashed
+		HashEntry_t * pEntry = m_dHash [ uHash ];
+		HashEntry_t ** ppEntry = &m_dHash [ uHash ];
+		while ( pEntry )
 		{
-			Create ();
-			bFirst = true;
+			if ( pEntry->m_tKey==tKey )
+				return false;
+
+			ppEntry = &pEntry->m_pNextByHash;
+			pEntry = pEntry->m_pNextByHash;
 		}
 
-		HashEntry_t * pEntry = const_cast<HashEntry_t *> ( Search<true> ( tKey ) );
-		if ( !pEntry )
-			return SPH_HASH_OVERFLOW; // no more room in hash
-		if ( !pEntry->m_bEmpty )
-			return SPH_HASH_EXISTS; // this key is already hashed
+		// it's not; let's add the entry
+		assert ( !pEntry );
+		assert ( !*ppEntry );
 
-		pEntry->m_tData		= tData;
-		pEntry->m_tKey		= tKey;
-		pEntry->m_bDeleted	= false;
-		pEntry->m_bEmpty	= false;
+		pEntry = new HashEntry_t ();
+		pEntry->m_tKey = tKey;
+		pEntry->m_tValue = tValue;
+		pEntry->m_pNextByHash = NULL;
+		pEntry->m_pNextByOrder = NULL;
 
-		if ( bFirst )
+		*ppEntry = pEntry;
+
+		if ( !m_pFirstByOrder )
+			m_pFirstByOrder = pEntry;
+
+		if ( m_pLastByOrder )
 		{
-			m_iFirst = pEntry-m_pHash;
-			m_iLast = m_iFirst;
-		} else
-		{
-			assert ( m_iLast>=0 && m_iLast<LENGTH );
-			m_pHash[m_iLast].m_iNext = pEntry-m_pHash;
-			m_iLast = pEntry-m_pHash;
+			assert ( !m_pLastByOrder->m_pNextByOrder );
+			assert ( !pEntry->m_pNextByOrder );
+			m_pLastByOrder->m_pNextByOrder = pEntry;
 		}
+		m_pLastByOrder = pEntry;
 
-		return SPH_HASH_OK;
+		return true;
 	}
 
 	/// check if key exists
-	bool Exists ( const KEY & key ) const
+	bool Exists ( const KEY & tKey ) const
 	{
-		const HashEntry_t * pEntry = Search<false> ( key );
-		return !( pEntry==NULL || pEntry->m_bEmpty );
+		return FindByKey ( tKey )!=NULL;
 	}
 
 	/// get value pointer by key
 	T * operator () ( const KEY & tKey ) const
 	{
-		HashEntry_t * pEntry = const_cast<HashEntry_t *> ( Search<false> ( tKey ) );
-		if ( pEntry && !pEntry->m_bEmpty )
-			return &pEntry->m_tData;
-		return NULL;
+		HashEntry_t * pEntry = FindByKey ( tKey );
+		return pEntry ? &pEntry->m_tValue : NULL;
 	}
 
 	/// get value reference by key, asserting that the key exists in hash
 	T & operator [] ( const KEY & tKey ) const
 	{
-		HashEntry_t * pEntry = const_cast<HashEntry_t *> ( Search<false> ( tKey ) );
-		if ( pEntry && !pEntry->m_bEmpty )
-			return pEntry->m_tData;
+		HashEntry_t * pEntry = FindByKey ( tKey );
+		assert ( pEntry && "hash missing value in operator []" );
 
-		assert ( 0 && "hash missing value in operator []" );
-		return m_pHash[0].m_tData;
+		return pEntry->m_tValue;
 	}
 
 	/// copying
-	const CSphFixedOrderedHash<T,KEY,HASHFUNC,LENGTH,INCREASE> & operator = ( const CSphFixedOrderedHash<T,KEY,HASHFUNC,LENGTH,INCREASE> & rhs )
+	const CSphOrderedHash<T,KEY,HASHFUNC,LENGTH,STEP> & operator = ( const CSphOrderedHash<T,KEY,HASHFUNC,LENGTH,STEP> & rhs )
 	{
-		SafeDeleteArray ( m_pHash );
-		if ( rhs.m_pHash )
-		{
-			Create ();
-			for ( int i=0; i<LENGTH; i++ )
-			{
-				// FIXME! check if assignment operator gets called on key/data, and remove this
-				m_pHash[i].m_tKey = rhs.m_pHash[i].m_tKey;
-				m_pHash[i].m_tData = rhs.m_pHash[i].m_tData;
-				m_pHash[i].m_bDeleted = rhs.m_pHash[i].m_bDeleted;
-				m_pHash[i].m_bEmpty = rhs.m_pHash[i].m_bEmpty;
-				m_pHash[i].m_iNext = rhs.m_pHash[i].m_iNext;
-			}
-		}
+		Reset ();
 
-		m_iFirst = rhs.m_iFirst;
-		m_iLast = rhs.m_iLast;
+		rhs.IterateStart ();
+		while ( rhs.IterateNext() )
+			Add ( rhs.IterateGet(), rhs.IterateGetKey() );
+
 		return *this;
 	}
 
@@ -516,63 +490,33 @@ public:
 	/// start iterating
 	void IterateStart () const
 	{
-		m_iIterator = -1;
+		m_pIterator = NULL;
 	}
 
 	/// go to next existing entry
 	bool IterateNext () const
 	{
-		if ( !m_pHash )
-			return false;
-
-		if ( m_iIterator<0 )
-		{
-			assert ( m_iFirst>=0 );
-			m_iIterator = m_iFirst;
-		} else
-		{
-			assert ( m_iIterator>=0 && m_iIterator<LENGTH );
-			m_iIterator = m_pHash[m_iIterator].m_iNext;
-			if ( m_iIterator<0 )
-				return false;
-		}
-
-		return true;
+		m_pIterator = m_pIterator ? m_pIterator->m_pNextByOrder : m_pFirstByOrder;
+		return m_pIterator!=NULL;
 	}
 
 	/// get entry value
 	T & IterateGet () const
 	{
-		assert ( m_pHash );
-		assert ( m_iIterator>=0 && m_iIterator<LENGTH );
-		return m_pHash[m_iIterator].m_tData;
+		assert ( m_pIterator );
+		return m_pIterator->m_tValue;
 	}
 
 	/// get entry key
 	const KEY & IterateGetKey () const
 	{
-		assert ( m_pHash );
-		assert ( m_iIterator>=0 && m_iIterator<LENGTH );
-		return m_pHash[m_iIterator].m_tKey;
-	}
-
-protected:
-	/// allocate the hash on demand
-	void Create ()
-	{
-		assert ( !m_pHash );
-		m_pHash = new HashEntry_t [ LENGTH ];
-		for ( int i=0; i<LENGTH; i++ )
-		{
-			m_pHash[i].m_bEmpty = true;
-			m_pHash[i].m_bDeleted = false;
-			m_pHash[i].m_iNext = -1;
-		}
+		assert ( m_pIterator );
+		return m_pIterator->m_tKey;
 	}
 
 private:
 	/// current iterator
-	mutable int		m_iIterator;
+	mutable HashEntry_t *	m_pIterator;
 };
 
 /////////////////////////////////////////////////////////////////////////////

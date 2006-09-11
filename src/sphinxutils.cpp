@@ -154,38 +154,21 @@ bool CSphConfigParser::AddSection ( const char * sType, const char * sName )
 	m_sSectionType = sType;
 	m_sSectionName = sName;
 
-	ESphHashResult eRes;
-
 	if ( !m_tConf.Exists ( m_sSectionType ) )
-	{
-		eRes = m_tConf.Add ( CSphConfigType(), m_sSectionType );
-		if ( eRes!=SPH_HASH_OK )
-		{
-			assert ( eRes==SPH_HASH_OVERFLOW );
-			snprintf ( m_sError, sizeof(m_sError), "too many section types, hash overflow" );
-			return false;
-		}
-	}
+		m_tConf.Add ( CSphConfigType(), m_sSectionType ); // FIXME! be paranoid, verify that it returned true
 
 	if ( m_tConf[m_sSectionType].Exists ( m_sSectionName ) )
 	{
 		snprintf ( m_sError, sizeof(m_sError), "section '%s' (type='%s') already exists", sName, sType );
 		return false;
 	}
-
-	eRes = m_tConf[m_sSectionType].Add ( CSphConfigSection(), m_sSectionName );
-	if ( eRes!=SPH_HASH_OK )
-	{
-		assert ( eRes==SPH_HASH_OVERFLOW );
-		snprintf ( m_sError, sizeof(m_sError), "too many sections, hash overflow" );
-		return false;
-	}
+	m_tConf[m_sSectionType].Add ( CSphConfigSection(), m_sSectionName ); // FIXME! be paranoid, verify that it returned true
 
 	return true;
 }
 
 
-bool CSphConfigParser::AddKey ( const char * sKey, char * sValue )
+void CSphConfigParser::AddKey ( const char * sKey, char * sValue )
 {
 	assert ( m_tConf.Exists ( m_sSectionType ) );
 	assert ( m_tConf[m_sSectionType].Exists ( m_sSectionName ) );
@@ -213,15 +196,8 @@ bool CSphConfigParser::AddKey ( const char * sKey, char * sValue )
 	} else
 	{
 		// just add
-		ESphHashResult eRes = tSec.Add ( sValue, sKey );
-		if ( eRes!=SPH_HASH_OK )
-		{
-			assert ( eRes==SPH_HASH_OVERFLOW );
-			snprintf ( m_sError, sizeof(m_sError), "too many keys, hash overflow" );
-			return false;
-		}
+		tSec.Add ( sValue, sKey ); // FIXME! be paranoid, verify that it returned true
 	}
-	return true;
 }
 
 
@@ -351,8 +327,8 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 		// handle S_VALUE state
 		if ( eState==S_VALUE )
 		{
-			if ( *p=='\n' )					{ if ( !AddKey ( sToken, sValue ) ) break; iValue = 0; LOC_POP (); continue; }
-			if ( *p=='#' )					{ if ( !AddKey ( sToken, sValue ) ) break; iValue = 0; LOC_POP (); LOC_PUSH ( S_SKIP2NL ); continue; }
+			if ( *p=='\n' )					{ AddKey ( sToken, sValue ); iValue = 0; LOC_POP (); continue; }
+			if ( *p=='#' )					{ AddKey ( sToken, sValue ); iValue = 0; LOC_POP (); LOC_PUSH ( S_SKIP2NL ); continue; }
 			if ( *p=='\\' )					{ LOC_PUSH ( S_SKIP2NL ); continue; }
 			if ( iValue<iValueMax )			{ sValue[iValue++] = *p; sValue[iValue] = '\0'; }
 											continue;

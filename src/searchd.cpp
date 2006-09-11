@@ -2818,12 +2818,9 @@ int main ( int argc, char **argv )
 
 			} else
 			{
-				ESphHashResult eRes = g_hDistIndexes.Add ( tIdx, sIndexName );
-				if ( eRes!=SPH_HASH_OK )
+				if ( !g_hDistIndexes.Add ( tIdx, sIndexName ) )
 				{
-					assert ( eRes==SPH_HASH_OVERFLOW );
-					sphWarning ( "index '%s': too many indexes, hash overflow - NOT SERVING",
-						sIndexName );
+					sphWarning ( "index '%s': duplicate name in hash?! INTERNAL ERROR - NOT SERVING", sIndexName );
 					continue;
 				}
 			}
@@ -2929,12 +2926,9 @@ int main ( int argc, char **argv )
 				tIdx.m_pLockFile = new CSphString ( sTmp );
 			}
 
-			ESphHashResult eRes = g_hIndexes.Add ( tIdx, sIndexName );
-			if ( eRes!=SPH_HASH_OK )
+			if ( !g_hIndexes.Add ( tIdx, sIndexName ) )
 			{
-				assert ( eRes==SPH_HASH_OVERFLOW );
-				sphWarning ( "index '%s': too many indexes, hash overflow - NOT SERVING",
-					sIndexName );
+				sphWarning ( "index '%s': duplicate name in hash?! INTERNAL ERROR - NOT SERVING", sIndexName );
 				continue;
 			}
 

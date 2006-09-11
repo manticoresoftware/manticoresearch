@@ -48,7 +48,7 @@ struct CSphStrHashFunc
 
 /// small hash with string keys
 template < typename T >
-class SmallStringHash_T : public CSphFixedOrderedHash < T, CSphString, CSphStrHashFunc, 128, 13 > {};
+class SmallStringHash_T : public CSphOrderedHash < T, CSphString, CSphStrHashFunc, 256, 13 > {};
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -84,7 +84,7 @@ protected:
 	bool			IsPlainSection ( const char * sKey );
 	bool			IsNamedSection ( const char * sKey );
 	bool			AddSection ( const char * sType, const char * sSection );
-	bool			AddKey ( const char * sKey, char * sValue );
+	void			AddKey ( const char * sKey, char * sValue );
 };
 
 /////////////////////////////////////////////////////////////////////////////

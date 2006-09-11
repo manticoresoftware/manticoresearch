@@ -135,12 +135,13 @@ struct CSphRemapRange
 		, m_iEnd		( iEnd )
 		, m_iRemapStart	( iRemapStart )
 	{}
-
-	inline bool operator < ( const CSphRemapRange & b )
-	{
-		return m_iStart < b.m_iStart;
-	}
 };
+
+
+inline bool operator < ( const CSphRemapRange & a, const CSphRemapRange & b )
+{
+	return a.m_iStart < b.m_iStart;
+}
 
 
 /// lowercaser

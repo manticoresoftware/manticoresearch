@@ -65,6 +65,26 @@ namespace Private
 
 /////////////////////////////////////////////////////////////////////////////
 
+template < typename T >
+struct SphLess_T
+{
+	inline bool operator () ( const T & a, const T & b )
+	{
+		return a < b;
+	}
+};
+
+
+template < typename T >
+struct SphGreater_T
+{
+	inline bool operator () ( const T & a, const T & b )
+	{
+		return b < a;
+	}
+};
+
+
 /// generic vector
 /// (don't even ask why it's not std::vector)
 template < typename T, int INITIAL_LIMIT=1024 > class CSphVector
@@ -186,13 +206,13 @@ public:
 	/// sort
 	void Sort ( int iStart=0, int iEnd=-1 )
 	{
-		_Sort<false> ( iStart, iEnd );
+		Sort ( SphLess_T<T>(), iStart, iEnd );
 	}
 
 	/// reverse sort
 	void RSort ( int iStart=0, int iEnd=-1 )
 	{
-		_Sort<true> ( iStart, iEnd );
+		Sort ( SphGreater_T<T>(), iStart, iEnd );
 	}
 
 	/// sort
@@ -271,62 +291,6 @@ private:
 	int		m_iLength;		///< entries actually used
 	int		m_iLimit;		///< entries allocated
 	T *		m_pData;		///< entries
-
-private:
-	/// sort the array
-	template < bool REVERSE > void _Sort ( int iStart, int iEnd )
-	{
-		if ( m_iLength<2 ) return;
-		if ( iStart<0 ) iStart = m_iLength+iStart;
-		if ( iEnd<0 ) iEnd = m_iLength+iEnd;
-		assert ( iStart<=iEnd );
-
-		int st0[32], st1[32], a, b, k, i, j;
-		T x;
-
-		k = 1;
-		st0[0] = iStart;
-		st1[0] = iEnd;
-		while ( k )
-		{
-			k--;
-			i = a = st0[k];
-			j = b = st1[k];
-			x = m_pData [ (a+b)/2 ]; // FIXME! add better median at least
-			while ( a<b )
-			{
-				while ( i<=j )
-				{
-					#if USE_WINDOWS
-					#pragma warning(disable:4127)
-					#endif
-					if ( !REVERSE )
-					#if USE_WINDOWS
-					#pragma warning(default:4127)
-					#endif
-					{
-						while ( m_pData[i]<x ) i++;
-						while ( x<m_pData[j] ) j--;
-					} else
-					{
-						while ( x<m_pData[i] ) i++;
-						while ( m_pData[j]<x ) j--;
-					}
-					if (i <= j) { Swap ( m_pData[i], m_pData[j] ); i++; j--; }
-				}
-
-				if ( j-a>=b-i )
-				{
-					if ( a<j ) { st0[k] = a; st1[k] = j; k++; }
-					a = i;
-				} else
-				{
-					if ( i<b ) { st0[k] = i; st1[k] = b; k++; }
-					b = j;
-				}
-			}
-		}
-	}
 };
 
 

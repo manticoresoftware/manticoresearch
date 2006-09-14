@@ -674,7 +674,7 @@ DWORD sphCalcPriority ( const CSphMatch & tMatch, ESphGroupBy eGroupBy, int iGro
 
 	switch ( eGroupBy )
 	{
-		case SPH_GROUPBY_DAY:	return (pSplit->tm_year+1900)*10000 + (1+pSplit->tm_mon)*100 + (1+pSplit->tm_mday);
+		case SPH_GROUPBY_DAY:	return (pSplit->tm_year+1900)*10000 + (1+pSplit->tm_mon)*100 + pSplit->tm_mday;
 		case SPH_GROUPBY_WEEK:	return (pSplit->tm_year+1900)*1000 + (1+pSplit->tm_yday) - pSplit->tm_wday;
 		case SPH_GROUPBY_MONTH:	return (pSplit->tm_year+1900)*100 + (1+pSplit->tm_mon);
 		case SPH_GROUPBY_YEAR:	return (pSplit->tm_year+1900);

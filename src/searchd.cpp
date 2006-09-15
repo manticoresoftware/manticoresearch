@@ -2551,7 +2551,8 @@ bool RotateIndex ( ServedIndex_t & tIndex, const char * sIndex )
 
 	// try to create new index
 	CSphIndex * pNewIndex = sphCreateIndexPhrase ( sPath );
-	if ( !pNewIndex || !pNewIndex->Preload() )
+	const CSphSchema * pNewSchema = pNewIndex ? pNewIndex->Preload() : NULL;
+	if ( !pNewIndex || !pNewSchema )
 	{
 		if ( !pNewIndex )
 			sphWarning ( "rotating index '%s': failed to create new index object", sIndex );
@@ -2570,6 +2571,7 @@ bool RotateIndex ( ServedIndex_t & tIndex, const char * sIndex )
 	// uff. all done
 	SafeDelete ( tIndex.m_pIndex );
 	tIndex.m_pIndex = pNewIndex;
+	tIndex.m_pSchema = pNewSchema;
 
 	sphInfo ( "rotating index '%s': success", sIndex );
 	return true;

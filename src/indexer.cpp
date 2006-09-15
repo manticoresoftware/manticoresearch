@@ -837,10 +837,6 @@ int main ( int argc, char ** argv )
 			pIndex->SetProgressCallback ( ShowProgress );
 			if ( pIndex->Build ( pDict, dSources, iMemLimit, eDocinfo ) )
 			{
-				// if searchd is not running, we're good
-				if ( !bRotate )
-					bIndexedOk = true;
-
 				// if searchd is running, rename .tmp to .new which searchd will pick up
 				while ( bRotate )
 				{
@@ -867,7 +863,8 @@ int main ( int argc, char ** argv )
 					}
 
 					// all good?
-					bIndexedOk = ( iExt==4 );
+					if ( iExt==4 )
+						bIndexedOk = true;
 					break;
 				}
 			}
@@ -947,7 +944,7 @@ int main ( int argc, char ** argv )
 			if ( iErr==0 )
 			{
 				if ( !g_bQuiet )
-					fprintf ( stdout, "rotating indices: succesfully sent SIGHUP to searchd.\n" );
+					fprintf ( stdout, "rotating indices: succesfully sent SIGHUP to searchd (pid=%d).\n", iPID );
 			} else
 			{
 				switch ( errno )

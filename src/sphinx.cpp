@@ -5495,6 +5495,8 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 		pResult->m_tSchema.m_dAttrs.Add ( CSphColumnInfo ( "@count", SPH_ATTR_INTEGER ) );
 	}
 
+	m_dQueryWords.Reset ();
+
 	PROFILER_DONE ();
 	PROFILE_SHOW ();
 

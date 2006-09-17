@@ -240,7 +240,7 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 
 	#define LOC_PUSH(_new) { assert ( iStack<int(sizeof(eStack)/sizeof(eState)) ); eStack[iStack++] = eState; eState = _new; }
 	#define LOC_POP() { assert ( iStack>0 ); eState = eStack[--iStack]; }
-	#define LOC_BACK() { if ( *--p=='\n' ) m_iLine--; }
+	#define LOC_BACK() { if ( *p--=='\n' ) m_iLine--; }
 
 	m_sError[0] = '\0';
 

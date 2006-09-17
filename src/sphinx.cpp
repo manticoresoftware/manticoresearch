@@ -4832,7 +4832,7 @@ struct SphEvalNode_t : public CSphQueryWord
 	bool				m_bEvaluable;	///< whether this node is for matching or for filtering
 
 public:
-						SphEvalNode_t ( const SphQueryExpr_t * pNode, CSphDict * pDict, ESphDocinfo eDocinfo, const CSphDocInfo tMin );
+						SphEvalNode_t ( const SphQueryExpr_t * pNode, CSphDict * pDict, ESphDocinfo eDocinfo, const CSphDocInfo & tMin );
 						~SphEvalNode_t ();
 
 	void				SetFile ( CSphIndex_VLN * pIndex, int iFD );
@@ -4842,7 +4842,7 @@ public:
 };
 
 
-SphEvalNode_t::SphEvalNode_t ( const SphQueryExpr_t * pNode, CSphDict * pDict, ESphDocinfo eDocinfo, const CSphDocInfo tMin )
+SphEvalNode_t::SphEvalNode_t ( const SphQueryExpr_t * pNode, CSphDict * pDict, ESphDocinfo eDocinfo, const CSphDocInfo & tMin )
 {
 	assert ( pNode );
 	assert ( pDict );

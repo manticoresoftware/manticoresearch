@@ -1438,10 +1438,11 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				}
 
 				// do query!
-				int iReqSize = 56 + 4*tQuery.m_iWeights
+				int iReqSize = 64 + 4*tQuery.m_iWeights
 					+ strlen ( tQuery.m_sSortBy.cstr() )
 					+ strlen ( tQuery.m_sQuery.cstr() )
-					+ strlen ( tAgent.m_sIndexes.cstr() );
+					+ strlen ( tAgent.m_sIndexes.cstr() )
+					+ strlen ( tQuery.m_sGroupBy.cstr() );
 				ARRAY_FOREACH ( j, tQuery.m_dFilters )
 				{
 					const CSphFilter & tFilter = tQuery.m_dFilters[j];
@@ -1462,7 +1463,7 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				tOut.SendWord ( VER_COMMAND_SEARCH ); // command version
 				tOut.SendInt ( iReqSize-12 ); // request body length
 
-				// request v.1.2
+				// request v.1.3
 				tOut.SendInt ( 0 ); // offset is 0
 				tOut.SendInt ( g_iMaxMatches ); // limit is MAX_MATCHES
 				tOut.SendInt ( iMode ); // match mode
@@ -1489,6 +1490,8 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 						tOut.SendDword ( tFilter.m_uMaxValue );
 					}
 				}
+				tOut.SendInt ( tQuery.m_eGroupFunc );
+				tOut.SendString ( tQuery.m_sGroupBy.cstr() );
 				tOut.Flush ();
 
 				// FIXME! handle flush failure
@@ -1855,12 +1858,13 @@ bool CheckSortAndSchema ( const CSphSchema ** ppFirst, ISphMatchQueue ** ppTop, 
 		}
 
 		// lookup proper attribute index to group by
-		tQuery.m_iGroupBy = pServed->GetAttrIndex ( tQuery.m_sGroupBy.cstr() );
-		if ( !tQuery.m_sGroupBy.IsEmpty() && tQuery.m_iGroupBy<0 )
+		if ( !tQuery.SetSchema ( *pServed ) )
 		{
 			tReq.SendErrorReply ( "index '%s': group-by attribute '%s' not found",
-				sServedName, tQuery.m_sSortBy.cstr() );
+				sServedName, tQuery.m_sGroupBy.cstr() );
+			return false;
 		}
+		assert ( tQuery.m_sGroupBy.IsEmpty() || tQuery.GetGroupByAttr()>=0 );
 
 		// spawn queue and set sort-by attribute
 		assert ( !*ppTop );
@@ -2038,7 +2042,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 #if REMOVE_DUPES
 			// group-by queries remove dupes themselves
-			if ( tQuery.m_iGroupBy<0 )
+			if ( tQuery.GetGroupByAttr()<0 )
 				sphFlattenQueue ( pTop, pRes );
 #endif
 		}
@@ -2076,8 +2080,15 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 					return;
 
 				// merge this agent's results
-				ARRAY_FOREACH ( i, tAgent.m_tRes.m_dMatches )
-					pRes->m_dMatches.Add( tAgent.m_tRes.m_dMatches[i] );
+				if ( tQuery.GetGroupByAttr()<0 ) 
+				{
+					ARRAY_FOREACH ( i, tAgent.m_tRes.m_dMatches )
+						pRes->m_dMatches.Add ( tAgent.m_tRes.m_dMatches[i] );
+				} else
+				{
+					ARRAY_FOREACH ( i, tAgent.m_tRes.m_dMatches )
+						pTop->Push ( tAgent.m_tRes.m_dMatches[i] );
+				}
 				tAgent.m_tRes.m_dMatches.Reset ();
 
 				// merge this agent's stats
@@ -2107,7 +2118,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 #if REMOVE_DUPES
 			// group-by queries remove dupes themselves
-			if ( tQuery.m_iGroupBy<0 )
+			if ( tQuery.GetGroupByAttr()<0 )
 				sphFlattenQueue ( pTop, pRes );
 #endif
 		}
@@ -2157,7 +2168,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 #if REMOVE_DUPES
 				// group-by queries remove dupes themselves
-				if ( tQuery.m_iGroupBy<0 )
+				if ( tQuery.GetGroupByAttr()<0 )
 					sphFlattenQueue ( pTop, pRes );
 #endif
 
@@ -2178,7 +2189,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	}
 
 #if REMOVE_DUPES
-	if ( tQuery.m_iGroupBy>=0 )
+	if ( tQuery.GetGroupByAttr()>=0 )
 	{
 		// group-by queries remove dupes themselves, so just flatten
 		sphFlattenQueue ( pTop, pRes );

@@ -412,6 +412,9 @@ struct CSphSchema
 	/// checks if two schemas match
 	/// returns false and puts human-readable error message if they dont
 	bool	IsEqual ( const CSphSchema & rhs, CSphString & sError ) const;
+
+	/// return non-virtual attributes count
+	int		GetRealAttrCount () const;
 };
 
 
@@ -828,12 +831,20 @@ public:
 
 	CSphVector<CSphFilter,8>	m_dFilters;	///< filters
 
-	int				m_iGroupBy;		///< group-by attribute index
 	CSphString		m_sGroupBy;		///< group-by attribute name
 	ESphGroupBy		m_eGroupFunc;	///< function to pre-process group-by attribute value with
 
+protected:
+	int				m_iAttrs;		///< attribute count (necessary to instantiate group-by queus)
+	int				m_iGroupBy;		///< group-by attribute index
+
 public:
-					CSphQuery ();	///< ctor, fills defaults
+					CSphQuery ();								///< ctor, fills defaults
+	bool			SetSchema ( const CSphSchema & tSchema );	///< calc m_iAttrs and m_iGroupBy from schema
+
+	int				GetAttrsCount () const { return m_iAttrs;}
+	int				GetGroupByAttr () const { return m_iGroupBy; }
+
 };
 
 

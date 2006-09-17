@@ -683,6 +683,9 @@ DWORD sphCalcPriority ( const CSphMatch & tMatch, ESphGroupBy eGroupBy, int iGro
 }
 
 
+static const int VIRTUAL_ATTRS_COUNT = 2;
+
+
 /// match-sorting priority queue with hashed priorities
 template < typename COMP > class CSphGroupQueue
 	: public ISphMatchQueue
@@ -697,6 +700,7 @@ protected:
 	ESphGroupBy		m_eGroupBy;		///< group-by function
 	int				m_iGroupBy;		///< group-by argument attribute index
 
+	int				m_iAttrs;			///< normal match attribute count (to distinguish already grouped matches)
 	int				m_iAttrPriority;	///< group-by value virtual attribute index
 	int				m_iAttrCount;		///< grouped matches count virtual attribute index
 
@@ -717,7 +721,8 @@ public:
 		, m_iUsed ( 0 )
 		, m_iLimit ( pQuery->m_iMaxMatches )
 		, m_eGroupBy ( pQuery->m_eGroupFunc )
-		, m_iGroupBy ( pQuery->m_iGroupBy )
+		, m_iGroupBy ( pQuery->GetGroupByAttr() )
+		, m_iAttrs ( pQuery->GetAttrsCount() )
 		, m_iAttrPriority ( -1 )
 		, m_iAttrCount ( -1 )
 		, m_hPriority2Match ( pQuery->m_iMaxMatches )
@@ -745,6 +750,10 @@ public:
 	/// add entry to the queue
 	virtual bool Push ( const CSphMatch & tEntry )
 	{
+		assert ( tEntry.m_iAttrs==m_iAttrs || tEntry.m_iAttrs==m_iAttrs+VIRTUAL_ATTRS_COUNT );
+
+		bool bGrouped = ( tEntry.m_iAttrs!=m_iAttrs );
+
 		// calc priority
 		DWORD uPriority = sphCalcPriority ( tEntry, m_eGroupBy, m_iGroupBy );
 
@@ -754,21 +763,30 @@ public:
 		{
 			CSphMatch * pMatch = (*ppMatch);
 			assert ( pMatch );
-
-			// increase grouped matches count
 			assert ( pMatch->m_pAttrs [ m_iAttrPriority ]==uPriority );
-			pMatch->m_pAttrs [ m_iAttrCount ]++;
+
+			if ( bGrouped )
+			{
+				// it's already grouped match
+				// sum grouped matches count
+				assert ( pMatch->m_iAttrs==tEntry.m_iAttrs );
+				pMatch->m_pAttrs [ m_iAttrCount ] += tEntry.m_pAttrs [ m_iAttrCount ];
+
+			} else
+			{
+				// it's a simple match
+				// increase grouped matches count
+				assert ( pMatch->m_iAttrs==tEntry.m_iAttrs+VIRTUAL_ATTRS_COUNT );
+				pMatch->m_pAttrs [ m_iAttrCount ]++;
+			}
 
 			// if new entry is more relevant, update from it
 			if ( COMP::IsLess ( *pMatch, tEntry, m_tState ) )
 			{
 				pMatch->m_iDocID = tEntry.m_iDocID;
 				pMatch->m_iWeight = tEntry.m_iWeight;
-				if ( tEntry.m_iAttrs )
-				{
-					assert ( pMatch->m_iAttrs==tEntry.m_iAttrs+2 );
-					memcpy ( pMatch->m_pAttrs, tEntry.m_pAttrs, sizeof(DWORD)*tEntry.m_iAttrs );
-				}
+				if ( pMatch->m_iAttrs > VIRTUAL_ATTRS_COUNT )
+					memcpy ( pMatch->m_pAttrs, tEntry.m_pAttrs, sizeof(DWORD)*(pMatch->m_iAttrs-VIRTUAL_ATTRS_COUNT) );
 			}
 
 			// it's a dupe anyway, so we shouldn't update total matches count
@@ -793,18 +811,22 @@ public:
 
 		// do add
 		CSphMatch & tNew = m_dMatches [ m_dIndexes [ m_iUsed ] ];
-		assert ( tNew.m_iAttrs==0 || tNew.m_iAttrs==tEntry.m_iAttrs+2 );
+		int iNewAttrs = tEntry.m_iAttrs + ( bGrouped ? 0 : VIRTUAL_ATTRS_COUNT );
+		assert ( tNew.m_iAttrs==0 || tNew.m_iAttrs==iNewAttrs );
 
 		tNew.m_iDocID = tEntry.m_iDocID;
 		tNew.m_iWeight = tEntry.m_iWeight;
 		if ( !tNew.m_iAttrs )
 		{
-			tNew.m_iAttrs = tEntry.m_iAttrs+2;
-			tNew.m_pAttrs = new DWORD [ tEntry.m_iAttrs+2 ];
+			tNew.m_iAttrs = iNewAttrs;
+			tNew.m_pAttrs = new DWORD [ iNewAttrs ];
 		}
 		memcpy ( tNew.m_pAttrs, tEntry.m_pAttrs, tEntry.m_iAttrs*sizeof(DWORD) );
-		tNew.m_pAttrs [ m_iAttrPriority ] = uPriority;
-		tNew.m_pAttrs [ m_iAttrCount ] = 1;
+		if ( !bGrouped )
+		{
+			tNew.m_pAttrs [ m_iAttrPriority ] = uPriority;
+			tNew.m_pAttrs [ m_iAttrCount ] = 1;
+		}
 
 		m_hPriority2Match.Add ( &tNew, uPriority );
 
@@ -2315,31 +2337,50 @@ CSphQuery::CSphQuery ()
 	, m_iMaxMatches	( 1000 )
 	, m_iMinID		( 0 )
 	, m_iMaxID		( UINT_MAX )
+	, m_iAttrs		( -1 )
 	, m_iGroupBy	( -1 )
 {}
+
+
+bool CSphQuery::SetSchema ( const CSphSchema & tSchema )
+{
+	m_iAttrs = tSchema.m_dAttrs.GetLength ();
+
+	if ( m_sGroupBy.IsEmpty() )
+	{
+		m_iGroupBy = -1;
+		return true;
+	}
+
+	m_iGroupBy = tSchema.GetAttrIndex ( m_sGroupBy.cstr() );
+	return ( m_iGroupBy>=0 );
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // SCHEMA
 /////////////////////////////////////////////////////////////////////////////
 
+int CSphSchema::GetRealAttrCount () const
+{
+	// FIXME! add some bool instead of attr naming scheme?
+	int iAttrs = m_dAttrs.GetLength ();
+	if ( iAttrs>=VIRTUAL_ATTRS_COUNT )
+		if ( m_dAttrs[iAttrs-VIRTUAL_ATTRS_COUNT].m_sName=="@groupby" && m_dAttrs[iAttrs-VIRTUAL_ATTRS_COUNT+1].m_sName=="@count" )
+			iAttrs -= VIRTUAL_ATTRS_COUNT;
+	return iAttrs;
+}
+
+
 bool CSphSchema::IsEqual ( const CSphSchema & rhs, CSphString & sError ) const
 {
 	char sTmp [ 1024 ];
 
+	// check fields
 	if ( rhs.m_dFields.GetLength()!=m_dFields.GetLength() )
 	{
 		snprintf ( sTmp, sizeof(sTmp), "fulltext fields count mismatch: %d in schema '%s', %d in schema '%s'",
 			m_dFields.GetLength(), m_sName.cstr(),
 			rhs.m_dFields.GetLength(), rhs.m_sName.cstr() );
-		sError = sTmp;
-		return false;
-	}
-
-	if ( rhs.m_dAttrs.GetLength()!=m_dAttrs.GetLength() )
-	{
-		snprintf ( sTmp, sizeof(sTmp), "attributes count mismatch: %d in schema '%s', %d in schema '%s'",
-			m_dAttrs.GetLength(), m_sName.cstr(),
-			rhs.m_dAttrs.GetLength(), rhs.m_sName.cstr() );
 		sError = sTmp;
 		return false;
 	}
@@ -2355,11 +2396,22 @@ bool CSphSchema::IsEqual ( const CSphSchema & rhs, CSphString & sError ) const
 		return false;
 	}
 
-	ARRAY_FOREACH ( i, rhs.m_dAttrs )
+	// check attrs
+	int iRealAttrs = GetRealAttrCount();
+	if ( iRealAttrs!=rhs.GetRealAttrCount() )
+	{
+		snprintf ( sTmp, sizeof(sTmp), "non-virtual attributes count mismatch: %d in schema '%s', %d in schema '%s'",
+			m_dAttrs.GetLength(), m_sName.cstr(),
+			rhs.m_dAttrs.GetLength(), rhs.m_sName.cstr() );
+		sError = sTmp;
+		return false;
+	}
+
+	for ( int i=0; i<iRealAttrs; i++ )
 		if ( rhs.m_dAttrs[i].m_sName!=m_dAttrs[i].m_sName )
 	{
 		snprintf ( sTmp, sizeof(sTmp), "attribute %d/%d name mismatch: '%s' in schema '%s', '%s' in schema '%s'",
-			i, m_dAttrs.GetLength(),
+			i, iRealAttrs,
 			m_dAttrs[i].m_sName.cstr(), m_sName.cstr(),
 			rhs.m_dAttrs[i].m_sName.cstr(), rhs.m_sName.cstr() );
 		sError = sTmp;
@@ -4326,10 +4378,10 @@ inline int sphGroupMatch ( DWORD iGroup, DWORD * pGroups, int iGroups )
 
 ISphMatchQueue * sphCreateQueue ( const CSphQuery * pQuery )
 {
-	assert ( pQuery->m_sGroupBy.IsEmpty() || pQuery->m_iGroupBy>=0 );
+	assert ( pQuery->m_sGroupBy.IsEmpty() || pQuery->GetGroupByAttr()>=0 );
 	ISphMatchQueue * pTop = NULL;
 
-	if ( pQuery->m_iGroupBy<0 )
+	if ( pQuery->GetGroupByAttr()<0 )
 	{
 		switch ( pQuery->m_eSort )
 		{
@@ -5382,7 +5434,7 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 	}
 
 	// lookup group-by attribute index
-	pQuery->m_iGroupBy = m_tSchema.GetAttrIndex ( pQuery->m_sGroupBy.cstr() );
+	pQuery->SetSchema ( m_tSchema );
 
 	//////////////////////////////
 	// decode words from wordlist
@@ -5490,7 +5542,7 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 			LookupDocinfo ( *pCur++ );
 	}
 
-	if ( pQuery->m_iGroupBy>=0 )
+	if ( pQuery->GetGroupByAttr()>=0 )
 	{
 		pResult->m_tSchema.m_dAttrs.Add ( CSphColumnInfo ( "@groupby", SPH_ATTR_INTEGER ) );
 		pResult->m_tSchema.m_dAttrs.Add ( CSphColumnInfo ( "@count", SPH_ATTR_INTEGER ) );

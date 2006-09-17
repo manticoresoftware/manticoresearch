@@ -1107,6 +1107,22 @@ public:
 		else
 			m_iHitPos = 0;
 	}
+
+	void SetupAttrs ( ESphDocinfo eDocinfo, const CSphDocInfo & m_tMin )
+	{
+		m_tDoc.Reset ( m_tMin.m_iAttrs );
+
+		m_iMinID = m_tMin.m_iDocID;
+		if ( eDocinfo==SPH_DOCINFO_INLINE )
+		{
+			m_iInlineAttrs = m_tMin.m_iAttrs;
+			m_pInlineFixup = m_tMin.m_pAttrs;
+		} else
+		{
+			m_iInlineAttrs = 0;
+			m_pInlineFixup = NULL;
+		}
+	}
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -4816,7 +4832,7 @@ struct SphEvalNode_t : public CSphQueryWord
 	bool				m_bEvaluable;	///< whether this node is for matching or for filtering
 
 public:
-						SphEvalNode_t ( const SphQueryExpr_t * pNode, CSphDict * pDict );
+						SphEvalNode_t ( const SphQueryExpr_t * pNode, CSphDict * pDict, ESphDocinfo eDocinfo, const CSphDocInfo tMin );
 						~SphEvalNode_t ();
 
 	void				SetFile ( CSphIndex_VLN * pIndex, int iFD );
@@ -4826,7 +4842,7 @@ public:
 };
 
 
-SphEvalNode_t::SphEvalNode_t ( const SphQueryExpr_t * pNode, CSphDict * pDict )
+SphEvalNode_t::SphEvalNode_t ( const SphQueryExpr_t * pNode, CSphDict * pDict, ESphDocinfo eDocinfo, const CSphDocInfo tMin )
 {
 	assert ( pNode );
 	assert ( pDict );
@@ -4838,7 +4854,7 @@ SphEvalNode_t::SphEvalNode_t ( const SphQueryExpr_t * pNode, CSphDict * pDict )
 	m_sWord = pNode->m_sWord;
 	m_iWordID = 0;
 
-	m_pExpr = pNode->m_pExpr ? new SphEvalNode_t ( pNode->m_pExpr, pDict ) : NULL;
+	m_pExpr = pNode->m_pExpr ? new SphEvalNode_t ( pNode->m_pExpr, pDict, eDocinfo, tMin ) : NULL;
 	if ( m_pExpr )
 	{
 		m_pExpr->m_pParent = this;
@@ -4851,13 +4867,13 @@ SphEvalNode_t::SphEvalNode_t ( const SphQueryExpr_t * pNode, CSphDict * pDict )
 		m_pLast = NULL;
 	}
 
-	m_pNext = pNode->m_pNext ? new SphEvalNode_t ( pNode->m_pNext, pDict ) : NULL;
+	m_pNext = pNode->m_pNext ? new SphEvalNode_t ( pNode->m_pNext, pDict, eDocinfo, tMin ) : NULL;
 	if ( m_pNext )
 		m_pNext->m_pPrev = this;
 
 	m_pParent = NULL;
 
-	m_tDoc.m_iDocID = 0;
+	SetupAttrs ( eDocinfo, tMin );
 }
 
 
@@ -5051,7 +5067,8 @@ void CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, CSphDict * pDict, I
 		return;
 
 	// let's build our own tree! with doclists! and hits!
-	SphEvalNode_t tTree ( pTree, pDict );
+	assert ( m_tMin.m_iAttrs==m_tSchema.m_dAttrs.GetLength() );
+	SphEvalNode_t tTree ( pTree, pDict, m_eDocinfo, m_tMin );
 	tTree.SetFile ( this, iDoclistFD );
 
 	bool bEarlyLookup = ( m_eDocinfo==SPH_DOCINFO_EXTERN ) && pQuery->m_dFilters.GetLength();
@@ -5353,19 +5370,8 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 		m_dQueryWords[i].m_iWordID = pQueryParser->m_dHits[i].m_iWordID;
 		m_dQueryWords[i].m_iQueryPos = 1+i;
 
-		m_dQueryWords[i].m_tDoc.Reset ( m_tSchema.m_dAttrs.GetLength() );
-
-		if ( m_eDocinfo==SPH_DOCINFO_INLINE )
-		{
-			m_dQueryWords[i].m_iInlineAttrs = m_tMin.m_iAttrs;
-			m_dQueryWords[i].m_pInlineFixup = m_tMin.m_pAttrs;
-		} else
-		{
-			m_dQueryWords[i].m_iInlineAttrs = 0;
-			m_dQueryWords[i].m_pInlineFixup = NULL;
-		}
-		m_dQueryWords[i].m_iMinID = m_tMin.m_iDocID;
-		m_dQueryWords[i].m_tDoc.m_iDocID = 0;
+		assert ( m_tMin.m_iAttrs==m_tSchema.m_dAttrs.GetLength() );
+		m_dQueryWords[i].SetupAttrs ( m_eDocinfo, m_tMin );
 	}
 	SafeDelete ( pQueryParser );
 

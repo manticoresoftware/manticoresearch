@@ -5262,10 +5262,7 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 	// preload schema
 	//////////////////
 
-	char sTmp [ SPH_MAX_FILENAME_LEN ];
-	snprintf ( sTmp, sizeof(sTmp), "%s.sph", m_sFilename.cstr() );
-
-	CSphAutofile tIndexInfo ( sTmp );
+	CSphAutofile tIndexInfo ( GetIndexFileName ( "sph" ) );
 	if ( tIndexInfo.GetFD()<0 )
 		return false;
 
@@ -5305,11 +5302,11 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 		int iStride = 1+m_tSchema.m_dAttrs.GetLength();
 		int iEntrySize = sizeof(DWORD)*iStride;
 
-		snprintf ( sTmp, sizeof(sTmp), "%s.spa", m_sFilename.cstr() );
-		CSphAutofile tDocinfo ( sTmp );
+		const char * sDocinfo = GetIndexFileName ( "spa" );
+		CSphAutofile tDocinfo ( sDocinfo );
 
 		struct stat stDocinfo;
-		if ( tDocinfo.GetFD()<0 || stat ( sTmp, &stDocinfo)<0 || stDocinfo.st_size<iEntrySize )
+		if ( tDocinfo.GetFD()<0 || stat ( sDocinfo, &stDocinfo)<0 || stDocinfo.st_size<iEntrySize )
 			return NULL;
 
 		m_iDocinfo = stDocinfo.st_size / iEntrySize;
@@ -5353,11 +5350,11 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 	// preload wordlist
 	////////////////////
 
-	snprintf ( sTmp, sizeof(sTmp), "%s.spi", m_sFilename.cstr() );
-	CSphAutofile tWordlist ( sTmp );
+	const char * sWordlist = GetIndexFileName ( "spi" );
+	CSphAutofile tWordlist ( sWordlist );
 
 	struct stat stWordlist;
-	if ( tWordlist.GetFD()<0 || stat ( sTmp, &stWordlist)<0 || stWordlist.st_size<=0 )
+	if ( tWordlist.GetFD()<0 || stat ( sWordlist, &stWordlist)<0 || stWordlist.st_size<=0 )
 	{
 		SafeDeleteArray ( m_pDocinfo );
 		return NULL;

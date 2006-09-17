@@ -2037,7 +2037,9 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pTop );
 
 #if REMOVE_DUPES
-			sphFlattenQueue ( pTop, pRes );
+			// group-by queries remove dupes themselves
+			if ( tQuery.m_iGroupBy<0 )
+				sphFlattenQueue ( pTop, pRes );
 #endif
 		}
 		tmQuery += sphLongTimer ();
@@ -2104,7 +2106,9 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			iSearched++;
 
 #if REMOVE_DUPES
-			sphFlattenQueue ( pTop, pRes );
+			// group-by queries remove dupes themselves
+			if ( tQuery.m_iGroupBy<0 )
+				sphFlattenQueue ( pTop, pRes );
 #endif
 		}
 
@@ -2152,7 +2156,9 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 				tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pTop );
 
 #if REMOVE_DUPES
-				sphFlattenQueue ( pTop, pRes );
+				// group-by queries remove dupes themselves
+				if ( tQuery.m_iGroupBy<0 )
+					sphFlattenQueue ( pTop, pRes );
 #endif
 
 #if !USE_WINDOWS
@@ -2172,8 +2178,14 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	}
 
 #if REMOVE_DUPES
-	if ( iSearched!=1 )
+	if ( tQuery.m_iGroupBy>=0 )
 	{
+		// group-by queries remove dupes themselves, so just flatten
+		sphFlattenQueue ( pTop, pRes );
+
+	} else if ( iSearched!=1 )
+	{
+		// if there was only 1 index searched, it's already properly flattened
 		pRes->m_dMatches.Sort ();
 
 		ARRAY_FOREACH ( i, pRes->m_dMatches )

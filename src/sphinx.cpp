@@ -1067,7 +1067,7 @@ public:
 		m_iHitPos = 0;
 		m_iHitlistPos = 0;
 		m_iInlineAttrs = 0;
-		m_tDoc.Reset ();
+		m_tDoc.Reset ( 0 );
 		m_uFields = 0;
 	}
 
@@ -3668,10 +3668,8 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 		return 0;
 
 	// setup accumulating docinfo IDs range
-	m_tMin.Reset ();
-	m_tMin.m_iAttrs = m_tSchema.m_dAttrs.GetLength();
-	m_tMin.m_pAttrs = new DWORD [ m_tSchema.m_dAttrs.GetLength() ];
-	for ( int i=0; i<m_tSchema.m_dAttrs.GetLength(); i++ )
+	m_tMin.Reset ( m_tSchema.m_dAttrs.GetLength() );
+	ARRAY_FOREACH ( i, m_tSchema.m_dAttrs )
 		m_tMin.m_pAttrs[i] = UINT_MAX;
 	m_tMin.m_iDocID = UINT_MAX;
 
@@ -5355,10 +5353,7 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 		m_dQueryWords[i].m_iWordID = pQueryParser->m_dHits[i].m_iWordID;
 		m_dQueryWords[i].m_iQueryPos = 1+i;
 
-		m_dQueryWords[i].m_tDoc.Reset ();
-		m_dQueryWords[i].m_tDoc.m_iAttrs = m_tSchema.m_dAttrs.GetLength();
-		if ( m_tSchema.m_dAttrs.GetLength() )
-			m_dQueryWords[i].m_tDoc.m_pAttrs = new DWORD [ m_tSchema.m_dAttrs.GetLength() ];
+		m_dQueryWords[i].m_tDoc.Reset ( m_tSchema.m_dAttrs.GetLength() );
 
 		if ( m_eDocinfo==SPH_DOCINFO_INLINE )
 		{
@@ -7142,9 +7137,7 @@ bool CSphSource_XMLPipe::Init ( const char * sCommand )
 	m_pPipe = popen ( sCommand, "r" );
 	m_bBody = false;
 
-	m_tDocInfo.Reset ();
-	m_tDocInfo.m_iAttrs = 2;
-	m_tDocInfo.m_pAttrs = new DWORD [ 2];
+	m_tDocInfo.Reset ( 2 );
 
 	m_tSchema.m_dFields.Reset ();
 	m_tSchema.m_dFields.Add ( CSphColumnInfo ( "title" ) );

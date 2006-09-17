@@ -1690,17 +1690,12 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 						ARRAY_FOREACH ( i, tAgent.m_tRes.m_dMatches )
 						{
 							CSphMatch & tMatch = tAgent.m_tRes.m_dMatches[i];
-							tMatch.Reset ();
+							tMatch.Reset ( iAttrs );
 
 							tMatch.m_iDocID = tReq.GetInt ();
 							tMatch.m_iWeight = tReq.GetInt ();
-							tMatch.m_iAttrs = iAttrs;
-							if ( iAttrs )
-							{
-								tMatch.m_pAttrs = new DWORD [ iAttrs ]; // !COMMIT pool these allocs
-								for ( int j=0; j<iAttrs; j++ )
-									tMatch.m_pAttrs[j] = tReq.GetDword ();
-							}
+							for ( int j=0; j<iAttrs; j++ )
+								tMatch.m_pAttrs[j] = tReq.GetDword ();
 						}
 					}
 

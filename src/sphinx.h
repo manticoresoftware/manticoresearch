@@ -319,11 +319,16 @@ struct CSphDocInfo
 	}
 
 	/// reset
-	void Reset ()
+	void Reset ( int iAttrs )
 	{
 		m_iDocID = 0;
-		m_iAttrs = 0;
-		SafeDeleteArray ( m_pAttrs );
+		if ( iAttrs!=m_iAttrs )
+		{
+			m_iAttrs = iAttrs;
+			SafeDeleteArray ( m_pAttrs );
+			if ( m_iAttrs )
+				m_pAttrs = new DWORD [ m_iAttrs ];
+		}
 	}
 
 	/// assignment

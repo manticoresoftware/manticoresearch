@@ -2249,7 +2249,7 @@ void CSphTokenizer_UTF8::AccumCodePoint ( int iCode )
 
 	} else
 	{
-		*m_pAccum++ = (BYTE)( ( (iCode>>12) & 0x0F ) | 0xC0 );
+		*m_pAccum++ = (BYTE)( ( (iCode>>12) & 0x0F ) | 0xE0 );
 		*m_pAccum++ = (BYTE)( ( (iCode>>6) & 0x3F ) | 0x80 );
 		*m_pAccum++ = (BYTE)( ( iCode & 0x3F ) | 0x80 );
 	}

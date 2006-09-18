@@ -16,8 +16,8 @@
 
 #include "sphinx.h"
 
-/// Sphinx query expression type
-enum SphQueryExpr_e
+/// Sphinx boolean query expression type
+enum ESphBooleanQueryExpr
 {
 	NODE_UNDEF,
 	NODE_AND,
@@ -25,41 +25,41 @@ enum SphQueryExpr_e
 };
 
 
-/// Sphinx query expression
-struct SphQueryExpr_t
+/// Sphinx boolean query expression
+struct CSphBooleanQueryExpr
 {
-	SphQueryExpr_e		m_eType;		///< this node's type
-	CSphString			m_sWord;		///< used for simple, ie. 1-word, subexpressions
-	SphQueryExpr_t *	m_pExpr;		///< used for composite, ie. non-word, subexperssions
-	SphQueryExpr_t *	m_pPrev;		///< next node in the list
-	SphQueryExpr_t *	m_pNext;		///< prev node in the list
-	SphQueryExpr_t *	m_pParent;		///< parent node
-	bool				m_bInvert;		///< whether to invert word/subexpr matching result
-	bool				m_bEvaluable;	///< whether this node evaluates to a document list or can only be used as a filter
+	ESphBooleanQueryExpr	m_eType;		///< this node's type
+	CSphString				m_sWord;		///< used for simple, ie. 1-word, subexpressions
+	CSphBooleanQueryExpr *	m_pExpr;		///< used for composite, ie. non-word, subexperssions
+	CSphBooleanQueryExpr *	m_pPrev;		///< next node in the list
+	CSphBooleanQueryExpr *	m_pNext;		///< prev node in the list
+	CSphBooleanQueryExpr *	m_pParent;		///< parent node
+	bool					m_bInvert;		///< whether to invert word/subexpr matching result
+	bool					m_bEvaluable;	///< whether this node evaluates to a document list or can only be used as a filter
 
 	/// ctor. zeroes out everything
-						SphQueryExpr_t ();
+							CSphBooleanQueryExpr ();
 
 	/// dtor. automatically kills the child and all siblings to the right
-						~SphQueryExpr_t ();
+							~CSphBooleanQueryExpr ();
 
 	/// detaches this node from its siblings, parent, and subexpressions
-	void				Detach ();
+	void					Detach ();
 
 	/// create a new tail, if i'm the tail
-	SphQueryExpr_t *	NewTail ();
+	CSphBooleanQueryExpr *	NewTail ();
 
 	/// check if this node is totally empty
-	bool				IsNull ();
+	bool					IsNull ();
 
 	/// check if this node has no siblings
-	bool				IsAlone ();
+	bool					IsAlone ();
 };
 
 
 /// parses the query and returns the resulting tree
 /// WARNING, this function MAY return NULL (if the query is empty)
-SphQueryExpr_t *		sphParseQuery ( const char * sQuery, const ISphTokenizer * pTokenizer );
+CSphBooleanQueryExpr *		sphParseBooleanQuery ( const char * sQuery, const ISphTokenizer * pTokenizer );
 
 #endif // _sphinxquery_
 

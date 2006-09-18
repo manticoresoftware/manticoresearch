@@ -9,25 +9,25 @@
 // Local classes
 /////////////////////////////////////////////////////////////////////////////
 
-class SphQueryParser_c
+class CSphBooleanQueryParser
 {
 public:
-	SphQueryExpr_t *	Parse ( const char * sQuery, const ISphTokenizer * pTokenizer );
+	CSphBooleanQueryExpr *	Parse ( const char * sQuery, const ISphTokenizer * pTokenizer );
 
 protected:
-	SphQueryExpr_t *	m_pRoot;
-	SphQueryExpr_t *	m_pCur;
+	CSphBooleanQueryExpr *	m_pRoot;
+	CSphBooleanQueryExpr *	m_pCur;
 
 protected:
-	int					IsSpecial ( int iCh );
-	void				HandleOperator ( int iCh );
+	int						IsSpecial ( int iCh );
+	void					HandleOperator ( int iCh );
 };
 
 /////////////////////////////////////////////////////////////////////////////
-// SphQueryExpr_t implementation
+// CSphBooleanQueryExpr implementation
 /////////////////////////////////////////////////////////////////////////////
 
-SphQueryExpr_t::SphQueryExpr_t ()
+CSphBooleanQueryExpr::CSphBooleanQueryExpr ()
 	: m_eType ( NODE_UNDEF )
 	, m_pExpr ( NULL )
 	, m_pPrev ( NULL )
@@ -39,13 +39,13 @@ SphQueryExpr_t::SphQueryExpr_t ()
 }
 
 
-SphQueryExpr_t::~SphQueryExpr_t ()
+CSphBooleanQueryExpr::~CSphBooleanQueryExpr ()
 {
 	SafeDelete ( m_pExpr );
 	SafeDelete ( m_pNext );
 }
 
-void SphQueryExpr_t::Detach ()
+void CSphBooleanQueryExpr::Detach ()
 {
 	// fixup parent
 	if ( m_pParent )
@@ -75,9 +75,9 @@ void SphQueryExpr_t::Detach ()
 }
 
 
-SphQueryExpr_t * SphQueryExpr_t::NewTail ()
+CSphBooleanQueryExpr * CSphBooleanQueryExpr::NewTail ()
 {
-	SphQueryExpr_t * pNew = new SphQueryExpr_t ();
+	CSphBooleanQueryExpr * pNew = new CSphBooleanQueryExpr ();
 	pNew->m_pPrev = this;
 	pNew->m_pParent = m_pParent;
 
@@ -88,7 +88,7 @@ SphQueryExpr_t * SphQueryExpr_t::NewTail ()
 }
 
 
-bool SphQueryExpr_t::IsNull ()
+bool CSphBooleanQueryExpr::IsNull ()
 {
 	bool bRes = ( m_pExpr==NULL && m_sWord.cstr()==NULL );
 	assert ( !( bRes && m_pNext ) );
@@ -96,22 +96,22 @@ bool SphQueryExpr_t::IsNull ()
 }
 
 
-bool SphQueryExpr_t::IsAlone ()
+bool CSphBooleanQueryExpr::IsAlone ()
 {
 	return ( !m_pNext && !m_pPrev );
 }
 
 /////////////////////////////////////////////////////////////////////////////
-// SphQueryParser_c implementation
+// CSphBooleanQueryParser implementation
 /////////////////////////////////////////////////////////////////////////////
 
-int SphQueryParser_c::IsSpecial ( int iCh )
+int CSphBooleanQueryParser::IsSpecial ( int iCh )
 {
 	return ( iCh=='(' || iCh==')' || iCh=='&' || iCh=='|' || iCh=='-' || iCh=='!' );
 }
 
 
-void SphQueryParser_c::HandleOperator ( int iCh )
+void CSphBooleanQueryParser::HandleOperator ( int iCh )
 {
 	assert ( iCh=='|' || iCh=='&' );
 	assert ( m_pCur->IsNull() );
@@ -121,7 +121,7 @@ void SphQueryParser_c::HandleOperator ( int iCh )
 		return;
 
 	// what type is it?
-	SphQueryExpr_e eNewType = ( iCh=='|' ) ? NODE_OR : NODE_AND;
+	ESphBooleanQueryExpr eNewType = ( iCh=='|' ) ? NODE_OR : NODE_AND;
 
 	// there's only one preceding word, so we can change the type
 	if ( !m_pCur->m_pPrev->m_pPrev )
@@ -140,7 +140,7 @@ void SphQueryParser_c::HandleOperator ( int iCh )
 	}
 
 	// current type does not match, spawn another tree level
-	SphQueryExpr_t * pNew = new SphQueryExpr_t ();
+	CSphBooleanQueryExpr * pNew = new CSphBooleanQueryExpr ();
 	pNew->m_eType = eNewType;
 
 	if ( eNewType==NODE_OR )
@@ -176,7 +176,7 @@ void SphQueryParser_c::HandleOperator ( int iCh )
 				m_pCur->m_pParent->m_eType = NODE_AND;
 			assert ( m_pCur->m_pParent->m_eType==NODE_AND );
 
-			SphQueryExpr_t * pPar = m_pCur->m_pParent;
+			CSphBooleanQueryExpr * pPar = m_pCur->m_pParent;
 			while ( pPar->m_pNext )
 				pPar = pPar->m_pNext;
 			pPar->m_pNext = m_pCur;
@@ -190,7 +190,7 @@ void SphQueryParser_c::HandleOperator ( int iCh )
 		} else
 		{
 			// no parent? change the root
-			SphQueryExpr_t * pNew = new SphQueryExpr_t ();
+			CSphBooleanQueryExpr * pNew = new CSphBooleanQueryExpr ();
 			pNew->m_eType = NODE_AND;
 
 			pNew->m_pExpr = m_pRoot;
@@ -204,7 +204,7 @@ void SphQueryParser_c::HandleOperator ( int iCh )
 			m_pCur->m_bInvert = bInv;
 
 			// fixup old expr parents
-			for ( SphQueryExpr_t * pTmp = pNew->m_pExpr; pTmp; pTmp = pTmp->m_pNext )
+			for ( CSphBooleanQueryExpr * pTmp = pNew->m_pExpr; pTmp; pTmp = pTmp->m_pNext )
 				pTmp->m_pParent = pNew;
 		}
 	}
@@ -214,12 +214,12 @@ void SphQueryParser_c::HandleOperator ( int iCh )
 }
 
 
-SphQueryExpr_t * SphQueryParser_c::Parse ( const char * sQuery, const ISphTokenizer * pTokenizer )
+CSphBooleanQueryExpr * CSphBooleanQueryParser::Parse ( const char * sQuery, const ISphTokenizer * pTokenizer )
 {
 	assert ( sQuery );
 	assert ( pTokenizer );
 
-	m_pRoot = new SphQueryExpr_t ();
+	m_pRoot = new CSphBooleanQueryExpr ();
 	m_pCur = m_pRoot;
 
 	// a buffer of my own
@@ -278,7 +278,7 @@ SphQueryExpr_t * SphQueryParser_c::Parse ( const char * sQuery, const ISphTokeni
 				m_pCur->m_eType = m_pCur->m_pPrev->m_eType;
 			}
 
-			m_pCur->m_pExpr = new SphQueryExpr_t ();
+			m_pCur->m_pExpr = new CSphBooleanQueryExpr ();
 			m_pCur->m_pExpr->m_pParent = m_pCur;
 			m_pCur = m_pCur->m_pExpr;
 			continue;
@@ -361,17 +361,17 @@ SphQueryExpr_t * SphQueryParser_c::Parse ( const char * sQuery, const ISphTokeni
 // Query simplification
 /////////////////////////////////////////////////////////////////////////////
 
-static void InvertExprLevel ( SphQueryExpr_t * pNode )
+static void InvertExprLevel ( CSphBooleanQueryExpr * pNode )
 {
 	assert ( pNode->m_eType!=NODE_UNDEF );
 	assert ( pNode->m_pPrev==NULL );
 
 #ifndef NDEBUG
-	SphQueryExpr_e eOldType = pNode->m_eType;
+	ESphBooleanQueryExpr eOldType = pNode->m_eType;
 #endif
-	SphQueryExpr_e eNewType = ( pNode->m_eType==NODE_AND ) ? NODE_OR : NODE_AND;
+	ESphBooleanQueryExpr eNewType = ( pNode->m_eType==NODE_AND ) ? NODE_OR : NODE_AND;
 
-	for ( SphQueryExpr_t * pFix = pNode; pFix; pFix = pFix->m_pNext )
+	for ( CSphBooleanQueryExpr * pFix = pNode; pFix; pFix = pFix->m_pNext )
 	{
 		assert ( pFix->m_eType==eOldType );
 		pFix->m_eType = eNewType;
@@ -381,7 +381,7 @@ static void InvertExprLevel ( SphQueryExpr_t * pNode )
 }
 
 
-static SphQueryExpr_t * RemoveRedundantNodes ( SphQueryExpr_t * pNode )
+static CSphBooleanQueryExpr * RemoveRedundantNodes ( CSphBooleanQueryExpr * pNode )
 {
 	// optimize my subexpression
 	if ( pNode->m_pExpr )
@@ -416,9 +416,9 @@ static SphQueryExpr_t * RemoveRedundantNodes ( SphQueryExpr_t * pNode )
 		&& pNode->m_pExpr->m_eType==pNode->m_eType )
 	{
 		// for each sublevel node, pull it up
-		SphQueryExpr_t * pSubFirst = pNode->m_pExpr;
-		SphQueryExpr_t * pSubLast = NULL;
-		for ( SphQueryExpr_t * pSub = pNode->m_pExpr; pSub; pSub = pSub->m_pNext )
+		CSphBooleanQueryExpr * pSubFirst = pNode->m_pExpr;
+		CSphBooleanQueryExpr * pSubLast = NULL;
+		for ( CSphBooleanQueryExpr * pSub = pNode->m_pExpr; pSub; pSub = pSub->m_pNext )
 		{
 			pSub->m_pParent = pNode->m_pParent;
 			pSubLast = pSub;
@@ -455,15 +455,15 @@ static SphQueryExpr_t * RemoveRedundantNodes ( SphQueryExpr_t * pNode )
 
 
 // place filters at the tail
-SphQueryExpr_t * ReorderLevel ( SphQueryExpr_t * pNode )
+CSphBooleanQueryExpr * ReorderLevel ( CSphBooleanQueryExpr * pNode )
 {
 	assert ( !pNode->m_pPrev );
 
 	// detach filters
-	SphQueryExpr_t * pFilters = NULL;
-	for ( SphQueryExpr_t * pCur = pNode; pCur; )
+	CSphBooleanQueryExpr * pFilters = NULL;
+	for ( CSphBooleanQueryExpr * pCur = pNode; pCur; )
 	{
-		SphQueryExpr_t * pNext = pCur->m_pNext;
+		CSphBooleanQueryExpr * pNext = pCur->m_pNext;
 		if ( !pCur->m_bEvaluable )
 		{
 			// unchain from main list, and fixup its head, too
@@ -492,7 +492,7 @@ SphQueryExpr_t * ReorderLevel ( SphQueryExpr_t * pNode )
 	if ( pFilters )
 	{
 		// to the tail
-		SphQueryExpr_t * pTail = pNode;
+		CSphBooleanQueryExpr * pTail = pNode;
 		while ( pTail->m_pNext )
 			pTail = pTail->m_pNext;
 
@@ -505,7 +505,7 @@ SphQueryExpr_t * ReorderLevel ( SphQueryExpr_t * pNode )
 			assert ( !pTail->m_pNext );
 			assert ( !pFilters->m_pNext );
 
-			SphQueryExpr_t * pPrev = pFilters->m_pPrev;
+			CSphBooleanQueryExpr * pPrev = pFilters->m_pPrev;
 			if ( pPrev )
 				pPrev->m_pNext = NULL;
 
@@ -520,7 +520,7 @@ SphQueryExpr_t * ReorderLevel ( SphQueryExpr_t * pNode )
 }
 
 
-static bool IsEvaluable ( SphQueryExpr_t * pNode )
+static bool IsEvaluable ( CSphBooleanQueryExpr * pNode )
 {
 	// find out if this node is evaluable
 	if ( !pNode->m_pExpr )
@@ -556,7 +556,7 @@ static bool IsEvaluable ( SphQueryExpr_t * pNode )
 	// now, this node is a level start, so we need to check its type
 	// and all the siblings to find out if the level is evaluable
 #ifndef NDEBUG
-	for ( SphQueryExpr_t * pCur = pNode->m_pNext; pCur; pCur = pCur->m_pNext )
+	for ( CSphBooleanQueryExpr * pCur = pNode->m_pNext; pCur; pCur = pCur->m_pNext )
 	{
 		bool bRes = IsEvaluable ( pCur );
 		assert ( bRes==pCur->m_bEvaluable );
@@ -567,14 +567,14 @@ static bool IsEvaluable ( SphQueryExpr_t * pNode )
 	{
 		case NODE_AND:
 			// there needs to be at least one directly evaluable node
-			for ( SphQueryExpr_t * pCur = pNode; pCur; pCur = pCur->m_pNext )
+			for ( CSphBooleanQueryExpr * pCur = pNode; pCur; pCur = pCur->m_pNext )
 				if ( pCur->m_bEvaluable )
 					return true;
 			return false;
 
 		case NODE_OR:
 			// all the nodes need to be directly evaluable
-			for ( SphQueryExpr_t * pCur = pNode; pCur; pCur = pCur->m_pNext )
+			for ( CSphBooleanQueryExpr * pCur = pNode; pCur; pCur = pCur->m_pNext )
 				if ( !pCur->m_bEvaluable )
 					return false;
 			return true;
@@ -589,9 +589,9 @@ static bool IsEvaluable ( SphQueryExpr_t * pNode )
 // Debugging stuff
 /////////////////////////////////////////////////////////////////////////////
 
-static void DumpTree ( SphQueryExpr_t * pNode, int iLevel=0 )
+static void DumpTree ( CSphBooleanQueryExpr * pNode, int iLevel=0 )
 {
-	for ( SphQueryExpr_t * pCur = pNode; pCur; pCur = pCur->m_pNext )
+	for ( CSphBooleanQueryExpr * pCur = pNode; pCur; pCur = pCur->m_pNext )
 	{
 		for ( int i=0; i<iLevel; i++ )
 			printf ( "\t" );
@@ -621,10 +621,10 @@ static void DumpTree ( SphQueryExpr_t * pNode, int iLevel=0 )
 // Entry point
 /////////////////////////////////////////////////////////////////////////////
 
-SphQueryExpr_t * sphParseQuery ( const char * sQuery, const ISphTokenizer * pTokenizer )
+CSphBooleanQueryExpr * sphParseBooleanQuery ( const char * sQuery, const ISphTokenizer * pTokenizer )
 {
-	SphQueryParser_c qp;
-	SphQueryExpr_t * pTree = qp.Parse ( sQuery, pTokenizer );
+	CSphBooleanQueryParser qp;
+	CSphBooleanQueryExpr * pTree = qp.Parse ( sQuery, pTokenizer );
 
 	if ( pTree )
 		pTree = RemoveRedundantNodes ( pTree );

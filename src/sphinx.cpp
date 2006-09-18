@@ -4868,33 +4868,33 @@ void CSphIndex_VLN::MatchAny ( const CSphQuery * pQuery, ISphMatchQueue * pTop, 
 }
 
 
-struct SphEvalNode_t : public CSphQueryWord
+struct CSphBooleanEvalNode : public CSphQueryWord
 {
-	SphQueryExpr_e		m_eType;	///< this node's type
+	ESphBooleanQueryExpr	m_eType;	///< this node's type
 
-	SphEvalNode_t *		m_pExpr;	///< subexperssion
-	SphEvalNode_t *		m_pParent;	///< subexperssion's parent
+	CSphBooleanEvalNode *	m_pExpr;	///< subexperssion
+	CSphBooleanEvalNode *	m_pParent;	///< subexperssion's parent
 
-	SphEvalNode_t *		m_pPrev;	///< prev expression at this level
-	SphEvalNode_t *		m_pNext;	///< next expression at this level
+	CSphBooleanEvalNode *	m_pPrev;	///< prev expression at this level
+	CSphBooleanEvalNode *	m_pNext;	///< next expression at this level
 
-	CSphMatch *			m_pLast;	///< last matched document at this node (may point to a subexpression or sibling); we only need to store this for NODE_OR type
+	CSphMatch *				m_pLast;	///< last matched document at this node (may point to a subexpression or sibling); we only need to store this for NODE_OR type
 
-	bool				m_bInvert;		///< whether to invert the matching logic
-	bool				m_bEvaluable;	///< whether this node is for matching or for filtering
+	bool					m_bInvert;		///< whether to invert the matching logic
+	bool					m_bEvaluable;	///< whether this node is for matching or for filtering
 
 public:
-						SphEvalNode_t ( const SphQueryExpr_t * pNode, CSphDict * pDict, ESphDocinfo eDocinfo, const CSphDocInfo & tMin );
-						~SphEvalNode_t ();
+							CSphBooleanEvalNode ( const CSphBooleanQueryExpr * pNode, CSphDict * pDict, ESphDocinfo eDocinfo, const CSphDocInfo & tMin );
+							~CSphBooleanEvalNode ();
 
-	void				SetFile ( CSphIndex_VLN * pIndex, int iFD );
-	CSphMatch *			MatchNode ( DWORD iMinID );		///< get next match at this node, with ID greater than iMinID
-	CSphMatch *			MatchLevel ( DWORD iMinID );	///< get next match at this level, with ID greater than iMinID
-	bool				IsRejected ( DWORD iID );		///< check if this match should be rejected
+	void					SetFile ( CSphIndex_VLN * pIndex, int iFD );
+	CSphMatch *				MatchNode ( DWORD iMinID );		///< get next match at this node, with ID greater than iMinID
+	CSphMatch *				MatchLevel ( DWORD iMinID );	///< get next match at this level, with ID greater than iMinID
+	bool					IsRejected ( DWORD iID );		///< check if this match should be rejected
 };
 
 
-SphEvalNode_t::SphEvalNode_t ( const SphQueryExpr_t * pNode, CSphDict * pDict, ESphDocinfo eDocinfo, const CSphDocInfo & tMin )
+CSphBooleanEvalNode::CSphBooleanEvalNode ( const CSphBooleanQueryExpr * pNode, CSphDict * pDict, ESphDocinfo eDocinfo, const CSphDocInfo & tMin )
 {
 	assert ( pNode );
 	assert ( pDict );
@@ -4906,7 +4906,7 @@ SphEvalNode_t::SphEvalNode_t ( const SphQueryExpr_t * pNode, CSphDict * pDict, E
 	m_sWord = pNode->m_sWord;
 	m_iWordID = 0;
 
-	m_pExpr = pNode->m_pExpr ? new SphEvalNode_t ( pNode->m_pExpr, pDict, eDocinfo, tMin ) : NULL;
+	m_pExpr = pNode->m_pExpr ? new CSphBooleanEvalNode ( pNode->m_pExpr, pDict, eDocinfo, tMin ) : NULL;
 	if ( m_pExpr )
 	{
 		m_pExpr->m_pParent = this;
@@ -4919,7 +4919,7 @@ SphEvalNode_t::SphEvalNode_t ( const SphQueryExpr_t * pNode, CSphDict * pDict, E
 		m_pLast = NULL;
 	}
 
-	m_pNext = pNode->m_pNext ? new SphEvalNode_t ( pNode->m_pNext, pDict, eDocinfo, tMin ) : NULL;
+	m_pNext = pNode->m_pNext ? new CSphBooleanEvalNode ( pNode->m_pNext, pDict, eDocinfo, tMin ) : NULL;
 	m_pPrev = NULL;
 	if ( m_pNext )
 		m_pNext->m_pPrev = this;
@@ -4930,14 +4930,14 @@ SphEvalNode_t::SphEvalNode_t ( const SphQueryExpr_t * pNode, CSphDict * pDict, E
 }
 
 
-SphEvalNode_t::~SphEvalNode_t ()
+CSphBooleanEvalNode::~CSphBooleanEvalNode ()
 {
 	SafeDelete ( m_pExpr );
 	SafeDelete ( m_pNext );
 }
 
 
-void SphEvalNode_t::SetFile ( CSphIndex_VLN * pIndex, int iFD )
+void CSphBooleanEvalNode::SetFile ( CSphIndex_VLN * pIndex, int iFD )
 {
 	// setup self
 	if ( pIndex->SetupQueryWord ( *this, iFD ) )
@@ -4950,13 +4950,13 @@ void SphEvalNode_t::SetFile ( CSphIndex_VLN * pIndex, int iFD )
 	// setup siblings
 	if ( !m_pPrev )
 	{
-		for ( SphEvalNode_t * pNode = m_pNext; pNode; pNode = pNode->m_pNext )
+		for ( CSphBooleanEvalNode * pNode = m_pNext; pNode; pNode = pNode->m_pNext )
 			pNode->SetFile ( pIndex, iFD );
 	}
 }
 
 
-bool SphEvalNode_t::IsRejected ( DWORD iID )
+bool CSphBooleanEvalNode::IsRejected ( DWORD iID )
 {
 	assert ( !m_bEvaluable );
 	assert ( m_pPrev ); // filter node can't start a level
@@ -4995,7 +4995,7 @@ bool SphEvalNode_t::IsRejected ( DWORD iID )
 }
 
 
-CSphMatch * SphEvalNode_t::MatchNode ( DWORD iMinID )
+CSphMatch * CSphBooleanEvalNode::MatchNode ( DWORD iMinID )
 {
 	assert ( m_bEvaluable );
 
@@ -5018,7 +5018,7 @@ CSphMatch * SphEvalNode_t::MatchNode ( DWORD iMinID )
 }
 
 
-CSphMatch * SphEvalNode_t::MatchLevel ( DWORD iMinID )
+CSphMatch * CSphBooleanEvalNode::MatchLevel ( DWORD iMinID )
 {
 	assert ( m_bEvaluable );
 	if ( m_eType==NODE_AND )
@@ -5026,7 +5026,7 @@ CSphMatch * SphEvalNode_t::MatchLevel ( DWORD iMinID )
 		// match all siblings
 		// search for min equal match ID through all the siblings
 		CSphMatch * pCur = NULL;
-		for ( SphEvalNode_t * pNode = this; pNode; )
+		for ( CSphBooleanEvalNode * pNode = this; pNode; )
 		{
 			if ( pNode->m_bEvaluable )
 			{
@@ -5078,7 +5078,7 @@ CSphMatch * SphEvalNode_t::MatchLevel ( DWORD iMinID )
 		CSphMatch * pCur = NULL;
 		DWORD iMinMatch = UINT_MAX; // best match ID found so far
 
-		for ( SphEvalNode_t * pNode = this; pNode; pNode = pNode->m_pNext )
+		for ( CSphBooleanEvalNode * pNode = this; pNode; pNode = pNode->m_pNext )
 		{
 			assert ( pNode->m_bEvaluable );
 
@@ -5118,13 +5118,13 @@ void CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, CSphDict * pDict, I
 	/////////////////////////
 
 	// parse query
-	SphQueryExpr_t * pTree = sphParseQuery ( pQuery->m_sQuery.cstr(), pQuery->m_pTokenizer );
+	CSphBooleanQueryExpr * pTree = sphParseBooleanQuery ( pQuery->m_sQuery.cstr(), pQuery->m_pTokenizer );
 	if ( !pTree )
 		return;
 
 	// let's build our own tree! with doclists! and hits!
 	assert ( m_tMin.m_iAttrs==m_tSchema.m_dAttrs.GetLength() );
-	SphEvalNode_t tTree ( pTree, pDict, m_eDocinfo, m_tMin );
+	CSphBooleanEvalNode tTree ( pTree, pDict, m_eDocinfo, m_tMin );
 	tTree.SetFile ( this, iDoclistFD );
 
 	bool bEarlyLookup = ( m_eDocinfo==SPH_DOCINFO_EXTERN ) && pQuery->m_dFilters.GetLength();

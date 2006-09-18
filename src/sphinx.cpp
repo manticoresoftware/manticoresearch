@@ -4920,6 +4920,7 @@ SphEvalNode_t::SphEvalNode_t ( const SphQueryExpr_t * pNode, CSphDict * pDict, E
 	}
 
 	m_pNext = pNode->m_pNext ? new SphEvalNode_t ( pNode->m_pNext, pDict, eDocinfo, tMin ) : NULL;
+	m_pPrev = NULL;
 	if ( m_pNext )
 		m_pNext->m_pPrev = this;
 
@@ -4947,8 +4948,11 @@ void SphEvalNode_t::SetFile ( CSphIndex_VLN * pIndex, int iFD )
 		m_pExpr->SetFile ( pIndex, iFD );
 
 	// setup siblings
-	for ( SphEvalNode_t * pNode = m_pNext; pNode; pNode = pNode->m_pNext )
-		pNode->SetFile ( pIndex, iFD );
+	if ( !m_pPrev )
+	{
+		for ( SphEvalNode_t * pNode = m_pNext; pNode; pNode = pNode->m_pNext )
+			pNode->SetFile ( pIndex, iFD );
+	}
 }
 
 

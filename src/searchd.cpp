@@ -1877,11 +1877,13 @@ bool CheckSortAndSchema ( const CSphSchema ** ppFirst, ISphMatchQueue ** ppTop, 
 
 		// check schemas
 		CSphString sError;
-		if ( !pServed->IsEqual ( **ppFirst, sError ) )
+		ESphSchemaCompare eComp = pServed->CompareTo ( **ppFirst, sError );
+		if ( eComp==SPH_SCHEMAS_INCOMPATIBLE )
 		{
-			tReq.SendErrorReply ( "index '%s': schema mismatch: %s", sServedName, sError.cstr() );
+			tReq.SendErrorReply ( "index '%s': incompatible schemas: %s", sServedName, sError.cstr() );
 			return false;
 		}
+		// FIXME!!! warn if schemas are compatible but not equal!
 	}
 	return true;
 }

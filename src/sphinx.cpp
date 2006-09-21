@@ -2371,32 +2371,16 @@ int CSphSchema::GetRealAttrCount () const
 }
 
 
-bool CSphSchema::IsEqual ( const CSphSchema & rhs, CSphString & sError ) const
+ESphSchemaCompare CSphSchema::CompareTo ( const CSphSchema & rhs, CSphString & sError ) const
 {
 	char sTmp [ 1024 ];
+	sError = "";
 
-	// check fields
-	if ( rhs.m_dFields.GetLength()!=m_dFields.GetLength() )
-	{
-		snprintf ( sTmp, sizeof(sTmp), "fulltext fields count mismatch: %d in schema '%s', %d in schema '%s'",
-			m_dFields.GetLength(), m_sName.cstr(),
-			rhs.m_dFields.GetLength(), rhs.m_sName.cstr() );
-		sError = sTmp;
-		return false;
-	}
+	/////////////////////////
+	// incompatibility tests
+	/////////////////////////
 
-	ARRAY_FOREACH ( i, rhs.m_dFields )
-		if ( rhs.m_dFields[i].m_sName!=m_dFields[i].m_sName )
-	{
-		snprintf ( sTmp, sizeof(sTmp), "field %d/%d name mismatch: '%s' in schema '%s', '%s' in schema '%s'",
-			i, m_dFields.GetLength(),
-			m_dFields[i].m_sName.cstr(), m_sName.cstr(),
-			rhs.m_dFields[i].m_sName.cstr(), rhs.m_sName.cstr() );
-		sError = sTmp;
-		return false;
-	}
-
-	// check attrs
+	// check attrs count
 	int iRealAttrs = GetRealAttrCount();
 	if ( iRealAttrs!=rhs.GetRealAttrCount() )
 	{
@@ -2404,21 +2388,61 @@ bool CSphSchema::IsEqual ( const CSphSchema & rhs, CSphString & sError ) const
 			m_dAttrs.GetLength(), m_sName.cstr(),
 			rhs.m_dAttrs.GetLength(), rhs.m_sName.cstr() );
 		sError = sTmp;
-		return false;
+		return SPH_SCHEMAS_INCOMPATIBLE;
 	}
 
+	// check attr types
+	for ( int i=0; i<iRealAttrs; i++ )
+		if ( rhs.m_dAttrs[i].m_eAttrType!=m_dAttrs[i].m_eAttrType )
+	{
+		snprintf ( sTmp, sizeof(sTmp), "attribute %d/%d type mismatch: name='%s', type=%d in schema '%s'; name='%s', type=%d in schema '%s'",
+			i, iRealAttrs,
+			m_dAttrs[i].m_sName.cstr(), m_dAttrs[i].m_eAttrType, m_sName.cstr(),
+			rhs.m_dAttrs[i].m_sName.cstr(), rhs.m_dAttrs[i].m_eAttrType, rhs.m_sName.cstr() );
+		sError = sTmp;
+		return SPH_SCHEMAS_INCOMPATIBLE;
+	}
+
+	//////////////////
+	// equality tests
+	//////////////////
+
+	ESphSchemaCompare eRes = SPH_SCHEMAS_EQUAL;
+
+	// check fulltext fields count
+	if ( rhs.m_dFields.GetLength()!=m_dFields.GetLength() )
+	{
+		snprintf ( sTmp, sizeof(sTmp), "fulltext fields count mismatch: %d in schema '%s', %d in schema '%s'",
+			m_dFields.GetLength(), m_sName.cstr(),
+			rhs.m_dFields.GetLength(), rhs.m_sName.cstr() );
+		sError = sTmp;
+		eRes = SPH_SCHEMAS_COMPATIBLE;
+	}
+
+	// check fulltext field names
+	ARRAY_FOREACH ( i, rhs.m_dFields )
+		if ( rhs.m_dFields[i].m_sName!=m_dFields[i].m_sName )
+	{
+		snprintf ( sTmp, sizeof(sTmp), "fulltext field %d/%d name mismatch: name='%s' in schema '%s'; name='%s' in schema '%s'",
+			i, m_dFields.GetLength(),
+			m_dFields[i].m_sName.cstr(), m_sName.cstr(),
+			rhs.m_dFields[i].m_sName.cstr(), rhs.m_sName.cstr() );
+		sError = sTmp;
+		eRes = SPH_SCHEMAS_COMPATIBLE;
+	}
+
+	// check attr names
 	for ( int i=0; i<iRealAttrs; i++ )
 		if ( rhs.m_dAttrs[i].m_sName!=m_dAttrs[i].m_sName )
 	{
-		snprintf ( sTmp, sizeof(sTmp), "attribute %d/%d name mismatch: '%s' in schema '%s', '%s' in schema '%s'",
+		snprintf ( sTmp, sizeof(sTmp), "attribute %d/%d name mismatch: name='%s' in schema '%s', name='%s' in schema '%s'",
 			i, iRealAttrs,
 			m_dAttrs[i].m_sName.cstr(), m_sName.cstr(),
 			rhs.m_dAttrs[i].m_sName.cstr(), rhs.m_sName.cstr() );
-		sError = sTmp;
-		return false;
+		eRes = SPH_SCHEMAS_COMPATIBLE;
 	}
 
-	return true;
+	return eRes;
 }
 
 
@@ -6107,11 +6131,13 @@ bool CSphSource::UpdateSchema ( CSphSchema * pInfo )
 
 	// check it
 	CSphString sError;
-	if ( !m_tSchema.IsEqual ( *pInfo, sError ) )
+	ESphSchemaCompare eComp = m_tSchema.CompareTo ( *pInfo, sError );
+	if ( eComp==SPH_SCHEMAS_INCOMPATIBLE )
 	{
-		fprintf ( stdout, "ERROR: schema mismatch: %s", sError.cstr() );
+		fprintf ( stdout, "ERROR: incompatible schemas: %s", sError.cstr() );
 		return false;
 	}
+	// FIXME!!! warn if schemas are compatible but not equal!
 
 	return true;
 }

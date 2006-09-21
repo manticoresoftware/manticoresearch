@@ -395,6 +395,14 @@ struct CSphColumnInfo
 };
 
 
+/// schema comparison results
+enum ESphSchemaCompare
+{
+	SPH_SCHEMAS_EQUAL			= 0,	///< these schemas are fully identical
+	SPH_SCHEMAS_COMPATIBLE		= 1,	///< these schemas are compatible, ie. attribute types match
+	SPH_SCHEMAS_INCOMPATIBLE	= 2		///< these schemas are not compatible
+};
+
 /// source schema
 struct CSphSchema
 {
@@ -403,18 +411,18 @@ struct CSphSchema
 	CSphVector<CSphColumnInfo,8>				m_dAttrs;		///< my per-document attributes
 
 	/// ctor
-			CSphSchema ( const char * sName ) : m_sName ( sName ) {}
+						CSphSchema ( const char * sName ) : m_sName ( sName ) {}
 
 	/// get attribute index by name
 	/// returns -1 if not found
-	int		GetAttrIndex ( const char * sName ) const;
+	int					GetAttrIndex ( const char * sName ) const;
 
 	/// checks if two schemas match
-	/// returns false and puts human-readable error message if they dont
-	bool	IsEqual ( const CSphSchema & rhs, CSphString & sError ) const;
+	/// if result is not SPH_SCHEMAS_EQUAL, human-readable error/warning message is put to sError
+	ESphSchemaCompare	CompareTo ( const CSphSchema & rhs, CSphString & sError ) const;
 
 	/// return non-virtual attributes count
-	int		GetRealAttrCount () const;
+	int					GetRealAttrCount () const;
 };
 
 

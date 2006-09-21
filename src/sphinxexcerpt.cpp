@@ -399,7 +399,10 @@ template<int L> void ExcerptGen_c::SubmitCodepoint ( CSphVector<Token_t,L> & dBu
 
 		// emit terminating token
 		if ( eType==TOK_NONE )
+		{
+			m_tTok.m_iWordID = 0;
 			dBuf.Add ( m_tTok );
+		}
 	}
 }
 

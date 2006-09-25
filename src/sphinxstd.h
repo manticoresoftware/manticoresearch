@@ -139,6 +139,15 @@ public:
 	{
 	}
 
+	/// copy ctor
+	CSphVector ( const CSphVector<T,INITIAL_LIMIT> & rhs )
+	{
+		m_iLength = 0;
+		m_iLimit = 0;
+		m_pData = NULL;
+		*this = rhs;
+	}
+
 	/// dtor
 	~CSphVector ()
 	{

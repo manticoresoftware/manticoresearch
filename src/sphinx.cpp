@@ -7031,6 +7031,12 @@ bool CSphSource_MySQL::Init ( const CSphSourceParams_MySQL & tParams )
 
 	int iCols = mysql_num_fields(m_pSqlResult)-1; // skip column 0, which must be the id
 	MYSQL_FIELD * pFields = mysql_fetch_fields ( m_pSqlResult );
+
+	CSphVector<bool,256> dFound;
+	dFound.Resize ( m_tParams.m_dAttrs.GetLength() );
+	ARRAY_FOREACH ( i, dFound )
+		dFound[i] = false;
+
 	for ( int i=0; i<iCols; i++ )
 	{
 		const char * sName = pFields[i+1].name;
@@ -7047,8 +7053,10 @@ bool CSphSource_MySQL::Init ( const CSphSourceParams_MySQL & tParams )
 		ARRAY_FOREACH ( j, m_tParams.m_dAttrs )
 			if ( !strcasecmp ( tCol.m_sName.cstr(), m_tParams.m_dAttrs[j].m_sName.cstr() ) )
 		{
-			tCol.m_eAttrType  = m_tParams.m_dAttrs[j].m_eAttrType;
+			tCol.m_eAttrType = m_tParams.m_dAttrs[j].m_eAttrType;
 			assert ( tCol.m_eAttrType!=SPH_ATTR_NONE );
+
+			dFound[j] = true;
 			break;
 		}
 
@@ -7057,7 +7065,11 @@ bool CSphSource_MySQL::Init ( const CSphSourceParams_MySQL & tParams )
 		else
 			m_tSchema.m_dAttrs.Add ( tCol );
 	}
-	// FIXME! should warn if some attrs went unmapped
+
+	// warn if some attrs went unmapped
+	ARRAY_FOREACH ( i, dFound )
+		if ( !dFound[i] )
+			fprintf ( stdout, "WARNING: attribute '%s' not found - IGNORING\n", m_tParams.m_dAttrs[i].m_sName.cstr() );
 
 	m_tDocInfo.m_iAttrs = m_tSchema.m_dAttrs.GetLength();
 	SafeDeleteArray ( m_tDocInfo.m_pAttrs );

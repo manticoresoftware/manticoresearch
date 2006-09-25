@@ -771,6 +771,15 @@ struct CSphMatch : public CSphDocInfo
 };
 
 
+inline void Swap ( CSphMatch & a, CSphMatch & b )
+{
+	Swap ( a.m_iDocID, b.m_iDocID );
+	Swap ( a.m_iAttrs, b.m_iAttrs );
+	Swap ( a.m_pAttrs, b.m_pAttrs );
+	Swap ( a.m_iWeight, b.m_iWeight );
+}
+
+
 /// search query sorting orders
 enum ESphSortOrder
 {

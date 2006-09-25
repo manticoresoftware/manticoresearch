@@ -413,6 +413,10 @@ struct CSphSchema
 	/// ctor
 						CSphSchema ( const char * sName ) : m_sName ( sName ) {}
 
+	/// get field index by name
+	/// returns -1 if not found
+	int					GetFieldIndex ( const char * sName ) const;
+
 	/// get attribute index by name
 	/// returns -1 if not found
 	int					GetAttrIndex ( const char * sName ) const;

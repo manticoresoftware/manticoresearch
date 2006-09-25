@@ -2446,6 +2446,17 @@ ESphSchemaCompare CSphSchema::CompareTo ( const CSphSchema & rhs, CSphString & s
 }
 
 
+int CSphSchema::GetFieldIndex ( const char * sName ) const
+{
+	if ( !sName )
+		return -1;
+	ARRAY_FOREACH ( i, m_dFields )
+		if ( m_dFields[i].m_sName==sName )
+			return i;
+	return -1;
+}
+
+
 int CSphSchema::GetAttrIndex ( const char * sName ) const
 {
 	if ( !sName )

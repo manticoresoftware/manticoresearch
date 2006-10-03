@@ -4566,7 +4566,7 @@ void CSphIndex_VLN::LookupDocinfo ( CSphDocInfo & tMatch )
 
 	if ( tMatch.m_iDocID==m_pDocinfo [ iStart*iStride ] )
 	{
-		pFound = m_pDocinfo;
+		pFound = m_pDocinfo + iStart*iStride;
 
 	} else if ( tMatch.m_iDocID==m_pDocinfo [ iEnd*iStride ] )
 	{

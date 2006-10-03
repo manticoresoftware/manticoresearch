@@ -463,12 +463,17 @@ public:
 	/// get stats
 	virtual const CSphSourceStats &		GetStats ();
 
-	/// update field and attribute information
+	/// updates schema fields and attributes
 	/// updates pInfo if it's empty; checks for match if it's not
-	/// must be called after Init()
+	/// must be called after Connect(); will always fail otherwise
 	virtual bool						UpdateSchema ( CSphSchema * pInfo );
 
 public:
+	/// connect to the source (eg. to the database)
+	/// connection settings are specific for each source type and as such
+	/// are implemented in specific descendants
+	virtual bool						Connect () = 0;
+
 	/// document getter
 	/// to be implemented by descendants
 	virtual int							Next () = 0;
@@ -557,7 +562,9 @@ struct CSphSource_PgSQL : CSphSource_Document
 						CSphSource_PgSQL ( const char * sName );
 	virtual				~CSphSource_PgSQL () {}
 
-	bool				Init ( const CSphSourceParams_PgSQL & pParams );
+	bool				Setup ( const CSphSourceParams_PgSQL & pParams );
+	virtual bool		Connect ();
+
 	virtual BYTE **		NextDocument ();
 	virtual void		PostIndex ();
 
@@ -623,7 +630,9 @@ struct CSphSource_MySQL : CSphSource_Document
 						CSphSource_MySQL ( const char * sName );
 	virtual				~CSphSource_MySQL () {}
 
-	bool				Init ( const CSphSourceParams_MySQL & tParams );
+	bool				Setup ( const CSphSourceParams_MySQL & tParams );
+	virtual bool		Connect ();
+
 	virtual BYTE **		NextDocument ();
 	virtual void		PostIndex ();
 
@@ -657,17 +666,13 @@ protected:
 class CSphSource_XMLPipe : public CSphSource
 {
 public:
-	/// ctor
-					CSphSource_XMLPipe ( const char * sName );
+					CSphSource_XMLPipe ( const char * sName );	///< ctor
+					~CSphSource_XMLPipe ();						///< dtor
 
-	/// dtor
-					~CSphSource_XMLPipe ();
+	bool			Setup ( const char * sCommand );			///< memorizes the command
+	virtual bool	Connect ();									///< actually runs the command 
 
-	/// initializer
-	bool			Init ( const char * sCommand );
-
-	/// hit chunk getter
-	virtual int		Next ();
+	virtual int		Next ();									///< hit chunk getter
 
 private:
 	enum Tag_e
@@ -680,33 +685,19 @@ private:
 	};
 
 private:
-	/// are we scanning body or expecting document?
-	bool			m_bBody;
+	CSphString		m_sCommand;			///< my command
 
-	/// what's our current tag
-	Tag_e			m_eTag;
+	bool			m_bBody;			///< are we scanning body or expecting document?
+	Tag_e			m_eTag;				///< what's our current tag
+	const char *	m_pTag;				///< tag name
+	int				m_iTagLength;		///< tag name length
 
-	/// tag name
-	const char *	m_pTag;
-
-	/// tag name length
-	int				m_iTagLength;
-
-	/// incoming stream
-	FILE *			m_pPipe;
-
-	/// buffer
-	BYTE			m_sBuffer [ 4096 ];
-
-	/// current buffer pos
-	BYTE *			m_pBuffer;
-
-	/// buffered end pos
-	BYTE *			m_pBufferEnd;
-
-private:
-	/// current word position
-	int				m_iWordPos;
+	FILE *			m_pPipe;			///< incoming stream
+	BYTE			m_sBuffer [ 4096 ];	///< buffer
+	BYTE *			m_pBuffer;			///< current buffer pos
+	BYTE *			m_pBufferEnd;		///< buffered end pos
+	
+	int				m_iWordPos;			///< current word position
 
 private:
 	/// set current tag

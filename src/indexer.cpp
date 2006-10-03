@@ -386,7 +386,7 @@ CSphSource * SpawnSourceMySQL ( const CSphConfigSection & hSource, const char * 
 	LOC_GETI ( tParams.m_iRangeStep,		"sql_range_step" );
 
 	CSphSource_MySQL * pSrcMySQL = new CSphSource_MySQL ( sSourceName );
-	if ( !pSrcMySQL->Init ( tParams ) )
+	if ( !pSrcMySQL->Setup ( tParams ) )
 		SafeDelete ( pSrcMySQL );
 	return pSrcMySQL;
 }
@@ -400,11 +400,9 @@ CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char 
 	LOC_CHECK ( hSource, "xmlpipe_command", "in source '%s'.", sSourceName );
 
 	CSphSource_XMLPipe * pSrcXML = new CSphSource_XMLPipe ( sSourceName );
-	if ( !pSrcXML->Init ( hSource["xmlpipe_command"].cstr() ) )
-	{
-		fprintf ( stdout, "FATAL: CSphSource_XMLPipe: unable to popen '%s'.\n", hSource["xmlpipe_command"].cstr() );
+	if ( !pSrcXML->Setup ( hSource["xmlpipe_command"].cstr() ) )
 		SafeDelete ( pSrcXML );
-	}
+
 	return pSrcXML;
 }
 

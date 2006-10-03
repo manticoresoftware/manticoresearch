@@ -3730,9 +3730,14 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 		assert ( pSource );
 
 		pSource->SetDict ( pDict );
-		if ( !pSource->UpdateSchema ( &m_tSchema ) )
-			return 0;
 	}
+
+	// connect 1st source and fetch its schema
+	if ( !dSources[0]->Connect () )
+		return 0;
+
+	if ( !dSources[0]->UpdateSchema ( &m_tSchema ) )
+		return 0;
 
 	if ( m_tSchema.m_dAttrs.GetLength()==0 )
 		m_eDocinfo = SPH_DOCINFO_NONE;
@@ -3790,10 +3795,18 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 
 	ARRAY_FOREACH ( iSource, dSources )
 	{
+		// connect and check schema, if it's not the first one
 		CSphSource * pSource = dSources[iSource];
-		assert ( pSource );
+		if ( iSource )
+		{
+			if ( !dSources[iSource]->Connect () )
+				return 0;
 
-		// FIXME! sql_query for sources 2+ might timeout by this time
+			if ( !dSources[iSource]->UpdateSchema ( &m_tSchema ) )
+				return 0;
+		}
+
+		// fetch documents
 		DWORD iDocID;
 		while ( ( iDocID = pSource->Next() )!=0 )
 		{
@@ -4286,6 +4299,11 @@ struct CSphQueryParser : CSphSource_Text
 	{
 		m_tDocInfo.m_iDocID = 1;
 		return (BYTE*)m_sQuery.cstr();
+	}
+
+	virtual bool Connect ()
+	{
+		return false;
 	}
 };
 
@@ -6374,14 +6392,8 @@ bool CSphSource_PgSQL::RunQueryStep ()
 }
 
 
-bool CSphSource_PgSQL::Init ( const CSphSourceParams_PgSQL & tParams )
+bool CSphSource_PgSQL::Setup ( const CSphSourceParams_PgSQL & tParams )
 {
-	#define LOC_ERROR(_msg,_arg) { fprintf ( stdout, _msg, _arg ); return 0; }
-	#define LOC_ERROR2(_msg,_arg,_arg2) { fprintf ( stdout, _msg, _arg, _arg2 ); return 0; }
-	#define LOC_PGSQL_ERROR(_msg) { sError = _msg; break; }
-
-	const char * sError = NULL;
-
 	// checks
 	assert ( !tParams.m_sQuery.IsEmpty() );
 	m_tParams = tParams;
@@ -6396,9 +6408,9 @@ bool CSphSource_PgSQL::Init ( const CSphSourceParams_PgSQL & tParams )
 	#undef LOC_FIX_NULL
 
 	#define LOC_FIX_QARRAY(_arg) \
-		ARRAY_FOREACH ( i, m_tParams._arg ) \
-			if ( m_tParams._arg[i].IsEmpty() ) \
-				m_tParams._arg.Remove ( i-- );
+	ARRAY_FOREACH ( i, m_tParams._arg ) \
+		if ( m_tParams._arg[i].IsEmpty() ) \
+			m_tParams._arg.Remove ( i-- );
 
 	LOC_FIX_QARRAY ( m_dQueryPre );
 	LOC_FIX_QARRAY ( m_dQueryPost );
@@ -6412,7 +6424,17 @@ bool CSphSource_PgSQL::Init ( const CSphSourceParams_PgSQL & tParams )
 		m_tParams.m_sUser.cstr(), m_tParams.m_sHost.cstr(), m_tParams.m_sPort.cstr(), m_tParams.m_sDB.cstr() );
 	m_sSqlDSN = sBuf;
 
-	// connect
+	return true;
+}
+
+
+bool CSphSource_PgSQL::Connect ()
+{
+	#define LOC_ERROR(_msg,_arg) { fprintf ( stdout, _msg, _arg ); return 0; }
+	#define LOC_ERROR2(_msg,_arg,_arg2) { fprintf ( stdout, _msg, _arg, _arg2 ); return 0; }
+	#define LOC_PGSQL_ERROR(_msg) { sError = _msg; break; }
+
+	const char * sError = NULL;
 	for ( ;; )
 	{
 		// do connect to database
@@ -6536,9 +6558,8 @@ bool CSphSource_PgSQL::Init ( const CSphSourceParams_PgSQL & tParams )
 	}
 
 	// some post-query setup
-	m_tSchema.m_dColumns.Reset ();
-	m_tSchema.m_dFields.GetLength() = 0;
-	m_tSchema.m_dAttrs.GetLength() = 0;
+	m_tSchema.m_dFields.Reset ();
+	m_tSchema.m_dAttrs.Reset ();
 
 	int iCols = PQnfields(m_pSqlResult)-1; // skip column 0, which must be the id
 	for ( int i=0; i<iCols; i++ )
@@ -6582,6 +6603,7 @@ bool CSphSource_PgSQL::Init ( const CSphSourceParams_PgSQL & tParams )
 	}
 
 	#undef LOC_ERROR
+	#undef LOC_ERROR2
 	#undef LOC_PGSQL_ERROR
 
 	return 1;
@@ -6861,14 +6883,8 @@ bool CSphSource_MySQL::RunQueryStep ()
 }
 
 
-bool CSphSource_MySQL::Init ( const CSphSourceParams_MySQL & tParams )
+bool CSphSource_MySQL::Setup ( const CSphSourceParams_MySQL & tParams )
 {
-	#define LOC_ERROR(_msg,_arg) { fprintf ( stdout, _msg, _arg ); return 0; }
-	#define LOC_ERROR2(_msg,_arg,_arg2) { fprintf ( stdout, _msg, _arg, _arg2 ); return 0; }
-	#define LOC_MYSQL_ERROR(_msg) { sError = _msg; break; }
-
-	const char * sError = NULL;
-
 	// checks
 	assert ( !tParams.m_sQuery.IsEmpty() );
 	m_tParams = tParams;
@@ -6899,11 +6915,22 @@ bool CSphSource_MySQL::Init ( const CSphSourceParams_MySQL & tParams )
 		m_tParams.m_sHost.cstr(),
 		m_tParams.m_iPort,
 		m_tParams.m_sUsock.cstr()
-			? ( m_tParams.m_sUsock.cstr() + ( m_tParams.m_sUsock.cstr()[0]=='/' ? 1 : 0 ) )
-			: "" );
+		? ( m_tParams.m_sUsock.cstr() + ( m_tParams.m_sUsock.cstr()[0]=='/' ? 1 : 0 ) )
+		: "" );
 	m_sSqlDSN = sBuf;
 
+	return true;
+}
+
+
+bool CSphSource_MySQL::Connect ()
+{
+	#define LOC_ERROR(_msg,_arg) { fprintf ( stdout, _msg, _arg ); return 0; }
+	#define LOC_ERROR2(_msg,_arg,_arg2) { fprintf ( stdout, _msg, _arg, _arg2 ); return 0; }
+	#define LOC_MYSQL_ERROR(_msg) { sError = _msg; break; }
+
 	// connect
+	const char * sError = NULL;
 	for ( ;; )
 	{
 		// initialize mysql lib
@@ -7085,6 +7112,7 @@ bool CSphSource_MySQL::Init ( const CSphSourceParams_MySQL & tParams )
 	}
 
 	#undef LOC_ERROR
+	#undef LOC_ERROR2
 	#undef LOC_MYSQL_ERROR
 
 	return 1;
@@ -7238,11 +7266,17 @@ CSphSource_XMLPipe::~CSphSource_XMLPipe ()
 }
 
 
-bool CSphSource_XMLPipe::Init ( const char * sCommand )
+bool CSphSource_XMLPipe::Setup ( const char * sCommand )
 {
 	assert ( sCommand );
+	m_sCommand = sCommand;
+	return true;
+}
 
-	m_pPipe = popen ( sCommand, "r" );
+
+bool CSphSource_XMLPipe::Connect ()
+{
+	m_pPipe = popen ( m_sCommand.cstr(), "r" );
 	m_bBody = false;
 
 	m_tDocInfo.Reset ( 2 );
@@ -7256,8 +7290,12 @@ bool CSphSource_XMLPipe::Init ( const char * sCommand )
 	m_tSchema.m_dAttrs.Add ( CSphColumnInfo ( "ts", SPH_ATTR_TIMESTAMP ) );
 
 	char sBuf [ 1024 ];
-	snprintf ( sBuf, sizeof(sBuf), "xmlpipe(%s)", sCommand );
+	snprintf ( sBuf, sizeof(sBuf), "xmlpipe(%s)", m_sCommand.cstr() );
 	m_tSchema.m_sName = sBuf;
+
+	// FIXME!!!
+	if ( !m_pPipe )
+		fprintf ( stdout, "WARNING: CSphSource_XMLPipe::Setup() failed to popen '%s'.\n", m_sCommand.cstr() );
 
 	return ( m_pPipe!=NULL );
 }

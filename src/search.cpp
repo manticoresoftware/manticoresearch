@@ -291,7 +291,7 @@ int main ( int argc, char ** argv )
 		{
 			// setup groupby
 			tQuery.SetSchema ( *pSchema );
-			if ( tQuery.GetGroupByAttr()<0 )
+			if ( !tQuery.m_sGroupBy.IsEmpty() && tQuery.GetGroupByAttr()<0 )
 			{
 				fprintf ( stdout, "WARNING: no such groupby attribute '%s' - DISABLING GROUPBY\n", tQuery.m_sGroupBy.cstr() );
 				tQuery.m_sGroupBy = "";

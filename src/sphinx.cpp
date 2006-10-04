@@ -668,6 +668,10 @@ struct IdentityHash_fn
 DWORD sphCalcPriority ( const CSphMatch & tMatch, ESphGroupBy eGroupBy, int iGroupBy )
 {
 	assert ( iGroupBy>=0 && iGroupBy<tMatch.m_iAttrs );
+	DWORD iAttr = tMatch.m_pAttrs [ iGroupBy ];
+
+	if ( eGroupBy==SPH_GROUPBY_ATTR )
+		return iAttr;
 
 	time_t tStamp = tMatch.m_pAttrs [ iGroupBy ];
 	struct tm * pSplit = localtime ( &tStamp ); // FIXME! use _r on UNIX

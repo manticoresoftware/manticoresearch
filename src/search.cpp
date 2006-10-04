@@ -41,6 +41,7 @@ int main ( int argc, char ** argv )
 			"-s, --start <offset>\tprint matches starting from this offset (default: 0)\n"
 			"-l, --limit <count>\tprint this many matches (default: 20)\n"
 			"-q, --noinfo\t\tdon't print document info from SQL database\n"
+			"-g, --group <attr>\tgroup by attribute named attr\n"
 			"--sort=date\t\tsort by date, descending\n"
 			"--rsort=date\t\tsort by date, ascending\n"
 			"--sort=ts\t\tsort by time segments\n"
@@ -88,6 +89,7 @@ int main ( int argc, char ** argv )
 			OPT ( "-l", "--limit" )		iLimit = atoi ( argv[++i] );
 			OPT ( "-c", "--config" )	sConfName = argv[++i];
 			OPT ( "-i", "--index" )		sIndex = argv[++i];
+			OPT ( "-g", "--group" )		{ tQuery.m_eGroupFunc = SPH_GROUPBY_ATTR; tQuery.m_sGroupBy = argv[++i]; }
 
 			else if ( (i+2)>=argc )		break;
 			OPT ( "-f", "--filter" )
@@ -287,6 +289,14 @@ int main ( int argc, char ** argv )
 		const CSphSchema * pSchema = pIndex->Preload ();
 		if ( pSchema )
 		{
+			// setup groupby
+			tQuery.SetSchema ( *pSchema );
+			if ( tQuery.GetGroupByAttr()<0 )
+			{
+				fprintf ( stdout, "WARNING: no such groupby attribute '%s' - DISABLING GROUPBY\n", tQuery.m_sGroupBy.cstr() );
+				tQuery.m_sGroupBy = "";
+			}
+
 			// if we're not sorting by relevance, lookup first timestamp column
 			if ( tQuery.m_eSort!=SPH_SORT_RELEVANCE )
 			{

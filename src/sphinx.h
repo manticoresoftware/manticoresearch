@@ -801,7 +801,8 @@ enum ESphGroupBy
 	SPH_GROUPBY_DAY		= 0,	///< group by day
 	SPH_GROUPBY_WEEK	= 1,	///< group by week
 	SPH_GROUPBY_MONTH	= 2,	///< group by month
-	SPH_GROUPBY_YEAR	= 3		///< group by year
+	SPH_GROUPBY_YEAR	= 3,	///< group by year
+	SPH_GROUPBY_ATTR	= 4		///< group by attribute value
 };
 
 

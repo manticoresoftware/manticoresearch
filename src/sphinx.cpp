@@ -2805,6 +2805,9 @@ CSphString CSphReader_VLN::GetString ()
 		GetRawBytes ( sBuf, iLen );
 		sRes.SetBinary ( sBuf, iLen );
 		SafeDeleteArray ( sBuf );
+	} else
+	{
+		sRes = "@emptyname";
 	}
 
 	return sRes;

@@ -208,6 +208,13 @@ public:
 		return false;
 	}
 
+	/// pop last value
+	const T & Pop ()
+	{
+		assert ( m_iLength>0 );
+		return m_pData[m_iLength--];
+	}
+
 	/// grow enough to hold that much entries, if needed
 	void Grow ( int iNewLimit )
 	{
@@ -277,20 +284,32 @@ public:
 		sphSort ( m_pData+iStart, iEnd-iStart+1, COMP );
 	}
 
-	/// access
-	/// FIXME! optimize for POD case
+	/// accessor by forward index
 	const T & operator [] ( int iIndex ) const
 	{
 		assert ( iIndex>=0 && iIndex<m_iLength );
 		return m_pData [ iIndex ];
 	}
 
-	/// access
-	/// FIXME! optimize for POD case
+	/// accessor by forward index
 	T & operator [] ( int iIndex )
 	{
 		assert ( iIndex>=0 && iIndex<m_iLength );
 		return m_pData [ iIndex ];
+	}
+
+	/// accessor by backward index
+	const T & operator () ( int iIndex ) const
+	{
+		assert ( iIndex<0 && iIndex>=-m_iLength );
+		return m_pData [ m_iLength+iIndex ];
+	}
+
+	/// accessor by backward index
+	T & operator () ( int iIndex )
+	{
+		assert ( iIndex<0 && iIndex>=-m_iLength );
+		return m_pData [ m_iLength+iIndex ];
 	}
 
 	/// copy

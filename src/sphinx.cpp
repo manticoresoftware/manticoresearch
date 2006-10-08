@@ -6241,55 +6241,71 @@ BYTE ** CSphSource_Text::NextDocument()
 	return t ? &t : NULL;
 };
 
-
-
 /////////////////////////////////////////////////////////////////////////////
-// PGSQL SOURCE
+// GENERIC SQL SOURCE
 /////////////////////////////////////////////////////////////////////////////
 
-#if USE_PGSQL
-
-CSphSourceParams_PgSQL::CSphSourceParams_PgSQL ()
-	: m_sQuery			( NULL )
-	, m_sQueryRange		( NULL )
-	, m_iRangeStep		( 1024 )
-
-	, m_sHost			( NULL )
-	, m_sUser			( NULL )
-	, m_sPass			( NULL )
-	, m_sDB				( NULL )
-	, m_sPort			( "5432" )
+CSphSourceParams_SQL::CSphSourceParams_SQL ()
+	: m_iRangeStep ( 1024 )
+	, m_iPort ( 0 )
 {
 }
 
-/////////////////////////////////////////////////////////////////////////////
 
-const char * const CSphSource_PgSQL::MACRO_VALUES [ CSphSource_PgSQL::MACRO_COUNT ] =
+const char * const CSphSource_SQL::MACRO_VALUES [ CSphSource_SQL::MACRO_COUNT ] =
 {
 	"$start",
 	"$end"
 };
 
 
-CSphSource_PgSQL::CSphSource_PgSQL ( const char * sName )
+CSphSource_SQL::CSphSource_SQL ( const char * sName )
 	: CSphSource_Document	( sName )
-	, m_pSqlResult		( NULL )
-
-	, m_iSqlRows		( 0 )
-	, m_iSqlRow			( 0 )
-
-	, m_iMinID			( 0 )
-	, m_iMaxID			( 0 )
-	, m_iCurrentID		( 0 )
-
-	, m_iMaxFetchedID	( 0 )
-
-	, m_bSqlConnected	( false )
+	, m_iMinID				( 0 )
+	, m_iMaxID				( 0 )
+	, m_iCurrentID			( 0 )
+	, m_iMaxFetchedID		( 0 )
+	, m_bSqlConnected		( false )
 {
 }
 
 
-bool CSphSource_PgSQL::RunQueryStep ()
+bool CSphSource_SQL::Setup ( const CSphSourceParams_SQL & tParams )
+{
+	// checks
+	assert ( !tParams.m_sQuery.IsEmpty() );
+
+	m_tParams = tParams;
+
+	// defaults
+	#define LOC_FIX_NULL(_arg) if ( !m_tParams._arg.cstr() ) m_tParams._arg = "";
+	LOC_FIX_NULL ( m_sHost );
+	LOC_FIX_NULL ( m_sUser );
+	LOC_FIX_NULL ( m_sPass );
+	LOC_FIX_NULL ( m_sDB );
+	#undef LOC_FIX_NULL
+
+	#define LOC_FIX_QARRAY(_arg) \
+		ARRAY_FOREACH ( i, m_tParams._arg ) \
+			if ( m_tParams._arg[i].IsEmpty() ) \
+				m_tParams._arg.Remove ( i-- );
+	LOC_FIX_QARRAY ( m_dQueryPre );
+	LOC_FIX_QARRAY ( m_dQueryPost );
+	LOC_FIX_QARRAY ( m_dQueryPostIndex );
+	#undef LOC_FIX_QARRAY
+
+	// build and store default DSN for error reporting
+	char sBuf [ 1024 ];
+	snprintf ( sBuf, sizeof(sBuf), "sql://%s:***@%s:%d/%s",
+		m_tParams.m_sUser.cstr(), m_tParams.m_sHost.cstr(),
+		m_tParams.m_iPort, m_tParams.m_sDB.cstr() );
+	m_sSqlDSN = sBuf;
+
+	return true;
+}
+
+
+bool CSphSource_SQL::RunQueryStep ()
 {
 	if ( m_tParams.m_iRangeStep<=0 )
 		return false;
@@ -6306,11 +6322,13 @@ bool CSphSource_PgSQL::RunQueryStep ()
 	assert ( m_iMinID>0 );
 	assert ( m_iMaxID>0 );
 	assert ( m_iMinID<=m_iMaxID );
+	assert ( m_tParams.m_sQuery.cstr() );
 
 	char sValues [ MACRO_COUNT ] [ iBufSize ];
+	int iNextID = Min ( m_iCurrentID+m_tParams.m_iRangeStep-1, m_iMaxID );
 	snprintf ( sValues[0], iBufSize, "%d", m_iCurrentID );
-	snprintf ( sValues[1], iBufSize, "%d", m_iCurrentID+m_tParams.m_iRangeStep-1 );
-	m_iCurrentID += m_tParams.m_iRangeStep;
+	snprintf ( sValues[1], iBufSize, "%d", iNextID );
+	m_iCurrentID = iNextID+1;
 
 	// OPTIMIZE? things can be precalculated
 	const char * sCur = m_tParams.m_sQuery.cstr();
@@ -6364,113 +6382,48 @@ bool CSphSource_PgSQL::RunQueryStep ()
 
 	// run query
 	const char * sError = NULL;
-	for ( ;; )
-	{
-		if ( m_pSqlResult )
-		{
-			PQclear ( m_pSqlResult );
-			m_pSqlResult = NULL;
-		}
 
-		m_pSqlResult = PQexec ( m_tSqlDriver, sRes );
-		ExecStatusType eRes = PQresultStatus ( m_pSqlResult );
-		if ( ( eRes!=PGRES_COMMAND_OK ) && ( eRes!=PGRES_TUPLES_OK ) )
-		{
-			sError = "pgsql_query";
-			break;
-		}
-		break;
-	}
+	SqlDismissResult ();
+	if ( !SqlQuery ( sRes ) )
+		sError = "sql_range_query";
 
 	SafeDeleteArray ( sRes );
 
 	// report errors, if any
 	if ( sError )
 	{
-		fprintf ( stdout, "ERROR: %s: %s (DSN=%s).\n",
-			sError, PQerrorMessage ( m_tSqlDriver ), m_sSqlDSN.cstr() );
+		fprintf ( stdout, "ERROR: %s: %s (DSN=%s).\n", sError, SqlError(), m_sSqlDSN.cstr() );
 		return false;
 	}
 
 	// all ok
-	m_iSqlRow = 0;
-	m_iSqlRows = PQntuples ( m_pSqlResult );
 	return true;
 }
 
-
-bool CSphSource_PgSQL::Setup ( const CSphSourceParams_PgSQL & tParams )
-{
-	// checks
-	assert ( !tParams.m_sQuery.IsEmpty() );
-	m_tParams = tParams;
-
-	// defaults
-	#define LOC_FIX_NULL(_arg) if ( !m_tParams._arg.cstr() ) m_tParams._arg = "";
-	LOC_FIX_NULL ( m_sHost );
-	LOC_FIX_NULL ( m_sUser );
-	LOC_FIX_NULL ( m_sPass );
-	LOC_FIX_NULL ( m_sDB );
-	LOC_FIX_NULL ( m_sClientEncoding );
-	#undef LOC_FIX_NULL
-
-	#define LOC_FIX_QARRAY(_arg) \
-	ARRAY_FOREACH ( i, m_tParams._arg ) \
-		if ( m_tParams._arg[i].IsEmpty() ) \
-			m_tParams._arg.Remove ( i-- );
-
-	LOC_FIX_QARRAY ( m_dQueryPre );
-	LOC_FIX_QARRAY ( m_dQueryPost );
-	LOC_FIX_QARRAY ( m_dQueryPostIndex );
-
-	#undef LOC_FIX_QARRAY
-
-	// build and store DSN for error reporting
-	char sBuf [ 1024 ];
-	snprintf ( sBuf, sizeof(sBuf), "pgsql://%s:***@%s:%s/%s",
-		m_tParams.m_sUser.cstr(), m_tParams.m_sHost.cstr(), m_tParams.m_sPort.cstr(), m_tParams.m_sDB.cstr() );
-	m_sSqlDSN = sBuf;
-
-	return true;
-}
-
-
-bool CSphSource_PgSQL::Connect ()
+bool CSphSource_SQL::Connect ()
 {
 	#define LOC_ERROR(_msg,_arg) { fprintf ( stdout, _msg, _arg ); return 0; }
 	#define LOC_ERROR2(_msg,_arg,_arg2) { fprintf ( stdout, _msg, _arg, _arg2 ); return 0; }
-	#define LOC_PGSQL_ERROR(_msg) { sError = _msg; break; }
+	#define LOC_SQL_ERROR(_msg) { sError = _msg; break; }
 
+	// connect to SQL and run required queries
 	const char * sError = NULL;
 	for ( ;; )
 	{
-		// do connect to database
-		m_tSqlDriver = PQsetdbLogin ( m_tParams.m_sHost.cstr(), m_tParams.m_sPort.cstr(), NULL, NULL,
-			m_tParams.m_sDB.cstr(), m_tParams.m_sUser.cstr(), m_tParams.m_sPass.cstr() );
+		// connect
+		if ( !SqlConnect() )
+			LOC_SQL_ERROR ( "sql_connect" );
 
-		// get connection status
-		if ( PQstatus ( m_tSqlDriver )==CONNECTION_BAD )
-			LOC_PGSQL_ERROR ( "PQsetdbLogin" ); // could not connect
-
-		m_bSqlConnected = true;		
-
-		// set client encoding
-		if ( !m_tParams.m_sClientEncoding.IsEmpty() )
-			if ( -1==PQsetClientEncoding ( m_tSqlDriver, m_tParams.m_sClientEncoding.cstr() ) )
-				LOC_PGSQL_ERROR ( "PQsetClientEncoding" );
-
-		// run pre-query
+		// run pre-queries
 		ARRAY_FOREACH ( i, m_tParams.m_dQueryPre )
 		{
-			m_pSqlResult = PQexec ( m_tSqlDriver, m_tParams.m_dQueryPre[i].cstr() );
+			if ( !SqlQuery ( m_tParams.m_dQueryPre[i].cstr() ) )
+				LOC_SQL_ERROR ( "sql_query_pre" );
 
-			ExecStatusType eRes = PQresultStatus ( m_pSqlResult );
-			if ( ( eRes!=PGRES_COMMAND_OK ) && ( eRes!=PGRES_TUPLES_OK ) )
-				LOC_PGSQL_ERROR ( "PQexec_pre" );
-
-			PQclear ( m_pSqlResult );
-			m_pSqlResult = NULL;
+			SqlDismissResult ();
 		}
+		if ( sError )
+			break;
 
 		// issue first fetch query
 		if ( !m_tParams.m_sQueryRange.IsEmpty() )
@@ -6494,505 +6447,7 @@ bool CSphSource_PgSQL::Connect ()
 			{
 				if ( !strstr ( m_tParams.m_sQuery.cstr(), MACRO_VALUES[i] ) )
 				{
-					fprintf ( stdout, "ERROR: sql_query_range: macro '%s' not found.\n",
-						MACRO_VALUES[i] );
-					bError = true;
-				}
-			}
-			if ( bError )
-				return 0;
-
-			// execute
-			m_pSqlResult = PQexec ( m_tSqlDriver, m_tParams.m_sQueryRange.cstr() );
-			ExecStatusType eRes = PQresultStatus ( m_pSqlResult );
-			if ( ( eRes!=PGRES_COMMAND_OK ) && ( eRes!=PGRES_TUPLES_OK ) )
-				LOC_PGSQL_ERROR ( "sql_query_range" );
-
-			// check number of fields (must be exactly 2)
-			if ( PQnfields ( m_pSqlResult ) !=2 )
-				LOC_ERROR ( "ERROR: sql_query_range: got %d columns, must be 2 (min_id/max_id).\n", PQnfields(m_pSqlResult) );
-
-			// fetch min/max
-			m_iMinID = myatoi ( PQgetvalue ( m_pSqlResult, 0, 0 ) );
-			m_iMaxID = myatoi ( PQgetvalue ( m_pSqlResult, 0, 1 ) );
-			
-			// check the data integrity
-			if ( m_iMinID<=0 )
-				LOC_ERROR ( "ERROR: sql_query_range: min_id=%d: must be positive.\n", m_iMinID );
-			if ( m_iMaxID<=0 )
-				LOC_ERROR ( "ERROR: sql_query_range: max_id=%d: must be positive.\n", m_iMaxID );
-			if ( m_iMinID>m_iMaxID )
-				LOC_ERROR2 ( "ERROR: sql_query_range: min_id=%d must not be greater than max_id=%d.\n", m_iMinID, m_iMaxID );
-
-			// free result
-			PQclear ( m_pSqlResult );
-			m_pSqlResult = NULL;
-
-			m_iCurrentID = m_iMinID;
-
-			// issue query
-			if ( !RunQueryStep () )
-				return 0;
-
-		} else
-		{
-			////////////////
-			// normal query
-			////////////////
-
-			assert ( !m_pSqlResult );
-			
-			m_pSqlResult = PQexec ( m_tSqlDriver, m_tParams.m_sQuery.cstr() );
-			
-			ExecStatusType eRes = PQresultStatus ( m_pSqlResult );
-			if ( ( eRes!=PGRES_COMMAND_OK ) && ( eRes!=PGRES_TUPLES_OK ) )
-				LOC_PGSQL_ERROR ( "sql_query" );
-
-			m_iSqlRow = 0;
-			m_iSqlRows = PQntuples ( m_pSqlResult );
-
-			m_tParams.m_iRangeStep = 0;
-		}
-		break;
-	}
-
-	// errors, anyone?
-	if ( sError )
-	{
-		fprintf ( stdout, "ERROR: %s: %s (DSN=%s).\n",
-			sError, PQerrorMessage ( m_tSqlDriver ), m_sSqlDSN.cstr() );
-		return 0;
-	}
-
-	// some post-query setup
-	m_tSchema.m_dFields.Reset ();
-	m_tSchema.m_dAttrs.Reset ();
-
-	int iCols = PQnfields(m_pSqlResult)-1; // skip column 0, which must be the id
-	for ( int i=0; i<iCols; i++ )
-	{
-		const char * sName = PQfname ( m_pSqlResult, i+1 );
-
-		if ( !sName )
-		{
-			fprintf ( stdout, "ERROR: column number %d has no name.\n", i+1 );
-			return 0;
-		}
-
-		CSphColumnInfo tCol ( sName );
-		tCol.m_iIndex = i+1;
-
-		ARRAY_FOREACH ( j, m_tParams.m_dAttrs )
-			if ( !strcasecmp ( tCol.m_sName.cstr(), m_tParams.m_dAttrs[j].m_sName.cstr() ) )
-		{
-			tCol.m_eAttrType  = m_tParams.m_dAttrs[j].m_eAttrType;
-			assert ( tCol.m_eAttrType!=SPH_ATTR_NONE );
-			break;
-		}
-
-		if ( tCol.m_eAttrType==SPH_ATTR_NONE )
-			m_tSchema.m_dFields.Add ( tCol );
-		else
-			m_tSchema.m_dAttrs.Add ( tCol );
-	}
-
-	m_tDocInfo.m_iAttrs = m_tSchema.m_dAttrs.GetLength();
-	SafeDeleteArray ( m_tDocInfo.m_pAttrs );
-	if ( m_tSchema.m_dAttrs.GetLength() )
-		m_tDocInfo.m_pAttrs = new DWORD [ m_tSchema.m_dAttrs.GetLength() ];
-
-	// check it
-	if ( m_tSchema.m_dFields.GetLength()>SPH_MAX_FIELDS )
-	{
-		fprintf ( stdout, "ERROR: too many fields (fields=%d, max=%d), please increase SPH_MAX_FIELDS in sphinx.h and recompile.\n",
-			m_tSchema.m_dFields.GetLength(), SPH_MAX_FIELDS );
-		return 0;
-	}
-
-	#undef LOC_ERROR
-	#undef LOC_ERROR2
-	#undef LOC_PGSQL_ERROR
-
-	return 1;
-}
-
-
-BYTE ** CSphSource_PgSQL::NextDocument ()
-{
-	PROFILE ( src_PgSQL );
-	assert ( m_bSqlConnected );
-
-	// check if we're finished	
-	while ( m_iSqlRow>=m_iSqlRows )
-	{
-		// maybe we can do next step yet?
-		if ( RunQueryStep () )
-			continue;
-
-		// ok, we're over
-		ARRAY_FOREACH ( i, m_tParams.m_dQueryPost )
-		{
-			m_pSqlResult = PQexec ( m_tSqlDriver, m_tParams.m_dQueryPost[i].cstr() );
-
-			ExecStatusType eRes = PQresultStatus ( m_pSqlResult );
-			if ( ( eRes!=PGRES_COMMAND_OK ) && ( eRes!=PGRES_TUPLES_OK ) )
-			{
-				fprintf ( stdout, "WARNING: pgsql_query_post(%d): error=%s, query=%s\n",
-					i, PQerrorMessage ( m_tSqlDriver ), m_tParams.m_dQueryPost[i].cstr() );
-				break;
-			}
-
-			PQclear ( m_pSqlResult );
-			m_pSqlResult = NULL;
-		}
-
-		// close connection and return
-		PQfinish ( m_tSqlDriver );
-		m_bSqlConnected = false;
-
-		return NULL;
-	}
-
-	// get him!
-	m_tDocInfo.m_iDocID = myatoi ( PQgetvalue ( m_pSqlResult, m_iSqlRow, 0 ) );
-	m_iMaxFetchedID = Max ( m_iMaxFetchedID, m_tDocInfo.m_iDocID );
-
-	if ( !m_tDocInfo.m_iDocID )
-		fprintf ( stdout, "WARNING: zero/NULL document_id, aborting indexing\n" );
-
-	// split columns into fields and attrs
-	ARRAY_FOREACH ( i, m_tSchema.m_dFields )
-		m_dFields[i] = (BYTE*) PQgetvalue ( m_pSqlResult, m_iSqlRow, m_tSchema.m_dFields[i].m_iIndex );
-
-	ARRAY_FOREACH ( i, m_tSchema.m_dAttrs )
-	{
-		DWORD * pAttrs = m_tDocInfo.m_pAttrs; // shortcut
-		pAttrs[i] = myatoi ( PQgetvalue ( m_pSqlResult, m_iSqlRow, m_tSchema.m_dAttrs[i].m_iIndex ) );
-		if ( !pAttrs[i] )
-		{
-			pAttrs[i] = 1;
-			fprintf ( stdout, "WARNING: zero/NULL attribute '%s' for document_id=%d, fixed up to 1\n",
-				m_tSchema.m_dAttrs[i].m_sName.cstr(), m_tDocInfo.m_iDocID );
-		}
-	}
-
-	// now, move to next row
-	m_iSqlRow++;
-	return m_dFields;
-}
-
-
-void CSphSource_PgSQL::PostIndex ()
-{
-	if ( !m_tParams.m_dQueryPostIndex.GetLength() || !m_iMaxFetchedID )
-		return;
-
-	assert ( !m_bSqlConnected );
-
-	#define LOC_PGSQL_ERROR(_msg) { sError = _msg; break; }
-
-	const char * sError = NULL;
-	for ( ;; )
-	{		
-		// do connect to database
-		m_tSqlDriver = PQsetdbLogin ( m_tParams.m_sHost.cstr(), m_tParams.m_sPort.cstr(), NULL, NULL,
-			m_tParams.m_sDB.cstr(), m_tParams.m_sUser.cstr(), m_tParams.m_sPass.cstr() );
-
-		// get connection status
-		if ( PQstatus ( m_tSqlDriver )==CONNECTION_BAD )
-			LOC_PGSQL_ERROR ( "PQsetdbLogin" );
-
-		m_bSqlConnected = true;
-		
-		// do execute query
-		ARRAY_FOREACH ( i, m_tParams.m_dQueryPostIndex )
-		{
-			char * sQuery = sphStrMacro ( m_tParams.m_dQueryPostIndex[i].cstr(), "$maxid", m_iMaxFetchedID );	
-			m_pSqlResult = PQexec ( m_tSqlDriver, sQuery );
-			delete [] sQuery;
-
-			ExecStatusType eRes = PQresultStatus ( m_pSqlResult );
-			if ( ( eRes!=PGRES_COMMAND_OK ) && ( eRes!=PGRES_TUPLES_OK ) )
-				LOC_PGSQL_ERROR ( "PQexec_post_index" );
-
-			PQclear ( m_pSqlResult );
-			m_pSqlResult = NULL;
-		}
-		break;
-	}
-	
-	if ( sError )
-		fprintf ( stdout, "ERROR: %s: %s (DSN=%s).\n",
-			sError, PQerrorMessage ( m_tSqlDriver ), m_sSqlDSN.cstr() );
-
-	#undef LOC_PGSQL_ERROR
-
-	PQfinish ( m_tSqlDriver );
-	m_bSqlConnected = false;
-}
-
-#endif // USE_PGSQL
-
-/////////////////////////////////////////////////////////////////////////////
-// MYSQL SOURCE
-/////////////////////////////////////////////////////////////////////////////
-
-#if USE_MYSQL
-
-CSphSourceParams_MySQL::CSphSourceParams_MySQL ()
-	: m_sQuery			( NULL )
-	, m_sQueryRange		( NULL )
-	, m_iRangeStep		( 1024 )
-
-	, m_sHost			( NULL )
-	, m_sUser			( NULL )
-	, m_sPass			( NULL )
-	, m_sDB				( NULL )
-	, m_iPort			( 3306 )
-	, m_sUsock			( NULL )
-{
-}
-
-/////////////////////////////////////////////////////////////////////////////
-
-const char * const CSphSource_MySQL::MACRO_VALUES [ CSphSource_MySQL::MACRO_COUNT ] =
-{
-	"$start",
-	"$end"
-};
-
-
-CSphSource_MySQL::CSphSource_MySQL ( const char * sName )
-	: CSphSource_Document	( sName )
-	, m_pSqlResult		( NULL )
-	, m_tSqlRow			( NULL )
-
-	, m_iMinID			( 0 )
-	, m_iMaxID			( 0 )
-	, m_iCurrentID		( 0 )
-
-	, m_iMaxFetchedID	( 0 )
-
-	, m_bSqlConnected	( false )
-{
-}
-
-
-bool CSphSource_MySQL::RunQueryStep ()
-{
-	if ( m_tParams.m_iRangeStep<=0 )
-		return false;
-	if ( m_iCurrentID>m_iMaxID )
-		return false;
-
-	static const int iBufSize = 16;
-	char * sRes = NULL;
-
-	//////////////////////////////////////////////
-	// range query with $start/$end interpolation
-	//////////////////////////////////////////////
-
-	assert ( m_iMinID>0 );
-	assert ( m_iMaxID>0 );
-	assert ( m_iMinID<=m_iMaxID );
-	assert ( m_tParams.m_sQuery.cstr() );
-
-	char sValues [ MACRO_COUNT ] [ iBufSize ];
-	snprintf ( sValues[0], iBufSize, "%d", m_iCurrentID );
-	snprintf ( sValues[1], iBufSize, "%d", m_iCurrentID+m_tParams.m_iRangeStep-1 );
-	m_iCurrentID += m_tParams.m_iRangeStep;
-
-	// OPTIMIZE? things can be precalculated
-	const char * sCur = m_tParams.m_sQuery.cstr();
-	int iLen = 0;
-	while ( *sCur )
-	{
-		if ( *sCur=='$' )
-		{
-			int i;
-			for ( i=0; i<MACRO_COUNT; i++ )
-				if ( strncmp ( MACRO_VALUES[i], sCur, strlen(MACRO_VALUES[i]) )==0 )
-			{
-				sCur += strlen ( MACRO_VALUES[i] );
-				iLen += strlen ( sValues[i] );
-				break;
-			}
-			if ( i<MACRO_COUNT )
-				continue;
-		}
-
-		sCur++;
-		iLen++;
-	}
-	iLen++; // trailing zero
-
-	// do interpolation
-	sRes = new char [ iLen ];
-	sCur = m_tParams.m_sQuery.cstr();
-
-	char * sDst = sRes;
-	while ( *sCur )
-	{
-		if ( *sCur=='$' )
-		{
-			int i;
-			for ( i=0; i<MACRO_COUNT; i++ )
-				if ( strncmp ( MACRO_VALUES[i], sCur, strlen(MACRO_VALUES[i]) )==0 )
-			{
-				strcpy ( sDst, sValues[i] );
-				sCur += strlen ( MACRO_VALUES[i] );
-				sDst += strlen ( sValues[i] );
-				break;
-			}
-			if ( i<MACRO_COUNT )
-				continue;
-		}
-		*sDst++ = *sCur++;
-	}
-	*sDst++ = '\0';
-	assert ( sDst-sRes==iLen );
-
-	// run query
-	const char * sError = NULL;
-	for ( ;; )
-	{
-		if ( m_pSqlResult )
-		{
-			mysql_free_result ( m_pSqlResult );
-			m_pSqlResult = NULL;
-		}
-		if ( mysql_query ( &m_tSqlDriver, sRes ) )
-		{
-			sError = "mysql_query";
-			break;
-		}
-		m_pSqlResult = mysql_use_result ( &m_tSqlDriver );
-		if ( !m_pSqlResult )
-		{
-			sError = "mysql_use_result";
-			break;
-		}
-		break;
-	}
-
-	SafeDeleteArray ( sRes );
-
-	// report errors, if any
-	if ( sError )
-	{
-		fprintf ( stdout, "ERROR: %s: %s (DSN=%s).\n",
-			sError, mysql_error ( &m_tSqlDriver ), m_sSqlDSN.cstr() );
-		return false;
-	}
-
-	// all ok
-	return true;
-}
-
-
-bool CSphSource_MySQL::Setup ( const CSphSourceParams_MySQL & tParams )
-{
-	// checks
-	assert ( !tParams.m_sQuery.IsEmpty() );
-	m_tParams = tParams;
-
-	// defaults
-	#define LOC_FIX_NULL(_arg) if ( !m_tParams._arg.cstr() ) m_tParams._arg = "";
-	LOC_FIX_NULL ( m_sHost );
-	LOC_FIX_NULL ( m_sUser );
-	LOC_FIX_NULL ( m_sPass );
-	LOC_FIX_NULL ( m_sDB );
-	#undef LOC_FIX_NULL
-
-	#define LOC_FIX_QARRAY(_arg) \
-		ARRAY_FOREACH ( i, m_tParams._arg ) \
-			if ( m_tParams._arg[i].IsEmpty() ) \
-				m_tParams._arg.Remove ( i-- );
-
-	LOC_FIX_QARRAY ( m_dQueryPre );
-	LOC_FIX_QARRAY ( m_dQueryPost );
-	LOC_FIX_QARRAY ( m_dQueryPostIndex );
-
-	#undef LOC_FIX_QARRAY
-
-	// build and store DSN for error reporting
-	char sBuf [ 1024 ];
-	snprintf ( sBuf, sizeof(sBuf), "mysql://%s:***@%s:%d/%s",
-		m_tParams.m_sUser.cstr(),
-		m_tParams.m_sHost.cstr(),
-		m_tParams.m_iPort,
-		m_tParams.m_sUsock.cstr()
-		? ( m_tParams.m_sUsock.cstr() + ( m_tParams.m_sUsock.cstr()[0]=='/' ? 1 : 0 ) )
-		: "" );
-	m_sSqlDSN = sBuf;
-
-	return true;
-}
-
-
-bool CSphSource_MySQL::Connect ()
-{
-	#define LOC_ERROR(_msg,_arg) { fprintf ( stdout, _msg, _arg ); return 0; }
-	#define LOC_ERROR2(_msg,_arg,_arg2) { fprintf ( stdout, _msg, _arg, _arg2 ); return 0; }
-	#define LOC_MYSQL_ERROR(_msg) { sError = _msg; break; }
-
-	// connect
-	const char * sError = NULL;
-	for ( ;; )
-	{
-		// initialize mysql lib
-		mysql_init ( &m_tSqlDriver );
-
-		// do connect
-		if ( !mysql_real_connect ( &m_tSqlDriver,
-			m_tParams.m_sHost.cstr(),
-			m_tParams.m_sUser.cstr(),
-			m_tParams.m_sPass.cstr(),
-			m_tParams.m_sDB.cstr(),
-			m_tParams.m_iPort,
-			m_tParams.m_sUsock.cstr(), 0 ) )
-		{
-			LOC_MYSQL_ERROR ( "mysql_real_connect" );
-		}
-		m_bSqlConnected = true;
-
-		// run pre-query
-		ARRAY_FOREACH ( i, m_tParams.m_dQueryPre )
-		{
-			if ( mysql_query ( &m_tSqlDriver, m_tParams.m_dQueryPre[i].cstr() ) )
-				LOC_MYSQL_ERROR ( "mysql_query_pre" );
-
-			m_pSqlResult = mysql_use_result ( &m_tSqlDriver );
-			if ( m_pSqlResult )
-			{
-				mysql_free_result ( m_pSqlResult );
-				m_pSqlResult = NULL;
-			}
-		}
-
-		// issue first fetch query
-		if ( !m_tParams.m_sQueryRange.IsEmpty() )
-		{
-			///////////////
-			// range query
-			///////////////
-
-			// check step
-			if ( m_tParams.m_iRangeStep<=0 )
-				LOC_ERROR ( "ERROR: mysql_range_step=%d: must be positive.\n", m_tParams.m_iRangeStep );
-			if ( m_tParams.m_iRangeStep<128 )
-			{
-				fprintf ( stdout, "WARNING: mysql_range_step=%d: too small; increased to 128.\n", m_tParams.m_iRangeStep );
-				m_tParams.m_iRangeStep = 128;
-			}
-
-			// check query for macros
-			bool bError = false;
-			for ( int i=0; i<MACRO_COUNT; i++ )
-			{
-				if ( !strstr ( m_tParams.m_sQuery.cstr(), MACRO_VALUES[i] ) )
-				{
-					fprintf ( stdout, "ERROR: mysql_ranged_query: macro '%s' not found.\n",
+					fprintf ( stdout, "ERROR: sql_query: macro '%s' not found.\n",
 						MACRO_VALUES[i] );
 					bError = true;
 				}
@@ -7001,35 +6456,30 @@ bool CSphSource_MySQL::Connect ()
 				return 0;
 
 			// run query
-			if ( mysql_query ( &m_tSqlDriver, m_tParams.m_sQueryRange.cstr() ) )
-				LOC_MYSQL_ERROR ( "mysql_query_range" );
+			if ( !SqlQuery ( m_tParams.m_sQueryRange.cstr() ) )
+				LOC_SQL_ERROR ( "sql_query_range" );
 
 			// fetch min/max
-			m_pSqlResult = mysql_use_result ( &m_tSqlDriver );
-			if ( !m_pSqlResult )
-				LOC_MYSQL_ERROR ( "mysql_use_result_range" );
-			if ( m_pSqlResult->field_count!=2 )
-				LOC_ERROR ( "ERROR: mysql_query_range: got %d columns, must be 2 (min_id/max_id).\n", m_pSqlResult->field_count );
+			int iCols = SqlNumFields ();
+			if ( iCols!=2 )
+				LOC_ERROR ( "ERROR: sql_query_range: expected 2 columns (min_id/max_id), got %d.\n", iCols );
 
-			m_tSqlRow = mysql_fetch_row ( m_pSqlResult );
-			if ( !m_tSqlRow )
-				LOC_MYSQL_ERROR ( "mysql_fetch_row_range" );
+			if ( !SqlFetchRow() )
+				LOC_SQL_ERROR ( "sql_query_range: fetch_row" );
 
-			m_iMinID = myatoi ( m_tSqlRow[0] );
-			m_iMaxID = myatoi ( m_tSqlRow[1] );
+			m_iMinID = myatoi ( SqlColumn(0) );
+			m_iMaxID = myatoi ( SqlColumn(1) );
 			if ( m_iMinID<=0 )
-				LOC_ERROR ( "ERROR: mysql_query_range: min_id=%d: must be positive.\n", m_iMinID );
+				LOC_ERROR ( "ERROR: sql_query_range: min_id=%d: must be positive.\n", m_iMinID );
 			if ( m_iMaxID<=0 )
-				LOC_ERROR ( "ERROR: mysql_query_range: max_id=%d: must be positive.\n", m_iMaxID );
+				LOC_ERROR ( "ERROR: sql_query_range: max_id=%d: must be positive.\n", m_iMaxID );
 			if ( m_iMinID>m_iMaxID )
-				LOC_ERROR2 ( "ERROR: mysql_query_range: min_id=%d must not be greater than max_id=%d.\n", m_iMinID, m_iMaxID );
+				LOC_ERROR2 ( "ERROR: sql_query_range: min_id=%d, max_id=%d: min_id must be less than max_id.\n", m_iMinID, m_iMaxID );
 
-			mysql_free_result ( m_pSqlResult );
-			m_pSqlResult = NULL;
-
-			m_iCurrentID = m_iMinID;
+			SqlDismissResult ();
 
 			// issue query
+			m_iCurrentID = m_iMinID;
 			if ( !RunQueryStep () )
 				return 0;
 
@@ -7039,13 +6489,9 @@ bool CSphSource_MySQL::Connect ()
 			// normal query
 			////////////////
 
-			assert ( !m_pSqlResult );
-			if ( mysql_query ( &m_tSqlDriver, m_tParams.m_sQuery.cstr() ) )
-				LOC_MYSQL_ERROR ( "mysql_query" );
-			m_pSqlResult = mysql_use_result ( &m_tSqlDriver );
-			if ( !m_pSqlResult )
-				LOC_MYSQL_ERROR ( "mysql_use_result" );
-		
+			if ( !SqlQuery ( m_tParams.m_sQuery.cstr() ) )
+				LOC_SQL_ERROR ( "sql_query" );
+
 			m_tParams.m_iRangeStep = 0;
 		}
 		break;
@@ -7055,7 +6501,7 @@ bool CSphSource_MySQL::Connect ()
 	if ( sError )
 	{
 		fprintf ( stdout, "ERROR: %s: %s (DSN=%s).\n",
-			sError, mysql_error ( &m_tSqlDriver ), m_sSqlDSN.cstr() );
+			sError, SqlError(), m_sSqlDSN.cstr() );
 		return 0;
 	}
 
@@ -7063,8 +6509,7 @@ bool CSphSource_MySQL::Connect ()
 	m_tSchema.m_dFields.Reset ();
 	m_tSchema.m_dAttrs.Reset ();
 
-	int iCols = mysql_num_fields(m_pSqlResult)-1; // skip column 0, which must be the id
-	MYSQL_FIELD * pFields = mysql_fetch_fields ( m_pSqlResult );
+	int iCols = SqlNumFields() - 1; // skip column 0, which must be the id
 
 	CSphVector<bool,256> dFound;
 	dFound.Resize ( m_tParams.m_dAttrs.GetLength() );
@@ -7073,8 +6518,7 @@ bool CSphSource_MySQL::Connect ()
 
 	for ( int i=0; i<iCols; i++ )
 	{
-		const char * sName = pFields[i+1].name;
-
+		const char * sName = SqlFieldName(i+1);
 		if ( !sName )
 		{
 			fprintf ( stdout, "ERROR: column number %d has no name.\n", i+1 );
@@ -7120,59 +6564,53 @@ bool CSphSource_MySQL::Connect ()
 
 	#undef LOC_ERROR
 	#undef LOC_ERROR2
-	#undef LOC_MYSQL_ERROR
+	#undef LOC_SQL_ERROR
 
 	return 1;
 }
 
 
-BYTE ** CSphSource_MySQL::NextDocument ()
+BYTE ** CSphSource_SQL::NextDocument ()
 {
-	PROFILE ( src_mysql );
+	PROFILE ( src_sql );
 	assert ( m_bSqlConnected );
 
-	m_tSqlRow = mysql_fetch_row ( m_pSqlResult );
+	bool bGotRow = SqlFetchRow ();
 
 	// when the party's over...
-	while ( !m_tSqlRow )
+	while ( !bGotRow )
 	{
 		// is that an error?
-		if ( mysql_errno ( &m_tSqlDriver ) )
-			sphDie ( "FATAL: mysql_fetch_row: %s.\n", mysql_error ( &m_tSqlDriver ) );
+		if ( SqlIsError() )
+			sphDie ( "FATAL: sql_fetch_row: %s.\n", SqlIsError() );
 
 		// maybe we can do next step yet?
 		if ( RunQueryStep () )
 		{
-			m_tSqlRow = mysql_fetch_row ( m_pSqlResult );
+			bGotRow = SqlFetchRow ();
 			continue;
 		}
 
 		// ok, we're over
 		ARRAY_FOREACH ( i, m_tParams.m_dQueryPost )
 		{
-			if ( mysql_query ( &m_tSqlDriver, m_tParams.m_dQueryPost[i].cstr() ) )
+			if ( !SqlQuery ( m_tParams.m_dQueryPost[i].cstr() ) )
 			{
 				fprintf ( stdout, "WARNING: mysql_query_post(%d): error=%s, query=%s\n",
-					i, mysql_error ( &m_tSqlDriver ), m_tParams.m_dQueryPost[i].cstr() );
+					i, SqlError(), m_tParams.m_dQueryPost[i].cstr() );
 				break;
 			}
-			m_pSqlResult = mysql_use_result ( &m_tSqlDriver );
-			if ( m_pSqlResult )
-			{
-				mysql_free_result ( m_pSqlResult );
-				m_pSqlResult = NULL;
-			}
+			SqlDismissResult ();
 		}
 
 		// close connection and return
-		mysql_close ( &m_tSqlDriver );
-		m_bSqlConnected = false;
+		SqlDisconnect ();
 
 		return NULL;
 	}
 
 	// get him!
-	m_tDocInfo.m_iDocID = myatoi ( m_tSqlRow[0] );
+	m_tDocInfo.m_iDocID = myatoi ( SqlColumn(0) );
 	m_iMaxFetchedID = Max ( m_iMaxFetchedID, m_tDocInfo.m_iDocID );
 
 	if ( !m_tDocInfo.m_iDocID )
@@ -7180,12 +6618,12 @@ BYTE ** CSphSource_MySQL::NextDocument ()
 
 	// split columns into fields and attrs
 	ARRAY_FOREACH ( i, m_tSchema.m_dFields )
-		m_dFields[i] = (BYTE*) m_tSqlRow [ m_tSchema.m_dFields[i].m_iIndex ];
+		m_dFields[i] = (BYTE*) SqlColumn ( m_tSchema.m_dFields[i].m_iIndex );
 
 	ARRAY_FOREACH ( i, m_tSchema.m_dAttrs )
 	{
 		DWORD * pAttrs = m_tDocInfo.m_pAttrs; // shortcut
-		pAttrs[i] = myatoi ( m_tSqlRow [ m_tSchema.m_dAttrs[i].m_iIndex ] );
+		pAttrs[i] = myatoi ( SqlColumn ( m_tSchema.m_dAttrs[i].m_iIndex ) );
 		if ( !pAttrs[i] )
 		{
 			pAttrs[i] = 1;
@@ -7198,57 +6636,329 @@ BYTE ** CSphSource_MySQL::NextDocument ()
 }
 
 
-void CSphSource_MySQL::PostIndex ()
+void CSphSource_SQL::PostIndex ()
 {
 	if ( !m_tParams.m_dQueryPostIndex.GetLength() || !m_iMaxFetchedID )
 		return;
 
 	assert ( !m_bSqlConnected );
 
-	#define LOC_MYSQL_ERROR(_msg) { sError = _msg; break; }
+	#define LOC_SQL_ERROR(_msg) { sError = _msg; break; }
 
 	const char * sError = NULL;
 	for ( ;; )
 	{
-		mysql_init ( &m_tSqlDriver );
-		if ( !mysql_real_connect ( &m_tSqlDriver,
-			m_tParams.m_sHost.cstr(), m_tParams.m_sUser.cstr(), m_tParams.m_sPass.cstr(), m_tParams.m_sDB.cstr(),
-			m_tParams.m_iPort, m_tParams.m_sUsock.cstr(), 0 ) )
-		{
-			LOC_MYSQL_ERROR ( "mysql_real_connect" );
-		}
+		if ( !SqlConnect () )
+			LOC_SQL_ERROR ( "mysql_real_connect" );
 
 		ARRAY_FOREACH ( i, m_tParams.m_dQueryPostIndex )
 		{
 			char * sQuery = sphStrMacro ( m_tParams.m_dQueryPostIndex[i].cstr(), "$maxid", m_iMaxFetchedID );
-			int iRes = mysql_query ( &m_tSqlDriver, sQuery );
+			bool bRes = SqlQuery ( sQuery );
 			delete [] sQuery;
 
-			if ( iRes )
-				LOC_MYSQL_ERROR ( "mysql_query_post_index" );
+			if ( !bRes )
+				LOC_SQL_ERROR ( "sql_query_post_index" );
 
-			m_pSqlResult = mysql_use_result ( &m_tSqlDriver );
-			if ( m_pSqlResult )
-			{
-				mysql_free_result ( m_pSqlResult );
-				m_pSqlResult = NULL;
-			}
+			SqlDismissResult ();
 		}
 		break;
 	}
-	
+
 	if ( sError )
-		fprintf ( stdout, "ERROR: %s: %s (DSN=%s).\n",
-			sError, mysql_error ( &m_tSqlDriver ), m_sSqlDSN.cstr() );
+		fprintf ( stdout, "ERROR: %s: %s (DSN=%s).\n", sError, SqlError(), m_sSqlDSN.cstr() );
 
-	#undef LOC_MYSQL_ERROR
+	#undef LOC_SQL_ERROR
 
-	mysql_close ( &m_tSqlDriver );
+	SqlDisconnect ();
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// MYSQL SOURCE
+/////////////////////////////////////////////////////////////////////////////
+
+#if USE_MYSQL
+
+CSphSourceParams_MySQL::CSphSourceParams_MySQL ()
+{
+	m_iPort = 3306;
+}
+
+
+CSphSource_MySQL::CSphSource_MySQL ( const char * sName )
+	: CSphSource_SQL ( sName )
+	, m_pMysqlResult( NULL )
+	, m_tMysqlRow	( NULL )
+	, m_pMysqlFields( NULL )
+{
+}
+
+
+void CSphSource_MySQL::SqlDismissResult ()
+{
+	if ( !m_pMysqlResult )
+		return;
+
+	mysql_free_result ( m_pMysqlResult );
+	m_pMysqlResult = NULL;
+	m_pMysqlFields = NULL;
+}
+
+
+bool CSphSource_MySQL::SqlQuery ( const char * sQuery )
+{
+	if ( mysql_query ( &m_tMysqlDriver, sQuery ) )
+		return false;
+
+	m_pMysqlResult = mysql_use_result ( &m_tMysqlDriver );
+	m_pMysqlFields = NULL;
+	return true;
+}
+
+
+bool CSphSource_MySQL::SqlIsError ()
+{
+	return mysql_errno ( &m_tMysqlDriver )!=0;
+}
+
+
+const char * CSphSource_MySQL::SqlError ()
+{
+	return mysql_error ( &m_tMysqlDriver );
+}
+
+
+bool CSphSource_MySQL::SqlConnect ()
+{
+	mysql_init ( &m_tMysqlDriver );
+
+	assert ( !m_bSqlConnected );
+	if ( !mysql_real_connect ( &m_tMysqlDriver,
+		m_tParams.m_sHost.cstr(), m_tParams.m_sUser.cstr(), m_tParams.m_sPass.cstr(),
+		m_tParams.m_sDB.cstr(), m_tParams.m_iPort, m_sMysqlUsock.cstr(), 0 ) )
+	{
+		return false;
+	}
+
+	m_bSqlConnected = true;
+	return m_bSqlConnected;
+}
+
+
+void CSphSource_MySQL::SqlDisconnect ()
+{
+	assert ( m_bSqlConnected );
+	mysql_close ( &m_tMysqlDriver );
 	m_bSqlConnected = false;
+}
+
+
+int CSphSource_MySQL::SqlNumFields ()
+{
+	if ( !m_pMysqlResult )
+		return -1;
+
+	return mysql_num_fields ( m_pMysqlResult );
+}
+
+
+bool CSphSource_MySQL::SqlFetchRow ()
+{
+	if ( !m_pMysqlResult )
+		return false;
+
+	m_tMysqlRow = mysql_fetch_row ( m_pMysqlResult );
+	return m_tMysqlRow!=NULL;
+}
+
+
+const char * CSphSource_MySQL::SqlColumn ( int iIndex )
+{
+	if ( !m_pMysqlResult )
+		return NULL;
+
+	return m_tMysqlRow[iIndex];
+}
+
+
+const char * CSphSource_MySQL::SqlFieldName ( int iIndex )
+{
+	if ( !m_pMysqlResult )
+		return NULL;
+
+	if ( !m_pMysqlFields )
+		m_pMysqlFields = mysql_fetch_fields ( m_pMysqlResult );
+
+	return m_pMysqlFields[iIndex].name;
+}
+
+
+bool CSphSource_MySQL::Setup ( const CSphSourceParams_MySQL & tParams )
+{
+	if ( !CSphSource_SQL::Setup ( tParams ) )
+		return false;
+
+	m_sMysqlUsock = tParams.m_sUsock;
+
+	// build and store DSN for error reporting
+	char sBuf [ 1024 ];
+	snprintf ( sBuf, sizeof(sBuf), "mysql%s", m_sSqlDSN.cstr()+3 );
+	m_sSqlDSN = sBuf;
+
+	return true;
 }
 
 #endif // USE_MYSQL
 
+/////////////////////////////////////////////////////////////////////////////
+// PGSQL SOURCE
+/////////////////////////////////////////////////////////////////////////////
+
+#if USE_PGSQL
+
+CSphSourceParams_PgSQL::CSphSourceParams_PgSQL ()
+{
+	m_iRangeStep = 1024;
+	m_iPort = 5432;
+}
+
+
+CSphSource_PgSQL::CSphSource_PgSQL ( const char * sName )
+	: CSphSource_SQL	( sName )
+	, m_pPgResult		( NULL )
+	, m_iPgRows			( 0 )
+	, m_iPgRow			( 0 )
+{
+}
+
+
+bool CSphSource_PgSQL::SqlIsError ()
+{
+	return ( m_iPgRow<m_iPgRows ); // if we're over, it's just last row
+}
+
+
+const char * CSphSource_PgSQL::SqlError ()
+{
+	return PQerrorMessage ( m_tPgDriver );
+}
+
+
+bool CSphSource_PgSQL::Setup ( const CSphSourceParams_PgSQL & tParams )
+{
+	// checks
+	CSphSource_SQL::Setup ( tParams );
+
+	m_sPgClientEncoding = tParams.m_sClientEncoding;
+	if ( !m_sPgClientEncoding.cstr() )
+		m_sPgClientEncoding = "";
+
+	// build and store DSN for error reporting
+	char sBuf [ 1024 ];
+	snprintf ( sBuf, sizeof(sBuf), "pgsql%s", m_sSqlDSN.cstr()+3 );
+	m_sSqlDSN = sBuf;
+
+	return true;
+}
+
+
+bool CSphSource_PgSQL::SqlConnect ()
+{
+	assert ( !m_bSqlConnected );
+
+	char sPort[64];
+	snprintf ( sPort, sizeof(sPort), "%d", m_tParams.m_iPort );
+	m_tPgDriver = PQsetdbLogin ( m_tParams.m_sHost.cstr(), sPort, NULL, NULL,
+		m_tParams.m_sDB.cstr(), m_tParams.m_sUser.cstr(), m_tParams.m_sPass.cstr() );
+
+	if ( PQstatus ( m_tPgDriver )==CONNECTION_BAD )
+		return false;
+
+	// set client encoding
+	if ( !m_sPgClientEncoding.IsEmpty() )
+		if ( -1==PQsetClientEncoding ( m_tPgDriver, m_sPgClientEncoding.cstr() ) )
+	{
+		SqlDisconnect ();
+		return false;
+	}
+
+	m_bSqlConnected = true;
+	return true;
+}
+
+
+void CSphSource_PgSQL::SqlDisconnect ()	
+{
+	assert ( m_bSqlConnected );
+	PQfinish ( m_tPgDriver );
+	m_bSqlConnected = false;
+}
+
+
+bool CSphSource_PgSQL::SqlQuery ( const char * sQuery )
+{
+	m_iPgRow = -1;
+	m_iPgRows = 0;
+
+	m_pPgResult = PQexec ( m_tPgDriver, sQuery );
+
+	ExecStatusType eRes = PQresultStatus ( m_pPgResult );
+	if ( ( eRes!=PGRES_COMMAND_OK ) && ( eRes!=PGRES_TUPLES_OK ) )
+		return false;
+
+	m_iPgRows = PQntuples ( m_pPgResult );
+	return true;
+}
+
+
+void CSphSource_PgSQL::SqlDismissResult ()
+{
+	if ( !m_pPgResult )
+		return;
+
+	PQclear ( m_pPgResult );
+	m_pPgResult = NULL;
+}
+
+
+int CSphSource_PgSQL::SqlNumFields ()
+{
+	if ( !m_pPgResult )
+		return -1;
+
+	return PQnfields ( m_pPgResult );
+}
+
+
+const char * CSphSource_PgSQL::SqlColumn ( int iIndex )
+{
+	if ( !m_pPgResult )
+		return NULL;
+
+	return PQgetvalue ( m_pPgResult, m_iPgRow, iIndex );
+}
+
+
+const char * CSphSource_PgSQL::SqlFieldName ( int iIndex )
+{
+	if ( !m_pPgResult )
+		return NULL;
+
+	return PQfname ( m_pPgResult, iIndex );
+}
+
+
+bool CSphSource_PgSQL::SqlFetchRow ()
+{
+	if ( !m_pPgResult )
+		return false;
+	return ( ++m_iPgRow<m_iPgRows );
+}
+
+#endif // USE_PGSQL
+
+/////////////////////////////////////////////////////////////////////////////
+// XMLPIPE
 /////////////////////////////////////////////////////////////////////////////
 
 CSphSource_XMLPipe::CSphSource_XMLPipe ( const char * sName)

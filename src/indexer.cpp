@@ -299,7 +299,7 @@ void ShowProgress ( const CSphIndexProgress * pProgress )
 	if (!( _hash.Exists ( _key ) )) \
 	{ \
 		fprintf ( stdout, "ERROR: key '%s' not found " _msg "\n", _key, _add ); \
-		return NULL; \
+		return false; \
 	}
 
 // get string
@@ -323,18 +323,14 @@ void ShowProgress ( const CSphIndexProgress * pProgress )
 		_arg.Add ( CSphColumnInfo ( pVal->cstr(), _type ) );
 
 
-#if USE_PGSQL
-CSphSource * SpawnSourcePgSQL ( const CSphConfigSection & hSource, const char * sSourceName )
+bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSection & hSource, const char * sSourceName )
 {
-	assert ( hSource["type"]=="pgsql" );
-
 	LOC_CHECK ( hSource, "sql_host", "in source '%s'", sSourceName );
 	LOC_CHECK ( hSource, "sql_user", "in source '%s'", sSourceName );
 	LOC_CHECK ( hSource, "sql_pass", "in source '%s'", sSourceName );
 	LOC_CHECK ( hSource, "sql_db", "in source '%s'", sSourceName );
 	LOC_CHECK ( hSource, "sql_query", "in source '%s'", sSourceName );
 
-	CSphSourceParams_PgSQL tParams;
 	LOC_GETS ( tParams.m_sQuery,			"sql_query" );
 	LOC_GETAS( tParams.m_dQueryPre,			"sql_query_pre" );
 	LOC_GETAS( tParams.m_dQueryPost,		"sql_query_post" );
@@ -346,12 +342,26 @@ CSphSource * SpawnSourcePgSQL ( const CSphConfigSection & hSource, const char * 
 	LOC_GETS ( tParams.m_sUser,				"sql_user" );
 	LOC_GETS ( tParams.m_sPass,				"sql_pass" );
 	LOC_GETS ( tParams.m_sDB,				"sql_db" );
-	LOC_GETS ( tParams.m_sClientEncoding,	"sql_client_encoding" );
-	LOC_GETS ( tParams.m_sPort,				"sql_port");
+	LOC_GETI ( tParams.m_iPort,				"sql_port");
 	LOC_GETI ( tParams.m_iRangeStep,		"sql_range_step" );
 
+	return true;
+}
+
+
+#if USE_PGSQL
+CSphSource * SpawnSourcePgSQL ( const CSphConfigSection & hSource, const char * sSourceName )
+{
+	assert ( hSource["type"]=="pgsql" );
+
+	CSphSourceParams_PgSQL tParams;
+	if ( !SqlParamsConfigure ( tParams, hSource, sSourceName ) )
+		return NULL;
+
+	LOC_GETS ( tParams.m_sClientEncoding,	"sql_client_encoding" );
+
 	CSphSource_PgSQL * pSrcPgSQL = new CSphSource_PgSQL ( sSourceName );
-	if ( !pSrcPgSQL->Init ( tParams ) )
+	if ( !pSrcPgSQL->Setup ( tParams ) )
 		SafeDelete ( pSrcPgSQL );
 	return pSrcPgSQL;
 }
@@ -363,27 +373,11 @@ CSphSource * SpawnSourceMySQL ( const CSphConfigSection & hSource, const char * 
 {
 	assert ( hSource["type"]=="mysql" );
 
-	LOC_CHECK ( hSource, "sql_host", "in source '%s'", sSourceName );
-	LOC_CHECK ( hSource, "sql_user", "in source '%s'", sSourceName );
-	LOC_CHECK ( hSource, "sql_pass", "in source '%s'", sSourceName );
-	LOC_CHECK ( hSource, "sql_db", "in source '%s'", sSourceName );
-	LOC_CHECK ( hSource, "sql_query", "in source '%s'", sSourceName );
-
 	CSphSourceParams_MySQL tParams;
-	LOC_GETS ( tParams.m_sQuery,			"sql_query" );
-	LOC_GETAS( tParams.m_dQueryPre,			"sql_query_pre" );
-	LOC_GETAS( tParams.m_dQueryPost,		"sql_query_post" );
-	LOC_GETS ( tParams.m_sQueryRange,		"sql_query_range" );
-	LOC_GETAS( tParams.m_dQueryPostIndex,	"sql_query_post_index" );
-	LOC_GETAA( tParams.m_dAttrs,			"sql_group_column",		SPH_ATTR_INTEGER );
-	LOC_GETAA( tParams.m_dAttrs,			"sql_date_column",		SPH_ATTR_TIMESTAMP );
-	LOC_GETS ( tParams.m_sHost,				"sql_host" );
-	LOC_GETS ( tParams.m_sUser,				"sql_user" );
-	LOC_GETS ( tParams.m_sPass,				"sql_pass" );
-	LOC_GETS ( tParams.m_sDB,				"sql_db" );
+	if ( !SqlParamsConfigure ( tParams, hSource, sSourceName ) )
+		return NULL;
+
 	LOC_GETS ( tParams.m_sUsock,			"sql_sock" );
-	LOC_GETI ( tParams.m_iPort,				"sql_port" );
-	LOC_GETI ( tParams.m_iRangeStep,		"sql_range_step" );
 
 	CSphSource_MySQL * pSrcMySQL = new CSphSource_MySQL ( sSourceName );
 	if ( !pSrcMySQL->Setup ( tParams ) )

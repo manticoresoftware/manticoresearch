@@ -528,14 +528,13 @@ struct CSphSource_Text : CSphSource_Document
 };
 
 
-#if USE_PGSQL
-/// PgSQL source params
-struct CSphSourceParams_PgSQL
+/// generic SQL source params
+struct CSphSourceParams_SQL
 {
 	// query params
-	CSphString	m_sQuery;
-	CSphString	m_sQueryRange;
-	int			m_iRangeStep;
+	CSphString						m_sQuery;
+	CSphString						m_sQueryRange;
+	int								m_iRangeStep;
 
 	CSphVector<CSphString,4>		m_dQueryPre;
 	CSphVector<CSphString,4>		m_dQueryPost;
@@ -543,38 +542,31 @@ struct CSphSourceParams_PgSQL
 	CSphVector<CSphColumnInfo,4>	m_dAttrs;
 
 	// connection params
-	CSphString	m_sHost;
-	CSphString	m_sUser;
-	CSphString	m_sPass;
-	CSphString	m_sDB;
-	CSphString	m_sPort;	
-	CSphString	m_sClientEncoding;
-	
-	/// ctor which sets defaults
-				CSphSourceParams_PgSQL ();
+	CSphString						m_sHost;
+	CSphString						m_sUser;
+	CSphString						m_sPass;
+	CSphString						m_sDB;
+	int								m_iPort;
+
+	CSphSourceParams_SQL ();
 };
 
 
-/// PgSQL source implementation
+/// generic SQL source
 /// multi-field plain-text documents fetched from given query
-struct CSphSource_PgSQL : CSphSource_Document
+struct CSphSource_SQL : CSphSource_Document
 {
-						CSphSource_PgSQL ( const char * sName );
-	virtual				~CSphSource_PgSQL () {}
+						CSphSource_SQL ( const char * sName );
+	virtual				~CSphSource_SQL () {}
 
-	bool				Setup ( const CSphSourceParams_PgSQL & pParams );
+	bool				Setup ( const CSphSourceParams_SQL & pParams );
 	virtual bool		Connect ();
 
 	virtual BYTE **		NextDocument ();
 	virtual void		PostIndex ();
 
 protected:
-	PGresult * 			m_pSqlResult;	///< postgresql execution restult context
-	PGconn *			m_tSqlDriver;	///< postgresql connection context
 	CSphString			m_sSqlDSN;
-
-	int					m_iSqlRows;		///< how much rows last step returned
-	int					m_iSqlRow;		///< current row (0 based, as in PQgetvalue)
 
 	BYTE *				m_dFields [ SPH_MAX_FIELDS ];
 
@@ -585,81 +577,105 @@ protected:
 	DWORD				m_iMaxFetchedID;///< max actually fetched ID
 
 	bool						m_bSqlConnected;
-	CSphSourceParams_PgSQL		m_tParams;
+	CSphSourceParams_SQL		m_tParams;
 
 	static const int			MACRO_COUNT = 2;
 	static const char * const	MACRO_VALUES [ MACRO_COUNT ];
 
 protected:
-	bool				RunQueryStep ();
+	bool					RunQueryStep ();
+
+protected:
+	virtual void			SqlDismissResult () = 0;
+	virtual bool			SqlQuery ( const char * sQuery ) = 0;
+	virtual bool			SqlIsError () = 0;
+	virtual const char *	SqlError () = 0;
+	virtual bool			SqlConnect () = 0;
+	virtual void			SqlDisconnect () = 0;
+	virtual int				SqlNumFields() = 0;
+	virtual bool			SqlFetchRow() = 0;
+	virtual const char *	SqlColumn ( int iIndex ) = 0;
+	virtual const char *	SqlFieldName ( int iIndex ) = 0;
 };
-#endif
 
 
 #if USE_MYSQL
 /// MySQL source params
-struct CSphSourceParams_MySQL
+struct CSphSourceParams_MySQL : CSphSourceParams_SQL
 {
-	// query params
-	CSphString	m_sQuery;
-	CSphString	m_sQueryRange;
-	int			m_iRangeStep;
-
-	CSphVector<CSphString,4>		m_dQueryPre;
-	CSphVector<CSphString,4>		m_dQueryPost;
-	CSphVector<CSphString,4>		m_dQueryPostIndex;
-	CSphVector<CSphColumnInfo,4>	m_dAttrs;
-
-	// connection params
-	CSphString	m_sHost;
-	CSphString	m_sUser;
-	CSphString	m_sPass;
-	CSphString	m_sDB;
-	int			m_iPort;
-	CSphString	m_sUsock;
-
-	/// ctor which sets defaults
-					CSphSourceParams_MySQL ();
+	CSphString	m_sUsock;					///< UNIX socket
+				CSphSourceParams_MySQL ();	///< ctor. sets defaults
 };
 
 
 /// MySQL source implementation
 /// multi-field plain-text documents fetched from given query
-struct CSphSource_MySQL : CSphSource_Document
+struct CSphSource_MySQL : CSphSource_SQL
 {
-						CSphSource_MySQL ( const char * sName );
-	virtual				~CSphSource_MySQL () {}
-
-	bool				Setup ( const CSphSourceParams_MySQL & tParams );
-	virtual bool		Connect ();
-
-	virtual BYTE **		NextDocument ();
-	virtual void		PostIndex ();
+							CSphSource_MySQL ( const char * sName );
+	bool					Setup ( const CSphSourceParams_MySQL & tParams );
 
 protected:
-	MYSQL_RES *			m_pSqlResult;
-	MYSQL_ROW			m_tSqlRow;
-	MYSQL				m_tSqlDriver;
-	CSphString			m_sSqlDSN;
+	MYSQL_RES *				m_pMysqlResult;
+	MYSQL_FIELD *			m_pMysqlFields;
+	MYSQL_ROW				m_tMysqlRow;
+	MYSQL					m_tMysqlDriver;
 
-	BYTE *				m_dFields [ SPH_MAX_FIELDS ];
-
-	int					m_iMinID;		///< grand min ID
-	int					m_iMaxID;		///< grand max ID
-	int					m_iCurrentID;	///< current min ID
-
-	DWORD				m_iMaxFetchedID;///< max actually fetched ID
-
-	bool						m_bSqlConnected;
-	CSphSourceParams_MySQL		m_tParams;
-
-	static const int			MACRO_COUNT = 2;
-	static const char * const	MACRO_VALUES [ MACRO_COUNT ];
+	CSphString				m_sMysqlUsock;
 
 protected:
-	bool				RunQueryStep ();
+	virtual void			SqlDismissResult ();
+	virtual bool			SqlQuery ( const char * sQuery );
+	virtual bool			SqlIsError ();
+	virtual const char *	SqlError ();
+	virtual bool			SqlConnect ();
+	virtual void			SqlDisconnect ();
+	virtual int				SqlNumFields();
+	virtual bool			SqlFetchRow();
+	virtual const char *	SqlColumn ( int iIndex );
+	virtual const char *	SqlFieldName ( int iIndex );
 };
-#endif
+#endif // USE_MYSQL
+
+
+#if USE_PGSQL
+/// PgSQL specific source params
+struct CSphSourceParams_PgSQL : CSphSourceParams_SQL
+{
+	CSphString		m_sClientEncoding;
+					CSphSourceParams_PgSQL ();
+};
+
+
+/// PgSQL source implementation
+/// multi-field plain-text documents fetched from given query
+struct CSphSource_PgSQL : CSphSource_SQL
+{
+							CSphSource_PgSQL ( const char * sName );
+	bool					Setup ( const CSphSourceParams_PgSQL & pParams );
+
+protected:
+	PGresult * 				m_pPgResult;	///< postgresql execution restult context
+	PGconn *				m_tPgDriver;	///< postgresql connection context
+
+	int						m_iPgRows;		///< how much rows last step returned
+	int						m_iPgRow;		///< current row (0 based, as in PQgetvalue)
+
+	CSphString				m_sPgClientEncoding;
+
+protected:
+	virtual void			SqlDismissResult ();
+	virtual bool			SqlQuery ( const char * sQuery );
+	virtual bool			SqlIsError ();
+	virtual const char *	SqlError ();
+	virtual bool			SqlConnect ();
+	virtual void			SqlDisconnect ();
+	virtual int				SqlNumFields();
+	virtual bool			SqlFetchRow();
+	virtual const char *	SqlColumn ( int iIndex );
+	virtual const char *	SqlFieldName ( int iIndex );
+};
+#endif // USE_PGSQL
 
 
 /// XML pipe source implementation

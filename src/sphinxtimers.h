@@ -18,7 +18,7 @@ DECLARE_TIMER ( invert_hits )
 DECLARE_TIMER ( read_hits )
 
 DECLARE_TIMER ( src_document )
-DECLARE_TIMER ( src_mysql )
+DECLARE_TIMER ( src_sql )
 DECLARE_TIMER ( src_xmlpipe )
 
 DECLARE_TIMER ( query_init )

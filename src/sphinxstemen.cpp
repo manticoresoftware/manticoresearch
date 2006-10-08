@@ -222,7 +222,7 @@ void stem_en ( BYTE * word )
 
 	#define W(p,c) (word[len-p] == c)
 	#define SUFF2(c2,c1) (len >= 2 && W(1,c1) && W(2,c2))
-	#define SUFF3(c3,c2,c1) (len >= 2 && W(1,c1) && W(2,c2) && W(3,c3))
+	#define SUFF3(c3,c2,c1) (len >= 3 && W(1,c1) && W(2,c2) && W(3,c3))
 	#define SUFF4(c4,c3,c2,c1) (len >= 4 && W(1,c1) && W(2,c2) && W(3,c3) && W(4,c4))
 	#define SUFF5(c5,c4,c3,c2,c1) (len >= 5 && W(1,c1) && W(2,c2) && W(3,c3) && W(4,c4) && W(5,c5))
 	#define SUFF6(c6,c5,c4,c3,c2,c1) (len >= 6 && W(1,c1) && W(2,c2) && W(3,c3) && W(4,c4) && W(5,c5) && W(6,c6))

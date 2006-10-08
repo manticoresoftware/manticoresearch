@@ -172,7 +172,7 @@ public:
 	}
 
 protected:
-	static const int	CHUNK_COUNT	= 0x200;
+	static const int	CHUNK_COUNT	= 0x300;
 	static const int	CHUNK_BITS	= 8;
 
 	static const int	CHUNK_SIZE	= 1 << CHUNK_BITS;

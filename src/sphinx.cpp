@@ -1600,7 +1600,7 @@ void CSphLowercaser::SetRemap ( const CSphRemapRange * pRemaps, int iRemaps )
 		LOC_CHECK_RANGE ( pRemap->m_iStart );
 		LOC_CHECK_RANGE ( pRemap->m_iEnd );
 		LOC_CHECK_RANGE ( pRemap->m_iRemapStart );
-		LOC_CHECK_RANGE ( pRemap->m_iRemapStart + pRemap->m_iEnd + pRemap->m_iStart );
+		LOC_CHECK_RANGE ( pRemap->m_iRemapStart + pRemap->m_iEnd - pRemap->m_iStart );
 
 		for ( int j = pRemap->m_iStart>>CHUNK_BITS; j <= pRemap->m_iEnd>>CHUNK_BITS; j++ )
 			dUsed[j] = 1;

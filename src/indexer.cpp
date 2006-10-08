@@ -624,8 +624,11 @@ int main ( int argc, char ** argv )
 
 		if ( hIndex("type") && hIndex["type"]=="distributed" )
 		{
-			fprintf ( stdout, "skipping index '%s' (distributed indexes can not be directly indexed)...\n", sIndexName );
-			fflush ( stdout );
+			if ( !g_bQuiet )
+			{
+				fprintf ( stdout, "skipping index '%s' (distributed indexes can not be directly indexed)...\n", sIndexName );
+				fflush ( stdout );
+			}
 			continue;
 		}
 

@@ -2228,10 +2228,13 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		sTimeBuf [ strlen(sTimeBuf)-1 ] = '\0';
 
 		static const char * sModes [ SPH_MATCH_TOTAL ] = { "all", "any", "phr", "bool" };
-		snprintf ( sBuf, sizeof(sBuf), "[%s] %d.%03d sec: [%d %d %s/%d %d] %s\n",
+		static const char * sSort [ SPH_SORT_TOTAL ] = { "rel", "attr-", "attr+", "tsegs" };
+
+		snprintf ( sBuf, sizeof(sBuf), "[%s] %d.%03d sec [%s/%d/%s %d (%d,%d)] [%s] %s\n",
 			sTimeBuf, pRes->m_iQueryTime/1000, pRes->m_iQueryTime%1000,
-			iOffset, iLimit, sModes [ tQuery.m_eMode ], tQuery.m_eSort,
-			pRes->m_iTotalMatches, tQuery.m_sQuery.cstr() );
+			sModes [ tQuery.m_eMode ], tQuery.m_dFilters.GetLength(), sSort [ tQuery.m_eSort ],
+			pRes->m_iTotalMatches, iOffset, iLimit,
+			sIndex.cstr(), tQuery.m_sQuery.cstr() );
 
 		sphLockEx ( g_iQueryLogFile );
 		lseek ( g_iQueryLogFile, 0, SEEK_END );

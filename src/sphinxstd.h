@@ -212,7 +212,7 @@ public:
 	const T & Pop ()
 	{
 		assert ( m_iLength>0 );
-		return m_pData[m_iLength--];
+		return m_pData[--m_iLength];
 	}
 
 	/// grow enough to hold that much entries, if needed

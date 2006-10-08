@@ -2040,7 +2040,11 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 		if ( m_pCur>=m_pBufferMax )
 		{
 			if ( !m_bLast || m_iAccum<m_iMinWordLen )
+			{
+				if ( m_bLast ) // if this is the last buffer, flush accumulator contents
+					m_iAccum = 0;
 				return NULL;
+			}
 		} else
 		{
 			iCode = m_tLC.ToLower ( *m_pCur++ );
@@ -2142,7 +2146,11 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 		if ( m_pCur>=m_pBufferMax )
 		{
 			if ( !m_bLast || m_iAccum<m_iMinWordLen )
+			{
+				if ( m_bLast ) // if this is the last buffer, flush accumulator contents
+					FlushAccum ();
 				return NULL;
+			}
 		} else
 		{
 			iCode = GetCodePoint(); // advances m_pCur

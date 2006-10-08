@@ -346,38 +346,44 @@ void sphSockSetErrno ( int iErr )
 }
 
 
-int sphCreateServerSocket ( int port )
+int sphCreateServerSocket ( DWORD uAddr, int iPort )
 {
-	int sock;
 	static struct sockaddr_in iaddr;
 
 	iaddr.sin_family = AF_INET;
-	iaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-	iaddr.sin_port = htons((short)port);
+	iaddr.sin_addr.s_addr = uAddr;
+	iaddr.sin_port = htons ( (short)iPort );
 
-	sphInfo ( "creating a server socket on port %d", port );
-	if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-		sphFatal ( "failed to create server socket on port %d: %s", port, sphSockError() );
+	char sAddr [ 256 ];
+	DWORD uHost = ntohl(uAddr);
+	snprintf ( sAddr, sizeof(sAddr), "%d.%d.%d.%d:%d", 
+		(uHost>>24) & 0xff, (uHost>>16) & 0xff, (uHost>>8) & 0xff, uHost & 0xff,
+		iPort );
+
+	sphInfo ( "creating server socket on %s", sAddr );
+	int iSock = socket ( AF_INET, SOCK_STREAM, 0 );
+	if ( iSock<0 )
+		sphFatal ( "failed to create server socket on %s: %s", sAddr, sphSockError() );
 
 	int iOn = 1;
-	if ( setsockopt ( sock, SOL_SOCKET, SO_REUSEADDR, (char*)&iOn, sizeof(iOn) ) )
+	if ( setsockopt ( iSock, SOL_SOCKET, SO_REUSEADDR, (char*)&iOn, sizeof(iOn) ) )
 		sphFatal ( "setsockopt() failed: %s", sphSockError() );
 
 	int iTries = 12;
 	int iRes;
 	do
 	{
-		iRes = bind ( sock, (struct sockaddr *)&iaddr, sizeof(iaddr) );
+		iRes = bind ( iSock, (struct sockaddr *)&iaddr, sizeof(iaddr) );
 		if ( iRes==0 )
 			break;
 
-		sphInfo ( "failed to bind on port %d, retrying...", port );
+		sphInfo ( "failed to bind on %s, retrying...", sAddr );
 		sleep ( 15 );
 	} while ( --iTries>0 );
 	if ( iRes )
-		sphFatal ( "failed to bind on port %d" );
+		sphFatal ( "failed to bind on %s", sAddr );
 
-	return sock;
+	return iSock;
 }
 
 
@@ -3064,7 +3070,20 @@ int main ( int argc, char **argv )
 	#endif
 
 	// create and bind socket
-	g_iSocket = sphCreateServerSocket ( iPort );
+	DWORD uAddr = htonl(INADDR_ANY);
+	if ( hSearchd("address") )
+	{
+		struct hostent * pHost = gethostbyname ( hSearchd["address"].cstr() );
+		if ( !pHost || pHost->h_addrtype!=AF_INET )
+		{
+			sphWarning ( "no AF_INET address associated with %s, listening on INADDR_ANY", hSearchd["address"].cstr() );
+		} else
+		{
+			assert ( sizeof(DWORD)==pHost->h_length );
+			memcpy ( &uAddr, pHost->h_addr, sizeof(uAddr) );
+		}
+	}
+	g_iSocket = sphCreateServerSocket ( uAddr, iPort );
 	listen ( g_iSocket, 5 );
 
 	/////////////////

@@ -351,6 +351,12 @@ indexer
 
 searchd
 {
+	# IP address on which search daemon will listen
+	# optional, default is to listen on all addresses, ie. address = 0.0.0.0
+	#
+	# address				= 127.0.0.1
+	# address				= 192.168.0.1
+
 	# port on which search daemon will listen
 	port				= 3312
 

@@ -2104,6 +2104,15 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			}
 		}
 
+		// if there were no local indexes, we have to copy schema
+		if ( !tDist.m_dLocal.GetLength() )
+		{
+			assert ( pFirst );
+			assert ( pRes->m_tSchema.m_dAttrs.GetLength()==0 );
+			assert ( pRes->m_tSchema.m_dFields.GetLength()==0 );
+			pRes->m_tSchema = *pFirst;
+		}
+
 	} else if ( sIndex=="*" )
 	{
 		// search through all local indexes

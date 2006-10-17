@@ -1220,6 +1220,7 @@ public:
 	AgentState_e	m_eState;		///< current state
 
 	CSphQueryResult	m_tRes;			///< query result
+	bool			m_bFailure;		///< whether query was succesful
 
 	int				m_iReplySize;	///< how many reply bytes are there
 	int				m_iReplyRead;	///< how many reply bytes are alredy received
@@ -1234,6 +1235,7 @@ public:
 		: m_iPort ( -1 )
 		, m_iSock ( -1 )
 		, m_eState ( AGENT_UNUSED )
+		, m_bFailure ( false )
 		, m_iReplySize ( 0 )
 		, m_iReplyRead ( 0 )
 		, m_pReplyBuf ( NULL )
@@ -1777,6 +1779,8 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 				tAgent.Close ();
 				tAgent.m_tRes.m_dMatches.Reset ();
 			}
+
+			tAgent.m_bFailure = bFailure;
 		}
 	}
 
@@ -2075,9 +2079,10 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 			// merge local and remote results
 			ARRAY_FOREACH ( iAgent, tDist.m_dAgents )
-				if ( tDist.m_dAgents[iAgent].m_tRes.m_dMatches.GetLength() )
 			{
 				Agent_t & tAgent = tDist.m_dAgents[iAgent];
+				if ( tAgent.m_bFailure )
+					continue;
 
 				// check/set sort-by attr and schema
 				char sName [ 1024 ];
@@ -2088,6 +2093,9 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 					return;
 
 				// merge this agent's results
+				if ( !tAgent.m_tRes.m_dMatches.GetLength() )
+					continue;
+
 				if ( tQuery.GetGroupByAttr()<0 ) 
 				{
 					ARRAY_FOREACH ( i, tAgent.m_tRes.m_dMatches )

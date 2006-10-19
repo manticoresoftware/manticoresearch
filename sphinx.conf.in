@@ -16,8 +16,8 @@ source src1
 	# whether to strip HTML
 	# values can be 0 (don't strip) or 1 (do strip)
 	# WARNING, only works with mysql source for now
-	# WARNING, only works ok for PERFECTLY formed XHTML for now
-	# WARNING, WILL BUG on normal everday HTML
+	# WARNING, should work ok for PERFECTLY formed XHTML for now
+	# WARNING, POSSIBLE TO BUG on malformed everday HTML
 	# optional, default is 0
 	strip_html			= 0
 
@@ -29,18 +29,20 @@ source src1
 	# optional, default is to not index anything
 	index_html_attrs	=
 
-	#############################################################################
+	#####################################################################
 
 	# some straightforward parameters for 'mysql' source type
 	sql_host			= localhost
 	sql_user			= test
 	sql_pass			=
 	sql_db				= test
-	# sql_sock			= /tmp/mysql.sock	# optional,
-										# usually '/var/lib/mysql/mysql.sock' on Linux,
-										# usually '/tmp/mysql.sock' on FreeBSD
-	sql_port			= 3306				# optional, default is 3306
+	sql_port			= 3306	# optional, default is 3306
 
+	# sql_sock			= /tmp/mysql.sock
+	#
+	# optional
+	# usually '/var/lib/mysql/mysql.sock' on Linux
+	# usually '/tmp/mysql.sock' on FreeBSD
 
 	# pre-query, executed before the main fetch query
 	# useful eg. to setup encoding or mark records
@@ -70,7 +72,7 @@ source src1
 	# when indexing lots of data
 	#
 	# to use query ranges, you should
-	# 1) provide a query to fetch min and max id (ie. id range) from data set;
+	# 1) provide a query to fetch min/max id (ie. id range) from data set;
 	# 2) configure step size in which this range will be walked;
 	# 3) use $start and $end macros somewhere in the main fetch query.
 	#
@@ -103,9 +105,10 @@ source src1
 	# these fields MUST be positive (non-zero, non-negative) integers
 	# these fields MUST fit into 32 bits
 	#
-	# columns are numbered starting from 1, ie. document_id is 1, next one is 2, etc
-	# if any of the columns is configured, it's removed from fulltext indexed fields,
-	# therefore changing the field numbering
+	# columns are numbered starting from 1, ie. document_id is 1,
+	# next one is 2, etc. if any of the columns is configured,
+	# it's removed from fulltext indexed fields, therefore changing
+	# the field numbering
 	#
 	# for instance, in this example configuration, 'title' column will
 	# number 1 and 'data' column will be number 2, because id/group/date
@@ -121,34 +124,44 @@ source src1
 	# sql_date_column	= 3
 
 
-	# post-query, executed immediately after the main fetch query is over
-	# useful eg. to unmark records
+	# post-query, executed on the end of main fetch query
+	#
+	# note that indexing is NOT completed at the point when post-query
+	# gets executed and might very well fail
+	#
 	# optional, default is empty
 	sql_query_post		=
 
 
-	# post-index-query, executed after the indexing is succesfully completed
-	# $maxid macro is available, which is the max document ID actually fetched from DB
+	# post-index-query, executed on succsefully completed indexing
+	#
+	# $maxid macro is the max document ID which was actually
+	# fetched from the database
+	#
 	# optional, default is empty
 	#
-	# sql_query_post_index = REPLACE INTO counters ( id, val ) VALUES ( 'max_indexed_id', $maxid )
+	# sql_query_post_index = REPLACE INTO counters ( id, val ) \
+	#	VALUES ( 'max_indexed_id', $maxid )
 
 
 	# document info query
-	# optional, default is empty
 	#
 	# ONLY used by search utility to display document information
-	# MUST fetch desired document field by its id, therefore must contain '$id' macro 
+	# MUST be able to fetch document info by its id, therefore
+	# MUST contain '$id' macro 
 	#
+	# optional, default is empty
 	sql_query_info		= SELECT * FROM documents WHERE id=$id
 
-	#############################################################################
+	#####################################################################
 
 	# demo config for 'xmlpipe' source type is a little below
-	# with xmlpipe, sphinx opens a pipe to a given command, and reads documents from stdin
+	#
+	# with xmlpipe, sphinx opens a pipe to a given command,
+	# and then reads documents from stdin
 	#
 	# sphinx expects one or more documents from xmlpipe stdin
-	# each document must be formatted as follows:
+	# each document must be formatted exactly as follows:
 	#
 	# <document>
 	# <id>123</id>
@@ -160,7 +173,7 @@ source src1
 	# </body>
 	# </document>
 	#
-	# timestamp element is optional, default value 1
+	# timestamp element is optional, its default value is 1
 	# all the other elements are mandatory
 
 	# type				= xmlpipe
@@ -184,58 +197,79 @@ source src1stripped : src1
 # local index example
 #
 # this is an index which is stored locally in the filesystem
-# all indexing-time options (such as morphology and charsets) belong to the index
+#
+# all indexing-time options (such as morphology and charsets)
+# are configured per local index
 index test1
 {
 	# which document source to index
 	# at least one MUST be defined
 	#
-	# multiple sources may be specified; to do so, just add more
+	# multiple sources MAY be specified; to do so, just add more
 	# "source = NAME" lines. in this case, ALL the document IDs
 	# in ALL the specified sources MUST be unique
 	source			= src1
 
 	# this is path and index file name without extension
-	# files <indexpath>.spi/spd/spr will be created by indexer
 	#
-	# .spr is temporary raw log, it can be removed when indexer is done
-	# .spi/.spd are fulltext index files (index index and index data)
+	# indexer will append different extensions to this path to
+	# generate names for both permanent and temporary index files
+	#
+	# .tmp* files are temporary and can be safely removed
+	# if indexer fails to remove them automatically
+	#
+	# .sp* files are fulltext index data files. specifically,
+	# .spa contains attribute values attached to each document id
+	# .spd contains doclists and hitlists
+	# .sph contains index header (schema and other settings)
+	# .spi contains wordlists
 	#
 	# MUST be defined
 	path			= @CONFDIR@/data/test1
 	# path			= @CONFDIR@/data/test1
 
 	# docinfo (ie. per-document attribute values) storage strategy
-	#
 	# defines how docinfo will be stored
-	# "none" means there'll be no docinfo (no groups, no dates, no nothing)
-	# "inline" means that the docinfo will be stored along with the doc IDs
-	# "extern" means that the docinfo will be stored separately
+	#
+	# available values are "none", "inline" and "extern"
+	#
+	# "none" means there'll be no docinfo at all (no groups/dates)
+	#
+	# "inline" means that the docinfo will be stored in the .spd
+	# file along with the document ID lists (doclists)
+	#
+	# "extern" means that the docinfo will be stored in the .spa
+	# file separately
 	#
 	# externally stored docinfo should (basically) be kept in RAM
 	# when querying; therefore, "inline" may be the only viable option
 	# for really huge (50-100+ million docs) datasets. however, for
 	# smaller datasets "extern" storage makes both indexing and
-	# searching much more efficient.
+	# searching MUCH more efficient.
 	#
 	# additional search-time memory requirements for extern storage are
 	#
 	#	( 1 + number_of_attrs )*number_of_docs*4 bytes
 	#
 	# so 10 million docs with 2 groups and 1 timestamp will take
-	# (1+2+1)*10M*4 = 160 MB of RAM. this is per daemon, ie. searchd
+	# (1+2+1)*10M*4 = 160 MB of RAM. this is PER DAEMON, ie. searchd
 	# will alloc 160 MB on startup, read the data and keep it shared
-	# between queries.
+	# between queries; the children will NOT allocate additional
+	# copies of this data.
 	#
 	# default is "extern" (as most collections are smaller than 100M docs)
 	docinfo			= extern
 
 	# morphology
-	# default is not to use any
 	#
 	# currently supported morphology preprocessors are Porter stemmers
 	# for English and Russian, and Soundex. more stemmers could be added
 	# at users request.
+	#
+	# available values are "none", "stem_en", "stem_ru", "stem_enru",
+	# and "soundex"
+	#
+	# optional, default is "none"
 	#
 	# morphology		= none
 	# morphology		= stem_en
@@ -245,6 +279,7 @@ index test1
 	morphology			= none
 
 	# stopwords file
+	#
 	# format is plain text in whatever encoding you use
 	# optional, default is empty
 	#
@@ -252,18 +287,25 @@ index test1
 	stopwords			=
 
 	# minimum word length
+	#
 	# only the words that are of this length and above will be indexed;
-	# for example, if min_word_len is 4, "the" won't be indexed, but "they" will be.
+	# for example, if min_word_len is 4, "the" won't be indexed,
+	# but "they" will be.
+	#
 	# default is 1, which (obviously) means to index everything
 	min_word_len		= 1
 
 	# charset encoding type
+	#
 	# known types are 'sbcs' (Single Byte CharSet) and 'utf-8'
+	#
 	# optional, default is sbcs
 	charset_type		= sbcs
 
 	# charset definition and case folding rules "table"
+	#
 	# optional, default value depends on charset_type
+	#
 	# for now, defaults are configured to support English and Russian
 	# this behavior MAY change in future versions
 	#
@@ -338,9 +380,13 @@ index dist1
 indexer
 {
 	# memory limit
-	# can be specified in bytes, kilobytes (mem_limit=1000K) or megabytes (mem_limit=10M)
+	#
+	# may be specified in bytes (no postfix), kilobytes (mem_limit=1000K)
+	# or megabytes (mem_limit=10M)
+	#
 	# will grow if set unacceptably low
-	# will warn if set too low, hurting the performance
+	# will warn if set too low and potentially hurting the performance
+	#
 	# optional, default is 32M
 	mem_limit			= 32M
 }
@@ -351,11 +397,15 @@ indexer
 
 searchd
 {
-	# IP address on which search daemon will listen
-	# optional, default is to listen on all addresses, ie. address = 0.0.0.0
+	# IP address on which search daemon will bind and accept
+	# incoming network requests
+	#
+	# optional, default is to listen on all addresses,
+	# ie. address = 0.0.0.0
 	#
 	# address				= 127.0.0.1
 	# address				= 192.168.0.1
+
 
 	# port on which search daemon will listen
 	port				= 3312
@@ -386,12 +436,16 @@ searchd
 	pid_file			= @CONFDIR@/log/searchd.pid
 
 
-	# maximum amount of matches this daemon would retrieve from each index
-	# and serve to client
+	# maximum amount of matches this daemon would ever retrieve
+	# from each index and serve to client
 	#
-	# this parameter affects per-client memory usage slightly (16 bytes per match)
-	# and CPU usage in match sorting phase; so blindly raising it to 1 million
-	# is definitely NOT recommended
+	# this parameter affects per-client memory and CPU usage
+	# (16+ bytes per match) in match sorting phase; so blindly raising
+	# it to 1 million is definitely NOT recommended
+	#
+	# starting from 0.9.7, it can be decreased on the fly through
+	# the corresponding API call; increasing is prohibited to protect
+	# against malicious and/or malformed requests
 	#
 	# default is 1000 (just like with Google)
 	max_matches			= 1000

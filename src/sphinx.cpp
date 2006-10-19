@@ -6590,7 +6590,7 @@ BYTE ** CSphSource_SQL::NextDocument ()
 	{
 		// is that an error?
 		if ( SqlIsError() )
-			sphDie ( "FATAL: sql_fetch_row: %s.\n", SqlIsError() );
+			sphDie ( "FATAL: sql_fetch_row: %s.\n", SqlError() );
 
 		// maybe we can do next step yet?
 		if ( RunQueryStep () )

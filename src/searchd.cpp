@@ -138,7 +138,7 @@ enum SearchdCommand_e
 /// known command versions
 enum
 {
-	VER_COMMAND_SEARCH		= 0x103,
+	VER_COMMAND_SEARCH		= 0x104,
 	VER_COMMAND_EXCERPT		= 0x100
 };
 
@@ -1446,7 +1446,7 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				}
 
 				// do query!
-				int iReqSize = 64 + 4*tQuery.m_iWeights
+				int iReqSize = 68 + 4*tQuery.m_iWeights
 					+ strlen ( tQuery.m_sSortBy.cstr() )
 					+ strlen ( tQuery.m_sQuery.cstr() )
 					+ strlen ( tAgent.m_sIndexes.cstr() )
@@ -1500,6 +1500,7 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				}
 				tOut.SendInt ( tQuery.m_eGroupFunc );
 				tOut.SendString ( tQuery.m_sGroupBy.cstr() );
+				tOut.SendInt ( tQuery.m_iMaxMatches );
 				tOut.Flush ();
 
 				// FIXME! handle flush failure
@@ -1917,9 +1918,6 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		return;
 	}
 
-	// per-server query settings
-	tQuery.m_iMaxMatches = g_iMaxMatches;
-
 	/////////////////
 	// parse request
 	/////////////////
@@ -1988,6 +1986,19 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	{
 		tQuery.m_eGroupFunc = (ESphGroupBy) tReq.GetDword ();
 		tQuery.m_sGroupBy = tReq.GetString ();
+	}
+
+	// v.1.4
+	tQuery.m_iMaxMatches = g_iMaxMatches;
+	if ( iVer>=0x104 )
+	{
+		tQuery.m_iMaxMatches = tReq.GetInt ();
+		if ( tQuery.m_iMaxMatches<1 || tQuery.m_iMaxMatches>g_iMaxMatches )
+		{
+			tReq.SendErrorReply ( "per-query max_matches=%d out of bounds (per-server max_matches=%d)",
+				tQuery.m_iMaxMatches, g_iMaxMatches );
+			return;
+		}
 	}
 
 	// additional checks

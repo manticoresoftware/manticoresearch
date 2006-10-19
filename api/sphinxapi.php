@@ -22,7 +22,7 @@ define ( "SEARCHD_COMMAND_SEARCH",	0 );
 define ( "SEARCHD_COMMAND_EXCERPT",	1 );
 
 /// current client-side command implementation versions
-define ( "VER_COMMAND_SEARCH",		0x103 );
+define ( "VER_COMMAND_SEARCH",		0x104 );
 define ( "VER_COMMAND_EXCERPT",		0x100 );
 
 /// known searchd status codes
@@ -69,9 +69,9 @@ class SphinxClient
 	var $_min;		///< attribute name to min-value hash (for range filters)
 	var $_max;		///< attribute name to max-value hash (for range filters)
 	var $_filter;	///< attribute name to values set hash (for values-set filters)
-
 	var $_groupby;	///< group-by attribute name
 	var $_groupfunc;///< function to pre-process group-by attribute value with
+	var $_maxmatches;///< max matches to retrieve
 
 	var $_error;	///< last error message
 	var $_warning;	///< last warning message
@@ -96,9 +96,9 @@ class SphinxClient
 		$this->_min		= array ();
 		$this->_max		= array ();
 		$this->_filter	= array ();
-
 		$this->_groupby		= "";
 		$this->_groupfunc	= SPH_GROUPBY_DAY;
+		$this->_maxmatches	= 1000;
 
 		$this->_error	= "";
 		$this->_warning	= "";
@@ -210,15 +210,18 @@ class SphinxClient
 	// searching
 	/////////////////////////////////////////////////////////////////////////////
 
-	/// set match offset/limits
-	function SetLimits ( $offset, $limit )
+	/// set match offset, count, and max number to retrieve
+	function SetLimits ( $offset, $limit, $max=0 )
 	{
 		assert ( is_int($offset) );
 		assert ( is_int($limit) );
 		assert ( $offset>=0 );
 		assert ( $limit>0 );
+		assert ( $max>=0 );
 		$this->_offset = $offset;
 		$this->_limit = $limit;
+		if ( $max>0 )
+			$this->_maxmatches = $max;
 	}
 
 	/// set match mode
@@ -369,6 +372,9 @@ class SphinxClient
 
 		// group-by
 		$req .= pack ( "NN", $this->_groupfunc, strlen($this->_groupby) ) . $this->_groupby;
+
+		// max matches to retrieve
+		$req .= pack ( "N", $this->_maxmatches );
 
 		////////////////////////////
 		// send query, get response

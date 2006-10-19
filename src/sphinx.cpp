@@ -6696,8 +6696,8 @@ CSphSourceParams_MySQL::CSphSourceParams_MySQL ()
 CSphSource_MySQL::CSphSource_MySQL ( const char * sName )
 	: CSphSource_SQL ( sName )
 	, m_pMysqlResult( NULL )
-	, m_tMysqlRow	( NULL )
 	, m_pMysqlFields( NULL )
+	, m_tMysqlRow	( NULL )
 {
 }
 

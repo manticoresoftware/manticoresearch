@@ -864,7 +864,7 @@ public:
 	ESphGroupBy		m_eGroupFunc;	///< function to pre-process group-by attribute value with
 
 protected:
-	int				m_iAttrs;		///< attribute count (necessary to instantiate group-by queus)
+	int				m_iAttrs;		///< attribute count (necessary to instantiate group-by queues)
 	int				m_iGroupBy;		///< group-by attribute index
 
 public:

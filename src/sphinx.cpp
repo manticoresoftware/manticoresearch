@@ -2356,7 +2356,7 @@ CSphQuery::CSphQuery ()
 
 bool CSphQuery::SetSchema ( const CSphSchema & tSchema )
 {
-	m_iAttrs = tSchema.m_dAttrs.GetLength ();
+	m_iAttrs = tSchema.GetRealAttrCount();
 
 	if ( m_sGroupBy.IsEmpty() )
 	{

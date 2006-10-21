@@ -1696,6 +1696,7 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 
 					assert ( !tAgent.m_tRes.m_dMatches.GetLength() );
 					int iAttrs = tSchema.m_dAttrs.GetLength();
+					int iRealAttrs = tSchema.GetRealAttrCount();
 					if ( iMatches )
 					{
 						tAgent.m_tRes.m_dMatches.Resize ( iMatches );
@@ -1708,6 +1709,7 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 							tMatch.m_iWeight = tReq.GetInt ();
 							for ( int j=0; j<iAttrs; j++ )
 								tMatch.m_pAttrs[j] = tReq.GetDword ();
+							tMatch.m_iAttrs = iRealAttrs;
 						}
 					}
 
@@ -2254,20 +2256,24 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	if ( g_iQueryLogFile>=0 )
 	{
 		time_t tNow;
-		char sTimeBuf[128];
+		char sTimeBuf[128], sGroupBuf[128];
 		char sBuf[1024];
 
 		time ( &tNow );
 		ctime_r ( &tNow, sTimeBuf );
 		sTimeBuf [ strlen(sTimeBuf)-1 ] = '\0';
 
+		sGroupBuf[0] = '\0';
+		if ( tQuery.GetGroupByAttr()>=0 )
+			snprintf ( sGroupBuf, sizeof(sGroupBuf), " @%s", tQuery.m_sGroupBy.cstr() );
+ 
 		static const char * sModes [ SPH_MATCH_TOTAL ] = { "all", "any", "phr", "bool" };
 		static const char * sSort [ SPH_SORT_TOTAL ] = { "rel", "attr-", "attr+", "tsegs" };
 
-		snprintf ( sBuf, sizeof(sBuf), "[%s] %d.%03d sec [%s/%d/%s %d (%d,%d)] [%s] %s\n",
+		snprintf ( sBuf, sizeof(sBuf), "[%s] %d.%03d sec [%s/%d/%s %d (%d,%d)%s] [%s] %s\n",
 			sTimeBuf, pRes->m_iQueryTime/1000, pRes->m_iQueryTime%1000,
 			sModes [ tQuery.m_eMode ], tQuery.m_dFilters.GetLength(), sSort [ tQuery.m_eSort ],
-			pRes->m_iTotalMatches, iOffset, iLimit,
+			pRes->m_iTotalMatches, iOffset, iLimit, sGroupBuf,
 			sIndex.cstr(), tQuery.m_sQuery.cstr() );
 
 		sphLockEx ( g_iQueryLogFile );

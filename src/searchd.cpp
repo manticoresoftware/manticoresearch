@@ -253,7 +253,7 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 
 	char sBuf [ 1024 ];
 	if ( !isatty ( g_iLogFile ) )
-		snprintf ( sBuf, sizeof(sBuf)-1, "[%s] [%5d] %s", sTimeBuf, getpid(), sBanner );
+		snprintf ( sBuf, sizeof(sBuf)-1, "[%s] [%5d] %s", sTimeBuf, (int)getpid(), sBanner );
 	else
 		strcpy ( sBuf, sBanner );
 	int iLen = strlen(sBuf);

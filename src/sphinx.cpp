@@ -6475,14 +6475,24 @@ bool CSphSource_SQL::Connect ()
 			if ( !SqlFetchRow() )
 				LOC_SQL_ERROR ( "sql_query_range: fetch_row" );
 
-			m_iMinID = myatoi ( SqlColumn(0) );
-			m_iMaxID = myatoi ( SqlColumn(1) );
-			if ( m_iMinID<=0 )
-				LOC_ERROR ( "ERROR: sql_query_range: min_id=%d: must be positive.\n", m_iMinID );
-			if ( m_iMaxID<=0 )
-				LOC_ERROR ( "ERROR: sql_query_range: max_id=%d: must be positive.\n", m_iMaxID );
-			if ( m_iMinID>m_iMaxID )
-				LOC_ERROR2 ( "ERROR: sql_query_range: min_id=%d, max_id=%d: min_id must be less than max_id.\n", m_iMinID, m_iMaxID );
+			if ( SqlColumn(0)==NULL && SqlColumn(1)==NULL )
+			{
+				// the source seems to be empty; workaround
+				m_iMinID = 1;
+				m_iMaxID = 1;
+
+			} else
+			{
+				// get and check min/max id
+				m_iMinID = myatoi ( SqlColumn(0) );
+				m_iMaxID = myatoi ( SqlColumn(1) );
+				if ( m_iMinID<=0 )
+					LOC_ERROR ( "ERROR: sql_query_range: min_id=%d: must be positive.\n", m_iMinID );
+				if ( m_iMaxID<=0 )
+					LOC_ERROR ( "ERROR: sql_query_range: max_id=%d: must be positive.\n", m_iMaxID );
+				if ( m_iMinID>m_iMaxID )
+					LOC_ERROR2 ( "ERROR: sql_query_range: min_id=%d, max_id=%d: min_id must be less than max_id.\n", m_iMinID, m_iMaxID );
+			}
 
 			SqlDismissResult ();
 

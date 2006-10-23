@@ -1696,7 +1696,6 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 
 					assert ( !tAgent.m_tRes.m_dMatches.GetLength() );
 					int iAttrs = tSchema.m_dAttrs.GetLength();
-					int iRealAttrs = tSchema.GetRealAttrCount();
 					if ( iMatches )
 					{
 						tAgent.m_tRes.m_dMatches.Resize ( iMatches );
@@ -1709,7 +1708,6 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 							tMatch.m_iWeight = tReq.GetInt ();
 							for ( int j=0; j<iAttrs; j++ )
 								tMatch.m_pAttrs[j] = tReq.GetDword ();
-							tMatch.m_iAttrs = iRealAttrs;
 						}
 					}
 

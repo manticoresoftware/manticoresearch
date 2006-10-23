@@ -3768,6 +3768,9 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 
 	const int iDocinfoStride = 1 + m_tSchema.m_dAttrs.GetLength();
 	int iDocinfoMax = Max ( 65536, iMemoryLimit/16/iDocinfoStride/sizeof(DWORD) );
+	if ( m_eDocinfo==SPH_DOCINFO_NONE )
+		iDocinfoMax = 1;
+
 	int iHitsMax = ( iMemoryLimit - iDocinfoMax*iDocinfoStride*sizeof(DWORD) ) / sizeof(CSphWordHit);
 
 	// allocate raw hits block
@@ -3779,6 +3782,11 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	CSphAutoArray<DWORD> dDocinfos ( iDocinfoMax*iDocinfoStride );
 	DWORD * pDocinfo = dDocinfos;
 	const DWORD * pDocinfoMax = dDocinfos + iDocinfoMax*iDocinfoStride;
+	if ( m_eDocinfo==SPH_DOCINFO_NONE )
+	{
+		pDocinfo = NULL;
+		pDocinfoMax = NULL;
+	}
 
 	// create temp hits file
 	CSphAutofile fdTmpHits ( OpenIndexFile ( "tmp1", O_CREAT | O_RDWR | O_TRUNC ) );
@@ -3852,7 +3860,8 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 			}
 
 			// store docinfo
-			if ( pDocinfo==dDocinfos || *pDocinfo!=pSource->m_tDocInfo.m_iDocID )
+			if ( m_eDocinfo!=SPH_DOCINFO_NONE )
+				if ( pDocinfo==dDocinfos || *pDocinfo!=pSource->m_tDocInfo.m_iDocID )
 			{
 				// store next entry
 				*pDocinfo = pSource->m_tDocInfo.m_iDocID;

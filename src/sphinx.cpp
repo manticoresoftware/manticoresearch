@@ -802,6 +802,11 @@ public:
 		{
 			m_iAttrPriority = tEntry.m_iAttrs;
 			m_iAttrCount = tEntry.m_iAttrs+1;
+			if ( bGrouped )
+			{
+				m_iAttrPriority -= VIRTUAL_ATTRS_COUNT;
+				m_iAttrCount -= VIRTUAL_ATTRS_COUNT;
+			}
 		}
 
 		if ( m_iUsed==m_iLimit )

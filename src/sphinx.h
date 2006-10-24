@@ -69,7 +69,7 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
-#define SPHINX_VERSION			"0.9.7-cvs"
+#define SPHINX_VERSION			"0.9.7-RC1"
 #define SPHINX_BANNER			"Sphinx " SPHINX_VERSION "\nCopyright (c) 2001-2006, Andrew Aksyonoff\n\n"
 #define SPHINX_SEARCHD_PROTO	1
 
@@ -953,6 +953,7 @@ public:
 	virtual int					Build ( CSphDict * dict, const CSphVector < CSphSource * > & dSources, int iMemoryLimit, ESphDocinfo eDocinfo ) = 0;
 	virtual CSphQueryResult *	Query ( CSphDict * dict, CSphQuery * pQuery ) = 0;
 	virtual bool				QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchQueue * pTop ) = 0;
+	virtual bool				Merge( CSphIndex * pSource ) = 0;
 
 	virtual const CSphSchema *	Preload () = 0;
 

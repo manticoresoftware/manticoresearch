@@ -441,6 +441,8 @@ int main ( int argc, char ** argv )
 	int iTopStops = 100;
 	bool bRotate = false;
 	bool bBuildFreqs = false;
+	bool bMerge = false;
+
 	CSphVector < const char *, 16 > dIndexes;
 	bool bIndexAll = false;
 
@@ -456,7 +458,15 @@ int main ( int argc, char ** argv )
 				fprintf ( stdout, "WARNING: can not stat config file '%s', using default 'sphinx.conf'.\n", argv[i+1] );
 			i++;
 		
-		} else if ( strcasecmp ( argv[i], "--buildstops" )==0 && (i+2)<argc )
+		}
+		else if ( strcasecmp ( argv[i], "--merge" )==0 && (i+2)<argc )
+		{
+			bMerge = true;
+			dIndexes.Add ( argv[i+1] );
+			dIndexes.Add ( argv[i+2] );
+			i += 2;
+		}
+		else if ( strcasecmp ( argv[i], "--buildstops" )==0 && (i+2)<argc )
 		{
 			sBuildStops = argv[i+1];
 			iTopStops = atoi ( argv[i+2] );
@@ -469,7 +479,6 @@ int main ( int argc, char ** argv )
 		{
 			bRotate = true;
 #endif
-
 		} else if ( strcasecmp ( argv[i], "--buildfreqs" )==0 )
 		{
 			bBuildFreqs = true;
@@ -529,6 +538,7 @@ int main ( int argc, char ** argv )
 				"\t\t\t\tto specifed file\n"
 				"--buildfreqs\t\t\tstore words frequencies to output.txt\n"
 				"\t\t\t\t(used with --buildstops only)\n"
+				"--merge <dst-index> <src-index>\tmerge source index to destination index\n"
 				"\n"
 				"Examples:\n"
 				"indexer --quiet myidx1\t\treindex 'myidx1' defined in 'sphinx.conf'\n"
@@ -616,6 +626,103 @@ int main ( int argc, char ** argv )
 			continue; \
 		}
 
+	if ( bMerge )
+	{
+		int nHaveIndexes = 0;
+		CSphVector< const char *, 2>    dPathes; 
+
+		ARRAY_FOREACH ( i, dIndexes )
+		{
+			hConf["index"].IterateStart ();
+			while ( hConf["index"].IterateNext() )
+			{
+				const CSphConfigSection & hIndex = hConf["index"].IterateGet ();
+				const char * sIndexName = hConf["index"].IterateGetKey ().cstr();				
+
+				if ( strcasecmp ( sIndexName, dIndexes[i] )==0 )
+				{
+					if ( hIndex("type") && hIndex["type"] == "distributed" )
+					{
+						fprintf ( stdout, "skipping index '%s' (distributed indexes can not be directly indexed)...\n", sIndexName );
+						fflush ( stdout );
+					}
+					else
+					{
+						CONF_CHECK ( hIndex, "path", "in index '%s'.", dIndexes[i] );
+						dPathes.Add( hIndex["path"].cstr() );
+						nHaveIndexes++;
+					}					
+					break;
+				}
+			}
+		}
+
+		if ( nHaveIndexes != 2 )
+		{
+			fprintf ( stdout, "FATAL: failed to find both of merging indexes\n" );
+			fflush ( stdout );
+			return 1;
+		}
+
+		CSphIndex * pDstIndex = sphCreateIndexPhrase ( dPathes[0] );
+		assert ( pDstIndex );
+
+		CSphIndex * pSrcIndex = sphCreateIndexPhrase ( dPathes[1] );
+		assert ( pSrcIndex );
+
+		//////////////////////////////////////////////////////////////////////////
+
+		if ( !pDstIndex->Merge( pSrcIndex ) )
+		{
+			fprintf ( stdout, "FATAL: failed to merge index '%s' to index '%s'", dIndexes[1], dIndexes[0] );
+			fflush ( stdout );
+		}
+		else
+		{
+			const CSphConfigSection & hIndex = hConf["index"][dIndexes[0]];
+
+			const char * sPath = hIndex["path"].cstr();
+			char sFrom [ SPH_MAX_FILENAME_LEN ];
+			char sTo [ SPH_MAX_FILENAME_LEN ];
+
+			int iExt;
+			const char * dExt[4] = { "sph", "spa", "spi", "spd" };
+			for ( iExt=0; iExt<4; iExt++ )
+			{
+				snprintf ( sFrom, sizeof(sFrom), "%s.%s.tmp", sPath, dExt[iExt] );
+				sFrom [ sizeof(sFrom)-1 ] = '\0';
+
+				snprintf ( sTo, sizeof(sTo), "%s.%s", sPath, dExt[iExt] );
+				sTo [ sizeof(sTo)-1 ] = '\0';
+
+				if ( remove ( sTo ) )
+				{
+					fprintf ( stdout, "WARNING: index '%s': delete '%s' failed: %s",
+						dIndexes[0], sTo, strerror(errno) );
+					break;
+				}
+
+				if ( rename ( sFrom, sTo ) )
+				{
+					fprintf ( stdout, "WARNING: index '%s': rename '%s' to '%s' failed: %s",
+						dIndexes[0], sFrom, sTo, strerror(errno) );
+					break;
+				}
+			}
+
+			// all good?
+			if ( iExt==4 )
+				bIndexedOk = true;
+		}
+
+		//////////////////////////////////////////////////////////////////////////
+
+		SafeDelete( pSrcIndex );
+		SafeDelete( pDstIndex );
+
+		return 0;
+	}
+
 	hConf["index"].IterateStart ();
 	while ( hConf["index"].IterateNext() )
 	{
@@ -637,10 +744,11 @@ int main ( int argc, char ** argv )
 			bool bIndex = false;
 			ARRAY_FOREACH ( i, dIndexes )
 				if ( strcasecmp ( sIndexName, dIndexes[i] )==0 )
-			{
-				bIndex = true;
-				break;
-			}
+				{
+					bIndex = true;
+					break;
+				}
+
 			if ( !bIndex )
 			{
 				if ( !g_bQuiet )

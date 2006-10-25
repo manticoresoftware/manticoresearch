@@ -2482,7 +2482,7 @@ void HandleClient ( int iSock )
 	int iLength = tBuf.GetInt ();
 	if ( tBuf.GetError() )
 	{
-		sphWarning ( "failed to receive client version and request" );
+		sphWarning ( "failed to receive client version and request (%s)", sphSockError() );
 		return;
 	}
 

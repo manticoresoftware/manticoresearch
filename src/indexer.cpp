@@ -896,6 +896,8 @@ int main ( int argc, char ** argv )
 			ARRAY_FOREACH ( i, dSources )
 			{
 				dSources[i]->SetDict ( &tDict );
+				if ( !dSources[i]->Connect () )
+					continue;
 				while ( dSources[i]->Next() );
 			}
 			tDict.Save ( sBuildStops, iTopStops, bBuildFreqs );

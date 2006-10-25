@@ -51,9 +51,11 @@ source src1
 	# sql_query_pre		= SET CHARACTER_SET_RESULTS=cp1251
 	sql_query_pre		=
 
-
 	# main document fetch query
-	# you can specify any number of fields
+	#
+	# you can specify up to 32 (formally SPH_MAX_FIELDS in sphinx.h) fields;
+	# all of the fields which are not document_id or attributes (see below)
+	# will be full-text indexed
 	#
 	# document_id MUST be the very first field
 	# document_id MUST be positive (non-zero, non-negative)
@@ -64,7 +66,6 @@ source src1
 	sql_query			= \
 		SELECT id, group_id, UNIX_TIMESTAMP(date_added) AS date_added, title, content \
 		FROM documents
-
 
 	# query range setup
 	#
@@ -101,28 +102,42 @@ source src1
 	#	WHERE id>=$start AND id<=$end
 
 
-	# group_id and date column names or numbers
-	# these fields MUST be positive (non-zero, non-negative) integers
-	# these fields MUST fit into 32 bits
+	# attribute columns
 	#
-	# columns are numbered starting from 1, ie. document_id is 1,
-	# next one is 2, etc. if any of the columns is configured,
-	# it's removed from fulltext indexed fields, therefore changing
-	# the field numbering
+	# attribute values MUST be positive (non-zero, non-negative) integers
+	# attribute values MUST fit into 32 bits
 	#
-	# for instance, in this example configuration, 'title' column will
-	# number 1 and 'data' column will be number 2, because id/group/date
-	# columns are removed
+	# attributes are additional values associated with each document which
+	# may be used to perform additional filtering and sorting during search.
+	# attributes are NOT full-text indexed; they are stored in the full text
+	# index as is.
+	#
+	# a good example would be a forum posts table. one might need to search
+	# through 'title' and 'content' fields but to limit search to specific
+	# values of 'author_id', or 'forum_id', or to sort by 'post_date', or to
+	# group matches by 'thread_id', or to group posts by month of the
+	# 'post_date' and provide statistics.
+	#
+	# this all can be achieved by specifying all the mentioned columns
+	# (excluding 'title' and 'content' which are full-text fields) as
+	# attributes and then using API calls to setup filtering, sorting,
+	# and grouping.
+	#
+	# sql_group_column specifies that the attribute type is integer
+	# sql_date_column specifies that the attribute type is UNIX timestamp
+	#
+	# starting with 0.9.7, there may be multiple attribute columns specified.
+	# here's an example for that mentioned posts table:
+	#
+	# sql_group_column	= author_id
+	# sql_group_column	= forum_id
+	# sql_group_column	= thread_id
+	# sql_date_column		= post_unix_timestamp
+	# sql_date_column		= last_edit_unix_timestamp
 	#
 	# optional, default is empty
 	sql_group_column	= group_id
 	sql_date_column		= date_added
-
-	# an example of specifying group/timestamp columns by index:
-	#
-	# sql_group_column	= 2
-	# sql_date_column	= 3
-
 
 	# post-query, executed on the end of main fetch query
 	#
@@ -131,7 +146,6 @@ source src1
 	#
 	# optional, default is empty
 	sql_query_post		=
-
 
 	# post-index-query, executed on succsefully completed indexing
 	#
@@ -226,7 +240,6 @@ index test1
 	#
 	# MUST be defined
 	path			= @CONFDIR@/data/test1
-	# path			= @CONFDIR@/data/test1
 
 	# docinfo (ie. per-document attribute values) storage strategy
 	# defines how docinfo will be stored

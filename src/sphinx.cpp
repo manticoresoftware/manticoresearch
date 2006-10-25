@@ -1211,11 +1211,11 @@ struct CSphMergeData
 	DWORD				m_iLastWordID;
 	SphOffset_t			m_iLastDocID;
 
-	CSphMergeData()
-		: m_iLastHitlistPos ( 0 )
-		, m_iWordlistOffset ( 0 )
+	CSphMergeData ()
+		: m_iLastDoclistPos ( 0 )
 		, m_iDoclistPos ( 0 )
-		, m_iLastDoclistPos ( 0 )
+		, m_iLastHitlistPos ( 0 )
+		, m_iWordlistOffset ( 0 )
 		, m_iLastWordID ( 0 )
 		, m_iLastDocID ( 0 )
 	{}
@@ -1233,10 +1233,10 @@ struct CSphDoclistRecord
 
 					CSphDoclistRecord ()
 						: m_iDocID ( 0 )
-						, m_iPos ( 0 )
-						, m_iLeadingZero ( 0 )
 						, m_pAttrs ( NULL )
+						, m_iPos ( 0 )
 						, m_uFields ( 0 )
+						, m_iLeadingZero ( 0 )
 						, m_iAttrNum ( 0 )
 					{}
 
@@ -4723,10 +4723,10 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource )
 		WriteSchemaColumn ( fdInfo, m_tSchema.m_dAttrs[i] );
 
 	// min doc
-	fdInfo.PutDword ( min ( m_tMin.m_iDocID, pSrcIndex->m_tMin.m_iDocID ) );
+	fdInfo.PutDword ( Min ( m_tMin.m_iDocID, pSrcIndex->m_tMin.m_iDocID ) );
 
 	for ( int i = 0; i < m_tMin.m_iAttrs; i++ )
-		m_tMin.m_pAttrs[i] = min ( m_tMin.m_pAttrs[i], pSrcIndex->m_tMin.m_pAttrs[i] );
+		m_tMin.m_pAttrs[i] = Min ( m_tMin.m_pAttrs[i], pSrcIndex->m_tMin.m_pAttrs[i] );
 
 	if ( m_eDocinfo==SPH_DOCINFO_INLINE )
 		fdInfo.PutBytes ( m_tMin.m_pAttrs, m_tMin.m_iAttrs*sizeof(DWORD) );

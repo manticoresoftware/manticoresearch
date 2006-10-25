@@ -2530,6 +2530,12 @@ CSphQuery::CSphQuery ()
 {}
 
 
+CSphQuery::~CSphQuery ()
+{
+	SafeDeleteArray ( m_pWeights );
+}
+
+
 bool CSphQuery::SetSchema ( const CSphSchema & tSchema )
 {
 	m_iAttrs = tSchema.GetRealAttrCount();

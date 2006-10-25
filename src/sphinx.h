@@ -340,11 +340,13 @@ struct CSphDocInfo
 		{
 			SafeDeleteArray ( m_pAttrs );
 			m_iAttrs = rhs.m_iAttrs;
+			if ( m_iAttrs )
+				m_pAttrs = new DWORD [ m_iAttrs ]; // OPTIMIZE! pool these allocs
 		}
 
 		if ( m_iAttrs )
 		{
-			m_pAttrs = new DWORD [ m_iAttrs ]; // OPTIMIZE! pool these allocs
+			assert ( m_iAttrs==rhs.m_iAttrs );
 			memcpy ( m_pAttrs, rhs.m_pAttrs, sizeof(DWORD)*m_iAttrs );
 		}
 
@@ -869,6 +871,7 @@ protected:
 
 public:
 					CSphQuery ();								///< ctor, fills defaults
+					~CSphQuery ();								///< dtor, frees owned stuff
 	bool			SetSchema ( const CSphSchema & tSchema );	///< calc m_iAttrs and m_iGroupBy from schema
 
 	int				GetAttrsCount () const { return m_iAttrs;}

@@ -748,6 +748,7 @@ int InputBuffer_c::GetDwords ( DWORD ** ppBuffer, int iMax, const char * sErrorT
 	}
 	if ( iCount )
 	{
+		assert ( !(*ppBuffer) ); // potential leak
 		(*ppBuffer) = new DWORD [ iCount ];
 		if ( !GetBytes ( (*ppBuffer), sizeof(int)*iCount ) )
 		{

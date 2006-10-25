@@ -2462,7 +2462,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 }
 
 
-void HandleClient ( int iSock )
+void HandleClient ( int iSock, const char * sClientIP )
 {
 	NetInputBuffer_c tBuf ( iSock );
 
@@ -2470,7 +2470,7 @@ void HandleClient ( int iSock )
 	DWORD uServer = SPHINX_SEARCHD_PROTO;
 	if ( sphSockSend ( iSock, (char*)&uServer, sizeof(DWORD), 0 )!=sizeof(DWORD) )
 	{
-		sphWarning ( "failed to send server version" );
+		sphWarning ( "failed to send server version (client=%s)", sClientIP );
 		return;
 	}
 
@@ -2482,7 +2482,7 @@ void HandleClient ( int iSock )
 	int iLength = tBuf.GetInt ();
 	if ( tBuf.GetError() )
 	{
-		sphWarning ( "failed to receive client version and request (%s)", sphSockError() );
+		sphWarning ( "failed to receive client version and request (client=%s, error=%s)", sClientIP, sphSockError() );
 		return;
 	}
 
@@ -2505,7 +2505,7 @@ void HandleClient ( int iSock )
 	assert ( iLength>0 && iLength<=NET_MAX_REQ_LEN );
 	if ( !tBuf.ReadFrom ( iLength ) )
 	{
-		sphWarning ( "failed to receive client request body" );
+		sphWarning ( "failed to receive client request body (client=%s)", sClientIP );
 		return;
 	}
 
@@ -3193,9 +3193,15 @@ int main ( int argc, char **argv )
 			continue;
 		}
 
+		char sClientIP [ 256 ];
+		DWORD uClientIP = ntohl ( remote_iaddr.sin_addr.s_addr );
+		snprintf ( sClientIP, sizeof(sClientIP), "%d.%d.%d.%d:%d", 
+			(uClientIP>>24) & 0xff, (uClientIP>>16) & 0xff, (uClientIP>>8) & 0xff, uClientIP & 0xff,
+			(int)ntohs(remote_iaddr.sin_port) );
+
 		if ( bOptConsole )
 		{
-			HandleClient ( rsock );
+			HandleClient ( rsock, sClientIP );
 			sphSockClose ( rsock );
 			continue;
 		}
@@ -3209,7 +3215,7 @@ int main ( int argc, char **argv )
 
 			// child process, handle client
 			case 0:
-				HandleClient ( rsock );
+				HandleClient ( rsock, sClientIP );
 				sphSockClose ( rsock );
 				exit ( 0 );
 				break;

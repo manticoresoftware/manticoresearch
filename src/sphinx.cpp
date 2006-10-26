@@ -4633,8 +4633,8 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource )
 	tDstWord.Read();
 	tSrcWord.Read();
 
-	DWORD iDstPos = ( DWORD ) m_pWordlistCheckpoints - ( DWORD ) pDstWordlist;
-	DWORD iSrcPos = ( DWORD ) pSrcIndex->m_pWordlistCheckpoints - ( DWORD ) pSrcWordlist;
+	DWORD iDstPos = DWORD ( (BYTE*)m_pWordlistCheckpoints - pDstWordlist );
+	DWORD iSrcPos = DWORD ( (BYTE*)pSrcIndex->m_pWordlistCheckpoints - pSrcWordlist );
 
 	tMerge.m_iWordlistOffset = wrDstIndex.m_iPos;
 
@@ -4699,8 +4699,8 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource )
 
 		iWordListEntries++;		
 
-		iDstPos = ( DWORD ) m_pWordlistCheckpoints - ( DWORD ) tDstSource.m_pWordlist;
-		iSrcPos = ( DWORD ) pSrcIndex->m_pWordlistCheckpoints - ( DWORD ) tSrcSource.m_pWordlist;
+		iDstPos = DWORD ( (BYTE*)m_pWordlistCheckpoints - tDstSource.m_pWordlist );
+		iSrcPos = DWORD ( (BYTE*)pSrcIndex->m_pWordlistCheckpoints - tSrcSource.m_pWordlist );
 	}
 
 	assert ( iDstPos == 2 && iSrcPos == 2 );

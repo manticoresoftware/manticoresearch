@@ -16,7 +16,7 @@ do
 done
 
 # check well-known library paths
-for MYSQL_LIB in "/usr/local/mysql/lib" "/usr/local/mysql/lib/mysql" "/usr/lib/mysql"
+for MYSQL_LIB in "/usr/local/mysql/lib" "/usr/local/lib/mysql" "/usr/local/mysql/lib/mysql" "/usr/lib/mysql"
 do
 	if test [ -d "$MYSQL_LIB" ]
 	then
@@ -54,12 +54,9 @@ then
 fi
 
 # check for custom includes path
-if test [ -z "$ac_cv_mysql_includes" ] 
-then 
-	AC_ARG_WITH([mysql-includes], 
-		AC_HELP_STRING([--with-mysql-includes], [path to MySQL header files]),
-		[ac_cv_mysql_includes=$withval])
-fi
+AC_ARG_WITH([mysql-includes], 
+	AC_HELP_STRING([--with-mysql-includes], [path to MySQL header files]),
+	[ac_cv_mysql_includes=$withval])
 if test [ -n "$ac_cv_mysql_includes" ]
 then
 	AC_CACHE_CHECK([MySQL includes], [ac_cv_mysql_includes], [ac_cv_mysql_includes=""])
@@ -67,12 +64,9 @@ then
 fi
 
 # check for custom library path
-if test [ -z "$ac_cv_mysql_libs" ]
-then
-	AC_ARG_WITH([mysql-libs], 
-		AC_HELP_STRING([--with-mysql-libs], [path to MySQL libraries]),
-		[ac_cv_mysql_libs=$withval])
-fi
+AC_ARG_WITH([mysql-libs], 
+	AC_HELP_STRING([--with-mysql-libs], [path to MySQL libraries]),
+	[ac_cv_mysql_libs=$withval])
 if test [ -n "$ac_cv_mysql_libs" ]
 then
 	# Trim trailing '.libs' if user passed it in --with-mysql-libs option

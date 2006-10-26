@@ -3076,20 +3076,6 @@ int main ( int argc, char **argv )
 		g_iQueryLogFile = g_iLogFile;
 	}
 
-	if ( !bOptConsole )
-	{
-		// i'm the main one
-		g_bHeadDaemon = true;
-
-		// create pid
-		g_sPidFile = hSearchd["pid_file"].cstr();
-		FILE * fp = fopen ( g_sPidFile, "w" );
-		if ( !fp )
-			sphFatal ( "failed to write pid file '%s'", g_sPidFile );
-		fprintf ( fp, "%d", getpid() );	
-		fclose ( fp );
-	}
-
 	////////////////////
 	// network startup
 	////////////////////
@@ -3118,6 +3104,21 @@ int main ( int argc, char **argv )
 	}
 	g_iSocket = sphCreateServerSocket ( uAddr, iPort );
 	listen ( g_iSocket, 5 );
+
+	// we're almost good, and can create .pid file now
+	if ( !bOptConsole )
+	{
+		// i'm the main one
+		g_bHeadDaemon = true;
+
+		// create pid
+		g_sPidFile = hSearchd["pid_file"].cstr();
+		FILE * fp = fopen ( g_sPidFile, "w" );
+		if ( !fp )
+			sphFatal ( "failed to write pid file '%s'", g_sPidFile );
+		fprintf ( fp, "%d", getpid() );	
+		fclose ( fp );
+	}
 
 	/////////////////
 	// serve clients

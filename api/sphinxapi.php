@@ -280,10 +280,13 @@ class SphinxClient
 		assert ( is_array($values) );
 		assert ( count($values) );
 
-		foreach ( $values as $value )
-			assert ( is_int($value) );
+		if ( is_array($values) && count($values) )
+		{
+			foreach ( $values as $value )
+				assert ( is_int($value) );
 
-		$this->_filter[$attribute] = $values;
+			$this->_filter[$attribute] = $values;
+		}
 	}
 
 	/// set range filter

@@ -37,6 +37,7 @@
 #else
 	#include <unistd.h>
 	#include <sys/time.h>
+	#include <sys/mman.h>
 
 	#define sphSeek		lseek
 #endif
@@ -368,6 +369,86 @@ public:
 
 /////////////////////////////////////////////////////////////////////////////
 
+/// in-memory buffer shared between processes
+template < typename T > class CSphSharedBuffer
+{
+public:
+	/// ctor
+	CSphSharedBuffer ()
+		: m_pData ( NULL )
+		, m_iLength ( 0 )
+	{}
+
+	/// dtor
+	~CSphSharedBuffer ()
+	{
+		Reset ();
+	}
+
+public:
+	/// allocate storage
+	bool Alloc ( int iEntries )
+	{
+		m_iLength = sizeof(T)*iEntries;
+
+#if USE_WINDOWS
+		m_pData = new T [ iEntries ];
+		return m_pData!=NULL;
+
+#else
+		m_pData = (T *) mmap ( NULL, m_iLength, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0 );
+		if ( m_pData==MAP_FAILED )
+		{
+			fprintf ( stdout, "ERROR: mmap() failed: %s.\n", strerror(errno) );
+			return false;
+		}
+
+		assert ( m_pData );
+		return true;
+#endif // USE_WINDOWS
+	}
+
+	/// deallocate storage
+	void Reset ()
+	{
+		if ( !m_pData )
+			return;
+
+#if USE_WINDOWS
+		delete [] m_pData;
+#else
+		int iRes = munmap ( m_pData, m_iLength );
+		if ( iRes )
+			fprintf ( stdout, "WARNING: munmap() failed: %s.\n", strerror(errno) );
+#endif // USE_WINDOWS
+	}
+
+public:
+	/// read-only accessor
+	inline const T & operator [] ( int iIndex )
+	{
+		return m_pData[iIndex];
+	}
+
+	/// get write address
+	T * GetWritePtr ()
+	{
+		return m_pData;
+	}
+
+	/// check if i'm empty
+	bool IsEmpty ()
+	{
+		return m_pData==NULL;
+	}
+
+protected:
+	T *					m_pData;	///< data storage
+	int					m_iLength;	///< data length, bytes
+};
+
+/////////////////////////////////////////////////////////////////////////////
+
 /// additional comparator parameters
 struct CSphMatchComparatorState
 {
@@ -539,7 +620,7 @@ protected:
 protected:
 	/// this function finds hash entry by it's key.
 	template < bool STOP_ON_DELETED >
-	const HashEntry_t * Search ( const KEY & key ) const
+	HashEntry_t * Search ( const KEY & key ) const
 	{
 		if ( !m_pHash )
 			return NULL;
@@ -608,7 +689,7 @@ public:
 	{
 		assert ( m_pHash );
 
-		HashEntry_t * pEntry = const_cast<HashEntry_t *> ( Search<true> ( tKey ) );
+		HashEntry_t * pEntry = Search<true> ( tKey );
 		assert ( pEntry && "hash overflow" );
 
 		// already hashed?
@@ -625,7 +706,7 @@ public:
 	/// remove entry from hash
 	void Remove ( const KEY & tKey )
 	{
-		HashEntry_t * pEntry = const_cast<HashEntry_t *> ( Search<false> ( tKey ) );
+		HashEntry_t * pEntry = Search<false> ( tKey );
 		if ( !pEntry || pEntry->m_bEmpty )
 			return;
 
@@ -637,7 +718,7 @@ public:
 	/// get value pointer by key
 	T * operator () ( const KEY & tKey ) const
 	{
-		HashEntry_t * pEntry = const_cast<HashEntry_t *> ( Search<false> ( tKey ) );
+		HashEntry_t * pEntry = Search<false> ( tKey );
 		if ( pEntry && !pEntry->m_bEmpty )
 			return &pEntry->m_tValue;
 		return NULL;
@@ -1376,7 +1457,7 @@ private:
 	int							m_dWeights [ SPH_MAX_FIELDS ];	///< search query field weights count
 
 private:
-	DWORD *						m_pDocinfo;				///< my docinfo cache
+	CSphSharedBuffer<DWORD>		m_pDocinfo;				///< my docinfo cache
 	int							m_iDocinfo;				///< my docinfo cache size
 
 	static const int			DOCINFO_HASH_BITS = 18;	// FIXME! make this configurable
@@ -1384,8 +1465,8 @@ private:
 	int							m_iDocinfoIdShift;
 
 	BYTE *						m_pWordlist;			///< my wordlist cache
-	CSphWordlistCheckpoint *	m_pWordlistCheckpoints;	///< my wordlist cache
-	int							m_iWordlistCheckpoints;	///< my wordlist cache
+	CSphWordlistCheckpoint *	m_pWordlistCheckpoints;	///< my wordlist cache checkpoints
+	int							m_iWordlistCheckpoints;	///< my wordlist cache checkpoints count
 
 	bool						m_bPreloaded;			///< if schema/docinfos are preloaded
 
@@ -3278,18 +3359,14 @@ CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename )
 	m_iWordlistEntries = 0;
 
 	m_eDocinfo = SPH_DOCINFO_NONE;
-	m_pDocinfo = NULL;
 	m_pDocinfoHash = NULL;
 	m_iDocinfoIdShift = 0;
-	m_pWordlist = NULL;
 	m_bPreloaded = false;
 }
 
 
 CSphIndex_VLN::~CSphIndex_VLN ()
 {
-	SafeDeleteArray ( m_pDocinfo );
-	SafeDeleteArray ( m_pWordlist );
 }
 
 
@@ -4506,10 +4583,10 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource )
 		if ( fdSpa.GetFD()<0 )
 			return 0;		
 
-		DWORD * pSrcRow = pSrcIndex->m_pDocinfo;
+		const DWORD * pSrcRow = &pSrcIndex->m_pDocinfo[0];
 		assert( pSrcRow );
 
-		DWORD * pDstRow = m_pDocinfo;
+		const DWORD * pDstRow = &m_pDocinfo[0];
 		assert( pDstRow );
 
 		int iSrcCount = 0;
@@ -5169,7 +5246,7 @@ void CSphIndex_VLN::LookupDocinfo ( CSphDocInfo & tMatch )
 		return;
 
 	assert ( m_eDocinfo==SPH_DOCINFO_EXTERN );
-	assert ( m_pDocinfo );
+	assert ( !m_pDocinfo.IsEmpty() );
 	assert ( m_tSchema.m_dAttrs.GetLength() );
 	assert ( tMatch.m_pAttrs );
 	assert ( tMatch.m_iAttrs==m_tSchema.m_dAttrs.GetLength() );
@@ -5179,15 +5256,15 @@ void CSphIndex_VLN::LookupDocinfo ( CSphDocInfo & tMatch )
 	int iEnd = m_pDocinfoHash [ uHash+1 ] - 1;
 
 	int iStride = 1 + m_tSchema.m_dAttrs.GetLength();
-	DWORD * pFound = NULL;
+	const DWORD * pFound = NULL;
 
 	if ( tMatch.m_iDocID==m_pDocinfo [ iStart*iStride ] )
 	{
-		pFound = m_pDocinfo + iStart*iStride;
+		pFound = &m_pDocinfo [ iStart*iStride ];
 
 	} else if ( tMatch.m_iDocID==m_pDocinfo [ iEnd*iStride ] )
 	{
-		pFound = m_pDocinfo + iEnd*iStride;
+		pFound = &m_pDocinfo [ iEnd*iStride ];
 
 	} else
 	{
@@ -5204,7 +5281,7 @@ void CSphIndex_VLN::LookupDocinfo ( CSphDocInfo & tMatch )
 			int iMid = iStart + (iEnd-iStart)/2;
 			if ( tMatch.m_iDocID==m_pDocinfo [ iMid*iStride ] )
 			{
-				pFound = m_pDocinfo + iMid*iStride;
+				pFound = &m_pDocinfo [ iMid*iStride ];
 				break;
 			}
 			if ( tMatch.m_iDocID<m_pDocinfo [ iMid*iStride ] )
@@ -5972,7 +6049,8 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 
 	if ( m_eDocinfo==SPH_DOCINFO_EXTERN )
 	{
-		SafeDeleteArray ( m_pDocinfo );
+		m_pDocinfo.Reset ();
+
 		int iStride = 1+m_tSchema.m_dAttrs.GetLength();
 		int iEntrySize = sizeof(DWORD)*iStride;
 
@@ -5984,11 +6062,12 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 			return NULL;
 
 		m_iDocinfo = stDocinfo.st_size / iEntrySize;
-		m_pDocinfo = new DWORD [ m_iDocinfo*iStride ]; // OPTIMIZE? maybe use mmap
+		if ( !m_pDocinfo.Alloc ( m_iDocinfo*iStride ) )
+			return NULL;
 
-		if ( ::read ( tDocinfo.GetFD(), m_pDocinfo, m_iDocinfo*iEntrySize )!=m_iDocinfo*iEntrySize )
+		if ( ::read ( tDocinfo.GetFD(), m_pDocinfo.GetWritePtr(), m_iDocinfo*iEntrySize )!=m_iDocinfo*iEntrySize )
 		{
-			SafeDeleteArray ( m_pDocinfo );
+			m_pDocinfo.Reset ();
 			return NULL;
 		}
 
@@ -6030,14 +6109,14 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 	struct stat stWordlist;
 	if ( tWordlist.GetFD()<0 || stat ( sWordlist, &stWordlist)<0 || stWordlist.st_size<=0 )
 	{
-		SafeDeleteArray ( m_pDocinfo );
+		m_pDocinfo.Reset ();
 		return NULL;
 	}
 
 	m_pWordlist = new BYTE [ stWordlist.st_size ];
 	if ( ::read ( tWordlist.GetFD(), m_pWordlist, stWordlist.st_size )!=stWordlist.st_size )
 	{
-		SafeDeleteArray ( m_pDocinfo );
+		m_pDocinfo.Reset ();
 		SafeDeleteArray ( m_pWordlist );
 		return NULL;
 	}
@@ -6077,7 +6156,7 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 	PROFILE_END ( query_init );
 
 	// check that docinfo is preloaded
-	assert ( m_eDocinfo!=SPH_DOCINFO_EXTERN || m_pDocinfo );
+	assert ( m_eDocinfo!=SPH_DOCINFO_EXTERN || !m_pDocinfo.IsEmpty() );
 
 	// split query into words
 	CSphQueryParser * pQueryParser = new CSphQueryParser ( pDict, pQuery->m_sQuery.cstr(),

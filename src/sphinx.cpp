@@ -1254,7 +1254,7 @@ struct CSphIndex_VLN;
 
 struct CSphMergeSource
 {	
-	BYTE *				m_pWordlist;
+	const BYTE *		m_pWordlist;
 	CSphReader_VLN *	m_pDataReader;	
 	CSphWriter *		m_pIndexWriter;
 	CSphWriter *		m_pDataWriter;
@@ -1344,7 +1344,7 @@ struct CSphWordIndexRecord
 		, m_iHitNum ( 0 )
 	{}
 
-	void Read ( BYTE * & pSource );
+	void Read ( const BYTE * & pSource );
 	void Write ( CSphWriter * pWriter, CSphMergeData * pMergeData );
 
 	bool operator < ( const CSphWordIndexRecord & rhs ) const
@@ -1464,7 +1464,7 @@ private:
 	DWORD *						m_pDocinfoHash;
 	int							m_iDocinfoIdShift;
 
-	BYTE *						m_pWordlist;			///< my wordlist cache
+	CSphSharedBuffer<BYTE>		m_pWordlist;			///< my wordlist cache
 	CSphWordlistCheckpoint *	m_pWordlistCheckpoints;	///< my wordlist cache checkpoints
 	int							m_iWordlistCheckpoints;	///< my wordlist cache checkpoints count
 
@@ -2999,7 +2999,7 @@ void CSphReader_VLN::GetBytes ( void *data, int size )
 }
 
 
-DWORD sphUnzipInt ( BYTE * & pBuf )
+DWORD sphUnzipInt ( const BYTE * & pBuf )
 {
 	register DWORD b, v = 0;
 	do
@@ -3023,7 +3023,7 @@ DWORD CSphReader_VLN::UnzipInt ()
 }
 
 
-SphOffset_t sphUnzipOffset ( BYTE * & pBuf )
+SphOffset_t sphUnzipOffset ( const BYTE * & pBuf )
 {
 	register DWORD b = 0;
 	register SphOffset_t v = 0;
@@ -4667,8 +4667,8 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource )
 	wrDstData.PutBytes ( &bDummy, 1 );
 	wrDstIndex.PutBytes ( &bDummy, 1 );
 
-	BYTE * pDstWordlist = m_pWordlist + 1;
-	BYTE * pSrcWordlist = pSrcIndex->m_pWordlist + 1;
+	const BYTE * pDstWordlist = &m_pWordlist[1];
+	const BYTE * pSrcWordlist = &pSrcIndex->m_pWordlist[1];
 
 	CSphVector<CSphWordlistCheckpoint>	dWordlistCheckpoints;
 	int									iWordListEntries = 0;
@@ -5911,7 +5911,7 @@ void CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, CSphDict * pDict, I
 bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, int iFD )
 {
 	// binary search through checkpoints for a one whose range matches word ID
-	assert ( m_bPreloaded && m_pWordlist );
+	assert ( m_bPreloaded && !m_pWordlist.IsEmpty() );
 
 	// empty index?
 	if ( !m_iWordlistCheckpoints )
@@ -5956,7 +5956,7 @@ bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, int iFD )
 	assert ( iWordlistOffset>=0 );
 
 	// decode wordlist chunk
-	BYTE * pBuf = m_pWordlist + iWordlistOffset;
+	const BYTE * pBuf = &m_pWordlist[iWordlistOffset];
 
 	DWORD iWordID = 0;
 	SphOffset_t iDoclistOffset = 0;
@@ -6113,15 +6113,17 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 		return NULL;
 	}
 
-	m_pWordlist = new BYTE [ stWordlist.st_size ];
-	if ( ::read ( tWordlist.GetFD(), m_pWordlist, stWordlist.st_size )!=stWordlist.st_size )
+	if ( !m_pWordlist.Alloc ( stWordlist.st_size ) )
+		return NULL;
+	if ( ::read ( tWordlist.GetFD(), m_pWordlist.GetWritePtr(), stWordlist.st_size )!=stWordlist.st_size )
 	{
 		m_pDocinfo.Reset ();
-		SafeDeleteArray ( m_pWordlist );
+		m_pWordlist.Reset ();
 		return NULL;
 	}
 
-	m_pWordlistCheckpoints = (CSphWordlistCheckpoint *)( m_pWordlist + iCheckpointsPos );
+	assert ( iCheckpointsPos>0 && iCheckpointsPos<INT_MAX );
+	m_pWordlistCheckpoints = (CSphWordlistCheckpoint *)( &m_pWordlist[int(iCheckpointsPos)] );
 
 	// all done
 	m_bPreloaded = true;
@@ -8186,7 +8188,7 @@ void CSphWordDataRecord::Write ( CSphMergeSource * pSource, CSphMergeData * pMer
 	pWriter->ZipInt ( 0 );
 }
 
-void CSphWordIndexRecord::Read ( BYTE * & pSource )
+void CSphWordIndexRecord::Read ( const BYTE * & pSource )
 {
 	DWORD iWordID = sphUnzipInt( pSource );
 	

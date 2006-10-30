@@ -2096,6 +2096,10 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 				if ( tAgent.m_bFailure )
 					continue;
 
+				// merge this agent's results
+				if ( !tAgent.m_tRes.m_dMatches.GetLength() )
+					continue;
+
 				// check/set sort-by attr and schema
 				char sName [ 1024 ];
 				snprintf ( sName, sizeof(sName), "%s:%d:%s",
@@ -2103,10 +2107,6 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 				if ( !CheckSortAndSchema ( &pFirst, &pTop, tQuery, &tAgent.m_tRes.m_tSchema, sName, tReq ) )
 					return;
-
-				// merge this agent's results
-				if ( !tAgent.m_tRes.m_dMatches.GetLength() )
-					continue;
 
 				if ( tQuery.GetGroupByAttr()<0 ) 
 				{

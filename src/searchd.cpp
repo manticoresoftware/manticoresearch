@@ -2097,6 +2097,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 					continue;
 
 				// merge this agent's results
+				// FIXME! should check schema before; but sometimes it's empty
 				if ( !tAgent.m_tRes.m_dMatches.GetLength() )
 					continue;
 
@@ -2124,8 +2125,9 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			}
 		}
 
-		// if there were no local indexes, we have to copy schema
-		if ( !tDist.m_dLocal.GetLength() )
+		// if there were no local indexes, schema in pRes was not yet set,
+		// so we have to copy it from first available agent schema
+		if ( !tDist.m_dLocal.GetLength() && pRes->m_iTotalMatches )
 		{
 			assert ( pFirst );
 			assert ( pRes->m_tSchema.m_dAttrs.GetLength()==0 );

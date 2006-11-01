@@ -95,8 +95,10 @@ protected:
 
 	CSphVector<Passage_t,256>	m_dPassages;	///< extracted passages
 
+	bool					m_bUtf8;
+
 protected:
-	template<int L> void	DecodeUtf8 ( const char * sText, CSphVector<Token_t,L> & dBuf );
+	template<int L> void	DecodeText ( const char * sText, CSphVector<Token_t,L> & dBuf );
 	template<int L> void	SubmitCodepoint ( CSphVector<Token_t,L> & dBuf, int iCode );
 	void					AccumulateCodepoint ( int iCode );
 
@@ -144,6 +146,8 @@ ExcerptGen_c::ExcerptGen_c ()
 	m_pDict = NULL;
 	m_pAccum = m_sAccum;
 	m_iAccum = 0;
+
+	m_bUtf8 = true;
 }
 
 
@@ -156,12 +160,12 @@ bool ExcerptGen_c::SetCaseFolding ( const char * sConfig )
 char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict, ISphTokenizer * pTokenizer )
 {
 	m_pDict = pDict;
+	m_bUtf8 = pTokenizer->IsUtf8 ();
 	m_tLC.SetRemap ( pTokenizer->GetLowercaser() );
 
 	// decode everything
-	// FIXME! should add SBCS support
-	DecodeUtf8 ( q.m_sSource.cstr(), m_dTokens );
-	DecodeUtf8 ( q.m_sWords.cstr(), m_dWords );
+	DecodeText ( q.m_sSource.cstr(), m_dTokens );
+	DecodeText ( q.m_sWords.cstr(), m_dWords );
 
 	// remove non-words
 	ARRAY_FOREACH ( i, m_dWords )
@@ -258,9 +262,20 @@ void ExcerptGen_c::HighlightStart ( const ExcerptQuery_t & q )
 }
 
 
-template<int L> void ExcerptGen_c::DecodeUtf8 ( const char * sText, CSphVector<Token_t,L> & dBuf )
+template<int L> void ExcerptGen_c::DecodeText ( const char * sText, CSphVector<Token_t,L> & dBuf )
 {
 	BYTE * pCur = (BYTE*) sText;
+
+	// SBCS decoder
+	if ( !m_bUtf8 )
+	{
+		while ( *pCur )
+			SubmitCodepoint ( dBuf, *pCur++ );
+		SubmitCodepoint ( dBuf, 0 );
+		return;
+	}
+
+	// UTF-8 decoder
 	while ( *pCur )
 	{
 		BYTE v = *pCur++;
@@ -316,27 +331,37 @@ bool myisbreak ( int c )
 }
 
 
-void ExcerptGen_c:: AccumulateCodepoint ( int iCode )
+void ExcerptGen_c::AccumulateCodepoint ( int iCode )
 {
 	if ( m_tTok.m_eType!=TOK_WORD || m_iAccum>SPH_MAX_WORD_LEN )
 		return;
 
-	// do UTF-8 encoding here
-	if ( iCode<0x80 )
+	if ( !m_bUtf8 )
 	{
-		*m_pAccum++ = (BYTE)( iCode & 0x7F );
-
-	} else if ( iCode<0x800 )
-	{
-		*m_pAccum++ = (BYTE)( ( (iCode>>6) & 0x1F ) | 0xC0 );
-		*m_pAccum++ = (BYTE)( ( iCode & 0x3F ) | 0x80 );
+		// SBCS encoder
+		assert ( iCode>=0 && iCode<255 );
+		*m_pAccum++ = (BYTE)iCode;
 
 	} else
 	{
-		*m_pAccum++ = (BYTE)( ( (iCode>>12) & 0x0F ) | 0xC0 );
-		*m_pAccum++ = (BYTE)( ( (iCode>>6) & 0x3F ) | 0x80 );
-		*m_pAccum++ = (BYTE)( ( iCode & 0x3F ) | 0x80 );
+		// UTF-8 encoder
+		if ( iCode<0x80 )
+		{
+			*m_pAccum++ = (BYTE)( iCode & 0x7F );
+
+		} else if ( iCode<0x800 )
+		{
+			*m_pAccum++ = (BYTE)( ( (iCode>>6) & 0x1F ) | 0xC0 );
+			*m_pAccum++ = (BYTE)( ( iCode & 0x3F ) | 0x80 );
+
+		} else
+		{
+			*m_pAccum++ = (BYTE)( ( (iCode>>12) & 0x0F ) | 0xC0 );
+			*m_pAccum++ = (BYTE)( ( (iCode>>6) & 0x3F ) | 0x80 );
+			*m_pAccum++ = (BYTE)( ( iCode & 0x3F ) | 0x80 );
+		}
 	}
+
 	assert ( m_pAccum>=m_sAccum && m_pAccum<m_sAccum+sizeof(m_sAccum) );
 	m_iAccum++;
 }
@@ -423,27 +448,33 @@ int ExcerptGen_c::TokenLen ( int iPos, int bRemoveSpaces )
 
 void ExcerptGen_c::ResultEmit ( int iCode )
 {
-	if ( iCode<=0x7f )
+	if ( !m_bUtf8 )
 	{
 		m_dResult.Add ( BYTE(iCode) );
-
-	} else if ( iCode<=0x7ff )
-	{
-		m_dResult.Add ( 0xc0 | BYTE( iCode>>6) );
-		m_dResult.Add ( 0x80 | BYTE( iCode&0x3f ) );
-
-	} else if ( iCode<=0xffff )
-	{
-		m_dResult.Add ( 0xe0 | BYTE( iCode>>12) );
-		m_dResult.Add ( 0x80 | BYTE( (iCode>>6)&0x3f ) );
-		m_dResult.Add ( 0x80 | BYTE( iCode&0x3f ) );
-
 	} else
 	{
-		m_dResult.Add ( 0xf0 | BYTE( iCode>>18) );
-		m_dResult.Add ( 0x80 | BYTE( (iCode>>12)&0x3f ) );
-		m_dResult.Add ( 0x80 | BYTE( (iCode>>6)&0x3f ) );
-		m_dResult.Add ( 0x80 | BYTE( iCode&0x3f ) );
+		if ( iCode<=0x7f )
+		{
+			m_dResult.Add ( BYTE(iCode) );
+
+		} else if ( iCode<=0x7ff )
+		{
+			m_dResult.Add ( 0xc0 | BYTE( iCode>>6) );
+			m_dResult.Add ( 0x80 | BYTE( iCode&0x3f ) );
+
+		} else if ( iCode<=0xffff )
+		{
+			m_dResult.Add ( 0xe0 | BYTE( iCode>>12) );
+			m_dResult.Add ( 0x80 | BYTE( (iCode>>6)&0x3f ) );
+			m_dResult.Add ( 0x80 | BYTE( iCode&0x3f ) );
+
+		} else
+		{
+			m_dResult.Add ( 0xf0 | BYTE( iCode>>18) );
+			m_dResult.Add ( 0x80 | BYTE( (iCode>>12)&0x3f ) );
+			m_dResult.Add ( 0x80 | BYTE( (iCode>>6)&0x3f ) );
+			m_dResult.Add ( 0x80 | BYTE( iCode&0x3f ) );
+		}
 	}
 	m_iResultLen++;
 }

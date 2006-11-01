@@ -1759,6 +1759,7 @@ public:
 	virtual void				SetBuffer ( BYTE * sBuffer, int iLength, bool bLast );
 	virtual BYTE *				GetToken ();
 	virtual ISphTokenizer *		Clone () const;
+	virtual bool				IsUtf8 () const { return false; }
 
 protected:
 	BYTE *				m_pBuffer;							///< my buffer
@@ -1780,6 +1781,7 @@ public:
 	virtual void				SetBuffer ( BYTE * sBuffer, int iLength, bool bLast );
 	virtual BYTE *				GetToken ();
 	virtual ISphTokenizer *		Clone () const;
+	virtual bool				IsUtf8 () const { return true; }
 
 protected:
 	int					GetCodePoint ();

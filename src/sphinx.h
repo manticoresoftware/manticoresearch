@@ -220,6 +220,9 @@ public:
 	/// spawn a clone of my own
 	virtual ISphTokenizer *			Clone () const = 0;
 
+	/// SBCS or UTF-8?
+	virtual bool					IsUtf8 () const = 0;
+
 protected:
 	CSphLowercaser		m_tLC;			///< my lowercaser
 	int					m_iMinWordLen;	///< minimal word length

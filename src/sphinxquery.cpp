@@ -561,6 +561,9 @@ static bool IsEvaluable ( CSphBooleanQueryExpr * pNode )
 		bool bRes = IsEvaluable ( pCur );
 		assert ( bRes==pCur->m_bEvaluable );
 	}
+#else
+	for ( CSphBooleanQueryExpr * pCur = pNode->m_pNext; pCur; pCur = pCur->m_pNext )
+		IsEvaluable ( pCur );
 #endif
 
 	switch ( pNode->m_eType )

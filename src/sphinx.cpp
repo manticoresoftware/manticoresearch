@@ -5329,7 +5329,7 @@ ISphMatchQueue * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & t
 			case FUNC_TIMESEGS:	pTop = new CSphGroupQueue < MatchTimeSegments_fn > ( pQuery ); break;
 
 			case FUNC_GENERIC2:	pTop = new CSphGroupQueue < MatchGeneric2_fn > ( pQuery ); break;
-			case FUNC_GENERIC3:	pTop = new CSphGroupQueue < MatchGeneric2_fn > ( pQuery ); break;
+			case FUNC_GENERIC3:	pTop = new CSphGroupQueue < MatchGeneric3_fn > ( pQuery ); break;
 		}
 	}
 

@@ -711,6 +711,33 @@ public:
 
 /////////////////////////////////////////////////////////////////////////////
 
+/// match comparator virtual attributes
+enum
+{
+	SPH_VATTR_ID			= -1,
+	SPH_VATTR_RELEVANCE		= -2
+};
+
+
+/// match comparator state
+struct CSphMatchComparatorState
+{
+	int				m_iAttr1;		///< 1st sort-by attribute index
+	int				m_iAttr2;		///< 2nd sort-by attribute index
+	int				m_iAttr3;		///< 3rd sort-by attribute index
+	unsigned int	m_uAttrDesc;	///< sort order mask (if i-th bit is set, i-th attr order is DESC)
+	unsigned int	m_iNow;			///< timestamp (for timesegments sorting mode)
+
+	CSphMatchComparatorState ()
+		: m_iAttr1 ( 0 )
+		, m_iAttr2 ( 0 )
+		, m_iAttr3 ( 0 )
+		, m_uAttrDesc ( 0 )
+		, m_iNow ( 0 )
+	{}
+};
+
+
 /// match-sorting priority min-queue interface
 template < typename T > class ISphQueue
 {
@@ -739,11 +766,8 @@ public:
 	/// match-queue specific, check if this queue needs attr values
 	bool				UsesAttrs () { return m_bUsesAttrs; }
 
-	/// match-queue specific, set attr to sort by
-	virtual void		SetAttr ( int ) {};
-
-	/// match-queue specific, get attr to sort by
-	virtual int			GetAttr () { return 0; }
+	/// match-queue specific, set comparator state
+	virtual void		SetState ( const CSphMatchComparatorState & ) {};
 
 protected:
 	bool				m_bUsesAttrs;	///<  match-queue specific, whether this queue uses attrs

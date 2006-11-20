@@ -799,6 +799,7 @@ enum ESphSortOrder
 	SPH_SORT_ATTR_DESC		= 1,	///< sort by document date desc, then by relevance desc
 	SPH_SORT_ATTR_ASC		= 2,	///< sort by document date asc, then by relevance desc
 	SPH_SORT_TIME_SEGMENTS	= 3,	///< sort by time segments (hour/day/week/etc) desc, then by relevance desc
+	SPH_SORT_EXTENDED		= 4,	///< sort by SQL-like expression (eg. "@relevance DESC, price ASC, @id DESC")
 
 	SPH_SORT_TOTAL
 };
@@ -977,7 +978,8 @@ CSphIndex *			sphCreateIndexPhrase ( const char * sFilename );
 void				sphSetQuiet ( bool bQuiet );
 
 /// create proper queue for given query
-ISphMatchQueue *	sphCreateQueue ( const CSphQuery * pQuery );
+/// may return NULL on error; in this case, error message is placed in sError
+ISphMatchQueue *	sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError );
 
 /// convert queue to sorted array, and add its entries to result's matches array
 void				sphFlattenQueue ( ISphMatchQueue * pQueue, CSphQueryResult * pResult );

@@ -449,14 +449,6 @@ protected:
 
 /////////////////////////////////////////////////////////////////////////////
 
-/// additional comparator parameters
-struct CSphMatchComparatorState
-{
-	int		m_iAttr;
-	DWORD	m_iNow;
-};
-
-
 /// simple match-sorting priority queue
 template < typename T, typename COMP > class CSphQueue
 	: public ISphQueue<T>
@@ -478,7 +470,6 @@ public:
 		m_pData = new T [ iSize ];
 		assert ( m_pData );
 
-		m_tState.m_iAttr = 0;
 		m_tState.m_iNow = (DWORD) time ( NULL );
 	}
 
@@ -568,16 +559,10 @@ public:
 		return m_pData[0];
 	}
 
-	/// set attr
-	virtual void SetAttr ( int iAttr )
+	/// set state
+	virtual void SetState ( const CSphMatchComparatorState & tState )
 	{
-		m_tState.m_iAttr = iAttr;
-	}
-
-	/// get attr
-	virtual int GetAttr ()
-	{
-		return m_tState.m_iAttr;
+		m_tState = tState;
 	}
 };
 
@@ -821,7 +806,6 @@ public:
 		for ( int i=0; i<m_iLimit; i++ )
 			m_dIndexes[i] = i;
 
-		m_tState.m_iAttr = 0;
 		m_tState.m_iNow = (DWORD) time ( NULL );
 	}
 
@@ -989,16 +973,10 @@ public:
 		return m_iUsed;
 	};
 
-	/// set attr
-	virtual void SetAttr ( int iAttr )
+	/// set state
+	virtual void SetState ( const CSphMatchComparatorState & tState )
 	{
-		m_tState.m_iAttr = iAttr;
-	}
-
-	/// get attr
-	virtual int GetAttr ()
-	{
-		return m_tState.m_iAttr;
+		m_tState = tState;
 	}
 };
 
@@ -5004,86 +4982,6 @@ struct CSphQueryParser : CSphSource_Text
 };
 
 
-/// match sorter
-struct MatchRelevanceLt_fn
-{
-	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & )
-	{
-		if ( a.m_iWeight!=b.m_iWeight )
-			return a.m_iWeight < b.m_iWeight;
-
-		return a.m_iDocID > b.m_iDocID;
-	};
-};
-
-
-/// match sorter
-struct MatchAttrLt_fn
-{
-	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
-	{
-		if ( a.m_pAttrs[t.m_iAttr]!=b.m_pAttrs[t.m_iAttr] )
-			return a.m_pAttrs[t.m_iAttr] < b.m_pAttrs[t.m_iAttr];
-
-		if ( a.m_iWeight!=b.m_iWeight )
-			return a.m_iWeight < b.m_iWeight;
-
-		return a.m_iDocID > b.m_iDocID;
-	};
-};
-
-
-/// match sorter
-struct MatchAttrGt_fn
-{
-	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
-	{
-		if ( a.m_pAttrs[t.m_iAttr]!=b.m_pAttrs[t.m_iAttr] )
-			return a.m_pAttrs[t.m_iAttr] > b.m_pAttrs[t.m_iAttr];
-
-		if ( a.m_iWeight!=b.m_iWeight )
-			return a.m_iWeight < b.m_iWeight;
-
-		return a.m_iDocID > b.m_iDocID;
-	};
-};
-
-
-/// match sorter
-struct MatchTimeSegments_fn
-{
-public:
-	/// comparator
-	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
-	{
-		int iA = GetSegment ( a.m_pAttrs[t.m_iAttr], t.m_iNow );
-		int iB = GetSegment ( b.m_pAttrs[t.m_iAttr], t.m_iNow );
-		if ( iA!=iB )
-			return iA > iB;
-
-		if ( a.m_iWeight!=b.m_iWeight )
-			return a.m_iWeight < b.m_iWeight;
-
-		if ( a.m_pAttrs[t.m_iAttr]!=b.m_pAttrs[t.m_iAttr] )
-			return a.m_pAttrs[t.m_iAttr] < b.m_pAttrs[t.m_iAttr];
-
-		return a.m_iDocID > b.m_iDocID;
-	};
-
-protected:
-	/// calc time segment
-	static inline int GetSegment ( DWORD iStamp, DWORD iNow )
-	{
-		if ( iStamp>=iNow-3600 ) return 0; // last hour
-		if ( iStamp>=iNow-24*3600 ) return 1; // last day
-		if ( iStamp>=iNow-7*24*3600 ) return 2; // last week
-		if ( iStamp>=iNow-30*24*3600 ) return 3; // last month
-		if ( iStamp>=iNow-90*24*3600 ) return 4; // last 3 months
-		return 5; // everything else
-	}
-};
-
-
 /// query-word comparator
 bool operator < ( const CSphQueryWord & a, const CSphQueryWord & b )
 {
@@ -5124,41 +5022,319 @@ inline int sphGroupMatch ( DWORD iGroup, DWORD * pGroups, int iGroups )
 	return 0;
 }
 
+//////////////////////////////////////////////////////////////////////////
 
-ISphMatchQueue * sphCreateQueue ( const CSphQuery * pQuery )
+/// match sorter
+struct MatchRelevanceLt_fn
+{
+	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & )
+	{
+		if ( a.m_iWeight!=b.m_iWeight )
+			return a.m_iWeight < b.m_iWeight;
+
+		return a.m_iDocID > b.m_iDocID;
+	};
+};
+
+
+/// match sorter
+struct MatchAttrLt_fn
+{
+	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
+	{
+		if ( a.m_pAttrs[t.m_iAttr1]!=b.m_pAttrs[t.m_iAttr1] )
+			return a.m_pAttrs[t.m_iAttr1] < b.m_pAttrs[t.m_iAttr1];
+
+		if ( a.m_iWeight!=b.m_iWeight )
+			return a.m_iWeight < b.m_iWeight;
+
+		return a.m_iDocID > b.m_iDocID;
+	};
+};
+
+
+/// match sorter
+struct MatchAttrGt_fn
+{
+	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
+	{
+		if ( a.m_pAttrs[t.m_iAttr1]!=b.m_pAttrs[t.m_iAttr1] )
+			return a.m_pAttrs[t.m_iAttr1] > b.m_pAttrs[t.m_iAttr1];
+
+		if ( a.m_iWeight!=b.m_iWeight )
+			return a.m_iWeight < b.m_iWeight;
+
+		return a.m_iDocID > b.m_iDocID;
+	};
+};
+
+
+/// match sorter
+struct MatchTimeSegments_fn
+{
+	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
+	{
+		int iA = GetSegment ( a.m_pAttrs[t.m_iAttr1], t.m_iNow );
+		int iB = GetSegment ( b.m_pAttrs[t.m_iAttr1], t.m_iNow );
+		if ( iA!=iB )
+			return iA > iB;
+
+		if ( a.m_iWeight!=b.m_iWeight )
+			return a.m_iWeight < b.m_iWeight;
+
+		if ( a.m_pAttrs[t.m_iAttr1]!=b.m_pAttrs[t.m_iAttr1] )
+			return a.m_pAttrs[t.m_iAttr1] < b.m_pAttrs[t.m_iAttr1];
+
+		return a.m_iDocID > b.m_iDocID;
+	};
+
+protected:
+	static inline int GetSegment ( DWORD iStamp, DWORD iNow )
+	{
+		if ( iStamp>=iNow-3600 ) return 0; // last hour
+		if ( iStamp>=iNow-24*3600 ) return 1; // last day
+		if ( iStamp>=iNow-7*24*3600 ) return 2; // last week
+		if ( iStamp>=iNow-30*24*3600 ) return 3; // last month
+		if ( iStamp>=iNow-90*24*3600 ) return 4; // last 3 months
+		return 5; // everything else
+	}
+};
+
+
+static inline DWORD MatchGetVattr ( const CSphMatch & m, int iAttr )
+{
+	if ( iAttr==SPH_VATTR_ID )
+		return m.m_iDocID;
+
+	if ( iAttr==SPH_VATTR_RELEVANCE )
+		return m.m_iWeight;
+
+	assert ( iAttr>=0 && iAttr<m.m_iAttrs );
+	return m.m_pAttrs[iAttr];
+}
+
+
+/// match sorter
+struct MatchGeneric2_fn
+{
+	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
+	{
+		DWORD aa, bb;
+
+		// first key
+		aa = MatchGetVattr ( a, t.m_iAttr1 );
+		bb = MatchGetVattr ( b, t.m_iAttr1 );
+		if ( aa!=bb )
+			return ( t.m_uAttrDesc&1 ) ^ ( aa>bb );
+
+		// second key
+		aa = MatchGetVattr ( a, t.m_iAttr2 );
+		bb = MatchGetVattr ( b, t.m_iAttr2 );
+		return ((t.m_uAttrDesc>>1)&1) ^ ( aa>bb );
+	};
+};
+
+
+/// match sorter
+struct MatchGeneric3_fn
+{
+	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
+	{
+		DWORD aa, bb;
+
+		// first key
+		aa = MatchGetVattr ( a, t.m_iAttr1 );
+		bb = MatchGetVattr ( b, t.m_iAttr1 );
+		if ( aa!=bb )
+			return ( t.m_uAttrDesc&1 ) ^ ( aa>bb );
+
+		// second key
+		aa = MatchGetVattr ( a, t.m_iAttr2 );
+		bb = MatchGetVattr ( b, t.m_iAttr2 );
+		if ( aa!=bb )
+			return ((t.m_uAttrDesc>>1)&1) ^ ( aa>bb );
+
+		// third key
+		aa = MatchGetVattr ( a, t.m_iAttr3 );
+		bb = MatchGetVattr ( b, t.m_iAttr3 );
+		return ((t.m_uAttrDesc>>2)&1) ^ ( aa>bb );
+	};
+};
+
+//////////////////////////////////////////////////////////////////////////
+
+ISphMatchQueue * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError )
 {
 	assert ( pQuery->m_sGroupBy.IsEmpty() || pQuery->GetGroupByAttr()>=0 );
+
 	ISphMatchQueue * pTop = NULL;
+	CSphMatchComparatorState tState;
+
+	char sBuf[256];
+	sError = "";
+
+	////////////////////////////////////
+	// choose and setup sorting functor
+	////////////////////////////////////
+
+	enum
+	{
+		FUNC_REL_DESC,
+		FUNC_ATTR_DESC,
+		FUNC_ATTR_ASC,
+		FUNC_TIMESEGS,
+
+		FUNC_GENERIC2,
+		FUNC_GENERIC3
+
+	} eFunc = FUNC_REL_DESC;
+	bool bUsesAttrs = false;
+
+	if ( pQuery->m_eSort==SPH_SORT_EXTENDED )
+	{
+		// mini parser
+		CSphTokenizer_SBCS tTokenizer;
+		tTokenizer.SetCaseFolding ( "0..9, A..Z->a..z, _, a..z, @" );
+
+		CSphString sSortClause = pQuery->m_sSortBy;
+		tTokenizer.SetBuffer ( (BYTE*)sSortClause.cstr(), strlen(sSortClause.cstr()), true );
+
+		const int MAX_SORT_FIELDS = 3;
+
+		bool bField = false; // whether i'm expecting field name or sort order
+		int dFields[MAX_SORT_FIELDS], iField = 0;
+
+		for ( const char * pTok=(char*)tTokenizer.GetToken(); pTok; pTok=(char*)tTokenizer.GetToken() )
+		{
+			bField = !bField;
+
+			// handle sort order
+			if ( !bField )
+			{
+				// check
+				if ( strcmp ( pTok, "desc" ) && strcmp ( pTok, "asc" ) )
+				{
+					snprintf ( sBuf, sizeof(sBuf), "invalid sorting order '%s'", pTok );
+					sError = sBuf;
+					return false;
+				}
+
+				// set
+				if ( !strcmp ( pTok, "desc" ) )
+					tState.m_uAttrDesc |= ( 1<<iField );
+
+				iField++;
+				continue;
+			}
+
+			// handle field name
+			if ( iField==MAX_SORT_FIELDS )
+			{
+				snprintf ( sBuf, sizeof(sBuf), "too much sort-by fields; maximum count is %d", MAX_SORT_FIELDS );
+				sError = sBuf;
+				return false;
+			}
+
+			if ( !strcmp ( pTok, "@relevance" ) || !strcmp ( pTok, "@rank" ) || !strcmp ( pTok, "@weight" ) )
+			{
+				dFields[iField] = SPH_VATTR_RELEVANCE;
+
+			} else if ( !strcmp ( pTok, "@id" ) )
+			{
+				dFields[iField] = SPH_VATTR_ID;
+
+			} else
+			{
+				dFields[iField] = tSchema.GetAttrIndex ( pTok );
+				if ( dFields[iField]<0 )
+				{
+					snprintf ( sBuf, sizeof(sBuf), "sort-by attribute '%s' not found", pTok );
+					sError = sBuf;
+					return false;
+				}
+				bUsesAttrs = true;
+			}
+		}
+
+		if ( iField==0 )
+		{
+			snprintf ( sBuf, sizeof(sBuf), "no sort order defined" );
+			sError = sBuf;
+			return false;
+		}
+
+		if ( iField==1 )
+			dFields[iField++] = SPH_VATTR_ID; // add "id ASC"
+
+		assert ( iField==2 || iField==3 );
+		eFunc = ( iField==2 ) ? FUNC_GENERIC2 : FUNC_GENERIC3;
+
+		tState.m_iAttr1 = dFields[0];
+		tState.m_iAttr2 = dFields[1];
+		tState.m_iAttr3 = dFields[2];
+
+	} else
+	{
+		// check sort-by attribute
+		if ( pQuery->m_eSort!=SPH_SORT_RELEVANCE )
+		{
+			tState.m_iAttr1 = tSchema.GetAttrIndex ( pQuery->m_sSortBy.cstr() );
+			if ( tState.m_iAttr1<0 )
+			{
+				snprintf ( sBuf, sizeof(sBuf), "sort-by attribute '%s' not found", pQuery->m_sSortBy.cstr() );
+				sError = sBuf;
+				return false;
+			}
+		}
+	
+		// find out what function to use and whether it needs attributes
+		bUsesAttrs = true;
+		switch ( pQuery->m_eSort )
+		{
+			case SPH_SORT_ATTR_DESC:		eFunc = FUNC_ATTR_DESC; break;
+			case SPH_SORT_ATTR_ASC:			eFunc = FUNC_ATTR_ASC; break;
+			case SPH_SORT_TIME_SEGMENTS:	eFunc = FUNC_TIMESEGS; break;
+			case SPH_SORT_RELEVANCE:		eFunc = FUNC_REL_DESC; bUsesAttrs = false; break;
+			default:
+				snprintf ( sBuf, sizeof(sBuf), "unknown sorting mode %d", pQuery->m_eSort );
+				sError = sBuf;
+				return false;
+		}
+	}
+
+	///////////////////
+	// spawn the queue
+	///////////////////
 
 	if ( pQuery->GetGroupByAttr()<0 )
 	{
-		switch ( pQuery->m_eSort )
+		switch ( eFunc )
 		{
-			case SPH_SORT_ATTR_DESC:	pTop = new CSphQueue < CSphMatch, MatchAttrLt_fn > ( pQuery->m_iMaxMatches, true ); break;
-			case SPH_SORT_ATTR_ASC:		pTop = new CSphQueue < CSphMatch, MatchAttrGt_fn > ( pQuery->m_iMaxMatches, true ); break;
-			case SPH_SORT_TIME_SEGMENTS:pTop = new CSphQueue < CSphMatch, MatchTimeSegments_fn > ( pQuery->m_iMaxMatches, true ); break;
-			case SPH_SORT_RELEVANCE:	pTop = new CSphQueue < CSphMatch, MatchRelevanceLt_fn > ( pQuery->m_iMaxMatches, false ); break;
-			default:
-				pTop = new CSphQueue < CSphMatch, MatchRelevanceLt_fn > ( pQuery->m_iMaxMatches, false );
-				fprintf ( stdout, "WARNING: unknown sorting mode '%d', using SPH_SORT_RELEVANCE\n", pQuery->m_eSort );
-				break;
+			case FUNC_REL_DESC:	pTop = new CSphQueue < CSphMatch, MatchRelevanceLt_fn > ( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+			case FUNC_ATTR_DESC:pTop = new CSphQueue < CSphMatch, MatchAttrLt_fn > ( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+			case FUNC_ATTR_ASC:	pTop = new CSphQueue < CSphMatch, MatchAttrGt_fn > ( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+			case FUNC_TIMESEGS:	pTop = new CSphQueue < CSphMatch, MatchTimeSegments_fn > ( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+
+			case FUNC_GENERIC2:	pTop = new CSphQueue < CSphMatch, MatchGeneric2_fn > ( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+			case FUNC_GENERIC3:	pTop = new CSphQueue < CSphMatch, MatchGeneric3_fn > ( pQuery->m_iMaxMatches, bUsesAttrs ); break;
 		}
+
 	} else
 	{
-		switch ( pQuery->m_eSort )
+		switch ( eFunc )
 		{
-			case SPH_SORT_ATTR_DESC:	pTop = new CSphGroupQueue < MatchAttrLt_fn > ( pQuery ); break;
-			case SPH_SORT_ATTR_ASC:		pTop = new CSphGroupQueue < MatchAttrGt_fn > ( pQuery ); break;
-			case SPH_SORT_TIME_SEGMENTS:pTop = new CSphGroupQueue < MatchTimeSegments_fn > ( pQuery ); break;
-			case SPH_SORT_RELEVANCE:	pTop = new CSphGroupQueue < MatchRelevanceLt_fn > ( pQuery ); break;
-			default:
-				pTop = new CSphGroupQueue < MatchRelevanceLt_fn > ( pQuery );
-				fprintf ( stdout, "WARNING: unknown sorting mode '%d', using SPH_SORT_RELEVANCE\n", pQuery->m_eSort );
-				break;
+			case FUNC_REL_DESC:	pTop = new CSphGroupQueue < MatchRelevanceLt_fn > ( pQuery ); break;
+			case FUNC_ATTR_DESC:pTop = new CSphGroupQueue < MatchAttrLt_fn > ( pQuery ); break;
+			case FUNC_ATTR_ASC:	pTop = new CSphGroupQueue < MatchAttrGt_fn > ( pQuery ); break;
+			case FUNC_TIMESEGS:	pTop = new CSphGroupQueue < MatchTimeSegments_fn > ( pQuery ); break;
+
+			case FUNC_GENERIC2:	pTop = new CSphGroupQueue < MatchGeneric2_fn > ( pQuery ); break;
+			case FUNC_GENERIC3:	pTop = new CSphGroupQueue < MatchGeneric2_fn > ( pQuery ); break;
 		}
 	}
 
 	assert ( pTop );
+	pTop->SetState ( tState );
 	return pTop;
 }
 
@@ -5185,21 +5361,13 @@ CSphQueryResult * CSphIndex_VLN::Query ( CSphDict * pDict, CSphQuery * pQuery )
 	// create result
 	CSphQueryResult * pResult = new CSphQueryResult();
 
-	// create queue
-	int iAttr = m_tSchema.GetAttrIndex ( pQuery->m_sSortBy.cstr() );
-	if ( iAttr<0 )
+	CSphString sError;
+	ISphMatchQueue * pTop = sphCreateQueue ( pQuery, m_tSchema, sError );
+	if ( !pTop )
 	{
-		if ( pQuery->m_eSort!=SPH_SORT_RELEVANCE )
-		{
-			fprintf ( stdout, "WARNING: CSphIndex_VLN::Query(): no sort-by attribute '%s', sorting by relevance.\n",
-				pQuery->m_sSortBy.cstr() );
-		}
-		pQuery->m_eSort = SPH_SORT_RELEVANCE;
-		iAttr = 0;
+		fprintf ( stdout, "ERROR: failed to create sorting queue: %s.\n", sError.cstr() );
+		return pResult;
 	}
-
-	ISphMatchQueue * pTop = sphCreateQueue ( pQuery );
-	pTop->SetAttr ( iAttr );
 
 	// run query
 	QueryEx ( pDict, pQuery, pResult, pTop );
@@ -5207,6 +5375,7 @@ CSphQueryResult * CSphIndex_VLN::Query ( CSphDict * pDict, CSphQuery * pQuery )
 	// convert results and return
 	pResult->m_dMatches.Reset ();
 	sphFlattenQueue ( pTop, pResult );
+
 	SafeDelete ( pTop );
 	return pResult;
 }
@@ -6140,7 +6309,6 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 	assert ( pQuery->m_pTokenizer );
 	assert ( pResult );
 	assert ( pTop );
-	assert ( pTop->GetAttr()>=0 );
 
 	PROFILER_INIT ();
 	PROFILE_BEGIN ( query_init );

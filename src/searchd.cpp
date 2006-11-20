@@ -1857,17 +1857,6 @@ bool CheckSortAndSchema ( const CSphSchema ** ppFirst, ISphMatchQueue ** ppTop, 
 	{
 		// lookup proper attribute index to sort by
 		*ppFirst = pServed;
-		int iAttr = pServed->GetAttrIndex ( tQuery.m_sSortBy.cstr() );
-		if ( iAttr<0 )
-		{
-			if ( tQuery.m_eSort!=SPH_SORT_RELEVANCE )
-			{
-				tReq.SendErrorReply ( "index '%s': sort-by attribute '%s' not found",
-					sServedName, tQuery.m_sSortBy.cstr() );
-				return false;
-			}
-			iAttr = 0;
-		}
 
 		// lookup proper attribute index to group by
 		if ( !tQuery.SetSchema ( *pServed ) )
@@ -1880,8 +1869,16 @@ bool CheckSortAndSchema ( const CSphSchema ** ppFirst, ISphMatchQueue ** ppTop, 
 
 		// spawn queue and set sort-by attribute
 		assert ( !*ppTop );
-		*ppTop = sphCreateQueue ( &tQuery );
-		(*ppTop)->SetAttr ( iAttr );
+
+		CSphString sError;
+		*ppTop = sphCreateQueue ( &tQuery, *pServed, sError );
+
+		if (! (*ppTop) )
+		{
+			tReq.SendErrorReply ( "index '%s': failed to create sorting queue: %s",
+				sServedName, sError.cstr() );
+			return false;
+		}
 
 	} else
 	{
@@ -2269,7 +2266,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			snprintf ( sGroupBuf, sizeof(sGroupBuf), " @%s", tQuery.m_sGroupBy.cstr() );
  
 		static const char * sModes [ SPH_MATCH_TOTAL ] = { "all", "any", "phr", "bool" };
-		static const char * sSort [ SPH_SORT_TOTAL ] = { "rel", "attr-", "attr+", "tsegs" };
+		static const char * sSort [ SPH_SORT_TOTAL ] = { "rel", "attr-", "attr+", "tsegs", "ext" };
 
 		snprintf ( sBuf, sizeof(sBuf), "[%s] %d.%03d sec [%s/%d/%s %d (%d,%d)%s] [%s] %s\n",
 			sTimeBuf, pRes->m_iQueryTime/1000, pRes->m_iQueryTime%1000,

@@ -6666,7 +6666,7 @@ void CSphDict_CRC32::LoadStopwords ( const char * sFiles, ISphTokenizer * pToken
 		do
 		{
 			iLength = (int)fread ( sBuffer, 1, sizeof(sBuffer), fp );
-			pTokenizer->SetBuffer ( sBuffer, iLength, false );
+			pTokenizer->SetBuffer ( sBuffer, iLength, iLength!=0 );
 
 			BYTE * pToken;
 			while ( ( pToken = pTokenizer->GetToken() )!=NULL )

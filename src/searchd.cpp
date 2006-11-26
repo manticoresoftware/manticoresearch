@@ -1934,7 +1934,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		tQuery.m_sSortBy= tReq.GetString ();
 	tQuery.m_sQuery		= tReq.GetString ();
 	tQuery.m_iWeights	= tReq.GetDwords ( (DWORD**)&tQuery.m_pWeights, SPH_MAX_FIELDS, "invalid weight count %d (should be in 0..%d range)" );
-	CSphString sIndex	= tReq.GetString ();
+	CSphString sIndexes	= tReq.GetString ();
 	tQuery.m_iMinID		= tReq.GetDword ();
 	tQuery.m_iMaxID		= tReq.GetDword ();
 
@@ -2031,17 +2031,17 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 	int iSearched = 0;
 
-	if ( g_hDistIndexes(sIndex) )
+	if ( g_hDistIndexes(sIndexes) )
 	{
 		// search through specified distributed index
-		DistributedIndex_t & tDist = g_hDistIndexes[sIndex];
+		DistributedIndex_t & tDist = g_hDistIndexes[sIndexes];
 
 		// start connecting to remote agents
 		ARRAY_FOREACH ( i, tDist.m_dAgents )
 			ConnectToRemoteAgent ( &tDist.m_dAgents[i] );
 
 		// connect to remote agents and query them first
-		int iRemote = QueryRemoteAgents ( sIndex.cstr(), tDist, tQuery, tQuery.m_eMode );
+		int iRemote = QueryRemoteAgents ( sIndexes.cstr(), tDist, tQuery, tQuery.m_eMode );
 
 		// while the remote queries are running, do local searches
 		// FIXME! what if the remote agents finish early, could they timeout?
@@ -2079,7 +2079,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		if ( iRemote )
 		{
 			int iMsecLeft = tDist.m_iAgentQueryTimeout - int(tmQuery*1000.0f);
-			int iReplys = WaitForRemoteAgents ( sIndex.cstr(), tDist, pRes, Max ( iMsecLeft, 0 ) );
+			int iReplys = WaitForRemoteAgents ( sIndexes.cstr(), tDist, pRes, Max ( iMsecLeft, 0 ) );
 			if ( !iReplys && !tDist.m_dLocal.GetLength() )
 			{
 				tReq.SendErrorReply ( "all reachable remote agents timed out" );
@@ -2132,7 +2132,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			pRes->m_tSchema = *pFirst;
 		}
 
-	} else if ( sIndex=="*" )
+	} else if ( sIndexes=="*" )
 	{
 		// search through all local indexes
 		g_hIndexes.IterateStart ();
@@ -2162,7 +2162,8 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	} else
 	{
 		// search through the specified local indexes
-		char * p = (char*)sIndex.cstr();
+		CSphString sSplit = sIndexes;
+		char * p = (char*)sSplit.cstr();
 		while ( *p )
 		{
 			// skip non-alphas
@@ -2272,7 +2273,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			sTimeBuf, pRes->m_iQueryTime/1000, pRes->m_iQueryTime%1000,
 			sModes [ tQuery.m_eMode ], tQuery.m_dFilters.GetLength(), sSort [ tQuery.m_eSort ],
 			pRes->m_iTotalMatches, iOffset, iLimit, sGroupBuf,
-			sIndex.cstr(), tQuery.m_sQuery.cstr() );
+			sIndexes.cstr(), tQuery.m_sQuery.cstr() );
 
 		sphLockEx ( g_iQueryLogFile );
 		lseek ( g_iQueryLogFile, 0, SEEK_END );

@@ -14,7 +14,7 @@
 //
 
 /////////////////////////////////////////////////////////////////////////////
-// Sphinx PHP searchd client API
+// PHP version of Sphinx searchd client (PHP API)
 /////////////////////////////////////////////////////////////////////////////
 
 /// known searchd commands
@@ -59,8 +59,8 @@ class SphinxClient
 {
 	var $_host;		///< searchd host (default is "localhost")
 	var $_port;		///< searchd port (default is 3312)
-	var $_offset;	///< how much records to seek from result-set start (default is 0)
-	var $_limit;	///< how much records to return from result-set starting at offset (default is 20)
+	var $_offset;	///< how many records to seek from result-set start (default is 0)
+	var $_limit;	///< how many records to return from result-set starting at offset (default is 20)
 	var $_mode;		///< query matching mode (default is SPH_MATCH_ALL)
 	var $_weights;	///< per-field weights (default is 1 for all fields)
 	var $_sort;		///< match sorting mode (default is SPH_SORT_RELEVANCE)
@@ -235,7 +235,7 @@ class SphinxClient
 		$this->_mode = $mode;
 	}
 
-	/// set match mode
+	/// set sort mode
 	function SetSortMode ( $mode, $sortby="" )
 	{
 		assert (
@@ -305,8 +305,23 @@ class SphinxClient
 		$this->_max[$attribute] = $max;
 	}
 
-	/// set grouping
-	/// if grouping
+	/// set grouping attribute and function
+	///
+	/// in grouping mode, all matches are assigned to different groups
+	/// based on grouping function value.
+	///
+	/// each group keeps track of the total match count, and the best match
+	/// (in this group) according to current sorting function.
+	///
+	/// the final result set contains one best match per group, with
+	/// grouping function value and matches count attached. result set
+	/// is sorted by grouping function value, in descending order.
+	///
+	/// for example, if sorting by relevance and grouping by "published"
+	/// attribute with SPH_GROUPBY_DAY function, then the result set will
+	/// contain one most relevant match per each day when there were any
+	/// matches published, with day number and per-day match count attached,
+	/// and sorted by day number in descending order (ie. recent days first).
 	function SetGroupBy ( $attribute, $func )
 	{
 		assert ( is_string($attribute) );
@@ -323,7 +338,7 @@ class SphinxClient
 	/// connect to searchd server and run given search query
 	///
 	/// $query is query string
-	/// $query is index name to query, default is "*" which means to query all indexes
+	/// $index is index name to query, default is "*" which means to query all indexes
 	///
 	/// returns false on failure
 	/// returns hash which has the following keys on success:
@@ -461,9 +476,9 @@ class SphinxClient
 
 	/// connect to searchd server and generate exceprts from given documents
 	///
+	/// $docs is an array of strings which represent the documents' contents
 	/// $index is a string specifiying the index which settings will be used
 	///		for stemming, lexing and case folding
-	/// $docs is an array of strings which represent the documents' contents
 	/// $words is a string which contains the words to highlight
 	/// $opts is a hash which contains additional optional highlighting parameters:
 	///		"before_match"
@@ -478,7 +493,7 @@ class SphinxClient
 	///			how much words to highlight around each match, default is 5
 	///
 	/// returns false on failure
-	/// retrurns an array of string excerpts on success
+	/// returns an array of string excerpts on success
 	function BuildExcerpts ( $docs, $index, $words, $opts=array() )
 	{
 		assert ( is_array($docs) );

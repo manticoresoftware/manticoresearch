@@ -1,7 +1,10 @@
 <?php
 
-require ( "sphinxapi.php" );
+//
+// $Id$
+//
 
+require ( "sphinxapi.php" );
 
 $docs = array
 (
@@ -33,5 +36,9 @@ if ( !$res )
 		print "n=$n, res=$entry\n";
 	}
 }
+
+//
+// $Id$
+//
 
 ?>

@@ -6629,6 +6629,9 @@ struct DwordCmp_fn
 
 void CSphDict_CRC32::LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer )
 {
+	assert ( !m_pStopwords );
+	assert ( !m_iStopwords );
+
 	static BYTE sBuffer [ 65536 ];
 
 	// tokenize file list
@@ -6677,12 +6680,15 @@ void CSphDict_CRC32::LoadStopwords ( const char * sFiles, ISphTokenizer * pToken
 		dStop.Sort();
 
 		// store IDs
-		m_iStopwords = dStop.GetLength ();
-		m_pStopwords = new DWORD [ m_iStopwords ];
-		memcpy ( m_pStopwords, &dStop[0], sizeof(DWORD)*m_iStopwords );
-		if ( !g_bSphQuiet )
-			fprintf ( stdout, "- loaded %d stopwords from '%s'\n",
-				m_iStopwords, sName ); // FIXME! do loglevels
+		if ( dStop.GetLength() )
+		{
+			m_iStopwords = dStop.GetLength ();
+			m_pStopwords = new DWORD [ m_iStopwords ];
+			memcpy ( m_pStopwords, &dStop[0], sizeof(DWORD)*m_iStopwords );
+			if ( !g_bSphQuiet )
+				fprintf ( stdout, "- loaded %d stopwords from '%s'\n",
+					m_iStopwords, sName ); // FIXME! do loglevels
+		}
 
 		// close file
 		fclose ( fp );

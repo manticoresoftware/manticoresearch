@@ -4,7 +4,7 @@
 # Python version of Sphinx searchd client (Python API)
 #
 # Copyright (c) 2006, Andrew Aksyonoff
-# Copyright (c) 2006, Mike Osadnick
+# Copyright (c) 2006, Mike Osadnik
 # All rights reserved
 #
 # This program is free software; you can redistribute it and/or modify
@@ -438,7 +438,7 @@ class SphinxClient:
 		return result	
 
 
-	def BuildExcerpts (self, docs, index, words, opts={}):
+	def BuildExcerpts (self, docs, index, words, opts=None):
 		"""
 		connect to searchd server and generate exceprts from given documents
 
@@ -461,6 +461,9 @@ class SphinxClient:
 		returns false on failure
 		returns an array of string excerpts on success
 		"""
+		if not opts:
+			opts = {}
+
 		assert(isinstance(docs, list))
 		assert(isinstance(index, str))
 		assert(isinstance(words, str))
@@ -469,12 +472,11 @@ class SphinxClient:
 		sock = self._Connect()
 
 		if not sock:
-			return {}
+			return []
 
 		# fixup options
 		opts.setdefault('before_match', '<b>')
 		opts.setdefault('after_match', '</b>')
-
 		opts.setdefault('chunk_separator', ' ... ')
 		opts.setdefault('limit', 256)
 		opts.setdefault('around', 5)
@@ -524,7 +526,7 @@ class SphinxClient:
 
 		response = self._GetResponse(sock, VER_COMMAND_EXCERPT )
 		if not response:
-			return {}
+			return []
 
 		# parse response
 		pos = 0

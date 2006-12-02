@@ -165,6 +165,8 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict, 
 
 	// decode everything
 	DecodeText ( q.m_sSource.cstr(), m_dTokens );
+	int iSourceCodes = m_dCodes.GetLength ();
+
 	DecodeText ( q.m_sWords.cstr(), m_dWords );
 
 	// remove non-words
@@ -194,7 +196,7 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict, 
 	}
 
 	// do highlighting
-	if ( q.m_iLimit<=0 || q.m_iLimit>m_dCodes.GetLength() )
+	if ( q.m_iLimit<=0 || q.m_iLimit>iSourceCodes )
 	{
 		HighlightAll ( q );
 

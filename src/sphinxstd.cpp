@@ -21,7 +21,12 @@
 
 #undef new
 
+// for ::write
+#if USE_WINDOWS
 #include <io.h>
+#else
+#include <unistd.h>
+#endif
 
 const DWORD MEMORY_MAGIC_PLAIN		= 0xbbbbbbbbUL;
 const DWORD MEMORY_MAGIC_ARRAY		= 0xaaaaaaaaUL;

@@ -2627,6 +2627,8 @@ bool RotateIndex ( ServedIndex_t & tIndex, const char * sIndex )
 			TryRename ( sIndex, sPath, dCur[j], dNew[j], true );
 			TryRename ( sIndex, sPath, dOld[j], dCur[j], true );
 		}
+
+		SafeDelete ( pNewIndex );
 		return false;
 	}
 

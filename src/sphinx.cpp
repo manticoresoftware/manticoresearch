@@ -5520,6 +5520,10 @@ void CSphIndex_VLN::MatchAll ( const CSphQuery * pQuery, ISphMatchQueue * pTop, 
 				matchWeight[i] = 0;
 			}
 
+			DWORD uSpanStart = UINT_MAX;
+			DWORD uSpanEnd = UINT_MAX;
+			bool bPhraseMatch = false;
+
 			DWORD k = INT_MAX;
 			for ( ;; )
 			{
@@ -5548,31 +5552,37 @@ void CSphIndex_VLN::MatchAll ( const CSphQuery * pQuery, ISphMatchQueue * pTop, 
 				// find max proximity relevance
 				if ( m_dQueryWords[imin].m_iQueryPos - pmin == k )
 				{
+					uSpanStart = Min ( uSpanStart, pmin );
+					uSpanEnd = Max ( uSpanEnd, pmin );
+
 					curPhraseWeight[j]++;
 					if ( phraseWeight[j] < curPhraseWeight[j] )
+					{
 						phraseWeight[j] = curPhraseWeight[j];
+
+						if ( (int)(uSpanEnd-uSpanStart)==m_dQueryWords.GetLength()-1 &&
+							curPhraseWeight[j]==m_dQueryWords.GetLength()-1 )
+						{
+							bPhraseMatch = true;
+						}
+					}
+
 				} else
 				{
 					curPhraseWeight[j] = 0;
+					uSpanStart = uSpanEnd = pmin;
 				}
+
 				k = m_dQueryWords[imin].m_iQueryPos - pmin;
 			}
 
 			// check if there was a perfect match
-			if ( pQuery->m_eMode==SPH_MATCH_PHRASE && m_dQueryWords.GetLength()>1 )
+			if ( pQuery->m_eMode==SPH_MATCH_PHRASE && m_dQueryWords.GetLength()>1 && !bPhraseMatch )
 			{
-				for ( i=0; i<m_iWeights; i++ )
-				{
-					if ( phraseWeight[i]==m_dQueryWords.GetLength()-1 )
-						break;
-				}
-				if ( i==m_iWeights )
-				{
-					// there was not. continue
-					i = 0;
-					docID++;
-					continue;
-				}
+				// there was not. continue
+				i = 0;
+				docID++;
+				continue;
 			}
 
 			// sum simple match weights and phrase match weights

@@ -158,7 +158,7 @@ void sphAllocsDump ( int iFile, int iSinceID )
 		pHeader = pHeader->m_pNext )
 	{
 		snprintf ( sBuf, sizeof(sBuf), "alloc %d at %s(%d): %d bytes\n", pHeader->m_iAllocId,
-			pHeader->m_sFile, pHeader->m_iLine, pHeader->m_iSize );
+			pHeader->m_sFile, pHeader->m_iLine, (int)pHeader->m_iSize );
 		write ( iFile, sBuf, strlen(sBuf) );
 	}
 

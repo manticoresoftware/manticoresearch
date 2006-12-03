@@ -3127,6 +3127,22 @@ int main ( int argc, char **argv )
 	sphInfo ( "accepting connections" );
 	for ( ;; )
 	{
+#if SPH_DEBUG_LEAKS
+		static int iHeadAllocs = sphAllocsCount ();
+		static int iHeadCheckpoint = sphAllocsLastID ();
+
+		if ( iHeadAllocs!=sphAllocsCount() )
+		{
+			sphLockEx ( g_iLogFile );
+			lseek ( g_iLogFile, 0, SEEK_END );
+			sphAllocsDump ( g_iLogFile, iHeadCheckpoint );
+			sphLockUn ( g_iLogFile );
+
+			iHeadAllocs = sphAllocsCount ();
+			iHeadCheckpoint = sphAllocsLastID ();
+		}
+#endif
+
 		// try to rotate indices
 		if ( g_iHUP && !g_iChildren )
 		{

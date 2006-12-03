@@ -157,6 +157,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\src\sphinxstd.cpp"
+				>
+			</File>
+			<File
 				RelativePath="..\src\sphinxexcerpt.cpp"
 				>
 			</File>

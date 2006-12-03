@@ -1532,41 +1532,6 @@ protected:
 };
 
 /////////////////////////////////////////////////////////////////////////////
-// MEMORY MANAGEMENT
-/////////////////////////////////////////////////////////////////////////////
-
-void * operator new ( size_t iSize )
-{
-	void * pResult = ::malloc ( iSize );
-	if ( !pResult )
-		sphDie ( "FATAL: out of memory (unable to allocate %d bytes).\n", iSize ); // FIXME! this may fail with malloc error too
-	return pResult;
-}
-
-
-void * operator new [] ( size_t iSize )
-{
-	void * pResult = ::malloc ( iSize );
-	if ( !pResult )
-		sphDie ( "FATAL: out of memory (unable to allocate %d bytes).\n", iSize ); // FIXME! this may fail with malloc error too
-	return pResult;
-}
-
-
-void operator delete ( void * pPtr )
-{
-	if ( pPtr )
-		::free ( pPtr );
-}
-
-
-void operator delete [] ( void * pPtr )
-{
-	if ( pPtr )
-		::free ( pPtr );
-}
-
-/////////////////////////////////////////////////////////////////////////////
 // UTILITY FUNCTIONS
 /////////////////////////////////////////////////////////////////////////////
 

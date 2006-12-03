@@ -82,20 +82,6 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
-/// new that never returns NULL (it crashes instead)
-void *			operator new ( size_t iSize );
-
-/// new that never returns NULL (it crashes instead)
-void *			operator new [] ( size_t iSize );
-
-/// delete for my new
-void			operator delete ( void * pPtr );
-
-/// delete for my new
-void			operator delete [] ( void * pPtr );
-
-/////////////////////////////////////////////////////////////////////////////
-
 /// crash with an error message
 void			sphDie ( char * sMessage, ... );
 

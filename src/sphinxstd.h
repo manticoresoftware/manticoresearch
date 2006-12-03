@@ -15,6 +15,40 @@
 #include <assert.h>
 
 /////////////////////////////////////////////////////////////////////////////
+// MEMORY MANAGEMENT
+/////////////////////////////////////////////////////////////////////////////
+
+#define SPH_DEBUG_LEAKS			0
+
+#if SPH_DEBUG_LEAKS
+
+/// debug new that tracks memory leaks
+void *			operator new ( size_t iSize, const char * sFile, int iLine );
+
+/// debug new that tracks memory leaks
+void *			operator new [] ( size_t iSize, const char * sFile, int iLine );
+
+/// get current allocs count
+int				sphAllocsCount ();
+
+/// get last alloc id
+int				sphAllocsLastID ();
+
+/// dump all allocs since given id
+void			sphAllocsDump ( int iFile, int iSinceID );
+
+#undef new
+#define new		new(__FILE__,__LINE__)
+
+#endif // SPH_DEBUG_LEAKS
+
+/// delete for my new
+void			operator delete ( void * pPtr );
+
+/// delete for my new
+void			operator delete [] ( void * pPtr );
+
+/////////////////////////////////////////////////////////////////////////////
 // GENERICS
 /////////////////////////////////////////////////////////////////////////////
 
@@ -64,6 +98,7 @@ namespace Private
 	< (bool) (sizeof(_Type) == (_ExpSize)) >)> static_assert_typedef_
 
 /////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
 
 /// generic comparator
 template < typename T >

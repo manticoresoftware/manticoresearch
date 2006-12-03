@@ -1,4 +1,4 @@
-SRC_SPHINX = sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp sphinxsoundex.cpp sphinxstemen.cpp sphinxstemru.cpp sphinxutils.cpp md5.cpp
+SRC_SPHINX = sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp sphinxsoundex.cpp sphinxstemen.cpp sphinxstemru.cpp sphinxutils.cpp md5.cpp sphinxstd.cpp
 HEADERS_SPHINX = sphinx.h sphinxexcerpt.h sphinxquery.h sphinxstd.h sphinxstem.h sphinxtimers.h sphinxutils.h sphinxstemru.inl md5.h
 
 noinst_LIBRARIES = libsphinx.a

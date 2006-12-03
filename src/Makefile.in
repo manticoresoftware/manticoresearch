@@ -56,7 +56,7 @@ libsphinx_a_LIBADD =
 am__objects_1 = sphinx.$(OBJEXT) sphinxexcerpt.$(OBJEXT) \
 	sphinxquery.$(OBJEXT) sphinxsoundex.$(OBJEXT) \
 	sphinxstemen.$(OBJEXT) sphinxstemru.$(OBJEXT) \
-	sphinxutils.$(OBJEXT) md5.$(OBJEXT)
+	sphinxutils.$(OBJEXT) md5.$(OBJEXT) sphinxstd.$(OBJEXT)
 am_libsphinx_a_OBJECTS = $(am__objects_1)
 libsphinx_a_OBJECTS = $(am_libsphinx_a_OBJECTS)
 am__installdirs = "$(DESTDIR)$(bindir)"
@@ -184,7 +184,7 @@ sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 sysconfdir = @sysconfdir@
 target_alias = @target_alias@
-SRC_SPHINX = sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp sphinxsoundex.cpp sphinxstemen.cpp sphinxstemru.cpp sphinxutils.cpp md5.cpp
+SRC_SPHINX = sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp sphinxsoundex.cpp sphinxstemen.cpp sphinxstemru.cpp sphinxutils.cpp md5.cpp sphinxstd.cpp
 HEADERS_SPHINX = sphinx.h sphinxexcerpt.h sphinxquery.h sphinxstd.h sphinxstem.h sphinxtimers.h sphinxutils.h sphinxstemru.inl md5.h
 noinst_LIBRARIES = libsphinx.a
 libsphinx_a_SOURCES = $(SRC_SPHINX)

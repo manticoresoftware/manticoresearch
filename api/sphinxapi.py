@@ -301,7 +301,7 @@ class SphinxClient:
 		returns false on failure
 		returns hash which has the following keys on success:
 			"matches"
-				hash which maps found document_id to ( "weight", "group" ) hash
+				an array of found matches represented as ( "id", "weight", "attrs" ) hashes
 			"total"
 				total amount of matches retrieved (upto SPH_MAX_MATCHES, see sphinx.h)
 			"total_found"
@@ -309,7 +309,8 @@ class SphinxClient:
 			"time"
 				search time
 			"words"
-				hash which maps query terms (stemmed!) to ( "docs", "hits" ) hash
+				an array of ( "word", "docs", "hits" ) hashes which contains
+				docs and hits count for stemmed (!) query words
 		"""
 		sock = self._Connect()
 		if not sock:
@@ -373,7 +374,7 @@ class SphinxClient:
 		# read schema
 		p = 0
 		fields = []
-		attrs = {}
+		attrs = []
 
 		nfields = unpack('>L', response[p:p+4])[0]
 		p += 4
@@ -396,7 +397,7 @@ class SphinxClient:
 			p += length
 			type_ = unpack('>L', response[p:p+4])[0]
 			p += 4
-			attrs[attr] = type_
+			attrs.append([attr,type_])
 
 		result['attrs'] = attrs
 
@@ -405,16 +406,18 @@ class SphinxClient:
 		p += 4
 
 		# read matches
+		result['matches'] = []
 		while count>0 and p<max_:
 			count -= 1
 			doc, weight = unpack('>2L', response[p:p+8])
 			p += 8
 
-			result.setdefault('matches', {}).setdefault(doc, {}).setdefault('weight', weight)
-			for attr, type_ in attrs.iteritems():
-				val = unpack('>L', response[p:p+4])[0]
+			match = { 'id':doc, 'weight':weight, 'attrs':{} }
+			for i in range(len(attrs)):
+				match['attrs'][attrs[i][0]] = unpack('>L', response[p:p+4])[0]
 				p += 4
-				result.setdefault('matches', {}).setdefault(doc, {}).setdefault('attrs', {}).setdefault(attr, val)
+
+			result['matches'].append ( match )
 
 		result['total'], result['total_found'], result['time'], words = \
 			unpack('>4L', response[p:p+16])
@@ -422,6 +425,7 @@ class SphinxClient:
 		result['time'] = '%.3f' % (result['time']/1000.0)
 		p += 16
 
+		result['words'] = []
 		while words>0:
 			words -= 1
 			length = unpack('>L', response[p:p+4])[0]
@@ -431,7 +435,7 @@ class SphinxClient:
 			docs, hits = unpack('>2L', response[p:p+8])
 			p += 8
 
-			result.setdefault('words', {}).setdefault(word, {'docs':docs, 'hits':hits})
+			result['words'].append({'word':word, 'docs':docs, 'hits':hits})
 
 		sock.close()
 

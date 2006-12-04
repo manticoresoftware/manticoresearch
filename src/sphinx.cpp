@@ -6347,7 +6347,7 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 			if ( m_dQueryWords[i].m_iWordID == m_dQueryWords[j].m_iWordID )
 		{
 			m_dQueryWords[i] = m_dQueryWords[j];
-			m_dQueryWords[i].m_iQueryPos = i;
+			m_dQueryWords[i].m_iQueryPos = 1+i;
 			break;
 		}
 		if ( j<i )

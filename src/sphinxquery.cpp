@@ -4,27 +4,10 @@
 
 #include "sphinx.h"
 #include "sphinxquery.h"
+#include <stdarg.h>
 
 /////////////////////////////////////////////////////////////////////////////
-// Local classes
-/////////////////////////////////////////////////////////////////////////////
-
-class CSphBooleanQueryParser
-{
-public:
-	CSphBooleanQueryExpr *	Parse ( const char * sQuery, const ISphTokenizer * pTokenizer );
-
-protected:
-	CSphBooleanQueryExpr *	m_pRoot;
-	CSphBooleanQueryExpr *	m_pCur;
-
-protected:
-	int						IsSpecial ( int iCh );
-	void					HandleOperator ( int iCh );
-};
-
-/////////////////////////////////////////////////////////////////////////////
-// CSphBooleanQueryExpr implementation
+// CSphBooleanQueryExpr
 /////////////////////////////////////////////////////////////////////////////
 
 CSphBooleanQueryExpr::CSphBooleanQueryExpr ()
@@ -104,6 +87,21 @@ bool CSphBooleanQueryExpr::IsAlone ()
 /////////////////////////////////////////////////////////////////////////////
 // CSphBooleanQueryParser implementation
 /////////////////////////////////////////////////////////////////////////////
+
+class CSphBooleanQueryParser
+{
+public:
+	CSphBooleanQueryExpr *	Parse ( const char * sQuery, const ISphTokenizer * pTokenizer );
+
+protected:
+	CSphBooleanQueryExpr *	m_pRoot;
+	CSphBooleanQueryExpr *	m_pCur;
+
+protected:
+	int						IsSpecial ( int iCh );
+	void					HandleOperator ( int iCh );
+};
+
 
 int CSphBooleanQueryParser::IsSpecial ( int iCh )
 {
@@ -621,7 +619,7 @@ static void DumpTree ( CSphBooleanQueryExpr * pNode, int iLevel=0 )
 }
 
 /////////////////////////////////////////////////////////////////////////////
-// Entry point
+// BOOLEAN PARSER ENTRY POINT
 /////////////////////////////////////////////////////////////////////////////
 
 CSphBooleanQueryExpr * sphParseBooleanQuery ( const char * sQuery, const ISphTokenizer * pTokenizer )
@@ -642,6 +640,519 @@ CSphBooleanQueryExpr * sphParseBooleanQuery ( const char * sQuery, const ISphTok
 	}
 
 	return pTree;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// EXTENDED QUERY PARSER
+/////////////////////////////////////////////////////////////////////////////
+
+class CSphExtendedQueryParser
+{
+public:
+							CSphExtendedQueryParser ();
+	CSphExtendedQuery *		Parse ( const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict );
+
+protected:
+	struct CNodeStackEntry
+	{
+		CSphExtendedQueryNode *		m_pNode;
+		bool						m_bAny;
+
+		CNodeStackEntry ()
+			: m_pNode ( NULL )
+			, m_bAny ( false )
+		{}
+
+		CNodeStackEntry ( CSphExtendedQueryNode * pNode, bool bAny )
+			: m_pNode ( pNode )
+			, m_bAny ( bAny )
+		{}
+	};
+
+protected:
+	CSphExtendedQuery *				m_pRes;		///< result holder
+	CSphVector<CNodeStackEntry,8>	m_dStack;	///< open nodes stack
+
+protected:
+	int					IsSpecial ( int iCh );
+	CSphExtendedQuery *	Error ( const char * sTemplate, ... );
+
+	void				PushNode ();					///< push new empty node onto stack
+	void				PopNode ( bool bReject=false);	///< pop node off the stack to proper list
+};
+
+
+void CSphExtendedQueryNode::Sublevelize ( CSphExtendedQueryNode * & pNew, bool bAny )
+{
+	if ( m_dChildren.GetLength()==1 )
+	{
+		// degenerate case with only one child. can attach another one
+		m_dChildren.Add ( pNew );
+		m_bAny = bAny;
+
+	} else
+	{
+		// a clone of my own
+		CSphExtendedQueryNode * pClone = new CSphExtendedQueryNode ();
+		pClone->m_pParent = this;
+		pClone->m_tAtom = m_tAtom;
+		pClone->m_bAny = m_bAny;
+		pClone->m_dChildren = m_dChildren;
+
+		// my data was just moved to clone
+		m_tAtom.Reset ();
+		m_dChildren.Reset ();
+
+		// and i'm a sublevel parent now
+		m_bAny = bAny;
+		m_dChildren.Add ( pClone );
+		m_dChildren.Add ( pNew );
+	}
+	pNew = NULL;
+}
+
+
+void CSphExtendedQueryNode::Submit ( CSphExtendedQueryNode * & pNew, bool bAny )
+{
+	assert ( pNew->m_pParent==NULL );
+
+	// empty src node. do nothing
+	if ( pNew->IsEmpty() )
+	{
+		SafeDelete ( pNew );
+		return;
+	}
+
+	// if dst is empty or if logical op matches, add src node to dst children
+	if ( IsEmpty() || ( !IsPlain() && m_bAny==bAny ) )
+	{
+		m_dChildren.Add ( pNew );
+		pNew = NULL;
+		return;
+	}
+
+	// incoming conjunction. merge plain dst and src nodes if we can
+	if ( bAny==false
+		&& IsPlain() && pNew->IsPlain() && m_tAtom.m_iField==pNew->m_tAtom.m_iField
+		&& m_tAtom.m_iMaxDistance==-1 && pNew->m_tAtom.m_iMaxDistance==-1 )
+	{
+		ARRAY_FOREACH ( i, pNew->m_tAtom.m_dWords )
+			m_tAtom.m_dWords.Add ( pNew->m_tAtom.m_dWords[i] );
+
+		SafeDelete ( pNew );
+		return;
+	}
+
+	// disjunction. detach last word/child if we can
+	if ( bAny==true && (
+		( IsPlain() && m_tAtom.m_dWords.GetLength()>1 && m_tAtom.m_iMaxDistance==-1 ) ||
+		( !IsPlain() && m_dChildren.GetLength()>1 ) ) )
+	{
+		// detach last word/child if we can, and build a new sublevel
+		CSphExtendedQueryNode * pChop;
+		if ( IsPlain() )
+		{
+			pChop = new CSphExtendedQueryNode ();
+			pChop->m_pParent = this;
+			pChop->m_tAtom.m_iField = m_tAtom.m_iField;
+			pChop->m_tAtom.m_dWords.Add ( m_tAtom.m_dWords.Last() );
+			m_tAtom.m_dWords.Resize ( m_tAtom.m_dWords.GetLength()-1 );
+		} else
+		{
+			pChop = m_dChildren.Pop ();
+		}
+
+		pChop->Submit ( pNew, true );
+		assert ( !pChop->IsPlain() );
+
+		Sublevelize ( pChop, false );
+		return;
+	}
+
+	// in all the other cases, just make a new sublevel
+	Sublevelize ( pNew, bAny );
+}
+
+
+CSphExtendedQueryParser::CSphExtendedQueryParser ()
+{
+}
+
+
+int CSphExtendedQueryParser::IsSpecial ( int iCh )
+{
+	return ( iCh=='(' || iCh==')' || iCh=='&' || iCh=='|' || iCh=='-' || iCh=='!'
+		|| iCh=='@' || iCh=='~' || iCh=='"' );
+}
+
+
+CSphExtendedQuery * CSphExtendedQueryParser::Error ( const char * sTemplate, ... )
+{
+	// !COMMIT definitely not to stdout!
+	va_list ap;
+	va_start ( ap, sTemplate );
+	vfprintf ( stdout, sTemplate, ap );
+	fprintf ( stdout, "\n" );
+	va_end ( ap );
+
+	return NULL;
+}
+
+
+void CSphExtendedQueryParser::PopNode ( bool bReject )
+{
+	assert ( m_dStack.GetLength()>0 );
+
+	// fixup degenerate phrases
+	CSphExtendedQueryAtom & tAtom = m_dStack.Last().m_pNode->m_tAtom;
+	if ( tAtom.m_iMaxDistance>=0 && tAtom.m_dWords.GetLength()<=1 )
+		tAtom.m_iMaxDistance = -1;
+
+	// pop stack top
+	if ( m_dStack.GetLength()>=2 )
+	{
+		// collapse last pair of nodes
+		m_dStack(-2).m_pNode->Submit ( m_dStack.Last().m_pNode, m_dStack.Last().m_bAny );
+	} else
+	{
+		// submit top-level expr to proper list
+		assert ( m_pRes );
+		if ( bReject )
+		{
+			assert ( m_dStack.Last().m_bAny==false );
+			m_pRes->m_pReject->Submit ( m_dStack.Last().m_pNode, true );
+		} else
+		{
+			m_pRes->m_pAccept->Submit ( m_dStack.Last().m_pNode, m_dStack.Last().m_bAny );
+		}
+	}
+
+	m_dStack.Pop ();
+}
+
+
+void CSphExtendedQueryParser::PushNode ()
+{
+	m_dStack.Add ( CNodeStackEntry ( new CSphExtendedQueryNode(), false ) );
+}
+
+
+CSphExtendedQuery * CSphExtendedQueryParser::Parse ( const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict )
+{
+	assert ( sQuery );
+	assert ( pTokenizer );
+	assert ( pSchema );
+
+	// clean up
+	assert ( m_dStack.GetLength()==0 );
+	m_pRes = new CSphExtendedQuery ();
+
+	// a buffer of my own
+	CSphString sBuffer ( sQuery );
+	ISphTokenizer * pMyTokenizer = pTokenizer->Clone ();
+	pMyTokenizer->AddSpecials ( "()&|-!@~\"" );
+	pMyTokenizer->SetBuffer ( (BYTE*)sBuffer.cstr(), strlen ( sBuffer.cstr() ), true );
+
+	// iterate all tokens
+	const int QUERY_END = -1;
+
+	enum
+	{
+		XQS_TEXT		= 0,
+		XQS_FIELD		= 1,
+		XQS_PHRASE		= 2,
+		XQS_PROXIMITYOP	= 3,
+		XQS_PROXIMITY	= 4,
+		XQS_NEGATION	= 5,
+		XQS_NEGTEXT		= 6
+	};
+
+	CSphVector<int,4> dState;
+	dState.Add ( XQS_TEXT );
+
+	bool bAny = false;
+	int iField = -1;
+
+	bool bRedo = false;
+	const char * sToken = NULL;
+	for ( ;; )
+	{
+		// get next token
+		if ( !bRedo )
+			sToken = (const char *) pMyTokenizer->GetToken ();
+		bRedo = false;
+
+		int iSpecial = sToken
+			? ( IsSpecial(sToken[0]) ? sToken[0] : 0 )
+			: QUERY_END;
+		assert ( !( iSpecial>0 && sToken[1]!=0 ) );
+
+		// ignore stopwords
+		if ( !iSpecial )
+		{
+			// GetWordID() may modify the word in-place; so we alloc a tempbuffer
+			CSphString sTmp ( sToken );
+			DWORD iWordID = pDict->GetWordID ( (BYTE*)sTmp.cstr() );
+			if ( !iWordID )
+				continue;
+		}
+
+		///////////////////////////
+		// handle "fragile" states
+		///////////////////////////
+
+		// handle post-atom negation state. everything except '|' flushes it
+		if ( dState.Last()==XQS_NEGATION && iSpecial!='|' )
+		{
+			assert ( m_dStack.GetLength()==1 );
+			dState.Pop ();
+			PopNode ( true );
+		}
+
+		// handle "expect proximity operator" state. everything except '~' flushes it
+		if ( dState.Last()==XQS_PROXIMITYOP )
+		{
+			assert ( m_dStack.Last().m_pNode->m_tAtom.m_iMaxDistance==0 );
+			dState.Pop ();
+
+			if ( iSpecial=='~' )
+			{
+				dState.Add ( XQS_PROXIMITY );
+			} else
+			{
+				bRedo = true;
+				PopNode ();
+			}
+			continue;
+		}
+
+		// handle "expect proximity distance" state. everything except valid distance flushes it
+		if ( dState.Last()==XQS_PROXIMITY )
+		{
+			int iProx = iSpecial ? 0 : atoi ( sToken );
+			if ( iProx>0 )
+				m_dStack.Last().m_pNode->m_tAtom.m_iMaxDistance = iProx;
+			else
+				bRedo = true;
+
+			dState.Pop ();
+			PopNode ();
+			continue;
+		}
+
+		///////////////////////
+		// handle non-specials
+		///////////////////////
+
+		if ( !iSpecial )
+		{
+			// handle field names
+			if ( dState.Last()==XQS_FIELD )
+			{
+				iField = pSchema->GetFieldIndex ( sToken );
+				if ( iField<0 )
+					return Error ( "no field '%s' found in schema '%s'", sToken, pSchema->m_sName.cstr() );
+
+				dState.Pop ();
+				while ( m_dStack.GetLength() ) // flush stack
+					PopNode ();
+				continue;
+			}
+
+			// handle in-phrase terms
+			if ( dState.Last()==XQS_PHRASE )
+			{
+				assert ( m_dStack.Last().m_pNode->m_tAtom.m_iMaxDistance==0 );
+				m_dStack.Last().m_pNode->m_tAtom.m_dWords.Add ( sToken );
+				continue;
+			}
+
+			// by default, spawn a new node and submit it
+			assert ( dState.Last()==XQS_TEXT || dState.Last()==XQS_NEGTEXT );
+			if ( dState.Last()==XQS_NEGTEXT )
+				dState.Pop ();
+
+			PushNode ();
+			m_dStack.Last().m_bAny = bAny;
+			m_dStack.Last().m_pNode->m_tAtom.m_iField = iField;
+			m_dStack.Last().m_pNode->m_tAtom.m_dWords.Add ( sToken );
+			bAny = false;
+			PopNode ();
+			continue;
+		}
+
+		///////////////////
+		// handle specials
+		////////////////////
+
+		assert ( iSpecial );
+
+		// block start
+		if ( iSpecial=='(' )
+		{
+			if ( dState.Last()!=XQS_TEXT && dState.Last()!=XQS_NEGTEXT )
+				return Error ( "internal error: '(' in unexpected state %d", dState.Last() );
+
+			if ( dState.Last()==XQS_TEXT && m_dStack.GetLength() )
+				return Error ( "nested '(' are not allowed" );
+
+			if ( dState.Last()==XQS_NEGTEXT )
+				dState.Pop ();
+
+			dState.Add ( XQS_TEXT );
+			PushNode ();
+			continue;
+		}
+
+		// block end
+		if ( iSpecial==')' )
+		{
+			if ( dState.Last()!=XQS_TEXT )
+				return Error ( "internal error: ')' in unexpected state %d", dState.Last() );
+
+			if ( m_dStack.GetLength()<1 )
+				return Error ( "')' without matching '('" );
+
+			dState.Pop ();
+			PopNode ();
+			continue;
+		}
+
+		// field limit
+		if ( iSpecial=='@' )
+		{
+			if ( m_dStack.GetLength() )
+				return Error ( "field specification is only allowed at top level" );
+
+			dState.Add ( XQS_FIELD );
+			continue;
+		}
+
+		// negation
+		if ( iSpecial=='-' || iSpecial=='!' )
+		{
+			// silently ignore in-phrase negation
+			if ( dState.Last()==XQS_PHRASE )
+				continue;
+
+			if ( m_dStack.GetLength() )
+				return Error ( "negation is only allowed at top level" );
+
+			dState.Add ( XQS_NEGATION );
+			dState.Add ( XQS_NEGTEXT );
+			PushNode ();
+			continue;
+		}
+
+		// disjunction (ie. logical OR)
+		if ( iSpecial=='|' )
+		{
+			if ( dState.Last()==XQS_NEGATION )
+				dState.Add ( XQS_NEGTEXT );
+
+			bAny = true;
+			continue;
+		}
+
+		// query end
+		if ( iSpecial==QUERY_END )
+		{
+			while ( m_dStack.GetLength() )
+				PopNode ();
+			break;
+		}
+
+		// phrase start end
+		if ( iSpecial=='"' )
+		{
+			if ( dState.Last()!=XQS_PHRASE )
+			{
+				// opening quote
+				PushNode ();
+				m_dStack.Last().m_bAny = bAny;
+				m_dStack.Last().m_pNode->m_tAtom.m_iField = iField;
+				m_dStack.Last().m_pNode->m_tAtom.m_iMaxDistance = 0;
+				bAny = false;
+				dState.Add ( XQS_PHRASE );
+
+			} else
+			{
+				// closing quote
+				dState.Pop ();
+
+				// implicit negation flush
+				if ( dState.Last()==XQS_NEGTEXT )
+					dState.Pop ();
+
+				// we don't pop the node yet, because we need to handle proximity
+				dState.Add ( XQS_PROXIMITYOP );
+			}
+			continue;
+		}
+
+		// proximity operator out of its state. just ignore
+		if ( iSpecial=='~' )
+			continue;
+
+		assert ( 0 && "INTERNAL ERROR: unhandled special token" );
+	}
+
+	return m_pRes;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
+#define XQDEBUG 0
+
+
+#if XQDEBUG
+static void xqIndent ( int iIndent )
+{
+	iIndent *= 2;
+	while ( iIndent--)
+		printf ( " " );
+}
+
+
+static void xqDump ( CSphExtendedQueryNode * pNode, const CSphSchema & tSch, int iIndent )
+{
+	if ( pNode->m_tAtom.IsEmpty() )
+	{
+		xqIndent ( iIndent ); printf ( pNode->m_bAny ? "OR:\n" : "AND:\n" );
+		ARRAY_FOREACH ( i, pNode->m_dChildren )
+			xqDump ( pNode->m_dChildren[i], tSch, iIndent+1 );
+	} else
+	{
+		const CSphExtendedQueryAtom & tAtom = pNode->m_tAtom;
+		xqIndent ( iIndent );
+		printf ( "MATCH(%s,%d):",
+			tAtom.m_iField>=0 ? tSch.m_dFields[tAtom.m_iField].m_sName.cstr() : "-",
+			tAtom.m_iMaxDistance );
+		ARRAY_FOREACH ( i, tAtom.m_dWords )
+			printf ( " %s", tAtom.m_dWords[i].cstr() );
+		printf ( "\n" );
+	}
+}
+#endif
+
+
+CSphExtendedQuery * sphParseExtendedQuery ( const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict )
+{
+	CSphExtendedQueryParser qp;
+	CSphExtendedQuery * pRes = qp.Parse ( sQuery, pTokenizer, pSchema, pDict );
+
+#if XQDEBUG
+	if ( pRes )
+	{
+		printf ( "--- accept ---\n" );
+		xqDump ( pRes->m_pAccept, *pSchema, 0 );
+		printf ( "--- reject ---\n" );
+		xqDump ( pRes->m_pReject, *pSchema, 0 );
+		printf ( "---\n" );
+	}
+#endif
+
+	return pRes;
 }
 
 //

@@ -35,6 +35,7 @@ define ( "SPH_MATCH_ALL",			0 );
 define ( "SPH_MATCH_ANY",			1 );
 define ( "SPH_MATCH_PHRASE",		2 );
 define ( "SPH_MATCH_BOOLEAN",		3 );
+define ( "SPH_MATCH_EXTENDED",		4 );
 
 /// known sort modes
 define ( "SPH_SORT_RELEVANCE",		0 );
@@ -231,7 +232,8 @@ class SphinxClient
 		assert ( $mode==SPH_MATCH_ALL
 			|| $mode==SPH_MATCH_ANY
 			|| $mode==SPH_MATCH_PHRASE
-			|| $mode==SPH_MATCH_BOOLEAN );
+			|| $mode==SPH_MATCH_BOOLEAN
+			|| $mode==SPH_MATCH_EXTENDED );
 		$this->_mode = $mode;
 	}
 

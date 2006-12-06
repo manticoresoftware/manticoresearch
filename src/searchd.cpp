@@ -2266,7 +2266,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		if ( tQuery.GetGroupByAttr()>=0 )
 			snprintf ( sGroupBuf, sizeof(sGroupBuf), " @%s", tQuery.m_sGroupBy.cstr() );
  
-		static const char * sModes [ SPH_MATCH_TOTAL ] = { "all", "any", "phr", "bool" };
+		static const char * sModes [ SPH_MATCH_TOTAL ] = { "all", "any", "phr", "bool", "ext" };
 		static const char * sSort [ SPH_SORT_TOTAL ] = { "rel", "attr-", "attr+", "tsegs", "ext" };
 
 		snprintf ( sBuf, sizeof(sBuf), "[%s] %d.%03d sec [%s/%d/%s %d (%d,%d)%s] [%s] %s\n",

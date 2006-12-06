@@ -25,6 +25,7 @@
 #include <sys/stat.h>
 #include <limits.h>
 #include <time.h>
+#include <math.h>
 
 #if USE_WINDOWS
 	#include <io.h> // for open()
@@ -1043,6 +1044,7 @@ public:
 
 	void		PutBytes ( const void * pData, int iSize );
 	void		PutDword ( DWORD uValue ) { PutBytes ( &uValue, sizeof(DWORD) ); }
+	void		PutOffset ( SphOffset_t uValue ) { PutBytes ( &uValue, sizeof(SphOffset_t) ); }
 	void		SeekTo ( SphOffset_t pos );
 
 	void		ZipInt ( DWORD uValue );
@@ -1079,6 +1081,7 @@ public:
 	void		GetRawBytes ( void * pData, int iSize );
 	void		GetBytes ( void * data, int size );
 	DWORD		GetDword ();
+	SphOffset_t	GetOffset ();
 	CSphString	GetString ();
 
 	DWORD		UnzipInt ();
@@ -1118,7 +1121,7 @@ class CSphQueryWord
 {
 public:
 	CSphString		m_sWord;		///< my copy of word
-	int				m_iQueryPos;	///< word position, from query
+	int				m_iQueryPos;	///< word position, from query (WARNING! reused for index into TF array in extended mode)
 	DWORD			m_iWordID;		///< word ID, from dictionary
 
 	int				m_iDocs;		///< document count, from wordlist
@@ -1126,6 +1129,7 @@ public:
 
 	CSphMatch		m_tDoc;			///< current match (partial)
 	DWORD			m_uFields;		///< current match fields
+	DWORD			m_uMatchHits;	///< current match hits count
 	DWORD			m_iHitPos;		///< current hit postition, from hitlist
 
 	SphOffset_t		m_iHitlistPos;	///< current position in hitlist, from doclist
@@ -1137,6 +1141,11 @@ public:
 	int				m_iInlineAttrs;	///< inline attributes count
 	DWORD *			m_pInlineFixup;	///< inline attributes fixup (POINTER TO EXTERNAL DATA, NOT MANAGED BY THIS CLASS!)
 
+private:
+#ifndef NDEBUG
+	bool			m_bHitlistOver;
+#endif
+
 public:
 	CSphQueryWord ()
 		: m_sWord ( NULL )
@@ -1145,11 +1154,15 @@ public:
 		, m_iDocs ( 0 )
 		, m_iHits ( 0 )
 		, m_uFields ( 0 )
+		, m_uMatchHits ( 0 )
 		, m_iHitPos ( 0 )
 		, m_iHitlistPos ( 0 )
 		, m_iMinID ( 0 )
 		, m_iInlineAttrs ( 0 )
 		, m_pInlineFixup ( NULL )
+#ifndef NDEBUG
+		, m_bHitlistOver ( true )
+#endif
 	{
 	}
 
@@ -1164,6 +1177,7 @@ public:
 		m_iInlineAttrs = 0;
 		m_tDoc.Reset ( 0 );
 		m_uFields = 0;
+		m_uMatchHits = 0;
 	}
 
 	void GetDoclistEntry ()
@@ -1184,9 +1198,12 @@ public:
 			m_iHitlistPos += iDeltaPos;
 			m_rdHitlist.SeekTo ( m_iHitlistPos, READ_NO_SIZE_HINT );
 			m_iHitPos = 0;
+#ifndef NDEBUG
+			m_bHitlistOver = false;
+#endif
 
-			// FIXME? incompatible with 096
 			m_uFields = m_rdDoclist.UnzipInt ();
+			m_uMatchHits = m_rdDoclist.UnzipInt ();
 
 		} else
 		{
@@ -1196,11 +1213,21 @@ public:
 
 	void GetHitlistEntry ()
 	{
+#ifndef NDEBUG
+		assert ( !m_bHitlistOver );
+#endif
+
 		DWORD iDelta = m_rdHitlist.UnzipInt ();
 		if ( iDelta )
+		{
 			m_iHitPos += iDelta;
-		else
+		} else
+		{
 			m_iHitPos = 0;
+#ifndef NDEBUG
+			m_bHitlistOver = true;
+#endif
+		}
 	}
 
 	void SetupAttrs ( ESphDocinfo eDocinfo, const CSphDocInfo & m_tMin )
@@ -1409,6 +1436,9 @@ private:
 	static const int			WORDLIST_CHECKPOINT		= 1024;		///< wordlist checkpoints frequency
 	static const int			WRITE_BUFFER_SIZE		= 262144;	///< my write buffer size
 
+	static const int			INDEX_MAGIC_HEADER		= 'XHPS';	///< my magic header
+	static const int			INDEX_FORMAT_VERSION	= 1;		///< my format version
+
 	CSphString					m_sFilename;
 	SphOffset_t					m_iFilePos;
 
@@ -1417,11 +1447,14 @@ private:
 	ESphDocinfo					m_eDocinfo;
 	CSphDocInfo					m_tMin;				///< min attribute values tracker
 
-	BYTE *						m_pWriteBuffer;					///< my write buffer
+	BYTE *						m_pWriteBuffer;		///< my write buffer
 
 	CSphWordHit					m_tLastHit;			///< hitlist entry
+
 	SphOffset_t					m_iLastHitlistPos;	///< doclist entry
-	DWORD						m_uFields;			///< doclist entry
+	DWORD						m_uLastDocFields;	///< doclist entry
+	DWORD						m_uLastDocHits;		///< doclist entry
+
 	SphOffset_t					m_iLastDoclistPos;	///< wordlist entry
 	int							m_iLastWordDocs;	///< wordlist entry
 	int							m_iLastWordHits;	///< wordlist entry
@@ -1429,7 +1462,7 @@ private:
 	int									m_iWordlistEntries;		///< wordlist entries written since last checkpoint
 	CSphVector<CSphWordlistCheckpoint>	m_dWordlistCheckpoints;	///< wordlist checkpoint offsets
 
-	CSphVector<CSphQueryWord,8>	m_dQueryWords;		///< search query words for "simple" query types (ie. match all/any/phrase)
+	CSphVector<CSphQueryWord,8>			m_dQueryWords;			///< search query words for "simple" query types (ie. match all/any/phrase)
 
 	int							m_iWeights;						///< search query field weights count
 	int							m_dWeights [ SPH_MAX_FIELDS ];	///< search query field weights count
@@ -1448,6 +1481,8 @@ private:
 
 	bool						m_bPreloaded;			///< if schema/docinfos are preloaded
 
+	CSphSourceStats				m_tStats;				///< my stats
+
 private:
 	const char *				GetIndexFileName ( const char * sExt );		///< WARNING, non-reenterable, static buffer!
 	int							OpenIndexFile ( char * ext, int mode );
@@ -1462,7 +1497,8 @@ private:
 
 	void						MatchAll ( const CSphQuery * pQuery, ISphMatchQueue * pTop, CSphQueryResult * pResult );
 	void						MatchAny ( const CSphQuery * pQuery, ISphMatchQueue * pTop, CSphQueryResult * pResult );
-	void						MatchBoolean ( const CSphQuery * pQuery, CSphDict * pTree, ISphMatchQueue * pTop, CSphQueryResult * pResult, int iDoclistFD );
+	void						MatchBoolean ( const CSphQuery * pQuery, CSphDict * pDict, ISphMatchQueue * pTop, CSphQueryResult * pResult, int iDoclistFD );
+	void						MatchExtended ( const CSphQuery * pQuery, CSphDict * pDict, ISphMatchQueue * pTop, CSphQueryResult * pResult, int iDoclistFD );
 
 	void						LookupDocinfo ( CSphDocInfo & tMatch );
 
@@ -1857,6 +1893,14 @@ bool CSphLowercaser::SetRemap ( const char * sConfig )
 }
 
 
+enum
+{
+	FLAG_CODEPOINT_SPECIAL	= 0x20000000,	// this codepoint is special
+	FLAG_CODEPOINT_DUAL		= 0x10000000,	// this codepoint is both special and valid word part
+	MASK_CODEPOINT			= 0x0fffffff	// mask off codepoint flags
+};
+
+
 void CSphLowercaser::AddSpecials ( const char * sSpecials )
 {
 	assert ( sSpecials );
@@ -1915,7 +1959,12 @@ void CSphLowercaser::AddSpecials ( const char * sSpecials )
 	{
 		int j = (int)(*c);
 		assert ( m_pChunk [ j>>CHUNK_BITS ] );
-		m_pChunk [ j>>CHUNK_BITS ] [ j & CHUNK_MASK ] = -j;
+
+		int & iCodepoint = m_pChunk [ j>>CHUNK_BITS ] [ j & CHUNK_MASK ];
+		if ( iCodepoint )
+			iCodepoint = FLAG_CODEPOINT_SPECIAL | FLAG_CODEPOINT_DUAL | iCodepoint;
+		else
+			iCodepoint = FLAG_CODEPOINT_SPECIAL | j;
 	}
 }
 
@@ -2252,15 +2301,28 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 			iCode = m_tLC.ToLower ( *m_pCur++ );
 		}
 
-		// skip whitespace and short words
-		if ( m_iAccum<m_iMinWordLen && iCode==0 )
+		// handle whitespace
+		if ( iCode==0 )
 		{
+			if ( m_iAccum<m_iMinWordLen )
+			{
+				m_iAccum = 0;
+				continue;
+			}
+
+			m_sAccum[m_iAccum] = '\0';
 			m_iAccum = 0;
-			continue;
+			return m_sAccum;
 		}
 
-		// handle whitespace and specials
-		if ( iCode<=0 )
+		// handle specials
+		// duals in the middle of the word are handled as if they were just plain codepoints
+		bool bSpecial =
+			( iCode & FLAG_CODEPOINT_SPECIAL ) &&
+			!( ( iCode & FLAG_CODEPOINT_DUAL ) && m_iAccum );
+		iCode &= MASK_CODEPOINT;
+
+		if ( bSpecial )
 		{
 			// skip short words
 			if ( m_iAccum<m_iMinWordLen )
@@ -2268,18 +2330,14 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 
 			if ( m_iAccum==0 )
 			{
-				// handle specials
-				assert ( iCode<0 && iCode>=-255 );
-				m_sAccum[0] = (BYTE)(-iCode);
+				// nice standalone special
+				m_sAccum[0] = (BYTE)iCode;
 				m_sAccum[1] = '\0';
 			} else
 			{
-				// flush accum in any case
+				// flush prev accum and redo this special
 				m_sAccum[m_iAccum] = '\0';
-
-				// we'll need to redo special char again
-				if ( iCode<0 )
-					m_pCur--;
+				m_pCur--;
 			}
 
 			m_iAccum = 0;
@@ -2358,15 +2416,27 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 			iCode = GetCodePoint(); // advances m_pCur
 		}
 
-		// skip whitespaces and short words
-		if ( m_iAccum<m_iMinWordLen && iCode==0 )
+		// handle whitespace and specials
+		if ( iCode==0 )
 		{
+			if ( m_iAccum<m_iMinWordLen )
+			{
+				FlushAccum ();
+				continue;
+			}
+
 			FlushAccum ();
-			continue;
+			return m_sAccum;
 		}
 
-		// handle whitespace and specials
-		if ( iCode<=0 )
+		// handle specials
+		// duals in the middle of the word are handled as if they were just plain codepoints
+		bool bSpecial =
+			( iCode & FLAG_CODEPOINT_SPECIAL ) &&
+			!( ( iCode & FLAG_CODEPOINT_DUAL ) && m_iAccum );
+		iCode &= MASK_CODEPOINT;
+
+		if ( bSpecial )
 		{
 			// skip short words
 			if ( m_iAccum<m_iMinWordLen )
@@ -2374,13 +2444,12 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 
 			if ( m_iAccum==0 )
 			{
-				assert ( iCode<0 );
-				AccumCodePoint ( -iCode ); // handle special as a standalone token
+				AccumCodePoint ( iCode ); // handle special as a standalone token
 			} else
 			{
-				if ( iCode<0 )
-					m_pCur = pCur; // we need to flush current accum and then redo special char again
+				m_pCur = pCur; // we need to flush current accum and then redo special char again
 			}
+
 			FlushAccum ();
 			return m_sAccum;
 		}
@@ -3010,6 +3079,14 @@ DWORD CSphReader_VLN::GetDword ()
 }
 
 
+SphOffset_t CSphReader_VLN::GetOffset ()
+{
+	SphOffset_t uRes;
+	GetRawBytes ( &uRes, sizeof(SphOffset_t) );
+	return uRes;
+}
+
+
 CSphString CSphReader_VLN::GetString ()
 {
 	CSphString sRes;
@@ -3297,7 +3374,8 @@ CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename )
 	m_tLastHit.m_iWordID = 0;
 	m_tLastHit.m_iWordPos = 0;
 	m_iLastHitlistPos = 0;
-	m_uFields = 0;
+	m_uLastDocFields = 0;
+	m_uLastDocHits = 0;
 	m_iLastDoclistPos = 0;
 	m_iLastWordDocs = 0;
 	m_iLastWordHits = 0;
@@ -3417,8 +3495,10 @@ void CSphIndex_VLN::cidxHit ( CSphWriter & fdWordlist, CSphWriter & fdData, CSph
 		if ( m_dDoclist.GetLength() )
 		{
 			// flush matched fields mask
-			m_dDoclist.Add ( m_uFields );
-			m_uFields = 0;
+			m_dDoclist.Add ( m_uLastDocFields );
+			m_dDoclist.Add ( m_uLastDocHits );
+			m_uLastDocFields = 0;
+			m_uLastDocHits = 0;
 
 			// flush wordlist entry
 			assert ( fdData.m_iPos > m_iLastDoclistPos );
@@ -3501,8 +3581,10 @@ void CSphIndex_VLN::cidxHit ( CSphWriter & fdWordlist, CSphWriter & fdData, CSph
 		if ( m_dDoclist.GetLength() )
 		{
 			// flush matched fields mask
-			m_dDoclist.Add ( m_uFields );
-			m_uFields = 0;
+			m_dDoclist.Add ( m_uLastDocFields );
+			m_dDoclist.Add ( m_uLastDocHits );
+			m_uLastDocFields = 0;
+			m_uLastDocHits = 0;
 		}
 
 		// add new doclist entry for new doc id
@@ -3533,7 +3615,8 @@ void CSphIndex_VLN::cidxHit ( CSphWriter & fdWordlist, CSphWriter & fdData, CSph
 	m_iLastWordHits++;
 
 	// update matched fields mask
-	m_uFields |= ( 1UL << (hit->m_iWordPos>>24) );
+	m_uLastDocFields |= ( 1UL << (hit->m_iWordPos>>24) );
+	m_uLastDocHits++;
 }
 
 
@@ -3568,6 +3651,10 @@ bool CSphIndex_VLN::cidxDone ( CSphWriter & fdWordlist, CSphWriter & fdData )
 	if ( fdInfo.IsError() )
 		return false;
 
+	// version
+	fdInfo.PutDword ( INDEX_MAGIC_HEADER );
+	fdInfo.PutDword ( INDEX_FORMAT_VERSION );
+
 	// docinfo
 	fdInfo.PutDword ( m_eDocinfo );
 
@@ -3587,6 +3674,10 @@ bool CSphIndex_VLN::cidxDone ( CSphWriter & fdWordlist, CSphWriter & fdData )
 	// wordlist checkpoints
 	fdInfo.PutBytes ( &iCheckpointsPos, sizeof(SphOffset_t) );
 	fdInfo.PutDword ( m_dWordlistCheckpoints.GetLength() );
+
+	// index stats
+	fdInfo.PutDword ( m_tStats.m_iTotalDocuments );
+	fdInfo.PutOffset ( m_tStats.m_iTotalBytes );
 
 	////////////////////////
 	// close all data files
@@ -4011,7 +4102,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	// build raw log
 	PROFILE_BEGIN ( collect_hits );
 
-	CSphSourceStats tComplete; // total stats for all the completed sources
+	m_tStats.Reset ();
 
 	CSphIndexProgress tProgress; // current progress
 	tProgress.m_ePhase = CSphIndexProgress::PHASE_COLLECT;
@@ -4043,8 +4134,8 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 			if ( m_pProgress
 				&& ( ( pSource->GetStats().m_iTotalDocuments % 1000 )==0 ) )
 			{
-				tProgress.m_iDocuments = tComplete.m_iTotalDocuments + pSource->GetStats().m_iTotalDocuments;
-				tProgress.m_iBytes = tComplete.m_iTotalBytes + pSource->GetStats().m_iTotalBytes;
+				tProgress.m_iDocuments = m_tStats.m_iTotalDocuments + pSource->GetStats().m_iTotalDocuments;
+				tProgress.m_iBytes = m_tStats.m_iTotalBytes + pSource->GetStats().m_iTotalBytes;
 				m_pProgress ( &tProgress );
 			}
 
@@ -4159,16 +4250,16 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 				tProgress.m_iHitsTotal += iHits;
 				if ( m_pProgress )
 				{
-					tProgress.m_iDocuments = tComplete.m_iTotalDocuments + pSource->GetStats().m_iTotalDocuments;
-					tProgress.m_iBytes = tComplete.m_iTotalBytes + pSource->GetStats().m_iTotalBytes;
+					tProgress.m_iDocuments = m_tStats.m_iTotalDocuments + pSource->GetStats().m_iTotalDocuments;
+					tProgress.m_iBytes = m_tStats.m_iTotalBytes + pSource->GetStats().m_iTotalBytes;
 					m_pProgress ( &tProgress );
 				}
 			}
 		}
 
 		// this source is over, update overall stats
-		tComplete.m_iTotalDocuments += pSource->GetStats().m_iTotalDocuments;
-		tComplete.m_iTotalBytes += pSource->GetStats().m_iTotalBytes;
+		m_tStats.m_iTotalDocuments += pSource->GetStats().m_iTotalDocuments;
+		m_tStats.m_iTotalBytes += pSource->GetStats().m_iTotalBytes;
 	}
 
 	// flush last docinfo block
@@ -4215,8 +4306,8 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 
 	if ( m_pProgress )
 	{
-		tProgress.m_iDocuments = tComplete.m_iTotalDocuments;
-		tProgress.m_iBytes = tComplete.m_iTotalBytes;
+		tProgress.m_iDocuments = m_tStats.m_iTotalDocuments;
+		tProgress.m_iBytes = m_tStats.m_iTotalBytes;
 		m_pProgress ( &tProgress );
 
 		tProgress.m_ePhase = CSphIndexProgress::PHASE_COLLECT_END;
@@ -5644,10 +5735,7 @@ void CSphIndex_VLN::MatchAny ( const CSphQuery * pQuery, ISphMatchQueue * pTop, 
 		{
 			// move to next document
 			if ( m_dQueryWords[i].m_tDoc.m_iDocID==iLastMatchID && iLastMatchID )
-			{
 				m_dQueryWords[i].GetDoclistEntry ();
-				m_dQueryWords[i].GetHitlistEntry ();
-			}
 
 			// remove emptied words
 			if ( !m_dQueryWords[i].m_tDoc.m_iDocID )
@@ -5687,7 +5775,10 @@ void CSphIndex_VLN::MatchAny ( const CSphQuery * pQuery, ISphMatchQueue * pTop, 
 
 		for ( i=0; i<iActive; i++ )
 			if ( m_dQueryWords[i].m_tDoc.m_iDocID==iLastMatchID )
-				pHit[iTerms++] = &m_dQueryWords[i];
+		{
+			pHit[iTerms++] = &m_dQueryWords[i];
+			m_dQueryWords[i].GetHitlistEntry ();
+		}
 		assert ( iTerms>0 );
 
 		// init weighting
@@ -6053,6 +6144,919 @@ void CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, CSphDict * pDict, I
 	SafeDelete ( pTree );
 }
 
+//////////////////////////////////////////////////////////////////////////////
+
+struct CSphTermSetup
+{
+	CSphDict *			m_pDict;
+	CSphIndex_VLN *		m_pIndex;
+	ESphDocinfo			m_eDocinfo;
+	CSphDocInfo			m_tMin;
+	int					m_iDoclistFD;
+};
+
+
+struct CSphSpanningHit
+{
+	DWORD	m_iPos;		///< where the hit starts
+	int		m_iSpan;	///< how long the hit spans
+	int		m_iHeadLCS;	///< head LCS length
+	int		m_iTailLCS;	///< tail LCS length
+	int		m_iMaxLCS;	///< max LCS length
+
+	CSphSpanningHit ()
+		: m_iPos ( 0 )
+		, m_iSpan ( 0 )
+		, m_iHeadLCS ( 0 )
+		, m_iTailLCS ( 0 )
+		, m_iMaxLCS ( 0 )
+	{}
+
+	void SetTotalMatch ( int iPos, int iSpan )
+	{
+		m_iPos = iPos;
+		m_iSpan = iSpan;
+		m_iHeadLCS = iSpan;
+		m_iTailLCS = iSpan;
+		m_iMaxLCS = iSpan;
+	}
+
+	bool IsValid ()
+	{
+		// tricky, but in the very last line we can't assert that
+		// m_iSpan>=m_iHeadLCS+m_iTailLCS, because head and tail LCSes
+		// might overlap. eg [ "a b c" a ] query against "a b c" text
+		return
+			( m_iMaxLCS>=m_iHeadLCS ) &&
+			( m_iMaxLCS>=m_iTailLCS ) &&
+			( ( m_iSpan==m_iTailLCS && m_iSpan==m_iHeadLCS && m_iSpan==m_iMaxLCS ) ||
+				( m_iSpan>m_iTailLCS && m_iSpan>=m_iMaxLCS ) );
+	}
+};
+ 
+
+class CSphExtendedEvalAtom : public CSphExtendedQueryAtom
+{
+	friend class		CSphExtendedEvalNode;
+
+public:
+						CSphExtendedEvalAtom ( const CSphExtendedQueryAtom & tAtom, const CSphTermSetup & tSetup );
+	CSphMatch *			GetNextDoc ( DWORD iMinID );
+	void				GetNextHit ( DWORD iMinPos );
+	void				GetLastTF ( DWORD * pTF ) const;
+	inline CSphMatch *	GetLastMatch () const { return m_pLast; }
+
+public:
+	CSphSpanningHit		m_tXhit;
+
+protected:
+	CSphVector<CSphQueryWord,8>	m_dTerms;	///< query term readers
+	CSphMatch *					m_pLast;	///< term with the highest position. NULL if this atom has no more matches
+};
+
+
+CSphExtendedEvalAtom::CSphExtendedEvalAtom ( const CSphExtendedQueryAtom & tAtom, const CSphTermSetup & tSetup )
+	: m_pLast ( NULL )
+{
+	assert ( tSetup.m_pDict );
+
+	// atom assignment
+	m_dWords = tAtom.m_dWords;
+	m_iField = tAtom.m_iField;
+	m_iMaxDistance = tAtom.m_iMaxDistance;
+
+	// setup words
+	m_dTerms.Resize ( m_dWords.GetLength() );
+	if ( m_dWords.GetLength() )
+		m_pLast = &m_dTerms[0].m_tDoc;
+
+	ARRAY_FOREACH ( iTerm, m_dTerms )
+	{
+		CSphQueryWord & tTerm = m_dTerms[iTerm];
+		tTerm.m_sWord = m_dWords[iTerm];
+
+		// GetWordID() may modify the word in-place; so we alloc a tempbuffer
+		CSphString sBuf ( tTerm.m_sWord );
+		tTerm.m_iWordID = tSetup.m_pDict->GetWordID ( (BYTE*)sBuf.cstr() );
+		tTerm.SetupAttrs ( tSetup.m_eDocinfo, tSetup.m_tMin );
+
+		if ( !tSetup.m_pIndex->SetupQueryWord ( tTerm, tSetup.m_iDoclistFD ) )
+			m_pLast = NULL;
+	}
+}
+
+
+void CSphExtendedEvalAtom::GetLastTF ( DWORD * pTF ) const
+{
+	ARRAY_FOREACH ( i, m_dTerms )
+	{
+		assert ( m_dTerms[i].m_iQueryPos>=0 ); // FIXME? verify max range as well
+		pTF [ m_dTerms[i].m_iQueryPos ] = m_dTerms[i].m_uMatchHits;
+	}
+}
+
+
+void CSphExtendedEvalAtom::GetNextHit ( DWORD iMinPos )
+{
+#ifndef NDEBUG
+	ARRAY_FOREACH ( i, m_dTerms )
+		assert ( m_dTerms[i].m_iHitPos );
+#endif
+
+	// if we just bail out without filling the hit,
+	// it means that nothing was found
+	m_tXhit.m_iPos = 0;
+
+	// OPTIMIZE? these are invariant during evaluation
+	assert ( m_iField<0 || m_iField<255 );
+	const DWORD uMinHitpos = ( m_iField<0 ) ? 1 : ( m_iField<<24 )+1;
+	const DWORD uMaxHitpos = ( m_iField<0 ) ? UINT_MAX : (1+m_iField)<<24;
+	if ( uMaxHitpos<=iMinPos )
+		return;
+
+	// skip to necessary min pos
+	ARRAY_FOREACH ( i, m_dTerms )
+	{
+		while ( m_dTerms[i].m_iHitPos && m_dTerms[i].m_iHitPos<iMinPos ) // OPTIMIZE? can remove check for 0
+			m_dTerms[i].GetHitlistEntry ();
+
+		if ( !m_dTerms[i].m_iHitPos || m_dTerms[i].m_iHitPos>=uMaxHitpos )
+			return;
+	}
+
+	if ( m_iMaxDistance==-1 )
+	{
+		//////////////////
+		// next plain hit
+		//////////////////
+
+		assert ( m_dTerms.GetLength()==1 ); // OPTIMIZE R&D single-atom leaves; should profile
+		assert ( m_dTerms[0].m_iHitPos );
+		assert ( m_dTerms[0].m_iHitPos>=uMinHitpos );
+
+		m_tXhit.SetTotalMatch ( m_dTerms[0].m_iHitPos, 1 );
+		return;
+	}
+
+	if ( m_iMaxDistance>0 )
+	{
+		//////////////////////
+		// next proximity hit
+		//////////////////////
+
+		for ( ;; )
+		{
+			// scan until next hit in this document
+			DWORD uMin = UINT_MAX;
+			DWORD uMax = 0;
+			int iMin = -1;
+
+			// calc min/max pos
+			ARRAY_FOREACH ( i, m_dTerms )
+			{
+				assert ( m_dTerms[i].m_iHitPos>=uMinHitpos && m_dTerms[i].m_iHitPos<uMaxHitpos );
+				assert ( m_iField<0 || int(m_dTerms[i].m_iHitPos>>24)==m_iField );
+
+				DWORD uPos = m_dTerms[i].m_iHitPos;
+				if ( uMin>uPos )
+				{
+					uMin = uPos;
+					iMin = i;
+				}
+				if ( uMax<uPos )
+					uMax = uPos;
+			}
+
+			// if proximity is ok, we have a match
+			// !COMMIT weighting needs to be redone
+			// !COMMIT fix "cat a cat" query vs. "a cat" text; should NOT match!
+			assert ( uMax>uMin );
+			int iWeight = m_iMaxDistance-uMax+uMin+m_dTerms.GetLength()-1;
+			if ( iWeight>0 )
+			{
+				// !COMMIT submit hit weight somewhere. was: m_pLast->m_iWeight = iWeight;
+				m_tXhit.m_iPos = uMin;
+				m_tXhit.m_iSpan = uMax-uMin+1;
+
+				// calc atom LCS
+				m_tXhit.m_iHeadLCS = 0;
+				m_tXhit.m_iTailLCS = 0;
+				m_tXhit.m_iMaxLCS = 1;
+
+				DWORD uLCSPos = 1+m_dTerms[0].m_iHitPos; // next expected LCS position
+				int iLCSLen = 1; // current LCS length
+
+				for ( int i=1; i<=m_dTerms.GetLength(); i++ )
+				{
+					DWORD uPos = ( i==m_dTerms.GetLength() ) ? 0 : m_dTerms[i].m_iHitPos;
+					assert ( i==m_dTerms.GetLength() || uPos );
+
+					if ( uPos!=uLCSPos )
+					{
+						if ( iMin==0 )
+							m_tXhit.m_iHeadLCS = iLCSLen;
+
+						if ( !uPos && m_dTerms.Last().m_iHitPos==uMax )
+							m_tXhit.m_iTailLCS = iLCSLen;
+
+						m_tXhit.m_iMaxLCS = Max ( m_tXhit.m_iMaxLCS, iLCSLen );
+						iLCSLen = 0;
+					}
+
+					uLCSPos = 1+uPos;
+					iLCSLen++;
+				}
+
+				assert ( m_tXhit.IsValid() );
+				return;
+			}
+
+			// next one
+			// if one hitlist is over, document is over, because *all* words must be within specified proximity
+			m_dTerms[iMin].GetHitlistEntry ();
+			if ( !m_dTerms[iMin].m_iHitPos || m_dTerms[iMin].m_iHitPos>=uMaxHitpos )
+				break;
+		}
+
+	} else
+	{
+		/////////////////////////
+		// next exact phrase hit
+		/////////////////////////
+
+		assert ( m_iMaxDistance==0 );
+
+		DWORD uCandidate = Max ( m_dTerms[0].m_iHitPos, iMinPos ); // next candidate start pos
+
+		int i;
+		for ( i=0; i<m_dTerms.GetLength(); i++ )
+		{
+			const DWORD & uPos = m_dTerms[i].m_iHitPos;
+			assert ( uPos>=uMinHitpos && uPos<uMaxHitpos );
+			assert ( m_iField<0 || int(uPos>>24)==m_iField );
+
+			// scan forward until this hit is not too early
+			while ( uPos < uCandidate+i )
+			{
+				// if one hitlist is over, document is over, because all words must be in the phrase
+				m_dTerms[i].GetHitlistEntry ();
+				if ( !uPos || uPos>=uMaxHitpos )
+				{
+					i = -1;
+					break;
+				}
+			}
+			if ( i==-1 )
+				break;
+
+			// if this his is too late, update candidate and scan again
+			if ( uPos > uCandidate+i )
+			{
+				uCandidate = uPos-i;
+				i = -1;
+				continue;
+			}
+
+			// this hit is a perfect match; continue to next term
+			assert ( uPos==uCandidate+i );
+		}
+
+		// so do we have a match?
+		if ( i==m_dTerms.GetLength() )
+		{
+			assert ( uCandidate>=uMinHitpos && uCandidate<uMaxHitpos );
+			assert ( uCandidate>=iMinPos );
+			m_tXhit.SetTotalMatch ( uCandidate, m_dTerms.GetLength() );
+		}
+	}
+}
+
+
+CSphMatch * CSphExtendedEvalAtom::GetNextDoc ( DWORD iMinID )
+{
+	if ( !m_pLast )
+		return NULL;
+
+	if ( m_pLast->m_iDocID>=iMinID )
+	{
+		assert ( m_tXhit.m_iPos );
+		return m_pLast;
+	}
+
+	// OPTIMIZE?
+	const DWORD uField = ( m_iField>=0 ) ? ( 1UL<<m_iField ) : 0xffffffffUL;
+	for ( ;; )
+	{
+		/////////////////
+		// scan doclists
+		/////////////////
+
+		ARRAY_FOREACH ( i, m_dTerms ) // OPTIMIZE? PQ?
+		{
+			// scan doclist until first ok id
+			CSphQueryWord & tTerm = m_dTerms[i];
+			while ( tTerm.m_tDoc.m_iDocID<iMinID )
+			{
+				tTerm.GetDoclistEntry ();
+				if ( !tTerm.m_tDoc.m_iDocID )
+				{
+					m_pLast = NULL;
+					return NULL;
+				}
+			}
+
+			// check fields
+			if (!( tTerm.m_uFields & uField ))
+			{
+				i = -1;
+				iMinID = 1+tTerm.m_tDoc.m_iDocID;
+				continue;
+			}
+
+			// adjust and rescan, if necessary
+			if ( tTerm.m_tDoc.m_iDocID>iMinID )
+			{
+				i = -1;
+				iMinID = tTerm.m_tDoc.m_iDocID;
+				continue;
+			}
+		}
+
+		// at this point, all terms share the same doc id
+		#if PARANOID
+		assert ( iMinID );
+		ARRAY_FOREACH ( i, m_dTerms )
+			assert ( m_dTerms[i].m_tDoc.m_iDocID==iMinID );
+		#endif
+
+		// preload hitlists
+		// !COMMIT OPTIMIZE 1-word query case
+		assert ( m_iField<0 || m_iField<255 );
+		const DWORD uMinHitpos = ( m_iField<0 ) ? 1 : ( m_iField<<24 )+1;
+		const DWORD uMaxHitpos = ( m_iField<0 ) ? UINT_MAX : (1+m_iField)<<24;
+
+		ARRAY_FOREACH ( i, m_dTerms )
+		{
+			// do preload
+			assert ( !m_dTerms[i].m_iHitPos );
+			while ( m_dTerms[i].m_iHitPos<uMinHitpos )
+			{
+				m_dTerms[i].GetHitlistEntry ();
+				assert ( m_dTerms[i].m_iHitPos );
+			}
+
+			// according to fields mask, there should be at least one hit, so check it
+			assert ( m_dTerms[i].m_iHitPos>=uMinHitpos && m_dTerms[i].m_iHitPos<uMaxHitpos );
+		}		
+
+		// if we just needed to match all words, we're done
+		if ( m_iMaxDistance==-1 )
+		{
+			assert ( m_dTerms.GetLength()==1 ); // OPTIMIZE R&D single-atom leaves; should profile
+			assert ( m_dTerms[0].m_iHitPos );
+
+			m_tXhit.SetTotalMatch ( m_dTerms[0].m_iHitPos, 1 );
+			return m_pLast;
+		}
+
+		// scan hitlists to enforce proximity and/or exact phrase constraints
+		assert ( m_iMaxDistance>=0 );
+		GetNextHit ( uMinHitpos );
+
+		if ( m_tXhit.m_iPos )
+			return m_pLast;
+
+		// proximity constraints were not met; continue scanning for documents
+		iMinID++;
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
+#define SPH_BM25_MAX_TERMS		256
+#define SPH_BM25_K1				1.2f
+#define SPH_BM25_SCALE			1000
+
+
+struct QwordsHash_fn
+{
+	static inline int Hash ( const CSphString & sKey )
+	{
+		return sphCRC32 ( (const BYTE *)sKey.cstr() );
+	}
+};
+
+
+typedef CSphOrderedHash < CSphQueryWord, CSphString, QwordsHash_fn, 256, 13 > CSphQwordsHash;
+
+
+class CSphExtendedEvalNode
+{
+public:
+						CSphExtendedEvalNode ( const CSphExtendedQueryNode * pNode, const CSphTermSetup & tSetup );
+						~CSphExtendedEvalNode ();
+
+public:
+	void				CollectQwords ( CSphQwordsHash & dHash, int & iCount );	///< collects all unique query words into dHash
+	CSphMatch *			GetNextMatch ( DWORD iMinID, int iTerms, float * pIDF );///< iTF==0 means that no weighting is required
+
+protected:
+	CSphMatch *			GetNextDoc ( DWORD iMinID, bool bCalcLCS );
+	void				GetNextHit ( DWORD iMinPos );
+	void				GetLastTF ( DWORD * pTF ) const;
+	inline CSphMatch *	GetLastDoc () const { return m_pLast; }
+	void				CalcLCS ();
+
+public:
+	CSphSpanningHit		m_tXhit;
+
+protected:
+	CSphExtendedEvalAtom				m_tAtom;		///< plain node atom
+	bool								m_bAny;			///< whether to match any or all children (ie. OR or AND)
+	CSphVector<CSphExtendedEvalNode*,8>	m_dChildren;	///< non-plain node children
+	bool								m_bDone;		///< whether this node has any more matches
+	CSphMatch *							m_pLast;		///< my last match
+};
+
+
+CSphExtendedEvalNode::CSphExtendedEvalNode ( const CSphExtendedQueryNode * pNode, const CSphTermSetup & tSetup )
+	: m_tAtom ( pNode->m_tAtom, tSetup )
+	, m_bAny ( pNode->m_bAny )
+	, m_bDone ( false )
+	, m_pLast ( NULL )
+{
+	ARRAY_FOREACH ( i, pNode->m_dChildren )
+		m_dChildren.Add ( new CSphExtendedEvalNode ( pNode->m_dChildren[i], tSetup ) );
+
+	if ( pNode->IsEmpty() )
+		m_bDone = true;
+}
+
+
+CSphExtendedEvalNode::~CSphExtendedEvalNode ()
+{
+	ARRAY_FOREACH ( i, m_dChildren )
+		SafeDelete ( m_dChildren[i] );
+}
+
+
+void CSphExtendedEvalNode::CalcLCS ()
+{
+	// only for non-plain match-all nodes
+	assert ( m_dChildren.GetLength() );
+	assert ( !m_bAny );
+
+	m_tXhit.SetTotalMatch ( UINT_MAX, 0 );
+
+	DWORD iMinPos = UINT_MAX;	// min pos over all children
+	DWORD iMaxEnd = 0;			// max pos+span over all children
+	DWORD iCurEnd = 0;			// current span end
+
+	DWORD iAccEnd = 0;			// accumulated LCS end
+	int iAccLCS = 0;			// accumulated LCS length
+	int iMaxLCS = 0;			// max LCS length encountered
+	int iHeadLCS;				// head LCS length; -1 if not yet computed
+
+	const CSphSpanningHit & tHead = m_dChildren[0]->m_tXhit;
+	if ( tHead.m_iSpan==tHead.m_iHeadLCS)
+	{
+		assert ( tHead.m_iSpan==tHead.m_iHeadLCS );
+		assert ( tHead.m_iSpan==tHead.m_iMaxLCS );
+		iHeadLCS = -1;
+	} else
+	{
+		iHeadLCS = tHead.m_iHeadLCS; // might be zeroed out later
+	}
+
+	ARRAY_FOREACH ( i, m_dChildren )
+	{
+		const CSphSpanningHit & tCur = m_dChildren[i]->m_tXhit;
+		iCurEnd = tCur.m_iPos + tCur.m_iSpan;
+
+		// incoming span is adjacent, grow current LCS
+		if ( iAccEnd==tCur.m_iPos )
+			iAccLCS += tCur.m_iHeadLCS;
+
+		// track min/max stuff
+		iMinPos = Min ( iMinPos, tCur.m_iPos );
+		iMaxEnd = Max ( iMaxEnd, iCurEnd );
+		iMaxLCS = Max ( iMaxLCS, iAccLCS );
+		iMaxLCS = Max ( iMaxLCS, tCur.m_iMaxLCS );
+
+		if ( iAccEnd==tCur.m_iPos && tCur.m_iHeadLCS==tCur.m_iSpan )
+		{
+			// incoming span is adjacent and continuous, we can keep that LCS
+			assert ( tCur.m_iSpan==tCur.m_iHeadLCS );
+			assert ( tCur.m_iSpan==tCur.m_iMaxLCS );
+			iAccEnd += tCur.m_iSpan;
+
+		} else 
+		{
+			// flush continuous head LCS
+			if ( iHeadLCS<0 && iAccLCS )
+				iHeadLCS = iAccLCS;
+
+			// new LCS starts at the tail of incoming span
+			iAccEnd = iCurEnd;
+			iAccLCS = tCur.m_iTailLCS;
+		}
+	}
+
+	// if and only if first child starts the span, we have some head LCS
+	if ( tHead.m_iPos!=iMinPos )
+	{
+		iHeadLCS = 0;
+	} else if ( iHeadLCS<0 )
+	{
+		assert ( iAccLCS );
+		iHeadLCS = iAccLCS; // final flush for fully continuous spans
+	}
+
+	// if and only if last child ends the span, we have some tail LCS
+	int iTailLCS = 0;
+	if ( iCurEnd==iMaxEnd )
+		iTailLCS = iAccLCS;
+
+	m_tXhit.m_iPos = iMinPos;
+	m_tXhit.m_iSpan = iMaxEnd-iMinPos;
+	m_tXhit.m_iHeadLCS = iHeadLCS;
+	m_tXhit.m_iTailLCS = iTailLCS;
+	m_tXhit.m_iMaxLCS = iMaxLCS;
+
+	// sanity checks
+	assert ( m_tXhit.IsValid() );
+}
+
+
+void CSphExtendedEvalNode::GetNextHit ( DWORD uMinPos )
+{
+	assert ( !m_bDone );
+
+	// plain node
+	if ( !m_dChildren.GetLength() )
+	{
+		assert ( !m_bAny );
+		assert ( !m_tAtom.IsEmpty() );
+
+		m_tAtom.GetNextHit ( uMinPos );
+		m_tXhit = m_tAtom.m_tXhit; // OPTIMIZE?
+		return;
+	}
+
+	// expression node
+	DWORD uChildPos = UINT_MAX;
+	int iMinChild = -1;
+
+	ARRAY_FOREACH ( i, m_dChildren )
+		if ( m_dChildren[i]->m_tXhit.m_iPos && m_dChildren[i]->m_pLast->m_iDocID==m_pLast->m_iDocID )
+	{
+		CSphExtendedEvalNode * pChild = m_dChildren[i];
+		do
+		{
+			pChild->GetNextHit ( uMinPos );
+		} while ( pChild->m_tXhit.m_iPos && pChild->m_tXhit.m_iPos<uMinPos );
+
+		if ( pChild->m_tXhit.m_iPos && pChild->m_tXhit.m_iPos<uChildPos )
+		{
+			uChildPos = pChild->m_tXhit.m_iPos;
+			iMinChild = i;
+		}
+	}
+
+	// it seems we're done
+	if ( iMinChild<0 )
+	{
+		m_tXhit.m_iPos = 0;
+		return;
+	}
+
+	// use child LCS for "match any" nodes
+	if ( m_bAny )
+	{
+		m_tXhit = m_dChildren[iMinChild]->m_tXhit;
+		return;
+	}
+
+	// recalc LCS for "match all" nodes
+	CalcLCS ();
+}
+
+
+CSphMatch * CSphExtendedEvalNode::GetNextDoc ( DWORD iMinID, bool bCalcLCS )
+{
+	if ( m_bDone )
+		return NULL;
+
+	////////////////////
+	// match plain node
+	////////////////////
+
+	if ( !m_dChildren.GetLength() )
+	{
+		assert ( !m_bAny );
+		assert ( !m_tAtom.IsEmpty() );
+
+		m_pLast = m_tAtom.GetNextDoc ( iMinID );
+		m_tXhit = m_tAtom.m_tXhit; // OPTIMIZE?
+		if ( !m_pLast )
+			m_bDone = true;
+		return m_pLast;
+	}
+
+	/////////////////////////
+	// match expression node
+	/////////////////////////
+
+	CSphMatch * pMatch = NULL;
+
+	if ( m_bAny )
+	{
+		////////////////////////
+		// match any child node
+		////////////////////////
+
+		ARRAY_FOREACH ( i, m_dChildren )
+		{
+			// get next candidate
+			CSphMatch * pCur = m_dChildren[i]->GetNextDoc ( iMinID, false );
+			assert ( pCur==m_dChildren[i]->GetLastDoc() );
+
+			if ( !pCur )
+			{
+				m_dChildren.RemoveFast ( i-- );
+				if ( !m_dChildren.GetLength() )
+				{
+					m_bDone = true;
+					return false;
+				}
+				continue;
+			}
+
+			// if it's better than current, make it current match
+			if ( !pMatch || pCur->m_iDocID < pMatch->m_iDocID )
+			{
+				pMatch = pCur;
+				m_tXhit = m_dChildren[i]->m_tXhit; // OPTIMIZE?
+			}
+		}
+
+	} else
+	{
+		////////////////////////////
+		// match all children nodes
+		////////////////////////////
+
+		// find a match
+		ARRAY_FOREACH ( i, m_dChildren )
+		{
+			CSphExtendedEvalNode * pChild = m_dChildren[i];
+			pMatch = pChild->GetNextDoc ( iMinID, false );
+			if ( !pMatch )
+			{
+				m_bDone = true;
+				m_pLast = NULL;
+				return NULL;
+			}
+
+			if ( pMatch->m_iDocID > iMinID )
+				i = -1;
+
+			iMinID = pMatch->m_iDocID;
+		}
+		assert ( pMatch );
+
+		// calc initial LCS
+		if ( bCalcLCS )
+			CalcLCS ();
+	}
+
+	return pMatch;
+}
+
+
+CSphMatch * CSphExtendedEvalNode::GetNextMatch ( DWORD iMinID, int iTerms, float * pIDF )
+{
+	CSphMatch * pMatch = GetNextDoc ( iMinID, iTerms!=0 );
+	m_pLast = pMatch;
+
+	if ( !pMatch || !iTerms ) // if there's no match or no need to rank, we're done
+		return pMatch;
+
+	////////////////////
+	// weight the match
+	////////////////////
+
+#ifndef NDEBUG
+	// check that every actually matching child has its hitlist ready
+	ARRAY_FOREACH ( i, m_dChildren )
+	{
+		assert ( m_dChildren[i]->GetLastDoc() );
+		if ( m_bAny )
+		{
+			assert ( m_dChildren[i]->GetLastDoc()->m_iDocID>=pMatch->m_iDocID );
+			if ( m_dChildren[i]->GetLastDoc()->m_iDocID==pMatch->m_iDocID )
+				assert ( m_dChildren[i]->m_tXhit.m_iPos );
+		} else
+		{
+			assert ( m_dChildren[i]->GetLastDoc()->m_iDocID==pMatch->m_iDocID );
+			assert ( m_dChildren[i]->m_tXhit.m_iPos );
+		}
+	}
+#endif
+
+	// calc LCS rank
+	int iMaxLCS = 0;
+	do 
+	{
+		iMaxLCS = Max ( iMaxLCS, m_tXhit.m_iMaxLCS );
+		GetNextHit ( 1+m_tXhit.m_iPos );
+	} while ( m_tXhit.m_iPos );
+
+	// calc simplified BM25 rank
+	DWORD uTF [ SPH_BM25_MAX_TERMS ]; // FIXME? maybe a dynamic array
+	assert ( iTerms<SPH_BM25_MAX_TERMS );
+
+	for ( int i=0; i<iTerms; i++ ) // FIXME? could be avoided if GetLastTF() returns a mask..
+		uTF[i] = 0;
+	GetLastTF ( uTF );
+
+	float fBM25 = 0.0f;
+	for ( int i=0; i<iTerms; i++ )
+		fBM25 += float(uTF[i]) / float(uTF[i]+SPH_BM25_K1) * pIDF[i]; // TF*IDF
+
+	// calc combined rank
+	// !COMMIT must account for field weights everywhere, document length in BM25, etc
+	int iBM25 = int ( ( fBM25 + 0.5f )*SPH_BM25_SCALE );
+	assert ( iBM25>=0 && iBM25<SPH_BM25_SCALE );
+
+	pMatch->m_iWeight = iMaxLCS*SPH_BM25_SCALE + iBM25;
+	return pMatch;
+}
+
+
+void CSphExtendedEvalNode::GetLastTF ( DWORD * pTF ) const
+{
+	if ( m_bDone )
+		return;
+
+	assert ( m_pLast );
+
+	if ( !m_dChildren.GetLength() )
+	{
+		m_tAtom.GetLastTF ( pTF );
+		return;
+	}
+
+	DWORD uID = m_pLast->m_iDocID;
+	if ( m_bAny )
+	{
+		ARRAY_FOREACH ( i, m_dChildren )
+			if ( m_dChildren[i]->GetLastDoc()->m_iDocID==uID )
+				m_dChildren[i]->GetLastTF ( pTF );
+	} else
+	{
+		ARRAY_FOREACH ( i, m_dChildren )
+		{
+			assert ( m_dChildren[i]->GetLastDoc()->m_iDocID==uID );
+			m_dChildren[i]->GetLastTF ( pTF );
+		}
+	}
+}
+
+
+void CSphExtendedEvalNode::CollectQwords ( CSphQwordsHash & dHash, int & iCount )
+{
+	if ( m_dChildren.GetLength() )
+	{
+		ARRAY_FOREACH ( i, m_dChildren )
+			m_dChildren[i]->CollectQwords ( dHash, iCount );
+	} else
+	{
+		ARRAY_FOREACH ( i, m_tAtom.m_dTerms )
+		{
+			bool bAdded = dHash.Add ( m_tAtom.m_dTerms[i], m_tAtom.m_dTerms[i].m_sWord );
+
+			CSphQueryWord * pWord = dHash ( m_tAtom.m_dTerms[i].m_sWord );
+			assert ( pWord );
+
+			if ( bAdded )
+				pWord->m_iQueryPos = iCount++;
+
+			m_tAtom.m_dTerms[i].m_iQueryPos = pWord->m_iQueryPos;
+		}
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
+void CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, CSphDict * pDict, ISphMatchQueue * pTop, CSphQueryResult * pResult, int iDoclistFD )
+{
+	assert ( pDict );
+	assert ( pTop );
+	assert ( m_tMin.m_iAttrs==m_tSchema.m_dAttrs.GetLength() );
+
+	//////////////////////////
+	// match in extended mode
+	//////////////////////////
+
+	bool bEarlyLookup = ( m_eDocinfo==SPH_DOCINFO_EXTERN ) && pQuery->m_dFilters.GetLength();
+	bool bLateLookup = ( m_eDocinfo==SPH_DOCINFO_EXTERN ) && !bEarlyLookup && pTop->UsesAttrs();
+
+	// parse query
+	CSphExtendedQuery * pParsed = sphParseExtendedQuery ( pQuery->m_sQuery.cstr(), pQuery->m_pTokenizer,
+		&m_tSchema, pDict );
+	if ( !pParsed )
+		return;
+
+	CSphTermSetup tSetup;
+	tSetup.m_pDict = pDict;
+	tSetup.m_pIndex = this;
+	tSetup.m_eDocinfo = m_eDocinfo;
+	tSetup.m_tMin = m_tMin;
+	tSetup.m_iDoclistFD = iDoclistFD;
+
+	CSphExtendedEvalNode tAccept ( pParsed->m_pAccept, tSetup );
+	CSphExtendedEvalNode tReject ( pParsed->m_pReject, tSetup );
+	SafeDelete ( pParsed );
+
+	////////////////////
+	// build word stats
+	////////////////////
+
+	CSphQwordsHash hQwords;
+	int iQwords = 0;
+	tAccept.CollectQwords ( hQwords, iQwords );
+
+	assert ( iQwords<SPH_BM25_MAX_TERMS );
+	int iIDF = 0;
+	float dIDF [ SPH_BM25_MAX_TERMS ];
+
+	pResult->m_iNumWords = 0;
+
+	hQwords.IterateStart ();
+	while ( hQwords.IterateNext() )
+	{
+		CSphQueryWord & tWord = hQwords.IterateGet ();
+
+		// build IDF
+		assert ( tWord.m_iDocs );
+		float fLogTotal = logf ( float(m_tStats.m_iTotalDocuments) );
+		dIDF[iIDF] =
+			logf ( float(m_tStats.m_iTotalDocuments-tWord.m_iDocs+1)/float(tWord.m_iDocs) )
+			/ ( 2*iQwords*fLogTotal );
+		iIDF++;
+
+		// update word stats
+		if ( pResult->m_iNumWords<SPH_MAX_QUERY_WORDS )
+		{
+			CSphQueryResult::WordStat_t & tStats = pResult->m_tWordStats [ pResult->m_iNumWords++ ];
+			if ( tStats.m_sWord.cstr() )
+			{
+				assert ( tStats.m_sWord==tWord.m_sWord );
+				tStats.m_iDocs += tWord.m_iDocs;
+				tStats.m_iHits += tWord.m_iHits;
+			} else
+			{
+				tStats.m_sWord = tWord.m_sWord;
+				tStats.m_iDocs = tWord.m_iDocs;
+				tStats.m_iHits = tWord.m_iHits;
+			}
+		}
+	}
+
+	//////////////////////////
+	// do that matching thing
+	//////////////////////////
+
+	DWORD iMinID = 1;
+	for ( ;; )
+	{
+		CSphMatch * pAccept = tAccept.GetNextMatch ( iMinID, iQwords, dIDF );
+		if ( !pAccept )
+			break;
+		iMinID = 1+pAccept->m_iDocID;
+
+		CSphMatch * pReject = tReject.GetNextMatch ( pAccept->m_iDocID, 0, NULL );
+		if ( pReject && pReject->m_iDocID==pAccept->m_iDocID )
+			continue;
+
+		// early reject by group id, doc id or timestamp
+		if ( bEarlyLookup )
+			LookupDocinfo ( *pAccept );
+
+		if ( sphMatchEarlyReject ( *pAccept, pQuery ) )
+			continue;
+
+		// lookup externally stored docinfo
+		if ( bLateLookup )
+			LookupDocinfo ( *pAccept );
+
+		if ( pTop->Push ( *pAccept ) )
+			pResult->m_iTotalMatches++;
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////////
 
 bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, int iFD )
 {
@@ -6166,8 +7170,25 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 	CSphReader_VLN rdInfo;
 	rdInfo.SetFile ( tIndexInfo.GetFD() );
 
+	// version
+	DWORD uVersion = rdInfo.GetDword ();
+	if ( uVersion!=INDEX_MAGIC_HEADER )
+	{
+		fprintf ( stdout, "ERROR: '%s': invalid schema file (old index version?)\n",
+			GetIndexFileName ( "sph" ) );
+		return false;
+	}
+
+	uVersion = rdInfo.GetDword();
+	if ( uVersion!=INDEX_FORMAT_VERSION )
+	{
+		fprintf ( stdout, "ERROR: '%s' is version %d, expected version %d\n",
+			GetIndexFileName ( "sph" ), uVersion, INDEX_FORMAT_VERSION );
+		return false;
+	}
+
 	// docinfo
-	m_eDocinfo = (ESphDocinfo) rdInfo.GetDword ();
+	m_eDocinfo = (ESphDocinfo) rdInfo.GetDword();
 
 	// schema
 	m_tSchema.m_dFields.Resize ( rdInfo.GetDword() );
@@ -6188,6 +7209,10 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 	SphOffset_t iCheckpointsPos;
 	rdInfo.GetRawBytes ( &iCheckpointsPos, sizeof(SphOffset_t) );
 	m_iWordlistCheckpoints = rdInfo.GetDword ();
+
+	// index stats
+	m_tStats.m_iTotalDocuments = rdInfo.GetDword ();
+	m_tStats.m_iTotalBytes = rdInfo.GetOffset ();
 
 	////////////////////
 	// preload docinfos
@@ -6306,77 +7331,81 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 	assert ( m_eDocinfo!=SPH_DOCINFO_EXTERN || !m_pDocinfo.IsEmpty() );
 
 	// split query into words
-	CSphQueryParser * pQueryParser = new CSphQueryParser ( pDict, pQuery->m_sQuery.cstr(),
-		pQuery->m_pTokenizer );
-	assert ( pQueryParser );
-
-	int iQueryWords = Min ( pQueryParser->m_dHits.GetLength (), SPH_MAX_QUERY_WORDS );
-	m_dQueryWords.Resize ( iQueryWords );
-	ARRAY_FOREACH ( i, m_dQueryWords )
+	if ( pQuery->m_eMode==SPH_MATCH_ALL
+		|| pQuery->m_eMode==SPH_MATCH_ANY
+		|| pQuery->m_eMode==SPH_MATCH_PHRASE )
 	{
-		m_dQueryWords[i].Reset ();
-		m_dQueryWords[i].m_sWord = pQueryParser->m_sWords[i];
-		m_dQueryWords[i].m_iWordID = pQueryParser->m_dHits[i].m_iWordID;
-		m_dQueryWords[i].m_iQueryPos = 1+i;
+		CSphQueryParser * pQueryParser = new CSphQueryParser ( pDict, pQuery->m_sQuery.cstr(),
+			pQuery->m_pTokenizer );
+		assert ( pQueryParser );
 
-		assert ( m_tMin.m_iAttrs==m_tSchema.m_dAttrs.GetLength() );
-		m_dQueryWords[i].SetupAttrs ( m_eDocinfo, m_tMin );
-	}
-	SafeDelete ( pQueryParser );
-
-	if ( !iQueryWords )
-	{
-		pResult->m_iQueryTime += int ( 1000.0f*( sphLongTimer() - tmQueryStart ) );
-		return true;
-	}
-
-	// lookup group-by attribute index
-	pQuery->SetSchema ( m_tSchema );
-
-	//////////////////////////////
-	// decode words from wordlist
-	//////////////////////////////
-
-	PROFILE_BEGIN ( query_load_words );
-
-	ARRAY_FOREACH ( i, m_dQueryWords )
-	{
-		// if the word was already loaded, just link to it
-		int j;
-		for ( j=0; j<i; j++ )
-			if ( m_dQueryWords[i].m_iWordID == m_dQueryWords[j].m_iWordID )
+		int iQueryWords = Min ( pQueryParser->m_dHits.GetLength (), SPH_MAX_QUERY_WORDS );
+		m_dQueryWords.Resize ( iQueryWords );
+		ARRAY_FOREACH ( i, m_dQueryWords )
 		{
-			m_dQueryWords[i] = m_dQueryWords[j];
+			m_dQueryWords[i].Reset ();
+			m_dQueryWords[i].m_sWord = pQueryParser->m_sWords[i];
+			m_dQueryWords[i].m_iWordID = pQueryParser->m_dHits[i].m_iWordID;
 			m_dQueryWords[i].m_iQueryPos = 1+i;
-			break;
+
+			assert ( m_tMin.m_iAttrs==m_tSchema.m_dAttrs.GetLength() );
+			m_dQueryWords[i].SetupAttrs ( m_eDocinfo, m_tMin );
 		}
-		if ( j<i )
-			continue;
+		SafeDelete ( pQueryParser );
 
-		// lookup this wordlist page
-		// offset might be -1 if page is totally empty
-		SetupQueryWord ( m_dQueryWords[i], tDoclist.GetFD() );
-	}
-
-	// build word stats
-	pResult->m_iNumWords = m_dQueryWords.GetLength();
-	ARRAY_FOREACH ( i, m_dQueryWords )
-	{
-		CSphQueryResult::WordStat_t & tWordStats = pResult->m_tWordStats[i];
-		if ( tWordStats.m_sWord.cstr() )
+		if ( !iQueryWords )
 		{
-			tWordStats.m_iDocs += m_dQueryWords[i].m_iDocs;
-			tWordStats.m_iHits += m_dQueryWords[i].m_iHits;
-		} else
-		{
-			tWordStats.m_sWord = m_dQueryWords[i].m_sWord;
-			tWordStats.m_iDocs = m_dQueryWords[i].m_iDocs;
-			tWordStats.m_iHits = m_dQueryWords[i].m_iHits;
+			pResult->m_iQueryTime += int ( 1000.0f*( sphLongTimer() - tmQueryStart ) );
+			return true;
 		}
-	}
 
-	// reorder hit lists
-	m_dQueryWords.Sort ();
+		// lookup group-by attribute index
+		pQuery->SetSchema ( m_tSchema );
+
+		// setup words from the wordlist
+		PROFILE_BEGIN ( query_load_words );
+
+		ARRAY_FOREACH ( i, m_dQueryWords )
+		{
+			// if the word was already loaded, just link to it
+			int j;
+			for ( j=0; j<i; j++ )
+				if ( m_dQueryWords[i].m_iWordID == m_dQueryWords[j].m_iWordID )
+			{
+				m_dQueryWords[i] = m_dQueryWords[j];
+				m_dQueryWords[i].m_iQueryPos = 1+i;
+				break;
+			}
+			if ( j<i )
+				continue;
+
+			// lookup this wordlist page
+			// offset might be -1 if page is totally empty
+			SetupQueryWord ( m_dQueryWords[i], tDoclist.GetFD() );
+		}
+
+		// build word stats
+		pResult->m_iNumWords = m_dQueryWords.GetLength();
+		ARRAY_FOREACH ( i, m_dQueryWords )
+		{
+			CSphQueryResult::WordStat_t & tWordStats = pResult->m_tWordStats[i];
+			if ( tWordStats.m_sWord.cstr() )
+			{
+				tWordStats.m_iDocs += m_dQueryWords[i].m_iDocs;
+				tWordStats.m_iHits += m_dQueryWords[i].m_iHits;
+			} else
+			{
+				tWordStats.m_sWord = m_dQueryWords[i].m_sWord;
+				tWordStats.m_iDocs = m_dQueryWords[i].m_iDocs;
+				tWordStats.m_iHits = m_dQueryWords[i].m_iHits;
+			}
+		}
+
+		// reorder hit lists
+		m_dQueryWords.Sort ();
+
+		PROFILE_END ( query_load_words );
+	}
 
 	// reorder attr set values and lookup indexes
 	ARRAY_FOREACH ( i, pQuery->m_dFilters )
@@ -6395,8 +7424,6 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 		// FIXME! should at least warn about bad filter name
 	}
 
-	PROFILE_END ( query_load_words );
-
 	// build weights
 	m_iWeights = m_tSchema.m_dFields.GetLength();
 	for ( int i=0; i<m_iWeights; i++ ) // defaults
@@ -6412,21 +7439,12 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 	PROFILE_BEGIN ( query_match );
 	switch ( pQuery->m_eMode )
 	{
-		case SPH_MATCH_ALL:
-		case SPH_MATCH_PHRASE:
-			MatchAll ( pQuery, pTop, pResult );
-			break;
-
-		case SPH_MATCH_ANY:
-			MatchAny ( pQuery, pTop, pResult );
-			break;
-
-		case SPH_MATCH_BOOLEAN:
-			MatchBoolean ( pQuery, pDict, pTop, pResult, tDoclist.GetFD() );
-			break;
-
-		default:
-			sphDie ( "FATAL: INTERNAL ERROR: unknown matching mode (mode=%d).\n", pQuery->m_eMode );
+		case SPH_MATCH_ALL:			MatchAll ( pQuery, pTop, pResult ); break;
+		case SPH_MATCH_PHRASE:		MatchAll ( pQuery, pTop, pResult ); break;
+		case SPH_MATCH_ANY:			MatchAny ( pQuery, pTop, pResult ); break;
+		case SPH_MATCH_BOOLEAN:		MatchBoolean ( pQuery, pDict, pTop, pResult, tDoclist.GetFD() ); break;
+		case SPH_MATCH_EXTENDED:	MatchExtended ( pQuery, pDict, pTop, pResult, tDoclist.GetFD() ); break;
+		default:					sphDie ( "FATAL: INTERNAL ERROR: unknown matching mode (mode=%d).\n", pQuery->m_eMode );
 	}
 	PROFILE_END ( query_match );
 

@@ -243,6 +243,7 @@ struct CSphDict
 	virtual				~CSphDict () {}
 
 	/// get word ID by word
+	/// returns 0 for stopwords
 	virtual DWORD		GetWordID ( BYTE * pWord ) = 0;
 
 	/// load stopwords from given files
@@ -353,12 +354,18 @@ struct CSphSourceStats
 	/// how much bytes
 	SphOffset_t		m_iTotalBytes;
 
-
 	/// ctor
-	CSphSourceStats () :
-		m_iTotalDocuments ( 0 ),
-		m_iTotalBytes ( 0 )
-	{};
+	CSphSourceStats ()
+	{
+		Reset ();
+	}
+
+	/// reset
+	void Reset ()
+	{
+		m_iTotalDocuments = 0;
+		m_iTotalBytes = 0;
+	}
 };
 
 
@@ -798,6 +805,7 @@ enum ESphMatchMode
 	SPH_MATCH_ANY,				///< match any query word
 	SPH_MATCH_PHRASE,			///< match this exact phrase
 	SPH_MATCH_BOOLEAN,			///< match this boolean query
+	SPH_MATCH_EXTENDED,			///< match this extended query
 
 	SPH_MATCH_TOTAL
 };

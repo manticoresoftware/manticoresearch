@@ -6558,7 +6558,7 @@ public:
 
 public:
 	void				CollectQwords ( CSphQwordsHash & dHash, int & iCount );	///< collects all unique query words into dHash
-	CSphMatch *			GetNextMatch ( DWORD iMinID, int iTerms, float * pIDF );///< iTF==0 means that no weighting is required
+	CSphMatch *			GetNextMatch ( DWORD iMinID, int iTerms, float * pIDF, int iFields, int * pWeights );	///< iTF==0 means that no weighting is required
 
 protected:
 	CSphMatch *			GetNextDoc ( DWORD iMinID, bool bCalcLCS );
@@ -6834,7 +6834,8 @@ CSphMatch * CSphExtendedEvalNode::GetNextDoc ( DWORD iMinID, bool bCalcLCS )
 }
 
 
-CSphMatch * CSphExtendedEvalNode::GetNextMatch ( DWORD iMinID, int iTerms, float * pIDF )
+CSphMatch * CSphExtendedEvalNode::GetNextMatch ( DWORD iMinID, int iTerms, float * pIDF,
+	int iFields, int * pWeights )
 {
 	CSphMatch * pMatch = GetNextDoc ( iMinID, iTerms!=0 );
 	m_pLast = pMatch;
@@ -6865,12 +6866,20 @@ CSphMatch * CSphExtendedEvalNode::GetNextMatch ( DWORD iMinID, int iTerms, float
 #endif
 
 	// calc LCS rank
-	int iMaxLCS = 0;
-	do 
+	int dMaxLCS [ SPH_MAX_FIELDS ];
+	for ( int i=0; i<iFields; i++ )
+		dMaxLCS[i] = 0;
+
+	do
 	{
+		int & iMaxLCS = dMaxLCS [ m_tXhit.m_iPos>>24 ];
 		iMaxLCS = Max ( iMaxLCS, m_tXhit.m_iMaxLCS );
 		GetNextHit ( 1+m_tXhit.m_iPos );
 	} while ( m_tXhit.m_iPos );
+
+	int iMaxLCS = 0;
+	for ( int i=0; i<iFields; i++ )
+		iMaxLCS += dMaxLCS[i] * pWeights[i];
 
 	// calc simplified BM25 rank
 	DWORD uTF [ SPH_BM25_MAX_TERMS ]; // FIXME? maybe a dynamic array
@@ -7031,12 +7040,12 @@ void CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, CSphDict * pDict, 
 	DWORD iMinID = 1;
 	for ( ;; )
 	{
-		CSphMatch * pAccept = tAccept.GetNextMatch ( iMinID, iQwords, dIDF );
+		CSphMatch * pAccept = tAccept.GetNextMatch ( iMinID, iQwords, dIDF, m_iWeights, m_dWeights );
 		if ( !pAccept )
 			break;
 		iMinID = 1+pAccept->m_iDocID;
 
-		CSphMatch * pReject = tReject.GetNextMatch ( pAccept->m_iDocID, 0, NULL );
+		CSphMatch * pReject = tReject.GetNextMatch ( pAccept->m_iDocID, 0, NULL, 0, NULL );
 		if ( pReject && pReject->m_iDocID==pAccept->m_iDocID )
 			continue;
 

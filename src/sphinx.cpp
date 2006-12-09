@@ -6778,7 +6778,7 @@ CSphMatch * CSphExtendedEvalNode::GetNextDoc ( DWORD iMinID, bool bCalcLCS )
 		ARRAY_FOREACH ( i, m_dChildren )
 		{
 			// get next candidate
-			CSphMatch * pCur = m_dChildren[i]->GetNextDoc ( iMinID, false );
+			CSphMatch * pCur = m_dChildren[i]->GetNextDoc ( iMinID, bCalcLCS );
 			assert ( pCur==m_dChildren[i]->GetLastDoc() );
 
 			if ( !pCur )
@@ -6810,7 +6810,7 @@ CSphMatch * CSphExtendedEvalNode::GetNextDoc ( DWORD iMinID, bool bCalcLCS )
 		ARRAY_FOREACH ( i, m_dChildren )
 		{
 			CSphExtendedEvalNode * pChild = m_dChildren[i];
-			pMatch = pChild->GetNextDoc ( iMinID, false );
+			pMatch = pChild->GetNextDoc ( iMinID, bCalcLCS );
 			if ( !pMatch )
 			{
 				m_bDone = true;
@@ -6830,6 +6830,7 @@ CSphMatch * CSphExtendedEvalNode::GetNextDoc ( DWORD iMinID, bool bCalcLCS )
 			CalcLCS ();
 	}
 
+	m_pLast = pMatch;
 	return pMatch;
 }
 

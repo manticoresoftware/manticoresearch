@@ -323,6 +323,66 @@ protected:
 #endif // SPH_INTERNAL_PROFILER
 
 /////////////////////////////////////////////////////////////////////////////
+
+#if USE_WINDOWS
+
+INT64 sphClocks ()
+{
+	DWORD tLo, tHi;
+	_asm
+	{
+		rdtsc
+			mov		tLo, eax
+			mov		tHi, edx
+	}
+	return ( INT64(tHi)<<32 ) | INT64(tLo);
+}
+
+
+INT64 sphClocksSec ()
+{
+	static INT64 tSEC = 0;
+	if ( tSEC )
+		return tSEC;
+
+	clock_t t, tt;
+
+	// wait til the begining of a new second
+	t = clock();
+	do {
+		tt = clock();
+	} while ( t==tt );
+
+	// measure one
+	tSEC = sphClocks();
+	while ( clock()-tt<CLK_TCK );
+	tSEC = sphClocks() - tSEC;
+
+	return tSEC;
+}
+
+
+class CSphClocker
+{
+public:
+	CSphClocker ( INT64 * pTarget )
+		: m_pTarget ( pTarget )
+	{
+		*m_pTarget -= sphClocks();
+	}
+
+	~CSphClocker ()
+	{
+		*m_pTarget += sphClocks();
+	}
+
+protected:
+	INT64 *		m_pTarget;
+};
+
+#endif // USE_WINDOWS
+
+/////////////////////////////////////////////////////////////////////////////
 // INTERNAL SPHINX CLASSES DECLARATIONS
 /////////////////////////////////////////////////////////////////////////////
 
@@ -6156,60 +6216,40 @@ struct CSphTermSetup
 };
 
 
-struct CSphSpanningHit
+struct CSphLCSState
 {
-	DWORD	m_iPos;		///< where the hit starts
-	int		m_iSpan;	///< how long the hit spans
-	int		m_iHeadLCS;	///< head LCS length
-	int		m_iTailLCS;	///< tail LCS length
-	int		m_iMaxLCS;	///< max LCS length
+	DWORD	m_uNextPos;						///< next pos expected
+	DWORD	m_dCurLCS [ SPH_MAX_FIELDS ];	///< current LCS length
+	DWORD	m_dMaxLCS [ SPH_MAX_FIELDS ];	///< max LCS length
 
-	CSphSpanningHit ()
-		: m_iPos ( 0 )
-		, m_iSpan ( 0 )
-		, m_iHeadLCS ( 0 )
-		, m_iTailLCS ( 0 )
-		, m_iMaxLCS ( 0 )
-	{}
-
-	void SetTotalMatch ( int iPos, int iSpan )
+	CSphLCSState ( int iFields )
 	{
-		m_iPos = iPos;
-		m_iSpan = iSpan;
-		m_iHeadLCS = iSpan;
-		m_iTailLCS = iSpan;
-		m_iMaxLCS = iSpan;
+		for ( int i=0; i<iFields; i++ )
+			m_dMaxLCS[i] = 0;
 	}
 
-	bool IsValid ()
+	void CleanCurrent ( int iFields )
 	{
-		// tricky, but in the very last line we can't assert that
-		// m_iSpan>=m_iHeadLCS+m_iTailLCS, because head and tail LCSes
-		// might overlap. eg [ "a b c" a ] query against "a b c" text
-		return
-			( m_iMaxLCS>=m_iHeadLCS ) &&
-			( m_iMaxLCS>=m_iTailLCS ) &&
-			( ( m_iSpan==m_iTailLCS && m_iSpan==m_iHeadLCS && m_iSpan==m_iMaxLCS ) ||
-				( m_iSpan>m_iTailLCS && m_iSpan>=m_iMaxLCS ) );
+		m_uNextPos = 0;
+		for ( int i=0; i<iFields; i++ )
+			m_dCurLCS[i] = 0;
 	}
 };
- 
+
 
 class CSphExtendedEvalAtom : public CSphExtendedQueryAtom
 {
-	friend class		CSphExtendedEvalNode;
-
 public:
 						CSphExtendedEvalAtom ( const CSphExtendedQueryAtom & tAtom, const CSphTermSetup & tSetup );
 	CSphMatch *			GetNextDoc ( DWORD iMinID );
 	void				GetNextHit ( DWORD iMinPos );
 	void				GetLastTF ( DWORD * pTF ) const;
 	inline CSphMatch *	GetLastMatch () const { return m_pLast; }
+	void				UpdateLCS ( CSphLCSState & tState );
 
 public:
-	CSphSpanningHit		m_tXhit;
+	DWORD				m_uLastHitPos;
 
-protected:
 	CSphVector<CSphQueryWord,8>	m_dTerms;	///< query term readers
 	CSphMatch *					m_pLast;	///< term with the highest position. NULL if this atom has no more matches
 };
@@ -6265,7 +6305,7 @@ void CSphExtendedEvalAtom::GetNextHit ( DWORD iMinPos )
 
 	// if we just bail out without filling the hit,
 	// it means that nothing was found
-	m_tXhit.m_iPos = 0;
+	m_uLastHitPos = 0;
 
 	// OPTIMIZE? these are invariant during evaluation
 	assert ( m_iField<0 || m_iField<255 );
@@ -6294,7 +6334,7 @@ void CSphExtendedEvalAtom::GetNextHit ( DWORD iMinPos )
 		assert ( m_dTerms[0].m_iHitPos );
 		assert ( m_dTerms[0].m_iHitPos>=uMinHitpos );
 
-		m_tXhit.SetTotalMatch ( m_dTerms[0].m_iHitPos, 1 );
+		m_uLastHitPos = m_dTerms[0].m_iHitPos;
 		return;
 	}
 
@@ -6334,40 +6374,7 @@ void CSphExtendedEvalAtom::GetNextHit ( DWORD iMinPos )
 			int iWeight = m_iMaxDistance-uMax+uMin+m_dTerms.GetLength()-1;
 			if ( iWeight>0 )
 			{
-				// !COMMIT submit hit weight somewhere. was: m_pLast->m_iWeight = iWeight;
-				m_tXhit.m_iPos = uMin;
-				m_tXhit.m_iSpan = uMax-uMin+1;
-
-				// calc atom LCS
-				m_tXhit.m_iHeadLCS = 0;
-				m_tXhit.m_iTailLCS = 0;
-				m_tXhit.m_iMaxLCS = 1;
-
-				DWORD uLCSPos = 1+m_dTerms[0].m_iHitPos; // next expected LCS position
-				int iLCSLen = 1; // current LCS length
-
-				for ( int i=1; i<=m_dTerms.GetLength(); i++ )
-				{
-					DWORD uPos = ( i==m_dTerms.GetLength() ) ? 0 : m_dTerms[i].m_iHitPos;
-					assert ( i==m_dTerms.GetLength() || uPos );
-
-					if ( uPos!=uLCSPos )
-					{
-						if ( iMin==0 )
-							m_tXhit.m_iHeadLCS = iLCSLen;
-
-						if ( !uPos && m_dTerms.Last().m_iHitPos==uMax )
-							m_tXhit.m_iTailLCS = iLCSLen;
-
-						m_tXhit.m_iMaxLCS = Max ( m_tXhit.m_iMaxLCS, iLCSLen );
-						iLCSLen = 0;
-					}
-
-					uLCSPos = 1+uPos;
-					iLCSLen++;
-				}
-
-				assert ( m_tXhit.IsValid() );
+				m_uLastHitPos = uMin;
 				return;
 			}
 
@@ -6426,7 +6433,7 @@ void CSphExtendedEvalAtom::GetNextHit ( DWORD iMinPos )
 		{
 			assert ( uCandidate>=uMinHitpos && uCandidate<uMaxHitpos );
 			assert ( uCandidate>=iMinPos );
-			m_tXhit.SetTotalMatch ( uCandidate, m_dTerms.GetLength() );
+			m_uLastHitPos = uCandidate;
 		}
 	}
 }
@@ -6439,7 +6446,7 @@ CSphMatch * CSphExtendedEvalAtom::GetNextDoc ( DWORD iMinID )
 
 	if ( m_pLast->m_iDocID>=iMinID )
 	{
-		assert ( m_tXhit.m_iPos );
+		assert ( m_uLastHitPos );
 		return m_pLast;
 	}
 
@@ -6515,7 +6522,7 @@ CSphMatch * CSphExtendedEvalAtom::GetNextDoc ( DWORD iMinID )
 			assert ( m_dTerms.GetLength()==1 ); // OPTIMIZE R&D single-atom leaves; should profile
 			assert ( m_dTerms[0].m_iHitPos );
 
-			m_tXhit.SetTotalMatch ( m_dTerms[0].m_iHitPos, 1 );
+			m_uLastHitPos = m_dTerms[0].m_iHitPos;
 			return m_pLast;
 		}
 
@@ -6523,11 +6530,65 @@ CSphMatch * CSphExtendedEvalAtom::GetNextDoc ( DWORD iMinID )
 		assert ( m_iMaxDistance>=0 );
 		GetNextHit ( uMinHitpos );
 
-		if ( m_tXhit.m_iPos )
+		if ( m_uLastHitPos )
 			return m_pLast;
 
 		// proximity constraints were not met; continue scanning for documents
 		iMinID++;
+	}
+}
+
+
+void CSphExtendedEvalAtom::UpdateLCS ( CSphLCSState & tState )
+{
+	if ( !m_uLastHitPos )
+	{
+		tState.m_uNextPos = 0; // no need to zero m_dCurLCS; it'll be auto-zeroed next time now
+		return;
+	}
+
+	DWORD uField = m_uLastHitPos>>24;
+
+	if ( m_iMaxDistance>0 )
+	{
+		// proximity atom
+		if ( m_uLastHitPos!=tState.m_uNextPos )
+		{
+			tState.m_dCurLCS[uField] = 0;
+			tState.m_uNextPos = m_uLastHitPos;
+		}
+
+		// calc head LCS
+		int i = 0;
+		while ( i<m_dTerms.GetLength() && tState.m_uNextPos==m_dTerms[i].m_iHitPos )
+		{
+			tState.m_dCurLCS[uField]++;
+			tState.m_uNextPos++;
+			i++;
+		}
+		tState.m_dMaxLCS[uField] = Max ( tState.m_dMaxLCS[uField], tState.m_dCurLCS[uField] );
+
+		if ( i!=m_dTerms.GetLength() )
+		{
+			// !COMMIT calc tail LCS here...
+			tState.m_uNextPos = 0;
+		} else
+		{
+			assert ( tState.m_uNextPos==m_dTerms.Last().m_iHitPos+1 );
+		}
+
+	} else
+	{
+		// plain 1-term atom  or phrase atom
+		assert ( m_iMaxDistance==0 || m_dTerms.GetLength()==1 );
+
+		if ( m_uLastHitPos!=tState.m_uNextPos )
+			tState.m_dCurLCS[uField] = 0;
+
+		tState.m_dCurLCS[uField] += m_dTerms.GetLength ();
+
+		tState.m_dMaxLCS[uField] = Max ( tState.m_dMaxLCS[uField], tState.m_dCurLCS[uField] );
+		tState.m_uNextPos = m_uLastHitPos + m_dTerms.GetLength ();
 	}
 }
 
@@ -6561,14 +6622,15 @@ public:
 	CSphMatch *			GetNextMatch ( DWORD iMinID, int iTerms, float * pIDF, int iFields, int * pWeights );	///< iTF==0 means that no weighting is required
 
 protected:
-	CSphMatch *			GetNextDoc ( DWORD iMinID, bool bCalcLCS );
+	CSphMatch *			GetNextDoc ( DWORD iMinID );
 	void				GetNextHit ( DWORD iMinPos );
 	void				GetLastTF ( DWORD * pTF ) const;
 	inline CSphMatch *	GetLastDoc () const { return m_pLast; }
-	void				CalcLCS ();
+	void				UpdateLCS ( CSphLCSState & tState );
 
 public:
-	CSphSpanningHit		m_tXhit;
+	DWORD				m_uLastHitPos;
+	int					m_iLastHitChild;
 
 protected:
 	CSphExtendedEvalAtom				m_tAtom;		///< plain node atom
@@ -6584,6 +6646,7 @@ CSphExtendedEvalNode::CSphExtendedEvalNode ( const CSphExtendedQueryNode * pNode
 	, m_bAny ( pNode->m_bAny )
 	, m_bDone ( false )
 	, m_pLast ( NULL )
+	, m_iLastHitChild ( -1 )
 {
 	ARRAY_FOREACH ( i, pNode->m_dChildren )
 		m_dChildren.Add ( new CSphExtendedEvalNode ( pNode->m_dChildren[i], tSetup ) );
@@ -6600,94 +6663,6 @@ CSphExtendedEvalNode::~CSphExtendedEvalNode ()
 }
 
 
-void CSphExtendedEvalNode::CalcLCS ()
-{
-	// only for non-plain match-all nodes
-	assert ( m_dChildren.GetLength() );
-	assert ( !m_bAny );
-
-	m_tXhit.SetTotalMatch ( UINT_MAX, 0 );
-
-	DWORD iMinPos = UINT_MAX;	// min pos over all children
-	DWORD iMaxEnd = 0;			// max pos+span over all children
-	DWORD iCurEnd = 0;			// current span end
-
-	DWORD iAccEnd = 0;			// accumulated LCS end
-	int iAccLCS = 0;			// accumulated LCS length
-	int iMaxLCS = 0;			// max LCS length encountered
-	int iHeadLCS;				// head LCS length; -1 if not yet computed
-
-	const CSphSpanningHit & tHead = m_dChildren[0]->m_tXhit;
-	if ( tHead.m_iSpan==tHead.m_iHeadLCS)
-	{
-		assert ( tHead.m_iSpan==tHead.m_iHeadLCS );
-		assert ( tHead.m_iSpan==tHead.m_iMaxLCS );
-		iHeadLCS = -1;
-	} else
-	{
-		iHeadLCS = tHead.m_iHeadLCS; // might be zeroed out later
-	}
-
-	ARRAY_FOREACH ( i, m_dChildren )
-	{
-		const CSphSpanningHit & tCur = m_dChildren[i]->m_tXhit;
-		iCurEnd = tCur.m_iPos + tCur.m_iSpan;
-
-		// incoming span is adjacent, grow current LCS
-		if ( iAccEnd==tCur.m_iPos )
-			iAccLCS += tCur.m_iHeadLCS;
-
-		// track min/max stuff
-		iMinPos = Min ( iMinPos, tCur.m_iPos );
-		iMaxEnd = Max ( iMaxEnd, iCurEnd );
-		iMaxLCS = Max ( iMaxLCS, iAccLCS );
-		iMaxLCS = Max ( iMaxLCS, tCur.m_iMaxLCS );
-
-		if ( iAccEnd==tCur.m_iPos && tCur.m_iHeadLCS==tCur.m_iSpan )
-		{
-			// incoming span is adjacent and continuous, we can keep that LCS
-			assert ( tCur.m_iSpan==tCur.m_iHeadLCS );
-			assert ( tCur.m_iSpan==tCur.m_iMaxLCS );
-			iAccEnd += tCur.m_iSpan;
-
-		} else 
-		{
-			// flush continuous head LCS
-			if ( iHeadLCS<0 && iAccLCS )
-				iHeadLCS = iAccLCS;
-
-			// new LCS starts at the tail of incoming span
-			iAccEnd = iCurEnd;
-			iAccLCS = tCur.m_iTailLCS;
-		}
-	}
-
-	// if and only if first child starts the span, we have some head LCS
-	if ( tHead.m_iPos!=iMinPos )
-	{
-		iHeadLCS = 0;
-	} else if ( iHeadLCS<0 )
-	{
-		assert ( iAccLCS );
-		iHeadLCS = iAccLCS; // final flush for fully continuous spans
-	}
-
-	// if and only if last child ends the span, we have some tail LCS
-	int iTailLCS = 0;
-	if ( iCurEnd==iMaxEnd )
-		iTailLCS = iAccLCS;
-
-	m_tXhit.m_iPos = iMinPos;
-	m_tXhit.m_iSpan = iMaxEnd-iMinPos;
-	m_tXhit.m_iHeadLCS = iHeadLCS;
-	m_tXhit.m_iTailLCS = iTailLCS;
-	m_tXhit.m_iMaxLCS = iMaxLCS;
-
-	// sanity checks
-	assert ( m_tXhit.IsValid() );
-}
-
-
 void CSphExtendedEvalNode::GetNextHit ( DWORD uMinPos )
 {
 	assert ( !m_bDone );
@@ -6699,7 +6674,7 @@ void CSphExtendedEvalNode::GetNextHit ( DWORD uMinPos )
 		assert ( !m_tAtom.IsEmpty() );
 
 		m_tAtom.GetNextHit ( uMinPos );
-		m_tXhit = m_tAtom.m_tXhit; // OPTIMIZE?
+		m_uLastHitPos = m_tAtom.m_uLastHitPos;
 		return;
 	}
 
@@ -6708,41 +6683,40 @@ void CSphExtendedEvalNode::GetNextHit ( DWORD uMinPos )
 	int iMinChild = -1;
 
 	ARRAY_FOREACH ( i, m_dChildren )
-		if ( m_dChildren[i]->m_tXhit.m_iPos && m_dChildren[i]->m_pLast->m_iDocID==m_pLast->m_iDocID )
+		if ( m_dChildren[i]->m_uLastHitPos && m_dChildren[i]->m_pLast->m_iDocID==m_pLast->m_iDocID )
 	{
 		CSphExtendedEvalNode * pChild = m_dChildren[i];
 		do
 		{
 			pChild->GetNextHit ( uMinPos );
-		} while ( pChild->m_tXhit.m_iPos && pChild->m_tXhit.m_iPos<uMinPos );
+		} while ( pChild->m_uLastHitPos && pChild->m_uLastHitPos<uMinPos );
 
-		if ( pChild->m_tXhit.m_iPos && pChild->m_tXhit.m_iPos<uChildPos )
+		if ( pChild->m_uLastHitPos && pChild->m_uLastHitPos<uChildPos )
 		{
-			uChildPos = pChild->m_tXhit.m_iPos;
+			uChildPos = pChild->m_uLastHitPos;
 			iMinChild = i;
 		}
 	}
 
-	// it seems we're done
 	if ( iMinChild<0 )
 	{
-		m_tXhit.m_iPos = 0;
+		m_uLastHitPos = 0;
 		return;
 	}
-
-	// use child LCS for "match any" nodes
+	
 	if ( m_bAny )
 	{
-		m_tXhit = m_dChildren[iMinChild]->m_tXhit;
-		return;
-	}
+		m_uLastHitPos = m_dChildren[iMinChild]->m_uLastHitPos;
+		m_iLastHitChild = iMinChild;
 
-	// recalc LCS for "match all" nodes
-	CalcLCS ();
+	} else
+	{
+		m_uLastHitPos = uChildPos;
+	}
 }
 
 
-CSphMatch * CSphExtendedEvalNode::GetNextDoc ( DWORD iMinID, bool bCalcLCS )
+CSphMatch * CSphExtendedEvalNode::GetNextDoc ( DWORD iMinID )
 {
 	if ( m_bDone )
 		return NULL;
@@ -6757,7 +6731,7 @@ CSphMatch * CSphExtendedEvalNode::GetNextDoc ( DWORD iMinID, bool bCalcLCS )
 		assert ( !m_tAtom.IsEmpty() );
 
 		m_pLast = m_tAtom.GetNextDoc ( iMinID );
-		m_tXhit = m_tAtom.m_tXhit; // OPTIMIZE?
+		m_uLastHitPos = m_tAtom.m_uLastHitPos;
 		if ( !m_pLast )
 			m_bDone = true;
 		return m_pLast;
@@ -6778,7 +6752,7 @@ CSphMatch * CSphExtendedEvalNode::GetNextDoc ( DWORD iMinID, bool bCalcLCS )
 		ARRAY_FOREACH ( i, m_dChildren )
 		{
 			// get next candidate
-			CSphMatch * pCur = m_dChildren[i]->GetNextDoc ( iMinID, bCalcLCS );
+			CSphMatch * pCur = m_dChildren[i]->GetNextDoc ( iMinID );
 			assert ( pCur==m_dChildren[i]->GetLastDoc() );
 
 			if ( !pCur )
@@ -6796,7 +6770,8 @@ CSphMatch * CSphExtendedEvalNode::GetNextDoc ( DWORD iMinID, bool bCalcLCS )
 			if ( !pMatch || pCur->m_iDocID < pMatch->m_iDocID )
 			{
 				pMatch = pCur;
-				m_tXhit = m_dChildren[i]->m_tXhit; // OPTIMIZE?
+				m_uLastHitPos = m_dChildren[i]->m_uLastHitPos;
+				m_iLastHitChild = i;
 			}
 		}
 
@@ -6810,7 +6785,7 @@ CSphMatch * CSphExtendedEvalNode::GetNextDoc ( DWORD iMinID, bool bCalcLCS )
 		ARRAY_FOREACH ( i, m_dChildren )
 		{
 			CSphExtendedEvalNode * pChild = m_dChildren[i];
-			pMatch = pChild->GetNextDoc ( iMinID, bCalcLCS );
+			pMatch = pChild->GetNextDoc ( iMinID );
 			if ( !pMatch )
 			{
 				m_bDone = true;
@@ -6823,11 +6798,15 @@ CSphMatch * CSphExtendedEvalNode::GetNextDoc ( DWORD iMinID, bool bCalcLCS )
 
 			iMinID = pMatch->m_iDocID;
 		}
+
 		assert ( pMatch );
 
-		// calc initial LCS
-		if ( bCalcLCS )
-			CalcLCS ();
+		m_uLastHitPos = UINT_MAX;
+		ARRAY_FOREACH ( i, m_dChildren )
+		{
+			assert ( m_dChildren[i]->m_uLastHitPos );
+			m_uLastHitPos = Min ( m_dChildren[i]->m_uLastHitPos, m_uLastHitPos );
+		}
 	}
 
 	m_pLast = pMatch;
@@ -6835,10 +6814,30 @@ CSphMatch * CSphExtendedEvalNode::GetNextDoc ( DWORD iMinID, bool bCalcLCS )
 }
 
 
+void CSphExtendedEvalNode::UpdateLCS ( CSphLCSState & tState )
+{
+	if ( m_dChildren.GetLength() )
+	{
+		if ( !m_bAny )
+		{
+			ARRAY_FOREACH ( i, m_dChildren )
+				m_dChildren[i]->UpdateLCS ( tState );
+		} else
+		{
+			assert ( m_dChildren[m_iLastHitChild]->m_uLastHitPos==m_uLastHitPos );
+			m_dChildren[m_iLastHitChild]->UpdateLCS ( tState );
+		}
+	} else
+	{
+		m_tAtom.UpdateLCS ( tState );
+	}
+}
+
+
 CSphMatch * CSphExtendedEvalNode::GetNextMatch ( DWORD iMinID, int iTerms, float * pIDF,
 	int iFields, int * pWeights )
 {
-	CSphMatch * pMatch = GetNextDoc ( iMinID, iTerms!=0 );
+	CSphMatch * pMatch = GetNextDoc ( iMinID );
 	m_pLast = pMatch;
 
 	if ( !pMatch || !iTerms ) // if there's no match or no need to rank, we're done
@@ -6850,6 +6849,7 @@ CSphMatch * CSphExtendedEvalNode::GetNextMatch ( DWORD iMinID, int iTerms, float
 
 #ifndef NDEBUG
 	// check that every actually matching child has its hitlist ready
+	assert ( m_uLastHitPos );
 	ARRAY_FOREACH ( i, m_dChildren )
 	{
 		assert ( m_dChildren[i]->GetLastDoc() );
@@ -6857,30 +6857,27 @@ CSphMatch * CSphExtendedEvalNode::GetNextMatch ( DWORD iMinID, int iTerms, float
 		{
 			assert ( m_dChildren[i]->GetLastDoc()->m_iDocID>=pMatch->m_iDocID );
 			if ( m_dChildren[i]->GetLastDoc()->m_iDocID==pMatch->m_iDocID )
-				assert ( m_dChildren[i]->m_tXhit.m_iPos );
+				assert ( m_dChildren[i]->m_uLastHitPos );
 		} else
 		{
 			assert ( m_dChildren[i]->GetLastDoc()->m_iDocID==pMatch->m_iDocID );
-			assert ( m_dChildren[i]->m_tXhit.m_iPos );
+			assert ( m_dChildren[i]->m_uLastHitPos );
 		}
 	}
 #endif
 
 	// calc LCS rank
-	int dMaxLCS [ SPH_MAX_FIELDS ];
-	for ( int i=0; i<iFields; i++ )
-		dMaxLCS[i] = 0;
-
-	do
+	CSphLCSState tState ( iFields );
+	do 
 	{
-		int & iMaxLCS = dMaxLCS [ m_tXhit.m_iPos>>24 ];
-		iMaxLCS = Max ( iMaxLCS, m_tXhit.m_iMaxLCS );
-		GetNextHit ( 1+m_tXhit.m_iPos );
-	} while ( m_tXhit.m_iPos );
+		tState.CleanCurrent ( iFields );
+		UpdateLCS ( tState );
+		GetNextHit ( 1+m_uLastHitPos );
+	} while ( m_uLastHitPos );
 
 	int iMaxLCS = 0;
 	for ( int i=0; i<iFields; i++ )
-		iMaxLCS += dMaxLCS[i] * pWeights[i];
+		iMaxLCS += tState.m_dMaxLCS[i] * pWeights[i];
 
 	// calc simplified BM25 rank
 	DWORD uTF [ SPH_BM25_MAX_TERMS ]; // FIXME? maybe a dynamic array
@@ -6943,6 +6940,7 @@ void CSphExtendedEvalNode::CollectQwords ( CSphQwordsHash & dHash, int & iCount 
 	} else
 	{
 		ARRAY_FOREACH ( i, m_tAtom.m_dTerms )
+			if ( m_tAtom.m_dTerms[i].m_iDocs )
 		{
 			bool bAdded = dHash.Add ( m_tAtom.m_dTerms[i], m_tAtom.m_dTerms[i].m_sWord );
 

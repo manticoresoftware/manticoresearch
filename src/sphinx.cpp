@@ -6623,7 +6623,7 @@ public:
 
 protected:
 	CSphMatch *			GetNextDoc ( DWORD iMinID );
-	void				GetNextHit ( DWORD iMinPos );
+	DWORD				GetNextHitNode ( DWORD iMinPos );
 	void				GetLastTF ( DWORD * pTF ) const;
 	inline CSphMatch *	GetLastDoc () const { return m_pLast; }
 	void				UpdateLCS ( CSphLCSState & tState );
@@ -6663,7 +6663,7 @@ CSphExtendedEvalNode::~CSphExtendedEvalNode ()
 }
 
 
-void CSphExtendedEvalNode::GetNextHit ( DWORD uMinPos )
+DWORD CSphExtendedEvalNode::GetNextHitNode ( DWORD uMinPos )
 {
 	assert ( !m_bDone );
 
@@ -6675,44 +6675,59 @@ void CSphExtendedEvalNode::GetNextHit ( DWORD uMinPos )
 
 		m_tAtom.GetNextHit ( uMinPos );
 		m_uLastHitPos = m_tAtom.m_uLastHitPos;
-		return;
+		return m_uLastHitPos;
 	}
 
 	// expression node
 	DWORD uChildPos = UINT_MAX;
 	int iMinChild = -1;
 
-	ARRAY_FOREACH ( i, m_dChildren )
-		if ( m_dChildren[i]->m_uLastHitPos && m_dChildren[i]->m_pLast->m_iDocID==m_pLast->m_iDocID )
+	if ( m_bAny )
 	{
-		CSphExtendedEvalNode * pChild = m_dChildren[i];
-		do
+		ARRAY_FOREACH ( i, m_dChildren )
+			if ( m_dChildren[i]->m_uLastHitPos && m_dChildren[i]->m_pLast->m_iDocID==m_pLast->m_iDocID )
 		{
-			pChild->GetNextHit ( uMinPos );
-		} while ( pChild->m_uLastHitPos && pChild->m_uLastHitPos<uMinPos );
+			CSphExtendedEvalNode * pChild = m_dChildren[i];
+			do
+			{
+				pChild->GetNextHitNode ( uMinPos );
+			} while ( pChild->m_uLastHitPos && pChild->m_uLastHitPos<uMinPos );
 
-		if ( pChild->m_uLastHitPos && pChild->m_uLastHitPos<uChildPos )
+			if ( pChild->m_uLastHitPos && pChild->m_uLastHitPos<uChildPos )
+			{
+				uChildPos = pChild->m_uLastHitPos;
+				iMinChild = i;
+			}
+		}
+
+		assert ( iMinChild<0 || m_dChildren[iMinChild]->m_uLastHitPos==uChildPos );
+
+	} else
+	{
+		ARRAY_FOREACH ( i, m_dChildren )
 		{
-			uChildPos = pChild->m_uLastHitPos;
-			iMinChild = i;
+			CSphExtendedEvalNode * pChild = m_dChildren[i];
+
+			DWORD uPos = pChild->m_uLastHitPos;
+			if ( !uPos )
+				continue;
+
+			if ( i==m_iLastHitChild )
+				uPos = pChild->GetNextHitNode ( uMinPos );
+
+			if ( uPos && uPos<uChildPos )
+			{
+				uChildPos = uPos;
+				iMinChild = i;
+			}
 		}
 	}
 
 	if ( iMinChild<0 )
-	{
-		m_uLastHitPos = 0;
-		return;
-	}
-	
-	if ( m_bAny )
-	{
-		m_uLastHitPos = m_dChildren[iMinChild]->m_uLastHitPos;
-		m_iLastHitChild = iMinChild;
-
-	} else
-	{
-		m_uLastHitPos = uChildPos;
-	}
+		uChildPos = 0;
+	m_uLastHitPos = uChildPos;
+	m_iLastHitChild = iMinChild;
+	return uChildPos;
 }
 
 
@@ -6804,8 +6819,14 @@ CSphMatch * CSphExtendedEvalNode::GetNextDoc ( DWORD iMinID )
 		m_uLastHitPos = UINT_MAX;
 		ARRAY_FOREACH ( i, m_dChildren )
 		{
-			assert ( m_dChildren[i]->m_uLastHitPos );
-			m_uLastHitPos = Min ( m_dChildren[i]->m_uLastHitPos, m_uLastHitPos );
+			DWORD uPos = m_dChildren[i]->m_uLastHitPos;
+			assert ( uPos );
+
+			if ( uPos<m_uLastHitPos )
+			{
+				m_uLastHitPos = uPos;
+				m_iLastHitChild = i;
+			}
 		}
 	}
 
@@ -6872,7 +6893,7 @@ CSphMatch * CSphExtendedEvalNode::GetNextMatch ( DWORD iMinID, int iTerms, float
 	{
 		tState.CleanCurrent ( iFields );
 		UpdateLCS ( tState );
-		GetNextHit ( 1+m_uLastHitPos );
+		GetNextHitNode ( 1+m_uLastHitPos );
 	} while ( m_uLastHitPos );
 
 	int iMaxLCS = 0;

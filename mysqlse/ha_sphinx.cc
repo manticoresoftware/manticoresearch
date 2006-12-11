@@ -6,11 +6,12 @@
 #pragma implementation // gcc: Class implementation
 #endif
 
-#ifndef __WIN__
-#include "mysql_priv.h"
-#else
-#include "../mysql_priv.h"
+#if _MSC_VER>=1400
+#define _CRT_SECURE_NO_DEPRECATE 1
+#define _CRT_NONSTDC_NO_DEPRECATE 1
 #endif
+
+#include "../mysql_priv.h"
 
 #include <mysys_err.h>
 #include <my_sys.h>
@@ -353,9 +354,6 @@ static int parse_url ( SPHINX_SHARE * share, TABLE * table, uint table_create_fl
 { 
 	uint error_num = ER_FOREIGN_DATA_STRING_INVALID;
 
-	char buf [ SPHINX_QUERY_BUFFER_SIZE ];
-	int buf_len;
-
 	DBUG_ENTER ( "ha_sphinx::parse_url" );
 	share->port = 0;
 
@@ -373,7 +371,7 @@ static int parse_url ( SPHINX_SHARE * share, TABLE * table, uint table_create_fl
 		bOk = false;
 
 		share->scheme = my_strndup (
-			(const byte*) table->s->connect_string.str,
+			(const char*) table->s->connect_string.str,
 			table->s->connect_string.length,
 			MYF(0) );
 		share->scheme [ table->s->connect_string.length ] = 0;
@@ -714,7 +712,7 @@ static int fill_temp_query_req ( char * field, query_req * req )
 {
 	DBUG_ENTER ( "fill_temp_query_req " );
 
-	char * fn, * fs;
+	char * fs;
 	uint flen;
 
 	if (( fs = strchr ( field, '=' ) ))
@@ -925,11 +923,10 @@ int ha_sphinx::index_read ( byte * buf, const byte * key, uint key_len,
 	short int resp_status;
 	short int resp_ver;
 	int resp_length = 0;
-	uint i, count = 0;
+	uint count = 0;
 	short command_search = htons(0x101);
 	String varchar;
 	uint var_length= uint2korr(key);
-	void ** tmp_ha_data;
 
 	DBUG_ENTER("ha_sphinx::index_read");
 	DGPRINT("%s","index_read\n");
@@ -992,7 +989,11 @@ int ha_sphinx::index_read ( byte * buf, const byte * key, uint key_len,
 		DBUG_RETURN ( HA_ERR_END_OF_FILE );
 	}
 
+#ifndef __WIN__
 	::recv ( fd_socket, response, resp_length, MSG_WAITALL );
+#else
+	::recv ( fd_socket, response, resp_length, 0 ); // FIXME!
+#endif
 
 	memcpy ( &count, response, 4 );
 	count_of_found_recs = ntohl(count);
@@ -1002,7 +1003,7 @@ int ha_sphinx::index_read ( byte * buf, const byte * key, uint key_len,
 
 	// set new data for thd->ha_data, it is used in show_status
 	#if MYSQL_VERSION_ID>50100
-	tmp_ha_data= thd_ha_data(table->in_use, &sphinx_hton);
+	void ** tmp_ha_data = thd_ha_data(table->in_use, &sphinx_hton);
 	#define TARGET *tmp_ha_data
 	#else
 	#define TARGET current_thd->ha_data[sphinx_hton.slot]
@@ -1058,7 +1059,6 @@ int ha_sphinx::get_rec ( byte * buf, const byte * key, uint keylen )
 	uint fn = 0;
 	int tmp;
 	byte * tmp1;
-	TIME tmptime;
 
 	#if MYSQL_VERSION_ID>50100
 	my_bitmap_map * org_bitmap = dbug_tmp_use_all_columns ( table, table->write_set );
@@ -1268,7 +1268,6 @@ int ha_sphinx::rename_table ( const char *, const char * )
 // Called from opt_range.cc by check_quick_keys().
 ha_rows ha_sphinx::records_in_range ( uint inx, key_range * min_key, key_range * max_key )
 {
-	char buf[128];
 	String varchar;
 	uint var_length = uint2korr(min_key->key);
 

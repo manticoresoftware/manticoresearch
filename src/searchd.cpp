@@ -1930,7 +1930,10 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	if ( iVer<=0x101 )
 		iGroups			= tReq.GetDwords ( &pGroups, SEARCHD_MAX_ATTR_VALUES, "invalid group count %d (should be in 0..%d range)" );
 	if ( iVer>=0x102 )
-		tQuery.m_sSortBy= tReq.GetString ();
+	{
+		tQuery.m_sSortBy = tReq.GetString ();
+		tQuery.m_sSortBy.ToLower ();
+	}
 	tQuery.m_sQuery		= tReq.GetString ();
 	tQuery.m_iWeights	= tReq.GetDwords ( (DWORD**)&tQuery.m_pWeights, SPH_MAX_FIELDS, "invalid weight count %d (should be in 0..%d range)" );
 	CSphString sIndexes	= tReq.GetString ();
@@ -1967,6 +1970,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		{
 			CSphFilter & tFilter = tQuery.m_dFilters[i];
 			tFilter.m_sAttrName = tReq.GetString ();
+			tFilter.m_sAttrName.ToLower ();
 			tFilter.m_iValues = tReq.GetDwords ( &tFilter.m_pValues, SEARCHD_MAX_ATTR_VALUES,
 				"invalid attribute set length %d (should be in 0..%d range)" );
 			if ( !tFilter.m_iValues )
@@ -1983,6 +1987,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	{
 		tQuery.m_eGroupFunc = (ESphGroupBy) tReq.GetDword ();
 		tQuery.m_sGroupBy = tReq.GetString ();
+		tQuery.m_sGroupBy.ToLower ();
 	}
 
 	// v.1.4

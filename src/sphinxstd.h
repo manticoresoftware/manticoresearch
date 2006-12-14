@@ -13,6 +13,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <ctype.h>
 
 /////////////////////////////////////////////////////////////////////////////
 // MEMORY MANAGEMENT
@@ -675,6 +676,13 @@ public:
 		if ( !m_sValue )
 			return true;
 		return ( (*m_sValue)=='\0' );
+	}
+
+	void ToLower ()
+	{
+		if ( m_sValue )
+			for ( char * s=m_sValue; *s; s++ )
+				*s = (char) tolower ( *s );
 	}
 };
 

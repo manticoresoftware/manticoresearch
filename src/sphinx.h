@@ -389,7 +389,9 @@ struct CSphColumnInfo
 	CSphColumnInfo ( const char * sName=NULL, ESphAttrType eType=SPH_ATTR_NONE )
 		: m_sName ( sName )
 		, m_eAttrType ( eType )
-	{}
+	{
+		m_sName.ToLower ();
+	}
 };
 
 

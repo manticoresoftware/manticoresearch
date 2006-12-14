@@ -3692,6 +3692,7 @@ void CSphIndex_VLN::WriteSchemaColumn ( CSphWriter & fdInfo, const CSphColumnInf
 void CSphIndex_VLN::ReadSchemaColumn ( CSphReader_VLN & rdInfo, CSphColumnInfo & tCol )
 {
 	tCol.m_sName = rdInfo.GetString ();
+	tCol.m_sName.ToLower ();
 	tCol.m_eAttrType = (ESphAttrType) rdInfo.GetDword ();
 }
 

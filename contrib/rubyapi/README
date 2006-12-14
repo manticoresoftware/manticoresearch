@@ -1,0 +1,38 @@
+=Sphinx Client Library 0.1.0
+
+This document gives an overview of what is Sphinx itself and how to use in 
+within Ruby on Rails. For more information or documentation, 
+please go to http://www.sphinxsearch.com
+
+==Sphinx
+
+Sphinx is a standalone full-text search engine, meant to provide fast, 
+size-efficient and relevant fulltext search functions to other applications. 
+Sphinx was specially designed to integrate well with SQL databases and 
+scripting languages. Currently built-in data sources support fetching data 
+either via direct connection to MySQL, or from an XML pipe.
+ 
+Simplest way to communicate with Sphinx is to use <tt>searchd</tt> -
+a daemon to search through fulltext indices from external software.
+
+==Documentation
+
+You can create the documentation by running:
+
+	rake rdoc
+
+==Latest version
+
+You can always get latest version from
+http://kpumuk.info/projects/ror-plugins/using-sphinx-search-engine-in-ruby-on-rails
+
+==Credits
+
+Dmytro Shteflyuk <kpumuk@kpumuk.info> http://kpumuk.info
+
+Special thanks to Alexey Kovyrin <alexey@kovyrin.net> http://blog.kovyrin.net
+
+==License
+
+This library is distributed under the terms of the Ruby license.
+You can freely distribute/modify this library.

@@ -1,0 +1,83 @@
+#!/bin/bash
+#
+# Init file for searchd
+#
+# chkconfig: 2345 55 25
+#
+# description: searchd 
+#
+# USE "chkconfig --add searchd" to configure Sphinx searchd service
+#
+# by Vladimir Fedorkov Mar 1, 2006, info@astellar.com
+# public domain
+
+SUDO_USER=searchd
+
+BASE_PATH=/release/search
+PID_FILE=$BASE_PATH/searchd.pid
+CONFIG_FILE=$BASE_PATH/sphinx.conf
+
+EXEC_PATH=$BASE_PATH
+LOG_PATH=$EXEC_PATH
+
+RETVAL=0
+prog="searchd"
+
+do_config() {
+	mkdir -p $EXEC_PATH
+	mkdir $EXEC_PATH/data
+	mkdir -p $LOG_PATH
+	chown -R $SUDO_USER $EXEC_PATH
+	chown -R $SUDO_USER $EXEC_PATH/$CONFIG_FILE
+	chown -R $SUDO_USER $LOG_PATH
+
+	chmod 600 $EXEC_PATH/$CONFIG_FILE
+	chmod u+rwx $EXEC_PATH/*
+	chmod -R u+rw,go-rwx $EXEC_PATH/data
+	chmod -R u+rw,go-rwx $LOG_PATH
+}
+
+do_start() {
+	echo "Starting $prog"
+	sudo -u $SUDO_USER $EXEC_PATH/$prog --config $CONFIG_FILE
+	RETVAL=$?
+	echo
+	return $RETVAL
+}
+
+do_stop() {
+	echo "Stopping $prog"
+	if [ -e $PID_FILE ] ; then
+		kill -15 `cat $PID_FILE`
+		sleep 5
+		if [ -e $PID_FILE ] ; then
+			kill -9 `cat $PID_FILE`
+		fi
+	fi
+	RETVAL=$?
+	echo
+	return $RETVAL
+}
+
+case $* in
+
+config)
+	do_config
+	;;
+
+start)
+	do_start
+	;;
+
+stop)
+	do_stop
+	;;
+
+*)
+	echo "usage: $0 {start|stop|config}" >&2
+
+	exit 1
+	;;
+esac
+
+exit $RETVAL

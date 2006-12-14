@@ -11,7 +11,14 @@
 #define _CRT_NONSTDC_NO_DEPRECATE 1
 #endif
 
+#include <mysql_version.h>
+
+#if MYSQL_VERSION_ID>50100
+#include "mysql_priv.h"
+#include <mysql/plugin.h>
+#else
 #include "../mysql_priv.h"
+#endif
 
 #include <mysys_err.h>
 #include <my_sys.h>
@@ -24,10 +31,6 @@
 #endif
 
 #include "ha_sphinx.h"
-
-#if MYSQL_VERSION_ID>50100
-#include <mysql/plugin.h>
-#endif
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -1177,7 +1180,11 @@ int ha_sphinx::rnd_pos ( byte *, byte * )
 }
 
 
+#if MYSQL_VERSION_ID>=50114
+int ha_sphinx::info ( uint flag )
+#else
 void ha_sphinx::info ( uint flag )
+#endif
 {
 	DBUG_ENTER ( "ha_sphinx::info" );
 	if ( table->s->keys>0 )
@@ -1189,7 +1196,11 @@ void ha_sphinx::info ( uint flag )
 	records = 20;
 	#endif
 
+#if MYSQL_VERSION_ID>=50114
+	DBUG_RETURN(0);
+#else
 	DBUG_VOID_RETURN;
+#endif
 }
 
 

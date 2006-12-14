@@ -136,7 +136,11 @@ public:
 	int				rnd_next ( byte * buf );
 	int				rnd_pos ( byte * buf, byte * pos );
 	void			position ( const byte * record );
+#if MYSQL_VERSION_ID>=50114
+	int			info ( uint );
+#else
 	void			info ( uint );
+#endif
 
 	int				extra ( enum ha_extra_function operation );
 	int				reset ();

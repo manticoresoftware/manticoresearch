@@ -1472,7 +1472,6 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				tOut.SendWord ( VER_COMMAND_SEARCH ); // command version
 				tOut.SendInt ( iReqSize-12 ); // request body length
 
-				// request v.1.3
 				tOut.SendInt ( 0 ); // offset is 0
 				tOut.SendInt ( g_iMaxMatches ); // limit is MAX_MATCHES
 				tOut.SendInt ( iMode ); // match mode

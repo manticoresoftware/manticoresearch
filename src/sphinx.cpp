@@ -1496,8 +1496,8 @@ private:
 	static const int			WORDLIST_CHECKPOINT		= 1024;		///< wordlist checkpoints frequency
 	static const int			WRITE_BUFFER_SIZE		= 262144;	///< my write buffer size
 
-	static const int			INDEX_MAGIC_HEADER		= 'XHPS';	///< my magic header
-	static const int			INDEX_FORMAT_VERSION	= 1;		///< my format version
+	static const DWORD			INDEX_MAGIC_HEADER		= 0x58485053;	///< my magic 'SPHX' header
+	static const DWORD			INDEX_FORMAT_VERSION	= 1;			///< my format version
 
 	CSphString					m_sFilename;
 	SphOffset_t					m_iFilePos;
@@ -6309,7 +6309,9 @@ void CSphExtendedEvalAtom::GetNextHit ( DWORD iMinPos )
 
 	// OPTIMIZE? these are invariant during evaluation
 	assert ( m_iField<0 || m_iField<255 );
+#ifndef NDEBUG
 	const DWORD uMinHitpos = ( m_iField<0 ) ? 1 : ( m_iField<<24 )+1;
+#endif
 	const DWORD uMaxHitpos = ( m_iField<0 ) ? UINT_MAX : (1+m_iField)<<24;
 	if ( uMaxHitpos<=iMinPos )
 		return;
@@ -6500,7 +6502,9 @@ CSphMatch * CSphExtendedEvalAtom::GetNextDoc ( DWORD iMinID )
 		// !COMMIT OPTIMIZE 1-word query case
 		assert ( m_iField<0 || m_iField<255 );
 		const DWORD uMinHitpos = ( m_iField<0 ) ? 1 : ( m_iField<<24 )+1;
+#ifndef NDEBUG
 		const DWORD uMaxHitpos = ( m_iField<0 ) ? UINT_MAX : (1+m_iField)<<24;
+#endif
 
 		ARRAY_FOREACH ( i, m_dTerms )
 		{
@@ -6642,11 +6646,11 @@ protected:
 
 
 CSphExtendedEvalNode::CSphExtendedEvalNode ( const CSphExtendedQueryNode * pNode, const CSphTermSetup & tSetup )
-	: m_tAtom ( pNode->m_tAtom, tSetup )
+	: m_iLastHitChild ( -1 )
+	, m_tAtom ( pNode->m_tAtom, tSetup )
 	, m_bAny ( pNode->m_bAny )
 	, m_bDone ( false )
 	, m_pLast ( NULL )
-	, m_iLastHitChild ( -1 )
 {
 	ARRAY_FOREACH ( i, pNode->m_dChildren )
 		m_dChildren.Add ( new CSphExtendedEvalNode ( pNode->m_dChildren[i], tSetup ) );

@@ -68,7 +68,7 @@ public:
 
 private:
 								ISphNoncopyable ( const ISphNoncopyable & ) {}
-	const ISphNoncopyable &		operator = ( const ISphNoncopyable & ) {}
+	const ISphNoncopyable &		operator = ( const ISphNoncopyable & ) { return *this; }
 };
 
 
@@ -85,6 +85,9 @@ struct CSphExtendedQueryAtom
 		: m_iField ( -1 )
 		, m_iMaxDistance ( -1 )
 	{}
+
+	/// default dtor
+	virtual ~CSphExtendedQueryAtom () {}
 
 	/// clears but does NOT free everything
 	/// NOTE: preserves field ID!

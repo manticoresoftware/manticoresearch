@@ -63,7 +63,7 @@ if test x$ac_cv_use_debug != xno; then
 	AC_MSG_RESULT([yes])
 else
 	if test x$ac_env_CPPFLAGS_set != xset; then
-		CPPFLAGS="-Wall -O3 -fomit-frame-pointer -DNDEBUG -D_FILE_OFFSET_BITS=64"
+		CPPFLAGS="-Wall -g -D_FILE_OFFSET_BITS=64 -O3 -DNDEBUG"
 	fi
 	AC_MSG_RESULT([no])
 fi

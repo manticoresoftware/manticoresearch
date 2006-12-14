@@ -2256,7 +2256,7 @@ if test x$ac_cv_use_debug != xno; then
 echo "${ECHO_T}yes" >&6
 else
 	if test x$ac_env_CPPFLAGS_set != xset; then
-		CPPFLAGS="-Wall -O3 -fomit-frame-pointer -DNDEBUG -D_FILE_OFFSET_BITS=64"
+		CPPFLAGS="-Wall -g -D_FILE_OFFSET_BITS=64 -O3 -DNDEBUG"
 	fi
 	echo "$as_me:$LINENO: result: no" >&5
 echo "${ECHO_T}no" >&6

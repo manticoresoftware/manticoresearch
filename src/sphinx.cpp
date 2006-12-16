@@ -3441,6 +3441,7 @@ CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename )
 	m_iLastWordHits = 0;
 	m_iWordlistEntries = 0;
 
+	m_iDocinfo = 0;
 	m_eDocinfo = SPH_DOCINFO_NONE;
 	m_pDocinfoHash = NULL;
 	m_iDocinfoIdShift = 0;

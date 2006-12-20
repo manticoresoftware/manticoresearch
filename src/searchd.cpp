@@ -2006,7 +2006,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 	// v.1.5
 	tQuery.m_bSortByGroup = true;
-	if ( iVer<=0x105 )
+	if ( iVer>=0x105 )
 		if ( !tReq.GetInt() )
 			tQuery.m_bSortByGroup = false;
 

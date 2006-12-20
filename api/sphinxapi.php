@@ -22,7 +22,7 @@ define ( "SEARCHD_COMMAND_SEARCH",	0 );
 define ( "SEARCHD_COMMAND_EXCERPT",	1 );
 
 /// current client-side command implementation versions
-define ( "VER_COMMAND_SEARCH",		0x104 );
+define ( "VER_COMMAND_SEARCH",		0x105 );
 define ( "VER_COMMAND_EXCERPT",		0x100 );
 
 /// known searchd status codes
@@ -73,7 +73,8 @@ class SphinxClient
 	var $_filter;	///< attribute name to values set hash (for values-set filters)
 	var $_groupby;	///< group-by attribute name
 	var $_groupfunc;///< function to pre-process group-by attribute value with
-	var $_maxmatches;///< max matches to retrieve
+	var $_maxmatches;	///< max matches to retrieve
+	var $_sortbygroup;	///< whether to sort grouped results by group, or by current sorting func
 
 	var $_error;	///< last error message
 	var $_warning;	///< last warning message
@@ -101,6 +102,7 @@ class SphinxClient
 		$this->_groupby		= "";
 		$this->_groupfunc	= SPH_GROUPBY_DAY;
 		$this->_maxmatches	= 1000;
+		$this->_sortbygroup	= true;
 
 		$this->_error	= "";
 		$this->_warning	= "";
@@ -316,15 +318,23 @@ class SphinxClient
 	/// (in this group) according to current sorting function.
 	///
 	/// the final result set contains one best match per group, with
-	/// grouping function value and matches count attached. result set
-	/// is sorted by grouping function value, in descending order.
+	/// grouping function value and matches count attached.
+	///
+	/// result set could be sorted either by 1) grouping function value
+	/// in descending order (this is the default mode, when $sortbygroup
+	/// is set to true); or by 2) current sorting function (when $sortbygroup
+	/// is false).
+	///
+	/// WARNING, when sorting by current function there might be less
+	/// matching groups reported than actually present. @count might also be
+	/// underestimated. 
 	///
 	/// for example, if sorting by relevance and grouping by "published"
 	/// attribute with SPH_GROUPBY_DAY function, then the result set will
 	/// contain one most relevant match per each day when there were any
 	/// matches published, with day number and per-day match count attached,
 	/// and sorted by day number in descending order (ie. recent days first).
-	function SetGroupBy ( $attribute, $func )
+	function SetGroupBy ( $attribute, $func, $sortbygroup=true )
 	{
 		assert ( is_string($attribute) );
 		assert ( $func==SPH_GROUPBY_DAY
@@ -335,6 +345,7 @@ class SphinxClient
 
 		$this->_groupby = $attribute;
 		$this->_groupfunc = $func;
+		$this->_sortbygroup = $sortbygroup;
 	}
 
 	/// connect to searchd server and run given search query
@@ -392,11 +403,10 @@ class SphinxClient
 				$req .= pack ( "N", $value );
 		}
 
-		// group-by
+		// group-by, max matches, sort-by-group flag
 		$req .= pack ( "NN", $this->_groupfunc, strlen($this->_groupby) ) . $this->_groupby;
-
-		// max matches to retrieve
 		$req .= pack ( "N", $this->_maxmatches );
+		$req .= pack ( "N", $this->_sortbygroup );
 
 		////////////////////////////
 		// send query, get response

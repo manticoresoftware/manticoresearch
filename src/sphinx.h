@@ -864,6 +864,7 @@ public:
 
 	CSphString		m_sGroupBy;		///< group-by attribute name
 	ESphGroupBy		m_eGroupFunc;	///< function to pre-process group-by attribute value with
+	bool			m_bSortByGroup;	///< whether to sort found groups by group key or by current sorting func
 
 protected:
 	int				m_iAttrs;		///< attribute count (necessary to instantiate group-by queues)

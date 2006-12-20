@@ -792,7 +792,7 @@ struct IdentityHash_fn
 };
 
 
-DWORD sphCalcPriority ( const CSphMatch & tMatch, ESphGroupBy eGroupBy, int iGroupBy )
+DWORD sphCalcGroupKey ( const CSphMatch & tMatch, ESphGroupBy eGroupBy, int iGroupBy )
 {
 	assert ( iGroupBy>=0 && iGroupBy<tMatch.m_iAttrs );
 	DWORD iAttr = tMatch.m_pAttrs [ iGroupBy ];
@@ -818,7 +818,7 @@ static const int VIRTUAL_ATTRS_COUNT = 2;
 
 
 /// match-sorting priority queue with hashed priorities
-template < typename COMP > class CSphGroupQueue
+template < typename COMP, bool SORT_BY_GROUP > class CSphGroupQueue
 	: public ISphMatchQueue
 {
 protected:
@@ -832,17 +832,17 @@ protected:
 	int				m_iGroupBy;		///< group-by argument attribute index
 
 	int				m_iAttrs;			///< normal match attribute count (to distinguish already grouped matches)
-	int				m_iAttrPriority;	///< group-by value virtual attribute index
+	int				m_iAttrGroup;		///< group-by value virtual attribute index
 	int				m_iAttrCount;		///< grouped matches count virtual attribute index
 
-	CSphFixedHash < CSphMatch *, DWORD, IdentityHash_fn >	m_hPriority2Match;
+	CSphFixedHash < CSphMatch *, DWORD, IdentityHash_fn >	m_hGroup2Match;
 
 	CSphMatchComparatorState	m_tState;
 
 protected:
-	inline DWORD	GetPriority ( int iIndex )
+	inline DWORD	GetGroupKey ( int iIndex )
 	{
-		return m_dMatches [ m_dIndexes[iIndex] ].m_pAttrs [ m_iAttrPriority ];
+		return m_dMatches [ m_dIndexes[iIndex] ].m_pAttrs [ m_iAttrGroup ];
 	}
 
 public:
@@ -854,9 +854,9 @@ public:
 		, m_eGroupBy ( pQuery->m_eGroupFunc )
 		, m_iGroupBy ( pQuery->GetGroupByAttr() )
 		, m_iAttrs ( pQuery->GetAttrsCount() )
-		, m_iAttrPriority ( -1 )
+		, m_iAttrGroup ( -1 )
 		, m_iAttrCount ( -1 )
-		, m_hPriority2Match ( pQuery->m_iMaxMatches )
+		, m_hGroup2Match ( pQuery->m_iMaxMatches )
 	{
 		assert ( m_iLimit>0 );
 		assert ( m_iGroupBy>=0 );
@@ -885,15 +885,15 @@ public:
 		bool bGrouped = ( tEntry.m_iAttrs!=m_iAttrs );
 
 		// calc priority
-		DWORD uPriority = sphCalcPriority ( tEntry, m_eGroupBy, m_iGroupBy );
+		DWORD uGroupKey = sphCalcGroupKey ( tEntry, m_eGroupBy, m_iGroupBy );
 
-		// if this priority is already hashed, we only need to update the corresponding match
-		CSphMatch ** ppMatch = m_hPriority2Match ( uPriority );
+		// if this group is already hashed, we only need to update the corresponding match
+		CSphMatch ** ppMatch = m_hGroup2Match ( uGroupKey );
 		if ( ppMatch )
 		{
 			CSphMatch * pMatch = (*ppMatch);
 			assert ( pMatch );
-			assert ( pMatch->m_pAttrs [ m_iAttrPriority ]==uPriority );
+			assert ( pMatch->m_pAttrs [ m_iAttrGroup ]==uGroupKey );
 
 			if ( bGrouped )
 			{
@@ -911,7 +911,10 @@ public:
 			}
 
 			// if new entry is more relevant, update from it
-			if ( COMP::IsLess ( *pMatch, tEntry, m_tState ) )
+			bool bLess = SORT_BY_GROUP
+				? ( pMatch->m_pAttrs[m_iAttrGroup] < uGroupKey )
+				: COMP::IsLess ( *pMatch, tEntry, m_tState );
+			if ( bLess )
 			{
 				pMatch->m_iDocID = tEntry.m_iDocID;
 				pMatch->m_iWeight = tEntry.m_iWeight;
@@ -926,11 +929,11 @@ public:
 		// the first one?
 		if ( !m_iUsed )
 		{
-			m_iAttrPriority = tEntry.m_iAttrs;
+			m_iAttrGroup = tEntry.m_iAttrs;
 			m_iAttrCount = tEntry.m_iAttrs+1;
 			if ( bGrouped )
 			{
-				m_iAttrPriority -= VIRTUAL_ATTRS_COUNT;
+				m_iAttrGroup -= VIRTUAL_ATTRS_COUNT;
 				m_iAttrCount -= VIRTUAL_ATTRS_COUNT;
 			}
 		}
@@ -938,7 +941,11 @@ public:
 		if ( m_iUsed==m_iLimit )
 		{
 			// if it's worse that current min, reject it, else pop off current min
-			if ( uPriority < GetPriority(0) )
+			bool bLess = SORT_BY_GROUP
+				? ( uGroupKey < GetGroupKey(0) )
+				: COMP::IsLess ( tEntry, Root(), m_tState );
+
+			if ( bLess )
 				return true;
 			else
 				Pop ();
@@ -959,18 +966,22 @@ public:
 		memcpy ( tNew.m_pAttrs, tEntry.m_pAttrs, tEntry.m_iAttrs*sizeof(DWORD) );
 		if ( !bGrouped )
 		{
-			tNew.m_pAttrs [ m_iAttrPriority ] = uPriority;
+			tNew.m_pAttrs [ m_iAttrGroup ] = uGroupKey;
 			tNew.m_pAttrs [ m_iAttrCount ] = 1;
 		}
 
-		m_hPriority2Match.Add ( &tNew, uPriority );
+		m_hGroup2Match.Add ( &tNew, uGroupKey );
 
 		// sift up if needed, so that worst (lesser) ones float to the top
 		int iEntry = m_iUsed++;
 		while ( iEntry )
 		{
 			int iParent = ( iEntry-1 ) >> 1;
-			if (!( GetPriority(iEntry) < GetPriority(iParent) ))
+			bool bLess = SORT_BY_GROUP
+				? ( GetGroupKey(iEntry) < GetGroupKey(iParent) )
+				: COMP::IsLess ( m_dMatches[m_dIndexes[iEntry]], m_dMatches[m_dIndexes[iParent]], m_tState );
+
+			if ( !bLess )
 				break;
 
 			// entry is less than parent, should float to the top
@@ -986,8 +997,8 @@ public:
 	{
 		assert ( m_iUsed );
 
-		DWORD uPriority = GetPriority(0);
-		m_hPriority2Match.Remove ( uPriority );
+		DWORD uGroupKey = GetGroupKey(0);
+		m_hGroup2Match.Remove ( uGroupKey );
 
 		if ( !--m_iUsed ) // empty queue? just return
 			return;
@@ -1006,11 +1017,19 @@ public:
 
 			// select smallest child
 			if ( iChild+1<m_iUsed )
-				if ( GetPriority(iChild+1) < GetPriority(iChild) )
+			{
+				bool bLess = SORT_BY_GROUP
+					? ( GetGroupKey(iChild+1) < GetGroupKey(iChild) )
+					: COMP::IsLess ( m_dMatches[m_dIndexes[iChild+1]], m_dMatches[m_dIndexes[iChild]], m_tState );
+				if ( bLess )
 					iChild++;
+			}
 
 			// if smallest child is less than entry, do float it to the top
-			if ( GetPriority(iChild) < GetPriority(iEntry) )
+			bool bLess = SORT_BY_GROUP
+				? ( GetGroupKey(iChild) < GetGroupKey(iEntry) )
+				: COMP::IsLess ( m_dMatches[m_dIndexes[iChild]], m_dMatches[m_dIndexes[iEntry]], m_tState );
+			if ( bLess )
 			{
 				Swap ( m_dIndexes[iChild], m_dIndexes[iEntry] );
 				iEntry = iChild;
@@ -2682,6 +2701,7 @@ CSphQuery::CSphQuery ()
 	, m_iMaxID		( UINT_MAX )
 	, m_iAttrs		( -1 )
 	, m_iGroupBy	( -1 )
+	, m_bSortByGroup( true )
 {}
 
 
@@ -5439,15 +5459,32 @@ ISphMatchQueue * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & t
 
 	} else
 	{
-		switch ( eFunc )
+		if ( pQuery->m_bSortByGroup )
 		{
-			case FUNC_REL_DESC:	pTop = new CSphGroupQueue < MatchRelevanceLt_fn > ( pQuery ); break;
-			case FUNC_ATTR_DESC:pTop = new CSphGroupQueue < MatchAttrLt_fn > ( pQuery ); break;
-			case FUNC_ATTR_ASC:	pTop = new CSphGroupQueue < MatchAttrGt_fn > ( pQuery ); break;
-			case FUNC_TIMESEGS:	pTop = new CSphGroupQueue < MatchTimeSegments_fn > ( pQuery ); break;
+			switch ( eFunc )
+			{
+				case FUNC_REL_DESC:	pTop = new CSphGroupQueue < MatchRelevanceLt_fn, true > ( pQuery ); break;
 
-			case FUNC_GENERIC2:	pTop = new CSphGroupQueue < MatchGeneric2_fn > ( pQuery ); break;
-			case FUNC_GENERIC3:	pTop = new CSphGroupQueue < MatchGeneric3_fn > ( pQuery ); break;
+				case FUNC_ATTR_DESC:pTop = new CSphGroupQueue < MatchAttrLt_fn, true > ( pQuery ); break;
+				case FUNC_ATTR_ASC:	pTop = new CSphGroupQueue < MatchAttrGt_fn, true > ( pQuery ); break;
+				case FUNC_TIMESEGS:	pTop = new CSphGroupQueue < MatchTimeSegments_fn, true > ( pQuery ); break;
+
+				case FUNC_GENERIC2:	pTop = new CSphGroupQueue < MatchGeneric2_fn, true > ( pQuery ); break;
+				case FUNC_GENERIC3:	pTop = new CSphGroupQueue < MatchGeneric3_fn, true > ( pQuery ); break;
+			}
+		} else
+		{
+			switch ( eFunc )
+			{
+				case FUNC_REL_DESC:	pTop = new CSphGroupQueue < MatchRelevanceLt_fn, false > ( pQuery ); break;
+
+				case FUNC_ATTR_DESC:pTop = new CSphGroupQueue < MatchAttrLt_fn, false > ( pQuery ); break;
+				case FUNC_ATTR_ASC:	pTop = new CSphGroupQueue < MatchAttrGt_fn, false > ( pQuery ); break;
+				case FUNC_TIMESEGS:	pTop = new CSphGroupQueue < MatchTimeSegments_fn, false > ( pQuery ); break;
+
+				case FUNC_GENERIC2:	pTop = new CSphGroupQueue < MatchGeneric2_fn, false > ( pQuery ); break;
+				case FUNC_GENERIC3:	pTop = new CSphGroupQueue < MatchGeneric3_fn, false > ( pQuery ); break;
+			}
 		}
 	}
 

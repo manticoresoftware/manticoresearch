@@ -138,7 +138,7 @@ enum SearchdCommand_e
 /// known command versions
 enum
 {
-	VER_COMMAND_SEARCH		= 0x104,
+	VER_COMMAND_SEARCH		= 0x105,
 	VER_COMMAND_EXCERPT		= 0x100
 };
 
@@ -1501,6 +1501,7 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				tOut.SendInt ( tQuery.m_eGroupFunc );
 				tOut.SendString ( tQuery.m_sGroupBy.cstr() );
 				tOut.SendInt ( tQuery.m_iMaxMatches );
+				tOut.SendInt ( tQuery.m_bSortByGroup );
 				tOut.Flush ();
 
 				// FIXME! handle flush failure
@@ -2002,6 +2003,12 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			return;
 		}
 	}
+
+	// v.1.5
+	tQuery.m_bSortByGroup = true;
+	if ( iVer<=0x105 )
+		if ( !tReq.GetInt() )
+			tQuery.m_bSortByGroup = false;
 
 	// additional checks
 	if ( tReq.GetError() )

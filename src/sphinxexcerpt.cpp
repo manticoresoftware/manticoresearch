@@ -341,7 +341,7 @@ void ExcerptGen_c::AccumulateCodepoint ( int iCode )
 	if ( !m_bUtf8 )
 	{
 		// SBCS encoder
-		assert ( iCode>=0 && iCode<255 );
+		assert ( iCode>=0 && iCode<=255 );
 		*m_pAccum++ = (BYTE)iCode;
 
 	} else

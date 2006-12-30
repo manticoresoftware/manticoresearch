@@ -6885,7 +6885,8 @@ void CSphExtendedEvalNode::UpdateLCS ( CSphLCSState & tState )
 		if ( !m_bAny )
 		{
 			ARRAY_FOREACH ( i, m_dChildren )
-				m_dChildren[i]->UpdateLCS ( tState );
+				if ( m_dChildren[i]->m_uLastHitPos )
+					m_dChildren[i]->UpdateLCS ( tState );
 		} else
 		{
 			assert ( m_dChildren[m_iLastHitChild]->m_uLastHitPos==m_uLastHitPos );

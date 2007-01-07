@@ -2726,9 +2726,9 @@ CSphQuery::CSphQuery ()
 	, m_iMaxMatches	( 1000 )
 	, m_iMinID		( 0 )
 	, m_iMaxID		( UINT_MAX )
+	, m_bSortByGroup( true )
 	, m_iAttrs		( -1 )
 	, m_iGroupBy	( -1 )
-	, m_bSortByGroup( true )
 {}
 
 

@@ -1051,7 +1051,7 @@ int main ( int argc, char ** argv )
 	if ( bIndexedOk )
 	{
 		bool bOK = false;
-		while ( bRotate )
+		while ( g_bRotate )
 		{
 			// load config
 			if ( !hConf.Exists ( "searchd" ) )
@@ -1104,7 +1104,7 @@ int main ( int argc, char ** argv )
 			break;
 		}
 
-		if ( bRotate )
+		if ( g_bRotate )
 		{
 			if ( !bOK )
 				fprintf ( stdout, "WARNING: indices NOT rotated.\n" );

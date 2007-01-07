@@ -4134,6 +4134,12 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	if ( m_tSchema.m_dAttrs.GetLength()==0 )
 		m_eDocinfo = SPH_DOCINFO_NONE;
 
+	if ( m_tSchema.m_dAttrs.GetLength()>0 && m_eDocinfo==SPH_DOCINFO_NONE )
+	{
+		fprintf ( stdout, "ERROR: got attributes, but docinfo is 'none' (fix your config file)\n" );
+		return 0;
+	}
+
 	////////////////////////////////////////////////
 	// collect and partially sort hits and docinfos
 	////////////////////////////////////////////////
@@ -5114,6 +5120,11 @@ struct CSphQueryParser : CSphSource_Text
 	}
 
 	virtual bool Connect ()
+	{
+		return false;
+	}
+
+	virtual bool HasAttrsConfigured ()
 	{
 		return false;
 	}

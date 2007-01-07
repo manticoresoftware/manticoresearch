@@ -825,6 +825,7 @@ int main ( int argc, char ** argv )
 		/////////////////////
 
 		CSphVector < CSphSource * > dSources;
+		bool bGotAttrs = false;
 
 		for ( CSphVariant * pSourceName = hIndex("source"); pSourceName; pSourceName = pSourceName->m_pNext )
 		{
@@ -838,6 +839,9 @@ int main ( int argc, char ** argv )
 			CSphSource * pSource = SpawnSource ( hSource, pSourceName->cstr() );
 			if ( !pSource )
 				continue;
+
+			if ( pSource->HasAttrsConfigured() )
+				bGotAttrs = true;
 
 			// strip_html, index_html_attrs
 			if ( hSource("strip_html") )
@@ -872,6 +876,11 @@ int main ( int argc, char ** argv )
 		{
 			if ( hIndex["docinfo"]=="none" )	eDocinfo = SPH_DOCINFO_NONE;
 			if ( hIndex["docinfo"]=="inline" )	eDocinfo = SPH_DOCINFO_INLINE;
+		}
+		if ( bGotAttrs && eDocinfo==SPH_DOCINFO_NONE )
+		{
+			fprintf ( stdout, "FATAL: index '%s': got attributes, but docinfo is 'none' (fix your config file).\n", sIndexName );
+			return 1;
 		}
 
 		///////////

@@ -482,6 +482,11 @@ public:
 	/// gets called when the indexing is succesfully (!) over
 	virtual void						PostIndex () {}
 
+	/// check if there are any attributes configured
+	/// note that there might be NO actual attributes in the case if configured
+	/// ones do not match those actually returned by the source
+	virtual bool						HasAttrsConfigured () = 0;
+
 protected:
 	ISphTokenizer *						m_pTokenizer;	///< my tokenizer
 	CSphDict *							m_pDict;		///< my dict
@@ -564,6 +569,8 @@ struct CSphSource_SQL : CSphSource_Document
 
 	virtual BYTE **		NextDocument ();
 	virtual void		PostIndex ();
+
+	virtual bool		HasAttrsConfigured () { return m_tParams.m_dAttrs.GetLength()!=0; }
 
 protected:
 	CSphString			m_sSqlDSN;
@@ -687,8 +694,8 @@ public:
 
 	bool			Setup ( const char * sCommand );			///< memorizes the command
 	virtual bool	Connect ();									///< actually runs the command 
-
 	virtual int		Next ();									///< hit chunk getter
+	virtual bool	HasAttrsConfigured () { return true; }
 
 private:
 	enum Tag_e

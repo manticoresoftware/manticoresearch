@@ -781,7 +781,7 @@ CSphExtendedQueryParser::CSphExtendedQueryParser ()
 
 int CSphExtendedQueryParser::IsSpecial ( int iCh )
 {
-	return ( iCh=='(' || iCh==')' || iCh=='&' || iCh=='|' || iCh=='-' || iCh=='!'
+	return ( iCh=='(' || iCh==')' || iCh=='|' || iCh=='-' || iCh=='!'
 		|| iCh=='@' || iCh=='~' || iCh=='"' );
 }
 
@@ -850,7 +850,7 @@ CSphExtendedQuery * CSphExtendedQueryParser::Parse ( const char * sQuery, const 
 	// a buffer of my own
 	CSphString sBuffer ( sQuery );
 	ISphTokenizer * pMyTokenizer = pTokenizer->Clone ();
-	pMyTokenizer->AddSpecials ( "()&|-!@~\"" );
+	pMyTokenizer->AddSpecials ( "()|-!@~\"" );
 	pMyTokenizer->SetBuffer ( (BYTE*)sBuffer.cstr(), strlen ( sBuffer.cstr() ), true );
 
 	// iterate all tokens

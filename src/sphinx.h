@@ -177,7 +177,7 @@ class ISphTokenizer
 {
 public:
 	/// trivial ctor
-									ISphTokenizer() : m_iMinWordLen ( 1 ) {}
+									ISphTokenizer() : m_iMinWordLen ( 1 ), m_iLastTokenLen ( 0 ) {}
 
 	/// trivial dtor
 	virtual							~ISphTokenizer () {}
@@ -196,6 +196,9 @@ public:
 	/// set min word length
 	virtual void					SetMinWordLen ( int iLen ) { m_iMinWordLen = Max ( iLen, 1 ); }
 
+	/// get last token length, in codepoints
+	int								GetLastTokenLen () { return m_iLastTokenLen; }
+
 public:
 	/// pass next buffer
 	virtual void					SetBuffer ( BYTE * sBuffer, int iLength, bool bLast ) = 0;
@@ -209,9 +212,13 @@ public:
 	/// SBCS or UTF-8?
 	virtual bool					IsUtf8 () const = 0;
 
+	/// calc codepoint length
+	virtual int						GetCodepointLength ( int iCode ) const = 0;
+
 protected:
 	CSphLowercaser		m_tLC;			///< my lowercaser
-	int					m_iMinWordLen;	///< minimal word length
+	int					m_iMinWordLen;	///< minimal word length, in codepoints
+	int					m_iLastTokenLen;///< last token length, in codepoints
 };
 
 /// create SBCS tokenizer
@@ -242,9 +249,13 @@ struct CSphDict
 	/// virtualizing dtor
 	virtual				~CSphDict () {}
 
-	/// get word ID by word
+	/// get word ID by word, "text" version
 	/// returns 0 for stopwords
 	virtual DWORD		GetWordID ( BYTE * pWord ) = 0;
+
+	/// get word ID by word, "binary" version
+	/// returns 0 for stopwords
+	virtual DWORD		GetWordID ( const BYTE * pWord, int iLen ) = 0;
 
 	/// load stopwords from given files
 	virtual void		LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer ) = 0;
@@ -265,6 +276,10 @@ struct CSphDict_CRC32 : CSphDict
 	/// does requested morphology and returns CRC32
 	virtual DWORD		GetWordID ( BYTE * pWord );
 
+	/// get word ID by word, "binary" version
+	/// does NOT apply any morphology
+	virtual DWORD		GetWordID ( const BYTE * pWord, int iLen );
+
 	/// load stopwords from given files
 	virtual void		LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer );
 
@@ -272,6 +287,9 @@ protected:
 	DWORD				m_iMorph;		///< morphology flags
 	int					m_iStopwords;	///< stopwords count
 	DWORD *				m_pStopwords;	///< stopwords ID list
+
+	/// filter ID against stopwords list
+	DWORD				FilterStopword ( DWORD uID );
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -468,6 +486,10 @@ public:
 	/// must be called after Connect(); will always fail otherwise
 	virtual bool						UpdateSchema ( CSphSchema * pInfo );
 
+	/// configure source to emit prefixes or infixes
+	/// passing zero iMinLength means to emit the words themselves
+	void								SetEmitInfixes ( bool bPrefixesOnly, int iMinLength );
+
 public:
 	/// connect to the source (eg. to the database)
 	/// connection settings are specific for each source type and as such
@@ -496,6 +518,9 @@ protected:
 
 	bool								m_bStripHTML;	///< whether to strip HTML
 	CSphHTMLStripper *					m_pStripper;	///< my HTML stripper
+
+	int									m_iMinInfixLen;	///< min indexable infix length (0 means don't index infixes)
+	bool								m_bPrefixesOnly;///< whether to index prefixes only or all the infixes
 };
 
 
@@ -510,7 +535,7 @@ struct CSphSource_Document : CSphSource
 	virtual int				Next ();
 
 	/// this is what we can call for my descendants
-	virtual void			WordCallback ( char * word ) { word = word; }
+	virtual void			WordCallback ( char * ) {}
 
 	/// field data getter
 	/// to be implemented by descendants

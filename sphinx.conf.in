@@ -1,5 +1,5 @@
 #
-# sphinx configuration file sample
+# Sphinx configuration file sample
 #
 
 #############################################################################
@@ -171,10 +171,10 @@ source src1
 
 	# demo config for 'xmlpipe' source type is a little below
 	#
-	# with xmlpipe, sphinx opens a pipe to a given command,
+	# with xmlpipe, indexer opens a pipe to a given command,
 	# and then reads documents from stdin
 	#
-	# sphinx expects one or more documents from xmlpipe stdin
+	# indexer expects one or more documents from xmlpipe stdin
 	# each document must be formatted exactly as follows:
 	#
 	# <document>
@@ -327,6 +327,43 @@ index test1
 	#
 	# 'utf-8' default value is
 	# charset_table		= 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F
+
+	# minimum prefix length
+	#
+	# if prefix length is positive, indexer will not only index all words,
+	# but all the possible prefixes (ie. word beginnings) as well
+	#
+	# for instance, "exam" query against such index will match documents
+	# which contain "example" word, even if they do not contain "exam"
+	#
+	# indexing prefixes will make the index grow significantly
+	# and could degrade search times
+	#
+	# currently there's no way to rank perfect word matches higher
+	# than prefix matches using only one index; you could setup two
+	# indexes for that
+	#
+	# default is 0, which means NOT to index prefixes
+	min_prefix_len		= 0
+
+	# minimum infix length
+	#
+	# if infix length is positive, indexer will not only index all words,
+	# but all the possible infixes (ie. characters subsequences starting
+	# anywhere inside the word) as well
+	#
+	# for instance, "amp" query against such index will match documents
+	# which contain "example" word, even if they do not contain "amp"
+	#
+	# indexing prefixes will make the index grow significantly
+	# and could degrade search times
+	#
+	# currently there's no way to rank perfect word matches higher
+	# than infix matches using only one index; you could setup two
+	# indexes for that
+	#
+	# default is 0, which means NOT to index infixes
+	min_infix_len		= 0
 }
 
 

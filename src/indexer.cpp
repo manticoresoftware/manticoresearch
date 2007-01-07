@@ -32,8 +32,15 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
-bool g_bQuiet			= false;
-bool g_bProgress		= true;
+bool			g_bQuiet		= false;
+bool			g_bProgress		= true;
+
+const char *	g_sBuildStops	= NULL;
+int				g_iTopStops		= 100;
+bool			g_bRotate		= false;
+bool			g_bBuildFreqs	= false;
+
+int				g_iMemLimit		= 0;
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -105,7 +112,7 @@ public:
 
 	/// add record to hash
 	/// OPTIMIZE: should pass T not by reference for simple types
-	T & Add ( const char * sKey, T & tValue )
+	T & Add ( const char * sKey, int iKeyLen, T & tValue )
 	{
 		DWORD uHash = HASHFUNC::Hash ( sKey ) % SIZE;
 
@@ -122,7 +129,10 @@ public:
 		{
 			// not found, add it, but don't MTF
 			pEntry = new CSphMTFHashEntry<T>;
-			pEntry->m_sKey = sKey;
+			if ( iKeyLen )
+				pEntry->m_sKey.SetBinary ( sKey, iKeyLen );
+			else
+				pEntry->m_sKey = sKey;
 			pEntry->m_pNext = NULL;
 			pEntry->m_iSlot = (int)uHash;
 			pEntry->m_tValue = tValue;
@@ -197,6 +207,7 @@ public:
 
 public:
 	virtual DWORD		GetWordID ( BYTE * pWord );
+	virtual DWORD		GetWordID ( const BYTE * pWord, int iLen );
 	virtual void		LoadStopwords ( const char * sFiles );
 
 protected:
@@ -254,7 +265,15 @@ void CSphStopwordBuilderDict::Save ( const char * sOutput, int iTop, bool bFreqs
 DWORD CSphStopwordBuilderDict::GetWordID ( BYTE * pWord )
 {
 	int iZero = 0;
-	m_hWords.Add ( (const char *)pWord, iZero )++;
+	m_hWords.Add ( (const char *)pWord, 0, iZero )++;
+	return 1;
+}
+
+
+DWORD CSphStopwordBuilderDict::GetWordID ( const BYTE * pWord, int iLen )
+{
+	int iZero = 0;
+	m_hWords.Add ( (const char *)pWord, iLen, iZero )++;
 	return 1;
 }
 
@@ -432,15 +451,388 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 #undef LOC_GETI
 #undef LOC_GETA
 
-/////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////
+// INDEXING
+//////////////////////////////////////////////////////////////////////////
+
+bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const CSphConfigType & hSources )
+{
+	if ( hIndex("type") && hIndex["type"]=="distributed" )
+	{
+		if ( !g_bQuiet )
+		{
+			fprintf ( stdout, "distributed index '%s' can not be directly indexed; skipping.\n", sIndexName );
+			fflush ( stdout );
+		}
+		return false;
+	}
+
+
+	if ( !g_bQuiet )
+	{
+		fprintf ( stdout, "indexing index '%s'...\n", sIndexName );
+		fflush ( stdout );
+	}
+
+	// check config
+	if ( !hIndex("path") )
+	{
+		fprintf ( stdout, "ERROR: index '%s': key 'path' not found.\n", sIndexName );
+		return false;
+	}
+
+	// check index lock file
+	if ( !g_bRotate && !g_sBuildStops )
+	{
+		char sLockFile [ SPH_MAX_FILENAME_LEN ];
+		snprintf ( sLockFile, sizeof(sLockFile), "%s.spl", hIndex["path"].cstr() );
+		sLockFile [ sizeof(sLockFile)-1 ] = '\0';
+
+		struct stat tStat;
+		if ( !stat ( sLockFile, &tStat ) )
+		{
+			fprintf ( stdout, "FATAL: index lock file '%s' exists, will not index. Try --rotate option.\n",
+				sLockFile );
+			exit ( 1 );
+		}
+	}
+
+	///////////////////
+	// spawn tokenizer
+	///////////////////
+
+	// charset_type
+	ISphTokenizer * pTokenizer = NULL;
+	bool bUseUTF8 = false;
+	if ( hIndex.Exists ( "charset_type" ) )
+	{
+		if ( hIndex["charset_type"]=="sbcs" )
+			pTokenizer = sphCreateSBCSTokenizer ();
+
+		else if ( hIndex["charset_type"]=="utf-8" )
+		{
+			pTokenizer = sphCreateUTF8Tokenizer ();
+			bUseUTF8 = true;
+
+		} else
+			sphDie ( "FATAL: unknown charset type '%s' in index '%s'.\n",
+			hIndex["charset_type"].cstr(), sIndexName );
+	} else
+	{
+		pTokenizer = sphCreateSBCSTokenizer ();
+	}
+	assert ( pTokenizer );
+
+	// charset_table
+	if ( hIndex.Exists ( "charset_table" ) )
+		if ( !pTokenizer->SetCaseFolding ( hIndex["charset_table"].cstr() ) )
+			sphDie ( "FATAL: failed to parse 'charset_table' in index '%s', fix your configuration.\n", sIndexName );
+
+	// min word len
+	int iMinWordLen = hIndex("min_word_len") ? hIndex["min_word_len"].intval() : 0;
+	iMinWordLen = Max ( iMinWordLen, 0 );
+
+	if ( iMinWordLen )
+		pTokenizer->SetMinWordLen ( iMinWordLen );
+
+	// prefix/infix indexing
+	int iPrefix = hIndex("min_prefix_len") ? hIndex["min_prefix_len"].intval() : 0;
+	int iInfix = hIndex("min_infix_len") ? hIndex["min_infix_len"].intval() : 0;
+	iPrefix = Max ( iPrefix, 0 );
+	iInfix = Max ( iInfix, 0 );
+
+	if ( iPrefix>0 && iInfix>0 )
+		sphDie ( "FATAL: index '%s': min_prefix_len and min_infix_len can not both be used.\n", sIndexName );
+
+	if ( iMinWordLen>0 && iPrefix>iMinWordLen )
+	{
+		fprintf ( stdout, "WARNING: index '%s': min_prefix_len greater than min_word_len, clamping.\n", sIndexName );
+		iPrefix = iMinWordLen;
+	}
+
+	if ( iMinWordLen>0 && iInfix>iMinWordLen )
+	{
+		fprintf ( stdout, "WARNING: index '%s': min_infix_len greater than min_word_len, clamping.\n", sIndexName );
+		iInfix = iMinWordLen;
+	}
+
+	bool bPrefixesOnly = ( iPrefix>0 );
+	int iMinInfixLen = ( iPrefix>0 ) ? iPrefix : iInfix;
+
+	/////////////////////
+	// spawn datasources
+	/////////////////////
+
+	CSphVector < CSphSource * > dSources;
+	bool bGotAttrs = false;
+
+	for ( CSphVariant * pSourceName = hIndex("source"); pSourceName; pSourceName = pSourceName->m_pNext )
+	{
+		if ( !hSources ( pSourceName->cstr() ) )
+		{
+			fprintf ( stdout, "ERROR: index '%s': source '%s' not found.\n", sIndexName, pSourceName->cstr() );
+			continue;
+		}
+		const CSphConfigSection & hSource = hSources [ pSourceName->cstr() ];
+
+		CSphSource * pSource = SpawnSource ( hSource, pSourceName->cstr() );
+		if ( !pSource )
+			continue;
+
+		if ( pSource->HasAttrsConfigured() )
+			bGotAttrs = true;
+
+		// strip_html, index_html_attrs
+		if ( hSource("strip_html") )
+		{
+			const char * sAttrs = NULL;
+			if ( hSource["strip_html"].intval() )
+			{
+				if ( hSource("index_html_attrs") )
+					sAttrs = hSource["index_html_attrs"].cstr();
+				if ( !sAttrs )
+					sAttrs = "";
+			}
+			sAttrs = pSource->SetStripHTML ( sAttrs );
+			if ( sAttrs )
+				fprintf ( stdout, "ERROR: source '%s': syntax error in 'index_html_attrs' near '%s'.\n",
+				pSourceName->cstr(), sAttrs );
+		}
+
+		// min_prefix_len, min_infix_len
+		pSource->SetEmitInfixes ( bPrefixesOnly, iMinInfixLen );
+
+		pSource->SetTokenizer ( pTokenizer );
+		dSources.Add ( pSource );
+	}
+
+	if ( !dSources.GetLength() )
+	{
+		fprintf ( stdout, "ERROR: index '%s': no valid sources configured; skipping.\n", sIndexName );
+		return false;
+	}
+
+	// configure docinfo storage
+	ESphDocinfo eDocinfo = SPH_DOCINFO_EXTERN;
+	if ( hIndex("docinfo") )
+	{
+		if ( hIndex["docinfo"]=="none" )	eDocinfo = SPH_DOCINFO_NONE;
+		if ( hIndex["docinfo"]=="inline" )	eDocinfo = SPH_DOCINFO_INLINE;
+	}
+	if ( bGotAttrs && eDocinfo==SPH_DOCINFO_NONE )
+	{
+		fprintf ( stdout, "FATAL: index '%s': got attributes, but docinfo is 'none' (fix your config file).\n", sIndexName );
+		exit ( 1 );
+	}
+
+	///////////
+	// do work
+	///////////
+
+	float fTime = sphLongTimer ();
+	bool bOK = false;
+
+	if ( g_sBuildStops )
+	{
+		///////////////////
+		// build stopwords
+		///////////////////
+
+		if ( !g_bQuiet )
+		{
+			fprintf ( stdout, "building stopwords list...\n" );
+			fflush ( stdout );
+		}
+
+		CSphStopwordBuilderDict tDict;
+		ARRAY_FOREACH ( i, dSources )
+		{
+			dSources[i]->SetDict ( &tDict );
+			if ( !dSources[i]->Connect () )
+				continue;
+			while ( dSources[i]->Next() );
+		}
+		tDict.Save ( g_sBuildStops, g_iTopStops, g_bBuildFreqs );
+
+	} else
+	{
+		///////////////
+		// create dict
+		///////////////
+
+		// configure morphology
+		DWORD iMorph = SPH_MORPH_NONE;
+		if ( hIndex ( "morphology" ) )
+		{
+			iMorph = sphParseMorphology ( hIndex["morphology"], bUseUTF8 );
+			if ( iMorph==SPH_MORPH_UNKNOWN )
+				fprintf ( stdout, "WARNING: unknown morphology type '%s' ignored in index '%s'.\n",
+				hIndex["morphology"].cstr(), sIndexName );
+		}
+
+		// create dict
+		CSphDict_CRC32 * pDict = new CSphDict_CRC32 ( iMorph );
+		assert ( pDict );
+
+		// configure stops
+		if ( hIndex.Exists ( "stopwords" ) )
+			pDict->LoadStopwords ( hIndex["stopwords"].cstr(), pTokenizer );
+
+		//////////
+		// index!
+		//////////
+
+		// if searchd is running, we want to reindex to .tmp files
+		char sIndexPath [ SPH_MAX_FILENAME_LEN ];
+		snprintf ( sIndexPath, sizeof(sIndexPath), g_bRotate ? "%s.tmp" : "%s", hIndex["path"].cstr() );
+		sIndexPath [ sizeof(sIndexPath)-1 ] = '\0';
+
+		// do index
+		CSphIndex * pIndex = sphCreateIndexPhrase ( sIndexPath );
+		assert ( pIndex );
+
+		pIndex->SetProgressCallback ( ShowProgress );
+		if ( pIndex->Build ( pDict, dSources, g_iMemLimit, eDocinfo ) )
+		{
+			// if searchd is running, rename .tmp to .new which searchd will pick up
+			while ( g_bRotate )
+			{
+				const char * sPath = hIndex["path"].cstr();
+				char sFrom [ SPH_MAX_FILENAME_LEN ];
+				char sTo [ SPH_MAX_FILENAME_LEN ];
+
+				int iExt;
+				const char * dExt[4] = { "sph", "spa", "spi", "spd" };
+				for ( iExt=0; iExt<4; iExt++ )
+				{
+					snprintf ( sFrom, sizeof(sFrom), "%s.tmp.%s", sPath, dExt[iExt] );
+					sFrom [ sizeof(sFrom)-1 ] = '\0';
+
+					snprintf ( sTo, sizeof(sTo), "%s.new.%s", sPath, dExt[iExt] );
+					sTo [ sizeof(sTo)-1 ] = '\0';
+
+					if ( rename ( sFrom, sTo ) )
+					{
+						fprintf ( stdout, "WARNING: index '%s': rename '%s' to '%s' failed: %s",
+							sIndexName, sFrom, sTo, strerror(errno) );
+						break;
+					}
+				}
+
+				// all good?
+				if ( iExt==4 )
+					bOK = true;
+				break;
+			}
+		}
+
+		SafeDelete ( pIndex );
+		SafeDelete ( pDict );
+	}
+
+	// trip report
+	fTime = sphLongTimer () - fTime;
+	if ( !g_bQuiet )
+	{
+		fTime = Max ( fTime, 0.01f );
+
+		CSphSourceStats tTotal;
+		ARRAY_FOREACH ( i, dSources )
+		{
+			const CSphSourceStats & tSource = dSources[i]->GetStats();
+			tTotal.m_iTotalDocuments += tSource.m_iTotalDocuments;
+			tTotal.m_iTotalBytes += tSource.m_iTotalBytes;
+		}
+
+		fprintf ( stdout, "total %d docs, " I64FMT " bytes\n",
+			tTotal.m_iTotalDocuments, tTotal.m_iTotalBytes );
+
+		fprintf ( stdout, "total %.3f sec, %.2f bytes/sec, %.2f docs/sec\n",
+			fTime, tTotal.m_iTotalBytes/fTime, tTotal.m_iTotalDocuments/fTime );
+	}
+
+	// cleanup and go on
+	ARRAY_FOREACH ( i, dSources )
+		SafeDelete ( dSources[i] );
+	SafeDelete ( pTokenizer );
+
+	return bOK;
+}
+
+//////////////////////////////////////////////////////////////////////////
+// MERGING
+//////////////////////////////////////////////////////////////////////////
+
+bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
+	const CSphConfigSection & hSrc, const char * sSrc )
+{
+	// check config
+	if ( !hDst("path") )
+	{
+		fprintf ( stdout, "ERROR: index '%s': key 'path' not found.\n", sDst );
+		return false;
+	}
+	if ( !hSrc("path") )
+	{
+		fprintf ( stdout, "ERROR: index '%s': key 'path' not found.\n", sSrc );
+		return false;
+	}
+
+	// do the merge
+	CSphIndex * pSrc = sphCreateIndexPhrase ( hSrc["path"].cstr() );
+	CSphIndex * pDst = sphCreateIndexPhrase ( hDst["path"].cstr() );
+	assert ( pSrc );
+	assert ( pDst );
+
+	bool bMergedOK = pDst->Merge ( pSrc );
+
+	SafeDelete ( pSrc );
+	SafeDelete ( pDst );
+
+	if ( !bMergedOK )
+		sphDie ( "FATAL: failed to merge index '%s' into index '%s'.\n", sSrc, sDst );
+
+	// pick up merge result
+	const char * sPath = hDst["path"].cstr();
+	char sFrom [ SPH_MAX_FILENAME_LEN ];
+	char sTo [ SPH_MAX_FILENAME_LEN ];
+
+	int iExt;
+	const char * dExt[4] = { "sph", "spa", "spi", "spd" };
+	for ( iExt=0; iExt<4; iExt++ )
+	{
+		snprintf ( sFrom, sizeof(sFrom), "%s.%s.tmp", sPath, dExt[iExt] );
+		sFrom [ sizeof(sFrom)-1 ] = '\0';
+
+		snprintf ( sTo, sizeof(sTo), "%s.%s", sPath, dExt[iExt] );
+		sTo [ sizeof(sTo)-1 ] = '\0';
+
+		if ( remove ( sTo ) )
+		{
+			fprintf ( stdout, "WARNING: index '%s': delete '%s' failed: %s",
+				sDst, sTo, strerror(errno) );
+			break;
+		}
+
+		if ( rename ( sFrom, sTo ) )
+		{
+			fprintf ( stdout, "WARNING: index '%s': rename '%s' to '%s' failed: %s",
+				sDst, sFrom, sTo, strerror(errno) );
+			break;
+		}
+	}
+
+	// all good?
+	return ( iExt==4 );
+}
+
+//////////////////////////////////////////////////////////////////////////
+// ENTRY
+//////////////////////////////////////////////////////////////////////////
 
 int main ( int argc, char ** argv )
 {
 	const char * sConfName = "sphinx.conf";
-	const char * sBuildStops = NULL;
-	int iTopStops = 100;
-	bool bRotate = false;
-	bool bBuildFreqs = false;
 	bool bMerge = false;
 
 	CSphVector < const char *, 16 > dIndexes;
@@ -468,20 +860,20 @@ int main ( int argc, char ** argv )
 		}
 		else if ( strcasecmp ( argv[i], "--buildstops" )==0 && (i+2)<argc )
 		{
-			sBuildStops = argv[i+1];
-			iTopStops = atoi ( argv[i+2] );
-			if ( iTopStops<=0 )
+			g_sBuildStops = argv[i+1];
+			g_iTopStops = atoi ( argv[i+2] );
+			if ( g_iTopStops<=0 )
 				break;
 			i += 2;
 
 #if !USE_WINDOWS
 		} else if ( strcasecmp ( argv[i], "--rotate" )==0 )
 		{
-			bRotate = true;
+			g_bRotate = true;
 #endif
 		} else if ( strcasecmp ( argv[i], "--buildfreqs" )==0 )
 		{
-			bBuildFreqs = true;
+			g_bBuildFreqs = true;
 
 		} else if ( strcasecmp ( argv[i], "--quiet" )==0 )
 		{
@@ -576,7 +968,7 @@ int main ( int argc, char ** argv )
 	}
 
 	// configure memlimit
-	int iMemLimit = 0;
+	g_iMemLimit = 0;
 	if ( hConf("indexer")
 		&& hConf["indexer"]("indexer")
 		&& hConf["indexer"]["indexer"]("mem_limit") )
@@ -608,7 +1000,7 @@ int main ( int argc, char ** argv )
 				fprintf ( stdout, "WARNING: bad mem_limit value '%s', using default.\n", sBuf.cstr() );
 			} else
 			{
-				iMemLimit = iScale*iRes;
+				g_iMemLimit = iScale*iRes;
 			}
 		}
 	}
@@ -618,400 +1010,37 @@ int main ( int argc, char ** argv )
 	////////////////////
 
 	bool bIndexedOk = false; // if any of the indexes are ok
-
-	#define CONF_CHECK(_hash,_key,_msg,_add) \
-		if (!( _hash.Exists ( _key ) )) \
-		{ \
-			fprintf ( stdout, "ERROR: key '%s' not found " _msg "\n", _key, _add ); \
-			continue; \
-		}
-
 	if ( bMerge )
 	{
-		int nHaveIndexes = 0;
-		CSphVector< const char *, 2>    dPathes; 
+		if ( dIndexes.GetLength()!=2 )
+			sphDie ( "FATAL: there must be 2 indexes to merge specified.\n" );
 
+		if ( !hConf["index"](dIndexes[0]) )
+			sphDie ( "FATAL: no merge destination index '%s'.\n", dIndexes[0] );
+
+		if ( !hConf["index"](dIndexes[1]) )
+			sphDie ( "FATAL: no merge source index '%s'.\n", dIndexes[1] );
+
+		DoMerge (
+			hConf["index"][dIndexes[0]], dIndexes[0],
+			hConf["index"][dIndexes[1]], dIndexes[1] );
+		return 0; // FIXME! should send SIGHUP...
+
+	} else if ( bIndexAll )
+	{
+		hConf["index"].IterateStart ();
+		while ( hConf["index"].IterateNext() )
+			bIndexedOk |= DoIndex ( hConf["index"].IterateGet (), hConf["index"].IterateGetKey().cstr(), hConf["source"] );
+
+	} else
+	{
 		ARRAY_FOREACH ( i, dIndexes )
 		{
-			hConf["index"].IterateStart ();
-			while ( hConf["index"].IterateNext() )
-			{
-				const CSphConfigSection & hIndex = hConf["index"].IterateGet ();
-				const char * sIndexName = hConf["index"].IterateGetKey ().cstr();				
-
-				if ( strcasecmp ( sIndexName, dIndexes[i] )==0 )
-				{
-					if ( hIndex("type") && hIndex["type"] == "distributed" )
-					{
-						fprintf ( stdout, "skipping index '%s' (distributed indexes can not be directly indexed)...\n", sIndexName );
-						fflush ( stdout );
-					}
-					else
-					{
-						CONF_CHECK ( hIndex, "path", "in index '%s'.", dIndexes[i] );
-						dPathes.Add( hIndex["path"].cstr() );
-						nHaveIndexes++;
-					}					
-					break;
-				}
-			}
+			if ( !hConf["index"](dIndexes[i]) )
+				fprintf ( stdout, "WARNING: no such index '%s', skipping.\n", dIndexes[i] );
+			else
+				bIndexedOk |= DoIndex ( hConf["index"][dIndexes[i]], dIndexes[i], hConf["source"] );
 		}
-
-		if ( nHaveIndexes != 2 )
-		{
-			fprintf ( stdout, "FATAL: failed to find both of merging indexes\n" );
-			fflush ( stdout );
-			return 1;
-		}
-
-		CSphIndex * pDstIndex = sphCreateIndexPhrase ( dPathes[0] );
-		assert ( pDstIndex );
-
-		CSphIndex * pSrcIndex = sphCreateIndexPhrase ( dPathes[1] );
-		assert ( pSrcIndex );
-
-		//////////////////////////////////////////////////////////////////////////
-
-		if ( !pDstIndex->Merge( pSrcIndex ) )
-		{
-			fprintf ( stdout, "FATAL: failed to merge index '%s' to index '%s'", dIndexes[1], dIndexes[0] );
-			fflush ( stdout );
-		}
-		else
-		{
-			const CSphConfigSection & hIndex = hConf["index"][dIndexes[0]];
-
-			const char * sPath = hIndex["path"].cstr();
-			char sFrom [ SPH_MAX_FILENAME_LEN ];
-			char sTo [ SPH_MAX_FILENAME_LEN ];
-
-			int iExt;
-			const char * dExt[4] = { "sph", "spa", "spi", "spd" };
-			for ( iExt=0; iExt<4; iExt++ )
-			{
-				snprintf ( sFrom, sizeof(sFrom), "%s.%s.tmp", sPath, dExt[iExt] );
-				sFrom [ sizeof(sFrom)-1 ] = '\0';
-
-				snprintf ( sTo, sizeof(sTo), "%s.%s", sPath, dExt[iExt] );
-				sTo [ sizeof(sTo)-1 ] = '\0';
-
-				if ( remove ( sTo ) )
-				{
-					fprintf ( stdout, "WARNING: index '%s': delete '%s' failed: %s",
-						dIndexes[0], sTo, strerror(errno) );
-					break;
-				}
-
-				if ( rename ( sFrom, sTo ) )
-				{
-					fprintf ( stdout, "WARNING: index '%s': rename '%s' to '%s' failed: %s",
-						dIndexes[0], sFrom, sTo, strerror(errno) );
-					break;
-				}
-			}
-
-			// all good?
-			if ( iExt==4 )
-				bIndexedOk = true;
-		}
-
-		//////////////////////////////////////////////////////////////////////////
-
-		SafeDelete( pSrcIndex );
-		SafeDelete( pDstIndex );
-
-		return 0;
-	}
-
-	hConf["index"].IterateStart ();
-	while ( hConf["index"].IterateNext() )
-	{
-		const CSphConfigSection & hIndex = hConf["index"].IterateGet ();
-		const char * sIndexName = hConf["index"].IterateGetKey ().cstr();
-
-		if ( hIndex("type") && hIndex["type"]=="distributed" )
-		{
-			if ( !g_bQuiet )
-			{
-				fprintf ( stdout, "skipping index '%s' (distributed indexes can not be directly indexed)...\n", sIndexName );
-				fflush ( stdout );
-			}
-			continue;
-		}
-
-		if ( !bIndexAll )
-		{
-			bool bIndex = false;
-			ARRAY_FOREACH ( i, dIndexes )
-				if ( strcasecmp ( sIndexName, dIndexes[i] )==0 )
-				{
-					bIndex = true;
-					break;
-				}
-
-			if ( !bIndex )
-			{
-				if ( !g_bQuiet )
-				{
-					fprintf ( stdout, "skipping index '%s' (not specified in command line)...\n", sIndexName );
-					fflush ( stdout );
-				}
-				continue;
-			}
-		}
-
-		if ( !g_bQuiet )
-		{
-			fprintf ( stdout, "indexing index '%s'...\n", sIndexName );
-			fflush ( stdout );
-		}
-
-		// check config
-		CONF_CHECK ( hIndex, "path", "in index '%s'.", sIndexName );
-
-		// check index lock file
-		if ( !bRotate && !sBuildStops )
-		{
-			char sLockFile [ SPH_MAX_FILENAME_LEN ];
-			snprintf ( sLockFile, sizeof(sLockFile), "%s.spl", hIndex["path"].cstr() );
-			sLockFile [ sizeof(sLockFile)-1 ] = '\0';
-
-			struct stat tStat;
-			if ( !stat ( sLockFile, &tStat ) )
-			{
-				fprintf ( stdout, "FATAL: index lock file '%s' exists, will not index. Try --rotate option.\n",
-					sLockFile );
-				return 1;
-			}
-		}
-
-		///////////////////
-		// spawn tokenizer
-		///////////////////
-
-		// charset_type
-		ISphTokenizer * pTokenizer = NULL;
-		bool bUseUTF8 = false;
-		if ( hIndex.Exists ( "charset_type" ) )
-		{
-			if ( hIndex["charset_type"]=="sbcs" )
-				pTokenizer = sphCreateSBCSTokenizer ();
-
-			else if ( hIndex["charset_type"]=="utf-8" )
-			{
-				pTokenizer = sphCreateUTF8Tokenizer ();
-				bUseUTF8 = true;
-
-			} else
-				sphDie ( "FATAL: unknown charset type '%s' in index '%s'.\n",
-				hIndex["charset_type"].cstr(), sIndexName );
-		} else
-		{
-			pTokenizer = sphCreateSBCSTokenizer ();
-		}
-		assert ( pTokenizer );
-
-		// charset_table
-		if ( hIndex.Exists ( "charset_table" ) )
-			if ( !pTokenizer->SetCaseFolding ( hIndex["charset_table"].cstr() ) )
-				sphDie ( "FATAL: failed to parse 'charset_table' in index '%s', fix your configuration.\n", sIndexName );
-
-		// min word len
-		if ( hIndex("min_word_len") )
-			pTokenizer->SetMinWordLen ( hIndex["min_word_len"].intval() );
-
-		/////////////////////
-		// spawn datasources
-		/////////////////////
-
-		CSphVector < CSphSource * > dSources;
-		bool bGotAttrs = false;
-
-		for ( CSphVariant * pSourceName = hIndex("source"); pSourceName; pSourceName = pSourceName->m_pNext )
-		{
-			if ( !hConf["source"]( pSourceName->cstr() ) )
-			{
-				fprintf ( stdout, "ERROR: index '%s': source '%s' not found.\n", sIndexName, pSourceName->cstr() );
-				continue;
-			}
-			const CSphConfigSection & hSource = hConf["source"][ pSourceName->cstr() ];
-
-			CSphSource * pSource = SpawnSource ( hSource, pSourceName->cstr() );
-			if ( !pSource )
-				continue;
-
-			if ( pSource->HasAttrsConfigured() )
-				bGotAttrs = true;
-
-			// strip_html, index_html_attrs
-			if ( hSource("strip_html") )
-			{
-				const char * sAttrs = NULL;
-				if ( hSource["strip_html"].intval() )
-				{
-					if ( hSource("index_html_attrs") )
-						sAttrs = hSource["index_html_attrs"].cstr();
-					if ( !sAttrs )
-						sAttrs = "";
-				}
-				sAttrs = pSource->SetStripHTML ( sAttrs );
-				if ( sAttrs )
-					fprintf ( stdout, "ERROR: source '%s': syntax error in 'index_html_attrs' near '%s'.\n",
-						pSourceName->cstr(), sAttrs );
-			}
-
-			pSource->SetTokenizer ( pTokenizer );
-			dSources.Add ( pSource );
-		}
-
-		if ( !dSources.GetLength() )
-		{
-			fprintf ( stdout, "ERROR: index '%s': no valid sources configured; skipping.\n", sIndexName );
-			continue;
-		}
-
-		// configure docinfo storage
-		ESphDocinfo eDocinfo = SPH_DOCINFO_EXTERN;
-		if ( hIndex("docinfo") )
-		{
-			if ( hIndex["docinfo"]=="none" )	eDocinfo = SPH_DOCINFO_NONE;
-			if ( hIndex["docinfo"]=="inline" )	eDocinfo = SPH_DOCINFO_INLINE;
-		}
-		if ( bGotAttrs && eDocinfo==SPH_DOCINFO_NONE )
-		{
-			fprintf ( stdout, "FATAL: index '%s': got attributes, but docinfo is 'none' (fix your config file).\n", sIndexName );
-			return 1;
-		}
-
-		///////////
-		// do work
-		///////////
-
-		float fTime = sphLongTimer ();
-
-		if ( sBuildStops )
-		{
-			///////////////////
-			// build stopwords
-			///////////////////
-
-			if ( !g_bQuiet )
-			{
-				fprintf ( stdout, "building stopwords list...\n" );
-				fflush ( stdout );
-			}
-
-			CSphStopwordBuilderDict tDict;
-			ARRAY_FOREACH ( i, dSources )
-			{
-				dSources[i]->SetDict ( &tDict );
-				if ( !dSources[i]->Connect () )
-					continue;
-				while ( dSources[i]->Next() );
-			}
-			tDict.Save ( sBuildStops, iTopStops, bBuildFreqs );
-
-		} else
-		{
-			///////////////
-			// create dict
-			///////////////
-
-			// configure morphology
-			DWORD iMorph = SPH_MORPH_NONE;
-			if ( hIndex ( "morphology" ) )
-			{
-				iMorph = sphParseMorphology ( hIndex["morphology"], bUseUTF8 );
-				if ( iMorph==SPH_MORPH_UNKNOWN )
-					fprintf ( stdout, "WARNING: unknown morphology type '%s' ignored in index '%s'.\n",
-						hIndex["morphology"].cstr(), sIndexName );
-			}
-
-			// create dict
-			CSphDict_CRC32 * pDict = new CSphDict_CRC32 ( iMorph );
-			assert ( pDict );
-
-			// configure stops
-			if ( hIndex.Exists ( "stopwords" ) )
-				pDict->LoadStopwords ( hIndex["stopwords"].cstr(), pTokenizer );
-
-			//////////
-			// index!
-			//////////
-
-			// if searchd is running, we want to reindex to .tmp files
-			char sIndexPath [ SPH_MAX_FILENAME_LEN ];
-			snprintf ( sIndexPath, sizeof(sIndexPath), bRotate ? "%s.tmp" : "%s", hIndex["path"].cstr() );
-			sIndexPath [ sizeof(sIndexPath)-1 ] = '\0';
-
-			// do index
-			CSphIndex * pIndex = sphCreateIndexPhrase ( sIndexPath );
-			assert ( pIndex );
-
-			pIndex->SetProgressCallback ( ShowProgress );
-			if ( pIndex->Build ( pDict, dSources, iMemLimit, eDocinfo ) )
-			{
-				// if searchd is running, rename .tmp to .new which searchd will pick up
-				while ( bRotate )
-				{
-					const char * sPath = hIndex["path"].cstr();
-					char sFrom [ SPH_MAX_FILENAME_LEN ];
-					char sTo [ SPH_MAX_FILENAME_LEN ];
-
-					int iExt;
-					const char * dExt[4] = { "sph", "spa", "spi", "spd" };
-					for ( iExt=0; iExt<4; iExt++ )
-					{
-						snprintf ( sFrom, sizeof(sFrom), "%s.tmp.%s", sPath, dExt[iExt] );
-						sFrom [ sizeof(sFrom)-1 ] = '\0';
-
-						snprintf ( sTo, sizeof(sTo), "%s.new.%s", sPath, dExt[iExt] );
-						sTo [ sizeof(sTo)-1 ] = '\0';
-
-						if ( rename ( sFrom, sTo ) )
-						{
-							fprintf ( stdout, "WARNING: index '%s': rename '%s' to '%s' failed: %s",
-								sIndexName, sFrom, sTo, strerror(errno) );
-							break;
-						}
-					}
-
-					// all good?
-					if ( iExt==4 )
-						bIndexedOk = true;
-					break;
-				}
-			}
-
-			SafeDelete ( pIndex );
-			SafeDelete ( pDict );
-		}
-
-		// trip report
-		fTime = sphLongTimer () - fTime;
-		if ( !g_bQuiet )
-		{
-			fTime = Max ( fTime, 0.01f );
-
-			CSphSourceStats tTotal;
-			ARRAY_FOREACH ( i, dSources )
-			{
-				const CSphSourceStats & tSource = dSources[i]->GetStats();
-				tTotal.m_iTotalDocuments += tSource.m_iTotalDocuments;
-				tTotal.m_iTotalBytes += tSource.m_iTotalBytes;
-			}
-
-			fprintf ( stdout, "total %d docs, " I64FMT " bytes\n",
-				tTotal.m_iTotalDocuments, tTotal.m_iTotalBytes );
-
-			fprintf ( stdout, "total %.3f sec, %.2f bytes/sec, %.2f docs/sec\n",
-				fTime, tTotal.m_iTotalBytes/fTime, tTotal.m_iTotalDocuments/fTime );
-		}
-
-		// cleanup and go on
-		ARRAY_FOREACH ( i, dSources )
-			SafeDelete ( dSources[i] );
-		SafeDelete ( pTokenizer );
 	}
 
 	////////////////////////////

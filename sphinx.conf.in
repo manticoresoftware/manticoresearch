@@ -9,7 +9,7 @@
 source src1
 {
 	# data source type
-	# for now, known types are 'mysql' and 'xmlpipe'
+	# for now, known types are 'mysql', 'pgsql' and 'xmlpipe'
 	# MUST be defined
 	type				= mysql
 

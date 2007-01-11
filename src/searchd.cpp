@@ -1569,6 +1569,7 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 		if ( select ( 1+iMax, &fdsRead, NULL, NULL, &tvTimeout )<=0 )
 			continue;
 
+		int iGotWordsFrom = -1;
 		ARRAY_FOREACH ( iAgent, tDist.m_dAgents )
 		{
 			Agent_t & tAgent = tDist.m_dAgents[iAgent];
@@ -1731,6 +1732,18 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 						sphWarning ( "index '%s': agent '%s:%d': expected %d query words, got %d",
 							sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort,
 							pRes->m_iNumWords, tAgent.m_tRes.m_iNumWords );
+						sphWarning ( "---" );
+
+						Agent_t & tFirst = tDist.m_dAgents[iGotWordsFrom];
+						sphWarning ( "first agent: '%s:%d'", tFirst.m_sHost.cstr(), tFirst.m_iPort );
+						for ( int i=0; i<pRes->m_iNumWords; i++ )
+							sphWarning ( "word %d: '%s'", i, pRes->m_tWordStats[i].m_sWord.cstr() );
+
+						sphWarning ( "current agent:" );
+						for ( int i=0; i<tAgent.m_tRes.m_iNumWords; i++ )
+							sphWarning ( "word %d: '%s'", i, tAgent.m_tRes.m_tWordStats[i].m_sWord.cstr() );
+
+						sphWarning ( "---" );
 						break;
 					}
 
@@ -1738,6 +1751,9 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 					{
 						pRes->m_iNumWords = tAgent.m_tRes.m_iNumWords;
 						bSetWords = true;
+
+						assert ( iGotWordsFrom==-1 );
+						iGotWordsFrom = iAgent;
 					}
 
 					// read words

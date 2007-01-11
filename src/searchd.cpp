@@ -1897,6 +1897,89 @@ bool CheckSortAndSchema ( const CSphSchema ** ppFirst, ISphMatchQueue ** ppTop, 
 	return true;
 }
 
+
+struct OldQuery_t 
+{
+	int			m_iVersion;
+	int			m_iGroups;
+	DWORD *		m_pGroups;
+	DWORD		m_iMinTS;
+	DWORD		m_iMaxTS;
+	DWORD		m_iMinGID;
+	DWORD		m_iMaxGID;
+
+	OldQuery_t ( int iVer )
+		: m_iVersion ( iVer )
+		, m_iGroups ( 0 )
+		, m_pGroups ( NULL )
+		, m_iMinTS ( 0 )
+		, m_iMaxTS ( UINT_MAX )
+		, m_iMinGID ( 0 )
+		, m_iMaxGID ( UINT_MAX )
+	{}
+};
+
+
+bool FixupQuery ( CSphQuery * pQuery, OldQuery_t * pOldQuery,
+	const CSphSchema * pSchema, const char * sIndexName, InputBuffer_c & tReq )
+{
+	// already?
+	if ( !pOldQuery->m_iVersion )
+		return true;
+
+	if ( pOldQuery->m_iGroups>0 || pOldQuery->m_iMinGID!=0 || pOldQuery->m_iMaxGID!=UINT_MAX )
+	{
+		int iAttr = -1;
+		ARRAY_FOREACH ( i, pSchema->m_dAttrs ) 
+			if ( pSchema->m_dAttrs[i].m_eAttrType==SPH_ATTR_INTEGER )
+		{
+			iAttr = i;
+			break;
+		}
+
+		if ( iAttr<0 )
+		{
+			tReq.SendErrorReply ( "index '%s': no group attribute found", sIndexName );
+			return false;
+		}
+
+		CSphFilter tFilter;
+		tFilter.m_sAttrName = pSchema->m_dAttrs[iAttr].m_sName;
+		tFilter.m_iValues = pOldQuery->m_iGroups;
+		tFilter.m_pValues = pOldQuery->m_pGroups;
+		tFilter.m_uMinValue = pOldQuery->m_iMinGID;
+		tFilter.m_uMaxValue = pOldQuery->m_iMaxGID;
+		pQuery->m_dFilters.Add ( tFilter );
+	}
+
+	if ( pOldQuery->m_iMinTS!=0 || pOldQuery->m_iMaxTS!=UINT_MAX )
+	{
+		int iAttr = -1;
+		ARRAY_FOREACH ( i, pSchema->m_dAttrs ) 
+			if ( pSchema->m_dAttrs[i].m_eAttrType==SPH_ATTR_TIMESTAMP )
+		{
+			iAttr = i;
+			break;
+		}
+
+		if ( iAttr<0 )
+		{
+			tReq.SendErrorReply ( "index '%s': no timestamp attribute found", sIndexName );
+			return false;
+		}
+
+		CSphFilter tFilter;
+		tFilter.m_sAttrName = pSchema->m_dAttrs[iAttr].m_sName;
+		tFilter.m_uMinValue = pOldQuery->m_iMinTS;
+		tFilter.m_uMaxValue = pOldQuery->m_iMaxTS;
+		pQuery->m_dFilters.Add ( tFilter );
+	}
+
+	pOldQuery->m_iVersion = 0;
+	return true;
+}
+
+
 void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 {
 	CSphQuery tQuery;
@@ -1920,8 +2003,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	// parse request
 	/////////////////
 
-	DWORD iMinTS = 0, iMaxTS = UINT_MAX, iMinGID = 0, iMaxGID = UINT_MAX, * pGroups = NULL;
-	int iGroups = 0;
+	OldQuery_t tOldQuery ( iVer );
 
 	// v.1.0. mode, limits, weights, ID/TS ranges
 	int iOffset			= tReq.GetInt ();
@@ -1929,7 +2011,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	tQuery.m_eMode		= (ESphMatchMode) tReq.GetInt ();
 	tQuery.m_eSort		= (ESphSortOrder) tReq.GetInt ();
 	if ( iVer<=0x101 )
-		iGroups			= tReq.GetDwords ( &pGroups, SEARCHD_MAX_ATTR_VALUES, "invalid group count %d (should be in 0..%d range)" );
+		tOldQuery.m_iGroups = tReq.GetDwords ( &tOldQuery.m_pGroups, SEARCHD_MAX_ATTR_VALUES, "invalid group count %d (should be in 0..%d range)" );
 	if ( iVer>=0x102 )
 	{
 		tQuery.m_sSortBy = tReq.GetString ();
@@ -1944,15 +2026,15 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	// upto v.1.1
 	if ( iVer<=0x101 )
 	{
-		iMinTS = tReq.GetDword ();
-		iMaxTS = tReq.GetDword ();
+		tOldQuery.m_iMinTS = tReq.GetDword ();
+		tOldQuery.m_iMaxTS = tReq.GetDword ();
 	}
 
 	// v.1.1 specific
 	if ( iVer==0x101 )
 	{
-		iMinGID = tReq.GetDword ();
-		iMaxGID = tReq.GetDword ();
+		tOldQuery.m_iMinGID = tReq.GetDword ();
+		tOldQuery.m_iMaxGID = tReq.GetDword ();
 	}
 	// !COMMIT use min/max ts/gid
 
@@ -2016,9 +2098,9 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		tReq.SendErrorReply ( "invalid or truncated request" );
 		return;
 	}
-	if ( tQuery.m_iMinID>tQuery.m_iMaxID || iMinTS>iMaxTS )
+	if ( tQuery.m_iMinID>tQuery.m_iMaxID )
 	{
-		tReq.SendErrorReply ( "invalid ID/TS range specified in query" );
+		tReq.SendErrorReply ( "invalid ID range specified in query" );
 		return;
 	}
 	if ( tQuery.m_eMode<0 || tQuery.m_eMode>SPH_MATCH_TOTAL )
@@ -2154,8 +2236,14 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			assert ( tServed.m_pDict );
 			assert ( tServed.m_pTokenizer );
 
+			const char * sIndexName = g_hIndexes.IterateGetKey().cstr();
+
 			// check/set sort-by attr and schema
-			if ( !CheckSortAndSchema ( &pFirst, &pTop, tQuery, tServed.m_pSchema, g_hIndexes.IterateGetKey().cstr(), tReq ) )
+			if ( !CheckSortAndSchema ( &pFirst, &pTop, tQuery, tServed.m_pSchema, sIndexName, tReq ) )
+				return;
+
+			// fixup old queries
+			if ( !FixupQuery ( &tQuery, &tOldQuery, tServed.m_pSchema, sIndexName, tReq ) )
 				return;
 
 			// do query
@@ -2208,6 +2296,10 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			{
 				// check/set sort-by attr and schema
 				if ( !CheckSortAndSchema ( &pFirst, &pTop, tQuery, tServed.m_pSchema, sNext, tReq ) )
+					return;
+
+				// fixup old queries
+				if ( !FixupQuery ( &tQuery, &tOldQuery, tServed.m_pSchema, sNext, tReq ) )
 					return;
 
 				// do query

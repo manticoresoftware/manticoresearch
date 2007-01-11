@@ -7050,7 +7050,6 @@ void CSphExtendedEvalNode::CollectQwords ( CSphQwordsHash & dHash, int & iCount 
 	} else
 	{
 		ARRAY_FOREACH ( i, m_tAtom.m_dTerms )
-			if ( m_tAtom.m_dTerms[i].m_iDocs )
 		{
 			bool bAdded = dHash.Add ( m_tAtom.m_dTerms[i], m_tAtom.m_dTerms[i].m_sWord );
 
@@ -7117,12 +7116,14 @@ void CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, CSphDict * pDict, 
 		CSphQueryWord & tWord = hQwords.IterateGet ();
 
 		// build IDF
-		assert ( tWord.m_iDocs );
-		float fLogTotal = logf ( float(m_tStats.m_iTotalDocuments) );
-		dIDF[iIDF] =
-			logf ( float(m_tStats.m_iTotalDocuments-tWord.m_iDocs+1)/float(tWord.m_iDocs) )
-			/ ( 2*iQwords*fLogTotal );
-		iIDF++;
+		float fIDF = 0.0f;
+		if ( tWord.m_iDocs )
+		{
+			float fLogTotal = logf ( float(m_tStats.m_iTotalDocuments) );
+			fIDF = logf ( float(m_tStats.m_iTotalDocuments-tWord.m_iDocs+1)/float(tWord.m_iDocs) )
+				/ ( 2*iQwords*fLogTotal );
+		}
+		dIDF[iIDF++] = fIDF;
 
 		// update word stats
 		if ( pResult->m_iNumWords<SPH_MAX_QUERY_WORDS )

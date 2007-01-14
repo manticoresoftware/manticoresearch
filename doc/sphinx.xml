@@ -2,10 +2,10 @@
 
 
 <articleinfo>
-<title>Sphinx 0.9.6 reference manual</title>
+<title>Sphinx 0.9.7 reference manual</title>
 <subtitle>Free open-source SQL full-text search engine</subtitle>
 <copyright>
-<year>2001-2006</year>
+<year>2001-2007</year>
 <holder>Andrew Aksyonoff, <email>shodan(at)shodan.ru</email></holder>
 </copyright>
 </articleinfo>
@@ -17,15 +17,24 @@
 <sect2 id="about"><title>About</title>
 <para>
 Sphinx is a full-text search engine, distributed under GPL version 2.
-Commercial licensing is also available upon request. 
+Commercial licenseing (eg. for embedded use) is also available upon request. 
 </para>
 <para>
 Generally, it's a standalone search engine, meant to provide fast,
-size-efficient and relevant fulltext search functions to other
+size-efficient and relevant full-text search functions to other
 applications. Sphinx was specially designed to integrate well with
-SQL databases and scripting languages. Currently built-in data
-source drivers support fetching data either via direct connection
-to MySQL, PostgreSQL, or from a pipe in a custom XML format. 
+SQL databases and scripting languages.
+</para>
+<para>
+Currently built-in data source drivers support fetching data either via
+direct connection to MySQL, or PostgreSQL, or from a pipe in a custom XML
+format. Adding new drivers (eg. to natively support some other DBMS)
+is designed to be as easy as possible.
+</para>
+<para>
+Search API is natively ported to PHP, Python, Perl and Ruby and
+also available as a pluggable MySQL storage engine. API is very
+lightweight so porting it to new language is known to take a few hours.
 </para>
 <para>
 As for the name, Sphinx is an acronym which is officially decoded
@@ -40,17 +49,18 @@ as SQL Phrase Index. Yes, I know about CMU's Sphinx project.
 <listitem>high indexing speed (upto 10 MB/sec on modern CPUs);</listitem>
 <listitem>high search speed (avg query is under 0.1 sec on 2-4 GB text collections);</listitem>
 <listitem>high scalability (upto 100 GB of text, upto 100 M documents on a single CPU);</listitem>
-<listitem>provides good relevance through phrase proximity ranking;</listitem>
+<listitem>provides good relevance ranking through combination of phrase proximity ranking and statistical (BM25) ranking;</listitem>
 <listitem>provides distributed searching capabilities;</listitem>
 <listitem>provides document exceprts generation;</listitem>
-<listitem>supports MySQL natively (MyISAM and InnoDB tables are both supported);</listitem>
-<listitem>supports PostgreSQL natively;</listitem>
-<listitem>supports single-byte encodings and UTF-8;</listitem>
-<listitem>supports English stemming, Russian stemming, and Soundex for morphology;</listitem>
-<listitem>supports any number of document fields (weights can be changed on the fly);</listitem>
-<listitem>supports document groups;</listitem>
+<listitem>provides searching from within MySQL through pluggable storage engine;</listitem>
+<listitem>supports boolean, phrase, and word proximity queries;</listitem>
+<listitem>supports multiple full-text fields per document (upto 32 by default);</listitem>
+<listitem>supports multiple additional attributes per document (ie. groups, timestamps, etc);</listitem>
 <listitem>supports stopwords;</listitem>
-<listitem>supports "match all", "match phrase", "match any" and "boolean query" search modes.</listitem>
+<listitem>supports both single-byte encodings and UTF-8;</listitem>
+<listitem>supports English stemming, Russian stemming, and Soundex for morphology;</listitem>
+<listitem>supports MySQL natively (MyISAM and InnoDB tables are both supported);</listitem>
+<listitem>supports PostgreSQL natively.</listitem>
 </itemizedlist>
 </para>
 </sect2>
@@ -61,10 +71,10 @@ as SQL Phrase Index. Yes, I know about CMU's Sphinx project.
 </para>
 <para>Currently, Sphinx distribution tarball includes the following software:
 <itemizedlist>
-<listitem><filename>indexer</filename>: an utility to create fulltext indexes;</listitem>
-<listitem><filename>search</filename>: a simple (test) utility to query fulltext indexes from command line;</listitem>
-<listitem><filename>searchd</filename>: a daemon to search through fulltext indexes from external software (such as Web scripts);</listitem>
-<listitem><filename>sphinxapi</filename>: a set of API libraries for popular Web scripting languages (currently, PHP).</listitem>
+<listitem><filename>indexer</filename>: an utility which creates fulltext indexes;</listitem>
+<listitem><filename>search</filename>: a simple command-line (CLI) test utility which searches through fulltext indexes;</listitem>
+<listitem><filename>searchd</filename>: a daemon which enables external software (eg. Web applications) to search through fulltext indexes;</listitem>
+<listitem><filename>sphinxapi</filename>: a set of searchd client API libraries for popular Web scripting languages (PHP, Python, Perl, Ruby).</listitem>
 </itemizedlist>
 </para>
 </sect2>
@@ -110,6 +120,8 @@ Sphinx initial author and current primary developer is:
 <para>People who contributed to Sphinx and their contributions (in no particular order) are:
 <itemizedlist>
 <listitem>Robert "coredev" Bengtsson (Sweden), initial version of PostgreSQL data source;</listitem>
+<listitem>Len Kranendonk, Perl API</listitem>
+<listitem>Dmytro Shteflyuk, Ruby API</listitem>
 </itemizedlist>
 </para>
 <para>
@@ -150,10 +162,7 @@ during last years, the obvious decision is to continue developing Sphinx
 
 
 </sect1>
-
-
-<sect1 id="installation">
-<title>Installation</title>
+<sect1 id="installation"><title>Installation</title>
 
 
 <sect2 id="supported-system"><title>Supported systems</title>
@@ -168,11 +177,12 @@ Currently known systems Sphinx has been successfully running on are:
 <listitem>Windows 2000, XP</listitem>
 <listitem>FreeBSD 4.x, 5.x, 6.x</listitem>
 <listitem>NetBSD 1.6</listitem>
+<listitem>Solaris 9</listitem>
 </itemizedlist>
 </para>
 <para>
 I hope Sphinx will work on other Unix platforms as well. 
-If the platform your run Sphinx on is not in this list,
+If the platform you run Sphinx on is not in this list,
 please do report it.
 </para>
 <para>
@@ -193,7 +203,7 @@ and install Sphinx:
 </itemizedlist>
 </para>
 <para>
-On Windows, you will need Microsoft Visual C/C++ Studio .NET 2003.
+On Windows, you will need Microsoft Visual C/C++ Studio .NET 2003 or 2005.
 Other compilers/environments will probably work as well, but for the
 time being, you will have to build makefile (or other environment
 specific project files) manually.
@@ -208,7 +218,7 @@ specific project files) manually.
 	Extract everything from the distribution tarball (haven't you already?)
 	and go to the <filename>sphinx</filename> subdirectory:
 	</para>
-<para><userinput><literallayout>$ tar xzvf sphinx-0.9.6.tar.gz
+<para><userinput><literallayout>$ tar xzvf sphinx-0.9.7.tar.gz
 $ cd sphinx
 </literallayout></userinput></para>
 </listitem>
@@ -265,7 +275,7 @@ on your system. As a quick hack, you can edit sphinx.h and replace off_t
 with DWORD in a typedef for SphOffset_t, but note that this will prohibit
 you from using full-text indexes larger than 2 GB. Even if the hack helps,
 please report such issues, providing the exact error message and
-compiler/OS details, so I could fix them in next releases.
+compiler/OS details, so I could properly fix them in next releases.
 </para>
 <para>
 If you keep getting any other error, or the suggestions above
@@ -383,6 +393,12 @@ index definition. All the documents coming from those sources
 will be merged as if they were coming from a single source.
 </para>
 </sect2>
+
+
+<sect2 id="attributes"><title>Attributes</title>
+(to be added)
+</sect2>
+
 
 <sect2 id="indexes"><title>Indexes</title>
 <para>
@@ -657,79 +673,787 @@ source delta : main
 
 
 </sect1>
-
-<!--
 <sect1 id="searching"><title>Searching</title>
 
 
 <sect2 id="matching-modes"><title>Matching modes</title>
-(to be added)
+<para>
+There are the following matching modes available:
+<itemizedlist>
+<listitem>SPH_MATCH_ALL, matches all query words (default mode);</listitem>
+<listitem>SPH_MATCH_ANY, matches any of the query words;</listitem>
+<listitem>SPH_MATCH_PHRASE, matches query as a phrase, requiring perfect match;</listitem>
+<listitem>SPH_MATCH_BOOLEAN, matches query as a boolean expression (see <xref linkend="boolean-syntax"/>);</listitem>
+<listitem>SPH_MATCH_EXTENDED, matches query as an expression in Sphinx internal query language (see <xref linkend="extended-syntax"/>).</listitem>
+</itemizedlist>
+</para>
+</sect2>
+
+<sect2 id="boolean-syntax"><title>Boolean query syntax</title>
+<para>
+Boolean queries allow the following special operators to be used:
+<itemizedlist>
+<listitem>explicit operator AND: <programlisting>hello &amp; world</programlisting></listitem>
+<listitem>operator OR: <programlisting>hello | world</programlisting></listitem>
+<listitem>operator NOT:
+<programlisting>
+hello -world
+hello !world
+</programlisting>
+</listitem>
+<listitem>grouping: <programlisting>( hello world )</programlisting></listitem>
+</itemizedlist>
+Here's an example query which uses all these operators:
+<example id="ex-boolean-query"><title>Boolean query example</title>
+<programlisting>
+( cat -dog ) | ( cat -mouse)
+</programlisting>
+</example>
+</para>
+<para>
+There always is implicit AND operator, so "hello world" query actually
+means "hello &amp; world".
+</para>
+<para>
+OR operator precedence is higher than AND, so "looking for cat | dog | mouse"
+means "looking for ( cat | dog | mouse )" and <emphasis>not</emphasis>
+"(looking for cat) | dog | mouse".
+</para>
+<para>
+Queries like "-dog", which implicitly include all documents from the
+collection, can not be evaluated. This is both for technical and performance
+reasons. Technically, Sphinx does not always keep a list of all IDs.
+Performance-wise, when the collection is huge (ie. 10-100M documents),
+evaluating such queries could take very long.
+</para>
 </sect2>
 
 
-<sect2 id="ranking-modes"><title>Ranking modes</title>
-(to be added)
+<sect2 id="extended-syntax"><title>Extended query syntax</title>
+<para>
+Extended queries allow the following special operators to be used:
+<itemizedlist>
+<listitem>operator OR: <programlisting>hello | world</programlisting></listitem>
+<listitem>operator NOT:
+<programlisting>
+hello -world
+hello !world
+</programlisting>
+</listitem>
+<listitem>field search operator: <programlisting>@title hello @body world</programlisting></listitem>
+<listitem>phrase search operator: <programlisting>"hello world"</programlisting></listitem>
+<listitem>proximity search operator: <programlisting>"hello world"~10</programlisting></listitem>
+</itemizedlist>
+
+Here's an example query which uses all these operators:
+<example id="ex-extended-query"><title>Extended query example</title>
+<programlisting>
+"hello world" @title "example program"~5 @body python -(php|perl)
+</programlisting>
+</example>
+</para>
+<para>
+There always is implicit AND operator, so "hello world" means that
+both "hello" and "world" must be present in matching document.
+</para>
+<para>
+OR operator precedence is higher than AND, so "looking for cat | dog | mouse"
+means "looking for ( cat | dog | mouse )" and <emphasis>not</emphasis>
+"(looking for cat) | dog | mouse".
+</para>
+<para>
+Proximity distance is specified in words, adjusted for word count, and
+applies to all words within quotes. For instance, "cat dog mouse"~5 query
+means that there must be less than 8-word span which contains all 3 words,
+ie. "CAT aaa bbb ccc DOG eee fff MOUSE" document will <emphasis>not</emphasis>
+match this query, because this span is exactly 8 words long.
+</para>
+<para>
+Nested brackets, as in queries like
+<programlisting>
+aaa | ( bbb ccc | ( ddd eee ) )
+</programlisting>
+are not allowed yet, but this will be fixed.
+</para>
+<para>
+Negation (ie. operator NOT) is only allowed on top level and not within
+brackets (ie. groups). This isn't going to change, because supporting nested
+negations would make phrase ranking implementation way too complicated.
+</para>
 </sect2>
 
 
-<sect2 id="weighting"><title>Run-time weighting</title>
-(to be added)
+<sect2 id="weighting"><title>Weighting</title>
+<para>
+Specific weighting function (currently) depends on the search mode.
+</para>
+<para>
+There are these major parts which are used in the weighting functions:
+<orderedlist>
+<listitem>phrase rank,</listitem>
+<listitem>statistical rank.</listitem>
+</orderedlist>
+</para>
+<para>
+Phrase rank is based on a length of longest common subsequence
+(LCS) of search words between document body and query phrase. So if
+there's a perfect phrase match in some document then its phrase rank
+would be the highest possible, and equal to query words count.
+</para>
+<para>
+Statistical rank is based on classic BM25 function which only takes
+word frequencies into account. If the word is rare in the whole database
+(ie. low frequency over document collection) or mentioned a lot in specific
+document (ie. high frequency over matching document), it receives more weight.
+Final BM25 weight is a floating point number between 0 and 1.
+</para>
+<para>
+In all modes, per-field weighted phrase ranks are computed as
+a product of LCS multiplied by per-field weight speficifed by user.
+Per-field weights are integer, default to 1, and can not be set
+lower than 1.
+</para>
+<para>
+In SPH_MATCH_BOOLEAN mode, no weighting is performed at all, every match weight
+is set to 1.
+</para>
+<para>
+In SPH_MATCH_ALL and SPH_MATCH_PHRASE modes, final weight is a sum of weighted phrase ranks.
+</para>
+<para>
+In SPH_MATCH_ANY mode, the idea is essentially the same, but it also
+adds a count of matching words in each field. Before that, weighted
+phrase ranks are additionally mutliplied by a value big enough to
+guarantee that higher phrase rank in <emphasis role="bold">any</emphasis> field will make the
+match ranked higher, even if it's field weight is low.
+</para>
+<para>
+In SPH_MATCH_EXTENDED mode, final weight is a sum of weighted phrase
+ranks and BM25 weight, multiplied by 1000 and rounded to integer.
+</para>
+<para>
+This is going to be changed, so that MATCH_ALL and MATCH_ANY modes
+use BM25 weights as well. This would improve search results in those
+match spans where phrase ranks are equal; this is especially useful
+for 1-word queries.
+</para>
+<para>
+The key idea (in all modes, besides boolean) is that better subphrase
+matches are ranked higher, and perfect matches are pulled to the top. Author's
+experience is that this phrase proximity based ranking provides noticeably
+better search quality than any statistical scheme alone (such as BM25,
+which is commonly used in other search engines).
+</para>
+</sect2>
+
+
+<sect2 id="sorting-modes"><title>Sorting modes</title>
+<para>
+There are the following result sorting modes available:
+<itemizedlist>
+<listitem>SPH_SORT_RELEVANCE, sorts by relevance in descending order (best matches first);</listitem>
+<listitem>SPH_SORT_ATTR_DESC, sorts by attribute in descending order (bigger attribute values first);</listitem>
+<listitem>SPH_SORT_ATTR_ASC, sorts by attribute in ascending order (smaller attribute values first);</listitem>
+<listitem>SPH_SORT_TIME_SEGMENTS, sorts by time segments (last hour/day/week/month) in descending order, and then by relevance in descending order;</listitem>
+<listitem>SPH_SORT_EXTENDED, sorts by SQL-like expression.</listitem>
+</itemizedlist>
+</para>
+<para>
+SPH_SORT_ATTR_ASC, SPH_SORT_ATTR_DESC and SPH_SORT_TIME_SEGMENTS modes
+require an attribute to sort by to be specified.
+</para>
+
+<bridgehead>SPH_SORT_TIME_SEGMENTS mode</bridgehead>
+<para>
+In SPH_SORT_TIME_SEGMENTS mode, attribute values are split into so-called
+time segments, and then sorted by time segment first, and by relevance second.
+</para>
+<para>
+The segments are calculated according to the <emphasis>current timestamp</emphasis>
+at the time when the search is performed, so the results would change over time.
+The segments are as follows:
+<itemizedlist>
+<listitem>last hour,</listitem>
+<listitem>last day,</listitem>
+<listitem>last week,</listitem>
+<listitem>last month,</listitem>
+<listitem>last 3 months,</listitem>
+<listitem>everything else.</listitem>
+</itemizedlist>
+These segments are hardcoded, but it is trivial to change them if necessary.
+</para>
+<para>
+This mode was added to support searching through blogs, news headlines, etc.
+When using time segments, recent records would be ranked higher because of segment,
+but withing the same segment, more relevant records would be ranked higher -
+unlike sorting by just the timestamp attribute, which would not take relevance
+into account at all.
+</para>
+
+<bridgehead>SPH_SORT_EXTENDED mode</bridgehead>
+<para>
+In SPH_SORT_EXTENDED mode, you would specify an SQL-like sort
+expression to sort by:
+<programlisting>
+@relevance DESC, price ASC, @id DESC
+</programlisting>
+</para>
+<para>
+Both internal attributes (their names start with @) and externally
+specified user attributes (their names are as is) can be allowed.
+In the example above, <option>@relevance</option> and <option>@id</option>
+are internal attributes and <option>price</option> is user-speficied.
+</para>
+<para>
+Known internal attributes are:
+<itemizedlist>
+<listitem>@id (match ID)</listitem>
+<listitem>@rank (match weight)</listitem>
+<listitem>@weight (match weight)</listitem>
+<listitem>@relevance (match weight)</listitem>
+</itemizedlist>
+<option>@rank</option>, <option>@weight</option> and <option>@relevance</option>
+are just aliases; there's no actual difference between them.
+</para>
+</sect2>
+
+
+<sect2 id="clustering"><title>Grouping (clustering) search results </title>
+<para>
+Sometimes it could be useful to group (or in other terms, cluster)
+search results and/or count per-group match counts - for instance,
+to draw a nice graph of how much maching blog posts were there per
+each month; or to group Web search results by site; or to group
+matching forum posts by author; etc.
+</para>
+<para>
+In theory, this could be performed by doing only the full-text search
+in Sphinx and then using found IDs to group on SQL server side. However,
+in practice doing this with a big result set (10K-10M matches) would
+typically kill performance.
+</para>
+<para>
+To avoid that, Sphinx offers so-called grouping mode. It is enabled
+with SetGroupBy() API call. When grouping, all matches are assigned to
+different groups based on group-by value. This value is computed from
+specified attribute using one of the following built-in functions:
+<itemizedlist>
+<listitem>SPH_GROUPBY_DAY, extracts year, month and day in YYYYMMDD format from timestamp;</listitem>
+<listitem>SPH_GROUPBY_WEEK, extracts year and first day of the week number (counting from year start) in YYYYNNN format from timestamp;</listitem>
+<listitem>SPH_GROUPBY_MONTH, extracts month in YYYYMM format from timestamp;</listitem>
+<listitem>SPH_GROUPBY_YEAR, extracts year in YYYY format from timestamp;</listitem>
+<listitem>SPH_GROUPBY_ATTR, uses attribute value itself for grouping.</listitem>
+</itemizedlist>
+</para>
+<para>
+The final search result set then contains one best match per group.
+Grouping function value and per-group match count are returned along
+as "virtual" attributes named
+<emphasis role="bold">@group</emphasis> and
+<emphasis role="bold">@count</emphasis> respectively.
+</para>
+<para>
+The result set is sorted either by
+<orderedlist>
+<listitem>group-by value in descending order (this is the default mode), or by</listitem>
+<listitem>current sorting mode.</listitem>
+</orderedlist>
+depending on 3rd argument to SetGroupBy() API call. Note that when sorting
+by current function there might be less matching groups reported than actually
+present, and @count might also be underestimated. This inaccuracy is because of
+performance reasons (to keep memory requirements low).
+</para>
+<para>
+For example, if sorting by relevance and grouping by <code>"published"</code>
+attribute with <code>SPH_GROUPBY_DAY</code> function, then the result set will
+contain
+<itemizedlist>
+<listitem>one most relevant match per each day when there were any
+matches published,</listitem>
+<listitem>with day number and per-day match count attached,</listitem>
+<listitem>sorted by day number in descending order (ie. recent days first).</listitem>
+</itemizedlist>
+</para>
 </sect2>
 
 
 <sect2 id="distributed"><title>Distributed searching</title>
-(to be added)
+<para>
+To scale well, Sphinx has distributed searching capabilities.
+Distributed searching is useful to improve query latency (ie. search
+time) and throughput (ie. max queries/sec) in multi-server, multi-CPU
+or multi-core environments. This is essential for applications which
+need to search through huge amounts data (ie. billions of records
+and terabytes of text).
+</para>
+<para>
+The key idea is to horizontally partition (HP) searched data
+accross search nodes and then process it in parallel.
+</para>
+<para>
+Partitioning is done manually. You would
+<itemizedlist>
+<listitem>setup several instances
+of Sphinx programs (<filename>indexer</filename> and <filename>searchd</filename>)
+on different servers;</listitem>
+<listitem>make the instances index (and search) different parts of data;</listitem>
+<listitem>configure a special distributed index on some of the <filename>searchd</filename>
+instances;</listitem>
+<listitem>and query this index.</listitem>.
+</itemizedlist>
+This index only contains references to other
+local and remote indexes - so it could not be directly reindexed,
+and you should reindex those indexes which it references instead.
+</para>
+<para>
+When <filename>searchd</filename> receives a query against distributed index,
+it does the following:
+<orderedlist>
+<listitem>connects to configured remote agents;</listitem>
+<listitem>issues the query;</listitem>
+<listitem>sequentially searches configured local indexes (while the remote agents are searching);</listitem>
+<listitem>retrieves remote agents' search results;</listitem>
+<listitem>merges all the results together, removing the duplicates;</listitem>
+<listitem>sends the merged resuls to client.</listitem>
+</orderedlist>
+</para>
+<para>
+From the application's point of view, there are no differences
+between usual and distributed index at all.
+</para>
+<para>
+Any <filename>searchd</filename> instance could serve both as a master
+(which aggregates the results) and a slave (which only does local searching)
+at the same time. This has a number of uses:
+<orderedlist>
+<listitem>every machine in a cluster could serve as a master which
+searches the whole cluster, and search requests could be balanced between
+masters to achieve a kind of HA (high availability) in case any of the nodes fails;
+</listitem>
+<listitem>
+if running within a single multi-CPU or multi-core machine, there
+would be only 1 searchd instance quering itself as an agent and thus
+utilizing all CPUs/core.
+</listitem>
+</orderedlist>
+</para>
+<para>
+It is scheduled to implement better HA support which would allow
+to specify which agents mirror each other, do health checks, keep track
+of alive agents, load-balance requests, etc.
+</para>
 </sect2>
+
+
+</sect1>
+<sect1 id="reporting-bugs"><title>Reporting bugs</title>
+
+
+<para>
+Unfortunately, Sphinx is not yet 100% bug free (even though I'm working hard
+towards that), so you might occasionally run into some issues.
+</para>
+<para>
+Reporting as much as possible about each bug is very important -
+because to fix it, I need to be able either to reproduce and debug the bug,
+or to deduce what's causing it from the information that you provide.
+So here are some instructions on how to do that.
+</para>
+
+
+<bridgehead>Build-time issues</bridgehead>
+<para>If Sphinx fails to build for some reason, please do the following:</para>
+<orderedlist>
+<listitem>check that headers and libraries for your DBMS are properly installed
+(for instance, check that <filename>mysql-devel</filename> package is present);
+</listitem>
+<listitem>report Sphinx version and config file (be sure to remove the passwords!),
+MySQL (or PostgreSQL) configuration info, gcc version, OS version and CPU type
+(ie. x86, x86-64, PowerPC, etc):
+<programlisting>
+mysql_config
+gcc --version
+uname -a
+</programlisting>
+</listitem>
+<listitem>
+report the error message which is produced by <filename>configure</filename>
+or <filename>gcc</filename> (it should be to include error message itself only,
+not the whole build log).
+</listitem>
+</orderedlist>
+
+
+<bridgehead>Run-time issues</bridgehead>
+<para>
+If Sphinx builds and runs, but there are any problems running it,
+please do the following:
+</para>
+<orderedlist>
+<listitem>describe the bug (ie. both the expected behavior and actual behavior)
+and all the steps necessary to reproduce it;</listitem>
+<listitem>include Sphinx version and config file (be sure to remove the passwords!),
+MySQL (or PostgreSQL) version, gcc version, OS version and CPU type (ie. x86, x86-64,
+PowerPC, etc):
+<programlisting>
+mysql --version
+gcc --version
+uname -a
+</programlisting>
+</listitem>
+<listitem>build, install and run debug versions of all Sphinx programs (this is
+to enable a lot of additional internal checks, so-called assertions):
+<programlisting>
+make distclean
+./configure --with-debug
+make install
+killall -TERM searchd
+</programlisting>
+</listitem>
+<listitem>reindex to check if any assertions are triggered (in this case,
+it's likely that the index is corrupted and causing problems);
+</listitem>
+<listitem>if the bug does not reproduce with debug versions,
+revert to non-debug and mention it in your report;
+</listitem>
+<listitem>if the bug could be easily reproduced with a small (1-100 record)
+part of your database, please provide a gzipped dump of that part;
+</listitem>
+<listitem>if the problem is related to <filename>searchd</filename>, include
+relevant entries from <filename>searchd.log</filename> and
+<filename>query.log</filename> in your bug report;
+</listitem>
+<listitem>if the problem is related to <filename>searchd</filename>, try
+running it in console mode and check if it dies with an assertion:
+<programlisting>
+./searchd --console
+</programlisting>
+</listitem>
+<listitem>if any program dies with an assertion, provide the assertion message.</listitem>
+</orderedlist>
+
+
+<bridgehead>Debugging crashes and hangups</bridgehead>
+<para>
+If any program crashes without an assertion or hangs up, you would additionally
+need to generate a core dump and examine it.
+</para>
+<para>
+First, enable core dumps. On most Linux systems, this is done
+using <filename>ulimit</filename>:
+<programlisting>
+ulimit -c 32768
+</programlisting>
+</para>
+<para>
+Note that <filename>ulimit</filename> is not server-wide
+and only affects current shell session, so you will not have
+to restore any server-wide limits.
+</para>
+<para>
+Core dumps should be placed in current working directory
+(and Sphinx programs do not change it), so this is where you
+would look for them.
+</para>
+<para>
+Next, run the program. If it crashes, it should print out
+something like "Segmentation fault (core dumped)", and you could
+look for the core file already. If it hangs, use <filename>kill -SEGV</filename>
+from another console to force it to exit and dump core:
+<programlisting>
+kill -SEGV HANGED-PROCESS-ID
+</programlisting>
+</para>
+<para>
+Finally, use <filename>gdb</filename> to examine the core file
+and obtain a backtrace:
+<programlisting>
+gdb ./PROGRAM CORE-DUMP-FILE-NAME
+(gdb) bt
+(gdb) quit
+</programlisting>
+</para>
+<para>
+Please do not immediately remove the core file because there could
+be additional helpful information which could be retrieved from it.
+You do not need to send me this file (as the debug info there is
+closely tied to your system) but I might need to ask
+you a few additional questions about it.
+</para>
 
 
 </sect1>
 <sect1 id="reference"><title><filename>sphinx.conf</filename> options reference</title>
 
 
-<sect2 id="ref-charset-table"><title>charset_table</title>
+<sect2 id="ref-source"><title>Data source configuration options</title>
+
+<sect3 id="ref-source-type"><title>type</title>
+<para>
+Data source type. Available types are <option>mysql</option>, <option>pgsql</option>
+and <option>xmlpipe</option>.
+</para>
+<para>
+This option is <emphasis role="bold">mandatory</emphasis>.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+type = mysql
+</programlisting>
+</sect3>
+
+
+<sect3 id="ref-strip-html"><title>strip_html</title>
+<para>
+Whether to strip HTML formatting from incoming full-text data.
+0 means that stripping should be disabled; 1 that it should be enabled.
+</para>
+<para>
+Stripping currently works with <option>mysql</option> and
+<option>pgsql</option> source, and is not yet implemented for
+<option>xmlpipe</option>. It should work with properly formed
+HTML (such as well-formed XHTML) but MAY bug on malformed HTML
+(such as with stray &lt;'s or unclosed &gt;'s).
+</para>
+<para>
+This option is optional.
+Default value is 0 (do not strip HTML).
+This option only applies to <option>mysql</option> and <option>pgsql</option> source types.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+strip_html = 0
+</programlisting>
+</sect3>
+
+
+<sect3 id="ref-index-html-attrs"><title>index_html_attrs</title>
+<para>
+Specifies which HTML attributes' contents still should be indexed when stripping HTML.
+The format is per-tag enumeration of indexable attributes, as shown in the example below.
+</para>
+<para>
+This option is optional.
+Default value is empty (do not index anything).
+This option only applies to <option>mysql</option> and <option>pgsql</option> source types.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+index_html_attrs = img=alt,title; a=title;
+</programlisting>
+</sect3>
+
+
+<sect3 id="ref-sql-host"><title>sql_host</title>
+<para>
+SQL server host to connect to.
+</para>
+<para>
+This option is <emphasis role="bold">mandatory</emphasis>.
+This option only applies to <option>mysql</option> and <option>pgsql</option> source types.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+sql_host = localhost
+</programlisting>
+</sect3>
+
+
+<sect3 id="ref-sql-port"><title>sql_port</title>
+<para>
+SQL server IP port to connect to.
+</para>
+<para>
+This option is optional.
+Default value is 3306 for <option>mysql</option> source type and 5432 for <option>pgsql</option> type.
+This option only applies to <option>mysql</option> and <option>pgsql</option> source types.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+sql_port = 3306
+</programlisting>
+</sect3>
+
+
+<sect3 id="ref-sql-user"><title>sql_user</title>
+<para>
+SQL user to use on <link linkend="ref-sql-host">sql_host</link>.
+</para>
+<para>
+This option is <emphasis role="bold">mandatory</emphasis>.
+This option only applies to <option>mysql</option> and <option>pgsql</option> source types.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+sql_user = test
+</programlisting>
+</sect3>
+
+
+<sect3 id="ref-sql-pass"><title>sql_pass</title>
+<para>
+SQL user password to use on <link linkend="ref-sql-host">sql_host</link>.
+</para>
+<para>
+This option is <emphasis role="bold">mandatory</emphasis>.
+This option only applies to <option>mysql</option> and <option>pgsql</option> source types.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+sql_pass = mysecretpassword
+</programlisting>
+</sect3>
+
+
+<sect3 id="ref-sql-db"><title>sql_db</title>
+<para>
+SQL database (in MySQL terms) to use after connection and perform further queries in.
+</para>
+<para>
+This option is <emphasis role="bold">mandatory</emphasis>.
+This option only applies to <option>mysql</option> and <option>pgsql</option> source types.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+sql_db = test
+</programlisting>
+</sect3>
+
+
+<sect3 id="ref-sql-sock"><title>sql_sock</title>
+<para>
+UNIX socket name to connect to local MySQL server.
+</para>
+<para>
+On Linux, it would typically be <filename>/var/lib/mysql/mysql.sock</filename>.
+On FreeBSD, it would typically be <filename>/tmp/mysql.sock</filename>.
+</para>
+<para>
+This option is optional.
+This option only applies to <option>mysql</option> source type.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+sql_sock = test
+</programlisting>
+</sect3>
+
+
+<sect3 id="ref-sql-query-pre"><title>sql_query_pre</title>
+<para>
+Pre-fetch query, or pre-query.
+</para>
+<para>
+There might be multiple pre-queries specified. They are executed
+before <link linkend="ref-sql-query">the main fetch query</link>
+in exactly the same order they were specified in config file.
+Pre-query results are ignored.
+</para>
+<para>
+Pre-queries are useful to setup encoding, or mark records
+which are going to be indexed, or update internal counters, etc.
+</para>
+<para>
+This option is optional.
+This option only applies to <option>mysql</option> and <option>pgsql</option> source types.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+sql_query_pre = SET CHARACTER_SET_RESULTS=utf-8
+</programlisting>
+</sect3>
+
+<sect3 id="ref-sql-query"><title>sql_query</title>
+<para>
+Main document fetch query.
+</para>
+<para>
+There can be only one main query. This is the query which is used to
+retrieve documents from SQL server.
+</para>
+<para>
+You can specify up to 32 fields (formally, upto SPH_MAX_FIELDS from sphinx.h).
+All of the fields which are not document ID or attributes will be full-text indexed.
+</para>
+<para>
+Document ID <emphasis role="bold">MUST</emphasis> be the very first field,
+and it <emphasis role="bold">MUST BE UNIQUE UNSIGNED NON-ZERO 32-BIT INTEGER NUMBER</emphasis>.
+</para>
+<para>
+This option is <emphasis role="bold">mandatory</emphasis>.
+This option only applies to <option>mysql</option> and <option>pgsql</option> source types.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+sql_query = \
+	SELECT id, group_id, UNIX_TIMESTAMP(date_added) AS date_added, \
+		title, content \
+	FROM documents
+</programlisting>
+</sect3>
+
+(to be added)
+
+</sect2>
+<sect2 id="ref-index"><title>Index configuration options</title>
+
+(to be added)
+
+<sect3 id="ref-charset-table"><title>charset_table</title>
 <bridgehead>Description</bridgehead>
 <para>Everything one needs to know about charset_table is here</para>
-<bridgehead>Example</bridgehead>
+<bridgehead>Example:</bridgehead>
 <programlisting>
 charset_table = A..Z->a..z
 </programlisting>
-</sect2>
+</sect3>
 
 
-<sect2 id="ref-charset-type"><title>charset_type</title>
+<sect3 id="ref-charset-type"><title>charset_type</title>
 <bridgehead>Description</bridgehead>
 <para>Everything one needs to know about charset_type is here</para>
-<bridgehead>Example</bridgehead>
+<bridgehead>Example:</bridgehead>
 <programlisting>
 charset_type = sbcs
 # charset_type = utf-8
 </programlisting>
-</sect2>
+</sect3>
 
 
-<sect2 id="ref-xmlpipe-command"><title>xmlpipe_command</title>
+<sect3 id="ref-xmlpipe-command"><title>xmlpipe_command</title>
 <bridgehead>Description</bridgehead>
 <para>Everything one needs to know about xmlpipe_command is here</para>
-<bridgehead>Example</bridgehead>
+<bridgehead>Example:</bridgehead>
 <programlisting>
 xmlpipe_command = perl /www/mysite.com/bin/sphinxpipe.pl
 </programlisting>
+</sect3>
+
+</sect2>
+<sect2 id="ref-indexer"><title><filename>indexer</filename> program configuration options</title>
+(to be added)
+</sect2>
+<sect2 id="ref-searchd"><title><filename>searchd</filename> program configuration options</title>
+(to be added)
 </sect2>
 
 
 </sect1>
-<sect1 id="developers"><title>Developer's corner</title>
 
+<!--
+<sect1 id="developers"><title>Developer's corner</title>
 
 <sect2 id="architecture-overview"><title>Sphinx architecture overview</title>
 (to be added)
 </sect2>
 
-
 <sect2 id="adding-data-sources"><title>Adding new data source drivers</title>
 (to be added)
 </sect2>
 
+<sect2 id="adding-data-sources"><title>API porting guidelines</title>
+(to be added)
+</sect2>
 
 </sect1>
 -->

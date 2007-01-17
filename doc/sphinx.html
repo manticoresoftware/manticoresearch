@@ -6,7 +6,7 @@ pre.programlisting
 	margin-left:		2em;
 	margin-right:		2em;
 }
-</style><meta name="generator" content="DocBook XSL Stylesheets V1.70.1"></head><body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="article" lang="en"><div class="titlepage"><div><div><h1 class="title"><a name="id94320"></a>Sphinx 0.9.7 reference manual</h1></div><div><h3 class="subtitle"><i>Free open-source SQL full-text search engine</i></h3></div><div><p class="copyright">Copyright &copy; 2001-2007 Andrew Aksyonoff, <code class="email">&lt;<a href="mailto:shodan(at)shodan.ru">shodan(at)shodan.ru</a>&gt;</code></p></div></div><hr></div><div class="toc"><p><b>Table of Contents</b></p><dl><dt><span class="sect1"><a href="#intro">1. Introduction</a></span></dt><dd><dl><dt><span class="sect2"><a href="#about">1.1. About</a></span></dt><dt><span class="sect2"><a href="#features">1.2. Sphinx features</a></span></dt><dt><span class="sect2"><a href="#getting">1.3. Where to get Sphinx</a></span></dt><dt><span class="sect2"><a href="#license">1.4. License</a></span></dt><dt><span class="sect2"><a href="#author">1.5. Author and contributors</a></span></dt><dt><span class="sect2"><a href="#history">1.6. History</a></span></dt></dl></dd><dt><span class="sect1"><a href="#installation">2. Installation</a></span></dt><dd><dl><dt><span class="sect2"><a href="#supported-system">2.1. Supported systems</a></span></dt><dt><span class="sect2"><a href="#required-tools">2.2. Required tools</a></span></dt><dt><span class="sect2"><a href="#installing">2.3. Installing Sphinx</a></span></dt><dt><span class="sect2"><a href="#install-problems">2.4. Known installation issues</a></span></dt><dt><span class="sect2"><a href="#quick-tour">2.5. Quick Sphinx usage tour</a></span></dt></dl></dd><dt><span class="sect1"><a href="#indexing">3. Indexing</a></span></dt><dd><dl><dt><span class="sect2"><a href="#sources">3.1. Data sources</a></span></dt><dt><span class="sect2"><a href="#attributes">3.2. Attributes</a></span></dt><dt><span class="sect2"><a href="#indexes">3.3. Indexes</a></span></dt><dt><span class="sect2"><a href="#data-restrictions">3.4. Restrictions on the source data</a></span></dt><dt><span class="sect2"><a href="#charsets">3.5. Charsets, case folding, and translation tables</a></span></dt><dt><span class="sect2"><a href="#sql">3.6. SQL data sources (MySQL, PostgreSQL)</a></span></dt><dt><span class="sect2"><a href="#xmlpipe">3.7. XMLpipe data source</a></span></dt><dt><span class="sect2"><a href="#live-updates">3.8. Live index updates</a></span></dt></dl></dd><dt><span class="sect1"><a href="#searching">4. Searching</a></span></dt><dd><dl><dt><span class="sect2"><a href="#matching-modes">4.1. Matching modes</a></span></dt><dt><span class="sect2"><a href="#boolean-syntax">4.2. Boolean query syntax</a></span></dt><dt><span class="sect2"><a href="#extended-syntax">4.3. Extended query syntax</a></span></dt><dt><span class="sect2"><a href="#weighting">4.4. Weighting</a></span></dt><dt><span class="sect2"><a href="#sorting-modes">4.5. Sorting modes</a></span></dt><dt><span class="sect2"><a href="#clustering">4.6. Grouping (clustering) search results </a></span></dt><dt><span class="sect2"><a href="#distributed">4.7. Distributed searching</a></span></dt></dl></dd><dt><span class="sect1"><a href="#reporting-bugs">5. Reporting bugs</a></span></dt><dt><span class="sect1"><a href="#reference">6. <code class="filename">sphinx.conf</code> options reference</a></span></dt><dd><dl><dt><span class="sect2"><a href="#ref-source">6.1. Data source configuration options</a></span></dt><dd><dl><dt><span class="sect3"><a href="#ref-source-type">6.1.1. type</a></span></dt><dt><span class="sect3"><a href="#ref-strip-html">6.1.2. strip_html</a></span></dt><dt><span class="sect3"><a href="#ref-index-html-attrs">6.1.3. index_html_attrs</a></span></dt><dt><span class="sect3"><a href="#ref-sql-host">6.1.4. sql_host</a></span></dt><dt><span class="sect3"><a href="#ref-sql-port">6.1.5. sql_port</a></span></dt><dt><span class="sect3"><a href="#ref-sql-user">6.1.6. sql_user</a></span></dt><dt><span class="sect3"><a href="#ref-sql-pass">6.1.7. sql_pass</a></span></dt><dt><span class="sect3"><a href="#ref-sql-db">6.1.8. sql_db</a></span></dt><dt><span class="sect3"><a href="#ref-sql-sock">6.1.9. sql_sock</a></span></dt><dt><span class="sect3"><a href="#ref-sql-query-pre">6.1.10. sql_query_pre</a></span></dt><dt><span class="sect3"><a href="#ref-sql-query">6.1.11. sql_query</a></span></dt></dl></dd><dt><span class="sect2"><a href="#ref-index">6.2. Index configuration options</a></span></dt><dd><dl><dt><span class="sect3"><a href="#ref-charset-table">6.2.1. charset_table</a></span></dt><dt><span class="sect3"><a href="#ref-charset-type">6.2.2. charset_type</a></span></dt><dt><span class="sect3"><a href="#ref-xmlpipe-command">6.2.3. xmlpipe_command</a></span></dt></dl></dd><dt><span class="sect2"><a href="#ref-indexer">6.3. <code class="filename">indexer</code> program configuration options</a></span></dt><dt><span class="sect2"><a href="#ref-searchd">6.4. <code class="filename">searchd</code> program configuration options</a></span></dt></dl></dd><dt><span class="appendix"><a href="#changelog">A. Sphinx revision history</a></span></dt></dl></div><div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="intro"></a>1.&nbsp;Introduction</h2></div></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="about"></a>1.1.&nbsp;About</h3></div></div></div><p>
+</style><meta name="generator" content="DocBook XSL Stylesheets V1.70.1"></head><body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="article" lang="en"><div class="titlepage"><div><div><h1 class="title"><a name="id94321"></a>Sphinx 0.9.7 reference manual</h1></div><div><h3 class="subtitle"><i>Free open-source SQL full-text search engine</i></h3></div><div><p class="copyright">Copyright &copy; 2001-2007 Andrew Aksyonoff, <code class="email">&lt;<a href="mailto:shodan(at)shodan.ru">shodan(at)shodan.ru</a>&gt;</code></p></div></div><hr></div><div class="toc"><p><b>Table of Contents</b></p><dl><dt><span class="sect1"><a href="#intro">1. Introduction</a></span></dt><dd><dl><dt><span class="sect2"><a href="#about">1.1. About</a></span></dt><dt><span class="sect2"><a href="#features">1.2. Sphinx features</a></span></dt><dt><span class="sect2"><a href="#getting">1.3. Where to get Sphinx</a></span></dt><dt><span class="sect2"><a href="#license">1.4. License</a></span></dt><dt><span class="sect2"><a href="#author">1.5. Author and contributors</a></span></dt><dt><span class="sect2"><a href="#history">1.6. History</a></span></dt></dl></dd><dt><span class="sect1"><a href="#installation">2. Installation</a></span></dt><dd><dl><dt><span class="sect2"><a href="#supported-system">2.1. Supported systems</a></span></dt><dt><span class="sect2"><a href="#required-tools">2.2. Required tools</a></span></dt><dt><span class="sect2"><a href="#installing">2.3. Installing Sphinx</a></span></dt><dt><span class="sect2"><a href="#install-problems">2.4. Known installation issues</a></span></dt><dt><span class="sect2"><a href="#quick-tour">2.5. Quick Sphinx usage tour</a></span></dt></dl></dd><dt><span class="sect1"><a href="#indexing">3. Indexing</a></span></dt><dd><dl><dt><span class="sect2"><a href="#sources">3.1. Data sources</a></span></dt><dt><span class="sect2"><a href="#attributes">3.2. Attributes</a></span></dt><dt><span class="sect2"><a href="#indexes">3.3. Indexes</a></span></dt><dt><span class="sect2"><a href="#data-restrictions">3.4. Restrictions on the source data</a></span></dt><dt><span class="sect2"><a href="#charsets">3.5. Charsets, case folding, and translation tables</a></span></dt><dt><span class="sect2"><a href="#sql">3.6. SQL data sources (MySQL, PostgreSQL)</a></span></dt><dt><span class="sect2"><a href="#xmlpipe">3.7. XMLpipe data source</a></span></dt><dt><span class="sect2"><a href="#live-updates">3.8. Live index updates</a></span></dt></dl></dd><dt><span class="sect1"><a href="#searching">4. Searching</a></span></dt><dd><dl><dt><span class="sect2"><a href="#matching-modes">4.1. Matching modes</a></span></dt><dt><span class="sect2"><a href="#boolean-syntax">4.2. Boolean query syntax</a></span></dt><dt><span class="sect2"><a href="#extended-syntax">4.3. Extended query syntax</a></span></dt><dt><span class="sect2"><a href="#weighting">4.4. Weighting</a></span></dt><dt><span class="sect2"><a href="#sorting-modes">4.5. Sorting modes</a></span></dt><dt><span class="sect2"><a href="#clustering">4.6. Grouping (clustering) search results </a></span></dt><dt><span class="sect2"><a href="#distributed">4.7. Distributed searching</a></span></dt></dl></dd><dt><span class="sect1"><a href="#reporting-bugs">5. Reporting bugs</a></span></dt><dt><span class="sect1"><a href="#reference">6. <code class="filename">sphinx.conf</code> options reference</a></span></dt><dd><dl><dt><span class="sect2"><a href="#ref-source">6.1. Data source configuration options</a></span></dt><dd><dl><dt><span class="sect3"><a href="#ref-source-type">6.1.1. type</a></span></dt><dt><span class="sect3"><a href="#ref-strip-html">6.1.2. strip_html</a></span></dt><dt><span class="sect3"><a href="#ref-index-html-attrs">6.1.3. index_html_attrs</a></span></dt><dt><span class="sect3"><a href="#ref-sql-host">6.1.4. sql_host</a></span></dt><dt><span class="sect3"><a href="#ref-sql-port">6.1.5. sql_port</a></span></dt><dt><span class="sect3"><a href="#ref-sql-user">6.1.6. sql_user</a></span></dt><dt><span class="sect3"><a href="#ref-sql-pass">6.1.7. sql_pass</a></span></dt><dt><span class="sect3"><a href="#ref-sql-db">6.1.8. sql_db</a></span></dt><dt><span class="sect3"><a href="#ref-sql-sock">6.1.9. sql_sock</a></span></dt><dt><span class="sect3"><a href="#ref-sql-query-pre">6.1.10. sql_query_pre</a></span></dt><dt><span class="sect3"><a href="#ref-sql-query">6.1.11. sql_query</a></span></dt><dt><span class="sect3"><a href="#ref-sql-query-range">6.1.12. sql_query_range</a></span></dt><dt><span class="sect3"><a href="#ref-sql-range-step">6.1.13. sql_range_step</a></span></dt></dl></dd><dt><span class="sect2"><a href="#ref-index">6.2. Index configuration options</a></span></dt><dd><dl><dt><span class="sect3"><a href="#ref-charset-table">6.2.1. charset_table</a></span></dt><dt><span class="sect3"><a href="#ref-charset-type">6.2.2. charset_type</a></span></dt><dt><span class="sect3"><a href="#ref-xmlpipe-command">6.2.3. xmlpipe_command</a></span></dt></dl></dd><dt><span class="sect2"><a href="#ref-indexer">6.3. <code class="filename">indexer</code> program configuration options</a></span></dt><dt><span class="sect2"><a href="#ref-searchd">6.4. <code class="filename">searchd</code> program configuration options</a></span></dt></dl></dd><dt><span class="appendix"><a href="#changelog">A. Sphinx revision history</a></span></dt></dl></div><div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="intro"></a>1.&nbsp;Introduction</h2></div></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="about"></a>1.1.&nbsp;About</h3></div></div></div><p>
 Sphinx is a full-text search engine, distributed under GPL version 2.
 Commercial licenseing (eg. for embedded use) is also available upon request. 
 </p><p>
@@ -51,10 +51,10 @@ if you would like to embed Sphinx in your software, but would not
 like to disclose its source code), please contact
 <a href="#author" title="1.5.&nbsp;Author and contributors">the author</a> to obtain
 a commercial license.
-</p></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="author"></a>1.5.&nbsp;Author and contributors</h3></div></div></div><h4><a name="id345213"></a>Author</h4><p>
+</p></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="author"></a>1.5.&nbsp;Author and contributors</h3></div></div></div><h4><a name="id344157"></a>Author</h4><p>
 Sphinx initial author and current primary developer is:
 </p><div class="itemizedlist"><ul type="disc"><li>Andrew Aksyonoff, <code class="email">&lt;<a href="mailto:shodan(at)shodan.ru">shodan(at)shodan.ru</a>&gt;</code></li></ul></div><p>
-</p><h4><a name="id344970"></a>Contributors</h4><p>People who contributed to Sphinx and their contributions (in no particular order) are:
+</p><h4><a name="id343897"></a>Contributors</h4><p>People who contributed to Sphinx and their contributions (in no particular order) are:
 </p><div class="itemizedlist"><ul type="disc"><li>Robert "coredev" Bengtsson (Sweden), initial version of PostgreSQL data source;</li><li>Len Kranendonk, Perl API</li><li>Dmytro Shteflyuk, Ruby API</li></ul></div><p>
 </p><p>
 Many other people have contributed ideas, bug reports, fixes, etc.
@@ -195,9 +195,82 @@ There can be as many sources per index as necessary. They will be
 sequentially processed in the very same order which was specifed in
 index definition. All the documents coming from those sources
 will be merged as if they were coming from a single source.
-</p></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="attributes"></a>3.2.&nbsp;Attributes</h3></div></div></div>
-(to be added)
-</div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="indexes"></a>3.3.&nbsp;Indexes</h3></div></div></div><p>
+</p></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="attributes"></a>3.2.&nbsp;Attributes</h3></div></div></div><p>
+It is often needed to do some additional processing of full-text
+search results depending not only on matching document ID and weight,
+but on a number of other per-document values as well.
+For instance, one might need to
+sort news search results by date and then relevance,
+or search through products within specified price range,
+or limit blog search to posts made by selected users,
+or group results by month.
+</p><p>
+To do that efficiently, Sphinx allows to attach a number
+of additional <em class="glossterm">attributes</em> to each document, and stores their
+values when indexing. These values may then be used to filter,
+sort, or group full-text matches when searching.
+</p><p>
+A good example would be a forum posts table. Assume that
+'title' and 'content' fields need to be full-text searchable,
+but it is also needed to optionally limit searching to some author
+or sub-forum (ie. specific values of 'author_id' or 'forum_id'),
+or to sort matches by 'post_date', or to group matching posts
+by month of the 'post_date' and calculate per-group match counts.
+</p><p>
+This can be achieved by specifying all the mentioned columns
+(excluding 'title' and 'content' which are full-text fields) as
+attributes and then using API calls to setup filtering, sorting,
+and grouping. Here as an example.
+</p><h4><a name="id350965"></a>Example sphinx.conf part:</h4><p>
+</p><pre class="programlisting">
+...
+sql_query = SELECT id, title, content, \
+	author_id, forum_id, post_date FROM my_forum_posts
+sql_group_column = author_id
+sql_group_column = forum_id
+sql_date_column = post_date
+...
+</pre><p>
+</p><h4><a name="id350977"></a>Example application code (in PHP):</h4><p>
+</p><pre class="programlisting">
+// only search posts by author whose ID is 123
+$cl-&gt;SetFilter ( "author_id", array ( 123 ) );
+
+// only search posts in sub-forums 1, 3 and 7
+$cl-&gt;SetFilter ( "forum_id", array ( 1,3,7 ) );
+
+// sort found posts by posting date in descending order
+$cl-&gt;SetSortMode ( SPH_ATTR_DESC, "post_date" );
+</pre><p>
+</p><p>
+Attributes are named. Attribute names are case insensitive.
+</p><p>
+Attributes are <span class="emphasis"><em>not</em></span> full-text indexed;
+they are stored in the index as is.
+</p><p>
+Currently supported attribute types are:
+</p><div class="itemizedlist"><ul type="disc"><li>32-bit unsigned integer,</li><li>UNIX timestamp.</li></ul></div><p>
+</p><p>
+Attribute values are currently internally stored as fixed-size
+4-byte values. A set of all per-document attribute values is called <em class="glossterm">docinfo</em>.
+Docinfos can either be
+</p><div class="itemizedlist"><ul type="disc"><li>stored separately ("extern" storage in <code class="filename">.spa</code> file), or</li><li>attached to each occurence of document ID in full-text index data
+("inline" storage in <code class="filename">.spd</code> file).</li></ul></div><p>
+</p><p>
+Externally stored docinfo is kept in RAM when searching. Thus
+"inline" may be the only viable option for huge (50-100+ million
+documents) datasets because of limited RAM size. However, for
+smaller datasets "extern" storage makes both indexing and
+searching <span class="emphasis"><em>much</em></span> more efficient.
+</p><p>
+Additional search-time memory requirements for extern storage are
+(1+number_of_attrs)*number_of_docs*4 bytes, ie. 10 million docs with
+2 groups and 1 timestamp will take (1+2+1)*10M*4 = 160 MB of RAM.
+This is <span class="emphasis"><em>PER DAEMON</em></span>, ie. searchd
+will alloc 160 MB on startup, read the data and keep it shared
+between queries; the children will <span class="emphasis"><em>NOT</em></span> allocate additional
+copies of this data.
+</p></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="indexes"></a>3.3.&nbsp;Indexes</h3></div></div></div><p>
 To be able to answer full-text search queries fast, Sphinx needs
 to build a special data structure optimized for such queries from
 your text data. This structure is called <em class="glossterm">index</em>; and
@@ -272,7 +345,7 @@ With all the SQL drivers, indexing generally works as follows.
 	to perform any necessary final cleanup;</li><li>connection to the database is closed again.</li></ul></div><p>
 Most options, such as database user/host/password, are straightforward.
 However, there are a few subtle things, which are discussed in more detail here.
-</p><h4><a name="id352068"></a>Ranged queries</h4><p>
+</p><h4><a name="ranged-queries"></a>Ranged queries</h4><p>
 Main query, which needs to fetch all the documents, can impose
 a read lock on the whole table and stall the concurrent queries
 (eg. INSERTs to MyISAM table), waste a lot of memory for result set, etc.
@@ -294,7 +367,7 @@ be run three times:
 Obviously, that's not much of a difference for 2000-row table,
 but when it comes to indexing 10-million-row MyISAM table,
 ranged queries might be of some help.
-</p><h4><a name="id352157"></a><code class="option">sql_post</code> vs. <code class="option">sql_post_index</code></h4><p>
+</p><h4><a name="id351408"></a><code class="option">sql_post</code> vs. <code class="option">sql_post_index</code></h4><p>
 The difference between post-query and post-index query is in that post-query
 is run immediately when Sphinx received all the documents, but further indexing
 <span class="bold"><strong>may</strong></span> still fail for some other reason. On the contrary,
@@ -507,7 +580,7 @@ There are the following result sorting modes available:
 </p><p>
 SPH_SORT_ATTR_ASC, SPH_SORT_ATTR_DESC and SPH_SORT_TIME_SEGMENTS modes
 require an attribute to sort by to be specified.
-</p><h4><a name="id352832"></a>SPH_SORT_TIME_SEGMENTS mode</h4><p>
+</p><h4><a name="id352100"></a>SPH_SORT_TIME_SEGMENTS mode</h4><p>
 In SPH_SORT_TIME_SEGMENTS mode, attribute values are split into so-called
 time segments, and then sorted by time segment first, and by relevance second.
 </p><p>
@@ -522,7 +595,7 @@ When using time segments, recent records would be ranked higher because of segme
 but withing the same segment, more relevant records would be ranked higher -
 unlike sorting by just the timestamp attribute, which would not take relevance
 into account at all.
-</p><h4><a name="id352903"></a>SPH_SORT_EXTENDED mode</h4><p>
+</p><h4><a name="id352172"></a>SPH_SORT_EXTENDED mode</h4><p>
 In SPH_SORT_EXTENDED mode, you would specify an SQL-like sort
 expression to sort by:
 </p><pre class="programlisting">
@@ -624,7 +697,7 @@ Reporting as much as possible about each bug is very important -
 because to fix it, I need to be able either to reproduce and debug the bug,
 or to deduce what's causing it from the information that you provide.
 So here are some instructions on how to do that.
-</p><h3><a name="id350937"></a>Build-time issues</h3><p>If Sphinx fails to build for some reason, please do the following:</p><div class="orderedlist"><ol type="1"><li>check that headers and libraries for your DBMS are properly installed
+</p><h3><a name="id352586"></a>Build-time issues</h3><p>If Sphinx fails to build for some reason, please do the following:</p><div class="orderedlist"><ol type="1"><li>check that headers and libraries for your DBMS are properly installed
 (for instance, check that <code class="filename">mysql-devel</code> package is present);
 </li><li>report Sphinx version and config file (be sure to remove the passwords!),
 MySQL (or PostgreSQL) configuration info, gcc version, OS version and CPU type
@@ -637,7 +710,7 @@ uname -a
 report the error message which is produced by <code class="filename">configure</code>
 or <code class="filename">gcc</code> (it should be to include error message itself only,
 not the whole build log).
-</li></ol></div><h3><a name="id353500"></a>Run-time issues</h3><p>
+</li></ol></div><h3><a name="id352639"></a>Run-time issues</h3><p>
 If Sphinx builds and runs, but there are any problems running it,
 please do the following:
 </p><div class="orderedlist"><ol type="1"><li>describe the bug (ie. both the expected behavior and actual behavior)
@@ -668,7 +741,7 @@ relevant entries from <code class="filename">searchd.log</code> and
 running it in console mode and check if it dies with an assertion:
 <pre class="programlisting">
 ./searchd --console
-</pre></li><li>if any program dies with an assertion, provide the assertion message.</li></ol></div><h3><a name="id353612"></a>Debugging crashes and hangups</h3><p>
+</pre></li><li>if any program dies with an assertion, provide the assertion message.</li></ol></div><h3><a name="id352750"></a>Debugging crashes and hangups</h3><p>
 If any program crashes without an assertion or hangs up, you would additionally
 need to generate a core dump and examine it.
 </p><p>
@@ -697,7 +770,7 @@ kill -SEGV HANGED-PROCESS-ID
 Finally, use <code class="filename">gdb</code> to examine the core file
 and obtain a backtrace:
 </p><pre class="programlisting">
-gdb ./PROGRAM CORE-DUMP-FILE-NAME
+gdb ./CRASHED-PROGRAM-FILE-NAME CORE-DUMP-FILE-NAME
 (gdb) bt
 (gdb) quit
 </pre><p>
@@ -712,7 +785,7 @@ Data source type. Available types are <code class="option">mysql</code>, <code c
 and <code class="option">xmlpipe</code>.
 </p><p>
 This option is <span class="bold"><strong>mandatory</strong></span>.
-</p><h5><a name="id353758"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id352897"></a>Example:</h5><pre class="programlisting">
 type = mysql
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-strip-html"></a>6.1.2.&nbsp;strip_html</h4></div></div></div><p>
 Whether to strip HTML formatting from incoming full-text data.
@@ -727,7 +800,7 @@ HTML (such as well-formed XHTML) but MAY bug on malformed HTML
 This option is optional.
 Default value is 0 (do not strip HTML).
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id353818"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id352957"></a>Example:</h5><pre class="programlisting">
 strip_html = 0
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-index-html-attrs"></a>6.1.3.&nbsp;index_html_attrs</h4></div></div></div><p>
 Specifies which HTML attributes' contents still should be indexed when stripping HTML.
@@ -736,14 +809,14 @@ The format is per-tag enumeration of indexable attributes, as shown in the examp
 This option is optional.
 Default value is empty (do not index anything).
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id353859"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id352999"></a>Example:</h5><pre class="programlisting">
 index_html_attrs = img=alt,title; a=title;
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-host"></a>6.1.4.&nbsp;sql_host</h4></div></div></div><p>
 SQL server host to connect to.
 </p><p>
 This option is <span class="bold"><strong>mandatory</strong></span>.
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id353902"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id353043"></a>Example:</h5><pre class="programlisting">
 sql_host = localhost
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-port"></a>6.1.5.&nbsp;sql_port</h4></div></div></div><p>
 SQL server IP port to connect to.
@@ -751,28 +824,28 @@ SQL server IP port to connect to.
 This option is optional.
 Default value is 3306 for <code class="option">mysql</code> source type and 5432 for <code class="option">pgsql</code> type.
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id353948"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id353090"></a>Example:</h5><pre class="programlisting">
 sql_port = 3306
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-user"></a>6.1.6.&nbsp;sql_user</h4></div></div></div><p>
 SQL user to use on <a href="#ref-sql-host" title="6.1.4.&nbsp;sql_host">sql_host</a>.
 </p><p>
 This option is <span class="bold"><strong>mandatory</strong></span>.
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id353997"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id353138"></a>Example:</h5><pre class="programlisting">
 sql_user = test
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-pass"></a>6.1.7.&nbsp;sql_pass</h4></div></div></div><p>
 SQL user password to use on <a href="#ref-sql-host" title="6.1.4.&nbsp;sql_host">sql_host</a>.
 </p><p>
 This option is <span class="bold"><strong>mandatory</strong></span>.
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id354046"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id353188"></a>Example:</h5><pre class="programlisting">
 sql_pass = mysecretpassword
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-db"></a>6.1.8.&nbsp;sql_db</h4></div></div></div><p>
 SQL database (in MySQL terms) to use after connection and perform further queries in.
 </p><p>
 This option is <span class="bold"><strong>mandatory</strong></span>.
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id354091"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id353232"></a>Example:</h5><pre class="programlisting">
 sql_db = test
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-sock"></a>6.1.9.&nbsp;sql_sock</h4></div></div></div><p>
 UNIX socket name to connect to local MySQL server.
@@ -782,7 +855,7 @@ On FreeBSD, it would typically be <code class="filename">/tmp/mysql.sock</code>.
 </p><p>
 This option is optional.
 This option only applies to <code class="option">mysql</code> source type.
-</p><h5><a name="id354138"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id353280"></a>Example:</h5><pre class="programlisting">
 sql_sock = test
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-query-pre"></a>6.1.10.&nbsp;sql_query_pre</h4></div></div></div><p>
 Pre-fetch query, or pre-query.
@@ -797,7 +870,7 @@ which are going to be indexed, or update internal counters, etc.
 </p><p>
 This option is optional.
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id354200"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id353341"></a>Example:</h5><pre class="programlisting">
 sql_query_pre = SET CHARACTER_SET_RESULTS=utf-8
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-query"></a>6.1.11.&nbsp;sql_query</h4></div></div></div><p>
 Main document fetch query.
@@ -813,12 +886,28 @@ and it <span class="bold"><strong>MUST BE UNIQUE UNSIGNED NON-ZERO 32-BIT INTEGE
 </p><p>
 This option is <span class="bold"><strong>mandatory</strong></span>.
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id354273"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id353415"></a>Example:</h5><pre class="programlisting">
 sql_query = \
 	SELECT id, group_id, UNIX_TIMESTAMP(date_added) AS date_added, \
 		title, content \
 	FROM documents
+</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-query-range"></a>6.1.12.&nbsp;sql_query_range</h4></div></div></div><p>
+Query which fetches min/max document IDs range to be used in ranged query (see <a href="#ranged-queries">Section&nbsp;3.6, &#8220;Ranged queries&#8221;</a>).
+</p><p>
+This option is optional.
+This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
+</p><h5><a name="id353460"></a>Example:</h5><pre class="programlisting">
+sql_query_range = SELECT MIN(id),MAX(id) FROM documents
+</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-range-step"></a>6.1.13.&nbsp;sql_range_step</h4></div></div></div><p>
+How much records to index per one ranged query step (see <a href="#ranged-queries">Section&nbsp;3.6, &#8220;Ranged queries&#8221;</a>).
+</p><p>
+This option is optional.
+Default value is 1024.
+This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
+</p><h5><a name="id353503"></a>Example:</h5><pre class="programlisting">
+sql_range_step = 1000
 </pre></div>
+
 
 (to be added)
 
@@ -826,12 +915,12 @@ sql_query = \
 
 (to be added)
 
-<div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-charset-table"></a>6.2.1.&nbsp;charset_table</h4></div></div></div><h5><a name="id354303"></a>Description</h5><p>Everything one needs to know about charset_table is here</p><h5><a name="id354312"></a>Example:</h5><pre class="programlisting">
+<div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-charset-table"></a>6.2.1.&nbsp;charset_table</h4></div></div></div><h5><a name="id353531"></a>Description</h5><p>Everything one needs to know about charset_table is here</p><h5><a name="id353540"></a>Example:</h5><pre class="programlisting">
 charset_table = A..Z-&gt;a..z
-</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-charset-type"></a>6.2.2.&nbsp;charset_type</h4></div></div></div><h5><a name="id354330"></a>Description</h5><p>Everything one needs to know about charset_type is here</p><h5><a name="id354339"></a>Example:</h5><pre class="programlisting">
+</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-charset-type"></a>6.2.2.&nbsp;charset_type</h4></div></div></div><h5><a name="id353558"></a>Description</h5><p>Everything one needs to know about charset_type is here</p><h5><a name="id353566"></a>Example:</h5><pre class="programlisting">
 charset_type = sbcs
 # charset_type = utf-8
-</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-xmlpipe-command"></a>6.2.3.&nbsp;xmlpipe_command</h4></div></div></div><h5><a name="id354357"></a>Description</h5><p>Everything one needs to know about xmlpipe_command is here</p><h5><a name="id354366"></a>Example:</h5><pre class="programlisting">
+</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-xmlpipe-command"></a>6.2.3.&nbsp;xmlpipe_command</h4></div></div></div><h5><a name="id353585"></a>Description</h5><p>Everything one needs to know about xmlpipe_command is here</p><h5><a name="id353594"></a>Example:</h5><pre class="programlisting">
 xmlpipe_command = perl /www/mysite.com/bin/sphinxpipe.pl
 </pre></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="ref-indexer"></a>6.3.&nbsp;<code class="filename">indexer</code> program configuration options</h3></div></div></div>
 (to be added)

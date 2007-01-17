@@ -396,7 +396,97 @@ will be merged as if they were coming from a single source.
 
 
 <sect2 id="attributes"><title>Attributes</title>
-(to be added)
+<para>
+It is often needed to do some additional processing of full-text
+search results depending not only on matching document ID and weight,
+but on a number of other per-document values as well.
+For instance, one might need to
+sort news search results by date and then relevance,
+or search through products within specified price range,
+or limit blog search to posts made by selected users,
+or group results by month.
+</para>
+<para>
+To do that efficiently, Sphinx allows to attach a number
+of additional <glossterm>attributes</glossterm> to each document, and stores their
+values when indexing. These values may then be used to filter,
+sort, or group full-text matches when searching.
+</para>
+<para>
+A good example would be a forum posts table. Assume that
+'title' and 'content' fields need to be full-text searchable,
+but it is also needed to optionally limit searching to some author
+or sub-forum (ie. specific values of 'author_id' or 'forum_id'),
+or to sort matches by 'post_date', or to group matching posts
+by month of the 'post_date' and calculate per-group match counts.
+</para>
+<para>
+This can be achieved by specifying all the mentioned columns
+(excluding 'title' and 'content' which are full-text fields) as
+attributes and then using API calls to setup filtering, sorting,
+and grouping. Here as an example.
+<bridgehead>Example sphinx.conf part:</bridgehead>
+<programlisting>
+...
+sql_query = SELECT id, title, content, \
+	author_id, forum_id, post_date FROM my_forum_posts
+sql_group_column = author_id
+sql_group_column = forum_id
+sql_date_column = post_date
+...
+</programlisting>
+<bridgehead>Example application code (in PHP):</bridgehead>
+<programlisting>
+// only search posts by author whose ID is 123
+$cl->SetFilter ( "author_id", array ( 123 ) );
+
+// only search posts in sub-forums 1, 3 and 7
+$cl->SetFilter ( "forum_id", array ( 1,3,7 ) );
+
+// sort found posts by posting date in descending order
+$cl->SetSortMode ( SPH_ATTR_DESC, "post_date" );
+</programlisting>
+</para>
+<para>
+Attributes are named. Attribute names are case insensitive.
+</para>
+<para>
+Attributes are <emphasis>not</emphasis> full-text indexed;
+they are stored in the index as is.
+</para>
+<para>
+Currently supported attribute types are:
+<itemizedlist>
+<listitem>32-bit unsigned integer,</listitem>
+<listitem>UNIX timestamp.</listitem>
+</itemizedlist>
+</para>
+<para>
+Attribute values are currently internally stored as fixed-size
+4-byte values. A set of all per-document attribute values is called <glossterm>docinfo</glossterm>.
+Docinfos can either be
+<itemizedlist>
+<listitem>stored separately ("extern" storage in <filename>.spa</filename> file), or</listitem>
+<listitem>attached to each occurence of document ID in full-text index data
+("inline" storage in <filename>.spd</filename> file).</listitem>
+</itemizedlist>
+</para>
+<para>
+Externally stored docinfo is kept in RAM when searching. Thus
+"inline" may be the only viable option for huge (50-100+ million
+documents) datasets because of limited RAM size. However, for
+smaller datasets "extern" storage makes both indexing and
+searching <emphasis>much</emphasis> more efficient.
+</para>
+<para>
+Additional search-time memory requirements for extern storage are
+(1+number_of_attrs)*number_of_docs*4 bytes, ie. 10 million docs with
+2 groups and 1 timestamp will take (1+2+1)*10M*4 = 160 MB of RAM.
+This is <emphasis>PER DAEMON</emphasis>, ie. searchd
+will alloc 160 MB on startup, read the data and keep it shared
+between queries; the children will <emphasis>NOT</emphasis> allocate additional
+copies of this data.
+</para>
 </sect2>
 
 
@@ -515,7 +605,7 @@ With all the SQL drivers, indexing generally works as follows.
 Most options, such as database user/host/password, are straightforward.
 However, there are a few subtle things, which are discussed in more detail here.
 </para>
-<bridgehead>Ranged queries</bridgehead>
+<bridgehead id="ranged-queries">Ranged queries</bridgehead>
 <para>
 Main query, which needs to fetch all the documents, can impose
 a read lock on the whole table and stall the concurrent queries
@@ -1168,7 +1258,7 @@ kill -SEGV HANGED-PROCESS-ID
 Finally, use <filename>gdb</filename> to examine the core file
 and obtain a backtrace:
 <programlisting>
-gdb ./PROGRAM CORE-DUMP-FILE-NAME
+gdb ./CRASHED-PROGRAM-FILE-NAME CORE-DUMP-FILE-NAME
 (gdb) bt
 (gdb) quit
 </programlisting>
@@ -1363,6 +1453,7 @@ sql_query_pre = SET CHARACTER_SET_RESULTS=utf-8
 </programlisting>
 </sect3>
 
+
 <sect3 id="ref-sql-query"><title>sql_query</title>
 <para>
 Main document fetch query.
@@ -1391,6 +1482,38 @@ sql_query = \
 	FROM documents
 </programlisting>
 </sect3>
+
+
+<sect3 id="ref-sql-query-range"><title>sql_query_range</title>
+<para>
+Query which fetches min/max document IDs range to be used in ranged query (see <xref linkend="ranged-queries"/>).
+</para>
+<para>
+This option is optional.
+This option only applies to <option>mysql</option> and <option>pgsql</option> source types.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+sql_query_range = SELECT MIN(id),MAX(id) FROM documents
+</programlisting>
+</sect3>
+
+
+<sect3 id="ref-sql-range-step"><title>sql_range_step</title>
+<para>
+How much records to index per one ranged query step (see <xref linkend="ranged-queries"/>).
+</para>
+<para>
+This option is optional.
+Default value is 1024.
+This option only applies to <option>mysql</option> and <option>pgsql</option> source types.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+sql_range_step = 1000
+</programlisting>
+</sect3>
+
 
 (to be added)
 

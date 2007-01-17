@@ -381,7 +381,7 @@ index test1stemmed : test1
 # distributed index example
 #
 # this is a virtual index which can NOT be directly indexed,
-# and only containts references to other local and/or remote indexes
+# and only contains references to other local and/or remote indexes
 #
 # if searchd receives a query against this index,
 # it does the following:

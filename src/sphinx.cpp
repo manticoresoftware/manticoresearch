@@ -2675,6 +2675,7 @@ CSphFilter::CSphFilter ()
 	, m_uMaxValue	( UINT_MAX )
 	, m_iValues		( 0 )
 	, m_pValues		( NULL )
+	, m_bExclude	( false )
 {}
 
 
@@ -5183,26 +5184,25 @@ inline int sphBitCount ( DWORD n )
 }
 
 
-inline int sphGroupMatch ( DWORD iGroup, DWORD * pGroups, int iGroups )
+inline bool sphGroupMatch ( DWORD iGroup, DWORD * pGroups, int iGroups )
 {
-	if ( !pGroups ) return 1;
-
+	if ( !pGroups ) return true;
 	DWORD * pA = pGroups;
 	DWORD * pB = pGroups+iGroups-1;
-	if ( iGroup==*pA || iGroup==*pB ) return 1;
-	if ( iGroup<(*pA) || iGroup>(*pB) ) return 0;
+	if ( iGroup==*pA || iGroup==*pB ) return true;
+	if ( iGroup<(*pA) || iGroup>(*pB) ) return false;
 
 	while ( pB-pA>1 )
 	{
 		DWORD * pM = pA + ((pB-pA)/2);
 		if ( iGroup==(*pM) )
-			return 1;
+			return true;
 		if ( iGroup<(*pM) )
 			pB = pM;
 		else
 			pA = pM;
 	}
-	return 0;
+	return false;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -5598,11 +5598,11 @@ static inline bool sphMatchEarlyReject ( const CSphMatch & tMatch, const CSphQue
 		DWORD uValue = tMatch.m_pAttrs [ tFilter.m_iAttrIndex ];
 		if ( tFilter.m_iValues )
 		{
-			if ( !sphGroupMatch ( uValue, tFilter.m_pValues, tFilter.m_iValues ) )
+			if ( !( tFilter.m_bExclude ^ sphGroupMatch ( uValue, tFilter.m_pValues, tFilter.m_iValues ) ) )
 				return true;
 		} else
 		{
-			if ( uValue<tFilter.m_uMinValue || uValue>tFilter.m_uMaxValue )
+			if ( tFilter.m_bExclude ^ ( uValue<tFilter.m_uMinValue || uValue>tFilter.m_uMaxValue ) )
 				return true;
 		}
 	}

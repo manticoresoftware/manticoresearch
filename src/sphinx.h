@@ -866,6 +866,7 @@ public:
 	DWORD			m_uMaxValue;	///< max value, only used when m_iValues==0
 	int				m_iValues;		///< values set size, default is 0
 	DWORD *			m_pValues;		///< values set. OWNED, WILL BE FREED IN DTOR.
+	bool			m_bExclude;		///< whether this is "include" or "exclude" filter (default is "include")
 
 public:
 					CSphFilter ();

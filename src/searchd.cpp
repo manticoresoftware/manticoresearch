@@ -138,7 +138,7 @@ enum SearchdCommand_e
 /// known command versions
 enum
 {
-	VER_COMMAND_SEARCH		= 0x105,
+	VER_COMMAND_SEARCH		= 0x106,
 	VER_COMMAND_EXCERPT		= 0x100
 };
 
@@ -1456,7 +1456,7 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				{
 					const CSphFilter & tFilter = tQuery.m_dFilters[j];
 					iReqSize +=
-						8
+						12
 						+ strlen ( tFilter.m_sAttrName.cstr() )
 						+ 4*tFilter.m_iValues
 						+ ( tFilter.m_iValues ? 0 : 8 );
@@ -1497,6 +1497,7 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 						tOut.SendDword ( tFilter.m_uMinValue );
 						tOut.SendDword ( tFilter.m_uMaxValue );
 					}
+					tOut.SendInt ( tFilter.m_bExclude );
 				}
 				tOut.SendInt ( tQuery.m_eGroupFunc );
 				tOut.SendString ( tQuery.m_sGroupBy.cstr() );
@@ -2062,6 +2063,8 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 				tFilter.m_uMinValue = tReq.GetDword ();
 				tFilter.m_uMaxValue = tReq.GetDword ();
 			}
+			if ( iVer>=0x106 )
+				tFilter.m_bExclude = !!tReq.GetDword ();
 		}
 	}
 
@@ -2076,15 +2079,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	// v.1.4
 	tQuery.m_iMaxMatches = g_iMaxMatches;
 	if ( iVer>=0x104 )
-	{
 		tQuery.m_iMaxMatches = tReq.GetInt ();
-		if ( tQuery.m_iMaxMatches<1 || tQuery.m_iMaxMatches>g_iMaxMatches )
-		{
-			tReq.SendErrorReply ( "per-query max_matches=%d out of bounds (per-server max_matches=%d)",
-				tQuery.m_iMaxMatches, g_iMaxMatches );
-			return;
-		}
-	}
 
 	// v.1.5
 	tQuery.m_bSortByGroup = true;
@@ -2106,6 +2101,12 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	if ( tQuery.m_eMode<0 || tQuery.m_eMode>SPH_MATCH_TOTAL )
 	{
 		tReq.SendErrorReply ( "invalid match mode %d", tQuery.m_eMode );
+		return;
+	}
+	if ( tQuery.m_iMaxMatches<1 || tQuery.m_iMaxMatches>g_iMaxMatches )
+	{
+		tReq.SendErrorReply ( "per-query max_matches=%d out of bounds (per-server max_matches=%d)",
+			tQuery.m_iMaxMatches, g_iMaxMatches );
 		return;
 	}
 

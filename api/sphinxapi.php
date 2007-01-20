@@ -22,7 +22,7 @@ define ( "SEARCHD_COMMAND_SEARCH",	0 );
 define ( "SEARCHD_COMMAND_EXCERPT",	1 );
 
 /// current client-side command implementation versions
-define ( "VER_COMMAND_SEARCH",		0x105 );
+define ( "VER_COMMAND_SEARCH",		0x106 );
 define ( "VER_COMMAND_EXCERPT",		0x100 );
 
 /// known searchd status codes
@@ -68,9 +68,7 @@ class SphinxClient
 	var $_sortby;	///< attribute to sort by (defualt is "")
 	var $_min_id;	///< min ID to match (default is 0)
 	var $_max_id;	///< max ID to match (default is UINT_MAX)
-	var $_min;		///< attribute name to min-value hash (for range filters)
-	var $_max;		///< attribute name to max-value hash (for range filters)
-	var $_filter;	///< attribute name to values set hash (for values-set filters)
+	var $_filters;	///< search filters
 	var $_groupby;	///< group-by attribute name
 	var $_groupfunc;///< function to pre-process group-by attribute value with
 	var $_maxmatches;	///< max matches to retrieve
@@ -96,9 +94,7 @@ class SphinxClient
 		$this->_sortby	= "";
 		$this->_min_id	= 0;
 		$this->_max_id	= 0xFFFFFFFF;
-		$this->_min		= array ();
-		$this->_max		= array ();
-		$this->_filter	= array ();
+		$this->_filters	= array ();
 		$this->_groupby		= "";
 		$this->_groupfunc	= SPH_GROUPBY_DAY;
 		$this->_maxmatches	= 1000;
@@ -280,7 +276,7 @@ class SphinxClient
 	/// set values filter
 	/// only match those records where $attribute column values
 	/// are in specified set
-	function SetFilter ( $attribute, $values )
+	function SetFilter ( $attribute, $values, $exclude=false )
 	{
 		assert ( is_string($attribute) );
 		assert ( is_array($values) );
@@ -291,22 +287,21 @@ class SphinxClient
 			foreach ( $values as $value )
 				assert ( is_int($value) );
 
-			$this->_filter[$attribute] = $values;
+			$this->_filters[] = array ( "attr"=>$attribute, "exclude"=>$exclude, "values"=>$values );
 		}
 	}
 
 	/// set range filter
 	/// only match those records where $attribute column value
 	/// is beetwen $min and $max (including $min and $max)
-	function SetFilterRange ( $attribute, $min, $max )
+	function SetFilterRange ( $attribute, $min, $max, $exclude=false )
 	{
 		assert ( is_string($attribute) );
 		assert ( is_int($min) );
 		assert ( is_int($max) );
 		assert ( $min<=$max );
 
-		$this->_min[$attribute] = $min;
-		$this->_max[$attribute] = $max;
+		$this->_filters[] = array ( "attr"=>$attribute, "exclude"=>$exclude, "min"=>$min, "max"=>$max );
 	}
 
 	/// set grouping attribute and function
@@ -386,21 +381,20 @@ class SphinxClient
 			pack ( "N", (int)$this->_max_id );
 
 		// filters
-		$req .= pack ( "N", count($this->_min) + count($this->_filter) );
-
-		foreach ( $this->_min as $attr => $min )
-			$req .=
-				pack ( "N", strlen($attr) ) . $attr .
-				pack ( "NNN", 0, $min, $this->_max[$attr] );
-
-		foreach ( $this->_filter as $attr => $values )
+		$req .= pack ( "N", count($this->_filters) );
+		foreach ( $this->_filters as $filter )
 		{
-			$req .= 
-				pack ( "N", strlen($attr) ) . $attr .
-				pack ( "N", count($values) );
-
-			foreach ( $values as $value )
-				$req .= pack ( "N", $value );
+			$req .= pack ( "N", strlen($filter["attr"]) ) . $filter["attr"];
+			if ( isset($filter["values"]) )
+			{
+				$req .= pack ( "N", count($filter["values"]) );
+				foreach ( $filter["values"] as $value )
+					$req .= pack ( "N", $value );
+			} else
+			{
+				$req .= pack ( "NNN", 0, $filter["min"], $filter["max"] );
+			}
+			$req .= pack ( "N", $filter["exclude"] );
 		}
 
 		// group-by, max matches, sort-by-group flag

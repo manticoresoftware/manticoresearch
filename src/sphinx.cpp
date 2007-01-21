@@ -1734,11 +1734,11 @@ char * strlwr ( char * s )
 #endif
 
 
-char * sphStrMacro ( const char * sTemplate, const char * sMacro, int iValue )
+char * sphStrMacro ( const char * sTemplate, const char * sMacro, DWORD uValue )
 {
 	// expand macro
 	char sExp [ 16 ];
-	snprintf ( sExp, sizeof(sExp), "%d", iValue );
+	snprintf ( sExp, sizeof(sExp), "%u", uValue );
 
 	// calc lengths
 	int iExp = strlen ( sExp );
@@ -1776,9 +1776,10 @@ char * sphStrMacro ( const char * sTemplate, const char * sMacro, int iValue )
 }
 
 
-int myatoi ( const char * nptr )
+DWORD sphToDword ( const char * s )
 {
-	return nptr ? atoi ( nptr ) : 0;
+	if ( !s ) return 0;
+	return strtoul ( s, NULL, 10 );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -8344,10 +8345,10 @@ const char * const CSphSource_SQL::MACRO_VALUES [ CSphSource_SQL::MACRO_COUNT ] 
 
 CSphSource_SQL::CSphSource_SQL ( const char * sName )
 	: CSphSource_Document	( sName )
-	, m_iMinID				( 0 )
-	, m_iMaxID				( 0 )
-	, m_iCurrentID			( 0 )
-	, m_iMaxFetchedID		( 0 )
+	, m_uMinID				( 0 )
+	, m_uMaxID				( 0 )
+	, m_uCurrentID			( 0 )
+	, m_uMaxFetchedID		( 0 )
 	, m_bSqlConnected		( false )
 {
 }
@@ -8392,7 +8393,7 @@ bool CSphSource_SQL::RunQueryStep ()
 {
 	if ( m_tParams.m_iRangeStep<=0 )
 		return false;
-	if ( m_iCurrentID>m_iMaxID )
+	if ( m_uCurrentID>m_uMaxID )
 		return false;
 
 	static const int iBufSize = 16;
@@ -8402,16 +8403,16 @@ bool CSphSource_SQL::RunQueryStep ()
 	// range query with $start/$end interpolation
 	//////////////////////////////////////////////
 
-	assert ( m_iMinID>0 );
-	assert ( m_iMaxID>0 );
-	assert ( m_iMinID<=m_iMaxID );
+	assert ( m_uMinID>0 );
+	assert ( m_uMaxID>0 );
+	assert ( m_uMinID<=m_uMaxID );
 	assert ( m_tParams.m_sQuery.cstr() );
 
 	char sValues [ MACRO_COUNT ] [ iBufSize ];
-	int iNextID = Min ( m_iCurrentID+m_tParams.m_iRangeStep-1, m_iMaxID );
-	snprintf ( sValues[0], iBufSize, "%d", m_iCurrentID );
-	snprintf ( sValues[1], iBufSize, "%d", iNextID );
-	m_iCurrentID = iNextID+1;
+	DWORD uNextID = Min ( m_uCurrentID+m_tParams.m_iRangeStep-1, m_uMaxID );
+	snprintf ( sValues[0], iBufSize, "%u", m_uCurrentID );
+	snprintf ( sValues[1], iBufSize, "%u", uNextID );
+	m_uCurrentID = uNextID+1;
 
 	// OPTIMIZE? things can be precalculated
 	const char * sCur = m_tParams.m_sQuery.cstr();
@@ -8553,26 +8554,31 @@ bool CSphSource_SQL::Connect ()
 			if ( SqlColumn(0)==NULL && SqlColumn(1)==NULL )
 			{
 				// the source seems to be empty; workaround
-				m_iMinID = 1;
-				m_iMaxID = 1;
+				m_uMinID = 1;
+				m_uMaxID = 1;
 
 			} else
 			{
 				// get and check min/max id
-				m_iMinID = myatoi ( SqlColumn(0) );
-				m_iMaxID = myatoi ( SqlColumn(1) );
-				if ( m_iMinID<=0 )
-					LOC_ERROR ( "ERROR: sql_query_range: min_id=%d: must be positive.\n", m_iMinID );
-				if ( m_iMaxID<=0 )
-					LOC_ERROR ( "ERROR: sql_query_range: max_id=%d: must be positive.\n", m_iMaxID );
-				if ( m_iMinID>m_iMaxID )
-					LOC_ERROR2 ( "ERROR: sql_query_range: min_id=%d, max_id=%d: min_id must be less than max_id.\n", m_iMinID, m_iMaxID );
+				const char * sCol0 = SqlColumn(0);
+				const char * sCol1 = SqlColumn(1);
+				m_uMinID = sphToDword ( sCol0 );
+				m_uMaxID = sphToDword ( sCol1 );
+				if ( !sCol0 ) sCol0 = "(null)";
+				if ( !sCol1 ) sCol1 = "(null)";
+
+				if ( m_uMinID<=0 )
+					LOC_ERROR ( "ERROR: sql_query_range: min_id='%s': must be positive 32-bit unsigned integer.\n", sCol0 );
+				if ( m_uMaxID<=0 )
+					LOC_ERROR ( "ERROR: sql_query_range: max_id='%s': must be positive 32-bit unsigned integer.\n", sCol1 );
+				if ( m_uMinID>m_uMaxID )
+					LOC_ERROR2 ( "ERROR: sql_query_range: min_id='%s', max_id='%s': min_id must be less than max_id.\n", sCol0, sCol1 );
 			}
 
 			SqlDismissResult ();
 
 			// issue query
-			m_iCurrentID = m_iMinID;
+			m_uCurrentID = m_uMinID;
 			if ( !RunQueryStep () )
 				return 0;
 
@@ -8703,8 +8709,8 @@ BYTE ** CSphSource_SQL::NextDocument ()
 	}
 
 	// get him!
-	m_tDocInfo.m_iDocID = myatoi ( SqlColumn(0) );
-	m_iMaxFetchedID = Max ( m_iMaxFetchedID, m_tDocInfo.m_iDocID );
+	m_tDocInfo.m_iDocID = sphToDword ( SqlColumn(0) );
+	m_uMaxFetchedID = Max ( m_uMaxFetchedID, m_tDocInfo.m_iDocID );
 
 	if ( !m_tDocInfo.m_iDocID )
 		fprintf ( stdout, "WARNING: zero/NULL document_id, aborting indexing\n" );
@@ -8716,11 +8722,11 @@ BYTE ** CSphSource_SQL::NextDocument ()
 	ARRAY_FOREACH ( i, m_tSchema.m_dAttrs )
 	{
 		DWORD * pAttrs = m_tDocInfo.m_pAttrs; // shortcut
-		pAttrs[i] = myatoi ( SqlColumn ( m_tSchema.m_dAttrs[i].m_iIndex ) );
+		pAttrs[i] = sphToDword ( SqlColumn ( m_tSchema.m_dAttrs[i].m_iIndex ) );
 		if ( !pAttrs[i] )
 		{
 			pAttrs[i] = 1;
-			fprintf ( stdout, "WARNING: zero/NULL attribute '%s' for document_id=%d, fixed up to 1\n",
+			fprintf ( stdout, "WARNING: zero/NULL attribute '%s' for document_id=%u, fixed up to 1\n",
 				m_tSchema.m_dAttrs[i].m_sName.cstr(), m_tDocInfo.m_iDocID );
 		}
 	}
@@ -8731,7 +8737,7 @@ BYTE ** CSphSource_SQL::NextDocument ()
 
 void CSphSource_SQL::PostIndex ()
 {
-	if ( !m_tParams.m_dQueryPostIndex.GetLength() || !m_iMaxFetchedID )
+	if ( !m_tParams.m_dQueryPostIndex.GetLength() || !m_uMaxFetchedID )
 		return;
 
 	assert ( !m_bSqlConnected );
@@ -8746,7 +8752,7 @@ void CSphSource_SQL::PostIndex ()
 
 		ARRAY_FOREACH ( i, m_tParams.m_dQueryPostIndex )
 		{
-			char * sQuery = sphStrMacro ( m_tParams.m_dQueryPostIndex[i].cstr(), "$maxid", m_iMaxFetchedID );
+			char * sQuery = sphStrMacro ( m_tParams.m_dQueryPostIndex[i].cstr(), "$maxid", m_uMaxFetchedID );
 			bool bRes = SqlQuery ( sQuery );
 			delete [] sQuery;
 
@@ -9185,7 +9191,7 @@ int CSphSource_XMLPipe::Next ()
 		if ( m_pBuffer>=m_pBufferEnd )
 			if ( !UpdateBuffer() )
 		{
-			fprintf ( stdout, "WARNING: CSphSource_XMLPipe(): unexpected EOF while scanning doc '%d' body.\n",
+			fprintf ( stdout, "WARNING: CSphSource_XMLPipe(): unexpected EOF while scanning doc '%u' body.\n",
 				m_tDocInfo.m_iDocID );
 			return 0;
 		}

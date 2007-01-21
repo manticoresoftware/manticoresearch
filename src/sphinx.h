@@ -91,8 +91,8 @@ float			sphLongTimer ();
 /// Sphinx CRC32 implementation
 DWORD			sphCRC32 ( const BYTE * pString );
 
-/// replaces all occurences of sMacro in sTemplate with textual representation of iValue
-char *			sphStrMacro ( const char * sTemplate, const char * sMacro, int iValue );
+/// replaces all occurences of sMacro in sTemplate with textual representation of uValue
+char *			sphStrMacro ( const char * sTemplate, const char * sMacro, DWORD uValue );
 
 /////////////////////////////////////////////////////////////////////////////
 // TOKENIZERS
@@ -602,11 +602,10 @@ protected:
 
 	BYTE *				m_dFields [ SPH_MAX_FIELDS ];
 
-	int					m_iMinID;		///< grand min ID
-	int					m_iMaxID;		///< grand max ID
-	int					m_iCurrentID;	///< current min ID
-
-	DWORD				m_iMaxFetchedID;///< max actually fetched ID
+	DWORD				m_uMinID;		///< grand min ID
+	DWORD				m_uMaxID;		///< grand max ID
+	DWORD				m_uCurrentID;	///< current min ID
+	DWORD				m_uMaxFetchedID;///< max actually fetched ID
 
 	bool						m_bSqlConnected;
 	CSphSourceParams_SQL		m_tParams;

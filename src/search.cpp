@@ -345,7 +345,7 @@ int main ( int argc, char ** argv )
 			for ( int i=iStart; i<iMaxIndex; i++ )
 			{
 				CSphMatch & tMatch = pResult->m_dMatches[i];
-				fprintf ( stdout, "%d. document=%d, weight=%d", 1+i, tMatch.m_iDocID, tMatch.m_iWeight );
+				fprintf ( stdout, "%d. document=%u, weight=%d", 1+i, tMatch.m_iDocID, tMatch.m_iWeight );
 
 				if ( tMatch.m_pAttrs )
 					ARRAY_FOREACH ( j, pResult->m_tSchema.m_dAttrs )
@@ -354,7 +354,7 @@ int main ( int argc, char ** argv )
 
 					if ( tAttr.m_eAttrType==SPH_ATTR_INTEGER )
 					{
-						fprintf ( stdout, ", %s=%d", tAttr.m_sName.cstr(), tMatch.m_pAttrs[j] );
+						fprintf ( stdout, ", %s=%u", tAttr.m_sName.cstr(), tMatch.m_pAttrs[j] );
 					
 					} else if ( tAttr.m_eAttrType==SPH_ATTR_TIMESTAMP )
 					{

@@ -29,6 +29,7 @@ define ( "VER_COMMAND_EXCERPT",		0x100 );
 define ( "SEARCHD_OK",				0 );
 define ( "SEARCHD_ERROR",			1 );
 define ( "SEARCHD_RETRY",			2 );
+define ( "SEARCHD_WARNING",			3 );
 
 /// known match modes
 define ( "SPH_MATCH_ALL",			0 );
@@ -180,6 +181,12 @@ class SphinxClient
 		}
 
 		// check status
+		if ( $status==SEARCHD_WARNING )
+		{
+			list(,$wlen) = unpack ( "N*", substr ( $response, 0, 4 ) );
+			$this->_warning = substr ( $response, 4, $wlen );
+			return substr ( $response, 4+$wlen );
+		}
 		if ( $status==SEARCHD_ERROR )
 		{
 			$this->_error = "searchd error: " . substr ( $response, 4 );

@@ -1576,8 +1576,8 @@ private:
 
 	void						MatchAll ( const CSphQuery * pQuery, ISphMatchQueue * pTop, CSphQueryResult * pResult );
 	void						MatchAny ( const CSphQuery * pQuery, ISphMatchQueue * pTop, CSphQueryResult * pResult );
-	void						MatchBoolean ( const CSphQuery * pQuery, CSphDict * pDict, ISphMatchQueue * pTop, CSphQueryResult * pResult, int iDoclistFD );
-	void						MatchExtended ( const CSphQuery * pQuery, CSphDict * pDict, ISphMatchQueue * pTop, CSphQueryResult * pResult, int iDoclistFD );
+	bool						MatchBoolean ( const CSphQuery * pQuery, CSphDict * pDict, ISphMatchQueue * pTop, CSphQueryResult * pResult, int iDoclistFD );
+	bool						MatchExtended ( const CSphQuery * pQuery, CSphDict * pDict, ISphMatchQueue * pTop, CSphQueryResult * pResult, int iDoclistFD );
 
 	void						LookupDocinfo ( CSphDocInfo & tMatch );
 
@@ -6239,20 +6239,23 @@ CSphMatch * CSphBooleanEvalNode::MatchLevel ( DWORD iMinID )
 }
 
 
-void CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, CSphDict * pDict, ISphMatchQueue * pTop, CSphQueryResult * pResult, int iDoclistFD )
+bool CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, CSphDict * pDict, ISphMatchQueue * pTop, CSphQueryResult * pResult, int iDoclistFD )
 {
 	/////////////////////////
 	// match in boolean mode
 	/////////////////////////
 
 	// parse query
-	CSphBooleanQueryExpr * pTree = sphParseBooleanQuery ( pQuery->m_sQuery.cstr(), pQuery->m_pTokenizer );
-	if ( !pTree )
-		return;
+	CSphBooleanQuery tParsed;
+	if ( !sphParseBooleanQuery ( tParsed, pQuery->m_sQuery.cstr(), pQuery->m_pTokenizer ) )
+	{
+		pResult->m_sError = tParsed.m_sParseError;
+		return false;
+	}
 
 	// let's build our own tree! with doclists! and hits!
 	assert ( m_tMin.m_iAttrs==m_tSchema.m_dAttrs.GetLength() );
-	CSphBooleanEvalNode tTree ( pTree, pDict, m_eDocinfo, m_tMin );
+	CSphBooleanEvalNode tTree ( tParsed.m_pTree, pDict, m_eDocinfo, m_tMin );
 	tTree.SetFile ( this, iDoclistFD );
 
 	bool bEarlyLookup = ( m_eDocinfo==SPH_DOCINFO_EXTERN ) && pQuery->m_dFilters.GetLength();
@@ -6284,8 +6287,7 @@ void CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, CSphDict * pDict, I
 			pResult->m_iTotalMatches++;
 	}
 
-	// all done
-	SafeDelete ( pTree );
+	return true;
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -7066,7 +7068,7 @@ void CSphExtendedEvalNode::CollectQwords ( CSphQwordsHash & dHash, int & iCount 
 
 //////////////////////////////////////////////////////////////////////////////
 
-void CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, CSphDict * pDict, ISphMatchQueue * pTop, CSphQueryResult * pResult, int iDoclistFD )
+bool CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, CSphDict * pDict, ISphMatchQueue * pTop, CSphQueryResult * pResult, int iDoclistFD )
 {
 	assert ( pDict );
 	assert ( pTop );
@@ -7080,10 +7082,13 @@ void CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, CSphDict * pDict, 
 	bool bLateLookup = ( m_eDocinfo==SPH_DOCINFO_EXTERN ) && !bEarlyLookup && pTop->UsesAttrs();
 
 	// parse query
-	CSphExtendedQuery * pParsed = sphParseExtendedQuery ( pQuery->m_sQuery.cstr(), pQuery->m_pTokenizer,
-		&m_tSchema, pDict );
-	if ( !pParsed )
-		return;
+	CSphExtendedQuery tParsed;
+	if ( !sphParseExtendedQuery ( tParsed, pQuery->m_sQuery.cstr(), pQuery->m_pTokenizer,
+		&m_tSchema, pDict ) )
+	{
+		pResult->m_sError = tParsed.m_sParseError;
+		return false;
+	}
 
 	CSphTermSetup tSetup;
 	tSetup.m_pDict = pDict;
@@ -7092,9 +7097,8 @@ void CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, CSphDict * pDict, 
 	tSetup.m_tMin = m_tMin;
 	tSetup.m_iDoclistFD = iDoclistFD;
 
-	CSphExtendedEvalNode tAccept ( pParsed->m_pAccept, tSetup );
-	CSphExtendedEvalNode tReject ( pParsed->m_pReject, tSetup );
-	SafeDelete ( pParsed );
+	CSphExtendedEvalNode tAccept ( tParsed.m_pAccept, tSetup );
+	CSphExtendedEvalNode tReject ( tParsed.m_pReject, tSetup );
 
 	////////////////////
 	// build word stats
@@ -7173,6 +7177,8 @@ void CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, CSphDict * pDict, 
 		if ( pTop->Push ( *pAccept ) )
 			pResult->m_iTotalMatches++;
 	}
+
+	return true;
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -7556,16 +7562,21 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 	//////////////////////////////////////
 
 	PROFILE_BEGIN ( query_match );
+	bool bMatch = true;
 	switch ( pQuery->m_eMode )
 	{
 		case SPH_MATCH_ALL:			MatchAll ( pQuery, pTop, pResult ); break;
 		case SPH_MATCH_PHRASE:		MatchAll ( pQuery, pTop, pResult ); break;
 		case SPH_MATCH_ANY:			MatchAny ( pQuery, pTop, pResult ); break;
-		case SPH_MATCH_BOOLEAN:		MatchBoolean ( pQuery, pDict, pTop, pResult, tDoclist.GetFD() ); break;
-		case SPH_MATCH_EXTENDED:	MatchExtended ( pQuery, pDict, pTop, pResult, tDoclist.GetFD() ); break;
+		case SPH_MATCH_BOOLEAN:		bMatch = MatchBoolean ( pQuery, pDict, pTop, pResult, tDoclist.GetFD() ); break;
+		case SPH_MATCH_EXTENDED:	bMatch = MatchExtended ( pQuery, pDict, pTop, pResult, tDoclist.GetFD() ); break;
 		default:					sphDie ( "FATAL: INTERNAL ERROR: unknown matching mode (mode=%d).\n", pQuery->m_eMode );
 	}
 	PROFILE_END ( query_match );
+
+	// check if there was error while matching (boolean or extended query parsing error, for one)
+	if ( !bMatch )
+		return false;
 
 	if ( !pTop->UsesAttrs() && pTop->GetLength() )
 	{

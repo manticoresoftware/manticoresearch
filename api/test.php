@@ -24,28 +24,22 @@ foreach ( $_SERVER["argv"] as $arg )
 	$args[] = $arg;
 
 $q = "";
-$any = false;
+$mode = SPH_MATCH_ALL;
 $groups = array();
 $port = 3312;
 $index = "*";
 for ( $i=0; $i<count($args); $i++ )
 {
-	if ( $args[$i]=="--any" )
-	{
-		$any = true;
-	} else if ( $args[$i]=="--group" )
-	{
-		$groups[] = (int)$args[++$i];
-	} else if ( $args[$i]=="-p" )
-	{
-		$port = (int)$args[++$i];
-	} else if ( $args[$i]=="-i" )
-	{
-		$index = $args[++$i];
-	} else
-	{
+	$arg = $args[$i];
+
+	if ( $arg=="-a" || $arg=="--any" )				$mode = SPH_MATCH_ANY;
+	else if ( $arg=="-b" || $arg=="--boolean" )		$mode = SPH_MATCH_BOOLEAN;
+	else if ( $arg=="-e" || $arg=="--extended" )	$mode = SPH_MATCH_EXTENDED;
+	else if ( $arg=="-g" || $arg=="--group" )		$groups[] = (int)$args[++$i];
+	else if ( $arg=="-p" || $arg=="--port" )		$port = (int)$args[++$i];
+	else if ( $arg=="-i" || $arg=="--index" )		$index = $args[++$i];
+	else
 		$q .= $args[$i] . " ";
-	}
 }
 
 ////////////
@@ -55,7 +49,7 @@ for ( $i=0; $i<count($args); $i++ )
 $cl = new SphinxClient ();
 $cl->SetServer ( "localhost", $port );
 $cl->SetWeights ( array ( 100, 1 ) );
-$cl->SetMatchMode ( $any ? SPH_MATCH_ANY : SPH_MATCH_ALL );
+$cl->SetMatchMode ( $mode );
 if ( count($groups) )
 	$cl->SetFilter ( "group_id", $groups );
 $res = $cl->Query ( $q, $index );

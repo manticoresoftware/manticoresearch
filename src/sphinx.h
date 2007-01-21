@@ -918,6 +918,8 @@ public:
 class CSphQueryResult
 {
 public:
+	CSphString				m_sError;	///< error message
+
 	struct WordStat_t
 	{
 		CSphString			m_sWord;	///< i-th search term (normalized word form)

@@ -10,37 +10,36 @@ if not sys.argv[1:]:
 	sys.exit(0)
 
 q = ''
-any = False
+mode = SPH_MATCH_ALL
 groups = []
 port = 3312
 index = '*'
 
 i = 1
 while (i<len(sys.argv)):
-	if sys.argv[i] == '--any':
-		any = True
-	elif sys.argv[i] == '--group':
+	arg = sys.argv[i]
+	if arg=='-a' or arg=='--any':
+		mode = SPH_MATCH_ANY
+	elif arg=='-b' or arg=='--boolean':
+		mode = SPH_MATCH_BOOLEAN
+	elif arg=='-e' or arg=='--extended':
+		mode = SPH_MATCH_EXTENDED
+	elif arg=='-g' or arg=='--group':
+		groups.append ( int(sys.argv[++i]) )
+	elif arg=='-p' or arg=='--port':
+		port = int(sys.argv[++i])
+	elif arg=='-i':
 		i += 1
-		groups.append ( int(sys.argv[i]) )
-	elif sys.argv[i] == '-p':
-		i += 1
-		port = sys.argv[i]
-	elif sys.argv[i] == '-i':
-		i += 1
-		index = sys.argv[i]
+		index = sys.argv[++i]
 	else:
-		q = '%s%s ' % (q, sys.argv[i])
+		q = '%s%s ' % ( q, arg )
 	i += 1
 
 # do query
 cl = SphinxClient()
 cl.SetServer('localhost', port)
 cl.SetWeights([100, 1])
-
-if any:
-	cl.SetMatchMode(SPH_MATCH_ANY)
-else:
-	cl.SetMatchMode(SPH_MATCH_ALL)
+cl.SetMatchMode ( mode )
 
 if groups:
 	cl.SetFilter('group_id', groups)
@@ -52,7 +51,7 @@ if not res:
 	sys.exit(1)
 
 if cl.GetLastWarning():
-	print 'WARNING: %s' % cl.GetLastWarning()
+	print 'WARNING: %s\n' % cl.GetLastWarning()
 
 print 'Query \'%s\' retrieved %d of %d matches in %s sec' % (q, res['total'], res['total_found'], res['time'])
 print 'Query stats:'

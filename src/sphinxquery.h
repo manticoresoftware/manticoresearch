@@ -58,18 +58,17 @@ struct CSphBooleanQueryExpr
 	bool					IsAlone ();
 };
 
-//////////////////////////////////////////////////////////////////////////////
 
-/// prevent copy
-class ISphNoncopyable
+struct CSphBooleanQuery : ISphNoncopyable
 {
-public:
-								ISphNoncopyable () {}
+	CSphString				m_sParseError;
+	CSphBooleanQueryExpr *	m_pTree;
 
-private:
-								ISphNoncopyable ( const ISphNoncopyable & ) {}
-	const ISphNoncopyable &		operator = ( const ISphNoncopyable & ) { return *this; }
+	CSphBooleanQuery () : m_pTree ( NULL )	{}
+	~CSphBooleanQuery ()					{ SafeDelete ( m_pTree ); }
 };
+
+//////////////////////////////////////////////////////////////////////////////
 
 
 /// extended query atom
@@ -156,6 +155,7 @@ public:
 /// extended query
 struct CSphExtendedQuery : public ISphNoncopyable
 {
+	CSphString					m_sParseError;
 	CSphExtendedQueryNode *		m_pAccept;
 	CSphExtendedQueryNode *		m_pReject;
 
@@ -177,12 +177,14 @@ struct CSphExtendedQuery : public ISphNoncopyable
 //////////////////////////////////////////////////////////////////////////////
 
 /// parses the query and returns the resulting tree
-/// WARNING, this function MAY return NULL (if the query is empty)
-CSphBooleanQueryExpr *		sphParseBooleanQuery ( const char * sQuery, const ISphTokenizer * pTokenizer );
+/// return false and fills tQuery.m_sParseError on error
+/// WARNING, parsed tree might be NULL (eg. if query was empty)
+bool	sphParseBooleanQuery ( CSphBooleanQuery & tQuery, const char * sQuery, const ISphTokenizer * pTokenizer );
 
 /// parses the query and returns the resulting tree
-/// WARNING, this function MAY return NULL (if the query is empty or there were errors)
-CSphExtendedQuery *			sphParseExtendedQuery ( const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict );
+/// return false and fills tQuery.m_sParseError on error
+/// WARNING, parsed tree might be NULL (eg. if query was empty)
+bool	sphParseExtendedQuery ( CSphExtendedQuery & tQuery, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict );
 
 #endif // _sphinxquery_
 

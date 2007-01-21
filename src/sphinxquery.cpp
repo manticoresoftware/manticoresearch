@@ -622,24 +622,23 @@ static void DumpTree ( CSphBooleanQueryExpr * pNode, int iLevel=0 )
 // BOOLEAN PARSER ENTRY POINT
 /////////////////////////////////////////////////////////////////////////////
 
-CSphBooleanQueryExpr * sphParseBooleanQuery ( const char * sQuery, const ISphTokenizer * pTokenizer )
+bool sphParseBooleanQuery ( CSphBooleanQuery & tParsed, const char * sQuery, const ISphTokenizer * pTokenizer )
 {
 	CSphBooleanQueryParser qp;
-	CSphBooleanQueryExpr * pTree = qp.Parse ( sQuery, pTokenizer );
 
-	if ( pTree )
-		pTree = RemoveRedundantNodes ( pTree );
+	tParsed.m_pTree = RemoveRedundantNodes ( qp.Parse ( sQuery, pTokenizer ) );
+	if ( !tParsed.m_pTree )
+		return true;
 
-	if ( pTree && IsEvaluable ( pTree ) )
+	if ( !IsEvaluable ( tParsed.m_pTree ) )
 	{
-		pTree = ReorderLevel ( pTree );
-	} else
-	{
-		// FIXME! warning here
-		SafeDelete ( pTree );
+		tParsed.m_sParseError = "non-evaluable boolean query (negation on top level)";
+		SafeDelete ( tParsed.m_pTree );
+		return false;
 	}
 
-	return pTree;
+	tParsed.m_pTree = ReorderLevel ( tParsed.m_pTree );
+	return true;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -649,8 +648,8 @@ CSphBooleanQueryExpr * sphParseBooleanQuery ( const char * sQuery, const ISphTok
 class CSphExtendedQueryParser
 {
 public:
-							CSphExtendedQueryParser ();
-	CSphExtendedQuery *		Parse ( const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict );
+						CSphExtendedQueryParser ();
+	bool				Parse ( CSphExtendedQuery & tParsed, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict );
 
 protected:
 	struct CNodeStackEntry
@@ -675,7 +674,7 @@ protected:
 
 protected:
 	int					IsSpecial ( int iCh );
-	CSphExtendedQuery *	Error ( const char * sTemplate, ... );
+	bool				Error ( const char * sTemplate, ... );
 
 	void				PushNode ();					///< push new empty node onto stack
 	void				PopNode ( bool bReject=false);	///< pop node off the stack to proper list
@@ -786,16 +785,23 @@ int CSphExtendedQueryParser::IsSpecial ( int iCh )
 }
 
 
-CSphExtendedQuery * CSphExtendedQueryParser::Error ( const char * sTemplate, ... )
+bool CSphExtendedQueryParser::Error ( const char * sTemplate, ... )
 {
-	// !COMMIT definitely not to stdout!
+	assert ( m_pRes );
+	char sBuf[256];
+
+	const char * sPrefix = "query error: ";
+	int iPrefix = strlen(sPrefix);
+	strcpy ( sBuf, sPrefix );
+
 	va_list ap;
 	va_start ( ap, sTemplate );
-	vfprintf ( stdout, sTemplate, ap );
-	fprintf ( stdout, "\n" );
+	vsnprintf ( sBuf+iPrefix, sizeof(sBuf)-iPrefix, sTemplate, ap );
 	va_end ( ap );
 
-	return NULL;
+	m_pRes->m_sParseError = sBuf;
+	m_pRes = NULL;
+	return false;
 }
 
 
@@ -837,7 +843,7 @@ void CSphExtendedQueryParser::PushNode ()
 }
 
 
-CSphExtendedQuery * CSphExtendedQueryParser::Parse ( const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict )
+bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict )
 {
 	assert ( sQuery );
 	assert ( pTokenizer );
@@ -845,7 +851,7 @@ CSphExtendedQuery * CSphExtendedQueryParser::Parse ( const char * sQuery, const 
 
 	// clean up
 	assert ( m_dStack.GetLength()==0 );
-	m_pRes = new CSphExtendedQuery ();
+	m_pRes = &tParsed;
 
 	// a buffer of my own
 	CSphString sBuffer ( sQuery );
@@ -951,7 +957,7 @@ CSphExtendedQuery * CSphExtendedQueryParser::Parse ( const char * sQuery, const 
 			{
 				iField = pSchema->GetFieldIndex ( sToken );
 				if ( iField<0 )
-					return Error ( "no field '%s' found in schema '%s'", sToken, pSchema->m_sName.cstr() );
+					return Error ( "no field '%s' found in schema", sToken );
 
 				dState.Pop ();
 				while ( m_dStack.GetLength() ) // flush stack
@@ -991,7 +997,7 @@ CSphExtendedQuery * CSphExtendedQueryParser::Parse ( const char * sQuery, const 
 		if ( iSpecial=='(' )
 		{
 			if ( dState.Last()!=XQS_TEXT && dState.Last()!=XQS_NEGTEXT )
-				return Error ( "internal error: '(' in unexpected state %d", dState.Last() );
+				return Error ( "INTERNAL ERROR: '(' in unexpected state %d", dState.Last() );
 
 			if ( dState.Last()==XQS_TEXT && m_dStack.GetLength() )
 				return Error ( "nested '(' are not allowed" );
@@ -1008,7 +1014,7 @@ CSphExtendedQuery * CSphExtendedQueryParser::Parse ( const char * sQuery, const 
 		if ( iSpecial==')' )
 		{
 			if ( dState.Last()!=XQS_TEXT )
-				return Error ( "internal error: ')' in unexpected state %d", dState.Last() );
+				return Error ( "INTERNAL ERROR: ')' in unexpected state %d", dState.Last() );
 
 			if ( m_dStack.GetLength()<1 )
 				return Error ( "')' without matching '('" );
@@ -1097,7 +1103,8 @@ CSphExtendedQuery * CSphExtendedQueryParser::Parse ( const char * sQuery, const 
 		assert ( 0 && "INTERNAL ERROR: unhandled special token" );
 	}
 
-	return m_pRes;
+	m_pRes = NULL;
+	return true;
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -1136,10 +1143,10 @@ static void xqDump ( CSphExtendedQueryNode * pNode, const CSphSchema & tSch, int
 #endif
 
 
-CSphExtendedQuery * sphParseExtendedQuery ( const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict )
+bool sphParseExtendedQuery ( CSphExtendedQuery & tParsed, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict )
 {
 	CSphExtendedQueryParser qp;
-	CSphExtendedQuery * pRes = qp.Parse ( sQuery, pTokenizer, pSchema, pDict );
+	bool bRes = qp.Parse ( tParsed, sQuery, pTokenizer, pSchema, pDict );
 
 #if XQDEBUG
 	if ( pRes )
@@ -1152,7 +1159,7 @@ CSphExtendedQuery * sphParseExtendedQuery ( const char * sQuery, const ISphToken
 	}
 #endif
 
-	return pRes;
+	return bRes;
 }
 
 //

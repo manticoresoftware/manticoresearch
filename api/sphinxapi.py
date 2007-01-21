@@ -30,18 +30,21 @@ VER_COMMAND_EXCERPT		= 0x100
 SEARCHD_OK				= 0
 SEARCHD_ERROR			= 1
 SEARCHD_RETRY			= 2
+SEARCHD_WARNING			= 3
 
 # known match modes
 SPH_MATCH_ALL			= 0
 SPH_MATCH_ANY			= 1
 SPH_MATCH_PHRASE		= 2
 SPH_MATCH_BOOLEAN		= 3
+SPH_MATCH_EXTENDED		= 4
 
 # known sort modes
 SPH_SORT_RELEVANCE		= 0
 SPH_SORT_ATTR_DESC		= 1
 SPH_SORT_ATTR_ASC		= 2
 SPH_SORT_TIME_SEGMENTS	= 3
+SPH_SORT_EXTENDED		= 4
 
 # known attribute types
 SPH_ATTR_INTEGER		= 1
@@ -160,6 +163,11 @@ class SphinxClient:
 			return None
 
 		# check status
+		if status==SEARCHD_WARNING:
+			wend = 4 + unpack ( '>L', response[0:4] )[0]
+			self._warning = response[4:wend]
+			return response[wend:]
+
 		if status==SEARCHD_ERROR:
 			self._error = 'searchd error: '+response[4:]
 			return None
@@ -197,7 +205,7 @@ class SphinxClient:
 		"""
 		set match mode
 		"""
-		assert(mode in [SPH_MATCH_ALL, SPH_MATCH_ANY, SPH_MATCH_PHRASE, SPH_MATCH_BOOLEAN])
+		assert(mode in [SPH_MATCH_ALL, SPH_MATCH_ANY, SPH_MATCH_PHRASE, SPH_MATCH_BOOLEAN, SPH_MATCH_EXTENDED])
 		self._mode = mode
 
 
@@ -205,7 +213,7 @@ class SphinxClient:
 		"""
 		set sort mode
 		"""
-		assert(sort in [SPH_SORT_RELEVANCE, SPH_SORT_DATE_DESC, SPH_SORT_DATE_ASC, SPH_SORT_TIME_SEGMENTS])
+		assert(sort in [SPH_SORT_RELEVANCE, SPH_SORT_DATE_DESC, SPH_SORT_DATE_ASC, SPH_SORT_TIME_SEGMENTS, SPH_SORT_EXTENDED])
 		self._sort = sort
 
 

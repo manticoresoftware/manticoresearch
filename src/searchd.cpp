@@ -147,8 +147,9 @@ enum
 enum SearchdStatus_e
 {
 	SEARCHD_OK		= 0,	///< general success, command-specific reply follows
-	SEARCHD_ERROR	= 1,	///< general failure, command-specific reply may follow
-	SEARCHD_RETRY	= 2		///< temporaty failure, client should retry later
+	SEARCHD_ERROR	= 1,	///< general failure, error message follows
+	SEARCHD_RETRY	= 2,	///< temporary failure, error message follows, client should retry later
+	SEARCHD_WARNING	= 3		///< general success, warning message and command-specific reply follow
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1981,6 +1982,122 @@ bool FixupQuery ( CSphQuery * pQuery, OldQuery_t * pOldQuery,
 }
 
 
+struct SearchFailure_t
+{
+	CSphString	m_sIndex;	///< searched index name
+	CSphString	m_sError;	///< search error message
+
+	bool operator == ( const SearchFailure_t & r ) const
+	{
+		return m_sIndex==r.m_sIndex && m_sError==r.m_sError;
+	}
+
+	bool operator < ( const SearchFailure_t & r ) const
+	{
+		int iRes = strcmp ( m_sError.cstr(), r.m_sError.cstr() );
+		if ( !iRes )
+			iRes = strcmp ( m_sIndex.cstr(), r.m_sIndex.cstr() );
+		return iRes<0;
+	}
+
+	const SearchFailure_t & operator = ( const SearchFailure_t & r )
+	{
+		m_sIndex = r.m_sIndex;
+		m_sError = r.m_sError;
+		return *this;
+	}
+};
+
+
+struct StrBuf_t
+{
+protected:
+	char		m_sBuf [ 2048 ];
+	char *		m_pBuf;
+	int			m_iLeft;
+
+public:
+	StrBuf_t ()
+	{
+		memset ( m_sBuf, 0, sizeof(m_sBuf) );
+		m_iLeft = sizeof(m_sBuf)-1;
+		m_pBuf = m_sBuf;
+	}
+
+	const char * cstr ()
+	{
+		return m_sBuf;
+	}
+
+	int GetLength ()
+	{
+		return sizeof(m_sBuf)-1-m_iLeft;
+	}
+
+	bool Append ( const char * s, bool bWhole )
+	{
+		int iLen = strlen(s);
+		if ( bWhole && m_iLeft<iLen )
+			return false;
+
+		iLen = Min ( m_iLeft, iLen );
+		memcpy ( m_pBuf, s, iLen );
+		m_pBuf += iLen;
+		m_iLeft -= iLen;
+		return true;
+	}
+
+	const StrBuf_t & operator += ( const char * s )
+	{
+		Append ( s, false );
+		return *this;
+	}
+};
+
+
+void ReportSearchFailures ( StrBuf_t & sReport, CSphVector<SearchFailure_t,8> & dFailures )
+{
+	if ( !dFailures.GetLength() )
+		return;
+
+	// collapse same messages
+	dFailures.Sort ();
+	int iSpanStart = 0;
+
+	for ( int i=1; i<=dFailures.GetLength(); i++ )
+	{
+		// keep scanning while error text is the same
+		if ( i!=dFailures.GetLength() )
+			if ( dFailures[i].m_sError==dFailures[i-1].m_sError )
+				continue;
+
+		// build current span
+		StrBuf_t sSpan;
+		if ( iSpanStart )
+			sSpan += "; ";
+		sSpan += "index ";
+		for ( int j=iSpanStart; j<i; j++ )
+		{
+			if ( j!=iSpanStart )
+				sSpan += ",";
+			sSpan += "'";
+			sSpan += dFailures[j].m_sIndex.cstr();
+			sSpan += "'";
+		}
+		sSpan += ": ";
+		if ( !sSpan.Append ( dFailures[iSpanStart].m_sError.cstr(), true ) )
+			break;
+
+		// flush current span
+		if ( !sReport.Append ( sSpan.cstr(), true ) )
+			break;
+
+		// done
+		iSpanStart = i;
+	}
+}
+
+
 void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 {
 	CSphQuery tQuery;
@@ -2124,6 +2241,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 #define REMOVE_DUPES 1
 
 	int iSearched = 0;
+	CSphVector<SearchFailure_t,8> dFailures;
 
 	if ( g_hDistIndexes(sIndexes) )
 	{
@@ -2248,15 +2366,27 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 				return;
 
 			// do query
-			tQuery.m_pTokenizer = tServed.m_pTokenizer;
-			tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pTop );
 			iSearched++;
+			tQuery.m_pTokenizer = tServed.m_pTokenizer;
+			if ( !tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pTop ) )
+			{
+				SearchFailure_t tTmp;
+				tTmp.m_sIndex = sIndexName;
+				tTmp.m_sError = pRes->m_sError;
+				dFailures.Add ( tTmp );
+			}
 
 #if REMOVE_DUPES
 			// group-by queries remove dupes themselves
 			if ( tQuery.GetGroupByAttr()<0 )
 				sphFlattenQueue ( pTop, pRes );
 #endif
+		}
+
+		if ( !iSearched )
+		{
+			tReq.SendErrorReply ( "no local indexes configured" );
+			return;
 		}
 
 	} else
@@ -2305,7 +2435,13 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 				// do query
 				tQuery.m_pTokenizer = tServed.m_pTokenizer;
-				tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pTop );
+				if ( !tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pTop ) )
+				{
+					SearchFailure_t tTmp;
+					tTmp.m_sIndex = sNext;
+					tTmp.m_sError = pRes->m_sError;
+					dFailures.Add ( tTmp );
+				}
 
 #if REMOVE_DUPES
 				// group-by queries remove dupes themselves
@@ -2327,6 +2463,15 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			tReq.SendErrorReply ( "no valid indexes specified in request" );
 			return;
 		}
+	}
+
+	StrBuf_t sFailures;
+	ReportSearchFailures ( sFailures, dFailures );
+
+	if ( iSearched==dFailures.GetLength() )
+	{
+		tReq.SendErrorReply ( "%s", sFailures.cstr() );
+		return;
 	}
 
 #if REMOVE_DUPES
@@ -2410,12 +2555,19 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	for ( int i=0; i<pRes->m_iNumWords; i++ ) // per-word stats
 		iRespLen += 12 + strlen ( pRes->m_tWordStats[i].m_sWord.cstr() ); // wordlen, word, docs, hits
 
+	bool bWarning = ( iVer>=0x106 && dFailures.GetLength() );
+	if ( bWarning )
+		iRespLen += 4 + strlen ( sFailures.cstr() );
 
 	// send header
 	NetOutputBuffer_c tOut ( iSock );
-	tOut.SendWord ( SEARCHD_OK );
+	tOut.SendWord ( (WORD)( bWarning ? SEARCHD_WARNING : SEARCHD_OK ) );
 	tOut.SendWord ( VER_COMMAND_SEARCH );
 	tOut.SendInt ( iRespLen );
+
+	// send warning
+	if ( bWarning )
+		tOut.SendString ( sFailures.cstr() );
 
 	// send schema
 	if ( iVer>=0x102 )

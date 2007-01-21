@@ -66,6 +66,17 @@ template < typename T > inline void Swap ( T & v1, T & v2 )
 	v2 = temp;
 }
 
+/// prevent copy
+class ISphNoncopyable
+{
+public:
+								ISphNoncopyable () {}
+
+private:
+								ISphNoncopyable ( const ISphNoncopyable & ) {}
+	const ISphNoncopyable &		operator = ( const ISphNoncopyable & ) { return *this; }
+};
+
 /////////////////////////////////////////////////////////////////////////////
 // DEBUGGING
 /////////////////////////////////////////////////////////////////////////////
@@ -98,7 +109,6 @@ namespace Private
 	typedef ::Private::static_assert_test<sizeof(::Private::SizeError \
 	< (bool) (sizeof(_Type) == (_ExpSize)) >)> static_assert_typedef_
 
-/////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
 
 /// generic comparator

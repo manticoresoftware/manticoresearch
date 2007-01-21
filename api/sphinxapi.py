@@ -23,7 +23,7 @@ SEARCHD_COMMAND_SEARCH	= 0
 SEARCHD_COMMAND_EXCERPT	= 1
 
 # current client-side command implementation versions
-VER_COMMAND_SEARCH		= 0x104
+VER_COMMAND_SEARCH		= 0x106
 VER_COMMAND_EXCERPT		= 0x100
 
 # known searchd status codes
@@ -66,11 +66,10 @@ class SphinxClient:
 	_sortby		= ''					# attribute to sort by (defualt is "")
 	_min_id		= 0						# min ID to match (default is 0)
 	_max_id		= 0xFFFFFFFF			# max ID to match (default is UINT_MAX)
-	_min		= {}					# attribute name to min-value hash (for range filters)
-	_max		= {}					# attribute name to max-value hash (for range filters)
-	_filter		= {}					# attribute name to values set hash (for values-set filters)
+	_filters	= []					# search filters
 	_groupby	= ''					# group-by attribute name
 	_groupfunc	= SPH_GROUPBY_DAY		# function to pre-process group-by attribute value with
+	_sortbygroup= 1						# whether to sort grouped results by group, or by current sorting func
 	_maxmatches	= 1000					# max matches to retrieve
 
 	_error		= ''					# last error message
@@ -233,7 +232,7 @@ class SphinxClient:
 		self._max_id = maxid
 
 
-	def SetFilter (self, attribute, values):
+	def SetFilter ( self, attribute, values, exclude=0 ):
 		"""
 		set values filter
 		only match those records where $attribute column values
@@ -246,10 +245,10 @@ class SphinxClient:
 		for value in values:
 			assert(isinstance(value, int))
 
-		self._filter[attribute] = values
+		self._filters.append ( { 'attr':attribute, 'exclude':exclude, 'values':values } )
 
 
-	def SetFilterRange (self, attribute, min_, max_):
+	def SetFilterRange (self, attribute, min_, max_, exclude=0 ):
 		"""
 		set range filter
 		only match those records where $attribute column value
@@ -260,11 +259,10 @@ class SphinxClient:
 		assert(isinstance(max_, int))
 		assert(min_<=max_)
 
-		self._min[attribute] = min_
-		self._max[attribute] = max_
+		self._filters.append ( { 'attr':attribute, 'exclude':exclude, 'min':min_, 'max':max_ } )
 
 
-	def SetGroupBy (self, attribute, func):
+	def SetGroupBy ( self, attribute, func, sortbygroup=1 ):
 		"""
 		set grouping attribute and function
 
@@ -275,8 +273,16 @@ class SphinxClient:
 		(in this group) according to current sorting function.
 
 		the final result set contains one best match per group, with
-		grouping function value and matches count attached. result set
-		is sorted by grouping function value, in descending order.
+		grouping function value and matches count attached.
+
+		result set could be sorted either by 1) grouping function value
+		in descending order (this is the default mode, when $sortbygroup
+		is set to true); or by 2) current sorting function (when $sortbygroup
+		is false).
+
+		WARNING, when sorting by current function there might be less
+		matching groups reported than actually present. @count might also be
+		underestimated. 
 
 		for example, if sorting by relevance and grouping by "published"
 		attribute with SPH_GROUPBY_DAY function, then the result set will
@@ -289,6 +295,7 @@ class SphinxClient:
 
 		self._groupby = attribute
 		self._groupfunc = func
+		self._sortbygroup = sortbygroup
 
 
 	def Query (self, query, index='*'):
@@ -335,27 +342,24 @@ class SphinxClient:
 		req.append(pack('>L', self._max_id))
 
 		# filters
-		req.append(pack('>L', len(self._min)+len(self._filter)))
-
-		for attr, m in self._min.iteritems():
-			req.append(pack('>L', len(attr)))
-			req.append(attr)
-			req.append(pack('>3L', 0, m, self._max[attr]))
-
-		for attr, values in self._filter.iteritems():
-			req.append(pack('>L', len(attr)))
-			req.append(attr)
-
-			req.append(pack('>L', len(values)))
-			for v in values:
-				req.append(pack('>L', v))
+		req.append ( pack ( '>L', len(self._filters) ) )
+		for f in self._filters:
+			req.append ( pack ( '>L', len(f['attr']) ) )
+			req.append ( f['attr'] )
+			if ( 'values' in f ):
+				req.append ( pack ( '>L', len(f['values']) ) )
+				for v in f['values']:
+					req.append ( pack ( '>L', v ) )
+			else:
+				req.append ( pack ( '>3L', 0, f['min'], f['max'] ) )
+			req.append ( pack ( '>L', f['exclude'] ) )
 
 		# group-by
 		req.append(pack('>2L', self._groupfunc, len(self._groupby)))
 		req.append(self._groupby)
 
-		# max matches to retrieve
-		req.append(pack('>L', self._maxmatches))
+		# max matches, sort-by-group
+		req.append(pack('>2L', self._maxmatches, self._sortbygroup))
 
 		# send query, get response
 		req = ''.join(req)

@@ -19,9 +19,9 @@ i = 1
 while (i<len(sys.argv)):
 	if sys.argv[i] == '--any':
 		any = True
-	elif i == '--group':
+	elif sys.argv[i] == '--group':
 		i += 1
-		groups = sys.argv[i]
+		groups.append ( int(sys.argv[i]) )
 	elif sys.argv[i] == '-p':
 		i += 1
 		port = sys.argv[i]

@@ -741,39 +741,55 @@ relevant entries from <code class="filename">searchd.log</code> and
 running it in console mode and check if it dies with an assertion:
 <pre class="programlisting">
 ./searchd --console
-</pre></li><li>if any program dies with an assertion, provide the assertion message.</li></ol></div><h3><a name="id352750"></a>Debugging crashes and hangups</h3><p>
-If any program crashes without an assertion or hangs up, you would additionally
-need to generate a core dump and examine it.
-</p><p>
-First, enable core dumps. On most Linux systems, this is done
+</pre></li><li>if any program dies with an assertion, provide the assertion message.</li></ol></div><h3><a name="id352750"></a>Debugging assertions, crashes and hangups</h3><p>
+If any program dies with an assertion, crashes without an assertion or hangs up,
+you would additionally need to generate a core dump and examine it.
+</p><div class="orderedlist"><ol type="1"><li>
+enable core dumps. On most Linux systems, this is done
 using <code class="filename">ulimit</code>:
-</p><pre class="programlisting">
+<pre class="programlisting">
 ulimit -c 32768
+</pre></li><li>
+run the program and try to reproduce the bug;
+</li><li>
+if the program crashes (either with or without an assertion),
+find the core file in current directory (it should typically print
+out "Segmentation fault (core dumped)" message);
+</li><li>
+if the program hangs, use <code class="filename">kill -SEGV</code>
+from another console to force it to exit and dump core:
+<pre class="programlisting">
+kill -SEGV HANGED-PROCESS-ID
+</pre></li><li>
+use <code class="filename">gdb</code> to examine the core file
+and obtain a backtrace:
+<pre class="programlisting">
+gdb ./CRASHED-PROGRAM-FILE-NAME CORE-DUMP-FILE-NAME
+(gdb) bt
+(gdb) quit
+</pre></li></ol></div><p>
+Note that HANGED-PROCESS-ID, CRASHED-PROGRAM-FILE-NAME and
+CORE-DUMP-FILE-NAME must all be replaced with specific numbers
+and file names. For example, hanged searchd debugging session
+would look like:
+</p><pre class="programlisting">
+# kill -SEGV 12345
+# ls *core*
+core.12345
+# gdb ./searchd core.12345
+(gdb) bt
+...
+(gdb) quit
 </pre><p>
 </p><p>
 Note that <code class="filename">ulimit</code> is not server-wide
-and only affects current shell session, so you will not have
-to restore any server-wide limits.
+and only affects current shell session. This means that you will not
+have to restore any server-wide limits - but if you relogin,
+you will have to set <code class="filename">ulimit</code> again.
 </p><p>
 Core dumps should be placed in current working directory
 (and Sphinx programs do not change it), so this is where you
 would look for them.
-</p><p>
-Next, run the program. If it crashes, it should print out
-something like "Segmentation fault (core dumped)", and you could
-look for the core file already. If it hangs, use <code class="filename">kill -SEGV</code>
-from another console to force it to exit and dump core:
-</p><pre class="programlisting">
-kill -SEGV HANGED-PROCESS-ID
-</pre><p>
-</p><p>
-Finally, use <code class="filename">gdb</code> to examine the core file
-and obtain a backtrace:
-</p><pre class="programlisting">
-gdb ./CRASHED-PROGRAM-FILE-NAME CORE-DUMP-FILE-NAME
-(gdb) bt
-(gdb) quit
-</pre><p>
 </p><p>
 Please do not immediately remove the core file because there could
 be additional helpful information which could be retrieved from it.
@@ -785,7 +801,7 @@ Data source type. Available types are <code class="option">mysql</code>, <code c
 and <code class="option">xmlpipe</code>.
 </p><p>
 This option is <span class="bold"><strong>mandatory</strong></span>.
-</p><h5><a name="id352897"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id352935"></a>Example:</h5><pre class="programlisting">
 type = mysql
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-strip-html"></a>6.1.2.&nbsp;strip_html</h4></div></div></div><p>
 Whether to strip HTML formatting from incoming full-text data.
@@ -800,7 +816,7 @@ HTML (such as well-formed XHTML) but MAY bug on malformed HTML
 This option is optional.
 Default value is 0 (do not strip HTML).
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id352957"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id352995"></a>Example:</h5><pre class="programlisting">
 strip_html = 0
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-index-html-attrs"></a>6.1.3.&nbsp;index_html_attrs</h4></div></div></div><p>
 Specifies which HTML attributes' contents still should be indexed when stripping HTML.
@@ -809,14 +825,14 @@ The format is per-tag enumeration of indexable attributes, as shown in the examp
 This option is optional.
 Default value is empty (do not index anything).
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id352999"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id353037"></a>Example:</h5><pre class="programlisting">
 index_html_attrs = img=alt,title; a=title;
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-host"></a>6.1.4.&nbsp;sql_host</h4></div></div></div><p>
 SQL server host to connect to.
 </p><p>
 This option is <span class="bold"><strong>mandatory</strong></span>.
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id353043"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id353081"></a>Example:</h5><pre class="programlisting">
 sql_host = localhost
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-port"></a>6.1.5.&nbsp;sql_port</h4></div></div></div><p>
 SQL server IP port to connect to.
@@ -824,28 +840,28 @@ SQL server IP port to connect to.
 This option is optional.
 Default value is 3306 for <code class="option">mysql</code> source type and 5432 for <code class="option">pgsql</code> type.
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id353090"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id353128"></a>Example:</h5><pre class="programlisting">
 sql_port = 3306
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-user"></a>6.1.6.&nbsp;sql_user</h4></div></div></div><p>
 SQL user to use on <a href="#ref-sql-host" title="6.1.4.&nbsp;sql_host">sql_host</a>.
 </p><p>
 This option is <span class="bold"><strong>mandatory</strong></span>.
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id353138"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id353177"></a>Example:</h5><pre class="programlisting">
 sql_user = test
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-pass"></a>6.1.7.&nbsp;sql_pass</h4></div></div></div><p>
 SQL user password to use on <a href="#ref-sql-host" title="6.1.4.&nbsp;sql_host">sql_host</a>.
 </p><p>
 This option is <span class="bold"><strong>mandatory</strong></span>.
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id353188"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id353226"></a>Example:</h5><pre class="programlisting">
 sql_pass = mysecretpassword
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-db"></a>6.1.8.&nbsp;sql_db</h4></div></div></div><p>
 SQL database (in MySQL terms) to use after connection and perform further queries in.
 </p><p>
 This option is <span class="bold"><strong>mandatory</strong></span>.
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id353232"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id353271"></a>Example:</h5><pre class="programlisting">
 sql_db = test
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-sock"></a>6.1.9.&nbsp;sql_sock</h4></div></div></div><p>
 UNIX socket name to connect to local MySQL server.
@@ -855,7 +871,7 @@ On FreeBSD, it would typically be <code class="filename">/tmp/mysql.sock</code>.
 </p><p>
 This option is optional.
 This option only applies to <code class="option">mysql</code> source type.
-</p><h5><a name="id353280"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id353318"></a>Example:</h5><pre class="programlisting">
 sql_sock = test
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-query-pre"></a>6.1.10.&nbsp;sql_query_pre</h4></div></div></div><p>
 Pre-fetch query, or pre-query.
@@ -870,7 +886,7 @@ which are going to be indexed, or update internal counters, etc.
 </p><p>
 This option is optional.
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id353341"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id353379"></a>Example:</h5><pre class="programlisting">
 sql_query_pre = SET CHARACTER_SET_RESULTS=utf-8
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-query"></a>6.1.11.&nbsp;sql_query</h4></div></div></div><p>
 Main document fetch query.
@@ -886,7 +902,7 @@ and it <span class="bold"><strong>MUST BE UNIQUE UNSIGNED NON-ZERO 32-BIT INTEGE
 </p><p>
 This option is <span class="bold"><strong>mandatory</strong></span>.
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id353415"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id353453"></a>Example:</h5><pre class="programlisting">
 sql_query = \
 	SELECT id, group_id, UNIX_TIMESTAMP(date_added) AS date_added, \
 		title, content \
@@ -896,7 +912,7 @@ Query which fetches min/max document IDs range to be used in ranged query (see <
 </p><p>
 This option is optional.
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id353460"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id353498"></a>Example:</h5><pre class="programlisting">
 sql_query_range = SELECT MIN(id),MAX(id) FROM documents
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-range-step"></a>6.1.13.&nbsp;sql_range_step</h4></div></div></div><p>
 How much records to index per one ranged query step (see <a href="#ranged-queries">Section&nbsp;3.6, &#8220;Ranged queries&#8221;</a>).
@@ -904,7 +920,7 @@ How much records to index per one ranged query step (see <a href="#ranged-querie
 This option is optional.
 Default value is 1024.
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id353503"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id353541"></a>Example:</h5><pre class="programlisting">
 sql_range_step = 1000
 </pre></div>
 
@@ -915,12 +931,12 @@ sql_range_step = 1000
 
 (to be added)
 
-<div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-charset-table"></a>6.2.1.&nbsp;charset_table</h4></div></div></div><h5><a name="id353531"></a>Description</h5><p>Everything one needs to know about charset_table is here</p><h5><a name="id353540"></a>Example:</h5><pre class="programlisting">
+<div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-charset-table"></a>6.2.1.&nbsp;charset_table</h4></div></div></div><h5><a name="id353569"></a>Description</h5><p>Everything one needs to know about charset_table is here</p><h5><a name="id353578"></a>Example:</h5><pre class="programlisting">
 charset_table = A..Z-&gt;a..z
-</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-charset-type"></a>6.2.2.&nbsp;charset_type</h4></div></div></div><h5><a name="id353558"></a>Description</h5><p>Everything one needs to know about charset_type is here</p><h5><a name="id353566"></a>Example:</h5><pre class="programlisting">
+</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-charset-type"></a>6.2.2.&nbsp;charset_type</h4></div></div></div><h5><a name="id353596"></a>Description</h5><p>Everything one needs to know about charset_type is here</p><h5><a name="id353604"></a>Example:</h5><pre class="programlisting">
 charset_type = sbcs
 # charset_type = utf-8
-</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-xmlpipe-command"></a>6.2.3.&nbsp;xmlpipe_command</h4></div></div></div><h5><a name="id353585"></a>Description</h5><p>Everything one needs to know about xmlpipe_command is here</p><h5><a name="id353594"></a>Example:</h5><pre class="programlisting">
+</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-xmlpipe-command"></a>6.2.3.&nbsp;xmlpipe_command</h4></div></div></div><h5><a name="id353623"></a>Description</h5><p>Everything one needs to know about xmlpipe_command is here</p><h5><a name="id353632"></a>Example:</h5><pre class="programlisting">
 xmlpipe_command = perl /www/mysite.com/bin/sphinxpipe.pl
 </pre></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="ref-indexer"></a>6.3.&nbsp;<code class="filename">indexer</code> program configuration options</h3></div></div></div>
 (to be added)

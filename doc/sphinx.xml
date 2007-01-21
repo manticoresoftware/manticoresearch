@@ -1223,45 +1223,69 @@ running it in console mode and check if it dies with an assertion:
 </orderedlist>
 
 
-<bridgehead>Debugging crashes and hangups</bridgehead>
+<bridgehead>Debugging assertions, crashes and hangups</bridgehead>
 <para>
-If any program crashes without an assertion or hangs up, you would additionally
-need to generate a core dump and examine it.
+If any program dies with an assertion, crashes without an assertion or hangs up,
+you would additionally need to generate a core dump and examine it.
 </para>
-<para>
-First, enable core dumps. On most Linux systems, this is done
+<orderedlist>
+<listitem>
+enable core dumps. On most Linux systems, this is done
 using <filename>ulimit</filename>:
 <programlisting>
 ulimit -c 32768
 </programlisting>
-</para>
-<para>
-Note that <filename>ulimit</filename> is not server-wide
-and only affects current shell session, so you will not have
-to restore any server-wide limits.
-</para>
-<para>
-Core dumps should be placed in current working directory
-(and Sphinx programs do not change it), so this is where you
-would look for them.
-</para>
-<para>
-Next, run the program. If it crashes, it should print out
-something like "Segmentation fault (core dumped)", and you could
-look for the core file already. If it hangs, use <filename>kill -SEGV</filename>
+</listitem>
+<listitem>
+run the program and try to reproduce the bug;
+</listitem>
+<listitem>
+if the program crashes (either with or without an assertion),
+find the core file in current directory (it should typically print
+out "Segmentation fault (core dumped)" message);
+</listitem>
+<listitem>
+if the program hangs, use <filename>kill -SEGV</filename>
 from another console to force it to exit and dump core:
 <programlisting>
 kill -SEGV HANGED-PROCESS-ID
 </programlisting>
-</para>
-<para>
-Finally, use <filename>gdb</filename> to examine the core file
+</listitem>
+<listitem>
+use <filename>gdb</filename> to examine the core file
 and obtain a backtrace:
 <programlisting>
 gdb ./CRASHED-PROGRAM-FILE-NAME CORE-DUMP-FILE-NAME
 (gdb) bt
 (gdb) quit
 </programlisting>
+</listitem>
+</orderedlist>
+<para>
+Note that HANGED-PROCESS-ID, CRASHED-PROGRAM-FILE-NAME and
+CORE-DUMP-FILE-NAME must all be replaced with specific numbers
+and file names. For example, hanged searchd debugging session
+would look like:
+<programlisting>
+# kill -SEGV 12345
+# ls *core*
+core.12345
+# gdb ./searchd core.12345
+(gdb) bt
+...
+(gdb) quit
+</programlisting>
+</para>
+<para>
+Note that <filename>ulimit</filename> is not server-wide
+and only affects current shell session. This means that you will not
+have to restore any server-wide limits - but if you relogin,
+you will have to set <filename>ulimit</filename> again.
+</para>
+<para>
+Core dumps should be placed in current working directory
+(and Sphinx programs do not change it), so this is where you
+would look for them.
 </para>
 <para>
 Please do not immediately remove the core file because there could

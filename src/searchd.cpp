@@ -2226,6 +2226,17 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			tQuery.m_iMaxMatches, g_iMaxMatches );
 		return;
 	}
+	if ( iOffset<0 || iOffset>=tQuery.m_iMaxMatches )
+	{
+		tReq.SendErrorReply ( "offset out of bounds (offset=%d, max_matches=%d)",
+			iOffset, tQuery.m_iMaxMatches );
+		return;
+	}
+	if ( iLimit<0 )
+	{
+		tReq.SendErrorReply ( "limit out of bounds (limit=%d)", iLimit );
+		return;
+	}
 
 	////////////////
 	// do searching

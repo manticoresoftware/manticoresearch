@@ -59,6 +59,72 @@
 #endif
 
 /////////////////////////////////////////////////////////////////////////////
+// MISC LOCAL CLASSES
+/////////////////////////////////////////////////////////////////////////////
+
+struct ServedIndex_t
+{
+	CSphIndex *			m_pIndex;
+	const CSphSchema *	m_pSchema;	///< pointer to index schema, managed by the index itself
+	CSphDict *			m_pDict;
+	ISphTokenizer *		m_pTokenizer;
+	CSphString *		m_pLockFile; 
+	CSphString *		m_pIndexPath;
+
+public:
+						ServedIndex_t ();
+						~ServedIndex_t ();
+	void				Reset ();
+};
+
+
+struct SearchFailure_t
+{
+public:
+	CSphString	m_sIndex;	///< searched index name
+	CSphString	m_sError;	///< search error message
+
+public:
+	SearchFailure_t () {}
+
+	SearchFailure_t ( const char * sIndex, const char * sErrorTemplate, ... )
+	{
+		char sBuf [ 2048 ];
+		va_list ap;
+		va_start ( ap, sErrorTemplate );
+		vsnprintf ( sBuf, sizeof(sBuf), sErrorTemplate, ap );
+		va_end ( ap );
+
+		m_sIndex = sIndex;
+		m_sError = sBuf;
+	}
+
+public:
+	bool operator == ( const SearchFailure_t & r ) const
+	{
+		return m_sIndex==r.m_sIndex && m_sError==r.m_sError;
+	}
+
+	bool operator < ( const SearchFailure_t & r ) const
+	{
+		int iRes = strcmp ( m_sError.cstr(), r.m_sError.cstr() );
+		if ( !iRes )
+			iRes = strcmp ( m_sIndex.cstr(), r.m_sIndex.cstr() );
+		return iRes<0;
+	}
+
+	const SearchFailure_t & operator = ( const SearchFailure_t & r )
+	{
+		m_sIndex = r.m_sIndex;
+		m_sError = r.m_sError;
+		return *this;
+	}
+};
+
+
+typedef CSphVector<SearchFailure_t,8>		SearchFailuresLog_t;
+
+/////////////////////////////////////////////////////////////////////////////
 
 enum ESphLogLevel
 {
@@ -85,41 +151,6 @@ static int				g_iHUP			= 0;
 static const char *		g_sPidFile		= NULL;
 static bool				g_bHeadDaemon	= false;
 static int				g_iMaxMatches	= 1000;
-
-struct ServedIndex_t
-{
-	CSphIndex *			m_pIndex;
-	const CSphSchema *	m_pSchema;	///< pointer to index schema, managed by the index itself
-	CSphDict *			m_pDict;
-	ISphTokenizer *		m_pTokenizer;
-	CSphString *		m_pLockFile; 
-	CSphString *		m_pIndexPath;
-
-	ServedIndex_t ()
-	{
-		Reset ();
-	}
-
-	void Reset ()
-	{
-		m_pIndex	= NULL;
-		m_pDict		= NULL;
-		m_pTokenizer= NULL;
-		m_pLockFile	= NULL;
-		m_pIndexPath= NULL;
-	}
-
-	~ServedIndex_t ()
-	{
-		if ( m_pLockFile && g_bHeadDaemon )
-			unlink ( m_pLockFile->cstr() );
-		SafeDelete ( m_pIndex );
-		SafeDelete ( m_pDict );
-		SafeDelete ( m_pTokenizer );
-		SafeDelete ( m_pLockFile );
-		SafeDelete ( m_pIndexPath );
-	}
-};
 
 static SmallStringHash_T < ServedIndex_t >	g_hIndexes;
 
@@ -208,6 +239,33 @@ void Shutdown ()
 	if ( g_sPidFile )
 		unlink ( g_sPidFile );
 	g_hIndexes.Reset ();
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+ServedIndex_t::ServedIndex_t ()
+{
+	Reset ();
+}
+
+void ServedIndex_t::Reset ()
+{
+	m_pIndex	= NULL;
+	m_pDict		= NULL;
+	m_pTokenizer= NULL;
+	m_pLockFile	= NULL;
+	m_pIndexPath= NULL;
+}
+
+ServedIndex_t::~ServedIndex_t ()
+{
+	if ( m_pLockFile && g_bHeadDaemon )
+		unlink ( m_pLockFile->cstr() );
+	SafeDelete ( m_pIndex );
+	SafeDelete ( m_pDict );
+	SafeDelete ( m_pTokenizer );
+	SafeDelete ( m_pLockFile );
+	SafeDelete ( m_pIndexPath );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1224,6 +1282,7 @@ public:
 	CSphQueryResult	m_tRes;			///< query result
 	bool			m_bFailure;		///< whether query was succesful
 
+	int				m_iReplyStatus;	///< reply status code
 	int				m_iReplySize;	///< how many reply bytes are there
 	int				m_iReplyRead;	///< how many reply bytes are alredy received
 	char *			m_pReplyBuf;	///< reply buffer
@@ -1238,6 +1297,7 @@ public:
 		, m_iSock ( -1 )
 		, m_eState ( AGENT_UNUSED )
 		, m_bFailure ( false )
+		, m_iReplyStatus ( -1 )
 		, m_iReplySize ( 0 )
 		, m_iReplyRead ( 0 )
 		, m_pReplyBuf ( NULL )
@@ -1307,7 +1367,7 @@ static SmallStringHash_T < DistributedIndex_t >		g_hDistIndexes;
 
 /////////////////////////////////////////////////////////////////////////////
 
-void ConnectToRemoteAgent ( Agent_t * pAgent )
+void ConnectToRemoteAgent ( Agent_t * pAgent, const char * sIndexName, SearchFailuresLog_t & dFailures )
 {
 	assert ( pAgent );
 	assert ( pAgent->m_iPort>0 );
@@ -1326,13 +1386,15 @@ void ConnectToRemoteAgent ( Agent_t * pAgent )
 	pAgent->m_iSock = socket ( pAgent->GetAddrType(), SOCK_STREAM, 0 );
 	if ( pAgent->m_iSock<0 )
 	{
-		sphWarning ( "agent '%s:%d': socket() failed", pAgent->m_sHost.cstr(), pAgent->m_iPort );
+		dFailures.Add ( SearchFailure_t ( sIndexName, "agent '%s:%d': socket() failed",
+			pAgent->m_sHost.cstr(), pAgent->m_iPort ) );
 		return;
 	}
 
 	if ( sphSetSockNB ( pAgent->m_iSock )<0 )
 	{
-		sphWarning ( "agent '%s:%d': sphSetSockNB() failed", pAgent->m_sHost.cstr(), pAgent->m_iPort );
+		dFailures.Add ( SearchFailure_t ( sIndexName, "agent '%s:%d': sphSetSockNB() failed",
+			pAgent->m_sHost.cstr(), pAgent->m_iPort ) );
 		return;
 	}
 
@@ -1342,8 +1404,8 @@ void ConnectToRemoteAgent ( Agent_t * pAgent )
 		if ( iErr!=EINPROGRESS && iErr!=EINTR && iErr!=EWOULDBLOCK ) // check for EWOULDBLOCK is for winsock only
 		{
 			pAgent->Close ();
-			sphWarning ( "agent '%s:%d': connect() failed: %s", pAgent->m_sHost.cstr(), pAgent->m_iPort,
-				sphSockError(iErr) );
+			dFailures.Add ( SearchFailure_t ( sIndexName, "agent '%s:%d': connect() failed: %s",
+				pAgent->m_sHost.cstr(), pAgent->m_iPort, sphSockError(iErr) ) );
 			return;
 		} else
 		{
@@ -1363,7 +1425,8 @@ void ConnectToRemoteAgent ( Agent_t * pAgent )
 #pragma warning(disable:4389) // signed/unsigned mismatch
 #endif // USE_WINDOWS
 
-int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, const CSphQuery & tQuery, int iMode )
+int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, const CSphQuery & tQuery, int iMode,
+	SearchFailuresLog_t & dFailures )
 {
 	int iTimeout = tDist.m_iAgentConnectTimeout;
 	int iAgents = 0;
@@ -1420,8 +1483,8 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				if ( iErr )
 				{
 					// connect() failure
-					sphWarning ( "index '%s': agent '%s:%d': connect() failed (err=%d)",
-						sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort, iErr );
+					dFailures.Add ( SearchFailure_t ( sIndexName, "agent '%s:%d': connect() failed (err=%d)",
+						tAgent.m_sHost.cstr(), tAgent.m_iPort, iErr ) );
 					tAgent.Close ();
 				} else
 				{
@@ -1440,9 +1503,9 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				iRemoteVer = ntohl ( iRemoteVer );
 				if ( iRes!=sizeof(iRemoteVer) || iRemoteVer<=0 )
 				{
-					sphWarning ( "index '%s': agent '%s:%d': expected protocol v.%d, got v.%d",
-						sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort,
-						SPHINX_SEARCHD_PROTO, iRemoteVer );
+					dFailures.Add ( SearchFailure_t ( sIndexName, "agent '%s:%d': expected protocol v.%d, got v.%d",
+						tAgent.m_sHost.cstr(), tAgent.m_iPort,
+						SPHINX_SEARCHD_PROTO, iRemoteVer ) );
 					tAgent.Close ();
 					continue;
 				}
@@ -1520,9 +1583,9 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 		if ( tAgent.m_eState!=AGENT_QUERY && tAgent.m_eState!=AGENT_UNUSED )
 		{
 			tAgent.Close ();
-			sphWarning ( "index '%s': agent '%s:%d': %s() timed out",
-				sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort,
-				tAgent.m_eState==AGENT_HELLO ? "read" : "connect" );
+			dFailures.Add ( SearchFailure_t ( sIndexName, "agent '%s:%d': %s() timed out",
+				tAgent.m_sHost.cstr(), tAgent.m_iPort,
+				tAgent.m_eState==AGENT_HELLO ? "read" : "connect" ) );
 		}
 	}
 
@@ -1530,7 +1593,8 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 }
 
 
-int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, CSphQueryResult * pRes, int iTimeout )
+int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, CSphQueryResult * pRes, int iTimeout,
+	SearchFailuresLog_t & dFailures )
 {
 	assert ( pRes );
 	assert ( iTimeout>=0 );
@@ -1597,8 +1661,9 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 					if ( sphSockRecv ( tAgent.m_iSock, (char*)&tReplyHeader, sizeof(tReplyHeader), 0 )!=sizeof(tReplyHeader) )
 					{
 						// bail out if failed
-						sphWarning ( "index '%s': agent '%s:%d': failed to receive reply header",
-							sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort );
+						dFailures.Add ( SearchFailure_t ( sIndexName,
+							"agent '%s:%d': failed to receive reply header",
+							tAgent.m_sHost.cstr(), tAgent.m_iPort ) );
 						break;
 					}
 
@@ -1606,26 +1671,13 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 					tReplyHeader.m_iVer = ntohs ( tReplyHeader.m_iVer );
 					tReplyHeader.m_iLength = ntohl ( tReplyHeader.m_iLength );
 
-					// check the status
-					if ( tReplyHeader.m_iStatus!=SEARCHD_OK || tReplyHeader.m_iLength<=0 )
+					// check the packet
+					if ( tReplyHeader.m_iLength<0 ) // FIXME! add reasonable max packet len too
 					{
-						if ( tReplyHeader.m_iStatus!=SEARCHD_OK && tReplyHeader.m_iLength>0 )
-						{
-							char sAgentError[1024];
-							int iToRead = Min ( (int)sizeof(sAgentError)-1, tReplyHeader.m_iLength );
-							int iRes = sphSockRecv ( tAgent.m_iSock, sAgentError, iToRead, 0 );
-							sAgentError [ Max ( iRes, 0 ) ] = '\0';
-
-							sphWarning ( "index '%s': agent '%s:%d': remote error (status=%d, error=%s)",
-								sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort,
-								tReplyHeader.m_iStatus, sAgentError+4 );
-
-						} else
-						{
-							sphWarning ( "index '%s': agent '%s:%d': ill-formed reply length (status=%d, len=%d)",
-								sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort,
-								tReplyHeader.m_iStatus, tReplyHeader.m_iLength );
-						}
+						dFailures.Add ( SearchFailure_t ( sIndexName,
+							"agent '%s:%d': ill-formed reply length (status=%d, len=%d)",
+							tAgent.m_sHost.cstr(), tAgent.m_iPort,
+							tReplyHeader.m_iStatus, tReplyHeader.m_iLength ) );
 						break;
 					}
 
@@ -1635,13 +1687,15 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 					tAgent.m_pReplyBuf = new char [ tReplyHeader.m_iLength ];
 					tAgent.m_iReplySize = tReplyHeader.m_iLength;
 					tAgent.m_iReplyRead = 0;
+					tAgent.m_iReplyStatus = tReplyHeader.m_iStatus;
 
 					if ( !tAgent.m_pReplyBuf )
 					{
 						// bail out if failed
-						sphWarning ( "index '%s': agent '%s:%d': failed to alloc %d bytes for reply buffer",
-							sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort,
-							tAgent.m_iReplySize );
+						dFailures.Add ( SearchFailure_t ( sIndexName,
+							"agent '%s:%d': failed to alloc %d bytes for reply buffer",
+							tAgent.m_sHost.cstr(), tAgent.m_iPort,
+							tAgent.m_iReplySize ) );
 						break;
 					}
 				}
@@ -1657,9 +1711,10 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 					// bail out if read failed
 					if ( iRes<0 )
 					{
-						sphWarning ( "index '%s': agent '%s:%d': failed to receive reply body: %s",
-							sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort,
-							sphSockError() );
+						dFailures.Add ( SearchFailure_t ( sIndexName,
+							"agent '%s:%d': failed to receive reply body: %s",
+							tAgent.m_sHost.cstr(), tAgent.m_iPort,
+							sphSockError() ) );
 						break;
 					}
 
@@ -1672,6 +1727,24 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 				if ( tAgent.m_eState==AGENT_REPLY && tAgent.m_iReplyRead==tAgent.m_iReplySize )
 				{
 					MemInputBuffer_c tReq ( tAgent.m_pReplyBuf, tAgent.m_iReplySize );
+
+					if ( tAgent.m_iReplyStatus==SEARCHD_WARNING )
+					{
+						CSphString sAgentWarning = tReq.GetString ();
+						dFailures.Add ( SearchFailure_t ( sIndexName,
+							"agent '%s:%d': remote warning (status=%d, error=%s)",
+							tAgent.m_sHost.cstr(), tAgent.m_iPort,
+							tAgent.m_iReplyStatus, sAgentWarning.cstr() ) );
+
+					} else if ( tAgent.m_iReplyStatus!=SEARCHD_OK )
+					{
+						CSphString sAgentError = tReq.GetString ();
+						dFailures.Add ( SearchFailure_t ( sIndexName,
+							"agent '%s:%d': remote error (status=%d, error=%s)",
+							tAgent.m_sHost.cstr(), tAgent.m_iPort,
+							tAgent.m_iReplyStatus, sAgentError.cstr() ) );
+						break;
+					}
 
 					// get schema
 					CSphSchema & tSchema = tAgent.m_tRes.m_tSchema;
@@ -1691,9 +1764,9 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 					int iMatches = tReq.GetInt ();
 					if ( iMatches<0 || iMatches>g_iMaxMatches )
 					{
-						sphWarning ( "index '%s': agent '%s:%d': invalid match count received (count=%d)",
-							sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort,
-							iMatches );
+						dFailures.Add ( SearchFailure_t ( sIndexName,
+							"agent '%s:%d': invalid match count received (count=%d)",
+							tAgent.m_sHost.cstr(), tAgent.m_iPort, iMatches ) );
 						break;
 					}
 
@@ -1721,18 +1794,20 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 					tAgent.m_tRes.m_iNumWords = tReq.GetInt ();
 					if ( iRetrieved!=iMatches )
 					{
-						sphWarning ( "index '%s': agent '%s:%d': expected %d retrieved documents, got %d",
-							sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort,
-							iMatches, iRetrieved );
+						dFailures.Add ( SearchFailure_t ( sIndexName,
+							"agent '%s:%d': expected %d retrieved documents, got %d",
+							tAgent.m_sHost.cstr(), tAgent.m_iPort,
+							iMatches, iRetrieved ) );
 						break;
 					}
 
 					bool bSetWords = false;
 					if ( pRes->m_iNumWords && tAgent.m_tRes.m_iNumWords!=pRes->m_iNumWords )
 					{
-						sphWarning ( "index '%s': agent '%s:%d': expected %d query words, got %d",
-							sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort,
-							pRes->m_iNumWords, tAgent.m_tRes.m_iNumWords );
+						dFailures.Add ( SearchFailure_t  ( sIndexName,
+							"agent '%s:%d': expected %d query words, got %d",
+							tAgent.m_sHost.cstr(), tAgent.m_iPort,
+							pRes->m_iNumWords, tAgent.m_tRes.m_iNumWords ) );
 						break;
 					}
 
@@ -1764,13 +1839,14 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 
 					if ( i!=pRes->m_iNumWords || tReq.GetError() )
 					{
-						sphWarning ( "index '%s': agent '%s:%d': expected %d retrieved documents, got %d",
-							sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort,
-							iMatches, iRetrieved );
+						dFailures.Add ( SearchFailure_t  ( sIndexName,
+							"agent '%s:%d': expected %d retrieved documents, got %d",
+							tAgent.m_sHost.cstr(), tAgent.m_iPort,
+							iMatches, iRetrieved ) );
 						break;
 					}
 
-					// all done
+					// all is well
 					iAgents++;
 					tAgent.Close ();
 				}
@@ -1797,8 +1873,9 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 			assert ( !tAgent.m_tRes.m_dMatches.GetLength() );
 			tAgent.Close ();
 
-			sphWarning ( "index '%s': agent '%s:%d': query timed out",
-				sIndexName, tAgent.m_sHost.cstr(), tAgent.m_iPort );
+			dFailures.Add ( SearchFailure_t ( sIndexName,
+				"agent '%s:%d': query timed out",
+				tAgent.m_sHost.cstr(), tAgent.m_iPort ) );
 		}
 	}
 
@@ -1982,33 +2059,6 @@ bool FixupQuery ( CSphQuery * pQuery, OldQuery_t * pOldQuery,
 }
 
 
-struct SearchFailure_t
-{
-	CSphString	m_sIndex;	///< searched index name
-	CSphString	m_sError;	///< search error message
-
-	bool operator == ( const SearchFailure_t & r ) const
-	{
-		return m_sIndex==r.m_sIndex && m_sError==r.m_sError;
-	}
-
-	bool operator < ( const SearchFailure_t & r ) const
-	{
-		int iRes = strcmp ( m_sError.cstr(), r.m_sError.cstr() );
-		if ( !iRes )
-			iRes = strcmp ( m_sIndex.cstr(), r.m_sIndex.cstr() );
-		return iRes<0;
-	}
-
-	const SearchFailure_t & operator = ( const SearchFailure_t & r )
-	{
-		m_sIndex = r.m_sIndex;
-		m_sError = r.m_sError;
-		return *this;
-	}
-};
-
-
 struct StrBuf_t
 {
 protected:
@@ -2055,7 +2105,7 @@ public:
 };
 
 
-void ReportSearchFailures ( StrBuf_t & sReport, CSphVector<SearchFailure_t,8> & dFailures )
+void ReportSearchFailures ( StrBuf_t & sReport, SearchFailuresLog_t & dFailures )
 {
 	if ( !dFailures.GetLength() )
 		return;
@@ -2251,23 +2301,23 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 #define REMOVE_DUPES 1
 
-	int iSearched = 0;
-	bool bDist = false;
-	CSphVector<SearchFailure_t,8> dFailures;
+	SearchFailuresLog_t dFailures;
+
+	int iTries = 0;
+	int iSuccesses = 0;
 
 	if ( g_hDistIndexes(sIndexes) )
 	{
-		bDist = true;
-
 		// search through specified distributed index
 		DistributedIndex_t & tDist = g_hDistIndexes[sIndexes];
+		iTries += tDist.m_dAgents.GetLength();
 
 		// start connecting to remote agents
 		ARRAY_FOREACH ( i, tDist.m_dAgents )
-			ConnectToRemoteAgent ( &tDist.m_dAgents[i] );
+			ConnectToRemoteAgent ( &tDist.m_dAgents[i], sIndexes.cstr(), dFailures );
 
 		// connect to remote agents and query them first
-		int iRemote = QueryRemoteAgents ( sIndexes.cstr(), tDist, tQuery, tQuery.m_eMode );
+		int iRemote = QueryRemoteAgents ( sIndexes.cstr(), tDist, tQuery, tQuery.m_eMode, dFailures );
 
 		// while the remote queries are running, do local searches
 		// FIXME! what if the remote agents finish early, could they timeout?
@@ -2285,7 +2335,11 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 			// do query
 			tQuery.m_pTokenizer = tServed.m_pTokenizer;
-			tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pTop );
+			iTries++;
+			if ( !tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pTop ) )
+				dFailures.Add ( SearchFailure_t ( tDist.m_dLocal[i].cstr(), "%s", pRes->m_sError.cstr() ) );
+			else
+				iSuccesses++;
 
 #if REMOVE_DUPES
 			// group-by queries remove dupes themselves
@@ -2302,17 +2356,17 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		}
 
 		// wait for remote queries to complete
-		if ( iRemote )
+		while ( iRemote )
 		{
 			int iMsecLeft = tDist.m_iAgentQueryTimeout - int(tmQuery*1000.0f);
-			int iReplys = WaitForRemoteAgents ( sIndexes.cstr(), tDist, pRes, Max ( iMsecLeft, 0 ) );
-			if ( !iReplys && !tDist.m_dLocal.GetLength() )
-			{
-				tReq.SendErrorReply ( "all reachable remote agents timed out" );
-				return;
-			}
+			int iReplys = WaitForRemoteAgents ( sIndexes.cstr(), tDist, pRes, Max ( iMsecLeft, 0 ), dFailures );
 
-			// merge local and remote results
+			// check if there were valid (though might be 0-matches) replys
+			iSuccesses += iReplys;
+			if ( !iReplys )
+				break;
+
+			// merge in remote results
 			ARRAY_FOREACH ( iAgent, tDist.m_dAgents )
 			{
 				Agent_t & tAgent = tDist.m_dAgents[iAgent];
@@ -2346,6 +2400,8 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 				// merge this agent's stats
 				pRes->m_iTotalMatches += tAgent.m_tRes.m_iTotalMatches;
 			}
+
+			break;
 		}
 
 		// if there were no local indexes, schema in pRes was not yet set,
@@ -2380,15 +2436,12 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 				return;
 
 			// do query
-			iSearched++;
+			iTries++;
 			tQuery.m_pTokenizer = tServed.m_pTokenizer;
 			if ( !tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pTop ) )
-			{
-				SearchFailure_t tTmp;
-				tTmp.m_sIndex = sIndexName;
-				tTmp.m_sError = pRes->m_sError;
-				dFailures.Add ( tTmp );
-			}
+				dFailures.Add ( SearchFailure_t ( sIndexName, "%s", pRes->m_sError.cstr() ) );
+			else
+				iSuccesses++;
 
 #if REMOVE_DUPES
 			// group-by queries remove dupes themselves
@@ -2397,7 +2450,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 #endif
 		}
 
-		if ( !iSearched )
+		if ( !iTries )
 		{
 			tReq.SendErrorReply ( "no local indexes configured" );
 			return;
@@ -2449,13 +2502,11 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 				// do query
 				tQuery.m_pTokenizer = tServed.m_pTokenizer;
+				iTries++;
 				if ( !tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pTop ) )
-				{
-					SearchFailure_t tTmp;
-					tTmp.m_sIndex = sNext;
-					tTmp.m_sError = pRes->m_sError;
-					dFailures.Add ( tTmp );
-				}
+					dFailures.Add ( SearchFailure_t ( sNext, "%s", pRes->m_sError.cstr() ) );
+				else
+					iSuccesses++;
 
 #if REMOVE_DUPES
 				// group-by queries remove dupes themselves
@@ -2468,21 +2519,22 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 					tCache.StoreResult ( tQuery, sNext, pRes );
 #endif
 			}
-
-			iSearched++;
 		}
 
-		if ( !iSearched )
+		if ( !iTries )
 		{
 			tReq.SendErrorReply ( "no valid indexes specified in request" );
 			return;
 		}
 	}
 
+	// build report
 	StrBuf_t sFailures;
 	ReportSearchFailures ( sFailures, dFailures );
 
-	if ( !bDist && iSearched==dFailures.GetLength() )
+	// if there were no succesful searches at all, this is an error
+	assert ( iTries );
+	if ( !iSuccesses )
 	{
 		tReq.SendErrorReply ( "%s", sFailures.cstr() );
 		return;
@@ -2494,7 +2546,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		// group-by queries remove dupes themselves, so just flatten
 		sphFlattenQueue ( pTop, pRes );
 
-	} else if ( iSearched!=1 )
+	} else if ( iSuccesses!=1 )
 	{
 		// if there was only 1 index searched, it's already properly flattened
 		pRes->m_dMatches.Sort ();

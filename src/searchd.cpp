@@ -2252,10 +2252,13 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 #define REMOVE_DUPES 1
 
 	int iSearched = 0;
+	bool bDist = false;
 	CSphVector<SearchFailure_t,8> dFailures;
 
 	if ( g_hDistIndexes(sIndexes) )
 	{
+		bDist = true;
+
 		// search through specified distributed index
 		DistributedIndex_t & tDist = g_hDistIndexes[sIndexes];
 
@@ -2479,7 +2482,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	StrBuf_t sFailures;
 	ReportSearchFailures ( sFailures, dFailures );
 
-	if ( iSearched==dFailures.GetLength() )
+	if ( !bDist && iSearched==dFailures.GetLength() )
 	{
 		tReq.SendErrorReply ( "%s", sFailures.cstr() );
 		return;

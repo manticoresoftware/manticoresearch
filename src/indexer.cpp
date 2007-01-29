@@ -501,39 +501,10 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 	// spawn tokenizer
 	///////////////////
 
-	// charset_type
-	ISphTokenizer * pTokenizer = NULL;
-	bool bUseUTF8 = false;
-	if ( hIndex.Exists ( "charset_type" ) )
-	{
-		if ( hIndex["charset_type"]=="sbcs" )
-			pTokenizer = sphCreateSBCSTokenizer ();
-
-		else if ( hIndex["charset_type"]=="utf-8" )
-		{
-			pTokenizer = sphCreateUTF8Tokenizer ();
-			bUseUTF8 = true;
-
-		} else
-			sphDie ( "FATAL: unknown charset type '%s' in index '%s'.\n",
-			hIndex["charset_type"].cstr(), sIndexName );
-	} else
-	{
-		pTokenizer = sphCreateSBCSTokenizer ();
-	}
-	assert ( pTokenizer );
-
-	// charset_table
-	if ( hIndex.Exists ( "charset_table" ) )
-		if ( !pTokenizer->SetCaseFolding ( hIndex["charset_table"].cstr() ) )
-			sphDie ( "FATAL: failed to parse 'charset_table' in index '%s', fix your configuration.\n", sIndexName );
-
-	// min word len
-	int iMinWordLen = hIndex("min_word_len") ? hIndex["min_word_len"].intval() : 0;
-	iMinWordLen = Max ( iMinWordLen, 0 );
-
-	if ( iMinWordLen )
-		pTokenizer->SetMinWordLen ( iMinWordLen );
+	CSphString sError;
+	ISphTokenizer * pTokenizer = sphConfTokenizer ( hIndex, sError );
+	if ( !pTokenizer )
+		sphDie ( "FATAL: index '%s': %s.\n", sIndexName, sError.cstr() );
 
 	// prefix/infix indexing
 	int iPrefix = hIndex("min_prefix_len") ? hIndex["min_prefix_len"].intval() : 0;
@@ -544,6 +515,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 	if ( iPrefix>0 && iInfix>0 )
 		sphDie ( "FATAL: index '%s': min_prefix_len and min_infix_len can not both be used.\n", sIndexName );
 
+	int iMinWordLen = hIndex("min_word_len") ? Max ( hIndex["min_word_len"].intval(), 0 ) : 0;
 	if ( iMinWordLen>0 && iPrefix>iMinWordLen )
 	{
 		fprintf ( stdout, "WARNING: index '%s': min_prefix_len greater than min_word_len, clamping.\n", sIndexName );
@@ -661,14 +633,10 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		///////////////
 
 		// configure morphology
-		DWORD iMorph = SPH_MORPH_NONE;
-		if ( hIndex ( "morphology" ) )
-		{
-			iMorph = sphParseMorphology ( hIndex["morphology"], bUseUTF8 );
-			if ( iMorph==SPH_MORPH_UNKNOWN )
-				fprintf ( stdout, "WARNING: unknown morphology type '%s' ignored in index '%s'.\n",
-				hIndex["morphology"].cstr(), sIndexName );
-		}
+		DWORD iMorph = sphConfMorphology ( hIndex, pTokenizer->IsUtf8() );
+		if ( iMorph==SPH_MORPH_UNKNOWN )
+			fprintf ( stdout, "WARNING: index '%s': unknown morphology type '%s' - ignored'.\n",
+				sIndexName, hIndex["morphology"].cstr() );
 
 		// create dict
 		CSphDict_CRC32 * pDict = new CSphDict_CRC32 ( iMorph );

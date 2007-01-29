@@ -1963,18 +1963,6 @@ void CSphLowercaser::SetRemap ( const CSphRemapRange * pRemaps, int iRemaps )
 }
 
 
-bool CSphLowercaser::SetRemap ( const char * sConfig )
-{
-	CSphCharsetDefinitionParser tParser;
-	if ( tParser.Parse ( sConfig, *this )!=0 )
-	{
-		fprintf ( stdout, "ERROR: %s", tParser.GetLastError() );
-		return false;
-	}
-	return true;
-}
-
-
 enum
 {
 	FLAG_CODEPOINT_SPECIAL	= 0x20000000,	// this codepoint is special
@@ -2095,7 +2083,7 @@ int CSphCharsetDefinitionParser::Error ( const char * sMessage )
 	strncpy ( sErrorBuffer, m_pCurrent, sizeof(sErrorBuffer) );
 	sErrorBuffer [ sizeof(sErrorBuffer)-1 ] = '\0';
 
-	snprintf ( m_sError, sizeof(m_sError), "CharsetDefinitionParser(): %s near '%s'.",
+	snprintf ( m_sError, sizeof(m_sError), "%s near '%s'",
 		sMessage, sErrorBuffer );
 	m_sError [ sizeof(m_sError)-1 ] = '\0';
 
@@ -2316,12 +2304,12 @@ int CSphCharsetDefinitionParser::Parse ( const char * sConfig, CSphLowercaser & 
 
 /////////////////////////////////////////////////////////////////////////////
 
-bool ISphTokenizer::SetCaseFolding ( const char * sConfig )
+bool ISphTokenizer::SetCaseFolding ( const char * sConfig, CSphString & sError )
 {
 	CSphCharsetDefinitionParser tParser;
 	if ( tParser.Parse ( sConfig, m_tLC )!=0 )
 	{
-		fprintf ( stdout, "ERROR: %s", tParser.GetLastError() );
+		sError = tParser.GetLastError();
 		return false;
 	}
 	return true;
@@ -2342,7 +2330,8 @@ CSphTokenizer_SBCS::CSphTokenizer_SBCS ()
 	, m_iAccum		( 0 )
 	, m_bLast		( false )
 {
-	SetCaseFolding ( SPHINX_DEFAULT_SBCS_TABLE );
+	CSphString sTmp;
+	SetCaseFolding ( SPHINX_DEFAULT_SBCS_TABLE, sTmp );
 }
 
 
@@ -2455,7 +2444,8 @@ CSphTokenizer_UTF8::CSphTokenizer_UTF8 ()
 	, m_bLast		( false )
 {
 	m_pAccum = m_sAccum;
-	SetCaseFolding ( SPHINX_DEFAULT_UTF8_TABLE );
+	CSphString sTmp;
+	SetCaseFolding ( SPHINX_DEFAULT_UTF8_TABLE, sTmp );
 }
 
 
@@ -5377,8 +5367,9 @@ ISphMatchQueue * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & t
 	if ( pQuery->m_eSort==SPH_SORT_EXTENDED )
 	{
 		// mini parser
+		CSphString sTmp;
 		CSphTokenizer_SBCS tTokenizer;
-		tTokenizer.SetCaseFolding ( "0..9, A..Z->a..z, _, a..z, @" );
+		tTokenizer.SetCaseFolding ( "0..9, A..Z->a..z, _, a..z, @", sTmp );
 
 		CSphString sSortClause = pQuery->m_sSortBy;
 		tTokenizer.SetBuffer ( (BYTE*)sSortClause.cstr(), strlen(sSortClause.cstr()), true );

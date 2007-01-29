@@ -90,7 +90,10 @@ protected:
 /////////////////////////////////////////////////////////////////////////////
 
 /// parse morphology option string to bit mask
-DWORD	sphParseMorphology ( const CSphString & sOption, bool bUseUTF8 );
+DWORD				sphConfMorphology ( const CSphConfigSection & hIndex, bool bUseUTF8 );
+
+/// create and configure tokenizer from index definition section
+ISphTokenizer *		sphConfTokenizer ( const CSphConfigSection & hIndex, CSphString & sError );
 
 #endif // _sphinxutils_
 

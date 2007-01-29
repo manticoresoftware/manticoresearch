@@ -139,7 +139,6 @@ public:
 
 	void		SetRemap ( const CSphRemapRange * pRemaps, int iRemaps );
 	void		SetRemap ( const CSphLowercaser * pLC );
-	bool		SetRemap ( const char * sConfig );
 	void		AddSpecials ( const char * sSpecials );
 
 public:
@@ -184,7 +183,7 @@ public:
 
 	/// set new translation table
 	/// returns true on success, false on failure
-	virtual bool					SetCaseFolding ( const char * sConfig );
+	virtual bool					SetCaseFolding ( const char * sConfig, CSphString & sError );
 
 	/// add special chars to translation table (SBCS only, for now)
 	/// updates lowercaser so that these remap to -1

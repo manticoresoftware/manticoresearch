@@ -3227,52 +3227,19 @@ int main ( int argc, char **argv )
 			}
 
 			// configure charset_type
-			ISphTokenizer * pTokenizer = NULL;
-			bool bUseUTF8 = false;
-			if ( hIndex.Exists ( "charset_type" ) )
+			CSphString sError;
+			ISphTokenizer * pTokenizer = sphConfTokenizer ( hIndex, sError );
+			if ( !pTokenizer )
 			{
-				if ( hIndex["charset_type"]=="sbcs" )
-					pTokenizer = sphCreateSBCSTokenizer ();
-
-				else if ( hIndex["charset_type"]=="utf-8" )
-				{
-					pTokenizer = sphCreateUTF8Tokenizer ();
-					bUseUTF8 = true;
-
-				} else
-				{
-					sphWarning ( "index '%s': unknown charset type '%s' - NOT SERVING",
-						sIndexName, hIndex["charset_type"].cstr() );
-					continue;
-				}
-			} else
-			{
-				pTokenizer = sphCreateSBCSTokenizer ();
-			}
-			assert ( pTokenizer );
-
-			// configure morphology
-			DWORD iMorph = SPH_MORPH_NONE;
-			if ( hIndex ( "morphology" ) )
-			{
-				iMorph = sphParseMorphology ( hIndex["morphology"], bUseUTF8 );
-				if ( iMorph==SPH_MORPH_UNKNOWN )
-					sphWarning ( "index '%s': unknown morphology type '%s' ignored",
-						sIndexName, hIndex["morphology"].cstr() );
-			}
-
-			// configure charset_table
-			if ( hIndex.Exists ( "charset_table" ) )
-				if ( !pTokenizer->SetCaseFolding ( hIndex["charset_table"].cstr() ) )
-			{
-				sphWarning ( "index '%s': failed to parse 'charset_table' - NOT SERVING",
-					sIndexName );
+				sphWarning ( "index '%s': %s - NOT SERVING", sIndexName, sError.cstr() );
 				continue;
 			}
 
-			// min word len
-			if ( hIndex("min_word_len") )
-				pTokenizer->SetMinWordLen ( hIndex["min_word_len"].intval() );
+			// configure morphology
+			DWORD iMorph = sphConfMorphology ( hIndex, pTokenizer->IsUtf8() );
+			if ( iMorph==SPH_MORPH_UNKNOWN )
+				sphWarning ( "index '%s': unknown morphology type '%s' - ignored",
+					sIndexName, hIndex["morphology"].cstr() );
 
 			// create add this one to served hashes
 			ServedIndex_t tIdx;

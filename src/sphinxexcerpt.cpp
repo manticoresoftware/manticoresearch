@@ -25,7 +25,6 @@ public:
 							ExcerptGen_c ();
 							~ExcerptGen_c () {}
 
-	bool					SetCaseFolding ( const char * sConfig );
 	char *					BuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict, ISphTokenizer * pTokenizer );
 
 public:
@@ -141,19 +140,11 @@ ExcerptGen_c::ExcerptGen_c ()
 	m_tTok.m_iStart = -1;
 	m_tTok.m_iLength = -1;
 
-	m_tLC.SetRemap ( SPHINX_DEFAULT_UTF8_TABLE );
-
 	m_pDict = NULL;
 	m_pAccum = m_sAccum;
 	m_iAccum = 0;
 
 	m_bUtf8 = true;
-}
-
-
-bool ExcerptGen_c::SetCaseFolding ( const char * sConfig )
-{
-	return m_tLC.SetRemap ( sConfig );
 }
 
 

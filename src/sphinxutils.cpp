@@ -416,8 +416,13 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 
 /////////////////////////////////////////////////////////////////////////////
 
-DWORD sphParseMorphology ( const CSphString & sOption, bool bUseUTF8 )
+DWORD sphConfMorphology ( const CSphConfigSection & hIndex, bool bUseUTF8 )
 {
+	if ( !hIndex("morphology") )
+		return SPH_MORPH_NONE;
+
+	const CSphString & sOption = hIndex["morphology"];
+
 	DWORD iMorph = SPH_MORPH_UNKNOWN;
 	DWORD iStemRu = ( bUseUTF8 ? SPH_MORPH_STEM_RU_UTF8 : SPH_MORPH_STEM_RU_CP1251 );
 
@@ -437,6 +442,49 @@ DWORD sphParseMorphology ( const CSphString & sOption, bool bUseUTF8 )
 		iMorph = SPH_MORPH_NONE;
 
 	return iMorph;
+}
+
+
+ISphTokenizer * sphConfTokenizer ( const CSphConfigSection & hIndex, CSphString & sError )
+{
+	char sErrorBuf[256];
+
+	// charset_type
+	ISphTokenizer * pTokenizer = NULL;
+	if ( !hIndex("charset_type") || hIndex["charset_type"]=="sbcs" )
+	{
+		pTokenizer = sphCreateSBCSTokenizer ();
+
+	} else if ( hIndex["charset_type"]=="utf-8" )
+	{
+		pTokenizer = sphCreateUTF8Tokenizer ();
+
+	} else
+	{
+		snprintf ( sErrorBuf, sizeof(sErrorBuf), "unknown charset type '%s'", hIndex["charset_type"].cstr() );
+		sError = sErrorBuf;
+		return NULL;
+	}
+
+	assert ( pTokenizer );
+
+	// charset_table
+	if ( hIndex("charset_table") )
+		if ( !pTokenizer->SetCaseFolding ( hIndex["charset_table"].cstr(), sError ) )
+	{
+		SafeDelete ( pTokenizer );
+
+		snprintf ( sErrorBuf, sizeof(sErrorBuf), "'charset_table': %s", sError.cstr() );
+		sError = sErrorBuf;
+		return NULL;
+	}
+
+	// min_word_len
+	int iMinWordLen = hIndex("min_word_len") ? Max ( hIndex["min_word_len"].intval(), 0 ) : 0;
+	if ( iMinWordLen )
+		pTokenizer->SetMinWordLen ( iMinWordLen );
+
+	return pTokenizer;
 }
 
 //

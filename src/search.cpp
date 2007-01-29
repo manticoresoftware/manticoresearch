@@ -184,33 +184,16 @@ int main ( int argc, char ** argv )
 			sphDie ( "FATAL: key 'path' not found in index '%s'.\n", sIndexName );
 
 		// configure charset_type
-		tQuery.m_pTokenizer = NULL;
-		bool bUseUTF8 = false;
-		if ( hIndex.Exists ( "charset_type" ) )
-		{
-			if ( hIndex["charset_type"]=="sbcs" )
-				tQuery.m_pTokenizer = sphCreateSBCSTokenizer ();
-			else if ( hIndex["charset_type"]=="utf-8" )
-			{
-				tQuery.m_pTokenizer = sphCreateUTF8Tokenizer ();
-				bUseUTF8 = true;
-			}
-			else
-				sphDie ( "FATAL: unknown charset type '%s' in index '%s'.\n", hIndex["charset_type"].cstr(), sIndexName );
-		} else
-		{
-			tQuery.m_pTokenizer = sphCreateSBCSTokenizer ();
-		}
+		CSphString sError;
+		tQuery.m_pTokenizer = sphConfTokenizer ( hIndex, sError );
+		if ( !tQuery.m_pTokenizer )
+			sphDie ( "FATAL: index '%s': %s.\n", sIndexName, sError.cstr() );
 
 		// get morphology type
-		DWORD iMorph = SPH_MORPH_NONE;
-		if ( hIndex ( "morphology" ) )
-		{
-			iMorph = sphParseMorphology ( hIndex["morphology"], bUseUTF8 );
-			if ( iMorph==SPH_MORPH_UNKNOWN )
-				fprintf ( stdout, "WARNING: unknown morphology type '%s' ignored in index '%s'.\n",
-					hIndex["morphology"].cstr(), sIndexName );
-		}
+		DWORD iMorph = sphConfMorphology ( hIndex, tQuery.m_pTokenizer->IsUtf8() );
+		if ( iMorph==SPH_MORPH_UNKNOWN )
+			fprintf ( stdout, "WARNING: index '%s': unknown morphology type '%s' - ignored.\n",
+				sIndexName,	hIndex["morphology"].cstr() );
 
 		// do we want to show document info from database?
 		#if USE_MYSQL
@@ -268,16 +251,6 @@ int main ( int argc, char ** argv )
 		CSphDict * pDict = new CSphDict_CRC32 ( iMorph );
 		pDict->LoadStopwords ( hIndex.Exists ( "stopwords" ) ? hIndex["stopwords"].cstr() : NULL,
 			tQuery.m_pTokenizer );
-
-		// configure charset_table
-		assert ( tQuery.m_pTokenizer );
-		if ( hIndex.Exists ( "charset_table" ) )
-			if ( !tQuery.m_pTokenizer->SetCaseFolding ( hIndex["charset_table"].cstr() ) )
-				sphDie ( "FATAL: failed to parse 'charset_table' in index '%s'.\n", sIndexName );
-
-		// min word len
-		if ( hIndex("min_word_len") )
-			tQuery.m_pTokenizer->SetMinWordLen ( hIndex["min_word_len"].intval() );
 
 		//////////
 		// search

@@ -457,7 +457,9 @@ ISphTokenizer * sphConfTokenizer ( const CSphConfigSection & hIndex, CSphString 
 
 	} else if ( hIndex["charset_type"]=="utf-8" )
 	{
-		pTokenizer = sphCreateUTF8Tokenizer ();
+		pTokenizer = hIndex("ngram_chars")
+			? sphCreateUTF8NgramTokenizer ()
+			: sphCreateUTF8Tokenizer ();
 
 	} else
 	{
@@ -483,6 +485,22 @@ ISphTokenizer * sphConfTokenizer ( const CSphConfigSection & hIndex, CSphString 
 	int iMinWordLen = hIndex("min_word_len") ? Max ( hIndex["min_word_len"].intval(), 0 ) : 0;
 	if ( iMinWordLen )
 		pTokenizer->SetMinWordLen ( iMinWordLen );
+
+	// ngram_chars
+	if ( hIndex("ngram_chars") )
+		if ( !pTokenizer->SetNgramChars ( hIndex["ngram_chars"].cstr(), sError ) )
+	{
+		SafeDelete ( pTokenizer );
+
+		snprintf ( sErrorBuf, sizeof(sErrorBuf), "'ngram_chars': %s", sError.cstr() );
+		sError = sErrorBuf;
+		return NULL;
+	}
+
+	// ngram_len
+	int iNgramLen = hIndex("ngram_len") ? Max ( hIndex["ngram_len"].intval(), 0 ) : 0;
+	if ( iNgramLen )
+		pTokenizer->SetNgramLen ( iNgramLen );
 
 	return pTokenizer;
 }

@@ -137,8 +137,9 @@ public:
 				CSphLowercaser ();
 				~CSphLowercaser ();
 
-	void		SetRemap ( const CSphRemapRange * pRemaps, int iRemaps );
+	void		Reset ();
 	void		SetRemap ( const CSphLowercaser * pLC );
+	void		AddRemaps ( const CSphRemapRange * pRemaps, int iRemaps, DWORD uFlags, DWORD uFlagsIfExists );
 	void		AddSpecials ( const char * sSpecials );
 
 public:
@@ -199,6 +200,13 @@ public:
 	int								GetLastTokenLen () { return m_iLastTokenLen; }
 
 public:
+	/// set n-gram characters (for CJK n-gram indexing)
+	virtual bool					SetNgramChars ( const char *, CSphString & ) { return true; }
+
+	/// set n-gram length (for CJK n-gram indexing)
+	virtual void					SetNgramLen ( int ) {}
+
+public:
 	/// pass next buffer
 	virtual void					SetBuffer ( BYTE * sBuffer, int iLength, bool bLast ) = 0;
 
@@ -225,6 +233,9 @@ ISphTokenizer *			sphCreateSBCSTokenizer ();
 
 /// create UTF-8 tokenizer
 ISphTokenizer *			sphCreateUTF8Tokenizer ();
+
+/// create UTF-8 tokenizer with n-grams support (for CJK n-gram indexing)
+ISphTokenizer *			sphCreateUTF8NgramTokenizer ();
 
 /////////////////////////////////////////////////////////////////////////////
 // DICTIONARIES

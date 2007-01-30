@@ -1791,7 +1791,7 @@ class CSphCharsetDefinitionParser
 {
 public:
 						CSphCharsetDefinitionParser ();
-	int					Parse ( const char * sConfig, CSphLowercaser & tLC );
+	bool				Parse ( const char * sConfig, CSphVector<CSphRemapRange> & dRanges );
 	const char *		GetLastError ();
 
 protected:
@@ -1799,7 +1799,7 @@ protected:
 	char				m_sError [ 1024 ];
 	const char *		m_pCurrent;
 
-	int					Error ( const char * sMessage );
+	bool				Error ( const char * sMessage );
 	void				SkipSpaces ();
 	bool				IsEof ();
 	bool				CheckEof ();
@@ -1859,6 +1859,22 @@ protected:
 	bool				m_bLast;							///< is this buffer the last one
 };
 
+
+/// UTF-8 tokenizer with n-grams
+class CSphTokenizer_UTF8Ngram : public CSphTokenizer_UTF8
+{
+public:
+						CSphTokenizer_UTF8Ngram () : m_iNgramLen ( 1 ) {}
+
+public:
+	virtual bool		SetNgramChars ( const char * sConfig, CSphString & sError );
+	virtual void		SetNgramLen ( int iLen );
+	virtual BYTE *		GetToken ();
+
+protected:
+	int					m_iNgramLen;
+};
+
 /////////////////////////////////////////////////////////////////////////////
 
 ISphTokenizer * sphCreateSBCSTokenizer ()
@@ -1872,6 +1888,11 @@ ISphTokenizer * sphCreateUTF8Tokenizer ()
 	return new CSphTokenizer_UTF8 ();
 }
 
+ISphTokenizer * sphCreateUTF8NgramTokenizer ()
+{
+	return new CSphTokenizer_UTF8Ngram ();
+}
+
 /////////////////////////////////////////////////////////////////////////////
 
 CSphLowercaser::CSphLowercaser ()
@@ -1880,9 +1901,18 @@ CSphLowercaser::CSphLowercaser ()
 }
 
 
+void CSphLowercaser::Reset()
+{
+	m_iChunks = 0;
+	for ( int i=0; i<CHUNK_COUNT; i++ )
+		m_pChunk[i] = NULL;
+	SafeDeleteArray ( m_pData );
+}
+
+
 CSphLowercaser::~CSphLowercaser ()
 {
-	SafeDeleteArray ( m_pData );
+	Reset ();
 }
 
 
@@ -1891,9 +1921,9 @@ void CSphLowercaser::SetRemap ( const CSphLowercaser * pLC )
 	if ( !pLC )
 		return;
 
-	m_iChunks = pLC->m_iChunks;
+	Reset ();
 
-	SafeDeleteArray ( m_pData );
+	m_iChunks = pLC->m_iChunks;
 	m_pData = new int [ m_iChunks*CHUNK_SIZE ];
 	memcpy ( m_pData, pLC->m_pData, sizeof(int)*m_iChunks*CHUNK_SIZE );
 
@@ -1904,77 +1934,8 @@ void CSphLowercaser::SetRemap ( const CSphLowercaser * pLC )
 }
 
 
-void CSphLowercaser::SetRemap ( const CSphRemapRange * pRemaps, int iRemaps )
+void CSphLowercaser::AddRemaps ( const CSphRemapRange * pRemaps, int iRemaps, DWORD uFlags, DWORD uFlagsIfExists )
 {
-	SafeDeleteArray ( m_pData );
-
-	#define LOC_CHECK_RANGE(_a) assert ( (_a)>=0 && (_a)<MAX_CODE );
-
-	// find out chunk count and build chunk usage bitmap
-	int dUsed [ CHUNK_COUNT ];
-	memset ( dUsed, 0, sizeof(dUsed) );
-
-	const CSphRemapRange * pRemap = pRemaps;
-	for ( int i=0; i<iRemaps; i++, pRemap++ )
-	{
-		LOC_CHECK_RANGE ( pRemap->m_iStart );
-		LOC_CHECK_RANGE ( pRemap->m_iEnd );
-		LOC_CHECK_RANGE ( pRemap->m_iRemapStart );
-		LOC_CHECK_RANGE ( pRemap->m_iRemapStart + pRemap->m_iEnd - pRemap->m_iStart );
-
-		for ( int j = pRemap->m_iStart>>CHUNK_BITS; j <= pRemap->m_iEnd>>CHUNK_BITS; j++ )
-			dUsed[j] = 1;
-	}
-
-	m_iChunks = 0;
-	for ( int i=0; i<CHUNK_COUNT; i++ )
-		if ( dUsed[i] )
-			m_iChunks++;
-
-	#undef LOC_CHECK_RANGE
-
-	// alloc
-	assert ( m_iChunks );
-	m_pData = new int [ m_iChunks*CHUNK_SIZE ];
-	memset ( m_pData, 0, sizeof(int)*m_iChunks*CHUNK_SIZE );
-
-	memset ( m_pChunk, 0, sizeof(m_pChunk) );
-
-	// build chunks hash
-	int * pChunk = m_pData;
-	for ( int i=0; i<CHUNK_COUNT; i++ )
-		if ( dUsed[i] )
-	{
-		m_pChunk[i] = pChunk;
-		pChunk += CHUNK_SIZE;
-	}
-
-	// fill the actual remapping table chunks
-	pRemap = pRemaps;
-	for ( int i=0; i<iRemaps; i++, pRemap++ )
-	{
-		int iRemapped = pRemap->m_iRemapStart;
-		for ( int j = pRemap->m_iStart; j <= pRemap->m_iEnd; j++, iRemapped++ )
-		{
-			assert ( m_pChunk [ j>>CHUNK_BITS ] );
-			m_pChunk [ j>>CHUNK_BITS ] [ j & CHUNK_MASK ] = iRemapped;
-		}
-	}
-}
-
-
-enum
-{
-	FLAG_CODEPOINT_SPECIAL	= 0x20000000,	// this codepoint is special
-	FLAG_CODEPOINT_DUAL		= 0x10000000,	// this codepoint is both special and valid word part
-	MASK_CODEPOINT			= 0x0fffffff	// mask off codepoint flags
-};
-
-
-void CSphLowercaser::AddSpecials ( const char * sSpecials )
-{
-	assert ( sSpecials );
-
 	// build new chunks map
 	// 0 means "was unused"
 	// 1 means "was used"
@@ -1984,11 +1945,20 @@ void CSphLowercaser::AddSpecials ( const char * sSpecials )
 		dUsed[i] = m_pChunk[i] ? 1 : 0;
 
 	int iNewChunks = m_iChunks;
-	for ( const BYTE * c = (const BYTE *) sSpecials; *c; c++ )
-	{
-		int iChunk = ((int)(*c)) >> CHUNK_BITS;
 
-		if ( dUsed[iChunk]==0 )
+	for ( int i=0; i<iRemaps; i++ )
+	{
+		const CSphRemapRange * pRemap = pRemaps+i;
+
+		#define LOC_CHECK_RANGE(_a) assert ( (_a)>=0 && (_a)<MAX_CODE );
+		LOC_CHECK_RANGE ( pRemap->m_iStart );
+		LOC_CHECK_RANGE ( pRemap->m_iEnd );
+		LOC_CHECK_RANGE ( pRemap->m_iRemapStart );
+		LOC_CHECK_RANGE ( pRemap->m_iRemapStart + pRemap->m_iEnd - pRemap->m_iStart );
+		#undef LOC_CHECK_RANGE
+
+		for ( int iChunk = pRemap->m_iStart>>CHUNK_BITS; iChunk <= pRemap->m_iEnd>>CHUNK_BITS; iChunk++ )
+			if ( dUsed[iChunk]==0 )
 		{
 			dUsed[iChunk] = 2;
 			iNewChunks++;
@@ -2017,7 +1987,7 @@ void CSphLowercaser::AddSpecials ( const char * sSpecials )
 			if ( dUsed[i]==1 )
 				memcpy ( m_pChunk[i], pOldChunk, sizeof(int)*CHUNK_SIZE );
 		}
-		assert ( pChunk-m_pData==iNewChunks*CHUNK_SIZE );
+		assert ( pChunk-pData==iNewChunks*CHUNK_SIZE );
 
 		SafeDeleteArray ( m_pData );
 		m_pData = pData;
@@ -2025,17 +1995,43 @@ void CSphLowercaser::AddSpecials ( const char * sSpecials )
 	}
 
 	// fill new stuff
-	for ( const BYTE * c = (const BYTE *) sSpecials; *c; c++ )
+	for ( int i=0; i<iRemaps; i++ )
 	{
-		int j = (int)(*c);
-		assert ( m_pChunk [ j>>CHUNK_BITS ] );
+		const CSphRemapRange * pRemap = pRemaps+i;
 
-		int & iCodepoint = m_pChunk [ j>>CHUNK_BITS ] [ j & CHUNK_MASK ];
-		if ( iCodepoint )
-			iCodepoint = FLAG_CODEPOINT_SPECIAL | FLAG_CODEPOINT_DUAL | iCodepoint;
-		else
-			iCodepoint = FLAG_CODEPOINT_SPECIAL | j;
+		DWORD iRemapped = pRemap->m_iRemapStart;
+		for ( int j = pRemap->m_iStart; j <= pRemap->m_iEnd; j++, iRemapped++ )
+		{
+			assert ( m_pChunk [ j>>CHUNK_BITS ] );
+			int & iCodepoint = m_pChunk [ j>>CHUNK_BITS ] [ j & CHUNK_MASK ];
+			iCodepoint =  ( iCodepoint ? uFlagsIfExists : uFlags ) | iRemapped;
+		}
 	}
+}
+
+
+enum
+{
+	MASK_CODEPOINT			= 0x0fffffffUL,	// mask off codepoint flags
+	FLAG_CODEPOINT_SPECIAL	= 0x10000000UL,	// this codepoint is special
+	FLAG_CODEPOINT_DUAL		= 0x20000000UL,	// this codepoint is special but also a valid word part
+	FLAG_CODEPOINT_NGRAM	= 0x40000000UL	// this codepoint is n-gram indexed
+};
+
+
+void CSphLowercaser::AddSpecials ( const char * sSpecials )
+{
+	assert ( sSpecials );
+	int iSpecials = strlen(sSpecials);
+
+	CSphVector<CSphRemapRange> dRemaps;
+	dRemaps.Resize ( iSpecials );
+	ARRAY_FOREACH ( i, dRemaps )
+		dRemaps[i].m_iStart = dRemaps[i].m_iEnd = dRemaps[i].m_iRemapStart = sSpecials[i];
+
+	AddRemaps ( &dRemaps[0], iSpecials,
+		FLAG_CODEPOINT_SPECIAL,
+		FLAG_CODEPOINT_SPECIAL | FLAG_CODEPOINT_DUAL );
 }
 
 const CSphLowercaser & CSphLowercaser::operator = ( const CSphLowercaser & rhs )
@@ -2077,7 +2073,7 @@ bool CSphCharsetDefinitionParser::CheckEof ()
 }
 
 
-int CSphCharsetDefinitionParser::Error ( const char * sMessage )
+bool CSphCharsetDefinitionParser::Error ( const char * sMessage )
 {
 	char sErrorBuffer[32];
 	strncpy ( sErrorBuffer, m_pCurrent, sizeof(sErrorBuffer) );
@@ -2088,7 +2084,7 @@ int CSphCharsetDefinitionParser::Error ( const char * sMessage )
 	m_sError [ sizeof(m_sError)-1 ] = '\0';
 
 	m_bError = true;
-	return -1;
+	return false;
 }
 
 
@@ -2128,7 +2124,10 @@ int CSphCharsetDefinitionParser::ParseCharsetCode ()
 	} else
 	{
 		if ( (*(BYTE*)p)<32 || (*(BYTE*)p)>127 )
-			return Error ( "non-ASCII characters not allowed, use 'U+00AB' syntax" );
+		{
+			Error ( "non-ASCII characters not allowed, use 'U+00AB' syntax" );
+			return -1;
+		}
 
 		iCode = *p++;
 		while ( isspace(*p) )
@@ -2140,11 +2139,10 @@ int CSphCharsetDefinitionParser::ParseCharsetCode ()
 }
 
 
-int CSphCharsetDefinitionParser::Parse ( const char * sConfig, CSphLowercaser & tLC )
+bool CSphCharsetDefinitionParser::Parse ( const char * sConfig, CSphVector<CSphRemapRange> & dRanges )
 {
 	m_pCurrent = sConfig;
-
-	CSphVector<CSphRemapRange> dRanges;
+	dRanges.Reset ();
 
 	// do parse
 	while ( *m_pCurrent )
@@ -2159,9 +2157,9 @@ int CSphCharsetDefinitionParser::Parse ( const char * sConfig, CSphLowercaser & 
 
 		// parse char code
 		const char * pStart = m_pCurrent;
-		int iStart = ParseCharsetCode ();
+		int iStart = ParseCharsetCode();
 		if ( iStart<0 )
-			return -1;
+			return false;
 
 		// stray char?
 		if ( !*m_pCurrent || *m_pCurrent==',' )
@@ -2180,7 +2178,7 @@ int CSphCharsetDefinitionParser::Parse ( const char * sConfig, CSphLowercaser & 
 			m_pCurrent += 2;
 			int iDest = ParseCharsetCode ();
 			if ( iDest<0 )
-				return -1;
+				return false;
 
 			dRanges.Add ( CSphRemapRange ( iStart, iStart, iDest ) );
 			if ( *m_pCurrent!=',' )
@@ -2196,12 +2194,12 @@ int CSphCharsetDefinitionParser::Parse ( const char * sConfig, CSphLowercaser & 
 		
 		SkipSpaces ();
 		if ( CheckEof () )
-			return -1;
+			return false;
 
 		// parse range end char code
 		int iEnd = ParseCharsetCode ();
 		if ( iEnd<0 )
-			return -1;
+			return false;
 		if ( iStart>iEnd )
 		{
 			m_pCurrent = pStart;
@@ -2243,17 +2241,17 @@ int CSphCharsetDefinitionParser::Parse ( const char * sConfig, CSphLowercaser & 
 
 		SkipSpaces ();
 		if ( CheckEof () )
-			return -1;
+			return false;
 
 		// parse dest start
 		const char * pRemapStart = m_pCurrent;
 		int iRemapStart = ParseCharsetCode ();
 		if ( iRemapStart<0 )
-			return -1;
+			return false;
 
 		// expect '..'
 		if ( CheckEof () )
-			return -1;
+			return false;
 		if (!( m_pCurrent[0]=='.' && m_pCurrent[1]=='.' ))
 			return Error ( "expected '..'" );
 		m_pCurrent += 2;
@@ -2261,7 +2259,7 @@ int CSphCharsetDefinitionParser::Parse ( const char * sConfig, CSphLowercaser & 
 		// parse dest end
 		int iRemapEnd = ParseCharsetCode ();
 		if ( iRemapEnd<0 )
-			return -1;
+			return false;
 
 		// check dest range
 		if ( iRemapStart>iRemapEnd )
@@ -2298,8 +2296,7 @@ int CSphCharsetDefinitionParser::Parse ( const char * sConfig, CSphLowercaser & 
 		}
 	}
 
-	tLC.SetRemap ( &dRanges[0], dRanges.GetLength() );
-	return 0;
+	return true;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -2307,11 +2304,15 @@ int CSphCharsetDefinitionParser::Parse ( const char * sConfig, CSphLowercaser & 
 bool ISphTokenizer::SetCaseFolding ( const char * sConfig, CSphString & sError )
 {
 	CSphCharsetDefinitionParser tParser;
-	if ( tParser.Parse ( sConfig, m_tLC )!=0 )
+	CSphVector<CSphRemapRange> dRemaps;
+	if ( !tParser.Parse ( sConfig, dRemaps ) )
 	{
 		sError = tParser.GetLastError();
 		return false;
 	}
+
+	m_tLC.Reset ();
+	m_tLC.AddRemaps ( &dRemaps[0], dRemaps.GetLength(), 0, 0 );
 	return true;
 }
 
@@ -2653,6 +2654,39 @@ int CSphTokenizer_UTF8::GetCodepointLength ( int iCode ) const
 
 	assert ( iBytes>=2 && iBytes<=4 );
 	return iBytes;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+bool CSphTokenizer_UTF8Ngram::SetNgramChars ( const char * sConfig, CSphString & sError )
+{
+	CSphCharsetDefinitionParser tParser;
+	CSphVector<CSphRemapRange> dRemaps;
+	if ( !tParser.Parse ( sConfig, dRemaps ) )
+	{
+		sError = tParser.GetLastError();
+		return false;
+	}
+
+	m_tLC.AddRemaps ( &dRemaps[0], dRemaps.GetLength(),
+		FLAG_CODEPOINT_NGRAM | FLAG_CODEPOINT_SPECIAL,
+		FLAG_CODEPOINT_NGRAM | FLAG_CODEPOINT_SPECIAL ); // !COMMIT support other n-gram lengths than 1
+	return true;
+}
+
+
+void CSphTokenizer_UTF8Ngram::SetNgramLen ( int iLen )
+{
+	assert ( iLen>0 );
+	m_iNgramLen = iLen;
+}
+
+
+BYTE * CSphTokenizer_UTF8Ngram::GetToken ()
+{
+	// !COMMIT support other n-gram lengths than 1
+	assert ( m_iNgramLen==1 );
+	return CSphTokenizer_UTF8::GetToken ();
 }
 
 /////////////////////////////////////////////////////////////////////////////

@@ -1537,7 +1537,7 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				tOut.SendInt ( iReqSize-12 ); // request body length
 
 				tOut.SendInt ( 0 ); // offset is 0
-				tOut.SendInt ( g_iMaxMatches ); // limit is MAX_MATCHES
+				tOut.SendInt ( Min ( tQuery.m_iOffset+tQuery.m_iLimit, tQuery.m_iMaxMatches ) ); // limit is MAX_MATCHES
 				tOut.SendInt ( iMode ); // match mode
 				tOut.SendInt ( tQuery.m_eSort ); // sort mode
 				tOut.SendString ( tQuery.m_sSortBy.cstr() ); // sort attr
@@ -2190,8 +2190,8 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	OldQuery_t tOldQuery ( iVer );
 
 	// v.1.0. mode, limits, weights, ID/TS ranges
-	int iOffset			= tReq.GetInt ();
-	int iLimit			= tReq.GetInt ();
+	tQuery.m_iOffset	= tReq.GetInt ();
+	tQuery.m_iLimit		= tReq.GetInt ();
 	tQuery.m_eMode		= (ESphMatchMode) tReq.GetInt ();
 	tQuery.m_eSort		= (ESphSortOrder) tReq.GetInt ();
 	if ( iVer<=0x101 )
@@ -2292,15 +2292,15 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			tQuery.m_iMaxMatches, g_iMaxMatches );
 		return;
 	}
-	if ( iOffset<0 || iOffset>=tQuery.m_iMaxMatches )
+	if ( tQuery.m_iOffset<0 || tQuery.m_iOffset>=tQuery.m_iMaxMatches )
 	{
 		tReq.SendErrorReply ( "offset out of bounds (offset=%d, max_matches=%d)",
-			iOffset, tQuery.m_iMaxMatches );
+			tQuery.m_iOffset, tQuery.m_iMaxMatches );
 		return;
 	}
-	if ( iLimit<0 )
+	if ( tQuery.m_iLimit<0 )
 	{
-		tReq.SendErrorReply ( "limit out of bounds (limit=%d)", iLimit );
+		tReq.SendErrorReply ( "limit out of bounds (limit=%d)", tQuery.m_iLimit );
 		return;
 	}
 
@@ -2603,7 +2603,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		snprintf ( sBuf, sizeof(sBuf), "[%s] %d.%03d sec [%s/%d/%s %d (%d,%d)%s] [%s] %s\n",
 			sTimeBuf, pRes->m_iQueryTime/1000, pRes->m_iQueryTime%1000,
 			sModes [ tQuery.m_eMode ], tQuery.m_dFilters.GetLength(), sSort [ tQuery.m_eSort ],
-			pRes->m_iTotalMatches, iOffset, iLimit, sGroupBuf,
+			pRes->m_iTotalMatches, tQuery.m_iOffset, tQuery.m_iLimit, sGroupBuf,
 			sIndexes.cstr(), tQuery.m_sQuery.cstr() );
 
 		sphLockEx ( g_iQueryLogFile );
@@ -2628,7 +2628,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			iRespLen += 8 + strlen ( pRes->m_tSchema.m_dAttrs[i].m_sName.cstr() ); // namelen, name, type
 	}
 
-	int iCount = Max ( Min ( iLimit, pRes->m_dMatches.GetLength()-iOffset ), 0 );
+	int iCount = Max ( Min ( tQuery.m_iLimit, pRes->m_dMatches.GetLength()-tQuery.m_iOffset ), 0 );
 	if ( iVer<=0x101 )
 		iRespLen += 16*iCount; // matches
 	else
@@ -2681,7 +2681,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	tOut.SendInt ( iCount );
 	for ( int i=0; i<iCount; i++ )
 	{
-		const CSphMatch & tMatch = pRes->m_dMatches[iOffset+i];
+		const CSphMatch & tMatch = pRes->m_dMatches[tQuery.m_iOffset+i];
 		tOut.SendDword ( tMatch.m_iDocID );
 		if ( iVer<=0x101 )
 		{

@@ -2744,7 +2744,8 @@ void CSphFilter::SortValues ()
 /////////////////////////////////////////////////////////////////////////////
 
 CSphQuery::CSphQuery ()
-	: m_pWeights	( NULL )
+	: m_iOffset		( 0 )
+	, m_pWeights	( NULL )
 	, m_iWeights	( 0 )
 	, m_eMode		( SPH_MATCH_ALL )
 	, m_eSort		( SPH_SORT_RELEVANCE )

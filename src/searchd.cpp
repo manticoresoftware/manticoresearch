@@ -1537,7 +1537,7 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				tOut.SendInt ( iReqSize-12 ); // request body length
 
 				tOut.SendInt ( 0 ); // offset is 0
-				tOut.SendInt ( Min ( tQuery.m_iOffset+tQuery.m_iLimit, tQuery.m_iMaxMatches ) ); // limit is MAX_MATCHES
+				tOut.SendInt ( g_iMaxMatches ); // limit is MAX_MATCHES
 				tOut.SendInt ( iMode ); // match mode
 				tOut.SendInt ( tQuery.m_eSort ); // sort mode
 				tOut.SendString ( tQuery.m_sSortBy.cstr() ); // sort attr

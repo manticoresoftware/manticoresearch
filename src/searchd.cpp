@@ -364,8 +364,8 @@ void sphInfo ( const char * sFmt, ... )
 // NETWORK STUFF
 /////////////////////////////////////////////////////////////////////////////
 
-const int		NET_MAX_REQ_LEN			= 1048576;
-const int		NET_MAX_STR_LEN			= NET_MAX_REQ_LEN;
+int				MAX_PACKET_SIZE			= 8*1024*1024;
+
 const int		SEARCHD_MAX_ATTRS		= 256;
 const int		SEARCHD_MAX_ATTR_VALUES	= 4096;
 
@@ -734,7 +734,7 @@ InputBuffer_c::InputBuffer_c ()
 	: m_bError ( true )
 	, m_iLen ( 0 )
 {
-	m_pBuf = new BYTE [ NET_MAX_REQ_LEN ];
+	m_pBuf = new BYTE [ MAX_PACKET_SIZE ];
 	m_pCur = m_pBuf;
 }
 
@@ -764,7 +764,7 @@ CSphString InputBuffer_c::GetString ()
 	CSphString sRes;
 
 	int iLen = GetInt ();
-	if ( m_bError || iLen<0 || iLen>NET_MAX_STR_LEN || ( m_pCur+iLen > m_pBuf+m_iLen ) )
+	if ( m_bError || iLen<0 || iLen>MAX_PACKET_SIZE || ( m_pCur+iLen > m_pBuf+m_iLen ) )
 	{
 		SetError ( true );
 		return sRes;
@@ -779,7 +779,7 @@ CSphString InputBuffer_c::GetString ()
 bool InputBuffer_c::GetBytes ( void * pBuf, int iLen )
 {
 	assert ( pBuf );
-	assert ( iLen>0 && iLen<=NET_MAX_REQ_LEN );
+	assert ( iLen>0 && iLen<=MAX_PACKET_SIZE );
 
 	if ( m_bError || ( m_pCur+iLen > m_pBuf+m_iLen ) )
 	{
@@ -831,7 +831,7 @@ NetInputBuffer_c::NetInputBuffer_c ( int iSock )
 bool NetInputBuffer_c::ReadFrom ( int iLen )
 {
 	assert ( iLen>0 );
-	assert ( iLen<=NET_MAX_REQ_LEN );
+	assert ( iLen<=MAX_PACKET_SIZE );
 	assert ( m_iSock>0 );
 
 	m_pCur = m_pBuf;
@@ -886,7 +886,7 @@ void NetInputBuffer_c::SendErrorReply ( const char * sTemplate, ... )
 
 MemInputBuffer_c::MemInputBuffer_c ( const char * sFrom, int iLen )
 {
-	if ( iLen<0 || iLen>NET_MAX_STR_LEN )
+	if ( iLen<0 || iLen>MAX_PACKET_SIZE )
 	{
 		m_bError = true;
 		return;
@@ -1727,6 +1727,14 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 				if ( tAgent.m_eState==AGENT_REPLY && tAgent.m_iReplyRead==tAgent.m_iReplySize )
 				{
 					MemInputBuffer_c tReq ( tAgent.m_pReplyBuf, tAgent.m_iReplySize );
+					if ( tReq.GetError() )
+					{
+						dFailures.Add ( SearchFailure_t ( sIndexName,
+							"agent '%s:%d': reply length out of bounds (len=%d, max_packet_size=%d)",
+							tAgent.m_sHost.cstr(), tAgent.m_iPort,
+							tAgent.m_iReplySize, MAX_PACKET_SIZE ) );
+						break;
+					}
 
 					if ( tAgent.m_iReplyStatus==SEARCHD_WARNING )
 					{
@@ -1840,7 +1848,7 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 					if ( tReq.GetError() )
 					{
 						dFailures.Add ( SearchFailure_t  ( sIndexName,
-							"agent '%s:%d': reply error, probably incomplete",
+							"agent '%s:%d': incomplete reply",
 							tAgent.m_sHost.cstr(), tAgent.m_iPort ) );
 						break;
 					}
@@ -2818,13 +2826,13 @@ void HandleClient ( int iSock, const char * sClientIP )
 
 	// check request
 	if ( iCommand<0 || iCommand>=SEARCHD_COMMAND_TOTAL
-		|| iLength<=0 || iLength>NET_MAX_REQ_LEN )
+		|| iLength<=0 || iLength>MAX_PACKET_SIZE )
 	{
 		// unknown command, default response header
 		tBuf.SendErrorReply ( "unknown command (code=%d)", iCommand );
 
 		// if request length is insane, low level comm is broken, so we bail out
-		if ( iLength<=0 || iLength>NET_MAX_REQ_LEN )
+		if ( iLength<=0 || iLength>MAX_PACKET_SIZE )
 		{
 			sphWarning ( "ill-formed client request (length=%d out of bounds)", iLength );
 			return;
@@ -2832,7 +2840,7 @@ void HandleClient ( int iSock, const char * sClientIP )
 	}
 
 	// get request body
-	assert ( iLength>0 && iLength<=NET_MAX_REQ_LEN );
+	assert ( iLength>0 && iLength<=MAX_PACKET_SIZE );
 	if ( !tBuf.ReadFrom ( iLength ) )
 	{
 		sphWarning ( "failed to receive client request body (client=%s)", sClientIP );

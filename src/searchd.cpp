@@ -1837,12 +1837,20 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 						pRes->m_tWordStats[i].m_iHits += tReq.GetInt (); // update hits count
 					}
 
-					if ( i!=pRes->m_iNumWords || tReq.GetError() )
+					if ( tReq.GetError() )
 					{
 						dFailures.Add ( SearchFailure_t  ( sIndexName,
-							"agent '%s:%d': expected %d retrieved documents, got %d",
+							"agent '%s:%d': reply error, probably incomplete",
+							tAgent.m_sHost.cstr(), tAgent.m_iPort ) );
+						break;
+					}
+
+					if ( i!=pRes->m_iNumWords )
+					{
+						dFailures.Add ( SearchFailure_t  ( sIndexName,
+							"agent '%s:%d': expected %d words, got %d",
 							tAgent.m_sHost.cstr(), tAgent.m_iPort,
-							iMatches, iRetrieved ) );
+							i, pRes->m_iNumWords ) );
 						break;
 					}
 

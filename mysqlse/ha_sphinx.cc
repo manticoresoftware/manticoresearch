@@ -24,35 +24,292 @@
 #include <my_sys.h>
 
 #ifndef __WIN__
-#include <my_net.h>
-#include <netdb.h>
+	// UNIX-specific
+	#include <my_net.h>
+	#include <netdb.h>
 #else
-#include <io.h>
+	// Windows-specific
+	#include <io.h>
+	#define strcasecmp	stricmp
+	#define snprintf	_snprintf
 #endif
 
+#include <ctype.h>
 #include "ha_sphinx.h"
+
+#ifndef MSG_WAITALL
+#define MSG_WAITALL 0
+#endif
+
+#if _MSC_VER>=1400
+#pragma warning(push,4)
+#endif
+
+/////////////////////////////////////////////////////////////////////////////
+
+// FIXME! make this all dynamic
+#define SPHINXSE_MAX_QUERY_SIZE		32768
+#define SPHINXSE_MAX_FILTERS		32
+#define SPHINXSE_MAX_ATTRIBUTES		32
+
+#define SPHINXSE_DEFAULT_HOST		"127.0.0.1"
+#define SPHINXSE_DEFAULT_PORT		3312
+#define SPHINXSE_DEFAULT_INDEX		"*"
+
+#define SPHINXSE_SYSTEM_COLUMNS		3
+
+// FIXME! all the following is cut-n-paste from sphinx.h and searchd.cpp
+#define SPHINX_VERSION		"0.9.7"
+
+enum
+{
+	SPHINX_SEARCHD_PROTO	= 1,
+	SEARCHD_COMMAND_SEARCH	= 0,
+	VER_COMMAND_SEARCH		= 0x104,
+};
+
+/// search query sorting orders
+enum ESphSortOrder
+{
+	SPH_SORT_RELEVANCE		= 0,	///< sort by document relevance desc, then by date
+	SPH_SORT_ATTR_DESC		= 1,	///< sort by document date desc, then by relevance desc
+	SPH_SORT_ATTR_ASC		= 2,	///< sort by document date asc, then by relevance desc
+	SPH_SORT_TIME_SEGMENTS	= 3,	///< sort by time segments (hour/day/week/etc) desc, then by relevance desc
+	SPH_SORT_EXTENDED		= 4,	///< sort by SQL-like expression (eg. "@relevance DESC, price ASC, @id DESC")
+
+	SPH_SORT_TOTAL
+};
+
+/// search query matching mode
+enum ESphMatchMode
+{
+	SPH_MATCH_ALL = 0,			///< match all query words
+	SPH_MATCH_ANY,				///< match any query word
+	SPH_MATCH_PHRASE,			///< match this exact phrase
+	SPH_MATCH_BOOLEAN,			///< match this boolean query
+	SPH_MATCH_EXTENDED,			///< match this extended query
+
+	SPH_MATCH_TOTAL
+};
+
+/// search query grouping mode
+enum ESphGroupBy
+{
+	SPH_GROUPBY_DAY		= 0,	///< group by day
+	SPH_GROUPBY_WEEK	= 1,	///< group by week
+	SPH_GROUPBY_MONTH	= 2,	///< group by month
+	SPH_GROUPBY_YEAR	= 3,	///< group by year
+	SPH_GROUPBY_ATTR	= 4		///< group by attribute value
+};
+
+/// known attribute types
+enum ESphAttrType
+{
+	SPH_ATTR_NONE		= 0,	///< not an attribute at all
+	SPH_ATTR_INTEGER	= 1,	///< this attr is just an integer
+	SPH_ATTR_TIMESTAMP	= 2		///< this attr is a timestamp
+};
 
 //////////////////////////////////////////////////////////////////////////////
 
-#define SPHINX_DEBUG 0
+#define SPHINX_DEBUG_OUTPUT		1
+#define SPHINX_DEBUG_CALLS		0
 
 #include <stdarg.h>
 
-inline void DGPRINT ( const char * format, ... )
+inline void SPH_DEBUG ( const char * format, ... )
 {
-	#if SPHINX_DEBUG
+	#if SPHINX_DEBUG_OUTPUT
 	va_list ap;
 	va_start ( ap, format );
+	fprintf ( stderr, "SphinxSE: " );
 	vfprintf ( stderr, format, ap );
+	fprintf ( stderr, "\n" );
 	va_end ( ap );
 	#endif
 }
 
+#if SPHINX_DEBUG_CALLS
+
+#define SPH_ENTER_FUNC() { SPH_DEBUG ( "enter %s", __FUNCTION__ ); }
+#define SPH_ENTER_METHOD() { SPH_DEBUG ( "enter %s(this=%08x)", __FUNCTION__, this ); }
+#define SPH_RET(_arg) { SPH_DEBUG ( "leave %s", __FUNCTION__ ); return _arg; }
+#define SPH_VOID_RET() { SPH_DEBUG ( "leave %s", __FUNCTION__ ); return; }
+
+#else
+
+#define SPH_ENTER_FUNC() DBUG_ENTER(__FUNCTION__)
+#define SPH_ENTER_METHOD() DBUG_ENTER(__FUNCTION__)
+#define SPH_RET(_arg) { DBUG_RETURN(_arg); }
+#define SPH_VOID_RET() { DBUG_VOID_RETURN; }
+
+#endif
+
+
+#define SafeDeleteArray(_arg) { if ( _arg ) delete [] ( _arg ); }
+
 //////////////////////////////////////////////////////////////////////////////
 
-#define DEF_SPHINX_HOST "127.0.0.1"
-#define DEF_SPHINX_PORT 3312
-#define DEF_INDEX_NAME "*"
+/// a structure that will be shared among all open Sphinx SE handlers
+struct CSphSEShare
+{
+	pthread_mutex_t	m_tMutex;
+	THR_LOCK		m_tLock;
+	TABLE *			m_pTable;
+	char *			m_sTable;
+	char *			m_sScheme;
+	char *			m_sHost;
+	char *			m_sSocket;
+	char *			m_sIndex;
+	ushort			m_iPort;
+	uint			m_iTableNameLen;
+	uint			m_iUseCount;
+
+	CSphSEShare ()
+		: m_pTable ( NULL )
+		, m_sTable ( NULL )
+		, m_sScheme ( NULL )
+		, m_sHost ( NULL )
+		, m_sSocket ( NULL )
+		, m_sIndex ( NULL )
+		, m_iPort ( 0 )
+		, m_iTableNameLen ( 0 )
+		, m_iUseCount ( 0 )
+	{}
+};
+
+/// schema attribute
+struct CSphSEAttr
+{
+	char *			m_sName;		///< attribute name (received from Sphinx)
+	ESphAttrType	m_eType;		///< attribute type (received from Sphinx)
+	int				m_iField;		///< field index in current table (-1 if none)
+
+	CSphSEAttr()
+		: m_sName ( NULL )
+		, m_eType ( SPH_ATTR_NONE )
+		, m_iField ( -1 )
+	{}
+};
+
+/// word stats
+struct CSphSEWordStats
+{
+	char *			m_sWord;
+	int				m_iDocs;
+	int				m_iHits;
+
+	CSphSEWordStats ()
+		: m_sWord ( NULL )
+		, m_iDocs ( 0 )
+		, m_iHits ( 0 )
+	{}
+
+	~CSphSEWordStats ()
+	{
+		SafeDeleteArray ( m_sWord );
+	}
+};
+
+/// request stats
+struct CSphSEStats
+{
+public:
+	int					m_iMatchesTotal;
+	int					m_iMatchesFound;
+	int					m_iQueryMsec;
+	int					m_iWords;
+	CSphSEWordStats *	m_dWords;
+
+	CSphSEStats()
+		: m_iMatchesTotal ( 0 )
+		, m_iMatchesFound ( 0 )
+		, m_iQueryMsec ( 0 )
+		, m_iWords ( 0 )
+		, m_dWords ( NULL )
+	{}
+
+	~CSphSEStats()
+	{
+		SafeDeleteArray ( m_dWords );
+	}
+};
+
+/// search query filter
+struct CSphSEFilter
+{
+public:
+	char *			m_sAttrName;
+	uint32			m_uMinValue;
+	uint32			m_uMaxValue;
+	int				m_iValues;
+	uint32 *		m_pValues;
+
+public:
+	CSphSEFilter::CSphSEFilter ()
+		: m_sAttrName ( NULL )
+		, m_uMinValue ( 0 )
+		, m_uMaxValue ( UINT_MAX )
+		, m_iValues ( 0 )
+		, m_pValues ( NULL )
+	{
+	}
+
+	CSphSEFilter::~CSphSEFilter ()
+	{}
+};
+
+/// client-side search query
+struct CSphSEQuery
+{
+private:
+	char *			m_sQueryBuffer;
+
+	const char *	m_sIndex;
+	int				m_iOffset;
+	int				m_iLimit;
+
+	char *			m_sQuery;
+	uint32 *		m_pWeights;
+	int				m_iWeights;
+	ESphMatchMode	m_eMode;
+	ESphSortOrder	m_eSort;
+	char *			m_sSortBy;
+	int				m_iMaxMatches;
+	uint32			m_iMinID;
+	uint32			m_iMaxID;
+
+	int				m_iFilters;
+	CSphSEFilter	m_dFilters[SPHINXSE_MAX_FILTERS];
+
+	char *			m_sGroupBy;
+	ESphGroupBy		m_eGroupFunc;
+
+public:
+	char			m_sParseError[256];
+
+public:
+	CSphSEQuery ( const char * sQuery, int iLength, const char * sIndex );
+	~CSphSEQuery ();
+
+	bool			Parse ();
+	int				BuildRequest ( char ** ppBuffer );
+
+protected:
+	char *			m_pBuf;
+	char *			m_pCur;
+	int				m_iBufLeft;
+	bool			m_bBufOverrun;
+
+	int				ParseArray ( uint32 ** ppValues, const char * sValue );
+	bool			ParseField ( char * sField );
+
+	void			SendBytes ( const void * pBytes, int iBytes );
+	void			SendWord ( short int v )		{ v = ntohs(v); SendBytes ( &v, sizeof(short int) ); }
+	void			SendInt ( int v )				{ v = ntohl(v); SendBytes ( &v, sizeof(int) ); }
+	void			SendDword ( uint v )			{ v = ntohl(v) ;SendBytes ( &v, sizeof(uint) ); }
+	void			SendString ( const char * v )	{ int iLen = strlen(v); SendDword(iLen); SendBytes ( v, iLen ); }
+};
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -64,10 +321,10 @@ inline void DGPRINT ( const char * format, ... )
 
 static handler *	sphinx_create_handler ( handlerton * hton, TABLE_SHARE * table, MEM_ROOT * mem_root );
 static int			sphinx_init_func ( void * p );
-static bool			sphinx_init_func_for_handlerton ();
 static int			sphinx_close_connection ( handlerton * hton, THD * thd );
 static int			sphinx_panic ( handlerton * hton, enum ha_panic_function flag );
 static bool			sphinx_show_status ( handlerton * hton, THD * thd, stat_print_fn * stat_print, enum ha_stat_type stat_type );
+
 #else
 
 static bool			sphinx_init_func_for_handlerton ();
@@ -79,19 +336,17 @@ bool				sphinx_show_status ( THD * thd );
 //////////////////////////////////////////////////////////////////////////////
 
 static const char	sphinx_hton_name[]		= "SPHINX";
-static const char	sphinx_hton_comment[]	= "Sphinx storage engine";
+static const char	sphinx_hton_comment[]	= "Sphinx storage engine " SPHINX_VERSION;
 
-#if MYSQL_VERSION_ID>50100
-handlerton sphinx_hton;
-#else
+#if MYSQL_VERSION_ID<50100
 handlerton sphinx_hton =
 {
 	#ifdef MYSQL_HANDLERTON_INTERFACE_VERSION
 	MYSQL_HANDLERTON_INTERFACE_VERSION,
 	#endif
-	"SPHINX",
+	sphinx_hton_name,
 	SHOW_OPTION_YES,
-	"Sphinx storage engine", 
+	sphinx_hton_comment,
 	DB_TYPE_SPHINX_DB,
 	sphinx_init_func_for_handlerton,
 	0,							// slot
@@ -125,25 +380,25 @@ static HASH			sphinx_open_tables;	// hash used to track open tables
 //////////////////////////////////////////////////////////////////////////////
 
 // hashing function
-static byte * sphinx_get_key ( SPHINX_SHARE * share, uint * length, my_bool )
+static byte * sphinx_get_key ( CSphSEShare * pShare, uint * pLength, my_bool )
 {
-	*length = share->table_name_length;
-	return (byte*) share->table_name;
+	*pLength = pShare->m_iTableNameLen;
+	return (byte*) pShare->m_sTable;
 }
 
 
 static int sphinx_init_func ( void * p )
 {
-	DBUG_ENTER ( "sphinx_init_func" );
+	SPH_ENTER_FUNC();
 	if ( !sphinx_init )
 	{
 		sphinx_init = 1;
-		handlerton * hton = (handlerton*) p;
 		VOID ( pthread_mutex_init ( &sphinx_mutex, MY_MUTEX_INIT_FAST ) );
 		hash_init ( &sphinx_open_tables, system_charset_info, 32, 0, 0,
 			(hash_get_key) sphinx_get_key, 0, 0 );
 
 		#if MYSQL_VERSION_ID > 50100
+		handlerton * hton = (handlerton*) p;
 		hton->state				= SHOW_OPTION_YES;
 		hton->db_type			= DB_TYPE_DEFAULT;
 		hton->create			= sphinx_create_handler;
@@ -153,60 +408,68 @@ static int sphinx_init_func ( void * p )
 		hton->flags				= HTON_CAN_RECREATE;
 		#endif
 	}
-	DBUG_RETURN(0);
+	SPH_RET(0);
+}
+
+
+#if MYSQL_VERSION_ID<50100
+static bool sphinx_init_func_for_handlerton ()
+{
+	return sphinx_init_func ( &sphinx_hton );
+}
+#endif
+
+
+#if MYSQL_VERSION_ID>50100
+
+static int sphinx_close_connection ( handlerton * hton, THD * thd )
+{
+	// deallocate common handler data
+	SPH_ENTER_FUNC();
+	void ** tmp = thd_ha_data ( thd, hton );
+	CSphSEStats * pStats = (CSphSEStats*) (*tmp);
+	if ( pStats )
+		delete pStats;
+	SPH_RET(0);
 }
 
 
 static int sphinx_done_func ( void * p )
 {
-	int error = 0;
-	DBUG_ENTER ( "sphinx_done_func" );
+	SPH_ENTER_FUNC();
 
+	int error = 0;
 	if ( sphinx_init )
 	{
 		sphinx_init = 0;
-		if ( sphinx_open_tables. records )
+		if ( sphinx_open_tables.records )
 			error = 1;
 		hash_free ( &sphinx_open_tables );
 		pthread_mutex_destroy ( &sphinx_mutex );
 	}
-	DBUG_RETURN(0);
+
+	SPH_RET(0);
 }
 
 
-static bool sphinx_init_func_for_handlerton ()
-{
-	return sphinx_init_func ( &sphinx_hton );
-}
-
-
-#if MYSQL_VERSION_ID>50100
-static int sphinx_close_connection ( handlerton * hton, THD * thd )
-{
-	// deallocate common handler data
-	void **tmp = thd_ha_data ( thd, &sphinx_hton );
-	my_free ( (gptr)*tmp, MYF(MY_ALLOW_ZERO_PTR) );
-
-	DGPRINT ( "%s\n","sphinx_close_connection" );
-	return 0;
-}
-#else
-static int sphinx_close_connection ( THD * thd )
-{
-	// deallocate common handler data
-	my_free ( (gptr) thd->ha_data[sphinx_hton.slot], MYF(MY_ALLOW_ZERO_PTR) );
-	DGPRINT("%s\n","sphinx_close_connection");
-	return 0;
-}
-#endif // >50100
-
-
-#if MYSQL_VERSION_ID>50100
 static int sphinx_panic ( handlerton * hton, enum ha_panic_function flag )
 {
 	return sphinx_done_func ( hton );
 }
-#endif
+
+#else
+
+static int sphinx_close_connection ( THD * thd )
+{
+	// deallocate common handler data
+	SPH_ENTER_FUNC();
+	CSphSEStats * pStats = (CSphSEStats*) thd->ha_data[sphinx_hton.slot];
+	if ( pStats )
+		delete pStats;
+	SPH_RET(0);
+}
+
+#endif // >50100
 
 //////////////////////////////////////////////////////////////////////////////
 // SHOW STATUS
@@ -219,55 +482,40 @@ static bool sphinx_show_status ( handlerton * hton, THD * thd, stat_print_fn * s
 bool sphinx_show_status ( THD * thd )
 #endif
 {
-	#if MYSQL_VERSION_ID<50100
+	SPH_ENTER_FUNC();
+
+#if MYSQL_VERSION_ID<50100
 	Protocol * protocol = thd->protocol;
 	List<Item> field_list;
-	#endif
+#endif
 
 	char buf1[IO_SIZE];
 	uint buf1len;
 	char buf2[IO_SIZE];
 	uint buf2len= 0;
-	uint d1,d2,d3,num_words;
-	byte *response;
-	uint word_length;
-	uint word_docs;
-	uint word_hits;
-	uint i,current_word_offset= 0;
 	String words;
 
-	DBUG_ENTER ( "sphinx_show_status" );
+	buf1[0] = '\0';
+	buf2[0] = '\0';
 
 #if MYSQL_VERSION_ID>50100
-	response = (byte *) (*thd_ha_data ( thd, &sphinx_hton ) );
+	CSphSEStats * pStats = (CSphSEStats*) ( *thd_ha_data ( thd, hton ) );
 #else
 	if ( have_sphinx_db!=SHOW_OPTION_YES )
 	{
 		my_message ( ER_NOT_SUPPORTED_YET,
 			"failed to call SHOW SPHINX STATUS: --skip-sphinx was specified",
 			MYF(0) );
-		DBUG_RETURN(TRUE);
+		SPH_RET(TRUE);
 	}
-	response = (byte *) thd->ha_data[sphinx_hton.slot];
+	CSphSEStats * pStats = (CSphSEStats*) thd->ha_data[sphinx_hton.slot];
 #endif
 
-	DGPRINT ( "%s\n","show_sphinx_status" );
-	if ( response )
+	if ( pStats )
 	{
-		DGPRINT ( "response %p\n",response );
-		memcpy ( &d1, response, 4 );
-		memcpy ( &d2, response+4, 4 );
-		memcpy ( &d3, response+8, 4 );
-		memcpy ( &num_words, response+12, 4 );
-
-		d1 = ntohl(d1);
-		d2 = ntohl(d2);
-		d3 = ntohl(d3);
-		num_words = ntohl(num_words);
-
 		buf1len = my_snprintf ( buf1, sizeof(buf1),
 			"total: %d, total found: %d, time: %d, words: %d", 
-			d1, d2, d3, num_words );
+			pStats->m_iMatchesTotal, pStats->m_iMatchesFound, pStats->m_iQueryMsec, pStats->m_iWords );
 
 #if MYSQL_VERSION_ID>50100
 		stat_print ( thd, sphinx_hton_name, strlen(sphinx_hton_name),
@@ -277,36 +525,23 @@ bool sphinx_show_status ( THD * thd )
 		field_list.push_back ( new Item_empty_string ( "Name",FN_REFLEN ) );
 		field_list.push_back ( new Item_empty_string ( "Status",10 ) );
 		if ( protocol->send_fields ( &field_list, Protocol::SEND_NUM_ROWS | Protocol::SEND_EOF ) )
-			DBUG_RETURN(TRUE);
+			SPH_RET(TRUE);
 
 		protocol->prepare_for_resend ();
 		protocol->store ( STRING_WITH_LEN("SPHINX"), system_charset_info );
 		protocol->store ( STRING_WITH_LEN("stats"), system_charset_info );
 		protocol->store ( buf1, buf1len, system_charset_info );
 		if ( protocol->write() )
-			DBUG_RETURN(TRUE);
+			SPH_RET(TRUE);
 #endif
 
-		if ( num_words>0 )
+		if ( pStats->m_iWords )
 		{
-			memset ( buf2, 0, IO_SIZE );
-			for ( i=0; i<num_words; i++ )
+			for ( int i=0; i<pStats->m_iWords; i++ )
 			{
-				memcpy ( &word_length, response+16+current_word_offset, sizeof(uint) );
-				word_length = ntohl(word_length);
-				words.set_quick ( (char *) response+16+current_word_offset+sizeof(uint),
-					word_length, &my_charset_bin );
-				DGPRINT ( "read word: %s\n", words.ptr() );
-
-				memcpy ( &word_docs, response+16+current_word_offset+sizeof(uint)+word_length, sizeof(uint) );
-				memcpy ( &word_hits, response+16+current_word_offset+2*sizeof(uint)+word_length, sizeof(uint) );
-				word_docs = ntohl(word_docs);
-				word_hits = ntohl(word_hits);
-				DGPRINT ( "read stats: %d, %d\n", word_docs, word_hits );
-
-				current_word_offset += 3*sizeof(uint) + word_length; 
+				CSphSEWordStats & tWord = pStats->m_dWords[i];
 				buf2len = my_snprintf ( buf2, sizeof(buf2), "%s%s:%d:%d ",
-					buf2, words.ptr(), word_docs, word_hits );
+					buf2, tWord.m_sWord, tWord.m_iDocs, tWord.m_iHits );
 			}
 
 #if MYSQL_VERSION_ID>50100
@@ -318,204 +553,629 @@ bool sphinx_show_status ( THD * thd )
 			protocol->store ( STRING_WITH_LEN("words"), system_charset_info );
 			protocol->store ( buf2, buf2len, system_charset_info );
 			if ( protocol->write() )
-				DBUG_RETURN(TRUE);
+				SPH_RET(TRUE);
 #endif
 		}
 
 	} else
 	{
-		DGPRINT ( "empty response %p\n", response );
-
 		#if MYSQL_VERSION_ID < 50100
 		field_list.push_back ( new Item_empty_string ( "Type", 10 ) );
 		field_list.push_back ( new Item_empty_string ( "Name", FN_REFLEN ) );
 		field_list.push_back ( new Item_empty_string ( "Status", 10 ) );
 		if ( protocol->send_fields ( &field_list, Protocol::SEND_NUM_ROWS | Protocol::SEND_EOF ) )
-			DBUG_RETURN(TRUE);
+			SPH_RET(TRUE);
 
 		protocol->prepare_for_resend ();
 		protocol->store ( STRING_WITH_LEN("SPHINX"), system_charset_info );
 		protocol->store ( STRING_WITH_LEN("stats"), system_charset_info );
 		protocol->store ( STRING_WITH_LEN("no query has been executed yet"), system_charset_info );
 		if ( protocol->write() )
-			DBUG_RETURN(TRUE);
+			SPH_RET(TRUE);
 		#endif
 	}
-	
+
 	#if MYSQL_VERSION_ID < 50100
 	send_eof(thd);
 	#endif
 
-	DBUG_RETURN(FALSE);
+	SPH_RET(FALSE);
 }
 
 //////////////////////////////////////////////////////////////////////////////
+// HELPERS
+//////////////////////////////////////////////////////////////////////////////
 
-// supports the following scheme:
-// sphinx://host:port
-static int parse_url ( SPHINX_SHARE * share, TABLE * table, uint table_create_flag )
-{ 
-	uint error_num = ER_FOREIGN_DATA_STRING_INVALID;
+// the following scheme variants are recognized
+//
+// sphinx://host/index
+// sphinx://host:port/index
+static bool ParseUrl ( CSphSEShare * share, TABLE * table, bool bCreate )
+{
+	SPH_ENTER_FUNC();
 
-	DBUG_ENTER ( "ha_sphinx::parse_url" );
-	share->port = 0;
+	if ( share )
+		share->m_pTable = table;
 
 	#if MYSQL_VERSION_ID<50100 
 	#define my_strndup my_strdup_with_length
 	#endif
 
-	share->hostname		= DEF_SPHINX_HOST;
-	share->port			= DEF_SPHINX_PORT;
-	share->indexname	= DEF_INDEX_NAME;
+	char * sScheme = NULL;
+	char * sHost = SPHINXSE_DEFAULT_HOST;
+	char * sIndex = SPHINXSE_DEFAULT_INDEX;
+	int iPort = SPHINXSE_DEFAULT_PORT;
 
 	bool bOk = true;
 	while ( table->s->connect_string.length!=0 )
 	{
 		bOk = false;
 
-		share->scheme = my_strndup (
+		sScheme = my_strndup (
 			(const char*) table->s->connect_string.str,
 			table->s->connect_string.length,
 			MYF(0) );
-		share->scheme [ table->s->connect_string.length ] = 0;
+		sScheme [ table->s->connect_string.length ] = 0;
 
-		DGPRINT ( "scheme: %s\n", share->scheme );
-		if (!( share->hostname = strstr ( share->scheme, "://" ) ))
+		sHost = strstr ( sScheme, "://" );
+		if ( !sHost )
 			break;
-		
-		share->scheme [ share->hostname - share->scheme ] = '\0';
-		if ( strcmp ( share->scheme, "sphinx" )!=0 )
+		sHost[0] = '\0';
+		sHost += 3;
+
+		if ( strcmp ( sScheme, "sphinx" )!=0 )
 			break;
 
-		share->hostname += 3; 
-		if (( share->sport = strchr ( share->hostname, ':' ) ) )
+		char * sPort = strchr ( sHost, ':' );
+		if ( sPort )
 		{
-			share->hostname [ share->sport - share->hostname ] = '\0';
-			share->sport++;
-
-			if ( share->sport[0]=='\0' )
-				share->sport= NULL;
-			else 
+			*sPort++ = '\0';
+			if ( *sPort )
 			{
-				if (( share->indexname = strchr ( share->sport, '/' ) ))
-				{
-					share->sport[share->indexname - share->sport]= '\0'; 
-					share->indexname++;
+				sIndex = strchr ( sPort, '/' );
+				if ( sIndex )
+					*sIndex++ = '\0'; 
+				else
+					sIndex = SPHINXSE_DEFAULT_INDEX;
 
-				} else
-				{
-					share->indexname= DEF_INDEX_NAME;
-				}
-				share->port= atoi(share->sport);
+				iPort = atoi(sPort);
+				if ( !iPort )
+					iPort = SPHINXSE_DEFAULT_PORT;
 			}
+		} else
+		{
+			sIndex = strchr ( sHost, '/' );
+			if ( sIndex )
+				*sIndex++ = '\0';
+			else
+				sIndex = SPHINXSE_DEFAULT_INDEX;
 		}
 
 		bOk = true;
 		break;
 	}
 
-	if ( bOk )
+	if ( !bOk )
 	{
-		DGPRINT ( "host:port/index %s:%d/%s\n", share->hostname, share->port, share->indexname );
- 		DBUG_RETURN(0);
+		my_error ( bCreate ? ER_FOREIGN_DATA_STRING_INVALID_CANT_CREATE : ER_FOREIGN_DATA_STRING_INVALID,
+			MYF(0), table->s->connect_string );
 	} else
 	{
-		share->parse_error = 1;
-		DBUG_RETURN(0);
+		if ( share )
+		{
+			share->m_sScheme = sScheme;
+			share->m_sHost = sHost;
+			share->m_sIndex = sIndex;
+			share->m_iPort = (ushort)iPort;
+		}
 	}
+	if ( !bOk && !share )
+		my_free ( (gptr)sScheme, MYF(0) );
+
+	SPH_RET(bOk);
 }
 
 
 // Example of simple lock controls. The "share" it creates is structure we will
 // pass to each sphinx handler. Do you have to have one of these? Well, you have
 // pieces that are used for locking, and they are needed to function.
-static SPHINX_SHARE * get_share ( const char * table_name, TABLE * table )
+static CSphSEShare * get_share ( const char * table_name, TABLE * table )
 {
-	SPHINX_SHARE * share;
+	SPH_ENTER_FUNC();
+
+	CSphSEShare * pShare;
 	uint length;
 	char * tmp_name;
 
 	pthread_mutex_lock ( &sphinx_mutex );
 	length = (uint) strlen ( table_name );
 
-	if (!( share = (SPHINX_SHARE*) hash_search ( &sphinx_open_tables,
+	if (!( pShare = (CSphSEShare*) hash_search ( &sphinx_open_tables,
 		(byte*) table_name, length ) ))
 	{
-		if (!( share = (SPHINX_SHARE *) my_multi_malloc ( MYF(MY_WME|MY_ZEROFILL),
-			&share, sizeof(*share), &tmp_name, length+1, NullS ) ))
+		if (!( pShare = (CSphSEShare *) my_multi_malloc ( MYF(MY_WME|MY_ZEROFILL),
+			&pShare, sizeof(CSphSEShare), &tmp_name, length+1, NullS ) ))
 		{
 			pthread_mutex_unlock ( &sphinx_mutex );
-			return NULL;
+			SPH_RET(NULL);
 		}
 
-		share->parse_error = 0;
-		parse_url ( share, table, 0 );
+		if ( !ParseUrl ( pShare, table, false ) )
+			SPH_RET(NULL);
 
-		share->use_count = 0;
-		share->table_name_length = length;
-		share->table_name = tmp_name;
-		strmov ( share->table_name, table_name );
-		if ( my_hash_insert ( &sphinx_open_tables, (byte*) share ) )
+		pShare->m_iUseCount = 0;
+		pShare->m_iTableNameLen = length;
+		pShare->m_sTable = tmp_name;
+		strmov ( pShare->m_sTable, table_name );
+		if ( my_hash_insert ( &sphinx_open_tables, (byte*) pShare ) )
 		{
 			pthread_mutex_unlock ( &sphinx_mutex );
-			my_free ( (gptr) share, MYF(0) );
-			return NULL;
+			my_free ( (gptr) pShare, MYF(0) );
+			SPH_RET(NULL);
 		}
 
-		thr_lock_init ( &share->lock );
-		pthread_mutex_init ( &share->mutex,MY_MUTEX_INIT_FAST );
+		thr_lock_init ( &pShare->m_tLock );
+		pthread_mutex_init ( &pShare->m_tMutex,MY_MUTEX_INIT_FAST );
 	}
-	share->use_count++;
+
+	pShare->m_iUseCount++;
 	pthread_mutex_unlock ( &sphinx_mutex );
-	return share;
+	SPH_RET(pShare);
 }
 
 
 // Free lock controls. We call this whenever we close a table. If the table had
 // the last reference to the share then we free memory associated with it.
-static int free_share ( SPHINX_SHARE * share )
+static int free_share ( CSphSEShare * pShare )
 {
+	SPH_ENTER_FUNC();
 	pthread_mutex_lock ( &sphinx_mutex );
-	if ( !--share->use_count )
+
+	if ( !--pShare->m_iUseCount )
 	{
-		hash_delete ( &sphinx_open_tables, (byte*) share );
+		hash_delete ( &sphinx_open_tables, (byte*) pShare );
 
-		my_free ( (gptr) share->scheme, MYF(MY_ALLOW_ZERO_PTR) );
-		share->scheme = 0;
+		my_free ( (gptr) pShare->m_sScheme, MYF(MY_ALLOW_ZERO_PTR) );
+		pShare->m_sScheme = 0;
 
-		thr_lock_delete ( &share->lock );
-		pthread_mutex_destroy ( &share->mutex );
-		my_free ( (gptr) share, MYF(0) );
+		thr_lock_delete ( &pShare->m_tLock );
+		pthread_mutex_destroy ( &pShare->m_tMutex );
+		my_free ( (gptr) pShare, MYF(0) );
 	}
 
 	pthread_mutex_unlock ( &sphinx_mutex );
-	return 0;
+	SPH_RET(0);
 }
 
 
 #if MYSQL_VERSION_ID>50100
 static handler * sphinx_create_handler ( handlerton * hton, TABLE_SHARE * table, MEM_ROOT * mem_root )
 {
-	return new ( mem_root ) ha_sphinx ( table );
+	return new ( mem_root ) ha_sphinx ( hton, table );
 }
 #endif
 
+//////////////////////////////////////////////////////////////////////////////
+// CLIENT-SIDE REQUEST STUFF
+//////////////////////////////////////////////////////////////////////////////
+
+CSphSEQuery::CSphSEQuery ( const char * sQuery, int iLength, const char * sIndex )
+	: m_sIndex ( sIndex ? sIndex : "*" )
+	, m_iOffset ( 0 )
+	, m_iLimit ( 20 )
+	, m_sQuery ( "" )
+	, m_pWeights ( NULL )
+	, m_iWeights ( 0 )
+	, m_eMode ( SPH_MATCH_ALL )
+	, m_eSort ( SPH_SORT_RELEVANCE )
+	, m_sSortBy ( "" )
+	, m_iMaxMatches ( 1000 )
+	, m_iMinID ( 0 )
+	, m_iMaxID ( UINT_MAX )
+	, m_iFilters ( 0 )
+	, m_sGroupBy ( "" )
+	, m_eGroupFunc ( SPH_GROUPBY_DAY )
+	, m_pBuf ( NULL )
+	, m_pCur ( NULL )
+	, m_iBufLeft ( 0 )
+	, m_bBufOverrun ( false )
+{
+	m_sQueryBuffer = new char [ iLength+2 ];
+	memcpy ( m_sQueryBuffer, sQuery, iLength );
+	m_sQueryBuffer[iLength]= ';';
+	m_sQueryBuffer[iLength+1]= '\0';
+
+}
+
+
+CSphSEQuery::~CSphSEQuery ()
+{
+	SPH_ENTER_METHOD();
+	SafeDeleteArray ( m_pWeights );
+	SafeDeleteArray ( m_pBuf );
+	SPH_VOID_RET();
+}
+
+
+int CSphSEQuery::ParseArray ( uint32 ** ppValues, const char * sValue )
+{
+	SPH_ENTER_METHOD();
+
+//	assert ( ppValues );
+//	assert ( !(*ppValues) );
+
+	const char * p;
+	bool bPrevDigit = false;
+	int iValues = 0;
+
+	// count the values
+	for ( p=sValue; *p; p++ )
+	{
+		bool bDigit = ( (*p)>='0' && (*p)<='9' );
+		if ( bDigit && !bPrevDigit )
+			iValues++;
+		bPrevDigit = bDigit;
+	}
+	if ( !iValues )
+		SPH_RET(0);
+
+	// extract the values
+	uint32 * pValues = new uint32 [ iValues ];
+	*ppValues = pValues;
+
+	int iIndex = 0;
+	uint32 uValue = 0;
+
+	bPrevDigit = false;
+	for ( p=sValue; ; p++ )
+	{
+		bool bDigit = ( (*p)>='0' && (*p)<='9' );
+
+		if ( bDigit )
+		{
+			if ( !bPrevDigit )
+				uValue = 0;
+			uValue = uValue*10 + ( (*p)-'0' );
+		}
+
+		if ( !bDigit && bPrevDigit )
+		{
+			assert ( iIndex<iValues );
+			pValues [ iIndex++ ] = uValue;
+		}
+
+		bPrevDigit = bDigit;
+
+		if ( !(*p) )
+			break;
+	}
+
+	SPH_RET(iValues);
+}
+
+
+static char * chop ( char * s )
+{
+	while ( *s && isspace(*s) )
+		s++;
+
+	char * p = s + strlen(s);
+	while ( p>s && isspace(p[-1]) )
+		p--;
+	*p = '\0';
+
+	return s;
+}
+
+
+static bool myisattr ( char c )
+{
+	return
+		( c>='0' && c<='9' ) ||
+		( c>='a' && c<='z' ) ||
+		( c>='A' && c<='Z' ) ||
+		c=='_';
+}
+
+
+bool CSphSEQuery::ParseField ( char * sField )
+{
+	SPH_ENTER_METHOD();
+
+	// look for option name/value separator
+	char * sValue = strchr ( sField, '=' );
+	if ( !sValue )
+	{
+		// by default let's assume it's just query
+		if ( sField[0] )
+			m_sQuery = sField;
+		SPH_RET(true);
+	}
+
+	// split
+	*sValue++ = '\0';
+	sValue = chop ( sValue );
+	int iValue = atoi ( sValue );
+
+	// handle options
+	char * sName = chop ( sField );
+
+	if ( !strcmp ( sName, "query" ) )			m_sQuery = sValue;
+	else if ( !strcmp ( sName, "index" ) )		m_sIndex = sValue;
+	else if ( !strcmp ( sName, "offset" ) )		m_iOffset = iValue;
+	else if ( !strcmp ( sName, "limit" ) )		m_iLimit = iValue;
+	else if ( !strcmp ( sName, "weights" ) )	m_iWeights = ParseArray ( &m_pWeights, sValue );
+	else if ( !strcmp ( sName, "minid" ) )		m_iMinID = iValue;
+	else if ( !strcmp ( sName, "maxid" ) )		m_iMaxID = iValue;
+
+	else if ( !strcmp ( sName, "mode" ) )
+	{
+
+		m_eMode = SPH_MATCH_ALL;
+		if ( !strcmp ( sValue, "any") )				m_eMode = SPH_MATCH_ANY;
+		else if ( !strcmp ( sValue, "phrase" ) )	m_eMode = SPH_MATCH_PHRASE;
+		else if ( !strcmp ( sValue, "boolean") )	m_eMode = SPH_MATCH_BOOLEAN;
+		else if ( !strcmp ( sValue, "extended") )	m_eMode = SPH_MATCH_EXTENDED;
+		else
+		{
+			snprintf ( m_sParseError, sizeof(m_sParseError), "unknown matching mode '%s'", sValue );
+			SPH_RET(false);
+		}
+
+	} else if ( !strcmp ( sName, "sort" ) )
+	{
+		static const struct 
+		{
+			const char *	m_sName;
+			ESphSortOrder	m_eSort;
+		} dSortModes[] = 
+		{
+			{ "relevance",		SPH_SORT_RELEVANCE },
+			{ "attr_desc:",		SPH_SORT_ATTR_DESC },
+			{ "attr_asc:",		SPH_SORT_ATTR_ASC },
+			{ "time_segments:",	SPH_SORT_TIME_SEGMENTS },
+			{ "extended:",		SPH_SORT_EXTENDED },
+		};
+
+		int i;
+		const int nModes = sizeof(dSortModes)/sizeof(dSortModes[0]);
+		for ( i=0; i<nModes; i++ )
+			if ( !strncmp ( sValue, dSortModes[i].m_sName, strlen(dSortModes[i].m_sName) ) )
+		{
+			m_eSort = dSortModes[i].m_eSort;
+			m_sSortBy = sValue + strlen(dSortModes[i].m_sName);
+			break;
+		}
+		if ( i==nModes )
+		{
+			snprintf ( m_sParseError, sizeof(m_sParseError), "unknown sorting mode '%s'", sValue );
+			SPH_RET(false);
+		}
+
+	} else if ( !strcmp ( sName, "range" ) && m_iFilters<SPHINXSE_MAX_FILTERS )
+	{
+		for ( ;; )
+		{
+			CSphSEFilter & tFilter = m_dFilters [ m_iFilters ];
+			char * p;
+
+			if (!( p = strchr ( sValue, ',' ) ))
+				break;
+			*p++ = '\0';
+
+			tFilter.m_sAttrName = chop ( sValue );
+			sValue = p;
+
+			if (!( p = strchr ( sValue, ',' ) ))
+				break;
+			*p++ = '\0';
+
+			tFilter.m_uMinValue = atoi(sValue);
+			tFilter.m_uMaxValue = atoi(p);
+
+			// all ok
+			m_iFilters++;
+			break;
+		}
+
+	} else if ( !strcmp ( sName, "filter" ) && m_iFilters<SPHINXSE_MAX_FILTERS )
+	{
+		for ( ;; )
+		{
+			CSphSEFilter & tFilter = m_dFilters [ m_iFilters ];
+
+			// get the attr name
+			while ( (*sValue) && !myisattr(*sValue) )
+				sValue++;
+			if ( !*sValue )
+				break;
+
+			tFilter.m_sAttrName = sValue;
+			while ( (*sValue) && myisattr(*sValue) )
+				sValue++;
+			if ( !*sValue )
+				break;
+			*sValue++ = '\0';
+
+			// get the values
+			tFilter.m_iValues = ParseArray ( & tFilter.m_pValues, sValue );
+			if ( !tFilter.m_iValues )
+			{
+				assert ( !tFilter.m_pValues );
+				break;
+			}
+
+			// all ok
+			m_iFilters++;
+			break;
+		}
+
+	} else
+	{
+		snprintf ( m_sParseError, sizeof(m_sParseError), "unknown parameter '%s'", sName );
+		SPH_RET(false);
+	}
+
+	// !COMMIT handle syntax errors
+
+	SPH_RET(true);
+}
+
+
+bool CSphSEQuery::Parse ()
+{
+	SPH_ENTER_METHOD();
+	SPH_DEBUG ( "query [[ %s ]]", m_sQueryBuffer );
+
+	char * pNext;
+	char * pCur = m_sQueryBuffer;
+
+	while (( pNext = strchr(  pCur, ';' ) ))
+	{
+		*pNext++ = '\0';
+		if ( !ParseField ( pCur ) )
+			SPH_RET(false);
+		pCur = pNext;
+	}
+
+	SPH_RET(true);
+}
+
+
+void CSphSEQuery::SendBytes ( const void * pBytes, int iBytes )
+{
+	SPH_ENTER_METHOD();
+	if ( m_iBufLeft<iBytes )
+	{
+		m_bBufOverrun = true;
+		SPH_VOID_RET();
+	}
+
+	memcpy ( m_pCur, pBytes, iBytes );
+
+	m_pCur += iBytes;
+	m_iBufLeft -= iBytes;
+	SPH_VOID_RET();
+}
+
+
+int CSphSEQuery::BuildRequest ( char ** ppBuffer )
+{
+	SPH_ENTER_METHOD();
+
+	// calc request length
+	int iReqSize = 64 + 4*m_iWeights
+		+ strlen ( m_sSortBy )
+		+ strlen ( m_sQuery )
+		+ strlen ( m_sIndex )
+		+ strlen ( m_sGroupBy );
+
+	for ( int i=0; i<m_iFilters; i++ )
+	{
+		const CSphSEFilter & tFilter = m_dFilters[i];
+		iReqSize +=
+			8
+			+ strlen ( tFilter.m_sAttrName )
+			+ 4*tFilter.m_iValues
+			+ ( tFilter.m_iValues ? 0 : 8 );
+	}
+
+	m_iBufLeft = 0;
+	SafeDeleteArray ( m_pBuf );
+
+	m_pBuf = new char [ iReqSize ];
+	if ( !m_pBuf )
+		SPH_RET(-1);
+
+	m_pCur = m_pBuf;
+	m_iBufLeft = iReqSize;
+	m_bBufOverrun = false;
+	(*ppBuffer) = m_pBuf;
+
+	// build request
+	SendWord ( SEARCHD_COMMAND_SEARCH ); // command id
+	SendWord ( VER_COMMAND_SEARCH ); // command version
+	SendInt ( iReqSize-8 ); // request body length
+
+	SendInt ( m_iOffset );
+	SendInt ( m_iLimit );
+	SendInt ( m_eMode );
+	SendInt ( m_eSort );
+	SendString ( m_sSortBy ); // sort attr
+	SendString ( m_sQuery ); // query
+	SendInt ( m_iWeights );
+	for ( int j=0; j<m_iWeights; j++ )
+		SendInt ( m_pWeights[j] ); // weights
+	SendString ( m_sIndex ); // indexes
+	SendInt ( m_iMinID ); // id/ts ranges
+	SendInt ( m_iMaxID );
+
+	SendInt ( m_iFilters );
+	for ( int j=0; j<m_iFilters; j++ )
+	{
+		const CSphSEFilter & tFilter = m_dFilters[j];
+		SendString ( tFilter.m_sAttrName );
+		SendInt ( tFilter.m_iValues );
+		for ( int k=0; k<tFilter.m_iValues; k++ )
+			SendInt ( tFilter.m_pValues[k] );
+		if ( !tFilter.m_iValues )
+		{
+			SendDword ( tFilter.m_uMinValue );
+			SendDword ( tFilter.m_uMaxValue );
+		}
+	}
+
+	SendInt ( m_eGroupFunc );
+	SendString ( m_sGroupBy );
+	SendInt ( m_iMaxMatches );
+
+	// detect buffer overruns and underruns, and report internal error
+	if ( m_bBufOverrun || m_iBufLeft!=0 || m_pCur-m_pBuf!=iReqSize )
+		SPH_RET(-1);
+
+	// all fine
+	SPH_RET(iReqSize);
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// SPHINX HANDLER
 //////////////////////////////////////////////////////////////////////////////
 
 static const char * ha_sphinx_exts[] = { NullS };
 
 
-ha_sphinx::ha_sphinx ( TABLE_ARG * table_arg )
-	: handler ( &sphinx_hton, table_arg )
+#if MYSQL_VERSION_ID<50100
+ha_sphinx::ha_sphinx ( TABLE_ARG * table )
+	: handler ( &sphinx_hton, table )
+#else
+ha_sphinx::ha_sphinx ( handlerton * hton, TABLE_ARG * table )
+	: handler ( hton, table )
+#endif
+	, m_pShare ( NULL )
+	, m_iStartOfScan ( 0 )
+	, m_iMatchesTotal ( 0 )
+	, m_iCurrentPos ( 0 )
+	, m_pCurrentKey ( NULL )
+	, m_iCurrentKeyLen ( 0 )
+	, m_pResponse ( NULL )
+	, m_pResponseEnd ( NULL )
+	, m_pCur ( NULL )
+	, m_bUnpackError ( false )
+	, m_iFields ( 0 )
+	, m_dFields ( NULL )
+	, m_iAttrs ( 0 )
+	, m_dAttrs ( NULL )
+	, m_dUnboundFields ( NULL )
 {
-	buffer.set ( (char*)byte_buffer, 1024, system_charset_info );
+	SPH_ENTER_METHOD();
+	SPH_VOID_RET();
 }
 
 
 // If frm_error() is called then we will use this to to find out what file extentions
 // exist for the storage engine. This is also used by the default rename_table and
 // delete_table method in handler.cc.
-const char **ha_sphinx::bas_ext() const
+const char ** ha_sphinx::bas_ext() const
 {
 	return ha_sphinx_exts;
 }
@@ -528,55 +1188,58 @@ const char **ha_sphinx::bas_ext() const
 //
 // Called from handler.cc by handler::ha_open(). The server opens all tables by
 // calling ha_open() which then calls the handler specific open().
-int ha_sphinx::open ( const char * name, int mode, uint test_if_locked )
+int ha_sphinx::open ( const char * name, int, uint )
 {
-	DBUG_ENTER ( "ha_sphinx::open" );
-	if (!( share = get_share ( name, table ) ))
-		DBUG_RETURN(1);
+	SPH_ENTER_METHOD();
+	m_pShare = get_share ( name, table );
+	if ( !m_pShare )
+		SPH_RET(1);
 
-	thr_lock_data_init ( &share->lock, &lock, NULL );
+	thr_lock_data_init ( &m_pShare->m_tLock, &m_tLock, NULL );
 
 	#if MYSQL_VERSION_ID>50100
-	*thd_ha_data ( table->in_use, &sphinx_hton ) = NULL;
+	*thd_ha_data ( table->in_use, ht ) = NULL;
 	#else
 	table->in_use->ha_data [ sphinx_hton.slot ] = NULL;
 	#endif
 
-	DBUG_RETURN(0);
+	SPH_RET(0);
 }
 
 
-int ha_sphinx::do_open_connection()
+int ha_sphinx::ConnectToSearchd ()
 {
-	DBUG_ENTER ( "ha_sphinx::do_open_connection" );
+	SPH_ENTER_METHOD();
 
 	struct sockaddr_in sa;
 	in_addr_t ip_addr;
 	int version;
-	int my_version = htonl(1);
+	uint uClientVersion = htonl ( SPHINX_SEARCHD_PROTO );
 
-	DGPRINT ( "%s\n","open connection" );
 	memset ( &sa, 0, sizeof(sa) );
 	sa.sin_family = AF_INET;
 
 	// prepare host address
-	if ( (int)( ip_addr=inet_addr(share->hostname) ) != (int)INADDR_NONE )
+	if ( (int)( ip_addr=inet_addr(m_pShare->m_sHost) ) != (int)INADDR_NONE )
 	{ 
-		memcpy_fixed ( &sa.sin_addr, &ip_addr, sizeof(ip_addr) );
+		memcpy ( &sa.sin_addr, &ip_addr, sizeof(ip_addr) );
 	} else
 	{
 		int tmp_errno;
 		struct hostent tmp_hostent, *hp;
 		char buff2 [ GETHOSTBYNAME_BUFF_SIZE ];
 
-		hp = my_gethostbyname_r ( share->hostname, &tmp_hostent,
+		hp = my_gethostbyname_r ( m_pShare->m_sHost, &tmp_hostent,
 			buff2, sizeof(buff2), &tmp_errno );
 		if ( !hp )
 		{ 
 			my_gethostbyname_r_free();
-			my_error ( ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0),
-				"failed to connect to Sphinx searchd: unable to resolve host name" );
-			DBUG_RETURN(1);
+
+			char sError[256];
+			my_snprintf ( sError, sizeof(sError), "failed to resolve searchd host (name=%s)", m_pShare->m_sHost );
+
+			my_error ( ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), sError );
+			SPH_RET(-1);
 		}
 
 		memcpy ( &sa.sin_addr, hp->h_addr,
@@ -584,39 +1247,44 @@ int ha_sphinx::do_open_connection()
 		my_gethostbyname_r_free();
 	}
 
-	sa.sin_port = htons(share->port);
+	sa.sin_port = htons(m_pShare->m_iPort);
 
+	char sError[256];
+	int iSocket = socket ( AF_INET, SOCK_STREAM, 0 );
 
-	if ( ( fd_socket = socket ( AF_INET, SOCK_STREAM, 0 ) )<0 )
+	if ( iSocket<0 )
 	{
-		DGPRINT ( "%s", "client: can't open stream socket\n" );
-		my_error ( ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), "Can't open client socket" );
-		DBUG_RETURN(1);
+		my_error ( ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), "failed to create client socket" );
+		SPH_RET(-1);
 	}
 
-	if ( connect ( fd_socket, (struct sockaddr *) &sa, sizeof(sa) ) < 0 )
+	if ( connect ( iSocket, (struct sockaddr *) &sa, sizeof(sa) )<0 )
 	{
-		DGPRINT ( "%s","client: can't connect to sphinx\n" );
-		my_error ( ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), "Can't connect to sphinx server" );
-		DBUG_RETURN(1);
+		my_snprintf ( sError, sizeof(sError), "failed to connect to searchd (host=%s, port=%d)",
+			m_pShare->m_sHost, m_pShare->m_iPort );
+		my_error ( ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), sError );
+		SPH_RET(-1);
 	}
 
-	if ( ::recv ( fd_socket, (char *)&version, sizeof(version), 0 )!=sizeof(version) )
+	if ( ::recv ( iSocket, (char *)&version, sizeof(version), 0 )!=sizeof(version) )
 	{
-		DGPRINT ( "%s","client: can't get version\n" );
-		my_error ( ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), "Can't get sphinx server version" );
-		DBUG_RETURN(1);
-	}
-	DGPRINT ( "version %d\n", version );
-
-	if ( ::send ( fd_socket, (char *)&my_version, sizeof(my_version), 0 )!=sizeof(my_version) )
-	{
-		DGPRINT ( "%s","client: can't send version\n" );
-		my_error ( ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), "Can't send client version" );
-		DBUG_RETURN(1);
+		::close ( iSocket );
+		my_snprintf ( sError, sizeof(sError), "failed to receive searchd version (host=%s, port=%d)",
+			m_pShare->m_sHost, m_pShare->m_iPort );
+		my_error ( ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), sError );
+		SPH_RET(-1);
 	}
 
-	DBUG_RETURN(0);
+	if ( ::send ( iSocket, (char*)&uClientVersion, sizeof(uClientVersion), 0 )!=sizeof(uClientVersion) )
+	{
+		::close ( iSocket );
+		my_snprintf ( sError, sizeof(sError), "failed to send client version (host=%s, port=%d)",
+			m_pShare->m_sHost, m_pShare->m_iPort );
+		my_error ( ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), sError );
+		SPH_RET(-1);
+	}
+
+	SPH_RET(iSocket);
 }
 
 
@@ -630,489 +1298,434 @@ int ha_sphinx::do_open_connection()
 // For sql_base.cc look at close_data_tables().
 int ha_sphinx::close()
 {
-	DBUG_ENTER ( "ha_sphinx::close" );
-	DGPRINT ( "%s","close\n" );
-	DBUG_RETURN ( free_share(share) );
+	SPH_ENTER_METHOD();
+	SPH_RET ( free_share(m_pShare) );
 }
 
 
 int ha_sphinx::write_row ( byte * )
 {
-	DBUG_ENTER ( "ha_sphinx::write_row" );
-	DBUG_RETURN ( HA_ERR_WRONG_COMMAND );
+	SPH_ENTER_METHOD();
+	SPH_RET ( HA_ERR_WRONG_COMMAND );
 }
 
 
 int ha_sphinx::update_row ( const byte *, byte * )
 {
-	DBUG_ENTER ( "ha_sphinx::update_row" );
-	DBUG_RETURN ( HA_ERR_WRONG_COMMAND );
+	SPH_ENTER_METHOD();
+	SPH_RET ( HA_ERR_WRONG_COMMAND );
 }
 
 
 int ha_sphinx::delete_row ( const byte * )
 {
-	DBUG_ENTER ( "ha_sphinx::delete_row" );
-	DBUG_RETURN ( HA_ERR_WRONG_COMMAND );
+	SPH_ENTER_METHOD();
+	SPH_RET ( HA_ERR_WRONG_COMMAND );
 }
 
 
 // keynr is key (index) number
 // sorted is 1 if result MUST be sorted according to index
-int ha_sphinx::index_init ( uint keynr, bool sorted )
+int ha_sphinx::index_init ( uint keynr, bool )
 {
-	DBUG_ENTER ( "index_init" );
-	DGPRINT ( "index_init, index number=%d\n", keynr );
-
-	start_of_scan = 1;
+	SPH_ENTER_METHOD();
+	m_iStartOfScan = 1;
 	active_index = keynr;
-	DBUG_RETURN(0);
+	SPH_RET(0);
 }
 
 
 int ha_sphinx::index_end()
 {
-	DBUG_ENTER ( "index_end" );
-	DGPRINT ( "%s","index_end\n" );
-	DBUG_RETURN(0);
+	SPH_ENTER_METHOD();
+	SPH_RET(0);
 }
 
-//////////////////////////////////////////////////////////////////////////////
 
-static int fill_array ( int ** weights, char * str )
+uint32 ha_sphinx::UnpackDword ()
 {
-	DBUG_ENTER ( "fill_array" );
-
-	uint n;
-	char * fs;
-
-	*weights = (int*) my_malloc ( strlen(str)*sizeof(int), MYF(0) );
-	DGPRINT ( "fill_array str = %s\n", str );
-
-	n = 0; 
-	while ( str[0] )
+	if ( m_pCur+sizeof(uint32)>m_pResponseEnd )
 	{
-		if (( fs = strchr ( str, ',') ))
+		m_pCur = m_pResponseEnd;
+		m_bUnpackError = true;
+		return 0;
+	}
+
+	uint32 uRes = ntohl ( *( (uint32*)m_pCur ) );
+	m_pCur += sizeof(uint32);
+	return uRes;
+}
+
+
+char * ha_sphinx::UnpackString ()
+{
+	uint32 iLen = UnpackDword ();
+	if ( !iLen )
+		return NULL;
+
+	if ( m_pCur+iLen>m_pResponseEnd )
+	{
+		m_pCur = m_pResponseEnd;
+		m_bUnpackError = true;
+		return NULL;
+	}
+
+	char * sRes = new char [ 1+iLen ];
+	memcpy ( sRes, m_pCur, iLen );
+	sRes[iLen] = '\0';
+	m_pCur += iLen;
+	return sRes;
+}
+
+
+static inline const char * FixNull ( const char * s )
+{
+	return s ? s : "(null)";
+}
+
+
+bool ha_sphinx::UnpackSchema ()
+{
+	SPH_ENTER_METHOD();
+
+	// unpack network packet
+	SafeDeleteArray ( m_dFields );
+	m_iFields = UnpackDword ();
+	m_dFields = new char * [ m_iFields ];
+	if ( !m_dFields )
+		SPH_RET(false);
+
+	for ( uint32 i=0; i<m_iFields; i++ )
+		m_dFields[i] = UnpackString ();
+
+	SafeDeleteArray ( m_dAttrs );
+	m_iAttrs = UnpackDword ();
+	m_dAttrs = new CSphSEAttr [ m_iAttrs ];
+	if ( !m_dAttrs )
+	{
+		SafeDeleteArray ( m_dFields );
+		SPH_RET(false);
+	}
+
+	TABLE * pTable = m_pShare->m_pTable;
+	for ( uint32 i=0; i<m_iAttrs; i++ )
+	{
+		m_dAttrs[i].m_sName = UnpackString ();
+		m_dAttrs[i].m_eType = (ESphAttrType) UnpackDword ();
+
+		m_dAttrs[i].m_iField = -1;
+		for ( uint32 j=SPHINXSE_SYSTEM_COLUMNS; j<pTable->s->fields; j++ )
+			if ( !strcasecmp ( m_dAttrs[i].m_sName, pTable->field[j]->field_name ) )
 		{
-			str [ fs-str ] = '\0';
-			(*weights)[n++] = atoi(str);
-			str = fs+1;
-			DGPRINT ( "found member: %d\n", (*weights)[n-1] );
-		} else
-		{
-			(*weights)[n++]= atoi(str);
-			DGPRINT ( "found member: %d\n", (*weights)[n-1] );
+			m_dAttrs[i].m_iField = j;
 			break;
 		}
 	}
 
-	DGPRINT ( "fill_array total = %d\n", n);
-	DBUG_RETURN(n);
+	m_iMatchesTotal = UnpackDword ();
+
+	// build unbound fields map
+	SafeDeleteArray ( m_dUnboundFields );
+	m_dUnboundFields = new int [ pTable->s->fields ];
+
+	for ( uint32 i=0; i<pTable->s->fields; i++ )
+	{
+		if ( i<SPHINXSE_SYSTEM_COLUMNS )
+			m_dUnboundFields[i] = SPH_ATTR_NONE;
+
+		else if ( pTable->field[i]->type()==MYSQL_TYPE_TIMESTAMP )
+			m_dUnboundFields[i] = SPH_ATTR_TIMESTAMP;
+
+		else
+			m_dUnboundFields[i] = SPH_ATTR_INTEGER;
+	}
+
+	for ( uint32 i=0; i<m_iAttrs; i++ )
+		if ( m_dAttrs[i].m_iField>=0 )
+			m_dUnboundFields [ m_dAttrs[i].m_iField ] = SPH_ATTR_NONE;
+
+	SPH_RET(!m_bUnpackError);
 }
 
 
-static int fill_temp_query_req ( char * field, query_req * req )
+CSphSEStats * ha_sphinx::UnpackStats ()
 {
-	DBUG_ENTER ( "fill_temp_query_req " );
+	SPH_ENTER_METHOD();
 
-	char * fs;
-	uint flen;
+	CSphSEStats * pStats = new CSphSEStats ();
+	if ( !pStats )
+		SPH_RET(NULL);
 
-	if (( fs = strchr ( field, '=' ) ))
+	char * pCurSave = m_pCur;
+	m_pCur = m_pCur + m_iMatchesTotal*(2+m_iAttrs)*sizeof(uint); // id+weight+attrs
+
+	pStats->m_iMatchesTotal = UnpackDword ();
+	pStats->m_iMatchesFound = UnpackDword ();
+	pStats->m_iQueryMsec = UnpackDword ();
+	pStats->m_iWords = UnpackDword ();
+
+	if ( m_bUnpackError )
 	{
-		flen = fs - field;
-
-		if ( strncmp ( field, "query", flen )==0 )
-		{
-			req->query = fs+1;
-			req->query_len = strlen(req->query);
-
-		} else if ( strncmp ( field, "index", flen )==0 )
-		{
-			req->index = fs+1;
-			req->index_len = strlen(req->index);
-
-		} else if ( strncmp ( field, "offset", flen )==0 )
-		{
-			req->offset = atoi ( fs+1 );
-
-		} else if ( strncmp ( field, "limit", flen )==0 )
-		{
-			req->limit = atoi ( fs+1 );
-
-		} else if ( strncmp ( field, "weights", flen )==0 )
-		{
-			req->weights_count = fill_array ( &req->weights, fs+1 );
-
-		} else if ( strncmp ( field, "groups", flen )==0 )
-		{
-			req->groups_count = fill_array ( &req->groups, fs+1 );
-
-		} else if ( strncmp ( field, "mode", flen )==0 )
-		{
-			req->mode = 0;
-			if ( strcmp ( fs+1, "any")==0 )
-				req->mode = 1;
-			else if ( strcmp ( fs+1, "phrase" )==0 )
-				req->mode= 2;
-			else if ( strcmp ( fs+1, "boolean")==0 )
-				req->mode= 3;
-
-		} else if ( strncmp ( field, "sort", flen)==0 )
-		{
-			req->sort = atoi ( fs+1 );
-
-		} else if ( strncmp ( field, "minid", flen )==0 )
-		{
-			req->min_id = atoi ( fs+1 );
-
-		} else if ( strncmp ( field, "maxid", flen)==0 )
-		{
-			req->max_id = atoi ( fs+1 );
-
-		} else if ( strncmp ( field, "min_ts", flen )==0 )
-		{
-			req->min_tid = atoi ( fs+1 );
-
-		} else if ( strncmp ( field, "max_ts", flen)==0 )
-		{
-			req->max_tid = atoi ( fs+1 );
-
-		} else if ( strncmp ( field, "min_gid", flen)==0 )
-		{
-			req->min_gid = atoi ( fs+1 );
-
-		} else if ( strncmp ( field, "max_gid", flen )==0 )
-		{
-			req->max_gid = atoi( fs+1 );
-		}
-
-	} else
-	{
-		// by default let's assume it's just query
-		if ( field[0] )
-		{
-			req->query = field;
-			req->query_len = strlen(req->query);
-		}
+		delete pStats;
+		SPH_RET(NULL);
 	}
 
-	DBUG_RETURN(0);
+	pStats->m_dWords = new CSphSEWordStats [ pStats->m_iWords ]; // !COMMIT not bad-value safe
+	if ( !pStats->m_dWords )
+	{
+		delete pStats;
+		SPH_RET(NULL);
+	}
+
+	for ( int i=0; i<pStats->m_iWords; i++ )
+	{
+		CSphSEWordStats & tWord = pStats->m_dWords[i];
+		tWord.m_sWord = UnpackString ();
+		tWord.m_iDocs = UnpackDword ();
+		tWord.m_iHits = UnpackDword ();
+	}
+
+	if ( m_bUnpackError )
+	{
+		delete pStats;
+		SPH_RET(NULL);
+	}
+
+	m_pCur = pCurSave;
+	SPH_RET(pStats);
 }
 
-
-#define COPYBUF(a) memcpy ( buffer_req+buf_len, &query_fields.a, sizeof(query_fields.a) ); \
-	buf_len += sizeof(query_fields.a);
-
-
-#define CONVINT(a) query_fields.a= htonl(query_fields.a);
-
-
-int ha_sphinx::parse_query ( char * query, char * buffer_req )
-{
-	uint n, buf_len;
-	char * ap;
-	char * current_string = query;
-	query_req query_fields;
-
-	DBUG_ENTER ( "ha_sphinx::parse_query" );
-	DGPRINT ( "got query: %s\n", query );
-
-	memset ( &query_fields, 0, sizeof(query_fields) ); 
-	query_fields.index = share->indexname; // default value
-	query_fields.index_len = strlen(share->indexname); // default value
-	query_fields.limit = 20; 
-	query_fields.max_id = 0xFFFFFFFFUL;
-	query_fields.max_tid = 0xFFFFFFFFUL;
-	query_fields.max_gid = 0xFFFFFFFFUL;
-
-	while (( ap = strchr(current_string, ';') ))
-	{
-		current_string [ ap-current_string ] = '\0';
-		fill_temp_query_req ( current_string, &query_fields );
-
-		DGPRINT ( "found: %s\n", current_string );
-		current_string = ap+1;
-	}
-
-	DGPRINT ( "req->query: %s\n", query_fields.query );
-	DGPRINT ( "req->query_len: %d\n", query_fields.query_len );
-	DGPRINT ( "req->index: %s\n", query_fields.index );
-	DGPRINT ( "req->index_len: %d\n", query_fields.index_len );
-	DGPRINT ( "req->offset: %d\n", query_fields.offset );
-	DGPRINT ( "req->limit: %d\n", query_fields.limit );
-	DGPRINT ( "req->mode: %d\n", query_fields.mode );
-	DGPRINT ( "req->sort: %d\n", query_fields.sort );
-	DGPRINT ( "req->min_id: %d\n", query_fields.min_id );
-	DGPRINT ( "req->max_id: %d\n", query_fields.max_id );
-
-	query_fields.offset				= htonl(query_fields.offset);
-	query_fields.limit				= htonl(query_fields.limit);
-	query_fields.mode				= htonl(query_fields.mode);
-	query_fields.sort				= htonl(query_fields.sort);
-	query_fields.min_id				= htonl(query_fields.min_id);
-	query_fields.max_id				= htonl(query_fields.max_id);
-	query_fields.min_gid			= htonl(query_fields.min_gid);
-	query_fields.max_gid			= htonl(query_fields.max_gid);
-	query_fields.min_tid			= htonl(query_fields.min_tid);
-	query_fields.max_tid			= htonl(query_fields.max_tid);
-	query_fields.query_len_code		= htonl(query_fields.query_len);
-	query_fields.index_len_code		= htonl(query_fields.index_len);
-	query_fields.groups_count_code	= htonl(query_fields.groups_count);
-	query_fields.weights_count_code	= htonl(query_fields.weights_count);
-
-	buf_len = 0 ; // fill buffer starting with offset 
-	COPYBUF ( offset );
-	COPYBUF ( limit );
-	COPYBUF ( mode );
-	COPYBUF ( sort );
-
-	COPYBUF ( groups_count_code );
-	DGPRINT ( "req->groups_count: %d\n",query_fields.groups_count );
-	for ( n=0; n<query_fields.groups_count; n++ )
-	{
-		DGPRINT ( "req->groups: n=%d, val=%d\n", n, query_fields.groups[n] );
-		query_fields.groups[n] = htonl(query_fields.groups[n]); 
-		memcpy ( buffer_req+buf_len, query_fields.groups+n, sizeof(int) ); 
-		buf_len += sizeof(int);
-	}
-
-	COPYBUF ( query_len_code );
-	memcpy ( buffer_req+buf_len, query_fields.query, query_fields.query_len );
-	buf_len += query_fields.query_len; // query 
-
-	COPYBUF ( weights_count_code );
-	DGPRINT ( "req->weights_count: %d\n", query_fields.weights_count );
-	for ( n=0; n<query_fields.weights_count; n++ )
-	{
-		DGPRINT ( "req->weights: n=%d, val=%d\n", n, query_fields.weights[n] );
-		query_fields.weights[n] = htonl ( query_fields.weights[n] ); 
-		memcpy ( buffer_req+buf_len, query_fields.weights+n, sizeof(int) );
-		buf_len += sizeof(int);
-	}
-
-	COPYBUF ( index_len_code );
-	memcpy ( buffer_req+buf_len, query_fields.index, query_fields.index_len );
-	buf_len += query_fields.index_len; // index
-	COPYBUF ( min_id );
-	COPYBUF ( max_id );
-	COPYBUF ( min_tid );
-	COPYBUF ( max_tid );
-	COPYBUF ( min_gid );
-	COPYBUF ( max_gid );
-
-	my_free ( (gptr) query_fields.groups, MYF(MY_ALLOW_ZERO_PTR) );
-	my_free ( (gptr) query_fields.weights, MYF(MY_ALLOW_ZERO_PTR) );
-
-	DBUG_RETURN ( buf_len );
-}
-
-//////////////////////////////////////////////////////////////////////////////
 
 // Positions an index cursor to the index specified in the handle. Fetches the
 // row if available. If the key value is null, begin at the first key of the
 // index.
-int ha_sphinx::index_read ( byte * buf, const byte * key, uint key_len,
-	enum ha_rkey_function find_flag )
+int ha_sphinx::index_read ( byte * buf, const byte * key, uint key_len, enum ha_rkey_function )
 {
-	char buffer [ SPHINX_QUERY_BUFFER_SIZE ];
-	char * index = "*";
-	uint index_len = strlen(index);
-	uint index_len_code = htonl(index_len);
-	char * query;
-	uint buf_len = 0;
-	uint length_of_req = 0;
-	uint my_version = htonl(1);
-	short int resp_status;
-	short int resp_ver;
-	int resp_length = 0;
-	uint count = 0;
-	short command_search = htons(0x101);
-	String varchar;
-	uint var_length= uint2korr(key);
+	SPH_ENTER_METHOD();
+	char sError[256];
 
-	DBUG_ENTER("ha_sphinx::index_read");
-	DGPRINT("%s","index_read\n");
+	m_pCurrentKey = key;
+	m_iCurrentKeyLen = key_len;
+	m_iStartOfScan = 1;
 
-	varchar.set_quick ( (char*)key+HA_KEY_BLOB_LENGTH, var_length, &my_charset_bin );
-	current_key = key;
-	current_key_len = key_len;
-	start_of_scan = 1;
-	if ( do_open_connection() )
-		DBUG_RETURN ( HA_ERR_END_OF_FILE );
-
-	#define START_OFFSET 8
-
-	memset ( buffer, 0, SPHINX_QUERY_BUFFER_SIZE );
-	memcpy ( buffer+2, &command_search, 2 );
-
-	query = my_malloc ( var_length+2, MYF(0) );
-	memcpy ( query, (char*)key+HA_KEY_BLOB_LENGTH, var_length );
-	query[var_length]= ';';
-	query[var_length+1]= '\0';
-	buf_len = parse_query ( query, buffer+START_OFFSET );
-	my_free ( query, MYF(0) );
-
-	DGPRINT ( "req length: %d\n", buf_len );
-	length_of_req = htonl(buf_len);
-
-	memcpy ( buffer+4, &length_of_req, sizeof(uint) );
-	length_of_req = ntohl(length_of_req);
-	DGPRINT ( "req length1: %d\n", length_of_req );
-
-	::send ( fd_socket, buffer, buf_len+8, 0 );
-	::recv ( fd_socket, (char*)&resp_status, 2, 0 );
-	resp_status = ntohs(resp_status);
-
-	if ( resp_status )
+	// parse query
+	CSphSEQuery q ( (char*)key+HA_KEY_BLOB_LENGTH, uint2korr(key), m_pShare->m_sIndex );
+	if ( !q.Parse () )
 	{
-		::recv ( fd_socket, (char *)&resp_length, 4, 0 );
-		resp_length = ntohl(resp_length);
-		response = (char *) my_malloc ( resp_length+1, MYF(0) );
-		memset ( response, 0, resp_length+1 );
-		::recv ( fd_socket, response, resp_length, 0 );
-		DGPRINT ( "res length: %d\n", resp_length ); 
-		my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), "SPHINX server returned error" );
-
-		DBUG_RETURN ( HA_ERR_END_OF_FILE );
+		my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), q.m_sParseError );
+		SPH_RET ( HA_ERR_END_OF_FILE );
 	}
 
-	::recv(fd_socket, (char *)&resp_ver, 2, 0);
-	::recv(fd_socket, (char *)&resp_length, 4, 0);
+	// do connect
+	int iSocket = ConnectToSearchd ();
+	if ( iSocket<0 )
+		SPH_RET ( HA_ERR_END_OF_FILE );
 
-	DGPRINT ( "res status: %d\n",resp_status ); 
-	DGPRINT ( "res ver: %d\n",resp_ver ); 
-	resp_length = ntohl ( resp_length );
-	DGPRINT ( "res length: %d\n",resp_length ); 
+	// my buffer
+	char * pBuffer; // will be free by CSphSEQuery dtor; do NOT free manually
+	int iReqLen = q.BuildRequest ( &pBuffer );
 
-	response = (char *) my_malloc ( resp_length, MYF(0) );
-	if ( !response )
+	if ( iReqLen<=0 )
 	{
-		my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), "Wrong response from SPHINX" );
-		DBUG_RETURN ( HA_ERR_END_OF_FILE );
+		my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), "INTERNAL ERROR: q.BuildRequest() failed" );
+		SPH_RET ( HA_ERR_END_OF_FILE );
 	}
 
-#ifndef __WIN__
-	::recv ( fd_socket, response, resp_length, MSG_WAITALL );
-#else
-	::recv ( fd_socket, response, resp_length, 0 ); // FIXME!
-#endif
+	// send request
+	::send ( iSocket, pBuffer, iReqLen, 0 );
 
-	memcpy ( &count, response, 4 );
-	count_of_found_recs = ntohl(count);
-	DGPRINT ( "count records: %d\n",count_of_found_recs ); 
+	// receive reply
+	char sHeader[8];
+	::recv ( iSocket, sHeader, sizeof(sHeader), MSG_WAITALL );
 
-	current_pos = 0;
+	short int uRespStatus = ntohs ( *(short int*)( &sHeader[0] ) );
+	short int uRespVersion = ntohs ( *(short int*)( &sHeader[2] ) );
+	uint uRespLength = ntohl ( *(uint *)( &sHeader[4] ) );
+	SPH_DEBUG ( "got response header (status=%d version=%d length=%d)",
+		uRespStatus, uRespVersion, uRespLength );
+
+	m_pResponse = new char [ uRespLength+1 ];
+	if ( !m_pResponse )
+	{
+		my_snprintf ( sError, sizeof(sError), "bad searchd response length (length=%d)", uRespLength );
+		my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), sError );
+		SPH_RET ( HA_ERR_END_OF_FILE );
+	}
+
+	int iRecvLength = ::recv ( iSocket, m_pResponse, uRespLength, MSG_WAITALL );
+	::close ( iSocket );
+	iSocket = -1;
+
+	if ( iRecvLength!=(int)uRespLength )
+	{
+		my_snprintf ( sError, sizeof(sError), "net read error (expected=%d, got=%d)", uRespLength, iRecvLength );
+		my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), sError );
+		SPH_RET ( HA_ERR_END_OF_FILE );
+	}
+
+	if ( uRespStatus )
+	{
+		int iErr = (int)ntohl ( *(uint*)m_pResponse );
+		if ( iErr>=0 && (iErr+(int)sizeof(uint))<=iRecvLength )
+		{
+			char * sErr = m_pResponse + sizeof(uint);
+			sErr[iErr] = '\0';
+
+			my_snprintf ( sError, sizeof(sError), "searchd error: %s", sErr );
+			my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), sError );
+
+		} else
+		{
+			char * sErr = m_pResponse + sizeof(uint);
+			sErr[iErr] = '\0';
+
+			my_snprintf ( sError, sizeof(sError), "searchd error: %s", sErr );
+			my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), "no valid response from searchd" );
+		}
+		SPH_RET ( HA_ERR_END_OF_FILE );
+	}
+
+	m_iCurrentPos = 0;
+	m_pCur = m_pResponse;
+	m_pResponseEnd = m_pResponse + uRespLength;
+	m_bUnpackError = false;
+
+	if ( !UnpackSchema () )
+	{
+		my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), "INTERNAL ERROR: UnpackSchema() failed" );
+		SPH_RET ( HA_ERR_END_OF_FILE );
+	}
 
 	// set new data for thd->ha_data, it is used in show_status
 	#if MYSQL_VERSION_ID>50100
-	void ** tmp_ha_data = thd_ha_data(table->in_use, &sphinx_hton);
-	#define TARGET *tmp_ha_data
+	void ** tmp_ha_data = thd_ha_data ( table->in_use, ht );
+	#define TARGET (*tmp_ha_data)
 	#else
-	#define TARGET current_thd->ha_data[sphinx_hton.slot]
+	#define TARGET (current_thd->ha_data[sphinx_hton.slot])
 	#endif // >50100
 
-	my_free ( (gptr) TARGET, MYF(MY_ALLOW_ZERO_PTR) );
-	TARGET = my_malloc ( resp_length - count_of_found_recs * 4 * 4 - 4, MYF(0) );
-	memcpy ( TARGET, response + count_of_found_recs * 4 * 4 + 4, resp_length - count_of_found_recs * 4 * 4 - 4 );
+	CSphSEStats * pStats = (CSphSEStats *) TARGET;
+	if ( pStats )
+	{
+		delete pStats;
+		TARGET = NULL;
+	}
 
-	::close ( fd_socket );
-	DBUG_RETURN ( get_rec ( buf, key, key_len ) );
+	pStats = UnpackStats ();
+	if ( !pStats )
+	{
+		my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), "INTERNAL ERROR: UnpackStats() failed" );
+		SPH_RET ( HA_ERR_END_OF_FILE );
+	}
+	TARGET = pStats;
+
+	SPH_RET ( get_rec ( buf, key, key_len ) );
 }
 
 
 // Positions an index cursor to the index specified in key. Fetches the
 // row if any. This is only used to read whole keys.
-int ha_sphinx::index_read_idx ( byte * buf, uint index, const byte * key,
-	uint, enum ha_rkey_function)
+int ha_sphinx::index_read_idx ( byte *, uint, const byte *, uint, enum ha_rkey_function )
 {
-	DBUG_ENTER ( "ha_sphinx::index_read_idx" );
-	DGPRINT ( "%s","index_read_idx\n" );
-	DBUG_RETURN ( HA_ERR_WRONG_COMMAND );
+	SPH_ENTER_METHOD();
+	SPH_RET ( HA_ERR_WRONG_COMMAND );
 }
 
 
 // Used to read forward through the index.
 int ha_sphinx::index_next ( byte * buf )
 {
-	DBUG_ENTER ( "ha_sphinx::index_next" );
-	DGPRINT ( "%s","index_next\n" );
-	DBUG_RETURN ( get_rec ( buf, current_key, current_key_len ) );
+	SPH_ENTER_METHOD();
+	SPH_RET ( get_rec ( buf, m_pCurrentKey, m_iCurrentKeyLen ) );
 }
 
 
 int ha_sphinx::index_next_same ( byte * buf, const byte * key, uint keylen )
 {
-	DBUG_ENTER ( "ha_sphinx::index_next" );
-	DGPRINT ( "%s","index_next_same\n" );
-	DBUG_RETURN ( get_rec ( buf, key, keylen ) );
+	SPH_ENTER_METHOD();
+	SPH_RET ( get_rec ( buf, key, keylen ) );
 }
 
 
 int ha_sphinx::get_rec ( byte * buf, const byte * key, uint keylen )
 {
-	DBUG_ENTER ( "ha_sphinx::get_rec" );
+	SPH_ENTER_METHOD();
 
-	if ( current_pos>=count_of_found_recs)
+	if ( m_iCurrentPos>=m_iMatchesTotal )
 	{
-		my_free ( response, MYF(0) );
-		DBUG_RETURN ( HA_ERR_END_OF_FILE ); 
+		SafeDeleteArray ( m_pResponse );
+		SPH_RET ( HA_ERR_END_OF_FILE ); 
 	}
-
-	uint fn = 0;
-	int tmp;
-	byte * tmp1;
 
 	#if MYSQL_VERSION_ID>50100
 	my_bitmap_map * org_bitmap = dbug_tmp_use_all_columns ( table, table->write_set );
 	#endif
-	Field ** field=table->field;
+	Field ** field = table->field;
 
-	// read and store ID
-	memcpy ( &tmp, response + (1+current_pos*4)*4, sizeof(int) );
+	// unpack and return the match
+	uint32 uMatchID = UnpackDword ();
+	uint32 uMatchWeight = UnpackDword ();
 
-	tmp1 = (byte *)&tmp;
-	tmp = ntohl(tmp);
-	field[0]->store(tmp, 1);
+	field[0]->store ( uMatchID, 1 );
+	field[1]->store ( uMatchWeight, 1 );
+	field[2]->set_key_image ( (char*)key, keylen ); // store requested query. it's necessary, otherwise mysql goes crazy
 
-	// read and store GID
-	memcpy ( &tmp, response + (2+current_pos*4)*4, sizeof(int) );
+	for ( uint32 i=0; i<m_iAttrs; i++ )
+	{
+		uint32 uValue = UnpackDword ();
+		if ( m_dAttrs[i].m_iField<0 )
+			continue;
 
-	tmp1 = (byte *)&tmp;
-	tmp = ntohl(tmp);
-	field[1]->store ( tmp, 1 );
+		Field * af = field [ m_dAttrs[i].m_iField ];
+		switch ( m_dAttrs[i].m_eType )
+		{
+			case SPH_ATTR_INTEGER:		af->store ( uValue, 1 ); break;
+			case SPH_ATTR_TIMESTAMP:	longstore ( af->ptr, uValue ); break;
+			default:
+				my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0),
+					"INTERNAL ERROR: unhandled attr type %d", m_dAttrs[i].m_eType );
+				SafeDeleteArray ( m_pResponse );
+				SPH_RET ( HA_ERR_END_OF_FILE ); 
+		}
+	}
 
-	// read and store TIMESTAMP
-	memcpy ( &tmp, response + (3+current_pos*4)*4, sizeof(int) );
-	tmp = ntohl(tmp);
-	longstore ( field[2]->ptr,tmp ); // way to store TIMESTAMP
+	if ( m_bUnpackError )
+	{
+		my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), "INTERNAL ERROR: response unpacker failed" );
+		SafeDeleteArray ( m_pResponse );
+		SPH_RET ( HA_ERR_END_OF_FILE ); 
+	}
 
-	// read and store WEIGHT
-	memcpy ( &tmp, response+(4+current_pos*4)*4, sizeof(int) );
-	tmp = ntohl(tmp);
-	field[3]->store ( tmp, 1 );
-
-	// store requested query
-	// it's necessary, otherwise mysql goes crazy
-	field[4]->set_key_image ( (char*)key, keylen );
+	// zero out unmapped fields
+	for ( int i=SPHINXSE_SYSTEM_COLUMNS; i<(int)table->s->fields; i++ )
+		if ( m_dUnboundFields[i]!=SPH_ATTR_NONE )
+			switch ( m_dUnboundFields[i] )
+	{
+		case SPH_ATTR_INTEGER:		table->field[i]->store ( 0, 1 ); break;
+		case SPH_ATTR_TIMESTAMP:	longstore ( table->field[i]->ptr, 0 ); break;
+		default:
+			my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0),
+				"INTERNAL ERROR: unhandled unbound field type %d", m_dUnboundFields[i] );
+			SafeDeleteArray ( m_pResponse );
+			SPH_RET ( HA_ERR_END_OF_FILE );
+	}
 
 	memset ( buf, 0, table->s->null_bytes );
-	current_pos++;
+	m_iCurrentPos++;
 
 	#if MYSQL_VERSION_ID > 50100
 	dbug_tmp_restore_column_map(table->write_set, org_bitmap);
 	#endif
 
-	DBUG_RETURN(0);
+	SPH_RET(0);
 }
 
 
 // Used to read backwards through the index.
-int ha_sphinx::index_prev ( byte * buf )
+int ha_sphinx::index_prev ( byte * )
 {
-	DBUG_ENTER ( "ha_sphinx::index_prev" );
-	DGPRINT ( "%s","index_prev\n" );
-	DBUG_RETURN ( HA_ERR_WRONG_COMMAND );
+	SPH_ENTER_METHOD();
+	SPH_RET ( HA_ERR_WRONG_COMMAND );
 }
 
 
@@ -1120,51 +1733,48 @@ int ha_sphinx::index_prev ( byte * buf )
 //
 // Called from opt_range.cc, opt_sum.cc, sql_handler.cc,
 // and sql_select.cc.
-int ha_sphinx::index_first ( byte * buf)
+int ha_sphinx::index_first ( byte * )
 {
-	DBUG_ENTER ( "ha_sphinx::index_first" );
-	DGPRINT( "%s","index_first\n" );
-	DBUG_RETURN ( HA_ERR_END_OF_FILE );
+	SPH_ENTER_METHOD();
+	SPH_RET ( HA_ERR_END_OF_FILE );
 }
 
 // index_last() asks for the last key in the index.
 //
 // Called from opt_range.cc, opt_sum.cc, sql_handler.cc,
 // and sql_select.cc.
-int ha_sphinx::index_last ( byte * buf )
+int ha_sphinx::index_last ( byte * )
 {
-	DBUG_ENTER ( "ha_sphinx::index_last" );
-	DGPRINT ( "%s","index_last\n" );
-	DBUG_RETURN ( HA_ERR_WRONG_COMMAND );
+	SPH_ENTER_METHOD();
+	SPH_RET ( HA_ERR_WRONG_COMMAND );
 }
 
 
 int ha_sphinx::rnd_init ( bool )
 {
-	DBUG_ENTER ( "ha_sphinx::rnd_init" );
-	DGPRINT ( "%s","rnd_init\n" );
-	DBUG_RETURN(0);
+	SPH_ENTER_METHOD();
+	SPH_RET(0);
 }
 
 
 int ha_sphinx::rnd_end()
 {
-	DBUG_ENTER ( "ha_sphinx::rnd_end" );
-	DBUG_RETURN(0);
+	SPH_ENTER_METHOD();
+	SPH_RET(0);
 }
 
 
 int ha_sphinx::rnd_next ( byte * )
 {
-	DBUG_ENTER ( "ha_sphinx::rnd_next" );
-	DBUG_RETURN ( HA_ERR_END_OF_FILE );
+	SPH_ENTER_METHOD();
+	SPH_RET ( HA_ERR_END_OF_FILE );
 }
 
 
-void ha_sphinx::position ( const byte * record )
+void ha_sphinx::position ( const byte * )
 {
-	DBUG_ENTER ( "ha_sphinx::position" );
-	DBUG_VOID_RETURN;
+	SPH_ENTER_METHOD();
+	SPH_VOID_RET();
 }
 
 
@@ -1175,18 +1785,19 @@ void ha_sphinx::position ( const byte * record )
 // Called from filesort.cc records.cc sql_insert.cc sql_select.cc sql_update.cc.
 int ha_sphinx::rnd_pos ( byte *, byte * )
 {
-	DBUG_ENTER ( "ha_sphinx::rnd_pos" );
-	DBUG_RETURN ( HA_ERR_WRONG_COMMAND );
+	SPH_ENTER_METHOD();
+	SPH_RET ( HA_ERR_WRONG_COMMAND );
 }
 
 
-#if MYSQL_VERSION_ID>=50114
-int ha_sphinx::info ( uint flag )
+#if MYSQL_VERSION_ID>=50030
+int ha_sphinx::info ( uint )
 #else
-void ha_sphinx::info ( uint flag )
+void ha_sphinx::info ( uint )
 #endif
 {
-	DBUG_ENTER ( "ha_sphinx::info" );
+	SPH_ENTER_METHOD();
+
 	if ( table->s->keys>0 )
 		table->key_info[0].rec_per_key[0] = 1;
 
@@ -1196,32 +1807,32 @@ void ha_sphinx::info ( uint flag )
 	records = 20;
 	#endif
 
-#if MYSQL_VERSION_ID>=50114
-	DBUG_RETURN(0);
+#if MYSQL_VERSION_ID>=50030
+	SPH_RET(0);
 #else
-	DBUG_VOID_RETURN;
+	SPH_VOID_RET();
 #endif
 }
 
 
 int ha_sphinx::extra ( enum ha_extra_function )
 {
-	DBUG_ENTER ( "ha_sphinx::extra" );
-	DBUG_RETURN(0);
+	SPH_ENTER_METHOD();
+	SPH_RET(0);
 }
 
 
 int ha_sphinx::reset()
 {
-	DBUG_ENTER ( "ha_sphinx::reset" );
-	DBUG_RETURN(0);
+	SPH_ENTER_METHOD();
+	SPH_RET(0);
 }
 
 
 int ha_sphinx::delete_all_rows()
 {
-	DBUG_ENTER ( "ha_sphinx::delete_all_rows" );
-	DBUG_RETURN ( HA_ERR_WRONG_COMMAND );
+	SPH_ENTER_METHOD();
+	SPH_RET ( HA_ERR_WRONG_COMMAND );
 }
 
 
@@ -1236,25 +1847,28 @@ int ha_sphinx::delete_all_rows()
 // from sql_table.cc by copy_data_between_tables().
 int ha_sphinx::external_lock ( THD *, int )
 {
-	DBUG_ENTER ( "ha_sphinx::external_lock" );
-	DBUG_RETURN(0);
+	SPH_ENTER_METHOD();
+	SPH_RET(0);
 }
 
 
-THR_LOCK_DATA ** ha_sphinx::store_lock ( THD *thd, THR_LOCK_DATA ** to,
+THR_LOCK_DATA ** ha_sphinx::store_lock ( THD *, THR_LOCK_DATA ** to,
 	enum thr_lock_type lock_type )
 {
-	if ( lock_type!=TL_IGNORE && lock.type==TL_UNLOCK )
-		lock.type=lock_type;
-	*to++ = &lock;
-	return to;
+	SPH_ENTER_METHOD();
+
+	if ( lock_type!=TL_IGNORE && m_tLock.type==TL_UNLOCK )
+		m_tLock.type=lock_type;
+
+	*to++ = &m_tLock;
+	SPH_RET(to);
 }
 
 
 int ha_sphinx::delete_table ( const char * )
 {
-	DBUG_ENTER ( "ha_sphinx::delete_table" );
-	DBUG_RETURN(0);
+	SPH_ENTER_METHOD();
+	SPH_RET(0);
 }
 
 
@@ -1267,8 +1881,8 @@ int ha_sphinx::delete_table ( const char * )
 // Called from sql_table.cc by mysql_rename_table().
 int ha_sphinx::rename_table ( const char *, const char * )
 {
-	DBUG_ENTER ( "ha_sphinx::rename_table" );
-	DBUG_RETURN(0);
+	SPH_ENTER_METHOD();
+	SPH_RET(0);
 }
 
 
@@ -1277,15 +1891,24 @@ int ha_sphinx::rename_table ( const char *, const char * )
 // if start_key matches any rows.
 //
 // Called from opt_range.cc by check_quick_keys().
-ha_rows ha_sphinx::records_in_range ( uint inx, key_range * min_key, key_range * max_key )
+ha_rows ha_sphinx::records_in_range ( uint, key_range * min_key, key_range * max_key )
 {
+	SPH_ENTER_METHOD();
+
+#if SPHINX_DEBUG
 	String varchar;
 	uint var_length = uint2korr(min_key->key);
-
-	DBUG_ENTER ( "ha_sphinx::records_in_range" );
 	varchar.set_quick ( (char*)min_key->key+HA_KEY_BLOB_LENGTH, var_length, &my_charset_bin );
-	DGPRINT ( "records_in range = %s, %d\n", varchar.ptr(), var_length );
-	DBUG_RETURN(3); // low number to force index usage
+	SPH_DEBUG ( __FUNCTION__ ": key_val=%s, key_len=%d", varchar.ptr(), var_length );
+#endif
+
+	SPH_RET(3); // low number to force index usage
+}
+
+
+static inline bool IsIntegerFieldType ( enum_field_types eType )
+{
+	return eType==MYSQL_TYPE_LONG;
 }
 
 
@@ -1297,15 +1920,95 @@ ha_rows ha_sphinx::records_in_range ( uint inx, key_range * min_key, key_range *
 // currently provided for doing that.
 //
 // Called from handle.cc by ha_create_table().
-int ha_sphinx::create ( const char * name, TABLE * table_arg, HA_CREATE_INFO * create_info )
+int ha_sphinx::create ( const char * name, TABLE * table, HA_CREATE_INFO * )
 {
-	DBUG_ENTER ( "ha_sphinx::create" );
-	DGPRINT ( "count of fields %d\n", table_arg->s->fields );
+	SPH_ENTER_METHOD();
+	char sError[256];
 
-	if ( table_arg->s->fields!=5 )
-		DBUG_RETURN(-1);
+	if ( !ParseUrl ( NULL, table, true ) )
+		SPH_RET(-1);
 
-	DBUG_RETURN(0);
+	for ( ;; )
+	{
+		// check system fields (count and types)
+		if ( table->s->fields<SPHINXSE_SYSTEM_COLUMNS )
+		{
+			my_snprintf ( sError, sizeof(sError), "%s: there MUST be at least %d columns",
+				name, SPHINXSE_SYSTEM_COLUMNS );
+			break;
+		}
+
+		if ( !IsIntegerFieldType ( table->field[0]->type() ) )
+		{
+			my_snprintf ( sError, sizeof(sError), "%s: 1st column (docid) MUST be integer", name );
+			break;
+		}
+
+		if ( !IsIntegerFieldType ( table->field[1]->type() ) )
+		{
+			my_snprintf ( sError, sizeof(sError), "%s: 2nd column (weight) MUST be integer", name );
+			break;
+		}
+
+		if ( table->field[2]->type()!=MYSQL_TYPE_VARCHAR )
+		{
+			my_snprintf ( sError, sizeof(sError), "%s: 3rd column (search query) MUST be varchar", name );
+			break;
+		}
+
+		// check attributes
+		int i;
+		for ( i=3; i<(int)table->s->fields; i++ )
+		{
+			enum_field_types eType = table->field[i]->type();
+			if ( eType!=MYSQL_TYPE_TIMESTAMP && !IsIntegerFieldType(eType) )
+			{
+				my_snprintf ( sError, sizeof(sError), "%s: %dth column (attribute %s) MUST be integer or timestamp",
+					name, i+1, table->field[i]->field_name );
+				break;
+			}
+		}
+
+		if ( i!=(int)table->s->fields )
+			break;
+
+		// check index
+		if (
+			table->s->keys!=1 ||
+			table->key_info[0].key_parts!=1 ||
+			strcasecmp ( table->key_info[0].key_part[0].field->field_name, table->field[2]->field_name ) )
+		{
+			my_snprintf ( sError, sizeof(sError), "%s: there must be an index on '%s' column",
+				name, table->field[2]->field_name );
+			break;
+		}
+
+		// all good
+		sError[0] = '\0';
+		break;
+	}
+	if ( sError[0] )
+	{
+		my_error ( ER_CANT_CREATE_TABLE, MYF(0), sError, -1 );
+		SPH_RET(-1);
+	}
+
+
+/*
+		MYSQL_TYPE_DECIMAL,
+		MYSQL_TYPE_LONG,
+		MYSQL_TYPE_LONGLONG,
+
+		MYSQL_TYPE_TIMESTAMP,
+		MYSQL_TYPE_DATETIME,
+		MYSQL_TYPE_NEWDATE,
+		
+		MYSQL_TYPE_VARCHAR,
+		MYSQL_TYPE_VAR_STRING,
+		MYSQL_TYPE_STRING,
+*/
+
+	SPH_RET(0);
 }
 
 

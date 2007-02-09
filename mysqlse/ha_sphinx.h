@@ -7,9 +7,6 @@
 #endif
 
 
-#define SPHINX_QUERY_BUFFER_SIZE	2048		// 2K should be enough
-
-
 #if MYSQL_VERSION_ID>50100
 #define TABLE_ARG	st_table_share
 #else
@@ -17,74 +14,39 @@
 #endif
 
 
-/// SPHINX_SHARE is a structure that will be shared
-/// among all open Sphinx SE handlers
-typedef struct st_sphinx_share
-{
-	char *			table_name;
-	char *			scheme;
-	char *			hostname;
-	char *			socket;
-	char *			sport;
-	char *			indexname;
-	uint			parse_error;
-	ushort			port;
-	uint			table_name_length,use_count;
-	pthread_mutex_t	mutex;
-	THR_LOCK		lock;
-} SPHINX_SHARE;
-
-
-/// Sphinx network request
-typedef struct st_query_req
-{
-	uint	offset;
-	uint	limit;
-	uint	mode;
-	uint	sort;
-	uint	min_id;
-	uint	max_id;
-	uint	min_tid;
-	uint	max_tid;
-	uint	min_gid;
-	uint	max_gid;
-	char *	query;
-	char *	index;
-	uint	query_len;
-	uint	index_len;
-	uint	query_len_code;
-	uint	index_len_code;
-	uint	weights_count;
-	uint	weights_count_code;
-	int *	weights;
-	uint	groups_count;
-	uint	groups_count_code;
-	int *	groups;
-} query_req;
-
-
-/// forward decl
+/// forward decls
 class THD;
+struct CSphReqQuery;
+struct CSphSEShare;
+struct CSphSEAttr;
+struct CSphSEStats;
 
 
 /// Sphinx SE handler class
 class ha_sphinx : public handler
 {
 protected:
-	THR_LOCK_DATA	lock;				///< MySQL lock
-	SPHINX_SHARE *	share;				///< shared lock info
-	String			buffer;
-	byte			byte_buffer[1024];
-	int				start_of_scan;
-	int				fd_socket;
-	uint			count_of_found_recs;
-	uint			current_pos;
-	const byte *	current_key;
-	uint			current_key_len;
-	char *			response;
+	THR_LOCK_DATA	m_tLock;				///< MySQL lock
+
+	CSphSEShare *	m_pShare;				///< shared lock info
+
+	int				m_iStartOfScan;
+	uint			m_iMatchesTotal;
+	uint			m_iCurrentPos;
+	const byte *	m_pCurrentKey;
+	uint			m_iCurrentKeyLen;
+
+	char *			m_pResponse;			///< searchd response storage
+	char *			m_pResponseEnd;			///< searchd response storage end (points to wilderness!)
+	char *			m_pCur;					///< current position into response
+	bool			m_bUnpackError;			///< any errors while unpacking response
 
 public:
+#if MYSQL_VERSION_ID<50100
 					ha_sphinx ( TABLE_ARG * table_arg );
+#else
+					ha_sphinx ( handlerton * hton, TABLE_ARG * table_arg );
+#endif
 					~ha_sphinx () {}
 
 	const char *	table_type () const		{ return "SPHINX"; }	///< SE name for display purposes
@@ -102,6 +64,7 @@ public:
 	uint			max_supported_keys () const				{ return 1; }
 	uint			max_supported_key_parts () const		{ return 1; }
 	uint			max_supported_key_length () const		{ return 1024; }
+	uint			max_supported_key_part_length () const	{ return 1024; }
 
 	#if MYSQL_VERSION_ID>50100
 	virtual double	scan_time ()	{ return (double)( stats.records+stats.deleted )/20.0 + 10; }	///< called in test_quick_select to determine if indexes should be used
@@ -136,8 +99,9 @@ public:
 	int				rnd_next ( byte * buf );
 	int				rnd_pos ( byte * buf, byte * pos );
 	void			position ( const byte * record );
-#if MYSQL_VERSION_ID>=50114
-	int			info ( uint );
+
+#if MYSQL_VERSION_ID>=50030
+	int				info ( uint );
 #else
 	void			info ( uint );
 #endif
@@ -154,9 +118,22 @@ public:
 
 	THR_LOCK_DATA **store_lock ( THD * thd, THR_LOCK_DATA ** to, enum thr_lock_type lock_type );
 
-protected:
-	int				do_open_connection ();
-	int				parse_query ( char * query, char * query_req );
+private:
+	uint32			m_iFields;
+	char **			m_dFields;
+
+	uint32			m_iAttrs;
+	CSphSEAttr *	m_dAttrs;
+
+	int *			m_dUnboundFields;
+
+private:
+	int				ConnectToSearchd ();
+
+	uint32			UnpackDword ();
+	char *			UnpackString ();
+	bool			UnpackSchema ();
+	CSphSEStats *	UnpackStats ();
 };
 
 

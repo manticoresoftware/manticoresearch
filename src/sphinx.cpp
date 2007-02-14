@@ -8748,13 +8748,7 @@ BYTE ** CSphSource_SQL::NextDocument ()
 	ARRAY_FOREACH ( i, m_tSchema.m_dAttrs )
 	{
 		DWORD * pAttrs = m_tDocInfo.m_pAttrs; // shortcut
-		pAttrs[i] = sphToDword ( SqlColumn ( m_tSchema.m_dAttrs[i].m_iIndex ) );
-		if ( !pAttrs[i] )
-		{
-			pAttrs[i] = 1;
-			fprintf ( stdout, "WARNING: zero/NULL attribute '%s' for document_id=%u, fixed up to 1\n",
-				m_tSchema.m_dAttrs[i].m_sName.cstr(), m_tDocInfo.m_iDocID );
-		}
+		pAttrs[i] = sphToDword ( SqlColumn ( m_tSchema.m_dAttrs[i].m_iIndex ) ); // FIXME? report conversion errors maybe?
 	}
 
 	return m_dFields;

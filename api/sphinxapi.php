@@ -20,10 +20,12 @@
 /// known searchd commands
 define ( "SEARCHD_COMMAND_SEARCH",	0 );
 define ( "SEARCHD_COMMAND_EXCERPT",	1 );
+define ( "SEARCHD_COMMAND_UPDATE",	2 );
 
 /// current client-side command implementation versions
 define ( "VER_COMMAND_SEARCH",		0x106 );
 define ( "VER_COMMAND_EXCERPT",		0x100 );
+define ( "VER_COMMAND_UPDATE",		0x100 );
 
 /// known searchd status codes
 define ( "SEARCHD_OK",				0 );
@@ -583,6 +585,72 @@ class SphinxClient
 		}
 
 		return $res;
+	}
+
+	/////////////////////////////////////////////////////////////////////////////
+	// attribute updates
+	/////////////////////////////////////////////////////////////////////////////
+
+	/// update specified attributes on specified documents
+	///
+	/// $index is a name of the index to be updated
+	/// $attrs is an array of attribute name strings
+	/// $values is a hash where key is document id, and value is an array of
+	///		new attribute values
+	///
+	/// returns number of actually updated documents (0 or more) on success
+	/// returns -1 on failure
+	///
+	/// usage example:
+	///		$cl->UpdateAttributes ( array("group"), array(123=>array(456)) );
+	function UpdateAttributes ( $index, $attrs, $values )
+	{
+		// verify everything
+		assert ( is_string($index) );
+
+		assert ( is_array($attrs) );
+		foreach ( $attrs as $attr )
+			assert ( is_string($attr) );
+
+		assert ( is_array($values) );
+		foreach ( $values as $id=>$entry )
+		{
+			assert ( is_int($id) );
+			assert ( is_array($entry) );
+			assert ( count($entry)==count($attrs) );
+			foreach ( $entry as $v )
+				assert ( is_int($v) );
+		}
+
+		// build request
+		$req = pack ( "N", strlen($index) ) . $index;
+
+		$req .= pack ( "N", count($attrs) );
+		foreach ( $attrs as $attr )
+			$req .= pack ( "N", strlen($attr) ) . $attr;
+
+		$req .= pack ( "N", count($values) );
+		foreach ( $values as $id=>$entry )
+		{
+			$req .= pack ( "N", $id );
+			foreach ( $entry as $v )
+				$req .= pack ( "N", $v );
+		}
+
+		// connect, send query, get response
+		if (!( $fp = $this->_Connect() ))
+			return -1;
+
+		$len = strlen($req);
+		$req = pack ( "nnN", SEARCHD_COMMAND_UPDATE, VER_COMMAND_UPDATE, $len ) . $req; // add header
+		fwrite ( $fp, $req, $len+8 );
+
+		if (!( $response = $this->_GetResponse ( $fp, VER_COMMAND_UPDATE ) ))
+			return -1;
+
+		// parse response
+		list(,$updated) = unpack ( "N*", substr ( $response, $p, 4 ) );
+		return $updated;
 	}
 }
 

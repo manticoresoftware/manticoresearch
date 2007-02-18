@@ -951,6 +951,21 @@ public:
 };
 
 /////////////////////////////////////////////////////////////////////////////
+// ATTRIBUTE UPDATE QUERY
+/////////////////////////////////////////////////////////////////////////////
+
+struct CSphAttrUpdate_t
+{
+	CSphVector<CSphColumnInfo,8>	m_dAttrs;		///< update schema (ie. what attrs to update)
+	int								m_iUpdates;		///< updates count
+	DWORD *							m_pUpdates;		///< updates data
+
+public:
+	CSphAttrUpdate_t ();		///< builds new clean structure
+	~CSphAttrUpdate_t ();		
+};
+
+/////////////////////////////////////////////////////////////////////////////
 // FULLTEXT INDICES
 /////////////////////////////////////////////////////////////////////////////
 
@@ -1001,11 +1016,17 @@ public:
 
 public:
 	virtual int					Build ( CSphDict * dict, const CSphVector < CSphSource * > & dSources, int iMemoryLimit, ESphDocinfo eDocinfo ) = 0;
-	virtual CSphQueryResult *	Query ( CSphDict * dict, CSphQuery * pQuery ) = 0;
-	virtual bool				QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchQueue * pTop ) = 0;
-	virtual bool				Merge( CSphIndex * pSource ) = 0;
 
 	virtual const CSphSchema *	Preload () = 0;
+	virtual CSphQueryResult *	Query ( CSphDict * dict, CSphQuery * pQuery ) = 0;
+	virtual bool				QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchQueue * pTop ) = 0;
+
+	virtual bool				Merge ( CSphIndex * pSource ) = 0;
+
+	/// updates memory-cached attributes in real time
+	/// returns non-negative amount of actually found and updated records on success
+	/// returns -1 and fills sError on failure
+	virtual int					UpdateAttributes ( const CSphAttrUpdate_t & tUpd, CSphString & sError ) = 0;
 
 protected:
 	ProgressCallback_t *		m_pProgress;

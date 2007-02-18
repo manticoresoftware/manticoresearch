@@ -485,7 +485,7 @@ public:
 	}
 
 public:
-	/// read-only accessor
+	/// accessor
 	inline const T & operator [] ( int iIndex )
 	{
 		return m_pData[iIndex];
@@ -1505,11 +1505,14 @@ struct CSphIndex_VLN : CSphIndex
 								~CSphIndex_VLN ();
 
 	virtual int					Build ( CSphDict * pDict, const CSphVector < CSphSource * > & dSources, int iMemoryLimit, ESphDocinfo eDocinfo );
+
+	virtual const CSphSchema *	Preload ();
 	virtual CSphQueryResult *	Query ( CSphDict * pDict, CSphQuery * pQuery);
 	virtual bool				QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchQueue * pTop );
-	virtual const CSphSchema *	Preload ();
-	bool						Merge ( CSphIndex * pSource );	
-	void						MergeWordData ( CSphWordRecord & tDstWord, CSphWordRecord & tSrcWord );
+
+	virtual bool				Merge ( CSphIndex * pSource );	
+
+	virtual int					UpdateAttributes ( const CSphAttrUpdate_t & tUpd, CSphString & sError );
 
 private:
 	static const int			WORDLIST_CHECKPOINT		= 1024;		///< wordlist checkpoints frequency
@@ -1579,7 +1582,10 @@ private:
 	bool						MatchBoolean ( const CSphQuery * pQuery, CSphDict * pDict, ISphMatchQueue * pTop, CSphQueryResult * pResult, int iDoclistFD );
 	bool						MatchExtended ( const CSphQuery * pQuery, CSphDict * pDict, ISphMatchQueue * pTop, CSphQueryResult * pResult, int iDoclistFD );
 
+	const DWORD *				FindDocinfo ( DWORD uDocID );
 	void						LookupDocinfo ( CSphDocInfo & tMatch );
+
+	void						MergeWordData ( CSphWordRecord & tDstWord, CSphWordRecord & tSrcWord );
 
 public:
 	// FIXME! this needs to be protected, and refactored as well
@@ -3264,6 +3270,21 @@ CSphQueryResult::~CSphQueryResult ()
 }
 
 /////////////////////////////////////////////////////////////////////////////
+// ATTR UPDATE
+/////////////////////////////////////////////////////////////////////////////
+
+CSphAttrUpdate_t::CSphAttrUpdate_t ()
+	: m_iUpdates ( 0 )
+	, m_pUpdates ( NULL )
+{}
+
+
+CSphAttrUpdate_t::~CSphAttrUpdate_t ()
+{
+	SafeDeleteArray ( m_pUpdates );
+}
+
+/////////////////////////////////////////////////////////////////////////////
 // CHUNK READER
 /////////////////////////////////////////////////////////////////////////////
 
@@ -3527,6 +3548,52 @@ CSphIndex_VLN::~CSphIndex_VLN ()
 {
 }
 
+/////////////////////////////////////////////////////////////////////////////
+
+int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate_t & tUpd, CSphString & sError )
+{
+	assert ( tUpd.m_pUpdates || !tUpd.m_iUpdates );
+
+	// error message buffer
+	char sBuf [ 1024 ];
+
+	// remap update schema to index schema
+	CSphVector<int,8> dAttrIndex;
+	ARRAY_FOREACH ( i, tUpd.m_dAttrs )
+	{
+		int iIndex = m_tSchema.GetAttrIndex ( tUpd.m_dAttrs[i].m_sName.cstr() );
+		if ( iIndex<0 )
+		{
+			snprintf ( sBuf, sizeof(sBuf), "attribute '%s' not found", tUpd.m_dAttrs[i].m_sName.cstr() );
+			sError = sBuf;
+			return -1;
+		}
+		dAttrIndex.Add ( 1+iIndex );
+	}
+	assert ( dAttrIndex.GetLength()==tUpd.m_dAttrs.GetLength() );
+
+	// do update
+	int iUpdated = 0;
+	int iStride = 1+dAttrIndex.GetLength();
+	const DWORD * pUpdate = tUpd.m_pUpdates;
+
+	for ( int iUpd=0; iUpd<tUpd.m_iUpdates; iUpd++, pUpdate+=iStride )
+	{
+		DWORD * pEntry = const_cast < DWORD * > ( FindDocinfo ( pUpdate[0] ) );
+		if ( !pEntry )
+			continue;
+
+		assert ( pEntry[0]==pUpdate[0] );
+		ARRAY_FOREACH ( i, dAttrIndex )
+			pEntry [ dAttrIndex[i] ] = pUpdate[1+i];
+
+		iUpdated++;
+	}
+
+	return iUpdated;
+}
+
+/////////////////////////////////////////////////////////////////////////////
 
 #define SPH_CMPHIT_LESS(a,b) \
 	(a.m_iWordID < b.m_iWordID || \
@@ -5638,29 +5705,27 @@ static inline bool sphMatchEarlyReject ( const CSphMatch & tMatch, const CSphQue
 }
 
 
-void CSphIndex_VLN::LookupDocinfo ( CSphDocInfo & tMatch )
+const DWORD * CSphIndex_VLN::FindDocinfo ( DWORD uDocID )
 {
 	if ( m_iDocinfo<=0 )
-		return;
+		return NULL;
 
 	assert ( m_eDocinfo==SPH_DOCINFO_EXTERN );
 	assert ( !m_pDocinfo.IsEmpty() );
 	assert ( m_tSchema.m_dAttrs.GetLength() );
-	assert ( tMatch.m_pAttrs );
-	assert ( tMatch.m_iAttrs==m_tSchema.m_dAttrs.GetLength() );
 
-	DWORD uHash = ( tMatch.m_iDocID - m_pDocinfo[0] ) >> m_iDocinfoIdShift;
+	DWORD uHash = ( uDocID - m_pDocinfo[0] ) >> m_iDocinfoIdShift;
 	int iStart = m_pDocinfoHash [ uHash ];
 	int iEnd = m_pDocinfoHash [ uHash+1 ] - 1;
 
 	int iStride = 1 + m_tSchema.m_dAttrs.GetLength();
 	const DWORD * pFound = NULL;
 
-	if ( tMatch.m_iDocID==m_pDocinfo [ iStart*iStride ] )
+	if ( uDocID==m_pDocinfo [ iStart*iStride ] )
 	{
 		pFound = &m_pDocinfo [ iStart*iStride ];
 
-	} else if ( tMatch.m_iDocID==m_pDocinfo [ iEnd*iStride ] )
+	} else if ( uDocID==m_pDocinfo [ iEnd*iStride ] )
 	{
 		pFound = &m_pDocinfo [ iEnd*iStride ];
 
@@ -5670,19 +5735,19 @@ void CSphIndex_VLN::LookupDocinfo ( CSphDocInfo & tMatch )
 		{
 			// check if nothing found
 			if (
-				tMatch.m_iDocID < m_pDocinfo [ iStart*iStride ] ||
-				tMatch.m_iDocID > m_pDocinfo [ iEnd*iStride ] )
+				uDocID < m_pDocinfo [ iStart*iStride ] ||
+				uDocID > m_pDocinfo [ iEnd*iStride ] )
 					break;
-			assert ( tMatch.m_iDocID > m_pDocinfo [ iStart*iStride ] );
-			assert ( tMatch.m_iDocID < m_pDocinfo [ iEnd*iStride ] );
+			assert ( uDocID > m_pDocinfo [ iStart*iStride ] );
+			assert ( uDocID < m_pDocinfo [ iEnd*iStride ] );
 
 			int iMid = iStart + (iEnd-iStart)/2;
-			if ( tMatch.m_iDocID==m_pDocinfo [ iMid*iStride ] )
+			if ( uDocID==m_pDocinfo [ iMid*iStride ] )
 			{
 				pFound = &m_pDocinfo [ iMid*iStride ];
 				break;
 			}
-			if ( tMatch.m_iDocID<m_pDocinfo [ iMid*iStride ] )
+			if ( uDocID<m_pDocinfo [ iMid*iStride ] )
 				iEnd = iMid;
 			else
 				iStart = iMid;
@@ -5690,7 +5755,20 @@ void CSphIndex_VLN::LookupDocinfo ( CSphDocInfo & tMatch )
 	}
 
 	assert ( pFound );
-	memcpy ( tMatch.m_pAttrs, pFound+1, tMatch.m_iAttrs*sizeof(DWORD) );
+	return pFound;
+}
+
+
+void CSphIndex_VLN::LookupDocinfo ( CSphDocInfo & tMatch )
+{
+	const DWORD * pFound = FindDocinfo ( tMatch.m_iDocID );
+	if ( pFound )
+	{
+		assert ( tMatch.m_pAttrs );
+		assert ( tMatch.m_iAttrs==m_tSchema.m_dAttrs.GetLength() );
+		assert ( pFound[0]==tMatch.m_iDocID );
+		memcpy ( tMatch.m_pAttrs, pFound+1, tMatch.m_iAttrs*sizeof(DWORD) );
+	}
 }
 
 

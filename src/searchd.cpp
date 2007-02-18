@@ -161,6 +161,7 @@ enum SearchdCommand_e
 {
 	SEARCHD_COMMAND_SEARCH		= 0,
 	SEARCHD_COMMAND_EXCERPT		= 1,
+	SEARCHD_COMMAND_UPDATE		= 2,
 
 	SEARCHD_COMMAND_TOTAL
 };
@@ -170,7 +171,8 @@ enum SearchdCommand_e
 enum
 {
 	VER_COMMAND_SEARCH		= 0x106,
-	VER_COMMAND_EXCERPT		= 0x100
+	VER_COMMAND_EXCERPT		= 0x100,
+	VER_COMMAND_UPDATE		= 0x100
 };
 
 
@@ -2799,6 +2801,65 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	assert ( tOut.GetError()==true || tOut.GetSentCount()==iRespLen+8 );
 }
 
+/////////////////////////////////////////////////////////////////////////////
+
+void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq )
+{
+	// check major command version
+	if ( (iVer>>8)!=(VER_COMMAND_UPDATE>>8) )
+	{
+		tReq.SendErrorReply ( "major command version mismatch (expected v.%d.x, got v.%d.%d)",
+			VER_COMMAND_UPDATE>>8, iVer>>8, iVer&0xff );
+		return;
+	}
+
+	// obtain and check index name
+	CSphString sIndex = tReq.GetString ();
+	if ( !g_hIndexes ( sIndex ) )
+	{
+		tReq.SendErrorReply ( "invalid local index '%s' specified in request", sIndex.cstr() );
+		return;
+	}
+	assert ( g_hIndexes[sIndex].m_pIndex );
+
+	// obtain update data
+	CSphAttrUpdate_t tUpd;
+	tUpd.m_dAttrs.Resize ( tReq.GetDword() ); // FIXME! check this
+	ARRAY_FOREACH ( i, tUpd.m_dAttrs )
+		tUpd.m_dAttrs[i].m_sName = tReq.GetString ();
+
+	int iStride = 1+tUpd.m_dAttrs.GetLength();
+	tUpd.m_iUpdates = tReq.GetInt (); // FIXME! check this
+	tUpd.m_pUpdates = new DWORD [ tUpd.m_iUpdates*iStride ];
+	for ( int i=0; i<tUpd.m_iUpdates*iStride; i++ )
+		tUpd.m_pUpdates[i] = tReq.GetDword ();
+
+	// check buffer
+	if ( tReq.GetError() )
+	{
+		tReq.SendErrorReply ( "invalid or truncated request" );
+		return;
+	}
+
+	// do update
+	CSphString sError;
+	int iUpdated = g_hIndexes[sIndex].m_pIndex->UpdateAttributes ( tUpd, sError );
+	if ( iUpdated<0 )
+	{
+		tReq.SendErrorReply ( "index '%s': %s", sIndex.cstr(), sError.cstr() );
+		return;
+	}
+
+	NetOutputBuffer_c tOut ( iSock );
+	tOut.SendWord ( SEARCHD_OK );
+	tOut.SendWord ( VER_COMMAND_UPDATE);
+	tOut.SendInt ( sizeof(DWORD) );
+	tOut.SendInt ( iUpdated );
+	tOut.Flush ();
+	assert ( tOut.GetError()==true || tOut.GetSentCount()==8+sizeof(DWORD) );
+}
+
+/////////////////////////////////////////////////////////////////////////////
 
 void HandleClient ( int iSock, const char * sClientIP )
 {
@@ -2853,6 +2914,7 @@ void HandleClient ( int iSock, const char * sClientIP )
 	{
 		case SEARCHD_COMMAND_SEARCH:	HandleCommandSearch ( iSock, iCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_EXCERPT:	HandleCommandExcerpt ( iSock, iCommandVer, tBuf ); break;
+		case SEARCHD_COMMAND_UPDATE:	HandleCommandUpdate ( iSock, iCommandVer, tBuf ); break;
 		default:						assert ( 0 && "INTERNAL ERROR: unhandled command" ); break;
 	}
 }

@@ -1788,6 +1788,43 @@ DWORD sphToDword ( const char * s )
 	return strtoul ( s, NULL, 10 );
 }
 
+#if USE_WINDOWS || !HAVE_F_SETLKW
+bool sphLockEx ( int, bool )
+{
+	return true;
+}
+
+void sphLockUn ( int )
+{
+}
+
+#else
+
+bool sphLockEx ( int iFile, bool bWait )
+{
+	struct flock tLock;
+	tLock.l_type = F_WRLCK;
+	tLock.l_whence = SEEK_SET;
+	tLock.l_start = 0;
+	tLock.l_len = 0;
+
+	int iCmd = bWait ? F_SETLKW : F_SETLK;
+	return ( fcntl ( iFile, iCmd, &tLock )!=-1 );
+}
+
+
+void sphLockUn ( int iFile )
+{
+	struct flock tLock;
+	tLock.l_type = F_UNLCK;
+	tLock.l_whence = SEEK_SET;
+	tLock.l_start = 0;
+	tLock.l_len = 0;
+
+	fcntl ( iFile, F_SETLK, &tLock );
+}
+#endif
+
 /////////////////////////////////////////////////////////////////////////////
 // TOKENIZERS
 /////////////////////////////////////////////////////////////////////////////
@@ -4299,6 +4336,18 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 		pDocinfoMax = NULL;
 	}
 
+	// create and exclusively lock indexer lock file
+	CSphAutofile fdLock ( OpenIndexFile ( "tmp0", O_CREAT | O_RDWR | O_TRUNC ) );
+	if ( fdLock.GetFD()<0 )
+		return 0;
+
+	if ( !sphLockEx ( fdLock.GetFD(), false ) )
+	{
+		fprintf ( stdout, "ERROR: failed to lock '%s': another indexer running?\n",
+			GetIndexFileName ( "tmp0" ) );
+		return 0;
+	}
+
 	// create temp hits file
 	CSphAutofile fdTmpHits ( OpenIndexFile ( "tmp1", O_CREAT | O_RDWR | O_TRUNC ) );
 	if ( fdTmpHits.GetFD()<0 )
@@ -4782,8 +4831,10 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	// FIXME! should be unlinked on early-exit too
 	fdTmpHits.Close ();
 	fdTmpDocinfos.Close ();
+	fdLock.Close ();
 
 	char sBuf [ SPH_MAX_FILENAME_LEN ];
+	snprintf ( sBuf, sizeof(sBuf), "%s.tmp0", m_sFilename.cstr() ); unlink ( sBuf );
 	snprintf ( sBuf, sizeof(sBuf), "%s.tmp1", m_sFilename.cstr() ); unlink ( sBuf );
 	snprintf ( sBuf, sizeof(sBuf), "%s.tmp2", m_sFilename.cstr() ); unlink ( sBuf );
 

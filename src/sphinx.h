@@ -94,6 +94,13 @@ DWORD			sphCRC32 ( const BYTE * pString );
 /// replaces all occurences of sMacro in sTemplate with textual representation of uValue
 char *			sphStrMacro ( const char * sTemplate, const char * sMacro, DWORD uValue );
 
+/// try to obtain an exclusive lock on specified file
+/// bWait specifies whether to wait
+bool			sphLockEx ( int iFile, bool bWait );
+
+/// remove existing locks
+void			sphLockUn ( int iFile );
+
 /////////////////////////////////////////////////////////////////////////////
 // TOKENIZERS
 /////////////////////////////////////////////////////////////////////////////

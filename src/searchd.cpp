@@ -274,29 +274,6 @@ ServedIndex_t::~ServedIndex_t ()
 // LOGGING
 /////////////////////////////////////////////////////////////////////////////
 
-void sphLockEx ( int iFile )
-{
-	#if HAVE_LOCK_EX || USE_WINDOWS
-		flock ( iFile, LOCK_EX );
-	#else
-		#ifdef HAVE_F_SETLKW
-			fcntl ( iFile, F_SETLKW, F_WRLCK );
-		#endif
-	#endif
-}
-
-
-void sphLockUn ( int iFile )
-{
-	#if HAVE_LOCK_EX || USE_WINDOWS
-		flock ( iFile, LOCK_UN );
-	#else
-		#ifdef HAVE_F_SETLK
-			fcntl ( iFile, F_SETLKW, F_UNLCK );
-		#endif
-	#endif
-}
-
 void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 {
 	if ( eLevel>g_eLogLevel || g_iLogFile<0 )
@@ -322,7 +299,7 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	vsnprintf ( sBuf+iLen, sizeof(sBuf)-iLen-1, sFmt, ap );
 	strncat ( sBuf, "\n", sizeof(sBuf) );
 
-	sphLockEx ( g_iLogFile );
+	sphLockEx ( g_iLogFile, true );
 	lseek ( g_iLogFile, 0, SEEK_END );
 	write ( g_iLogFile, sBuf, strlen(sBuf) );
 	sphLockUn ( g_iLogFile );
@@ -2608,7 +2585,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			pRes->m_iTotalMatches, tQuery.m_iOffset, tQuery.m_iLimit, sGroupBuf,
 			sIndexes.cstr(), tQuery.m_sQuery.cstr() );
 
-		sphLockEx ( g_iQueryLogFile );
+		sphLockEx ( g_iQueryLogFile, true );
 		lseek ( g_iQueryLogFile, 0, SEEK_END );
 		write ( g_iQueryLogFile, sBuf, strlen(sBuf) );
 		sphLockUn ( g_iQueryLogFile );

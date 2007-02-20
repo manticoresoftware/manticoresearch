@@ -2873,8 +2873,6 @@ ESphSchemaCompare CSphSchema::CompareTo ( const CSphSchema & rhs, CSphString & s
 	// equality tests
 	//////////////////
 
-	ESphSchemaCompare eRes = SPH_SCHEMAS_EQUAL;
-
 	// check fulltext fields count
 	if ( rhs.m_dFields.GetLength()!=m_dFields.GetLength() )
 	{
@@ -2882,7 +2880,7 @@ ESphSchemaCompare CSphSchema::CompareTo ( const CSphSchema & rhs, CSphString & s
 			m_dFields.GetLength(), m_sName.cstr(),
 			rhs.m_dFields.GetLength(), rhs.m_sName.cstr() );
 		sError = sTmp;
-		eRes = SPH_SCHEMAS_COMPATIBLE;
+		return SPH_SCHEMAS_COMPATIBLE;
 	}
 
 	// check fulltext field names
@@ -2894,7 +2892,7 @@ ESphSchemaCompare CSphSchema::CompareTo ( const CSphSchema & rhs, CSphString & s
 			m_dFields[i].m_sName.cstr(), m_sName.cstr(),
 			rhs.m_dFields[i].m_sName.cstr(), rhs.m_sName.cstr() );
 		sError = sTmp;
-		eRes = SPH_SCHEMAS_COMPATIBLE;
+		return SPH_SCHEMAS_COMPATIBLE;
 	}
 
 	// check attr names
@@ -2905,10 +2903,10 @@ ESphSchemaCompare CSphSchema::CompareTo ( const CSphSchema & rhs, CSphString & s
 			i, iRealAttrs,
 			m_dAttrs[i].m_sName.cstr(), m_sName.cstr(),
 			rhs.m_dAttrs[i].m_sName.cstr(), rhs.m_sName.cstr() );
-		eRes = SPH_SCHEMAS_COMPATIBLE;
+		return SPH_SCHEMAS_COMPATIBLE;
 	}
 
-	return eRes;
+	return SPH_SCHEMAS_EQUAL;
 }
 
 

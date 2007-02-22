@@ -26,8 +26,10 @@ foreach ( $_SERVER["argv"] as $arg )
 $q = "";
 $mode = SPH_MATCH_ALL;
 $groups = array();
+$host = "localhost";
 $port = 3312;
 $index = "*";
+$groupby = "";
 for ( $i=0; $i<count($args); $i++ )
 {
 	$arg = $args[$i];
@@ -36,8 +38,10 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="-b" || $arg=="--boolean" )		$mode = SPH_MATCH_BOOLEAN;
 	else if ( $arg=="-e" || $arg=="--extended" )	$mode = SPH_MATCH_EXTENDED;
 	else if ( $arg=="-g" || $arg=="--group" )		$groups[] = (int)$args[++$i];
+	else if ( $arg=="-h" || $arg=="--host" )		$host = $args[++$i];
 	else if ( $arg=="-p" || $arg=="--port" )		$port = (int)$args[++$i];
 	else if ( $arg=="-i" || $arg=="--index" )		$index = $args[++$i];
+	else if ( $arg=="-y" || $arg=="--groupby" )		$groupby = $args[++$i];
 	else
 		$q .= $args[$i] . " ";
 }
@@ -47,11 +51,13 @@ for ( $i=0; $i<count($args); $i++ )
 ////////////
 
 $cl = new SphinxClient ();
-$cl->SetServer ( "localhost", $port );
+$cl->SetServer ( $host, $port );
 $cl->SetWeights ( array ( 100, 1 ) );
 $cl->SetMatchMode ( $mode );
 if ( count($groups) )
 	$cl->SetFilter ( "group_id", $groups );
+if ( $groupby )
+	$cl->SetGroupBy ( $groupby, SPH_GROUPBY_ATTR, false );
 $res = $cl->Query ( $q, $index );
 
 ////////////////

@@ -645,87 +645,50 @@ static inline int iLog2 ( DWORD iValue )
 #pragma warning(disable:4127)
 #endif
 
+
 /// simple fixed-size hash
 /// doesn't keep the order
-template < typename T, typename KEY, typename HASHFUNC, int STEP=117 >
-class CSphFixedHash
+template < typename T, typename KEY, typename HASHFUNC >
+class CSphFixedHash : ISphNoncopyable
 {
 protected:
+	static const int			HASH_LIST_END	= -1;
+	static const int			HASH_DELETED	= -2;
+
 	struct HashEntry_t
 	{
-		T 				m_tValue;			///< data, owned by the hash
-		KEY				m_tKey;				///< key, owned by the hash
-		bool			m_bDeleted;			///< is this entry deleted
-		bool			m_bEmpty;			///< is this entry empty
+		KEY		m_tKey;
+		T		m_tValue;
+		int		m_iNext;
+
+		HashEntry_t () : m_iNext ( HASH_DELETED ) {}
 	};
 
 protected:
-	HashEntry_t	*	m_pHash;				///< hash entries storage
-	const int		m_iLength;				///< hash capacity, power of 2
+	CSphVector<HashEntry_t>		m_dEntries;		///< key-value pairs storage pool
+	CSphVector<int>				m_dHash;		///< hash into m_dEntries pool
 
-protected:
-	/// this function finds hash entry by it's key.
-	template < bool STOP_ON_DELETED >
-	HashEntry_t * Search ( const KEY & key ) const
-	{
-		if ( !m_pHash )
-			return NULL;
-
-		DWORD uStart = DWORD ( HASHFUNC::Hash ( key ) ) & ( m_iLength-1 );
-		DWORD uHash = uStart;
-		do 
-		{
-			// deleted slot
-			if ( m_pHash[uHash].m_bDeleted )
-			{
-				// found deleted slot
-				if ( STOP_ON_DELETED )
-					return m_pHash + uHash;
-			}
-			else
-			{
-				// empty slot
-				if ( m_pHash[uHash].m_bEmpty )
-					return m_pHash + uHash;
-
-				// found the same
-				if ( m_pHash[uHash].m_tKey == key )
-					return m_pHash + uHash;
-			}
-
-			// next index
-			uHash = ( uHash+STEP ) & ( m_iLength-1 );
-		} while ( uHash!=uStart );
-		return NULL;
-	}
+	int							m_iFree;		///< free pairs count
+	CSphVector<int>				m_dFree;		///< free pair indexes
 
 public:
 	/// ctor
 	CSphFixedHash ( int iLength )
-		: m_pHash ( NULL )
-		, m_iLength ( 1<<( 1 + iLog2(iLength-1) ) )
 	{
+		int iBuckets = 2<<iLog2(iLength-1); // less than 50% bucket usage guaranteed
 		assert ( iLength>0 );
-		assert ( iLength<=m_iLength );
+		assert ( iLength<=iBuckets );
 
-		m_pHash = new HashEntry_t [ m_iLength ];
-		for ( int i=0; i<m_iLength; i++ )
-		{
-			m_pHash[i].m_bEmpty = true;
-			m_pHash[i].m_bDeleted = false;
-		}
-	}
+		m_dEntries.Resize ( iLength );
 
-	/// dtor
-	~CSphFixedHash ()
-	{
-		Reset ();
-	}
+		m_dHash.Resize ( iBuckets );
+		ARRAY_FOREACH ( i, m_dHash )
+			m_dHash[i] = HASH_LIST_END;
 
-	/// reset
-	void Reset ()
-	{
-		SafeDeleteArray ( m_pHash );
+		m_iFree = iLength;
+		m_dFree.Resize ( iLength );
+		ARRAY_FOREACH ( i, m_dFree )
+			m_dFree[i] = i;
 	}
 
 	/// add new entry
@@ -733,50 +696,81 @@ public:
 	/// returns pointer to value if already hashed
 	T * Add ( const T & tValue, const KEY & tKey )
 	{
-		assert ( m_pHash );
+		assert ( m_iFree>0 && "hash overflow" );
 
-		HashEntry_t * pEntry = Search<true> ( tKey );
-		assert ( pEntry && "hash overflow" );
+		// check if it's already hashed
+		DWORD uHash = DWORD ( HASHFUNC::Hash ( tKey ) ) & ( m_dHash.GetLength()-1 );
+		int iPrev = -1, iEntry;
 
-		// already hashed?
-		if ( !pEntry->m_bEmpty && !pEntry->m_bDeleted )
-			return &pEntry->m_tValue;
+		for ( iEntry=m_dHash[uHash]; iEntry>=0; iPrev=iEntry, iEntry=m_dEntries[iEntry].m_iNext )
+			if ( m_dEntries[iEntry].m_tKey==tKey )
+				return &m_dEntries[iEntry].m_tValue;
+		assert ( iEntry!=HASH_DELETED );
 
-		pEntry->m_tKey		= tKey;
-		pEntry->m_tValue	= tValue;
-		pEntry->m_bDeleted	= false;
-		pEntry->m_bEmpty	= false;
+		// if it's not, do add
+		int iNew = m_dFree [ --m_iFree ];
+
+		HashEntry_t & tNew = m_dEntries[iNew];
+		assert ( tNew.m_iNext==HASH_DELETED );
+
+		tNew.m_tKey = tKey;
+		tNew.m_tValue = tValue;
+		tNew.m_iNext = HASH_LIST_END;
+
+		if ( iPrev>=0 )
+		{
+			assert ( m_dEntries[iPrev].m_iNext==HASH_LIST_END );
+			m_dEntries[iPrev].m_iNext = iNew;
+		} else
+		{
+			assert ( m_dHash[uHash]==HASH_LIST_END );
+			m_dHash[uHash] = iNew;
+		}
 		return NULL;
 	}
 
 	/// remove entry from hash
 	void Remove ( const KEY & tKey )
 	{
-		HashEntry_t * pEntry = Search<false> ( tKey );
-		if ( !pEntry || pEntry->m_bEmpty )
-			return;
+		// check if it's already hashed
+		DWORD uHash = DWORD ( HASHFUNC::Hash ( tKey ) ) & ( m_dHash.GetLength()-1 );
+		int iPrev = -1, iEntry;
 
-		assert ( !pEntry->m_bDeleted );
-		assert ( pEntry->m_tKey==tKey );
-		pEntry->m_bDeleted = true;
+		for ( iEntry=m_dHash[uHash]; iEntry>=0; iPrev=iEntry, iEntry=m_dEntries[iEntry].m_iNext )
+			if ( m_dEntries[iEntry].m_tKey==tKey )
+		{
+			// found, remove it
+			assert ( m_dEntries[iEntry].m_iNext!=HASH_DELETED );
+			if ( iPrev>=0 )
+				m_dEntries[iPrev].m_iNext = m_dEntries[iEntry].m_iNext;
+			else
+				m_dHash[uHash] = m_dEntries[iEntry].m_iNext;
+
+#ifndef NDEBUG
+			m_dEntries[iEntry].m_iNext = HASH_DELETED;
+#endif
+
+			m_dFree [ m_iFree++ ] = iEntry;
+			return;
+		}
+		assert ( iEntry!=HASH_DELETED );
 	}
 
 	/// get value pointer by key
 	T * operator () ( const KEY & tKey ) const
 	{
-		HashEntry_t * pEntry = Search<false> ( tKey );
-		if ( pEntry && !pEntry->m_bEmpty )
-			return &pEntry->m_tValue;
+		DWORD uHash = DWORD ( HASHFUNC::Hash ( tKey ) ) & ( m_dHash.GetLength()-1 );
+		int iEntry;
+
+		for ( iEntry=m_dHash[uHash]; iEntry>=0; iEntry=m_dEntries[iEntry].m_iNext )
+			if ( m_dEntries[iEntry].m_tKey==tKey )
+				return (T*)&m_dEntries[iEntry].m_tValue;
+
+		assert ( iEntry!=HASH_DELETED );
 		return NULL;
 	}
-
-	/// copying
-	const CSphFixedHash<T,KEY,HASHFUNC,STEP> & operator = ( const CSphFixedHash<T,KEY,HASHFUNC,STEP> & rhs )
-	{
-		assert ( 0 );
-		return *this;
-	}
 };
+
 
 #if USE_WINDOWS
 #pragma warning(default:4127)
@@ -970,7 +964,13 @@ public:
 			tNew.m_pAttrs [ m_iAttrCount ] = 1;
 		}
 
+#ifndef NDEBUG
+		CSphMatch ** pRes = m_hGroup2Match.Add ( &tNew, uGroupKey );
+		assert ( pRes==NULL );
+		assert ( m_hGroup2Match(uGroupKey)!=NULL );
+#else
 		m_hGroup2Match.Add ( &tNew, uGroupKey );
+#endif
 
 		// sift up if needed, so that worst (lesser) ones float to the top
 		int iEntry = m_iUsed++;
@@ -998,7 +998,9 @@ public:
 		assert ( m_iUsed );
 
 		DWORD uGroupKey = GetGroupKey(0);
+		assert ( m_hGroup2Match(uGroupKey)!=NULL );
 		m_hGroup2Match.Remove ( uGroupKey );
+		assert ( m_hGroup2Match(uGroupKey)==NULL );
 
 		if ( !--m_iUsed ) // empty queue? just return
 			return;

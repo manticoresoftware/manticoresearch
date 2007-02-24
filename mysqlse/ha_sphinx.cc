@@ -112,7 +112,7 @@ enum ESphAttrType
 
 //////////////////////////////////////////////////////////////////////////////
 
-#define SPHINX_DEBUG_OUTPUT		1
+#define SPHINX_DEBUG_OUTPUT		0
 #define SPHINX_DEBUG_CALLS		0
 
 #include <stdarg.h>

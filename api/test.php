@@ -37,11 +37,12 @@ for ( $i=0; $i<count($args); $i++ )
 	if ( $arg=="-a" || $arg=="--any" )				$mode = SPH_MATCH_ANY;
 	else if ( $arg=="-b" || $arg=="--boolean" )		$mode = SPH_MATCH_BOOLEAN;
 	else if ( $arg=="-e" || $arg=="--extended" )	$mode = SPH_MATCH_EXTENDED;
-	else if ( $arg=="-g" || $arg=="--group" )		$groups[] = (int)$args[++$i];
+	else if ( $arg=="-f" || $arg=="--filter" )		$groups[] = (int)$args[++$i];
+	else if ( $arg=="-g" || $arg=="--groupby" )		$groupby = $args[++$i];
 	else if ( $arg=="-h" || $arg=="--host" )		$host = $args[++$i];
-	else if ( $arg=="-p" || $arg=="--port" )		$port = (int)$args[++$i];
 	else if ( $arg=="-i" || $arg=="--index" )		$index = $args[++$i];
-	else if ( $arg=="-y" || $arg=="--groupby" )		$groupby = $args[++$i];
+	else if ( $arg=="-p" || $arg=="--port" )		$port = (int)$args[++$i];
+	else if ( $arg=="-s" || $arg=="--sortby" )		$sortby = $args[++$i];
 	else
 		$q .= $args[$i] . " ";
 }
@@ -58,6 +59,8 @@ if ( count($groups) )
 	$cl->SetFilter ( "group_id", $groups );
 if ( $groupby )
 	$cl->SetGroupBy ( $groupby, SPH_GROUPBY_ATTR, false );
+if ( $sortby )
+	$cl->SetSortMode ( SPH_SORT_EXTENDED, $sortby );
 $res = $cl->Query ( $q, $index );
 
 ////////////////

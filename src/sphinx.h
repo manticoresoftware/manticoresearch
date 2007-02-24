@@ -997,8 +997,64 @@ struct CSphIndexProgress
 };
 
 
-/// match queue interface
-typedef ISphQueue<CSphMatch>	ISphMatchQueue;
+/// match comparator virtual attributes
+enum
+{
+	SPH_VATTR_ID			= -1,
+	SPH_VATTR_RELEVANCE		= -2
+};
+
+
+/// match comparator state
+struct CSphMatchComparatorState
+{
+	int				m_iAttr1;		///< 1st sort-by attribute index
+	int				m_iAttr2;		///< 2nd sort-by attribute index
+	int				m_iAttr3;		///< 3rd sort-by attribute index
+	unsigned int	m_uAttrDesc;	///< sort order mask (if i-th bit is set, i-th attr order is DESC)
+	unsigned int	m_iNow;			///< timestamp (for timesegments sorting mode)
+
+	CSphMatchComparatorState ()
+		: m_iAttr1 ( 0 )
+		, m_iAttr2 ( 0 )
+		, m_iAttr3 ( 0 )
+		, m_uAttrDesc ( 0 )
+		, m_iNow ( 0 )
+	{}
+};
+
+
+/// match-sorting priority queue interface
+class ISphMatchQueue
+{
+public:
+	/// virtualizing dtor
+	virtual				~ISphMatchQueue () {}
+
+	/// check if this queue needs attr values
+	virtual bool		UsesAttrs () = 0;
+
+	/// set comparator state
+	virtual void		SetState ( const CSphMatchComparatorState & ) = 0;
+
+	/// base push
+	/// returns false if the entry was rejected as duplicate
+	/// returns true otherwise (even if it was not actually inserted)
+	virtual bool		Push ( const CSphMatch & tEntry ) = 0;
+
+	/// get entries count
+	virtual int			GetLength () const = 0;
+
+	/// get first entry ptr
+	/// used for docinfo lookup
+	/// entries order does NOT matter and is NOT guaranteed
+	/// however top GetLength() entries MUST be stored linearly starting from First()
+	virtual CSphMatch *	First () = 0;
+
+	/// store all entries into specified location, in properly sorted order,
+	/// and remove them from queue
+	virtual void		Flatten ( CSphMatch * pTo ) = 0;
+};
 
 
 /// available docinfo storage strategies

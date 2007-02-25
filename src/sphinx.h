@@ -915,7 +915,7 @@ public:
 
 	CSphString		m_sGroupBy;		///< group-by attribute name
 	ESphGroupBy		m_eGroupFunc;	///< function to pre-process group-by attribute value with
-	bool			m_bSortByGroup;	///< whether to sort found groups by group key or by current sorting func
+	CSphString		m_sGroupSortBy;	///< sorting clause for groups in group-by mode
 
 protected:
 	int				m_iAttrs;		///< attribute count (necessary to instantiate group-by queues)
@@ -997,45 +997,50 @@ struct CSphIndexProgress
 };
 
 
-/// match comparator virtual attributes
+/// virtual attributes
 enum
 {
-	SPH_VATTR_ID			= -1,
-	SPH_VATTR_RELEVANCE		= -2
+	SPH_VATTR_ID			= -1,	///< tells match sorter to use doc id
+	SPH_VATTR_RELEVANCE		= -2,	///< tells match sorter to use match weight
+
+	SPH_VATTR_GROUP			= 0,	///< @group offset after normal attrs
+	SPH_VATTR_COUNT			= 1,	///< @count offset after normal attrs
+	SPH_VATTR_TOTAL			= 2		///< total inserted virtual attrs count
 };
 
 
 /// match comparator state
 struct CSphMatchComparatorState
 {
-	int				m_iAttr1;		///< 1st sort-by attribute index
-	int				m_iAttr2;		///< 2nd sort-by attribute index
-	int				m_iAttr3;		///< 3rd sort-by attribute index
-	unsigned int	m_uAttrDesc;	///< sort order mask (if i-th bit is set, i-th attr order is DESC)
-	unsigned int	m_iNow;			///< timestamp (for timesegments sorting mode)
+	int				m_iAttr[3];		///< sort-by attributes indexes
+	DWORD			m_uAttrDesc;	///< sort order mask (if i-th bit is set, i-th attr order is DESC)
+	DWORD			m_iNow;			///< timestamp (for timesegments sorting mode)
 
 	CSphMatchComparatorState ()
-		: m_iAttr1 ( 0 )
-		, m_iAttr2 ( 0 )
-		, m_iAttr3 ( 0 )
-		, m_uAttrDesc ( 0 )
+		: m_uAttrDesc ( 0 )
 		, m_iNow ( 0 )
-	{}
+	{
+		for ( int i=0; i<sizeof(m_iAttr)/sizeof(int); i++ )
+			m_iAttr[i] = -1;
+	}
 };
 
 
-/// match-sorting priority queue interface
-class ISphMatchQueue
+/// generic match sorter interface
+class ISphMatchSorter
 {
 public:
 	/// virtualizing dtor
-	virtual				~ISphMatchQueue () {}
+	virtual				~ISphMatchSorter () {}
 
 	/// check if this queue needs attr values
 	virtual bool		UsesAttrs () = 0;
 
-	/// set comparator state
+	/// set match comparator state
 	virtual void		SetState ( const CSphMatchComparatorState & ) = 0;
+
+	/// set group comparator state
+	virtual void		SetGroupState ( const CSphMatchComparatorState & ) {}
 
 	/// base push
 	/// returns false if the entry was rejected as duplicate
@@ -1082,7 +1087,7 @@ public:
 
 	virtual const CSphSchema *	Preload () = 0;
 	virtual CSphQueryResult *	Query ( CSphDict * dict, CSphQuery * pQuery ) = 0;
-	virtual bool				QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchQueue * pTop ) = 0;
+	virtual bool				QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchSorter * pTop ) = 0;
 
 	virtual bool				Merge ( CSphIndex * pSource ) = 0;
 
@@ -1106,10 +1111,10 @@ void				sphSetQuiet ( bool bQuiet );
 
 /// create proper queue for given query
 /// may return NULL on error; in this case, error message is placed in sError
-ISphMatchQueue *	sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError );
+ISphMatchSorter *	sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError );
 
 /// convert queue to sorted array, and add its entries to result's matches array
-void				sphFlattenQueue ( ISphMatchQueue * pQueue, CSphQueryResult * pResult );
+void				sphFlattenQueue ( ISphMatchSorter * pQueue, CSphQueryResult * pResult );
 
 #endif // _sphinx_
 

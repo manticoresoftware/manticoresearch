@@ -30,6 +30,7 @@ $host = "localhost";
 $port = 3312;
 $index = "*";
 $groupby = "";
+$groupsort = "@group desc";
 for ( $i=0; $i<count($args); $i++ )
 {
 	$arg = $args[$i];
@@ -39,6 +40,7 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="-e" || $arg=="--extended" )	$mode = SPH_MATCH_EXTENDED;
 	else if ( $arg=="-f" || $arg=="--filter" )		$groups[] = (int)$args[++$i];
 	else if ( $arg=="-g" || $arg=="--groupby" )		$groupby = $args[++$i];
+	else if ( $arg=="-gs"|| $arg=="--groupsort" )	$groupsort = $args[++$i];
 	else if ( $arg=="-h" || $arg=="--host" )		$host = $args[++$i];
 	else if ( $arg=="-i" || $arg=="--index" )		$index = $args[++$i];
 	else if ( $arg=="-p" || $arg=="--port" )		$port = (int)$args[++$i];
@@ -58,7 +60,7 @@ $cl->SetMatchMode ( $mode );
 if ( count($groups) )
 	$cl->SetFilter ( "group_id", $groups );
 if ( $groupby )
-	$cl->SetGroupBy ( $groupby, SPH_GROUPBY_ATTR, false );
+	$cl->SetGroupBy ( $groupby, SPH_GROUPBY_ATTR, $groupsort );
 if ( $sortby )
 	$cl->SetSortMode ( SPH_SORT_EXTENDED, $sortby );
 $res = $cl->Query ( $q, $index );

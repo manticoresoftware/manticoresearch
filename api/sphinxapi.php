@@ -23,7 +23,7 @@ define ( "SEARCHD_COMMAND_EXCERPT",	1 );
 define ( "SEARCHD_COMMAND_UPDATE",	2 );
 
 /// current client-side command implementation versions
-define ( "VER_COMMAND_SEARCH",		0x106 );
+define ( "VER_COMMAND_SEARCH",		0x107 );
 define ( "VER_COMMAND_EXCERPT",		0x100 );
 define ( "VER_COMMAND_UPDATE",		0x100 );
 
@@ -61,24 +61,24 @@ define ( "SPH_GROUPBY_ATTR",		4 );
 /// sphinx searchd client class
 class SphinxClient
 {
-	var $_host;		///< searchd host (default is "localhost")
-	var $_port;		///< searchd port (default is 3312)
-	var $_offset;	///< how many records to seek from result-set start (default is 0)
-	var $_limit;	///< how many records to return from result-set starting at offset (default is 20)
-	var $_mode;		///< query matching mode (default is SPH_MATCH_ALL)
-	var $_weights;	///< per-field weights (default is 1 for all fields)
-	var $_sort;		///< match sorting mode (default is SPH_SORT_RELEVANCE)
-	var $_sortby;	///< attribute to sort by (defualt is "")
-	var $_min_id;	///< min ID to match (default is 0)
-	var $_max_id;	///< max ID to match (default is UINT_MAX)
-	var $_filters;	///< search filters
-	var $_groupby;	///< group-by attribute name
-	var $_groupfunc;///< function to pre-process group-by attribute value with
+	var $_host;			///< searchd host (default is "localhost")
+	var $_port;			///< searchd port (default is 3312)
+	var $_offset;		///< how many records to seek from result-set start (default is 0)
+	var $_limit;		///< how many records to return from result-set starting at offset (default is 20)
+	var $_mode;			///< query matching mode (default is SPH_MATCH_ALL)
+	var $_weights;		///< per-field weights (default is 1 for all fields)
+	var $_sort;			///< match sorting mode (default is SPH_SORT_RELEVANCE)
+	var $_sortby;		///< attribute to sort by (defualt is "")
+	var $_min_id;		///< min ID to match (default is 0)
+	var $_max_id;		///< max ID to match (default is UINT_MAX)
+	var $_filters;		///< search filters
+	var $_groupby;		///< group-by attribute name
+	var $_groupfunc;	///< group-by function (to pre-process group-by attribute value with)
+	var $_groupsort;	///< group-by sorting clause (to sort groups in result set with)
 	var $_maxmatches;	///< max matches to retrieve
-	var $_sortbygroup;	///< whether to sort grouped results by group, or by current sorting func
 
-	var $_error;	///< last error message
-	var $_warning;	///< last warning message
+	var $_error;		///< last error message
+	var $_warning;		///< last warning message
 
 	/////////////////////////////////////////////////////////////////////////////
 	// common stuff
@@ -87,21 +87,21 @@ class SphinxClient
 	/// create a new client object and fill defaults
 	function SphinxClient ()
 	{
-		$this->_host	= "localhost";
-		$this->_port	= 3312;
-		$this->_offset	= 0;
-		$this->_limit	= 20;
-		$this->_mode	= SPH_MATCH_ALL;
-		$this->_weights	= array ();
-		$this->_sort	= SPH_SORT_RELEVANCE;
-		$this->_sortby	= "";
-		$this->_min_id	= 0;
-		$this->_max_id	= 0xFFFFFFFF;
-		$this->_filters	= array ();
+		$this->_host		= "localhost";
+		$this->_port		= 3312;
+		$this->_offset		= 0;
+		$this->_limit		= 20;
+		$this->_mode		= SPH_MATCH_ALL;
+		$this->_weights		= array ();
+		$this->_sort		= SPH_SORT_RELEVANCE;
+		$this->_sortby		= "";
+		$this->_min_id		= 0;
+		$this->_max_id		= 0xFFFFFFFF;
+		$this->_filters		= array ();
 		$this->_groupby		= "";
 		$this->_groupfunc	= SPH_GROUPBY_DAY;
+		$this->_groupsort	= "@group desc";
 		$this->_maxmatches	= 1000;
-		$this->_sortbygroup	= true;
 
 		$this->_error	= "";
 		$this->_warning	= "";
@@ -244,7 +244,7 @@ class SphinxClient
 		$this->_mode = $mode;
 	}
 
-	/// set sort mode
+	/// set matches sorting mode
 	function SetSortMode ( $mode, $sortby="" )
 	{
 		assert (
@@ -324,23 +324,35 @@ class SphinxClient
 	/// the final result set contains one best match per group, with
 	/// grouping function value and matches count attached.
 	///
-	/// result set could be sorted either by 1) grouping function value
-	/// in descending order (this is the default mode, when $sortbygroup
-	/// is set to true); or by 2) current sorting function (when $sortbygroup
-	/// is false).
+	/// groups in result set could be sorted by any sorting clause,
+	/// including both document attributes and the following special
+	/// internal Sphinx attributes:
 	///
-	/// WARNING, when sorting by current function there might be less
-	/// matching groups reported than actually present. @count might also be
-	/// underestimated. 
+	/// - @id - match document ID;
+	/// - @weight, @rank, @relevance -  match weight;
+	/// - @group - groupby function value;
+	/// - @count - amount of matches in group.
+	///
+	/// the default mode is to sort by groupby value in descending order,
+	/// ie. by "@group desc".
+	///
+	/// "total_found" would contain total amount of matching groups over
+	/// the whole index.
+	///
+	/// WARNING: grouping is done in fixed memory and thus its results
+	/// are only approximate; so there might be there might be more groups
+	/// reported in total_found than actually present. @count might also
+	/// be underestimated. 
 	///
 	/// for example, if sorting by relevance and grouping by "published"
 	/// attribute with SPH_GROUPBY_DAY function, then the result set will
 	/// contain one most relevant match per each day when there were any
 	/// matches published, with day number and per-day match count attached,
 	/// and sorted by day number in descending order (ie. recent days first).
-	function SetGroupBy ( $attribute, $func, $sortbygroup=true )
+	function SetGroupBy ( $attribute, $func, $groupsort="@group desc" )
 	{
 		assert ( is_string($attribute) );
+		assert ( is_string($groupsort) );
 		assert ( $func==SPH_GROUPBY_DAY
 			|| $func==SPH_GROUPBY_WEEK
 			|| $func==SPH_GROUPBY_MONTH
@@ -349,7 +361,7 @@ class SphinxClient
 
 		$this->_groupby = $attribute;
 		$this->_groupfunc = $func;
-		$this->_sortbygroup = $sortbygroup;
+		$this->_groupsort = $groupsort;
 	}
 
 	/// connect to searchd server and run given search query
@@ -409,7 +421,7 @@ class SphinxClient
 		// group-by, max matches, sort-by-group flag
 		$req .= pack ( "NN", $this->_groupfunc, strlen($this->_groupby) ) . $this->_groupby;
 		$req .= pack ( "N", $this->_maxmatches );
-		$req .= pack ( "N", $this->_sortbygroup );
+		$req .= pack ( "N", strlen($this->_groupsort) ) . $this->_groupsort;
 
 		////////////////////////////
 		// send query, get response

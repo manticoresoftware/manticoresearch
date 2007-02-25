@@ -170,7 +170,7 @@ enum SearchdCommand_e
 /// known command versions
 enum
 {
-	VER_COMMAND_SEARCH		= 0x106,
+	VER_COMMAND_SEARCH		= 0x107,
 	VER_COMMAND_EXCERPT		= 0x100,
 	VER_COMMAND_UPDATE		= 0x100
 };
@@ -1545,7 +1545,7 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				tOut.SendInt ( tQuery.m_eGroupFunc );
 				tOut.SendString ( tQuery.m_sGroupBy.cstr() );
 				tOut.SendInt ( tQuery.m_iMaxMatches );
-				tOut.SendInt ( tQuery.m_bSortByGroup );
+				tOut.SendString ( tQuery.m_sGroupSortBy.cstr() );
 				tOut.Flush ();
 
 				// FIXME! handle flush failure
@@ -1921,7 +1921,7 @@ inline bool operator < ( const CSphMatch & a, const CSphMatch & b )
 
 /////////////////////////////////////////////////////////////////////////////
 
-bool CheckSortAndSchema ( const CSphSchema ** ppFirst, ISphMatchQueue ** ppTop, CSphQuery & tQuery,
+bool CheckSortAndSchema ( const CSphSchema ** ppFirst, ISphMatchSorter ** ppTop, CSphQuery & tQuery,
 	const CSphSchema * pServed, const char * sServedName, InputBuffer_c & tReq )
 {
 	assert ( ppFirst );
@@ -2243,11 +2243,39 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	if ( iVer>=0x104 )
 		tQuery.m_iMaxMatches = tReq.GetInt ();
 
-	// v.1.5
-	tQuery.m_bSortByGroup = true;
-	if ( iVer>=0x105 )
-		if ( !tReq.GetInt() )
-			tQuery.m_bSortByGroup = false;
+	// v.1.5, v.1.7
+	if ( iVer>=0x107 )
+	{
+		tQuery.m_sGroupSortBy = tReq.GetString ();
+	} else if ( iVer>=0x105 )
+	{
+		bool bSortByGroup = ( tReq.GetInt()!=0 );
+		if ( !bSortByGroup )
+		{
+			char sBuf[256];
+			switch ( tQuery.m_eSort )
+			{
+				case SPH_SORT_RELEVANCE:
+					tQuery.m_sGroupSortBy = "@weight desc";
+					break;
+
+				case SPH_SORT_ATTR_DESC:
+				case SPH_SORT_ATTR_ASC:
+					snprintf ( sBuf, sizeof(sBuf), "%s %s", tQuery.m_sSortBy.cstr(),
+						tQuery.m_eSort==SPH_SORT_ATTR_ASC ? "asc" : "desc" );
+					tQuery.m_sGroupSortBy = sBuf;
+					break;
+
+				case SPH_SORT_EXTENDED:	
+					tQuery.m_sGroupSortBy = tQuery.m_sSortBy;
+					break;
+
+				default:
+					tReq.SendErrorReply ( "INTERNAL ERROR: unsupported sort mode %d in groupby sort fixup", tQuery.m_eSort );
+					return;
+			}
+		}
+	}
 
 	// additional checks
 	if ( tReq.GetError() )
@@ -2292,7 +2320,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 	const CSphSchema * pFirst = NULL;
 	CSphQueryResult * pRes = new CSphQueryResult ();
-	ISphMatchQueue * pTop = NULL;
+	ISphMatchSorter * pTop = NULL;
 
 #define REMOVE_DUPES 1
 

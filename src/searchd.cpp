@@ -1494,7 +1494,8 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 					+ strlen ( tQuery.m_sSortBy.cstr() )
 					+ strlen ( tQuery.m_sQuery.cstr() )
 					+ strlen ( tAgent.m_sIndexes.cstr() )
-					+ strlen ( tQuery.m_sGroupBy.cstr() );
+					+ strlen ( tQuery.m_sGroupBy.cstr() )
+					+ strlen ( tQuery.m_sGroupSortBy.cstr() );
 				ARRAY_FOREACH ( j, tQuery.m_dFilters )
 				{
 					const CSphFilter & tFilter = tQuery.m_dFilters[j];

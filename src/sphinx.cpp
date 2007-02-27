@@ -1,4 +1,4 @@
-//
+	//
 // $Id$
 //
 
@@ -5485,6 +5485,8 @@ struct MatchGeneric2_fn
 		// second key
 		aa = MatchGetVattr ( a, t.m_iAttr[1] );
 		bb = MatchGetVattr ( b, t.m_iAttr[1] );
+		if ( aa==bb )
+			return false;
 		return ((t.m_uAttrDesc>>1)&1) ^ ( aa>bb );
 	};
 };
@@ -5512,6 +5514,8 @@ struct MatchGeneric3_fn
 		// third key
 		aa = MatchGetVattr ( a, t.m_iAttr[2] );
 		bb = MatchGetVattr ( b, t.m_iAttr[2] );
+		if ( aa==bb )
+			return false;
 		return ((t.m_uAttrDesc>>2)&1) ^ ( aa>bb );
 	};
 };

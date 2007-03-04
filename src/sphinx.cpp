@@ -1180,6 +1180,7 @@ class CSphReader_VLN
 public:
 
 				CSphReader_VLN ();
+				CSphReader_VLN ( BYTE * pBuf, int iSize );
 	virtual		~CSphReader_VLN ();
 
 	void		SetFile ( int iFD );
@@ -1212,6 +1213,9 @@ private:
 	int			m_iBuffUsed;
 	BYTE *		m_pBuff;
 	int			m_iSizeHint;	///< how much do we expect to read
+
+	int			m_iBufSize;
+	bool		m_bBufOwned;
 
 	static const int	READ_BUFFER_SIZE		= 262144;
 	static const int	READ_DEFAULT_BLOCK		= 32768;
@@ -3121,13 +3125,31 @@ CSphReader_VLN::CSphReader_VLN ()
 	, m_iBuffUsed ( 0 )
 	, m_pBuff ( NULL )
 	, m_iSizeHint ( 0 )
+	, m_iBufSize ( 0 )
+	, m_bBufOwned ( false )
 {
+}
+
+
+CSphReader_VLN::CSphReader_VLN ( BYTE * pBuf, int iSize )
+	: m_iFD ( -1 )
+	, m_iPos ( 0 )
+	, m_iBuffPos ( 0 )
+	, m_iBuffUsed ( 0 )
+	, m_pBuff ( pBuf )
+	, m_iSizeHint ( 0 )
+	, m_iBufSize ( iSize )
+	, m_bBufOwned ( false )
+{
+	assert ( pBuf );
+	assert ( iSize>0 );
 }
 
 
 CSphReader_VLN::~CSphReader_VLN ()
 {
-	SafeDeleteArray ( m_pBuff );
+	if ( m_bBufOwned )
+		SafeDeleteArray ( m_pBuff );
 }
 
 
@@ -3170,7 +3192,11 @@ void CSphReader_VLN::UpdateCache ()
 
 	// alloc buf on first actual read
 	if ( !m_pBuff )
-		m_pBuff = new BYTE [ READ_BUFFER_SIZE ];
+	{
+		m_bBufOwned = true;
+		m_iBufSize = READ_BUFFER_SIZE;
+		m_pBuff = new BYTE [ m_iBufSize ];
+	}
 
 	// stream position could be changed externally
 	// so let's just hope that the OS optimizes redundant seeks
@@ -3181,7 +3207,7 @@ void CSphReader_VLN::UpdateCache ()
 		m_iSizeHint = READ_DEFAULT_BLOCK;
 
 	m_iBuffPos = 0;
-	m_iBuffUsed = ::read ( m_iFD, m_pBuff, Min ( m_iSizeHint, READ_BUFFER_SIZE ) );
+	m_iBuffUsed = ::read ( m_iFD, m_pBuff, Min ( m_iSizeHint, m_iBufSize ) );
 	m_iPos = iNewPos;
 
 	m_iSizeHint -= m_iBuffUsed;
@@ -7523,7 +7549,17 @@ bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, int iFD )
 
 const CSphSchema * CSphIndex_VLN::Preload ()
 {
-	m_bPreloaded = false;
+	// reset
+	if ( m_bPreloaded )
+	{
+		m_pDocinfo.Reset ();
+		m_pWordlist.Reset ();
+
+		m_iDocinfo = 0;
+		m_eDocinfo = SPH_DOCINFO_NONE;
+		m_iDocinfoIdShift = 0;
+		m_bPreloaded = false;
+	}
 
 	//////////////////
 	// preload schema
@@ -7533,7 +7569,8 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 	if ( tIndexInfo.GetFD()<0 )
 		return false;
 
-	CSphReader_VLN rdInfo;
+	BYTE dCacheInfo [ 8192 ];
+	CSphReader_VLN rdInfo ( dCacheInfo, sizeof(dCacheInfo) ); // to avoid mallocs
 	rdInfo.SetFile ( tIndexInfo.GetFD() );
 
 	// version
@@ -7559,15 +7596,14 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 	// schema
 	m_tSchema.m_dFields.Resize ( rdInfo.GetDword() );
 	ARRAY_FOREACH ( i, m_tSchema.m_dFields )
-		ReadSchemaColumn ( rdInfo, m_tSchema.m_dFields[i] );
+		ReadSchemaColumn ( rdInfo, m_tSchema.m_dFields[i] ); // FIXME? mallocs
 	m_tSchema.m_dAttrs.Resize ( rdInfo.GetDword() );
 	ARRAY_FOREACH ( i, m_tSchema.m_dAttrs )
-		ReadSchemaColumn ( rdInfo, m_tSchema.m_dAttrs[i] );
+		ReadSchemaColumn ( rdInfo, m_tSchema.m_dAttrs[i] ); // FIXME? mallocs
 
 	// min doc
+	m_tMin.Reset ( m_tSchema.m_dAttrs.GetLength() );
 	m_tMin.m_iDocID = rdInfo.GetDword();
-	m_tMin.m_iAttrs = m_tSchema.m_dAttrs.GetLength();
-	m_tMin.m_pAttrs = new DWORD [ m_tSchema.m_dAttrs.GetLength() ];
 	if ( m_eDocinfo==SPH_DOCINFO_INLINE )
 		rdInfo.GetRawBytes ( m_tMin.m_pAttrs, sizeof(DWORD)*m_tSchema.m_dAttrs.GetLength() );
 
@@ -7586,8 +7622,6 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 
 	if ( m_eDocinfo==SPH_DOCINFO_EXTERN )
 	{
-		m_pDocinfo.Reset ();
-
 		int iStride = 1+m_tSchema.m_dAttrs.GetLength();
 		int iEntrySize = sizeof(DWORD)*iStride;
 
@@ -7609,7 +7643,8 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 		}
 
 		// build hash
-		m_pDocinfoHash = new DWORD [ (1<<DOCINFO_HASH_BITS) + 1 ];
+		if ( !m_pDocinfoHash )
+			m_pDocinfoHash = new DWORD [ (1<<DOCINFO_HASH_BITS) + 1 ];
 
 		DWORD uRange = m_pDocinfo [ (m_iDocinfo-1)*iStride ] - m_pDocinfo[0];
 		m_iDocinfoIdShift = 0;

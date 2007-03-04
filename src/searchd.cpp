@@ -65,11 +65,12 @@
 struct ServedIndex_t
 {
 	CSphIndex *			m_pIndex;
-	const CSphSchema *	m_pSchema;	///< pointer to index schema, managed by the index itself
+	const CSphSchema *	m_pSchema;		///< pointer to index schema, managed by the index itself
 	CSphDict *			m_pDict;
 	ISphTokenizer *		m_pTokenizer;
 	CSphString *		m_pLockFile; 
 	CSphString *		m_pIndexPath;
+	bool				m_bEnabled;		///< to disable index in cases when rotation fails
 
 public:
 						ServedIndex_t ();
@@ -257,6 +258,7 @@ void ServedIndex_t::Reset ()
 	m_pTokenizer= NULL;
 	m_pLockFile	= NULL;
 	m_pIndexPath= NULL;
+	m_bEnabled	= true;
 }
 
 ServedIndex_t::~ServedIndex_t ()
@@ -2445,6 +2447,9 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		while ( g_hIndexes.IterateNext () )
 		{
 			const ServedIndex_t & tServed = g_hIndexes.IterateGet ();
+			if ( !tServed.m_bEnabled )
+				continue;
+
 			assert ( tServed.m_pIndex );
 			assert ( tServed.m_pDict );
 			assert ( tServed.m_pTokenizer );
@@ -2483,6 +2488,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	} else
 	{
 		// search through the specified local indexes
+		int iDisabled = 0;
 		CSphString sSplit = sIndexes;
 		char * p = (char*)sSplit.cstr();
 		while ( *p )
@@ -2506,6 +2512,12 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			}
 
 			const ServedIndex_t & tServed = g_hIndexes[sNext];
+			if ( !tServed.m_bEnabled )
+			{
+				iDisabled++;
+				continue;
+			}
+
 			assert ( tServed.m_pIndex );
 			assert ( tServed.m_pDict );
 			assert ( tServed.m_pTokenizer );
@@ -2547,7 +2559,10 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 		if ( !iTries )
 		{
-			tReq.SendErrorReply ( "no valid indexes specified in request" );
+			if ( iDisabled )
+				tReq.SendErrorReply ( "no available indexes in request (disabled=%d)", iDisabled );
+			else
+				tReq.SendErrorReply ( "no valid indexes in request" );
 			return;
 		}
 	}
@@ -2964,14 +2979,13 @@ bool TryRename ( const char * sIndex, const char * sPrefix, const char * sFromPo
 }
 
 
-bool RotateIndex ( ServedIndex_t & tIndex, const char * sIndex )
+void RotateIndex ( ServedIndex_t & tIndex, const char * sIndex )
 {
 	char sFile [ SPH_MAX_FILENAME_LEN ];
 	const char * sPath = tIndex.m_pIndexPath->cstr();
 
 	// whatever happens, we won't retry
 	g_iHUP = 0;
-	sphInfo ( "rotating index '%s': children exited, trying to rotate", sIndex );
 
 	// check files
 	const int EXT_COUNT = 4;
@@ -2984,9 +2998,9 @@ bool RotateIndex ( ServedIndex_t & tIndex, const char * sIndex )
 		snprintf ( sFile, sizeof(sFile), "%s%s", sPath, dNew[i] );
 		if ( !IsReadable ( sFile ) )
 		{
-			sphWarning ( "rotating index '%s': '%s' unreadable: %s",
-				sIndex, sFile, strerror(errno) );
-			return false;
+			if ( i>0 )
+				sphWarning ( "rotating index '%s': '%s' unreadable: %s; using old index", sIndex, sFile, strerror(errno) );
+			return;
 		}
 	}
 
@@ -2999,7 +3013,9 @@ bool RotateIndex ( ServedIndex_t & tIndex, const char * sIndex )
 		// rollback
 		for ( int j=0; j<i; j++ )
 			TryRename ( sIndex, sPath, dOld[j], dCur[j], true );
-		return false;
+
+		sphWarning ( "rotating index '%s': rename to .old failed; using old index", sIndex );
+		return;
 	}
 
 	// rename new to current
@@ -3017,15 +3033,11 @@ bool RotateIndex ( ServedIndex_t & tIndex, const char * sIndex )
 			TryRename ( sIndex, sPath, dOld[j], dCur[j], true );
 	}
 
-	// try to create new index
-	CSphIndex * pNewIndex = sphCreateIndexPhrase ( sPath );
-	const CSphSchema * pNewSchema = pNewIndex ? pNewIndex->Preload() : NULL;
-	if ( !pNewIndex || !pNewSchema )
+	// try to use new index
+	const CSphSchema * pNewSchema = tIndex.m_pIndex->Preload ();
+	if ( !pNewSchema )
 	{
-		if ( !pNewIndex )
-			sphWarning ( "rotating index '%s': failed to create new index object", sIndex );
-		else
-			sphWarning ( "rotating index '%s': failed to preload schema/docinfo", sIndex );
+		sphWarning ( "rotating index '%s': failed to preload schema/docinfo", sIndex );
 
 		// try to recover
 		for ( int j=0; j<EXT_COUNT; j++ )
@@ -3034,17 +3046,22 @@ bool RotateIndex ( ServedIndex_t & tIndex, const char * sIndex )
 			TryRename ( sIndex, sPath, dOld[j], dCur[j], true );
 		}
 
-		SafeDelete ( pNewIndex );
-		return false;
+		pNewSchema = tIndex.m_pIndex->Preload ();
+		if ( !pNewSchema )
+		{
+			sphWarning ( "rotating index '%s': .new preload failed; ROLLBACK FAILED; INDEX UNUSABLE", sIndex );
+			tIndex.m_bEnabled = false;
+		} else
+		{
+			sphWarning ( "rotating index '%s': .new preload failed; using old index", sIndex );
+		}
+		return;
 	}
 
 	// uff. all done
-	SafeDelete ( tIndex.m_pIndex );
-	tIndex.m_pIndex = pNewIndex;
 	tIndex.m_pSchema = pNewSchema;
-
+	tIndex.m_bEnabled = true;
 	sphInfo ( "rotating index '%s': success", sIndex );
-	return true;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -3530,8 +3547,7 @@ int main ( int argc, char **argv )
 				assert ( tIndex.m_pLockFile );
 				assert ( tIndex.m_pIndexPath );
 
-				if ( !RotateIndex ( tIndex, sIndex ) )
-					sphWarning ( "rotating index '%s': using old index", sIndex );
+				RotateIndex ( tIndex, sIndex );
 			}
 		}
 

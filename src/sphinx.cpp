@@ -1,4 +1,4 @@
-	//
+//
 // $Id$
 //
 
@@ -530,7 +530,7 @@ public:
 	}
 
 	/// dtor
-	~CSphQueue ()
+	virtual ~CSphQueue ()
 	{
 		SafeDeleteArray ( m_pData );
 	}
@@ -5719,6 +5719,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 			case FUNC_TIMESEGS:	pTop = new CSphMatchQueue < MatchTimeSegments_fn > ( pQuery->m_iMaxMatches, bUsesAttrs ); break;
 			case FUNC_GENERIC2:	pTop = new CSphMatchQueue < MatchGeneric2_fn > ( pQuery->m_iMaxMatches, bUsesAttrs ); break;
 			case FUNC_GENERIC3:	pTop = new CSphMatchQueue < MatchGeneric3_fn > ( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+			default:			assert ( 0 && "internal error" ); break;
 		}
 	} else
 	{
@@ -5733,6 +5734,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 				case FUNC_TIMESEGS:	pTop = new CSphKBufferGroupSorter < MatchTimeSegments_fn, MatchTimeSegments_fn > ( pQuery ); break;
 				case FUNC_GENERIC2:	pTop = new CSphKBufferGroupSorter < MatchGeneric2_fn, MatchGeneric2_fn > ( pQuery ); break;
 				case FUNC_GENERIC3:	pTop = new CSphKBufferGroupSorter < MatchGeneric3_fn, MatchGeneric3_fn > ( pQuery ); break;
+				default:			assert ( 0 && "internal error" ); break;
 			}
 		} else if ( eGroupFunc==FUNC_GENERIC2 )
 		{
@@ -5744,6 +5746,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 				case FUNC_TIMESEGS:	pTop = new CSphKBufferGroupSorter < MatchTimeSegments_fn, MatchGeneric2_fn > ( pQuery ); break;
 				case FUNC_GENERIC2:	pTop = new CSphKBufferGroupSorter < MatchGeneric2_fn, MatchGeneric2_fn > ( pQuery ); break;
 				case FUNC_GENERIC3:	pTop = new CSphKBufferGroupSorter < MatchGeneric3_fn, MatchGeneric2_fn > ( pQuery ); break;
+				default:			assert ( 0 && "internal error" ); break;
 			}
 		} else if ( eGroupFunc==FUNC_GENERIC3 )
 		{
@@ -5755,6 +5758,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 				case FUNC_TIMESEGS:	pTop = new CSphKBufferGroupSorter < MatchTimeSegments_fn, MatchGeneric3_fn > ( pQuery ); break;
 				case FUNC_GENERIC2:	pTop = new CSphKBufferGroupSorter < MatchGeneric2_fn, MatchGeneric3_fn > ( pQuery ); break;
 				case FUNC_GENERIC3:	pTop = new CSphKBufferGroupSorter < MatchGeneric3_fn, MatchGeneric3_fn > ( pQuery ); break;
+				default:			assert ( 0 && "internal error" ); break;
 			}
 		} else
 		{

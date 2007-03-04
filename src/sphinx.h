@@ -1020,7 +1020,7 @@ struct CSphMatchComparatorState
 		: m_uAttrDesc ( 0 )
 		, m_iNow ( 0 )
 	{
-		for ( int i=0; i<sizeof(m_iAttr)/sizeof(int); i++ )
+		for ( int i=0; i<(int)(sizeof(m_iAttr)/sizeof(int)); i++ )
 			m_iAttr[i] = -1;
 	}
 };

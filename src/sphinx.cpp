@@ -448,9 +448,19 @@ public:
 
 public:
 	/// allocate storage
-	bool Alloc ( int iEntries )
+	bool Alloc ( DWORD iEntries )
 	{
-		m_iLength = sizeof(T)*iEntries;
+		assert ( !m_pData );
+
+		SphOffset_t uCheck = sizeof(T);
+		uCheck *= (SphOffset_t)iEntries;
+
+		m_iLength = (size_t)uCheck;
+		if ( uCheck!=(SphOffset_t)m_iLength )
+		{
+			fprintf ( stdout, "ERROR: impossible to mmap() over 4 GB on 32-bit system.\n" );
+			return false;
+		}
 
 #if USE_WINDOWS
 		m_pData = new T [ iEntries ];
@@ -460,7 +470,7 @@ public:
 		m_pData = (T *) mmap ( NULL, m_iLength, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0 );
 		if ( m_pData==MAP_FAILED )
 		{
-			fprintf ( stdout, "ERROR: mmap() failed: %s.\n", strerror(errno) );
+			fprintf ( stdout, "ERROR: mmap() failed: %s (over 2GB on some 32-bit systems?).\n", strerror(errno) );
 			return false;
 		}
 
@@ -482,6 +492,8 @@ public:
 		if ( iRes )
 			fprintf ( stdout, "WARNING: munmap() failed: %s.\n", strerror(errno) );
 #endif // USE_WINDOWS
+
+		m_pData = NULL;
 	}
 
 public:
@@ -505,7 +517,7 @@ public:
 
 protected:
 	T *					m_pData;	///< data storage
-	int					m_iLength;	///< data length, bytes
+	size_t				m_iLength;	///< data length, bytes
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1585,7 +1597,7 @@ private:
 
 private:
 	CSphSharedBuffer<DWORD>		m_pDocinfo;				///< my docinfo cache
-	int							m_iDocinfo;				///< my docinfo cache size
+	DWORD						m_uDocinfo;				///< my docinfo cache size
 
 	static const int			DOCINFO_HASH_BITS = 18;	// FIXME! make this configurable
 	DWORD *						m_pDocinfoHash;
@@ -3627,7 +3639,7 @@ CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename )
 	m_iLastWordHits = 0;
 	m_iWordlistEntries = 0;
 
-	m_iDocinfo = 0;
+	m_uDocinfo = 0;
 	m_eDocinfo = SPH_DOCINFO_NONE;
 	m_pDocinfoHash = NULL;
 	m_iDocinfoIdShift = 0;
@@ -4946,10 +4958,10 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource )
 		const DWORD * pDstRow = &m_pDocinfo[0];
 		assert( pDstRow );
 
-		int iSrcCount = 0;
-		int iDstCount = 0;
+		DWORD iSrcCount = 0;
+		DWORD iDstCount = 0;
 
-		while( iSrcCount < pSrcIndex->m_iDocinfo && iDstCount < m_iDocinfo )
+		while( iSrcCount < pSrcIndex->m_uDocinfo && iDstCount < m_uDocinfo )
 		{
 			if ( pDstRow[0] < pSrcRow[0] )
 			{
@@ -4973,10 +4985,10 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource )
 			}
 		}
 
-		if ( iDstCount < m_iDocinfo )
-			sphWrite( fdSpa.GetFD(), pDstRow, sizeof( DWORD ) * iStride * ( m_iDocinfo - iDstCount ), "doc_attr" );
-		else if ( iSrcCount < pSrcIndex->m_iDocinfo )
-			sphWrite( fdSpa.GetFD(), pSrcRow, sizeof( DWORD ) * iStride * ( pSrcIndex->m_iDocinfo - iSrcCount ), "doc_attr" );
+		if ( iDstCount < m_uDocinfo )
+			sphWrite( fdSpa.GetFD(), pDstRow, sizeof( DWORD ) * iStride * ( m_uDocinfo - iDstCount ), "doc_attr" );
+		else if ( iSrcCount < pSrcIndex->m_uDocinfo )
+			sphWrite( fdSpa.GetFD(), pSrcRow, sizeof( DWORD ) * iStride * ( pSrcIndex->m_uDocinfo - iSrcCount ), "doc_attr" );
 	}	
 
 	/////////////////
@@ -5869,7 +5881,7 @@ static inline bool sphMatchEarlyReject ( const CSphMatch & tMatch, const CSphQue
 
 const DWORD * CSphIndex_VLN::FindDocinfo ( DWORD uDocID )
 {
-	if ( m_iDocinfo<=0 )
+	if ( m_uDocinfo<=0 )
 		return NULL;
 
 	assert ( m_eDocinfo==SPH_DOCINFO_EXTERN );
@@ -7555,7 +7567,7 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 		m_pDocinfo.Reset ();
 		m_pWordlist.Reset ();
 
-		m_iDocinfo = 0;
+		m_uDocinfo = 0;
 		m_eDocinfo = SPH_DOCINFO_NONE;
 		m_iDocinfoIdShift = 0;
 		m_bPreloaded = false;
@@ -7632,11 +7644,21 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 		if ( tDocinfo.GetFD()<0 || stat ( sDocinfo, &stDocinfo)<0 || stDocinfo.st_size<iEntrySize )
 			return NULL;
 
-		m_iDocinfo = stDocinfo.st_size / iEntrySize;
-		if ( !m_pDocinfo.Alloc ( m_iDocinfo*iStride ) )
+		m_uDocinfo = stDocinfo.st_size / iEntrySize;
+
+		SphOffset_t uCheck8 = m_uDocinfo;
+		uCheck8 *= (SphOffset_t)iEntrySize;
+		if ( uCheck8!=(SphOffset_t)stDocinfo.st_size )
+			return NULL; // 4B document count limit hit
+
+		size_t uCheckBytes = (size_t)uCheck8;
+		if ( uCheck8!=(SphOffset_t)uCheckBytes )
+			return NULL; // 4 GB size_t limit on 32-bit platform hit
+
+		if ( !m_pDocinfo.Alloc ( uCheckBytes/sizeof(DWORD) ) )
 			return NULL;
 
-		if ( ::read ( tDocinfo.GetFD(), m_pDocinfo.GetWritePtr(), m_iDocinfo*iEntrySize )!=m_iDocinfo*iEntrySize )
+		if ( ::read ( tDocinfo.GetFD(), m_pDocinfo.GetWritePtr(), stDocinfo.st_size )!=stDocinfo.st_size )
 		{
 			m_pDocinfo.Reset ();
 			return NULL;
@@ -7646,7 +7668,7 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 		if ( !m_pDocinfoHash )
 			m_pDocinfoHash = new DWORD [ (1<<DOCINFO_HASH_BITS) + 1 ];
 
-		DWORD uRange = m_pDocinfo [ (m_iDocinfo-1)*iStride ] - m_pDocinfo[0];
+		DWORD uRange = m_pDocinfo [ (m_uDocinfo-1)*iStride ] - m_pDocinfo[0];
 		m_iDocinfoIdShift = 0;
 		while ( uRange >= (1<<DOCINFO_HASH_BITS) )
 		{
@@ -7657,7 +7679,7 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 		DWORD uLastHash = 0;
 		m_pDocinfoHash[0] = 0;
 
-		for ( int i=1; i<m_iDocinfo; i++ )
+		for ( DWORD i=1; i<m_uDocinfo; i++ )
 		{
 			DWORD uHash = ( m_pDocinfo [ i*iStride ] - m_pDocinfo[0] ) >> m_iDocinfoIdShift;
 			if ( uHash==uLastHash )
@@ -7668,7 +7690,7 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 
 			uLastHash = uHash;
 		}
-		m_pDocinfoHash [ ++uLastHash ] = m_iDocinfo;
+		m_pDocinfoHash [ ++uLastHash ] = m_uDocinfo;
 	}
 
 	////////////////////

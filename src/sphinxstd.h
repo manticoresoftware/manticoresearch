@@ -12,8 +12,10 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <assert.h>
 #include <ctype.h>
+#include <stdarg.h>
 
 /////////////////////////////////////////////////////////////////////////////
 // MEMORY MANAGEMENT
@@ -679,6 +681,19 @@ public:
 			memcpy ( m_sValue, sValue, iLen );
 			memset ( m_sValue+iLen, 0, 1+SAFETY_GAP );
 		}
+	}
+
+	const CSphString & SetSprintf ( const char * sTemplate, ... )
+	{
+		char sBuf[1024];
+		va_list ap;
+
+		va_start ( ap, sTemplate );
+		vsnprintf ( sBuf, sizeof(sBuf), sTemplate, ap );
+		va_end ( ap );
+
+		(*this) = sBuf;
+		return (*this);
 	}
 
 	bool IsEmpty () const

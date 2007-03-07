@@ -235,17 +235,6 @@ int getpid ()
 // MISC
 /////////////////////////////////////////////////////////////////////////////
 
-void Shutdown ()
-{
-	if ( g_iSocket )
-		sphSockClose ( g_iSocket );
-	if ( g_sPidFile )
-		unlink ( g_sPidFile );
-	g_hIndexes.Reset ();
-}
-
-/////////////////////////////////////////////////////////////////////////////
-
 ServedIndex_t::ServedIndex_t ()
 {
 	Reset ();
@@ -275,6 +264,8 @@ ServedIndex_t::~ServedIndex_t ()
 /////////////////////////////////////////////////////////////////////////////
 // LOGGING
 /////////////////////////////////////////////////////////////////////////////
+
+void Shutdown (); // forward ref for sphFatal()
 
 void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 {
@@ -339,6 +330,34 @@ void sphInfo ( const char * sFmt, ... )
 	va_start ( ap, sFmt );
 	sphLog ( LOG_INFO, sFmt, ap );
 	va_end ( ap );
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+void Shutdown ()
+{
+	if ( g_iSocket )
+		sphSockClose ( g_iSocket );
+
+	// save attribute updates for all local indexes
+	g_hIndexes.IterateStart ();
+	while ( g_hIndexes.IterateNext () )
+	{
+		const ServedIndex_t & tServed = g_hIndexes.IterateGet ();
+		if ( !tServed.m_bEnabled )
+			continue;
+
+		if ( !tServed.m_pIndex->SaveAttributes () )
+			sphWarning ( "index %s: attrs save failed: %s\n",
+			g_hIndexes.IterateGetKey().cstr(), tServed.m_pIndex->GetLastError() );
+	}
+
+	g_hIndexes.Reset ();
+
+	if ( g_sPidFile )
+		unlink ( g_sPidFile );
+
+	sphInfo ( "shutdown complete" );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1897,6 +1916,12 @@ void sigchld ( int )
 		g_iChildren--;
 }
 
+void sighup ( int )
+{
+	sphInfo ( "rotating indices: caught SIGHUP, waiting for children to exit" );
+	g_iHUP = 1;
+}
+#endif // !USE_WINDOWS
 
 void sigterm ( int )
 {
@@ -1904,14 +1929,6 @@ void sigterm ( int )
 	Shutdown ();
 	exit ( 0 );
 }
-
-
-void sighup ( int )
-{
-	sphInfo ( "rotating indices: caught SIGHUP, waiting for children to exit" );
-	g_iHUP = 1;
-}
-#endif // !USE_WINDOWS
 
 /////////////////////////////////////////////////////////////////////////////
 // THE SERVER
@@ -2863,11 +2880,11 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq )
 	}
 
 	// do update
-	CSphString sError;
-	int iUpdated = g_hIndexes[sIndex].m_pIndex->UpdateAttributes ( tUpd, sError );
+	int iUpdated = g_hIndexes[sIndex].m_pIndex->UpdateAttributes ( tUpd );
 	if ( iUpdated<0 )
 	{
-		tReq.SendErrorReply ( "index '%s': %s", sIndex.cstr(), sError.cstr() );
+		tReq.SendErrorReply ( "index '%s': %s", sIndex.cstr(),
+			g_hIndexes[sIndex].m_pIndex->GetLastError().cstr() );
 		return;
 	}
 

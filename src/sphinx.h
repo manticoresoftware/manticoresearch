@@ -1080,7 +1080,9 @@ public:
 public:
 								CSphIndex ( const char * sName ) : m_pProgress ( NULL ), m_tSchema ( sName ) {}
 	virtual						~CSphIndex () {}
+
 	virtual	void				SetProgressCallback ( ProgressCallback_t * pfnProgress ) { m_pProgress = pfnProgress; }
+	virtual const CSphString &	GetLastError () { return m_sLastError; }
 
 public:
 	virtual int					Build ( CSphDict * dict, const CSphVector < CSphSource * > & dSources, int iMemoryLimit, ESphDocinfo eDocinfo ) = 0;
@@ -1093,12 +1095,17 @@ public:
 
 	/// updates memory-cached attributes in real time
 	/// returns non-negative amount of actually found and updated records on success
-	/// returns -1 and fills sError on failure
-	virtual int					UpdateAttributes ( const CSphAttrUpdate_t & tUpd, CSphString & sError ) = 0;
+	/// on failure, -1 is returned and GetLastError() contains error message
+	virtual int					UpdateAttributes ( const CSphAttrUpdate_t & tUpd ) = 0;
+
+	/// saves memory-cached attributes, if there were any updates to them
+	/// on failure, false is returned and GetLastError() contains error message
+	virtual bool				SaveAttributes () = 0;
 
 protected:
 	ProgressCallback_t *		m_pProgress;
 	CSphSchema					m_tSchema;
+	CSphString					m_sLastError;
 };
 
 /////////////////////////////////////////////////////////////////////////////

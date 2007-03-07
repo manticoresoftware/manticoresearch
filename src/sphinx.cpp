@@ -1558,7 +1558,8 @@ struct CSphIndex_VLN : CSphIndex
 
 	virtual bool				Merge ( CSphIndex * pSource );	
 
-	virtual int					UpdateAttributes ( const CSphAttrUpdate_t & tUpd, CSphString & sError );
+	virtual int					UpdateAttributes ( const CSphAttrUpdate_t & tUpd );
+	virtual bool				SaveAttributes ();
 
 private:
 	static const int			WORDLIST_CHECKPOINT		= 1024;		///< wordlist checkpoints frequency
@@ -1602,6 +1603,7 @@ private:
 	static const int			DOCINFO_HASH_BITS = 18;	// FIXME! make this configurable
 	DWORD *						m_pDocinfoHash;
 	int							m_iDocinfoIdShift;
+	bool						m_bDocinfoUpdated;		///< whether memory cache was updated
 
 	CSphSharedBuffer<BYTE>		m_pWordlist;			///< my wordlist cache
 	CSphWordlistCheckpoint *	m_pWordlistCheckpoints;	///< my wordlist cache checkpoints
@@ -3643,6 +3645,8 @@ CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename )
 	m_eDocinfo = SPH_DOCINFO_NONE;
 	m_pDocinfoHash = NULL;
 	m_iDocinfoIdShift = 0;
+	m_bDocinfoUpdated = false;
+
 	m_bPreloaded = false;
 }
 
@@ -3653,12 +3657,21 @@ CSphIndex_VLN::~CSphIndex_VLN ()
 
 /////////////////////////////////////////////////////////////////////////////
 
-int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate_t & tUpd, CSphString & sError )
+int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate_t & tUpd )
 {
-	assert ( tUpd.m_pUpdates || !tUpd.m_iUpdates );
+	// check if we can
+	if ( m_eDocinfo!=SPH_DOCINFO_EXTERN )
+	{
+		m_sLastError.SetSprintf ( "docinfo=extern required for updates" );
+		return -1;
+	}
 
-	// error message buffer
-	char sBuf [ 1024 ];
+	// check if we have to
+	if ( !m_uDocinfo || !tUpd.m_iUpdates )
+		return 0;
+
+	// check if we have what
+	assert ( tUpd.m_pUpdates );
 
 	// remap update schema to index schema
 	CSphVector<int,8> dAttrIndex;
@@ -3667,8 +3680,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate_t & tUpd, CSphString 
 		int iIndex = m_tSchema.GetAttrIndex ( tUpd.m_dAttrs[i].m_sName.cstr() );
 		if ( iIndex<0 )
 		{
-			snprintf ( sBuf, sizeof(sBuf), "attribute '%s' not found", tUpd.m_dAttrs[i].m_sName.cstr() );
-			sError = sBuf;
+			m_sLastError.SetSprintf ( "attribute '%s' not found", tUpd.m_dAttrs[i].m_sName.cstr() );
 			return -1;
 		}
 		dAttrIndex.Add ( 1+iIndex );
@@ -3693,7 +3705,69 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate_t & tUpd, CSphString 
 		iUpdated++;
 	}
 
+	if ( iUpdated>0 )
+		m_bDocinfoUpdated = true;
+
 	return iUpdated;
+}
+
+
+bool CSphIndex_VLN::SaveAttributes ()
+{
+	if ( !m_bDocinfoUpdated || !m_uDocinfo )
+		return true;
+	assert ( m_eDocinfo==SPH_DOCINFO_EXTERN && m_uDocinfo && m_pDocinfo.GetWritePtr() );
+
+	// save current state
+	int iFD = OpenIndexFile ( "spa.tmpnew", O_CREAT | O_RDWR | O_TRUNC );
+	if ( iFD<0 )
+		return false;
+
+	size_t uStride = 1+m_tSchema.m_dAttrs.GetLength();
+	size_t uSize = uStride*size_t(m_uDocinfo)*sizeof(DWORD);
+	size_t uWrote = ::write ( iFD, m_pDocinfo.GetWritePtr(), uSize );
+
+	if ( uWrote!=uSize )
+	{
+		m_sLastError.SetSprintf ( "write error: %s", strerror(errno) );
+		::close ( iFD );
+		return false;
+	}
+	::close ( iFD );
+
+	// do some juggling
+	CSphString sSpa = GetIndexFileName ( "spa" );
+	CSphString sSpaNew = GetIndexFileName ( "spa.tmpnew" );
+	CSphString sSpaOld = GetIndexFileName ( "spa.tmpold" );
+
+	if ( ::rename ( sSpa.cstr(), sSpaOld.cstr() ) )
+	{
+		m_sLastError.SetSprintf ( "rename '%s' to '%s' failed: %s",
+			sSpa.cstr(), sSpaOld.cstr(), strerror(errno) );
+		return false;
+	}
+
+	if ( ::rename ( sSpaNew.cstr(), sSpa.cstr() ) )
+	{
+		if ( ::rename ( sSpaOld.cstr(), sSpa.cstr() ) )
+		{
+			// rollback failed too!
+			m_sLastError.SetSprintf ( "rollback rename to '%s' failed: %s; INDEX UNUSABLE; FIX FILE NAMES MANUALLY",
+				sSpa.cstr(), strerror(errno) );
+		} else
+		{
+			// rollback went ok
+			m_sLastError.SetSprintf ( "rename '%s' to '%s' failed: %s",
+				sSpaNew.cstr(), sSpa.cstr(), strerror(errno) );
+		}
+		return false;
+	}
+
+	// all done
+	::unlink ( sSpaOld.cstr() );
+
+	m_bDocinfoUpdated = false;
+	return true;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -3772,7 +3846,7 @@ int CSphIndex_VLN::OpenIndexFile ( char * ext, int mode )
 	const char * sName = GetIndexFileName ( ext );
 	int iFD = ::open ( sName, mode | SPH_BINARY, 0644 );
 	if ( iFD<0 )
-		fprintf ( stdout, "ERROR: failed to open '%s': %s.\n", sName, strerror(errno) );
+		m_sLastError.SetSprintf ( "failed to open '%s': %s", sName, strerror(errno) );
 	return iFD;
 }
 
@@ -4405,7 +4479,10 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	// create and exclusively lock indexer lock file
 	CSphAutofile fdLock ( OpenIndexFile ( "tmp0", O_CREAT | O_RDWR | O_TRUNC ) );
 	if ( fdLock.GetFD()<0 )
+	{
+		fprintf ( stdout, "ERROR: %s.\n", m_sLastError.cstr() );
 		return 0;
+	}
 
 	if ( !sphLockEx ( fdLock.GetFD(), false ) )
 	{
@@ -4417,12 +4494,18 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	// create temp hits file
 	CSphAutofile fdTmpHits ( OpenIndexFile ( "tmp1", O_CREAT | O_RDWR | O_TRUNC ) );
 	if ( fdTmpHits.GetFD()<0 )
+	{
+		fprintf ( stdout, "ERROR: %s.\n", m_sLastError.cstr() );
 		return 0;
+	}
 
 	// create temp docinfos file
 	CSphAutofile fdTmpDocinfos ( OpenIndexFile ( "tmp2", O_CREAT | O_RDWR | O_TRUNC ) );
 	if ( fdTmpDocinfos.GetFD()<0 )
+	{
+		fprintf ( stdout, "ERROR: %s.\n", m_sLastError.cstr() );
 		return 0;
+	}
 
 	// setup accumulating docinfo IDs range
 	m_tMin.Reset ( m_tSchema.m_dAttrs.GetLength() );
@@ -4654,7 +4737,10 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	// initialize writer
 	CSphAutofile fdDocinfo ( OpenIndexFile ( "spa", O_CREAT | O_RDWR | O_TRUNC ) );
 	if ( fdDocinfo.GetFD()<0 )
+	{
+		fprintf ( stdout, "ERROR: %s.\n", m_sLastError.cstr() );
 		return 0;
+	}
 
 	if ( m_eDocinfo==SPH_DOCINFO_EXTERN && dHitBlocks.GetLength() )
 	{
@@ -4766,6 +4852,12 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	// initialize readers
 	fdTmpHits.Close ();
 	fdTmpHits.SetFD ( OpenIndexFile ( "tmp1", O_RDONLY ) );
+	if ( fdTmpHits.GetFD()<0 )
+	{
+		fprintf ( stdout, "ERROR: %s.\n", m_sLastError.cstr() );
+		return 0;
+	}
+
 	iSharedOffset = -1;
 	ARRAY_FOREACH ( i, dBins )
 		dBins[i]->Init ( fdTmpHits.GetFD(), &iSharedOffset, "sort_hits", iMemoryLimit, iRawBlocks );
@@ -4950,7 +5042,10 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource )
 	{
 		CSphAutofile fdSpa ( OpenIndexFile ( "spa.tmp", O_CREAT | O_RDWR | O_TRUNC ) );
 		if ( fdSpa.GetFD()<0 )
+		{
+			fprintf ( stdout, "ERROR: %s.\n", m_sLastError.cstr() );
 			return 0;		
+		}
 
 		const DWORD * pSrcRow = &pSrcIndex->m_pDocinfo[0];
 		assert( pSrcRow );
@@ -7570,6 +7665,8 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 		m_uDocinfo = 0;
 		m_eDocinfo = SPH_DOCINFO_NONE;
 		m_iDocinfoIdShift = 0;
+		m_bDocinfoUpdated = false;
+
 		m_bPreloaded = false;
 	}
 

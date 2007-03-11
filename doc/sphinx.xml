@@ -1431,7 +1431,8 @@ mysql> SHOW ENGINE SPHINX STATUS;
 </sect2>
 
 
-</sect1><sect1 id="reporting-bugs"><title>Reporting bugs</title>
+</sect1>
+<sect1 id="reporting-bugs"><title>Reporting bugs</title>
 
 
 <para>
@@ -1834,7 +1835,125 @@ sql_range_step = 1000
 </sect3>
 
 
-(to be added)
+<sect3 id="ref-sql-group-column"><title>sql_group_column</title>
+<para>
+Integer attribute column declaration. Specified column should be present among
+those fetched by <xref linkend="ref-sql-query"/>.
+</para>
+<para>
+There might be multiple attributes specified.
+</para>
+<para>
+This option is optional.
+This option only applies to <option>mysql</option> and <option>pgsql</option> source types.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+sql_group_column = group_id    # declare 1st attribute
+sql_group_column = author_id   # declare 2nd attribute
+</programlisting>
+</sect3>
+
+
+<sect3 id="ref-sql-date-column"><title>sql_date_column</title>
+<para>
+UNIX timestamp attribute column declaration. Specified column should be present among
+those fetched by <xref linkend="ref-sql-query"/>.
+</para>
+<para>
+There might be multiple attributes specified.
+</para>
+<para>
+This option is optional.
+This option only applies to <option>mysql</option> and <option>pgsql</option> source types.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+sql_date_column = added_ts
+</programlisting>
+</sect3>
+
+<sect3 id="ref-sql-query-post"><title>sql_query_post</title>
+<para>
+Post-fetch query, executed immediately after main fetch
+query (<xref linkend="ref-sql-query"/>) ends. If this query produces
+errors, they are reported as warnings, but indexing is NOT terminated.
+It's result set is ignored.
+</para>
+<para>
+Note that indexing is NOT completed at the point when post-query
+gets executed, and further indexing might fail.
+</para>
+<para>
+This option is optional.
+This option only applies to <option>mysql</option> and <option>pgsql</option> source types.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+sql_query_post = DROP TABLE my_tmp_table
+</programlisting>
+</sect3>
+
+
+<sect3 id="ref-sql-query-post-index"><title>sql_query_post_index</title>
+<para>
+Post-index query, executed when indexing is succesfully completed.
+If this query produces errors, they are reported as warnings,
+but indexing is NOT terminated. It's result set is ignored.
+</para>
+<para>
+In this query, you can use <code>$maxid</code> macro, expanded
+to max document ID which was actually fetched from the database
+during indexing.
+</para>
+<para>
+This option is optional.
+This option only applies to <option>mysql</option> and <option>pgsql</option> source types.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+sql_query_post_index = REPLACE INTO counters ( id, val ) \
+    VALUES ( 'max_indexed_id', $maxid )
+</programlisting>
+</sect3>
+
+
+<sect3 id="ref-sql-query-info"><title>sql_query_info</title>
+<para>
+Document info query. Only used by CLI search to fetch and display
+document information; and only intended for debugging purposes.
+</para>
+<para>
+This query fetches info to be displayed by CLI search utility
+by document ID. Therefore, it must contain <code>$id</code> macro.
+</para>
+<para>
+This option is optional.
+This option only applies to <option>mysql</option> and <option>pgsql</option> source types.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+sql_query_info = SELECT * FROM documents WHERE id=$id
+</programlisting>
+</sect3>
+
+
+<sect3 id="ref-xmlpipe-command"><title>xmlpipe_command</title>
+<para>
+Command which will be executed in xmlpipe mode to obtain documents.
+See <xref linkend="xmlpipe"/> for output format description.
+</para>
+	# xmlpipe_command	= cat @CONFDIR@/test.xml
+<para>
+This option is <emphasis role="bold">mandatory</emphasis>.
+This option only applies to <option>xmlpipe</option> source type.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+xmlpipe_command = cat /home/sphinx/test.xml
+</programlisting>
+</sect3>
+
 
 </sect2>
 <sect2 id="ref-index"><title>Index configuration options</title>
@@ -1861,15 +1980,6 @@ charset_type = sbcs
 </programlisting>
 </sect3>
 
-
-<sect3 id="ref-xmlpipe-command"><title>xmlpipe_command</title>
-<bridgehead>Description</bridgehead>
-<para>Everything one needs to know about xmlpipe_command is here</para>
-<bridgehead>Example:</bridgehead>
-<programlisting>
-xmlpipe_command = perl /www/mysite.com/bin/sphinxpipe.pl
-</programlisting>
-</sect3>
 
 </sect2>
 <sect2 id="ref-indexer"><title><filename>indexer</filename> program configuration options</title>

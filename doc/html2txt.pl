@@ -108,8 +108,8 @@ while ( $html =~ s/^(.*?)<([\/]*\w+)(\s+.*?)*>//ms )
 		}
 		$acc = "";
 
-		$res .= "\n" if ( in ( [ "div","/div","/h1","/h2","/h3","/p","hr",
-			"/dl","/ol","/ul" ], $tag ) );
+		$res .= "\n" if ( in ( [ "div","/div","/h1","/h2","/h3","/p","hr" ], $tag ) );
+		$res .= "\n" if ( $#lists<=2 && in ( ["/dl","/ol","/ul" ], $tag ) );
 
 		if ( $tag eq "hr" )
 		{

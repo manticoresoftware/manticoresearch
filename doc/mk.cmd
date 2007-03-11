@@ -1,4 +1,5 @@
 @echo off
+
 pwd | sed -e s/\\/\//g > 1.tmp
 for /F "usebackq" %%i in (1.tmp) do set PWD=%%i
 rm 1.tmp
@@ -12,3 +13,6 @@ xsltproc ^
 	| sed -e "s/ /\&nbsp;/g" ^
 	| sed -e "s/©/\&copy;/g" ^
 	> sphinx.html
+
+perl html2txt.pl < sphinx.html > sphinx.txt
+

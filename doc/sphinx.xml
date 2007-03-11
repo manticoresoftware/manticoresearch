@@ -224,7 +224,7 @@ $ cd sphinx
 </listitem>
 <listitem>
 	<para>Run the configuration program:</para>
-	<para><userinput>$ ./configure</userinput></para>
+	<para><userinput><literallayout>$ ./configure</literallayout></userinput></para>
 	<para>
 	There's a number of options to configure. The complete listing may
 	be obtained by using <option>--help</option> switch. The most important ones are:
@@ -239,11 +239,11 @@ $ cd sphinx
 </listitem>
 <listitem>
 	<para>Build the binaries:</para>
-	<para><userinput>$ make</userinput></para>
+	<para><userinput><literallayout>$ make</literallayout></userinput></para>
 </listitem>
 <listitem>
 	<para>Install the binaries in the directory of your choice:</para>
-	<para><userinput>$ make install</userinput></para>
+	<para><userinput><literallayout>$ make install</literallayout></userinput></para>
 </listitem>
 </orderedlist></para>
 </sect2>
@@ -313,7 +313,7 @@ $ vi sphinx.conf</literallayout></userinput></para>
 	table from MySQL database <filename>test</filename>; so there's <filename>example.sql</filename>
 	sample data file to populate that table with a few documents for testing purposes:
 	</para>
-	<para><userinput>$ mysql -u test &lt; /usr/local/sphinx/etc/example.sql</userinput></para>
+	<para><userinput><literallayout>$ mysql -u test &lt; /usr/local/sphinx/etc/example.sql</literallayout></userinput></para>
 </listitem>
 <listitem>
 	<para>Run the indexer to create full-text index from your data:</para>

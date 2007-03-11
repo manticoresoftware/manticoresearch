@@ -17,7 +17,7 @@
 <sect2 id="about"><title>About</title>
 <para>
 Sphinx is a full-text search engine, distributed under GPL version 2.
-Commercial licenseing (eg. for embedded use) is also available upon request. 
+Commercial licensing (eg. for embedded use) is also available upon request. 
 </para>
 <para>
 Generally, it's a standalone search engine, meant to provide fast,
@@ -1136,7 +1136,302 @@ of alive agents, load-balance requests, etc.
 
 
 </sect1>
-<sect1 id="reporting-bugs"><title>Reporting bugs</title>
+<sect1 id="sphinxse"><title>MySQL storage engine (SphinxSE)</title>
+
+
+<sect2 id="sphinxse-overview"><title>SphinxSE overview</title>
+<para>
+SphinxSE is MySQL storage engine which can be compiled
+into MySQL server 5.x using its pluggable architecure.
+It is not available for MySQL 4.x series. It also requires
+MySQL 5.0.22 or higher in 5.0.x series, or MySQL 5.1.12
+or higher in 5.1.x series.
+</para>
+<para>
+Despite the name, SphinxSE does <emphasis>not</emphasis>
+actually store any data itself. It is actually a built-in client
+which allows MySQL server to talk to <filename>searchd</filename>,
+run search queries, and obtain search results. All indexing and
+searching happen outside MySQL.
+</para>
+<para>
+Obvious SphinxSE applications include:
+<itemizedlist>
+<listitem>easier porting of MySQL FTS applications to Sphinx;</listitem>
+<listitem>allowing Sphinx use with progamming languages for which native APIs are not available yet;</listitem>
+<listitem>optimizations when additional Sphinx result set processing on MySQL side is required
+	(eg. JOINs with original document tables, additional MySQL-side filtering, etc).</listitem>
+</itemizedlist>
+</para>
+</sect2>
+
+
+<sect2 id="sphinxse-installing"><title>Installing SphinxSE</title>
+<para>
+You will need to obtain a copy of MySQL sources, prepare those,
+and then recompile MySQL binary.
+MySQL sources (mysql-5.x.yy.tar.gz) could be obtained from 
+<ulink url="http://dev.mysql.com">dev.mysql.com</ulink> Web site.
+</para>
+<para>
+For some MySQL versions, there are delta tarballs with already
+prepared source versions available from Sphinx Web site. After unzipping
+those over original sources MySQL would be ready to be configured and
+built with Sphinx support.
+</para>
+<para>
+If such tarball is not available, or does not work for you for any
+reason, you would have to prepare sources manually. You will need to
+GNU Autotools framework (autoconf, automake and libtool) installed
+to do that.
+</para>
+
+
+<sect3 id="sphinxse-mysql50"><title>Compiling MySQL 5.0.x with SphinxSE</title>
+<para>
+Skips steps 1-3 if using already prepared delta tarball.
+</para>
+<orderedlist>
+<listitem><para>copy <filename>sphinx.5.0.yy.diff</filename> patch file
+into MySQL sources directory and run
+<programlisting>
+patch -p1 &lt; sphinx.5.0.yy.diff
+</programlisting>
+If there's no .diff file exactly for the specific version you need
+to build, try applying .diff with closest version numbers. It is important
+that the patch should apply with no rejects.
+</para></listitem>
+<listitem>in MySQL sources directory, run
+<programlisting>
+sh BUILD/autorun.sh
+</programlisting>
+</listitem>
+<listitem>in MySQL sources directory, create <filename>sql/sphinx</filename>
+directory in and copy all files in <filename>mysqlse</filename> directory 
+from Sphinx sources there. Example:
+<programlisting>
+cp -R /root/builds/sphinx-0.9.7/mysqlse /root/builds/mysql-5.0.24/sql/sphinx
+</programlisting>
+</listitem>
+<listitem>
+configure MySQL and enable Sphinx engine:
+<programlisting>
+./configure --with-sphinx-storage-engine
+</programlisting>
+</listitem>
+<listitem>
+build and install MySQL:
+<programlisting>
+make
+make install
+</programlisting>
+</listitem>
+</orderedlist>
+</sect3>
+
+
+<sect3 id="sphinxse-mysql51"><title>Compiling MySQL 5.1.x with SphinxSE</title>
+<para>
+Skip steps 1-2 if using already prepared delta tarball.
+</para>
+<orderedlist>
+<listitem>in MySQL sources directory, create <filename>storage/sphinx</filename>
+directory in and copy all files in <filename>mysqlse</filename> directory 
+from Sphinx sources there. Example:
+<programlisting>
+cp -R /root/builds/sphinx-0.9.7/mysqlse /root/builds/mysql-5.1.14/storage/sphinx
+</programlisting>
+</listitem>
+<listitem>in MySQL sources directory, run
+<programlisting>
+sh BUILD/autorun.sh
+</programlisting>
+</listitem>
+<listitem>
+configure MySQL and enable Sphinx engine:
+<programlisting>
+./configure --with-plugins=sphinx
+</programlisting>
+</listitem>
+<listitem>
+build and install MySQL:
+<programlisting>
+make
+make install
+</programlisting>
+</listitem>
+</orderedlist>
+</sect3>
+
+
+<sect3 id="sphinxse-checking"><title>Checking SphinxSE installation</title>
+To check whether SphinxSE has been succesfully compiled
+into MySQL, launch newly built servers, run mysql client and
+issue <code>SHOW ENGINES</code> query. You should see a list
+of all available engines. Sphinx should be present and "Support"
+column should contain "YES":
+
+<programlisting>     
+mysql> show engines;
++------------+----------+----------------------------------------------------------------+
+| Engine     | Support  | Comment                                                        |
++------------+----------+----------------------------------------------------------------+
+| MyISAM     | DEFAULT  | Default engine as of MySQL 3.23 with great performance         |
+  ...
+| SPHINX     | YES      | Sphinx storage engine                                          |
+  ...
++------------+----------+----------------------------------------------------------------+
+13 rows in set (0.00 sec)    
+</programlisting>     
+</sect3>
+</sect2>
+
+
+<sect2 id="sphinxse-using"><title>Using SphinxSE</title>
+<para>
+To search via SphinxSE, you would need to create special ENGINE=SPHINX "search table",
+and then SELECT from it with full text query put into WHERE clause for query column.
+</para>
+<para>
+Let's begin with an example create statement and search query:
+<programlisting>
+CREATE TABLE t1
+(
+    id          INTEGER NOT NULL,
+    weight      INTEGER NOT NULL,
+    query       VARCHAR(255) NOT NULL,
+    group_id    INTEGER,
+    INDEX(id),
+    INDEX(query)
+) ENGINE=SPHINX CONNECTION="sphinx://localhost:3312/test";
+
+SELECT * FROM t1 WHERE query='test it;mode=any';
+</programlisting>
+</para>
+<para>
+First 3 columns of search table <emphasis>must</emphasis> be <code>INTEGER</code>,
+<code>INTEGER</code> and <code>VARCHAR</code> which will be mapped to document ID,
+match weight and search query accordingly. There also must be indexes on document ID
+and search query columns. These columns' names are insignficant.
+</para>
+<para>
+Additional columns must be either <code>INTEGER</code> or <code>TIMESTAMP</code>.
+They will be bound to attributes provided in Sphinx result set by name, so their
+names must match attribute names specified in <filename>sphinx.conf</filename>.
+If there's no such attribute name in Sphinx search results, column will have
+<code>NULL</code> values.
+</para>
+<para>
+<code>CONNECTION</code> string parameter can be used to specify default
+searchd host, port and indexes for queries issued using this table.
+If no connection string is specified in <code>CREATE TABLE</code>,
+index name "*" (ie. search all indexes) and localhost:3312 are assumed.
+Connection string syntax is as follows:
+<programlisting>
+CONNECTION="sphinx://HOST:PORT/INDEXNAME"
+</programlisting>
+You can change the default connection string later:
+<programlisting>
+ALTER TABLE t1 CONNECTION="sphinx://NEWHOST:NEWPORT/NEWINDEXNAME";
+</programlisting>
+You can also override all these parameters per-query.
+</para>
+<para>
+As seen in example, both query text and search options should be put
+into WHERE clause on search query column (ie. 3rd column); the options
+are separated by semicolons; and their names from values by equality sign.
+Any number of options can be specified. Available options are:
+<itemizedlist>
+<listitem>query - query text;</listitem>
+<listitem>mode - matching mode. Must be one of "all", "any", "phrase",
+	"boolean", or "extended". Default is "all";</listitem>
+<listitem>sort - match sorting mode. Must be one of "relevance", "attr_desc",
+"attr_asc", "time_segments", or "extended". In all modes besides "relevance"
+attribute name (or sorting clause for "extended") is also required after a colon:
+<programlisting>
+... WHERE query='test;sort=attr_asc:group_id';
+... WHERE query='test;sort=extended:@weight desc, group_id asc';
+</programlisting>
+</listitem>
+<listitem>offset - offset into result set, default is 0;</listitem>
+<listitem>limit - amount of matches to retrieve from result set, default is 20;</listitem>
+<listitem>index - names of the indexes to search:
+<programlisting>
+... WHERE query='test;index=test1;';
+... WHERE query='test;index=test1,test2,test3;';
+</programlisting>
+</listitem>
+<listitem>minid, maxid - min and max document ID to match;</listitem>
+<listitem>weights - comma-separated list of weights to be assigned to Sphinx full-text fields:
+<programlisting>
+... WHERE query='test;weights=1,2,3;';
+</programlisting>
+</listitem>
+<listitem>filter - comma-separated attribute name and a set of values to match:
+<programlisting>
+... WHERE query='test;filter=group_id,1,5,19;';
+</programlisting>
+</listitem>
+<listitem>range - comma-separated attribute name, min and max value to match:
+<programlisting>
+... WHERE query='test;range=group_id,3,7;';
+</programlisting>
+</listitem>
+</itemizedlist>
+</para>
+<para>
+One <emphasis role="bold">very important</emphasis> note that it is
+<emphasis role="bold">much</emphasis> more efficient to allow Sphinx
+to perform sorting, filtering and slicing the result set than to raise
+max matches count and use WHERE, ORDER BY and LIMIT clauses on MySQL
+side. This is for two reasons. First, Sphinx does a number of
+optimizations and performs better than MySQL on these tasks.
+Second, less data would need to be packed by searchd, transferred
+and unpacked by SphinxSE.
+</para>
+<para>
+Additional query info besides result set could be
+retrieved with <code>SHOW ENGINE SPHINX STATUS</code> statement:
+<programlisting>
+mysql> SHOW ENGINE SPHINX STATUS;
++--------+-------+-------------------------------------------------+
+| Type   | Name  | Status                                          |
++--------+-------+-------------------------------------------------+
+| SPHINX | stats | total: 25, total found: 25, time: 126, words: 2 | 
+| SPHINX | words | sphinx:591:1256 soft:11076:15945                | 
++--------+-------+-------------------------------------------------+
+2 rows in set (0.00 sec)
+</programlisting>
+</para>
+<para>
+You could perform JOINs on SphinxSE search table and tables using
+other engines. Here's an example with "documents" from example.sql:
+<programlisting>
+mysql> SELECT content, date_added FROM test.documents docs
+-> JOIN t1 ON (docs.id=t1.id) 
+-> WHERE query="one document;mode=any";
++-------------------------------------+---------------------+
+| content                             | docdate             |
++-------------------------------------+---------------------+
+| this is my test document number two | 2006-06-17 14:04:28 | 
+| this is my test document number one | 2006-06-17 14:04:28 | 
++-------------------------------------+---------------------+
+2 rows in set (0.00 sec)
+
+mysql> SHOW ENGINE SPHINX STATUS;
++--------+-------+---------------------------------------------+
+| Type   | Name  | Status                                      |
++--------+-------+---------------------------------------------+
+| SPHINX | stats | total: 2, total found: 2, time: 0, words: 2 | 
+| SPHINX | words | one:1:2 document:2:2                        | 
++--------+-------+---------------------------------------------+
+2 rows in set (0.00 sec)
+</programlisting>
+</para>
+</sect2>
+
+
+</sect1><sect1 id="reporting-bugs"><title>Reporting bugs</title>
 
 
 <para>
@@ -1448,7 +1743,7 @@ This option only applies to <option>mysql</option> source type.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
-sql_sock = test
+sql_sock = /tmp/mysql.sock
 </programlisting>
 </sect3>
 

@@ -114,8 +114,8 @@ Phrase Index. Yes, I know about CMU's Sphinx project.
    * high indexing speed (upto 10 MB/sec on modern CPUs);
    * high search speed (avg query is under 0.1 sec on 2-4 GB text
      collections);
-   * high scalability (upto 100 GB of text, upto 100 M documents on a
-     single CPU);
+   * high scalability (upto 100 GB of text, upto 100 M documents on
+     a single CPU);
    * provides good relevance ranking through combination of phrase
      proximity ranking and statistical (BM25) ranking;
    * provides distributed searching capabilities;
@@ -198,8 +198,8 @@ you!
 
 Sphinx development was started back in 2001, because I didn't manage to
 find an acceptable search solution (for a database driven Web site) which
-would meet my requirements. Actually, each and every important aspect was a
-problem:
+would meet my requirements. Actually, each and every important aspect was
+a problem:
 
    * search quality (ie. good relevance)
 
@@ -314,8 +314,8 @@ reason is that off_t type is less than 64-bit on your system. As a quick
 hack, you can edit sphinx.h and replace off_t with DWORD in a typedef for
 SphOffset_t, but note that this will prohibit you from using full-text
 indexes larger than 2 GB. Even if the hack helps, please report such
-issues, providing the exact error message and compiler/OS details, so I
-could properly fix them in next releases.
+issues, providing the exact error message and compiler/OS details, so
+I could properly fix them in next releases.
 
 If you keep getting any other error, or the suggestions above do not seem
 to help you, please don't hesitate to contact me.
@@ -396,8 +396,8 @@ data source driver (or simply driver or data source for brevity).
 At the time of this writing, there are drivers for MySQL and PostgreSQL
 databases, which can connect to the database using its native C/C++ API,
 run queries and fetch the data. There's also a driver called XMLpipe, which
-runs a specified command and reads the data from its stdout. See Section
-3.7, <<XMLpipe data source>> section for the format description.
+runs a specified command and reads the data from its stdout. See
+Section 3.7, <<XMLpipe data source>> section for the format description.
 
 There can be as many sources per index as necessary. They will be
 sequentially processed in the very same order which was specifed in index
@@ -408,8 +408,8 @@ if they were coming from a single source.
 ---------------
 
 It is often needed to do some additional processing of full-text search
-results depending not only on matching document ID and weight, but on a
-number of other per-document values as well. For instance, one might need
+results depending not only on matching document ID and weight, but on
+a number of other per-document values as well. For instance, one might need
 to sort news search results by date and then relevance, or search through
 products within specified price range, or limit blog search to posts made
 by selected users, or group results by month.
@@ -477,22 +477,22 @@ because of limited RAM size. However, for smaller datasets "extern" storage
 makes both indexing and searching much more efficient.
 
 Additional search-time memory requirements for extern storage are
-(1+number_of_attrs)*number_of_docs*4 bytes, ie. 10 million docs with 2
-groups and 1 timestamp will take (1+2+1)*10M*4 = 160 MB of RAM. This is PER
-DAEMON, ie. searchd will alloc 160 MB on startup, read the data and keep it
-shared between queries; the children will NOT allocate additional copies of
-this data.
+(1+number_of_attrs)*number_of_docs*4 bytes, ie. 10 million docs with
+2 groups and 1 timestamp will take (1+2+1)*10M*4 = 160 MB of RAM. This is
+PER DAEMON, ie. searchd will alloc 160 MB on startup, read the data and
+keep it shared between queries; the children will NOT allocate additional
+copies of this data.
 
 3.3. Indexes
 ------------
 
-To be able to answer full-text search queries fast, Sphinx needs to build a
-special data structure optimized for such queries from your text data. This
-structure is called index; and the process of building index from text is
-called indexing.
+To be able to answer full-text search queries fast, Sphinx needs to build
+a special data structure optimized for such queries from your text data.
+This structure is called index; and the process of building index from text
+is called indexing.
 
-Different index types are well suited for different tasks. For example, a
-disk-based tree-based index would be easy to update (ie. insert new
+Different index types are well suited for different tasks. For example,
+a disk-based tree-based index would be easy to update (ie. insert new
 documents to existing index), but rather slow to search. Therefore, Sphinx
 architecture allows for different index types to be implemented easily.
 
@@ -507,8 +507,8 @@ It is planned to implement more index types, including the type which would
 be updateable in real time.
 
 There can be as many indexes per configuration file as necessary. indexer
-utility can reindex either all of them (if --all option is specified), or a
-certain explicitly specified subset. searchd utility will serve all the
+utility can reindex either all of them (if --all option is specified), or
+a certain explicitly specified subset. searchd utility will serve all the
 specified indexes, and the clients can specify what indexes to search in
 run time.
 
@@ -522,8 +522,8 @@ ALL DOCUMENT IDS MUST BE UNIQUE UNSIGNED NON-ZERO 32-BIT INTEGER NUMBERS.
 
 If this requirement is not met, different bad things can happen. For
 instance, Sphinx can crash with an internal assertion while indexing; or
-produce strange results when searching due to conflicting IDs. Also, a
-1000-pound gorilla might eventually come out of your display and start
+produce strange results when searching due to conflicting IDs. Also,
+a 1000-pound gorilla might eventually come out of your display and start
 throwing barrels at you. You've been warned.
 
 3.5. Charsets, case folding, and translation tables
@@ -688,9 +688,9 @@ index. Delta index could then be reindexed very frequently, and the
 documents can be made available to search in a matter of minutes.
 
 Specifying which documents should go to what index and reindexing main
-index could also be made fully automatical. One option would be to make a
-counter table which would track the ID which would split the documents, and
-update it whenever the main index is reindexed.
+index could also be made fully automatical. One option would be to make
+a counter table which would track the ID which would split the documents,
+and update it whenever the main index is reindexed.
 
 Example 3. Fully automated live updates
 
@@ -728,8 +728,8 @@ There are the following matching modes available:
    * SPH_MATCH_ALL, matches all query words (default mode);
    * SPH_MATCH_ANY, matches any of the query words;
    * SPH_MATCH_PHRASE, matches query as a phrase, requiring perfect match;
-   * SPH_MATCH_BOOLEAN, matches query as a boolean expression (see Section
-     4.2, <<Boolean query syntax>>);
+   * SPH_MATCH_BOOLEAN, matches query as a boolean expression (see
+     Section 4.2, <<Boolean query syntax>>);
    * SPH_MATCH_EXTENDED, matches query as an expression in Sphinx internal
      query language (see Section 4.3, <<Extended query syntax>>).
 
@@ -841,8 +841,8 @@ There are these major parts which are used in the weighting functions:
    2. statistical rank.
 
 Phrase rank is based on a length of longest common subsequence (LCS) of
-search words between document body and query phrase. So if there's a
-perfect phrase match in some document then its phrase rank would be the
+search words between document body and query phrase. So if there's
+a perfect phrase match in some document then its phrase rank would be the
 highest possible, and equal to query words count.
 
 Statistical rank is based on classic BM25 function which only takes word
@@ -861,8 +861,8 @@ weight is set to 1.
 In SPH_MATCH_ALL and SPH_MATCH_PHRASE modes, final weight is a sum of
 weighted phrase ranks.
 
-In SPH_MATCH_ANY mode, the idea is essentially the same, but it also adds a
-count of matching words in each field. Before that, weighted phrase ranks
+In SPH_MATCH_ANY mode, the idea is essentially the same, but it also adds
+a count of matching words in each field. Before that, weighted phrase ranks
 are additionally mutliplied by a value big enough to guarantee that higher
 phrase rank in any field will make the match ranked higher, even if it's
 field weight is low.
@@ -1642,10 +1642,10 @@ Example:
 7.1.16. sql_query_post
 ----------------------
 
-Post-fetch query, executed immediately after main fetch query (Section
-7.1.11, <<sql_query>>) ends. If this query produces errors, they are
-reported as warnings, but indexing is NOT terminated. It's result set is
-ignored.
+Post-fetch query, executed immediately after main fetch query
+(Section 7.1.11, <<sql_query>>) ends. If this query produces errors, they
+are reported as warnings, but indexing is NOT terminated. It's result set
+is ignored.
 
 Note that indexing is NOT completed at the point when post-query gets
 executed, and further indexing might fail.

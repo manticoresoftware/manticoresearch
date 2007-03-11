@@ -7,10 +7,13 @@ use Data::Dumper;
 $Text::Wrap::columns = 76;
 $Text::Wrap::unexpand = 0;
 
+$MAGIC_NBSP = "\xff";
+
 sub unentity
 {
 	my $html = shift;
-	$html =~ s/&nbsp;/ /g;
+	die ( "INTERNAL ERROR: magic nbsp code found in html" ) if ( $html =~ /$MAGIC_NBSP/ );
+	$html =~ s/&nbsp;/$MAGIC_NBSP/g;
 	$html =~ s/&lt;/</g;
 	$html =~ s/&gt;/>/g;
 	$html =~ s/&#8220;/<</g;
@@ -28,6 +31,7 @@ sub linify
 	$text =~ s/\s{2,}/ /g;
 	$text =~ s/^\s+//ms;
 	$text =~ s/\s+$//ms;
+	$text =~ s/\s+(\w)\s+/ \1$MAGIC_NBSP/g; # glue 1-letter words with nbsp's
 	return $text;
 };
 
@@ -171,6 +175,7 @@ while ( $html =~ s/^(.*?)<([\/]*\w+)(\s+.*?)*>//ms )
 $res .= "\n\n--eof--\n";
 $res =~ s/^\n+//;
 $res =~ s/\n{3,}/\n\n/gms;
+$res =~ s/$MAGIC_NBSP/ /g;
 print $res;
 
 #

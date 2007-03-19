@@ -1012,7 +1012,7 @@ enum
 /// match comparator state
 struct CSphMatchComparatorState
 {
-	int				m_iAttr[3];		///< sort-by attributes indexes
+	int				m_iAttr[5];		///< sort-by attributes indexes
 	DWORD			m_uAttrDesc;	///< sort order mask (if i-th bit is set, i-th attr order is DESC)
 	DWORD			m_iNow;			///< timestamp (for timesegments sorting mode)
 

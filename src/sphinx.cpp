@@ -5588,6 +5588,7 @@ protected:
 	}
 };
 
+/////////////////////////////////////////////////////////////////////////////
 
 static inline DWORD MatchGetVattr ( const CSphMatch & m, int iAttr )
 {
@@ -5602,60 +5603,87 @@ static inline DWORD MatchGetVattr ( const CSphMatch & m, int iAttr )
 }
 
 
-/// match sorter
+#define SPH_TEST_KEYPART(_idx) \
+	aa = MatchGetVattr ( a, t.m_iAttr[_idx] ); \
+	bb = MatchGetVattr ( b, t.m_iAttr[_idx] ); \
+	if ( aa!=bb ) \
+		return ( (t.m_uAttrDesc>>(_idx))&1 ) ^ ( aa>bb );
+
+
+#define SPH_TEST_LASTKEYPART(_idx) \
+	aa = MatchGetVattr ( a, t.m_iAttr[_idx] ); \
+	bb = MatchGetVattr ( b, t.m_iAttr[_idx] ); \
+	if ( aa==bb ) \
+		return false; \
+	return ((t.m_uAttrDesc>>(_idx))&1) ^ ( aa>bb );
+
+
 struct MatchGeneric2_fn
 {
 	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
 	{
 		DWORD aa, bb;
-
-		// first key
-		aa = MatchGetVattr ( a, t.m_iAttr[0] );
-		bb = MatchGetVattr ( b, t.m_iAttr[0] );
-		if ( aa!=bb )
-			return ( t.m_uAttrDesc&1 ) ^ ( aa>bb );
-
-		// second key
-		aa = MatchGetVattr ( a, t.m_iAttr[1] );
-		bb = MatchGetVattr ( b, t.m_iAttr[1] );
-		if ( aa==bb )
-			return false;
-		return ((t.m_uAttrDesc>>1)&1) ^ ( aa>bb );
+		SPH_TEST_KEYPART(0);
+		SPH_TEST_LASTKEYPART(1);
 	};
 };
 
 
-/// match sorter
 struct MatchGeneric3_fn
 {
 	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
 	{
 		DWORD aa, bb;
+		SPH_TEST_KEYPART(0);
+		SPH_TEST_KEYPART(1);
+		SPH_TEST_LASTKEYPART(2);
+	};
+};
 
-		// first key
-		aa = MatchGetVattr ( a, t.m_iAttr[0] );
-		bb = MatchGetVattr ( b, t.m_iAttr[0] );
-		if ( aa!=bb )
-			return ( t.m_uAttrDesc&1 ) ^ ( aa>bb );
 
-		// second key
-		aa = MatchGetVattr ( a, t.m_iAttr[1] );
-		bb = MatchGetVattr ( b, t.m_iAttr[1] );
-		if ( aa!=bb )
-			return ((t.m_uAttrDesc>>1)&1) ^ ( aa>bb );
+struct MatchGeneric4_fn
+{
+	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
+	{
+		DWORD aa, bb;
+		SPH_TEST_KEYPART(0);
+		SPH_TEST_KEYPART(1);
+		SPH_TEST_KEYPART(2);
+		SPH_TEST_LASTKEYPART(3);
+	};
+};
 
-		// third key
-		aa = MatchGetVattr ( a, t.m_iAttr[2] );
-		bb = MatchGetVattr ( b, t.m_iAttr[2] );
-		if ( aa==bb )
-			return false;
-		return ((t.m_uAttrDesc>>2)&1) ^ ( aa>bb );
+
+struct MatchGeneric5_fn
+{
+	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
+	{
+		DWORD aa, bb;
+		SPH_TEST_KEYPART(0);
+		SPH_TEST_KEYPART(1);
+		SPH_TEST_KEYPART(2);
+		SPH_TEST_KEYPART(3);
+		SPH_TEST_LASTKEYPART(4);
 	};
 };
 
 //////////////////////////////////////////////////////////////////////////
 
-static const int MAX_SORT_FIELDS = 3;
+static const int MAX_SORT_FIELDS = 5; // MUST be in sync with CSphMatchComparatorState::m_iAttr
+
+
+enum ESphSortFunc
+{
+	FUNC_REL_DESC,
+	FUNC_ATTR_DESC,
+	FUNC_ATTR_ASC,
+	FUNC_TIMESEGS,
+	FUNC_GENERIC2,
+	FUNC_GENERIC3,
+	FUNC_GENERIC4,
+	FUNC_GENERIC5,
+	FUNC_SORTBY
+};
 
 
 /// returns 0 or less on error
@@ -5753,6 +5781,19 @@ static int sphParseSortClause ( const char * sClause, const CSphQuery * pQuery,
 }
 
 
+ESphSortFunc sphNumSortAttrs2Func ( int iAttrs )
+{
+	switch ( iAttrs )
+	{
+		case 2:		return FUNC_GENERIC2; 
+		case 3:		return FUNC_GENERIC3;
+		case 4:		return FUNC_GENERIC4;
+		case 5:		return FUNC_GENERIC5;
+		default:	assert ( 0 && "internal error" ); return FUNC_GENERIC2;
+	}
+}
+
+
 ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError )
 {
 	assert ( pQuery->m_sGroupBy.IsEmpty() || pQuery->GetGroupByAttr()>=0 );
@@ -5767,17 +5808,6 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 	// choose and setup sorting functor
 	////////////////////////////////////
 
-	enum ESphSortFunc
-	{
-		FUNC_REL_DESC,
-		FUNC_ATTR_DESC,
-		FUNC_ATTR_ASC,
-		FUNC_TIMESEGS,
-		FUNC_GENERIC2,
-		FUNC_GENERIC3,
-		FUNC_SORTBY
-	};
-
 	ESphSortFunc eMatchFunc = FUNC_REL_DESC;
 	ESphSortFunc eGroupFunc = FUNC_SORTBY;
 	bool bUsesAttrs = false;
@@ -5790,8 +5820,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		if ( iParsed<=0 )
 			return false;
 
-		assert ( iParsed==2 || iParsed==3 );
-		eMatchFunc = ( iParsed==2 ) ? FUNC_GENERIC2 : FUNC_GENERIC3;
+		eMatchFunc = sphNumSortAttrs2Func ( iParsed );
 
 		for ( int i=0; i<iParsed; i++ )
 			if ( tStateMatch.m_iAttr[i]>=0 )
@@ -5834,8 +5863,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		if ( iParsed<=0 )
 			return false;
 
-		assert ( iParsed==2 || iParsed==3 );
-		eGroupFunc = ( iParsed==2 ) ? FUNC_GENERIC2 : FUNC_GENERIC3;
+		eGroupFunc = sphNumSortAttrs2Func ( iParsed );
 	}
 
 	///////////////////
@@ -5852,6 +5880,8 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 			case FUNC_TIMESEGS:	pTop = new CSphMatchQueue < MatchTimeSegments_fn > ( pQuery->m_iMaxMatches, bUsesAttrs ); break;
 			case FUNC_GENERIC2:	pTop = new CSphMatchQueue < MatchGeneric2_fn > ( pQuery->m_iMaxMatches, bUsesAttrs ); break;
 			case FUNC_GENERIC3:	pTop = new CSphMatchQueue < MatchGeneric3_fn > ( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+			case FUNC_GENERIC4:	pTop = new CSphMatchQueue < MatchGeneric4_fn > ( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+			case FUNC_GENERIC5:	pTop = new CSphMatchQueue < MatchGeneric5_fn > ( pQuery->m_iMaxMatches, bUsesAttrs ); break;
 			default:			assert ( 0 && "internal error" ); break;
 		}
 	} else
@@ -5867,7 +5897,8 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 				case FUNC_TIMESEGS:	pTop = new CSphKBufferGroupSorter < MatchTimeSegments_fn, MatchTimeSegments_fn > ( pQuery ); break;
 				case FUNC_GENERIC2:	pTop = new CSphKBufferGroupSorter < MatchGeneric2_fn, MatchGeneric2_fn > ( pQuery ); break;
 				case FUNC_GENERIC3:	pTop = new CSphKBufferGroupSorter < MatchGeneric3_fn, MatchGeneric3_fn > ( pQuery ); break;
-				default:			assert ( 0 && "internal error" ); break;
+				case FUNC_GENERIC4:	pTop = new CSphKBufferGroupSorter < MatchGeneric4_fn, MatchGeneric4_fn > ( pQuery ); break;
+				case FUNC_GENERIC5:	pTop = new CSphKBufferGroupSorter < MatchGeneric5_fn, MatchGeneric5_fn > ( pQuery ); break;
 			}
 		} else if ( eGroupFunc==FUNC_GENERIC2 )
 		{
@@ -5879,7 +5910,8 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 				case FUNC_TIMESEGS:	pTop = new CSphKBufferGroupSorter < MatchTimeSegments_fn, MatchGeneric2_fn > ( pQuery ); break;
 				case FUNC_GENERIC2:	pTop = new CSphKBufferGroupSorter < MatchGeneric2_fn, MatchGeneric2_fn > ( pQuery ); break;
 				case FUNC_GENERIC3:	pTop = new CSphKBufferGroupSorter < MatchGeneric3_fn, MatchGeneric2_fn > ( pQuery ); break;
-				default:			assert ( 0 && "internal error" ); break;
+				case FUNC_GENERIC4:	pTop = new CSphKBufferGroupSorter < MatchGeneric4_fn, MatchGeneric2_fn > ( pQuery ); break;
+				case FUNC_GENERIC5:	pTop = new CSphKBufferGroupSorter < MatchGeneric5_fn, MatchGeneric2_fn > ( pQuery ); break;
 			}
 		} else if ( eGroupFunc==FUNC_GENERIC3 )
 		{
@@ -5891,12 +5923,15 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 				case FUNC_TIMESEGS:	pTop = new CSphKBufferGroupSorter < MatchTimeSegments_fn, MatchGeneric3_fn > ( pQuery ); break;
 				case FUNC_GENERIC2:	pTop = new CSphKBufferGroupSorter < MatchGeneric2_fn, MatchGeneric3_fn > ( pQuery ); break;
 				case FUNC_GENERIC3:	pTop = new CSphKBufferGroupSorter < MatchGeneric3_fn, MatchGeneric3_fn > ( pQuery ); break;
-				default:			assert ( 0 && "internal error" ); break;
+				case FUNC_GENERIC4:	pTop = new CSphKBufferGroupSorter < MatchGeneric4_fn, MatchGeneric3_fn > ( pQuery ); break;
+				case FUNC_GENERIC5:	pTop = new CSphKBufferGroupSorter < MatchGeneric5_fn, MatchGeneric3_fn > ( pQuery ); break;
 			}
-		} else
+		}
+
+		if ( !pTop )
 		{
-			snprintf ( sBuf, sizeof(sBuf), "unknown group sorting mode %d", eGroupFunc );
-			sError = sBuf;
+			sError.SetSprintf ( "internal error: unhandled group/match sorting modes (group=%d, match=%d)",
+				eGroupFunc, eMatchFunc );
 			return false;
 		}
 	}

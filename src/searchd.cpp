@@ -349,7 +349,7 @@ void Shutdown ()
 
 		if ( !tServed.m_pIndex->SaveAttributes () )
 			sphWarning ( "index %s: attrs save failed: %s\n",
-			g_hIndexes.IterateGetKey().cstr(), tServed.m_pIndex->GetLastError() );
+			g_hIndexes.IterateGetKey().cstr(), tServed.m_pIndex->GetLastError().cstr() );
 	}
 
 	g_hIndexes.Reset ();

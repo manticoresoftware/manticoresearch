@@ -5899,6 +5899,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 				case FUNC_GENERIC3:	pTop = new CSphKBufferGroupSorter < MatchGeneric3_fn, MatchGeneric3_fn > ( pQuery ); break;
 				case FUNC_GENERIC4:	pTop = new CSphKBufferGroupSorter < MatchGeneric4_fn, MatchGeneric4_fn > ( pQuery ); break;
 				case FUNC_GENERIC5:	pTop = new CSphKBufferGroupSorter < MatchGeneric5_fn, MatchGeneric5_fn > ( pQuery ); break;
+				default:			break;
 			}
 		} else if ( eGroupFunc==FUNC_GENERIC2 )
 		{
@@ -5912,6 +5913,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 				case FUNC_GENERIC3:	pTop = new CSphKBufferGroupSorter < MatchGeneric3_fn, MatchGeneric2_fn > ( pQuery ); break;
 				case FUNC_GENERIC4:	pTop = new CSphKBufferGroupSorter < MatchGeneric4_fn, MatchGeneric2_fn > ( pQuery ); break;
 				case FUNC_GENERIC5:	pTop = new CSphKBufferGroupSorter < MatchGeneric5_fn, MatchGeneric2_fn > ( pQuery ); break;
+				default:			break;
 			}
 		} else if ( eGroupFunc==FUNC_GENERIC3 )
 		{
@@ -5925,6 +5927,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 				case FUNC_GENERIC3:	pTop = new CSphKBufferGroupSorter < MatchGeneric3_fn, MatchGeneric3_fn > ( pQuery ); break;
 				case FUNC_GENERIC4:	pTop = new CSphKBufferGroupSorter < MatchGeneric4_fn, MatchGeneric3_fn > ( pQuery ); break;
 				case FUNC_GENERIC5:	pTop = new CSphKBufferGroupSorter < MatchGeneric5_fn, MatchGeneric3_fn > ( pQuery ); break;
+				default:			break;
 			}
 		}
 

@@ -16,6 +16,9 @@
 #include <assert.h>
 #include <ctype.h>
 #include <stdarg.h>
+#include <stddef.h>
+#include <limits.h>
+#include <sys/types.h>
 
 /////////////////////////////////////////////////////////////////////////////
 // COMPILE-TIME SIZE CHECKS
@@ -39,10 +42,6 @@ namespace Private
 /////////////////////////////////////////////////////////////////////////////
 // 64-BIT INTEGER TYPES AND MACROS
 /////////////////////////////////////////////////////////////////////////////
-
-#include <stddef.h>
-#include <limits.h>
-#include <sys/types.h>
 
 #if defined(U64C) || defined(I64C) || defined(U64FMT) || defined(I64FMT)
 #error "Internal 64-bit integer macros already defined."

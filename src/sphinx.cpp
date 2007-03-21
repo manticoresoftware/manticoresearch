@@ -3231,9 +3231,13 @@ void CSphReader_VLN::UpdateCache ()
 int CSphReader_VLN::GetByte ()
 {
 	if ( m_iBuffPos>=m_iBuffUsed )
+	{
 		UpdateCache ();
-	assert ( m_iBuffPos<m_iBuffUsed );
+		if ( m_iBuffPos>=m_iBuffUsed )
+			return 0;
+	}
 
+	assert ( m_iBuffPos<m_iBuffUsed );
 	return m_pBuff [ m_iBuffPos++ ];
 }
 

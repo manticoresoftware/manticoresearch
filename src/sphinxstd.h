@@ -18,6 +18,65 @@
 #include <stdarg.h>
 
 /////////////////////////////////////////////////////////////////////////////
+// COMPILE-TIME SIZE CHECKS
+/////////////////////////////////////////////////////////////////////////////
+
+/// compile time error struct
+template<int> struct CompileTimeError;
+template<> struct CompileTimeError<true> {};
+
+namespace Private
+{
+	template<int x>		struct static_assert_test{};
+	template<bool x>	struct SizeError;
+	template<>			struct SizeError<true>{};
+}
+
+#define STATIC_SIZE_ASSERT(_Type,_ExpSize)	\
+	typedef ::Private::static_assert_test<sizeof(::Private::SizeError \
+	< (bool) (sizeof(_Type) == (_ExpSize)) >)> static_assert_typedef_
+
+/////////////////////////////////////////////////////////////////////////////
+// 64-BIT INTEGER TYPES AND MACROS
+/////////////////////////////////////////////////////////////////////////////
+
+#include <stddef.h>
+#include <limits.h>
+#include <sys/types.h>
+
+#if defined(U64C) || defined(I64C) || defined(U64FMT) || defined(I64FMT)
+#error "Internal 64-bit integer macros already defined."
+#endif
+
+#if __STDC_VERSION__>=199901L || __STDC_VERSION>=199901L || defined(_STDINT_H) || defined(_STDINT_H_)
+#include <stdint.h>
+#else // no stdint.h
+
+#if defined(_MSC_VER)
+typedef __int64 int64_t;
+typedef unsigned __int64 uint64_t;
+#define U64C(v) v ## UI64
+#define I64C(v) v ## I64
+#define U64FMT "%UI64d"
+#define I64FMT "%I64d"
+#else // !defined(_MSC_VER)
+typedef long long int64_t;
+typedef unsigned long long uint64_t;
+#endif // !defined(_MSC_VER)
+
+#endif // no stdint.h
+
+// if platform-specific macros were not supplied, use common defaults
+#ifndef I64FMT
+#define U64C(v) v ## ULL
+#define I64C(v) v ## LL
+#define U64FMT "%llu"
+#define I64FMT "%lld"
+#endif
+
+STATIC_SIZE_ASSERT ( uint64_t, 8 );
+
+/////////////////////////////////////////////////////////////////////////////
 // MEMORY MANAGEMENT
 /////////////////////////////////////////////////////////////////////////////
 
@@ -52,6 +111,21 @@ void			operator delete ( void * pPtr );
 void			operator delete [] ( void * pPtr );
 
 /////////////////////////////////////////////////////////////////////////////
+// DEBUGGING
+/////////////////////////////////////////////////////////////////////////////
+
+#if USE_WINDOWS
+#ifndef NDEBUG
+
+void sphAssert ( const char * sExpr, const char * sFile, int iLine );
+
+#undef assert
+#define assert(_expr) (void)( (_expr) || ( sphAssert ( #_expr, __FILE__, __LINE__ ), 0 ) )
+
+#endif // !NDEBUG
+#endif // USE_WINDOWS
+
+/////////////////////////////////////////////////////////////////////////////
 // GENERICS
 /////////////////////////////////////////////////////////////////////////////
 
@@ -78,38 +152,6 @@ private:
 								ISphNoncopyable ( const ISphNoncopyable & ) {}
 	const ISphNoncopyable &		operator = ( const ISphNoncopyable & ) { return *this; }
 };
-
-/////////////////////////////////////////////////////////////////////////////
-// DEBUGGING
-/////////////////////////////////////////////////////////////////////////////
-
-#if USE_WINDOWS
-#ifndef NDEBUG
-
-void sphAssert ( const char * sExpr, const char * sFile, int iLine );
-
-#undef assert
-#define assert(_expr) (void)( (_expr) || ( sphAssert ( #_expr, __FILE__, __LINE__ ), 0 ) )
-
-#endif // !NDEBUG
-#endif // USE_WINDOWS
-
-/////////////////////////////////////////////////////////////////////////////
-
-/// compile time error struct
-template<int> struct CompileTimeError;
-template<> struct CompileTimeError<true> {};
-
-namespace Private
-{
-	template<int x>		struct static_assert_test{};
-	template<bool x>	struct SizeError;
-	template<>			struct SizeError<true>{};
-}
-
-#define STATIC_SIZE_ASSERT(_Type,_ExpSize)	\
-	typedef ::Private::static_assert_test<sizeof(::Private::SizeError \
-	< (bool) (sizeof(_Type) == (_ExpSize)) >)> static_assert_typedef_
 
 //////////////////////////////////////////////////////////////////////////////
 

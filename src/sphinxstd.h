@@ -10,15 +10,25 @@
 #define _CRT_NONSTDC_NO_DEPRECATE 1
 #endif
 
+#if HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <assert.h>
 #include <ctype.h>
 #include <stdarg.h>
-#include <stddef.h>
-#include <limits.h>
+
+// for 64-bit types
+#if HAVE_STDINT_H
+#include <stdint.h>
+#endif
+
+#if HAVE_SYS_TYPES_H
 #include <sys/types.h>
+#endif
 
 /////////////////////////////////////////////////////////////////////////////
 // COMPILE-TIME SIZE CHECKS

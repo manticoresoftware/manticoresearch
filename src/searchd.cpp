@@ -3640,6 +3640,7 @@ int main ( int argc, char **argv )
 
 			// child process, handle client
 			case 0:
+				g_bHeadDaemon = false;
 				HandleClient ( rsock, sClientIP );
 				sphSockClose ( rsock );
 				exit ( 0 );

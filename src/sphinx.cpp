@@ -387,27 +387,74 @@ protected:
 /////////////////////////////////////////////////////////////////////////////
 
 #ifdef O_BINARY
-#define SPH_BINARY O_BINARY
+#define SPH_O_BINARY O_BINARY
 #else
-#define SPH_BINARY 0
+#define SPH_O_BINARY 0
 #endif
 
+#define SPH_O_READ	( O_RDONLY | SPH_O_BINARY )
+#define SPH_O_NEW	( O_CREAT | O_RDWR | O_TRUNC | SPH_O_BINARY )
+
+
 /// file which closes automatically when going out of scope
-class CSphAutofile
+class CSphAutofile : ISphNoncopyable
 {
 protected:
-	int		m_iFD;		///< my file descriptior
+	int			m_iFD;			///< my file descriptior
+	CSphString	m_sFilename;	///< my file name
 
 public:
-			CSphAutofile ( const char * sName )	{ m_iFD = ::open ( sName, O_RDONLY | SPH_BINARY ); }
-			CSphAutofile ( int iFD )			{ m_iFD = iFD; }
-			~CSphAutofile ()					{ Close (); }
+	CSphAutofile ( const char * sName, int iMode, CSphString & sError )
+	{
+		assert ( sName );
+		m_iFD = ::open ( sName, iMode );
+		m_sFilename = sName;
 
-	int		GetFD () const						{ return m_iFD; }
-	void	SetFD ( int iFD )					{ Close (); m_iFD = iFD; }
-	void	Close ()							{ if ( m_iFD>=0 ) ::close ( m_iFD ); m_iFD = -1; }
+		if ( m_iFD<0 )
+			sError.SetSprintf ( "failed to open %s: %s", sName, strerror(errno) );
+	}
 
-	const CSphAutofile & operator = ( const CSphAutofile & )	{ assert(0); return *this; }
+	~CSphAutofile ()
+	{
+		Close ();
+	}
+
+	void Close ()
+	{
+		if ( m_iFD>=0 ) 
+			::close ( m_iFD );
+		m_iFD = -1;
+		m_sFilename = "";
+	}
+
+public:
+	int GetFD () const
+	{
+		return m_iFD;
+	}
+
+	const char * GetFilename () const
+	{
+		assert ( m_sFilename.cstr() );
+		return m_sFilename.cstr();
+	}
+
+	SphOffset_t GetSize ( SphOffset_t iMinSize, CSphString & sError )
+	{
+		struct stat st;
+		if ( stat ( GetFilename(), &st )<0 )
+		{
+			sError.SetSprintf ( "failed to stat %s: %s", GetFilename(), strerror(errno) );
+			return -1;
+		}
+		if ( st.st_size<iMinSize )
+		{
+			sError.SetSprintf ( "failed to load %s: bad size "I64FMT" (at least "I64FMT" bytes expected)",
+				GetFilename(), (int64_t)st.st_size, (int64_t)iMinSize );
+			return -1;
+		}
+		return st.st_size;
+	}
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1190,12 +1237,11 @@ private:
 class CSphReader_VLN
 {
 public:
-
-				CSphReader_VLN ();
-				CSphReader_VLN ( BYTE * pBuf, int iSize );
+				CSphReader_VLN ( BYTE * pBuf=NULL, int iSize=0 );
 	virtual		~CSphReader_VLN ();
 
-	void		SetFile ( int iFD );
+	void		SetFile ( int iFD, const char * sFilename );
+	void		SetFile ( const CSphAutofile & tFile );
 	void		Reset ();
 
 	void		SeekTo ( SphOffset_t iPos, int iSizeHint );
@@ -1209,10 +1255,9 @@ public:
 	DWORD		UnzipInt ();
 	SphOffset_t	UnzipOffset ();
 
-	SphOffset_t Tell()
-	{
-		return m_iPos + m_iBuffPos;
-	}
+	SphOffset_t				Tell () const				{ return m_iPos + m_iBuffPos; }
+	bool					GetErrorFlag () const		{ return m_bError; }
+	const CSphString &		GetErrorMessage () const	{ return m_sError; }
 
 	const CSphReader_VLN &	operator = ( const CSphReader_VLN & rhs );
 
@@ -1228,6 +1273,10 @@ private:
 
 	int			m_iBufSize;
 	bool		m_bBufOwned;
+
+	bool		m_bError;
+	CSphString	m_sError;
+	CSphString	m_sFilename;
 
 	static const int	READ_BUFFER_SIZE		= 262144;
 	static const int	READ_DEFAULT_BLOCK		= 32768;
@@ -1615,7 +1664,6 @@ private:
 
 private:
 	const char *				GetIndexFileName ( const char * sExt );		///< WARNING, non-reenterable, static buffer!
-	int							OpenIndexFile ( char * ext, int mode );
 	int							AdjustMemoryLimit ( int iMemoryLimit );
 
 	int							cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWORD * pDocinfo, int Docinfos, int iStride );
@@ -1627,8 +1675,8 @@ private:
 
 	void						MatchAll ( const CSphQuery * pQuery, ISphMatchSorter * pTop, CSphQueryResult * pResult );
 	void						MatchAny ( const CSphQuery * pQuery, ISphMatchSorter * pTop, CSphQueryResult * pResult );
-	bool						MatchBoolean ( const CSphQuery * pQuery, CSphDict * pDict, ISphMatchSorter * pTop, CSphQueryResult * pResult, int iDoclistFD );
-	bool						MatchExtended ( const CSphQuery * pQuery, CSphDict * pDict, ISphMatchSorter * pTop, CSphQueryResult * pResult, int iDoclistFD );
+	bool						MatchBoolean ( const CSphQuery * pQuery, CSphDict * pDict, ISphMatchSorter * pTop, CSphQueryResult * pResult, const CSphAutofile & tDoclist );
+	bool						MatchExtended ( const CSphQuery * pQuery, CSphDict * pDict, ISphMatchSorter * pTop, CSphQueryResult * pResult, const CSphAutofile & tDoclist );
 
 	const DWORD *				FindDocinfo ( DWORD uDocID );
 	void						LookupDocinfo ( CSphDocInfo & tMatch );
@@ -1637,7 +1685,7 @@ private:
 
 public:
 	// FIXME! this needs to be protected, and refactored as well
-	bool						SetupQueryWord ( CSphQueryWord & tWord, int iFD );
+	bool						SetupQueryWord ( CSphQueryWord & tWord, const CSphAutofile & tFile );
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -2990,7 +3038,7 @@ CSphWriter::CSphWriter ( const char * sName )
 
 	m_pBuffer = new BYTE [ SPH_CACHE_WRITE ];
 	m_pPool = m_pBuffer;
-	m_iFD = ::open ( m_sName.cstr(), O_CREAT | O_RDWR | O_TRUNC | SPH_BINARY, 0644 );
+	m_iFD = ::open ( m_sName.cstr(), SPH_O_NEW, 0644 );
 	m_iPoolUsed = 0;
 	m_iPos = 0;
 	m_bError = ( m_iFD<0 );
@@ -3132,19 +3180,6 @@ bool CSphWriter::IsError ()
 // BIT-ENCODED FILE INPUT
 ///////////////////////////////////////////////////////////////////////////////
 
-CSphReader_VLN::CSphReader_VLN ()
-	: m_iFD ( -1 )
-	, m_iPos ( 0 )
-	, m_iBuffPos ( 0 )
-	, m_iBuffUsed ( 0 )
-	, m_pBuff ( NULL )
-	, m_iSizeHint ( 0 )
-	, m_iBufSize ( 0 )
-	, m_bBufOwned ( false )
-{
-}
-
-
 CSphReader_VLN::CSphReader_VLN ( BYTE * pBuf, int iSize )
 	: m_iFD ( -1 )
 	, m_iPos ( 0 )
@@ -3154,9 +3189,9 @@ CSphReader_VLN::CSphReader_VLN ( BYTE * pBuf, int iSize )
 	, m_iSizeHint ( 0 )
 	, m_iBufSize ( iSize )
 	, m_bBufOwned ( false )
+	, m_bError ( false )
 {
-	assert ( pBuf );
-	assert ( iSize>0 );
+	assert ( pBuf==NULL || iSize>0 );
 }
 
 
@@ -3167,18 +3202,25 @@ CSphReader_VLN::~CSphReader_VLN ()
 }
 
 
-void CSphReader_VLN::SetFile ( int iFD )
+void CSphReader_VLN::SetFile ( int iFD, const char * sFilename )
 {
 	m_iFD = iFD;
 	m_iPos = 0;
 	m_iBuffPos = 0;
 	m_iBuffUsed = 0;
+	m_sFilename = sFilename;
+}
+
+
+void CSphReader_VLN::SetFile ( const CSphAutofile & tFile )
+{
+	SetFile ( tFile.GetFD(), tFile.GetFilename() );
 }
 
 
 void CSphReader_VLN::Reset ()
 {
-	SetFile ( -1 );
+	SetFile ( -1, "" );
 }
 
 
@@ -3215,16 +3257,37 @@ void CSphReader_VLN::UpdateCache ()
 	// stream position could be changed externally
 	// so let's just hope that the OS optimizes redundant seeks
 	SphOffset_t iNewPos = m_iPos + m_iBuffUsed;
-	sphSeek ( m_iFD, iNewPos, SEEK_SET );
+	if ( sphSeek ( m_iFD, iNewPos, SEEK_SET )==-1 )
+	{
+		// unexpected io failure
+		m_iBuffPos = 0;
+		m_iBuffUsed = 0;
+
+		m_bError = true;
+		m_sError.SetSprintf ( "seek error in %s: pos="I64FMT", code=%d, msg=%s",
+			m_sFilename.cstr(), (int64_t)iNewPos, errno, strerror(errno) );
+		return;
+	}
 
 	if ( m_iSizeHint<=0 )
 		m_iSizeHint = READ_DEFAULT_BLOCK;
 
+	int iReadLen = Min ( m_iSizeHint, m_iBufSize );
 	m_iBuffPos = 0;
-	m_iBuffUsed = ::read ( m_iFD, m_pBuff, Min ( m_iSizeHint, m_iBufSize ) );
+	m_iBuffUsed = ::read ( m_iFD, m_pBuff, iReadLen );
 	m_iPos = iNewPos;
 
-	m_iSizeHint -= m_iBuffUsed;
+	if ( m_iBuffUsed>0 )
+	{
+		// all fine, adjust hint
+		m_iSizeHint -= m_iBuffUsed;
+	} else
+	{
+		// unexpected io failure
+		m_bError = true;
+		m_sError.SetSprintf ( "read error in %s: pos="I64FMT", len=%d, code=%d, msg=%s",
+			m_sFilename.cstr(), (int64_t)m_iPos, iReadLen, errno, strerror(errno) );
+	}
 }
 
 
@@ -3234,7 +3297,7 @@ int CSphReader_VLN::GetByte ()
 	{
 		UpdateCache ();
 		if ( m_iBuffPos>=m_iBuffUsed )
-			return 0;
+			return 0; // unexpected io failure
 	}
 
 	assert ( m_iBuffPos<m_iBuffUsed );
@@ -3245,9 +3308,16 @@ int CSphReader_VLN::GetByte ()
 void CSphReader_VLN::GetRawBytes ( void * pData, int iSize )
 {
 	if ( m_iBuffPos+iSize>m_iBuffUsed )
+	{
 		UpdateCache ();
-	assert ( (m_iBuffPos+iSize)<=m_iBuffUsed );
+		if ( m_iBuffPos+iSize>m_iBuffUsed )
+		{
+			memset ( pData, 0, iSize ); // unexpected io failure
+			return;
+		}
+	}
 
+	assert ( (m_iBuffPos+iSize)<=m_iBuffUsed );
 	memcpy ( pData, m_pBuff+m_iBuffPos, iSize );
 	m_iBuffPos += iSize;
 }
@@ -3314,7 +3384,7 @@ SphOffset_t CSphReader_VLN::UnzipOffset ()
 
 const CSphReader_VLN & CSphReader_VLN::operator = ( const CSphReader_VLN & rhs )
 {
-	SetFile ( rhs.m_iFD );
+	SetFile ( rhs.m_iFD, rhs.m_sFilename.cstr() );
 	SeekTo ( rhs.m_iPos + rhs.m_iBuffPos, rhs.m_iSizeHint );
 	return *this;
 }
@@ -3723,21 +3793,20 @@ bool CSphIndex_VLN::SaveAttributes ()
 	assert ( m_eDocinfo==SPH_DOCINFO_EXTERN && m_uDocinfo && m_pDocinfo.GetWritePtr() );
 
 	// save current state
-	int iFD = OpenIndexFile ( "spa.tmpnew", O_CREAT | O_RDWR | O_TRUNC );
-	if ( iFD<0 )
+	CSphAutofile fdTmpnew ( GetIndexFileName("spa.tmpnew"), SPH_O_NEW, m_sLastError );
+	if ( fdTmpnew.GetFD()<0 )
 		return false;
 
 	size_t uStride = 1+m_tSchema.m_dAttrs.GetLength();
 	size_t uSize = uStride*size_t(m_uDocinfo)*sizeof(DWORD);
-	size_t uWrote = ::write ( iFD, m_pDocinfo.GetWritePtr(), uSize );
+	size_t uWrote = ::write ( fdTmpnew.GetFD(), m_pDocinfo.GetWritePtr(), uSize );
 
 	if ( uWrote!=uSize )
 	{
 		m_sLastError.SetSprintf ( "write error: %s", strerror(errno) );
-		::close ( iFD );
 		return false;
 	}
-	::close ( iFD );
+	fdTmpnew.Close ();
 
 	// do some juggling
 	CSphString sSpa = GetIndexFileName ( "spa" );
@@ -3842,16 +3911,6 @@ const char * CSphIndex_VLN::GetIndexFileName ( const char * sExt )
 	static char sBuf [ SPH_MAX_FILENAME_LEN ];
 	snprintf ( sBuf, sizeof(sBuf), "%s.%s", m_sFilename.cstr(), sExt );
 	return sBuf;
-}
-
-
-int CSphIndex_VLN::OpenIndexFile ( char * ext, int mode )
-{
-	const char * sName = GetIndexFileName ( ext );
-	int iFD = ::open ( sName, mode | SPH_BINARY, 0644 );
-	if ( iFD<0 )
-		m_sLastError.SetSprintf ( "failed to open '%s': %s", sName, strerror(errno) );
-	return iFD;
 }
 
 
@@ -4481,35 +4540,25 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	}
 
 	// create and exclusively lock indexer lock file
-	CSphAutofile fdLock ( OpenIndexFile ( "tmp0", O_CREAT | O_RDWR | O_TRUNC ) );
+	CSphAutofile fdLock ( GetIndexFileName("tmp0"), SPH_O_NEW, m_sLastError );
 	if ( fdLock.GetFD()<0 )
-	{
-		fprintf ( stdout, "ERROR: %s.\n", m_sLastError.cstr() );
 		return 0;
-	}
 
 	if ( !sphLockEx ( fdLock.GetFD(), false ) )
 	{
-		fprintf ( stdout, "ERROR: failed to lock '%s': another indexer running?\n",
-			GetIndexFileName ( "tmp0" ) );
+		m_sLastError.SetSprintf ( "failed to lock '%s': another indexer running?", fdLock.GetFilename() );
 		return 0;
 	}
 
 	// create temp hits file
-	CSphAutofile fdTmpHits ( OpenIndexFile ( "tmp1", O_CREAT | O_RDWR | O_TRUNC ) );
+	CSphAutofile fdTmpHits ( GetIndexFileName("tmp1"), SPH_O_NEW, m_sLastError );
 	if ( fdTmpHits.GetFD()<0 )
-	{
-		fprintf ( stdout, "ERROR: %s.\n", m_sLastError.cstr() );
 		return 0;
-	}
 
 	// create temp docinfos file
-	CSphAutofile fdTmpDocinfos ( OpenIndexFile ( "tmp2", O_CREAT | O_RDWR | O_TRUNC ) );
+	CSphAutofile fdTmpDocinfos ( GetIndexFileName("tmp2"), SPH_O_NEW, m_sLastError );
 	if ( fdTmpDocinfos.GetFD()<0 )
-	{
-		fprintf ( stdout, "ERROR: %s.\n", m_sLastError.cstr() );
 		return 0;
-	}
 
 	// setup accumulating docinfo IDs range
 	m_tMin.Reset ( m_tSchema.m_dAttrs.GetLength() );
@@ -4739,12 +4788,9 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	/////////////////
 
 	// initialize writer
-	CSphAutofile fdDocinfo ( OpenIndexFile ( "spa", O_CREAT | O_RDWR | O_TRUNC ) );
+	CSphAutofile fdDocinfo ( GetIndexFileName("spa"), SPH_O_NEW, m_sLastError );
 	if ( fdDocinfo.GetFD()<0 )
-	{
-		fprintf ( stdout, "ERROR: %s.\n", m_sLastError.cstr() );
 		return 0;
-	}
 
 	if ( m_eDocinfo==SPH_DOCINFO_EXTERN && dHitBlocks.GetLength() )
 	{
@@ -4854,14 +4900,6 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 		m_eDocinfo = SPH_DOCINFO_INLINE;
 
 	// initialize readers
-	fdTmpHits.Close ();
-	fdTmpHits.SetFD ( OpenIndexFile ( "tmp1", O_RDONLY ) );
-	if ( fdTmpHits.GetFD()<0 )
-	{
-		fprintf ( stdout, "ERROR: %s.\n", m_sLastError.cstr() );
-		return 0;
-	}
-
 	iSharedOffset = -1;
 	ARRAY_FOREACH ( i, dBins )
 		dBins[i]->Init ( fdTmpHits.GetFD(), &iSharedOffset, "sort_hits", iMemoryLimit, iRawBlocks );
@@ -5044,12 +5082,9 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource )
 
 	if ( m_eDocinfo == SPH_DOCINFO_EXTERN && pSrcIndex->m_eDocinfo == SPH_DOCINFO_EXTERN )
 	{
-		CSphAutofile fdSpa ( OpenIndexFile ( "spa.tmp", O_CREAT | O_RDWR | O_TRUNC ) );
+		CSphAutofile fdSpa ( GetIndexFileName("spa.tmp"), SPH_O_NEW, m_sLastError );
 		if ( fdSpa.GetFD()<0 )
-		{
-			fprintf ( stdout, "ERROR: %s.\n", m_sLastError.cstr() );
-			return 0;		
-		}
+			return false;
 
 		const DWORD * pSrcRow = &pSrcIndex->m_pDocinfo[0];
 		assert( pSrcRow );
@@ -5094,25 +5129,19 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource )
 	/// merging .spd
 	/////////////////
 
-	CSphAutofile tDstData ( GetIndexFileName ( "spd" ) );
+	CSphAutofile tDstData ( GetIndexFileName("spd"), SPH_O_READ, m_sLastError );
 	if ( tDstData.GetFD()<0 )
-	{
-		fprintf( stdout, "FATAL: failed to open data file '%s'", GetIndexFileName ( "spd" ) );
 		return false;
-	}
 
-	CSphAutofile tSrcData ( pSrcIndex->GetIndexFileName ( "spd" ) );
+	CSphAutofile tSrcData ( pSrcIndex->GetIndexFileName("spd"), SPH_O_READ, m_sLastError );
 	if ( tSrcData.GetFD()<0 )
-	{
-		fprintf( stdout, "FATAL: failed to open data file '%s'", pSrcIndex->GetIndexFileName ( "spd" ) );
 		return false;
-	}
 
 	CSphReader_VLN rdDstData;
-	rdDstData.SetFile ( tDstData.GetFD() );
+	rdDstData.SetFile ( tDstData.GetFD(), tDstData.GetFilename() );
 
 	CSphReader_VLN rdSrcData;
-	rdSrcData.SetFile ( tSrcData.GetFD() );
+	rdSrcData.SetFile ( tSrcData.GetFD(), tDstData.GetFilename() );
 
 	rdDstData.SeekTo( 1, 0 );
 	rdSrcData.SeekTo( 1, 0 );
@@ -6026,6 +6055,9 @@ const DWORD * CSphIndex_VLN::FindDocinfo ( DWORD uDocID )
 	assert ( m_tSchema.m_dAttrs.GetLength() );
 
 	DWORD uHash = ( uDocID - m_pDocinfo[0] ) >> m_iDocinfoIdShift;
+	if ( uHash>(1<<DOCINFO_HASH_BITS) ) // possible in case of broken data, for instance
+		return NULL;
+
 	int iStart = m_pDocinfoHash [ uHash ];
 	int iEnd = m_pDocinfoHash [ uHash+1 ] - 1;
 
@@ -6431,7 +6463,7 @@ public:
 							CSphBooleanEvalNode ( const CSphBooleanQueryExpr * pNode, CSphDict * pDict, ESphDocinfo eDocinfo, const CSphDocInfo & tMin );
 							~CSphBooleanEvalNode ();
 
-	void					SetFile ( CSphIndex_VLN * pIndex, int iFD );
+	void					SetFile ( CSphIndex_VLN * pIndex, const CSphAutofile & tFile );
 	CSphMatch *				MatchNode ( DWORD iMinID );		///< get next match at this node, with ID greater than iMinID
 	CSphMatch *				MatchLevel ( DWORD iMinID );	///< get next match at this level, with ID greater than iMinID
 	bool					IsRejected ( DWORD iID );		///< check if this match should be rejected
@@ -6481,21 +6513,21 @@ CSphBooleanEvalNode::~CSphBooleanEvalNode ()
 }
 
 
-void CSphBooleanEvalNode::SetFile ( CSphIndex_VLN * pIndex, int iFD )
+void CSphBooleanEvalNode::SetFile ( CSphIndex_VLN * pIndex, const CSphAutofile & tFile )
 {
 	// setup self
-	if ( pIndex->SetupQueryWord ( *this, iFD ) )
+	if ( pIndex->SetupQueryWord ( *this, tFile ) )
 		m_pLast = &m_tDoc;
 
 	// setup children
 	if ( m_pExpr )
-		m_pExpr->SetFile ( pIndex, iFD );
+		m_pExpr->SetFile ( pIndex, tFile );
 
 	// setup siblings
 	if ( !m_pPrev )
 	{
 		for ( CSphBooleanEvalNode * pNode = m_pNext; pNode; pNode = pNode->m_pNext )
-			pNode->SetFile ( pIndex, iFD );
+			pNode->SetFile ( pIndex, tFile );
 	}
 }
 
@@ -6655,7 +6687,7 @@ CSphMatch * CSphBooleanEvalNode::MatchLevel ( DWORD iMinID )
 }
 
 
-bool CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, CSphDict * pDict, ISphMatchSorter * pTop, CSphQueryResult * pResult, int iDoclistFD )
+bool CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, CSphDict * pDict, ISphMatchSorter * pTop, CSphQueryResult * pResult, const CSphAutofile & tDoclist )
 {
 	/////////////////////////
 	// match in boolean mode
@@ -6665,14 +6697,14 @@ bool CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, CSphDict * pDict, I
 	CSphBooleanQuery tParsed;
 	if ( !sphParseBooleanQuery ( tParsed, pQuery->m_sQuery.cstr(), pQuery->m_pTokenizer ) )
 	{
-		pResult->m_sError = tParsed.m_sParseError;
+		m_sLastError = tParsed.m_sParseError;
 		return false;
 	}
 
 	// let's build our own tree! with doclists! and hits!
 	assert ( m_tMin.m_iAttrs==m_tSchema.m_dAttrs.GetLength() );
 	CSphBooleanEvalNode tTree ( tParsed.m_pTree, pDict, m_eDocinfo, m_tMin );
-	tTree.SetFile ( this, iDoclistFD );
+	tTree.SetFile ( this, tDoclist );
 
 	bool bEarlyLookup = ( m_eDocinfo==SPH_DOCINFO_EXTERN ) && pQuery->m_dFilters.GetLength();
 	bool bLateLookup = ( m_eDocinfo==SPH_DOCINFO_EXTERN ) && !bEarlyLookup && pTop->UsesAttrs();
@@ -6708,13 +6740,17 @@ bool CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, CSphDict * pDict, I
 
 //////////////////////////////////////////////////////////////////////////////
 
-struct CSphTermSetup
+struct CSphTermSetup : ISphNoncopyable
 {
-	CSphDict *			m_pDict;
-	CSphIndex_VLN *		m_pIndex;
-	ESphDocinfo			m_eDocinfo;
-	CSphDocInfo			m_tMin;
-	int					m_iDoclistFD;
+	CSphDict *				m_pDict;
+	CSphIndex_VLN *			m_pIndex;
+	ESphDocinfo				m_eDocinfo;
+	CSphDocInfo				m_tMin;
+	const CSphAutofile &	m_tDoclist;
+
+	CSphTermSetup ( const CSphAutofile & tDoclist )
+		: m_tDoclist ( tDoclist )
+	{}
 };
 
 
@@ -6782,7 +6818,7 @@ CSphExtendedEvalAtom::CSphExtendedEvalAtom ( const CSphExtendedQueryAtom & tAtom
 		tTerm.m_iWordID = tSetup.m_pDict->GetWordID ( (BYTE*)sBuf.cstr() );
 		tTerm.SetupAttrs ( tSetup.m_eDocinfo, tSetup.m_tMin );
 
-		if ( !tSetup.m_pIndex->SetupQueryWord ( tTerm, tSetup.m_iDoclistFD ) )
+		if ( !tSetup.m_pIndex->SetupQueryWord ( tTerm, tSetup.m_tDoclist ) )
 			m_pLast = NULL;
 	}
 }
@@ -7484,7 +7520,7 @@ void CSphExtendedEvalNode::CollectQwords ( CSphQwordsHash & dHash, int & iCount 
 
 //////////////////////////////////////////////////////////////////////////////
 
-bool CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, CSphDict * pDict, ISphMatchSorter * pTop, CSphQueryResult * pResult, int iDoclistFD )
+bool CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, CSphDict * pDict, ISphMatchSorter * pTop, CSphQueryResult * pResult, const CSphAutofile & tDoclist )
 {
 	assert ( pDict );
 	assert ( pTop );
@@ -7502,16 +7538,15 @@ bool CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, CSphDict * pDict, 
 	if ( !sphParseExtendedQuery ( tParsed, pQuery->m_sQuery.cstr(), pQuery->m_pTokenizer,
 		&m_tSchema, pDict ) )
 	{
-		pResult->m_sError = tParsed.m_sParseError;
+		m_sLastError = tParsed.m_sParseError;
 		return false;
 	}
 
-	CSphTermSetup tSetup;
+	CSphTermSetup tSetup ( tDoclist );
 	tSetup.m_pDict = pDict;
 	tSetup.m_pIndex = this;
 	tSetup.m_eDocinfo = m_eDocinfo;
 	tSetup.m_tMin = m_tMin;
-	tSetup.m_iDoclistFD = iDoclistFD;
 
 	CSphExtendedEvalNode tAccept ( tParsed.m_pAccept, tSetup );
 	CSphExtendedEvalNode tReject ( tParsed.m_pReject, tSetup );
@@ -7599,7 +7634,7 @@ bool CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, CSphDict * pDict, 
 
 //////////////////////////////////////////////////////////////////////////////
 
-bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, int iFD )
+bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, const CSphAutofile & tDoclist )
 {
 	// binary search through checkpoints for a one whose range matches word ID
 	assert ( m_bPreloaded && !m_pWordlist.IsEmpty() );
@@ -7683,9 +7718,9 @@ bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, int iFD )
 			sphUnzipInt ( pBuf ); // might be 0 at checkpoint
 			SphOffset_t iDoclistLen = sphUnzipOffset ( pBuf );
 
-			tWord.m_rdDoclist.SetFile ( iFD );
+			tWord.m_rdDoclist.SetFile ( tDoclist );
 			tWord.m_rdDoclist.SeekTo ( iDoclistOffset, (int)iDoclistLen );
-			tWord.m_rdHitlist.SetFile ( iFD );
+			tWord.m_rdHitlist.SetFile ( tDoclist );
 			tWord.m_iDocs = iDocs;
 			tWord.m_iHits = iHits;
 			return true;
@@ -7716,13 +7751,13 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 	// preload schema
 	//////////////////
 
-	CSphAutofile tIndexInfo ( GetIndexFileName ( "sph" ) );
+	CSphAutofile tIndexInfo ( GetIndexFileName("sph"), SPH_O_READ, m_sLastError );
 	if ( tIndexInfo.GetFD()<0 )
 		return false;
 
 	BYTE dCacheInfo [ 8192 ];
 	CSphReader_VLN rdInfo ( dCacheInfo, sizeof(dCacheInfo) ); // to avoid mallocs
-	rdInfo.SetFile ( tIndexInfo.GetFD() );
+	rdInfo.SetFile ( tIndexInfo );
 
 	// version
 	DWORD uVersion = rdInfo.GetDword ();
@@ -7776,28 +7811,30 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 		int iStride = 1+m_tSchema.m_dAttrs.GetLength();
 		int iEntrySize = sizeof(DWORD)*iStride;
 
-		const char * sDocinfo = GetIndexFileName ( "spa" );
-		CSphAutofile tDocinfo ( sDocinfo );
-
-		struct stat stDocinfo;
-		if ( tDocinfo.GetFD()<0 || stat ( sDocinfo, &stDocinfo)<0 || stDocinfo.st_size<iEntrySize )
+		CSphAutofile tDocinfo ( GetIndexFileName("spa"), SPH_O_READ, m_sLastError );
+		if ( tDocinfo.GetFD()<0 )
 			return NULL;
 
-		m_uDocinfo = stDocinfo.st_size / iEntrySize;
+		SphOffset_t iDocinfoSize = tDocinfo.GetSize ( iEntrySize, m_sLastError );
+		if ( iDocinfoSize<0 )
+			return NULL;
 
-		SphOffset_t uCheck8 = m_uDocinfo;
-		uCheck8 *= (SphOffset_t)iEntrySize;
-		if ( uCheck8!=(SphOffset_t)stDocinfo.st_size )
+		// intentionally losing data; we don't support more than 4B documents per instance yet
+		m_uDocinfo = (DWORD)( iDocinfoSize / iEntrySize );
+
+		uint64_t uDocinfoSize = m_uDocinfo;
+		uDocinfoSize *= (uint64_t)iEntrySize;
+
+		if ( uDocinfoSize!=(uint64_t)iDocinfoSize )
 			return NULL; // 4B document count limit hit
 
-		size_t uCheckBytes = (size_t)uCheck8;
-		if ( uCheck8!=(SphOffset_t)uCheckBytes )
+		if ( uDocinfoSize!=(uint64_t)((size_t)uDocinfoSize) )
 			return NULL; // 4 GB size_t limit on 32-bit platform hit
 
-		if ( !m_pDocinfo.Alloc ( uCheckBytes/sizeof(DWORD) ) )
+		if ( !m_pDocinfo.Alloc ( (size_t)(uDocinfoSize/sizeof(DWORD)) ) )
 			return NULL;
 
-		if ( ::read ( tDocinfo.GetFD(), m_pDocinfo.GetWritePtr(), stDocinfo.st_size )!=stDocinfo.st_size )
+		if ( ::read ( tDocinfo.GetFD(), m_pDocinfo.GetWritePtr(), (size_t)uDocinfoSize )!=uDocinfoSize )
 		{
 			m_pDocinfo.Reset ();
 			return NULL;
@@ -7837,17 +7874,27 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 	////////////////////
 
 	const char * sWordlist = GetIndexFileName ( "spi" );
-	CSphAutofile tWordlist ( sWordlist );
+	CSphAutofile tWordlist ( sWordlist, SPH_O_READ, m_sLastError );
+	if ( tWordlist.GetFD()<0 )
+		return NULL;
 
 	struct stat stWordlist;
-	if ( tWordlist.GetFD()<0 || stat ( sWordlist, &stWordlist)<0 || stWordlist.st_size<=0 )
+	if ( stat ( sWordlist, &stWordlist)<0 )
 	{
+		m_sLastError.SetSprintf ( "failed to stat %s: %s", sWordlist, strerror(errno) );
+		m_pDocinfo.Reset ();
+		return NULL;
+	}
+	if ( stWordlist.st_size<=0 )
+	{
+		m_sLastError.SetSprintf ( "failed to load %s: bad size", sWordlist );
 		m_pDocinfo.Reset ();
 		return NULL;
 	}
 
 	if ( !m_pWordlist.Alloc ( stWordlist.st_size ) )
 		return NULL;
+
 	if ( ::read ( tWordlist.GetFD(), m_pWordlist.GetWritePtr(), stWordlist.st_size )!=stWordlist.st_size )
 	{
 		m_pDocinfo.Reset ();
@@ -7883,7 +7930,7 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 		return false;
 	pResult->m_tSchema = m_tSchema;
 
-	CSphAutofile tDoclist ( GetIndexFileName ( "spd" ) );
+	CSphAutofile tDoclist ( GetIndexFileName("spd"), SPH_O_READ, m_sLastError );
 	if ( tDoclist.GetFD()<0 )
 		return false;
 
@@ -7893,9 +7940,10 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 	assert ( m_eDocinfo!=SPH_DOCINFO_EXTERN || !m_pDocinfo.IsEmpty() );
 
 	// split query into words
-	if ( pQuery->m_eMode==SPH_MATCH_ALL
+	bool bSimpleQuery = ( pQuery->m_eMode==SPH_MATCH_ALL
 		|| pQuery->m_eMode==SPH_MATCH_ANY
-		|| pQuery->m_eMode==SPH_MATCH_PHRASE )
+		|| pQuery->m_eMode==SPH_MATCH_PHRASE );
+	if ( bSimpleQuery )
 	{
 		CSphQueryParser * pQueryParser = new CSphQueryParser ( pDict, pQuery->m_sQuery.cstr(),
 			pQuery->m_pTokenizer );
@@ -7943,7 +7991,7 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 
 			// lookup this wordlist page
 			// offset might be -1 if page is totally empty
-			SetupQueryWord ( m_dQueryWords[i], tDoclist.GetFD() );
+			SetupQueryWord ( m_dQueryWords[i], tDoclist );
 		}
 
 		// build word stats
@@ -8005,8 +8053,8 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 		case SPH_MATCH_ALL:			MatchAll ( pQuery, pTop, pResult ); break;
 		case SPH_MATCH_PHRASE:		MatchAll ( pQuery, pTop, pResult ); break;
 		case SPH_MATCH_ANY:			MatchAny ( pQuery, pTop, pResult ); break;
-		case SPH_MATCH_BOOLEAN:		bMatch = MatchBoolean ( pQuery, pDict, pTop, pResult, tDoclist.GetFD() ); break;
-		case SPH_MATCH_EXTENDED:	bMatch = MatchExtended ( pQuery, pDict, pTop, pResult, tDoclist.GetFD() ); break;
+		case SPH_MATCH_BOOLEAN:		bMatch = MatchBoolean ( pQuery, pDict, pTop, pResult, tDoclist ); break;
+		case SPH_MATCH_EXTENDED:	bMatch = MatchExtended ( pQuery, pDict, pTop, pResult, tDoclist ); break;
 		default:					sphDie ( "FATAL: INTERNAL ERROR: unknown matching mode (mode=%d).\n", pQuery->m_eMode );
 	}
 	PROFILE_END ( query_match );
@@ -8014,6 +8062,25 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 	// check if there was error while matching (boolean or extended query parsing error, for one)
 	if ( !bMatch )
 		return false;
+
+	if ( bSimpleQuery )
+		ARRAY_FOREACH ( i, m_dQueryWords )
+	{
+		if ( m_dQueryWords[i].m_rdDoclist.GetErrorFlag() )
+		{
+			m_sLastError = m_dQueryWords[i].m_rdDoclist.GetErrorMessage ();
+			return false;
+		}
+		if ( m_dQueryWords[i].m_rdHitlist.GetErrorFlag() )
+		{
+			m_sLastError = m_dQueryWords[i].m_rdHitlist.GetErrorMessage ();
+			return false;
+		}
+	}
+
+	///////////////////
+	// cook result set
+	///////////////////
 
 	if ( !pTop->UsesAttrs() && pTop->GetLength() )
 	{

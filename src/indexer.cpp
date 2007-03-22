@@ -692,6 +692,9 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 					bOK = true;
 				break;
 			}
+		} else
+		{
+			fprintf ( stdout, "ERROR: index '%s': %s.\n", sIndexName, pIndex->GetLastError().cstr() );
 		}
 
 		SafeDelete ( pIndex );

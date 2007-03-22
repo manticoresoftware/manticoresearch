@@ -88,6 +88,14 @@ public:
 public:
 	SearchFailure_t () {}
 
+	SearchFailure_t ( const char * sIndex, const CSphString & sError )
+	{
+		m_sIndex = sIndex;
+		m_sError = sError;
+		if ( !m_sIndex.cstr() ) m_sIndex = "(no index name)";
+		if ( !m_sError.cstr() ) m_sError = "(no message)";
+	}
+
 	SearchFailure_t ( const char * sIndex, const char * sErrorTemplate, ... )
 	{
 		char sBuf [ 2048 ];
@@ -2380,7 +2388,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			tQuery.m_pTokenizer = tServed.m_pTokenizer;
 			iTries++;
 			if ( !tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pTop ) )
-				dFailures.Add ( SearchFailure_t ( tDist.m_dLocal[i].cstr(), "%s", pRes->m_sError.cstr() ) );
+				dFailures.Add ( SearchFailure_t ( tDist.m_dLocal[i].cstr(), tServed.m_pIndex->GetLastError() ) );
 			else
 				iSuccesses++;
 
@@ -2485,7 +2493,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			iTries++;
 			tQuery.m_pTokenizer = tServed.m_pTokenizer;
 			if ( !tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pTop ) )
-				dFailures.Add ( SearchFailure_t ( sIndexName, "%s", pRes->m_sError.cstr() ) );
+				dFailures.Add ( SearchFailure_t ( sIndexName, tServed.m_pIndex->GetLastError() ) );
 			else
 				iSuccesses++;
 
@@ -2557,7 +2565,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 				tQuery.m_pTokenizer = tServed.m_pTokenizer;
 				iTries++;
 				if ( !tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pTop ) )
-					dFailures.Add ( SearchFailure_t ( sNext, "%s", pRes->m_sError.cstr() ) );
+					dFailures.Add ( SearchFailure_t ( sNext, tServed.m_pIndex->GetLastError() ) );
 				else
 					iSuccesses++;
 

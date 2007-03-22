@@ -936,8 +936,6 @@ public:
 class CSphQueryResult
 {
 public:
-	CSphString				m_sError;	///< error message
-
 	struct WordStat_t
 	{
 		CSphString			m_sWord;	///< i-th search term (normalized word form)
@@ -1078,7 +1076,7 @@ public:
 	typedef void ProgressCallback_t ( const CSphIndexProgress * pStat );
 
 public:
-								CSphIndex ( const char * sName ) : m_pProgress ( NULL ), m_tSchema ( sName ) {}
+								CSphIndex ( const char * sName ) : m_pProgress ( NULL ), m_tSchema ( sName ), m_sLastError ( "(no error message)" )  {}
 	virtual						~CSphIndex () {}
 
 	virtual	void				SetProgressCallback ( ProgressCallback_t * pfnProgress ) { m_pProgress = pfnProgress; }

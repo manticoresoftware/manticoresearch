@@ -495,7 +495,7 @@ public:
 
 public:
 	/// allocate storage
-	bool Alloc ( DWORD iEntries )
+	bool Alloc ( DWORD iEntries, CSphString & sError )
 	{
 		assert ( !m_pData );
 
@@ -505,7 +505,7 @@ public:
 		m_iLength = (size_t)uCheck;
 		if ( uCheck!=(SphOffset_t)m_iLength )
 		{
-			fprintf ( stdout, "ERROR: impossible to mmap() over 4 GB on 32-bit system.\n" );
+			sError.SetSprintf ( "impossible to mmap() over 4 GB on 32-bit system" );
 			return false;
 		}
 
@@ -517,7 +517,12 @@ public:
 		m_pData = (T *) mmap ( NULL, m_iLength, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0 );
 		if ( m_pData==MAP_FAILED )
 		{
-			fprintf ( stdout, "ERROR: mmap() failed: %s (over 2GB on some 32-bit systems?).\n", strerror(errno) );
+			if ( m_iLength>0x7fffffffUL )
+				sError.SetSprintf ( "mmap() failed: %s (length="I64FMT" is over 2GB, impossible on some 32-bit systems)",
+					strerror(errno), (int64_t)m_iLength );
+			else
+				sError.SetSprintf ( "mmap() failed: %s (length="I64FMT")",
+				strerror(errno), (int64_t)m_iLength );
 			return false;
 		}
 
@@ -1198,14 +1203,14 @@ public:
 
 /////////////////////////////////////////////////////////////////////////////
 
-class CSphWriter
+class CSphWriter : ISphNoncopyable
 {
 public:
 	CSphString	m_sName;
 	SphOffset_t	m_iPos;
 
 public:
-				CSphWriter ( const char * sName );
+				CSphWriter ( const char * sName, CSphString & sErrorBuffer );
 				~CSphWriter ();
 
 	void		CloseFile (); ///< note: calls Flush(), ie. IsError() might get true after this call
@@ -1219,14 +1224,16 @@ public:
 	void		ZipOffset ( SphOffset_t uValue );
 	void		ZipOffsets ( CSphVector<SphOffset_t> * pData );
 
-	bool		IsError ();
+	bool		IsError () const	{ return m_bError; }
 
 private:
 	int			m_iFD;
 	int			m_iPoolUsed;
 	BYTE *		m_pBuffer;
 	BYTE *		m_pPool;
-	bool		m_bError;
+
+	bool			m_bError;
+	CSphString &	m_sError;
 
 	void		PutByte ( int data );
 	void		Flush ();
@@ -1804,22 +1811,17 @@ float sphLongTimer ()
 }
 
 
-int sphWrite ( int iFD, const void * pBuf, size_t iCount, const char * sName )
+bool sphWrite ( int iFD, const void * pBuf, size_t iCount, const char * sName, CSphString & sError )
 {
 	int iWritten = ::write ( iFD, pBuf, iCount );
-	if ( iWritten!=(int)iCount )
-	{
-		if ( iWritten<0 )
-		{
-			fprintf ( stdout, "ERROR: %s: write error: %s.\n",
-				sName, strerror(errno) );
-		} else
-		{
-			fprintf ( stdout, "ERROR: %s: write error: %d of %d bytes written.\n",
-				sName, iWritten, int(iCount) );
-		}
-	}
-	return iWritten;
+	if ( iWritten==(int)iCount )
+		return true;
+
+	if ( iWritten<0 )
+		sError.SetSprintf ( "%s: write error: %s", sName, strerror(errno) );
+	else
+		sError.SetSprintf ( "%s: write error: %d of %d bytes written", sName, iWritten, int(iCount) );
+	return false;
 }
 
 
@@ -3031,7 +3033,8 @@ int CSphSchema::GetAttrIndex ( const char * sName ) const
 // BIT-ENCODED FILE OUTPUT
 ///////////////////////////////////////////////////////////////////////////////
 
-CSphWriter::CSphWriter ( const char * sName )
+CSphWriter::CSphWriter ( const char * sName, CSphString & sErrorBuffer )
+	: m_sError ( sErrorBuffer )
 {
 	assert ( sName );
 	m_sName = sName;
@@ -3042,6 +3045,9 @@ CSphWriter::CSphWriter ( const char * sName )
 	m_iPoolUsed = 0;
 	m_iPos = 0;
 	m_bError = ( m_iFD<0 );
+
+	if ( m_bError )
+		m_sError.SetSprintf ( "failed to create %s: %s" , sName, strerror(errno) );
 }
 
 
@@ -3153,7 +3159,7 @@ void CSphWriter::Flush ()
 {
 	PROFILE ( write_hits );
 
-	if ( sphWrite ( m_iFD, m_pBuffer, m_iPoolUsed, m_sName.cstr() )!=m_iPoolUsed )
+	if ( !sphWrite ( m_iFD, m_pBuffer, m_iPoolUsed, m_sName.cstr(), m_sError ) )
 		m_bError = true;
 
 	m_iPoolUsed = 0;
@@ -3168,12 +3174,6 @@ void CSphWriter::SeekTo ( SphOffset_t iPos )
 	Flush ();
 	sphSeek ( m_iFD, iPos, SEEK_SET );
 	m_iPos = iPos;
-}
-
-
-bool CSphWriter::IsError ()
-{
-	return m_bError;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -4090,7 +4090,7 @@ bool CSphIndex_VLN::cidxDone ( CSphWriter & fdWordlist, CSphWriter & fdData )
 	// create header
 	/////////////////
 
-	CSphWriter fdInfo ( GetIndexFileName ( "sph" ) );
+	CSphWriter fdInfo ( GetIndexFileName("sph"), m_sLastError );
 	if ( fdInfo.IsError() )
 		return false;
 
@@ -4131,10 +4131,7 @@ bool CSphIndex_VLN::cidxDone ( CSphWriter & fdWordlist, CSphWriter & fdData )
 	fdWordlist.CloseFile ();
 
 	if ( fdInfo.IsError() || fdWordlist.IsError() || fdData.IsError() )
-	{
-		fprintf ( stdout, "ERROR: write() failed, out of disk space?\n" );
 		return false;
-	}
 
 	return true;
 }
@@ -4311,7 +4308,7 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWOR
 		if ( pBuf>maxP )
 		{
 			w = (int)(pBuf - m_pWriteBuffer);
-			if ( sphWrite ( fd, m_pWriteBuffer, w, "raw_hits" )!=w )
+			if ( !sphWrite ( fd, m_pWriteBuffer, w, "raw_hits", m_sLastError ) )
 				return -1;
 			n += w;
 			pBuf = m_pWriteBuffer;
@@ -4321,7 +4318,7 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWOR
 	pBuf += encodeVLB ( pBuf, 0 );
 	pBuf += encodeVLB ( pBuf, 0 );
 	w = (int)(pBuf - m_pWriteBuffer);
-	if ( sphWrite ( fd, m_pWriteBuffer, w, "raw_hits" )!=w )
+	if ( !sphWrite ( fd, m_pWriteBuffer, w, "raw_hits", m_sLastError ) )
 		return -1;
 	n += w;
 
@@ -4504,7 +4501,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 
 	if ( m_tSchema.m_dAttrs.GetLength()>0 && m_eDocinfo==SPH_DOCINFO_NONE )
 	{
-		fprintf ( stdout, "ERROR: got attributes, but docinfo is 'none' (fix your config file)\n" );
+		m_sLastError.SetSprintf ( "got attributes, but docinfo is 'none' (fix your config file)" );
 		return 0;
 	}
 
@@ -4638,7 +4635,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 					int iLen = iDocinfoMax*iDocinfoStride*sizeof(DWORD);
 
 					sphSortDocinfos ( dDocinfos, iDocinfoMax, iDocinfoStride );
-					if ( sphWrite ( fdTmpDocinfos.GetFD(), dDocinfos, iLen, "raw_docinfos" )!=iLen )
+					if ( !sphWrite ( fdTmpDocinfos.GetFD(), dDocinfos, iLen, "raw_docinfos", m_sLastError ) )
 						return 0;
 
 					pDocinfo = dDocinfos;
@@ -4738,7 +4735,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 
 		int iLen = iDocinfoLastBlockSize*iDocinfoStride*sizeof(DWORD);
 		sphSortDocinfos ( dDocinfos, iDocinfoLastBlockSize, iDocinfoStride );
-		if ( sphWrite ( fdTmpDocinfos.GetFD(), dDocinfos, iLen, "raw_docinfos" )!=iLen )
+		if ( !sphWrite ( fdTmpDocinfos.GetFD(), dDocinfos, iLen, "raw_docinfos", m_sLastError ) )
 			return 0;
 
 		iDocinfoBlocks++;
@@ -4821,7 +4818,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 		{
 			if ( dBins[i]->ReadBytes  ( pDocinfo, iDocinfoStride*sizeof(DWORD) )<=0 )
 			{
-				fprintf ( stdout, "ERROR: sort_docinfos: warmup failed; I/O error?\n" );
+				m_sLastError.SetSprintf ( "sort_docinfos: warmup failed (io error?)" );
 				return 0;
 			}
 			pDocinfo += iDocinfoStride;
@@ -4842,7 +4839,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 			if ( pDocinfo>=pDocinfoMax )
 			{
 				int iLen = iDocinfoMax*iDocinfoStride*sizeof(DWORD);
-				if ( sphWrite ( fdDocinfo.GetFD(), dDocinfos, iLen, "sort_docinfo" )!=iLen )
+				if ( !sphWrite ( fdDocinfo.GetFD(), dDocinfos, iLen, "sort_docinfo", m_sLastError ) )
 					return 0;
 				pDocinfo = dDocinfos;
 			}
@@ -4852,7 +4849,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 			int iRes = dBins[iBin]->ReadBytes ( pEntry, iDocinfoStride*sizeof(DWORD) );
 			if ( iRes<0 )
 			{
-				fprintf ( stdout, "ERROR: sort_docinfo: failed to read entry.\n" );
+				m_sLastError.SetSprintf ( "sort_docinfo: failed to read entry" );
 				return 0;
 			}
 			if ( iRes>0 )
@@ -4862,7 +4859,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 		{
 			assert ( 0 == ( pDocinfo-dDocinfos ) % iDocinfoStride );
 			int iLen = ( pDocinfo - dDocinfos )*sizeof(DWORD);
-			if ( sphWrite ( fdDocinfo.GetFD(), dDocinfos, iLen, "sort_docinfo" )!=iLen )
+			if ( !sphWrite ( fdDocinfo.GetFD(), dDocinfos, iLen, "sort_docinfo", m_sLastError ) )
 				return 0;
 		}
 
@@ -4908,11 +4905,11 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	// create new index files set
 	//////////////////////////////
 
-	CSphWriter fdWordlist ( GetIndexFileName ( "spi" ) );
+	CSphWriter fdWordlist ( GetIndexFileName("spi"), m_sLastError );
 	if ( fdWordlist.IsError() )
 		return 0;
 
-	CSphWriter fdData ( GetIndexFileName ( "spd" ) );
+	CSphWriter fdData ( GetIndexFileName("spd"), m_sLastError );
 	if ( fdData.IsError() )
 		return 0;
 
@@ -4954,7 +4951,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 		{
 			if ( !dBins[i]->ReadHit ( &tHit, iAttrs, dInlineAttrs+i*iAttrs ) )
 			{
-				fprintf ( stdout, "ERROR: sort_hits: warmup failed; I/O error?\n" );
+				m_sLastError.SetSprintf ( "sort_hits: warmup failed (io error?)" );
 				return 0;
 			}
 			bActive[i] = tHit.m_iWordID;
@@ -4977,10 +4974,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 			tQueue.m_pData->m_iDocID -= m_tMin.m_iDocID;
 			cidxHit ( fdWordlist, fdData, tQueue.m_pData, iAttrs ? dInlineAttrs+iBin*iAttrs : NULL );
 			if ( fdWordlist.IsError() || fdData.IsError() )
-			{
-				fprintf ( stdout, "ERROR: write() failed, out of disk space?\n" );
 				return 0;
-			}
 
 			// pop queue root and push next hit from popped bin
 
@@ -5064,13 +5058,13 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource )
 	CSphString sError;
 	if ( pDstSchema->CompareTo( *pSrcSchema, sError ) != SPH_SCHEMAS_EQUAL )
 	{
-		fprintf( stdout, "FATAL: merging indexes have not equal schemes" );
+		m_sLastError.SetSprintf ( "merging indexes with different schemas is not allowed" );
 		return false;
 	}
 
 	if ( m_eDocinfo == SPH_DOCINFO_EXTERN && pSrcIndex->m_eDocinfo == SPH_DOCINFO_INLINE )
 	{
-		fprintf( stdout, "FATAL: merging indexes have not equal schemes" );
+		m_sLastError.SetSprintf ( "merging indexes with different docinfo storage is not allowed" );
 		return false;
 	}
 
@@ -5099,19 +5093,19 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource )
 		{
 			if ( pDstRow[0] < pSrcRow[0] )
 			{
-				sphWrite( fdSpa.GetFD(), pDstRow, sizeof( DWORD ) * iStride, "doc_attr" );
+				sphWrite( fdSpa.GetFD(), pDstRow, sizeof( DWORD ) * iStride, "doc_attr", m_sLastError );
 				pDstRow += iStride;
 				iDstCount++;
 			}
 			else if ( pDstRow[0] > pSrcRow[0] )
 			{
-				sphWrite( fdSpa.GetFD(), pSrcRow, sizeof( DWORD ) * iStride, "doc_attr" );
+				sphWrite( fdSpa.GetFD(), pSrcRow, sizeof( DWORD ) * iStride, "doc_attr", m_sLastError );
 				pSrcRow += iStride;
 				iSrcCount++;
 			}
 			else if ( pDstRow[0] == pSrcRow[0] )
 			{
-				sphWrite( fdSpa.GetFD(), pSrcRow, sizeof( DWORD ) * iStride, "doc_attr" );
+				sphWrite( fdSpa.GetFD(), pSrcRow, sizeof( DWORD ) * iStride, "doc_attr", m_sLastError );
 				pSrcRow += iStride;
 				iSrcCount++;
 				pDstRow += iStride;
@@ -5120,9 +5114,9 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource )
 		}
 
 		if ( iDstCount < m_uDocinfo )
-			sphWrite( fdSpa.GetFD(), pDstRow, sizeof( DWORD ) * iStride * ( m_uDocinfo - iDstCount ), "doc_attr" );
+			sphWrite( fdSpa.GetFD(), pDstRow, sizeof( DWORD ) * iStride * ( m_uDocinfo - iDstCount ), "doc_attr", m_sLastError );
 		else if ( iSrcCount < pSrcIndex->m_uDocinfo )
-			sphWrite( fdSpa.GetFD(), pSrcRow, sizeof( DWORD ) * iStride * ( pSrcIndex->m_uDocinfo - iSrcCount ), "doc_attr" );
+			sphWrite( fdSpa.GetFD(), pSrcRow, sizeof( DWORD ) * iStride * ( pSrcIndex->m_uDocinfo - iSrcCount ), "doc_attr", m_sLastError );
 	}	
 
 	/////////////////
@@ -5146,19 +5140,13 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource )
 	rdDstData.SeekTo( 1, 0 );
 	rdSrcData.SeekTo( 1, 0 );
 
-	CSphWriter wrDstData( GetIndexFileName( "spd.tmp" ) );
+	CSphWriter wrDstData( GetIndexFileName("spd.tmp"), m_sLastError );
 	if ( wrDstData.IsError() )
-	{
-		fprintf( stdout, "FATAL: failed to create data file '%s'", GetIndexFileName( "spd.tmp" ) );
 		return false;
-	}
 
-	CSphWriter wrDstIndex( GetIndexFileName( "spi.tmp" ) );
+	CSphWriter wrDstIndex( GetIndexFileName("spi.tmp"), m_sLastError );
 	if ( wrDstIndex.IsError() )
-	{
-		fprintf( stdout, "FATAL: failed to create index file '%s'", GetIndexFileName( "spi.tmp" ) );
 		return false;
-	}
 
 	BYTE bDummy = 1;
 	wrDstData.PutBytes ( &bDummy, 1 );
@@ -5287,7 +5275,7 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource )
 	if ( dWordlistCheckpoints.GetLength() )
 		wrDstIndex.PutBytes ( &dWordlistCheckpoints[0], dWordlistCheckpoints.GetLength() * sizeof ( CSphWordlistCheckpoint ) );
 
-	CSphWriter fdInfo ( GetIndexFileName ( "sph.tmp" ) );
+	CSphWriter fdInfo ( GetIndexFileName("sph.tmp"), m_sLastError );
 	if ( fdInfo.IsError() )
 		return false;
 
@@ -5999,7 +5987,7 @@ CSphQueryResult * CSphIndex_VLN::Query ( CSphDict * pDict, CSphQuery * pQuery )
 	ISphMatchSorter * pTop = sphCreateQueue ( pQuery, m_tSchema, sError );
 	if ( !pTop )
 	{
-		fprintf ( stdout, "ERROR: failed to create sorting queue: %s.\n", sError.cstr() );
+		m_sLastError.SetSprintf ( "failed to create sorting queue: %s", sError.cstr() );
 		return pResult;
 	}
 
@@ -7763,7 +7751,7 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 	DWORD uVersion = rdInfo.GetDword ();
 	if ( uVersion!=INDEX_MAGIC_HEADER )
 	{
-		fprintf ( stdout, "ERROR: '%s': invalid schema file (old index version?)\n",
+		m_sLastError.SetSprintf ( "'%s': invalid schema file (old index version?)",
 			GetIndexFileName ( "sph" ) );
 		return false;
 	}
@@ -7771,7 +7759,7 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 	uVersion = rdInfo.GetDword();
 	if ( uVersion!=INDEX_FORMAT_VERSION )
 	{
-		fprintf ( stdout, "ERROR: '%s' is version %d, expected version %d\n",
+		m_sLastError.SetSprintf ( "'%s' is version %d, expected version %d",
 			GetIndexFileName ( "sph" ), uVersion, INDEX_FORMAT_VERSION );
 		return false;
 	}
@@ -7826,12 +7814,18 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 		uDocinfoSize *= (uint64_t)iEntrySize;
 
 		if ( uDocinfoSize!=(uint64_t)iDocinfoSize )
-			return NULL; // 4B document count limit hit
+		{
+			m_sLastError.SetSprintf ( "docinfo size check mismatch (4B document limit hit?)" );
+			return NULL;
+		}
 
 		if ( uDocinfoSize!=(uint64_t)((size_t)uDocinfoSize) )
-			return NULL; // 4 GB size_t limit on 32-bit platform hit
+		{
+			m_sLastError.SetSprintf ( "docinfo does not fit in size_t (4 GB size_t limit on 32-bit system hit?)" );
+			return NULL;
+		}
 
-		if ( !m_pDocinfo.Alloc ( (size_t)(uDocinfoSize/sizeof(DWORD)) ) )
+		if ( !m_pDocinfo.Alloc ( (size_t)(uDocinfoSize/sizeof(DWORD)), m_sLastError ) )
 			return NULL;
 
 		if ( ::read ( tDocinfo.GetFD(), m_pDocinfo.GetWritePtr(), (size_t)uDocinfoSize )!=uDocinfoSize )
@@ -7892,7 +7886,7 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 		return NULL;
 	}
 
-	if ( !m_pWordlist.Alloc ( stWordlist.st_size ) )
+	if ( !m_pWordlist.Alloc ( stWordlist.st_size, m_sLastError ) )
 		return NULL;
 
 	if ( ::read ( tWordlist.GetFD(), m_pWordlist.GetWritePtr(), stWordlist.st_size )!=stWordlist.st_size )

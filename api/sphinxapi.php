@@ -473,16 +473,21 @@ class SphinxClient
 				substr ( $response, $p, 8 ) ) );
 			$p += 8;
 
+			$doc = sprintf ( "%u", $doc ); // workaround for php signed/unsigned braindamage
+			$weight = sprintf ( "%u", $weight );
+
 			$result["matches"][$doc]["weight"] = $weight;
 			foreach ( $attrs as $attr=>$type )
 			{
 				list(,$val) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
-				$result["matches"][$doc]["attrs"][$attr] = $val;
+				$result["matches"][$doc]["attrs"][$attr] = sprintf ( "%u", $val );
 			}
 		}
-		list ( $result["total"], $result["total_found"], $result["time"], $words ) =
+		list ( $total, $total_found, $msecs, $words ) =
 			array_values ( unpack ( "N*N*N*N*", substr ( $response, $p, 16 ) ) );
-		$result["time"] = sprintf ( "%.3f", $result["time"]/1000 );
+		$result["total"] = sprintf ( "%u", $total );
+		$result["total_found"] = sprintf ( "%u", $total_found );
+		$result["time"] = sprintf ( "%.3f", $msecs/1000 );
 		$p += 16;
 
 		while ( $words-->0 )
@@ -490,8 +495,9 @@ class SphinxClient
 			list(,$len) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
 			$word = substr ( $response, $p, $len ); $p += $len;
 			list ( $docs, $hits ) = array_values ( unpack ( "N*N*", substr ( $response, $p, 8 ) ) ); $p += 8;
-
-			$result["words"][$word] = array ( "docs"=>$docs, "hits"=>$hits );
+			$result["words"][$word] = array (
+				"docs"=>sprintf ( "%u", $docs ),
+				"hits"=>sprintf ( "%u", $hits ) );
 		}
 
 		return $result;

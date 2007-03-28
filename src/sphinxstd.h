@@ -760,7 +760,18 @@ public:
 			for ( char * s=m_sValue; *s; s++ )
 				*s = (char) tolower ( *s );
 	}
+
+	void Swap ( CSphString & rhs )
+	{
+		::Swap ( m_sValue, rhs.m_sValue );
+	}
 };
+
+/// string swapper
+inline void Swap ( CSphString & v1, CSphString & v2 )
+{
+	v1.Swap ( v2 );
+}
 
 /////////////////////////////////////////////////////////////////////////////
 

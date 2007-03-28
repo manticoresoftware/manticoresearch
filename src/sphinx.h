@@ -417,7 +417,8 @@ enum ESphAttrType
 {
 	SPH_ATTR_NONE		= 0,	///< not an attribute at all
 	SPH_ATTR_INTEGER	= 1,	///< this attr is just an integer
-	SPH_ATTR_TIMESTAMP	= 2		///< this attr is a timestamp
+	SPH_ATTR_TIMESTAMP	= 2,	///< this attr is a timestamp
+	SPH_ATTR_ORDINAL	= 3		///< this attr is an ordinal string number (integer at search time, specially handled at indexing time)
 };
 
 
@@ -480,6 +481,7 @@ class CSphSource
 public:
 	CSphVector<CSphWordHit>				m_dHits;	///< current document split into words
 	CSphDocInfo							m_tDocInfo;	///< current document info
+	CSphVector<CSphString,16>			m_dStrAttrs;///< current document string attrs
 
 public:
 	/// ctor

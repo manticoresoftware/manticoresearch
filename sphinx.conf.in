@@ -123,8 +123,13 @@ source src1
 	# attributes and then using API calls to setup filtering, sorting,
 	# and grouping.
 	#
-	# sql_group_column specifies that the attribute type is integer
-	# sql_date_column specifies that the attribute type is UNIX timestamp
+	# sql_group_column is used to declare integer attributes.
+	#
+	# sql_date_column is used to declare UNIX timestamp attributes.
+	#
+	# sql_str2ordinal_column is used to declare integer attributes which 
+	# values are computed as ordinal numbers of corresponding column value
+	# in sorted list of column values.
 	#
 	# starting with 0.9.7, there may be multiple attribute columns specified.
 	# here's an example for that mentioned posts table:
@@ -138,6 +143,7 @@ source src1
 	# optional, default is empty
 	sql_group_column	= group_id
 	sql_date_column		= date_added
+	# sql_str2ordinal_column	= author_name
 
 	# post-query, executed on the end of main fetch query
 	#

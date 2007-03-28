@@ -4469,6 +4469,31 @@ int CSphIndex_VLN::AdjustMemoryLimit ( int iMemoryLimit )
 }
 
 
+/// in-memory ordinals accumulation and sorting
+struct CSphOrdinal
+{
+	DWORD		m_uDocID;	///< doc id
+	DWORD		m_uValue;	///< ordinal value
+	CSphString	m_sValue;	///< string value
+};
+
+struct CmpOrdinalsValue_fn
+{
+	inline int operator () ( const CSphOrdinal & a, const CSphOrdinal & b )
+	{
+		return strcmp ( a.m_sValue.cstr(), b.m_sValue.cstr() )==-1;
+	}
+};
+
+struct CmpOrdinalsDocid_fn
+{
+	inline int operator () ( const CSphOrdinal & a, const CSphOrdinal & b )
+	{
+		return a.m_uDocID < b.m_uDocID;
+	}
+};
+
+
 int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > & dSources, int iMemoryLimit, ESphDocinfo eDocinfo )
 {
 	PROFILER_INIT ();
@@ -4541,6 +4566,16 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 		pDocinfoMax = NULL;
 	}
 
+	// ordinals storage
+	CSphVector<int,SPH_MAX_FIELDS> dOrdinalAttrs;
+	if ( m_eDocinfo==SPH_DOCINFO_EXTERN )
+		ARRAY_FOREACH ( i, m_tSchema.m_dAttrs )
+			if ( m_tSchema.m_dAttrs[i].m_eAttrType==SPH_ATTR_ORDINAL )
+				dOrdinalAttrs.Add ( i );
+
+	CSphVector < CSphVector<CSphOrdinal> > dOrdinals;
+	dOrdinals.Resize ( dOrdinalAttrs.GetLength() );
+
 	// create and exclusively lock indexer lock file
 	CSphAutofile fdLock ( GetIndexFileName("tmp0"), SPH_O_NEW, m_sLastError );
 	if ( fdLock.GetFD()<0 )
@@ -4612,6 +4647,17 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 			int iDocHits = pSource->m_dHits.GetLength ();
 			if ( iDocHits<=0 )
 				continue;
+
+			// store ordinals
+			ARRAY_FOREACH ( i, dOrdinalAttrs )
+			{
+				CSphVector<CSphOrdinal> & dCol = dOrdinals[i];
+				dCol.Resize ( 1+dCol.GetLength() );
+
+				dCol.Last().m_uDocID = pSource->m_tDocInfo.m_iDocID;
+				dCol.Last().m_uValue = 0;
+				Swap ( dCol.Last().m_sValue, pSource->m_dStrAttrs[dOrdinalAttrs[i]] );
+			}
 
 			// update min docinfo
 			assert ( pSource->m_tDocInfo.m_iDocID );
@@ -4789,6 +4835,16 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	// sort docinfos
 	/////////////////
 
+	// sort ordinals
+	ARRAY_FOREACH ( i, dOrdinalAttrs )
+	{
+		DWORD uVal = 0;
+		dOrdinals[i].Sort ( CmpOrdinalsValue_fn() );
+		ARRAY_FOREACH ( j, dOrdinals[i] )
+			dOrdinals[i][j].m_uValue = ++uVal;
+		dOrdinals[i].Sort ( CmpOrdinalsDocid_fn() );
+	}
+
 	// initialize writer
 	CSphAutofile fdDocinfo ( GetIndexFileName("spa"), SPH_O_NEW, m_sLastError );
 	if ( fdDocinfo.GetFD()<0 )
@@ -4831,6 +4887,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 		}
 
 		// while the queue has data for us
+		int iOrd = 0;
 		pDocinfo = dDocinfos;
 		while ( qDocinfo.GetLength() )
 		{
@@ -4840,7 +4897,15 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 
 			// emit it
 			memcpy ( pDocinfo, pEntry, iDocinfoStride*sizeof(DWORD) );
+			ARRAY_FOREACH ( i, dOrdinalAttrs )
+			{
+				assert ( dOrdinals[i][iOrd].m_uDocID == pEntry[0] );
+				assert ( 1+dOrdinalAttrs[i]<iDocinfoStride );
+				pDocinfo [ 1+dOrdinalAttrs[i] ] = dOrdinals[i][iOrd].m_uValue;
+			}
+			iOrd++;
 			pDocinfo += iDocinfoStride;
+
 			if ( pDocinfo>=pDocinfoMax )
 			{
 				int iLen = iDocinfoMax*iDocinfoStride*sizeof(DWORD);
@@ -9149,10 +9214,9 @@ bool CSphSource_SQL::Connect ()
 		if ( !dFound[i] )
 			fprintf ( stdout, "WARNING: attribute '%s' not found - IGNORING\n", m_tParams.m_dAttrs[i].m_sName.cstr() );
 
-	m_tDocInfo.m_iAttrs = m_tSchema.m_dAttrs.GetLength();
-	SafeDeleteArray ( m_tDocInfo.m_pAttrs );
-	if ( m_tSchema.m_dAttrs.GetLength() )
-		m_tDocInfo.m_pAttrs = new DWORD [ m_tSchema.m_dAttrs.GetLength() ];
+	// alloc storage
+	m_tDocInfo.Reset ( m_tSchema.m_dAttrs.GetLength() );
+	m_dStrAttrs.Resize ( m_tSchema.m_dAttrs.GetLength() );
 
 	// check it
 	if ( m_tSchema.m_dFields.GetLength()>SPH_MAX_FIELDS )
@@ -9222,8 +9286,20 @@ BYTE ** CSphSource_SQL::NextDocument ()
 
 	ARRAY_FOREACH ( i, m_tSchema.m_dAttrs )
 	{
-		DWORD * pAttrs = m_tDocInfo.m_pAttrs; // shortcut
-		pAttrs[i] = sphToDword ( SqlColumn ( m_tSchema.m_dAttrs[i].m_iIndex ) ); // FIXME? report conversion errors maybe?
+		// shortcuts
+		const CSphColumnInfo & tAttr = m_tSchema.m_dAttrs[i];
+		DWORD & uAttr = m_tDocInfo.m_pAttrs[i];
+
+		if ( tAttr.m_eAttrType==SPH_ATTR_ORDINAL )
+		{
+			// store string
+			m_dStrAttrs[i] = SqlColumn ( tAttr.m_iIndex );
+			uAttr = 0;
+		} else
+		{
+			// just store as uint by default
+			uAttr = sphToDword ( SqlColumn ( tAttr.m_iIndex ) ); // FIXME? report conversion errors maybe?
+		}
 	}
 
 	return m_dFields;

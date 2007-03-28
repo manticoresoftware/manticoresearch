@@ -355,8 +355,9 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 	LOC_GETAS( tParams.m_dQueryPost,		"sql_query_post" );
 	LOC_GETS ( tParams.m_sQueryRange,		"sql_query_range" );
 	LOC_GETAS( tParams.m_dQueryPostIndex,	"sql_query_post_index" );
-	LOC_GETAA( tParams.m_dAttrs,			"sql_group_column",		SPH_ATTR_INTEGER );
-	LOC_GETAA( tParams.m_dAttrs,			"sql_date_column",		SPH_ATTR_TIMESTAMP );
+	LOC_GETAA( tParams.m_dAttrs,			"sql_group_column",			SPH_ATTR_INTEGER );
+	LOC_GETAA( tParams.m_dAttrs,			"sql_date_column",			SPH_ATTR_TIMESTAMP );
+	LOC_GETAA( tParams.m_dAttrs,			"sql_str2ordinal_column",	SPH_ATTR_ORDINAL );
 	LOC_GETS ( tParams.m_sHost,				"sql_host" );
 	LOC_GETS ( tParams.m_sUser,				"sql_user" );
 	LOC_GETS ( tParams.m_sPass,				"sql_pass" );

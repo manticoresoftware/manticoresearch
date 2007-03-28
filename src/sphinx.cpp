@@ -407,7 +407,7 @@ public:
 	CSphAutofile ( const char * sName, int iMode, CSphString & sError )
 	{
 		assert ( sName );
-		m_iFD = ::open ( sName, iMode );
+		m_iFD = ::open ( sName, iMode, 0644 );
 		m_sFilename = sName;
 
 		if ( m_iFD<0 )

@@ -1947,6 +1947,14 @@ inline bool operator < ( const CSphMatch & a, const CSphMatch & b )
 	return a.m_iDocID < b.m_iDocID;
 };
 
+inline bool operator < ( const CSphTaggedMatch & a, const CSphTaggedMatch & b )
+{
+	if ( a.m_iDocID==b.m_iDocID )
+		return a.m_iTag > b.m_iTag;
+	else
+		return a.m_iDocID < b.m_iDocID;
+};
+
 /////////////////////////////////////////////////////////////////////////////
 
 bool CheckSortAndSchema ( const CSphSchema ** ppFirst, ISphMatchSorter ** ppTop, CSphQuery & tQuery,
@@ -2356,6 +2364,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 	int iTries = 0;
 	int iSuccesses = 0;
+	int iTag = 0;
 
 	if ( g_hDistIndexes(sIndexes) )
 	{
@@ -2395,7 +2404,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 #if REMOVE_DUPES
 			// group-by queries remove dupes themselves
 			if ( tQuery.GetGroupByAttr()<0 )
-				sphFlattenQueue ( pTop, pRes );
+				sphFlattenQueue ( pTop, pRes, iTag++ );
 #endif
 		}
 		tmQuery += sphLongTimer ();
@@ -2500,7 +2509,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 #if REMOVE_DUPES
 			// group-by queries remove dupes themselves
 			if ( tQuery.GetGroupByAttr()<0 )
-				sphFlattenQueue ( pTop, pRes );
+				sphFlattenQueue ( pTop, pRes, iTag++ );
 #endif
 		}
 
@@ -2572,7 +2581,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 #if REMOVE_DUPES
 				// group-by queries remove dupes themselves
 				if ( tQuery.GetGroupByAttr()<0 )
-					sphFlattenQueue ( pTop, pRes );
+					sphFlattenQueue ( pTop, pRes, iTag++ );
 #endif
 
 #if !USE_WINDOWS
@@ -2608,7 +2617,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	if ( tQuery.GetGroupByAttr()>=0 )
 	{
 		// group-by queries remove dupes themselves, so just flatten
-		sphFlattenQueue ( pTop, pRes );
+		sphFlattenQueue ( pTop, pRes, 0 );
 
 	} else if ( iSuccesses!=1 )
 	{
@@ -2622,7 +2631,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		}
 		pRes->m_dMatches.Reset ();
 
-		sphFlattenQueue ( pTop, pRes );
+		sphFlattenQueue ( pTop, pRes, 0 );
 	}
 #else
 	sphFlattenQueue ( pTop, pRes );

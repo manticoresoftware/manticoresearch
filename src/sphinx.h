@@ -337,6 +337,14 @@ struct CSphDocInfo
 	{
 	}
 
+	/// copy ctor. just in case
+	CSphDocInfo ( const CSphDocInfo & rhs )
+		: m_iAttrs ( 0 )
+		, m_pAttrs ( NULL )
+	{
+		*this = rhs;
+	}
+
 	/// dtor. frees everything
 	~CSphDocInfo ()
 	{
@@ -802,36 +810,37 @@ struct CSphMatch : public CSphDocInfo
 {
 	int m_iWeight;
 
-	CSphMatch ()
-		: m_iWeight ( 0 )
-	{
-	}
-
-	CSphMatch ( const CSphMatch & rhs )
-	{
-		*this = rhs;
-	}
-
-	bool operator == ( const CSphMatch & rhs ) const
-	{
-		return ( m_iDocID==rhs.m_iDocID );
-	}
-
-	const CSphMatch & operator = ( const CSphMatch & rhs )
-	{
-		CSphDocInfo::operator = ( rhs );
-		m_iWeight = rhs.m_iWeight;
-		return *this;
-	}
+	CSphMatch () : m_iWeight ( 0 ) {}
+	bool operator == ( const CSphMatch & rhs ) const		{ return ( m_iDocID==rhs.m_iDocID ); }
 };
 
-
+/// specialized swapper
 inline void Swap ( CSphMatch & a, CSphMatch & b )
 {
 	Swap ( a.m_iDocID, b.m_iDocID );
 	Swap ( a.m_iAttrs, b.m_iAttrs );
 	Swap ( a.m_pAttrs, b.m_pAttrs );
 	Swap ( a.m_iWeight, b.m_iWeight );
+}
+
+
+/// search query match with some attached userland tag
+struct CSphTaggedMatch : public CSphMatch
+{
+	int m_iTag;
+
+	CSphTaggedMatch () : m_iTag ( 0 ) {}
+	const CSphTaggedMatch & operator = ( const CSphMatch & rhs ) { CSphMatch::operator = ( rhs ); return *this; }
+};
+
+/// specialized swapper
+inline void Swap ( CSphTaggedMatch & a, CSphTaggedMatch & b )
+{
+	Swap ( a.m_iDocID, b.m_iDocID );
+	Swap ( a.m_iAttrs, b.m_iAttrs );
+	Swap ( a.m_pAttrs, b.m_pAttrs );
+	Swap ( a.m_iWeight, b.m_iWeight );
+	Swap ( a.m_iTag, b.m_iTag );
 }
 
 
@@ -943,10 +952,10 @@ public:
 		int					m_iHits;	///< hit count for this term
 	}						m_tWordStats [ SPH_MAX_QUERY_WORDS ];
 
-	int						m_iNumWords;		///< query word count
-	int						m_iQueryTime;		///< query time, ms
-	CSphVector<CSphMatch>	m_dMatches;			///< top matching documents, no more than MAX_MATCHES
-	int						m_iTotalMatches;	///< total matches count
+	int							m_iNumWords;		///< query word count
+	int							m_iQueryTime;		///< query time, ms
+	CSphVector<CSphTaggedMatch>	m_dMatches;			///< top matching documents, no more than MAX_MATCHES
+	int							m_iTotalMatches;	///< total matches count
 
 	CSphSchema				m_tSchema;			///< result schema
 
@@ -1056,7 +1065,7 @@ public:
 
 	/// store all entries into specified location, in properly sorted order,
 	/// and remove them from queue
-	virtual void		Flatten ( CSphMatch * pTo ) = 0;
+	virtual void		Flatten ( CSphTaggedMatch * pTo, int iTag ) = 0;
 };
 
 
@@ -1119,7 +1128,7 @@ void				sphSetQuiet ( bool bQuiet );
 ISphMatchSorter *	sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError );
 
 /// convert queue to sorted array, and add its entries to result's matches array
-void				sphFlattenQueue ( ISphMatchSorter * pQueue, CSphQueryResult * pResult );
+void				sphFlattenQueue ( ISphMatchSorter * pQueue, CSphQueryResult * pResult, int iTag );
 
 #endif // _sphinx_
 

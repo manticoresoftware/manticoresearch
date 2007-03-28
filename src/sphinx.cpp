@@ -798,13 +798,15 @@ public:
 	}
 
 	/// store all entries into specified location in sorted order, and remove them from queue
-	void Flatten ( CSphMatch * pTo )
+	void Flatten ( CSphTaggedMatch * pTo, int iTag )
 	{
 		assert ( m_iUsed>=0 );
 		pTo += m_iUsed;
 		while ( m_iUsed>0 )
 		{
-			*--pTo = m_pData[0]; // OPTIMIZE? reset dst + swap?
+			--pTo;
+			pTo[0] = m_pData[0]; // OPTIMIZE? reset dst + swap?
+			pTo->m_iTag = iTag;
 			Pop ();
 		}
 	}
@@ -1100,11 +1102,14 @@ public:
 	}
 
 	/// store all entries into specified location in sorted order, and remove them from queue
-	void Flatten ( CSphMatch * pTo )
+	void Flatten ( CSphTaggedMatch * pTo, int iTag )
 	{
 		Sort ();
-		for ( int i=0; i<m_iLimit; i++ )
-			*pTo++ = m_pData[i];
+		for ( int i=0; i<m_iLimit; i++, pTo++ )
+		{
+			pTo[0] = m_pData[i];
+			pTo->m_iTag = iTag;
+		}
 		m_iUsed = 0;
 	}
 
@@ -5967,13 +5972,13 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 }
 
 
-void sphFlattenQueue ( ISphMatchSorter * pQueue, CSphQueryResult * pResult )
+void sphFlattenQueue ( ISphMatchSorter * pQueue, CSphQueryResult * pResult, int iTag )
 {
 	if ( pQueue && pQueue->GetLength() )
 	{
 		int iOffset = pResult->m_dMatches.GetLength ();
 		pResult->m_dMatches.Resize ( iOffset + pQueue->GetLength() );
-		pQueue->Flatten ( &pResult->m_dMatches[iOffset] );
+		pQueue->Flatten ( &pResult->m_dMatches[iOffset], iTag );
 	}
 }
 
@@ -5996,7 +6001,7 @@ CSphQueryResult * CSphIndex_VLN::Query ( CSphDict * pDict, CSphQuery * pQuery )
 
 	// convert results and return
 	pResult->m_dMatches.Reset ();
-	sphFlattenQueue ( pTop, pResult );
+	sphFlattenQueue ( pTop, pResult, 0 );
 
 	SafeDelete ( pTop );
 	return pResult;

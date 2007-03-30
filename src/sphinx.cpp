@@ -7632,7 +7632,7 @@ bool CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, CSphDict * pDict, 
 		float fIDF = 0.0f;
 		if ( tWord.m_iDocs )
 		{
-			float fLogTotal = logf ( float(m_tStats.m_iTotalDocuments) );
+			float fLogTotal = logf ( float(1+m_tStats.m_iTotalDocuments) );
 			fIDF = logf ( float(m_tStats.m_iTotalDocuments-tWord.m_iDocs+1)/float(tWord.m_iDocs) )
 				/ ( 2*iQwords*fLogTotal );
 		}

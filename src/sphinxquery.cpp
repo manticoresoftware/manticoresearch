@@ -781,7 +781,7 @@ CSphExtendedQueryParser::CSphExtendedQueryParser ()
 int CSphExtendedQueryParser::IsSpecial ( int iCh )
 {
 	return ( iCh=='(' || iCh==')' || iCh=='|' || iCh=='-' || iCh=='!'
-		|| iCh=='@' || iCh=='~' || iCh=='"' );
+		|| iCh=='@' || iCh=='~' || iCh=='"' || iCh=='*' );
 }
 
 
@@ -856,7 +856,7 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 	// a buffer of my own
 	CSphString sBuffer ( sQuery );
 	ISphTokenizer * pMyTokenizer = pTokenizer->Clone ();
-	pMyTokenizer->AddSpecials ( "()|-!@~\"" );
+	pMyTokenizer->AddSpecials ( "()|-!@~\"*" ); // MUST be in sync with IsSpecial()
 	pMyTokenizer->SetBuffer ( (BYTE*)sBuffer.cstr(), strlen ( sBuffer.cstr() ), true );
 
 	// iterate all tokens
@@ -993,6 +993,20 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 
 		assert ( iSpecial );
 
+		// filed unlimit
+		if ( dState.Last()==XQS_FIELD )
+		{
+			dState.Pop ();
+			if ( iSpecial=='*' )
+			{
+				iField = -1;
+				while ( m_dStack.GetLength() ) // flush stack
+					PopNode ();
+				continue;
+			}
+			// do *not* continue here, just handle the special
+		}
+
 		// block start
 		if ( iSpecial=='(' )
 		{
@@ -1096,8 +1110,8 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 			continue;
 		}
 
-		// proximity operator out of its state. just ignore
-		if ( iSpecial=='~' )
+		// proximity operator or stray '*' out of its state. just ignore
+		if ( iSpecial=='~' || iSpecial=='*' )
 			continue;
 
 		assert ( 0 && "INTERNAL ERROR: unhandled special token" );

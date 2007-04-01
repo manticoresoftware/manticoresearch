@@ -1299,7 +1299,7 @@ CREATE TABLE t1
 (
     id          INTEGER NOT NULL,
     weight      INTEGER NOT NULL,
-    query       VARCHAR(255) NOT NULL,
+    query       VARCHAR(3072) NOT NULL,
     group_id    INTEGER,
     INDEX(id),
     INDEX(query)
@@ -2011,6 +2011,95 @@ charset_type = sbcs
 -->
 
 <appendix id="changelog"><title>Sphinx revision history</title>
+
+<sect2 id="ver_0_9_7"><title>Version 0.9.7, 02 apr 2007</title>
+<itemizedlist>
+<listitem>added support for <option>sql_str2ordinal_column</option></listitem>
+<listitem>added support for upto 5 sort-by attrs (in extended sorting mode)</listitem>
+<listitem>added support for separate groups sorting clause (in group-by mode)</listitem>
+<listitem>added support for on-the-fly attribute updates (PRE-ALPHA; will change heavily; use for preliminary testing ONLY)</listitem>
+<listitem>added support for zero/NULL attributes</listitem>
+<listitem>added support for 0.9.7 features to SphinxSE</listitem>
+<listitem>added support for n-grams (alpha, 1-grams only for now)</listitem>
+<listitem>added support for warnings reported to client</listitem>
+<listitem>added support for exclude-filters</listitem>
+<listitem>added support for prefix and infix indexing (see <option>max_prefix_len</option>, <option>max_infix_len</option>)</listitem>
+<listitem>added <option>@*</option> syntax to reset current field to query language</listitem>
+<listitem>added removal of duplicate entries in query index order</listitem>
+<listitem>added PHP API workarounds for PHP signed/unsigned braindamage</listitem>
+<listitem>added locks to avoid two concurrent indexers working on same index</listitem>
+<listitem>added check for existing attributes vs. <option>docinfo=none</option> case</listitem>
+<listitem>improved groupby code a lot (better precision, and upto 25x times faster in extreme cases)</listitem>
+<listitem>improved error handling and reporting</listitem>
+<listitem>improved handling of broken indexes (reports error instead of hanging/crashing)</listitem>
+<listitem>improved <option>mmap()</option> limits for attributes and wordlists (now able to map over 4 GB on x64 and over 2 GB on x32 where possible)</listitem>
+<listitem>improved <option>malloc()</option> pressure in head daemon (search time should not degrade with time any more)</listitem>
+<listitem>improved <filename>test.php</filename> command line options</listitem>
+<listitem>improved error reporting (distributed query, broken index etc issues now reported to client)</listitem>
+<listitem>changed default network packet size to be 8M, added extra checks</listitem>
+<listitem>fixed division by zero in BM25 on 1-document collections (in extended matching mode)</listitem>
+<listitem>fixed <filename>.spl</filename> files getting unlinked</listitem>
+<listitem>fixed crash in schema compatibility test</listitem>
+<listitem>fixed UTF-8 Russian stemmer</listitem>
+<listitem>fixed requested matches count when querying distributed agents</listitem>
+<listitem>fixed signed vs. unsigned issues everywhere (ranged queries, CLI search output, and obtaining docid)</listitem>
+<listitem>fixed potential crashes vs. negative query offsets</listitem>
+<listitem>fixed 0-match docs vs. extended mode vs. stats</listitem>
+<listitem>fixed group/timestamp filters being ignored if querying from older clients</listitem>
+<listitem>fixed docs to mention <option>pgsql</option> source type</listitem>
+<listitem>fixed issues with explicit '&amp;' in extended matching mode</listitem>
+<listitem>fixed wrong assertion in SBCS encoder</listitem>
+<listitem>fixed crashes with no-attribute indexes after rotate</listitem>
+</itemizedlist>
+</sect2>
+
+<sect2 id="ver_0_9_7_rc2"><title>Version 0.9.7-RC2, 15 dec 2006</title>
+<itemizedlist>
+<listitem>added support for extended matching mode (query language)</listitem>
+<listitem>added support for extended sorting mode (sorting clauses)</listitem>
+<listitem>added support for SBCS excerpts</listitem>
+<listitem>added <option>mmap()ing</option> for attributes and wordlist (improves search time, speeds up <option>fork()</option> greatly)</listitem>
+<listitem>fixed attribute name handling to be case insensitive</listitem>
+<listitem>fixed default compiler options to simplify post-mortem debugging (added <option>-g</option>, removed <option>-fomit-frame-pointer</option>)</listitem>
+<listitem>fixed rare memory leak</listitem>
+<listitem>fixed "hello hello" queries in "match phrase" mode</listitem>
+<listitem>fixed issue with excerpts, texts and overlong queries</listitem>
+<listitem>fixed logging multiple index name (no longer tokenized)</listitem>
+<listitem>fixed trailing stopword not flushed from tokenizer</listitem>
+<listitem>fixed boolean evaluation</listitem>
+<listitem>fixed pidfile being wrongly <option>unlink()ed</option> on <option>bind()</option> failure</listitem>
+<listitem>fixed <option>--with-mysql-includes/libs</option> (they conflicted with well-known paths)</listitem>
+<listitem>fixes for 64-bit platforms</listitem>
+</itemizedlist>
+</sect2>
+
+<sect2 id="ver_0_9_7_rc1"><title>Version 0.9.7-RC1, 26 oct 2006</title>
+<itemizedlist>
+<listitem>added alpha index merging code</listitem>
+<listitem>added an option to decrease <option>max_matches</option> per-query</listitem>
+<listitem>added an option to specify IP address for searchd to listen on</listitem>
+<listitem>added support for unlimited amount of configured sources and indexes</listitem>
+<listitem>added support for group-by queries</listitem>
+<listitem>added support for /2 range modifier in charset_table</listitem>
+<listitem>added support for arbitrary amount of document attributes</listitem>
+<listitem>added logging filter count and index name</listitem>
+<listitem>added <option>--with-debug</option> option to configure to compile in debug mode</listitem>
+<listitem>added <option>-DNDEBUG</option> when compiling in default mode</listitem>
+<listitem>improved search time (added doclist size hints, in-memory wordlist cache, and used VLB coding everywhere)</listitem>
+<listitem>improved (refactored) SQL driver code (adding new drivers should be very easy now)</listitem>
+<listitem>improved exceprts generation</listitem>
+<listitem>fixed issue with empty sources and ranged queries</listitem>
+<listitem>fixed querying purely remote distributed indexes</listitem>
+<listitem>fixed suffix length check in English stemmer in some cases</listitem>
+<listitem>fixed UTF-8 decoder for codes over U+20000 (for CJK)</listitem>
+<listitem>fixed UTF-8 encoder for 3-byte sequences (for CJK)</listitem>
+<listitem>fixed overshort (less than <option>min_word_len</option>) words prepended to next field</listitem>
+<listitem>fixed source connection order (indexer does not connect to all sources at once now)</listitem>
+<listitem>fixed line numbering in config parser</listitem>
+<listitem>fixed some issues with index rotation</listitem>
+</itemizedlist>
+</sect2>
+
 <sect2 id="ver_0_9_6"><title>Version 0.9.6, 24 jul 2006</title>
 <itemizedlist>
 <listitem>added support for empty indexes</listitem>
@@ -2020,6 +2109,7 @@ charset_type = sbcs
 <listitem>fixed building on Solaris 9</listitem>
 </itemizedlist>
 </sect2>
+
 <sect2 id="ver_0_9_6_rc1"><title>Version 0.9.6-RC1, 26 jun 2006</title>
 <itemizedlist>
 <listitem>added boolean queries support (experimental, beta version)</listitem>
@@ -2045,6 +2135,7 @@ charset_type = sbcs
 <listitem>fixed redundant <code>time(NULL)</code> calls in time-segments mode</listitem>
 </itemizedlist>
 </sect2>
+
 </appendix>
 
 </article>

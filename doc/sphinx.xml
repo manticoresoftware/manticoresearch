@@ -561,11 +561,11 @@ To do that properly, Sphinx needs to know
 <listitem>what letters should be folded to what letters.</listitem>
 </itemizedlist>
 This should be configured on a per-index basis using
-<option><link linkend="ref-charset-type">charset_type</link></option> and 
-<option><link linkend="ref-charset-table">charset_table</link></option> options.
-With <option><link linkend="ref-charset-type">charset_type</link></option>,
+<option><!--link linkend="ref-charset-type"-->charset_type<!--/link--></option> and 
+<option><!--link linkend="ref-charset-table"-->charset_table<!--/link--></option> options.
+With <option><!--link linkend="ref-charset-type"-->charset_type<!--/link--></option>,
 one would specify whether the document encoding is single-byte (SBCS) or UTF-8.
-<option><link linkend="ref-charset-table">charset_table</link></option> would
+<option><!--link linkend="ref-charset-table"-->charset_table<!--/link--></option> would
 then be used to specify the table which maps letter characters to their case
 folded versions. The characters which are not in the table are considered
 to be non-letters and will be treated as word separators when indexing
@@ -980,7 +980,7 @@ unlike sorting by just the timestamp attribute, which would not take relevance
 into account at all.
 </para>
 
-<bridgehead>SPH_SORT_EXTENDED mode</bridgehead>
+<bridgehead id="sort-extended">SPH_SORT_EXTENDED mode</bridgehead>
 <para>
 In SPH_SORT_EXTENDED mode, you would specify an SQL-like sort
 expression to sort by:
@@ -1043,15 +1043,29 @@ as "virtual" attributes named
 <emphasis role="bold">@count</emphasis> respectively.
 </para>
 <para>
-The result set is sorted either by
-<orderedlist>
-<listitem>group-by value in descending order (this is the default mode), or by</listitem>
-<listitem>current sorting mode.</listitem>
-</orderedlist>
-depending on 3rd argument to SetGroupBy() API call. Note that when sorting
-by current function there might be less matching groups reported than actually
-present, and @count might also be underestimated. This inaccuracy is because of
-performance reasons (to keep memory requirements low).
+The result set is sorted by group-by sorting clause, with the syntax similar
+to <link linkend="sort-extended"><option>SPH_SORT_EXTENDED</option> sorting clause</link>
+syntax. In addition to <option>@id</option> and <option>@weight</option>,
+group-by sorting clause may also include:
+<itemizedlist>
+<listitem>@group (groupby function value),</listitem>
+<listitem>@count (amount of matches in group).</listitem>
+</itemizedlist>
+</para>
+<para>
+The default mode is to sort by groupby value in descending order,
+ie. by <option>"@group desc"</option>.
+</para>
+<para>
+On completion, <option>total_found</option> result parameter would
+contain total amount of matching groups over he whole index.
+</para>
+<para>
+<emphasis role="bold">WARNING:</emphasis> grouping is done in fixed memory
+and thus its results are only approximate; so there might be more groups reported
+in <option>total_found</option> than actually present. <option>@count</option> might also
+be underestimated. To reduce inaccuracy, one should raise <option>max_matches</option>.
+If <option>max_matches</option> allows to store all found groups, results will be 100% correct.
 </para>
 <para>
 For example, if sorting by relevance and grouping by <code>"published"</code>
@@ -1873,6 +1887,39 @@ sql_date_column = added_ts
 </programlisting>
 </sect3>
 
+
+<sect3 id="ref-sql-str2ordinal-column"><title>sql_str2ordinal_column</title>
+<para>
+Ordinal string number attribute column declaration. Specified column should be present among
+those fetched by <xref linkend="ref-sql-query"/>.
+</para>
+<para>
+When indexing such attributes, string values are fetched from database,
+stored, sorted and then replaced by ordinal number (integer) in the sorted
+strings array. These integers could then be used when searching to sort by 
+by string values lexicographically.
+</para>
+<para>
+<emphasis role="bold">WARNING</emphasis>, all such string values
+are going to be stored in RAM while indexing!
+</para>
+<para>
+<emphasis role="bold">WARNING</emphasis>, "C" locale will be used when sorting!
+</para>
+<para>
+There might be multiple attributes specified.
+</para>
+<para>
+This option is optional.
+This option only applies to <option>mysql</option> and <option>pgsql</option> source types.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+sql_str2ordinal_column = author_name
+</programlisting>
+</sect3>
+
+
 <sect3 id="ref-sql-query-post"><title>sql_query_post</title>
 <para>
 Post-fetch query, executed immediately after main fetch
@@ -1956,31 +2003,9 @@ xmlpipe_command = cat /home/sphinx/test.xml
 
 
 </sect2>
+<!--
 <sect2 id="ref-index"><title>Index configuration options</title>
-
 (to be added)
-
-<sect3 id="ref-charset-table"><title>charset_table</title>
-<bridgehead>Description</bridgehead>
-<para>Everything one needs to know about charset_table is here</para>
-<bridgehead>Example:</bridgehead>
-<programlisting>
-charset_table = A..Z->a..z
-</programlisting>
-</sect3>
-
-
-<sect3 id="ref-charset-type"><title>charset_type</title>
-<bridgehead>Description</bridgehead>
-<para>Everything one needs to know about charset_type is here</para>
-<bridgehead>Example:</bridgehead>
-<programlisting>
-charset_type = sbcs
-# charset_type = utf-8
-</programlisting>
-</sect3>
-
-
 </sect2>
 <sect2 id="ref-indexer"><title><filename>indexer</filename> program configuration options</title>
 (to be added)
@@ -1988,7 +2013,7 @@ charset_type = sbcs
 <sect2 id="ref-searchd"><title><filename>searchd</filename> program configuration options</title>
 (to be added)
 </sect2>
-
+-->
 
 </sect1>
 

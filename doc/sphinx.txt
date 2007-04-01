@@ -70,15 +70,11 @@ Table of Contents
          7.1.13. sql_range_step
          7.1.14. sql_group_column
          7.1.15. sql_date_column
-         7.1.16. sql_query_post
-         7.1.17. sql_query_post_index
-         7.1.18. sql_query_info
-         7.1.19. xmlpipe_command
-      7.2. Index configuration options
-         7.2.1. charset_table
-         7.2.2. charset_type
-      7.3. indexer program configuration options
-      7.4. searchd program configuration options
+         7.1.16. sql_str2ordinal_column
+         7.1.17. sql_query_post
+         7.1.18. sql_query_post_index
+         7.1.19. sql_query_info
+         7.1.20. xmlpipe_command
 
    A. Sphinx revision history
 
@@ -567,13 +563,13 @@ With all the SQL drivers, indexing generally works as follows.
      encoding with MySQL;
    * main query (see Section 7.1.11, <<sql_query>>) is executed and the
      rows it returns are indexed;
-   * post-query (see Section 7.1.16, <<sql_query_post>>) is executed to
+   * post-query (see Section 7.1.17, <<sql_query_post>>) is executed to
      perform any necessary cleanup;
    * connection to the database is closed;
    * indexer does the sorting phase (to be pedantic, index-type specific
      post-processing);
    * connection to the database is established again;
-   * post-index query (see Section 7.1.17, <<sql_query_post_index>>) is
+   * post-index query (see Section 7.1.18, <<sql_query_post_index>>) is
      executed to perform any necessary final cleanup;
    * connection to the database is closed again.
 
@@ -980,15 +976,24 @@ The final search result set then contains one best match per group.
 Grouping function value and per-group match count are returned along as
 "virtual" attributes named @group and @count respectively.
 
-The result set is sorted either by
+The result set is sorted by group-by sorting clause, with the syntax
+similar to SPH_SORT_EXTENDED sorting clause syntax. In addition to @id and
+@weight, group-by sorting clause may also include:
 
-   1. group-by value in descending order (this is the default mode), or by
-   2. current sorting mode.
+   * @group (groupby function value),
+   * @count (amount of matches in group).
 
-depending on 3rd argument to SetGroupBy() API call. Note that when sorting
-by current function there might be less matching groups reported than
-actually present, and @count might also be underestimated. This inaccuracy
-is because of performance reasons (to keep memory requirements low).
+The default mode is to sort by groupby value in descending order, ie. by
+"@group desc".
+
+On completion, total_found result parameter would contain total amount of
+matching groups over he whole index.
+
+WARNING: grouping is done in fixed memory and thus its results are only
+approximate; so there might be more groups reported in total_found than
+actually present. @count might also be underestimated. To reduce
+inaccuracy, one should raise max_matches. If max_matches allows to store
+all found groups, results will be 100% correct.
 
 For example, if sorting by relevance and grouping by "published" attribute
 with SPH_GROUPBY_DAY function, then the result set will contain
@@ -1639,7 +1644,32 @@ Example:
 
    | sql_date_column = added_ts
 
-7.1.16. sql_query_post
+7.1.16. sql_str2ordinal_column
+------------------------------
+
+Ordinal string number attribute column declaration. Specified column should
+be present among those fetched by Section 7.1.11, <<sql_query>>.
+
+When indexing such attributes, string values are fetched from database,
+stored, sorted and then replaced by ordinal number (integer) in the sorted
+strings array. These integers could then be used when searching to sort by
+by string values lexicographically.
+
+WARNING, all such string values are going to be stored in RAM while
+indexing!
+
+WARNING, "C" locale will be used when sorting!
+
+There might be multiple attributes specified.
+
+This option is optional. This option only applies to mysql and pgsql source
+types.
+
+Example:
+
+   | sql_str2ordinal_column = author_name
+
+7.1.17. sql_query_post
 ----------------------
 
 Post-fetch query, executed immediately after main fetch query
@@ -1657,7 +1687,7 @@ Example:
 
    | sql_query_post = DROP TABLE my_tmp_table
 
-7.1.17. sql_query_post_index
+7.1.18. sql_query_post_index
 ----------------------------
 
 Post-index query, executed when indexing is succesfully completed. If this
@@ -1675,7 +1705,7 @@ Example:
    | sql_query_post_index = REPLACE INTO counters ( id, val ) \
    |     VALUES ( 'max_indexed_id', $maxid )
 
-7.1.18. sql_query_info
+7.1.19. sql_query_info
 ----------------------
 
 Document info query. Only used by CLI search to fetch and display document
@@ -1691,7 +1721,7 @@ Example:
 
    | sql_query_info = SELECT * FROM documents WHERE id=$id
 
-7.1.19. xmlpipe_command
+7.1.20. xmlpipe_command
 -----------------------
 
 Command which will be executed in xmlpipe mode to obtain documents. See
@@ -1703,42 +1733,6 @@ option only applies to xmlpipe source type.
 Example:
 
    | xmlpipe_command = cat /home/sphinx/test.xml
-
-7.2. Index configuration options
---------------------------------
-
-(to be added)
-
-7.2.1. charset_table
---------------------
-
-Description
-Everything one needs to know about charset_table is here
-
-Example:
-
-   | charset_table = A..Z->a..z
-
-7.2.2. charset_type
--------------------
-
-Description
-Everything one needs to know about charset_type is here
-
-Example:
-
-   | charset_type = sbcs
-   | # charset_type = utf-8
-
-7.3. indexer program configuration options
-------------------------------------------
-
-(to be added)
-
-7.4. searchd program configuration options
-------------------------------------------
-
-(to be added)
 
 A. Sphinx revision history
 ==========================

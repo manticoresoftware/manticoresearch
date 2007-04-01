@@ -129,7 +129,9 @@ source src1
 	#
 	# sql_str2ordinal_column is used to declare integer attributes which 
 	# values are computed as ordinal numbers of corresponding column value
-	# in sorted list of column values.
+	# in sorted list of column values. WARNING, all such strings values
+	# are going to be stored in RAM while indexing, and "C" locale will
+	# be used when sorting!
 	#
 	# starting with 0.9.7, there may be multiple attribute columns specified.
 	# here's an example for that mentioned posts table:

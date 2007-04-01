@@ -17,7 +17,22 @@ unset ( $_SERVER["argv"][0] );
 
 // build query
 if ( !is_array($_SERVER["argv"]) || empty($_SERVER["argv"]) )
-	die ( "usage: php -f test.php [--any] <word [word [word [...]]]> [--group <group>] [-p <port>] [-i <index>]\n" );
+{
+	print ( "Usage: php -f test.php [OPTIONS] query words\n\n" );
+	print ( "Options are:\n" );
+	print ( "-h, --host <HOST>\tconnect to searchd at host HOST\n" );
+	print ( "-p, --port\t\tconnect to searchd at port PORT\n" );
+	print ( "-i, --index <IDX>\tsearch through index(es) specified by IDX\n" );
+	print ( "-s, --sortby <EXPR>\tsort matches by 'EXPR'\n" );
+	print ( "-a, --any\t\tuse 'match any word' matching mode\n" );
+	print ( "-b, --boolean\t\tuse 'boolean query' matching mode\n" );
+	print ( "-e, --extended\t\tuse 'extended query' matching mode\n" );
+	print ( "-f, --filter <ATTR>\tfilter by attribute 'ATTR' (default is 'group_id')\n" );
+	print ( "-v, --value <VAL>\tadd VAL to allowed 'group_id' values list\n" );
+	print ( "-g, --groupby <EXPR>\tgroup matches by 'EXPR'\n" );
+	print ( "-gs, --groupsort <EXPR>\tsort groups by 'EXPR'\n" );
+	exit;
+}
 
 $args = array();
 foreach ( $_SERVER["argv"] as $arg )
@@ -25,26 +40,28 @@ foreach ( $_SERVER["argv"] as $arg )
 
 $q = "";
 $mode = SPH_MATCH_ALL;
-$groups = array();
 $host = "localhost";
 $port = 3312;
 $index = "*";
 $groupby = "";
 $groupsort = "@group desc";
+$filter = "group_id";
+$filtervals = array();
 for ( $i=0; $i<count($args); $i++ )
 {
 	$arg = $args[$i];
 
-	if ( $arg=="-a" || $arg=="--any" )				$mode = SPH_MATCH_ANY;
+	if ( $arg=="-h" || $arg=="--host" )				$host = $args[++$i];
+	else if ( $arg=="-p" || $arg=="--port" )		$port = (int)$args[++$i];
+	else if ( $arg=="-i" || $arg=="--index" )		$index = $args[++$i];
+	else if ( $arg=="-s" || $arg=="--sortby" )		$sortby = $args[++$i];
+	else if ( $arg=="-a" || $arg=="--any" )			$mode = SPH_MATCH_ANY;
 	else if ( $arg=="-b" || $arg=="--boolean" )		$mode = SPH_MATCH_BOOLEAN;
 	else if ( $arg=="-e" || $arg=="--extended" )	$mode = SPH_MATCH_EXTENDED;
-	else if ( $arg=="-f" || $arg=="--filter" )		$groups[] = (int)$args[++$i];
+	else if ( $arg=="-f" || $arg=="--filter" )		$filter = $args[++$i];
+	else if ( $arg=="-v" || $arg=="--value" )		$filtervals[] = (int)$args[++$i];
 	else if ( $arg=="-g" || $arg=="--groupby" )		$groupby = $args[++$i];
 	else if ( $arg=="-gs"|| $arg=="--groupsort" )	$groupsort = $args[++$i];
-	else if ( $arg=="-h" || $arg=="--host" )		$host = $args[++$i];
-	else if ( $arg=="-i" || $arg=="--index" )		$index = $args[++$i];
-	else if ( $arg=="-p" || $arg=="--port" )		$port = (int)$args[++$i];
-	else if ( $arg=="-s" || $arg=="--sortby" )		$sortby = $args[++$i];
 	else
 		$q .= $args[$i] . " ";
 }
@@ -57,8 +74,8 @@ $cl = new SphinxClient ();
 $cl->SetServer ( $host, $port );
 $cl->SetWeights ( array ( 100, 1 ) );
 $cl->SetMatchMode ( $mode );
-if ( count($groups) )
-	$cl->SetFilter ( "group_id", $groups );
+if ( count($filtervals) )
+	$cl->SetFilter ( $filter, $filtervals );
 if ( $groupby )
 	$cl->SetGroupBy ( $groupby, SPH_GROUPBY_ATTR, $groupsort );
 if ( $sortby )

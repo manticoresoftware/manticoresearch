@@ -3,7 +3,7 @@
 //
 
 //
-// Copyright (c) 2001-2006, Andrew Aksyonoff. All rights reserved.
+// Copyright (c) 2001-2007, Andrew Aksyonoff. All rights reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License. You should have
@@ -69,8 +69,8 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
-#define SPHINX_VERSION			"0.9.7-RC2"
-#define SPHINX_BANNER			"Sphinx " SPHINX_VERSION "\nCopyright (c) 2001-2006, Andrew Aksyonoff\n\n"
+#define SPHINX_VERSION			"0.9.7"
+#define SPHINX_BANNER			"Sphinx " SPHINX_VERSION "\nCopyright (c) 2001-2007, Andrew Aksyonoff\n\n"
 #define SPHINX_SEARCHD_PROTO	1
 
 #define SPH_MAX_QUERY_WORDS		10

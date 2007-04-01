@@ -370,6 +370,36 @@ index test1
 	#
 	# default is 0, which means NOT to index infixes
 	min_infix_len		= 0
+
+	# n-grams length
+	#
+	# n-grams provide basic CJK support for unsegmented texts. if using
+	# n-grams, streams of CJK characters are indexed as n-grams. for example,
+	# if incoming stream is ABCDEF and n is 2, this text would be indexed
+	# as if it was AB BC CD DE EF.
+	#
+	# this feature is in alpha version state and only n=1 is currently
+	# supported; this is going to be improved.
+	#
+	# note that if search query is segmented (ie. words are separated with
+	# whitespace), words are in quotes and extended matching mode is used,
+	# then all matching documents will be returned even if their text was
+	# *not* segmented. in the example above, ABCDEF text will be indexed as
+	# A B C D E F, and "BCD" query will be transformed to "B C D" (where
+	# quotes is phrase matching operator), so the document will match.
+	#
+	# optional, default is 0, which means NOT to use n-grams
+	#
+	# ngram_len = 1
+
+	# n-gram characters table
+	#
+	# specifies what specific characters are subject to n-gram
+	# extraction. format is similar to charset_table.
+	#
+	# optional, default is empty
+	#
+	# ngrams_chars = U+3000..U+2FA1F
 }
 
 

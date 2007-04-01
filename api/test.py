@@ -6,45 +6,81 @@ from sphinxapi import *
 import sys, time
 
 if not sys.argv[1:]:
-	print 'usage: test.py [--any] <word [word [word [...]]]> [--group <group>] [-p <port>] [-i <index>]\n'
+	print "Usage: python test.py [OPTIONS] query words\n"
+	print "Options are:"
+	print "-h, --host <HOST>\tconnect to searchd at host HOST"
+	print "-p, --port\t\tconnect to searchd at port PORT"
+	print "-i, --index <IDX>\tsearch through index(es) specified by IDX"
+	print "-s, --sortby <EXPR>\tsort matches by 'EXPR'"
+	print "-a, --any\t\tuse 'match any word' matching mode"
+	print "-b, --boolean\t\tuse 'boolean query' matching mode"
+	print "-e, --extended\t\tuse 'extended query' matching mode"
+	print "-f, --filter <ATTR>\tfilter by attribute 'ATTR' (default is 'group_id')"
+	print "-v, --value <VAL>\tadd VAL to allowed 'group_id' values list"
+	print "-g, --groupby <EXPR>\tgroup matches by 'EXPR'"
+	print "-gs, --groupsort <EXPR>\tsort groups by 'EXPR'"
 	sys.exit(0)
 
 q = ''
 mode = SPH_MATCH_ALL
-groups = []
+host = 'localhost'
 port = 3312
 index = '*'
+filtercol = 'group_id'
+filtervals = []
+sortby = ''
+groupby = ''
+groupsort = '@group desc'
 
 i = 1
 while (i<len(sys.argv)):
 	arg = sys.argv[i]
-	if arg=='-a' or arg=='--any':
+	if arg=='-h' or arg=='--host':
+		i += 1
+		host = sys.argv[i]
+	elif arg=='-p' or arg=='--port':
+		i += 1
+		port = int(sys.argv[i])
+	elif arg=='-i':
+		i += 1
+		index = sys.argv[i]
+	elif arg=='-s':
+		i += 1
+		sortby = sys.argv[i]
+	elif arg=='-a' or arg=='--any':
 		mode = SPH_MATCH_ANY
 	elif arg=='-b' or arg=='--boolean':
 		mode = SPH_MATCH_BOOLEAN
 	elif arg=='-e' or arg=='--extended':
 		mode = SPH_MATCH_EXTENDED
-	elif arg=='-g' or arg=='--group':
-		groups.append ( int(sys.argv[++i]) )
-	elif arg=='-p' or arg=='--port':
-		port = int(sys.argv[++i])
-	elif arg=='-i':
+	elif arg=='-f' or arg=='--filter':
 		i += 1
-		index = sys.argv[++i]
+		filtercol = sys.argv[i]
+	elif arg=='-v' or arg=='--value':
+		i += 1
+		filtervals.append ( int(sys.argv[i]) )
+	elif arg=='-g' or arg=='--groupby':
+		i += 1
+		groupby = sys.argv[i]
+	elif arg=='-gs' or arg=='--groupsort':
+		i += 1
+		groupsort = sys.argv[i]
 	else:
 		q = '%s%s ' % ( q, arg )
 	i += 1
 
 # do query
 cl = SphinxClient()
-cl.SetServer('localhost', port)
-cl.SetWeights([100, 1])
+cl.SetServer ( host, port )
+cl.SetWeights ( [100, 1] )
 cl.SetMatchMode ( mode )
-
-if groups:
-	cl.SetFilter('group_id', groups)
-
-res = cl.Query(q, index)
+if filtervals:
+	cl.SetFilter ( filtercol, filtervals )
+if groupby:
+	cl.SetGroupBy ( groupby, SPH_GROUPBY_ATTR, groupsort )
+if sortby:
+	cl.SetSortMode ( SPH_SORT_EXTENDED, sortby )
+res = cl.Query ( q, index )
 
 if not res:
 	print 'query failed: %s' % cl.GetLastError()

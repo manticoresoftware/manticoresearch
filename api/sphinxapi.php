@@ -340,8 +340,8 @@ class SphinxClient
 	/// the whole index.
 	///
 	/// WARNING: grouping is done in fixed memory and thus its results
-	/// are only approximate; so there might be there might be more groups
-	/// reported in total_found than actually present. @count might also
+	/// are only approximate; so there might be more groups reported
+	/// in total_found than actually present. @count might also
 	/// be underestimated. 
 	///
 	/// for example, if sorting by relevance and grouping by "published"

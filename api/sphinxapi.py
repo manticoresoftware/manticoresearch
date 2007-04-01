@@ -3,7 +3,7 @@
 #
 # Python version of Sphinx searchd client (Python API)
 #
-# Copyright (c) 2006, Andrew Aksyonoff
+# Copyright (c) 2006-2007, Andrew Aksyonoff
 # Copyright (c) 2006, Mike Osadnik
 # All rights reserved
 #
@@ -23,7 +23,7 @@ SEARCHD_COMMAND_SEARCH	= 0
 SEARCHD_COMMAND_EXCERPT	= 1
 
 # current client-side command implementation versions
-VER_COMMAND_SEARCH		= 0x106
+VER_COMMAND_SEARCH		= 0x107
 VER_COMMAND_EXCERPT		= 0x100
 
 # known searchd status codes
@@ -71,10 +71,9 @@ class SphinxClient:
 	_max_id		= 0xFFFFFFFF			# max ID to match (default is UINT_MAX)
 	_filters	= []					# search filters
 	_groupby	= ''					# group-by attribute name
-	_groupfunc	= SPH_GROUPBY_DAY		# function to pre-process group-by attribute value with
-	_sortbygroup= 1						# whether to sort grouped results by group, or by current sorting func
+	_groupfunc	= SPH_GROUPBY_DAY		# group-by function (to pre-process group-by attribute value with)
+	_groupsort	= '@group desc'			# group-by sorting clause (to sort groups in result set with)
 	_maxmatches	= 1000					# max matches to retrieve
-
 	_error		= ''					# last error message
 	_warning	= ''					# last warning message
 
@@ -209,12 +208,14 @@ class SphinxClient:
 		self._mode = mode
 
 
-	def SetSortMode (self, sort):
+	def SetSortMode ( self, mode, clause='' ):
 		"""
 		set sort mode
 		"""
-		assert(sort in [SPH_SORT_RELEVANCE, SPH_SORT_DATE_DESC, SPH_SORT_DATE_ASC, SPH_SORT_TIME_SEGMENTS, SPH_SORT_EXTENDED])
-		self._sort = sort
+		assert ( mode in [SPH_SORT_RELEVANCE, SPH_SORT_ATTR_DESC, SPH_SORT_ATTR_ASC, SPH_SORT_TIME_SEGMENTS, SPH_SORT_EXTENDED] )
+		assert ( isinstance ( clause, str ) )
+		self._sort = mode
+		self._sortby = clause
 
 
 	def SetWeights (self, weights): 
@@ -270,7 +271,7 @@ class SphinxClient:
 		self._filters.append ( { 'attr':attribute, 'exclude':exclude, 'min':min_, 'max':max_ } )
 
 
-	def SetGroupBy ( self, attribute, func, sortbygroup=1 ):
+	def SetGroupBy ( self, attribute, func, groupsort='@group desc' ):
 		"""
 		set grouping attribute and function
 
@@ -283,14 +284,25 @@ class SphinxClient:
 		the final result set contains one best match per group, with
 		grouping function value and matches count attached.
 
-		result set could be sorted either by 1) grouping function value
-		in descending order (this is the default mode, when $sortbygroup
-		is set to true); or by 2) current sorting function (when $sortbygroup
-		is false).
+		groups in result set could be sorted by any sorting clause,
+		including both document attributes and the following special
+		internal Sphinx attributes:
 
-		WARNING, when sorting by current function there might be less
-		matching groups reported than actually present. @count might also be
-		underestimated. 
+		- @id - match document ID;
+		- @weight, @rank, @relevance -  match weight;
+		- @group - groupby function value;
+		- @count - amount of matches in group.
+
+		the default mode is to sort by groupby value in descending order,
+		ie. by "@group desc".
+
+		"total_found" would contain total amount of matching groups over
+		the whole index.
+
+		WARNING: grouping is done in fixed memory and thus its results
+		are only approximate; so there might be more groups reported
+		in total_found than actually present. @count might also
+		be underestimated. 
 
 		for example, if sorting by relevance and grouping by "published"
 		attribute with SPH_GROUPBY_DAY function, then the result set will
@@ -300,10 +312,11 @@ class SphinxClient:
 		"""
 		assert(isinstance(attribute, str))
 		assert(func in [SPH_GROUPBY_DAY, SPH_GROUPBY_WEEK, SPH_GROUPBY_MONTH, SPH_GROUPBY_YEAR, SPH_GROUPBY_ATTR] )
+		assert(isinstance(groupsort, str))
 
 		self._groupby = attribute
 		self._groupfunc = func
-		self._sortbygroup = sortbygroup
+		self._groupsort = groupsort
 
 
 	def Query (self, query, index='*'):
@@ -362,12 +375,11 @@ class SphinxClient:
 				req.append ( pack ( '>3L', 0, f['min'], f['max'] ) )
 			req.append ( pack ( '>L', f['exclude'] ) )
 
-		# group-by
-		req.append(pack('>2L', self._groupfunc, len(self._groupby)))
-		req.append(self._groupby)
-
-		# max matches, sort-by-group
-		req.append(pack('>2L', self._maxmatches, self._sortbygroup))
+		# group-by, max-matches, group-sort
+		req.append ( pack ( '>2L', self._groupfunc, len(self._groupby) ) )
+		req.append ( self._groupby )
+		req.append ( pack ( '>2L', self._maxmatches, len(self._groupsort) ) )
+		req.append ( self._groupsort )
 
 		# send query, get response
 		req = ''.join(req)

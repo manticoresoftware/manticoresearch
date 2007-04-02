@@ -1249,13 +1249,36 @@ number of options can be specified. Available options are:
 
       | ... WHERE query='test;weights=1,2,3;';
 
-   * filter - comma-separated attribute name and a set of values to match:
+   * filter, !filter - comma-separated attribute name and a set of values
+     to match:
 
+      | # only include groups 1, 5 and 19
       | ... WHERE query='test;filter=group_id,1,5,19;';
+      | 
+      | # exclude groups 3 and 11
+      | ... WHERE query='test;!filter=group_id,3,11;';
 
-   * range - comma-separated attribute name, min and max value to match:
+   * range, !range - comma-separated attribute name, min and max value to
+     match:
 
+      | # include groups from 3 to 7, inclusive
       | ... WHERE query='test;range=group_id,3,7;';
+      | 
+      | # exclude groups from 5 to 25
+      | ... WHERE query='test;!range=group_id,5,25;';
+
+   * maxmatches - per-query max matches value:
+
+      | ... WHERE query='test;maxmatches=2000;';
+
+   * groupby - group-by function and attribute:
+
+      | ... WHERE query='test;groupby=day:published_ts;';
+      | ... WHERE query='test;groupby=attr:group_id;';
+
+   * groupsort - group-by sorting clause:
+
+      | ... WHERE query='test;groupsort=@count desc;';
 
 One very important note that it is much more efficient to allow Sphinx to
 perform sorting, filtering and slicing the result set than to raise max

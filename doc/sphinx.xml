@@ -1381,14 +1381,38 @@ attribute name (or sorting clause for "extended") is also required after a colon
 ... WHERE query='test;weights=1,2,3;';
 </programlisting>
 </listitem>
-<listitem>filter - comma-separated attribute name and a set of values to match:
+<listitem>filter, !filter - comma-separated attribute name and a set of values to match:
 <programlisting>
+# only include groups 1, 5 and 19
 ... WHERE query='test;filter=group_id,1,5,19;';
+
+# exclude groups 3 and 11
+... WHERE query='test;!filter=group_id,3,11;';
 </programlisting>
 </listitem>
-<listitem>range - comma-separated attribute name, min and max value to match:
+<listitem>range, !range - comma-separated attribute name, min and max value to match:
 <programlisting>
+# include groups from 3 to 7, inclusive
 ... WHERE query='test;range=group_id,3,7;';
+
+# exclude groups from 5 to 25
+... WHERE query='test;!range=group_id,5,25;';
+</programlisting>
+</listitem>
+<listitem>maxmatches - per-query max matches value:
+<programlisting>
+... WHERE query='test;maxmatches=2000;';
+</programlisting>
+</listitem>
+<listitem>groupby - group-by function and attribute:
+<programlisting>
+... WHERE query='test;groupby=day:published_ts;';
+... WHERE query='test;groupby=attr:group_id;';
+</programlisting>
+</listitem>
+<listitem>groupsort - group-by sorting clause:
+<programlisting>
+... WHERE query='test;groupsort=@count desc;';
 </programlisting>
 </listitem>
 </itemizedlist>

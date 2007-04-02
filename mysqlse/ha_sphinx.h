@@ -63,8 +63,8 @@ public:
 	uint			max_supported_record_length () const	{ return HA_MAX_REC_LENGTH; }
 	uint			max_supported_keys () const				{ return 1; }
 	uint			max_supported_key_parts () const		{ return 1; }
-	uint			max_supported_key_length () const		{ return 1024; }
-	uint			max_supported_key_part_length () const	{ return 1024; }
+	uint			max_supported_key_length () const		{ return MAX_KEY_LENGTH; }
+	uint			max_supported_key_part_length () const	{ return MAX_KEY_LENGTH; }
 
 	#if MYSQL_VERSION_ID>50100
 	virtual double	scan_time ()	{ return (double)( stats.records+stats.deleted )/20.0 + 10; }	///< called in test_quick_select to determine if indexes should be used
@@ -133,7 +133,7 @@ private:
 	uint32			UnpackDword ();
 	char *			UnpackString ();
 	bool			UnpackSchema ();
-	CSphSEStats *	UnpackStats ();
+	bool			UnpackStats ( CSphSEStats * pStats );
 };
 
 

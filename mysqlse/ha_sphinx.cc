@@ -48,9 +48,7 @@
 /////////////////////////////////////////////////////////////////////////////
 
 // FIXME! make this all dynamic
-#define SPHINXSE_MAX_QUERY_SIZE		32768
 #define SPHINXSE_MAX_FILTERS		32
-#define SPHINXSE_MAX_ATTRIBUTES		32
 
 #define SPHINXSE_DEFAULT_HOST		"127.0.0.1"
 #define SPHINXSE_DEFAULT_PORT		3312
@@ -65,7 +63,7 @@ enum
 {
 	SPHINX_SEARCHD_PROTO	= 1,
 	SEARCHD_COMMAND_SEARCH	= 0,
-	VER_COMMAND_SEARCH		= 0x104,
+	VER_COMMAND_SEARCH		= 0x107,
 };
 
 /// search query sorting orders
@@ -108,6 +106,15 @@ enum ESphAttrType
 	SPH_ATTR_NONE		= 0,	///< not an attribute at all
 	SPH_ATTR_INTEGER	= 1,	///< this attr is just an integer
 	SPH_ATTR_TIMESTAMP	= 2		///< this attr is a timestamp
+};
+
+/// known answers
+enum
+{
+	SEARCHD_OK		= 0,	///< general success, command-specific reply follows
+	SEARCHD_ERROR	= 1,	///< general failure, error message follows
+	SEARCHD_RETRY	= 2,	///< temporary failure, error message follows, client should retry later
+	SEARCHD_WARNING	= 3		///< general success, warning message and command-specific reply follow
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -190,6 +197,11 @@ struct CSphSEAttr
 		, m_eType ( SPH_ATTR_NONE )
 		, m_iField ( -1 )
 	{}
+
+	~CSphSEAttr ()
+	{
+		SafeDeleteArray ( m_sName );
+	}
 };
 
 /// word stats
@@ -220,18 +232,29 @@ public:
 	int					m_iQueryMsec;
 	int					m_iWords;
 	CSphSEWordStats *	m_dWords;
+	bool				m_bLastError;
+	char				m_sLastMessage[1024];
 
 	CSphSEStats()
-		: m_iMatchesTotal ( 0 )
-		, m_iMatchesFound ( 0 )
-		, m_iQueryMsec ( 0 )
-		, m_iWords ( 0 )
-		, m_dWords ( NULL )
-	{}
+		: m_dWords ( NULL )
+	{
+		Reset ();
+	}
+
+	void Reset ()
+	{
+		m_iMatchesTotal = 0;
+		m_iMatchesFound = 0;
+		m_iQueryMsec = 0;
+		m_iWords = 0;
+		SafeDeleteArray ( m_dWords );
+		m_bLastError = false;
+		m_sLastMessage[0] = '\0';
+	}
 
 	~CSphSEStats()
 	{
-		SafeDeleteArray ( m_dWords );
+		Reset ();
 	}
 };
 
@@ -244,6 +267,7 @@ public:
 	uint32			m_uMaxValue;
 	int				m_iValues;
 	uint32 *		m_pValues;
+	int				m_bExclude;
 
 public:
 	CSphSEFilter::CSphSEFilter ()
@@ -252,6 +276,7 @@ public:
 		, m_uMaxValue ( UINT_MAX )
 		, m_iValues ( 0 )
 		, m_pValues ( NULL )
+		, m_bExclude ( 0 )
 	{
 	}
 
@@ -282,8 +307,9 @@ private:
 	int				m_iFilters;
 	CSphSEFilter	m_dFilters[SPHINXSE_MAX_FILTERS];
 
-	char *			m_sGroupBy;
 	ESphGroupBy		m_eGroupFunc;
+	char *			m_sGroupBy;
+	char *			m_sGroupSortBy;
 
 public:
 	char			m_sParseError[256];
@@ -430,6 +456,7 @@ static int sphinx_close_connection ( handlerton * hton, THD * thd )
 	CSphSEStats * pStats = (CSphSEStats*) (*tmp);
 	if ( pStats )
 		delete pStats;
+	*tmp = NULL;
 	SPH_RET(0);
 }
 
@@ -466,6 +493,7 @@ static int sphinx_close_connection ( THD * thd )
 	CSphSEStats * pStats = (CSphSEStats*) thd->ha_data[sphinx_hton.slot];
 	if ( pStats )
 		delete pStats;
+	thd->ha_data[sphinx_hton.slot] = NULL;
 	SPH_RET(0);
 }
 
@@ -552,6 +580,24 @@ bool sphinx_show_status ( THD * thd )
 			protocol->store ( STRING_WITH_LEN("SPHINX"), system_charset_info );
 			protocol->store ( STRING_WITH_LEN("words"), system_charset_info );
 			protocol->store ( buf2, buf2len, system_charset_info );
+			if ( protocol->write() )
+				SPH_RET(TRUE);
+#endif
+		}
+
+		// send last error or warning
+		if ( pStats->m_sLastMessage && pStats->m_sLastMessage[0] )
+		{
+			const char * sMessageType = pStats->m_bLastError ? "error" : "warning";
+
+#if MYSQL_VERSION_ID>50100
+			stat_print ( thd, sphinx_hton_name, strlen(sphinx_hton_name),
+				sMessageType, strlen(sMessageType), pStats->m_sLastMessage, strlen(pStats->m_sLastMessage) );
+#else
+			protocol->prepare_for_resend ();
+			protocol->store ( STRING_WITH_LEN("SPHINX"), system_charset_info );
+			protocol->store ( sMessageType, strlen(sMessageType), system_charset_info );
+			protocol->store ( pStats->m_sLastMessage, strlen(pStats->m_sLastMessage), system_charset_info );
 			if ( protocol->write() )
 				SPH_RET(TRUE);
 #endif
@@ -773,8 +819,9 @@ CSphSEQuery::CSphSEQuery ( const char * sQuery, int iLength, const char * sIndex
 	, m_iMinID ( 0 )
 	, m_iMaxID ( UINT_MAX )
 	, m_iFilters ( 0 )
-	, m_sGroupBy ( "" )
 	, m_eGroupFunc ( SPH_GROUPBY_DAY )
+	, m_sGroupBy ( "" )
+	, m_sGroupSortBy ( "@group desc" )
 	, m_pBuf ( NULL )
 	, m_pCur ( NULL )
 	, m_iBufLeft ( 0 )
@@ -907,6 +954,8 @@ bool CSphSEQuery::ParseField ( char * sField )
 	else if ( !strcmp ( sName, "weights" ) )	m_iWeights = ParseArray ( &m_pWeights, sValue );
 	else if ( !strcmp ( sName, "minid" ) )		m_iMinID = iValue;
 	else if ( !strcmp ( sName, "maxid" ) )		m_iMaxID = iValue;
+	else if ( !strcmp ( sName, "maxmatches" ) )	m_iMaxMatches = iValue;
+	else if ( !strcmp ( sName, "groupsort" ) )	m_sGroupSortBy = sValue;
 
 	else if ( !strcmp ( sName, "mode" ) )
 	{
@@ -953,11 +1002,43 @@ bool CSphSEQuery::ParseField ( char * sField )
 			SPH_RET(false);
 		}
 
-	} else if ( !strcmp ( sName, "range" ) && m_iFilters<SPHINXSE_MAX_FILTERS )
+	} else if ( !strcmp ( sName, "groupby" ) )
+	{
+		static const struct 
+		{
+			const char *	m_sName;
+			ESphGroupBy		m_eFunc;
+		} dGroupModes[] = 
+		{
+			{ "day:",	SPH_GROUPBY_DAY },
+			{ "week:",	SPH_GROUPBY_WEEK },
+			{ "month:",	SPH_GROUPBY_MONTH },
+			{ "year:",	SPH_GROUPBY_YEAR },
+			{ "attr:",	SPH_GROUPBY_ATTR },
+		};
+
+		int i;
+		const int nModes = sizeof(dGroupModes)/sizeof(dGroupModes[0]);
+		for ( i=0; i<nModes; i++ )
+			if ( !strncmp ( sValue, dGroupModes[i].m_sName, strlen(dGroupModes[i].m_sName) ) )
+		{
+			m_eGroupFunc = dGroupModes[i].m_eFunc;
+			m_sGroupBy = sValue + strlen(dGroupModes[i].m_sName);
+			break;
+		}
+		if ( i==nModes )
+		{
+			snprintf ( m_sParseError, sizeof(m_sParseError), "unknown groupby mode '%s'", sValue );
+			SPH_RET(false);
+		}
+
+	} else if ( m_iFilters<SPHINXSE_MAX_FILTERS &&
+		( !strcmp ( sName, "range" ) || !strcmp ( sName, "!range" ) ) )
 	{
 		for ( ;; )
 		{
 			CSphSEFilter & tFilter = m_dFilters [ m_iFilters ];
+			tFilter.m_bExclude = ( strcmp ( sName, "!range")==0 );
 			char * p;
 
 			if (!( p = strchr ( sValue, ',' ) ))
@@ -979,11 +1060,13 @@ bool CSphSEQuery::ParseField ( char * sField )
 			break;
 		}
 
-	} else if ( !strcmp ( sName, "filter" ) && m_iFilters<SPHINXSE_MAX_FILTERS )
+	} else if ( m_iFilters<SPHINXSE_MAX_FILTERS &&
+		( !strcmp ( sName, "filter" ) || !strcmp ( sName, "!filter" ) ) )
 	{
 		for ( ;; )
 		{
 			CSphSEFilter & tFilter = m_dFilters [ m_iFilters ];
+			tFilter.m_bExclude = ( strcmp ( sName, "!filter")==0 );
 
 			// get the attr name
 			while ( (*sValue) && !myisattr(*sValue) )
@@ -1065,17 +1148,18 @@ int CSphSEQuery::BuildRequest ( char ** ppBuffer )
 	SPH_ENTER_METHOD();
 
 	// calc request length
-	int iReqSize = 64 + 4*m_iWeights
+	int iReqSize = 68 + 4*m_iWeights
 		+ strlen ( m_sSortBy )
 		+ strlen ( m_sQuery )
 		+ strlen ( m_sIndex )
-		+ strlen ( m_sGroupBy );
+		+ strlen ( m_sGroupBy )
+		+ strlen ( m_sGroupSortBy );
 
 	for ( int i=0; i<m_iFilters; i++ )
 	{
 		const CSphSEFilter & tFilter = m_dFilters[i];
 		iReqSize +=
-			8
+			12
 			+ strlen ( tFilter.m_sAttrName )
 			+ 4*tFilter.m_iValues
 			+ ( tFilter.m_iValues ? 0 : 8 );
@@ -1124,11 +1208,13 @@ int CSphSEQuery::BuildRequest ( char ** ppBuffer )
 			SendDword ( tFilter.m_uMinValue );
 			SendDword ( tFilter.m_uMaxValue );
 		}
+		SendInt ( tFilter.m_bExclude );
 	}
 
 	SendInt ( m_eGroupFunc );
 	SendString ( m_sGroupBy );
 	SendInt ( m_iMaxMatches );
+	SendString ( m_sGroupSortBy );
 
 	// detect buffer overruns and underruns, and report internal error
 	if ( m_bBufOverrun || m_iBufLeft!=0 || m_pCur-m_pBuf!=iReqSize )
@@ -1390,7 +1476,11 @@ bool ha_sphinx::UnpackSchema ()
 	SPH_ENTER_METHOD();
 
 	// unpack network packet
+	if ( m_dFields )
+		for ( int i=0; i<(int)m_iFields; i++ )
+			SafeDeleteArray ( m_dFields[i] );
 	SafeDeleteArray ( m_dFields );
+
 	m_iFields = UnpackDword ();
 	m_dFields = new char * [ m_iFields ];
 	if ( !m_dFields )
@@ -1404,6 +1494,8 @@ bool ha_sphinx::UnpackSchema ()
 	m_dAttrs = new CSphSEAttr [ m_iAttrs ];
 	if ( !m_dAttrs )
 	{
+		for ( int i=0; i<(int)m_iFields; i++ )
+			SafeDeleteArray ( m_dFields[i] );
 		SafeDeleteArray ( m_dFields );
 		SPH_RET(false);
 	}
@@ -1416,10 +1508,23 @@ bool ha_sphinx::UnpackSchema ()
 
 		m_dAttrs[i].m_iField = -1;
 		for ( uint32 j=SPHINXSE_SYSTEM_COLUMNS; j<pTable->s->fields; j++ )
-			if ( !strcasecmp ( m_dAttrs[i].m_sName, pTable->field[j]->field_name ) )
 		{
-			m_dAttrs[i].m_iField = j;
-			break;
+			const char * sTableField = pTable->field[j]->field_name;
+			const char * sAttrField = m_dAttrs[i].m_sName;
+			if ( m_dAttrs[i].m_sName[0]=='@' )
+			{
+				const char * sAtPrefix = "_sph_";
+				if ( strncmp ( sTableField, sAtPrefix, strlen(sAtPrefix) ) )
+					continue;
+				sTableField += strlen(sAtPrefix);
+				sAttrField++;
+			}
+
+			if ( !strcasecmp ( sAttrField, sTableField ) )
+			{
+				m_dAttrs[i].m_iField = j;
+				break;
+			}
 		}
 	}
 
@@ -1449,13 +1554,9 @@ bool ha_sphinx::UnpackSchema ()
 }
 
 
-CSphSEStats * ha_sphinx::UnpackStats ()
+bool ha_sphinx::UnpackStats ( CSphSEStats * pStats )
 {
-	SPH_ENTER_METHOD();
-
-	CSphSEStats * pStats = new CSphSEStats ();
-	if ( !pStats )
-		SPH_RET(NULL);
+	assert ( pStats );
 
 	char * pCurSave = m_pCur;
 	m_pCur = m_pCur + m_iMatchesTotal*(2+m_iAttrs)*sizeof(uint); // id+weight+attrs
@@ -1466,17 +1567,11 @@ CSphSEStats * ha_sphinx::UnpackStats ()
 	pStats->m_iWords = UnpackDword ();
 
 	if ( m_bUnpackError )
-	{
-		delete pStats;
-		SPH_RET(NULL);
-	}
+		return false;
 
 	pStats->m_dWords = new CSphSEWordStats [ pStats->m_iWords ]; // !COMMIT not bad-value safe
 	if ( !pStats->m_dWords )
-	{
-		delete pStats;
-		SPH_RET(NULL);
-	}
+		return false;
 
 	for ( int i=0; i<pStats->m_iWords; i++ )
 	{
@@ -1487,13 +1582,10 @@ CSphSEStats * ha_sphinx::UnpackStats ()
 	}
 
 	if ( m_bUnpackError )
-	{
-		delete pStats;
-		SPH_RET(NULL);
-	}
+		return false;
 
 	m_pCur = pCurSave;
-	SPH_RET(pStats);
+	return true;
 }
 
 
@@ -1553,7 +1645,15 @@ int ha_sphinx::index_read ( byte * buf, const byte * key, uint key_len, enum ha_
 		SPH_RET ( HA_ERR_END_OF_FILE );
 	}
 
-	int iRecvLength = ::recv ( iSocket, m_pResponse, uRespLength, MSG_WAITALL );
+	int iRecvLength = 0;
+	while ( iRecvLength<(int)uRespLength )
+	{
+		int iRecv = ::recv ( iSocket, m_pResponse+iRecvLength, uRespLength-iRecvLength, MSG_WAITALL );
+		if ( iRecv<0 )
+			break;
+		iRecvLength += iRecv;
+	}
+
 	::close ( iSocket );
 	iSocket = -1;
 
@@ -1561,39 +1661,6 @@ int ha_sphinx::index_read ( byte * buf, const byte * key, uint key_len, enum ha_
 	{
 		my_snprintf ( sError, sizeof(sError), "net read error (expected=%d, got=%d)", uRespLength, iRecvLength );
 		my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), sError );
-		SPH_RET ( HA_ERR_END_OF_FILE );
-	}
-
-	if ( uRespStatus )
-	{
-		int iErr = (int)ntohl ( *(uint*)m_pResponse );
-		if ( iErr>=0 && (iErr+(int)sizeof(uint))<=iRecvLength )
-		{
-			char * sErr = m_pResponse + sizeof(uint);
-			sErr[iErr] = '\0';
-
-			my_snprintf ( sError, sizeof(sError), "searchd error: %s", sErr );
-			my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), sError );
-
-		} else
-		{
-			char * sErr = m_pResponse + sizeof(uint);
-			sErr[iErr] = '\0';
-
-			my_snprintf ( sError, sizeof(sError), "searchd error: %s", sErr );
-			my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), "no valid response from searchd" );
-		}
-		SPH_RET ( HA_ERR_END_OF_FILE );
-	}
-
-	m_iCurrentPos = 0;
-	m_pCur = m_pResponse;
-	m_pResponseEnd = m_pResponse + uRespLength;
-	m_bUnpackError = false;
-
-	if ( !UnpackSchema () )
-	{
-		my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), "INTERNAL ERROR: UnpackSchema() failed" );
 		SPH_RET ( HA_ERR_END_OF_FILE );
 	}
 
@@ -1606,19 +1673,60 @@ int ha_sphinx::index_read ( byte * buf, const byte * key, uint key_len, enum ha_
 	#endif // >50100
 
 	CSphSEStats * pStats = (CSphSEStats *) TARGET;
-	if ( pStats )
+	if ( !pStats )
 	{
-		delete pStats;
-		TARGET = NULL;
+		pStats = new CSphSEStats ();
+		TARGET = pStats;
+		if ( !pStats )
+		{
+			my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), "INTERNAL ERROR: malloc() failed" );
+			SPH_RET ( HA_ERR_END_OF_FILE );
+		}
+	} else
+	{
+		pStats->Reset ();
 	}
 
-	pStats = UnpackStats ();
-	if ( !pStats )
+	// parse reply
+	m_iCurrentPos = 0;
+	m_pCur = m_pResponse;
+	m_pResponseEnd = m_pResponse + uRespLength;
+	m_bUnpackError = false;
+
+	if ( uRespStatus!=SEARCHD_OK )
+	{
+		char * sMessage = UnpackString ();
+		if ( !sMessage )
+		{
+			my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), "no valid response from searchd (status=%d, resplen=%d)",
+				uRespStatus, uRespLength );
+			SPH_RET ( HA_ERR_END_OF_FILE );
+		}
+
+		strncpy ( pStats->m_sLastMessage, sMessage, sizeof(pStats->m_sLastMessage) );
+		SafeDeleteArray ( sMessage );
+
+		if ( uRespStatus!=SEARCHD_WARNING )
+		{
+			my_snprintf ( sError, sizeof(sError), "searchd error: %s", pStats->m_sLastMessage );
+			my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), sError );
+
+			pStats->m_bLastError = true;
+			SPH_RET ( HA_ERR_END_OF_FILE );
+		}
+	}
+
+	if ( !UnpackSchema () )
+	{
+		my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), "INTERNAL ERROR: UnpackSchema() failed" );
+		SPH_RET ( HA_ERR_END_OF_FILE );
+	}
+
+	if ( !UnpackStats ( pStats ) )
 	{
 		my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), "INTERNAL ERROR: UnpackStats() failed" );
 		SPH_RET ( HA_ERR_END_OF_FILE );
 	}
-	TARGET = pStats;
 
 	SPH_RET ( get_rec ( buf, key, key_len ) );
 }

@@ -1315,7 +1315,6 @@ CREATE TABLE t1
     weight      INTEGER NOT NULL,
     query       VARCHAR(3072) NOT NULL,
     group_id    INTEGER,
-    INDEX(id),
     INDEX(query)
 ) ENGINE=SPHINX CONNECTION="sphinx://localhost:3312/test";
 

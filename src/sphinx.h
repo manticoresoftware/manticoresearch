@@ -1079,6 +1079,35 @@ enum ESphDocinfo
 	SPH_DOCINFO_EXTERN		= 2		///< store docinfo separately
 };
 
+/// purging data
+struct CSphPurgeData
+{
+	CSphString		m_sKey;
+	int				m_iAttrIndex;
+	DWORD			m_dwMinValue;
+	DWORD			m_dwMaxValue;
+	bool			m_bPurge;
+
+	CSphPurgeData()
+		: m_dwMinValue ( 0 )
+		, m_dwMaxValue ( 0 )
+		, m_iAttrIndex ( -1 )
+		, m_bPurge ( false )
+	{}
+
+	bool IsShouldPurge ( const DWORD * pAttrs )
+	{
+		if ( ( m_iAttrIndex == -1 ) || !m_bPurge || !pAttrs )
+			return false;
+		else
+			return ( ( m_dwMinValue <= pAttrs[m_iAttrIndex] ) && ( m_dwMaxValue >= pAttrs[m_iAttrIndex] ) );
+	}
+
+	bool IsEnabled ()
+	{
+		return m_bPurge;
+	}
+};
 
 /// generic fulltext index interface
 class CSphIndex
@@ -1099,8 +1128,7 @@ public:
 	virtual const CSphSchema *	Preload () = 0;
 	virtual CSphQueryResult *	Query ( CSphDict * dict, CSphQuery * pQuery ) = 0;
 	virtual bool				QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchSorter * pTop ) = 0;
-
-	virtual bool				Merge ( CSphIndex * pSource ) = 0;
+	virtual bool				Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData ) = 0;
 
 	/// updates memory-cached attributes in real time
 	/// returns non-negative amount of actually found and updated records on success

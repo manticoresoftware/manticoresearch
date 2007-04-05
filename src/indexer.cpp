@@ -736,7 +736,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 //////////////////////////////////////////////////////////////////////////
 
 bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
-	const CSphConfigSection & hSrc, const char * sSrc )
+	const CSphConfigSection & hSrc, const char * sSrc, CSphPurgeData & tPurge )
 {
 	// check config
 	if ( !hDst("path") )
@@ -756,7 +756,7 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 	assert ( pSrc );
 	assert ( pDst );
 
-	bool bMergedOK = pDst->Merge ( pSrc );
+	bool bMergedOK = pDst->Merge ( pSrc, tPurge );
 
 	SafeDelete ( pSrc );
 	SafeDelete ( pDst );
@@ -776,7 +776,11 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 		snprintf ( sFrom, sizeof(sFrom), "%s.%s.tmp", sPath, dExt[iExt] );
 		sFrom [ sizeof(sFrom)-1 ] = '\0';
 
-		snprintf ( sTo, sizeof(sTo), "%s.%s", sPath, dExt[iExt] );
+		if ( g_bRotate )
+			snprintf ( sTo, sizeof(sTo), "%s.new.%s", sPath, dExt[iExt] );
+		else
+			snprintf ( sTo, sizeof(sTo), "%s.%s", sPath, dExt[iExt] );
+
 		sTo [ sizeof(sTo)-1 ] = '\0';
 
 		if ( remove ( sTo ) )
@@ -805,7 +809,8 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 int main ( int argc, char ** argv )
 {
 	const char * sConfName = "sphinx.conf";
-	bool bMerge = false;
+	bool bMerge = false;	
+	CSphPurgeData	tPurge;
 
 	CSphVector < const char *, 16 > dIndexes;
 	bool bIndexAll = false;
@@ -829,6 +834,15 @@ int main ( int argc, char ** argv )
 			dIndexes.Add ( argv[i+1] );
 			dIndexes.Add ( argv[i+2] );
 			i += 2;
+		}
+		else if ( bMerge && strcasecmp ( argv[i], "--purge" )==0 && (i+3)<argc )
+		{
+			tPurge.m_bPurge = true;
+			tPurge.m_sKey = argv[i+1];
+			
+			char * sStopStr;
+			tPurge.m_dwMinValue = strtoul( argv[i+2], &sStopStr, 10 );
+			tPurge.m_dwMaxValue = strtoul( argv[i+3], &sStopStr, 10 );
 		}
 		else if ( strcasecmp ( argv[i], "--buildstops" )==0 && (i+2)<argc )
 		{
@@ -993,17 +1007,14 @@ int main ( int argc, char ** argv )
 		if ( !hConf["index"](dIndexes[1]) )
 			sphDie ( "FATAL: no merge source index '%s'.\n", dIndexes[1] );
 
-		DoMerge (
+		bIndexedOk = DoMerge (
 			hConf["index"][dIndexes[0]], dIndexes[0],
-			hConf["index"][dIndexes[1]], dIndexes[1] );
-		return 0; // FIXME! should send SIGHUP...
-
+			hConf["index"][dIndexes[1]], dIndexes[1], tPurge );
 	} else if ( bIndexAll )
 	{
 		hConf["index"].IterateStart ();
 		while ( hConf["index"].IterateNext() )
 			bIndexedOk |= DoIndex ( hConf["index"].IterateGet (), hConf["index"].IterateGetKey().cstr(), hConf["source"] );
-
 	} else
 	{
 		ARRAY_FOREACH ( i, dIndexes )

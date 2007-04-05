@@ -1089,9 +1089,9 @@ struct CSphPurgeData
 	bool			m_bPurge;
 
 	CSphPurgeData()
-		: m_dwMinValue ( 0 )
+		: m_iAttrIndex ( -1 )
+		, m_dwMinValue ( 0 )
 		, m_dwMaxValue ( 0 )
-		, m_iAttrIndex ( -1 )
 		, m_bPurge ( false )
 	{}
 

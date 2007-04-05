@@ -1512,9 +1512,9 @@ struct CSphDoclistRecord
 						, m_pAttrs ( NULL )
 						, m_iPos ( 0 )
 						, m_uFields ( 0 )
+						, m_uMatchHits ( 0 )
 						, m_iLeadingZero ( 0 )
 						, m_iAttrNum ( 0 )
-						, m_uMatchHits ( 0 )
 					{}
 
 	virtual			~CSphDoclistRecord ();

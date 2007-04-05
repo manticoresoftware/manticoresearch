@@ -44,7 +44,7 @@ public:
 		int					m_iLength;		///< token length (in codepoints)
 		int					m_iWeight;		///< token weight
 		DWORD				m_uWords;		///< matching query words mask
-		DWORD				m_iWordID;		///< token word ID from dictionary
+		SphWordID_t			m_iWordID;		///< token word ID from dictionary
 	};
 
 	struct Passage_t
@@ -162,7 +162,7 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict, 
 
 	// remove non-words
 	ARRAY_FOREACH ( i, m_dWords )
-		if ( m_dWords[i].m_eType!=TOK_WORD || !m_dWords[i].m_iWordID )
+		if ( m_dWords[i].m_eType!=TOK_WORD || m_dWords[i].m_iWordID==0 )
 			m_dWords.Remove ( i-- );
 
 	// truncate the array

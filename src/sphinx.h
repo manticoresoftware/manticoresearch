@@ -69,7 +69,44 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
-#define SPHINX_VERSION			"0.9.7"
+#define USE_64BIT 1
+
+#if USE_64BIT
+
+// use 64-bit unsigned integers to store document and word IDs
+#define SPHINX_BITS_TAG	"-id64"
+typedef uint64_t		SphWordID_t;
+typedef uint64_t		SphDocID_t;
+
+#define DOCID_MAX		U64C(0xffffffffffffffff) 
+#define DOCID_FMT		U64FMT
+#define DOCINFO_IDSIZE	2
+
+STATIC_SIZE_ASSERT ( SphWordID_t, 8 );
+STATIC_SIZE_ASSERT ( SphDocID_t, 8 );
+
+#else
+
+// use 32-bit unsigned integers to store document and word IDs
+#define SPHINX_BITS_TAG	""
+typedef DWORD			SphWordID_t;
+typedef DWORD			SphDocID_t;			
+
+#define DOCID_MAX		0xffffffffUL
+#define DOCID_FMT		"%u"
+#define DOCINFO_IDSIZE	1
+
+STATIC_SIZE_ASSERT ( SphWordID_t, 4 );
+STATIC_SIZE_ASSERT ( SphDocID_t, 4 );
+
+#endif // USE_64BIT
+
+inline SphDocID_t &		DOCINFO2ID ( const DWORD * pDocinfo )	{ return *(SphDocID_t*)pDocinfo; }
+inline DWORD *			DOCINFO2ATTRS ( DWORD * pDocinfo )		{ return pDocinfo+DOCINFO_IDSIZE; }
+
+/////////////////////////////////////////////////////////////////////////////
+
+#define SPHINX_VERSION			"0.9.8" SPHINX_BITS_TAG "-dev"
 #define SPHINX_BANNER			"Sphinx " SPHINX_VERSION "\nCopyright (c) 2001-2007, Andrew Aksyonoff\n\n"
 #define SPHINX_SEARCHD_PROTO	1
 
@@ -92,7 +129,7 @@ float			sphLongTimer ();
 DWORD			sphCRC32 ( const BYTE * pString );
 
 /// replaces all occurences of sMacro in sTemplate with textual representation of uValue
-char *			sphStrMacro ( const char * sTemplate, const char * sMacro, DWORD uValue );
+char *			sphStrMacro ( const char * sTemplate, const char * sMacro, SphDocID_t uValue );
 
 /// try to obtain an exclusive lock on specified file
 /// bWait specifies whether to wait
@@ -268,11 +305,11 @@ struct CSphDict
 
 	/// get word ID by word, "text" version
 	/// returns 0 for stopwords
-	virtual DWORD		GetWordID ( BYTE * pWord ) = 0;
+	virtual SphWordID_t	GetWordID ( BYTE * pWord ) = 0;
 
 	/// get word ID by word, "binary" version
 	/// returns 0 for stopwords
-	virtual DWORD		GetWordID ( const BYTE * pWord, int iLen ) = 0;
+	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen ) = 0;
 
 	/// load stopwords from given files
 	virtual void		LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer ) = 0;
@@ -291,11 +328,11 @@ struct CSphDict_CRC32 : CSphDict
 
 	/// get word ID by word
 	/// does requested morphology and returns CRC32
-	virtual DWORD		GetWordID ( BYTE * pWord );
+	virtual SphWordID_t	GetWordID ( BYTE * pWord );
 
 	/// get word ID by word, "binary" version
 	/// does NOT apply any morphology
-	virtual DWORD		GetWordID ( const BYTE * pWord, int iLen );
+	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen );
 
 	/// load stopwords from given files
 	virtual void		LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer );
@@ -303,10 +340,10 @@ struct CSphDict_CRC32 : CSphDict
 protected:
 	DWORD				m_iMorph;		///< morphology flags
 	int					m_iStopwords;	///< stopwords count
-	DWORD *				m_pStopwords;	///< stopwords ID list
+	SphWordID_t *		m_pStopwords;	///< stopwords ID list
 
 	/// filter ID against stopwords list
-	DWORD				FilterStopword ( DWORD uID );
+	SphWordID_t			FilterStopword ( SphWordID_t uID );
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -316,16 +353,16 @@ protected:
 /// hit info
 struct CSphWordHit
 {
-	DWORD	m_iDocID;		///< document ID
-	DWORD	m_iWordID;		///< word ID in current dictionary
-	DWORD	m_iWordPos;		///< word position in current document
+	SphDocID_t		m_iDocID;		///< document ID
+	SphWordID_t		m_iWordID;		///< word ID in current dictionary
+	DWORD			m_iWordPos;		///< word position in current document
 };
 
 
 /// document info
 struct CSphDocInfo
 {
-	DWORD		m_iDocID;	///< document ID
+	SphDocID_t	m_iDocID;	///< document ID
 	int			m_iAttrs;	///< attribute count (FIXME! invariant over index; stored for assignment operator)
 	DWORD *		m_pAttrs;	///< attribute values
 
@@ -525,7 +562,7 @@ public:
 
 	/// document getter
 	/// to be implemented by descendants
-	virtual int							Next () = 0;
+	virtual bool						Next () = 0;
 
 	/// post-index callback
 	/// gets called when the indexing is succesfully (!) over
@@ -559,7 +596,7 @@ struct CSphSource_Document : CSphSource
 							CSphSource_Document ( const char * sName ) : CSphSource ( sName ), m_bCallWordCallback ( false ) {}
 
 	/// my generic tokenizer
-	virtual int				Next ();
+	virtual bool			Next ();
 
 	/// this is what we can call for my descendants
 	virtual void			WordCallback ( char * ) {}
@@ -629,10 +666,10 @@ protected:
 
 	BYTE *				m_dFields [ SPH_MAX_FIELDS ];
 
-	DWORD				m_uMinID;		///< grand min ID
-	DWORD				m_uMaxID;		///< grand max ID
-	DWORD				m_uCurrentID;	///< current min ID
-	DWORD				m_uMaxFetchedID;///< max actually fetched ID
+	SphDocID_t			m_uMinID;		///< grand min ID
+	SphDocID_t			m_uMaxID;		///< grand max ID
+	SphDocID_t			m_uCurrentID;	///< current min ID
+	SphDocID_t			m_uMaxFetchedID;///< max actually fetched ID
 
 	bool						m_bSqlConnected;
 	CSphSourceParams_SQL		m_tParams;
@@ -745,7 +782,7 @@ public:
 
 	bool			Setup ( const char * sCommand );			///< memorizes the command
 	virtual bool	Connect ();									///< actually runs the command 
-	virtual int		Next ();									///< hit chunk getter
+	virtual bool	Next ();									///< hit chunk getter
 	virtual bool	HasAttrsConfigured () { return true; }
 
 private:
@@ -798,6 +835,9 @@ private:
 
 	/// scan for tag with integer value
 	bool			ScanInt ( const char * sTag, DWORD * pRes, bool bStrict=true );
+
+	/// scan for tag with integer value
+	bool			ScanInt ( const char * sTag, uint64_t * pRes, bool bStrict=true );
 
 	/// scan for tag with string value
 	bool			ScanStr ( const char * sTag, char * pRes, int iMaxLength );
@@ -919,8 +959,8 @@ public:
 	ISphTokenizer *	m_pTokenizer;	///< tokenizer to use. NOT OWNED.
 	int				m_iMaxMatches;	///< max matches to retrieve, default is 1000. more matches use more memory and CPU time to hold and sort them
 
-	DWORD			m_iMinID;		///< min ID to match, 0 by default
-	DWORD			m_iMaxID;		///< max ID to match, UINT_MAX by default
+	SphDocID_t		m_iMinID;		///< min ID to match, 0 by default
+	SphDocID_t		m_iMaxID;		///< max ID to match, UINT_MAX by default
 
 	CSphVector<CSphFilter,8>	m_dFilters;	///< filters
 
@@ -1125,7 +1165,7 @@ public:
 public:
 	virtual int					Build ( CSphDict * dict, const CSphVector < CSphSource * > & dSources, int iMemoryLimit, ESphDocinfo eDocinfo ) = 0;
 
-	virtual const CSphSchema *	Preload () = 0;
+	virtual const CSphSchema *	Preload ( bool bMlock, CSphString * sWarning ) = 0;
 	virtual CSphQueryResult *	Query ( CSphDict * dict, CSphQuery * pQuery ) = 0;
 	virtual bool				QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchSorter * pTop ) = 0;
 	virtual bool				Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData ) = 0;

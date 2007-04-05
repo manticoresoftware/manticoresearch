@@ -898,8 +898,8 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 		{
 			// GetWordID() may modify the word in-place; so we alloc a tempbuffer
 			CSphString sTmp ( sToken );
-			DWORD iWordID = pDict->GetWordID ( (BYTE*)sTmp.cstr() );
-			if ( !iWordID )
+			SphWordID_t iWordID = pDict->GetWordID ( (BYTE*)sTmp.cstr() );
+			if ( iWordID==0 )
 				continue;
 		}
 

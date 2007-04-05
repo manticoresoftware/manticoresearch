@@ -71,6 +71,7 @@ struct ServedIndex_t
 	CSphString *		m_pLockFile; 
 	CSphString *		m_pIndexPath;
 	bool				m_bEnabled;		///< to disable index in cases when rotation fails
+	bool				m_bMlock;
 
 public:
 						ServedIndex_t ();
@@ -179,7 +180,7 @@ enum SearchdCommand_e
 /// known command versions
 enum
 {
-	VER_COMMAND_SEARCH		= 0x107,
+	VER_COMMAND_SEARCH		= 0x108,
 	VER_COMMAND_EXCERPT		= 0x100,
 	VER_COMMAND_UPDATE		= 0x100
 };
@@ -256,6 +257,7 @@ void ServedIndex_t::Reset ()
 	m_pLockFile	= NULL;
 	m_pIndexPath= NULL;
 	m_bEnabled	= true;
+	m_bMlock	= false;
 }
 
 ServedIndex_t::~ServedIndex_t ()
@@ -568,10 +570,20 @@ class NetOutputBuffer_c
 {
 public:
 				NetOutputBuffer_c ( int iSock );
-	bool		SendInt ( int iValue )		{ return SendT<int> ( htonl ( iValue ) ); }
-	bool		SendDword ( DWORD iValue )	{ return SendT<DWORD> ( htonl ( iValue ) ); }
-	bool		SendWord ( WORD iValue )	{ return SendT<WORD> ( htons ( iValue ) ); }
+
+	bool		SendInt ( int iValue )			{ return SendT<int> ( htonl ( iValue ) ); }
+	bool		SendDword ( DWORD iValue )		{ return SendT<DWORD> ( htonl ( iValue ) ); }
+	bool		SendWord ( WORD iValue )		{ return SendT<WORD> ( htons ( iValue ) ); }
+	bool		SendUint64 ( uint64_t iValue )	{ SendT<DWORD> ( htonl ( (DWORD)(iValue>>32) ) ); return SendT<DWORD> ( htonl ( (DWORD)(iValue&0xffffffffUL) ) ); }
+
+#if USE_64BIT
+	bool		SendDocid ( SphDocID_t iValue )	{ return SendUint64 ( iValue ); }
+#else
+	bool		SendDocid ( SphDocID_t iValue )	{ return SendDword ( iValue ); }
+#endif
+
 	bool		SendString ( const char * sStr );
+
 	bool		Flush ();
 	bool		GetError () { return m_bError; }
 	int			GetSentCount () { return m_iSent; }
@@ -601,6 +613,7 @@ public:
 	int				GetInt () { return ntohl ( GetT<int> () ); }
 	WORD			GetWord () { return ntohs ( GetT<WORD> () ); }
 	DWORD			GetDword () { return ntohl ( GetT<DWORD> () ); }
+	uint64_t		GetUint64() { uint64_t uRes = GetDword(); return (uRes<<32)+GetDword(); };
 	BYTE			GetByte () { return GetT<BYTE> (); }
 	CSphString		GetString ();
 	int				GetDwords ( DWORD ** pBuffer, int iMax, const char * sErrorTemplate );
@@ -1243,7 +1256,7 @@ void CSphCache::GenerateCacheFileName ( const CSphQuery & tQuery )
 	md5_byte_t tDigest[16];
 	char sBuf[2048];
 
-	int iLen = snprintf ( sBuf, sizeof(sBuf), "%s-%d-%d-%d-%d",
+	int iLen = snprintf ( sBuf, sizeof(sBuf), "%s-%d-%d-" DOCID_FMT "-" DOCID_FMT,
 		tQuery.m_sQuery.cstr(),tQuery.m_eMode, tQuery.m_eSort,
 		tQuery.m_iMinID, tQuery.m_iMaxID );
 
@@ -1519,7 +1532,7 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				}
 
 				// do query!
-				int iReqSize = 72 + 4*tQuery.m_iWeights
+				int iReqSize = 68 + 2*sizeof(SphDocID_t) + 4*tQuery.m_iWeights
 					+ strlen ( tQuery.m_sSortBy.cstr() )
 					+ strlen ( tQuery.m_sQuery.cstr() )
 					+ strlen ( tAgent.m_sIndexes.cstr() )
@@ -1555,8 +1568,9 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				for ( int j=0; j<tQuery.m_iWeights; j++ )
 					tOut.SendInt ( tQuery.m_pWeights[j] ); // weights
 				tOut.SendString ( tAgent.m_sIndexes.cstr() ); // indexes
-				tOut.SendInt ( tQuery.m_iMinID ); // id/ts ranges
-				tOut.SendInt ( tQuery.m_iMaxID );
+				tOut.SendInt ( USE_64BIT ); // id range bits
+				tOut.SendDocid ( tQuery.m_iMinID ); // id/ts ranges
+				tOut.SendDocid ( tQuery.m_iMaxID );
 				tOut.SendInt ( tQuery.m_dFilters.GetLength() );
 				ARRAY_FOREACH ( j, tQuery.m_dFilters )
 				{
@@ -1787,6 +1801,15 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 						break;
 					}
 
+					int bAgent64 = tReq.GetInt ();
+					if ( bAgent64 && !USE_64BIT )
+					{
+						// should be reported as warning
+						dFailures.Add ( SearchFailure_t ( sIndexName,
+							"agent '%s:%d' is id64 and master is id32; resulting docids might be wrapped",
+							tAgent.m_sHost.cstr(), tAgent.m_iPort ) );
+					}
+
 					assert ( !tAgent.m_tRes.m_dMatches.GetLength() );
 					int iAttrs = tSchema.m_dAttrs.GetLength();
 					if ( iMatches )
@@ -1796,8 +1819,7 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 						{
 							CSphMatch & tMatch = tAgent.m_tRes.m_dMatches[i];
 							tMatch.Reset ( iAttrs );
-
-							tMatch.m_iDocID = tReq.GetInt ();
+							tMatch.m_iDocID = bAgent64 ? (SphDocID_t)tReq.GetUint64() : tReq.GetDword();
 							tMatch.m_iWeight = tReq.GetInt ();
 							for ( int j=0; j<iAttrs; j++ )
 								tMatch.m_pAttrs[j] = tReq.GetDword ();
@@ -2219,8 +2241,22 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	tQuery.m_sQuery		= tReq.GetString ();
 	tQuery.m_iWeights	= tReq.GetDwords ( (DWORD**)&tQuery.m_pWeights, SPH_MAX_FIELDS, "invalid weight count %d (should be in 0..%d range)" );
 	CSphString sIndexes	= tReq.GetString ();
-	tQuery.m_iMinID		= tReq.GetDword ();
-	tQuery.m_iMaxID		= tReq.GetDword ();
+
+	bool bIdrange64 = false;
+	if ( iVer>=0x108 )
+		bIdrange64 = ( tReq.GetInt()!=0  );
+
+	if ( bIdrange64 )
+	{
+		tQuery.m_iMinID		= (SphDocID_t)tReq.GetUint64 ();
+		tQuery.m_iMaxID		= (SphDocID_t)tReq.GetUint64 ();
+		// FIXME? could report clamp here if I'm id32 and client passed id64 range,
+		// but frequently this won't affect anything at all
+	} else
+	{
+		tQuery.m_iMinID		= tReq.GetDword ();
+		tQuery.m_iMaxID		= tReq.GetDword ();
+	}
 
 	// upto v.1.1
 	if ( iVer<=0x101 )
@@ -2601,6 +2637,12 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		}
 	}
 
+	// warn about id64 server vs old clients
+#if USE_64BIT
+	if ( iVer<0x108 )
+		dFailures.Add ( SearchFailure_t ( "*", "searchd is id64; resulting docids might be wrapped" ) );
+#endif
+
 	// build report
 	StrBuf_t sFailures;
 	ReportSearchFailures ( sFailures, dFailures );
@@ -2686,10 +2728,12 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	}
 
 	int iCount = Max ( Min ( tQuery.m_iLimit, pRes->m_dMatches.GetLength()-tQuery.m_iOffset ), 0 );
-	if ( iVer<=0x101 )
+	if ( iVer<0x102 )
 		iRespLen += 16*iCount; // matches
-	else
+	else if ( iVer<0x108 )
 		iRespLen += ( 8+4*pRes->m_tSchema.m_dAttrs.GetLength() )*iCount; // matches
+	else
+		iRespLen += 4 + ( 8+4*USE_64BIT+4*pRes->m_tSchema.m_dAttrs.GetLength() )*iCount; // id64 tag and matches
 
 	for ( int i=0; i<pRes->m_iNumWords; i++ ) // per-word stats
 		iRespLen += 12 + strlen ( pRes->m_tWordStats[i].m_sWord.cstr() ); // wordlen, word, docs, hits
@@ -2736,10 +2780,18 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	}
 
 	tOut.SendInt ( iCount );
+	if ( iVer>=0x108 )
+		tOut.SendInt ( USE_64BIT );
 	for ( int i=0; i<iCount; i++ )
 	{
 		const CSphMatch & tMatch = pRes->m_dMatches[tQuery.m_iOffset+i];
-		tOut.SendDword ( tMatch.m_iDocID );
+#if USE_64BIT
+		if ( iVer>=0x108 )
+			tOut.SendUint64 ( tMatch.m_iDocID );
+		else
+#endif
+			tOut.SendDword ( (DWORD)tMatch.m_iDocID );
+
 		if ( iVer<=0x101 )
 		{
 			tOut.SendDword ( iGIDIndex>=0 ? tMatch.m_pAttrs[iGIDIndex] : 1 );
@@ -3068,7 +3120,8 @@ void RotateIndex ( ServedIndex_t & tIndex, const char * sIndex )
 	}
 
 	// try to use new index
-	const CSphSchema * pNewSchema = tIndex.m_pIndex->Preload ();
+	CSphString sWarning;
+	const CSphSchema * pNewSchema = tIndex.m_pIndex->Preload ( tIndex.m_bMlock, &sWarning );
 	if ( !pNewSchema )
 	{
 		sphWarning ( "rotating index '%s': failed to preload schema/docinfo", sIndex );
@@ -3080,7 +3133,7 @@ void RotateIndex ( ServedIndex_t & tIndex, const char * sIndex )
 			TryRename ( sIndex, sPath, dOld[j], dCur[j], true );
 		}
 
-		pNewSchema = tIndex.m_pIndex->Preload ();
+		pNewSchema = tIndex.m_pIndex->Preload ( tIndex.m_bMlock, &sWarning );
 		if ( !pNewSchema )
 		{
 			sphWarning ( "rotating index '%s': .new preload failed; ROLLBACK FAILED; INDEX UNUSABLE", sIndex );
@@ -3088,8 +3141,15 @@ void RotateIndex ( ServedIndex_t & tIndex, const char * sIndex )
 		} else
 		{
 			sphWarning ( "rotating index '%s': .new preload failed; using old index", sIndex );
+			if ( !sWarning.IsEmpty() )
+				sphWarning ( "rotating index '%s': %s", sIndex, sWarning.cstr() );
 		}
 		return;
+
+	} else
+	{
+		if ( !sWarning.IsEmpty() )
+			sphWarning ( "rotating index '%s': %s", sIndex, sWarning.cstr() );
 	}
 
 	// uff. all done
@@ -3376,16 +3436,22 @@ int main ( int argc, char **argv )
 				sphWarning ( "index '%s': unknown morphology type '%s' - ignored",
 					sIndexName, hIndex["morphology"].cstr() );
 
-			// create add this one to served hashes
+			// configure memlocking
 			ServedIndex_t tIdx;
+			if ( hIndex("mlock") && hIndex["mlock"].intval() )
+				tIdx.m_bMlock = true;
 
+			// create add this one to served hashes
+			CSphString sWarning;
 			tIdx.m_pIndex = sphCreateIndexPhrase ( hIndex["path"].cstr() );
-			tIdx.m_pSchema = tIdx.m_pIndex->Preload() ;
+			tIdx.m_pSchema = tIdx.m_pIndex->Preload ( tIdx.m_bMlock, &sWarning );
 			if ( !tIdx.m_pSchema )
 			{
 				sphWarning ( "index '%s': failed to preload schema and docinfos - NOT SERVING", sIndexName );
 				continue;
 			}
+			if ( !sWarning.IsEmpty() )
+				sphWarning ( "index '%s': %s", sIndexName, sWarning.cstr() );
 
 			tIdx.m_pDict = new CSphDict_CRC32 ( iMorph );
 			tIdx.m_pDict->LoadStopwords ( hIndex.Exists ( "stopwords" ) ? hIndex["stopwords"].cstr() : NULL, pTokenizer );

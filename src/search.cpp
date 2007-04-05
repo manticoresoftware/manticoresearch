@@ -260,7 +260,7 @@ int main ( int argc, char ** argv )
 		CSphQueryResult * pResult = NULL;
 
 		CSphIndex * pIndex = sphCreateIndexPhrase ( hIndex["path"].cstr() );
-		const CSphSchema * pSchema = pIndex->Preload ();
+		const CSphSchema * pSchema = pIndex->Preload ( false, NULL );
 		if ( pSchema )
 		{
 			// setup groupby

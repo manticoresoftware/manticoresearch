@@ -35,6 +35,8 @@
 	#define pclose		_pclose
 	#define snprintf	_snprintf
 	#define sphSeek		_lseeki64
+	#define strtoull	_strtoui64
+
 #else
 	#include <unistd.h>
 	#include <sys/time.h>
@@ -485,6 +487,7 @@ public:
 	CSphSharedBuffer ()
 		: m_pData ( NULL )
 		, m_iLength ( 0 )
+		, m_bMlock ( false )
 	{}
 
 	/// dtor
@@ -493,9 +496,15 @@ public:
 		Reset ();
 	}
 
+	/// set locking mode for subsequent Alloc()s
+	void SetMlock ( bool bMlock )
+	{
+		m_bMlock = bMlock;
+	}
+
 public:
 	/// allocate storage
-	bool Alloc ( DWORD iEntries, CSphString & sError )
+	bool Alloc ( DWORD iEntries, CSphString & sError, CSphString * sWarning )
 	{
 		assert ( !m_pData );
 
@@ -509,6 +518,9 @@ public:
 			return false;
 		}
 
+		if ( sWarning )
+			*sWarning = ""; // avoid-a-warn
+
 #if USE_WINDOWS
 		m_pData = new T [ iEntries ];
 		return m_pData!=NULL;
@@ -518,13 +530,15 @@ public:
 		if ( m_pData==MAP_FAILED )
 		{
 			if ( m_iLength>0x7fffffffUL )
-				sError.SetSprintf ( "mmap() failed: %s (length="I64FMT" is over 2GB, impossible on some 32-bit systems)",
-					strerror(errno), (int64_t)m_iLength );
+				sError.SetSprintf ( "mmap() failed: %s (length="I64FMT" is over 2GB, impossible on some 32-bit systems)", strerror(errno), (int64_t)m_iLength );
 			else
-				sError.SetSprintf ( "mmap() failed: %s (length="I64FMT")",
-				strerror(errno), (int64_t)m_iLength );
+				sError.SetSprintf ( "mmap() failed: %s (length="I64FMT")", strerror(errno), (int64_t)m_iLength );
 			return false;
 		}
+
+		if ( m_bMlock )
+			if ( -1==mlock ( m_pData, m_iLength ) )
+				sWarning->SetSprintf ( "mlock() failed: %s", strerror(errno) );
 
 		assert ( m_pData );
 		return true;
@@ -570,6 +584,7 @@ public:
 protected:
 	T *					m_pData;	///< data storage
 	size_t				m_iLength;	///< data length, bytes
+	bool				m_bMlock;	///< whether to lock data in RAM
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -814,7 +829,7 @@ public:
 
 //////////////////////////////////////////////////////////////////////////////
 
-static inline int iLog2 ( DWORD iValue )
+static inline int iLog2 ( uint64_t iValue )
 {
 	int iBits = 0;
 	while ( iValue )
@@ -1196,14 +1211,14 @@ public:
 	int					m_iFileLeft;	///< how much data is still unread from the file
 
 public:
-			CSphBin ();
-			~CSphBin ();
-	void	Init ( int iFD, SphOffset_t * pSharedOffset, const char * sPhase, int iMemoryLimit, int iBlocks );
+						CSphBin ();
+						~CSphBin ();
+	void				Init ( int iFD, SphOffset_t * pSharedOffset, const char * sPhase, int iMemoryLimit, int iBlocks );
 
-	DWORD	ReadVLB ();
-	int		ReadByte ();
-	int		ReadBytes ( void * pDest, int iBytes );
-	int		ReadHit ( CSphWordHit * e, int iAttrs, DWORD * pAttrs );
+	SphWordID_t			ReadVLB ();		// FIXME? should actually be widest type of both 
+	int					ReadByte ();
+	int					ReadBytes ( void * pDest, int iBytes );
+	int					ReadHit ( CSphWordHit * e, int iAttrs, DWORD * pAttrs );
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1224,6 +1239,12 @@ public:
 	void		PutDword ( DWORD uValue ) { PutBytes ( &uValue, sizeof(DWORD) ); }
 	void		PutOffset ( SphOffset_t uValue ) { PutBytes ( &uValue, sizeof(SphOffset_t) ); }
 	void		SeekTo ( SphOffset_t pos );
+
+#if USE_64BIT
+	void		PutDocid ( SphDocID_t uValue ) { PutOffset ( uValue ); }
+#else
+	void		PutDocid ( SphDocID_t uValue ) { PutDword ( uValue ); }
+#endif
 
 	void		ZipInt ( DWORD uValue );
 	void		ZipOffset ( SphOffset_t uValue );
@@ -1271,6 +1292,14 @@ public:
 	bool					GetErrorFlag () const		{ return m_bError; }
 	const CSphString &		GetErrorMessage () const	{ return m_sError; }
 
+#if USE_64BIT
+	SphDocID_t	GetDocid ()		{ return GetOffset(); }
+	SphDocID_t	UnzipDocid ()	{ return UnzipOffset(); }
+#else
+	SphDocID_t	GetDocid ()		{ return GetDword(); }
+	SphDocID_t	UnzipDocid ()	{ return UnzipInt(); }
+#endif
+
 	const CSphReader_VLN &	operator = ( const CSphReader_VLN & rhs );
 
 private:
@@ -1308,7 +1337,7 @@ class CSphQueryWord
 public:
 	CSphString		m_sWord;		///< my copy of word
 	int				m_iQueryPos;	///< word position, from query (WARNING! reused for index into TF array in extended mode)
-	DWORD			m_iWordID;		///< word ID, from dictionary
+	SphWordID_t		m_iWordID;		///< word ID, from dictionary
 
 	int				m_iDocs;		///< document count, from wordlist
 	int				m_iHits;		///< hit count, from wordlist
@@ -1323,7 +1352,7 @@ public:
 	CSphReader_VLN	m_rdDoclist;	///< my doclist reader
 	CSphReader_VLN	m_rdHitlist;	///< my hitlist reader
 
-	DWORD			m_iMinID;		///< min ID to fixup
+	SphDocID_t		m_iMinID;		///< min ID to fixup
 	int				m_iInlineAttrs;	///< inline attributes count
 	DWORD *			m_pInlineFixup;	///< inline attributes fixup (POINTER TO EXTERNAL DATA, NOT MANAGED BY THIS CLASS!)
 
@@ -1368,10 +1397,10 @@ public:
 
 	void GetDoclistEntry ()
 	{
-		DWORD iDeltaDoc = m_rdDoclist.UnzipInt ();
+		SphDocID_t iDeltaDoc = m_rdDoclist.UnzipDocid ();
 		if ( iDeltaDoc )
 		{
-			if ( !m_tDoc.m_iDocID )
+			if ( m_tDoc.m_iDocID==0 )
 				m_tDoc.m_iDocID = m_iMinID;
 			m_tDoc.m_iDocID += iDeltaDoc;
 
@@ -1437,8 +1466,8 @@ public:
 
 struct CSphWordlistCheckpoint
 {
-	DWORD	m_iWordID;
-	DWORD	m_iWordlistOffset;
+	SphWordID_t			m_iWordID;
+	DWORD				m_iWordlistOffset;
 };
 
 struct CSphIndex_VLN;
@@ -1450,8 +1479,8 @@ struct CSphMergeSource
 	CSphWriter *		m_pIndexWriter;
 	CSphWriter *		m_pDataWriter;
 	int					m_iAttrNum;
-	SphOffset_t			m_iLastDocID;
-	DWORD				m_iMinDocID;
+	SphDocID_t			m_iLastDocID;
+	SphDocID_t			m_iMinDocID;
 	CSphMatch			m_tMatch;
 	bool				m_bForceDocinfo;
 	CSphIndex_VLN *		m_pIndex;
@@ -1480,8 +1509,8 @@ struct CSphMergeData
 	SphOffset_t			m_iDoclistPos;
 	SphOffset_t			m_iLastHitlistPos;
 	SphOffset_t			m_iWordlistOffset;	
-	DWORD				m_iLastWordID;
-	SphOffset_t			m_iLastDocID;
+	SphWordID_t			m_iLastWordID;
+	SphDocID_t			m_iLastDocID;
 	CSphPurgeData *		m_pPurgeData;
 	CSphSourceStats		m_tStats;
 
@@ -1499,7 +1528,7 @@ struct CSphMergeData
 /// doclist record
 struct CSphDoclistRecord
 {
-	SphOffset_t		m_iDocID;
+	SphDocID_t		m_iDocID;
 	SphOffset_t *	m_pAttrs;
 	SphOffset_t		m_iPos;
 	DWORD			m_uFields;
@@ -1528,7 +1557,7 @@ struct CSphDoclistRecord
 
 struct CSphWordIndexRecord
 {
-	DWORD			m_iWordID;
+	SphWordID_t		m_iWordID;
 	SphOffset_t		m_iDoclistPos;
 	int				m_iDocNum;
 	int				m_iHitNum;
@@ -1561,7 +1590,7 @@ struct CSphWordIndexRecord
 
 struct CSphWordDataRecord
 {
-	DWORD								m_iWordID;
+	SphWordID_t							m_iWordID;
 	int									m_iAttrNum;
 	CSphVector< DWORD >					m_dWordPos;
 	CSphVector< CSphDoclistRecord >		m_dDoclist;
@@ -1618,7 +1647,7 @@ struct CSphIndex_VLN : CSphIndex
 
 	virtual int					Build ( CSphDict * pDict, const CSphVector < CSphSource * > & dSources, int iMemoryLimit, ESphDocinfo eDocinfo );
 
-	virtual const CSphSchema *	Preload ();
+	virtual const CSphSchema *	Preload ( bool bMlock, CSphString * sWarning );
 	virtual CSphQueryResult *	Query ( CSphDict * pDict, CSphQuery * pQuery);
 	virtual bool				QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchSorter * pTop );
 
@@ -1633,7 +1662,7 @@ private:
 	static const int			WRITE_BUFFER_SIZE		= 262144;	///< my write buffer size
 
 	static const DWORD			INDEX_MAGIC_HEADER		= 0x58485053;	///< my magic 'SPHX' header
-	static const DWORD			INDEX_FORMAT_VERSION	= 1;			///< my format version
+	static const DWORD			INDEX_FORMAT_VERSION	= 2;			///< my format version
 
 	CSphString					m_sFilename;
 	SphOffset_t					m_iFilePos;
@@ -1696,7 +1725,7 @@ private:
 	bool						MatchBoolean ( const CSphQuery * pQuery, CSphDict * pDict, ISphMatchSorter * pTop, CSphQueryResult * pResult, const CSphAutofile & tDoclist );
 	bool						MatchExtended ( const CSphQuery * pQuery, CSphDict * pDict, ISphMatchSorter * pTop, CSphQueryResult * pResult, const CSphAutofile & tDoclist );
 
-	const DWORD *				FindDocinfo ( DWORD uDocID );
+	const DWORD *				FindDocinfo ( SphDocID_t uDocID );
 	void						LookupDocinfo ( CSphDocInfo & tMatch );
 
 public:
@@ -1847,11 +1876,11 @@ char * strlwr ( char * s )
 #endif
 
 
-char * sphStrMacro ( const char * sTemplate, const char * sMacro, DWORD uValue )
+char * sphStrMacro ( const char * sTemplate, const char * sMacro, SphDocID_t uValue )
 {
 	// expand macro
-	char sExp [ 16 ];
-	snprintf ( sExp, sizeof(sExp), "%u", uValue );
+	char sExp [ 32 ];
+	snprintf ( sExp, sizeof(sExp), DOCID_FMT, uValue );
 
 	// calc lengths
 	int iExp = strlen ( sExp );
@@ -1895,15 +1924,25 @@ DWORD sphToDword ( const char * s )
 	return strtoul ( s, NULL, 10 );
 }
 
-#if USE_WINDOWS || !HAVE_F_SETLKW
-bool sphLockEx ( int, bool )
+
+uint64_t sphToQword ( const char * s )
 {
-	return true;
+	if ( !s ) return 0;
+	return strtoull ( s, NULL, 10 );
 }
 
-void sphLockUn ( int )
-{
-}
+
+#if USE_64BIT
+#define sphToDocid sphToQword
+#else
+#define sphToDocid sphToDword
+#endif
+
+
+#if USE_WINDOWS || !HAVE_F_SETLKW
+
+bool sphLockEx ( int, bool )	{ return true; }
+void sphLockUn ( int )			{}
 
 #else
 
@@ -2902,7 +2941,7 @@ CSphQuery::CSphQuery ()
 	, m_pTokenizer	( NULL )
 	, m_iMaxMatches	( 1000 )
 	, m_iMinID		( 0 )
-	, m_iMaxID		( UINT_MAX )
+	, m_iMaxID		( DOCID_MAX )
 	, m_sGroupSortBy( "@group desc" )
 	, m_iAttrs		( -1 )
 	, m_iGroupBy	( -1 )
@@ -3122,7 +3161,7 @@ void CSphWriter::ZipOffset ( SphOffset_t uValue )
 {
 	int iBytes = 1;
 
-	SphOffset_t u = ( uValue>>7 );
+	uint64_t u = ((uint64_t)uValue)>>7;
 	while ( u )
 	{
 		u >>= 7;
@@ -3149,7 +3188,7 @@ void CSphWriter::ZipOffsets ( CSphVector<SphOffset_t> * pData )
 
 		int iBytes = 1;
 
-		SphOffset_t u = ( uValue>>7 );
+		uint64_t u = ((uint64_t)uValue)>>7;
 		while ( u )
 		{
 			u >>= 7;
@@ -3340,56 +3379,42 @@ void CSphReader_VLN::GetBytes ( void *data, int size )
 		*b++ = (BYTE) GetByte ();
 }
 
+/////////////////////////////////////////////////////////////////////////////
 
-DWORD sphUnzipInt ( const BYTE * & pBuf )
-{
-	register DWORD b, v = 0;
-	do
-	{
-		b = *pBuf++;
-		v = ( v<<7 ) + ( b&0x7f );
-	} while ( b&0x80 );
+#if PARANOID
+
+#define SPH_UNZIP_IMPL(_type,_getexpr) \
+	register DWORD b = 0; \
+	register _type v = 0; \
+	int it = 0; \
+	do { b = _getexpr; v = ( v<<7 ) + ( b&0x7f ); it++; } while ( b&0x80 ); \
+	assert ( (it-1)*7<=sizeof(_type)*8 ); \
 	return v;
-}
 
+#else
 
-DWORD CSphReader_VLN::UnzipInt ()
-{
-	register DWORD b, v = 0;
-	do
-	{
-		b = GetByte ();
-		v = ( v<<7 ) + ( b&0x7f );
-	} while ( b&0x80 );
+#define SPH_UNZIP_IMPL(_type,_getexpr) \
+	register DWORD b = 0; \
+	register _type v = 0; \
+	do { b = _getexpr; v = ( v<<7 ) + ( b&0x7f ); } while ( b&0x80 ); \
 	return v;
-}
+
+#endif // PARANOID
+
+DWORD sphUnzipInt ( const BYTE * & pBuf )			{ SPH_UNZIP_IMPL ( DWORD, *pBuf++ ); }
+SphOffset_t sphUnzipOffset ( const BYTE * & pBuf )	{ SPH_UNZIP_IMPL ( SphOffset_t, *pBuf++ ); }
+
+DWORD CSphReader_VLN::UnzipInt ()			{ SPH_UNZIP_IMPL ( DWORD, GetByte() ); }
+SphOffset_t CSphReader_VLN::UnzipOffset ()	{ SPH_UNZIP_IMPL ( SphOffset_t, GetByte() ); }
 
 
-SphOffset_t sphUnzipOffset ( const BYTE * & pBuf )
-{
-	register DWORD b = 0;
-	register SphOffset_t v = 0;
-	do
-	{
-		b = *pBuf++;
-		v = ( v<<7 ) + ( b&0x7f );
-	} while ( b&0x80 );
-	return v;
-}
+#if USE_64BIT
+#define sphUnzipWordid sphUnzipOffset
+#else
+#define sphUnzipWordid sphUnzipInt
+#endif
 
-
-SphOffset_t CSphReader_VLN::UnzipOffset ()
-{
-	register DWORD b;
-	register SphOffset_t v = 0;
-
-	do
-	{
-		b = GetByte ();
-		v = ( v<<7 ) + ( SphOffset_t(b&0x7f) );
-	} while ( b&0x80 );
-	return v;
-}
+/////////////////////////////////////////////////////////////////////////////
 
 const CSphReader_VLN & CSphReader_VLN::operator = ( const CSphReader_VLN & rhs )
 {
@@ -3616,15 +3641,22 @@ int CSphBin::ReadBytes ( void * pDest, int iBytes )
 }
 
 
-DWORD CSphBin::ReadVLB ()
+#if USE_64BIT
+#define READVLB_FAILED U64C(0xffffffffffffffff)
+#else
+#define READVLB_FAILED 0xffffffffUL
+#endif
+
+
+SphWordID_t CSphBin::ReadVLB ()
 {
-	DWORD v = 0, o = 0;
-	int t;
+	SphWordID_t v = 0;
+	int o = 0, t;
 	do
 	{
 		if ( ( t = ReadByte() )<0 )
-			return 0xffffffff; // FIXME! replace with some other errcode
-		v += ( (t & 0x7f ) << o );
+			return READVLB_FAILED; // FIXME! replace with some other errcode
+		v += ( (SphWordID_t(t & 0x7f)) << o );
 		o += 7;
 	} while ( t & 0x80 );
 	return v;
@@ -3633,8 +3665,6 @@ DWORD CSphBin::ReadVLB ()
 
 int CSphBin::ReadHit ( CSphWordHit * e, int iAttrs, DWORD * pAttrs )
 {
-	DWORD r;
-
 	// expected EOB
 	if ( m_iDone )
 	{
@@ -3646,8 +3676,8 @@ int CSphBin::ReadHit ( CSphWordHit * e, int iAttrs, DWORD * pAttrs )
 	for ( ;; )
 	{
 		// unexpected EOB
-		r = ReadVLB();
-		if ( r==0xffffffffUL )
+		SphWordID_t r = ReadVLB ();
+		if ( r==READVLB_FAILED )
 			return 0;
 
 		if ( r )
@@ -3669,14 +3699,15 @@ int CSphBin::ReadHit ( CSphWordHit * e, int iAttrs, DWORD * pAttrs )
 
 					for ( int i=0; i<iAttrs; i++, pAttrs++ )
 					{
-						*pAttrs = ReadVLB ();
-						if ( *pAttrs==0xffffffffUL )
+						SphWordID_t uTmp = ReadVLB (); // FIXME? check range?
+						*pAttrs = (DWORD)uTmp;
+						if ( uTmp==READVLB_FAILED )
 							return 0; // read unexpected EOB
 					}
 					break;
 
 				case BIN_POS: 
-					tHit.m_iWordPos += r;
+					tHit.m_iWordPos += (DWORD)r; // FIXME? check range?
 					*e = tHit;
 					return 1;
 
@@ -3772,16 +3803,16 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate_t & tUpd )
 
 	// do update
 	int iUpdated = 0;
-	int iStride = 1+dAttrIndex.GetLength();
+	int iStride = DOCINFO_IDSIZE+dAttrIndex.GetLength();
 	const DWORD * pUpdate = tUpd.m_pUpdates;
 
 	for ( int iUpd=0; iUpd<tUpd.m_iUpdates; iUpd++, pUpdate+=iStride )
 	{
-		DWORD * pEntry = const_cast < DWORD * > ( FindDocinfo ( pUpdate[0] ) );
+		DWORD * pEntry = const_cast < DWORD * > ( FindDocinfo ( DOCINFO2ID(pUpdate ) ) );
 		if ( !pEntry )
 			continue;
 
-		assert ( pEntry[0]==pUpdate[0] );
+		assert ( DOCINFO2ID(pEntry)==DOCINFO2ID(pUpdate) );
 		ARRAY_FOREACH ( i, dAttrIndex )
 			pEntry [ dAttrIndex[i] ] = pUpdate[1+i];
 
@@ -3806,7 +3837,7 @@ bool CSphIndex_VLN::SaveAttributes ()
 	if ( fdTmpnew.GetFD()<0 )
 		return false;
 
-	size_t uStride = 1+m_tSchema.m_dAttrs.GetLength();
+	size_t uStride = DOCINFO_IDSIZE+m_tSchema.m_dAttrs.GetLength();
 	size_t uSize = uStride*size_t(m_uDocinfo)*sizeof(DWORD);
 	size_t uWrote = ::write ( fdTmpnew.GetFD(), m_pDocinfo.GetWritePtr(), uSize );
 
@@ -3884,13 +3915,13 @@ void sphSortDocinfos ( DWORD * pBuf, int iCount, int iStride )
 		k--;
 		i = a = st0[k];
 		j = b = st1[k];
-		DWORD iMedian = pBuf [ ((a+b)/2) * iStride ];
+		SphDocID_t iMedian = DOCINFO2ID ( pBuf + ((a+b)/2)*iStride );
 		while ( a<b )
 		{
 			while ( i<=j )
 			{
-				while ( pBuf[i*iStride] < iMedian ) i++;
-				while ( iMedian < pBuf[j*iStride] ) j--;
+				while ( DOCINFO2ID ( pBuf + i*iStride ) < iMedian ) i++;
+				while ( iMedian < DOCINFO2ID ( pBuf + j*iStride ) ) j--;
 				if ( i<=j )
 				{
 					memcpy ( pTmp, pBuf+i*iStride, iStride*sizeof(DWORD) );
@@ -3926,8 +3957,8 @@ const char * CSphIndex_VLN::GetIndexFileName ( const char * sExt )
 void CSphIndex_VLN::cidxHit ( CSphWriter & fdWordlist, CSphWriter & fdData, CSphWordHit * hit, DWORD * pAttrs )
 {
 	assert (
-		( hit->m_iWordID && hit->m_iWordPos && hit->m_iDocID ) || // it's either ok hit
-		( !hit->m_iWordID && !hit->m_iWordPos ) ); // or "flush-hit"
+		( hit->m_iWordID!=0 && hit->m_iWordPos!=0 && hit->m_iDocID!=0 ) || // it's either ok hit
+		( hit->m_iWordID==0 && hit->m_iWordPos==0 ) ); // or "flush-hit"
 
 	/////////////
 	// next word
@@ -4011,7 +4042,7 @@ void CSphIndex_VLN::cidxHit ( CSphWriter & fdWordlist, CSphWriter & fdData, CSph
 		}
 
 		assert ( hit->m_iWordID > m_tLastHit.m_iWordID );
-		fdWordlist.ZipInt ( hit->m_iWordID - m_tLastHit.m_iWordID );
+		fdWordlist.ZipOffset ( hit->m_iWordID - m_tLastHit.m_iWordID ); // FIXME! slow with 32bit wordids
 		m_tLastHit.m_iWordID = hit->m_iWordID;
 	}
 
@@ -4107,6 +4138,9 @@ bool CSphIndex_VLN::cidxDone ( CSphWriter & fdWordlist, CSphWriter & fdData )
 	fdInfo.PutDword ( INDEX_MAGIC_HEADER );
 	fdInfo.PutDword ( INDEX_FORMAT_VERSION );
 
+	// bits
+	fdInfo.PutDword ( USE_64BIT );
+
 	// docinfo
 	fdInfo.PutDword ( m_eDocinfo );
 
@@ -4119,7 +4153,7 @@ bool CSphIndex_VLN::cidxDone ( CSphWriter & fdWordlist, CSphWriter & fdData )
 		WriteSchemaColumn ( fdInfo, m_tSchema.m_dAttrs[i] );
 
 	// min doc
-	fdInfo.PutDword ( m_tMin.m_iDocID );
+	fdInfo.PutOffset ( m_tMin.m_iDocID ); // was dword in v.1
 	if ( m_eDocinfo==SPH_DOCINFO_INLINE )
 		fdInfo.PutBytes ( m_tMin.m_pAttrs, m_tMin.m_iAttrs*sizeof(DWORD) );
 
@@ -4162,6 +4196,22 @@ inline int encodeVLB(BYTE *buf, DWORD v)
 }
 
 
+inline int encodeVLB8(BYTE *buf, SphOffset_t v)
+{
+	register BYTE b;
+	register int n = 0;
+
+	do {
+		b = (BYTE)(v & 0x7f);
+		v >>= 7;
+		if (v) b |= 0x80;
+		*buf++ = b;
+		n++;
+	} while (v);
+	return n;
+}
+
+
 int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWORD * pDocinfo, int iDocinfos, int iStride )
 {
 	PROFILE ( write_hits );
@@ -4176,14 +4226,14 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWOR
 	static const int HBITS = 11;
 	static const int HSIZE = (1<<HBITS);
 
-	DWORD iStartID = 0;
+	SphDocID_t iStartID = 0;
 	int dHash [ HSIZE+1 ];
 	int iShift = 0;
 
 	if ( pDocinfo )
 	{
-		iStartID = *pDocinfo;
-		int iBits = iLog2 ( pDocinfo [ (iDocinfos-1)*iStride ] - iStartID );
+		iStartID = DOCINFO2ID ( pDocinfo );
+		int iBits = iLog2 ( DOCINFO2ID ( pDocinfo + (iDocinfos-1)*iStride ) - iStartID  );
 		iShift = ( iBits<HBITS ) ? 0 : ( iBits-HBITS );
 
 		#ifndef NDEBUG
@@ -4195,7 +4245,7 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWOR
 		int iHashed = 0;
 		for ( int i=0; i<iDocinfos; i++ )
 		{
-			int iHash = ( pDocinfo [ i*iStride ] - iStartID ) >> iShift;
+			int iHash = (int)( ( DOCINFO2ID(pDocinfo+i*iStride)-iStartID )>>iShift );
 			assert ( iHash>=0 && iHash<HSIZE );
 
 			if ( iHash>iHashed )
@@ -4214,12 +4264,14 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWOR
 
 	BYTE *pBuf, *maxP;
 	int n = 0, w;
-	DWORD d1, d2, d3, l1=0, l2=0, l3=0;
+	SphWordID_t d1, l1=0;
+	SphDocID_t d2, l2=0;
+	DWORD d3, l3=0;
 
 	pBuf = m_pWriteBuffer;
 	maxP = m_pWriteBuffer + WRITE_BUFFER_SIZE - 128;
 
-	DWORD iAttrID = 0; // current doc id
+	SphDocID_t iAttrID = 0; // current doc id
 	DWORD * pAttrs = NULL; // current doc attrs
 
 	while ( iHits-- )
@@ -4227,19 +4279,19 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWOR
 		// find attributes by id
 		if ( pDocinfo && iAttrID!=pHit->m_iDocID )
 		{
-			int iHash = ( pHit->m_iDocID - iStartID ) >> iShift;
+			int iHash = (int)( ( pHit->m_iDocID-iStartID )>>iShift );
 			assert ( iHash>=0 && iHash<HSIZE );
 
 			int iStart = dHash[iHash];
 			int iEnd = dHash[iHash+1];
 
-			if ( pHit->m_iDocID==pDocinfo [ iStart*iStride ] )
+			if ( pHit->m_iDocID==DOCINFO2ID ( pDocinfo + iStart*iStride ) )
 			{
-				pAttrs = pDocinfo + iStart*iStride + 1;
+				pAttrs = DOCINFO2ATTRS ( pDocinfo + iStart*iStride );
 
-			} else if ( pHit->m_iDocID==pDocinfo [ iEnd*iStride ])
+			} else if ( pHit->m_iDocID==DOCINFO2ID ( pDocinfo + iEnd*iStride ) )
 			{
-				pAttrs = pDocinfo + iEnd*iStride + 1;
+				pAttrs = DOCINFO2ATTRS ( pDocinfo + iEnd*iStride );
 
 			} else
 			{
@@ -4248,19 +4300,19 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWOR
 				{
 					// check if nothing found
 					if (
-						pHit->m_iDocID < pDocinfo [ iStart*iStride ] ||
-						pHit->m_iDocID > pDocinfo [ iEnd*iStride ] )
+						pHit->m_iDocID < DOCINFO2ID ( pDocinfo + iStart*iStride ) ||
+						pHit->m_iDocID > DOCINFO2ID ( pDocinfo + iEnd*iStride ) )
 							break;
-					assert ( pHit->m_iDocID > pDocinfo [ iStart*iStride ] );
-					assert ( pHit->m_iDocID < pDocinfo [ iEnd*iStride ] );
+					assert ( pHit->m_iDocID > DOCINFO2ID ( pDocinfo + iStart*iStride ) );
+					assert ( pHit->m_iDocID < DOCINFO2ID ( pDocinfo + iEnd*iStride ) );
 
 					int iMid = iStart + (iEnd-iStart)/2;
-					if ( pHit->m_iDocID==pDocinfo [ iMid*iStride ] )
+					if ( pHit->m_iDocID==DOCINFO2ID ( pDocinfo + iMid*iStride ) )
 					{
-						pAttrs = pDocinfo + iMid*iStride + 1;
+						pAttrs = DOCINFO2ATTRS ( pDocinfo + iMid*iStride );
 						break;
 					}
-					if ( pHit->m_iDocID<pDocinfo [ iMid*iStride ] )
+					if ( pHit->m_iDocID<DOCINFO2ID ( pDocinfo + iMid*iStride ) )
 						iEnd = iMid;
 					else
 						iStart = iMid;
@@ -4268,7 +4320,7 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWOR
 			}
 
 			assert ( pAttrs );
-			assert ( pAttrs[-1]==pHit->m_iDocID );
+			assert ( DOCINFO2ID(pAttrs-DOCINFO_IDSIZE )==pHit->m_iDocID );
 			iAttrID = pHit->m_iDocID;
 		}
 
@@ -4278,7 +4330,7 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWOR
 		d3 = pHit->m_iWordPos - l3;
 
 		// ignore duplicate hits
-		if ( 0==(d1|d2|d3) )
+		if ( d1==0 && d2==0 && d3==0 ) // OPTIMIZE? check if ( 0==(d1|d2|d3) ) is faster
 		{
 			pHit++;
 			continue;
@@ -4294,8 +4346,13 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWOR
 		if ( d2 ) pBuf += encodeVLB ( pBuf, 0 );
 
 		// encode deltas
+#if USE_64BIT
+		if ( d1 ) pBuf += encodeVLB8 ( pBuf, d1 ); // encode word delta
+		if ( d2 ) pBuf += encodeVLB8 ( pBuf, d2 ); // encode doc id (whole or delta)
+#else
 		if ( d1 ) pBuf += encodeVLB ( pBuf, d1 ); // encode word delta
 		if ( d2 ) pBuf += encodeVLB ( pBuf, d2 ); // encode doc id (whole or delta)
+#endif
 
 		// encode attrs
 		if ( d2 && pAttrs )
@@ -4440,7 +4497,7 @@ struct CmpQueuedDocinfo_fn
 
 	static inline bool IsLess ( const int a, const int b )
 	{
-		return m_pStorage [ a*m_iStride ] < m_pStorage [ b*m_iStride ];
+		return DOCINFO2ID ( m_pStorage + a*m_iStride ) < DOCINFO2ID ( m_pStorage + b*m_iStride );
 	};
 };
 DWORD *		CmpQueuedDocinfo_fn::m_pStorage		= NULL;
@@ -4476,7 +4533,7 @@ int CSphIndex_VLN::AdjustMemoryLimit ( int iMemoryLimit )
 /// in-memory ordinals accumulation and sorting
 struct CSphOrdinal
 {
-	DWORD		m_uDocID;	///< doc id
+	SphDocID_t	m_uDocID;	///< doc id
 	DWORD		m_uValue;	///< ordinal value
 	CSphString	m_sValue;	///< string value
 };
@@ -4548,7 +4605,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	// alloc 1/16 of memory (but not less than 64K entries) for docinfos
 	iMemoryLimit = AdjustMemoryLimit ( iMemoryLimit );
 
-	const int iDocinfoStride = 1 + m_tSchema.m_dAttrs.GetLength();
+	const int iDocinfoStride = DOCINFO_IDSIZE + m_tSchema.m_dAttrs.GetLength();
 	int iDocinfoMax = Max ( 65536, iMemoryLimit/16/iDocinfoStride/sizeof(DWORD) );
 	if ( m_eDocinfo==SPH_DOCINFO_NONE )
 		iDocinfoMax = 1;
@@ -4605,7 +4662,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	m_tMin.Reset ( m_tSchema.m_dAttrs.GetLength() );
 	ARRAY_FOREACH ( i, m_tSchema.m_dAttrs )
 		m_tMin.m_pAttrs[i] = UINT_MAX;
-	m_tMin.m_iDocID = UINT_MAX;
+	m_tMin.m_iDocID = DOCID_MAX;
 
 	// build raw log
 	PROFILE_BEGIN ( collect_hits );
@@ -4633,11 +4690,8 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 		}
 
 		// fetch documents
-		DWORD iDocID;
-		while ( ( iDocID = pSource->Next() )!=0 )
+		while ( pSource->Next() )
 		{
-			assert ( iDocID==pSource->m_tDocInfo.m_iDocID );
-
 			// show progress bar
 			if ( m_pProgress
 				&& ( ( pSource->GetStats().m_iTotalDocuments % 1000 )==0 ) )
@@ -4675,11 +4729,11 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 
 			// store docinfo
 			if ( m_eDocinfo!=SPH_DOCINFO_NONE )
-				if ( pDocinfo==dDocinfos || *pDocinfo!=pSource->m_tDocInfo.m_iDocID )
+				if ( pDocinfo==dDocinfos || DOCINFO2ID(pDocinfo)!=pSource->m_tDocInfo.m_iDocID )
 			{
 				// store next entry
-				*pDocinfo = pSource->m_tDocInfo.m_iDocID;
-				memcpy ( pDocinfo+1, pSource->m_tDocInfo.m_pAttrs, sizeof(DWORD)*m_tSchema.m_dAttrs.GetLength() );
+				DOCINFO2ID(pDocinfo) = pSource->m_tDocInfo.m_iDocID;
+				memcpy ( DOCINFO2ATTRS(pDocinfo), pSource->m_tDocInfo.m_pAttrs, sizeof(DWORD)*m_tSchema.m_dAttrs.GetLength() );
 				pDocinfo += iDocinfoStride;
 
 				// if not inlining, flush buffer if it's full
@@ -4751,8 +4805,8 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 					// we'll need to know it's info next flush
 					if ( iDocHits )
 					{
-						*pDocinfo = pSource->m_tDocInfo.m_iDocID;
-						memcpy ( pDocinfo+1, pSource->m_tDocInfo.m_pAttrs, sizeof(DWORD)*m_tSchema.m_dAttrs.GetLength() );
+						DOCINFO2ID(pDocinfo) = pSource->m_tDocInfo.m_iDocID;
+						memcpy ( DOCINFO2ATTRS(pDocinfo), pSource->m_tDocInfo.m_pAttrs, sizeof(DWORD)*m_tSchema.m_dAttrs.GetLength() );
 						pDocinfo += iDocinfoStride;
 					}
 				} else
@@ -5028,7 +5082,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 				m_sLastError.SetSprintf ( "sort_hits: warmup failed (io error?)" );
 				return 0;
 			}
-			bActive[i] = tHit.m_iWordID;
+			bActive[i] = ( tHit.m_iWordID!=0 );
 			if ( bActive[i] )
 				tQueue.Push ( tHit, i );
 		}
@@ -5056,7 +5110,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 			if ( bActive[iBin] )
 			{
 				dBins[iBin]->ReadHit ( &tHit, iAttrs, dInlineAttrs+iBin*iAttrs );
-				bActive[iBin] = tHit.m_iWordID;
+				bActive[iBin] = ( tHit.m_iWordID!=0 );
 				if ( bActive[iBin] )
 					tQueue.Push ( tHit, iBin );
 			}
@@ -5126,8 +5180,8 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 	CSphIndex_VLN * pSrcIndex = dynamic_cast< CSphIndex_VLN * >( pSource );
 	assert( pSrcIndex );
 
-	const CSphSchema * pDstSchema = Preload();
-	const CSphSchema * pSrcSchema = pSrcIndex->Preload();
+	const CSphSchema * pDstSchema = Preload ( false, NULL );
+	const CSphSchema * pSrcSchema = pSrcIndex->Preload ( false, NULL );
 
 	CSphString sError;
 	if ( pDstSchema->CompareTo( *pSrcSchema, sError ) != SPH_SCHEMAS_EQUAL )
@@ -5142,7 +5196,7 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 		return false;
 	}
 
-	int iStride = 1 + m_tSchema.m_dAttrs.GetLength();
+	int iStride = DOCINFO_IDSIZE + m_tSchema.m_dAttrs.GetLength();
 
 	/////////////////
 	/// merging .spa
@@ -5260,10 +5314,8 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 		tSrcSource.m_bForceDocinfo = true;
 	}
 
-	CSphMergeData		tMerge;
-
+	CSphMergeData tMerge;
 	tPurgeData.m_iAttrIndex = m_tSchema.GetAttrIndex( tPurgeData.m_sKey.cstr() );
-
 	tMerge.m_pPurgeData = &tPurgeData;
 	tMerge.m_iLastDocID = m_tMin.m_iDocID;
 
@@ -5373,7 +5425,7 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 		WriteSchemaColumn ( fdInfo, m_tSchema.m_dAttrs[i] );
 
 	// min doc
-	fdInfo.PutDword ( Min ( m_tMin.m_iDocID, pSrcIndex->m_tMin.m_iDocID ) );
+	fdInfo.PutDocid ( Min ( m_tMin.m_iDocID, pSrcIndex->m_tMin.m_iDocID ) );
 
 	for ( int i = 0; i < m_tMin.m_iAttrs; i++ )
 		m_tMin.m_pAttrs[i] = Min ( m_tMin.m_pAttrs[i], pSrcIndex->m_tMin.m_pAttrs[i] );
@@ -5418,15 +5470,15 @@ void CSphIndex_VLN::MergeWordData ( CSphWordRecord & tDstWord, CSphWordRecord & 
 	int iTotalHits = 0;
 	int iTotalDocs = 0;
 
-	int iDstDocID = ( DWORD ) pDstData->m_dDoclist[0].m_iDocID;
-	int iSrcDocID = ( DWORD ) pSrcData->m_dDoclist[0].m_iDocID;
+	SphDocID_t iDstDocID = pDstData->m_dDoclist[0].m_iDocID;
+	SphDocID_t iSrcDocID = pSrcData->m_dDoclist[0].m_iDocID;
 
 	int iDstCount = 0;
 	int iSrcCount = 0;
 
 	while ( iDstDocID || iSrcDocID )
 	{
-		if ( ( iDstDocID && iDstDocID < iSrcDocID ) || !iSrcDocID )
+		if ( ( iDstDocID && iDstDocID<iSrcDocID ) || iSrcDocID==0 )
 		{
 			DWORD iPos = 0;
 			do 
@@ -5444,11 +5496,11 @@ void CSphIndex_VLN::MergeWordData ( CSphWordRecord & tDstWord, CSphWordRecord & 
 			iDstCount++;
 
 			if ( iDstCount < iDstDocNum )
-				iDstDocID = ( DWORD ) pDstData->m_dDoclist[iDstCount].m_iDocID;
+				iDstDocID = pDstData->m_dDoclist[iDstCount].m_iDocID;
 			else
 				iDstDocID = 0;
 		}
-		else if ( ( iSrcDocID && iDstDocID > iSrcDocID ) || !iDstDocID )
+		else if ( ( iSrcDocID && iDstDocID>iSrcDocID ) || iDstDocID==0 )
 		{
 			DWORD iPos = 0;
 			do 
@@ -5466,7 +5518,7 @@ void CSphIndex_VLN::MergeWordData ( CSphWordRecord & tDstWord, CSphWordRecord & 
 			iSrcCount++;
 
 			if ( iSrcCount < iSrcDocNum )
-				iSrcDocID = ( DWORD ) pSrcData->m_dDoclist[iSrcCount].m_iDocID;
+				iSrcDocID = pSrcData->m_dDoclist[iSrcCount].m_iDocID;
 			else
 				iSrcDocID = 0;
 		}
@@ -5515,12 +5567,12 @@ void CSphIndex_VLN::MergeWordData ( CSphWordRecord & tDstWord, CSphWordRecord & 
 			iSrcCount++;
 
 			if ( iDstCount < iDstDocNum )
-				iDstDocID += ( DWORD ) pDstData->m_dDoclist[iDstCount].m_iDocID;
+				iDstDocID += pDstData->m_dDoclist[iDstCount].m_iDocID;
 			else
 				iDstDocID = 0;
 
 			if ( iSrcCount < iSrcDocNum )
-				iSrcDocID += ( DWORD ) pSrcData->m_dDoclist[iSrcCount].m_iDocID;
+				iSrcDocID += pSrcData->m_dDoclist[iSrcCount].m_iDocID;
 			else
 				iSrcDocID = 0;
 		}
@@ -5700,7 +5752,7 @@ protected:
 
 /////////////////////////////////////////////////////////////////////////////
 
-static inline DWORD MatchGetVattr ( const CSphMatch & m, int iAttr )
+static inline SphDocID_t MatchGetVattr ( const CSphMatch & m, int iAttr )
 {
 	if ( iAttr==SPH_VATTR_ID )
 		return m.m_iDocID;
@@ -5732,7 +5784,7 @@ struct MatchGeneric2_fn
 {
 	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
 	{
-		DWORD aa, bb;
+		SphDocID_t aa, bb;
 		SPH_TEST_KEYPART(0);
 		SPH_TEST_LASTKEYPART(1);
 	};
@@ -5743,7 +5795,7 @@ struct MatchGeneric3_fn
 {
 	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
 	{
-		DWORD aa, bb;
+		SphDocID_t aa, bb;
 		SPH_TEST_KEYPART(0);
 		SPH_TEST_KEYPART(1);
 		SPH_TEST_LASTKEYPART(2);
@@ -5755,7 +5807,7 @@ struct MatchGeneric4_fn
 {
 	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
 	{
-		DWORD aa, bb;
+		SphDocID_t aa, bb;
 		SPH_TEST_KEYPART(0);
 		SPH_TEST_KEYPART(1);
 		SPH_TEST_KEYPART(2);
@@ -5768,7 +5820,7 @@ struct MatchGeneric5_fn
 {
 	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
 	{
-		DWORD aa, bb;
+		SphDocID_t aa, bb;
 		SPH_TEST_KEYPART(0);
 		SPH_TEST_KEYPART(1);
 		SPH_TEST_KEYPART(2);
@@ -6122,7 +6174,7 @@ static inline bool sphMatchEarlyReject ( const CSphMatch & tMatch, const CSphQue
 }
 
 
-const DWORD * CSphIndex_VLN::FindDocinfo ( DWORD uDocID )
+const DWORD * CSphIndex_VLN::FindDocinfo ( SphDocID_t uDocID )
 {
 	if ( m_uDocinfo<=0 )
 		return NULL;
@@ -6131,21 +6183,21 @@ const DWORD * CSphIndex_VLN::FindDocinfo ( DWORD uDocID )
 	assert ( !m_pDocinfo.IsEmpty() );
 	assert ( m_tSchema.m_dAttrs.GetLength() );
 
-	DWORD uHash = ( uDocID - m_pDocinfo[0] ) >> m_iDocinfoIdShift;
+	DWORD uHash = (DWORD)( ( uDocID - DOCINFO2ID ( &m_pDocinfo[0] ) ) >> m_iDocinfoIdShift );
 	if ( uHash>(1<<DOCINFO_HASH_BITS) ) // possible in case of broken data, for instance
 		return NULL;
 
 	int iStart = m_pDocinfoHash [ uHash ];
 	int iEnd = m_pDocinfoHash [ uHash+1 ] - 1;
 
-	int iStride = 1 + m_tSchema.m_dAttrs.GetLength();
+	int iStride = DOCINFO_IDSIZE + m_tSchema.m_dAttrs.GetLength();
 	const DWORD * pFound = NULL;
 
-	if ( uDocID==m_pDocinfo [ iStart*iStride ] )
+	if ( uDocID==DOCINFO2ID ( &m_pDocinfo [ iStart*iStride ] ) )
 	{
 		pFound = &m_pDocinfo [ iStart*iStride ];
 
-	} else if ( uDocID==m_pDocinfo [ iEnd*iStride ] )
+	} else if ( uDocID==DOCINFO2ID ( &m_pDocinfo [ iEnd*iStride ] ) )
 	{
 		pFound = &m_pDocinfo [ iEnd*iStride ];
 
@@ -6155,19 +6207,19 @@ const DWORD * CSphIndex_VLN::FindDocinfo ( DWORD uDocID )
 		{
 			// check if nothing found
 			if (
-				uDocID < m_pDocinfo [ iStart*iStride ] ||
-				uDocID > m_pDocinfo [ iEnd*iStride ] )
+				uDocID < DOCINFO2ID ( &m_pDocinfo [ iStart*iStride ] ) ||
+				uDocID > DOCINFO2ID ( &m_pDocinfo [ iEnd*iStride ] ) )
 					break;
-			assert ( uDocID > m_pDocinfo [ iStart*iStride ] );
-			assert ( uDocID < m_pDocinfo [ iEnd*iStride ] );
+			assert ( uDocID > DOCINFO2ID ( &m_pDocinfo [ iStart*iStride ] ) );
+			assert ( uDocID < DOCINFO2ID ( &m_pDocinfo [ iEnd*iStride ] ) );
 
 			int iMid = iStart + (iEnd-iStart)/2;
-			if ( uDocID==m_pDocinfo [ iMid*iStride ] )
+			if ( uDocID==DOCINFO2ID ( &m_pDocinfo [ iMid*iStride ] ) )
 			{
 				pFound = &m_pDocinfo [ iMid*iStride ];
 				break;
 			}
-			if ( uDocID<m_pDocinfo [ iMid*iStride ] )
+			if ( uDocID<DOCINFO2ID ( &m_pDocinfo [ iMid*iStride ] ) )
 				iEnd = iMid;
 			else
 				iStart = iMid;
@@ -6181,13 +6233,13 @@ const DWORD * CSphIndex_VLN::FindDocinfo ( DWORD uDocID )
 
 void CSphIndex_VLN::LookupDocinfo ( CSphDocInfo & tMatch )
 {
-	const DWORD * pFound = FindDocinfo ( tMatch.m_iDocID );
+	DWORD * pFound = const_cast < DWORD * > ( FindDocinfo ( tMatch.m_iDocID ) );
 	if ( pFound )
 	{
 		assert ( tMatch.m_pAttrs );
 		assert ( tMatch.m_iAttrs==m_tSchema.m_dAttrs.GetLength() );
-		assert ( pFound[0]==tMatch.m_iDocID );
-		memcpy ( tMatch.m_pAttrs, pFound+1, tMatch.m_iAttrs*sizeof(DWORD) );
+		assert ( DOCINFO2ID(pFound)==tMatch.m_iDocID );
+		memcpy ( tMatch.m_pAttrs, DOCINFO2ATTRS(pFound), tMatch.m_iAttrs*sizeof(DWORD) );
 	}
 }
 
@@ -6210,7 +6262,7 @@ void CSphIndex_VLN::MatchAll ( const CSphQuery * pQuery, ISphMatchSorter * pTop,
 		m_dQueryWords[i].GetDoclistEntry ();
 
 	i = 0;
-	DWORD docID = 0;
+	SphDocID_t docID = 0;
 	for ( ;; )
 	{
 		/////////////////////
@@ -6220,7 +6272,7 @@ void CSphIndex_VLN::MatchAll ( const CSphQuery * pQuery, ISphMatchSorter * pTop,
 		// scan lists until *all* the ids match
 		while ( m_dQueryWords[i].m_tDoc.m_iDocID && docID>m_dQueryWords[i].m_tDoc.m_iDocID )
 			m_dQueryWords[i].GetDoclistEntry ();
-		if ( !m_dQueryWords[i].m_tDoc.m_iDocID )
+		if ( m_dQueryWords[i].m_tDoc.m_iDocID==0 )
 			break;
 
 		if ( docID<m_dQueryWords[i].m_tDoc.m_iDocID )
@@ -6376,7 +6428,7 @@ void CSphIndex_VLN::MatchAny ( const CSphQuery * pQuery, ISphMatchSorter * pTop,
 	//////////////////
 
 	int iActive = m_dQueryWords.GetLength(); // total number of words still active
-	DWORD iLastMatchID = 0;
+	SphDocID_t iLastMatchID = 0;
 
 	bool bEarlyLookup = ( m_eDocinfo==SPH_DOCINFO_EXTERN ) && pQuery->m_dFilters.GetLength();
 	bool bLateLookup = ( m_eDocinfo==SPH_DOCINFO_EXTERN ) && !bEarlyLookup && pTop->UsesAttrs();
@@ -6397,7 +6449,7 @@ void CSphIndex_VLN::MatchAny ( const CSphQuery * pQuery, ISphMatchSorter * pTop,
 	{
 		// update active pointers to document lists, kill empty ones,
 		// and get min current document id
-		DWORD iMinID = UINT_MAX;
+		SphDocID_t iMinID = DOCID_MAX;
 		int iMinIndex = -1;
 
 		for ( i=0; i<iActive; i++ )
@@ -6407,7 +6459,7 @@ void CSphIndex_VLN::MatchAny ( const CSphQuery * pQuery, ISphMatchSorter * pTop,
 				m_dQueryWords[i].GetDoclistEntry ();
 
 			// remove emptied words
-			if ( !m_dQueryWords[i].m_tDoc.m_iDocID )
+			if ( m_dQueryWords[i].m_tDoc.m_iDocID==0 )
 			{
 				m_dQueryWords[i] = m_dQueryWords[iActive-1];
 				i--;
@@ -6428,8 +6480,8 @@ void CSphIndex_VLN::MatchAny ( const CSphQuery * pQuery, ISphMatchSorter * pTop,
 
 		iLastMatchID = iMinID;
 		assert ( iMinIndex>=0 );
-		assert ( iLastMatchID!=0 );
-		assert ( iLastMatchID!=UINT_MAX );
+		assert ( iLastMatchID );
+		assert ( iLastMatchID!=DOCID_MAX );
 
 		// early reject by group id, doc id or timestamp
 		CSphMatch & tMatch = m_dQueryWords[iMinIndex].m_tDoc;
@@ -6541,9 +6593,9 @@ public:
 							~CSphBooleanEvalNode ();
 
 	void					SetFile ( CSphIndex_VLN * pIndex, const CSphAutofile & tFile );
-	CSphMatch *				MatchNode ( DWORD iMinID );		///< get next match at this node, with ID greater than iMinID
-	CSphMatch *				MatchLevel ( DWORD iMinID );	///< get next match at this level, with ID greater than iMinID
-	bool					IsRejected ( DWORD iID );		///< check if this match should be rejected
+	CSphMatch *				MatchNode ( SphDocID_t iMinID );	///< get next match at this node, with ID greater than iMinID
+	CSphMatch *				MatchLevel ( SphDocID_t iMinID );	///< get next match at this level, with ID greater than iMinID
+	bool					IsRejected ( SphDocID_t iID );		///< check if this match should be rejected
 };
 
 
@@ -6609,7 +6661,7 @@ void CSphBooleanEvalNode::SetFile ( CSphIndex_VLN * pIndex, const CSphAutofile &
 }
 
 
-bool CSphBooleanEvalNode::IsRejected ( DWORD iID )
+bool CSphBooleanEvalNode::IsRejected ( SphDocID_t iID )
 {
 	assert ( !m_bEvaluable );
 	assert ( m_pPrev ); // filter node can't start a level
@@ -6638,7 +6690,7 @@ bool CSphBooleanEvalNode::IsRejected ( DWORD iID )
 	while ( iID > m_tDoc.m_iDocID )
 	{
 		GetDoclistEntry ();
-		if ( !m_tDoc.m_iDocID )
+		if ( m_tDoc.m_iDocID==0 )
 		{
 			m_pLast = NULL;
 			return false;
@@ -6648,7 +6700,7 @@ bool CSphBooleanEvalNode::IsRejected ( DWORD iID )
 }
 
 
-CSphMatch * CSphBooleanEvalNode::MatchNode ( DWORD iMinID )
+CSphMatch * CSphBooleanEvalNode::MatchNode ( SphDocID_t iMinID )
 {
 	assert ( m_bEvaluable );
 
@@ -6671,7 +6723,7 @@ CSphMatch * CSphBooleanEvalNode::MatchNode ( DWORD iMinID )
 }
 
 
-CSphMatch * CSphBooleanEvalNode::MatchLevel ( DWORD iMinID )
+CSphMatch * CSphBooleanEvalNode::MatchLevel ( SphDocID_t iMinID )
 {
 	assert ( m_bEvaluable );
 	if ( m_eType==NODE_AND )
@@ -6690,7 +6742,7 @@ CSphMatch * CSphBooleanEvalNode::MatchLevel ( DWORD iMinID )
 				if ( !pCandidate )
 					return NULL;
 
-				DWORD iCandidate = pCandidate->m_iDocID;
+				SphDocID_t iCandidate = pCandidate->m_iDocID;
 				assert ( iCandidate );
 
 				if ( iCandidate>=iMinID )
@@ -6710,7 +6762,7 @@ CSphMatch * CSphBooleanEvalNode::MatchLevel ( DWORD iMinID )
 				if ( pNode->IsRejected ( pCur->m_iDocID ) )
 				{
 					// oh, the doc's rejected. restart scanning
-					iMinID = 1+pCur->m_iDocID;
+					iMinID = 1 + pCur->m_iDocID;
 					pNode = this;
 					pCur = NULL;
 				} else
@@ -6729,7 +6781,7 @@ CSphMatch * CSphBooleanEvalNode::MatchLevel ( DWORD iMinID )
 		// search for min match ID through all the siblings
 
 		CSphMatch * pCur = NULL;
-		DWORD iMinMatch = UINT_MAX; // best match ID found so far
+		SphDocID_t iMinMatch = DOCID_MAX; // best match ID found so far
 
 		for ( CSphBooleanEvalNode * pNode = this; pNode; pNode = pNode->m_pNext )
 		{
@@ -6749,7 +6801,7 @@ CSphMatch * CSphBooleanEvalNode::MatchLevel ( DWORD iMinID )
 				continue;
 
 			// check if this match is any better than the current one
-			DWORD iCandidate = pNode->m_pLast->m_iDocID;
+			SphDocID_t iCandidate = pNode->m_pLast->m_iDocID;
 			assert ( iCandidate>=iMinID );
 
 			if ( iCandidate<=iMinMatch )
@@ -6787,13 +6839,13 @@ bool CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, CSphDict * pDict, I
 	bool bLateLookup = ( m_eDocinfo==SPH_DOCINFO_EXTERN ) && !bEarlyLookup && pTop->UsesAttrs();
 
 	// do matching
-	DWORD iMinID = 1;
+	SphDocID_t iMinID = 1;
 	for ( ;; )
 	{
 		CSphMatch * pMatch = tTree.MatchLevel ( iMinID );
 		if ( !pMatch )
 			break;
-		iMinID = 1+pMatch->m_iDocID;
+		iMinID = 1 + pMatch->m_iDocID;
 
 		// early reject by group id, doc id or timestamp
 		if ( bEarlyLookup )
@@ -6856,7 +6908,7 @@ class CSphExtendedEvalAtom : public CSphExtendedQueryAtom
 {
 public:
 						CSphExtendedEvalAtom ( const CSphExtendedQueryAtom & tAtom, const CSphTermSetup & tSetup );
-	CSphMatch *			GetNextDoc ( DWORD iMinID );
+	CSphMatch *			GetNextDoc ( SphDocID_t iMinID );
 	void				GetNextHit ( DWORD iMinPos );
 	void				GetLastTF ( DWORD * pTF ) const;
 	inline CSphMatch *	GetLastMatch () const { return m_pLast; }
@@ -7056,7 +7108,7 @@ void CSphExtendedEvalAtom::GetNextHit ( DWORD iMinPos )
 }
 
 
-CSphMatch * CSphExtendedEvalAtom::GetNextDoc ( DWORD iMinID )
+CSphMatch * CSphExtendedEvalAtom::GetNextDoc ( SphDocID_t iMinID )
 {
 	if ( !m_pLast )
 		return NULL;
@@ -7093,7 +7145,7 @@ CSphMatch * CSphExtendedEvalAtom::GetNextDoc ( DWORD iMinID )
 			if (!( tTerm.m_uFields & uField ))
 			{
 				i = -1;
-				iMinID = 1+tTerm.m_tDoc.m_iDocID;
+				iMinID = 1 + tTerm.m_tDoc.m_iDocID;
 				continue;
 			}
 
@@ -7238,10 +7290,10 @@ public:
 
 public:
 	void				CollectQwords ( CSphQwordsHash & dHash, int & iCount );	///< collects all unique query words into dHash
-	CSphMatch *			GetNextMatch ( DWORD iMinID, int iTerms, float * pIDF, int iFields, int * pWeights );	///< iTF==0 means that no weighting is required
+	CSphMatch *			GetNextMatch ( SphDocID_t iMinID, int iTerms, float * pIDF, int iFields, int * pWeights );	///< iTF==0 means that no weighting is required
 
 protected:
-	CSphMatch *			GetNextDoc ( DWORD iMinID );
+	CSphMatch *			GetNextDoc ( SphDocID_t iMinID );
 	DWORD				GetNextHitNode ( DWORD iMinPos );
 	void				GetLastTF ( DWORD * pTF ) const;
 	inline CSphMatch *	GetLastDoc () const { return m_pLast; }
@@ -7350,7 +7402,7 @@ DWORD CSphExtendedEvalNode::GetNextHitNode ( DWORD uMinPos )
 }
 
 
-CSphMatch * CSphExtendedEvalNode::GetNextDoc ( DWORD iMinID )
+CSphMatch * CSphExtendedEvalNode::GetNextDoc ( SphDocID_t iMinID )
 {
 	if ( m_bDone )
 		return NULL;
@@ -7475,7 +7527,7 @@ void CSphExtendedEvalNode::UpdateLCS ( CSphLCSState & tState )
 }
 
 
-CSphMatch * CSphExtendedEvalNode::GetNextMatch ( DWORD iMinID, int iTerms, float * pIDF,
+CSphMatch * CSphExtendedEvalNode::GetNextMatch ( SphDocID_t iMinID, int iTerms, float * pIDF,
 	int iFields, int * pWeights )
 {
 	CSphMatch * pMatch = GetNextDoc ( iMinID );
@@ -7555,7 +7607,7 @@ void CSphExtendedEvalNode::GetLastTF ( DWORD * pTF ) const
 		return;
 	}
 
-	DWORD uID = m_pLast->m_iDocID;
+	SphDocID_t uID = m_pLast->m_iDocID;
 	if ( m_bAny )
 	{
 		ARRAY_FOREACH ( i, m_dChildren )
@@ -7679,13 +7731,13 @@ bool CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, CSphDict * pDict, 
 	// do that matching thing
 	//////////////////////////
 
-	DWORD iMinID = 1;
+	SphDocID_t iMinID = 1;
 	for ( ;; )
 	{
 		CSphMatch * pAccept = tAccept.GetNextMatch ( iMinID, iQwords, dIDF, m_iWeights, m_dWeights );
 		if ( !pAccept )
 			break;
-		iMinID = 1+pAccept->m_iDocID;
+		iMinID = 1 + pAccept->m_iDocID;
 
 		CSphMatch * pReject = tReject.GetNextMatch ( pAccept->m_iDocID, 0, NULL, 0, NULL );
 		if ( pReject && pReject->m_iDocID==pAccept->m_iDocID )
@@ -7761,15 +7813,15 @@ bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, const CSphAutofile &
 	// decode wordlist chunk
 	const BYTE * pBuf = &m_pWordlist[iWordlistOffset];
 
-	DWORD iWordID = 0;
+	SphWordID_t iWordID = 0;
 	SphOffset_t iDoclistOffset = 0;
 
 	for ( ;; )
 	{
 		// unpack next word ID
-		DWORD iDeltaWord = sphUnzipInt ( pBuf );
+		SphWordID_t iDeltaWord = sphUnzipWordid ( pBuf ); // FIXME! slow with 32bit wordids
 
-		if ( !iDeltaWord ) // wordlist chunk is over
+		if ( iDeltaWord==0 ) // wordlist chunk is over
 			break;
 		iWordID += iDeltaWord;
 
@@ -7792,7 +7844,7 @@ bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, const CSphAutofile &
 		if ( iWordID==tWord.m_iWordID )
 		{
 			// unpack next word ID and offset delta (ie. hitlist length)
-			sphUnzipInt ( pBuf ); // might be 0 at checkpoint
+			sphUnzipWordid ( pBuf ); // might be 0 at checkpoint
 			SphOffset_t iDoclistLen = sphUnzipOffset ( pBuf );
 
 			tWord.m_rdDoclist.SetFile ( tDoclist );
@@ -7808,7 +7860,7 @@ bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, const CSphAutofile &
 }
 
 
-const CSphSchema * CSphIndex_VLN::Preload ()
+const CSphSchema * CSphIndex_VLN::Preload ( bool bMlock, CSphString * sWarning )
 {
 	// reset
 	if ( m_bPreloaded )
@@ -7823,6 +7875,8 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 
 		m_bPreloaded = false;
 	}
+	m_pDocinfo.SetMlock ( bMlock );
+	m_pWordlist.SetMlock ( bMlock );
 
 	//////////////////
 	// preload schema
@@ -7853,6 +7907,15 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 		return false;
 	}
 
+	// bits
+	DWORD bUse64 = rdInfo.GetDword ();
+	if ( bUse64!=USE_64BIT )
+	{
+		m_sLastError.SetSprintf ( "'%s' is id%d, and this binary is id%d\n",
+			GetIndexFileName ( "sph" ), bUse64 ? 64 : 32, USE_64BIT ? 64 : 32 );
+		return false;
+	}
+
 	// docinfo
 	m_eDocinfo = (ESphDocinfo) rdInfo.GetDword();
 
@@ -7866,7 +7929,7 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 
 	// min doc
 	m_tMin.Reset ( m_tSchema.m_dAttrs.GetLength() );
-	m_tMin.m_iDocID = rdInfo.GetDword();
+	m_tMin.m_iDocID = (SphDocID_t) rdInfo.GetOffset (); // was dword in v.1; losing high bits when !USE_64 is intentional, check is performed on bUse64 above
 	if ( m_eDocinfo==SPH_DOCINFO_INLINE )
 		rdInfo.GetRawBytes ( m_tMin.m_pAttrs, sizeof(DWORD)*m_tSchema.m_dAttrs.GetLength() );
 
@@ -7885,7 +7948,7 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 
 	if ( m_eDocinfo==SPH_DOCINFO_EXTERN )
 	{
-		int iStride = 1+m_tSchema.m_dAttrs.GetLength();
+		int iStride = DOCINFO_IDSIZE + m_tSchema.m_dAttrs.GetLength();
 		int iEntrySize = sizeof(DWORD)*iStride;
 
 		CSphAutofile tDocinfo ( GetIndexFileName("spa"), SPH_O_READ, m_sLastError );
@@ -7914,7 +7977,7 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 			return NULL;
 		}
 
-		if ( !m_pDocinfo.Alloc ( (size_t)(uDocinfoSize/sizeof(DWORD)), m_sLastError ) )
+		if ( !m_pDocinfo.Alloc ( (size_t)(uDocinfoSize/sizeof(DWORD)), m_sLastError, sWarning ) )
 			return NULL;
 
 		if ( ::read ( tDocinfo.GetFD(), m_pDocinfo.GetWritePtr(), (size_t)uDocinfoSize )!=uDocinfoSize )
@@ -7927,7 +7990,8 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 		if ( !m_pDocinfoHash )
 			m_pDocinfoHash = new DWORD [ (1<<DOCINFO_HASH_BITS) + 1 ];
 
-		DWORD uRange = m_pDocinfo [ (m_uDocinfo-1)*iStride ] - m_pDocinfo[0];
+		SphDocID_t uFirst = DOCINFO2ID ( &m_pDocinfo[0] );
+		SphDocID_t uRange = DOCINFO2ID ( &m_pDocinfo[(m_uDocinfo-1)*iStride] ) - uFirst;
 		m_iDocinfoIdShift = 0;
 		while ( uRange >= (1<<DOCINFO_HASH_BITS) )
 		{
@@ -7940,7 +8004,7 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 
 		for ( DWORD i=1; i<m_uDocinfo; i++ )
 		{
-			DWORD uHash = ( m_pDocinfo [ i*iStride ] - m_pDocinfo[0] ) >> m_iDocinfoIdShift;
+			DWORD uHash = (DWORD)( ( DOCINFO2ID ( &m_pDocinfo[i*iStride] ) - uFirst ) >> m_iDocinfoIdShift );
 			if ( uHash==uLastHash )
 				continue;
 
@@ -7975,7 +8039,7 @@ const CSphSchema * CSphIndex_VLN::Preload ()
 		return NULL;
 	}
 
-	if ( !m_pWordlist.Alloc ( stWordlist.st_size, m_sLastError ) )
+	if ( !m_pWordlist.Alloc ( stWordlist.st_size, m_sLastError, sWarning ) )
 		return NULL;
 
 	if ( ::read ( tWordlist.GetFD(), m_pWordlist.GetWritePtr(), stWordlist.st_size )!=stWordlist.st_size )
@@ -8281,6 +8345,38 @@ DWORD sphCRC32 ( const BYTE * pString, int iLen )
 	return ~crc;
 }
 
+/////////////////////////////////////////////////////////////////////////////
+
+SphOffset_t sphFNV64 ( const BYTE * s )
+{
+	SphOffset_t hval = 0xcbf29ce484222325ULL;
+	while ( *s )
+	{
+		// xor the bottom with the current octet
+		hval ^= (SphOffset_t)*s++;
+
+		// multiply by the 64 bit FNV magic prime mod 2^64
+		hval += (hval << 1) + (hval << 4) + (hval << 5) + (hval << 7) + (hval << 8) + (hval << 40); // gcc optimization
+	}
+	return hval;
+}
+
+
+SphOffset_t sphFNV64 ( const BYTE * s, int iLen )
+{
+	SphOffset_t hval = 0xcbf29ce484222325ULL;
+	for ( ; iLen>0; iLen-- )
+	{
+		// xor the bottom with the current octet
+		hval ^= (SphOffset_t)*s++;
+
+		// multiply by the 64 bit FNV magic prime mod 2^64
+		hval += (hval << 1) + (hval << 4) + (hval << 5) + (hval << 7) + (hval << 8) + (hval << 40); // gcc optimization
+	}
+	return hval;
+}
+
+/////////////////////////////////////////////////////////////////////////////
 
 CSphDict_CRC32::CSphDict_CRC32 ( DWORD iMorph )
 	: m_iMorph		( iMorph )
@@ -8293,14 +8389,14 @@ CSphDict_CRC32::CSphDict_CRC32 ( DWORD iMorph )
 }
 
 
-DWORD CSphDict_CRC32::FilterStopword ( DWORD uID )
+SphWordID_t CSphDict_CRC32::FilterStopword ( SphWordID_t uID )
 {
 	if ( !m_iStopwords )
 		return uID;
 
 	// OPTIMIZE: binary search is not too good, could do some hashing instead
-	DWORD * pStart = m_pStopwords;
-	DWORD * pEnd = m_pStopwords + m_iStopwords - 1;
+	SphWordID_t * pStart = m_pStopwords;
+	SphWordID_t * pEnd = m_pStopwords + m_iStopwords - 1;
 	do
 	{
 		if ( uID==*pStart || uID==*pEnd )
@@ -8309,7 +8405,7 @@ DWORD CSphDict_CRC32::FilterStopword ( DWORD uID )
 		if ( uID<*pStart || uID>*pEnd )
 			return uID;
 
-		DWORD * pMid = pStart + (pEnd-pStart)/2;
+		SphWordID_t * pMid = pStart + (pEnd-pStart)/2;
 		if ( uID==*pMid )
 			return 0;
 
@@ -8323,8 +8419,18 @@ DWORD CSphDict_CRC32::FilterStopword ( DWORD uID )
 	return uID;
 }
 
+/////////////////////////////////////////////////////////////////////////////
 
-DWORD CSphDict_CRC32::GetWordID ( BYTE * pWord )
+template < typename T > T sphCRCWord ( const BYTE * pWord );
+template<> uint64_t sphCRCWord ( const BYTE * pWord ) { return sphFNV64 ( pWord ); }
+template<> DWORD sphCRCWord ( const BYTE * pWord ) { return sphCRC32 ( pWord ); }
+
+template < typename T > T sphCRCWord ( const BYTE * pWord, int iLen );
+template<> uint64_t sphCRCWord ( const BYTE * pWord, int iLen ) { return sphFNV64 ( pWord, iLen ); }
+template<> DWORD sphCRCWord ( const BYTE * pWord, int iLen ) { return sphCRC32 ( pWord, iLen ); }
+
+
+SphWordID_t CSphDict_CRC32::GetWordID ( BYTE * pWord )
 {
 	if ( m_iMorph & SPH_MORPH_STEM_EN )
 		stem_en ( pWord );
@@ -8335,15 +8441,16 @@ DWORD CSphDict_CRC32::GetWordID ( BYTE * pWord )
 	if ( m_iMorph & SPH_MORPH_SOUNDEX )
 		stem_soundex ( pWord );
 
-	return FilterStopword ( sphCRC32 ( pWord ) );
+	return FilterStopword ( sphCRCWord<SphWordID_t> ( pWord ) );
 }
 
 
-DWORD CSphDict_CRC32::GetWordID ( const BYTE * pWord, int iLen )
+SphWordID_t CSphDict_CRC32::GetWordID ( const BYTE * pWord, int iLen )
 {
-	return FilterStopword ( sphCRC32 ( pWord, iLen ) );
+	return FilterStopword ( sphCRCWord<SphWordID_t> ( pWord, iLen ) );
 }
 
+/////////////////////////////////////////////////////////////////////////////
 
 struct DwordCmp_fn
 {
@@ -8393,7 +8500,7 @@ void CSphDict_CRC32::LoadStopwords ( const char * sFiles, ISphTokenizer * pToken
 		}
 
 		// tokenize file
-		CSphVector<DWORD> dStop;
+		CSphVector<SphWordID_t> dStop;
 		int iLength;
 		do
 		{
@@ -8412,8 +8519,8 @@ void CSphDict_CRC32::LoadStopwords ( const char * sFiles, ISphTokenizer * pToken
 		if ( dStop.GetLength() )
 		{
 			m_iStopwords = dStop.GetLength ();
-			m_pStopwords = new DWORD [ m_iStopwords ];
-			memcpy ( m_pStopwords, &dStop[0], sizeof(DWORD)*m_iStopwords );
+			m_pStopwords = new SphWordID_t [ m_iStopwords ];
+			memcpy ( m_pStopwords, &dStop[0], sizeof(SphWordID_t)*m_iStopwords );
 			if ( !g_bSphQuiet )
 				fprintf ( stdout, "- loaded %d stopwords from '%s'\n",
 					m_iStopwords, sName ); // FIXME! do loglevels
@@ -8793,15 +8900,15 @@ void CSphSource::SetEmitInfixes ( bool bPrefixesOnly, int iMinLength )
 // DOCUMENT SOURCE
 /////////////////////////////////////////////////////////////////////////////
 
-int CSphSource_Document::Next()
+bool CSphSource_Document::Next()
 {
 	assert ( m_pTokenizer );
 	PROFILE ( src_document );
 
 	BYTE ** dFields = NextDocument();
 
-	if ( !dFields || m_tDocInfo.m_iDocID<=0 )
-		return 0;
+	if ( !dFields || m_tDocInfo.m_iDocID==0 )
+		return false;
 
 	m_tStats.m_iTotalDocuments++;
 	m_dHits.Reset ();
@@ -8833,7 +8940,7 @@ int CSphSource_Document::Next()
 				// if there are no infixes, just submit
 				if ( m_iMinInfixLen>=iLen )
 				{
-					DWORD iWord = m_pDict->GetWordID ( sWord );
+					SphWordID_t iWord = m_pDict->GetWordID ( sWord );
 					if ( iWord )
 					{
 						CSphWordHit & tHit = m_dHits.Add ();
@@ -8858,7 +8965,7 @@ int CSphSource_Document::Next()
 
 					for ( int i=m_iMinInfixLen; i<=iLen-iStart; i++ )
 					{
-						DWORD iWord = m_pDict->GetWordID ( sInfix, sInfixEnd-sInfix );
+						SphWordID_t iWord = m_pDict->GetWordID ( sInfix, sInfixEnd-sInfix );
 						sInfixEnd += m_pTokenizer->GetCodepointLength ( *sInfixEnd );
 
 						if ( iWord )
@@ -8882,7 +8989,7 @@ int CSphSource_Document::Next()
 			// index words only
 			while ( ( sWord = m_pTokenizer->GetToken() )!=NULL )
 			{
-				DWORD iWord = m_pDict->GetWordID ( sWord );
+				SphWordID_t iWord = m_pDict->GetWordID ( sWord );
 				if ( iWord )
 				{
 					CSphWordHit & tHit = m_dHits.Add ();
@@ -8896,7 +9003,7 @@ int CSphSource_Document::Next()
 		}
 	}
 
-	return m_tDocInfo.m_iDocID;
+	return true;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -8981,7 +9088,7 @@ bool CSphSource_SQL::RunQueryStep ()
 	if ( m_uCurrentID>m_uMaxID )
 		return false;
 
-	static const int iBufSize = 16;
+	static const int iBufSize = 32;
 	char * sRes = NULL;
 
 	//////////////////////////////////////////////
@@ -8994,10 +9101,10 @@ bool CSphSource_SQL::RunQueryStep ()
 	assert ( m_tParams.m_sQuery.cstr() );
 
 	char sValues [ MACRO_COUNT ] [ iBufSize ];
-	DWORD uNextID = Min ( m_uCurrentID+m_tParams.m_iRangeStep-1, m_uMaxID );
-	snprintf ( sValues[0], iBufSize, "%u", m_uCurrentID );
-	snprintf ( sValues[1], iBufSize, "%u", uNextID );
-	m_uCurrentID = uNextID+1;
+	SphDocID_t uNextID = Min ( m_uCurrentID + m_tParams.m_iRangeStep - 1, m_uMaxID );
+	snprintf ( sValues[0], iBufSize, DOCID_FMT, m_uCurrentID );
+	snprintf ( sValues[1], iBufSize, DOCID_FMT, uNextID );
+	m_uCurrentID = 1 + uNextID;
 
 	// OPTIMIZE? things can be precalculated
 	const char * sCur = m_tParams.m_sQuery.cstr();
@@ -9147,8 +9254,8 @@ bool CSphSource_SQL::Connect ()
 				// get and check min/max id
 				const char * sCol0 = SqlColumn(0);
 				const char * sCol1 = SqlColumn(1);
-				m_uMinID = sphToDword ( sCol0 );
-				m_uMaxID = sphToDword ( sCol1 );
+				m_uMinID = sphToDocid ( sCol0 );
+				m_uMaxID = sphToDocid ( sCol1 );
 				if ( !sCol0 ) sCol0 = "(null)";
 				if ( !sCol1 ) sCol1 = "(null)";
 
@@ -9293,7 +9400,7 @@ BYTE ** CSphSource_SQL::NextDocument ()
 	}
 
 	// get him!
-	m_tDocInfo.m_iDocID = sphToDword ( SqlColumn(0) );
+	m_tDocInfo.m_iDocID = sphToDocid ( SqlColumn(0) );
 	m_uMaxFetchedID = Max ( m_uMaxFetchedID, m_tDocInfo.m_iDocID );
 
 	if ( !m_tDocInfo.m_iDocID )
@@ -9707,7 +9814,7 @@ bool CSphSource_XMLPipe::Connect ()
 }
 
 
-int CSphSource_XMLPipe::Next ()
+bool CSphSource_XMLPipe::Next ()
 {
 	PROFILE ( src_xmlpipe );
 	char sTitle [ 1024 ]; // FIXME?
@@ -9725,10 +9832,10 @@ int CSphSource_XMLPipe::Next ()
 		// scan for opening '<document>' tag if necessary
 		SetTag ( "document" );
 		if ( !SkipTag ( true, false ) )
-			return 0;
+			return false;
 
 		if ( !ScanInt ( "id", &m_tDocInfo.m_iDocID ) )
-			return 0;
+			return false;
 		m_tStats.m_iTotalDocuments++;
 
 		if ( !ScanInt ( "group", &m_tDocInfo.m_pAttrs[0] ) )
@@ -9738,7 +9845,7 @@ int CSphSource_XMLPipe::Next ()
 			m_tDocInfo.m_pAttrs[1] = 1;
 
 		if ( !ScanStr ( "title", sTitle, sizeof ( sTitle ) ) )
-			return 0;
+			return false;
 
 		// index title
 		{
@@ -9749,7 +9856,7 @@ int CSphSource_XMLPipe::Next ()
 			m_pTokenizer->SetBuffer ( (BYTE*)sTitle, iLen, true );
 			while ( ( sWord = m_pTokenizer->GetToken() )!=NULL )
 			{
-				DWORD iWID = m_pDict->GetWordID ( sWord );
+				SphWordID_t iWID = m_pDict->GetWordID ( sWord );
 				if ( iWID )
 				{
 					CSphWordHit & tHit = m_dHits.Add ();
@@ -9762,7 +9869,7 @@ int CSphSource_XMLPipe::Next ()
 
 		SetTag ( "body" );
 		if ( !SkipTag ( true ) )
-			return 0;
+			return false;
 
 		m_bBody = true;
 		m_iWordPos = 0;
@@ -9783,7 +9890,7 @@ int CSphSource_XMLPipe::Next ()
 		{
 			fprintf ( stdout, "WARNING: CSphSource_XMLPipe(): unexpected EOF while scanning doc '%u' body.\n",
 				m_tDocInfo.m_iDocID );
-			return 0;
+			return false;
 		}
 
 		// check for body tag end in this buffer
@@ -9801,7 +9908,7 @@ int CSphSource_XMLPipe::Next ()
 		BYTE * sWord;
 		while ( ( sWord = m_pTokenizer->GetToken () )!=NULL )
 		{
-			DWORD iWID = m_pDict->GetWordID ( sWord );
+			SphWordID_t iWID = m_pDict->GetWordID ( sWord );
 			if ( iWID )
 			{
 				CSphWordHit & tHit = m_dHits.Add ();
@@ -9818,7 +9925,7 @@ int CSphSource_XMLPipe::Next ()
 		// let's check if it's '</body>' which is the only allowed tag at this point
 		SetTag ( "body" );
 		if ( !SkipTag ( false ) )
-			return 0;
+			return false;
 
 		// well, it is
 		m_bBody = false;
@@ -9826,11 +9933,11 @@ int CSphSource_XMLPipe::Next ()
 		// let's check if it's '</document>' which is the only allowed tag at this point
 		SetTag ( "document" );
 		if ( !SkipTag ( false ) )
-			return 0;
+			return false;
 	}
 
 	// if it was all correct, we have to flush our hits
-	return m_tDocInfo.m_iDocID;
+	return true;
 }
 
 
@@ -9944,6 +10051,17 @@ bool CSphSource_XMLPipe::SkipTag ( bool bOpen, bool bWarnOnEOF, bool bStrict )
 
 bool CSphSource_XMLPipe::ScanInt ( const char * sTag, DWORD * pRes, bool bStrict )
 {
+	uint64_t uRes;
+	if ( !ScanInt ( sTag, &uRes, bStrict ) )
+		return false;
+
+	(*pRes) = (DWORD)uRes;
+	return true;
+}
+
+
+bool CSphSource_XMLPipe::ScanInt ( const char * sTag, uint64_t * pRes, bool bStrict )
+{
 	assert ( sTag );
 	assert ( pRes );
 
@@ -10045,12 +10163,12 @@ void CSphDoclistRecord::Read( CSphMergeSource * pSource )
 
 	assert ( pReader );
 
-	m_iDocID = pReader->UnzipOffset() + pSource->m_iLastDocID;
+	m_iDocID = pSource->m_iLastDocID + pReader->UnzipDocid();
 	pSource->m_iLastDocID = m_iDocID;
 
 	if ( pSource->m_bForceDocinfo )
 	{	
-		pSource->m_tMatch.m_iDocID = ( DWORD ) m_iDocID;
+		pSource->m_tMatch.m_iDocID = m_iDocID;
 		pSource->m_pIndex->LookupDocinfo ( pSource->m_tMatch );
 	}
 
@@ -10064,6 +10182,7 @@ void CSphDoclistRecord::Read( CSphMergeSource * pSource )
 			else
 				m_pAttrs[i] = pReader->UnzipOffset();
 		}
+
 	m_iPos = pReader->UnzipOffset();
 	m_uFields = pReader->UnzipInt();
 	m_uMatchHits = pReader->UnzipInt ();
@@ -10076,12 +10195,13 @@ void CSphDoclistRecord::Write( CSphMergeSource * pSource )
 	CSphWriter * pWriter = pSource->m_pDataWriter;
 	assert ( pWriter );
 
-	pWriter->ZipOffset( m_iDocID - pSource->m_iLastDocID );
+	pWriter->ZipOffset ( m_iDocID - pSource->m_iLastDocID );
 	pSource->m_iLastDocID = m_iDocID;
 
 	if ( m_iAttrNum )
 		for ( int i = 0; i < m_iAttrNum; ++i )
 			pWriter->ZipOffset( m_pAttrs[i] );			
+
 	pWriter->ZipOffset( m_iPos );
 	pWriter->ZipInt( m_uFields );
 	pWriter->ZipInt( m_uMatchHits );
@@ -10213,7 +10333,7 @@ void CSphWordIndexRecord::Write ( CSphWriter * pWriter, CSphMergeData * pMergeDa
 
 	pMergeData->m_iWordlistOffset = pWriter->m_iPos;
 
-	pWriter->ZipInt ( m_iWordID - pMergeData->m_iLastWordID );
+	pWriter->ZipOffset ( m_iWordID - pMergeData->m_iLastWordID ); // FIXME! slow with 32bit wordids
 	pWriter->ZipOffset ( m_iDoclistPos );
 	pWriter->ZipInt ( m_iDocNum );
 	pWriter->ZipInt ( m_iHitNum );

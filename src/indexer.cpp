@@ -206,8 +206,8 @@ public:
 	void				Save ( const char * sOutput, int iTop, bool bFreqs );
 
 public:
-	virtual DWORD		GetWordID ( BYTE * pWord );
-	virtual DWORD		GetWordID ( const BYTE * pWord, int iLen );
+	virtual SphWordID_t	GetWordID ( BYTE * pWord );
+	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen );
 	virtual void		LoadStopwords ( const char * sFiles );
 
 protected:
@@ -262,7 +262,7 @@ void CSphStopwordBuilderDict::Save ( const char * sOutput, int iTop, bool bFreqs
 }
 
 
-DWORD CSphStopwordBuilderDict::GetWordID ( BYTE * pWord )
+SphWordID_t CSphStopwordBuilderDict::GetWordID ( BYTE * pWord )
 {
 	int iZero = 0;
 	m_hWords.Add ( (const char *)pWord, 0, iZero )++;
@@ -270,7 +270,7 @@ DWORD CSphStopwordBuilderDict::GetWordID ( BYTE * pWord )
 }
 
 
-DWORD CSphStopwordBuilderDict::GetWordID ( const BYTE * pWord, int iLen )
+SphWordID_t CSphStopwordBuilderDict::GetWordID ( const BYTE * pWord, int iLen )
 {
 	int iZero = 0;
 	m_hWords.Add ( (const char *)pWord, iLen, iZero )++;

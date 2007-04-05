@@ -281,6 +281,15 @@ index test1
 	# default is "extern" (as most collections are smaller than 100M docs)
 	docinfo			= extern
 
+	# memory locking for cached data
+	#
+	# if set to 1, mlock() will be called to prevent cached index data
+	# (ie. spi and spa files) from being swapped out. requires searchd to
+	# be run under root account.
+	#
+	# optional, default is 0
+	mlock			= 0
+
 	# morphology
 	#
 	# currently supported morphology preprocessors are Porter stemmers

@@ -23,7 +23,7 @@ define ( "SEARCHD_COMMAND_EXCERPT",	1 );
 define ( "SEARCHD_COMMAND_UPDATE",	2 );
 
 /// current client-side command implementation versions
-define ( "VER_COMMAND_SEARCH",		0x107 );
+define ( "VER_COMMAND_SEARCH",		0x108 );
 define ( "VER_COMMAND_EXCERPT",		0x100 );
 define ( "VER_COMMAND_UPDATE",		0x100 );
 
@@ -397,9 +397,7 @@ class SphinxClient
 		foreach ( $this->_weights as $weight )
 			$req .= pack ( "N", (int)$weight );
 		$req .= pack ( "N", strlen($index) ) . $index; // indexes
-		$req .= // id range
-			pack ( "N", (int)$this->_min_id ) .
-			pack ( "N", (int)$this->_max_id );
+		$req .= pack ( "NNN", 0, (int)$this->_min_id, (int)$this->_max_id ); // id32 range
 
 		// filters
 		$req .= pack ( "N", count($this->_filters) );
@@ -465,13 +463,23 @@ class SphinxClient
 
 		// read match count
 		list(,$count) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
+		list(,$id64) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
 
 		// read matches
 		while ( $count-->0 && $p<$max )
 		{
-			list ( $doc, $weight ) = array_values ( unpack ( "N*N*",
-				substr ( $response, $p, 8 ) ) );
-			$p += 8;
+			if ( $id64 )
+			{
+				list ( $dochi, $doclo, $weight ) = array_values ( unpack ( "N*N*N*",
+					substr ( $response, $p, 12 ) ) );
+				$p += 12;
+				$doc = (((int)$dochi)<<32) + ((int)$doclo);
+			} else
+			{
+				list ( $doc, $weight ) = array_values ( unpack ( "N*N*",
+					substr ( $response, $p, 8 ) ) );
+				$p += 8;
+			}
 
 			$doc = sprintf ( "%u", $doc ); // workaround for php signed/unsigned braindamage
 			$weight = sprintf ( "%u", $weight );

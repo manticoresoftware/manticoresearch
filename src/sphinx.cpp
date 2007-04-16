@@ -1120,7 +1120,8 @@ public:
 	void Flatten ( CSphTaggedMatch * pTo, int iTag )
 	{
 		Sort ();
-		for ( int i=0; i<m_iLimit; i++, pTo++ )
+		int iLen = GetLength ();
+		for ( int i=0; i<iLen; i++, pTo++ )
 		{
 			pTo[0] = m_pData[i];
 			pTo->m_iTag = iTag;

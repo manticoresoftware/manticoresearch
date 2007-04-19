@@ -57,6 +57,7 @@ define ( "SPH_GROUPBY_WEEK",		1 );
 define ( "SPH_GROUPBY_MONTH",		2 );
 define ( "SPH_GROUPBY_YEAR",		3 );
 define ( "SPH_GROUPBY_ATTR",		4 );
+define ( "SPH_GROUPBY_ATTRPAIR",	5 );
 
 /// sphinx searchd client class
 class SphinxClient
@@ -357,7 +358,8 @@ class SphinxClient
 			|| $func==SPH_GROUPBY_WEEK
 			|| $func==SPH_GROUPBY_MONTH
 			|| $func==SPH_GROUPBY_YEAR
-			|| $func==SPH_GROUPBY_ATTR );
+			|| $func==SPH_GROUPBY_ATTR
+			|| $func==SPH_GROUPBY_ATTRPAIR );
 
 		$this->_groupby = $attribute;
 		$this->_groupfunc = $func;

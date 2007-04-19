@@ -921,7 +921,8 @@ enum ESphGroupBy
 	SPH_GROUPBY_WEEK	= 1,	///< group by week
 	SPH_GROUPBY_MONTH	= 2,	///< group by month
 	SPH_GROUPBY_YEAR	= 3,	///< group by year
-	SPH_GROUPBY_ATTR	= 4		///< group by attribute value
+	SPH_GROUPBY_ATTR	= 4,	///< group by attribute value
+	SPH_GROUPBY_ATTRPAIR= 5		///< group by sequential attrs pair
 };
 
 
@@ -977,10 +978,10 @@ protected:
 public:
 					CSphQuery ();								///< ctor, fills defaults
 					~CSphQuery ();								///< dtor, frees owned stuff
-	bool			SetSchema ( const CSphSchema & tSchema );	///< calc m_iAttrs and m_iGroupBy from schema
 
-	int				GetAttrsCount () const { return m_iAttrs;}
-	int				GetGroupByAttr () const { return m_iGroupBy; }
+	bool			SetSchema ( const CSphSchema & tSchema, CSphString & sError );	///< calc m_iAttrs and m_iGroupBy from schema
+	int				GetAttrsCount () const		{ return m_iAttrs;}
+	int				GetGroupByAttr () const		{ return m_iGroupBy; }
 
 };
 

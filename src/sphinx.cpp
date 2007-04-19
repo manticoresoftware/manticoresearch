@@ -976,20 +976,20 @@ public:
 
 struct IdentityHash_fn
 {
-	static inline int Hash ( int iValue )
-	{
-		return iValue;
-	}
+	static inline uint64_t Hash ( uint64_t iValue ) { return iValue; }
 };
 
 
-DWORD sphCalcGroupKey ( const CSphMatch & tMatch, ESphGroupBy eGroupBy, int iGroupBy )
+uint64_t sphCalcGroupKey ( const CSphMatch & tMatch, ESphGroupBy eGroupBy, int iGroupBy )
 {
 	assert ( iGroupBy>=0 && iGroupBy<tMatch.m_iAttrs );
 	DWORD iAttr = tMatch.m_pAttrs [ iGroupBy ];
 
 	if ( eGroupBy==SPH_GROUPBY_ATTR )
 		return iAttr;
+
+	if ( eGroupBy==SPH_GROUPBY_ATTRPAIR )
+		return iAttr + ( ( (uint64_t) tMatch.m_pAttrs[iGroupBy+1] )<<32 );
 
 	time_t tStamp = tMatch.m_pAttrs [ iGroupBy ];
 	struct tm * pSplit = localtime ( &tStamp ); // FIXME! use _r on UNIX
@@ -1015,7 +1015,7 @@ protected:
 	ESphGroupBy		m_eGroupBy;		///< group-by function
 	int				m_iGroupBy;		///< group-by argument attribute index
 
-	CSphFixedHash < CSphMatch *, DWORD, IdentityHash_fn >	m_hGroup2Match;
+	CSphFixedHash < CSphMatch *, uint64_t, IdentityHash_fn >	m_hGroup2Match;
 
 protected:
 	int				m_iLimit;		///< max matches to be retrieved
@@ -1043,7 +1043,7 @@ public:
 	{
 		assert ( tEntry.m_iAttrs==m_iAttrs || tEntry.m_iAttrs==m_iAttrs+SPH_VATTR_TOTAL );
 		bool bGrouped = ( tEntry.m_iAttrs!=m_iAttrs );
-		DWORD uGroupKey = sphCalcGroupKey ( tEntry, m_eGroupBy, m_iGroupBy );
+		uint64_t uGroupKey = sphCalcGroupKey ( tEntry, m_eGroupBy, m_iGroupBy );
 
 		// if this group is already hashed, we only need to update the corresponding match
 		CSphMatch ** ppMatch = m_hGroup2Match ( uGroupKey );
@@ -1051,7 +1051,7 @@ public:
 		{
 			CSphMatch * pMatch = (*ppMatch);
 			assert ( pMatch );
-			assert ( pMatch->m_pAttrs [ m_iAttrs+SPH_VATTR_GROUP ]==uGroupKey );
+			assert ( m_eGroupBy==SPH_GROUPBY_ATTRPAIR || pMatch->m_pAttrs [ m_iAttrs+SPH_VATTR_GROUP ]==uGroupKey );
 
 			if ( bGrouped )
 			{
@@ -1087,8 +1087,18 @@ public:
 			Sort (); // sort
 			m_iUsed -= m_iLimit; // cut off
 			m_hGroup2Match.Reset (); // rehash
-			for ( int i=0; i<m_iUsed; i++ )
-				m_hGroup2Match.Add ( m_pData+i, m_pData[i].m_pAttrs[ m_iAttrs+SPH_VATTR_GROUP ] );
+			if ( m_eGroupBy==SPH_GROUPBY_ATTRPAIR )
+			{
+				for ( int i=0; i<m_iUsed; i++ )
+				{
+					uint64_t uKey = sphCalcGroupKey ( m_pData[i], m_eGroupBy, m_iGroupBy );
+					m_hGroup2Match.Add ( &m_pData[i], uKey );
+				}
+			} else
+			{
+				for ( int i=0; i<m_iUsed; i++ )
+					m_hGroup2Match.Add ( m_pData+i, m_pData[i].m_pAttrs[ m_iAttrs+SPH_VATTR_GROUP ] );
+			}
 		}
 
 		// do add
@@ -1108,7 +1118,7 @@ public:
 		memcpy ( tNew.m_pAttrs, tEntry.m_pAttrs, tEntry.m_iAttrs*sizeof(DWORD) );
 		if ( !bGrouped )
 		{
-			tNew.m_pAttrs [ m_iAttrs+SPH_VATTR_GROUP ] = uGroupKey;
+			tNew.m_pAttrs [ m_iAttrs+SPH_VATTR_GROUP ] = (DWORD)uGroupKey; // intentionally truncate
 			tNew.m_pAttrs [ m_iAttrs+SPH_VATTR_COUNT ] = 1;
 		}
 
@@ -2955,7 +2965,7 @@ CSphQuery::~CSphQuery ()
 }
 
 
-bool CSphQuery::SetSchema ( const CSphSchema & tSchema )
+bool CSphQuery::SetSchema ( const CSphSchema & tSchema, CSphString & sError )
 {
 	m_iAttrs = tSchema.GetRealAttrCount();
 
@@ -2966,7 +2976,19 @@ bool CSphQuery::SetSchema ( const CSphSchema & tSchema )
 	}
 
 	m_iGroupBy = tSchema.GetAttrIndex ( m_sGroupBy.cstr() );
-	return ( m_iGroupBy>=0 );
+	if ( m_iGroupBy<0 )
+	{
+		sError.SetSprintf ( "group-by attribute '%s' not found", m_sGroupBy.cstr() );
+		return false;
+	}
+
+	if ( m_eGroupFunc==SPH_GROUPBY_ATTRPAIR && m_iGroupBy+1>=m_iAttrs )
+	{
+		sError.SetSprintf ( "group-by attribute '%s' must not be last in ATTRPAIR grouping mode", m_sGroupBy.cstr() );
+		return false;
+	}
+
+	return true;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -8118,7 +8140,8 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 		}
 
 		// lookup group-by attribute index
-		pQuery->SetSchema ( m_tSchema );
+		if ( !pQuery->SetSchema ( m_tSchema, m_sLastError ) )
+			return false;
 
 		// setup words from the wordlist
 		PROFILE_BEGIN ( query_load_words );

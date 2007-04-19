@@ -1991,18 +1991,16 @@ bool CheckSortAndSchema ( const CSphSchema ** ppFirst, ISphMatchSorter ** ppTop,
 		*ppFirst = pServed;
 
 		// lookup proper attribute index to group by
-		if ( !tQuery.SetSchema ( *pServed ) )
+		CSphString sError;
+		if ( !tQuery.SetSchema ( *pServed, sError ) )
 		{
-			tReq.SendErrorReply ( "index '%s': group-by attribute '%s' not found",
-				sServedName, tQuery.m_sGroupBy.cstr() );
+			tReq.SendErrorReply ( "index '%s': %s", sServedName, sError.cstr() );
 			return false;
 		}
 		assert ( tQuery.m_sGroupBy.IsEmpty() || tQuery.GetGroupByAttr()>=0 );
 
 		// spawn queue and set sort-by attribute
 		assert ( !*ppTop );
-
-		CSphString sError;
 		*ppTop = sphCreateQueue ( &tQuery, *pServed, sError );
 
 		if (! (*ppTop) )

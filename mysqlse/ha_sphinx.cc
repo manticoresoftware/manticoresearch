@@ -270,7 +270,7 @@ public:
 	int				m_bExclude;
 
 public:
-	CSphSEFilter::CSphSEFilter ()
+	CSphSEFilter ()
 		: m_sAttrName ( NULL )
 		, m_uMinValue ( 0 )
 		, m_uMaxValue ( UINT_MAX )
@@ -280,7 +280,7 @@ public:
 	{
 	}
 
-	CSphSEFilter::~CSphSEFilter ()
+	~CSphSEFilter ()
 	{}
 };
 

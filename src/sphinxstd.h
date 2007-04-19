@@ -57,9 +57,7 @@ namespace Private
 #error "Internal 64-bit integer macros already defined."
 #endif
 
-#if __STDC_VERSION__>=199901L || __STDC_VERSION>=199901L || defined(_STDINT_H) || defined(_STDINT_H_)
-#include <stdint.h>
-#else // no stdint.h
+#if !HAVE_STDINT_H
 
 #if defined(_MSC_VER)
 typedef __int64 int64_t;

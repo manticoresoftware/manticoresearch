@@ -2666,14 +2666,19 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		// if there was only 1 index searched, it's already properly flattened
 		pRes->m_dMatches.Sort ();
 
+		int iDupes = 0;
 		ARRAY_FOREACH ( i, pRes->m_dMatches )
 		{
 			if ( i==0 || pRes->m_dMatches[i].m_iDocID!=pRes->m_dMatches[i-1].m_iDocID )
 				pTop->Push ( pRes->m_dMatches[i] );
+			else
+				iDupes++;
 		}
-		pRes->m_dMatches.Reset ();
 
+		pRes->m_dMatches.Reset ();
 		sphFlattenQueue ( pTop, pRes, 0 );
+
+		pRes->m_iTotalMatches -= iDupes;
 	}
 #else
 	sphFlattenQueue ( pTop, pRes );

@@ -178,6 +178,9 @@
 /* Define to 1 if you can safely include both <sys/time.h> and <time.h>. */
 #undef TIME_WITH_SYS_TIME
 
+/* 64-bit document and word IDs */
+#undef USE_64BIT
+
 /* Define to 1 if you want to compile with MySQL support */
 #undef USE_MYSQL
 

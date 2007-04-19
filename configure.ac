@@ -1,7 +1,7 @@
 dnl Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.59)
-AC_INIT([sphinx], [0.9.6], [shodan(at)shodan.ru])
+AC_INIT([sphinx], [0.9.8], [shodan(at)shodan.ru])
 
 dnl --------------------------------------------------------------------------
 
@@ -47,6 +47,20 @@ if test x$ac_cv_use_pgsql != xno; then
     AC_SUBST([PGSQL_CFLAGS])
 fi
 AM_CONDITIONAL(USE_PGSQL, test x$ac_cv_use_pgsql != xno)
+
+
+AC_MSG_CHECKING([whether to use 64-bit document/word IDs])
+sph_enable_id64=no
+AC_ARG_ENABLE([id64],
+	[  --enable-id64           use 64-bit document and word IDs (default is no)],
+	[sph_enable_id64=$enableval])
+if test x$sph_enable_id64 != xno; then
+	AC_DEFINE(USE_64BIT, 1, [64-bit document and word IDs])
+	AC_MSG_RESULT([yes])
+else
+	AC_DEFINE(USE_64BIT, 0, [64-bit document and word IDs])
+	AC_MSG_RESULT([no])
+fi
 
 dnl --------------------------------------------------------------------------
 

@@ -1205,6 +1205,11 @@ to attributes provided in Sphinx result set by name, so their names must
 match attribute names specified in sphinx.conf. If there's no such
 attribute name in Sphinx search results, column will have NULL values.
 
+Special "virtual" attributes names can also be bound to SphinxSE columns.
+_sph_ needs to be used instead of @ for that. For instance, to obtain
+@group and @count virtual attributes, use _sph_group and _sph_count column
+names.
+
 CONNECTION string parameter can be used to specify default searchd host,
 port and indexes for queries issued using this table. If no connection
 string is specified in CREATE TABLE, index name "*" (ie. search all

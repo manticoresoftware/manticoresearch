@@ -1335,6 +1335,13 @@ If there's no such attribute name in Sphinx search results, column will have
 <code>NULL</code> values.
 </para>
 <para>
+Special "virtual" attributes names can also be bound to SphinxSE columns.
+<code>_sph_</code> needs to be used instead of <code>@</code> for that.
+For instance, to obtain <code>@group</code> and <code>@count</code>
+virtual attributes, use <code>_sph_group</code> and <code>_sph_count</code>
+column names.
+</para>
+<para>
 <code>CONNECTION</code> string parameter can be used to specify default
 searchd host, port and indexes for queries issued using this table.
 If no connection string is specified in <code>CREATE TABLE</code>,

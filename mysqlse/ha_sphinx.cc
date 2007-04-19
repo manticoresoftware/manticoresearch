@@ -153,7 +153,8 @@ inline void SPH_DEBUG ( const char * format, ... )
 #endif
 
 
-#define SafeDeleteArray(_arg) { if ( _arg ) delete [] ( _arg ); }
+#define SafeDelete(_arg)		{ if ( _arg ) delete ( _arg );		(_arg) = NULL; }
+#define SafeDeleteArray(_arg)	{ if ( _arg ) delete [] ( _arg );	(_arg) = NULL; }
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -281,7 +282,9 @@ public:
 	}
 
 	~CSphSEFilter ()
-	{}
+	{
+		SafeDeleteArray ( m_pValues );
+	}
 };
 
 /// client-side search query
@@ -454,8 +457,7 @@ static int sphinx_close_connection ( handlerton * hton, THD * thd )
 	SPH_ENTER_FUNC();
 	void ** tmp = thd_ha_data ( thd, hton );
 	CSphSEStats * pStats = (CSphSEStats*) (*tmp);
-	if ( pStats )
-		delete pStats;
+	SafeDelete ( pStats );
 	*tmp = NULL;
 	SPH_RET(0);
 }
@@ -491,8 +493,7 @@ static int sphinx_close_connection ( THD * thd )
 	// deallocate common handler data
 	SPH_ENTER_FUNC();
 	CSphSEStats * pStats = (CSphSEStats*) thd->ha_data[sphinx_hton.slot];
-	if ( pStats )
-		delete pStats;
+	SafeDelete ( pStats );
 	thd->ha_data[sphinx_hton.slot] = NULL;
 	SPH_RET(0);
 }
@@ -838,6 +839,7 @@ CSphSEQuery::CSphSEQuery ( const char * sQuery, int iLength, const char * sIndex
 CSphSEQuery::~CSphSEQuery ()
 {
 	SPH_ENTER_METHOD();
+	SafeDeleteArray ( m_sQueryBuffer );
 	SafeDeleteArray ( m_pWeights );
 	SafeDeleteArray ( m_pBuf );
 	SPH_VOID_RET();
@@ -1082,7 +1084,7 @@ bool CSphSEQuery::ParseField ( char * sField )
 			*sValue++ = '\0';
 
 			// get the values
-			tFilter.m_iValues = ParseArray ( & tFilter.m_pValues, sValue );
+			tFilter.m_iValues = ParseArray ( &tFilter.m_pValues, sValue );
 			if ( !tFilter.m_iValues )
 			{
 				assert ( !tFilter.m_pValues );
@@ -1569,6 +1571,7 @@ bool ha_sphinx::UnpackStats ( CSphSEStats * pStats )
 	if ( m_bUnpackError )
 		return false;
 
+	SafeDeleteArray ( pStats->m_dWords );
 	pStats->m_dWords = new CSphSEWordStats [ pStats->m_iWords ]; // !COMMIT not bad-value safe
 	if ( !pStats->m_dWords )
 		return false;
@@ -1637,6 +1640,7 @@ int ha_sphinx::index_read ( byte * buf, const byte * key, uint key_len, enum ha_
 	SPH_DEBUG ( "got response header (status=%d version=%d length=%d)",
 		uRespStatus, uRespVersion, uRespLength );
 
+	SafeDeleteArray ( m_pResponse );
 	m_pResponse = new char [ uRespLength+1 ];
 	if ( !m_pResponse )
 	{

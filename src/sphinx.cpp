@@ -1007,7 +1007,7 @@ uint64_t sphCalcGroupKey ( const CSphMatch & tMatch, ESphGroupBy eGroupBy, int i
 
 /// match sorter with k-buffering and group-by
 template < typename COMPMATCH, typename COMPGROUP >
-class CSphKBufferGroupSorter : public CSphMatchQueueTraits
+class CSphKBufferGroupSorter : public CSphMatchQueueTraits, public ISphNoncopyable
 {
 protected:
 	const int		m_iAttrs;		///< normal match attribute count (to distinguish already grouped matches)

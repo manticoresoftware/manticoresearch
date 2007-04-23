@@ -4,6 +4,7 @@
 	Version="7.10"
 	Name="indexer"
 	ProjectGUID="{405619C7-CC22-4FB8-9237-B196CB897355}"
+	RootNamespace="indexer"
 	Keyword="Win32Proj">
 	<Platforms>
 		<Platform

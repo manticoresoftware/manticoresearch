@@ -23,6 +23,7 @@
 				MinimalRebuild="TRUE"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="5"
+				RuntimeTypeInfo="TRUE"
 				UsePrecompiledHeader="0"
 				ProgramDataBaseFileName="$(IntDir)/$(ProjectName).pdb"
 				WarningLevel="4"
@@ -62,6 +63,7 @@
 				Name="VCCLCompilerTool"
 				PreprocessorDefinitions="WIN32;NDEBUG;_LIB"
 				RuntimeLibrary="4"
+				RuntimeTypeInfo="TRUE"
 				UsePrecompiledHeader="0"
 				ProgramDataBaseFileName="$(IntDir)/$(ProjectName).pdb"
 				WarningLevel="4"
@@ -103,22 +105,22 @@
 				RelativePath="..\src\sphinx.cpp">
 			</File>
 			<File
-				RelativePath="..\src\sphinxstd.cpp">
-			</File>
-			<File
 				RelativePath="..\src\sphinxexcerpt.cpp">
 			</File>
 			<File
+				RelativePath="..\src\sphinxquery.cpp">
+			</File>
+			<File
 				RelativePath="..\src\sphinxsoundex.cpp">
+			</File>
+			<File
+				RelativePath="..\src\sphinxstd.cpp">
 			</File>
 			<File
 				RelativePath="..\src\sphinxstemen.cpp">
 			</File>
 			<File
 				RelativePath="..\src\sphinxstemru.cpp">
-			</File>
-			<File
-				RelativePath="..\src\sphinxquery.cpp">
 			</File>
 			<File
 				RelativePath="..\src\sphinxutils.cpp">
@@ -135,6 +137,9 @@
 				RelativePath="..\src\sphinxexcerpt.h">
 			</File>
 			<File
+				RelativePath="..\src\sphinxquery.h">
+			</File>
+			<File
 				RelativePath="..\src\sphinxstd.h">
 			</File>
 			<File
@@ -142,9 +147,6 @@
 			</File>
 			<File
 				RelativePath="..\src\sphinxtimers.h">
-			</File>
-			<File
-				RelativePath="..\src\sphinxquery.h">
 			</File>
 			<File
 				RelativePath="..\src\sphinxutils.h">

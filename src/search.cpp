@@ -260,11 +260,20 @@ int main ( int argc, char ** argv )
 		CSphQueryResult * pResult = NULL;
 
 		CSphIndex * pIndex = sphCreateIndexPhrase ( hIndex["path"].cstr() );
-		const CSphSchema * pSchema = pIndex->Preload ( false, NULL );
-		if ( pSchema )
+		sError = "could not create index (check that files exist)";
+		for ( ; pIndex; )
 		{
+			const CSphSchema * pSchema = pIndex->Preload ( false, NULL );
+			if ( !pSchema )
+			{
+				sError = pIndex->GetLastError ();
+				break;
+			}
+
 			// setup groupby
-			tQuery.SetSchema ( *pSchema );
+			if ( !tQuery.SetSchema ( *pSchema, sError ) )
+				break;
+
 			if ( !tQuery.m_sGroupBy.IsEmpty() && tQuery.GetGroupByAttr()<0 )
 			{
 				fprintf ( stdout, "WARNING: no such groupby attribute '%s' - DISABLING GROUPBY\n", tQuery.m_sGroupBy.cstr() );
@@ -290,6 +299,7 @@ int main ( int argc, char ** argv )
 			}
 
 			pResult = pIndex->Query ( pDict, &tQuery );
+			break;
 		}
 
 		SafeDelete ( pIndex );
@@ -302,7 +312,7 @@ int main ( int argc, char ** argv )
 
 		if ( !pResult )
 		{
-			fprintf ( stdout, "index '%s': search error: can not open index.\n", sIndexName );
+			fprintf ( stdout, "index '%s': search error: %s.\n", sIndexName, sError.cstr() );
 			return 1;
 		}
 

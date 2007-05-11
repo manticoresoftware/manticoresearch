@@ -2956,6 +2956,7 @@ CSphQuery::CSphQuery ()
 	, m_sGroupSortBy( "@group desc" )
 	, m_iAttrs		( -1 )
 	, m_iGroupBy	( -1 )
+	, m_iCutoff		( 0 )
 {}
 
 
@@ -6267,6 +6268,17 @@ void CSphIndex_VLN::LookupDocinfo ( CSphDocInfo & tMatch )
 }
 
 
+#define SPH_SUBMIT_MATCH(_match) \
+	if ( bLateLookup ) \
+		LookupDocinfo ( _match ); \
+	\
+	if ( pTop->Push ( _match ) ) \
+		pResult->m_iTotalMatches++; \
+	\
+	if ( pQuery->m_iCutoff>0 && pResult->m_iTotalMatches>=pQuery->m_iCutoff ) \
+		break;
+
+
 void CSphIndex_VLN::MatchAll ( const CSphQuery * pQuery, ISphMatchSorter * pTop, CSphQueryResult * pResult )
 {
 	///////////////////
@@ -6426,16 +6438,8 @@ void CSphIndex_VLN::MatchAll ( const CSphQuery * pQuery, ISphMatchSorter * pTop,
 				tMatch.m_iWeight += m_dWeights[i] * ( matchWeight[i] + phraseWeight[i] );
 		}
 
-		////////////////
-		// submit match
-		////////////////
-
-		// lookup externally stored docinfo
-		if ( bLateLookup )
-			LookupDocinfo ( tMatch );
-
-		if ( pTop->Push ( tMatch ) )
-			pResult->m_iTotalMatches++;
+		// submit
+		SPH_SUBMIT_MATCH ( tMatch );
 
 		// continue looking for next matches
 		i = 0;
@@ -6586,12 +6590,8 @@ void CSphIndex_VLN::MatchAny ( const CSphQuery * pQuery, ISphMatchSorter * pTop,
 		for ( i=0; i<m_iWeights; i++ )
 			tMatch.m_iWeight += m_dWeights[i] * ( sphBitCount(dWeights[i].m_uMatch) + dWeights[i].m_iMaxPhrase*iPhraseK );
 
-		// lookup externally stored docinfo
-		if ( bLateLookup )
-			LookupDocinfo ( tMatch );
-
-		if ( pTop->Push ( tMatch ) )
-			pResult->m_iTotalMatches++;
+		// submit
+		SPH_SUBMIT_MATCH ( tMatch );
 	}
 }
 
@@ -6879,12 +6879,8 @@ bool CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, CSphDict * pDict, I
 		// set weight and push it to the queue
 		pMatch->m_iWeight = 1; // set weight
 
-		// lookup externally stored docinfo
-		if ( bLateLookup )
-			LookupDocinfo ( *pMatch );
-
-		if ( pTop->Push ( *pMatch ) )
-			pResult->m_iTotalMatches++;
+		// submit
+		SPH_SUBMIT_MATCH ( *pMatch );
 	}
 
 	return true;
@@ -7773,12 +7769,8 @@ bool CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, CSphDict * pDict, 
 		if ( sphMatchEarlyReject ( *pAccept, pQuery ) )
 			continue;
 
-		// lookup externally stored docinfo
-		if ( bLateLookup )
-			LookupDocinfo ( *pAccept );
-
-		if ( pTop->Push ( *pAccept ) )
-			pResult->m_iTotalMatches++;
+		// submit
+		SPH_SUBMIT_MATCH ( *pAccept );
 	}
 
 	return true;

@@ -971,6 +971,8 @@ public:
 	ESphGroupBy		m_eGroupFunc;	///< function to pre-process group-by attribute value with
 	CSphString		m_sGroupSortBy;	///< sorting clause for groups in group-by mode
 
+	int				m_iCutoff;		///< matches count threshold to stop searching at (defualt is 0; means to search until all matches are found)
+
 protected:
 	int				m_iAttrs;		///< attribute count (necessary to instantiate group-by queues)
 	int				m_iGroupBy;		///< group-by attribute index

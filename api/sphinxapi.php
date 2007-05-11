@@ -23,7 +23,7 @@ define ( "SEARCHD_COMMAND_EXCERPT",	1 );
 define ( "SEARCHD_COMMAND_UPDATE",	2 );
 
 /// current client-side command implementation versions
-define ( "VER_COMMAND_SEARCH",		0x108 );
+define ( "VER_COMMAND_SEARCH",		0x109 );
 define ( "VER_COMMAND_EXCERPT",		0x100 );
 define ( "VER_COMMAND_UPDATE",		0x100 );
 
@@ -77,6 +77,7 @@ class SphinxClient
 	var $_groupfunc;	///< group-by function (to pre-process group-by attribute value with)
 	var $_groupsort;	///< group-by sorting clause (to sort groups in result set with)
 	var $_maxmatches;	///< max matches to retrieve
+	var $_cutoff;		///< cutoff to stop searching at (default is 0)
 
 	var $_error;		///< last error message
 	var $_warning;		///< last warning message
@@ -103,6 +104,7 @@ class SphinxClient
 		$this->_groupfunc	= SPH_GROUPBY_DAY;
 		$this->_groupsort	= "@group desc";
 		$this->_maxmatches	= 1000;
+		$this->_cutoff		= 0;
 
 		$this->_error	= "";
 		$this->_warning	= "";
@@ -220,8 +222,9 @@ class SphinxClient
 	// searching
 	/////////////////////////////////////////////////////////////////////////////
 
-	/// set match offset, count, and max number to retrieve
-	function SetLimits ( $offset, $limit, $max=0 )
+	/// set offset and count into result set,
+	/// and max-matches and cutoff to use while searching
+	function SetLimits ( $offset, $limit, $max=0, $cutoff=0 )
 	{
 		assert ( is_int($offset) );
 		assert ( is_int($limit) );
@@ -232,6 +235,8 @@ class SphinxClient
 		$this->_limit = $limit;
 		if ( $max>0 )
 			$this->_maxmatches = $max;
+		if ( $cutoff>0 )
+			$this->_cutoff = $cutoff;
 	}
 
 	/// set match mode
@@ -418,10 +423,11 @@ class SphinxClient
 			$req .= pack ( "N", $filter["exclude"] );
 		}
 
-		// group-by, max matches, sort-by-group flag
+		// group-by clause, max-matches count, group-sort clause, cutoff count
 		$req .= pack ( "NN", $this->_groupfunc, strlen($this->_groupby) ) . $this->_groupby;
 		$req .= pack ( "N", $this->_maxmatches );
 		$req .= pack ( "N", strlen($this->_groupsort) ) . $this->_groupsort;
+		$req .= pack ( "N", $this->_cutoff );
 
 		////////////////////////////
 		// send query, get response

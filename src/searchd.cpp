@@ -180,7 +180,7 @@ enum SearchdCommand_e
 /// known command versions
 enum
 {
-	VER_COMMAND_SEARCH		= 0x108,
+	VER_COMMAND_SEARCH		= 0x109,
 	VER_COMMAND_EXCERPT		= 0x100,
 	VER_COMMAND_UPDATE		= 0x100
 };
@@ -1532,7 +1532,7 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				}
 
 				// do query!
-				int iReqSize = 68 + 2*sizeof(SphDocID_t) + 4*tQuery.m_iWeights
+				int iReqSize = 72 + 2*sizeof(SphDocID_t) + 4*tQuery.m_iWeights
 					+ strlen ( tQuery.m_sSortBy.cstr() )
 					+ strlen ( tQuery.m_sQuery.cstr() )
 					+ strlen ( tAgent.m_sIndexes.cstr() )
@@ -1590,6 +1590,7 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				tOut.SendString ( tQuery.m_sGroupBy.cstr() );
 				tOut.SendInt ( tQuery.m_iMaxMatches );
 				tOut.SendString ( tQuery.m_sGroupSortBy.cstr() );
+				tOut.SendInt ( tQuery.m_iCutoff );
 				tOut.Flush ();
 
 				// FIXME! handle flush failure
@@ -2347,7 +2348,14 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		}
 	}
 
+	// v.1.9
+	if ( iVer>=0x109 )
+		tQuery.m_iCutoff = tReq.GetInt();
+
+	/////////////////////
 	// additional checks
+	/////////////////////
+
 	if ( tReq.GetError() )
 	{
 		tReq.SendErrorReply ( "invalid or truncated request" );
@@ -2378,6 +2386,11 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	if ( tQuery.m_iLimit<0 )
 	{
 		tReq.SendErrorReply ( "limit out of bounds (limit=%d)", tQuery.m_iLimit );
+		return;
+	}
+	if ( tQuery.m_iCutoff<0 )
+	{
+		tReq.SendErrorReply ( "cutoff out of bounds (cutoff=%d)", tQuery.m_iCutoff );
 		return;
 	}
 

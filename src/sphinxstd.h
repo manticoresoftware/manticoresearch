@@ -10,7 +10,7 @@
 #define _CRT_NONSTDC_NO_DEPRECATE 1
 #endif
 
-#if _MSC_VER<1400
+#if defined(_MSC_VER) && (_MSC_VER<1400)
 #define vsnprintf _vsnprintf
 #endif
 

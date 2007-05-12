@@ -213,7 +213,6 @@ enum SearchdStatus_e
 #define EINPROGRESS		WSAEINPROGRESS
 #define EINTR			WSAEINTR
 #define socklen_t		int
-#define vsnprintf		_vsnprintf
 
 
 void flock ( int, int )

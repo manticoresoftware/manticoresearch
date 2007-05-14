@@ -843,6 +843,7 @@ int main ( int argc, char ** argv )
 			char * sStopStr;
 			tPurge.m_dwMinValue = strtoul( argv[i+2], &sStopStr, 10 );
 			tPurge.m_dwMaxValue = strtoul( argv[i+3], &sStopStr, 10 );
+			i += 3;
 		}
 		else if ( strcasecmp ( argv[i], "--buildstops" )==0 && (i+2)<argc )
 		{

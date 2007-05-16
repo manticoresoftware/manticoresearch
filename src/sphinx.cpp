@@ -5269,7 +5269,12 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 			sphWrite( fdSpa.GetFD(), pDstRow, sizeof( DWORD ) * iStride * ( m_uDocinfo - iDstCount ), "doc_attr", m_sLastError );
 		else if ( iSrcCount < pSrcIndex->m_uDocinfo )
 			sphWrite( fdSpa.GetFD(), pSrcRow, sizeof( DWORD ) * iStride * ( pSrcIndex->m_uDocinfo - iSrcCount ), "doc_attr", m_sLastError );
-	}	
+	}
+	else
+	{
+		CSphAutofile fdSpa ( GetIndexFileName("spa.tmp"), SPH_O_NEW, m_sLastError );
+		fdSpa.Close();
+	}
 
 	/////////////////
 	/// merging .spd
@@ -5289,8 +5294,16 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 	CSphReader_VLN rdSrcData;
 	rdSrcData.SetFile ( tSrcData.GetFD(), tDstData.GetFilename() );
 
+	bool bSrcEmpty = false;
+	bool bDstEmpty = false;
+
 	rdDstData.SeekTo( 1, 0 );
+	if ( rdDstData.Tell() >= tDstData.GetSize( 0, sError ) )
+		bDstEmpty = true;
+
 	rdSrcData.SeekTo( 1, 0 );
+	if ( rdSrcData.Tell() >= tSrcData.GetSize( 0, sError ) )
+		bSrcEmpty = true;
 
 	CSphWriter wrDstData( GetIndexFileName("spd.tmp"), m_sLastError );
 	if ( wrDstData.IsError() )
@@ -5346,15 +5359,22 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 	CSphWordRecord		tDstWord ( &tDstSource, &tMerge );
 	CSphWordRecord		tSrcWord ( &tSrcSource, &tMerge );
 	
-	tDstWord.Read();
-	tSrcWord.Read();
+	DWORD uProgress = 0x03;
+
+	if ( !bDstEmpty )
+		tDstWord.Read();
+	else
+		uProgress &= ~0x01;
+
+	if ( !bSrcEmpty )
+		tSrcWord.Read();
+	else
+		uProgress &= ~0x02;
 
 	DWORD iDstPos = DWORD ( (BYTE*)m_pWordlistCheckpoints - pDstWordlist );
 	DWORD iSrcPos = DWORD ( (BYTE*)pSrcIndex->m_pWordlistCheckpoints - pSrcWordlist );
 
 	tMerge.m_iWordlistOffset = wrDstIndex.m_iPos;
-
-	DWORD uProgress = 0x03;
 	
 	while ( uProgress ) 
 	{
@@ -5418,8 +5438,6 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 		iDstPos = DWORD ( (BYTE*)m_pWordlistCheckpoints - tDstSource.m_pWordlist );
 		iSrcPos = DWORD ( (BYTE*)pSrcIndex->m_pWordlistCheckpoints - tSrcSource.m_pWordlist );
 	}
-
-	assert ( iDstPos == 2 && iSrcPos == 2 );
 
 	wrDstIndex.ZipInt ( 0 );
 	wrDstIndex.ZipOffset ( wrDstData.m_iPos - tMerge.m_iDoclistPos );	

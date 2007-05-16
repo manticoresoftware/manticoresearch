@@ -77,7 +77,7 @@ $cl->SetMatchMode ( $mode );
 if ( count($filtervals) )
 	$cl->SetFilter ( $filter, $filtervals );
 if ( $groupby )
-	$cl->SetGroupBy ( $groupby, SPH_GROUPBY_ATTRPAIR, $groupsort );
+	$cl->SetGroupBy ( $groupby, SPH_GROUPBY_ATTR, $groupsort );
 if ( $sortby )
 	$cl->SetSortMode ( SPH_SORT_EXTENDED, $sortby );
 $res = $cl->Query ( $q, $index );

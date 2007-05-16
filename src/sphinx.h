@@ -494,7 +494,7 @@ struct CSphSchema
 	CSphVector<CSphColumnInfo,8>				m_dAttrs;		///< my per-document attributes
 
 	/// ctor
-						CSphSchema ( const char * sName ) : m_sName ( sName ) {}
+						CSphSchema ( const char * sName="(nameless)" ) : m_sName ( sName ) {}
 
 	/// get field index by name
 	/// returns -1 if not found
@@ -510,6 +510,9 @@ struct CSphSchema
 
 	/// return non-virtual attributes count
 	int					GetRealAttrCount () const;
+
+	/// reset
+	void				Reset () { m_dFields.Reset(); m_dAttrs.Reset(); }
 };
 
 

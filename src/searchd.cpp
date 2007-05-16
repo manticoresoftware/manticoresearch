@@ -1979,52 +1979,50 @@ inline bool operator < ( const CSphTaggedMatch & a, const CSphTaggedMatch & b )
 
 /////////////////////////////////////////////////////////////////////////////
 
-bool CheckSortAndSchema ( const CSphSchema ** ppFirst, ISphMatchSorter ** ppTop, CSphQuery & tQuery,
-	const CSphSchema * pServed, const char * sServedName, InputBuffer_c & tReq )
+ISphMatchSorter * CreateSorter ( CSphQuery & tQuery, const CSphSchema & tSchema, const char * sServedName, InputBuffer_c & tReq )
 {
-	assert ( ppFirst );
-	assert ( pServed );
-
-	if ( !*ppFirst )
+	// lookup proper attribute index to group by, if any
+	CSphString sError;
+	if ( !tQuery.SetSchema ( tSchema, sError ) )
 	{
-		// lookup proper attribute index to sort by
-		*ppFirst = pServed;
-
-		// lookup proper attribute index to group by
-		CSphString sError;
-		if ( !tQuery.SetSchema ( *pServed, sError ) )
-		{
-			tReq.SendErrorReply ( "index '%s': %s", sServedName, sError.cstr() );
-			return false;
-		}
-		assert ( tQuery.m_sGroupBy.IsEmpty() || tQuery.GetGroupByAttr()>=0 );
-
-		// spawn queue and set sort-by attribute
-		assert ( !*ppTop );
-		*ppTop = sphCreateQueue ( &tQuery, *pServed, sError );
-
-		if (! (*ppTop) )
-		{
-			tReq.SendErrorReply ( "index '%s': failed to create sorting queue: %s",
-				sServedName, sError.cstr() );
-			return false;
-		}
-
-	} else
-	{
-		assert ( *ppTop );
-
-		// check schemas
-		CSphString sError;
-		ESphSchemaCompare eComp = pServed->CompareTo ( **ppFirst, sError );
-		if ( eComp==SPH_SCHEMAS_INCOMPATIBLE )
-		{
-			tReq.SendErrorReply ( "index '%s': incompatible schemas: %s", sServedName, sError.cstr() );
-			return false;
-		}
-		// FIXME!!! warn if schemas are compatible but not equal!
+		tReq.SendErrorReply ( "index '%s': %s", sServedName, sError.cstr() );
+		return NULL;
 	}
-	return true;
+	assert ( tQuery.m_sGroupBy.IsEmpty() || tQuery.GetGroupByAttr()>=0 );
+
+	// spawn queue and set sort-by attribute
+	ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, tSchema, sError );
+	if ( !pSorter )
+	{
+		tReq.SendErrorReply ( "index '%s': failed to create sorting queue: %s",
+			sServedName, sError.cstr() );
+		return NULL;
+	}
+
+	return pSorter;
+}
+
+
+// returns true if dst was empty or both were equal; false otherwise
+bool MinimizeSchema ( CSphSchema & tDst, const CSphSchema & tSrc )
+{
+	// if dst is empty, just copy it
+	if ( tDst.GetRealAttrCount()==0 )
+	{
+		tDst = tSrc;
+		return true;
+	}
+
+	// remove all dst attribtues that are not present in src
+	bool bResult = true;
+	for ( int i=0; i<tDst.GetRealAttrCount(); i++ )
+		if ( tSrc.GetAttrIndex ( tDst.m_dAttrs[i].m_sName.cstr() )==-1 )
+	{
+		tDst.m_dAttrs.Remove ( i );
+		i--;
+		bResult = false;
+	}
+	return bResult;
 }
 
 
@@ -2400,11 +2398,10 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	// do search
 	float tmStart = sphLongTimer ();
 
-	const CSphSchema * pFirst = NULL;
 	CSphQueryResult * pRes = new CSphQueryResult ();
-	ISphMatchSorter * pTop = NULL;
 
-#define REMOVE_DUPES 1
+	CSphVector < int, 8 > dMatchCounts;
+	CSphVector < CSphSchema, 8 > dSchemas;
 
 	SearchFailuresLog_t dFailures;
 
@@ -2435,23 +2432,27 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			assert ( tServed.m_pDict );
 			assert ( tServed.m_pTokenizer );
 
-			// check/set sort-by attr and schema
-			if ( !CheckSortAndSchema ( &pFirst, &pTop, tQuery, tServed.m_pSchema, tDist.m_dLocal[i].cstr(), tReq ) )
+			// create queue
+			ISphMatchSorter * pSorter = CreateSorter ( tQuery, *tServed.m_pSchema, tDist.m_dLocal[i].cstr(), tReq );
+			if ( !pSorter )
 				return;
 
 			// do query
 			tQuery.m_pTokenizer = tServed.m_pTokenizer;
 			iTries++;
-			if ( !tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pTop ) )
+			if ( !tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pSorter ) )
 				dFailures.Add ( SearchFailure_t ( tDist.m_dLocal[i].cstr(), tServed.m_pIndex->GetLastError() ) );
 			else
 				iSuccesses++;
 
-#if REMOVE_DUPES
-			// group-by queries remove dupes themselves
-			if ( tQuery.GetGroupByAttr()<0 )
-				sphFlattenQueue ( pTop, pRes, iTag++ );
-#endif
+			// extract my results and store schema
+			if ( pSorter->GetLength() )
+			{
+				dMatchCounts.Add ( pSorter->GetLength() );
+				dSchemas.Add ( pRes->m_tSchema );
+				sphFlattenQueue ( pSorter, pRes, iTag++ );
+			}
+			SafeDelete ( pSorter );
 		}
 		tmQuery += sphLongTimer ();
 
@@ -2462,18 +2463,15 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		}
 
 		// wait for remote queries to complete
-		while ( iRemote )
+		if ( iRemote )
 		{
 			int iMsecLeft = tDist.m_iAgentQueryTimeout - int(tmQuery*1000.0f);
 			int iReplys = WaitForRemoteAgents ( sIndexes.cstr(), tDist, pRes, Max ( iMsecLeft, 0 ), dFailures );
 
-			// check if there were valid (though might be 0-matches) replys
+			// check if there were valid (though might be 0-matches) replys, and merge them
 			iSuccesses += iReplys;
-			if ( !iReplys )
-				break;
-
-			// merge in remote results
-			ARRAY_FOREACH ( iAgent, tDist.m_dAgents )
+			if ( iReplys )
+				ARRAY_FOREACH ( iAgent, tDist.m_dAgents )
 			{
 				Agent_t & tAgent = tDist.m_dAgents[iAgent];
 				if ( tAgent.m_bFailure )
@@ -2481,43 +2479,21 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 				// merge this agent's results
 				// FIXME! should check schema before; but sometimes it's empty
+				// FIXME! is it possible for result to not have required attributes?
 				if ( !tAgent.m_tRes.m_dMatches.GetLength() )
 					continue;
 
-				// check/set sort-by attr and schema
-				char sName [ 1024 ];
-				snprintf ( sName, sizeof(sName), "%s:%d:%s",
-					tAgent.m_sHost.cstr(), tAgent.m_iPort, tAgent.m_sIndexes.cstr() );
+				ARRAY_FOREACH ( i, tAgent.m_tRes.m_dMatches )
+					pRes->m_dMatches.Add ( tAgent.m_tRes.m_dMatches[i] ); // FIXME! what about tagging?
 
-				if ( !CheckSortAndSchema ( &pFirst, &pTop, tQuery, &tAgent.m_tRes.m_tSchema, sName, tReq ) )
-					return;
+				dMatchCounts.Add ( tAgent.m_tRes.m_dMatches.GetLength() );
+				dSchemas.Add ( tAgent.m_tRes.m_tSchema );
 
-				if ( tQuery.GetGroupByAttr()<0 ) 
-				{
-					ARRAY_FOREACH ( i, tAgent.m_tRes.m_dMatches )
-						pRes->m_dMatches.Add ( tAgent.m_tRes.m_dMatches[i] );
-				} else
-				{
-					ARRAY_FOREACH ( i, tAgent.m_tRes.m_dMatches )
-						pTop->Push ( tAgent.m_tRes.m_dMatches[i] );
-				}
 				tAgent.m_tRes.m_dMatches.Reset ();
 
 				// merge this agent's stats
 				pRes->m_iTotalMatches += tAgent.m_tRes.m_iTotalMatches;
 			}
-
-			break;
-		}
-
-		// if there were no local indexes, schema in pRes was not yet set,
-		// so we have to copy it from first available agent schema
-		if ( !tDist.m_dLocal.GetLength() && pRes->m_iTotalMatches )
-		{
-			assert ( pFirst );
-			assert ( pRes->m_tSchema.m_dAttrs.GetLength()==0 );
-			assert ( pRes->m_tSchema.m_dFields.GetLength()==0 );
-			pRes->m_tSchema = *pFirst;
 		}
 
 	} else if ( sIndexes=="*" )
@@ -2536,27 +2512,31 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 			const char * sIndexName = g_hIndexes.IterateGetKey().cstr();
 
-			// check/set sort-by attr and schema
-			if ( !CheckSortAndSchema ( &pFirst, &pTop, tQuery, tServed.m_pSchema, sIndexName, tReq ) )
-				return;
-
 			// fixup old queries
 			if ( !FixupQuery ( &tQuery, &tOldQuery, tServed.m_pSchema, sIndexName, tReq ) )
+				return;
+
+			// create queue
+			ISphMatchSorter * pSorter = CreateSorter ( tQuery, *tServed.m_pSchema, sIndexName, tReq );
+			if ( !pSorter )
 				return;
 
 			// do query
 			iTries++;
 			tQuery.m_pTokenizer = tServed.m_pTokenizer;
-			if ( !tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pTop ) )
+			if ( !tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pSorter ) )
 				dFailures.Add ( SearchFailure_t ( sIndexName, tServed.m_pIndex->GetLastError() ) );
 			else
 				iSuccesses++;
 
-#if REMOVE_DUPES
-			// group-by queries remove dupes themselves
-			if ( tQuery.GetGroupByAttr()<0 )
-				sphFlattenQueue ( pTop, pRes, iTag++ );
-#endif
+			// extract my results and store schema
+			if ( pSorter->GetLength() )
+			{
+				dMatchCounts.Add ( pSorter->GetLength() );
+				dSchemas.Add ( pRes->m_tSchema );
+				sphFlattenQueue ( pSorter, pRes, iTag++ );
+			}
+			SafeDelete ( pSorter );
 		}
 
 		if ( !iTries )
@@ -2608,27 +2588,31 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 				|| !tCache.ReadFromFile ( tQuery, sNext, tServed.m_pIndexPath->cstr(), pRes ) )
 #endif
 			{
-				// check/set sort-by attr and schema
-				if ( !CheckSortAndSchema ( &pFirst, &pTop, tQuery, tServed.m_pSchema, sNext, tReq ) )
-					return;
-
 				// fixup old queries
 				if ( !FixupQuery ( &tQuery, &tOldQuery, tServed.m_pSchema, sNext, tReq ) )
+					return;
+
+				// create queue
+				ISphMatchSorter * pSorter = CreateSorter ( tQuery, *tServed.m_pSchema, sNext, tReq );
+				if ( !pSorter )
 					return;
 
 				// do query
 				tQuery.m_pTokenizer = tServed.m_pTokenizer;
 				iTries++;
-				if ( !tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pTop ) )
+				if ( !tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pSorter ) )
 					dFailures.Add ( SearchFailure_t ( sNext, tServed.m_pIndex->GetLastError() ) );
 				else
 					iSuccesses++;
 
-#if REMOVE_DUPES
-				// group-by queries remove dupes themselves
-				if ( tQuery.GetGroupByAttr()<0 )
-					sphFlattenQueue ( pTop, pRes, iTag++ );
-#endif
+				// extract my results and store schema
+				if ( pSorter->GetLength() )
+				{
+					dMatchCounts.Add ( pSorter->GetLength() );
+					dSchemas.Add ( pRes->m_tSchema );
+					sphFlattenQueue ( pSorter, pRes, iTag++ );
+				}
+				SafeDelete ( pSorter );
 
 #if !USE_WINDOWS
 				if ( g_bCacheEnable )
@@ -2653,50 +2637,128 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		dFailures.Add ( SearchFailure_t ( "*", "searchd is id64; resulting docids might be wrapped" ) );
 #endif
 
-	// build report
-	StrBuf_t sFailures;
-	ReportSearchFailures ( sFailures, dFailures );
-
 	// if there were no succesful searches at all, this is an error
 	assert ( iTries );
 	if ( !iSuccesses )
 	{
+		StrBuf_t sFailures;
+		ReportSearchFailures ( sFailures, dFailures );
+
 		tReq.SendErrorReply ( "%s", sFailures.cstr() );
 		return;
 	}
 
-#if REMOVE_DUPES
-	if ( tQuery.GetGroupByAttr()>=0 )
-	{
-		// group-by queries remove dupes themselves, so just flatten
-		sphFlattenQueue ( pTop, pRes, 0 );
+	////////////////
+	// remove dupes
+	////////////////
 
-	} else if ( iSuccesses!=1 )
+	if ( iSuccesses>1 )
 	{
-		// if there was only 1 index searched, it's already properly flattened
+		// sanity check
+		int iExpected = 0;
+		ARRAY_FOREACH ( i, dMatchCounts )
+			iExpected += dMatchCounts[i];
+
+		if ( iExpected!=pRes->m_dMatches.GetLength() )
+		{
+			tReq.SendErrorReply ( "INTERNAL ERROR: expected %d matches in combined result set, got %d",
+				iExpected, pRes->m_dMatches.GetLength() );
+			return;
+		}
+
+		// build minimal schema
+		bool bAllEqual = true;
+		pRes->m_tSchema.Reset();
+		ARRAY_FOREACH ( i, dSchemas )
+			if ( !MinimizeSchema ( pRes->m_tSchema, dSchemas[i] ) )
+				bAllEqual = false;
+
+		// convert all matches to minimal schema
+		if ( !bAllEqual )
+		{
+			int iCur = 0;
+			int iOutAttrs = pRes->m_tSchema.m_dAttrs.GetLength();
+			int * dMapFrom = NULL;
+			DWORD * dOutAttrs = NULL;
+
+			if ( iOutAttrs )
+			{
+				dMapFrom = new int [ iOutAttrs ];
+				dOutAttrs = new DWORD [ iOutAttrs ];
+			}
+
+			ARRAY_FOREACH ( iSchema, dSchemas )
+			{
+				assert ( iOutAttrs<=dSchemas[iSchema].m_dAttrs.GetLength() );
+
+				ARRAY_FOREACH ( i, pRes->m_tSchema.m_dAttrs )
+				{
+					dMapFrom[i] = dSchemas[iSchema].GetAttrIndex ( pRes->m_tSchema.m_dAttrs[i].m_sName.cstr() );
+					assert ( dMapFrom[i]>=0 );
+				}
+
+				for ( int i=iCur; i<iCur+dMatchCounts[iSchema]; i++ )
+				{
+					CSphTaggedMatch & tMatch = pRes->m_dMatches[i];
+					tMatch.m_iAttrs = iOutAttrs;
+					if ( tMatch.m_iAttrs )
+					{
+						for ( int j=0; j<iOutAttrs; j++ )
+							dOutAttrs[j] = tMatch.m_pAttrs[dMapFrom[j]];
+
+						for ( int j=0; j<iOutAttrs; j++ )
+							tMatch.m_pAttrs[j] = dOutAttrs[j];
+					}
+				}
+				iCur += dMatchCounts[iSchema];
+			}
+
+			assert ( iCur==pRes->m_dMatches.GetLength() );
+			SafeDeleteArray ( dMapFrom );
+			SafeDeleteArray ( dOutAttrs );
+		}
+
+		// create queue
+		ISphMatchSorter * pSorter = CreateSorter ( tQuery, pRes->m_tSchema, "(remove-dupes)", tReq );
+		if ( !pSorter )
+			return;
+
+		// sort by docid and then by tag
 		pRes->m_dMatches.Sort ();
 
+		// kill all dupes
 		int iDupes = 0;
-		ARRAY_FOREACH ( i, pRes->m_dMatches )
+		if ( tQuery.GetGroupByAttr()>=0 )
 		{
-			if ( i==0 || pRes->m_dMatches[i].m_iDocID!=pRes->m_dMatches[i-1].m_iDocID )
-				pTop->Push ( pRes->m_dMatches[i] );
-			else
-				iDupes++;
+			// groupby sorters does that automagically
+			ARRAY_FOREACH ( i, pRes->m_dMatches )
+				if ( !pSorter->Push ( pRes->m_dMatches[i] ) )
+					iDupes++;
+		} else
+		{
+			// normal sorter needs massasging
+			ARRAY_FOREACH ( i, pRes->m_dMatches )
+			{
+				if ( i==0 || pRes->m_dMatches[i].m_iDocID!=pRes->m_dMatches[i-1].m_iDocID )
+					pSorter->Push ( pRes->m_dMatches[i] );
+				else
+					iDupes++;
+			}
 		}
 
 		pRes->m_dMatches.Reset ();
-		sphFlattenQueue ( pTop, pRes, 0 );
+		sphFlattenQueue ( pSorter, pRes, 0 );
+		SafeDelete ( pSorter );
 
 		pRes->m_iTotalMatches -= iDupes;
 	}
-#else
-	sphFlattenQueue ( pTop, pRes );
-#endif
 
 	pRes->m_iQueryTime = int ( 1000.0f*( sphLongTimer() - tmStart ) );
 
+	/////////////
 	// log query
+	/////////////
+
 	if ( g_iQueryLogFile>=0 )
 	{
 		time_t tNow;
@@ -2729,6 +2791,10 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	//////////////////////
 	// serve the response
 	//////////////////////
+
+	// build report
+	StrBuf_t sFailures;
+	ReportSearchFailures ( sFailures, dFailures );
 
 	// calc response length
 	int iRespLen = 20; // header
@@ -2836,7 +2902,6 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	assert ( tOut.GetError()==true || tOut.GetSentCount()==iRespLen+8 );
 
 	SafeDelete ( pRes );
-	SafeDelete ( pTop );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -3218,10 +3283,17 @@ int main ( int argc, char **argv )
 		return 1;
 	}
 
-	#if USE_WINDOWS
+#if USE_WINDOWS
 	sphWarning ( "forcing --console mode on Windows" );
 	bOptConsole = true;
-	#endif // USE_WINDOWS
+
+	// init WSA on Windows
+	// we need to do it this early because otherwise gethostbyname() from config parser could fail
+	WSADATA tWSAData;
+	int iStartupErr = WSAStartup ( WINSOCK_VERSION, &tWSAData );
+	if ( iStartupErr )
+		sphFatal ( "failed to initialize WinSock2: %s", sphSockError(iStartupErr) );
+#endif
 
 	/////////////////////
 	// parse config file
@@ -3311,7 +3383,7 @@ int main ( int argc, char **argv )
 			{
 				if ( !g_hIndexes ( pLocal->cstr() ) )
 				{
-					sphWarning ( "index '%s': no such local index '%s' - NOT SERVING",
+					sphWarning ( "index '%s': no such local index '%s' - SKIPPING LOCAL INDEX",
 						sIndexName, pLocal->cstr() );
 					continue;
 				}
@@ -3328,13 +3400,13 @@ int main ( int argc, char **argv )
 				while ( sphIsAlpha(*p) || *p=='.' || *p=='-' ) p++;
 				if ( p==pAgent->cstr() )
 				{
-					sphWarning ( "index '%s': agent '%s': host name expected - NOT SERVING",
+					sphWarning ( "index '%s': agent '%s': host name expected - SKIPPING AGENT",
 						sIndexName, pAgent->cstr() );
 					continue;
 				}
 				if ( *p++!=':' )
 				{
-					sphWarning ( "index '%s': agent '%s': colon expected near '%s' - NOT SERVING",
+					sphWarning ( "index '%s': agent '%s': colon expected near '%s' - SKIPPING AGENT",
 						sIndexName, pAgent->cstr(), p );
 					continue;
 				}
@@ -3343,14 +3415,14 @@ int main ( int argc, char **argv )
 				// extract port
 				if ( !isdigit(*p) )
 				{
-					sphWarning ( "index '%s': agent '%s': port number expected near '%s' - NOT SERVING",
+					sphWarning ( "index '%s': agent '%s': port number expected near '%s' - SKIPPING AGENT",
 						sIndexName, pAgent->cstr(), p );
 					continue;
 				}
 				tAgent.m_iPort = atoi(p);
 				if ( tAgent.m_iPort<=0 || tAgent.m_iPort>=65536 )
 				{
-					sphWarning ( "index '%s': agent '%s': invalid port number near '%s' - NOT SERVING",
+					sphWarning ( "index '%s': agent '%s': invalid port number near '%s' - SKIPPING AGENT",
 						sIndexName, pAgent->cstr(), p );
 					continue;
 				}
@@ -3359,7 +3431,7 @@ int main ( int argc, char **argv )
 				while ( isdigit(*p) ) p++;
 				if ( *p++!=':' )
 				{
-					sphWarning ( "index '%s': agent '%s': colon expected near '%s' - NOT SERVING",
+					sphWarning ( "index '%s': agent '%s': colon expected near '%s' - SKIPPING AGENT",
 						sIndexName, pAgent->cstr(), p );
 					continue;
 				}
@@ -3370,7 +3442,7 @@ int main ( int argc, char **argv )
 					p++;
 				if ( *p )
 				{
-					sphWarning ( "index '%s': agent '%s': index list expected near '%s' - NOT SERVING",
+					sphWarning ( "index '%s': agent '%s': index list expected near '%s' - SKIPPING AGENT",
 						sIndexName, pAgent->cstr(), p );
 					continue;
 				}
@@ -3380,8 +3452,8 @@ int main ( int argc, char **argv )
 				struct hostent * hp = gethostbyname ( tAgent.m_sHost.cstr() );
 				if ( !hp )
 				{
-					sphWarning ( "index '%s': agent '%s': failed to lookup host name - NOT SERVING",
-						sIndexName, pAgent->cstr() );
+					sphWarning ( "index '%s': agent '%s': failed to lookup host name '%s' (error=%s) - SKIPPING AGENT",
+						sIndexName, pAgent->cstr(), tAgent.m_sHost.cstr(), sphSockError() );
 					continue;
 				}
 				tAgent.SetAddr ( hp->h_addrtype, hp->h_length, hp->h_addr_list[0] );
@@ -3586,14 +3658,6 @@ int main ( int argc, char **argv )
 	////////////////////
 	// network startup
 	////////////////////
-
-	// init WSA on Windows
-	#if USE_WINDOWS
-	WSADATA tWSAData;
-	int iStartupErr = WSAStartup ( WINSOCK_VERSION, &tWSAData );
-	if ( iStartupErr )
-		sphFatal ( "failed to initialize WinSock2: %s", sphSockError(iStartupErr) );
-	#endif
 
 	// create and bind socket
 	DWORD uAddr = htonl(INADDR_ANY);

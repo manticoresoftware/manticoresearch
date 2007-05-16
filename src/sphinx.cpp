@@ -2929,7 +2929,11 @@ const CSphFilter & CSphFilter::operator = ( const CSphFilter & rhs )
 
 static int cmpDword ( const void * a, const void * b )
 {
-	return *((DWORD*)a) - *((DWORD*)b);
+	DWORD aa = *((DWORD*)a);
+	DWORD bb = *((DWORD*)b);
+	if ( aa==bb )
+		return 0;
+	return ( aa<bb ) ? -1 : 1;
 }
 
 

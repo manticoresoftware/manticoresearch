@@ -482,22 +482,6 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		return false;
 	}
 
-	// check index lock file
-	if ( !g_bRotate && !g_sBuildStops )
-	{
-		char sLockFile [ SPH_MAX_FILENAME_LEN ];
-		snprintf ( sLockFile, sizeof(sLockFile), "%s.spl", hIndex["path"].cstr() );
-		sLockFile [ sizeof(sLockFile)-1 ] = '\0';
-
-		struct stat tStat;
-		if ( !stat ( sLockFile, &tStat ) )
-		{
-			fprintf ( stdout, "FATAL: index lock file '%s' exists, will not index. Try --rotate option.\n",
-				sLockFile );
-			exit ( 1 );
-		}
-	}
-
 	///////////////////
 	// spawn tokenizer
 	///////////////////
@@ -659,6 +643,13 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		// do index
 		CSphIndex * pIndex = sphCreateIndexPhrase ( sIndexPath );
 		assert ( pIndex );
+
+		// check lock file
+		if ( !pIndex->Lock() )
+		{
+			fprintf ( stdout, "FATAL: %s, will not index. Try --rotate option.\n", pIndex->GetLastError().cstr() );
+			exit ( 1 );
+		}
 
 		pIndex->SetProgressCallback ( ShowProgress );
 		if ( pIndex->Build ( pDict, dSources, g_iMemLimit, eDocinfo ) )

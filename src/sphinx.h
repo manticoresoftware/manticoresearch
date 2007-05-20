@@ -1183,6 +1183,8 @@ public:
 	virtual int					Build ( CSphDict * dict, const CSphVector < CSphSource * > & dSources, int iMemoryLimit, ESphDocinfo eDocinfo ) = 0;
 
 	virtual const CSphSchema *	Preload ( bool bMlock, CSphString * sWarning ) = 0;
+	virtual bool				Lock () = 0;
+
 	virtual CSphQueryResult *	Query ( CSphDict * dict, CSphQuery * pQuery ) = 0;
 	virtual bool				QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchSorter * pTop ) = 0;
 	virtual bool				Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData ) = 0;

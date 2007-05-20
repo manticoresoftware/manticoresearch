@@ -68,7 +68,6 @@ struct ServedIndex_t
 	const CSphSchema *	m_pSchema;		///< pointer to index schema, managed by the index itself
 	CSphDict *			m_pDict;
 	ISphTokenizer *		m_pTokenizer;
-	CSphString *		m_pLockFile; 
 	CSphString *		m_pIndexPath;
 	bool				m_bEnabled;		///< to disable index in cases when rotation fails
 	bool				m_bMlock;
@@ -159,7 +158,6 @@ static int				g_iSocket		= 0;
 static int				g_iQueryLogFile	= -1;
 static int				g_iHUP			= 0;
 static const char *		g_sPidFile		= NULL;
-static bool				g_bHeadDaemon	= false;
 static int				g_iMaxMatches	= 1000;
 
 static SmallStringHash_T < ServedIndex_t >	g_hIndexes;
@@ -256,7 +254,6 @@ void ServedIndex_t::Reset ()
 	m_pIndex	= NULL;
 	m_pDict		= NULL;
 	m_pTokenizer= NULL;
-	m_pLockFile	= NULL;
 	m_pIndexPath= NULL;
 	m_bEnabled	= true;
 	m_bMlock	= false;
@@ -264,12 +261,9 @@ void ServedIndex_t::Reset ()
 
 ServedIndex_t::~ServedIndex_t ()
 {
-	if ( m_pLockFile && g_bHeadDaemon )
-		unlink ( m_pLockFile->cstr() );
 	SafeDelete ( m_pIndex );
 	SafeDelete ( m_pDict );
 	SafeDelete ( m_pTokenizer );
-	SafeDelete ( m_pLockFile );
 	SafeDelete ( m_pIndexPath );
 }
 
@@ -3602,28 +3596,10 @@ int main ( int argc, char **argv )
 			tIdx.m_pTokenizer = pTokenizer;
 			tIdx.m_pIndexPath = new CSphString ( hIndex["path"] );
 
-			if ( !bOptConsole )
+			if ( !tIdx.m_pIndex->Lock() )
 			{
-				// check lock file
-				char sTmp [ 1024 ];
-				snprintf ( sTmp, sizeof(sTmp), "%s.spl", hIndex["path"].cstr() );
-				sTmp [ sizeof(sTmp)-1 ] = '\0';
-
-				struct stat tStat;
-				if ( !stat ( sTmp, &tStat ) )
-				{
-					sphWarning ( "index '%s': lock file '%s' exists - NOT SERVING", sIndexName, sTmp );
-					continue;
-				}
-
-				// create lock file
-				FILE * fp = fopen ( sTmp, "w" );
-				if ( !fp )
-					sphFatal ( "index '%s': failed to create lock file '%s''", sIndexName, sTmp );
-				fprintf ( fp, "%d", getpid() );
-				fclose ( fp );
-
-				tIdx.m_pLockFile = new CSphString ( sTmp );
+				sphWarning ( "index '%s': %s - NOT SERVING", sIndexName, tIdx.m_pIndex->GetLastError().cstr() );
+				continue;
 			}
 
 			if ( !g_hIndexes.Add ( tIdx, sIndexName ) )
@@ -3736,9 +3712,6 @@ int main ( int argc, char **argv )
 	// we're almost good, and can create .pid file now
 	if ( !bOptConsole )
 	{
-		// i'm the main one
-		g_bHeadDaemon = true;
-
 		// create pid
 		g_sPidFile = hSearchd["pid_file"].cstr();
 		FILE * fp = fopen ( g_sPidFile, "w" );
@@ -3780,7 +3753,6 @@ int main ( int argc, char **argv )
 				ServedIndex_t & tIndex = g_hIndexes.IterateGet();
 				const char * sIndex = g_hIndexes.IterateGetKey().cstr();
 				assert ( tIndex.m_pIndex );
-				assert ( tIndex.m_pLockFile );
 				assert ( tIndex.m_pIndexPath );
 
 				RotateIndex ( tIndex, sIndex );
@@ -3859,7 +3831,6 @@ int main ( int argc, char **argv )
 
 			// child process, handle client
 			case 0:
-				g_bHeadDaemon = false;
 				HandleClient ( rsock, sClientIP );
 				sphSockClose ( rsock );
 				exit ( 0 );

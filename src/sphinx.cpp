@@ -1659,6 +1659,8 @@ struct CSphIndex_VLN : CSphIndex
 	virtual int					Build ( CSphDict * pDict, const CSphVector < CSphSource * > & dSources, int iMemoryLimit, ESphDocinfo eDocinfo );
 
 	virtual const CSphSchema *	Preload ( bool bMlock, CSphString * sWarning );
+	virtual bool				Lock ();
+
 	virtual CSphQueryResult *	Query ( CSphDict * pDict, CSphQuery * pQuery);
 	virtual bool				QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchSorter * pTop );
 
@@ -1675,8 +1677,9 @@ private:
 	static const DWORD			INDEX_MAGIC_HEADER		= 0x58485053;	///< my magic 'SPHX' header
 	static const DWORD			INDEX_FORMAT_VERSION	= 2;			///< my format version
 
+private:
 	CSphString					m_sFilename;
-	SphOffset_t					m_iFilePos;
+	int							m_iLockFD;
 
 	CSphVector<SphOffset_t>		m_dDoclist;
 
@@ -3770,6 +3773,7 @@ CSphIndex * sphCreateIndexPhrase ( const char * sFilename )
 
 CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename )
 	: CSphIndex ( sFilename )
+	, m_iLockFD ( -1 )
 {
 	m_sFilename = sFilename;
 
@@ -3798,6 +3802,11 @@ CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename )
 
 CSphIndex_VLN::~CSphIndex_VLN ()
 {
+	if ( m_iLockFD>=0 )
+	{
+		::close ( m_iLockFD );
+		::unlink ( GetIndexFileName ( "spl" ) );
+	}
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -7924,6 +7933,29 @@ bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, const CSphAutofile &
 	}
 
 	return false;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
+bool CSphIndex_VLN::Lock ()
+{
+	const char * sName = GetIndexFileName ( "spl" );
+
+	int m_iLockFD = ::open ( sName, SPH_O_NEW, 0644 );
+	if ( m_iLockFD<0 )
+	{
+		m_sLastError.SetSprintf ( "failed to open %s: %s", sName, strerror(errno) );
+		return false;
+	}
+
+	if ( !sphLockEx ( m_iLockFD, false ) )
+	{
+		m_sLastError.SetSprintf ( "failed to obtain exclusive lock on %s", sName );
+		::close ( m_iLockFD );
+		return false;
+	}
+
+	return true;
 }
 
 

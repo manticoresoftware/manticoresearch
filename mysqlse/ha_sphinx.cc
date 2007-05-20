@@ -63,7 +63,7 @@ enum
 {
 	SPHINX_SEARCHD_PROTO	= 1,
 	SEARCHD_COMMAND_SEARCH	= 0,
-	VER_COMMAND_SEARCH		= 0x107,
+	VER_COMMAND_SEARCH		= 0x109	,
 };
 
 /// search query sorting orders
@@ -313,6 +313,8 @@ private:
 	ESphGroupBy		m_eGroupFunc;
 	char *			m_sGroupBy;
 	char *			m_sGroupSortBy;
+
+	int				m_iCutoff;
 
 public:
 	char			m_sParseError[256];
@@ -823,6 +825,8 @@ CSphSEQuery::CSphSEQuery ( const char * sQuery, int iLength, const char * sIndex
 	, m_eGroupFunc ( SPH_GROUPBY_DAY )
 	, m_sGroupBy ( "" )
 	, m_sGroupSortBy ( "@group desc" )
+	, m_iCutoff ( 0 )
+
 	, m_pBuf ( NULL )
 	, m_pCur ( NULL )
 	, m_iBufLeft ( 0 )
@@ -958,6 +962,7 @@ bool CSphSEQuery::ParseField ( char * sField )
 	else if ( !strcmp ( sName, "maxid" ) )		m_iMaxID = iValue;
 	else if ( !strcmp ( sName, "maxmatches" ) )	m_iMaxMatches = iValue;
 	else if ( !strcmp ( sName, "groupsort" ) )	m_sGroupSortBy = sValue;
+	else if ( !strcmp ( sName, "cutoff" ) )		m_iCutoff = iValue;
 
 	else if ( !strcmp ( sName, "mode" ) )
 	{
@@ -1150,7 +1155,7 @@ int CSphSEQuery::BuildRequest ( char ** ppBuffer )
 	SPH_ENTER_METHOD();
 
 	// calc request length
-	int iReqSize = 68 + 4*m_iWeights
+	int iReqSize = 76 + 4*m_iWeights
 		+ strlen ( m_sSortBy )
 		+ strlen ( m_sQuery )
 		+ strlen ( m_sIndex )
@@ -1194,6 +1199,7 @@ int CSphSEQuery::BuildRequest ( char ** ppBuffer )
 	for ( int j=0; j<m_iWeights; j++ )
 		SendInt ( m_pWeights[j] ); // weights
 	SendString ( m_sIndex ); // indexes
+	SendInt ( 0 ); // id32 range follows
 	SendInt ( m_iMinID ); // id/ts ranges
 	SendInt ( m_iMaxID );
 
@@ -1217,6 +1223,7 @@ int CSphSEQuery::BuildRequest ( char ** ppBuffer )
 	SendString ( m_sGroupBy );
 	SendInt ( m_iMaxMatches );
 	SendString ( m_sGroupSortBy );
+	SendInt ( m_iCutoff );
 
 	// detect buffer overruns and underruns, and report internal error
 	if ( m_bBufOverrun || m_iBufLeft!=0 || m_pCur-m_pBuf!=iReqSize )
@@ -1254,6 +1261,7 @@ ha_sphinx::ha_sphinx ( handlerton * hton, TABLE_ARG * table )
 	, m_dFields ( NULL )
 	, m_iAttrs ( 0 )
 	, m_dAttrs ( NULL )
+	, m_bId64 ( 0 )
 	, m_dUnboundFields ( NULL )
 {
 	SPH_ENTER_METHOD();
@@ -1531,8 +1539,9 @@ bool ha_sphinx::UnpackSchema ()
 	}
 
 	m_iMatchesTotal = UnpackDword ();
+	m_bId64 = UnpackDword ();
 
-	// build unbound fields map
+	// network packet unpacked; build unbound fields map
 	SafeDeleteArray ( m_dUnboundFields );
 	m_dUnboundFields = new int [ pTable->s->fields ];
 
@@ -1561,7 +1570,7 @@ bool ha_sphinx::UnpackStats ( CSphSEStats * pStats )
 	assert ( pStats );
 
 	char * pCurSave = m_pCur;
-	m_pCur = m_pCur + m_iMatchesTotal*(2+m_iAttrs)*sizeof(uint); // id+weight+attrs
+	m_pCur = m_pCur + m_iMatchesTotal*(2+m_bId64+m_iAttrs)*sizeof(uint); // id+weight+attrs
 
 	pStats->m_iMatchesTotal = UnpackDword ();
 	pStats->m_iMatchesFound = UnpackDword ();
@@ -1776,6 +1785,8 @@ int ha_sphinx::get_rec ( byte * buf, const byte * key, uint keylen )
 	Field ** field = table->field;
 
 	// unpack and return the match
+	if ( m_bId64 )
+		UnpackDword (); // FIXME! add full id64 support later here; for now, it ignores high bits
 	uint32 uMatchID = UnpackDword ();
 	uint32 uMatchWeight = UnpackDword ();
 

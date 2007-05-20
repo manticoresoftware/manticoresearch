@@ -124,6 +124,7 @@ private:
 
 	uint32			m_iAttrs;
 	CSphSEAttr *	m_dAttrs;
+	int				m_bId64;
 
 	int *			m_dUnboundFields;
 

@@ -33,7 +33,7 @@
 	#include <io.h>
 	#include <winsock2.h>
 
-	#define sphSockRecv(_sock,_buf,_len,_flags)		::recv(_sock,_buf,_len,_flags)
+	#define sphSockRecv(_sock,_buf,_len)			::recv(_sock,_buf,_len,0)
 	#define sphSockSend(_sock,_buf,_len,_flags)		::send(_sock,_buf,_len,_flags)
 	#define sphSockClose(_sock)						::closesocket(_sock)
 
@@ -52,7 +52,7 @@
 	#include <sys/mman.h>
 	#include <md5.h>
 
-	#define sphSockRecv(_sock,_buf,_len,_flags)		::recv(_sock,_buf,_len,_flags)
+	#define sphSockRecv(_sock,_buf,_len)			::recv(_sock,_buf,_len,MSG_NOSIGNAL)
 	#define sphSockSend(_sock,_buf,_len,_flags)		::send(_sock,_buf,_len,_flags)
 	#define sphSockClose(_sock)						::close(_sock)
 
@@ -522,8 +522,8 @@ int sphSockRead ( int iSock, void * buf, int iLen )
 			return -1;
 		}
 
-		// try to recv next chunk
-		iRes = sphSockRecv ( iSock, pBuf, iLeftBytes, 0 );
+		// try to receive next chunk
+		iRes = sphSockRecv ( iSock, pBuf, iLeftBytes );
 
 		// if there was EINTR, retry
 		if ( iRes==-1 )
@@ -1519,7 +1519,7 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 			{
 				// read reply
 				int iRemoteVer;
-				int iRes = sphSockRecv ( tAgent.m_iSock, (char*)&iRemoteVer, sizeof(iRemoteVer), 0 );
+				int iRes = sphSockRecv ( tAgent.m_iSock, (char*)&iRemoteVer, sizeof(iRemoteVer) );
 				iRemoteVer = ntohl ( iRemoteVer );
 				if ( iRes!=sizeof(iRemoteVer) || iRemoteVer<=0 )
 				{
@@ -1681,7 +1681,7 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 					} tReplyHeader;
 					STATIC_SIZE_ASSERT ( tReplyHeader, 8 );
 
-					if ( sphSockRecv ( tAgent.m_iSock, (char*)&tReplyHeader, sizeof(tReplyHeader), 0 )!=sizeof(tReplyHeader) )
+					if ( sphSockRecv ( tAgent.m_iSock, (char*)&tReplyHeader, sizeof(tReplyHeader) )!=sizeof(tReplyHeader) )
 					{
 						// bail out if failed
 						dFailures.Add ( SearchFailure_t ( sIndexName,
@@ -1729,7 +1729,7 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 					// do read
 					assert ( tAgent.m_iReplyRead<tAgent.m_iReplySize );
 					int iRes = sphSockRecv ( tAgent.m_iSock, tAgent.m_pReplyBuf+tAgent.m_iReplyRead,
-						tAgent.m_iReplySize-tAgent.m_iReplyRead, 0 );
+						tAgent.m_iReplySize-tAgent.m_iReplyRead );
 
 					// bail out if read failed
 					if ( iRes<0 )

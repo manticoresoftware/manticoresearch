@@ -1090,6 +1090,12 @@ struct CSphMatchComparatorState
 class ISphMatchSorter
 {
 public:
+	bool				m_bRandomize;
+
+public:
+	/// ctor
+						ISphMatchSorter () : m_bRandomize ( false ) {}
+
 	/// virtualizing dtor
 	virtual				~ISphMatchSorter () {}
 

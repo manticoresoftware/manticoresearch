@@ -5897,14 +5897,17 @@ enum ESphSortFunc
 };
 
 
-/// returns 0 or less on error
+const int SORT_CLAUSE_ERROR		= 0;
+const int SORT_CLAUSE_RANDOM	= -1;
+
+
+/// returns SORT_CLAUSE_ERROR on error
+/// returns SORT_CLAUSE_RANDOM on "sort by random" clause
 /// returns 1 or more (number of fields encountered) on success
 static int sphParseSortClause ( const char * sClause, const CSphQuery * pQuery,
 	const CSphSchema & tSchema, bool bGroupClause,
 	CSphMatchComparatorState & tState, CSphString & sError )
 {
-	char sBuf[256];
-
 	// mini parser
 	CSphString sTmp;
 	CSphTokenizer_SBCS tTokenizer;
@@ -5920,15 +5923,18 @@ static int sphParseSortClause ( const char * sClause, const CSphQuery * pQuery,
 	{
 		bField = !bField;
 
+		// special case, sort by random
+		if ( iField==0 && bField && strcmp ( pTok, "@random" )==0 )
+			return SORT_CLAUSE_RANDOM;
+
 		// handle sort order
 		if ( !bField )
 		{
 			// check
 			if ( strcmp ( pTok, "desc" ) && strcmp ( pTok, "asc" ) )
 			{
-				snprintf ( sBuf, sizeof(sBuf), "invalid sorting order '%s'", pTok );
-				sError = sBuf;
-				return 0;
+				sError.SetSprintf ( "invalid sorting order '%s'", pTok );
+				return SORT_CLAUSE_ERROR;
 			}
 
 			// set
@@ -5942,10 +5948,8 @@ static int sphParseSortClause ( const char * sClause, const CSphQuery * pQuery,
 		// handle field name
 		if ( iField==MAX_SORT_FIELDS )
 		{
-			snprintf ( sBuf, sizeof(sBuf), "too much sort-by fields; maximum count is %d",
-				MAX_SORT_FIELDS );
-			sError = sBuf;
-			return 0;
+			sError.SetSprintf ( "too much sort-by fields; maximum count is %d", MAX_SORT_FIELDS );
+			return SORT_CLAUSE_ERROR;
 		}
 
 		if ( !strcasecmp ( pTok, "@relevance" )
@@ -5971,23 +5975,22 @@ static int sphParseSortClause ( const char * sClause, const CSphQuery * pQuery,
 			tState.m_iAttr[iField] = tSchema.GetAttrIndex ( pTok );
 			if ( tState.m_iAttr[iField]<0 )
 			{
-				snprintf ( sBuf, sizeof(sBuf), "sort-by attribute '%s' not found", pTok );
-				sError = sBuf;
-				return 0;
+				sError.SetSprintf ( "sort-by attribute '%s' not found", pTok );
+				return SORT_CLAUSE_ERROR;
 			}
 		}
 	}
 
 	if ( iField==0 )
 	{
-		snprintf ( sBuf, sizeof(sBuf), "no sort order defined" );
-		sError = sBuf;
-		return 0;
+		sError.SetSprintf ( "no sort order defined" );
+		return SORT_CLAUSE_ERROR;
 	}
 
 	if ( iField==1 )
 		tState.m_iAttr[iField++] = SPH_VATTR_ID; // add "id ASC"
 
+	assert ( iField>=2 );
 	return iField;
 }
 
@@ -5996,6 +5999,14 @@ ESphSortFunc sphNumSortAttrs2Func ( int iAttrs )
 {
 	switch ( iAttrs )
 	{
+		case SORT_CLAUSE_RANDOM:
+#if USE_WINDOWS
+			srand ( GetCurrentProcessId() );
+#else
+			srand ( getpid() );
+#endif
+			return FUNC_REL_DESC;
+
 		case 2:		return FUNC_GENERIC2; 
 		case 3:		return FUNC_GENERIC3;
 		case 4:		return FUNC_GENERIC4;
@@ -6012,7 +6023,6 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 	ISphMatchSorter * pTop = NULL;
 	CSphMatchComparatorState tStateMatch, tStateGroup;
 
-	char sBuf[256];
 	sError = "";
 
 	////////////////////////////////////
@@ -6022,17 +6032,21 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 	ESphSortFunc eMatchFunc = FUNC_REL_DESC;
 	ESphSortFunc eGroupFunc = FUNC_SORTBY;
 	bool bUsesAttrs = false;
+	bool bRandomize = false;
 
 	// matches sorting function
 	if ( pQuery->m_eSort==SPH_SORT_EXTENDED )
 	{
 		int iParsed = sphParseSortClause ( pQuery->m_sSortBy.cstr(), pQuery, tSchema,
 			false, tStateMatch, sError );
-		if ( iParsed<=0 )
+
+		if ( iParsed==SORT_CLAUSE_ERROR )
 			return false;
 
-		eMatchFunc = sphNumSortAttrs2Func ( iParsed );
+		if ( iParsed==SORT_CLAUSE_RANDOM )
+			bRandomize = true;
 
+		eMatchFunc = sphNumSortAttrs2Func ( iParsed );
 		for ( int i=0; i<iParsed; i++ )
 			if ( tStateMatch.m_iAttr[i]>=0 )
 				bUsesAttrs = true;
@@ -6045,8 +6059,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 			tStateMatch.m_iAttr[0] = tSchema.GetAttrIndex ( pQuery->m_sSortBy.cstr() );
 			if ( tStateMatch.m_iAttr[0]<0 )
 			{
-				snprintf ( sBuf, sizeof(sBuf), "sort-by attribute '%s' not found", pQuery->m_sSortBy.cstr() );
-				sError = sBuf;
+				sError.SetSprintf ( "sort-by attribute '%s' not found", pQuery->m_sSortBy.cstr() );
 				return false;
 			}
 		}
@@ -6060,8 +6073,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 			case SPH_SORT_TIME_SEGMENTS:	eMatchFunc = FUNC_TIMESEGS; break;
 			case SPH_SORT_RELEVANCE:		eMatchFunc = FUNC_REL_DESC; bUsesAttrs = false; break;
 			default:
-				snprintf ( sBuf, sizeof(sBuf), "unknown sorting mode %d", pQuery->m_eSort );
-				sError = sBuf;
+				sError.SetSprintf ( "unknown sorting mode %d", pQuery->m_eSort );
 				return false;
 		}
 	}
@@ -6071,8 +6083,15 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 	{
 		int iParsed = sphParseSortClause ( pQuery->m_sGroupSortBy.cstr(), pQuery, tSchema,
 			true, tStateGroup, sError );
-		if ( iParsed<=0 )
+
+		if ( iParsed==SORT_CLAUSE_ERROR )
 			return false;
+
+		if ( iParsed==SORT_CLAUSE_RANDOM )
+		{
+			sError.SetSprintf ( "groups can not be sorted by @random" );
+			return false;
+		}
 
 		eGroupFunc = sphNumSortAttrs2Func ( iParsed );
 	}
@@ -6153,6 +6172,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 	assert ( pTop );
 	pTop->SetState ( tStateMatch );
 	pTop->SetGroupState ( tStateGroup );
+	pTop->m_bRandomize = bRandomize;
 	return pTop;
 }
 
@@ -6296,6 +6316,9 @@ void CSphIndex_VLN::LookupDocinfo ( CSphDocInfo & tMatch )
 #define SPH_SUBMIT_MATCH(_match) \
 	if ( bLateLookup ) \
 		LookupDocinfo ( _match ); \
+	\
+	if ( pTop->m_bRandomize ) \
+		(_match).m_iWeight = rand(); \
 	\
 	if ( pTop->Push ( _match ) ) \
 		pResult->m_iTotalMatches++; \
@@ -7774,6 +7797,10 @@ bool CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, CSphDict * pDict, 
 	//////////////////////////
 	// do that matching thing
 	//////////////////////////
+
+	// randomizing trick. setting iQwords to 0 prevents weighting
+	if ( pTop->m_bRandomize )
+		iQwords = 0;
 
 	SphDocID_t iMinID = 1;
 	for ( ;; )

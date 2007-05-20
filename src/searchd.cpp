@@ -180,7 +180,7 @@ enum SearchdCommand_e
 /// known command versions
 enum
 {
-	VER_COMMAND_SEARCH		= 0x109,
+	VER_COMMAND_SEARCH		= 0x10A,
 	VER_COMMAND_EXCERPT		= 0x100,
 	VER_COMMAND_UPDATE		= 0x100
 };
@@ -194,6 +194,9 @@ enum SearchdStatus_e
 	SEARCHD_RETRY	= 2,	///< temporary failure, error message follows, client should retry later
 	SEARCHD_WARNING	= 3		///< general success, warning message and command-specific reply follow
 };
+
+const int	MAX_RETRY_COUNT		= 8;
+const int	MAX_RETRY_DELAY		= 1000;
 
 /////////////////////////////////////////////////////////////////////////////
 // MACHINE-DEPENDENT STUFF
@@ -1285,7 +1288,8 @@ enum AgentState_e
 	AGENT_CONNECT,				///< connecting to agent
 	AGENT_HELLO,				///< waiting for "VER x" hello
 	AGENT_QUERY,				///< query sent, wating for reply
-	AGENT_REPLY					///< reading reply
+	AGENT_REPLY,				///< reading reply
+	AGENT_RETRY					///< should retry
 };
 
 /// remote agent host/port
@@ -1337,7 +1341,8 @@ public:
 		{
 			sphSockClose ( m_iSock );
 			m_iSock = -1;
-			m_eState = AGENT_UNUSED;
+			if ( m_eState!=AGENT_RETRY )
+				m_eState = AGENT_UNUSED;
 
 			SafeDeleteArray ( m_pReplyBuf );
 		}
@@ -1531,7 +1536,7 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				}
 
 				// do query!
-				int iReqSize = 72 + 2*sizeof(SphDocID_t) + 4*tQuery.m_iWeights
+				int iReqSize = 80 + 2*sizeof(SphDocID_t) + 4*tQuery.m_iWeights
 					+ strlen ( tQuery.m_sSortBy.cstr() )
 					+ strlen ( tQuery.m_sQuery.cstr() )
 					+ strlen ( tAgent.m_sIndexes.cstr() )
@@ -1590,6 +1595,8 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				tOut.SendInt ( tQuery.m_iMaxMatches );
 				tOut.SendString ( tQuery.m_sGroupSortBy.cstr() );
 				tOut.SendInt ( tQuery.m_iCutoff );
+				tOut.SendInt ( tQuery.m_iRetryCount );
+				tOut.SendInt ( tQuery.m_iRetryDelay );
 				tOut.Flush ();
 
 				// FIXME! handle flush failure
@@ -1766,6 +1773,11 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 							"agent '%s:%d': remote warning (status=%d, error=%s)",
 							tAgent.m_sHost.cstr(), tAgent.m_iPort,
 							tAgent.m_iReplyStatus, sAgentWarning.cstr() ) );
+
+					} else if ( tAgent.m_iReplyStatus==SEARCHD_RETRY )
+					{
+						tAgent.m_eState = AGENT_RETRY;
+						break;
 
 					} else if ( tAgent.m_iReplyStatus!=SEARCHD_OK )
 					{
@@ -2154,6 +2166,16 @@ public:
 };
 
 
+void sphUsleep ( int iMsec )
+{
+	struct timeval tvTimeout;
+	tvTimeout.tv_sec = iMsec / 1000; // full seconds
+	tvTimeout.tv_usec = ( iMsec % 1000 ) * 1000; // remainder is msec, so *1000 for usec
+
+	select ( 0, NULL, NULL, NULL, &tvTimeout ); // FIXME? could handle EINTR
+}
+
+
 void ReportSearchFailures ( StrBuf_t & sReport, SearchFailuresLog_t & dFailures )
 {
 	if ( !dFailures.GetLength() )
@@ -2349,6 +2371,13 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	if ( iVer>=0x109 )
 		tQuery.m_iCutoff = tReq.GetInt();
 
+	// v.1.10
+	if ( iVer>=0x10A )
+	{
+		tQuery.m_iRetryCount = tReq.GetInt ();
+		tQuery.m_iRetryDelay = tReq.GetInt ();
+	}
+
 	/////////////////////
 	// additional checks
 	/////////////////////
@@ -2390,6 +2419,16 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		tReq.SendErrorReply ( "cutoff out of bounds (cutoff=%d)", tQuery.m_iCutoff );
 		return;
 	}
+	if ( tQuery.m_iRetryCount<0 || tQuery.m_iRetryCount>MAX_RETRY_COUNT )
+	{
+		tReq.SendErrorReply ( "retry count out of bounds (count=%d)", tQuery.m_iRetryCount );
+		return;
+	}
+	if ( tQuery.m_iRetryDelay<0 || tQuery.m_iRetryDelay>MAX_RETRY_DELAY )
+	{
+		tReq.SendErrorReply ( "retry delay out of bounds (delay=%d)", tQuery.m_iRetryDelay );
+		return;
+	}
 
 	////////////////
 	// do searching
@@ -2415,85 +2454,103 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		DistributedIndex_t & tDist = g_hDistIndexes[sIndexes];
 		iTries += tDist.m_dAgents.GetLength();
 
-		// start connecting to remote agents
-		ARRAY_FOREACH ( i, tDist.m_dAgents )
-			ConnectToRemoteAgent ( &tDist.m_dAgents[i], sIndexes.cstr(), dFailures );
-
-		// connect to remote agents and query them first
-		int iRemote = QueryRemoteAgents ( sIndexes.cstr(), tDist, tQuery, tQuery.m_eMode, dFailures );
-
-		// while the remote queries are running, do local searches
-		// FIXME! what if the remote agents finish early, could they timeout?
-		float tmQuery = -sphLongTimer ();
-		ARRAY_FOREACH ( i, tDist.m_dLocal )
+		tQuery.m_iRetryCount = Min ( Max ( tQuery.m_iRetryCount, 0 ), MAX_RETRY_COUNT ); // paranoid clamp
+		for ( int iRetry=0; iRetry<=tQuery.m_iRetryCount; iRetry++ )
 		{
-			const ServedIndex_t & tServed = g_hIndexes [ tDist.m_dLocal[i] ];
-			assert ( tServed.m_pIndex );
-			assert ( tServed.m_pDict );
-			assert ( tServed.m_pTokenizer );
-
-			// create queue
-			ISphMatchSorter * pSorter = CreateSorter ( tQuery, *tServed.m_pSchema, tDist.m_dLocal[i].cstr(), tReq );
-			if ( !pSorter )
-				return;
-
-			// do query
-			tQuery.m_pTokenizer = tServed.m_pTokenizer;
-			iTries++;
-			if ( !tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pSorter ) )
-				dFailures.Add ( SearchFailure_t ( tDist.m_dLocal[i].cstr(), tServed.m_pIndex->GetLastError() ) );
-			else
-				iSuccesses++;
-
-			// extract my results and store schema
-			if ( pSorter->GetLength() )
+			// delay between retries
+			if ( iRetry>0 )
+				sphUsleep ( tQuery.m_iRetryDelay );
+    
+			// start connecting to remote agents
+			ARRAY_FOREACH ( i, tDist.m_dAgents )
+				if ( iRetry==0 || tDist.m_dAgents[i].m_eState==AGENT_RETRY )
+					ConnectToRemoteAgent ( &tDist.m_dAgents[i], sIndexes.cstr(), dFailures );
+    
+			// connect to remote agents and query them first
+			int iRemote = QueryRemoteAgents ( sIndexes.cstr(), tDist, tQuery, tQuery.m_eMode, dFailures );
+    
+			// while the remote queries are running, do local searches
+			// FIXME! what if the remote agents finish early, could they timeout?
+			float tmQuery = 0.0f;
+			if ( iRetry==0 )
 			{
-				dMatchCounts.Add ( pSorter->GetLength() );
-				dSchemas.Add ( pRes->m_tSchema );
-				sphFlattenQueue ( pSorter, pRes, iTag++ );
+				if ( !iRemote && !tDist.m_dLocal.GetLength() )
+				{
+					tReq.SendErrorReply ( "all remote agents unreachable, no local indexes configured" );
+					return;
+				}
+    
+				tmQuery = -sphLongTimer ();
+				ARRAY_FOREACH ( i, tDist.m_dLocal )
+				{
+					const ServedIndex_t & tServed = g_hIndexes [ tDist.m_dLocal[i] ];
+					assert ( tServed.m_pIndex );
+					assert ( tServed.m_pDict );
+					assert ( tServed.m_pTokenizer );
+    
+					// create queue
+					ISphMatchSorter * pSorter = CreateSorter ( tQuery, *tServed.m_pSchema, tDist.m_dLocal[i].cstr(), tReq );
+					if ( !pSorter )
+						return;
+    
+					// do query
+					tQuery.m_pTokenizer = tServed.m_pTokenizer;
+					iTries++;
+					if ( !tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pSorter ) )
+						dFailures.Add ( SearchFailure_t ( tDist.m_dLocal[i].cstr(), tServed.m_pIndex->GetLastError() ) );
+					else
+						iSuccesses++;
+    
+					// extract my results and store schema
+					if ( pSorter->GetLength() )
+					{
+						dMatchCounts.Add ( pSorter->GetLength() );
+						dSchemas.Add ( pRes->m_tSchema );
+						sphFlattenQueue ( pSorter, pRes, iTag++ );
+					}
+					SafeDelete ( pSorter );
+				}
+				tmQuery += sphLongTimer ();
 			}
-			SafeDelete ( pSorter );
-		}
-		tmQuery += sphLongTimer ();
-
-		if ( !iRemote && !tDist.m_dLocal.GetLength() )
-		{
-			tReq.SendErrorReply ( "all remote agents unreachable, no local indexes configured" );
-			return;
-		}
-
-		// wait for remote queries to complete
-		if ( iRemote )
-		{
-			int iMsecLeft = tDist.m_iAgentQueryTimeout - int(tmQuery*1000.0f);
-			int iReplys = WaitForRemoteAgents ( sIndexes.cstr(), tDist, pRes, Max ( iMsecLeft, 0 ), dFailures );
-
-			// check if there were valid (though might be 0-matches) replys, and merge them
-			iSuccesses += iReplys;
-			if ( iReplys )
-				ARRAY_FOREACH ( iAgent, tDist.m_dAgents )
+    
+			// wait for remote queries to complete
+			if ( iRemote )
 			{
-				Agent_t & tAgent = tDist.m_dAgents[iAgent];
-				if ( tAgent.m_bFailure )
-					continue;
-
-				// merge this agent's results
-				// FIXME! should check schema before; but sometimes it's empty
-				// FIXME! is it possible for result to not have required attributes?
-				if ( !tAgent.m_tRes.m_dMatches.GetLength() )
-					continue;
-
-				ARRAY_FOREACH ( i, tAgent.m_tRes.m_dMatches )
-					pRes->m_dMatches.Add ( tAgent.m_tRes.m_dMatches[i] ); // FIXME! what about tagging?
-
-				dMatchCounts.Add ( tAgent.m_tRes.m_dMatches.GetLength() );
-				dSchemas.Add ( tAgent.m_tRes.m_tSchema );
-
-				tAgent.m_tRes.m_dMatches.Reset ();
-
-				// merge this agent's stats
-				pRes->m_iTotalMatches += tAgent.m_tRes.m_iTotalMatches;
+				int iMsecLeft = tDist.m_iAgentQueryTimeout - int(tmQuery*1000.0f);
+				int iReplys = WaitForRemoteAgents ( sIndexes.cstr(), tDist, pRes, Max ( iMsecLeft, 0 ), dFailures );
+    
+				// check if there were valid (though might be 0-matches) replys, and merge them
+				iSuccesses += iReplys;
+				if ( iReplys )
+					ARRAY_FOREACH ( iAgent, tDist.m_dAgents )
+				{
+					Agent_t & tAgent = tDist.m_dAgents[iAgent];
+					if ( tAgent.m_bFailure )
+						continue;
+    				if ( !tAgent.m_tRes.m_dMatches.GetLength() )
+						continue;
+    
+					// merge this agent's results
+					ARRAY_FOREACH ( i, tAgent.m_tRes.m_dMatches )
+						pRes->m_dMatches.Add ( tAgent.m_tRes.m_dMatches[i] ); // FIXME! what about tagging?
+    
+					dMatchCounts.Add ( tAgent.m_tRes.m_dMatches.GetLength() );
+					dSchemas.Add ( tAgent.m_tRes.m_tSchema );
+    
+					tAgent.m_tRes.m_dMatches.Reset ();
+    
+					// merge this agent's stats
+					pRes->m_iTotalMatches += tAgent.m_tRes.m_iTotalMatches;
+				}
 			}
+    
+			// check if we need to retry again
+			int iToRetry = 0;
+			ARRAY_FOREACH ( i, tDist.m_dAgents )
+				if ( tDist.m_dAgents[i].m_eState==AGENT_RETRY )
+					iToRetry++;
+			if ( !iToRetry )
+				break;
 		}
 
 	} else if ( sIndexes=="*" )

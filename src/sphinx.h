@@ -976,6 +976,9 @@ public:
 
 	int				m_iCutoff;		///< matches count threshold to stop searching at (defualt is 0; means to search until all matches are found)
 
+	int				m_iRetryCount;	///< retry count, for distributed queries
+	int				m_iRetryDelay;	///< retry delay, for distributed queries
+
 protected:
 	int				m_iAttrs;		///< attribute count (necessary to instantiate group-by queues)
 	int				m_iGroupBy;		///< group-by attribute index

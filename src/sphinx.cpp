@@ -2958,9 +2958,12 @@ CSphQuery::CSphQuery ()
 	, m_iMinID		( 0 )
 	, m_iMaxID		( DOCID_MAX )
 	, m_sGroupSortBy( "@group desc" )
+	, m_iCutoff		( 0 )
+	, m_iRetryCount	( 0 )
+	, m_iRetryDelay	( 0 )
+
 	, m_iAttrs		( -1 )
 	, m_iGroupBy	( -1 )
-	, m_iCutoff		( 0 )
 {}
 
 

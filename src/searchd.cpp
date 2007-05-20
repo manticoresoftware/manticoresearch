@@ -3596,12 +3596,6 @@ int main ( int argc, char **argv )
 			tIdx.m_pTokenizer = pTokenizer;
 			tIdx.m_pIndexPath = new CSphString ( hIndex["path"] );
 
-			if ( !tIdx.m_pIndex->Lock() )
-			{
-				sphWarning ( "index '%s': %s - NOT SERVING", sIndexName, tIdx.m_pIndex->GetLastError().cstr() );
-				continue;
-			}
-
 			if ( !g_hIndexes.Add ( tIdx, sIndexName ) )
 			{
 				sphWarning ( "index '%s': duplicate name in hash?! INTERNAL ERROR - NOT SERVING", sIndexName );

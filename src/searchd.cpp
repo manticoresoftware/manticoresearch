@@ -3682,6 +3682,19 @@ int main ( int argc, char **argv )
 		}
 		#endif
 
+		// re-lock indexes
+		g_hIndexes.IterateStart ();
+		while ( g_hIndexes.IterateNext () )
+		{
+			ServedIndex_t & tServed = g_hIndexes.IterateGet ();
+			if ( tServed.m_bEnabled && !tServed.m_pIndex->Lock() )
+			{
+				sphWarning ( "index '%s': %s; INDEX UNUSABLE", g_hIndexes.IterateGetKey().cstr(),
+					tServed.m_pIndex->GetLastError().cstr() );
+				tServed.m_bEnabled = false;
+			}
+		}
+
 	} else
 	{
 		// if we're running in console mode, dump queries to tty as well

@@ -7941,11 +7941,14 @@ bool CSphIndex_VLN::Lock ()
 {
 	const char * sName = GetIndexFileName ( "spl" );
 
-	int m_iLockFD = ::open ( sName, SPH_O_NEW, 0644 );
 	if ( m_iLockFD<0 )
 	{
-		m_sLastError.SetSprintf ( "failed to open %s: %s", sName, strerror(errno) );
-		return false;
+		m_iLockFD = ::open ( sName, SPH_O_NEW, 0644 );
+		if ( m_iLockFD<0 )
+		{
+			m_sLastError.SetSprintf ( "failed to open %s: %s", sName, strerror(errno) );
+			return false;
+		}
 	}
 
 	if ( !sphLockEx ( m_iLockFD, false ) )

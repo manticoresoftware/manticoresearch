@@ -2703,7 +2703,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	// remove dupes
 	////////////////
 
-	if ( iSuccesses>1 )
+	while ( iSuccesses>1 )
 	{
 		// sanity check
 		int iExpected = 0;
@@ -2716,6 +2716,9 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 				iExpected, pRes->m_dMatches.GetLength() );
 			return;
 		}
+
+		if ( !pRes->m_dMatches.GetLength() )
+			break;
 
 		// build minimal schema
 		bool bAllEqual = true;
@@ -2802,6 +2805,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		SafeDelete ( pSorter );
 
 		pRes->m_iTotalMatches -= iDupes;
+		break;
 	}
 
 	pRes->m_iQueryTime = int ( 1000.0f*( sphLongTimer() - tmStart ) );

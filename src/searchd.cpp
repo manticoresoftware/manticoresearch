@@ -2703,6 +2703,9 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	// remove dupes
 	////////////////
 
+	if ( dSchemas.GetLength() )
+		pRes->m_tSchema = dSchemas[0];
+
 	while ( iSuccesses>1 )
 	{
 		// sanity check

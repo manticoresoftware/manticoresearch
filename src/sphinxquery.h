@@ -70,14 +70,24 @@ struct CSphBooleanQuery : ISphNoncopyable
 
 //////////////////////////////////////////////////////////////////////////////
 
+/// extended query word with attached position within atom
+struct CSphExtendedQueryAtomWord
+{
+	CSphString	m_sWord;
+	int			m_iAtomPos;
+
+	CSphExtendedQueryAtomWord () : m_iAtomPos ( -1 ) {}
+	CSphExtendedQueryAtomWord ( const char * sWord, int iPos ) : m_sWord ( sWord ), m_iAtomPos ( iPos ) {}
+};
+
 
 /// extended query atom
 /// atom is a list of required query words with field and proximity constraints
 struct CSphExtendedQueryAtom
 {
-	CSphVector<CSphString,8>	m_dWords;
-	int							m_iField;
-	int							m_iMaxDistance;
+	CSphVector<CSphExtendedQueryAtomWord,8>	m_dWords;
+	int		m_iField;
+	int		m_iMaxDistance;
 
 	/// default ctor
 	CSphExtendedQueryAtom ()

@@ -878,6 +878,7 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 
 	bool bAny = false;
 	int iField = -1;
+	int iAtomPos = 0;
 
 	bool bRedo = false;
 	const char * sToken = NULL;
@@ -900,7 +901,11 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 			CSphString sTmp ( sToken );
 			SphWordID_t iWordID = pDict->GetWordID ( (BYTE*)sTmp.cstr() );
 			if ( iWordID==0 )
+			{
+				if ( iAtomPos )
+					iAtomPos++;
 				continue;
+			}
 		}
 
 		///////////////////////////
@@ -969,7 +974,8 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 			if ( dState.Last()==XQS_PHRASE )
 			{
 				assert ( m_dStack.Last().m_pNode->m_tAtom.m_iMaxDistance==0 );
-				m_dStack.Last().m_pNode->m_tAtom.m_dWords.Add ( sToken );
+				CSphExtendedQueryAtomWord tAW ( sToken, iAtomPos++ );
+				m_dStack.Last().m_pNode->m_tAtom.m_dWords.Add ( tAW );
 				continue;
 			}
 
@@ -978,10 +984,11 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 			if ( dState.Last()==XQS_NEGTEXT )
 				dState.Pop ();
 
+			CSphExtendedQueryAtomWord tAW ( sToken, -1 );
 			PushNode ();
 			m_dStack.Last().m_bAny = bAny;
 			m_dStack.Last().m_pNode->m_tAtom.m_iField = iField;
-			m_dStack.Last().m_pNode->m_tAtom.m_dWords.Add ( sToken );
+			m_dStack.Last().m_pNode->m_tAtom.m_dWords.Add ( tAW );
 			bAny = false;
 			PopNode ();
 			continue;
@@ -1094,6 +1101,7 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 				m_dStack.Last().m_pNode->m_tAtom.m_iMaxDistance = 0;
 				bAny = false;
 				dState.Add ( XQS_PHRASE );
+				iAtomPos = 0;
 
 			} else
 			{
@@ -1150,7 +1158,7 @@ static void xqDump ( CSphExtendedQueryNode * pNode, const CSphSchema & tSch, int
 			tAtom.m_iField>=0 ? tSch.m_dFields[tAtom.m_iField].m_sName.cstr() : "-",
 			tAtom.m_iMaxDistance );
 		ARRAY_FOREACH ( i, tAtom.m_dWords )
-			printf ( " %s", tAtom.m_dWords[i].cstr() );
+			printf ( " %s (pos %d)", tAtom.m_dWords[i].m_sWord.cstr(), tAtom.m_dWords[i].m_iAtomPos );
 		printf ( "\n" );
 	}
 }
@@ -1163,12 +1171,12 @@ bool sphParseExtendedQuery ( CSphExtendedQuery & tParsed, const char * sQuery, c
 	bool bRes = qp.Parse ( tParsed, sQuery, pTokenizer, pSchema, pDict );
 
 #if XQDEBUG
-	if ( pRes )
+	if ( bRes )
 	{
 		printf ( "--- accept ---\n" );
-		xqDump ( pRes->m_pAccept, *pSchema, 0 );
+		xqDump ( tParsed.m_pAccept, *pSchema, 0 );
 		printf ( "--- reject ---\n" );
-		xqDump ( pRes->m_pReject, *pSchema, 0 );
+		xqDump ( tParsed.m_pReject, *pSchema, 0 );
 		printf ( "---\n" );
 	}
 #endif

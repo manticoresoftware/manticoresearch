@@ -2019,16 +2019,22 @@ bool MinimizeSchema ( CSphSchema & tDst, const CSphSchema & tSrc )
 		return true;
 	}
 
-	// remove all dst attribtues that are not present in src
-	bool bResult = true;
+	// check for equality, and remove all dst attributes that are not present in src
+	bool bEqual = ( tDst.GetRealAttrCount()==tSrc.GetRealAttrCount() );
 	for ( int i=0; i<tDst.GetRealAttrCount(); i++ )
-		if ( tSrc.GetAttrIndex ( tDst.m_dAttrs[i].m_sName.cstr() )==-1 )
 	{
-		tDst.m_dAttrs.Remove ( i );
-		i--;
-		bResult = false;
+		int iSrcIdx = tSrc.GetAttrIndex ( tDst.m_dAttrs[i].m_sName.cstr() );
+
+		if ( iSrcIdx!=i )
+			bEqual = false;
+
+		if ( iSrcIdx==-1 )
+		{
+			tDst.m_dAttrs.Remove ( i );
+			i--;
+		}
 	}
-	return bResult;
+	return bEqual;
 }
 
 

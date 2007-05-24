@@ -56,6 +56,8 @@
 
 #define SPHINXSE_SYSTEM_COLUMNS		3
 
+#define SPHINXSE_MAX_ALLOC			(16*1024*1024)
+
 // FIXME! all the following is cut-n-paste from sphinx.h and searchd.cpp
 #define SPHINX_VERSION		"0.9.7"
 
@@ -1641,7 +1643,11 @@ int ha_sphinx::index_read ( byte * buf, const byte * key, uint key_len, enum ha_
 
 	// receive reply
 	char sHeader[8];
-	::recv ( iSocket, sHeader, sizeof(sHeader), MSG_WAITALL );
+	if ( ::recv ( iSocket, sHeader, sizeof(sHeader), MSG_WAITALL )!=sizeof(sHeader) )
+	{
+		my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), "failed to receive response header (searchd went away?)" );
+		SPH_RET ( HA_ERR_END_OF_FILE );
+	}
 
 	short int uRespStatus = ntohs ( *(short int*)( &sHeader[0] ) );
 	short int uRespVersion = ntohs ( *(short int*)( &sHeader[2] ) );
@@ -1650,10 +1656,12 @@ int ha_sphinx::index_read ( byte * buf, const byte * key, uint key_len, enum ha_
 		uRespStatus, uRespVersion, uRespLength );
 
 	SafeDeleteArray ( m_pResponse );
-	m_pResponse = new char [ uRespLength+1 ];
+	if ( uRespLength<=SPHINXSE_MAX_ALLOC )
+		m_pResponse = new char [ uRespLength+1 ];
+
 	if ( !m_pResponse )
 	{
-		my_snprintf ( sError, sizeof(sError), "bad searchd response length (length=%d)", uRespLength );
+		my_snprintf ( sError, sizeof(sError), "bad searchd response length (length=%u)", uRespLength );
 		my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), sError );
 		SPH_RET ( HA_ERR_END_OF_FILE );
 	}

@@ -1487,43 +1487,46 @@ struct CSphMergeSource
 {	
 	const BYTE *		m_pWordlist;
 	CSphReader_VLN *	m_pDataReader;	
-	CSphWriter *		m_pIndexWriter;
-	CSphWriter *		m_pDataWriter;
 	int					m_iAttrNum;
 	SphDocID_t			m_iLastDocID;
 	SphDocID_t			m_iMinDocID;
 	CSphMatch			m_tMatch;
 	bool				m_bForceDocinfo;
 	CSphIndex_VLN *		m_pIndex;
+	DWORD *				m_pMinAttrs;
 
 	CSphMergeSource()
 		: m_pWordlist ( NULL )
 		, m_pDataReader ( NULL )
-		, m_pIndexWriter ( NULL )
-		, m_pDataWriter ( NULL )
 		, m_iAttrNum ( 0 )
 		, m_iLastDocID ( 0 )
 		, m_iMinDocID ( 0 )
 		, m_bForceDocinfo ( false )
 		, m_pIndex ( NULL )
+		, m_pMinAttrs ( NULL )
 	{}
 
 	bool Check ()
 	{
-		return ( m_pWordlist && m_pDataReader && m_pDataWriter && m_pIndexWriter );
+		return ( m_pWordlist && m_pDataReader );
 	}
 };
 
 struct CSphMergeData
 {
+	CSphWriter *		m_pIndexWriter;
+	CSphWriter *		m_pDataWriter;
 	SphOffset_t			m_iLastDoclistPos;
 	SphOffset_t			m_iDoclistPos;
 	SphOffset_t			m_iLastHitlistPos;
 	SphOffset_t			m_iWordlistOffset;	
 	SphWordID_t			m_iLastWordID;
 	SphDocID_t			m_iLastDocID;
+	SphDocID_t			m_iMinDocID;
 	CSphPurgeData *		m_pPurgeData;
 	CSphSourceStats		m_tStats;
+	DWORD *				m_pMinAttrs;
+	ESphDocinfo			m_eDocinfo;
 
 	CSphMergeData ()
 		: m_iLastDoclistPos ( 0 )
@@ -1532,8 +1535,19 @@ struct CSphMergeData
 		, m_iWordlistOffset ( 0 )
 		, m_iLastWordID ( 0 )
 		, m_iLastDocID ( 0 )
+		, m_iMinDocID ( 0 )
 		, m_pPurgeData ( NULL )
+		, m_pMinAttrs ( NULL )
+		, m_pIndexWriter ( NULL )
+		, m_pDataWriter ( NULL )
+		, m_eDocinfo ( SPH_DOCINFO_NONE )
 	{}
+
+	virtual ~CSphMergeData ()
+	{
+		if ( m_pMinAttrs )
+			delete[] m_pMinAttrs;
+	}
 };
 
 /// doclist record
@@ -1554,14 +1568,14 @@ struct CSphDoclistRecord
 						, m_uFields ( 0 )
 						, m_uMatchHits ( 0 )
 						, m_iLeadingZero ( 0 )
-						, m_iAttrNum ( 0 )
+						, m_iAttrNum ( 0 )					
 					{}
 
 	virtual			~CSphDoclistRecord ();
 
 	void			Inititalize ( int iAttrNum );
 	void			Read ( CSphMergeSource * pSource );
-	void			Write ( CSphMergeSource * pSource );
+	void			Write ( CSphMergeSource * pSource, CSphMergeData * pData );
 
 	const CSphDoclistRecord & operator = ( const CSphDoclistRecord & rhs );
 };
@@ -1630,6 +1644,11 @@ struct CSphWordDataRecord
 
 	void Read ( CSphMergeSource * pSource, CSphMergeData * pMergeData, int iDocNum );
 	void Write ( CSphMergeSource * pSource, CSphMergeData * pMergeData );
+
+	bool IsEmpty() const
+	{
+		return ( m_dDoclist.GetLength() == 0 );
+	}
 };
 
 struct CSphWordRecord
@@ -1646,6 +1665,10 @@ struct CSphWordRecord
 
 	void Read ();
 	void Write ();
+	bool IsEmpty() const
+	{
+		return m_tWordData.IsEmpty();
+	}
 };
 
 /// this is my actual VLN-compressed phrase index implementation
@@ -4131,10 +4154,10 @@ void CSphIndex_VLN::cidxHit ( CSphWriter & fdWordlist, CSphWriter & fdData, CSph
 	///////////
 
 	// add hit delta
-	assert ( hit->m_iWordPos > m_tLastHit.m_iWordPos );
+	assert ( hit->m_iWordPos > m_tLastHit.m_iWordPos );	
 	fdData.ZipInt ( hit->m_iWordPos - m_tLastHit.m_iWordPos );
 	m_tLastHit.m_iWordPos = hit->m_iWordPos;
-	m_iLastWordHits++;
+	m_iLastWordHits++;	
 
 	// update matched fields mask
 	m_uLastDocFields |= ( 1UL << (hit->m_iWordPos>>24) );
@@ -5221,7 +5244,18 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 	assert( pSrcIndex );
 
 	const CSphSchema * pDstSchema = Preload ( false, NULL );
+	if ( !pDstSchema )
+	{
+		fprintf ( stdout, "ERROR: failed to load scheme '%s'.\n", GetIndexFileName("sph") );
+		return false;
+	}
+
 	const CSphSchema * pSrcSchema = pSrcIndex->Preload ( false, NULL );
+	if ( !pSrcSchema )
+	{
+		fprintf ( stdout, "ERROR: failed to load scheme '%s'.\n", GetIndexFileName("sph") );
+		return false;
+	}
 
 	CSphString sError;
 	if ( pDstSchema->CompareTo( *pSrcSchema, sError ) != SPH_SCHEMAS_EQUAL )
@@ -5229,8 +5263,9 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 		m_sLastError.SetSprintf ( "merging indexes with different schemas is not allowed" );
 		return false;
 	}
-
-	if ( m_eDocinfo == SPH_DOCINFO_EXTERN && pSrcIndex->m_eDocinfo == SPH_DOCINFO_INLINE )
+	 
+	// FIXME!
+	if ( m_eDocinfo != pSrcIndex->m_eDocinfo )
 	{
 		m_sLastError.SetSprintf ( "merging indexes with different docinfo storage is not allowed" );
 		return false;
@@ -5343,23 +5378,21 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 	CSphMergeSource		tSrcSource;
 
 	tDstSource.m_pWordlist = pDstWordlist;
-	tDstSource.m_pDataReader = &rdDstData;
-	tDstSource.m_pIndexWriter = &wrDstIndex;
-	tDstSource.m_pDataWriter = &wrDstData;
+	tDstSource.m_pDataReader = &rdDstData;	
 	tDstSource.m_iAttrNum = ( m_eDocinfo == SPH_DOCINFO_INLINE )? m_tSchema.m_dAttrs.GetLength() : 0;
 	tDstSource.m_iLastDocID = m_tMin.m_iDocID;
 	tDstSource.m_iMinDocID = m_tMin.m_iDocID;
+	tDstSource.m_pMinAttrs = m_tMin.m_pAttrs;
 	tDstSource.m_pIndex = this;
 	
 	tSrcSource.m_pWordlist = pSrcWordlist;
 	tSrcSource.m_pDataReader = &rdSrcData;
-	tSrcSource.m_pIndexWriter = &wrDstIndex;
-	tSrcSource.m_pDataWriter = &wrDstData;
 	tSrcSource.m_iAttrNum = ( pSrcIndex->m_eDocinfo == SPH_DOCINFO_INLINE )? pSrcIndex->m_tSchema.m_dAttrs.GetLength() : 0;
 	tSrcSource.m_iLastDocID = pSrcIndex->m_tMin.m_iDocID;
 	tSrcSource.m_iMinDocID = pSrcIndex->m_tMin.m_iDocID;
+	tSrcSource.m_pMinAttrs = pSrcIndex->m_tMin.m_pAttrs;
 	tSrcSource.m_pIndex = pSrcIndex;
-	
+		
 	if ( m_eDocinfo == SPH_DOCINFO_INLINE && pSrcIndex->m_eDocinfo == SPH_DOCINFO_EXTERN )
 	{
 		tSrcSource.m_iAttrNum = pSrcIndex->m_tSchema.m_dAttrs.GetLength();
@@ -5370,7 +5403,27 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 	CSphMergeData tMerge;
 	tPurgeData.m_iAttrIndex = m_tSchema.GetAttrIndex( tPurgeData.m_sKey.cstr() );
 	tMerge.m_pPurgeData = &tPurgeData;
-	tMerge.m_iLastDocID = m_tMin.m_iDocID;
+	tMerge.m_iMinDocID = Min( m_tMin.m_iDocID, pSrcIndex->m_tMin.m_iDocID );
+	tMerge.m_iLastDocID = tMerge.m_iMinDocID;
+	tMerge.m_pIndexWriter = &wrDstIndex;
+	tMerge.m_pDataWriter = &wrDstData;
+	tMerge.m_eDocinfo = m_eDocinfo;
+
+	int iMinAttrSize = m_tSchema.m_dAttrs.GetLength();
+	assert ( iMinAttrSize );
+
+	tMerge.m_pMinAttrs = new DWORD[iMinAttrSize];
+	assert ( tMerge.m_pMinAttrs );
+	
+	for( int i = 0; i < iMinAttrSize; i++ )
+	{
+		if ( bDstEmpty )
+			tMerge.m_pMinAttrs[i] = pSrcIndex->m_tMin.m_pAttrs[i];
+		else if ( bSrcEmpty )
+			tMerge.m_pMinAttrs[i] = m_tMin.m_pAttrs[i];
+		else
+			tMerge.m_pMinAttrs[i] = Min ( m_tMin.m_pAttrs[i], pSrcIndex->m_tMin.m_pAttrs[i] );
+	}
 
 	CSphWordRecord		tDstWord ( &tDstSource, &tMerge );
 	CSphWordRecord		tSrcWord ( &tSrcSource, &tMerge );
@@ -5405,7 +5458,8 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 
 		if ( ( ( uProgress & 0x01 ) && tDstWord.m_tWordIndex < tSrcWord.m_tWordIndex ) || !( uProgress & 0x02 ) )
 		{
-			tDstWord.Write();
+			if ( !tDstWord.IsEmpty() )
+				tDstWord.Write();
 			
 			if ( iDstPos > 2 )
 				tDstWord.Read();
@@ -5414,7 +5468,8 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 		}
 		else if ( ( ( uProgress & 0x02 ) && tDstWord.m_tWordIndex > tSrcWord.m_tWordIndex ) || !( uProgress & 0x01 ) )
 		{
-			tSrcWord.Write();
+			if ( !tSrcWord.IsEmpty() )
+				tSrcWord.Write();
 
 			if ( iSrcPos > 2 )
 				tSrcWord.Read();		
@@ -5471,6 +5526,9 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 	fdInfo.PutDword ( INDEX_MAGIC_HEADER );
 	fdInfo.PutDword ( INDEX_FORMAT_VERSION );
 
+	// bits
+	fdInfo.PutDword ( USE_64BIT );
+
 	// docinfo
 	fdInfo.PutDword ( m_eDocinfo );
 
@@ -5483,10 +5541,10 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 		WriteSchemaColumn ( fdInfo, m_tSchema.m_dAttrs[i] );
 
 	// min doc
-	fdInfo.PutDocid ( Min ( m_tMin.m_iDocID, pSrcIndex->m_tMin.m_iDocID ) );
+	fdInfo.PutOffset ( tMerge.m_iMinDocID );
 
 	for ( int i = 0; i < m_tMin.m_iAttrs; i++ )
-		m_tMin.m_pAttrs[i] = Min ( m_tMin.m_pAttrs[i], pSrcIndex->m_tMin.m_pAttrs[i] );
+		m_tMin.m_pAttrs[i] = tMerge.m_pMinAttrs[i];
 
 	if ( m_eDocinfo==SPH_DOCINFO_INLINE )
 		fdInfo.PutBytes ( m_tMin.m_pAttrs, m_tMin.m_iAttrs*sizeof(DWORD) );
@@ -10268,7 +10326,7 @@ void CSphDoclistRecord::Inititalize ( int iAttrNum )
 void CSphDoclistRecord::Read( CSphMergeSource * pSource )
 {	
 	assert ( pSource );
-
+	 
 	CSphReader_VLN * pReader = pSource->m_pDataReader;
 
 	assert ( pReader );
@@ -10285,12 +10343,14 @@ void CSphDoclistRecord::Read( CSphMergeSource * pSource )
 	if ( m_iAttrNum )
 		for ( int i = 0; i < m_iAttrNum; ++i )
 		{
+			assert ( pSource->m_pMinAttrs );
+
 			if ( pSource->m_bForceDocinfo )
 			{
 				m_pAttrs[i] = pSource->m_tMatch.m_pAttrs[i];
 			}
 			else
-				m_pAttrs[i] = pReader->UnzipOffset();
+				m_pAttrs[i] = pReader->UnzipOffset() + pSource->m_pMinAttrs[i];
 		}
 
 	m_iPos = pReader->UnzipOffset();
@@ -10298,19 +10358,32 @@ void CSphDoclistRecord::Read( CSphMergeSource * pSource )
 	m_uMatchHits = pReader->UnzipInt ();
 }
 
-void CSphDoclistRecord::Write( CSphMergeSource * pSource )
+void CSphDoclistRecord::Write( CSphMergeSource * pSource, CSphMergeData * pData )
 {
 	assert ( pSource );
+	assert ( pData );
 
-	CSphWriter * pWriter = pSource->m_pDataWriter;
+	CSphWriter * pWriter = pData->m_pDataWriter;
 	assert ( pWriter );
+	
+	pWriter->ZipOffset ( m_iDocID - pData->m_iLastDocID );
+	pData->m_iLastDocID = m_iDocID;
 
-	pWriter->ZipOffset ( m_iDocID - pSource->m_iLastDocID );
-	pSource->m_iLastDocID = m_iDocID;
+	assert ( pData->m_pMinAttrs );
 
 	if ( m_iAttrNum )
-		for ( int i = 0; i < m_iAttrNum; ++i )
-			pWriter->ZipOffset( m_pAttrs[i] );			
+	{
+		if ( pData->m_eDocinfo == SPH_DOCINFO_INLINE )
+		{
+			for ( int i = 0; i < m_iAttrNum; ++i )
+				pWriter->ZipOffset( m_pAttrs[i] - pData->m_pMinAttrs[i] );
+		}
+		else if ( pData->m_eDocinfo == SPH_DOCINFO_EXTERN )
+		{
+			for ( int i = 0; i < m_iAttrNum; ++i )
+				pWriter->ZipOffset( m_pAttrs[i] );
+		}
+	}
 
 	pWriter->ZipOffset( m_iPos );
 	pWriter->ZipInt( m_uFields );
@@ -10346,15 +10419,17 @@ void CSphWordDataRecord::Read( CSphMergeSource * pSource, CSphMergeData * pMerge
 	assert ( pMergeData );
 	assert ( pMergeData->m_pPurgeData );
 	
+	DWORD iWordPos = 0;
+	CSphVector< DWORD > dWordPosIndex;
 	CSphReader_VLN * pReader = pSource->m_pDataReader;
 	assert ( pReader );
-
+	
 	m_dWordPos.Reset();
 	m_dDoclist.Reset();
 
 	for( int i = 0; i < iDocNum; i++ )
 	{
-		DWORD iWordPos = 0;
+		dWordPosIndex.Add( m_dWordPos.GetLength() );
 		do 
 		{
 			iWordPos = pReader->UnzipInt ();
@@ -10371,9 +10446,37 @@ void CSphWordDataRecord::Read( CSphMergeSource * pSource, CSphMergeData * pMerge
 		tDoc.Inititalize ( m_iAttrNum );
 		tDoc.Read ( pSource );
 
-		if ( !pMergeData->m_pPurgeData->IsEnabled() )
+		if ( pMergeData->m_pPurgeData->IsEnabled() )
+		{
 			if ( !pMergeData->m_pPurgeData->IsShouldPurge( ( const DWORD * ) tDoc.m_pAttrs ) )
 				m_dDoclist.Add( tDoc );
+			else
+			{
+				// remove word posistions
+				assert ( i < dWordPosIndex.GetLength() );
+				DWORD iStartIndex = dWordPosIndex[i];
+
+				if ( i == ( dWordPosIndex.GetLength() - 1 ) )
+				{
+					if ( iStartIndex > 0)
+						m_dWordPos.Resize( iStartIndex + 1 );
+					else
+						m_dWordPos.Reset();
+				}
+				else
+				{
+					DWORD iLastIndex = dWordPosIndex[i + 1];
+					int iRemoveSize = iLastIndex - iStartIndex;
+					int iNewSize = m_dWordPos.GetLength() - iRemoveSize;
+
+					for ( int iWordPos = iStartIndex; iWordPos < iNewSize; iWordPos++ )
+						m_dWordPos[iWordPos] = m_dWordPos[iWordPos+iRemoveSize];
+					m_dWordPos.Resize( iNewSize );
+				}				
+			}
+		}
+		else
+			m_dDoclist.Add( tDoc );
 	}
 	
 	m_iLeadingZero = pReader->UnzipInt ();
@@ -10387,7 +10490,7 @@ void CSphWordDataRecord::Write ( CSphMergeSource * pSource, CSphMergeData * pMer
 	assert ( m_dWordPos.GetLength() );
 	assert ( m_dDoclist.GetLength() );
 
-	CSphWriter * pWriter = pSource->m_pDataWriter;
+	CSphWriter * pWriter = pMergeData->m_pDataWriter;
 	assert ( pWriter );
 
 	int iDocCount = 0;
@@ -10410,7 +10513,7 @@ void CSphWordDataRecord::Write ( CSphMergeSource * pSource, CSphMergeData * pMer
 	pMergeData->m_iDoclistPos = pWriter->m_iPos;
 
 	for( int i = 0; i < m_dDoclist.GetLength(); i++ )
-		m_dDoclist[i].Write ( pSource );
+		m_dDoclist[i].Write ( pSource, pMergeData );
 
 	pWriter->ZipInt ( 0 );
 
@@ -10457,13 +10560,19 @@ void CSphWordRecord::Read ()
 	assert ( m_pMergeData );
 	assert ( m_pMergeSource->Check() );
 
+	// read word index data
 	m_tWordIndex.Read( m_pMergeSource->m_pWordlist );
 
+	// setup
 	m_tWordData.m_iWordID = m_tWordIndex.m_iWordID;
 	m_tWordData.m_iAttrNum = m_pMergeSource->m_iAttrNum;
 	m_pMergeSource->m_iLastDocID = m_pMergeSource->m_iMinDocID;
 
+	// read doclist data
 	m_tWordData.Read( m_pMergeSource, m_pMergeData, m_tWordIndex.m_iDocNum );
+
+	// update docs counter for "purge" reason
+	m_tWordIndex.m_iDocNum = m_tWordData.m_dDoclist.GetLength();
 }
 
 void CSphWordRecord::Write ()
@@ -10472,14 +10581,15 @@ void CSphWordRecord::Write ()
 	assert ( m_pMergeData );
 	assert ( m_pMergeSource->Check() );
 
-	m_pMergeSource->m_iLastDocID = m_pMergeData->m_iLastDocID;
-
+	//m_pMergeSource->m_iLastDocID = m_pMergeData->m_iLastDocID;
 	m_tWordData.Write( m_pMergeSource, m_pMergeData );
 
 	m_tWordIndex.m_iDoclistPos = m_pMergeData->m_iDoclistPos - m_pMergeData->m_iLastDoclistPos;
 	m_pMergeData->m_iLastDoclistPos = m_pMergeData->m_iDoclistPos;
 	
-	m_tWordIndex.Write( m_pMergeSource->m_pIndexWriter, m_pMergeData );	
+	m_tWordIndex.Write( m_pMergeData->m_pIndexWriter, m_pMergeData );
+
+	m_pMergeData->m_iLastDocID = m_pMergeData->m_iMinDocID;
 }
 
 /////////////////////////////////////////////////////////////////////////////

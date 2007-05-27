@@ -1157,7 +1157,7 @@ struct CSphPurgeData
 		if ( ( m_iAttrIndex == -1 ) || !m_bPurge || !pAttrs )
 			return false;
 		else
-			return ( ( m_dwMinValue <= pAttrs[m_iAttrIndex] ) && ( m_dwMaxValue >= pAttrs[m_iAttrIndex] ) );
+			return ( ( m_dwMinValue > pAttrs[m_iAttrIndex] ) || ( m_dwMaxValue < pAttrs[m_iAttrIndex] ) );
 	}
 
 	bool IsEnabled ()

@@ -1087,6 +1087,10 @@ int main ( int argc, char ** argv )
 	}
 #endif
 
+#if SPH_DEBUG_LEAKS
+	sphAllocsStats ();
+#endif
+
 	return 0;
 }
 

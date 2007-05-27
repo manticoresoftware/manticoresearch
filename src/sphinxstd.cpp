@@ -46,10 +46,13 @@ struct CSphMemHeader
 };
 
 
-static int				g_iAllocsCount	= 0;
+static int				g_iCurAllocs	= 0;
 static int				g_iAllocsId		= 0;
 static CSphMemHeader *	g_pAllocs		= NULL;
-
+static int				g_iCurBytes		= 0;
+static int				g_iTotalAllocs	= 0;
+static int				g_iPeakAllocs	= 0;
+static int				g_iPeakBytes	= 0;
 
 void * sphDebugNew ( size_t iSize, const char * sFile, int iLine, bool bArray )
 {
@@ -74,7 +77,13 @@ void * sphDebugNew ( size_t iSize, const char * sFile, int iLine, bool bArray )
 	}
 	g_pAllocs = pHeader;
 
-	g_iAllocsCount++;
+	g_iCurAllocs++;
+	g_iCurBytes += iSize;
+
+	g_iTotalAllocs++;
+	g_iPeakAllocs = Max ( g_iPeakAllocs, g_iCurAllocs );
+	g_iPeakBytes = Max ( g_iPeakBytes, g_iCurBytes );
+
 	return pHeader+1;
 }
 
@@ -129,14 +138,17 @@ void sphDebugDelete ( void * pPtr, bool bArray )
 
 	// mark and delete
 	pHeader->m_uMagic = MEMORY_MAGIC_DELETED;
-	g_iAllocsCount--;
+
+	g_iCurAllocs--;
+	g_iCurBytes -= pHeader->m_iSize;
+
 	::free ( pHeader );
 }
 
 
 int sphAllocsCount ()
 {
-	return g_iAllocsCount;
+	return g_iCurAllocs;
 }
 
 
@@ -164,6 +176,13 @@ void sphAllocsDump ( int iFile, int iSinceID )
 
 	snprintf ( sBuf, sizeof(sBuf), "--- end of dump ---\n" );
 	write ( iFile, sBuf, strlen(sBuf) );
+}
+
+
+void sphAllocsStats ()
+{
+	fprintf ( stdout, "--- total-allocs=%d, peak-allocs=%d, peak-bytes=%d\n",
+		g_iTotalAllocs, g_iPeakAllocs, g_iPeakBytes );
 }
 
 //////////////////////////////////////////////////////////////////////////

@@ -299,6 +299,9 @@ int main ( int argc, char ** argv )
 			}
 
 			pResult = pIndex->Query ( pDict, &tQuery );
+			if ( !pResult )
+				sError = pIndex->GetLastError ();
+
 			break;
 		}
 

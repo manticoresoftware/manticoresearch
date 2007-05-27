@@ -3218,10 +3218,10 @@ void RotateIndex ( ServedIndex_t & tIndex, const char * sIndex )
 	g_iHUP = 0;
 
 	// check files
-	const int EXT_COUNT = 4;
-	const char * dNew[EXT_COUNT] = { ".new.sph", ".new.spa", ".new.spi", ".new.spd" };
-	const char * dOld[EXT_COUNT] = { ".old.sph", ".old.spa", ".old.spi", ".old.spd" };
-	const char * dCur[EXT_COUNT] = { ".sph", ".spa", ".spi", ".spd" };
+	const int EXT_COUNT = 5;
+	const char * dNew[EXT_COUNT] = { ".new.sph", ".new.spa", ".new.spi", ".new.spd", ".new.spp" };
+	const char * dOld[EXT_COUNT] = { ".old.sph", ".old.spa", ".old.spi", ".old.spd", ".old.spp" };
+	const char * dCur[EXT_COUNT] = { ".sph", ".spa", ".spi", ".spd", ".spp" };
 
 	for ( int i=0; i<EXT_COUNT; i++ )
 	{
@@ -3754,7 +3754,7 @@ int main ( int argc, char **argv )
 
 		if ( iHeadAllocs!=sphAllocsCount() )
 		{
-			sphLockEx ( g_iLogFile );
+			sphLockEx ( g_iLogFile, false );
 			lseek ( g_iLogFile, 0, SEEK_END );
 			sphAllocsDump ( g_iLogFile, iHeadCheckpoint );
 			sphLockUn ( g_iLogFile );

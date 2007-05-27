@@ -110,6 +110,9 @@ int				sphAllocsLastID ();
 /// dump all allocs since given id
 void			sphAllocsDump ( int iFile, int iSinceID );
 
+/// dump stats to stdout
+void			sphAllocsStats ();
+
 #undef new
 #define new		new(__FILE__,__LINE__)
 

@@ -662,8 +662,9 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 				char sTo [ SPH_MAX_FILENAME_LEN ];
 
 				int iExt;
-				const char * dExt[4] = { "sph", "spa", "spi", "spd" };
-				for ( iExt=0; iExt<4; iExt++ )
+				const int EXT_COUNT = 5;
+				const char * dExt[EXT_COUNT] = { "sph", "spa", "spi", "spd", "spp" };
+				for ( iExt=0; iExt<EXT_COUNT; iExt++ )
 				{
 					snprintf ( sFrom, sizeof(sFrom), "%s.tmp.%s", sPath, dExt[iExt] );
 					sFrom [ sizeof(sFrom)-1 ] = '\0';
@@ -680,7 +681,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 				}
 
 				// all good?
-				if ( iExt==4 )
+				if ( iExt==EXT_COUNT )
 					bOK = true;
 				break;
 			}
@@ -761,8 +762,9 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 	char sTo [ SPH_MAX_FILENAME_LEN ];
 
 	int iExt;
-	const char * dExt[5] = { "sph", "spa", "spi", "spd", "spp" };
-	for ( iExt=0; iExt<5; iExt++ )
+	const int EXT_COUNT = 5;
+	const char * dExt[EXT_COUNT] = { "sph", "spa", "spi", "spd", "spp" };
+	for ( iExt=0; iExt<EXT_COUNT; iExt++ )
 	{
 		snprintf ( sFrom, sizeof(sFrom), "%s.%s.tmp", sPath, dExt[iExt] );
 		sFrom [ sizeof(sFrom)-1 ] = '\0';
@@ -790,7 +792,7 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 	}
 
 	// all good?
-	return ( iExt==5 );
+	return ( iExt==EXT_COUNT );
 }
 
 //////////////////////////////////////////////////////////////////////////

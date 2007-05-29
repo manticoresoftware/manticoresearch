@@ -17,7 +17,7 @@
 /////////////////////////////////////////////////////////////////////////////
 
 #ifdef _WIN32
-	#define USE_MYSQL		1	/// whether to compile with MySQL support
+	#define USE_MYSQL		1	/// whether to compile MySQL support
 	#define USE_WINDOWS		1	/// whether to compile for Windows
 #else
 	#define USE_WINDOWS		0	/// whether to compile for Windows
@@ -287,18 +287,6 @@ ISphTokenizer *			sphCreateUTF8NgramTokenizer ();
 // DICTIONARIES
 /////////////////////////////////////////////////////////////////////////////
 
-/// morphology flags
-enum ESphMorphology
-{
-	SPH_MORPH_NONE				= 0,
-	SPH_MORPH_STEM_EN			= (1UL<<1),
-	SPH_MORPH_STEM_RU_CP1251	= (1UL<<2),
-	SPH_MORPH_STEM_RU_UTF8		= (1UL<<3),
-	SPH_MORPH_SOUNDEX			= (1UL<<4),
-	SPH_MORPH_UNKNOWN			= (1UL<<30)
-};
-
-
 /// abstract word dictionary interface
 struct CSphDict
 {
@@ -315,38 +303,14 @@ struct CSphDict
 
 	/// load stopwords from given files
 	virtual void		LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer ) = 0;
+
+	/// set morphology
+	virtual bool		SetMorphology ( const CSphVariant * sMorph, bool bUseUTF8, CSphString & sError ) = 0;
 };
 
 
-/// CRC32 dictionary
-struct CSphDict_CRC32 : CSphDict
-{
-	/// ctor
-	/// iMorph is a combination of ESphMorphology flags
-						CSphDict_CRC32 ( DWORD iMorph );
-
-	/// virtualizing dtor
-	virtual				~CSphDict_CRC32 () {}
-
-	/// get word ID by word
-	/// does requested morphology and returns CRC32
-	virtual SphWordID_t	GetWordID ( BYTE * pWord );
-
-	/// get word ID by word, "binary" version
-	/// does NOT apply any morphology
-	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen );
-
-	/// load stopwords from given files
-	virtual void		LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer );
-
-protected:
-	DWORD				m_iMorph;		///< morphology flags
-	int					m_iStopwords;	///< stopwords count
-	SphWordID_t *		m_pStopwords;	///< stopwords ID list
-
-	/// filter ID against stopwords list
-	SphWordID_t			FilterStopword ( SphWordID_t uID );
-};
+/// dictionary factory
+CSphDict *				sphCreateDictionaryCRC ();
 
 /////////////////////////////////////////////////////////////////////////////
 // DATASOURCES

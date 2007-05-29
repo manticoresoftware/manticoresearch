@@ -3581,12 +3581,6 @@ int main ( int argc, char **argv )
 				continue;
 			}
 
-			// configure morphology
-			DWORD iMorph = sphConfMorphology ( hIndex, pTokenizer->IsUtf8() );
-			if ( iMorph==SPH_MORPH_UNKNOWN )
-				sphWarning ( "index '%s': unknown morphology type '%s' - ignored",
-					sIndexName, hIndex["morphology"].cstr() );
-
 			// configure memlocking
 			ServedIndex_t tIdx;
 			if ( hIndex("mlock") && hIndex["mlock"].intval() )
@@ -3604,7 +3598,12 @@ int main ( int argc, char **argv )
 			if ( !sWarning.IsEmpty() )
 				sphWarning ( "index '%s': %s", sIndexName, sWarning.cstr() );
 
-			tIdx.m_pDict = new CSphDict_CRC32 ( iMorph );
+			tIdx.m_pDict = sphCreateDictionaryCRC ();
+			assert ( tIdx.m_pDict  );
+
+			if ( !tIdx.m_pDict->SetMorphology ( hIndex("morphology"), pTokenizer->IsUtf8(), sError ) )
+				sphWarning ( "index '%s': %s\n", sIndexName, sError.cstr() );	
+
 			tIdx.m_pDict->LoadStopwords ( hIndex.Exists ( "stopwords" ) ? hIndex["stopwords"].cstr() : NULL, pTokenizer );
 			tIdx.m_pTokenizer = pTokenizer;
 			tIdx.m_pIndexPath = new CSphString ( hIndex["path"] );

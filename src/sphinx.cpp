@@ -27,6 +27,10 @@
 #include <time.h>
 #include <math.h>
 
+#if USE_LIBSTEMMER
+#include "libstemmer.h"
+#endif
+
 #if USE_WINDOWS
 	#include <io.h> // for open()
 
@@ -48,6 +52,11 @@
 #if ( USE_WINDOWS && USE_MYSQL )
 	#pragma comment(linker, "/defaultlib:libmysql.lib")
 	#pragma message("Automatically linking with libmysql.lib")
+#endif
+
+#if ( USE_WINDOWS && USE_LIBSTEMMER )
+#pragma comment(linker, "/defaultlib:libstemmer_c.lib")
+#pragma message("Automatically linking with libstemmer_c.lib")
 #endif
 
 /////////////////////////////////////////////////////////////////////////////
@@ -8500,7 +8509,44 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 }
 
 /////////////////////////////////////////////////////////////////////////////
-// CRC32 DICTIONARY
+// CRC32/64 DICTIONARIES
+/////////////////////////////////////////////////////////////////////////////
+
+/// morphology flags
+enum
+{
+	SPH_MORPH_STEM_EN			= (1UL<<1),
+	SPH_MORPH_STEM_RU_CP1251	= (1UL<<2),
+	SPH_MORPH_STEM_RU_UTF8		= (1UL<<3),
+	SPH_MORPH_SOUNDEX			= (1UL<<4),
+	SPH_MORPH_LIBSTEMMER		= (1UL<<5)
+};
+
+
+/// CRC32/64 dictionary
+struct CSphDictCRC : CSphDict
+{
+						CSphDictCRC ();
+	virtual				~CSphDictCRC ();
+
+	virtual SphWordID_t	GetWordID ( BYTE * pWord );
+	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen );
+	virtual void		LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer );
+	virtual bool		SetMorphology ( const CSphVariant * sMorph, bool bUseUTF8, CSphString & sError );
+
+protected:
+	DWORD				m_iMorph;		///< morphology flags
+#if USE_LIBSTEMMER
+	sb_stemmer *		m_pStemmer;
+#endif
+
+	int					m_iStopwords;	///< stopwords count
+	SphWordID_t *		m_pStopwords;	///< stopwords ID list
+
+protected:
+	SphWordID_t			FilterStopword ( SphWordID_t uID );	///< filter ID against stopwords list
+};
+
 /////////////////////////////////////////////////////////////////////////////
 
 static const DWORD g_dSphinxCRC32 [ 256 ] =
@@ -8624,18 +8670,27 @@ SphOffset_t sphFNV64 ( const BYTE * s, int iLen )
 
 /////////////////////////////////////////////////////////////////////////////
 
-CSphDict_CRC32::CSphDict_CRC32 ( DWORD iMorph )
-	: m_iMorph		( iMorph )
+CSphDictCRC::CSphDictCRC ()
+	: m_iMorph		( 0 )
+#if USE_LIBSTEMMER
+	, m_pStemmer	( NULL )
+#endif
+
 	, m_iStopwords	( 0 )
 	, m_pStopwords	( NULL )
 {
-	assert (!( ( m_iMorph & SPH_MORPH_STEM_RU_CP1251 ) && ( m_iMorph & SPH_MORPH_STEM_RU_UTF8 ) ));
-	if ( ( m_iMorph & SPH_MORPH_STEM_RU_CP1251 ) || ( m_iMorph & SPH_MORPH_STEM_RU_UTF8 ) )
-		stem_ru_init ();
 }
 
 
-SphWordID_t CSphDict_CRC32::FilterStopword ( SphWordID_t uID )
+CSphDictCRC::~CSphDictCRC ()
+{
+#if USE_LIBSTEMMER
+	sb_stemmer_delete ( m_pStemmer );
+#endif
+}
+
+
+SphWordID_t CSphDictCRC::FilterStopword ( SphWordID_t uID )
 {
 	if ( !m_iStopwords )
 		return uID;
@@ -8676,27 +8731,38 @@ template<> uint64_t sphCRCWord ( const BYTE * pWord, int iLen ) { return sphFNV6
 template<> DWORD sphCRCWord ( const BYTE * pWord, int iLen ) { return sphCRC32 ( pWord, iLen ); }
 
 
-SphWordID_t CSphDict_CRC32::GetWordID ( BYTE * pWord )
+SphWordID_t CSphDictCRC::GetWordID ( BYTE * pWord )
 {
 	if ( m_iMorph & SPH_MORPH_STEM_EN )
 		stem_en ( pWord );
+
 	if ( m_iMorph & SPH_MORPH_STEM_RU_CP1251 )
 		stem_ru_cp1251 ( pWord );
+
 	if ( m_iMorph & SPH_MORPH_STEM_RU_UTF8 )
 		stem_ru_utf8 ( (WORD*)pWord );
+
 	if ( m_iMorph & SPH_MORPH_SOUNDEX )
 		stem_soundex ( pWord );
+
+#if USE_LIBSTEMMER
+	if ( m_iMorph & SPH_MORPH_LIBSTEMMER )
+	{
+		assert ( m_pStemmer );
+		sb_stemmer_stem ( m_pStemmer, (sb_symbol*)pWord, strlen((const char*)pWord) );
+		pWord [ sb_stemmer_length ( m_pStemmer ) ] = '\0';
+	}
+#endif
 
 	return FilterStopword ( sphCRCWord<SphWordID_t> ( pWord ) );
 }
 
 
-SphWordID_t CSphDict_CRC32::GetWordID ( const BYTE * pWord, int iLen )
+SphWordID_t CSphDictCRC::GetWordID ( const BYTE * pWord, int iLen )
 {
 	return FilterStopword ( sphCRCWord<SphWordID_t> ( pWord, iLen ) );
 }
 
-/////////////////////////////////////////////////////////////////////////////
 
 struct DwordCmp_fn
 {
@@ -8709,7 +8775,7 @@ struct DwordCmp_fn
 };
 
 
-void CSphDict_CRC32::LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer )
+void CSphDictCRC::LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer )
 {
 	assert ( !m_pStopwords );
 	assert ( !m_iStopwords );
@@ -8777,6 +8843,88 @@ void CSphDict_CRC32::LoadStopwords ( const char * sFiles, ISphTokenizer * pToken
 	}
 
 	SafeDeleteArray ( sList );
+}
+
+
+bool CSphDictCRC::SetMorphology ( const CSphVariant * sMorph, bool bUseUTF8, CSphString & sError )
+{
+	m_iMorph = 0;
+#if USE_LIBSTEMMER
+	sb_stemmer_delete ( m_pStemmer );
+	m_pStemmer = NULL;
+#endif
+
+	if ( !sMorph )
+		return true;
+
+	DWORD iStemRu = ( bUseUTF8 ? SPH_MORPH_STEM_RU_UTF8 : SPH_MORPH_STEM_RU_CP1251 );
+	CSphString sOption = *sMorph;
+	sOption.ToLower ();
+
+	if ( sOption.IsEmpty() || sOption=="none" )
+	{
+		return true;
+
+	} else if ( sOption=="stem_en" )
+	{
+		m_iMorph = SPH_MORPH_STEM_EN;
+
+	} else if ( sOption=="stem_ru" )
+	{
+		m_iMorph = iStemRu;
+		stem_ru_init ();
+
+	} else if ( sOption=="stem_enru" )
+	{
+		m_iMorph = iStemRu | SPH_MORPH_STEM_EN;
+		stem_ru_init ();
+
+	} else if ( sOption=="soundex" )
+	{
+		m_iMorph = SPH_MORPH_SOUNDEX;
+
+	}
+	
+#if USE_LIBSTEMMER
+	else if ( sOption.Begins ( "libstemmer_" ) )
+	{
+		const char * sAlgo = sOption.cstr() + strlen ( "libstemmer_" );
+		if ( bUseUTF8 )
+		{
+			m_pStemmer = sb_stemmer_new ( sAlgo, "UTF_8" );
+		} else
+		{
+			m_pStemmer = sb_stemmer_new ( sAlgo, "ISO_8859_1" );
+			if ( !m_pStemmer )
+				m_pStemmer = sb_stemmer_new ( sAlgo, "ISO_8859_2" );
+			if ( !m_pStemmer )
+				m_pStemmer = sb_stemmer_new ( sAlgo, "KOI8_R" );
+		}
+
+		if ( !m_pStemmer )
+		{
+			sError.SetSprintf (  "libstemmer morphology algorithm '%s' not available for %s encoding - IGNORED",
+				sAlgo, bUseUTF8 ? "UTF-8" : "SBCS" );
+			return false;
+		}
+
+		m_iMorph = SPH_MORPH_LIBSTEMMER;
+
+	}
+#endif
+
+	else
+	{
+		sError.SetSprintf ( "unknown morphology option '%s' - IGNORED", sOption.cstr() );
+		return false;
+	}
+	return true;
+}
+
+
+CSphDict * sphCreateDictionaryCRC ()
+{
+	return new CSphDictCRC ();
 }
 
 /////////////////////////////////////////////////////////////////////////////

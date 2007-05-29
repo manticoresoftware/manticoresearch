@@ -189,12 +189,6 @@ int main ( int argc, char ** argv )
 		if ( !tQuery.m_pTokenizer )
 			sphDie ( "FATAL: index '%s': %s.\n", sIndexName, sError.cstr() );
 
-		// get morphology type
-		DWORD iMorph = sphConfMorphology ( hIndex, tQuery.m_pTokenizer->IsUtf8() );
-		if ( iMorph==SPH_MORPH_UNKNOWN )
-			fprintf ( stdout, "WARNING: index '%s': unknown morphology type '%s' - ignored.\n",
-				sIndexName,	hIndex["morphology"].cstr() );
-
 		// do we want to show document info from database?
 		#if USE_MYSQL
 		MYSQL tSqlDriver;
@@ -247,8 +241,14 @@ int main ( int argc, char ** argv )
 		}
 		#endif
 
+		// create dict
+		CSphDict * pDict = sphCreateDictionaryCRC ();
+		assert ( pDict );
+
+		if ( !pDict->SetMorphology ( hIndex("morphology"), tQuery.m_pTokenizer->IsUtf8(), sError ) )
+			fprintf ( stdout, "WARNING: index '%s': %s\n", sIndexName, sError.cstr() );	
+
 		// configure stopwords
-		CSphDict * pDict = new CSphDict_CRC32 ( iMorph );
 		pDict->LoadStopwords ( hIndex.Exists ( "stopwords" ) ? hIndex["stopwords"].cstr() : NULL,
 			tQuery.m_pTokenizer );
 

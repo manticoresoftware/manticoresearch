@@ -89,9 +89,6 @@ protected:
 
 /////////////////////////////////////////////////////////////////////////////
 
-/// parse morphology option string to bit mask
-DWORD				sphConfMorphology ( const CSphConfigSection & hIndex, bool bUseUTF8 );
-
 /// create and configure tokenizer from index definition section
 ISphTokenizer *		sphConfTokenizer ( const CSphConfigSection & hIndex, CSphString & sError );
 

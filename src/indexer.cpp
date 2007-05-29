@@ -198,17 +198,18 @@ inline bool operator < ( const Word_t & a, const Word_t & b)
 };
 
 
-class CSphStopwordBuilderDict : public CSphDict_CRC32
+class CSphStopwordBuilderDict : public CSphDict
 {
 public:
-						CSphStopwordBuilderDict ();
-	virtual				~CSphStopwordBuilderDict () {}
+						CSphStopwordBuilderDict () {}
 	void				Save ( const char * sOutput, int iTop, bool bFreqs );
 
 public:
 	virtual SphWordID_t	GetWordID ( BYTE * pWord );
 	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen );
-	virtual void		LoadStopwords ( const char * sFiles );
+
+	virtual void		LoadStopwords ( const char *, ISphTokenizer * ) {}
+	virtual bool		SetMorphology ( const CSphVariant *, bool, CSphString & ) { return true; }
 
 protected:
 	struct HashFunc_t
@@ -222,12 +223,6 @@ protected:
 protected:
 	CSphMTFHash < int, 1048576, HashFunc_t >	m_hWords;
 };
-
-
-CSphStopwordBuilderDict::CSphStopwordBuilderDict ()
-	: CSphDict_CRC32 ( SPH_MORPH_NONE )
-{
-}
 
 
 void CSphStopwordBuilderDict::Save ( const char * sOutput, int iTop, bool bFreqs )
@@ -275,12 +270,6 @@ SphWordID_t CSphStopwordBuilderDict::GetWordID ( const BYTE * pWord, int iLen )
 	int iZero = 0;
 	m_hWords.Add ( (const char *)pWord, iLen, iZero )++;
 	return 1;
-}
-
-
-void CSphStopwordBuilderDict::LoadStopwords ( const char * sFiles )
-{
-	sFiles = sFiles;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -617,15 +606,12 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		// create dict
 		///////////////
 
-		// configure morphology
-		DWORD iMorph = sphConfMorphology ( hIndex, pTokenizer->IsUtf8() );
-		if ( iMorph==SPH_MORPH_UNKNOWN )
-			fprintf ( stdout, "WARNING: index '%s': unknown morphology type '%s' - ignored'.\n",
-				sIndexName, hIndex["morphology"].cstr() );
-
 		// create dict
-		CSphDict_CRC32 * pDict = new CSphDict_CRC32 ( iMorph );
+		CSphDict * pDict = sphCreateDictionaryCRC ();
 		assert ( pDict );
+
+		if ( !pDict->SetMorphology ( hIndex("morphology"), pTokenizer->IsUtf8(), sError ) )
+			fprintf ( stdout, "WARNING: index '%s': %s\n", sIndexName, sError.cstr() );	
 
 		// configure stops
 		if ( hIndex.Exists ( "stopwords" ) )

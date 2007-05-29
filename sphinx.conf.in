@@ -292,12 +292,20 @@ index test1
 
 	# morphology
 	#
-	# currently supported morphology preprocessors are Porter stemmers
-	# for English and Russian, and Soundex. more stemmers could be added
-	# at users request.
+	# built-in morphology preprocessors include English stemmer,
+	# Russian stemmer (works with UTF-8 and Windows-1251 encodings),
+	# and Soundex.
 	#
-	# available values are "none", "stem_en", "stem_ru", "stem_enru",
-	# and "soundex"
+	# additional stemmers provided by Snowball project libstemmer
+	# library (available at http://snowball.tartarus.org/) may also be
+	# enabled at compile time using --with-libstemmer configure option.
+	#
+	# built-in values are "none", "stem_en", "stem_ru", "stem_enru",
+	# and "soundex".
+	#
+	# additional values provided by libstemmer are in "libstemmer_XXX"
+	# format, where XXX is libstemmer algorithm codename (refer to
+	# libstemmer_c/libstemmer/modules.txt for a complete list)
 	#
 	# optional, default is "none"
 	#
@@ -306,11 +314,17 @@ index test1
 	# morphology		= stem_ru
 	# morphology		= stem_enru
 	# morphology		= soundex
+	#
+	# morphology		= libstemmer_german
+	# morphology		= libstemmer_dan
+	# morphology		= libstemmer_sv
 	morphology			= none
 
 	# stopwords file
 	#
 	# format is plain text in whatever encoding you use
+	# note that if using stemming, stopwords are stemmed as well
+	#
 	# optional, default is empty
 	#
 	# stopwords			= @CONFDIR@/data/stopwords.txt

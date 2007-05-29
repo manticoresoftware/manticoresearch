@@ -40,6 +40,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
+				AdditionalIncludeDirectories="$(SolutionDir)/libstemmer_c/include"
 				PreprocessorDefinitions="WIN32;_DEBUG;_LIB"
 				MinimalRebuild="true"
 				ExceptionHandling="0"
@@ -105,6 +106,7 @@
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
+				AdditionalIncludeDirectories="$(SolutionDir)/libstemmer_c"
 				PreprocessorDefinitions="WIN32;NDEBUG;_LIB"
 				ExceptionHandling="0"
 				RuntimeLibrary="0"
@@ -157,10 +159,6 @@
 				>
 			</File>
 			<File
-				RelativePath="..\src\sphinxstd.cpp"
-				>
-			</File>
-			<File
 				RelativePath="..\src\sphinxexcerpt.cpp"
 				>
 			</File>
@@ -170,6 +168,10 @@
 			</File>
 			<File
 				RelativePath="..\src\sphinxsoundex.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\src\sphinxstd.cpp"
 				>
 			</File>
 			<File

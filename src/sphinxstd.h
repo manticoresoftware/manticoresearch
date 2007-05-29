@@ -770,6 +770,13 @@ public:
 	{
 		::Swap ( m_sValue, rhs.m_sValue );
 	}
+
+	bool Begins ( const char * sPrefix ) const
+	{
+		if ( !m_sValue || !sPrefix )
+			return false;
+		return strncmp ( m_sValue, sPrefix, strlen(sPrefix) )==0;
+	}
 };
 
 /// string swapper

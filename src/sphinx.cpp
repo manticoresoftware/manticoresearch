@@ -8749,12 +8749,7 @@ SphWordID_t CSphDictCRC::GetWordID ( BYTE * pWord )
 	if ( m_iMorph & SPH_MORPH_LIBSTEMMER )
 	{
 		assert ( m_pStemmer );
-
-		const sb_symbol * sStemmed = sb_stemmer_stem ( m_pStemmer, (sb_symbol*)pWord, strlen((const char*)pWord) );
-		int iLen = sb_stemmer_length ( m_pStemmer );
-
-		memcpy ( pWord, sStemmed, iLen );
-		pWord[iLen] = '\0';		
+		pWord = (BYTE*) sb_stemmer_stem ( m_pStemmer, (sb_symbol*)pWord, strlen((const char*)pWord) );
 	}
 #endif
 

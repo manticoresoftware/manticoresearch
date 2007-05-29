@@ -79,7 +79,7 @@ if test x$ac_cv_use_libstemmer != xno; then
 		AC_MSG_ERROR([missing libstemmer sources from libstemmer_c.
 
 Please download the C version of libstemmer library from
-http://snowball.tartarus.org/ and add its contents to libstemmer_c/
+http://snowball.tartarus.org/ and extract its sources over libstemmer_c/
 subdirectory in order to build Sphinx with libstemmer support.
 ])
 	fi

@@ -1500,14 +1500,14 @@ struct CSphMergeSource
 
 	CSphMergeSource()
 		: m_pWordlist ( NULL )
-		, m_pDoclistReader ( NULL )
 		, m_iAttrNum ( 0 )
 		, m_iLastDocID ( 0 )
 		, m_iMinDocID ( 0 )
 		, m_bForceDocinfo ( false )
 		, m_pIndex ( NULL )
-		, m_pMinAttrs ( NULL )
+		, m_pDoclistReader ( NULL )
 		, m_pHitlistReader ( NULL )
+		, m_pMinAttrs ( NULL )
 	{}
 
 	bool Check ()

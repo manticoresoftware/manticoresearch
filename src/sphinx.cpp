@@ -1494,13 +1494,13 @@ struct CSphMergeSource
 	CSphMatch			m_tMatch;
 	bool				m_bForceDocinfo;
 	CSphIndex_VLN *		m_pIndex;
-	CSphReader_VLN *	m_pDataReader;
+	CSphReader_VLN *	m_pDoclistReader;
 	CSphReader_VLN *	m_pHitlistReader;
 	DWORD *				m_pMinAttrs;
 
 	CSphMergeSource()
 		: m_pWordlist ( NULL )
-		, m_pDataReader ( NULL )
+		, m_pDoclistReader ( NULL )
 		, m_iAttrNum ( 0 )
 		, m_iLastDocID ( 0 )
 		, m_iMinDocID ( 0 )
@@ -1512,7 +1512,7 @@ struct CSphMergeSource
 
 	bool Check ()
 	{
-		return ( m_pWordlist && m_pDataReader && m_pHitlistReader );
+		return ( m_pWordlist && m_pDoclistReader && m_pHitlistReader );
 	}
 };
 
@@ -5453,7 +5453,7 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 	CSphMergeSource		tSrcSource;
 
 	tDstSource.m_pWordlist = pDstWordlist;
-	tDstSource.m_pDataReader = &rdDstData;	
+	tDstSource.m_pDoclistReader = &rdDstData;	
 	tDstSource.m_pHitlistReader = &rdDstHitlist;
 	tDstSource.m_iAttrNum = ( m_eDocinfo == SPH_DOCINFO_INLINE )? m_tSchema.m_dAttrs.GetLength() : 0;
 	tDstSource.m_iLastDocID = m_tMin.m_iDocID;
@@ -5462,7 +5462,7 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 	tDstSource.m_pIndex = this;
 	
 	tSrcSource.m_pWordlist = pSrcWordlist;
-	tSrcSource.m_pDataReader = &rdSrcData;
+	tSrcSource.m_pDoclistReader = &rdSrcData;
 	tSrcSource.m_pHitlistReader = &rdSrcHitlist;
 	tSrcSource.m_iAttrNum = ( pSrcIndex->m_eDocinfo == SPH_DOCINFO_INLINE )? pSrcIndex->m_tSchema.m_dAttrs.GetLength() : 0;
 	tSrcSource.m_iLastDocID = pSrcIndex->m_tMin.m_iDocID;
@@ -10404,7 +10404,7 @@ void CSphDoclistRecord::Read( CSphMergeSource * pSource )
 {	
 	assert ( pSource );
 	 
-	CSphReader_VLN * pReader = pSource->m_pDataReader;
+	CSphReader_VLN * pReader = pSource->m_pDoclistReader;
 
 	assert ( pReader );
 
@@ -10498,7 +10498,7 @@ void CSphWordDataRecord::Read( CSphMergeSource * pSource, CSphMergeData * pMerge
 	
 	DWORD iWordPos = 0;
 	CSphVector< DWORD > dWordPosIndex;
-	CSphReader_VLN * pReader = pSource->m_pDataReader;
+	CSphReader_VLN * pReader = pSource->m_pDoclistReader;
 	CSphReader_VLN * pHitlistReader = pSource->m_pHitlistReader;
 	assert ( pReader && pHitlistReader );
 	

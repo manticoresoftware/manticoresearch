@@ -1521,38 +1521,43 @@ struct CSphMergeData
 	CSphWriter *		m_pIndexWriter;
 	CSphWriter *		m_pDataWriter;
 	CSphWriter *		m_pHitlistWriter;
+
 	SphOffset_t			m_iLastDoclistPos;
 	SphOffset_t			m_iDoclistPos;
 	SphOffset_t			m_iLastHitlistPos;
-	SphOffset_t			m_iWordlistOffset;	
+	SphOffset_t			m_iWordlistOffset;
+
 	SphWordID_t			m_iLastWordID;
 	SphDocID_t			m_iLastDocID;
 	SphDocID_t			m_iMinDocID;
+
 	CSphPurgeData *		m_pPurgeData;
 	CSphSourceStats		m_tStats;
 	DWORD *				m_pMinAttrs;
 	ESphDocinfo			m_eDocinfo;
 
 	CSphMergeData ()
-		: m_iLastDoclistPos ( 0 )
+		: m_pIndexWriter ( NULL )
+		, m_pDataWriter ( NULL )
+		, m_pHitlistWriter ( NULL )
+
+		, m_iLastDoclistPos ( 0 )
 		, m_iDoclistPos ( 0 )
 		, m_iLastHitlistPos ( 0 )
 		, m_iWordlistOffset ( 0 )
+
 		, m_iLastWordID ( 0 )
 		, m_iLastDocID ( 0 )
 		, m_iMinDocID ( 0 )
+
 		, m_pPurgeData ( NULL )
 		, m_pMinAttrs ( NULL )
-		, m_pIndexWriter ( NULL )
-		, m_pDataWriter ( NULL )
-		, m_pHitlistWriter ( NULL )
 		, m_eDocinfo ( SPH_DOCINFO_NONE )
 	{}
 
 	virtual ~CSphMergeData ()
 	{
-		if ( m_pMinAttrs )
-			delete[] m_pMinAttrs;
+		SafeDeleteArray ( m_pMinAttrs );
 	}
 };
 

@@ -761,8 +761,8 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 	char sTo [ SPH_MAX_FILENAME_LEN ];
 
 	int iExt;
-	const char * dExt[4] = { "sph", "spa", "spi", "spd" };
-	for ( iExt=0; iExt<4; iExt++ )
+	const char * dExt[5] = { "sph", "spa", "spi", "spd", "spp" };
+	for ( iExt=0; iExt<5; iExt++ )
 	{
 		snprintf ( sFrom, sizeof(sFrom), "%s.%s.tmp", sPath, dExt[iExt] );
 		sFrom [ sizeof(sFrom)-1 ] = '\0';
@@ -790,7 +790,7 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 	}
 
 	// all good?
-	return ( iExt==4 );
+	return ( iExt==5 );
 }
 
 //////////////////////////////////////////////////////////////////////////

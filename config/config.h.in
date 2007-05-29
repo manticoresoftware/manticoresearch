@@ -181,6 +181,9 @@
 /* 64-bit document and word IDs */
 #undef USE_64BIT
 
+/* libstemmer support */
+#undef USE_LIBSTEMMER
+
 /* Define to 1 if you want to compile with MySQL support */
 #undef USE_MYSQL
 

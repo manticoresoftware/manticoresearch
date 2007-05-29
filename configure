@@ -311,7 +311,7 @@ ac_includes_default="\
 # include <unistd.h>
 #endif"
 
-ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS INSTALL_PROGRAM INSTALL_SCRIPT INSTALL_DATA CYGPATH_W PACKAGE VERSION ACLOCAL AUTOCONF AUTOMAKE AUTOHEADER MAKEINFO install_sh STRIP ac_ct_STRIP INSTALL_STRIP_PROGRAM mkdir_p AWK SET_MAKE am__leading_dot AMTAR am__tar am__untar MAINTAINER_MODE_TRUE MAINTAINER_MODE_FALSE MAINT mysqlconfig MYSQL_LIBS MYSQL_CFLAGS USE_MYSQL_TRUE USE_MYSQL_FALSE pgconfig PGSQL_LIBS PGSQL_CFLAGS USE_PGSQL_TRUE USE_PGSQL_FALSE CC CFLAGS LDFLAGS CPPFLAGS ac_ct_CC EXEEXT OBJEXT DEPDIR am__include am__quote AMDEP_TRUE AMDEP_FALSE AMDEPBACKSLASH CCDEPMODE am__fastdepCC_TRUE am__fastdepCC_FALSE CXX CXXFLAGS ac_ct_CXX CXXDEPMODE am__fastdepCXX_TRUE am__fastdepCXX_FALSE RANLIB ac_ct_RANLIB CPP EGREP LIBOBJS CONFDIR LTLIBOBJS'
+ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS INSTALL_PROGRAM INSTALL_SCRIPT INSTALL_DATA CYGPATH_W PACKAGE VERSION ACLOCAL AUTOCONF AUTOMAKE AUTOHEADER MAKEINFO install_sh STRIP ac_ct_STRIP INSTALL_STRIP_PROGRAM mkdir_p AWK SET_MAKE am__leading_dot AMTAR am__tar am__untar MAINTAINER_MODE_TRUE MAINTAINER_MODE_FALSE MAINT mysqlconfig MYSQL_LIBS MYSQL_CFLAGS USE_MYSQL_TRUE USE_MYSQL_FALSE pgconfig PGSQL_LIBS PGSQL_CFLAGS USE_PGSQL_TRUE USE_PGSQL_FALSE USE_LIBSTEMMER_TRUE USE_LIBSTEMMER_FALSE CC CFLAGS LDFLAGS CPPFLAGS ac_ct_CC EXEEXT OBJEXT DEPDIR am__include am__quote AMDEP_TRUE AMDEP_FALSE AMDEPBACKSLASH CCDEPMODE am__fastdepCC_TRUE am__fastdepCC_FALSE CXX CXXFLAGS ac_ct_CXX CXXDEPMODE am__fastdepCXX_TRUE am__fastdepCXX_FALSE RANLIB ac_ct_RANLIB CPP EGREP LIBOBJS CONFDIR LTLIBOBJS'
 ac_subst_files=''
 
 # Initialize some variables set by options.
@@ -873,6 +873,8 @@ Optional Packages:
   --with-mysql-libs       path to MySQL libraries
   --with-pgsql-includes   path to PostgreSQL header files
   --with-pgsql-libs       path to PostgreSQL libraries
+  --with-libstemmer       compile with libstemmer support (default is
+                          disabled)
   --with-debug            compile slower debug version (default is disabled)
 
 Some influential environment variables:
@@ -2252,6 +2254,63 @@ _ACEOF
 	echo "$as_me:$LINENO: result: no" >&5
 echo "${ECHO_T}no" >&6
 fi
+
+
+
+# Check whether --with-libstemmer or --without-libstemmer was given.
+if test "${with_libstemmer+set}" = set; then
+  withval="$with_libstemmer"
+  ac_cv_use_libstemmer=$withval
+else
+  ac_cv_use_libstemmer=no
+
+fi;
+
+echo "$as_me:$LINENO: checking whether to compile with libstemmer support" >&5
+echo $ECHO_N "checking whether to compile with libstemmer support... $ECHO_C" >&6
+if test x$ac_cv_use_libstemmer != xno; then
+	if test -d libstemmer_c && test -f libstemmer_c/include/libstemmer.h; then
+		echo "$as_me:$LINENO: result: yes" >&5
+echo "${ECHO_T}yes" >&6
+
+cat >>confdefs.h <<\_ACEOF
+#define USE_LIBSTEMMER 1
+_ACEOF
+
+	else
+		{ { echo "$as_me:$LINENO: error: missing libstemmer sources from libstemmer_c.
+
+Please download the C version of libstemmer library from
+http://snowball.tartarus.org/ and add its contents to libstemmer_c/
+subdirectory in order to build Sphinx with libstemmer support.
+" >&5
+echo "$as_me: error: missing libstemmer sources from libstemmer_c.
+
+Please download the C version of libstemmer library from
+http://snowball.tartarus.org/ and add its contents to libstemmer_c/
+subdirectory in order to build Sphinx with libstemmer support.
+" >&2;}
+   { (exit 1); exit 1; }; }
+	fi
+else
+	echo "$as_me:$LINENO: result: no" >&5
+echo "${ECHO_T}no" >&6
+
+cat >>confdefs.h <<\_ACEOF
+#define USE_LIBSTEMMER 0
+_ACEOF
+
+fi
+
+
+if test x$ac_cv_use_libstemmer != xno; then
+  USE_LIBSTEMMER_TRUE=
+  USE_LIBSTEMMER_FALSE='#'
+else
+  USE_LIBSTEMMER_TRUE='#'
+  USE_LIBSTEMMER_FALSE=
+fi
+
 
 
 
@@ -7385,7 +7444,7 @@ fi
 CONFDIR=`eval echo "${my_op_prefix}"`
 
 
-                              ac_config_files="$ac_config_files Makefile src/Makefile sphinx.conf.dist:sphinx.conf.in"
+                                        ac_config_files="$ac_config_files Makefile src/Makefile libstemmer_c/Makefile sphinx.conf.dist:sphinx.conf.in"
 
 
 cat >confcache <<\_ACEOF
@@ -7497,6 +7556,13 @@ if test -z "${USE_PGSQL_TRUE}" && test -z "${USE_PGSQL_FALSE}"; then
   { { echo "$as_me:$LINENO: error: conditional \"USE_PGSQL\" was never defined.
 Usually this means the macro was only invoked conditionally." >&5
 echo "$as_me: error: conditional \"USE_PGSQL\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test -z "${USE_LIBSTEMMER_TRUE}" && test -z "${USE_LIBSTEMMER_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"USE_LIBSTEMMER\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"USE_LIBSTEMMER\" was never defined.
 Usually this means the macro was only invoked conditionally." >&2;}
    { (exit 1); exit 1; }; }
 fi
@@ -7967,6 +8033,7 @@ do
   # Handling of arguments.
   "Makefile" ) CONFIG_FILES="$CONFIG_FILES Makefile" ;;
   "src/Makefile" ) CONFIG_FILES="$CONFIG_FILES src/Makefile" ;;
+  "libstemmer_c/Makefile" ) CONFIG_FILES="$CONFIG_FILES libstemmer_c/Makefile" ;;
   "sphinx.conf.dist" ) CONFIG_FILES="$CONFIG_FILES sphinx.conf.dist:sphinx.conf.in" ;;
   "depfiles" ) CONFIG_COMMANDS="$CONFIG_COMMANDS depfiles" ;;
   "config/config.h" ) CONFIG_HEADERS="$CONFIG_HEADERS config/config.h" ;;
@@ -8090,6 +8157,8 @@ s,@PGSQL_LIBS@,$PGSQL_LIBS,;t t
 s,@PGSQL_CFLAGS@,$PGSQL_CFLAGS,;t t
 s,@USE_PGSQL_TRUE@,$USE_PGSQL_TRUE,;t t
 s,@USE_PGSQL_FALSE@,$USE_PGSQL_FALSE,;t t
+s,@USE_LIBSTEMMER_TRUE@,$USE_LIBSTEMMER_TRUE,;t t
+s,@USE_LIBSTEMMER_FALSE@,$USE_LIBSTEMMER_FALSE,;t t
 s,@CC@,$CC,;t t
 s,@CFLAGS@,$CFLAGS,;t t
 s,@LDFLAGS@,$LDFLAGS,;t t

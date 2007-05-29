@@ -48,6 +48,7 @@ if test x$ac_cv_use_pgsql != xno; then
 fi
 AM_CONDITIONAL(USE_PGSQL, test x$ac_cv_use_pgsql != xno)
 
+dnl ---
 
 AC_MSG_CHECKING([whether to use 64-bit document/word IDs])
 sph_enable_id64=no
@@ -61,6 +62,32 @@ else
 	AC_DEFINE(USE_64BIT, 0, [64-bit document and word IDs])
 	AC_MSG_RESULT([no])
 fi
+
+dnl ---
+
+AC_ARG_WITH([libstemmer],
+	AC_HELP_STRING([--with-libstemmer], [compile with libstemmer support (default is disabled)]),
+	[ac_cv_use_libstemmer=$withval], [ac_cv_use_libstemmer=no]
+)
+
+AC_MSG_CHECKING([whether to compile with libstemmer support])
+if test x$ac_cv_use_libstemmer != xno; then
+	if test -d libstemmer_c && test -f libstemmer_c/include/libstemmer.h; then
+		AC_MSG_RESULT([yes])
+		AC_DEFINE(USE_LIBSTEMMER, 1, [libstemmer support])
+	else
+		AC_MSG_ERROR([missing libstemmer sources from libstemmer_c.
+
+Please download the C version of libstemmer library from
+http://snowball.tartarus.org/ and add its contents to libstemmer_c/
+subdirectory in order to build Sphinx with libstemmer support.
+])
+	fi
+else
+	AC_MSG_RESULT([no])
+	AC_DEFINE(USE_LIBSTEMMER, 0, [libstemmer support])
+fi
+AM_CONDITIONAL(USE_LIBSTEMMER, test x$ac_cv_use_libstemmer != xno)
 
 dnl --------------------------------------------------------------------------
 
@@ -154,6 +181,7 @@ AC_SUBST(CONFDIR)
 AC_CONFIG_FILES([
     Makefile
     src/Makefile
+    libstemmer_c/Makefile
     sphinx.conf.dist:sphinx.conf.in
 ])
 

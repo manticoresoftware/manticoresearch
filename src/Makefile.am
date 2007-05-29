@@ -12,8 +12,15 @@ indexer_SOURCES = indexer.cpp
 searchd_SOURCES = searchd.cpp
 search_SOURCES = search.cpp
 
-indexer_LDADD = libsphinx.a $(MYSQL_LIBS) $(PGSQL_LIBS)
-searchd_LDADD = libsphinx.a $(MYSQL_LIBS) $(PGSQL_LIBS) -lz
-search_LDADD = libsphinx.a $(MYSQL_LIBS) $(PGSQL_LIBS)
+if USE_LIBSTEMMER
+LIBSTEMMER_LIBS = $(top_srcdir)/libstemmer_c/libstemmer.a
+AM_CPPFLAGS = -I$(top_srcdir)/libstemmer_c/include
+else
+LIBSTEMMER_LIBS =
+endif
+
+indexer_LDADD = libsphinx.a $(LIBSTEMMER_LIBS) $(MYSQL_LIBS) $(PGSQL_LIBS)
+searchd_LDADD = libsphinx.a $(LIBSTEMMER_LIBS) $(MYSQL_LIBS) $(PGSQL_LIBS) -lz
+search_LDADD = libsphinx.a $(LIBSTEMMER_LIBS) $(MYSQL_LIBS) $(PGSQL_LIBS)
 
 EXTRA_DIST = indexer.vcproj libsphinx.vcproj searchd.vcproj search.vcproj

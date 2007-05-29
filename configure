@@ -2279,15 +2279,23 @@ fi;
 echo "$as_me:$LINENO: checking whether to compile debug version" >&5
 echo $ECHO_N "checking whether to compile debug version... $ECHO_C" >&6
 if test x$ac_cv_use_debug != xno; then
-        CPPFLAGS="-Wall -g -D_FILE_OFFSET_BITS=64"
+        SPHINX_CFLAGS="-Wall -g -D_FILE_OFFSET_BITS=64"
 	echo "$as_me:$LINENO: result: yes" >&5
 echo "${ECHO_T}yes" >&6
 else
-	if test x$ac_env_CPPFLAGS_set != xset; then
-		CPPFLAGS="-Wall -g -D_FILE_OFFSET_BITS=64 -O3 -DNDEBUG"
-	fi
+	SPHINX_CFLAGS="-Wall -g -D_FILE_OFFSET_BITS=64 -O3 -DNDEBUG"
 	echo "$as_me:$LINENO: result: no" >&5
 echo "${ECHO_T}no" >&6
+fi
+
+CPPFLAGS="$CPPFLAGS $MYSQL_CFLAGS $PGSQL_CFLAGS"
+
+if test x$ac_env_CFLAGS_set != xset; then
+	CFLAGS=$SPHINX_CFLAGS
+fi
+
+if test x$ac_env_CXXFLAGS_set != xset; then
+	CXXFLAGS=$SPHINX_CFLAGS
 fi
 
 ac_ext=c
@@ -3938,11 +3946,6 @@ else
   RANLIB="$ac_cv_prog_RANLIB"
 fi
 
-
-CPPFLAGS="$CPPFLAGS $MYSQL_CFLAGS $PGSQL_CFLAGS"
-if test x$ac_env_CXXFLAGS_set != set; then
-	CXXFLAGS=
-fi
 
 
 

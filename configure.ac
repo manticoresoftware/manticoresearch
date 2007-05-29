@@ -73,23 +73,29 @@ AC_ARG_WITH([debug],
 
 AC_MSG_CHECKING([whether to compile debug version])
 if test x$ac_cv_use_debug != xno; then
-        CPPFLAGS="-Wall -g -D_FILE_OFFSET_BITS=64"
+        SPHINX_CFLAGS="-Wall -g -D_FILE_OFFSET_BITS=64"
 	AC_MSG_RESULT([yes])
 else
-	if test x$ac_env_CPPFLAGS_set != xset; then
-		CPPFLAGS="-Wall -g -D_FILE_OFFSET_BITS=64 -O3 -DNDEBUG"
-	fi
+	SPHINX_CFLAGS="-Wall -g -D_FILE_OFFSET_BITS=64 -O3 -DNDEBUG"
 	AC_MSG_RESULT([no])
+fi
+
+dnl always set preprocessor flags for both C and C++ compilers
+CPPFLAGS="$CPPFLAGS $MYSQL_CFLAGS $PGSQL_CFLAGS"
+
+dnl set flags for C compiler if there are no user overrides
+if test x$ac_env_CFLAGS_set != xset; then
+	CFLAGS=$SPHINX_CFLAGS
+fi
+
+dnl set flags for C++ compiler if there are no user overrides
+if test x$ac_env_CXXFLAGS_set != xset; then
+	CXXFLAGS=$SPHINX_CFLAGS
 fi
 
 AC_PROG_CC
 AC_PROG_CXX
 AC_PROG_RANLIB
-
-CPPFLAGS="$CPPFLAGS $MYSQL_CFLAGS $PGSQL_CFLAGS"
-if test x$ac_env_CXXFLAGS_set != set; then
-	CXXFLAGS=
-fi
 
 dnl --------------------------------------------------------------------------
 

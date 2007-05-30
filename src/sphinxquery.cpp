@@ -1028,6 +1028,7 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 
 			dState.Add ( XQS_TEXT );
 			PushNode ();
+			m_dStack.Last().m_bAny = bAny;
 			continue;
 		}
 

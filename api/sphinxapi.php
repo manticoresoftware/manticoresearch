@@ -164,17 +164,21 @@ class SphinxClient
 	/// get and check response packet from searchd server
 	function _GetResponse ( $fp, $client_ver )
 	{
-		$header = fread ( $fp, 8 );
-		list ( $status, $ver, $len ) = array_values ( unpack ( "n2a/Nb", $header ) );
 		$response = "";
 		$left = $len;
-		while ( $left>0 && !feof($fp) )
+
+		$header = fread ( $fp, 8 );
+		if ( strlen($header)==8 )
 		{
-			$chunk = fread ( $fp, $left );
-			if ( $chunk )
+			list ( $status, $ver, $len ) = array_values ( unpack ( "n2a/Nb", $header ) );
+			while ( $left>0 && !feof($fp) )
 			{
-				$response .= $chunk;
-				$left -= strlen($chunk);
+				$chunk = fread ( $fp, $left );
+				if ( $chunk )
+				{
+					$response .= $chunk;
+					$left -= strlen($chunk);
+				}
 			}
 		}
 		fclose ( $fp );

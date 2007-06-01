@@ -232,6 +232,9 @@ public:
 	/// returns true on success, false on failure
 	virtual bool					SetCaseFolding ( const char * sConfig, CSphString & sError );
 
+	/// add additional range to translation table
+	virtual void					AddCaseFolding ( CSphRemapRange & tRange );
+
 	/// add special chars to translation table (SBCS only, for now)
 	/// updates lowercaser so that these remap to -1
 	virtual void					AddSpecials ( const char * sSpecials );

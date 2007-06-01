@@ -859,6 +859,10 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 	pMyTokenizer->AddSpecials ( "()|-!@~\"*" ); // MUST be in sync with IsSpecial()
 	pMyTokenizer->SetBuffer ( (BYTE*)sBuffer.cstr(), strlen ( sBuffer.cstr() ), true );
 
+	// underscore must be accepted in field names
+	CSphRemapRange tUnderscore ( '_', '_', '_' );
+	pMyTokenizer->AddCaseFolding ( tUnderscore );
+
 	// iterate all tokens
 	const int QUERY_END = -1;
 

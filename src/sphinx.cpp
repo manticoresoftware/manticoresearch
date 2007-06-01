@@ -2588,6 +2588,12 @@ bool ISphTokenizer::SetCaseFolding ( const char * sConfig, CSphString & sError )
 }
 
 
+void ISphTokenizer::AddCaseFolding ( CSphRemapRange & tRange )
+{
+	m_tLC.AddRemaps ( &tRange, 1, 0, 0 );
+}
+
+
 void ISphTokenizer::AddSpecials ( const char * sSpecials )
 {
 	m_tLC.AddSpecials ( sSpecials );

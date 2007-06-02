@@ -1595,7 +1595,7 @@ struct CSphDoclistRecord
 
 	void			Inititalize ( int iAttrNum );
 	void			Read ( CSphMergeSource * pSource );
-	void			Write ( CSphMergeSource * pSource, CSphMergeData * pData );
+	void			Write ( CSphMergeData * pData );
 
 	const CSphDoclistRecord & operator = ( const CSphDoclistRecord & rhs );
 };
@@ -1663,7 +1663,7 @@ struct CSphWordDataRecord
 	}
 
 	void Read ( CSphMergeSource * pSource, CSphMergeData * pMergeData, int iDocNum );
-	void Write ( CSphMergeSource * pSource, CSphMergeData * pMergeData );
+	void Write ( CSphMergeData * pMergeData );
 
 	bool IsEmpty() const
 	{
@@ -10598,9 +10598,8 @@ void CSphDoclistRecord::Read( CSphMergeSource * pSource )
 	m_uMatchHits = pReader->UnzipInt ();
 }
 
-void CSphDoclistRecord::Write( CSphMergeSource * pSource, CSphMergeData * pData )
+void CSphDoclistRecord::Write ( CSphMergeData * pData )
 {
-	assert ( pSource );
 	assert ( pData );
 
 	CSphWriter * pWriter = pData->m_pDataWriter;
@@ -10724,9 +10723,8 @@ void CSphWordDataRecord::Read( CSphMergeSource * pSource, CSphMergeData * pMerge
 	assert( m_iLeadingZero == 0 );
 }
 
-void CSphWordDataRecord::Write ( CSphMergeSource * pSource, CSphMergeData * pMergeData )
+void CSphWordDataRecord::Write ( CSphMergeData * pMergeData )
 {
-	assert ( pSource );
 	assert ( pMergeData );
 	assert ( m_dWordPos.GetLength() );
 	assert ( m_dDoclist.GetLength() );
@@ -10755,7 +10753,7 @@ void CSphWordDataRecord::Write ( CSphMergeSource * pSource, CSphMergeData * pMer
 	pMergeData->m_iDoclistPos = pWriter->GetPos();
 
 	for( int i = 0; i < m_dDoclist.GetLength(); i++ )
-		m_dDoclist[i].Write ( pSource, pMergeData );
+		m_dDoclist[i].Write ( pMergeData );
 
 	pWriter->ZipInt ( 0 );
 
@@ -10823,12 +10821,12 @@ void CSphWordRecord::Write ()
 	assert ( m_pMergeData );
 	assert ( m_pMergeSource->Check() );
 	
-	m_tWordData.Write( m_pMergeSource, m_pMergeData );
+	m_tWordData.Write ( m_pMergeData );
 
 	m_tWordIndex.m_iDoclistPos = m_pMergeData->m_iDoclistPos - m_pMergeData->m_iLastDoclistPos;
 	m_pMergeData->m_iLastDoclistPos = m_pMergeData->m_iDoclistPos;
 	
-	m_tWordIndex.Write( m_pMergeData->m_pIndexWriter, m_pMergeData );
+	m_tWordIndex.Write ( m_pMergeData->m_pIndexWriter, m_pMergeData );
 
 	m_pMergeData->m_iLastDocID = m_pMergeData->m_iMinDocID;
 }

@@ -165,27 +165,55 @@ struct CSphSEShare
 {
 	pthread_mutex_t	m_tMutex;
 	THR_LOCK		m_tLock;
-	TABLE *			m_pTable;
+
 	char *			m_sTable;
 	char *			m_sScheme;
-	char *			m_sHost;
-	char *			m_sSocket;
-	char *			m_sIndex;
+	char *			m_sHost;	///< points into m_sScheme buffer, DO NOT FREE EXPLICITLY
+	char *			m_sSocket;	///< points into m_sScheme buffer, DO NOT FREE EXPLICITLY
+	char *			m_sIndex;	///< points into m_sScheme buffer, DO NOT FREE EXPLICITLY
 	ushort			m_iPort;
 	uint			m_iTableNameLen;
 	uint			m_iUseCount;
 
+	int					m_iTableFields;
+	char **				m_sTableField;
+	enum_field_types *	m_eTableFieldType;
+
 	CSphSEShare ()
-		: m_pTable ( NULL )
-		, m_sTable ( NULL )
+		: m_sTable ( NULL )
 		, m_sScheme ( NULL )
 		, m_sHost ( NULL )
 		, m_sSocket ( NULL )
 		, m_sIndex ( NULL )
 		, m_iPort ( 0 )
 		, m_iTableNameLen ( 0 )
-		, m_iUseCount ( 0 )
-	{}
+		, m_iUseCount ( 1 )
+
+		, m_iTableFields ( 0 )
+		, m_sTableField ( NULL )
+		, m_eTableFieldType ( NULL )
+	{
+		thr_lock_init ( &m_tLock );
+		pthread_mutex_init ( &m_tMutex, MY_MUTEX_INIT_FAST );
+	}
+
+	~CSphSEShare ()
+	{
+		pthread_mutex_destroy ( &m_tMutex );
+		thr_lock_delete ( &m_tLock );
+
+		SafeDeleteArray ( m_sTable );
+		SafeDeleteArray ( m_sScheme );
+		ResetTable ();
+	}
+
+	void ResetTable ()
+	{
+		for ( int i=0; i<m_iTableFields; i++ )
+			SafeDeleteArray ( m_sTableField[i] );
+		SafeDeleteArray ( m_sTableField );
+		SafeDeleteArray ( m_eTableFieldType );
+	}
 };
 
 /// schema attribute
@@ -637,6 +665,62 @@ bool sphinx_show_status ( THD * thd )
 // HELPERS
 //////////////////////////////////////////////////////////////////////////////
 
+static char * sphDup ( const char * sSrc, int iLen=-1 )
+{
+	if ( !sSrc )
+		return NULL;
+
+	if ( iLen<0 )
+		iLen = strlen(sSrc);
+
+	char * sRes = new char [ 1+iLen ];
+	memcpy ( sRes, sSrc, iLen );
+	sRes[iLen] = '\0';
+	return sRes;
+}
+
+
+static void sphLogError ( const char * sFmt, ... )
+{
+	// emit timestamp
+#ifdef __WIN__
+	SYSTEMTIME t;
+	GetLocalTime ( &t );
+
+	fprintf ( stderr, "%02d%02d%02d %2d:%02d:%02d SphinxSE: internal error: ",
+		(int)t.wYear % 100, (int)t.wMonth, (int)t.wDay,
+		(int)t.wHour, (int)t.wMinute, (int)t.wSecond );
+#else
+	// Unix version
+	time_t tStamp;
+	time ( &tStamp );
+
+	struct tm * pParsed;
+#ifdef HAVE_LOCALTIME_R
+	struct tm tParsed;
+	localtime_r ( &tStamp, &tParsed );
+	pParsed = &tParsed;
+#else
+	pParsed = localtime ( &tStamp );
+#endif // HAVE_LOCALTIME_R
+
+	fprintf ( stderr, "%02d%02d%02d %2d:%02d:%02d SphinxSE: internal error: ",
+		pParsed->tm_year % 100, pParsed->tm_mon + 1, pParsed->tm_mday,
+		pParsed->tm_hour, pParsed->tm_min, pParsed->tm_sec);
+#endif // __WIN__
+
+	// emit message
+	va_list ap;
+	va_start ( ap, sFmt );
+	vfprintf ( stderr, sFmt, ap );
+	va_end ( ap );
+
+	// emit newline
+	fprintf ( stderr, "\n" );
+}
+
+
+
 // the following scheme variants are recognized
 //
 // sphinx://host/index
@@ -646,11 +730,36 @@ static bool ParseUrl ( CSphSEShare * share, TABLE * table, bool bCreate )
 	SPH_ENTER_FUNC();
 
 	if ( share )
-		share->m_pTable = table;
+	{
+		// check incoming stuff
+		if ( !table )
+		{
+			sphLogError ( "table==NULL in ParseUrl()" ); 
+			return false;
+		}
+		if ( !table->s )
+		{
+			sphLogError ( "(table->s)==NULL in ParseUrl()" ); 
+			return false;
+		}
 
-	#if MYSQL_VERSION_ID<50100 
-	#define my_strndup my_strdup_with_length
-	#endif
+		// free old stuff
+		share->ResetTable ();
+
+		// fill new stuff
+		share->m_iTableFields = table->s->fields;
+		if ( share->m_iTableFields )
+		{
+			share->m_sTableField = new char * [ share->m_iTableFields ];
+			share->m_eTableFieldType = new enum_field_types [ share->m_iTableFields ];
+
+			for ( int i=0; i<share->m_iTableFields; i++ )
+			{
+				share->m_sTableField[i] = sphDup ( table->field[i]->field_name );
+				share->m_eTableFieldType[i] = table->field[i]->type();
+			}
+		}
+	}
 
 	char * sScheme = NULL;
 	char * sHost = SPHINXSE_DEFAULT_HOST;
@@ -661,12 +770,7 @@ static bool ParseUrl ( CSphSEShare * share, TABLE * table, bool bCreate )
 	while ( table->s->connect_string.length!=0 )
 	{
 		bOk = false;
-
-		sScheme = my_strndup (
-			(const char*) table->s->connect_string.str,
-			table->s->connect_string.length,
-			MYF(0) );
-		sScheme [ table->s->connect_string.length ] = 0;
+		sScheme = sphDup ( table->s->connect_string.str, table->s->connect_string.length );
 
 		sHost = strstr ( sScheme, "://" );
 		if ( !sHost )
@@ -714,6 +818,7 @@ static bool ParseUrl ( CSphSEShare * share, TABLE * table, bool bCreate )
 	{
 		if ( share )
 		{
+			SafeDeleteArray ( share->m_sScheme );
 			share->m_sScheme = sScheme;
 			share->m_sHost = sHost;
 			share->m_sIndex = sIndex;
@@ -721,7 +826,7 @@ static bool ParseUrl ( CSphSEShare * share, TABLE * table, bool bCreate )
 		}
 	}
 	if ( !bOk && !share )
-		my_free ( (gptr)sScheme, MYF(0) );
+		SafeDeleteArray ( sScheme );
 
 	SPH_RET(bOk);
 }
@@ -733,43 +838,44 @@ static bool ParseUrl ( CSphSEShare * share, TABLE * table, bool bCreate )
 static CSphSEShare * get_share ( const char * table_name, TABLE * table )
 {
 	SPH_ENTER_FUNC();
-
-	CSphSEShare * pShare;
-	uint length;
-	char * tmp_name;
-
 	pthread_mutex_lock ( &sphinx_mutex );
-	length = (uint) strlen ( table_name );
 
-	if (!( pShare = (CSphSEShare*) hash_search ( &sphinx_open_tables,
-		(byte*) table_name, length ) ))
+	CSphSEShare * pShare = NULL;
+	for ( ;; )
 	{
-		if (!( pShare = (CSphSEShare *) my_multi_malloc ( MYF(MY_WME|MY_ZEROFILL),
-			&pShare, sizeof(CSphSEShare), &tmp_name, length+1, NullS ) ))
+		// check if we already have this share
+		pShare = (CSphSEShare*) hash_search ( &sphinx_open_tables, (byte*)table_name, strlen(table_name) );
+		if ( pShare )
 		{
-			pthread_mutex_unlock ( &sphinx_mutex );
-			SPH_RET(NULL);
+			pShare->m_iUseCount++;
+			break;
 		}
 
-		if ( !ParseUrl ( pShare, table, false ) )
-			SPH_RET(NULL);
+		// try to allocate new share
+		pShare = new CSphSEShare ();
+		if ( !pShare )
+			break;
 
-		pShare->m_iUseCount = 0;
-		pShare->m_iTableNameLen = length;
-		pShare->m_sTable = tmp_name;
-		strmov ( pShare->m_sTable, table_name );
+		// try to setup it
+		if ( !ParseUrl ( pShare, table, false ) )
+		{
+			SafeDelete ( pShare );
+			break;
+		}
+
+		// try to hash it
+		pShare->m_iTableNameLen = strlen(table_name);
+		pShare->m_sTable = sphDup ( table_name );
 		if ( my_hash_insert ( &sphinx_open_tables, (byte*) pShare ) )
 		{
-			pthread_mutex_unlock ( &sphinx_mutex );
-			my_free ( (gptr) pShare, MYF(0) );
-			SPH_RET(NULL);
+			SafeDelete ( pShare );
+			break;
 		}
 
-		thr_lock_init ( &pShare->m_tLock );
-		pthread_mutex_init ( &pShare->m_tMutex,MY_MUTEX_INIT_FAST );
+		// all seems fine
+		break;
 	}
 
-	pShare->m_iUseCount++;
 	pthread_mutex_unlock ( &sphinx_mutex );
 	SPH_RET(pShare);
 }
@@ -785,13 +891,7 @@ static int free_share ( CSphSEShare * pShare )
 	if ( !--pShare->m_iUseCount )
 	{
 		hash_delete ( &sphinx_open_tables, (byte*) pShare );
-
-		my_free ( (gptr) pShare->m_sScheme, MYF(MY_ALLOW_ZERO_PTR) );
-		pShare->m_sScheme = 0;
-
-		thr_lock_delete ( &pShare->m_tLock );
-		pthread_mutex_destroy ( &pShare->m_tMutex );
-		my_free ( (gptr) pShare, MYF(0) );
+		SafeDelete ( pShare );
 	}
 
 	pthread_mutex_unlock ( &sphinx_mutex );
@@ -1512,16 +1612,15 @@ bool ha_sphinx::UnpackSchema ()
 		SPH_RET(false);
 	}
 
-	TABLE * pTable = m_pShare->m_pTable;
 	for ( uint32 i=0; i<m_iAttrs; i++ )
 	{
 		m_dAttrs[i].m_sName = UnpackString ();
 		m_dAttrs[i].m_eType = (ESphAttrType) UnpackDword ();
 
 		m_dAttrs[i].m_iField = -1;
-		for ( uint32 j=SPHINXSE_SYSTEM_COLUMNS; j<pTable->s->fields; j++ )
+		for ( int j=SPHINXSE_SYSTEM_COLUMNS; j<m_pShare->m_iTableFields; j++ )
 		{
-			const char * sTableField = pTable->field[j]->field_name;
+			const char * sTableField = m_pShare->m_sTableField[j];
 			const char * sAttrField = m_dAttrs[i].m_sName;
 			if ( m_dAttrs[i].m_sName[0]=='@' )
 			{
@@ -1545,14 +1644,14 @@ bool ha_sphinx::UnpackSchema ()
 
 	// network packet unpacked; build unbound fields map
 	SafeDeleteArray ( m_dUnboundFields );
-	m_dUnboundFields = new int [ pTable->s->fields ];
+	m_dUnboundFields = new int [ m_pShare->m_iTableFields ];
 
-	for ( uint32 i=0; i<pTable->s->fields; i++ )
+	for ( int i=0; i<m_pShare->m_iTableFields; i++ )
 	{
 		if ( i<SPHINXSE_SYSTEM_COLUMNS )
 			m_dUnboundFields[i] = SPH_ATTR_NONE;
 
-		else if ( pTable->field[i]->type()==MYSQL_TYPE_TIMESTAMP )
+		else if ( m_pShare->m_eTableFieldType[i]==MYSQL_TYPE_TIMESTAMP )
 			m_dUnboundFields[i] = SPH_ATTR_TIMESTAMP;
 
 		else

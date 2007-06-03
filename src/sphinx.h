@@ -940,6 +940,7 @@ public:
 	CSphString		m_sGroupBy;		///< group-by attribute name
 	ESphGroupBy		m_eGroupFunc;	///< function to pre-process group-by attribute value with
 	CSphString		m_sGroupSortBy;	///< sorting clause for groups in group-by mode
+	CSphString		m_sGroupDistinct;///< count distinct values for this attribute
 
 	int				m_iCutoff;		///< matches count threshold to stop searching at (defualt is 0; means to search until all matches are found)
 
@@ -949,15 +950,16 @@ public:
 protected:
 	int				m_iAttrs;		///< attribute count (necessary to instantiate group-by queues)
 	int				m_iGroupBy;		///< group-by attribute index
+	int				m_iDistinctAttr;///< distinct-counted attribute index
 
 public:
 					CSphQuery ();								///< ctor, fills defaults
 					~CSphQuery ();								///< dtor, frees owned stuff
 
-	bool			SetSchema ( const CSphSchema & tSchema, CSphString & sError );	///< calc m_iAttrs and m_iGroupBy from schema
+	bool			SetSchema ( const CSphSchema & tSchema, CSphString & sError );	///< calc m_iAttrs, m_iGroupBy, m_iDistinct from schema
 	int				GetAttrsCount () const		{ return m_iAttrs;}
 	int				GetGroupByAttr () const		{ return m_iGroupBy; }
-
+	int				GetDistinctAttr () const	{ return m_iDistinctAttr; }
 };
 
 
@@ -1024,18 +1026,6 @@ struct CSphIndexProgress
 };
 
 
-/// virtual attributes
-enum
-{
-	SPH_VATTR_ID			= -1,	///< tells match sorter to use doc id
-	SPH_VATTR_RELEVANCE		= -2,	///< tells match sorter to use match weight
-
-	SPH_VATTR_GROUP			= 0,	///< @group offset after normal attrs
-	SPH_VATTR_COUNT			= 1,	///< @count offset after normal attrs
-	SPH_VATTR_TOTAL			= 2		///< total inserted virtual attrs count
-};
-
-
 /// match comparator state
 struct CSphMatchComparatorState
 {
@@ -1043,12 +1033,22 @@ struct CSphMatchComparatorState
 	DWORD			m_uAttrDesc;	///< sort order mask (if i-th bit is set, i-th attr order is DESC)
 	DWORD			m_iNow;			///< timestamp (for timesegments sorting mode)
 
+	/// create default empty state
 	CSphMatchComparatorState ()
 		: m_uAttrDesc ( 0 )
 		, m_iNow ( 0 )
 	{
 		for ( int i=0; i<(int)(sizeof(m_iAttr)/sizeof(int)); i++ )
 			m_iAttr[i] = -1;
+	}
+
+	/// check if given attr index is used
+	bool HasAttr ( int iAttrIndex )
+	{
+		for ( int i=0; i<(int)(sizeof(m_iAttr)/sizeof(int)); i++ )
+			if ( m_iAttr[i]==iAttrIndex )
+				return true;
+		return false;
 	}
 };
 

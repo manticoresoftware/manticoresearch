@@ -228,6 +228,12 @@ template < typename T, typename F > void sphSort ( T * pData, int iCount, F COMP
 	}
 }
 
+
+template < typename T > void sphSort ( T * pData, int iCount )
+{
+	sphSort ( pData, iCount, SphLess_T<T>() );
+}
+
 //////////////////////////////////////////////////////////////////////////////
 
 /// generic vector
@@ -430,7 +436,7 @@ public:
 		return *this;
 	}
 
-private:
+protected:
 	int		m_iLength;		///< entries actually used
 	int		m_iLimit;		///< entries allocated
 	T *		m_pData;		///< entries

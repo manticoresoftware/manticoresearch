@@ -397,6 +397,22 @@ protected:
 // INTERNAL SPHINX CLASSES DECLARATIONS
 /////////////////////////////////////////////////////////////////////////////
 
+/// virtual attributes
+enum
+{
+	SPH_VATTR_ID			= -1,	///< tells match sorter to use doc id
+	SPH_VATTR_RELEVANCE		= -2,	///< tells match sorter to use match weight
+
+	SPH_VATTR_GROUP			= 0,	///< @group offset after normal attrs
+	SPH_VATTR_COUNT			= 1,	///< @count offset after normal attrs
+	SPH_VATTR_DISTINCT		= 2,	///< @distinct offset after normal attrs
+
+	SPH_VATTRTOTAL_GROUP	= 2,
+	SPH_VATTRTOTAL_DISTINCT	= 3
+};
+
+/////////////////////////////////////////////////////////////////////////////
+
 #ifdef O_BINARY
 #define SPH_O_BINARY O_BINARY
 #else
@@ -985,11 +1001,145 @@ public:
 
 struct IdentityHash_fn
 {
-	static inline uint64_t Hash ( uint64_t iValue ) { return iValue; }
+	static inline uint64_t	Hash ( uint64_t iValue )	{ return iValue; }
+	static inline DWORD		Hash ( DWORD iValue )		{ return iValue; }
+};
+
+/////////////////////////////////////////////////////////////////////////////
+
+typedef uint64_t	SphGroupKey_t;
+
+/// (group,attrvalue) pair
+struct SphGroupedValue_t
+{
+public:
+	SphGroupKey_t	m_uGroup;
+	DWORD			m_uValue;
+
+public:
+	SphGroupedValue_t ()
+	{}
+
+	SphGroupedValue_t ( SphGroupKey_t uGroup, DWORD uValue )
+		: m_uGroup ( uGroup )
+		, m_uValue ( uValue )
+	{}
+
+	inline bool operator < ( const SphGroupedValue_t & rhs ) const
+	{
+		if ( m_uGroup<rhs.m_uGroup ) return true;
+		if ( m_uGroup>rhs.m_uGroup ) return false;
+		return m_uValue<rhs.m_uValue;
+	}
+
+	inline bool operator == ( const SphGroupedValue_t & rhs ) const
+	{
+		return m_uGroup==rhs.m_uGroup && m_uValue==rhs.m_uValue;
+	}
 };
 
 
-uint64_t sphCalcGroupKey ( const CSphMatch & tMatch, ESphGroupBy eGroupBy, int iGroupBy )
+/// unique values counter
+/// used for COUNT(DISTINCT xxx) GROUP BY yyy queries
+class CSphUniqounter : public CSphVector<SphGroupedValue_t,16384>
+{
+public:
+#ifndef NDEBUG
+					CSphUniqounter () : m_iCountPos ( 0 ), m_bSorted ( true ) {}
+	void			Add ( const SphGroupedValue_t & tValue )	{ CSphVector::Add ( tValue ); m_bSorted = false; }
+	void			Sort ()										{ CSphVector::Sort (); m_bSorted = true; }
+
+#else
+					CSphUniqounter () : m_iCountPos ( 0 ) {}
+#endif
+
+public:
+	int				CountStart ( SphGroupKey_t * pOutGroup );	///< starting counting distinct values, returns count and group key (0 if empty)
+	int				CountNext ( SphGroupKey_t * pOutGroup );	///< continues counting distinct values, returns count and group key (0 if done)
+	void			Compact ( SphGroupKey_t * pRemoveGroups, int iRemoveGroups );
+
+protected:
+	int				m_iCountPos;
+
+#ifndef NDEBUG
+	bool			m_bSorted;
+#endif
+};
+
+
+int CSphUniqounter::CountStart ( SphGroupKey_t * pOutGroup )
+{
+	m_iCountPos = 0;
+	return CountNext ( pOutGroup );
+}
+
+
+int CSphUniqounter::CountNext ( SphGroupKey_t * pOutGroup )
+{
+	assert ( m_bSorted );
+	if ( m_iCountPos>=m_iLength )
+		return 0;
+
+	SphGroupKey_t uGroup = m_pData[m_iCountPos].m_uGroup;
+	DWORD uValue = m_pData[m_iCountPos].m_uValue;
+	*pOutGroup = uGroup;
+
+	int iCount = 1;
+	while ( m_pData[m_iCountPos].m_uGroup==uGroup )
+	{
+		if ( m_pData[m_iCountPos].m_uValue!=uValue )
+			iCount++;
+		uValue = m_pData[m_iCountPos].m_uValue;
+		m_iCountPos++;
+	}
+	return iCount;
+}
+
+
+void CSphUniqounter::Compact ( SphGroupKey_t * pRemoveGroups, int iRemoveGroups )
+{
+	assert ( m_bSorted );
+	if ( !m_iLength )
+		return;
+
+	sphSort ( pRemoveGroups, iRemoveGroups );
+
+	SphGroupedValue_t * pSrc = m_pData;
+	SphGroupedValue_t * pDst = m_pData;
+	SphGroupedValue_t * pEnd = m_pData + m_iLength;
+
+	// skip remove-groups which are not in my list
+	while ( iRemoveGroups && (*pRemoveGroups)<pSrc->m_uGroup )
+	{
+		pRemoveGroups++;
+		iRemoveGroups--;
+	}
+
+	for ( ; pSrc<pEnd; pSrc++ )
+	{
+		// check if this entry needs to be removed
+		while ( iRemoveGroups && (*pRemoveGroups)<pSrc->m_uGroup )
+		{
+			pRemoveGroups++;
+			iRemoveGroups--;
+		}
+		if ( iRemoveGroups && pSrc->m_uGroup==*pRemoveGroups )
+			continue;
+
+		// check if it's a dupe
+		if ( pDst>m_pData && pDst[-1]==pSrc[0] )
+			continue;
+
+		*pDst++ = *pSrc;
+	}
+
+	assert ( pDst-m_pData<=m_iLength );
+	m_iLength = pDst-m_pData;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+SphGroupKey_t sphCalcGroupKey ( const CSphMatch & tMatch, ESphGroupBy eGroupBy, int iGroupBy )
 {
 	assert ( iGroupBy>=0 && iGroupBy<tMatch.m_iAttrs );
 	DWORD iAttr = tMatch.m_pAttrs [ iGroupBy ];
@@ -998,7 +1148,7 @@ uint64_t sphCalcGroupKey ( const CSphMatch & tMatch, ESphGroupBy eGroupBy, int i
 		return iAttr;
 
 	if ( eGroupBy==SPH_GROUPBY_ATTRPAIR )
-		return iAttr + ( ( (uint64_t) tMatch.m_pAttrs[iGroupBy+1] )<<32 );
+		return iAttr + ( ( (SphGroupKey_t) tMatch.m_pAttrs[iGroupBy+1] )<<32 );
 
 	time_t tStamp = tMatch.m_pAttrs [ iGroupBy ];
 	struct tm * pSplit = localtime ( &tStamp ); // FIXME! use _r on UNIX
@@ -1015,7 +1165,11 @@ uint64_t sphCalcGroupKey ( const CSphMatch & tMatch, ESphGroupBy eGroupBy, int i
 
 
 /// match sorter with k-buffering and group-by
-template < typename COMPMATCH, typename COMPGROUP >
+#if USE_WINDOWS
+#pragma warning(disable:4127)
+#endif
+
+template < typename COMPMATCH, typename COMPGROUP, bool DISTINCT >
 class CSphKBufferGroupSorter : public CSphMatchQueueTraits, public ISphNoncopyable
 {
 protected:
@@ -1024,35 +1178,43 @@ protected:
 	ESphGroupBy		m_eGroupBy;		///< group-by function
 	int				m_iGroupBy;		///< group-by argument attribute index
 
-	CSphFixedHash < CSphMatch *, uint64_t, IdentityHash_fn >	m_hGroup2Match;
+	CSphFixedHash < CSphMatch *, SphGroupKey_t, IdentityHash_fn >	m_hGroup2Match;
 
 protected:
 	int				m_iLimit;		///< max matches to be retrieved
-	DWORD			m_iCoeff;		///< buffer size scale coefficient (k as in k-buffer)
+
+	CSphUniqounter	m_tUniq;
+	int				m_iDistinctAttr;
+	bool			m_bSortByDistinct;
 
 	CSphMatchComparatorState	m_tStateGroup;
 
+	static const int			GROUPBY_FACTOR = 4;	///< allocate this times more storage when doing group-by (k, as in k-buffer)
+
 public:
 	/// ctor
-	CSphKBufferGroupSorter ( const CSphQuery * pQuery, DWORD iCoeff=1 ) // FIXME! make k configurable
-		: CSphMatchQueueTraits ( (1+iCoeff)*pQuery->m_iMaxMatches, true )
-		, m_iAttrs ( pQuery->GetAttrsCount() )
-		, m_eGroupBy ( pQuery->m_eGroupFunc )
-		, m_iGroupBy ( pQuery->GetGroupByAttr() )
-		, m_hGroup2Match ( (1+iCoeff)*pQuery->m_iMaxMatches )
-
-		, m_iLimit ( pQuery->m_iMaxMatches )
-		, m_iCoeff ( iCoeff )
+	CSphKBufferGroupSorter ( const CSphQuery * pQuery ) // FIXME! make k configurable
+		: CSphMatchQueueTraits ( pQuery->m_iMaxMatches*GROUPBY_FACTOR, true )
+		, m_iAttrs			( pQuery->GetAttrsCount() )
+		, m_eGroupBy		( pQuery->m_eGroupFunc )
+		, m_iGroupBy		( pQuery->GetGroupByAttr() )
+		, m_hGroup2Match	( pQuery->m_iMaxMatches*GROUPBY_FACTOR )
+		, m_iLimit			( pQuery->m_iMaxMatches )
+		, m_iDistinctAttr	( pQuery->GetDistinctAttr() )
+		, m_bSortByDistinct	( false )
 	{
-		assert ( iCoeff>0 );
+		assert ( GROUPBY_FACTOR>1 );
+		assert ( DISTINCT==false || m_iDistinctAttr>=0 );
 	}
 
 	/// add entry to the queue
 	virtual bool Push ( const CSphMatch & tEntry )
 	{
-		assert ( tEntry.m_iAttrs==m_iAttrs || tEntry.m_iAttrs==m_iAttrs+SPH_VATTR_TOTAL );
+		const int VATTR_TOTAL = DISTINCT ? SPH_VATTRTOTAL_DISTINCT : SPH_VATTRTOTAL_GROUP;
+		assert ( tEntry.m_iAttrs==m_iAttrs || tEntry.m_iAttrs==m_iAttrs+VATTR_TOTAL );
+
 		bool bGrouped = ( tEntry.m_iAttrs!=m_iAttrs );
-		uint64_t uGroupKey = sphCalcGroupKey ( tEntry, m_eGroupBy, m_iGroupBy );
+		SphGroupKey_t uGroupKey = sphCalcGroupKey ( tEntry, m_eGroupBy, m_iGroupBy );
 
 		// if this group is already hashed, we only need to update the corresponding match
 		CSphMatch ** ppMatch = m_hGroup2Match ( uGroupKey );
@@ -1073,7 +1235,7 @@ public:
 			{
 				// it's a simple match
 				// increase grouped matches count
-				assert ( pMatch->m_iAttrs==tEntry.m_iAttrs+SPH_VATTR_TOTAL );
+				assert ( pMatch->m_iAttrs==tEntry.m_iAttrs+VATTR_TOTAL );
 				pMatch->m_pAttrs [ m_iAttrs+SPH_VATTR_COUNT ]++;
 			}
 
@@ -1082,39 +1244,28 @@ public:
 			{
 				pMatch->m_iDocID = tEntry.m_iDocID;
 				pMatch->m_iWeight = tEntry.m_iWeight;
-				if ( pMatch->m_iAttrs > SPH_VATTR_TOTAL )
-					memcpy ( pMatch->m_pAttrs, tEntry.m_pAttrs, sizeof(DWORD)*(pMatch->m_iAttrs-SPH_VATTR_TOTAL) );
+				if ( pMatch->m_iAttrs > VATTR_TOTAL )
+					memcpy ( pMatch->m_pAttrs, tEntry.m_pAttrs, sizeof(DWORD)*(pMatch->m_iAttrs-VATTR_TOTAL) );
 			}
-
-			// it's a dupe anyway, so we shouldn't update total matches count
-			return false;
 		}
+
+		// submit distinct entry in all cases
+		if ( DISTINCT )
+			m_tUniq.Add ( SphGroupedValue_t ( uGroupKey, tEntry.m_pAttrs[m_iDistinctAttr] ) );
+
+		// it's a dupe anyway, so we shouldn't update total matches count
+		if ( ppMatch )
+			return false;
 
 		// if we're full, let's cut off some worst groups
 		if ( m_iUsed==m_iSize )
-		{
-			Sort (); // sort
-			m_iUsed -= m_iLimit; // cut off
-			m_hGroup2Match.Reset (); // rehash
-			if ( m_eGroupBy==SPH_GROUPBY_ATTRPAIR )
-			{
-				for ( int i=0; i<m_iUsed; i++ )
-				{
-					uint64_t uKey = sphCalcGroupKey ( m_pData[i], m_eGroupBy, m_iGroupBy );
-					m_hGroup2Match.Add ( &m_pData[i], uKey );
-				}
-			} else
-			{
-				for ( int i=0; i<m_iUsed; i++ )
-					m_hGroup2Match.Add ( m_pData+i, m_pData[i].m_pAttrs[ m_iAttrs+SPH_VATTR_GROUP ] );
-			}
-		}
+			CutWorst ();
 
 		// do add
 		assert ( m_iUsed<m_iSize );
 		CSphMatch & tNew = m_pData [ m_iUsed++ ];
 
-		int iNewAttrs = tEntry.m_iAttrs + ( bGrouped ? 0 : SPH_VATTR_TOTAL );
+		int iNewAttrs = tEntry.m_iAttrs + ( bGrouped ? 0 : VATTR_TOTAL );
 		assert ( tNew.m_iAttrs==0 || tNew.m_iAttrs==iNewAttrs );
 
 		tNew.m_iDocID = tEntry.m_iDocID;
@@ -1129,6 +1280,8 @@ public:
 		{
 			tNew.m_pAttrs [ m_iAttrs+SPH_VATTR_GROUP ] = (DWORD)uGroupKey; // intentionally truncate
 			tNew.m_pAttrs [ m_iAttrs+SPH_VATTR_COUNT ] = 1;
+			if ( DISTINCT )
+				tNew.m_pAttrs [ m_iAttrs+SPH_VATTR_DISTINCT ] = 0;
 		}
 
 		m_hGroup2Match.Add ( &tNew, uGroupKey );
@@ -1138,22 +1291,101 @@ public:
 	/// store all entries into specified location in sorted order, and remove them from queue
 	void Flatten ( CSphTaggedMatch * pTo, int iTag )
 	{
-		Sort ();
+		CountDistinct ();
+		SortGroups ();
+
 		int iLen = GetLength ();
 		for ( int i=0; i<iLen; i++, pTo++ )
 		{
 			pTo[0] = m_pData[i];
 			pTo->m_iTag = iTag;
 		}
+
 		m_iUsed = 0;
 	}
 
-public:
-	int		GetLength () const											{ return Min ( m_iUsed, m_iLimit ); }
-	void	SetGroupState ( const CSphMatchComparatorState & tState )	{ m_tStateGroup = tState; }
+	/// get entries count
+	int GetLength () const
+	{
+		return Min ( m_iUsed, m_iLimit );
+	}
+
+	/// set group comparator state
+	void SetGroupState ( const CSphMatchComparatorState & tState )
+	{
+		m_tStateGroup = tState;
+		m_bSortByDistinct = m_tStateGroup.HasAttr ( m_iAttrs+SPH_VATTR_DISTINCT );
+	}
 
 protected:
-	void Sort ()
+	/// count distinct values if necessary
+	void CountDistinct ()
+	{
+		if ( DISTINCT )
+		{
+			m_tUniq.Sort ();
+			SphGroupKey_t uGroup;
+			for ( int iCount = m_tUniq.CountStart(&uGroup); iCount; iCount = m_tUniq.CountNext(&uGroup) )
+			{
+				CSphMatch ** ppMatch = m_hGroup2Match(uGroup);
+				if ( ppMatch )
+					(*ppMatch)->m_pAttrs[m_iAttrs+SPH_VATTR_DISTINCT] = iCount;
+			}
+		}
+	}
+
+	/// cut worst N groups off the buffer tail
+	void CutWorst ()
+	{
+		// sort groups
+		if ( m_bSortByDistinct )
+			CountDistinct ();
+		SortGroups ();
+
+		// cut groups
+		int iCut = m_iLimit * (int)(GROUPBY_FACTOR/2);
+		m_iUsed -= iCut;
+
+		// cleanup unused distinct stuff
+		if ( DISTINCT )
+		{
+			// build kill-list
+			CSphVector<SphGroupKey_t> dRemove;
+			dRemove.Resize ( iCut );
+			if ( m_eGroupBy==SPH_GROUPBY_ATTRPAIR )
+			{
+				for ( int i=0; i<iCut; i++ )
+					dRemove[i] = sphCalcGroupKey ( m_pData[m_iUsed+i], m_eGroupBy, m_iGroupBy );
+			} else
+			{
+				for ( int i=0; i<iCut; i++ )
+					dRemove[i] = m_pData[m_iUsed+i].m_pAttrs[m_iAttrs+SPH_VATTR_GROUP];
+			}
+
+			// sort and compact
+			if ( !m_bSortByDistinct )
+				m_tUniq.Sort ();
+			m_tUniq.Compact ( &dRemove[0], iCut );
+		}
+
+		// rehash
+		m_hGroup2Match.Reset ();
+		if ( m_eGroupBy==SPH_GROUPBY_ATTRPAIR )
+		{
+			for ( int i=0; i<m_iUsed; i++ )
+			{
+				SphGroupKey_t uKey = sphCalcGroupKey ( m_pData[i], m_eGroupBy, m_iGroupBy );
+				m_hGroup2Match.Add ( &m_pData[i], uKey );
+			}
+		} else
+		{
+			for ( int i=0; i<m_iUsed; i++ )
+				m_hGroup2Match.Add ( m_pData+i, m_pData[i].m_pAttrs[ m_iAttrs+SPH_VATTR_GROUP ] );
+		}
+	}
+
+	/// sort groups buffer
+	void SortGroups ()
 	{
 		CSphMatch * pData = m_pData;
 		int iCount = m_iUsed;
@@ -1194,6 +1426,11 @@ protected:
 	}
 };
 
+#if USE_WINDOWS
+#pragma warning(default:4127)
+#endif
+
+//////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////
 
 /// possible bin states
@@ -3039,8 +3276,9 @@ CSphQuery::CSphQuery ()
 	, m_iRetryCount	( 0 )
 	, m_iRetryDelay	( 0 )
 
-	, m_iAttrs		( -1 )
-	, m_iGroupBy	( -1 )
+	, m_iAttrs			( -1 )
+	, m_iGroupBy		( -1 )
+	, m_iDistinctAttr	( -1 )
 {}
 
 
@@ -3057,6 +3295,7 @@ bool CSphQuery::SetSchema ( const CSphSchema & tSchema, CSphString & sError )
 	if ( m_sGroupBy.IsEmpty() )
 	{
 		m_iGroupBy = -1;
+		m_iDistinctAttr = -1;
 		return true;
 	}
 
@@ -3073,6 +3312,17 @@ bool CSphQuery::SetSchema ( const CSphSchema & tSchema, CSphString & sError )
 		return false;
 	}
 
+	m_iDistinctAttr = -1;
+	if ( !m_sGroupDistinct.IsEmpty() )
+	{
+		m_iDistinctAttr = tSchema.GetAttrIndex ( m_sGroupDistinct.cstr() );
+		if ( m_iDistinctAttr<0 )
+		{
+			sError.SetSprintf ( "group-count-distinct attribute '%s' not found", m_sGroupDistinct.cstr() );
+			return false;
+		}
+	}
+
 	return true;
 }
 
@@ -3083,11 +3333,11 @@ bool CSphQuery::SetSchema ( const CSphSchema & tSchema, CSphString & sError )
 int CSphSchema::GetRealAttrCount () const
 {
 	// FIXME! add some bool instead of magic attr naming?
-	int iAttrs = m_dAttrs.GetLength ();
-	if ( iAttrs>=SPH_VATTR_TOTAL )
-		if ( m_dAttrs[iAttrs-SPH_VATTR_TOTAL].m_sName=="@groupby" && m_dAttrs[iAttrs-SPH_VATTR_TOTAL+1].m_sName=="@count" )
-			iAttrs -= SPH_VATTR_TOTAL;
-	return iAttrs;
+	for ( int i=0; i<m_dAttrs.GetLength()-1; i++ )
+		if ( m_dAttrs[i].m_sName=="@groupby" && m_dAttrs[i+1].m_sName=="@count" )
+			return i;
+
+	return m_dAttrs.GetLength();
 }
 
 
@@ -6137,6 +6387,15 @@ static int sphParseSortClause ( const char * sClause, const CSphQuery * pQuery,
 		{
 			tState.m_iAttr[iField] = pQuery->GetAttrsCount() + SPH_VATTR_GROUP;
 
+		} else if ( !strcasecmp ( pTok, "@distinct" ) && bGroupClause )
+		{
+			if ( pQuery->GetDistinctAttr()<0 )
+			{
+				sError.SetSprintf ( "no count-distinct attribute; can not sort by @distinct" );
+				return SORT_CLAUSE_ERROR;
+			}
+			tState.m_iAttr[iField] = pQuery->GetAttrsCount() + SPH_VATTR_DISTINCT;
+
 		} else
 		{
 			tState.m_iAttr[iField] = tSchema.GetAttrIndex ( pTok );
@@ -6182,6 +6441,54 @@ ESphSortFunc sphNumSortAttrs2Func ( int iAttrs )
 	}
 }
 
+/////////////////////////////////////////////////////////////////////////////
+
+template < typename PARAM1, typename PARAM2, typename ARG >
+ISphMatchSorter * sphCreateSorter3rd  ( bool bParam3, ARG arg )
+{
+	if ( bParam3==true )
+		return new CSphKBufferGroupSorter<PARAM1,PARAM2,true> ( arg );
+	else
+		return new CSphKBufferGroupSorter<PARAM1,PARAM2,false> ( arg );
+}
+
+
+template < typename PARAM1, typename ARG >
+ISphMatchSorter * sphCreateSorter2nd ( ESphSortFunc eParam2, bool bParam3, ARG arg )
+{
+	switch ( eParam2 )
+	{
+		case FUNC_REL_DESC:		return sphCreateSorter3rd<PARAM1,MatchRelevanceLt_fn>	( bParam3, arg ); break;
+		case FUNC_ATTR_DESC:	return sphCreateSorter3rd<PARAM1,MatchAttrLt_fn>		( bParam3, arg ); break;
+		case FUNC_ATTR_ASC:		return sphCreateSorter3rd<PARAM1,MatchAttrGt_fn>		( bParam3, arg ); break;
+		case FUNC_TIMESEGS:		return sphCreateSorter3rd<PARAM1,MatchTimeSegments_fn>	( bParam3, arg ); break;
+		case FUNC_GENERIC2:		return sphCreateSorter3rd<PARAM1,MatchGeneric2_fn>		( bParam3, arg ); break;
+		case FUNC_GENERIC3:		return sphCreateSorter3rd<PARAM1,MatchGeneric3_fn>		( bParam3, arg ); break;
+		case FUNC_GENERIC4:		return sphCreateSorter3rd<PARAM1,MatchGeneric4_fn>		( bParam3, arg ); break;
+		case FUNC_GENERIC5:		return sphCreateSorter3rd<PARAM1,MatchGeneric5_fn>		( bParam3, arg ); break;
+	}
+	return NULL;
+}
+
+
+template < typename ARG >
+ISphMatchSorter * sphCreateSorter1st ( ESphSortFunc eParam1, ESphSortFunc eParam2, bool bParam3, ARG arg )
+{
+	switch ( eParam1 )
+	{
+		case FUNC_REL_DESC:		return sphCreateSorter2nd<MatchRelevanceLt_fn>	( eParam2, bParam3, arg ); break;
+		case FUNC_ATTR_DESC:	return sphCreateSorter2nd<MatchAttrLt_fn>		( eParam2, bParam3, arg ); break;
+		case FUNC_ATTR_ASC:		return sphCreateSorter2nd<MatchAttrGt_fn>		( eParam2, bParam3, arg ); break;
+		case FUNC_TIMESEGS:		return sphCreateSorter2nd<MatchTimeSegments_fn>	( eParam2, bParam3, arg ); break;
+		case FUNC_GENERIC2:		return sphCreateSorter2nd<MatchGeneric2_fn>		( eParam2, bParam3, arg ); break;
+		case FUNC_GENERIC3:		return sphCreateSorter2nd<MatchGeneric3_fn>		( eParam2, bParam3, arg ); break;
+		case FUNC_GENERIC4:		return sphCreateSorter2nd<MatchGeneric4_fn>		( eParam2, bParam3, arg ); break;
+		case FUNC_GENERIC5:		return sphCreateSorter2nd<MatchGeneric5_fn>		( eParam2, bParam3, arg ); break;
+	}
+	return NULL;
+}
+
+/////////////////////////////////////////////////////////////////////////////
 
 ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError )
 {
@@ -6286,48 +6593,10 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		if ( eGroupFunc==FUNC_SORTBY )
 		{
 			tStateGroup = tStateMatch;
-			switch ( eMatchFunc )
-			{
-				case FUNC_REL_DESC:	pTop = new CSphKBufferGroupSorter < MatchRelevanceLt_fn, MatchRelevanceLt_fn > ( pQuery ); break;
-				case FUNC_ATTR_DESC:pTop = new CSphKBufferGroupSorter < MatchAttrLt_fn, MatchAttrLt_fn > ( pQuery ); break;
-				case FUNC_ATTR_ASC:	pTop = new CSphKBufferGroupSorter < MatchAttrGt_fn, MatchAttrGt_fn > ( pQuery ); break;
-				case FUNC_TIMESEGS:	pTop = new CSphKBufferGroupSorter < MatchTimeSegments_fn, MatchTimeSegments_fn > ( pQuery ); break;
-				case FUNC_GENERIC2:	pTop = new CSphKBufferGroupSorter < MatchGeneric2_fn, MatchGeneric2_fn > ( pQuery ); break;
-				case FUNC_GENERIC3:	pTop = new CSphKBufferGroupSorter < MatchGeneric3_fn, MatchGeneric3_fn > ( pQuery ); break;
-				case FUNC_GENERIC4:	pTop = new CSphKBufferGroupSorter < MatchGeneric4_fn, MatchGeneric4_fn > ( pQuery ); break;
-				case FUNC_GENERIC5:	pTop = new CSphKBufferGroupSorter < MatchGeneric5_fn, MatchGeneric5_fn > ( pQuery ); break;
-				default:			break;
-			}
-		} else if ( eGroupFunc==FUNC_GENERIC2 )
-		{
-			switch ( eMatchFunc )
-			{
-				case FUNC_REL_DESC:	pTop = new CSphKBufferGroupSorter < MatchRelevanceLt_fn, MatchGeneric2_fn > ( pQuery ); break;
-				case FUNC_ATTR_DESC:pTop = new CSphKBufferGroupSorter < MatchAttrLt_fn, MatchGeneric2_fn > ( pQuery ); break;
-				case FUNC_ATTR_ASC:	pTop = new CSphKBufferGroupSorter < MatchAttrGt_fn, MatchGeneric2_fn > ( pQuery ); break;
-				case FUNC_TIMESEGS:	pTop = new CSphKBufferGroupSorter < MatchTimeSegments_fn, MatchGeneric2_fn > ( pQuery ); break;
-				case FUNC_GENERIC2:	pTop = new CSphKBufferGroupSorter < MatchGeneric2_fn, MatchGeneric2_fn > ( pQuery ); break;
-				case FUNC_GENERIC3:	pTop = new CSphKBufferGroupSorter < MatchGeneric3_fn, MatchGeneric2_fn > ( pQuery ); break;
-				case FUNC_GENERIC4:	pTop = new CSphKBufferGroupSorter < MatchGeneric4_fn, MatchGeneric2_fn > ( pQuery ); break;
-				case FUNC_GENERIC5:	pTop = new CSphKBufferGroupSorter < MatchGeneric5_fn, MatchGeneric2_fn > ( pQuery ); break;
-				default:			break;
-			}
-		} else if ( eGroupFunc==FUNC_GENERIC3 )
-		{
-			switch ( eMatchFunc )
-			{
-				case FUNC_REL_DESC:	pTop = new CSphKBufferGroupSorter < MatchRelevanceLt_fn, MatchGeneric3_fn > ( pQuery ); break;
-				case FUNC_ATTR_DESC:pTop = new CSphKBufferGroupSorter < MatchAttrLt_fn, MatchGeneric3_fn > ( pQuery ); break;
-				case FUNC_ATTR_ASC:	pTop = new CSphKBufferGroupSorter < MatchAttrGt_fn, MatchGeneric3_fn > ( pQuery ); break;
-				case FUNC_TIMESEGS:	pTop = new CSphKBufferGroupSorter < MatchTimeSegments_fn, MatchGeneric3_fn > ( pQuery ); break;
-				case FUNC_GENERIC2:	pTop = new CSphKBufferGroupSorter < MatchGeneric2_fn, MatchGeneric3_fn > ( pQuery ); break;
-				case FUNC_GENERIC3:	pTop = new CSphKBufferGroupSorter < MatchGeneric3_fn, MatchGeneric3_fn > ( pQuery ); break;
-				case FUNC_GENERIC4:	pTop = new CSphKBufferGroupSorter < MatchGeneric4_fn, MatchGeneric3_fn > ( pQuery ); break;
-				case FUNC_GENERIC5:	pTop = new CSphKBufferGroupSorter < MatchGeneric5_fn, MatchGeneric3_fn > ( pQuery ); break;
-				default:			break;
-			}
+			eGroupFunc = eMatchFunc;
 		}
 
+		pTop = sphCreateSorter1st ( eMatchFunc, eGroupFunc, pQuery->GetDistinctAttr()>=0, pQuery );
 		if ( !pTop )
 		{
 			sError.SetSprintf ( "internal error: unhandled group/match sorting modes (group=%d, match=%d)",
@@ -8502,6 +8771,8 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 	{
 		pResult->m_tSchema.m_dAttrs.Add ( CSphColumnInfo ( "@groupby", SPH_ATTR_INTEGER ) );
 		pResult->m_tSchema.m_dAttrs.Add ( CSphColumnInfo ( "@count", SPH_ATTR_INTEGER ) );
+		if ( pQuery->GetDistinctAttr()>=0 )
+			pResult->m_tSchema.m_dAttrs.Add ( CSphColumnInfo ( "@distinct", SPH_ATTR_INTEGER ) );
 	}
 
 	m_dQueryWords.Reset ();

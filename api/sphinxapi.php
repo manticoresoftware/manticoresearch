@@ -23,7 +23,7 @@ define ( "SEARCHD_COMMAND_EXCERPT",	1 );
 define ( "SEARCHD_COMMAND_UPDATE",	2 );
 
 /// current client-side command implementation versions
-define ( "VER_COMMAND_SEARCH",		0x10A );
+define ( "VER_COMMAND_SEARCH",		0x10B );
 define ( "VER_COMMAND_EXCERPT",		0x100 );
 define ( "VER_COMMAND_UPDATE",		0x100 );
 
@@ -76,6 +76,7 @@ class SphinxClient
 	var $_groupby;		///< group-by attribute name
 	var $_groupfunc;	///< group-by function (to pre-process group-by attribute value with)
 	var $_groupsort;	///< group-by sorting clause (to sort groups in result set with)
+	var $_groupdistinct;///< group-by count-distinct attribute
 	var $_maxmatches;	///< max matches to retrieve
 	var $_cutoff;		///< cutoff to stop searching at (default is 0)
 	var $_retrycount;	///< distributed retries count
@@ -105,6 +106,7 @@ class SphinxClient
 		$this->_groupby		= "";
 		$this->_groupfunc	= SPH_GROUPBY_DAY;
 		$this->_groupsort	= "@group desc";
+		$this->_groupdistinct= "";
 		$this->_maxmatches	= 1000;
 		$this->_cutoff		= 0;
 		$this->_retrycount	= 0;
@@ -380,6 +382,13 @@ class SphinxClient
 		$this->_groupsort = $groupsort;
 	}
 
+	/// set count-distinct attribute for group-by queries
+	function SetGroupDistinct ( $attribute )
+	{
+		assert ( is_string($attribute) );
+		$this->_groupdistinct = $attribute;
+	}
+
 	/// set distributed retries count and delay
 	function SetRetries ( $count, $delay=0 )
 	{
@@ -446,6 +455,7 @@ class SphinxClient
 		$req .= pack ( "N", $this->_maxmatches );
 		$req .= pack ( "N", strlen($this->_groupsort) ) . $this->_groupsort;
 		$req .= pack ( "NNN", $this->_cutoff, $this->_retrycount, $this->_retrydelay );
+		$req .= pack ( "N", strlen($this->_groupdistinct) ) . $this->_groupdistinct;
 
 		////////////////////////////
 		// send query, get response

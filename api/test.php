@@ -30,7 +30,8 @@ if ( !is_array($_SERVER["argv"]) || empty($_SERVER["argv"]) )
 	print ( "-f, --filter <ATTR>\tfilter by attribute 'ATTR' (default is 'group_id')\n" );
 	print ( "-v, --value <VAL>\tadd VAL to allowed 'group_id' values list\n" );
 	print ( "-g, --groupby <EXPR>\tgroup matches by 'EXPR'\n" );
-	print ( "-gs, --groupsort <EXPR>\tsort groups by 'EXPR'\n" );
+	print ( "-gs,--groupsort <EXPR>\tsort groups by 'EXPR'\n" );
+	print ( "-d, --distinct <ATTR>\tcount distinct values of 'ATTR''\n" );
 	exit;
 }
 
@@ -47,6 +48,7 @@ $groupby = "";
 $groupsort = "@group desc";
 $filter = "group_id";
 $filtervals = array();
+$distinct = "";
 for ( $i=0; $i<count($args); $i++ )
 {
 	$arg = $args[$i];
@@ -62,6 +64,7 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="-v" || $arg=="--value" )		$filtervals[] = (int)$args[++$i];
 	else if ( $arg=="-g" || $arg=="--groupby" )		$groupby = $args[++$i];
 	else if ( $arg=="-gs"|| $arg=="--groupsort" )	$groupsort = $args[++$i];
+	else if ( $arg=="-d" || $arg=="--distinct" )	$distinct = $args[++$i];
 	else
 		$q .= $args[$i] . " ";
 }
@@ -74,12 +77,10 @@ $cl = new SphinxClient ();
 $cl->SetServer ( $host, $port );
 $cl->SetWeights ( array ( 100, 1 ) );
 $cl->SetMatchMode ( $mode );
-if ( count($filtervals) )
-	$cl->SetFilter ( $filter, $filtervals );
-if ( $groupby )
-	$cl->SetGroupBy ( $groupby, SPH_GROUPBY_ATTR, $groupsort );
-if ( $sortby )
-	$cl->SetSortMode ( SPH_SORT_EXTENDED, $sortby );
+if ( count($filtervals) )	$cl->SetFilter ( $filter, $filtervals );
+if ( $groupby )				$cl->SetGroupBy ( $groupby, SPH_GROUPBY_ATTR, $groupsort );
+if ( $sortby )				$cl->SetSortMode ( SPH_SORT_EXTENDED, $sortby );
+if ( $distinct )			$cl->SetGroupDistinct ( $distinct );
 $res = $cl->Query ( $q, $index );
 
 ////////////////

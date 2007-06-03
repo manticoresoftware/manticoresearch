@@ -178,7 +178,7 @@ enum SearchdCommand_e
 /// known command versions
 enum
 {
-	VER_COMMAND_SEARCH		= 0x10A,
+	VER_COMMAND_SEARCH		= 0x10B,
 	VER_COMMAND_EXCERPT		= 0x100,
 	VER_COMMAND_UPDATE		= 0x100
 };
@@ -1535,7 +1535,8 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 					+ strlen ( tQuery.m_sQuery.cstr() )
 					+ strlen ( tAgent.m_sIndexes.cstr() )
 					+ strlen ( tQuery.m_sGroupBy.cstr() )
-					+ strlen ( tQuery.m_sGroupSortBy.cstr() );
+					+ strlen ( tQuery.m_sGroupSortBy.cstr() )
+					+ strlen ( tQuery.m_sGroupDistinct.cstr() );
 				ARRAY_FOREACH ( j, tQuery.m_dFilters )
 				{
 					const CSphFilter & tFilter = tQuery.m_dFilters[j];
@@ -1591,6 +1592,7 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				tOut.SendInt ( tQuery.m_iCutoff );
 				tOut.SendInt ( tQuery.m_iRetryCount );
 				tOut.SendInt ( tQuery.m_iRetryDelay );
+				tOut.SendString ( tQuery.m_sGroupDistinct.cstr() );
 				tOut.Flush ();
 
 				// FIXME! handle flush failure
@@ -2377,6 +2379,10 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		tQuery.m_iRetryCount = tReq.GetInt ();
 		tQuery.m_iRetryDelay = tReq.GetInt ();
 	}
+
+	// v.1.11
+	if ( iVer>=0x10B )
+		tQuery.m_sGroupDistinct = tReq.GetString ();
 
 	/////////////////////
 	// additional checks

@@ -1530,7 +1530,7 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				}
 
 				// do query!
-				int iReqSize = 80 + 2*sizeof(SphDocID_t) + 4*tQuery.m_iWeights
+				int iReqSize = 84 + 2*sizeof(SphDocID_t) + 4*tQuery.m_iWeights
 					+ strlen ( tQuery.m_sSortBy.cstr() )
 					+ strlen ( tQuery.m_sQuery.cstr() )
 					+ strlen ( tAgent.m_sIndexes.cstr() )

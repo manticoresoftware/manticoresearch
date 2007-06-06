@@ -1046,8 +1046,8 @@ class CSphUniqounter : public CSphVector<SphGroupedValue_t,16384>
 public:
 #ifndef NDEBUG
 					CSphUniqounter () : m_iCountPos ( 0 ), m_bSorted ( true ) {}
-	void			Add ( const SphGroupedValue_t & tValue )	{ CSphVector::Add ( tValue ); m_bSorted = false; }
-	void			Sort ()										{ CSphVector::Sort (); m_bSorted = true; }
+	void			Add ( const SphGroupedValue_t & tValue )	{ CSphVector<SphGroupedValue_t,16384>::Add ( tValue ); m_bSorted = false; }
+	void			Sort ()										{ CSphVector<SphGroupedValue_t,16384>::Sort (); m_bSorted = true; }
 
 #else
 					CSphUniqounter () : m_iCountPos ( 0 ) {}
@@ -6466,8 +6466,8 @@ ISphMatchSorter * sphCreateSorter2nd ( ESphSortFunc eParam2, bool bParam3, ARG a
 		case FUNC_GENERIC3:		return sphCreateSorter3rd<PARAM1,MatchGeneric3_fn>		( bParam3, arg ); break;
 		case FUNC_GENERIC4:		return sphCreateSorter3rd<PARAM1,MatchGeneric4_fn>		( bParam3, arg ); break;
 		case FUNC_GENERIC5:		return sphCreateSorter3rd<PARAM1,MatchGeneric5_fn>		( bParam3, arg ); break;
+		default:				return NULL;
 	}
-	return NULL;
 }
 
 
@@ -6484,8 +6484,8 @@ ISphMatchSorter * sphCreateSorter1st ( ESphSortFunc eParam1, ESphSortFunc eParam
 		case FUNC_GENERIC3:		return sphCreateSorter2nd<MatchGeneric3_fn>		( eParam2, bParam3, arg ); break;
 		case FUNC_GENERIC4:		return sphCreateSorter2nd<MatchGeneric4_fn>		( eParam2, bParam3, arg ); break;
 		case FUNC_GENERIC5:		return sphCreateSorter2nd<MatchGeneric5_fn>		( eParam2, bParam3, arg ); break;
+		default:				return NULL;
 	}
-	return NULL;
 }
 
 /////////////////////////////////////////////////////////////////////////////

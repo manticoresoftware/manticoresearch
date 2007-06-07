@@ -49,6 +49,7 @@ $groupsort = "@group desc";
 $filter = "group_id";
 $filtervals = array();
 $distinct = "";
+$sortby = "";
 for ( $i=0; $i<count($args); $i++ )
 {
 	$arg = $args[$i];

@@ -2278,6 +2278,12 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		tQuery.m_iMaxID		= tReq.GetDword ();
 	}
 
+	if ( iVer<0x108 && tQuery.m_iMaxID==0xffffffffUL )
+		tQuery.m_iMaxID = 0; // fixup older clients which send 32-bit UINT_MAX by default
+
+	if ( tQuery.m_iMaxID==0 )
+		tQuery.m_iMaxID = DOCID_MAX;
+
 	// upto v.1.1
 	if ( iVer<=0x101 )
 	{

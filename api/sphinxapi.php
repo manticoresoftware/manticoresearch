@@ -70,8 +70,8 @@ class SphinxClient
 	var $_weights;		///< per-field weights (default is 1 for all fields)
 	var $_sort;			///< match sorting mode (default is SPH_SORT_RELEVANCE)
 	var $_sortby;		///< attribute to sort by (defualt is "")
-	var $_min_id;		///< min ID to match (default is 0)
-	var $_max_id;		///< max ID to match (default is UINT_MAX)
+	var $_min_id;		///< min ID to match (default is 0, which means no limit)
+	var $_max_id;		///< max ID to match (default is 0, which means no limit)
 	var $_filters;		///< search filters
 	var $_groupby;		///< group-by attribute name
 	var $_groupfunc;	///< group-by function (to pre-process group-by attribute value with)
@@ -101,7 +101,7 @@ class SphinxClient
 		$this->_sort		= SPH_SORT_RELEVANCE;
 		$this->_sortby		= "";
 		$this->_min_id		= 0;
-		$this->_max_id		= 0xFFFFFFFF;
+		$this->_max_id		= 0;
 		$this->_filters		= array ();
 		$this->_groupby		= "";
 		$this->_groupfunc	= SPH_GROUPBY_DAY;

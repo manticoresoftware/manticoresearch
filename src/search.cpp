@@ -331,7 +331,7 @@ int main ( int argc, char ** argv )
 			for ( int i=iStart; i<iMaxIndex; i++ )
 			{
 				CSphMatch & tMatch = pResult->m_dMatches[i];
-				fprintf ( stdout, "%d. document=%u, weight=%d", 1+i, tMatch.m_iDocID, tMatch.m_iWeight );
+				fprintf ( stdout, "%d. document=" DOCID_FMT ", weight=%d", 1+i, tMatch.m_iDocID, tMatch.m_iWeight );
 
 				if ( tMatch.m_pAttrs )
 					ARRAY_FOREACH ( j, pResult->m_tSchema.m_dAttrs )

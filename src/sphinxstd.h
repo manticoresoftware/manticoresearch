@@ -68,7 +68,7 @@ typedef __int64 int64_t;
 typedef unsigned __int64 uint64_t;
 #define U64C(v) v ## UI64
 #define I64C(v) v ## I64
-#define U64FMT "%UI64d"
+#define U64FMT "%I64d"
 #define I64FMT "%I64d"
 #else // !defined(_MSC_VER)
 typedef long long int64_t;

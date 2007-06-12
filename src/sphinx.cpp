@@ -1230,6 +1230,7 @@ public:
 				// sum grouped matches count
 				assert ( pMatch->m_iAttrs==tEntry.m_iAttrs );
 				pMatch->m_pAttrs [ m_iAttrs+SPH_VATTR_COUNT ] += tEntry.m_pAttrs [ m_iAttrs+SPH_VATTR_COUNT ];
+				pMatch->m_pAttrs [ m_iAttrs+SPH_VATTR_DISTINCT ] += tEntry.m_pAttrs [ m_iAttrs+SPH_VATTR_DISTINCT ];
 
 			} else
 			{
@@ -1249,8 +1250,8 @@ public:
 			}
 		}
 
-		// submit distinct entry in all cases
-		if ( DISTINCT )
+		// submit actual distinct value in all cases
+		if ( DISTINCT && !bGrouped )
 			m_tUniq.Add ( SphGroupedValue_t ( uGroupKey, tEntry.m_pAttrs[m_iDistinctAttr] ) );
 
 		// it's a dupe anyway, so we shouldn't update total matches count

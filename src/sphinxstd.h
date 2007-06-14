@@ -113,6 +113,9 @@ void			sphAllocsDump ( int iFile, int iSinceID );
 /// dump stats to stdout
 void			sphAllocsStats ();
 
+/// check all exitsing allocs; raises assertion failure in cases of errors
+void			sphAllocsCheck ();
+
 #undef new
 #define new		new(__FILE__,__LINE__)
 

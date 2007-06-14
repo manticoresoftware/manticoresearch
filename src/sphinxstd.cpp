@@ -20,6 +20,7 @@
 #if SPH_DEBUG_LEAKS
 
 #undef new
+#define SPH_DEBUG_DOFREE 1 // 0 will not actually free returned blocks; helps to catch double deletes etc
 
 // for ::write
 #if USE_WINDOWS
@@ -118,6 +119,11 @@ void sphDebugDelete ( void * pPtr, bool bArray )
 			return;
 	}
 
+	BYTE * pBlock = (BYTE*) pHeader;
+	if ( *(DWORD*)( pBlock+pHeader->m_iSize+sizeof(CSphMemHeader) ) != MEMORY_MAGIC_END )
+		sphDie ( "FATAL: out-of-bounds write beyond block %d allocated at %s(%d)\n",
+			pHeader->m_iAllocId, pHeader->m_sFile, pHeader->m_iLine );
+
 	// unchain
 	if ( pHeader==g_pAllocs )
 		g_pAllocs = g_pAllocs->m_pNext;
@@ -142,7 +148,9 @@ void sphDebugDelete ( void * pPtr, bool bArray )
 	g_iCurAllocs--;
 	g_iCurBytes -= pHeader->m_iSize;
 
+#if SPH_DEBUG_DOFREE
 	::free ( pHeader );
+#endif
 }
 
 
@@ -183,6 +191,23 @@ void sphAllocsStats ()
 {
 	fprintf ( stdout, "--- total-allocs=%d, peak-allocs=%d, peak-bytes=%d\n",
 		g_iTotalAllocs, g_iPeakAllocs, g_iPeakBytes );
+}
+
+
+void sphAllocsCheck ()
+{
+	for ( CSphMemHeader * pHeader=g_pAllocs; pHeader; pHeader=pHeader->m_pNext )
+	{
+		BYTE * pBlock = (BYTE*) pHeader;
+
+		if (!( pHeader->m_uMagic==MEMORY_MAGIC_ARRAY || pHeader->m_uMagic==MEMORY_MAGIC_PLAIN ))
+			sphDie ( "corrupted header in block %d allocated at %s(%d)\n",
+				pHeader->m_iAllocId, pHeader->m_sFile, pHeader->m_iLine );
+
+		if ( *(DWORD*)( pBlock+pHeader->m_iSize+sizeof(CSphMemHeader) ) != MEMORY_MAGIC_END )
+			sphDie ( "out-of-bounds write beyond block %d allocated at %s(%d)\n",
+				pHeader->m_iAllocId, pHeader->m_sFile, pHeader->m_iLine );
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////

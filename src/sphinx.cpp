@@ -1230,7 +1230,8 @@ public:
 				// sum grouped matches count
 				assert ( pMatch->m_iAttrs==tEntry.m_iAttrs );
 				pMatch->m_pAttrs [ m_iAttrs+SPH_VATTR_COUNT ] += tEntry.m_pAttrs [ m_iAttrs+SPH_VATTR_COUNT ];
-				pMatch->m_pAttrs [ m_iAttrs+SPH_VATTR_DISTINCT ] += tEntry.m_pAttrs [ m_iAttrs+SPH_VATTR_DISTINCT ];
+				if ( DISTINCT )
+					pMatch->m_pAttrs [ m_iAttrs+SPH_VATTR_DISTINCT ] += tEntry.m_pAttrs [ m_iAttrs+SPH_VATTR_DISTINCT ];
 
 			} else
 			{

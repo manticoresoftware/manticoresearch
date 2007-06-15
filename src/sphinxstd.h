@@ -35,23 +35,11 @@
 #endif
 
 /////////////////////////////////////////////////////////////////////////////
-// COMPILE-TIME SIZE CHECKS
+// COMPILE-TIME CHECKS
 /////////////////////////////////////////////////////////////////////////////
 
-/// compile time error struct
-template<int> struct CompileTimeError;
-template<> struct CompileTimeError<true> {};
-
-namespace Private
-{
-	template<int x>		struct static_assert_test{};
-	template<bool x>	struct SizeError;
-	template<>			struct SizeError<true>{};
-}
-
-#define STATIC_SIZE_ASSERT(_Type,_ExpSize)	\
-	typedef ::Private::static_assert_test<sizeof(::Private::SizeError \
-	< (bool) (sizeof(_Type) == (_ExpSize)) >)> static_assert_typedef_
+#define STATIC_ASSERT(_cond,_name)		typedef char STATIC_ASSERT_FAILED_ ## _name [ (_cond) ? 1 : -1 ]
+#define STATIC_SIZE_ASSERT(_type,_size)	STATIC_ASSERT ( sizeof(_type)==_size, _type ## _MUST_BE_ ## _size ## _BYTES )
 
 /////////////////////////////////////////////////////////////////////////////
 // 64-BIT INTEGER TYPES AND MACROS

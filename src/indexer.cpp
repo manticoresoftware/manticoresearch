@@ -274,34 +274,119 @@ SphWordID_t CSphStopwordBuilderDict::GetWordID ( const BYTE * pWord, int iLen )
 
 /////////////////////////////////////////////////////////////////////////////
 
-void ShowProgress ( const CSphIndexProgress * pProgress )
+void ShowProgress ( const CSphIndexProgress * pProgress, bool bPhaseEnd )
 {
-	if ( g_bQuiet )
+	// if in quiet mode, do not show anything at all
+	// if in no-progress mode, only show phase ends
+	if ( g_bQuiet || ( !g_bProgress && !bPhaseEnd ) )
 		return;
 
-	if (
-		( g_bProgress && pProgress->m_ePhase==CSphIndexProgress::PHASE_COLLECT ) ||
-		( pProgress->m_ePhase==CSphIndexProgress::PHASE_COLLECT_END ) )
+	switch ( pProgress->m_ePhase )
 	{
-		fprintf ( stdout, "collected %d docs, %.1f MB",
-			pProgress->m_iDocuments, float(pProgress->m_iBytes)/1000000.0f );
-		fprintf ( stdout, pProgress->m_ePhase==CSphIndexProgress::PHASE_COLLECT_END ? "\n" : "\r" );
+		case CSphIndexProgress::PHASE_COLLECT:
+			fprintf ( stdout, "collected %d docs, %.1f MB", pProgress->m_iDocuments, float(pProgress->m_iBytes)/1000000.0f );
+			break;
+
+		case CSphIndexProgress::PHASE_SORT:
+			fprintf ( stdout, "sorted %.1f Mhits, %.1f%% done", float(pProgress->m_iHits)/1000000,
+				100.0f*float(pProgress->m_iHits) / float(pProgress->m_iHitsTotal) );
+			break;
+
+		case CSphIndexProgress::PHASE_COLLECT_MVA:
+			fprintf ( stdout, "collected %d attr values", pProgress->m_iAttrs );
+			break;
+
+		case CSphIndexProgress::PHASE_SORT_MVA:
+			fprintf ( stdout, "sorted %.1f Mvalues, %.1f%% done", float(pProgress->m_iAttrs)/1000000,
+				100.0f*float(pProgress->m_iAttrs) / float(pProgress->m_iAttrsTotal) );
+			break;
 	}
 
-	if (
-		( g_bProgress && pProgress->m_ePhase==CSphIndexProgress::PHASE_SORT ) ||
-		( pProgress->m_ePhase==CSphIndexProgress::PHASE_SORT_END ) )
-	{
-		fprintf ( stdout, "sorted %.1f Mhits, %.1f%% done\r",
-			float(pProgress->m_iHits)/1000000,
-			100.0f*float(pProgress->m_iHits) / float(pProgress->m_iHitsTotal) );
-		fprintf ( stdout, pProgress->m_ePhase==CSphIndexProgress::PHASE_SORT_END ? "\n" : "\r" );
-	}
-
+	fprintf ( stdout, bPhaseEnd ? "\n" : "\r" );
 	fflush ( stdout );
 }
 
 /////////////////////////////////////////////////////////////////////////////
+
+/// chars which can be used for Sphinx names (ie. index names, field names, etc)
+inline bool myisalpha ( int c )
+{
+	return ( c>='0' && c<='9' ) || ( c>='a' && c<='z' ) || ( c>='A' && c<='Z' ) || c=='-' || c=='_';
+}
+
+
+/// parse multi-valued attr definition
+bool ParseMultiAttr ( const char * sBuf, CSphColumnInfo & tAttr, const char * sSourceName )
+{
+	// format is as follows:
+	//
+	// multi-valued-attr := ATTR-TYPE ATTR-NAME 'from' SOURCE-TYPE [;QUERY] [;RANGE-QUERY]
+	// ATTR-TYPE := 'uint' | 'timestamp'
+	// SOURCE-TYPE := 'field' | 'query' | 'ranged-query'
+
+	const char * sTok = NULL;
+	int iTokLen = -1;
+
+#define LOC_ERR(_arg,_pos) \
+	{ \
+		if ( !*(_pos) ) \
+			fprintf ( stdout, "ERROR: source '%s': unexpected end of line in sql_attr_multi.\n", sSourceName ); \
+		else \
+			fprintf ( stdout, "ERROR: source '%s': expected " _arg " in sql_attr_multi, got '%s'.\n", sSourceName, _pos ); \
+		return false; \
+	}
+#define LOC_SPACE0()		{ while ( isspace(*sBuf) ) sBuf++; }
+#define LOC_SPACE1()		{ if ( !isspace(*sBuf) ) LOC_ERR ( "token", sBuf ) ; LOC_SPACE0(); }
+#define LOC_TOK()			{ sTok = sBuf; while ( myisalpha(*sBuf) ) sBuf++; iTokLen = sBuf-sTok; }
+#define LOC_TOKEQ(_arg)		( iTokLen==(int)strlen(_arg) && strncasecmp ( sTok, _arg, iTokLen )==0 )
+#define LOC_TEXT()			{ if ( *sBuf!=';') LOC_ERR ( "';'", sBuf ); sTok = ++sBuf; while ( *sBuf && *sBuf!=';' ) sBuf++; iTokLen = sBuf-sTok; }
+
+	// handle ATTR-TYPE
+	LOC_SPACE0(); LOC_TOK();
+	if ( LOC_TOKEQ("uint") )				tAttr.m_eAttrType = SPH_ATTR_INTEGER | SPH_ATTR_MULTI;
+	else if ( LOC_TOKEQ("timestamp") )		tAttr.m_eAttrType = SPH_ATTR_INTEGER | SPH_ATTR_MULTI;
+	else									LOC_ERR ( "attr type ('uint' or 'timestamp')", sTok );
+
+	// handle ATTR-NAME
+	LOC_SPACE1(); LOC_TOK ();
+	if ( iTokLen )							tAttr.m_sName.SetBinary ( sTok, iTokLen );
+	else									LOC_ERR ( "attr name", sTok );
+
+	// handle 'from'
+	LOC_SPACE1(); LOC_TOK();
+	if ( !LOC_TOKEQ("from") )				LOC_ERR ( "'from' keyword", sTok );
+
+	// handle SOURCE-TYPE
+	LOC_SPACE1(); LOC_TOK(); LOC_SPACE0();
+	if ( LOC_TOKEQ("field") )				tAttr.m_eSrc = SPH_ATTRSRC_FIELD;
+	else if ( LOC_TOKEQ("query") )			tAttr.m_eSrc = SPH_ATTRSRC_QUERY;
+	else if ( LOC_TOKEQ("ranged-query") )	tAttr.m_eSrc = SPH_ATTRSRC_RANGEDQUERY;
+	else									LOC_ERR ( "value source type ('field', or 'query', or 'ranged-query')", sTok );
+
+	if ( tAttr.m_eSrc==SPH_ATTRSRC_FIELD )	return true;
+
+	// handle QUERY
+	LOC_TEXT();
+	if ( iTokLen )							tAttr.m_sQuery.SetBinary ( sTok, iTokLen );
+	else									LOC_ERR ( "query", sTok );
+
+	if ( tAttr.m_eSrc==SPH_ATTRSRC_QUERY )	return true;
+
+	// handle RANGE-QUERY
+	LOC_TEXT();
+	if ( iTokLen )							tAttr.m_sQuery.SetBinary ( sTok, iTokLen );
+	else									LOC_ERR ( "range query", sTok );
+
+#undef LOC_ERR
+#undef LOC_SPACE0
+#undef LOC_SPACE1
+#undef LOC_TOK
+#undef LOC_TOKEQ
+#undef LOC_TEXT
+
+	return true;
+}
+
 
 #define LOC_CHECK(_hash,_key,_msg,_add) \
 	if (!( _hash.Exists ( _key ) )) \
@@ -339,20 +424,35 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 	LOC_CHECK ( hSource, "sql_db", "in source '%s'", sSourceName );
 	LOC_CHECK ( hSource, "sql_query", "in source '%s'", sSourceName );
 
-	LOC_GETS ( tParams.m_sQuery,			"sql_query" );
-	LOC_GETAS( tParams.m_dQueryPre,			"sql_query_pre" );
-	LOC_GETAS( tParams.m_dQueryPost,		"sql_query_post" );
-	LOC_GETS ( tParams.m_sQueryRange,		"sql_query_range" );
-	LOC_GETAS( tParams.m_dQueryPostIndex,	"sql_query_post_index" );
-	LOC_GETAA( tParams.m_dAttrs,			"sql_group_column",			SPH_ATTR_INTEGER );
-	LOC_GETAA( tParams.m_dAttrs,			"sql_date_column",			SPH_ATTR_TIMESTAMP );
-	LOC_GETAA( tParams.m_dAttrs,			"sql_str2ordinal_column",	SPH_ATTR_ORDINAL );
 	LOC_GETS ( tParams.m_sHost,				"sql_host" );
 	LOC_GETS ( tParams.m_sUser,				"sql_user" );
 	LOC_GETS ( tParams.m_sPass,				"sql_pass" );
 	LOC_GETS ( tParams.m_sDB,				"sql_db" );
 	LOC_GETI ( tParams.m_iPort,				"sql_port");
+
+	LOC_GETS ( tParams.m_sQuery,			"sql_query" );
+	LOC_GETAS( tParams.m_dQueryPre,			"sql_query_pre" );
+	LOC_GETAS( tParams.m_dQueryPost,		"sql_query_post" );
+	LOC_GETS ( tParams.m_sQueryRange,		"sql_query_range" );
+	LOC_GETAS( tParams.m_dQueryPostIndex,	"sql_query_post_index" );
 	LOC_GETI ( tParams.m_iRangeStep,		"sql_range_step" );
+
+	LOC_GETAA( tParams.m_dAttrs,			"sql_group_column",			SPH_ATTR_INTEGER );
+	LOC_GETAA( tParams.m_dAttrs,			"sql_date_column",			SPH_ATTR_TIMESTAMP );
+	LOC_GETAA( tParams.m_dAttrs,			"sql_str2ordinal_column",	SPH_ATTR_ORDINAL );
+
+	LOC_GETAA( tParams.m_dAttrs,			"sql_attr_uint",			SPH_ATTR_INTEGER );
+	LOC_GETAA( tParams.m_dAttrs,			"sql_attr_timestamp",		SPH_ATTR_TIMESTAMP );
+	LOC_GETAA( tParams.m_dAttrs,			"sql_attr_str2ordinal",		SPH_ATTR_ORDINAL );
+
+	// parse multi-attrs
+	for ( CSphVariant * pVal = hSource("sql_attr_multi"); pVal; pVal = pVal->m_pNext )
+	{
+		CSphColumnInfo tAttr;
+		if ( !ParseMultiAttr ( pVal->cstr(), tAttr, sSourceName ) )
+			return false;
+		tParams.m_dAttrs.Add ( tAttr );
+	}
 
 	return true;
 }
@@ -439,7 +539,8 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 #undef LOC_CHECK
 #undef LOC_GETS
 #undef LOC_GETI
-#undef LOC_GETA
+#undef LOC_GETAS
+#undef LOC_GETAA
 
 //////////////////////////////////////////////////////////////////////////
 // INDEXING
@@ -594,9 +695,9 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		ARRAY_FOREACH ( i, dSources )
 		{
 			dSources[i]->SetDict ( &tDict );
-			if ( !dSources[i]->Connect () )
+			if ( !dSources[i]->Connect () || !dSources[i]->IterateHitsStart() )
 				continue;
-			while ( dSources[i]->Next() );
+			while ( dSources[i]->IterateHitsNext() );
 		}
 		tDict.Save ( g_sBuildStops, g_iTopStops, g_bBuildFreqs );
 

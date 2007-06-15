@@ -1796,7 +1796,7 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 					ARRAY_FOREACH ( j, tSchema.m_dAttrs )
 					{
 						tSchema.m_dAttrs[j].m_sName = tReq.GetString ();
-						tSchema.m_dAttrs[j].m_eAttrType = (ESphAttrType) tReq.GetDword (); // FIXME! add a sanity check
+						tSchema.m_dAttrs[j].m_eAttrType = tReq.GetDword (); // FIXME! add a sanity check
 					}
 
 					// get matches
@@ -3604,7 +3604,7 @@ int main ( int argc, char **argv )
 			tIdx.m_pSchema = tIdx.m_pIndex->Preload ( tIdx.m_bMlock, &sWarning );
 			if ( !tIdx.m_pSchema )
 			{
-				sphWarning ( "index '%s': failed to preload schema and docinfos - NOT SERVING", sIndexName );
+				sphWarning ( "index '%s': preload failed (%s) - NOT SERVING", sIndexName, tIdx.m_pIndex->GetLastError().cstr() );
 				continue;
 			}
 			if ( !sWarning.IsEmpty() )

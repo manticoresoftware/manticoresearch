@@ -123,29 +123,59 @@ source src1
 	# attributes and then using API calls to setup filtering, sorting,
 	# and grouping.
 	#
-	# sql_group_column is used to declare integer attributes.
+	# sql_attr_uint is used to declare unsigned integer attributes.
+	# sql_group_column is deprecated alias for sql_attr_uint.
 	#
-	# sql_date_column is used to declare UNIX timestamp attributes.
+	# sql_attr_timestamp is used to declare UNIX timestamp attributes.
+	# sql_date_column is deprecated alias for sql_attr_timestamp.
 	#
-	# sql_str2ordinal_column is used to declare integer attributes which 
+	# sql_attr_str2ordinal is used to declare integer attributes which 
 	# values are computed as ordinal numbers of corresponding column value
 	# in sorted list of column values. WARNING, all such strings values
 	# are going to be stored in RAM while indexing, and "C" locale will
 	# be used when sorting!
+	# sql_str2ordinal_column is deprecated alias for sql_attr_str2ordinal.
 	#
 	# starting with 0.9.7, there may be multiple attribute columns specified.
 	# here's an example for that mentioned posts table:
 	#
-	# sql_group_column	= author_id
-	# sql_group_column	= forum_id
-	# sql_group_column	= thread_id
-	# sql_date_column		= post_unix_timestamp
-	# sql_date_column		= last_edit_unix_timestamp
+	# sql_attr_uint = author_id
+	# sql_attr_uint = forum_id
+	# sql_attr_uint = thread_id
+	# sql_attr_timestamp = post_unix_timestamp
+	# sql_attr_timestamp = last_edit_unix_timestamp
 	#
 	# optional, default is empty
-	sql_group_column	= group_id
-	sql_date_column		= date_added
-	# sql_str2ordinal_column	= author_name
+	sql_attr_uint			= group_id
+	sql_attr_timestamp		= date_added
+	# sql_attr_str2ordinal	= author_name
+
+
+	# multi-valued attribute (MVA) columns
+	#
+	# plain attributes only allow to attach 1 value per each document.
+	# however, there are cases (such as tags or categories) when it is
+	# desired to attach multiple values of the same attribute and be able
+	# to apply filtering to value lists.
+	#
+	# 'sql_multi_attr' option is used to declare such attributes.
+	# its value format is as follows:
+	#
+	#	ATTR-TYPE ATTR-NAME 'from' SOURCE-TYPE [;QUERY] [;RANGE-QUERY]
+	#
+	# where
+	# ATTR-TYPE is 'uint' or 'timestamp'
+	# SOURCE-TYPE is 'field', 'query', or 'ranged-query'
+	# QUERY is SQL query used to fetch all ( docid, attrvalue ) pairs
+	# RANGE-QUERY is SQL query used to fetch min and max ID values, similar to 'sql_query_range'
+	#
+	# optional, default is empty
+	#
+	# sql_attr_multi	= uint tag from query; SELECT id, tag FROM tags
+	# sql_attr_multi	= uint tag from ranged-query; \
+	#	SELECT id, tag FROM tags WHERE id>=$start AND id<=$end; \
+	#	SELECT MIN(id), MAX(id) FROM tags
+
 
 	# post-query, executed on the end of main fetch query
 	#

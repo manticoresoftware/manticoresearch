@@ -419,12 +419,23 @@ struct CSphSourceStats
 
 
 /// known attribute types
-enum ESphAttrType
+enum
 {
-	SPH_ATTR_NONE		= 0,	///< not an attribute at all
-	SPH_ATTR_INTEGER	= 1,	///< this attr is just an integer
-	SPH_ATTR_TIMESTAMP	= 2,	///< this attr is a timestamp
-	SPH_ATTR_ORDINAL	= 3		///< this attr is an ordinal string number (integer at search time, specially handled at indexing time)
+	SPH_ATTR_NONE		= 0,			///< not an attribute at all
+	SPH_ATTR_INTEGER	= 1,			///< this attr is just an integer
+	SPH_ATTR_TIMESTAMP	= 2,			///< this attr is a timestamp
+	SPH_ATTR_ORDINAL	= 3,			///< this attr is an ordinal string number (integer at search time, specially handled at indexing time)
+
+	SPH_ATTR_MULTI		= 0x40000000UL	///< this attr has multiple values (0 or more)
+};
+
+/// known multi-valued attr sources
+enum ESphAttrSrc
+{
+	SPH_ATTRSRC_NONE		= 0,	///< not multi-valued
+	SPH_ATTRSRC_FIELD		= 1,	///< get attr values from text field
+	SPH_ATTRSRC_QUERY		= 2,	///< get attr values from SQL query
+	SPH_ATTRSRC_RANGEDQUERY	= 3		///< get attr values from ranged SQL query
 };
 
 
@@ -432,13 +443,18 @@ enum ESphAttrType
 struct CSphColumnInfo
 {
 	CSphString		m_sName;		///< column name
-	ESphAttrType	m_eAttrType;	///< attribute type
+	DWORD			m_eAttrType;	///< attribute type
 	int				m_iIndex;		///< index into the result set
 
+	ESphAttrSrc		m_eSrc;			///< attr source (for multi-valued attrs only)
+	CSphString		m_sQuery;		///< query to retrieve values (for multi-valued attrs only)
+	CSphString		m_sQueryRange;	///< query to retrieve range (for multi-valued attrs only)
+
 	/// handy ctor
-	CSphColumnInfo ( const char * sName=NULL, ESphAttrType eType=SPH_ATTR_NONE )
+	CSphColumnInfo ( const char * sName=NULL, DWORD eType=SPH_ATTR_NONE )
 		: m_sName ( sName )
 		, m_eAttrType ( eType )
+		, m_eSrc ( SPH_ATTRSRC_NONE )
 	{
 		m_sName.ToLower ();
 	}
@@ -519,7 +535,7 @@ public:
 
 	/// updates schema fields and attributes
 	/// updates pInfo if it's empty; checks for match if it's not
-	/// must be called after Connect(); will always fail otherwise
+	/// must be called after IterateHitsStart(); will always fail otherwise
 	virtual bool						UpdateSchema ( CSphSchema * pInfo );
 
 	/// configure source to emit prefixes or infixes
@@ -532,18 +548,33 @@ public:
 	/// are implemented in specific descendants
 	virtual bool						Connect () = 0;
 
-	/// document getter
-	/// to be implemented by descendants
-	virtual bool						Next () = 0;
-
-	/// post-index callback
-	/// gets called when the indexing is succesfully (!) over
-	virtual void						PostIndex () {}
+	/// disconnect from the source
+	virtual void						Disconnect () = 0;
 
 	/// check if there are any attributes configured
 	/// note that there might be NO actual attributes in the case if configured
 	/// ones do not match those actually returned by the source
 	virtual bool						HasAttrsConfigured () = 0;
+
+	/// begin iterating document hits
+	/// to be implemented by descendants
+	virtual bool						IterateHitsStart () = 0;
+
+	/// get next document hit
+	/// to be implemented by descendants
+	virtual bool						IterateHitsNext () = 0;
+
+	/// begin iterating values of out-of-document multi-valued attribute iAttr
+	/// will fail if iAttr is out of range, or is not multi-valued
+	/// can also fail if configured settings are invalid (eg. SQL query can not be executed)
+	virtual bool						IterateMultivaluedStart ( int iAttr ) = 0;
+
+	/// get next multi-valued (id,attr-value) tuple to m_tDocInfo
+	virtual bool						IterateMultivaluedNext () = 0;
+
+	/// post-index callback
+	/// gets called when the indexing is succesfully (!) over
+	virtual void						PostIndex () {}
 
 protected:
 	ISphTokenizer *						m_pTokenizer;	///< my tokenizer
@@ -568,7 +599,7 @@ struct CSphSource_Document : CSphSource
 							CSphSource_Document ( const char * sName ) : CSphSource ( sName ), m_bCallWordCallback ( false ) {}
 
 	/// my generic tokenizer
-	virtual bool			Next ();
+	virtual bool			IterateHitsNext ();
 
 	/// this is what we can call for my descendants
 	virtual void			WordCallback ( char * ) {}
@@ -627,11 +658,19 @@ struct CSphSource_SQL : CSphSource_Document
 
 	bool				Setup ( const CSphSourceParams_SQL & pParams );
 	virtual bool		Connect ();
+	virtual void		Disconnect ();
 
+	virtual bool		IterateHitsStart ();
 	virtual BYTE **		NextDocument ();
 	virtual void		PostIndex ();
 
 	virtual bool		HasAttrsConfigured () { return m_tParams.m_dAttrs.GetLength()!=0; }
+
+	virtual bool		IterateMultivaluedStart ( int iAttr );
+	virtual bool		IterateMultivaluedNext ();
+
+private:
+	bool				m_bSqlConnected;///< am i connected?
 
 protected:
 	CSphString			m_sSqlDSN;
@@ -642,8 +681,8 @@ protected:
 	SphDocID_t			m_uMaxID;		///< grand max ID
 	SphDocID_t			m_uCurrentID;	///< current min ID
 	SphDocID_t			m_uMaxFetchedID;///< max actually fetched ID
+	int					m_iMultiAttr;	///< multi-valued attr being currently fetched
 
-	bool						m_bSqlConnected;
 	CSphSourceParams_SQL		m_tParams;
 
 	static const int			MACRO_COUNT = 2;
@@ -752,10 +791,16 @@ public:
 					CSphSource_XMLPipe ( const char * sName );	///< ctor
 					~CSphSource_XMLPipe ();						///< dtor
 
-	bool			Setup ( const char * sCommand );			///< memorizes the command
-	virtual bool	Connect ();									///< actually runs the command 
-	virtual bool	Next ();									///< hit chunk getter
-	virtual bool	HasAttrsConfigured () { return true; }
+	bool			Setup ( const char * sCommand );			///< memorize the command
+	virtual bool	Connect ();									///< run the command and open the pipe
+	virtual void	Disconnect ();								///< close the pipe
+
+	virtual bool	IterateHitsStart () { return true; }		///< Connect() starts getting documents automatically, so this one is empty
+	virtual bool	IterateHitsNext ();							///< parse incoming chunk and emit some hits
+
+	virtual bool	HasAttrsConfigured ()			{ return true; }	///< xmlpipe always has some attrs for now
+	virtual bool	IterateMultivaluedStart ( int )	{ return false; }	///< xmlpipe does not support multi-valued attrs for now
+	virtual bool	IterateMultivaluedNext ()		{ return false; }	///< xmlpipe does not support multi-valued attrs for now
 
 private:
 	enum Tag_e
@@ -907,9 +952,11 @@ public:
 	int				m_iValues;		///< values set size, default is 0
 	DWORD *			m_pValues;		///< values set. OWNED, WILL BE FREED IN DTOR.
 	bool			m_bExclude;		///< whether this is "include" or "exclude" filter (default is "include")
+	bool			m_bMva;			///< whether this filter is against multi-valued attribute
 
 public:
 					CSphFilter ();
+					CSphFilter ( const CSphFilter & rhs );
 					~CSphFilter ();
 	void			SortValues ();	///< sort values in ascending order
 
@@ -1011,8 +1058,10 @@ struct CSphIndexProgress
 	enum Phase_e
 	{
 		PHASE_COLLECT,				///< document collection phase
-		PHASE_COLLECT_END,			///< document collection phase end
 		PHASE_SORT,					///< final sorting phase
+		PHASE_COLLECT_MVA,			///< multi-valued attributes collection phase
+		PHASE_SORT_MVA,				///< multi-valued attributes collection phase
+		PHASE_COLLECT_MVA_END,		///< multi-valued attributes collection phase end
 		PHASE_SORT_END				///< final sorting phase end
 	};
 
@@ -1021,8 +1070,21 @@ struct CSphIndexProgress
 	int				m_iDocuments;	///< PHASE_COLLECT: documents collected so far
 	SphOffset_t		m_iBytes;		///< PHASE_COLLECT: bytes collected so far
 
+	uint64_t		m_iAttrs;		///< PHASE_COLLECT_MVA, PHASE_SORT_MVA: attrs processed so far
+	uint64_t		m_iAttrsTotal;	///< PHASE_SORT_MVA: attrs total
+
 	SphOffset_t		m_iHits;		///< PHASE_SORT: hits sorted so far
 	SphOffset_t		m_iHitsTotal;	///< PHASE_SORT: hits total
+
+	CSphIndexProgress ()
+		: m_ePhase ( PHASE_COLLECT )
+		, m_iDocuments ( 0 )
+		, m_iBytes ( 0 )
+		, m_iAttrs ( 0 )
+		, m_iAttrsTotal ( 0 )
+		, m_iHits ( 0 )
+		, m_iHitsTotal ( 0 )
+	{}
 };
 
 
@@ -1137,7 +1199,7 @@ struct CSphPurgeData
 class CSphIndex
 {
 public:
-	typedef void ProgressCallback_t ( const CSphIndexProgress * pStat );
+	typedef void ProgressCallback_t ( const CSphIndexProgress * pStat, bool bPhaseEnd );
 
 public:
 								CSphIndex ( const char * sName ) : m_pProgress ( NULL ), m_tSchema ( sName ), m_sLastError ( "(no error message)" )  {}

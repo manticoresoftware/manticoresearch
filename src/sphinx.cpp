@@ -512,6 +512,7 @@ public:
 	CSphSharedBuffer ()
 		: m_pData ( NULL )
 		, m_iLength ( 0 )
+		, m_iEntries ( 0 )
 		, m_bMlock ( false )
 	{}
 
@@ -548,8 +549,6 @@ public:
 
 #if USE_WINDOWS
 		m_pData = new T [ iEntries ];
-		return m_pData!=NULL;
-
 #else
 		m_pData = (T *) mmap ( NULL, m_iLength, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0 );
 		if ( m_pData==MAP_FAILED )
@@ -564,10 +563,11 @@ public:
 		if ( m_bMlock )
 			if ( -1==mlock ( m_pData, m_iLength ) )
 				sWarning->SetSprintf ( "mlock() failed: %s", strerror(errno) );
+#endif // USE_WINDOWS
 
 		assert ( m_pData );
+		m_iEntries = iEntries;
 		return true;
-#endif // USE_WINDOWS
 	}
 
 	/// deallocate storage
@@ -585,12 +585,15 @@ public:
 #endif // USE_WINDOWS
 
 		m_pData = NULL;
+		m_iLength = 0;
+		m_iEntries = 0;
 	}
 
 public:
 	/// accessor
 	inline const T & operator [] ( int iIndex )
 	{
+		assert ( iIndex>=0 && iIndex<(int)m_iEntries );
 		return m_pData[iIndex];
 	}
 
@@ -609,6 +612,7 @@ public:
 protected:
 	T *					m_pData;	///< data storage
 	size_t				m_iLength;	///< data length, bytes
+	DWORD				m_iEntries;	///< data length, entries
 	bool				m_bMlock;	///< whether to lock data in RAM
 };
 
@@ -1472,7 +1476,9 @@ public:
 public:
 						CSphBin ();
 						~CSphBin ();
-	void				Init ( int iFD, SphOffset_t * pSharedOffset, const char * sPhase, int iMemoryLimit, int iBlocks );
+
+	static int			CalcBinSize ( int iMemoryLimit, int iBlocks, const char * sPhase );
+	void				Init ( int iFD, SphOffset_t * pSharedOffset, const int iBinSize );
 
 	SphWordID_t			ReadVLB ();		// FIXME? should actually be widest type of both 
 	int					ReadByte ();
@@ -1539,6 +1545,9 @@ public:
 	void		Reset ();
 
 	void		SeekTo ( SphOffset_t iPos, int iSizeHint );
+
+	void		SkipBytes ( int iCount );
+	SphOffset_t	GetPos () const { return m_iPos+m_iBuffPos; }
 
 	void		GetRawBytes ( void * pData, int iSize );
 	void		GetBytes ( void * data, int size );
@@ -2008,6 +2017,8 @@ private:
 	CSphWriter					m_wrDoclist;	///< wordlist writer
 	CSphWriter					m_wrHitlist;	///< hitlist writer
 
+	CSphIndexProgress			m_tProgress;
+
 private:
 	// searching-only
 	CSphVector<CSphQueryWord,8>			m_dQueryWords;			///< search query words for "simple" query types (ie. match all/any/phrase)
@@ -2017,6 +2028,7 @@ private:
 
 	CSphSharedBuffer<DWORD>		m_pDocinfo;				///< my docinfo cache
 	DWORD						m_uDocinfo;				///< my docinfo cache size
+	CSphSharedBuffer<DWORD>		m_pMva;					///< my multi-valued attrs cache
 
 	static const int			DOCINFO_HASH_BITS = 18;	// FIXME! make this configurable
 	DWORD *						m_pDocinfoHash;
@@ -2048,6 +2060,8 @@ private:
 
 	const DWORD *				FindDocinfo ( SphDocID_t uDocID );
 	void						LookupDocinfo ( CSphDocInfo & tMatch );
+
+	bool						BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAutoArray<CSphWordHit> & dHits, int iArenaSize );
 
 public:
 	// FIXME! this needs to be protected, and refactored as well
@@ -2172,6 +2186,9 @@ float sphLongTimer ()
 
 bool sphWrite ( int iFD, const void * pBuf, size_t iCount, const char * sName, CSphString & sError )
 {
+	if ( iCount<=0 )
+		return true;
+
 	int iWritten = ::write ( iFD, pBuf, iCount );
 	if ( iWritten==(int)iCount )
 		return true;
@@ -3217,7 +3234,16 @@ CSphFilter::CSphFilter ()
 	, m_iValues		( 0 )
 	, m_pValues		( NULL )
 	, m_bExclude	( false )
+	, m_bMva		( false )
 {}
+
+
+CSphFilter::CSphFilter ( const CSphFilter &  rhs )
+{
+	assert ( 0 );
+	m_pValues = NULL;
+	(*this) = rhs;
+}
 
 
 CSphFilter::~CSphFilter ()
@@ -3239,6 +3265,8 @@ const CSphFilter & CSphFilter::operator = ( const CSphFilter & rhs )
 		m_pValues = new DWORD [ m_iValues ];
 		memcpy ( m_pValues, rhs.m_pValues, sizeof(DWORD)*m_iValues );
 	}
+	m_bExclude		= rhs.m_bExclude;
+	m_bMva			= rhs.m_bMva;
 	return *this;
 }
 
@@ -3671,6 +3699,12 @@ void CSphReader_VLN::SeekTo ( SphOffset_t iPos, int iSizeHint )
 }
 
 
+void CSphReader_VLN::SkipBytes ( int iCount )
+{
+	SeekTo ( m_iPos+m_iBuffPos+iCount, m_iSizeHint-m_iBuffPos-iCount );
+}
+
+
 void CSphReader_VLN::UpdateCache ()
 {
 	PROFILE ( read_hits );
@@ -3897,22 +3931,35 @@ CSphBin::CSphBin ()
 }
 
 
-void CSphBin::Init ( int iFD, SphOffset_t * pSharedOffset, const char * sPhase, int iMemoryLimit, int iBlocks )
+int CSphBin::CalcBinSize ( int iMemoryLimit, int iBlocks, const char * sPhase )
 {
-	assert ( !m_dBuffer );
+	if ( iBlocks<=0 )
+		return CSphBin::MIN_SIZE;
 
 	int iBinSize = ( ( iMemoryLimit/iBlocks + 2048 ) >> 12 ) << 12; // round to 4k
+
 	if ( iBinSize<CSphBin::MIN_SIZE )
 	{
 		iBinSize = CSphBin::MIN_SIZE;
-		fprintf ( stdout, "WARNING: %s: mem_limit=%d kb too low, increasing to %d kb.\n",
+		fprintf ( stdout, "WARNING: %s: mem_limit=%d kb extremely low, increasing to %d kb.\n",
 			sPhase, iMemoryLimit/1024, iBinSize*iBlocks/1024 );
 	}
+
 	if ( iBinSize<CSphBin::WARN_SIZE )
 	{
 		fprintf ( stdout, "WARNING: %s: merge_block_size=%d kb too low, increasing mem_limit may improve performance.\n",
 			sPhase, iBinSize/1024 );
 	}
+
+	return iBinSize;
+}
+
+
+void CSphBin::Init ( int iFD, SphOffset_t * pSharedOffset, const int iBinSize )
+{
+	assert ( !m_dBuffer );
+	assert ( iBinSize>=MIN_SIZE );
+	assert ( pSharedOffset );
 
 	m_iFile = iFD;
 	m_pFilePos = pSharedOffset;
@@ -4501,7 +4548,7 @@ void CSphIndex_VLN::ReadSchemaColumn ( CSphReader_VLN & rdInfo, CSphColumnInfo &
 {
 	tCol.m_sName = rdInfo.GetString ();
 	tCol.m_sName.ToLower ();
-	tCol.m_eAttrType = (ESphAttrType) rdInfo.GetDword ();
+	tCol.m_eAttrType = rdInfo.GetDword ();
 }
 
 
@@ -4917,6 +4964,243 @@ int CSphIndex_VLN::AdjustMemoryLimit ( int iMemoryLimit )
 	return iMemoryLimit;
 }
 
+/////////////////////////////////////////////////////////////////////////////
+
+struct MvaEntry_t
+{
+	SphDocID_t	m_uDocID;
+	int			m_iAttr;
+	DWORD		m_uValue;
+
+	inline bool operator < ( const MvaEntry_t & rhs ) const
+	{
+		if ( m_uDocID!=rhs.m_uDocID ) return m_uDocID<rhs.m_uDocID;
+		if ( m_iAttr!=rhs.m_iAttr ) return m_iAttr<rhs.m_iAttr;
+		return m_uValue<rhs.m_uValue;
+	}
+};
+
+
+struct MvaEntryTag_t : public MvaEntry_t
+{
+	int			m_iTag;
+};
+
+
+struct MvaEntryCmp_fn
+{
+	static inline bool IsLess ( const MvaEntry_t & a, const MvaEntry_t & b )
+	{
+		return a<b;
+	};
+};
+
+
+bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAutoArray<CSphWordHit> & dHits, int iArenaSize )
+{
+	// initialize writer (data file must always exists)
+	CSphWriter wrMva;
+	if ( !wrMva.OpenFile ( GetIndexFileName("spm"), m_sLastError ) )
+		return false;
+
+	// calcs and checks
+	CSphVector<int,32> dMvaIndexes;
+	ARRAY_FOREACH ( i, m_tSchema.m_dAttrs )
+		if ( m_tSchema.m_dAttrs[i].m_eAttrType & SPH_ATTR_MULTI )
+			dMvaIndexes.Add ( i );
+
+	if ( dMvaIndexes.GetLength()<=0 )
+		return false;
+
+	// reuse hits pool
+	CSphWordHit * pArena = dHits;
+	MvaEntry_t * pMvaPool = (MvaEntry_t*) pArena;
+	MvaEntry_t * pMvaMax = pMvaPool + ( iArenaSize/sizeof(MvaEntry_t) );
+	MvaEntry_t * pMva = pMvaPool;
+
+	// create temp file
+	CSphAutofile fdTmpMva ( GetIndexFileName("tmp3"), SPH_O_NEW, m_sLastError );
+	if ( fdTmpMva.GetFD()<0 )
+		return false;
+
+	//////////////////////////////
+	// collect and partially sort
+	//////////////////////////////
+
+	CSphVector<int> dBlockLens;
+
+	m_tProgress.m_ePhase = CSphIndexProgress::PHASE_COLLECT_MVA;
+	m_tProgress.m_iAttrs = 0;
+
+	ARRAY_FOREACH ( iSource, dSources )
+	{
+		CSphSource * pSource = dSources[iSource];
+		if ( !pSource->Connect() )
+			return 0;
+
+		ARRAY_FOREACH ( i, dMvaIndexes )
+		{
+			int iAttr = dMvaIndexes[i];
+			if ( !pSource->IterateMultivaluedStart(iAttr) )
+				return 0;
+
+			while ( pSource->IterateMultivaluedNext() )
+			{
+				pMva->m_uDocID = pSource->m_tDocInfo.m_iDocID;
+				pMva->m_iAttr = i;
+				pMva->m_uValue = pSource->m_tDocInfo.m_pAttrs[iAttr];
+
+				if ( ++pMva>=pMvaMax )
+				{
+					sphSort ( pMvaPool, pMva-pMvaPool );
+					if ( !sphWrite ( fdTmpMva.GetFD(), pMvaPool, (pMva-pMvaPool)*sizeof(MvaEntry_t), "temp_mva", m_sLastError ) )
+						return false;
+
+					dBlockLens.Add ( pMva-pMvaPool );
+					m_tProgress.m_iAttrs += pMva-pMvaPool;
+					pMva = pMvaPool;
+
+					if ( m_pProgress )
+						m_pProgress ( &m_tProgress, false );
+				}
+			}
+		}
+
+		pSource->Disconnect ();
+	}
+
+	if ( pMva>pMvaPool )
+	{
+		sphSort ( pMvaPool, pMva-pMvaPool );
+		if ( !sphWrite ( fdTmpMva.GetFD(), pMvaPool, (pMva-pMvaPool)*sizeof(MvaEntry_t), "temp_mva", m_sLastError ) )
+			return false;
+
+		dBlockLens.Add ( pMva-pMvaPool );
+		m_tProgress.m_iAttrs += pMva-pMvaPool;
+		pMva = pMvaPool;
+	}
+
+	if ( m_pProgress )
+		m_pProgress ( &m_tProgress, true );
+
+	///////////////////////////
+	// free memory for sorting
+	///////////////////////////
+
+	dHits.Reset ();
+
+	//////////////
+	// fully sort
+	//////////////
+
+	if ( m_pProgress )
+	{
+		m_tProgress.m_ePhase = CSphIndexProgress::PHASE_SORT_MVA;
+		m_tProgress.m_iAttrsTotal = m_tProgress.m_iAttrs;
+		m_pProgress ( &m_tProgress, false );
+	}
+
+	// initialize readers
+	CSphVector<CSphBin *> dBins;
+	dBins.Grow ( dBlockLens.GetLength() );
+
+	int iBinSize = CSphBin::CalcBinSize ( iArenaSize, dBlockLens.GetLength(), "sort_mva" );
+	SphOffset_t iSharedOffset = -1;
+
+	ARRAY_FOREACH ( i, dBlockLens )
+	{
+		dBins.Add ( new CSphBin() );
+		dBins[i]->m_iFileLeft = dBlockLens[i]*sizeof(MvaEntry_t);
+		dBins[i]->m_iFilePos = ( i==0 ) ? 0 : dBins[i-1]->m_iFilePos + dBins[i-1]->m_iFileLeft;
+		dBins[i]->Init ( fdTmpMva.GetFD(), &iSharedOffset, iBinSize );
+	}
+
+	// do the sort
+	CSphQueue < MvaEntryTag_t, MvaEntryCmp_fn > qMva ( Max ( 1, dBlockLens.GetLength() ) );
+	ARRAY_FOREACH ( i, dBlockLens )
+	{
+		MvaEntryTag_t tEntry;
+		if ( dBins[i]->ReadBytes ( (MvaEntry_t*) &tEntry, sizeof(MvaEntry_t) )<=0 )
+		{
+			m_sLastError.SetSprintf ( "sort_mva: warmup failed (io error?)" );
+			return 0;
+		}
+
+		tEntry.m_iTag = i;
+		qMva.Push ( tEntry );
+	}
+
+	// spm-file := info-list [ 0+ ]
+	// info-list := docid, values-list [ index.schema.mva-count ]
+	// values-list := values-count, value [ values-count ]
+	SphDocID_t uCurID = 0;
+	CSphVector < CSphVector<DWORD,16>, 16 > dCurInfo;
+	dCurInfo.Resize ( dMvaIndexes.GetLength() );
+
+	for ( ;; )
+	{
+		// flush previous per-document info-list
+		if ( !qMva.GetLength() || qMva.Root().m_uDocID!=uCurID )
+		{
+			if ( uCurID )
+			{
+				wrMva.PutDocid ( uCurID );
+				ARRAY_FOREACH ( i, dCurInfo )
+				{
+					int iValues = dCurInfo[i].GetLength();
+					wrMva.PutDword ( iValues );
+					wrMva.PutBytes ( &dCurInfo[i][0], iValues*sizeof(DWORD) );
+				}
+			}
+
+			if ( !qMva.GetLength() )
+				break;
+
+			uCurID = qMva.Root().m_uDocID;
+			ARRAY_FOREACH ( i, dCurInfo )
+				dCurInfo[i].Resize ( 0 );
+		}
+
+		// accumulate this entry
+#if PARANOID
+		assert ( dCurInfo[ qMva.Root().m_iAttr ].GetLength()==0
+			|| dCurInfo [ qMva.Root().m_iAttr ].Last() <= qMva.Root().m_uValue );
+#endif
+		dCurInfo [ qMva.Root().m_iAttr ].AddUnique ( qMva.Root().m_uValue );
+
+		// get next entry
+		int iBin = qMva.Root().m_iTag;
+		qMva.Pop ();
+
+		MvaEntryTag_t tEntry;
+		int iRes = dBins[iBin]->ReadBytes ( (MvaEntry_t*)&tEntry, sizeof(MvaEntry_t) );
+		tEntry.m_iTag = iBin;
+		if ( iRes>0 )
+			qMva.Push ( tEntry );
+
+		if ( iRes<0 )
+		{
+			m_sLastError.SetSprintf ( "sort_mva: read error" );
+			return false;
+		}
+	}
+
+	// clean up readers
+	ARRAY_FOREACH ( i, dBins )
+		SafeDelete ( dBins[i] );
+
+	wrMva.CloseFile ();
+	if ( wrMva.IsError() )
+		return false;
+
+	if ( m_pProgress )
+		m_pProgress ( &m_tProgress, true );
+
+	fdTmpMva.Close ();
+	unlink ( GetIndexFileName("tmp3") );
+	return true;
+}
+
 
 /// in-memory ordinals accumulation and sorting
 struct CSphOrdinal
@@ -4969,18 +5253,28 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	}
 
 	// connect 1st source and fetch its schema
-	if ( !dSources[0]->Connect () )
+	if ( !dSources[0]->Connect() || !dSources[0]->IterateHitsStart() || !dSources[0]->UpdateSchema ( &m_tSchema ) )
 		return 0;
 
-	if ( !dSources[0]->UpdateSchema ( &m_tSchema ) )
-		return 0;
-
+	// check docinfo
 	if ( m_tSchema.m_dAttrs.GetLength()==0 )
 		m_eDocinfo = SPH_DOCINFO_NONE;
 
 	if ( m_tSchema.m_dAttrs.GetLength()>0 && m_eDocinfo==SPH_DOCINFO_NONE )
 	{
 		m_sLastError.SetSprintf ( "got attributes, but docinfo is 'none' (fix your config file)" );
+		return 0;
+	}
+
+	CSphVector<int,32> dMvaIndexes;
+	ARRAY_FOREACH ( i, m_tSchema.m_dAttrs )
+		if ( m_tSchema.m_dAttrs[i].m_eAttrType & SPH_ATTR_MULTI )
+			dMvaIndexes.Add ( i );
+
+	bool bGotMVA = ( dMvaIndexes.GetLength()!=0 );
+	if ( bGotMVA && m_eDocinfo!=SPH_DOCINFO_EXTERN )
+	{
+		m_sLastError.SetSprintf ( "multi-valued attributes are only supported if but docinfo is 'extern' (fix your config file)" );
 		return 0;
 	}
 
@@ -5025,9 +5319,12 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	CSphVector < CSphVector<CSphOrdinal> > dOrdinals;
 	dOrdinals.Resize ( dOrdinalAttrs.GetLength() );
 
-	// create and exclusively lock indexer lock file
+	// create temp files
 	CSphAutofile fdLock ( GetIndexFileName("tmp0"), SPH_O_NEW, m_sLastError );
-	if ( fdLock.GetFD()<0 )
+	CSphAutofile fdTmpHits ( GetIndexFileName("tmp1"), SPH_O_NEW, m_sLastError );
+	CSphAutofile fdTmpDocinfos ( GetIndexFileName("tmp2"), SPH_O_NEW, m_sLastError );
+
+	if ( fdLock.GetFD()<0 || fdTmpHits.GetFD()<0 || fdTmpDocinfos.GetFD()<0 )
 		return 0;
 
 	if ( !sphLockEx ( fdLock.GetFD(), false ) )
@@ -5035,16 +5332,6 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 		m_sLastError.SetSprintf ( "failed to lock '%s': another indexer running?", fdLock.GetFilename() );
 		return 0;
 	}
-
-	// create temp hits file
-	CSphAutofile fdTmpHits ( GetIndexFileName("tmp1"), SPH_O_NEW, m_sLastError );
-	if ( fdTmpHits.GetFD()<0 )
-		return 0;
-
-	// create temp docinfos file
-	CSphAutofile fdTmpDocinfos ( GetIndexFileName("tmp2"), SPH_O_NEW, m_sLastError );
-	if ( fdTmpDocinfos.GetFD()<0 )
-		return 0;
 
 	// setup accumulating docinfo IDs range
 	m_tMin.Reset ( m_tSchema.m_dAttrs.GetLength() );
@@ -5056,10 +5343,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	PROFILE_BEGIN ( collect_hits );
 
 	m_tStats.Reset ();
-
-	CSphIndexProgress tProgress; // current progress
-	tProgress.m_ePhase = CSphIndexProgress::PHASE_COLLECT;
-	tProgress.m_iHitsTotal = 0;
+	m_tProgress.m_ePhase = CSphIndexProgress::PHASE_COLLECT;
 
 	CSphVector<int> dHitBlocks;
 	int iDocinfoBlocks = 0;
@@ -5069,24 +5353,19 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 		// connect and check schema, if it's not the first one
 		CSphSource * pSource = dSources[iSource];
 		if ( iSource )
-		{
-			if ( !dSources[iSource]->Connect () )
+			if ( !pSource->Connect() || !pSource->IterateHitsStart() || !pSource->UpdateSchema ( &m_tSchema ) )
 				return 0;
-
-			if ( !dSources[iSource]->UpdateSchema ( &m_tSchema ) )
-				return 0;
-		}
 
 		// fetch documents
-		while ( pSource->Next() )
+		while ( pSource->IterateHitsNext() )
 		{
 			// show progress bar
 			if ( m_pProgress
 				&& ( ( pSource->GetStats().m_iTotalDocuments % 1000 )==0 ) )
 			{
-				tProgress.m_iDocuments = m_tStats.m_iTotalDocuments + pSource->GetStats().m_iTotalDocuments;
-				tProgress.m_iBytes = m_tStats.m_iTotalBytes + pSource->GetStats().m_iTotalBytes;
-				m_pProgress ( &tProgress );
+				m_tProgress.m_iDocuments = m_tStats.m_iTotalDocuments + pSource->GetStats().m_iTotalDocuments;
+				m_tProgress.m_iBytes = m_tStats.m_iTotalBytes + pSource->GetStats().m_iTotalBytes;
+				m_pProgress ( &m_tProgress, false );
 			}
 
 			// make a shortcut for hit count
@@ -5152,7 +5431,6 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 			}
 #endif
 
-			// while there's not enough space in buffers
 			while ( iDocHits )
 			{
 				// copy as much hits as we can
@@ -5208,17 +5486,19 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 					return 0;
 
 				// progress bar
-				tProgress.m_iHitsTotal += iHits;
+				m_tProgress.m_iHitsTotal += iHits;
 				if ( m_pProgress )
 				{
-					tProgress.m_iDocuments = m_tStats.m_iTotalDocuments + pSource->GetStats().m_iTotalDocuments;
-					tProgress.m_iBytes = m_tStats.m_iTotalBytes + pSource->GetStats().m_iTotalBytes;
-					m_pProgress ( &tProgress );
+					m_tProgress.m_iDocuments = m_tStats.m_iTotalDocuments + pSource->GetStats().m_iTotalDocuments;
+					m_tProgress.m_iBytes = m_tStats.m_iTotalBytes + pSource->GetStats().m_iTotalBytes;
+					m_pProgress ( &m_tProgress, false );
 				}
 			}
 		}
 
-		// this source is over, update overall stats
+		// this source is over, disconnect and update stats
+		pSource->Disconnect ();
+
 		m_tStats.m_iTotalDocuments += pSource->GetStats().m_iTotalDocuments;
 		m_tStats.m_iTotalBytes += pSource->GetStats().m_iTotalBytes;
 	}
@@ -5246,7 +5526,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 			PROFILE ( sort_hits );
 			sphSort ( &dHits[0], iHits, CmpHit_fn() );
 		}
-		tProgress.m_iHitsTotal += iHits;
+		m_tProgress.m_iHitsTotal += iHits;
 
 		if ( m_eDocinfo==SPH_DOCINFO_INLINE )
 		{
@@ -5263,19 +5543,23 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 			return 0;
 	}
 
-	dHits.Reset ();
-
 	if ( m_pProgress )
 	{
-		tProgress.m_iDocuments = m_tStats.m_iTotalDocuments;
-		tProgress.m_iBytes = m_tStats.m_iTotalBytes;
-		m_pProgress ( &tProgress );
-
-		tProgress.m_ePhase = CSphIndexProgress::PHASE_COLLECT_END;
-		m_pProgress ( &tProgress );
+		m_tProgress.m_iDocuments = m_tStats.m_iTotalDocuments;
+		m_tProgress.m_iBytes = m_tStats.m_iTotalBytes;
+		m_pProgress ( &m_tProgress, true );
 	}
 
 	PROFILE_END ( collect_hits );
+
+	///////////////////////////////////////
+	// collect and sort multi-valued attrs
+	///////////////////////////////////////
+
+	BuildMVA ( dSources, dHits, iHitsMax*sizeof(CSphWordHit) );
+
+	// reset hits pool
+	dHits.Reset ();
 
 	/////////////////
 	// sort docinfos
@@ -5291,6 +5575,16 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 		dOrdinals[i].Sort ( CmpOrdinalsDocid_fn() );
 	}
 
+	// initialize MVA reader
+	CSphAutofile fdMva ( GetIndexFileName("spm"), SPH_O_BINARY, m_sLastError );
+	if ( fdMva.GetFD()<0 )
+		return false;
+
+	CSphReader_VLN rdMva;
+	rdMva.SetFile ( fdMva );
+
+	SphDocID_t uMvaID = rdMva.GetDocid();
+
 	// initialize writer
 	CSphAutofile fdDocinfo ( GetIndexFileName("spa"), SPH_O_NEW, m_sLastError );
 	if ( fdDocinfo.GetFD()<0 )
@@ -5302,16 +5596,16 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 		assert ( dBins.GetLength()==0 );
 		dBins.Grow ( iDocinfoBlocks );
 
+		int iBinSize = CSphBin::CalcBinSize ( iMemoryLimit, iDocinfoBlocks, "sort_docinfos" );
+		iSharedOffset = -1;
+
 		for ( int i=0; i<iDocinfoBlocks; i++ )
 		{
 			dBins.Add ( new CSphBin() );
 			dBins[i]->m_iFileLeft = ( ( i==iDocinfoBlocks-1 ) ? iDocinfoLastBlockSize : iDocinfoMax )*iDocinfoStride*sizeof(DWORD);
 			dBins[i]->m_iFilePos = ( i==0 ) ? 0 : dBins[i-1]->m_iFilePos + dBins[i-1]->m_iFileLeft;
+			dBins[i]->Init ( fdTmpDocinfos.GetFD(), &iSharedOffset, iBinSize );
 		}
-
-		iSharedOffset = -1;
-		ARRAY_FOREACH ( i, dBins )
-			dBins[i]->Init ( fdTmpDocinfos.GetFD(), &iSharedOffset, "sort_docinfos", iMemoryLimit, iDocinfoBlocks );
 
 		// docinfo queue
 		CSphAutoArray<DWORD> dDocinfoQueue ( iDocinfoBlocks*iDocinfoStride );
@@ -5341,15 +5635,45 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 			int iBin = qDocinfo.Root();
 			DWORD * pEntry = dDocinfoQueue + iBin*iDocinfoStride;
 
-			// emit it
-			memcpy ( pDocinfo, pEntry, iDocinfoStride*sizeof(DWORD) );
+			// update ordinals
 			ARRAY_FOREACH ( i, dOrdinalAttrs )
 			{
-				assert ( dOrdinals[i][iOrd].m_uDocID == pEntry[0] );
-				assert ( 1+dOrdinalAttrs[i]<iDocinfoStride );
-				pDocinfo [ 1+dOrdinalAttrs[i] ] = dOrdinals[i][iOrd].m_uValue;
+				assert ( dOrdinals[i][iOrd].m_uDocID == DOCINFO2ID(pEntry) );
+				DOCINFO2ATTRS(pEntry) [ dOrdinalAttrs[i] ] = dOrdinals[i][iOrd].m_uValue;
 			}
 			iOrd++;
+
+			// update MVA
+			if ( bGotMVA )
+			{
+				// go to next id
+				while ( uMvaID<DOCINFO2ID(pEntry) )
+				{
+					ARRAY_FOREACH ( i, dMvaIndexes )
+						rdMva.SkipBytes ( rdMva.GetDword()*sizeof(DWORD) );
+
+					uMvaID = rdMva.GetDocid();
+					if ( !uMvaID )
+						uMvaID = DOCID_MAX;
+				}
+
+				assert ( uMvaID>=DOCINFO2ID(pEntry) );
+				if ( uMvaID==DOCINFO2ID(pEntry) )
+				{
+					ARRAY_FOREACH ( i, dMvaIndexes )
+					{
+						DOCINFO2ATTRS(pEntry) [ dMvaIndexes[i] ] = (DWORD)( rdMva.GetPos()/sizeof(DWORD) ); // intentional clamp; we'll check for 32bit overflow later
+						rdMva.SkipBytes ( rdMva.GetDword()*sizeof(DWORD) );
+					}
+
+					uMvaID = rdMva.GetDocid();
+					if ( !uMvaID )
+						uMvaID = DOCID_MAX;
+				}
+			}
+
+			// emit it
+			memcpy ( pDocinfo, pEntry, iDocinfoStride*sizeof(DWORD) );
 			pDocinfo += iDocinfoStride;
 
 			if ( pDocinfo>=pDocinfoMax )
@@ -5396,26 +5720,25 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 
 	PROFILE_BEGIN ( invert_hits );
 
-	// calc bin positions from their lengths
+	// initialize readers
 	assert ( dBins.GetLength()==0 );
 	dBins.Grow ( dHitBlocks.GetLength() );
+
+	iSharedOffset = -1;
+	int iBinSize = CSphBin::CalcBinSize ( iMemoryLimit, dHitBlocks.GetLength(), "sort_hits" );
 
 	ARRAY_FOREACH ( i, dHitBlocks )
 	{
 		dBins.Add ( new CSphBin() );
 		dBins[i]->m_iFileLeft = dHitBlocks[i];
 		dBins[i]->m_iFilePos = ( i==0 ) ? 0 : dBins[i-1]->m_iFilePos + dBins[i-1]->m_iFileLeft;
+		dBins[i]->Init ( fdTmpHits.GetFD(), &iSharedOffset, iBinSize );
 	}
 
 	// if there were no hits, create zero-length index files
 	int iRawBlocks = dBins.GetLength();
 	if ( iRawBlocks==0 )
 		m_eDocinfo = SPH_DOCINFO_INLINE;
-
-	// initialize readers
-	iSharedOffset = -1;
-	ARRAY_FOREACH ( i, dBins )
-		dBins[i]->Init ( fdTmpHits.GetFD(), &iSharedOffset, "sort_hits", iMemoryLimit, iRawBlocks );
 
 	//////////////////////////////
 	// create new index files set
@@ -5480,8 +5803,8 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 		}
 
 		// init progress meter
-		tProgress.m_ePhase = CSphIndexProgress::PHASE_SORT;
-		tProgress.m_iHits = 0;
+		m_tProgress.m_ePhase = CSphIndexProgress::PHASE_SORT;
+		m_tProgress.m_iHits = 0;
 
 		// while the queue has data for us
 		// FIXME! analyze binsRead return code
@@ -5509,19 +5832,16 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 			// progress
 			if ( m_pProgress && ++iHitsSorted==1000000 )
 			{
-				tProgress.m_iHits += iHitsSorted;
-				m_pProgress ( &tProgress );
+				m_tProgress.m_iHits += iHitsSorted;
+				m_pProgress ( &m_tProgress, false );
 				iHitsSorted = 0;
 			}
 		}
 
 		if ( m_pProgress )
 		{
-			tProgress.m_iHits += iHitsSorted;
-			m_pProgress ( &tProgress );
-
-			tProgress.m_ePhase = CSphIndexProgress::PHASE_SORT_END;
-			m_pProgress ( &tProgress );
+			m_tProgress.m_iHits += iHitsSorted;
+			m_pProgress ( &m_tProgress, true );
 		}
 
 		// cleanup
@@ -6656,7 +6976,7 @@ CSphQueryResult * CSphIndex_VLN::Query ( CSphDict * pDict, CSphQuery * pQuery )
 }
 
 
-static inline bool sphMatchEarlyReject ( const CSphMatch & tMatch, const CSphQuery * pQuery )
+static inline bool sphMatchEarlyReject ( const CSphMatch & tMatch, const CSphQuery * pQuery, CSphSharedBuffer<DWORD> & pMvaStorage )
 {
 	if ( tMatch.m_iDocID < pQuery->m_iMinID || tMatch.m_iDocID > pQuery->m_iMaxID )
 		return true;
@@ -6670,15 +6990,67 @@ static inline bool sphMatchEarlyReject ( const CSphMatch & tMatch, const CSphQue
 		if ( tFilter.m_iAttrIndex<0 )
 			continue;
 
-		DWORD uValue = tMatch.m_pAttrs [ tFilter.m_iAttrIndex ];
-		if ( tFilter.m_iValues )
+		if ( tFilter.m_bMva )
 		{
-			if ( !( tFilter.m_bExclude ^ sphGroupMatch ( uValue, tFilter.m_pValues, tFilter.m_iValues ) ) )
-				return true;
+			// multiple values
+			const DWORD * pMva = &pMvaStorage [ tMatch.m_pAttrs [ tFilter.m_iAttrIndex ] ];
+			const DWORD * pMvaMax = pMva + (*pMva) + 1;
+			pMva++;
+
+			// filter matches if any of multiple values match (ie. are in the set, or in the range)
+			bool bOK = false;
+			if ( tFilter.m_iValues )
+			{
+				// walk both attr values and filter values lists, and ok match if there's any intersection
+				const DWORD * pFilter = tFilter.m_pValues;
+				const DWORD * pFilterMax = pFilter + tFilter.m_iValues;
+
+				while ( pMva<pMvaMax && pFilter<pFilterMax && pMva[0]!=pFilter[0] )
+				{
+					while ( pMva<pMvaMax && pMva[0]<pFilter[0] ) pMva++;
+					if ( pMva>=pMvaMax ) break;
+
+					while ( pFilter<pFilterMax && pFilter[0]<pMva[0] ) pFilter++;
+					if ( pFilter>=pFilterMax ) break;
+
+				}
+
+				bOK = ( pMva<pMvaMax && pFilter<pFilterMax );
+				assert ( bOK==false || pMva[0]==pFilter[0] );
+
+				if ( bOK )
+					tMatch.m_pAttrs [ tFilter.m_iAttrIndex ] = pFilter[0];
+
+			} else
+			{
+				// walk attr list, and ok match if any of values is within range
+				while ( pMva<pMvaMax )
+				{
+					if ( pMva[0]>=tFilter.m_uMinValue && pMva[0]<=tFilter.m_uMaxValue )
+					{
+						bOK = true;
+						tMatch.m_pAttrs [ tFilter.m_iAttrIndex ] = pMva[0];
+						break;
+					}
+					pMva++;
+				}
+			}
+
+			return ( !( tFilter.m_bExclude ^ bOK ) );
+
 		} else
 		{
-			if ( tFilter.m_bExclude ^ ( uValue<tFilter.m_uMinValue || uValue>tFilter.m_uMaxValue ) )
-				return true;
+			// single value
+			DWORD uValue = tMatch.m_pAttrs [ tFilter.m_iAttrIndex ];
+			if ( tFilter.m_iValues )
+			{
+				if ( !( tFilter.m_bExclude ^ sphGroupMatch ( uValue, tFilter.m_pValues, tFilter.m_iValues ) ) )
+					return true;
+			} else
+			{
+				if ( tFilter.m_bExclude ^ ( uValue<tFilter.m_uMinValue || uValue>tFilter.m_uMaxValue ) )
+					return true;
+			}
 		}
 	}
 
@@ -6820,7 +7192,7 @@ void CSphIndex_VLN::MatchAll ( const CSphQuery * pQuery, ISphMatchSorter * pTop,
 		// early reject by group id, doc id or timestamp
 		if ( bEarlyLookup )
 			LookupDocinfo ( tMatch );
-		if ( sphMatchEarlyReject ( tMatch, pQuery ) )
+		if ( sphMatchEarlyReject ( tMatch, pQuery, m_pMva ) )
 		{
 			docID++;
 			i = 0;
@@ -7007,7 +7379,7 @@ void CSphIndex_VLN::MatchAny ( const CSphQuery * pQuery, ISphMatchSorter * pTop,
 		CSphMatch & tMatch = m_dQueryWords[iMinIndex].m_tDoc;
 		if ( bEarlyLookup )
 			LookupDocinfo ( tMatch );
-		if ( sphMatchEarlyReject ( tMatch, pQuery ) )
+		if ( sphMatchEarlyReject ( tMatch, pQuery, m_pMva ) )
 			continue;
 
 		// get the words we're matching current document against (let's call them "terms")
@@ -7366,7 +7738,7 @@ bool CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, ISphMatchSorter * p
 		// early reject by group id, doc id or timestamp
 		if ( bEarlyLookup )
 			LookupDocinfo ( *pMatch );
-		if ( sphMatchEarlyReject ( *pMatch, pQuery ) )
+		if ( sphMatchEarlyReject ( *pMatch, pQuery, m_pMva ) )
 			continue;
 
 		// set weight and push it to the queue
@@ -8243,7 +8615,7 @@ bool CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, ISphMatchSorter * 
 		if ( bEarlyLookup )
 			LookupDocinfo ( *pAccept );
 
-		if ( sphMatchEarlyReject ( *pAccept, pQuery ) )
+		if ( sphMatchEarlyReject ( *pAccept, pQuery, m_pMva ) )
 			continue;
 
 		// submit
@@ -8471,6 +8843,10 @@ const CSphSchema * CSphIndex_VLN::Preload ( bool bMlock, CSphString * sWarning )
 
 	if ( m_eDocinfo==SPH_DOCINFO_EXTERN )
 	{
+		/////////////
+		// attr data
+		/////////////
+
 		int iStride = DOCINFO_IDSIZE + m_tSchema.m_dAttrs.GetLength();
 		int iEntrySize = sizeof(DWORD)*iStride;
 
@@ -8537,6 +8913,78 @@ const CSphSchema * CSphIndex_VLN::Preload ( bool bMlock, CSphString * sWarning )
 			uLastHash = uHash;
 		}
 		m_pDocinfoHash [ ++uLastHash ] = m_uDocinfo;
+
+		////////////
+		// MVA data
+		////////////
+
+		CSphVector<int,32> dMvaIndexes;
+		ARRAY_FOREACH ( i, m_tSchema.m_dAttrs )
+			if ( m_tSchema.m_dAttrs[i].m_eAttrType & SPH_ATTR_MULTI )
+				dMvaIndexes.Add ( i );
+
+		CSphAutofile fdMva ( GetIndexFileName("spm"), SPH_O_READ, m_sLastError );
+		if ( fdMva.GetFD()>=0 )
+		{
+			SphOffset_t iMvaSize = fdMva.GetSize ( iEntrySize, m_sLastError );
+			if ( iMvaSize<0 )
+				return NULL;
+
+			if ( iMvaSize!=(SphOffset_t)((size_t)iMvaSize) )
+			{
+				m_sLastError.SetSprintf ( "'%s' too big for size_t (4 GB limit on 32-bit system hit?)", fdMva.GetFilename() );
+				return NULL;
+			}
+
+			if ( !m_pMva.Alloc ( (size_t)(iMvaSize/sizeof(DWORD)), m_sLastError, sWarning ) )
+				return NULL;
+
+			size_t iMvaRead = ::read ( fdMva.GetFD(), m_pMva.GetWritePtr(), (size_t)iMvaSize );
+			if ( iMvaRead!=iMvaSize )
+			{
+				m_sLastError.SetSprintf ( "read error in '%s', %d of %d bytes read", fdMva.GetFilename(),
+					iMvaRead, iMvaSize );
+				m_pMva.Reset ();
+				return NULL;
+			}
+
+#if PARANOID
+			// for each docinfo entry, verify that MVA attrs point to right storage location
+			for ( DWORD iDoc=0; iDoc<m_uDocinfo; iDoc++ )
+			{
+				DWORD * pEntry = (DWORD *)&m_pDocinfo[iDoc*iStride];
+				SphDocID_t uDocID = DOCINFO2ID(pEntry);
+
+				DWORD uOff = DOCINFO2ATTRS(pEntry) [ dMvaIndexes[0] ];
+				if ( !uOff )
+				{
+					// its either all or nothing
+					ARRAY_FOREACH ( i, dMvaIndexes )
+						assert ( DOCINFO2ATTRS(pEntry) [ dMvaIndexes[i] ]==0 );
+				} else
+				{
+					// check id
+					DWORD * pMva = (DWORD *)&m_pMva[uOff-DOCINFO_IDSIZE];
+					SphDocID_t uMvaID = DOCINFO2ID(pMva);
+					assert ( uDocID==uMvaID );
+
+					// walk the trail
+					ARRAY_FOREACH ( i, dMvaIndexes )
+					{
+						assert ( DOCINFO2ATTRS(pEntry) [ dMvaIndexes[i] ]==uOff );
+						int iCount = m_pMva[uOff];
+						uOff += iCount;
+					}
+				}
+			}
+#endif // PARANOID
+
+		} else
+		{
+			// if we failed to open .spm file *and* have MVAs, we can not continue
+			if ( dMvaIndexes.GetLength() )
+				return NULL;
+		}
 	}
 
 	////////////////////
@@ -8722,6 +9170,14 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 		for ( int i=0; i<Min ( m_iWeights, pQuery->m_iWeights ); i++ )
 			m_dWeights[i] = Max ( 1, pQuery->m_pWeights[i] );
 
+	// adjust filters
+	ARRAY_FOREACH ( i, pQuery->m_dFilters )
+	{
+		CSphFilter & tFilter = pQuery->m_dFilters[i];
+		if ( tFilter.m_iAttrIndex>=0 )
+			tFilter.m_bMva = ( ( m_tSchema.m_dAttrs [ tFilter.m_iAttrIndex ].m_eAttrType & SPH_ATTR_MULTI )!=0 );
+	}
+
 	//////////////////////////////////////
 	// find and weight matching documents
 	//////////////////////////////////////
@@ -8758,18 +9214,40 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 		}
 	}
 
+	m_dQueryWords.Reset ();
+
 	///////////////////
 	// cook result set
 	///////////////////
 
-	if ( !pTop->UsesAttrs() && pTop->GetLength() )
+	// adjust results
+	if ( pTop->GetLength() )
 	{
-		int iCount = pTop->GetLength ();
-		CSphMatch * pCur = pTop->First ();
-		while ( iCount-- )
-			LookupDocinfo ( *pCur++ );
+		const int iCount = pTop->GetLength ();
+		CSphMatch * const pHead = pTop->First();
+		CSphMatch * const pTail = pHead + iCount;
+
+		// lookup attributes if necessary
+		if ( m_eDocinfo==SPH_DOCINFO_EXTERN && !pTop->UsesAttrs() && !pQuery->m_dFilters.GetLength() )
+			for ( CSphMatch * pCur=pHead; pCur<pTail; pCur++ )
+				LookupDocinfo ( *pCur );
+
+		// cleanup mva attrs which were not set by filters
+		CSphVector<int,8> dMvaToClean;
+		ARRAY_FOREACH ( i, m_tSchema.m_dAttrs )
+			if ( m_tSchema.m_dAttrs[i].m_eAttrType & SPH_ATTR_MULTI )
+				dMvaToClean.Add ( i );
+
+		ARRAY_FOREACH ( i, pQuery->m_dFilters )
+			if ( pQuery->m_dFilters[i].m_bMva )
+				dMvaToClean.RemoveValue ( pQuery->m_dFilters[i].m_iAttrIndex );
+
+		ARRAY_FOREACH ( i, dMvaToClean )
+			for ( CSphMatch * pCur=pHead; pCur<pTail; pCur++ )
+				pCur->m_pAttrs[dMvaToClean[i]] = 0;
 	}
 
+	// adjust schema
 	if ( pQuery->GetGroupByAttr()>=0 )
 	{
 		pResult->m_tSchema.m_dAttrs.Add ( CSphColumnInfo ( "@groupby", SPH_ATTR_INTEGER ) );
@@ -8777,8 +9255,6 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 		if ( pQuery->GetDistinctAttr()>=0 )
 			pResult->m_tSchema.m_dAttrs.Add ( CSphColumnInfo ( "@distinct", SPH_ATTR_INTEGER ) );
 	}
-
-	m_dQueryWords.Reset ();
 
 	PROFILER_DONE ();
 	PROFILE_SHOW ();
@@ -9578,7 +10054,7 @@ void CSphSource::SetEmitInfixes ( bool bPrefixesOnly, int iMinLength )
 // DOCUMENT SOURCE
 /////////////////////////////////////////////////////////////////////////////
 
-bool CSphSource_Document::Next()
+bool CSphSource_Document::IterateHitsNext ()
 {
 	assert ( m_pTokenizer );
 	PROFILE ( src_document );
@@ -9721,6 +10197,7 @@ CSphSource_SQL::CSphSource_SQL ( const char * sName )
 	, m_uMaxID				( 0 )
 	, m_uCurrentID			( 0 )
 	, m_uMaxFetchedID		( 0 )
+	, m_iMultiAttr			( -1 )
 	, m_bSqlConnected		( false )
 {
 }
@@ -9856,31 +10333,51 @@ bool CSphSource_SQL::RunQueryStep ()
 	return true;
 }
 
+
+#define LOC_ERROR(_msg,_arg) { fprintf ( stdout, _msg, _arg ); return 0; }
+#define LOC_ERROR2(_msg,_arg,_arg2) { fprintf ( stdout, _msg, _arg, _arg2 ); return 0; }
+#define LOC_SQL_ERROR(_msg) { sError = _msg; break; }
+
+
+/// connect to SQL server
 bool CSphSource_SQL::Connect ()
 {
-	#define LOC_ERROR(_msg,_arg) { fprintf ( stdout, _msg, _arg ); return 0; }
-	#define LOC_ERROR2(_msg,_arg,_arg2) { fprintf ( stdout, _msg, _arg, _arg2 ); return 0; }
-	#define LOC_SQL_ERROR(_msg) { sError = _msg; break; }
+	// do not connect twice
+	if ( m_bSqlConnected )
+		return true;
 
-	// connect to SQL and run required queries
+	// try to connect
+	if ( !SqlConnect() )
+	{
+		fprintf ( stdout, "ERROR: sql_connect: %s (DSN=%s).\n", SqlError(), m_sSqlDSN.cstr() );
+		return false;
+	}
+
+	// run pre-queries
+	ARRAY_FOREACH ( i, m_tParams.m_dQueryPre )
+	{
+		if ( !SqlQuery ( m_tParams.m_dQueryPre[i].cstr() ) )
+		{
+			fprintf ( stdout, "ERROR: sql_query_pre: %s (DSN=%s).\n", SqlError(), m_sSqlDSN.cstr() );
+			SqlDisconnect ();
+			return false;
+		}
+		SqlDismissResult ();
+	}
+
+	// all good
+	m_bSqlConnected = true;
+	return true;
+}
+
+
+/// issue main rows fetch query
+bool CSphSource_SQL::IterateHitsStart ()
+{
+	assert ( m_bSqlConnected );
 	const char * sError = NULL;
 	for ( ;; )
 	{
-		// connect
-		if ( !SqlConnect() )
-			LOC_SQL_ERROR ( "sql_connect" );
-
-		// run pre-queries
-		ARRAY_FOREACH ( i, m_tParams.m_dQueryPre )
-		{
-			if ( !SqlQuery ( m_tParams.m_dQueryPre[i].cstr() ) )
-				LOC_SQL_ERROR ( "sql_query_pre" );
-
-			SqlDismissResult ();
-		}
-		if ( sError )
-			break;
-
 		// issue first fetch query
 		if ( !m_tParams.m_sQueryRange.IsEmpty() )
 		{
@@ -9971,8 +10468,7 @@ bool CSphSource_SQL::Connect ()
 	// errors, anyone?
 	if ( sError )
 	{
-		fprintf ( stdout, "ERROR: %s: %s (DSN=%s).\n",
-			sError, SqlError(), m_sSqlDSN.cstr() );
+		fprintf ( stdout, "ERROR: %s: %s (DSN=%s).\n", sError, SqlError(), m_sSqlDSN.cstr() );
 		return 0;
 	}
 
@@ -9987,6 +10483,7 @@ bool CSphSource_SQL::Connect ()
 	ARRAY_FOREACH ( i, dFound )
 		dFound[i] = false;
 
+	// map plain attrs from SQL
 	for ( int i=0; i<iCols; i++ )
 	{
 		const char * sName = SqlFieldName(i+1);
@@ -10002,8 +10499,16 @@ bool CSphSource_SQL::Connect ()
 		ARRAY_FOREACH ( j, m_tParams.m_dAttrs )
 			if ( !strcasecmp ( tCol.m_sName.cstr(), m_tParams.m_dAttrs[j].m_sName.cstr() ) )
 		{
-			tCol.m_eAttrType = m_tParams.m_dAttrs[j].m_eAttrType;
+			const CSphColumnInfo & tAttr = m_tParams.m_dAttrs[j];
+
+			tCol.m_eAttrType = tAttr.m_eAttrType;
 			assert ( tCol.m_eAttrType!=SPH_ATTR_NONE );
+
+			if ( tAttr.m_eSrc!=SPH_ATTRSRC_FIELD )
+			{
+				fprintf ( stdout, "ERROR: multi-valued attribute '%s' found in query; source type must be 'field'.\n", tAttr.m_sName.cstr() );
+				return 0;
+			}
 
 			dFound[j] = true;
 			break;
@@ -10013,6 +10518,17 @@ bool CSphSource_SQL::Connect ()
 			m_tSchema.m_dFields.Add ( tCol );
 		else
 			m_tSchema.m_dAttrs.Add ( tCol );
+	}
+
+	// map multi-valued attrs
+	ARRAY_FOREACH ( i, m_tParams.m_dAttrs )
+	{
+		const CSphColumnInfo & tAttr = m_tParams.m_dAttrs[i];
+		if ( ( tAttr.m_eAttrType & SPH_ATTR_MULTI ) && tAttr.m_eSrc!=SPH_ATTRSRC_FIELD )
+		{
+			m_tSchema.m_dAttrs.Add ( tAttr );
+			dFound[i] = true;
+		}
 	}
 
 	// warn if some attrs went unmapped
@@ -10032,11 +10548,19 @@ bool CSphSource_SQL::Connect ()
 		return 0;
 	}
 
-	#undef LOC_ERROR
-	#undef LOC_ERROR2
-	#undef LOC_SQL_ERROR
-
 	return 1;
+}
+
+#undef LOC_ERROR
+#undef LOC_ERROR2
+#undef LOC_SQL_ERROR
+
+
+void CSphSource_SQL::Disconnect ()
+{
+	if ( m_bSqlConnected )
+		SqlDisconnect ();
+	m_bSqlConnected = false;
 }
 
 
@@ -10073,9 +10597,6 @@ BYTE ** CSphSource_SQL::NextDocument ()
 			SqlDismissResult ();
 		}
 
-		// close connection and return
-		SqlDisconnect ();
-
 		return NULL;
 	}
 
@@ -10100,6 +10621,10 @@ BYTE ** CSphSource_SQL::NextDocument ()
 		{
 			// store string
 			m_dStrAttrs[i] = SqlColumn ( tAttr.m_iIndex );
+			uAttr = 0;
+		} else if ( tAttr.m_eAttrType & SPH_ATTR_MULTI )
+		{
+			// clean up multi-valued; 0 means that there are no values
 			uAttr = 0;
 		} else
 		{
@@ -10147,6 +10672,71 @@ void CSphSource_SQL::PostIndex ()
 	#undef LOC_SQL_ERROR
 
 	SqlDisconnect ();
+}
+
+
+bool CSphSource_SQL::IterateMultivaluedStart ( int iAttr )
+{
+	if ( iAttr<0 || iAttr>=m_tSchema.m_dAttrs.GetLength() )
+		return false;
+
+	m_iMultiAttr = iAttr;
+	const CSphColumnInfo & tAttr = m_tSchema.m_dAttrs[iAttr];
+
+	if ( !(tAttr.m_eAttrType & SPH_ATTR_MULTI) )
+		return false;
+
+	switch ( tAttr.m_eSrc )
+	{
+	case SPH_ATTRSRC_FIELD:
+		return false;
+
+	case SPH_ATTRSRC_QUERY:
+		// run simple query
+		if ( !SqlQuery ( tAttr.m_sQuery.cstr() ) )
+		{
+			fprintf ( stdout, "ERROR: multi-valued attr '%s' query failed: %s.\n", tAttr.m_sName.cstr(), SqlError() );
+			return false;
+		}
+		if ( SqlNumFields()!=2 )
+		{
+			fprintf ( stdout, "ERROR: multi-valued attr '%s' query returned %d fields (expected 2).\n", tAttr.m_sName.cstr(), SqlNumFields() );
+			SqlDismissResult ();
+			return false;
+		}
+		return true;
+
+	case SPH_ATTRSRC_RANGEDQUERY:
+		// !COMMIT support ranged as well
+		return false;
+
+	default:
+		fprintf ( stdout, "INTERNAL ERROR: unknown multi-valued attr source type %d.\n", tAttr.m_eSrc );
+		return false;
+	}
+}
+
+
+bool CSphSource_SQL::IterateMultivaluedNext ()
+{
+	assert ( m_bSqlConnected );
+	assert ( m_tSchema.m_dAttrs[m_iMultiAttr].m_eAttrType & SPH_ATTR_MULTI );
+
+	// fetch next row
+	bool bGotRow = SqlFetchRow ();
+	while ( !bGotRow )
+	{
+		if ( SqlIsError() )
+			sphDie ( "FATAL: sql_fetch_row: %s.\n", SqlError() );
+
+		// !COMMIT run next ranged step here
+		return false;
+	}
+
+	// return that tuple
+	m_tDocInfo.m_iDocID = sphToDocid ( SqlColumn(0) );
+	m_tDocInfo.m_pAttrs [ m_iMultiAttr ] = sphToDword ( SqlColumn(1) );
+	return true;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -10207,25 +10797,15 @@ const char * CSphSource_MySQL::SqlError ()
 bool CSphSource_MySQL::SqlConnect ()
 {
 	mysql_init ( &m_tMysqlDriver );
-
-	assert ( !m_bSqlConnected );
-	if ( !mysql_real_connect ( &m_tMysqlDriver,
+	return NULL!=mysql_real_connect ( &m_tMysqlDriver,
 		m_tParams.m_sHost.cstr(), m_tParams.m_sUser.cstr(), m_tParams.m_sPass.cstr(),
-		m_tParams.m_sDB.cstr(), m_tParams.m_iPort, m_sMysqlUsock.cstr(), 0 ) )
-	{
-		return false;
-	}
-
-	m_bSqlConnected = true;
-	return m_bSqlConnected;
+		m_tParams.m_sDB.cstr(), m_tParams.m_iPort, m_sMysqlUsock.cstr(), 0 );
 }
 
 
 void CSphSource_MySQL::SqlDisconnect ()
 {
-	assert ( m_bSqlConnected );
 	mysql_close ( &m_tMysqlDriver );
-	m_bSqlConnected = false;
 }
 
 
@@ -10340,8 +10920,6 @@ bool CSphSource_PgSQL::Setup ( const CSphSourceParams_PgSQL & tParams )
 
 bool CSphSource_PgSQL::SqlConnect ()
 {
-	assert ( !m_bSqlConnected );
-
 	char sPort[64];
 	snprintf ( sPort, sizeof(sPort), "%d", m_tParams.m_iPort );
 	m_tPgDriver = PQsetdbLogin ( m_tParams.m_sHost.cstr(), sPort, NULL, NULL,
@@ -10358,16 +10936,13 @@ bool CSphSource_PgSQL::SqlConnect ()
 		return false;
 	}
 
-	m_bSqlConnected = true;
 	return true;
 }
 
 
 void CSphSource_PgSQL::SqlDisconnect ()	
 {
-	assert ( m_bSqlConnected );
 	PQfinish ( m_tPgDriver );
-	m_bSqlConnected = false;
 }
 
 
@@ -10451,6 +11026,12 @@ CSphSource_XMLPipe::CSphSource_XMLPipe ( const char * sName)
 
 CSphSource_XMLPipe::~CSphSource_XMLPipe ()
 {
+	Disconnect ();
+}
+
+
+void CSphSource_XMLPipe::Disconnect ()
+{
 	if ( m_pPipe )
 	{
 		pclose ( m_pPipe );
@@ -10494,7 +11075,7 @@ bool CSphSource_XMLPipe::Connect ()
 }
 
 
-bool CSphSource_XMLPipe::Next ()
+bool CSphSource_XMLPipe::IterateHitsNext ()
 {
 	PROFILE ( src_xmlpipe );
 	char sTitle [ 1024 ]; // FIXME?

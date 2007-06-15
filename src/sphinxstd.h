@@ -271,6 +271,16 @@ public:
 		m_pData [ m_iLength++ ] = tValue;
 	}
 
+	/// add unique entry (ie. do not add if equal to last one)
+	void AddUnique ( const T & tValue )
+	{
+		if ( m_iLength>=m_iLimit )
+			Grow ( 1+m_iLength );
+
+		if ( m_iLength==0 || m_pData[m_iLength-1]!=tValue )
+			m_pData [ m_iLength++ ] = tValue;
+	}
+
 	/// get last entry
 	T & Last ()
 	{

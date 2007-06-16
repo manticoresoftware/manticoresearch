@@ -10504,7 +10504,7 @@ bool CSphSource_SQL::IterateHitsStart ()
 			tCol.m_eAttrType = tAttr.m_eAttrType;
 			assert ( tCol.m_eAttrType!=SPH_ATTR_NONE );
 
-			if ( tAttr.m_eSrc!=SPH_ATTRSRC_FIELD )
+			if ( ( tAttr.m_eAttrType & SPH_ATTR_MULTI ) && tAttr.m_eSrc!=SPH_ATTRSRC_FIELD )
 			{
 				fprintf ( stdout, "ERROR: multi-valued attribute '%s' found in query; source type must be 'field'.\n", tAttr.m_sName.cstr() );
 				return 0;

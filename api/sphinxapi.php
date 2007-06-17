@@ -534,7 +534,7 @@ class SphinxClient
 		$result["time"] = sprintf ( "%.3f", $msecs/1000 );
 		$p += 16;
 
-		while ( $words-->0 )
+		while ( $words-->0 && $p<$max )
 		{
 			list(,$len) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
 			$word = substr ( $response, $p, $len ); $p += $len;

@@ -274,7 +274,7 @@ int main ( int argc, char ** argv )
 			if ( !tQuery.SetSchema ( *pSchema, sError ) )
 				break;
 
-			if ( !tQuery.m_sGroupBy.IsEmpty() && tQuery.GetGroupByAttr()<0 )
+			if ( !tQuery.m_sGroupBy.IsEmpty() && tQuery.m_iGroupbyOffset<0 )
 			{
 				fprintf ( stdout, "WARNING: no such groupby attribute '%s' - DISABLING GROUPBY\n", tQuery.m_sGroupBy.cstr() );
 				tQuery.m_sGroupBy = "";
@@ -284,10 +284,10 @@ int main ( int argc, char ** argv )
 			if ( tQuery.m_eSort!=SPH_SORT_RELEVANCE )
 			{
 				int iTS = -1;
-				ARRAY_FOREACH ( i, pSchema->m_dAttrs )
-					if ( pSchema->m_dAttrs[i].m_eAttrType==SPH_ATTR_TIMESTAMP )
+				for ( int i=0; i<pSchema->GetAttrsCount(); i++ )
+					if ( pSchema->GetAttr(i).m_eAttrType==SPH_ATTR_TIMESTAMP )
 				{
-					tQuery.m_sSortBy = pSchema->m_dAttrs[i].m_sName;
+					tQuery.m_sSortBy = pSchema->GetAttr(i).m_sName;
 					iTS = i;
 					break;
 				}
@@ -333,19 +333,18 @@ int main ( int argc, char ** argv )
 				CSphMatch & tMatch = pResult->m_dMatches[i];
 				fprintf ( stdout, "%d. document=" DOCID_FMT ", weight=%d", 1+i, tMatch.m_iDocID, tMatch.m_iWeight );
 
-				if ( tMatch.m_pAttrs )
-					ARRAY_FOREACH ( j, pResult->m_tSchema.m_dAttrs )
+				for ( int j=0; j<pResult->m_tSchema.GetAttrsCount(); j++ )
 				{
-					const CSphColumnInfo & tAttr = pResult->m_tSchema.m_dAttrs[j];
+					const CSphColumnInfo & tAttr = pResult->m_tSchema.GetAttr(j);
 
 					if ( tAttr.m_eAttrType==SPH_ATTR_INTEGER )
 					{
-						fprintf ( stdout, ", %s=%u", tAttr.m_sName.cstr(), tMatch.m_pAttrs[j] );
+						fprintf ( stdout, ", %s=%u", tAttr.m_sName.cstr(), tMatch.GetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount ) );
 					
 					} else if ( tAttr.m_eAttrType==SPH_ATTR_TIMESTAMP )
 					{
 						char sBuf[256];
-						time_t tStamp = tMatch.m_pAttrs[j]; // for 64-bit
+						time_t tStamp = tMatch.GetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount ); // for 64-bit
 						strncpy ( sBuf, ctime(&tStamp), sizeof(sBuf) );
 
 						char * p = sBuf;

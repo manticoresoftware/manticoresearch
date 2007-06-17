@@ -1787,16 +1787,19 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 
 					// get schema
 					CSphSchema & tSchema = tAgent.m_tRes.m_tSchema;
+					tSchema.Reset ();
 
 					tSchema.m_dFields.Resize ( tReq.GetInt() ); // FIXME! add a sanity check
 					ARRAY_FOREACH ( j, tSchema.m_dFields )
 						tSchema.m_dFields[j].m_sName = tReq.GetString ();
 
-					tSchema.m_dAttrs.Resize ( tReq.GetInt() ); // FIXME! add a sanity check
-					ARRAY_FOREACH ( j, tSchema.m_dAttrs )
+					int iNumAttrs = tReq.GetInt(); // FIXME! add a sanity check
+					for ( int j=0; j<iNumAttrs; j++ )
 					{
-						tSchema.m_dAttrs[j].m_sName = tReq.GetString ();
-						tSchema.m_dAttrs[j].m_eAttrType = tReq.GetDword (); // FIXME! add a sanity check
+						CSphColumnInfo tCol;
+						tCol.m_sName = tReq.GetString ();
+						tCol.m_eAttrType = tReq.GetDword (); // FIXME! add a sanity check
+						tSchema.AddAttr ( tCol );
 					}
 
 					// get matches
@@ -1819,18 +1822,20 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 					}
 
 					assert ( !tAgent.m_tRes.m_dMatches.GetLength() );
-					int iAttrs = tSchema.m_dAttrs.GetLength();
 					if ( iMatches )
 					{
 						tAgent.m_tRes.m_dMatches.Resize ( iMatches );
 						ARRAY_FOREACH ( i, tAgent.m_tRes.m_dMatches )
 						{
 							CSphMatch & tMatch = tAgent.m_tRes.m_dMatches[i];
-							tMatch.Reset ( iAttrs );
+							tMatch.Reset ( tSchema.GetRowSize() );
 							tMatch.m_iDocID = bAgent64 ? (SphDocID_t)tReq.GetUint64() : tReq.GetDword();
 							tMatch.m_iWeight = tReq.GetInt ();
-							for ( int j=0; j<iAttrs; j++ )
-								tMatch.m_pAttrs[j] = tReq.GetDword ();
+							for ( int j=0; j<tSchema.GetAttrsCount(); j++ )
+							{
+								const CSphColumnInfo & tAttr = tSchema.GetAttr(j);
+								tMatch.SetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount, tReq.GetDword () );
+							}
 						}
 					}
 
@@ -1996,7 +2001,7 @@ ISphMatchSorter * CreateSorter ( CSphQuery & tQuery, const CSphSchema & tSchema,
 		tReq.SendErrorReply ( "index '%s': %s", sServedName, sError.cstr() );
 		return NULL;
 	}
-	assert ( tQuery.m_sGroupBy.IsEmpty() || tQuery.GetGroupByAttr()>=0 );
+	assert ( tQuery.m_sGroupBy.IsEmpty() || tQuery.m_iGroupbyOffset>=0 );
 
 	// spawn queue and set sort-by attribute
 	ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, tSchema, sError );
@@ -2015,27 +2020,36 @@ ISphMatchSorter * CreateSorter ( CSphQuery & tQuery, const CSphSchema & tSchema,
 bool MinimizeSchema ( CSphSchema & tDst, const CSphSchema & tSrc )
 {
 	// if dst is empty, just copy it
-	if ( tDst.GetRealAttrCount()==0 )
+	if ( tDst.GetAttrsCount()==0 )
 	{
 		tDst = tSrc;
 		return true;
 	}
 
 	// check for equality, and remove all dst attributes that are not present in src
-	bool bEqual = ( tDst.GetRealAttrCount()==tSrc.GetRealAttrCount() );
-	for ( int i=0; i<tDst.GetRealAttrCount(); i++ )
+	CSphVector<CSphColumnInfo,8> dDst;
+	for ( int i=0; i<tDst.GetAttrsCount(); i++ )
+		dDst.Add ( tDst.GetAttr(i) );
+
+	bool bEqual = ( tDst.GetAttrsCount()==tSrc.GetAttrsCount() );
+	ARRAY_FOREACH ( i, dDst );
 	{
-		int iSrcIdx = tSrc.GetAttrIndex ( tDst.m_dAttrs[i].m_sName.cstr() );
+		int iSrcIdx = tSrc.GetAttrIndex ( dDst[i].m_sName.cstr() );
 
 		if ( iSrcIdx!=i )
 			bEqual = false;
 
 		if ( iSrcIdx==-1 )
 		{
-			tDst.m_dAttrs.Remove ( i );
+			dDst.Remove ( i );
 			i--;
 		}
 	}
+
+	tDst.ResetAttrs ();
+	ARRAY_FOREACH ( i, dDst )
+		tDst.AddAttr ( dDst[i] );
+
 	return bEqual;
 }
 
@@ -2072,8 +2086,8 @@ bool FixupQuery ( CSphQuery * pQuery, OldQuery_t * pOldQuery,
 	if ( pOldQuery->m_iGroups>0 || pOldQuery->m_iMinGID!=0 || pOldQuery->m_iMaxGID!=UINT_MAX )
 	{
 		int iAttr = -1;
-		ARRAY_FOREACH ( i, pSchema->m_dAttrs ) 
-			if ( pSchema->m_dAttrs[i].m_eAttrType==SPH_ATTR_INTEGER )
+		for ( int i=0; i<pSchema->GetAttrsCount(); i++ ) 
+			if ( pSchema->GetAttr(i).m_eAttrType==SPH_ATTR_INTEGER )
 		{
 			iAttr = i;
 			break;
@@ -2086,7 +2100,7 @@ bool FixupQuery ( CSphQuery * pQuery, OldQuery_t * pOldQuery,
 		}
 
 		CSphFilter tFilter;
-		tFilter.m_sAttrName = pSchema->m_dAttrs[iAttr].m_sName;
+		tFilter.m_sAttrName = pSchema->GetAttr(iAttr).m_sName;
 		tFilter.m_iValues = pOldQuery->m_iGroups;
 		tFilter.m_pValues = pOldQuery->m_pGroups;
 		tFilter.m_uMinValue = pOldQuery->m_iMinGID;
@@ -2097,8 +2111,8 @@ bool FixupQuery ( CSphQuery * pQuery, OldQuery_t * pOldQuery,
 	if ( pOldQuery->m_iMinTS!=0 || pOldQuery->m_iMaxTS!=UINT_MAX )
 	{
 		int iAttr = -1;
-		ARRAY_FOREACH ( i, pSchema->m_dAttrs ) 
-			if ( pSchema->m_dAttrs[i].m_eAttrType==SPH_ATTR_TIMESTAMP )
+		for ( int i=0; i<pSchema->GetAttrsCount(); i++ ) 
+			if ( pSchema->GetAttr(i).m_eAttrType==SPH_ATTR_TIMESTAMP )
 		{
 			iAttr = i;
 			break;
@@ -2111,7 +2125,7 @@ bool FixupQuery ( CSphQuery * pQuery, OldQuery_t * pOldQuery,
 		}
 
 		CSphFilter tFilter;
-		tFilter.m_sAttrName = pSchema->m_dAttrs[iAttr].m_sName;
+		tFilter.m_sAttrName = pSchema->GetAttr(iAttr).m_sName;
 		tFilter.m_uMinValue = pOldQuery->m_iMinTS;
 		tFilter.m_uMaxValue = pOldQuery->m_iMaxTS;
 		pQuery->m_dFilters.Add ( tFilter );
@@ -2752,45 +2766,51 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		if ( !bAllEqual )
 		{
 			int iCur = 0;
-			int iOutAttrs = pRes->m_tSchema.m_dAttrs.GetLength();
 			int * dMapFrom = NULL;
-			DWORD * dOutAttrs = NULL;
 
-			if ( iOutAttrs )
-			{
-				dMapFrom = new int [ iOutAttrs ];
-				dOutAttrs = new DWORD [ iOutAttrs ];
-			}
+			CSphDocInfo tRow;
+			tRow.Reset ( pRes->m_tSchema.GetRowSize() );
+
+			if ( tRow.m_iRowitems )
+				dMapFrom = new int [ pRes->m_tSchema.GetAttrsCount() ];
 
 			ARRAY_FOREACH ( iSchema, dSchemas )
 			{
-				assert ( iOutAttrs<=dSchemas[iSchema].m_dAttrs.GetLength() );
+				assert ( tRow.m_iRowitems<=dSchemas[iSchema].GetRowSize() );
 
-				ARRAY_FOREACH ( i, pRes->m_tSchema.m_dAttrs )
+				for ( int i=0; i<pRes->m_tSchema.GetAttrsCount(); i++ ) 
 				{
-					dMapFrom[i] = dSchemas[iSchema].GetAttrIndex ( pRes->m_tSchema.m_dAttrs[i].m_sName.cstr() );
+					dMapFrom[i] = dSchemas[iSchema].GetAttrIndex ( pRes->m_tSchema.GetAttr(i).m_sName.cstr() );
 					assert ( dMapFrom[i]>=0 );
 				}
 
 				for ( int i=iCur; i<iCur+dMatchCounts[iSchema]; i++ )
 				{
 					CSphTaggedMatch & tMatch = pRes->m_dMatches[i];
-					tMatch.m_iAttrs = iOutAttrs;
-					if ( tMatch.m_iAttrs )
-					{
-						for ( int j=0; j<iOutAttrs; j++ )
-							dOutAttrs[j] = tMatch.m_pAttrs[dMapFrom[j]];
+					assert ( tMatch.m_iRowitems>=tRow.m_iRowitems );
 
-						for ( int j=0; j<iOutAttrs; j++ )
-							tMatch.m_pAttrs[j] = dOutAttrs[j];
+					if ( tRow.m_iRowitems )
+					{
+						for ( int j=0; j<pRes->m_tSchema.GetAttrsCount(); j++ ) 
+						{
+							const CSphColumnInfo & tDst = pRes->m_tSchema.GetAttr(j);
+							const CSphColumnInfo & tSrc = dSchemas[iSchema].GetAttr ( dMapFrom[j] );
+
+							tRow.SetAttr ( tDst.m_iBitOffset, tDst.m_iBitCount,
+								tMatch.GetAttr ( tSrc.m_iBitOffset, tSrc.m_iBitCount ) );
+						}
+
+						for ( int j=0; j<tRow.m_iRowitems; j++ )
+							tMatch.m_pRowitems[j] = tRow.m_pRowitems[j];
 					}
+					tMatch.m_iRowitems = tRow.m_iRowitems;
 				}
+
 				iCur += dMatchCounts[iSchema];
 			}
 
 			assert ( iCur==pRes->m_dMatches.GetLength() );
 			SafeDeleteArray ( dMapFrom );
-			SafeDeleteArray ( dOutAttrs );
 		}
 
 		// create queue
@@ -2803,7 +2823,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 		// kill all dupes
 		int iDupes = 0;
-		if ( tQuery.GetGroupByAttr()>=0 )
+		if ( tQuery.m_iGroupbyOffset>=0 )
 		{
 			// groupby sorters does that automagically
 			ARRAY_FOREACH ( i, pRes->m_dMatches )
@@ -2846,7 +2866,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		sTimeBuf [ strlen(sTimeBuf)-1 ] = '\0';
 
 		sGroupBuf[0] = '\0';
-		if ( tQuery.GetGroupByAttr()>=0 )
+		if ( tQuery.m_iGroupbyOffset>=0 )
 			snprintf ( sGroupBuf, sizeof(sGroupBuf), " @%s", tQuery.m_sGroupBy.cstr() );
  
 		static const char * sModes [ SPH_MATCH_TOTAL ] = { "all", "any", "phr", "bool", "ext" };
@@ -2880,17 +2900,17 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		iRespLen += 8; // 4 for field count, 4 for attr count
 		ARRAY_FOREACH ( i, pRes->m_tSchema.m_dFields )
 			iRespLen += 4 + strlen ( pRes->m_tSchema.m_dFields[i].m_sName.cstr() ); // namelen, name
-		ARRAY_FOREACH ( i, pRes->m_tSchema.m_dAttrs )
-			iRespLen += 8 + strlen ( pRes->m_tSchema.m_dAttrs[i].m_sName.cstr() ); // namelen, name, type
+		for ( int i=0; i<pRes->m_tSchema.GetAttrsCount(); i++ )
+			iRespLen += 8 + strlen ( pRes->m_tSchema.GetAttr(i).m_sName.cstr() ); // namelen, name, type
 	}
 
 	int iCount = Max ( Min ( tQuery.m_iLimit, pRes->m_dMatches.GetLength()-tQuery.m_iOffset ), 0 );
 	if ( iVer<0x102 )
 		iRespLen += 16*iCount; // matches
 	else if ( iVer<0x108 )
-		iRespLen += ( 8+4*pRes->m_tSchema.m_dAttrs.GetLength() )*iCount; // matches
+		iRespLen += ( 8+4*pRes->m_tSchema.GetAttrsCount() )*iCount; // matches
 	else
-		iRespLen += 4 + ( 8+4*USE_64BIT+4*pRes->m_tSchema.m_dAttrs.GetLength() )*iCount; // id64 tag and matches
+		iRespLen += 4 + ( 8+4*USE_64BIT+4*pRes->m_tSchema.GetAttrsCount() )*iCount; // id64 tag and matches
 
 	for ( int i=0; i<pRes->m_iNumWords; i++ ) // per-word stats
 		iRespLen += 12 + strlen ( pRes->m_tWordStats[i].m_sWord.cstr() ); // wordlen, word, docs, hits
@@ -2916,29 +2936,39 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		ARRAY_FOREACH ( i, pRes->m_tSchema.m_dFields )
 			tOut.SendString ( pRes->m_tSchema.m_dFields[i].m_sName.cstr() );
 
-		tOut.SendInt ( pRes->m_tSchema.m_dAttrs.GetLength() );
-		ARRAY_FOREACH ( i, pRes->m_tSchema.m_dAttrs )
+		tOut.SendInt ( pRes->m_tSchema.GetAttrsCount() );
+		for ( int i=0; i<pRes->m_tSchema.GetAttrsCount(); i++ )
 		{
-			tOut.SendString ( pRes->m_tSchema.m_dAttrs[i].m_sName.cstr() );
-			tOut.SendDword ( (DWORD)pRes->m_tSchema.m_dAttrs[i].m_eAttrType );
+			tOut.SendString ( pRes->m_tSchema.GetAttr(i).m_sName.cstr() );
+			tOut.SendDword ( (DWORD)pRes->m_tSchema.GetAttr(i).m_eAttrType );
 		}
 	}
 
 	// send matches
-	int iGIDIndex = -1;
-	int iTSIndex = -1;
+	int iGIDOffset = -1, iGIDCount = -1;
+	int iTSOffset = -1, iTSCount = -1;
 	if ( iVer<=0x101 )
-		ARRAY_FOREACH ( i, pRes->m_tSchema.m_dAttrs )
 	{
-		if ( iTSIndex<0 && pRes->m_tSchema.m_dAttrs[i].m_eAttrType==SPH_ATTR_TIMESTAMP )
-			iTSIndex = i;
-		if ( iGIDIndex<0 && pRes->m_tSchema.m_dAttrs[i].m_eAttrType==SPH_ATTR_INTEGER )
-			iGIDIndex = i;
+		for ( int i=0; i<pRes->m_tSchema.GetAttrsCount(); i++ )
+		{
+			const CSphColumnInfo & tAttr = pRes->m_tSchema.GetAttr(i);
+			if ( iTSOffset<0 && tAttr.m_eAttrType==SPH_ATTR_TIMESTAMP )
+			{
+				iTSOffset = tAttr.m_iBitOffset;
+				iTSCount = tAttr.m_iBitCount;
+			}
+			if ( iGIDOffset<0 && tAttr.m_eAttrType==SPH_ATTR_INTEGER )
+			{
+				iGIDOffset = tAttr.m_iBitOffset;
+				iGIDCount = tAttr.m_iBitCount;
+			}
+		}
 	}
 
 	tOut.SendInt ( iCount );
 	if ( iVer>=0x108 )
 		tOut.SendInt ( USE_64BIT );
+
 	for ( int i=0; i<iCount; i++ )
 	{
 		const CSphMatch & tMatch = pRes->m_dMatches[tQuery.m_iOffset+i];
@@ -2951,15 +2981,19 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 		if ( iVer<=0x101 )
 		{
-			tOut.SendDword ( iGIDIndex>=0 ? tMatch.m_pAttrs[iGIDIndex] : 1 );
-			tOut.SendDword ( iTSIndex>=0 ? tMatch.m_pAttrs[iTSIndex] : 1 );
+			tOut.SendDword ( iGIDOffset>=0 ? tMatch.GetAttr ( iGIDOffset, iGIDCount ) : 1 );
+			tOut.SendDword ( iTSOffset>=0 ? tMatch.GetAttr ( iTSOffset, iTSCount ) : 1 );
 			tOut.SendInt ( tMatch.m_iWeight );
 		} else
 		{
 			tOut.SendInt ( tMatch.m_iWeight );
-			assert ( tMatch.m_iAttrs==pRes->m_tSchema.m_dAttrs.GetLength() );
-			for ( int j=0; j<tMatch.m_iAttrs; j++ )
-				tOut.SendDword ( tMatch.m_pAttrs[j] );
+
+			assert ( tMatch.m_iRowitems==pRes->m_tSchema.GetRowSize() );
+			for ( int j=0; j<pRes->m_tSchema.GetAttrsCount(); j++ )
+			{
+				const CSphColumnInfo & tAttr = pRes->m_tSchema.GetAttr(j);
+				tOut.SendDword ( tMatch.GetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount ) );
+			}
 		}
 	}
 	tOut.SendInt ( pRes->m_dMatches.GetLength() );
@@ -3230,10 +3264,10 @@ void RotateIndex ( ServedIndex_t & tIndex, const char * sIndex )
 	g_iHUP = 0;
 
 	// check files
-	const int EXT_COUNT = 5;
-	const char * dNew[EXT_COUNT] = { ".new.sph", ".new.spa", ".new.spi", ".new.spd", ".new.spp" };
-	const char * dOld[EXT_COUNT] = { ".old.sph", ".old.spa", ".old.spi", ".old.spd", ".old.spp" };
-	const char * dCur[EXT_COUNT] = { ".sph", ".spa", ".spi", ".spd", ".spp" };
+	const int EXT_COUNT = 6;
+	const char * dNew[EXT_COUNT] = { ".new.sph", ".new.spa", ".new.spi", ".new.spd", ".new.spp", ".new.spm" };
+	const char * dOld[EXT_COUNT] = { ".old.sph", ".old.spa", ".old.spi", ".old.spd", ".old.spp", ".old.spm" };
+	const char * dCur[EXT_COUNT] = { ".sph", ".spa", ".spi", ".spd", ".spp", ".spm" };
 
 	for ( int i=0; i<EXT_COUNT; i++ )
 	{

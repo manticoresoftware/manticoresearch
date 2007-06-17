@@ -327,26 +327,31 @@ struct CSphWordHit
 	DWORD			m_iWordPos;		///< word position in current document
 };
 
+/// row entry (storage only, does not necessarily map 1:1 to attributes)
+typedef DWORD		CSphRowitem;
+const CSphRowitem	ROWITEM_MAX		= UINT_MAX;
+const int			ROWITEM_BITS	= 8*sizeof(CSphRowitem);
+
 
 /// document info
 struct CSphDocInfo
 {
-	SphDocID_t	m_iDocID;	///< document ID
-	int			m_iAttrs;	///< attribute count (FIXME! invariant over index; stored for assignment operator)
-	DWORD *		m_pAttrs;	///< attribute values
+	SphDocID_t		m_iDocID;		///< document ID
+	int				m_iRowitems;	///< row items count
+	CSphRowitem *	m_pRowitems;	///< row data
 
 	/// ctor. clears everything
 	CSphDocInfo ()
 		: m_iDocID ( 0 )
-		, m_iAttrs ( 0 )
-		, m_pAttrs ( NULL )
+		, m_iRowitems ( 0 )
+		, m_pRowitems ( NULL )
 	{
 	}
 
 	/// copy ctor. just in case
 	CSphDocInfo ( const CSphDocInfo & rhs )
-		: m_iAttrs ( 0 )
-		, m_pAttrs ( NULL )
+		: m_iRowitems ( 0 )
+		, m_pRowitems ( NULL )
 	{
 		*this = rhs;
 	}
@@ -354,19 +359,19 @@ struct CSphDocInfo
 	/// dtor. frees everything
 	~CSphDocInfo ()
 	{
-		SafeDeleteArray ( m_pAttrs );
+		SafeDeleteArray ( m_pRowitems );
 	}
 
 	/// reset
-	void Reset ( int iAttrs )
+	void Reset ( int iNewRowitems )
 	{
 		m_iDocID = 0;
-		if ( iAttrs!=m_iAttrs )
+		if ( iNewRowitems!=m_iRowitems )
 		{
-			m_iAttrs = iAttrs;
-			SafeDeleteArray ( m_pAttrs );
-			if ( m_iAttrs )
-				m_pAttrs = new DWORD [ m_iAttrs ];
+			m_iRowitems = iNewRowitems;
+			SafeDeleteArray ( m_pRowitems );
+			if ( m_iRowitems )
+				m_pRowitems = new CSphRowitem [ m_iRowitems ];
 		}
 	}
 
@@ -375,21 +380,58 @@ struct CSphDocInfo
 	{
 		m_iDocID = rhs.m_iDocID;
 
-		if ( m_iAttrs!=rhs.m_iAttrs )
+		if ( m_iRowitems!=rhs.m_iRowitems )
 		{
-			SafeDeleteArray ( m_pAttrs );
-			m_iAttrs = rhs.m_iAttrs;
-			if ( m_iAttrs )
-				m_pAttrs = new DWORD [ m_iAttrs ]; // OPTIMIZE! pool these allocs
+			SafeDeleteArray ( m_pRowitems );
+			m_iRowitems = rhs.m_iRowitems;
+			if ( m_iRowitems )
+				m_pRowitems = new CSphRowitem [ m_iRowitems ]; // OPTIMIZE! pool these allocs
 		}
 
-		if ( m_iAttrs )
+		if ( m_iRowitems )
 		{
-			assert ( m_iAttrs==rhs.m_iAttrs );
-			memcpy ( m_pAttrs, rhs.m_pAttrs, sizeof(DWORD)*m_iAttrs );
+			assert ( m_iRowitems==rhs.m_iRowitems );
+			memcpy ( m_pRowitems, rhs.m_pRowitems, sizeof(CSphRowitem)*m_iRowitems );
 		}
 
 		return *this;
+	}
+
+	/// get attr by item index
+	CSphRowitem GetAttr ( int iItem ) const
+	{
+		assert ( iItem>=0 && iItem<m_iRowitems );
+		return m_pRowitems[iItem];
+	}
+
+	/// get attr by bit offset/count
+	CSphRowitem GetAttr ( int iBitOffset, int iBitCount ) const
+	{
+		assert ( iBitOffset>=0 && iBitOffset<m_iRowitems*ROWITEM_BITS );
+		assert ( iBitCount>0 && iBitOffset+iBitCount<=m_iRowitems*ROWITEM_BITS );
+
+		int iItem = iBitOffset / ROWITEM_BITS;
+		if ( iBitCount==ROWITEM_BITS )
+			return m_pRowitems[iItem];
+
+		int iShift = iBitOffset % ROWITEM_BITS;
+		return ( m_pRowitems[iItem]>>iShift ) & ( (1UL<<iBitCount)-1 );
+	}
+
+	/// set attr by bit offset/count
+	void SetAttr ( int iBitOffset, int iBitCount, CSphRowitem uValue ) const
+	{
+		assert ( iBitOffset>=0 && iBitOffset<m_iRowitems*ROWITEM_BITS );
+		assert ( iBitCount>0 && iBitOffset+iBitCount<=m_iRowitems*ROWITEM_BITS );
+
+		int iItem = iBitOffset / ROWITEM_BITS;
+		if ( iBitCount==ROWITEM_BITS )
+			m_pRowitems[iItem] = uValue;
+
+		int iShift = iBitOffset % ROWITEM_BITS;
+		CSphRowitem uMask = ( (1UL<<iBitCount)-1 ) << iShift;
+		m_pRowitems[iItem] &= ~uMask;
+		m_pRowitems[iItem] |= ( uMask & (uValue<<iShift) );
 	}
 };
 
@@ -425,6 +467,7 @@ enum
 	SPH_ATTR_INTEGER	= 1,			///< this attr is just an integer
 	SPH_ATTR_TIMESTAMP	= 2,			///< this attr is a timestamp
 	SPH_ATTR_ORDINAL	= 3,			///< this attr is an ordinal string number (integer at search time, specially handled at indexing time)
+	SPH_ATTR_BOOL		= 4,			///< this attr is a boolean bit field
 
 	SPH_ATTR_MULTI		= 0x40000000UL	///< this attr has multiple values (0 or more)
 };
@@ -444,7 +487,11 @@ struct CSphColumnInfo
 {
 	CSphString		m_sName;		///< column name
 	DWORD			m_eAttrType;	///< attribute type
-	int				m_iIndex;		///< index into the result set
+
+	int				m_iIndex;		///< index into source result set
+	int				m_iRowitem;		///< index into document info row (only if attr spans whole rowitem; -1 otherwise)
+	int				m_iBitOffset;	///< bit offset into row
+	int				m_iBitCount;	///< bit count
 
 	ESphAttrSrc		m_eSrc;			///< attr source (for multi-valued attrs only)
 	CSphString		m_sQuery;		///< query to retrieve values (for multi-valued attrs only)
@@ -454,6 +501,10 @@ struct CSphColumnInfo
 	CSphColumnInfo ( const char * sName=NULL, DWORD eType=SPH_ATTR_NONE )
 		: m_sName ( sName )
 		, m_eAttrType ( eType )
+		, m_iIndex ( -1 )
+		, m_iRowitem ( -1 )
+		, m_iBitOffset ( -1 )
+		, m_iBitCount ( -1 )
 		, m_eSrc ( SPH_ATTRSRC_NONE )
 	{
 		m_sName.ToLower ();
@@ -472,30 +523,50 @@ enum ESphSchemaCompare
 /// source schema
 struct CSphSchema
 {
-	CSphString									m_sName;		///< my human-readable name
-	CSphVector<CSphColumnInfo,SPH_MAX_FIELDS>	m_dFields;		///< my fulltext-searchable fields
-	CSphVector<CSphColumnInfo,8>				m_dAttrs;		///< my per-document attributes
+	CSphString						m_sName;		///< my human-readable name
+	CSphVector<CSphColumnInfo,8>	m_dFields;		///< my fulltext-searchable fields
+
+public:
 
 	/// ctor
-						CSphSchema ( const char * sName="(nameless)" ) : m_sName ( sName ) {}
+							CSphSchema ( const char * sName="(nameless)" ) : m_sName ( sName ) {}
 
 	/// get field index by name
 	/// returns -1 if not found
-	int					GetFieldIndex ( const char * sName ) const;
+	int						GetFieldIndex ( const char * sName ) const;
 
 	/// get attribute index by name
 	/// returns -1 if not found
-	int					GetAttrIndex ( const char * sName ) const;
+	int						GetAttrIndex ( const char * sName ) const;
 
 	/// checks if two schemas match
 	/// if result is not SPH_SCHEMAS_EQUAL, human-readable error/warning message is put to sError
-	ESphSchemaCompare	CompareTo ( const CSphSchema & rhs, CSphString & sError ) const;
+	ESphSchemaCompare		CompareTo ( const CSphSchema & rhs, CSphString & sError ) const;
 
 	/// return non-virtual attributes count
-	int					GetRealAttrCount () const;
+	int						GetRealAttrCount () const;
 
-	/// reset
-	void				Reset () { m_dFields.Reset(); m_dAttrs.Reset(); }
+	/// reset fields and attrs
+	void					Reset ();
+
+	/// reset attrs only
+	void					ResetAttrs ();
+
+	/// get row size
+	int						GetRowSize () const				{ return m_dRowUsed.GetLength(); }
+
+	/// get attrs count
+	int						GetAttrsCount () const			{ return m_dAttrs.GetLength(); }
+
+	/// get attr
+	const CSphColumnInfo &	GetAttr ( int iIndex ) const	{ return m_dAttrs[iIndex]; }
+
+	/// add attr
+	void					AddAttr ( const CSphColumnInfo & tAttr );
+
+protected:
+	CSphVector<CSphColumnInfo,8>	m_dAttrs;		///< all my attributes
+	CSphVector<int,8>				m_dRowUsed;		///< row map (amount of used bits in each rowitem)
 };
 
 
@@ -877,8 +948,8 @@ struct CSphMatch : public CSphDocInfo
 inline void Swap ( CSphMatch & a, CSphMatch & b )
 {
 	Swap ( a.m_iDocID, b.m_iDocID );
-	Swap ( a.m_iAttrs, b.m_iAttrs );
-	Swap ( a.m_pAttrs, b.m_pAttrs );
+	Swap ( a.m_iRowitems, b.m_iRowitems );
+	Swap ( a.m_pRowitems, b.m_pRowitems );
 	Swap ( a.m_iWeight, b.m_iWeight );
 }
 
@@ -896,8 +967,8 @@ struct CSphTaggedMatch : public CSphMatch
 inline void Swap ( CSphTaggedMatch & a, CSphTaggedMatch & b )
 {
 	Swap ( a.m_iDocID, b.m_iDocID );
-	Swap ( a.m_iAttrs, b.m_iAttrs );
-	Swap ( a.m_pAttrs, b.m_pAttrs );
+	Swap ( a.m_iRowitems, b.m_iRowitems );
+	Swap ( a.m_pRowitems, b.m_pRowitems );
 	Swap ( a.m_iWeight, b.m_iWeight );
 	Swap ( a.m_iTag, b.m_iTag );
 }
@@ -946,13 +1017,16 @@ class CSphFilter
 {
 public:
 	CSphString		m_sAttrName;	///< filtered attribute name
-	int				m_iAttrIndex;	///< filtered attribute index
 	DWORD			m_uMinValue;	///< min value, only used when m_iValues==0
 	DWORD			m_uMaxValue;	///< max value, only used when m_iValues==0
 	int				m_iValues;		///< values set size, default is 0
 	DWORD *			m_pValues;		///< values set. OWNED, WILL BE FREED IN DTOR.
 	bool			m_bExclude;		///< whether this is "include" or "exclude" filter (default is "include")
 	bool			m_bMva;			///< whether this filter is against multi-valued attribute
+
+	int				m_iAttr;		///< attr index into schema
+	int				m_iBitOffset;	///< attr bit offset into row
+	int				m_iBitCount;	///< attr bit count
 
 public:
 					CSphFilter ();
@@ -994,19 +1068,18 @@ public:
 	int				m_iRetryCount;	///< retry count, for distributed queries
 	int				m_iRetryDelay;	///< retry delay, for distributed queries
 
-protected:
-	int				m_iAttrs;		///< attribute count (necessary to instantiate group-by queues)
-	int				m_iGroupBy;		///< group-by attribute index
-	int				m_iDistinctAttr;///< distinct-counted attribute index
+public:
+	int				m_iRowitems;		///< row size (necessary to instantiate group-by queues)
+	int				m_iGroupbyOffset;	///< group-by attr bit offset
+	int				m_iGroupbyCount;	///< group-by attr bit count
+	int				m_iDistinctOffset;	///< distinct-counted attr bit offset
+	int				m_iDistinctCount;	///< distinct-counted attr bit count
 
 public:
 					CSphQuery ();								///< ctor, fills defaults
 					~CSphQuery ();								///< dtor, frees owned stuff
 
 	bool			SetSchema ( const CSphSchema & tSchema, CSphString & sError );	///< calc m_iAttrs, m_iGroupBy, m_iDistinct from schema
-	int				GetAttrsCount () const		{ return m_iAttrs;}
-	int				GetGroupByAttr () const		{ return m_iGroupBy; }
-	int				GetDistinctAttr () const	{ return m_iDistinctAttr; }
 };
 
 
@@ -1091,25 +1164,42 @@ struct CSphIndexProgress
 /// match comparator state
 struct CSphMatchComparatorState
 {
-	int				m_iAttr[5];		///< sort-by attributes indexes
-	DWORD			m_uAttrDesc;	///< sort order mask (if i-th bit is set, i-th attr order is DESC)
-	DWORD			m_iNow;			///< timestamp (for timesegments sorting mode)
+	static const int	MAX_ATTRS = 5;
+
+	int					m_iAttr[MAX_ATTRS];			///< sort-by attr index
+	int					m_iRowitem[MAX_ATTRS];		///< sort-by attr row item (-1 if not maps to full item)
+	int					m_iBitOffset[MAX_ATTRS];	///< sort-by attr bit offset into row
+	int					m_iBitCount[MAX_ATTRS];		///< sort-by attr bit count
+
+	DWORD				m_uAttrDesc;				///< sort order mask (if i-th bit is set, i-th attr order is DESC)
+	DWORD				m_iNow;						///< timestamp (for timesegments sorting mode)
 
 	/// create default empty state
 	CSphMatchComparatorState ()
 		: m_uAttrDesc ( 0 )
 		, m_iNow ( 0 )
 	{
-		for ( int i=0; i<(int)(sizeof(m_iAttr)/sizeof(int)); i++ )
+		for ( int i=0; i<MAX_ATTRS; i++ )
+		{
 			m_iAttr[i] = -1;
+			m_iRowitem[i] = -1;
+			m_iBitOffset[i] = -1;
+			m_iBitCount[i] = -1;
+		}
 	}
 
-	/// check if given attr index is used
-	bool HasAttr ( int iAttrIndex )
+	/// get my i-th attr from match
+	template < bool BITS > CSphRowitem GetAttr ( const CSphMatch & m, int i ) const;
+	template<> CSphRowitem GetAttr<false> ( const CSphMatch & m, int i ) const		{ return m.GetAttr ( m_iRowitem[i] ); }
+	template<> CSphRowitem GetAttr<true> ( const CSphMatch & m, int i ) const		{ return m.GetAttr ( m_iBitOffset[i], m_iBitCount[i] ); }
+
+	/// check if any of my attrs are bitfields
+	bool UsesBitfields ()
 	{
-		for ( int i=0; i<(int)(sizeof(m_iAttr)/sizeof(int)); i++ )
-			if ( m_iAttr[i]==iAttrIndex )
-				return true;
+		for ( int i=0; i<MAX_ATTRS; i++ )
+			if ( m_iAttr[i]>=0 )
+				if ( m_iBitCount[i]!=ROWITEM_BITS || (m_iBitOffset[i]%ROWITEM_BITS )!=0 )
+					return true;
 		return false;
 	}
 };

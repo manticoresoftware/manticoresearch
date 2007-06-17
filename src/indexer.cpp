@@ -42,6 +42,9 @@ bool			g_bBuildFreqs	= false;
 
 int				g_iMemLimit		= 0;
 
+const int		EXT_COUNT = 6;
+const char *	g_dExt[EXT_COUNT] = { "sph", "spa", "spi", "spd", "spp", "spm" };
+
 /////////////////////////////////////////////////////////////////////////////
 
 template < typename T > struct CSphMTFHashEntry
@@ -444,6 +447,7 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 	LOC_GETAA( tParams.m_dAttrs,			"sql_attr_uint",			SPH_ATTR_INTEGER );
 	LOC_GETAA( tParams.m_dAttrs,			"sql_attr_timestamp",		SPH_ATTR_TIMESTAMP );
 	LOC_GETAA( tParams.m_dAttrs,			"sql_attr_str2ordinal",		SPH_ATTR_ORDINAL );
+	LOC_GETAA( tParams.m_dAttrs,			"sql_attr_bool",			SPH_ATTR_BOOL );
 
 	// parse multi-attrs
 	for ( CSphVariant * pVal = hSource("sql_attr_multi"); pVal; pVal = pVal->m_pNext )
@@ -749,14 +753,12 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 				char sTo [ SPH_MAX_FILENAME_LEN ];
 
 				int iExt;
-				const int EXT_COUNT = 5;
-				const char * dExt[EXT_COUNT] = { "sph", "spa", "spi", "spd", "spp" };
 				for ( iExt=0; iExt<EXT_COUNT; iExt++ )
 				{
-					snprintf ( sFrom, sizeof(sFrom), "%s.tmp.%s", sPath, dExt[iExt] );
+					snprintf ( sFrom, sizeof(sFrom), "%s.tmp.%s", sPath, g_dExt[iExt] );
 					sFrom [ sizeof(sFrom)-1 ] = '\0';
 
-					snprintf ( sTo, sizeof(sTo), "%s.new.%s", sPath, dExt[iExt] );
+					snprintf ( sTo, sizeof(sTo), "%s.new.%s", sPath, g_dExt[iExt] );
 					sTo [ sizeof(sTo)-1 ] = '\0';
 
 					if ( rename ( sFrom, sTo ) )
@@ -849,17 +851,15 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 	char sTo [ SPH_MAX_FILENAME_LEN ];
 
 	int iExt;
-	const int EXT_COUNT = 5;
-	const char * dExt[EXT_COUNT] = { "sph", "spa", "spi", "spd", "spp" };
 	for ( iExt=0; iExt<EXT_COUNT; iExt++ )
 	{
-		snprintf ( sFrom, sizeof(sFrom), "%s.%s.tmp", sPath, dExt[iExt] );
+		snprintf ( sFrom, sizeof(sFrom), "%s.%s.tmp", sPath, g_dExt[iExt] );
 		sFrom [ sizeof(sFrom)-1 ] = '\0';
 
 		if ( g_bRotate )
-			snprintf ( sTo, sizeof(sTo), "%s.new.%s", sPath, dExt[iExt] );
+			snprintf ( sTo, sizeof(sTo), "%s.new.%s", sPath, g_dExt[iExt] );
 		else
-			snprintf ( sTo, sizeof(sTo), "%s.%s", sPath, dExt[iExt] );
+			snprintf ( sTo, sizeof(sTo), "%s.%s", sPath, g_dExt[iExt] );
 
 		sTo [ sizeof(sTo)-1 ] = '\0';
 

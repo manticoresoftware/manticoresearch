@@ -409,20 +409,6 @@ public:
 		return m_pData [ iIndex ];
 	}
 
-	/// accessor by backward index
-	const T & operator () ( int iIndex ) const
-	{
-		assert ( iIndex<0 && iIndex>=-m_iLength );
-		return m_pData [ m_iLength+iIndex ];
-	}
-
-	/// accessor by backward index
-	T & operator () ( int iIndex )
-	{
-		assert ( iIndex<0 && iIndex>=-m_iLength );
-		return m_pData [ m_iLength+iIndex ];
-	}
-
 	/// copy
 	const CSphVector < T, INITIAL_LIMIT > & operator = ( const CSphVector < T, INITIAL_LIMIT > & rhs )
 	{

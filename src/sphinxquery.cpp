@@ -818,7 +818,7 @@ void CSphExtendedQueryParser::PopNode ( bool bReject )
 	if ( m_dStack.GetLength()>=2 )
 	{
 		// collapse last pair of nodes
-		m_dStack(-2).m_pNode->Submit ( m_dStack.Last().m_pNode, m_dStack.Last().m_bAny );
+		m_dStack[ m_dStack.GetLength()-2 ].m_pNode->Submit ( m_dStack.Last().m_pNode, m_dStack.Last().m_bAny );
 	} else
 	{
 		// submit top-level expr to proper list

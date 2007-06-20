@@ -413,10 +413,37 @@ bool ParseMultiAttr ( const char * sBuf, CSphColumnInfo & tAttr, const char * sS
 	for ( CSphVariant * pVal = hSource(_key); pVal; pVal = pVal->m_pNext ) \
 		_arg.Add ( pVal->cstr() );
 
-// get array of attrs
-#define LOC_GETAA(_arg,_key,_type) \
-	for ( CSphVariant * pVal = hSource(_key); pVal; pVal = pVal->m_pNext ) \
-		_arg.Add ( CSphColumnInfo ( pVal->cstr(), _type ) );
+
+void SqlAttrsConfigure ( CSphSourceParams_SQL & tParams, const CSphVariant * pHead, DWORD uAttrType, const char * sSourceName )
+{
+	for ( const CSphVariant * pCur = pHead; pCur; pCur= pCur->m_pNext )
+	{
+		CSphColumnInfo tCol ( pCur->cstr(), uAttrType );
+		char * pColon = strchr ( const_cast<char*>(tCol.m_sName.cstr()), ':' );
+		if ( pColon )
+		{
+			*pColon = '\0';
+
+			if ( uAttrType==SPH_ATTR_INTEGER )
+			{
+				int iBits = strtol ( pColon+1, NULL, 10 );
+				if ( iBits<=0 || iBits>ROWITEM_BITS )
+				{
+					fprintf ( stdout, "WARNING: source '%s': attribute '%s': invalid bitcount=%d (bitcount ignored)\n",
+						sSourceName, tCol.m_sName.cstr(), iBits );
+					iBits = -1;
+				}
+				tCol.m_iBitCount = iBits;
+
+			} else
+			{
+				fprintf ( stdout, "WARNING: source '%s': attribute '%s': bitcount is only supported for integer types\n",
+					sSourceName, tCol.m_sName.cstr() );
+			}
+		}
+		tParams.m_dAttrs.Add ( tCol );
+	}
+}
 
 
 bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSection & hSource, const char * sSourceName )
@@ -440,14 +467,14 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 	LOC_GETAS( tParams.m_dQueryPostIndex,	"sql_query_post_index" );
 	LOC_GETI ( tParams.m_iRangeStep,		"sql_range_step" );
 
-	LOC_GETAA( tParams.m_dAttrs,			"sql_group_column",			SPH_ATTR_INTEGER );
-	LOC_GETAA( tParams.m_dAttrs,			"sql_date_column",			SPH_ATTR_TIMESTAMP );
-	LOC_GETAA( tParams.m_dAttrs,			"sql_str2ordinal_column",	SPH_ATTR_ORDINAL );
+	SqlAttrsConfigure ( tParams,	hSource("sql_group_column"),		SPH_ATTR_INTEGER,	sSourceName );
+	SqlAttrsConfigure ( tParams,	hSource("sql_date_column"),			SPH_ATTR_TIMESTAMP,	sSourceName );
+	SqlAttrsConfigure ( tParams,	hSource("sql_str2ordinal_column"),	SPH_ATTR_ORDINAL,	sSourceName );
 
-	LOC_GETAA( tParams.m_dAttrs,			"sql_attr_uint",			SPH_ATTR_INTEGER );
-	LOC_GETAA( tParams.m_dAttrs,			"sql_attr_timestamp",		SPH_ATTR_TIMESTAMP );
-	LOC_GETAA( tParams.m_dAttrs,			"sql_attr_str2ordinal",		SPH_ATTR_ORDINAL );
-	LOC_GETAA( tParams.m_dAttrs,			"sql_attr_bool",			SPH_ATTR_BOOL );
+	SqlAttrsConfigure ( tParams,	hSource("sql_attr_uint"),			SPH_ATTR_INTEGER,	sSourceName );
+	SqlAttrsConfigure ( tParams,	hSource("sql_attr_timestamp"),		SPH_ATTR_TIMESTAMP,	sSourceName );
+	SqlAttrsConfigure ( tParams,	hSource("sql_attr_str2ordinal"),	SPH_ATTR_ORDINAL,	sSourceName );
+	SqlAttrsConfigure ( tParams,	hSource("sql_attr_bool"),			SPH_ATTR_BOOL,		sSourceName );
 
 	// parse multi-attrs
 	for ( CSphVariant * pVal = hSource("sql_attr_multi"); pVal; pVal = pVal->m_pNext )

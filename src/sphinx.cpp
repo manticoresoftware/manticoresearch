@@ -1998,7 +1998,7 @@ private:
 	static const int			WRITE_BUFFER_SIZE		= 262144;	///< my write buffer size
 
 	static const DWORD			INDEX_MAGIC_HEADER		= 0x58485053;	///< my magic 'SPHX' header
-	static const DWORD			INDEX_FORMAT_VERSION	= 4;			///< my format version
+	static const DWORD			INDEX_FORMAT_VERSION	= 5;			///< my format version
 
 private:
 	// common stuff
@@ -3512,10 +3512,22 @@ void CSphSchema::AddAttr ( const CSphColumnInfo & tCol )
 
 	m_dAttrs.Add ( tCol );
 
+	int iBits = ROWITEM_BITS;
+	if ( tCol.m_iBitCount>0 )
+		iBits = tCol.m_iBitCount;
 	if ( tCol.m_eAttrType==SPH_ATTR_BOOL )
-	{
-		int iBits = 1;
+		iBits = 1;
 
+	m_dAttrs.Last().m_iBitCount = iBits;
+
+	if ( iBits==ROWITEM_BITS )
+	{
+		m_dAttrs.Last().m_iRowitem = m_dRowUsed.GetLength();
+		m_dAttrs.Last().m_iBitOffset = m_dRowUsed.GetLength()*ROWITEM_BITS;
+		m_dRowUsed.Add ( ROWITEM_BITS );
+
+	} else
+	{
 		int iItem;
 		for ( iItem=0; iItem<m_dRowUsed.GetLength(); iItem++ )
 			if ( m_dRowUsed[iItem]+iBits<=ROWITEM_BITS )
@@ -3525,17 +3537,7 @@ void CSphSchema::AddAttr ( const CSphColumnInfo & tCol )
 
 		m_dAttrs.Last().m_iRowitem = -1;
 		m_dAttrs.Last().m_iBitOffset = iItem*ROWITEM_BITS + m_dRowUsed[iItem];
-		m_dAttrs.Last().m_iBitCount = iBits;
-
 		m_dRowUsed[iItem] += iBits;
-
-	} else
-	{
-		m_dAttrs.Last().m_iRowitem = m_dRowUsed.GetLength();
-		m_dAttrs.Last().m_iBitOffset = m_dRowUsed.GetLength()*ROWITEM_BITS;
-		m_dAttrs.Last().m_iBitCount = ROWITEM_BITS;
-
-		m_dRowUsed.Add ( ROWITEM_BITS );
 	}
 }
 
@@ -4614,6 +4616,10 @@ void CSphIndex_VLN::WriteSchemaColumn ( CSphWriter & fdInfo, const CSphColumnInf
 	fdInfo.PutDword ( iLen );
 	fdInfo.PutBytes ( tCol.m_sName.cstr(), iLen );
 	fdInfo.PutDword ( tCol.m_eAttrType );
+
+	fdInfo.PutDword ( tCol.m_iRowitem );
+	fdInfo.PutDword ( tCol.m_iBitOffset );
+	fdInfo.PutDword ( tCol.m_iBitCount );
 }
 
 
@@ -4622,6 +4628,18 @@ void CSphIndex_VLN::ReadSchemaColumn ( CSphReader_VLN & rdInfo, CSphColumnInfo &
 	tCol.m_sName = rdInfo.GetString ();
 	tCol.m_sName.ToLower ();
 	tCol.m_eAttrType = rdInfo.GetDword ();
+
+	if ( m_uVersion>=5 )
+	{
+		tCol.m_iRowitem = rdInfo.GetDword ();
+		tCol.m_iBitOffset = rdInfo.GetDword ();
+		tCol.m_iBitCount = rdInfo.GetDword ();
+	} else
+	{
+		tCol.m_iRowitem = -1;
+		tCol.m_iBitOffset = -1;
+		tCol.m_iBitCount = -1;
+	}
 }
 
 
@@ -10673,8 +10691,6 @@ bool CSphSource_SQL::IterateHitsStart ()
 		}
 
 		CSphColumnInfo tCol ( sName );
-		tCol.m_iIndex = i+1;
-
 		ARRAY_FOREACH ( j, m_tParams.m_dAttrs )
 			if ( !strcasecmp ( tCol.m_sName.cstr(), m_tParams.m_dAttrs[j].m_sName.cstr() ) )
 		{
@@ -10689,12 +10705,12 @@ bool CSphSource_SQL::IterateHitsStart ()
 				return 0;
 			}
 
+			tCol = tAttr;
 			dFound[j] = true;
 			break;
 		}
 
-		tCol.m_iBitCount = ( tCol.m_eAttrType==SPH_ATTR_BOOL ) ? 1 : sizeof(CSphRowitem);
-
+		tCol.m_iIndex = i+1;
 		if ( tCol.m_eAttrType==SPH_ATTR_NONE )
 			m_tSchema.m_dFields.Add ( tCol );
 		else

@@ -126,22 +126,31 @@ source src1
 	# sql_attr_uint is used to declare unsigned integer attributes.
 	# sql_group_column is deprecated alias for sql_attr_uint.
 	#
+	# you can specify bit count for integer attributes by appending
+	# ':BITCOUNT' to attribute name (see examples below). such bitfields
+	# would be packed together in 32-bit chunks, to reduce storage space
+	# requirements.
+	#
+	# sql_attr_bool is used to declared boolean attributes.
+	# these are packed to 1 bit of storage (along with other bitfields).
+	#
 	# sql_attr_timestamp is used to declare UNIX timestamp attributes.
 	# sql_date_column is deprecated alias for sql_attr_timestamp.
 	#
-	# sql_attr_str2ordinal is used to declare integer attributes which 
+	# sql_attr_str2ordinal is used to declare integer attributes whose
 	# values are computed as ordinal numbers of corresponding column value
 	# in sorted list of column values. WARNING, all such strings values
 	# are going to be stored in RAM while indexing, and "C" locale will
 	# be used when sorting!
 	# sql_str2ordinal_column is deprecated alias for sql_attr_str2ordinal.
 	#
-	# starting with 0.9.7, there may be multiple attribute columns specified.
+	# there may be multiple attribute columns specified.
 	# here's an example for that mentioned posts table:
 	#
 	# sql_attr_uint = author_id
-	# sql_attr_uint = forum_id
+	# sql_attr_uint = forum_id:9 # 9 bits for forum id
 	# sql_attr_uint = thread_id
+	# sql_attr_uint = country_id:12 # 12 bits for country id
 	# sql_attr_timestamp = post_unix_timestamp
 	# sql_attr_timestamp = last_edit_unix_timestamp
 	#
@@ -584,9 +593,9 @@ searchd
 	# (16+ bytes per match) in match sorting phase; so blindly raising
 	# it to 1 million is definitely NOT recommended
 	#
-	# starting from 0.9.7, it can be decreased on the fly through
-	# the corresponding API call; increasing is prohibited to protect
-	# against malicious and/or malformed requests
+	# max_matches can be decreased on the fly through the corresponding
+	# API call; increasing is prohibited to protect against malicious
+	# and/or malformed requests
 	#
 	# default is 1000 (just like with Google)
 	max_matches			= 1000

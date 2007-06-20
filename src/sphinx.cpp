@@ -2715,15 +2715,17 @@ bool CSphCharsetDefinitionParser::Parse ( const char * sConfig, CSphVector<CSphR
 		// stray remap?
 		if ( m_pCurrent[0]=='-' && m_pCurrent[1]=='>' )
 		{
+			// parse and add
 			m_pCurrent += 2;
 			int iDest = ParseCharsetCode ();
 			if ( iDest<0 )
 				return false;
-
 			dRanges.Add ( CSphRemapRange ( iStart, iStart, iDest ) );
-			if ( *m_pCurrent!=',' )
-				return Error ( "syntax error" );
-			m_pCurrent++;
+
+			// it's either end of line now, or must be followed by comma
+			if ( *m_pCurrent )
+				if ( *m_pCurrent++!=',' )
+					return Error ( "syntax error" );
 			continue;
 		}
 

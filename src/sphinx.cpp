@@ -10299,8 +10299,6 @@ bool CSphSource_Document::IterateHitsNext ()
 						tHit.m_iDocID = m_tDocInfo.m_iDocID;
 						tHit.m_iWordID = iWord;
 						tHit.m_iWordPos = (j << 24) | iPos;
-						if ( m_bCallWordCallback )
-							WordCallback ( (char*) sWord );
 					}
 					iPos++;
 					continue;
@@ -10327,8 +10325,6 @@ bool CSphSource_Document::IterateHitsNext ()
 							tHit.m_iDocID = m_tDocInfo.m_iDocID;
 							tHit.m_iWordID = iWord;
 							tHit.m_iWordPos = (j << 24) | iPos;
-							if ( m_bCallWordCallback )
-								WordCallback ( (char*) sWord );
 						}
 					}
 
@@ -10337,7 +10333,7 @@ bool CSphSource_Document::IterateHitsNext ()
 
 				iPos++; // FIXME! what if all prefixes were stopped?
 			}
-		}
+		} else
 		{
 			// index words only
 			while ( ( sWord = m_pTokenizer->GetToken() )!=NULL )
@@ -10349,8 +10345,6 @@ bool CSphSource_Document::IterateHitsNext ()
 					tHit.m_iDocID = m_tDocInfo.m_iDocID;
 					tHit.m_iWordID = iWord;
 					tHit.m_iWordPos = (j << 24) | iPos;
-					if ( m_bCallWordCallback )
-						WordCallback ( (char*) sWord );
 				}
 				iPos++;
 			}

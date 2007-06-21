@@ -667,21 +667,14 @@ protected:
 struct CSphSource_Document : CSphSource
 {
 	/// ctor
-							CSphSource_Document ( const char * sName ) : CSphSource ( sName ), m_bCallWordCallback ( false ) {}
+							CSphSource_Document ( const char * sName ) : CSphSource ( sName ) {}
 
 	/// my generic tokenizer
 	virtual bool			IterateHitsNext ();
 
-	/// this is what we can call for my descendants
-	virtual void			WordCallback ( char * ) {}
-
 	/// field data getter
 	/// to be implemented by descendants
 	virtual BYTE **			NextDocument () = 0;
-
-protected:
-	/// whether to call the callback
-	bool					m_bCallWordCallback;
 };
 
 

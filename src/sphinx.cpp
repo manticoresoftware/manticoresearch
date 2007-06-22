@@ -4599,6 +4599,9 @@ void CSphIndex_VLN::cidxHit ( CSphWordHit * hit, CSphRowitem * pAttrs )
 	///////////
 
 	// add hit delta
+	if ( hit->m_iWordPos==m_tLastHit.m_iWordPos )
+		return;
+
 	assert ( hit->m_iWordPos > m_tLastHit.m_iWordPos );	
 	m_wrHitlist.ZipInt ( hit->m_iWordPos - m_tLastHit.m_iWordPos );
 	m_tLastHit.m_iWordPos = hit->m_iWordPos;

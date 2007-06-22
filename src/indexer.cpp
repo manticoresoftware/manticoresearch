@@ -722,10 +722,11 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		CSphStopwordBuilderDict tDict;
 		ARRAY_FOREACH ( i, dSources )
 		{
+			CSphString sError;
 			dSources[i]->SetDict ( &tDict );
-			if ( !dSources[i]->Connect () || !dSources[i]->IterateHitsStart() )
+			if ( !dSources[i]->Connect ( sError ) || !dSources[i]->IterateHitsStart ( sError ) )
 				continue;
-			while ( dSources[i]->IterateHitsNext() );
+			while ( dSources[i]->IterateHitsNext ( sError ) );
 		}
 		tDict.Save ( g_sBuildStops, g_iTopStops, g_bBuildFreqs );
 

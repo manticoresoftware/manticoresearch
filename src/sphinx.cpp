@@ -5173,7 +5173,7 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAut
 	ARRAY_FOREACH ( iSource, dSources )
 	{
 		CSphSource * pSource = dSources[iSource];
-		if ( !pSource->Connect() )
+		if ( !pSource->Connect ( m_sLastError ) )
 			return 0;
 
 		ARRAY_FOREACH ( i, dMvaIndexes )
@@ -5183,10 +5183,10 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAut
 			int iRowitem = m_tSchema.GetAttr(iAttr).m_iRowitem;
 			assert ( iRowitem>=0 );
 
-			if ( !pSource->IterateMultivaluedStart(iAttr) )
+			if ( !pSource->IterateMultivaluedStart ( iAttr, m_sLastError ) )
 				return 0;
 
-			while ( pSource->IterateMultivaluedNext() )
+			while ( pSource->IterateMultivaluedNext () )
 			{
 				pMva->m_uDocID = pSource->m_tDocInfo.m_iDocID;
 				pMva->m_iAttr = i;
@@ -5395,8 +5395,12 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	}
 
 	// connect 1st source and fetch its schema
-	if ( !dSources[0]->Connect() || !dSources[0]->IterateHitsStart() || !dSources[0]->UpdateSchema ( &m_tSchema ) )
+	if ( !dSources[0]->Connect ( m_sLastError )
+		|| !dSources[0]->IterateHitsStart ( m_sLastError )
+		|| !dSources[0]->UpdateSchema ( &m_tSchema, m_sLastError ) )
+	{
 		return 0;
+	}
 
 	// check docinfo
 	if ( m_tSchema.GetAttrsCount()==0 )
@@ -5495,15 +5499,27 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 		// connect and check schema, if it's not the first one
 		CSphSource * pSource = dSources[iSource];
 		if ( iSource )
-			if ( !pSource->Connect() || !pSource->IterateHitsStart() || !pSource->UpdateSchema ( &m_tSchema ) )
+			if ( !pSource->Connect ( m_sLastError )
+				|| !pSource->IterateHitsStart ( m_sLastError )
+				|| !pSource->UpdateSchema ( &m_tSchema, m_sLastError ) )
+			{
 				return 0;
+			}
 
 		// setup infix indexing
 		pSource->SetEmitInfixes ( m_bPrefixesOnly, m_iMinInfixLen );
 
 		// fetch documents
-		while ( pSource->IterateHitsNext() )
+		for ( ;; )
 		{
+			// get next doc, and handle errors
+			if ( !pSource->IterateHitsNext ( m_sLastError ) )
+				return 0;
+
+			// check for eof
+			if ( !pSource->m_tDocInfo.m_iDocID )
+				break;
+
 			// show progress bar
 			if ( m_pProgress
 				&& ( ( pSource->GetStats().m_iTotalDocuments % 1000 )==0 ) )
@@ -10334,7 +10350,7 @@ void CSphSource::SetTokenizer ( ISphTokenizer * pTokenizer)
 }
 
 
-bool CSphSource::UpdateSchema ( CSphSchema * pInfo )
+bool CSphSource::UpdateSchema ( CSphSchema * pInfo, CSphString & sError )
 {
 	assert ( pInfo );
 	assert ( m_tSchema.m_dFields.GetLength()>0 );
@@ -10347,15 +10363,15 @@ bool CSphSource::UpdateSchema ( CSphSchema * pInfo )
 	}
 
 	// check it
-	CSphString sError;
-	ESphSchemaCompare eComp = m_tSchema.CompareTo ( *pInfo, sError );
+	CSphString sCompError;
+	ESphSchemaCompare eComp = m_tSchema.CompareTo ( *pInfo, sCompError );
 	if ( eComp==SPH_SCHEMAS_INCOMPATIBLE )
 	{
-		fprintf ( stdout, "ERROR: incompatible schemas: %s", sError.cstr() );
+		sError.SetSprintf ( "incompatible schemas: %s", sCompError.cstr() );
 		return false;
 	}
-	// FIXME!!! warn if schemas are compatible but not equal!
 
+	// FIXME!!! warn if schemas are compatible but not equal!
 	return true;
 }
 
@@ -10370,14 +10386,15 @@ void CSphSource::SetEmitInfixes ( bool bPrefixesOnly, int iMinLength )
 // DOCUMENT SOURCE
 /////////////////////////////////////////////////////////////////////////////
 
-bool CSphSource_Document::IterateHitsNext ()
+bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 {
 	assert ( m_pTokenizer );
 	PROFILE ( src_document );
 
-	BYTE ** dFields = NextDocument();
-
-	if ( !dFields || m_tDocInfo.m_iDocID==0 )
+	BYTE ** dFields = NextDocument ( sError );
+	if ( m_tDocInfo.m_iDocID==0 )
+		return true;
+	if ( !dFields )
 		return false;
 
 	m_tStats.m_iTotalDocuments++;
@@ -10483,17 +10500,6 @@ bool CSphSource_Document::IterateHitsNext ()
 }
 
 /////////////////////////////////////////////////////////////////////////////
-// PLAIN TEXT SOURCE
-/////////////////////////////////////////////////////////////////////////////
-
-BYTE ** CSphSource_Text::NextDocument()
-{
-	static BYTE * t;
-	t = NextText ();
-	return t ? &t : NULL;
-};
-
-/////////////////////////////////////////////////////////////////////////////
 // GENERIC SQL SOURCE
 /////////////////////////////////////////////////////////////////////////////
 
@@ -10558,7 +10564,7 @@ bool CSphSource_SQL::Setup ( const CSphSourceParams_SQL & tParams )
 }
 
 
-bool CSphSource_SQL::RunQueryStep ()
+bool CSphSource_SQL::RunQueryStep ( CSphString & sError )
 {
 	if ( m_tParams.m_iRangeStep<=0 )
 		return false;
@@ -10634,28 +10640,19 @@ bool CSphSource_SQL::RunQueryStep ()
 	assert ( sDst-sRes==iLen );
 
 	// run query
-	const char * sError = NULL;
-
 	SqlDismissResult ();
-	if ( !SqlQuery ( sRes ) )
-		sError = "sql_range_query";
+	bool bRes = SqlQuery ( sRes );
+
+	if ( !bRes )
+		sError.SetSprintf ( "sql_range_query: %s (DSN=%s)", sError, SqlError(), m_sSqlDSN.cstr() );
 
 	SafeDeleteArray ( sRes );
-
-	// report errors, if any
-	if ( sError )
-	{
-		fprintf ( stdout, "ERROR: %s: %s (DSN=%s).\n", sError, SqlError(), m_sSqlDSN.cstr() );
-		return false;
-	}
-
-	// all ok
-	return true;
+	return bRes;
 }
 
 
 /// connect to SQL server
-bool CSphSource_SQL::Connect ()
+bool CSphSource_SQL::Connect ( CSphString & sError )
 {
 	// do not connect twice
 	if ( m_bSqlConnected )
@@ -10664,7 +10661,7 @@ bool CSphSource_SQL::Connect ()
 	// try to connect
 	if ( !SqlConnect() )
 	{
-		fprintf ( stdout, "ERROR: sql_connect: %s (DSN=%s).\n", SqlError(), m_sSqlDSN.cstr() );
+		sError.SetSprintf ( "sql_connect: %s (DSN=%s)", SqlError(), m_sSqlDSN.cstr() );
 		return false;
 	}
 
@@ -10673,7 +10670,7 @@ bool CSphSource_SQL::Connect ()
 	{
 		if ( !SqlQuery ( m_tParams.m_dQueryPre[i].cstr() ) )
 		{
-			fprintf ( stdout, "ERROR: sql_query_pre: %s (DSN=%s).\n", SqlError(), m_sSqlDSN.cstr() );
+			sError.SetSprintf ( "sql_query_pre[%d]: %s (DSN=%s)", i, SqlError(), m_sSqlDSN.cstr() );
 			SqlDisconnect ();
 			return false;
 		}
@@ -10686,15 +10683,16 @@ bool CSphSource_SQL::Connect ()
 }
 
 
-#define LOC_ERROR(_msg,_arg) { fprintf ( stdout, _msg, _arg ); return 0; }
-#define LOC_ERROR2(_msg,_arg,_arg2) { fprintf ( stdout, _msg, _arg, _arg2 ); return 0; }
-#define LOC_SQL_ERROR(_msg) { sError = _msg; break; }
+#define LOC_ERROR(_msg,_arg)			{ sError.SetSprintf ( _msg, _arg ); return false; }
+#define LOC_ERROR2(_msg,_arg,_arg2)		{ sError.SetSprintf ( _msg, _arg, _arg2 ); return false; }
+#define LOC_SQL_ERROR(_msg)				{ sSqlError = _msg; break; }
 
 /// issue main rows fetch query
-bool CSphSource_SQL::IterateHitsStart ()
+bool CSphSource_SQL::IterateHitsStart ( CSphString & sError )
 {
 	assert ( m_bSqlConnected );
-	const char * sError = NULL;
+
+	const char * sSqlError = NULL;
 	for ( ;; )
 	{
 		// issue first fetch query
@@ -10706,7 +10704,8 @@ bool CSphSource_SQL::IterateHitsStart ()
 
 			// check step
 			if ( m_tParams.m_iRangeStep<=0 )
-				LOC_ERROR ( "ERROR: sql_range_step=%d: must be positive.\n", m_tParams.m_iRangeStep );
+				LOC_ERROR ( "sql_range_step=%d: must be positive", m_tParams.m_iRangeStep );
+
 			if ( m_tParams.m_iRangeStep<128 )
 			{
 				sphWarn ( "sql_range_step=%d: too small; increased to 128", m_tParams.m_iRangeStep );
@@ -10716,7 +10715,7 @@ bool CSphSource_SQL::IterateHitsStart ()
 			// check query for macros
 			for ( int i=0; i<MACRO_COUNT; i++ )
 				if ( !strstr ( m_tParams.m_sQuery.cstr(), MACRO_VALUES[i] ) )
-					LOC_ERROR ( "ERROR: sql_query: macro '%s' not found.\n", MACRO_VALUES[i] );
+					LOC_ERROR ( "sql_query: macro '%s' not found", MACRO_VALUES[i] );
 
 			// run query
 			if ( !SqlQuery ( m_tParams.m_sQueryRange.cstr() ) )
@@ -10725,7 +10724,7 @@ bool CSphSource_SQL::IterateHitsStart ()
 			// fetch min/max
 			int iCols = SqlNumFields ();
 			if ( iCols!=2 )
-				LOC_ERROR ( "ERROR: sql_query_range: expected 2 columns (min_id/max_id), got %d.\n", iCols );
+				LOC_ERROR ( "sql_query_range: expected 2 columns (min_id/max_id), got %d", iCols );
 
 			if ( !SqlFetchRow() )
 				LOC_SQL_ERROR ( "sql_query_range: fetch_row" );
@@ -10747,19 +10746,19 @@ bool CSphSource_SQL::IterateHitsStart ()
 				if ( !sCol1 ) sCol1 = "(null)";
 
 				if ( m_uMinID<=0 )
-					LOC_ERROR ( "ERROR: sql_query_range: min_id='%s': must be positive 32-bit unsigned integer.\n", sCol0 );
+					LOC_ERROR ( "sql_query_range: min_id='%s': must be positive 32-bit unsigned integer", sCol0 );
 				if ( m_uMaxID<=0 )
-					LOC_ERROR ( "ERROR: sql_query_range: max_id='%s': must be positive 32-bit unsigned integer.\n", sCol1 );
+					LOC_ERROR ( "sql_query_range: max_id='%s': must be positive 32-bit unsigned integer", sCol1 );
 				if ( m_uMinID>m_uMaxID )
-					LOC_ERROR2 ( "ERROR: sql_query_range: min_id='%s', max_id='%s': min_id must be less than max_id.\n", sCol0, sCol1 );
+					LOC_ERROR2 ( "sql_query_range: min_id='%s', max_id='%s': min_id must be less than max_id", sCol0, sCol1 );
 			}
 
 			SqlDismissResult ();
 
 			// issue query
 			m_uCurrentID = m_uMinID;
-			if ( !RunQueryStep () )
-				return 0;
+			if ( !RunQueryStep ( sError ) )
+				return false;
 
 		} else
 		{
@@ -10776,10 +10775,10 @@ bool CSphSource_SQL::IterateHitsStart ()
 	}
 
 	// errors, anyone?
-	if ( sError )
+	if ( sSqlError )
 	{
-		fprintf ( stdout, "ERROR: %s: %s (DSN=%s).\n", sError, SqlError(), m_sSqlDSN.cstr() );
-		return 0;
+		sError.SetSprintf ( "%s: %s (DSN=%s)", sSqlError, SqlError(), m_sSqlDSN.cstr() );
+		return false;
 	}
 
 	// some post-query setup
@@ -10797,7 +10796,7 @@ bool CSphSource_SQL::IterateHitsStart ()
 	{
 		const char * sName = SqlFieldName(i+1);
 		if ( !sName )
-			LOC_ERROR ( "ERROR: column number %d has no name.\n", i+1 );
+			LOC_ERROR ( "column number %d has no name", i+1 );
 
 		CSphColumnInfo tCol ( sName );
 		ARRAY_FOREACH ( j, m_tParams.m_dAttrs )
@@ -10809,7 +10808,7 @@ bool CSphSource_SQL::IterateHitsStart ()
 			assert ( tCol.m_eAttrType!=SPH_ATTR_NONE );
 
 			if ( ( tAttr.m_eAttrType & SPH_ATTR_MULTI ) && tAttr.m_eSrc!=SPH_ATTRSRC_FIELD )
-				LOC_ERROR ( "ERROR: multi-valued attribute '%s' found in query; source type must be 'field'.\n", tAttr.m_sName.cstr() );
+				LOC_ERROR ( "multi-valued attribute '%s' of wrong source-type found in query; must be 'field'", tAttr.m_sName.cstr() );
 
 			tCol = tAttr;
 			dFound[j] = true;
@@ -10845,10 +10844,10 @@ bool CSphSource_SQL::IterateHitsStart ()
 
 	// check it
 	if ( m_tSchema.m_dFields.GetLength()>SPH_MAX_FIELDS )
-		LOC_ERROR2 ( "ERROR: too many fields (fields=%d, max=%d); raise SPH_MAX_FIELDS in sphinx.h and rebuild.\n",
+		LOC_ERROR2 ( "too many fields (fields=%d, max=%d); raise SPH_MAX_FIELDS in sphinx.h and rebuild",
 			m_tSchema.m_dFields.GetLength(), SPH_MAX_FIELDS );
 
-	return 1;
+	return true;
 }
 
 #undef LOC_ERROR
@@ -10864,48 +10863,59 @@ void CSphSource_SQL::Disconnect ()
 }
 
 
-BYTE ** CSphSource_SQL::NextDocument ()
+BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 {
 	PROFILE ( src_sql );
 	assert ( m_bSqlConnected );
 
-	bool bGotRow = SqlFetchRow ();
-
-	// when the party's over...
-	while ( !bGotRow )
+	// get next non-zero-id row
+	do
 	{
-		// is that an error?
-		if ( SqlIsError() )
-			sphDie ( "sql_fetch_row: %s", SqlError() );
+		// try to get next row
+		bool bGotRow = SqlFetchRow ();
 
-		// maybe we can do next step yet?
-		if ( RunQueryStep () )
+		// when the party's over...
+		while ( !bGotRow )
 		{
-			bGotRow = SqlFetchRow ();
-			continue;
-		}
-
-		// ok, we're over
-		ARRAY_FOREACH ( i, m_tParams.m_dQueryPost )
-		{
-			if ( !SqlQuery ( m_tParams.m_dQueryPost[i].cstr() ) )
+			// is that an error?
+			if ( SqlIsError() )
 			{
-				sphWarn ( "sql_query_post[%d]: error=%s, query=%s",
-					i, SqlError(), m_tParams.m_dQueryPost[i].cstr() );
-				break;
+				sError.SetSprintf ( "sql_fetch_row: %s", SqlError() );
+				m_tDocInfo.m_iDocID = 1; // 0 means legal eof
+				return NULL;
 			}
-			SqlDismissResult ();
+
+			// maybe we can do next step yet?
+			if ( RunQueryStep ( sError ) )
+			{
+				bGotRow = SqlFetchRow ();
+				continue;
+			}
+
+			// ok, we're over
+			ARRAY_FOREACH ( i, m_tParams.m_dQueryPost )
+			{
+				if ( !SqlQuery ( m_tParams.m_dQueryPost[i].cstr() ) )
+				{
+					sphWarn ( "sql_query_post[%d]: error=%s, query=%s",
+						i, SqlError(), m_tParams.m_dQueryPost[i].cstr() );
+					break;
+				}
+				SqlDismissResult ();
+			}
+
+			m_tDocInfo.m_iDocID = 0; // 0 means legal eof
+			return NULL;
 		}
 
-		return NULL;
-	}
+		// get him!
+		m_tDocInfo.m_iDocID = sphToDocid ( SqlColumn(0) );
+		m_uMaxFetchedID = Max ( m_uMaxFetchedID, m_tDocInfo.m_iDocID );
 
-	// get him!
-	m_tDocInfo.m_iDocID = sphToDocid ( SqlColumn(0) );
-	m_uMaxFetchedID = Max ( m_uMaxFetchedID, m_tDocInfo.m_iDocID );
+		if ( !m_tDocInfo.m_iDocID )
+			sphWarn ( "zero/NULL document_id, skipping" );
 
-	if ( !m_tDocInfo.m_iDocID )
-		sphWarn ( "zero/NULL document_id, aborting indexing" );
+	} while ( !m_tDocInfo.m_iDocID );
 
 	// cleanup attrs
 	for ( int i=0; i<m_tDocInfo.m_iRowitems; i++ )
@@ -10946,9 +10956,9 @@ void CSphSource_SQL::PostIndex ()
 
 	assert ( !m_bSqlConnected );
 
-	#define LOC_SQL_ERROR(_msg) { sError = _msg; break; }
+	#define LOC_SQL_ERROR(_msg) { sSqlError= _msg; break; }
 
-	const char * sError = NULL;
+	const char * sSqlError = NULL;
 	for ( ;; )
 	{
 		if ( !SqlConnect () )
@@ -10968,8 +10978,8 @@ void CSphSource_SQL::PostIndex ()
 		break;
 	}
 
-	if ( sError )
-		fprintf ( stdout, "ERROR: %s: %s (DSN=%s).\n", sError, SqlError(), m_sSqlDSN.cstr() );
+	if ( sSqlError )
+		sphWarn ( "%s: %s (DSN=%s)", sSqlError, SqlError(), m_sSqlDSN.cstr() );
 
 	#undef LOC_SQL_ERROR
 
@@ -10977,7 +10987,7 @@ void CSphSource_SQL::PostIndex ()
 }
 
 
-bool CSphSource_SQL::IterateMultivaluedStart ( int iAttr )
+bool CSphSource_SQL::IterateMultivaluedStart ( int iAttr, CSphString & sError )
 {
 	if ( iAttr<0 || iAttr>=m_tSchema.GetAttrsCount() )
 		return false;
@@ -10997,12 +11007,12 @@ bool CSphSource_SQL::IterateMultivaluedStart ( int iAttr )
 		// run simple query
 		if ( !SqlQuery ( tAttr.m_sQuery.cstr() ) )
 		{
-			fprintf ( stdout, "ERROR: multi-valued attr '%s' query failed: %s.\n", tAttr.m_sName.cstr(), SqlError() );
+			sError.SetSprintf ( "multi-valued attr '%s' query failed: %s", tAttr.m_sName.cstr(), SqlError() );
 			return false;
 		}
 		if ( SqlNumFields()!=2 )
 		{
-			fprintf ( stdout, "ERROR: multi-valued attr '%s' query returned %d fields (expected 2).\n", tAttr.m_sName.cstr(), SqlNumFields() );
+			sError.SetSprintf ( "multi-valued attr '%s' query returned %d fields (expected 2)", tAttr.m_sName.cstr(), SqlNumFields() );
 			SqlDismissResult ();
 			return false;
 		}
@@ -11013,7 +11023,7 @@ bool CSphSource_SQL::IterateMultivaluedStart ( int iAttr )
 		return false;
 
 	default:
-		fprintf ( stdout, "INTERNAL ERROR: unknown multi-valued attr source type %d.\n", tAttr.m_eSrc );
+		sError.SetSprintf ( "INTERNAL ERROR: unknown multi-valued attr source type %d", tAttr.m_eSrc );
 		return false;
 	}
 }
@@ -11351,7 +11361,7 @@ bool CSphSource_XMLPipe::Setup ( const char * sCommand )
 }
 
 
-bool CSphSource_XMLPipe::Connect ()
+bool CSphSource_XMLPipe::Connect ( CSphString & sError )
 {
 	m_pPipe = popen ( m_sCommand.cstr(), "r" );
 	m_bBody = false;
@@ -11373,15 +11383,14 @@ bool CSphSource_XMLPipe::Connect ()
 	snprintf ( sBuf, sizeof(sBuf), "xmlpipe(%s)", m_sCommand.cstr() );
 	m_tSchema.m_sName = sBuf;
 
-	// FIXME!!!
 	if ( !m_pPipe )
-		sphWarn ( "CSphSource_XMLPipe::Setup() failed to popen '%s'", m_sCommand.cstr() );
+		sError.SetSprintf ( "xmlpipe: failed to popen '%s'", m_sCommand.cstr() );
 
 	return ( m_pPipe!=NULL );
 }
 
 
-bool CSphSource_XMLPipe::IterateHitsNext ()
+bool CSphSource_XMLPipe::IterateHitsNext ( CSphString & sError )
 {
 	PROFILE ( src_xmlpipe );
 	char sTitle [ 1024 ]; // FIXME?
@@ -11396,22 +11405,29 @@ bool CSphSource_XMLPipe::IterateHitsNext ()
 
 	if ( !m_bBody )
 	{
-		// scan for opening '<document>' tag if necessary
+		// check for eof
+		if ( !SkipWhitespace() )
+		{
+			m_tDocInfo.m_iDocID = 0;
+			return true;
+		}
+
+		// look for opening '<document>' tag
 		SetTag ( "document" );
-		if ( !SkipTag ( true, false ) )
+		if ( !SkipTag ( true, sError ) )
 			return false;
 
-		if ( !ScanInt ( "id", &m_tDocInfo.m_iDocID ) )
+		if ( !ScanInt ( "id", &m_tDocInfo.m_iDocID, sError ) )
 			return false;
 		m_tStats.m_iTotalDocuments++;
 
-		if ( !ScanInt ( "group", &m_tDocInfo.m_pRowitems[0] ) )
+		if ( !ScanInt ( "group", &m_tDocInfo.m_pRowitems[0], sError ) )
 			m_tDocInfo.m_pRowitems[0] = 1;
 
-		if ( !ScanInt ( "timestamp", &m_tDocInfo.m_pRowitems[1], false ) )
+		if ( !ScanInt ( "timestamp", &m_tDocInfo.m_pRowitems[1], sError ) )
 			m_tDocInfo.m_pRowitems[1] = 1;
 
-		if ( !ScanStr ( "title", sTitle, sizeof ( sTitle ) ) )
+		if ( !ScanStr ( "title", sTitle, sizeof(sTitle), sError ) )
 			return false;
 
 		// index title
@@ -11436,7 +11452,7 @@ bool CSphSource_XMLPipe::IterateHitsNext ()
 		}
 
 		SetTag ( "body" );
-		if ( !SkipTag ( true ) )
+		if ( !SkipTag ( true, sError ) )
 			return false;
 
 		m_bBody = true;
@@ -11456,7 +11472,7 @@ bool CSphSource_XMLPipe::IterateHitsNext ()
 		if ( m_pBuffer>=m_pBufferEnd )
 			if ( !UpdateBuffer() )
 		{
-			sphWarn ( "CSphSource_XMLPipe(): unexpected EOF while scanning doc " DOCID_FMT " body",
+			sError.SetSprintf ( "xmlpipe: unexpected EOF while scanning docid=" DOCID_FMT " body",
 				m_tDocInfo.m_iDocID );
 			return false;
 		}
@@ -11493,7 +11509,7 @@ bool CSphSource_XMLPipe::IterateHitsNext ()
 	{
 		// let's check if it's '</body>' which is the only allowed tag at this point
 		SetTag ( "body" );
-		if ( !SkipTag ( false ) )
+		if ( !SkipTag ( false, sError ) )
 			return false;
 
 		// well, it is
@@ -11501,7 +11517,7 @@ bool CSphSource_XMLPipe::IterateHitsNext ()
 
 		// let's check if it's '</document>' which is the only allowed tag at this point
 		SetTag ( "document" );
-		if ( !SkipTag ( false ) )
+		if ( !SkipTag ( false, sError ) )
 			return false;
 	}
 
@@ -11558,7 +11574,7 @@ bool CSphSource_XMLPipe::SkipWhitespace ()
 }
 
 
-bool CSphSource_XMLPipe::CheckTag ( bool bOpen, bool bStrict )
+bool CSphSource_XMLPipe::CheckTag ( bool bOpen, CSphString & sError )
 {
 	int iAdd = bOpen ? 2 : 3;
 
@@ -11568,9 +11584,8 @@ bool CSphSource_XMLPipe::CheckTag ( bool bOpen, bool bStrict )
 
 	if ( m_pBufferEnd-m_pBuffer < m_iTagLength+iAdd )
 	{
-		if ( bStrict )
-			sphWarn ( "CSphSource_XMLPipe(): expected '<%s%s>', got EOF",
-				bOpen ? "" : "/", m_pTag );
+		sError.SetSprintf ( "xmlpipe: expected '<%s%s>', got EOF",
+			bOpen ? "" : "/", m_pTag );
 		return false;
 	}
 
@@ -11591,9 +11606,8 @@ bool CSphSource_XMLPipe::CheckTag ( bool bOpen, bool bStrict )
 		strncpy ( sGot, (char*)m_pBuffer, iCopy );
 		sGot [ iCopy ] = '\0';
 
-		if ( bStrict )
-			sphWarn ( "CSphSource_XMLPipe(): expected '<%s%s>', got '%s'",
-				bOpen ? "" : "/", m_pTag, sGot );
+		sError.SetSprintf ( "xmlpipe: expected '<%s%s>', got '%s'",
+			bOpen ? "" : "/", m_pTag, sGot );
 		return false;
 	}
 
@@ -11604,24 +11618,23 @@ bool CSphSource_XMLPipe::CheckTag ( bool bOpen, bool bStrict )
 }
 
 
-bool CSphSource_XMLPipe::SkipTag ( bool bOpen, bool bWarnOnEOF, bool bStrict )
+bool CSphSource_XMLPipe::SkipTag ( bool bOpen, CSphString & sError )
 {
 	if ( !SkipWhitespace() )
 	{
-		if ( bWarnOnEOF )
-			sphWarn ( "WARNING: CSphSource_XMLPipe(): expected '<%s%s>', got EOF",
-				bOpen ? "" : "/", m_pTag );
+		sError.SetSprintf ( "xmlpipe: expected '<%s%s>', got EOF",
+			bOpen ? "" : "/", m_pTag );
 		return false;
 	}
 
-	return CheckTag ( bOpen, bStrict );
+	return CheckTag ( bOpen, sError );
 }
 
 
-bool CSphSource_XMLPipe::ScanInt ( const char * sTag, DWORD * pRes, bool bStrict )
+bool CSphSource_XMLPipe::ScanInt ( const char * sTag, DWORD * pRes, CSphString & sError )
 {
 	uint64_t uRes;
-	if ( !ScanInt ( sTag, &uRes, bStrict ) )
+	if ( !ScanInt ( sTag, &uRes, sError ) )
 		return false;
 
 	(*pRes) = (DWORD)uRes;
@@ -11629,19 +11642,19 @@ bool CSphSource_XMLPipe::ScanInt ( const char * sTag, DWORD * pRes, bool bStrict
 }
 
 
-bool CSphSource_XMLPipe::ScanInt ( const char * sTag, uint64_t * pRes, bool bStrict )
+bool CSphSource_XMLPipe::ScanInt ( const char * sTag, uint64_t * pRes, CSphString & sError )
 {
 	assert ( sTag );
 	assert ( pRes );
 
 	// scan for <sTag>
 	SetTag ( sTag );
-	if ( !SkipTag ( true, true, bStrict ) )
+	if ( !SkipTag ( true, sError ) )
 		return false;
 
 	if ( !SkipWhitespace() )
 	{
-		sphWarn ( "CSphSource_XMLPipe(): expected <%s> data, got EOF", m_pTag );
+		sError.SetSprintf ( "xmlpipe: expected <%s> data, got EOF", m_pTag );
 		return false;
 	}
 
@@ -11659,14 +11672,14 @@ bool CSphSource_XMLPipe::ScanInt ( const char * sTag, uint64_t * pRes, bool bStr
 	}
 
 	// scan for </sTag>
-	if ( !SkipTag ( false ) )
+	if ( !SkipTag ( false, sError ) )
 		return false;
 
 	return true;
 }
 
 
-bool CSphSource_XMLPipe::ScanStr ( const char * sTag, char * pRes, int iMaxLength )
+bool CSphSource_XMLPipe::ScanStr ( const char * sTag, char * pRes, int iMaxLength, CSphString & sError )
 {
 	assert ( sTag );
 	assert ( pRes );
@@ -11675,12 +11688,12 @@ bool CSphSource_XMLPipe::ScanStr ( const char * sTag, char * pRes, int iMaxLengt
 
 	// scan for <sTag>
 	SetTag ( sTag );
-	if ( !SkipTag ( true ) )
+	if ( !SkipTag ( true, sError ) )
 		return false;
 
 	if ( !SkipWhitespace() )
 	{
-		sphWarn ( "CSphSource_XMLPipe(): expected <%s> data, got EOF", m_pTag );
+		sError.SetSprintf ( "xmlpipe: expected <%s> data, got EOF", m_pTag );
 		return false;
 	}
 
@@ -11697,12 +11710,15 @@ bool CSphSource_XMLPipe::ScanStr ( const char * sTag, char * pRes, int iMaxLengt
 	*pRes++ = '\0';
 
 	// scan for </sTag>
-	if ( !SkipTag ( false ) )
+	if ( !SkipTag ( false, sError ) )
 		return false;
 
 	return true;
 }
 
+/////////////////////////////////////////////////////////////////////////////
+// MERGER HELPERS
+/////////////////////////////////////////////////////////////////////////////
 
 CSphDoclistRecord::~CSphDoclistRecord()
 {

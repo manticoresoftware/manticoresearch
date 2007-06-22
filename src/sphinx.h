@@ -610,7 +610,7 @@ public:
 	/// updates schema fields and attributes
 	/// updates pInfo if it's empty; checks for match if it's not
 	/// must be called after IterateHitsStart(); will always fail otherwise
-	virtual bool						UpdateSchema ( CSphSchema * pInfo );
+	virtual bool						UpdateSchema ( CSphSchema * pInfo, CSphString & sError );
 
 	/// configure source to emit prefixes or infixes
 	/// passing zero iMinLength means to emit the words themselves
@@ -620,7 +620,7 @@ public:
 	/// connect to the source (eg. to the database)
 	/// connection settings are specific for each source type and as such
 	/// are implemented in specific descendants
-	virtual bool						Connect () = 0;
+	virtual bool						Connect ( CSphString & sError ) = 0;
 
 	/// disconnect from the source
 	virtual void						Disconnect () = 0;
@@ -632,16 +632,19 @@ public:
 
 	/// begin iterating document hits
 	/// to be implemented by descendants
-	virtual bool						IterateHitsStart () = 0;
+	virtual bool						IterateHitsStart ( CSphString & sError ) = 0;
 
 	/// get next document hit
 	/// to be implemented by descendants
-	virtual bool						IterateHitsNext () = 0;
+	/// on next document, returns true and m_tDocInfo.m_uDocID is not 0
+	/// on end of documents, returns true and m_tDocInfo.m_uDocID is 0
+	/// on error, returns false and fills sError
+	virtual bool						IterateHitsNext ( CSphString & sError ) = 0;
 
 	/// begin iterating values of out-of-document multi-valued attribute iAttr
 	/// will fail if iAttr is out of range, or is not multi-valued
 	/// can also fail if configured settings are invalid (eg. SQL query can not be executed)
-	virtual bool						IterateMultivaluedStart ( int iAttr ) = 0;
+	virtual bool						IterateMultivaluedStart ( int iAttr, CSphString & sError ) = 0;
 
 	/// get next multi-valued (id,attr-value) tuple to m_tDocInfo
 	virtual bool						IterateMultivaluedNext () = 0;
@@ -673,22 +676,11 @@ struct CSphSource_Document : CSphSource
 							CSphSource_Document ( const char * sName ) : CSphSource ( sName ) {}
 
 	/// my generic tokenizer
-	virtual bool			IterateHitsNext ();
+	virtual bool			IterateHitsNext ( CSphString & sError );
 
 	/// field data getter
 	/// to be implemented by descendants
-	virtual BYTE **			NextDocument () = 0;
-};
-
-
-/// generic text source
-/// one-field plain-text documents
-struct CSphSource_Text : CSphSource_Document
-{
-					CSphSource_Text ( const char * sName ) : CSphSource_Document ( sName ) {};
-	BYTE **			NextDocument ();
-
-	virtual BYTE *	NextText () = 0;
+	virtual BYTE **			NextDocument ( CSphString & sError ) = 0;
 };
 
 
@@ -724,16 +716,16 @@ struct CSphSource_SQL : CSphSource_Document
 	virtual				~CSphSource_SQL () {}
 
 	bool				Setup ( const CSphSourceParams_SQL & pParams );
-	virtual bool		Connect ();
+	virtual bool		Connect ( CSphString & sError );
 	virtual void		Disconnect ();
 
-	virtual bool		IterateHitsStart ();
-	virtual BYTE **		NextDocument ();
+	virtual bool		IterateHitsStart ( CSphString & sError );
+	virtual BYTE **		NextDocument ( CSphString & sError );
 	virtual void		PostIndex ();
 
 	virtual bool		HasAttrsConfigured () { return m_tParams.m_dAttrs.GetLength()!=0; }
 
-	virtual bool		IterateMultivaluedStart ( int iAttr );
+	virtual bool		IterateMultivaluedStart ( int iAttr, CSphString & sError );
 	virtual bool		IterateMultivaluedNext ();
 
 private:
@@ -756,7 +748,7 @@ protected:
 	static const char * const	MACRO_VALUES [ MACRO_COUNT ];
 
 protected:
-	bool					RunQueryStep ();
+	bool					RunQueryStep ( CSphString & sError );
 
 protected:
 	virtual void			SqlDismissResult () = 0;
@@ -859,15 +851,15 @@ public:
 					~CSphSource_XMLPipe ();						///< dtor
 
 	bool			Setup ( const char * sCommand );			///< memorize the command
-	virtual bool	Connect ();									///< run the command and open the pipe
+	virtual bool	Connect ( CSphString & sError );			///< run the command and open the pipe
 	virtual void	Disconnect ();								///< close the pipe
 
-	virtual bool	IterateHitsStart () { return true; }		///< Connect() starts getting documents automatically, so this one is empty
-	virtual bool	IterateHitsNext ();							///< parse incoming chunk and emit some hits
+	virtual bool	IterateHitsStart ( CSphString & ) { return true; }	///< Connect() starts getting documents automatically, so this one is empty
+	virtual bool	IterateHitsNext ( CSphString & sError );			///< parse incoming chunk and emit some hits
 
-	virtual bool	HasAttrsConfigured ()			{ return true; }	///< xmlpipe always has some attrs for now
-	virtual bool	IterateMultivaluedStart ( int )	{ return false; }	///< xmlpipe does not support multi-valued attrs for now
-	virtual bool	IterateMultivaluedNext ()		{ return false; }	///< xmlpipe does not support multi-valued attrs for now
+	virtual bool	HasAttrsConfigured ()							{ return true; }	///< xmlpipe always has some attrs for now
+	virtual bool	IterateMultivaluedStart ( int, CSphString & )	{ return false; }	///< xmlpipe does not support multi-valued attrs for now
+	virtual bool	IterateMultivaluedNext ()						{ return false; }	///< xmlpipe does not support multi-valued attrs for now
 
 private:
 	enum Tag_e
@@ -911,20 +903,20 @@ private:
 
 	/// check if what's at current pos is either opening/closing current tag (m_pTag)
 	/// return false on failure
-	bool			CheckTag ( bool bOpen, bool bStrict=true );
+	bool			CheckTag ( bool bOpen, CSphString & sError );
 
 	/// skips whitespace and opening/closing current tag (m_pTag)
 	/// returns false on failure
-	bool			SkipTag ( bool bOpen, bool bWarnOnEOF=true, bool bStrict=true );
+	bool			SkipTag ( bool bOpen, CSphString & sError );
 
 	/// scan for tag with integer value
-	bool			ScanInt ( const char * sTag, DWORD * pRes, bool bStrict=true );
+	bool			ScanInt ( const char * sTag, DWORD * pRes, CSphString & sError );
 
 	/// scan for tag with integer value
-	bool			ScanInt ( const char * sTag, uint64_t * pRes, bool bStrict=true );
+	bool			ScanInt ( const char * sTag, uint64_t * pRes, CSphString & sError );
 
 	/// scan for tag with string value
-	bool			ScanStr ( const char * sTag, char * pRes, int iMaxLength );
+	bool			ScanStr ( const char * sTag, char * pRes, int iMaxLength, CSphString & sError );
 };
 
 /////////////////////////////////////////////////////////////////////////////

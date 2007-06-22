@@ -9106,7 +9106,7 @@ const CSphSchema * CSphIndex_VLN::Preload ( bool bMlock, CSphString * sWarning )
 		bUse64 = rdInfo.GetDword ();
 	if ( bUse64!=USE_64BIT )
 	{
-		m_sLastError.SetSprintf ( "'%s' is id%d, and this binary is id%d\n",
+		m_sLastError.SetSprintf ( "'%s' is id%d, and this binary is id%d",
 			GetIndexFileName ( "sph" ), bUse64 ? 64 : 32, USE_64BIT ? 64 : 32 );
 		return false;
 	}

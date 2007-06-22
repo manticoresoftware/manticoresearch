@@ -6079,7 +6079,7 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 	if ( tDstData.GetFD()<0 )
 		return false;
 
-	CSphAutofile tDstHitlist ( GetIndexFileName ( m_uVersion==3 ? "spp" : "spd" ), SPH_O_READ, m_sLastError );
+	CSphAutofile tDstHitlist ( GetIndexFileName ( m_uVersion>=3 ? "spp" : "spd" ), SPH_O_READ, m_sLastError );
 	if ( tDstHitlist.GetFD()<0 )
 		return false;
 
@@ -6087,7 +6087,7 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 	if ( tSrcData.GetFD()<0 )
 		return false;
 
-	CSphAutofile tSrcHitlist ( pSrcIndex->GetIndexFileName ( m_uVersion==3 ? "spp" : "spd" ), SPH_O_READ, m_sLastError );
+	CSphAutofile tSrcHitlist ( pSrcIndex->GetIndexFileName ( m_uVersion>=3 ? "spp" : "spd" ), SPH_O_READ, m_sLastError );
 	if ( tSrcHitlist.GetFD()<0 )
 		return false;
 
@@ -9246,7 +9246,7 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 	if ( tDoclist.GetFD()<0 )
 		return false;
 
-	CSphAutofile tHitlist ( GetIndexFileName ( m_uVersion==3 ? "spp" : "spd" ), SPH_O_READ, m_sLastError );
+	CSphAutofile tHitlist ( GetIndexFileName ( m_uVersion>=3 ? "spp" : "spd" ), SPH_O_READ, m_sLastError );
 	if ( tHitlist.GetFD()<0 )
 		return false;
 

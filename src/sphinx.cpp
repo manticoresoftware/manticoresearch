@@ -90,6 +90,8 @@ void sphAssert ( const char * sExpr, const char * sFile, int iLine )
 const char *	SPHINX_DEFAULT_SBCS_TABLE	= "0..9, A..Z->a..z, _, a..z, U+A8->U+B8, U+B8, U+C0..U+DF->U+E0..U+FF, U+E0..U+FF";
 const char *	SPHINX_DEFAULT_UTF8_TABLE	= "0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F";
 
+const char		MAGIC_WORD_TAIL				= 1;
+
 /////////////////////////////////////////////////////////////////////////////
 
 static bool		g_bSphQuiet		= false;
@@ -1510,6 +1512,7 @@ public:
 	bool		OpenFile ( const char * sName, CSphString & sErrorBuffer );
 	void		CloseFile (); ///< note: calls Flush(), ie. IsError() might get true after this call
 
+	void		PutByte ( int uValue );
 	void		PutBytes ( const void * pData, int iSize );
 	void		PutDword ( DWORD uValue ) { PutBytes ( &uValue, sizeof(DWORD) ); }
 	void		PutOffset ( SphOffset_t uValue ) { PutBytes ( &uValue, sizeof(SphOffset_t) ); }
@@ -1541,7 +1544,6 @@ private:
 	bool			m_bError;
 	CSphString *	m_pError;
 
-	void		PutByte ( int data );
 	void		Flush ();
 };
 
@@ -1564,6 +1566,8 @@ public:
 
 	void		GetRawBytes ( void * pData, int iSize );
 	void		GetBytes ( void * data, int size );
+
+	int			GetByte ();
 	DWORD		GetDword ();
 	SphOffset_t	GetOffset ();
 	CSphString	GetString ();
@@ -1606,7 +1610,6 @@ private:
 	static const int	READ_DEFAULT_BLOCK		= 32768;
 
 private:
-	int			GetByte ();
 	void		UpdateCache ();
 };
 
@@ -1957,6 +1960,7 @@ struct CSphWordRecord
 /// everything required to setup search term
 struct CSphTermSetup : ISphNoncopyable
 {
+	ISphTokenizer *			m_pTokenizer;
 	CSphDict *				m_pDict;
 	CSphIndex_VLN *			m_pIndex;
 	ESphDocinfo				m_eDocinfo;
@@ -1965,7 +1969,10 @@ struct CSphTermSetup : ISphNoncopyable
 	const CSphAutofile &	m_tHitlist;
 
 	CSphTermSetup ( const CSphAutofile & tDoclist, const CSphAutofile & tHitlist )
-		: m_tDoclist ( tDoclist )
+		: m_pTokenizer ( NULL )
+		, m_pDict ( NULL )
+		, m_pIndex ( NULL )
+		, m_tDoclist ( tDoclist )
 		, m_tHitlist ( tHitlist )
 	{}
 };
@@ -1984,8 +1991,8 @@ struct CSphIndex_VLN : CSphIndex
 	virtual const CSphSchema *	Preload ( bool bMlock, CSphString * sWarning );
 	virtual bool				Lock ();
 
-	virtual CSphQueryResult *	Query ( CSphDict * pDict, CSphQuery * pQuery);
-	virtual bool				QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchSorter * pTop );
+	virtual CSphQueryResult *	Query ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery );
+	virtual bool				QueryEx ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchSorter * pTop );
 
 	virtual bool				Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData );
 	void						MergeWordData ( CSphWordRecord & tDstWord, CSphWordRecord & tSrcWord );
@@ -1998,7 +2005,7 @@ private:
 	static const int			WRITE_BUFFER_SIZE		= 262144;	///< my write buffer size
 
 	static const DWORD			INDEX_MAGIC_HEADER		= 0x58485053;	///< my magic 'SPHX' header
-	static const DWORD			INDEX_FORMAT_VERSION	= 5;			///< my format version
+	static const DWORD			INDEX_FORMAT_VERSION	= 6;			///< my format version
 
 private:
 	// common stuff
@@ -3315,7 +3322,6 @@ CSphQuery::CSphQuery ()
 	, m_iWeights	( 0 )
 	, m_eMode		( SPH_MATCH_ALL )
 	, m_eSort		( SPH_SORT_RELEVANCE )
-	, m_pTokenizer	( NULL )
 	, m_iMaxMatches	( 1000 )
 	, m_iMinID		( 0 )
 	, m_iMaxID		( DOCID_MAX )
@@ -4235,6 +4241,23 @@ int CSphBin::ReadHit ( CSphWordHit * e, int iRowitems, CSphRowitem * pRowitems )
 // INDEX
 /////////////////////////////////////////////////////////////////////////////
 
+CSphIndex::CSphIndex ( const char * sName )
+	: m_pProgress ( NULL )
+	, m_tSchema ( sName )
+	, m_sLastError ( "(no error message)" )
+	, m_iMinInfixLen ( 0 )
+	, m_bPrefixesOnly ( false )
+{}
+
+
+void CSphIndex::SetInfixIndexing ( bool bPrefixesOnly, int iMinLength )
+{
+	m_iMinInfixLen = Max ( iMinLength, 0 );
+	m_bPrefixesOnly = bPrefixesOnly;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
 CSphIndex * sphCreateIndexPhrase ( const char * sFilename )
 {
 	return new CSphIndex_VLN ( sFilename );
@@ -4693,6 +4716,10 @@ bool CSphIndex_VLN::cidxDone ()
 	// index stats
 	fdInfo.PutDword ( m_tStats.m_iTotalDocuments );
 	fdInfo.PutOffset ( m_tStats.m_iTotalBytes );
+
+	// prefix/infix info
+	fdInfo.PutByte ( m_bPrefixesOnly );
+	fdInfo.PutDword ( m_iMinInfixLen );
 
 	////////////////////////
 	// close all data files
@@ -5454,6 +5481,9 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 		if ( iSource )
 			if ( !pSource->Connect() || !pSource->IterateHitsStart() || !pSource->UpdateSchema ( &m_tSchema ) )
 				return 0;
+
+		// setup infix indexing
+		pSource->SetEmitInfixes ( m_bPrefixesOnly, m_iMinInfixLen );
 
 		// fetch documents
 		while ( pSource->IterateHitsNext() )
@@ -6471,6 +6501,65 @@ void CSphIndex_VLN::MergeWordData ( CSphWordRecord & tDstWord, CSphWordRecord & 
 // THE SEARCHER
 /////////////////////////////////////////////////////////////////////////////
 
+/// dict wrapper for star-syntax support in prefix-indexes
+class CSphDictStar : public CSphDict
+{
+public:
+				CSphDictStar ( CSphDict * pDict ) : m_pDict ( pDict ) { assert ( m_pDict ); }
+
+	void		LoadStopwords ( const char * sStops, ISphTokenizer * pTok );
+	bool		SetMorphology ( const CSphVariant * sMorph, bool bUseUTF8, CSphString & sError );
+
+	SphWordID_t	GetWordID ( BYTE * pWord );
+	SphWordID_t	GetWordID ( const BYTE * pWord, int iLen );
+
+protected:
+	CSphDict *	m_pDict;
+};
+
+
+void CSphDictStar::LoadStopwords ( const char * sStops, ISphTokenizer * pTok )
+{
+	m_pDict->LoadStopwords ( sStops, pTok );
+}
+
+
+bool CSphDictStar::SetMorphology ( const CSphVariant * sMorph, bool bUseUTF8, CSphString & sError )
+{
+	return m_pDict->SetMorphology ( sMorph, bUseUTF8, sError );
+}
+
+
+SphWordID_t CSphDictStar::GetWordID ( const BYTE * pWord, int iLen )
+{
+	return m_pDict->GetWordID ( pWord, iLen );
+}
+
+
+SphWordID_t CSphDictStar::GetWordID ( BYTE * pWord )
+{
+	char sBuf [ 16+3*SPH_MAX_WORD_LEN ];
+
+	int iLen = strlen ( (const char*)pWord );
+	memcpy ( sBuf, pWord, iLen+1 );
+
+	if ( iLen )
+	{
+		if ( sBuf[iLen-1]=='*' )
+		{
+			sBuf[iLen-1] = '\0';
+		} else
+		{
+			sBuf[iLen] = MAGIC_WORD_TAIL;
+			sBuf[iLen+1] = '\0';
+		}
+	}
+
+	return m_pDict->GetWordID ( (BYTE*)sBuf );
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
 /// my simple query parser
 struct CSphSimpleQueryParser
 {
@@ -7129,7 +7218,7 @@ void sphFlattenQueue ( ISphMatchSorter * pQueue, CSphQueryResult * pResult, int 
 }
 
 
-CSphQueryResult * CSphIndex_VLN::Query ( CSphDict * pDict, CSphQuery * pQuery )
+CSphQueryResult * CSphIndex_VLN::Query ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery )
 {
 	// create result
 	CSphQueryResult * pResult = new CSphQueryResult();
@@ -7143,7 +7232,7 @@ CSphQueryResult * CSphIndex_VLN::Query ( CSphDict * pDict, CSphQuery * pQuery )
 	}
 
 	// run query
-	if ( QueryEx ( pDict, pQuery, pResult, pTop ) )
+	if ( QueryEx ( pTokenizer, pDict, pQuery, pResult, pTop ) )
 	{
 		// convert results and return
 		pResult->m_dMatches.Reset ();
@@ -7894,7 +7983,7 @@ bool CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, ISphMatchSorter * p
 
 	// parse query
 	CSphBooleanQuery tParsed;
-	if ( !sphParseBooleanQuery ( tParsed, pQuery->m_sQuery.cstr(), pQuery->m_pTokenizer ) )
+	if ( !sphParseBooleanQuery ( tParsed, pQuery->m_sQuery.cstr(), tTermSetup.m_pTokenizer ) )
 	{
 		m_sLastError = tParsed.m_sParseError;
 		return false;
@@ -8716,7 +8805,7 @@ bool CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, ISphMatchSorter * 
 
 	// parse query
 	CSphExtendedQuery tParsed;
-	if ( !sphParseExtendedQuery ( tParsed, pQuery->m_sQuery.cstr(), pQuery->m_pTokenizer,
+	if ( !sphParseExtendedQuery ( tParsed, pQuery->m_sQuery.cstr(), tTermSetup.m_pTokenizer,
 		&m_tSchema, tTermSetup.m_pDict ) )
 	{
 		m_sLastError = tParsed.m_sParseError;
@@ -9026,6 +9115,13 @@ const CSphSchema * CSphIndex_VLN::Preload ( bool bMlock, CSphString * sWarning )
 	m_tStats.m_iTotalDocuments = rdInfo.GetDword ();
 	m_tStats.m_iTotalBytes = rdInfo.GetOffset ();
 
+	// infix stuff
+	if ( m_uVersion>=6 )
+	{
+		m_bPrefixesOnly = ( rdInfo.GetByte ()!=0 );
+		m_iMinInfixLen = rdInfo.GetDword ();
+	}
+
 	////////////////////
 	// preload docinfos
 	////////////////////
@@ -9223,11 +9319,11 @@ const CSphSchema * CSphIndex_VLN::Preload ( bool bMlock, CSphString * sWarning )
 }
 
 
-bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchSorter * pTop )
+bool CSphIndex_VLN::QueryEx ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchSorter * pTop )
 {
+	assert ( pTokenizer );
 	assert ( pDict );
 	assert ( pQuery );
-	assert ( pQuery->m_pTokenizer );
 	assert ( pResult );
 	assert ( pTop );
 
@@ -9251,7 +9347,19 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 		return false;
 
 	// prepare for setup
+	bool bUseStar = ( m_bPrefixesOnly==true && m_iMinInfixLen>0 );
+
+	CSphDictStar tDictStar ( pDict );
+	if ( bUseStar )
+	{
+		pDict = &tDictStar;
+
+		CSphRemapRange tStar ( '*', '*', '*' ); // FIXME? check and warn if star was already there
+		pTokenizer->AddCaseFolding ( tStar );
+	}
+
 	CSphTermSetup tTermSetup ( tDoclist, tHitlist );
+	tTermSetup.m_pTokenizer = pTokenizer;
 	tTermSetup.m_pDict = pDict;
 	tTermSetup.m_pIndex = this;
 	tTermSetup.m_eDocinfo = m_eDocinfo;
@@ -9269,7 +9377,7 @@ bool CSphIndex_VLN::QueryEx ( CSphDict * pDict, CSphQuery * pQuery, CSphQueryRes
 	if ( bSimpleQuery )
 	{
 		CSphSimpleQueryParser qp;
-		int iRealWords = qp.Parse ( pQuery->m_sQuery.cstr(), pQuery->m_pTokenizer, pDict );
+		int iRealWords = qp.Parse ( pQuery->m_sQuery.cstr(), pTokenizer, pDict );
 		if ( !iRealWords )
 		{
 			pResult->m_iQueryTime += int ( 1000.0f*( sphLongTimer() - tmQueryStart ) );
@@ -10241,14 +10349,8 @@ bool CSphSource::UpdateSchema ( CSphSchema * pInfo )
 
 void CSphSource::SetEmitInfixes ( bool bPrefixesOnly, int iMinLength )
 {
-	if ( iMinLength>0 )
-	{
-		m_bPrefixesOnly = bPrefixesOnly;
-		m_iMinInfixLen = iMinLength;
-	} else
-	{
-		m_iMinInfixLen = 0;
-	}
+	m_iMinInfixLen = Max ( iMinLength, 0 );
+	m_bPrefixesOnly = bPrefixesOnly;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -10283,7 +10385,7 @@ bool CSphSource_Document::IterateHitsNext ()
 		m_pTokenizer->SetBuffer ( sField, iLen, true );
 
 		BYTE * sWord;
-		int iPos = 1;
+		int iPos = ( j<<24 ) + 1;
 
 		if ( m_iMinInfixLen )
 		{
@@ -10292,17 +10394,26 @@ bool CSphSource_Document::IterateHitsNext ()
 			{
 				int iLen = m_pTokenizer->GetLastTokenLen ();
 
-				// if there are no infixes, just submit
+				// always index full word (maybe with magic tail marker)
+				if ( m_bPrefixesOnly )
+				{
+					int iBytes = strlen ( (const char*)sWord );
+					sWord[iBytes] = MAGIC_WORD_TAIL;
+					sWord[iBytes+1] = '\0';
+				}
+
+				SphWordID_t iWord = m_pDict->GetWordID ( sWord );
+				if ( iWord )
+				{
+					CSphWordHit & tHit = m_dHits.Add ();
+					tHit.m_iDocID = m_tDocInfo.m_iDocID;
+					tHit.m_iWordID = iWord;
+					tHit.m_iWordPos = iPos;
+				}
+
+				// if there are no infixes, that's it
 				if ( m_iMinInfixLen>=iLen )
 				{
-					SphWordID_t iWord = m_pDict->GetWordID ( sWord );
-					if ( iWord )
-					{
-						CSphWordHit & tHit = m_dHits.Add ();
-						tHit.m_iDocID = m_tDocInfo.m_iDocID;
-						tHit.m_iWordID = iWord;
-						tHit.m_iWordPos = (j << 24) | iPos;
-					}
 					iPos++;
 					continue;
 				}
@@ -10327,14 +10438,15 @@ bool CSphSource_Document::IterateHitsNext ()
 							CSphWordHit & tHit = m_dHits.Add ();
 							tHit.m_iDocID = m_tDocInfo.m_iDocID;
 							tHit.m_iWordID = iWord;
-							tHit.m_iWordPos = (j << 24) | iPos;
+							tHit.m_iWordPos = iPos;
 						}
 					}
 
 					sInfix += m_pTokenizer->GetCodepointLength ( *sInfix );
 				}
 
-				iPos++; // FIXME! what if all prefixes were stopped?
+				// move on
+				iPos++; 
 			}
 		} else
 		{
@@ -10347,7 +10459,7 @@ bool CSphSource_Document::IterateHitsNext ()
 					CSphWordHit & tHit = m_dHits.Add ();
 					tHit.m_iDocID = m_tDocInfo.m_iDocID;
 					tHit.m_iWordID = iWord;
-					tHit.m_iWordPos = (j << 24) | iPos;
+					tHit.m_iWordPos = iPos;
 				}
 				iPos++;
 			}

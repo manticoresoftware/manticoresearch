@@ -297,10 +297,13 @@ struct CSphDict
 	virtual				~CSphDict () {}
 
 	/// get word ID by word, "text" version
+	/// may apply stemming and modify word inplac
 	/// returns 0 for stopwords
 	virtual SphWordID_t	GetWordID ( BYTE * pWord ) = 0;
 
 	/// get word ID by word, "binary" version
+	/// only used with prefix/infix indexing
+	/// must not apply stemming and modify anything
 	/// returns 0 for stopwords
 	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen ) = 0;
 
@@ -1043,7 +1046,6 @@ public:
 	ESphMatchMode	m_eMode;		///< match mode. default is "match all"
 	ESphSortOrder	m_eSort;		///< sort mode
 	CSphString		m_sSortBy;		///< attribute to sort by
-	ISphTokenizer *	m_pTokenizer;	///< tokenizer to use. NOT OWNED.
 	int				m_iMaxMatches;	///< max matches to retrieve, default is 1000. more matches use more memory and CPU time to hold and sort them
 
 	SphDocID_t		m_iMinID;		///< min ID to match, 0 by default
@@ -1285,11 +1287,12 @@ public:
 	typedef void ProgressCallback_t ( const CSphIndexProgress * pStat, bool bPhaseEnd );
 
 public:
-								CSphIndex ( const char * sName ) : m_pProgress ( NULL ), m_tSchema ( sName ), m_sLastError ( "(no error message)" )  {}
+								CSphIndex ( const char * sName );
 	virtual						~CSphIndex () {}
 
 	virtual	void				SetProgressCallback ( ProgressCallback_t * pfnProgress ) { m_pProgress = pfnProgress; }
 	virtual const CSphString &	GetLastError () { return m_sLastError; }
+	virtual void				SetInfixIndexing ( bool bPrefixesOnly, int iMinLength );
 
 public:
 	virtual int					Build ( CSphDict * dict, const CSphVector < CSphSource * > & dSources, int iMemoryLimit, ESphDocinfo eDocinfo ) = 0;
@@ -1297,9 +1300,9 @@ public:
 	virtual const CSphSchema *	Preload ( bool bMlock, CSphString * sWarning ) = 0;
 	virtual bool				Lock () = 0;
 
-	virtual CSphQueryResult *	Query ( CSphDict * dict, CSphQuery * pQuery ) = 0;
-	virtual bool				QueryEx ( CSphDict * dict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchSorter * pTop ) = 0;
-	virtual bool				Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData ) = 0;
+	virtual CSphQueryResult *	Query ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery ) = 0;
+	virtual bool				QueryEx ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchSorter * pTop ) = 0;
+	virtual bool				Merge ( CSphIndex * pSource, CSphPurgeData & tPurgeData ) = 0;
 
 	/// updates memory-cached attributes in real time
 	/// returns non-negative amount of actually found and updated records on success
@@ -1314,6 +1317,9 @@ protected:
 	ProgressCallback_t *		m_pProgress;
 	CSphSchema					m_tSchema;
 	CSphString					m_sLastError;
+
+	int							m_iMinInfixLen;	///< min indexable infix length (0 means don't index infixes)
+	bool						m_bPrefixesOnly;///< whether to index prefixes only or all the infixes
 };
 
 /////////////////////////////////////////////////////////////////////////////

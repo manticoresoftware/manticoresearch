@@ -677,9 +677,6 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 				pSourceName->cstr(), sAttrs );
 		}
 
-		// min_prefix_len, min_infix_len
-		pSource->SetEmitInfixes ( bPrefixesOnly, iMinInfixLen );
-
 		pSource->SetTokenizer ( pTokenizer );
 		dSources.Add ( pSource );
 	}
@@ -770,6 +767,8 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		}
 
 		pIndex->SetProgressCallback ( ShowProgress );
+		pIndex->SetInfixIndexing ( bPrefixesOnly, iMinInfixLen );
+
 		if ( pIndex->Build ( pDict, dSources, g_iMemLimit, eDocinfo ) )
 		{
 			// if searchd is running, rename .tmp to .new which searchd will pick up

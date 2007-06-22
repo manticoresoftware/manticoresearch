@@ -2520,9 +2520,8 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 						return;
     
 					// do query
-					tQuery.m_pTokenizer = tServed.m_pTokenizer;
 					iTries++;
-					if ( !tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pSorter ) )
+					if ( !tServed.m_pIndex->QueryEx ( tServed.m_pTokenizer, tServed.m_pDict, &tQuery, pRes, pSorter ) )
 						dFailures.Add ( SearchFailure_t ( tDist.m_dLocal[i].cstr(), tServed.m_pIndex->GetLastError() ) );
 					else
 						iSuccesses++;
@@ -2606,8 +2605,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 			// do query
 			iTries++;
-			tQuery.m_pTokenizer = tServed.m_pTokenizer;
-			if ( !tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pSorter ) )
+			if ( !tServed.m_pIndex->QueryEx ( tServed.m_pTokenizer, tServed.m_pDict, &tQuery, pRes, pSorter ) )
 				dFailures.Add ( SearchFailure_t ( sIndexName, tServed.m_pIndex->GetLastError() ) );
 			else
 				iSuccesses++;
@@ -2681,9 +2679,8 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 					return;
 
 				// do query
-				tQuery.m_pTokenizer = tServed.m_pTokenizer;
 				iTries++;
-				if ( !tServed.m_pIndex->QueryEx ( tServed.m_pDict, &tQuery, pRes, pSorter ) )
+				if ( !tServed.m_pIndex->QueryEx ( tServed.m_pTokenizer, tServed.m_pDict, &tQuery, pRes, pSorter ) )
 					dFailures.Add ( SearchFailure_t ( sNext, tServed.m_pIndex->GetLastError() ) );
 				else
 					iSuccesses++;

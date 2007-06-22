@@ -185,8 +185,8 @@ int main ( int argc, char ** argv )
 
 		// configure charset_type
 		CSphString sError;
-		tQuery.m_pTokenizer = sphConfTokenizer ( hIndex, sError );
-		if ( !tQuery.m_pTokenizer )
+		ISphTokenizer * pTokenizer = sphConfTokenizer ( hIndex, sError );
+		if ( !pTokenizer )
 			sphDie ( "FATAL: index '%s': %s.\n", sIndexName, sError.cstr() );
 
 		// do we want to show document info from database?
@@ -245,12 +245,12 @@ int main ( int argc, char ** argv )
 		CSphDict * pDict = sphCreateDictionaryCRC ();
 		assert ( pDict );
 
-		if ( !pDict->SetMorphology ( hIndex("morphology"), tQuery.m_pTokenizer->IsUtf8(), sError ) )
+		if ( !pDict->SetMorphology ( hIndex("morphology"), pTokenizer->IsUtf8(), sError ) )
 			fprintf ( stdout, "WARNING: index '%s': %s\n", sIndexName, sError.cstr() );	
 
 		// configure stopwords
 		pDict->LoadStopwords ( hIndex.Exists ( "stopwords" ) ? hIndex["stopwords"].cstr() : NULL,
-			tQuery.m_pTokenizer );
+			pTokenizer );
 
 		//////////
 		// search
@@ -298,7 +298,7 @@ int main ( int argc, char ** argv )
 				}
 			}
 
-			pResult = pIndex->Query ( pDict, &tQuery );
+			pResult = pIndex->Query ( pTokenizer, pDict, &tQuery );
 			if ( !pResult )
 				sError = pIndex->GetLastError ();
 
@@ -307,7 +307,7 @@ int main ( int argc, char ** argv )
 
 		SafeDelete ( pIndex );
 		SafeDelete ( pDict );
-		SafeDelete ( tQuery.m_pTokenizer );
+		SafeDelete ( pTokenizer );
 
 		/////////
 		// print

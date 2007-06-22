@@ -610,7 +610,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 	CSphString sError;
 	ISphTokenizer * pTokenizer = sphConfTokenizer ( hIndex, sError );
 	if ( !pTokenizer )
-		sphDie ( "FATAL: index '%s': %s.\n", sIndexName, sError.cstr() );
+		sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 
 	// prefix/infix indexing
 	int iPrefix = hIndex("min_prefix_len") ? hIndex["min_prefix_len"].intval() : 0;
@@ -619,7 +619,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 	iInfix = Max ( iInfix, 0 );
 
 	if ( iPrefix>0 && iInfix>0 )
-		sphDie ( "FATAL: index '%s': min_prefix_len and min_infix_len can not both be used.\n", sIndexName );
+		sphDie ( "index '%s': min_prefix_len and min_infix_len can not both be used", sIndexName );
 
 	int iMinWordLen = hIndex("min_word_len") ? Max ( hIndex["min_word_len"].intval(), 0 ) : 0;
 	if ( iMinWordLen>0 && iPrefix>iMinWordLen )
@@ -863,13 +863,11 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 	assert ( pSrc );
 	assert ( pDst );
 
-	bool bMergedOK = pDst->Merge ( pSrc, tPurge );
+	if ( !pDst->Merge ( pSrc, tPurge ) )
+		sphDie ( "failed to merge index '%s' into index '%s': %s", sSrc, sDst, pDst->GetLastError().cstr() );
 
 	SafeDelete ( pSrc );
 	SafeDelete ( pDst );
-
-	if ( !bMergedOK )
-		sphDie ( "FATAL: failed to merge index '%s' into index '%s'.\n", sSrc, sDst );
 
 	// pick up merge result
 	const char * sPath = hDst["path"].cstr();
@@ -1106,13 +1104,13 @@ int main ( int argc, char ** argv )
 	if ( bMerge )
 	{
 		if ( dIndexes.GetLength()!=2 )
-			sphDie ( "FATAL: there must be 2 indexes to merge specified.\n" );
+			sphDie ( "there must be 2 indexes to merge specified" );
 
 		if ( !hConf["index"](dIndexes[0]) )
-			sphDie ( "FATAL: no merge destination index '%s'.\n", dIndexes[0] );
+			sphDie ( "no merge destination index '%s'", dIndexes[0] );
 
 		if ( !hConf["index"](dIndexes[1]) )
-			sphDie ( "FATAL: no merge source index '%s'.\n", dIndexes[1] );
+			sphDie ( "no merge source index '%s'", dIndexes[1] );
 
 		bIndexedOk = DoMerge (
 			hConf["index"][dIndexes[0]], dIndexes[0],

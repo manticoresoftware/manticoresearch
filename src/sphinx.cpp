@@ -2152,15 +2152,17 @@ protected:
 // UTILITY FUNCTIONS
 /////////////////////////////////////////////////////////////////////////////
 
-void sphDie(char *message, ...)
+void sphDie ( char * sTemplate, ... )
 {
 	va_list ap;
-
-	va_start(ap, message);
-	vfprintf(stdout, message, ap);
-	va_end(ap);
-	exit(1);
+	va_start ( ap, sTemplate );
+	fprintf ( stdout, "FATAL: " );
+	vfprintf ( stdout, sTemplate, ap );
+	fprintf ( stdout, "\n" );
+	va_end ( ap );
+	exit ( 1 );
 }
+
 
 /// time, in seconds
 float sphLongTimer ()
@@ -4222,7 +4224,7 @@ int CSphBin::ReadHit ( CSphWordHit * e, int iRowitems, CSphRowitem * pRowitems )
 					return 1;
 
 				default:
-					sphDie ( "FATAL: INTERNAL ERROR: unknown bin state (state=%d).\n", m_eState );
+					sphDie ( "INTERNAL ERROR: unknown bin state (state=%d)", m_eState );
 			}
 		} else
 		{
@@ -4231,7 +4233,7 @@ int CSphBin::ReadHit ( CSphWordHit * e, int iRowitems, CSphRowitem * pRowitems )
 				case BIN_POS:	m_eState = BIN_DOC; break;
 				case BIN_DOC:	m_eState = BIN_WORD; break;
 				case BIN_WORD:	m_iDone = 1; e->m_iWordID = 0; return 1;
-				default:		sphDie ( "FATAL: INTERNAL ERROR: unknown bin state (state=%d).\n", m_eState );
+				default:		sphDie ( "INTERNAL ERROR: unknown bin state (state=%d)", m_eState );
 			}
 		}
 	}
@@ -9493,7 +9495,7 @@ bool CSphIndex_VLN::QueryEx ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSph
 		case SPH_MATCH_ANY:			MatchAny ( pQuery, pTop, pResult ); break;
 		case SPH_MATCH_BOOLEAN:		bMatch = MatchBoolean ( pQuery, pTop, pResult, tTermSetup ); break;
 		case SPH_MATCH_EXTENDED:	bMatch = MatchExtended ( pQuery, pTop, pResult, tTermSetup ); break;
-		default:					sphDie ( "FATAL: INTERNAL ERROR: unknown matching mode (mode=%d).\n", pQuery->m_eMode );
+		default:					sphDie ( "INTERNAL ERROR: unknown matching mode (mode=%d)", pQuery->m_eMode );
 	}
 	PROFILE_END ( query_match );
 
@@ -10882,7 +10884,7 @@ BYTE ** CSphSource_SQL::NextDocument ()
 	{
 		// is that an error?
 		if ( SqlIsError() )
-			sphDie ( "FATAL: sql_fetch_row: %s.\n", SqlError() );
+			sphDie ( "sql_fetch_row: %s", SqlError() );
 
 		// maybe we can do next step yet?
 		if ( RunQueryStep () )
@@ -11035,7 +11037,7 @@ bool CSphSource_SQL::IterateMultivaluedNext ()
 	while ( !bGotRow )
 	{
 		if ( SqlIsError() )
-			sphDie ( "FATAL: sql_fetch_row: %s.\n", SqlError() );
+			sphDie ( "sql_fetch_row: %s", SqlError() );
 
 		// !COMMIT run next ranged step here
 		return false;

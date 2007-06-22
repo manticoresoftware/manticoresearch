@@ -158,11 +158,11 @@ int main ( int argc, char ** argv )
 	// load config
 	CSphConfigParser cp;
 	if ( !cp.Parse ( sConfName ) )
-		sphDie ( "FATAL: failed to parse config file '%s'.\n", sConfName );
+		sphDie ( "failed to parse config file '%s'", sConfName );
 
 	CSphConfig & hConf = cp.m_tConf;
 	if ( !hConf.Exists ( "index" ) )
-		sphDie ( "FATAL: no indexes found in config file '%s'.\n", sConfName );
+		sphDie ( "no indexes found in config file '%s'", sConfName );
 
 	/////////////////////
 	// search each index
@@ -181,13 +181,13 @@ int main ( int argc, char ** argv )
 			continue;
 
 		if ( !hIndex.Exists ( "path" ) )
-			sphDie ( "FATAL: key 'path' not found in index '%s'.\n", sIndexName );
+			sphDie ( "key 'path' not found in index '%s'", sIndexName );
 
 		// configure charset_type
 		CSphString sError;
 		ISphTokenizer * pTokenizer = sphConfTokenizer ( hIndex, sError );
 		if ( !pTokenizer )
-			sphDie ( "FATAL: index '%s': %s.\n", sIndexName, sError.cstr() );
+			sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 
 		// do we want to show document info from database?
 		#if USE_MYSQL
@@ -216,7 +216,7 @@ int main ( int argc, char ** argv )
 				break;
 			sQueryInfo = hSource["sql_query_info"].cstr();
 			if ( !strstr ( sQueryInfo, "$id" ) )
-				sphDie ( "FATAL: 'sql_query_info' value must contain '$id'." );
+				sphDie ( "'sql_query_info' value must contain '$id'" );
 
 			int iPort = 3306;
 			if ( hSource.Exists ( "sql_port" ) && hSource["sql_port"].intval() )
@@ -232,8 +232,7 @@ int main ( int argc, char ** argv )
 				hSource.Exists ( "sql_sock" ) ? hSource["sql_sock"].cstr() : NULL,
 				0 ) )
 			{
-				sphDie ( "FATAL: failed to connect to MySQL (error='%s').",
-					mysql_error ( &tSqlDriver ) );
+				sphDie ( "failed to connect to MySQL (error=%s)", mysql_error ( &tSqlDriver ) );
 			}
 
 			// all good
@@ -384,7 +383,7 @@ int main ( int argc, char ** argv )
 					}
 
 					if ( sError )
-						sphDie ( "FATAL: sql_query_info: %s: %s.\n", sError, mysql_error ( &tSqlDriver ) );
+						sphDie ( "sql_query_info: %s: %s", sError, mysql_error ( &tSqlDriver ) );
 
 					delete [] sQuery;
 				}

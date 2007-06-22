@@ -59,7 +59,7 @@ void * sphDebugNew ( size_t iSize, const char * sFile, int iLine, bool bArray )
 {
 	BYTE * pBlock = (BYTE*) ::malloc ( iSize+sizeof(CSphMemHeader)+sizeof(DWORD) );
 	if ( !pBlock )
-		sphDie ( "FATAL: out of memory (unable to allocate %d bytes).\n", iSize ); // FIXME! this may fail with malloc error too
+		sphDie ( "out of memory (unable to allocate %d bytes)", iSize ); // FIXME! this may fail with malloc error too
 
 	*(DWORD*)( pBlock+iSize+sizeof(CSphMemHeader) ) = MEMORY_MAGIC_END;
 
@@ -99,29 +99,29 @@ void sphDebugDelete ( void * pPtr, bool bArray )
 	{
 		case MEMORY_MAGIC_ARRAY:
 			if ( !bArray )
-				sphDie ( "FATAL: delete [] on non-array block %d allocated at %s(%d)\n",
+				sphDie ( "delete [] on non-array block %d allocated at %s(%d)",
 					pHeader->m_iAllocId, pHeader->m_sFile, pHeader->m_iLine );
 			break;
 
 		case MEMORY_MAGIC_PLAIN:
 			if ( bArray )
-				sphDie ( "FATAL: delete on array block %d allocated at %s(%d)\n",
+				sphDie ( "delete on array block %d allocated at %s(%d)",
 					pHeader->m_iAllocId, pHeader->m_sFile, pHeader->m_iLine );
 			break;
 
 		case MEMORY_MAGIC_DELETED:
-			sphDie ( "FATAL: double delete on block %d allocated at %s(%d)\n",
+			sphDie ( "double delete on block %d allocated at %s(%d)",
 				pHeader->m_iAllocId, pHeader->m_sFile, pHeader->m_iLine );
 			break;
 
 		default:
-			sphDie ( "FATAL: delete on unmanaged block at 0x%08x\n", pPtr );
+			sphDie ( "delete on unmanaged block at 0x%08x", pPtr );
 			return;
 	}
 
 	BYTE * pBlock = (BYTE*) pHeader;
 	if ( *(DWORD*)( pBlock+pHeader->m_iSize+sizeof(CSphMemHeader) ) != MEMORY_MAGIC_END )
-		sphDie ( "FATAL: out-of-bounds write beyond block %d allocated at %s(%d)\n",
+		sphDie ( "out-of-bounds write beyond block %d allocated at %s(%d)",
 			pHeader->m_iAllocId, pHeader->m_sFile, pHeader->m_iLine );
 
 	// unchain
@@ -201,11 +201,11 @@ void sphAllocsCheck ()
 		BYTE * pBlock = (BYTE*) pHeader;
 
 		if (!( pHeader->m_uMagic==MEMORY_MAGIC_ARRAY || pHeader->m_uMagic==MEMORY_MAGIC_PLAIN ))
-			sphDie ( "corrupted header in block %d allocated at %s(%d)\n",
+			sphDie ( "corrupted header in block %d allocated at %s(%d)",
 				pHeader->m_iAllocId, pHeader->m_sFile, pHeader->m_iLine );
 
 		if ( *(DWORD*)( pBlock+pHeader->m_iSize+sizeof(CSphMemHeader) ) != MEMORY_MAGIC_END )
-			sphDie ( "out-of-bounds write beyond block %d allocated at %s(%d)\n",
+			sphDie ( "out-of-bounds write beyond block %d allocated at %s(%d)",
 				pHeader->m_iAllocId, pHeader->m_sFile, pHeader->m_iLine );
 	}
 }
@@ -245,7 +245,7 @@ void * operator new ( size_t iSize )
 {
 	void * pResult = ::malloc ( iSize );
 	if ( !pResult )
-		sphDie ( "FATAL: out of memory (unable to allocate %d bytes).\n", iSize ); // FIXME! this may fail with malloc error too
+		sphDie ( "out of memory (unable to allocate %d bytes)", iSize ); // FIXME! this may fail with malloc error too
 	return pResult;
 }
 
@@ -254,7 +254,7 @@ void * operator new [] ( size_t iSize )
 {
 	void * pResult = ::malloc ( iSize );
 	if ( !pResult )
-		sphDie ( "FATAL: out of memory (unable to allocate %d bytes).\n", iSize ); // FIXME! this may fail with malloc error too
+		sphDie ( "out of memory (unable to allocate %d bytes)", iSize ); // FIXME! this may fail with malloc error too
 	return pResult;
 }
 

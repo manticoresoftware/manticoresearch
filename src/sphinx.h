@@ -1177,7 +1177,7 @@ struct CSphMatchComparatorState
 	}
 
 	/// get my i-th attr from match
-	template<bool BITS> CSphRowitem GetAttr ( const CSphMatch & m, int i ) const;
+	template<bool BITS> inline CSphRowitem GetAttr ( const CSphMatch & m, int i ) const;
 
 	/// check if any of my attrs are bitfields
 	bool UsesBitfields ()
@@ -1191,13 +1191,13 @@ struct CSphMatchComparatorState
 };
 
 template<>
-CSphRowitem CSphMatchComparatorState::GetAttr<false> ( const CSphMatch & m, int i ) const
+inline CSphRowitem CSphMatchComparatorState::GetAttr<false> ( const CSphMatch & m, int i ) const
 {
 	return m.GetAttr ( m_iRowitem[i] );
 }
 
 template<>
-CSphRowitem CSphMatchComparatorState::GetAttr<true> ( const CSphMatch & m, int i ) const
+inline CSphRowitem CSphMatchComparatorState::GetAttr<true> ( const CSphMatch & m, int i ) const
 {
 	return m.GetAttr ( m_iBitOffset[i], m_iBitCount[i] );
 }

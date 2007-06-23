@@ -7028,28 +7028,28 @@ ISphMatchSorter * sphCreateSorter2nd ( ESphSortFunc eGroupFunc, bool bGroupBits,
 	{
 		switch ( eGroupFunc )
 		{
-			case FUNC_REL_DESC:		return sphCreateSorter3rd<COMPMATCH,MatchRelevanceLt_fn<true>>	( bDistinct, arg ); break;
-			case FUNC_ATTR_DESC:	return sphCreateSorter3rd<COMPMATCH,MatchAttrLt_fn<true>>		( bDistinct, arg ); break;
-			case FUNC_ATTR_ASC:		return sphCreateSorter3rd<COMPMATCH,MatchAttrGt_fn<true>>		( bDistinct, arg ); break;
-			case FUNC_TIMESEGS:		return sphCreateSorter3rd<COMPMATCH,MatchTimeSegments_fn<true>>	( bDistinct, arg ); break;
-			case FUNC_GENERIC2:		return sphCreateSorter3rd<COMPMATCH,MatchGeneric2_fn<true>>		( bDistinct, arg ); break;
-			case FUNC_GENERIC3:		return sphCreateSorter3rd<COMPMATCH,MatchGeneric3_fn<true>>		( bDistinct, arg ); break;
-			case FUNC_GENERIC4:		return sphCreateSorter3rd<COMPMATCH,MatchGeneric4_fn<true>>		( bDistinct, arg ); break;
-			case FUNC_GENERIC5:		return sphCreateSorter3rd<COMPMATCH,MatchGeneric5_fn<true>>		( bDistinct, arg ); break;
+			case FUNC_REL_DESC:		return sphCreateSorter3rd<COMPMATCH,MatchRelevanceLt_fn<true> >	( bDistinct, arg ); break;
+			case FUNC_ATTR_DESC:	return sphCreateSorter3rd<COMPMATCH,MatchAttrLt_fn<true> >		( bDistinct, arg ); break;
+			case FUNC_ATTR_ASC:		return sphCreateSorter3rd<COMPMATCH,MatchAttrGt_fn<true> >		( bDistinct, arg ); break;
+			case FUNC_TIMESEGS:		return sphCreateSorter3rd<COMPMATCH,MatchTimeSegments_fn<true> >( bDistinct, arg ); break;
+			case FUNC_GENERIC2:		return sphCreateSorter3rd<COMPMATCH,MatchGeneric2_fn<true> >	( bDistinct, arg ); break;
+			case FUNC_GENERIC3:		return sphCreateSorter3rd<COMPMATCH,MatchGeneric3_fn<true> >	( bDistinct, arg ); break;
+			case FUNC_GENERIC4:		return sphCreateSorter3rd<COMPMATCH,MatchGeneric4_fn<true> >	( bDistinct, arg ); break;
+			case FUNC_GENERIC5:		return sphCreateSorter3rd<COMPMATCH,MatchGeneric5_fn<true> >	( bDistinct, arg ); break;
 			default:				return NULL;
 		}
 	} else
 	{
 		switch ( eGroupFunc )
 		{
-			case FUNC_REL_DESC:		return sphCreateSorter3rd<COMPMATCH,MatchRelevanceLt_fn<false>>	( bDistinct, arg ); break;
-			case FUNC_ATTR_DESC:	return sphCreateSorter3rd<COMPMATCH,MatchAttrLt_fn<false>>		( bDistinct, arg ); break;
-			case FUNC_ATTR_ASC:		return sphCreateSorter3rd<COMPMATCH,MatchAttrGt_fn<false>>		( bDistinct, arg ); break;
-			case FUNC_TIMESEGS:		return sphCreateSorter3rd<COMPMATCH,MatchTimeSegments_fn<false>>( bDistinct, arg ); break;
-			case FUNC_GENERIC2:		return sphCreateSorter3rd<COMPMATCH,MatchGeneric2_fn<false>>	( bDistinct, arg ); break;
-			case FUNC_GENERIC3:		return sphCreateSorter3rd<COMPMATCH,MatchGeneric3_fn<false>>	( bDistinct, arg ); break;
-			case FUNC_GENERIC4:		return sphCreateSorter3rd<COMPMATCH,MatchGeneric4_fn<false>>	( bDistinct, arg ); break;
-			case FUNC_GENERIC5:		return sphCreateSorter3rd<COMPMATCH,MatchGeneric5_fn<false>>	( bDistinct, arg ); break;
+			case FUNC_REL_DESC:		return sphCreateSorter3rd<COMPMATCH,MatchRelevanceLt_fn<false> >( bDistinct, arg ); break;
+			case FUNC_ATTR_DESC:	return sphCreateSorter3rd<COMPMATCH,MatchAttrLt_fn<false> >		( bDistinct, arg ); break;
+			case FUNC_ATTR_ASC:		return sphCreateSorter3rd<COMPMATCH,MatchAttrGt_fn<false> >		( bDistinct, arg ); break;
+			case FUNC_TIMESEGS:		return sphCreateSorter3rd<COMPMATCH,MatchTimeSegments_fn<false> >( bDistinct, arg ); break;
+			case FUNC_GENERIC2:		return sphCreateSorter3rd<COMPMATCH,MatchGeneric2_fn<false> >	( bDistinct, arg ); break;
+			case FUNC_GENERIC3:		return sphCreateSorter3rd<COMPMATCH,MatchGeneric3_fn<false> >	( bDistinct, arg ); break;
+			case FUNC_GENERIC4:		return sphCreateSorter3rd<COMPMATCH,MatchGeneric4_fn<false> >	( bDistinct, arg ); break;
+			case FUNC_GENERIC5:		return sphCreateSorter3rd<COMPMATCH,MatchGeneric5_fn<false> >	( bDistinct, arg ); break;
 			default:				return NULL;
 		}
 	}
@@ -7063,28 +7063,28 @@ ISphMatchSorter * sphCreateSorter1st ( ESphSortFunc eMatchFunc, bool bMatchBits,
 	{
 		switch ( eMatchFunc )
 		{
-			case FUNC_REL_DESC:		return sphCreateSorter2nd<MatchRelevanceLt_fn<true>>	( eGroupFunc, bGroupBits, bDistinct, arg ); break;
-			case FUNC_ATTR_DESC:	return sphCreateSorter2nd<MatchAttrLt_fn<true>>			( eGroupFunc, bGroupBits, bDistinct, arg ); break;
-			case FUNC_ATTR_ASC:		return sphCreateSorter2nd<MatchAttrGt_fn<true>>			( eGroupFunc, bGroupBits, bDistinct, arg ); break;
-			case FUNC_TIMESEGS:		return sphCreateSorter2nd<MatchTimeSegments_fn<true>>	( eGroupFunc, bGroupBits, bDistinct, arg ); break;
-			case FUNC_GENERIC2:		return sphCreateSorter2nd<MatchGeneric2_fn<true>>		( eGroupFunc, bGroupBits, bDistinct, arg ); break;
-			case FUNC_GENERIC3:		return sphCreateSorter2nd<MatchGeneric3_fn<true>>		( eGroupFunc, bGroupBits, bDistinct, arg ); break;
-			case FUNC_GENERIC4:		return sphCreateSorter2nd<MatchGeneric4_fn<true>>		( eGroupFunc, bGroupBits, bDistinct, arg ); break;
-			case FUNC_GENERIC5:		return sphCreateSorter2nd<MatchGeneric5_fn<true>>		( eGroupFunc, bGroupBits, bDistinct, arg ); break;
+			case FUNC_REL_DESC:		return sphCreateSorter2nd<MatchRelevanceLt_fn<true> >	( eGroupFunc, bGroupBits, bDistinct, arg ); break;
+			case FUNC_ATTR_DESC:	return sphCreateSorter2nd<MatchAttrLt_fn<true> >		( eGroupFunc, bGroupBits, bDistinct, arg ); break;
+			case FUNC_ATTR_ASC:		return sphCreateSorter2nd<MatchAttrGt_fn<true> >		( eGroupFunc, bGroupBits, bDistinct, arg ); break;
+			case FUNC_TIMESEGS:		return sphCreateSorter2nd<MatchTimeSegments_fn<true> >	( eGroupFunc, bGroupBits, bDistinct, arg ); break;
+			case FUNC_GENERIC2:		return sphCreateSorter2nd<MatchGeneric2_fn<true> >		( eGroupFunc, bGroupBits, bDistinct, arg ); break;
+			case FUNC_GENERIC3:		return sphCreateSorter2nd<MatchGeneric3_fn<true> >		( eGroupFunc, bGroupBits, bDistinct, arg ); break;
+			case FUNC_GENERIC4:		return sphCreateSorter2nd<MatchGeneric4_fn<true> >		( eGroupFunc, bGroupBits, bDistinct, arg ); break;
+			case FUNC_GENERIC5:		return sphCreateSorter2nd<MatchGeneric5_fn<true> >		( eGroupFunc, bGroupBits, bDistinct, arg ); break;
 			default:				return NULL;
 		}
 	} else
 	{
 		switch ( eMatchFunc )
 		{
-			case FUNC_REL_DESC:		return sphCreateSorter2nd<MatchRelevanceLt_fn<false>>	( eGroupFunc, bGroupBits, bDistinct, arg ); break;
-			case FUNC_ATTR_DESC:	return sphCreateSorter2nd<MatchAttrLt_fn<false>>		( eGroupFunc, bGroupBits, bDistinct, arg ); break;
-			case FUNC_ATTR_ASC:		return sphCreateSorter2nd<MatchAttrGt_fn<false>>		( eGroupFunc, bGroupBits, bDistinct, arg ); break;
-			case FUNC_TIMESEGS:		return sphCreateSorter2nd<MatchTimeSegments_fn<false>>	( eGroupFunc, bGroupBits, bDistinct, arg ); break;
-			case FUNC_GENERIC2:		return sphCreateSorter2nd<MatchGeneric2_fn<false>>		( eGroupFunc, bGroupBits, bDistinct, arg ); break;
-			case FUNC_GENERIC3:		return sphCreateSorter2nd<MatchGeneric3_fn<false>>		( eGroupFunc, bGroupBits, bDistinct, arg ); break;
-			case FUNC_GENERIC4:		return sphCreateSorter2nd<MatchGeneric4_fn<false>>		( eGroupFunc, bGroupBits, bDistinct, arg ); break;
-			case FUNC_GENERIC5:		return sphCreateSorter2nd<MatchGeneric5_fn<false>>		( eGroupFunc, bGroupBits, bDistinct, arg ); break;
+			case FUNC_REL_DESC:		return sphCreateSorter2nd<MatchRelevanceLt_fn<false> >	( eGroupFunc, bGroupBits, bDistinct, arg ); break;
+			case FUNC_ATTR_DESC:	return sphCreateSorter2nd<MatchAttrLt_fn<false> >		( eGroupFunc, bGroupBits, bDistinct, arg ); break;
+			case FUNC_ATTR_ASC:		return sphCreateSorter2nd<MatchAttrGt_fn<false> >		( eGroupFunc, bGroupBits, bDistinct, arg ); break;
+			case FUNC_TIMESEGS:		return sphCreateSorter2nd<MatchTimeSegments_fn<false> >	( eGroupFunc, bGroupBits, bDistinct, arg ); break;
+			case FUNC_GENERIC2:		return sphCreateSorter2nd<MatchGeneric2_fn<false> >		( eGroupFunc, bGroupBits, bDistinct, arg ); break;
+			case FUNC_GENERIC3:		return sphCreateSorter2nd<MatchGeneric3_fn<false> >		( eGroupFunc, bGroupBits, bDistinct, arg ); break;
+			case FUNC_GENERIC4:		return sphCreateSorter2nd<MatchGeneric4_fn<false> >		( eGroupFunc, bGroupBits, bDistinct, arg ); break;
+			case FUNC_GENERIC5:		return sphCreateSorter2nd<MatchGeneric5_fn<false> >		( eGroupFunc, bGroupBits, bDistinct, arg ); break;
 			default:				return NULL;
 		}
 	}
@@ -7190,27 +7190,27 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		{
 			switch ( eMatchFunc )
 			{
-				case FUNC_REL_DESC:	pTop = new CSphMatchQueue<MatchRelevanceLt_fn<true>>	( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_ATTR_DESC:pTop = new CSphMatchQueue<MatchAttrLt_fn<true>>			( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_ATTR_ASC:	pTop = new CSphMatchQueue<MatchAttrGt_fn<true>>			( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_TIMESEGS:	pTop = new CSphMatchQueue<MatchTimeSegments_fn<true>>	( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_GENERIC2:	pTop = new CSphMatchQueue<MatchGeneric2_fn<true>>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_GENERIC3:	pTop = new CSphMatchQueue<MatchGeneric3_fn<true>>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_GENERIC4:	pTop = new CSphMatchQueue<MatchGeneric4_fn<true>>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_GENERIC5:	pTop = new CSphMatchQueue<MatchGeneric5_fn<true>>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+				case FUNC_REL_DESC:	pTop = new CSphMatchQueue<MatchRelevanceLt_fn<true> >	( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+				case FUNC_ATTR_DESC:pTop = new CSphMatchQueue<MatchAttrLt_fn<true> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+				case FUNC_ATTR_ASC:	pTop = new CSphMatchQueue<MatchAttrGt_fn<true> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+				case FUNC_TIMESEGS:	pTop = new CSphMatchQueue<MatchTimeSegments_fn<true> >	( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+				case FUNC_GENERIC2:	pTop = new CSphMatchQueue<MatchGeneric2_fn<true> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+				case FUNC_GENERIC3:	pTop = new CSphMatchQueue<MatchGeneric3_fn<true> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+				case FUNC_GENERIC4:	pTop = new CSphMatchQueue<MatchGeneric4_fn<true> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+				case FUNC_GENERIC5:	pTop = new CSphMatchQueue<MatchGeneric5_fn<true> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
 			}
 		} else
 		{
 			switch ( eMatchFunc )
 			{
-				case FUNC_REL_DESC:	pTop = new CSphMatchQueue<MatchRelevanceLt_fn<false>>	( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_ATTR_DESC:pTop = new CSphMatchQueue<MatchAttrLt_fn<false>>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_ATTR_ASC:	pTop = new CSphMatchQueue<MatchAttrGt_fn<false>>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_TIMESEGS:	pTop = new CSphMatchQueue<MatchTimeSegments_fn<false>>	( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_GENERIC2:	pTop = new CSphMatchQueue<MatchGeneric2_fn<false>>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_GENERIC3:	pTop = new CSphMatchQueue<MatchGeneric3_fn<false>>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_GENERIC4:	pTop = new CSphMatchQueue<MatchGeneric4_fn<false>>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_GENERIC5:	pTop = new CSphMatchQueue<MatchGeneric5_fn<false>>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+				case FUNC_REL_DESC:	pTop = new CSphMatchQueue<MatchRelevanceLt_fn<false> >	( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+				case FUNC_ATTR_DESC:pTop = new CSphMatchQueue<MatchAttrLt_fn<false> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+				case FUNC_ATTR_ASC:	pTop = new CSphMatchQueue<MatchAttrGt_fn<false> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+				case FUNC_TIMESEGS:	pTop = new CSphMatchQueue<MatchTimeSegments_fn<false> >	( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+				case FUNC_GENERIC2:	pTop = new CSphMatchQueue<MatchGeneric2_fn<false> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+				case FUNC_GENERIC3:	pTop = new CSphMatchQueue<MatchGeneric3_fn<false> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+				case FUNC_GENERIC4:	pTop = new CSphMatchQueue<MatchGeneric4_fn<false> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+				case FUNC_GENERIC5:	pTop = new CSphMatchQueue<MatchGeneric5_fn<false> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
 			}
 		}
 

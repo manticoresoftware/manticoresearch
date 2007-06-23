@@ -821,7 +821,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 			tTotal.m_iTotalBytes += tSource.m_iTotalBytes;
 		}
 
-		fprintf ( stdout, "total %d docs, " I64FMT " bytes\n",
+		fprintf ( stdout, "total %d docs, %"PRIi64" bytes\n",
 			tTotal.m_iTotalDocuments, tTotal.m_iTotalBytes );
 
 		fprintf ( stdout, "total %.3f sec, %.2f bytes/sec, %.2f docs/sec\n",

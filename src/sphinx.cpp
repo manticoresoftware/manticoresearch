@@ -481,7 +481,7 @@ public:
 		}
 		if ( st.st_size<iMinSize )
 		{
-			sError.SetSprintf ( "failed to load %s: bad size "I64FMT" (at least "I64FMT" bytes expected)",
+			sError.SetSprintf ( "failed to load %s: bad size %"PRIi64" (at least %"PRIi64" bytes expected)",
 				GetFilename(), (int64_t)st.st_size, (int64_t)iMinSize );
 			return -1;
 		}
@@ -559,9 +559,9 @@ public:
 		if ( m_pData==MAP_FAILED )
 		{
 			if ( m_iLength>0x7fffffffUL )
-				sError.SetSprintf ( "mmap() failed: %s (length="I64FMT" is over 2GB, impossible on some 32-bit systems)", strerror(errno), (int64_t)m_iLength );
+				sError.SetSprintf ( "mmap() failed: %s (length=%"PRIi64" is over 2GB, impossible on some 32-bit systems)", strerror(errno), (int64_t)m_iLength );
 			else
-				sError.SetSprintf ( "mmap() failed: %s (length="I64FMT")", strerror(errno), (int64_t)m_iLength );
+				sError.SetSprintf ( "mmap() failed: %s (length=%"PRIi64")", strerror(errno), (int64_t)m_iLength );
 			return false;
 		}
 
@@ -3825,7 +3825,7 @@ void CSphReader_VLN::UpdateCache ()
 		m_iBuffUsed = 0;
 
 		m_bError = true;
-		m_sError.SetSprintf ( "seek error in %s: pos="I64FMT", code=%d, msg=%s",
+		m_sError.SetSprintf ( "seek error in %s: pos=%"PRIi64", code=%d, msg=%s",
 			m_sFilename.cstr(), (int64_t)iNewPos, errno, strerror(errno) );
 		return;
 	}
@@ -3846,7 +3846,7 @@ void CSphReader_VLN::UpdateCache ()
 	{
 		// unexpected io failure
 		m_bError = true;
-		m_sError.SetSprintf ( "read error in %s: pos="I64FMT", len=%d, code=%d, msg=%s",
+		m_sError.SetSprintf ( "read error in %s: pos=%"PRIi64", len=%d, code=%d, msg=%s",
 			m_sFilename.cstr(), (int64_t)m_iPos, iReadLen, errno, strerror(errno) );
 	}
 }

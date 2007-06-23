@@ -30,6 +30,11 @@
 #include <stdint.h>
 #endif
 
+#if HAVE_INTTYPES_H
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+#endif
+
 #if HAVE_SYS_TYPES_H
 #include <sys/types.h>
 #endif
@@ -45,7 +50,7 @@
 // 64-BIT INTEGER TYPES AND MACROS
 /////////////////////////////////////////////////////////////////////////////
 
-#if defined(U64C) || defined(I64C) || defined(U64FMT) || defined(I64FMT)
+#if defined(U64C) || defined(I64C)
 #error "Internal 64-bit integer macros already defined."
 #endif
 
@@ -56,8 +61,8 @@ typedef __int64 int64_t;
 typedef unsigned __int64 uint64_t;
 #define U64C(v) v ## UI64
 #define I64C(v) v ## I64
-#define U64FMT "%I64d"
-#define I64FMT "%I64d"
+#define PRIu64 "I64d"
+#define PRIi64 "I64d"
 #else // !defined(_MSC_VER)
 typedef long long int64_t;
 typedef unsigned long long uint64_t;
@@ -66,14 +71,24 @@ typedef unsigned long long uint64_t;
 #endif // no stdint.h
 
 // if platform-specific macros were not supplied, use common defaults
-#ifndef I64FMT
+#ifndef U64C
 #define U64C(v) v ## ULL
+#endif
+
+#ifndef I64C
 #define I64C(v) v ## LL
-#define U64FMT "%llu"
-#define I64FMT "%lld"
+#endif
+
+#ifndef PRIu64
+#define PRIu64 "llu"
+#endif
+
+#ifndef PRIi64
+#define PRIi64 "lld"
 #endif
 
 STATIC_SIZE_ASSERT ( uint64_t, 8 );
+STATIC_SIZE_ASSERT ( int64_t, 8 );
 
 /////////////////////////////////////////////////////////////////////////////
 // MEMORY MANAGEMENT

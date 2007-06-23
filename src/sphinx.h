@@ -1121,9 +1121,7 @@ struct CSphIndexProgress
 		PHASE_COLLECT,				///< document collection phase
 		PHASE_SORT,					///< final sorting phase
 		PHASE_COLLECT_MVA,			///< multi-valued attributes collection phase
-		PHASE_SORT_MVA,				///< multi-valued attributes collection phase
-		PHASE_COLLECT_MVA_END,		///< multi-valued attributes collection phase end
-		PHASE_SORT_END				///< final sorting phase end
+		PHASE_SORT_MVA				///< multi-valued attributes collection phase
 	};
 
 	Phase_e			m_ePhase;		///< current indexing phase

@@ -919,7 +919,7 @@ MemInputBuffer_c::MemInputBuffer_c ( const char * sFrom, int iLen )
 // SIMPLE FILE-BASED QUERY CACHE
 /////////////////////////////////////////////////////////////////////////////
 
-#if !USE_WINDOWS
+#if 0
 
 /// my simple cache
 class CSphCache
@@ -2032,7 +2032,7 @@ bool MinimizeSchema ( CSphSchema & tDst, const CSphSchema & tSrc )
 		dDst.Add ( tDst.GetAttr(i) );
 
 	bool bEqual = ( tDst.GetAttrsCount()==tSrc.GetAttrsCount() );
-	ARRAY_FOREACH ( i, dDst );
+	ARRAY_FOREACH ( i, dDst )
 	{
 		int iSrcIdx = tSrc.GetAttrIndex ( dDst[i].m_sName.cstr() );
 
@@ -2663,7 +2663,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			assert ( tServed.m_pDict );
 			assert ( tServed.m_pTokenizer );
 
-#if !USE_WINDOWS
+#if 0
 			CSphCache tCache ( g_sCacheDir.cstr(), g_iCacheTTL, g_bCacheGzip );
 			if ( !g_bCacheEnable
 				|| !tCache.ReadFromFile ( tQuery, sNext, tServed.m_pIndexPath->cstr(), pRes ) )
@@ -2694,7 +2694,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 				}
 				SafeDelete ( pSorter );
 
-#if !USE_WINDOWS
+#if 0
 				if ( g_bCacheEnable )
 					tCache.StoreResult ( tQuery, sNext, pRes );
 #endif

@@ -1333,7 +1333,7 @@ public:
 		m_tStateGroup = tState;
 
 		if ( DISTINCT && m_iDistinctOffset>=0 )
-			for ( int i=0; i<sizeof(m_tStateGroup.m_iBitOffset)/sizeof(m_tStateGroup.m_iBitOffset[0]); i++ )
+			for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
 				if ( m_tStateGroup.m_iBitOffset[i]==m_iDistinctOffset )
 			{
 				m_bSortByDistinct = true;
@@ -10521,12 +10521,12 @@ const char * const CSphSource_SQL::MACRO_VALUES [ CSphSource_SQL::MACRO_COUNT ] 
 
 CSphSource_SQL::CSphSource_SQL ( const char * sName )
 	: CSphSource_Document	( sName )
+	, m_bSqlConnected		( false )
 	, m_uMinID				( 0 )
 	, m_uMaxID				( 0 )
 	, m_uCurrentID			( 0 )
 	, m_uMaxFetchedID		( 0 )
 	, m_iMultiAttr			( -1 )
-	, m_bSqlConnected		( false )
 {
 }
 
@@ -10646,7 +10646,7 @@ bool CSphSource_SQL::RunQueryStep ( CSphString & sError )
 	bool bRes = SqlQuery ( sRes );
 
 	if ( !bRes )
-		sError.SetSprintf ( "sql_range_query: %s (DSN=%s)", sError, SqlError(), m_sSqlDSN.cstr() );
+		sError.SetSprintf ( "sql_range_query: %s (DSN=%s)", SqlError(), m_sSqlDSN.cstr() );
 
 	SafeDeleteArray ( sRes );
 	return bRes;

@@ -9179,26 +9179,23 @@ const CSphSchema * CSphIndex_VLN::Preload ( bool bMlock, CSphString * sWarning )
 
 		// intentionally losing data; we don't support more than 4B documents per instance yet
 		m_uDocinfo = (DWORD)( iDocinfoSize / iEntrySize );
-
-		uint64_t uDocinfoSize = m_uDocinfo;
-		uDocinfoSize *= (uint64_t)iEntrySize;
-
-		if ( uDocinfoSize!=(uint64_t)iDocinfoSize )
+		if ( iDocinfoSize!=SphOffset_t(m_uDocinfo)*SphOffset_t(iEntrySize) )
 		{
 			m_sLastError.SetSprintf ( "docinfo size check mismatch (4B document limit hit?)" );
 			return NULL;
 		}
 
-		if ( uDocinfoSize!=(uint64_t)((size_t)uDocinfoSize) )
+		size_t sDocinfoSize = (size_t)iDocinfoSize;
+		if ( iDocinfoSize!=(SphOffset_t)sDocinfoSize )
 		{
 			m_sLastError.SetSprintf ( "docinfo does not fit in size_t (4 GB size_t limit on 32-bit system hit?)" );
 			return NULL;
 		}
 
-		if ( !m_pDocinfo.Alloc ( (size_t)(uDocinfoSize/sizeof(DWORD)), m_sLastError, sWarning ) )
+		if ( !m_pDocinfo.Alloc ( DWORD(sDocinfoSize/sizeof(DWORD)), m_sLastError, sWarning ) )
 			return NULL;
 
-		if ( ::read ( tDocinfo.GetFD(), m_pDocinfo.GetWritePtr(), (size_t)uDocinfoSize )!=uDocinfoSize )
+		if ( (size_t)::read ( tDocinfo.GetFD(), m_pDocinfo.GetWritePtr(), sDocinfoSize )!=sDocinfoSize )
 		{
 			m_pDocinfo.Reset ();
 			return NULL;
@@ -9258,20 +9255,21 @@ const CSphSchema * CSphIndex_VLN::Preload ( bool bMlock, CSphString * sWarning )
 			m_pMva.Reset ();
 			if ( iMvaSize>0 )
 			{
-				if ( iMvaSize!=(SphOffset_t)((size_t)iMvaSize) )
+				size_t sMvaSize = (size_t)iMvaSize;
+				if ( iMvaSize!=(SphOffset_t)sMvaSize )
 				{
 					m_sLastError.SetSprintf ( "'%s' too big for size_t (4 GB limit on 32-bit system hit?)", fdMva.GetFilename() );
 					return NULL;
 				}
 
-				if ( !m_pMva.Alloc ( (size_t)(iMvaSize/sizeof(DWORD)), m_sLastError, sWarning ) )
+				if ( !m_pMva.Alloc ( DWORD(iMvaSize/sizeof(DWORD)), m_sLastError, sWarning ) )
 					return NULL;
 
-				size_t iMvaRead = ::read ( fdMva.GetFD(), m_pMva.GetWritePtr(), (size_t)iMvaSize );
-				if ( iMvaRead!=iMvaSize )
+				size_t sMvaRead = (size_t) ::read ( fdMva.GetFD(), m_pMva.GetWritePtr(), sMvaSize );
+				if ( sMvaRead!=sMvaSize )
 				{
 					m_sLastError.SetSprintf ( "read error in '%s', %d of %d bytes read", fdMva.GetFilename(),
-						iMvaRead, iMvaSize );
+						sMvaRead, sMvaSize );
 					m_pMva.Reset ();
 					return NULL;
 				}

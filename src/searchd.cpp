@@ -3596,11 +3596,6 @@ int main ( int argc, char **argv )
 	if ( iPidFD<0 )
 		sphFatal ( "failed to create pid file '%s': %s (searchd already running?)", g_sPidFile, strerror(errno) );
 
-	char sPid[16];
-	snprintf ( sPid, sizeof(sPid), "%d", getpid() );
-	if ( ::write ( iPidFD, sPid, strlen(sPid) )!=(int)strlen(sPid) )
-		sphFatal ( "failed to write to pid file '%s': %s", g_sPidFile, strerror(errno) );
-
 	// configure and preload
 	int iValidIndexes = 0;
 	hConf["index"].IterateStart ();
@@ -3882,6 +3877,11 @@ int main ( int argc, char **argv )
 		// re-lock pid
 		if ( !sphLockEx ( iPidFD, false ) )
 			sphFatal ( "failed to re-lock pid file '%s': %s", g_sPidFile, strerror(errno) );
+
+		char sPid[16];
+		snprintf ( sPid, sizeof(sPid), "%d", getpid() );
+		if ( ::write ( iPidFD, sPid, strlen(sPid) )!=(int)strlen(sPid) )
+			sphFatal ( "failed to write to pid file '%s': %s", g_sPidFile, strerror(errno) );
 
 		// re-lock indexes
 		g_hIndexes.IterateStart ();

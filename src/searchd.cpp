@@ -3430,12 +3430,12 @@ void CheckPipes ()
 		{
 			// index name must follow
 			DWORD iLen;
-			iRes = ::read ( g_dPipes[i], &iLen, sizeof(DWORD) );
+			iRes = ::read ( iToClose, &iLen, sizeof(DWORD) );
 			LOC_CHECK_READ ( sizeof(DWORD) );
 
 			CSphString sBuf;
 			sBuf.Reserve ( iLen );
-			iRes = ::read ( g_dPipes[i], (char*)sBuf.cstr(), iLen );
+			iRes = ::read ( iToClose, (char*)sBuf.cstr(), iLen );
 			LOC_CHECK_READ ( iLen );
 
 			if ( g_hIndexes(sBuf) )

@@ -142,6 +142,7 @@ enum ESphLogLevel
 	LOG_INFO	= 2
 };
 
+static bool				g_bHeadDaemon	= false;
 static bool				g_bLogStdout	= true;
 static int				g_iLogFile		= STDOUT_FILENO;
 static ESphLogLevel		g_eLogLevel		= LOG_INFO;
@@ -350,28 +351,38 @@ void sphInfo ( const char * sFmt, ... )
 
 void Shutdown ()
 {
+	// some head-only shutdown procedures
+	if ( g_bHeadDaemon )
+	{
+		// save attribute updates for all local indexes
+		g_hIndexes.IterateStart ();
+		while ( g_hIndexes.IterateNext () )
+		{
+			const ServedIndex_t & tServed = g_hIndexes.IterateGet ();
+			if ( !tServed.m_bEnabled )
+				continue;
+
+			if ( !tServed.m_pIndex->SaveAttributes () )
+				sphWarning ( "index %s: attrs save failed: %s\n",
+				g_hIndexes.IterateGetKey().cstr(), tServed.m_pIndex->GetLastError().cstr() );
+		}
+
+		// unlock indexes
+		g_hIndexes.IterateStart();
+		while ( g_hIndexes.IterateNext() )
+			g_hIndexes.IterateGet().m_pIndex->Unlock();
+		g_hIndexes.Reset();
+
+		// remove pid
+		if ( g_sPidFile )
+			::unlink ( g_sPidFile );
+	}
+
 	if ( g_iSocket )
 		sphSockClose ( g_iSocket );
 
-	// save attribute updates for all local indexes
-	g_hIndexes.IterateStart ();
-	while ( g_hIndexes.IterateNext () )
-	{
-		const ServedIndex_t & tServed = g_hIndexes.IterateGet ();
-		if ( !tServed.m_bEnabled )
-			continue;
-
-		if ( !tServed.m_pIndex->SaveAttributes () )
-			sphWarning ( "index %s: attrs save failed: %s\n",
-			g_hIndexes.IterateGetKey().cstr(), tServed.m_pIndex->GetLastError().cstr() );
-	}
-
-	g_hIndexes.Reset ();
-
-	if ( g_sPidFile )
-		unlink ( g_sPidFile );
-
-	sphInfo ( "shutdown complete" );
+	if ( g_bHeadDaemon )
+		sphInfo ( "shutdown complete" );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1976,7 +1987,9 @@ void sighup ( int )
 
 void sigterm ( int )
 {
-	sphInfo ( "caught SIGTERM, shutting down" );
+	if ( g_bHeadDaemon )
+		sphInfo ( "caught SIGTERM, shutting down" );
+
 	Shutdown ();
 	exit ( 0 );
 }
@@ -3714,6 +3727,8 @@ int main ( int argc, char **argv )
 			// configure local index
 			/////////////////////////
 
+			ServedIndex_t tIdx;
+
 			// check path
 			if ( !hIndex.Exists ( "path" ) )
 			{
@@ -3721,21 +3736,37 @@ int main ( int argc, char **argv )
 				continue;
 			}
 
-			// configure charset_type
+			// check name
+			if ( g_hIndexes.Exists ( sIndexName ) )
+			{
+				sphWarning ( "index '%s': duplicate name in hash?! INTERNAL ERROR - NOT SERVING", sIndexName );
+				continue;
+			}
+			// configure tokenizer
 			CSphString sError;
-			ISphTokenizer * pTokenizer = sphConfTokenizer ( hIndex, sError );
-			if ( !pTokenizer )
+			tIdx.m_pTokenizer = sphConfTokenizer ( hIndex, sError );
+			if ( !tIdx.m_pTokenizer )
 			{
 				sphWarning ( "index '%s': %s - NOT SERVING", sIndexName, sError.cstr() );
 				continue;
 			}
 
+			// conifgure dict
+			tIdx.m_pDict = sphCreateDictionaryCRC ();
+			if ( !tIdx.m_pDict )
+			{
+				sphWarning ( "index '%s': failed to create dictionary - NOT SERVING", sIndexName );
+				continue;
+			}
+			if ( !tIdx.m_pDict->SetMorphology ( hIndex("morphology"), tIdx.m_pTokenizer->IsUtf8(), sError ) )
+				sphWarning ( "index '%s': %s\n", sIndexName, sError.cstr() );	
+			tIdx.m_pDict->LoadStopwords ( hIndex.Exists ( "stopwords" ) ? hIndex["stopwords"].cstr() : NULL, tIdx.m_pTokenizer );
+
 			// configure memlocking
-			ServedIndex_t tIdx;
 			if ( hIndex("mlock") && hIndex["mlock"].intval() )
 				tIdx.m_bMlock = true;
 
-			// create add this one to served hashes
+			// try to create index
 			CSphString sWarning;
 			tIdx.m_pIndex = sphCreateIndexPhrase ( hIndex["path"].cstr() );
 			tIdx.m_pSchema = tIdx.m_pIndex->Preload ( tIdx.m_bMlock, &sWarning );
@@ -3747,19 +3778,18 @@ int main ( int argc, char **argv )
 			if ( !sWarning.IsEmpty() )
 				sphWarning ( "index '%s': %s", sIndexName, sWarning.cstr() );
 
-			tIdx.m_pDict = sphCreateDictionaryCRC ();
-			assert ( tIdx.m_pDict  );
+			// try to lock it
+			if ( !tIdx.m_pIndex->Lock() )
+			{
+				sphWarning ( "index '%s': lock failed (%s) - NOT SERVING", sIndexName, tIdx.m_pIndex->GetLastError().cstr() );
+				continue;
+			}
 
-			if ( !tIdx.m_pDict->SetMorphology ( hIndex("morphology"), pTokenizer->IsUtf8(), sError ) )
-				sphWarning ( "index '%s': %s\n", sIndexName, sError.cstr() );	
-
-			tIdx.m_pDict->LoadStopwords ( hIndex.Exists ( "stopwords" ) ? hIndex["stopwords"].cstr() : NULL, pTokenizer );
-			tIdx.m_pTokenizer = pTokenizer;
+			// done
 			tIdx.m_pIndexPath = new CSphString ( hIndex["path"] );
-
 			if ( !g_hIndexes.Add ( tIdx, sIndexName ) )
 			{
-				sphWarning ( "index '%s': duplicate name in hash?! INTERNAL ERROR - NOT SERVING", sIndexName );
+				sphWarning ( "INTERNAL ERROR: index '%s': hash add failed - NOT SERVING", sIndexName );
 				continue;
 			}
 
@@ -3893,7 +3923,9 @@ int main ( int argc, char **argv )
 	// serve clients
 	/////////////////
 
+	g_bHeadDaemon = true;
 	sphInfo ( "accepting connections" );
+
 	for ( ;; )
 	{
 		CheckLeaks ();
@@ -4011,6 +4043,7 @@ int main ( int argc, char **argv )
 
 			// child process, handle client
 			case 0:
+				g_bHeadDaemon = false;
 				ARRAY_FOREACH ( i, g_dPipes )
 					SafeClose ( g_dPipes[i] );
 				HandleClient ( rsock, sClientIP, dPipe[1] );

@@ -1987,12 +1987,12 @@ struct CSphIndex_VLN : CSphIndex
 	friend struct CSphDoclistRecord;
 
 								CSphIndex_VLN ( const char * sFilename );
-								~CSphIndex_VLN ();
 
 	virtual int					Build ( CSphDict * pDict, const CSphVector < CSphSource * > & dSources, int iMemoryLimit, ESphDocinfo eDocinfo );
 
 	virtual const CSphSchema *	Preload ( bool bMlock, CSphString * sWarning );
 	virtual bool				Lock ();
+	virtual void				Unlock ();
 
 	virtual CSphQueryResult *	Query ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery );
 	virtual bool				QueryEx ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchSorter * pTop );
@@ -4306,16 +4306,6 @@ CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename )
 
 	m_bPreloaded = false;
 	m_uVersion = 0;
-}
-
-
-CSphIndex_VLN::~CSphIndex_VLN ()
-{
-	if ( m_iLockFD>=0 )
-	{
-		::close ( m_iLockFD );
-		::unlink ( GetIndexFileName ( "spl" ) );
-	}
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -9051,6 +9041,16 @@ bool CSphIndex_VLN::Lock ()
 	}
 
 	return true;
+}
+
+
+void CSphIndex_VLN::Unlock() 
+{
+	if ( m_iLockFD>=0 )
+	{
+		::close ( m_iLockFD );
+		::unlink ( GetIndexFileName ( "spl" ) );
+	}
 }
 
 

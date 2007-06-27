@@ -1300,6 +1300,7 @@ public:
 
 	virtual const CSphSchema *	Preload ( bool bMlock, CSphString * sWarning ) = 0;
 	virtual bool				Lock () = 0;
+	virtual void				Unlock () = 0;
 
 	virtual CSphQueryResult *	Query ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery ) = 0;
 	virtual bool				QueryEx ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchSorter * pTop ) = 0;

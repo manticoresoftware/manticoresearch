@@ -1305,6 +1305,7 @@ public:
 	virtual bool				QueryEx ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchSorter * pTop ) = 0;
 	virtual bool				Merge ( CSphIndex * pSource, CSphPurgeData & tPurgeData ) = 0;
 
+public:
 	/// updates memory-cached attributes in real time
 	/// returns non-negative amount of actually found and updated records on success
 	/// on failure, -1 is returned and GetLastError() contains error message
@@ -1314,6 +1315,10 @@ public:
 	/// on failure, false is returned and GetLastError() contains error message
 	virtual bool				SaveAttributes () = 0;
 
+	/// externally set "updated" flag
+	/// needed because updates and saves may be performed by other processes
+	virtual void				SetAttrsUpdated ( bool bFlag ) { m_bAttrsUpdated = bFlag; }
+
 protected:
 	ProgressCallback_t *		m_pProgress;
 	CSphSchema					m_tSchema;
@@ -1321,6 +1326,8 @@ protected:
 
 	int							m_iMinInfixLen;	///< min indexable infix length (0 means don't index infixes)
 	bool						m_bPrefixesOnly;///< whether to index prefixes only or all the infixes
+
+	bool						m_bAttrsUpdated;///< whether in-memory attrs are updated (compared to disk state)
 };
 
 /////////////////////////////////////////////////////////////////////////////

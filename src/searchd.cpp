@@ -162,6 +162,14 @@ static int				g_iMaxMatches	= 1000;
 
 static SmallStringHash_T < ServedIndex_t >	g_hIndexes;
 
+enum
+{
+	SPH_PIPE_UPDATED_ATTRS,
+	SPH_PIPE_SAVED_ATTRS
+};
+
+static CSphVector<int,8>	g_dPipes; // currently open read-pipes to children processes
+
 /////////////////////////////////////////////////////////////////////////////
 
 /// known commands
@@ -3097,7 +3105,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 
 /////////////////////////////////////////////////////////////////////////////
 
-void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq )
+void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeFD )
 {
 	// check major command version
 	if ( (iVer>>8)!=(VER_COMMAND_UPDATE>>8) )
@@ -3144,6 +3152,15 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq )
 		return;
 	}
 
+	// notify head daemon
+	DWORD uTmp = SPH_PIPE_UPDATED_ATTRS;
+	::write ( iPipeFD, &uTmp, sizeof(DWORD) );
+
+	uTmp = strlen ( sIndex.cstr() );
+	::write ( iPipeFD, &uTmp, sizeof(DWORD) );
+	::write ( iPipeFD, sIndex.cstr(), uTmp );
+
+	// serve reply to client
 	NetOutputBuffer_c tOut ( iSock );
 	tOut.SendWord ( SEARCHD_OK );
 	tOut.SendWord ( VER_COMMAND_UPDATE);
@@ -3155,7 +3172,15 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq )
 
 /////////////////////////////////////////////////////////////////////////////
 
-void HandleClient ( int iSock, const char * sClientIP )
+void SafeClose ( int & iFD )
+{
+	if ( iFD>=0 )
+		::close ( iFD );
+	iFD = -1;
+}
+
+
+void HandleClient ( int iSock, const char * sClientIP, int iPipeFD )
 {
 	NetInputBuffer_c tBuf ( iSock );
 
@@ -3206,9 +3231,9 @@ void HandleClient ( int iSock, const char * sClientIP )
 	assert ( iCommand>=0 && iCommand<SEARCHD_COMMAND_TOTAL );
 	switch ( iCommand )
 	{
-		case SEARCHD_COMMAND_SEARCH:	HandleCommandSearch ( iSock, iCommandVer, tBuf ); break;
-		case SEARCHD_COMMAND_EXCERPT:	HandleCommandExcerpt ( iSock, iCommandVer, tBuf ); break;
-		case SEARCHD_COMMAND_UPDATE:	HandleCommandUpdate ( iSock, iCommandVer, tBuf ); break;
+		case SEARCHD_COMMAND_SEARCH:	SafeClose ( iPipeFD ); HandleCommandSearch ( iSock, iCommandVer, tBuf ); break;
+		case SEARCHD_COMMAND_EXCERPT:	SafeClose ( iPipeFD ); HandleCommandExcerpt ( iSock, iCommandVer, tBuf ); break;
+		case SEARCHD_COMMAND_UPDATE:	HandleCommandUpdate ( iSock, iCommandVer, tBuf, iPipeFD ); SafeClose ( iPipeFD ); break;
 		default:						assert ( 0 && "INTERNAL ERROR: unhandled command" ); break;
 	}
 }
@@ -3346,6 +3371,87 @@ void RotateIndex ( ServedIndex_t & tIndex, const char * sIndex )
 }
 
 /////////////////////////////////////////////////////////////////////////////
+
+void CheckLeaks ()
+{
+#if SPH_DEBUG_LEAKS
+	static int iHeadAllocs = sphAllocsCount ();
+	static int iHeadCheckpoint = sphAllocsLastID ();
+
+	if ( iHeadAllocs!=sphAllocsCount() )
+	{
+		sphLockEx ( g_iLogFile, false );
+		lseek ( g_iLogFile, 0, SEEK_END );
+		sphAllocsDump ( g_iLogFile, iHeadCheckpoint );
+		sphLockUn ( g_iLogFile );
+
+		iHeadAllocs = sphAllocsCount ();
+		iHeadCheckpoint = sphAllocsLastID ();
+	}
+#endif
+}
+
+
+void CheckPipes ()
+{
+	#define LOC_CHECK_READ(_exp) \
+		if ( iRes!=int(_exp) ) \
+		{ \
+			sphWarning ( "pipe read failed (exp=%d, res=%d, error=%s)", int(_exp), iRes, \
+				iRes>0 ? "(none)" : strerror(errno) ); \
+			continue; \
+		}
+
+	int iToClose = -1;
+	ARRAY_FOREACH ( i, g_dPipes )
+	{
+		SafeClose ( iToClose );
+
+		// try to get status code
+		DWORD uStatus;
+		int iRes = ::read ( g_dPipes[i], &uStatus, sizeof(DWORD) );
+
+		// no data yet?
+		if ( iRes==-1 && errno==EAGAIN )
+			continue;
+
+		// either if there's eof, or error, or valid data - this pipe is over
+		iToClose = g_dPipes[i];
+		g_dPipes.Remove ( i-- );
+
+		// check for eof
+		if ( iRes==0 )
+			continue;
+
+		// check for error
+		LOC_CHECK_READ ( sizeof(DWORD) );
+
+		if ( uStatus==SPH_PIPE_UPDATED_ATTRS )
+		{
+			// index name must follow
+			DWORD iLen;
+			iRes = ::read ( g_dPipes[i], &iLen, sizeof(DWORD) );
+			LOC_CHECK_READ ( sizeof(DWORD) );
+
+			CSphString sBuf;
+			sBuf.Reserve ( iLen );
+			iRes = ::read ( g_dPipes[i], (char*)sBuf.cstr(), iLen );
+			LOC_CHECK_READ ( iLen );
+
+			if ( g_hIndexes(sBuf) )
+				g_hIndexes(sBuf)->m_pIndex->SetAttrsUpdated ( true );
+			else
+				sphWarning ( "INTERNAL ERROR: unknown index '%s' in piped notification", sBuf.cstr() );
+
+		} else
+		{
+			// unhandled status code
+			sphWarning ( "INTERNAL ERROR: unknown pipe status=%d", uStatus );
+		}
+	}
+	SafeClose ( iToClose );
+}
+
 
 int main ( int argc, char **argv )
 {
@@ -3790,21 +3896,8 @@ int main ( int argc, char **argv )
 	sphInfo ( "accepting connections" );
 	for ( ;; )
 	{
-#if SPH_DEBUG_LEAKS
-		static int iHeadAllocs = sphAllocsCount ();
-		static int iHeadCheckpoint = sphAllocsLastID ();
-
-		if ( iHeadAllocs!=sphAllocsCount() )
-		{
-			sphLockEx ( g_iLogFile, false );
-			lseek ( g_iLogFile, 0, SEEK_END );
-			sphAllocsDump ( g_iLogFile, iHeadCheckpoint );
-			sphLockUn ( g_iLogFile );
-
-			iHeadAllocs = sphAllocsCount ();
-			iHeadCheckpoint = sphAllocsLastID ();
-		}
-#endif
+		CheckLeaks ();
+		CheckPipes ();
 
 		// try to rotate indices
 		if ( g_iHUP && !g_iChildren )
@@ -3879,28 +3972,55 @@ int main ( int argc, char **argv )
 
 		if ( bOptConsole )
 		{
-			HandleClient ( rsock, sClientIP );
+			HandleClient ( rsock, sClientIP, -1 );
 			sphSockClose ( rsock );
 			continue;
 		}
 
 		#if !USE_WINDOWS
+		// open pipe to be able to receive notifications from children
+		int dPipe[2] = { -1, -1 };
+
+		for ( ;; )
+		{
+			if ( pipe(dPipe) )
+			{
+				sphWarning ( "pipe() failed (error=%s)", strerror(errno) );
+				break;
+			}
+
+			if ( fcntl ( dPipe[0], F_SETFL, O_NONBLOCK ) )
+			{
+				sphWarning ( "fcntl() on pipe failed (error=%s)", strerror(errno) );
+				SafeClose ( dPipe[0] );
+				SafeClose ( dPipe[1] );
+				break;
+			}
+
+			g_dPipes.Add ( dPipe[0] );
+			break;
+		}
+
+		// handle that client
+		g_iChildren++;
 		switch ( fork() )
 		{
 			// fork() failed
 			case -1:
-				sphFatal ( "fork() failed (reason: %s)", strerror ( errno ) );
+				sphFatal ( "fork() failed (reason: %s)", strerror(errno) );
 
 			// child process, handle client
 			case 0:
-				HandleClient ( rsock, sClientIP );
+				ARRAY_FOREACH ( i, g_dPipes )
+					SafeClose ( g_dPipes[i] );
+				HandleClient ( rsock, sClientIP, dPipe[1] );
 				sphSockClose ( rsock );
 				exit ( 0 );
 				break;
 
 			// parent process, continue accept()ing
 			default:
-				g_iChildren++;
+				SafeClose ( dPipe[1] );
 				sphSockClose ( rsock );
 				break;
 		}

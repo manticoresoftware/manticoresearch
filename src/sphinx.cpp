@@ -2056,7 +2056,6 @@ private:
 	static const int			DOCINFO_HASH_BITS = 18;	// FIXME! make this configurable
 	DWORD *						m_pDocinfoHash;
 	int							m_iDocinfoIdShift;
-	bool						m_bDocinfoUpdated;		///< whether memory cache was updated
 
 	CSphSharedBuffer<BYTE>		m_pWordlist;			///< my wordlist cache
 	CSphWordlistCheckpoint *	m_pWordlistCheckpoints;	///< my wordlist cache checkpoints
@@ -4263,6 +4262,7 @@ CSphIndex::CSphIndex ( const char * sName )
 	, m_sLastError ( "(no error message)" )
 	, m_iMinInfixLen ( 0 )
 	, m_bPrefixesOnly ( false )
+	, m_bAttrsUpdated ( false )
 {}
 
 
@@ -4303,7 +4303,6 @@ CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename )
 	m_eDocinfo = SPH_DOCINFO_NONE;
 	m_pDocinfoHash = NULL;
 	m_iDocinfoIdShift = 0;
-	m_bDocinfoUpdated = false;
 
 	m_bPreloaded = false;
 	m_uVersion = 0;
@@ -4370,7 +4369,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate_t & tUpd )
 	}
 
 	if ( iUpdated>0 )
-		m_bDocinfoUpdated = true;
+		m_bAttrsUpdated = true;
 
 	return iUpdated;
 }
@@ -4378,7 +4377,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate_t & tUpd )
 
 bool CSphIndex_VLN::SaveAttributes ()
 {
-	if ( !m_bDocinfoUpdated || !m_uDocinfo )
+	if ( !m_bAttrsUpdated || !m_uDocinfo )
 		return true;
 	assert ( m_eDocinfo==SPH_DOCINFO_EXTERN && m_uDocinfo && m_pDocinfo.GetWritePtr() );
 
@@ -4429,7 +4428,7 @@ bool CSphIndex_VLN::SaveAttributes ()
 	// all done
 	::unlink ( sSpaOld.cstr() );
 
-	m_bDocinfoUpdated = false;
+	m_bAttrsUpdated = false;
 	return true;
 }
 
@@ -9066,7 +9065,7 @@ const CSphSchema * CSphIndex_VLN::Preload ( bool bMlock, CSphString * sWarning )
 		m_uDocinfo = 0;
 		m_eDocinfo = SPH_DOCINFO_NONE;
 		m_iDocinfoIdShift = 0;
-		m_bDocinfoUpdated = false;
+		m_bAttrsUpdated = false;
 
 		m_bPreloaded = false;
 	}

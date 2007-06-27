@@ -747,6 +747,13 @@ public:
 		}
 	}
 
+	void Reserve ( int iLen )
+	{
+		SafeDeleteArray ( m_sValue );
+		m_sValue = new char [ 1+SAFETY_GAP+iLen ];
+		memset ( m_sValue, 0, 1+SAFETY_GAP+iLen );
+	}
+
 	const CSphString & SetSprintf ( const char * sTemplate, ... )
 	{
 		char sBuf[1024];

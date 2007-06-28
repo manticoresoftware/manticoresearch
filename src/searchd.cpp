@@ -3877,7 +3877,8 @@ int main ( int argc, char **argv )
 		#endif
 
 		// re-lock pid
-		if ( !sphLockEx ( iPidFD, false ) )
+		// FIXME! there's a potential race here
+		if ( !sphLockEx ( iPidFD, true ) )
 			sphFatal ( "failed to re-lock pid file '%s': %s", g_sPidFile, strerror(errno) );
 
 		char sPid[16];

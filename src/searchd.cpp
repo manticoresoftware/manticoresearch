@@ -37,6 +37,8 @@
 	#define sphSockSend(_sock,_buf,_len,_flags)		::send(_sock,_buf,_len,_flags)
 	#define sphSockClose(_sock)						::closesocket(_sock)
 
+	#define ftruncate								_chsize
+
 #else
 	// UNIX-specific headers and calls
 	#include <unistd.h>
@@ -2201,16 +2203,6 @@ public:
 		return *this;
 	}
 };
-
-
-void sphUsleep ( int iMsec )
-{
-	struct timeval tvTimeout;
-	tvTimeout.tv_sec = iMsec / 1000; // full seconds
-	tvTimeout.tv_usec = ( iMsec % 1000 ) * 1000; // remainder is msec, so *1000 for usec
-
-	select ( 0, NULL, NULL, NULL, &tvTimeout ); // FIXME? could handle EINTR
-}
 
 
 void ReportSearchFailures ( StrBuf_t & sReport, SearchFailuresLog_t & dFailures )

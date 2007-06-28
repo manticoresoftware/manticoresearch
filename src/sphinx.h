@@ -141,6 +141,9 @@ bool			sphLockEx ( int iFile, bool bWait );
 /// remove existing locks
 void			sphLockUn ( int iFile );
 
+/// millisecond-precision sleep
+void			sphUsleep ( int iMsec );
+
 /////////////////////////////////////////////////////////////////////////////
 // TOKENIZERS
 /////////////////////////////////////////////////////////////////////////////
@@ -698,6 +701,9 @@ struct CSphSourceParams_SQL
 	CSphVector<CSphString,4>		m_dQueryPostIndex;
 	CSphVector<CSphColumnInfo,4>	m_dAttrs;
 
+	int								m_iThrottleDelay;
+	int								m_iThrottleRows;
+
 	// connection params
 	CSphString						m_sHost;
 	CSphString						m_sUser;
@@ -742,6 +748,7 @@ protected:
 	SphDocID_t			m_uCurrentID;	///< current min ID
 	SphDocID_t			m_uMaxFetchedID;///< max actually fetched ID
 	int					m_iMultiAttr;	///< multi-valued attr being currently fetched
+	int					m_iRows;		///< rows since last throttle
 
 	CSphSourceParams_SQL		m_tParams;
 

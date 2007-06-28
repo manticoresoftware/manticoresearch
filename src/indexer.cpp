@@ -464,6 +464,9 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 	LOC_GETAS( tParams.m_dQueryPostIndex,	"sql_query_post_index" );
 	LOC_GETI ( tParams.m_iRangeStep,		"sql_range_step" );
 
+	LOC_GETI ( tParams.m_iThrottleDelay,	"sql_throttle_delay" );
+	LOC_GETI ( tParams.m_iThrottleRows,		"sql_throttle_rows" );
+
 	SqlAttrsConfigure ( tParams,	hSource("sql_group_column"),		SPH_ATTR_INTEGER,	sSourceName );
 	SqlAttrsConfigure ( tParams,	hSource("sql_date_column"),			SPH_ATTR_TIMESTAMP,	sSourceName );
 	SqlAttrsConfigure ( tParams,	hSource("sql_str2ordinal_column"),	SPH_ATTR_ORDINAL,	sSourceName );
@@ -480,6 +483,18 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 		if ( !ParseMultiAttr ( pVal->cstr(), tAttr, sSourceName ) )
 			return false;
 		tParams.m_dAttrs.Add ( tAttr );
+	}
+
+	// additional checks
+	if ( tParams.m_iThrottleDelay<0 )
+	{
+		fprintf ( stdout, "WARNING: sql_throttle_delay must be non-negative; throttling disabled\n" );
+		tParams.m_iThrottleDelay = 0;
+	}
+	if ( tParams.m_iThrottleRows<=0 )
+	{
+		fprintf ( stdout, "WARNING: sql_throttle_row must be positive; throttling disabled\n" );
+		tParams.m_iThrottleDelay = 0;
 	}
 
 	return true;

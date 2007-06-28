@@ -2344,6 +2344,21 @@ void sphLockUn ( int iFile )
 }
 #endif
 
+
+void sphUsleep ( int iMsec )
+{
+#if USE_WINDOWS
+	Sleep ( iMsec );
+
+#else
+	struct timeval tvTimeout;
+	tvTimeout.tv_sec = iMsec / 1000; // full seconds
+	tvTimeout.tv_usec = ( iMsec % 1000 ) * 1000; // remainder is msec, so *1000 for usec
+
+	select ( 0, NULL, NULL, NULL, &tvTimeout ); // FIXME? could handle EINTR
+#endif
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // TOKENIZERS
 /////////////////////////////////////////////////////////////////////////////
@@ -10504,6 +10519,8 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 
 CSphSourceParams_SQL::CSphSourceParams_SQL ()
 	: m_iRangeStep ( 1024 )
+	, m_iThrottleDelay ( 0 )
+	, m_iThrottleRows ( 1 )
 	, m_iPort ( 0 )
 {
 }
@@ -10524,6 +10541,7 @@ CSphSource_SQL::CSphSource_SQL ( const char * sName )
 	, m_uCurrentID			( 0 )
 	, m_uMaxFetchedID		( 0 )
 	, m_iMultiAttr			( -1 )
+	, m_iRows				( 0 )
 {
 }
 
@@ -10872,6 +10890,11 @@ BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 	{
 		// try to get next row
 		bool bGotRow = SqlFetchRow ();
+		if ( m_tParams.m_iThrottleDelay>0 && ++m_iRows==m_tParams.m_iThrottleRows )
+		{
+			sphUsleep ( m_tParams.m_iThrottleDelay );
+			m_iRows = 0;
+		}
 
 		// when the party's over...
 		while ( !bGotRow )

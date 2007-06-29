@@ -764,7 +764,7 @@ public:
 
 public:
 	int			GetLength () const										{ return m_iUsed; }
-	void		SetState ( const CSphMatchComparatorState & tState )	{ m_tState = tState; }
+	void		SetState ( const CSphMatchComparatorState & tState )	{ m_tState = tState; m_tState.m_iNow = (DWORD) time ( NULL ); }
 	bool		UsesAttrs ()											{ return m_bUsesAttrs; }
 	CSphMatch *	First ()												{ return m_pData; }
 };

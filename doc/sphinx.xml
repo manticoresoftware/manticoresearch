@@ -1149,6 +1149,45 @@ of alive agents, load-balance requests, etc.
 </sect2>
 
 
+<sect2 id="query-log-format"><title><filename>searchd</filename> query log format</title>
+<para>
+<filename>searchd</filename> logs all succesfully executed search queries
+into query log file. Here's an example:
+
+<programlisting>
+[Fri Jun 29 21:17:58 2007] 0.004 sec [all/0/rel 35254 (0,20)] [lj] test
+[Fri Jun 29 21:20:34 2007] 0.024 sec [all/0/rel 19886 (0,20) @channel_id] [lj] test
+</programlisting>
+
+This log format is as follows:
+<programlisting>
+[query-date] query-time [match-mode/filters-count/sort-mode
+    total-matches (offset,limit) @groupby-attr] [index-name] query
+</programlisting>
+
+Match mode can take one of the following values:
+<itemizedlist>
+<listitem>"all" for SPH_MATCH_ALL mode;</listitem>
+<listitem>"any" for SPH_MATCH_ANY mode;</listitem>
+<listitem>"phr" for SPH_MATCH_PHRASE mode;</listitem>
+<listitem>"bool" for SPH_MATCH_BOOLEAN mode;</listitem>
+<listitem>"ext" for SPH_MATCH_EXTENDED mode.</listitem>
+</itemizedlist>
+
+Sort mode can take one of the following values:
+
+<itemizedlist>
+<listitem>"rel" for SPH_SORT_RELEVANCE mode;</listitem>
+<listitem>"attr-" for SPH_SORT_ATTR_DESC mode;</listitem>
+<listitem>"attr+" for SPH_SORT_ATTR_ASC mode;</listitem>
+<listitem>"tsegs" for SPH_SORT_TIME_SEGMENTS mode;</listitem>
+<listitem>"ext" for SPH_SORT_EXTENDED mode.</listitem>
+</itemizedlist>
+
+</para>
+</sect2>
+
+
 </sect1>
 <sect1 id="sphinxse"><title>MySQL storage engine (SphinxSE)</title>
 

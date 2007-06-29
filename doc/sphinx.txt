@@ -43,6 +43,7 @@ Table of Contents
       4.5. Sorting modes
       4.6. Grouping (clustering) search results
       4.7. Distributed searching
+      4.8. searchd query log format
 
    5. MySQL storage engine (SphinxSE)
       5.1. SphinxSE overview
@@ -1057,6 +1058,36 @@ This has a number of uses:
 It is scheduled to implement better HA support which would allow to specify
 which agents mirror each other, do health checks, keep track of alive
 agents, load-balance requests, etc.
+
+4.8. searchd query log format
+-----------------------------
+
+searchd logs all succesfully executed search queries into query log file.
+Here's an example:
+
+   | [Fri Jun 29 21:17:58 2007] 0.004 sec [all/0/rel 35254 (0,20)] [lj] test
+   | [Fri Jun 29 21:20:34 2007] 0.024 sec [all/0/rel 19886 (0,20) @channel_id] [lj] test
+
+This log format is as follows:
+
+   | [query-date] query-time [match-mode/filters-count/sort-mode
+   |     total-matches (offset,limit) @groupby-attr] [index-name] query
+
+Match mode can take one of the following values:
+
+   * "all" for SPH_MATCH_ALL mode;
+   * "any" for SPH_MATCH_ANY mode;
+   * "phr" for SPH_MATCH_PHRASE mode;
+   * "bool" for SPH_MATCH_BOOLEAN mode;
+   * "ext" for SPH_MATCH_EXTENDED mode.
+
+Sort mode can take one of the following values:
+
+   * "rel" for SPH_SORT_RELEVANCE mode;
+   * "attr-" for SPH_SORT_ATTR_DESC mode;
+   * "attr+" for SPH_SORT_ATTR_ASC mode;
+   * "tsegs" for SPH_SORT_TIME_SEGMENTS mode;
+   * "ext" for SPH_SORT_EXTENDED mode.
 
 5. MySQL storage engine (SphinxSE)
 ==================================

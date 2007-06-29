@@ -7093,7 +7093,7 @@ static ESortClauseParseResult sphParseSortClause ( const char * sClause, const C
 		case 3:		eFunc = FUNC_GENERIC3; break;
 		case 4:		eFunc = FUNC_GENERIC4; break;
 		case 5:		eFunc = FUNC_GENERIC5; break;
-		default:	sError.SetSprintf ( "INTERNAL ERROR: %d fields in " __FUNCTION__, iField ); return SORT_CLAUSE_ERROR;
+		default:	sError.SetSprintf ( "INTERNAL ERROR: %d fields in sphParseSortClause()", iField ); return SORT_CLAUSE_ERROR;
 	}
 	return SORT_CLAUSE_OK;
 }

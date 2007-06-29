@@ -104,8 +104,8 @@ source src1
 
 	# attribute columns
 	#
-	# attribute values MUST be positive (non-zero, non-negative) integers
-	# attribute values MUST fit into 32 bits
+	# attribute values MUST be non-negative 32-bit integers
+	# (negative values will be wrapped around)
 	#
 	# attributes are additional values associated with each document which
 	# may be used to perform additional filtering and sorting during search.

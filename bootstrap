@@ -2,5 +2,5 @@
 
 autoheader \
 && aclocal \
-&& automake --foreign --ignore-deps \
+&& automake --foreign \
 && autoconf

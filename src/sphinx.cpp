@@ -7185,7 +7185,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 	// spawn the queue
 	///////////////////
 
-	bool bMatchBits = tStateGroup.UsesBitfields ();
+	bool bMatchBits = tStateMatch.UsesBitfields ();
 	bool bGroupBits = tStateGroup.UsesBitfields ();
 
 	if ( pQuery->m_iGroupbyOffset<0 )

@@ -6854,6 +6854,85 @@ struct MatchGeneric5_fn
 
 //////////////////////////////////////////////////////////////////////////
 
+template < bool BITS >
+struct MatchCustom_fn
+{
+	// setup sorting state
+	static bool SetupAttr ( const CSphSchema & tSchema, CSphMatchComparatorState & tState, CSphString & sError, int iIdx, const char * sAttr )
+	{
+		if ( iIdx>=CSphMatchComparatorState::MAX_ATTRS )
+		{
+			sError.SetSprintf ( "custom sort: too many attributes declared" );
+			return false;
+		}
+
+		int iAttr = tSchema.GetAttrIndex(sAttr);
+		if ( iAttr<0 )
+		{
+			sError.SetSprintf ( "custom sort: attr '%s' not found in schema", sAttr );
+			return false;
+		}
+
+		const CSphColumnInfo & tAttr = tSchema.GetAttr(iAttr);
+		tState.m_iAttr[iIdx] = iAttr;
+		tState.m_iBitOffset[iIdx] = tAttr.m_iBitOffset;
+		tState.m_iBitCount[iIdx] = tAttr.m_iBitCount;
+		tState.m_iRowitem[iIdx] = tAttr.m_iRowitem;
+		return true;
+	}
+
+	// setup sorting state
+	static bool Setup ( const CSphSchema & tSchema, CSphMatchComparatorState & tState, CSphString & sError )
+	{
+		float fTmp;
+		int iAttr = 0;
+
+#define MATCH_FUNCTION				fTmp
+#define MATCH_WEIGHT				1.0f
+#define MATCH_NOW					1.0f
+#define MATCH_ATTR(_idx)			1.0f
+#define MATCH_DECLARE_ATTR(_name)	if ( !SetupAttr ( tSchema, tState, sError, iAttr++, _name ) ) return false;
+#include "sphinxcustomsort.inl"
+;
+
+		return true;
+	}
+
+	// calc function and compare matches
+	// OPTIMIZE? could calc once per match on submit
+	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
+	{
+#undef MATCH_DECLARE_ATTR
+#undef MATCH_WEIGHT
+#undef MATCH_NOW
+#undef MATCH_ATTR
+#define MATCH_DECLARE_ATTR(_name)	;
+#define MATCH_WEIGHT				float(MATCH_VAR.m_iWeight)
+#define MATCH_NOW					float(t.m_iNow)
+#define MATCH_ATTR(_idx)			float(t.GetAttr<BITS>(MATCH_VAR,_idx))
+
+		float aa, bb;
+
+#undef MATCH_FUNCTION
+#undef MATCH_VAR
+#define MATCH_FUNCTION aa
+#define MATCH_VAR a
+#include "sphinxcustomsort.inl"
+;
+
+#undef MATCH_FUNCTION
+#undef MATCH_VAR
+#define MATCH_FUNCTION bb
+#define MATCH_VAR b
+#include "sphinxcustomsort.inl"
+;
+
+		return aa<bb;
+	}
+};
+
+//////////////////////////////////////////////////////////////////////////
+
 static const int MAX_SORT_FIELDS = 5; // MUST be in sync with CSphMatchComparatorState::m_iAttr
 
 
@@ -6867,20 +6946,21 @@ enum ESphSortFunc
 	FUNC_GENERIC3,
 	FUNC_GENERIC4,
 	FUNC_GENERIC5,
-	FUNC_SORTBY
+	FUNC_CUSTOM
 };
 
 
-const int SORT_CLAUSE_ERROR		= 0;
-const int SORT_CLAUSE_RANDOM	= -1;
+enum ESortClauseParseResult
+{
+	SORT_CLAUSE_OK,
+	SORT_CLAUSE_ERROR,
+	SORT_CLAUSE_RANDOM
+};
 
 
-/// returns SORT_CLAUSE_ERROR on error
-/// returns SORT_CLAUSE_RANDOM on "sort by random" clause
-/// returns 1 or more (number of fields encountered) on success
-static int sphParseSortClause ( const char * sClause, const CSphQuery * pQuery,
+static ESortClauseParseResult sphParseSortClause ( const char * sClause, const CSphQuery * pQuery,
 	const CSphSchema & tSchema, bool bGroupClause,
-	CSphMatchComparatorState & tState, CSphString & sError )
+	ESphSortFunc & eFunc, CSphMatchComparatorState & tState, CSphString & sError )
 {
 	// mini parser
 	CSphString sTmp;
@@ -6900,6 +6980,13 @@ static int sphParseSortClause ( const char * sClause, const CSphQuery * pQuery,
 		// special case, sort by random
 		if ( iField==0 && bField && strcmp ( pTok, "@random" )==0 )
 			return SORT_CLAUSE_RANDOM;
+
+		// special case, sort by custom
+		if ( iField==0 && bField && strcmp ( pTok, "@custom" )==0 )
+		{
+			eFunc = FUNC_CUSTOM;
+			return MatchCustom_fn<false>::Setup ( tSchema, tState, sError ) ? SORT_CLAUSE_OK : SORT_CLAUSE_ERROR;
+		}
 
 		// handle sort order
 		if ( !bField )
@@ -6938,6 +7025,12 @@ static int sphParseSortClause ( const char * sClause, const CSphQuery * pQuery,
 
 		} else if ( !strcasecmp ( pTok, "@count" ) && bGroupClause )
 		{
+			if ( pQuery->m_iGroupbyOffset<0 )
+			{
+				sError.SetSprintf ( "no group-by attribute; can not sort by @count" );
+				return SORT_CLAUSE_ERROR;
+			}
+
 			tState.m_iAttr[iField] = tSchema.GetAttrsCount() + SPH_VATTR_COUNT;
 			tState.m_iRowitem[iField] = tSchema.GetRowSize() + SPH_VATTR_COUNT;
 			tState.m_iBitOffset[iField] = ( tSchema.GetRowSize()+SPH_VATTR_COUNT )*ROWITEM_BITS;
@@ -6945,6 +7038,12 @@ static int sphParseSortClause ( const char * sClause, const CSphQuery * pQuery,
 
 		} else if ( !strcasecmp ( pTok, "@group" ) && bGroupClause )
 		{
+			if ( pQuery->m_iGroupbyOffset<0 )
+			{
+				sError.SetSprintf ( "no group-by attribute; can not sort by @group" );
+				return SORT_CLAUSE_ERROR;
+			}
+
 			tState.m_iAttr[iField] = tSchema.GetAttrsCount() + SPH_VATTR_GROUP;
 			tState.m_iRowitem[iField] = tSchema.GetRowSize() + SPH_VATTR_GROUP;
 			tState.m_iBitOffset[iField] = ( tSchema.GetRowSize()+SPH_VATTR_GROUP )*ROWITEM_BITS;
@@ -6988,29 +7087,15 @@ static int sphParseSortClause ( const char * sClause, const CSphQuery * pQuery,
 	if ( iField==1 )
 		tState.m_iAttr[iField++] = SPH_VATTR_ID; // add "id ASC"
 
-	assert ( iField>=2 );
-	return iField;
-}
-
-
-ESphSortFunc sphNumSortAttrs2Func ( int iAttrs )
-{
-	switch ( iAttrs )
+	switch ( iField )
 	{
-		case SORT_CLAUSE_RANDOM:
-#if USE_WINDOWS
-			srand ( GetCurrentProcessId() );
-#else
-			srand ( getpid() );
-#endif
-			return FUNC_REL_DESC;
-
-		case 2:		return FUNC_GENERIC2; 
-		case 3:		return FUNC_GENERIC3;
-		case 4:		return FUNC_GENERIC4;
-		case 5:		return FUNC_GENERIC5;
-		default:	assert ( 0 && "internal error" ); return FUNC_GENERIC2;
+		case 2:		eFunc = FUNC_GENERIC2; break;
+		case 3:		eFunc = FUNC_GENERIC3; break;
+		case 4:		eFunc = FUNC_GENERIC4; break;
+		case 5:		eFunc = FUNC_GENERIC5; break;
+		default:	sError.SetSprintf ( "INTERNAL ERROR: %d fields in " __FUNCTION__, iField ); return SORT_CLAUSE_ERROR;
 	}
+	return SORT_CLAUSE_OK;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -7110,24 +7195,23 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 	////////////////////////////////////
 
 	ESphSortFunc eMatchFunc = FUNC_REL_DESC;
-	ESphSortFunc eGroupFunc = FUNC_SORTBY;
+	ESphSortFunc eGroupFunc = FUNC_REL_DESC;
 	bool bUsesAttrs = false;
 	bool bRandomize = false;
 
 	// matches sorting function
 	if ( pQuery->m_eSort==SPH_SORT_EXTENDED )
 	{
-		int iParsed = sphParseSortClause ( pQuery->m_sSortBy.cstr(), pQuery, tSchema,
-			false, tStateMatch, sError );
+		ESortClauseParseResult eRes = sphParseSortClause ( pQuery->m_sSortBy.cstr(), pQuery, tSchema,
+			false, eMatchFunc, tStateMatch, sError );
 
-		if ( iParsed==SORT_CLAUSE_ERROR )
+		if ( eRes==SORT_CLAUSE_ERROR )
 			return false;
 
-		if ( iParsed==SORT_CLAUSE_RANDOM )
+		if ( eRes==SORT_CLAUSE_RANDOM )
 			bRandomize = true;
 
-		eMatchFunc = sphNumSortAttrs2Func ( iParsed );
-		for ( int i=0; i<iParsed; i++ )
+		for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
 			if ( tStateMatch.m_iAttr[i]>=0 )
 				bUsesAttrs = true;
 
@@ -7166,19 +7250,15 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 	// groups sorting function
 	if ( pQuery->m_iGroupbyOffset>=0 )
 	{
-		int iParsed = sphParseSortClause ( pQuery->m_sGroupSortBy.cstr(), pQuery, tSchema,
-			true, tStateGroup, sError );
+		ESortClauseParseResult eRes = sphParseSortClause ( pQuery->m_sGroupSortBy.cstr(), pQuery, tSchema,
+			true, eGroupFunc, tStateGroup, sError );
 
-		if ( iParsed==SORT_CLAUSE_ERROR )
-			return false;
-
-		if ( iParsed==SORT_CLAUSE_RANDOM )
+		if ( eRes==SORT_CLAUSE_ERROR || eRes==SORT_CLAUSE_RANDOM )
 		{
-			sError.SetSprintf ( "groups can not be sorted by @random" );
+			if ( eRes==SORT_CLAUSE_RANDOM )
+				sError.SetSprintf ( "groups can not be sorted by @random" );
 			return false;
 		}
-
-		eGroupFunc = sphNumSortAttrs2Func ( iParsed );
 	}
 
 	///////////////////
@@ -7202,6 +7282,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 				case FUNC_GENERIC3:	pTop = new CSphMatchQueue<MatchGeneric3_fn<true> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
 				case FUNC_GENERIC4:	pTop = new CSphMatchQueue<MatchGeneric4_fn<true> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
 				case FUNC_GENERIC5:	pTop = new CSphMatchQueue<MatchGeneric5_fn<true> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+				case FUNC_CUSTOM:	pTop = new CSphMatchQueue<MatchCustom_fn<true> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
 				default:			pTop = NULL;
 			}
 		} else
@@ -7216,17 +7297,13 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 				case FUNC_GENERIC3:	pTop = new CSphMatchQueue<MatchGeneric3_fn<false> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
 				case FUNC_GENERIC4:	pTop = new CSphMatchQueue<MatchGeneric4_fn<false> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
 				case FUNC_GENERIC5:	pTop = new CSphMatchQueue<MatchGeneric5_fn<false> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+				case FUNC_CUSTOM:	pTop = new CSphMatchQueue<MatchCustom_fn<false> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
 				default:			pTop = NULL;
 			}
 		}
 
 	} else
 	{
-		if ( eGroupFunc==FUNC_SORTBY )
-		{
-			tStateGroup = tStateMatch;
-			eGroupFunc = eMatchFunc;
-		}
 		pTop = sphCreateSorter1st ( eMatchFunc, bMatchBits, eGroupFunc, bGroupBits, pQuery->m_iDistinctOffset>=0, pQuery );
 	}
 

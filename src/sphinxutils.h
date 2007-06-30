@@ -32,7 +32,7 @@ extern const char * g_dSphKeysSearch[];
 /// let's build our own theme park!
 inline int sphIsAlpha ( int c )
 {
-	return isalpha(c) || isdigit(c) || c=='_';
+	return ( c>='0' && c<='9' ) || ( c>='a' && c<='z' ) || ( c>='A' && c<='Z' ) || c=='-' || c=='_';
 }
 
 /////////////////////////////////////////////////////////////////////////////

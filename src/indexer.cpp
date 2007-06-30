@@ -308,13 +308,6 @@ void ShowProgress ( const CSphIndexProgress * pProgress, bool bPhaseEnd )
 
 /////////////////////////////////////////////////////////////////////////////
 
-/// chars which can be used for Sphinx names (ie. index names, field names, etc)
-inline bool myisalpha ( int c )
-{
-	return ( c>='0' && c<='9' ) || ( c>='a' && c<='z' ) || ( c>='A' && c<='Z' ) || c=='-' || c=='_';
-}
-
-
 /// parse multi-valued attr definition
 bool ParseMultiAttr ( const char * sBuf, CSphColumnInfo & tAttr, const char * sSourceName )
 {
@@ -337,7 +330,7 @@ bool ParseMultiAttr ( const char * sBuf, CSphColumnInfo & tAttr, const char * sS
 	}
 #define LOC_SPACE0()		{ while ( isspace(*sBuf) ) sBuf++; }
 #define LOC_SPACE1()		{ if ( !isspace(*sBuf) ) LOC_ERR ( "token", sBuf ) ; LOC_SPACE0(); }
-#define LOC_TOK()			{ sTok = sBuf; while ( myisalpha(*sBuf) ) sBuf++; iTokLen = sBuf-sTok; }
+#define LOC_TOK()			{ sTok = sBuf; while ( sphIsAlpha(*sBuf) ) sBuf++; iTokLen = sBuf-sTok; }
 #define LOC_TOKEQ(_arg)		( iTokLen==(int)strlen(_arg) && strncasecmp ( sTok, _arg, iTokLen )==0 )
 #define LOC_TEXT()			{ if ( *sBuf!=';') LOC_ERR ( "';'", sBuf ); sTok = ++sBuf; while ( *sBuf && *sBuf!=';' ) sBuf++; iTokLen = sBuf-sTok; }
 
@@ -986,7 +979,7 @@ int main ( int argc, char ** argv )
 		{
 			bIndexAll = true;
 
-		} else if ( isalpha(argv[i][0]) || isdigit(argv[i][0]) || argv[i][0]=='_' ) // myisalpha
+		} else if ( sphIsAlpha(argv[i][0]) )
 		{
 			dIndexes.Add ( argv[i] );
 

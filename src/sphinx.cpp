@@ -7117,10 +7117,6 @@ ISphMatchSorter * sphCreateSorter2nd ( ESphSortFunc eGroupFunc, bool bGroupBits,
 	{
 		switch ( eGroupFunc )
 		{
-			case FUNC_REL_DESC:		return sphCreateSorter3rd<COMPMATCH,MatchRelevanceLt_fn<true> >	( bDistinct, arg ); break;
-			case FUNC_ATTR_DESC:	return sphCreateSorter3rd<COMPMATCH,MatchAttrLt_fn<true> >		( bDistinct, arg ); break;
-			case FUNC_ATTR_ASC:		return sphCreateSorter3rd<COMPMATCH,MatchAttrGt_fn<true> >		( bDistinct, arg ); break;
-			case FUNC_TIMESEGS:		return sphCreateSorter3rd<COMPMATCH,MatchTimeSegments_fn<true> >( bDistinct, arg ); break;
 			case FUNC_GENERIC2:		return sphCreateSorter3rd<COMPMATCH,MatchGeneric2_fn<true> >	( bDistinct, arg ); break;
 			case FUNC_GENERIC3:		return sphCreateSorter3rd<COMPMATCH,MatchGeneric3_fn<true> >	( bDistinct, arg ); break;
 			case FUNC_GENERIC4:		return sphCreateSorter3rd<COMPMATCH,MatchGeneric4_fn<true> >	( bDistinct, arg ); break;
@@ -7131,10 +7127,6 @@ ISphMatchSorter * sphCreateSorter2nd ( ESphSortFunc eGroupFunc, bool bGroupBits,
 	{
 		switch ( eGroupFunc )
 		{
-			case FUNC_REL_DESC:		return sphCreateSorter3rd<COMPMATCH,MatchRelevanceLt_fn<false> >( bDistinct, arg ); break;
-			case FUNC_ATTR_DESC:	return sphCreateSorter3rd<COMPMATCH,MatchAttrLt_fn<false> >		( bDistinct, arg ); break;
-			case FUNC_ATTR_ASC:		return sphCreateSorter3rd<COMPMATCH,MatchAttrGt_fn<false> >		( bDistinct, arg ); break;
-			case FUNC_TIMESEGS:		return sphCreateSorter3rd<COMPMATCH,MatchTimeSegments_fn<false> >( bDistinct, arg ); break;
 			case FUNC_GENERIC2:		return sphCreateSorter3rd<COMPMATCH,MatchGeneric2_fn<false> >	( bDistinct, arg ); break;
 			case FUNC_GENERIC3:		return sphCreateSorter3rd<COMPMATCH,MatchGeneric3_fn<false> >	( bDistinct, arg ); break;
 			case FUNC_GENERIC4:		return sphCreateSorter3rd<COMPMATCH,MatchGeneric4_fn<false> >	( bDistinct, arg ); break;

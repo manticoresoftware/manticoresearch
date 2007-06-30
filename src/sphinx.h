@@ -701,8 +701,7 @@ struct CSphSourceParams_SQL
 	CSphVector<CSphString,4>		m_dQueryPostIndex;
 	CSphVector<CSphColumnInfo,4>	m_dAttrs;
 
-	int								m_iThrottleDelay;
-	int								m_iThrottleRows;
+	int								m_iRangedThrottle;
 
 	// connection params
 	CSphString						m_sHost;
@@ -748,7 +747,6 @@ protected:
 	SphDocID_t			m_uCurrentID;	///< current min ID
 	SphDocID_t			m_uMaxFetchedID;///< max actually fetched ID
 	int					m_iMultiAttr;	///< multi-valued attr being currently fetched
-	int					m_iRows;		///< rows since last throttle
 
 	CSphSourceParams_SQL		m_tParams;
 

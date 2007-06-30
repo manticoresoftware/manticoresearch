@@ -464,8 +464,7 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 	LOC_GETAS( tParams.m_dQueryPostIndex,	"sql_query_post_index" );
 	LOC_GETI ( tParams.m_iRangeStep,		"sql_range_step" );
 
-	LOC_GETI ( tParams.m_iThrottleDelay,	"sql_throttle_delay" );
-	LOC_GETI ( tParams.m_iThrottleRows,		"sql_throttle_rows" );
+	LOC_GETI ( tParams.m_iRangedThrottle,	"sql_ranged_throttle" );
 
 	SqlAttrsConfigure ( tParams,	hSource("sql_group_column"),		SPH_ATTR_INTEGER,	sSourceName );
 	SqlAttrsConfigure ( tParams,	hSource("sql_date_column"),			SPH_ATTR_TIMESTAMP,	sSourceName );
@@ -486,15 +485,10 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 	}
 
 	// additional checks
-	if ( tParams.m_iThrottleDelay<0 )
+	if ( tParams.m_iRangedThrottle<0 )
 	{
-		fprintf ( stdout, "WARNING: sql_throttle_delay must be non-negative; throttling disabled\n" );
-		tParams.m_iThrottleDelay = 0;
-	}
-	if ( tParams.m_iThrottleRows<=0 )
-	{
-		fprintf ( stdout, "WARNING: sql_throttle_row must be positive; throttling disabled\n" );
-		tParams.m_iThrottleDelay = 0;
+		fprintf ( stdout, "WARNING: sql_ranged_throttle must not be negative; throttling disabled\n" );
+		tParams.m_iRangedThrottle = 0;
 	}
 
 	return true;

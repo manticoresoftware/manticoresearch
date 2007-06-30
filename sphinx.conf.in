@@ -205,21 +205,17 @@ source src1
 	#	VALUES ( 'max_indexed_id', $maxid )
 
 
-	# query throttling
+	# ranged query throttling
 	#
 	# useful in cases when indexer imposes too much load on DBMS,
 	# throttling causes indexer to sleep for N milliseconds once
-	# per M pulled rows
+	# per each ranged query step
 	#
-	# sql_throttle_delay is delay time in milliseconds
+	# sql_ranged_throttle is delay time in milliseconds
 	# optional, default is 0 which means no delay
-	#
-	# sql_throttle_rows is number of rows to index between delays
-	# optional, default is 1
-	sql_throttle_delay	= 0
-	sql_throttle_rows	= 1
+	sql_ranged_throttle	= 0
 
-
+	
 	# document info query
 	#
 	# ONLY used by search utility to display document information

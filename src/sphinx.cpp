@@ -2347,6 +2347,9 @@ void sphLockUn ( int iFile )
 
 void sphUsleep ( int iMsec )
 {
+	if ( iMsec<=0 )
+		return;
+
 #if USE_WINDOWS
 	Sleep ( iMsec );
 
@@ -10588,8 +10591,7 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 
 CSphSourceParams_SQL::CSphSourceParams_SQL ()
 	: m_iRangeStep ( 1024 )
-	, m_iThrottleDelay ( 0 )
-	, m_iThrottleRows ( 1 )
+	, m_iRangedThrottle ( 0 )
 	, m_iPort ( 0 )
 {
 }
@@ -10610,7 +10612,6 @@ CSphSource_SQL::CSphSource_SQL ( const char * sName )
 	, m_uCurrentID			( 0 )
 	, m_uMaxFetchedID		( 0 )
 	, m_iMultiAttr			( -1 )
-	, m_iRows				( 0 )
 {
 }
 
@@ -10659,6 +10660,8 @@ bool CSphSource_SQL::RunQueryStep ( CSphString & sError )
 
 	static const int iBufSize = 32;
 	char * sRes = NULL;
+
+	sphUsleep ( m_tParams.m_iRangedThrottle );
 
 	//////////////////////////////////////////////
 	// range query with $start/$end interpolation
@@ -10959,11 +10962,6 @@ BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 	{
 		// try to get next row
 		bool bGotRow = SqlFetchRow ();
-		if ( m_tParams.m_iThrottleDelay>0 && ++m_iRows==m_tParams.m_iThrottleRows )
-		{
-			sphUsleep ( m_tParams.m_iThrottleDelay );
-			m_iRows = 0;
-		}
 
 		// when the party's over...
 		while ( !bGotRow )

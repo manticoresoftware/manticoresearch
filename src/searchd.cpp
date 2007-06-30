@@ -33,11 +33,9 @@
 	#include <io.h>
 	#include <winsock2.h>
 
-	#define sphSockRecv(_sock,_buf,_len)			::recv(_sock,_buf,_len,0)
-	#define sphSockSend(_sock,_buf,_len,_flags)		::send(_sock,_buf,_len,_flags)
-	#define sphSockClose(_sock)						::closesocket(_sock)
-
-	#define ftruncate								_chsize
+	#define sphSockRecv(_sock,_buf,_len)	::recv(_sock,_buf,_len,0)
+	#define sphSockSend(_sock,_buf,_len)	::send(_sock,_buf,_len,0)
+	#define sphSockClose(_sock)				::closesocket(_sock)
 
 #else
 	// UNIX-specific headers and calls
@@ -54,14 +52,14 @@
 	#include <sys/mman.h>
 	#include <md5.h>
 
-	#define sphSockRecv(_sock,_buf,_len)			::recv(_sock,_buf,_len,MSG_NOSIGNAL)
-	#define sphSockSend(_sock,_buf,_len,_flags)		::send(_sock,_buf,_len,_flags)
-	#define sphSockClose(_sock)						::close(_sock)
+	#define sphSockRecv(_sock,_buf,_len)	::recv(_sock,_buf,_len,MSG_NOSIGNAL)
+	#define sphSockSend(_sock,_buf,_len)	::send(_sock,_buf,_len,0)
+	#define sphSockClose(_sock)				::close(_sock)
 
 #endif
 
 /////////////////////////////////////////////////////////////////////////////
-// MISC LOCAL CLASSES
+// MISC GLOBALS
 /////////////////////////////////////////////////////////////////////////////
 
 struct ServedIndex_t
@@ -79,61 +77,6 @@ public:
 						~ServedIndex_t ();
 	void				Reset ();
 };
-
-
-struct SearchFailure_t
-{
-public:
-	CSphString	m_sIndex;	///< searched index name
-	CSphString	m_sError;	///< search error message
-
-public:
-	SearchFailure_t () {}
-
-	SearchFailure_t ( const char * sIndex, const CSphString & sError )
-	{
-		m_sIndex = sIndex;
-		m_sError = sError;
-		if ( !m_sIndex.cstr() ) m_sIndex = "(no index name)";
-		if ( !m_sError.cstr() ) m_sError = "(no message)";
-	}
-
-	SearchFailure_t ( const char * sIndex, const char * sErrorTemplate, ... )
-	{
-		char sBuf [ 2048 ];
-		va_list ap;
-		va_start ( ap, sErrorTemplate );
-		vsnprintf ( sBuf, sizeof(sBuf), sErrorTemplate, ap );
-		va_end ( ap );
-
-		m_sIndex = sIndex;
-		m_sError = sBuf;
-	}
-
-public:
-	bool operator == ( const SearchFailure_t & r ) const
-	{
-		return m_sIndex==r.m_sIndex && m_sError==r.m_sError;
-	}
-
-	bool operator < ( const SearchFailure_t & r ) const
-	{
-		int iRes = strcmp ( m_sError.cstr(), r.m_sError.cstr() );
-		if ( !iRes )
-			iRes = strcmp ( m_sIndex.cstr(), r.m_sIndex.cstr() );
-		return iRes<0;
-	}
-
-	const SearchFailure_t & operator = ( const SearchFailure_t & r )
-	{
-		m_sIndex = r.m_sIndex;
-		m_sError = r.m_sError;
-		return *this;
-	}
-};
-
-
-typedef CSphVector<SearchFailure_t,8>		SearchFailuresLog_t;
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -226,29 +169,13 @@ const int	MAX_RETRY_DELAY		= 1000;
 #define EINTR			WSAEINTR
 #define socklen_t		int
 
-
-void flock ( int, int )
-{
-}
-
-
-void sleep ( int iSec )
-{
-	Sleep ( iSec*1000 );
-}
-
+#define ftruncate		_chsize
+#define getpid			GetCurrentProcessId
 
 void ctime_r ( time_t * tNow, char * sBuf )
 {
 	strcpy ( sBuf, ctime(tNow) );
 }
-
-
-int getpid ()
-{
-	return GetCurrentProcessId();
-}
-
 #endif // USE_WINDOWS
 
 /////////////////////////////////////////////////////////////////////////////
@@ -351,6 +278,170 @@ void sphInfo ( const char * sFmt, ... )
 
 /////////////////////////////////////////////////////////////////////////////
 
+struct StrBuf_t
+{
+protected:
+	char		m_sBuf [ 2048 ];
+	char *		m_pBuf;
+	int			m_iLeft;
+
+public:
+	StrBuf_t ()
+	{
+		memset ( m_sBuf, 0, sizeof(m_sBuf) );
+		m_iLeft = sizeof(m_sBuf)-1;
+		m_pBuf = m_sBuf;
+	}
+
+	const char * cstr ()
+	{
+		return m_sBuf;
+	}
+
+	int GetLength ()
+	{
+		return sizeof(m_sBuf)-1-m_iLeft;
+	}
+
+	bool Append ( const char * s, bool bWhole )
+	{
+		int iLen = strlen(s);
+		if ( bWhole && m_iLeft<iLen )
+			return false;
+
+		iLen = Min ( m_iLeft, iLen );
+		memcpy ( m_pBuf, s, iLen );
+		m_pBuf += iLen;
+		m_iLeft -= iLen;
+		return true;
+	}
+
+	const StrBuf_t & operator += ( const char * s )
+	{
+		Append ( s, false );
+		return *this;
+	}
+};
+
+
+struct SearchFailure_t
+{
+public:
+	CSphString	m_sIndex;	///< searched index name
+	CSphString	m_sError;	///< search error message
+
+public:
+	SearchFailure_t () {}
+
+	SearchFailure_t ( const CSphString & sIndex, const CSphString & sError )
+	{
+		m_sIndex = sIndex;
+		m_sError = sError;
+		if ( m_sIndex.IsEmpty() ) m_sIndex = "(no index name)";
+		if ( m_sError.IsEmpty() ) m_sError = "(no message)";
+	}
+
+public:
+	bool operator == ( const SearchFailure_t & r ) const
+	{
+		return m_sIndex==r.m_sIndex && m_sError==r.m_sError;
+	}
+
+	bool operator < ( const SearchFailure_t & r ) const
+	{
+		int iRes = strcmp ( m_sError.cstr(), r.m_sError.cstr() );
+		if ( !iRes )
+			iRes = strcmp ( m_sIndex.cstr(), r.m_sIndex.cstr() );
+		return iRes<0;
+	}
+
+	const SearchFailure_t & operator = ( const SearchFailure_t & r )
+	{
+		m_sIndex = r.m_sIndex;
+		m_sError = r.m_sError;
+		return *this;
+	}
+};
+
+
+struct SearchFailuresLog_t : protected CSphVector<SearchFailure_t,8>
+{
+public:
+	CSphString	m_sIndex;
+	CSphString	m_sPrefix;
+
+	void Reset ()
+	{
+		m_sIndex = "";
+		m_sPrefix= "";
+	}
+
+	bool IsEmpty ()
+	{
+		return GetLength()==0;
+	}
+
+	void Submit ( const char * sTemplate, ... )
+	{
+		assert ( !m_sIndex.IsEmpty() );
+
+		char sBuf [ 2048 ];
+		snprintf ( sBuf, sizeof(sBuf), "%s", m_sPrefix.IsEmpty() ? "" : m_sPrefix.cstr() );
+
+		va_list ap;
+		va_start ( ap, sTemplate );
+		int iLen = strlen(sBuf);
+		vsnprintf ( sBuf+iLen, sizeof(sBuf)-iLen, sTemplate, ap );
+		va_end ( ap );
+
+		Add ( SearchFailure_t ( m_sIndex, sBuf ) );
+	}
+
+	void BuildReport ( StrBuf_t & sReport )
+	{
+		if ( !GetLength() )
+			return;
+
+		// collapse same messages
+		Sort ();
+		int iSpanStart = 0;
+
+		for ( int i=1; i<=GetLength(); i++ )
+		{
+			// keep scanning while error text is the same
+			if ( i!=GetLength() )
+				if ( m_pData[i].m_sError==m_pData[i-1].m_sError )
+					continue;
+
+			// build current span
+			StrBuf_t sSpan;
+			if ( iSpanStart )
+				sSpan += "; ";
+			sSpan += "index ";
+			for ( int j=iSpanStart; j<i; j++ )
+			{
+				if ( j!=iSpanStart )
+					sSpan += ",";
+				sSpan += m_pData[j].m_sIndex.cstr();
+			}
+			sSpan += ": ";
+			if ( !sSpan.Append ( m_pData[iSpanStart].m_sError.cstr(), true ) )
+				break;
+
+			// flush current span
+			if ( !sReport.Append ( sSpan.cstr(), true ) )
+				break;
+
+			// done
+			iSpanStart = i;
+		}
+	}
+};
+
+/////////////////////////////////////////////////////////////////////////////
+// SIGNAL HANDLERS
+/////////////////////////////////////////////////////////////////////////////
+
 void Shutdown ()
 {
 	// some head-only shutdown procedures
@@ -387,14 +478,58 @@ void Shutdown ()
 		sphInfo ( "shutdown complete" );
 }
 
+
+#if !USE_WINDOWS
+void sigchld ( int )
+{
+	signal ( SIGCHLD, sigchld );
+	while ( waitpid ( 0, (int *)0, WNOHANG | WUNTRACED ) > 0 )
+		g_iChildren--;
+}
+
+
+void sighup ( int )
+{
+	sphInfo ( "rotating indices: caught SIGHUP, waiting for children to exit" );
+	g_iHUP = 1;
+}
+
+
+void sigterm ( int )
+{
+	if ( g_bHeadDaemon )
+		sphInfo ( "caught SIGTERM, shutting down" );
+
+	Shutdown ();
+	exit ( 0 );
+}
+#endif // !USE_WINDOWS
+
 /////////////////////////////////////////////////////////////////////////////
 // NETWORK STUFF
 /////////////////////////////////////////////////////////////////////////////
 
-int				MAX_PACKET_SIZE			= 8*1024*1024;
-
+const int		MAX_PACKET_SIZE			= 8*1024*1024;
 const int		SEARCHD_MAX_ATTRS		= 256;
 const int		SEARCHD_MAX_ATTR_VALUES	= 4096;
+
+
+// wrap FD_SET to prevent warnings on Windows
+#if USE_WINDOWS
+
+#pragma warning(disable:4127) // conditional expr is const
+#pragma warning(disable:4389) // signed/unsigned mismatch
+
+void SPH_FD_SET ( int fd, fd_set * fdset ) { FD_SET ( fd, fdset ); }
+
+#pragma warning(default:4127) // conditional expr is const
+#pragma warning(default:4389) // signed/unsigned mismatch
+
+#else // !USE_WINDOWS
+
+#define	SPH_FD_SET FD_SET
+
+#endif
 
 
 const char * sphSockError ( int iErr=0 )
@@ -464,7 +599,7 @@ int sphCreateServerSocket ( DWORD uAddr, int iPort )
 			break;
 
 		sphInfo ( "failed to bind on %s, retrying...", sAddr );
-		sleep ( 15 );
+		sphUsleep ( 3000 );
 	} while ( --iTries>0 );
 	if ( iRes )
 		sphFatal ( "failed to bind on %s", sAddr );
@@ -483,19 +618,10 @@ int sphSetSockNB ( int iSock )
 	#endif
 }
 
-/////////////////////////////////////////////////////////////////////////////
-
-STATIC_SIZE_ASSERT ( DWORD, 4 );
-
 
 int sphSockRead ( int iSock, void * buf, int iLen )
 {
 	assert ( iLen>0 );
-
-	#if USE_WINDOWS
-	#pragma warning(disable:4127) // conditional expr is const
-	#pragma warning(disable:4389) // signed/unsigned mismatch
-	#endif // USE_WINDOWS
 
 	int iTimeout = 1000*Max ( 1, g_iReadTimeout ); // ms to wait total
 	int iLeftMs = iTimeout; // ms to wait left
@@ -508,11 +634,11 @@ int sphSockRead ( int iSock, void * buf, int iLen )
 	{
 		fd_set fdRead;
 		FD_ZERO ( &fdRead );
-		FD_SET ( iSock, &fdRead );
+		SPH_FD_SET ( iSock, &fdRead );
 
 		fd_set fdExcept;
 		FD_ZERO ( &fdExcept );
-		FD_SET ( iSock, &fdExcept );
+		SPH_FD_SET ( iSock, &fdExcept );
 
 		struct timeval tv;
 		tv.tv_sec = iLeftMs / 1000;
@@ -570,11 +696,6 @@ int sphSockRead ( int iSock, void * buf, int iLen )
 	}
 
 	return iLen;
-
-	#if USE_WINDOWS
-	#pragma warning(default:4127) // conditional expr is const
-	#pragma warning(default:4389) // signed/unsigned mismatch
-	#endif // USE_WINDOWS
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -616,8 +737,8 @@ protected:
 	bool		SetError ( bool bValue );	///< set error flag
 	bool		FlushIf ( int iToAdd );		///< flush if there's not enough free space to add iToAdd bytes
 
-	template < typename T > bool	SendT ( T tValue );
-	bool							SendBytes ( const void * pBuf, int iLen );
+	bool							SendBytes ( const void * pBuf, int iLen );	///< protected to avoid network-vs-host order bugs
+	template < typename T > bool	SendT ( T tValue );							///< protected to avoid network-vs-host order bugs
 };
 
 
@@ -625,8 +746,9 @@ protected:
 class InputBuffer_c
 {
 public:
-					InputBuffer_c ();
-	virtual			~InputBuffer_c ();
+					InputBuffer_c ( const BYTE * pBuf, int iLen );
+	virtual			~InputBuffer_c () {}
+
 	int				GetInt () { return ntohl ( GetT<int> () ); }
 	WORD			GetWord () { return ntohs ( GetT<WORD> () ); }
 	DWORD			GetDword () { return ntohl ( GetT<DWORD> () ); }
@@ -639,10 +761,10 @@ public:
 	virtual void	SendErrorReply ( const char *, ... ) = 0;
 
 protected:
+	const BYTE *	m_pBuf;
+	const BYTE *	m_pCur;
 	bool			m_bError;
-	BYTE *			m_pBuf;
 	int				m_iLen;
-	BYTE *			m_pCur;
 
 protected:
 	void						SetError ( bool bError ) { m_bError = bError; }
@@ -655,7 +777,7 @@ protected:
 class MemInputBuffer_c : public InputBuffer_c
 {
 public:
-					MemInputBuffer_c ( const char * sFrom, int iLen );
+					MemInputBuffer_c ( const BYTE * pBuf, int iLen ) : InputBuffer_c ( pBuf, iLen ) {}
 	virtual void	SendErrorReply ( const char *, ... ) {}
 };
 
@@ -665,6 +787,8 @@ class NetInputBuffer_c : public InputBuffer_c
 {
 public:
 					NetInputBuffer_c ( int iSock );
+	virtual			~NetInputBuffer_c ();
+
 	bool			ReadFrom ( int iLen );
 	virtual void	SendErrorReply ( const char *, ... );
 
@@ -749,7 +873,7 @@ bool NetOutputBuffer_c::Flush ()
 	assert ( iLen>0 );
 	assert ( iLen<=(int)sizeof(m_dBuffer) );
 
-	int iRes = sphSockSend ( m_iSock, (char*)&m_dBuffer[0], iLen, 0 );
+	int iRes = sphSockSend ( m_iSock, (char*)&m_dBuffer[0], iLen );
 	m_bError = ( iRes!=iLen );
 
 	m_iSent += iLen;
@@ -768,19 +892,12 @@ bool NetOutputBuffer_c::FlushIf ( int iToAdd )
 
 /////////////////////////////////////////////////////////////////////////////
 
-InputBuffer_c::InputBuffer_c ()
-	: m_bError ( true )
-	, m_iLen ( 0 )
-{
-	m_pBuf = new BYTE [ MAX_PACKET_SIZE ];
-	m_pCur = m_pBuf;
-}
-
-
-InputBuffer_c::~InputBuffer_c ()
-{
-	SafeDeleteArray ( m_pBuf );
-}
+InputBuffer_c::InputBuffer_c ( const BYTE * pBuf, int iLen )
+	: m_pBuf ( pBuf )
+	, m_pCur ( pBuf )
+	, m_bError ( !pBuf || iLen<0 )
+	, m_iLen ( iLen )
+{}
 
 
 template < typename T > T InputBuffer_c::GetT ()
@@ -861,8 +978,17 @@ int InputBuffer_c::GetDwords ( DWORD ** ppBuffer, int iMax, const char * sErrorT
 /////////////////////////////////////////////////////////////////////////////
 
 NetInputBuffer_c::NetInputBuffer_c ( int iSock )
-	: m_iSock ( iSock )
+	: InputBuffer_c ( new BYTE [ MAX_PACKET_SIZE ], MAX_PACKET_SIZE )
+	, m_iSock ( iSock )
 {
+	if ( !m_pBuf )
+		m_bError = true;
+}
+
+
+NetInputBuffer_c::~NetInputBuffer_c ()
+{
+	SafeDeleteArray ( m_pBuf );
 }
 
 
@@ -874,7 +1000,7 @@ bool NetInputBuffer_c::ReadFrom ( int iLen )
 
 	m_pCur = m_pBuf;
 
-	int iGot = sphSockRead ( m_iSock, m_pBuf, iLen );
+	int iGot = sphSockRead ( m_iSock, const_cast<BYTE*>(m_pBuf), iLen );
 	if ( iGot!=iLen )
 	{
 		m_bError = true;
@@ -917,23 +1043,7 @@ void NetInputBuffer_c::SendErrorReply ( const char * sTemplate, ... )
 	p4[1] = htonl(iStrLen);
 
 	// send!
-	sphSockSend ( m_iSock, dBuf, iHeaderLen+iStrLen, 0 );
-}
-
-/////////////////////////////////////////////////////////////////////////////
-
-MemInputBuffer_c::MemInputBuffer_c ( const char * sFrom, int iLen )
-{
-	if ( iLen<0 || iLen>MAX_PACKET_SIZE )
-	{
-		m_bError = true;
-		return;
-	}
-
-	memcpy ( m_pBuf, sFrom, iLen );
-	m_iLen = iLen;
-	m_pCur = m_pBuf;
-	m_bError = false;
+	sphSockSend ( m_iSock, dBuf, iHeaderLen+iStrLen );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1324,7 +1434,7 @@ public:
 	int				m_iReplyStatus;	///< reply status code
 	int				m_iReplySize;	///< how many reply bytes are there
 	int				m_iReplyRead;	///< how many reply bytes are alredy received
-	char *			m_pReplyBuf;	///< reply buffer
+	BYTE *			m_pReplyBuf;	///< reply buffer
 
 protected:
 	int				m_iAddrType;
@@ -1346,20 +1456,18 @@ public:
 
 	~Agent_t ()
 	{
-		SafeDeleteArray ( m_pReplyBuf );
 		Close ();
 	}
 
 	void Close ()
 	{
+		SafeDeleteArray ( m_pReplyBuf );
 		if ( m_iSock>0 )
 		{
 			sphSockClose ( m_iSock );
 			m_iSock = -1;
 			if ( m_eState!=AGENT_RETRY )
 				m_eState = AGENT_UNUSED;
-
-			SafeDeleteArray ( m_pReplyBuf );
 		}
 	}
 
@@ -1372,103 +1480,95 @@ public:
 		memcpy ( &m_uAddr, pAddr, iAddrLen );
 	}
 
-	int GetAddrType () const
-	{
-		return m_iAddrType;
-	}
-
-	int GetAddrLen () const
-	{
-		return sizeof(m_uAddr);
-	}
-
-	const char * GetAddr () const
-	{
-		return (const char *)&m_uAddr;
-	}
+	int GetAddrType () const		{ return m_iAddrType; }
+	int GetAddrLen () const			{ return sizeof(m_uAddr); }
+	const char * GetAddr () const	{ return (const char *)&m_uAddr; }
 };
 
 /// distributed index
 struct DistributedIndex_t
 {
-	CSphVector<Agent_t,16>	m_dAgents;					///< remote agents
-	CSphVector<CSphString>	m_dLocal;					///< local indexes
-	int						m_iAgentConnectTimeout;		///< in msec
-	int						m_iAgentQueryTimeout;		///< in msec
+	CSphVector<Agent_t,8>		m_dAgents;					///< remote agents
+	CSphVector<CSphString,8>	m_dLocal;					///< local indexes
+	int							m_iAgentConnectTimeout;		///< in msec
+	int							m_iAgentQueryTimeout;		///< in msec
 
 	DistributedIndex_t ()
 		: m_iAgentConnectTimeout ( 1000 )
 		, m_iAgentQueryTimeout ( 3000 )
-	{
-	}
+	{}
 };
 
 static SmallStringHash_T < DistributedIndex_t >		g_hDistIndexes;
 
 /////////////////////////////////////////////////////////////////////////////
 
-void ConnectToRemoteAgent ( Agent_t * pAgent, const char * sIndexName, SearchFailuresLog_t & dFailures )
+struct IRequestBuilder_t : public ISphNoncopyable
 {
-	assert ( pAgent );
-	assert ( pAgent->m_iPort>0 );
-	assert ( pAgent->GetAddr() );
-	assert ( pAgent->m_iSock<0 );
+	virtual void BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut ) const = 0;
+};
 
-	pAgent->m_eState = AGENT_UNUSED;
 
-	struct sockaddr_in sa;
+struct IReplyParser_t
+{
+	virtual bool ParseReply ( MemInputBuffer_c & tReq, Agent_t & tAgent, SearchFailuresLog_t & dFailures ) const = 0;
+};
 
-	memset ( &sa, 0, sizeof(sa) );
-	memcpy ( &sa.sin_addr, pAgent->GetAddr(), pAgent->GetAddrLen() );
-	sa.sin_family = (short)pAgent->GetAddrType();
-	sa.sin_port = htons ( (unsigned short)pAgent->m_iPort );
 
-	pAgent->m_iSock = socket ( pAgent->GetAddrType(), SOCK_STREAM, 0 );
-	if ( pAgent->m_iSock<0 )
+void ConnectToRemoteAgents ( CSphVector<Agent_t,8> & dAgents, bool bRetryOnly, SearchFailuresLog_t & dFailures )
+{
+	ARRAY_FOREACH ( iAgent, dAgents )
 	{
-		dFailures.Add ( SearchFailure_t ( sIndexName, "agent '%s:%d': socket() failed",
-			pAgent->m_sHost.cstr(), pAgent->m_iPort ) );
-		return;
-	}
+		Agent_t & tAgent = dAgents[iAgent];
+		if ( bRetryOnly && tAgent.m_eState!=AGENT_RETRY )
+			continue;
 
-	if ( sphSetSockNB ( pAgent->m_iSock )<0 )
-	{
-		dFailures.Add ( SearchFailure_t ( sIndexName, "agent '%s:%d': sphSetSockNB() failed",
-			pAgent->m_sHost.cstr(), pAgent->m_iPort ) );
-		return;
-	}
+		dFailures.m_sPrefix.SetSprintf ( "agent %s:%d: ", tAgent.m_sHost.cstr(), tAgent.m_iPort );
+		tAgent.m_eState = AGENT_UNUSED;
 
-	if ( connect ( pAgent->m_iSock, (struct sockaddr*)&sa, sizeof(sa) )<0 )
-	{
-		int iErr = sphSockGetErrno();
-		if ( iErr!=EINPROGRESS && iErr!=EINTR && iErr!=EWOULDBLOCK ) // check for EWOULDBLOCK is for winsock only
+		struct sockaddr_in sa;
+		memset ( &sa, 0, sizeof(sa) );
+		memcpy ( &sa.sin_addr, tAgent.GetAddr(), tAgent.GetAddrLen() );
+		sa.sin_family = (short)tAgent.GetAddrType();
+		sa.sin_port = htons ( (unsigned short)tAgent.m_iPort );
+
+		tAgent.m_iSock = socket ( tAgent.GetAddrType(), SOCK_STREAM, 0 );
+		if ( tAgent.m_iSock<0 )
 		{
-			pAgent->Close ();
-			dFailures.Add ( SearchFailure_t ( sIndexName, "agent '%s:%d': connect() failed: %s",
-				pAgent->m_sHost.cstr(), pAgent->m_iPort, sphSockError(iErr) ) );
+			dFailures.Submit ( "socket() failed: %s", sphSockError() );
 			return;
+		}
+
+		if ( sphSetSockNB ( tAgent.m_iSock )<0 )
+		{
+			dFailures.Submit ( "sphSetSockNB() failed: %s", sphSockError() );
+			return;
+		}
+
+		if ( connect ( tAgent.m_iSock, (struct sockaddr*)&sa, sizeof(sa) )<0 )
+		{
+			int iErr = sphSockGetErrno();
+			if ( iErr!=EINPROGRESS && iErr!=EINTR && iErr!=EWOULDBLOCK ) // check for EWOULDBLOCK is for winsock only
+			{
+				tAgent.Close ();
+				dFailures.Submit ( "connect() failed: %s", sphSockError(iErr) );
+				return;
+			} else
+			{
+				// connection in progress
+				tAgent.m_eState = AGENT_CONNECT;
+			}
 		} else
 		{
-			// connection in progress
-			pAgent->m_eState = AGENT_CONNECT;
+			// socket connected, ready to read hello message
+			tAgent.m_eState = AGENT_HELLO;
 		}
-	} else
-	{
-		// socket connected, ready to read hello message
-		pAgent->m_eState = AGENT_HELLO;
 	}
 }
 
 
-#if USE_WINDOWS
-#pragma warning(disable:4127) // conditional expr is const
-#pragma warning(disable:4389) // signed/unsigned mismatch
-#endif // USE_WINDOWS
-
-int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, const CSphQuery & tQuery, int iMode,
-	SearchFailuresLog_t & dFailures )
+int QueryRemoteAgents ( CSphVector<Agent_t,8> & dAgents, int iTimeout, const IRequestBuilder_t & tBuilder, SearchFailuresLog_t & dFailures )
 {
-	int iTimeout = tDist.m_iAgentConnectTimeout;
 	int iAgents = 0;
 	assert ( iTimeout>=0 );
 
@@ -1482,15 +1582,15 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 
 		int iMax = 0;
 		bool bDone = true;
-		ARRAY_FOREACH ( i, tDist.m_dAgents )
+		ARRAY_FOREACH ( i, dAgents )
 		{
-			const Agent_t & tAgent = tDist.m_dAgents[i];
+			const Agent_t & tAgent = dAgents[i];
 			if ( tAgent.m_eState==AGENT_CONNECT || tAgent.m_eState==AGENT_HELLO )
 			{
 				assert ( tAgent.m_iPort>0 );
 				assert ( tAgent.m_iSock>0 );
 
-				FD_SET ( tAgent.m_iSock, ( tAgent.m_eState==AGENT_CONNECT ) ? &fdsWrite : &fdsRead );
+				SPH_FD_SET ( tAgent.m_iSock, ( tAgent.m_eState==AGENT_CONNECT ) ? &fdsWrite : &fdsRead );
 				iMax = Max ( iMax, tAgent.m_iSock );
 				bDone = false;
 			}
@@ -1510,9 +1610,10 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 		if ( select ( 1+iMax, &fdsRead, &fdsWrite, NULL, &tvTimeout )<=0 )
 			continue;
 
-		ARRAY_FOREACH ( i, tDist.m_dAgents )
+		ARRAY_FOREACH ( i, dAgents )
 		{
-			Agent_t & tAgent = tDist.m_dAgents[i];
+			Agent_t & tAgent = dAgents[i];
+			dFailures.m_sPrefix.SetSprintf ( "agent %s:%d: ", tAgent.m_sHost.cstr(), tAgent.m_iPort );
 
 			// check if connection completed
 			if ( tAgent.m_eState==AGENT_CONNECT && FD_ISSET ( tAgent.m_iSock, &fdsWrite ) )
@@ -1523,8 +1624,7 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				if ( iErr )
 				{
 					// connect() failure
-					dFailures.Add ( SearchFailure_t ( sIndexName, "agent '%s:%d': connect() failed (err=%d)",
-						tAgent.m_sHost.cstr(), tAgent.m_iPort, iErr ) );
+					dFailures.Submit ( "connect() failed (err=%d)", iErr );
 					tAgent.Close ();
 				} else
 				{
@@ -1543,96 +1643,31 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 				iRemoteVer = ntohl ( iRemoteVer );
 				if ( iRes!=sizeof(iRemoteVer) || iRemoteVer<=0 )
 				{
-					dFailures.Add ( SearchFailure_t ( sIndexName, "agent '%s:%d': expected protocol v.%d, got v.%d",
-						tAgent.m_sHost.cstr(), tAgent.m_iPort,
-						SPHINX_SEARCHD_PROTO, iRemoteVer ) );
+					dFailures.Submit ( "expected protocol v.%d, got v.%d", SPHINX_SEARCHD_PROTO, iRemoteVer );
 					tAgent.Close ();
 					continue;
 				}
 
-				// do query!
-				int iReqSize = 84 + 2*sizeof(SphDocID_t) + 4*tQuery.m_iWeights
-					+ strlen ( tQuery.m_sSortBy.cstr() )
-					+ strlen ( tQuery.m_sQuery.cstr() )
-					+ strlen ( tAgent.m_sIndexes.cstr() )
-					+ strlen ( tQuery.m_sGroupBy.cstr() )
-					+ strlen ( tQuery.m_sGroupSortBy.cstr() )
-					+ strlen ( tQuery.m_sGroupDistinct.cstr() );
-				ARRAY_FOREACH ( j, tQuery.m_dFilters )
-				{
-					const CSphFilter & tFilter = tQuery.m_dFilters[j];
-					iReqSize +=
-						12
-						+ strlen ( tFilter.m_sAttrName.cstr() )
-						+ 4*tFilter.m_iValues
-						+ ( tFilter.m_iValues ? 0 : 8 );
-				}
-
+				// send request
 				NetOutputBuffer_c tOut ( tAgent.m_iSock );
+				tBuilder.BuildRequest ( tAgent.m_sIndexes.cstr(), tOut );
+				tOut.Flush (); // FIXME! handle flush failure?
 
-				// say hello
-				tOut.SendDword ( SPHINX_SEARCHD_PROTO );
-
-				// request header
-				tOut.SendWord ( SEARCHD_COMMAND_SEARCH ); // command id
-				tOut.SendWord ( VER_COMMAND_SEARCH ); // command version
-				tOut.SendInt ( iReqSize-12 ); // request body length
-
-				tOut.SendInt ( 0 ); // offset is 0
-				tOut.SendInt ( tQuery.m_iMaxMatches ); // limit is MAX_MATCHES
-				tOut.SendInt ( iMode ); // match mode
-				tOut.SendInt ( tQuery.m_eSort ); // sort mode
-				tOut.SendString ( tQuery.m_sSortBy.cstr() ); // sort attr
-				tOut.SendString ( tQuery.m_sQuery.cstr() ); // query
-				tOut.SendInt ( tQuery.m_iWeights );
-				for ( int j=0; j<tQuery.m_iWeights; j++ )
-					tOut.SendInt ( tQuery.m_pWeights[j] ); // weights
-				tOut.SendString ( tAgent.m_sIndexes.cstr() ); // indexes
-				tOut.SendInt ( USE_64BIT ); // id range bits
-				tOut.SendDocid ( tQuery.m_iMinID ); // id/ts ranges
-				tOut.SendDocid ( tQuery.m_iMaxID );
-				tOut.SendInt ( tQuery.m_dFilters.GetLength() );
-				ARRAY_FOREACH ( j, tQuery.m_dFilters )
-				{
-					const CSphFilter & tFilter = tQuery.m_dFilters[j];
-					tOut.SendString ( tFilter.m_sAttrName.cstr() );
-					tOut.SendInt ( tFilter.m_iValues );
-					for ( int k=0; k<tFilter.m_iValues; k++ )
-						tOut.SendInt ( tFilter.m_pValues[k] );
-					if ( !tFilter.m_iValues )
-					{
-						tOut.SendDword ( tFilter.m_uMinValue );
-						tOut.SendDword ( tFilter.m_uMaxValue );
-					}
-					tOut.SendInt ( tFilter.m_bExclude );
-				}
-				tOut.SendInt ( tQuery.m_eGroupFunc );
-				tOut.SendString ( tQuery.m_sGroupBy.cstr() );
-				tOut.SendInt ( tQuery.m_iMaxMatches );
-				tOut.SendString ( tQuery.m_sGroupSortBy.cstr() );
-				tOut.SendInt ( tQuery.m_iCutoff );
-				tOut.SendInt ( tQuery.m_iRetryCount );
-				tOut.SendInt ( tQuery.m_iRetryDelay );
-				tOut.SendString ( tQuery.m_sGroupDistinct.cstr() );
-				tOut.Flush ();
-
-				// FIXME! handle flush failure
 				tAgent.m_eState = AGENT_QUERY;
 				iAgents++;
 			}
 		}
 	}
 
-	ARRAY_FOREACH ( i, tDist.m_dAgents )
+	ARRAY_FOREACH ( i, dAgents )
 	{
 		// check if connection timed out
-		Agent_t & tAgent = tDist.m_dAgents[i];
+		Agent_t & tAgent = dAgents[i];
 		if ( tAgent.m_eState!=AGENT_QUERY && tAgent.m_eState!=AGENT_UNUSED )
 		{
 			tAgent.Close ();
-			dFailures.Add ( SearchFailure_t ( sIndexName, "agent '%s:%d': %s() timed out",
-				tAgent.m_sHost.cstr(), tAgent.m_iPort,
-				tAgent.m_eState==AGENT_HELLO ? "read" : "connect" ) );
+			dFailures.m_sPrefix.SetSprintf ( "agent %s:%d: ", tAgent.m_sHost.cstr(), tAgent.m_iPort );
+			dFailures.Submit ( "%s() timed out", tAgent.m_eState==AGENT_HELLO ? "read" : "connect" );
 		}
 	}
 
@@ -1640,10 +1675,9 @@ int QueryRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, con
 }
 
 
-int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, CSphQueryResult * pRes, int iTimeout,
-	SearchFailuresLog_t & dFailures )
+int WaitForRemoteAgents ( CSphVector<Agent_t,8> & dAgents, int iTimeout,
+	IReplyParser_t & tParser, SearchFailuresLog_t & dFailures )
 {
-	assert ( pRes );
 	assert ( iTimeout>=0 );
 
 	int iAgents = 0;
@@ -1656,15 +1690,15 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 
 		int iMax = 0;
 		bool bDone = true;
-		ARRAY_FOREACH ( iAgent, tDist.m_dAgents )
+		ARRAY_FOREACH ( iAgent, dAgents )
 		{
-			Agent_t & tAgent = tDist.m_dAgents[iAgent];
+			Agent_t & tAgent = dAgents[iAgent];
 			if ( tAgent.m_eState==AGENT_QUERY || tAgent.m_eState==AGENT_REPLY )
 			{
 				assert ( tAgent.m_iPort>0 );
 				assert ( tAgent.m_iSock>0 );
 
-				FD_SET ( tAgent.m_iSock, &fdsRead );
+				SPH_FD_SET ( tAgent.m_iSock, &fdsRead );
 				iMax = Max ( iMax, tAgent.m_iSock );
 				bDone = false;
 			}
@@ -1682,17 +1716,18 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 		if ( select ( 1+iMax, &fdsRead, NULL, NULL, &tvTimeout )<=0 )
 			continue;
 
-		ARRAY_FOREACH ( iAgent, tDist.m_dAgents )
+		ARRAY_FOREACH ( iAgent, dAgents )
 		{
-			Agent_t & tAgent = tDist.m_dAgents[iAgent];
+			Agent_t & tAgent = dAgents[iAgent];
 			if (!( tAgent.m_eState==AGENT_QUERY || tAgent.m_eState==AGENT_REPLY ))
 				continue;
 			if ( !FD_ISSET ( tAgent.m_iSock, &fdsRead ) )
 				continue;
 
 			// if there was no reply yet, read reply header
+			dFailures.m_sPrefix.SetSprintf ( "agent %s:%d: ", tAgent.m_sHost.cstr(), tAgent.m_iPort );
 			bool bFailure = true;
-			do
+			for ( ;; )
 			{
 				if ( tAgent.m_eState==AGENT_QUERY )
 				{
@@ -1708,9 +1743,7 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 					if ( sphSockRecv ( tAgent.m_iSock, (char*)&tReplyHeader, sizeof(tReplyHeader) )!=sizeof(tReplyHeader) )
 					{
 						// bail out if failed
-						dFailures.Add ( SearchFailure_t ( sIndexName,
-							"agent '%s:%d': failed to receive reply header",
-							tAgent.m_sHost.cstr(), tAgent.m_iPort ) );
+						dFailures.Submit ( "failed to receive reply header" );
 						break;
 					}
 
@@ -1719,19 +1752,16 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 					tReplyHeader.m_iLength = ntohl ( tReplyHeader.m_iLength );
 
 					// check the packet
-					if ( tReplyHeader.m_iLength<0 ) // FIXME! add reasonable max packet len too
+					if ( tReplyHeader.m_iLength<0 || tReplyHeader.m_iLength>MAX_PACKET_SIZE ) // FIXME! add reasonable max packet len too
 					{
-						dFailures.Add ( SearchFailure_t ( sIndexName,
-							"agent '%s:%d': ill-formed reply length (status=%d, len=%d)",
-							tAgent.m_sHost.cstr(), tAgent.m_iPort,
-							tReplyHeader.m_iStatus, tReplyHeader.m_iLength ) );
+						dFailures.Submit ( "bad packet size (status=%d, len=%d, max_packet_size=%d)", tReplyHeader.m_iStatus, tReplyHeader.m_iLength, MAX_PACKET_SIZE );
 						break;
 					}
 
 					// header received, switch the status
 					assert ( tAgent.m_pReplyBuf==NULL );
 					tAgent.m_eState = AGENT_REPLY;
-					tAgent.m_pReplyBuf = new char [ tReplyHeader.m_iLength ];
+					tAgent.m_pReplyBuf = new BYTE [ tReplyHeader.m_iLength ];
 					tAgent.m_iReplySize = tReplyHeader.m_iLength;
 					tAgent.m_iReplyRead = 0;
 					tAgent.m_iReplyStatus = tReplyHeader.m_iStatus;
@@ -1739,10 +1769,7 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 					if ( !tAgent.m_pReplyBuf )
 					{
 						// bail out if failed
-						dFailures.Add ( SearchFailure_t ( sIndexName,
-							"agent '%s:%d': failed to alloc %d bytes for reply buffer",
-							tAgent.m_sHost.cstr(), tAgent.m_iPort,
-							tAgent.m_iReplySize ) );
+						dFailures.Submit ( "failed to alloc %d bytes for reply buffer", tAgent.m_iReplySize );
 						break;
 					}
 				}
@@ -1752,16 +1779,13 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 				{
 					// do read
 					assert ( tAgent.m_iReplyRead<tAgent.m_iReplySize );
-					int iRes = sphSockRecv ( tAgent.m_iSock, tAgent.m_pReplyBuf+tAgent.m_iReplyRead,
+					int iRes = sphSockRecv ( tAgent.m_iSock, (char*)tAgent.m_pReplyBuf+tAgent.m_iReplyRead,
 						tAgent.m_iReplySize-tAgent.m_iReplyRead );
 
 					// bail out if read failed
 					if ( iRes<0 )
 					{
-						dFailures.Add ( SearchFailure_t ( sIndexName,
-							"agent '%s:%d': failed to receive reply body: %s",
-							tAgent.m_sHost.cstr(), tAgent.m_iPort,
-							sphSockError() ) );
+						dFailures.Submit ( "failed to receive reply body: %s", sphSockError() );
 						break;
 					}
 
@@ -1774,22 +1798,12 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 				if ( tAgent.m_eState==AGENT_REPLY && tAgent.m_iReplyRead==tAgent.m_iReplySize )
 				{
 					MemInputBuffer_c tReq ( tAgent.m_pReplyBuf, tAgent.m_iReplySize );
-					if ( tReq.GetError() )
-					{
-						dFailures.Add ( SearchFailure_t ( sIndexName,
-							"agent '%s:%d': reply length out of bounds (len=%d, max_packet_size=%d)",
-							tAgent.m_sHost.cstr(), tAgent.m_iPort,
-							tAgent.m_iReplySize, MAX_PACKET_SIZE ) );
-						break;
-					}
 
+					// check for general errors/warnings first
 					if ( tAgent.m_iReplyStatus==SEARCHD_WARNING )
 					{
 						CSphString sAgentWarning = tReq.GetString ();
-						dFailures.Add ( SearchFailure_t ( sIndexName,
-							"agent '%s:%d': remote warning (status=%d, error=%s)",
-							tAgent.m_sHost.cstr(), tAgent.m_iPort,
-							tAgent.m_iReplyStatus, sAgentWarning.cstr() ) );
+						dFailures.Submit ( "remote warning (status=%d, error=%s)", tAgent.m_iReplyStatus, sAgentWarning.cstr() );
 
 					} else if ( tAgent.m_iReplyStatus==SEARCHD_RETRY )
 					{
@@ -1799,132 +1813,19 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 					} else if ( tAgent.m_iReplyStatus!=SEARCHD_OK )
 					{
 						CSphString sAgentError = tReq.GetString ();
-						dFailures.Add ( SearchFailure_t ( sIndexName,
-							"agent '%s:%d': remote error (status=%d, error=%s)",
-							tAgent.m_sHost.cstr(), tAgent.m_iPort,
-							tAgent.m_iReplyStatus, sAgentError.cstr() ) );
+						dFailures.Submit ( "remote error (status=%d, error=%s)", tAgent.m_iReplyStatus, sAgentError.cstr() );
 						break;
 					}
 
-					// get schema
-					CSphSchema & tSchema = tAgent.m_tRes.m_tSchema;
-					tSchema.Reset ();
-
-					tSchema.m_dFields.Resize ( tReq.GetInt() ); // FIXME! add a sanity check
-					ARRAY_FOREACH ( j, tSchema.m_dFields )
-						tSchema.m_dFields[j].m_sName = tReq.GetString ();
-
-					int iNumAttrs = tReq.GetInt(); // FIXME! add a sanity check
-					for ( int j=0; j<iNumAttrs; j++ )
-					{
-						CSphColumnInfo tCol;
-						tCol.m_sName = tReq.GetString ();
-						tCol.m_eAttrType = tReq.GetDword (); // FIXME! add a sanity check
-						tSchema.AddAttr ( tCol );
-					}
-
-					// get matches
-					int iMatches = tReq.GetInt ();
-					if ( iMatches<0 || iMatches>g_iMaxMatches )
-					{
-						dFailures.Add ( SearchFailure_t ( sIndexName,
-							"agent '%s:%d': invalid match count received (count=%d)",
-							tAgent.m_sHost.cstr(), tAgent.m_iPort, iMatches ) );
+					// call parser
+					if ( !tParser.ParseReply ( tReq, tAgent, dFailures ) )
 						break;
-					}
 
-					int bAgent64 = tReq.GetInt ();
-					if ( bAgent64 && !USE_64BIT )
-					{
-						// should be reported as warning
-						dFailures.Add ( SearchFailure_t ( sIndexName,
-							"agent '%s:%d' is id64 and master is id32; resulting docids might be wrapped",
-							tAgent.m_sHost.cstr(), tAgent.m_iPort ) );
-					}
-
-					assert ( !tAgent.m_tRes.m_dMatches.GetLength() );
-					if ( iMatches )
-					{
-						tAgent.m_tRes.m_dMatches.Resize ( iMatches );
-						ARRAY_FOREACH ( i, tAgent.m_tRes.m_dMatches )
-						{
-							CSphMatch & tMatch = tAgent.m_tRes.m_dMatches[i];
-							tMatch.Reset ( tSchema.GetRowSize() );
-							tMatch.m_iDocID = bAgent64 ? (SphDocID_t)tReq.GetUint64() : tReq.GetDword();
-							tMatch.m_iWeight = tReq.GetInt ();
-							for ( int j=0; j<tSchema.GetAttrsCount(); j++ )
-							{
-								const CSphColumnInfo & tAttr = tSchema.GetAttr(j);
-								tMatch.SetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount, tReq.GetDword () );
-							}
-						}
-					}
-
-					// read totals (retrieved count, total count, query time, word count)
-					int iRetrieved = tReq.GetInt ();
-					tAgent.m_tRes.m_iTotalMatches = tReq.GetInt ();
-					tAgent.m_tRes.m_iQueryTime = tReq.GetInt ();
-					tAgent.m_tRes.m_iNumWords = tReq.GetInt ();
-					if ( iRetrieved!=iMatches )
-					{
-						dFailures.Add ( SearchFailure_t ( sIndexName,
-							"agent '%s:%d': expected %d retrieved documents, got %d",
-							tAgent.m_sHost.cstr(), tAgent.m_iPort,
-							iMatches, iRetrieved ) );
-						break;
-					}
-
-					bool bSetWords = false;
-					if ( pRes->m_iNumWords && tAgent.m_tRes.m_iNumWords!=pRes->m_iNumWords )
-					{
-						dFailures.Add ( SearchFailure_t  ( sIndexName,
-							"agent '%s:%d': expected %d query words, got %d",
-							tAgent.m_sHost.cstr(), tAgent.m_iPort,
-							pRes->m_iNumWords, tAgent.m_tRes.m_iNumWords ) );
-						break;
-					}
-
-					if ( !pRes->m_iNumWords )
-					{
-						pRes->m_iNumWords = tAgent.m_tRes.m_iNumWords;
-						bSetWords = true;
-					}
-
-					// read words
-					int i;
-					for ( i=0; i<pRes->m_iNumWords; i++ )
-					{
-						CSphString sWord = tReq.GetString ();
-
-						// set it in result if not yet, or check if already
-						if ( bSetWords )
-						{
-							pRes->m_tWordStats[i].m_sWord = sWord;
-						} else
-						{
-							if ( pRes->m_tWordStats[i].m_sWord!=sWord )
-								break;
-						}
-
-						pRes->m_tWordStats[i].m_iDocs += tReq.GetInt (); // update docs count
-						pRes->m_tWordStats[i].m_iHits += tReq.GetInt (); // update hits count
-					}
-
+					// check if there was enough data
 					if ( tReq.GetError() )
 					{
-						dFailures.Add ( SearchFailure_t  ( sIndexName,
-							"agent '%s:%d': incomplete reply",
-							tAgent.m_sHost.cstr(), tAgent.m_iPort ) );
-						break;
-					}
-
-					if ( i!=pRes->m_iNumWords )
-					{
-						dFailures.Add ( SearchFailure_t  ( sIndexName,
-							"agent '%s:%d': expected %d words, got %d",
-							tAgent.m_sHost.cstr(), tAgent.m_iPort,
-							i, pRes->m_iNumWords ) );
-						break;
+						dFailures.Submit ( "incomplete reply" );
+						return false;
 					}
 
 					// all is well
@@ -1933,7 +1834,8 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 				}
 
 				bFailure = false;
-			} while ( false );
+				break;
+			}
 
 			if ( bFailure )
 			{
@@ -1946,58 +1848,24 @@ int WaitForRemoteAgents ( const char * sIndexName, DistributedIndex_t & tDist, C
 	}
 
 	// close timed-out agents
-	ARRAY_FOREACH ( iAgent, tDist.m_dAgents )
+	ARRAY_FOREACH ( iAgent, dAgents )
 	{
-		Agent_t & tAgent = tDist.m_dAgents[iAgent];
+		Agent_t & tAgent = dAgents[iAgent];
 		if ( tAgent.m_eState==AGENT_QUERY )
 		{
 			assert ( !tAgent.m_tRes.m_dMatches.GetLength() );
 			tAgent.Close ();
 
-			dFailures.Add ( SearchFailure_t ( sIndexName,
-				"agent '%s:%d': query timed out",
-				tAgent.m_sHost.cstr(), tAgent.m_iPort ) );
+			dFailures.m_sPrefix.SetSprintf ( "agent %s:%d: ", tAgent.m_sHost.cstr(), tAgent.m_iPort );
+			dFailures.Submit ( "query timed out" );
 		}
 	}
 
 	return iAgents;
 }
 
-#if USE_WINDOWS
-#pragma warning(default:4127) // conditional expr is const
-#pragma warning(default:4389) // signed/unsigned mismatch
-#endif // USE_WINDOWS
-
 /////////////////////////////////////////////////////////////////////////////
-// SIGNALS
-/////////////////////////////////////////////////////////////////////////////
-
-#if !USE_WINDOWS
-void sigchld ( int )
-{
-	signal ( SIGCHLD, sigchld );
-	while ( waitpid ( 0, (int *)0, WNOHANG | WUNTRACED ) > 0 )
-		g_iChildren--;
-}
-
-void sighup ( int )
-{
-	sphInfo ( "rotating indices: caught SIGHUP, waiting for children to exit" );
-	g_iHUP = 1;
-}
-#endif // !USE_WINDOWS
-
-void sigterm ( int )
-{
-	if ( g_bHeadDaemon )
-		sphInfo ( "caught SIGTERM, shutting down" );
-
-	Shutdown ();
-	exit ( 0 );
-}
-
-/////////////////////////////////////////////////////////////////////////////
-// THE SERVER
+// SEARCH HANDLER
 /////////////////////////////////////////////////////////////////////////////
 
 inline bool operator < ( const CSphMatch & a, const CSphMatch & b )
@@ -2012,6 +1880,201 @@ inline bool operator < ( const CSphTaggedMatch & a, const CSphTaggedMatch & b )
 	else
 		return a.m_iDocID < b.m_iDocID;
 };
+
+/////////////////////////////////////////////////////////////////////////////
+
+struct SearchRequestBuilder_t : public IRequestBuilder_t
+{
+	SearchRequestBuilder_t ( const CSphQuery & tQuery ) : m_tQuery ( tQuery ) {}
+	virtual void BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut ) const;
+
+protected:
+	const CSphQuery & m_tQuery;
+};
+
+
+struct SearchReplyParser_t : public IReplyParser_t
+{
+	SearchReplyParser_t ( CSphQueryResult * pRes ) : m_pRes ( pRes ) {}
+	virtual bool		ParseReply ( MemInputBuffer_c & tReq, Agent_t & tAgent, SearchFailuresLog_t & dFailures ) const;
+
+protected:
+	CSphQueryResult *	m_pRes;
+};
+
+
+void SearchRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut ) const
+{
+	const CSphQuery & q = m_tQuery;
+	int iReqSize = 84 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
+		+ strlen ( q.m_sSortBy.cstr() )
+		+ strlen ( q.m_sQuery.cstr() )
+		+ strlen ( sIndexes )
+		+ strlen ( q.m_sGroupBy.cstr() )
+		+ strlen ( q.m_sGroupSortBy.cstr() )
+		+ strlen ( q.m_sGroupDistinct.cstr() );
+	ARRAY_FOREACH ( j, q.m_dFilters )
+	{
+		const CSphFilter & tFilter = q.m_dFilters[j];
+		iReqSize +=
+			12
+			+ strlen ( tFilter.m_sAttrName.cstr() )
+			+ 4*tFilter.m_iValues
+			+ ( tFilter.m_iValues ? 0 : 8 );
+	}
+
+	// say hello
+	tOut.SendDword ( SPHINX_SEARCHD_PROTO );
+
+	// request header
+	tOut.SendWord ( SEARCHD_COMMAND_SEARCH ); // command id
+	tOut.SendWord ( VER_COMMAND_SEARCH ); // command version
+	tOut.SendInt ( iReqSize-12 ); // request body length
+
+	tOut.SendInt ( 0 ); // offset is 0
+	tOut.SendInt ( q.m_iMaxMatches ); // limit is MAX_MATCHES
+	tOut.SendInt ( (DWORD)q.m_eMode ); // match mode
+	tOut.SendInt ( q.m_eSort ); // sort mode
+	tOut.SendString ( q.m_sSortBy.cstr() ); // sort attr
+	tOut.SendString ( q.m_sQuery.cstr() ); // query
+	tOut.SendInt ( q.m_iWeights );
+	for ( int j=0; j<q.m_iWeights; j++ )
+		tOut.SendInt ( q.m_pWeights[j] ); // weights
+	tOut.SendString ( sIndexes ); // indexes
+	tOut.SendInt ( USE_64BIT ); // id range bits
+	tOut.SendDocid ( q.m_iMinID ); // id/ts ranges
+	tOut.SendDocid ( q.m_iMaxID );
+	tOut.SendInt ( q.m_dFilters.GetLength() );
+	ARRAY_FOREACH ( j, q.m_dFilters )
+	{
+		const CSphFilter & tFilter = q.m_dFilters[j];
+		tOut.SendString ( tFilter.m_sAttrName.cstr() );
+		tOut.SendInt ( tFilter.m_iValues );
+		for ( int k=0; k<tFilter.m_iValues; k++ )
+			tOut.SendInt ( tFilter.m_pValues[k] );
+		if ( !tFilter.m_iValues )
+		{
+			tOut.SendDword ( tFilter.m_uMinValue );
+			tOut.SendDword ( tFilter.m_uMaxValue );
+		}
+		tOut.SendInt ( tFilter.m_bExclude );
+	}
+	tOut.SendInt ( q.m_eGroupFunc );
+	tOut.SendString ( q.m_sGroupBy.cstr() );
+	tOut.SendInt ( q.m_iMaxMatches );
+	tOut.SendString ( q.m_sGroupSortBy.cstr() );
+	tOut.SendInt ( q.m_iCutoff );
+	tOut.SendInt ( q.m_iRetryCount );
+	tOut.SendInt ( q.m_iRetryDelay );
+	tOut.SendString ( q.m_sGroupDistinct.cstr() );
+}
+
+
+bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, Agent_t & tAgent, SearchFailuresLog_t & dFailures ) const
+{
+	assert ( m_pRes );
+
+	// get schema
+	CSphSchema & tSchema = tAgent.m_tRes.m_tSchema;
+	tSchema.Reset ();
+
+	tSchema.m_dFields.Resize ( tReq.GetInt() ); // FIXME! add a sanity check
+	ARRAY_FOREACH ( j, tSchema.m_dFields )
+		tSchema.m_dFields[j].m_sName = tReq.GetString ();
+
+	int iNumAttrs = tReq.GetInt(); // FIXME! add a sanity check
+	for ( int j=0; j<iNumAttrs; j++ )
+	{
+		CSphColumnInfo tCol;
+		tCol.m_sName = tReq.GetString ();
+		tCol.m_eAttrType = tReq.GetDword (); // FIXME! add a sanity check
+		tSchema.AddAttr ( tCol );
+	}
+
+	// get matches
+	int iMatches = tReq.GetInt ();
+	if ( iMatches<0 || iMatches>g_iMaxMatches )
+	{
+		dFailures.Submit ( "invalid match count received (count=%d)", iMatches );
+		return false;
+	}
+
+	int bAgent64 = tReq.GetInt ();
+#if !USE_64BIT
+	if ( bAgent64 )
+		dFailures.Submit ( "id64 agent, id32 master, docids might be wrapped" );
+#endif
+
+	assert ( !tAgent.m_tRes.m_dMatches.GetLength() );
+	if ( iMatches )
+	{
+		tAgent.m_tRes.m_dMatches.Resize ( iMatches );
+		ARRAY_FOREACH ( i, tAgent.m_tRes.m_dMatches )
+		{
+			CSphMatch & tMatch = tAgent.m_tRes.m_dMatches[i];
+			tMatch.Reset ( tSchema.GetRowSize() );
+			tMatch.m_iDocID = bAgent64 ? (SphDocID_t)tReq.GetUint64() : tReq.GetDword();
+			tMatch.m_iWeight = tReq.GetInt ();
+			for ( int j=0; j<tSchema.GetAttrsCount(); j++ )
+			{
+				const CSphColumnInfo & tAttr = tSchema.GetAttr(j);
+				tMatch.SetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount, tReq.GetDword () );
+			}
+		}
+	}
+
+	// read totals (retrieved count, total count, query time, word count)
+	int iRetrieved = tReq.GetInt ();
+	tAgent.m_tRes.m_iTotalMatches = tReq.GetInt ();
+	tAgent.m_tRes.m_iQueryTime = tReq.GetInt ();
+	tAgent.m_tRes.m_iNumWords = tReq.GetInt ();
+	if ( iRetrieved!=iMatches )
+	{
+		dFailures.Submit ( "expected %d retrieved documents, got %d", iMatches, iRetrieved );
+		return false;
+	}
+
+	bool bSetWords = false;
+	if ( m_pRes->m_iNumWords && tAgent.m_tRes.m_iNumWords!=m_pRes->m_iNumWords )
+	{
+		dFailures.Submit ( "expected %d query words, got %d", m_pRes->m_iNumWords, tAgent.m_tRes.m_iNumWords );
+		return false;
+	}
+
+	if ( !m_pRes->m_iNumWords )
+	{
+		m_pRes->m_iNumWords = tAgent.m_tRes.m_iNumWords;
+		bSetWords = true;
+	}
+
+	// read words
+	int i;
+	for ( i=0; i<m_pRes->m_iNumWords; i++ )
+	{
+		CSphString sWord = tReq.GetString ();
+
+		// set it in result if not yet, or check if already
+		if ( bSetWords )
+		{
+			m_pRes->m_tWordStats[i].m_sWord = sWord;
+		} else
+		{
+			if ( m_pRes->m_tWordStats[i].m_sWord!=sWord )
+				break;
+		}
+
+		m_pRes->m_tWordStats[i].m_iDocs += tReq.GetInt (); // update docs count
+		m_pRes->m_tWordStats[i].m_iHits += tReq.GetInt (); // update hits count
+	}
+
+	if ( i!=m_pRes->m_iNumWords )
+	{
+		dFailures.Submit ( "expected %d words, got %d", i, m_pRes->m_iNumWords );
+		return false;
+	}
+
+	return true;
+}
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -2156,95 +2219,6 @@ bool FixupQuery ( CSphQuery * pQuery, OldQuery_t * pOldQuery,
 
 	pOldQuery->m_iVersion = 0;
 	return true;
-}
-
-
-struct StrBuf_t
-{
-protected:
-	char		m_sBuf [ 2048 ];
-	char *		m_pBuf;
-	int			m_iLeft;
-
-public:
-	StrBuf_t ()
-	{
-		memset ( m_sBuf, 0, sizeof(m_sBuf) );
-		m_iLeft = sizeof(m_sBuf)-1;
-		m_pBuf = m_sBuf;
-	}
-
-	const char * cstr ()
-	{
-		return m_sBuf;
-	}
-
-	int GetLength ()
-	{
-		return sizeof(m_sBuf)-1-m_iLeft;
-	}
-
-	bool Append ( const char * s, bool bWhole )
-	{
-		int iLen = strlen(s);
-		if ( bWhole && m_iLeft<iLen )
-			return false;
-
-		iLen = Min ( m_iLeft, iLen );
-		memcpy ( m_pBuf, s, iLen );
-		m_pBuf += iLen;
-		m_iLeft -= iLen;
-		return true;
-	}
-
-	const StrBuf_t & operator += ( const char * s )
-	{
-		Append ( s, false );
-		return *this;
-	}
-};
-
-
-void ReportSearchFailures ( StrBuf_t & sReport, SearchFailuresLog_t & dFailures )
-{
-	if ( !dFailures.GetLength() )
-		return;
-
-	// collapse same messages
-	dFailures.Sort ();
-	int iSpanStart = 0;
-
-	for ( int i=1; i<=dFailures.GetLength(); i++ )
-	{
-		// keep scanning while error text is the same
-		if ( i!=dFailures.GetLength() )
-			if ( dFailures[i].m_sError==dFailures[i-1].m_sError )
-				continue;
-
-		// build current span
-		StrBuf_t sSpan;
-		if ( iSpanStart )
-			sSpan += "; ";
-		sSpan += "index ";
-		for ( int j=iSpanStart; j<i; j++ )
-		{
-			if ( j!=iSpanStart )
-				sSpan += ",";
-			sSpan += "'";
-			sSpan += dFailures[j].m_sIndex.cstr();
-			sSpan += "'";
-		}
-		sSpan += ": ";
-		if ( !sSpan.Append ( dFailures[iSpanStart].m_sError.cstr(), true ) )
-			break;
-
-		// flush current span
-		if ( !sReport.Append ( sSpan.cstr(), true ) )
-			break;
-
-		// done
-		iSpanStart = i;
-	}
 }
 
 
@@ -2500,13 +2474,12 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			if ( iRetry>0 )
 				sphUsleep ( tQuery.m_iRetryDelay );
     
-			// start connecting to remote agents
-			ARRAY_FOREACH ( i, tDist.m_dAgents )
-				if ( iRetry==0 || tDist.m_dAgents[i].m_eState==AGENT_RETRY )
-					ConnectToRemoteAgent ( &tDist.m_dAgents[i], sIndexes.cstr(), dFailures );
-    
-			// connect to remote agents and query them first
-			int iRemote = QueryRemoteAgents ( sIndexes.cstr(), tDist, tQuery, tQuery.m_eMode, dFailures );
+			// connect to remote agents and query them
+			dFailures.m_sIndex = sIndexes;
+			ConnectToRemoteAgents ( tDist.m_dAgents, iRetry!=0, dFailures );
+
+			SearchRequestBuilder_t tReqBuilder ( tQuery );
+			int iRemote = QueryRemoteAgents ( tDist.m_dAgents, tDist.m_iAgentConnectTimeout, tReqBuilder, dFailures );
     
 			// while the remote queries are running, do local searches
 			// FIXME! what if the remote agents finish early, could they timeout?
@@ -2535,8 +2508,11 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 					// do query
 					iTries++;
 					if ( !tServed.m_pIndex->QueryEx ( tServed.m_pTokenizer, tServed.m_pDict, &tQuery, pRes, pSorter ) )
-						dFailures.Add ( SearchFailure_t ( tDist.m_dLocal[i].cstr(), tServed.m_pIndex->GetLastError() ) );
-					else
+					{
+						dFailures.m_sIndex = tDist.m_dLocal[i];
+						dFailures.m_sPrefix = "";
+						dFailures.Submit ( "%s", tServed.m_pIndex->GetLastError().cstr() );
+					} else
 						iSuccesses++;
     
 					// extract my results and store schema
@@ -2554,8 +2530,10 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			// wait for remote queries to complete
 			if ( iRemote )
 			{
+				dFailures.m_sIndex = sIndexes;
+				SearchReplyParser_t tParser ( pRes );
 				int iMsecLeft = tDist.m_iAgentQueryTimeout - int(tmQuery*1000.0f);
-				int iReplys = WaitForRemoteAgents ( sIndexes.cstr(), tDist, pRes, Max ( iMsecLeft, 0 ), dFailures );
+				int iReplys = WaitForRemoteAgents ( tDist.m_dAgents, Max(iMsecLeft,0), tParser, dFailures );
     
 				// check if there were valid (though might be 0-matches) replys, and merge them
 				iSuccesses += iReplys;
@@ -2563,11 +2541,9 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 					ARRAY_FOREACH ( iAgent, tDist.m_dAgents )
 				{
 					Agent_t & tAgent = tDist.m_dAgents[iAgent];
-					if ( tAgent.m_bFailure )
+					if ( tAgent.m_bFailure || !tAgent.m_tRes.m_dMatches.GetLength() )
 						continue;
-    				if ( !tAgent.m_tRes.m_dMatches.GetLength() )
-						continue;
-    
+   
 					// merge this agent's results
 					ARRAY_FOREACH ( i, tAgent.m_tRes.m_dMatches )
 						pRes->m_dMatches.Add ( tAgent.m_tRes.m_dMatches[i] ); // FIXME! what about tagging?
@@ -2619,8 +2595,11 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			// do query
 			iTries++;
 			if ( !tServed.m_pIndex->QueryEx ( tServed.m_pTokenizer, tServed.m_pDict, &tQuery, pRes, pSorter ) )
-				dFailures.Add ( SearchFailure_t ( sIndexName, tServed.m_pIndex->GetLastError() ) );
-			else
+			{
+				dFailures.m_sIndex = sIndexName;
+				dFailures.m_sPrefix = "";
+				dFailures.Submit ( "%s", tServed.m_pIndex->GetLastError().cstr() );
+			} else
 				iSuccesses++;
 
 			// extract my results and store schema
@@ -2694,8 +2673,11 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 				// do query
 				iTries++;
 				if ( !tServed.m_pIndex->QueryEx ( tServed.m_pTokenizer, tServed.m_pDict, &tQuery, pRes, pSorter ) )
-					dFailures.Add ( SearchFailure_t ( sNext, tServed.m_pIndex->GetLastError() ) );
-				else
+				{
+					dFailures.m_sIndex = sNext;
+					dFailures.m_sPrefix = "";
+					dFailures.Submit ( "%s", tServed.m_pIndex->GetLastError().cstr() );
+				} else
 					iSuccesses++;
 
 				// extract my results and store schema
@@ -2727,7 +2709,11 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	// warn about id64 server vs old clients
 #if USE_64BIT
 	if ( iVer<0x108 )
-		dFailures.Add ( SearchFailure_t ( "*", "searchd is id64; resulting docids might be wrapped" ) );
+	{
+		dFailures.m_sIndex = "*";
+		dFailures.m_sPrefix = "";
+		dFailures.Submit ( "searchd is id64; resulting docids might be wrapped" );
+	}
 #endif
 
 	// if there were no succesful searches at all, this is an error
@@ -2735,7 +2721,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	if ( !iSuccesses )
 	{
 		StrBuf_t sFailures;
-		ReportSearchFailures ( sFailures, dFailures );
+		dFailures.BuildReport ( sFailures );
 
 		tReq.SendErrorReply ( "%s", sFailures.cstr() );
 		return;
@@ -2900,7 +2886,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 	// build report
 	StrBuf_t sFailures;
-	ReportSearchFailures ( sFailures, dFailures );
+	dFailures.BuildReport ( sFailures );
 
 	// calc response length
 	int iRespLen = 20; // header
@@ -2925,7 +2911,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	for ( int i=0; i<pRes->m_iNumWords; i++ ) // per-word stats
 		iRespLen += 12 + strlen ( pRes->m_tWordStats[i].m_sWord.cstr() ); // wordlen, word, docs, hits
 
-	bool bWarning = ( iVer>=0x106 && dFailures.GetLength() );
+	bool bWarning = ( iVer>=0x106 && !dFailures.IsEmpty() );
 	if ( bWarning )
 		iRespLen += 4 + strlen ( sFailures.cstr() );
 
@@ -3025,6 +3011,8 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 }
 
 /////////////////////////////////////////////////////////////////////////////
+// EXCERPTS HANDLER
+/////////////////////////////////////////////////////////////////////////////
 
 void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 {
@@ -3109,6 +3097,65 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 }
 
 /////////////////////////////////////////////////////////////////////////////
+// UPDATES HANDLER
+/////////////////////////////////////////////////////////////////////////////
+
+struct UpdateRequestBuilder_t : public IRequestBuilder_t
+{
+	UpdateRequestBuilder_t ( const CSphAttrUpdate_t & pUpd ) : m_tUpd ( pUpd ) {}
+	virtual void BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut ) const;
+
+protected:
+	const CSphAttrUpdate_t & m_tUpd;
+};
+
+
+struct UpdateReplyParser_t : public IReplyParser_t
+{
+	UpdateReplyParser_t ( int * pUpd )
+		: m_pUpdated ( pUpd )
+	{}
+
+	virtual bool ParseReply ( MemInputBuffer_c & tReq, Agent_t &, SearchFailuresLog_t & ) const
+	{
+		*m_pUpdated += tReq.GetDword ();
+		return true;
+	}
+
+protected:
+	int * m_pUpdated;
+};
+
+
+void UpdateRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut ) const
+{
+	int iStride = ( 1+m_tUpd.m_dAttrs.GetLength() );
+
+	int iReqSize = 4+strlen(sIndexes); // indexes string
+	iReqSize += 4; // attrs array len, data
+	ARRAY_FOREACH ( i, m_tUpd.m_dAttrs )
+		iReqSize += 4+strlen(m_tUpd.m_dAttrs[i].m_sName.cstr());
+	iReqSize += 4; // values array len, data
+	iReqSize += 4*iStride*m_tUpd.m_iUpdates;
+
+	// header
+	tOut.SendDword ( SPHINX_SEARCHD_PROTO );
+	tOut.SendWord ( SEARCHD_COMMAND_UPDATE );
+	tOut.SendWord ( VER_COMMAND_UPDATE );
+	tOut.SendInt ( iReqSize );
+
+	tOut.SendString ( sIndexes );
+	tOut.SendInt ( m_tUpd.m_dAttrs.GetLength() );
+	ARRAY_FOREACH ( i, m_tUpd.m_dAttrs )
+		tOut.SendString ( m_tUpd.m_dAttrs[i].m_sName.cstr() );
+	tOut.SendInt ( m_tUpd.m_iUpdates );
+
+	DWORD * pUpd = m_tUpd.m_pUpdates;
+	DWORD * pUpdMax = pUpd + iStride*m_tUpd.m_iUpdates;
+	for ( ; pUpd<pUpdMax; pUpd++ )
+		tOut.SendDword ( *pUpd );
+}
+
 
 void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeFD )
 {
@@ -3121,13 +3168,12 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 	}
 
 	// obtain and check index name
-	CSphString sIndex = tReq.GetString ();
-	if ( !g_hIndexes ( sIndex ) )
+	CSphString sReqIndex = tReq.GetString ();
+	if ( !g_hIndexes(sReqIndex) && !g_hDistIndexes(sReqIndex) )
 	{
-		tReq.SendErrorReply ( "invalid local index '%s' specified in request", sIndex.cstr() );
+		tReq.SendErrorReply ( "unknown index '%s' specified in request", sReqIndex.cstr() );
 		return;
 	}
-	assert ( g_hIndexes[sIndex].m_pIndex );
 
 	// obtain update data
 	CSphAttrUpdate_t tUpd;
@@ -3141,7 +3187,6 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 	for ( int i=0; i<tUpd.m_iUpdates*iStride; i++ )
 		tUpd.m_pUpdates[i] = tReq.GetDword ();
 
-	// check buffer
 	if ( tReq.GetError() )
 	{
 		tReq.SendErrorReply ( "invalid or truncated request" );
@@ -3149,32 +3194,117 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 	}
 
 	// do update
-	int iUpdated = g_hIndexes[sIndex].m_pIndex->UpdateAttributes ( tUpd );
-	if ( iUpdated<0 )
+	SearchFailuresLog_t dFailures;
+	int iSuccesses = 0;
+	int iUpdated = 0;
+
+	CSphVector<CSphString,8> dLocal, dUpdated;
+	const CSphVector<CSphString,8> * pLocal = NULL;
+
+	if ( g_hIndexes(sReqIndex) )
 	{
-		tReq.SendErrorReply ( "index '%s': %s", sIndex.cstr(),
-			g_hIndexes[sIndex].m_pIndex->GetLastError().cstr() );
+		dLocal.Add ( sReqIndex );
+		pLocal = &dLocal;
+	} else
+	{
+		assert ( g_hDistIndexes(sReqIndex) );
+		pLocal = &g_hDistIndexes[sReqIndex].m_dLocal;
+	}
+
+	// update local indexes
+	assert ( pLocal );
+	ARRAY_FOREACH ( i, (*pLocal) )
+	{
+		const char * sIndex = (*pLocal)[i].cstr();
+		ServedIndex_t * pServed = g_hIndexes(sIndex);
+
+		dFailures.m_sIndex = sIndex;
+		dFailures.m_sPrefix = "";
+
+		if ( !pServed || !pServed->m_pIndex )
+		{
+			dFailures.Submit ( "index not available" );
+			continue;
+		}
+
+		int iUpd = pServed->m_pIndex->UpdateAttributes ( tUpd );
+		if ( iUpd<0 )
+		{
+			dFailures.Submit ( "%s", pServed->m_pIndex->GetLastError().cstr() );
+
+		} else
+		{
+			iUpdated += iUpd;
+			dUpdated.Add ( sIndex );
+			iSuccesses++;
+		}
+	}
+
+	// update remote agents
+	if ( g_hDistIndexes(sReqIndex) )
+	{
+		DistributedIndex_t & tDist = g_hDistIndexes[sReqIndex];
+		dFailures.m_sIndex = sReqIndex;
+
+		// connect to remote agents and query them
+		ConnectToRemoteAgents ( tDist.m_dAgents, false, dFailures );
+
+		UpdateRequestBuilder_t tReqBuilder ( tUpd );
+		int iRemote = QueryRemoteAgents ( tDist.m_dAgents, tDist.m_iAgentConnectTimeout, tReqBuilder, dFailures );
+
+		if ( iRemote )
+		{
+			UpdateReplyParser_t tParser ( &iUpdated );
+			iSuccesses += WaitForRemoteAgents ( tDist.m_dAgents, tDist.m_iAgentQueryTimeout, tParser, dFailures );
+		}
+	}
+
+	// notify head daemon of local updates
+	if ( iPipeFD>=0 )
+	{
+		DWORD uTmp = SPH_PIPE_UPDATED_ATTRS;
+		::write ( iPipeFD, &uTmp, sizeof(DWORD) );
+
+		uTmp = dUpdated.GetLength();
+		::write ( iPipeFD, &uTmp, sizeof(DWORD) );
+
+		ARRAY_FOREACH ( i, dUpdated )
+		{
+			uTmp = strlen ( dUpdated[i].cstr() );
+			::write ( iPipeFD, &uTmp, sizeof(DWORD) );
+			::write ( iPipeFD, dUpdated[i].cstr(), uTmp );
+		}
+	}
+
+	// serve reply to client
+	StrBuf_t sReport;
+	dFailures.BuildReport ( sReport );
+
+	if ( !iSuccesses )
+	{
+		tReq.SendErrorReply ( "%s", sReport.cstr() );
 		return;
 	}
 
-	// notify head daemon
-	DWORD uTmp = SPH_PIPE_UPDATED_ATTRS;
-	::write ( iPipeFD, &uTmp, sizeof(DWORD) );
-
-	uTmp = strlen ( sIndex.cstr() );
-	::write ( iPipeFD, &uTmp, sizeof(DWORD) );
-	::write ( iPipeFD, sIndex.cstr(), uTmp );
-
-	// serve reply to client
 	NetOutputBuffer_c tOut ( iSock );
-	tOut.SendWord ( SEARCHD_OK );
-	tOut.SendWord ( VER_COMMAND_UPDATE);
-	tOut.SendInt ( sizeof(DWORD) );
+	if ( dFailures.IsEmpty() )
+	{
+		tOut.SendWord ( SEARCHD_OK );
+		tOut.SendWord ( VER_COMMAND_UPDATE );
+		tOut.SendInt ( 4 );
+	} else
+	{
+		tOut.SendWord ( SEARCHD_WARNING );
+		tOut.SendWord ( VER_COMMAND_UPDATE );
+		tOut.SendInt ( 8+strlen(sReport.cstr()) );
+		tOut.SendString ( sReport.cstr() );
+	}
 	tOut.SendInt ( iUpdated );
 	tOut.Flush ();
-	assert ( tOut.GetError()==true || tOut.GetSentCount()==8+sizeof(DWORD) );
 }
 
+/////////////////////////////////////////////////////////////////////////////
+// GENERAL HANDLER
 /////////////////////////////////////////////////////////////////////////////
 
 void SafeClose ( int & iFD )
@@ -3191,7 +3321,7 @@ void HandleClient ( int iSock, const char * sClientIP, int iPipeFD )
 
 	// send my version
 	DWORD uServer = SPHINX_SEARCHD_PROTO;
-	if ( sphSockSend ( iSock, (char*)&uServer, sizeof(DWORD), 0 )!=sizeof(DWORD) )
+	if ( sphSockSend ( iSock, (char*)&uServer, sizeof(DWORD) )!=sizeof(DWORD) )
 	{
 		sphWarning ( "failed to send server version (client=%s)", sClientIP );
 		return;
@@ -3243,6 +3373,8 @@ void HandleClient ( int iSock, const char * sClientIP, int iPipeFD )
 	}
 }
 
+/////////////////////////////////////////////////////////////////////////////
+// INDEX ROTATION
 /////////////////////////////////////////////////////////////////////////////
 
 bool IsReadable ( const char * sPath )
@@ -3376,6 +3508,8 @@ void RotateIndex ( ServedIndex_t & tIndex, const char * sIndex )
 }
 
 /////////////////////////////////////////////////////////////////////////////
+// MAIN LOOP
+/////////////////////////////////////////////////////////////////////////////
 
 void CheckLeaks ()
 {
@@ -3433,20 +3567,27 @@ void CheckPipes ()
 
 		if ( uStatus==SPH_PIPE_UPDATED_ATTRS )
 		{
-			// index name must follow
-			DWORD iLen;
-			iRes = ::read ( iToClose, &iLen, sizeof(DWORD) );
+			int iUpdIndexes;
+			iRes = ::read ( iToClose, &iUpdIndexes, sizeof(DWORD) );
 			LOC_CHECK_READ ( sizeof(DWORD) );
 
-			CSphString sBuf;
-			sBuf.Reserve ( iLen );
-			iRes = ::read ( iToClose, (char*)sBuf.cstr(), iLen );
-			LOC_CHECK_READ ( iLen );
+			for ( int i=0; i<iUpdIndexes; i++ )
+			{
+				// index name must follow
+				DWORD iLen;
+				iRes = ::read ( iToClose, &iLen, sizeof(DWORD) );
+				LOC_CHECK_READ ( sizeof(DWORD) );
 
-			if ( g_hIndexes(sBuf) )
-				g_hIndexes(sBuf)->m_pIndex->SetAttrsUpdated ( true );
-			else
-				sphWarning ( "INTERNAL ERROR: unknown index '%s' in piped notification", sBuf.cstr() );
+				CSphString sBuf;
+				sBuf.Reserve ( iLen );
+				iRes = ::read ( iToClose, (char*)sBuf.cstr(), iLen );
+				LOC_CHECK_READ ( iLen );
+
+				if ( g_hIndexes(sBuf) )
+					g_hIndexes(sBuf)->m_pIndex->SetAttrsUpdated ( true );
+				else
+					sphWarning ( "INTERNAL ERROR: unknown index '%s' in piped notification", sBuf.cstr() );
+			}
 
 		} else
 		{
@@ -3582,13 +3723,18 @@ int main ( int argc, char **argv )
 	//////////////////////
 
 	// create and lock pid
-	g_sPidFile = hSearchd["pid_file"].cstr();
+	int iPidFD = -1;
+	if ( !bOptConsole )
+	{
+		g_sPidFile = hSearchd["pid_file"].cstr();
 
-	int iPidFD = ::open ( g_sPidFile, O_CREAT | O_WRONLY, S_IREAD | S_IWRITE );
-	if ( iPidFD<0 )
-		sphFatal ( "failed to create pid file '%s': %s", g_sPidFile, strerror(errno) );
-	if ( !sphLockEx ( iPidFD, false ) )
-		sphFatal ( "failed to lock pid file '%s': %s (searchd already running?)", g_sPidFile, strerror(errno) );
+		iPidFD = ::open ( g_sPidFile, O_CREAT | O_WRONLY, S_IREAD | S_IWRITE );
+		if ( iPidFD<0 )
+			sphFatal ( "failed to create pid file '%s': %s", g_sPidFile, strerror(errno) );
+
+		if ( !sphLockEx ( iPidFD, false ) )
+			sphFatal ( "failed to lock pid file '%s': %s (searchd already running?)", g_sPidFile, strerror(errno) );
+	}
 
 	// configure and preload
 	int iValidIndexes = 0;
@@ -3948,20 +4094,10 @@ int main ( int argc, char **argv )
 			}
 		}
 
-		#if USE_WINDOWS
-		#pragma warning(disable:4127) // conditional expr is const
-		#pragma warning(disable:4389) // signed/unsigned mismatch
-		#endif // USE_WINDOWS
-
 		// we can't simply accept, because of the need to react to HUPs
 		fd_set fdsAccept;
 		FD_ZERO ( &fdsAccept );
-		FD_SET ( g_iSocket, &fdsAccept );
-
-		#if USE_WINDOWS
-		#pragma warning(default:4127) // conditional expr is const
-		#pragma warning(default:4389) // signed/unsigned mismatch
-		#endif // USE_WINDOWS
+		SPH_FD_SET ( g_iSocket, &fdsAccept );
 
 		struct timeval tvTimeout;
 		tvTimeout.tv_sec = 1;

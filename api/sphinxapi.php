@@ -664,7 +664,7 @@ class SphinxClient
 	/// returns -1 on failure
 	///
 	/// usage example:
-	///		$cl->UpdateAttributes ( array("group"), array(123=>array(456)) );
+	///		$cl->UpdateAttributes ( "test1", array("group_id"), array(1=>array(456)) );
 	function UpdateAttributes ( $index, $attrs, $values )
 	{
 		// verify everything

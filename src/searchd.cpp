@@ -1624,7 +1624,7 @@ int QueryRemoteAgents ( CSphVector<Agent_t,8> & dAgents, int iTimeout, const IRe
 				if ( iErr )
 				{
 					// connect() failure
-					dFailures.Submit ( "connect() failed (err=%d)", iErr );
+					dFailures.Submit ( "connect() failed: %s", sphSockError(iErr) );
 					tAgent.Close ();
 				} else
 				{
@@ -1754,7 +1754,7 @@ int WaitForRemoteAgents ( CSphVector<Agent_t,8> & dAgents, int iTimeout,
 					// check the packet
 					if ( tReplyHeader.m_iLength<0 || tReplyHeader.m_iLength>MAX_PACKET_SIZE ) // FIXME! add reasonable max packet len too
 					{
-						dFailures.Submit ( "bad packet size (status=%d, len=%d, max_packet_size=%d)", tReplyHeader.m_iStatus, tReplyHeader.m_iLength, MAX_PACKET_SIZE );
+						dFailures.Submit ( "invalid packet size (status=%d, len=%d, max_packet_size=%d)", tReplyHeader.m_iStatus, tReplyHeader.m_iLength, MAX_PACKET_SIZE );
 						break;
 					}
 
@@ -1803,7 +1803,7 @@ int WaitForRemoteAgents ( CSphVector<Agent_t,8> & dAgents, int iTimeout,
 					if ( tAgent.m_iReplyStatus==SEARCHD_WARNING )
 					{
 						CSphString sAgentWarning = tReq.GetString ();
-						dFailures.Submit ( "remote warning (status=%d, error=%s)", tAgent.m_iReplyStatus, sAgentWarning.cstr() );
+						dFailures.Submit ( "remote warning: %s", sAgentWarning.cstr() );
 
 					} else if ( tAgent.m_iReplyStatus==SEARCHD_RETRY )
 					{
@@ -1813,7 +1813,7 @@ int WaitForRemoteAgents ( CSphVector<Agent_t,8> & dAgents, int iTimeout,
 					} else if ( tAgent.m_iReplyStatus!=SEARCHD_OK )
 					{
 						CSphString sAgentError = tReq.GetString ();
-						dFailures.Submit ( "remote error (status=%d, error=%s)", tAgent.m_iReplyStatus, sAgentError.cstr() );
+						dFailures.Submit ( "remote error: %s", sAgentError.cstr() );
 						break;
 					}
 
@@ -2222,6 +2222,28 @@ bool FixupQuery ( CSphQuery * pQuery, OldQuery_t * pOldQuery,
 }
 
 
+void ParseIndexList ( const CSphString & sIndexes, CSphVector<CSphString,8> & dOut )
+{
+	CSphString sSplit = sIndexes;
+	char * p = (char*)sSplit.cstr();
+	while ( *p )
+	{
+		// skip non-alphas
+		while ( (*p) && !sphIsAlpha(*p) ) p++;
+		if ( !(*p) ) break;
+
+		// this is my next index name
+		const char * sNext = p;
+		while ( sphIsAlpha(*p) ) p++;
+
+		assert ( sNext!=p );
+		if ( *p ) *p++ = '\0'; // if it was not the end yet, we'll continue from next char
+
+		dOut.Add ( sNext );
+	}
+}
+
+
 void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 {
 	CSphQuery tQuery;
@@ -2402,7 +2424,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	}
 	if ( tQuery.m_iMinID>tQuery.m_iMaxID )
 	{
-		tReq.SendErrorReply ( "invalid ID range specified in query" );
+		tReq.SendErrorReply ( "invalid ID range (min greater than max)" );
 		return;
 	}
 	if ( tQuery.m_eMode<0 || tQuery.m_eMode>SPH_MATCH_TOTAL )
@@ -2463,7 +2485,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 	if ( g_hDistIndexes(sIndexes) )
 	{
-		// search through specified distributed index
+		// search through requested distributed index
 		DistributedIndex_t & tDist = g_hDistIndexes[sIndexes];
 		iTries += tDist.m_dAgents.GetLength();
 
@@ -2620,80 +2642,71 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 	} else
 	{
-		// search through the specified local indexes
+		// search through the requested local indexes
+		CSphVector<CSphString,8> dIndexNames;
+		ParseIndexList ( sIndexes, dIndexNames );
+
 		int iDisabled = 0;
-		CSphString sSplit = sIndexes;
-		char * p = (char*)sSplit.cstr();
-		while ( *p )
+		ARRAY_FOREACH ( i, dIndexNames )
 		{
-			// skip non-alphas
-			while ( (*p) && !sphIsAlpha(*p) ) p++;
-			if ( !(*p) ) break;
-
-			// this is my next index name
-			const char * sNext = p;
-			while ( sphIsAlpha(*p) ) p++;
-
-			assert ( sNext!=p );
-			if ( *p ) *p++ = '\0'; // if it was not the end yet, we'll continue from next char
+			const char * sIndexName = dIndexNames[i].cstr();
 
 			// check that this one exists
-			if ( !g_hIndexes.Exists ( sNext ) )
+			if ( !g_hIndexes.Exists(sIndexName) )
 			{
-				tReq.SendErrorReply ( "invalid index '%s' specified in request", sNext );
+				tReq.SendErrorReply ( "unknown local index '%s' in search request", sIndexName );
 				return;
 			}
 
-			const ServedIndex_t & tServed = g_hIndexes[sNext];
+			const ServedIndex_t & tServed = g_hIndexes[sIndexName];
 			if ( !tServed.m_bEnabled )
 			{
 				iDisabled++;
 				continue;
 			}
-
 			assert ( tServed.m_pIndex );
 			assert ( tServed.m_pDict );
 			assert ( tServed.m_pTokenizer );
 
 #if 0
 			CSphCache tCache ( g_sCacheDir.cstr(), g_iCacheTTL, g_bCacheGzip );
-			if ( !g_bCacheEnable
-				|| !tCache.ReadFromFile ( tQuery, sNext, tServed.m_pIndexPath->cstr(), pRes ) )
+			if ( g_bCacheEnable )
+				if ( tCache.ReadFromFile ( tQuery, sNext, tServed.m_pIndexPath->cstr(), pRes ) )
+					continue;
 #endif
+
+			// fixup old queries
+			if ( !FixupQuery ( &tQuery, &tOldQuery, tServed.m_pSchema, sIndexName, tReq ) )
+				return;
+
+			// create queue
+			ISphMatchSorter * pSorter = CreateSorter ( tQuery, *tServed.m_pSchema, sIndexName, tReq );
+			if ( !pSorter )
+				return;
+
+			// do query
+			iTries++;
+			if ( !tServed.m_pIndex->QueryEx ( tServed.m_pTokenizer, tServed.m_pDict, &tQuery, pRes, pSorter ) )
 			{
-				// fixup old queries
-				if ( !FixupQuery ( &tQuery, &tOldQuery, tServed.m_pSchema, sNext, tReq ) )
-					return;
+				dFailures.m_sIndex = sIndexName;
+				dFailures.m_sPrefix = "";
+				dFailures.Submit ( "%s", tServed.m_pIndex->GetLastError().cstr() );
+			} else
+				iSuccesses++;
 
-				// create queue
-				ISphMatchSorter * pSorter = CreateSorter ( tQuery, *tServed.m_pSchema, sNext, tReq );
-				if ( !pSorter )
-					return;
-
-				// do query
-				iTries++;
-				if ( !tServed.m_pIndex->QueryEx ( tServed.m_pTokenizer, tServed.m_pDict, &tQuery, pRes, pSorter ) )
-				{
-					dFailures.m_sIndex = sNext;
-					dFailures.m_sPrefix = "";
-					dFailures.Submit ( "%s", tServed.m_pIndex->GetLastError().cstr() );
-				} else
-					iSuccesses++;
-
-				// extract my results and store schema
-				if ( pSorter->GetLength() )
-				{
-					dMatchCounts.Add ( pSorter->GetLength() );
-					dSchemas.Add ( pRes->m_tSchema );
-					sphFlattenQueue ( pSorter, pRes, iTag++ );
-				}
-				SafeDelete ( pSorter );
+			// extract my results and store schema
+			if ( pSorter->GetLength() )
+			{
+				dMatchCounts.Add ( pSorter->GetLength() );
+				dSchemas.Add ( pRes->m_tSchema );
+				sphFlattenQueue ( pSorter, pRes, iTag++ );
+			}
+			SafeDelete ( pSorter );
 
 #if 0
-				if ( g_bCacheEnable )
-					tCache.StoreResult ( tQuery, sNext, pRes );
+			if ( g_bCacheEnable )
+				tCache.StoreResult ( tQuery, sNext, pRes );
 #endif
-			}
 		}
 
 		if ( !iTries )
@@ -3038,9 +3051,9 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	int iFlags = tReq.GetInt ();
 	CSphString sIndex = tReq.GetString ();
 
-	if ( !g_hIndexes ( sIndex ) )
+	if ( !g_hIndexes(sIndex) )
 	{
-		tReq.SendErrorReply ( "invalid local index '%s' specified in request", sIndex.cstr() );
+		tReq.SendErrorReply ( "unknown local index '%s' in search request", sIndex.cstr() );
 		return;
 	}
 	CSphDict * pDict = g_hIndexes[sIndex].m_pDict;
@@ -3167,15 +3180,10 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 		return;
 	}
 
-	// obtain and check index name
-	CSphString sReqIndex = tReq.GetString ();
-	if ( !g_hIndexes(sReqIndex) && !g_hDistIndexes(sReqIndex) )
-	{
-		tReq.SendErrorReply ( "unknown index '%s' specified in request", sReqIndex.cstr() );
-		return;
-	}
+	// get index name
+	CSphString sIndexes = tReq.GetString ();
 
-	// obtain update data
+	// get update data
 	CSphAttrUpdate_t tUpd;
 	tUpd.m_dAttrs.Resize ( tReq.GetDword() ); // FIXME! check this
 	ARRAY_FOREACH ( i, tUpd.m_dAttrs )
@@ -3193,69 +3201,94 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 		return;
 	}
 
+	// check index names
+	CSphVector<CSphString,8> dIndexNames;
+	ParseIndexList ( sIndexes, dIndexNames );
+
+	if ( !dIndexNames.GetLength() )
+	{
+		tReq.SendErrorReply ( "no valid indexes in update request" );
+		return;
+	}
+
+	ARRAY_FOREACH ( i, dIndexNames )
+	{
+		if ( !g_hIndexes(dIndexNames[i]) && !g_hDistIndexes(dIndexNames[i]) )
+		{
+			tReq.SendErrorReply ( "unknown index '%s' in update request", dIndexNames[i].cstr() );
+			return;
+		}
+	}
+
 	// do update
 	SearchFailuresLog_t dFailures;
 	int iSuccesses = 0;
 	int iUpdated = 0;
+	CSphVector<CSphString,8> dUpdated;
 
-	CSphVector<CSphString,8> dLocal, dUpdated;
-	const CSphVector<CSphString,8> * pLocal = NULL;
-
-	if ( g_hIndexes(sReqIndex) )
+	ARRAY_FOREACH ( iIdx, dIndexNames )
 	{
-		dLocal.Add ( sReqIndex );
-		pLocal = &dLocal;
-	} else
-	{
-		assert ( g_hDistIndexes(sReqIndex) );
-		pLocal = &g_hDistIndexes[sReqIndex].m_dLocal;
-	}
+		const char * sReqIndex = dIndexNames[iIdx].cstr();
 
-	// update local indexes
-	assert ( pLocal );
-	ARRAY_FOREACH ( i, (*pLocal) )
-	{
-		const char * sIndex = (*pLocal)[i].cstr();
-		ServedIndex_t * pServed = g_hIndexes(sIndex);
+		CSphVector<CSphString,8> dLocal;
+		const CSphVector<CSphString,8> * pLocal = NULL;
 
-		dFailures.m_sIndex = sIndex;
-		dFailures.m_sPrefix = "";
-
-		if ( !pServed || !pServed->m_pIndex )
+		if ( g_hIndexes(sReqIndex) )
 		{
-			dFailures.Submit ( "index not available" );
-			continue;
-		}
-
-		int iUpd = pServed->m_pIndex->UpdateAttributes ( tUpd );
-		if ( iUpd<0 )
-		{
-			dFailures.Submit ( "%s", pServed->m_pIndex->GetLastError().cstr() );
-
+			dLocal.Add ( sReqIndex );
+			pLocal = &dLocal;
 		} else
 		{
-			iUpdated += iUpd;
-			dUpdated.Add ( sIndex );
-			iSuccesses++;
+			assert ( g_hDistIndexes(sReqIndex) );
+			pLocal = &g_hDistIndexes[sReqIndex].m_dLocal;
 		}
-	}
 
-	// update remote agents
-	if ( g_hDistIndexes(sReqIndex) )
-	{
-		DistributedIndex_t & tDist = g_hDistIndexes[sReqIndex];
-		dFailures.m_sIndex = sReqIndex;
-
-		// connect to remote agents and query them
-		ConnectToRemoteAgents ( tDist.m_dAgents, false, dFailures );
-
-		UpdateRequestBuilder_t tReqBuilder ( tUpd );
-		int iRemote = QueryRemoteAgents ( tDist.m_dAgents, tDist.m_iAgentConnectTimeout, tReqBuilder, dFailures );
-
-		if ( iRemote )
+		// update local indexes
+		assert ( pLocal );
+		ARRAY_FOREACH ( i, (*pLocal) )
 		{
-			UpdateReplyParser_t tParser ( &iUpdated );
-			iSuccesses += WaitForRemoteAgents ( tDist.m_dAgents, tDist.m_iAgentQueryTimeout, tParser, dFailures );
+			const char * sIndex = (*pLocal)[i].cstr();
+			ServedIndex_t * pServed = g_hIndexes(sIndex);
+
+			dFailures.m_sIndex = sIndex;
+			dFailures.m_sPrefix = "";
+
+			if ( !pServed || !pServed->m_pIndex )
+			{
+				dFailures.Submit ( "index not available" );
+				continue;
+			}
+
+			int iUpd = pServed->m_pIndex->UpdateAttributes ( tUpd );
+			if ( iUpd<0 )
+			{
+				dFailures.Submit ( "%s", pServed->m_pIndex->GetLastError().cstr() );
+
+			} else
+			{
+				iUpdated += iUpd;
+				dUpdated.Add ( sIndex );
+				iSuccesses++;
+			}
+		}
+
+		// update remote agents
+		if ( g_hDistIndexes(sReqIndex) )
+		{
+			DistributedIndex_t & tDist = g_hDistIndexes[sReqIndex];
+			dFailures.m_sIndex = sReqIndex;
+
+			// connect to remote agents and query them
+			ConnectToRemoteAgents ( tDist.m_dAgents, false, dFailures );
+
+			UpdateRequestBuilder_t tReqBuilder ( tUpd );
+			int iRemote = QueryRemoteAgents ( tDist.m_dAgents, tDist.m_iAgentConnectTimeout, tReqBuilder, dFailures );
+
+			if ( iRemote )
+			{
+				UpdateReplyParser_t tParser ( &iUpdated );
+				iSuccesses += WaitForRemoteAgents ( tDist.m_dAgents, tDist.m_iAgentQueryTimeout, tParser, dFailures );
+			}
 		}
 	}
 

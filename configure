@@ -7444,8 +7444,7 @@ fi
 CONFDIR=`eval echo "${my_op_prefix}"`
 
 
-                                        ac_config_files="$ac_config_files Makefile src/Makefile libstemmer_c/Makefile sphinx.conf.dist:sphinx.conf.in"
-
+                                        ac_config_files="$ac_config_files Makefile src/Makefile libstemmer_c/Makefile sphinx.conf:sphinx.conf.in"
 
 cat >confcache <<\_ACEOF
 # This file is a shell script that caches the results of configure
@@ -8034,7 +8033,7 @@ do
   "Makefile" ) CONFIG_FILES="$CONFIG_FILES Makefile" ;;
   "src/Makefile" ) CONFIG_FILES="$CONFIG_FILES src/Makefile" ;;
   "libstemmer_c/Makefile" ) CONFIG_FILES="$CONFIG_FILES libstemmer_c/Makefile" ;;
-  "sphinx.conf.dist" ) CONFIG_FILES="$CONFIG_FILES sphinx.conf.dist:sphinx.conf.in" ;;
+  "sphinx.conf" ) CONFIG_FILES="$CONFIG_FILES sphinx.conf:sphinx.conf.in" ;;
   "depfiles" ) CONFIG_COMMANDS="$CONFIG_COMMANDS depfiles" ;;
   "config/config.h" ) CONFIG_HEADERS="$CONFIG_HEADERS config/config.h" ;;
   *) { { echo "$as_me:$LINENO: error: invalid argument: $ac_config_target" >&5

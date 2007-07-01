@@ -92,10 +92,12 @@ static bool				g_bLogStdout	= true;
 static int				g_iLogFile		= STDOUT_FILENO;
 static ESphLogLevel		g_eLogLevel		= LOG_INFO;
 
+#if 0
 static bool				g_bCacheEnable	= false;
 static CSphString		g_sCacheDir ( "qcache" );
 static int				g_iCacheTTL		= 300;
 static bool				g_bCacheGzip	= false;
+#endif
 
 static int				g_iReadTimeout	= 5;	// sec
 static int				g_iChildren		= 0;
@@ -3635,6 +3637,7 @@ int main ( int argc, char **argv )
 
 	const char *	sOptConfig		= NULL;
 	bool			bOptConsole		= false;
+	bool			bOptStop		= false;
 
 	int i;
 	for ( i=1; i<argc; i++ )
@@ -3654,7 +3657,14 @@ int main ( int argc, char **argv )
 			fprintf ( stdout, "usage: searchd [--config file.conf] [--console|--stop]\n" );
 			return 0;
 
-		} else break;
+		} else if ( !strcmp ( argv[i], "--stop" ) || !strcmp ( argv[i], "stop" ) )
+		{
+			bOptStop = true;
+
+		} else
+		{
+			break;
+		}
 	}
 	if ( i!=argc )
 	{
@@ -3717,6 +3727,44 @@ int main ( int argc, char **argv )
 
 	const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
 
+	////////////////////////
+	// stop running searchd
+	////////////////////////
+
+#if !USE_WINDOWS
+	if ( bOptStop )
+	{
+		if ( !hSearchd("pid_file") )
+			sphFatal ( "stop: option 'pid_file' not found in '%s' section 'searchd'", sOptConfig );
+
+		const char * sPid = hSearchd["pid_file"].cstr(); // shortcut
+		FILE * fp = fopen ( sPid, "r" );
+		if ( !fp )
+			sphFatal ( "stop: pid file '%s' does not exist or is not readable", sPid );
+
+		char sBuf[16];
+		int iLen = (int) fread ( sBuf, 1, sizeof(sBuf)-1, fp );
+		sBuf[iLen] = '\0';
+		fclose ( fp );
+
+		int iPid = atoi(sBuf);
+		if ( iPid<=0 )
+			sphFatal ( "stop: failed to read valid pid from '%s'", sPid );
+
+		if ( kill ( iPid, SIGTERM ) )
+			sphFatal ( "stop: kill() on pid %d failed: %s", iPid, strerror(errno) );
+		else
+		{
+			sphInfo ( "stop: succesfully sent SIGTERM to pid %d", iPid );
+			exit ( 0 );
+		}
+	}
+#endif
+
+	/////////////////////
+	// configure searchd
+	/////////////////////
+
 	if ( !hConf.Exists ( "index" ) )
 		sphFatal ( "no indexes found in '%s'", sOptConfig );
 
@@ -3750,6 +3798,7 @@ int main ( int argc, char **argv )
 		}
 	}
 
+#if 0
 	if ( hSearchd("cache_dir") )
 	{
 		// FIXME! add more validation
@@ -3762,6 +3811,7 @@ int main ( int argc, char **argv )
 		if ( hSearchd("cache_gzip") && hSearchd["cache_gzip"].intval()!=0 )
 			g_bCacheGzip = true;
 	}
+#endif
 
 	//////////////////////
 	// build indexes hash

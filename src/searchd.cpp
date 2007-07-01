@@ -3410,18 +3410,6 @@ void HandleClient ( int iSock, const char * sClientIP, int iPipeFD )
 // INDEX ROTATION
 /////////////////////////////////////////////////////////////////////////////
 
-bool IsReadable ( const char * sPath )
-{
-	int iFD = ::open ( sPath, O_RDONLY );
-
-	if ( iFD<0 )
-		return false;
-
-	close ( iFD );
-	return true;
-}
-
-
 bool TryRename ( const char * sIndex, const char * sPrefix, const char * sFromPostfix, const char * sToPostfix, bool bFatal )
 {
 	char sFrom [ SPH_MAX_FILENAME_LEN ];
@@ -3464,7 +3452,7 @@ void RotateIndex ( ServedIndex_t & tIndex, const char * sIndex )
 	for ( int i=0; i<EXT_COUNT; i++ )
 	{
 		snprintf ( sFile, sizeof(sFile), "%s%s", sPath, dNew[i] );
-		if ( !IsReadable ( sFile ) )
+		if ( !sphIsReadable ( sFile ) )
 		{
 			if ( i>0 )
 				sphWarning ( "rotating index '%s': '%s' unreadable: %s; using old index", sIndex, sFile, strerror(errno) );
@@ -3645,33 +3633,32 @@ int main ( int argc, char **argv )
 	// parse command line
 	//////////////////////
 
-	const char *	sOptConfig		= "sphinx.conf";
+	const char *	sOptConfig		= NULL;
 	bool			bOptConsole		= false;
 
 	int i;
 	for ( i=1; i<argc; i++ )
 	{
-		if ( strcasecmp ( argv[i], "--config" )==0 && (i+1)<argc )
+		if ( ( !strcmp ( argv[i], "--config" ) || !strcmp ( argv[i], "-c" ) ) && (i+1)<argc )
 		{
-			struct stat tStat;
-			if ( !stat ( argv[i+1], &tStat ) )
-				sOptConfig = argv[i+1];
-			else
-				sphWarning ( "failed to stat config file '%s', using default 'sphinx.conf'", argv[i+1] );
-			i++;
+			sOptConfig = argv[++i];
+			if ( !sphIsReadable ( sOptConfig ) )
+				sphFatal ( "config file '%s' does not exist or is not readable", sOptConfig );
 
-		} else if ( strcasecmp ( argv[i], "--console" )==0 )
+		} else if ( !strcmp ( argv[i], "--console" ) )
 		{
 			bOptConsole = true;
-		} else
+
+		} else if ( !strcmp ( argv[i], "--help" ) || !strcmp ( argv[i], "-h" ) )
 		{
-			break;
-		}
+			fprintf ( stdout, "usage: searchd [--config file.conf] [--console|--stop]\n" );
+			return 0;
+
+		} else break;
 	}
 	if ( i!=argc )
 	{
 		fprintf ( stdout, "ERROR: malformed or unknown option near '%s'.\n\n", argv[i] );
-		fprintf ( stdout, "usage: searchd [--config file.conf] [--console]\n" );
 		return 1;
 	}
 
@@ -3691,10 +3678,35 @@ int main ( int argc, char **argv )
 	// parse config file
 	/////////////////////
 
-	CSphConfigParser cp;
+	// fallback to defaults if there was no explicit config specified
+	while ( !sOptConfig )
+	{
+#ifdef SYSCONFDIR
+		sOptConfig = SYSCONFDIR "/sphinx.conf";
+		if ( sphIsReadable(sOptConfig) )
+			break;
+#endif
+
+		sOptConfig = "./sphinx.conf";
+		if ( sphIsReadable(sOptConfig) )
+			break;
+
+		sOptConfig = NULL;
+		break;
+	}
+
+	if ( !sOptConfig )
+		sphFatal ( "no readable config file (looked in "
+#ifdef SYSCONFDIR
+			SYSCONFDIR "/sphinx.conf, "
+#endif
+			"./sphinx.conf)." );
+
 	sphInfo ( "using config file '%s'...", sOptConfig );
 
+	// do parse
 	// FIXME! add key validation here. g_dSphKeysCommon, g_dSphKeysSearchd
+	CSphConfigParser cp;
 	if ( !cp.Parse ( sOptConfig ) )
 		sphFatal ( "failed to parse config file '%s'", sOptConfig );
 

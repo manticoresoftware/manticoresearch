@@ -178,7 +178,6 @@ sysconfdir = @sysconfdir@
 target_alias = @target_alias@
 @USE_LIBSTEMMER_FALSE@SUBDIRS = src
 @USE_LIBSTEMMER_TRUE@SUBDIRS = libstemmer_c src
-@USE_LIBSTEMMER_TRUE@AM_CPPFLAGS = -I$(top_srcdir)/libstemmer_c/include
 EXTRA_DIST = api storage sphinx.conf.in sphinx.sln todo.txt example.sql
 sysconf_DATA = sphinx.conf.dist example.sql
 all: all-recursive

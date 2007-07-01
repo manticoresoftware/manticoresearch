@@ -17,6 +17,7 @@
 #include "sphinx.h"
 #include "sphinxutils.h"
 #include <ctype.h>
+#include <fcntl.h>
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -474,6 +475,18 @@ ISphTokenizer * sphConfTokenizer ( const CSphConfigSection & hIndex, CSphString 
 		pTokenizer->SetNgramLen ( iNgramLen );
 
 	return pTokenizer;
+}
+
+
+bool sphIsReadable ( const char * sPath )
+{
+	int iFD = ::open ( sPath, O_RDONLY );
+
+	if ( iFD<0 )
+		return false;
+
+	close ( iFD );
+	return true;
 }
 
 //

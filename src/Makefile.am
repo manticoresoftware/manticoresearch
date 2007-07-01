@@ -11,9 +11,10 @@ search_SOURCES = search.cpp
 
 if USE_LIBSTEMMER
 LIBSTEMMER_LIBS = $(top_srcdir)/libstemmer_c/libstemmer.a
-AM_CPPFLAGS = -I$(top_srcdir)/libstemmer_c/include
+AM_CPPFLAGS = -I$(top_srcdir)/libstemmer_c/include -DSYSCONFDIR="\"$(sysconfdir)\""
 else
 LIBSTEMMER_LIBS =
+AM_CPPFLAGS = -DSYSCONFDIR="\"$(sysconfdir)\""
 endif
 
 indexer_LDADD = libsphinx.a $(LIBSTEMMER_LIBS) $(MYSQL_LIBS) $(PGSQL_LIBS)

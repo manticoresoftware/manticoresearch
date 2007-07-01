@@ -912,7 +912,7 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 
 int main ( int argc, char ** argv )
 {
-	const char * sConfName = "sphinx.conf";
+	const char * sOptConfig = NULL;
 	bool bMerge = false;	
 	CSphPurgeData	tPurge;
 
@@ -922,15 +922,11 @@ int main ( int argc, char ** argv )
 	int i;
 	for ( i=1; i<argc; i++ )
 	{
-		if ( strcasecmp ( argv[i], "--config" )==0 && (i+1)<argc )
+		if ( ( !strcmp ( argv[i], "--config" ) || !strcmp ( argv[i], "-c" ) ) && (i+1)<argc )
 		{
-			struct stat tStat;
-			if ( !stat ( argv[i+1], &tStat ) )
-				sConfName = argv[i+1];
-			else
-				fprintf ( stdout, "WARNING: can not stat config file '%s', using default 'sphinx.conf'.\n", argv[i+1] );
-			i++;
-		
+			sOptConfig = argv[++i];
+			if ( !sphIsReadable ( sOptConfig ) )
+				sphDie ( "config file '%s' does not exist or is not readable", sOptConfig );
 		}
 		else if ( strcasecmp ( argv[i], "--merge" )==0 && (i+2)<argc )
 		{
@@ -1035,14 +1031,38 @@ int main ( int argc, char ** argv )
 	// load config
 	///////////////
 
+	// fallback to defaults if there was no explicit config specified
+	while ( !sOptConfig )
+	{
+#ifdef SYSCONFDIR
+		sOptConfig = SYSCONFDIR "/sphinx.conf";
+		if ( sphIsReadable(sOptConfig) )
+			break;
+#endif
+
+		sOptConfig = "./sphinx.conf";
+		if ( sphIsReadable(sOptConfig) )
+			break;
+
+		sOptConfig = NULL;
+		break;
+	}
+
+	if ( !sOptConfig )
+		sphDie ( "no readable config file (looked in "
+#ifdef SYSCONFDIR
+			SYSCONFDIR "/sphinx.conf, "
+#endif
+			"./sphinx.conf)" );
+
 	if ( !g_bQuiet )
-		fprintf ( stdout, "using config file '%s'...\n", sConfName );
+		fprintf ( stdout, "using config file '%s'...\n", sOptConfig );
 
 	// FIXME! add key validation here. g_dSphKeysCommon, g_dSphKeysIndexer
 	CSphConfigParser cp;
-	if ( !cp.Parse ( sConfName ) )
+	if ( !cp.Parse ( sOptConfig ) )
 	{
-		fprintf ( stdout, "FATAL: failed to parse config file '%s'.\n", sConfName );
+		fprintf ( stdout, "FATAL: failed to parse config file '%s'.\n", sOptConfig );
 		return 1;
 	}
 	const CSphConfig & hConf = cp.m_tConf;

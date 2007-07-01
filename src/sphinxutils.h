@@ -92,6 +92,9 @@ protected:
 /// create and configure tokenizer from index definition section
 ISphTokenizer *		sphConfTokenizer ( const CSphConfigSection & hIndex, CSphString & sError );
 
+/// check if file exists and is a readable file
+bool				sphIsReadable ( const char * sFilename );
+
 #endif // _sphinxutils_
 
 //

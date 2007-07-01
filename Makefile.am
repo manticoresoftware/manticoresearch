@@ -1,6 +1,5 @@
 if USE_LIBSTEMMER
 SUBDIRS = libstemmer_c src
-AM_CPPFLAGS = -I$(top_srcdir)/libstemmer_c/include
 else
 SUBDIRS = src
 endif

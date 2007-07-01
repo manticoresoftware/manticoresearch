@@ -33,7 +33,7 @@ int main ( int argc, char ** argv )
 			"Usage: search [OPTIONS] <word1 [word2 [word3 [...]]]>\n"
 			"\n"
 			"Options are:\n"
-			"-c, --config <file>\tuse given config file (default: sphinx.conf)\n"
+			"-c, --config <file>\tuse given config file instead of defaults\n"
 			"-i, --index <index>\tsearch given index only (default: all indexes)\n"
 			"-a, --any\t\tmatch any query word (default: match all words)\n"
 			"-b, --boolean\t\tmatch in boolean mode\n"
@@ -58,7 +58,7 @@ int main ( int argc, char ** argv )
 	char sQuery [ 1024 ];
 	sQuery[0] = '\0';
 
-	const char * sConfName = "sphinx.conf";
+	const char * sOptConfig = NULL;
 	const char * sIndex = NULL;
 	bool bNoInfo = false;
 	bool bStdin = false;
@@ -88,7 +88,7 @@ int main ( int argc, char ** argv )
 			else if ( (i+1)>=argc )		break;
 			OPT ( "-s", "--start" )		iStart = atoi ( argv[++i] );
 			OPT ( "-l", "--limit" )		iLimit = atoi ( argv[++i] );
-			OPT ( "-c", "--config" )	sConfName = argv[++i];
+			OPT ( "-c", "--config" )	sOptConfig = argv[++i];
 			OPT ( "-i", "--index" )		sIndex = argv[++i];
 			OPT ( "-g", "--group" )		{ tQuery.m_eGroupFunc = SPH_GROUPBY_ATTR; tQuery.m_sGroupBy = argv[++i]; }
 
@@ -155,14 +155,40 @@ int main ( int argc, char ** argv )
 
 	tQuery.m_iMaxMatches = 1000; // iStart + iLimit;
 
+	// fallback to defaults if there was no explicit config specified
+	while ( !sOptConfig )
+	{
+#ifdef SYSCONFDIR
+		sOptConfig = SYSCONFDIR "/sphinx.conf";
+		if ( sphIsReadable(sOptConfig) )
+			break;
+#endif
+
+		sOptConfig = "./sphinx.conf";
+		if ( sphIsReadable(sOptConfig) )
+			break;
+
+		sOptConfig = NULL;
+		break;
+	}
+
+	if ( !sOptConfig )
+		sphDie ( "no readable config file (looked in "
+#ifdef SYSCONFDIR
+			SYSCONFDIR "/sphinx.conf, "
+#endif
+			"./sphinx.conf)" );
+
+	fprintf ( stdout, "using config file '%s'...", sOptConfig );
+
 	// load config
 	CSphConfigParser cp;
-	if ( !cp.Parse ( sConfName ) )
-		sphDie ( "failed to parse config file '%s'", sConfName );
+	if ( !cp.Parse ( sOptConfig ) )
+		sphDie ( "failed to parse config file '%s'", sOptConfig );
 
 	CSphConfig & hConf = cp.m_tConf;
 	if ( !hConf.Exists ( "index" ) )
-		sphDie ( "no indexes found in config file '%s'", sConfName );
+		sphDie ( "no indexes found in config file '%s'", sOptConfig );
 
 	/////////////////////
 	// search each index

@@ -179,7 +179,7 @@ int main ( int argc, char ** argv )
 #endif
 			"./sphinx.conf)" );
 
-	fprintf ( stdout, "using config file '%s'...", sOptConfig );
+	fprintf ( stdout, "using config file '%s'...\n", sOptConfig );
 
 	// load config
 	CSphConfigParser cp;

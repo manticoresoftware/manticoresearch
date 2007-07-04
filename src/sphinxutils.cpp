@@ -18,7 +18,10 @@
 #include "sphinxutils.h"
 #include <ctype.h>
 #include <fcntl.h>
+
+#if USE_WINDOWS
 #include <io.h> // for ::open on windows
+#endif
 
 /////////////////////////////////////////////////////////////////////////////
 

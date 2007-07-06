@@ -515,9 +515,8 @@ class SphinxClient
 				list ( $doc, $weight ) = array_values ( unpack ( "N*N*",
 					substr ( $response, $p, 8 ) ) );
 				$p += 8;
+				$doc = sprintf ( "%u", $doc ); // workaround for php signed/unsigned braindamage
 			}
-
-			$doc = sprintf ( "%u", $doc ); // workaround for php signed/unsigned braindamage
 			$weight = sprintf ( "%u", $weight );
 
 			$result["matches"][$doc]["weight"] = $weight;

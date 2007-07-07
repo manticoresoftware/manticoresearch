@@ -469,6 +469,7 @@ protected:
 	HashEntry_t *	m_dHash [ LENGTH ];		///< all the hash entries
 	HashEntry_t *	m_pFirstByOrder;		///< first entry in the insertion order
 	HashEntry_t *	m_pLastByOrder;			///< last entry in the insertion order
+	int				m_iLength;				///< entries count
 
 protected:
 	/// find entry by key
@@ -491,6 +492,7 @@ public:
 	CSphOrderedHash ()
 		: m_pFirstByOrder ( NULL )
 		, m_pLastByOrder ( NULL )
+		, m_iLength ( 0 )
 		, m_pIterator ( NULL )
 	{
 		for ( int i=0; i<LENGTH; i++ )
@@ -520,6 +522,7 @@ public:
 		m_pFirstByOrder = NULL;
 		m_pLastByOrder = NULL;
 		m_pIterator = NULL;
+		m_iLength = 0;
 	}
 
 	/// add new entry
@@ -564,6 +567,7 @@ public:
 		}
 		m_pLastByOrder = pEntry;
 
+		m_iLength++;
 		return true;
 	}
 
@@ -599,6 +603,12 @@ public:
 			Add ( rhs.IterateGet(), rhs.IterateGetKey() );
 
 		return *this;
+	}
+
+	/// length query
+	int GetLength () const
+	{
+		return m_iLength;
 	}
 
 public:

@@ -263,6 +263,10 @@ public:
 	virtual void					SetNgramLen ( int ) {}
 
 public:
+	/// load synonyms list
+	virtual bool					LoadSynonyms ( const char * sFilename, CSphString & sError );
+
+public:
 	/// pass next buffer
 	virtual void					SetBuffer ( BYTE * sBuffer, int iLength, bool bLast ) = 0;
 

@@ -1048,6 +1048,7 @@ struct IdentityHash_fn
 {
 	static inline uint64_t	Hash ( uint64_t iValue )	{ return iValue; }
 	static inline DWORD		Hash ( DWORD iValue )		{ return iValue; }
+	static inline int		Hash ( int iValue )			{ return iValue; }
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -2653,10 +2654,11 @@ void CSphLowercaser::AddRemaps ( const CSphRemapRange * pRemaps, int iRemaps, DW
 
 enum
 {
-	MASK_CODEPOINT			= 0x0fffffffUL,	// mask off codepoint flags
-	FLAG_CODEPOINT_SPECIAL	= 0x10000000UL,	// this codepoint is special
-	FLAG_CODEPOINT_DUAL		= 0x20000000UL,	// this codepoint is special but also a valid word part
-	FLAG_CODEPOINT_NGRAM	= 0x40000000UL	// this codepoint is n-gram indexed
+	MASK_CODEPOINT			= 0x0ffffffUL,	// mask off codepoint flags
+	FLAG_CODEPOINT_SPECIAL	= 0x1000000UL,	// this codepoint is special
+	FLAG_CODEPOINT_DUAL		= 0x2000000UL,	// this codepoint is special but also a valid word part
+	FLAG_CODEPOINT_NGRAM	= 0x4000000UL,	// this codepoint is n-gram indexed
+	FLAG_CODEPOINT_SYNONYM	= 0x8000000UL	// this codepoint is used in synonym tokens only
 };
 
 
@@ -2944,6 +2946,88 @@ bool CSphCharsetDefinitionParser::Parse ( const char * sConfig, CSphVector<CSphR
 
 /////////////////////////////////////////////////////////////////////////////
 
+/// check if the code is whitespace
+inline bool sphIsSpace ( int iCode )
+{
+	return iCode==' ' || iCode=='\t' || iCode=='\n' || iCode=='\r';
+}
+
+
+/// UTF-8 decode codepoint
+/// advances buffer ptr in all cases but end of buffer
+///
+/// returns -1 on failure
+/// returns 0 on end of buffer
+/// returns codepoint on success
+inline int sphUTF8Decode ( BYTE * & pBuf )
+{
+	BYTE v = *pBuf;
+	if ( !v )
+		return 0;
+	pBuf++;
+
+	// check for 7-bit case
+	if ( v<128 )
+		return v;
+
+	// get number of bytes
+	int iBytes = 0;
+	while ( v & 0x80 )
+	{
+		iBytes++;
+		v <<= 1;
+	}
+
+	// check for valid number of bytes
+	if ( iBytes<2 || iBytes>4 )
+		return -1;
+
+	int iCode = ( v>>iBytes );
+	iBytes--;
+	do
+	{
+		if ( !(*pBuf) )
+			return 0; // unexpected eof
+
+		if ( ((*pBuf) & 0xC0)!=0x80 )
+			return -1; // invalid code
+
+		iCode = ( iCode<<6 ) + ( (*pBuf) & 0x3F );
+		iBytes--;
+		pBuf++;
+	} while ( iBytes );
+
+	// all good
+	return v;
+}
+
+
+/// UTF-8 encode codepoint to buffer
+/// returns number of bytes used
+inline int sphUTF8Encode ( BYTE * pBuf, int iCode )
+{
+	if ( iCode<0x80 )
+	{
+		pBuf[0] = (BYTE)( iCode & 0x7F );
+		return 1;
+
+	} else if ( iCode<0x800 )
+	{
+		pBuf[0] = (BYTE)( ( (iCode>>6) & 0x1F ) | 0xC0 );
+		pBuf[1] = (BYTE)( ( iCode & 0x3F ) | 0x80 );
+		return 2;
+
+	} else
+	{
+		pBuf[0] = (BYTE)( ( (iCode>>12) & 0x0F ) | 0xE0 );
+		pBuf[1] = (BYTE)( ( (iCode>>6) & 0x3F ) | 0x80 );
+		pBuf[2] = (BYTE)( ( iCode & 0x3F ) | 0x80 );
+		return 3;
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
 bool ISphTokenizer::SetCaseFolding ( const char * sConfig, CSphString & sError )
 {
 	CSphCharsetDefinitionParser tParser;
@@ -2969,6 +3053,144 @@ void ISphTokenizer::AddCaseFolding ( CSphRemapRange & tRange )
 void ISphTokenizer::AddSpecials ( const char * sSpecials )
 {
 	m_tLC.AddSpecials ( sSpecials );
+}
+
+
+static int TokenizeOnWhitespace ( CSphString * dTokens, int iMaxTokens, BYTE * sFrom, bool bUtf8 )
+{
+	BYTE sAccum [ 3*SPH_MAX_WORD_LEN+16 ];
+	BYTE * pAccum = sAccum;
+	int iAccum = 0;
+	int iTokens = 0;
+
+	for ( ;; )
+	{
+		int iCode = bUtf8 ? sphUTF8Decode(sFrom) : *sFrom++;
+
+		// eof or whitespace?
+		if ( !iCode || sphIsSpace(iCode) )
+		{
+			// flush accum
+			if ( iAccum )
+			{
+				*pAccum = '\0';
+				if ( iTokens<iMaxTokens )
+					dTokens[iTokens++] = (char*)sAccum;
+
+				pAccum = sAccum;
+				iAccum = 0;
+			}
+
+			// break on eof
+			if ( !iCode )
+				break;
+		} else
+		{
+			// accumulate everything else
+			if ( iAccum<SPH_MAX_WORD_LEN )
+			{
+				pAccum += sphUTF8Encode ( pAccum, iCode );
+				iAccum++;
+			}
+		}
+	}
+
+	return iTokens;
+}
+
+
+struct CSphSynonym
+{
+	static const int	MAX_TOKENS	= 8;
+
+	int					m_iFrom;
+	int					m_iTo;
+
+	CSphString			m_dFrom[MAX_TOKENS];
+	CSphString			m_dTo[MAX_TOKENS];
+
+	CSphSynonym ()
+		: m_iFrom ( 0 )
+		, m_iTo ( 0 )
+	{}
+};
+
+
+bool ISphTokenizer::LoadSynonyms ( const char * sFilename, CSphString & sError )
+{
+	FILE * fp = fopen ( sFilename, "r" );
+	if ( !fp )
+	{
+		sError.SetSprintf ( "failed to open '%s'", sFilename );
+		return false;
+	}
+
+	int iLine = 0;
+	char sBuffer[1024];
+
+	CSphOrderedHash < int, int, IdentityHash_fn, 4096, 117 > hSynonymOnly;
+	while ( fgets ( sBuffer, sizeof(sBuffer), fp ) )
+	{
+		iLine++;
+
+		// extract map-from and map-to parts
+		char * sSplit = strstr ( sBuffer, "=>" );
+		if ( !sSplit )
+		{
+			sError.SetSprintf ( "%s line %d: mapping token (=>) not found", sFilename, iLine );
+			return false;
+		}
+
+		BYTE * sFrom = (BYTE *) sBuffer;
+		BYTE * sTo = (BYTE *)( sSplit + strlen ( "=>" ) );
+		*sSplit = '\0';
+
+		// tokenize map-from and map-to, and add new entry to hash
+		CSphSynonym tSyn;
+
+		tSyn.m_iFrom = TokenizeOnWhitespace ( tSyn.m_dFrom, CSphSynonym::MAX_TOKENS, sFrom, IsUtf8() );
+		if ( !tSyn.m_iFrom )
+		{
+			sError.SetSprintf ( "%s line %d: empty map-from part", sFilename, iLine );
+			fclose ( fp );
+			return false;
+		}
+
+		tSyn.m_iTo = TokenizeOnWhitespace ( tSyn.m_dTo, CSphSynonym::MAX_TOKENS, sTo, IsUtf8() );
+		if ( !tSyn.m_iTo )
+		{
+			sError.SetSprintf ( "%s line %d: empty map-to part", sFilename, iLine );
+			fclose ( fp );
+			return false;
+		}
+
+		// !COMMIT hash stuff here
+
+		// track synonym-only codepoints in map-from
+		for ( ;; )
+		{
+			int iCode = IsUtf8() ? sphUTF8Decode(sFrom) : *sFrom++;
+			if ( !iCode )
+				break;
+			if ( iCode>0 && !sphIsSpace(iCode) && !m_tLC.ToLower(iCode) )
+				hSynonymOnly.Add ( 1, iCode );
+		}
+	}
+	fclose ( fp );
+
+	// add synonym-only remaps
+	CSphVector<CSphRemapRange> dRemaps;
+	dRemaps.Grow ( hSynonymOnly.GetLength() );
+
+	hSynonymOnly.IterateStart ();
+	while ( hSynonymOnly.IterateNext() )
+	{
+		CSphRemapRange & tRange = dRemaps.Add ();
+		tRange.m_iStart = tRange.m_iEnd = tRange.m_iRemapStart = hSynonymOnly.IterateGetKey();
+	}
+
+	m_tLC.AddRemaps ( &dRemaps[0], dRemaps.GetLength(), FLAG_CODEPOINT_SYNONYM, 0 );
+	return true;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -3196,45 +3418,10 @@ int CSphTokenizer_UTF8::GetCodePoint ()
 
 	for ( ;; )
 	{
-		// check for eof
-		BYTE v = *m_pCur;
-		if ( !v )
+		int iCode = sphUTF8Decode ( m_pCur );
+		if ( iCode==0 )
 			return 0;
-		m_pCur++;
-
-		// check for 7-bit case
-		if ( v<128 )
-			return m_tLC.ToLower ( v );
-
-		// get number of bytes
-		int iBytes = 0;
-		while ( v & 0x80 )
-		{
-			iBytes++;
-			v <<= 1;
-		}
-
-		// check for valid number of bytes
-		if ( iBytes<2 || iBytes>4 )
-			continue;
-
-		int iCode = ( v>>iBytes );
-		iBytes--;
-		do
-		{
-			if ( !(*m_pCur) )
-				break;
-			if ( ((*m_pCur) & 0xC0)!=0x80 )
-				break;
-
-			iCode = ( iCode<<6 ) + ( (*m_pCur) & 0x3F );
-			iBytes--;
-			m_pCur++;
-		} while ( iBytes );
-
-		// return code point if there were no errors
-		// ignore and continue scanning otherwise
-		if ( !iBytes )
+		if ( iCode>0 )
 			return m_tLC.ToLower ( iCode );
 	}
 }
@@ -3249,22 +3436,7 @@ void CSphTokenizer_UTF8::AccumCodePoint ( int iCode )
 	if ( m_iAccum>SPH_MAX_WORD_LEN )
 		return;
 
-	// do UTF-8 encoding here
-	if ( iCode<0x80 )
-	{
-		*m_pAccum++ = (BYTE)( iCode & 0x7F );
-
-	} else if ( iCode<0x800 )
-	{
-		*m_pAccum++ = (BYTE)( ( (iCode>>6) & 0x1F ) | 0xC0 );
-		*m_pAccum++ = (BYTE)( ( iCode & 0x3F ) | 0x80 );
-
-	} else
-	{
-		*m_pAccum++ = (BYTE)( ( (iCode>>12) & 0x0F ) | 0xE0 );
-		*m_pAccum++ = (BYTE)( ( (iCode>>6) & 0x3F ) | 0x80 );
-		*m_pAccum++ = (BYTE)( ( iCode & 0x3F ) | 0x80 );
-	}
+	m_pAccum += sphUTF8Encode ( m_pAccum, iCode );
 
 	assert ( m_pAccum>=m_sAccum && m_pAccum<m_sAccum+sizeof(m_sAccum) );
 	m_iAccum++;

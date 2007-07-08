@@ -2415,7 +2415,7 @@ bool sphIsReadable ( const char * sPath, CSphString * pError )
 	if ( iFD<0 )
 	{
 		if ( pError )
-			pError->SetSprintf ( "%s unreadable: %s", strerror(errno) );
+			pError->SetSprintf ( "%s unreadable: %s", sPath, strerror(errno) );
 		return false;
 	}
 
@@ -4383,7 +4383,7 @@ CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename )
 	m_eDocinfo = SPH_DOCINFO_NONE;
 
 	m_bPreallocated = false;
-	m_uVersion = 0;
+	m_uVersion = INDEX_FORMAT_VERSION;
 }
 
 /////////////////////////////////////////////////////////////////////////////

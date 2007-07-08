@@ -610,6 +610,14 @@ searchd
 	#
 	# default is 1000 (just like with Google)
 	max_matches			= 1000
+
+	# seamless rotate
+	#
+	# prevents short periods of searchd being inaccessible when rotating
+	# indexes with huge attribute and/or dictionary files
+	#
+	# optional, default is 1
+	seamless_rotate		= 1
 }
 
 # --eof--

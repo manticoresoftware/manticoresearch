@@ -288,8 +288,8 @@ int main ( int argc, char ** argv )
 		sError = "could not create index (check that files exist)";
 		for ( ; pIndex; )
 		{
-			const CSphSchema * pSchema = pIndex->Preload ( false, NULL );
-			if ( !pSchema )
+			const CSphSchema * pSchema = pIndex->Prealloc ( false, NULL );
+			if ( !pSchema || !pIndex->Preread() )
 			{
 				sError = pIndex->GetLastError ();
 				break;

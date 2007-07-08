@@ -144,6 +144,9 @@ void			sphLockUn ( int iFile );
 /// millisecond-precision sleep
 void			sphUsleep ( int iMsec );
 
+/// check if file exists and is a readable file
+bool			sphIsReadable ( const char * sFilename, CSphString * pError=NULL );
+
 /////////////////////////////////////////////////////////////////////////////
 // TOKENIZERS
 /////////////////////////////////////////////////////////////////////////////
@@ -1296,17 +1299,39 @@ public:
 								CSphIndex ( const char * sName );
 	virtual						~CSphIndex () {}
 
+	virtual const CSphString &	GetLastError () const { return m_sLastError; }
+	virtual const CSphSchema *	GetSchema () const { return &m_tSchema; }
+
 	virtual	void				SetProgressCallback ( ProgressCallback_t * pfnProgress ) { m_pProgress = pfnProgress; }
-	virtual const CSphString &	GetLastError () { return m_sLastError; }
 	virtual void				SetInfixIndexing ( bool bPrefixesOnly, int iMinLength );
 
 public:
 	virtual int					Build ( CSphDict * dict, const CSphVector < CSphSource * > & dSources, int iMemoryLimit, ESphDocinfo eDocinfo ) = 0;
 
-	virtual const CSphSchema *	Preload ( bool bMlock, CSphString * sWarning ) = 0;
+public:
+	/// check all data files, preload schema, and preallocate enough shared RAM to load memory-cached data
+	virtual const CSphSchema *	Prealloc ( bool bMlock, CSphString * sWarning ) = 0;
+
+	/// deallocate all previously preallocated shared data
+	virtual void				Dealloc () = 0;
+
+	/// precache everything which needs to be precached
+	// WARNING, WILL BE CALLED FROM DIFFERENT PROCESS, MUST ONLY MODIFY SHARED MEMORY
+	virtual bool				Preread () = 0;
+
+	/// set new index base path
+	virtual void				SetBase ( const char * sNewBase ) = 0;
+
+	/// set new index base path, and physically rename index files too
+	virtual bool				Rename ( const char * sNewBase ) = 0;
+
+	/// obtain exclusive lock on this index
 	virtual bool				Lock () = 0;
+
+	/// dismiss exclusive lock and unlink lock file
 	virtual void				Unlock () = 0;
 
+public:
 	virtual CSphQueryResult *	Query ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery ) = 0;
 	virtual bool				QueryEx ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchSorter * pTop ) = 0;
 	virtual bool				Merge ( CSphIndex * pSource, CSphPurgeData & tPurgeData ) = 0;

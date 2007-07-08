@@ -76,6 +76,8 @@ Table of Contents
          7.1.18. sql_query_post_index
          7.1.19. sql_query_info
          7.1.20. xmlpipe_command
+      7.2. searchd program configuration options
+         7.2.1. seamless_rotate
 
    A. Sphinx revision history
 
@@ -1785,12 +1787,56 @@ Example:
 Command which will be executed in xmlpipe mode to obtain documents. See
 Section 3.7, <<XMLpipe data source>> for output format description.
 
-# xmlpipe_command = cat @CONFDIR@/test.xml This option is mandatory. This
-option only applies to xmlpipe source type.
+This option is mandatory. This option only applies to xmlpipe source type.
 
 Example:
 
    | xmlpipe_command = cat /home/sphinx/test.xml
+
+7.2. searchd program configuration options
+------------------------------------------
+
+7.2.1. seamless_rotate
+----------------------
+
+This feature prevents short periods of searchd being inaccessible while
+rotating indexes with huge attribute and/or dictionary files (.spa and .spi
+respectively).
+
+Normally, rotating an index works as follows:
+
+   1. new queries are temporarly rejected (with "retry" error code);
+   2. searchd waits for all currently running queries to finish;
+   3. old index is deallocated and its files are renamed;
+   4. new index files are renamed and required RAM is allocated;
+   5. new index attribute and dictionary data is preloaded to RAM;
+   6. searchd resumes serving queries from new index.
+
+However, if there's a lot of attribute or dictionary data, then preloading
+step could take noticeble time - up to several minutes in case of
+preloading 5-10+ GB files.
+
+With seamless rotate enabled, rotating works as follows:
+
+   1. new index RAM storage is allocated;
+   2. new index attribute and dictionary data is asynchronously preloaded
+      to RAM;
+   3. on success, old index is deallocated and both indexes' files are
+      renamed;
+   4. on failure, new index is deallocated;
+   5. at any given moment, queries are served either from old or new index
+      copy.
+
+Seamless rotate comes at the cost of higher peak memory usage during the
+rotation (because both old and new copies of .spa and .spd data need to be
+in RAM while preloading new copy). Average usage stays the same.
+
+This option is optional. Default values is 1, which means to enable
+seamless rotate.
+
+Example:
+
+   | seamless_rotate = 1
 
 A. Sphinx revision history
 ==========================

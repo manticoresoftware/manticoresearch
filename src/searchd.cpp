@@ -68,7 +68,7 @@ struct ServedIndex_t
 	const CSphSchema *	m_pSchema;		///< pointer to index schema, managed by the index itself
 	CSphDict *			m_pDict;
 	ISphTokenizer *		m_pTokenizer;
-	CSphString *		m_pIndexPath;
+	CSphString			m_sIndexPath;
 	bool				m_bEnabled;		///< to disable index in cases when rotation fails
 	bool				m_bMlock;
 
@@ -104,16 +104,22 @@ static int				g_iChildren		= 0;
 static int				g_iMaxChildren	= 0;
 static int				g_iSocket		= 0;
 static int				g_iQueryLogFile	= -1;
-static int				g_iHUP			= 0;
 static const char *		g_sPidFile		= NULL;
 static int				g_iMaxMatches	= 1000;
+static bool				g_bSeamlessRotate	= true;
 
-static SmallStringHash_T < ServedIndex_t >	g_hIndexes;
+static bool				g_bDoRotate			= false;	// flag that we should start rotation; set from SIGHUP
+
+static SmallStringHash_T<ServedIndex_t>		g_hIndexes;				// served indexes hash
+static CSphVector<const char *>				g_dRotating;			// names of indexes to be rotated this time
+static const char *							g_sPrereading	= NULL;	// name of index currently being preread
+static CSphIndex *							g_pPrereading		= NULL;	// rotation "buffer"
 
 enum
 {
 	SPH_PIPE_UPDATED_ATTRS,
-	SPH_PIPE_SAVED_ATTRS
+	SPH_PIPE_SAVED_ATTRS,
+	SPH_PIPE_PREREAD
 };
 
 static CSphVector<int,8>	g_dPipes; // currently open read-pipes to children processes
@@ -194,7 +200,6 @@ void ServedIndex_t::Reset ()
 	m_pIndex	= NULL;
 	m_pDict		= NULL;
 	m_pTokenizer= NULL;
-	m_pIndexPath= NULL;
 	m_bEnabled	= true;
 	m_bMlock	= false;
 }
@@ -204,7 +209,6 @@ ServedIndex_t::~ServedIndex_t ()
 	SafeDelete ( m_pIndex );
 	SafeDelete ( m_pDict );
 	SafeDelete ( m_pTokenizer );
-	SafeDelete ( m_pIndexPath );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -492,8 +496,8 @@ void sigchld ( int )
 
 void sighup ( int )
 {
-	sphInfo ( "rotating indices: caught SIGHUP, waiting for children to exit" );
-	g_iHUP = 1;
+	sphInfo ( "rotating indices" );
+	g_bDoRotate = true;
 }
 
 
@@ -3437,13 +3441,10 @@ bool TryRename ( const char * sIndex, const char * sPrefix, const char * sFromPo
 }
 
 
-void RotateIndex ( ServedIndex_t & tIndex, const char * sIndex )
+void RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 {
 	char sFile [ SPH_MAX_FILENAME_LEN ];
-	const char * sPath = tIndex.m_pIndexPath->cstr();
-
-	// whatever happens, we won't retry
-	g_iHUP = 0;
+	const char * sPath = tIndex.m_sIndexPath.cstr();
 
 	// check files
 	const int EXT_COUNT = 6;
@@ -3493,10 +3494,10 @@ void RotateIndex ( ServedIndex_t & tIndex, const char * sIndex )
 
 	// try to use new index
 	CSphString sWarning;
-	const CSphSchema * pNewSchema = tIndex.m_pIndex->Preload ( tIndex.m_bMlock, &sWarning );
-	if ( !pNewSchema )
+	const CSphSchema * pNewSchema = tIndex.m_pIndex->Prealloc ( tIndex.m_bMlock, &sWarning );
+	if ( !pNewSchema || !tIndex.m_pIndex->Preread() )
 	{
-		sphWarning ( "rotating index '%s': failed to preload schema/docinfo", sIndex );
+		sphWarning ( "rotating index '%s': .new preload failed: %s", sIndex, tIndex.m_pIndex->GetLastError().cstr() );
 
 		// try to recover
 		for ( int j=0; j<EXT_COUNT; j++ )
@@ -3505,8 +3506,8 @@ void RotateIndex ( ServedIndex_t & tIndex, const char * sIndex )
 			TryRename ( sIndex, sPath, dOld[j], dCur[j], true );
 		}
 
-		pNewSchema = tIndex.m_pIndex->Preload ( tIndex.m_bMlock, &sWarning );
-		if ( !pNewSchema )
+		pNewSchema = tIndex.m_pIndex->Prealloc ( tIndex.m_bMlock, &sWarning );
+		if ( !pNewSchema || !tIndex.m_pIndex->Preread() )
 		{
 			sphWarning ( "rotating index '%s': .new preload failed; ROLLBACK FAILED; INDEX UNUSABLE", sIndex );
 			tIndex.m_bEnabled = false;
@@ -3534,6 +3535,80 @@ void RotateIndex ( ServedIndex_t & tIndex, const char * sIndex )
 // MAIN LOOP
 /////////////////////////////////////////////////////////////////////////////
 
+#if USE_WINDOWS
+
+int CreatePipe ( bool )		{ return -1; }
+int PipeAndFork ( bool )	{ return -1; }
+
+#else
+
+// open new pipe to be able to receive notifications from children
+// adds read-end fd to g_dPipes; returns write-end fd for child
+int CreatePipe ( bool bFatal )
+{
+	assert ( g_bHeadDaemon );
+	int dPipe[2] = { -1, -1 };
+
+	for ( ;; )
+	{
+		if ( pipe(dPipe) )
+		{
+			if ( bFatal )
+				sphFatal ( "pipe() failed (error=%s)", strerror(errno) );
+			else
+				sphWarning ( "pipe() failed (error=%s)", strerror(errno) );
+			break;
+		}
+
+		if ( fcntl ( dPipe[0], F_SETFL, O_NONBLOCK ) )
+		{
+			sphWarning ( "fcntl() on pipe failed (error=%s)", strerror(errno) );
+			SafeClose ( dPipe[0] );
+			SafeClose ( dPipe[1] );
+			break;
+		}
+
+		g_dPipes.Add ( dPipe[0] );
+		break;
+	}
+
+	return dPipe[1];
+}
+
+
+/// create new worker child
+/// creates a pipe to it, forks, and does some post-fork work
+//
+/// in child, returns write-end pipe fd (might be -1!) and sets g_bHeadDaemon to false
+/// in parent, returns -1 and leaves g_bHeadDaemon unaffected
+int PipeAndFork ( bool bFatal )
+{
+	int iChildPipe = CreatePipe ( bFatal );
+	switch ( fork() )
+	{
+		// fork() failed
+		case -1:
+			sphFatal ( "fork() failed (reason: %s)", strerror(errno) );
+
+		// child process, handle client
+		case 0:
+			g_bHeadDaemon = false;
+			ARRAY_FOREACH ( i, g_dPipes )
+				SafeClose ( g_dPipes[i] );
+			break;
+
+		// parent process, continue accept()ing
+		default:
+			SafeClose ( iChildPipe );
+			break;
+	}
+	return iChildPipe;
+}
+
+#endif // !USE_WINDOWS
+
+
+/// check and report if there were any leaks since last call
 void CheckLeaks ()
 {
 #if SPH_DEBUG_LEAKS
@@ -3554,21 +3629,170 @@ void CheckLeaks ()
 }
 
 
-void CheckPipes ()
+void SeamlessTryToForkPrereader ()
 {
-	#define LOC_CHECK_READ(_exp) \
-		if ( iRes!=int(_exp) ) \
-		{ \
-			sphWarning ( "pipe read failed (exp=%d, res=%d, error=%s)", int(_exp), iRes, \
-				iRes>0 ? "(none)" : strerror(errno) ); \
-			continue; \
+	// alloc buffer index (once per run)
+	if ( !g_pPrereading )
+		g_pPrereading = sphCreateIndexPhrase ( NULL );
+
+	// next in line
+	const char * sPrereading = g_dRotating.Pop ();
+	if ( !sPrereading || !g_hIndexes(sPrereading) )
+	{
+		sphWarning ( "INTERNAL ERROR: preread attempt on unknown index '%s'", sPrereading ? sPrereading : "(NULL)" );
+		return;
+	}
+	const ServedIndex_t & tServed = g_hIndexes[sPrereading];
+
+	// rebase buffer index
+	char sNewPath [ SPH_MAX_FILENAME_LEN ];
+	snprintf ( sNewPath, sizeof(sNewPath), "%s.new", tServed.m_sIndexPath.cstr() );
+	g_pPrereading->SetBase ( sNewPath );
+
+	// prealloc enough RAM and lock new index
+	CSphString sWarn;
+	if ( !g_pPrereading->Prealloc ( tServed.m_bMlock, &sWarn ) )
+	{
+		sphWarning ( "rotating index '%s': prealloc: %s; using old index", sPrereading, g_pPrereading->GetLastError().cstr() );
+		return;
+	}
+	if ( !g_pPrereading->Lock() )
+	{
+		sphWarning ( "rotating index '%s': lock: %s; using old index", sPrereading, g_pPrereading->GetLastError().cstr() );
+		g_pPrereading->Dealloc ();
+		return;
+	}
+
+	// fork async reader
+	g_sPrereading = sPrereading;
+	int iPipeFD = PipeAndFork ( true );
+
+	// in parent, wait for prereader process to finish
+	if ( g_bHeadDaemon )
+		return;
+
+	// in child, do preread
+	bool bRes = g_pPrereading->Preread ();
+	if ( !bRes )
+		sphWarning ( "rotating index '%s': preread failed: %s; using old index", g_sPrereading, g_pPrereading->GetLastError().cstr() );
+
+	// report and exit
+	DWORD uTmp = SPH_PIPE_PREREAD;
+	::write ( iPipeFD, &uTmp, sizeof(DWORD) );
+
+	uTmp = bRes;
+	::write ( iPipeFD, &uTmp, sizeof(DWORD) );
+
+	::close ( iPipeFD );
+	exit ( 0 );
+}
+
+
+void SeamlessForkPrereader ()
+{
+	// sanity checks
+	if ( !g_bDoRotate )
+	{
+		sphWarning ( "INTERNAL ERROR: preread attempt not in rotate state" );
+		return;
+	}
+	if ( g_sPrereading )
+	{
+		sphWarning ( "INTERNAL ERROR: preread attempt before previous completion" );
+		return;
+	}
+
+	// try candidates one by one
+	while ( g_dRotating.GetLength() && !g_sPrereading )
+		SeamlessTryToForkPrereader ();
+
+	// if there's no more candidates, and nothing in the works, we're done
+	if ( !g_sPrereading && !g_dRotating.GetLength() )
+	{
+		g_bDoRotate = false;
+		sphInfo ( "rotating indices finished" );
+	}
+}
+
+
+/// simple wrapper to simplify reading from pipes
+struct PipeReader_t
+{
+	PipeReader_t ( int iFD )
+		: m_iFD ( iFD )
+		, m_bError ( false )
+	{}
+
+	~PipeReader_t ()
+	{
+		SafeClose ( m_iFD );
+	}
+
+	int GetFD () const
+	{
+		return m_iFD;
+	}
+
+	bool IsError () const
+	{
+		return m_bError;
+	}
+
+	int GetInt ()
+	{
+		int iTmp;
+		if ( !GetBytes ( &iTmp, sizeof(iTmp) ) )
+			iTmp = 0;
+		return iTmp;
+	}
+
+	CSphString GetString ()
+	{
+		int iLen = GetInt ();
+		CSphString sRes;
+		sRes.Reserve ( iLen );
+		if ( !GetBytes ( const_cast<char*>(sRes.cstr()), iLen ) )
+			sRes = "";
+		return sRes;
+	}
+
+protected:
+	bool GetBytes ( void * pBuf, int iCount )
+	{
+		if ( m_bError )
+			return false;
+		
+		if ( m_iFD<0 )
+		{
+			m_bError = true;
+			sphWarning ( "invalid pipe fd" );
+			return false;
 		}
 
-	int iToClose = -1;
+		int iRes = ::read ( m_iFD, pBuf, iCount );
+		if ( iRes!=iCount )
+		{
+			m_bError = true;
+			sphWarning ( "pipe read failed (exp=%d, res=%d, error=%s)",
+				iCount, iRes, iRes>0 ? "(none)" : strerror(errno) );
+			return false;
+		}
+
+		return true;
+	}
+
+protected:
+	int			m_iFD;
+	bool		m_bError;
+
+};
+
+
+/// check if there are any notifications from the children and handle them
+void CheckPipes ()
+{
 	ARRAY_FOREACH ( i, g_dPipes )
 	{
-		SafeClose ( iToClose );
-
 		// try to get status code
 		DWORD uStatus;
 		int iRes = ::read ( g_dPipes[i], &uStatus, sizeof(DWORD) );
@@ -3578,39 +3802,84 @@ void CheckPipes ()
 			continue;
 
 		// either if there's eof, or error, or valid data - this pipe is over
-		iToClose = g_dPipes[i];
+		PipeReader_t tPipe ( g_dPipes[i] );
 		g_dPipes.Remove ( i-- );
 
-		// check for eof
-		if ( iRes==0 )
+		// check for eof/error
+		if ( iRes!=sizeof(DWORD) )
+		{
+			if ( iRes!=0 )
+				sphWarning ( "pipe read failed (status)" );
 			continue;
+		}
 
-		// check for error
-		LOC_CHECK_READ ( sizeof(DWORD) );
-
+		// handle
 		if ( uStatus==SPH_PIPE_UPDATED_ATTRS )
 		{
-			int iUpdIndexes;
-			iRes = ::read ( iToClose, &iUpdIndexes, sizeof(DWORD) );
-			LOC_CHECK_READ ( sizeof(DWORD) );
-
+			int iUpdIndexes = tPipe.GetInt ();
 			for ( int i=0; i<iUpdIndexes; i++ )
 			{
 				// index name must follow
-				DWORD iLen;
-				iRes = ::read ( iToClose, &iLen, sizeof(DWORD) );
-				LOC_CHECK_READ ( sizeof(DWORD) );
+				CSphString sIndex = tPipe.GetString ();
+				if ( tPipe.IsError() )
+					break;
 
-				CSphString sBuf;
-				sBuf.Reserve ( iLen );
-				iRes = ::read ( iToClose, (char*)sBuf.cstr(), iLen );
-				LOC_CHECK_READ ( iLen );
-
-				if ( g_hIndexes(sBuf) )
-					g_hIndexes(sBuf)->m_pIndex->SetAttrsUpdated ( true );
+				if ( g_hIndexes(sIndex) )
+					g_hIndexes(sIndex)->m_pIndex->SetAttrsUpdated ( true );
 				else
-					sphWarning ( "INTERNAL ERROR: unknown index '%s' in piped notification", sBuf.cstr() );
+					sphWarning ( "INTERNAL ERROR: unknown index '%s' in piped notification (updated)", sIndex.cstr() );
 			}
+
+		} else if ( uStatus==SPH_PIPE_PREREAD )
+		{
+			assert ( g_bDoRotate && g_bSeamlessRotate && g_sPrereading );
+
+			int iRes = tPipe.GetInt();
+			if ( tPipe.IsError() )
+				break;
+
+			// if preread was succesful, exchange served index and prereader buffer index
+			if ( iRes )
+			{
+				ServedIndex_t & tServed = g_hIndexes[g_sPrereading];
+				CSphIndex * pOld = tServed.m_pIndex;
+				CSphIndex * pNew = g_pPrereading;
+
+				char sOld [ SPH_MAX_FILENAME_LEN ];
+				snprintf ( sOld, sizeof(sOld), "%s.old", tServed.m_sIndexPath.cstr() );
+
+				if ( !pOld->Rename ( sOld ) )
+				{
+					// FIXME! rollback inside Rename() call potentially fail
+					sphWarning ( "rotating index '%s': cur to old rename failed: %s", g_sPrereading, pOld->GetLastError().cstr() );
+					continue;
+				}
+				// FIXME! at this point there's no cur lock file; ie. potential race
+				if ( !pNew->Rename ( tServed.m_sIndexPath.cstr() ) )
+				{
+					sphWarning ( "rotating index '%s': new to cur rename failed: %s", g_sPrereading, pNew->GetLastError().cstr() );
+					if ( !pOld->Rename ( tServed.m_sIndexPath.cstr() ) )
+					{
+						sphWarning ( "rotating index '%s': old to cur rename failed: %s; INDEX UNUSABLE", g_sPrereading, pOld->GetLastError().cstr() );
+						tServed.m_bEnabled = false;
+					}
+					continue;
+				}
+
+				// all went fine; swap them
+				Swap ( tServed.m_pIndex, g_pPrereading );
+				tServed.m_pSchema = tServed.m_pIndex->GetSchema ();
+				tServed.m_bEnabled = true;
+				sphInfo ( "rotating index '%s': success", g_sPrereading );
+			}
+
+			// in any case, buffer index should now be deallocated
+			g_pPrereading->Dealloc ();
+			g_pPrereading->Unlock ();
+			g_sPrereading = NULL;
+
+			// work next one
+			SeamlessForkPrereader ();
 
 		} else
 		{
@@ -3618,7 +3887,70 @@ void CheckPipes ()
 			sphWarning ( "INTERNAL ERROR: unknown pipe status=%d", uStatus );
 		}
 	}
-	SafeClose ( iToClose );
+}
+
+
+void CheckRotate ()
+{
+	// do we need to rotate now?
+	if ( !g_bDoRotate )
+		return;
+
+	/////////////////////
+	// RAM-greedy rotate
+	/////////////////////
+
+	if ( !g_bSeamlessRotate )
+	{
+		// wait until there's no running queries
+		if ( g_iChildren )
+			return;
+
+		g_hIndexes.IterateStart();
+		while ( g_hIndexes.IterateNext() )
+		{
+			ServedIndex_t & tIndex = g_hIndexes.IterateGet();
+			const char * sIndex = g_hIndexes.IterateGetKey().cstr();
+			assert ( tIndex.m_pIndex );
+
+			RotateIndexGreedy ( tIndex, sIndex );
+		}
+
+		g_bDoRotate = false;
+		sphInfo ( "rotating indices finished" );
+		return;
+	}
+
+	///////////////////
+	// seamless rotate
+	///////////////////
+
+	assert ( g_bDoRotate && g_bSeamlessRotate );
+	if ( g_dRotating.GetLength() || g_sPrereading )
+		return; // rotate in progress already; will be handled in CheckPipes()
+
+	// check what indexes need to be rotated
+	g_hIndexes.IterateStart();
+	while ( g_hIndexes.IterateNext() )
+	{
+		const ServedIndex_t & tIndex = g_hIndexes.IterateGet();
+		const char * sIndex = g_hIndexes.IterateGetKey().cstr();
+		assert ( tIndex.m_pIndex );
+
+		CSphString sNewPath;
+		sNewPath.SetSprintf ( "%s.new", tIndex.m_sIndexPath.cstr() );
+
+		// check if there's a .new index incoming
+		// FIXME? move this code to index, and also check for exists-but-not-readable
+		CSphString sTmp;
+		sTmp.SetSprintf ( "%s.sph", sNewPath.cstr() );
+		if ( !sphIsReadable ( sTmp.cstr() ) )
+			continue;
+
+		g_dRotating.Add ( sIndex );
+	}
+
+	SeamlessForkPrereader ();
 }
 
 
@@ -3797,6 +4129,9 @@ int main ( int argc, char **argv )
 			g_iMaxMatches = iMax;
 		}
 	}
+
+	if ( hSearchd("seamless_rotate") )
+		g_bSeamlessRotate = ( hSearchd["seamless_rotate"].intval()!=0 );
 
 #if 0
 	if ( hSearchd("cache_dir") )
@@ -4012,10 +4347,10 @@ int main ( int argc, char **argv )
 			// try to create index
 			CSphString sWarning;
 			tIdx.m_pIndex = sphCreateIndexPhrase ( hIndex["path"].cstr() );
-			tIdx.m_pSchema = tIdx.m_pIndex->Preload ( tIdx.m_bMlock, &sWarning );
-			if ( !tIdx.m_pSchema )
+			tIdx.m_pSchema = tIdx.m_pIndex->Prealloc ( tIdx.m_bMlock, &sWarning );
+			if ( !tIdx.m_pSchema || !tIdx.m_pIndex->Preread() )
 			{
-				sphWarning ( "index '%s': preload failed (%s) - NOT SERVING", sIndexName, tIdx.m_pIndex->GetLastError().cstr() );
+				sphWarning ( "index '%s': preload: %s; NOT SERVING", sIndexName, tIdx.m_pIndex->GetLastError().cstr() );
 				continue;
 			}
 			if ( !sWarning.IsEmpty() )
@@ -4024,12 +4359,12 @@ int main ( int argc, char **argv )
 			// try to lock it
 			if ( !tIdx.m_pIndex->Lock() )
 			{
-				sphWarning ( "index '%s': lock failed (%s) - NOT SERVING", sIndexName, tIdx.m_pIndex->GetLastError().cstr() );
+				sphWarning ( "index '%s': lock: %s; NOT SERVING", sIndexName, tIdx.m_pIndex->GetLastError().cstr() );
 				continue;
 			}
 
 			// done
-			tIdx.m_pIndexPath = new CSphString ( hIndex["path"] );
+			tIdx.m_sIndexPath = hIndex["path"];
 			if ( !g_hIndexes.Add ( tIdx, sIndexName ) )
 			{
 				sphWarning ( "INTERNAL ERROR: index '%s': hash add failed - NOT SERVING", sIndexName );
@@ -4129,7 +4464,7 @@ int main ( int argc, char **argv )
 			ServedIndex_t & tServed = g_hIndexes.IterateGet ();
 			if ( tServed.m_bEnabled && !tServed.m_pIndex->Lock() )
 			{
-				sphWarning ( "index '%s': %s; INDEX UNUSABLE", g_hIndexes.IterateGetKey().cstr(),
+				sphWarning ( "index '%s': lock: %s; INDEX UNUSABLE", g_hIndexes.IterateGetKey().cstr(),
 					tServed.m_pIndex->GetLastError().cstr() );
 				tServed.m_bEnabled = false;
 			}
@@ -4173,21 +4508,7 @@ int main ( int argc, char **argv )
 	{
 		CheckLeaks ();
 		CheckPipes ();
-
-		// try to rotate indices
-		if ( g_iHUP && !g_iChildren )
-		{
-			g_hIndexes.IterateStart();
-			while ( g_hIndexes.IterateNext() )
-			{
-				ServedIndex_t & tIndex = g_hIndexes.IterateGet();
-				const char * sIndex = g_hIndexes.IterateGetKey().cstr();
-				assert ( tIndex.m_pIndex );
-				assert ( tIndex.m_pIndexPath );
-
-				RotateIndex ( tIndex, sIndex );
-			}
-		}
+		CheckRotate ();
 
 		// we can't simply accept, because of the need to react to HUPs
 		fd_set fdsAccept;
@@ -4211,7 +4532,8 @@ int main ( int argc, char **argv )
 		if ( rsock<0 )
 			sphFatal ( "accept() failed (reason: %s)", sphSockError(iErr) );
 
-		if ( ( g_iMaxChildren && g_iChildren>=g_iMaxChildren ) || g_iHUP )
+		if ( ( g_iMaxChildren && g_iChildren>=g_iMaxChildren )
+			|| ( g_bDoRotate && !g_bSeamlessRotate ) )
 		{
 			const char * sMessage = "server maxed out, retry in a second";
 			int iRespLen = 4 + strlen(sMessage);
@@ -4242,53 +4564,21 @@ int main ( int argc, char **argv )
 			continue;
 		}
 
-		#if !USE_WINDOWS
-		// open pipe to be able to receive notifications from children
-		int dPipe[2] = { -1, -1 };
-
-		for ( ;; )
-		{
-			if ( pipe(dPipe) )
-			{
-				sphWarning ( "pipe() failed (error=%s)", strerror(errno) );
-				break;
-			}
-
-			if ( fcntl ( dPipe[0], F_SETFL, O_NONBLOCK ) )
-			{
-				sphWarning ( "fcntl() on pipe failed (error=%s)", strerror(errno) );
-				SafeClose ( dPipe[0] );
-				SafeClose ( dPipe[1] );
-				break;
-			}
-
-			g_dPipes.Add ( dPipe[0] );
-			break;
-		}
-
 		// handle that client
+		#if !USE_WINDOWS
 		g_iChildren++;
-		switch ( fork() )
+		int iChildPipe = PipeAndFork ( false );
+
+		if ( !g_bHeadDaemon )
 		{
-			// fork() failed
-			case -1:
-				sphFatal ( "fork() failed (reason: %s)", strerror(errno) );
-
 			// child process, handle client
-			case 0:
-				g_bHeadDaemon = false;
-				ARRAY_FOREACH ( i, g_dPipes )
-					SafeClose ( g_dPipes[i] );
-				HandleClient ( rsock, sClientIP, dPipe[1] );
-				sphSockClose ( rsock );
-				exit ( 0 );
-				break;
-
+			HandleClient ( rsock, sClientIP, iChildPipe );
+			sphSockClose ( rsock );
+			exit ( 0 );
+		} else
+		{
 			// parent process, continue accept()ing
-			default:
-				SafeClose ( dPipe[1] );
-				sphSockClose ( rsock );
-				break;
+			sphSockClose ( rsock );
 		}
 		#endif // !USE_WINDOWS
 	}

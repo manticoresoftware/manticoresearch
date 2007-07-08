@@ -471,7 +471,7 @@ public:
 		return m_sFilename.cstr();
 	}
 
-	SphOffset_t GetSize ( SphOffset_t iMinSize, CSphString & sError )
+	SphOffset_t GetSize ( SphOffset_t iMinSize, bool bCheckSizeT, CSphString & sError )
 	{
 		struct stat st;
 		if ( stat ( GetFilename(), &st )<0 )
@@ -485,7 +485,35 @@ public:
 				GetFilename(), (int64_t)st.st_size, (int64_t)iMinSize );
 			return -1;
 		}
+		if ( bCheckSizeT )
+		{
+			size_t sCheck = (size_t)st.st_size;
+			if ( st.st_size!=SphOffset_t(sCheck) )
+			{
+				sError.SetSprintf ( "failed to load %s: bad size %"PRIi64" (out of size_t; 4 GB limit on 32-bit machine hit?)",
+					GetFilename(), (int64_t)st.st_size );
+				return -1;
+			}
+		}
 		return st.st_size;
+	}
+
+	SphOffset_t GetSize ()
+	{
+		CSphString sTmp;
+		return GetSize ( 0, false, sTmp );
+	}
+
+	bool Read ( void * pBuf, size_t uCount, CSphString & sError )
+	{
+		size_t uRead = (size_t) ::read ( GetFD(), pBuf, uCount );
+		if ( uRead!=uCount )
+		{
+			sError.SetSprintf ( "read error in %s; %u of %u bytes read",
+				GetFilename(), uRead, uCount );
+			return false;
+		}
+		return true;
 	}
 };
 
@@ -546,6 +574,7 @@ public:
 		if ( uCheck!=(SphOffset_t)m_iLength )
 		{
 			sError.SetSprintf ( "impossible to mmap() over 4 GB on 32-bit system" );
+			m_iLength = 0;
 			return false;
 		}
 
@@ -562,6 +591,7 @@ public:
 				sError.SetSprintf ( "mmap() failed: %s (length=%"PRIi64" is over 2GB, impossible on some 32-bit systems)", strerror(errno), (int64_t)m_iLength );
 			else
 				sError.SetSprintf ( "mmap() failed: %s (length=%"PRIi64")", strerror(errno), (int64_t)m_iLength );
+			m_iLength = 0;
 			return false;
 		}
 
@@ -596,22 +626,28 @@ public:
 
 public:
 	/// accessor
-	inline const T & operator [] ( int iIndex )
+	inline const T & operator [] ( int iIndex ) const
 	{
 		assert ( iIndex>=0 && iIndex<(int)m_iEntries );
 		return m_pData[iIndex];
 	}
 
 	/// get write address
-	T * GetWritePtr ()
+	T * GetWritePtr () const
 	{
 		return m_pData;
 	}
 
 	/// check if i'm empty
-	bool IsEmpty ()
+	bool IsEmpty () const
 	{
 		return m_pData==NULL;
+	}
+
+	/// get length
+	size_t GetLength () const
+	{
+		return m_iLength;
 	}
 
 protected:
@@ -1990,9 +2026,18 @@ struct CSphIndex_VLN : CSphIndex
 
 	virtual int					Build ( CSphDict * pDict, const CSphVector < CSphSource * > & dSources, int iMemoryLimit, ESphDocinfo eDocinfo );
 
-	virtual const CSphSchema *	Preload ( bool bMlock, CSphString * sWarning );
+	virtual const CSphSchema *	Prealloc ( bool bMlock, CSphString * sWarning );
+	virtual void				Dealloc ();
+
+	virtual bool				Preread ();
+	template<typename T> bool	PrereadSharedBuffer ( CSphSharedBuffer<T> & pBuffer, const char * sExt );
+
+	virtual void				SetBase ( const char * sNewBase );
+	virtual bool				Rename ( const char * sNewBase );
+
 	virtual bool				Lock ();
 	virtual void				Unlock ();
+
 
 	virtual CSphQueryResult *	Query ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery );
 	virtual bool				QueryEx ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchSorter * pTop );
@@ -2054,18 +2099,18 @@ private:
 	CSphSharedBuffer<DWORD>		m_pMva;					///< my multi-valued attrs cache
 
 	static const int			DOCINFO_HASH_BITS = 18;	// FIXME! make this configurable
-	DWORD *						m_pDocinfoHash;
-	int							m_iDocinfoIdShift;
+	CSphSharedBuffer<DWORD>		m_pDocinfoHash;
 
 	CSphSharedBuffer<BYTE>		m_pWordlist;			///< my wordlist cache
 	CSphWordlistCheckpoint *	m_pWordlistCheckpoints;	///< my wordlist cache checkpoints
 	int							m_iWordlistCheckpoints;	///< my wordlist cache checkpoints count
 
-	bool						m_bPreloaded;			///< if schema/docinfos are preloaded
+	bool						m_bPreallocated;		///< are we ready to preread
+	CSphSharedBuffer<BYTE>		m_bPreread;				///< are we ready to search
 	DWORD						m_uVersion;				///< data files version
 
 private:
-	const char *				GetIndexFileName ( const char * sExt );		///< WARNING, non-reenterable, static buffer!
+	const char *				GetIndexFileName ( const char * sExt ) const;	///< WARNING, non-reenterable, static buffer!
 	int							AdjustMemoryLimit ( int iMemoryLimit );
 
 	int							cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWORD * pDocinfo, int Docinfos, int iStride );
@@ -2360,6 +2405,22 @@ void sphUsleep ( int iMsec )
 
 	select ( 0, NULL, NULL, NULL, &tvTimeout ); // FIXME? could handle EINTR
 #endif
+}
+
+
+bool sphIsReadable ( const char * sPath, CSphString * pError )
+{
+	int iFD = ::open ( sPath, O_RDONLY );
+
+	if ( iFD<0 )
+	{
+		if ( pError )
+			pError->SetSprintf ( "%s unreadable: %s", strerror(errno) );
+		return false;
+	}
+
+	close ( iFD );
+	return true;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -4281,7 +4342,8 @@ CSphIndex::CSphIndex ( const char * sName )
 	, m_iMinInfixLen ( 0 )
 	, m_bPrefixesOnly ( false )
 	, m_bAttrsUpdated ( false )
-{}
+{
+}
 
 
 void CSphIndex::SetInfixIndexing ( bool bPrefixesOnly, int iMinLength )
@@ -4319,10 +4381,8 @@ CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename )
 
 	m_uDocinfo = 0;
 	m_eDocinfo = SPH_DOCINFO_NONE;
-	m_pDocinfoHash = NULL;
-	m_iDocinfoIdShift = 0;
 
-	m_bPreloaded = false;
+	m_bPreallocated = false;
 	m_uVersion = 0;
 }
 
@@ -4360,7 +4420,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate_t & tUpd )
 
 	// do update
 	int iUpdated = 0;
-	int iStride = DOCINFO_IDSIZE+dAttrIndex.GetLength();
+	int iStride = DOCINFO_IDSIZE + dAttrIndex.GetLength();
 	const DWORD * pUpdate = tUpd.m_pUpdates;
 
 	for ( int iUpd=0; iUpd<tUpd.m_iUpdates; iUpd++, pUpdate+=iStride )
@@ -4503,7 +4563,7 @@ void sphSortDocinfos ( DWORD * pBuf, int iCount, int iStride )
 }
 
 
-const char * CSphIndex_VLN::GetIndexFileName ( const char * sExt )
+const char * CSphIndex_VLN::GetIndexFileName ( const char * sExt ) const
 {
 	static char sBuf [ SPH_MAX_FILENAME_LEN ];
 	snprintf ( sBuf, sizeof(sBuf), "%s.%s", m_sFilename.cstr(), sExt );
@@ -6049,6 +6109,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	return 1;
 }
 
+
 bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 {
 	assert( pSource );
@@ -6056,31 +6117,26 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 	CSphIndex_VLN * pSrcIndex = dynamic_cast< CSphIndex_VLN * >( pSource );
 	assert( pSrcIndex );
 
-	const CSphSchema * pDstSchema = Preload ( false, NULL );
-	if ( !pDstSchema )
+	const CSphSchema * pDstSchema = Prealloc ( false, NULL );
+	if ( !pDstSchema || !Preread() )
+		return false;
+
+	const CSphSchema * pSrcSchema = pSrcIndex->Prealloc(  false, NULL );
+	if ( !pSrcSchema || !pSrcIndex->Preread() )
 	{
-		m_sLastError.SetSprintf ( "failed to load schema '%s'", GetIndexFileName("sph") );
+		m_sLastError.SetSprintf ( "source index preload failed: %s", pSrcIndex->GetLastError().cstr() );
 		return false;
 	}
-
-	const CSphSchema * pSrcSchema = pSrcIndex->Preload ( false, NULL );
-	if ( !pSrcSchema )
+	if ( pDstSchema->CompareTo ( *pSrcSchema, m_sLastError ) != SPH_SCHEMAS_EQUAL )
 	{
-		m_sLastError.SetSprintf ( "failed to load schema '%s'", GetIndexFileName("sph") );
-		return false;
-	}
-
-	CSphString sError;
-	if ( pDstSchema->CompareTo( *pSrcSchema, sError ) != SPH_SCHEMAS_EQUAL )
-	{
-		m_sLastError.SetSprintf ( "merging indexes with different schemas is not allowed" );
+		m_sLastError.SetSprintf ( "schemas must be the same" );
 		return false;
 	}
 	 
 	// FIXME!
-	if ( m_eDocinfo != pSrcIndex->m_eDocinfo )
+	if ( m_eDocinfo!=pSrcIndex->m_eDocinfo )
 	{
-		m_sLastError.SetSprintf ( "merging indexes with different docinfo storage is not allowed" );
+		m_sLastError.SetSprintf ( "docinfo storage must be the same" );
 		return false;
 	}
 
@@ -6180,13 +6236,13 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 	rdDstData.SeekTo( 1, 0 );
 	rdDstHitlist.SeekTo( 1, 0 );
 
-	if ( rdDstData.Tell() >= tDstData.GetSize( 0, sError ) || rdDstHitlist.Tell() >= tDstHitlist.GetSize( 0, sError ) )
+	if ( rdDstData.Tell() >= tDstData.GetSize() || rdDstHitlist.Tell() >= tDstHitlist.GetSize() )
 		bDstEmpty = true;
 
 	rdSrcData.SeekTo( 1, 0 );
 	rdSrcHitlist.SeekTo( 1, 0 );
 
-	if ( rdSrcData.Tell() >= tSrcData.GetSize( 0, sError ) || rdSrcHitlist.Tell() >= tSrcHitlist.GetSize( 0, sError ) )
+	if ( rdSrcData.Tell() >= tSrcData.GetSize() || rdSrcHitlist.Tell() >= tSrcHitlist.GetSize() )
 		bSrcEmpty = true;
 
 	if ( !wrDstData.OpenFile ( GetIndexFileName("spd.tmp"), m_sLastError ) )
@@ -7448,12 +7504,12 @@ const DWORD * CSphIndex_VLN::FindDocinfo ( SphDocID_t uDocID )
 	assert ( !m_pDocinfo.IsEmpty() );
 	assert ( m_tSchema.GetAttrsCount() );
 
-	DWORD uHash = (DWORD)( ( uDocID - DOCINFO2ID ( &m_pDocinfo[0] ) ) >> m_iDocinfoIdShift );
+	DWORD uHash = (DWORD)( ( uDocID - DOCINFO2ID ( &m_pDocinfo[0] ) ) >> m_pDocinfoHash[0] );
 	if ( uHash>(1<<DOCINFO_HASH_BITS) ) // possible in case of broken data, for instance
 		return NULL;
 
-	int iStart = m_pDocinfoHash [ uHash ];
-	int iEnd = m_pDocinfoHash [ uHash+1 ] - 1;
+	int iStart = m_pDocinfoHash [ uHash+1 ];
+	int iEnd = m_pDocinfoHash [ uHash+2 ] - 1;
 
 	int iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 	const DWORD * pFound = NULL;
@@ -9011,7 +9067,7 @@ bool CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, ISphMatchSorter * 
 bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, const CSphTermSetup & tTermSetup )
 {
 	// binary search through checkpoints for a one whose range matches word ID
-	assert ( m_bPreloaded && !m_pWordlist.IsEmpty() );
+	assert ( m_bPreread[0] && !m_pWordlist.IsEmpty() );
 
 	// empty index?
 	if ( !m_iWordlistCheckpoints )
@@ -9122,7 +9178,7 @@ bool CSphIndex_VLN::Lock ()
 
 	if ( !sphLockEx ( m_iLockFD, false ) )
 	{
-		m_sLastError.SetSprintf ( "failed to obtain exclusive lock on %s", sName );
+		m_sLastError.SetSprintf ( "failed to lock %s: %s", sName, strerror(errno) );
 		::close ( m_iLockFD );
 		return false;
 	}
@@ -9137,27 +9193,45 @@ void CSphIndex_VLN::Unlock()
 	{
 		::close ( m_iLockFD );
 		::unlink ( GetIndexFileName ( "spl" ) );
+		m_iLockFD = -1;
 	}
 }
 
 
-const CSphSchema * CSphIndex_VLN::Preload ( bool bMlock, CSphString * sWarning )
+void CSphIndex_VLN::Dealloc ()
+{
+	if ( !m_bPreallocated )
+		return;
+
+	m_pDocinfo.Reset ();
+	m_pWordlist.Reset ();
+	m_pMva.Reset ();
+
+	m_uDocinfo = 0;
+	m_eDocinfo = SPH_DOCINFO_NONE;
+	m_bAttrsUpdated = false;
+
+	m_bPreallocated = false;
+}
+
+
+const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString * sWarning )
 {
 	// reset
-	if ( m_bPreloaded )
+	Dealloc ();
+
+	// always keep preread flag
+	if ( m_bPreread.IsEmpty() )
 	{
-		m_pDocinfo.Reset ();
-		m_pWordlist.Reset ();
-
-		m_uDocinfo = 0;
-		m_eDocinfo = SPH_DOCINFO_NONE;
-		m_iDocinfoIdShift = 0;
-		m_bAttrsUpdated = false;
-
-		m_bPreloaded = false;
+		if ( !m_bPreread.Alloc ( 1, m_sLastError, NULL ) )
+			return NULL;
 	}
+	m_bPreread.GetWritePtr()[0] = 0;
+
+	// set new locking flag
 	m_pDocinfo.SetMlock ( bMlock );
 	m_pWordlist.SetMlock ( bMlock );
+	m_pMva.SetMlock ( bMlock );
 
 	//////////////////
 	// preload schema
@@ -9165,7 +9239,7 @@ const CSphSchema * CSphIndex_VLN::Preload ( bool bMlock, CSphString * sWarning )
 
 	CSphAutofile tIndexInfo ( GetIndexFileName("sph"), SPH_O_READ, m_sLastError );
 	if ( tIndexInfo.GetFD()<0 )
-		return false;
+		return NULL;
 
 	BYTE dCacheInfo [ 8192 ];
 	CSphReader_VLN rdInfo ( dCacheInfo, sizeof(dCacheInfo) ); // to avoid mallocs
@@ -9177,7 +9251,7 @@ const CSphSchema * CSphIndex_VLN::Preload ( bool bMlock, CSphString * sWarning )
 	{
 		m_sLastError.SetSprintf ( "'%s': invalid schema file (old index version?)",
 			GetIndexFileName ( "sph" ) );
-		return false;
+		return NULL;
 	}
 
 	m_uVersion = rdInfo.GetDword();
@@ -9185,7 +9259,7 @@ const CSphSchema * CSphIndex_VLN::Preload ( bool bMlock, CSphString * sWarning )
 	{
 		m_sLastError.SetSprintf ( "%s is v.%d, binary is v.%d", GetIndexFileName("sph"),
 			m_uVersion, INDEX_FORMAT_VERSION );
-		return false;
+		return NULL;
 	}
 
 	// bits
@@ -9196,7 +9270,7 @@ const CSphSchema * CSphIndex_VLN::Preload ( bool bMlock, CSphString * sWarning )
 	{
 		m_sLastError.SetSprintf ( "'%s' is id%d, and this binary is id%d",
 			GetIndexFileName ( "sph" ), bUse64 ? 64 : 32, USE_64BIT ? 64 : 32 );
-		return false;
+		return NULL;
 	}
 
 	// docinfo
@@ -9242,9 +9316,19 @@ const CSphSchema * CSphIndex_VLN::Preload ( bool bMlock, CSphString * sWarning )
 		m_iMinInfixLen = rdInfo.GetDword ();
 	}
 
-	////////////////////
-	// preload docinfos
-	////////////////////
+	///////////////////////////////////////
+	// verify that data files are readable
+	///////////////////////////////////////
+
+	if ( !sphIsReadable ( GetIndexFileName("spd"), &m_sLastError ) )
+		return NULL;
+
+	if ( m_uVersion>=3 && !sphIsReadable ( GetIndexFileName("spp"), &m_sLastError ) )
+		return NULL;
+
+	/////////////////////
+	// prealloc docinfos
+	/////////////////////
 
 	if ( m_eDocinfo==SPH_DOCINFO_EXTERN )
 	{
@@ -9259,7 +9343,7 @@ const CSphSchema * CSphIndex_VLN::Preload ( bool bMlock, CSphString * sWarning )
 		if ( tDocinfo.GetFD()<0 )
 			return NULL;
 
-		SphOffset_t iDocinfoSize = tDocinfo.GetSize ( iEntrySize, m_sLastError );
+		SphOffset_t iDocinfoSize = tDocinfo.GetSize ( iEntrySize, true, m_sLastError );
 		if ( iDocinfoSize<0 )
 			return NULL;
 
@@ -9271,50 +9355,13 @@ const CSphSchema * CSphIndex_VLN::Preload ( bool bMlock, CSphString * sWarning )
 			return NULL;
 		}
 
-		size_t sDocinfoSize = (size_t)iDocinfoSize;
-		if ( iDocinfoSize!=(SphOffset_t)sDocinfoSize )
-		{
-			m_sLastError.SetSprintf ( "docinfo does not fit in size_t (4 GB size_t limit on 32-bit system hit?)" );
-			return NULL;
-		}
-
-		if ( !m_pDocinfo.Alloc ( DWORD(sDocinfoSize/sizeof(DWORD)), m_sLastError, sWarning ) )
+		// prealloc
+		if ( !m_pDocinfo.Alloc ( DWORD(iDocinfoSize/sizeof(DWORD)), m_sLastError, sWarning ) )
 			return NULL;
 
-		if ( (size_t)::read ( tDocinfo.GetFD(), m_pDocinfo.GetWritePtr(), sDocinfoSize )!=sDocinfoSize )
-		{
-			m_pDocinfo.Reset ();
-			return NULL;
-		}
-
-		// build hash
-		if ( !m_pDocinfoHash )
-			m_pDocinfoHash = new DWORD [ (1<<DOCINFO_HASH_BITS) + 1 ];
-
-		SphDocID_t uFirst = DOCINFO2ID ( &m_pDocinfo[0] );
-		SphDocID_t uRange = DOCINFO2ID ( &m_pDocinfo[(m_uDocinfo-1)*iStride] ) - uFirst;
-		m_iDocinfoIdShift = 0;
-		while ( uRange >= (1<<DOCINFO_HASH_BITS) )
-		{
-			m_iDocinfoIdShift++;
-			uRange >>= 1;
-		}
-
-		DWORD uLastHash = 0;
-		m_pDocinfoHash[0] = 0;
-
-		for ( DWORD i=1; i<m_uDocinfo; i++ )
-		{
-			DWORD uHash = (DWORD)( ( DOCINFO2ID ( &m_pDocinfo[i*iStride] ) - uFirst ) >> m_iDocinfoIdShift );
-			if ( uHash==uLastHash )
-				continue;
-
-			while ( uLastHash<uHash )
-				m_pDocinfoHash [ ++uLastHash ] = i;
-
-			uLastHash = uHash;
-		}
-		m_pDocinfoHash [ ++uLastHash ] = m_uDocinfo;
+		if ( m_pDocinfoHash.IsEmpty() )
+			if ( !m_pDocinfoHash.Alloc ( (1<<DOCINFO_HASH_BITS)+4, m_sLastError, sWarning ) )
+				return NULL;
 
 		////////////
 		// MVA data
@@ -9322,118 +9369,229 @@ const CSphSchema * CSphIndex_VLN::Preload ( bool bMlock, CSphString * sWarning )
 
 		if ( m_uVersion>=4 )
 		{
-			// find out what attrs are MVA
-			CSphVector<int,32> dMvaIndexes;
-			for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
-				if ( m_tSchema.GetAttr(i).m_eAttrType & SPH_ATTR_MULTI )
-					dMvaIndexes.Add ( i );
-
 			// if index is v4, .spm must always exist, even though length could be 0
 			CSphAutofile fdMva ( GetIndexFileName("spm"), SPH_O_READ, m_sLastError );
 			if ( fdMva.GetFD()<0 )
 				return NULL;
 
-			SphOffset_t iMvaSize = fdMva.GetSize ( 0, m_sLastError );
+			SphOffset_t iMvaSize = fdMva.GetSize ( 0, true, m_sLastError );
 			if ( iMvaSize<0 )
 				return NULL;
 
-			// load data, if any
-			m_pMva.Reset ();
+			// prealloc
 			if ( iMvaSize>0 )
-			{
-				size_t sMvaSize = (size_t)iMvaSize;
-				if ( iMvaSize!=(SphOffset_t)sMvaSize )
-				{
-					m_sLastError.SetSprintf ( "'%s' too big for size_t (4 GB limit on 32-bit system hit?)", fdMva.GetFilename() );
-					return NULL;
-				}
-
 				if ( !m_pMva.Alloc ( DWORD(iMvaSize/sizeof(DWORD)), m_sLastError, sWarning ) )
 					return NULL;
-
-				size_t sMvaRead = (size_t) ::read ( fdMva.GetFD(), m_pMva.GetWritePtr(), sMvaSize );
-				if ( sMvaRead!=sMvaSize )
-				{
-					m_sLastError.SetSprintf ( "read error in '%s', %d of %d bytes read", fdMva.GetFilename(),
-						sMvaRead, sMvaSize );
-					m_pMva.Reset ();
-					return NULL;
-				}
-			}
-
-#if PARANOID
-			// for each docinfo entry, verify that MVA attrs point to right storage location
-			for ( DWORD iDoc=0; iDoc<m_uDocinfo; iDoc++ )
-			{
-				DWORD * pEntry = (DWORD *)&m_pDocinfo[iDoc*iStride];
-				SphDocID_t uDocID = DOCINFO2ID(pEntry);
-
-				DWORD uOff = DOCINFO2ATTRS(pEntry) [ dMvaIndexes[0] ];
-				if ( !uOff )
-				{
-					// its either all or nothing
-					ARRAY_FOREACH ( i, dMvaIndexes )
-						assert ( DOCINFO2ATTRS(pEntry) [ dMvaIndexes[i] ]==0 );
-				} else
-				{
-					// check id
-					DWORD * pMva = (DWORD *)&m_pMva[uOff-DOCINFO_IDSIZE];
-					SphDocID_t uMvaID = DOCINFO2ID(pMva);
-					assert ( uDocID==uMvaID );
-
-					// walk the trail
-					ARRAY_FOREACH ( i, dMvaIndexes )
-					{
-						assert ( DOCINFO2ATTRS(pEntry) [ dMvaIndexes[i] ]==uOff );
-						int iCount = m_pMva[uOff];
-						uOff += iCount;
-					}
-				}
-			}
-#endif // PARANOID
-
 		}
 	}
 
-	////////////////////
-	// preload wordlist
-	////////////////////
+	/////////////////////
+	// prealloc wordlist
+	/////////////////////
 
-	const char * sWordlist = GetIndexFileName ( "spi" );
-	CSphAutofile tWordlist ( sWordlist, SPH_O_READ, m_sLastError );
+	CSphAutofile tWordlist ( GetIndexFileName("spi"), SPH_O_READ, m_sLastError );
 	if ( tWordlist.GetFD()<0 )
 		return NULL;
 
-	struct stat stWordlist;
-	if ( stat ( sWordlist, &stWordlist)<0 )
-	{
-		m_sLastError.SetSprintf ( "failed to stat %s: %s", sWordlist, strerror(errno) );
-		m_pDocinfo.Reset ();
-		return NULL;
-	}
-	if ( stWordlist.st_size<=0 )
-	{
-		m_sLastError.SetSprintf ( "failed to load %s: bad size", sWordlist );
-		m_pDocinfo.Reset ();
-		return NULL;
-	}
-
-	if ( !m_pWordlist.Alloc ( stWordlist.st_size, m_sLastError, sWarning ) )
+	SphOffset_t iWordlistLen = tWordlist.GetSize ( 1, true, m_sLastError );
+	if ( iWordlistLen<0 )
 		return NULL;
 
-	if ( ::read ( tWordlist.GetFD(), m_pWordlist.GetWritePtr(), stWordlist.st_size )!=stWordlist.st_size )
-	{
-		m_pDocinfo.Reset ();
-		m_pWordlist.Reset ();
+	if ( !m_pWordlist.Alloc ( DWORD(iWordlistLen), m_sLastError, sWarning ) )
 		return NULL;
-	}
 
 	assert ( iCheckpointsPos>0 && iCheckpointsPos<INT_MAX );
 	m_pWordlistCheckpoints = (CSphWordlistCheckpoint *)( &m_pWordlist[int(iCheckpointsPos)] );
 
 	// all done
-	m_bPreloaded = true;
+	m_bPreallocated = true;
 	return &m_tSchema;
+}
+
+
+template < typename T > bool CSphIndex_VLN::PrereadSharedBuffer ( CSphSharedBuffer<T> & pBuffer, const char * sExt )
+{
+	if ( !pBuffer.GetLength() )
+		return true;
+
+	CSphAutofile fdBuf ( GetIndexFileName(sExt), SPH_O_READ, m_sLastError );
+	if ( fdBuf.GetFD()<0 )
+		return false;
+
+	if ( !fdBuf.Read ( pBuffer.GetWritePtr(), size_t(pBuffer.GetLength()), m_sLastError ) )
+		return false;
+
+	return true;
+}
+
+
+bool CSphIndex_VLN::Preread ()
+{
+	if ( !m_bPreallocated )
+	{
+		m_sLastError = "INTERNAL ERROR: not preallocated";
+		return false;
+	}
+	if ( m_bPreread[0] )
+	{
+		m_sLastError = "INTERNAL ERROR: already preread";
+		return false;
+	}
+
+	///////////////////
+	// read everything
+	///////////////////
+
+	if ( !PrereadSharedBuffer ( m_pDocinfo, "spa" ) )
+		return false;
+
+	if ( !PrereadSharedBuffer ( m_pMva, "spm" ) )
+		return false;
+
+	if ( !PrereadSharedBuffer ( m_pWordlist, "spi" ) )
+		return false;
+
+	//////////////////////
+	// precalc everything
+	//////////////////////
+
+	// build attributes hash
+	if ( m_pDocinfo.GetLength() )
+	{
+		int iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
+		SphDocID_t uFirst = DOCINFO2ID ( &m_pDocinfo[0] );
+		SphDocID_t uRange = DOCINFO2ID ( &m_pDocinfo[(m_uDocinfo-1)*iStride] ) - uFirst;
+		DWORD iShift = 0;
+		while ( uRange >= (1<<DOCINFO_HASH_BITS) )
+		{
+			iShift++;
+			uRange >>= 1;
+		}
+
+		DWORD uLastHash = 0;
+		DWORD * pHash = m_pDocinfoHash.GetWritePtr();
+		*pHash++ = iShift;
+
+		for ( DWORD i=1; i<m_uDocinfo; i++ )
+		{
+			DWORD uHash = (DWORD)( ( DOCINFO2ID ( &m_pDocinfo[i*iStride] ) - uFirst ) >> iShift );
+			if ( uHash==uLastHash )
+				continue;
+
+			while ( uLastHash<uHash )
+				pHash [ ++uLastHash ] = i;
+
+			uLastHash = uHash;
+		}
+		pHash [ ++uLastHash ] = m_uDocinfo;
+	}
+
+	// paranoid MVA verification
+	#if PARANOID
+	// find out what attrs are MVA
+	CSphVector<int,32> dMvaIndexes;
+	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
+		if ( m_tSchema.GetAttr(i).m_eAttrType & SPH_ATTR_MULTI )
+			dMvaIndexes.Add ( i );
+
+	// for each docinfo entry, verify that MVA attrs point to right storage location
+	int iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
+	for ( DWORD iDoc=0; iDoc<m_uDocinfo; iDoc++ )
+	{
+		DWORD * pEntry = (DWORD *)&m_pDocinfo[iDoc*iStride];
+		SphDocID_t uDocID = DOCINFO2ID(pEntry);
+
+		DWORD uOff = DOCINFO2ATTRS(pEntry) [ dMvaIndexes[0] ];
+		if ( !uOff )
+		{
+			// its either all or nothing
+			ARRAY_FOREACH ( i, dMvaIndexes )
+				assert ( DOCINFO2ATTRS(pEntry) [ dMvaIndexes[i] ]==0 );
+		} else
+		{
+			// check id
+			DWORD * pMva = (DWORD *)&m_pMva[uOff-DOCINFO_IDSIZE];
+			SphDocID_t uMvaID = DOCINFO2ID(pMva);
+			assert ( uDocID==uMvaID );
+
+			// walk the trail
+			ARRAY_FOREACH ( i, dMvaIndexes )
+			{
+				assert ( DOCINFO2ATTRS(pEntry) [ dMvaIndexes[i] ]==uOff );
+				int iCount = m_pMva[uOff];
+				uOff += iCount;
+			}
+		}
+	}
+	#endif // PARANOID
+
+	m_bPreread.GetWritePtr()[0] = 1;
+	return true;
+}
+
+
+void CSphIndex_VLN::SetBase ( const char * sNewBase )
+{
+	m_sFilename = sNewBase;
+}
+
+
+bool CSphIndex_VLN::Rename ( const char * sNewBase )
+{
+	if ( m_sFilename==sNewBase )
+		return true;
+
+	// try to rename everything
+	char sFrom [ SPH_MAX_FILENAME_LEN ];
+	char sTo [ SPH_MAX_FILENAME_LEN ];
+
+	const int EXT_COUNT = 7;
+	const char * sExts[EXT_COUNT] = { "spa", "spd", "sph", "spi", "spl", "spm", "spp" };
+	DWORD uMask = 0;
+
+	int iExt;
+	for ( iExt=0; iExt<EXT_COUNT; iExt++ )
+	{
+		const char * sExt = sExts[iExt];
+		if ( !strcmp ( sExt, "spp" ) && m_uVersion<3 ) // .spp files are v3+
+			continue;
+		if ( !strcmp ( sExt, "spm" ) && m_uVersion<4 ) // .spm files are v4+
+			continue;
+		if ( !strcmp ( sExt, "spl" ) && m_iLockFD<0 ) // .spl files are locks
+			continue;
+
+		snprintf ( sFrom, sizeof(sFrom), "%s.%s", m_sFilename.cstr(), sExt );
+		snprintf ( sTo, sizeof(sTo), "%s.%s", sNewBase, sExt );
+		if ( ::rename ( sFrom, sTo ) )
+		{
+			m_sLastError.SetSprintf ( "rename %s to %s failed: %s", sFrom, sTo, strerror(errno) );
+			break;
+		}
+		uMask |= (1UL<<iExt);
+	}
+
+	// are we good?
+	if ( iExt==EXT_COUNT )
+	{
+		SetBase ( sNewBase );
+		return true;
+	}
+
+	// if there were errors, rollback
+	for ( iExt=0; iExt<EXT_COUNT; iExt++ )
+	{
+		if (!( uMask & (1UL<<iExt) ))
+			continue;
+
+		const char * sExt = sExts[iExt];
+		snprintf ( sFrom, sizeof(sFrom), "%s.%s", sNewBase, sExt );
+		snprintf ( sTo, sizeof(sTo), "%s.%s", m_sFilename.cstr(), sExt );
+		if ( ::rename ( sFrom, sTo ) )
+		{
+			// !COMMIT should handle rollback failures somehow
+		}
+	}
+	return false;
 }
 
 
@@ -9452,8 +9610,11 @@ bool CSphIndex_VLN::QueryEx ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSph
 	float tmQueryStart = sphLongTimer ();
 
 	// open files
-	if ( !m_bPreloaded )
+	if ( m_bPreread.IsEmpty() || !m_bPreread[0] )
+	{
+		m_sLastError = "index not preread";
 		return false;
+	}
 	pResult->m_tSchema = m_tSchema;
 
 	CSphAutofile tDoclist ( GetIndexFileName("spd"), SPH_O_READ, m_sLastError );

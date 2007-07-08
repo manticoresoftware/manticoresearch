@@ -481,18 +481,6 @@ ISphTokenizer * sphConfTokenizer ( const CSphConfigSection & hIndex, CSphString 
 	return pTokenizer;
 }
 
-
-bool sphIsReadable ( const char * sPath )
-{
-	int iFD = ::open ( sPath, O_RDONLY );
-
-	if ( iFD<0 )
-		return false;
-
-	close ( iFD );
-	return true;
-}
-
 //
 // $Id$
 //

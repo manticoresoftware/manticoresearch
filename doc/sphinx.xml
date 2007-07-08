@@ -2059,7 +2059,6 @@ sql_query_info = SELECT * FROM documents WHERE id=$id
 Command which will be executed in xmlpipe mode to obtain documents.
 See <xref linkend="xmlpipe"/> for output format description.
 </para>
-	# xmlpipe_command	= cat @CONFDIR@/test.xml
 <para>
 This option is <emphasis role="bold">mandatory</emphasis>.
 This option only applies to <option>xmlpipe</option> source type.
@@ -2072,6 +2071,7 @@ xmlpipe_command = cat /home/sphinx/test.xml
 
 
 </sect2>
+
 <!--
 <sect2 id="ref-index"><title>Index configuration options</title>
 (to be added)
@@ -2079,10 +2079,55 @@ xmlpipe_command = cat /home/sphinx/test.xml
 <sect2 id="ref-indexer"><title><filename>indexer</filename> program configuration options</title>
 (to be added)
 </sect2>
-<sect2 id="ref-searchd"><title><filename>searchd</filename> program configuration options</title>
-(to be added)
-</sect2>
 -->
+
+<sect2 id="ref-searchd"><title><filename>searchd</filename> program configuration options</title>
+<sect3 id="seamless-rotate"><title>seamless_rotate</title>
+<para>
+This feature prevents short periods of <filename>searchd</filename> being inaccessible
+while rotating indexes with huge attribute and/or dictionary files
+(<filename>.spa</filename> and <filename>.spi</filename> respectively).
+</para>
+<para>
+Normally, rotating an index works as follows:
+<orderedlist>
+<listitem>new queries are temporarly rejected (with "retry" error code);</listitem>
+<listitem><filename>searchd</filename> waits for all currently running queries to finish;</listitem>
+<listitem>old index is deallocated and its files are renamed;</listitem>
+<listitem>new index files are renamed and required RAM is allocated;</listitem>
+<listitem>new index attribute and dictionary data is preloaded to RAM;</listitem>
+<listitem><filename>searchd</filename> resumes serving queries from new index.</listitem>
+</orderedlist>
+</para>
+<para>
+However, if there's a lot of attribute or dictionary data, then preloading step
+could take noticeble time - up to several minutes in case of preloading 1-5+ GB files.
+</para>
+<para>
+With seamless rotate enabled, rotating works as follows:
+<orderedlist>
+<listitem>new index RAM storage is allocated;</listitem>
+<listitem>new index attribute and dictionary data is asynchronously preloaded to RAM;</listitem>
+<listitem>on success, old index is deallocated and both indexes' files are renamed;</listitem>
+<listitem>on failure, new index is deallocated;</listitem>
+<listitem>at any given moment, queries are served either from old or new index copy.</listitem>
+</orderedlist>
+</para>
+<para>
+Seamless rotate comes at the cost of higher <emphasis role="bold">peak</emphasis>
+memory usage during the rotation (because both old and new copies of
+<filename>.spa</filename> and <filename>.spd</filename> data need to be
+in RAM while preloading new copy). Average usage stays the same.
+</para>
+<para>
+This option is optional. Default values is 1, which means to enable seamless rotate.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+seamless_rotate = 1
+</programlisting>
+</sect3>
+</sect2>
 
 </sect1>
 

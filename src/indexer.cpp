@@ -751,12 +751,11 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		//////////
 
 		// if searchd is running, we want to reindex to .tmp files
-		char sIndexPath [ SPH_MAX_FILENAME_LEN ];
-		snprintf ( sIndexPath, sizeof(sIndexPath), g_bRotate ? "%s.tmp" : "%s", hIndex["path"].cstr() );
-		sIndexPath [ sizeof(sIndexPath)-1 ] = '\0';
+		CSphString sIndexPath;
+		sIndexPath.SetSprintf ( g_bRotate ? "%s.tmp" : "%s", hIndex["path"].cstr() );
 
 		// do index
-		CSphIndex * pIndex = sphCreateIndexPhrase ( sIndexPath );
+		CSphIndex * pIndex = sphCreateIndexPhrase ( sIndexPath.cstr() );
 		assert ( pIndex );
 
 		// check lock file
@@ -769,41 +768,17 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		pIndex->SetProgressCallback ( ShowProgress );
 		pIndex->SetInfixIndexing ( bPrefixesOnly, iMinInfixLen );
 
-		if ( pIndex->Build ( pDict, dSources, g_iMemLimit, eDocinfo ) )
+		bOK = pIndex->Build ( pDict, dSources, g_iMemLimit, eDocinfo )!=0;
+		if ( bOK && g_bRotate )
 		{
-			// if searchd is running, rename .tmp to .new which searchd will pick up
-			while ( g_bRotate )
-			{
-				const char * sPath = hIndex["path"].cstr();
-				char sFrom [ SPH_MAX_FILENAME_LEN ];
-				char sTo [ SPH_MAX_FILENAME_LEN ];
-
-				int iExt;
-				for ( iExt=0; iExt<EXT_COUNT; iExt++ )
-				{
-					snprintf ( sFrom, sizeof(sFrom), "%s.tmp.%s", sPath, g_dExt[iExt] );
-					sFrom [ sizeof(sFrom)-1 ] = '\0';
-
-					snprintf ( sTo, sizeof(sTo), "%s.new.%s", sPath, g_dExt[iExt] );
-					sTo [ sizeof(sTo)-1 ] = '\0';
-
-					if ( rename ( sFrom, sTo ) )
-					{
-						fprintf ( stdout, "WARNING: index '%s': rename '%s' to '%s' failed: %s",
-							sIndexName, sFrom, sTo, strerror(errno) );
-						break;
-					}
-				}
-
-				// all good?
-				if ( iExt==EXT_COUNT )
-					bOK = true;
-				break;
-			}
-		} else
-		{
-			fprintf ( stdout, "ERROR: index '%s': %s.\n", sIndexName, pIndex->GetLastError().cstr() );
+			sIndexPath.SetSprintf ( "%s.new", hIndex["path"].cstr() );
+			bOK = pIndex->Rename ( sIndexPath.cstr() );
 		}
+
+		if ( !bOK )
+			fprintf ( stdout, "ERROR: index '%s': %s.\n", sIndexName, pIndex->GetLastError().cstr() );
+
+		pIndex->Unlock ();
 
 		SafeDelete ( pIndex );
 		SafeDelete ( pDict );

@@ -49,7 +49,7 @@ am__CONFIG_DISTCLEAN_FILES = config.status config.cache config.log \
  configure.lineno configure.status.lineno
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/config/config.h
-CONFIG_CLEAN_FILES = sphinx.conf
+CONFIG_CLEAN_FILES = sphinx.conf.dist
 SOURCES =
 DIST_SOURCES =
 RECURSIVE_TARGETS = all-recursive check-recursive dvi-recursive \
@@ -179,7 +179,7 @@ target_alias = @target_alias@
 @USE_LIBSTEMMER_FALSE@SUBDIRS = src
 @USE_LIBSTEMMER_TRUE@SUBDIRS = libstemmer_c src
 EXTRA_DIST = api storage sphinx.conf.in example.sql
-sysconf_DATA = sphinx.conf example.sql
+sysconf_DATA = sphinx.conf.dist example.sql
 all: all-recursive
 
 .SUFFIXES:
@@ -233,7 +233,7 @@ $(top_srcdir)/config/config.h.in: @MAINTAINER_MODE_TRUE@ $(am__configure_deps)
 
 distclean-hdr:
 	-rm -f config/config.h config/stamp-h1
-sphinx.conf: $(top_builddir)/config.status $(srcdir)/sphinx.conf.in
+sphinx.conf.dist: $(top_builddir)/config.status $(srcdir)/sphinx.conf.in
 	cd $(top_builddir) && $(SHELL) ./config.status $@
 uninstall-info-am:
 install-sysconfDATA: $(sysconf_DATA)

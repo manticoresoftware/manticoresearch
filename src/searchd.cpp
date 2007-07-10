@@ -4425,6 +4425,20 @@ int main ( int argc, char **argv )
 		dup2 ( iDevNull, STDERR_FILENO );
 		g_bLogStdout = false;
 
+		// explicitly unlock everything in parent immediately before fork
+		//
+		// there's a race in case another instance is started before
+		// child re-acquires all locks; but let's hope that's rare
+		g_hIndexes.IterateStart ();
+		while ( g_hIndexes.IterateNext () )
+		{
+			ServedIndex_t & tServed = g_hIndexes.IterateGet ();
+			if ( tServed.m_bEnabled )
+				tServed.m_pIndex->Unlock();
+		}
+
+		sphLockUn ( iPidFD );
+
 		#if !USE_WINDOWS
 		switch ( fork() )
 		{

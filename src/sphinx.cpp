@@ -2998,7 +2998,7 @@ inline int sphUTF8Decode ( BYTE * & pBuf )
 	} while ( iBytes );
 
 	// all good
-	return v;
+	return iCode;
 }
 
 

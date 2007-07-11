@@ -9640,9 +9640,10 @@ bool CSphIndex_VLN::Preread ()
 			uRange >>= 1;
 		}
 
-		DWORD uLastHash = 0;
 		DWORD * pHash = m_pDocinfoHash.GetWritePtr();
 		*pHash++ = iShift;
+		*pHash = 0;
+		DWORD uLastHash = 0;
 
 		for ( DWORD i=1; i<m_uDocinfo; i++ )
 		{

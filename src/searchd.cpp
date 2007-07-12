@@ -4363,7 +4363,7 @@ int main ( int argc, char **argv )
 				sphWarning ( "index '%s': %s", sIndexName, sWarning.cstr() );
 
 			// try to lock it
-			if ( !tIdx.m_pIndex->Lock() )
+			if ( !bOptConsole && !tIdx.m_pIndex->Lock() )
 			{
 				sphWarning ( "index '%s': lock: %s; NOT SERVING", sIndexName, tIdx.m_pIndex->GetLastError().cstr() );
 				continue;

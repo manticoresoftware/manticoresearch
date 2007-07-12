@@ -1380,6 +1380,14 @@ ISphMatchSorter *	sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 /// convert queue to sorted array, and add its entries to result's matches array
 void				sphFlattenQueue ( ISphMatchSorter * pQueue, CSphQueryResult * pResult, int iTag );
 
+/////////////////////////////////////////////////////////////////////////////
+
+/// callback type
+typedef void		(*SphErrorCallback_fn) ( const char * );
+
+/// register application-level internal error callback
+void				sphSetInternalErrorCallback ( SphErrorCallback_fn fnCallback );
+
 #endif // _sphinx_
 
 //

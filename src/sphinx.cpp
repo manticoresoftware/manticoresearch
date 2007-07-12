@@ -97,7 +97,8 @@ const char		MAGIC_WORD_TAIL				= 1;
 
 /////////////////////////////////////////////////////////////////////////////
 
-static bool		g_bSphQuiet		= false;
+static bool					g_bSphQuiet					= false;
+static SphErrorCallback_fn	g_pInternalErrorCallback	= NULL;
 
 /////////////////////////////////////////////////////////////////////////////
 // COMPILE-TIME CHECKS
@@ -1618,6 +1619,7 @@ public:
 	SphOffset_t				Tell () const				{ return m_iPos + m_iBuffPos; }
 	bool					GetErrorFlag () const		{ return m_bError; }
 	const CSphString &		GetErrorMessage () const	{ return m_sError; }
+	const CSphString &		GetFilename() const			{ return m_sFilename; }
 
 #if USE_64BIT
 	SphDocID_t	GetDocid ()		{ return GetOffset(); }
@@ -2422,6 +2424,27 @@ bool sphIsReadable ( const char * sPath, CSphString * pError )
 
 	close ( iFD );
 	return true;
+}
+
+
+void sphInternalError ( const char * sTemplate, ... )
+{
+	if ( !g_pInternalErrorCallback )
+		return;
+
+	char sBuf [ 1024 ];
+	va_list ap;
+	va_start ( ap, sTemplate );
+	vsnprintf ( sBuf, sizeof(sBuf), sTemplate, ap );
+	va_end ( ap );
+
+	g_pInternalErrorCallback ( sBuf );
+}
+
+
+void sphSetInternalErrorCallback ( void (*fnCallback) ( const char * ) )
+{
+	g_pInternalErrorCallback = fnCallback;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -8660,7 +8683,18 @@ CSphMatch * CSphExtendedEvalAtom::GetNextDoc ( SphDocID_t iMinID )
 			while ( m_dTerms[i].m_iHitPos<uMinHitpos )
 			{
 				m_dTerms[i].GetHitlistEntry ();
-				assert ( m_dTerms[i].m_iHitPos );
+
+				// broken hitlist protection
+				if ( !m_dTerms[i].m_iHitPos )
+				{
+					if ( m_dTerms[i].m_rdHitlist.GetErrorFlag() )
+						sphInternalError ( "%s", m_dTerms[i].m_rdHitlist.GetErrorMessage().cstr() );
+					else
+						sphInternalError ( "unexpected hitlist end (word=%s, hitlist=%s, docid=" DOCID_FMT ")",
+							m_dTerms[i].m_sWord.cstr(), m_dTerms[i].m_rdHitlist.GetFilename().cstr(),
+							m_dTerms[i].m_tDoc.m_iDocID );
+					return NULL; 
+				}
 			}
 
 			// according to fields mask, there should be at least one hit, so check it

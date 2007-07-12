@@ -282,6 +282,12 @@ void sphInfo ( const char * sFmt, ... )
 	va_end ( ap );
 }
 
+
+void LogInternalError ( const char * sError )
+{
+	sphWarning(  "INTERNAL ERROR: %s", sError );
+}
+
 /////////////////////////////////////////////////////////////////////////////
 
 struct StrBuf_t
@@ -4517,6 +4523,8 @@ int main ( int argc, char **argv )
 
 	g_bHeadDaemon = true;
 	sphInfo ( "accepting connections" );
+
+	sphSetInternalErrorCallback ( LogInternalError );
 
 	for ( ;; )
 	{

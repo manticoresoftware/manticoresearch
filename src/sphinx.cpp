@@ -10606,47 +10606,109 @@ const char * CSphHTMLStripper::SetAttrs ( const char * sConfig )
 }
 
 
-BYTE * RemoveQuoted ( BYTE * p )
+const BYTE * SkipQuoted ( const BYTE * p )
 {
-	BYTE cEnd = *p;
-	*p++ = ' ';
+	BYTE cEnd = *p++; // either apostrophe or quote
 	while ( *p && *p!=cEnd )
-		*p++ = ' ';
+		p++;
 	if ( *p==cEnd )
-		*p++ = ' ';
+		p++;
 	return p;
 }
 
 
+struct HtmlEntity_t
+{
+	const char *	m_sEntity;
+	int				m_iLen;
+	BYTE			m_cStripped;
+};
+
+
+static const HtmlEntity_t g_dHtmlEntities[] =
+{
+	{ "&amp;",		5,	'&' },
+	{ "&lt;",		4,	'<' },
+	{ "&gt;",		4,	'>' },
+	{ "&quot;",		6,	'"' },
+	{ "&apos;",		6,	'\'' }
+};
+static const int g_iHtmlEntities = sizeof(g_dHtmlEntities)/sizeof(HtmlEntity_t);
+
+
 BYTE * CSphHTMLStripper::Strip ( BYTE * sData )
 {
-	BYTE * p = sData;
+	const BYTE * s = sData;
+	BYTE * d = sData;
 	for ( ;; )
 	{
-		// scan for tag beginning
-		while ( *p && *p!='<' ) p++;
-		if ( !*p ) break;
+		// scan until eof, or tag, or entity
+		while ( *s && *s!='<' && *s!='&' )
+			*d++ = *s++;
+		if ( !*s )
+			break;
 
-		if ( !isalpha(p[1]) && p[1]!='/' && p[1]!='!' )
+		// handle entity
+		if ( *s=='&' )
 		{
-			p++;
+			if ( s[1]=='#' )
+			{
+				// handle "&#number;" form
+				int iCode = 0;
+				s += 2;
+				while ( isdigit(*s) )
+					iCode = iCode*10 + (*s++) - '0';
+
+				if ( iCode==0 || *s!=';' )
+					continue;
+
+				d += sphUTF8Encode ( d, iCode );
+				s++;
+
+			} else
+			{
+				// handle known list
+				// FIXME! add bigger table and hashed search here
+				int i;
+				for ( i=0; i<g_iHtmlEntities; i++ )
+					if ( strncmp ( (const char*)s, g_dHtmlEntities[i].m_sEntity, g_dHtmlEntities[i].m_iLen )==0 )
+				{
+					*d++ = g_dHtmlEntities[i].m_cStripped;
+					s += g_dHtmlEntities[i].m_iLen;
+					break;
+				}
+				if ( i==g_iHtmlEntities )
+				{
+					// unknown entity
+					*d++ = *s++;
+				}
+			}
 			continue;
 		}
-		*p++ = ' '; // remove '<'
+
+		// handle tag
+		assert ( *s=='<' );
+		if ( !isalpha(s[1]) && s[1]!='/' && s[1]!='!' )
+		{
+			*d++ = *s++;
+			continue;
+		}
+		s++; // skip '<'
 
 		// check if it's a comment
-		if ( p[0]=='!' && p[1]=='-' && p[2]=='-' )
+		if ( s[0]=='!' && s[1]=='-' && s[2]=='-' )
 		{
 			// scan until comment end
-			p[0] = p[1] = p[2] = ' '; p += 3; // clear closing '!--'
-			while ( *p )
+			s += 3; // skip opening '!--'
+			while ( *s )
 			{
-				if ( p[0]=='-' && p[1]=='-' && p[2]=='>' )
+				if ( s[0]=='-' && s[1]=='-' && s[2]=='>' )
 					break;
-				*p++ = ' ';
+				s++;
 			}
-			if ( !*p ) break;
-			p[0] = p[1] = p[2] = ' '; p += 3; // clear closing '-->'
+			if ( !*s )
+				break;
+			s += 3; // skip closing '-->'
 			continue;
 		}
 
@@ -10656,9 +10718,9 @@ BYTE * CSphHTMLStripper::Strip ( BYTE * sData )
 		for ( pTag=m_pTags; pTag; pTag=pTag->m_pNext )
 		{
 			iLen = (int)strlen(pTag->m_sTag); // OPTIMIZE! cache strlen() result
-			if ( strncasecmp ( pTag->m_sTag, (char*)p, iLen ) )
+			if ( strncasecmp ( pTag->m_sTag, (const char*)s, iLen ) )
 				continue;
-			if ( !isalpha ( p[iLen] ) )
+			if ( !isalpha ( s[iLen] ) )
 				break;
 		}
 
@@ -10666,38 +10728,39 @@ BYTE * CSphHTMLStripper::Strip ( BYTE * sData )
 		if ( !pTag )
 		{
 			// we just scan until EOLN or tag end
-			while ( *p && *p!='>' )
+			while ( *s && *s!='>' )
 			{
-				if ( *p=='\'' || *p=='"' )
-					p = RemoveQuoted ( p );
+				if ( *s=='\'' || *s=='"' )
+					s = SkipQuoted ( s );
 				else
-					*p++ = ' ';
+					s++;
 			}
-			if ( *p ) *p++ = ' ';
-			continue;;
+			if ( *s )
+				s++;
+			continue;
 		}
 
 		// remove tag name
-		while ( iLen-- ) *p++ = ' ';
-		assert ( !isalpha(*p) );
+		while ( iLen-- ) s++;
+		assert ( !isalpha(*s) );
 
-		while ( *p && *p!='>' )
+		while ( *s && *s!='>' )
 		{
 			// skip non-alphas
-			while ( *p && *p!='>' )
+			while ( *s && *s!='>' )
 			{
-				if ( *p=='\'' || *p=='"' )
+				if ( *s=='\'' || *s=='"' )
 				{
-					p = RemoveQuoted ( p );
-					while ( isspace(*p) ) p++;
+					s = SkipQuoted ( s );
+					while ( isspace(*s) ) s++;
 				}
-				if ( isalpha(*p) )
+				if ( isalpha(*s) )
 					break;
-				*p++ = ' ';
+				s++;
 			}
-			if ( !isalpha(*p) )
+			if ( !isalpha(*s) )
 			{
-				if ( *p ) *p++ = ' ';
+				if ( *s ) s++;
 				break;
 			}
 
@@ -10707,48 +10770,44 @@ BYTE * CSphHTMLStripper::Strip ( BYTE * sData )
 			for ( pAttr=pTag->m_pAttrs; pAttr; pAttr=pAttr->m_pNext )
 			{
 				iLen2 = (int)strlen(pAttr->m_sAttr); // OPTIMIZE! cache strlen() result
-				if ( strncasecmp ( pAttr->m_sAttr, (char*)p, iLen2 ) )
+				if ( strncasecmp ( pAttr->m_sAttr, (const char*)s, iLen2 ) )
 					continue;
-				if ( p[iLen2]=='=' || isspace(p[iLen2]) )
+				if ( s[iLen2]=='=' || isspace(s[iLen2]) )
 					break;
 			}
 
 			// if attribute is unknown or malformed, we just skip all alphas and rescan
 			if ( !pAttr )
 			{
-				while ( isalpha(*p) ) *p++ = ' ';
+				while ( isalpha(*s) ) s++;
 				continue;
 			}
 
 			// attribute is known
-			while ( iLen2-- ) *p++ = ' ';
+			while ( iLen2-- ) s++;
 
 			// skip spaces, check for '=', and skip spaces again
-			while ( isspace(*p) ) p++; if ( !*p ) break;
-			if ( *p!='=' )
-			{
-				*p++ = ' ';
-				break;
-			}
-			*p++ = ' ';
-			while ( isspace(*p) ) p++;
+			while ( isspace(*s) ) s++; if ( !*s ) break;
+			if ( *s++!='=' ) break;
+			while ( isspace(*s) ) s++;
 
 			// handle quoted value
-			if ( *p=='\'' || *p=='"' )
+			if ( *s=='\'' || *s=='"' )
 			{
-				char cEnd = *p;
-				*p++ = ' ';
-				while ( *p && *p!=cEnd ) p++;
-				if ( *p==cEnd ) *p++ = ' ';
+				char cEnd = *s;
+				s++;
+				while ( *s && *s!=cEnd ) *d++ = *s++;
+				if ( *s==cEnd ) s++;
 				continue;
 			}
 
 			// handle unquoted value
-			while ( *p && !isspace(*p) && *p!='>' ) p++;
+			while ( *s && !isspace(*s) && *s!='>' ) *d++ = *s++;
 		}
-		if ( *p=='>' ) *p++ = ' ';
+		if ( *s=='>' ) s++;
 	}
 
+	*d++ = '\0';
 	return sData;
 }
 

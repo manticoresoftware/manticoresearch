@@ -59,13 +59,13 @@
 #define SPHINXSE_MAX_ALLOC			(16*1024*1024)
 
 // FIXME! all the following is cut-n-paste from sphinx.h and searchd.cpp
-#define SPHINX_VERSION		"0.9.7"
+#define SPHINX_VERSION		"0.9.8"
 
 enum
 {
 	SPHINX_SEARCHD_PROTO	= 1,
 	SEARCHD_COMMAND_SEARCH	= 0,
-	VER_COMMAND_SEARCH		= 0x109	,
+	VER_COMMAND_SEARCH		= 0x10B,
 };
 
 /// search query sorting orders
@@ -343,8 +343,13 @@ private:
 	ESphGroupBy		m_eGroupFunc;
 	char *			m_sGroupBy;
 	char *			m_sGroupSortBy;
-
 	int				m_iCutoff;
+	int				m_iRetryCount;
+	int				m_iRetryDelay;
+	char *			m_sGroupDistinct;							///< points to query buffer; do NOT delete
+	int				m_iIndexWeights;
+	char *			m_sIndexWeight[SPHINXSE_MAX_FILTERS];		///< points to query buffer; do NOT delete
+	int				m_iIndexWeight[SPHINXSE_MAX_FILTERS];
 
 public:
 	char			m_sParseError[256];
@@ -928,6 +933,10 @@ CSphSEQuery::CSphSEQuery ( const char * sQuery, int iLength, const char * sIndex
 	, m_sGroupBy ( "" )
 	, m_sGroupSortBy ( "@group desc" )
 	, m_iCutoff ( 0 )
+	, m_iRetryCount ( 0 )
+	, m_iRetryDelay ( 0 )
+	, m_sGroupDistinct ( "" )
+	, m_iIndexWeights ( 0 )
 
 	, m_pBuf ( NULL )
 	, m_pCur ( NULL )
@@ -938,7 +947,6 @@ CSphSEQuery::CSphSEQuery ( const char * sQuery, int iLength, const char * sIndex
 	memcpy ( m_sQueryBuffer, sQuery, iLength );
 	m_sQueryBuffer[iLength]= ';';
 	m_sQueryBuffer[iLength+1]= '\0';
-
 }
 
 
@@ -1064,6 +1072,7 @@ bool CSphSEQuery::ParseField ( char * sField )
 	else if ( !strcmp ( sName, "maxid" ) )		m_iMaxID = iValue;
 	else if ( !strcmp ( sName, "maxmatches" ) )	m_iMaxMatches = iValue;
 	else if ( !strcmp ( sName, "groupsort" ) )	m_sGroupSortBy = sValue;
+	else if ( !strcmp ( sName, "distinct" ) )	m_sGroupDistinct = sValue;
 	else if ( !strcmp ( sName, "cutoff" ) )		m_iCutoff = iValue;
 
 	else if ( !strcmp ( sName, "mode" ) )
@@ -1203,6 +1212,50 @@ bool CSphSEQuery::ParseField ( char * sField )
 			break;
 		}
 
+	} else if ( !strcmp ( sName, "indexweights" ) )
+	{
+		m_iIndexWeights = 0;
+
+		char * p = sValue;
+		while ( *p && m_iIndexWeights<SPHINXSE_MAX_FILTERS )
+		{
+			// extract attr name
+			if ( !myisattr(*p) )
+			{
+				snprintf ( m_sParseError, sizeof(m_sParseError), "indexweights: index name expected near '%s'", p );
+				SPH_RET(false);
+			}
+
+			m_sIndexWeight[m_iIndexWeights] = p;
+			while ( myisattr(*p) ) p++;
+
+			if ( *p!=',' )
+			{
+				snprintf ( m_sParseError, sizeof(m_sParseError), "indexweights: comma expected near '%s'", p );
+				SPH_RET(false);
+			}
+			*p++ = '\0';
+
+			// extract attr value
+			char * sVal = p;
+			while ( isdigit(*p) ) p++;
+			if ( p==sVal )
+			{
+				snprintf ( m_sParseError, sizeof(m_sParseError), "indexweights: integer weight expected near '%s'", sVal );
+				SPH_RET(false);
+			}
+			m_iIndexWeight[m_iIndexWeights] = atoi(sVal);
+			m_iIndexWeights++;
+
+			if ( !*p )  break;
+			if ( *p!=',' )
+			{
+				snprintf ( m_sParseError, sizeof(m_sParseError), "indexweights: comma expected near '%s'", p );
+				SPH_RET(false);
+			}
+			p++;
+		}
+
 	} else
 	{
 		snprintf ( m_sParseError, sizeof(m_sParseError), "unknown parameter '%s'", sName );
@@ -1257,13 +1310,13 @@ int CSphSEQuery::BuildRequest ( char ** ppBuffer )
 	SPH_ENTER_METHOD();
 
 	// calc request length
-	int iReqSize = 76 + 4*m_iWeights
+	int iReqSize = 88 + 4*m_iWeights
 		+ strlen ( m_sSortBy )
 		+ strlen ( m_sQuery )
 		+ strlen ( m_sIndex )
 		+ strlen ( m_sGroupBy )
-		+ strlen ( m_sGroupSortBy );
-
+		+ strlen ( m_sGroupSortBy )
+		+ strlen ( m_sGroupDistinct );
 	for ( int i=0; i<m_iFilters; i++ )
 	{
 		const CSphSEFilter & tFilter = m_dFilters[i];
@@ -1273,6 +1326,11 @@ int CSphSEQuery::BuildRequest ( char ** ppBuffer )
 			+ 4*tFilter.m_iValues
 			+ ( tFilter.m_iValues ? 0 : 8 );
 	}
+
+#if 0
+	for ( int i=0; i<m_iIndexWeights; i++ ) // 1.12+
+		iReqSize += 8 + strlen(m_sIndexWeight[i] );
+#endif
 
 	m_iBufLeft = 0;
 	SafeDeleteArray ( m_pBuf );
@@ -1325,7 +1383,19 @@ int CSphSEQuery::BuildRequest ( char ** ppBuffer )
 	SendString ( m_sGroupBy );
 	SendInt ( m_iMaxMatches );
 	SendString ( m_sGroupSortBy );
-	SendInt ( m_iCutoff );
+	SendInt ( m_iCutoff ); // 1.9+
+	SendInt ( m_iRetryCount ); // 1.10+
+	SendInt ( m_iRetryDelay );
+	SendString ( m_sGroupDistinct ); // 1.11+
+
+#if 0
+	SendInt ( m_iIndexWeights );
+	for ( int i=0; i<m_iIndexWeights; i++ ) // 1.12+
+	{
+		SendString ( m_sIndexWeight[i] );
+		SendInt ( m_iIndexWeight[i] );
+	}
+#endif
 
 	// detect buffer overruns and underruns, and report internal error
 	if ( m_bBufOverrun || m_iBufLeft!=0 || m_pCur-m_pBuf!=iReqSize )

@@ -446,10 +446,10 @@ static HASH			sphinx_open_tables;	// hash used to track open tables
 //////////////////////////////////////////////////////////////////////////////
 
 // hashing function
-static byte * sphinx_get_key ( CSphSEShare * pShare, uint * pLength, my_bool )
+static uchar * sphinx_get_key ( CSphSEShare * pShare, uint * pLength, my_bool )
 {
 	*pLength = pShare->m_iTableNameLen;
-	return (byte*) pShare->m_sTable;
+	return (uchar*) pShare->m_sTable;
 }
 
 
@@ -849,7 +849,7 @@ static CSphSEShare * get_share ( const char * table_name, TABLE * table )
 	for ( ;; )
 	{
 		// check if we already have this share
-		pShare = (CSphSEShare*) hash_search ( &sphinx_open_tables, (byte*)table_name, strlen(table_name) );
+		pShare = (CSphSEShare*) hash_search ( &sphinx_open_tables, (uchar*)table_name, strlen(table_name) );
 		if ( pShare )
 		{
 			pShare->m_iUseCount++;
@@ -871,7 +871,7 @@ static CSphSEShare * get_share ( const char * table_name, TABLE * table )
 		// try to hash it
 		pShare->m_iTableNameLen = strlen(table_name);
 		pShare->m_sTable = sphDup ( table_name );
-		if ( my_hash_insert ( &sphinx_open_tables, (byte*) pShare ) )
+		if ( my_hash_insert ( &sphinx_open_tables, (uchar*) pShare ) )
 		{
 			SafeDelete ( pShare );
 			break;
@@ -895,7 +895,7 @@ static int free_share ( CSphSEShare * pShare )
 
 	if ( !--pShare->m_iUseCount )
 	{
-		hash_delete ( &sphinx_open_tables, (byte*) pShare );
+		hash_delete ( &sphinx_open_tables, (uchar*) pShare );
 		SafeDelete ( pShare );
 	}
 
@@ -1572,21 +1572,21 @@ int ha_sphinx::close()
 }
 
 
-int ha_sphinx::write_row ( byte * )
+int ha_sphinx::write_row ( uchar * )
 {
 	SPH_ENTER_METHOD();
 	SPH_RET ( HA_ERR_WRONG_COMMAND );
 }
 
 
-int ha_sphinx::update_row ( const byte *, byte * )
+int ha_sphinx::update_row ( const uchar *, uchar * )
 {
 	SPH_ENTER_METHOD();
 	SPH_RET ( HA_ERR_WRONG_COMMAND );
 }
 
 
-int ha_sphinx::delete_row ( const byte * )
+int ha_sphinx::delete_row ( const uchar * )
 {
 	SPH_ENTER_METHOD();
 	SPH_RET ( HA_ERR_WRONG_COMMAND );
@@ -1775,7 +1775,7 @@ bool ha_sphinx::UnpackStats ( CSphSEStats * pStats )
 // Positions an index cursor to the index specified in the handle. Fetches the
 // row if available. If the key value is null, begin at the first key of the
 // index.
-int ha_sphinx::index_read ( byte * buf, const byte * key, uint key_len, enum ha_rkey_function )
+int ha_sphinx::index_read ( uchar * buf, const uchar * key, uint key_len, enum ha_rkey_function )
 {
 	SPH_ENTER_METHOD();
 	char sError[256];
@@ -1924,7 +1924,7 @@ int ha_sphinx::index_read ( byte * buf, const byte * key, uint key_len, enum ha_
 
 // Positions an index cursor to the index specified in key. Fetches the
 // row if any. This is only used to read whole keys.
-int ha_sphinx::index_read_idx ( byte *, uint, const byte *, uint, enum ha_rkey_function )
+int ha_sphinx::index_read_idx ( uchar *, uint, const uchar *, uint, enum ha_rkey_function )
 {
 	SPH_ENTER_METHOD();
 	SPH_RET ( HA_ERR_WRONG_COMMAND );
@@ -1932,21 +1932,21 @@ int ha_sphinx::index_read_idx ( byte *, uint, const byte *, uint, enum ha_rkey_f
 
 
 // Used to read forward through the index.
-int ha_sphinx::index_next ( byte * buf )
+int ha_sphinx::index_next ( uchar * buf )
 {
 	SPH_ENTER_METHOD();
 	SPH_RET ( get_rec ( buf, m_pCurrentKey, m_iCurrentKeyLen ) );
 }
 
 
-int ha_sphinx::index_next_same ( byte * buf, const byte * key, uint keylen )
+int ha_sphinx::index_next_same ( uchar * buf, const uchar * key, uint keylen )
 {
 	SPH_ENTER_METHOD();
 	SPH_RET ( get_rec ( buf, key, keylen ) );
 }
 
 
-int ha_sphinx::get_rec ( byte * buf, const byte * key, uint keylen )
+int ha_sphinx::get_rec ( uchar * buf, const uchar * key, uint keylen )
 {
 	SPH_ENTER_METHOD();
 
@@ -2023,7 +2023,7 @@ int ha_sphinx::get_rec ( byte * buf, const byte * key, uint keylen )
 
 
 // Used to read backwards through the index.
-int ha_sphinx::index_prev ( byte * )
+int ha_sphinx::index_prev ( uchar * )
 {
 	SPH_ENTER_METHOD();
 	SPH_RET ( HA_ERR_WRONG_COMMAND );
@@ -2034,7 +2034,7 @@ int ha_sphinx::index_prev ( byte * )
 //
 // Called from opt_range.cc, opt_sum.cc, sql_handler.cc,
 // and sql_select.cc.
-int ha_sphinx::index_first ( byte * )
+int ha_sphinx::index_first ( uchar * )
 {
 	SPH_ENTER_METHOD();
 	SPH_RET ( HA_ERR_END_OF_FILE );
@@ -2044,7 +2044,7 @@ int ha_sphinx::index_first ( byte * )
 //
 // Called from opt_range.cc, opt_sum.cc, sql_handler.cc,
 // and sql_select.cc.
-int ha_sphinx::index_last ( byte * )
+int ha_sphinx::index_last ( uchar * )
 {
 	SPH_ENTER_METHOD();
 	SPH_RET ( HA_ERR_WRONG_COMMAND );
@@ -2065,14 +2065,14 @@ int ha_sphinx::rnd_end()
 }
 
 
-int ha_sphinx::rnd_next ( byte * )
+int ha_sphinx::rnd_next ( uchar * )
 {
 	SPH_ENTER_METHOD();
 	SPH_RET ( HA_ERR_END_OF_FILE );
 }
 
 
-void ha_sphinx::position ( const byte * )
+void ha_sphinx::position ( const uchar * )
 {
 	SPH_ENTER_METHOD();
 	SPH_VOID_RET();
@@ -2084,7 +2084,7 @@ void ha_sphinx::position ( const byte * )
 // ref. You can use ha_get_ptr(pos,ref_length) to retrieve whatever key
 // or position you saved when position() was called.
 // Called from filesort.cc records.cc sql_insert.cc sql_select.cc sql_update.cc.
-int ha_sphinx::rnd_pos ( byte *, byte * )
+int ha_sphinx::rnd_pos ( uchar *, uchar * )
 {
 	SPH_ENTER_METHOD();
 	SPH_RET ( HA_ERR_WRONG_COMMAND );

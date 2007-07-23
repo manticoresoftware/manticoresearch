@@ -33,7 +33,7 @@ protected:
 	int				m_iStartOfScan;
 	uint			m_iMatchesTotal;
 	uint			m_iCurrentPos;
-	const byte *	m_pCurrentKey;
+	const uchar *	m_pCurrentKey;
 	uint			m_iCurrentKeyLen;
 
 	char *			m_pResponse;			///< searchd response storage
@@ -78,27 +78,27 @@ public:
 	int				open ( const char * name, int mode, uint test_if_locked );
 	int				close ();
 
-	int				write_row ( byte * buf );
-	int				update_row ( const byte * old_data, byte * new_data );
-	int				delete_row ( const byte * buf );
+	int				write_row ( uchar * buf );
+	int				update_row ( const uchar * old_data, uchar * new_data );
+	int				delete_row ( const uchar * buf );
 
 	int				index_init ( uint keynr, bool sorted ); 
 	int				index_end (); 
-	int				index_read ( byte * buf, const byte * key, uint key_len, enum ha_rkey_function find_flag );
-	int				index_read_idx ( byte * buf, uint idx, const byte * key, uint key_len, enum ha_rkey_function find_flag );
-	int				index_next ( byte * buf );
-	int				index_next_same ( byte * buf, const byte * key, uint keylen );
-	int				index_prev ( byte * buf );
-	int				index_first ( byte * buf );
-	int				index_last ( byte * buf );
+	int				index_read ( uchar * buf, const uchar * key, uint key_len, enum ha_rkey_function find_flag );
+	int				index_read_idx ( uchar * buf, uint idx, const uchar * key, uint key_len, enum ha_rkey_function find_flag );
+	int				index_next ( uchar * buf );
+	int				index_next_same ( uchar * buf, const uchar * key, uint keylen );
+	int				index_prev ( uchar * buf );
+	int				index_first ( uchar * buf );
+	int				index_last ( uchar * buf );
 
-	int				get_rec ( byte * buf, const byte * key, uint keylen );
+	int				get_rec ( uchar * buf, const uchar * key, uint keylen );
 
 	int				rnd_init ( bool scan );
 	int				rnd_end ();
-	int				rnd_next ( byte * buf );
-	int				rnd_pos ( byte * buf, byte * pos );
-	void			position ( const byte * record );
+	int				rnd_next ( uchar * buf );
+	int				rnd_pos ( uchar * buf, uchar * pos );
+	void			position ( const uchar * record );
 
 #if MYSQL_VERSION_ID>=50030
 	int				info ( uint );

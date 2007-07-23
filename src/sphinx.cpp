@@ -9607,7 +9607,9 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString * sWarning 
 		return NULL;
 
 	assert ( iCheckpointsPos>0 && iCheckpointsPos<INT_MAX );
-	m_pWordlistCheckpoints = (CSphWordlistCheckpoint *)( &m_pWordlist[int(iCheckpointsPos)] );
+	m_pWordlistCheckpoints = ( iCheckpointsPos>=iWordlistLen )
+		? NULL
+		: (CSphWordlistCheckpoint *)( &m_pWordlist[int(iCheckpointsPos)] );
 
 	// all done
 	m_bPreallocated = true;

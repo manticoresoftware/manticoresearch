@@ -1969,7 +1969,11 @@ int ha_sphinx::get_rec ( uchar * buf, const uchar * key, uint keylen )
 
 	field[0]->store ( uMatchID, 1 );
 	field[1]->store ( uMatchWeight, 1 );
+	#if MYSQL_VERSION_ID>=50120
+	field[2]->set_key_image ( key, keylen ); // store requested query. it's necessary, otherwise mysql goes crazy
+	#else
 	field[2]->set_key_image ( (char*)key, keylen ); // store requested query. it's necessary, otherwise mysql goes crazy
+	#endif
 
 	for ( uint32 i=0; i<m_iAttrs; i++ )
 	{

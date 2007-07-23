@@ -1245,7 +1245,7 @@ public:
 	/// ctor
 	CSphKBufferGroupSorter ( const CSphQuery * pQuery ) // FIXME! make k configurable
 		: CSphMatchQueueTraits ( pQuery->m_iMaxMatches*GROUPBY_FACTOR, true )
-		, m_iRowitems		( pQuery->m_iRowitems )
+		, m_iRowitems		( pQuery->m_iRealRowitems )
 		, m_eGroupBy		( pQuery->m_eGroupFunc )
 		, m_iGroupbyOffset	( pQuery->m_iGroupbyOffset )
 		, m_iGroupbyCount	( pQuery->m_iGroupbyCount )
@@ -3620,7 +3620,7 @@ CSphQuery::CSphQuery ()
 	, m_iRetryCount	( 0 )
 	, m_iRetryDelay	( 0 )
 
-	, m_iRowitems		( -1 )
+	, m_iRealRowitems	( -1 )
 	, m_iGroupbyOffset	( -1 )
 	, m_iGroupbyCount	( -1 )
 	, m_iDistinctOffset	( -1 )
@@ -3636,7 +3636,7 @@ CSphQuery::~CSphQuery ()
 
 bool CSphQuery::SetSchema ( const CSphSchema & tSchema, CSphString & sError )
 {
-	m_iRowitems = tSchema.GetRowSize();
+	m_iRealRowitems = tSchema.GetRealRowSize();
 	m_iGroupbyOffset = -1;
 	m_iDistinctOffset = -1;
 
@@ -3679,14 +3679,19 @@ bool CSphQuery::SetSchema ( const CSphSchema & tSchema, CSphString & sError )
 // SCHEMA
 /////////////////////////////////////////////////////////////////////////////
 
-int CSphSchema::GetRealAttrCount () const
+int CSphSchema::GetRealAttrsCount () const
 {
 	// FIXME! add some bool instead of magic attr naming?
-	for ( int i=0; i<m_dAttrs.GetLength()-1; i++ )
-		if ( m_dAttrs[i].m_sName=="@groupby" && m_dAttrs[i+1].m_sName=="@count" )
-			return i;
+	int iGroupby = GetAttrIndex ( "@groupby" );
+	return ( iGroupby>=0 ) ? iGroupby : GetAttrsCount();
+}
 
-	return m_dAttrs.GetLength();
+
+int CSphSchema::GetRealRowSize () const
+{
+	// FIXME! add some bool instead of magic attr naming?
+	int iGroupby = GetAttrIndex ( "@groupby" );
+	return ( iGroupby>=0 ) ? GetAttr(iGroupby).m_iRowitem : GetRowSize();
 }
 
 
@@ -3700,8 +3705,8 @@ ESphSchemaCompare CSphSchema::CompareTo ( const CSphSchema & rhs, CSphString & s
 	/////////////////////////
 
 	// check attrs count
-	int iRealAttrs = GetRealAttrCount();
-	if ( iRealAttrs!=rhs.GetRealAttrCount() )
+	int iRealAttrs = GetRealAttrsCount();
+	if ( iRealAttrs!=rhs.GetRealAttrsCount() )
 	{
 		snprintf ( sTmp, sizeof(sTmp), "non-virtual attributes count mismatch: %d in schema '%s', %d in schema '%s'",
 			m_dAttrs.GetLength(), m_sName.cstr(),
@@ -7285,9 +7290,9 @@ static ESortClauseParseResult sphParseSortClause ( const char * sClause, const C
 				return SORT_CLAUSE_ERROR;
 			}
 
-			tState.m_iAttr[iField] = tSchema.GetAttrsCount() + SPH_VATTR_COUNT;
-			tState.m_iRowitem[iField] = tSchema.GetRowSize() + SPH_VATTR_COUNT;
-			tState.m_iBitOffset[iField] = ( tSchema.GetRowSize()+SPH_VATTR_COUNT )*ROWITEM_BITS;
+			tState.m_iAttr[iField] = tSchema.GetRealAttrsCount() + SPH_VATTR_COUNT;
+			tState.m_iRowitem[iField] = tSchema.GetRealRowSize() + SPH_VATTR_COUNT;
+			tState.m_iBitOffset[iField] = ( tSchema.GetRealRowSize()+SPH_VATTR_COUNT )*ROWITEM_BITS;
 			tState.m_iBitCount[iField] = ROWITEM_BITS;
 
 		} else if ( !strcasecmp ( pTok, "@group" ) && bGroupClause )
@@ -7298,9 +7303,9 @@ static ESortClauseParseResult sphParseSortClause ( const char * sClause, const C
 				return SORT_CLAUSE_ERROR;
 			}
 
-			tState.m_iAttr[iField] = tSchema.GetAttrsCount() + SPH_VATTR_GROUP;
-			tState.m_iRowitem[iField] = tSchema.GetRowSize() + SPH_VATTR_GROUP;
-			tState.m_iBitOffset[iField] = ( tSchema.GetRowSize()+SPH_VATTR_GROUP )*ROWITEM_BITS;
+			tState.m_iAttr[iField] = tSchema.GetRealAttrsCount() + SPH_VATTR_GROUP;
+			tState.m_iRowitem[iField] = tSchema.GetRealRowSize() + SPH_VATTR_GROUP;
+			tState.m_iBitOffset[iField] = ( tSchema.GetRealRowSize()+SPH_VATTR_GROUP )*ROWITEM_BITS;
 			tState.m_iBitCount[iField] = ROWITEM_BITS;
 
 		} else if ( !strcasecmp ( pTok, "@distinct" ) && bGroupClause )
@@ -7311,9 +7316,9 @@ static ESortClauseParseResult sphParseSortClause ( const char * sClause, const C
 				return SORT_CLAUSE_ERROR;
 			}
 
-			tState.m_iAttr[iField] = tSchema.GetAttrsCount() + SPH_VATTR_DISTINCT;
-			tState.m_iRowitem[iField] = tSchema.GetRowSize() + SPH_VATTR_DISTINCT;
-			tState.m_iBitOffset[iField] = ( tSchema.GetRowSize()+SPH_VATTR_DISTINCT )*ROWITEM_BITS;
+			tState.m_iAttr[iField] = tSchema.GetRealAttrsCount() + SPH_VATTR_DISTINCT;
+			tState.m_iRowitem[iField] = tSchema.GetRealRowSize() + SPH_VATTR_DISTINCT;
+			tState.m_iBitOffset[iField] = ( tSchema.GetRealRowSize()+SPH_VATTR_DISTINCT )*ROWITEM_BITS;
 			tState.m_iBitCount[iField] = ROWITEM_BITS;
 
 		} else

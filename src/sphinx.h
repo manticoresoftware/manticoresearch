@@ -557,8 +557,6 @@ public:
 	/// if result is not SPH_SCHEMAS_EQUAL, human-readable error/warning message is put to sError
 	ESphSchemaCompare		CompareTo ( const CSphSchema & rhs, CSphString & sError ) const;
 
-	/// return non-virtual attributes count
-	int						GetRealAttrCount () const;
 
 	/// reset fields and attrs
 	void					Reset ();
@@ -571,6 +569,12 @@ public:
 
 	/// get attrs count
 	int						GetAttrsCount () const			{ return m_dAttrs.GetLength(); }
+
+	/// get non-virtual row size
+	int						GetRealRowSize () const;
+
+	/// get non-virtual attributes count
+	int						GetRealAttrsCount () const;
 
 	/// get attr
 	const CSphColumnInfo &	GetAttr ( int iIndex ) const	{ return m_dAttrs[iIndex]; }
@@ -1069,7 +1073,7 @@ public:
 	int				m_iRetryDelay;	///< retry delay, for distributed queries
 
 public:
-	int				m_iRowitems;		///< row size (necessary to instantiate group-by queues)
+	int				m_iRealRowitems;	///< row size w/o group-by virtual attrs (necessary to instantiate group-by queues)
 	int				m_iGroupbyOffset;	///< group-by attr bit offset
 	int				m_iGroupbyCount;	///< group-by attr bit count
 	int				m_iDistinctOffset;	///< distinct-counted attr bit offset

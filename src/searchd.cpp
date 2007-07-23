@@ -3976,33 +3976,31 @@ int main ( int argc, char **argv )
 	const char *	sOptConfig		= NULL;
 	bool			bOptConsole		= false;
 	bool			bOptStop		= false;
+	const char *	sOptIndex		= NULL;
+	int				iOptPort		= 0;
+
+	#define OPT(_a1,_a2)	else if ( !strcmp(argv[i],_a1) || !strcmp(argv[i],_a2) )
+	#define OPT1(_a1)		else if ( !strcmp(argv[i],_a1) )
 
 	int i;
 	for ( i=1; i<argc; i++ )
 	{
-		if ( ( !strcmp ( argv[i], "--config" ) || !strcmp ( argv[i], "-c" ) ) && (i+1)<argc )
-		{
-			sOptConfig = argv[++i];
-			if ( !sphIsReadable ( sOptConfig ) )
-				sphFatal ( "config file '%s' does not exist or is not readable", sOptConfig );
+		// handle non-options
+		if ( argv[i][0]!='-' )		break;
 
-		} else if ( !strcmp ( argv[i], "--console" ) )
-		{
-			bOptConsole = true;
+		// handle no-arg options
+		OPT ( "-h", "--help" )		{ fprintf ( stdout, "usage: searchd [--config file.conf] [--console|--stop]\n" ); return 0; }
+		OPT1 ( "--console" )		bOptConsole = true;
+		OPT1 ( "--stop" )			bOptStop = true;
 
-		} else if ( !strcmp ( argv[i], "--help" ) || !strcmp ( argv[i], "-h" ) )
-		{
-			fprintf ( stdout, "usage: searchd [--config file.conf] [--console|--stop]\n" );
-			return 0;
+		// handle 1-arg options
+		else if ( (i+1)>=argc )		break;
+		OPT ( "-c", "--config" )	sOptConfig = argv[++i];
+		OPT ( "-p", "--port" )		iOptPort = atoi ( argv[++i] );
+		OPT ( "-i", "--index" )		sOptIndex = argv[++i];
 
-		} else if ( !strcmp ( argv[i], "--stop" ) || !strcmp ( argv[i], "stop" ) )
-		{
-			bOptStop = true;
-
-		} else
-		{
-			break;
-		}
+		// handle unknown options
+		else break;
 	}
 	if ( i!=argc )
 	{
@@ -4117,6 +4115,8 @@ int main ( int argc, char **argv )
 	int iPort = hSearchd["port"].intval();
 	if ( !iPort )
 		sphFatal ( "expected valid 'port', got '%s'", hSearchd["port"].cstr() );
+	if ( bOptConsole && iOptPort>0 )
+		iPort = iOptPort;
 
 	if ( hSearchd.Exists ( "read_timeout" ) && hSearchd["read_timeout"].intval()>=0 )
 		g_iReadTimeout = hSearchd["read_timeout"].intval();
@@ -4179,6 +4179,9 @@ int main ( int argc, char **argv )
 	{
 		const CSphConfigSection & hIndex = hConf["index"].IterateGet();
 		const char * sIndexName = hConf["index"].IterateGetKey().cstr();
+
+		if ( bOptConsole && sOptIndex && strcasecmp ( sIndexName, sOptIndex )!=0 )
+			continue;
 
 		if ( hIndex("type") && hIndex["type"]=="distributed" )
 		{

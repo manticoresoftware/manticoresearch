@@ -3887,6 +3887,7 @@ bool CSphWriter::OpenFile ( const char * sName, CSphString & sErrorBuffer )
 CSphWriter::~CSphWriter ()
 {
 	CloseFile ();
+	SafeDeleteArray ( m_pBuffer );
 }
 
 

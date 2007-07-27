@@ -334,7 +334,7 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 		{
 			if ( *p=='\n' )					{ AddKey ( sToken, sValue ); iValue = 0; LOC_POP (); continue; }
 			if ( *p=='#' )					{ AddKey ( sToken, sValue ); iValue = 0; LOC_POP (); LOC_PUSH ( S_SKIP2NL ); continue; }
-			if ( *p=='\\' )					{ LOC_PUSH ( S_SKIP2NL ); continue; }
+			if ( *p=='\\' )					if ( p[1]=='\r' || p[1]=='\n' ) { LOC_PUSH ( S_SKIP2NL ); continue; }
 			if ( iValue<iValueMax )			{ sValue[iValue++] = *p; sValue[iValue] = '\0'; }
 											continue;
 		}

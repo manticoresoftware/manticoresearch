@@ -2510,7 +2510,7 @@ public:
 	virtual int					GetCodepointLength ( int iCode ) const;
 
 protected:
-	int					GetCodePoint ();
+	int					GetFoldedCodePoint ();
 	void				AccumCodePoint ( int iCode );
 	void				FlushAccum ();
 
@@ -3373,34 +3373,39 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 	for ( ;; )
 	{
 		// get next codepoint
-		int iCode = 0;
 		BYTE * pCur = m_pCur; // to redo special char, if there's a token already
-		if ( m_pCur>=m_pBufferMax )
-		{
-			if ( !m_bLast || m_iAccum<m_iMinWordLen )
-			{
-				if ( m_bLast ) // if this is the last buffer, flush accumulator contents
-					FlushAccum ();
+		int iCode = GetFoldedCodePoint (); // advances m_pCur
 
+		// handle eof
+		if ( iCode<0 )
+		{
+			// if it was not the last buffer, just keep the accumulator
+			if ( !m_bLast )
+			{
 				m_iLastTokenLen = 0;
 				return NULL;
 			}
-		} else
-		{
-			iCode = GetCodePoint(); // advances m_pCur
-		}
 
-		// handle whitespace and specials
-		if ( iCode==0 )
-		{
-			if ( m_iAccum<m_iMinWordLen )
+			// skip trailing short word
+			FlushAccum ();
+			if ( m_iLastTokenLen<m_iMinWordLen )
 			{
-				FlushAccum ();
-				continue;
+				m_iLastTokenLen = 0;
+				return NULL;
 			}
 
-			FlushAccum ();
+			// return trailing word
 			return m_sAccum;
+		}
+
+		// handle whitespace
+		if ( iCode==0 )
+		{
+			FlushAccum ();
+			if ( m_iLastTokenLen<m_iMinWordLen )
+				continue;
+			else
+				return m_sAccum;
 		}
 
 		// handle specials
@@ -3412,7 +3417,7 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 
 		if ( bSpecial )
 		{
-			// skip short words
+			// skip short words preceding specials
 			if ( m_iAccum<m_iMinWordLen )
 				FlushAccum ();
 
@@ -3434,19 +3439,18 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 }
 
 
-int CSphTokenizer_UTF8::GetCodePoint ()
+int CSphTokenizer_UTF8::GetFoldedCodePoint ()
 {
-	if ( m_pCur>=m_pBufferMax )
-		return 0;
-
-	for ( ;; )
+	while ( m_pCur<m_pBufferMax )
 	{
+		// decode next one (returns -1 on error)
 		int iCode = sphUTF8Decode ( m_pCur );
-		if ( iCode==0 )
-			return 0;
-		if ( iCode>0 )
+
+		// on succesful decode, fold and return
+		if ( iCode>=0 )
 			return m_tLC.ToLower ( iCode );
 	}
+	return -1; // eof
 }
 
 

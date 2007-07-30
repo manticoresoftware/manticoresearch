@@ -94,6 +94,7 @@ const char *	SPHINX_DEFAULT_SBCS_TABLE	= "0..9, A..Z->a..z, _, a..z, U+A8->U+B8,
 const char *	SPHINX_DEFAULT_UTF8_TABLE	= "0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F";
 
 const char		MAGIC_WORD_TAIL				= 1;
+const char		MAGIC_SYNONYM_WHITESPACE	= 1;
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -2505,6 +2506,7 @@ public:
 
 	virtual void				SetBuffer ( BYTE * sBuffer, int iLength, bool bLast );
 	virtual BYTE *				GetToken ();
+	virtual BYTE *				GetTokenSyn ();
 	virtual ISphTokenizer *		Clone () const;
 	virtual bool				IsUtf8 () const { return true; }
 	virtual int					GetCodepointLength ( int iCode ) const;
@@ -2518,10 +2520,23 @@ protected:
 	BYTE *				m_pBuffer;							///< my buffer
 	BYTE *				m_pBufferMax;						///< max buffer ptr, exclusive (ie. this ptr is invalid, but every ptr below is ok)
 	BYTE *				m_pCur;								///< current position
+	bool				m_bLast;							///< is this buffer the last one
+
 	BYTE				m_sAccum [ 3*SPH_MAX_WORD_LEN+3 ];	///< boundary token accumulator
 	BYTE *				m_pAccum;							///< current accumulator position
 	int					m_iAccum;							///< boundary token size
-	bool				m_bLast;							///< is this buffer the last one
+
+protected:
+	int					m_iSynFlushing;						///< are we flushing folded tokens
+
+	BYTE				m_sSynAcc [ MAX_SYNONYM_LEN+4 ];	///< candidate buffer
+	int					m_iSynAcc;							///< candidate buffer length, bytes
+
+	BYTE				m_sSynFolded [ MAX_SYNONYM_LEN+4 ];	///< folded tokens bufer
+	int					m_iSynFolded;						///< folded tokens buffer length, bytes
+	int					m_iSynFoldedLastTok;				///< last folded token start offset, bytes
+	int					m_iSynFoldedLastCodes;				///< last folded token length, codepoints
+
 };
 
 
@@ -3053,6 +3068,12 @@ inline int sphUTF8Encode ( BYTE * pBuf, int iCode )
 
 bool ISphTokenizer::SetCaseFolding ( const char * sConfig, CSphString & sError )
 {
+	if ( m_dSynonyms.GetLength() )
+	{
+		sError = "SetCaseFolding() must not be called after LoadSynonyms()";
+		return false;
+	}
+
 	CSphCharsetDefinitionParser tParser;
 	CSphVector<CSphRemapRange> dRemaps;
 	if ( !tParser.Parse ( sConfig, dRemaps ) )
@@ -3079,12 +3100,11 @@ void ISphTokenizer::AddSpecials ( const char * sSpecials )
 }
 
 
-static int TokenizeOnWhitespace ( CSphString * dTokens, int iMaxTokens, BYTE * sFrom, bool bUtf8 )
+static int TokenizeOnWhitespace ( CSphVector<CSphString,8> & dTokens, BYTE * sFrom, bool bUtf8 )
 {
 	BYTE sAccum [ 3*SPH_MAX_WORD_LEN+16 ];
 	BYTE * pAccum = sAccum;
 	int iAccum = 0;
-	int iTokens = 0;
 
 	for ( ;; )
 	{
@@ -3097,8 +3117,7 @@ static int TokenizeOnWhitespace ( CSphString * dTokens, int iMaxTokens, BYTE * s
 			if ( iAccum )
 			{
 				*pAccum = '\0';
-				if ( iTokens<iMaxTokens )
-					dTokens[iTokens++] = (char*)sAccum;
+				dTokens.Add ( (char*)sAccum );
 
 				pAccum = sAccum;
 				iAccum = 0;
@@ -3118,29 +3137,37 @@ static int TokenizeOnWhitespace ( CSphString * dTokens, int iMaxTokens, BYTE * s
 		}
 	}
 
-	return iTokens;
+	return dTokens.GetLength();
 }
 
 
-struct CSphSynonym
+static BYTE * sphTrim ( BYTE * s )
 {
-	static const int	MAX_TOKENS	= 8;
+	// skip to first non-whitespace from start
+	while ( *s && sphIsSpace(*s) )
+		s++;
+	if ( !*s )
+		return s;
 
-	int					m_iFrom;
-	int					m_iTo;
+	// find the end
+	BYTE * sEnd = s;
+	while ( *sEnd )
+		sEnd++;
+	sEnd--;
 
-	CSphString			m_dFrom[MAX_TOKENS];
-	CSphString			m_dTo[MAX_TOKENS];
+	// skip to first non-whitespace from end
+	while ( sEnd>s && sphIsSpace(*sEnd) )
+		sEnd--;
 
-	CSphSynonym ()
-		: m_iFrom ( 0 )
-		, m_iTo ( 0 )
-	{}
-};
+	*++sEnd = '\0';
+	return s;
+}
 
 
 bool ISphTokenizer::LoadSynonyms ( const char * sFilename, CSphString & sError )
 {
+	m_dSynonyms.Reset ();
+
 	FILE * fp = fopen ( sFilename, "r" );
 	if ( !fp )
 	{
@@ -3152,9 +3179,12 @@ bool ISphTokenizer::LoadSynonyms ( const char * sFilename, CSphString & sError )
 	char sBuffer[1024];
 
 	CSphOrderedHash < int, int, IdentityHash_fn, 4096, 117 > hSynonymOnly;
+	CSphVector<CSphString,8> dFrom;
+
 	while ( fgets ( sBuffer, sizeof(sBuffer), fp ) )
 	{
 		iLine++;
+		dFrom.Resize ( 0 );
 
 		// extract map-from and map-to parts
 		char * sSplit = strstr ( sBuffer, "=>" );
@@ -3168,26 +3198,52 @@ bool ISphTokenizer::LoadSynonyms ( const char * sFilename, CSphString & sError )
 		BYTE * sTo = (BYTE *)( sSplit + strlen ( "=>" ) );
 		*sSplit = '\0';
 
-		// tokenize map-from and map-to, and add new entry to hash
-		CSphSynonym tSyn;
-
-		tSyn.m_iFrom = TokenizeOnWhitespace ( tSyn.m_dFrom, CSphSynonym::MAX_TOKENS, sFrom, IsUtf8() );
-		if ( !tSyn.m_iFrom )
+		// tokenize map-from
+		if ( !TokenizeOnWhitespace ( dFrom, sFrom, IsUtf8() ) )
 		{
 			sError.SetSprintf ( "%s line %d: empty map-from part", sFilename, iLine );
 			fclose ( fp );
 			return false;
 		}
 
-		tSyn.m_iTo = TokenizeOnWhitespace ( tSyn.m_dTo, CSphSynonym::MAX_TOKENS, sTo, IsUtf8() );
-		if ( !tSyn.m_iTo )
+		// trim map-to
+		sTo = sphTrim ( sTo );
+		if ( !*sTo )
 		{
 			sError.SetSprintf ( "%s line %d: empty map-to part", sFilename, iLine );
 			fclose ( fp );
 			return false;
 		}
 
-		// !COMMIT hash stuff here
+		// pack and store it
+		int iFromLen = 1;
+		ARRAY_FOREACH ( i, dFrom )
+			iFromLen += strlen(dFrom[i].cstr()) + 1;
+
+		if ( iFromLen>MAX_SYNONYM_LEN )
+		{
+			sError.SetSprintf ( "%s line %d: map-from part too long (over %d bytes)", sFilename, iLine, MAX_SYNONYM_LEN );
+			fclose ( fp );
+			return false;
+		}
+
+		CSphSynonym & tSyn = m_dSynonyms.Add ();
+		tSyn.m_sFrom.Reserve ( iFromLen );
+		tSyn.m_iFromLen = iFromLen;
+		tSyn.m_sTo = (char*)sTo;
+		tSyn.m_iToLen = strlen((char*)sTo);
+
+		char * sCur = const_cast<char*> ( tSyn.m_sFrom.cstr() );
+		ARRAY_FOREACH ( i, dFrom )
+		{
+			int iLen = strlen ( dFrom[i].cstr() );
+			memcpy ( sCur, dFrom[i].cstr(), iLen );
+
+			sCur[iLen] = MAGIC_SYNONYM_WHITESPACE;
+			sCur += iLen+1;
+		}
+		*sCur++ = '\0';
+		assert ( sCur-tSyn.m_sFrom.cstr()==iFromLen );
 
 		// track synonym-only codepoints in map-from
 		for ( ;; )
@@ -3200,6 +3256,9 @@ bool ISphTokenizer::LoadSynonyms ( const char * sFilename, CSphString & sError )
 		}
 	}
 	fclose ( fp );
+
+	// sort the list
+	m_dSynonyms.Sort ();
 
 	// add synonym-only remaps
 	CSphVector<CSphRemapRange> dRemaps;
@@ -3335,8 +3394,14 @@ CSphTokenizer_UTF8::CSphTokenizer_UTF8 ()
 	: m_pBuffer		( NULL )
 	, m_pBufferMax	( NULL )
 	, m_pCur		( NULL )
-	, m_iAccum		( 0 )
 	, m_bLast		( false )
+	, m_iAccum		( 0 )
+
+	, m_iSynFlushing		( -1 )
+	, m_iSynAcc				( 0 )
+	, m_iSynFolded			( 0 )
+	, m_iSynFoldedLastTok	( 0 )
+	, m_iSynFoldedLastCodes	( 0 )
 {
 	m_pAccum = m_sAccum;
 	CSphString sTmp;
@@ -3370,6 +3435,9 @@ void CSphTokenizer_UTF8::SetBuffer ( BYTE * sBuffer, int iLength, bool bLast )
 
 BYTE * CSphTokenizer_UTF8::GetToken ()
 {
+	if ( m_dSynonyms.GetLength() )
+		return GetTokenSyn ();
+
 	for ( ;; )
 	{
 		// get next codepoint
@@ -3435,6 +3503,184 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 
 		// just accumulate
 		AccumCodePoint ( iCode );
+	}
+}
+
+
+enum SynCheck_e
+{
+	SYNCHECK_LESS,
+	SYNCHECK_PARTIAL,
+	SYNCHECK_EXACT,
+	SYNCHECK_GREATER
+};
+
+
+static inline SynCheck_e SynCheckPrefix ( const CSphSynonym & tCandidate, const BYTE * sPrefix, int iPrefixLen )
+{
+	const BYTE * sCand = (const BYTE*) tCandidate.m_sFrom.cstr();
+	const BYTE * sCur = sPrefix;
+	const BYTE * sMax = sPrefix + iPrefixLen;
+
+	while ( sCur<sMax )
+	{
+		if ( *sCand < *sCur ) return SYNCHECK_LESS;
+		if ( *sCand > *sCur ) return SYNCHECK_GREATER;
+		sCand++;
+		sCur++;
+	}
+	return *sCand ? SYNCHECK_PARTIAL : SYNCHECK_EXACT;
+}
+
+
+BYTE * CSphTokenizer_UTF8::GetTokenSyn ()
+{
+	assert ( m_dSynonyms.GetLength() );
+
+	for ( ;; )
+	{
+		////////////////////////////////////////////////////////////
+		// accumulate incoming raw stream and check it for synonyms
+		////////////////////////////////////////////////////////////
+
+		for ( ; m_iSynFlushing<0; )
+		{
+			// get raw and folded codepoints
+			int iCode = -1;
+			while ( m_pCur<m_pBufferMax && iCode<0 )
+				iCode = sphUTF8Decode ( m_pCur );
+
+			// handle eof
+			int iFolded = 0;
+			if ( iCode<0 )
+			{
+				if ( !m_bLast || m_iSynAcc==0 )
+				{
+					// if it's not the last one, or if the acc is empty, just bail out
+					m_iLastTokenLen = 0;
+					return NULL;
+				}
+			} else
+			{
+				iFolded = m_tLC.ToLower ( iCode );
+			}
+
+			// handle raw non-whitespace
+			if ( iFolded>0 )
+			{
+				// check for specials
+				bool bSpecial =
+					( iFolded & FLAG_CODEPOINT_SPECIAL ) &&
+					!( ( iFolded & FLAG_CODEPOINT_DUAL ) && m_iSynAcc && m_sSynAcc[m_iSynAcc-1]!=MAGIC_SYNONYM_WHITESPACE );
+
+				// fixup folded code
+				if ( iFolded & FLAG_CODEPOINT_SYNONYM )
+					iFolded = 0;
+				iFolded &= MASK_CODEPOINT;
+
+				// skip short folded tokens
+				if ( !iFolded || bSpecial )
+				{
+					if ( m_iSynFoldedLastCodes<m_iMinWordLen )
+						m_iSynFolded = m_iSynFoldedLastTok;
+				}
+
+				if ( bSpecial )
+				{
+					// it's special for raw token; detach it and flush
+					m_sSynFolded[m_iSynFolded++] = 0;
+					m_iSynFolded += sphUTF8Encode ( m_sSynFolded+m_iSynFolded, iFolded & MASK_CODEPOINT );
+					m_sSynFolded[m_iSynFolded++] = 0;
+					m_iSynFlushing = 0;
+
+				} else
+				{
+					// it's either non-special or dual for raw token; which should cover duals for folded too
+					m_iSynAcc += sphUTF8Encode ( m_sSynAcc+m_iSynAcc, iCode );
+					m_iSynFolded += sphUTF8Encode ( m_sSynFolded+m_iSynFolded, iFolded );
+				}
+
+				if ( !iFolded || bSpecial )
+				{
+					m_iSynFoldedLastTok = m_iSynFolded;
+					m_iSynFoldedLastCodes = 0;
+				} else
+				{
+					m_iSynFoldedLastCodes++;
+				}
+				continue;
+			}
+			assert ( iFolded==0 );
+
+			// handle raw whitespace
+			if ( !m_iSynAcc || m_sSynAcc[m_iSynAcc-1]==MAGIC_SYNONYM_WHITESPACE ) // ignore heading and trailing whitespace
+				continue;
+
+			// skip short folded tokens
+			if ( m_iSynFoldedLastCodes<m_iMinWordLen )
+				m_iSynFolded = m_iSynFoldedLastTok;
+
+			m_sSynAcc[m_iSynAcc++] = MAGIC_SYNONYM_WHITESPACE;
+			m_sSynFolded[m_iSynFolded++] = 0;
+
+			m_iSynFoldedLastTok = m_iSynFolded;
+			m_iSynFoldedLastCodes = 0;
+
+			// check current prefix against synonyms list
+			// FIXME! optimize this
+			bool bPartial = false;
+			ARRAY_FOREACH ( i, m_dSynonyms )
+			{
+				SynCheck_e eCheck = SynCheckPrefix ( m_dSynonyms[i], m_sSynAcc, m_iSynAcc );
+				if ( eCheck==SYNCHECK_EXACT )
+				{
+					m_iSynAcc = 0;
+					m_iSynFolded = 0;
+					m_iSynFoldedLastCodes = 0;
+					m_iSynFoldedLastTok = 0;
+
+					m_iLastTokenLen = m_dSynonyms[i].m_iToLen;
+					strcpy ( (char*)m_sAccum, m_dSynonyms[i].m_sTo.cstr() );
+
+					return m_sAccum;
+				}
+				if ( eCheck==SYNCHECK_PARTIAL )
+					bPartial = true;
+			}
+
+			// if there's no partial matches or if it's eof, let's flush
+			if ( !bPartial || iCode<0 )
+				m_iSynFlushing = 0;
+		}
+
+		///////////////////////////////////////////////////////////////
+		// flush everything accumulated during potential synonym check
+		///////////////////////////////////////////////////////////////
+
+		assert ( m_iSynFlushing>=0 );
+
+		// skip folded whitespace
+		while ( m_iSynFlushing<m_iSynFolded && !m_sSynFolded[m_iSynFlushing] )
+			m_iSynFlushing++;
+
+		// check if we're over
+		if ( m_iSynFlushing>=m_iSynFolded )
+		{
+			m_iSynAcc = 0;
+			m_iSynFolded = 0;
+			m_iSynFoldedLastCodes = 0;
+			m_iSynFoldedLastTok = 0;
+			m_iSynFlushing = -1;
+			continue;
+		}
+
+		// got something; memorize it and skip until whitespace
+		int iRes = m_iSynFlushing;
+		while ( m_iSynFlushing<m_iSynFolded && m_sSynFolded[m_iSynFlushing] )
+			m_iSynFlushing++;
+		m_iLastTokenLen = m_iSynFlushing - iRes;
+
+		return m_sSynFolded + iRes;
 	}
 }
 

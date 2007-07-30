@@ -225,6 +225,21 @@ protected:
 
 /////////////////////////////////////////////////////////////////////////////
 
+/// synonym list entry
+struct CSphSynonym
+{
+	CSphString	m_sFrom;	///< specially packed list of map-from tokens
+	CSphString	m_sTo;		///< map-to string
+	int			m_iFromLen;	///< cached m_sFrom length 
+	int			m_iToLen;	///< cached m_sTo length 
+
+	inline bool operator < ( const CSphSynonym & rhs ) const
+	{
+		return strcmp ( m_sFrom.cstr(), rhs.m_sFrom.cstr() ) < 0;
+	}
+};
+
+
 /// generic tokenizer
 class ISphTokenizer
 {
@@ -283,9 +298,13 @@ public:
 	virtual int						GetCodepointLength ( int iCode ) const = 0;
 
 protected:
-	CSphLowercaser		m_tLC;			///< my lowercaser
-	int					m_iMinWordLen;	///< minimal word length, in codepoints
-	int					m_iLastTokenLen;///< last token length, in codepoints
+	static const int				MAX_SYNONYM_LEN		= 1024;	///< max synonyms map-from length, bytes
+
+	CSphLowercaser					m_tLC;						///< my lowercaser
+	int								m_iMinWordLen;				///< minimal word length, in codepoints
+	int								m_iLastTokenLen;			///< last token length, in codepoints
+
+	CSphVector<CSphSynonym,8>		m_dSynonyms;				///< active synonyms
 };
 
 /// create SBCS tokenizer

@@ -55,12 +55,13 @@ void TestUTF8Tokenizer ()
 			"1", "",							NULL,								// test that empty strings work
 			"1", "this is my rifle",			"this", "is", "my", "rifle", NULL,	// test that tokenizing works
 			"1", "This is MY rifle",			"this", "is", "my", "rifle", NULL,	// test that folding works
-			"1", "i-phone",						"i-phone", NULL,					// test that duals (specials in the middle of the word) work ok*/
+			"1", "i-phone",						"i-phone", NULL,					// test that duals (specials in the middle of the word) work ok
 			"1", "i phone",						"phone", NULL,						// test that short words are skipped
 			"1", "this is m",					"this", "is", NULL,					// test that short words at the end are skipped
 			"1", "the -phone",					"the", "-", "phone", NULL,			// test that specials work
 			"1", "the!phone",					"the", "!", "phone", NULL,			// test that specials work
 			"1", "i!phone",						"!", "phone", NULL,					// test that short words preceding specials are skipped
+			"1", "/-hi",						"-", "hi", NULL,					// test that synonym-dual but folded-special chars work ok
 			"2", "AT&T",						"AT&T", NULL,						// test that synonyms work
 			"2", "AT & T",						"AT & T", NULL,						// test that synonyms with spaces work
 			"2", "AT    &  T",					"AT & T", NULL,						// test that synonyms with continuous spaces work

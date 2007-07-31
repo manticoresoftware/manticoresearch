@@ -1155,7 +1155,7 @@ int main ( int argc, char ** argv )
 			FILE * fp = fopen ( hSearchd["pid_file"].cstr(), "r" );
 			if ( !fp )
 			{
-				fprintf ( stdout, "WARNING: failed to read pid_file '%s'.\n", hSearchd["pid_file"].cstr() );
+				fprintf ( stdout, "WARNING: failed to open pid_file '%s'.\n", hSearchd["pid_file"].cstr() );
 				break;
 			}
 			if ( fscanf ( fp, "%d", &iPID )!=1 || iPID<=0 )

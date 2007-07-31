@@ -52,6 +52,11 @@
 	#include <sys/mman.h>
 	#include <md5.h>
 
+	// there's no MSG_NOSIGNAL on OS X
+	#ifndef MSG_NOSIGNAL
+	#define MSG_NOSIGNAL 0
+	#endif
+
 	#define sphSockRecv(_sock,_buf,_len)	::recv(_sock,_buf,_len,MSG_NOSIGNAL)
 	#define sphSockSend(_sock,_buf,_len)	::send(_sock,_buf,_len,0)
 	#define sphSockClose(_sock)				::close(_sock)

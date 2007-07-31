@@ -423,8 +423,6 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 
 ISphTokenizer * sphConfTokenizer ( const CSphConfigSection & hIndex, CSphString & sError )
 {
-	char sErrorBuf[256];
-
 	// charset_type
 	ISphTokenizer * pTokenizer = NULL;
 	if ( !hIndex("charset_type") || hIndex["charset_type"]=="sbcs" )
@@ -439,8 +437,7 @@ ISphTokenizer * sphConfTokenizer ( const CSphConfigSection & hIndex, CSphString 
 
 	} else
 	{
-		snprintf ( sErrorBuf, sizeof(sErrorBuf), "unknown charset type '%s'", hIndex["charset_type"].cstr() );
-		sError = sErrorBuf;
+		sError.SetSprintf ( "unknown charset type '%s'", hIndex["charset_type"].cstr() );
 		return NULL;
 	}
 
@@ -451,9 +448,7 @@ ISphTokenizer * sphConfTokenizer ( const CSphConfigSection & hIndex, CSphString 
 		if ( !pTokenizer->SetCaseFolding ( hIndex["charset_table"].cstr(), sError ) )
 	{
 		SafeDelete ( pTokenizer );
-
-		snprintf ( sErrorBuf, sizeof(sErrorBuf), "'charset_table': %s", sError.cstr() );
-		sError = sErrorBuf;
+		sError.SetSprintf ( "'charset_table': %s", sError.cstr() );
 		return NULL;
 	}
 
@@ -467,9 +462,7 @@ ISphTokenizer * sphConfTokenizer ( const CSphConfigSection & hIndex, CSphString 
 		if ( !pTokenizer->SetNgramChars ( hIndex["ngram_chars"].cstr(), sError ) )
 	{
 		SafeDelete ( pTokenizer );
-
-		snprintf ( sErrorBuf, sizeof(sErrorBuf), "'ngram_chars': %s", sError.cstr() );
-		sError = sErrorBuf;
+		sError.SetSprintf ( "'ngram_chars': %s", sError.cstr() );
 		return NULL;
 	}
 
@@ -477,6 +470,14 @@ ISphTokenizer * sphConfTokenizer ( const CSphConfigSection & hIndex, CSphString 
 	int iNgramLen = hIndex("ngram_len") ? Max ( hIndex["ngram_len"].intval(), 0 ) : 0;
 	if ( iNgramLen )
 		pTokenizer->SetNgramLen ( iNgramLen );
+
+	// synonyms
+	if ( hIndex("synonyms") )
+		if ( !pTokenizer->LoadSynonyms ( hIndex["synonyms"].cstr(), sError ) )
+	{
+		SafeDelete ( pTokenizer );
+		return NULL;
+	}
 
 	return pTokenizer;
 }

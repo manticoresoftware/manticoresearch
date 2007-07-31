@@ -380,6 +380,37 @@ index test1
 	# stopwords			= @CONFDIR@/data/stopwords.txt
 	stopwords			=
 
+	# synonyms file
+	#
+	# synonyms allow to explicilty map different word spellings
+	# to a normal form, as well as support special characters
+	# which would normally be treated as whitespace.
+	#
+	# synonyms file contains one line per synonym,
+	# and the line format is as follows:
+	#
+	# map-from-tokens => map-to-token
+	#
+	# example file contents:
+	#
+	# AT & T => AT&T
+	# AT&T => AT&T
+	# Standarten Fuehrer => standartenfuhrer
+	# Standarten Fuhrer => standartenfuhrer
+	#
+	# all tokens are case sensitive; thus, in the example above,
+	# "At&t" text will be tokenized as "at" and "t" tokens - unlike
+	# "AT&T" which will produce single "AT&T" token.
+	#
+	# whitespace in map-from matters but is not counted;
+	# ie. "AT & T" map-from will match "AT    &   T" text,
+	# whatever the amount of space in both map-from part
+	# and the text.
+	#
+	# optional, default is empty
+	#
+	# synonyms 			= @CONFDIR@/data/synonyms.txt
+
 	# minimum word length
 	#
 	# only the words that are of this length and above will be indexed;

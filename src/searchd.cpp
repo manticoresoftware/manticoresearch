@@ -3206,12 +3206,22 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 	ARRAY_FOREACH ( i, tUpd.m_dAttrs )
 		tUpd.m_dAttrs[i].m_sName = tReq.GetString ();
 
-	int iStride = 1+tUpd.m_dAttrs.GetLength();
+	int iStride = DOCINFO_IDSIZE + tUpd.m_dAttrs.GetLength();
+
 	tUpd.m_iUpdates = tReq.GetInt (); // FIXME! check this
 	tUpd.m_pUpdates = new DWORD [ tUpd.m_iUpdates*iStride ];
-	for ( int i=0; i<tUpd.m_iUpdates*iStride; i++ )
-		tUpd.m_pUpdates[i] = tReq.GetDword ();
 
+	int iPos = 0;
+	for ( int i=0; i<tUpd.m_iUpdates; i++ )
+	{
+		tUpd.m_pUpdates[iPos++] = tReq.GetDword();
+		#if USE_64BIT
+		tUpd.m_pUpdates[iPos++] = 0;
+		#endif
+
+		ARRAY_FOREACH ( j, tUpd.m_dAttrs )
+			tUpd.m_pUpdates[iPos++] = tReq.GetDword();
+	}
 	if ( tReq.GetError() )
 	{
 		tReq.SendErrorReply ( "invalid or truncated request" );

@@ -4879,7 +4879,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate_t & tUpd )
 			m_sLastError.SetSprintf ( "attribute '%s' not found", tUpd.m_dAttrs[i].m_sName.cstr() );
 			return -1;
 		}
-		dAttrIndex.Add ( 1+iIndex );
+		dAttrIndex.Add ( iIndex );
 	}
 	assert ( dAttrIndex.GetLength()==tUpd.m_dAttrs.GetLength() );
 
@@ -4895,8 +4895,16 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate_t & tUpd )
 			continue;
 
 		assert ( DOCINFO2ID(pEntry)==DOCINFO2ID(pUpdate) );
+		pEntry = DOCINFO2ATTRS(pEntry);
+
 		ARRAY_FOREACH ( i, dAttrIndex )
-			pEntry [ dAttrIndex[i] ] = pUpdate[1+i];
+		{
+			const CSphColumnInfo & tCol = m_tSchema.GetAttr ( dAttrIndex[i] );
+			if ( tCol.m_iRowitem>=0 )
+				pEntry [ tCol.m_iRowitem ] = pUpdate [ DOCINFO_IDSIZE+i ];
+			else
+				sphSetRowAttr ( pEntry, tCol.m_iBitOffset, tCol.m_iBitCount, pUpdate [ DOCINFO_IDSIZE+i ] );
+		}
 
 		iUpdated++;
 	}
@@ -8012,7 +8020,6 @@ const DWORD * CSphIndex_VLN::FindDocinfo ( SphDocID_t uDocID )
 		}
 	}
 
-	assert ( pFound );
 	return pFound;
 }
 

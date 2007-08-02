@@ -366,6 +366,20 @@ const CSphRowitem	ROWITEM_MAX		= UINT_MAX;
 const int			ROWITEM_BITS	= 8*sizeof(CSphRowitem);
 
 
+/// setter
+inline void sphSetRowAttr ( CSphRowitem * pRow, int iBitOffset, int iBitCount, CSphRowitem uValue )
+{
+	int iItem = iBitOffset / ROWITEM_BITS;
+	if ( iBitCount==ROWITEM_BITS )
+		pRow[iItem] = uValue;
+
+	int iShift = iBitOffset % ROWITEM_BITS;
+	CSphRowitem uMask = ( (1UL<<iBitCount)-1 ) << iShift;
+	pRow[iItem] &= ~uMask;
+	pRow[iItem] |= ( uMask & (uValue<<iShift) );
+}
+
+
 /// document info
 struct CSphDocInfo
 {
@@ -456,15 +470,7 @@ struct CSphDocInfo
 	{
 		assert ( iBitOffset>=0 && iBitOffset<m_iRowitems*ROWITEM_BITS );
 		assert ( iBitCount>0 && iBitOffset+iBitCount<=m_iRowitems*ROWITEM_BITS );
-
-		int iItem = iBitOffset / ROWITEM_BITS;
-		if ( iBitCount==ROWITEM_BITS )
-			m_pRowitems[iItem] = uValue;
-
-		int iShift = iBitOffset % ROWITEM_BITS;
-		CSphRowitem uMask = ( (1UL<<iBitCount)-1 ) << iShift;
-		m_pRowitems[iItem] &= ~uMask;
-		m_pRowitems[iItem] |= ( uMask & (uValue<<iShift) );
+		sphSetRowAttr ( m_pRowitems, iBitOffset, iBitCount, uValue );
 	}
 };
 

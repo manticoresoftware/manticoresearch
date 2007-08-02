@@ -3159,14 +3159,12 @@ protected:
 
 void UpdateRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut ) const
 {
-	int iStride = ( 1+m_tUpd.m_dAttrs.GetLength() );
-
 	int iReqSize = 4+strlen(sIndexes); // indexes string
 	iReqSize += 4; // attrs array len, data
 	ARRAY_FOREACH ( i, m_tUpd.m_dAttrs )
 		iReqSize += 4+strlen(m_tUpd.m_dAttrs[i].m_sName.cstr());
 	iReqSize += 4; // values array len, data
-	iReqSize += 4*iStride*m_tUpd.m_iUpdates;
+	iReqSize += 4*( 1+m_tUpd.m_dAttrs.GetLength() )*m_tUpd.m_iUpdates;
 
 	// header
 	tOut.SendDword ( SPHINX_SEARCHD_PROTO );
@@ -3181,9 +3179,18 @@ void UpdateRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuff
 	tOut.SendInt ( m_tUpd.m_iUpdates );
 
 	DWORD * pUpd = m_tUpd.m_pUpdates;
-	DWORD * pUpdMax = pUpd + iStride*m_tUpd.m_iUpdates;
-	for ( ; pUpd<pUpdMax; pUpd++ )
-		tOut.SendDword ( *pUpd );
+	DWORD * pUpdMax = pUpd + ( DOCINFO_IDSIZE+m_tUpd.m_dAttrs.GetLength() )*m_tUpd.m_iUpdates;
+	for ( ; pUpd<pUpdMax; )
+	{
+		tOut.SendDword ( *pUpd++ );
+		#if USE_64BIT
+		pUpd++;
+		#endif
+
+		for ( int j=0; j<m_tUpd.m_dAttrs.GetLength(); j++ )
+			tOut.SendDword ( *pUpd++ );
+	}
+	assert ( pUpd==pUpdMax );
 }
 
 

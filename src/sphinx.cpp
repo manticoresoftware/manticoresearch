@@ -3625,7 +3625,7 @@ BYTE * CSphTokenizer_UTF8::GetTokenSyn ()
 			assert ( iFolded==0 );
 
 			// handle raw whitespace
-			if ( !m_iSynAcc || m_sSynAcc[m_iSynAcc-1]==MAGIC_SYNONYM_WHITESPACE ) // ignore heading and trailing whitespace
+			if ( iCode>=0 && ( !m_iSynAcc || m_sSynAcc[m_iSynAcc-1]==MAGIC_SYNONYM_WHITESPACE ) ) // ignore heading and trailing whitespace
 				continue;
 
 			// skip short folded tokens

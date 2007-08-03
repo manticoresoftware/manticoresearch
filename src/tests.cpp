@@ -73,6 +73,8 @@ void TestUTF8Tokenizer ()
 			"2", "standarten fuehrerr",			"standarten", "fuehrerr", NULL,
 			"2", "standarten fuehrer Stirlitz",	"Standartenfuehrer", "stirlitz", NULL,
 			"2", "OS/2 vs OS/360 vs Ms-Dos",	"OS/2", "vs", "os", "360", "vs", "MS-DOS", NULL,
+			"2", "AT ",							"at", NULL,							// test that prefix-whitespace-eof combo does not hang
+			"2", "AT&T&TT",						"at", "tt", NULL,
 			0
 		};
 

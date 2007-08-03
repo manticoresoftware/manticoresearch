@@ -3581,8 +3581,8 @@ BYTE * CSphTokenizer_UTF8::GetTokenSyn ()
 
 		for ( ; m_iSynFlushing<0; )
 		{
-			assert ( m_iSynAccBytes<sizeof(m_sSynAcc) );
-			assert ( m_iSynFolded<sizeof(m_sSynFolded) );
+			assert ( m_iSynAccBytes<(int)sizeof(m_sSynAcc) );
+			assert ( m_iSynFolded<(int)sizeof(m_sSynFolded) );
 
 			// get raw and folded codepoints
 			int iCode = -1;

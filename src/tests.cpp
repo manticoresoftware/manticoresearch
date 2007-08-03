@@ -120,6 +120,22 @@ void TestUTF8Tokenizer ()
 		pTokenizer->SetBuffer ( (BYTE*)sLine3, 4, true );
 		assert ( !strcmp ( (char*)pTokenizer->GetToken(), "hi" ) );
 
+		// test uberlong tokens
+		printf ( "testing tokenizer for uberlong token handling\n" );
+
+		const int UBERLONG = 4096;
+		char * sLine4 = new char [ UBERLONG+1 ]; 
+		memset ( sLine4, 'a', UBERLONG );
+		sLine4[UBERLONG] = '\0';
+
+		char sTok4[SPH_MAX_WORD_LEN+1];
+		memset ( sTok4, 'a', SPH_MAX_WORD_LEN );
+		sTok4[SPH_MAX_WORD_LEN] = '\0';
+
+		pTokenizer->SetBuffer ( (BYTE*)sLine4, strlen(sLine4), true );
+		assert ( !strcmp ( (char*)pTokenizer->GetToken(), sTok4 ) );
+		assert ( pTokenizer->GetToken()==NULL );
+
 		SafeDelete ( pTokenizer );
 	}
 }

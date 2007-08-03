@@ -2539,6 +2539,7 @@ protected:
 	int					m_iFolded;							///< folded tokens buffer length, bytes
 	int					m_iFoldedLastTok;					///< last folded token start offset, bytes
 	int					m_iFoldedLastCodes;					///< last folded token length, codepoints
+	int					m_iFoldedLast;						///< last folded codepoint
 };
 
 
@@ -3437,9 +3438,11 @@ CSphTokenizer_UTF8::CSphTokenizer_UTF8 ()
 	, m_iSynFlushing		( -1 )
 	, m_iSynBytes			( 0 )
 	, m_iSynCodes			( 0 )
+
 	, m_iFolded				( 0 )
 	, m_iFoldedLastTok		( 0 )
 	, m_iFoldedLastCodes	( 0 )
+	, m_iFoldedLast			( 0 )
 {
 	m_pAccum = m_sAccum;
 	CSphString sTmp;
@@ -3579,6 +3582,7 @@ void CSphTokenizer_UTF8::SynReset ()
 	m_iFolded = 0;
 	m_iFoldedLastCodes = 0;
 	m_iFoldedLastTok = 0;
+	m_iFoldedLast = 0;
 }
 
 
@@ -3627,7 +3631,7 @@ BYTE * CSphTokenizer_UTF8::GetTokenSyn ()
 
 				bool bFoldedSpecial =
 					( iFolded & FLAG_CODEPOINT_SPECIAL ) &&
-					!( ( iFolded & FLAG_CODEPOINT_DUAL ) && m_iFolded && m_sFolded[m_iFolded-1]!=0 );
+					!( ( iFolded & FLAG_CODEPOINT_DUAL ) && m_iFoldedLast );
 
 				// fixup folded code
 				if ( iFolded & FLAG_CODEPOINT_SYNONYM )
@@ -3644,9 +3648,10 @@ BYTE * CSphTokenizer_UTF8::GetTokenSyn ()
 				if ( bRawSpecial )
 				{
 					// it's special for raw token (and therefore for folded too); detach it and flush
-					m_sFolded[m_iFolded++] = 0;
+					if ( m_iFoldedLast ) m_sFolded[m_iFolded++] = 0;
 					m_iFolded += sphUTF8Encode ( m_sFolded+m_iFolded, iFolded & MASK_CODEPOINT );
 					m_sFolded[m_iFolded++] = 0;
+					m_iFoldedLast = 0;
 					m_iSynFlushing = 0;
 
 				} else if ( bFoldedSpecial )
@@ -3658,9 +3663,10 @@ BYTE * CSphTokenizer_UTF8::GetTokenSyn ()
 						m_iSynCodes++;
 					}
 
-					m_sFolded[m_iFolded++] = 0;
+					if ( m_iFoldedLast ) m_sFolded[m_iFolded++] = 0;
 					m_iFolded += sphUTF8Encode ( m_sFolded+m_iFolded, iFolded );
 					m_sFolded[m_iFolded++] = 0;
+					m_iFoldedLast = 0;
 
 				} else
 				{
@@ -3670,11 +3676,19 @@ BYTE * CSphTokenizer_UTF8::GetTokenSyn ()
 						m_iSynBytes += sphUTF8Encode ( m_sSyn+m_iSynBytes, iCode );
 						m_iSynCodes++;
 					}
-					if ( m_iFoldedLastCodes<SPH_MAX_WORD_LEN || !iFolded )
+
+					if ( !iFolded )
+					{
+						if ( m_iFoldedLast )
+							m_sFolded[m_iFolded++] = 0;
+					} else if ( m_iFoldedLastCodes<SPH_MAX_WORD_LEN )
+					{
 						m_iFolded += sphUTF8Encode ( m_sFolded+m_iFolded, iFolded );
+					}
+					m_iFoldedLast = iFolded;
 				}
 
-				if ( !iFolded || bFoldedSpecial )
+				if ( !m_iFoldedLast )
 				{
 					m_iFoldedLastTok = m_iFolded;
 					m_iFoldedLastCodes = 0;

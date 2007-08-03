@@ -136,6 +136,19 @@ void TestUTF8Tokenizer ()
 		assert ( !strcmp ( (char*)pTokenizer->GetToken(), sTok4 ) );
 		assert ( pTokenizer->GetToken()==NULL );
 
+		// test uberlong synonym-only tokens
+		if ( iRun==2 )
+		{
+			printf ( "testing tokenizer for uberlong synonym-only char token handling\n" );
+
+			memset ( sLine4, '/', UBERLONG );
+			sLine4[UBERLONG] = '\0';
+
+			pTokenizer->SetBuffer ( (BYTE*)sLine4, strlen(sLine4), true );
+			assert ( pTokenizer->GetToken()==NULL );
+		}
+
+		SafeDelete ( sLine4 );
 		SafeDelete ( pTokenizer );
 	}
 }

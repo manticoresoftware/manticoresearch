@@ -2516,6 +2516,8 @@ protected:
 	void				AccumCodePoint ( int iCode );
 	void				FlushAccum ();
 
+	void				SynReset ();
+
 protected:
 	BYTE *				m_pBuffer;							///< my buffer
 	BYTE *				m_pBufferMax;						///< max buffer ptr, exclusive (ie. this ptr is invalid, but every ptr below is ok)
@@ -2529,14 +2531,14 @@ protected:
 protected:
 	int					m_iSynFlushing;						///< are we flushing folded tokens
 
-	BYTE				m_sSynAcc [ MAX_SYNONYM_LEN+4 ];	///< candidate buffer
-	int					m_iSynAccBytes;						///< candidate buffer length, bytes
-	int					m_iSynAccCodes;						///< candidate buffer length, codepoints
+	BYTE				m_sSyn [ MAX_SYNONYM_LEN+4 ];		///< candidate buffer
+	int					m_iSynBytes;						///< candidate buffer length, bytes
+	int					m_iSynCodes;						///< candidate buffer length, codepoints
 
-	BYTE				m_sSynFolded [ MAX_SYNONYM_LEN+4 ];	///< folded tokens bufer
-	int					m_iSynFolded;						///< folded tokens buffer length, bytes
-	int					m_iSynFoldedLastTok;				///< last folded token start offset, bytes
-	int					m_iSynFoldedLastCodes;				///< last folded token length, codepoints
+	BYTE				m_sFolded [ MAX_SYNONYM_LEN+4 ];	///< folded tokens bufer
+	int					m_iFolded;							///< folded tokens buffer length, bytes
+	int					m_iFoldedLastTok;					///< last folded token start offset, bytes
+	int					m_iFoldedLastCodes;					///< last folded token length, codepoints
 };
 
 
@@ -3433,11 +3435,11 @@ CSphTokenizer_UTF8::CSphTokenizer_UTF8 ()
 	, m_iAccum		( 0 )
 
 	, m_iSynFlushing		( -1 )
-	, m_iSynAccBytes		( 0 )
-	, m_iSynAccCodes		( 0 )
-	, m_iSynFolded			( 0 )
-	, m_iSynFoldedLastTok	( 0 )
-	, m_iSynFoldedLastCodes	( 0 )
+	, m_iSynBytes			( 0 )
+	, m_iSynCodes			( 0 )
+	, m_iFolded				( 0 )
+	, m_iFoldedLastTok		( 0 )
+	, m_iFoldedLastCodes	( 0 )
 {
 	m_pAccum = m_sAccum;
 	CSphString sTmp;
@@ -3569,6 +3571,17 @@ static inline SynCheck_e SynCheckPrefix ( const CSphSynonym & tCandidate, const 
 }
 
 
+void CSphTokenizer_UTF8::SynReset ()
+{
+	m_iSynBytes = 0;
+	m_iSynCodes = 0;
+
+	m_iFolded = 0;
+	m_iFoldedLastCodes = 0;
+	m_iFoldedLastTok = 0;
+}
+
+
 BYTE * CSphTokenizer_UTF8::GetTokenSyn ()
 {
 	assert ( m_dSynonyms.GetLength() );
@@ -3581,8 +3594,8 @@ BYTE * CSphTokenizer_UTF8::GetTokenSyn ()
 
 		for ( ; m_iSynFlushing<0; )
 		{
-			assert ( m_iSynAccBytes<(int)sizeof(m_sSynAcc) );
-			assert ( m_iSynFolded<(int)sizeof(m_sSynFolded) );
+			assert ( m_iSynBytes<(int)sizeof(m_sSyn) );
+			assert ( m_iFolded<(int)sizeof(m_sFolded) );
 
 			// get raw and folded codepoints
 			int iCode = -1;
@@ -3593,7 +3606,7 @@ BYTE * CSphTokenizer_UTF8::GetTokenSyn ()
 			int iFolded = 0;
 			if ( iCode<0 )
 			{
-				if ( !m_bLast || m_iSynAccBytes==0 )
+				if ( !m_bLast || m_iSynBytes==0 )
 				{
 					// if it's not the last one, or if the acc is empty, just bail out
 					m_iLastTokenLen = 0;
@@ -3610,11 +3623,11 @@ BYTE * CSphTokenizer_UTF8::GetTokenSyn ()
 				// check for specials
 				bool bRawSpecial =
 					( iFolded & FLAG_CODEPOINT_SPECIAL ) &&
-					!( ( iFolded & FLAG_CODEPOINT_DUAL ) && m_iSynAccBytes && m_sSynAcc[m_iSynAccBytes-1]!=MAGIC_SYNONYM_WHITESPACE );
+					!( ( iFolded & FLAG_CODEPOINT_DUAL ) && m_iSynBytes && m_sSyn[m_iSynBytes-1]!=MAGIC_SYNONYM_WHITESPACE );
 
 				bool bFoldedSpecial =
 					( iFolded & FLAG_CODEPOINT_SPECIAL ) &&
-					!( ( iFolded & FLAG_CODEPOINT_DUAL ) && m_iSynFolded && m_sSynFolded[m_iSynFolded-1]!=0 );
+					!( ( iFolded & FLAG_CODEPOINT_DUAL ) && m_iFolded && m_sFolded[m_iFolded-1]!=0 );
 
 				// fixup folded code
 				if ( iFolded & FLAG_CODEPOINT_SYNONYM )
@@ -3624,83 +3637,78 @@ BYTE * CSphTokenizer_UTF8::GetTokenSyn ()
 				// skip short folded tokens
 				if ( !iFolded || bFoldedSpecial )
 				{
-					if ( m_iSynFoldedLastCodes<m_iMinWordLen )
-						m_iSynFolded = m_iSynFoldedLastTok;
+					if ( m_iFoldedLastCodes<m_iMinWordLen )
+						m_iFolded = m_iFoldedLastTok;
 				}
 
 				if ( bRawSpecial )
 				{
 					// it's special for raw token (and therefore for folded too); detach it and flush
-					m_sSynFolded[m_iSynFolded++] = 0;
-					m_iSynFolded += sphUTF8Encode ( m_sSynFolded+m_iSynFolded, iFolded & MASK_CODEPOINT );
-					m_sSynFolded[m_iSynFolded++] = 0;
+					m_sFolded[m_iFolded++] = 0;
+					m_iFolded += sphUTF8Encode ( m_sFolded+m_iFolded, iFolded & MASK_CODEPOINT );
+					m_sFolded[m_iFolded++] = 0;
 					m_iSynFlushing = 0;
 
 				} else if ( bFoldedSpecial )
 				{
 					// it's either non-special or dual for raw token; but special for folded
-					if ( m_iSynAccCodes<SPH_MAX_WORD_LEN )
+					if ( m_iSynCodes<SPH_MAX_WORD_LEN )
 					{
-						m_iSynAccBytes += sphUTF8Encode ( m_sSynAcc+m_iSynAccBytes, iCode );
-						m_iSynAccCodes++;
+						m_iSynBytes += sphUTF8Encode ( m_sSyn+m_iSynBytes, iCode );
+						m_iSynCodes++;
 					}
 
-					m_sSynFolded[m_iSynFolded++] = 0;
-					m_iSynFolded += sphUTF8Encode ( m_sSynFolded+m_iSynFolded, iFolded );
-					m_sSynFolded[m_iSynFolded++] = 0;
+					m_sFolded[m_iFolded++] = 0;
+					m_iFolded += sphUTF8Encode ( m_sFolded+m_iFolded, iFolded );
+					m_sFolded[m_iFolded++] = 0;
 
 				} else
 				{
 					// it's non-special or dual for both raw and folded tokens
-					if ( m_iSynAccCodes<SPH_MAX_WORD_LEN )
+					if ( m_iSynCodes<SPH_MAX_WORD_LEN )
 					{
-						m_iSynAccBytes += sphUTF8Encode ( m_sSynAcc+m_iSynAccBytes, iCode );
-						m_iSynAccCodes++;
+						m_iSynBytes += sphUTF8Encode ( m_sSyn+m_iSynBytes, iCode );
+						m_iSynCodes++;
 					}
-					if ( m_iSynFoldedLastCodes<SPH_MAX_WORD_LEN || !iFolded )
-						m_iSynFolded += sphUTF8Encode ( m_sSynFolded+m_iSynFolded, iFolded );
+					if ( m_iFoldedLastCodes<SPH_MAX_WORD_LEN || !iFolded )
+						m_iFolded += sphUTF8Encode ( m_sFolded+m_iFolded, iFolded );
 				}
 
 				if ( !iFolded || bFoldedSpecial )
 				{
-					m_iSynFoldedLastTok = m_iSynFolded;
-					m_iSynFoldedLastCodes = 0;
+					m_iFoldedLastTok = m_iFolded;
+					m_iFoldedLastCodes = 0;
 				} else
 				{
-					m_iSynFoldedLastCodes++;
+					m_iFoldedLastCodes++;
 				}
 				continue;
 			}
 			assert ( iFolded==0 );
 
 			// handle raw whitespace
-			if ( iCode>=0 && ( !m_iSynAccBytes || m_sSynAcc[m_iSynAccBytes-1]==MAGIC_SYNONYM_WHITESPACE ) ) // ignore heading and trailing whitespace
+			if ( iCode>=0 && ( !m_iSynBytes || m_sSyn[m_iSynBytes-1]==MAGIC_SYNONYM_WHITESPACE ) ) // ignore heading and trailing whitespace
 				continue;
 
 			// skip short folded tokens
-			if ( m_iSynFoldedLastCodes<m_iMinWordLen )
-				m_iSynFolded = m_iSynFoldedLastTok;
+			if ( m_iFoldedLastCodes<m_iMinWordLen )
+				m_iFolded = m_iFoldedLastTok;
 
-			m_sSynAcc[m_iSynAccBytes++] = MAGIC_SYNONYM_WHITESPACE;
-			m_sSynFolded[m_iSynFolded++] = 0;
+			m_sSyn[m_iSynBytes++] = MAGIC_SYNONYM_WHITESPACE;
+			m_sFolded[m_iFolded++] = 0;
 
-			m_iSynFoldedLastTok = m_iSynFolded;
-			m_iSynFoldedLastCodes = 0;
+			m_iFoldedLastTok = m_iFolded;
+			m_iFoldedLastCodes = 0;
 
 			// check current prefix against synonyms list
 			// FIXME! optimize this
 			bool bPartial = false;
 			ARRAY_FOREACH ( i, m_dSynonyms )
 			{
-				SynCheck_e eCheck = SynCheckPrefix ( m_dSynonyms[i], m_sSynAcc, m_iSynAccBytes );
+				SynCheck_e eCheck = SynCheckPrefix ( m_dSynonyms[i], m_sSyn, m_iSynBytes );
 				if ( eCheck==SYNCHECK_EXACT )
 				{
-					m_iSynAccBytes = 0;
-					m_iSynAccCodes = 0;
-
-					m_iSynFolded = 0;
-					m_iSynFoldedLastCodes = 0;
-					m_iSynFoldedLastTok = 0;
+					SynReset ();
 
 					m_iLastTokenLen = m_dSynonyms[i].m_iToLen;
 					strcpy ( (char*)m_sAccum, m_dSynonyms[i].m_sTo.cstr() );
@@ -3724,31 +3732,25 @@ BYTE * CSphTokenizer_UTF8::GetTokenSyn ()
 		assert ( m_iSynFlushing>=0 );
 		int iPos = m_iSynFlushing;
 
-		while ( iPos<m_iSynFolded && !m_sSynFolded[iPos] )
+		while ( iPos<m_iFolded && !m_sFolded[iPos] )
 			iPos++;
 
 		// check if we're over
-		if ( iPos>=m_iSynFolded )
+		if ( iPos>=m_iFolded )
 		{
-			m_iSynAccBytes = 0;
-			m_iSynAccCodes = 0;
-
-			m_iSynFolded = 0;
-			m_iSynFoldedLastCodes = 0;
-			m_iSynFoldedLastTok = 0;
-
+			SynReset ();
 			m_iSynFlushing = -1;
 			continue;
 		}
 
 		// got something; memorize it and skip until whitespace
 		int iRes = iPos;
-		while ( iPos<m_iSynFolded && m_sSynFolded[iPos] )
+		while ( iPos<m_iFolded && m_sFolded[iPos] )
 			iPos++;
 		m_iLastTokenLen = iPos - iRes;
 		m_iSynFlushing = iPos;
 
-		return m_sSynFolded + iRes;
+		return m_sFolded + iRes;
 	}
 }
 

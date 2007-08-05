@@ -3596,6 +3596,7 @@ BYTE * CSphTokenizer_UTF8::GetTokenSyn ()
 		// accumulate incoming raw stream and check it for synonyms
 		////////////////////////////////////////////////////////////
 
+		bool bBreakOnFolded = false;
 		for ( ; m_iSynFlushing<0; )
 		{
 			assert ( m_iSynBytes<(int)sizeof(m_sSyn) );
@@ -3661,6 +3662,9 @@ BYTE * CSphTokenizer_UTF8::GetTokenSyn ()
 					{
 						m_iSynBytes += sphUTF8Encode ( m_sSyn+m_iSynBytes, iCode );
 						m_iSynCodes++;
+					} else
+					{
+						bBreakOnFolded = true;
 					}
 
 					if ( m_iFoldedLast ) m_sFolded[m_iFolded++] = 0;
@@ -3675,6 +3679,9 @@ BYTE * CSphTokenizer_UTF8::GetTokenSyn ()
 					{
 						m_iSynBytes += sphUTF8Encode ( m_sSyn+m_iSynBytes, iCode );
 						m_iSynCodes++;
+					} else
+					{
+						bBreakOnFolded = true;
 					}
 
 					if ( !iFolded )
@@ -3692,6 +3699,11 @@ BYTE * CSphTokenizer_UTF8::GetTokenSyn ()
 				{
 					m_iFoldedLastTok = m_iFolded;
 					m_iFoldedLastCodes = 0;
+					if ( bBreakOnFolded )
+					{
+						m_iSynFlushing = 0;
+						break;
+					}
 				} else
 				{
 					m_iFoldedLastCodes++;

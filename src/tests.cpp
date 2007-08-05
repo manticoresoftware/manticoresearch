@@ -146,6 +146,21 @@ void TestUTF8Tokenizer ()
 
 			pTokenizer->SetBuffer ( (BYTE*)sLine4, strlen(sLine4), true );
 			assert ( pTokenizer->GetToken()==NULL );
+
+			printf ( "testing tokenizer for uberlong synonym token handling\n" );
+
+			for ( int i=0; i<UBERLONG-3; i+=3 )
+			{
+				sLine4[i+0] = 'a';
+				sLine4[i+1] = 'a';
+				sLine4[i+2] = '/';
+				sLine4[i+3] = '\0';
+			}
+
+			pTokenizer->SetBuffer ( (BYTE*)sLine4, strlen(sLine4), true );
+			for ( int i=0; i<UBERLONG-3; i+=3 )
+				assert ( !strcmp(  (char*)pTokenizer->GetToken(), "aa" ) );
+			assert ( pTokenizer->GetToken()==NULL );
 		}
 
 		SafeDelete ( sLine4 );

@@ -11810,8 +11810,10 @@ BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 		DWORD uValue = 0;
 		if ( tAttr.m_eAttrType==SPH_ATTR_ORDINAL )
 		{
-			// memorize string for ordinals
+			// memorize string for ordinals; fixup NULLs
 			m_dStrAttrs[i] = SqlColumn ( tAttr.m_iIndex );
+			if ( !m_dStrAttrs[i].cstr() )
+				m_dStrAttrs[i] = "";
 
 		} else if (!( tAttr.m_eAttrType & SPH_ATTR_MULTI ))
 		{

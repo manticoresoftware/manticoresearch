@@ -239,6 +239,7 @@ Currently known systems Sphinx has been successfully running on are:
    * FreeBSD 4.x, 5.x, 6.x
    * NetBSD 1.6
    * Solaris 9
+   * Mac OS X
 
 I hope Sphinx will work on other Unix platforms as well. If the platform
 you run Sphinx on is not in this list, please do report it.
@@ -1814,7 +1815,7 @@ Normally, rotating an index works as follows:
 
 However, if there's a lot of attribute or dictionary data, then preloading
 step could take noticeble time - up to several minutes in case of
-preloading 5-10+ GB files.
+preloading 1-5+ GB files.
 
 With seamless rotate enabled, rotating works as follows:
 

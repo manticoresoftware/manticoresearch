@@ -92,6 +92,13 @@ enum ESphLogLevel
 	LOG_INFO	= 2
 };
 
+#define					SEARCHD_SERVICE_NAME	"searchd"
+
+static bool				g_bService		= false;
+static bool				g_bServiceStop	= false;
+
+static CSphVector<CSphString,8>	g_dArgs;
+
 static bool				g_bHeadDaemon	= false;
 static bool				g_bLogStdout	= true;
 static int				g_iLogFile		= STDOUT_FILENO;
@@ -224,7 +231,7 @@ void Shutdown (); // forward ref for sphFatal()
 
 void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 {
-	if ( eLevel>g_eLogLevel || g_iLogFile<0 )
+	if ( eLevel>g_eLogLevel || ( g_iLogFile<0 && !g_bService ) )
 		return;
 
 	time_t tNow;
@@ -245,16 +252,54 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	int iLen = strlen(sBuf);
 
 	vsnprintf ( sBuf+iLen, sizeof(sBuf)-iLen-1, sFmt, ap );
-	strncat ( sBuf, "\n", sizeof(sBuf) );
 
-	sphLockEx ( g_iLogFile, true );
-	lseek ( g_iLogFile, 0, SEEK_END );
-	write ( g_iLogFile, sBuf, strlen(sBuf) );
-	sphLockUn ( g_iLogFile );
-
-	if ( g_bLogStdout && g_iLogFile!=STDOUT_FILENO )
+#if USE_WINDOWS
+	if ( g_bService && g_iLogFile==STDOUT_FILENO )
 	{
-		write ( STDOUT_FILENO, sBuf, strlen(sBuf) );
+		HANDLE hEventSource;
+		LPCTSTR lpszStrings[2];
+
+		hEventSource = RegisterEventSource ( NULL, SEARCHD_SERVICE_NAME );
+		if ( hEventSource )
+		{
+			lpszStrings[0] = SEARCHD_SERVICE_NAME;
+			lpszStrings[1] = sBuf;
+
+			WORD eType = EVENTLOG_INFORMATION_TYPE;
+			switch ( eLevel )
+			{
+				case LOG_FATAL:		eType = EVENTLOG_ERROR_TYPE; break;
+				case LOG_WARNING:	eType = EVENTLOG_WARNING_TYPE; break;
+				case LOG_INFO:		eType = EVENTLOG_INFORMATION_TYPE; break;
+			}
+
+			ReportEvent ( hEventSource,	// event log handle
+				eType,					// event type
+				0,						// event category
+				0,						// event identifier
+				NULL,					// no security identifier
+				2,						// size of lpszStrings array
+				0,						// no binary data
+				lpszStrings,			// array of strings
+				NULL );					// no binary data
+
+			DeregisterEventSource ( hEventSource );
+		}
+
+	} else
+#endif
+	{
+		strncat ( sBuf, "\n", sizeof(sBuf) );
+
+		sphLockEx ( g_iLogFile, true );
+		lseek ( g_iLogFile, 0, SEEK_END );
+		write ( g_iLogFile, sBuf, strlen(sBuf) );
+		sphLockUn ( g_iLogFile );
+
+		if ( g_bLogStdout && g_iLogFile!=STDOUT_FILENO )
+		{
+			write ( STDOUT_FILENO, sBuf, strlen(sBuf) );
+		}
 	}
 }
 
@@ -290,7 +335,7 @@ void sphInfo ( const char * sFmt, ... )
 
 void LogInternalError ( const char * sError )
 {
-	sphWarning(  "INTERNAL ERROR: %s", sError );
+	sphWarning( "INTERNAL ERROR: %s", sError );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -473,7 +518,7 @@ void Shutdown ()
 				continue;
 
 			if ( !tServed.m_pIndex->SaveAttributes () )
-				sphWarning ( "index %s: attrs save failed: %s\n",
+				sphWarning ( "index %s: attrs save failed: %s",
 				g_hIndexes.IterateGetKey().cstr(), tServed.m_pIndex->GetLastError().cstr() );
 		}
 
@@ -1103,7 +1148,7 @@ bool CSphCache::ReadFromFile ( const CSphQuery & tQuery, const char * sIndexName
 
 	char sBuf [ SPH_MAX_FILENAME_LEN ];
 	snprintf ( sBuf, sizeof(sBuf), "%s/%s/%c%c/%c%c/%s", m_sCacheDir.cstr(),
-		sIndexName, m_sCacheFileName[0], m_sCacheFileName[1],  m_sCacheFileName[2], m_sCacheFileName[3], m_sCacheFileName );
+		sIndexName, m_sCacheFileName[0], m_sCacheFileName[1], m_sCacheFileName[2], m_sCacheFileName[3], m_sCacheFileName );
 
 	struct stat stFileInfo;
 	if ( lstat ( sBuf, &stFileInfo) < 0 )
@@ -2304,7 +2349,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 	bool bIdrange64 = false;
 	if ( iVer>=0x108 )
-		bIdrange64 = ( tReq.GetInt()!=0  );
+		bIdrange64 = ( tReq.GetInt()!=0 );
 
 	if ( bIdrange64 )
 	{
@@ -2512,14 +2557,14 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			// delay between retries
 			if ( iRetry>0 )
 				sphUsleep ( tQuery.m_iRetryDelay );
-    
+
 			// connect to remote agents and query them
 			dFailures.m_sIndex = sIndexes;
 			ConnectToRemoteAgents ( tDist.m_dAgents, iRetry!=0, dFailures );
 
 			SearchRequestBuilder_t tReqBuilder ( tQuery );
 			int iRemote = QueryRemoteAgents ( tDist.m_dAgents, tDist.m_iAgentConnectTimeout, tReqBuilder, dFailures );
-    
+
 			// while the remote queries are running, do local searches
 			// FIXME! what if the remote agents finish early, could they timeout?
 			float tmQuery = 0.0f;
@@ -2530,7 +2575,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 					tReq.SendErrorReply ( "all remote agents unreachable, no local indexes configured" );
 					return;
 				}
-    
+
 				tmQuery = -sphLongTimer ();
 				ARRAY_FOREACH ( i, tDist.m_dLocal )
 				{
@@ -2538,12 +2583,12 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 					assert ( tServed.m_pIndex );
 					assert ( tServed.m_pDict );
 					assert ( tServed.m_pTokenizer );
-    
+
 					// create queue
 					ISphMatchSorter * pSorter = CreateSorter ( tQuery, *tServed.m_pSchema, tDist.m_dLocal[i].cstr(), tReq );
 					if ( !pSorter )
 						return;
-    
+
 					// do query
 					iTries++;
 					if ( !tServed.m_pIndex->QueryEx ( tServed.m_pTokenizer, tServed.m_pDict, &tQuery, pRes, pSorter ) )
@@ -2553,7 +2598,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 						dFailures.Submit ( "%s", tServed.m_pIndex->GetLastError().cstr() );
 					} else
 						iSuccesses++;
-    
+
 					// extract my results and store schema
 					if ( pSorter->GetLength() )
 					{
@@ -2565,7 +2610,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 				}
 				tmQuery += sphLongTimer ();
 			}
-    
+
 			// wait for remote queries to complete
 			if ( iRemote )
 			{
@@ -2573,7 +2618,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 				SearchReplyParser_t tParser ( pRes );
 				int iMsecLeft = tDist.m_iAgentQueryTimeout - int(tmQuery*1000.0f);
 				int iReplys = WaitForRemoteAgents ( tDist.m_dAgents, Max(iMsecLeft,0), tParser, dFailures );
-    
+
 				// check if there were valid (though might be 0-matches) replys, and merge them
 				iSuccesses += iReplys;
 				if ( iReplys )
@@ -2582,21 +2627,21 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 					Agent_t & tAgent = tDist.m_dAgents[iAgent];
 					if ( tAgent.m_bFailure || !tAgent.m_tRes.m_dMatches.GetLength() )
 						continue;
-   
+
 					// merge this agent's results
 					ARRAY_FOREACH ( i, tAgent.m_tRes.m_dMatches )
 						pRes->m_dMatches.Add ( tAgent.m_tRes.m_dMatches[i] ); // FIXME! what about tagging?
-    
+
 					dMatchCounts.Add ( tAgent.m_tRes.m_dMatches.GetLength() );
 					dSchemas.Add ( tAgent.m_tRes.m_tSchema );
-    
+
 					tAgent.m_tRes.m_dMatches.Reset ();
-    
+
 					// merge this agent's stats
 					pRes->m_iTotalMatches += tAgent.m_tRes.m_iTotalMatches;
 				}
 			}
-    
+
 			// check if we need to retry again
 			int iToRetry = 0;
 			ARRAY_FOREACH ( i, tDist.m_dAgents )
@@ -3982,14 +4027,242 @@ void CheckRotate ()
 }
 
 
-int main ( int argc, char **argv )
+#if !USE_WINDOWS
+#define WINAPI
+#else
+
+SERVICE_STATUS			g_ss;
+SERVICE_STATUS_HANDLE	g_ssHandle;
+
+
+void MySetServiceStatus ( DWORD dwCurrentState, DWORD dwWin32ExitCode, DWORD dwWaitHint )
 {
+	static DWORD dwCheckPoint = 1;
+
+	if ( dwCurrentState == SERVICE_START_PENDING )
+		g_ss.dwControlsAccepted = 0;
+	else
+		g_ss.dwControlsAccepted = SERVICE_ACCEPT_STOP;
+
+	g_ss.dwCurrentState = dwCurrentState;
+	g_ss.dwWin32ExitCode = dwWin32ExitCode;
+	g_ss.dwWaitHint = dwWaitHint;
+
+	if ( dwCurrentState==SERVICE_RUNNING || dwCurrentState==SERVICE_STOPPED )
+		g_ss.dwCheckPoint = 0;
+	else
+		g_ss.dwCheckPoint = dwCheckPoint++;
+
+	SetServiceStatus ( g_ssHandle, &g_ss );
+}
+
+
+void WINAPI ServiceControl ( DWORD dwControlCode )
+{
+	switch ( dwControlCode )
+	{
+		case SERVICE_CONTROL_STOP:
+			MySetServiceStatus ( SERVICE_STOP_PENDING, NO_ERROR, 0 );
+			g_bServiceStop = true;
+			break;
+
+		default:
+			MySetServiceStatus ( g_ss.dwCurrentState, NO_ERROR, 0 );
+			break;
+	}
+}
+
+
+// warning! static buffer, non-reentrable
+const char * WinErrorInfo ()
+{
+	static char sBuf[1024];
+
+	DWORD uErr = ::GetLastError ();
+	sprintf ( sBuf, "code=%d, error=", uErr );
+
+	int iLen = strlen(sBuf);
+	if ( !FormatMessage ( FORMAT_MESSAGE_FROM_SYSTEM, NULL, uErr, 0, sBuf+iLen, sizeof(sBuf)-iLen, NULL ) ) // FIXME? force US-english langid?
+		strcpy ( sBuf+iLen, "(no message)" );
+
+	return sBuf;
+}
+
+
+SC_HANDLE ServiceOpenManager ()
+{
+	SC_HANDLE hSCM = OpenSCManager (
+		NULL,					// local computer
+		NULL,					// ServicesActive database 
+		SC_MANAGER_ALL_ACCESS );// full access rights
+
+	if ( hSCM==NULL )
+		sphFatal ( "OpenSCManager() failed: %s", WinErrorInfo() );
+
+	return hSCM;
+}
+
+
+void strappend ( char * sBuf, const int iBufLimit, char * sAppend )
+{
+	int iLen = strlen(sBuf);
+	int iAppend = strlen(sAppend);
+
+	int iToCopy = Min ( iBufLimit-iLen-1, iAppend );
+	memcpy ( sBuf+iLen, sAppend, iToCopy );
+	sBuf[iLen+iToCopy] = '\0';
+}
+
+
+void ServiceInstall ( int argc, char ** argv )
+{
+	if ( g_bService )
+		return;
+
+	sphInfo ( "Installing service..." );
+
+	char szPath[MAX_PATH];
+	if( !GetModuleFileName ( NULL, szPath, MAX_PATH ) )
+		sphFatal ( "GetModuleFileName() failed: %s", WinErrorInfo() );
+
+	strappend ( szPath, sizeof(szPath), " --ntservice" );
+	for ( int i=1; i<argc; i++ )
+		if ( strcmp ( argv[i], "--install" ) )
+	{
+		strappend ( szPath, sizeof(szPath), " " );
+		strappend ( szPath, sizeof(szPath), argv[i] );
+	}
+
+	SC_HANDLE hSCM = ServiceOpenManager ();
+	SC_HANDLE hService = CreateService (
+		hSCM,							// SCM database 
+		SEARCHD_SERVICE_NAME,			// name of service 
+		SEARCHD_SERVICE_NAME,			// service name to display 
+		SERVICE_ALL_ACCESS,				// desired access 
+		SERVICE_WIN32_OWN_PROCESS,		// service type 
+		SERVICE_AUTO_START,				// start type 
+		SERVICE_ERROR_NORMAL,			// error control type 
+		szPath,							// path to service's binary 
+		NULL,							// no load ordering group 
+		NULL,							// no tag identifier 
+		NULL,							// no dependencies 
+		NULL,							// LocalSystem account 
+		NULL );							// no password 
+
+	if ( !hService ) 
+	{
+		CloseServiceHandle ( hSCM );
+		sphFatal ( "CreateService() failed: %s", WinErrorInfo() );
+
+	} else
+	{
+		sphInfo ( "Service '%s' installed succesfully.", SEARCHD_SERVICE_NAME ); 
+	}
+
+	SERVICE_DESCRIPTION tDesc;
+	tDesc.lpDescription = SEARCHD_SERVICE_NAME "-" SPHINX_VERSION;
+	if ( !ChangeServiceConfig2 ( hService, SERVICE_CONFIG_DESCRIPTION, &tDesc ) )
+		sphWarning ( "failed to set service description" );
+
+	CloseServiceHandle ( hService ); 
+	CloseServiceHandle ( hSCM );
+}
+
+
+void ServiceDelete ()
+{
+	if ( g_bService )
+		return;
+
+	sphInfo ( "Deleting service..." );
+
+	// open manager
+	SC_HANDLE hSCM = ServiceOpenManager ();
+
+	// open service
+	SC_HANDLE hService = OpenService ( hSCM, SEARCHD_SERVICE_NAME, DELETE );
+	if ( !hService )
+	{ 
+		CloseServiceHandle ( hSCM );
+		sphFatal ( "OpenService() failed: %s", WinErrorInfo() );
+	}
+
+	// do delete
+	bool bRes = !!DeleteService(hService);
+	CloseServiceHandle ( hService );
+	CloseServiceHandle ( hSCM );
+
+	if ( !bRes ) 
+		sphFatal ( "DeleteService() failed: %s", WinErrorInfo() );
+	else
+		sphInfo ( "Service '%s' deleted succesfully.", SEARCHD_SERVICE_NAME ); 
+
+}
+#endif // USE_WINDOWS
+
+
+void ShowHelp ()
+{
+	fprintf ( stdout,
+		"Usage: searchd [OPTIONS]\n"
+		"\n"
+		"Options are:\n"
+		"-h, --help\t\tdisplay this help message\n"
+		"-c, -config <file>\tread configuration from specified file\n"
+		"\t\t\t(default is sphinx.conf)\n"
+		"--stop\t\t\tsend SIGTERM to currently running searchd\n"
+		"\t\t\t(PID is taken from pid_file specified in config file)\n"
+#if USE_WINDOWS
+		"--install\t\tinstall as Windows service\n"
+		"--delete\t\tdelete Windows service\n"
+#endif
+		"\n"
+		"Debugging options are:\n"
+		"--console\t\trun in console mode (do not fork, do not log to files)\n"
+		"-p, --port <port>\tlisten on given port (overrides config setting)\n"
+		"-i, --index <index>\tonly serve one given index\n"
+		"\n"
+		"Examples:\n"
+		"searchd --config /usr/local/sphinx/etc/sphinx.conf\n"
+#if USE_WINDOWS
+		"searchd --install --config c:\\sphinx\\sphinx.conf\n"
+#endif
+		);
+}
+
+
+int WINAPI ServiceMain ( int argc, char **argv )
+{
+#if USE_WINDOWS
+	CSphVector<char *,8> dArgs;
+	if ( g_bService )
+	{
+		g_ssHandle = RegisterServiceCtrlHandler ( SEARCHD_SERVICE_NAME, ServiceControl );
+		if ( !g_ssHandle )
+			sphFatal ( "failed to start service: RegisterServiceCtrlHandler() failed: %s", WinErrorInfo() );
+
+		g_ss.dwServiceType = SERVICE_WIN32_OWN_PROCESS;
+		MySetServiceStatus ( SERVICE_START_PENDING, NO_ERROR, 4000 );
+
+		if ( argc<=1 )
+		{
+			dArgs.Resize ( g_dArgs.GetLength() );
+			ARRAY_FOREACH ( i, g_dArgs )
+				dArgs[i] = (char*) g_dArgs[i].cstr();
+
+			argc = g_dArgs.GetLength();
+			argv = &dArgs[0];
+		}
+	}
+#endif
+
 	int rsock;
 	struct sockaddr_in remote_iaddr;
 	socklen_t len;
 	CSphConfig conf;
 
-	fprintf ( stdout, SPHINX_BANNER );
+	if ( !g_bService )
+		fprintf ( stdout, SPHINX_BANNER );
 
 	//////////////////////
 	// parse command line
@@ -4011,9 +4284,14 @@ int main ( int argc, char **argv )
 		if ( argv[i][0]!='-' )		break;
 
 		// handle no-arg options
-		OPT ( "-h", "--help" )		{ fprintf ( stdout, "usage: searchd [--config file.conf] [--console|--stop]\n" ); return 0; }
+		OPT ( "-h", "--help" )		{ ShowHelp(); return 0; }
 		OPT1 ( "--console" )		bOptConsole = true;
 		OPT1 ( "--stop" )			bOptStop = true;
+#if USE_WINDOWS
+		OPT1 ( "--install" )		{ if ( !g_bService ) { ServiceInstall ( argc, argv ); return 0; } }
+		OPT1 ( "--delete" )			{ if ( !g_bService ) { ServiceDelete (); return 0; } }
+		OPT1 ( "--ntservice" )		; // it's valid but handled elsewhere
+#endif
 
 		// handle 1-arg options
 		else if ( (i+1)>=argc )		break;
@@ -4025,14 +4303,14 @@ int main ( int argc, char **argv )
 		else break;
 	}
 	if ( i!=argc )
-	{
-		fprintf ( stdout, "ERROR: malformed or unknown option near '%s'.\n\n", argv[i] );
-		return 1;
-	}
+		sphFatal ( "malformed or unknown option near '%s'; use '-h' or '--help' to see available options.", argv[i] );
 
 #if USE_WINDOWS
-	sphWarning ( "forcing --console mode on Windows" );
-	bOptConsole = true;
+	if ( !g_bService )
+	{
+		sphWarning ( "forcing --console mode on Windows" );
+		bOptConsole = true;
+	}
 
 	// init WSA on Windows
 	// we need to do it this early because otherwise gethostbyname() from config parser could fail
@@ -4368,7 +4646,7 @@ int main ( int argc, char **argv )
 				continue;
 			}
 			if ( !tIdx.m_pDict->SetMorphology ( hIndex("morphology"), tIdx.m_pTokenizer->IsUtf8(), sError ) )
-				sphWarning ( "index '%s': %s\n", sIndexName, sError.cstr() );	
+				sphWarning ( "index '%s': %s", sIndexName, sError.cstr() );	
 			tIdx.m_pDict->LoadStopwords ( hIndex.Exists ( "stopwords" ) ? hIndex["stopwords"].cstr() : NULL, tIdx.m_pTokenizer );
 
 			// configure memlocking
@@ -4447,6 +4725,7 @@ int main ( int argc, char **argv )
 		}
 
 		// do daemonize
+#if !USE_WINDOWS
 		int iDevNull = open ( "/dev/null", O_RDWR );
 		close ( STDIN_FILENO );
 		close ( STDOUT_FILENO );
@@ -4454,6 +4733,7 @@ int main ( int argc, char **argv )
 		dup2 ( iDevNull, STDIN_FILENO );
 		dup2 ( iDevNull, STDOUT_FILENO );
 		dup2 ( iDevNull, STDERR_FILENO );
+#endif
 		g_bLogStdout = false;
 
 		// explicitly unlock everything in parent immediately before fork
@@ -4549,10 +4829,24 @@ int main ( int argc, char **argv )
 	g_bHeadDaemon = true;
 	sphInfo ( "accepting connections" );
 
+#if USE_WINDOWS
+	if ( g_bService )
+		MySetServiceStatus ( SERVICE_RUNNING, NO_ERROR, 0 );
+#endif
+
 	sphSetInternalErrorCallback ( LogInternalError );
 
 	for ( ;; )
 	{
+#if USE_WINDOWS
+		if ( g_bService && g_bServiceStop )
+		{
+			Shutdown ();
+			MySetServiceStatus ( SERVICE_STOPPED, NO_ERROR, 0 );
+			exit ( 0 );
+		}
+#endif
+
 		CheckLeaks ();
 		CheckPipes ();
 		CheckRotate ();
@@ -4604,7 +4898,7 @@ int main ( int argc, char **argv )
 			(uClientIP>>24) & 0xff, (uClientIP>>16) & 0xff, (uClientIP>>8) & 0xff, uClientIP & 0xff,
 			(int)ntohs(remote_iaddr.sin_port) );
 
-		if ( bOptConsole )
+		if ( bOptConsole || g_bService )
 		{
 			HandleClient ( rsock, sClientIP, -1 );
 			sphSockClose ( rsock );
@@ -4629,6 +4923,35 @@ int main ( int argc, char **argv )
 		}
 		#endif // !USE_WINDOWS
 	}
+}
+
+
+int main ( int argc, char **argv )
+{
+#if USE_WINDOWS
+	for ( int i=1; i<argc; i++ )
+		if ( strcmp ( argv[i], "--ntservice" )==0 )
+	{
+		g_bService = true;
+		break;
+	}
+
+	if ( g_bService )
+	{
+		for ( int i=0; i<argc; i++ )
+			g_dArgs.Add ( argv[i] );
+
+		SERVICE_TABLE_ENTRY dDispatcherTable[] =
+		{
+			{ SEARCHD_SERVICE_NAME, (LPSERVICE_MAIN_FUNCTION)ServiceMain },
+			{ NULL, NULL }
+		};
+		if ( !StartServiceCtrlDispatcher ( dDispatcherTable ) )
+			sphFatal ( "StartServiceCtrlDispatcher() failed: %s", WinErrorInfo() );
+	} else
+#endif
+
+	return ServiceMain ( argc, argv );
 }
 
 //

@@ -293,7 +293,7 @@ void ShowProgress ( const CSphIndexProgress * pProgress, bool bPhaseEnd )
 			break;
 
 		case CSphIndexProgress::PHASE_COLLECT_MVA:
-			fprintf ( stdout, "collected %d attr values", pProgress->m_iAttrs );
+			fprintf ( stdout, "collected %"PRIu64" attr values", pProgress->m_iAttrs );
 			break;
 
 		case CSphIndexProgress::PHASE_SORT_MVA:

@@ -95,7 +95,9 @@ enum ESphLogLevel
 #define					SEARCHD_SERVICE_NAME	"searchd"
 
 static bool				g_bService		= false;
+#if USE_WINDOWS
 static bool				g_bServiceStop	= false;
+#endif
 
 static CSphVector<CSphString,8>	g_dArgs;
 
@@ -1567,12 +1569,14 @@ static SmallStringHash_T < DistributedIndex_t >		g_hDistIndexes;
 
 struct IRequestBuilder_t : public ISphNoncopyable
 {
+	virtual ~IRequestBuilder_t () {} // to avoid gcc4 warns
 	virtual void BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut ) const = 0;
 };
 
 
 struct IReplyParser_t
 {
+	virtual ~IReplyParser_t () {} // to avoid gcc4 warns
 	virtual bool ParseReply ( MemInputBuffer_c & tReq, Agent_t & tAgent, SearchFailuresLog_t & dFailures ) const = 0;
 };
 

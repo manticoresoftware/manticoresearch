@@ -37,6 +37,8 @@ int main ( int argc, char ** argv )
 			"-i, --index <index>\tsearch given index only (default: all indexes)\n"
 			"-a, --any\t\tmatch any query word (default: match all words)\n"
 			"-b, --boolean\t\tmatch in boolean mode\n"
+			"-p, --phrase\t\tmatch exact phrase\n"
+			"-e, --extended\t\tmatch in extended mode\n"
 			"-f, --filter <attr> <v>\tonly match if attribute attr value is v\n"
 			"-s, --start <offset>\tprint matches starting from this offset (default: 0)\n"
 			"-l, --limit <count>\tprint this many matches (default: 20)\n"

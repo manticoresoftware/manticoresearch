@@ -10388,7 +10388,7 @@ bool CSphIndex_VLN::QueryEx ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSph
 			for ( CSphMatch * pCur=pHead; pCur<pTail; pCur++ )
 				LookupDocinfo ( *pCur );
 	}
-	pResult->m_pMva = &m_pMva[0];
+	pResult->m_pMva = m_pMva.GetWritePtr();
 
 	// adjust schema
 	if ( pQuery->m_iGroupbyOffset>=0 )

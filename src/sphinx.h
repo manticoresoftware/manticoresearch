@@ -968,33 +968,16 @@ private:
 /// search query match
 struct CSphMatch : public CSphDocInfo
 {
-	int m_iWeight;
+	int	m_iWeight;	///< my weight
+	int	m_iTag;		///< my index tag
 
-	CSphMatch () : m_iWeight ( 0 ) {}
-	bool operator == ( const CSphMatch & rhs ) const		{ return ( m_iDocID==rhs.m_iDocID ); }
+	CSphMatch () : m_iWeight ( 0 ), m_iTag ( 0 ) {}
+	bool operator == ( const CSphMatch & rhs ) const { return ( m_iDocID==rhs.m_iDocID ); }
 };
+
 
 /// specialized swapper
 inline void Swap ( CSphMatch & a, CSphMatch & b )
-{
-	Swap ( a.m_iDocID, b.m_iDocID );
-	Swap ( a.m_iRowitems, b.m_iRowitems );
-	Swap ( a.m_pRowitems, b.m_pRowitems );
-	Swap ( a.m_iWeight, b.m_iWeight );
-}
-
-
-/// search query match with some attached userland tag
-struct CSphTaggedMatch : public CSphMatch
-{
-	int m_iTag;
-
-	CSphTaggedMatch () : m_iTag ( 0 ) {}
-	const CSphTaggedMatch & operator = ( const CSphMatch & rhs ) { CSphMatch::operator = ( rhs ); return *this; }
-};
-
-/// specialized swapper
-inline void Swap ( CSphTaggedMatch & a, CSphTaggedMatch & b )
 {
 	Swap ( a.m_iDocID, b.m_iDocID );
 	Swap ( a.m_iRowitems, b.m_iRowitems );
@@ -1123,12 +1106,13 @@ public:
 		int					m_iHits;	///< hit count for this term
 	}						m_tWordStats [ SPH_MAX_QUERY_WORDS ];
 
-	int							m_iNumWords;		///< query word count
-	int							m_iQueryTime;		///< query time, ms
-	CSphVector<CSphTaggedMatch>	m_dMatches;			///< top matching documents, no more than MAX_MATCHES
-	int							m_iTotalMatches;	///< total matches count
+	int						m_iNumWords;		///< query word count
+	int						m_iQueryTime;		///< query time, ms
+	CSphVector<CSphMatch>	m_dMatches;			///< top matching documents, no more than MAX_MATCHES
+	int						m_iTotalMatches;	///< total matches count
 
 	CSphSchema				m_tSchema;			///< result schema
+	const DWORD *			m_pMva;				///< pointer to MVA storage
 
 public:
 							CSphQueryResult ();		///< ctor
@@ -1278,9 +1262,10 @@ public:
 	/// however top GetLength() entries MUST be stored linearly starting from First()
 	virtual CSphMatch *	First () = 0;
 
-	/// store all entries into specified location, in properly sorted order,
-	/// and remove them from queue
-	virtual void		Flatten ( CSphTaggedMatch * pTo, int iTag ) = 0;
+	/// store all entries into specified location and remove them from the queue
+	/// entries are stored in properly sorted order,
+	/// if iTag is non-negative, entries are also tagged; otherwise, their tag's unchanged
+	virtual void		Flatten ( CSphMatch * pTo, int iTag ) = 0;
 };
 
 

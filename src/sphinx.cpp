@@ -885,7 +885,7 @@ public:
 	}
 
 	/// store all entries into specified location in sorted order, and remove them from queue
-	void Flatten ( CSphTaggedMatch * pTo, int iTag )
+	void Flatten ( CSphMatch * pTo, int iTag )
 	{
 		assert ( m_iUsed>=0 );
 		pTo += m_iUsed;
@@ -893,7 +893,8 @@ public:
 		{
 			--pTo;
 			pTo[0] = m_pData[0]; // OPTIMIZE? reset dst + swap?
-			pTo->m_iTag = iTag;
+			if ( iTag>=0 )
+				pTo->m_iTag = iTag;
 			Pop ();
 		}
 	}
@@ -1299,6 +1300,7 @@ public:
 			{
 				pMatch->m_iDocID = tEntry.m_iDocID;
 				pMatch->m_iWeight = tEntry.m_iWeight;
+				pMatch->m_iTag = tEntry.m_iTag;
 
 				for ( int i=0; i<pMatch->m_iRowitems-VATTR_TOTAL; i++ )
 					pMatch->m_pRowitems[i] = tEntry.m_pRowitems[i];
@@ -1326,6 +1328,7 @@ public:
 
 		tNew.m_iDocID = tEntry.m_iDocID;
 		tNew.m_iWeight = tEntry.m_iWeight;
+		tNew.m_iTag = tEntry.m_iTag;
 		if ( !tNew.m_iRowitems )
 		{
 			tNew.m_iRowitems = iNewSize;
@@ -1345,7 +1348,7 @@ public:
 	}
 
 	/// store all entries into specified location in sorted order, and remove them from queue
-	void Flatten ( CSphTaggedMatch * pTo, int iTag )
+	void Flatten ( CSphMatch * pTo, int iTag )
 	{
 		CountDistinct ();
 		SortGroups ();
@@ -1354,7 +1357,8 @@ public:
 		for ( int i=0; i<iLen; i++, pTo++ )
 		{
 			pTo[0] = m_pData[i];
-			pTo->m_iTag = iTag;
+			if ( iTag>=0 )
+				pTo->m_iTag = iTag;
 		}
 
 		m_iUsed = 0;
@@ -4613,6 +4617,7 @@ CSphQueryResult::CSphQueryResult ()
 	m_iNumWords = 0;
 	m_iQueryTime = 0;
 	m_iTotalMatches = 0;
+	m_pMva = NULL;
 }
 
 
@@ -8010,8 +8015,9 @@ static inline bool sphMatchEarlyReject ( const CSphMatch & tMatch, const CSphQue
 				bOK = ( pMva<pMvaMax && pFilter<pFilterMax );
 				assert ( bOK==false || pMva[0]==pFilter[0] );
 
-				if ( bOK )
-					tMatch.SetAttr ( tFilter.m_iBitOffset, tFilter.m_iBitCount, pFilter[0] );
+// FIXME! should we report matched-value somehow?
+//				if ( bOK )
+//					tMatch.SetAttr ( tFilter.m_iBitOffset, tFilter.m_iBitCount, pFilter[0] );
 
 			} else
 			{
@@ -8021,7 +8027,8 @@ static inline bool sphMatchEarlyReject ( const CSphMatch & tMatch, const CSphQue
 					if ( pMva[0]>=tFilter.m_uMinValue && pMva[0]<=tFilter.m_uMaxValue )
 					{
 						bOK = true;
-						tMatch.SetAttr ( tFilter.m_iBitOffset, tFilter.m_iBitCount, pMva[0] );
+// FIXME! should we report matched-value somehow?
+//						tMatch.SetAttr ( tFilter.m_iBitOffset, tFilter.m_iBitCount, pMva[0] );
 						break;
 					}
 					pMva++;
@@ -10380,25 +10387,8 @@ bool CSphIndex_VLN::QueryEx ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSph
 		if ( m_eDocinfo==SPH_DOCINFO_EXTERN && !pTop->UsesAttrs() && !pQuery->m_dFilters.GetLength() )
 			for ( CSphMatch * pCur=pHead; pCur<pTail; pCur++ )
 				LookupDocinfo ( *pCur );
-
-		// cleanup mva attrs which were not set by filters
-		CSphVector<int,8> dMvaToClean;
-		for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
-			if ( m_tSchema.GetAttr(i).m_eAttrType & SPH_ATTR_MULTI )
-				dMvaToClean.Add ( i );
-
-		ARRAY_FOREACH ( i, pQuery->m_dFilters )
-			if ( pQuery->m_dFilters[i].m_bMva )
-				dMvaToClean.RemoveValue ( pQuery->m_dFilters[i].m_iAttr );
-
-		ARRAY_FOREACH ( i, dMvaToClean )
-		{
-			int iOffset = m_tSchema.GetAttr(i).m_iBitOffset;
-			int iCount = m_tSchema.GetAttr(i).m_iBitCount;
-			for ( CSphMatch * pCur=pHead; pCur<pTail; pCur++ )
-				pCur->SetAttr ( iOffset, iCount, 0 );
-		}
 	}
+	pResult->m_pMva = &m_pMva[0];
 
 	// adjust schema
 	if ( pQuery->m_iGroupbyOffset>=0 )

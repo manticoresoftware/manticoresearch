@@ -114,8 +114,14 @@ if ( $res===false )
 			foreach ( $res["attrs"] as $attrname => $attrtype )
 			{
 				$value = $docinfo["attrs"][$attrname];
-				if ( $attrtype==SPH_ATTR_TIMESTAMP )
-					$value = date ( "Y-m-d H:i:s", $value );
+				if ( $attrtype & SPH_ATTR_MULTI )
+				{
+					$value = "(" . join ( ",", $value ) .")";
+				} else
+				{
+					if ( $attrtype==SPH_ATTR_TIMESTAMP )
+						$value = date ( "Y-m-d H:i:s", $value );
+				}
 				print ", $attrname=$value";
 			}
 			print "\n";

@@ -23,7 +23,7 @@ define ( "SEARCHD_COMMAND_EXCERPT",	1 );
 define ( "SEARCHD_COMMAND_UPDATE",	2 );
 
 /// current client-side command implementation versions
-define ( "VER_COMMAND_SEARCH",		0x10B );
+define ( "VER_COMMAND_SEARCH",		0x10C );
 define ( "VER_COMMAND_EXCERPT",		0x100 );
 define ( "VER_COMMAND_UPDATE",		0x100 );
 
@@ -50,6 +50,7 @@ define ( "SPH_SORT_EXTENDED", 		4 );
 /// known attribute types
 define ( "SPH_ATTR_INTEGER",		1 );
 define ( "SPH_ATTR_TIMESTAMP",		2 );
+define ( "SPH_ATTR_MULTI",			0x40000000 );
 
 /// known grouping functions
 define ( "SPH_GROUPBY_DAY",			0 );
@@ -517,14 +518,29 @@ class SphinxClient
 				$p += 8;
 				$doc = sprintf ( "%u", $doc ); // workaround for php signed/unsigned braindamage
 			}
-			$weight = sprintf ( "%u", $weight );
 
+			$weight = sprintf ( "%u", $weight );
 			$result["matches"][$doc]["weight"] = $weight;
+
+			$attrvals = array ();
 			foreach ( $attrs as $attr=>$type )
 			{
 				list(,$val) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
-				$result["matches"][$doc]["attrs"][$attr] = sprintf ( "%u", $val );
+				if ( $type & SPH_ATTR_MULTI )
+				{
+					$attrvals[$attr] = array ();
+					$nvalues = $val;
+					while ( $nvalues-->0 && $p<$max )
+					{
+						list(,$val) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
+						$attrvals[$attr][] = sprintf ( "%u", $val );
+					}
+				} else
+				{
+					$attrvals[$attr] = sprintf ( "%u", $val );
+				}
 			}
+			$result["matches"][$doc]["attrs"] = $attrvals;
 		}
 		list ( $total, $total_found, $msecs, $words ) =
 			array_values ( unpack ( "N*N*N*N*", substr ( $response, $p, 16 ) ) );

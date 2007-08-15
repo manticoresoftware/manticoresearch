@@ -127,7 +127,7 @@ static bool				g_bDoRotate			= false;	// flag that we should start rotation; set
 static SmallStringHash_T<ServedIndex_t>		g_hIndexes;				// served indexes hash
 static CSphVector<const char *>				g_dRotating;			// names of indexes to be rotated this time
 static const char *							g_sPrereading	= NULL;	// name of index currently being preread
-static CSphIndex *							g_pPrereading		= NULL;	// rotation "buffer"
+static CSphIndex *							g_pPrereading	= NULL;	// rotation "buffer"
 
 enum
 {
@@ -136,7 +136,9 @@ enum
 	SPH_PIPE_PREREAD
 };
 
-static CSphVector<int,8>	g_dPipes; // currently open read-pipes to children processes
+static CSphVector<int,8>	g_dPipes;		// currently open read-pipes to children processes
+
+static CSphVector<DWORD>	g_dMvaStorage;	// per-query (!) pool to store MVAs received from remote agents
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -154,7 +156,7 @@ enum SearchdCommand_e
 /// known command versions
 enum
 {
-	VER_COMMAND_SEARCH		= 0x10B,
+	VER_COMMAND_SEARCH		= 0x10C,
 	VER_COMMAND_EXCERPT		= 0x100,
 	VER_COMMAND_UPDATE		= 0x100
 };
@@ -1936,11 +1938,6 @@ int WaitForRemoteAgents ( CSphVector<Agent_t,8> & dAgents, int iTimeout,
 
 inline bool operator < ( const CSphMatch & a, const CSphMatch & b )
 {
-	return a.m_iDocID < b.m_iDocID;
-};
-
-inline bool operator < ( const CSphTaggedMatch & a, const CSphTaggedMatch & b )
-{
 	if ( a.m_iDocID==b.m_iDocID )
 		return a.m_iTag > b.m_iTag;
 	else
@@ -2084,7 +2081,19 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, Agent_t & tAgent
 			for ( int j=0; j<tSchema.GetAttrsCount(); j++ )
 			{
 				const CSphColumnInfo & tAttr = tSchema.GetAttr(j);
-				tMatch.SetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount, tReq.GetDword () );
+				if ( tAttr.m_eAttrType & SPH_ATTR_MULTI )
+				{
+					tMatch.SetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount, g_dMvaStorage.GetLength() );
+
+					int iValues = tReq.GetDword ();
+					g_dMvaStorage.Add ( iValues );
+					while ( iValues-- )
+						g_dMvaStorage.Add ( tReq.GetDword() );
+
+				} else
+				{
+					tMatch.SetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount, tReq.GetDword() );
+				}
 			}
 		}
 	}
@@ -2548,6 +2557,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	int iTries = 0;
 	int iSuccesses = 0;
 	int iTag = 0;
+	CSphVector<const DWORD *,8> dTag2MVA; // tag to mva storage ptr mapping
 
 	if ( g_hDistIndexes(sIndexes) )
 	{
@@ -2608,6 +2618,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 					{
 						dMatchCounts.Add ( pSorter->GetLength() );
 						dSchemas.Add ( pRes->m_tSchema );
+						dTag2MVA.Add ( pRes->m_pMva );
 						sphFlattenQueue ( pSorter, pRes, iTag++ );
 					}
 					SafeDelete ( pSorter );
@@ -2634,7 +2645,10 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 					// merge this agent's results
 					ARRAY_FOREACH ( i, tAgent.m_tRes.m_dMatches )
-						pRes->m_dMatches.Add ( tAgent.m_tRes.m_dMatches[i] ); // FIXME! what about tagging?
+					{
+						pRes->m_dMatches.Add ( tAgent.m_tRes.m_dMatches[i] );
+						pRes->m_dMatches.Last().m_iTag = iTag;
+					}
 
 					dMatchCounts.Add ( tAgent.m_tRes.m_dMatches.GetLength() );
 					dSchemas.Add ( tAgent.m_tRes.m_tSchema );
@@ -2654,6 +2668,10 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			if ( !iToRetry )
 				break;
 		}
+
+		assert ( iTag==dTag2MVA.GetLength() );
+		if ( g_dMvaStorage.GetLength() )
+			dTag2MVA.Add ( &g_dMvaStorage[0] );
 
 	} else if ( sIndexes=="*" )
 	{
@@ -2695,6 +2713,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			{
 				dMatchCounts.Add ( pSorter->GetLength() );
 				dSchemas.Add ( pRes->m_tSchema );
+				dTag2MVA.Add ( pRes->m_pMva );
 				sphFlattenQueue ( pSorter, pRes, iTag++ );
 			}
 			SafeDelete ( pSorter );
@@ -2765,6 +2784,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			{
 				dMatchCounts.Add ( pSorter->GetLength() );
 				dSchemas.Add ( pRes->m_tSchema );
+				dTag2MVA.Add ( pRes->m_pMva );
 				sphFlattenQueue ( pSorter, pRes, iTag++ );
 			}
 			SafeDelete ( pSorter );
@@ -2861,7 +2881,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 
 				for ( int i=iCur; i<iCur+dMatchCounts[iSchema]; i++ )
 				{
-					CSphTaggedMatch & tMatch = pRes->m_dMatches[i];
+					CSphMatch & tMatch = pRes->m_dMatches[i];
 					assert ( tMatch.m_iRowitems>=tRow.m_iRowitems );
 
 					if ( tRow.m_iRowitems )
@@ -2917,7 +2937,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		}
 
 		pRes->m_dMatches.Reset ();
-		sphFlattenQueue ( pSorter, pRes, 0 );
+		sphFlattenQueue ( pSorter, pRes, -1 );
 		SafeDelete ( pSorter );
 
 		pRes->m_iTotalMatches -= iDupes;
@@ -2994,6 +3014,28 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	if ( bWarning )
 		iRespLen += 4 + strlen ( sFailures.cstr() );
 
+	CSphVector<int,8> dMvaItems;
+	for ( int i=0; i<pRes->m_tSchema.GetAttrsCount(); i++ )
+	{
+		const CSphColumnInfo & tCol = pRes->m_tSchema.GetAttr(i);
+		if ( tCol.m_eAttrType & SPH_ATTR_MULTI )
+		{
+			assert ( tCol.m_iRowitem>=0 );
+			dMvaItems.Add ( tCol.m_iRowitem );
+		}
+	}
+
+	if ( iVer>=0x10C )
+	{
+		for ( int i=0; i<iCount; i++ )
+		{
+			const CSphMatch & tMatch = pRes->m_dMatches[tQuery.m_iOffset+i];
+			const DWORD * pMva = dTag2MVA [ tMatch.m_iTag ];
+			ARRAY_FOREACH ( j, dMvaItems )
+				iRespLen += 4*pMva [ tMatch.GetAttr ( dMvaItems[j] ) ]; // FIXME? maybe add some sanity check here
+		}
+	}
+
 	// send header
 	NetOutputBuffer_c tOut ( iSock );
 	tOut.SendWord ( (WORD)( bWarning ? SEARCHD_WARNING : SEARCHD_OK ) );
@@ -3063,11 +3105,34 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		{
 			tOut.SendInt ( tMatch.m_iWeight );
 
+			const DWORD * pMva = dTag2MVA [ tMatch.m_iTag ];
+
 			assert ( tMatch.m_iRowitems==pRes->m_tSchema.GetRowSize() );
 			for ( int j=0; j<pRes->m_tSchema.GetAttrsCount(); j++ )
 			{
 				const CSphColumnInfo & tAttr = pRes->m_tSchema.GetAttr(j);
-				tOut.SendDword ( tMatch.GetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount ) );
+				if ( tAttr.m_eAttrType & SPH_ATTR_MULTI )
+				{
+					if ( iVer>=0x10C )
+					{
+						// send MVA values
+						const DWORD * pValues = pMva + tMatch.GetAttr ( tAttr.m_iRowitem );
+						int iValues = *pValues++;
+
+						tOut.SendDword ( iValues );
+						while ( iValues-- )
+							tOut.SendDword ( *pValues++ );
+
+					} else
+					{
+						// for older clients, fixup MVA to 0
+						tOut.SendDword ( 0 );
+					}
+				} else
+				{
+					// send plain attr
+					tOut.SendDword ( tMatch.GetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount ) );
+				}
 			}
 		}
 	}

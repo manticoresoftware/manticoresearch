@@ -210,7 +210,7 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 {
 	const int L_STEPBACK	= 16;
 	const int L_TOKEN		= 64;
-	const int L_BUFFER		= 256;
+	const int L_BUFFER		= 2048;
 
 	// open file
 	FILE * fp = fopen ( sFileName, "rb" );
@@ -219,18 +219,15 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 
 	// init parser
 	m_sFileName = sFileName;
-	m_iLine = 1;
+	m_iLine = 0;
 
 	char * p = NULL;
 	char * pEnd = NULL;
+
 	char sBuf [ L_BUFFER ];
-	char sStepback [ L_STEPBACK+1 ];
 	char sToken [ L_TOKEN ];
 	int iToken = 0;
 	int iCh = -1;
-
-	const char * sLine = p;
-	int iStepback = 0;
 
 	enum { S_TOP, S_SKIP2NL, S_TOK, S_TYPE, S_SEC, S_CHR, S_VALUE, S_SECNAME, S_SECBASE } eState = S_TOP, eStack[8];
 	int iStack = 0;
@@ -245,31 +242,30 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 
 	#define LOC_PUSH(_new) { assert ( iStack<int(sizeof(eStack)/sizeof(eState)) ); eStack[iStack++] = eState; eState = _new; }
 	#define LOC_POP() { assert ( iStack>0 ); eState = eStack[--iStack]; }
-	#define LOC_BACK() { if ( *p--=='\n' ) m_iLine--; }
+	#define LOC_BACK() { p--; }
 
 	m_sError[0] = '\0';
 
 	for ( ; ; p++ )
 	{
-		// if this chunk is over, load next chunk
+		// if this line is over, load next line
 		if ( p>=pEnd )
 		{
-			iStepback = Min ( p-sLine, L_STEPBACK );
-			memcpy ( sStepback, p-iStepback, iStepback );
-			sLine = sBuf-(p-sLine);
+			if ( !fgets ( sBuf, L_BUFFER, fp ) )
+				break; // FIXME! check for read error
 
-			int iLen = fread ( sBuf, 1, sizeof(sBuf), fp );
+			m_iLine++;
+			int iLen = strlen(sBuf);
 			if ( iLen<=0 )
-				break;
+				LOC_ERROR ( "internal error; fgets() returned empty string" );
 
 			p = sBuf;
 			pEnd = sBuf + iLen;
-		}
-		if ( *p=='\n' )
-		{
-			iStepback = 0;
-			sLine = p+1;
-			m_iLine++;
+			if ( pEnd[-1]!='\n' )
+			{
+				if ( iLen==L_BUFFER-1 )
+					LOC_ERROR ( "line too long" );
+			}
 		}
 
 		// handle S_TOP state
@@ -284,8 +280,9 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 		// handle S_SKIP2NL state
 		if ( eState==S_SKIP2NL )
 		{
-			if ( *p=='\n' )					{ LOC_POP (); continue; }
-											continue;
+			LOC_POP ();
+			p = pEnd;
+			continue;
 		}
 
 		// handle S_TOK state
@@ -392,27 +389,17 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 
 	if ( strlen(m_sError) )
 	{
-		int iCtx = Min ( L_STEPBACK, p-sLine+1 ); // error context is upto L_STEPBACK chars back, but never going to prev line
+		int iCol = (int)(p-sBuf+1);
+		int iCtx = Min ( L_STEPBACK, iCol ); // error context is upto L_STEPBACK chars back, but never going to prev line
 		const char * sCtx = p-iCtx+1;
 		if ( sCtx<sBuf )
-		{
-			// copy proper amount of chars from stepback buffer
-			int iFromStepback = iCtx - (p-sBuf+1);
-			assert ( iFromStepback>0 );
-			assert ( iFromStepback<=iStepback );
-			memmove ( sStepback, sStepback+iStepback-iFromStepback, iFromStepback );
+			sCtx = sBuf;
 
-			// add proper amount of chars from main buffer
-			assert ( iFromStepback+p-sBuf+1<=L_STEPBACK );
-			memcpy ( sStepback+iFromStepback, sBuf, p-sBuf+1 );
-			sStepback[iFromStepback+p-sBuf+1] = '\0';
-		} else
-		{
-			memcpy ( sStepback, sLine, iCtx );
-			sStepback[iCtx] = '\0';
-		}
+		char sStepback [ L_STEPBACK+1 ];
+		memcpy ( sStepback, sCtx, iCtx );
+		sStepback[iCtx] = '\0';
 
-		fprintf ( stdout, "%s line %d col %d: %s near '%s'\n", m_sFileName.cstr(), m_iLine, int(p-sLine+1),
+		fprintf ( stdout, "%s line %d col %d: %s near '%s'\n", m_sFileName.cstr(), m_iLine, iCol,
 			m_sError, sStepback );
 		return false;
 	}

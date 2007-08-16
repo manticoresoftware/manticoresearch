@@ -3427,6 +3427,7 @@ ISphTokenizer * CSphTokenizer_SBCS::Clone () const
 {
 	CSphTokenizer_SBCS * pClone = new CSphTokenizer_SBCS ();
 	pClone->m_tLC = m_tLC;
+	pClone->m_dSynonyms = m_dSynonyms;
 	return pClone;
 }
 
@@ -3830,6 +3831,7 @@ ISphTokenizer * CSphTokenizer_UTF8::Clone () const
 {
 	CSphTokenizer_UTF8 * pClone = new CSphTokenizer_UTF8 ();
 	pClone->m_tLC = m_tLC;
+	pClone->m_dSynonyms = m_dSynonyms;
 	return pClone;
 }
 

@@ -210,7 +210,7 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 {
 	const int L_STEPBACK	= 16;
 	const int L_TOKEN		= 64;
-	const int L_BUFFER		= 2048;
+	const int L_BUFFER		= 8192;
 
 	// open file
 	FILE * fp = fopen ( sFileName, "rb" );

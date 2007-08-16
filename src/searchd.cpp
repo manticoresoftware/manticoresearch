@@ -2670,8 +2670,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		}
 
 		assert ( iTag==dTag2MVA.GetLength() );
-		if ( g_dMvaStorage.GetLength() )
-			dTag2MVA.Add ( &g_dMvaStorage[0] );
+		dTag2MVA.Add ( g_dMvaStorage.GetLength() ? &g_dMvaStorage[0] : NULL );
 
 	} else if ( sIndexes=="*" )
 	{
@@ -3025,7 +3024,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		}
 	}
 
-	if ( iVer>=0x10C )
+	if ( iVer>=0x10C && dMvaItems.GetLength() )
 	{
 		for ( int i=0; i<iCount; i++ )
 		{

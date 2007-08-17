@@ -300,6 +300,9 @@ void ShowProgress ( const CSphIndexProgress * pProgress, bool bPhaseEnd )
 			fprintf ( stdout, "sorted %.1f Mvalues, %.1f%% done", float(pProgress->m_iAttrs)/1000000,
 				100.0f*float(pProgress->m_iAttrs) / float(pProgress->m_iAttrsTotal) );
 			break;
+		case CSphIndexProgress::PHASE_MERGE:
+			fprintf ( stdout, "merged %.1f Kwords", float(pProgress->m_iWords)/1000 );
+			break;
 	}
 
 	fprintf ( stdout, bPhaseEnd ? "\n" : "\r" );
@@ -837,6 +840,8 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 	CSphIndex * pDst = sphCreateIndexPhrase ( hDst["path"].cstr() );
 	assert ( pSrc );
 	assert ( pDst );
+
+	pDst->SetProgressCallback ( ShowProgress );
 
 	if ( !pDst->Merge ( pSrc, tPurge ) )
 		sphDie ( "failed to merge index '%s' into index '%s': %s", sSrc, sDst, pDst->GetLastError().cstr() );

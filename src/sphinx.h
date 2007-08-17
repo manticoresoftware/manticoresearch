@@ -1146,7 +1146,8 @@ struct CSphIndexProgress
 		PHASE_COLLECT,				///< document collection phase
 		PHASE_SORT,					///< final sorting phase
 		PHASE_COLLECT_MVA,			///< multi-valued attributes collection phase
-		PHASE_SORT_MVA				///< multi-valued attributes collection phase
+		PHASE_SORT_MVA,				///< multi-valued attributes collection phase
+		PHASE_MERGE					///< index merging phase
 	};
 
 	Phase_e			m_ePhase;		///< current indexing phase
@@ -1160,6 +1161,8 @@ struct CSphIndexProgress
 	SphOffset_t		m_iHits;		///< PHASE_SORT: hits sorted so far
 	SphOffset_t		m_iHitsTotal;	///< PHASE_SORT: hits total
 
+	int				m_iWords;		///< PHASE_MERGE: words merged so far
+
 	CSphIndexProgress ()
 		: m_ePhase ( PHASE_COLLECT )
 		, m_iDocuments ( 0 )
@@ -1168,6 +1171,7 @@ struct CSphIndexProgress
 		, m_iAttrsTotal ( 0 )
 		, m_iHits ( 0 )
 		, m_iHitsTotal ( 0 )
+		, m_iWords ( 0 )
 	{}
 };
 

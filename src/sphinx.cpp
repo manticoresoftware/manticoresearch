@@ -7128,16 +7128,18 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 	return true;
 }
 
+
 void CSphIndex_VLN::MergeWordData ( CSphWordRecord & tDstWord, CSphWordRecord & tSrcWord )
 {
 	assert ( tDstWord.m_pMergeSource->Check() );
 	assert ( tSrcWord.m_pMergeSource->Check() );
 	assert ( tDstWord.m_tWordIndex == tSrcWord.m_tWordIndex );
 
-	CSphVector< DWORD >					dWordPos;
-	CSphVector< CSphDoclistRecord >		dDoclist;
-	CSphWordDataRecord *				pDstData = &tDstWord.m_tWordData;
-	CSphWordDataRecord *				pSrcData = &tSrcWord.m_tWordData;
+	static CSphVector<DWORD>				dWordPos;
+	static CSphVector<CSphDoclistRecord>	dDoclist;
+
+	CSphWordDataRecord *					pDstData = &tDstWord.m_tWordData;
+	CSphWordDataRecord *					pSrcData = &tSrcWord.m_tWordData;
 	
 	int iDstWordPos = 0;
 	int iSrcWordPos = 0;
@@ -7259,8 +7261,10 @@ void CSphIndex_VLN::MergeWordData ( CSphWordRecord & tDstWord, CSphWordRecord & 
 		}
 	}
 
-	tDstWord.m_tWordData.m_dWordPos = dWordPos;
-	tDstWord.m_tWordData.m_dDoclist = dDoclist;
+	tDstWord.m_tWordData.m_dWordPos.SwapData ( dWordPos );
+	tDstWord.m_tWordData.m_dDoclist.SwapData ( dDoclist );
+	dWordPos.Resize ( 0 );
+	dDoclist.Resize ( 0 );
 
 	tDstWord.m_tWordIndex.m_iHitNum = iTotalHits;
 	tDstWord.m_tWordIndex.m_iDocNum = iTotalDocs;	

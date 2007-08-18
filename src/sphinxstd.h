@@ -438,6 +438,14 @@ public:
 		return *this;
 	}
 
+	/// swap
+	void SwapData ( CSphVector < T, INITIAL_LIMIT > & rhs )
+	{
+		Swap ( m_iLength, rhs.m_iLength );
+		Swap ( m_iLimit, rhs.m_iLimit );
+		Swap ( m_pData, rhs.m_pData );
+	}
+
 protected:
 	int		m_iLength;		///< entries actually used
 	int		m_iLimit;		///< entries allocated

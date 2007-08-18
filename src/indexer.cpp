@@ -843,8 +843,11 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 
 	pDst->SetProgressCallback ( ShowProgress );
 
+	float tmMerge = -sphLongTimer ();
 	if ( !pDst->Merge ( pSrc, tPurge ) )
 		sphDie ( "failed to merge index '%s' into index '%s': %s", sSrc, sDst, pDst->GetLastError().cstr() );
+	tmMerge += sphLongTimer ();
+	printf ( "merged in %.1f sec\n", tmMerge );
 
 	SafeDelete ( pSrc );
 	SafeDelete ( pDst );

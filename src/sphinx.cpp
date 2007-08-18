@@ -7117,6 +7117,9 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 	fdInfo.PutDword ( iTotalDocs );
 	fdInfo.PutOffset ( iTotalBytes );
 
+	fdInfo.PutByte ( m_bPrefixesOnly );
+	fdInfo.PutDword ( m_iMinInfixLen );
+
 	if ( m_pProgress )
 		m_pProgress ( &m_tProgress, true );
 

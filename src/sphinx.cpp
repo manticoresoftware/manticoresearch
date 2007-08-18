@@ -6766,6 +6766,7 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 
 	CSphDocMVA	tDstMVA( iMVANum ), tSrcMVA( iMVANum );
 
+	int iDeltaTotalDocs = 0;
 	if ( m_eDocinfo == SPH_DOCINFO_EXTERN && pSrcIndex->m_eDocinfo == SPH_DOCINFO_EXTERN )
 	{
 		CSphAutofile fdSpa ( GetIndexFileName("spa.tmp"), SPH_O_NEW, m_sLastError );
@@ -6826,6 +6827,7 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 
 				if ( iDstDocID==iSrcDocID )
 				{
+					iDeltaTotalDocs++;
 					pDstRow += iStride;
 					iDstCount++;
 				}
@@ -7110,7 +7112,7 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 	fdInfo.PutBytes ( &iCheckpointsPos, sizeof(SphOffset_t) );
 	fdInfo.PutDword ( dWordlistCheckpoints.GetLength() );
 
-	int iTotalDocs = m_tStats.m_iTotalDocuments + pSrcIndex->m_tStats.m_iTotalDocuments;
+	int iTotalDocs = m_tStats.m_iTotalDocuments + pSrcIndex->m_tStats.m_iTotalDocuments - iDeltaTotalDocs;
 	SphOffset_t iTotalBytes = m_tStats.m_iTotalBytes + pSrcIndex->m_tStats.m_iTotalBytes;
 
 	// index stats

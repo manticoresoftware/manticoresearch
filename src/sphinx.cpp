@@ -6843,26 +6843,22 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 					tSrcMVA.Read( tSrcSPM );
 				}
 				
-				bool bIsDst = false;
-				if ( tSrcMVA.m_iDocID == tDstMVA.m_iDocID )
-				{
+				bool bFixupMVA = true;
+				if ( tSrcMVA.m_iDocID == tDstMVA.m_iDocID && tSrcMVA.m_iDocID != 0 )
 					tSrcMVA.Write( tSPMWriter );
-				}
+				else if ( tDstMVA.m_iDocID == iDstDocID )
+					bFixupMVA = false;
+				else if ( tSrcMVA.m_iDocID == iSrcDocID )
+					tSrcMVA.Write( tSPMWriter );
 				else
-				{
-					if ( tDstMVA.m_iDocID == iDstDocID )
-					{
-						tDstMVA.Write( tSPMWriter );
-						bIsDst = true;
-					}
-					else if ( tSrcMVA.m_iDocID == iSrcDocID )
-						tSrcMVA.Write( tSPMWriter );
-				}
+					bFixupMVA = false;
 
-				DWORD * pAttrs = DOCINFO2ATTRS ( pSrcRow );
-				CSphDocMVA & tWinner = bIsDst ? tDstMVA : tSrcMVA;
-				ARRAY_FOREACH ( i, tWinner.m_dMVA )
-					pAttrs[dRowItemOffset[i]] = tWinner.m_dOffsets[i];
+				if ( bFixupMVA )
+				{
+					DWORD * pAttrs = DOCINFO2ATTRS ( pSrcRow );
+					ARRAY_FOREACH ( i, tSrcMVA.m_dMVA )
+						pAttrs[dRowItemOffset[i]] = tSrcMVA.m_dOffsets[i];
+				}				
 
 				sphWrite( fdSpa.GetFD(), pSrcRow, sizeof( DWORD ) * iStride, "doc_attr", m_sLastError );
 				pSrcRow += iStride;

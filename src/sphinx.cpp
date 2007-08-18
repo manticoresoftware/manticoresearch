@@ -2006,6 +2006,24 @@ struct CSphWordRecord
 	}
 };
 
+struct CSphDocMVA
+{
+	SphDocID_t								m_iDocID;
+	CSphVector < CSphVector<DWORD,16>, 16 > m_dMVA;
+	CSphVector < DWORD,16 >					m_dOffsets;
+
+	CSphDocMVA( int iSize )
+		: m_iDocID ( 0 )
+	{
+		m_dMVA.Resize( iSize );
+		m_dOffsets.Resize( iSize );
+	}
+
+	void	Read( CSphReader_VLN & tReader );
+	void	Write( CSphWriter & tWriter );
+	void	Merge( const CSphDocMVA & tDocMVA );
+};
+
 /////////////////////////////////////////////////////////////////////////////
 
 /// everything required to setup search term
@@ -6709,8 +6727,45 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 	int iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 
 	/////////////////
-	/// merging .spa
+	/// merging .spa, .spm
 	/////////////////
+
+	CSphReader_VLN	tDstSPM, tSrcSPM;
+	CSphWriter		tSPMWriter;
+
+	/// preparing files
+	CSphAutofile tDstSPMFile ( GetIndexFileName("spm"), SPH_O_READ, m_sLastError );
+	if ( tDstSPMFile.GetFD()<0 )
+		return false;
+
+	CSphAutofile tSrcSPMFile ( pSrcIndex->GetIndexFileName("spm"), SPH_O_READ, m_sLastError );
+	if ( tSrcSPMFile.GetFD()<0 )
+		return false;
+
+	tDstSPM.SetFile ( tDstSPMFile.GetFD(), tDstSPMFile.GetFilename() );		
+	tSrcSPM.SetFile ( tSrcSPMFile.GetFD(), tSrcSPMFile.GetFilename() );	
+
+	if ( !tSPMWriter.OpenFile ( GetIndexFileName("spm.tmp"), m_sLastError ) )
+		return false;
+
+	/// merging
+	int iAttrNum = pDstSchema->GetAttrsCount();
+	int iMVANum = 0;
+	CSphVector < DWORD, 16 >  dRowItemOffset;
+	for( int i = 0; i < iAttrNum; ++i )
+	{
+		const CSphColumnInfo & tInfo = pDstSchema->GetAttr( i );
+		if ( tInfo.m_eAttrType & SPH_ATTR_MULTI )
+		{
+			assert ( tInfo.m_iRowitem >= 0 );
+			assert ( tInfo.m_iRowitem < iStride );
+
+			dRowItemOffset.Add( tInfo.m_iRowitem );
+			iMVANum++;
+		}
+	}
+
+	CSphDocMVA	tDstMVA( iMVANum ), tSrcMVA( iMVANum );
 
 	if ( m_eDocinfo == SPH_DOCINFO_EXTERN && pSrcIndex->m_eDocinfo == SPH_DOCINFO_EXTERN )
 	{
@@ -6718,31 +6773,104 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 		if ( fdSpa.GetFD()<0 )
 			return false;
 
-		const DWORD * pSrcRow = &pSrcIndex->m_pDocinfo[0];
+		DWORD * pSrcRow = pSrcIndex->m_pDocinfo.GetWritePtr();
 		assert( pSrcRow );
 
-		const DWORD * pDstRow = &m_pDocinfo[0];
+		DWORD * pDstRow = m_pDocinfo.GetWritePtr();
 		assert( pDstRow );
 
 		DWORD iSrcCount = 0;
 		DWORD iDstCount = 0;
 
-		while( iSrcCount < pSrcIndex->m_uDocinfo && iDstCount < m_uDocinfo )
+		while( iSrcCount < pSrcIndex->m_uDocinfo || iDstCount < m_uDocinfo )
 		{
 			if ( pDstRow[0] < pSrcRow[0] )
 			{
+				do
+				{
+					tDstMVA.Read( tDstSPM );
+				}
+				while( tDstMVA.m_iDocID && ( tDstMVA.m_iDocID < pDstRow[0] ) );
+
+				if ( tDstMVA.m_iDocID == pDstRow[0] )
+					tDstMVA.Write( tSPMWriter );
+
+				ARRAY_FOREACH( i, tDstMVA.m_dMVA )
+				{
+					pDstRow[dRowItemOffset[i] + 1] = tDstMVA.m_dOffsets[i];
+				}
+
 				sphWrite( fdSpa.GetFD(), pDstRow, sizeof( DWORD ) * iStride, "doc_attr", m_sLastError );
 				pDstRow += iStride;
 				iDstCount++;
 			}
 			else if ( pDstRow[0] > pSrcRow[0] )
 			{
+				do
+				{
+					tSrcMVA.Read( tSrcSPM );
+				}
+				while( tSrcMVA.m_iDocID && ( tSrcMVA.m_iDocID < pSrcRow[0] ) );
+
+				if ( tSrcMVA.m_iDocID == pSrcRow[0] )
+					tSrcMVA.Write( tSPMWriter );
+
+				ARRAY_FOREACH( i, tSrcMVA.m_dMVA )
+				{
+					pSrcRow[dRowItemOffset[i] + 1] = tSrcMVA.m_dOffsets[i];
+				}
+
 				sphWrite( fdSpa.GetFD(), pSrcRow, sizeof( DWORD ) * iStride, "doc_attr", m_sLastError );
 				pSrcRow += iStride;
 				iSrcCount++;
 			}
 			else if ( pDstRow[0] == pSrcRow[0] )
 			{
+				do
+				{
+					tDstMVA.Read( tDstSPM );
+				}
+				while( tDstMVA.m_iDocID && ( tDstMVA.m_iDocID < pDstRow[0] ) );
+
+				do
+				{
+					tSrcMVA.Read( tSrcSPM );
+				}
+				while( tSrcMVA.m_iDocID && ( tSrcMVA.m_iDocID < pSrcRow[0] ) );
+
+				bool bIsDst = false;
+				if ( tSrcMVA.m_iDocID == tDstMVA.m_iDocID )
+				{
+					tDstMVA.Merge( tSrcMVA );
+					tDstMVA.Write( tSPMWriter );
+					bIsDst = true;
+				}
+				else
+				{
+					if ( tDstMVA.m_iDocID == pDstRow[0] )
+					{
+						tDstMVA.Write( tSPMWriter );
+						bIsDst = true;
+					}
+					else if ( tSrcMVA.m_iDocID == pSrcRow[0] )
+						tSrcMVA.Write( tSPMWriter );
+				}
+
+				if ( bIsDst )
+				{
+					ARRAY_FOREACH( i, tDstMVA.m_dMVA )
+					{
+						pSrcRow[dRowItemOffset[i] + 1] = tDstMVA.m_dOffsets[i];
+					}
+				}
+				else
+				{
+					ARRAY_FOREACH( i, tSrcMVA.m_dMVA )
+					{
+						pSrcRow[dRowItemOffset[i] + 1] = tSrcMVA.m_dOffsets[i];
+					}
+				}				
+
 				sphWrite( fdSpa.GetFD(), pSrcRow, sizeof( DWORD ) * iStride, "doc_attr", m_sLastError );
 				pSrcRow += iStride;
 				iSrcCount++;
@@ -6751,10 +6879,11 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 			}
 		}
 
-		if ( iDstCount < m_uDocinfo )
+		/*if ( iDstCount < m_uDocinfo )
 			sphWrite( fdSpa.GetFD(), pDstRow, sizeof( DWORD ) * iStride * ( m_uDocinfo - iDstCount ), "doc_attr", m_sLastError );
 		else if ( iSrcCount < pSrcIndex->m_uDocinfo )
 			sphWrite( fdSpa.GetFD(), pSrcRow, sizeof( DWORD ) * iStride * ( pSrcIndex->m_uDocinfo - iSrcCount ), "doc_attr", m_sLastError );
+		*/
 	}
 	else
 	{
@@ -6762,6 +6891,36 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 		fdSpa.Close();
 	}
 
+	/////////////////
+	/// merging .spm
+	/////////////////
+
+	/*tDstMVA.Read( tDstSPM );
+	tSrcMVA.Read( tSrcSPM );
+
+	do 
+	{
+		if ( tDstMVA.m_iDocID && ( tDstMVA.m_iDocID < tSrcMVA.m_iDocID ) || !tSrcMVA.m_iDocID )
+		{
+			tDstMVA.Write( tSPMWriter );
+			tDstMVA.Read( tDstSPM );
+		}
+		else if ( tSrcMVA.m_iDocID && ( tDstMVA.m_iDocID > tSrcMVA.m_iDocID ) || !tDstMVA.m_iDocID )
+		{
+			tSrcMVA.Write( tSPMWriter );
+			tSrcMVA.Read( tSrcSPM );
+		}
+		else if ( tDstMVA.m_iDocID && tSrcMVA.m_iDocID )
+		{
+			tDstMVA.Merge( tSrcMVA );
+			tDstMVA.Write( tSPMWriter );
+
+			tDstMVA.Read( tDstSPM );			
+			tSrcMVA.Read( tSrcSPM );
+		}
+	} while( tDstMVA.m_iDocID || tSrcMVA.m_iDocID );
+	*/
+	
 	/////////////////
 	/// merging .spd
 	/////////////////
@@ -12842,7 +13001,7 @@ bool CSphWordIndexRecord::Read ( const BYTE * & pSource, CSphMergeSource * pMerg
 		pMergeSource->m_iWordlistEntries = 0;
 	}
 
-	DWORD iWordID = sphUnzipInt( pSource );
+	SphWordID_t iWordID = sphUnzipWordid( pSource );
 	
 	if ( !iWordID )
 	{
@@ -12915,6 +13074,57 @@ void CSphWordRecord::Write ()
 	m_tWordIndex.Write ( m_pMergeData->m_pIndexWriter, m_pMergeData );
 
 	m_pMergeData->m_iLastDocID = m_pMergeData->m_iMinDocID;
+}
+
+void CSphDocMVA::Read( CSphReader_VLN & tReader )
+{
+	m_iDocID = tReader.GetDocid();
+	if ( m_iDocID )
+	{
+		ARRAY_FOREACH( i, m_dMVA )
+		{
+			DWORD iValues = tReader.GetDword();
+			m_dMVA[i].Resize( iValues );
+			tReader.GetBytes( &m_dMVA[i][0], iValues * sizeof(DWORD) );
+		}
+	}	
+}
+
+void CSphDocMVA::Write( CSphWriter & tWriter )
+{
+	tWriter.PutDocid ( m_iDocID );
+	ARRAY_FOREACH ( i, m_dMVA )
+	{
+		m_dOffsets[i] = ( DWORD )tWriter.GetPos() / 4;
+
+		int iValues = m_dMVA[i].GetLength();
+		tWriter.PutDword ( iValues );
+		tWriter.PutBytes ( &m_dMVA[i][0], iValues*sizeof(DWORD) );
+	}
+}
+
+void CSphDocMVA::Merge( const CSphDocMVA & tDocMVA )
+{
+	ARRAY_FOREACH ( i, m_dMVA )
+	{
+		ARRAY_FOREACH( j, tDocMVA.m_dMVA[i] )
+		{
+			DWORD iValue = tDocMVA.m_dMVA[i][j];
+			bool bSkip = false;
+			ARRAY_FOREACH( k, m_dMVA[i] )
+			{
+				if ( m_dMVA[i][k] == iValue )
+				{
+					bSkip = true;
+					break;
+				}
+			}
+			if ( !bSkip )
+				m_dMVA[i].Add( iValue );
+		}
+
+		m_dMVA[i].Sort();
+	}
 }
 
 /////////////////////////////////////////////////////////////////////////////

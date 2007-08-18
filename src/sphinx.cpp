@@ -6782,62 +6782,68 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 		DWORD iSrcCount = 0;
 		DWORD iDstCount = 0;
 
+		tDstMVA.Read( tDstSPM );
+		tSrcMVA.Read( tSrcSPM );
+
 		while( iSrcCount < pSrcIndex->m_uDocinfo || iDstCount < m_uDocinfo )
 		{
-			if ( pDstRow[0] < pSrcRow[0] )
+			SphDocID_t iDstDocID, iSrcDocID;
+
+			iDstDocID = DOCINFO2ID( pDstRow );
+			iSrcDocID = DOCINFO2ID( pSrcRow );
+
+			if ( iDstDocID < iSrcDocID )
 			{
-				do
+				while( tDstMVA.m_iDocID && ( tDstMVA.m_iDocID < iDstDocID ) )
 				{
 					tDstMVA.Read( tDstSPM );
 				}
-				while( tDstMVA.m_iDocID && ( tDstMVA.m_iDocID < pDstRow[0] ) );
-
-				if ( tDstMVA.m_iDocID == pDstRow[0] )
+				
+				if ( tDstMVA.m_iDocID == iDstDocID )
 					tDstMVA.Write( tSPMWriter );
 
+				DWORD * pAttrs = DOCINFO2ATTRS ( pDstRow );
 				ARRAY_FOREACH( i, tDstMVA.m_dMVA )
 				{
-					pDstRow[dRowItemOffset[i] + 1] = tDstMVA.m_dOffsets[i];
+					pAttrs[dRowItemOffset[i]] = tDstMVA.m_dOffsets[i];
 				}
 
 				sphWrite( fdSpa.GetFD(), pDstRow, sizeof( DWORD ) * iStride, "doc_attr", m_sLastError );
 				pDstRow += iStride;
 				iDstCount++;
 			}
-			else if ( pDstRow[0] > pSrcRow[0] )
+			else if ( iDstDocID > iSrcDocID )
 			{
-				do
+				while( tSrcMVA.m_iDocID && ( tSrcMVA.m_iDocID < iSrcDocID ) )
 				{
 					tSrcMVA.Read( tSrcSPM );
 				}
-				while( tSrcMVA.m_iDocID && ( tSrcMVA.m_iDocID < pSrcRow[0] ) );
-
-				if ( tSrcMVA.m_iDocID == pSrcRow[0] )
+				
+				if ( tSrcMVA.m_iDocID == iSrcDocID )
 					tSrcMVA.Write( tSPMWriter );
 
+				DWORD * pAttrs = DOCINFO2ATTRS ( pSrcRow );
 				ARRAY_FOREACH( i, tSrcMVA.m_dMVA )
 				{
-					pSrcRow[dRowItemOffset[i] + 1] = tSrcMVA.m_dOffsets[i];
+					pAttrs[dRowItemOffset[i]] = tSrcMVA.m_dOffsets[i];
 				}
 
 				sphWrite( fdSpa.GetFD(), pSrcRow, sizeof( DWORD ) * iStride, "doc_attr", m_sLastError );
 				pSrcRow += iStride;
 				iSrcCount++;
 			}
-			else if ( pDstRow[0] == pSrcRow[0] )
+			else if ( iDstDocID == iSrcDocID )
 			{
-				do
+				while( tDstMVA.m_iDocID && ( tDstMVA.m_iDocID < iDstDocID ) )
 				{
 					tDstMVA.Read( tDstSPM );
 				}
-				while( tDstMVA.m_iDocID && ( tDstMVA.m_iDocID < pDstRow[0] ) );
-
-				do
+				
+				while( tSrcMVA.m_iDocID && ( tSrcMVA.m_iDocID < iSrcDocID ) )
 				{
 					tSrcMVA.Read( tSrcSPM );
 				}
-				while( tSrcMVA.m_iDocID && ( tSrcMVA.m_iDocID < pSrcRow[0] ) );
-
+				
 				bool bIsDst = false;
 				if ( tSrcMVA.m_iDocID == tDstMVA.m_iDocID )
 				{
@@ -6847,29 +6853,19 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 				}
 				else
 				{
-					if ( tDstMVA.m_iDocID == pDstRow[0] )
+					if ( tDstMVA.m_iDocID == iDstDocID )
 					{
 						tDstMVA.Write( tSPMWriter );
 						bIsDst = true;
 					}
-					else if ( tSrcMVA.m_iDocID == pSrcRow[0] )
+					else if ( tSrcMVA.m_iDocID == iSrcDocID )
 						tSrcMVA.Write( tSPMWriter );
 				}
 
-				if ( bIsDst )
-				{
-					ARRAY_FOREACH( i, tDstMVA.m_dMVA )
-					{
-						pSrcRow[dRowItemOffset[i] + 1] = tDstMVA.m_dOffsets[i];
-					}
-				}
-				else
-				{
-					ARRAY_FOREACH( i, tSrcMVA.m_dMVA )
-					{
-						pSrcRow[dRowItemOffset[i] + 1] = tSrcMVA.m_dOffsets[i];
-					}
-				}				
+				DWORD * pAttrs = DOCINFO2ATTRS ( pSrcRow );
+				CSphDocMVA & tWinner = bIsDst ? tDstMVA : tSrcMVA;
+				ARRAY_FOREACH ( i, tWinner.m_dMVA )
+					pAttrs[dRowItemOffset[i]] = tWinner.m_dOffsets[i];
 
 				sphWrite( fdSpa.GetFD(), pSrcRow, sizeof( DWORD ) * iStride, "doc_attr", m_sLastError );
 				pSrcRow += iStride;
@@ -6878,48 +6874,12 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 				iDstCount++;
 			}
 		}
-
-		/*if ( iDstCount < m_uDocinfo )
-			sphWrite( fdSpa.GetFD(), pDstRow, sizeof( DWORD ) * iStride * ( m_uDocinfo - iDstCount ), "doc_attr", m_sLastError );
-		else if ( iSrcCount < pSrcIndex->m_uDocinfo )
-			sphWrite( fdSpa.GetFD(), pSrcRow, sizeof( DWORD ) * iStride * ( pSrcIndex->m_uDocinfo - iSrcCount ), "doc_attr", m_sLastError );
-		*/
 	}
 	else
 	{
 		CSphAutofile fdSpa ( GetIndexFileName("spa.tmp"), SPH_O_NEW, m_sLastError );
 		fdSpa.Close();
 	}
-
-	/////////////////
-	/// merging .spm
-	/////////////////
-
-	/*tDstMVA.Read( tDstSPM );
-	tSrcMVA.Read( tSrcSPM );
-
-	do 
-	{
-		if ( tDstMVA.m_iDocID && ( tDstMVA.m_iDocID < tSrcMVA.m_iDocID ) || !tSrcMVA.m_iDocID )
-		{
-			tDstMVA.Write( tSPMWriter );
-			tDstMVA.Read( tDstSPM );
-		}
-		else if ( tSrcMVA.m_iDocID && ( tDstMVA.m_iDocID > tSrcMVA.m_iDocID ) || !tDstMVA.m_iDocID )
-		{
-			tSrcMVA.Write( tSPMWriter );
-			tSrcMVA.Read( tSrcSPM );
-		}
-		else if ( tDstMVA.m_iDocID && tSrcMVA.m_iDocID )
-		{
-			tDstMVA.Merge( tSrcMVA );
-			tDstMVA.Write( tSPMWriter );
-
-			tDstMVA.Read( tDstSPM );			
-			tSrcMVA.Read( tSrcSPM );
-		}
-	} while( tDstMVA.m_iDocID || tSrcMVA.m_iDocID );
-	*/
 	
 	/////////////////
 	/// merging .spd

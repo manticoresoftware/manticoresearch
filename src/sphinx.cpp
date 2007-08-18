@@ -607,6 +607,31 @@ public:
 		return true;
 	}
 
+
+	/// relock again (for daemonization only)
+#if USE_WINDOWS
+	bool Mlock ( const char *, CSphString & )
+	{
+		return true;
+	}
+#else
+	bool Mlock ( const char * sPrefix, CSphString & sError )
+	{
+		if ( !m_bMlock )
+			return true;
+
+		if ( mlock ( m_pData, m_iLength )!=-1 )
+			return true;
+
+		if ( sError.IsEmpty() )
+			sError.SetSprintf ( "%s mlock() failed: bytes=%"PRIu64", error=%s", sPrefix, (uint64_t)m_iLength, strerror(errno) );
+		else
+			sError.SetSprintf ( "%s; %s mlock() failed: bytes=%"PRIu64", error=%s", sError.cstr(), sPrefix, (uint64_t)m_iLength, strerror(errno) );
+		return false;
+	}
+#endif
+
+
 	/// deallocate storage
 	void Reset ()
 	{
@@ -2056,6 +2081,7 @@ struct CSphIndex_VLN : CSphIndex
 	virtual int					Build ( CSphDict * pDict, const CSphVector < CSphSource * > & dSources, int iMemoryLimit, ESphDocinfo eDocinfo );
 
 	virtual const CSphSchema *	Prealloc ( bool bMlock, CSphString * sWarning );
+	virtual bool				Mlock ();
 	virtual void				Dealloc ();
 
 	virtual bool				Preread ();
@@ -2066,7 +2092,6 @@ struct CSphIndex_VLN : CSphIndex
 
 	virtual bool				Lock ();
 	virtual void				Unlock ();
-
 
 	virtual CSphQueryResult *	Query ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery );
 	virtual bool				QueryEx ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchSorter * pTop );
@@ -9885,6 +9910,16 @@ void CSphIndex_VLN::Unlock()
 		::unlink ( GetIndexFileName ( "spl" ) );
 		m_iLockFD = -1;
 	}
+}
+
+
+bool CSphIndex_VLN::Mlock ()
+{
+	bool bRes = true;
+	bRes &= m_pDocinfo.Mlock ( "docinfo", m_sLastError );
+	bRes &= m_pWordlist.Mlock ( "wordlist", m_sLastError );
+	bRes &= m_pMva.Mlock ( "mva", m_sLastError );
+	return bRes;
 }
 
 

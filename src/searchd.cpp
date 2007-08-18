@@ -4855,11 +4855,23 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		while ( g_hIndexes.IterateNext () )
 		{
 			ServedIndex_t & tServed = g_hIndexes.IterateGet ();
-			if ( tServed.m_bEnabled && !tServed.m_pIndex->Lock() )
+			if ( !tServed.m_bEnabled )
+				continue;
+
+			// obtain exclusive lock
+			if ( !tServed.m_pIndex->Lock() )
 			{
 				sphWarning ( "index '%s': lock: %s; INDEX UNUSABLE", g_hIndexes.IterateGetKey().cstr(),
 					tServed.m_pIndex->GetLastError().cstr() );
 				tServed.m_bEnabled = false;
+				continue;
+			}
+
+			// try to mlock again because mlock does not survive over fork
+			if ( !tServed.m_pIndex->Mlock() )
+			{
+				sphWarning ( "index '%s': %s", g_hIndexes.IterateGetKey().cstr(),
+					tServed.m_pIndex->GetLastError().cstr() );
 			}
 		}
 

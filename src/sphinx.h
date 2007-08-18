@@ -1353,6 +1353,9 @@ public:
 	/// dismiss exclusive lock and unlink lock file
 	virtual void				Unlock () = 0;
 
+	/// relock shared RAM (only on daemonization)
+	virtual bool				Mlock () = 0;
+
 public:
 	virtual CSphQueryResult *	Query ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery ) = 0;
 	virtual bool				QueryEx ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchSorter * pTop ) = 0;

@@ -2021,7 +2021,6 @@ struct CSphDocMVA
 
 	void	Read( CSphReader_VLN & tReader );
 	void	Write( CSphWriter & tWriter );
-	void	Merge( const CSphDocMVA & tDocMVA );
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -6847,9 +6846,7 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 				bool bIsDst = false;
 				if ( tSrcMVA.m_iDocID == tDstMVA.m_iDocID )
 				{
-					tDstMVA.Merge( tSrcMVA );
-					tDstMVA.Write( tSPMWriter );
-					bIsDst = true;
+					tSrcMVA.Write( tSPMWriter );
 				}
 				else
 				{
@@ -13055,35 +13052,11 @@ void CSphDocMVA::Write( CSphWriter & tWriter )
 	tWriter.PutDocid ( m_iDocID );
 	ARRAY_FOREACH ( i, m_dMVA )
 	{
-		m_dOffsets[i] = ( DWORD )tWriter.GetPos() / 4;
+		m_dOffsets[i] = ( DWORD )tWriter.GetPos() / sizeof( DWORD );
 
 		int iValues = m_dMVA[i].GetLength();
 		tWriter.PutDword ( iValues );
 		tWriter.PutBytes ( &m_dMVA[i][0], iValues*sizeof(DWORD) );
-	}
-}
-
-void CSphDocMVA::Merge( const CSphDocMVA & tDocMVA )
-{
-	ARRAY_FOREACH ( i, m_dMVA )
-	{
-		ARRAY_FOREACH( j, tDocMVA.m_dMVA[i] )
-		{
-			DWORD iValue = tDocMVA.m_dMVA[i][j];
-			bool bSkip = false;
-			ARRAY_FOREACH( k, m_dMVA[i] )
-			{
-				if ( m_dMVA[i][k] == iValue )
-				{
-					bSkip = true;
-					break;
-				}
-			}
-			if ( !bSkip )
-				m_dMVA[i].Add( iValue );
-		}
-
-		m_dMVA[i].Sort();
 	}
 }
 

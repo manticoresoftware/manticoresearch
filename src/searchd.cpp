@@ -3031,7 +3031,11 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			const CSphMatch & tMatch = pRes->m_dMatches[tQuery.m_iOffset+i];
 			const DWORD * pMva = dTag2MVA [ tMatch.m_iTag ];
 			ARRAY_FOREACH ( j, dMvaItems )
-				iRespLen += 4*pMva [ tMatch.GetAttr ( dMvaItems[j] ) ]; // FIXME? maybe add some sanity check here
+			{
+				DWORD iMvaIndex = tMatch.GetAttr ( dMvaItems[j] );
+				if ( iMvaIndex )
+					iRespLen += 4*pMva[iMvaIndex]; // FIXME? maybe add some sanity check here
+			}
 		}
 	}
 
@@ -3112,20 +3116,21 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 				const CSphColumnInfo & tAttr = pRes->m_tSchema.GetAttr(j);
 				if ( tAttr.m_eAttrType & SPH_ATTR_MULTI )
 				{
-					if ( iVer>=0x10C )
+					DWORD iMvaIndex = tMatch.GetAttr ( tAttr.m_iRowitem );
+					if ( iVer<0x10C || iMvaIndex==0 )
+					{
+						// for older clients, fixups column value to 0
+						// for newer clients, means that there are 0 values
+						tOut.SendDword ( 0 );
+					} else
 					{
 						// send MVA values
-						const DWORD * pValues = pMva + tMatch.GetAttr ( tAttr.m_iRowitem );
+						const DWORD * pValues = pMva + iMvaIndex;
 						int iValues = *pValues++;
 
 						tOut.SendDword ( iValues );
 						while ( iValues-- )
 							tOut.SendDword ( *pValues++ );
-
-					} else
-					{
-						// for older clients, fixup MVA to 0
-						tOut.SendDword ( 0 );
 					}
 				} else
 				{

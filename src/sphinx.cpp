@@ -6812,10 +6812,19 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 
 		while( iSrcCount < pSrcIndex->m_uDocinfo || iDstCount < m_uDocinfo )
 		{
-			SphDocID_t iDstDocID = DOCINFO2ID(pDstRow);
-			SphDocID_t iSrcDocID = DOCINFO2ID(pSrcRow);
+			SphDocID_t iDstDocID, iSrcDocID;
 
-			if ( iDstDocID<iSrcDocID )
+			if ( iDstCount < m_uDocinfo )
+				iDstDocID = DOCINFO2ID(pDstRow);
+			else
+				iDstDocID = 0;
+
+			if ( iSrcCount < pSrcIndex->m_uDocinfo )
+				iSrcDocID = DOCINFO2ID(pSrcRow);
+			else
+				iSrcDocID = 0;
+
+			if ( iDstDocID && iDstDocID < iSrcDocID )
 			{
 				while ( tDstMVA.m_iDocID && tDstMVA.m_iDocID<iDstDocID )
 					tDstMVA.Read ( tDstSPM );
@@ -6832,7 +6841,7 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 				pDstRow += iStride;
 				iDstCount++;
 
-			} else
+			} else if ( iSrcDocID )
 			{
 				// iSrcDocID<=iDstDocID; in both cases, its src attr values that must win
 				while ( tSrcMVA.m_iDocID && tSrcMVA.m_iDocID<iSrcDocID )

@@ -6824,7 +6824,7 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 			else
 				iSrcDocID = 0;
 
-			if ( iDstDocID && iDstDocID < iSrcDocID )
+			if ( ( iDstDocID && iDstDocID < iSrcDocID ) || iDstDocID )
 			{
 				while ( tDstMVA.m_iDocID && tDstMVA.m_iDocID<iDstDocID )
 					tDstMVA.Read ( tDstSPM );

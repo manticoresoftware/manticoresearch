@@ -8218,14 +8218,19 @@ const DWORD * CSphIndex_VLN::FindDocinfo ( SphDocID_t uDocID )
 	assert ( !m_pDocinfo.IsEmpty() );
 	assert ( m_tSchema.GetAttrsCount() );
 
-	DWORD uHash = (DWORD)( ( uDocID - DOCINFO2ID ( &m_pDocinfo[0] ) ) >> m_pDocinfoHash[0] );
+	int iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
+	SphDocID_t uFirst = DOCINFO2ID ( &m_pDocinfo[0] );
+	SphDocID_t uLast = DOCINFO2ID ( &m_pDocinfo[(m_uDocinfo-1)*iStride] );
+	if ( uDocID<uFirst || uDocID>uLast )
+		return NULL;
+
+	DWORD uHash = (DWORD)( ( uDocID - uFirst ) >> m_pDocinfoHash[0] );
 	if ( uHash>(1<<DOCINFO_HASH_BITS) ) // possible in case of broken data, for instance
 		return NULL;
 
 	int iStart = m_pDocinfoHash [ uHash+1 ];
 	int iEnd = m_pDocinfoHash [ uHash+2 ] - 1;
 
-	int iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 	const DWORD * pFound = NULL;
 
 	if ( uDocID==DOCINFO2ID ( &m_pDocinfo [ iStart*iStride ] ) )

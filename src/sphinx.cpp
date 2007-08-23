@@ -6823,8 +6823,8 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 				iSrcDocID = DOCINFO2ID(pSrcRow);
 			else
 				iSrcDocID = 0;
-
-			if ( ( iDstDocID && iDstDocID < iSrcDocID ) || iDstDocID )
+			
+			if ( ( iDstDocID && iDstDocID < iSrcDocID ) || ( iDstDocID && !iSrcDocID ) )
 			{
 				while ( tDstMVA.m_iDocID && tDstMVA.m_iDocID<iDstDocID )
 					tDstMVA.Read ( tDstSPM );

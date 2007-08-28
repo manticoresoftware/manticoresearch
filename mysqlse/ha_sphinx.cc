@@ -147,10 +147,10 @@ inline void SPH_DEBUG ( const char * format, ... )
 
 #else
 
-#define SPH_ENTER_FUNC() DBUG_ENTER(__FUNCTION__)
-#define SPH_ENTER_METHOD() DBUG_ENTER(__FUNCTION__)
-#define SPH_RET(_arg) { DBUG_RETURN(_arg); }
-#define SPH_VOID_RET() { DBUG_VOID_RETURN; }
+#define SPH_ENTER_FUNC()
+#define SPH_ENTER_METHOD()
+#define SPH_RET(_arg) { return(_arg); }
+#define SPH_VOID_RET() { return; }
 
 #endif
 

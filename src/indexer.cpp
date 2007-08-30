@@ -821,7 +821,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 //////////////////////////////////////////////////////////////////////////
 
 bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
-	const CSphConfigSection & hSrc, const char * sSrc, CSphPurgeData & tPurge )
+	const CSphConfigSection & hSrc, const char * sSrc, CSphPurgeData & tPurge, bool bRotate )
 {
 	// check config
 	if ( !hDst("path") )
@@ -841,6 +841,18 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 	assert ( pSrc );
 	assert ( pDst );
 
+	if ( !pSrc->Lock() && !bRotate )
+	{
+		fprintf ( stdout, "ERROR: index '%s' is already locked; lock: %s\n", sSrc, pSrc->GetLastError().cstr() );
+		return false;
+	}
+
+	if ( !pDst->Lock() && !bRotate )
+	{
+		fprintf ( stdout, "ERROR: index '%s' is already locked; lock: %s\n", sDst, pDst->GetLastError().cstr() );
+		return false;
+	}
+
 	pDst->SetProgressCallback ( ShowProgress );
 
 	float tmMerge = -sphLongTimer ();
@@ -848,9 +860,6 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 		sphDie ( "failed to merge index '%s' into index '%s': %s", sSrc, sDst, pDst->GetLastError().cstr() );
 	tmMerge += sphLongTimer ();
 	printf ( "merged in %.1f sec\n", tmMerge );
-
-	SafeDelete ( pSrc );
-	SafeDelete ( pDst );
 
 	// pick up merge result
 	const char * sPath = hDst["path"].cstr();
@@ -884,6 +893,12 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 			break;
 		}
 	}
+
+	pSrc->Unlock();
+	pDst->Unlock();
+
+	SafeDelete ( pSrc );
+	SafeDelete ( pDst );
 
 	// all good?
 	return ( iExt==EXT_COUNT );
@@ -1117,7 +1132,7 @@ int main ( int argc, char ** argv )
 
 		bIndexedOk = DoMerge (
 			hConf["index"][dIndexes[0]], dIndexes[0],
-			hConf["index"][dIndexes[1]], dIndexes[1], tPurge );
+			hConf["index"][dIndexes[1]], dIndexes[1], tPurge, g_bRotate );
 	} else if ( bIndexAll )
 	{
 		hConf["index"].IterateStart ();

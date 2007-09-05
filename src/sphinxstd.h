@@ -785,6 +785,15 @@ public:
 		return (*this);
 	}
 
+	const CSphString & SetSprintf ( const char * sTemplate, va_list ap )
+	{
+		char sBuf[1024];
+		vsnprintf ( sBuf, sizeof(sBuf), sTemplate, ap );
+
+		(*this) = sBuf;
+		return (*this);
+	}
+
 	bool IsEmpty () const
 	{
 		if ( !m_sValue )
@@ -797,6 +806,13 @@ public:
 		if ( m_sValue )
 			for ( char * s=m_sValue; *s; s++ )
 				*s = (char) tolower ( *s );
+	}
+
+	void ToUpper ()
+	{
+		if ( m_sValue )
+			for ( char * s=m_sValue; *s; s++ )
+				*s = (char) toupper ( *s );
 	}
 
 	void Swap ( CSphString & rhs )

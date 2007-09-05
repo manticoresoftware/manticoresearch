@@ -23,7 +23,7 @@ define ( "SEARCHD_COMMAND_EXCERPT",	1 );
 define ( "SEARCHD_COMMAND_UPDATE",	2 );
 
 /// current client-side command implementation versions
-define ( "VER_COMMAND_SEARCH",		0x10C );
+define ( "VER_COMMAND_SEARCH",		0x10D );
 define ( "VER_COMMAND_EXCERPT",		0x100 );
 define ( "VER_COMMAND_UPDATE",		0x100 );
 
@@ -95,6 +95,7 @@ class SphinxClient
 	{
 		$this->_host		= "localhost";
 		$this->_port		= 3312;
+
 		$this->_offset		= 0;
 		$this->_limit		= 20;
 		$this->_mode		= SPH_MATCH_ALL;
@@ -113,8 +114,10 @@ class SphinxClient
 		$this->_retrycount	= 0;
 		$this->_retrydelay	= 0;
 
-		$this->_error	= "";
-		$this->_warning	= "";
+		$this->_error		= "";
+		$this->_warning		= "";
+
+		$this->_reqs		= array ();
 	}
 
 	/// get last error message (string)
@@ -331,6 +334,12 @@ class SphinxClient
 		$this->_filters[] = array ( "attr"=>$attribute, "exclude"=>$exclude, "min"=>$min, "max"=>$max );
 	}
 
+	/// clear all filters (for multi-queries)
+	function ResetFilters ()
+	{
+		$this->_filters[] = array();
+	}
+
 	/// set grouping attribute and function
 	///
 	/// in grouping mode, all matches are assigned to different groups
@@ -399,6 +408,8 @@ class SphinxClient
 		$this->_retrydelay = $delay;
 	}
 
+	//////////////////////////////////////////////////////////////////////////////
+
 	/// connect to searchd server and run given search query
 	///
 	/// $query is query string
@@ -418,13 +429,34 @@ class SphinxClient
 	///			hash which maps query terms (stemmed!) to ( "docs", "hits" ) hash
 	function Query ( $query, $index="*" )
 	{
-		if (!( $fp = $this->_Connect() ))
+		assert ( empty($this->_reqs) );
+
+		$this->AddQuery ( $query, $index );
+		$results = $this->RunQueries ();
+
+		if ( !is_array($results) )
 			return false;
 
-		/////////////////
-		// build request
-		/////////////////
+		$this->_error = $results[0]["error"];
+		$this->_warning = $results[0]["warning"];
+		return $results[0];
+	}
 
+	/// add query to batch
+	///
+	/// batch queries enable searchd to perform internal optimizations,
+	/// if possible; and reduce network connection overheads in all cases.
+	///
+	/// for instance, running exactly the same query with different
+	/// groupby settings will enable searched to perform expensive
+	/// full-text search and ranking operation only once, but compute
+	/// multiple groupby results from its output.
+	///
+	/// parameters are exactly the same as in Query() call
+	/// returns index to results array returned by RunQueries() call
+	function AddQuery ( $query, $index="*" )
+	{
+		// build request
 		$req = pack ( "NNNN", $this->_offset, $this->_limit, $this->_mode, $this->_sort ); // mode and limits
 		$req .= pack ( "N", strlen($this->_sortby) ) . $this->_sortby;
 		$req .= pack ( "N", strlen($query) ) . $query; // query itself
@@ -458,108 +490,168 @@ class SphinxClient
 		$req .= pack ( "NNN", $this->_cutoff, $this->_retrycount, $this->_retrydelay );
 		$req .= pack ( "N", strlen($this->_groupdistinct) ) . $this->_groupdistinct;
 
+		// store request to requests array
+		$this->_reqs[] = $req;
+		return count($this->_reqs)-1;
+	}
+
+	/// run queries batch
+	///
+	/// returns an array of result sets on success
+	/// returns false on network IO failure
+	///
+	/// each result set in returned array is a hash which containts
+	/// the same keys as the hash returned by Query(), plus:
+	///		"error"
+	///			search error for this query
+	///		"words"
+	///			hash which maps query terms (stemmed!) to ( "docs", "hits" ) hash
+	function RunQueries ()
+	{
+		if ( empty($this->_reqs) )
+		{
+			$this->_error = "no queries defined, issue AddQuery() first";
+			return false;
+		}
+
+		if (!( $fp = $this->_Connect() ))
+			return false;
+
 		////////////////////////////
 		// send query, get response
 		////////////////////////////
 
-		$len = strlen($req);
-		$req = pack ( "nnN", SEARCHD_COMMAND_SEARCH, VER_COMMAND_SEARCH, $len ) . $req; // add header
+		$nreqs = count($this->_reqs);
+		$req = join ( "", $this->_reqs );
+		$len = 4+strlen($req);
+		$req = pack ( "nnNN", SEARCHD_COMMAND_SEARCH, VER_COMMAND_SEARCH, $len, $nreqs ) . $req; // add header
+
 		fwrite ( $fp, $req, $len+8 );
 		if (!( $response = $this->_GetResponse ( $fp, VER_COMMAND_SEARCH ) ))
 			return false;
+
+		$this->_reqs = array ();
 
 		//////////////////
 		// parse response
 		//////////////////
 
-		$result = array();
-		$max = strlen($response); // protection from broken response
+		$p = 0; // current position
+		$max = strlen($response); // max position for checks, to protect against broken responses
 
-		// read schema
-		$p = 0;
-		$fields = array ();
-		$attrs = array ();
-
-		list(,$nfields) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
-		while ( $nfields-->0 && $p<$max )
+		$results = array ();
+		for ( $ires=0; $ires<$nreqs && $p<$max; $ires++ )
 		{
-			list(,$len) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
-			$fields[] = substr ( $response, $p, $len ); $p += $len;
-		}
-		$result["fields"] = $fields;
+			$results[] = array();
+			$result =& $results[$ires];
 
-		list(,$nattrs) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
-		while ( $nattrs-->0 && $p<$max  )
-		{
-			list(,$len) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
-			$attr = substr ( $response, $p, $len ); $p += $len;
-			list(,$type) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
-			$attrs[$attr] = $type;
-		}
-		$result["attrs"] = $attrs;
+			$result["error"] = "";
+			$result["warning"] = "";
 
-		// read match count
-		list(,$count) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
-		list(,$id64) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
-
-		// read matches
-		while ( $count-->0 && $p<$max )
-		{
-			if ( $id64 )
+			// extract status
+			list(,$status) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
+			$result["status"] = $status;
+			if ( $status!=SEARCHD_OK )
 			{
-				list ( $dochi, $doclo, $weight ) = array_values ( unpack ( "N*N*N*",
-					substr ( $response, $p, 12 ) ) );
-				$p += 12;
-				$doc = (((int)$dochi)<<32) + ((int)$doclo);
-			} else
-			{
-				list ( $doc, $weight ) = array_values ( unpack ( "N*N*",
-					substr ( $response, $p, 8 ) ) );
-				$p += 8;
-				$doc = sprintf ( "%u", $doc ); // workaround for php signed/unsigned braindamage
-			}
+				list(,$len) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
+				$message = substr ( $response, $p, $len ); $p += $len;
 
-			$weight = sprintf ( "%u", $weight );
-			$result["matches"][$doc]["weight"] = $weight;
-
-			$attrvals = array ();
-			foreach ( $attrs as $attr=>$type )
-			{
-				list(,$val) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
-				if ( $type & SPH_ATTR_MULTI )
+				if ( $status==SEARCHD_WARNING )
 				{
-					$attrvals[$attr] = array ();
-					$nvalues = $val;
-					while ( $nvalues-->0 && $p<$max )
-					{
-						list(,$val) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
-						$attrvals[$attr][] = sprintf ( "%u", $val );
-					}
+					$result["warning"] = $message;
 				} else
 				{
-					$attrvals[$attr] = sprintf ( "%u", $val );
+					$result["error"] = $message;
+					continue;
 				}
 			}
-			$result["matches"][$doc]["attrs"] = $attrvals;
-		}
-		list ( $total, $total_found, $msecs, $words ) =
-			array_values ( unpack ( "N*N*N*N*", substr ( $response, $p, 16 ) ) );
-		$result["total"] = sprintf ( "%u", $total );
-		$result["total_found"] = sprintf ( "%u", $total_found );
-		$result["time"] = sprintf ( "%.3f", $msecs/1000 );
-		$p += 16;
 
-		while ( $words-->0 && $p<$max )
-		{
-			list(,$len) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
-			$word = substr ( $response, $p, $len ); $p += $len;
-			list ( $docs, $hits ) = array_values ( unpack ( "N*N*", substr ( $response, $p, 8 ) ) ); $p += 8;
-			$result["words"][$word] = array (
-				"docs"=>sprintf ( "%u", $docs ),
-				"hits"=>sprintf ( "%u", $hits ) );
+			// read schema
+			$fields = array ();
+			$attrs = array ();
+
+			list(,$nfields) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
+			while ( $nfields-->0 && $p<$max )
+			{
+				list(,$len) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
+				$fields[] = substr ( $response, $p, $len ); $p += $len;
+			}
+			$result["fields"] = $fields;
+
+			list(,$nattrs) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
+			while ( $nattrs-->0 && $p<$max  )
+			{
+				list(,$len) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
+				$attr = substr ( $response, $p, $len ); $p += $len;
+				list(,$type) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
+				$attrs[$attr] = $type;
+			}
+			$result["attrs"] = $attrs;
+
+			// read match count
+			list(,$count) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
+			list(,$id64) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
+
+			// read matches
+			while ( $count-->0 && $p<$max )
+			{
+				if ( $id64 )
+				{
+					list ( $dochi, $doclo, $weight ) = array_values ( unpack ( "N*N*N*",
+						substr ( $response, $p, 12 ) ) );
+					$p += 12;
+					$doc = (((int)$dochi)<<32) + ((int)$doclo);
+				} else
+				{
+					list ( $doc, $weight ) = array_values ( unpack ( "N*N*",
+						substr ( $response, $p, 8 ) ) );
+					$p += 8;
+					$doc = sprintf ( "%u", $doc ); // workaround for php signed/unsigned braindamage
+				}
+
+				$weight = sprintf ( "%u", $weight );
+				$result["matches"][$doc]["weight"] = $weight;
+
+				$attrvals = array ();
+				foreach ( $attrs as $attr=>$type )
+				{
+					list(,$val) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
+					if ( $type & SPH_ATTR_MULTI )
+					{
+						$attrvals[$attr] = array ();
+						$nvalues = $val;
+						while ( $nvalues-->0 && $p<$max )
+						{
+							list(,$val) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
+							$attrvals[$attr][] = sprintf ( "%u", $val );
+						}
+					} else
+					{
+						$attrvals[$attr] = sprintf ( "%u", $val );
+					}
+				}
+				$result["matches"][$doc]["attrs"] = $attrvals;
+			}
+
+			list ( $total, $total_found, $msecs, $words ) =
+				array_values ( unpack ( "N*N*N*N*", substr ( $response, $p, 16 ) ) );
+			$result["total"] = sprintf ( "%u", $total );
+			$result["total_found"] = sprintf ( "%u", $total_found );
+			$result["time"] = sprintf ( "%.3f", $msecs/1000 );
+			$p += 16;
+
+			while ( $words-->0 && $p<$max )
+			{
+				list(,$len) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
+				$word = substr ( $response, $p, $len ); $p += $len;
+				list ( $docs, $hits ) = array_values ( unpack ( "N*N*", substr ( $response, $p, 8 ) ) ); $p += 8;
+				$result["words"][$word] = array (
+					"docs"=>sprintf ( "%u", $docs ),
+					"hits"=>sprintf ( "%u", $hits ) );
+			}
 		}
 
-		return $result;
+		return $results;
 	}
 
 	/////////////////////////////////////////////////////////////////////////////

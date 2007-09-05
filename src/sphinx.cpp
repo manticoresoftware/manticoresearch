@@ -845,6 +845,8 @@ public:
 	/// add entry to the queue
 	virtual bool Push ( const CSphMatch & tEntry )
 	{
+		m_iTotal++;
+
 		if ( m_iUsed==m_iSize )
 		{
 			// if it's worse that current min, reject it, else pop off current min
@@ -922,6 +924,7 @@ public:
 				pTo->m_iTag = iTag;
 			Pop ();
 		}
+		m_iTotal = 0;
 	}
 };
 
@@ -1369,6 +1372,7 @@ public:
 		}
 
 		m_hGroup2Match.Add ( &tNew, uGroupKey );
+		m_iTotal++;
 		return true;
 	}
 
@@ -1387,6 +1391,7 @@ public:
 		}
 
 		m_iUsed = 0;
+		m_iTotal = 0;
 	}
 
 	/// get entries count
@@ -2104,6 +2109,7 @@ struct CSphIndex_VLN : CSphIndex
 
 	virtual CSphQueryResult *	Query ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery );
 	virtual bool				QueryEx ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchSorter * pTop );
+	virtual bool				MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters );
 
 	virtual bool				Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData );
 	void						MergeWordData ( CSphWordRecord & tDstWord, CSphWordRecord & tSrcWord );
@@ -2172,6 +2178,9 @@ private:
 	CSphSharedBuffer<BYTE>		m_bPreread;				///< are we ready to search
 	DWORD						m_uVersion;				///< data files version
 
+	bool						m_bEarlyLookup;			///< whether early attr value lookup is needed
+	bool						m_bLateLookup;			///< whether late attr value lookup is needed
+
 private:
 	const char *				GetIndexFileName ( const char * sExt ) const;	///< WARNING, non-reenterable, static buffer!
 	int							AdjustMemoryLimit ( int iMemoryLimit );
@@ -2183,10 +2192,10 @@ private:
 	void						WriteSchemaColumn ( CSphWriter & fdInfo, const CSphColumnInfo & tCol );
 	void						ReadSchemaColumn ( CSphReader_VLN & rdInfo, CSphColumnInfo & tCol );
 
-	void						MatchAll ( const CSphQuery * pQuery, ISphMatchSorter * pTop, CSphQueryResult * pResult );
-	void						MatchAny ( const CSphQuery * pQuery, ISphMatchSorter * pTop, CSphQueryResult * pResult );
-	bool						MatchBoolean ( const CSphQuery * pQuery, ISphMatchSorter * pTop, CSphQueryResult * pResult, const CSphTermSetup & tTermSetup );
-	bool						MatchExtended ( const CSphQuery * pQuery, ISphMatchSorter * pTop, CSphQueryResult * pResult, const CSphTermSetup & tTermSetup );
+	void						MatchAll ( const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters );
+	void						MatchAny ( const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters );
+	bool						MatchBoolean ( const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, const CSphTermSetup & tTermSetup );
+	bool						MatchExtended ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphTermSetup & tTermSetup );
 
 	const DWORD *				FindDocinfo ( SphDocID_t uDocID );
 	void						LookupDocinfo ( CSphDocInfo & tMatch );
@@ -3992,6 +4001,24 @@ const CSphFilter & CSphFilter::operator = ( const CSphFilter & rhs )
 }
 
 
+bool CSphFilter::operator == ( const CSphFilter & rhs ) const
+{
+	// check name and mode
+	if ( m_sAttrName!=rhs.m_sAttrName || m_bExclude!=rhs.m_bExclude )
+		return false;
+
+	// for range filters, check ranges
+	if ( !m_iValues )
+		return m_uMinValue==rhs.m_uMinValue && m_uMaxValue==rhs.m_uMaxValue;
+
+	// for set filters, compare sets
+	for ( int i=0; i<m_iValues; i++ )
+		if ( m_pValues[i]!=rhs.m_pValues[i] )
+			return false;
+	return true;
+}
+
+
 static int cmpDword ( const void * a, const void * b )
 {
 	DWORD aa = *((DWORD*)a);
@@ -4032,13 +4059,15 @@ CSphQuery::CSphQuery ()
 	, m_iGroupbyCount	( -1 )
 	, m_iDistinctOffset	( -1 )
 	, m_iDistinctCount	( -1 )
+
+	, m_iOldVersion ( 0 )
+	, m_iOldGroups ( 0 )
+	, m_pOldGroups ( NULL )
+	, m_iOldMinTS ( 0 )
+	, m_iOldMaxTS ( UINT_MAX )
+	, m_iOldMinGID ( 0 )
+	, m_iOldMaxGID ( UINT_MAX )
 {}
-
-
-CSphQuery::~CSphQuery ()
-{
-	SafeDeleteArray ( m_pWeights );
-}
 
 
 bool CSphQuery::SetSchema ( const CSphSchema & tSchema, CSphString & sError )
@@ -4246,6 +4275,22 @@ void CSphSchema::AddAttr ( const CSphColumnInfo & tCol )
 		m_dAttrs.Last().m_iBitOffset = iItem*ROWITEM_BITS + m_dRowUsed[iItem];
 		m_dRowUsed[iItem] += iBits;
 	}
+}
+
+
+void CSphSchema::BuildResultSchema ( const CSphQuery * pQuery )
+{
+	if ( pQuery->m_iGroupbyOffset<0 )
+		return;
+
+	CSphColumnInfo tGroupby ( "@groupby", SPH_ATTR_INTEGER );
+	CSphColumnInfo tCount ( "@count", SPH_ATTR_INTEGER );
+	CSphColumnInfo tDistinct ( "@distinct", SPH_ATTR_INTEGER );
+
+	AddAttr ( tGroupby );
+	AddAttr ( tCount );
+	if ( pQuery->m_iDistinctOffset>=0 )
+		AddAttr ( tDistinct );
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -4675,6 +4720,9 @@ CSphQueryResult::CSphQueryResult ()
 	m_iQueryTime = 0;
 	m_iTotalMatches = 0;
 	m_pMva = NULL;
+	m_iOffset = 0;
+	m_iCount = 0;
+	m_iSuccesses = 0;
 }
 
 
@@ -8095,6 +8143,11 @@ CSphQueryResult * CSphIndex_VLN::Query ( ISphTokenizer * pTokenizer, CSphDict * 
 	// create result
 	CSphQueryResult * pResult = new CSphQueryResult();
 
+	// lookup group-by attribute index
+	if ( !pQuery->SetSchema ( m_tSchema, m_sLastError ) )
+		return false;
+
+	// create sorter
 	CSphString sError;
 	ISphMatchSorter * pTop = sphCreateQueue ( pQuery, m_tSchema, sError );
 	if ( !pTop )
@@ -8278,30 +8331,32 @@ void CSphIndex_VLN::LookupDocinfo ( CSphDocInfo & tMatch )
 
 
 #define SPH_SUBMIT_MATCH(_match) \
-	if ( bLateLookup ) \
+	if ( m_bLateLookup ) \
 		LookupDocinfo ( _match ); \
 	\
-	if ( pTop->m_bRandomize ) \
+	if ( bRandomize ) \
 		(_match).m_iWeight = rand(); \
 	\
-	if ( pTop->Push ( _match ) ) \
-		pResult->m_iTotalMatches++; \
+	bool bNewMatch = false; \
+	for ( int iSorter=0; iSorter<iSorters; iSorter++ ) \
+		bNewMatch |= ppSorters[iSorter]->Push ( _match ); \
 	\
-	if ( pQuery->m_iCutoff>0 && pResult->m_iTotalMatches>=pQuery->m_iCutoff ) \
-		break;
+	if ( bNewMatch ) \
+		if ( --iCutoff==0 ) \
+			break;
 
 
-void CSphIndex_VLN::MatchAll ( const CSphQuery * pQuery, ISphMatchSorter * pTop, CSphQueryResult * pResult )
+void CSphIndex_VLN::MatchAll ( const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters )
 {
+	bool bRandomize = ppSorters[0]->m_bRandomize;
+	int iCutoff = pQuery->m_iCutoff;
+
 	///////////////////
 	// match all words
 	///////////////////
 
 	if ( !m_dQueryWords[0].m_iDocs )
 		return;
-
-	bool bEarlyLookup = ( m_eDocinfo==SPH_DOCINFO_EXTERN ) && pQuery->m_dFilters.GetLength();
-	bool bLateLookup = ( m_eDocinfo==SPH_DOCINFO_EXTERN ) && !bEarlyLookup && pTop->UsesAttrs();
 
 	// preload doclist entries, and calc max qpos
 	int i, iMaxQpos = 0;
@@ -8339,7 +8394,7 @@ void CSphIndex_VLN::MatchAll ( const CSphQuery * pQuery, ISphMatchSorter * pTop,
 		CSphMatch & tMatch = m_dQueryWords[0].m_tDoc;
 
 		// early reject by group id, doc id or timestamp
-		if ( bEarlyLookup )
+		if ( m_bEarlyLookup )
 			LookupDocinfo ( tMatch );
 		if ( sphMatchEarlyReject ( tMatch, pQuery, m_pMva ) )
 		{
@@ -8462,17 +8517,17 @@ void CSphIndex_VLN::MatchAll ( const CSphQuery * pQuery, ISphMatchSorter * pTop,
 }
 
 
-void CSphIndex_VLN::MatchAny ( const CSphQuery * pQuery, ISphMatchSorter * pTop, CSphQueryResult * pResult )
+void CSphIndex_VLN::MatchAny ( const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters )
 {
+	bool bRandomize = ppSorters[0]->m_bRandomize;
+	int iCutoff = pQuery->m_iCutoff;
+
 	//////////////////
 	// match any word
 	//////////////////
 
 	int iActive = m_dQueryWords.GetLength(); // total number of words still active
 	SphDocID_t iLastMatchID = 0;
-
-	bool bEarlyLookup = ( m_eDocinfo==SPH_DOCINFO_EXTERN ) && pQuery->m_dFilters.GetLength();
-	bool bLateLookup = ( m_eDocinfo==SPH_DOCINFO_EXTERN ) && !bEarlyLookup && pTop->UsesAttrs();
 
 	// preload entries
 	int i;
@@ -8526,7 +8581,7 @@ void CSphIndex_VLN::MatchAny ( const CSphQuery * pQuery, ISphMatchSorter * pTop,
 
 		// early reject by group id, doc id or timestamp
 		CSphMatch & tMatch = m_dQueryWords[iMinIndex].m_tDoc;
-		if ( bEarlyLookup )
+		if ( m_bEarlyLookup )
 			LookupDocinfo ( tMatch );
 		if ( sphMatchEarlyReject ( tMatch, pQuery, m_pMva ) )
 			continue;
@@ -8853,8 +8908,11 @@ CSphMatch * CSphBooleanEvalNode::MatchLevel ( SphDocID_t iMinID )
 }
 
 
-bool CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, ISphMatchSorter * pTop, CSphQueryResult * pResult, const CSphTermSetup & tTermSetup )
+bool CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, const CSphTermSetup & tTermSetup )
 {
+	bool bRandomize = ppSorters[0]->m_bRandomize;
+	int iCutoff = pQuery->m_iCutoff;
+
 	/////////////////////////
 	// match in boolean mode
 	/////////////////////////
@@ -8872,9 +8930,6 @@ bool CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, ISphMatchSorter * p
 	CSphBooleanEvalNode tTree ( tParsed.m_pTree, tTermSetup.m_pDict, m_eDocinfo, m_tMin );
 	tTree.SetFile ( this, tTermSetup );
 
-	bool bEarlyLookup = ( m_eDocinfo==SPH_DOCINFO_EXTERN ) && pQuery->m_dFilters.GetLength();
-	bool bLateLookup = ( m_eDocinfo==SPH_DOCINFO_EXTERN ) && !bEarlyLookup && pTop->UsesAttrs();
-
 	// do matching
 	SphDocID_t iMinID = 1;
 	for ( ;; )
@@ -8885,7 +8940,7 @@ bool CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, ISphMatchSorter * p
 		iMinID = 1 + pMatch->m_iDocID;
 
 		// early reject by group id, doc id or timestamp
-		if ( bEarlyLookup )
+		if ( m_bEarlyLookup )
 			LookupDocinfo ( *pMatch );
 		if ( sphMatchEarlyReject ( *pMatch, pQuery, m_pMva ) )
 			continue;
@@ -9680,17 +9735,16 @@ void CSphExtendedEvalNode::CollectQwords ( CSphQwordsHash & dHash, int & iCount 
 
 //////////////////////////////////////////////////////////////////////////////
 
-bool CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, ISphMatchSorter * pTop, CSphQueryResult * pResult, const CSphTermSetup & tTermSetup )
+bool CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphTermSetup & tTermSetup )
 {
-	assert ( pTop );
+	bool bRandomize = ppSorters[0]->m_bRandomize;
+	int iCutoff = pQuery->m_iCutoff;
+
 	assert ( m_tMin.m_iRowitems==m_tSchema.GetRowSize() );
 
 	//////////////////////////
 	// match in extended mode
 	//////////////////////////
-
-	bool bEarlyLookup = ( m_eDocinfo==SPH_DOCINFO_EXTERN ) && pQuery->m_dFilters.GetLength();
-	bool bLateLookup = ( m_eDocinfo==SPH_DOCINFO_EXTERN ) && !bEarlyLookup && pTop->UsesAttrs();
 
 	// parse query
 	CSphExtendedQuery tParsed;
@@ -9756,7 +9810,7 @@ bool CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, ISphMatchSorter * 
 	//////////////////////////
 
 	// randomizing trick. setting iQwords to 0 prevents weighting
-	if ( pTop->m_bRandomize )
+	if ( bRandomize )
 		iQwords = 0;
 
 	SphDocID_t iMinID = 1;
@@ -9772,7 +9826,7 @@ bool CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, ISphMatchSorter * 
 			continue;
 
 		// early reject by group id, doc id or timestamp
-		if ( bEarlyLookup )
+		if ( m_bEarlyLookup )
 			LookupDocinfo ( *pAccept );
 
 		if ( sphMatchEarlyReject ( *pAccept, pQuery, m_pMva ) )
@@ -10333,16 +10387,24 @@ bool CSphIndex_VLN::Rename ( const char * sNewBase )
 
 bool CSphIndex_VLN::QueryEx ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchSorter * pTop )
 {
+	bool bRes = MultiQuery ( pTokenizer, pDict, pQuery, pResult, 1, &pTop );
+	pResult->m_iTotalMatches += bRes ? pTop->GetTotalCount () : 0;
+	pResult->m_tSchema.BuildResultSchema ( pQuery );
+	return bRes;
+}
+
+
+bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters )
+{
 	assert ( pTokenizer );
 	assert ( pDict );
 	assert ( pQuery );
 	assert ( pResult );
-	assert ( pTop );
+	assert ( ppSorters );
 
 	PROFILER_INIT ();
 	PROFILE_BEGIN ( query_init );
 
-	// create result and start timing
 	float tmQueryStart = sphLongTimer ();
 
 	// open files
@@ -10351,7 +10413,6 @@ bool CSphIndex_VLN::QueryEx ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSph
 		m_sLastError = "index not preread";
 		return false;
 	}
-	pResult->m_tSchema = m_tSchema;
 
 	CSphAutofile tDoclist ( GetIndexFileName("spd"), SPH_O_READ, m_sLastError );
 	if ( tDoclist.GetFD()<0 )
@@ -10411,11 +10472,6 @@ bool CSphIndex_VLN::QueryEx ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSph
 			assert ( m_tMin.m_iRowitems==m_tSchema.GetRowSize() );
 			m_dQueryWords[i].SetupAttrs ( m_eDocinfo, m_tMin );
 		}
-
-
-		// lookup group-by attribute index
-		if ( !pQuery->SetSchema ( m_tSchema, m_sLastError ) )
-			return false;
 
 		// setup words from the wordlist
 		PROFILE_BEGIN ( query_load_words );
@@ -10495,6 +10551,15 @@ bool CSphIndex_VLN::QueryEx ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSph
 		for ( int i=0; i<Min ( m_iWeights, pQuery->m_iWeights ); i++ )
 			m_dWeights[i] = Max ( 1, pQuery->m_pWeights[i] );
 
+	// setup lookup
+	m_bEarlyLookup = ( m_eDocinfo==SPH_DOCINFO_EXTERN ) && pQuery->m_dFilters.GetLength();
+	m_bLateLookup = false;
+	if ( ( m_eDocinfo==SPH_DOCINFO_EXTERN ) && !m_bEarlyLookup )
+		for ( int iSorter=0; iSorter<iSorters && !m_bLateLookup; iSorter++ )
+			if ( ppSorters[iSorter]->UsesAttrs() )
+				m_bLateLookup = true;
+
+
 	//////////////////////////////////////
 	// find and weight matching documents
 	//////////////////////////////////////
@@ -10503,11 +10568,11 @@ bool CSphIndex_VLN::QueryEx ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSph
 	bool bMatch = true;
 	switch ( pQuery->m_eMode )
 	{
-		case SPH_MATCH_ALL:			MatchAll ( pQuery, pTop, pResult ); break;
-		case SPH_MATCH_PHRASE:		MatchAll ( pQuery, pTop, pResult ); break;
-		case SPH_MATCH_ANY:			MatchAny ( pQuery, pTop, pResult ); break;
-		case SPH_MATCH_BOOLEAN:		bMatch = MatchBoolean ( pQuery, pTop, pResult, tTermSetup ); break;
-		case SPH_MATCH_EXTENDED:	bMatch = MatchExtended ( pQuery, pTop, pResult, tTermSetup ); break;
+		case SPH_MATCH_ALL:			MatchAll ( pQuery, iSorters, ppSorters ); break;
+		case SPH_MATCH_PHRASE:		MatchAll ( pQuery, iSorters, ppSorters ); break;
+		case SPH_MATCH_ANY:			MatchAny ( pQuery, iSorters, ppSorters ); break;
+		case SPH_MATCH_BOOLEAN:		bMatch = MatchBoolean ( pQuery, iSorters, ppSorters, tTermSetup ); break;
+		case SPH_MATCH_EXTENDED:	bMatch = MatchExtended ( pQuery, pResult, iSorters, ppSorters, tTermSetup ); break;
 		default:					sphDie ( "INTERNAL ERROR: unknown matching mode (mode=%d)", pQuery->m_eMode );
 	}
 	PROFILE_END ( query_match );
@@ -10533,35 +10598,31 @@ bool CSphIndex_VLN::QueryEx ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSph
 
 	m_dQueryWords.Reset ();
 
-	///////////////////
-	// cook result set
-	///////////////////
+	////////////////////
+	// cook result sets
+	////////////////////
 
-	// adjust results
-	if ( pTop->GetLength() )
+	// adjust result sets
+	for ( int iSorter=0; iSorter<iSorters; iSorter++ )
 	{
-		const int iCount = pTop->GetLength ();
-		CSphMatch * const pHead = pTop->First();
-		CSphMatch * const pTail = pHead + iCount;
+		ISphMatchSorter * pTop = ppSorters[iSorter];
 
-		// lookup attributes if necessary
-		if ( m_eDocinfo==SPH_DOCINFO_EXTERN && !pTop->UsesAttrs() && !pQuery->m_dFilters.GetLength() )
+		// final lookup
+		if ( pTop->GetLength() && !m_bEarlyLookup && !m_bLateLookup )
+		{
+			const int iCount = pTop->GetLength ();
+			CSphMatch * const pHead = pTop->First();
+			CSphMatch * const pTail = pHead + iCount;
+
 			for ( CSphMatch * pCur=pHead; pCur<pTail; pCur++ )
 				LookupDocinfo ( *pCur );
-	}
-	pResult->m_pMva = m_pMva.GetWritePtr();
+		}
 
-	// adjust schema
-	if ( pQuery->m_iGroupbyOffset>=0 )
-	{
-		CSphColumnInfo tGroupby ( "@groupby", SPH_ATTR_INTEGER );
-		CSphColumnInfo tCount ( "@count", SPH_ATTR_INTEGER );
-		CSphColumnInfo tDistinct ( "@distinct", SPH_ATTR_INTEGER );
+		// mva ptr
+		pResult->m_pMva = m_pMva.GetWritePtr();
 
-		pResult->m_tSchema.AddAttr ( tGroupby );
-		pResult->m_tSchema.AddAttr ( tCount );
-		if ( pQuery->m_iDistinctOffset>=0 )
-			pResult->m_tSchema.AddAttr ( tDistinct );
+		// schema
+		pResult->m_tSchema = m_tSchema;
 	}
 
 	PROFILER_DONE ();

@@ -560,6 +560,7 @@ enum ESphSchemaCompare
 };
 
 /// source schema
+class CSphQuery;
 struct CSphSchema
 {
 	CSphString						m_sName;		///< my human-readable name
@@ -606,6 +607,10 @@ public:
 
 	/// add attr
 	void					AddAttr ( const CSphColumnInfo & tAttr );
+
+	/// build result schema from current contents and query
+	/// adds virtual columns such as @group etc
+	void					BuildResultSchema ( const CSphQuery * pQuery );
 
 protected:
 	CSphVector<CSphColumnInfo,8>	m_dAttrs;		///< all my attributes
@@ -1035,8 +1040,8 @@ public:
 	int				m_iValues;		///< values set size, default is 0
 	DWORD *			m_pValues;		///< values set. OWNED, WILL BE FREED IN DTOR.
 	bool			m_bExclude;		///< whether this is "include" or "exclude" filter (default is "include")
-	bool			m_bMva;			///< whether this filter is against multi-valued attribute
 
+	bool			m_bMva;			///< whether this filter is against multi-valued attribute
 	int				m_iAttr;		///< attr index into schema
 	int				m_iBitOffset;	///< attr bit offset into row
 	int				m_iBitCount;	///< attr bit count
@@ -1047,7 +1052,9 @@ public:
 					~CSphFilter ();
 	void			SortValues ();	///< sort values in ascending order
 
-	const CSphFilter & operator = ( const CSphFilter & rhs );
+	const CSphFilter &	operator = ( const CSphFilter & rhs );
+	bool				operator == ( const CSphFilter & rhs ) const;
+	bool				operator != ( const CSphFilter & rhs ) const { return !( (*this)==rhs ); }
 };
 
 
@@ -1055,9 +1062,11 @@ public:
 class CSphQuery
 {
 public:
+	CSphString		m_sIndexes;		///< indexes to search
+	CSphString		m_sQuery;		///< query string
+
 	int				m_iOffset;		///< offset into result set (as X in MySQL LIMIT X,Y clause)
 	int				m_iLimit;		///< limit into result set (as Y in MySQL LIMIT X,Y clause)
-	CSphString		m_sQuery;		///< query string
 	DWORD *			m_pWeights;		///< user-supplied per-field weights. may be NULL. default is NULL. NOT OWNED, WILL NOT BE FREED in dtor.
 	int				m_iWeights;		///< number of user-supplied weights. missing fields will be assigned weight 1. default is 0
 	ESphMatchMode	m_eMode;		///< match mode. default is "match all"
@@ -1088,8 +1097,17 @@ public:
 	int				m_iDistinctCount;	///< distinct-counted attr bit count
 
 public:
-					CSphQuery ();								///< ctor, fills defaults
-					~CSphQuery ();								///< dtor, frees owned stuff
+	int				m_iOldVersion;		///< version, to fixup old queries
+	int				m_iOldGroups;		///< 0.9.6 group filter values count
+	DWORD *			m_pOldGroups;		///< 0.9.6 group filter values
+	DWORD			m_iOldMinTS;		///< 0.9.6 min timestamp
+	DWORD			m_iOldMaxTS;		///< 0.9.6 max timestamp
+	DWORD			m_iOldMinGID;		///< 0.9.6 min group id
+	DWORD			m_iOldMaxGID;		///< 0.9.6 max group id
+
+public:
+					CSphQuery ();		///< ctor, fills defaults
+					~CSphQuery () {}	///< dtor, frees owned stuff
 
 	bool			SetSchema ( const CSphSchema & tSchema, CSphString & sError );	///< calc m_iAttrs, m_iGroupBy, m_iDistinct from schema
 };
@@ -1113,6 +1131,14 @@ public:
 
 	CSphSchema				m_tSchema;			///< result schema
 	const DWORD *			m_pMva;				///< pointer to MVA storage
+
+	CSphString				m_sError;			///< error message
+	CSphString				m_sWarning;			///< warning message
+
+	int						m_iOffset;			///< requested offset into matches array
+	int						m_iCount;			///< count which will be actually served (computed from total, offset and limit)
+
+	int						m_iSuccesses;
 
 public:
 							CSphQueryResult ();		///< ctor
@@ -1235,10 +1261,11 @@ class ISphMatchSorter
 {
 public:
 	bool				m_bRandomize;
+	int					m_iTotal;
 
 public:
 	/// ctor
-						ISphMatchSorter () : m_bRandomize ( false ) {}
+						ISphMatchSorter () : m_bRandomize ( false ), m_iTotal ( 0 ) {}
 
 	/// virtualizing dtor
 	virtual				~ISphMatchSorter () {}
@@ -1259,6 +1286,9 @@ public:
 
 	/// get entries count
 	virtual int			GetLength () const = 0;
+
+	/// get total count of non-duplicates Push()ed through this queue
+	virtual int			GetTotalCount () const { return m_iTotal; }
 
 	/// get first entry ptr
 	/// used for docinfo lookup
@@ -1328,7 +1358,11 @@ public:
 	virtual void				SetInfixIndexing ( bool bPrefixesOnly, int iMinLength );
 
 public:
+	/// build index by indexing given sources
 	virtual int					Build ( CSphDict * dict, const CSphVector < CSphSource * > & dSources, int iMemoryLimit, ESphDocinfo eDocinfo ) = 0;
+
+	/// build index by mering current index with given index
+	virtual bool				Merge ( CSphIndex * pSource, CSphPurgeData & tPurgeData ) = 0;
 
 public:
 	/// check all data files, preload schema, and preallocate enough shared RAM to load memory-cached data
@@ -1359,7 +1393,7 @@ public:
 public:
 	virtual CSphQueryResult *	Query ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery ) = 0;
 	virtual bool				QueryEx ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchSorter * pTop ) = 0;
-	virtual bool				Merge ( CSphIndex * pSource, CSphPurgeData & tPurgeData ) = 0;
+	virtual bool				MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters ) = 0;
 
 public:
 	/// updates memory-cached attributes in real time

@@ -6,6 +6,18 @@
 
 const int MAX_STR_LENGTH = 512;
 
+#if !USE_WINDOWS
+char * strlwr ( char * s )
+{
+      while ( *s )
+      {
+              *s = tolower ( *s );
+              s++;
+      }
+      return s;
+}
+#endif
+
 //////////////////////////////////////////////////////////////////////////
 class CISpellDict
 {

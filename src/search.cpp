@@ -24,6 +24,20 @@
 	}
 
 
+const char * myctime ( DWORD uStamp )
+{
+	static char sBuf[256];
+	time_t tStamp = uStamp; // for 64-bit
+	strncpy ( sBuf, ctime(&tStamp), sizeof(sBuf) );
+
+	char * p = sBuf;
+	while ( (*p) && (*p)!='\n' && (*p)!='\r' ) p++;
+	*p = '\0';
+
+	return sBuf;
+}
+
+
 int main ( int argc, char ** argv )
 {
 	fprintf ( stdout, SPHINX_BANNER );
@@ -101,9 +115,8 @@ int main ( int argc, char ** argv )
 				{
 					tQuery.m_dFilters.Reset ();
 					tQuery.m_dFilters.Resize ( 1 );
-					tQuery.m_dFilters[0].m_iValues = 1;
-					tQuery.m_dFilters[0].m_pValues = new DWORD [ 1 ];
-					tQuery.m_dFilters[0].m_pValues[0] = atoi ( argv[i+2] );
+					tQuery.m_dFilters[0].m_dValues.Reset ();
+					tQuery.m_dFilters[0].m_dValues.Add ( atoi ( argv[i+2] ) );
 					tQuery.m_dFilters[0].m_sAttrName = argv[i+1];
 					i += 2;
 				}
@@ -297,16 +310,6 @@ int main ( int argc, char ** argv )
 				break;
 			}
 
-			// setup groupby
-			if ( !tQuery.SetSchema ( *pSchema, sError ) )
-				break;
-
-			if ( !tQuery.m_sGroupBy.IsEmpty() && tQuery.m_iGroupbyOffset<0 )
-			{
-				fprintf ( stdout, "WARNING: no such groupby attribute '%s' - DISABLING GROUPBY\n", tQuery.m_sGroupBy.cstr() );
-				tQuery.m_sGroupBy = "";
-			}
-
 			// if we're not sorting by relevance, lookup first timestamp column
 			if ( tQuery.m_eSort!=SPH_SORT_RELEVANCE )
 			{
@@ -363,22 +366,14 @@ int main ( int argc, char ** argv )
 				for ( int j=0; j<pResult->m_tSchema.GetAttrsCount(); j++ )
 				{
 					const CSphColumnInfo & tAttr = pResult->m_tSchema.GetAttr(j);
+					fprintf ( stdout, ", %s=", tAttr.m_sName.cstr() );
 
-					if ( tAttr.m_eAttrType==SPH_ATTR_INTEGER )
+					switch ( tAttr.m_eAttrType )
 					{
-						fprintf ( stdout, ", %s=%u", tAttr.m_sName.cstr(), tMatch.GetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount ) );
-					
-					} else if ( tAttr.m_eAttrType==SPH_ATTR_TIMESTAMP )
-					{
-						char sBuf[256];
-						time_t tStamp = tMatch.GetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount ); // for 64-bit
-						strncpy ( sBuf, ctime(&tStamp), sizeof(sBuf) );
-
-						char * p = sBuf;
-						while ( (*p) && (*p)!='\n' && (*p)!='\r' ) p++;
-						*p = '\0';
-
-						fprintf ( stdout, ", %s=%s", tAttr.m_sName.cstr(), sBuf );
+						case SPH_ATTR_INTEGER:		fprintf ( stdout, "%u", tMatch.GetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount ) ); break;
+						case SPH_ATTR_TIMESTAMP:	fprintf ( stdout, "%s", myctime ( tMatch.GetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount ) ) ); break;
+						case SPH_ATTR_FLOAT:		fprintf ( stdout, "%f", tMatch.GetAttrFloat ( tAttr.m_iRowitem ) ); break;
+						default:					fprintf ( stdout, ", %s=(unknown-type-%d)", tAttr.m_eAttrType );
 					}
 				}
 				fprintf ( stdout,"\n" );

@@ -149,7 +149,7 @@ enum SearchdCommand_e
 /// known command versions
 enum
 {
-	VER_COMMAND_SEARCH		= 0x10D,
+	VER_COMMAND_SEARCH		= 0x10E,
 	VER_COMMAND_EXCERPT		= 0x100,
 	VER_COMMAND_UPDATE		= 0x100
 };
@@ -870,6 +870,7 @@ public:
 	bool		SendDword ( DWORD iValue )		{ return SendT<DWORD> ( htonl ( iValue ) ); }
 	bool		SendWord ( WORD iValue )		{ return SendT<WORD> ( htons ( iValue ) ); }
 	bool		SendUint64 ( uint64_t iValue )	{ SendT<DWORD> ( htonl ( (DWORD)(iValue>>32) ) ); return SendT<DWORD> ( htonl ( (DWORD)(iValue&0xffffffffUL) ) ); }
+	bool		SendFloat ( float fValue )		{ return SendT<float> ( fValue ); }
 
 #if USE_64BIT
 	bool		SendDocid ( SphDocID_t iValue )	{ return SendUint64 ( iValue ); }
@@ -911,8 +912,10 @@ public:
 	DWORD			GetDword () { return ntohl ( GetT<DWORD> () ); }
 	uint64_t		GetUint64() { uint64_t uRes = GetDword(); return (uRes<<32)+GetDword(); };
 	BYTE			GetByte () { return GetT<BYTE> (); }
+	float			GetFloat () { return GetT<float> (); }
 	CSphString		GetString ();
 	int				GetDwords ( DWORD ** pBuffer, int iMax, const char * sErrorTemplate );
+	bool			GetDwords ( CSphVector<DWORD,8> & dBuffer, int iMax, const char * sErrorTemplate );
 	bool			GetError () { return m_bError; }
 
 	virtual void	SendErrorReply ( const char *, ... ) = 0;
@@ -1130,6 +1133,32 @@ int InputBuffer_c::GetDwords ( DWORD ** ppBuffer, int iMax, const char * sErrorT
 			(*ppBuffer)[i] = htonl ( (*ppBuffer)[i] );
 	}
 	return iCount;
+}
+
+
+bool InputBuffer_c::GetDwords ( CSphVector<DWORD,8> & dBuffer, int iMax, const char * sErrorTemplate )
+{
+	int iCount = GetInt ();
+	if ( iCount<0 || iCount>iMax )
+	{
+		SendErrorReply ( sErrorTemplate, iCount, iMax );
+		SetError ( true );
+		return false;
+	}
+
+	dBuffer.Resize ( iCount );
+	if ( iCount )
+	{
+		if ( !GetBytes ( &dBuffer[0], sizeof(int)*iCount ) )
+		{
+			dBuffer.Reset ();
+			return false;
+		}
+		ARRAY_FOREACH ( i, dBuffer )
+			dBuffer[i] = htonl ( dBuffer[i] );
+	}
+
+	return true;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1720,7 +1749,7 @@ protected:
 
 int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuery & q ) const
 {
-	int iReqSize = 72 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
+	int iReqSize = 76 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
 		+ strlen ( q.m_sSortBy.cstr() )
 		+ strlen ( q.m_sQuery.cstr() )
 		+ strlen ( sIndexes )
@@ -1730,12 +1759,21 @@ int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuer
 	ARRAY_FOREACH ( j, q.m_dFilters )
 	{
 		const CSphFilter & tFilter = q.m_dFilters[j];
-		iReqSize +=
-			12
-			+ strlen ( tFilter.m_sAttrName.cstr() )
-			+ 4*tFilter.m_iValues
-			+ ( tFilter.m_iValues ? 0 : 8 );
+		iReqSize += 12 + strlen ( tFilter.m_sAttrName.cstr() ); // string attr-name; int type; int exclude-flag
+		switch ( tFilter.m_eType )
+		{
+			case SPH_FILTER_VALUES:
+				iReqSize += 4 + 4*tFilter.m_dValues.GetLength(); // int values-count; int[] values
+				break;
+
+			case SPH_FILTER_RANGE:
+			case SPH_FILTER_FLOATRANGE:
+				iReqSize += 8; // int/float min-val,max-val
+				break;
+		}
 	}
+	if ( q.m_bCalcGeodist )
+		iReqSize += 16 + strlen ( q.m_sGeoLatAttr.cstr() ) + strlen ( q.m_sGeoLongAttr.cstr() ); // string lat-attr, long-attr; float lat, long
 	return iReqSize;
 }
 
@@ -1760,13 +1798,24 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 	{
 		const CSphFilter & tFilter = q.m_dFilters[j];
 		tOut.SendString ( tFilter.m_sAttrName.cstr() );
-		tOut.SendInt ( tFilter.m_iValues );
-		for ( int k=0; k<tFilter.m_iValues; k++ )
-			tOut.SendInt ( tFilter.m_pValues[k] );
-		if ( !tFilter.m_iValues )
+		tOut.SendInt ( tFilter.m_eType );
+		switch ( tFilter.m_eType )
 		{
-			tOut.SendDword ( tFilter.m_uMinValue );
-			tOut.SendDword ( tFilter.m_uMaxValue );
+			case SPH_FILTER_VALUES:
+				tOut.SendInt ( tFilter.m_dValues.GetLength() );
+				ARRAY_FOREACH ( k, tFilter.m_dValues )
+					tOut.SendInt ( tFilter.m_dValues[k] );
+				break;
+
+			case SPH_FILTER_RANGE:
+				tOut.SendDword ( tFilter.m_uMinValue );
+				tOut.SendDword ( tFilter.m_uMaxValue );
+				break;
+
+			case SPH_FILTER_FLOATRANGE:
+				tOut.SendFloat ( tFilter.m_fMinValue );
+				tOut.SendFloat ( tFilter.m_fMaxValue );
+				break;
 		}
 		tOut.SendInt ( tFilter.m_bExclude );
 	}
@@ -1778,6 +1827,14 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 	tOut.SendInt ( q.m_iRetryCount );
 	tOut.SendInt ( q.m_iRetryDelay );
 	tOut.SendString ( q.m_sGroupDistinct.cstr() );
+	tOut.SendInt ( q.m_bGeoAnchor );
+	if ( q.m_bGeoAnchor )
+	{
+		tOut.SendString ( q.m_sGeoLatAttr.cstr() );
+		tOut.SendString ( q.m_sGeoLongAttr.cstr() );
+		tOut.SendFloat ( q.m_fGeoLatitude );
+		tOut.SendFloat ( q.m_fGeoLongitude );
+	}
 }
 
 
@@ -1919,22 +1976,6 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, Agent_t & tAgent
 
 /////////////////////////////////////////////////////////////////////////////
 
-ISphMatchSorter * CreateSorter ( CSphQuery & tQuery, const CSphSchema & tSchema, CSphString & sError )
-{
-	// lookup proper attribute index to group by, if any
-	if ( !tQuery.SetSchema ( tSchema, sError ) )
-		return NULL;
-	assert ( tQuery.m_sGroupBy.IsEmpty() || tQuery.m_iGroupbyOffset>=0 );
-
-	// spawn queue and set sort-by attribute
-	ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, tSchema, sError );
-	if ( !pSorter )
-		return NULL;
-
-	return pSorter;
-}
-
-
 // returns true if dst was empty or both were equal; false otherwise
 bool MinimizeSchema ( CSphSchema & tDst, const CSphSchema & tSrc )
 {
@@ -1997,8 +2038,9 @@ bool FixupQuery ( CSphQuery * pQuery, const CSphSchema * pSchema, const char * s
 
 		CSphFilter tFilter;
 		tFilter.m_sAttrName = pSchema->GetAttr(iAttr).m_sName;
-		tFilter.m_iValues = pQuery->m_iOldGroups;
-		tFilter.m_pValues = pQuery->m_pOldGroups;
+		tFilter.m_dValues.Resize ( pQuery->m_iOldGroups );
+		ARRAY_FOREACH ( i, tFilter.m_dValues )
+			tFilter.m_dValues[i] = pQuery->m_pOldGroups[i];
 		tFilter.m_uMinValue = pQuery->m_iOldMinGID;
 		tFilter.m_uMaxValue = pQuery->m_iOldMaxGID;
 		pQuery->m_dFilters.Add ( tFilter );
@@ -2121,19 +2163,54 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 		}
 
 		tQuery.m_dFilters.Resize ( iAttrFilters );
-		ARRAY_FOREACH ( i, tQuery.m_dFilters )
+		ARRAY_FOREACH ( iFilter, tQuery.m_dFilters )
 		{
-			CSphFilter & tFilter = tQuery.m_dFilters[i];
+			CSphFilter & tFilter = tQuery.m_dFilters[iFilter];
 			tFilter.m_sAttrName = tReq.GetString ();
 			tFilter.m_sAttrName.ToLower ();
-			tFilter.m_iValues = tReq.GetDwords ( &tFilter.m_pValues, SEARCHD_MAX_ATTR_VALUES,
-				"invalid attribute set length %d (should be in 0..%d range)" );
-			if ( !tFilter.m_iValues )
+
+			if ( iVer>=0x10E )
 			{
-				// 0 length means this is range, not set
-				tFilter.m_uMinValue = tReq.GetDword ();
-				tFilter.m_uMaxValue = tReq.GetDword ();
+				// v.1.14+
+				tFilter.m_eType = (ESphFilter) tReq.GetDword ();
+				switch ( tFilter.m_eType )
+				{
+					case SPH_FILTER_RANGE:
+						tFilter.m_uMinValue = tReq.GetDword ();
+						tFilter.m_uMaxValue = tReq.GetDword ();
+						break;
+
+					case SPH_FILTER_FLOATRANGE:
+						tFilter.m_fMinValue = tReq.GetFloat ();
+						tFilter.m_fMaxValue = tReq.GetFloat ();
+						break;
+
+					case SPH_FILTER_VALUES:
+						if ( !tReq.GetDwords ( tFilter.m_dValues, SEARCHD_MAX_ATTR_VALUES, "invalid attribute set length %d (should be in 0..%d range)" ) )
+							return false;
+						break;
+
+					default:
+						tReq.SendErrorReply ( "unknown filter type (type-id=%d)", tFilter.m_eType );
+						return false;
+				}
+
+			} else
+			{
+				// pre-1.14
+				if ( !tReq.GetDwords ( tFilter.m_dValues, SEARCHD_MAX_ATTR_VALUES, "invalid attribute set length %d (should be in 0..%d range)" ) )
+					return false;
+
+				if ( !tFilter.m_dValues.GetLength() )
+				{
+					// 0 length means this is range, not set
+					tFilter.m_uMinValue = tReq.GetDword ();
+					tFilter.m_uMaxValue = tReq.GetDword ();
+				}
+
+				tFilter.m_eType = tFilter.m_dValues.GetLength() ? SPH_FILTER_VALUES : SPH_FILTER_RANGE;
 			}
+
 			if ( iVer>=0x106 )
 				tFilter.m_bExclude = !!tReq.GetDword ();
 		}
@@ -2200,6 +2277,19 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 	// v.1.11
 	if ( iVer>=0x10B )
 		tQuery.m_sGroupDistinct = tReq.GetString ();
+
+	// v.1.14
+	if ( iVer>=0x10E )
+	{
+		tQuery.m_bGeoAnchor = ( tReq.GetInt()!=0 );
+		if ( tQuery.m_bGeoAnchor )
+		{
+			tQuery.m_sGeoLatAttr = tReq.GetString ();
+			tQuery.m_sGeoLongAttr = tReq.GetString ();
+			tQuery.m_fGeoLatitude = tReq.GetFloat ();
+			tQuery.m_fGeoLongitude = tReq.GetFloat ();
+		}
+	}
 
 	/////////////////////
 	// additional checks
@@ -2486,7 +2576,10 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 				} else
 				{
 					// send plain attr
-					tOut.SendDword ( tMatch.GetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount ) );
+					if ( tAttr.m_eAttrType==SPH_ATTR_FLOAT )
+						tOut.SendFloat ( tMatch.GetAttrFloat ( tAttr.m_iRowitem ) );
+					else
+						tOut.SendDword ( tMatch.GetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount ) );
 				}
 			}
 		}
@@ -2589,7 +2682,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery )
 	}
 
 	// create queue
-	ISphMatchSorter * pSorter = CreateSorter ( tQuery, tRes.m_tSchema, tRes.m_sError );
+	ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, tRes.m_tSchema, tRes.m_sError );
 	if ( !pSorter )
 		return false;
 
@@ -2876,7 +2969,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 					for ( int iQuery=iStart; iQuery<=iEnd; iQuery++ )
 					{
 						CSphString sError;
-						ISphMatchSorter * pSorter = CreateSorter ( m_dQueries[iQuery], *tServed.m_pSchema, sError );
+						ISphMatchSorter * pSorter = sphCreateQueue ( &m_dQueries[iQuery], *tServed.m_pSchema, sError );
 						if ( !pSorter )
 							m_dFailuresSet[iQuery].SubmitEx ( dLocal[iLocal].cstr(), "%s", sError.cstr() );
 
@@ -2948,7 +3041,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 						}
 
 						// create queue
-						ISphMatchSorter * pSorter = CreateSorter ( tQuery, *tServed.m_pSchema, sError );
+						ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, *tServed.m_pSchema, sError );
 						if ( !pSorter )
 						{
 							m_dFailuresSet[iQuery].SubmitEx ( dLocal[iLocal].cstr(), "%s", sError.cstr() );

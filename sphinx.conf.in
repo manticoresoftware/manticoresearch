@@ -131,7 +131,7 @@ source src1
 	# would be packed together in 32-bit chunks, to reduce storage space
 	# requirements.
 	#
-	# sql_attr_bool is used to declared boolean attributes.
+	# sql_attr_bool is used to declare boolean attributes.
 	# these are packed to 1 bit of storage (along with other bitfields).
 	#
 	# sql_attr_timestamp is used to declare UNIX timestamp attributes.
@@ -144,6 +144,9 @@ source src1
 	# be used when sorting!
 	# sql_str2ordinal_column is deprecated alias for sql_attr_str2ordinal.
 	#
+	# sql_attr_float are used to declare float attributes. the values
+	# are intended to be stored as "single", ie. in 32-bit IEEE format.
+	#
 	# there may be multiple attribute columns specified.
 	# here's an example for that mentioned posts table:
 	#
@@ -153,6 +156,8 @@ source src1
 	# sql_attr_uint = country_id:12 # 12 bits for country id
 	# sql_attr_timestamp = post_unix_timestamp
 	# sql_attr_timestamp = last_edit_unix_timestamp
+	# sql_attr_float = lat_radians
+	# sql_attr_float = long_radians
 	#
 	# optional, default is empty
 	sql_attr_uint			= group_id

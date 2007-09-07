@@ -404,22 +404,6 @@ protected:
 // INTERNAL SPHINX CLASSES DECLARATIONS
 /////////////////////////////////////////////////////////////////////////////
 
-/// virtual attributes
-enum
-{
-	SPH_VATTR_ID			= -1,	///< tells match sorter to use doc id
-	SPH_VATTR_RELEVANCE		= -2,	///< tells match sorter to use match weight
-
-	SPH_VATTR_GROUP			= 0,	///< @group offset after normal attrs
-	SPH_VATTR_COUNT			= 1,	///< @count offset after normal attrs
-	SPH_VATTR_DISTINCT		= 2,	///< @distinct offset after normal attrs
-
-	SPH_VATTRTOTAL_GROUP	= 2,
-	SPH_VATTRTOTAL_DISTINCT	= 3
-};
-
-/////////////////////////////////////////////////////////////////////////////
-
 #ifdef O_BINARY
 #define SPH_O_BINARY O_BINARY
 #else
@@ -795,7 +779,7 @@ public:
 /////////////////////////////////////////////////////////////////////////////
 
 /// match-sorting priority queue traits
-class CSphMatchQueueTraits : public ISphMatchSorter
+class CSphMatchQueueTraits : public ISphMatchSorter, ISphNoncopyable
 {
 protected:
 	CSphMatch *					m_pData;
@@ -803,7 +787,7 @@ protected:
 	int							m_iSize;
 
 	CSphMatchComparatorState	m_tState;
-	bool						m_bUsesAttrs;
+	const bool					m_bUsesAttrs;
 
 public:
 	/// ctor
@@ -1242,13 +1226,28 @@ SphGroupKey_t sphCalcGroupKey ( const CSphMatch & tMatch, ESphGroupBy eGroupBy, 
 }
 
 
+/// attribute magic
+enum
+{
+	SPH_VATTR_ID			= -1,	///< tells match sorter to use doc id
+	SPH_VATTR_RELEVANCE		= -2,	///< tells match sorter to use match weight
+
+	OFF_POSTCALC_GROUP		= 0,	///< @group attr offset after normal and calculated attrs
+	OFF_POSTCALC_COUNT		= 1,	///< @count attr offset after normal and calculated attrs
+	OFF_POSTCALC_DISTINCT	= 2,	///< @distinct attr offset after normal and calculated attrs
+
+	ADD_ITEMS_GROUP			= 2,	///< how much items to add in plain group-by mode
+	ADD_ITEMS_DISTINCT		= 3		///< how much items to add in count-distinct mode
+};
+
+
 /// match sorter with k-buffering and group-by
 #if USE_WINDOWS
 #pragma warning(disable:4127)
 #endif
 
 template < typename COMPMATCH, typename COMPGROUP, bool DISTINCT >
-class CSphKBufferGroupSorter : public CSphMatchQueueTraits, public ISphNoncopyable
+class CSphKBufferGroupSorter : public CSphMatchQueueTraits
 {
 protected:
 	const int		m_iRowitems;		///< normal match rowitems count (to distinguish already grouped matches)
@@ -1275,7 +1274,7 @@ public:
 	/// ctor
 	CSphKBufferGroupSorter ( const CSphQuery * pQuery ) // FIXME! make k configurable
 		: CSphMatchQueueTraits ( pQuery->m_iMaxMatches*GROUPBY_FACTOR, true )
-		, m_iRowitems		( pQuery->m_iRealRowitems )
+		, m_iRowitems		( pQuery->m_iPresortRowitems )
 		, m_eGroupBy		( pQuery->m_eGroupFunc )
 		, m_iGroupbyOffset	( pQuery->m_iGroupbyOffset )
 		, m_iGroupbyCount	( pQuery->m_iGroupbyCount )
@@ -1292,8 +1291,9 @@ public:
 	/// add entry to the queue
 	virtual bool Push ( const CSphMatch & tEntry )
 	{
-		const int VATTR_TOTAL = DISTINCT ? SPH_VATTRTOTAL_DISTINCT : SPH_VATTRTOTAL_GROUP;
-		assert ( tEntry.m_iRowitems==m_iRowitems || tEntry.m_iRowitems==m_iRowitems+VATTR_TOTAL );
+
+		const int ADD_ITEMS_TOTAL = DISTINCT ? ADD_ITEMS_DISTINCT : ADD_ITEMS_GROUP;
+		assert ( tEntry.m_iRowitems==m_iRowitems || tEntry.m_iRowitems==m_iRowitems+ADD_ITEMS_TOTAL );
 
 		bool bGrouped = ( tEntry.m_iRowitems!=m_iRowitems );
 		SphGroupKey_t uGroupKey = sphCalcGroupKey ( tEntry, m_eGroupBy, m_iGroupbyOffset, m_iGroupbyCount );
@@ -1304,23 +1304,23 @@ public:
 		{
 			CSphMatch * pMatch = (*ppMatch);
 			assert ( pMatch );
-			assert ( m_eGroupBy==SPH_GROUPBY_ATTRPAIR || pMatch->m_pRowitems [ m_iRowitems+SPH_VATTR_GROUP ]==uGroupKey );
+			assert ( m_eGroupBy==SPH_GROUPBY_ATTRPAIR || pMatch->m_pRowitems [ m_iRowitems+OFF_POSTCALC_GROUP ]==uGroupKey );
 
 			if ( bGrouped )
 			{
 				// it's already grouped match
 				// sum grouped matches count
 				assert ( pMatch->m_iRowitems==tEntry.m_iRowitems );
-				pMatch->m_pRowitems [ m_iRowitems+SPH_VATTR_COUNT ] += tEntry.m_pRowitems [ m_iRowitems+SPH_VATTR_COUNT ];
+				pMatch->m_pRowitems [ m_iRowitems+OFF_POSTCALC_COUNT ] += tEntry.m_pRowitems [ m_iRowitems+OFF_POSTCALC_COUNT ];
 				if ( DISTINCT )
-					pMatch->m_pRowitems [ m_iRowitems+SPH_VATTR_DISTINCT ] += tEntry.m_pRowitems [ m_iRowitems+SPH_VATTR_DISTINCT ];
+					pMatch->m_pRowitems [ m_iRowitems+OFF_POSTCALC_DISTINCT ] += tEntry.m_pRowitems [ m_iRowitems+OFF_POSTCALC_DISTINCT ];
 
 			} else
 			{
 				// it's a simple match
 				// increase grouped matches count
-				assert ( pMatch->m_iRowitems==tEntry.m_iRowitems+VATTR_TOTAL );
-				pMatch->m_pRowitems [ m_iRowitems+SPH_VATTR_COUNT ]++;
+				assert ( pMatch->m_iRowitems==tEntry.m_iRowitems+ADD_ITEMS_TOTAL );
+				pMatch->m_pRowitems [ m_iRowitems+OFF_POSTCALC_COUNT ]++;
 			}
 
 			// if new entry is more relevant, update from it
@@ -1330,7 +1330,7 @@ public:
 				pMatch->m_iWeight = tEntry.m_iWeight;
 				pMatch->m_iTag = tEntry.m_iTag;
 
-				for ( int i=0; i<pMatch->m_iRowitems-VATTR_TOTAL; i++ )
+				for ( int i=0; i<pMatch->m_iRowitems-ADD_ITEMS_TOTAL; i++ )
 					pMatch->m_pRowitems[i] = tEntry.m_pRowitems[i];
 			}
 		}
@@ -1351,7 +1351,7 @@ public:
 		assert ( m_iUsed<m_iSize );
 		CSphMatch & tNew = m_pData [ m_iUsed++ ];
 
-		int iNewSize = tEntry.m_iRowitems + ( bGrouped ? 0 : VATTR_TOTAL );
+		int iNewSize = tEntry.m_iRowitems + ( bGrouped ? 0 : ADD_ITEMS_TOTAL );
 		assert ( tNew.m_iRowitems==0 || tNew.m_iRowitems==iNewSize );
 
 		tNew.m_iDocID = tEntry.m_iDocID;
@@ -1365,10 +1365,10 @@ public:
 		memcpy ( tNew.m_pRowitems, tEntry.m_pRowitems, tEntry.m_iRowitems*sizeof(CSphRowitem) );
 		if ( !bGrouped )
 		{
-			tNew.m_pRowitems [ m_iRowitems+SPH_VATTR_GROUP ] = (DWORD)uGroupKey; // intentionally truncate
-			tNew.m_pRowitems [ m_iRowitems+SPH_VATTR_COUNT ] = 1;
+			tNew.m_pRowitems [ m_iRowitems+OFF_POSTCALC_GROUP ] = (DWORD)uGroupKey; // intentionally truncate
+			tNew.m_pRowitems [ m_iRowitems+OFF_POSTCALC_COUNT ] = 1;
 			if ( DISTINCT )
-				tNew.m_pRowitems [ m_iRowitems+SPH_VATTR_DISTINCT ] = 0;
+				tNew.m_pRowitems [ m_iRowitems+OFF_POSTCALC_DISTINCT ] = 0;
 		}
 
 		m_hGroup2Match.Add ( &tNew, uGroupKey );
@@ -1426,7 +1426,7 @@ protected:
 			{
 				CSphMatch ** ppMatch = m_hGroup2Match(uGroup);
 				if ( ppMatch )
-					(*ppMatch)->m_pRowitems[m_iRowitems+SPH_VATTR_DISTINCT] = iCount;
+					(*ppMatch)->m_pRowitems[m_iRowitems+OFF_POSTCALC_DISTINCT] = iCount;
 			}
 		}
 	}
@@ -1456,7 +1456,7 @@ protected:
 			} else
 			{
 				for ( int i=0; i<iCut; i++ )
-					dRemove[i] = m_pData[m_iUsed+i].m_pRowitems[m_iRowitems+SPH_VATTR_GROUP];
+					dRemove[i] = m_pData[m_iUsed+i].m_pRowitems[m_iRowitems+OFF_POSTCALC_GROUP];
 			}
 
 			// sort and compact
@@ -1477,7 +1477,7 @@ protected:
 		} else
 		{
 			for ( int i=0; i<m_iUsed; i++ )
-				m_hGroup2Match.Add ( m_pData+i, m_pData[i].m_pRowitems[ m_iRowitems+SPH_VATTR_GROUP ] );
+				m_hGroup2Match.Add ( m_pData+i, m_pData[i].m_pRowitems[ m_iRowitems+OFF_POSTCALC_GROUP ] );
 		}
 	}
 
@@ -1808,9 +1808,9 @@ public:
 		}
 	}
 
-	void SetupAttrs ( ESphDocinfo eDocinfo, const CSphDocInfo & m_tMin )
+	void SetupAttrs ( ESphDocinfo eDocinfo, const CSphDocInfo & m_tMin, int iToCalc )
 	{
-		m_tDoc.Reset ( m_tMin.m_iRowitems );
+		m_tDoc.Reset ( m_tMin.m_iRowitems+iToCalc );
 
 		m_iMinID = m_tMin.m_iDocID;
 		if ( eDocinfo==SPH_DOCINFO_INLINE )
@@ -2072,6 +2072,7 @@ struct CSphTermSetup : ISphNoncopyable
 	CSphIndex_VLN *			m_pIndex;
 	ESphDocinfo				m_eDocinfo;
 	CSphDocInfo				m_tMin;
+	int						m_iToCalc;
 	const CSphAutofile &	m_tDoclist;
 	const CSphAutofile &	m_tHitlist;
 
@@ -2079,6 +2080,8 @@ struct CSphTermSetup : ISphNoncopyable
 		: m_pTokenizer ( NULL )
 		, m_pDict ( NULL )
 		, m_pIndex ( NULL )
+		, m_eDocinfo ( SPH_DOCINFO_NONE )
+		, m_iToCalc ( 0 )
 		, m_tDoclist ( tDoclist )
 		, m_tHitlist ( tHitlist )
 	{}
@@ -2181,6 +2184,12 @@ private:
 	bool						m_bEarlyLookup;			///< whether early attr value lookup is needed
 	bool						m_bLateLookup;			///< whether late attr value lookup is needed
 
+	bool						m_bCalcGeodist;			///< whether to compute geodistance
+	int							m_iGeoLatRowitem;		///< latitude rowitem
+	int							m_iGeoLongRowitem;		///< longitude rowitem
+	float						m_fGeoAnchorLat;		///< anchor latitude
+	float						m_fGeoAnchorLong;		///< anchor longitude
+
 private:
 	const char *				GetIndexFileName ( const char * sExt ) const;	///< WARNING, non-reenterable, static buffer!
 	int							AdjustMemoryLimit ( int iMemoryLimit );
@@ -2198,7 +2207,7 @@ private:
 	bool						MatchExtended ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphTermSetup & tTermSetup );
 
 	const DWORD *				FindDocinfo ( SphDocID_t uDocID );
-	void						LookupDocinfo ( CSphDocInfo & tMatch );
+	void						LookupDocinfo ( CSphMatch & tMatch );
 
 	bool						BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAutoArray<CSphWordHit> & dHits, int iArenaSize );
 
@@ -2393,6 +2402,13 @@ char * sphStrMacro ( const char * sTemplate, const char * sMacro, SphDocID_t uVa
 
 	assert ( (int)strlen(sRes)==iRes );
 	return sRes;
+}
+
+
+float sphToFloat ( const char * s )
+{
+	if ( !s ) return 0.0f;
+	return (float)strtod ( s, NULL );
 }
 
 
@@ -3945,82 +3961,45 @@ CSphFilter::CSphFilter ()
 	: m_sAttrName	( "" )
 	, m_uMinValue	( 0 )
 	, m_uMaxValue	( UINT_MAX )
-	, m_iValues		( 0 )
-	, m_pValues		( NULL )
 	, m_bExclude	( false )
 	, m_bMva		( false )
-	, m_iAttr		( -1 )
 	, m_iBitOffset	( -1 )
 	, m_iBitCount	( -1 )
 {}
 
 
-CSphFilter::CSphFilter ( const CSphFilter &  rhs )
+CSphFilter::CSphFilter ( const CSphFilter & rhs )
 {
 	assert ( 0 );
-	m_pValues = NULL;
 	(*this) = rhs;
-}
-
-
-CSphFilter::~CSphFilter ()
-{
-	SafeDeleteArray ( m_pValues );
-}
-
-
-const CSphFilter & CSphFilter::operator = ( const CSphFilter & rhs )
-{
-	m_sAttrName		= rhs.m_sAttrName;
-	m_uMinValue		= rhs.m_uMinValue;
-	m_uMaxValue		= rhs.m_uMaxValue;
-	m_iValues		= rhs.m_iValues;
-	SafeDeleteArray ( m_pValues );
-	if ( m_iValues )
-	{
-		m_pValues = new DWORD [ m_iValues ];
-		memcpy ( m_pValues, rhs.m_pValues, sizeof(DWORD)*m_iValues );
-	}
-	m_bExclude		= rhs.m_bExclude;
-	m_bMva			= rhs.m_bMva;
-	m_iBitOffset	= rhs.m_iBitOffset;
-	m_iBitCount		= rhs.m_iBitCount;
-	return *this;
 }
 
 
 bool CSphFilter::operator == ( const CSphFilter & rhs ) const
 {
-	// check name and mode
-	if ( m_sAttrName!=rhs.m_sAttrName || m_bExclude!=rhs.m_bExclude )
+	// check name, mode, type
+	if ( m_sAttrName!=rhs.m_sAttrName || m_bExclude!=rhs.m_bExclude || m_eType==rhs.m_eType )
 		return false;
 
-	// for range filters, check ranges
-	if ( !m_iValues )
-		return m_uMinValue==rhs.m_uMinValue && m_uMaxValue==rhs.m_uMaxValue;
+	switch ( m_eType )
+	{
+		case SPH_FILTER_RANGE:
+			return m_uMinValue==rhs.m_uMinValue && m_uMaxValue==rhs.m_uMaxValue;
 
-	// for set filters, compare sets
-	for ( int i=0; i<m_iValues; i++ )
-		if ( m_pValues[i]!=rhs.m_pValues[i] )
+		case SPH_FILTER_VALUES:
+			if ( m_dValues.GetLength()!=rhs.m_dValues.GetLength() )
+				return false;
+
+			ARRAY_FOREACH ( i, m_dValues )
+				if ( m_dValues[i]!=rhs.m_dValues[i] )
+					return false;
+
+			return true;
+
+		default:
+			assert ( 0 && "internal error: unhandled filter type in comparison" );
 			return false;
-	return true;
-}
-
-
-static int cmpDword ( const void * a, const void * b )
-{
-	DWORD aa = *((DWORD*)a);
-	DWORD bb = *((DWORD*)b);
-	if ( aa==bb )
-		return 0;
-	return ( aa<bb ) ? -1 : 1;
-}
-
-
-void CSphFilter::SortValues ()
-{
-	if ( m_pValues )
-		qsort ( m_pValues, m_iValues, sizeof(DWORD), cmpDword );
+	}
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -4042,62 +4021,26 @@ CSphQuery::CSphQuery ()
 	, m_iRetryCount	( 0 )
 	, m_iRetryDelay	( 0 )
 
-	, m_iRealRowitems	( -1 )
+	, m_bGeoAnchor		( false )
+	, m_fGeoLatitude	( 0.0f )
+	, m_fGeoLongitude	( 0.0f )
+
+	, m_bCalcGeodist	( false )
+
+	, m_iPresortRowitems( -1 )
 	, m_iGroupbyOffset	( -1 )
 	, m_iGroupbyCount	( -1 )
 	, m_iDistinctOffset	( -1 )
 	, m_iDistinctCount	( -1 )
 
-	, m_iOldVersion ( 0 )
-	, m_iOldGroups ( 0 )
-	, m_pOldGroups ( NULL )
-	, m_iOldMinTS ( 0 )
-	, m_iOldMaxTS ( UINT_MAX )
-	, m_iOldMinGID ( 0 )
-	, m_iOldMaxGID ( UINT_MAX )
+	, m_iOldVersion		( 0 )
+	, m_iOldGroups		( 0 )
+	, m_pOldGroups		( NULL )
+	, m_iOldMinTS		( 0 )
+	, m_iOldMaxTS		( UINT_MAX )
+	, m_iOldMinGID		( 0 )
+	, m_iOldMaxGID		( UINT_MAX )
 {}
-
-
-bool CSphQuery::SetSchema ( const CSphSchema & tSchema, CSphString & sError )
-{
-	m_iRealRowitems = tSchema.GetRealRowSize();
-	m_iGroupbyOffset = -1;
-	m_iDistinctOffset = -1;
-
-	if ( m_sGroupBy.IsEmpty() )
-		return true;
-
-	// setup gropuby attr
-	int iGroupBy = tSchema.GetAttrIndex ( m_sGroupBy.cstr() );
-	if ( iGroupBy<0 )
-	{
-		sError.SetSprintf ( "group-by attribute '%s' not found", m_sGroupBy.cstr() );
-		return false;
-	}
-	if ( m_eGroupFunc==SPH_GROUPBY_ATTRPAIR && iGroupBy+1>=tSchema.GetAttrsCount() )
-	{
-		sError.SetSprintf ( "group-by attribute '%s' must not be last in ATTRPAIR grouping mode", m_sGroupBy.cstr() );
-		return false;
-	}
-	m_iGroupbyOffset = tSchema.GetAttr(iGroupBy).m_iBitOffset;
-	m_iGroupbyCount = tSchema.GetAttr(iGroupBy).m_iBitCount;
-
-	// setup distinct attr
-	if ( !m_sGroupDistinct.IsEmpty() )
-	{
-		int iDistinct = tSchema.GetAttrIndex ( m_sGroupDistinct.cstr() );
-		if ( iDistinct<0 )
-		{
-			sError.SetSprintf ( "group-count-distinct attribute '%s' not found", m_sGroupDistinct.cstr() );
-			return false;
-		}
-
-		m_iDistinctOffset = tSchema.GetAttr(iDistinct).m_iBitOffset;
-		m_iDistinctCount = tSchema.GetAttr(iDistinct).m_iBitCount;
-	}
-
-	return true;
-}
 
 /////////////////////////////////////////////////////////////////////////////
 // SCHEMA
@@ -7461,17 +7404,17 @@ inline int sphBitCount ( DWORD n )
 }
 
 
-inline bool sphGroupMatch ( DWORD iGroup, DWORD * pGroups, int iGroups )
+inline bool sphGroupMatch ( DWORD iGroup, const DWORD * pGroups, int iGroups )
 {
 	if ( !pGroups ) return true;
-	DWORD * pA = pGroups;
-	DWORD * pB = pGroups+iGroups-1;
+	const DWORD * pA = pGroups;
+	const DWORD * pB = pGroups+iGroups-1;
 	if ( iGroup==*pA || iGroup==*pB ) return true;
 	if ( iGroup<(*pA) || iGroup>(*pB) ) return false;
 
 	while ( pB-pA>1 )
 	{
-		DWORD * pM = pA + ((pB-pA)/2);
+		const DWORD * pM = pA + ((pB-pA)/2);
 		if ( iGroup==(*pM) )
 			return true;
 		if ( iGroup<(*pM) )
@@ -7572,32 +7515,24 @@ protected:
 
 /////////////////////////////////////////////////////////////////////////////
 
-template < bool BITS >
-static inline SphDocID_t MatchGetVattr ( const CSphMatch & m, const CSphMatchComparatorState & t, int iIndex )
-{
-	if ( t.m_iAttr[iIndex]==SPH_VATTR_ID )
-		return m.m_iDocID;
-
-	if ( t.m_iAttr[iIndex]==SPH_VATTR_RELEVANCE )
-		return m.m_iWeight;
-
-	return t.GetAttr<BITS> ( m, iIndex );
-}
+#define SPH_TEST_PAIR(_aa,_bb,_idx ) \
+	if ( (_aa)!=(_bb) ) \
+		return ( (t.m_uAttrDesc>>(_idx))&1 ) ^ ( (_aa)>(_bb) );
 
 
 #define SPH_TEST_KEYPART(_idx) \
-	aa = MatchGetVattr<BITS> ( a, t, _idx ); \
-	bb = MatchGetVattr<BITS> ( b, t, _idx ); \
-	if ( aa!=bb ) \
-		return ( (t.m_uAttrDesc>>(_idx))&1 ) ^ ( aa>bb );
-
-
-#define SPH_TEST_LASTKEYPART(_idx) \
-	aa = MatchGetVattr<BITS> ( a, t, _idx ); \
-	bb = MatchGetVattr<BITS> ( b, t, _idx ); \
-	if ( aa==bb ) \
-		return false; \
-	return ((t.m_uAttrDesc>>(_idx))&1) ^ ( aa>bb );
+	switch ( t.m_iAttr[_idx] ) \
+	{ \
+		case SPH_VATTR_ID:			SPH_TEST_PAIR ( a.m_iDocID, b.m_iDocID, _idx ); break; \
+		case SPH_VATTR_RELEVANCE:	SPH_TEST_PAIR ( a.m_iWeight, b.m_iWeight, _idx ); break; \
+		default: \
+		{ \
+			register CSphRowitem aa = t.GetAttr<BITS> ( a, _idx ); \
+			register CSphRowitem bb = t.GetAttr<BITS> ( b, _idx ); \
+			SPH_TEST_PAIR ( aa, bb, _idx ); \
+			break; \
+		} \
+	}
 
 
 template < bool BITS >
@@ -7605,9 +7540,9 @@ struct MatchGeneric2_fn
 {
 	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
 	{
-		SphDocID_t aa, bb;
-		SPH_TEST_KEYPART(0);
-		SPH_TEST_LASTKEYPART(1);
+			SPH_TEST_KEYPART(0);
+		SPH_TEST_KEYPART(1);
+		return false;
 	};
 };
 
@@ -7617,10 +7552,10 @@ struct MatchGeneric3_fn
 {
 	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
 	{
-		SphDocID_t aa, bb;
 		SPH_TEST_KEYPART(0);
 		SPH_TEST_KEYPART(1);
-		SPH_TEST_LASTKEYPART(2);
+		SPH_TEST_KEYPART(2);
+		return false;
 	};
 };
 
@@ -7630,11 +7565,11 @@ struct MatchGeneric4_fn
 {
 	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
 	{
-		SphDocID_t aa, bb;
 		SPH_TEST_KEYPART(0);
 		SPH_TEST_KEYPART(1);
 		SPH_TEST_KEYPART(2);
-		SPH_TEST_LASTKEYPART(3);
+		SPH_TEST_KEYPART(3);
+		return false;
 	};
 };
 
@@ -7644,12 +7579,12 @@ struct MatchGeneric5_fn
 {
 	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
 	{
-		SphDocID_t aa, bb;
 		SPH_TEST_KEYPART(0);
 		SPH_TEST_KEYPART(1);
 		SPH_TEST_KEYPART(2);
 		SPH_TEST_KEYPART(3);
-		SPH_TEST_LASTKEYPART(4);
+		SPH_TEST_KEYPART(4);
+		return false;
 	};
 };
 
@@ -7759,6 +7694,15 @@ enum ESortClauseParseResult
 };
 
 
+enum
+{
+	FIXUP_GEODIST	= -1000,
+	FIXUP_COUNT		= -1001,
+	FIXUP_GROUP		= -1002,
+	FIXUP_DISTINCT	= -1003
+};
+
+
 static ESortClauseParseResult sphParseSortClause ( const char * sClause, const CSphQuery * pQuery,
 	const CSphSchema & tSchema, bool bGroupClause,
 	ESphSortFunc & eFunc, CSphMatchComparatorState & tState, CSphString & sError )
@@ -7824,6 +7768,10 @@ static ESortClauseParseResult sphParseSortClause ( const char * sClause, const C
 		{
 			tState.m_iAttr[iField] = SPH_VATTR_ID;
 
+		} else if ( !strcasecmp ( pTok, "@geodist" ) )
+		{
+			tState.m_iAttr[iField] = FIXUP_GEODIST;
+
 		} else if ( !strcasecmp ( pTok, "@count" ) && bGroupClause )
 		{
 			if ( pQuery->m_iGroupbyOffset<0 )
@@ -7831,11 +7779,7 @@ static ESortClauseParseResult sphParseSortClause ( const char * sClause, const C
 				sError.SetSprintf ( "no group-by attribute; can not sort by @count" );
 				return SORT_CLAUSE_ERROR;
 			}
-
-			tState.m_iAttr[iField] = tSchema.GetRealAttrsCount() + SPH_VATTR_COUNT;
-			tState.m_iRowitem[iField] = tSchema.GetRealRowSize() + SPH_VATTR_COUNT;
-			tState.m_iBitOffset[iField] = ( tSchema.GetRealRowSize()+SPH_VATTR_COUNT )*ROWITEM_BITS;
-			tState.m_iBitCount[iField] = ROWITEM_BITS;
+			tState.m_iAttr[iField] = FIXUP_COUNT;
 
 		} else if ( !strcasecmp ( pTok, "@group" ) && bGroupClause )
 		{
@@ -7844,11 +7788,7 @@ static ESortClauseParseResult sphParseSortClause ( const char * sClause, const C
 				sError.SetSprintf ( "no group-by attribute; can not sort by @group" );
 				return SORT_CLAUSE_ERROR;
 			}
-
-			tState.m_iAttr[iField] = tSchema.GetRealAttrsCount() + SPH_VATTR_GROUP;
-			tState.m_iRowitem[iField] = tSchema.GetRealRowSize() + SPH_VATTR_GROUP;
-			tState.m_iBitOffset[iField] = ( tSchema.GetRealRowSize()+SPH_VATTR_GROUP )*ROWITEM_BITS;
-			tState.m_iBitCount[iField] = ROWITEM_BITS;
+			tState.m_iAttr[iField] = FIXUP_GROUP;
 
 		} else if ( !strcasecmp ( pTok, "@distinct" ) && bGroupClause )
 		{
@@ -7857,11 +7797,7 @@ static ESortClauseParseResult sphParseSortClause ( const char * sClause, const C
 				sError.SetSprintf ( "no count-distinct attribute; can not sort by @distinct" );
 				return SORT_CLAUSE_ERROR;
 			}
-
-			tState.m_iAttr[iField] = tSchema.GetRealAttrsCount() + SPH_VATTR_DISTINCT;
-			tState.m_iRowitem[iField] = tSchema.GetRealRowSize() + SPH_VATTR_DISTINCT;
-			tState.m_iBitOffset[iField] = ( tSchema.GetRealRowSize()+SPH_VATTR_DISTINCT )*ROWITEM_BITS;
-			tState.m_iBitCount[iField] = ROWITEM_BITS;
+			tState.m_iAttr[iField] = FIXUP_DISTINCT;
 
 		} else
 		{
@@ -7871,7 +7807,6 @@ static ESortClauseParseResult sphParseSortClause ( const char * sClause, const C
 				sError.SetSprintf ( "sort-by attribute '%s' not found", pTok );
 				return SORT_CLAUSE_ERROR;
 			}
-
 			tState.m_iAttr[iField] = iAttr;
 			tState.m_iRowitem[iField] = tSchema.GetAttr(iAttr).m_iRowitem;
 			tState.m_iBitOffset[iField] = tSchema.GetAttr(iAttr).m_iBitOffset;
@@ -7974,10 +7909,55 @@ ISphMatchSorter * sphCreateSorter1st ( ESphSortFunc eMatchFunc, bool bMatchBits,
 
 /////////////////////////////////////////////////////////////////////////////
 
-ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError )
+static bool UpdateQueryForSchema ( CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError )
 {
+	pQuery->m_iGroupbyOffset = -1;
+	pQuery->m_iDistinctOffset = -1;
+
+	if ( pQuery->m_sGroupBy.IsEmpty() )
+		return true;
+
+	// setup gropuby attr
+	int iGroupBy = tSchema.GetAttrIndex ( pQuery->m_sGroupBy.cstr() );
+	if ( iGroupBy<0 )
+	{
+		sError.SetSprintf ( "group-by attribute '%s' not found", pQuery->m_sGroupBy.cstr() );
+		return false;
+	}
+	if ( pQuery->m_eGroupFunc==SPH_GROUPBY_ATTRPAIR && iGroupBy+1>=tSchema.GetAttrsCount() )
+	{
+		sError.SetSprintf ( "group-by attribute '%s' must not be last in ATTRPAIR grouping mode", pQuery->m_sGroupBy.cstr() );
+		return false;
+	}
+	pQuery->m_iGroupbyOffset = tSchema.GetAttr(iGroupBy).m_iBitOffset;
+	pQuery->m_iGroupbyCount = tSchema.GetAttr(iGroupBy).m_iBitCount;
+
+	// setup distinct attr
+	if ( !pQuery->m_sGroupDistinct.IsEmpty() )
+	{
+		int iDistinct = tSchema.GetAttrIndex ( pQuery->m_sGroupDistinct.cstr() );
+		if ( iDistinct<0 )
+		{
+			sError.SetSprintf ( "group-count-distinct attribute '%s' not found", pQuery->m_sGroupDistinct.cstr() );
+			return false;
+		}
+
+		pQuery->m_iDistinctOffset = tSchema.GetAttr(iDistinct).m_iBitOffset;
+		pQuery->m_iDistinctCount = tSchema.GetAttr(iDistinct).m_iBitCount;
+	}
+
+	return true;
+}
+
+
+ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError )
+{
+	// lookup proper attribute index to group by, if any
+	if ( !UpdateQueryForSchema ( pQuery, tSchema, sError ) )
+		return NULL;
 	assert ( pQuery->m_sGroupBy.IsEmpty() || pQuery->m_iGroupbyOffset>=0 );
 
+	// prepare
 	ISphMatchSorter * pTop = NULL;
 	CSphMatchComparatorState tStateMatch, tStateGroup;
 
@@ -7991,6 +7971,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 	ESphSortFunc eGroupFunc = FUNC_REL_DESC;
 	bool bUsesAttrs = false;
 	bool bRandomize = false;
+	pQuery->m_bCalcGeodist = false;
 
 	// matches sorting function
 	if ( pQuery->m_eSort==SPH_SORT_EXTENDED )
@@ -8005,8 +7986,15 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 			bRandomize = true;
 
 		for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
+		{
 			if ( tStateMatch.m_iAttr[i]>=0 )
 				bUsesAttrs = true;
+			if ( tStateMatch.m_iAttr[i]==FIXUP_GEODIST )
+			{
+				bUsesAttrs = true;
+				pQuery->m_bCalcGeodist = true;
+			}
+		}
 
 	} else
 	{
@@ -8051,6 +8039,40 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 			if ( eRes==SORT_CLAUSE_RANDOM )
 				sError.SetSprintf ( "groups can not be sorted by @random" );
 			return false;
+		}
+	}
+
+	// update for calculated stuff
+	ARRAY_FOREACH ( i, pQuery->m_dFilters )
+		if ( pQuery->m_dFilters[i].m_sAttrName=="@geodist" )
+	{
+		pQuery->m_bCalcGeodist = true;
+		break;
+	}
+
+	int iToCalc = ( pQuery->m_bCalcGeodist ? 1 : 0 );
+	pQuery->m_iPresortRowitems = tSchema.GetRealRowSize() + iToCalc;
+
+	for ( int iState=0; iState<2; iState++ )
+	{
+		CSphMatchComparatorState & tState = iState ? tStateMatch : tStateGroup;
+		for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
+		{
+			int iOffset = -1;
+			switch ( tState.m_iAttr[i] )
+			{
+				case FIXUP_GEODIST:		iOffset = 0; break;
+				case FIXUP_COUNT:		iOffset = iToCalc+OFF_POSTCALC_COUNT; break;
+				case FIXUP_GROUP:		iOffset = iToCalc+OFF_POSTCALC_GROUP; break;
+				case FIXUP_DISTINCT:	iOffset = iToCalc+OFF_POSTCALC_DISTINCT; break;
+			}
+			if ( iOffset>=0 )
+			{
+				tState.m_iAttr[i] = tSchema.GetRealAttrsCount() + iOffset;
+				tState.m_iRowitem[i] = tSchema.GetRealRowSize() + iOffset;
+				tState.m_iBitOffset[i] = tState.m_iRowitem[i]*ROWITEM_BITS;
+				tState.m_iBitCount[i] = ROWITEM_BITS;
+			}
 		}
 	}
 
@@ -8128,21 +8150,17 @@ void sphFlattenQueue ( ISphMatchSorter * pQueue, CSphQueryResult * pResult, int 
 
 CSphQueryResult * CSphIndex_VLN::Query ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery )
 {
-	// create result
-	CSphQueryResult * pResult = new CSphQueryResult();
-
-	// lookup group-by attribute index
-	if ( !pQuery->SetSchema ( m_tSchema, m_sLastError ) )
-		return false;
-
 	// create sorter
 	CSphString sError;
 	ISphMatchSorter * pTop = sphCreateQueue ( pQuery, m_tSchema, sError );
 	if ( !pTop )
 	{
 		m_sLastError.SetSprintf ( "failed to create sorting queue: %s", sError.cstr() );
-		return pResult;
+		return NULL;
 	}
+
+	// create result
+	CSphQueryResult * pResult = new CSphQueryResult();
 
 	// run query
 	if ( QueryEx ( pTokenizer, pDict, pQuery, pResult, pTop ) )
@@ -8183,43 +8201,50 @@ static inline bool sphMatchEarlyReject ( const CSphMatch & tMatch, const CSphQue
 
 			// filter matches if any of multiple values match (ie. are in the set, or in the range)
 			bool bOK = false;
-			if ( tFilter.m_iValues )
+			switch ( tFilter.m_eType )
 			{
-				// walk both attr values and filter values lists, and ok match if there's any intersection
-				const DWORD * pFilter = tFilter.m_pValues;
-				const DWORD * pFilterMax = pFilter + tFilter.m_iValues;
-
-				while ( pMva<pMvaMax && pFilter<pFilterMax && pMva[0]!=pFilter[0] )
+				case SPH_FILTER_VALUES:
 				{
-					while ( pMva<pMvaMax && pMva[0]<pFilter[0] ) pMva++;
-					if ( pMva>=pMvaMax ) break;
+					// walk both attr values and filter values lists, and ok match if there's any intersection
+					const DWORD * pFilter = &tFilter.m_dValues[0];
+					const DWORD * pFilterMax = pFilter + tFilter.m_dValues.GetLength();
 
-					while ( pFilter<pFilterMax && pFilter[0]<pMva[0] ) pFilter++;
-					if ( pFilter>=pFilterMax ) break;
-
-				}
-
-				bOK = ( pMva<pMvaMax && pFilter<pFilterMax );
-				assert ( bOK==false || pMva[0]==pFilter[0] );
-
-// FIXME! should we report matched-value somehow?
-//				if ( bOK )
-//					tMatch.SetAttr ( tFilter.m_iBitOffset, tFilter.m_iBitCount, pFilter[0] );
-
-			} else
-			{
-				// walk attr list, and ok match if any of values is within range
-				while ( pMva<pMvaMax )
-				{
-					if ( pMva[0]>=tFilter.m_uMinValue && pMva[0]<=tFilter.m_uMaxValue )
+					while ( pMva<pMvaMax && pFilter<pFilterMax && pMva[0]!=pFilter[0] )
 					{
-						bOK = true;
-// FIXME! should we report matched-value somehow?
-//						tMatch.SetAttr ( tFilter.m_iBitOffset, tFilter.m_iBitCount, pMva[0] );
-						break;
+						while ( pMva<pMvaMax && pMva[0]<pFilter[0] ) pMva++;
+						if ( pMva>=pMvaMax ) break;
+
+						while ( pFilter<pFilterMax && pFilter[0]<pMva[0] ) pFilter++;
+						if ( pFilter>=pFilterMax ) break;
+
 					}
-					pMva++;
+
+					bOK = ( pMva<pMvaMax && pFilter<pFilterMax );
+					assert ( bOK==false || pMva[0]==pFilter[0] );
+
+					// FIXME! should we report matched-value somehow?
+					// if ( bOK ) tMatch.SetAttr ( tFilter.m_iBitOffset, tFilter.m_iBitCount, pFilter[0] );
+					break;
 				}
+
+				case SPH_FILTER_RANGE:
+					// walk attr list, and ok match if any of values is within range
+					while ( pMva<pMvaMax )
+					{
+						if ( pMva[0]>=tFilter.m_uMinValue && pMva[0]<=tFilter.m_uMaxValue )
+						{
+							bOK = true;
+							// FIXME! should we report matched-value somehow?
+							// tMatch.SetAttr ( tFilter.m_iBitOffset, tFilter.m_iBitCount, pMva[0] );
+							break;
+						}
+						pMva++;
+					}
+					break;
+
+				default:
+					assert ( 0 && "internal error: unhandled MVA filter type" );
+					break;
 			}
 
 			return ( !( tFilter.m_bExclude ^ bOK ) );
@@ -8227,15 +8252,31 @@ static inline bool sphMatchEarlyReject ( const CSphMatch & tMatch, const CSphQue
 		} else
 		{
 			// single value
-			DWORD uValue = tMatch.GetAttr ( tFilter.m_iBitOffset, tFilter.m_iBitCount );
-			if ( tFilter.m_iValues )
+			DWORD uValue;
+			float fValue;
+			switch ( tFilter.m_eType )
 			{
-				if ( !( tFilter.m_bExclude ^ sphGroupMatch ( uValue, tFilter.m_pValues, tFilter.m_iValues ) ) )
-					return true;
-			} else
-			{
-				if ( tFilter.m_bExclude ^ ( uValue<tFilter.m_uMinValue || uValue>tFilter.m_uMaxValue ) )
-					return true;
+				case SPH_FILTER_VALUES:
+					uValue = tMatch.GetAttr ( tFilter.m_iBitOffset, tFilter.m_iBitCount );
+					if ( !( tFilter.m_bExclude ^ sphGroupMatch ( uValue, &tFilter.m_dValues[0], tFilter.m_dValues.GetLength() ) ) )
+						return true;
+					break;
+
+				case SPH_FILTER_RANGE:
+					uValue = tMatch.GetAttr ( tFilter.m_iBitOffset, tFilter.m_iBitCount );
+					if ( tFilter.m_bExclude ^ ( uValue<tFilter.m_uMinValue || uValue>tFilter.m_uMaxValue ) )
+						return true;
+					break;
+
+				case SPH_FILTER_FLOATRANGE:
+					fValue = tMatch.GetAttrFloat ( tFilter.m_iRowitem );
+					if ( tFilter.m_bExclude ^ ( fValue<tFilter.m_fMinValue || fValue>tFilter.m_fMaxValue ) )
+						return true;
+					break;
+
+				default:
+					assert ( 0 && "internal error: unhandled filter type" );
+					break;
 			}
 		}
 	}
@@ -8305,15 +8346,35 @@ const DWORD * CSphIndex_VLN::FindDocinfo ( SphDocID_t uDocID )
 }
 
 
-void CSphIndex_VLN::LookupDocinfo ( CSphDocInfo & tMatch )
+static inline double sphSqr ( double v )
+{
+	return v*v;
+}
+
+
+void CSphIndex_VLN::LookupDocinfo ( CSphMatch & tMatch )
 {
 	DWORD * pFound = const_cast < DWORD * > ( FindDocinfo ( tMatch.m_iDocID ) );
 	if ( pFound )
 	{
+		int iToCalc = m_bCalcGeodist ? 1 : 0;
+
 		assert ( tMatch.m_pRowitems );
-		assert ( tMatch.m_iRowitems==m_tSchema.GetRowSize() );
+		assert ( tMatch.m_iRowitems==m_tSchema.GetRowSize()+iToCalc );
 		assert ( DOCINFO2ID(pFound)==tMatch.m_iDocID );
-		memcpy ( tMatch.m_pRowitems, DOCINFO2ATTRS(pFound), tMatch.m_iRowitems*sizeof(CSphRowitem) );
+		memcpy ( tMatch.m_pRowitems, DOCINFO2ATTRS(pFound), m_tSchema.GetRowSize()*sizeof(CSphRowitem) );
+
+		if ( m_bCalcGeodist )
+		{
+			const double R = 6384000;
+			float plat = tMatch.GetAttrFloat ( m_iGeoLatRowitem );
+			float plon = tMatch.GetAttrFloat ( m_iGeoLongRowitem );
+			double dlat = plat - m_fGeoAnchorLat;
+			double dlon = plon - m_fGeoAnchorLong;
+			double a = sphSqr(sin(dlat/2)) + cos(plat)*cos(m_fGeoAnchorLat)*sphSqr(sin(dlon/2));
+			double c = 2*asin ( Min ( 1, sqrt(a) ) );
+			tMatch.SetAttrFloat ( m_tSchema.GetRowSize(), float(R*c) ); // FIXME! magic offset
+		}
 	}
 }
 
@@ -8669,7 +8730,7 @@ struct CSphBooleanEvalNode : public CSphQueryWord
 	bool					m_bEvaluable;	///< whether this node is for matching or for filtering
 
 public:
-							CSphBooleanEvalNode ( const CSphBooleanQueryExpr * pNode, CSphDict * pDict, ESphDocinfo eDocinfo, const CSphDocInfo & tMin );
+							CSphBooleanEvalNode ( const CSphBooleanQueryExpr * pNode, const CSphTermSetup & tTermSetup );
 							~CSphBooleanEvalNode ();
 
 	void					SetFile ( CSphIndex_VLN * pIndex, const CSphTermSetup & tTermSetup );
@@ -8679,10 +8740,10 @@ public:
 };
 
 
-CSphBooleanEvalNode::CSphBooleanEvalNode ( const CSphBooleanQueryExpr * pNode, CSphDict * pDict, ESphDocinfo eDocinfo, const CSphDocInfo & tMin )
+CSphBooleanEvalNode::CSphBooleanEvalNode ( const CSphBooleanQueryExpr * pNode, const CSphTermSetup & tTermSetup )
 {
 	assert ( pNode );
-	assert ( pDict );
+	assert ( tTermSetup.m_pDict );
 
 	m_eType = pNode->m_eType;
 	m_bInvert = pNode->m_bInvert;
@@ -8691,7 +8752,7 @@ CSphBooleanEvalNode::CSphBooleanEvalNode ( const CSphBooleanQueryExpr * pNode, C
 	m_sWord = pNode->m_sWord;
 	m_iWordID = 0;
 
-	m_pExpr = pNode->m_pExpr ? new CSphBooleanEvalNode ( pNode->m_pExpr, pDict, eDocinfo, tMin ) : NULL;
+	m_pExpr = pNode->m_pExpr ? new CSphBooleanEvalNode ( pNode->m_pExpr, tTermSetup ) : NULL;
 	if ( m_pExpr )
 	{
 		m_pExpr->m_pParent = this;
@@ -8700,18 +8761,18 @@ CSphBooleanEvalNode::CSphBooleanEvalNode ( const CSphBooleanQueryExpr * pNode, C
 	{
 		// GetWordID() may modify the word in-place; so we alloc a tempbuffer
 		CSphString sBuf ( m_sWord );
-		m_iWordID = pDict->GetWordID ( (BYTE*)sBuf.cstr() );
+		m_iWordID = tTermSetup.m_pDict->GetWordID ( (BYTE*)sBuf.cstr() );
 		m_pLast = NULL;
 	}
 
-	m_pNext = pNode->m_pNext ? new CSphBooleanEvalNode ( pNode->m_pNext, pDict, eDocinfo, tMin ) : NULL;
+	m_pNext = pNode->m_pNext ? new CSphBooleanEvalNode ( pNode->m_pNext, tTermSetup ) : NULL;
 	m_pPrev = NULL;
 	if ( m_pNext )
 		m_pNext->m_pPrev = this;
 
 	m_pParent = NULL;
 
-	SetupAttrs ( eDocinfo, tMin );
+	SetupAttrs ( tTermSetup.m_eDocinfo, tTermSetup.m_tMin, tTermSetup.m_iToCalc );
 }
 
 
@@ -8915,7 +8976,7 @@ bool CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, int iSorters, ISphM
 
 	// let's build our own tree! with doclists! and hits!
 	assert ( m_tMin.m_iRowitems==m_tSchema.GetRowSize() );
-	CSphBooleanEvalNode tTree ( tParsed.m_pTree, tTermSetup.m_pDict, m_eDocinfo, m_tMin );
+	CSphBooleanEvalNode tTree ( tParsed.m_pTree, tTermSetup );
 	tTree.SetFile ( this, tTermSetup );
 
 	// do matching
@@ -9007,7 +9068,7 @@ CSphExtendedEvalAtom::CSphExtendedEvalAtom ( const CSphExtendedQueryAtom & tAtom
 		// GetWordID() may modify the word in-place; so we alloc a tempbuffer
 		CSphString sBuf ( tTerm.m_sWord );
 		tTerm.m_iWordID = tSetup.m_pDict->GetWordID ( (BYTE*)sBuf.cstr() );
-		tTerm.SetupAttrs ( tSetup.m_eDocinfo, tSetup.m_tMin );
+		tTerm.SetupAttrs ( tSetup.m_eDocinfo, tSetup.m_tMin, tSetup.m_iToCalc );
 
 		if ( !tSetup.m_pIndex->SetupQueryWord ( tTerm, tSetup ) )
 			m_pLast = NULL;
@@ -10377,7 +10438,6 @@ bool CSphIndex_VLN::QueryEx ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSph
 {
 	bool bRes = MultiQuery ( pTokenizer, pDict, pQuery, pResult, 1, &pTop );
 	pResult->m_iTotalMatches += bRes ? pTop->GetTotalCount () : 0;
-	pResult->m_tSchema.BuildResultSchema ( pQuery );
 	return bRes;
 }
 
@@ -10428,6 +10488,7 @@ bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, C
 	tTermSetup.m_pIndex = this;
 	tTermSetup.m_eDocinfo = m_eDocinfo;
 	tTermSetup.m_tMin = m_tMin;
+	tTermSetup.m_iToCalc = pQuery->m_bCalcGeodist ? 1 : 0;
 
 	PROFILE_END ( query_init );
 
@@ -10458,7 +10519,7 @@ bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, C
 			m_dQueryWords[i].m_iQueryPos = qp.m_dWords[i].m_iQueryPos;
 
 			assert ( m_tMin.m_iRowitems==m_tSchema.GetRowSize() );
-			m_dQueryWords[i].SetupAttrs ( m_eDocinfo, m_tMin );
+			m_dQueryWords[i].SetupAttrs ( tTermSetup.m_eDocinfo, tTermSetup.m_tMin, tTermSetup.m_iToCalc );
 		}
 
 		// setup words from the wordlist
@@ -10510,25 +10571,30 @@ bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, C
 	ARRAY_FOREACH ( i, pQuery->m_dFilters )
 	{
 		CSphFilter & tFilter = pQuery->m_dFilters[i];
+		tFilter.m_dValues.Sort ();
+		tFilter.m_iBitOffset = -1; // filters with negative bit-offset will be ignored
+		tFilter.m_iRowitem = INT_MAX;
 
-		tFilter.SortValues ();
-		tFilter.m_iAttr = -1;
-		tFilter.m_iBitOffset = -1;
-
-		for ( int j=0; j<m_tSchema.GetAttrsCount(); j++ )
+		// special handling for in-match property
+		if ( tFilter.m_sAttrName=="@geodist" )
 		{
-			const CSphColumnInfo & tAttr = m_tSchema.GetAttr(j);
-			if ( tFilter.m_sAttrName==tAttr.m_sName )
-			{
-				tFilter.m_iAttr = j;
-				tFilter.m_iBitOffset = tAttr.m_iBitOffset;
-				tFilter.m_iBitCount = tAttr.m_iBitCount;
-				tFilter.m_bMva = ( ( tAttr.m_eAttrType & SPH_ATTR_MULTI )!=0 );
-				break;
-			}
+			assert ( pQuery->m_bCalcGeodist );
+			tFilter.m_iBitOffset = 0; // to avoid ignoring
+			tFilter.m_iBitCount = 0;
+			tFilter.m_bMva = false;
+			tFilter.m_iRowitem = m_tSchema.GetRealRowSize ();
+			continue;
 		}
 
-		// FIXME! should at least warn about bad filter name
+		// lookup it in user attributes
+		int iAttr = m_tSchema.GetAttrIndex ( tFilter.m_sAttrName.cstr() );
+		if ( iAttr<0 )
+			continue; // FIXME! simply continue? should at least warn about bad attr name
+
+		const CSphColumnInfo & tAttr = m_tSchema.GetAttr(iAttr);
+		tFilter.m_iBitOffset = tAttr.m_iBitOffset;
+		tFilter.m_iBitCount = tAttr.m_iBitCount;
+		tFilter.m_bMva = ( ( tAttr.m_eAttrType & SPH_ATTR_MULTI )!=0 );
 	}
 
 	// build weights
@@ -10547,6 +10613,35 @@ bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, C
 			if ( ppSorters[iSorter]->UsesAttrs() )
 				m_bLateLookup = true;
 
+	// setup calculations
+	m_bCalcGeodist = pQuery->m_bCalcGeodist;
+	if ( m_bCalcGeodist )
+	{
+		if ( !pQuery->m_bGeoAnchor )
+		{
+			m_sLastError.SetSprintf ( "no geo-anchor point specified in search query, @geodist not available"  );
+			return false;
+		}
+
+		int iLat = m_tSchema.GetAttrIndex ( pQuery->m_sGeoLatAttr.cstr() );
+		if ( iLat<0 )
+		{
+			m_sLastError.SetSprintf ( "unknown latitude attribute '%s'", pQuery->m_sGeoLatAttr.cstr() );
+			return false;
+		}
+
+		int iLong = m_tSchema.GetAttrIndex ( pQuery->m_sGeoLongAttr.cstr() );
+		if ( iLong<0 )
+		{
+			m_sLastError.SetSprintf ( "unknown latitude attribute '%s'", pQuery->m_sGeoLongAttr.cstr() );
+			return false;
+		}
+
+		m_iGeoLatRowitem = m_tSchema.GetAttr(iLat).m_iRowitem;
+		m_iGeoLongRowitem = m_tSchema.GetAttr(iLong).m_iRowitem;
+		m_fGeoAnchorLat = pQuery->m_fGeoLatitude;
+		m_fGeoAnchorLong = pQuery->m_fGeoLongitude;
+	}
 
 	//////////////////////////////////////
 	// find and weight matching documents
@@ -10611,6 +10706,11 @@ bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, C
 
 		// schema
 		pResult->m_tSchema = m_tSchema;
+		if ( m_bCalcGeodist )
+		{
+			CSphColumnInfo tGeodist ( "@geodist", SPH_ATTR_FLOAT );
+			pResult->m_tSchema.AddAttr ( tGeodist );
+		}
 	}
 
 	PROFILER_DONE ();
@@ -12004,24 +12104,36 @@ BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 
 	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
 	{
-		// shortcuts
-		const CSphColumnInfo & tAttr = m_tSchema.GetAttr(i);
+		const CSphColumnInfo & tAttr = m_tSchema.GetAttr(i); // shortcut
 
-		DWORD uValue = 0;
-		if ( tAttr.m_eAttrType==SPH_ATTR_ORDINAL )
+		if ( tAttr.m_eAttrType & SPH_ATTR_MULTI )
 		{
-			// memorize string for ordinals; fixup NULLs
-			m_dStrAttrs[i] = SqlColumn ( tAttr.m_iIndex );
-			if ( !m_dStrAttrs[i].cstr() )
-				m_dStrAttrs[i] = "";
-
-		} else if (!( tAttr.m_eAttrType & SPH_ATTR_MULTI ))
-		{
-			// just store as uint by default
-			uValue = sphToDword ( SqlColumn ( tAttr.m_iIndex ) ); // FIXME? report conversion errors maybe?
+			m_tDocInfo.SetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount, 0 );
+			continue;
 		}
 
-		m_tDocInfo.SetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount, uValue );
+		switch ( tAttr.m_eAttrType )
+		{
+			case SPH_ATTR_ORDINAL:
+				// memorize string, fixup NULLs
+				m_dStrAttrs[i] = SqlColumn ( tAttr.m_iIndex );
+				if ( !m_dStrAttrs[i].cstr() )
+					m_dStrAttrs[i] = "";
+
+				m_tDocInfo.SetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount, 0 );
+				break;
+
+			case SPH_ATTR_FLOAT:
+				m_tDocInfo.SetAttrFloat ( tAttr.m_iRowitem,
+					sphToFloat ( SqlColumn ( tAttr.m_iIndex ) ) ); // FIXME? report conversion errors maybe?
+				break;
+
+			default:
+				// just store as uint by default
+				m_tDocInfo.SetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount,
+					sphToDword ( SqlColumn ( tAttr.m_iIndex ) ) ); // FIXME? report conversion errors maybe?
+				break;
+		}
 	}
 
 	return m_dFields;

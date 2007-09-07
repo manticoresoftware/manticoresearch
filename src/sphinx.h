@@ -359,9 +359,11 @@ struct CSphWordHit
 
 /// row entry (storage only, does not necessarily map 1:1 to attributes)
 typedef DWORD		CSphRowitem;
+
 const CSphRowitem	ROWITEM_MAX		= UINT_MAX;
 const int			ROWITEM_BITS	= 8*sizeof(CSphRowitem);
 
+STATIC_ASSERT ( sizeof(CSphRowitem)==sizeof(float), ROWITEM_AND_FLOAT_SIZE_MISMATCH );
 
 /// setter
 inline void sphSetRowAttr ( CSphRowitem * pRow, int iBitOffset, int iBitCount, CSphRowitem uValue )
@@ -462,6 +464,13 @@ struct CSphDocInfo
 		return ( m_pRowitems[iItem]>>iShift ) & ( (1UL<<iBitCount)-1 );
 	}
 
+	/// get float attr
+	float GetAttrFloat ( int iItem ) const
+	{
+		assert ( iItem>=0 && iItem<m_iRowitems );
+		return *( reinterpret_cast<float*> ( m_pRowitems+iItem ) );
+	};
+
 	/// set attr by bit offset/count
 	void SetAttr ( int iBitOffset, int iBitCount, CSphRowitem uValue ) const
 	{
@@ -469,6 +478,13 @@ struct CSphDocInfo
 		assert ( iBitCount>0 && iBitOffset+iBitCount<=m_iRowitems*ROWITEM_BITS );
 		sphSetRowAttr ( m_pRowitems, iBitOffset, iBitCount, uValue );
 	}
+
+	/// set float attr
+	void SetAttrFloat ( int iItem, float fValue ) const
+	{
+		assert ( iItem>=0 && iItem<m_iRowitems );
+		*( reinterpret_cast<float*> ( m_pRowitems+iItem ) ) = fValue;
+	};
 };
 
 
@@ -504,6 +520,7 @@ enum
 	SPH_ATTR_TIMESTAMP	= 2,			///< this attr is a timestamp
 	SPH_ATTR_ORDINAL	= 3,			///< this attr is an ordinal string number (integer at search time, specially handled at indexing time)
 	SPH_ATTR_BOOL		= 4,			///< this attr is a boolean bit field
+	SPH_ATTR_FLOAT		= 5,
 
 	SPH_ATTR_MULTI		= 0x40000000UL	///< this attr has multiple values (0 or more)
 };
@@ -970,10 +987,11 @@ private:
 /// search query match
 struct CSphMatch : public CSphDocInfo
 {
-	int	m_iWeight;	///< my weight
-	int	m_iTag;		///< my index tag
+	int		m_iWeight;	///< my computed weight
+	float	m_fGeodist;	///< my computed geodistance
+	int		m_iTag;		///< my index tag
 
-	CSphMatch () : m_iWeight ( 0 ), m_iTag ( 0 ) {}
+	CSphMatch () : m_iWeight ( 0 ), m_fGeodist ( 0 ), m_iTag ( 0 ) {}
 	bool operator == ( const CSphMatch & rhs ) const { return ( m_iDocID==rhs.m_iDocID ); }
 };
 
@@ -986,6 +1004,7 @@ inline void Swap ( CSphMatch & a, CSphMatch & b )
 	Swap ( a.m_pRowitems, b.m_pRowitems );
 	Swap ( a.m_iWeight, b.m_iWeight );
 	Swap ( a.m_iTag, b.m_iTag );
+	Swap ( a.m_fGeodist, b.m_fGeodist );
 }
 
 
@@ -1027,31 +1046,49 @@ enum ESphGroupBy
 };
 
 
+/// search query filter types
+enum ESphFilter
+{
+	SPH_FILTER_VALUES		= 0,	///< filter by integer values set
+	SPH_FILTER_RANGE		= 1,	///< filter by integer range
+	SPH_FILTER_FLOATRANGE	= 2		///< filter by float range
+};
+
+
 /// search query filter
 class CSphFilter
 {
 public:
-	CSphString		m_sAttrName;	///< filtered attribute name
-	DWORD			m_uMinValue;	///< min value, only used when m_iValues==0
-	DWORD			m_uMaxValue;	///< max value, only used when m_iValues==0
-	int				m_iValues;		///< values set size, default is 0
-	DWORD *			m_pValues;		///< values set. OWNED, WILL BE FREED IN DTOR.
-	bool			m_bExclude;		///< whether this is "include" or "exclude" filter (default is "include")
+	CSphString			m_sAttrName;	///< filtered attribute name
+	bool				m_bExclude;		///< whether this is "include" or "exclude" filter (default is "include")
 
-	bool			m_bMva;			///< whether this filter is against multi-valued attribute
-	int				m_iAttr;		///< attr index into schema
-	int				m_iBitOffset;	///< attr bit offset into row
-	int				m_iBitCount;	///< attr bit count
+	ESphFilter			m_eType;		///< filter type
+	union
+	{
+		DWORD			m_uMinValue;	///< range min
+		float			m_fMinValue;	///< range min
+	};
+	union
+	{
+		DWORD			m_uMaxValue;	///< range max
+		float			m_fMaxValue;	///< range max
+	};
+	CSphVector<DWORD,8>	m_dValues;		///< integer values set
 
 public:
-					CSphFilter ();
-					CSphFilter ( const CSphFilter & rhs );
-					~CSphFilter ();
-	void			SortValues ();	///< sort values in ascending order
+	bool				m_bMva;			///< whether this filter is against multi-valued attribute
+	int					m_iRowitem;		///< attr item offset into row, for full-item attrs
+	int					m_iBitOffset;	///< attr bit offset into row
+	int					m_iBitCount;	///< attr bit count
 
-	const CSphFilter &	operator = ( const CSphFilter & rhs );
+public:
+						CSphFilter ();
+
 	bool				operator == ( const CSphFilter & rhs ) const;
 	bool				operator != ( const CSphFilter & rhs ) const { return !( (*this)==rhs ); }
+
+protected:
+						CSphFilter ( const CSphFilter & rhs );
 };
 
 
@@ -1087,7 +1124,17 @@ public:
 	int				m_iRetryDelay;	///< retry delay, for distributed queries
 
 public:
-	int				m_iRealRowitems;	///< row size w/o group-by virtual attrs (necessary to instantiate group-by queues)
+	bool			m_bGeoAnchor;		///< do we have an anchor
+	CSphString		m_sGeoLatAttr;		///< latitude attr name
+	CSphString		m_sGeoLongAttr;		///< longitude attr name
+	float			m_fGeoLatitude;		///< anchor latitude
+	float			m_fGeoLongitude;	///< anchor longitude
+
+public:
+	bool			m_bCalcGeodist;		///< whether this query needs to calc @geodist
+
+public:
+	int				m_iPresortRowitems;	///< row size submitted to sorter (with calculated attributes, but without groupby/count attributes added by sorters)
 	int				m_iGroupbyOffset;	///< group-by attr bit offset
 	int				m_iGroupbyCount;	///< group-by attr bit count
 	int				m_iDistinctOffset;	///< distinct-counted attr bit offset
@@ -1105,8 +1152,6 @@ public:
 public:
 					CSphQuery ();		///< ctor, fills defaults
 					~CSphQuery () {}	///< dtor, frees owned stuff
-
-	bool			SetSchema ( const CSphSchema & tSchema, CSphString & sError );	///< calc m_iAttrs, m_iGroupBy, m_iDistinct from schema
 };
 
 
@@ -1267,7 +1312,7 @@ public:
 	/// virtualizing dtor
 	virtual				~ISphMatchSorter () {}
 
-	/// check if this queue needs attr values
+	/// check if this sorter needs attr values
 	virtual bool		UsesAttrs () = 0;
 
 	/// set match comparator state
@@ -1425,9 +1470,10 @@ CSphIndex *			sphCreateIndexPhrase ( const char * sFilename );
 /// tell libsphinx to be quiet or not (logs and loglevels to come later)
 void				sphSetQuiet ( bool bQuiet );
 
-/// create proper queue for given query
+/// creates proper queue for given query
+/// modifies pQuery, setups several field locators
 /// may return NULL on error; in this case, error message is placed in sError
-ISphMatchSorter *	sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError );
+ISphMatchSorter *	sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError );
 
 /// convert queue to sorted array, and add its entries to result's matches array
 void				sphFlattenQueue ( ISphMatchSorter * pQueue, CSphQueryResult * pResult, int iTag );

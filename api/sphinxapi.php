@@ -23,7 +23,7 @@ define ( "SEARCHD_COMMAND_EXCERPT",	1 );
 define ( "SEARCHD_COMMAND_UPDATE",	2 );
 
 /// current client-side command implementation versions
-define ( "VER_COMMAND_SEARCH",		0x10D );
+define ( "VER_COMMAND_SEARCH",		0x10E );
 define ( "VER_COMMAND_EXCERPT",		0x100 );
 define ( "VER_COMMAND_UPDATE",		0x100 );
 
@@ -47,9 +47,17 @@ define ( "SPH_SORT_ATTR_ASC",		2 );
 define ( "SPH_SORT_TIME_SEGMENTS", 	3 );
 define ( "SPH_SORT_EXTENDED", 		4 );
 
+/// known filter types
+define ( "SPH_FILTER_VALUES",		0 );
+define ( "SPH_FILTER_RANGE",		1 );
+define ( "SPH_FILTER_FLOATRANGE",	2 );
+
 /// known attribute types
 define ( "SPH_ATTR_INTEGER",		1 );
 define ( "SPH_ATTR_TIMESTAMP",		2 );
+define ( "SPH_ATTR_ORDINAL",		3 );
+define ( "SPH_ATTR_BOOL",			4 );
+define ( "SPH_ATTR_FLOAT",			5 );
 define ( "SPH_ATTR_MULTI",			0x40000000 );
 
 /// known grouping functions
@@ -82,9 +90,12 @@ class SphinxClient
 	var $_cutoff;		///< cutoff to stop searching at (default is 0)
 	var $_retrycount;	///< distributed retries count
 	var $_retrydelay;	///< distributed retries delay
+	var $_anchor;		///< geographical anchor point
 
 	var $_error;		///< last error message
 	var $_warning;		///< last warning message
+
+	var $_reqs;			///< requests array for multi-query
 
 	/////////////////////////////////////////////////////////////////////////////
 	// common stuff
@@ -113,6 +124,7 @@ class SphinxClient
 		$this->_cutoff		= 0;
 		$this->_retrycount	= 0;
 		$this->_retrydelay	= 0;
+		$this->_anchor		= array ();
 
 		$this->_error		= "";
 		$this->_warning		= "";
@@ -317,7 +329,7 @@ class SphinxClient
 			foreach ( $values as $value )
 				assert ( is_int($value) );
 
-			$this->_filters[] = array ( "attr"=>$attribute, "exclude"=>$exclude, "values"=>$values );
+			$this->_filters[] = array ( "type"=>SPH_FILTER_VALUES, "attr"=>$attribute, "exclude"=>$exclude, "values"=>$values );
 		}
 	}
 
@@ -331,13 +343,45 @@ class SphinxClient
 		assert ( is_int($max) );
 		assert ( $min<=$max );
 
-		$this->_filters[] = array ( "attr"=>$attribute, "exclude"=>$exclude, "min"=>$min, "max"=>$max );
+		$this->_filters[] = array ( "type"=>SPH_FILTER_RANGE, "attr"=>$attribute, "exclude"=>$exclude, "min"=>$min, "max"=>$max );
+	}
+
+	/// set float range filter
+	/// only match those records where $attribute column value
+	/// is beetwen $min and $max (including $min and $max)
+	function SetFilterFloatRange ( $attribute, $min, $max, $exclude=false )
+	{
+		assert ( is_string($attribute) );
+		assert ( is_float($min) );
+		assert ( is_float($max) );
+		assert ( $min<=$max );
+
+		$this->_filters[] = array ( "type"=>SPH_FILTER_FLOATRANGE, "attr"=>$attribute, "exclude"=>$exclude, "min"=>$min, "max"=>$max );
+	}
+
+	/// setup geographical anchor point
+	/// required to use @geodist in filters and sorting
+	/// distance will be computed to this point
+	///
+	/// $attrlat is the name of latitude attribute
+	/// $attrlong is the name of longitude attribute
+	/// $lat is anchor point latitude, in radians
+	/// $long is anchor point longitude, in radians
+	function SetGeoAnchor ( $attrlat, $attrlong, $lat, $long )
+	{
+		assert ( is_string($attrlat) );
+		assert ( is_string($attrlong) );
+		assert ( is_float($lat) );
+		assert ( is_float($long) );
+
+		$this->_anchor = array ( "attrlat"=>$attrlat, "attrlong"=>$attrlong, "lat"=>$lat, "long"=>$long );
 	}
 
 	/// clear all filters (for multi-queries)
 	function ResetFilters ()
 	{
 		$this->_filters[] = array();
+		$this->_anchor = array();
 	}
 
 	/// set grouping attribute and function
@@ -435,11 +479,14 @@ class SphinxClient
 		$results = $this->RunQueries ();
 
 		if ( !is_array($results) )
-			return false;
+			return false; // probably network error; error message should be already filled
 
 		$this->_error = $results[0]["error"];
 		$this->_warning = $results[0]["warning"];
-		return $results[0];
+		if ( $results[0]["status"]==SEARCHD_ERROR )
+			return false;
+		else
+			return $results[0];
 	}
 
 	/// add query to batch
@@ -471,14 +518,25 @@ class SphinxClient
 		foreach ( $this->_filters as $filter )
 		{
 			$req .= pack ( "N", strlen($filter["attr"]) ) . $filter["attr"];
-			if ( isset($filter["values"]) )
+			$req .= pack ( "N", $filter["type"] );
+			switch ( $filter["type"] )
 			{
-				$req .= pack ( "N", count($filter["values"]) );
-				foreach ( $filter["values"] as $value )
-					$req .= pack ( "N", $value );
-			} else
-			{
-				$req .= pack ( "NNN", 0, $filter["min"], $filter["max"] );
+				case SPH_FILTER_VALUES:
+					$req .= pack ( "N", count($filter["values"]) );
+					foreach ( $filter["values"] as $value )
+						$req .= pack ( "N", $value );
+					break;
+
+				case SPH_FILTER_RANGE:
+					$req .= pack ( "NN", $filter["min"], $filter["max"] );
+					break;
+
+				case SPH_FILTER_FLOATRANGE:
+					$req .= pack ( "ff", $filter["min"], $filter["max"] );
+					break;
+
+				default:
+					assert ( 0 && "internal error: unhandled filter type" );
 			}
 			$req .= pack ( "N", $filter["exclude"] );
 		}
@@ -489,6 +547,19 @@ class SphinxClient
 		$req .= pack ( "N", strlen($this->_groupsort) ) . $this->_groupsort;
 		$req .= pack ( "NNN", $this->_cutoff, $this->_retrycount, $this->_retrydelay );
 		$req .= pack ( "N", strlen($this->_groupdistinct) ) . $this->_groupdistinct;
+
+		// anchor point
+		if ( empty($this->_anchor) )
+		{
+			$req .= pack ( "N", 0 );
+		} else
+		{
+			$a =& $this->_anchor;
+			$req .= pack ( "N", 1 );
+			$req .= pack ( "N", strlen($a["attrlat"]) ) . $a["attrlat"];
+			$req .= pack ( "N", strlen($a["attrlong"]) ) . $a["attrlong"];
+			$req .= pack ( "ff", $a["lat"], $a["long"] );
+		}
 
 		// store request to requests array
 		$this->_reqs[] = $req;
@@ -615,6 +686,15 @@ class SphinxClient
 				$attrvals = array ();
 				foreach ( $attrs as $attr=>$type )
 				{
+					// handle floats
+					if ( $type==SPH_ATTR_FLOAT )
+					{
+						list(,$val) = unpack ( "f*", substr ( $response, $p, 4 ) ); $p += 4;
+						$attrvals[$attr] = $val;
+						continue;
+					}
+
+					// handle everything else as unsigned ints
 					list(,$val) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
 					if ( $type & SPH_ATTR_MULTI )
 					{

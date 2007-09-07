@@ -273,6 +273,21 @@ void operator delete [] ( void * pPtr )
 
 #endif // SPH_DEBUG_LEAKS
 
+/////////////////////////////////////////////////////////////////////////////
+// HELPERS
+/////////////////////////////////////////////////////////////////////////////
+
+void sphDie ( char * sTemplate, ... )
+{
+	va_list ap;
+	va_start ( ap, sTemplate );
+	fprintf ( stdout, "FATAL: " );
+	vfprintf ( stdout, sTemplate, ap );
+	fprintf ( stdout, "\n" );
+	va_end ( ap );
+	exit ( 1 );
+}
+
 //
 // $Id$
 //

@@ -122,9 +122,6 @@ inline DWORD *			DOCINFO2ATTRS ( DWORD * pDocinfo )		{ return pDocinfo+DOCINFO_I
 
 /////////////////////////////////////////////////////////////////////////////
 
-/// crash with an error message
-void			sphDie ( char * sMessage, ... );
-
 /// time, in seconds
 float			sphLongTimer ();
 

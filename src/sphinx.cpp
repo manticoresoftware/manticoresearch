@@ -2271,18 +2271,6 @@ protected:
 // UTILITY FUNCTIONS
 /////////////////////////////////////////////////////////////////////////////
 
-void sphDie ( char * sTemplate, ... )
-{
-	va_list ap;
-	va_start ( ap, sTemplate );
-	fprintf ( stdout, "FATAL: " );
-	vfprintf ( stdout, sTemplate, ap );
-	fprintf ( stdout, "\n" );
-	va_end ( ap );
-	exit ( 1 );
-}
-
-
 void sphWarn ( char * sTemplate, ... )
 {
 	va_list ap;

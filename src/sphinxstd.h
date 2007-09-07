@@ -738,7 +738,7 @@ public:
 		return *this;
 	}
 
-	CSphString SubString ( int iStart, int iCount )
+	CSphString SubString ( int iStart, int iCount ) const
 	{
 		#ifndef NDEBUG
 		int iLen = strlen(m_sValue);

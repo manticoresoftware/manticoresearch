@@ -2,7 +2,7 @@
 // $Id$
 //
 
-#include "sphinx.h"
+#include "sphinxstd.h"
 
 const int MAX_STR_LENGTH = 512;
 
@@ -19,6 +19,7 @@ char * strlwr ( char * s )
 #endif
 
 //////////////////////////////////////////////////////////////////////////
+
 class CISpellDict
 {
 public:
@@ -32,7 +33,7 @@ public:
 
 	bool			Load ( const char * szFilename );
 	void			IterateStart ();
-	const CISpellDictWord * IterateNext ();
+	const			CISpellDictWord * IterateNext ();
 
 private:
 	CSphVector < CISpellDictWord * > m_dEntries;
@@ -446,7 +447,7 @@ int main ( int argc, char ** argv )
 {
 	CSphString sDict, sAffix, sResult = "result.txt";
 
-	printf ( "ISpell dictionary dump creator\n" );
+	printf ( "spelldump, an ispell dictionary dumper\n\n" );
 
 	switch ( argc )
 	{
@@ -458,6 +459,8 @@ int main ( int argc, char ** argv )
 			break;
 		default:
 			printf ( "Usage: spelldump <dictionary> <affix> [result]\n" );
+			if ( argc==1 )
+				exit ( 0 );
 			break;
 	}
 

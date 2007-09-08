@@ -47,6 +47,27 @@
 #define STATIC_SIZE_ASSERT(_type,_size)	STATIC_ASSERT ( sizeof(_type)==_size, _type ## _MUST_BE_ ## _size ## _BYTES )
 
 /////////////////////////////////////////////////////////////////////////////
+// PORTABILITY
+/////////////////////////////////////////////////////////////////////////////
+
+#if _WIN32
+
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+
+#define strcasecmp			strcmpi
+#define strncasecmp			_strnicmp
+#define snprintf			_snprintf
+
+#else
+
+typedef unsigned int		DWORD;
+typedef unsigned short		WORD;
+typedef unsigned char		BYTE;
+
+#endif // _WIN32
+
+/////////////////////////////////////////////////////////////////////////////
 // 64-BIT INTEGER TYPES AND MACROS
 /////////////////////////////////////////////////////////////////////////////
 

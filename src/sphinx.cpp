@@ -8357,10 +8357,8 @@ void CSphIndex_VLN::LookupDocinfo ( CSphMatch & tMatch )
 	DWORD * pFound = const_cast < DWORD * > ( FindDocinfo ( tMatch.m_iDocID ) );
 	if ( pFound )
 	{
-		int iToCalc = m_bCalcGeodist ? 1 : 0;
-
 		assert ( tMatch.m_pRowitems );
-		assert ( tMatch.m_iRowitems==m_tSchema.GetRowSize()+iToCalc );
+		assert ( tMatch.m_iRowitems==m_tSchema.GetRowSize() + ( m_bCalcGeodist ? 1 : 0 ) );
 		assert ( DOCINFO2ID(pFound)==tMatch.m_iDocID );
 		memcpy ( tMatch.m_pRowitems, DOCINFO2ATTRS(pFound), m_tSchema.GetRowSize()*sizeof(CSphRowitem) );
 

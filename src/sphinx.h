@@ -52,20 +52,10 @@
 #endif
 
 #if USE_WINDOWS
-	#define WIN32_LEAN_AND_MEAN
-	#include <windows.h>
-
-	#define strcasecmp			strcmpi
-	#define strncasecmp			_strnicmp
-	#define snprintf			_snprintf
-
-	typedef __int64				SphOffset_t;
-	#define STDOUT_FILENO		fileno(stdout)
+typedef __int64				SphOffset_t;
+#define STDOUT_FILENO		fileno(stdout)
 #else
-	typedef unsigned int		DWORD;
-	typedef unsigned short		WORD;
-	typedef unsigned char		BYTE;
-	typedef off_t				SphOffset_t;
+typedef off_t				SphOffset_t;
 #endif
 
 /////////////////////////////////////////////////////////////////////////////

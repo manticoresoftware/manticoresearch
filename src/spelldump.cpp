@@ -658,7 +658,7 @@ char CISpellAffix::ToLowerCase ( char cChar )
 
 	// dictionary conversion
 	if ( m_dCharset [(BYTE) cChar] )
-		m_dCharset [(BYTE) cChar];
+		return m_dCharset [(BYTE) cChar];
 
 	// user-defined code page conversion
 	return (char)tolower ( cChar );

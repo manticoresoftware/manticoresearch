@@ -4,6 +4,9 @@
 
 #include "sphinxstd.h"
 
+#include <locale.h>
+
+
 const int MAX_STR_LENGTH = 512;
 
 //////////////////////////////////////////////////////////////////////////
@@ -82,7 +85,7 @@ public:
 	const			CISpellDictWord * IterateNext ();
 
 private:
-	CSphVector < CISpellDictWord > m_dEntries;
+	CSphVector < CISpellDictWord, 131072 > m_dEntries;
 	int				m_iIterator;
 };
 
@@ -186,6 +189,16 @@ private:
 	CSphString	m_sCondition;
 	CSphString	m_sStrip;
 	CSphString	m_sAppend;
+
+	int			m_iWordLen;
+	int			m_iCondLen;
+	int			m_iStripLen;
+	int			m_iAppendLen;
+
+	bool		CheckSuffix ( const CSphString & sWord ) const;
+	bool		CheckPrefix ( const CSphString & sWord ) const;
+	bool		StripAppendSuffix ( CSphString & sWord ) const;
+	bool		StripAppendPrefix ( CSphString & sWord ) const;
 };
 
 
@@ -195,7 +208,11 @@ CISpellAffixRule::CISpellAffixRule ( RuleType_e eRule, char cFlag, char * szCond
 	, m_sCondition	( szCondition )
 	, m_sStrip		( szStrip )
 	, m_sAppend		( szAppend )
+	, m_iWordLen	( 0 )
 {
+	m_iCondLen	= szCondition ? strlen ( szCondition ) : 0;
+	m_iStripLen = szStrip ? strlen ( szStrip ) : 0;
+	m_iAppendLen = szAppend ? strlen ( szAppend ) : 0;
 }
 
 
@@ -207,67 +224,143 @@ bool CISpellAffixRule::Apply ( CSphString & sWord )
 	if ( sWord.IsEmpty () )
 		return false;
 
-	bool bFits = true;
+	m_iWordLen = strlen ( sWord.cstr () );
 
+	bool bDotCond = m_sCondition == ".";
+	
 	if ( m_eRule == RULE_SUFFIXES )
 	{
-		int iWordLen = strlen ( sWord.cstr () );
-		if ( m_sCondition != "." )
-		{
-			int iCondI = strlen ( m_sCondition.cstr () ) - 1;
-			for ( int i = iWordLen - 1; iCondI >= 0 && i >= 0 && bFits; --i )
-			{
-				if ( m_sCondition.cstr () [iCondI] != ']' )
-				{
-					if ( m_sCondition.cstr () [iCondI] != sWord.cstr () [i] )
-						bFits = false;
-				}
-				else
-				{
-					int iRangeStart = -1;
-					
-					for ( int j = iCondI; j >=0 && iRangeStart == -1; --j )
-						if ( m_sCondition.cstr () [j] == '[' )
-							iRangeStart = j;
-
-					if ( iRangeStart == -1 )
-						bFits = false;
-					else
-					{
-						if ( !IsInSet ( sWord.cstr () [i], m_sCondition.SubString ( iRangeStart + 1, iCondI - iRangeStart - 1 ).cstr () ) )
-							bFits = false;
-						iCondI = iRangeStart - 1;
-					}
-				}
-			}
-		}
-
-		if ( !bFits )
+		if ( ! bDotCond && ! CheckSuffix ( sWord ) )
 			return false;
 
-		char szTmp [MAX_STR_LENGTH];
-		int nCopy = iWordLen;
-
-		if ( !m_sStrip.IsEmpty () )
-		{
-			const char * Pos = strstr ( sWord.cstr (), m_sStrip.cstr () );
-			nCopy = Pos - sWord.cstr ();
-			if ( nCopy != iWordLen - (int)strlen ( m_sStrip.cstr () ) )
-				return false;
-		}
-
-		strncpy ( szTmp, sWord.cstr (), nCopy );
-		szTmp [nCopy] = '\0';
-
-		if ( !m_sAppend.IsEmpty () )
-			strcat ( szTmp, m_sAppend.cstr () );
-		
-		sWord = szTmp;
+		StripAppendSuffix ( sWord );
 	}
 	else
 	{
-		// TODO
+		if ( ! bDotCond && ! CheckPrefix ( sWord ) )
+			return false;
+
+		StripAppendPrefix ( sWord );
 	}
+
+	return true;
+}
+
+
+bool CISpellAffixRule::CheckSuffix ( const CSphString & sWord ) const
+{
+	int iCondI = m_iCondLen - 1;
+	for ( int i = m_iWordLen - 1; iCondI >= 0 && i >= 0; --i )
+	{
+		if ( m_sCondition.cstr () [iCondI] != ']' )
+		{
+			if ( m_sCondition.cstr () [iCondI] != sWord.cstr () [i] )
+				return false;
+
+			--iCondI;
+		}
+		else
+		{
+			int iRangeStart = -1;
+
+			for ( int j = iCondI; j >=0 && iRangeStart == -1; --j )
+				if ( m_sCondition.cstr () [j] == '[' )
+					iRangeStart = j;
+
+			if ( iRangeStart == -1 )
+				return false;
+			else
+			{
+				if ( !IsInSet ( sWord.cstr () [i], m_sCondition.SubString ( iRangeStart + 1, iCondI - iRangeStart - 1 ).cstr () ) )
+					return false;
+
+				iCondI = iRangeStart - 1;
+			}
+		}
+	}
+
+	return true;
+}
+
+
+bool CISpellAffixRule::StripAppendSuffix ( CSphString & sWord ) const
+{
+	static char szTmp [ MAX_STR_LENGTH];
+
+	int nCopy = m_iWordLen;
+
+	if ( !m_sStrip.IsEmpty () )
+	{
+		const char * Pos = strstr ( sWord.cstr (), m_sStrip.cstr () );
+		nCopy = Pos - sWord.cstr ();
+		if ( nCopy != m_iWordLen - m_iStripLen )
+			return false;
+	}
+
+	strncpy ( szTmp, sWord.cstr (), nCopy );
+	szTmp [nCopy] = '\0';
+
+	if ( !m_sAppend.IsEmpty () )
+		strcat ( szTmp, m_sAppend.cstr () );
+
+	sWord = szTmp;
+
+	return true;
+}
+
+
+bool CISpellAffixRule::CheckPrefix ( const CSphString & sWord ) const
+{
+	int iCondI = 0;
+	for ( int i = 0; iCondI < m_iCondLen && i < m_iWordLen; ++i )
+	{
+		if ( m_sCondition.cstr () [iCondI] != '[' )
+		{
+			if ( m_sCondition.cstr () [iCondI] != sWord.cstr () [i] )
+				return false;
+
+			++iCondI;
+		}
+		else
+		{
+			int iRangeEnd = -1;
+
+			for ( int j = iCondI; j < m_iCondLen && iRangeEnd == -1; ++j )
+				if ( m_sCondition.cstr () [j] == ']' )
+					iRangeEnd = j;
+
+			if ( iRangeEnd == -1 )
+				return false;
+			else
+			{
+				if ( !IsInSet ( sWord.cstr () [i], m_sCondition.SubString ( iCondI + 1, iRangeEnd - iCondI - 1 ).cstr () ) )
+					return false;
+			}
+		}
+	}
+
+	return true;
+}
+
+
+bool CISpellAffixRule::StripAppendPrefix ( CSphString & sWord ) const
+{
+	static char szTmp [ MAX_STR_LENGTH];
+
+	if ( !m_sStrip.IsEmpty () )
+	{
+		const char * Pos = strstr ( sWord.cstr (), m_sStrip.cstr () );
+		if ( Pos != sWord.cstr () )
+			return false;
+	}
+
+	if ( !m_sAppend.IsEmpty () )
+		strcpy ( szTmp, m_sAppend.cstr () );
+
+	strncpy ( szTmp + m_iAppendLen, sWord.cstr () + m_iStripLen, m_iWordLen - m_iStripLen );
+	szTmp [m_iWordLen - m_iStripLen + m_iAppendLen] = '\0';
+
+	sWord = szTmp;
 
 	return true;
 }
@@ -283,6 +376,8 @@ char CISpellAffixRule::Flag () const
 class CISpellAffix
 {
 public:
+				CISpellAffix ( const char * szLocale );
+
 	bool		Load ( const char * szFilename );
 	CISpellAffixRule * GetRule ( int iRule );
 	int			GetNumRules () const;
@@ -291,19 +386,22 @@ public:
 private:
 	CSphVector < CISpellAffixRule > m_dRules;
 
-	struct CISpellCharPair
-	{
-		char	m_cCharLwr;
-		char	m_cCharUpr;
-	};
-
-	CSphVector < CISpellCharPair >	m_dCharset;
+	char		m_dCharset [256];
+	bool		m_bFirstCaseConv;
+	CSphString	m_sLocale;
 
 	bool		AddToCharset ( char * szRangeL, char * szRangeU );
 	void		AddCharPair ( char cCharL, char cCharU );
-	void		Strip ( char * szText ) const;
-	char		ToLowerCase ( char cChar ) const;
+	void		Strip ( char * szText );
+	char		ToLowerCase ( char cChar );
+	void		LoadLocale ();
 };
+
+
+CISpellAffix::CISpellAffix ( const char * szLocale )
+	: m_sLocale ( szLocale )
+{
+}
 
 
 bool CISpellAffix::Load (  const char * szFilename )
@@ -312,15 +410,17 @@ bool CISpellAffix::Load (  const char * szFilename )
 		return false;
 
 	m_dRules.Reset ();
+	memset ( m_dCharset, 0, sizeof ( m_dCharset ) );
+	m_bFirstCaseConv = true;
 
 	FILE * pFile = fopen ( szFilename, "rt" );
 	if ( !pFile )
 		return false;
 
-	char szBuffer [MAX_STR_LENGTH];
-	char szCondition  [MAX_STR_LENGTH];
-	char szStrip  [MAX_STR_LENGTH];
-	char szAppend  [MAX_STR_LENGTH];
+	char szBuffer	 [MAX_STR_LENGTH];
+	char szCondition [MAX_STR_LENGTH];
+	char szStrip	 [MAX_STR_LENGTH];
+	char szAppend    [MAX_STR_LENGTH];
 
 	bool bOk = true;
 	RuleType_e eRule = RULE_NONE;
@@ -461,7 +561,11 @@ int CISpellAffix::GetNumRules () const
 
 bool CISpellAffix::HaveCharset () const
 {
-	return m_dCharset.GetLength () > 0;
+	for ( int i = 0; i < 256; ++i )
+		if ( m_dCharset [i] )
+			return true;
+
+	return false;
 }
 
 
@@ -516,33 +620,11 @@ bool CISpellAffix::AddToCharset ( char * szRangeL, char * szRangeU )
 
 void CISpellAffix::AddCharPair ( char cCharL, char cCharU )
 {
-	bool bFound = false;
-
-	for ( int i = 0; i < m_dCharset.GetLength () && !bFound; ++i )
-		if ( m_dCharset [i].m_cCharLwr == cCharL )
-		{
-			m_dCharset [i].m_cCharUpr = cCharU;
-			bFound = true;
-		}
-		else
-			if ( m_dCharset [i].m_cCharUpr == cCharU )
-			{
-				m_dCharset [i].m_cCharLwr = cCharL;
-				bFound = true;
-			}
-
-
-	if ( !bFound )
-	{
-		CISpellCharPair CharPair;
-		CharPair.m_cCharLwr = cCharL;
-		CharPair.m_cCharUpr = cCharU;
-		m_dCharset.Add ( CharPair );
-	}
+	m_dCharset [(BYTE)cCharL] = cCharU;
 }
 
 
-void CISpellAffix::Strip ( char * szText ) const
+void CISpellAffix::Strip ( char * szText )
 {
 	char * szIterator1 = szText;
 	char * szIterator2 = szText;
@@ -566,41 +648,54 @@ void CISpellAffix::Strip ( char * szText ) const
 }
 
 
-char CISpellAffix::ToLowerCase ( char cChar ) const
+char CISpellAffix::ToLowerCase ( char cChar )
 {
-	// FIXME, !COMMIT
-	// use a user-defined char set in here
+	if ( m_bFirstCaseConv )
+	{
+		LoadLocale ();
+		m_bFirstCaseConv = false;
+	}
 
-	// user dictionary conversion
-	ARRAY_FOREACH ( i, m_dCharset )
-		if ( m_dCharset [i].m_cCharUpr == cChar )
-			return m_dCharset [i].m_cCharLwr;
+	// dictionary conversion
+	if ( m_dCharset [(BYTE) cChar] )
+		m_dCharset [(BYTE) cChar];
 
-	// temporary russian conversion
-	static char Upper [] = "ÀÁÂÃÄÅ¨ÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞß";
-	static char Lower [] = "àáâãäå¸æçèéêëìíîïðñòóôõö÷øùúûüýþÿ";
+	// user-defined code page conversion
+	return (char)tolower ( cChar );
+}
 
-	for ( unsigned int i = 0; i < strlen ( Upper); ++i )
-		if ( cChar == Upper [i] )
-			return Lower [i];
 
-	char cResult = (char)tolower ( cChar );
-	if ( cResult != cChar )
-		return cResult;
-
-	return cChar;
+void CISpellAffix::LoadLocale ()
+{
+	if ( HaveCharset () )
+		printf ( "Using dictionary-defined character set\n" );
+	else
+		if ( ! m_sLocale.IsEmpty () )
+		{
+			char szLocaleBuffer [MAX_STR_LENGTH];
+			sprintf ( szLocaleBuffer, ".%s", m_sLocale.cstr () );
+			char * szLocale = setlocale( LC_ALL, szLocaleBuffer );
+			if ( szLocale )
+				printf ( "Using user-defined character set: '%s'\n", szLocale );
+			else
+				printf ( "Warning: could not load specified code page\n" );
+		}
+		else
+			printf ( "Warning: no character set specified\n" );
 }
 
 //////////////////////////////////////////////////////////////////////////
 
 int main ( int argc, char ** argv )
 {
-	CSphString sDict, sAffix, sResult = "result.txt";
+	CSphString sDict, sAffix, sLocale, sResult = "result.txt";
 
 	printf ( "spelldump, an ispell dictionary dumper\n\n" );
 
 	switch ( argc )
 	{
+		case 5:
+			sLocale = argv [4];
 		case 4:
 			sResult = argv [3];
 		case 3:
@@ -608,23 +703,21 @@ int main ( int argc, char ** argv )
 			sAffix = argv [2];
 			break;
 		default:
-			printf ( "Usage: spelldump <dictionary> <affix> [result]\n" );
+			printf ( "Usage: spelldump <dictionary> <affix> [result] [codepage_number]\n" );
 			if ( argc==1 )
 				exit ( 0 );
 			break;
 	}
 
-	printf ( "Loading dictionary... " );
+	printf ( "Loading dictionary...\n" );
 	CISpellDict Dict;
 	if ( !Dict.Load ( sDict.cstr () ) )
-		sphDie ( "\nError loading dictionary file '%s'\n", sDict.IsEmpty () ? "" : sDict.cstr () );
-	printf ( "ok\n" );
+		sphDie ( "Error loading dictionary file '%s'\n", sDict.IsEmpty () ? "" : sDict.cstr () );
 
-	printf ( "Loading affix file... " );
-	CISpellAffix Affix;
+	printf ( "Loading affix file...\n" );
+	CISpellAffix Affix ( sLocale.cstr () );
 	if ( !Affix.Load ( sAffix.cstr () ) )
-		sphDie ( "\nError loading affix file '%s'\n", sAffix.IsEmpty () ? "" : sAffix.cstr () );
-	printf ( "ok\n" );
+		sphDie ( "Error loading affix file '%s'\n", sAffix.IsEmpty () ? "" : sAffix.cstr () );
 
 	if ( sResult.IsEmpty () )
 		sphDie ( "No result file specified\n" );
@@ -632,9 +725,6 @@ int main ( int argc, char ** argv )
 	FILE * pResultFile = fopen ( sResult.cstr (), "wt" );
 	if ( !pResultFile )
 		sphDie ( "Unable to open '%s' for writing\n", sResult.cstr () );
-
-	if ( Affix.HaveCharset () )
-		printf ( "Using dictionary-defined character set\n" );
 
 	Dict.IterateStart ();
 	const CISpellDict::CISpellDictWord * pWord = NULL;
@@ -658,7 +748,10 @@ int main ( int argc, char ** argv )
 				}
 			}
 
-		printf ( "\rDictionary words processed: %d", ++nDone );
+		if ( nDone % 5 == 0 )
+			printf ( "\rDictionary words processed: %d", nDone );
+
+		++nDone;
 	}
 
 	fclose ( pResultFile );

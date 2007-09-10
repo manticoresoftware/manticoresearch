@@ -233,14 +233,22 @@ bool CISpellAffixRule::Apply ( CSphString & sWord )
 		if ( ! bDotCond && ! CheckSuffix ( sWord ) )
 			return false;
 
-		StripAppendSuffix ( sWord );
+		if ( ! StripAppendSuffix ( sWord ) )
+		{
+			printf ( "Warning: can't append suffix to '%s'. Wrong flags?\n", sWord.cstr () );
+			return false;
+		}
 	}
 	else
 	{
 		if ( ! bDotCond && ! CheckPrefix ( sWord ) )
 			return false;
 
-		StripAppendPrefix ( sWord );
+		if ( ! StripAppendPrefix ( sWord ) )
+		{
+			printf ( "Warning: can't append prefix to '%s'. Wrong flags?\n", sWord.cstr () );
+			return false;
+		}
 	}
 
 	return true;
@@ -287,18 +295,17 @@ bool CISpellAffixRule::StripAppendSuffix ( CSphString & sWord ) const
 {
 	static char szTmp [ MAX_STR_LENGTH];
 
-	int nCopy = m_iWordLen;
-
 	if ( !m_sStrip.IsEmpty () )
 	{
-		const char * Pos = strstr ( sWord.cstr (), m_sStrip.cstr () );
-		nCopy = Pos - sWord.cstr ();
-		if ( nCopy != m_iWordLen - m_iStripLen )
+		if ( m_iWordLen < m_iStripLen )
+			return false;
+
+		if ( strncmp ( sWord.cstr () + m_iWordLen - m_iStripLen, m_sStrip.cstr (), m_iStripLen ) )
 			return false;
 	}
 
-	strncpy ( szTmp, sWord.cstr (), nCopy );
-	szTmp [nCopy] = '\0';
+	strncpy ( szTmp, sWord.cstr (), m_iWordLen - m_iStripLen );
+	szTmp [m_iWordLen - m_iStripLen] = '\0';
 
 	if ( !m_sAppend.IsEmpty () )
 		strcat ( szTmp, m_sAppend.cstr () );
@@ -734,6 +741,7 @@ int main ( int argc, char ** argv )
 		if ( pWord->m_sFlags.IsEmpty () )
 			fprintf ( pResultFile, "%s > %s\n", pWord->m_sWord.cstr (), pWord->m_sWord.cstr () );
 		else
+		{
 			for ( unsigned int i = 0; i < strlen ( pWord->m_sFlags.cstr () ); ++i )
 			{
 				for ( int j = 0; j < Affix.GetNumRules (); ++j )
@@ -747,6 +755,7 @@ int main ( int argc, char ** argv )
 					}
 				}
 			}
+		}
 
 		if ( nDone % 5 == 0 )
 			printf ( "\rDictionary words processed: %d", nDone );

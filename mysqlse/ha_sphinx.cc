@@ -1537,7 +1537,7 @@ int ha_sphinx::ConnectToSearchd ()
 
 	if ( ::recv ( iSocket, (char *)&version, sizeof(version), 0 )!=sizeof(version) )
 	{
-		::close ( iSocket );
+		closesocket ( iSocket );
 		my_snprintf ( sError, sizeof(sError), "failed to receive searchd version (host=%s, port=%d)",
 			m_pShare->m_sHost, m_pShare->m_iPort );
 		my_error ( ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), sError );
@@ -1546,7 +1546,7 @@ int ha_sphinx::ConnectToSearchd ()
 
 	if ( ::send ( iSocket, (char*)&uClientVersion, sizeof(uClientVersion), 0 )!=sizeof(uClientVersion) )
 	{
-		::close ( iSocket );
+		closesocket ( iSocket );
 		my_snprintf ( sError, sizeof(sError), "failed to send client version (host=%s, port=%d)",
 			m_pShare->m_sHost, m_pShare->m_iPort );
 		my_error ( ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), sError );
@@ -1844,7 +1844,7 @@ int ha_sphinx::index_read ( uchar * buf, const uchar * key, uint key_len, enum h
 		iRecvLength += iRecv;
 	}
 
-	::close ( iSocket );
+	closesocket ( iSocket );
 	iSocket = -1;
 
 	if ( iRecvLength!=(int)uRespLength )

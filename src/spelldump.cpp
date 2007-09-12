@@ -80,6 +80,22 @@ public:
 		CSphString	m_sFlags;
 	};
 
+	// string comparator
+	struct DictWordLess
+	{
+		inline bool operator () ( const CISpellDictWord & a, const CISpellDictWord & b )
+		{
+			if ( a.m_sWord.IsEmpty () )
+				return b.m_sWord.IsEmpty () ? false : true;
+
+			if ( b.m_sWord.IsEmpty () )
+				return false;
+
+			return strcmp ( a.m_sWord.cstr (), b.m_sWord.cstr () ) == -1;
+		}
+	};
+
+
 	bool			Load ( const char * szFilename );
 	void			IterateStart ();
 	const			CISpellDictWord * IterateNext ();
@@ -146,6 +162,10 @@ bool CISpellDict::Load ( const char * szFilename )
 	}
 
 	fclose ( pFile );
+
+	if ( bOk )
+		m_dEntries.Sort ( DictWordLess () );
+
 	return bOk;
 }
 
@@ -738,9 +758,9 @@ int main ( int argc, char ** argv )
 	int nDone = 0;
 	while ( ( pWord = Dict.IterateNext () ) != NULL )
 	{
-		if ( pWord->m_sFlags.IsEmpty () )
-			fprintf ( pResultFile, "%s > %s\n", pWord->m_sWord.cstr (), pWord->m_sWord.cstr () );
-		else
+		fprintf ( pResultFile, "%s > %s\n", pWord->m_sWord.cstr (), pWord->m_sWord.cstr () );
+
+		if ( ! pWord->m_sFlags.IsEmpty () )
 		{
 			for ( unsigned int i = 0; i < strlen ( pWord->m_sFlags.cstr () ); ++i )
 			{

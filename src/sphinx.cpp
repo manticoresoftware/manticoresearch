@@ -8247,7 +8247,8 @@ static inline bool sphMatchEarlyReject ( const CSphMatch & tMatch, const CSphQue
 					break;
 			}
 
-			return ( !( tFilter.m_bExclude ^ bOK ) );
+			if ( !( tFilter.m_bExclude ^ bOK ) )
+				return true;
 
 		} else
 		{

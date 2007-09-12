@@ -154,6 +154,12 @@ void sphDebugDelete ( void * pPtr, bool bArray )
 }
 
 
+int	sphAllocBytes ()
+{
+	return g_iCurBytes;
+}
+
+
 int sphAllocsCount ()
 {
 	return g_iCurAllocs;

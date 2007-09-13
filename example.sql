@@ -10,6 +10,7 @@ CREATE TABLE test.documents
 	content		TEXT NOT NULL
 );
 
+
 REPLACE INTO test.documents ( id, group_id, group_id2, date_added, title, content ) VALUES
 	( 1, 1, 5, NOW(), 'test one', 'this is my test document number one' ),
 	( 2, 1, 6, NOW(), 'test two', 'this is my test document number two' ),

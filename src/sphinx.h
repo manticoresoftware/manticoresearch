@@ -291,7 +291,7 @@ protected:
 	int								m_iMinWordLen;				///< minimal word length, in codepoints
 	int								m_iLastTokenLen;			///< last token length, in codepoints
 
-	CSphVector<CSphSynonym,8>		m_dSynonyms;				///< active synonyms
+	CSphVector<CSphSynonym>			m_dSynonyms;				///< active synonyms
 };
 
 /// create SBCS tokenizer
@@ -568,7 +568,7 @@ class CSphQuery;
 struct CSphSchema
 {
 	CSphString						m_sName;		///< my human-readable name
-	CSphVector<CSphColumnInfo,8>	m_dFields;		///< my fulltext-searchable fields
+	CSphVector<CSphColumnInfo>		m_dFields;		///< my fulltext-searchable fields
 
 public:
 
@@ -617,8 +617,8 @@ public:
 	void					BuildResultSchema ( const CSphQuery * pQuery );
 
 protected:
-	CSphVector<CSphColumnInfo,8>	m_dAttrs;		///< all my attributes
-	CSphVector<int,8>				m_dRowUsed;		///< row map (amount of used bits in each rowitem)
+	CSphVector<CSphColumnInfo>		m_dAttrs;		///< all my attributes
+	CSphVector<int>					m_dRowUsed;		///< row map (amount of used bits in each rowitem)
 };
 
 
@@ -629,7 +629,7 @@ class CSphSource
 public:
 	CSphVector<CSphWordHit>				m_dHits;	///< current document split into words
 	CSphDocInfo							m_tDocInfo;	///< current document info
-	CSphVector<CSphString,16>			m_dStrAttrs;///< current document string attrs
+	CSphVector<CSphString>				m_dStrAttrs;///< current document string attrs
 
 public:
 	/// ctor
@@ -741,10 +741,10 @@ struct CSphSourceParams_SQL
 	CSphString						m_sQueryRange;
 	int								m_iRangeStep;
 
-	CSphVector<CSphString,4>		m_dQueryPre;
-	CSphVector<CSphString,4>		m_dQueryPost;
-	CSphVector<CSphString,4>		m_dQueryPostIndex;
-	CSphVector<CSphColumnInfo,4>	m_dAttrs;
+	CSphVector<CSphString>			m_dQueryPre;
+	CSphVector<CSphString>			m_dQueryPost;
+	CSphVector<CSphString>			m_dQueryPostIndex;
+	CSphVector<CSphColumnInfo>		m_dAttrs;
 
 	int								m_iRangedThrottle;
 
@@ -1063,7 +1063,7 @@ public:
 		DWORD			m_uMaxValue;	///< range max
 		float			m_fMaxValue;	///< range max
 	};
-	CSphVector<DWORD,8>	m_dValues;		///< integer values set
+	CSphVector<DWORD>	m_dValues;		///< integer values set
 
 public:
 	bool				m_bMva;			///< whether this filter is against multi-valued attribute
@@ -1101,7 +1101,7 @@ public:
 	SphDocID_t		m_iMinID;		///< min ID to match, 0 by default
 	SphDocID_t		m_iMaxID;		///< max ID to match, UINT_MAX by default
 
-	CSphVector<CSphFilter,8>	m_dFilters;	///< filters
+	CSphVector<CSphFilter>	m_dFilters;	///< filters
 
 	CSphString		m_sGroupBy;		///< group-by attribute name
 	ESphGroupBy		m_eGroupFunc;	///< function to pre-process group-by attribute value with
@@ -1183,7 +1183,7 @@ public:
 
 struct CSphAttrUpdate_t
 {
-	CSphVector<CSphColumnInfo,8>	m_dAttrs;		///< update schema (ie. what attrs to update)
+	CSphVector<CSphColumnInfo>		m_dAttrs;		///< update schema (ie. what attrs to update)
 	int								m_iUpdates;		///< updates count
 	DWORD *							m_pUpdates;		///< updates data
 
@@ -1391,7 +1391,7 @@ public:
 
 public:
 	/// build index by indexing given sources
-	virtual int					Build ( CSphDict * dict, const CSphVector < CSphSource * > & dSources, int iMemoryLimit, ESphDocinfo eDocinfo ) = 0;
+	virtual int					Build ( CSphDict * dict, const CSphVector<CSphSource*> & dSources, int iMemoryLimit, ESphDocinfo eDocinfo ) = 0;
 
 	/// build index by mering current index with given index
 	virtual bool				Merge ( CSphIndex * pSource, CSphPurgeData & tPurgeData ) = 0;

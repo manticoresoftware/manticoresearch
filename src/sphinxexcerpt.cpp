@@ -75,10 +75,9 @@ public:
 	};
 
 protected:
-	CSphVector<int,8192>	m_dCodes;		///< original source text codepoints
-
-	CSphVector<Token_t,1024>m_dTokens;		///< source text tokens
-	CSphVector<Token_t,16>	m_dWords;		///< query words tokens
+	CSphVector<int>			m_dCodes;		///< original source text codepoints
+	CSphVector<Token_t>		m_dTokens;		///< source text tokens
+	CSphVector<Token_t>		m_dWords;		///< query words tokens
 
 	CSphDict *				m_pDict;
 	BYTE					m_sAccum [ 3*SPH_MAX_WORD_LEN+3 ];
@@ -87,24 +86,24 @@ protected:
 
 	Token_t					m_tTok;			///< currently decoded token
 
-	CSphVector<BYTE,16384>	m_dResult;		///< result holder
+	CSphVector<BYTE>		m_dResult;		///< result holder
 	int						m_iResultLen;	///< result codepoints count
 
 	CSphLowercaser			m_tLC;
 
-	CSphVector<Passage_t,256>	m_dPassages;	///< extracted passages
+	CSphVector<Passage_t>	m_dPassages;	///< extracted passages
 
 	bool					m_bUtf8;
 
 protected:
-	template<int L> void	DecodeText ( const char * sText, CSphVector<Token_t,L> & dBuf );
-	template<int L> void	SubmitCodepoint ( CSphVector<Token_t,L> & dBuf, int iCode );
+	void					DecodeText ( const char * sText, CSphVector<Token_t> & dBuf );
+	void					SubmitCodepoint ( CSphVector<Token_t> & dBuf, int iCode );
 	void					AccumulateCodepoint ( int iCode );
 
 	bool					TokensMatch ( const Token_t & a, const Token_t & b);
 	int						TokenLen ( int iPos, int bRemoveSpaces );
 
-	void					CalcPassageWeight ( const CSphVector<int,16> & dPassage, Passage_t & tPass, int iMaxWords );
+	void					CalcPassageWeight ( const CSphVector<int> & dPassage, Passage_t & tPass, int iMaxWords );
 	bool					ExtractPassages ( const ExcerptQuery_t & q );
 
 	void					HighlightAll ( const ExcerptQuery_t & q );
@@ -155,6 +154,8 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict, 
 	m_tLC.SetRemap ( pTokenizer->GetLowercaser() );
 
 	// decode everything
+	m_dCodes.Reserve ( 8192 );
+	m_dTokens.Reserve ( 1024 );
 	DecodeText ( q.m_sSource.cstr(), m_dTokens );
 	int iSourceCodes = m_dCodes.GetLength ();
 
@@ -174,7 +175,8 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict, 
 		m_dWords[i].m_iWeight = m_dWords[i].m_iLength; // FIXME! should obtain freqs from dict
 
 	// reset result
-	m_dResult.Reset ();
+	m_dResult.Reserve ( 16384 );
+	m_dResult.Resize ( 0 );
 	m_iResultLen = 0;
 
 	// calc matching word masks
@@ -255,7 +257,7 @@ void ExcerptGen_c::HighlightStart ( const ExcerptQuery_t & q )
 }
 
 
-template<int L> void ExcerptGen_c::DecodeText ( const char * sText, CSphVector<Token_t,L> & dBuf )
+void ExcerptGen_c::DecodeText ( const char * sText, CSphVector<Token_t> & dBuf )
 {
 	BYTE * pCur = (BYTE*) sText;
 
@@ -360,7 +362,7 @@ void ExcerptGen_c::AccumulateCodepoint ( int iCode )
 }
 
 
-template<int L> void ExcerptGen_c::SubmitCodepoint ( CSphVector<Token_t,L> & dBuf, int iCode )
+void ExcerptGen_c::SubmitCodepoint ( CSphVector<Token_t> & dBuf, int iCode )
 {
 	// find out its type
 	Token_e eType = TOK_NONE;
@@ -491,7 +493,7 @@ void ExcerptGen_c::ResultEmit ( const Token_t & sTok )
 
 /////////////////////////////////////////////////////////////////////////////
 
-void ExcerptGen_c::CalcPassageWeight ( const CSphVector<int,16> & dPassage, Passage_t & tPass, int iMaxWords )
+void ExcerptGen_c::CalcPassageWeight ( const CSphVector<int> & dPassage, Passage_t & tPass, int iMaxWords )
 {
 	DWORD uLast = 0;
 	int iLCS = 1;
@@ -545,11 +547,14 @@ void ExcerptGen_c::CalcPassageWeight ( const CSphVector<int,16> & dPassage, Pass
 bool ExcerptGen_c::ExtractPassages ( const ExcerptQuery_t & q )
 {
 	// my current passage
-	CSphVector<int,16> dPass;
+	CSphVector<int> dPass;
 
 	// initialize
 	Passage_t tPass;
 	tPass.Reset ();
+
+	m_dPassages.Reserve ( 256 );
+	m_dPassages.Resize ( 0 );
 
 	int iMaxWords = 2*q.m_iAround+1;
 
@@ -667,7 +672,7 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & q )
 	// select the ones to show
 	///////////////////////////
 
-	CSphVector<Passage_t,32> dShow;
+	CSphVector<Passage_t> dShow;
 	int iLeft = q.m_iLimit;
 
 	while ( iLeft>0 && m_dPassages.GetLength() )

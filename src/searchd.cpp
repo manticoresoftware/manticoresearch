@@ -99,7 +99,7 @@ static bool				g_bService		= false;
 static bool				g_bServiceStop	= false;
 #endif
 
-static CSphVector<CSphString,8>	g_dArgs;
+static CSphVector<CSphString>	g_dArgs;
 
 static bool				g_bHeadDaemon	= false;
 static bool				g_bLogStdout	= true;
@@ -128,8 +128,7 @@ enum
 	SPH_PIPE_SAVED_ATTRS,
 	SPH_PIPE_PREREAD
 };
-
-static CSphVector<int,8>	g_dPipes;		// currently open read-pipes to children processes
+static CSphVector<int>		g_dPipes;		// currently open read-pipes to children processes
 
 static CSphVector<DWORD>	g_dMvaStorage;	// per-query (!) pool to store MVAs received from remote agents
 
@@ -438,7 +437,7 @@ class SearchFailuresLog_c : public SearchFailuresLog_i
 protected:
 	CSphString						m_sIndex;
 	CSphString						m_sPrefix;
-	CSphVector<SearchFailure_t,8>	m_dLog;
+	CSphVector<SearchFailure_t>		m_dLog;
 
 public:
 	void SetIndex ( const char * sIndex )
@@ -543,7 +542,7 @@ public:
 class SearchFailuresLogset_c : public SearchFailuresLog_i
 {
 protected:
-	CSphVector<SearchFailuresLog_c,8>	m_dLogs;
+	CSphVector<SearchFailuresLog_c>		m_dLogs;
 	int									m_iStart;
 	int									m_iEnd;
 
@@ -915,7 +914,7 @@ public:
 	float			GetFloat () { return GetT<float> (); }
 	CSphString		GetString ();
 	int				GetDwords ( DWORD ** pBuffer, int iMax, const char * sErrorTemplate );
-	bool			GetDwords ( CSphVector<DWORD,8> & dBuffer, int iMax, const char * sErrorTemplate );
+	bool			GetDwords ( CSphVector<DWORD> & dBuffer, int iMax, const char * sErrorTemplate );
 	bool			GetError () { return m_bError; }
 
 	virtual void	SendErrorReply ( const char *, ... ) = 0;
@@ -1136,7 +1135,7 @@ int InputBuffer_c::GetDwords ( DWORD ** ppBuffer, int iMax, const char * sErrorT
 }
 
 
-bool InputBuffer_c::GetDwords ( CSphVector<DWORD,8> & dBuffer, int iMax, const char * sErrorTemplate )
+bool InputBuffer_c::GetDwords ( CSphVector<DWORD> & dBuffer, int iMax, const char * sErrorTemplate )
 {
 	int iCount = GetInt ();
 	if ( iCount<0 || iCount>iMax )
@@ -1324,8 +1323,8 @@ public:
 /// distributed index
 struct DistributedIndex_t
 {
-	CSphVector<Agent_t,8>		m_dAgents;					///< remote agents
-	CSphVector<CSphString,8>	m_dLocal;					///< local indexes
+	CSphVector<Agent_t>			m_dAgents;					///< remote agents
+	CSphVector<CSphString>		m_dLocal;					///< local indexes
 	int							m_iAgentConnectTimeout;		///< in msec
 	int							m_iAgentQueryTimeout;		///< in msec
 
@@ -1353,7 +1352,7 @@ struct IReplyParser_t
 };
 
 
-void ConnectToRemoteAgents ( CSphVector<Agent_t,8> & dAgents, bool bRetryOnly, SearchFailuresLog_i & dFailures )
+void ConnectToRemoteAgents ( CSphVector<Agent_t> & dAgents, bool bRetryOnly, SearchFailuresLog_i & dFailures )
 {
 	ARRAY_FOREACH ( iAgent, dAgents )
 	{
@@ -1406,7 +1405,7 @@ void ConnectToRemoteAgents ( CSphVector<Agent_t,8> & dAgents, bool bRetryOnly, S
 }
 
 
-int QueryRemoteAgents ( CSphVector<Agent_t,8> & dAgents, int iTimeout, const IRequestBuilder_t & tBuilder, SearchFailuresLog_i & dFailures )
+int QueryRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, const IRequestBuilder_t & tBuilder, SearchFailuresLog_i & dFailures )
 {
 	int iAgents = 0;
 	assert ( iTimeout>=0 );
@@ -1514,7 +1513,7 @@ int QueryRemoteAgents ( CSphVector<Agent_t,8> & dAgents, int iTimeout, const IRe
 }
 
 
-int WaitForRemoteAgents ( CSphVector<Agent_t,8> & dAgents, int iTimeout,
+int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout,
 	IReplyParser_t & tParser, SearchFailuresLogset_c & dFailuresSet )
 {
 	assert ( iTimeout>=0 );
@@ -1721,7 +1720,7 @@ inline bool operator < ( const CSphMatch & a, const CSphMatch & b )
 
 struct SearchRequestBuilder_t : public IRequestBuilder_t
 {
-						SearchRequestBuilder_t ( const CSphVector<CSphQuery,8> & dQueries, int iStart, int iEnd ) : m_dQueries ( dQueries ), m_iStart ( iStart ), m_iEnd ( iEnd ) {}
+						SearchRequestBuilder_t ( const CSphVector<CSphQuery> & dQueries, int iStart, int iEnd ) : m_dQueries ( dQueries ), m_iStart ( iStart ), m_iEnd ( iEnd ) {}
 	virtual void		BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut ) const;
 
 protected:
@@ -1729,7 +1728,7 @@ protected:
 	void				SendQuery ( const char * sIndexes, NetOutputBuffer_c & tOut, const CSphQuery & q ) const;
 
 protected:
-	const CSphVector<CSphQuery,8> &		m_dQueries;
+	const CSphVector<CSphQuery> &		m_dQueries;
 	int									m_iStart;
 	int									m_iEnd;
 };
@@ -1987,7 +1986,7 @@ bool MinimizeSchema ( CSphSchema & tDst, const CSphSchema & tSrc )
 	}
 
 	// check for equality, and remove all dst attributes that are not present in src
-	CSphVector<CSphColumnInfo,8> dDst;
+	CSphVector<CSphColumnInfo> dDst;
 	for ( int i=0; i<tDst.GetAttrsCount(); i++ )
 		dDst.Add ( tDst.GetAttr(i) );
 
@@ -2074,7 +2073,7 @@ bool FixupQuery ( CSphQuery * pQuery, const CSphSchema * pSchema, const char * s
 }
 
 
-void ParseIndexList ( const CSphString & sIndexes, CSphVector<CSphString,8> & dOut )
+void ParseIndexList ( const CSphString & sIndexes, CSphVector<CSphString> & dOut )
 {
 	CSphString sSplit = sIndexes;
 	char * p = (char*)sSplit.cstr();
@@ -2381,7 +2380,7 @@ void LogQuery ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 }
 
 
-int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<const DWORD *,8> & dTag2MVA )
+int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<const DWORD *> & dTag2MVA )
 {
 	int iRespLen = 0;
 
@@ -2429,7 +2428,7 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 		iRespLen += 12 + strlen ( pRes->m_tWordStats[i].m_sWord.cstr() ); // wordlen, word, docs, hits
 
 	// MVA values
-	CSphVector<int,8> dMvaItems;
+	CSphVector<int> dMvaItems;
 	for ( int i=0; i<pRes->m_tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tCol = pRes->m_tSchema.GetAttr(i);
@@ -2459,7 +2458,7 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 }
 
 
-void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pRes, const CSphVector<const DWORD *,8> & dTag2MVA )
+void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pRes, const CSphVector<const DWORD *> & dTag2MVA )
 {
 	// status
 	if ( iVer>=0x10D )
@@ -2601,8 +2600,8 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 
 struct AggrResult_t : CSphQueryResult
 {
-	CSphVector<CSphSchema,8>		m_dSchemas;		///< aggregated resultsets schemas (for schema minimization)
-	CSphVector<int,8>				m_dMatchCounts;	///< aggregated resultsets lengths (for schema minimization)
+	CSphVector<CSphSchema>		m_dSchemas;		///< aggregated resultsets schemas (for schema minimization)
+	CSphVector<int>				m_dMatchCounts;	///< aggregated resultsets lengths (for schema minimization)
 };
 
 
@@ -2727,12 +2726,12 @@ public:
 
 public:
 	int								m_iClientVer;					///< client version
-	CSphVector<CSphQuery,8>			m_dQueries;						///< queries which i need to search
-	CSphVector<AggrResult_t,8>		m_dResults;						///< results which i obtained
+	CSphVector<CSphQuery>			m_dQueries;						///< queries which i need to search
+	CSphVector<AggrResult_t>		m_dResults;						///< results which i obtained
 	SearchFailuresLogset_c			m_dFailuresSet;					///< failure logs for each query
 
 	int								m_iTag;							///< current tag
-	CSphVector<const DWORD *,8>		m_dTag2MVA;						///< tag to mva-storage-ptr mapping
+	CSphVector<const DWORD *>		m_dTag2MVA;						///< tag to mva-storage-ptr mapping
 
 protected:
 	void							RunSubset ( int iStart, int iEnd );	///< run queries against index(es) from first query in the subset
@@ -2756,6 +2755,9 @@ void SearchHandler_c::RunQueries ()
 	///////////////////////////////
 	// choose path and run queries
 	///////////////////////////////
+
+	g_dMvaStorage.Reserve ( 1024 );
+	g_dMvaStorage.Resize ( 0 );
 
 	// check if all queries are to the same index
 	bool bSameIndex = false;
@@ -2850,7 +2852,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	// build local indexes list
 	////////////////////////////
 
-	CSphVector<CSphString,8> dLocal;
+	CSphVector<CSphString> dLocal;
 	DistributedIndex_t * pDist = g_hDistIndexes ( tFirst.m_sIndexes );
 
 	if ( !pDist )
@@ -2959,12 +2961,12 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 					// run single multi-queue query
 					////////////////////////////////
 
-					CSphVector<int,8> dSorterIndexes;
+					CSphVector<int> dSorterIndexes;
 					dSorterIndexes.Resize ( iEnd+1 );
 					ARRAY_FOREACH ( j, dSorterIndexes )
 						dSorterIndexes[j] = -1;
 
-					CSphVector<ISphMatchSorter*,8> dSorters;
+					CSphVector<ISphMatchSorter*> dSorters;
 
 					for ( int iQuery=iStart; iQuery<=iEnd; iQuery++ )
 					{
@@ -3372,7 +3374,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 		return;
 	}
 
-	CSphVector < char *, 32 > dExcerpts;
+	CSphVector<char*> dExcerpts;
 	for ( int i=0; i<iCount; i++ )
 	{
 		q.m_sSource = tReq.GetString ();
@@ -3511,7 +3513,7 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 	}
 
 	// check index names
-	CSphVector<CSphString,8> dIndexNames;
+	CSphVector<CSphString> dIndexNames;
 	ParseIndexList ( sIndexes, dIndexNames );
 
 	if ( !dIndexNames.GetLength() )
@@ -3536,14 +3538,14 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 
 	int iSuccesses = 0;
 	int iUpdated = 0;
-	CSphVector<CSphString,8> dUpdated;
+	CSphVector<CSphString> dUpdated;
 
 	ARRAY_FOREACH ( iIdx, dIndexNames )
 	{
 		const char * sReqIndex = dIndexNames[iIdx].cstr();
 
-		CSphVector<CSphString,8> dLocal;
-		const CSphVector<CSphString,8> * pLocal = NULL;
+		CSphVector<CSphString> dLocal;
+		const CSphVector<CSphString> * pLocal = NULL;
 
 		if ( g_hIndexes(sReqIndex) )
 		{
@@ -4467,7 +4469,7 @@ void ShowHelp ()
 int WINAPI ServiceMain ( int argc, char **argv )
 {
 #if USE_WINDOWS
-	CSphVector<char *,8> dArgs;
+	CSphVector<char *> dArgs;
 	if ( g_bService )
 	{
 		g_ssHandle = RegisterServiceCtrlHandler ( SEARCHD_SERVICE_NAME, ServiceControl );

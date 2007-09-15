@@ -1102,13 +1102,13 @@ public:
 
 /// unique values counter
 /// used for COUNT(DISTINCT xxx) GROUP BY yyy queries
-class CSphUniqounter : public CSphVector<SphGroupedValue_t,16384>
+class CSphUniqounter : public CSphVector<SphGroupedValue_t>
 {
 public:
 #ifndef NDEBUG
-					CSphUniqounter () : m_iCountPos ( 0 ), m_bSorted ( true ) {}
-	void			Add ( const SphGroupedValue_t & tValue )	{ CSphVector<SphGroupedValue_t,16384>::Add ( tValue ); m_bSorted = false; }
-	void			Sort ()										{ CSphVector<SphGroupedValue_t,16384>::Sort (); m_bSorted = true; }
+					CSphUniqounter () : m_iCountPos ( 0 ), m_bSorted ( true ) { Reserve ( 16384 ); }
+	void			Add ( const SphGroupedValue_t & tValue )	{ CSphVector<SphGroupedValue_t>::Add ( tValue ); m_bSorted = false; }
+	void			Sort ()										{ CSphVector<SphGroupedValue_t>::Sort (); m_bSorted = true; }
 
 #else
 					CSphUniqounter () : m_iCountPos ( 0 ) {}
@@ -1449,6 +1449,7 @@ protected:
 			// build kill-list
 			CSphVector<SphGroupKey_t> dRemove;
 			dRemove.Resize ( iCut );
+
 			if ( m_eGroupBy==SPH_GROUPBY_ATTRPAIR )
 			{
 				for ( int i=0; i<iCut; i++ )
@@ -1991,8 +1992,8 @@ struct CSphWordDataRecord
 {
 	SphWordID_t							m_iWordID;
 	int									m_iRowitems;
-	CSphVector< DWORD >					m_dWordPos;
-	CSphVector< CSphDoclistRecord >		m_dDoclist;
+	CSphVector<DWORD>					m_dWordPos;
+	CSphVector<CSphDoclistRecord>		m_dDoclist;
 	DWORD								m_iLeadingZero;
 
 	CSphWordDataRecord()
@@ -2047,19 +2048,19 @@ struct CSphWordRecord
 
 struct CSphDocMVA
 {
-	SphDocID_t								m_iDocID;
-	CSphVector < CSphVector<DWORD,16>, 16 > m_dMVA;
-	CSphVector < DWORD,16 >					m_dOffsets;
+	SphDocID_t							m_iDocID;
+	CSphVector < CSphVector<DWORD> >	m_dMVA;
+	CSphVector < DWORD >				m_dOffsets;
 
 	CSphDocMVA( int iSize )
 		: m_iDocID ( 0 )
 	{
-		m_dMVA.Resize( iSize );
-		m_dOffsets.Resize( iSize );
+		m_dMVA.Resize ( iSize );
+		m_dOffsets.Resize ( iSize );
 	}
 
-	void	Read( CSphReader_VLN & tReader );
-	void	Write( CSphWriter & tWriter );
+	void	Read ( CSphReader_VLN & tReader );
+	void	Write ( CSphWriter & tWriter );
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -2095,7 +2096,7 @@ struct CSphIndex_VLN : CSphIndex
 
 								CSphIndex_VLN ( const char * sFilename );
 
-	virtual int					Build ( CSphDict * pDict, const CSphVector < CSphSource * > & dSources, int iMemoryLimit, ESphDocinfo eDocinfo );
+	virtual int					Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSources, int iMemoryLimit, ESphDocinfo eDocinfo );
 
 	virtual const CSphSchema *	Prealloc ( bool bMlock, CSphString * sWarning );
 	virtual bool				Mlock ();
@@ -2161,7 +2162,7 @@ private:
 
 private:
 	// searching-only
-	CSphVector<CSphQueryWord,8>			m_dQueryWords;			///< search query words for "simple" query types (ie. match all/any/phrase)
+	CSphVector<CSphQueryWord>	m_dQueryWords;			///< search query words for "simple" query types (ie. match all/any/phrase)
 
 	int							m_iWeights;						///< search query field weights count
 	int							m_dWeights [ SPH_MAX_FIELDS ];	///< search query field weights count
@@ -3162,8 +3163,10 @@ bool ISphTokenizer::SetCaseFolding ( const char * sConfig, CSphString & sError )
 		return false;
 	}
 
-	CSphCharsetDefinitionParser tParser;
 	CSphVector<CSphRemapRange> dRemaps;
+	dRemaps.Reserve ( 256 );
+
+	CSphCharsetDefinitionParser tParser;
 	if ( !tParser.Parse ( sConfig, dRemaps ) )
 	{
 		sError = tParser.GetLastError();
@@ -3188,7 +3191,7 @@ void ISphTokenizer::AddSpecials ( const char * sSpecials )
 }
 
 
-static int TokenizeOnWhitespace ( CSphVector<CSphString,8> & dTokens, BYTE * sFrom, bool bUtf8 )
+static int TokenizeOnWhitespace ( CSphVector<CSphString> & dTokens, BYTE * sFrom, bool bUtf8 )
 {
 	BYTE sAccum [ 3*SPH_MAX_WORD_LEN+16 ];
 	BYTE * pAccum = sAccum;
@@ -3267,7 +3270,7 @@ bool ISphTokenizer::LoadSynonyms ( const char * sFilename, CSphString & sError )
 	char sBuffer[1024];
 
 	CSphOrderedHash < int, int, IdentityHash_fn, 4096, 117 > hSynonymOnly;
-	CSphVector<CSphString,8> dFrom;
+	CSphVector<CSphString> dFrom;
 
 	bool bOK = false;
 	for ( ;; )
@@ -3372,7 +3375,7 @@ bool ISphTokenizer::LoadSynonyms ( const char * sFilename, CSphString & sError )
 
 	// add synonym-only remaps
 	CSphVector<CSphRemapRange> dRemaps;
-	dRemaps.Grow ( hSynonymOnly.GetLength() );
+	dRemaps.Reserve ( hSynonymOnly.GetLength() );
 
 	hSynonymOnly.IterateStart ();
 	while ( hSynonymOnly.IterateNext() )
@@ -3924,8 +3927,10 @@ int CSphTokenizer_UTF8::GetCodepointLength ( int iCode ) const
 
 bool CSphTokenizer_UTF8Ngram::SetNgramChars ( const char * sConfig, CSphString & sError )
 {
-	CSphCharsetDefinitionParser tParser;
 	CSphVector<CSphRemapRange> dRemaps;
+	dRemaps.Reserve ( 256 );
+
+	CSphCharsetDefinitionParser tParser;
 	if ( !tParser.Parse ( sConfig, dRemaps ) )
 	{
 		sError = tParser.GetLastError();
@@ -4993,7 +4998,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate_t & tUpd )
 	assert ( tUpd.m_pUpdates );
 
 	// remap update schema to index schema
-	CSphVector<int,8> dAttrIndex;
+	CSphVector<int> dAttrIndex;
 	ARRAY_FOREACH ( i, tUpd.m_dAttrs )
 	{
 		int iIndex = m_tSchema.GetAttrIndex ( tUpd.m_dAttrs[i].m_sName.cstr() );
@@ -5805,7 +5810,7 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAut
 		return false;
 
 	// calcs and checks
-	CSphVector<int,32> dMvaIndexes;
+	CSphVector<int> dMvaIndexes;
 	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
 		if ( m_tSchema.GetAttr(i).m_eAttrType & SPH_ATTR_MULTI )
 			dMvaIndexes.Add ( i );
@@ -5829,6 +5834,7 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAut
 	//////////////////////////////
 
 	CSphVector<int> dBlockLens;
+	dBlockLens.Reserve ( 1024 );
 
 	m_tProgress.m_ePhase = CSphIndexProgress::PHASE_COLLECT_MVA;
 	m_tProgress.m_iAttrs = 0;
@@ -5906,8 +5912,8 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAut
 	}
 
 	// initialize readers
-	CSphVector<CSphBin *> dBins;
-	dBins.Grow ( dBlockLens.GetLength() );
+	CSphVector<CSphBin*> dBins;
+	dBins.Reserve ( dBlockLens.GetLength() );
 
 	int iBinSize = CSphBin::CalcBinSize ( iArenaSize, dBlockLens.GetLength(), "sort_mva" );
 	SphOffset_t iSharedOffset = -1;
@@ -5939,7 +5945,7 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAut
 	// info-list := docid, values-list [ index.schema.mva-count ]
 	// values-list := values-count, value [ values-count ]
 	SphDocID_t uCurID = 0;
-	CSphVector < CSphVector<DWORD,16>, 16 > dCurInfo;
+	CSphVector < CSphVector<DWORD> > dCurInfo;
 	dCurInfo.Resize ( dMvaIndexes.GetLength() );
 
 	for ( ;; )
@@ -6032,7 +6038,7 @@ struct CmpOrdinalsDocid_fn
 };
 
 
-int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > & dSources, int iMemoryLimit, ESphDocinfo eDocinfo )
+int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSources, int iMemoryLimit, ESphDocinfo eDocinfo )
 {
 	PROFILER_INIT ();
 
@@ -6045,7 +6051,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	m_eDocinfo = eDocinfo;
 
 	// vars shared between phases
-	CSphVector<CSphBin *> dBins;
+	CSphVector<CSphBin*> dBins;
 	SphOffset_t iSharedOffset = -1;
 
 	// setup sources
@@ -6075,7 +6081,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 		return 0;
 	}
 
-	CSphVector<int,32> dMvaIndexes;
+	CSphVector<int> dMvaIndexes;
 	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
 		if ( m_tSchema.GetAttr(i).m_eAttrType & SPH_ATTR_MULTI )
 			dMvaIndexes.Add ( i );
@@ -6119,7 +6125,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	}
 
 	// ordinals storage
-	CSphVector<int,SPH_MAX_FIELDS> dOrdinalAttrs;
+	CSphVector<int> dOrdinalAttrs;
 	if ( m_eDocinfo==SPH_DOCINFO_EXTERN )
 		for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
 			if ( m_tSchema.GetAttr(i).m_eAttrType==SPH_ATTR_ORDINAL )
@@ -6155,6 +6161,8 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	m_tProgress.m_ePhase = CSphIndexProgress::PHASE_COLLECT;
 
 	CSphVector<int> dHitBlocks;
+	dHitBlocks.Reserve ( 1024 );
+
 	int iDocinfoBlocks = 0;
 
 	ARRAY_FOREACH ( iSource, dSources )
@@ -6415,7 +6423,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 	{
 		// initialize readers
 		assert ( dBins.GetLength()==0 );
-		dBins.Grow ( iDocinfoBlocks );
+		dBins.Reserve ( iDocinfoBlocks );
 
 		int iBinSize = CSphBin::CalcBinSize ( iMemoryLimit, iDocinfoBlocks, "sort_docinfos" );
 		iSharedOffset = -1;
@@ -6543,7 +6551,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 
 	// initialize readers
 	assert ( dBins.GetLength()==0 );
-	dBins.Grow ( dHitBlocks.GetLength() );
+	dBins.Reserve ( dHitBlocks.GetLength() );
 
 	iSharedOffset = -1;
 	int iBinSize = CSphBin::CalcBinSize ( iMemoryLimit, dHitBlocks.GetLength(), "sort_hits" );
@@ -6763,7 +6771,7 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 	/// merging
 	int iAttrNum = pDstSchema->GetAttrsCount();
 	int iMVANum = 0;
-	CSphVector < DWORD, 16 > dRowItemOffset;
+	CSphVector<DWORD> dRowItemOffset;
 	for( int i = 0; i < iAttrNum; ++i )
 	{
 		const CSphColumnInfo & tInfo = pDstSchema->GetAttr( i );
@@ -6923,11 +6931,11 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 	wrDstIndex.PutBytes ( &bDummy, 1 );
 	wrDstHitlist.PutBytes ( &bDummy, 1 );
 
-	CSphVector<CSphWordlistCheckpoint>	dWordlistCheckpoints;
-	int									iWordListEntries = 0;
+	CSphVector<CSphWordlistCheckpoint> dWordlistCheckpoints;
+	dWordlistCheckpoints.Reserve ( 1024 );
 
-	CSphMergeSource		tDstSource;
-	CSphMergeSource		tSrcSource;
+	int iWordListEntries = 0;
+	CSphMergeSource tDstSource, tSrcSource;
 
 	tDstSource.m_pWordlist = !bDstEmpty? &m_pWordlist[1] : NULL;
 	tDstSource.m_pWordlistEnd = ( const BYTE * )m_pWordlistCheckpoints;
@@ -7142,8 +7150,11 @@ void CSphIndex_VLN::MergeWordData ( CSphWordRecord & tDstWord, CSphWordRecord & 
 	assert ( tSrcWord.m_pMergeSource->Check() );
 	assert ( tDstWord.m_tWordIndex == tSrcWord.m_tWordIndex );
 
-	static CSphVector<DWORD>				dWordPos;
-	static CSphVector<CSphDoclistRecord>	dDoclist;
+	static CSphVector<DWORD> dWordPos;
+	dWordPos.Reserve ( 1024 );
+
+	static CSphVector<CSphDoclistRecord> dDoclist;
+	dDoclist.Reserve ( 1024 );
 
 	CSphWordDataRecord *					pDstData = &tDstWord.m_tWordData;
 	CSphWordDataRecord *					pSrcData = &tSrcWord.m_tWordData;
@@ -9039,7 +9050,7 @@ public:
 public:
 	DWORD				m_uLastHitPos;
 
-	CSphVector<CSphQueryWord,8>	m_dTerms;	///< query term readers
+	CSphVector<CSphQueryWord>	m_dTerms;	///< query term readers
 	CSphMatch *					m_pLast;	///< term with the highest position. NULL if this atom has no more matches
 };
 
@@ -9440,7 +9451,7 @@ public:
 protected:
 	CSphExtendedEvalAtom				m_tAtom;		///< plain node atom
 	bool								m_bAny;			///< whether to match any or all children (ie. OR or AND)
-	CSphVector<CSphExtendedEvalNode*,8>	m_dChildren;	///< non-plain node children
+	CSphVector<CSphExtendedEvalNode*>	m_dChildren;	///< non-plain node children
 	bool								m_bDone;		///< whether this node has any more matches
 	CSphMatch *							m_pLast;		///< my last match
 };
@@ -11571,6 +11582,7 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 		return false;
 
 	m_tStats.m_iTotalDocuments++;
+	m_dHits.Reserve ( 1024 );
 	m_dHits.Resize ( 0 );
 
 	for ( int j=0; j<m_tSchema.m_dFields.GetLength(); j++ )
@@ -11962,7 +11974,7 @@ bool CSphSource_SQL::IterateHitsStart ( CSphString & sError )
 
 	int iCols = SqlNumFields() - 1; // skip column 0, which must be the id
 
-	CSphVector<bool,256> dFound;
+	CSphVector<bool> dFound;
 	dFound.Resize ( m_tParams.m_dAttrs.GetLength() );
 	ARRAY_FOREACH ( i, dFound )
 		dFound[i] = false;
@@ -12587,7 +12599,9 @@ bool CSphSource_XMLPipe::IterateHitsNext ( CSphString & sError )
 
 	assert ( m_pPipe );
 	assert ( m_pTokenizer );
-	m_dHits.Reset ();
+
+	m_dHits.Reserve ( 1024 );
+	m_dHits.Resize ( 0 );
 
 	/////////////////////////
 	// parse document header
@@ -13014,14 +13028,18 @@ void CSphWordDataRecord::Read( CSphMergeSource * pSource, CSphMergeData * pMerge
 	assert ( pMergeData );
 	assert ( pMergeData->m_pPurgeData );
 	
+	CSphVector<DWORD> dWordPosIndex;
+	dWordPosIndex.Reserve ( 1024 );
+
 	DWORD iWordPos = 0;
-	CSphVector< DWORD > dWordPosIndex;
 	CSphReader_VLN * pReader = pSource->m_pDoclistReader;
 	CSphReader_VLN * pHitlistReader = pSource->m_pHitlistReader;
 	assert ( pReader && pHitlistReader );
-	
-	m_dWordPos.Reset();
-	m_dDoclist.Reset();
+
+	m_dWordPos.Reserve ( 1024 );
+	m_dWordPos.Resize ( 0 );
+	m_dDoclist.Reserve ( 1024 );
+	m_dDoclist.Resize ( 0 );
 
 	for( int i = 0; i < iDocNum; i++ )
 	{
@@ -13095,7 +13113,7 @@ void CSphWordDataRecord::Write ( CSphMergeData * pMergeData )
 	m_dDoclist[iDocCount++].m_iPos = pHitlistWriter->GetPos() - pMergeData->m_iLastHitlistPos;
 	pMergeData->m_iLastHitlistPos = pHitlistWriter->GetPos();
 
-	for( int i = 0; i < m_dWordPos.GetLength(); i++ )
+	ARRAY_FOREACH ( i, m_dWordPos )
 	{
 		pHitlistWriter->ZipInt ( m_dWordPos[i] );
 		if ( m_dWordPos[i] == 0 )
@@ -13108,7 +13126,7 @@ void CSphWordDataRecord::Write ( CSphMergeData * pMergeData )
 
 	pMergeData->m_iDoclistPos = pWriter->GetPos();
 
-	for( int i = 0; i < m_dDoclist.GetLength(); i++ )
+	ARRAY_FOREACH ( i, m_dDoclist )
 		m_dDoclist[i].Write ( pMergeData );
 
 	pWriter->ZipInt ( 0 );

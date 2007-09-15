@@ -232,6 +232,8 @@ void CSphStopwordBuilderDict::Save ( const char * sOutput, int iTop, bool bFreqs
 		return;
 
 	CSphVector<Word_t> dTop;
+	dTop.Reserve ( 1024 );
+
 	const CSphMTFHashEntry<int> * it;
 	HASH_FOREACH ( it, m_hWords )
 	{
@@ -644,7 +646,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 	// spawn datasources
 	/////////////////////
 
-	CSphVector < CSphSource * > dSources;
+	CSphVector<CSphSource*> dSources;
 	bool bGotAttrs = false;
 
 	for ( CSphVariant * pSourceName = hIndex("source"); pSourceName; pSourceName = pSourceName->m_pNext )
@@ -915,7 +917,7 @@ int main ( int argc, char ** argv )
 	bool bMerge = false;	
 	CSphPurgeData	tPurge;
 
-	CSphVector < const char *, 16 > dIndexes;
+	CSphVector<const char *> dIndexes;
 	bool bIndexAll = false;
 
 	int i;

@@ -670,7 +670,7 @@ protected:
 
 protected:
 	CSphExtendedQuery *				m_pRes;		///< result holder
-	CSphVector<CNodeStackEntry,8>	m_dStack;	///< open nodes stack
+	CSphVector<CNodeStackEntry>		m_dStack;	///< open nodes stack
 
 protected:
 	int					IsSpecial ( int iCh );
@@ -877,7 +877,7 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 		XQS_NEGTEXT		= 6
 	};
 
-	CSphVector<int,4> dState;
+	CSphVector<int> dState;
 	dState.Add ( XQS_TEXT );
 
 	bool bAny = false;

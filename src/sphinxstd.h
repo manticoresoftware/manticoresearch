@@ -275,8 +275,11 @@ template < typename T > void sphSort ( T * pData, int iCount )
 
 /// generic vector
 /// (don't even ask why it's not std::vector)
-template < typename T, int INITIAL_LIMIT=1024 > class CSphVector
+template < typename T > class CSphVector
 {
+protected:
+	static const int MAGIC_INITIAL_LIMIT = 8;
+
 public:
 	/// ctor
 	CSphVector ()
@@ -287,7 +290,7 @@ public:
 	}
 
 	/// copy ctor
-	CSphVector ( const CSphVector<T,INITIAL_LIMIT> & rhs )
+	CSphVector ( const CSphVector<T> & rhs )
 	{
 		m_iLength = 0;
 		m_iLimit = 0;
@@ -305,7 +308,7 @@ public:
 	T & Add ()
 	{
 		if ( m_iLength>=m_iLimit )
-			Grow ( 1+m_iLength );
+			Reserve ( 1+m_iLength );
 		return m_pData [ m_iLength++ ];
 	}
 
@@ -313,7 +316,7 @@ public:
 	void Add ( const T & tValue )
 	{
 		if ( m_iLength>=m_iLimit )
-			Grow ( 1+m_iLength );
+			Reserve ( 1+m_iLength );
 		m_pData [ m_iLength++ ] = tValue;
 	}
 
@@ -321,7 +324,7 @@ public:
 	void AddUnique ( const T & tValue )
 	{
 		if ( m_iLength>=m_iLimit )
-			Grow ( 1+m_iLength );
+			Reserve ( 1+m_iLength );
 
 		if ( m_iLength==0 || m_pData[m_iLength-1]!=tValue )
 			m_pData [ m_iLength++ ] = tValue;
@@ -372,8 +375,8 @@ public:
 		return m_pData[--m_iLength];
 	}
 
-	/// grow enough to hold that much entries, if needed
-	void Grow ( int iNewLimit )
+	/// grow enough to hold that much entries, if needed, but do *not* change the length
+	void Reserve ( int iNewLimit )
 	{
 		// check that we really need to be called
 		assert ( iNewLimit>=0 );
@@ -382,7 +385,7 @@ public:
 
 		// calc new limit
 		if ( !m_iLimit )
-			m_iLimit = INITIAL_LIMIT;
+			m_iLimit = MAGIC_INITIAL_LIMIT;
 		while ( m_iLimit<iNewLimit )
 			m_iLimit *= 2;
 
@@ -399,7 +402,7 @@ public:
 	void Resize ( int iNewLength )
 	{
 		if ( iNewLength>=m_iLength )
-			Grow ( iNewLength );
+			Reserve ( iNewLength );
 		m_iLength = iNewLength;
 	}
 
@@ -456,7 +459,7 @@ public:
 	}
 
 	/// copy
-	const CSphVector < T, INITIAL_LIMIT > & operator = ( const CSphVector < T, INITIAL_LIMIT > & rhs )
+	const CSphVector<T> & operator = ( const CSphVector<T> & rhs )
 	{
 		Reset ();
 
@@ -470,7 +473,7 @@ public:
 	}
 
 	/// swap
-	void SwapData ( CSphVector < T, INITIAL_LIMIT > & rhs )
+	void SwapData ( CSphVector<T> & rhs )
 	{
 		Swap ( m_iLength, rhs.m_iLength );
 		Swap ( m_iLimit, rhs.m_iLimit );

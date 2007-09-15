@@ -85,7 +85,7 @@ struct CSphExtendedQueryAtomWord
 /// atom is a list of required query words with field and proximity constraints
 struct CSphExtendedQueryAtom
 {
-	CSphVector<CSphExtendedQueryAtomWord,8>	m_dWords;
+	CSphVector<CSphExtendedQueryAtomWord>	m_dWords;
 	int		m_iField;
 	int		m_iMaxDistance;
 
@@ -123,7 +123,7 @@ struct CSphExtendedQueryNode : public ISphNoncopyable
 
 	CSphExtendedQueryAtom					m_tAtom;		///< plain node atom
 	bool									m_bAny;			///< whether to match any or all children (ie. OR or AND)
-	CSphVector<CSphExtendedQueryNode*,8>	m_dChildren;	///< non-plain node children
+	CSphVector<CSphExtendedQueryNode*>		m_dChildren;	///< non-plain node children
 
 public:
 	/// ctor

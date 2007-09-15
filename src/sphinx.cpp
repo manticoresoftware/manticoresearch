@@ -2759,7 +2759,7 @@ void CSphLowercaser::AddRemaps ( const CSphRemapRange * pRemaps, int iRemaps, DW
 		{
 			assert ( m_pChunk [ j>>CHUNK_BITS ] );
 			int & iCodepoint = m_pChunk [ j>>CHUNK_BITS ] [ j & CHUNK_MASK ];
-			iCodepoint =  ( iCodepoint ? uFlagsIfExists : uFlags ) | iRemapped;
+			iCodepoint = ( iCodepoint ? uFlagsIfExists : uFlags ) | iRemapped;
 		}
 	}
 }
@@ -3140,7 +3140,7 @@ inline int sphUTF8Encode ( BYTE * pBuf, int iCode )
 }
 
 
-static int sphUTF8Len ( const char * pStr  )
+static int sphUTF8Len ( const char * pStr )
 {
 	BYTE * pBuf = (BYTE*) pStr;
 	int iRes = 0, iCode;
@@ -5469,7 +5469,7 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWOR
 	if ( pDocinfo )
 	{
 		iStartID = DOCINFO2ID ( pDocinfo );
-		int iBits = iLog2 ( DOCINFO2ID ( pDocinfo + (iDocinfos-1)*iStride ) - iStartID  );
+		int iBits = iLog2 ( DOCINFO2ID ( pDocinfo + (iDocinfos-1)*iStride ) - iStartID );
 		iShift = ( iBits<HBITS ) ? 0 : ( iBits-HBITS );
 
 		#ifndef NDEBUG
@@ -6438,7 +6438,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector < CSphSource * > &
 		pDocinfo = dDocinfoQueue;
 		for ( int i=0; i<iDocinfoBlocks; i++ )
 		{
-			if ( dBins[i]->ReadBytes  ( pDocinfo, iDocinfoStride*sizeof(DWORD) )<=0 )
+			if ( dBins[i]->ReadBytes ( pDocinfo, iDocinfoStride*sizeof(DWORD) )<=0 )
 			{
 				m_sLastError.SetSprintf ( "sort_docinfos: warmup failed (io error?)" );
 				return 0;
@@ -6717,7 +6717,7 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 	if ( !pDstSchema || !Preread() )
 		return false;
 
-	const CSphSchema * pSrcSchema = pSrcIndex->Prealloc(  false, NULL );
+	const CSphSchema * pSrcSchema = pSrcIndex->Prealloc ( false, NULL );
 	if ( !pSrcSchema || !pSrcIndex->Preread() )
 	{
 		m_sLastError.SetSprintf ( "source index preload failed: %s", pSrcIndex->GetLastError().cstr() );
@@ -6763,7 +6763,7 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 	/// merging
 	int iAttrNum = pDstSchema->GetAttrsCount();
 	int iMVANum = 0;
-	CSphVector < DWORD, 16 >  dRowItemOffset;
+	CSphVector < DWORD, 16 > dRowItemOffset;
 	for( int i = 0; i < iAttrNum; ++i )
 	{
 		const CSphColumnInfo & tInfo = pDstSchema->GetAttr( i );
@@ -7224,14 +7224,14 @@ void CSphIndex_VLN::MergeWordData ( CSphWordRecord & tDstWord, CSphWordRecord & 
 
 			while ( uCompleted != 0x03 ) 
 			{
-				if ( ! ( uCompleted & 0x01 ) )
+				if ( !( uCompleted & 0x01 ) )
 				{
 					iDstPos = pDstData->m_dWordPos[iDstWordPos++];
 					if ( !iDstPos )
 						uCompleted |= 0x01;
 				}
 
-				if ( ! ( uCompleted & 0x02 ) )
+				if ( !( uCompleted & 0x02 ) )
 				{
 					iSrcPos = pSrcData->m_dWordPos[iSrcWordPos++];
 					if ( !iSrcPos )
@@ -7343,7 +7343,7 @@ SphWordID_t CSphDictStar::GetWordID ( BYTE * pWord )
 /// my simple query parser
 struct CSphSimpleQueryParser
 {
-	struct  
+	struct
 	{
 		CSphString		m_sWord;
 		SphWordID_t		m_uWordID;
@@ -7449,7 +7449,7 @@ struct MatchAttrLt_fn
 	{
 		CSphRowitem aa = t.GetAttr<BITS>(a,0);
 		CSphRowitem bb = t.GetAttr<BITS>(b,0);
-		if ( aa!=bb  )
+		if ( aa!=bb )
 			return aa<bb;
 
 		if ( a.m_iWeight!=b.m_iWeight )
@@ -7468,7 +7468,7 @@ struct MatchAttrGt_fn
 	{
 		CSphRowitem aa = t.GetAttr<BITS>(a,0);
 		CSphRowitem bb = t.GetAttr<BITS>(b,0);
-		if ( aa!=bb  )
+		if ( aa!=bb )
 			return aa>bb;
 
 		if ( a.m_iWeight!=b.m_iWeight )
@@ -7837,7 +7837,7 @@ static ESortClauseParseResult sphParseSortClause ( const char * sClause, const C
 /////////////////////////////////////////////////////////////////////////////
 
 template < typename COMPMATCH, typename COMPGROUP, typename ARG >
-ISphMatchSorter * sphCreateSorter3rd  ( bool bDistinct, ARG arg )
+ISphMatchSorter * sphCreateSorter3rd ( bool bDistinct, ARG arg )
 {
 	if ( bDistinct==true )
 		return new CSphKBufferGroupSorter<COMPMATCH,COMPGROUP,true> ( arg );
@@ -9384,7 +9384,7 @@ void CSphExtendedEvalAtom::UpdateLCS ( CSphLCSState & tState )
 
 	} else
 	{
-		// plain 1-term atom  or phrase atom
+		// plain 1-term atom or phrase atom
 		assert ( m_iMaxDistance==0 || m_dTerms.GetLength()==1 );
 
 		if ( m_uLastHitPos!=tState.m_uNextPos )
@@ -10618,7 +10618,7 @@ bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, C
 	{
 		if ( !pQuery->m_bGeoAnchor )
 		{
-			m_sLastError.SetSprintf ( "no geo-anchor point specified in search query, @geodist not available"  );
+			m_sLastError.SetSprintf ( "no geo-anchor point specified in search query, @geodist not available" );
 			return false;
 		}
 
@@ -11116,7 +11116,7 @@ bool CSphDictCRC::SetMorphology ( const CSphVariant * sMorph, bool bUseUTF8, CSp
 
 		if ( !m_pStemmer )
 		{
-			sError.SetSprintf (  "libstemmer morphology algorithm '%s' not available for %s encoding - IGNORED",
+			sError.SetSprintf ( "libstemmer morphology algorithm '%s' not available for %s encoding - IGNORED",
 				sAlgo, bUseUTF8 ? "UTF-8" : "SBCS" );
 			return false;
 		}

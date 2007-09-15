@@ -159,7 +159,7 @@ void TestUTF8Tokenizer ()
 
 			pTokenizer->SetBuffer ( (BYTE*)sLine4, strlen(sLine4), true );
 			for ( int i=0; i<UBERLONG-3; i+=3 )
-				assert ( !strcmp(  (char*)pTokenizer->GetToken(), "aa" ) );
+				assert ( !strcmp ( (char*)pTokenizer->GetToken(), "aa" ) );
 			assert ( pTokenizer->GetToken()==NULL );
 		}
 

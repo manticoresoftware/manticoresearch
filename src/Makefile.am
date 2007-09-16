@@ -9,6 +9,11 @@ indexer_SOURCES = indexer.cpp
 searchd_SOURCES = searchd.cpp
 search_SOURCES = search.cpp
 
+BUILT_SOURCES = extract-version
+.PHONY: extract-version
+extract-version:
+	if test -d ../.svn; then svn info .. --xml | perl svnxrev.pl; fi;
+
 if USE_LIBSTEMMER
 LIBSTEMMER_LIBS = $(top_srcdir)/libstemmer_c/libstemmer.a
 AM_CPPFLAGS = -I$(top_srcdir)/libstemmer_c/include -DSYSCONFDIR="\"$(sysconfdir)\""

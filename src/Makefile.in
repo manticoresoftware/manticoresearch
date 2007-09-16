@@ -193,6 +193,7 @@ libsphinx_a_SOURCES = $(SRC_SPHINX)
 indexer_SOURCES = indexer.cpp
 searchd_SOURCES = searchd.cpp
 search_SOURCES = search.cpp
+BUILT_SOURCES = extract-version
 @USE_LIBSTEMMER_FALSE@LIBSTEMMER_LIBS = 
 @USE_LIBSTEMMER_TRUE@LIBSTEMMER_LIBS = $(top_srcdir)/libstemmer_c/libstemmer.a
 @USE_LIBSTEMMER_FALSE@AM_CPPFLAGS = -DSYSCONFDIR="\"$(sysconfdir)\""
@@ -201,7 +202,8 @@ indexer_LDADD = libsphinx.a $(LIBSTEMMER_LIBS) $(MYSQL_LIBS) $(PGSQL_LIBS)
 searchd_LDADD = libsphinx.a $(LIBSTEMMER_LIBS) $(MYSQL_LIBS) $(PGSQL_LIBS) -lz
 search_LDADD = libsphinx.a $(LIBSTEMMER_LIBS) $(MYSQL_LIBS) $(PGSQL_LIBS)
 EXTRA_DIST = indexer.vcproj libsphinx.vcproj searchd.vcproj search.vcproj
-all: all-am
+all: $(BUILT_SOURCES)
+	$(MAKE) $(AM_MAKEFLAGS) all-am
 
 .SUFFIXES:
 .SUFFIXES: .cpp .o .obj
@@ -384,13 +386,15 @@ distdir: $(DISTFILES)
 	  fi; \
 	done
 check-am: all-am
-check: check-am
+check: $(BUILT_SOURCES)
+	$(MAKE) $(AM_MAKEFLAGS) check-am
 all-am: Makefile $(LIBRARIES) $(PROGRAMS)
 installdirs:
 	for dir in "$(DESTDIR)$(bindir)"; do \
 	  test -z "$$dir" || $(mkdir_p) "$$dir"; \
 	done
-install: install-am
+install: $(BUILT_SOURCES)
+	$(MAKE) $(AM_MAKEFLAGS) install-am
 install-exec: install-exec-am
 install-data: install-data-am
 uninstall: uninstall-am
@@ -414,6 +418,7 @@ distclean-generic:
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
 	@echo "it deletes files that may require special tools to rebuild."
+	-test -z "$(BUILT_SOURCES)" || rm -f $(BUILT_SOURCES)
 clean: clean-am
 
 clean-am: clean-binPROGRAMS clean-generic clean-noinstLIBRARIES \
@@ -476,6 +481,9 @@ uninstall-am: uninstall-binPROGRAMS uninstall-info-am
 	tags uninstall uninstall-am uninstall-binPROGRAMS \
 	uninstall-info-am
 
+.PHONY: extract-version
+extract-version:
+	if test -d ../.svn; then svn info .. --xml | perl svnxrev.pl; fi;
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.
 .NOEXPORT:

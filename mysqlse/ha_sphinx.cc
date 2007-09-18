@@ -381,9 +381,9 @@ protected:
 
 #if MYSQL_VERSION_ID>50100
 
-#if MYSQL_VERSION_ID<50112
-#error Sphinx SE requires MySQL 5.1.12 or higher if compiling for 5.1.x series!
-#endif // <50112
+#if MYSQL_VERSION_ID<50114
+#error Sphinx SE requires MySQL 5.1.14 or higher if compiling for 5.1.x series!
+#endif
 
 static handler *	sphinx_create_handler ( handlerton * hton, TABLE_SHARE * table, MEM_ROOT * mem_root );
 static int			sphinx_init_func ( void * p );
@@ -849,7 +849,12 @@ static CSphSEShare * get_share ( const char * table_name, TABLE * table )
 	for ( ;; )
 	{
 		// check if we already have this share
+#if MYSQL_VERSION_ID>=50120
+		pShare = (CSphSEShare*) hash_search ( &sphinx_open_tables, (const uchar *) table_name, strlen(table_name) );
+#else
 		pShare = (CSphSEShare*) hash_search ( &sphinx_open_tables, table_name, strlen(table_name) );
+#endif
+
 		if ( pShare )
 		{
 			pShare->m_iUseCount++;

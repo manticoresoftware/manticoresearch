@@ -14,6 +14,11 @@
 #endif
 
 
+#if MYSQL_VERSION_ID>=50120
+typedef uchar byte;
+#endif
+
+
 /// forward decls
 class THD;
 struct CSphReqQuery;

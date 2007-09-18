@@ -380,7 +380,7 @@ class SphinxClient
 	/// clear all filters (for multi-queries)
 	function ResetFilters ()
 	{
-		$this->_filters[] = array();
+		$this->_filters = array();
 		$this->_anchor = array();
 	}
 

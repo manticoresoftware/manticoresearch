@@ -731,7 +731,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 			dSources[i]->SetDict ( &tDict );
 			if ( !dSources[i]->Connect ( sError ) || !dSources[i]->IterateHitsStart ( sError ) )
 				continue;
-			while ( dSources[i]->IterateHitsNext ( sError ) );
+			while ( dSources[i]->IterateHitsNext ( sError ) && dSources[i]->m_tDocInfo.m_iDocID );
 		}
 		tDict.Save ( g_sBuildStops, g_iTopStops, g_bBuildFreqs );
 

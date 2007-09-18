@@ -96,9 +96,9 @@ public:
 
 	int				rnd_init ( bool scan );
 	int				rnd_end ();
-	int				rnd_next ( uchar * buf );
-	int				rnd_pos ( uchar * buf, uchar * pos );
-	void			position ( const uchar * record );
+	int				rnd_next ( byte * buf );
+	int				rnd_pos ( byte * buf, byte * pos );
+	void			position ( const byte * record );
 
 #if MYSQL_VERSION_ID>=50030
 	int				info ( uint );

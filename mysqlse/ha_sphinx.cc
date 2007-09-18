@@ -849,7 +849,7 @@ static CSphSEShare * get_share ( const char * table_name, TABLE * table )
 	for ( ;; )
 	{
 		// check if we already have this share
-		pShare = (CSphSEShare*) hash_search ( &sphinx_open_tables, (uchar*)table_name, strlen(table_name) );
+		pShare = (CSphSEShare*) hash_search ( &sphinx_open_tables, table_name, strlen(table_name) );
 		if ( pShare )
 		{
 			pShare->m_iUseCount++;
@@ -871,7 +871,7 @@ static CSphSEShare * get_share ( const char * table_name, TABLE * table )
 		// try to hash it
 		pShare->m_iTableNameLen = strlen(table_name);
 		pShare->m_sTable = sphDup ( table_name );
-		if ( my_hash_insert ( &sphinx_open_tables, (uchar*) pShare ) )
+		if ( my_hash_insert ( &sphinx_open_tables, (const byte *)pShare ) )
 		{
 			SafeDelete ( pShare );
 			break;
@@ -895,7 +895,7 @@ static int free_share ( CSphSEShare * pShare )
 
 	if ( !--pShare->m_iUseCount )
 	{
-		hash_delete ( &sphinx_open_tables, (uchar*) pShare );
+		hash_delete ( &sphinx_open_tables, (byte *)pShare );
 		SafeDelete ( pShare );
 	}
 
@@ -1537,7 +1537,7 @@ int ha_sphinx::ConnectToSearchd ()
 
 	if ( ::recv ( iSocket, (char *)&version, sizeof(version), 0 )!=sizeof(version) )
 	{
-		closesocket ( iSocket );
+		::closesocket ( iSocket );
 		my_snprintf ( sError, sizeof(sError), "failed to receive searchd version (host=%s, port=%d)",
 			m_pShare->m_sHost, m_pShare->m_iPort );
 		my_error ( ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), sError );
@@ -1546,7 +1546,7 @@ int ha_sphinx::ConnectToSearchd ()
 
 	if ( ::send ( iSocket, (char*)&uClientVersion, sizeof(uClientVersion), 0 )!=sizeof(uClientVersion) )
 	{
-		closesocket ( iSocket );
+		::closesocket ( iSocket );
 		my_snprintf ( sError, sizeof(sError), "failed to send client version (host=%s, port=%d)",
 			m_pShare->m_sHost, m_pShare->m_iPort );
 		my_error ( ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), sError );
@@ -1844,7 +1844,7 @@ int ha_sphinx::index_read ( uchar * buf, const uchar * key, uint key_len, enum h
 		iRecvLength += iRecv;
 	}
 
-	closesocket ( iSocket );
+	::closesocket ( iSocket );
 	iSocket = -1;
 
 	if ( iRecvLength!=(int)uRespLength )
@@ -2069,14 +2069,14 @@ int ha_sphinx::rnd_end()
 }
 
 
-int ha_sphinx::rnd_next ( uchar * )
+int ha_sphinx::rnd_next ( byte * )
 {
 	SPH_ENTER_METHOD();
 	SPH_RET ( HA_ERR_END_OF_FILE );
 }
 
 
-void ha_sphinx::position ( const uchar * )
+void ha_sphinx::position ( const byte * )
 {
 	SPH_ENTER_METHOD();
 	SPH_VOID_RET();
@@ -2088,7 +2088,7 @@ void ha_sphinx::position ( const uchar * )
 // ref. You can use ha_get_ptr(pos,ref_length) to retrieve whatever key
 // or position you saved when position() was called.
 // Called from filesort.cc records.cc sql_insert.cc sql_select.cc sql_update.cc.
-int ha_sphinx::rnd_pos ( uchar *, uchar * )
+int ha_sphinx::rnd_pos ( byte *, byte * )
 {
 	SPH_ENTER_METHOD();
 	SPH_RET ( HA_ERR_WRONG_COMMAND );

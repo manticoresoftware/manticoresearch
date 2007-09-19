@@ -10448,6 +10448,7 @@ bool CSphIndex_VLN::QueryEx ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSph
 {
 	bool bRes = MultiQuery ( pTokenizer, pDict, pQuery, pResult, 1, &pTop );
 	pResult->m_iTotalMatches += bRes ? pTop->GetTotalCount () : 0;
+	pResult->m_tSchema.BuildResultSchema ( pQuery ); 
 	return bRes;
 }
 

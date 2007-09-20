@@ -5,14 +5,18 @@
 #
 # svnversion is nice, but lacks options to extract tag/branch name,
 # which is something i would really like to mention in builds
+#
+# usage: svn info --xml WORKING-COPY-ROOT | perl svnxrev.pl [OUTPUT-HEADER-NAME]
 
 $UTILITY = "svnxrev";				# that's my name
 $PROJECT = "sphinx";				# that's expected project name
 $PREFIX = "SPH";					# that's the prefix for defines
 $OUTPUT = "sphinxversion.h";		# that's where i will write the result
 
+$OUTPUT = $ARGV[0] if ( $#ARGV==0 );
+
 undef $/;
-$info = <>;
+$info = <STDIN>;
 
 die ( "$UTILITY: failed to extract repository url" ) if (!( $info =~ /<url>(.*?)<\/url>/ ));
 $url = $1;
@@ -28,10 +32,25 @@ $tagrev = length($tag)
 	? "$tag-r$rev"
 	: "r$rev";
 
-open ( FH, ">$OUTPUT" ) or die ( "$UTILITY: failed to write output file (name=$OUTPUT)" );
-print FH "#define ${PREFIX}_SVN_TAG \"$tag\"\n";
-print FH "#define ${PREFIX}_SVN_REV $rev\n";
-print FH "#define ${PREFIX}_SVN_TAGREV \"$tagrev\"\n";
+$result = <<EOT;
+#define ${PREFIX}_SVN_TAG "$tag"
+#define ${PREFIX}_SVN_REV $rev
+#define ${PREFIX}_SVN_TAGREV "$tagrev"
+EOT
+
+if ( open FH, "<$OUTPUT" )
+{
+	$current = <FH>;
+	close ( FH );
+	if ( $current eq $result )
+	{
+		print "$UTILITY: build tag $tagrev unchanged\n";
+		exit 0;
+	}
+}
+
+open ( FH, "+>$OUTPUT" ) or die ( "$UTILITY: failed to write output file (name=$OUTPUT)" );
+print FH $result;
 close ( FH );
 
 print "$UTILITY: extracted build tag: $tagrev\n";

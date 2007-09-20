@@ -99,11 +99,7 @@ inline DWORD *			DOCINFO2ATTRS ( DWORD * pDocinfo )		{ return pDocinfo+DOCINFO_I
 
 /////////////////////////////////////////////////////////////////////////////
 
-#if USE_WINDOWS
-#define SPH_SVN_TAGREV "unknown"
-#else
 #include "sphinxversion.h"
-#endif
 
 #define SPHINX_VERSION			"0.9.8" SPHINX_BITS_TAG "-dev (" SPH_SVN_TAGREV ")"
 #define SPHINX_BANNER			"Sphinx " SPHINX_VERSION "\nCopyright (c) 2001-2007, Andrew Aksyonoff\n\n"

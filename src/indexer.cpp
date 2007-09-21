@@ -508,6 +508,7 @@ CSphSource * SpawnSourcePgSQL ( const CSphConfigSection & hSource, const char * 
 	CSphSource_PgSQL * pSrcPgSQL = new CSphSource_PgSQL ( sSourceName );
 	if ( !pSrcPgSQL->Setup ( tParams ) )
 		SafeDelete ( pSrcPgSQL );
+
 	return pSrcPgSQL;
 }
 #endif // USE_PGSQL
@@ -527,6 +528,7 @@ CSphSource * SpawnSourceMySQL ( const CSphConfigSection & hSource, const char * 
 	CSphSource_MySQL * pSrcMySQL = new CSphSource_MySQL ( sSourceName );
 	if ( !pSrcMySQL->Setup ( tParams ) )
 		SafeDelete ( pSrcMySQL );
+
 	return pSrcMySQL;
 }
 #endif // USE_MYSQL
@@ -665,6 +667,9 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		if ( pSource->HasAttrsConfigured() )
 			bGotAttrs = true;
 
+		pSource->SetupFieldMatch ( hIndex.Exists ( "prefix_fields" ) ? hIndex ["prefix_fields"].cstr () : NULL,
+								   hIndex.Exists ( "infix_fields" )  ? hIndex ["infix_fields"].cstr ()	: NULL );
+
 		// strip_html, index_html_attrs
 		if ( hSource("strip_html") )
 		{
@@ -761,7 +766,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		sIndexPath.SetSprintf ( g_bRotate ? "%s.tmp" : "%s", hIndex["path"].cstr() );
 
 		// do index
-		CSphIndex * pIndex = sphCreateIndexPhrase ( sIndexPath.cstr() );
+		CSphIndex * pIndex = sphCreateIndexPhrase ( sIndexPath.cstr(), hIndex ("enable_star" ) ? hIndex ["enable_star"].intval () != 0 : false );
 		assert ( pIndex );
 
 		// check lock file
@@ -839,8 +844,8 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 	}
 
 	// do the merge
-	CSphIndex * pSrc = sphCreateIndexPhrase ( hSrc["path"].cstr() );
-	CSphIndex * pDst = sphCreateIndexPhrase ( hDst["path"].cstr() );
+	CSphIndex * pSrc = sphCreateIndexPhrase ( hSrc["path"].cstr(), hSrc ("enable_star" ) ? hSrc ["enable_star"].intval () != 0 : false );
+	CSphIndex * pDst = sphCreateIndexPhrase ( hDst["path"].cstr(), hDst ("enable_star" ) ? hDst ["enable_star"].intval () != 0 : false );
 	assert ( pSrc );
 	assert ( pDst );
 

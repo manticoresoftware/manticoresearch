@@ -527,11 +527,21 @@ enum ESphAttrSrc
 };
 
 
+/// known multi-valued attr sources
+enum
+{
+	SPH_MATCH_WHOLE		= 0,		///< whole-word match
+	SPH_MATCH_PREFIX	= 1,		///< prefix match
+	SPH_MATCH_INFIX		= 1 << 1	///< infix match
+};
+
+
 /// source column info
 struct CSphColumnInfo
 {
 	CSphString		m_sName;		///< column name
 	DWORD			m_eAttrType;	///< attribute type
+	DWORD			m_uMatchType;	///< infix/prefix match type
 
 	int				m_iIndex;		///< index into source result set
 	int				m_iRowitem;		///< index into document info row (only if attr spans whole rowitem; -1 otherwise)
@@ -551,6 +561,7 @@ struct CSphColumnInfo
 		, m_iBitOffset ( -1 )
 		, m_iBitCount ( -1 )
 		, m_eSrc ( SPH_ATTRSRC_NONE )
+		, m_uMatchType	( SPH_MATCH_WHOLE )
 	{
 		m_sName.ToLower ();
 	}
@@ -704,6 +715,9 @@ public:
 	/// gets called when the indexing is succesfully (!) over
 	virtual void						PostIndex () {}
 
+	/// setup field match mode
+	virtual void						SetupFieldMatch ( const char * szPrefixFields, const char * szInfixFields ) {}
+
 protected:
 	ISphTokenizer *						m_pTokenizer;	///< my tokenizer
 	CSphDict *							m_pDict;		///< my dict
@@ -721,8 +735,9 @@ protected:
 
 /// generic document source
 /// provides multi-field support and generic tokenizer
-struct CSphSource_Document : CSphSource
+class CSphSource_Document : public CSphSource
 {
+public:
 	/// ctor
 							CSphSource_Document ( const char * sName ) : CSphSource ( sName ) {}
 
@@ -732,6 +747,18 @@ struct CSphSource_Document : CSphSource
 	/// field data getter
 	/// to be implemented by descendants
 	virtual BYTE **			NextDocument ( CSphString & sError ) = 0;
+
+	virtual void			SetupFieldMatch ( const char * szPrefixFields, const char * szInfixFields );
+
+protected:
+	bool					IsPrefixMatch ( const char * szField ) const;
+	bool					IsInfixMatch ( const char * szField ) const;
+
+private:
+	CSphString				m_sPrefixFields;
+	CSphString				m_sInfixFields;
+
+	bool					IsFieldInStr ( const char * szField, const char * szString ) const;
 };
 
 
@@ -1457,7 +1484,7 @@ protected:
 /////////////////////////////////////////////////////////////////////////////
 
 /// create phrase fulltext index implemntation
-CSphIndex *			sphCreateIndexPhrase ( const char * sFilename );
+CSphIndex *			sphCreateIndexPhrase ( const char * sFilename, bool bEnableStar );
 
 /// tell libsphinx to be quiet or not (logs and loglevels to come later)
 void				sphSetQuiet ( bool bQuiet );

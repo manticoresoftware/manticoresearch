@@ -299,7 +299,7 @@ int main ( int argc, char ** argv )
 		tQuery.m_sQuery = sQuery;
 		CSphQueryResult * pResult = NULL;
 
-		CSphIndex * pIndex = sphCreateIndexPhrase ( hIndex["path"].cstr() );
+		CSphIndex * pIndex = sphCreateIndexPhrase ( hIndex["path"].cstr(), hIndex ("enable_star" ) ? hIndex ["enable_star"].intval () != 0 : false  );
 		sError = "could not create index (check that files exist)";
 		for ( ; pIndex; )
 		{

@@ -14,6 +14,7 @@
 #include "sphinx.h"
 #include "sphinxstem.h"
 #include "sphinxquery.h"
+#include "sphinxutils.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -2094,7 +2095,7 @@ struct CSphIndex_VLN : CSphIndex
 {
 	friend struct CSphDoclistRecord;
 
-								CSphIndex_VLN ( const char * sFilename );
+								CSphIndex_VLN ( const char * sFilename, bool bEnableStar );
 
 	virtual int					Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSources, int iMemoryLimit, ESphDocinfo eDocinfo );
 
@@ -2126,7 +2127,7 @@ private:
 	static const int			WRITE_BUFFER_SIZE		= 262144;	///< my write buffer size
 
 	static const DWORD			INDEX_MAGIC_HEADER		= 0x58485053;	///< my magic 'SPHX' header
-	static const DWORD			INDEX_FORMAT_VERSION	= 6;			///< my format version
+	static const DWORD			INDEX_FORMAT_VERSION	= 7;			///< my format version
 
 private:
 	// common stuff
@@ -2170,6 +2171,8 @@ private:
 	CSphSharedBuffer<DWORD>		m_pDocinfo;				///< my docinfo cache
 	DWORD						m_uDocinfo;				///< my docinfo cache size
 	CSphSharedBuffer<DWORD>		m_pMva;					///< my multi-valued attrs cache
+
+	bool						m_bEnableStar;			///< enable star-syntax
 
 	static const int			DOCINFO_HASH_BITS = 18;	// FIXME! make this configurable
 	CSphSharedBuffer<DWORD>		m_pDocinfoHash;
@@ -4947,15 +4950,16 @@ void CSphIndex::SetInfixIndexing ( bool bPrefixesOnly, int iMinLength )
 
 /////////////////////////////////////////////////////////////////////////////
 
-CSphIndex * sphCreateIndexPhrase ( const char * sFilename )
+CSphIndex * sphCreateIndexPhrase ( const char * sFilename, bool bEnableStar )
 {
-	return new CSphIndex_VLN ( sFilename );
+	return new CSphIndex_VLN ( sFilename, bEnableStar );
 }
 
 
-CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename )
+CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename, bool bEnableStar )
 	: CSphIndex ( sFilename )
 	, m_iLockFD ( -1 )
+	, m_bEnableStar ( bEnableStar )
 {
 	m_sFilename = sFilename;
 
@@ -10482,7 +10486,13 @@ bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, C
 		return false;
 
 	// prepare for setup
-	bool bUseStar = ( m_bPrefixesOnly==true && m_iMinInfixLen>0 );
+
+	bool bUseStar = false;
+	if ( m_uVersion >= 7 )
+		bUseStar = m_iMinInfixLen > 0 && m_bEnableStar;
+	else
+		if ( m_uVersion == 6 )
+			bUseStar = ( m_bPrefixesOnly==true && m_iMinInfixLen>0 );
 
 	CSphDictStar tDictStar ( pDict );
 	if ( bUseStar )
@@ -11586,6 +11596,8 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 	m_dHits.Reserve ( 1024 );
 	m_dHits.Resize ( 0 );
 
+	bool bGlobalPartialMatch = m_iMinInfixLen > 0;
+
 	for ( int j=0; j<m_tSchema.m_dFields.GetLength(); j++ )
 	{
 		BYTE * sField = dFields[j];
@@ -11603,20 +11615,20 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 		BYTE * sWord;
 		int iPos = ( j<<24 ) + 1;
 
-		if ( m_iMinInfixLen )
+		bool bPartialMatch = m_iMinInfixLen && m_tSchema.m_dFields [j].m_uMatchType != SPH_MATCH_WHOLE
+			&& ( (  m_bPrefixesOnly && ( m_tSchema.m_dFields [j].m_uMatchType & SPH_MATCH_PREFIX ) )
+			  || ( !m_bPrefixesOnly && ( m_tSchema.m_dFields [j].m_uMatchType & SPH_MATCH_INFIX ) ) );
+
+		if ( bPartialMatch )
 		{
 			// index all infixes
 			while ( ( sWord = m_pTokenizer->GetToken() )!=NULL )
 			{
 				int iLen = m_pTokenizer->GetLastTokenLen ();
 
-				// always index full word (maybe with magic tail marker)
-				if ( m_bPrefixesOnly )
-				{
-					int iBytes = strlen ( (const char*)sWord );
-					sWord[iBytes] = MAGIC_WORD_TAIL;
-					sWord[iBytes+1] = '\0';
-				}
+				// always index full word (with magic tail marker)
+				sWord[iLen] = MAGIC_WORD_TAIL;
+				sWord[iLen+1] = '\0';
 
 				SphWordID_t iWord = m_pDict->GetWordID ( sWord );
 				if ( iWord )
@@ -11669,6 +11681,13 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 			// index words only
 			while ( ( sWord = m_pTokenizer->GetToken() )!=NULL )
 			{
+				if ( bGlobalPartialMatch )
+				{
+					int iBytes = strlen ( (const char*)sWord );
+					sWord[iBytes] = MAGIC_WORD_TAIL;
+					sWord[iBytes+1] = '\0';
+				}
+
 				SphWordID_t iWord = m_pDict->GetWordID ( sWord );
 				if ( iWord )
 				{
@@ -11683,6 +11702,45 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 	}
 
 	return true;
+}
+
+
+void CSphSource_Document::SetupFieldMatch ( const char * szPrefixFields, const char * szInfixFields )
+{
+	m_sPrefixFields = szPrefixFields;
+	m_sInfixFields = szInfixFields;
+}
+
+
+bool CSphSource_Document::IsPrefixMatch ( const char * szField ) const
+{
+	return IsFieldInStr ( szField, m_sPrefixFields.cstr () );
+}
+
+
+bool CSphSource_Document::IsInfixMatch ( const char * szField ) const
+{
+	return IsFieldInStr ( szField, m_sInfixFields.cstr () );
+}
+
+
+bool CSphSource_Document::IsFieldInStr ( const char * szField, const char * szString ) const
+{
+	if ( ! szString )
+		return true;
+
+	if  ( ! szField )
+		return false;
+
+	const char * szPos = strstr ( szString, szField );
+	if ( ! szPos )
+		return false;
+
+	int iFieldLen = strlen ( szField );
+	bool bStartOk = szPos == szString || ! sphIsAlpha ( *szPos );
+	bool bEndOk = !*(szPos + iFieldLen) || ! sphIsAlpha ( *(szPos + iFieldLen) );
+
+	return bStartOk && bEndOk;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -12005,6 +12063,14 @@ bool CSphSource_SQL::IterateHitsStart ( CSphString & sError )
 		}
 
 		tCol.m_iIndex = i+1;
+		tCol.m_uMatchType = SPH_MATCH_WHOLE;
+
+		if ( IsPrefixMatch ( tCol.m_sName.cstr () ) )
+			tCol.m_uMatchType |= SPH_MATCH_PREFIX;
+
+		if ( IsInfixMatch ( tCol.m_sName.cstr () ) )
+			tCol.m_uMatchType |= SPH_MATCH_INFIX;
+
 		if ( tCol.m_eAttrType==SPH_ATTR_NONE )
 			m_tSchema.m_dFields.Add ( tCol );
 		else

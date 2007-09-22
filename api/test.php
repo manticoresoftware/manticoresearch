@@ -27,6 +27,7 @@ if ( !is_array($_SERVER["argv"]) || empty($_SERVER["argv"]) )
 	print ( "-a, --any\t\tuse 'match any word' matching mode\n" );
 	print ( "-b, --boolean\t\tuse 'boolean query' matching mode\n" );
 	print ( "-e, --extended\t\tuse 'extended query' matching mode\n" );
+	print ( "-ph,--phrase\t\tuse 'exact phrase' matching mode\n" );
 	print ( "-f, --filter <ATTR>\tfilter by attribute 'ATTR' (default is 'group_id')\n" );
 	print ( "-v, --value <VAL>\tadd VAL to allowed 'group_id' values list\n" );
 	print ( "-g, --groupby <EXPR>\tgroup matches by 'EXPR'\n" );
@@ -61,6 +62,7 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="-a" || $arg=="--any" )			$mode = SPH_MATCH_ANY;
 	else if ( $arg=="-b" || $arg=="--boolean" )		$mode = SPH_MATCH_BOOLEAN;
 	else if ( $arg=="-e" || $arg=="--extended" )	$mode = SPH_MATCH_EXTENDED;
+	else if ( $arg=="-ph"|| $arg=="--phrase" )		$mode = SPH_MATCH_PHRASE;
 	else if ( $arg=="-f" || $arg=="--filter" )		$filter = $args[++$i];
 	else if ( $arg=="-v" || $arg=="--value" )		$filtervals[] = (int)$args[++$i];
 	else if ( $arg=="-g" || $arg=="--groupby" )		$groupby = $args[++$i];

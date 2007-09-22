@@ -416,6 +416,7 @@ index test1
 	#
 	# synonyms 			= @CONFDIR@/data/synonyms.txt
 
+
 	# minimum word length
 	#
 	# only the words that are of this length and above will be indexed;
@@ -444,6 +445,7 @@ index test1
 	#
 	# 'utf-8' default value is
 	# charset_table		= 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F
+
 
 	# minimum prefix length
 	#
@@ -482,6 +484,56 @@ index test1
 	# default is 0, which means NOT to index infixes
 	min_infix_len		= 0
 
+	# prefix_fields
+	# infix_fields
+	#
+	# these features can be used to limit prefix or infix indexing
+	# to several explicitly specified fields, and retain normal
+	# "whole word" indexing on all others.
+	#
+	# optional, default value is empty, which means to index
+	# prefixes or infixes in all available full-text fields
+	#
+	# prefix_fields		= filename
+	# infix_fields		= url, domain
+
+
+	# enable_star
+	#
+	# this feature enables "star-syntax" in keywords when searching
+	# through indexes whcih were created with prefix or infix indexing
+	# enabled.
+	#
+	# possible values are 0, which means to disable star-syntax
+	# and treat all keywords as prefixs or infixes respectively,
+	# and 1, which means that:
+	# 1) keywords without stars will be treated as full words;
+	# 2) keywords with star at the end will be treated as prefixes;
+	# 3) keywords with stars at the start and the end will be treated
+	# as infixes (provided that the index was built with infixes).
+	#
+	# for example, assume that the index was built with infixes and
+	# that enable_star is 1. searching should work as follows:
+	#
+	# 1) "abcdef" query will match only those documents which have
+	# the exact "abcdef" word in them;
+	#
+	# 2) "abc*" query will match those documents which have any
+	# words starting with "abc", but *not* in the middle; including
+	# the documents which have "abc" word;
+	#
+	# 3) "*cde*" query will match those documents which have any
+	# words either starting with "cde", or with "cde" in the middle;
+	# including the documents which have "cde" word".
+	#
+	# enable_star only affects searching; so it can be changed
+	# without reindexing (one would need to restart searchd, though).
+	#
+	# optional, default value is 0 (to keep compatibility with 0.9.7).
+	#
+	# enable_star		= 1
+
+	
 	# n-grams length
 	#
 	# n-grams provide basic CJK support for unsegmented texts. if using
@@ -502,6 +554,7 @@ index test1
 	# optional, default is 0, which means NOT to use n-grams
 	#
 	# ngram_len = 1
+
 
 	# n-gram characters table
 	#

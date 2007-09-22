@@ -716,7 +716,7 @@ public:
 	virtual void						PostIndex () {}
 
 	/// setup field match mode
-	virtual void						SetupFieldMatch ( const char * szPrefixFields, const char * szInfixFields ) {}
+	virtual void						SetupFieldMatch ( const char *, const char * ) {}
 
 protected:
 	ISphTokenizer *						m_pTokenizer;	///< my tokenizer

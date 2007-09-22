@@ -76,6 +76,7 @@ struct ServedIndex_t
 	CSphString			m_sIndexPath;
 	bool				m_bEnabled;		///< to disable index in cases when rotation fails
 	bool				m_bMlock;
+	bool				m_bStar;
 
 public:
 						ServedIndex_t ();
@@ -210,6 +211,7 @@ void ServedIndex_t::Reset ()
 	m_pTokenizer= NULL;
 	m_bEnabled	= true;
 	m_bMlock	= false;
+	m_bStar		= false;
 }
 
 ServedIndex_t::~ServedIndex_t ()
@@ -3941,7 +3943,7 @@ void SeamlessTryToForkPrereader ()
 {
 	// alloc buffer index (once per run)
 	if ( !g_pPrereading )
-		g_pPrereading = sphCreateIndexPhrase ( NULL );
+		g_pPrereading = sphCreateIndexPhrase ( NULL, false ); // FIXME! check if it's ok
 
 	// next in line
 	const char * sPrereading = g_dRotating.Pop ();
@@ -4869,13 +4871,15 @@ int WINAPI ServiceMain ( int argc, char **argv )
 				sphWarning ( "index '%s': %s", sIndexName, sError.cstr() );	
 			tIdx.m_pDict->LoadStopwords ( hIndex.Exists ( "stopwords" ) ? hIndex["stopwords"].cstr() : NULL, tIdx.m_pTokenizer );
 
-			// configure memlocking
+			// configure memlocking, star
 			if ( hIndex("mlock") && hIndex["mlock"].intval() )
 				tIdx.m_bMlock = true;
+			if ( hIndex("enable_star") && hIndex["enable_star"].intval() )
+				tIdx.m_bStar = true;
 
 			// try to create index
 			CSphString sWarning;
-			tIdx.m_pIndex = sphCreateIndexPhrase ( hIndex["path"].cstr() );
+			tIdx.m_pIndex = sphCreateIndexPhrase ( hIndex["path"].cstr(), tIdx.m_bStar );
 			tIdx.m_pSchema = tIdx.m_pIndex->Prealloc ( tIdx.m_bMlock, &sWarning );
 			if ( !tIdx.m_pSchema || !tIdx.m_pIndex->Preread() )
 			{

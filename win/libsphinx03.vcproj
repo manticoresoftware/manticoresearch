@@ -132,6 +132,20 @@
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}">
 			<File
 				RelativePath="..\src\sphinx.h">
+				<FileConfiguration
+					Name="Debug|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						CommandLine="$(SolutionDir)\src\svnxrev.cmd $(SolutionDir)"
+						Outputs="$(SolutionDir)\src\nonexistent"/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Release|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						CommandLine="$(SolutionDir)\src\svnxrev.cmd $(SolutionDir)"
+						Outputs="$(SolutionDir)\src\nonexistent"/>
+				</FileConfiguration>
 			</File>
 			<File
 				RelativePath="..\src\sphinxexcerpt.h">

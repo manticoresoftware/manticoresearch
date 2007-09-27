@@ -556,12 +556,12 @@ struct CSphColumnInfo
 	CSphColumnInfo ( const char * sName=NULL, DWORD eType=SPH_ATTR_NONE )
 		: m_sName ( sName )
 		, m_eAttrType ( eType )
+		, m_uMatchType ( SPH_MATCH_WHOLE )
 		, m_iIndex ( -1 )
 		, m_iRowitem ( -1 )
 		, m_iBitOffset ( -1 )
 		, m_iBitCount ( -1 )
 		, m_eSrc ( SPH_ATTRSRC_NONE )
-		, m_uMatchType	( SPH_MATCH_WHOLE )
 	{
 		m_sName.ToLower ();
 	}

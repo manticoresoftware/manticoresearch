@@ -24,7 +24,7 @@ $url = $1;
 die ( "$UTILITY: failed to extract commit revision" ) if (!( $info =~ /<commit\s+.*?revision=\"(\d+)\"/ ));
 $rev = $1;
 
-die ( "$UTILITY: unexpected project name (project=$PROJECT, url=$url)" ) if (!( $url =~ s/svn:\/\/.*?\/$PROJECT\/// ));
+exit ( 0 ) if (!( $url =~ s/svn:\/\/.*?\/$PROJECT\/// )); # for cases when we're imported to 3rd party SVN repo
 die ( "$UTILITY: unexpected project directory layout (url=$url)" ) if (!( $url =~ /^(?:trunk|tags\/(.*)|branches\/(.*))$/ ));
 $tag = $1.$2;
 

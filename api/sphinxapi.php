@@ -829,7 +829,7 @@ class SphinxClient
 				$this->_error = "incomplete reply";
 				return false;
 			}
-			$res[] = substr ( $response, $pos, $len );
+			$res[] = $len ? substr ( $response, $pos, $len ) : "";
 			$pos += $len;
 		}
 

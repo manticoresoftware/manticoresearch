@@ -3872,7 +3872,7 @@ int CreatePipe ( bool bFatal )
 
 		if ( fcntl ( dPipe[0], F_SETFL, O_NONBLOCK ) )
 		{
-			sphWarning ( "fcntl() on pipe failed (error=%s)", strerror(errno) );
+			sphWarning ( "fcntl(O_NONBLOCK) on pipe failed (error=%s)", strerror(errno) );
 			SafeClose ( dPipe[0] );
 			SafeClose ( dPipe[1] );
 			break;
@@ -4031,7 +4031,10 @@ struct PipeReader_t
 	PipeReader_t ( int iFD )
 		: m_iFD ( iFD )
 		, m_bError ( false )
-	{}
+	{
+		if ( !fcntl ( iFD, F_SETFL, 0 ) )
+			sphWarning ( "fcntl(0) on pipe failed (error=%s)", strerror(errno) );
+	}
 
 	~PipeReader_t ()
 	{

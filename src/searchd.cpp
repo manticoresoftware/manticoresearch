@@ -4147,6 +4147,11 @@ void CheckPipes ()
 		{
 			assert ( g_bDoRotate && g_bSeamlessRotate && g_sPrereading );
 
+			// whatever the outcome, we will be done with this one
+			const char * sPrereading = g_sPrereading;
+			g_sPrereading = NULL;
+
+			// notice that this will block!
 			int iRes = tPipe.GetInt();
 			if ( tPipe.IsError() )
 				break;
@@ -4154,7 +4159,7 @@ void CheckPipes ()
 			// if preread was succesful, exchange served index and prereader buffer index
 			if ( iRes )
 			{
-				ServedIndex_t & tServed = g_hIndexes[g_sPrereading];
+				ServedIndex_t & tServed = g_hIndexes[sPrereading];
 				CSphIndex * pOld = tServed.m_pIndex;
 				CSphIndex * pNew = g_pPrereading;
 
@@ -4164,16 +4169,16 @@ void CheckPipes ()
 				if ( !pOld->Rename ( sOld ) )
 				{
 					// FIXME! rollback inside Rename() call potentially fail
-					sphWarning ( "rotating index '%s': cur to old rename failed: %s", g_sPrereading, pOld->GetLastError().cstr() );
+					sphWarning ( "rotating index '%s': cur to old rename failed: %s", sPrereading, pOld->GetLastError().cstr() );
 					continue;
 				}
 				// FIXME! at this point there's no cur lock file; ie. potential race
 				if ( !pNew->Rename ( tServed.m_sIndexPath.cstr() ) )
 				{
-					sphWarning ( "rotating index '%s': new to cur rename failed: %s", g_sPrereading, pNew->GetLastError().cstr() );
+					sphWarning ( "rotating index '%s': new to cur rename failed: %s", sPrereading, pNew->GetLastError().cstr() );
 					if ( !pOld->Rename ( tServed.m_sIndexPath.cstr() ) )
 					{
-						sphWarning ( "rotating index '%s': old to cur rename failed: %s; INDEX UNUSABLE", g_sPrereading, pOld->GetLastError().cstr() );
+						sphWarning ( "rotating index '%s': old to cur rename failed: %s; INDEX UNUSABLE", sPrereading, pOld->GetLastError().cstr() );
 						tServed.m_bEnabled = false;
 					}
 					continue;
@@ -4183,13 +4188,12 @@ void CheckPipes ()
 				Swap ( tServed.m_pIndex, g_pPrereading );
 				tServed.m_pSchema = tServed.m_pIndex->GetSchema ();
 				tServed.m_bEnabled = true;
-				sphInfo ( "rotating index '%s': success", g_sPrereading );
+				sphInfo ( "rotating index '%s': success", sPrereading );
 			}
 
 			// in any case, buffer index should now be deallocated
 			g_pPrereading->Dealloc ();
 			g_pPrereading->Unlock ();
-			g_sPrereading = NULL;
 
 			// work next one
 			SeamlessForkPrereader ();

@@ -2975,7 +2975,10 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 						CSphString sError;
 						ISphMatchSorter * pSorter = sphCreateQueue ( &m_dQueries[iQuery], *tServed.m_pSchema, sError );
 						if ( !pSorter )
+						{
 							m_dFailuresSet[iQuery].SubmitEx ( dLocal[iLocal].cstr(), "%s", sError.cstr() );
+							continue;
+						}
 
 						dSorterIndexes[iQuery] = dSorters.GetLength();
 						dSorters.Add ( pSorter );
@@ -2992,10 +2995,15 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 								m_dFailuresSet[iQuery].SubmitEx ( dLocal[iLocal].cstr(), "%s", tServed.m_pIndex->GetLastError().cstr() );
 						} else
 						{
-							// succeeded
+							// multi-query succeeded
 							for ( int iQuery=iStart; iQuery<=iEnd; iQuery++ )
 							{
-								ISphMatchSorter * pSorter = dSorters [ dSorterIndexes [ iQuery ] ];
+								// but some of the sorters could had failed at "create sorter" stage
+								if ( dSorterIndexes[iQuery]<0 )
+									continue;
+
+								// this one seems OK
+								ISphMatchSorter * pSorter = dSorters [ dSorterIndexes[iQuery] ];
 								AggrResult_t & tRes = m_dResults[iQuery];
 								tRes.m_iSuccesses++;
 
@@ -3194,7 +3202,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			m_dFailuresSet[iRes].BuildReport ( sFailures );
 
 			tRes.m_sError = sFailures.cstr();
-			return;
+			continue;
 		}
 
 		// minimize schema and remove dupes

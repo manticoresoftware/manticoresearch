@@ -4032,8 +4032,10 @@ struct PipeReader_t
 		: m_iFD ( iFD )
 		, m_bError ( false )
 	{
+#if !USE_WINDOWS
 		if ( !fcntl ( iFD, F_SETFL, 0 ) )
 			sphWarning ( "fcntl(0) on pipe failed (error=%s)", strerror(errno) );
+#endif
 	}
 
 	~PipeReader_t ()

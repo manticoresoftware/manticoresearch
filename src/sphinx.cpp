@@ -4050,6 +4050,15 @@ CSphQuery::CSphQuery ()
 	, m_iOldMaxGID		( UINT_MAX )
 {}
 
+
+int CSphQuery::GetIndexWeight ( const char * sName ) const
+{
+	ARRAY_FOREACH ( i, m_dIndexWeights )
+		if ( m_dIndexWeights[i].m_sName==sName )
+			return m_dIndexWeights[i].m_iValue;
+	return 1;
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // SCHEMA
 /////////////////////////////////////////////////////////////////////////////

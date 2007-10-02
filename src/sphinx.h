@@ -1111,6 +1111,16 @@ protected:
 };
 
 
+/// name+int pair
+struct CSphNamedInt
+{
+	CSphString	m_sName;
+	int			m_iValue;
+
+	CSphNamedInt () : m_iValue ( 0 ) {}
+};
+
+
 /// search query
 class CSphQuery
 {
@@ -1142,17 +1152,16 @@ public:
 	int				m_iRetryCount;	///< retry count, for distributed queries
 	int				m_iRetryDelay;	///< retry delay, for distributed queries
 
-public:
 	bool			m_bGeoAnchor;		///< do we have an anchor
 	CSphString		m_sGeoLatAttr;		///< latitude attr name
 	CSphString		m_sGeoLongAttr;		///< longitude attr name
 	float			m_fGeoLatitude;		///< anchor latitude
 	float			m_fGeoLongitude;	///< anchor longitude
 
-public:
-	bool			m_bCalcGeodist;		///< whether this query needs to calc @geodist
+	CSphVector<CSphNamedInt>	m_dIndexWeights;	///< per-index weights
 
 public:
+	bool			m_bCalcGeodist;		///< whether this query needs to calc @geodist
 	int				m_iPresortRowitems;	///< row size submitted to sorter (with calculated attributes, but without groupby/count attributes added by sorters)
 	int				m_iGroupbyOffset;	///< group-by attr bit offset
 	int				m_iGroupbyCount;	///< group-by attr bit count
@@ -1171,6 +1180,8 @@ public:
 public:
 					CSphQuery ();		///< ctor, fills defaults
 					~CSphQuery () {}	///< dtor, frees owned stuff
+
+	int				GetIndexWeight ( const char * sName ) const;	///< return index weight from m_dIndexWeights; or 1 by default
 };
 
 

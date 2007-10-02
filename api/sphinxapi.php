@@ -23,7 +23,7 @@ define ( "SEARCHD_COMMAND_EXCERPT",	1 );
 define ( "SEARCHD_COMMAND_UPDATE",	2 );
 
 /// current client-side command implementation versions
-define ( "VER_COMMAND_SEARCH",		0x10E );
+define ( "VER_COMMAND_SEARCH",		0x10F );
 define ( "VER_COMMAND_EXCERPT",		0x100 );
 define ( "VER_COMMAND_UPDATE",		0x100 );
 
@@ -104,9 +104,11 @@ class SphinxClient
 	/// create a new client object and fill defaults
 	function SphinxClient ()
 	{
+		// per-client-object settings
 		$this->_host		= "localhost";
 		$this->_port		= 3312;
 
+		// per-query settings
 		$this->_offset		= 0;
 		$this->_limit		= 20;
 		$this->_mode		= SPH_MATCH_ALL;
@@ -125,10 +127,13 @@ class SphinxClient
 		$this->_retrycount	= 0;
 		$this->_retrydelay	= 0;
 		$this->_anchor		= array ();
+		$this->_indexweights= array ();
 
+		// per-reply fields (for single-query case)
 		$this->_error		= "";
 		$this->_warning		= "";
 
+		// requests storage (for multi-query case)
 		$this->_reqs		= array ();
 	}
 
@@ -301,6 +306,18 @@ class SphinxClient
 			assert ( is_int($weight) );
 
 		$this->_weights = $weights;
+	}
+
+	/// set per-index weights
+	function SetIndexWeights ( $weights )
+	{
+		assert ( is_array($weights) );
+		foreach ( $weights as $index=>$weight )
+		{
+			assert ( is_string($index) );
+			assert ( is_int($weight) );
+		}
+		$this->_indexweights = $weights;
 	}
 
 	/// set IDs range to match
@@ -560,6 +577,11 @@ class SphinxClient
 			$req .= pack ( "N", strlen($a["attrlong"]) ) . $a["attrlong"];
 			$req .= pack ( "ff", $a["lat"], $a["long"] );
 		}
+
+		// per-index weights
+		$req .= pack ( "N", count($this->_indexweights) );
+		foreach ( $this->_indexweights as $idx=>$weight )
+			$req .= pack ( "N", strlen($idx) ) . $idx . pack ( "N", $weight );
 
 		// store request to requests array
 		$this->_reqs[] = $req;

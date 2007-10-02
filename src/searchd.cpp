@@ -149,7 +149,7 @@ enum SearchdCommand_e
 /// known command versions
 enum
 {
-	VER_COMMAND_SEARCH		= 0x10E,
+	VER_COMMAND_SEARCH		= 0x10F,
 	VER_COMMAND_EXCERPT		= 0x100,
 	VER_COMMAND_UPDATE		= 0x100
 };
@@ -1750,7 +1750,7 @@ protected:
 
 int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuery & q ) const
 {
-	int iReqSize = 76 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
+	int iReqSize = 80 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
 		+ strlen ( q.m_sSortBy.cstr() )
 		+ strlen ( q.m_sQuery.cstr() )
 		+ strlen ( sIndexes )
@@ -1773,8 +1773,10 @@ int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuer
 				break;
 		}
 	}
-	if ( q.m_bCalcGeodist )
+	if ( q.m_bGeoAnchor )
 		iReqSize += 16 + strlen ( q.m_sGeoLatAttr.cstr() ) + strlen ( q.m_sGeoLongAttr.cstr() ); // string lat-attr, long-attr; float lat, long
+	ARRAY_FOREACH ( i, q.m_dIndexWeights )
+		iReqSize += 8 + strlen ( q.m_dIndexWeights[i].m_sName.cstr() ); // string index-name; int index-weight
 	return iReqSize;
 }
 
@@ -1835,6 +1837,12 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 		tOut.SendString ( q.m_sGeoLongAttr.cstr() );
 		tOut.SendFloat ( q.m_fGeoLatitude );
 		tOut.SendFloat ( q.m_fGeoLongitude );
+	}
+	tOut.SendInt ( q.m_dIndexWeights.GetLength() );
+	ARRAY_FOREACH ( i, q.m_dIndexWeights )
+	{
+		tOut.SendString ( q.m_dIndexWeights[i].m_sName.cstr() );
+		tOut.SendInt ( q.m_dIndexWeights[i].m_iValue );
 	}
 }
 
@@ -2292,6 +2300,17 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 		}
 	}
 
+	// v.1.15
+	if ( iVer>=0x10F )
+	{
+		tQuery.m_dIndexWeights.Resize ( tReq.GetInt() ); // FIXME! add sanity check
+		ARRAY_FOREACH ( i, tQuery.m_dIndexWeights )
+		{
+			tQuery.m_dIndexWeights[i].m_sName = tReq.GetString ();
+			tQuery.m_dIndexWeights[i].m_iValue = tReq.GetInt ();
+		}
+	}
+
 	/////////////////////
 	// additional checks
 	/////////////////////
@@ -2604,6 +2623,7 @@ struct AggrResult_t : CSphQueryResult
 {
 	CSphVector<CSphSchema>		m_dSchemas;		///< aggregated resultsets schemas (for schema minimization)
 	CSphVector<int>				m_dMatchCounts;	///< aggregated resultsets lengths (for schema minimization)
+	CSphVector<int>				m_dIndexWeights;///< aggregated resultsets per-index weights (optional)
 };
 
 
@@ -2701,12 +2721,43 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery )
 	} else
 	{
 		// normal sorter needs massasging
-		ARRAY_FOREACH ( i, tRes.m_dMatches )
+		if ( tQuery.m_dIndexWeights.GetLength() )
 		{
-			if ( i==0 || tRes.m_dMatches[i].m_iDocID!=tRes.m_dMatches[i-1].m_iDocID )
-				pSorter->Push ( tRes.m_dMatches[i] );
-			else
-				iDupes++;
+			// if there were per-index weights, compute weighted ranks sum
+			int iCur = 0;
+			int iMax = tRes.m_dMatches.GetLength();
+
+			while ( iCur<iMax )
+			{
+				CSphMatch & tMatch = tRes.m_dMatches[iCur++];
+				if ( tMatch.m_iTag>=0 )
+					tMatch.m_iWeight *= tRes.m_dIndexWeights[tMatch.m_iTag];
+
+				while ( iCur<iMax && tRes.m_dMatches[iCur].m_iDocID==tMatch.m_iDocID )
+				{
+					const CSphMatch & tDupe = tRes.m_dMatches[iCur];
+					int iAddWeight = tDupe.m_iWeight;
+					if ( tDupe.m_iTag>=0 )
+						iAddWeight *= tRes.m_dIndexWeights[tDupe.m_iTag];
+					tMatch.m_iWeight += iAddWeight;
+
+					iDupes++;
+					iCur++;
+				}
+
+				pSorter->Push ( tMatch );
+			}
+
+		} else
+		{
+			// by default, simply remove dupes (select first by tag)
+			ARRAY_FOREACH ( i, tRes.m_dMatches )
+			{
+				if ( i==0 || tRes.m_dMatches[i].m_iDocID!=tRes.m_dMatches[i-1].m_iDocID )
+					pSorter->Push ( tRes.m_dMatches[i] );
+				else
+					iDupes++;
+			}
 		}
 	}
 
@@ -2749,6 +2800,12 @@ SearchHandler_c::SearchHandler_c ( int iQueries, int iClientVer )
 	m_dQueries.Resize ( iQueries );
 	m_dResults.Resize ( iQueries );
 	m_dFailuresSet.SetSize ( iQueries );
+
+	ARRAY_FOREACH ( i, m_dResults )
+	{
+		assert ( m_dResults[i].m_dIndexWeights.GetLength()==0 );
+		m_dResults[i].m_dIndexWeights.Add ( 1 ); // reserved index 0 with weight 1 for remote matches
+	}
 }
 
 
@@ -3025,6 +3082,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 								{
 									tRes.m_dMatchCounts.Add ( pSorter->GetLength() );
 									tRes.m_dSchemas.Add ( tRes.m_tSchema );
+									tRes.m_dIndexWeights.Add ( m_dQueries[iQuery].GetIndexWeight ( dLocal[iLocal].cstr() ) );
 									m_dTag2MVA.Add ( tRes.m_pMva );
 									sphFlattenQueue ( pSorter, &tRes, m_iTag++ );
 								}
@@ -3072,6 +3130,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 						{
 							tRes.m_dMatchCounts.Add ( pSorter->GetLength() );
 							tRes.m_dSchemas.Add ( tRes.m_tSchema );
+							tRes.m_dIndexWeights.Add ( tQuery.GetIndexWeight ( dLocal[iLocal].cstr() ) );
 							m_dTag2MVA.Add ( tRes.m_pMva );
 							sphFlattenQueue ( pSorter, &tRes, m_iTag++ );
 						}
@@ -3121,6 +3180,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 					tRes.m_dMatchCounts.Add ( tRemoteResult.m_dMatches.GetLength() );
 					tRes.m_dSchemas.Add ( tRemoteResult.m_tSchema );
+					// note how we do NOT* add per-index weight here; remote agents are all tagged 0 (which contains weight 1)
 
 					// merge this agent's stats
 					tRes.m_iTotalMatches += tRemoteResult.m_iTotalMatches;

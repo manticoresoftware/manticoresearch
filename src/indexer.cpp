@@ -625,9 +625,6 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 	iPrefix = Max ( iPrefix, 0 );
 	iInfix = Max ( iInfix, 0 );
 
-	if ( iPrefix>0 && iInfix>0 )
-		sphDie ( "index '%s': min_prefix_len and min_infix_len can not both be used", sIndexName );
-
 	int iMinWordLen = hIndex("min_word_len") ? Max ( hIndex["min_word_len"].intval(), 0 ) : 0;
 	if ( iMinWordLen>0 && iPrefix>iMinWordLen )
 	{
@@ -640,9 +637,6 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		fprintf ( stdout, "WARNING: index '%s': min_infix_len greater than min_word_len, clamping.\n", sIndexName );
 		iInfix = iMinWordLen;
 	}
-
-	bool bPrefixesOnly = ( iPrefix>0 );
-	int iMinInfixLen = ( iPrefix>0 ) ? iPrefix : iInfix;
 
 	/////////////////////
 	// spawn datasources
@@ -777,7 +771,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		}
 
 		pIndex->SetProgressCallback ( ShowProgress );
-		pIndex->SetInfixIndexing ( bPrefixesOnly, iMinInfixLen );
+		pIndex->SetInfixIndexing ( iPrefix, iInfix );
 
 		bOK = pIndex->Build ( pDict, dSources, g_iMemLimit, eDocinfo )!=0;
 		if ( bOK && g_bRotate )

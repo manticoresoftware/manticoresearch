@@ -94,6 +94,7 @@ void sphWarn ( char * sTemplate, ... );
 const char *	SPHINX_DEFAULT_SBCS_TABLE	= "0..9, A..Z->a..z, _, a..z, U+A8->U+B8, U+B8, U+C0..U+DF->U+E0..U+FF, U+E0..U+FF";
 const char *	SPHINX_DEFAULT_UTF8_TABLE	= "0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F";
 
+const char		MAGIC_WORD_HEAD				= 1;
 const char		MAGIC_WORD_TAIL				= 1;
 const char		MAGIC_SYNONYM_WHITESPACE	= 1;
 
@@ -2127,7 +2128,7 @@ private:
 	static const int			WRITE_BUFFER_SIZE		= 262144;	///< my write buffer size
 
 	static const DWORD			INDEX_MAGIC_HEADER		= 0x58485053;	///< my magic 'SPHX' header
-	static const DWORD			INDEX_FORMAT_VERSION	= 7;			///< my format version
+	static const DWORD			INDEX_FORMAT_VERSION	= 8;			///< my format version
 
 private:
 	// common stuff
@@ -4944,17 +4945,17 @@ CSphIndex::CSphIndex ( const char * sName )
 	: m_pProgress ( NULL )
 	, m_tSchema ( sName )
 	, m_sLastError ( "(no error message)" )
+	, m_iMinPrefixLen ( 0 )
 	, m_iMinInfixLen ( 0 )
-	, m_bPrefixesOnly ( false )
 	, m_bAttrsUpdated ( false )
 {
 }
 
 
-void CSphIndex::SetInfixIndexing ( bool bPrefixesOnly, int iMinLength )
+void CSphIndex::SetInfixIndexing ( int iPrefixLen, int iInfixLen )
 {
-	m_iMinInfixLen = Max ( iMinLength, 0 );
-	m_bPrefixesOnly = bPrefixesOnly;
+	m_iMinPrefixLen = Max ( iPrefixLen, 0 );
+	m_iMinInfixLen = Max ( iInfixLen, 0 );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -5415,7 +5416,7 @@ bool CSphIndex_VLN::cidxDone ()
 	fdInfo.PutOffset ( m_tStats.m_iTotalBytes );
 
 	// prefix/infix info
-	fdInfo.PutByte ( m_bPrefixesOnly );
+	fdInfo.PutDword ( m_iMinPrefixLen );
 	fdInfo.PutDword ( m_iMinInfixLen );
 
 	////////////////////////
@@ -6074,6 +6075,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 		assert ( pSource );
 
 		pSource->SetDict ( pDict );
+		pSource->SetEmitInfixes ( m_iMinPrefixLen, m_iMinInfixLen );
 	}
 
 	// connect 1st source and fetch its schema
@@ -6182,6 +6184,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 	{
 		// connect and check schema, if it's not the first one
 		CSphSource * pSource = dSources[iSource];
+
 		if ( iSource )
 			if ( !pSource->Connect ( m_sLastError )
 				|| !pSource->IterateHitsStart ( m_sLastError )
@@ -6189,9 +6192,6 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 			{
 				return 0;
 			}
-
-		// setup infix indexing
-		pSource->SetEmitInfixes ( m_bPrefixesOnly, m_iMinInfixLen );
 
 		// fetch documents
 		for ( ;; )
@@ -7147,7 +7147,7 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 	fdInfo.PutDword ( iTotalDocs );
 	fdInfo.PutOffset ( iTotalBytes );
 
-	fdInfo.PutByte ( m_bPrefixesOnly );
+	fdInfo.PutDword ( m_iMinPrefixLen );
 	fdInfo.PutDword ( m_iMinInfixLen );
 
 	if ( m_pProgress )
@@ -7309,16 +7309,16 @@ void CSphIndex_VLN::MergeWordData ( CSphWordRecord & tDstWord, CSphWordRecord & 
 class CSphDictStar : public CSphDict
 {
 public:
-				CSphDictStar ( CSphDict * pDict ) : m_pDict ( pDict ) { assert ( m_pDict ); }
+						CSphDictStar ( CSphDict * pDict ) : m_pDict ( pDict ) { assert ( m_pDict ); }
 
-	void		LoadStopwords ( const char * sStops, ISphTokenizer * pTok );
-	bool		SetMorphology ( const CSphVariant * sMorph, bool bUseUTF8, CSphString & sError );
+	void				LoadStopwords ( const char * sStops, ISphTokenizer * pTok );
+	bool				SetMorphology ( const CSphVariant * sMorph, bool bUseUTF8, CSphString & sError );
 
-	SphWordID_t	GetWordID ( BYTE * pWord );
-	SphWordID_t	GetWordID ( const BYTE * pWord, int iLen );
+	virtual SphWordID_t	GetWordID ( BYTE * pWord );
+	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen );
 
 protected:
-	CSphDict *	m_pDict;
+	CSphDict *			m_pDict;
 };
 
 
@@ -7353,6 +7353,70 @@ SphWordID_t CSphDictStar::GetWordID ( BYTE * pWord )
 		{
 			sBuf[iLen-1] = '\0';
 		} else
+		{
+			sBuf[iLen] = MAGIC_WORD_TAIL;
+			sBuf[iLen+1] = '\0';
+		}
+	}
+
+	return m_pDict->GetWordID ( (BYTE*)sBuf );
+}
+
+//////////////////////////////////////////////////////////////////////////
+/// star dict for data version 8
+class CSphDictStarV8 : public CSphDictStar
+{
+public:
+						CSphDictStarV8 ( CSphDict * pDict, bool bPrefixes, bool bInfixes );
+
+	virtual SphWordID_t	GetWordID ( BYTE * pWord );
+
+private:
+	bool				m_bPrefixes;
+	bool				m_bInfixes;
+};
+
+
+CSphDictStarV8::CSphDictStarV8 ( CSphDict * pDict, bool bPrefixes, bool bInfixes )
+	: CSphDictStar	( pDict )
+	, m_bPrefixes	( bPrefixes )
+	, m_bInfixes	( bInfixes )
+{
+}
+
+
+SphWordID_t	CSphDictStarV8::GetWordID ( BYTE * pWord )
+{
+	char sBuf [ 16+3*SPH_MAX_WORD_LEN ];
+
+	int iLen = strlen ( (const char*)pWord );
+
+	if ( iLen )
+	{
+		if ( pWord [0] == '*' )
+		{
+			memcpy ( sBuf, pWord + 1, iLen );
+			--iLen;
+			if ( ! m_bInfixes )
+			{
+				// TODO: WARN!
+			}
+		}
+		else
+		{
+			if ( m_bInfixes )
+			{
+				++iLen;
+				memcpy ( sBuf + 1, pWord, iLen );
+				sBuf [0] = MAGIC_WORD_HEAD;
+			}
+			else
+				memcpy ( sBuf, pWord, iLen + 1 );
+		}
+
+		if ( sBuf[iLen-1]=='*' )
+			sBuf[iLen-1] = '\0';
+		else
 		{
 			sBuf[iLen] = MAGIC_WORD_TAIL;
 			sBuf[iLen+1] = '\0';
@@ -10169,11 +10233,28 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString * sWarning 
 	m_tStats.m_iTotalBytes = rdInfo.GetOffset ();
 
 	// infix stuff
-	if ( m_uVersion>=6 )
+	if ( m_uVersion >= 8 )
 	{
-		m_bPrefixesOnly = ( rdInfo.GetByte ()!=0 );
+		m_iMinPrefixLen = rdInfo.GetDword ();
 		m_iMinInfixLen = rdInfo.GetDword ();
 	}
+	else
+		if ( m_uVersion>=6 )
+		{
+			bool bPrefixesOnly = ( rdInfo.GetByte ()!=0 );
+			int iMinInfixLen = rdInfo.GetDword ();
+
+			if ( bPrefixesOnly )
+			{
+				m_iMinPrefixLen = iMinInfixLen;
+				m_iMinInfixLen = 0;
+			}
+			else
+			{
+				m_iMinPrefixLen = 0;
+				m_iMinInfixLen = iMinInfixLen;
+			}
+		}
 
 	///////////////////////////////////////
 	// verify that data files are readable
@@ -10498,15 +10579,17 @@ bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, C
 
 	bool bUseStar = false;
 	if ( m_uVersion >= 7 )
-		bUseStar = m_iMinInfixLen > 0 && m_bEnableStar;
+		bUseStar = ( m_iMinPrefixLen > 0 || m_iMinInfixLen > 0 ) && m_bEnableStar;
 	else
 		if ( m_uVersion == 6 )
-			bUseStar = ( m_bPrefixesOnly==true && m_iMinInfixLen>0 );
+			bUseStar = m_iMinPrefixLen > 0;
 
-	CSphDictStar tDictStar ( pDict );
+	CSphDictStarV8	tDictStarV8 ( pDict, m_iMinPrefixLen > 0, m_iMinInfixLen > 0 );
+	CSphDictStar	tDictStar ( pDict );
+
 	if ( bUseStar )
 	{
-		pDict = &tDictStar;
+		pDict = m_uVersion >= 8 ? &tDictStarV8 : &tDictStar;
 
 		CSphRemapRange tStar ( '*', '*', '*' ); // FIXME? check and warn if star was already there
 		pTokenizer->AddCaseFolding ( tStar );
@@ -11511,8 +11594,8 @@ CSphSource::CSphSource ( const char * sName )
 	, m_pDict ( NULL )
 	, m_tSchema ( sName )
 	, m_bStripHTML ( false )
+	, m_iMinPrefixLen ( 0 )
 	, m_iMinInfixLen ( 0 )
-	, m_bPrefixesOnly ( false )
 {
 	m_pStripper = new CSphHTMLStripper ();
 }
@@ -11580,10 +11663,10 @@ bool CSphSource::UpdateSchema ( CSphSchema * pInfo, CSphString & sError )
 }
 
 
-void CSphSource::SetEmitInfixes ( bool bPrefixesOnly, int iMinLength )
+void CSphSource::SetEmitInfixes ( int iMinPrefixLen, int iMinInfixLen )
 {
-	m_iMinInfixLen = Max ( iMinLength, 0 );
-	m_bPrefixesOnly = bPrefixesOnly;
+	m_iMinPrefixLen = Max ( iMinPrefixLen, 0 );
+	m_iMinInfixLen = Max ( iMinInfixLen, 0 );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -11605,7 +11688,7 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 	m_dHits.Reserve ( 1024 );
 	m_dHits.Resize ( 0 );
 
-	bool bGlobalPartialMatch = m_iMinInfixLen > 0;
+	bool bGlobalPartialMatch = m_iMinPrefixLen > 0 || m_iMinInfixLen > 0;
 
 	for ( int j=0; j<m_tSchema.m_dFields.GetLength(); j++ )
 	{
@@ -11624,22 +11707,28 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 		BYTE * sWord;
 		int iPos = ( j<<24 ) + 1;
 
-		bool bPartialMatch = m_iMinInfixLen && m_tSchema.m_dFields [j].m_uMatchType != SPH_MATCH_WHOLE
-			&& ( (  m_bPrefixesOnly && ( m_tSchema.m_dFields [j].m_uMatchType & SPH_MATCH_PREFIX ) )
-			  || ( !m_bPrefixesOnly && ( m_tSchema.m_dFields [j].m_uMatchType & SPH_MATCH_INFIX ) ) );
+		bool bPrefixField = m_tSchema.m_dFields [j].m_eMatchType == SPH_MATCH_PREFIX;
+		bool bInfixMode = m_iMinInfixLen > 0;
 
-		if ( bPartialMatch )
+		BYTE sBuf [ 16+3*SPH_MAX_WORD_LEN ];
+
+		if ( m_tSchema.m_dFields [j].m_eMatchType != SPH_MATCH_WHOLE )
 		{
+			int iMinInfixLen = bPrefixField ? m_iMinPrefixLen : m_iMinInfixLen;
+
 			// index all infixes
 			while ( ( sWord = m_pTokenizer->GetToken() )!=NULL )
 			{
 				int iLen = m_pTokenizer->GetLastTokenLen ();
 
-				// always index full word (with magic tail marker)
-				sWord[iLen] = MAGIC_WORD_TAIL;
-				sWord[iLen+1] = '\0';
+				// always index full word (with magic head/tail marker(s))
+				int iBytes = strlen ( (const char*)sWord );
+				memcpy ( sBuf + 1, sWord, iBytes );
+				sBuf [0]			= MAGIC_WORD_HEAD;
+				sBuf [iBytes + 1]	= MAGIC_WORD_TAIL;
+				sBuf [iBytes + 2]	= '\0';
 
-				SphWordID_t iWord = m_pDict->GetWordID ( sWord );
+				SphWordID_t iWord = m_pDict->GetWordID ( sBuf );
 				if ( iWord )
 				{
 					CSphWordHit & tHit = m_dHits.Add ();
@@ -11649,26 +11738,26 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 				}
 
 				// if there are no infixes, that's it
-				if ( m_iMinInfixLen>=iLen )
+				if ( iMinInfixLen > iLen )
 				{
 					iPos++;
 					continue;
 				}
 
 				// process all infixes
-				int iMaxStart = m_bPrefixesOnly ? 0 : ( iLen-m_iMinInfixLen );
+				int iMaxStart = bPrefixField ? 0 : ( iLen - iMinInfixLen );
 
-				BYTE * sInfix = sWord;
+				BYTE * sInfix = sBuf + 1;
+
 				for ( int iStart=0; iStart<=iMaxStart; iStart++ )
 				{
 					BYTE * sInfixEnd = sInfix;
-					for ( int i=0; i<m_iMinInfixLen; i++ )
+					for ( int i = 0; i < iMinInfixLen; i++ )
 						sInfixEnd += m_pTokenizer->GetCodepointLength ( *sInfixEnd );
 
-					for ( int i=m_iMinInfixLen; i<=iLen-iStart; i++ )
+					for ( int i=iMinInfixLen; i<=iLen-iStart; i++ )
 					{
 						SphWordID_t iWord = m_pDict->GetWordID ( sInfix, sInfixEnd-sInfix );
-						sInfixEnd += m_pTokenizer->GetCodepointLength ( *sInfixEnd );
 
 						if ( iWord )
 						{
@@ -11677,6 +11766,21 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 							tHit.m_iWordID = iWord;
 							tHit.m_iWordPos = iPos;
 						}
+
+						// word start: add magic head
+						if ( bInfixMode && sInfix == sBuf + 1 )
+						{
+							iWord = m_pDict->GetWordID ( sInfix - 1, sInfixEnd-sInfix + 1 );
+							if ( iWord )
+							{
+								CSphWordHit & tHit = m_dHits.Add ();
+								tHit.m_iDocID = m_tDocInfo.m_iDocID;
+								tHit.m_iWordID = iWord;
+								tHit.m_iWordPos = iPos;
+							}
+						}
+
+						sInfixEnd += m_pTokenizer->GetCodepointLength ( *sInfixEnd );
 					}
 
 					sInfix += m_pTokenizer->GetCodepointLength ( *sInfix );
@@ -12072,13 +12176,19 @@ bool CSphSource_SQL::IterateHitsStart ( CSphString & sError )
 		}
 
 		tCol.m_iIndex = i+1;
-		tCol.m_uMatchType = SPH_MATCH_WHOLE;
+		tCol.m_eMatchType = SPH_MATCH_WHOLE;
 
-		if ( IsPrefixMatch ( tCol.m_sName.cstr () ) )
-			tCol.m_uMatchType |= SPH_MATCH_PREFIX;
+		bool bPrefix = m_iMinPrefixLen > 0 && IsPrefixMatch ( tCol.m_sName.cstr () );
+		bool bInfix =  m_iMinInfixLen > 0  && IsInfixMatch ( tCol.m_sName.cstr () );
 
-		if ( IsInfixMatch ( tCol.m_sName.cstr () ) )
-			tCol.m_uMatchType |= SPH_MATCH_INFIX;
+		if ( bPrefix && m_iMinPrefixLen > 0 && bInfix && m_iMinInfixLen > 0)
+			LOC_ERROR ( "field '%s' is marked for both infix and prefix indexing", tCol.m_sName.cstr() );
+			
+		if ( bPrefix )
+			tCol.m_eMatchType = SPH_MATCH_PREFIX;
+
+		if ( bInfix )
+			tCol.m_eMatchType = SPH_MATCH_INFIX;
 
 		if ( tCol.m_eAttrType==SPH_ATTR_NONE )
 			m_tSchema.m_dFields.Add ( tCol );

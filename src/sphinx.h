@@ -528,11 +528,11 @@ enum ESphAttrSrc
 
 
 /// known multi-valued attr sources
-enum
+enum ESphMatch
 {
 	SPH_MATCH_WHOLE		= 0,		///< whole-word match
 	SPH_MATCH_PREFIX	= 1,		///< prefix match
-	SPH_MATCH_INFIX		= 1 << 1	///< infix match
+	SPH_MATCH_INFIX		= 2			///< infix match
 };
 
 
@@ -541,7 +541,7 @@ struct CSphColumnInfo
 {
 	CSphString		m_sName;		///< column name
 	DWORD			m_eAttrType;	///< attribute type
-	DWORD			m_uMatchType;	///< infix/prefix match type
+	ESphMatch		m_eMatchType;	///< infix/prefix match type
 
 	int				m_iIndex;		///< index into source result set
 	int				m_iRowitem;		///< index into document info row (only if attr spans whole rowitem; -1 otherwise)
@@ -556,7 +556,7 @@ struct CSphColumnInfo
 	CSphColumnInfo ( const char * sName=NULL, DWORD eType=SPH_ATTR_NONE )
 		: m_sName ( sName )
 		, m_eAttrType ( eType )
-		, m_uMatchType ( SPH_MATCH_WHOLE )
+		, m_eMatchType ( SPH_MATCH_WHOLE )
 		, m_iIndex ( -1 )
 		, m_iRowitem ( -1 )
 		, m_iBitOffset ( -1 )
@@ -675,8 +675,8 @@ public:
 	virtual bool						UpdateSchema ( CSphSchema * pInfo, CSphString & sError );
 
 	/// configure source to emit prefixes or infixes
-	/// passing zero iMinLength means to emit the words themselves
-	void								SetEmitInfixes ( bool bPrefixesOnly, int iMinLength );
+	/// passing zero to both iMinPrefixLen and iMinInfixLen means to emit the words themselves
+	void								SetEmitInfixes ( int iMinPrefixLen, int iMinInfixLen );
 
 public:
 	/// connect to the source (eg. to the database)
@@ -728,8 +728,8 @@ protected:
 	bool								m_bStripHTML;	///< whether to strip HTML
 	CSphHTMLStripper *					m_pStripper;	///< my HTML stripper
 
+	int									m_iMinPrefixLen; ///< min indexable prefix (0 means don't index prefixes)
 	int									m_iMinInfixLen;	///< min indexable infix length (0 means don't index infixes)
-	bool								m_bPrefixesOnly;///< whether to index prefixes only or all the infixes
 };
 
 
@@ -1427,7 +1427,7 @@ public:
 	virtual const CSphSchema *	GetSchema () const { return &m_tSchema; }
 
 	virtual	void				SetProgressCallback ( ProgressCallback_t * pfnProgress ) { m_pProgress = pfnProgress; }
-	virtual void				SetInfixIndexing ( bool bPrefixesOnly, int iMinLength );
+	virtual void				SetInfixIndexing ( int iPrefixLen, int iInfixLen );
 
 public:
 	/// build index by indexing given sources
@@ -1486,8 +1486,8 @@ protected:
 	CSphSchema					m_tSchema;
 	CSphString					m_sLastError;
 
+	int							m_iMinPrefixLen;///< min indexable prefix length (0 means don't index prefixes)
 	int							m_iMinInfixLen;	///< min indexable infix length (0 means don't index infixes)
-	bool						m_bPrefixesOnly;///< whether to index prefixes only or all the infixes
 
 	bool						m_bAttrsUpdated;///< whether in-memory attrs are updated (compared to disk state)
 };

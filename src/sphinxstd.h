@@ -161,6 +161,19 @@ void			operator delete [] ( void * pPtr );
 /// crash with an error message
 void			sphDie ( char * sMessage, ... );
 
+
+/// how much bits do we need for given int
+inline int		sphLog2 ( uint64_t iValue )
+{
+	int iBits = 0;
+	while ( iValue )
+	{
+		iValue >>= 1;
+		iBits++;
+	}
+	return iBits;
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // DEBUGGING
 /////////////////////////////////////////////////////////////////////////////

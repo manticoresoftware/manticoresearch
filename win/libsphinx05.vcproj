@@ -167,6 +167,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\src\sphinxsort.cpp"
+				>
+			</File>
+			<File
 				RelativePath="..\src\sphinxsoundex.cpp"
 				>
 			</File>

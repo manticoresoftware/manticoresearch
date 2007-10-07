@@ -8609,7 +8609,7 @@ void CSphIndex_VLN::MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISph
 				if ( !tFilter.m_bExclude )
 				{
 					// include-filter, non-overlapping block-range and include-range
-					if ( fBlockMin>tFilter.m_uMaxValue || fBlockMax<tFilter.m_fMinValue )
+					if ( fBlockMin>tFilter.m_fMaxValue || fBlockMax<tFilter.m_fMinValue )
 						bReject = true;
 				} else
 				{
@@ -9538,6 +9538,7 @@ bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, C
 			continue; // FIXME! simply continue? should at least warn about bad attr name
 
 		const CSphColumnInfo & tAttr = m_tSchema.GetAttr(iAttr);
+		tFilter.m_iRowitem = tAttr.m_iRowitem;
 		tFilter.m_iBitOffset = tAttr.m_iBitOffset;
 		tFilter.m_iBitCount = tAttr.m_iBitCount;
 		tFilter.m_bMva = ( ( tAttr.m_eAttrType & SPH_ATTR_MULTI )!=0 );

@@ -10475,7 +10475,6 @@ void CSphSource::SetTokenizer ( ISphTokenizer * pTokenizer)
 bool CSphSource::UpdateSchema ( CSphSchema * pInfo, CSphString & sError )
 {
 	assert ( pInfo );
-	assert ( m_tSchema.m_dFields.GetLength()>0 );
 
 	// fill it
 	if ( pInfo->m_dFields.GetLength()==0 && pInfo->GetAttrsCount()==0 )

@@ -5661,7 +5661,8 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 	// collect and sort multi-valued attrs
 	///////////////////////////////////////
 
-	BuildMVA ( dSources, dHits, iHitsMax*sizeof(CSphWordHit) );
+	if ( !BuildMVA ( dSources, dHits, iHitsMax*sizeof(CSphWordHit) ) )
+		return 0;
 
 	// reset hits pool
 	dHits.Reset ();

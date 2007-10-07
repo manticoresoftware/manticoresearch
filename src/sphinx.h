@@ -96,6 +96,7 @@ STATIC_SIZE_ASSERT ( SphDocID_t, 4 );
 
 inline SphDocID_t &		DOCINFO2ID ( const DWORD * pDocinfo )	{ return *(SphDocID_t*)pDocinfo; }
 inline DWORD *			DOCINFO2ATTRS ( DWORD * pDocinfo )		{ return pDocinfo+DOCINFO_IDSIZE; }
+inline const DWORD *	DOCINFO2ATTRS ( const DWORD * pDocinfo ){ return pDocinfo+DOCINFO_IDSIZE; }
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -357,6 +358,18 @@ const int			ROWITEM_BITS	= 8*sizeof(CSphRowitem);
 
 STATIC_ASSERT ( sizeof(CSphRowitem)==sizeof(float), ROWITEM_AND_FLOAT_SIZE_MISMATCH );
 
+/// getter
+inline CSphRowitem sphGetRowAttr ( const DWORD * pRow, int iBitOffset, int iBitCount )
+{
+	int iItem = iBitOffset / ROWITEM_BITS;
+	if ( iBitCount==ROWITEM_BITS )
+		return pRow[iItem];
+
+	int iShift = iBitOffset % ROWITEM_BITS;
+	return ( pRow[iItem]>>iShift ) & ( (1UL<<iBitCount)-1 );
+}
+
+
 /// setter
 inline void sphSetRowAttr ( CSphRowitem * pRow, int iBitOffset, int iBitCount, CSphRowitem uValue )
 {
@@ -435,6 +448,7 @@ struct CSphDocInfo
 		return *this;
 	}
 
+public:
 	/// get attr by item index
 	CSphRowitem GetAttr ( int iItem ) const
 	{
@@ -447,13 +461,7 @@ struct CSphDocInfo
 	{
 		assert ( iBitOffset>=0 && iBitOffset<m_iRowitems*ROWITEM_BITS );
 		assert ( iBitCount>0 && iBitOffset+iBitCount<=m_iRowitems*ROWITEM_BITS );
-
-		int iItem = iBitOffset / ROWITEM_BITS;
-		if ( iBitCount==ROWITEM_BITS )
-			return m_pRowitems[iItem];
-
-		int iShift = iBitOffset % ROWITEM_BITS;
-		return ( m_pRowitems[iItem]>>iShift ) & ( (1UL<<iBitCount)-1 );
+		return sphGetRowAttr ( m_pRowitems, iBitOffset, iBitCount );
 	}
 
 	/// get float attr
@@ -463,6 +471,7 @@ struct CSphDocInfo
 		return *( reinterpret_cast<float*> ( m_pRowitems+iItem ) );
 	};
 
+public:
 	/// set attr by bit offset/count
 	void SetAttr ( int iBitOffset, int iBitCount, CSphRowitem uValue ) const
 	{
@@ -1048,6 +1057,7 @@ enum ESphMatchMode
 	SPH_MATCH_PHRASE,			///< match this exact phrase
 	SPH_MATCH_BOOLEAN,			///< match this boolean query
 	SPH_MATCH_EXTENDED,			///< match this extended query
+	SPH_MATCH_FULLSCAN,			///< match all document IDs w/o fulltext query, apply filters
 
 	SPH_MATCH_TOTAL
 };

@@ -184,6 +184,7 @@ const int	MAX_RETRY_DELAY		= 1000;
 #define EWOULDBLOCK		WSAEWOULDBLOCK
 #define EINPROGRESS		WSAEINPROGRESS
 #define EINTR			WSAEINTR
+#define ECONNRESET		WSAECONNRESET
 #define socklen_t		int
 
 #define ftruncate		_chsize
@@ -826,6 +827,13 @@ int sphSockRead ( int iSock, void * buf, int iLen )
 
 		// try to receive next chunk
 		iRes = sphSockRecv ( iSock, pBuf, iLeftBytes );
+
+		// if there was eof, we're done
+		if ( iRes==0 )
+		{
+			sphSockSetErrno ( ECONNRESET );
+			return -1;
+		}
 
 		// if there was EINTR, retry
 		if ( iRes==-1 )

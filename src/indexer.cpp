@@ -79,37 +79,6 @@ public:
 		}
 	}
 
-	/// accessor
-	T * operator [] ( const char * sKey )
-	{
-		return Find ( sKey );
-	}
-
-	/// accesor
-	T * Find ( const char * sKey )
-	{
-		DWORD uHash = HASHFUNC::Hash ( sKey ) % SIZE;
-
-		// find matching entry
-		CSphMTFHashEntry<T> * pEntry = m_pData [ uHash ];
-		CSphMTFHashEntry<T> * pPrev = NULL;
-		while ( pEntry && strcmp ( sKey, pEntry->m_sKey.cstr() ) )
-		{
-			pPrev = pEntry;
-			pEntry = pEntry->pNext;
-		}
-
-		// move to front on access
-		if ( pPrev )
-		{
-			pPrev->m_pNext = pEntry->m_pNext;
-			pEntry->m_pNext = m_pData [ uHash ];
-			m_pData [ uHash ] = pEntry;
-		}
-
-		return pEntry ? &pEntry->m_tValue : NULL;
-	}
-
 	/// add record to hash
 	/// OPTIMIZE: should pass T not by reference for simple types
 	T & Add ( const char * sKey, int iKeyLen, T & tValue )

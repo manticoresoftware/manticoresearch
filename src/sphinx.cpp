@@ -6627,7 +6627,8 @@ SphWordID_t CSphDictStar::GetWordID ( BYTE * pWord )
 }
 
 //////////////////////////////////////////////////////////////////////////
-/// star dict for data version 8
+
+/// star dict for index v.8+
 class CSphDictStarV8 : public CSphDictStar
 {
 public:
@@ -6654,39 +6655,71 @@ SphWordID_t	CSphDictStarV8::GetWordID ( BYTE * pWord )
 	char sBuf [ 16+3*SPH_MAX_WORD_LEN ];
 
 	int iLen = strlen ( (const char*)pWord );
+	if ( !iLen )
+		return 0;
 
-	if ( iLen )
+	bool bHeadStar = ( pWord[0]=='*' );
+	bool bTailStar = ( pWord[iLen-1]=='*' );
+
+	if ( m_bInfixes )
 	{
-		if ( pWord [0] == '*' )
+		////////////////////////////////////
+		// infix or mixed infix+prefix mode
+		////////////////////////////////////
+
+		// handle head star
+		if ( bHeadStar )
 		{
-			memcpy ( sBuf, pWord + 1, iLen );
-			--iLen;
-			if ( ! m_bInfixes )
-			{
-				// TODO: WARN!
-			}
-		}
-		else
+			memcpy ( sBuf, pWord+1, iLen-- ); // chops star, copies trailing zero, updates iLen
+		} else
 		{
-			if ( m_bInfixes )
-			{
-				++iLen;
-				memcpy ( sBuf + 1, pWord, iLen );
-				sBuf [0] = MAGIC_WORD_HEAD;
-			}
-			else
-				memcpy ( sBuf, pWord, iLen + 1 );
+			sBuf[0] = MAGIC_WORD_HEAD;
+			memcpy ( sBuf+1, pWord, ++iLen ); // copies everything incl trailing zero, updates iLen
 		}
 
-		if ( sBuf[iLen-1]=='*' )
-			sBuf[iLen-1] = '\0';
-		else
+		// handle tail star
+		if ( bTailStar )
 		{
-			sBuf[iLen] = MAGIC_WORD_TAIL;
+			sBuf[iLen-1] = '\0'; // got star, just chop it away
+		} else
+		{
+			sBuf[iLen] = MAGIC_WORD_TAIL; // no star, add tail marker
 			sBuf[iLen+1] = '\0';
+		}
+
+	} else
+	{
+		////////////////////
+		// prefix-only mode
+		////////////////////
+
+		assert ( m_bPrefixes );
+
+		// always ignore head star in prefix mode
+		if ( bHeadStar )
+		{
+			pWord++;
+			iLen--;
+		}
+
+		// handle tail star
+		if ( !bTailStar )
+		{
+			// exact word search request, always (ie. both in infix/prefix mode) mangles to "\1word\1" in v.8+
+			sBuf[0] = MAGIC_WORD_HEAD;
+			memcpy ( sBuf+1, pWord, iLen );
+			sBuf[iLen+1] = MAGIC_WORD_TAIL;
+			sBuf[iLen+2] = '\0';
+
+		} else
+		{
+			// prefix search request, mangles to word itself (just chop away the star)
+			memcpy ( sBuf, pWord, iLen );
+			sBuf[iLen-1] = '\0';
 		}
 	}
 
+	// calc id for mangled word
 	return m_pDict->GetWordID ( (BYTE*)sBuf );
 }
 
@@ -8903,28 +8936,19 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString * sWarning 
 	m_tStats.m_iTotalBytes = rdInfo.GetOffset ();
 
 	// infix stuff
-	if ( m_uVersion >= 8 )
+	if ( m_uVersion>=8 )
 	{
 		m_iMinPrefixLen = rdInfo.GetDword ();
 		m_iMinInfixLen = rdInfo.GetDword ();
-	}
-	else
-		if ( m_uVersion>=6 )
-		{
-			bool bPrefixesOnly = ( rdInfo.GetByte ()!=0 );
-			int iMinInfixLen = rdInfo.GetDword ();
 
-			if ( bPrefixesOnly )
-			{
-				m_iMinPrefixLen = iMinInfixLen;
-				m_iMinInfixLen = 0;
-			}
-			else
-			{
-				m_iMinPrefixLen = 0;
-				m_iMinInfixLen = iMinInfixLen;
-			}
-		}
+	} else if ( m_uVersion>=6 )
+	{
+		bool bPrefixesOnly = ( rdInfo.GetByte ()!=0 );
+		m_iMinPrefixLen = rdInfo.GetDword ();
+		m_iMinInfixLen = 0;
+		if ( !bPrefixesOnly )
+			Swap ( m_iMinPrefixLen, m_iMinInfixLen );
+	}
 
 	///////////////////////////////////////
 	// verify that data files are readable
@@ -9406,26 +9430,26 @@ bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, C
 	if ( tHitlist.GetFD()<0 )
 		return false;
 
-	// prepare for setup
-
-	bool bUseStar = false;
-	if ( m_uVersion >= 7 )
-		bUseStar = ( m_iMinPrefixLen > 0 || m_iMinInfixLen > 0 ) && m_bEnableStar;
-	else
-		if ( m_uVersion == 6 )
-			bUseStar = m_iMinPrefixLen > 0;
-
-	CSphDictStarV8	tDictStarV8 ( pDict, m_iMinPrefixLen > 0, m_iMinInfixLen > 0 );
-	CSphDictStar	tDictStar ( pDict );
-
-	if ( bUseStar )
+	// setup proper dict
+	bool bUseStarDict = false;
+	if (
+		( m_uVersion>=7 && ( m_iMinPrefixLen>0 || m_iMinInfixLen>0 ) && m_bEnableStar ) || // v.7 added mangling to infixes
+		( m_uVersion==6 && ( m_iMinPrefixLen>0 ) && m_bEnableStar ) ) // v.6 added mangling to prefixes
 	{
-		pDict = m_uVersion >= 8 ? &tDictStarV8 : &tDictStar;
+		bUseStarDict = true;
+	}
+
+	CSphDictStar tDictStar ( pDict );
+	CSphDictStarV8 tDictStarV8 ( pDict, m_iMinPrefixLen>0, m_iMinInfixLen>0 );
+	if ( bUseStarDict )
+	{
+		pDict = ( m_uVersion>=8 ) ? &tDictStarV8 : &tDictStar; // v.8 introduced new mangling rules
 
 		CSphRemapRange tStar ( '*', '*', '*' ); // FIXME? check and warn if star was already there
 		pTokenizer->AddCaseFolding ( tStar );
 	}
 
+	// prepare for setup
 	CSphTermSetup tTermSetup ( tDoclist, tHitlist );
 	tTermSetup.m_pTokenizer = pTokenizer;
 	tTermSetup.m_pDict = pDict;
@@ -10544,12 +10568,12 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 		BYTE * sWord;
 		int iPos = ( j<<24 ) + 1;
 
-		bool bPrefixField = m_tSchema.m_dFields [j].m_eMatchType == SPH_MATCH_PREFIX;
+		bool bPrefixField = m_tSchema.m_dFields [j].m_eWordpart == SPH_WORDPART_PREFIX;
 		bool bInfixMode = m_iMinInfixLen > 0;
 
 		BYTE sBuf [ 16+3*SPH_MAX_WORD_LEN ];
 
-		if ( m_tSchema.m_dFields [j].m_eMatchType != SPH_MATCH_WHOLE )
+		if ( m_tSchema.m_dFields [j].m_eWordpart != SPH_WORDPART_WHOLE )
 		{
 			int iMinInfixLen = bPrefixField ? m_iMinPrefixLen : m_iMinInfixLen;
 
@@ -11013,7 +11037,7 @@ bool CSphSource_SQL::IterateHitsStart ( CSphString & sError )
 		}
 
 		tCol.m_iIndex = i+1;
-		tCol.m_eMatchType = SPH_MATCH_WHOLE;
+		tCol.m_eWordpart = SPH_WORDPART_WHOLE;
 
 		bool bPrefix = m_iMinPrefixLen > 0 && IsPrefixMatch ( tCol.m_sName.cstr () );
 		bool bInfix =  m_iMinInfixLen > 0  && IsInfixMatch ( tCol.m_sName.cstr () );
@@ -11022,10 +11046,10 @@ bool CSphSource_SQL::IterateHitsStart ( CSphString & sError )
 			LOC_ERROR ( "field '%s' is marked for both infix and prefix indexing", tCol.m_sName.cstr() );
 			
 		if ( bPrefix )
-			tCol.m_eMatchType = SPH_MATCH_PREFIX;
+			tCol.m_eWordpart = SPH_WORDPART_PREFIX;
 
 		if ( bInfix )
-			tCol.m_eMatchType = SPH_MATCH_INFIX;
+			tCol.m_eWordpart = SPH_WORDPART_INFIX;
 
 		if ( tCol.m_eAttrType==SPH_ATTR_NONE )
 			m_tSchema.m_dFields.Add ( tCol );

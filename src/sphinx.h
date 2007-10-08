@@ -536,12 +536,12 @@ enum ESphAttrSrc
 };
 
 
-/// known multi-valued attr sources
-enum ESphMatch
+/// wordpart processing type
+enum ESphWordpart
 {
-	SPH_MATCH_WHOLE		= 0,		///< whole-word match
-	SPH_MATCH_PREFIX	= 1,		///< prefix match
-	SPH_MATCH_INFIX		= 2			///< infix match
+	SPH_WORDPART_WHOLE		= 0,	///< whole-word
+	SPH_WORDPART_PREFIX		= 1,	///< prefix
+	SPH_WORDPART_INFIX		= 2		///< infix
 };
 
 
@@ -550,7 +550,7 @@ struct CSphColumnInfo
 {
 	CSphString		m_sName;		///< column name
 	DWORD			m_eAttrType;	///< attribute type
-	ESphMatch		m_eMatchType;	///< infix/prefix match type
+	ESphWordpart	m_eWordpart;	///< wordpart processing type
 
 	int				m_iIndex;		///< index into source result set
 	int				m_iRowitem;		///< index into document info row (only if attr spans whole rowitem; -1 otherwise)
@@ -565,7 +565,7 @@ struct CSphColumnInfo
 	CSphColumnInfo ( const char * sName=NULL, DWORD eType=SPH_ATTR_NONE )
 		: m_sName ( sName )
 		, m_eAttrType ( eType )
-		, m_eMatchType ( SPH_MATCH_WHOLE )
+		, m_eWordpart ( SPH_WORDPART_WHOLE )
 		, m_iIndex ( -1 )
 		, m_iRowitem ( -1 )
 		, m_iBitOffset ( -1 )

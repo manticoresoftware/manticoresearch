@@ -9041,6 +9041,27 @@ template < typename T > bool CSphIndex_VLN::PrereadSharedBuffer ( CSphSharedBuff
 }
 
 
+/// attribute value location in the row
+struct AttrLocator_t
+{
+	int m_iRowitem;
+	int m_iBitOffset;
+	int m_iBitCount;
+
+	AttrLocator_t ()
+		: m_iRowitem ( -1 )
+		, m_iBitOffset ( -1 )
+		, m_iBitCount ( -1 )
+	{}
+
+	AttrLocator_t ( const CSphColumnInfo & tCol )
+		: m_iRowitem	( tCol.m_iRowitem )
+		, m_iBitOffset	( tCol.m_iBitOffset )
+		, m_iBitCount	( tCol.m_iBitCount )
+	{}
+};
+
+
 bool CSphIndex_VLN::Preread ()
 {
 	if ( !m_bPreallocated )
@@ -9107,26 +9128,7 @@ bool CSphIndex_VLN::Preread ()
 	if ( m_pDocinfoIndex.GetLength() )
 	{
 		// int attrs to the left, float attrs to the right
-		struct ItemLocator_t
-		{
-			int m_iRowitem;
-			int m_iBitOffset;
-			int m_iBitCount;
-
-			ItemLocator_t ()
-				: m_iRowitem ( -1 )
-				, m_iBitOffset ( -1 )
-				, m_iBitCount ( -1 )
-			{}
-
-			ItemLocator_t ( const CSphColumnInfo & tCol )
-				: m_iRowitem	( tCol.m_iRowitem )
-				, m_iBitOffset	( tCol.m_iBitOffset )
-				, m_iBitCount	( tCol.m_iBitCount )
-			{}
-		};
-
-		CSphVector<ItemLocator_t> dIntAttrs;
+		CSphVector<AttrLocator_t> dIntAttrs;
 		CSphVector<int> dFloatAttrs, dMvaAttrs;
 
 		for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
@@ -9186,7 +9188,7 @@ bool CSphIndex_VLN::Preread ()
 
 			// aim
 			DWORD uStart = uIndexEntry*DOCINFO_INDEX_FREQ;
-			DWORD uCount = Min ( DOCINFO_INDEX_FREQ, m_uDocinfo-uStart );
+			DWORD uCount = Min ( (DWORD)DOCINFO_INDEX_FREQ, m_uDocinfo-uStart );
 
 			const DWORD * pDocinfo = &m_pDocinfo [ uStart*uStride ];
 			const DWORD * pDocinfoMax = pDocinfo + uCount*uStride;

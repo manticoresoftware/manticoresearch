@@ -5093,7 +5093,7 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAut
 			dMvaIndexes.Add ( i );
 
 	if ( dMvaIndexes.GetLength()<=0 )
-		return false;
+		return true;
 
 	// reuse hits pool
 	CSphWordHit * pArena = dHits;
@@ -5120,7 +5120,7 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAut
 	{
 		CSphSource * pSource = dSources[iSource];
 		if ( !pSource->Connect ( m_sLastError ) )
-			return 0;
+			return false;
 
 		ARRAY_FOREACH ( i, dMvaIndexes )
 		{
@@ -5130,7 +5130,7 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAut
 			assert ( iRowitem>=0 );
 
 			if ( !pSource->IterateMultivaluedStart ( iAttr, m_sLastError ) )
-				return 0;
+				return false;
 
 			while ( pSource->IterateMultivaluedNext () )
 			{
@@ -5211,7 +5211,7 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAut
 		if ( dBins[i]->ReadBytes ( (MvaEntry_t*) &tEntry, sizeof(MvaEntry_t) )<=0 )
 		{
 			m_sLastError.SetSprintf ( "sort_mva: warmup failed (io error?)" );
-			return 0;
+			return false;
 		}
 
 		tEntry.m_iTag = i;

@@ -394,13 +394,6 @@ class SphinxClient
 		$this->_anchor = array ( "attrlat"=>$attrlat, "attrlong"=>$attrlong, "lat"=>$lat, "long"=>$long );
 	}
 
-	/// clear all filters (for multi-queries)
-	function ResetFilters ()
-	{
-		$this->_filters = array();
-		$this->_anchor = array();
-	}
-
 	/// set grouping attribute and function
 	///
 	/// in grouping mode, all matches are assigned to different groups
@@ -467,6 +460,24 @@ class SphinxClient
 		assert ( is_int($delay) && $delay>=0 );
 		$this->_retrycount = $count;
 		$this->_retrydelay = $delay;
+	}
+
+	//////////////////////////////////////////////////////////////////////////////
+
+	/// clear all filters (for multi-queries)
+	function ResetFilters ()
+	{
+		$this->_filters = array();
+		$this->_anchor = array();
+	}
+
+	/// clear groupby settings
+	function ResetGroupBy ()
+	{
+		$this->_groupby		= "";
+		$this->_groupfunc	= SPH_GROUPBY_DAY;
+		$this->_groupsort	= "@group desc";
+		$this->_groupdistinct= "";
 	}
 
 	//////////////////////////////////////////////////////////////////////////////

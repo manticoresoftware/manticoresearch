@@ -373,7 +373,7 @@ int main ( int argc, char ** argv )
 						case SPH_ATTR_INTEGER:		fprintf ( stdout, "%u", tMatch.GetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount ) ); break;
 						case SPH_ATTR_TIMESTAMP:	fprintf ( stdout, "%s", myctime ( tMatch.GetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount ) ) ); break;
 						case SPH_ATTR_FLOAT:		fprintf ( stdout, "%f", tMatch.GetAttrFloat ( tAttr.m_iRowitem ) ); break;
-						default:					fprintf ( stdout, ", %s=(unknown-type-%d)", tAttr.m_eAttrType );
+						default:					fprintf ( stdout, "(unknown-type-%d)", tAttr.m_eAttrType );
 					}
 				}
 				fprintf ( stdout,"\n" );

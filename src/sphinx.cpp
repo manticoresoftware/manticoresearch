@@ -6774,7 +6774,9 @@ struct CSphSimpleQueryParser
 /// query-word comparator
 bool operator < ( const CSphQueryWord & a, const CSphQueryWord & b )
 {
-	return a.m_iDocs < b.m_iDocs;
+	return ( a.m_iDocs==b.m_iDocs )
+		? ( a.m_iQueryPos > b.m_iQueryPos ) // this is tricky. with "xxx yyy xxx" queries, we must advance 2nd "xxx" entry first when scanning. hence, it must be first in the list!
+		: ( a.m_iDocs < b.m_iDocs );
 }
 
 
@@ -9499,23 +9501,7 @@ bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, C
 		PROFILE_BEGIN ( query_load_words );
 
 		ARRAY_FOREACH ( i, m_dQueryWords )
-		{
-			// if the word was already loaded, just link to it
-			int j;
-			for ( j=0; j<i; j++ )
-				if ( m_dQueryWords[i].m_iWordID == m_dQueryWords[j].m_iWordID )
-			{
-				m_dQueryWords[i] = m_dQueryWords[j];
-				m_dQueryWords[i].m_iQueryPos = 1+i;
-				break;
-			}
-			if ( j<i )
-				continue;
-
-			// lookup this wordlist page
-			// offset might be -1 if page is totally empty
 			SetupQueryWord ( m_dQueryWords[i], tTermSetup );
-		}
 
 		// build word stats
 		pResult->m_iNumWords = m_dQueryWords.GetLength();

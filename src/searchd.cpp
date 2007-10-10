@@ -116,7 +116,10 @@ static const char *		g_sPidFile		= NULL;
 static int				g_iMaxMatches	= 1000;
 static bool				g_bSeamlessRotate	= true;
 
-static bool				g_bDoRotate			= false;	// flag that we should start rotation; set from SIGHUP
+static bool				g_bDoRotate			= false;	// flag that we are rotating now; set from SIGHUP; cleared on rotation success
+
+static bool				g_bGotSighup		= false;	// we just received SIGHUP; need to log
+static bool				g_bGotSigterm		= false;	// we just received SIGTERM; need to shutdown
 
 static SmallStringHash_T<ServedIndex_t>		g_hIndexes;				// served indexes hash
 static CSphVector<const char *>				g_dRotating;			// names of indexes to be rotated this time
@@ -649,18 +652,19 @@ void sigchld ( int )
 
 void sighup ( int )
 {
-	sphInfo ( "rotating indices" );
 	g_bDoRotate = true;
+	g_bGotSighup = true;
 }
 
 
 void sigterm ( int )
 {
-	if ( g_bHeadDaemon )
-		sphInfo ( "caught SIGTERM, shutting down" );
+	// in child, bail out immediately
+	if ( !g_bHeadDaemon )
+		exit ( 0 );
 
-	Shutdown ();
-	exit ( 0 );
+	// in head, perform a clean shutdown
+	g_bGotSigterm = true;
 }
 #endif // !USE_WINDOWS
 
@@ -5167,6 +5171,21 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			exit ( 0 );
 		}
 #endif
+
+		if ( g_bGotSighup )
+		{
+			sphInfo ( "rotating indices" ); // this might hang if performed from SIGHUP
+			g_bGotSighup = false;
+		}
+
+		if ( g_bGotSigterm )
+		{
+			assert ( g_bHeadDaemon );
+			sphInfo ( "caught SIGTERM, shutting down" );
+
+			Shutdown ();
+			exit ( 0 );
+		}
 
 		CheckLeaks ();
 		CheckPipes ();

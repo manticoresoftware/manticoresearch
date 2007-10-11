@@ -446,13 +446,18 @@ static HASH			sphinx_open_tables;	// hash used to track open tables
 //////////////////////////////////////////////////////////////////////////////
 
 // hashing function
-static uchar * sphinx_get_key ( const byte * pSharePtr, size_t * pLength, my_bool )
+#if MYSQL_VERSION_ID>50100
+typedef size_t GetKeyLength_t;
+#else
+typedef uint GetKeyLength_t;
+#endif
+
+static byte * sphinx_get_key ( const byte * pSharePtr, GetKeyLength_t * pLength, my_bool )
 {
 	CSphSEShare * pShare = (CSphSEShare *) pSharePtr;
 	*pLength = (size_t) pShare->m_iTableNameLen;
-	return (uchar*) pShare->m_sTable;
+	return (byte*) pShare->m_sTable;
 }
-
 
 static int sphinx_init_func ( void * p )
 {

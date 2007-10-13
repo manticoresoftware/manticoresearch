@@ -446,7 +446,7 @@ static HASH			sphinx_open_tables;	// hash used to track open tables
 //////////////////////////////////////////////////////////////////////////////
 
 // hashing function
-#if MYSQL_VERSION_ID>50100
+#if MYSQL_VERSION_ID>=50120
 typedef size_t GetKeyLength_t;
 #else
 typedef uint GetKeyLength_t;

@@ -38,7 +38,7 @@ protected:
 	int				m_iStartOfScan;
 	uint			m_iMatchesTotal;
 	uint			m_iCurrentPos;
-	const uchar *	m_pCurrentKey;
+	const byte *	m_pCurrentKey;
 	uint			m_iCurrentKeyLen;
 
 	char *			m_pResponse;			///< searchd response storage
@@ -87,17 +87,19 @@ public:
 	int				update_row ( const uchar * old_data, uchar * new_data );
 	int				delete_row ( const uchar * buf );
 
-	int				index_init ( uint keynr, bool sorted ); 
-	int				index_end (); 
-	int				index_read ( uchar * buf, const uchar * key, uint key_len, enum ha_rkey_function find_flag );
-	int				index_read_idx ( uchar * buf, uint idx, const uchar * key, uint key_len, enum ha_rkey_function find_flag );
-	int				index_next ( uchar * buf );
-	int				index_next_same ( uchar * buf, const uchar * key, uint keylen );
-	int				index_prev ( uchar * buf );
-	int				index_first ( uchar * buf );
-	int				index_last ( uchar * buf );
+	int				index_init ( uint keynr, bool sorted ); // 5.1.x
+	int				index_init ( uint keynr ) { return index_init ( keynr, false ); } // 5.0.x
 
-	int				get_rec ( uchar * buf, const uchar * key, uint keylen );
+	int				index_end (); 
+	int				index_read ( byte * buf, const byte * key, uint key_len, enum ha_rkey_function find_flag );
+	int				index_read_idx ( byte * buf, uint idx, const byte * key, uint key_len, enum ha_rkey_function find_flag );
+	int				index_next ( byte * buf );
+	int				index_next_same ( byte * buf, const byte * key, uint keylen );
+	int				index_prev ( byte * buf );
+	int				index_first ( byte * buf );
+	int				index_last ( byte * buf );
+
+	int				get_rec ( byte * buf, const byte * key, uint keylen );
 
 	int				rnd_init ( bool scan );
 	int				rnd_end ();

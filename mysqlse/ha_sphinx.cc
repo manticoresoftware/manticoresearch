@@ -1786,7 +1786,7 @@ bool ha_sphinx::UnpackStats ( CSphSEStats * pStats )
 // Positions an index cursor to the index specified in the handle. Fetches the
 // row if available. If the key value is null, begin at the first key of the
 // index.
-int ha_sphinx::index_read ( uchar * buf, const uchar * key, uint key_len, enum ha_rkey_function )
+int ha_sphinx::index_read ( byte * buf, const byte * key, uint key_len, enum ha_rkey_function )
 {
 	SPH_ENTER_METHOD();
 	char sError[256];
@@ -1935,7 +1935,7 @@ int ha_sphinx::index_read ( uchar * buf, const uchar * key, uint key_len, enum h
 
 // Positions an index cursor to the index specified in key. Fetches the
 // row if any. This is only used to read whole keys.
-int ha_sphinx::index_read_idx ( uchar *, uint, const uchar *, uint, enum ha_rkey_function )
+int ha_sphinx::index_read_idx ( byte *, uint, const byte *, uint, enum ha_rkey_function )
 {
 	SPH_ENTER_METHOD();
 	SPH_RET ( HA_ERR_WRONG_COMMAND );
@@ -1943,21 +1943,21 @@ int ha_sphinx::index_read_idx ( uchar *, uint, const uchar *, uint, enum ha_rkey
 
 
 // Used to read forward through the index.
-int ha_sphinx::index_next ( uchar * buf )
+int ha_sphinx::index_next ( byte * buf )
 {
 	SPH_ENTER_METHOD();
 	SPH_RET ( get_rec ( buf, m_pCurrentKey, m_iCurrentKeyLen ) );
 }
 
 
-int ha_sphinx::index_next_same ( uchar * buf, const uchar * key, uint keylen )
+int ha_sphinx::index_next_same ( byte * buf, const byte * key, uint keylen )
 {
 	SPH_ENTER_METHOD();
 	SPH_RET ( get_rec ( buf, key, keylen ) );
 }
 
 
-int ha_sphinx::get_rec ( uchar * buf, const uchar * key, uint keylen )
+int ha_sphinx::get_rec ( byte * buf, const byte * key, uint keylen )
 {
 	SPH_ENTER_METHOD();
 
@@ -2038,7 +2038,7 @@ int ha_sphinx::get_rec ( uchar * buf, const uchar * key, uint keylen )
 
 
 // Used to read backwards through the index.
-int ha_sphinx::index_prev ( uchar * )
+int ha_sphinx::index_prev ( byte * )
 {
 	SPH_ENTER_METHOD();
 	SPH_RET ( HA_ERR_WRONG_COMMAND );
@@ -2049,7 +2049,7 @@ int ha_sphinx::index_prev ( uchar * )
 //
 // Called from opt_range.cc, opt_sum.cc, sql_handler.cc,
 // and sql_select.cc.
-int ha_sphinx::index_first ( uchar * )
+int ha_sphinx::index_first ( byte * )
 {
 	SPH_ENTER_METHOD();
 	SPH_RET ( HA_ERR_END_OF_FILE );
@@ -2059,7 +2059,7 @@ int ha_sphinx::index_first ( uchar * )
 //
 // Called from opt_range.cc, opt_sum.cc, sql_handler.cc,
 // and sql_select.cc.
-int ha_sphinx::index_last ( uchar * )
+int ha_sphinx::index_last ( byte * )
 {
 	SPH_ENTER_METHOD();
 	SPH_RET ( HA_ERR_WRONG_COMMAND );
@@ -2211,11 +2211,11 @@ ha_rows ha_sphinx::records_in_range ( uint, key_range * min_key, key_range * max
 {
 	SPH_ENTER_METHOD();
 
-#if SPHINX_DEBUG
+#if SPHINX_DEBUG_OUTPUT
 	String varchar;
 	uint var_length = uint2korr(min_key->key);
 	varchar.set_quick ( (char*)min_key->key+HA_KEY_BLOB_LENGTH, var_length, &my_charset_bin );
-	SPH_DEBUG ( __FUNCTION__ ": key_val=%s, key_len=%d", varchar.ptr(), var_length );
+	SPH_DEBUG ( "%s: key_val=%s, key_len=%d", __FUNCTION__, varchar.ptr(), var_length );
 #endif
 
 	SPH_RET(3); // low number to force index usage

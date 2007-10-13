@@ -822,7 +822,6 @@ public:
 	static int			CalcBinSize ( int iMemoryLimit, int iBlocks, const char * sPhase );
 	void				Init ( int iFD, SphOffset_t * pSharedOffset, const int iBinSize );
 
-	SphWordID_t			ReadVLB ();		// FIXME? should actually be widest type of both 
 	int					ReadByte ();
 	int					ReadBytes ( void * pDest, int iBytes );
 	int					ReadHit ( CSphWordHit * e, int iRowitems, CSphRowitem * pRowitems );
@@ -4114,28 +4113,6 @@ int CSphBin::ReadBytes ( void * pDest, int iBytes )
 }
 
 
-#if USE_64BIT
-#define READVLB_FAILED U64C(0xffffffffffffffff)
-#else
-#define READVLB_FAILED 0xffffffffUL
-#endif
-
-
-SphWordID_t CSphBin::ReadVLB ()
-{
-	SphWordID_t v = 0;
-	int o = 0, t;
-	do
-	{
-		if ( ( t = ReadByte() )<0 )
-			return READVLB_FAILED; // FIXME! replace with some other errcode
-		v += ( (SphWordID_t(t & 0x7f)) << o );
-		o += 7;
-	} while ( t & 0x80 );
-	return v;
-}
-
-
 int CSphBin::ReadHit ( CSphWordHit * e, int iRowitems, CSphRowitem * pRowitems )
 {
 	// expected EOB
@@ -4148,17 +4125,26 @@ int CSphBin::ReadHit ( CSphWordHit * e, int iRowitems, CSphRowitem * pRowitems )
 	CSphWordHit & tHit = m_tLastHit; // shortcut
 	for ( ;; )
 	{
-		// unexpected EOB
-		SphWordID_t r = ReadVLB ();
-		if ( r==READVLB_FAILED )
-			return 0;
+		SphWordID_t uDelta;
+		int iOff, iTmp;
 
-		if ( r )
+		// read VLB-encoded delta
+		uDelta = 0;
+		iOff = 0;
+		do
+		{
+			if ( ( iTmp = ReadByte() )<0 )
+				return 0;
+			uDelta += ( (SphWordID_t(iTmp & 0x7f)) << iOff );
+			iOff += 7;
+		} while ( iTmp & 0x80 );
+
+		if ( uDelta )
 		{
 			switch ( m_eState )
 			{
 				case BIN_WORD:
-					tHit.m_iWordID += r;
+					tHit.m_iWordID += uDelta;
 					tHit.m_iDocID = 0;
 					tHit.m_iWordPos = 0;
 					m_eState = BIN_DOC;
@@ -4167,20 +4153,29 @@ int CSphBin::ReadHit ( CSphWordHit * e, int iRowitems, CSphRowitem * pRowitems )
 				case BIN_DOC:
 					// doc id
 					m_eState = BIN_POS;
-					tHit.m_iDocID += r;
+					tHit.m_iDocID += uDelta;
 					tHit.m_iWordPos = 0;
 
 					for ( int i=0; i<iRowitems; i++, pRowitems++ )
 					{
-						SphWordID_t uTmp = ReadVLB (); // FIXME? check range?
-						*pRowitems = (DWORD)uTmp;
-						if ( uTmp==READVLB_FAILED )
-							return 0; // read unexpected EOB
+						// read VLB-encoded rowitem
+						uDelta = 0;
+						iOff = 0;
+						do
+						{
+							if ( ( iTmp = ReadByte() )<0 )
+								return 0;
+							uDelta += ( (SphWordID_t(iTmp & 0x7f)) << iOff );
+							iOff += 7;
+						} while ( iTmp & 0x80 );
+
+						// emit it
+						*pRowitems = (DWORD)uDelta; // FIXME? check range?
 					}
 					break;
 
 				case BIN_POS: 
-					tHit.m_iWordPos += (DWORD)r; // FIXME? check range?
+					tHit.m_iWordPos += (DWORD)uDelta; // FIXME? check range?
 					*e = tHit;
 					return 1;
 
@@ -5428,6 +5423,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 
 	// setup accumulating docinfo IDs range
 	m_tMin.Reset ( m_tSchema.GetRowSize() );
+
 	for ( int i=0; i<m_tMin.m_iRowitems; i++ )
 		m_tMin.m_pRowitems[i] = ROWITEM_MAX;
 	m_tMin.m_iDocID = DOCID_MAX;
@@ -5873,10 +5869,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 	m_tMin.m_iDocID--;
 	if ( m_eDocinfo==SPH_DOCINFO_INLINE )
 		for ( int i=0; i<m_tMin.m_iRowitems; i++ )
-	{
-		assert ( m_tMin.m_pRowitems[i]>0 ); // FIXME? is this necessary now?
-		m_tMin.m_pRowitems[i]--;
-	}
+			m_tMin.m_pRowitems[i]--;
 
 	//////////////
 	// final sort

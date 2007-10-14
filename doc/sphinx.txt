@@ -452,7 +452,7 @@ Example application code (in PHP):
    | $cl->SetFilter ( "forum_id", array ( 1,3,7 ) );
    | 
    | // sort found posts by posting date in descending order
-   | $cl->SetSortMode ( SPH_ATTR_DESC, "post_date" );
+   | $cl->SetSortMode ( SPH_SORT_ATTR_DESC, "post_date" );
 
 Attributes are named. Attribute names are case insensitive.
 

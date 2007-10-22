@@ -5297,7 +5297,7 @@ struct CmpOrdinalsValue_fn
 {
 	inline int operator () ( const CSphOrdinal & a, const CSphOrdinal & b )
 	{
-		return strcmp ( a.m_sValue.cstr(), b.m_sValue.cstr() )==-1;
+		return strcmp ( a.m_sValue.cstr(), b.m_sValue.cstr() )<0;
 	}
 };
 

@@ -10637,8 +10637,19 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 				if ( bGlobalPartialMatch )
 				{
 					int iBytes = strlen ( (const char*)sWord );
-					sWord[iBytes] = MAGIC_WORD_TAIL;
-					sWord[iBytes+1] = '\0';
+					memcpy ( sBuf + 1, sWord, iBytes );
+					sBuf [0]			= MAGIC_WORD_HEAD;
+					sBuf [iBytes + 1]	= MAGIC_WORD_TAIL;
+					sBuf [iBytes + 2]	= '\0';
+
+					SphWordID_t iWord = m_pDict->GetWordID ( sBuf );
+					if ( iWord )
+					{
+						CSphWordHit & tHit = m_dHits.Add ();
+						tHit.m_iDocID = m_tDocInfo.m_iDocID;
+						tHit.m_iWordID = iWord;
+						tHit.m_iWordPos = iPos;
+					}
 				}
 
 				SphWordID_t iWord = m_pDict->GetWordID ( sWord );
@@ -10690,7 +10701,7 @@ bool CSphSource_Document::IsFieldInStr ( const char * szField, const char * szSt
 		return false;
 
 	int iFieldLen = strlen ( szField );
-	bool bStartOk = szPos == szString || ! sphIsAlpha ( *szPos );
+	bool bStartOk = szPos == szString || ! sphIsAlpha ( *(szPos - 1) );
 	bool bEndOk = !*(szPos + iFieldLen) || ! sphIsAlpha ( *(szPos + iFieldLen) );
 
 	return bStartOk && bEndOk;

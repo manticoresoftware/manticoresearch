@@ -140,7 +140,7 @@ sub _Connect {
 	
 	# check version
 	my $buf = '';
-	recv($fp, $buf, 4, 0) eq "" || croak("recv: ".$!);
+	recv($fp, $buf, 4, 0) ne "" || croak("recv: ".$!);
 	my $v = unpack("N*", $buf);
 	$v = int($v);
 	if($v < 1) {
@@ -162,7 +162,7 @@ sub _GetResponse {
 	my $client_ver = shift;
 
 	my $header;
-	recv($fp, $header, 8, 0) eq "" || croak("recv: ".$!);
+	recv($fp, $header, 8, 0) ne "" || croak("recv: ".$!);
 
 	my ($status, $ver, $len ) = unpack("n2N", $header);
         my ($chunk, $response);

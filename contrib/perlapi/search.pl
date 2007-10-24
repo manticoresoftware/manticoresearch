@@ -35,7 +35,7 @@ $spx->SetServer('localhost' , 3312);
 # func can be SPH_GROUPBY_DAY SPH_GROUPBY_WEEK SPH_GROUPBY_MONTH SPH_GROUPBY_YEAR SPH_GROUPBY_ATTR
 # $spx->SetGroupBy('group_id', SPH_GROUPBY_ATTR);
 
-my $results = $spx->Query('book store');
+my $results = $spx->Query('test', 'lj1');
 print "Total documents found: " . $results->{total_found} . "\n";
 print "Search took: " . $results->{time} . "s\n";
 

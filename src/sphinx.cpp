@@ -8862,7 +8862,14 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString * sWarning 
 	if ( tIndexInfo.GetFD()<0 )
 		return NULL;
 
-	BYTE dCacheInfo [ 8192 ];
+	BYTE dCacheInfo [ 32768 ];
+	SphOffset_t iHeaderSize = tIndexInfo.GetSize ();
+	if ( iHeaderSize>sizeof(dCacheInfo) )
+	{
+		m_sLastError.SetSprintf ( "unexpectedly large header file (size=%d, max=%d)", (int)iHeaderSize, sizeof(dCacheInfo) );
+		return NULL;
+	}
+
 	CSphReader_VLN rdInfo ( dCacheInfo, sizeof(dCacheInfo) ); // to avoid mallocs
 	rdInfo.SetFile ( tIndexInfo );
 

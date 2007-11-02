@@ -4098,7 +4098,7 @@ void SeamlessForkPrereader ()
 	if ( !g_sPrereading && !g_dRotating.GetLength() )
 	{
 		g_bDoRotate = false;
-		sphInfo ( "rotating indices finished" );
+		sphInfo ( "rotating finished" );
 	}
 }
 
@@ -4314,7 +4314,7 @@ void CheckRotate ()
 		}
 
 		g_bDoRotate = false;
-		sphInfo ( "rotating indices finished" );
+		sphInfo ( "rotating finished" );
 		return;
 	}
 
@@ -5172,7 +5172,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 		if ( g_bGotSighup )
 		{
-			sphInfo ( "rotating indices" ); // this might hang if performed from SIGHUP
+			sphInfo ( "rotating indices (seamless=%d)", (int)g_bSeamlessRotate ); // this might hang if performed from SIGHUP
 			g_bGotSighup = false;
 		}
 

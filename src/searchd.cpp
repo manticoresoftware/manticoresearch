@@ -116,10 +116,10 @@ static const char *		g_sPidFile		= NULL;
 static int				g_iMaxMatches	= 1000;
 static bool				g_bSeamlessRotate	= true;
 
-static bool				g_bDoRotate			= false;	// flag that we are rotating now; set from SIGHUP; cleared on rotation success
-
-static bool				g_bGotSighup		= false;	// we just received SIGHUP; need to log
-static bool				g_bGotSigterm		= false;	// we just received SIGTERM; need to shutdown
+static volatile bool	g_bDoRotate			= false;	// flag that we are rotating now; set from SIGHUP; cleared on rotation success
+static volatile bool	g_bGotSighup		= false;	// we just received SIGHUP; need to log
+static volatile bool	g_bGotSigterm		= false;	// we just received SIGTERM; need to shutdown
+static volatile bool	g_bGotSigchld		= false;	// we just received SIGCHLD; need to count dead children
 
 static SmallStringHash_T<ServedIndex_t>		g_hIndexes;				// served indexes hash
 static CSphVector<const char *>				g_dRotating;			// names of indexes to be rotated this time
@@ -642,14 +642,6 @@ void Shutdown ()
 
 
 #if !USE_WINDOWS
-void sigchld ( int )
-{
-	signal ( SIGCHLD, sigchld );
-	while ( waitpid ( 0, (int *)0, WNOHANG | WUNTRACED ) > 0 )
-		g_iChildren--;
-}
-
-
 void sighup ( int )
 {
 	g_bDoRotate = true;
@@ -665,6 +657,12 @@ void sigterm ( int )
 
 	// in head, perform a clean shutdown
 	g_bGotSigterm = true;
+}
+
+
+void sigchld ( int )
+{
+	g_bGotSigchld = true;
 }
 #endif // !USE_WINDOWS
 
@@ -5186,6 +5184,15 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			Shutdown ();
 			exit ( 0 );
 		}
+
+#if !USE_WINDOWS
+		if ( g_bGotSigchld )
+		{
+			while ( waitpid ( 0, NULL, WNOHANG ) > 0 )
+				g_iChildren--;
+			g_bGotSigchld = false;
+		}
+#endif
 
 		CheckLeaks ();
 		CheckPipes ();

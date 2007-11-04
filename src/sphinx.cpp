@@ -8827,6 +8827,7 @@ void CSphIndex_VLN::Dealloc ()
 	m_pDocinfoHash.Reset ();
 	m_pWordlist.Reset ();
 	m_pMva.Reset ();
+	m_pDocinfoIndex.Reset ();
 
 	m_uDocinfo = 0;
 	m_eDocinfo = SPH_DOCINFO_NONE;

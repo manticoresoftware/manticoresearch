@@ -132,9 +132,18 @@ enum
 	SPH_PIPE_SAVED_ATTRS,
 	SPH_PIPE_PREREAD
 };
-static CSphVector<int>		g_dPipes;		// currently open read-pipes to children processes
 
-static CSphVector<DWORD>	g_dMvaStorage;	// per-query (!) pool to store MVAs received from remote agents
+struct  PipeInfo_t
+{
+	int		m_iFD;			///< read-pipe to child
+	bool	m_bPrereader;	///< is that one prereader or "normal" child
+
+	PipeInfo_t () : m_iFD ( -1 ), m_bPrereader ( false ) {}
+};
+
+static CSphVector<PipeInfo_t>	g_dPipes;		///< currently open read-pipes to children processes
+
+static CSphVector<DWORD>		g_dMvaStorage;	///< per-query (!) pool to store MVAs received from remote agents
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -4188,21 +4197,36 @@ void CheckPipes ()
 	{
 		// try to get status code
 		DWORD uStatus;
-		int iRes = ::read ( g_dPipes[i], &uStatus, sizeof(DWORD) );
+		int iRes = ::read ( g_dPipes[i].m_iFD, &uStatus, sizeof(DWORD) );
 
 		// no data yet?
 		if ( iRes==-1 && errno==EAGAIN )
 			continue;
 
 		// either if there's eof, or error, or valid data - this pipe is over
-		PipeReader_t tPipe ( g_dPipes[i] );
+		PipeReader_t tPipe ( g_dPipes[i].m_iFD );
+		bool bPrereader = g_dPipes[i].m_bPrereader;
 		g_dPipes.Remove ( i-- );
 
 		// check for eof/error
 		if ( iRes!=sizeof(DWORD) )
 		{
-			if ( iRes!=0 )
-				sphWarning ( "pipe read failed (status)" );
+			// report problems
+			if ( iRes!=0 || bPrereader )
+				sphWarning ( "pipe status read failed (prereader=%d)", bPrereader );
+
+			// if that was prereader who failed, clean up previous one and launch next one
+			if ( bPrereader )
+			{
+				g_sPrereading = NULL;
+
+				// in any case, buffer index should now be deallocated
+				g_pPrereading->Dealloc ();
+				g_pPrereading->Unlock ();
+
+				// work next one
+				SeamlessForkPrereader ();
+			}
 			continue;
 		}
 
@@ -4225,7 +4249,7 @@ void CheckPipes ()
 
 		} else if ( uStatus==SPH_PIPE_PREREAD )
 		{
-			assert ( g_bDoRotate && g_bSeamlessRotate && g_sPrereading );
+			assert ( g_bDoRotate && g_bSeamlessRotate && g_sPrereading && bPrereader );
 
 			// whatever the outcome, we will be done with this one
 			const char * sPrereading = g_sPrereading;
@@ -4233,12 +4257,9 @@ void CheckPipes ()
 
 			// notice that this will block!
 			int iRes = tPipe.GetInt();
-			if ( tPipe.IsError() )
-				break;
-
-			// if preread was succesful, exchange served index and prereader buffer index
-			if ( iRes )
+			if ( !tPipe.IsError() && iRes )
 			{
+				// if preread was succesful, exchange served index and prereader buffer index
 				ServedIndex_t & tServed = g_hIndexes[sPrereading];
 				CSphIndex * pOld = tServed.m_pIndex;
 				CSphIndex * pNew = g_pPrereading;
@@ -4269,6 +4290,13 @@ void CheckPipes ()
 				tServed.m_pSchema = tServed.m_pIndex->GetSchema ();
 				tServed.m_bEnabled = true;
 				sphInfo ( "rotating index '%s': success", sPrereading );
+
+			} else
+			{
+				if ( tPipe.IsError() )
+					sphWarning ( "rotating index '%s': pipe read failed" );
+				else
+					sphWarning ( "rotating index '%s': preread failure reported" );
 			}
 
 			// in any case, buffer index should now be deallocated

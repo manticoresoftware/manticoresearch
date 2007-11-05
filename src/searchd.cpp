@@ -3941,7 +3941,7 @@ int PipeAndFork ( bool )	{ return -1; }
 
 // open new pipe to be able to receive notifications from children
 // adds read-end fd to g_dPipes; returns write-end fd for child
-int CreatePipe ( bool bFatal )
+int CreatePipe ( bool bFatal, bool bPrereader )
 {
 	assert ( g_bHeadDaemon );
 	int dPipe[2] = { -1, -1 };
@@ -3965,7 +3965,10 @@ int CreatePipe ( bool bFatal )
 			break;
 		}
 
-		g_dPipes.Add ( dPipe[0] );
+		PipeInfo_t tAdd;
+		tAdd.m_iFD = dPipe[0];
+		tAdd.m_bPrereader = bPrereader;
+		g_dPipes.Add ( tAdd );
 		break;
 	}
 
@@ -3978,9 +3981,9 @@ int CreatePipe ( bool bFatal )
 //
 /// in child, returns write-end pipe fd (might be -1!) and sets g_bHeadDaemon to false
 /// in parent, returns -1 and leaves g_bHeadDaemon unaffected
-int PipeAndFork ( bool bFatal )
+int PipeAndFork ( bool bFatal, bool bPrereader )
 {
-	int iChildPipe = CreatePipe ( bFatal );
+	int iChildPipe = CreatePipe ( bFatal, bPrereader );
 	switch ( fork() )
 	{
 		// fork() failed
@@ -3991,7 +3994,7 @@ int PipeAndFork ( bool bFatal )
 		case 0:
 			g_bHeadDaemon = false;
 			ARRAY_FOREACH ( i, g_dPipes )
-				SafeClose ( g_dPipes[i] );
+				SafeClose ( g_dPipes[i].m_iFD );
 			break;
 
 		// parent process, continue accept()ing
@@ -4062,7 +4065,7 @@ void SeamlessTryToForkPrereader ()
 
 	// fork async reader
 	g_sPrereading = sPrereading;
-	int iPipeFD = PipeAndFork ( true );
+	int iPipeFD = PipeAndFork ( true, true );
 
 	// in parent, wait for prereader process to finish
 	if ( g_bHeadDaemon )
@@ -5283,7 +5286,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		// handle that client
 		#if !USE_WINDOWS
 		g_iChildren++;
-		int iChildPipe = PipeAndFork ( false );
+		int iChildPipe = PipeAndFork ( false, false );
 
 		if ( !g_bHeadDaemon )
 		{

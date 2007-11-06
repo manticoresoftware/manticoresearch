@@ -238,11 +238,30 @@ void Shutdown (); // forward ref for sphFatal()
 
 void sphFormatCurrentTime ( char * sTimeBuf )
 {
+#if !USE_WINDOWS
 	struct timeval tv;
 	gettimeofday ( &tv, NULL );
 
 	struct tm tmp;
 	localtime_r ( &tv.tv_sec, &tmp );
+#else
+	struct
+	{
+		time_t	tv_sec;
+		DWORD	tv_usec;
+	} tv;
+
+	FILETIME ft;
+	GetSystemTimeAsFileTime ( &ft );
+
+	uint64_t ts = ( uint64_t(ft.dwHighDateTime)<<32 ) + uint64_t(ft.dwLowDateTime) - 116444736000000000ULL; // Jan 1, 1970 magic
+	ts /= 10; // to microseconds
+	tv.tv_sec  = (DWORD)(ts/1000000);
+	tv.tv_usec = (DWORD)(ts%1000000);
+
+	struct tm tmp;
+	tmp = *localtime ( &tv.tv_sec );
+#endif
 
 	static const char * sWeekday[7] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
 	static const char * sMonth[12] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
@@ -3943,8 +3962,8 @@ void RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 
 #if USE_WINDOWS
 
-int CreatePipe ( bool )		{ return -1; }
-int PipeAndFork ( bool )	{ return -1; }
+int CreatePipe ( bool, bool )	{ return -1; }
+int PipeAndFork ( bool, bool )	{ return -1; }
 
 #else
 

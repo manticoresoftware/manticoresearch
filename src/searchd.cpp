@@ -202,10 +202,6 @@ const int	MAX_RETRY_DELAY		= 1000;
 #define ftruncate		_chsize
 #define getpid			GetCurrentProcessId
 
-void ctime_r ( time_t * tNow, char * sBuf )
-{
-	strcpy ( sBuf, ctime(tNow) );
-}
 #endif // USE_WINDOWS
 
 /////////////////////////////////////////////////////////////////////////////
@@ -240,16 +236,32 @@ ServedIndex_t::~ServedIndex_t ()
 
 void Shutdown (); // forward ref for sphFatal()
 
+void sphFormatCurrentTime ( char * sTimeBuf )
+{
+	struct timeval tv;
+	gettimeofday ( &tv, NULL );
+
+	struct tm tmp;
+	localtime_r ( &tv.tv_sec, &tmp );
+
+	static const char * sWeekday[7] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+	static const char * sMonth[12] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+
+	sprintf ( sTimeBuf, "%.3s %.3s%3d %.2d:%.2d:%.2d.%.3d %d",
+		sWeekday [ tmp.tm_wday ],
+		sMonth [ tmp.tm_mon ],
+		tmp.tm_mday, tmp.tm_hour,
+		tmp.tm_min, tmp.tm_sec, (int)(tv.tv_usec/1000),
+		1900+tmp.tm_year );
+}
+
 void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 {
 	if ( eLevel>g_eLogLevel || ( g_iLogFile<0 && !g_bService ) )
 		return;
 
-	time_t tNow;
 	char sTimeBuf[128];
-	time ( &tNow );
-	ctime_r ( &tNow, sTimeBuf );
-	sTimeBuf [ strlen(sTimeBuf)-1 ] = '\0';
+	sphFormatCurrentTime ( sTimeBuf );
 
 	const char * sBanner = "";
 	if ( eLevel==LOG_FATAL )	sBanner = "FATAL: ";
@@ -2392,13 +2404,10 @@ void LogQuery ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 	if ( g_iQueryLogFile<0 || !tRes.m_sError.IsEmpty() )
 		return;
 
-	time_t tNow;
 	char sTimeBuf[128], sGroupBuf[128];
 	char sBuf[1024];
 
-	time ( &tNow );
-	ctime_r ( &tNow, sTimeBuf );
-	sTimeBuf [ strlen(sTimeBuf)-1 ] = '\0';
+	sphFormatCurrentTime ( sTimeBuf );
 
 	sGroupBuf[0] = '\0';
 	if ( tQuery.m_iGroupbyOffset>=0 )

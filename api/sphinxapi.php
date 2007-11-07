@@ -485,7 +485,20 @@ class SphinxClient
 	/// connect to searchd server and run given search query
 	///
 	/// $query is query string
-	/// $index is index name to query, default is "*" which means to query all indexes
+	///
+	/// $index is index name (or names) to query. default value is "*" which means
+	/// to query all indexes. accepted characters for index names are letters, numbers,
+	/// dash, and underscore; everything else is considered a separator. therefore,
+	/// all the following calls are valid and will search two indexes:
+	///
+	///		$cl->Query ( "test query", "main delta" );
+	///		$cl->Query ( "test query", "main;delta" );
+	///		$cl->Query ( "test query", "main, delta" );
+	///
+	/// index order matters. if identical IDs are found in two or more indexes,
+	/// weight and attribute values from the very last matching index will be used
+	/// for sorting and returning to client. therefore, in the example above,
+	/// matches from "delta" index will always "win" over matches from "main".
 	///
 	/// returns false on failure
 	/// returns hash which has the following keys on success:

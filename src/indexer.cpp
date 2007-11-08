@@ -594,19 +594,6 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 	iPrefix = Max ( iPrefix, 0 );
 	iInfix = Max ( iInfix, 0 );
 
-	int iMinWordLen = hIndex("min_word_len") ? Max ( hIndex["min_word_len"].intval(), 0 ) : 0;
-	if ( iMinWordLen>0 && iPrefix>iMinWordLen )
-	{
-		fprintf ( stdout, "WARNING: index '%s': min_prefix_len greater than min_word_len, clamping.\n", sIndexName );
-		iPrefix = iMinWordLen;
-	}
-
-	if ( iMinWordLen>0 && iInfix>iMinWordLen )
-	{
-		fprintf ( stdout, "WARNING: index '%s': min_infix_len greater than min_word_len, clamping.\n", sIndexName );
-		iInfix = iMinWordLen;
-	}
-
 	/////////////////////
 	// spawn datasources
 	/////////////////////

@@ -12319,18 +12319,6 @@ bool CSphSource_SQL::Connect ( CSphString & sError )
 		return false;
 	}
 
-	// run pre-queries
-	ARRAY_FOREACH ( i, m_tParams.m_dQueryPre )
-	{
-		if ( !SqlQuery ( m_tParams.m_dQueryPre[i].cstr() ) )
-		{
-			sError.SetSprintf ( "sql_query_pre[%d]: %s (DSN=%s)", i, SqlError(), m_sSqlDSN.cstr() );
-			SqlDisconnect ();
-			return false;
-		}
-		SqlDismissResult ();
-	}
-
 	// all good
 	m_bSqlConnected = true;
 	return true;
@@ -12345,6 +12333,18 @@ bool CSphSource_SQL::Connect ( CSphString & sError )
 bool CSphSource_SQL::IterateHitsStart ( CSphString & sError )
 {
 	assert ( m_bSqlConnected );
+
+	// run pre-queries
+	ARRAY_FOREACH ( i, m_tParams.m_dQueryPre )
+	{
+		if ( !SqlQuery ( m_tParams.m_dQueryPre[i].cstr() ) )
+		{
+			sError.SetSprintf ( "sql_query_pre[%d]: %s (DSN=%s)", i, SqlError(), m_sSqlDSN.cstr() );
+			SqlDisconnect ();
+			return false;
+		}
+		SqlDismissResult ();
+	}
 
 	const char * sSqlError = NULL;
 	for ( ;; )

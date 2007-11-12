@@ -7637,6 +7637,10 @@ bool CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, int iSorters, ISphM
 
 	// let's build our own tree! with doclists! and hits!
 	assert ( m_tMin.m_iRowitems==m_tSchema.GetRowSize() );
+	
+	if ( !tParsed.m_pTree )
+		return true;
+
 	CSphBooleanEvalNode tTree ( tParsed.m_pTree, tTermSetup );
 	tTree.SetFile ( this, tTermSetup );
 

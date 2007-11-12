@@ -381,6 +381,9 @@ static void InvertExprLevel ( CSphBooleanQueryExpr * pNode )
 
 static CSphBooleanQueryExpr * RemoveRedundantNodes ( CSphBooleanQueryExpr * pNode )
 {
+	if ( !pNode )
+		return NULL;
+
 	// optimize my subexpression
 	if ( pNode->m_pExpr )
 	{

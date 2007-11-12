@@ -8480,7 +8480,12 @@ bool CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, CSphQueryResult * 
 	int iQwords = 0;
 	tAccept.CollectQwords ( hQwords, iQwords );
 
-	assert ( iQwords<SPH_BM25_MAX_TERMS );
+	if ( iQwords >= SPH_BM25_MAX_TERMS )
+	{
+		m_sLastError.SetSprintf ( "too many keywords (keywords=%d, max=%d)", iQwords, SPH_BM25_MAX_TERMS );
+		return false;
+	}
+
 	int iIDF = 0;
 	float dIDF [ SPH_BM25_MAX_TERMS ];
 

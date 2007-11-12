@@ -1058,6 +1058,7 @@ enum ESphMatchMode
 	SPH_MATCH_BOOLEAN,			///< match this boolean query
 	SPH_MATCH_EXTENDED,			///< match this extended query
 	SPH_MATCH_FULLSCAN,			///< match all document IDs w/o fulltext query, apply filters
+	SPH_MATCH_EXTENDED2,		///< extended engine V2 (TEMPORARY, WILL BE REMOVED IN 0.9.8-RELEASE)
 
 	SPH_MATCH_TOTAL
 };

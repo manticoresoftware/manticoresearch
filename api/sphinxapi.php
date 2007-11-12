@@ -39,6 +39,8 @@ define ( "SPH_MATCH_ANY",			1 );
 define ( "SPH_MATCH_PHRASE",		2 );
 define ( "SPH_MATCH_BOOLEAN",		3 );
 define ( "SPH_MATCH_EXTENDED",		4 );
+define ( "SPH_MATCH_FULLSCAN",		5 );
+define ( "SPH_MATCH_EXTENDED2",		6 );	// extended engine V2 (TEMPORARY, WILL BE REMOVED IN 0.9.8-RELEASE)
 
 /// known sort modes
 define ( "SPH_SORT_RELEVANCE",		0 );
@@ -278,7 +280,8 @@ class SphinxClient
 			|| $mode==SPH_MATCH_ANY
 			|| $mode==SPH_MATCH_PHRASE
 			|| $mode==SPH_MATCH_BOOLEAN
-			|| $mode==SPH_MATCH_EXTENDED );
+			|| $mode==SPH_MATCH_EXTENDED
+			|| $mode==SPH_MATCH_EXTENDED2 );
 		$this->_mode = $mode;
 	}
 

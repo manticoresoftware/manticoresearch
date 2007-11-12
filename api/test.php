@@ -33,6 +33,7 @@ if ( !is_array($_SERVER["argv"]) || empty($_SERVER["argv"]) )
 	print ( "-g, --groupby <EXPR>\tgroup matches by 'EXPR'\n" );
 	print ( "-gs,--groupsort <EXPR>\tsort groups by 'EXPR'\n" );
 	print ( "-d, --distinct <ATTR>\tcount distinct values of 'ATTR''\n" );
+	print ( "-l, --limit <COUNT>\tretrieve COUNT matches (default: 20)\n" );
 	exit;
 }
 
@@ -51,6 +52,7 @@ $filter = "group_id";
 $filtervals = array();
 $distinct = "";
 $sortby = "";
+$limit = 20;
 for ( $i=0; $i<count($args); $i++ )
 {
 	$arg = $args[$i];
@@ -62,12 +64,14 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="-a" || $arg=="--any" )			$mode = SPH_MATCH_ANY;
 	else if ( $arg=="-b" || $arg=="--boolean" )		$mode = SPH_MATCH_BOOLEAN;
 	else if ( $arg=="-e" || $arg=="--extended" )	$mode = SPH_MATCH_EXTENDED;
+	else if ( $arg=="-e2" )							$mode = SPH_MATCH_EXTENDED2;
 	else if ( $arg=="-ph"|| $arg=="--phrase" )		$mode = SPH_MATCH_PHRASE;
 	else if ( $arg=="-f" || $arg=="--filter" )		$filter = $args[++$i];
 	else if ( $arg=="-v" || $arg=="--value" )		$filtervals[] = (int)$args[++$i];
 	else if ( $arg=="-g" || $arg=="--groupby" )		$groupby = $args[++$i];
 	else if ( $arg=="-gs"|| $arg=="--groupsort" )	$groupsort = $args[++$i];
 	else if ( $arg=="-d" || $arg=="--distinct" )	$distinct = $args[++$i];
+	else if ( $arg=="-l" || $arg=="--limit" )		$limit = $args[++$i];
 	else
 		$q .= $args[$i] . " ";
 }
@@ -84,6 +88,7 @@ if ( count($filtervals) )	$cl->SetFilter ( $filter, $filtervals );
 if ( $groupby )				$cl->SetGroupBy ( $groupby, SPH_GROUPBY_ATTR, $groupsort );
 if ( $sortby )				$cl->SetSortMode ( SPH_SORT_EXTENDED, $sortby );
 if ( $distinct )			$cl->SetGroupDistinct ( $distinct );
+if ( $limit )				$cl->SetLimits ( 0, $limit, ( $limit>1000 ) ? $limit : 1000 );
 $res = $cl->Query ( $q, $index );
 
 ////////////////

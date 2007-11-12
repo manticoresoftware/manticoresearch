@@ -147,7 +147,7 @@ public:
 	}
 
 	/// check if i'm plain
-	bool IsPlain ()
+	bool IsPlain () const
 	{
 		return m_dChildren.GetLength()==0;
 	}

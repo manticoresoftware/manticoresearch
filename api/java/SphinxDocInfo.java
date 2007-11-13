@@ -8,10 +8,9 @@ import java.util.*;
  */
 public class SphinxDocInfo
 {
-	public long docId;
-	public int weight;
-	private LinkedHashMap attrs = null;
-	private LinkedHashMap types = null;
+	private long docId;
+	private int weight;
+	private ArrayList attrValues = null;
 
 	/**
 	 * Create document info using document id and its weight
@@ -21,8 +20,7 @@ public class SphinxDocInfo
 	 */
 	public SphinxDocInfo(long docId, int weight)
 	{
-		this.attrs = new LinkedHashMap();
-		this.types = new LinkedHashMap();
+		this.attrValues = new ArrayList();
 		this.docId = docId;
 		this.weight = weight;
 	}
@@ -32,20 +30,29 @@ public class SphinxDocInfo
 	 *
 	 * @return set of doc attributes
 	 */
-	public Set getAttrNameSet()
+	public ArrayList getAttrValues()
 	{
-		return attrs.keySet();
+		return attrValues;
+	}
+
+	public long getDocId()
+	{
+		return docId;
+	}
+
+	public int getWeight()
+	{
+		return weight;
 	}
 
 	/**
 	 * Get attribute value for given attribute name for this document
 	 *
-	 * @param attrName attribute name
 	 * @return attribute value for this document
 	 */
-	public int getAttr(String attrName)
+	public int getAttr(int no)
 	{
-		Integer value = (Integer) this.attrs.get(attrName);
+		Integer value = (Integer) this.attrValues.get(no);
 		return value.intValue();
 	}
 
@@ -53,24 +60,30 @@ public class SphinxDocInfo
 	 * Set attribute value for given attribute name for this document
 	 *
 	 * @param attrName attribute name
-	 * @param type	 attribute type
 	 * @param value	value for this document
 	 */
-	public void setAttr(String attrName, int type, Object value)
+	public void setAttr(String attrName, Object value)
 	{
-		types.put(attrName, new Integer(type));
-		this.attrs.put(attrName, value);
+		this.attrValues.add(value);
 	}
 
 	/**
 	 * Set integer attribute value for given attribute name for this document
-	 *
-	 * @param attrName attribute name
 	 * @param value	value for this document
 	 */
-	public void setAttr(String attrName, int value)
+	public void setAttr(int no, int value)
 	{
 		Integer iBox = new Integer(value);
-		this.attrs.put(attrName, iBox);
+		this.attrValues.add(no, iBox);
+	}
+
+	/**
+	 * Set integer attribute value for given attribute name for this document
+	 * @param value	value for this document
+	 */
+	public void setAttr(int no, float value)
+	{
+		Float iBox = new Float(value);
+		this.attrValues.add(no, iBox);
 	}
 }

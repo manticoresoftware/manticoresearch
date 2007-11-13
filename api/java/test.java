@@ -56,9 +56,6 @@ public class test
 		cl.SetWeights(new int[]{100, 1});
 		cl.SetMatchMode(mode);
 		cl.SetLimits(offset, RESULT_LIMIT, MAX_RESULTS);
-		//cl.SetFilter("dgenre_id", 6, false);
-		//cl.SetGroupDistinct("dgenre_id");
-		//cl.SetGroupBy("dgenre_id", cl.SPH_GROUPBY_ATTR, "@group desc");
 
 		//convert groups to int[]
 		if (groups.size() > 0) {
@@ -79,7 +76,7 @@ public class test
 
 		SphinxResult res = cl.Query(q.toString(), index);
 		//assert res != null;
-		if (res == null || cl.GetLastError().length() > 0) {
+		if (res == null || (cl.GetLastError() != null && cl.GetLastError().length() > 0)) {
 			System.err.println("Error: " + cl.GetLastError());
 			System.exit(1);
 		}
@@ -90,21 +87,51 @@ public class test
 
 		System.out.println("Query " + q + " retrieved " + res.total + " of " + res.totalFound + " matches in " + res.time + " sec.");
 		System.out.println("Query stats:");
-		for (Iterator e = res.words.keySet().iterator(); e.hasNext();) {
-			String word = (String) e.next();
-			SphinxWordInfo wordInfo = (SphinxWordInfo) res.words.get(word);
-			System.out.println(word + " found " + wordInfo.hits + " times in " + wordInfo.docs + " documents");
+		for (int i = 0; i < res.words.length; i++) {
+			SphinxWordInfo wordInfo = res.words[i];
+			System.out.println(wordInfo.word + " found " + wordInfo.hits + " times in " + wordInfo.docs + " documents");
 		}
 
 		System.out.println("Matches:");
-		for (Iterator e = res.matches.keySet().iterator(); e.hasNext();) {
-			String doc = (String) e.next();
-			SphinxDocInfo info = (SphinxDocInfo) res.matches.get(doc);
-			System.out.print("DocID: " + doc + " weight: " + info.weight);
-			System.out.print(" attrs: ");
-			for (Iterator e2 = info.getAttrNameSet().iterator(); e2.hasNext();) {
-				String attr = (String) e2.next();
-				System.out.print(attr + "=" + info.getAttr(attr) + " ");
+		for (int i = 0; i < res.matches.length; i++) {
+			SphinxDocInfo info = res.matches[i];
+			System.out.print("DocId=" + info.getDocId() + ", weight=" + info.getWeight());
+			System.out.print(", attrNames: ");
+			//String[] attrNames = res.attrNames.
+			ArrayList attrs = info.getAttrValues();
+
+			if (res.attrNames != null && res.attrTypes != null)
+			for (int attrNo = 0; attrNo < res.attrNames.length; attrNo++) {
+				switch (res.attrTypes[attrNo])
+				{
+					case SphinxClient.SPH_ATTR_INTEGER:
+						Integer attrI = (Integer) attrs.get(attrNo);
+						System.out.print(res.attrNames[attrNo] + "=" + attrI.intValue() + " ");
+						break;
+					case SphinxClient.SPH_ATTR_FLOAT:
+						Float attrF = (Float) attrs.get(attrNo);
+						System.out.print(res.attrNames[attrNo] + "=" + attrF.floatValue() + " ");
+						break;
+					case SphinxClient.SPH_ATTR_MULTI:
+						int[] attrM = (int[]) attrs.get(attrNo);
+						if (attrM != null)
+						for (int j = 0; j < attrM.length; j++)
+						{
+							System.out.print(res.attrNames[attrNo] + "[" + j + "]=" + attrM[j] + " ");
+						}
+						break;
+					case SphinxClient.SPH_ATTR_ORDINAL:
+						String attrS = (String) attrs.get(attrNo);
+						System.out.print(res.attrNames[attrNo] + "=" + attrS + " ");
+						break;
+					case SphinxClient.SPH_ATTR_TIMESTAMP:
+						Integer attrT = (Integer) attrs.get(attrNo);
+						Date date = new Date(attrT.longValue());
+						System.out.print(res.attrNames[attrNo] + "=" + date.toString() + " ");
+						break;
+					default:
+						System.out.print(res.attrNames[attrNo] + " type id = " + res.attrTypes[attrNo]);
+				}
 			}
 			System.out.println();
 		}

@@ -53,12 +53,12 @@ public class SphinxClient
 	public final static int SPH_SORT_TIME_SEGMENTS = 3;
 	public final static int SPH_SORT_EXTENDED = 4;
 
-	/* known filter types*/
+	/* known filter attrTypes*/
 	public final static int SPH_FILTER_VALUES = 0;
 	public final static int SPH_FILTER_RANGE = 1;
 	public final static int SPH_FILTER_FLOATRANGE = 2;
 
-	/* known attribute types*/
+	/* known attribute attrTypes*/
 	public final static int SPH_ATTR_INTEGER = 1;
 	public final static int SPH_ATTR_TIMESTAMP = 2;
 	public final static int SPH_ATTR_ORDINAL = 3;
@@ -187,7 +187,7 @@ public class SphinxClient
 	/**
 	 * requests set for multi-query LinkedHashSet<ByteArrayOutputStream>
 	 */
-	protected LinkedHashMap _reqs;
+	protected ArrayList _reqs;
 	/**
 	 * runtime index weights
 	 */
@@ -254,7 +254,7 @@ public class SphinxClient
 
 		//this._reqs = new SphinxRequest();
 		//this._reqs = new LinkedHashSet<SphinxRequest>();
-		this._reqs = new LinkedHashMap();
+		this._reqs = new ArrayList();
 		this._weights = null;
 		this._indexWeights = new LinkedHashMap();
 	}
@@ -286,6 +286,7 @@ public class SphinxClient
 	 *
 	 * @param host searchd hostname to connect to
 	 * @param port searchd port number
+	 * @throws SphinxException if wrong parameters passed
 	 */
 	public void SetServer(String host, int port) throws SphinxException
 	{
@@ -345,6 +346,7 @@ public class SphinxClient
 	 * @param sock	   socket to read from
 	 * @param client_ver searchd client version
 	 * @return raw byte response
+	 * @throws SphinxException if wrong parameters passed
 	 */
 	protected byte[] _GetResponse(Socket sock, int client_ver) throws SphinxException
 	{
@@ -453,6 +455,7 @@ public class SphinxClient
 	 * @param limit  return limit items from result set
 	 * @param max	override <code>max_matches</code> option from searchd config
 	 * @param cutoff when to stop searching
+	 * @throws SphinxException if wrong parameters passed
 	 */
 	public void SetLimits(int offset, int limit, int max, int cutoff) throws SphinxException
 	{
@@ -474,6 +477,7 @@ public class SphinxClient
 	 * @param offset result offset
 	 * @param limit  return limit items from result set
 	 * @param max	override <code>max_matches</code> option from searchd config
+	 * @throws SphinxException if wrong parameters passed
 	 */
 	public void SetLimits(int offset, int limit, int max) throws SphinxException
 	{
@@ -485,6 +489,7 @@ public class SphinxClient
 	 *
 	 * @param offset result offset
 	 * @param limit  return limit items from result set
+	 * @throws SphinxException if wrong parameters passed
 	 */
 	public void SetLimits(int offset, int limit) throws SphinxException
 	{
@@ -495,6 +500,7 @@ public class SphinxClient
 	 * Set match mode.
 	 *
 	 * @param mode new match mode (MUST be one of SphinxClient.SPH_MATCH_* constants)
+	 * @throws SphinxException if wrong parameters passed
 	 */
 	public void SetMatchMode(int mode) throws SphinxException
 	{
@@ -509,6 +515,7 @@ public class SphinxClient
 	 *
 	 * @param mode   sort mode (MUST be one of SphinxClient.SPH_SORT_* constants)
 	 * @param sortby field to use with sort
+	 * @throws SphinxException if wrong parameters passed
 	 */
 	public void SetSortMode(int mode, String sortby) throws SphinxException
 	{
@@ -528,6 +535,7 @@ public class SphinxClient
 	 * Set sort mode
 	 *
 	 * @param mode sort mode
+	 * @throws SphinxException if wrong parameters passed
 	 */
 	public void SetSortMode(int mode) throws SphinxException
 	{
@@ -540,6 +548,7 @@ public class SphinxClient
 	 *
 	 * @param weights int array should contain positive weight
 	 * @noinspection ConstantConditions
+	 * @throws SphinxException if wrong parameters passed
 	 */
 	public void SetWeights(int[] weights) throws SphinxException
 	{
@@ -568,6 +577,7 @@ public class SphinxClient
 	 *
 	 * @param min min id to match
 	 * @param max max id to match
+	 * @throws SphinxException if wrong parameters passed
 	 */
 	public void SetIDRange(int min, int max) throws SphinxException
 	{
@@ -584,6 +594,7 @@ public class SphinxClient
 	 * @param attribute attribute name
 	 * @param values	values to match
 	 * @param exclude   invert matches
+	 * @throws SphinxException if wrong parameters passed
 	 */
 	public void SetFilter(String attribute, int[] values, boolean exclude) throws SphinxException
 	{
@@ -617,6 +628,7 @@ public class SphinxClient
 	 * @param min	   min attribute value
 	 * @param max	   max attribute value
 	 * @param exclude   should we exclude documents with attribute values from min to max instead of including it
+	 * @throws SphinxException if wrong parameters passed
 	 */
 	public void SetFilterRange(String attribute, int min, int max, boolean exclude) throws SphinxException
 	{
@@ -642,6 +654,7 @@ public class SphinxClient
 	 * @param min	   min attribute value
 	 * @param max	   max attribute value
 	 * @param exclude   should we exclude documents with attribute values from min to max instead of including it
+	 * @throws SphinxException if wrong parameters passed
 	 */
 	public void SetFilterFloadRange(String attribute, float min, float max, boolean exclude) throws SphinxException
 	{
@@ -667,6 +680,7 @@ public class SphinxClient
 	 * @param longitudeAttrName the name of longitude attribute
 	 * @param latitude		  anchor point latitude, in radians
 	 * @param longitude		 anchor point longitude, in radians
+	 * @throws SphinxException if wrong parameters passed
 	 */
 	public void SetGeoAnchor(String latitudeAttrName, String longitudeAttrName, float latitude, float longitude) throws SphinxException
 	{
@@ -713,6 +727,7 @@ public class SphinxClient
 	 * @param attribute grouping attribute name
 	 * @param func	  func type (See predefined SPH_GROUPBY_* constants for details)
 	 * @param groupsort soft type ("@group desc" by default)
+	 * @throws SphinxException 	if wrong parameters passed
 	 */
 	public void SetGroupBy(String attribute, int func, String groupsort) throws SphinxException
 	{
@@ -731,6 +746,7 @@ public class SphinxClient
 	 *
 	 * @param attribute attribute to group by
 	 * @param func	  groupping type
+	 * @throws SphinxException if wrong parameters passed
 	 */
 	public void SetGroupBy(String attribute, int func) throws SphinxException
 	{
@@ -752,6 +768,7 @@ public class SphinxClient
 	 *
 	 * @param count retry count
 	 * @param delay retry delay
+	 * @throws SphinxException if wrong parameters passed
 	 */
 	public void SetRetries(int count, int delay) throws SphinxException
 	{
@@ -765,6 +782,7 @@ public class SphinxClient
 	 * set distributed retries count with zero delay
 	 *
 	 * @param count retry count
+	 * @throws SphinxException if wrong parameters passed
 	 */
 	public void SetRetries(int count) throws SphinxException
 	{
@@ -792,6 +810,7 @@ public class SphinxClient
 	 *
 	 * @param query string
 	 * @return {@link SphinxResult} result set or null on error
+	 * @throws SphinxException if wrong parameters passed
 	 */
 	public SphinxResult Query(String query) throws SphinxException
 	{
@@ -815,6 +834,7 @@ public class SphinxClient
 	 *         search time
 	 *         "words"
 	 *         hash which maps query terms (stemmed!) to ( "docs", "hits" ) hash
+	 * @throws SphinxException if wrong parameters passed
 	 */
 	public SphinxResult Query(String query, String index) throws SphinxException
 	{
@@ -841,7 +861,7 @@ public class SphinxClient
 		}
 	}
 
-	public synchronized String AddQuery(String query, String index) throws SphinxException
+	public synchronized int AddQuery(String query, String index) throws SphinxException
 	{
 		ByteArrayOutputStream req = new ByteArrayOutputStream();
 		/////////////////
@@ -904,8 +924,8 @@ public class SphinxClient
 				out.writeInt(weight.intValue());
 			}
 			out.flush();
-			String qIndex = String.valueOf(_reqs.size());
-			this._reqs.put(qIndex, req.toByteArray());
+			int qIndex = _reqs.size();
+			this._reqs.add(qIndex, req.toByteArray());
 			return qIndex;
 		} catch (Exception ex) {
 			myAssert(false, "error on AddQuery: " + ex.getMessage());
@@ -917,7 +937,7 @@ public class SphinxClient
 				myAssert(false, "error on AddQuery: " + e.getMessage());
 			}
 		}
-		return null;
+		return -1;
 	}
 
 	public SphinxResult[] RunQueries() throws SphinxException
@@ -942,13 +962,13 @@ public class SphinxClient
 			prepareRQ.writeShort(VER_COMMAND_SEARCH);
 			int rqLen = 4;
 			for (int i = 0; i < nreqs; i++) {
-				byte[] subRq = (byte[]) this._reqs.get(String.valueOf(i));
+				byte[] subRq = (byte[]) this._reqs.get(i);
 				rqLen += subRq.length;
 			}
 			prepareRQ.writeInt(rqLen);
 			prepareRQ.writeInt(nreqs);
 			for (int i = 0; i < nreqs; i++) {
-				byte[] subRq = (byte[]) this._reqs.get(String.valueOf(i));
+				byte[] subRq = (byte[]) this._reqs.get(i);
 				prepareRQ.write(subRq);
 			}
 			OutputStream SockOut = sock.getOutputStream();
@@ -960,7 +980,7 @@ public class SphinxClient
 		}
 
 		//reset requests
-		_reqs = new LinkedHashMap();
+		_reqs = new ArrayList();
 
 		//get response
 		byte[] response = null;
@@ -1003,16 +1023,20 @@ public class SphinxClient
 
 				//read arrts
 				int nattrs = in.readInt();
+				res.attrTypes = new int[nattrs];
+				res.attrNames = new String[nattrs];
 				for (int i = 0; i < nattrs; i++) {
 					String AttrName = readNetUTF8(in);
 					int AttrType = in.readInt();
-					res.attrs.put(AttrName, new Integer(AttrType));
+					res.attrNames[i] = AttrName;
+					res.attrTypes[i] = AttrType;
 				}
 
 				// read match count
 				int count = in.readInt();
 				int id64 = in.readInt();
-				for (int i = 0; i < count; i++) {
+				res.matches = new SphinxDocInfo[count];
+				for (int matchesNo = 0; matchesNo < count; matchesNo++) {
 					SphinxDocInfo docInfo;
 					if (id64 != 0) {
 						int docHi = in.readInt();
@@ -1027,32 +1051,33 @@ public class SphinxClient
 						docInfo = new SphinxDocInfo(docId, weight);
 					}
 					// read matches
-					for (Iterator e = res.attrs.keySet().iterator(); e.hasNext();) {
-						String attrName = (String) e.next();
-						Integer type = (Integer) res.attrs.get(attrName);
+					for (int attrNumber = 0; attrNumber < res.attrTypes.length; attrNumber++)
+					{
+						String attrName = res.attrNames[attrNumber];
+						//Integer type = (Integer) res.attrNames.get(attrName);
+						int type = res.attrTypes[attrNumber];
 
 						// handle floats
-						if (type.intValue() == SPH_ATTR_FLOAT) {
+						if (type == SPH_ATTR_FLOAT) {
 							float value = in.readFloat();
-							docInfo.setAttr(attrName, type.intValue(), new Float(value));
+							docInfo.setAttr(attrNumber, value);
 							continue;
 						}
 
 						// handle everything else as unsigned ints
 						int val = in.readInt();
-						if ((type.intValue() & SPH_ATTR_MULTI) != 0) {
-							int nvalues = val;
-							int[] vals = new int[nvalues];
-							for (int j = 0; j < nvalues; j++) {
-								vals[j] = in.readInt();
+						if ((type & SPH_ATTR_MULTI) != 0) {
+							int[] vals = new int[val];
+							for (int k = 0; k < val; k++) {
+								vals[k] = in.readInt();
 							}
-							docInfo.setAttr(attrName, type.intValue(), vals);
+							docInfo.setAttr(attrName, vals);
 						} else {
-							docInfo.setAttr(attrName, type.intValue(), new Integer(val));
+							docInfo.setAttr(attrNumber, val);
 						}
-						docInfo.setAttr(attrName, val);
+						docInfo.setAttr(attrNumber, val);
 					}
-					res.matches.put(String.valueOf(docInfo.docId), docInfo);
+					res.matches[matchesNo] = docInfo;
 				}
 
 				res.total = in.readInt();
@@ -1060,12 +1085,13 @@ public class SphinxClient
 				res.time = in.readInt() / 1000; //@Todo: format should be %.3f
 				int wordCount = in.readInt();
 
+				res.words = new SphinxWordInfo[wordCount];
 				for (int i = 0; i < wordCount; i++) {
 					String word = readNetUTF8(in);
 					int docs = in.readInt();
 					int hits = in.readInt();
 					SphinxWordInfo winfo = new SphinxWordInfo(word, docs, hits);
-					res.words.put(word, winfo);
+					res.words[i] = winfo;
 				}
 			}
 			in.close();
@@ -1101,6 +1127,7 @@ public class SphinxClient
 	 *              "around"
 	 *              how much words to highlight around each match, default is 5
 	 * @return false on failure, an array of string excerpts on success
+	 * @throws SphinxException if wrong parameters passed
 	 */
 	public String[] BuildExcerpts(String[] docs, String index, String words, Map opts) throws SphinxException
 	{
@@ -1192,11 +1219,11 @@ public class SphinxClient
 	}
 
 	/*
-	public int UpdateAttributes (String index, Set attrs, Map values )
+	public int UpdateAttributes (String index, Set attrNames, Map values )
 	{
 		myAssert(index != null && index.length() > 0, "UpdateAttributes: Have no index to update");
 
-		myAssert(attrs != null, "BuildExcerpts: Have no document attributes");
+		myAssert(attrNames != null, "BuildExcerpts: Have no document attributes");
 		myAssert(words != null && words.length() > 0, "BuildExcerpts: Have no words to highlight");
 
 		ByteArrayOutputStream req = new ByteArrayOutputStream();
@@ -1207,8 +1234,8 @@ public class SphinxClient
 			// v.1.0 req
 			writeNetUTF8(rqData, index);
 
-			rqData.writeInt(attrs.size());
-			for (Iterator e = attrs.iterator(); e.hasNext(); )
+			rqData.writeInt(attrNames.size());
+			for (Iterator e = attrNames.iterator(); e.hasNext(); )
 			{
 			    String attr = (String) e.next();
 				writeNetUTF8(rqData, attr);
@@ -1235,7 +1262,7 @@ public class SphinxClient
 	 * @param condition condution to check. Must be true for normal flow.
 	 * @param err	   error to set if condition is false.
 	 * @return true on falure
-	 * @throws SphinxException
+	 * @throws SphinxException if wrong parameters passed
 	 */
 	boolean myAssert(boolean condition, String err) throws SphinxException
 	{

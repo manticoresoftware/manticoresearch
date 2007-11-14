@@ -2441,6 +2441,10 @@ void LogQuery ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 		tRes.m_iTotalMatches, tQuery.m_iOffset, tQuery.m_iLimit, sGroupBuf,
 		tQuery.m_sIndexes.cstr(), tQuery.m_sQuery.cstr() );
 
+	// snprintf does not emit zero at some runtimes (eg. VS2005)
+	sBuf[sizeof(sBuf)-2] = '\n';
+	sBuf[sizeof(sBuf)-1] = '\0';
+
 	sphLockEx ( g_iQueryLogFile, true );
 	lseek ( g_iQueryLogFile, 0, SEEK_END );
 	write ( g_iQueryLogFile, sBuf, strlen(sBuf) );

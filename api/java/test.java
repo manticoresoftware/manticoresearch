@@ -25,7 +25,7 @@ public class test
 		String index = "*";
 		int offset = 0;
 
-		//parse arguments
+		/* parse arguments */
 		if (argv != null) {
 			for (int i = 0; i < argv.length; i++) {
 				String arg = argv[i];
@@ -57,7 +57,7 @@ public class test
 		cl.SetMatchMode(mode);
 		cl.SetLimits(offset, RESULT_LIMIT, MAX_RESULTS);
 
-		//convert groups to int[]
+		/* convert groups to int[] */
 		if (groups.size() > 0) {
 			int[] groupList = new int[groups.size()];
 			String group = null;
@@ -75,16 +75,12 @@ public class test
 		}
 
 		SphinxResult res = cl.Query(q.toString(), index);
-		//assert res != null;
 		if (res == null || (cl.GetLastError() != null && cl.GetLastError().length() > 0)) {
 			System.err.println("Error: " + cl.GetLastError());
 			System.exit(1);
 		}
 
-		////////////////
-		// print me out
-		////////////////
-
+		/* print me out */
 		System.out.println("Query " + q + " retrieved " + res.total + " of " + res.totalFound + " matches in " + res.time + " sec.");
 		System.out.println("Query stats:");
 		for (int i = 0; i < res.words.length; i++) {
@@ -97,7 +93,6 @@ public class test
 			SphinxDocInfo info = res.matches[i];
 			System.out.print("DocId=" + info.getDocId() + ", weight=" + info.getWeight());
 			System.out.print(", attrNames: ");
-			//String[] attrNames = res.attrNames.
 			ArrayList attrs = info.getAttrValues();
 
 			if (res.attrNames != null && res.attrTypes != null)

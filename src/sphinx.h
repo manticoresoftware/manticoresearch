@@ -1016,10 +1016,9 @@ private:
 struct CSphMatch : public CSphDocInfo
 {
 	int		m_iWeight;	///< my computed weight
-	float	m_fGeodist;	///< my computed geodistance
 	int		m_iTag;		///< my index tag
 
-	CSphMatch () : m_iWeight ( 0 ), m_fGeodist ( 0 ), m_iTag ( 0 ) {}
+	CSphMatch () : m_iWeight ( 0 ), m_iTag ( 0 ) {}
 	bool operator == ( const CSphMatch & rhs ) const { return ( m_iDocID==rhs.m_iDocID ); }
 };
 
@@ -1032,7 +1031,6 @@ inline void Swap ( CSphMatch & a, CSphMatch & b )
 	Swap ( a.m_pRowitems, b.m_pRowitems );
 	Swap ( a.m_iWeight, b.m_iWeight );
 	Swap ( a.m_iTag, b.m_iTag );
-	Swap ( a.m_fGeodist, b.m_fGeodist );
 }
 
 

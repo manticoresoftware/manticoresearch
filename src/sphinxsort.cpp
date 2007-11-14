@@ -1407,7 +1407,9 @@ ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchem
 		break;
 	}
 
-	int iToCalc = ( pQuery->m_bCalcGeodist ? 1 : 0 );
+	bool bHaveGeo = tSchema.GetAttrIndex ( "@geodist" ) >= 0 ;
+	int iToCalc = ( pQuery->m_bCalcGeodist ? ( bHaveGeo ? 0 : 1 ) : 0 );
+
 	pQuery->m_iPresortRowitems = tSchema.GetRealRowSize() + iToCalc;
 
 	for ( int iState=0; iState<2; iState++ )
@@ -1426,7 +1428,7 @@ ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchem
 			if ( iOffset>=0 )
 			{
 				tState.m_iAttr[i] = tSchema.GetRealAttrsCount() + iOffset;
-				tState.m_iRowitem[i] = tSchema.GetRealRowSize() + iOffset;
+				tState.m_iRowitem[i] = tSchema.GetRealRowSize() + iOffset + ( bHaveGeo ? -1 : 0 );
 				tState.m_iBitOffset[i] = tState.m_iRowitem[i]*ROWITEM_BITS;
 				tState.m_iBitCount[i] = ROWITEM_BITS;
 			}

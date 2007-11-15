@@ -4,15 +4,14 @@
 # Makefile to automate sphinxapi.jar source builds
 #
 
-PASS1SOURCES = \
+# order matters; full rebuild is always performed; but it somehow works
+SOURCES = \
 	SphinxMatch.java \
 	SphinxException.java \
+	SphinxWordInfo.java \
 	SphinxResult.java \
-	SphinxWordInfo.java
-PASS2SOURCES = \
 	SphinxClient.java \
 	test.java
-SOURCES = $(PASS1SOURCES) $(PASS2SOURCES)
 CLASSES = $(SOURCES:.java=.class)
 
 all : sphinxapi.jar

@@ -20,4 +20,7 @@ this could be gradually dropped.
 
 	- issue `java -jar sphinxapi.jar'
 
+5) Warnings about "unchecked" mode on 1.5+ are caused by keeping
+the code compatible with 1.4. Fix suggestions are welcome.
+
 --eof--

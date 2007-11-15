@@ -113,7 +113,7 @@ public class SphinxClient
 	 * Creates new SphinxClient instance.
 	 *
 	 * Default host and port that the instance will connect to are
-	 * localhost:3312. That can be overriden using @see SetServer().
+	 * localhost:3312. That can be overriden using {@link #SetServer SetServer()}.
 	 */
 	public SphinxClient()
 	{
@@ -123,7 +123,7 @@ public class SphinxClient
 	/**
 	 * Creates new SphinxClient instance, with host:port specification.
 	 *
-	 * Host and port can be later overriden using @see SetSever.
+	 * Host and port can be later overriden using {@link #SetServer SetServer()}.
 	 *
 	 * @param host searchd host name (default: localhost)
 	 * @param port searchd port number (default: 3312)
@@ -466,11 +466,7 @@ public class SphinxClient
 		_filterCount++;
 	}
 
-	/**
-	 * Set values filter with a single value (syntax sugar).
-	 *
-	 * @see SetFilter ( String attribute, int[] values, boolean exclude )
-	 */
+	/** Set values filter with a single value (syntax sugar; see {@link #SetFilter(String,int[],boolean)}). */
 	public void SetFilter ( String attribute, int value, boolean exclude ) throws SphinxException
 	{
 		int[] values = new int[] { value };
@@ -912,13 +908,14 @@ public class SphinxClient
 	 * @param docs		an array of strings which represent the documents' contents
 	 * @param index		a string with the name of the index which settings will be used for stemming, lexing and case folding
 	 * @param words		a string which contains the query words to highlight
-	 * @param opts		a hash with additional optional highlighting parameters:
+	 * @param opts		a hash (String keys, String/Int values) with optional highlighting parameters:
 	 *					<ul>
-	 *					<li><b>"before_match"</b>, a string to insert before a set of matching words (default is "&lt;b*gt;");
-	 *					<li><b>"after_match"</b>, a string to insert after a set of matching words (default is "&lt;/b*gt;");
-	 *					<li><b>"chunk_separator"</b>, a string to insert between excerpts chunks (default is "...");
-	 *					<li><b>"limit"</b>, max excerpt size in codepoints (default is 256);
-	 *					<li><b>"around"</b>, how much words to highlight around each match (default is 5).
+	 *					<li>"before_match" - a string to insert before a set of matching words (default is "&lt;b&gt;");
+	 *					<li>"after_match" - a string to insert after a set of matching words (default is "&lt;/b&gt;");
+	 *					<li>"chunk_separator" - a string to insert between excerpts chunks (default is "...");
+	 *					<li>"limit" - max excerpt size in codepoints (default is 256);
+	 *					<li>"around" - how much words to highlight around each match (default is 5).
+	 *					</ul>
 	 * @return			null on failure, an array of string excerpts on success
 	 *
 	 * @throws SphinxException on invalid parameters

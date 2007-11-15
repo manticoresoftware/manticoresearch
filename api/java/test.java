@@ -79,6 +79,8 @@ public class test
 			System.err.println("Error: " + cl.GetLastError());
 			System.exit(1);
 		}
+		if ( cl.GetLastWarning()!=null && cl.GetLastWarning().length()>0 )
+			System.out.println ( "WARNING: " + cl.GetLastWarning() + "\n" );
 
 		/* print me out */
 		System.out.println ( "Query '" + q + "' retrieved " + res.total + " of " + res.totalFound + " matches in " + res.time + " sec." );
@@ -105,7 +107,7 @@ public class test
 				if ( ( res.attrTypes[a] & SphinxClient.SPH_ATTR_MULTI )!=0 )
 				{
 					System.out.print ( "(" );
-					int[] attrM = (int[]) info.attrValues.get(a);
+					long[] attrM = (long[]) info.attrValues.get(a);
 					if ( attrM!=null )
 						for ( int j=0; j<attrM.length; j++ )
 					{
@@ -121,18 +123,14 @@ public class test
 					{
 						case SphinxClient.SPH_ATTR_INTEGER:
 						case SphinxClient.SPH_ATTR_ORDINAL:
-							Integer attrI = (Integer) info.attrValues.get(a);
-							System.out.print ( attrI.intValue() );
-							break;
-
 						case SphinxClient.SPH_ATTR_FLOAT:
-							Float attrF = (Float) info.attrValues.get(a);
-							System.out.print ( attrF.floatValue() );
+							/* longs or floats; print as is */
+							System.out.print ( info.attrValues.get(a) );
 							break;
 
 						case SphinxClient.SPH_ATTR_TIMESTAMP:
-							Integer attrT = (Integer) info.attrValues.get(a);
-							Date date = new Date ( attrT.longValue()*1000 );
+							Long iStamp = (Long) info.attrValues.get(a);
+							Date date = new Date ( iStamp*1000 );
 							System.out.print ( date.toString() );
 							break;
 

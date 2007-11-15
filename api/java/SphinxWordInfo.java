@@ -11,13 +11,13 @@ public class SphinxWordInfo
 	public String	word;
 
 	/** Total amount of matching documents in collection. */
-	public int		docs;
+	public long		docs;
 
 	/** Total amount of hits (occurences) in collection. */
-	public int		hits;
+	public long		hits;
 
 	/** Trivial constructor. */
-	public SphinxWordInfo ( String word, int docs, int hits )
+	public SphinxWordInfo ( String word, long docs, long hits )
 	{
 		this.word = word;
 		this.docs = docs;

@@ -242,11 +242,11 @@ public class SphinxClient
 	}
 
 	/** Get and check response packet from searchd (internal method). */
-	private byte[] _GetResponse(Socket sock, int client_ver) throws SphinxException
+	private byte[] _GetResponse ( Socket sock, int client_ver ) throws SphinxException
 	{
 		short status = 0, ver = 0;
 		int len = 0;
-		byte[] response = new byte[65536];
+		byte[] response = null;
 
 		DataInputStream sIn = null;
 		InputStream SockInput = null;
@@ -254,55 +254,62 @@ public class SphinxClient
 		{
 			SockInput = sock.getInputStream();
 			sIn = new DataInputStream(SockInput);
-		} catch (IOException e)
+
+		} catch ( IOException e )
 		{
 			myAssert ( false, "getInputStream() failed: " + e.getMessage() );
 			return null;
 		}
 
-		try {
+		try
+		{
 			/* read status fields */
 			status = sIn.readShort();
 			ver = sIn.readShort();
 			len = sIn.readInt();
 
 			/* read response if non-empty */
-			myAssert(len > 0, "zero-sized searchd response reported");
-			if (len > 0) {
+			myAssert ( len>0, "zero-sized searchd response body" );
+			if ( len>0 )
+			{
 				response = new byte[len];
-				sIn.readFully(response, 0, len);
+				sIn.readFully ( response, 0, len );
 			} else
 			{
 				/* FIXME! no response, return null? */
 			}
 
 			/* check status */
-			/* FIXME! fix error string conversion */
-			if (status == SEARCHD_WARNING) {
-				int wlen = sIn.readInt();
-				byte[] byteWarn = new byte[wlen];
-				sIn.readFully(byteWarn, 0, wlen);
-				String warning = new String(byteWarn);
-				_warning = warning;
+			if ( status==SEARCHD_WARNING )
+			{
+				DataInputStream in = new DataInputStream ( new ByteArrayInputStream ( response ) );
+
+				int iWarnLen = in.readInt ();
+				_warning = new String ( response, 4, iWarnLen );
+
+				byte tmp[] = new byte [ response.length-4-iWarnLen ];
+				for ( int i=0; i<tmp.length; i++ )
+					tmp[i] = response[i+4+iWarnLen]; /* FIXME! is there some way to optimize this? */
+				response = tmp;
+
+			} else if ( status==SEARCHD_ERROR )
+			{
+				_error = "searchd error: " + new String ( response, 4, response.length-4 );
 				return null;
-			} else if (status == SEARCHD_ERROR) {
-				_error = "searchd error: " + new String(response);
+
+			} else if ( status==SEARCHD_RETRY )
+			{
+				_error = "temporary searchd error: " + new String ( response, 4, response.length-4 );
 				return null;
-			} else if (status == SEARCHD_RETRY) {
-				_error = "temporary searchd error: " + new String(response);
+
+			} else if ( status!=SEARCHD_OK )
+			{
+				_error = "searched returned unknown status, code=" + status;
 				return null;
 			}
 
-			if (status != SEARCHD_OK) {
-				_error = "unknown status code '" + status + "'";
-				return null;
-			}
-
-			/* check version */
-			if (ver < client_ver) {
-				_warning = "searchd command v." + (ver >> 8) + "." + (ver & 0xff) + "older than client's v." + (client_ver >> 8) + "." + (client_ver & 0xff) + ", some options might not work";
-			}
-		} catch (IOException e) {
+		} catch ( IOException e )
+		{
 			if (len != 0) {
 				StringBuilder error = new StringBuilder();
 				error.append("failed to read searchd response (status=").append(status);
@@ -325,18 +332,22 @@ public class SphinxClient
 				_error = _error + " Received zero-sized searchd response " + e.getMessage();
 			}
 			return null;
-		} finally {
+
+		} finally
+		{
 			try {
 				if (sIn != null) sIn.close();
 			} catch (IOException e) {
 				_error = _error + " Unable to close searchd response input stream: " + e.getMessage();
 			}
+
 			try {
 				if (sock != null && !sock.isConnected()) sock.close();
 			} catch (IOException e) {
 				_error = _error + " Unable to close searchd socket: " + e.getMessage();
 			}
 		}
+
 		return response;
 	}
 
@@ -827,20 +838,12 @@ public class SphinxClient
 				int count = in.readInt();
 				int id64 = in.readInt();
 				res.matches = new SphinxMatch[count];
-				for (int matchesNo = 0; matchesNo < count; matchesNo++) {
+				for ( int matchesNo=0; matchesNo<count; matchesNo++ )
+				{
 					SphinxMatch docInfo;
-					if (id64 != 0) {
-						int docHi = in.readInt();
-						int docLo = in.readInt();
-						long doc64 = docHi;
-						doc64 = doc64 << 32 + docLo;
-						int weight = in.readInt();
-						docInfo = new SphinxMatch(doc64, weight);
-					} else {
-						int docId = in.readInt();
-						int weight = in.readInt();
-						docInfo = new SphinxMatch(docId, weight);
-					}
+					docInfo = new SphinxMatch (
+							( id64==0 ) ? readDword(in) : in.readLong(),
+							in.readInt() );
 
 					/* read matches */
 					for (int attrNumber = 0; attrNumber < res.attrTypes.length; attrNumber++)
@@ -856,12 +859,12 @@ public class SphinxClient
 						}
 
 						/* handle everything else as unsigned ints */
-						int val = in.readInt();
+						long val = readDword ( in );
 						if ( ( type & SPH_ATTR_MULTI )!=0 )
 						{
-							int[] vals = new int[val];
+							long[] vals = new long [ (int)val ];
 							for ( int k=0; k<val; k++ )
-								vals[k] = in.readInt();
+								vals[k] = readDword ( in );
 
 							docInfo.attrValues.add ( attrNumber, vals );
 
@@ -876,26 +879,26 @@ public class SphinxClient
 				res.total = in.readInt();
 				res.totalFound = in.readInt();
 				res.time = in.readInt() / 1000; /* FIXME! format should be %.3f */
-				int wordCount = in.readInt();
 
-				res.words = new SphinxWordInfo[wordCount];
-				for (int i = 0; i < wordCount; i++) {
-					String word = readNetUTF8(in);
-					int docs = in.readInt();
-					int hits = in.readInt();
-					SphinxWordInfo winfo = new SphinxWordInfo(word, docs, hits);
-					res.words[i] = winfo;
-				}
+				res.words = new SphinxWordInfo [ in.readInt() ];
+				for ( int i=0; i<res.words.length; i++ )
+					res.words[i] = new SphinxWordInfo ( readNetUTF8(in), readDword(in), readDword(in) );
 			}
 			in.close();
 			return results;
-		} catch (IOException e) {
-			myAssert(false, "Query: Unable to parse response: " + e.getMessage());
-		} finally {
-			try {
-				in.close();
-			} catch (IOException e) {
-				myAssert(false, "Query: Unable to close datain stream : " + e.getMessage());
+
+		} catch ( IOException e )
+		{
+			myAssert ( false, "unable to parse response: " + e.getMessage() );
+
+		} finally
+		{
+			try
+			{
+				in.close ();
+			} catch ( IOException e )
+			{
+				myAssert ( false, "unable to close DataInputStream: " + e.getMessage() );
 			}
 		}
 
@@ -1021,6 +1024,15 @@ public class SphinxClient
 	{
 		istream.readUnsignedShort (); /* searchd emits dword lengths, but Java expects words; lets just skip first 2 bytes */
 		return istream.readUTF ();
+	}
+
+	/** Unsigned int IO helper (internal method). */
+	private static long readDword ( DataInputStream istream ) throws IOException
+	{
+		long v = (long) istream.readInt ();
+		if ( v<0 )
+			v += 4294967296L;
+		return v;
 	}
 }
 

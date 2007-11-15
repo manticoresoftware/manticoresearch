@@ -870,7 +870,7 @@ public class SphinxClient
 
 						} else
 						{
-							docInfo.attrValues.add ( attrNumber, val );
+							docInfo.attrValues.add ( attrNumber, new Long ( val ) );
 						}
 					}
 					res.matches[matchesNo] = docInfo;

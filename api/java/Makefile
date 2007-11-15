@@ -5,7 +5,7 @@
 #
 
 PASS1SOURCES = \
-	SphinxDocInfo.java \
+	SphinxMatch.java \
 	SphinxException.java \
 	SphinxResult.java \
 	SphinxWordInfo.java

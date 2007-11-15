@@ -61,18 +61,18 @@ public class SphinxClient
 
 	/* searchd commands */
 	private final static int SEARCHD_COMMAND_SEARCH	= 0;
-	private final static int SEARCHD_COMMAND_EXCERPT	= 1;
+	private final static int SEARCHD_COMMAND_EXCERPT= 1;
 	private final static int SEARCHD_COMMAND_UPDATE	= 2;
 
 	/* searchd command versions */
-	private final static int VER_MAJOR_PROTO			= 0x1;
+	private final static int VER_MAJOR_PROTO		= 0x1;
 	private final static int VER_COMMAND_SEARCH		= 0x10F;
-	private final static int VER_COMMAND_EXCERPT		= 0x100;
+	private final static int VER_COMMAND_EXCERPT	= 0x100;
 	private final static int VER_COMMAND_UPDATE		= 0x100;
 
 	/* filter types */
 	private final static int SPH_FILTER_VALUES		= 0;
-	private final static int SPH_FILTER_RANGE			= 1;
+	private final static int SPH_FILTER_RANGE		= 1;
 	private final static int SPH_FILTER_FLOATRANGE	= 2;
 
 
@@ -164,7 +164,7 @@ public class SphinxClient
 
 		_reqs			= new ArrayList();
 		_weights		= null;
-		_indexWeights = new LinkedHashMap();
+		_indexWeights	= new LinkedHashMap();
 	}
 
 	/**
@@ -180,7 +180,7 @@ public class SphinxClient
 	/**
 	 * Get last warning message, if any.
 	 *
-	 * @return string with last error message (empty string if no errors occured)
+	 * @return string with last warning message (empty string if no errors occured)
 	 */
 	public String GetLastWarning()
 	{
@@ -203,12 +203,7 @@ public class SphinxClient
 		_port = port;
 	}
 
-	/**
-	 * Connect to searchd server.
-	 * Sets internal <code>_error<code> on falure
-	 *
-	 * @return open socket on success, <code>null</code> on falure.
-	 */
+	/** Connect to searchd and exchange versions (internal method). */
 	private Socket _Connect()
 	{
 		Socket sock;
@@ -216,7 +211,7 @@ public class SphinxClient
 			sock = new Socket(_host, _port);
 			sock.setSoTimeout(SPH_CLIENT_TIMEOUT_MILLISEC);
 		} catch (IOException e) {
-			_error = "connection to " + _host + ":" + _port + " failed:" + e.getMessage();
+			_error = "connection to " + _host + ":" + _port + " failed: " + e.getMessage();
 			return null;
 		}
 
@@ -229,7 +224,7 @@ public class SphinxClient
 			int version = sIn.readInt();
 			if (version < 1) {
 				sock.close();
-				_error = "expected searchd protocol version 1+, got version '" + version + "'";
+				_error = "expected searchd protocol version 1+, got version " + version;
 				return null;
 			}
 			sOut = new DataOutputStream(sockOutput);
@@ -244,18 +239,9 @@ public class SphinxClient
 			return null;
 		}
 		return sock;
-
 	}
 
-	/**
-	 * Get and check response packet from searchd server.
-	 *
-	 * @param sock socket to read from
-	 * @param client_ver searchd client version
-	 * @return raw byte response
-	 *
-	 * @throws SphinxException on invalid parameters
-	 */
+	/** Get and check response packet from searchd (internal method). */
 	private byte[] _GetResponse(Socket sock, int client_ver) throws SphinxException
 	{
 		short status = 0, ver = 0;
@@ -354,20 +340,11 @@ public class SphinxClient
 		return response;
 	}
 
-	/**
-	 * Set match offset, count, max number and cutoff
-	 *
-	 * @param offset result offset
-	 * @param limit return limit items from result set
-	 * @param max	override <code>max_matches</code> option from searchd config
-	 * @param cutoff when to stop searching
-	 *
-	 * @throws SphinxException on invalid parameters
-	 */
-	public void SetLimits(int offset, int limit, int max, int cutoff) throws SphinxException
+	/** Set matches offset and limit to return to client, max matches to retrieve on server, and cutoff. */
+	public void SetLimits ( int offset, int limit, int max, int cutoff ) throws SphinxException
 	{
 		myAssert ( offset>=0, "offset must be greater than or equal to 0" );
-		myAssert ( limit>0, "limit must be greater than 0"  );
+		myAssert ( limit>0, "limit must be greater than 0" );
 		myAssert ( max>0, "max must be greater than 0" );
 		myAssert ( cutoff>=0, "max must be greater than or equal to 0" );
 
@@ -377,40 +354,19 @@ public class SphinxClient
 		_cutoff = cutoff;
 	}
 
-	/**
-	 * Set search limits with default cutoff
-	 *
-	 * @param offset result offset
-	 * @param limit return limit items from result set
-	 * @param max	override <code>max_matches</code> option from searchd config
-	 *
-	 * @throws SphinxException on invalid parameters
-	 */
-	public void SetLimits(int offset, int limit, int max) throws SphinxException
+	/** Set matches offset and limit to return to client, and max matches to retrieve on server. */
+	public void SetLimits ( int offset, int limit, int max ) throws SphinxException
 	{
-		SetLimits(offset, limit, max, 0);
+		SetLimits ( offset, limit, max, 0 );
 	}
 
-	/**
-	 * Set search limits with default cutoff and max matches
-	 *
-	 * @param offset result offset
-	 * @param limit return limit items from result set
-	 *
-	 * @throws SphinxException on invalid parameters
-	 */
-	public void SetLimits(int offset, int limit) throws SphinxException
+	/** Set matches offset and limit to return to client. */
+	public void SetLimits ( int offset, int limit) throws SphinxException
 	{
-		SetLimits(offset, limit, 0, 0);
+		SetLimits ( offset, limit, 0, 0 );
 	}
 
-	/**
-	 * Set match mode.
-	 *
-	 * @param mode new match mode (MUST be one of SphinxClient.SPH_MATCH_* constants)
-	 *
-	 * @throws SphinxException on invalid parameters
-	 */
+	/** Set matching mode. */
 	public void SetMatchMode(int mode) throws SphinxException
 	{
 		myAssert (
@@ -422,15 +378,8 @@ public class SphinxClient
 		_mode = mode;
 	}
 
-	/**
-	 * Set sort mode.
-	 *
-	 * @param mode sort mode (MUST be one of SphinxClient.SPH_SORT_* constants)
-	 * @param sortby field to use with sort
-	 *
-	 * @throws SphinxException on invalid parameters
-	 */
-	public void SetSortMode(int mode, String sortby) throws SphinxException
+	/** Set sorting mode. */
+	public void SetSortMode ( int mode, String sortby ) throws SphinxException
 	{
 		myAssert (
 			mode==SPH_SORT_RELEVANCE ||
@@ -444,26 +393,7 @@ public class SphinxClient
 		_sortby = ( sortby==null ) ? "" : sortby;
 	}
 
-	/**
-	 * Set sort mode
-	 *
-	 * @param mode sort mode
-	 *
-	 * @throws SphinxException on invalid parameters
-	 */
-	public void SetSortMode(int mode) throws SphinxException
-	{
-		SetSortMode(mode, null);
-	}
-
-	/**
-	 * Set per-field weights.
-	 * Currently supported weights from 1 to 2^31-1. This range may change in furute.
-	 *
-	 * @param weights int array should contain positive weight
-	 *
-	 * @throws SphinxException on invalid parameters
-	 */
+	/** Set per-field weights (all values must be positive). */
 	public void SetWeights(int[] weights) throws SphinxException
 	{
 		myAssert ( weights!=null, "weights must not be null" );
@@ -475,26 +405,28 @@ public class SphinxClient
 	}
 
 	/**
-	 * set per-index weights
+	 * Set per-index weights
 	 *
-	 * @param indexWeights Map <String, Integer> with IndexName => Weight pair
+	 * @param indexWeights hash which maps String index names to Integer weights
 	 */
-	public void SetIndexWeights(Map indexWeights)
+	public void SetIndexWeights ( Map indexWeights ) throws SphinxException
 	{
+		/* FIXME! implement checks here */
 		_indexWeights = indexWeights;
 	}
 
 	/**
-	 * set IDs range to match.
-	 * Only match those records where document ID
-	 * is beetwen min and max (including min and max)
+	 * Set document IDs range to match.
 	 *
-	 * @param min min id to match
-	 * @param max max id to match
+	 * Only match those documents where document ID is beetwen given
+	 * min and max values (including themselves).
+	 *
+	 * @param min minimum document ID to match
+	 * @param max maximum document ID to match
 	 *
 	 * @throws SphinxException on invalid parameters
 	 */
-	public void SetIDRange(int min, int max) throws SphinxException
+	public void SetIDRange ( int min, int max ) throws SphinxException
 	{
 		myAssert ( min<=max, "min must be less or equal to max" );
 		_minId = min;
@@ -503,52 +435,58 @@ public class SphinxClient
 
 	/**
 	 * Set values filter.
-	 * only match those records where $attribute column values
-	 * are in specified set
 	 *
-	 * @param attribute attribute name
-	 * @param values	values to match
-	 * @param exclude invert matches
+	 * Only match those documents where <code>attribute</code> column value
+	 * is in given values set.
+	 *
+	 * @param attribute		attribute name to filter by
+	 * @param values		values set to match the attribute value by
+	 * @param exclude		whether to exclude matching documents instead
 	 *
 	 * @throws SphinxException on invalid parameters
 	 */
-	public void SetFilter(String attribute, int[] values, boolean exclude) throws SphinxException
+	public void SetFilter ( String attribute, int[] values, boolean exclude ) throws SphinxException
 	{
 		myAssert ( values!=null && values.length>0, "values array must not be null or empty" );
 		myAssert ( attribute!=null && attribute.length()>0, "attribute name must not be null or empty" );
 
 		try
 		{
-			writeNetUTF8(_filters, attribute);
-			_filters.writeInt(SPH_FILTER_VALUES);
-			_filters.writeInt(values.length);
-			for (int i = 0; i < values.length; i++)
-				_filters.writeInt(values[i]);
-			_filters.writeInt(exclude ? 1 : 0);
-		} catch (Exception e)
+			writeNetUTF8 ( _filters, attribute );
+			_filters.writeInt ( SPH_FILTER_VALUES );
+			_filters.writeInt ( values.length );
+			for ( int i=0; i<values.length; i++ )
+				_filters.writeInt ( values[i] );
+			_filters.writeInt ( exclude ? 1 : 0 );
+
+		} catch ( Exception e )
 		{
 			myAssert ( false, "IOException: " + e.getMessage() );
 		}
 		_filterCount++;
 	}
 
-	public void SetFilter(String attribute, int value, boolean exclude) throws SphinxException
+	/**
+	 * Set values filter with a single value (syntax sugar).
+	 *
+	 * @see SetFilter ( String attribute, int[] values, boolean exclude )
+	 */
+	public void SetFilter ( String attribute, int value, boolean exclude ) throws SphinxException
 	{
-		int[] values = new int[]{value};
-		SetFilter(attribute, values, exclude);
+		int[] values = new int[] { value };
+		SetFilter ( attribute, values, exclude );
 	}
 
 	/**
 	 * Set integer range filter.
 	 *
-	 * Only match those records where <code>attribute</code> column values
-	 * is beetwen <code>min</code> and <code>max</code> (including
-	 * <code>min</code> and <code>max</code>)
+	 * Only match those documents where <code>attribute</code> column value
+	 * is beetwen given min and max values (including themselves).
 	 *
 	 * @param attribute		attribute name to filter by
 	 * @param min			min attribute value
 	 * @param max			max attribute value
-	 * @param exclude		exclude-filter or include-filter flag
+	 * @param exclude		whether to exclude matching documents instead
 	 *
 	 * @throws SphinxException on invalid parameters
 	 */
@@ -557,12 +495,13 @@ public class SphinxClient
 		myAssert ( min<=max, "min must be less or equal to max" );
 		try
 		{
-			writeNetUTF8(_filters, attribute);
-			_filters.writeInt(SPH_FILTER_RANGE);
-			_filters.writeInt(min);
-			_filters.writeInt(max);
-			_filters.writeInt(exclude ? 1 : 0);
-		} catch (Exception e)
+			writeNetUTF8 ( _filters, attribute );
+			_filters.writeInt ( SPH_FILTER_RANGE );
+			_filters.writeInt ( min );
+			_filters.writeInt ( max );
+			_filters.writeInt ( exclude ? 1 : 0 );
+
+		} catch ( Exception e )
 		{
 			myAssert ( false, "IOException: " + e.getMessage() );
 		}
@@ -572,28 +511,28 @@ public class SphinxClient
 	/**
 	 * Set float range filter.
 	 *
-	 * Only match those records where <code>attribute</code> column values
-	 * is beetwen <code>min</code> and <code>max</code> (including
-	 * <code>min</code> and <code>max</code>)
+	 * Only match those documents where <code>attribute</code> column value
+	 * is beetwen given min and max values (including themselves).
 	 *
 	 * @param attribute		attribute name to filter by
 	 * @param min			min attribute value
 	 * @param max			max attribute value
-	 * @param exclude		exclude-filter or include-filter flag
+	 * @param exclude		whether to exclude matching documents instead
 	 *
 	 * @throws SphinxException on invalid parameters
+	 * Set float range filter.
 	 */
 	public void SetFilterFloatRange ( String attribute, float min, float max, boolean exclude ) throws SphinxException
 	{
 		myAssert ( min<=max, "min must be less or equal to max" );
 		try
 		{
-			writeNetUTF8(_filters, attribute);
-			_filters.writeInt(SPH_FILTER_RANGE);
-			_filters.writeFloat(min);
-			_filters.writeFloat(max);
-			_filters.writeInt(exclude ? 1 : 0);
-		} catch (Exception e)
+			writeNetUTF8 ( _filters, attribute );
+			_filters.writeInt ( SPH_FILTER_RANGE );
+			_filters.writeFloat ( min );
+			_filters.writeFloat ( max );
+			_filters.writeInt ( exclude ? 1 : 0 );
+		} catch ( Exception e )
 		{
 			myAssert ( false, "IOException: " + e.getMessage() );
 		}
@@ -604,7 +543,7 @@ public class SphinxClient
 	 * Setup geographical anchor point.
 	 *
 	 * Required to use @geodist in filters and sorting.
-	 * Distance will be computed to this point
+	 * Distance will be computed to this point.
 	 *
 	 * @param latitudeAttr		the name of latitude attribute
 	 * @param longitudeAttr		the name of longitude attribute
@@ -624,40 +563,8 @@ public class SphinxClient
 		_longitude = longitude;
 	}
 
-	/**
-	 * Set grouping attribute and function.
-	 * <p/>
-	 * in grouping mode, all matches are assigned to different groups
-	 * based on grouping function value.
-	 * <p/>
-	 * each group keeps track of the total match count, and the best match
-	 * (in this group) according to current sorting function.
-	 * <p/>
-	 * the final result set contains one best match per group, with
-	 * grouping function value and matches count attached.
-	 * <p/>
-	 * result set could be sorted either by 1) grouping function value
-	 * in descending order (this is the default mode, when $sortbygroup
-	 * is set to true); or by 2) current sorting function (when $sortbygroup
-	 * is false).
-	 * <p/>
-	 * WARNING, when sorting by current function there might be less
-	 * matching groups reported than actually present. @count might also be
-	 * underestimated.
-	 * <p/>
-	 * for example, if sorting by relevance and grouping by "published"
-	 * attribute with SPH_GROUPBY_DAY function, then the result set will
-	 * contain one most relevant match per each day when there were any
-	 * matches published, with day number and per-day match count attached,
-	 * and sorted by day number in descending order (ie. recent days first).
-	 *
-	 * @param attribute grouping attribute name
-	 * @param func	func type (See predefined SPH_GROUPBY_* constants for details)
-	 * @param groupsort soft type ("@group desc" by default)
-	 *
-	 * @throws SphinxException on invalid parameters
-	 */
-	public void SetGroupBy(String attribute, int func, String groupsort) throws SphinxException
+	/** Set grouping attribute and function. */
+	public void SetGroupBy ( String attribute, int func, String groupsort ) throws SphinxException
 	{
 		myAssert (
 			func==SPH_GROUPBY_DAY ||
@@ -672,38 +579,20 @@ public class SphinxClient
 		_groupSort = groupsort;
 	}
 
-	/**
-	 * Set grouping attribute and function with default ("@group desc") groupsort
-	 *
-	 * @param attribute attribute to group by
-	 * @param func	groupping type
-	 *
-	 * @throws SphinxException on invalid parameters
-	 */
+	/** Set grouping attribute and function with default ("@group desc") groupsort (syntax sugar). */
 	public void SetGroupBy(String attribute, int func) throws SphinxException
 	{
 		SetGroupBy(attribute, func, "@group desc");
 	}
 
-	/**
-	 * set count-distinct attribute for group-by queries
-	 *
-	 * @param attribute group by attribute
-	 */
+	/** Set count-distinct attribute for group-by queries. */
 	public void SetGroupDistinct(String attribute)
 	{
 		_groupDistinct = attribute;
 	}
 
-	/**
-	 * set distributed retries count and delay
-	 *
-	 * @param count retry count
-	 * @param delay retry delay
-	 *
-	 * @throws SphinxException on invalid parameters
-	 */
-	public void SetRetries(int count, int delay) throws SphinxException
+	/** Set distributed retries count and delay. */
+	public void SetRetries ( int count, int delay ) throws SphinxException
 	{
 		myAssert ( count>=0, "count must not be negative" );
 		myAssert ( delay>=0, "delay must not be negative" );
@@ -711,21 +600,13 @@ public class SphinxClient
 		_retrydelay = delay;
 	}
 
-	/**
-	 * set distributed retries count with zero delay
-	 *
-	 * @param count retry count
-	 *
-	 * @throws SphinxException on invalid parameters
-	 */
-	public void SetRetries(int count) throws SphinxException
+	/** Set distributed retries count with default (zero) delay (syntax sugar). */
+	public void SetRetries ( int count ) throws SphinxException
 	{
-		SetRetries(count, 0);
+		SetRetries ( count, 0 );
 	}
 
-	/**
-	 * clear all filters (for multi-queries)
-	 */
+	/** Reset all currently set filters (for multi-queries). */
 	public void ResetFilters()
 	{
 		/* should we close them first? */
@@ -740,32 +621,23 @@ public class SphinxClient
 		_longitude = 0;
 	}
 
-	/**
-	 * connect to searchd server and run given search query against all indexes
-	 *
-	 * @param query string
-	 * @return {@link SphinxResult} result set or null on error
-	 *
-	 * @throws SphinxException on invalid parameters
-	 */
+	/** Connect to searchd server and run current search query against all indexes (syntax sugar). */
 	public SphinxResult Query(String query) throws SphinxException
 	{
 		return Query(query, "*");
 	}
 
 	/**
-	 * Connect to searchd server and run given search query.
+	 * Connect to searchd server and run current search query.
 	 *
-	 * @param query query string
-	 * @param index index name to query, can be "*" which means to query all indexes
-	 * (default for <code>Query(String query)</code>)
-	 * @return {@link SphinxResult} result set object, which contains retrieved
-	 * matches as well as some per-collection statistics (total found matches,
-	 * query time, per-word statistics, etc)
+	 * @param query		query string
+	 * @param index		index name(s) to query. May contain anything-separated
+	 *					list of index names, or "*" which means to query all indexes.
+	 * @return			{@link SphinxResult} object
 	 *
 	 * @throws SphinxException on invalid parameters
 	 */
-	public SphinxResult Query(String query, String index) throws SphinxException
+	public SphinxResult Query ( String query, String index ) throws SphinxException
 	{
 		myAssert ( _reqs==null || _reqs.size()==0, "AddQuery() and Query() can not be combined; use RunQueries() instead" );
 
@@ -786,7 +658,8 @@ public class SphinxClient
 		}
 	}
 
-	public synchronized int AddQuery(String query, String index) throws SphinxException
+	/** Add new query with current settings to current search request. */
+	public int AddQuery ( String query, String index ) throws SphinxException
 	{
 		ByteArrayOutputStream req = new ByteArrayOutputStream();
 
@@ -865,6 +738,7 @@ public class SphinxClient
 		return -1;
 	}
 
+	/** Run all previously added search queries. */
 	public SphinxResult[] RunQueries() throws SphinxException
 	{
 		if (_reqs == null || _reqs.size() < 1) {
@@ -956,20 +830,20 @@ public class SphinxClient
 				/* read match count */
 				int count = in.readInt();
 				int id64 = in.readInt();
-				res.matches = new SphinxDocInfo[count];
+				res.matches = new SphinxMatch[count];
 				for (int matchesNo = 0; matchesNo < count; matchesNo++) {
-					SphinxDocInfo docInfo;
+					SphinxMatch docInfo;
 					if (id64 != 0) {
 						int docHi = in.readInt();
 						int docLo = in.readInt();
 						long doc64 = docHi;
 						doc64 = doc64 << 32 + docLo;
 						int weight = in.readInt();
-						docInfo = new SphinxDocInfo(doc64, weight);
+						docInfo = new SphinxMatch(doc64, weight);
 					} else {
 						int docId = in.readInt();
 						int weight = in.readInt();
-						docInfo = new SphinxDocInfo(docId, weight);
+						docInfo = new SphinxMatch(docId, weight);
 					}
 
 					/* read matches */
@@ -979,24 +853,26 @@ public class SphinxClient
 						int type = res.attrTypes[attrNumber];
 
 						/* handle floats */
-						if (type == SPH_ATTR_FLOAT) {
-							float value = in.readFloat();
-							docInfo.setAttr(attrNumber, value);
+						if ( type==SPH_ATTR_FLOAT )
+						{
+							docInfo.attrValues.add ( attrNumber, new Float ( in.readFloat() ) );
 							continue;
 						}
 
 						/* handle everything else as unsigned ints */
 						int val = in.readInt();
-						if ((type & SPH_ATTR_MULTI) != 0) {
+						if ( ( type & SPH_ATTR_MULTI )!=0 )
+						{
 							int[] vals = new int[val];
-							for (int k = 0; k < val; k++) {
+							for ( int k=0; k<val; k++ )
 								vals[k] = in.readInt();
-							}
-							docInfo.setAttr(attrName, vals);
-						} else {
-							docInfo.setAttr(attrNumber, val);
+
+							docInfo.attrValues.add ( attrNumber, vals );
+
+						} else
+						{
+							docInfo.attrValues.add ( attrNumber, val );
 						}
-						docInfo.setAttr(attrNumber, val);
 					}
 					res.matches[matchesNo] = docInfo;
 				}
@@ -1031,22 +907,23 @@ public class SphinxClient
 	}
 
 	/**
-	 * connect to searchd server and generate exceprts from given documents.
+	 * Connect to searchd server and generate exceprts from given documents.
 	 *
-	 * @param docs is an array of strings which represent the documents' contents
-	 * @param index is a string specifiying the index which settings will be used for stemming, lexing and case folding
-	 * @param words is a string which contains the words to highlight
-	 * @param opts opts is a hash which contains additional optional highlighting parameters:
-	 * "before_match" - a string to insert before a set of matching words, default is "<b>";
-	 * "after_match" - a string to insert after a set of matching words, default is "<b>";
-	 * "chunk_separator" - a string to insert between excerpts chunks, default is " ... ";
-	 * "limit" - max excerpt size in symbols (codepoints), default is 256;
-	 * "around" - how much words to highlight around each match, default is 5
-	 * @return false on failure, an array of string excerpts on success
+	 * @param docs		an array of strings which represent the documents' contents
+	 * @param index		a string with the name of the index which settings will be used for stemming, lexing and case folding
+	 * @param words		a string which contains the query words to highlight
+	 * @param opts		a hash with additional optional highlighting parameters:
+	 *					<ul>
+	 *					<li><b>"before_match"</b>, a string to insert before a set of matching words (default is "&lt;b*gt;");
+	 *					<li><b>"after_match"</b>, a string to insert after a set of matching words (default is "&lt;/b*gt;");
+	 *					<li><b>"chunk_separator"</b>, a string to insert between excerpts chunks (default is "...");
+	 *					<li><b>"limit"</b>, max excerpt size in codepoints (default is 256);
+	 *					<li><b>"around"</b>, how much words to highlight around each match (default is 5).
+	 * @return			null on failure, an array of string excerpts on success
 	 *
 	 * @throws SphinxException on invalid parameters
 	 */
-	public String[] BuildExcerpts(String[] docs, String index, String words, Map opts) throws SphinxException
+	public String[] BuildExcerpts ( String[] docs, String index, String words, Map opts ) throws SphinxException
 	{
 		myAssert(docs != null && docs.length > 0, "BuildExcerpts: Have no documents to process");
 		myAssert(index != null && index.length() > 0, "BuildExcerpts: Have no index to process documents");
@@ -1125,9 +1002,7 @@ public class SphinxClient
 		}
 	}
 
-	/**
-	 * Internal sanity check syntax sugar.
-	 */
+	/** Internal sanity check. */
 	private void myAssert ( boolean condition, String err ) throws SphinxException
 	{
 		if ( !condition )
@@ -1137,33 +1012,18 @@ public class SphinxClient
 		}
 	}
 
-	/**
-	 * java to sphinx String protocol hack
-	 * Adds lead 2 zero bytes to stream before string length to make length 4 bytes
-	 * as expected by search server
-	 *
-	 * @param ostream output stream to write <code>String</code> to
-	 * @param str	 <code>String</code> to send to sphinx server
-	 */
+	/** String IO helper (internal method). */
 	private static void writeNetUTF8(DataOutputStream ostream, String str) throws IOException
 	{
 		ostream.writeShort(0);
 		ostream.writeUTF(str);
 	}
 
-	/**
-	 * sphinx to java String protocol hack
-	 * Reads first 2 lead bytes from stream before string length to make length
-	 * 2 bytes as expected by Java modified UTF8 (see also {@link DataInputStream})
-	 *
-	 * @param istream output stream to write <code>String</code> to
-	 * @return str <code>String</code> sent from sphinx server
-	 */
+	/** String IO helper (internal method). */
 	private static String readNetUTF8(DataInputStream istream) throws IOException
 	{
-		int dummy = istream.readUnsignedShort(); /* searchd emits dwords, Java expects words */
-		String value = istream.readUTF();
-		return value;
+		istream.readUnsignedShort (); /* searchd emits dword lengths, but Java expects words; lets just skip first 2 bytes */
+		return istream.readUTF ();
 	}
 }
 

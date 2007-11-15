@@ -1,128 +1,75 @@
+/*
+ * $Id$
+ */
+
 package org.sphx.api;
 
 /**
- * Sphinx result set class which store the following information on success:
- * "matches"
- * hash which maps found document_id to SphinxDocInfo( "weight", "group" ) hash
- * "total"
- * total amount of matches retrieved (upto SPH_MAX_MATCHES, see sphinx.h)
- * "totalFound"
- * total amount of matching documents in index
- * "time"
- * search time
- * "words"
- * hash which maps query terms (stemmed!) to ( "docs", "hits" ) hash
+ * Search result set.
  *
- * Disclamer. Well. This is mostly C++ vision on how should java code be.
- * to find "native" java API visit FIXME
+ * Includes retrieved matches array, status code and error/warning messages,
+ * query stats, and per-word stats.
  */
 public class SphinxResult
 {
-	/**
-	 * Fields returned by sphinx
-	 */
-	public String[] fields;
-	/**
-	 * attribute map
-	 */
-	public String[] attrNames;
-	/**
-	 * attribute attrTypes
-	 */
-	public int[] attrTypes;
-	/**
-	 * DocInfo matches
-	 */
-	public SphinxDocInfo[] matches;
-	/**
-	 * total documents in result set
-	 */
-	public int total;
-	/**
-	 * total documents found
-	 */
-	public int totalFound;
-	/**
-	 * time took
-	 */
-	public float time;
-	/**
-	 * words SphinxWordInfo)
-	 */
-	public SphinxWordInfo[] words;
-	/**
-	 * warning for this request
-	 */
-	public String warning = null;
-	/**
-	 * error for this request
-	 */
-	public String error = null;
-	/**
-	 * status returned by server
-	 */
-	private int status = -1;
+	/** Full-text field namess. */
+	public String[]			fields;
+
+	/** Attribute names. */
+	public String[]			attrNames;
+
+	/** Attribute types (refer to SPH_ATTR_xxx constants in SphinxClient). */
+	public int[]			attrTypes;
+
+	/** Retrieved matches. */
+	public SphinxMatch[]	matches;
+
+	/** Total matches in this result set. */
+	public int				total;
+
+	/** Total matches found in the index(es). */
+	public int				totalFound;
+
+	/** Elapsed time (as reported by searchd), in seconds. */
+	public float			time;
+
+	/** Per-word statistics. */
+	public SphinxWordInfo[]	words;
+
+	/** Warning message, if any. */
+	public String			warning = null;
+
+	/** Error message, if any. */
+	public String			error = null;
 
 
-	/**
-	 * Read result status
-	 *
-	 * @return status code
-	 */
-	public int getStatus()
-	{
-		return status;
-	}
+	/** Query status (refer to SEARCHD_xxx constants in SphinxClient). */
+	private int				status = -1;
 
-	/**
-	 * Status setter. Visible only to org.sphx.api package
-	 *
-	 * @param status status to set
-	 */
-	void setStatus(int status)
-	{
-		this.status = status;
-	}
 
-	/**
-	 * creates an empty result set
-	 */
+	/** Trivial constructor, initializes an empty result set. */
 	public SphinxResult()
 	{
 		this.attrNames = new String[0];
-		this.matches = new SphinxDocInfo[0];;
+		this.matches = new SphinxMatch[0];;
 		this.words = new SphinxWordInfo[0];
 		this.fields = new String[0];
 		this.attrTypes = new int[0];
 	}
 
-	/**
-	 * get all matches from the result set
-	 * @return hash document_id to SphinxDocInfo( "weight", "group" )
-	 */
-	public SphinxDocInfo[] getMatches()
+	/** Get query status. */
+	public int getStatus()
 	{
-		return matches;
+		return status;
 	}
 
-	/**
-	 * Get total amount of matches retrieved
-	 *
-	 * @return int total
-	 */
-	public int getTotal()
+	/** Set query status (accessible from API package only). */
+	void setStatus ( int status )
 	{
-		return total;
-	}
-
-	/**
-	 * Get total amount of matching documents in index
-	 *
-	 * @return amount of matching documents
-	 */
-	public int getTotalFound()
-	{
-		return totalFound;
+		this.status = status;
 	}
 }
 
+/*
+ * $Id$
+ */

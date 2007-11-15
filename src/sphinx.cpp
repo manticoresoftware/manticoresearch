@@ -3603,14 +3603,22 @@ void CSphWriter::PutByte ( int data )
 
 void CSphWriter::PutBytes ( const void * pData, int iSize )
 {
-	if ( m_iPoolUsed+iSize>SPH_CACHE_WRITE )
-		Flush ();
-	assert ( m_iPoolUsed+iSize<=SPH_CACHE_WRITE );
+	const BYTE * pBuf = (const BYTE *) pData;
+	while ( iSize>0 )
+	{
+		int iPut = Min ( iSize, SPH_CACHE_WRITE );
+		if ( m_iPoolUsed+iPut>SPH_CACHE_WRITE )
+			Flush ();
+		assert ( m_iPoolUsed+iPut<=SPH_CACHE_WRITE );
 
-	memcpy ( m_pPool, pData, iSize );
-	m_pPool += iSize;
-	m_iPoolUsed += iSize;
-	m_iPos += iSize;
+		memcpy ( m_pPool, pBuf, iPut );
+		m_pPool += iPut;
+		m_iPoolUsed += iPut;
+		m_iPos += iPut;
+
+		pBuf += iPut;
+		iSize -= iPut;
+	}
 }
 
 

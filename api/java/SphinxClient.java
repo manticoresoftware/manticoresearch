@@ -244,16 +244,13 @@ public class SphinxClient
 	/** Get and check response packet from searchd (internal method). */
 	private byte[] _GetResponse ( Socket sock, int client_ver ) throws SphinxException
 	{
-		short status = 0, ver = 0;
-		int len = 0;
-		byte[] response = null;
-
+		/* connect */
 		DataInputStream sIn = null;
 		InputStream SockInput = null;
 		try
 		{
 			SockInput = sock.getInputStream();
-			sIn = new DataInputStream(SockInput);
+			sIn = new DataInputStream ( SockInput );
 
 		} catch ( IOException e )
 		{
@@ -261,6 +258,10 @@ public class SphinxClient
 			return null;
 		}
 
+		/* read response */
+		byte[] response = null;
+		short status = 0, ver = 0;
+		int len = 0;
 		try
 		{
 			/* read status fields */
@@ -310,41 +311,32 @@ public class SphinxClient
 
 		} catch ( IOException e )
 		{
-			if (len != 0) {
-				StringBuilder error = new StringBuilder();
-				error.append("failed to read searchd response (status=").append(status);
-				error.append(", ver=").append(ver);
-				error.append(", len=").append(len);
-				error.append(") reason ");
-				error.append(e.getMessage());
-				error.append(" trace:\n ");
+			if ( len!=0 )
+			{
+				/* get trace, to provide even more failure details */
+				PrintWriter ew = new PrintWriter ( new StringWriter() );
+				e.printStackTrace ( ew );
+				ew.flush ();
+				ew.close ();
+				String sTrace = ew.toString ();
 
-				/* get trace here to let user know which request failed */
-				StringWriter errStream = new StringWriter();
-				PrintWriter errWriter = new PrintWriter(errStream);
-				e.printStackTrace(errWriter);
-				errWriter.flush();
-				errWriter.close();
-
-				error.append(errWriter.toString());
-				_error = error.toString();
-			} else {
-				_error = _error + " Received zero-sized searchd response " + e.getMessage();
+				/* build error message */
+				_error =  "failed to read searchd response (status=" + status + ", ver=" + ver + ", len=" + len + ", trace=" + sTrace +")";
+			} else
+			{
+				_error = "received zero-sized searchd response (searchd crashed?): " + e.getMessage();
 			}
 			return null;
 
 		} finally
 		{
-			try {
-				if (sIn != null) sIn.close();
-			} catch (IOException e) {
-				_error = _error + " Unable to close searchd response input stream: " + e.getMessage();
-			}
-
-			try {
-				if (sock != null && !sock.isConnected()) sock.close();
-			} catch (IOException e) {
-				_error = _error + " Unable to close searchd socket: " + e.getMessage();
+			try
+			{
+				if ( sIn!=null ) sIn.close();
+				if ( sock!=null && !sock.isConnected() ) sock.close();
+			} catch ( IOException e )
+			{
+				/* silently ignore close failures; nothing could be done anyway */
 			}
 		}
 

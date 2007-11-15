@@ -130,7 +130,7 @@ public class test
 
 						case SphinxClient.SPH_ATTR_TIMESTAMP:
 							Long iStamp = (Long) info.attrValues.get(a);
-							Date date = new Date ( iStamp*1000 );
+							Date date = new Date ( iStamp.longValue()*1000 );
 							System.out.print ( date.toString() );
 							break;
 

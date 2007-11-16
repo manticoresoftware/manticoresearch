@@ -29,6 +29,7 @@ struct ExcerptQuery_t
 	int				m_iAround;			///< how much words to highlight around each match
 	bool			m_bRemoveSpaces;	///< whether to collapse whitespace
 	bool			m_bExactPhrase;		///< whether to highlight exact phrase matches only
+	bool			m_bSinglePassage;	///< whether to return single best passage only
 
 public:
 	ExcerptQuery_t ()
@@ -39,6 +40,7 @@ public:
 		, m_iAround ( 5 )
 		, m_bRemoveSpaces ( false )
 		, m_bExactPhrase ( false )
+		, m_bSinglePassage ( false )
 	{
 	}
 };

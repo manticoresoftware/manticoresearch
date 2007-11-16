@@ -806,6 +806,8 @@ class SphinxClient
 	///			how much words to highlight around each match, default is 5
 	///		"exact_phrase"
 	///			whether to highlight exact phrase matches only, default is false
+	///		"single_passage"
+	///			whether to extract single best passage only, default is false
 	///
 	/// returns false on failure
 	/// returns an array of string excerpts on success
@@ -829,6 +831,7 @@ class SphinxClient
 		if ( !isset($opts["limit"]) )				$opts["limit"] = 256;
 		if ( !isset($opts["around"]) )				$opts["around"] = 5;
 		if ( !isset($opts["exact_phrase"]) )		$opts["exact_phrase"] = false;
+		if ( !isset($opts["single_passage"]) )		$opts["single_passage"] = false;
 
 		/////////////////
 		// build request
@@ -836,8 +839,8 @@ class SphinxClient
 
 		// v.1.0 req
 		$flags = 1; // remove spaces
-		if ( $opts["exact_phrase"] )
-			$flags |= 2;
+		if ( $opts["exact_phrase"] )	$flags |= 2;
+		if ( $opts["single_passage"] )	$flags |= 4;
 		$req = pack ( "NN", 0, $flags ); // mode=0, flags=$flags
 		$req .= pack ( "N", strlen($index) ) . $index; // req index
 		$req .= pack ( "N", strlen($words) ) . $words; // req words

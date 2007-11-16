@@ -741,6 +741,10 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & q )
 			dShow.Add ( tPass );
 			iLeft -= tPass.m_iCodes;
 
+			// sometimes be need only one best one
+			if ( q.m_bSinglePassage )
+				break;
+
 			// we now show some of the query words,
 			// so displaying other passages containing those is less significant,
 			// so let's update all the other weights (and word masks, to avoid updating twice)

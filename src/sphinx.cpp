@@ -1974,8 +1974,11 @@ void CSphLowercaser::SetRemap ( const CSphLowercaser * pLC )
 }
 
 
-void CSphLowercaser::AddRemaps ( const CSphRemapRange * pRemaps, int iRemaps, DWORD uFlags, DWORD uFlagsIfExists )
+void CSphLowercaser::AddRemaps ( const CSphVector<CSphRemapRange> & dRemaps, DWORD uFlags, DWORD uFlagsIfExists )
 {
+	if ( !dRemaps.GetLength() )
+		return;
+
 	// build new chunks map
 	// 0 means "was unused"
 	// 1 means "was used"
@@ -1986,18 +1989,18 @@ void CSphLowercaser::AddRemaps ( const CSphRemapRange * pRemaps, int iRemaps, DW
 
 	int iNewChunks = m_iChunks;
 
-	for ( int i=0; i<iRemaps; i++ )
+	ARRAY_FOREACH ( i, dRemaps )
 	{
-		const CSphRemapRange * pRemap = pRemaps+i;
+		const CSphRemapRange & tRemap = dRemaps[i];
 
 		#define LOC_CHECK_RANGE(_a) assert ( (_a)>=0 && (_a)<MAX_CODE );
-		LOC_CHECK_RANGE ( pRemap->m_iStart );
-		LOC_CHECK_RANGE ( pRemap->m_iEnd );
-		LOC_CHECK_RANGE ( pRemap->m_iRemapStart );
-		LOC_CHECK_RANGE ( pRemap->m_iRemapStart + pRemap->m_iEnd - pRemap->m_iStart );
+		LOC_CHECK_RANGE ( tRemap.m_iStart );
+		LOC_CHECK_RANGE ( tRemap.m_iEnd );
+		LOC_CHECK_RANGE ( tRemap.m_iRemapStart );
+		LOC_CHECK_RANGE ( tRemap.m_iRemapStart + tRemap.m_iEnd - tRemap.m_iStart );
 		#undef LOC_CHECK_RANGE
 
-		for ( int iChunk = pRemap->m_iStart>>CHUNK_BITS; iChunk <= pRemap->m_iEnd>>CHUNK_BITS; iChunk++ )
+		for ( int iChunk = tRemap.m_iStart>>CHUNK_BITS; iChunk <= tRemap.m_iEnd>>CHUNK_BITS; iChunk++ )
 			if ( dUsed[iChunk]==0 )
 		{
 			dUsed[iChunk] = 2;
@@ -2035,12 +2038,12 @@ void CSphLowercaser::AddRemaps ( const CSphRemapRange * pRemaps, int iRemaps, DW
 	}
 
 	// fill new stuff
-	for ( int i=0; i<iRemaps; i++ )
+	ARRAY_FOREACH ( i, dRemaps )
 	{
-		const CSphRemapRange * pRemap = pRemaps+i;
+		const CSphRemapRange & tRemap = dRemaps[i];
 
-		DWORD iRemapped = pRemap->m_iRemapStart;
-		for ( int j = pRemap->m_iStart; j <= pRemap->m_iEnd; j++, iRemapped++ )
+		DWORD iRemapped = tRemap.m_iRemapStart;
+		for ( int j = tRemap.m_iStart; j <= tRemap.m_iEnd; j++, iRemapped++ )
 		{
 			assert ( m_pChunk [ j>>CHUNK_BITS ] );
 			int & iCodepoint = m_pChunk [ j>>CHUNK_BITS ] [ j & CHUNK_MASK ];
@@ -2070,7 +2073,7 @@ void CSphLowercaser::AddSpecials ( const char * sSpecials )
 	ARRAY_FOREACH ( i, dRemaps )
 		dRemaps[i].m_iStart = dRemaps[i].m_iEnd = dRemaps[i].m_iRemapStart = sSpecials[i];
 
-	AddRemaps ( &dRemaps[0], iSpecials,
+	AddRemaps ( dRemaps,
 		FLAG_CODEPOINT_SPECIAL,
 		FLAG_CODEPOINT_SPECIAL | FLAG_CODEPOINT_DUAL );
 }
@@ -2458,14 +2461,16 @@ bool ISphTokenizer::SetCaseFolding ( const char * sConfig, CSphString & sError )
 	}
 
 	m_tLC.Reset ();
-	m_tLC.AddRemaps ( &dRemaps[0], dRemaps.GetLength(), 0, 0 );
+	m_tLC.AddRemaps ( dRemaps, 0, 0 );
 	return true;
 }
 
 
 void ISphTokenizer::AddCaseFolding ( CSphRemapRange & tRange )
 {
-	m_tLC.AddRemaps ( &tRange, 1, 0, 0 );
+	CSphVector<CSphRemapRange> dTmp;
+	dTmp.Add ( tRange );
+	m_tLC.AddRemaps ( dTmp, 0, 0 );
 }
 
 
@@ -2676,7 +2681,7 @@ bool ISphTokenizer::LoadSynonyms ( const char * sFilename, CSphString & sError )
 		tRange.m_iStart = tRange.m_iEnd = tRange.m_iRemapStart = hSynonymOnly.IterateGetKey();
 	}
 
-	m_tLC.AddRemaps ( &dRemaps[0], dRemaps.GetLength(), FLAG_CODEPOINT_SYNONYM, 0 );
+	m_tLC.AddRemaps ( dRemaps, FLAG_CODEPOINT_SYNONYM, 0 );
 	return true;
 }
 
@@ -3229,7 +3234,7 @@ bool CSphTokenizer_UTF8Ngram::SetNgramChars ( const char * sConfig, CSphString &
 		return false;
 	}
 
-	m_tLC.AddRemaps ( &dRemaps[0], dRemaps.GetLength(),
+	m_tLC.AddRemaps ( dRemaps,
 		FLAG_CODEPOINT_NGRAM | FLAG_CODEPOINT_SPECIAL,
 		FLAG_CODEPOINT_NGRAM | FLAG_CODEPOINT_SPECIAL ); // !COMMIT support other n-gram lengths than 1
 	return true;

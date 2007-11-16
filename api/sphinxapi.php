@@ -804,6 +804,8 @@ class SphinxClient
 	///			max excerpt size in symbols (codepoints), default is 256
 	///		"around"
 	///			how much words to highlight around each match, default is 5
+	///		"exact_phrase"
+	///			whether to highlight exact phrase matches only, default is false
 	///
 	/// returns false on failure
 	/// returns an array of string excerpts on success
@@ -826,13 +828,17 @@ class SphinxClient
 		if ( !isset($opts["chunk_separator"]) )		$opts["chunk_separator"] = " ... ";
 		if ( !isset($opts["limit"]) )				$opts["limit"] = 256;
 		if ( !isset($opts["around"]) )				$opts["around"] = 5;
+		if ( !isset($opts["exact_phrase"]) )		$opts["exact_phrase"] = false;
 
 		/////////////////
 		// build request
 		/////////////////
 
 		// v.1.0 req
-		$req = pack ( "NN", 0, 1 ); // mode=0, flags=1 (remove spaces)
+		$flags = 1; // remove spaces
+		if ( $opts["exact_phrase"] )
+			$flags |= 2;
+		$req = pack ( "NN", 0, $flags ); // mode=0, flags=$flags
 		$req .= pack ( "N", strlen($index) ) . $index; // req index
 		$req .= pack ( "N", strlen($words) ) . $words; // req words
 

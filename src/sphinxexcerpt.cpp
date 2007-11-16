@@ -94,6 +94,7 @@ protected:
 	CSphVector<Passage_t>	m_dPassages;	///< extracted passages
 
 	bool					m_bUtf8;
+	bool					m_bExactPhrase;
 
 protected:
 	void					DecodeText ( const char * sText, CSphVector<Token_t> & dBuf );
@@ -144,6 +145,7 @@ ExcerptGen_c::ExcerptGen_c ()
 	m_iAccum = 0;
 
 	m_bUtf8 = true;
+	m_bExactPhrase = false;
 }
 
 
@@ -165,6 +167,8 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict, 
 	ARRAY_FOREACH ( i, m_dWords )
 		if ( m_dWords[i].m_eType!=TOK_WORD || m_dWords[i].m_iWordID==0 )
 			m_dWords.Remove ( i-- );
+
+	m_bExactPhrase = q.m_bExactPhrase && ( m_dWords.GetLength()>1 );
 
 	// truncate the array
 	if ( m_dWords.GetLength()>SPH_MAX_QUERY_WORDS )
@@ -217,30 +221,74 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict, 
 void ExcerptGen_c::HighlightAll ( const ExcerptQuery_t & q )
 {
 	bool bOpen = false;
-	int iMaxTok = m_dTokens.GetLength()-1; // skip last one, it's TOK_NONE
+	const int iMaxTok = m_dTokens.GetLength()-1; // skip last one, it's TOK_NONE
 
-	for ( int iTok=0; iTok<iMaxTok; iTok++ )
+	if ( m_bExactPhrase )
 	{
-		if ( m_dTokens[iTok].m_uWords )
+		// exact phrase
+		for ( int iCur=0; iCur<iMaxTok; )
 		{
-			if ( !bOpen )
+			// skip non-opening words
+			while ( iCur<iMaxTok && !( m_dTokens[iCur].m_uWords & 1 ))
+				ResultEmit ( m_dTokens[iCur++] );
+
+			// check if we have enough words left
+			if ( iCur+m_dWords.GetLength()-1>=iMaxTok )
 			{
-				ResultEmit ( q.m_sBeforeMatch.cstr() );
-				bOpen = true;
+				// not enough, just copy the tail
+				while ( iCur<iMaxTok )
+					ResultEmit ( m_dTokens[iCur++] );
+				break;
 			}
-			ResultEmit ( m_dTokens[iTok] );
-		} else
-		{
-			if ( bOpen )
+
+			// lookahead
+			assert ( iCur>=0 && iCur<iMaxTok );
+			assert ( m_dTokens[iCur].m_uWords & 1 );
+
+			int iLookahead = 1; // current lookahead position
+			int iMatched = 1; // phrase words matched so far
+			while ( iCur+iLookahead<iMaxTok && iMatched<m_dWords.GetLength() )
 			{
+				const Token_t & tTok = m_dTokens[iCur+iLookahead];
+				if ( !tTok.m_uWords )
+				{
+					iLookahead++;
+					continue;
+				}
+
+				if (!( tTok.m_uWords & (1<<iMatched) ))
+					break;
+
+				iLookahead++;
+				iMatched++;
+			}
+
+			// emit looked-ahead tokens
+			if ( iMatched==m_dWords.GetLength() )
+				ResultEmit ( q.m_sBeforeMatch.cstr() );
+
+			while ( iLookahead-- )
+				ResultEmit ( m_dTokens[iCur++] );
+
+			if ( iMatched==m_dWords.GetLength() )
 				ResultEmit ( q.m_sAfterMatch.cstr() );
-				bOpen = false;
+		}
+
+	} else
+	{
+		// bag of words
+		for ( int iTok=0; iTok<iMaxTok; iTok++ )
+		{
+			if ( ( m_dTokens[iTok].m_uWords!=0 ) ^ bOpen )
+			{
+				ResultEmit ( bOpen ? q.m_sAfterMatch.cstr() : q.m_sBeforeMatch.cstr() );
+				bOpen = !bOpen;
 			}
 			ResultEmit ( m_dTokens[iTok] );
 		}
+		if ( bOpen )
+			ResultEmit ( q.m_sAfterMatch.cstr() );
 	}
-	if ( bOpen )
-		ResultEmit ( q.m_sAfterMatch.cstr() );
 }
 
 
@@ -254,6 +302,7 @@ void ExcerptGen_c::HighlightStart ( const ExcerptQuery_t & q )
 		if ( i>=m_dTokens.GetLength() )
 			break;
 	}
+	ResultEmit ( q.m_sChunkSeparator.cstr() );
 }
 
 
@@ -557,6 +606,7 @@ bool ExcerptGen_c::ExtractPassages ( const ExcerptQuery_t & q )
 	m_dPassages.Resize ( 0 );
 
 	int iMaxWords = 2*q.m_iAround+1;
+	int iLCSThresh = m_bExactPhrase ? m_dWords.GetLength()*iMaxWords : 0;
 
 	ARRAY_FOREACH ( iTok, m_dTokens )
 	{
@@ -586,7 +636,8 @@ bool ExcerptGen_c::ExtractPassages ( const ExcerptQuery_t & q )
 	if ( tPass.m_uWords )
 	{
 		CalcPassageWeight ( dPass, tPass, iMaxWords );
-		m_dPassages.Add ( tPass );
+		if ( tPass.m_iMaxLCS>=iLCSThresh )
+			m_dPassages.Add ( tPass );
 	}
 
 	// my lovely update-and-submit loop
@@ -627,29 +678,32 @@ bool ExcerptGen_c::ExtractPassages ( const ExcerptQuery_t & q )
 		assert ( m_dTokens[iAdd].m_eType==TOK_WORD );
 		tPass.m_iTokens++;
 		tPass.m_iCodes += m_dTokens[iAdd].m_iLength;
-
 		dPass.Add ( iAdd );
-		CalcPassageWeight ( dPass, tPass, iMaxWords );
 
-		// submit match, if it's any new and cool
-		if ( tPass.m_uWords )
+		// re-weight current passage, and check if it matches
+		CalcPassageWeight ( dPass, tPass, iMaxWords );
+		if ( !tPass.m_uWords || tPass.m_iMaxLCS<iLCSThresh )
+			continue;
+
+		// if it's the very first one, do add
+		if ( !m_dPassages.GetLength() )
 		{
-			if ( !m_dPassages.GetLength() )
-			{
-				m_dPassages.Add ( tPass );
-			} else
-			{
-				Passage_t & tLast = m_dPassages.Last();
-				if ( tLast.m_uWords!=tPass.m_uWords
-					|| tLast.m_iStart+tLast.m_iTokens-1 < tPass.m_iStart )
-				{
-					m_dPassages.Add ( tPass );
-				} else
-				{
-					if ( tLast.GetWeight()<tPass.GetWeight() )
-						tLast = tPass;
-				}
-			}
+			m_dPassages.Add ( tPass );
+			continue;
+		}
+
+		// check if it's new or better
+		Passage_t & tLast = m_dPassages.Last();
+		if ( tLast.m_uWords!=tPass.m_uWords
+			|| tLast.m_iStart+tLast.m_iTokens-1 < tPass.m_iStart )
+		{
+			// new
+			m_dPassages.Add ( tPass );
+		} else
+		{
+			// better
+			if ( tLast.GetWeight()<tPass.GetWeight() )
+				tLast = tPass;
 		}
 	}
 

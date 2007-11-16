@@ -26,8 +26,9 @@ struct ExcerptQuery_t
 	CSphString		m_sAfterMatch;		///< string to insert after each match
 	CSphString		m_sChunkSeparator;	///< string to insert between matching chunks (in limited mode only)
 	int				m_iLimit;			///< max chars in excerpt (0 if unlimited)
-	int				m_bRemoveSpaces;	///< whether to collapse whitespace
 	int				m_iAround;			///< how much words to highlight around each match
+	bool			m_bRemoveSpaces;	///< whether to collapse whitespace
+	bool			m_bExactPhrase;		///< whether to highlight exact phrase matches only
 
 public:
 	ExcerptQuery_t ()
@@ -35,8 +36,9 @@ public:
 		, m_sAfterMatch ( "</b>" )
 		, m_sChunkSeparator ( " ... " )
 		, m_iLimit ( 256 )
-		, m_bRemoveSpaces ( false )
 		, m_iAround ( 5 )
+		, m_bRemoveSpaces ( false )
+		, m_bExactPhrase ( false )
 	{
 	}
 };

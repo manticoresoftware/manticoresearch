@@ -931,6 +931,7 @@ public class SphinxClient
 		if (!opts.containsKey("chunk_separator")) opts.put("chunk_separator", "...");
 		if (!opts.containsKey("limit")) opts.put("limit", new Integer(256));
 		if (!opts.containsKey("around")) opts.put("around", new Integer(5));
+		if (!opts.containsKey("exact_phrase")) opts.put("exact_phrase", new Integer(0));
 
 		/* build request */
 		ByteArrayOutputStream req = new ByteArrayOutputStream();
@@ -941,7 +942,10 @@ public class SphinxClient
 
 			/* v.1.0 req */
 			rqData.writeInt(0);
-			rqData.writeInt(1);
+			int iFlags = 1; // remove_spaces
+			if ( ((Integer)opts.get("exact_phrase"))!=0 )
+				iFlags |= 2; // exact_phrase
+			rqData.writeInt ( iFlags );
 			writeNetUTF8(rqData, index);
 			writeNetUTF8(rqData, words);
 

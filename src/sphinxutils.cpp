@@ -412,6 +412,7 @@ ISphTokenizer * sphConfTokenizer ( const CSphConfigSection & hIndex, CSphString 
 {
 	// charset_type
 	ISphTokenizer * pTokenizer = NULL;
+
 	if ( !hIndex("charset_type") || hIndex["charset_type"]=="sbcs" )
 	{
 		pTokenizer = sphCreateSBCSTokenizer ();
@@ -463,6 +464,17 @@ ISphTokenizer * sphConfTokenizer ( const CSphConfigSection & hIndex, CSphString 
 		if ( !pTokenizer->LoadSynonyms ( hIndex["synonyms"].cstr(), sError ) )
 	{
 		SafeDelete ( pTokenizer );
+		sError.SetSprintf ( "'synonyms': %s", sError.cstr() );
+		return NULL;
+	}
+
+	// phrase boundaries
+	int iBoundaryStep = hIndex("phrase_boundary_step") ? Max ( hIndex["phrase_boundary_step"].intval(), 0 ) : 0;
+	if ( iBoundaryStep>0 && hIndex("phrase_boundary") )
+		if ( !pTokenizer->SetBoundary ( hIndex["phrase_boundary"].cstr(), sError ) )
+	{
+		SafeDelete ( pTokenizer );
+		sError.SetSprintf ( "'phrase_boundary': %s", sError.cstr() );
 		return NULL;
 	}
 

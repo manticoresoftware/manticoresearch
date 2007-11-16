@@ -564,6 +564,30 @@ index test1
 	# optional, default is empty
 	#
 	# ngrams_chars = U+3000..U+2FA1F
+
+
+	# phrase boundary characters table
+	#
+	# controls what characters will be treated as phrase boundary
+	# (if and only if followed by a separator, to avoid abbreviations
+	# such as S.T.A.L.K.E.R or URLs being treated as several phrases).
+	#
+	# additional word position increment (see phrase_boundary_step)
+	# will be added to current word position on boundary. this enables
+	# phrase-level searching through proximity queries.
+	#
+	# optional, default is empty
+	#
+	# phrase_boundary = ., ?, !, U+2026 # horizontal ellipsis
+
+
+	# phrase boundary word-position increment
+	#
+	# see phrase_boundary for description
+	#
+	# optional, default is 0
+	#
+	# phrase_boundary_step = 100
 }
 
 

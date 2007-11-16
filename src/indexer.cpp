@@ -594,6 +594,9 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 	iPrefix = Max ( iPrefix, 0 );
 	iInfix = Max ( iInfix, 0 );
 
+	// boundary
+	int iBoundaryStep = hIndex("phrase_boundary_step") ? Max ( hIndex["phrase_boundary_step"].intval(), 0 ) : 0;
+
 	/////////////////////
 	// spawn datasources
 	/////////////////////
@@ -728,6 +731,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 
 		pIndex->SetProgressCallback ( ShowProgress );
 		pIndex->SetInfixIndexing ( iPrefix, iInfix );
+		pIndex->SetBoundaryStep ( iBoundaryStep );
 
 		bOK = pIndex->Build ( pDict, dSources, g_iMemLimit, eDocinfo )!=0;
 		if ( bOK && g_bRotate )

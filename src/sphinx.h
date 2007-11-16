@@ -235,11 +235,12 @@ class ISphTokenizer
 {
 public:
 	/// trivial ctor
-									ISphTokenizer() : m_iMinWordLen ( 1 ), m_iLastTokenLen ( 0 ) {}
+									ISphTokenizer() : m_iMinWordLen ( 1 ), m_iLastTokenLen ( 0 ), m_bTokenBoundary ( false ), m_bBoundary ( false ) {}
 
 	/// trivial dtor
 	virtual							~ISphTokenizer () {}
 
+public:
 	/// set new translation table
 	/// returns true on success, false on failure
 	virtual bool					SetCaseFolding ( const char * sConfig, CSphString & sError );
@@ -251,25 +252,20 @@ public:
 	/// updates lowercaser so that these remap to -1
 	virtual void					AddSpecials ( const char * sSpecials );
 
-	/// get lowercaser
-	virtual const CSphLowercaser *	GetLowercaser () const { return &m_tLC; }
-
 	/// set min word length
 	virtual void					SetMinWordLen ( int iLen ) { m_iMinWordLen = Max ( iLen, 1 ); }
 
-	/// get last token length, in codepoints
-	int								GetLastTokenLen () { return m_iLastTokenLen; }
-
-public:
 	/// set n-gram characters (for CJK n-gram indexing)
 	virtual bool					SetNgramChars ( const char *, CSphString & ) { return true; }
 
 	/// set n-gram length (for CJK n-gram indexing)
 	virtual void					SetNgramLen ( int ) {}
 
-public:
 	/// load synonyms list
 	virtual bool					LoadSynonyms ( const char * sFilename, CSphString & sError );
+
+	/// set phrase boundary chars
+	virtual bool					SetBoundary ( const char * sConfig, CSphString & sError );
 
 public:
 	/// pass next buffer
@@ -278,14 +274,24 @@ public:
 	/// get next token
 	virtual BYTE *					GetToken () = 0;
 
+	/// calc codepoint length
+	virtual int						GetCodepointLength ( int iCode ) const = 0;
+
+	/// get last token length, in codepoints
+	inline int						GetLastTokenLen () { return m_iLastTokenLen; }
+
+	/// get last token boundary flag (true if there was a boundary before the token)
+	inline bool						GetBoundary () { return m_bTokenBoundary; }
+
+public:
+	/// get lowercaser
+	virtual const CSphLowercaser *	GetLowercaser () const { return &m_tLC; }
+
 	/// spawn a clone of my own
 	virtual ISphTokenizer *			Clone () const = 0;
 
 	/// SBCS or UTF-8?
 	virtual bool					IsUtf8 () const = 0;
-
-	/// calc codepoint length
-	virtual int						GetCodepointLength ( int iCode ) const = 0;
 
 protected:
 	static const int				MAX_SYNONYM_LEN		= 1024;	///< max synonyms map-from length, bytes
@@ -293,6 +299,8 @@ protected:
 	CSphLowercaser					m_tLC;						///< my lowercaser
 	int								m_iMinWordLen;				///< minimal word length, in codepoints
 	int								m_iLastTokenLen;			///< last token length, in codepoints
+	bool							m_bTokenBoundary;			///< last token boundary flag (true after boundary codepoint followed by separator)
+	bool							m_bBoundary;				///< boundary flag (true immediately after boundary codepoint)
 
 	CSphVector<CSphSynonym>			m_dSynonyms;				///< active synonyms
 };
@@ -687,6 +695,9 @@ public:
 	/// passing zero to both iMinPrefixLen and iMinInfixLen means to emit the words themselves
 	void								SetEmitInfixes ( int iMinPrefixLen, int iMinInfixLen );
 
+	/// set boundary step
+	void								SetBoundaryStep ( int iBoundaryStep ) { m_iBoundaryStep = Max ( iBoundaryStep, 0 ); }
+
 public:
 	/// connect to the source (eg. to the database)
 	/// connection settings are specific for each source type and as such
@@ -737,8 +748,9 @@ protected:
 	bool								m_bStripHTML;	///< whether to strip HTML
 	CSphHTMLStripper *					m_pStripper;	///< my HTML stripper
 
-	int									m_iMinPrefixLen; ///< min indexable prefix (0 means don't index prefixes)
+	int									m_iMinPrefixLen;///< min indexable prefix (0 means don't index prefixes)
 	int									m_iMinInfixLen;	///< min indexable infix length (0 means don't index infixes)
+	int									m_iBoundaryStep;///< additional boundary word position increment
 };
 
 
@@ -1437,6 +1449,7 @@ public:
 
 	virtual	void				SetProgressCallback ( ProgressCallback_t * pfnProgress ) { m_pProgress = pfnProgress; }
 	virtual void				SetInfixIndexing ( int iPrefixLen, int iInfixLen );
+	virtual void				SetBoundaryStep ( int iBoundaryStep );
 
 public:
 	/// build index by indexing given sources
@@ -1497,6 +1510,7 @@ protected:
 
 	int							m_iMinPrefixLen;///< min indexable prefix length (0 means don't index prefixes)
 	int							m_iMinInfixLen;	///< min indexable infix length (0 means don't index infixes)
+	int							m_iBoundaryStep;///< on-boundary additional word position step (0 means index all words continuously)
 
 	bool						m_bAttrsUpdated;///< whether in-memory attrs are updated (compared to disk state)
 };

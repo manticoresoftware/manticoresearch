@@ -2055,11 +2055,12 @@ void CSphLowercaser::AddRemaps ( const CSphVector<CSphRemapRange> & dRemaps, DWO
 
 enum
 {
-	MASK_CODEPOINT			= 0x0ffffffUL,	// mask off codepoint flags
-	FLAG_CODEPOINT_SPECIAL	= 0x1000000UL,	// this codepoint is special
-	FLAG_CODEPOINT_DUAL		= 0x2000000UL,	// this codepoint is special but also a valid word part
-	FLAG_CODEPOINT_NGRAM	= 0x4000000UL,	// this codepoint is n-gram indexed
-	FLAG_CODEPOINT_SYNONYM	= 0x8000000UL	// this codepoint is used in synonym tokens only
+	MASK_CODEPOINT			= 0x00ffffffUL,	// mask off codepoint flags
+	FLAG_CODEPOINT_SPECIAL	= 0x01000000UL,	// this codepoint is special
+	FLAG_CODEPOINT_DUAL		= 0x02000000UL,	// this codepoint is special but also a valid word part
+	FLAG_CODEPOINT_NGRAM	= 0x04000000UL,	// this codepoint is n-gram indexed
+	FLAG_CODEPOINT_SYNONYM	= 0x08000000UL,	// this codepoint is used in synonym tokens only
+	FLAG_CODEPOINT_BOUNDARY	= 0x10000000UL	// this codepoint is phrase boundary
 };
 
 
@@ -2451,8 +2452,6 @@ bool ISphTokenizer::SetCaseFolding ( const char * sConfig, CSphString & sError )
 	}
 
 	CSphVector<CSphRemapRange> dRemaps;
-	dRemaps.Reserve ( 256 );
-
 	CSphCharsetDefinitionParser tParser;
 	if ( !tParser.Parse ( sConfig, dRemaps ) )
 	{
@@ -2685,6 +2684,41 @@ bool ISphTokenizer::LoadSynonyms ( const char * sFilename, CSphString & sError )
 	return true;
 }
 
+
+bool ISphTokenizer::SetBoundary ( const char * sConfig, CSphString & sError )
+{
+	// parse
+	CSphVector<CSphRemapRange> dRemaps;
+	CSphCharsetDefinitionParser tParser;
+	if ( !tParser.Parse ( sConfig, dRemaps ) )
+	{
+		sError = tParser.GetLastError();
+		return false;
+	}
+
+	// check
+	ARRAY_FOREACH ( i, dRemaps )
+	{
+		if ( dRemaps[i].m_iStart!=dRemaps[i].m_iRemapStart )
+		{
+			sError.SetSprintf ( "phrase boundary characters must not be remapped (map-from=U+%x, map-to=U+%x)",
+				dRemaps[i].m_iStart, dRemaps[i].m_iRemapStart );
+			return false;
+		}
+
+		for ( int j=dRemaps[i].m_iStart; j<=dRemaps[i].m_iEnd; j++ )
+			if ( m_tLC.ToLower(j) )
+		{
+			sError.SetSprintf ( "phrase boundary characters must not be present in valid characters table (code=U+%x)", j );
+			return false;
+		}
+	}
+
+	// add mapping
+	m_tLC.AddRemaps ( dRemaps, FLAG_CODEPOINT_BOUNDARY, 0 );
+	return true;
+}
+
 /////////////////////////////////////////////////////////////////////////////
 
 CSphTokenizer_SBCS::CSphTokenizer_SBCS ()
@@ -2719,6 +2753,7 @@ void CSphTokenizer_SBCS::SetBuffer ( BYTE * sBuffer, int iLength, bool bLast )
 
 BYTE * CSphTokenizer_SBCS::GetToken ()
 {
+	m_bTokenBoundary = false;
 	for ( ;; )
 	{
 		// get next codepoint
@@ -2728,7 +2763,10 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 			if ( !m_bLast || m_iAccum<m_iMinWordLen )
 			{
 				if ( m_bLast ) // if this is the last buffer, flush accumulator contents
+				{
+					m_bBoundary = m_bTokenBoundary = false;
 					m_iAccum = 0;
+				}
 
 				m_iLastTokenLen = 0;
 				return NULL;
@@ -2738,8 +2776,10 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 			iCode = m_tLC.ToLower ( *m_pCur++ );
 		}
 
-		// handle whitespace
-		if ( iCode==0 )
+		// handle whitespace and boundary
+		if ( m_bBoundary && ( iCode==0 ) ) m_bTokenBoundary = true;
+		m_bBoundary = ( iCode & FLAG_CODEPOINT_BOUNDARY )!=0;
+		if ( iCode==0 || m_bBoundary )
 		{
 			if ( m_iAccum<m_iMinWordLen )
 			{
@@ -2852,6 +2892,7 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 	if ( m_dSynonyms.GetLength() )
 		return GetTokenSyn ();
 
+	m_bTokenBoundary = false;
 	for ( ;; )
 	{
 		// get next codepoint
@@ -2868,6 +2909,8 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 				return NULL;
 			}
 
+			m_bBoundary = m_bTokenBoundary = false;
+
 			// skip trailing short word
 			FlushAccum ();
 			if ( m_iLastTokenLen<m_iMinWordLen )
@@ -2880,8 +2923,10 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 			return m_sAccum;
 		}
 
-		// handle whitespace
-		if ( iCode==0 )
+		// handle whitespace and boundary
+		if ( m_bBoundary && ( iCode==0 ) ) m_bTokenBoundary = true;
+		m_bBoundary = ( iCode & FLAG_CODEPOINT_BOUNDARY )!=0;
+		if ( iCode==0 || m_bBoundary )
 		{
 			FlushAccum ();
 			if ( m_iLastTokenLen<m_iMinWordLen )
@@ -2963,6 +3008,7 @@ BYTE * CSphTokenizer_UTF8::GetTokenSyn ()
 {
 	assert ( m_dSynonyms.GetLength() );
 
+	m_bTokenBoundary = false;
 	for ( ;; )
 	{
 		////////////////////////////////////////////////////////////
@@ -2984,6 +3030,9 @@ BYTE * CSphTokenizer_UTF8::GetTokenSyn ()
 			int iFolded = 0;
 			if ( iCode<0 )
 			{
+				if ( m_bLast )
+					m_bBoundary = m_bTokenBoundary = false;
+
 				if ( !m_bLast || m_iSynBytes==0 )
 				{
 					// if it's not the last one, or if the acc is empty, just bail out
@@ -2994,6 +3043,11 @@ BYTE * CSphTokenizer_UTF8::GetTokenSyn ()
 			{
 				iFolded = m_tLC.ToLower ( iCode );
 			}
+
+			// handle boundary
+			if ( m_bBoundary && ( iCode==0 ) ) m_bTokenBoundary = true;
+			m_bBoundary = ( iCode & FLAG_CODEPOINT_BOUNDARY )!=0;
+			if ( m_bBoundary ) iCode = iFolded = 0;
 
 			// handle raw non-whitespace
 			if ( iFolded>0 )
@@ -3225,8 +3279,6 @@ int CSphTokenizer_UTF8::GetCodepointLength ( int iCode ) const
 bool CSphTokenizer_UTF8Ngram::SetNgramChars ( const char * sConfig, CSphString & sError )
 {
 	CSphVector<CSphRemapRange> dRemaps;
-	dRemaps.Reserve ( 256 );
-
 	CSphCharsetDefinitionParser tParser;
 	if ( !tParser.Parse ( sConfig, dRemaps ) )
 	{
@@ -4244,6 +4296,7 @@ CSphIndex::CSphIndex ( const char * sName )
 	, m_sLastError ( "(no error message)" )
 	, m_iMinPrefixLen ( 0 )
 	, m_iMinInfixLen ( 0 )
+	, m_iBoundaryStep ( 0 )
 	, m_bAttrsUpdated ( false )
 {
 }
@@ -4253,6 +4306,12 @@ void CSphIndex::SetInfixIndexing ( int iPrefixLen, int iInfixLen )
 {
 	m_iMinPrefixLen = Max ( iPrefixLen, 0 );
 	m_iMinInfixLen = Max ( iInfixLen, 0 );
+}
+
+
+void CSphIndex::SetBoundaryStep ( int iBoundaryStep )
+{
+	m_iBoundaryStep = Max ( iBoundaryStep, 0 );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -5373,6 +5432,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 
 		pSource->SetDict ( pDict );
 		pSource->SetEmitInfixes ( m_iMinPrefixLen, m_iMinInfixLen );
+		pSource->SetBoundaryStep ( m_iBoundaryStep );
 	}
 
 	// connect 1st source and fetch its schema
@@ -11893,6 +11953,7 @@ CSphSource::CSphSource ( const char * sName )
 	, m_bStripHTML ( false )
 	, m_iMinPrefixLen ( 0 )
 	, m_iMinInfixLen ( 0 )
+	, m_iBoundaryStep ( 0 )
 {
 	m_pStripper = new CSphHTMLStripper ();
 }
@@ -12015,6 +12076,9 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 			// index all infixes
 			while ( ( sWord = m_pTokenizer->GetToken() )!=NULL )
 			{
+				if ( m_pTokenizer->GetBoundary() )
+					iPos += m_iBoundaryStep;
+
 				int iLen = m_pTokenizer->GetLastTokenLen ();
 
 				// always index full word (with magic head/tail marker(s))
@@ -12090,6 +12154,9 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 			// index words only
 			while ( ( sWord = m_pTokenizer->GetToken() )!=NULL )
 			{
+				if ( m_pTokenizer->GetBoundary() )
+					iPos += m_iBoundaryStep;
+
 				if ( bGlobalPartialMatch )
 				{
 					int iBytes = strlen ( (const char*)sWord );

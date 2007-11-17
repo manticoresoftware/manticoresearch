@@ -243,7 +243,8 @@ void sphFormatCurrentTime ( char * sTimeBuf )
 	gettimeofday ( &tv, NULL );
 
 	struct tm tmp;
-	localtime_r ( &tv.tv_sec, &tmp );
+	time_t ts = (time_t) tv.tv_sec; // on some systems (eg. FreeBSD 6.2), tv.tv_sec has another type and we can't just pass it
+	localtime_r ( &ts, &tmp );
 #else
 	struct
 	{

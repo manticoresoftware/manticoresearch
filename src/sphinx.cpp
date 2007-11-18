@@ -4807,7 +4807,7 @@ inline int encodeVLB(BYTE *buf, DWORD v)
 }
 
 
-inline int encodeVLB8(BYTE *buf, SphOffset_t v)
+inline int encodeVLB8 ( BYTE * buf, uint64_t v )
 {
 	register BYTE b;
 	register int n = 0;
@@ -11322,13 +11322,13 @@ DWORD sphCRC32 ( const BYTE * pString, int iLen )
 
 /////////////////////////////////////////////////////////////////////////////
 
-SphOffset_t sphFNV64 ( const BYTE * s )
+uint64_t sphFNV64 ( const BYTE * s )
 {
-	SphOffset_t hval = 0xcbf29ce484222325ULL;
+	uint64_t hval = 0xcbf29ce484222325ULL;
 	while ( *s )
 	{
 		// xor the bottom with the current octet
-		hval ^= (SphOffset_t)*s++;
+		hval ^= (uint64_t)*s++;
 
 		// multiply by the 64 bit FNV magic prime mod 2^64
 		hval += (hval << 1) + (hval << 4) + (hval << 5) + (hval << 7) + (hval << 8) + (hval << 40); // gcc optimization
@@ -11337,13 +11337,13 @@ SphOffset_t sphFNV64 ( const BYTE * s )
 }
 
 
-SphOffset_t sphFNV64 ( const BYTE * s, int iLen )
+uint64_t sphFNV64 ( const BYTE * s, int iLen )
 {
-	SphOffset_t hval = 0xcbf29ce484222325ULL;
+	uint64_t hval = 0xcbf29ce484222325ULL;
 	for ( ; iLen>0; iLen-- )
 	{
 		// xor the bottom with the current octet
-		hval ^= (SphOffset_t)*s++;
+		hval ^= (uint64_t)*s++;
 
 		// multiply by the 64 bit FNV magic prime mod 2^64
 		hval += (hval << 1) + (hval << 4) + (hval << 5) + (hval << 7) + (hval << 8) + (hval << 40); // gcc optimization

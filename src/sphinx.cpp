@@ -10724,13 +10724,13 @@ bool CSphIndex_VLN::Preread ()
 			DWORD uStart = uIndexEntry*DOCINFO_INDEX_FREQ;
 			DWORD uCount = Min ( (DWORD)DOCINFO_INDEX_FREQ, m_uDocinfo-uStart );
 
-			const DWORD * pDocinfo = &m_pDocinfo [ uStart*uStride ];
-			const DWORD * pDocinfoMax = pDocinfo + uCount*uStride;
+			const DWORD * const pDocinfoStart = &m_pDocinfo [ uStart*uStride ];
+			const DWORD * const pDocinfoMax = pDocinfoStart + uCount*uStride;
 
 			// scan everything
-			for ( ; pDocinfo<pDocinfoMax; pDocinfo+=uStride )
+			for ( const DWORD * pCur=pDocinfoStart; pCur<pDocinfoMax; pCur+=uStride )
 			{
-				const DWORD * pRow = DOCINFO2ATTRS(pDocinfo);
+				const DWORD * pRow = DOCINFO2ATTRS(pCur);
 
 				// ints
 				ARRAY_FOREACH ( i, dIntAttrs )
@@ -10773,8 +10773,8 @@ bool CSphIndex_VLN::Preread ()
 			DWORD * pMaxEntry = pMinEntry + uStride;
 			DWORD * pMaxAttrs = pMinAttrs + uStride;
 
-			DOCINFO2ID(pMinEntry) = DOCINFO2ID(pDocinfo);
-			DOCINFO2ID(pMaxEntry) = DOCINFO2ID(pDocinfo-uStride);
+			DOCINFO2ID(pMinEntry) = DOCINFO2ID(pDocinfoStart);
+			DOCINFO2ID(pMaxEntry) = DOCINFO2ID(pDocinfoMax-uStride);
 
 			ARRAY_FOREACH ( i, dIntAttrs )
 			{

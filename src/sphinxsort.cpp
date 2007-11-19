@@ -1066,7 +1066,7 @@ static ESortClauseParseResult sphParseSortClause ( const char * sClause, const C
 	pTokenizer->SetCaseFolding ( "0..9, A..Z->a..z, _, a..z, @", sTmp );
 
 	CSphString sSortClause ( sClause );
-	pTokenizer->SetBuffer ( (BYTE*)sSortClause.cstr(), strlen(sSortClause.cstr()), true );
+	pTokenizer->SetBuffer ( (BYTE*)sSortClause.cstr(), strlen(sSortClause.cstr())  );
 
 	bool bField = false; // whether i'm expecting field name or sort order
 	int iField = 0;

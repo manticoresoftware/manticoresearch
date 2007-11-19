@@ -85,7 +85,7 @@ void TestUTF8Tokenizer ()
 				break;
 
 			printf ( "testing tokenizer, run=%d, line=%s\n", iRun, dTests[iCur] );
-			pTokenizer->SetBuffer ( (BYTE*)dTests[iCur], strlen(dTests[iCur]), true );
+			pTokenizer->SetBuffer ( (BYTE*)dTests[iCur], strlen(dTests[iCur]) );
 			iCur++;
 
 			for ( BYTE * pToken=pTokenizer->GetToken(); pToken; pToken=pTokenizer->GetToken() )
@@ -98,26 +98,11 @@ void TestUTF8Tokenizer ()
 			iCur++;
 		}
 
-		// test that short words at buffer boundary are accumulated
-		printf ( "testing tokenizer for short words at buffer boundary\n" );
-		char * sLine1 = "this is m";
-		char * sLine2 = "y rifle";
-
-		pTokenizer->SetBuffer ( (BYTE*)sLine1, strlen(sLine1), false );
-		assert ( !strcmp ( (char*)pTokenizer->GetToken(), "this" ) );
-		assert ( !strcmp ( (char*)pTokenizer->GetToken(), "is" ) );
-		assert ( pTokenizer->GetToken()==NULL );
-
-		pTokenizer->SetBuffer ( (BYTE*)sLine2, strlen(sLine2), true );
-		assert ( !strcmp ( (char*)pTokenizer->GetToken(), "my" ) );
-		assert ( !strcmp ( (char*)pTokenizer->GetToken(), "rifle" ) );
-		assert ( pTokenizer->GetToken()==NULL );
-
 		// test that decoder does not go over the buffer boundary on errors in UTF-8
 		printf ( "testing tokenizer for proper UTF-8 error handling\n" );
 		char * sLine3 = "hi\xd0\xffh";
 
-		pTokenizer->SetBuffer ( (BYTE*)sLine3, 4, true );
+		pTokenizer->SetBuffer ( (BYTE*)sLine3, 4 );
 		assert ( !strcmp ( (char*)pTokenizer->GetToken(), "hi" ) );
 
 		// test uberlong tokens
@@ -132,7 +117,7 @@ void TestUTF8Tokenizer ()
 		memset ( sTok4, 'a', SPH_MAX_WORD_LEN );
 		sTok4[SPH_MAX_WORD_LEN] = '\0';
 
-		pTokenizer->SetBuffer ( (BYTE*)sLine4, strlen(sLine4), true );
+		pTokenizer->SetBuffer ( (BYTE*)sLine4, strlen(sLine4) );
 		assert ( !strcmp ( (char*)pTokenizer->GetToken(), sTok4 ) );
 		assert ( pTokenizer->GetToken()==NULL );
 
@@ -144,7 +129,7 @@ void TestUTF8Tokenizer ()
 			memset ( sLine4, '/', UBERLONG );
 			sLine4[UBERLONG] = '\0';
 
-			pTokenizer->SetBuffer ( (BYTE*)sLine4, strlen(sLine4), true );
+			pTokenizer->SetBuffer ( (BYTE*)sLine4, strlen(sLine4) );
 			assert ( pTokenizer->GetToken()==NULL );
 
 			printf ( "testing tokenizer for uberlong synonym token handling\n" );
@@ -157,7 +142,7 @@ void TestUTF8Tokenizer ()
 				sLine4[i+3] = '\0';
 			}
 
-			pTokenizer->SetBuffer ( (BYTE*)sLine4, strlen(sLine4), true );
+			pTokenizer->SetBuffer ( (BYTE*)sLine4, strlen(sLine4) );
 			for ( int i=0; i<UBERLONG-3; i+=3 )
 				assert ( !strcmp ( (char*)pTokenizer->GetToken(), "aa" ) );
 			assert ( pTokenizer->GetToken()==NULL );
@@ -208,7 +193,7 @@ void BenchUTF8Tokenizer ()
 
 		int iTokens = 0;
 		float fTime = -sphLongTimer ();
-		pTokenizer->SetBuffer ( (BYTE*)sData, iData, true );
+		pTokenizer->SetBuffer ( (BYTE*)sData, iData );
 		while ( pTokenizer->GetToken() ) iTokens++;
 		fTime += sphLongTimer ();
 		printf ( "run %d: %d bytes, %d tokens, %.3f ms, %.3f MB/sec\n", iRun, iData, iTokens, 1000.0f*fTime, iData/fTime/1000000.0f );

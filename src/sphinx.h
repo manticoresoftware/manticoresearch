@@ -269,7 +269,7 @@ public:
 
 public:
 	/// pass next buffer
-	virtual void					SetBuffer ( BYTE * sBuffer, int iLength, bool bLast ) = 0;
+	virtual void					SetBuffer ( BYTE * sBuffer, int iLength ) = 0;
 
 	/// get next token
 	virtual BYTE *					GetToken () = 0;
@@ -975,13 +975,15 @@ private:
 private:
 	CSphString		m_sCommand;			///< my command
 
-	bool			m_bBody;			///< are we scanning body or expecting document?
 	Tag_e			m_eTag;				///< what's our current tag
 	const char *	m_pTag;				///< tag name
 	int				m_iTagLength;		///< tag name length
-
+	int				m_iBufferSize;		///< buffer size
+	bool			m_bEOF;				///< EOF encountered
+	bool			m_bWarned;			///< warned of buffer size already
+	
 	FILE *			m_pPipe;			///< incoming stream
-	BYTE			m_sBuffer [ 4096 ];	///< buffer
+	BYTE *			m_sBuffer;			///< buffer
 	BYTE *			m_pBuffer;			///< current buffer pos
 	BYTE *			m_pBufferEnd;		///< buffered end pos
 	

@@ -225,7 +225,7 @@ CSphBooleanQueryExpr * CSphBooleanQueryParser::Parse ( const char * sQuery, cons
 
 	ISphTokenizer * pMyTokenizer = pTokenizer->Clone ();
 	pMyTokenizer->AddSpecials ( "&|()-!" );
-	pMyTokenizer->SetBuffer ( (BYTE*)sBuffer.cstr(), strlen ( sBuffer.cstr() ), true );
+	pMyTokenizer->SetBuffer ( (BYTE*)sBuffer.cstr(), strlen ( sBuffer.cstr() ) );
 
 	// iterate all tokens
 	const int QUERY_END = -1;
@@ -860,7 +860,7 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 	CSphString sBuffer ( sQuery );
 	ISphTokenizer * pMyTokenizer = pTokenizer->Clone ();
 	pMyTokenizer->AddSpecials ( "()|-!@~\"*" ); // MUST be in sync with IsSpecial()
-	pMyTokenizer->SetBuffer ( (BYTE*)sBuffer.cstr(), strlen ( sBuffer.cstr() ), true );
+	pMyTokenizer->SetBuffer ( (BYTE*)sBuffer.cstr(), strlen ( sBuffer.cstr() ) );
 
 	// underscore must be accepted in field names
 	CSphRemapRange tUnderscore ( '_', '_', '_' );

@@ -1838,7 +1838,7 @@ public:
 						CSphTokenizer_SBCS ();
 	virtual				~CSphTokenizer_SBCS ();
 
-	virtual void				SetBuffer ( BYTE * sBuffer, int iLength, bool bLast );
+	virtual void				SetBuffer ( BYTE * sBuffer, int iLength );
 	virtual BYTE *				GetToken ();
 	virtual ISphTokenizer *		Clone () const;
 	virtual bool				IsUtf8 () const { return false; }
@@ -1850,7 +1850,6 @@ protected:
 	BYTE *				m_pCur;								///< current position
 	BYTE				m_sAccum [ 4+SPH_MAX_WORD_LEN ];	///< token accumulator
 	int					m_iAccum;							///< token size
-	bool				m_bLast;							///< is this buffer the last one
 };
 
 
@@ -1861,7 +1860,7 @@ public:
 						CSphTokenizer_UTF8 ();
 	virtual				~CSphTokenizer_UTF8 ();
 
-	virtual void				SetBuffer ( BYTE * sBuffer, int iLength, bool bLast );
+	virtual void				SetBuffer ( BYTE * sBuffer, int iLength );
 	virtual BYTE *				GetToken ();
 	virtual BYTE *				GetTokenSyn ();
 	virtual ISphTokenizer *		Clone () const;
@@ -1879,7 +1878,6 @@ protected:
 	BYTE *				m_pBuffer;							///< my buffer
 	BYTE *				m_pBufferMax;						///< max buffer ptr, exclusive (ie. this ptr is invalid, but every ptr below is ok)
 	BYTE *				m_pCur;								///< current position
-	bool				m_bLast;							///< is this buffer the last one
 
 	BYTE				m_sAccum [ 3*SPH_MAX_WORD_LEN+3 ];	///< boundary token accumulator
 	BYTE *				m_pAccum;							///< current accumulator position
@@ -2726,7 +2724,6 @@ CSphTokenizer_SBCS::CSphTokenizer_SBCS ()
 	, m_pBufferMax	( NULL )
 	, m_pCur		( NULL )
 	, m_iAccum		( 0 )
-	, m_bLast		( false )
 {
 	CSphString sTmp;
 	SetCaseFolding ( SPHINX_DEFAULT_SBCS_TABLE, sTmp );
@@ -2737,7 +2734,8 @@ CSphTokenizer_SBCS::~CSphTokenizer_SBCS ()
 {
 }
 
-void CSphTokenizer_SBCS::SetBuffer ( BYTE * sBuffer, int iLength, bool bLast )
+
+void CSphTokenizer_SBCS::SetBuffer ( BYTE * sBuffer, int iLength )
 {
 	// check that old one is over and that new length is sane
 	assert ( m_pCur>=m_pBufferMax );
@@ -2747,7 +2745,6 @@ void CSphTokenizer_SBCS::SetBuffer ( BYTE * sBuffer, int iLength, bool bLast )
 	m_pBuffer = sBuffer;
 	m_pBufferMax = sBuffer + iLength;
 	m_pCur = sBuffer;
-	m_bLast = bLast;
 }
 
 
@@ -2760,14 +2757,10 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 		int iCode = 0;
 		if ( m_pCur>=m_pBufferMax )
 		{
-			if ( !m_bLast || m_iAccum<m_iMinWordLen )
+			if ( m_iAccum<m_iMinWordLen )
 			{
-				if ( m_bLast ) // if this is the last buffer, flush accumulator contents
-				{
-					m_bBoundary = m_bTokenBoundary = false;
-					m_iAccum = 0;
-				}
-
+				m_bBoundary = m_bTokenBoundary = false;
+				m_iAccum = 0;
 				m_iLastTokenLen = 0;
 				return NULL;
 			}
@@ -2845,7 +2838,6 @@ CSphTokenizer_UTF8::CSphTokenizer_UTF8 ()
 	: m_pBuffer		( NULL )
 	, m_pBufferMax	( NULL )
 	, m_pCur		( NULL )
-	, m_bLast		( false )
 	, m_iAccum		( 0 )
 
 	, m_iSynFlushing		( -1 )
@@ -2868,7 +2860,7 @@ CSphTokenizer_UTF8::~CSphTokenizer_UTF8 ()
 }
 
 
-void CSphTokenizer_UTF8::SetBuffer ( BYTE * sBuffer, int iLength, bool bLast )
+void CSphTokenizer_UTF8::SetBuffer ( BYTE * sBuffer, int iLength )
 {
 	// check that old one is over and that new length is sane
 	assert ( m_pCur>=m_pBufferMax );
@@ -2878,7 +2870,6 @@ void CSphTokenizer_UTF8::SetBuffer ( BYTE * sBuffer, int iLength, bool bLast )
 	m_pBuffer = sBuffer;
 	m_pBufferMax = sBuffer + iLength;
 	m_pCur = sBuffer;
-	m_bLast = bLast;
 
 	// fixup embedded zeroes with spaces
 	for ( BYTE * p = m_pBuffer; p < m_pBufferMax; p++ )
@@ -2902,13 +2893,6 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 		// handle eof
 		if ( iCode<0 )
 		{
-			// if it was not the last buffer, just keep the accumulator
-			if ( !m_bLast )
-			{
-				m_iLastTokenLen = 0;
-				return NULL;
-			}
-
 			m_bBoundary = m_bTokenBoundary = false;
 
 			// skip trailing short word
@@ -3030,10 +3014,9 @@ BYTE * CSphTokenizer_UTF8::GetTokenSyn ()
 			int iFolded = 0;
 			if ( iCode<0 )
 			{
-				if ( m_bLast )
-					m_bBoundary = m_bTokenBoundary = false;
+				m_bBoundary = m_bTokenBoundary = false;
 
-				if ( !m_bLast || m_iSynBytes==0 )
+				if ( m_iSynBytes==0 )
 				{
 					// if it's not the last one, or if the acc is empty, just bail out
 					m_iLastTokenLen = 0;
@@ -6836,7 +6819,7 @@ struct CSphSimpleQueryParser
 		assert ( pDict );
 
 		CSphString sQbuf ( sQuery );
-		pTokenizer->SetBuffer ( (BYTE*)sQbuf.cstr(), strlen(sQuery), true );
+		pTokenizer->SetBuffer ( (BYTE*)sQbuf.cstr(), strlen(sQuery) );
 
 		int iWords = 0;
 		int iPos = 0;
@@ -11467,8 +11450,6 @@ void CSphDictCRC::LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenize
 	assert ( !m_pStopwords );
 	assert ( !m_iStopwords );
 
-	static BYTE sBuffer [ 65536 ];
-
 	// tokenize file list
 	if ( !sFiles )
 		return;
@@ -11490,26 +11471,34 @@ void CSphDictCRC::LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenize
 		while ( *pCur && !isspace(*pCur) ) pCur++;
 		if ( *pCur ) *pCur++ = '\0';
 
+		BYTE * pBuffer = NULL;
+
 		// open file
+		struct stat st;
+		if ( stat ( sName, &st ) == 0 )
+			pBuffer = new BYTE [st.st_size];
+		else
+		{
+			sphWarn ( "stopwords: failed to get file size for '%s'", sName );
+			continue;
+		}
+
 		FILE * fp = fopen ( sName, "rb" );
 		if ( !fp )
 		{
 			sphWarn ( "failed to load stopwords from '%s'", sName );
+			SafeDeleteArray ( pBuffer );
 			continue;
 		}
 
 		// tokenize file
 		CSphVector<SphWordID_t> dStop;
-		int iLength;
-		do
-		{
-			iLength = (int)fread ( sBuffer, 1, sizeof(sBuffer), fp );
-			pTokenizer->SetBuffer ( sBuffer, iLength, iLength!=0 );
+		int iLength = (int)fread ( pBuffer, 1, st.st_size, fp );
 
-			BYTE * pToken;
-			while ( ( pToken = pTokenizer->GetToken() )!=NULL )
-				dStop.Add ( GetWordID ( pToken ) );
-		} while ( iLength );
+		BYTE * pToken;
+		pTokenizer->SetBuffer ( pBuffer, iLength );
+		while ( ( pToken = pTokenizer->GetToken() )!=NULL )
+			dStop.Add ( GetWordID ( pToken ) );
 
 		// sort stopwords
 		dStop.Sort();
@@ -11524,6 +11513,8 @@ void CSphDictCRC::LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenize
 
 		// close file
 		fclose ( fp );
+
+		SafeDeleteArray ( pBuffer );
 	}
 
 	SafeDeleteArray ( sList );
@@ -12059,7 +12050,7 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 		int iLen = (int) strlen ( (char*)sField );
 		m_tStats.m_iTotalBytes += iLen;
 
-		m_pTokenizer->SetBuffer ( sField, iLen, true );
+		m_pTokenizer->SetBuffer ( sField, iLen );
 
 		BYTE * sWord;
 		int iPos = ( j<<24 ) + 1;
@@ -13088,20 +13079,24 @@ bool CSphSource_PgSQL::SqlFetchRow ()
 /////////////////////////////////////////////////////////////////////////////
 
 CSphSource_XMLPipe::CSphSource_XMLPipe ( const char * sName)
-	: CSphSource ( sName )
+	: CSphSource	( sName )
+	, m_iBufferSize	( 1048576 )
+	, m_bEOF		( false )
+	, m_bWarned		( false )
 {
-	m_bBody			= false;
 	m_pTag			= NULL;
 	m_iTagLength	= 0;
 	m_pPipe			= NULL;
 	m_pBuffer		= NULL;
 	m_pBufferEnd	= NULL;
+	m_sBuffer		= new BYTE [m_iBufferSize];
 }
 
 
 CSphSource_XMLPipe::~CSphSource_XMLPipe ()
 {
 	Disconnect ();
+	SafeDeleteArray ( m_sBuffer );
 }
 
 
@@ -13126,7 +13121,9 @@ bool CSphSource_XMLPipe::Setup ( const char * sCommand )
 bool CSphSource_XMLPipe::Connect ( CSphString & sError )
 {
 	m_pPipe = popen ( m_sCommand.cstr(), "r" );
-	m_bBody = false;
+	
+	m_bEOF		= false;
+	m_bWarned	= false;
 
 	m_tSchema.Reset ();
 
@@ -13167,123 +13164,171 @@ bool CSphSource_XMLPipe::IterateHitsNext ( CSphString & sError )
 	// parse document header
 	/////////////////////////
 
-	if ( !m_bBody )
+	// check for eof
+	if ( !SkipWhitespace() )
 	{
-		// check for eof
-		if ( !SkipWhitespace() )
-		{
-			m_tDocInfo.m_iDocID = 0;
-			return true;
-		}
-
-		// look for opening '<document>' tag
-		SetTag ( "document" );
-		if ( !SkipTag ( true, sError ) )
-			return false;
-
-		if ( !ScanInt ( "id", &m_tDocInfo.m_iDocID, sError ) )
-			return false;
-		m_tStats.m_iTotalDocuments++;
-
-		if ( !ScanInt ( "group", &m_tDocInfo.m_pRowitems[0], sError ) )
-			m_tDocInfo.m_pRowitems[0] = 1;
-
-		if ( !ScanInt ( "timestamp", &m_tDocInfo.m_pRowitems[1], sError ) )
-			m_tDocInfo.m_pRowitems[1] = 1;
-
-		if ( !ScanStr ( "title", sTitle, sizeof(sTitle), sError ) )
-			return false;
-
-		// index title
-		{
-			int iLen = (int)strlen ( sTitle );
-			int iPos = 1;
-			BYTE * sWord;
-
-			m_pTokenizer->SetBuffer ( (BYTE*)sTitle, iLen, true );
-			while ( ( sWord = m_pTokenizer->GetToken() )!=NULL )
-			{
-				SphWordID_t iWID = m_pDict->GetWordID ( sWord );
-				if ( iWID )
-				{
-					CSphWordHit & tHit = m_dHits.Add ();
-					tHit.m_iDocID = m_tDocInfo.m_iDocID;
-					tHit.m_iWordID = iWID;
-					tHit.m_iWordPos = iPos;
-				}
-				iPos++;
-			}
-		}
-
-		SetTag ( "body" );
-		if ( !SkipTag ( true, sError ) )
-			return false;
-
-		m_bBody = true;
-		m_iWordPos = 0;
+		m_tDocInfo.m_iDocID = 0;
+		return true;
 	}
 
-	/////////////////////////////
-	// parse body chunk by chunk
-	/////////////////////////////
+	// look for opening '<document>' tag
+	SetTag ( "document" );
+	if ( !SkipTag ( true, sError ) )
+		return false;
 
-	assert ( m_bBody );
+	if ( !ScanInt ( "id", &m_tDocInfo.m_iDocID, sError ) )
+		return false;
+	m_tStats.m_iTotalDocuments++;
 
-	bool bBodyEnd = false;
-	while ( m_dHits.GetLength()<1024 && !bBodyEnd ) // FIXME!
+	if ( !ScanInt ( "group", &m_tDocInfo.m_pRowitems[0], sError ) )
+		m_tDocInfo.m_pRowitems[0] = 1;
+
+	if ( !ScanInt ( "timestamp", &m_tDocInfo.m_pRowitems[1], sError ) )
+		m_tDocInfo.m_pRowitems[1] = 1;
+
+	if ( !ScanStr ( "title", sTitle, sizeof(sTitle), sError ) )
+		return false;
+
+	// index title
 	{
-		// suck in some data if needed
-		if ( m_pBuffer>=m_pBufferEnd )
-			if ( !UpdateBuffer() )
-		{
-			sError.SetSprintf ( "xmlpipe: unexpected EOF while scanning docid=" DOCID_FMT " body",
-				m_tDocInfo.m_iDocID );
-			return false;
-		}
-
-		// check for body tag end in this buffer
-		BYTE * p = m_pBuffer;
-		while ( p<m_pBufferEnd && *p!='<' )
-			p++;
-		if ( p<m_pBufferEnd && *p=='<' )
-			bBodyEnd = true;
-
-		// set proper buffer part
-		m_pTokenizer->SetBuffer ( m_pBuffer, p-m_pBuffer, bBodyEnd );
-		m_pBuffer = p;
-
-		// tokenize
+		int iLen = (int)strlen ( sTitle );
+		int iPos = 1;
 		BYTE * sWord;
-		while ( ( sWord = m_pTokenizer->GetToken () )!=NULL )
+
+		m_pTokenizer->SetBuffer ( (BYTE*)sTitle, iLen );
+		while ( ( sWord = m_pTokenizer->GetToken() )!=NULL )
 		{
 			SphWordID_t iWID = m_pDict->GetWordID ( sWord );
-			++m_iWordPos;
 			if ( iWID )
 			{
 				CSphWordHit & tHit = m_dHits.Add ();
 				tHit.m_iDocID = m_tDocInfo.m_iDocID;
 				tHit.m_iWordID = iWID;
-				tHit.m_iWordPos = (1<<24) | m_iWordPos; // field_id | iPos
+				tHit.m_iWordPos = iPos;
 			}
+			iPos++;
 		}
 	}
+
+	SetTag ( "body" );
+	if ( !SkipTag ( true, sError ) )
+		return false;
+
+	m_iWordPos = 0;
+
+	/////////////////////////////
+	// parse body chunk by chunk
+	/////////////////////////////
+
+	// check for body tag end in this buffer
+	const char * szBodyEnd = "</body>";
+
+	bool bFirstPass = true;
+	bool bBodyEnd = false;
+	BYTE * p = m_pBuffer;
+
+	while ( ! bBodyEnd )
+	{
+		p = m_pBuffer;
+		while ( p<m_pBufferEnd && ! bBodyEnd )
+		{
+			BYTE * pBufTemp = p;
+			BYTE * pEndTemp = (BYTE *)szBodyEnd;
+			while ( pBufTemp < m_pBufferEnd && *pEndTemp && *pBufTemp == *pEndTemp )
+			{
+				++pBufTemp;
+				++pEndTemp;
+			}
+
+			if ( !*pEndTemp )
+				bBodyEnd = true;
+			else
+				p++;
+		}
+
+		if ( ! bFirstPass )
+			break;
+
+		bFirstPass = false;
+
+		if ( ! bBodyEnd )
+			UpdateBuffer ();
+	}
+
+	if ( ! bBodyEnd )
+	{
+		if ( ! m_bWarned )
+		{
+			sphWarn ( "xmlpipe: encountered body larger than %d bytes while scanning docid=" DOCID_FMT " body", m_iBufferSize, m_tDocInfo.m_iDocID );
+			m_bWarned = true;
+		}
+	}
+
+	m_pTokenizer->SetBuffer ( m_pBuffer, p-m_pBuffer );
+
+	// tokenize
+	BYTE * sWord;
+	while ( ( sWord = m_pTokenizer->GetToken () )!=NULL )
+	{
+		SphWordID_t iWID = m_pDict->GetWordID ( sWord );
+		++m_iWordPos;
+		if ( iWID )
+		{
+			CSphWordHit & tHit = m_dHits.Add ();
+			tHit.m_iDocID = m_tDocInfo.m_iDocID;
+			tHit.m_iWordID = iWID;
+			tHit.m_iWordPos = (1<<24) | m_iWordPos; // field_id | iPos
+		}
+	}
+
+	m_pBuffer = p;
+
+	SetTag ( "body" );
 
 	// some tag was found
 	if ( bBodyEnd )
 	{
 		// let's check if it's '</body>' which is the only allowed tag at this point
-		SetTag ( "body" );
-		if ( !SkipTag ( false, sError ) )
-			return false;
-
-		// well, it is
-		m_bBody = false;
-
-		// let's check if it's '</document>' which is the only allowed tag at this point
-		SetTag ( "document" );
 		if ( !SkipTag ( false, sError ) )
 			return false;
 	}
+	else
+	{
+		// search for '</body>' tag
+		bool bFound = false;
+
+		while ( ! bFound )
+		{
+			while ( m_pBuffer < m_pBufferEnd && *m_pBuffer != '<' )
+				++m_pBuffer;
+
+			BYTE * pBufferTmp = m_pBuffer;
+			if ( m_pBuffer < m_pBufferEnd )
+			{
+				if ( ! SkipTag ( false, sError ) )
+				{
+					if ( m_bEOF )
+						return false;
+					else
+					{
+						if ( m_pBuffer == pBufferTmp )
+							m_pBuffer = pBufferTmp + 1;
+					}
+				}
+				else
+					bFound = true;
+			}
+			else
+				if ( ! UpdateBuffer () )
+					return false;
+		}
+	}
+
+
+	// let's check if it's '</document>' which is the only allowed tag at this point
+	SetTag ( "document" );
+	if ( !SkipTag ( false, sError ) )
+		return false;
 
 	// if it was all correct, we have to flush our hits
 	return true;
@@ -13299,13 +13344,13 @@ void CSphSource_XMLPipe::SetTag ( const char * sTag )
 
 bool CSphSource_XMLPipe::UpdateBuffer ()
 {
-	assert ( m_pBuffer!=&m_sBuffer[0] );
+	assert ( m_pBuffer!=m_sBuffer );
 
 	int iLeft = Max ( m_pBufferEnd-m_pBuffer, 0 );
 	if ( iLeft>0 )
 		memmove ( m_sBuffer, m_pBuffer, iLeft );
 
-	size_t iLen = fread ( &m_sBuffer [ iLeft ], 1, sizeof(m_sBuffer)-iLeft, m_pPipe );
+	size_t iLen = fread ( &m_sBuffer [ iLeft ], 1, m_iBufferSize-iLeft, m_pPipe );
 	m_tStats.m_iTotalBytes += iLen;
 
 	m_pBuffer = m_sBuffer;
@@ -13348,6 +13393,7 @@ bool CSphSource_XMLPipe::CheckTag ( bool bOpen, CSphString & sError )
 
 	if ( m_pBufferEnd-m_pBuffer < m_iTagLength+iAdd )
 	{
+		m_bEOF = true;
 		sError.SetSprintf ( "xmlpipe: expected '<%s%s>', got EOF",
 			bOpen ? "" : "/", m_pTag );
 		return false;
@@ -13386,6 +13432,7 @@ bool CSphSource_XMLPipe::SkipTag ( bool bOpen, CSphString & sError )
 {
 	if ( !SkipWhitespace() )
 	{
+		m_bEOF = true;
 		sError.SetSprintf ( "xmlpipe: expected '<%s%s>', got EOF",
 			bOpen ? "" : "/", m_pTag );
 		return false;

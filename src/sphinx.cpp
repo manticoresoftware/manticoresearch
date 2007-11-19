@@ -3042,12 +3042,12 @@ BYTE * CSphTokenizer_UTF8::GetTokenSyn ()
 			} else
 			{
 				iFolded = m_tLC.ToLower ( iCode );
-			}
 
-			// handle boundary
-			if ( m_bBoundary && ( iCode==0 ) ) m_bTokenBoundary = true;
-			m_bBoundary = ( iCode & FLAG_CODEPOINT_BOUNDARY )!=0;
-			if ( m_bBoundary ) iCode = iFolded = 0;
+				// handle boundary
+				if ( m_bBoundary && ( iCode==0 ) ) m_bTokenBoundary = true;
+				m_bBoundary = ( iCode & FLAG_CODEPOINT_BOUNDARY )!=0;
+				if ( m_bBoundary ) iCode = iFolded = 0;
+			}
 
 			// handle raw non-whitespace
 			if ( iFolded>0 )

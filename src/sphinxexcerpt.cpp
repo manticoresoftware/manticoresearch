@@ -708,7 +708,7 @@ bool ExcerptGen_c::ExtractPassages ( const ExcerptQuery_t & q )
 }
 
 
-bool ExcerptGen_c::ExtractPhrases ( const ExcerptQuery_t & q )
+bool ExcerptGen_c::ExtractPhrases ( const ExcerptQuery_t & )
 {
 	int iStart = 0;
 	DWORD uWords = 0;
@@ -782,13 +782,13 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & q )
 	CSphVector<Passage_t> dShow;
 	int iLeft = q.m_iLimit;
 
-	while ( iLeft>0 && m_dPassages.GetLength() )
+	while ( ( q.m_bUseBoundaries || iLeft>0 ) && m_dPassages.GetLength() )
 	{
 		// FIXME! use heap instead of sorting again every time?
 		m_dPassages.Sort ();
 		Passage_t & tPass = m_dPassages[0];
 
-		if ( tPass.m_iCodes<=iLeft )
+		if ( tPass.m_iCodes<=iLeft || q.m_bUseBoundaries )
 		{
 			// add it to the show
 			dShow.Add ( tPass );

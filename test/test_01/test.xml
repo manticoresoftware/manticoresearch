@@ -1,0 +1,47 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Test>
+  <Config>
+    <Static>indexer
+{
+	mem_limit			= 128M
+}
+
+searchd
+{
+</Static><Searchd_Settings></Searchd_Settings><Static>
+}
+
+source srclj
+{
+	type			= mysql</Static><Sql_Settings></Sql_Settings><Static>
+	sql_query = SELECT id, subject, body, author FROM test_table
+}
+</Static>
+    <Static>index lj
+{
+	source			= srclj
+	path			= data/lj
+	charset_type	= utf-8
+	min_word_len	= 0
+	min_infix_len	= 3
+	enable_star		= 1</Static>
+    <Dynamic>
+      <Variant>	prefix_fields	= </Variant>
+      <Variant>	prefix_fields	= subject</Variant>
+      <Variant>	prefix_fields	= body, author</Variant>
+    </Dynamic>
+    <Dynamic>
+      <Variant>	infix_fields	= </Variant>
+      <Variant>	infix_fields	= subject, body</Variant>
+      <Variant>	infix_fields	= author</Variant>
+    </Dynamic>
+    <Static>}</Static>
+  </Config>
+  <Query>
+    <Query_0>enab*</Query_0>
+    <Query_1>enab</Query_1>
+    <Query_2>anno</Query_2>
+    <Query_3>*dmin*</Query_3>
+    <Query_4>adm*</Query_4>
+  </Query>
+</Test>

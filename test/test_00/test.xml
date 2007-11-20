@@ -1,0 +1,49 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Test>
+  <Config>
+    <Static>indexer
+{
+	mem_limit			= 128M
+}
+
+searchd
+{</Static>
+<Searchd_Settings></Searchd_Settings><Static>
+}
+
+source srclj
+{
+	type			= mysql
+</Static><Sql_Settings></Sql_Settings><Static>
+	sql_query = SELECT id, subject, body, author FROM test_table
+}
+</Static>
+    <Static>index lj
+{
+	source			= srclj
+	path			= data/lj
+	charset_type	= utf-8</Static>
+    <Dynamic>
+      <Variant>	min_word_len	= 0</Variant>
+      <Variant>	min_word_len	= 1</Variant>
+      <Variant>	min_word_len	= 3</Variant>
+    </Dynamic>
+    <Dynamic>
+      <Variant>	min_prefix_len	= 0</Variant>
+      <Variant>	min_prefix_len	= 1</Variant>
+      <Variant>	min_prefix_len	= 3</Variant>
+    </Dynamic>
+    <Dynamic>
+      <Variant>	enable_star		= 0</Variant>
+      <Variant>	enable_star		= 1</Variant>
+    </Dynamic>
+    <Static>}</Static>
+  </Config>
+  <Query>
+    <Query_0>admin</Query_0>
+    <Query_1>*dmin*</Query_1>
+    <Query_2>ad*</Query_2>
+    <Query_3>dmin</Query_3>
+    <Query_4>adm</Query_4>
+  </Query>
+</Test>

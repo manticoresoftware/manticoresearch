@@ -34,7 +34,7 @@ public:
 		TOK_WORD,			///< just a word
 		TOK_SPACE,			///< whitespace chars seq
 		TOK_NONWORD,		///< non-word, non-space chars seq
-		TOK_BREAK			///< non-word, non-space chars seq which delimit a phrase part or boundary
+		TOK_BREAK			///< non-word chars seq which delimit a phrase part or boundary
 	};
 
 	struct Token_t
@@ -106,6 +106,7 @@ protected:
 
 	void					CalcPassageWeight ( const CSphVector<int> & dPassage, Passage_t & tPass, int iMaxWords );
 	bool					ExtractPassages ( const ExcerptQuery_t & q );
+	bool					ExtractPhrases ( const ExcerptQuery_t & q );
 
 	void					HighlightAll ( const ExcerptQuery_t & q );
 	void					HighlightStart ( const ExcerptQuery_t & q );
@@ -415,22 +416,17 @@ void ExcerptGen_c::SubmitCodepoint ( CSphVector<Token_t> & dBuf, int iCode )
 {
 	// find out its type
 	Token_e eType = TOK_NONE;
-	int iLC = 0;
+	int iLC = m_tLC.ToLower ( iCode );
 	if ( iCode )
 	{
-		if ( iCode<256 )
-		{
-			if ( myisbreak(iCode) )
-				eType = TOK_BREAK;
-			else if ( isspace(iCode) )
-				eType = TOK_SPACE;
-		}
+		if ( iCode<256 && isspace(iCode) )
+			eType = TOK_SPACE;
 
-		if ( eType==TOK_NONE )
-		{
-			iLC = m_tLC.ToLower ( iCode );
+		else if ( iLC & 0x10000000UL ) // FIXME! FLAG_CODEPOINT_BOUNDARY
+			eType = TOK_BREAK;
+
+		else
 			eType = iLC ? TOK_WORD : TOK_NONWORD;
-		}
 	}
 
 	// add the codepoint
@@ -595,15 +591,16 @@ void ExcerptGen_c::CalcPassageWeight ( const CSphVector<int> & dPassage, Passage
 
 bool ExcerptGen_c::ExtractPassages ( const ExcerptQuery_t & q )
 {
-	// my current passage
-	CSphVector<int> dPass;
-
-	// initialize
-	Passage_t tPass;
-	tPass.Reset ();
-
 	m_dPassages.Reserve ( 256 );
 	m_dPassages.Resize ( 0 );
+
+	if ( q.m_bUseBoundaries )
+		return ExtractPhrases ( q );
+
+	// my current passage
+	CSphVector<int> dPass;
+	Passage_t tPass;
+	tPass.Reset ();
 
 	int iMaxWords = 2*q.m_iAround+1;
 	int iLCSThresh = m_bExactPhrase ? m_dWords.GetLength()*iMaxWords : 0;
@@ -711,6 +708,62 @@ bool ExcerptGen_c::ExtractPassages ( const ExcerptQuery_t & q )
 }
 
 
+bool ExcerptGen_c::ExtractPhrases ( const ExcerptQuery_t & q )
+{
+	int iStart = 0;
+	DWORD uWords = 0;
+
+	ARRAY_FOREACH ( iTok, m_dTokens )
+	{
+		// phrase boundary found, go flush
+		if ( m_dTokens[iTok].m_eType==TOK_BREAK || m_dTokens[iTok].m_eType==TOK_NONE )
+		{
+			// where's my ending token
+			int iEnd = iTok;
+			if ( m_dTokens[iTok].m_eType==TOK_NONE )
+				iEnd--;
+
+			// emit non-empty phrases with matching words as passages
+			if ( iStart<iEnd && uWords!=0 )
+			{
+				Passage_t tPass;
+				tPass.Reset ();
+
+				tPass.m_iStart = iStart;
+				tPass.m_iTokens = iEnd-iStart+1;
+
+				CSphVector<int> dPass;
+				for ( int i=iStart; i<=iEnd; i++ )
+				{
+					tPass.m_iCodes += m_dTokens[i].m_iLength;
+					if ( m_dTokens[iTok].m_eType==TOK_WORD )
+						dPass.Add ( i );
+				}
+
+				CalcPassageWeight ( dPass, tPass, 1000 );
+				m_dPassages.Add ( tPass );
+			}
+
+			// skip until first word or EOF
+			while ( m_dTokens[iTok].m_eType!=TOK_WORD && m_dTokens[iTok].m_eType!=TOK_NONE )
+				iTok++;
+			if ( m_dTokens[iTok].m_eType==TOK_NONE )
+				break;
+
+			assert ( m_dTokens[iTok].m_eType==TOK_WORD );
+			iStart = iTok;
+			uWords = 0;
+		}
+
+		// just an incoming token
+		if ( m_dTokens[iTok].m_eType==TOK_WORD )
+			uWords |= m_dTokens[iTok].m_uWords;
+	}
+
+	return m_dPassages.GetLength()!=0;
+}
+
+
 struct PassageOrder_fn
 {
 	inline bool operator () ( const ExcerptGen_c::Passage_t & a, const ExcerptGen_c::Passage_t & b ) const
@@ -785,7 +838,7 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & q )
 				iLength += m_dTokens[iTok].m_iLength;
 		iLast = iEnd;
 	}
-	if ( iLength<q.m_iLimit )
+	if ( iLength<q.m_iLimit && !q.m_bUseBoundaries )
 	{
 		// word id is no longer needed; we'll use it to store index into dShow
 		ARRAY_FOREACH ( i, m_dTokens )

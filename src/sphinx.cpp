@@ -2707,7 +2707,7 @@ bool ISphTokenizer::SetBoundary ( const char * sConfig, CSphString & sError )
 		for ( int j=dRemaps[i].m_iStart; j<=dRemaps[i].m_iEnd; j++ )
 			if ( m_tLC.ToLower(j) )
 		{
-			sError.SetSprintf ( "phrase boundary characters must not be present in valid characters table (code=U+%x)", j );
+			sError.SetSprintf ( "phrase boundary characters must not be present in characters table, nor synonyms list, nor N-gram chars list (code=U+%x)", j );
 			return false;
 		}
 	}

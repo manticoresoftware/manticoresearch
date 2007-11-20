@@ -832,6 +832,7 @@ class SphinxClient
 		if ( !isset($opts["around"]) )				$opts["around"] = 5;
 		if ( !isset($opts["exact_phrase"]) )		$opts["exact_phrase"] = false;
 		if ( !isset($opts["single_passage"]) )		$opts["single_passage"] = false;
+		if ( !isset($opts["use_boundaries"]) )		$opts["use_boundaries"] = false;
 
 		/////////////////
 		// build request
@@ -841,6 +842,7 @@ class SphinxClient
 		$flags = 1; // remove spaces
 		if ( $opts["exact_phrase"] )	$flags |= 2;
 		if ( $opts["single_passage"] )	$flags |= 4;
+		if ( $opts["use_boundaries"] )	$flags |= 8;
 		$req = pack ( "NN", 0, $flags ); // mode=0, flags=$flags
 		$req .= pack ( "N", strlen($index) ) . $index; // req index
 		$req .= pack ( "N", strlen($words) ) . $words; // req words

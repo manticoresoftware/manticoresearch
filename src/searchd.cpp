@@ -3466,6 +3466,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	const int EXCERPT_FLAG_REMOVESPACES		= 1;
 	const int EXCERPT_FLAG_EXACTPHRASE		= 2;
 	const int EXCERPT_FLAG_SINGLEPASSAGE	= 4;
+	const int EXCERPT_FLAG_USEBOUNDARIES	= 8;
 
 	// v.1.0
 	ExcerptQuery_t q;
@@ -3492,6 +3493,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	q.m_bRemoveSpaces = ( iFlags & EXCERPT_FLAG_REMOVESPACES )!=0;
 	q.m_bExactPhrase = ( iFlags & EXCERPT_FLAG_EXACTPHRASE )!=0;
 	q.m_bSinglePassage = ( iFlags & EXCERPT_FLAG_SINGLEPASSAGE )!=0;
+	q.m_bUseBoundaries = ( iFlags & EXCERPT_FLAG_USEBOUNDARIES )!=0;
 
 	int iCount = tReq.GetInt ();
 	if ( iCount<0 || iCount>EXCERPT_MAX_ENTRIES )

@@ -933,6 +933,7 @@ public class SphinxClient
 		if (!opts.containsKey("around")) opts.put("around", new Integer(5));
 		if (!opts.containsKey("exact_phrase")) opts.put("exact_phrase", new Integer(0));
 		if (!opts.containsKey("single_passage")) opts.put("single_passage", new Integer(0));
+		if (!opts.containsKey("use_boundaries")) opts.put("use_boundaries", new Integer(0));
 
 		/* build request */
 		ByteArrayOutputStream req = new ByteArrayOutputStream();
@@ -946,6 +947,7 @@ public class SphinxClient
 			int iFlags = 1; // remove_spaces
 			if ( ((Integer)opts.get("exact_phrase"))!=0 )	iFlags |= 2;
 			if ( ((Integer)opts.get("single_passage"))!=0 )	iFlags |= 4;
+			if ( ((Integer)opts.get("use_boundaries"))!=0 )	iFlags |= 8;
 			rqData.writeInt ( iFlags );
 			writeNetUTF8(rqData, index);
 			writeNetUTF8(rqData, words);

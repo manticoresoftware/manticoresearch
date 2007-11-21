@@ -517,7 +517,6 @@ class SphinxConfig
 
 function RunTest ( $test_dir )
 {
-	$test_dir 	= "test_00/";
 	$model_file = $test_dir."model.bin";
 	$conf_dir 	= $test_dir."Conf";
 

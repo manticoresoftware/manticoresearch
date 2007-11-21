@@ -958,7 +958,7 @@ class SphinxClient
 			return -1;
 
 		// parse response
-		list(,$updated) = unpack ( "N*", substr ( $response, $p, 4 ) );
+		list(,$updated) = unpack ( "N*", substr ( $response, 0, 4 ) );
 		return $updated;
 	}
 }

@@ -15,15 +15,73 @@ $db_pwd				= "";
 $db_name			= "test";
 $db_port			= 3306;
 
+$g_model			= false;
+
 require_once ( "helpers.php" );
 
+//////////////////////
+// parse command line
+//////////////////////
+
+$args = $_SERVER["argv"];
+array_shift ( $args );
+
+if ( !is_array($args) || empty($args) )
+{
+	print ( "Usage: php -f ubertest.php <MODE> [OPTIONS]\n\n" );
+	print ( "Modes are:\n" );
+	print ( "g, gen\t\t\tgenerate reference ('model') test results\n" );
+	print ( "t, test\t\t\trun tests and compare results to reference\n" );
+	print ( "\nOptions are:\n" );
+	print ( "-u, --user <USER>\tuse 'USER' as MySQL user\n" );
+	print ( "-P, --password <PASS>\tuse 'PASS' as MySQL password\n" );
+	print ( "\nExamples:\n" );
+	print ( "php ubertest.php gen\n" );
+	print ( "php ubertest.php t --user test --password test\n" );
+	exit ( 0 );
+}
+
+$run = false;
+for ( $i=0; $i<count($args); $i++ )
+{
+	$arg = $args[$i];
+
+	if ( false );
+	else if ( $arg=="g" || $arg=="gen" )			{ $g_model = true; $run = true; }
+	else if ( $arg=="t" || $arg=="test" )			{ $g_model = false; $run = true; }
+	else if ( $arg=="-u" || $arg=="--user" )		$db_user = $args[++$i];
+	else if ( $arg=="-P" || $arg=="--password" )	$db_pwd = $args[++$i];
+	else
+	{
+		print ( "ERROR: unknown option '$arg'; run with no arguments for help screen.\n" );
+		exit ( 1 );
+	}
+}
+if ( !$run )
+{
+	print ( "ERROR: no run mode defined; run with no arguments for help screen.\n" );
+	exit ( 1 );
+}
+
+/////////////
+// run tests
+/////////////
+
 if ( IsModelGenMode () )
-	print ( "Model generation is ON\n" );
+	print ( "GENERATING REFERENCE TEST RESULTS\n\n" );
+else
+	print ( "PERFORMING AUTOMATED TESTING\n\n" );
 
-require_once ( "test_00/test.php" );
-require_once ( "test_01/test.php" );
 
-RunTest_00 ();
-RunTest_01 ();
+$dh = opendir ( "." );
+while ( $entry = readdir($dh) )
+{
+	if ( substr ( $entry,0,4 )!="test" )
+		continue;
+
+	// FIXME! should fetch and print human-readable test description from $entry/test.xml here
+	printf ( "Running test '$entry'...\n" );
+	RunTest ( $entry );
+}
 
 ?>

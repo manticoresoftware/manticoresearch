@@ -10,9 +10,9 @@ $sd_pid_file		= "searchd.pid";
 $sd_max_matches		=  100000;
 
 $db_host			= "localhost";
-$db_user			= "glook";
+$db_user			= "root";
 $db_pwd				= "";
-$db_name			= "glook";
+$db_name			= "test";
 $db_port			= 3306;
 
 require_once ( "helpers.php" );

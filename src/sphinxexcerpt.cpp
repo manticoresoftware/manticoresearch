@@ -54,6 +54,7 @@ public:
 		int					m_iCodes;		///< codepoints count
 		DWORD				m_uWords;		///< matching query words mask
 		int					m_iWordsWeight;	///< passage weight factor
+		int					m_iWordCount;	///< passage weight factor
 		int					m_iMaxLCS;		///< passage weight factor
 		int					m_iMinGap;		///< passage weight factor
 
@@ -64,13 +65,14 @@ public:
 			m_iCodes = 0;
 			m_uWords = 0;
 			m_iWordsWeight = 0;
+			m_iWordCount = 0;
 			m_iMaxLCS = 0;
 			m_iMinGap = 0;
 		}
 
 		inline int GetWeight () const
 		{
-			return m_iWordsWeight*m_iMaxLCS + m_iMinGap;
+			return m_iWordCount + m_iWordsWeight*m_iMaxLCS + m_iMinGap;
 		}
 	};
 
@@ -104,7 +106,7 @@ protected:
 	bool					TokensMatch ( const Token_t & a, const Token_t & b);
 	int						TokenLen ( int iPos, int bRemoveSpaces );
 
-	void					CalcPassageWeight ( const CSphVector<int> & dPassage, Passage_t & tPass, int iMaxWords );
+	void					CalcPassageWeight ( const CSphVector<int> & dPassage, Passage_t & tPass, int iMaxWords, int iWordCountCoeff );
 	bool					ExtractPassages ( const ExcerptQuery_t & q );
 	bool					ExtractPhrases ( const ExcerptQuery_t & q );
 
@@ -538,7 +540,7 @@ void ExcerptGen_c::ResultEmit ( const Token_t & sTok )
 
 /////////////////////////////////////////////////////////////////////////////
 
-void ExcerptGen_c::CalcPassageWeight ( const CSphVector<int> & dPassage, Passage_t & tPass, int iMaxWords )
+void ExcerptGen_c::CalcPassageWeight ( const CSphVector<int> & dPassage, Passage_t & tPass, int iMaxWords, int iWordCountCoeff )
 {
 	DWORD uLast = 0;
 	int iLCS = 1;
@@ -579,13 +581,18 @@ void ExcerptGen_c::CalcPassageWeight ( const CSphVector<int> & dPassage, Passage
 
 	// calc final weight
 	tPass.m_iWordsWeight = 0;
+	tPass.m_iWordCount = 0;
 
 	DWORD uWords = tPass.m_uWords;
 	for ( int iWord=0; uWords; uWords>>=1, iWord++ )
 		if ( uWords & 1 )
-			tPass.m_iWordsWeight += m_dWords[iWord].m_iWeight;
+	{
+		tPass.m_iWordsWeight += m_dWords[iWord].m_iWeight;
+		tPass.m_iWordCount++;
+	}
 
 	tPass.m_iMaxLCS *= iMaxWords;
+	tPass.m_iWordCount *= iWordCountCoeff;
 }
 
 
@@ -632,7 +639,7 @@ bool ExcerptGen_c::ExtractPassages ( const ExcerptQuery_t & q )
 
 	if ( tPass.m_uWords )
 	{
-		CalcPassageWeight ( dPass, tPass, iMaxWords );
+		CalcPassageWeight ( dPass, tPass, iMaxWords, 0 );
 		if ( tPass.m_iMaxLCS>=iLCSThresh )
 			m_dPassages.Add ( tPass );
 	}
@@ -678,7 +685,7 @@ bool ExcerptGen_c::ExtractPassages ( const ExcerptQuery_t & q )
 		dPass.Add ( iAdd );
 
 		// re-weight current passage, and check if it matches
-		CalcPassageWeight ( dPass, tPass, iMaxWords );
+		CalcPassageWeight ( dPass, tPass, iMaxWords, 0 );
 		if ( !tPass.m_uWords || tPass.m_iMaxLCS<iLCSThresh )
 			continue;
 
@@ -736,11 +743,11 @@ bool ExcerptGen_c::ExtractPhrases ( const ExcerptQuery_t & )
 				for ( int i=iStart; i<=iEnd; i++ )
 				{
 					tPass.m_iCodes += m_dTokens[i].m_iLength;
-					if ( m_dTokens[iTok].m_eType==TOK_WORD )
+					if ( m_dTokens[i].m_eType==TOK_WORD )
 						dPass.Add ( i );
 				}
 
-				CalcPassageWeight ( dPass, tPass, 1000 );
+				CalcPassageWeight ( dPass, tPass, 100, 10000 );
 				m_dPassages.Add ( tPass );
 			}
 

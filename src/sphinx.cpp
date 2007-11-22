@@ -11029,7 +11029,7 @@ bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, C
 		if ( tFilter.m_sAttrName=="@geodist" )
 		{
 			assert ( pQuery->m_bCalcGeodist );
-			tFilter.m_iBitOffset = 0; // to avoid ignoring
+			tFilter.m_iBitOffset = m_tSchema.GetRealRowSize() * ROWITEM_BITS; // to avoid ignoring
 			tFilter.m_iBitCount = 0;
 			tFilter.m_bMva = false;
 			tFilter.m_iRowitem = m_tSchema.GetRealRowSize ();

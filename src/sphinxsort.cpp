@@ -1212,6 +1212,7 @@ static ISphMatchSorter * sphCreateSorter2nd ( ESphSortFunc eGroupFunc, bool bGro
 			case FUNC_GENERIC3:		return sphCreateSorter3rd<COMPMATCH,MatchGeneric3_fn<true> >	( bDistinct, arg ); break;
 			case FUNC_GENERIC4:		return sphCreateSorter3rd<COMPMATCH,MatchGeneric4_fn<true> >	( bDistinct, arg ); break;
 			case FUNC_GENERIC5:		return sphCreateSorter3rd<COMPMATCH,MatchGeneric5_fn<true> >	( bDistinct, arg ); break;
+			case FUNC_CUSTOM:		return sphCreateSorter3rd<COMPMATCH,MatchCustom_fn<true> >		( bDistinct, arg ); break;
 			default:				return NULL;
 		}
 	} else
@@ -1222,6 +1223,7 @@ static ISphMatchSorter * sphCreateSorter2nd ( ESphSortFunc eGroupFunc, bool bGro
 			case FUNC_GENERIC3:		return sphCreateSorter3rd<COMPMATCH,MatchGeneric3_fn<false> >	( bDistinct, arg ); break;
 			case FUNC_GENERIC4:		return sphCreateSorter3rd<COMPMATCH,MatchGeneric4_fn<false> >	( bDistinct, arg ); break;
 			case FUNC_GENERIC5:		return sphCreateSorter3rd<COMPMATCH,MatchGeneric5_fn<false> >	( bDistinct, arg ); break;
+			case FUNC_CUSTOM:		return sphCreateSorter3rd<COMPMATCH,MatchCustom_fn<false> >		( bDistinct, arg ); break;
 			default:				return NULL;
 		}
 	}
@@ -1243,6 +1245,7 @@ static ISphMatchSorter * sphCreateSorter1st ( ESphSortFunc eMatchFunc, bool bMat
 			case FUNC_GENERIC3:		return sphCreateSorter2nd<MatchGeneric3_fn<true> >		( eGroupFunc, bGroupBits, bDistinct, arg ); break;
 			case FUNC_GENERIC4:		return sphCreateSorter2nd<MatchGeneric4_fn<true> >		( eGroupFunc, bGroupBits, bDistinct, arg ); break;
 			case FUNC_GENERIC5:		return sphCreateSorter2nd<MatchGeneric5_fn<true> >		( eGroupFunc, bGroupBits, bDistinct, arg ); break;
+			case FUNC_CUSTOM:		return sphCreateSorter2nd<MatchCustom_fn<true> >		( eGroupFunc, bGroupBits, bDistinct, arg ); break;
 			default:				return NULL;
 		}
 	} else
@@ -1257,6 +1260,7 @@ static ISphMatchSorter * sphCreateSorter1st ( ESphSortFunc eMatchFunc, bool bMat
 			case FUNC_GENERIC3:		return sphCreateSorter2nd<MatchGeneric3_fn<false> >		( eGroupFunc, bGroupBits, bDistinct, arg ); break;
 			case FUNC_GENERIC4:		return sphCreateSorter2nd<MatchGeneric4_fn<false> >		( eGroupFunc, bGroupBits, bDistinct, arg ); break;
 			case FUNC_GENERIC5:		return sphCreateSorter2nd<MatchGeneric5_fn<false> >		( eGroupFunc, bGroupBits, bDistinct, arg ); break;
+			case FUNC_CUSTOM:		return sphCreateSorter2nd<MatchCustom_fn<false> >		( eGroupFunc, bGroupBits, bDistinct, arg ); break;
 			default:				return NULL;
 		}
 	}

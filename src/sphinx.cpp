@@ -12187,6 +12187,9 @@ void CSphSource_Document::SetupFieldMatch ( const char * szPrefixFields, const c
 {
 	m_sPrefixFields = szPrefixFields;
 	m_sInfixFields = szInfixFields;
+
+	m_sPrefixFields.ToLower ();
+	m_sInfixFields.ToLower ();
 }
 
 

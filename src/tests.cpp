@@ -191,13 +191,21 @@ void BenchUTF8Tokenizer ()
 			pTokenizer->LoadSynonyms ( g_sTmpfile, sError );
 		pTokenizer->AddSpecials ( "!-" );
 
+		const int iPasses = 50;
 		int iTokens = 0;
-		float fTime = -sphLongTimer ();
-		pTokenizer->SetBuffer ( (BYTE*)sData, iData );
-		while ( pTokenizer->GetToken() ) iTokens++;
-		fTime += sphLongTimer ();
-		printf ( "run %d: %d bytes, %d tokens, %.3f ms, %.3f MB/sec\n", iRun, iData, iTokens, 1000.0f*fTime, iData/fTime/1000000.0f );
 
+		float fTime = -sphLongTimer ();
+		for ( int iPass=0; iPass<iPasses; iPass++ )
+		{
+			pTokenizer->SetBuffer ( (BYTE*)sData, iData );
+			while ( pTokenizer->GetToken() ) iTokens++;
+		}
+		fTime += sphLongTimer ();
+
+		iTokens /= iPasses;
+		fTime /= iPasses;
+
+		printf ( "run %d: %d bytes, %d tokens, %.3f ms, %.3f MB/sec\n", iRun, iData, iTokens, 1000.0f*fTime, iData/fTime/1000000.0f );
 		SafeDeleteArray ( sData );
 	}
 }

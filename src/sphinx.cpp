@@ -2656,6 +2656,21 @@ bool ISphTokenizer::LoadSynonyms ( const char * sFilename, CSphString & sError )
 	// sort the list
 	m_dSynonyms.Sort ();
 
+	// build simple lookup table
+	m_dSynStart.Resize ( 256 );
+	m_dSynEnd.Resize ( 256 );
+	for ( int i=0; i<256; i++ )
+	{
+		m_dSynStart[i] = INT_MAX;
+		m_dSynEnd[i] = -INT_MAX;
+	}
+	ARRAY_FOREACH ( i, m_dSynonyms )
+	{
+		int iCh = *(BYTE*)(m_dSynonyms[i].m_sFrom.cstr());
+		m_dSynStart[iCh] = Min ( m_dSynStart[iCh], i );
+		m_dSynEnd[iCh] = Max ( m_dSynEnd[iCh], i );
+	}
+
 	// add synonym-only remaps
 	CSphVector<CSphRemapRange> dRemaps;
 	dRemaps.Reserve ( hSynonymOnly.GetLength() );
@@ -3074,13 +3089,20 @@ BYTE * CSphTokenizer_UTF8::GetTokenSyn ()
 				iTest = sphUTF8Encode ( sTest, iMasked );
 			}
 
-
 			// refine synonyms range
 			#define LOC_RETURN_SYNONYM(_idx) \
 			{ \
 				strcpy ( (char*)m_sAccum, m_dSynonyms[_idx].m_sTo.cstr() ); \
 				m_iLastTokenLen = m_dSynonyms[_idx].m_iToLen; \
 				return m_sAccum; \
+			}
+
+			if ( iSynOff==0 )
+			{
+				iSynStart = m_dSynStart[sTest[0]];
+				iSynEnd = m_dSynEnd[sTest[0]];
+				if ( iSynStart>iSynEnd )
+					break;
 			}
 
 			SynCheck_e eStart = SynCheckPrefix ( m_dSynonyms[iSynStart], iSynOff, sTest, iTest );

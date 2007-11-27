@@ -4,10 +4,6 @@ require_once ( "../api/sphinxapi.php" );
 
 $windows = isset($_SERVER["WINDIR"]) || isset($_SERVER["windir"]) || isset($_SERVER["HOMEDRIVE"]);
 
-$indexer_path = "../src/indexer";
-$searchd_path = "../src/searchd";
-
-
 class TestResult
 {
 	public	$_tests_total;
@@ -120,31 +116,43 @@ function WriteQueryResults ( $results, $handle )
 }
 
 
-function RunIndexer ()
+function RunIndexer ( &$error )
 {
 	global $windows, $indexer_path;
 
 	$retval = 0;
 
-	if ( $windows )
-		system ( "indexer --config config.conf --all > NUL", $retval );
-	else
-		system ( "$indexer_path --config config.conf --all > /dev/null", $retval );
+	system ( "$indexer_path --quiet --config config.conf --all > error.txt", $retval );
+	$error = file_get_contents ( "error.txt" );
 
-	return $retval;
+	if ( $retval == 0  )
+	{
+		if ( empty ( $error ) )
+			return 0;
+		else
+			return 2;
+	}
+
+	return 1;
 }
 
 
-function StartSearchd ()
+function StartSearchd ( &$error )
 {
 	global $windows, $searchd_path;
 
 	$retval = 0;
 
 	if ( $windows )
-		system ( "net start searchd > NUL", $retval );
+	{
+		$process = popen ("start $searchd_path --config config.conf --pidfile > error.txt", "r" );
+		pclose ( $process );
+	}
 	else
-		system ( "$searchd_path --config config.conf > /dev/null", $retval );
+		system ( "$searchd_path --config config.conf > error.txt", $retval );
+
+	if ( $retval != 0 )
+		$error = file_get_contents ( "error.txt" );
 
 	return $retval;
 }
@@ -157,7 +165,7 @@ function StopSearchd ()
 	$retval = 0;
 
 	if ( $windows )
-		system ( "net stop searchd > NUL", $retval );
+		system ( "$searchd_path --config config.conf --stop > NUL", $retval );
 	else
 	{
 		if ( file_exists ( $sd_pid_file ) )
@@ -431,12 +439,17 @@ class SphinxConfig
 	}
 
 
-	function WriteResults ( $handle )
+	function WriteReportHeader ( $handle )
 	{
 		fprintf ( $handle, "==== Run:  %d ====\n", $this->SubtestNo () + 1 );
 		fwrite ( $handle, "Settings:\n" );
 		$this->WriteDiff ( $handle );
 		fwrite ( $handle, "\n" );
+	}
+
+
+	function WriteResults ( $handle )
+	{
 		WriteQueryResults ( $this->_results, $handle );
 	}
 
@@ -575,27 +588,38 @@ function RunTest ( $test_dir )
 	$report = fopen ( $test_dir."report.txt", "w" );
 
 	$nfailed = 0;
+	$error = "";
 
 	while ( $config->CreateNextConfig ( "config.conf" ) )
 	{
-		StopSearchd ();
-
 		printf ( "\r\tRunning subtest %d...", $config->SubtestNo () + 1 );
+		$config->WriteReportHeader ( $report );
+
+		StopSearchd ();
 
 		$config->Write ( $conf_dir."/"."config_".$config->SubtestNo ().".conf" );
 
-		$error = "";
-		if ( RunIndexer () != 0 )
+		$indexer_ret = RunIndexer ( $error );
+
+		switch ( $indexer_ret )
 		{
-			print ( "Error running indexer... FAILED\n" );
-			$nfailed++;
-			$config->SubtestFinished ();
-			continue;
+			case 2:
+				fwrite ( $report, "$error\n" );
+				break;
+
+			case 1:
+				print ( "Error running indexer... FAILED\n" );
+				$nfailed++;
+				fwrite ( $report, "$error\n" );
+				$config->SubtestFinished ();
+				continue;
 		}
 
-		if ( StartSearchd () != 0 )
+
+		if ( StartSearchd ( $error ) != 0 )
 		{
 			print ( "Error starting searchd... FAILED\n" );
+			fwrite ( $report, "$error\n" );
 			$nfailed++;
 			$config->SubtestFinished ();
 			continue;
@@ -605,6 +629,7 @@ function RunTest ( $test_dir )
 		if ( ! $config->RunQuery ( "*", $error ) )
 		{
 			print ( "Error running query: $error... FAILED\n" );
+			fwrite ( $report, "$error\n" );
 			$nfailed++;
 			$config->SubtestFinished ();
 			continue;
@@ -624,7 +649,7 @@ function RunTest ( $test_dir )
 
 	fclose ( $report );
 
-	printf ( "\r\t%d subtests total, %d failed\n", $config->SubtestNo () + 1, $nfailed );
+	printf ( "\r\t%d subtests total, %d failed\n", $config->SubtestNo (), $nfailed );
 
 	mysql_close ( $db_link );
 

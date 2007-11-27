@@ -19,6 +19,18 @@ $g_model			= false;
 
 require_once ( "helpers.php" );
 
+if ( $windows )
+{
+	$indexer_path = "..\\bin\\debug\\indexer";
+	$searchd_path = "..\\bin\\debug\\searchd";
+}
+else
+{
+	$indexer_path = "../src/indexer";
+	$searchd_path = "../src/searchd";
+}
+
+
 //////////////////////
 // parse command line
 //////////////////////
@@ -35,6 +47,8 @@ if ( !is_array($args) || empty($args) )
 	print ( "\nOptions are:\n" );
 	print ( "-u, --user <USER>\tuse 'USER' as MySQL user\n" );
 	print ( "-P, --password <PASS>\tuse 'PASS' as MySQL password\n" );
+	print ( "-i, --indexer <PATH>\tpath to indexer\n" );
+	print ( "-s, --searchd <PATH>\tpath to searchd\n" );
 	print ( "\nExamples:\n" );
 	print ( "php ubertest.php gen\n" );
 	print ( "php ubertest.php t --user test --password test\n" );
@@ -51,6 +65,8 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="t" || $arg=="test" )			{ $g_model = false; $run = true; }
 	else if ( $arg=="-u" || $arg=="--user" )		$db_user = $args[++$i];
 	else if ( $arg=="-P" || $arg=="--password" )	$db_pwd = $args[++$i];
+	else if ( $arg=="-i" || $arg=="--indexer" )		$indexer_path = $args[++$i];
+	else if ( $arg=="-s" || $arg=="--searchd" )		$searchd_path = $args[++$i];
 	else
 	{
 		print ( "ERROR: unknown option '$arg'; run with no arguments for help screen.\n" );
@@ -81,5 +97,7 @@ while ( $entry = readdir($dh) )
 
 	RunTest ( $entry );
 }
+
+unlink ( "error.txt" );
 
 ?>

@@ -4,6 +4,9 @@ require_once ( "../api/sphinxapi.php" );
 
 $windows = isset($_SERVER["WINDIR"]) || isset($_SERVER["windir"]) || isset($_SERVER["HOMEDRIVE"]);
 
+$indexer_path = "../src/indexer";
+$searchd_path = "../src/searchd";
+
 
 class TestResult
 {
@@ -18,7 +21,7 @@ class TestResult
 }
 
 
-function CreateDB ( $db_drop_path, $db_create_path, $db_insert_path )
+function CreateDB ( $db_drop, $db_create, $db_insert )
 {
 	global $db_host, $db_user, $db_pwd, $db_name, $db_port;
 
@@ -36,27 +39,15 @@ function CreateDB ( $db_drop_path, $db_create_path, $db_insert_path )
 	if ( $result == FALSE )
 		return FALSE;
 
-	$query = file_get_contents ( $db_drop_path );
-	if ( $query == FALSE )
-		return FALSE;
-
-	$result = mysql_query ( $query, $link );
+	$result = mysql_query ( $db_drop, $link );
 	if ( $result == FALSE )
 		return FALSE;
 
-	$query = file_get_contents ( $db_create_path );
-	if ( $query == FALSE )
-		return FALSE;
-
-	$result = mysql_query ( $query, $link );
+	$result = mysql_query ( $db_create, $link );
 	if ( $result == FALSE )
 		return FALSE;
 
-	$query = file_get_contents ( $db_insert_path );
-	if ( $query == FALSE )
-		return FALSE;
-
-	$result = mysql_query ( $query, $link );
+	$result = mysql_query ( $db_insert, $link );
 	if ( $result == FALSE )
 		return FALSE;
 
@@ -131,14 +122,14 @@ function WriteQueryResults ( $results, $handle )
 
 function RunIndexer ()
 {
-	global $windows;
+	global $windows, $indexer_path;
 
 	$retval = 0;
 
 	if ( $windows )
 		system ( "indexer --config config.conf --all > NUL", $retval );
 	else
-		system ( "./indexer --config config.conf --all > /dev/null", $retval );
+		system ( "$indexer_path --config config.conf --all > /dev/null", $retval );
 
 	return $retval;
 }
@@ -146,14 +137,14 @@ function RunIndexer ()
 
 function StartSearchd ()
 {
-	global $windows;
+	global $windows, $searchd_path;
 
 	$retval = 0;
 
 	if ( $windows )
 		system ( "net start searchd > NUL", $retval );
 	else
-		system ( "./searchd --config config.conf > /dev/null", $retval );
+		system ( "$searchd_path --config config.conf > /dev/null", $retval );
 
 	return $retval;
 }
@@ -161,7 +152,7 @@ function StartSearchd ()
 
 function StopSearchd ()
 {
-	global $sd_pid_file, $windows;
+	global $sd_pid_file, $windows, $searchd_path;
 
 	$retval = 0;
 
@@ -171,7 +162,7 @@ function StopSearchd ()
 	{
 		if ( file_exists ( $sd_pid_file ) )
 		{
-			system ( "./searchd --config config.conf --stop > /dev/null", $retval );
+			system ( "$searchd_path --config config.conf --stop > /dev/null", $retval );
 			while ( file_exists ( $sd_pid_file ) )
 				usleep ( 50000 );
 		}
@@ -207,6 +198,10 @@ function GetTreeRoot ( $node, $name )
 
 class SphinxConfig
 {
+	private $_name;
+	private $_db_create;
+	private $_db_drop;
+	private $_db_insert;
 	private $_counters;
 	private $_dynamic_entries;
 	private $_queries;
@@ -214,8 +209,8 @@ class SphinxConfig
 	private $_subtest;
 	private $_results;
 	private $_results_model;
-
-
+	
+	
 	function SphinxConfig ()
 	{
 		$this->_counters 		= array ();
@@ -230,6 +225,30 @@ class SphinxConfig
 	function SubtestNo ()
 	{
 		return $this->_subtest;
+	}
+
+
+	function Name ()
+	{
+		return $this->_name;
+	}
+
+
+	function DB_Drop ()
+	{
+		return $this->_db_drop;
+	}
+
+
+	function DB_Create ()
+	{
+		return $this->_db_create;
+	}
+
+
+	function DB_Insert ()
+	{
+		return $this->_db_insert;
 	}
 
 
@@ -311,6 +330,22 @@ class SphinxConfig
 		$this->_xml->load ( $config_file );
 		$this->GatherNodes ( GetTreeRoot ( $this->_xml, "config" ) );
 		$this->GatherQueries ( GetTreeRoot ( $this->_xml, "query" ) );
+
+		$name = GetTreeRoot ( $this->_xml, "name" );
+		if ( $name )
+			$this->_name = $name->nodeValue;
+
+		$db_create = GetTreeRoot ( $this->_xml, "db_create" );
+		if ( $db_create )
+			$this->_db_create = $db_create->nodeValue;
+
+		$db_drop = GetTreeRoot ( $this->_xml, "db_drop" );
+		if ( $db_drop )
+			$this->_db_drop = $db_drop->nodeValue;
+
+		$db_insert = GetTreeRoot ( $this->_xml, "db_insert" );
+		if ( $db_insert )
+			$this->_db_insert = $db_insert->nodeValue;
 	}
 
 
@@ -517,19 +552,23 @@ class SphinxConfig
 
 function RunTest ( $test_dir )
 {
+	$test_dir = $test_dir."/";
+
 	$model_file = $test_dir."model.bin";
 	$conf_dir 	= $test_dir."Conf";
 
-	$db_link = CreateDB ( $test_dir."db_drop.sql", $test_dir."db_create.sql", $test_dir."db_insert.sql" );
+	$config = new SphinxConfig;
+	$config->Load ( $test_dir."test.xml" );
+
+	printf ( "Running test '%s'...\n", $config->Name () );
+
+	$db_link = CreateDB ( $config->DB_Drop (), $config->DB_Create (), $config->DB_Insert () );
 	if ( ! $db_link )
 		die ( "Error creating test database\n" );
 
-	$config = new SphinxConfig;
-	$config->Load ( $test_dir."test.xml" );
 	if ( ! $config->LoadModel ( $model_file ) )
 		die ( "Error loading model\n" );
-		
-	
+
 	if ( ! file_exists ( $conf_dir ) )
 		mkdir ( $conf_dir );
 

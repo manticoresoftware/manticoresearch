@@ -79,8 +79,6 @@ while ( $entry = readdir($dh) )
 	if ( substr ( $entry,0,4 )!="test" )
 		continue;
 
-	// FIXME! should fetch and print human-readable test description from $entry/test.xml here
-	printf ( "Running test '$entry'...\n" );
 	RunTest ( $entry );
 }
 

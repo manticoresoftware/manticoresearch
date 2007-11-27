@@ -4631,6 +4631,27 @@ void ShowHelp ()
 }
 
 
+#if USE_WINDOWS
+BOOL WINAPI CtrlHandler ( DWORD )
+{
+	g_bGotSigterm = true;
+	return TRUE;
+}
+
+BOOL CALLBACK TerminateAppEnum ( HWND hwnd, LPARAM lParam )
+{
+	DWORD dwID;
+
+	GetWindowThreadProcessId ( hwnd, &dwID ) ;
+
+	if( dwID == (DWORD)lParam )
+		PostMessage(hwnd, WM_CLOSE, 0, 0) ;
+
+	return TRUE;
+}
+#endif
+
+
 int WINAPI ServiceMain ( int argc, char **argv )
 {
 #if USE_WINDOWS
@@ -4671,6 +4692,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	const char *	sOptConfig		= NULL;
 	bool			bOptConsole		= false;
 	bool			bOptStop		= false;
+	bool			bOptPIDFile		= false;
 	const char *	sOptIndex		= NULL;
 	int				iOptPort		= 0;
 
@@ -4687,6 +4709,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		OPT ( "-h", "--help" )		{ ShowHelp(); return 0; }
 		OPT1 ( "--console" )		bOptConsole = true;
 		OPT1 ( "--stop" )			bOptStop = true;
+		OPT1 ( "--pidfile" )		bOptPIDFile = true;
 #if USE_WINDOWS
 		OPT1 ( "--install" )		{ if ( !g_bService ) { ServiceInstall ( argc, argv ); return 0; } }
 		OPT1 ( "--delete" )			{ if ( !g_bService ) { ServiceDelete (); return 0; } }
@@ -4719,6 +4742,9 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( iStartupErr )
 		sphFatal ( "failed to initialize WinSock2: %s", sphSockError(iStartupErr) );
 #endif
+
+	if ( !bOptPIDFile )
+		bOptPIDFile = !bOptConsole;
 
 	/////////////////////
 	// parse config file
@@ -4767,7 +4793,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	// stop running searchd
 	////////////////////////
 
-#if !USE_WINDOWS
 	if ( bOptStop )
 	{
 		if ( !hSearchd("pid_file") )
@@ -4787,6 +4812,31 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		if ( iPid<=0 )
 			sphFatal ( "stop: failed to read valid pid from '%s'", sPid );
 
+#if USE_WINDOWS
+		bool bTerminatedOk = true;
+
+		HANDLE hProc = OpenProcess ( SYNCHRONIZE, FALSE, iPid );
+
+		if ( hProc )
+		{
+			EnumWindows ( (WNDENUMPROC)TerminateAppEnum, (LPARAM) iPid );
+
+			if ( WaitForSingleObject ( hProc, 5000 ) != WAIT_OBJECT_0 )
+				bTerminatedOk = false;
+
+			CloseHandle(hProc) ;
+		}
+		else
+			bTerminatedOk = false;
+
+		if ( bTerminatedOk )
+		{
+			sphInfo ( "stop: succesfully terminated pid %d", iPid );
+			exit ( 0 );
+		}			
+		else
+			sphFatal ( "stop: error terminating pid %d" );
+#else
 		if ( kill ( iPid, SIGTERM ) )
 			sphFatal ( "stop: kill() on pid %d failed: %s", iPid, strerror(errno) );
 		else
@@ -4794,8 +4844,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			sphInfo ( "stop: succesfully sent SIGTERM to pid %d", iPid );
 			exit ( 0 );
 		}
-	}
 #endif
+	}
 
 	/////////////////////
 	// configure searchd
@@ -4809,7 +4859,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			sphFatal ( "mandatory option '%s' not found " _msg, _key, _add );
 
 	CONF_CHECK ( hSearchd, "port", "in 'searchd' section", "" );
-	if ( !bOptConsole )
+	if ( bOptPIDFile )
 		CONF_CHECK ( hSearchd, "pid_file", "in 'searchd' section", "" );
 
 	int iPort = hSearchd["port"].intval();
@@ -4845,7 +4895,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	// create and lock pid
 	int iPidFD = -1;
-	if ( !bOptConsole )
+	if ( bOptPIDFile )
 	{
 		g_sPidFile = hSearchd["pid_file"].cstr();
 
@@ -5134,10 +5184,14 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			if ( tServed.m_bEnabled )
 				tServed.m_pIndex->Unlock();
 		}
+	}
 
+	if ( bOptPIDFile )
 		sphLockUn ( iPidFD );
 
-		#if !USE_WINDOWS
+	#if !USE_WINDOWS
+	if ( !bOptConsole )
+	{
 		switch ( fork() )
 		{
 			case -1:
@@ -5154,8 +5208,12 @@ int WINAPI ServiceMain ( int argc, char **argv )
 				// tty-controlled parent
 				exit ( 0 );
 		}
-		#endif
+	}
+	#endif
 
+
+	if ( bOptPIDFile )
+	{
 		// re-lock pid
 		// FIXME! there's a potential race here
 		if ( !sphLockEx ( iPidFD, true ) )
@@ -5168,7 +5226,14 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		if ( ::write ( iPidFD, sPid, iPidLen )!=iPidLen )
 			sphFatal ( "failed to write to pid file '%s': %s", g_sPidFile, strerror(errno) );
 		ftruncate ( iPidFD, iPidLen );
+	}
 
+#if USE_WINDOWS
+	SetConsoleCtrlHandler ( CtrlHandler, TRUE );
+#endif
+
+	if ( !bOptConsole )
+	{
 		// re-lock indexes
 		g_hIndexes.IterateStart ();
 		while ( g_hIndexes.IterateNext () )

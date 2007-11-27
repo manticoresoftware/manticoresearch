@@ -113,6 +113,7 @@ static int				g_iMaxChildren	= 0;
 static int				g_iSocket		= 0;
 static int				g_iQueryLogFile	= -1;
 static const char *		g_sPidFile		= NULL;
+static int				g_iPidFD		= -1;
 static int				g_iMaxMatches	= 1000;
 static bool				g_bSeamlessRotate	= true;
 
@@ -671,7 +672,10 @@ void Shutdown ()
 
 		// remove pid
 		if ( g_sPidFile )
+		{
+			::close ( g_iPidFD );
 			::unlink ( g_sPidFile );
+		}
 	}
 
 	if ( g_iSocket )
@@ -4894,16 +4898,15 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	//////////////////////
 
 	// create and lock pid
-	int iPidFD = -1;
 	if ( bOptPIDFile )
 	{
 		g_sPidFile = hSearchd["pid_file"].cstr();
 
-		iPidFD = ::open ( g_sPidFile, O_CREAT | O_WRONLY, S_IREAD | S_IWRITE );
-		if ( iPidFD<0 )
+		g_iPidFD = ::open ( g_sPidFile, O_CREAT | O_WRONLY, S_IREAD | S_IWRITE );
+		if ( g_iPidFD<0 )
 			sphFatal ( "failed to create pid file '%s': %s", g_sPidFile, strerror(errno) );
 
-		if ( !sphLockEx ( iPidFD, false ) )
+		if ( !sphLockEx ( g_iPidFD, false ) )
 			sphFatal ( "failed to lock pid file '%s': %s (searchd already running?)", g_sPidFile, strerror(errno) );
 	}
 
@@ -5187,7 +5190,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	}
 
 	if ( bOptPIDFile )
-		sphLockUn ( iPidFD );
+		sphLockUn ( g_iPidFD );
 
 	#if !USE_WINDOWS
 	if ( !bOptConsole )
@@ -5216,16 +5219,16 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	{
 		// re-lock pid
 		// FIXME! there's a potential race here
-		if ( !sphLockEx ( iPidFD, true ) )
+		if ( !sphLockEx ( g_iPidFD, true ) )
 			sphFatal ( "failed to re-lock pid file '%s': %s", g_sPidFile, strerror(errno) );
 
 		char sPid[16];
 		snprintf ( sPid, sizeof(sPid), "%d\n", getpid() );
 		int iPidLen = strlen(sPid);
 
-		if ( ::write ( iPidFD, sPid, iPidLen )!=iPidLen )
+		if ( ::write ( g_iPidFD, sPid, iPidLen )!=iPidLen )
 			sphFatal ( "failed to write to pid file '%s': %s", g_sPidFile, strerror(errno) );
-		ftruncate ( iPidFD, iPidLen );
+		ftruncate ( g_iPidFD, iPidLen );
 	}
 
 #if USE_WINDOWS

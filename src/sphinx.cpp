@@ -2954,17 +2954,35 @@ enum SynCheck_e
 };
 
 
-static inline SynCheck_e SynCheckPrefix ( const CSphSynonym & tCandidate, int iOff, const BYTE * sCur, int iBytes )
+static inline SynCheck_e SynCheckPrefix ( const CSphSynonym & tCandidate, int iOff, const BYTE * sCur, int iBytes, bool bMaybeSeparator )
 {
 	const BYTE * sCand = ((const BYTE*)tCandidate.m_sFrom.cstr()) + iOff;
+
 	while ( iBytes-->0 )
 	{
-		if ( *sCand < *sCur ) return SYNCHECK_LESS;
-		if ( *sCand > *sCur ) return SYNCHECK_GREATER;
+		if ( *sCand!=*sCur )
+		{
+			// incoming synonym-only char vs. ending sequence (eg. 2nd slash in "OS/2/3"); we actually have a match
+			if ( bMaybeSeparator && sCand[0]==MAGIC_SYNONYM_WHITESPACE && sCand[1]=='\0' )
+				return SYNCHECK_EXACT;
+
+			// otherwise, it is a mismatch
+			return ( *sCand<*sCur ) ? SYNCHECK_LESS : SYNCHECK_GREATER;
+		}
 		sCand++;
 		sCur++;
 	}
-	return *sCand ? SYNCHECK_PARTIAL : SYNCHECK_EXACT;
+
+	// full match after a full separator
+	if ( sCand[0]=='\0' )
+		return SYNCHECK_EXACT;
+
+	// full match after my last synonym-only char
+	if ( bMaybeSeparator && sCand[0]==MAGIC_SYNONYM_WHITESPACE && sCand[1]=='\0' )
+		return SYNCHECK_EXACT;
+
+	// otherwise, partial match so far
+	return SYNCHECK_PARTIAL;
 }
 
 
@@ -3004,9 +3022,10 @@ BYTE * CSphTokenizer_UTF8::GetTokenSyn ()
 		int iSynEnd = m_dSynonyms.GetLength()-1;
 		int iSynOff = 0;
 
-		// main refinement loop
 		int iLastFolded = 0;
 		BYTE * pRescan = NULL;
+
+		// main refinement loop
 		for ( ;; )
 		{
 			// store current position (to be able to restart from it on folded boundary)
@@ -3097,6 +3116,7 @@ BYTE * CSphTokenizer_UTF8::GetTokenSyn ()
 				return m_sAccum; \
 			}
 
+			// if this is the first symbol, use prebuilt lookup table to speedup initial range search
 			if ( iSynOff==0 )
 			{
 				iSynStart = m_dSynStart[sTest[0]];
@@ -3105,13 +3125,16 @@ BYTE * CSphTokenizer_UTF8::GetTokenSyn ()
 					break;
 			}
 
-			SynCheck_e eStart = SynCheckPrefix ( m_dSynonyms[iSynStart], iSynOff, sTest, iTest );
+			// this is to catch intermediate separators (eg. "OS/2/3")
+			bool bMaybeSeparator = ( iFolded & FLAG_CODEPOINT_SYNONYM )!=0;
+
+			SynCheck_e eStart = SynCheckPrefix ( m_dSynonyms[iSynStart], iSynOff, sTest, iTest, bMaybeSeparator );
 			if ( eStart==SYNCHECK_EXACT )
 				LOC_RETURN_SYNONYM ( iSynStart );
 			if ( eStart==SYNCHECK_GREATER || ( iSynStart==iSynEnd && eStart!=SYNCHECK_PARTIAL ) )
 				break;
 
-			SynCheck_e eEnd = SynCheckPrefix ( m_dSynonyms[iSynEnd], iSynOff, sTest, iTest );
+			SynCheck_e eEnd = SynCheckPrefix ( m_dSynonyms[iSynEnd], iSynOff, sTest, iTest, bMaybeSeparator );
 			if ( eEnd==SYNCHECK_EXACT )
 				LOC_RETURN_SYNONYM ( iSynEnd );
 			if ( eEnd==SYNCHECK_LESS )
@@ -3130,7 +3153,7 @@ BYTE * CSphTokenizer_UTF8::GetTokenSyn ()
 				while ( iR-iL>1 )
 				{
 					int iM = iL + (iR-iL)/2;
-					SynCheck_e eMid = SynCheckPrefix ( m_dSynonyms[iM], iSynOff, sTest, iTest );
+					SynCheck_e eMid = SynCheckPrefix ( m_dSynonyms[iM], iSynOff, sTest, iTest, bMaybeSeparator );
 
 					if ( eMid==SYNCHECK_LESS )
 					{
@@ -3168,7 +3191,7 @@ BYTE * CSphTokenizer_UTF8::GetTokenSyn ()
 				while ( iR-iL>1 )
 				{
 					int iM = iL + (iR-iL)/2;
-					SynCheck_e eMid = SynCheckPrefix ( m_dSynonyms[iM], iSynOff, sTest, iTest );
+					SynCheck_e eMid = SynCheckPrefix ( m_dSynonyms[iM], iSynOff, sTest, iTest, bMaybeSeparator );
 
 					if ( eMid==SYNCHECK_GREATER )
 					{

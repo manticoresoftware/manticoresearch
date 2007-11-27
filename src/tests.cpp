@@ -30,6 +30,8 @@ bool CreateSynonymsFile ()
 		"standarten fuhrer  => Standartenfuehrer\n"
 		"OS/2 => OS/2\n" 
 		"Ms-Dos => MS-DOS\n"
+		"MS DOS => MS-DOS\n"
+		"feat. => featuring\n"
 		);
 	fclose ( fp );
 	return true;
@@ -81,10 +83,12 @@ void TestUTF8Tokenizer ()
 			"2", "standarten fuehrer Stirlitz",	"Standartenfuehrer", "stirlitz", NULL,
 			"2", "OS/2 vs OS/360 vs Ms-Dos",	"OS/2", "vs", "os", "360", "vs", "MS-DOS", NULL,
 			"2", "AT ",							"at", NULL,							// test that prefix-whitespace-eof combo does not hang
-			"2", "AT&T&TT",						"at", "tt", NULL,
+			"2", "AT&T&TT",						"AT&T", "tt", NULL,
 			"2", "http://OS/2",					"http", "OS/2", NULL,
 			"2", "AT*&*T",						"at", NULL,
 			"2", "# OS/2's system install",		"OS/2", "system", "install", NULL,
+			"2", "IBM-s/OS/2/Merlin",			"ibm-s", "OS/2", "merlin", NULL,
+			"2", "MS DOSS feat.Deskview.MS DOS","ms", "doss", "featuring", "deskview", "MS-DOS", NULL,
 			0
 		};
 
@@ -164,9 +168,9 @@ void TestUTF8Tokenizer ()
 		printf ( "testing tokenizer for boundaries handling, run=%d\n", iRun );
 
 		CSphString sError;
-		assert  ( pTokenizer->SetBoundary ( "., ?", sError ) );
+		assert  ( pTokenizer->SetBoundary ( "?", sError ) );
 
-		char sLine5[] = "hello world. testing boundaries.";
+		char sLine5[] = "hello world? testing boundaries?";
 		pTokenizer->SetBuffer ( (BYTE*)sLine5, strlen(sLine5) );
 
 		assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "hello" ) ); assert ( !pTokenizer->GetBoundary() );

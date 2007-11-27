@@ -36,18 +36,25 @@ bool CreateSynonymsFile ()
 }
 
 
+ISphTokenizer * CreateTestTokenizer ( bool bSynonyms )
+{
+	CSphString sError;
+	ISphTokenizer * pTokenizer = sphCreateUTF8Tokenizer ();
+	assert ( pTokenizer->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F", sError ) );
+	pTokenizer->SetMinWordLen ( 2 );
+	pTokenizer->AddSpecials ( "!-" );
+	if ( bSynonyms )
+		assert ( pTokenizer->LoadSynonyms ( g_sTmpfile, sError ) );
+	return pTokenizer;
+}
+
+
 void TestUTF8Tokenizer ()
 {
 	assert ( CreateSynonymsFile () );
 	for ( int iRun=1; iRun<=2; iRun++ )
 	{
-		CSphString sError;
-		ISphTokenizer * pTokenizer = sphCreateUTF8Tokenizer ();
-		assert ( pTokenizer->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F", sError ) );
-		if ( iRun==2 )
-			assert ( pTokenizer->LoadSynonyms ( g_sTmpfile, sError ) );
-		pTokenizer->SetMinWordLen ( 2 );
-		pTokenizer->AddSpecials ( "!-" );
+		ISphTokenizer * pTokenizer = CreateTestTokenizer ( iRun==2 );
 
 		// simple "one-line" tests
 		char * dTests[] =
@@ -75,6 +82,9 @@ void TestUTF8Tokenizer ()
 			"2", "OS/2 vs OS/360 vs Ms-Dos",	"OS/2", "vs", "os", "360", "vs", "MS-DOS", NULL,
 			"2", "AT ",							"at", NULL,							// test that prefix-whitespace-eof combo does not hang
 			"2", "AT&T&TT",						"at", "tt", NULL,
+			"2", "http://OS/2",					"http", "OS/2", NULL,
+			"2", "AT*&*T",						"at", NULL,
+			"2", "# OS/2's system install",		"OS/2", "system", "install", NULL,
 			0
 		};
 
@@ -149,6 +159,22 @@ void TestUTF8Tokenizer ()
 		}
 
 		SafeDelete ( sLine4 );
+
+		// test boundaries 
+		printf ( "testing tokenizer for boundaries handling, run=%d\n", iRun );
+
+		CSphString sError;
+		assert  ( pTokenizer->SetBoundary ( "., ?", sError ) );
+
+		char sLine5[] = "hello world. testing boundaries.";
+		pTokenizer->SetBuffer ( (BYTE*)sLine5, strlen(sLine5) );
+
+		assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "hello" ) ); assert ( !pTokenizer->GetBoundary() );
+		assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "world" ) ); assert ( !pTokenizer->GetBoundary() );
+		assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "testing" ) ); assert ( pTokenizer->GetBoundary() );
+		assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "boundaries" ) ); assert ( !pTokenizer->GetBoundary() );
+
+		// done
 		SafeDelete ( pTokenizer );
 	}
 }

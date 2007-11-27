@@ -1868,33 +1868,19 @@ public:
 	virtual int					GetCodepointLength ( int iCode ) const;
 
 protected:
+	int					GetCodePoint ();
 	int					GetFoldedCodePoint ();
 	void				AccumCodePoint ( int iCode );
 	void				FlushAccum ();
-
-	void				SynReset ();
 
 protected:
 	BYTE *				m_pBuffer;							///< my buffer
 	BYTE *				m_pBufferMax;						///< max buffer ptr, exclusive (ie. this ptr is invalid, but every ptr below is ok)
 	BYTE *				m_pCur;								///< current position
 
-	BYTE				m_sAccum [ 3*SPH_MAX_WORD_LEN+3 ];	///< boundary token accumulator
+	BYTE				m_sAccum [ 3*SPH_MAX_WORD_LEN+3 ];	///< folded token accumulator
 	BYTE *				m_pAccum;							///< current accumulator position
 	int					m_iAccum;							///< boundary token size
-
-protected:
-	int					m_iSynFlushing;						///< are we flushing folded tokens
-
-	BYTE				m_sSyn [ MAX_SYNONYM_LEN+4 ];		///< candidate buffer
-	int					m_iSynBytes;						///< candidate buffer length, bytes
-	int					m_iSynCodes;						///< candidate buffer length, codepoints
-
-	BYTE				m_sFolded [ MAX_SYNONYM_LEN+4 ];	///< folded tokens bufer
-	int					m_iFolded;							///< folded tokens buffer length, bytes
-	int					m_iFoldedLastTok;					///< last folded token start offset, bytes
-	int					m_iFoldedLastCodes;					///< last folded token length, codepoints
-	int					m_iFoldedLast;						///< last folded codepoint
 };
 
 
@@ -2054,6 +2040,7 @@ void CSphLowercaser::AddRemaps ( const CSphVector<CSphRemapRange> & dRemaps, DWO
 enum
 {
 	MASK_CODEPOINT			= 0x00ffffffUL,	// mask off codepoint flags
+	MASK_FLAGS				= 0xff000000UL, // mask off codepoint value
 	FLAG_CODEPOINT_SPECIAL	= 0x01000000UL,	// this codepoint is special
 	FLAG_CODEPOINT_DUAL		= 0x02000000UL,	// this codepoint is special but also a valid word part
 	FLAG_CODEPOINT_NGRAM	= 0x04000000UL,	// this codepoint is n-gram indexed
@@ -2614,7 +2601,9 @@ bool ISphTokenizer::LoadSynonyms ( const char * sFilename, CSphString & sError )
 			sError.SetSprintf ( "%s line %d: map-from token too long (over %d bytes)", sFilename, iLine, SPH_MAX_WORD_LEN );
 			break;
 		}
-		if ( sphUTF8Len((const char*)sTo)>SPH_MAX_WORD_LEN )
+
+		int iToLen = sphUTF8Len ( (const char*)sTo );
+		if ( iToLen>SPH_MAX_WORD_LEN )
 		{
 			sError.SetSprintf ( "%s line %d: map-to token too long (over %d bytes)", sFilename, iLine, SPH_MAX_WORD_LEN );
 			break;
@@ -2635,7 +2624,7 @@ bool ISphTokenizer::LoadSynonyms ( const char * sFilename, CSphString & sError )
 		tSyn.m_sFrom.Reserve ( iFromLen );
 		tSyn.m_iFromLen = iFromLen;
 		tSyn.m_sTo = (char*)sTo;
-		tSyn.m_iToLen = strlen((char*)sTo);
+		tSyn.m_iToLen = iToLen;
 
 		char * sCur = const_cast<char*> ( tSyn.m_sFrom.cstr() );
 		ARRAY_FOREACH ( i, dFrom )
@@ -2839,15 +2828,6 @@ CSphTokenizer_UTF8::CSphTokenizer_UTF8 ()
 	, m_pBufferMax	( NULL )
 	, m_pCur		( NULL )
 	, m_iAccum		( 0 )
-
-	, m_iSynFlushing		( -1 )
-	, m_iSynBytes			( 0 )
-	, m_iSynCodes			( 0 )
-
-	, m_iFolded				( 0 )
-	, m_iFoldedLastTok		( 0 )
-	, m_iFoldedLastCodes	( 0 )
-	, m_iFoldedLast			( 0 )
 {
 	m_pAccum = m_sAccum;
 	CSphString sTmp;
@@ -2959,13 +2939,10 @@ enum SynCheck_e
 };
 
 
-static inline SynCheck_e SynCheckPrefix ( const CSphSynonym & tCandidate, const BYTE * sPrefix, int iPrefixLen )
+static inline SynCheck_e SynCheckPrefix ( const CSphSynonym & tCandidate, int iOff, const BYTE * sCur, int iBytes )
 {
-	const BYTE * sCand = (const BYTE*) tCandidate.m_sFrom.cstr();
-	const BYTE * sCur = sPrefix;
-	const BYTE * sMax = sPrefix + iPrefixLen;
-
-	while ( sCur<sMax )
+	const BYTE * sCand = ((const BYTE*)tCandidate.m_sFrom.cstr()) + iOff;
+	while ( iBytes-->0 )
 	{
 		if ( *sCand < *sCur ) return SYNCHECK_LESS;
 		if ( *sCand > *sCur ) return SYNCHECK_GREATER;
@@ -2976,15 +2953,22 @@ static inline SynCheck_e SynCheckPrefix ( const CSphSynonym & tCandidate, const 
 }
 
 
-void CSphTokenizer_UTF8::SynReset ()
+static inline bool IsSeparator ( int iFolded, bool bFirst )
 {
-	m_iSynBytes = 0;
-	m_iSynCodes = 0;
+	// eternal separator
+	if ( ( iFolded & MASK_CODEPOINT )==0 )
+		return true;
 
-	m_iFolded = 0;
-	m_iFoldedLastCodes = 0;
-	m_iFoldedLastTok = 0;
-	m_iFoldedLast = 0;
+	// just a codepoint
+	if (!( iFolded & MASK_FLAGS ))
+		return false;
+
+	// any magic flag, besides dual
+	if (!( iFolded & FLAG_CODEPOINT_DUAL ))
+		return true;
+
+	// dual depends on position
+	return bFirst;
 }
 
 
@@ -2995,199 +2979,267 @@ BYTE * CSphTokenizer_UTF8::GetTokenSyn ()
 	m_bTokenBoundary = false;
 	for ( ;; )
 	{
-		////////////////////////////////////////////////////////////
-		// accumulate incoming raw stream and check it for synonyms
-		////////////////////////////////////////////////////////////
+		// initialize accumulators and range
+		BYTE * pFirstSeparator = NULL;
 
-		bool bBreakOnFolded = false;
-		for ( ; m_iSynFlushing<0; )
+		m_iAccum = 0;
+		m_pAccum = m_sAccum;
+
+		int iSynStart = 0;
+		int iSynEnd = m_dSynonyms.GetLength()-1;
+		int iSynOff = 0;
+
+		// main refinement loop
+		int iLastFolded = 0;
+		BYTE * pRescan = NULL;
+		for ( ;; )
 		{
-			assert ( m_iSynBytes<(int)sizeof(m_sSyn) );
-			assert ( m_iFolded<(int)sizeof(m_sFolded) );
+			// store current position (to be able to restart from it on folded boundary)
+			BYTE * pCur = m_pCur;
 
-			// get raw and folded codepoints
-			int iCode = -1;
-			while ( m_pCur<m_pBufferMax && iCode<0 )
-				iCode = sphUTF8Decode ( m_pCur );
-
-			// handle eof
-			int iFolded = 0;
+			// get next codepoint
+			int iCode = GetCodePoint();
+			
+			// handle early-out
 			if ( iCode<0 )
 			{
-				m_bBoundary = m_bTokenBoundary = false;
-
-				if ( m_iSynBytes==0 )
-				{
-					// if it's not the last one, or if the acc is empty, just bail out
-					m_iLastTokenLen = 0;
+				// eof at token start? we're done
+				if ( iSynOff==0 )
 					return NULL;
+
+				// eof after whitespace? we already checked the candidate last time, so break
+				if ( iLastFolded==0 )
+					break;
+			}
+
+			// fold codepoint (and lookup flags!)
+			int iFolded = m_tLC.ToLower ( iCode );
+
+			// handle boundaries
+			if ( m_bBoundary && ( iFolded==0 ) ) m_bTokenBoundary = true;
+			m_bBoundary = ( iFolded & FLAG_CODEPOINT_BOUNDARY )!=0;
+
+			// skip continuous whitespace
+			if ( iLastFolded==0 && iFolded==0 )
+				continue;
+			iLastFolded = iFolded;
+
+			// handle specials at the very word start
+			if ( ( iFolded & FLAG_CODEPOINT_SPECIAL ) && m_iAccum==0 )
+			{
+				m_iLastTokenLen = 1;
+				m_sAccum [ sphUTF8Encode ( m_sAccum, iFolded & MASK_CODEPOINT ) ] = '\0';
+				return m_sAccum;
+			}
+
+			// if candidate starts with something special, and turns out to be not a synonym,
+			// we will need to rescan from current position later
+			if ( iSynOff==0 )
+				pRescan = IsSeparator ( iFolded, true ) ? m_pCur : NULL;
+
+			// accumulate folded token
+			if ( !pFirstSeparator )
+			{
+				if ( IsSeparator ( iFolded, m_iAccum==0 ) )
+				{
+					if ( m_iAccum )
+						pFirstSeparator = pCur;
+
+				} else if ( m_iAccum<SPH_MAX_WORD_LEN )
+				{
+					m_iAccum++;
+					m_pAccum += sphUTF8Encode ( m_pAccum, iFolded & MASK_CODEPOINT );
+					assert ( m_pAccum>=m_sAccum && m_pAccum<m_pAccum+sizeof(m_sAccum) );
+				}
+			}
+
+			// accumulate next raw synonym symbol to refine
+			// note that we need a special check for whitespace here, to avoid "MS*DOS" being treated as "MS DOS" synonym
+			BYTE sTest[4];
+			int iTest;
+
+			int iMasked = ( iCode & MASK_CODEPOINT );
+			if ( iFolded==0 )
+			{
+				sTest[0] = MAGIC_SYNONYM_WHITESPACE;
+				iTest = 1;
+
+				if (!( iMasked==' ' || iMasked=='\t' ))
+				{
+					sTest[1] = '\0';
+					iTest = 2;
 				}
 			} else
 			{
-				iFolded = m_tLC.ToLower ( iCode );
-
-				// handle boundary
-				if ( m_bBoundary && ( iCode==0 ) ) m_bTokenBoundary = true;
-				m_bBoundary = ( iCode & FLAG_CODEPOINT_BOUNDARY )!=0;
-				if ( m_bBoundary ) iCode = iFolded = 0;
+				iTest = sphUTF8Encode ( sTest, iMasked );
 			}
 
-			// handle raw non-whitespace
-			if ( iFolded>0 )
+
+			// refine synonyms range
+			#define LOC_RETURN_SYNONYM(_idx) \
+			{ \
+				strcpy ( (char*)m_sAccum, m_dSynonyms[_idx].m_sTo.cstr() ); \
+				m_iLastTokenLen = m_dSynonyms[_idx].m_iToLen; \
+				return m_sAccum; \
+			}
+
+			SynCheck_e eStart = SynCheckPrefix ( m_dSynonyms[iSynStart], iSynOff, sTest, iTest );
+			if ( eStart==SYNCHECK_EXACT )
+				LOC_RETURN_SYNONYM ( iSynStart );
+			if ( eStart==SYNCHECK_GREATER || ( iSynStart==iSynEnd && eStart!=SYNCHECK_PARTIAL ) )
+				break;
+
+			SynCheck_e eEnd = SynCheckPrefix ( m_dSynonyms[iSynEnd], iSynOff, sTest, iTest );
+			if ( eEnd==SYNCHECK_EXACT )
+				LOC_RETURN_SYNONYM ( iSynEnd );
+			if ( eEnd==SYNCHECK_LESS )
+				break;
+
+			// refine left boundary
+			if ( eStart!=SYNCHECK_PARTIAL )
 			{
-				// check for specials
-				bool bRawSpecial =
-					( iFolded & FLAG_CODEPOINT_SPECIAL ) &&
-					!( ( iFolded & FLAG_CODEPOINT_DUAL ) && m_iSynBytes && m_sSyn[m_iSynBytes-1]!=MAGIC_SYNONYM_WHITESPACE );
+				assert ( eStart==SYNCHECK_LESS );
 
-				bool bFoldedSpecial =
-					( iFolded & FLAG_CODEPOINT_SPECIAL ) &&
-					!( ( iFolded & FLAG_CODEPOINT_DUAL ) && m_iFoldedLast );
+				int iL = iSynStart;
+				int iR = iSynEnd;
+				SynCheck_e eL = eStart;
+				SynCheck_e eR = eEnd;
 
-				// fixup folded code
-				if ( iFolded & FLAG_CODEPOINT_SYNONYM )
-					iFolded = 0;
-				iFolded &= MASK_CODEPOINT;
-
-				// skip short folded tokens
-				if ( !iFolded || bFoldedSpecial )
+				while ( iR-iL>1 )
 				{
-					if ( m_iFoldedLastCodes<m_iMinWordLen )
-						m_iFolded = m_iFoldedLastTok;
-				}
+					int iM = iL + (iR-iL)/2;
+					SynCheck_e eMid = SynCheckPrefix ( m_dSynonyms[iM], iSynOff, sTest, iTest );
 
-				if ( bRawSpecial )
-				{
-					// it's special for raw token (and therefore for folded too); detach it and flush
-					if ( m_iFoldedLast ) m_sFolded[m_iFolded++] = 0;
-					m_iFolded += sphUTF8Encode ( m_sFolded+m_iFolded, iFolded & MASK_CODEPOINT );
-					m_sFolded[m_iFolded++] = 0;
-					m_iFoldedLast = 0;
-					m_iSynFlushing = 0;
-
-				} else if ( bFoldedSpecial )
-				{
-					// it's either non-special or dual for raw token; but special for folded
-					if ( m_iSynCodes<SPH_MAX_WORD_LEN )
+					if ( eMid==SYNCHECK_LESS )
 					{
-						m_iSynBytes += sphUTF8Encode ( m_sSyn+m_iSynBytes, iCode );
-						m_iSynCodes++;
+						iL = iM;
+						eL = eMid;
 					} else
 					{
-						bBreakOnFolded = true;
+						iR = iM;
+						eR = eMid;
 					}
+				}
 
-					if ( m_iFoldedLast ) m_sFolded[m_iFolded++] = 0;
-					m_iFolded += sphUTF8Encode ( m_sFolded+m_iFolded, iFolded );
-					m_sFolded[m_iFolded++] = 0;
-					m_iFoldedLast = 0;
+				assert ( eL==SYNCHECK_LESS );
+				assert ( eR!=SYNCHECK_LESS );
+				assert ( iR-iL==1 );
 
-				} else
+				if ( eR==SYNCHECK_GREATER )	break;
+				if ( eR==SYNCHECK_EXACT )	LOC_RETURN_SYNONYM ( iR );
+
+				assert ( eR==SYNCHECK_PARTIAL );
+				iSynStart = iR;
+				eStart = SYNCHECK_PARTIAL;
+			}
+
+			// refine right boundary
+			if ( eEnd!=SYNCHECK_PARTIAL )
+			{
+				assert ( eEnd==SYNCHECK_GREATER );
+
+				int iL = iSynStart;
+				int iR = iSynEnd;
+				SynCheck_e eL = eStart;
+				SynCheck_e eR = eEnd;
+
+				while ( iR-iL>1 )
 				{
-					// it's non-special or dual for both raw and folded tokens
-					if ( m_iSynCodes<SPH_MAX_WORD_LEN )
+					int iM = iL + (iR-iL)/2;
+					SynCheck_e eMid = SynCheckPrefix ( m_dSynonyms[iM], iSynOff, sTest, iTest );
+
+					if ( eMid==SYNCHECK_GREATER )
 					{
-						m_iSynBytes += sphUTF8Encode ( m_sSyn+m_iSynBytes, iCode );
-						m_iSynCodes++;
+						iR = iM;
+						eR = eMid;
 					} else
 					{
-						bBreakOnFolded = true;
+						iL = iM;
+						eL = eMid;
 					}
-
-					if ( !iFolded )
-					{
-						if ( m_iFoldedLast )
-							m_sFolded[m_iFolded++] = 0;
-					} else if ( m_iFoldedLastCodes<SPH_MAX_WORD_LEN )
-					{
-						m_iFolded += sphUTF8Encode ( m_sFolded+m_iFolded, iFolded );
-					}
-					m_iFoldedLast = iFolded;
 				}
 
-				if ( !m_iFoldedLast )
-				{
-					m_iFoldedLastTok = m_iFolded;
-					m_iFoldedLastCodes = 0;
-					if ( bBreakOnFolded )
-					{
-						m_iSynFlushing = 0;
-						break;
-					}
-				} else
-				{
-					m_iFoldedLastCodes++;
-				}
-				continue;
-			}
-			assert ( iFolded==0 );
+				assert ( eR==SYNCHECK_GREATER );
+				assert ( eL!=SYNCHECK_GREATER );
+				assert ( iR-iL==1 );
 
-			// handle raw whitespace
-			if ( iCode>=0 && ( !m_iSynBytes || m_sSyn[m_iSynBytes-1]==MAGIC_SYNONYM_WHITESPACE ) ) // ignore heading and trailing whitespace
-				continue;
+				if ( eL==SYNCHECK_LESS )	break;
+				if ( eL==SYNCHECK_EXACT )	LOC_RETURN_SYNONYM ( iL );
 
-			// skip short folded tokens
-			if ( m_iFoldedLastCodes<m_iMinWordLen )
-				m_iFolded = m_iFoldedLastTok;
-
-			m_sSyn[m_iSynBytes++] = MAGIC_SYNONYM_WHITESPACE;
-			m_sFolded[m_iFolded++] = 0;
-
-			m_iFoldedLastTok = m_iFolded;
-			m_iFoldedLastCodes = 0;
-
-			// check current prefix against synonyms list
-			// FIXME! optimize this
-			bool bPartial = false;
-			ARRAY_FOREACH ( i, m_dSynonyms )
-			{
-				SynCheck_e eCheck = SynCheckPrefix ( m_dSynonyms[i], m_sSyn, m_iSynBytes );
-				if ( eCheck==SYNCHECK_EXACT )
-				{
-					SynReset ();
-
-					m_iLastTokenLen = m_dSynonyms[i].m_iToLen;
-					strcpy ( (char*)m_sAccum, m_dSynonyms[i].m_sTo.cstr() );
-
-					return m_sAccum;
-				}
-				if ( eCheck==SYNCHECK_PARTIAL )
-					bPartial = true;
+				assert ( eL==SYNCHECK_PARTIAL );
+				iSynEnd = iL;
 			}
 
-			// if there's no partial matches or if it's eof, let's flush
-			if ( !bPartial || iCode<0 )
-				m_iSynFlushing = 0;
+			// handle eof
+			if ( iCode<0 )
+				break;
+
+			// we still have a partial synonym match, continue;
+			iSynOff += iTest;
 		}
 
-		///////////////////////////////////////////////////////////////
-		// flush everything accumulated during potential synonym check
-		///////////////////////////////////////////////////////////////
-
-		// skip folded whitespace
-		assert ( m_iSynFlushing>=0 );
-		int iPos = m_iSynFlushing;
-
-		while ( iPos<m_iFolded && !m_sFolded[iPos] )
-			iPos++;
-
-		// check if we're over
-		if ( iPos>=m_iFolded )
+		// at this point, that was not a synonym
+		if ( pRescan )
 		{
-			SynReset ();
-			m_iSynFlushing = -1;
+			m_pCur = pRescan;
 			continue;
+		}			
+
+		// at this point, it also started with a valid char
+		assert ( m_iAccum>0 );
+
+		// find the proper separator
+		if ( !pFirstSeparator )
+		{
+			// if there was none, scan until found
+			for ( ;; )
+			{
+				BYTE * pCur = m_pCur;
+				int iFolded = GetFoldedCodePoint ();
+				if ( iFolded<0 )
+					break; // eof
+
+				if ( IsSeparator ( iFolded, false ) )
+				{
+					if ( iFolded!=0 )
+						m_pCur = pCur; // force rescan
+					break;
+				}
+
+				if ( m_iAccum<SPH_MAX_WORD_LEN )
+				{
+					m_iAccum++;
+					m_pAccum += sphUTF8Encode ( m_pAccum, iFolded & MASK_CODEPOINT );
+					assert ( m_pAccum>=m_sAccum && m_pAccum<m_pAccum+sizeof(m_sAccum) );
+				}
+			}
+		} else
+		{
+			// if there was, token is ready but we should restart from that separator
+			m_pCur = pFirstSeparator;
 		}
 
-		// got something; memorize it and skip until whitespace
-		int iRes = iPos;
-		while ( iPos<m_iFolded && m_sFolded[iPos] )
-			iPos++;
-		m_iLastTokenLen = iPos - iRes;
-		m_iSynFlushing = iPos;
+		// return accumulated token
+		int iLen = (int)(m_pAccum-m_sAccum); // folded token length, in bytes
+		if ( iLen<m_iMinWordLen )
+			continue;
 
-		return m_sFolded + iRes;
+		m_sAccum[iLen] = '\0';
+		m_iLastTokenLen = m_iAccum;
+		return m_sAccum;
 	}
+}
+
+
+int CSphTokenizer_UTF8::GetCodePoint ()
+{
+	while ( m_pCur<m_pBufferMax )
+	{
+		int iCode = sphUTF8Decode ( m_pCur );
+		if ( iCode>=0 )
+			return iCode; // succesful decode
+	}
+	return -1; // eof
 }
 
 

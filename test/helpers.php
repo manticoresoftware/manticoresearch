@@ -590,7 +590,7 @@ function RunTest ( $test_dir )
 	$nfailed = 0;
 	$error = "";
 
-	while ( $config->CreateNextConfig ( "config.conf" ) )
+	do
 	{
 		printf ( "\r\tRunning subtest %d...", $config->SubtestNo () + 1 );
 		$config->WriteReportHeader ( $report );
@@ -644,6 +644,7 @@ function RunTest ( $test_dir )
 		$config->WriteResults ( $report );
 		$config->SubtestFinished ();
 	}
+	while ( $config->CreateNextConfig ( "config.conf" ) );
 
 	StopSearchd ();
 

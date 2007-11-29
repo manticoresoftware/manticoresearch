@@ -1184,7 +1184,7 @@ int main ( int argc, char ** argv )
 	sphAllocsStats ();
 #endif
 
-	return 0;
+	return bIndexedOk ? 0 : 1;
 }
 
 //

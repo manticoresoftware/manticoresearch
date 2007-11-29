@@ -12188,6 +12188,16 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 				// if there are no infixes, that's it
 				if ( iMinInfixLen > iLen )
 				{
+					// index full word
+					SphWordID_t iWord = m_pDict->GetWordID ( sWord );
+					if ( iWord )
+					{
+						CSphWordHit & tHit = m_dHits.Add ();
+						tHit.m_iDocID = m_tDocInfo.m_iDocID;
+						tHit.m_iWordID = iWord;
+						tHit.m_iWordPos = iPos;
+					}
+
 					iPos++;
 					continue;
 				}

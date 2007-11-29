@@ -30,7 +30,6 @@ else
 	$searchd_path = "../src/searchd";
 }
 
-
 //////////////////////
 // parse command line
 //////////////////////
@@ -99,5 +98,4 @@ while ( $entry = readdir($dh) )
 }
 
 unlink ( "error.txt" );
-
 ?>

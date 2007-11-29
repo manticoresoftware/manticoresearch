@@ -103,10 +103,10 @@ function WriteQueryResults ( $results, $handle )
 						fwrite ( $handle, "\n" );
 				    }
 				}
+				$n++;
 			}
 
 			fwrite ( $handle, "\n" );
-			$n++;
 		}
 
 		fwrite ( $handle, "\n" );
@@ -133,7 +133,7 @@ function RunIndexer ( &$error )
 			return 2;
 	}
 
-	return 1;
+	return $retval;
 }
 
 
@@ -260,21 +260,30 @@ class SphinxConfig
 	}
 
 
-	function CreateNextConfig ( $filename )
+	function CreateNextConfig ()
 	{
-		if ( $this->GenNextCfg ( 0 ) )
-		{
-			$this->Write ( $filename );
-			return TRUE;
-		}
-		else
-			return FALSE;
+		return $this->GenNextCfg ( 0 );
 	}
 
 
 	function SubtestFinished ()
 	{
 		$this->_subtest++;
+	}
+
+
+	function SubtestFailed ()
+	{
+		$this->_subtest++;
+
+		if ( IsModelGenMode () )
+			array_push ( $this->_results_model, "failed" );
+	}
+
+	
+	function ModelSubtestFailed ()
+	{
+		return $this->_results_model [$this->SubtestNo ()] == "failed";
 	}
 
 
@@ -563,6 +572,26 @@ class SphinxConfig
 }
 
 
+function HandleFailure ( $config, $report, $error, &$nfailed )
+{
+	if ( IsModelGenMode () )
+		print ( "\n" );
+	else
+	{
+		if ( $config->ModelSubtestFailed () )
+			print ( "OK\n" );
+		else
+		{
+			print ( "FAILED\n" );
+			$nfailed++;
+		}
+	}
+
+	fwrite ( $report, "$error\n" );
+	$config->SubtestFailed ();
+}
+
+
 function RunTest ( $test_dir )
 {
 	$test_dir = $test_dir."/";
@@ -598,6 +627,7 @@ function RunTest ( $test_dir )
 		StopSearchd ();
 
 		$config->Write ( $conf_dir."/"."config_".$config->SubtestNo ().".conf" );
+		$config->Write ( "config.conf" );
 
 		$indexer_ret = RunIndexer ( $error );
 
@@ -608,30 +638,26 @@ function RunTest ( $test_dir )
 				break;
 
 			case 1:
-				print ( "Error running indexer... FAILED\n" );
-				$nfailed++;
-				fwrite ( $report, "$error\n" );
-				$config->SubtestFinished ();
-				continue;
+				print ( "Error running indexer... " );
+				HandleFailure ( $config, $report, $error, $nfailed );
+				break;
 		}
 
+		if ( $indexer_ret == 1 )
+			continue;
 
 		if ( StartSearchd ( $error ) != 0 )
 		{
-			print ( "Error starting searchd... FAILED\n" );
-			fwrite ( $report, "$error\n" );
-			$nfailed++;
-			$config->SubtestFinished ();
+			print ( "Error starting searchd... " );
+			HandleFailure ( $config, $report, $error, $nfailed );
 			continue;
 		}
 
 		$error = "";
 		if ( ! $config->RunQuery ( "*", $error ) )
 		{
-			print ( "Error running query: $error... FAILED\n" );
-			fwrite ( $report, "$error\n" );
-			$nfailed++;
-			$config->SubtestFinished ();
+			print ( "Error running query: $error... " );
+			HandleFailure ( $config, $report, "$error\n", $nfailed );
 			continue;
 		}
 
@@ -644,13 +670,16 @@ function RunTest ( $test_dir )
 		$config->WriteResults ( $report );
 		$config->SubtestFinished ();
 	}
-	while ( $config->CreateNextConfig ( "config.conf" ) );
+	while ( $config->CreateNextConfig () );
 
 	StopSearchd ();
 
 	fclose ( $report );
 
-	printf ( "\r\t%d subtests total, %d failed\n", $config->SubtestNo (), $nfailed );
+	if ( IsModelGenMode () )
+		printf ( "\r\t%d subtests total\n", $config->SubtestNo () );
+	else
+		printf ( "\r\t%d subtests total, %d failed\n", $config->SubtestNo (), $nfailed );
 
 	mysql_close ( $db_link );
 

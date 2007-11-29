@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Test>
-  <Name>Prefix/infix indexing (part 1)</Name>
+  <Name>Prefix/infix indexing (part 3)</Name>
   <Config>
     <Static>indexer
 {
@@ -25,7 +25,7 @@ source srclj
 	path			= data/lj
 	charset_type	= utf-8</Static>
     <Dynamic>
-      <Variant>	min_word_len	= 0</Variant>
+      <Variant>	min_word_len	= 3</Variant>
     </Dynamic>
     <Dynamic>
       <Variant>	min_prefix_len	= 0</Variant>
@@ -50,6 +50,9 @@ source srclj
     <Query_3>dmin</Query_3>
     <Query_4>rep</Query_4>
     <Query_5>pda</Query_5>
+    <Query_6>I</Query_6>
+    <Query_7>I*</Query_7>
+    <Query_8>for</Query_8>
   </Query>
   <DB_Create>
 CREATE TABLE `test_table` (

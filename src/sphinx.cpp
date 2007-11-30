@@ -12314,10 +12314,10 @@ bool CSphSource_Document::IsInfixMatch ( const char * szField ) const
 
 bool CSphSource_Document::IsFieldInStr ( const char * szField, const char * szString ) const
 {
-	if ( ! szString )
+	if ( !szString || szString [0] == '\0' )
 		return true;
 
-	if  ( ! szField )
+	if  ( !szField || szField [0] == '\0' )
 		return false;
 
 	const char * szPos = strstr ( szString, szField );

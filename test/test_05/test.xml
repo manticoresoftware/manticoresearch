@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Test>
-  <Name>Prefix/infix indexing (part 3)</Name>
+  <Name>prefix_fields/infix_fields (part 3)</Name>
   <Config>
     <Static>indexer
 {
@@ -9,9 +9,7 @@
 
 searchd
 {
-</Static>
-<Searchd_Settings/>
-<Static>
+</Static><Searchd_Settings/><Static>
 }
 
 source srclj
@@ -23,43 +21,40 @@ source srclj
 	sql_query = SELECT id, subject, body, author FROM test_table
 }
 </Static>
-
 <Static>
 index lj
 {
 	source			= srclj
 	path			= </Static><Data_Path/><Static>/lj
 	charset_type	= utf-8
+	min_word_len	= 0
+	enable_star		= 1
 </Static>
+	<Dynamic>
+	  <Variant>	min_infix_len	= 0
+	min_prefix_len	= 0</Variant>
+	</Dynamic>
     <Dynamic>
-      <Variant>	min_word_len	= 3</Variant>
+      <Variant>	prefix_fields	= </Variant>
+      <Variant>	prefix_fields	= subject</Variant>
+      <Variant>	prefix_fields	= body</Variant>
+      <Variant>	prefix_fields	= body, author</Variant>
     </Dynamic>
     <Dynamic>
-      <Variant>	min_prefix_len	= 0</Variant>
-      <Variant>	min_prefix_len	= 1</Variant>
-      <Variant>	min_prefix_len	= 3</Variant>
-    </Dynamic>
-    <Dynamic>
-      <Variant>	min_infix_len	= 0</Variant>
-      <Variant>	min_infix_len	= 1</Variant>
-      <Variant>	min_infix_len	= 3</Variant>
-    </Dynamic>
-    <Dynamic>
-      <Variant>	enable_star		= 0</Variant>
-      <Variant>	enable_star		= 1</Variant>
+      <Variant>	infix_fields	= </Variant>
+      <Variant>	infix_fields	= SUBJECT</Variant>
+      <Variant>	infix_fields	= body</Variant>
+      <Variant>	infix_fields	= subject, AUTHOR</Variant>
     </Dynamic>
     <Static>}</Static>
   </Config>
   <Query>
-    <Query_0>admin</Query_0>
-    <Query_1>*earc*</Query_1>
-    <Query_2>up*</Query_2>
-    <Query_3>dmin</Query_3>
-    <Query_4>rep</Query_4>
-    <Query_5>pda</Query_5>
-    <Query_6>I</Query_6>
-    <Query_7>I*</Query_7>
-    <Query_8>for</Query_8>
+    <Query_0>enab*</Query_0>
+    <Query_1>grea*</Query_1>
+    <Query_2>Mak*</Query_2>
+    <Query_3>*ble*</Query_3>
+    <Query_4>*thor*</Query_4>
+    <Query_5>*oda*</Query_5>
   </Query>
   <DB_Create>
 CREATE TABLE `test_table` (

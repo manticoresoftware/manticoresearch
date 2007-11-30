@@ -8,22 +8,28 @@
 }
 
 searchd
-{</Static>
-<Searchd_Settings></Searchd_Settings><Static>
+{
+</Static>
+<Searchd_Settings/>
+<Static>
 }
 
 source srclj
 {
 	type			= mysql
-</Static><Sql_Settings></Sql_Settings><Static>
+</Static>
+<Sql_Settings/>
+<Static>
 	sql_query = SELECT id, subject, body, author FROM test_table
 }
 </Static>
-    <Static>index lj
+<Static>
+index lj
 {
 	source			= srclj
-	path			= data/lj
-	charset_type	= utf-8</Static>
+	path			= </Static><Data_Path/><Static>/lj
+	charset_type	= utf-8
+</Static>
     <Dynamic>
       <Variant>	min_word_len	= 1</Variant>
     </Dynamic>

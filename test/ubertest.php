@@ -15,6 +15,8 @@ $db_pwd				= "";
 $db_name			= "test";
 $db_port			= 3306;
 
+$index_data_path	= "data";
+
 $g_model			= false;
 
 require_once ( "helpers.php" );

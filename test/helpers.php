@@ -518,11 +518,16 @@ class SphinxConfig
 
 	function Dump ( $node, $file_handle, $dynamic_only )
 	{
+		global $index_data_path;
+
 		switch ( strtolower ( $node->nodeName ) )
 		{
 			case "static":
 				if ( $dynamic_only )
 					break;
+
+				fwrite ( $file_handle, "$node->nodeValue" );
+				break;
 
 			case "variant":
 				fwrite ( $file_handle, "$node->nodeValue\n" );
@@ -540,6 +545,13 @@ class SphinxConfig
 					break;
 
 				$this->WriteSqlSettings ( $file_handle );
+				break;
+			
+			case "data_path":
+				if ( $dynamic_only )
+					break;
+
+				fwrite ( $file_handle, $index_data_path );
 				break;
 
 			case "dynamic":
@@ -592,8 +604,27 @@ function HandleFailure ( $config, $report, $error, &$nfailed )
 }
 
 
+function EraseDirContents ( $path )
+{
+	$handle = opendir ( $path );
+
+	if ( $handle )
+	{
+    	while ( ( $file = readdir ( $handle ) ) !== false )
+		{ 
+        	if ( $file != "." && $file != ".." && !is_dir ( $file ) )
+				unlink ( "$path/$file" ); 
+        } 
+
+	    closedir ( $handle );
+    }
+}
+
+
 function RunTest ( $test_dir )
 {
+	global $indexer_data_path;
+
 	$test_dir = $test_dir."/";
 
 	$model_file = $test_dir."model.bin";
@@ -628,6 +659,8 @@ function RunTest ( $test_dir )
 
 		$config->Write ( $conf_dir."/"."config_".$config->SubtestNo ().".conf" );
 		$config->Write ( "config.conf" );
+
+		EraseDirContents ( $indexer_data_path );
 
 		$indexer_ret = RunIndexer ( $error );
 
@@ -677,9 +710,9 @@ function RunTest ( $test_dir )
 	fclose ( $report );
 
 	if ( IsModelGenMode () )
-		printf ( "\r\t%d subtests total\n", $config->SubtestNo () );
+		printf ( "\n\t%d subtests total\n", $config->SubtestNo () );
 	else
-		printf ( "\r\t%d subtests total, %d failed\n", $config->SubtestNo (), $nfailed );
+		printf ( "\n\t%d subtests total, %d failed\n", $config->SubtestNo (), $nfailed );
 
 	mysql_close ( $db_link );
 

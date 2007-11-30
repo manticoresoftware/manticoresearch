@@ -484,6 +484,7 @@ enum
 /// match comparator interface from group-by sorter point of view
 struct ISphMatchComparator
 {
+	virtual ~ISphMatchComparator () {}
 	virtual bool VirtualIsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & tState ) const = 0;
 };
 

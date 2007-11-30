@@ -276,14 +276,20 @@ class SphinxConfig
 	{
 		$this->_subtest++;
 
+		$failed = array ();
+		array_push ( $failed, "failed" );
+
 		if ( IsModelGenMode () )
-			array_push ( $this->_results_model, "failed" );
+			array_push ( $this->_results_model, $failed );
 	}
 
 	
 	function ModelSubtestFailed ()
 	{
-		return $this->_results_model [$this->SubtestNo ()] == "failed";
+		$failed = array ();
+		array_push ( $failed, "failed" );
+
+		return $this->_results_model [$this->SubtestNo ()] == $failed;
 	}
 
 

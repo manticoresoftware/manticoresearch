@@ -594,6 +594,20 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 	iPrefix = Max ( iPrefix, 0 );
 	iInfix = Max ( iInfix, 0 );
 
+	CSphString sPrefixFields, sInfixFields;
+
+	if ( hIndex.Exists ( "prefix_fields" ) ) 
+		sPrefixFields = hIndex ["prefix_fields"].cstr ();
+
+	if ( hIndex.Exists ( "infix_fields" ) ) 
+		sInfixFields = hIndex ["infix_fields"].cstr ();
+
+	if ( iPrefix == 0 && !sPrefixFields.IsEmpty () )
+		fprintf ( stdout, "WARNING: min_prefix_len = 0. prefix_fields are ignored\n" );
+
+	if ( iInfix == 0 && !sInfixFields.IsEmpty () )
+		fprintf ( stdout, "WARNING: min_infix_len = 0. infix_fields are ignored\n" );
+
 	// boundary
 	int iBoundaryStep = hIndex("phrase_boundary_step") ? Max ( hIndex["phrase_boundary_step"].intval(), 0 ) : 0;
 
@@ -620,8 +634,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		if ( pSource->HasAttrsConfigured() )
 			bGotAttrs = true;
 
-		pSource->SetupFieldMatch ( hIndex.Exists ( "prefix_fields" ) ? hIndex ["prefix_fields"].cstr () : NULL,
-								   hIndex.Exists ( "infix_fields" )  ? hIndex ["infix_fields"].cstr ()	: NULL );
+		pSource->SetupFieldMatch ( sPrefixFields.cstr (), sInfixFields.cstr () );
 
 		// strip_html, index_html_attrs
 		if ( hSource("strip_html") )

@@ -1,8 +1,19 @@
 <?php
 
+//
+// $Id$
+//
+
 require_once ( "../api/sphinxapi.php" );
 
 $windows = isset($_SERVER["WINDIR"]) || isset($_SERVER["windir"]) || isset($_SERVER["HOMEDRIVE"]);
+
+function MyMicrotime ()
+{
+	$q = gettimeofday();
+	return (float)($q["usec"] / 1000000) + $q["sec"];
+}
+
 
 class TestResult
 {
@@ -20,34 +31,14 @@ class TestResult
 function CreateDB ( $db_drop, $db_create, $db_insert )
 {
 	global $db_host, $db_user, $db_pwd, $db_name, $db_port;
-
-	$link = mysql_connect ( $db_host.":".$db_port, $db_user, $db_pwd );
-	if ( $link == FALSE )
-		return FALSE;
-
-	mysql_query ( "DROP DATABASE $db_name", $link );
-
-	$result = mysql_query ( "CREATE DATABASE $db_name", $link );
-	if ( $result == FALSE )
-		return FALSE;
-
-	$result = mysql_select_db ( $db_name, $link );
-	if ( $result == FALSE )
-		return FALSE;
-
-	$result = mysql_query ( $db_drop, $link );
-	if ( $result == FALSE )
-		return FALSE;
-
-	$result = mysql_query ( $db_create, $link );
-	if ( $result == FALSE )
-		return FALSE;
-
-	$result = mysql_query ( $db_insert, $link );
-	if ( $result == FALSE )
-		return FALSE;
-
-	return $link;
+	return
+		@mysql_connect ( $db_host.":".$db_port, $db_user, $db_pwd ) &&
+		@mysql_query ( "DROP DATABASE $db_name" ) &&
+		@mysql_query ( "CREATE DATABASE $db_name" ) &&
+		@mysql_select_db ( $db_name ) &&
+		@mysql_query ( $db_drop ) &&
+		@mysql_query ( $db_create ) &&
+		@mysql_query ( $db_insert );
 }
 
 
@@ -145,7 +136,7 @@ function StartSearchd ( &$error )
 
 	if ( $windows )
 	{
-		$process = popen ("start $searchd_path --config config.conf --pidfile > error.txt", "r" );
+		$process = popen ("start /min $searchd_path --config config.conf --pidfile > error.txt", "r" );
 		pclose ( $process );
 	}
 	else
@@ -215,6 +206,7 @@ class SphinxConfig
 	private $_queries;
 	private $_xml;
 	private $_subtest;
+	private $_subtestcount;
 	private $_results;
 	private $_results_model;
 	
@@ -227,37 +219,16 @@ class SphinxConfig
 		$this->_results			= array ();
 		$this->_results_model	= array ();
 		$this->_subtest 		= 0;
+		$this->_subtestcount	= 0;
 	}
 
 	
-	function SubtestNo ()
-	{
-		return $this->_subtest;
-	}
-
-
-	function Name ()
-	{
-		return $this->_name;
-	}
-
-
-	function DB_Drop ()
-	{
-		return $this->_db_drop;
-	}
-
-
-	function DB_Create ()
-	{
-		return $this->_db_create;
-	}
-
-
-	function DB_Insert ()
-	{
-		return $this->_db_insert;
-	}
+	function SubtestNo ()			{ return $this->_subtest; }
+	function SubtestCount ()		{ return $this->_subtestcount; }
+	function Name ()				{ return $this->_name; }
+	function DB_Drop ()				{ return $this->_db_drop; }
+	function DB_Create ()			{ return $this->_db_create; }
+	function DB_Insert ()			{ return $this->_db_insert; }
 
 
 	function CreateNextConfig ()
@@ -348,7 +319,7 @@ class SphinxConfig
 
 
 	function Load ( $config_file )
-	{	
+	{
 		$this->_xml = new DOMDocument ("1.0", "utf-8");
 		$this->_xml->load ( $config_file );
 		$this->GatherNodes ( GetTreeRoot ( $this->_xml, "config" ) );
@@ -369,6 +340,20 @@ class SphinxConfig
 		$db_insert = GetTreeRoot ( $this->_xml, "db_insert" );
 		if ( $db_insert )
 			$this->_db_insert = $db_insert->nodeValue;
+
+		// precalc subtests count
+		$this->_subtestcount = 1;
+	   	foreach ( $this->_dynamic_entries as $entry )
+	   	{
+	   		$nodes = $entry->childNodes;
+	   		$variants = 0;
+
+	   		for ( $j=0; $j<$nodes->length; $j++ )
+				if ( strtolower ( $nodes->item($j)->nodeName )=="variant" )
+					$variants++;
+	
+			$this->_subtestcount *= max ( $variants, 1 );
+		}
 	}
 
 
@@ -592,21 +577,17 @@ class SphinxConfig
 
 function HandleFailure ( $config, $report, $error, &$nfailed )
 {
-	if ( IsModelGenMode () )
-		print ( "\n" );
-	else
+	$ret = true;
+	if ( !IsModelGenMode() && !$config->ModelSubtestFailed () )
 	{
-		if ( $config->ModelSubtestFailed () )
-			print ( "OK\n" );
-		else
-		{
-			print ( "FAILED\n" );
-			$nfailed++;
-		}
+		$nfailed++;
+		$ret = false;
 	}
 
 	fwrite ( $report, "$error\n" );
 	$config->SubtestFailed ();
+
+	return $ret;
 }
 
 
@@ -639,26 +620,34 @@ function RunTest ( $test_dir )
 	$config = new SphinxConfig;
 	$config->Load ( $test_dir."test.xml" );
 
-	printf ( "Running test '%s'...\n", $config->Name () );
+	$prefix = sprintf ( "testing %s...", $config->Name () );
 
-	$db_link = CreateDB ( $config->DB_Drop (), $config->DB_Create (), $config->DB_Insert () );
-	if ( ! $db_link )
-		die ( "Error creating test database\n" );
+	if ( !CreateDB ( $config->DB_Drop(), $config->DB_Create(), $config->DB_Insert() ) )
+	{
+		printf ( "$prefix FAILED, error creating test DB: %s\n", mysql_error() );
+		return;
+	}
 
-	if ( ! $config->LoadModel ( $model_file ) )
-		die ( "Error loading model\n" );
+	if ( !$config->LoadModel ( $model_file ) )
+	{
+		printf ( "$prefix FAILED, error loading model\n" );
+		return;
+	}
 
-	if ( ! file_exists ( $conf_dir ) )
+	if ( !file_exists ( $conf_dir ) )
 		mkdir ( $conf_dir );
 
-	$report = fopen ( $test_dir."report.txt", "w" );
+	$report_file = $test_dir."report.txt";
+	$report = fopen ( $report_file, "w" );
 
 	$nfailed = 0;
 	$error = "";
-
+	$log = ""; // subtest failures log
+	$nsubtests = $config->SubtestCount();
 	do
 	{
-		printf ( "\r\tRunning subtest %d...", $config->SubtestNo () + 1 );
+		$subtest = $config->SubtestNo()+1;
+		print ( "$prefix $subtest/$nsubtests\r" );
 		$config->WriteReportHeader ( $report );
 
 		StopSearchd ();
@@ -669,40 +658,35 @@ function RunTest ( $test_dir )
 		EraseDirContents ( $indexer_data_path );
 
 		$indexer_ret = RunIndexer ( $error );
-
-		switch ( $indexer_ret )
+		if ( $indexer_ret==1 )
 		{
-			case 2:
-				fwrite ( $report, "$error\n" );
-				break;
-
-			case 1:
-				print ( "Error running indexer... " );
-				HandleFailure ( $config, $report, $error, $nfailed );
-				break;
-		}
-
-		if ( $indexer_ret == 1 )
+			if ( !HandleFailure ( $config, $report, $error, $nfailed ) )
+				$log .= "\tsubtest $subtest: error running indexer; see $report_file\n";
 			continue;
+
+		} else if ( $indexer_ret==2 )
+		{
+			fwrite ( $report, "$error\n" );
+		}
 
 		if ( StartSearchd ( $error ) != 0 )
 		{
-			print ( "Error starting searchd... " );
-			HandleFailure ( $config, $report, $error, $nfailed );
+			if ( !HandleFailure ( $config, $report, $error, $nfailed ) )
+				$log .= "\tsubtest $subtest: error starting searchd; see $report_file\n";
 			continue;
 		}
 
 		$error = "";
 		if ( ! $config->RunQuery ( "*", $error ) )
 		{
-			print ( "Error running query: $error... " );
-			HandleFailure ( $config, $report, "$error\n", $nfailed );
+			if ( !HandleFailure ( $config, $report, "$error\n", $nfailed ) )
+				$log .= "\tsubtest $subtest: query error: $error\n";
 			continue;
 		}
 
 		if ( ! IsModelGenMode () && ! $config->CompareToModel () )
 		{
-			print ( "FAILED\n" );
+			$log .= "\tsubtest $subtest: query results mismatch; see $report_file\n";
 			$nfailed++;
 		}
 
@@ -712,15 +696,15 @@ function RunTest ( $test_dir )
 	while ( $config->CreateNextConfig () );
 
 	StopSearchd ();
-
 	fclose ( $report );
+	mysql_close ();
 
 	if ( IsModelGenMode () )
-		printf ( "\n\t%d subtests total\n", $config->SubtestNo () );
+		printf ( "$prefix done; %d/%d subtests run\n", $config->SubtestNo(), $nsubtests );
+	else if ( $nfailed==0 )
+		printf ( "$prefix done; %d/%d subtests OK\n", $config->SubtestNo(), $nsubtests );
 	else
-		printf ( "\n\t%d subtests total, %d failed\n", $config->SubtestNo (), $nfailed );
-
-	mysql_close ( $db_link );
+		printf ( "$prefix done; %d/%d subtests FAILED:\n%s", $nfailed, $nsubtests, $log );
 
 	$config->WriteModel ( $model_file );
 
@@ -730,5 +714,9 @@ function RunTest ( $test_dir )
 
 	return $test_result;
 }
+
+//
+// $Id$
+//
 
 ?>

@@ -19,7 +19,7 @@ $index_data_path	= "data";
 
 $g_model			= false;
 
-require_once ( "helpers.php" );
+require_once ( "helpers.inc" );
 
 if ( $windows )
 {

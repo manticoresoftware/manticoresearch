@@ -10,7 +10,7 @@ $windows = isset($_SERVER["WINDIR"]) || isset($_SERVER["windir"]) || isset($_SER
 
 function MyMicrotime ()
 {
-	$q = gettimeofday();
+	$q = @gettimeofday();
 	return (float)($q["usec"] / 1000000) + $q["sec"];
 }
 

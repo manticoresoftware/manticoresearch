@@ -96,10 +96,17 @@ else
 
 $t = MyMicrotime ();
 
+$tests = array ();
 $dh = opendir ( "." );
 while ( $entry = readdir($dh) )
+{
 	if ( substr ( $entry,0,4 )=="test" )
-		RunTest ( $entry );
+		$tests[] = $entry;
+}
+sort ( $tests );
+
+foreach ( $tests as $test )
+	RunTest ( $test );
 
 @unlink ( "error.txt" );
 @unlink ( "config.conf" );

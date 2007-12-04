@@ -431,6 +431,9 @@ void ExcerptGen_c::SubmitCodepoint ( CSphVector<Token_t> & dBuf, int iCode )
 			eType = iLC ? TOK_WORD : TOK_NONWORD;
 	}
 
+	// clean up
+	iLC &= 0xffffffUL; // FIXME! MASK_CODEPOINT
+
 	// add the codepoint
 	int iPos = m_dCodes.GetLength ();
 	m_dCodes.Add ( iCode );

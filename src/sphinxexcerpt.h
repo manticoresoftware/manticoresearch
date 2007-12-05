@@ -30,7 +30,8 @@ struct ExcerptQuery_t
 	bool			m_bRemoveSpaces;	///< whether to collapse whitespace
 	bool			m_bExactPhrase;		///< whether to highlight exact phrase matches only
 	bool			m_bSinglePassage;	///< whether to return single best passage only
-	bool			m_bUseBoundaries;	///< whether to extract contexts by phrase boundaries setup in tokenizer
+	bool			m_bUseBoundaries;	///< whether to extract passages by phrase boundaries setup in tokenizer
+	bool			m_bWeightOrder;		///< whether to order best passages in document (default) or weight order
 
 public:
 	ExcerptQuery_t ()
@@ -43,6 +44,7 @@ public:
 		, m_bExactPhrase ( false )
 		, m_bSinglePassage ( false )
 		, m_bUseBoundaries ( false )
+		, m_bWeightOrder ( false )
 	{
 	}
 };

@@ -833,6 +833,7 @@ class SphinxClient
 		if ( !isset($opts["exact_phrase"]) )		$opts["exact_phrase"] = false;
 		if ( !isset($opts["single_passage"]) )		$opts["single_passage"] = false;
 		if ( !isset($opts["use_boundaries"]) )		$opts["use_boundaries"] = false;
+		if ( !isset($opts["weight_order"]) )		$opts["weight_order"] = false;
 
 		/////////////////
 		// build request
@@ -843,6 +844,7 @@ class SphinxClient
 		if ( $opts["exact_phrase"] )	$flags |= 2;
 		if ( $opts["single_passage"] )	$flags |= 4;
 		if ( $opts["use_boundaries"] )	$flags |= 8;
+		if ( $opts["weight_order"] )	$flags |= 16;
 		$req = pack ( "NN", 0, $flags ); // mode=0, flags=$flags
 		$req .= pack ( "N", strlen($index) ) . $index; // req index
 		$req .= pack ( "N", strlen($words) ) . $words; // req words

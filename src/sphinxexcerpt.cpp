@@ -835,7 +835,8 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & q )
 	///////////
 
 	// sort the passaged in the document order
-	dShow.Sort ( PassageOrder_fn() );
+	if ( !q.m_bWeightOrder )
+		dShow.Sort ( PassageOrder_fn() );
 
 	// estimate length, and grow it up to the limit
 	int iLast = -1;
@@ -901,12 +902,12 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & q )
 		int iTok = dShow[i].m_iStart;
 		int iEnd = iTok + dShow[i].m_iTokens - 1;
 
-		if ( iTok>1+iLast )
+		if ( iTok>1+iLast || q.m_bWeightOrder )
 			ResultEmit ( q.m_sChunkSeparator.cstr() );
 
 		while ( iTok<=iEnd )
 		{
-			if ( iTok>iLast )
+			if ( iTok>iLast || q.m_bWeightOrder )
 			{
 				// FIXME! glue
 				if ( m_dTokens[iTok].m_uWords )

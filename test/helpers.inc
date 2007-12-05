@@ -42,71 +42,6 @@ function CreateDB ( $db_drop, $db_create, $db_insert )
 }
 
 
-function WriteQueryResults ( $results, $handle )
-{
-	$nquery = 1;
-	foreach ( $results as $result )
-	{
-		fwrite ( $handle, "--- Query $nquery ---\n" );
-		$txt_q = $result["query"];
-		$txt_found = $result ["total_found"];
-		$txt_total = $result ["total"];
-		$txt_time = $result ["time"];
-
-		fwrite ( $handle, "Query '$txt_q': retrieved $txt_found of $txt_total matches in $txt_time sec.\n" );
-
-		if ( array_key_exists ( "words", $result ) && is_array( $result ["words"] ) )
-		{
-			fwrite ( $handle, "Word stats:\n" );
-
-			foreach ( $result ["words"] as $word => $word_result )
-			{
-				$hits = $word_result ["hits"];
-				$docs = $word_result ["docs"];
-				fwrite ( $handle, "\t'$word' found $hits times in $docs documents\n" );
-			}
-		}
-
-		fwrite ( $handle, "\n" );
-
-		if ( array_key_exists ( "matches", $result ) && is_array ( $result ["matches"] ) )
-		{
-			$n = 1;
-			fwrite ( $handle, "Matches:\n" );
-			foreach ( $result ["matches"] as $doc => $docinfo )
-			{
-				$weight = $docinfo ["weight"];
-
-				fwrite ( $handle, "$n. doc_id=$doc, weight=$weight" );
-
-				$query_res = mysql_query ( "select * from test_table where document_id = $doc" );
-
-				if ( $query_res != FALSE )
-				{
-					while ( $row = mysql_fetch_array ( $query_res, MYSQL_ASSOC ) )
-					{
-						foreach ( $row as $col_name => $col_content )
-						{
-							if ( array_search ( $col_name, $result ["fields"] ) !== FALSE )
-							   	fwrite ( $handle, " $col_name=\"$col_content\"" );
-						}
-
-						fwrite ( $handle, "\n" );
-				    }
-				}
-				$n++;
-			}
-
-			fwrite ( $handle, "\n" );
-		}
-
-		fwrite ( $handle, "\n" );
-	
-		++$nquery;
-	}
-}
-
-
 function RunIndexer ( &$error )
 {
 	global $windows, $indexer_path;
@@ -128,7 +63,7 @@ function RunIndexer ( &$error )
 }
 
 
-function StartSearchd ( &$error )
+function StartSearchd ( $config_file, $error_file, $pidfile, &$error )
 {
 	global $windows, $searchd_path;
 
@@ -136,35 +71,42 @@ function StartSearchd ( &$error )
 
 	if ( $windows )
 	{
-		$process = popen ("start /min $searchd_path --config config.conf --pidfile > error.txt", "r" );
+		$process = popen ("start /min $searchd_path --config $config_file --pidfile > $error_file", "r" );
 		pclose ( $process );
+
+		for ( $i = 0; $i < 10; $i++ )
+		{
+			if ( !file_exists ( $pidfile ) )
+				usleep ( 50000 );
+			else
+				break;
+		}
 	}
 	else
-		system ( "$searchd_path --config config.conf > error.txt", $retval );
+		system ( "$searchd_path --config $config_file > $error_file", $retval );
 
 	if ( $retval != 0 )
-		$error = file_get_contents ( "error.txt" );
+		$error = file_get_contents ( $error_file );
 
 	return $retval;
 }
 
 
-function StopSearchd ()
+function StopSearchd ( $config, $pidfile )
 {
-	global $sd_pid_file, $windows, $searchd_path;
+	global $windows, $searchd_path;
 
 	$retval = 0;
 
-	if ( $windows )
-		system ( "$searchd_path --config config.conf --stop > NUL", $retval );
-	else
+	if ( file_exists ( $pidfile ) )
 	{
-		if ( file_exists ( $sd_pid_file ) )
-		{
-			system ( "$searchd_path --config config.conf --stop > /dev/null", $retval );
-			while ( file_exists ( $sd_pid_file ) )
-				usleep ( 50000 );
-		}
+		if ( $windows )
+   			system ( "$searchd_path --config $config --stop > NUL", $retval );
+		else 
+			system ( "$searchd_path --config $config --stop > /dev/null", $retval );
+
+		while ( file_exists ( $pidfile ) )
+			usleep ( 50000 );
 	}
 
 	return $retval;
@@ -204,7 +146,13 @@ class SphinxConfig
 	private $_counters;
 	private $_dynamic_entries;
 	private $_queries;
+	private $_query_settings;
+	private $_query_attributes;
 	private $_xml;
+	private	$_sd_address;
+	private	$_sd_port;
+	private	$_sd_pid_file;
+	private $_num_agents;
 	private $_subtest;
 	private $_subtestcount;
 	private $_results;
@@ -213,13 +161,20 @@ class SphinxConfig
 	
 	function SphinxConfig ()
 	{
+		global $sd_address, $sd_port, $sd_pid_file;
+
 		$this->_counters 		= array ();
 		$this->_dynamic_entries = array ();
 		$this->_queries 		= array ();
 		$this->_results			= array ();
 		$this->_results_model	= array ();
+		$this->_query_attributes = array ();
+		$this->_num_agents		= 1;
 		$this->_subtest 		= 0;
 		$this->_subtestcount	= 0;
+		$this->_sd_address		= $sd_address;
+	   	$this->_sd_port			= $sd_port;
+		$this->_sd_pid_file		= $sd_pid_file;
 	}
 
 	
@@ -229,6 +184,7 @@ class SphinxConfig
 	function DB_Drop ()				{ return $this->_db_drop; }
 	function DB_Create ()			{ return $this->_db_create; }
 	function DB_Insert ()			{ return $this->_db_insert; }
+	function NumAgents ()			{ return $this->_num_agents; }
 
 
 	function CreateNextConfig ()
@@ -264,6 +220,22 @@ class SphinxConfig
 	}
 
 
+	function SetAgent ( $agent )
+	{
+		if ( !is_array ( $agent ) )
+			return;
+
+		$this->_sd_address = $agent ["address"];
+		$this->_sd_port = $agent ["port"];
+	}
+
+	
+	function SetPIDFile ( $pidfile )
+	{
+		$this->_sd_pid_file = $pidfile;
+	}
+
+
 	function GenNextCfg ( $i )
 	{
 		if ( count ( $this->_dynamic_entries ) == 0 )
@@ -291,14 +263,17 @@ class SphinxConfig
 	}
 
 
-	function GatherQueries ( $node )
+	function GatherEntities ( $node, &$array )
 	{
+		if ( empty ( $node ) )
+			return;
+
 		for ( $i = 0; !is_null ( $node->childNodes ) && $i < $node->childNodes->length; $i++ )
 		{
 			$child = $node->childNodes->item ( $i );
 		
 			if ( $child->nodeType == XML_ELEMENT_NODE )
-				array_push ( $this->_queries, $child->nodeValue );
+				array_push ( $array, $child->nodeValue );
 		}
 	}
 
@@ -323,7 +298,8 @@ class SphinxConfig
 		$this->_xml = new DOMDocument ("1.0", "utf-8");
 		$this->_xml->load ( $config_file );
 		$this->GatherNodes ( GetTreeRoot ( $this->_xml, "config" ) );
-		$this->GatherQueries ( GetTreeRoot ( $this->_xml, "query" ) );
+		$this->GatherEntities ( GetTreeRoot ( $this->_xml, "query" ), $this->_queries );
+		$this->GatherEntities ( GetTreeRoot ( $this->_xml, "query_attributes" ), $this->_query_attributes );
 
 		$name = GetTreeRoot ( $this->_xml, "name" );
 		if ( $name )
@@ -341,6 +317,15 @@ class SphinxConfig
 		if ( $db_insert )
 			$this->_db_insert = $db_insert->nodeValue;
 
+		$query_settings = GetTreeRoot ( $this->_xml, "query_settings" );
+		if ( $query_settings )
+			$this->_query_settings = $query_settings->nodeValue;
+
+		$num_agents = GetTreeRoot ( $this->_xml, "num_agents" );
+		if ( $num_agents )
+			$this->_num_agents = $num_agents->nodeValue;
+
+		
 		// precalc subtests count
 		$this->_subtestcount = 1;
 	   	foreach ( $this->_dynamic_entries as $entry )
@@ -369,13 +354,24 @@ class SphinxConfig
 			for ( $i = 0; $i < 3 && !$bOk; $i++ )
 			{
 				$cl = new SphinxClient ();
+				
 				$cl->SetServer ( $sd_address, $sd_port );
-            	$res = $cl->Query ( $query, $index );
-				if ( $res )
+
+				$results = 0;
+	
+				if ( empty ( $this->_query_settings ) )
+	            	$results = $cl->Query ( $query, $index );
+				else
+				{
+					$run_func = create_function( '$client, $query, $index, &$results', $this->_query_settings );
+					$run_func ( $cl, $query, $index, $results ); 
+				}
+
+				if ( $results )
 				{
 					$bOk = TRUE;
-					$res ["query"] = $query;
-        			array_push ( $query_results, $res );
+					$results ["query"] = $query;
+        			array_push ( $query_results, $results );
             	}
 				else
 					usleep ( 50000 );
@@ -445,12 +441,88 @@ class SphinxConfig
 		fwrite ( $handle, "Settings:\n" );
 		$this->WriteDiff ( $handle );
 		fwrite ( $handle, "\n" );
+
+		if ( !empty ( $this->_query_settings ) )
+			fprintf ( $handle, "Query settings:\n%s\n", $this->_query_settings );
 	}
 
 
 	function WriteResults ( $handle )
 	{
-		WriteQueryResults ( $this->_results, $handle );
+    	$nquery = 1;
+		foreach ( $this->_results as $result )
+		{
+			fwrite ( $handle, "--- Query $nquery ---\n" );
+			$txt_q = $result["query"];
+			$txt_found = $result ["total_found"];
+			$txt_total = $result ["total"];
+			$txt_time = $result ["time"];
+
+			fwrite ( $handle, "Query '$txt_q': retrieved $txt_found of $txt_total matches in $txt_time sec.\n" );
+
+			if ( array_key_exists ( "words", $result ) && is_array( $result ["words"] ) )
+			{
+				fwrite ( $handle, "Word stats:\n" );
+
+				foreach ( $result ["words"] as $word => $word_result )
+				{
+					$hits = $word_result ["hits"];
+					$docs = $word_result ["docs"];
+					fwrite ( $handle, "\t'$word' found $hits times in $docs documents\n" );
+				}
+			}
+
+			fwrite ( $handle, "\n" );
+
+			if ( array_key_exists ( "matches", $result ) && is_array ( $result ["matches"] ) )
+			{
+				$n = 1;
+				fwrite ( $handle, "Matches:\n" );
+				foreach ( $result ["matches"] as $doc => $docinfo )
+				{
+					$weight = $docinfo ["weight"];
+
+					fwrite ( $handle, "$n. doc_id=$doc, weight=$weight" );
+
+					if ( empty ( $this->_query_attributes ) )
+					{
+						$query_res = mysql_query ( "select * from test_table where document_id = $doc" );
+
+						if ( $query_res === FALSE )
+							fwrite ( $handle, "\n" );						
+						else
+						{
+							while ( $row = mysql_fetch_array ( $query_res, MYSQL_ASSOC ) )
+							{
+								foreach ( $row as $col_name => $col_content )
+								{
+									if ( array_search ( $col_name, $result ["fields"] ) !== FALSE )
+									   	fwrite ( $handle, " $col_name=\"$col_content\"" );
+								}
+
+								fwrite ( $handle, "\n" );
+					    	}
+						}
+					}
+					else
+					{
+						foreach ( $this->_query_attributes as $attribute )
+							if ( array_key_exists ( $attribute, $docinfo ["attrs"] ) )
+								fwrite ( $handle, " $attribute=".$docinfo ["attrs"][$attribute] );
+
+						fwrite ( $handle, "\n" );
+					}
+
+					$n++;
+				}
+
+				fwrite ( $handle, "\n" );
+			}
+
+			fwrite ( $handle, "\n" );
+	
+			++$nquery;
+		}
 	}
 
 
@@ -483,15 +555,15 @@ class SphinxConfig
 
 	function WriteSearchdSettings ( $handle )
 	{
-		global $sd_address, $sd_port, $sd_log, $sd_query_log, $sd_read_timeout, $sd_max_children, $sd_pid_file, $sd_max_matches;
+		global $sd_log, $sd_query_log, $sd_read_timeout, $sd_max_children, $sd_pid_file, $sd_max_matches;
 
-		fwrite ( $handle, "\taddress			= $sd_address\n" );
-		fwrite ( $handle, "\tport			= $sd_port\n" );
+		fwrite ( $handle, "\taddress			= ".$this->_sd_address."\n" );
+		fwrite ( $handle, "\tport			= ".$this->_sd_port."\n" );
 		fwrite ( $handle, "\tlog				= $sd_log\n" );
 		fwrite ( $handle, "\tquery_log		= $sd_query_log\n" );
 		fwrite ( $handle, "\tread_timeout	= $sd_read_timeout\n" );
 		fwrite ( $handle, "\tmax_children	= $sd_max_children\n" );
-		fwrite ( $handle, "\tpid_file		= $sd_pid_file\n" );
+		fwrite ( $handle, "\tpid_file		= ".$this->_sd_pid_file."\n" );
 		fwrite ( $handle, "\tmax_matches		= $sd_max_matches\n" );
 	}
 
@@ -509,7 +581,7 @@ class SphinxConfig
 
 	function Dump ( $node, $file_handle, $dynamic_only )
 	{
-		global $index_data_path;
+		global $index_data_path, $agent_address, $agent_port;
 
 		switch ( strtolower ( $node->nodeName ) )
 		{
@@ -536,6 +608,13 @@ class SphinxConfig
 					break;
 
 				$this->WriteSqlSettings ( $file_handle );
+				break;
+			
+			case "agent_address":
+				if ( $dynamic_only )
+					break;
+
+				fwrite ( $file_handle, $agent_address.":".$agent_port );
 				break;
 			
 			case "data_path":
@@ -610,7 +689,7 @@ function EraseDirContents ( $path )
 
 function RunTest ( $test_dir )
 {
-	global $indexer_data_path;
+	global $indexer_data_path, $agents, $sd_pid_file;
 
 	$test_dir = $test_dir."/";
 
@@ -650,8 +729,7 @@ function RunTest ( $test_dir )
 		print ( "$prefix $subtest/$nsubtests\r" );
 		$config->WriteReportHeader ( $report );
 
-		StopSearchd ();
-
+		$config->SetAgent ( $agents [0] );
 		$config->Write ( $conf_dir."/"."config_".$config->SubtestNo ().".conf" );
 		$config->Write ( "config.conf" );
 
@@ -669,12 +747,39 @@ function RunTest ( $test_dir )
 			fwrite ( $report, "$error\n" );
 		}
 
-		if ( StartSearchd ( $error ) != 0 )
+		$searchd_error = FALSE;
+
+		if ( $config->NumAgents () == 1 )
 		{
-			if ( !HandleFailure ( $config, $report, $error, $nfailed ) )
-				$log .= "\tsubtest $subtest: error starting searchd; see $report_file\n";
-			continue;
+			if ( StartSearchd ( "config.conf", "error.txt", $sd_pid_file, $error ) != 0 )
+			{
+				if ( !HandleFailure ( $config, $report, $error, $nfailed ) )
+					$log .= "\tsubtest $subtest: error starting searchd; see $report_file\n";
+				
+				$searchd_error = TRUE;
+			}
 		}
+		else
+			for ( $i = $config->NumAgents () - 1; $i >= 0  && !$searchd_error; $i-- )
+			{
+				$config_file = "config_$i.conf";
+				$pid_file = "searchd$i.pid";
+
+				$config->SetAgent ( $agents [$i] );
+				$config->SetPIDFile ( $pid_file );
+				$config->Write ( $config_file );
+
+				if ( StartSearchd ( $config_file, "error_$i.txt", $pid_file, $error ) != 0 )
+				{
+					if ( !HandleFailure ( $config, $report, $error, $nfailed ) )
+						$log .= "\tsubtest $subtest: error starting searchd; see $report_file\n";
+				
+					$searchd_error = TRUE;
+				}
+    		}
+
+		if ( $searchd_error )
+			continue;
 
 		$error = "";
 		if ( ! $config->RunQuery ( "*", $error ) )
@@ -692,10 +797,15 @@ function RunTest ( $test_dir )
 
 		$config->WriteResults ( $report );
 		$config->SubtestFinished ();
+
+		if ( $config->NumAgents () == 1 )
+			StopSearchd ( "config.conf", $sd_pid_file );
+		else
+			for ( $i = 0; $i < $config->NumAgents (); $i++ )
+				StopSearchd ( "config_$i.conf", "searchd$i.pid" );
 	}
 	while ( $config->CreateNextConfig () );
 
-	StopSearchd ();
 	fclose ( $report );
 	mysql_close ();
 

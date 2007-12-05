@@ -19,6 +19,12 @@ $db_pwd				= "";
 $db_name			= "test";
 $db_port			= 3306;
 
+$agent_address		= "localhost";
+$agent_port			= 6713;
+
+$agents 			= array ( array ( "address" => $sd_address, "port" => $sd_port ),
+							  array ( "address" => $agent_address, "port" => $agent_port ) );
+
 $index_data_path	= "data";
 
 $g_model			= false;
@@ -108,8 +114,24 @@ sort ( $tests );
 foreach ( $tests as $test )
 	RunTest ( $test );
 
-@unlink ( "error.txt" );
+
+// perform cleanup
 @unlink ( "config.conf" );
+@unlink ( "error.txt" );
+
+$nfile = 0;
+while ( file_exists ( "config_$nfile.conf" ) )
+{
+	@unlink ( "config_$nfile.conf" );
+	$nfile++;
+}
+
+$nfile = 0;
+while ( file_exists ( "error_$nfile.txt" ) )
+{
+	@unlink ( "error_$nfile.txt" );
+	$nfile++;
+}
 
 printf ( "%.2f sec elapsed\n", MyMicrotime()-$t );
 

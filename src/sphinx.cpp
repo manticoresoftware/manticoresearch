@@ -12908,6 +12908,7 @@ bool CSphSource_SQL::IterateMultivaluedNext ()
 #if USE_MYSQL
 
 CSphSourceParams_MySQL::CSphSourceParams_MySQL ()
+	: m_iFlags ( 0 )
 {
 	m_iPort = 3306;
 }
@@ -12961,7 +12962,7 @@ bool CSphSource_MySQL::SqlConnect ()
 	mysql_init ( &m_tMysqlDriver );
 	return NULL!=mysql_real_connect ( &m_tMysqlDriver,
 		m_tParams.m_sHost.cstr(), m_tParams.m_sUser.cstr(), m_tParams.m_sPass.cstr(),
-		m_tParams.m_sDB.cstr(), m_tParams.m_iPort, m_sMysqlUsock.cstr(), 0 );
+		m_tParams.m_sDB.cstr(), m_tParams.m_iPort, m_sMysqlUsock.cstr(), m_iMysqlConnectFlags );
 }
 
 
@@ -13017,6 +13018,7 @@ bool CSphSource_MySQL::Setup ( const CSphSourceParams_MySQL & tParams )
 		return false;
 
 	m_sMysqlUsock = tParams.m_sUsock;
+	m_iMysqlConnectFlags = tParams.m_iFlags;
 
 	// build and store DSN for error reporting
 	char sBuf [ 1024 ];

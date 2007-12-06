@@ -886,6 +886,8 @@ protected:
 struct CSphSourceParams_MySQL : CSphSourceParams_SQL
 {
 	CSphString	m_sUsock;					///< UNIX socket
+	int			m_iFlags;					///< connection flags
+
 				CSphSourceParams_MySQL ();	///< ctor. sets defaults
 };
 
@@ -904,6 +906,7 @@ protected:
 	MYSQL					m_tMysqlDriver;
 
 	CSphString				m_sMysqlUsock;
+	int						m_iMysqlConnectFlags;
 
 protected:
 	virtual void			SqlDismissResult ();

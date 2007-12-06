@@ -44,6 +44,33 @@ source src1
 	# usually '/var/lib/mysql/mysql.sock' on Linux
 	# usually '/tmp/mysql.sock' on FreeBSD
 
+
+	# MySQL specific client connection flags
+	#
+	# must contain an integer value with the sum of the flags.
+	# the value will be passed to mysql_real_connect. the flags are
+	# enumerated in mysql_com.h include file.
+	#
+	# here are some flags which could be useful for indexing,
+	# with their respective values:
+	#
+	# CLIENT_COMPRESS = 32; can use compression protocol
+	# CLIENT_SSL = 2048; switch to SSL after handshake
+	# CLIENT_SECURE_CONNECTION = 32768; new 4.1 authentication
+	#
+	# for example, specify 2080 (2048+32) to use both compression
+	# and SSL, or 32768 to use new authentication only.
+	#
+	# compression on 1 Gbps links is most likely to hurt indexing
+	# time though it reduces traffic. however it was reported that
+	# enabling compression on 100 mbps links can improve indexing
+	# time significantly.
+	#
+	# optional, default is 0
+	#
+	# mysql_connect_flags	= 32
+
+
 	# pre-query, executed before the main fetch query
 	# useful eg. to setup encoding or mark records
 	# optional, default is empty

@@ -1836,7 +1836,6 @@ class CSphTokenizer_SBCS : public ISphTokenizer
 {
 public:
 						CSphTokenizer_SBCS ();
-	virtual				~CSphTokenizer_SBCS ();
 
 	virtual void				SetBuffer ( BYTE * sBuffer, int iLength );
 	virtual BYTE *				GetToken ();
@@ -1845,11 +1844,7 @@ public:
 	virtual int					GetCodepointLength ( int ) const { return 1; }
 
 protected:
-	BYTE *				m_pBuffer;							///< my buffer
-	BYTE *				m_pBufferMax;						///< max buffer ptr, exclusive (ie. this ptr is invalid, but every ptr below is ok)
-	BYTE *				m_pCur;								///< current position
-	BYTE				m_sAccum [ 4+SPH_MAX_WORD_LEN ];	///< token accumulator
-	int					m_iAccum;							///< token size
+	virtual int					GetCodePoint () { return m_pCur>=m_pBufferMax ? -1 : int(*m_pCur++); }
 };
 
 
@@ -1858,11 +1853,9 @@ class CSphTokenizer_UTF8 : public ISphTokenizer
 {
 public:
 						CSphTokenizer_UTF8 ();
-	virtual				~CSphTokenizer_UTF8 ();
 
 	virtual void				SetBuffer ( BYTE * sBuffer, int iLength );
 	virtual BYTE *				GetToken ();
-	virtual BYTE *				GetTokenSyn ();
 	virtual ISphTokenizer *		Clone () const;
 	virtual bool				IsUtf8 () const { return true; }
 	virtual int					GetCodepointLength ( int iCode ) const;
@@ -1874,13 +1867,6 @@ protected:
 	void				FlushAccum ();
 
 protected:
-	BYTE *				m_pBuffer;							///< my buffer
-	BYTE *				m_pBufferMax;						///< max buffer ptr, exclusive (ie. this ptr is invalid, but every ptr below is ok)
-	BYTE *				m_pCur;								///< current position
-
-	BYTE				m_sAccum [ 3*SPH_MAX_WORD_LEN+3 ];	///< folded token accumulator
-	BYTE *				m_pAccum;							///< current accumulator position
-	int					m_iAccum;							///< boundary token size
 };
 
 
@@ -2428,6 +2414,20 @@ static int sphUTF8Len ( const char * pStr )
 
 /////////////////////////////////////////////////////////////////////////////
 
+ISphTokenizer::ISphTokenizer ()
+	: m_iMinWordLen ( 1 )
+	, m_iLastTokenLen ( 0 )
+	, m_bTokenBoundary ( false )
+	, m_bBoundary ( false )
+	, m_pBuffer		( NULL )
+	, m_pBufferMax	( NULL )
+	, m_pCur		( NULL )
+	, m_iAccum		( 0 )
+{
+	m_pAccum = m_sAccum;
+}
+
+
 bool ISphTokenizer::SetCaseFolding ( const char * sConfig, CSphString & sError )
 {
 	if ( m_dSynonyms.GetLength() )
@@ -2602,7 +2602,9 @@ bool ISphTokenizer::LoadSynonyms ( const char * sFilename, CSphString & sError )
 			break;
 		}
 
-		int iToLen = sphUTF8Len ( (const char*)sTo );
+		int iToLen = IsUtf8()
+			? sphUTF8Len ( (const char*)sTo )
+			: strlen ( (const char*)sTo );
 		if ( iToLen>SPH_MAX_WORD_LEN )
 		{
 			sError.SetSprintf ( "%s line %d: map-to token too long (over %d bytes)", sFilename, iLine, SPH_MAX_WORD_LEN );
@@ -2687,264 +2689,6 @@ bool ISphTokenizer::LoadSynonyms ( const char * sFilename, CSphString & sError )
 }
 
 
-bool ISphTokenizer::SetBoundary ( const char * sConfig, CSphString & sError )
-{
-	// parse
-	CSphVector<CSphRemapRange> dRemaps;
-	CSphCharsetDefinitionParser tParser;
-	if ( !tParser.Parse ( sConfig, dRemaps ) )
-	{
-		sError = tParser.GetLastError();
-		return false;
-	}
-
-	// check
-	ARRAY_FOREACH ( i, dRemaps )
-	{
-		if ( dRemaps[i].m_iStart!=dRemaps[i].m_iRemapStart )
-		{
-			sError.SetSprintf ( "phrase boundary characters must not be remapped (map-from=U+%x, map-to=U+%x)",
-				dRemaps[i].m_iStart, dRemaps[i].m_iRemapStart );
-			return false;
-		}
-
-		for ( int j=dRemaps[i].m_iStart; j<=dRemaps[i].m_iEnd; j++ )
-			if ( m_tLC.ToLower(j) )
-		{
-			sError.SetSprintf ( "phrase boundary characters must not be present in characters table, nor synonyms list, nor N-gram chars list (code=U+%x)", j );
-			return false;
-		}
-	}
-
-	// add mapping
-	m_tLC.AddRemaps ( dRemaps, FLAG_CODEPOINT_BOUNDARY, 0 );
-	return true;
-}
-
-/////////////////////////////////////////////////////////////////////////////
-
-CSphTokenizer_SBCS::CSphTokenizer_SBCS ()
-	: m_pBuffer		( NULL )
-	, m_pBufferMax	( NULL )
-	, m_pCur		( NULL )
-	, m_iAccum		( 0 )
-{
-	CSphString sTmp;
-	SetCaseFolding ( SPHINX_DEFAULT_SBCS_TABLE, sTmp );
-}
-
-
-CSphTokenizer_SBCS::~CSphTokenizer_SBCS ()
-{
-}
-
-
-void CSphTokenizer_SBCS::SetBuffer ( BYTE * sBuffer, int iLength )
-{
-	// check that old one is over and that new length is sane
-	assert ( m_pCur>=m_pBufferMax );
-	assert ( iLength>=0 );
-
-	// set buffer
-	m_pBuffer = sBuffer;
-	m_pBufferMax = sBuffer + iLength;
-	m_pCur = sBuffer;
-}
-
-
-BYTE * CSphTokenizer_SBCS::GetToken ()
-{
-	m_bTokenBoundary = false;
-	for ( ;; )
-	{
-		// get next codepoint
-		int iCode = 0;
-		if ( m_pCur>=m_pBufferMax )
-		{
-			if ( m_iAccum<m_iMinWordLen )
-			{
-				m_bBoundary = m_bTokenBoundary = false;
-				m_iAccum = 0;
-				m_iLastTokenLen = 0;
-				return NULL;
-			}
-		} else
-		{
-			iCode = m_tLC.ToLower ( *m_pCur++ );
-		}
-
-		// handle whitespace and boundary
-		if ( m_bBoundary && ( iCode==0 ) ) m_bTokenBoundary = true;
-		m_bBoundary = ( iCode & FLAG_CODEPOINT_BOUNDARY )!=0;
-		if ( iCode==0 || m_bBoundary )
-		{
-			if ( m_iAccum<m_iMinWordLen )
-			{
-				m_iAccum = 0;
-				continue;
-			}
-
-			m_iLastTokenLen = m_iAccum;
-			m_sAccum[m_iAccum] = '\0';
-			m_iAccum = 0;
-			return m_sAccum;
-		}
-
-		// handle specials
-		// duals in the middle of the word are handled as if they were just plain codepoints
-		bool bSpecial =
-			( iCode & FLAG_CODEPOINT_SPECIAL ) &&
-			!( ( iCode & FLAG_CODEPOINT_DUAL ) && m_iAccum );
-		iCode &= MASK_CODEPOINT;
-
-		if ( bSpecial )
-		{
-			// skip short words
-			if ( m_iAccum<m_iMinWordLen )
-				m_iAccum = 0;
-
-			if ( m_iAccum==0 )
-			{
-				// nice standalone special
-				m_iLastTokenLen = 1;
-				m_sAccum[0] = (BYTE)iCode;
-				m_sAccum[1] = '\0';
-			} else
-			{
-				// flush prev accum and redo this special
-				m_iLastTokenLen = m_iAccum;
-				m_sAccum[m_iAccum] = '\0';
-				m_pCur--;
-			}
-
-			m_iAccum = 0;
-			return m_sAccum;
-		}
-
-		// just accumulate
-		assert ( iCode>0 );
-		if ( m_iAccum<SPH_MAX_WORD_LEN )
-			m_sAccum[m_iAccum++] = (BYTE)iCode;
-	}
-}
-
-ISphTokenizer * CSphTokenizer_SBCS::Clone () const
-{
-	CSphTokenizer_SBCS * pClone = new CSphTokenizer_SBCS ();
-	pClone->m_tLC = m_tLC;
-	pClone->m_dSynonyms = m_dSynonyms;
-	return pClone;
-}
-
-/////////////////////////////////////////////////////////////////////////////
-
-CSphTokenizer_UTF8::CSphTokenizer_UTF8 ()
-	: m_pBuffer		( NULL )
-	, m_pBufferMax	( NULL )
-	, m_pCur		( NULL )
-	, m_iAccum		( 0 )
-{
-	m_pAccum = m_sAccum;
-	CSphString sTmp;
-	SetCaseFolding ( SPHINX_DEFAULT_UTF8_TABLE, sTmp );
-}
-
-
-CSphTokenizer_UTF8::~CSphTokenizer_UTF8 ()
-{
-}
-
-
-void CSphTokenizer_UTF8::SetBuffer ( BYTE * sBuffer, int iLength )
-{
-	// check that old one is over and that new length is sane
-	assert ( m_pCur>=m_pBufferMax );
-	assert ( iLength>=0 );
-
-	// set buffer
-	m_pBuffer = sBuffer;
-	m_pBufferMax = sBuffer + iLength;
-	m_pCur = sBuffer;
-
-	// fixup embedded zeroes with spaces
-	for ( BYTE * p = m_pBuffer; p < m_pBufferMax; p++ )
-		if ( !*p )
-			*p = ' ';
-}
-
-
-BYTE * CSphTokenizer_UTF8::GetToken ()
-{
-	if ( m_dSynonyms.GetLength() )
-		return GetTokenSyn ();
-
-	m_bTokenBoundary = false;
-	for ( ;; )
-	{
-		// get next codepoint
-		BYTE * pCur = m_pCur; // to redo special char, if there's a token already
-		int iCode = GetFoldedCodePoint (); // advances m_pCur
-
-		// handle eof
-		if ( iCode<0 )
-		{
-			m_bBoundary = m_bTokenBoundary = false;
-
-			// skip trailing short word
-			FlushAccum ();
-			if ( m_iLastTokenLen<m_iMinWordLen )
-			{
-				m_iLastTokenLen = 0;
-				return NULL;
-			}
-
-			// return trailing word
-			return m_sAccum;
-		}
-
-		// handle whitespace and boundary
-		if ( m_bBoundary && ( iCode==0 ) ) m_bTokenBoundary = true;
-		m_bBoundary = ( iCode & FLAG_CODEPOINT_BOUNDARY )!=0;
-		if ( iCode==0 || m_bBoundary )
-		{
-			FlushAccum ();
-			if ( m_iLastTokenLen<m_iMinWordLen )
-				continue;
-			else
-				return m_sAccum;
-		}
-
-		// handle specials
-		// duals in the middle of the word are handled as if they were just plain codepoints
-		bool bSpecial =
-			( iCode & FLAG_CODEPOINT_SPECIAL ) &&
-			!( ( iCode & FLAG_CODEPOINT_DUAL ) && m_iAccum );
-		iCode &= MASK_CODEPOINT;
-
-		if ( bSpecial )
-		{
-			// skip short words preceding specials
-			if ( m_iAccum<m_iMinWordLen )
-				FlushAccum ();
-
-			if ( m_iAccum==0 )
-			{
-				AccumCodePoint ( iCode ); // handle special as a standalone token
-			} else
-			{
-				m_pCur = pCur; // we need to flush current accum and then redo special char again
-			}
-
-			FlushAccum ();
-			return m_sAccum;
-		}
-
-		// just accumulate
-		AccumCodePoint ( iCode );
-	}
-}
-
-
 enum SynCheck_e
 {
 	SYNCHECK_LESS,
@@ -3005,7 +2749,7 @@ static inline bool IsSeparator ( int iFolded, bool bFirst )
 }
 
 
-BYTE * CSphTokenizer_UTF8::GetTokenSyn ()
+BYTE * ISphTokenizer::GetTokenSyn ()
 {
 	assert ( m_dSynonyms.GetLength() );
 
@@ -3240,7 +2984,7 @@ BYTE * CSphTokenizer_UTF8::GetTokenSyn ()
 			for ( ;; )
 			{
 				BYTE * pCur = m_pCur;
-				int iFolded = GetFoldedCodePoint ();
+				int iFolded = m_tLC.ToLower ( GetCodePoint() );
 				if ( iFolded<0 )
 					break; // eof
 
@@ -3272,6 +3016,248 @@ BYTE * CSphTokenizer_UTF8::GetTokenSyn ()
 		m_sAccum[iLen] = '\0';
 		m_iLastTokenLen = m_iAccum;
 		return m_sAccum;
+	}
+}
+
+
+bool ISphTokenizer::SetBoundary ( const char * sConfig, CSphString & sError )
+{
+	// parse
+	CSphVector<CSphRemapRange> dRemaps;
+	CSphCharsetDefinitionParser tParser;
+	if ( !tParser.Parse ( sConfig, dRemaps ) )
+	{
+		sError = tParser.GetLastError();
+		return false;
+	}
+
+	// check
+	ARRAY_FOREACH ( i, dRemaps )
+	{
+		if ( dRemaps[i].m_iStart!=dRemaps[i].m_iRemapStart )
+		{
+			sError.SetSprintf ( "phrase boundary characters must not be remapped (map-from=U+%x, map-to=U+%x)",
+				dRemaps[i].m_iStart, dRemaps[i].m_iRemapStart );
+			return false;
+		}
+
+		for ( int j=dRemaps[i].m_iStart; j<=dRemaps[i].m_iEnd; j++ )
+			if ( m_tLC.ToLower(j) )
+		{
+			sError.SetSprintf ( "phrase boundary characters must not be present in characters table, nor synonyms list, nor N-gram chars list (code=U+%x)", j );
+			return false;
+		}
+	}
+
+	// add mapping
+	m_tLC.AddRemaps ( dRemaps, FLAG_CODEPOINT_BOUNDARY, 0 );
+	return true;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+CSphTokenizer_SBCS::CSphTokenizer_SBCS ()
+{
+	CSphString sTmp;
+	SetCaseFolding ( SPHINX_DEFAULT_SBCS_TABLE, sTmp );
+}
+
+
+void CSphTokenizer_SBCS::SetBuffer ( BYTE * sBuffer, int iLength )
+{
+	// check that old one is over and that new length is sane
+	assert ( m_pCur>=m_pBufferMax );
+	assert ( iLength>=0 );
+
+	// set buffer
+	m_pBuffer = sBuffer;
+	m_pBufferMax = sBuffer + iLength;
+	m_pCur = sBuffer;
+}
+
+
+BYTE * CSphTokenizer_SBCS::GetToken ()
+{
+	if ( m_dSynonyms.GetLength() )
+		return GetTokenSyn ();
+
+	m_bTokenBoundary = false;
+	for ( ;; )
+	{
+		// get next codepoint
+		int iCode = 0;
+		if ( m_pCur>=m_pBufferMax )
+		{
+			if ( m_iAccum<m_iMinWordLen )
+			{
+				m_bBoundary = m_bTokenBoundary = false;
+				m_iAccum = 0;
+				m_iLastTokenLen = 0;
+				return NULL;
+			}
+		} else
+		{
+			iCode = m_tLC.ToLower ( *m_pCur++ );
+		}
+
+		// handle whitespace and boundary
+		if ( m_bBoundary && ( iCode==0 ) ) m_bTokenBoundary = true;
+		m_bBoundary = ( iCode & FLAG_CODEPOINT_BOUNDARY )!=0;
+		if ( iCode==0 || m_bBoundary )
+		{
+			if ( m_iAccum<m_iMinWordLen )
+			{
+				m_iAccum = 0;
+				continue;
+			}
+
+			m_iLastTokenLen = m_iAccum;
+			m_sAccum[m_iAccum] = '\0';
+			m_iAccum = 0;
+			return m_sAccum;
+		}
+
+		// handle specials
+		// duals in the middle of the word are handled as if they were just plain codepoints
+		bool bSpecial =
+			( iCode & FLAG_CODEPOINT_SPECIAL ) &&
+			!( ( iCode & FLAG_CODEPOINT_DUAL ) && m_iAccum );
+		iCode &= MASK_CODEPOINT;
+
+		if ( bSpecial )
+		{
+			// skip short words
+			if ( m_iAccum<m_iMinWordLen )
+				m_iAccum = 0;
+
+			if ( m_iAccum==0 )
+			{
+				// nice standalone special
+				m_iLastTokenLen = 1;
+				m_sAccum[0] = (BYTE)iCode;
+				m_sAccum[1] = '\0';
+			} else
+			{
+				// flush prev accum and redo this special
+				m_iLastTokenLen = m_iAccum;
+				m_sAccum[m_iAccum] = '\0';
+				m_pCur--;
+			}
+
+			m_iAccum = 0;
+			return m_sAccum;
+		}
+
+		// just accumulate
+		assert ( iCode>0 );
+		if ( m_iAccum<SPH_MAX_WORD_LEN )
+			m_sAccum[m_iAccum++] = (BYTE)iCode;
+	}
+}
+
+ISphTokenizer * CSphTokenizer_SBCS::Clone () const
+{
+	CSphTokenizer_SBCS * pClone = new CSphTokenizer_SBCS ();
+	pClone->m_tLC = m_tLC;
+	pClone->m_dSynonyms = m_dSynonyms;
+	return pClone;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+CSphTokenizer_UTF8::CSphTokenizer_UTF8 ()
+{
+	CSphString sTmp;
+	SetCaseFolding ( SPHINX_DEFAULT_UTF8_TABLE, sTmp );
+}
+
+
+void CSphTokenizer_UTF8::SetBuffer ( BYTE * sBuffer, int iLength )
+{
+	// check that old one is over and that new length is sane
+	assert ( m_pCur>=m_pBufferMax );
+	assert ( iLength>=0 );
+
+	// set buffer
+	m_pBuffer = sBuffer;
+	m_pBufferMax = sBuffer + iLength;
+	m_pCur = sBuffer;
+
+	// fixup embedded zeroes with spaces
+	for ( BYTE * p = m_pBuffer; p < m_pBufferMax; p++ )
+		if ( !*p )
+			*p = ' ';
+}
+
+
+BYTE * CSphTokenizer_UTF8::GetToken ()
+{
+	if ( m_dSynonyms.GetLength() )
+		return GetTokenSyn ();
+
+	m_bTokenBoundary = false;
+	for ( ;; )
+	{
+		// get next codepoint
+		BYTE * pCur = m_pCur; // to redo special char, if there's a token already
+		int iCode = GetFoldedCodePoint (); // advances m_pCur
+
+		// handle eof
+		if ( iCode<0 )
+		{
+			m_bBoundary = m_bTokenBoundary = false;
+
+			// skip trailing short word
+			FlushAccum ();
+			if ( m_iLastTokenLen<m_iMinWordLen )
+			{
+				m_iLastTokenLen = 0;
+				return NULL;
+			}
+
+			// return trailing word
+			return m_sAccum;
+		}
+
+		// handle whitespace and boundary
+		if ( m_bBoundary && ( iCode==0 ) ) m_bTokenBoundary = true;
+		m_bBoundary = ( iCode & FLAG_CODEPOINT_BOUNDARY )!=0;
+		if ( iCode==0 || m_bBoundary )
+		{
+			FlushAccum ();
+			if ( m_iLastTokenLen<m_iMinWordLen )
+				continue;
+			else
+				return m_sAccum;
+		}
+
+		// handle specials
+		// duals in the middle of the word are handled as if they were just plain codepoints
+		bool bSpecial =
+			( iCode & FLAG_CODEPOINT_SPECIAL ) &&
+			!( ( iCode & FLAG_CODEPOINT_DUAL ) && m_iAccum );
+		iCode &= MASK_CODEPOINT;
+
+		if ( bSpecial )
+		{
+			// skip short words preceding specials
+			if ( m_iAccum<m_iMinWordLen )
+				FlushAccum ();
+
+			if ( m_iAccum==0 )
+			{
+				AccumCodePoint ( iCode ); // handle special as a standalone token
+			} else
+			{
+				m_pCur = pCur; // we need to flush current accum and then redo special char again
+			}
+
+			FlushAccum ();
+			return m_sAccum;
+		}
+
+		// just accumulate
+		AccumCodePoint ( iCode );
 	}
 }
 

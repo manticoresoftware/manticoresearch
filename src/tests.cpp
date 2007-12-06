@@ -16,8 +16,7 @@
 
 const char * g_sTmpfile = "__libsphinxtest.tmp";
 
-
-bool CreateSynonymsFile ()
+bool CreateSynonymsFile ( const char * sMagic )
 {
 	FILE * fp = fopen ( g_sTmpfile, "w+" );
 	if ( !fp )
@@ -31,18 +30,19 @@ bool CreateSynonymsFile ()
 		"OS/2 => OS/2\n" 
 		"Ms-Dos => MS-DOS\n"
 		"MS DOS => MS-DOS\n"
-		"feat. => featuring\n"
-		);
+		"feat. => featuring\n" );
+	if ( sMagic )
+		fprintf ( fp, "%s => test\n", sMagic );
 	fclose ( fp );
 	return true;
 }
 
 
-ISphTokenizer * CreateTestTokenizer ( bool bSynonyms )
+ISphTokenizer * CreateTestTokenizer ( bool bUTF8, bool bSynonyms )
 {
 	CSphString sError;
-	ISphTokenizer * pTokenizer = sphCreateUTF8Tokenizer ();
-	assert ( pTokenizer->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F", sError ) );
+	ISphTokenizer * pTokenizer = bUTF8 ? sphCreateUTF8Tokenizer () : sphCreateSBCSTokenizer ();
+	assert ( pTokenizer->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z", sError ) );
 	pTokenizer->SetMinWordLen ( 2 );
 	pTokenizer->AddSpecials ( "!-" );
 	if ( bSynonyms )
@@ -51,14 +51,22 @@ ISphTokenizer * CreateTestTokenizer ( bool bSynonyms )
 }
 
 
-void TestUTF8Tokenizer ()
+void TestTokenizer ( bool bUTF8 )
 {
-	assert ( CreateSynonymsFile () );
+	const char * sPrefix = bUTF8 
+		? "testing UTF8 tokenizer"
+		: "testing SBCS tokenizer";
+
 	for ( int iRun=1; iRun<=2; iRun++ )
 	{
-		ISphTokenizer * pTokenizer = CreateTestTokenizer ( iRun==2 );
-
 		// simple "one-line" tests
+		char * sMagic = bUTF8
+			? "\xD1\x82\xD0\xB5\xD1\x81\xD1\x82" // valid UTF-8
+			: "\xC0\xC1\xF5\xF6"; // valid SBCS but invalid UTF-8
+
+		assert ( CreateSynonymsFile ( sMagic ) );
+		ISphTokenizer * pTokenizer = CreateTestTokenizer ( bUTF8, iRun==2 );
+
 		char * dTests[] =
 		{
 			"1", "",							NULL,								// test that empty strings work
@@ -89,6 +97,7 @@ void TestUTF8Tokenizer ()
 			"2", "# OS/2's system install",		"OS/2", "system", "install", NULL,
 			"2", "IBM-s/OS/2/Merlin",			"ibm-s", "OS/2", "merlin", NULL,
 			"2", "MS DOSS feat.Deskview.MS DOS","ms", "doss", "featuring", "deskview", "MS-DOS", NULL,
+			"2", sMagic,						"test", NULL,
 			0
 		};
 
@@ -98,7 +107,7 @@ void TestUTF8Tokenizer ()
 			if ( atoi(dTests[iCur++])>iRun )
 				break;
 
-			printf ( "testing tokenizer, run=%d, line=%s\n", iRun, dTests[iCur] );
+			printf ( "%s, run=%d, line=%s\n", sPrefix, iRun, dTests[iCur] );
 			pTokenizer->SetBuffer ( (BYTE*)dTests[iCur], strlen(dTests[iCur]) );
 			iCur++;
 
@@ -113,14 +122,17 @@ void TestUTF8Tokenizer ()
 		}
 
 		// test that decoder does not go over the buffer boundary on errors in UTF-8
-		printf ( "testing tokenizer for proper UTF-8 error handling\n" );
-		char * sLine3 = "hi\xd0\xffh";
+		if ( bUTF8 )
+		{
+			printf ( "%s for proper UTF-8 error handling\n", sPrefix );
+			char * sLine3 = "hi\xd0\xffh";
 
-		pTokenizer->SetBuffer ( (BYTE*)sLine3, 4 );
-		assert ( !strcmp ( (char*)pTokenizer->GetToken(), "hi" ) );
+			pTokenizer->SetBuffer ( (BYTE*)sLine3, 4 );
+			assert ( !strcmp ( (char*)pTokenizer->GetToken(), "hi" ) );
+		}
 
 		// test uberlong tokens
-		printf ( "testing tokenizer for uberlong token handling\n" );
+		printf ( "%s for uberlong token handling\n", sPrefix );
 
 		const int UBERLONG = 4096;
 		char * sLine4 = new char [ UBERLONG+1 ]; 
@@ -138,7 +150,7 @@ void TestUTF8Tokenizer ()
 		// test uberlong synonym-only tokens
 		if ( iRun==2 )
 		{
-			printf ( "testing tokenizer for uberlong synonym-only char token handling\n" );
+			printf ( "%s for uberlong synonym-only char token handling\n", sPrefix );
 
 			memset ( sLine4, '/', UBERLONG );
 			sLine4[UBERLONG] = '\0';
@@ -146,7 +158,7 @@ void TestUTF8Tokenizer ()
 			pTokenizer->SetBuffer ( (BYTE*)sLine4, strlen(sLine4) );
 			assert ( pTokenizer->GetToken()==NULL );
 
-			printf ( "testing tokenizer for uberlong synonym token handling\n" );
+			printf ( "%s for uberlong synonym token handling\n", sPrefix );
 
 			for ( int i=0; i<UBERLONG-3; i+=3 )
 			{
@@ -165,7 +177,7 @@ void TestUTF8Tokenizer ()
 		SafeDelete ( sLine4 );
 
 		// test boundaries 
-		printf ( "testing tokenizer for boundaries handling, run=%d\n", iRun );
+		printf ( "%s for boundaries handling, run=%d\n", sPrefix, iRun );
 
 		CSphString sError;
 		assert  ( pTokenizer->SetBoundary ( "?", sError ) );
@@ -184,10 +196,10 @@ void TestUTF8Tokenizer ()
 }
 
 
-void BenchUTF8Tokenizer ()
+void BenchTokenizer ( bool bUTF8 )
 {
-	printf ( "benchmarking UTF-8 tokenizer\n" );
-	if ( !CreateSynonymsFile() )
+	printf ( "benchmarking %s tokenizer\n", bUTF8 ? "UTF8" : "SBCS" );
+	if ( !CreateSynonymsFile ( NULL ) )
 	{
 		printf ( "benchmark failed: error writing temp synonyms file\n" );
 		return;
@@ -215,8 +227,8 @@ void BenchUTF8Tokenizer ()
 		}
 
 		CSphString sError;
-		ISphTokenizer * pTokenizer = sphCreateUTF8Tokenizer ();
-		pTokenizer->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F", sError );
+		ISphTokenizer * pTokenizer = bUTF8 ? sphCreateUTF8Tokenizer () : sphCreateSBCSTokenizer ();
+		pTokenizer->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z", sError );
 		if ( iRun==2 )
 			pTokenizer->LoadSynonyms ( g_sTmpfile, sError );
 		pTokenizer->AddSpecials ( "!-" );
@@ -246,9 +258,11 @@ void main ()
 	printf ( "RUNNING INTERNAL LIBSPHINX TESTS\n\n" );
 
 #ifdef NDEBUG
-	BenchUTF8Tokenizer ();
+	BenchTokenizer ( false );
+	BenchTokenizer ( true );
 #else
-	TestUTF8Tokenizer ();
+	TestTokenizer ( false );
+	TestTokenizer ( true );
 #endif
 
 	unlink ( g_sTmpfile );

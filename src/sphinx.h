@@ -192,7 +192,7 @@ public:
 	inline int	ToLower ( int iCode )
 	{
 		if ( iCode<0 || iCode>=MAX_CODE )
-			return 0;
+			return iCode;
 		register int * pChunk = m_pChunk [ iCode>>CHUNK_BITS ];
 		if ( pChunk )
 			return pChunk [ iCode & CHUNK_MASK ];
@@ -294,7 +294,10 @@ public:
 
 protected:
 	/// unified synonyms code
-	virtual int						GetCodePoint () = 0;
+	virtual int						GetCodepoint () = 0;
+
+	/// unified synonyms code
+	virtual void					AccumCodepoint ( int iCode ) = 0;
 
 	/// unified synonyms code
 	virtual BYTE *					GetTokenSyn ();

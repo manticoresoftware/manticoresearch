@@ -42,7 +42,7 @@ ISphTokenizer * CreateTestTokenizer ( bool bUTF8, bool bSynonyms )
 {
 	CSphString sError;
 	ISphTokenizer * pTokenizer = bUTF8 ? sphCreateUTF8Tokenizer () : sphCreateSBCSTokenizer ();
-	assert ( pTokenizer->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z", sError ) );
+	assert ( pTokenizer->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z, U+80..U+FF", sError ) );
 	pTokenizer->SetMinWordLen ( 2 );
 	pTokenizer->AddSpecials ( "!-" );
 	if ( bSynonyms )
@@ -61,7 +61,7 @@ void TestTokenizer ( bool bUTF8 )
 	{
 		// simple "one-line" tests
 		char * sMagic = bUTF8
-			? "\xD1\x82\xD0\xB5\xD1\x81\xD1\x82" // valid UTF-8
+			? "\xD1\x82\xD0\xB5\xD1\x81\xD1\x82\xD1\x82\xD1\x82" // valid UTF-8
 			: "\xC0\xC1\xF5\xF6"; // valid SBCS but invalid UTF-8
 
 		assert ( CreateSynonymsFile ( sMagic ) );
@@ -98,15 +98,11 @@ void TestTokenizer ( bool bUTF8 )
 			"2", "IBM-s/OS/2/Merlin",			"ibm-s", "OS/2", "merlin", NULL,
 			"2", "MS DOSS feat.Deskview.MS DOS","ms", "doss", "featuring", "deskview", "MS-DOS", NULL,
 			"2", sMagic,						"test", NULL,
-			0
+			NULL
 		};
 
-		int iCur = 0;
-		while ( dTests[iCur] )
+		for ( int iCur=0; dTests[iCur] && atoi(dTests[iCur++])<=iRun; )
 		{
-			if ( atoi(dTests[iCur++])>iRun )
-				break;
-
 			printf ( "%s, run=%d, line=%s\n", sPrefix, iRun, dTests[iCur] );
 			pTokenizer->SetBuffer ( (BYTE*)dTests[iCur], strlen(dTests[iCur]) );
 			iCur++;
@@ -120,6 +116,31 @@ void TestTokenizer ( bool bUTF8 )
 			assert ( dTests[iCur]==NULL );
 			iCur++;
 		}
+
+		// test misc SBCS-only and UTF8-only one-liners
+		char * dTests2[] =
+		{
+			"0", "\x80\x81\x82",				"\x80\x81\x82", NULL,
+			"1", "\xC2\x80\xC2\x81\xC2\x82",	"\xC2\x80\xC2\x81\xC2\x82", NULL,
+			NULL
+		};
+
+		for ( int iCur=0; dTests2[iCur] && atoi(dTests2[iCur++])==int(bUTF8); )
+		{
+			printf ( "%s, run=%d, line=%s\n", sPrefix, iRun, dTests2[iCur] );
+			pTokenizer->SetBuffer ( (BYTE*)dTests2[iCur], strlen(dTests2[iCur]) );
+			iCur++;
+
+			for ( BYTE * pToken=pTokenizer->GetToken(); pToken; pToken=pTokenizer->GetToken() )
+			{
+				assert ( dTests2[iCur] && strcmp ( (const char*)pToken, dTests2[iCur] )==0 );
+				iCur++;
+			}
+
+			assert ( dTests2[iCur]==NULL );
+			iCur++;
+		}
+
 
 		// test that decoder does not go over the buffer boundary on errors in UTF-8
 		if ( bUTF8 )

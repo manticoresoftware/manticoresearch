@@ -6774,6 +6774,8 @@ SphWordID_t CSphDictStar::GetWordID ( BYTE * pWord )
 {
 	char sBuf [ 16+3*SPH_MAX_WORD_LEN ];
 
+	m_pDict->ApplyStemmers ( pWord );
+
 	int iLen = strlen ( (const char*)pWord );
 	memcpy ( sBuf, pWord, iLen+1 );
 
@@ -6826,6 +6828,13 @@ SphWordID_t	CSphDictStarV8::GetWordID ( BYTE * pWord )
 
 	bool bHeadStar = ( pWord[0]=='*' );
 	bool bTailStar = ( pWord[iLen-1]=='*' );
+
+	if ( !bHeadStar && !bTailStar )
+		m_pDict->ApplyStemmers ( pWord );
+
+	iLen = strlen ( (const char*)pWord );
+	if ( !iLen )
+		return 0;
 
 	if ( m_bInfixes )
 	{
@@ -11290,6 +11299,8 @@ struct CSphDictCRC : CSphDict
 	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen );
 	virtual void		LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer );
 	virtual bool		SetMorphology ( const CSphVariant * sMorph, bool bUseUTF8, CSphString & sError );
+	virtual SphWordID_t	GetWordIDWithMarkers ( BYTE * pWord );
+	virtual void		ApplyStemmers ( BYTE * pWord );
 
 protected:
 	DWORD				m_iMorph;		///< morphology flags
@@ -11488,7 +11499,7 @@ template<> uint64_t sphCRCWord ( const BYTE * pWord, int iLen ) { return sphFNV6
 template<> DWORD sphCRCWord ( const BYTE * pWord, int iLen ) { return sphCRC32 ( pWord, iLen ); }
 
 
-SphWordID_t CSphDictCRC::GetWordID ( BYTE * pWord )
+void CSphDictCRC::ApplyStemmers ( BYTE * pWord )
 {
 	if ( m_iMorph & SPH_MORPH_STEM_EN )
 		stem_en ( pWord );
@@ -11514,7 +11525,12 @@ SphWordID_t CSphDictCRC::GetWordID ( BYTE * pWord )
 		pWord[iLen] = '\0';		
 	}
 #endif
+}
 
+
+SphWordID_t CSphDictCRC::GetWordID ( BYTE * pWord )
+{
+	ApplyStemmers ( pWord );
 	return FilterStopword ( sphCRCWord<SphWordID_t> ( pWord ) );
 }
 
@@ -11522,6 +11538,20 @@ SphWordID_t CSphDictCRC::GetWordID ( BYTE * pWord )
 SphWordID_t CSphDictCRC::GetWordID ( const BYTE * pWord, int iLen )
 {
 	return FilterStopword ( sphCRCWord<SphWordID_t> ( pWord, iLen ) );
+}
+
+
+SphWordID_t	CSphDictCRC::GetWordIDWithMarkers ( BYTE * pWord )
+{
+	ApplyStemmers ( pWord + 1 );
+	SphWordID_t uWordId = sphCRCWord<SphWordID_t> ( pWord + 1 );
+	if ( !FilterStopword ( uWordId ) )
+		return 0;
+
+	int iLength = strlen ( (const char *)(pWord + 1) );
+	pWord [iLength + 1] = MAGIC_WORD_TAIL;
+	pWord [iLength + 2] = '\0';
+	return sphCRCWord<SphWordID_t> ( pWord );
 }
 
 
@@ -12167,10 +12197,9 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 				int iBytes = strlen ( (const char*)sWord );
 				memcpy ( sBuf + 1, sWord, iBytes );
 				sBuf [0]			= MAGIC_WORD_HEAD;
-				sBuf [iBytes + 1]	= MAGIC_WORD_TAIL;
-				sBuf [iBytes + 2]	= '\0';
+				sBuf [iBytes + 1]	= '\0';
 
-				SphWordID_t iWord = m_pDict->GetWordID ( sBuf );
+				SphWordID_t iWord = m_pDict->GetWordIDWithMarkers ( sBuf );
 				if ( iWord )
 				{
 					CSphWordHit & tHit = m_dHits.Add ();
@@ -12178,6 +12207,11 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 					tHit.m_iWordID = iWord;
 					tHit.m_iWordPos = iPos;
 				}
+
+				// restore word
+				memcpy ( sBuf + 1, sWord, iBytes );
+				sBuf [iBytes + 1]	= MAGIC_WORD_TAIL;
+				sBuf [iBytes + 2]	= '\0';
 
 				// if there are no infixes, that's it
 				if ( iMinInfixLen > iLen )
@@ -12232,6 +12266,19 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 							}
 						}
 
+						// word end: add magic tail
+						if ( bInfixMode && sInfixEnd - sBuf == iLen )
+						{
+							iWord = m_pDict->GetWordID ( sInfix, sInfixEnd-sInfix + 2 );
+							if ( iWord )
+							{
+								CSphWordHit & tHit = m_dHits.Add ();
+								tHit.m_iDocID = m_tDocInfo.m_iDocID;
+								tHit.m_iWordID = iWord;
+								tHit.m_iWordPos = iPos;
+							}
+						}
+
 						sInfixEnd += m_pTokenizer->GetCodepointLength ( *sInfixEnd );
 					}
 
@@ -12254,10 +12301,9 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 					int iBytes = strlen ( (const char*)sWord );
 					memcpy ( sBuf + 1, sWord, iBytes );
 					sBuf [0]			= MAGIC_WORD_HEAD;
-					sBuf [iBytes + 1]	= MAGIC_WORD_TAIL;
-					sBuf [iBytes + 2]	= '\0';
+					sBuf [iBytes + 1]	= '\0';
 
-					SphWordID_t iWord = m_pDict->GetWordID ( sBuf );
+					SphWordID_t iWord = m_pDict->GetWordIDWithMarkers ( sBuf );
 					if ( iWord )
 					{
 						CSphWordHit & tHit = m_dHits.Add ();

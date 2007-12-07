@@ -348,11 +348,21 @@ struct CSphDict
 	/// returns 0 for stopwords
 	virtual SphWordID_t	GetWordID ( BYTE * pWord ) = 0;
 
+	/// get word ID by word, "text" version
+	/// may apply stemming and modify word inplace
+	/// accepts words with already prepended MAGIC_WORD_HEAD
+	/// appends MAGIC_WORD_TAIL
+	/// returns 0 for stopwords
+	virtual SphWordID_t	GetWordIDWithMarkers ( BYTE * pWord ) { return GetWordID ( pWord ); }
+
 	/// get word ID by word, "binary" version
 	/// only used with prefix/infix indexing
 	/// must not apply stemming and modify anything
 	/// returns 0 for stopwords
 	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen ) = 0;
+
+	/// apply stemmers to the given word
+	virtual void		ApplyStemmers ( BYTE * ) {}
 
 	/// load stopwords from given files
 	virtual void		LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer ) = 0;

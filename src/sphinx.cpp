@@ -1830,9 +1830,71 @@ protected:
 	int					ParseCharsetCode ();
 };
 
+#pragma warning(disable:4127) // conditional expr is const
+
+/// tokenizer implementation traits
+template < bool IS_UTF8 > 
+class CSphTokenizerTraits : public ISphTokenizer
+{
+public:
+	CSphTokenizerTraits ();
+
+protected:
+	BYTE * GetTokenSyn ();
+
+protected:
+	/// get codepoint
+	inline int GetCodepoint ()
+	{
+		if ( IS_UTF8 )
+		{
+			while ( m_pCur<m_pBufferMax )
+			{
+				int iCode = sphUTF8Decode ( m_pCur );
+				if ( iCode>=0 )
+					return iCode; // succesful decode
+			}
+			return -1; // eof
+		} else
+		{
+			return m_pCur>=m_pBufferMax
+				? -1
+				: int(*m_pCur++);
+		}
+	}
+
+	/// accum codepoint
+	inline void AccumCodepoint ( int iCode )
+	{
+		assert ( iCode>0 );
+		assert ( m_iAccum>=0 );
+
+		// throw away everything which is over the token size
+		if ( m_iAccum<SPH_MAX_WORD_LEN )
+		{
+			if ( IS_UTF8 )
+				m_pAccum += sphUTF8Encode ( m_pAccum, iCode );
+			else
+				*m_pAccum++ = BYTE(iCode);
+			assert ( m_pAccum>=m_sAccum && m_pAccum<m_sAccum+sizeof(m_sAccum) );
+
+			m_iAccum++;
+		}
+	}
+
+protected:
+	BYTE *				m_pBuffer;							///< my buffer
+	BYTE *				m_pBufferMax;						///< max buffer ptr, exclusive (ie. this ptr is invalid, but every ptr below is ok)
+	BYTE *				m_pCur;								///< current position
+
+	BYTE				m_sAccum [ 3*SPH_MAX_WORD_LEN+3 ];	///< folded token accumulator
+	BYTE *				m_pAccum;							///< current accumulator position
+	int					m_iAccum;							///< boundary token size
+};
+
 
 /// single-byte charset tokenizer
-class CSphTokenizer_SBCS : public ISphTokenizer
+class CSphTokenizer_SBCS : public CSphTokenizerTraits<false>
 {
 public:
 								CSphTokenizer_SBCS ();
@@ -1842,15 +1904,11 @@ public:
 	virtual ISphTokenizer *		Clone () const;
 	virtual bool				IsUtf8 () const { return false; }
 	virtual int					GetCodepointLength ( int ) const { return 1; }
-
-protected:
-	virtual int					GetCodepoint () { return m_pCur>=m_pBufferMax ? -1 : int(*m_pCur++); }
-	virtual void				AccumCodepoint ( int iCode );
 };
 
 
 /// UTF-8 tokenizer
-class CSphTokenizer_UTF8 : public ISphTokenizer
+class CSphTokenizer_UTF8 : public CSphTokenizerTraits<true>
 {
 public:
 								CSphTokenizer_UTF8 ();
@@ -1862,11 +1920,7 @@ public:
 	virtual int					GetCodepointLength ( int iCode ) const;
 
 protected:
-	virtual int					GetCodepoint ();
-	virtual void				AccumCodepoint ( int iCode );
 	void						FlushAccum ();
-
-protected:
 };
 
 
@@ -1884,6 +1938,8 @@ public:
 protected:
 	int					m_iNgramLen;
 };
+
+#pragma warning(default:4127) // conditional expr is const
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -2419,13 +2475,7 @@ ISphTokenizer::ISphTokenizer ()
 	, m_iLastTokenLen ( 0 )
 	, m_bTokenBoundary ( false )
 	, m_bBoundary ( false )
-	, m_pBuffer		( NULL )
-	, m_pBufferMax	( NULL )
-	, m_pCur		( NULL )
-	, m_iAccum		( 0 )
-{
-	m_pAccum = m_sAccum;
-}
+{}
 
 
 bool ISphTokenizer::SetCaseFolding ( const char * sConfig, CSphString & sError )
@@ -2696,6 +2746,18 @@ bool ISphTokenizer::LoadSynonyms ( const char * sFilename, CSphString & sError )
 	return true;
 }
 
+//////////////////////////////////////////////////////////////////////////
+
+template < bool IS_UTF8 >
+CSphTokenizerTraits<IS_UTF8>::CSphTokenizerTraits ()
+	: m_pBuffer		( NULL )
+	, m_pBufferMax	( NULL )
+	, m_pCur		( NULL )
+	, m_iAccum		( 0 )
+{
+	m_pAccum = m_sAccum;
+}
+
 
 enum SynCheck_e
 {
@@ -2757,7 +2819,8 @@ static inline bool IsSeparator ( int iFolded, bool bFirst )
 }
 
 
-BYTE * ISphTokenizer::GetTokenSyn ()
+template < bool IS_UTF8 >
+BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 {
 	assert ( m_dSynonyms.GetLength() );
 
@@ -3083,22 +3146,6 @@ void CSphTokenizer_SBCS::SetBuffer ( BYTE * sBuffer, int iLength )
 }
 
 
-void CSphTokenizer_SBCS::AccumCodepoint ( int iCode )
-{
-	assert ( iCode>0 );
-	assert ( m_iAccum>=0 );
-
-	// throw away everything which is over the token size
-	if ( m_iAccum>=SPH_MAX_WORD_LEN )
-		return;
-
-	*m_pAccum++ = BYTE(iCode);
-	assert ( m_pAccum>=m_sAccum && m_pAccum<m_sAccum+sizeof(m_sAccum) );
-
-	m_iAccum++;
-}
-
-
 BYTE * CSphTokenizer_SBCS::GetToken ()
 {
 	if ( m_dSynonyms.GetLength() )
@@ -3282,34 +3329,6 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 		// just accumulate
 		AccumCodepoint ( iCode );
 	}
-}
-
-
-int CSphTokenizer_UTF8::GetCodepoint ()
-{
-	while ( m_pCur<m_pBufferMax )
-	{
-		int iCode = sphUTF8Decode ( m_pCur );
-		if ( iCode>=0 )
-			return iCode; // succesful decode
-	}
-	return -1; // eof
-}
-
-
-void CSphTokenizer_UTF8::AccumCodepoint ( int iCode )
-{
-	assert ( iCode>0 );
-	assert ( m_iAccum>=0 );
-
-	// throw away everything which is over the token size
-	if ( m_iAccum>=SPH_MAX_WORD_LEN )
-		return;
-
-	m_pAccum += sphUTF8Encode ( m_pAccum, iCode );
-
-	assert ( m_pAccum>=m_sAccum && m_pAccum<m_sAccum+sizeof(m_sAccum) );
-	m_iAccum++;
 }
 
 

@@ -293,16 +293,6 @@ public:
 	virtual bool					IsUtf8 () const = 0;
 
 protected:
-	/// unified synonyms code
-	virtual int						GetCodepoint () = 0;
-
-	/// unified synonyms code
-	virtual void					AccumCodepoint ( int iCode ) = 0;
-
-	/// unified synonyms code
-	virtual BYTE *					GetTokenSyn ();
-
-protected:
 	static const int				MAX_SYNONYM_LEN		= 1024;	///< max synonyms map-from length, bytes
 
 	CSphLowercaser					m_tLC;						///< my lowercaser
@@ -314,14 +304,6 @@ protected:
 	CSphVector<CSphSynonym>			m_dSynonyms;				///< active synonyms
 	CSphVector<int>					m_dSynStart;				///< map 1st byte to candidate range start
 	CSphVector<int>					m_dSynEnd;					///< map 1st byte to candidate range end
-
-	BYTE *				m_pBuffer;							///< my buffer
-	BYTE *				m_pBufferMax;						///< max buffer ptr, exclusive (ie. this ptr is invalid, but every ptr below is ok)
-	BYTE *				m_pCur;								///< current position
-
-	BYTE				m_sAccum [ 3*SPH_MAX_WORD_LEN+3 ];	///< folded token accumulator
-	BYTE *				m_pAccum;							///< current accumulator position
-	int					m_iAccum;							///< boundary token size
 };
 
 /// create SBCS tokenizer

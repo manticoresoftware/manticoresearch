@@ -288,10 +288,7 @@ public class SphinxClient
 				int iWarnLen = in.readInt ();
 				_warning = new String ( response, 4, iWarnLen );
 
-				byte tmp[] = new byte [ response.length-4-iWarnLen ];
-				for ( int i=0; i<tmp.length; i++ )
-					tmp[i] = response[i+4+iWarnLen]; /* FIXME! is there some way to optimize this? */
-				response = tmp;
+				System.arraycopy ( response, 4+iWarnLen, response, 0, response.length-4-iWarnLen );
 
 			} else if ( status==SEARCHD_ERROR )
 			{
@@ -360,13 +357,13 @@ public class SphinxClient
 	/** Set matches offset and limit to return to client, and max matches to retrieve on server. */
 	public void SetLimits ( int offset, int limit, int max ) throws SphinxException
 	{
-		SetLimits ( offset, limit, max, 0 );
+		SetLimits ( offset, limit, max, _cutoff );
 	}
 
 	/** Set matches offset and limit to return to client. */
 	public void SetLimits ( int offset, int limit) throws SphinxException
 	{
-		SetLimits ( offset, limit, 0, 0 );
+		SetLimits ( offset, limit, _maxMatches, _cutoff );
 	}
 
 	/** Set matching mode. */
@@ -945,7 +942,7 @@ public class SphinxClient
 
 			/* v.1.0 req */
 			rqData.writeInt(0);
-			int iFlags = 1; // remove_spaces
+			int iFlags = 1; /* remove_spaces */
 			if ( ((Integer)opts.get("exact_phrase"))!=0 )	iFlags |= 2;
 			if ( ((Integer)opts.get("single_passage"))!=0 )	iFlags |= 4;
 			if ( ((Integer)opts.get("use_boundaries"))!=0 )	iFlags |= 8;

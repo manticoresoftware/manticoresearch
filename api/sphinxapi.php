@@ -533,6 +533,14 @@ class SphinxClient
 			return $results[0];
 	}
 
+	/// helper to pack floats in network byte order
+	function _PackFloat ( $f )
+	{
+		$t1 = pack ( "f", $f ); // machine order
+		list(,$t2) = unpack ( "L*", $t1 ); // int in machine order
+		return pack ( "N", $t2 );
+	}
+
 	/// add query to batch
 	///
 	/// batch queries enable searchd to perform internal optimizations,
@@ -576,7 +584,7 @@ class SphinxClient
 					break;
 
 				case SPH_FILTER_FLOATRANGE:
-					$req .= pack ( "ff", $filter["min"], $filter["max"] );
+					$req .= $this->_PackFloat ( $filter["min"] ) . $this->_PackFloat ( $filter["max"] );
 					break;
 
 				default:
@@ -602,7 +610,7 @@ class SphinxClient
 			$req .= pack ( "N", 1 );
 			$req .= pack ( "N", strlen($a["attrlat"]) ) . $a["attrlat"];
 			$req .= pack ( "N", strlen($a["attrlong"]) ) . $a["attrlong"];
-			$req .= pack ( "ff", $a["lat"], $a["long"] );
+			$req .= $this->_PackFloat ( $a["lat"] ) . $this->_PackFloat ( $a["long"] );
 		}
 
 		// per-index weights

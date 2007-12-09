@@ -915,11 +915,9 @@ int sphSockRead ( int iSock, void * buf, int iLen )
 // NETWORK BUFFERS
 /////////////////////////////////////////////////////////////////////////////
 
-/// float to dword conversion
-inline DWORD F2DW  ( float f )
-{
-	return *(DWORD *)&f;
-}
+/// float vs dword conversions
+inline DWORD F2DW ( float f )	{ return *(DWORD *)&f; }
+inline float DW2F ( DWORD d )	{ return *(float *)&d; }
 
 
 /// fixed-memory response buffer
@@ -975,7 +973,7 @@ public:
 	DWORD			GetDword () { return ntohl ( GetT<DWORD> () ); }
 	uint64_t		GetUint64() { uint64_t uRes = GetDword(); return (uRes<<32)+GetDword(); };
 	BYTE			GetByte () { return GetT<BYTE> (); }
-	float			GetFloat () { return GetT<float> (); }
+	float			GetFloat () { return DW2F ( ntohl ( GetT<DWORD> () ) ); }
 	CSphString		GetString ();
 	int				GetDwords ( DWORD ** pBuffer, int iMax, const char * sErrorTemplate );
 	bool			GetDwords ( CSphVector<DWORD> & dBuffer, int iMax, const char * sErrorTemplate );

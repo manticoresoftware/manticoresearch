@@ -5432,7 +5432,8 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAut
 				{
 					int iValues = dCurInfo[i].GetLength();
 					wrMva.PutDword ( iValues );
-					wrMva.PutBytes ( &dCurInfo[i][0], iValues*sizeof(DWORD) );
+					if ( iValues )
+						wrMva.PutBytes ( &dCurInfo[i][0], iValues*sizeof(DWORD) );
 				}
 			}
 
@@ -5555,10 +5556,16 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 		return 0;
 	}
 
-	CSphVector<int> dMvaIndexes;
+	CSphVector<int> dMvaIndexes, dMvaRowitem;
 	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
-		if ( m_tSchema.GetAttr(i).m_eAttrType & SPH_ATTR_MULTI )
+	{
+		const CSphColumnInfo & tCol = m_tSchema.GetAttr(i);
+		if ( tCol.m_eAttrType & SPH_ATTR_MULTI )
+		{
 			dMvaIndexes.Add ( i );
+			dMvaRowitem.Add ( tCol.m_iRowitem );
+		}
+	}
 
 	bool bGotMVA = ( dMvaIndexes.GetLength()!=0 );
 	if ( bGotMVA && m_eDocinfo!=SPH_DOCINFO_EXTERN )
@@ -5965,7 +5972,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 				{
 					ARRAY_FOREACH ( i, dMvaIndexes )
 					{
-						DOCINFO2ATTRS(pEntry) [ dMvaIndexes[i] ] = (DWORD)( rdMva.GetPos()/sizeof(DWORD) ); // intentional clamp; we'll check for 32bit overflow later
+						DOCINFO2ATTRS(pEntry) [ dMvaRowitem[i] ] = (DWORD)( rdMva.GetPos()/sizeof(DWORD) ); // intentional clamp; we'll check for 32bit overflow later
 						rdMva.SkipBytes ( rdMva.GetDword()*sizeof(DWORD) );
 					}
 

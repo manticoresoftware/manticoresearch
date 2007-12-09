@@ -25,6 +25,24 @@
 // TRAITS
 //////////////////////////////////////////////////////////////////////////
 
+/// helper to get i-th sorter attr from match
+template<bool BITS>
+inline CSphRowitem sphGetCompAttr ( const CSphMatchComparatorState & t, const CSphMatch & m, int i );
+
+template<>
+inline CSphRowitem sphGetCompAttr<false> ( const CSphMatchComparatorState & t, const CSphMatch & m, int i )
+{
+	return m.GetAttr ( t.m_iRowitem[i] );
+}
+
+template<>
+inline CSphRowitem sphGetCompAttr<true> ( const CSphMatchComparatorState & t, const CSphMatch & m, int i )
+{
+	return m.GetAttr ( t.m_iBitOffset[i], t.m_iBitCount[i] );
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 /// match-sorting priority queue traits
 class CSphMatchQueueTraits : public ISphMatchSorter, ISphNoncopyable
 {
@@ -818,8 +836,8 @@ struct MatchAttrLt_fn : public ISphMatchComparator
 
 	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
 	{
-		CSphRowitem aa = t.GetAttr<BITS>(a,0);
-		CSphRowitem bb = t.GetAttr<BITS>(b,0);
+		CSphRowitem aa = sphGetCompAttr<BITS> ( t, a, 0 );
+		CSphRowitem bb = sphGetCompAttr<BITS> ( t, b, 0 );
 		if ( aa!=bb )
 			return aa<bb;
 
@@ -842,8 +860,8 @@ struct MatchAttrGt_fn : public ISphMatchComparator
 
 	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
 	{
-		CSphRowitem aa = t.GetAttr<BITS>(a,0);
-		CSphRowitem bb = t.GetAttr<BITS>(b,0);
+		CSphRowitem aa = sphGetCompAttr<BITS> ( t, a, 0 );
+		CSphRowitem bb = sphGetCompAttr<BITS> ( t, b, 0 );
 		if ( aa!=bb )
 			return aa>bb;
 
@@ -866,8 +884,8 @@ struct MatchTimeSegments_fn : public ISphMatchComparator
 
 	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
 	{
-		CSphRowitem aa = t.GetAttr<BITS>(a,0);
-		CSphRowitem bb = t.GetAttr<BITS>(b,0);
+		CSphRowitem aa = sphGetCompAttr<BITS> ( t, a, 0 );
+		CSphRowitem bb = sphGetCompAttr<BITS> ( t, b, 0 );
 		int iA = GetSegment ( aa, t.m_iNow );
 		int iB = GetSegment ( bb, t.m_iNow );
 		if ( iA!=iB )
@@ -908,8 +926,8 @@ protected:
 		case SPH_VATTR_RELEVANCE:	SPH_TEST_PAIR ( a.m_iWeight, b.m_iWeight, _idx ); break; \
 		default: \
 		{ \
-			register CSphRowitem aa = t.GetAttr<BITS> ( a, _idx ); \
-			register CSphRowitem bb = t.GetAttr<BITS> ( b, _idx ); \
+			register CSphRowitem aa = sphGetCompAttr<BITS> ( t, a, _idx ); \
+			register CSphRowitem bb = sphGetCompAttr<BITS> ( t, b, _idx ); \
 			SPH_TEST_PAIR ( aa, bb, _idx ); \
 			break; \
 		} \
@@ -926,7 +944,7 @@ struct MatchGeneric2_fn : public ISphMatchComparator
 
 	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
 	{
-			SPH_TEST_KEYPART(0);
+		SPH_TEST_KEYPART(0);
 		SPH_TEST_KEYPART(1);
 		return false;
 	};
@@ -1051,7 +1069,7 @@ struct MatchCustom_fn : public ISphMatchComparator
 #define MATCH_DECLARE_ATTR(_name)	;
 #define MATCH_WEIGHT				float(MATCH_VAR.m_iWeight)
 #define MATCH_NOW					float(t.m_iNow)
-#define MATCH_ATTR(_idx)			float(t.GetAttr<BITS>(MATCH_VAR,_idx))
+#define MATCH_ATTR(_idx)			float(sphGetCompAttr<BITS>(t,MATCH_VAR,_idx))
 
 		float aa, bb;
 

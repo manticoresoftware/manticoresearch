@@ -1830,7 +1830,13 @@ protected:
 	int					ParseCharsetCode ();
 };
 
-#pragma warning(disable:4127) // conditional expr is const
+
+#if USE_WINDOWS
+#pragma warning(disable:4127) // conditional expr is const for MSVC
+#endif
+inline int sphUTF8Decode ( BYTE * & pBuf ); // forward ref for GCC
+inline int sphUTF8Encode ( BYTE * pBuf, int iCode ); // forward ref for GCC
+
 
 /// tokenizer implementation traits
 template < bool IS_UTF8 > 
@@ -1939,7 +1945,10 @@ protected:
 	int					m_iNgramLen;
 };
 
+
+#if USE_WINDOWS
 #pragma warning(default:4127) // conditional expr is const
+#endif
 
 /////////////////////////////////////////////////////////////////////////////
 

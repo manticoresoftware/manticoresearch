@@ -1997,7 +1997,7 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, Agent_t & tAgent
 							g_dMvaStorage.Add ( tReq.GetDword() );
 
 					}
-					else if ( tAttr.m_eAttrType & SPH_ATTR_FLOAT )
+					else if ( tAttr.m_eAttrType == SPH_ATTR_FLOAT )
 					{
 						float fRes = tReq.GetFloat();
 						tMatch.SetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount, *(DWORD*)&fRes  );

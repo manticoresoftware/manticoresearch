@@ -915,6 +915,13 @@ int sphSockRead ( int iSock, void * buf, int iLen )
 // NETWORK BUFFERS
 /////////////////////////////////////////////////////////////////////////////
 
+/// float to dword conversion
+inline DWORD F2DW  ( float f )
+{
+	return *(DWORD *)&f;
+}
+
+
 /// fixed-memory response buffer
 /// tracks usage, and flushes to network when necessary
 class NetOutputBuffer_c
@@ -926,7 +933,7 @@ public:
 	bool		SendDword ( DWORD iValue )		{ return SendT<DWORD> ( htonl ( iValue ) ); }
 	bool		SendWord ( WORD iValue )		{ return SendT<WORD> ( htons ( iValue ) ); }
 	bool		SendUint64 ( uint64_t iValue )	{ SendT<DWORD> ( htonl ( (DWORD)(iValue>>32) ) ); return SendT<DWORD> ( htonl ( (DWORD)(iValue&0xffffffffUL) ) ); }
-	bool		SendFloat ( float fValue )		{ return SendT<float> ( fValue ); }
+	bool		SendFloat ( float fValue )		{ return SendT<DWORD> ( htonl ( F2DW ( fValue ) ) ); }
 
 #if USE_64BIT
 	bool		SendDocid ( SphDocID_t iValue )	{ return SendUint64 ( iValue ); }

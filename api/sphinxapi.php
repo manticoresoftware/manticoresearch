@@ -738,8 +738,9 @@ class SphinxClient
 					// handle floats
 					if ( $type==SPH_ATTR_FLOAT )
 					{
-						list(,$val) = unpack ( "f*", substr ( $response, $p, 4 ) ); $p += 4;
-						$attrvals[$attr] = $val;
+						list(,$uval) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
+						list(,$fval) = unpack ( "f*", pack ( "L", $uval ) ); 
+						$attrvals[$attr] = $fval;
 						continue;
 					}
 

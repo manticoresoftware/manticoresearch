@@ -508,7 +508,17 @@ class SphinxConfig
 					{
 						foreach ( $this->_query_attributes as $attribute )
 							if ( array_key_exists ( $attribute, $docinfo ["attrs"] ) )
-								fwrite ( $handle, " $attribute=".$docinfo ["attrs"][$attribute] );
+							{
+								$attrtmp = $docinfo ["attrs"][$attribute];
+								if ( is_array ( $attrtmp ) )
+								{
+                    				fwrite ( $handle, " $attribute=");
+									foreach ( $attrtmp as $valuetmp )
+										fwrite ( $handle, " $valuetmp");
+								}
+								else
+									fwrite ( $handle, " $attribute=".$attrtmp );
+							}
 
 						fwrite ( $handle, "\n" );
 					}

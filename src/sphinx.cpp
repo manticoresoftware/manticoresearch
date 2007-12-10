@@ -7070,13 +7070,21 @@ static inline bool sphMatchEarlyReject ( const CSphMatch & tMatch, const CSphQue
 		if ( tFilter.m_bMva )
 		{
 			// multiple values
-			const DWORD * pMva = &pMvaStorage [ tMatch.GetAttr ( tFilter.m_iBitOffset, tFilter.m_iBitCount ) ];
-			const DWORD * pMvaMax = pMva + (*pMva) + 1;
-			pMva++;
+			CSphRowitem uOff = tMatch.GetAttr ( tFilter.m_iRowitem );
+
+			const DWORD * pMva = NULL;
+			const DWORD * pMvaMax = NULL;
+			if ( uOff )
+			{
+				pMva = &pMvaStorage [ uOff ];
+				pMvaMax = pMva + (*pMva) + 1;
+				pMva++;
+			}
 
 			// filter matches if any of multiple values match (ie. are in the set, or in the range)
 			bool bOK = false;
-			switch ( tFilter.m_eType )
+			if ( uOff )
+				switch ( tFilter.m_eType )
 			{
 				case SPH_FILTER_VALUES:
 				{
@@ -10915,10 +10923,10 @@ bool CSphIndex_VLN::Preread ()
 	// paranoid MVA verification
 	#if PARANOID
 	// find out what attrs are MVA
-	CSphVector<int,32> dMvaIndexes;
+	CSphVector<int> dMvaRowitem;
 	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
 		if ( m_tSchema.GetAttr(i).m_eAttrType & SPH_ATTR_MULTI )
-			dMvaIndexes.Add ( i );
+			dMvaRowitem.Add ( m_tSchema.GetAttr(i).m_iRowitem );
 
 	// for each docinfo entry, verify that MVA attrs point to right storage location
 	int iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
@@ -10927,12 +10935,12 @@ bool CSphIndex_VLN::Preread ()
 		DWORD * pEntry = (DWORD *)&m_pDocinfo[iDoc*iStride];
 		SphDocID_t uDocID = DOCINFO2ID(pEntry);
 
-		DWORD uOff = DOCINFO2ATTRS(pEntry) [ dMvaIndexes[0] ];
+		DWORD uOff = DOCINFO2ATTRS(pEntry) [ dMvaRowitem[0] ];
 		if ( !uOff )
 		{
 			// its either all or nothing
-			ARRAY_FOREACH ( i, dMvaIndexes )
-				assert ( DOCINFO2ATTRS(pEntry) [ dMvaIndexes[i] ]==0 );
+			ARRAY_FOREACH ( i, dMvaRowitem )
+				assert ( DOCINFO2ATTRS(pEntry) [ dMvaRowitem[i] ]==0 );
 		} else
 		{
 			// check id
@@ -10941,11 +10949,11 @@ bool CSphIndex_VLN::Preread ()
 			assert ( uDocID==uMvaID );
 
 			// walk the trail
-			ARRAY_FOREACH ( i, dMvaIndexes )
+			ARRAY_FOREACH ( i, dMvaRowitem )
 			{
-				assert ( DOCINFO2ATTRS(pEntry) [ dMvaIndexes[i] ]==uOff );
+				assert ( DOCINFO2ATTRS(pEntry) [ dMvaRowitem[i] ]==uOff );
 				int iCount = m_pMva[uOff];
-				uOff += iCount;
+				uOff += 1+iCount;
 			}
 		}
 	}

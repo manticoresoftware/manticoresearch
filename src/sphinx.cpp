@@ -10789,7 +10789,7 @@ bool CSphIndex_VLN::Preread ()
 
 			if ( tCol.m_eAttrType & SPH_ATTR_MULTI )
 			{
-				dMvaAttrs.Add ( i );
+				dMvaAttrs.Add ( tCol.m_iRowitem );
 				continue;
 			}
 

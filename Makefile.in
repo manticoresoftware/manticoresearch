@@ -167,7 +167,6 @@ libexecdir = @libexecdir@
 localstatedir = @localstatedir@
 mandir = @mandir@
 mkdir_p = @mkdir_p@
-mysqlconfig = @mysqlconfig@
 oldincludedir = @oldincludedir@
 pgconfig = @pgconfig@
 prefix = @prefix@

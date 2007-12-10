@@ -17,36 +17,41 @@ dnl --------------------------------------------------------------------------
 
 SPHINX_CONFIGURE_PART([configuring Sphinx])
 
-# Check if we should compile with MySQL support
+# check if we should compile with MySQL support
 AC_ARG_WITH([mysql], 
             AC_HELP_STRING([--with-mysql], [compile with MySQL support (default is enabled)]),
             [ac_cv_use_mysql=$withval], [ac_cv_use_mysql=yes]
 )
-AC_CACHE_CHECK([whether to compile with MySQL support], [ac_cv_use_mysql], [ac_cv_use_mysql=no])
-
-# Check if we should compile with PostgreSQL support
-AC_ARG_WITH([pgsql],
-            AC_HELP_STRING([--with-pgsql], [compile with PostgreSQL support (default is disabled)]),
-            [ac_cv_use_pgsql=$withval], [ac_cv_use_pgsql=no]
-)
-AC_CACHE_CHECK([whether to compile with PostgreSQL support], [ac_cv_use_pgsql], [ac_cv_use_pgsql=yes])
-
-
+AC_MSG_CHECKING([whether to compile with MySQL support])
 if test x$ac_cv_use_mysql != xno; then
+	AC_MSG_RESULT([yes])
     AC_CHECK_MYSQL([$ac_cv_use_mysql])
     AC_DEFINE(USE_MYSQL,1,[Define to 1 if you want to compile with MySQL support])
     AC_SUBST([MYSQL_LIBS])
     AC_SUBST([MYSQL_CFLAGS])
+else
+	AC_MSG_RESULT([no])
 fi
 AM_CONDITIONAL(USE_MYSQL, test x$ac_cv_use_mysql != xno)
 
+
+# check if we should compile with PostgreSQL support
+AC_ARG_WITH([pgsql],
+            AC_HELP_STRING([--with-pgsql], [compile with PostgreSQL support (default is disabled)]),
+            [ac_cv_use_pgsql=$withval], [ac_cv_use_pgsql=no]
+)
+AC_MSG_CHECKING([whether to compile with PostgreSQL support])
 if test x$ac_cv_use_pgsql != xno; then
+	AC_MSG_RESULT([yes])
     AC_CHECK_PGSQL([$ac_cv_use_pgsql])
     AC_DEFINE(USE_PGSQL,1,[Define to 1 if you want to compile with PostgreSQL support])
     AC_SUBST([PGSQL_LIBS])
     AC_SUBST([PGSQL_CFLAGS])
+else
+	AC_MSG_RESULT([no])
 fi
 AM_CONDITIONAL(USE_PGSQL, test x$ac_cv_use_pgsql != xno)
+
 
 dnl ---
 

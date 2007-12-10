@@ -1890,8 +1890,8 @@ for mysqlconfig in "$user_mysql_config" "mysql_config" \
 do
 	if test  -n "$mysqlconfig"
 	then
-		MYSQL_CFLAGS=`${mysqlconfig}z --cflags 2>/dev/null`
-		MYSQL_LIBS=`${mysqlconfig}z --libs 2>/dev/null`
+		MYSQL_CFLAGS=`${mysqlconfig} --cflags 2>/dev/null`
+		MYSQL_LIBS=`${mysqlconfig} --libs 2>/dev/null`
 
 		if test  $? -eq 0
 		then

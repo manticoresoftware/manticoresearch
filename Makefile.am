@@ -1,7 +1,7 @@
 if USE_LIBSTEMMER
-SUBDIRS = libstemmer_c src
+SUBDIRS = libstemmer_c src test
 else
-SUBDIRS = src
+SUBDIRS = src test
 endif
 
 EXTRA_DIST = api storage sphinx.conf.in example.sql

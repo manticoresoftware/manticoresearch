@@ -6,7 +6,7 @@ dnl ---------------------------------------------------------------------------
 
 AC_DEFUN([AC_CHECK_MYSQL],[
 
-user_mysql_config=
+mysqlconfig_locations="mysql_config /usr/bin/mysql_config /usr/local/bin/mysql_config /usr/local/mysql/bin/mysql_config /opt/mysql/bin/mysql_config /usr/pkg/bin/mysql_config"
 user_mysql_includes=
 user_mysql_libs=
 
@@ -17,9 +17,13 @@ then
 	if test [ -x "$mysqlroot/bin/mysql_config" ]
 	then
 		# if there's mysql_config, that's the best route
-		user_mysql_config="$mysqlroot/bin/mysql_config"
+		mysqlconfig_locations="$mysqlroot/bin/mysql_config"
 	elif test [ -d "$mysqlroot/include" -a -d "$mysqlroot/lib" ]
 	then
+		# explicit root; do not check well-known paths
+		mysqlconfig_locations=
+
+		# includes
 		if test [ -d "$mysqlroot/include/mysql" ]
 		then
 			user_mysql_includes="$mysqlroot/include/mysql"
@@ -27,6 +31,7 @@ then
 			user_mysql_includes="$mysqlroot/include"
 		fi
 
+		# libs
 		if test [ -d "$mysqlroot/lib/mysql" ]
 		then
 			user_mysql_libs="$mysqlroot/lib/mysql"
@@ -41,9 +46,7 @@ fi
 
 # try running mysql_config
 AC_MSG_CHECKING([for mysql_config])
-for mysqlconfig in "$user_mysql_config" "mysql_config" \
-	"/usr/bin/mysql_config" "/usr/local/bin/mysql_config" \
-	"/usr/local/mysql/bin/mysql_config" "/opt/mysql/bin/mysql_config" "/usr/pkg/bin/mysql_config"
+for mysqlconfig in $mysqlconfig_locations
 do
 	if test [ -n "$mysqlconfig" ]
 	then

@@ -1846,7 +1846,7 @@ if test x$ac_cv_use_mysql != xno; then
 echo "${ECHO_T}yes" >&6
 
 
-user_mysql_config=
+mysqlconfig_locations="mysql_config /usr/bin/mysql_config /usr/local/bin/mysql_config /usr/local/mysql/bin/mysql_config /opt/mysql/bin/mysql_config /usr/pkg/bin/mysql_config"
 user_mysql_includes=
 user_mysql_libs=
 
@@ -1857,9 +1857,13 @@ then
 	if test  -x "$mysqlroot/bin/mysql_config"
 	then
 		# if there's mysql_config, that's the best route
-		user_mysql_config="$mysqlroot/bin/mysql_config"
+		mysqlconfig_locations="$mysqlroot/bin/mysql_config"
 	elif test  -d "$mysqlroot/include" -a -d "$mysqlroot/lib"
 	then
+		# explicit root; do not check well-known paths
+		mysqlconfig_locations=
+
+		# includes
 		if test  -d "$mysqlroot/include/mysql"
 		then
 			user_mysql_includes="$mysqlroot/include/mysql"
@@ -1867,6 +1871,7 @@ then
 			user_mysql_includes="$mysqlroot/include"
 		fi
 
+		# libs
 		if test  -d "$mysqlroot/lib/mysql"
 		then
 			user_mysql_libs="$mysqlroot/lib/mysql"
@@ -1884,9 +1889,7 @@ fi
 # try running mysql_config
 echo "$as_me:$LINENO: checking for mysql_config" >&5
 echo $ECHO_N "checking for mysql_config... $ECHO_C" >&6
-for mysqlconfig in "$user_mysql_config" "mysql_config" \
-	"/usr/bin/mysql_config" "/usr/local/bin/mysql_config" \
-	"/usr/local/mysql/bin/mysql_config" "/opt/mysql/bin/mysql_config" "/usr/pkg/bin/mysql_config"
+for mysqlconfig in $mysqlconfig_locations
 do
 	if test  -n "$mysqlconfig"
 	then
@@ -2382,11 +2385,13 @@ fi;
 echo "$as_me:$LINENO: checking whether to compile debug version" >&5
 echo $ECHO_N "checking whether to compile debug version... $ECHO_C" >&6
 if test x$ac_cv_use_debug != xno; then
-        SPHINX_CFLAGS="-Wall -g -D_FILE_OFFSET_BITS=64"
+	SPHINX_CFLAGS="-Wall -g -D_FILE_OFFSET_BITS=64"
+	SPHINX_INJECT_FLAGS="-D_FILE_OFFSET_BITS=64"
 	echo "$as_me:$LINENO: result: yes" >&5
 echo "${ECHO_T}yes" >&6
 else
 	SPHINX_CFLAGS="-Wall -g -D_FILE_OFFSET_BITS=64 -O3 -DNDEBUG"
+	SPHINX_INJECT_FLAGS="-D_FILE_OFFSET_BITS=64 -DNDEBUG"
 	echo "$as_me:$LINENO: result: no" >&5
 echo "${ECHO_T}no" >&6
 fi
@@ -2395,10 +2400,14 @@ CPPFLAGS="$CPPFLAGS $MYSQL_CFLAGS $PGSQL_CFLAGS"
 
 if test x$ac_env_CFLAGS_set != xset; then
 	CFLAGS=$SPHINX_CFLAGS
+else
+	CFLAGS="$CFLAGS $SPHINX_INJECT_FLAGS"
 fi
 
 if test x$ac_env_CXXFLAGS_set != xset; then
 	CXXFLAGS=$SPHINX_CFLAGS
+else
+	CXXFLAGS="$CXXFLAGS $SPHINX_INJECT_FLAGS"
 fi
 
 ac_ext=c

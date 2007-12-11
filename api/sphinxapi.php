@@ -347,7 +347,7 @@ class SphinxClient
 		if ( is_array($values) && count($values) )
 		{
 			foreach ( $values as $value )
-				assert ( is_int($value) );
+				assert ( is_numeric($value) );
 
 			$this->_filters[] = array ( "type"=>SPH_FILTER_VALUES, "attr"=>$attribute, "exclude"=>$exclude, "values"=>$values );
 		}
@@ -576,7 +576,7 @@ class SphinxClient
 				case SPH_FILTER_VALUES:
 					$req .= pack ( "N", count($filter["values"]) );
 					foreach ( $filter["values"] as $value )
-						$req .= pack ( "N", $value );
+						$req .= pack ( "N", floatval($value) ); // this uberhack is to workaround 32bit signed int limit on x32 platforms
 					break;
 
 				case SPH_FILTER_RANGE:

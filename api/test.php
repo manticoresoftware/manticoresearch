@@ -67,7 +67,7 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="-e2" )							$mode = SPH_MATCH_EXTENDED2;
 	else if ( $arg=="-ph"|| $arg=="--phrase" )		$mode = SPH_MATCH_PHRASE;
 	else if ( $arg=="-f" || $arg=="--filter" )		$filter = $args[++$i];
-	else if ( $arg=="-v" || $arg=="--value" )		$filtervals[] = (int)$args[++$i];
+	else if ( $arg=="-v" || $arg=="--value" )		$filtervals[] = $args[++$i];
 	else if ( $arg=="-g" || $arg=="--groupby" )		$groupby = $args[++$i];
 	else if ( $arg=="-gs"|| $arg=="--groupsort" )	$groupsort = $args[++$i];
 	else if ( $arg=="-d" || $arg=="--distinct" )	$distinct = $args[++$i];

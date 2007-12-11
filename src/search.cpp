@@ -62,6 +62,9 @@ int main ( int argc, char ** argv )
 			"--rsort=date\t\tsort by date, ascending\n"
 			"--sort=ts\t\tsort by time segments\n"
 			"--stdin\t\t\tread query from stdin\n"
+			"\n"
+			"This program (CLI search) is for testing and debugging purposes only;\n"
+			"it is NOT intended for production use.\n"
 		);
 		exit ( 0 );
 	}
@@ -111,12 +114,14 @@ int main ( int argc, char ** argv )
 			else if ( (i+2)>=argc )		break;
 			OPT ( "-f", "--filter" )
 			{
-				if ( atoi ( argv[i+2] ) )
+				DWORD uVal = strtoul ( argv[i+2], NULL, 10 );
+				if ( uVal )
 				{
 					tQuery.m_dFilters.Reset ();
 					tQuery.m_dFilters.Resize ( 1 );
+					tQuery.m_dFilters[0].m_eType = SPH_FILTER_VALUES;
 					tQuery.m_dFilters[0].m_dValues.Reset ();
-					tQuery.m_dFilters[0].m_dValues.Add ( atoi ( argv[i+2] ) );
+					tQuery.m_dFilters[0].m_dValues.Add ( uVal );
 					tQuery.m_dFilters[0].m_sAttrName = argv[i+1];
 					i += 2;
 				}

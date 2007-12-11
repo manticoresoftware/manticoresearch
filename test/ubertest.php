@@ -51,8 +51,8 @@ array_shift ( $args );
 
 if ( !is_array($args) || empty($args) )
 {
-	print ( "Usage: php -f ubertest.php <MODE> [OPTIONS]\n\n" );
-	print ( "Modes are:\n" );
+	print ( "Usage: php -f ubertest.php <MODE> [OPTIONS]\n" );
+	print ( "\nModes are:\n" );
 	print ( "g, gen\t\t\tgenerate reference ('model') test results\n" );
 	print ( "t, test\t\t\trun tests and compare results to reference\n" );
 	print ( "\nOptions are:\n" );
@@ -60,11 +60,18 @@ if ( !is_array($args) || empty($args) )
 	print ( "-p, --password <PASS>\tuse 'PASS' as MySQL password\n" );
 	print ( "-i, --indexer <PATH>\tpath to indexer\n" );
 	print ( "-s, --searchd <PATH>\tpath to searchd\n" );
-	print ( "\nExamples:\n" );
+	print ( "\nEnvironment vriables are:\n" );
+	print ( "DBUSER\tuse 'USER' as MySQL user\n" );
+	print ( "DBPASS\tuse 'PASS' as MySQL password\n" );
+	print ( "\nUsage examples:\n" );
 	print ( "php ubertest.php gen\n" );
 	print ( "php ubertest.php t --user test --password test\n" );
+	print ( "DBPASS=test make check\n" );
 	exit ( 0 );
 }
+
+if ( $_ENV["DBUSER"] )	$db_user = $_ENV["DBUSER"];
+if ( $_ENV["DBPASS"] )  $db_pwd = $_ENV["DBPASS"];
 
 $run = false;
 for ( $i=0; $i<count($args); $i++ )

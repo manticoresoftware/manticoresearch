@@ -12306,10 +12306,10 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 		if ( m_bStripHTML )
 			m_pStripper->Strip ( sField );
 
-		int iLen = (int) strlen ( (char*)sField );
-		m_tStats.m_iTotalBytes += iLen;
+		int iFieldBytes = (int) strlen ( (char*)sField );
+		m_tStats.m_iTotalBytes += iFieldBytes;
 
-		m_pTokenizer->SetBuffer ( sField, iLen );
+		m_pTokenizer->SetBuffer ( sField, iFieldBytes );
 
 		BYTE * sWord;
 		int iPos = ( j<<24 ) + 1;
@@ -12392,7 +12392,7 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 						}
 
 						// word start: add magic head
-						if ( bInfixMode && sInfix == sBuf + 1 )
+						if ( bInfixMode && iStart==0 )
 						{
 							iWord = m_pDict->GetWordID ( sInfix - 1, sInfixEnd-sInfix + 1 );
 							if ( iWord )
@@ -12405,9 +12405,9 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 						}
 
 						// word end: add magic tail
-						if ( bInfixMode && sInfixEnd - sBuf == iLen )
+						if ( bInfixMode && i==iLen-iStart )
 						{
-							iWord = m_pDict->GetWordID ( sInfix, sInfixEnd-sInfix + 2 );
+							iWord = m_pDict->GetWordID ( sInfix, sInfixEnd-sInfix+1 );
 							if ( iWord )
 							{
 								CSphWordHit & tHit = m_dHits.Add ();

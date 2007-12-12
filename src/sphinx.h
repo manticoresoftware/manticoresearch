@@ -189,7 +189,7 @@ public:
 	const CSphLowercaser &		operator = ( const CSphLowercaser & rhs );
 
 public:
-	inline int	ToLower ( int iCode )
+	inline int	ToLower ( int iCode ) const
 	{
 		if ( iCode<0 || iCode>=MAX_CODE )
 			return iCode;

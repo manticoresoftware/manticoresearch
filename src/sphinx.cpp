@@ -1485,7 +1485,7 @@ private:
 
 	void						MatchAll ( const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters );
 	void						MatchAny ( const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters );
-	bool						MatchBoolean ( const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, const CSphTermSetup & tTermSetup );
+	bool						MatchBoolean ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphTermSetup & tTermSetup );
 	bool						MatchExtended ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphTermSetup & tTermSetup );
 	bool						MatchExtendedV1 ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphTermSetup & tTermSetup );
 	void						MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, const CSphTermSetup & tTermSetup );
@@ -1495,6 +1495,10 @@ private:
 	void						LookupDocinfo ( CSphMatch & tMatch );
 
 	bool						BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAutoArray<CSphWordHit> & dHits, int iArenaSize );
+
+	void						CheckQueryWord ( const char * szWord, CSphQueryResult * pResult );
+	void						CheckExtendedQuery ( const CSphExtendedQueryNode * pNode, CSphQueryResult * pResult );
+	void						CheckBooleanQuery ( const CSphBooleanQueryExpr * pExpr, CSphQueryResult * pResult );
 
 public:
 	// FIXME! this needs to be protected, and refactored as well
@@ -7843,7 +7847,22 @@ CSphMatch * CSphBooleanEvalNode::MatchLevel ( SphDocID_t iMinID )
 }
 
 
-bool CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, const CSphTermSetup & tTermSetup )
+void CSphIndex_VLN::CheckBooleanQuery ( const CSphBooleanQueryExpr * pExpr, CSphQueryResult * pResult )
+{
+	const CSphBooleanQueryExpr * pTestExpr = pExpr;
+
+	while ( pTestExpr )
+	{
+		CheckQueryWord ( pTestExpr->m_sWord.cstr (), pResult );
+		if ( pTestExpr->m_pExpr )
+			CheckBooleanQuery ( pTestExpr->m_pExpr, pResult );
+
+		pTestExpr = pTestExpr->m_pNext;
+	}
+}
+
+
+bool CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphTermSetup & tTermSetup )
 {
 	bool bRandomize = ppSorters[0]->m_bRandomize;
 	int iCutoff = pQuery->m_iCutoff;
@@ -7859,6 +7878,8 @@ bool CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, int iSorters, ISphM
 		m_sLastError = tParsed.m_sParseError;
 		return false;
 	}
+
+	CheckBooleanQuery ( tParsed.m_pTree, pResult );
 
 	// let's build our own tree! with doclists! and hits!
 	assert ( m_tMin.m_iRowitems==m_tSchema.GetRowSize() );
@@ -8695,6 +8716,9 @@ bool CSphIndex_VLN::MatchExtendedV1 ( const CSphQuery * pQuery, CSphQueryResult 
 		m_sLastError = tParsed.m_sParseError;
 		return false;
 	}
+
+	CheckExtendedQuery ( tParsed.m_pAccept, pResult );
+	CheckExtendedQuery ( tParsed.m_pReject, pResult );
 
 	CSphExtendedEvalNode tAccept ( tParsed.m_pAccept, tTermSetup );
 	CSphExtendedEvalNode tReject ( tParsed.m_pReject, tTermSetup );
@@ -10093,6 +10117,16 @@ int ExtRanker_c::GetMatches ( int iFields, const int * pWeights )
 
 //////////////////////////////////////////////////////////////////////////
 
+void CSphIndex_VLN::CheckExtendedQuery ( const CSphExtendedQueryNode * pNode, CSphQueryResult * pResult )
+{
+	ARRAY_FOREACH ( i, pNode->m_tAtom.m_dWords )
+		CheckQueryWord ( pNode->m_tAtom.m_dWords [i].m_sWord.cstr (), pResult );
+
+	ARRAY_FOREACH ( i, pNode->m_dChildren )
+		CheckExtendedQuery ( pNode->m_dChildren [i], pResult );
+}
+
+
 bool CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphTermSetup & tTermSetup )
 {
 	bool bRandomize = ppSorters[0]->m_bRandomize;
@@ -10107,6 +10141,9 @@ bool CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, CSphQueryResult * 
 		m_sLastError = tParsed.m_sParseError;
 		return false;
 	}
+
+	CheckExtendedQuery ( tParsed.m_pAccept, pResult );
+	CheckExtendedQuery ( tParsed.m_pReject, pResult );
 
 	// setup eval-tree
 	ExtRanker_c tRoot ( tParsed.m_pAccept, tParsed.m_pReject, tTermSetup );
@@ -10299,6 +10336,27 @@ void CSphIndex_VLN::MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISph
 
 			SPH_SUBMIT_MATCH ( tMatch );
 		}
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
+void CSphIndex_VLN::CheckQueryWord ( const char * szWord, CSphQueryResult * pResult )
+{
+	if ( ( !m_iMinPrefixLen && !m_iMinInfixLen ) || !m_bEnableStar || !szWord )
+		return;
+
+	int iLen = strlen ( szWord );
+	bool bHeadStar = szWord [0] == '*';
+	bool bTailStar = szWord [iLen - 1] == '*';
+	int iLenWOStars = iLen - ( bHeadStar ? 1 : 0 ) - ( bTailStar ? 1 : 0 );
+	if ( bHeadStar || bTailStar )
+	{
+		if ( m_iMinInfixLen > 0 && iLenWOStars < m_iMinInfixLen )
+			pResult->m_sWarning.SetSprintf ( "Query word length is less than min infix length. word: '%s' ", szWord );
+		else
+			if ( m_iMinPrefixLen > 0 && iLenWOStars < m_iMinPrefixLen )
+				pResult->m_sWarning.SetSprintf ( "Query word length is less than min prefix length. word: '%s' ", szWord );
 	}
 }
 
@@ -11122,6 +11180,8 @@ bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, C
 		m_dQueryWords.Resize ( iRealWords );
 		ARRAY_FOREACH ( i, m_dQueryWords )
 		{
+			CheckQueryWord ( qp.m_dWords[i].m_sWord.cstr (), pResult );
+
 			m_dQueryWords[i].Reset ();
 			m_dQueryWords[i].m_sWord = qp.m_dWords[i].m_sWord;
 			m_dQueryWords[i].m_iWordID = qp.m_dWords[i].m_uWordID;
@@ -11248,7 +11308,7 @@ bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, C
 		case SPH_MATCH_ALL:			MatchAll ( pQuery, iSorters, ppSorters ); break;
 		case SPH_MATCH_PHRASE:		MatchAll ( pQuery, iSorters, ppSorters ); break;
 		case SPH_MATCH_ANY:			MatchAny ( pQuery, iSorters, ppSorters ); break;
-		case SPH_MATCH_BOOLEAN:		bMatch = MatchBoolean ( pQuery, iSorters, ppSorters, tTermSetup ); break;
+		case SPH_MATCH_BOOLEAN:		bMatch = MatchBoolean ( pQuery, pResult, iSorters, ppSorters, tTermSetup ); break;
 		case SPH_MATCH_EXTENDED:	bMatch = MatchExtendedV1 ( pQuery, pResult, iSorters, ppSorters, tTermSetup ); break;
 		case SPH_MATCH_EXTENDED2:	bMatch = MatchExtended ( pQuery, pResult, iSorters, ppSorters, tTermSetup ); break;
 		case SPH_MATCH_FULLSCAN:	MatchFullScan ( pQuery, iSorters, ppSorters, tTermSetup ); break;

@@ -9020,8 +9020,8 @@ public:
 								ExtRanker_c ( const CSphExtendedQueryNode * pAccept, const CSphExtendedQueryNode * pReject, const CSphTermSetup & tSetup );
 	int							GetMatches ( int iFields, const int * pWeights );
 
-	void						GetQwords ( ExtQwordsHash_t & hQwords )				{ assert ( m_pRoot ); m_pRoot->GetQwords ( hQwords ); }
-	void						SetQwordsIDF ( const ExtQwordsHash_t & hQwords )	{ assert ( m_pRoot ); m_pRoot->SetQwordsIDF ( hQwords ); }
+	void						GetQwords ( ExtQwordsHash_t & hQwords )				{ if ( m_pRoot ) m_pRoot->GetQwords ( hQwords ); }
+	void						SetQwordsIDF ( const ExtQwordsHash_t & hQwords )	{ if ( m_pRoot ) m_pRoot->SetQwordsIDF ( hQwords ); }
 
 public:
 	CSphMatch					m_dMatches[ExtNode_i::MAX_DOCS];
@@ -10046,6 +10046,9 @@ ExtRanker_c::ExtRanker_c ( const CSphExtendedQueryNode * pAccept, const CSphExte
 
 int ExtRanker_c::GetMatches ( int iFields, const int * pWeights )
 {
+	if ( !m_pRoot )
+		return 0;
+
 	BYTE uLCS[SPH_MAX_FIELDS];
 	memset ( uLCS, 0, sizeof(uLCS) );
 

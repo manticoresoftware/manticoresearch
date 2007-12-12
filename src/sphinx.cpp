@@ -7861,6 +7861,39 @@ void CSphIndex_VLN::CheckBooleanQuery ( const CSphBooleanQueryExpr * pExpr, CSph
 	}
 }
 
+void sphGatherBooleanWordStats ( CSphBooleanEvalNode * pTree, CSphQueryResult * pResult )
+{
+	CSphBooleanEvalNode * pNode = pTree;
+
+	while ( pNode )
+	{
+		if ( pResult->m_iNumWords >= SPH_MAX_QUERY_WORDS )
+			return;
+
+		if ( pNode->m_pExpr )
+			sphGatherBooleanWordStats ( pNode->m_pExpr, pResult );
+		else
+		{
+			CSphQueryResult::WordStat_t & tStats = pResult->m_tWordStats [ pResult->m_iNumWords++ ];
+
+			if ( tStats.m_sWord.cstr() )
+			{
+				assert ( tStats.m_sWord==pNode->m_sWord );
+
+				tStats.m_iDocs += pNode->m_iDocs;
+				tStats.m_iHits += pNode->m_iHits;
+			} else
+			{
+				tStats.m_sWord = pNode->m_sWord;
+				tStats.m_iDocs = pNode->m_iDocs;
+				tStats.m_iHits = pNode->m_iHits;
+			}
+		}
+
+		pNode = pNode->m_pNext;
+	}
+}
+
 
 bool CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphTermSetup & tTermSetup )
 {
@@ -7911,6 +7944,8 @@ bool CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, CSphQueryResult * p
 		// submit
 		SPH_SUBMIT_MATCH ( *pMatch );
 	}
+
+	sphGatherBooleanWordStats ( &tTree, pResult );
 
 	return true;
 }

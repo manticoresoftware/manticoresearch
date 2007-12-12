@@ -419,25 +419,32 @@ class SphinxConfig
 
 	function CompareResults ( $query1, $query2 )
 	{
-		foreach ( $query1 as $key => $value )
-		{
-			if ( is_array ( $value ) && ! is_null ( $value ["time"] ) )
-				unset ( $query1 [$key]["time"] );
-		}
+		if ( count($query1)!=count($query2) )
+			return false;
 
-		foreach ( $query2 as $key => $value )
+		for ( $i=0; $i<count($query1); $i++ )
 		{
-			if ( is_array ( $value ) && ! is_null ( $value ["time"] ) )
-				unset ( $query2 [$key]["time"] );
+			if ( is_array($query1[$i]) )
+			{
+				unset ( $query1[$i]["time"] );
+				unset ( $query1[$i]["warning"] );
+				unset ( $query1[$i]["status"] );
+			}
+			if ( is_array($query2[$i]) )
+			{
+				unset ( $query2[$i]["time"] );
+				unset ( $query2[$i]["warning"] );
+				unset ( $query2[$i]["status"] );
+			}
 		}
-
-		return $query1 == $query2;
+	
+		return $query1==$query2;
 	}
 
 
 	function WriteReportHeader ( $handle )
 	{
-		fprintf ( $handle, "==== Run:  %d ====\n", $this->SubtestNo () + 1 );
+		fprintf ( $handle, "==== Run %d ====\n", $this->SubtestNo () + 1 );
 		fwrite ( $handle, "Settings:\n" );
 		$this->WriteDiff ( $handle );
 		fwrite ( $handle, "\n" );
@@ -447,11 +454,9 @@ class SphinxConfig
 	}
 
 
-	function WriteResults ( $handle )
+	/// format and write a single result set into log file
+	function WriteQuery ( $handle, $nquery, $result )
 	{
-    	$nquery = 1;
-		foreach ( $this->_results as $result )
-		{
 			fwrite ( $handle, "--- Query $nquery ---\n" );
 			$txt_q = $result["query"];
 			$txt_found = $result ["total_found"];
@@ -459,6 +464,8 @@ class SphinxConfig
 			$txt_time = $result ["time"];
 
 			fwrite ( $handle, "Query '$txt_q': retrieved $txt_found of $txt_total matches in $txt_time sec.\n" );
+			if ( $result["warning"] )
+				fwrite ( $handle, "Warning: " . $result["warning"] . "\n" );
 
 			if ( array_key_exists ( "words", $result ) && is_array( $result ["words"] ) )
 			{
@@ -530,8 +537,28 @@ class SphinxConfig
 			}
 
 			fwrite ( $handle, "\n" );
-	
-			++$nquery;
+	}
+
+
+	/// write all the result sets
+    function WriteResults ( $handle )
+    {
+        $nquery = 1;
+        foreach ( $this->_results as $result )
+			$this->WriteQuery ( $handle, $nquery++, $result );
+	}
+
+
+	/// write difference from the reference result sets
+	function WriteReferenceResultsDiff ( $handle )
+	{
+		$nquery = 0;
+		foreach ( $this->_results_model [ $this->SubtestNo() ] as $ref )
+		{
+			if ( $ref==$this->_results[$nquery++] )
+				continue;
+
+			$this->WriteQuery ( $handle, $nquery, $ref );
 		}
 	}
 
@@ -671,6 +698,8 @@ function HandleFailure ( $config, $report, $error, &$nfailed )
 	{
 		$nfailed++;
 		$ret = false;
+
+		fwrite ( $report, "SUBTEST FAILED, UNEXPECTED ERROR:\n" );
 	}
 
 	fwrite ( $report, "$error\n" );
@@ -799,13 +828,20 @@ function RunTest ( $test_dir )
 			continue;
 		}
 
-		if ( ! IsModelGenMode () && ! $config->CompareToModel () )
+		$mismatch = ( !IsModelGenMode() && !$config->CompareToModel() );
+		if ( $mismatch )
 		{
 			$log .= "\tsubtest $subtest: query results mismatch; see $report_file\n";
 			$nfailed++;
 		}
 
 		$config->WriteResults ( $report );
+		if ( $mismatch )
+		{
+			fwrite ( $report, "SUBTEST FAILED, RESULTS ARE DIFFERENT FROM THE REFERENCE:\n\n" );
+			$config->WriteReferenceResultsDiff ( $report );
+		}
+
 		$config->SubtestFinished ();
 
 		if ( $config->NumAgents () == 1 )

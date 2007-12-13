@@ -757,6 +757,21 @@ source delta : main
     sql_query = SELECT id, title, body FROM documents \
         WHERE id&gt;( SELECT max_doc_id FROM sph_counter WHERE counter_id=1 )
 }
+
+index main
+{
+    source = main
+    path = /path/to/main
+    # ... all the other settings
+}
+
+# note how all other settings are copied from main,
+# but source and path are overridden (they MUST be)
+index delta : main
+{
+    source = delta
+    path = /path/to/delta
+}
 </programlisting>
 </example>
 </para>

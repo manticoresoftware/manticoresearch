@@ -2610,6 +2610,9 @@ bool ISphTokenizer::LoadSynonyms ( const char * sFilename, CSphString & sError )
 {
 	m_dSynonyms.Reset ();
 
+	if ( !sFilename || !*sFilename )
+		return true;
+
 	FILE * fp = fopen ( sFilename, "r" );
 	if ( !fp )
 	{

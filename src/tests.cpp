@@ -30,7 +30,14 @@ bool CreateSynonymsFile ( const char * sMagic )
 		"OS/2 => OS/2\n" 
 		"Ms-Dos => MS-DOS\n"
 		"MS DOS => MS-DOS\n"
-		"feat. => featuring\n" );
+		"feat. => featuring\n"
+		"U.S. => US\n"
+		"U.S.A => USA\n"
+		"U.S.B. => USB\n"
+		"U.S.D. => USD\n"
+		"U.S.P. => USP\n"
+		"U.S.A.F. => USAF\n"
+		);
 	if ( sMagic )
 		fprintf ( fp, "%s => test\n", sMagic );
 	fclose ( fp );
@@ -96,8 +103,10 @@ void TestTokenizer ( bool bUTF8 )
 			"2", "AT*&*T",						"at", NULL,
 			"2", "# OS/2's system install",		"OS/2", "system", "install", NULL,
 			"2", "IBM-s/OS/2/Merlin",			"ibm-s", "OS/2", "merlin", NULL,
-			"2", "MS DOSS feat.Deskview.MS DOS","ms", "doss", "featuring", "deskview", "MS-DOS", NULL,
-			"2", sMagic,						"test", NULL,
+			"2", "MS DOSS feat.Deskview.MS DOS",			"ms", "doss", "featuring", "deskview", "MS-DOS", NULL,
+			"2", sMagic,									"test", NULL,
+			"2", "U.S. U.S.A. U.S.A.F.",					"US", "USA", "USAF", NULL,
+			"2", "U.S.AB U.S.A. U.S.B.U.S.D.U.S.U.S.A.F.",	"US", "ab", "USA", "USB", "USD", "US", "USAF", NULL,
 			NULL
 		};
 

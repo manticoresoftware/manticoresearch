@@ -2724,7 +2724,10 @@ bool ISphTokenizer::LoadSynonyms ( const char * sFilename, CSphString & sError )
 	fclose ( fp );
 
 	if ( !bOK )
+	{
+		m_dSynonyms.Reset ();
 		return false;
+	}
 
 	// sort the list
 	m_dSynonyms.Sort ();
@@ -2853,6 +2856,9 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 		int iLastFolded = 0;
 		BYTE * pRescan = NULL;
 
+		int iExact = -1;
+		BYTE * pExact = NULL;
+
 		// main refinement loop
 		for ( ;; )
 		{
@@ -2949,6 +2955,12 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 				return m_sAccum; \
 			}
 
+			#define LOC_REFINE_BREAK() \
+			{ \
+				if ( iExact>=0 ) { m_pCur = pExact; LOC_RETURN_SYNONYM ( iExact ); } \
+				break; \
+			}
+
 			// if this is the first symbol, use prebuilt lookup table to speedup initial range search
 			if ( iSynOff==0 )
 			{
@@ -2963,18 +2975,26 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 
 			SynCheck_e eStart = SynCheckPrefix ( m_dSynonyms[iSynStart], iSynOff, sTest, iTest, bMaybeSeparator );
 			if ( eStart==SYNCHECK_EXACT )
-				LOC_RETURN_SYNONYM ( iSynStart );
+			{
+				if ( iSynStart==iSynEnd ) LOC_RETURN_SYNONYM ( iSynStart );
+				iExact = iSynStart;
+				pExact = pCur;
+			}
 			if ( eStart==SYNCHECK_GREATER || ( iSynStart==iSynEnd && eStart!=SYNCHECK_PARTIAL ) )
-				break;
+				LOC_REFINE_BREAK();
 
 			SynCheck_e eEnd = SynCheckPrefix ( m_dSynonyms[iSynEnd], iSynOff, sTest, iTest, bMaybeSeparator );
-			if ( eEnd==SYNCHECK_EXACT )
-				LOC_RETURN_SYNONYM ( iSynEnd );
 			if ( eEnd==SYNCHECK_LESS )
-				break;
+				LOC_REFINE_BREAK();
+			if ( eEnd==SYNCHECK_EXACT )
+			{
+				iExact = iSynEnd;
+				pExact = pCur;
+			}
+
 
 			// refine left boundary
-			if ( eStart!=SYNCHECK_PARTIAL )
+			if ( eStart!=SYNCHECK_PARTIAL && eStart!=SYNCHECK_EXACT )
 			{
 				assert ( eStart==SYNCHECK_LESS );
 
@@ -3003,16 +3023,16 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 				assert ( eR!=SYNCHECK_LESS );
 				assert ( iR-iL==1 );
 
-				if ( eR==SYNCHECK_GREATER )	break;
-				if ( eR==SYNCHECK_EXACT )	LOC_RETURN_SYNONYM ( iR );
+				if ( eR==SYNCHECK_GREATER )					LOC_REFINE_BREAK();
+				if ( eR==SYNCHECK_EXACT && iR==iSynEnd )	LOC_RETURN_SYNONYM ( iR );
 
-				assert ( eR==SYNCHECK_PARTIAL );
+				assert ( eR==SYNCHECK_PARTIAL || eR==SYNCHECK_EXACT );
 				iSynStart = iR;
-				eStart = SYNCHECK_PARTIAL;
+				eStart = eR;
 			}
 
 			// refine right boundary
-			if ( eEnd!=SYNCHECK_PARTIAL )
+			if ( eEnd!=SYNCHECK_PARTIAL && eEnd!=SYNCHECK_EXACT )
 			{
 				assert ( eEnd==SYNCHECK_GREATER );
 
@@ -3041,11 +3061,12 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 				assert ( eL!=SYNCHECK_GREATER );
 				assert ( iR-iL==1 );
 
-				if ( eL==SYNCHECK_LESS )	break;
-				if ( eL==SYNCHECK_EXACT )	LOC_RETURN_SYNONYM ( iL );
+				if ( eL==SYNCHECK_LESS )					LOC_REFINE_BREAK();
+				if ( eL==SYNCHECK_EXACT && iL==iSynStart)	LOC_RETURN_SYNONYM ( iL );
 
-				assert ( eL==SYNCHECK_PARTIAL );
+				assert ( eL==SYNCHECK_PARTIAL || eL==SYNCHECK_EXACT );
 				iSynEnd = iL;
+				eEnd = eL;
 			}
 
 			// handle eof
@@ -3243,6 +3264,8 @@ ISphTokenizer * CSphTokenizer_SBCS::Clone () const
 	CSphTokenizer_SBCS * pClone = new CSphTokenizer_SBCS ();
 	pClone->m_tLC = m_tLC;
 	pClone->m_dSynonyms = m_dSynonyms;
+	pClone->m_dSynStart = m_dSynStart;
+	pClone->m_dSynEnd = m_dSynEnd;
 	return pClone;
 }
 
@@ -3360,6 +3383,8 @@ ISphTokenizer * CSphTokenizer_UTF8::Clone () const
 	CSphTokenizer_UTF8 * pClone = new CSphTokenizer_UTF8 ();
 	pClone->m_tLC = m_tLC;
 	pClone->m_dSynonyms = m_dSynonyms;
+	pClone->m_dSynStart = m_dSynStart;
+	pClone->m_dSynEnd = m_dSynEnd;
 	return pClone;
 }
 

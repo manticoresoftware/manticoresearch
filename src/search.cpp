@@ -98,6 +98,7 @@ int main ( int argc, char ** argv )
 			OPT ( "-b", "--boolean" )	tQuery.m_eMode = SPH_MATCH_BOOLEAN;
 			OPT ( "-p", "--phrase" )	tQuery.m_eMode = SPH_MATCH_PHRASE;
 			OPT ( "-e", "--ext" )		tQuery.m_eMode = SPH_MATCH_EXTENDED;
+			OPT ( "-e2", "--ext2" )		tQuery.m_eMode = SPH_MATCH_EXTENDED2;
 			OPT ( "-q", "--noinfo" )	bNoInfo = true;
 			OPT1 ( "--sort=date" )		tQuery.m_eSort = SPH_SORT_ATTR_DESC;
 			OPT1 ( "--rsort=date" )		tQuery.m_eSort = SPH_SORT_ATTR_ASC;

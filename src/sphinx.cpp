@@ -9222,6 +9222,9 @@ const ExtHit_t * ExtTerm_c::GetHitsChunk ( const ExtDoc_t * pMatched )
 			continue;
 		}
 
+		if (!( m_uFields & ( 1UL<<(m_tQword.m_iHitPos>>24) ) ))
+			continue;
+
 		ExtHit_t & tHit = m_dHits[iHit++];
 		tHit.m_uDocid = pDoc->m_uDocid;
 		tHit.m_uHitpos = m_tQword.m_iHitPos;

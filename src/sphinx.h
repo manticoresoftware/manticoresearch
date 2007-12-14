@@ -1090,6 +1090,18 @@ enum ESphMatchMode
 };
 
 
+/// search query relevance ranking mode
+enum ESphRankMode
+{
+	SPH_RANK_PROXIMITY_BM25		= 0,	///< default mode, phrase proximity major factor and BM25 minor one
+	SPH_RANK_BM25				= 1,	///< statistical mode, BM25 ranking only (faster but worse quality)
+	SPH_RANK_NONE				= 2,	///< no ranking, all matches get a weight of 1
+
+	SPH_RANK_TOTAL,
+	SPH_RANK_DEFAULT			= SPH_RANK_PROXIMITY_BM25
+};
+
+
 /// search query grouping mode
 enum ESphGroupBy
 {
@@ -1170,6 +1182,7 @@ public:
 	DWORD *			m_pWeights;		///< user-supplied per-field weights. may be NULL. default is NULL. NOT OWNED, WILL NOT BE FREED in dtor.
 	int				m_iWeights;		///< number of user-supplied weights. missing fields will be assigned weight 1. default is 0
 	ESphMatchMode	m_eMode;		///< match mode. default is "match all"
+	ESphRankMode	m_eRanker;		///< ranking mode, default is proximity+BM25
 	ESphSortOrder	m_eSort;		///< sort mode
 	CSphString		m_sSortBy;		///< attribute to sort by
 	int				m_iMaxMatches;	///< max matches to retrieve, default is 1000. more matches use more memory and CPU time to hold and sort them

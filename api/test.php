@@ -53,6 +53,7 @@ $filtervals = array();
 $distinct = "";
 $sortby = "";
 $limit = 20;
+$ranker = SPH_RANK_PROXIMITY_BM25;
 for ( $i=0; $i<count($args); $i++ )
 {
 	$arg = $args[$i];
@@ -72,6 +73,12 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="-gs"|| $arg=="--groupsort" )	$groupsort = $args[++$i];
 	else if ( $arg=="-d" || $arg=="--distinct" )	$distinct = $args[++$i];
 	else if ( $arg=="-l" || $arg=="--limit" )		$limit = $args[++$i];
+	else if ( $arg=="-r" )
+	{
+		$arg = strtolower($args[++$i]);
+		if ( $arg=="bm25" )		$ranker = SPH_RANK_BM25;
+		if ( $arg=="none" )		$ranker = SPH_RANK_NONE;
+	}
 	else
 		$q .= $args[$i] . " ";
 }
@@ -89,6 +96,7 @@ if ( $groupby )				$cl->SetGroupBy ( $groupby, SPH_GROUPBY_ATTR, $groupsort );
 if ( $sortby )				$cl->SetSortMode ( SPH_SORT_EXTENDED, $sortby );
 if ( $distinct )			$cl->SetGroupDistinct ( $distinct );
 if ( $limit )				$cl->SetLimits ( 0, $limit, ( $limit>1000 ) ? $limit : 1000 );
+$cl->SetRankingMode ( $ranker );
 $res = $cl->Query ( $q, $index );
 
 ////////////////

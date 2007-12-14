@@ -3499,6 +3499,7 @@ CSphQuery::CSphQuery ()
 	, m_pWeights	( NULL )
 	, m_iWeights	( 0 )
 	, m_eMode		( SPH_MATCH_ALL )
+	, m_eRanker		( SPH_RANK_DEFAULT )
 	, m_eSort		( SPH_SORT_RELEVANCE )
 	, m_iMaxMatches	( 1000 )
 	, m_iMinID		( 0 )
@@ -9041,12 +9042,13 @@ protected:
 };
 
 
-/// ranker, which folds hitstream into simple match chunks
+/// ranker interface
+/// ranker folds incoming hitstream into simple match chunks, and computes relevance rank
 class ExtRanker_c
 {
 public:
 								ExtRanker_c ( const CSphExtendedQueryNode * pAccept, const CSphExtendedQueryNode * pReject, const CSphTermSetup & tSetup );
-	int							GetMatches ( int iFields, const int * pWeights );
+	virtual int					GetMatches ( int iFields, const int * pWeights ) = 0;
 
 	void						GetQwords ( ExtQwordsHash_t & hQwords )				{ if ( m_pRoot ) m_pRoot->GetQwords ( hQwords ); }
 	void						SetQwordsIDF ( const ExtQwordsHash_t & hQwords )	{ if ( m_pRoot ) m_pRoot->SetQwordsIDF ( hQwords ); }
@@ -9059,6 +9061,22 @@ protected:
 	const ExtDoc_t *			m_pDoclist;
 	const ExtHit_t *			m_pHitlist;
 };
+
+
+#define DECLARE_RANKER(_name) \
+	class ExtRanker_##_name##_c : public ExtRanker_c \
+	{ \
+	public: \
+		ExtRanker_##_name##_c ( const CSphExtendedQueryNode * pAccept, const CSphExtendedQueryNode * pReject, const CSphTermSetup & tSetup ) \
+			: ExtRanker_c ( pAccept, pReject, tSetup ) \
+		{} \
+	\
+		virtual int GetMatches ( int iFields, const int * pWeights ); \
+	};
+
+DECLARE_RANKER ( ProximityBM25 )
+DECLARE_RANKER ( BM25 )
+DECLARE_RANKER ( None )
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -9342,6 +9360,7 @@ const ExtDoc_t * ExtAnd_c::GetDocsChunk ()
 			// emit it
 			ExtDoc_t & tDoc = m_dDocs[iDoc++];	
 			tDoc.m_uDocid = pCur0->m_uDocid;
+			tDoc.m_uFields = pCur0->m_uFields | pCur1->m_uFields;
 			tDoc.m_uHitlistOffset = -1;
 			tDoc.m_fTFIDF = pCur0->m_fTFIDF + pCur1->m_fTFIDF;
 
@@ -9493,6 +9512,7 @@ const ExtDoc_t * ExtOr_c::GetDocsChunk ()
 				while ( pCur0->m_uDocid==pCur1->m_uDocid && pCur0->m_uDocid!=DOCID_MAX && iDoc<MAX_DOCS-1 )
 				{
 					m_dDocs[iDoc] = *pCur0;
+					m_dDocs[iDoc].m_uFields = pCur0->m_uFields | pCur1->m_uFields;
 					m_dDocs[iDoc].m_fTFIDF = pCur0->m_fTFIDF + pCur1->m_fTFIDF;
 					iDoc++;
 					pCur0++;
@@ -10075,7 +10095,9 @@ ExtRanker_c::ExtRanker_c ( const CSphExtendedQueryNode * pAccept, const CSphExte
 	m_pHitlist = NULL;
 }
 
-int ExtRanker_c::GetMatches ( int iFields, const int * pWeights )
+//////////////////////////////////////////////////////////////////////////
+
+int ExtRanker_ProximityBM25_c::GetMatches ( int iFields, const int * pWeights )
 {
 	if ( !m_pRoot )
 		return 0;
@@ -10186,6 +10208,62 @@ int ExtRanker_c::GetMatches ( int iFields, const int * pWeights )
 
 //////////////////////////////////////////////////////////////////////////
 
+int ExtRanker_BM25_c::GetMatches ( int iFields, const int * pWeights )
+{
+	if ( !m_pRoot )
+		return 0;
+
+	const ExtDoc_t * pDoc = m_pDoclist;
+	int iMatches = 0;
+
+	while ( iMatches<ExtNode_i::MAX_DOCS )
+	{
+		if ( !pDoc || pDoc->m_uDocid==DOCID_MAX ) pDoc = m_pRoot->GetDocsChunk ();
+		if ( !pDoc ) { m_pDoclist = NULL; return iMatches; }
+
+		DWORD uRank = 0;
+		for ( int i=0; i<iFields; i++ )
+			uRank += ( (pDoc->m_uFields>>i)&1 )*pWeights[i];
+
+		m_dMatches[iMatches].m_iDocID = pDoc->m_uDocid;
+		m_dMatches[iMatches].m_iWeight = uRank*SPH_BM25_SCALE + int( (pDoc->m_fTFIDF+0.5f)*SPH_BM25_SCALE );
+		iMatches++;
+
+		pDoc++;
+	}
+
+	m_pDoclist = pDoc;
+	return iMatches;
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+int ExtRanker_None_c::GetMatches ( int, const int * )
+{
+	if ( !m_pRoot )
+		return 0;
+
+	const ExtDoc_t * pDoc = m_pDoclist;
+	int iMatches = 0;
+
+	while ( iMatches<ExtNode_i::MAX_DOCS )
+	{
+		if ( !pDoc || pDoc->m_uDocid==DOCID_MAX ) pDoc = m_pRoot->GetDocsChunk ();
+		if ( !pDoc ) { m_pDoclist = NULL; return iMatches; }
+
+		m_dMatches[iMatches].m_iDocID = pDoc->m_uDocid;
+		m_dMatches[iMatches].m_iWeight = 1;
+		iMatches++;
+
+		pDoc++;
+	}
+
+	m_pDoclist = pDoc;
+	return iMatches;
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 void CSphIndex_VLN::CheckExtendedQuery ( const CSphExtendedQueryNode * pNode, CSphQueryResult * pResult )
 {
 	ARRAY_FOREACH ( i, pNode->m_tAtom.m_dWords )
@@ -10215,11 +10293,23 @@ bool CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, CSphQueryResult * 
 	CheckExtendedQuery ( tParsed.m_pReject, pResult );
 
 	// setup eval-tree
-	ExtRanker_c tRoot ( tParsed.m_pAccept, tParsed.m_pReject, tTermSetup );
+	ExtRanker_c * pRoot = NULL;
+	switch ( pQuery->m_eRanker )
+	{
+		case SPH_RANK_PROXIMITY_BM25:	pRoot = new ExtRanker_ProximityBM25_c ( tParsed.m_pAccept, tParsed.m_pReject, tTermSetup ); break;
+		case SPH_RANK_BM25:				pRoot = new ExtRanker_BM25_c ( tParsed.m_pAccept, tParsed.m_pReject, tTermSetup ); break;
+		case SPH_RANK_NONE:				pRoot = new ExtRanker_None_c ( tParsed.m_pAccept, tParsed.m_pReject, tTermSetup ); break;
+
+		default:
+			pResult->m_sWarning.SetSprintf ( "unknown ranking mode %d; using default", (int)pQuery->m_eRanker );
+			pRoot = new ExtRanker_ProximityBM25_c ( tParsed.m_pAccept, tParsed.m_pReject, tTermSetup );
+			break;
+	}
+	assert ( pRoot );
 
 	// setup word stats and IDFs
 	ExtQwordsHash_t hQwords;
-	tRoot.GetQwords ( hQwords );
+	pRoot->GetQwords ( hQwords );
 
 	pResult->m_iNumWords = 0;
 	const int iQwords = hQwords.GetLength ();
@@ -10257,18 +10347,18 @@ bool CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, CSphQueryResult * 
 		}
 	}
 
-	tRoot.SetQwordsIDF ( hQwords );
+	pRoot->SetQwordsIDF ( hQwords );
 
 	// do searching
 	for ( ;; )
 	{
-		int iMatches = tRoot.GetMatches ( m_iWeights, m_dWeights );
+		int iMatches = pRoot->GetMatches ( m_iWeights, m_dWeights );
 		if ( iMatches<=0 )
 			break;
 
 		for ( int i=0; i<iMatches; i++ )
 		{
-			CSphMatch & tMatch = tRoot.m_dMatches[i];
+			CSphMatch & tMatch = pRoot->m_dMatches[i];
 
 			// early reject by group id, doc id or timestamp
 			if ( m_bEarlyLookup )

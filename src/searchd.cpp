@@ -162,7 +162,7 @@ enum SearchdCommand_e
 /// known command versions
 enum
 {
-	VER_COMMAND_SEARCH		= 0x10F,
+	VER_COMMAND_SEARCH		= 0x110,
 	VER_COMMAND_EXCERPT		= 0x100,
 	VER_COMMAND_UPDATE		= 0x100
 };
@@ -1810,7 +1810,7 @@ protected:
 
 int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuery & q ) const
 {
-	int iReqSize = 80 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
+	int iReqSize = 84 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
 		+ strlen ( q.m_sSortBy.cstr() )
 		+ strlen ( q.m_sQuery.cstr() )
 		+ strlen ( sIndexes )
@@ -1846,6 +1846,7 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 	tOut.SendInt ( 0 ); // offset is 0
 	tOut.SendInt ( q.m_iMaxMatches ); // limit is MAX_MATCHES
 	tOut.SendInt ( (DWORD)q.m_eMode ); // match mode
+	tOut.SendInt ( (DWORD)q.m_eRanker ); // ranking mode
 	tOut.SendInt ( q.m_eSort ); // sort mode
 	tOut.SendString ( q.m_sSortBy.cstr() ); // sort attr
 	tOut.SendString ( q.m_sQuery.cstr() ); // query
@@ -2179,6 +2180,8 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 	tQuery.m_iOffset	= tReq.GetInt ();
 	tQuery.m_iLimit		= tReq.GetInt ();
 	tQuery.m_eMode		= (ESphMatchMode) tReq.GetInt ();
+	if ( iVer>=0x110 )
+		tQuery.m_eRanker= (ESphRankMode) tReq.GetInt ();
 	tQuery.m_eSort		= (ESphSortOrder) tReq.GetInt ();
 	if ( iVer<=0x101 )
 		tQuery.m_iOldGroups = tReq.GetDwords ( &tQuery.m_pOldGroups, SEARCHD_MAX_ATTR_VALUES, "invalid group count %d (should be in 0..%d range)" );
@@ -2394,6 +2397,11 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 	if ( tQuery.m_eMode<0 || tQuery.m_eMode>SPH_MATCH_TOTAL )
 	{
 		tReq.SendErrorReply ( "invalid match mode %d", tQuery.m_eMode );
+		return false;
+	}
+	if ( tQuery.m_eRanker<0 || tQuery.m_eRanker>SPH_RANK_TOTAL )
+	{
+		tReq.SendErrorReply ( "invalid ranking mode %d", tQuery.m_eRanker );
 		return false;
 	}
 	if ( tQuery.m_iMaxMatches<1 || tQuery.m_iMaxMatches>g_iMaxMatches )
@@ -2953,6 +2961,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			( qCheck.m_iWeights!=qFirst.m_iWeights ) || // weights count
 			( qCheck.m_pWeights && memcmp ( qCheck.m_pWeights, qFirst.m_pWeights, sizeof(int)*qCheck.m_iWeights ) ) || // weights
 			( qCheck.m_eMode!=qFirst.m_eMode ) || // search mode
+			( qCheck.m_eRanker!=qFirst.m_eRanker ) || // ranking mode
 			( qCheck.m_iMinID!=qFirst.m_iMinID ) || // min-id filter
 			( qCheck.m_iMaxID!=qFirst.m_iMaxID ) || // max-id filter
 			( qCheck.m_dFilters.GetLength()!=qFirst.m_dFilters.GetLength() ) || // attr filters count

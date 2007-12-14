@@ -23,7 +23,7 @@ define ( "SEARCHD_COMMAND_EXCERPT",	1 );
 define ( "SEARCHD_COMMAND_UPDATE",	2 );
 
 /// current client-side command implementation versions
-define ( "VER_COMMAND_SEARCH",		0x10F );
+define ( "VER_COMMAND_SEARCH",		0x110 );
 define ( "VER_COMMAND_EXCERPT",		0x100 );
 define ( "VER_COMMAND_UPDATE",		0x100 );
 
@@ -40,7 +40,12 @@ define ( "SPH_MATCH_PHRASE",		2 );
 define ( "SPH_MATCH_BOOLEAN",		3 );
 define ( "SPH_MATCH_EXTENDED",		4 );
 define ( "SPH_MATCH_FULLSCAN",		5 );
-define ( "SPH_MATCH_EXTENDED2",		6 );	// extended engine V2 (TEMPORARY, WILL BE REMOVED IN 0.9.8-RELEASE)
+define ( "SPH_MATCH_EXTENDED2",		6 );	// extended engine V2 (TEMPORARY, WILL BE REMOVED)
+
+/// known ranking modes (ext2 only)
+define ( "SPH_RANK_PROXIMITY_BM25",	0 );	///< default mode, phrase proximity major factor and BM25 minor one
+define ( "SPH_RANK_BM25",			1 );	///< statistical mode, BM25 ranking only (faster but worse quality)
+define ( "SPH_RANK_NONE",			2 );	///< no ranking, all matches get a weight of 1
 
 /// known sort modes
 define ( "SPH_SORT_RELEVANCE",		0 );
@@ -93,6 +98,8 @@ class SphinxClient
 	var $_retrycount;	///< distributed retries count
 	var $_retrydelay;	///< distributed retries delay
 	var $_anchor;		///< geographical anchor point
+	var $_indexweights;	///< per-index weights
+	var $_ranker;		///< ranking mode (default is SPH_RANK_PROXIMITY_BM25)
 
 	var $_error;		///< last error message
 	var $_warning;		///< last warning message
@@ -130,6 +137,7 @@ class SphinxClient
 		$this->_retrydelay	= 0;
 		$this->_anchor		= array ();
 		$this->_indexweights= array ();
+		$this->_ranker		= SPH_RANK_PROXIMITY_BM25;
 
 		// per-reply fields (for single-query case)
 		$this->_error		= "";
@@ -283,6 +291,15 @@ class SphinxClient
 			|| $mode==SPH_MATCH_EXTENDED
 			|| $mode==SPH_MATCH_EXTENDED2 );
 		$this->_mode = $mode;
+	}
+
+	/// set ranking mode
+	function SetRankingMode ( $ranker )
+	{
+		assert ( $ranker==SPH_RANK_PROXIMITY_BM25
+			|| $ranker==SPH_RANK_BM25
+			|| $ranker==SPH_RANK_NONE );
+		$this->_ranker = $ranker;
 	}
 
 	/// set matches sorting mode
@@ -556,7 +573,7 @@ class SphinxClient
 	function AddQuery ( $query, $index="*" )
 	{
 		// build request
-		$req = pack ( "NNNN", $this->_offset, $this->_limit, $this->_mode, $this->_sort ); // mode and limits
+		$req = pack ( "NNNNN", $this->_offset, $this->_limit, $this->_mode, $this->_ranker, $this->_sort ); // mode and limits
 		$req .= pack ( "N", strlen($this->_sortby) ) . $this->_sortby;
 		$req .= pack ( "N", strlen($query) ) . $query; // query itself
 		$req .= pack ( "N", count($this->_weights) ); // weights

@@ -341,10 +341,6 @@ int main ( int argc, char ** argv )
 			break;
 		}
 
-		SafeDelete ( pIndex );
-		SafeDelete ( pDict );
-		SafeDelete ( pTokenizer );
-
 		/////////
 		// print
 		/////////
@@ -374,7 +370,20 @@ int main ( int argc, char ** argv )
 					const CSphColumnInfo & tAttr = pResult->m_tSchema.GetAttr(j);
 					fprintf ( stdout, ", %s=", tAttr.m_sName.cstr() );
 
-					switch ( tAttr.m_eAttrType )
+					if ( tAttr.m_eAttrType & SPH_ATTR_MULTI )
+					{
+						fprintf ( stdout, "(" );
+						int iIndex = tMatch.GetAttr ( tAttr.m_iRowitem );
+						if ( iIndex )
+						{
+							const DWORD * pValues = pResult->m_pMva + iIndex;
+							int iValues = *pValues++;
+							for ( int k=0; k<iValues; k++ )
+								fprintf ( stdout, k ? ",%u" : "%u", *pValues++ );
+						}
+						fprintf ( stdout, ")" );
+
+					} else switch ( tAttr.m_eAttrType )
 					{
 						case SPH_ATTR_INTEGER:
 						case SPH_ATTR_ORDINAL:
@@ -432,6 +441,14 @@ int main ( int argc, char ** argv )
 				pResult->m_tWordStats[i].m_iHits );
 		}
 		fprintf ( stdout, "\n" );
+
+		///////////
+		// cleanup
+		///////////
+
+		SafeDelete ( pIndex );
+		SafeDelete ( pDict );
+		SafeDelete ( pTokenizer );
 	}
 }
 

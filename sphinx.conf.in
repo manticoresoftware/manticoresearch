@@ -199,7 +199,7 @@ source src1
 	# desired to attach multiple values of the same attribute and be able
 	# to apply filtering to value lists.
 	#
-	# 'sql_multi_attr' option is used to declare such attributes.
+	# 'sql_attr_multi' option is used to declare such attributes.
 	# its value format is as follows:
 	#
 	#	ATTR-TYPE ATTR-NAME 'from' SOURCE-TYPE [;QUERY] [;RANGE-QUERY]

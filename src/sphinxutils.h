@@ -21,14 +21,6 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
-/// known keys for different config sections
-extern const char * g_dSphKeysCommon[];
-extern const char * g_dSphKeysIndexer[];
-extern const char * g_dSphKeysSearchd[];
-extern const char * g_dSphKeysSearch[];
-
-/////////////////////////////////////////////////////////////////////////////
-
 /// let's build our own theme park!
 inline int sphIsAlpha ( int c )
 {
@@ -78,13 +70,15 @@ protected:
 	CSphString		m_sSectionName;
 	char			m_sError [ 1024 ];
 
-protected:
-	bool			ValidateKey ( const char * sKey, const char ** dKnownKeys );
+	int					m_iWarnings;
+	static const int	WARNS_THRESH	= 5;
 
+protected:
 	bool			IsPlainSection ( const char * sKey );
 	bool			IsNamedSection ( const char * sKey );
 	bool			AddSection ( const char * sType, const char * sSection );
 	void			AddKey ( const char * sKey, char * sValue );
+	bool			ValidateKey ( const char * sKey );
 };
 
 /////////////////////////////////////////////////////////////////////////////

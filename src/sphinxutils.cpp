@@ -25,65 +25,6 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
-/// known keys for [common] config section
-const char * g_dSphKeysCommon[] =
-{
-	"index_path",
-	"morphology",
-	"stopwords",
-	"charset_type",
-	"charset_table",
-	NULL
-};
-
-
-/// known keys for [indexer] config section
-const char * g_dSphKeysIndexer[] =
-{
-	"type",
-	"sql_host",
-	"sql_port",
-	"sql_sock",
-	"sql_user",
-	"sql_pass",
-	"sql_db",
-	"sql_query_pre",
-	"sql_query_range",
-	"sql_query",
-	"sql_query_post",
-	"sql_group_column",
-	"sql_date_column",
-	"sql_range_step",
-	"xmlpipe_command",
-	"mem_limit",
-	"strip_html",
-	"index_html_attrs",
-	NULL
-};
-
-
-/// known keys for [searchd] config section
-const char * g_dSphKeysSearchd[] =
-{
-	"port",
-	"log",
-	"query_log",
-	"read_timeout",
-	"max_children",
-	"pid_file",
-	NULL
-};
-
-
-/// known keys for [search] config section
-const char * g_dSphKeysSearch[] =
-{
-	"sql_query_info",
-	NULL
-};
-
-/////////////////////////////////////////////////////////////////////////////
-
 static char * ltrim ( char * sLine )
 {
 	while ( *sLine && isspace(*sLine) )
@@ -107,33 +48,117 @@ static char * trim ( char * sLine )
 	return ltrim ( rtrim ( sLine ) );
 }
 
-/////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////
 // CONFIG PARSER
-/////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////
+
+/// key flags
+enum
+{
+	KEY_DEPRECATED		= 1UL<<0,
+	KEY_LIST			= 1UL<<1
+};
+
+/// key descriptor for validation purposes
+struct KeyDesc_t
+{
+	const char *		m_sKey;		///< key name
+	int					m_iFlags;	///< flags
+	const char *		m_sExtra;	///< extra stuff (deprecated name, for now)
+};
+
+/// allowed keys for source section
+static KeyDesc_t g_dKeysSource[] =
+{
+	{ "type",					0, NULL },
+	{ "strip_html",				0, NULL },
+	{ "index_html_attrs",		0, NULL },
+	{ "sql_host",				0, NULL },
+	{ "sql_user",				0, NULL },
+	{ "sql_pass",				0, NULL },
+	{ "sql_db",					0, NULL },
+	{ "sql_port",				0, NULL },
+	{ "sql_sock",				0, NULL },
+	{ "mysql_connect_flags",	0, NULL },
+	{ "sql_query_pre",			KEY_LIST, NULL },
+	{ "sql_query",				0, NULL },
+	{ "sql_query_range",		0, NULL },
+	{ "sql_range_step",			0, NULL },
+	{ "sql_attr_uint",			KEY_LIST, NULL },
+	{ "sql_attr_bool",			KEY_LIST, NULL },
+	{ "sql_attr_timestamp",		KEY_LIST, NULL },
+	{ "sql_attr_str2ordinal",	KEY_LIST, NULL },
+	{ "sql_attr_float",			KEY_LIST, NULL },
+	{ "sql_attr_multi",			KEY_LIST, NULL },
+	{ "sql_query_post",			KEY_LIST, NULL },
+	{ "sql_query_post_index",	KEY_LIST, NULL },
+	{ "sql_ranged_throttle",	0, NULL },
+	{ "sql_query_info",			0, NULL },
+	{ "xmlpipe_command",		0, NULL },
+	{ "sql_group_column",		KEY_LIST | KEY_DEPRECATED, "sql_attr_uint"  },
+	{ "sql_date_column",		KEY_LIST | KEY_DEPRECATED, "sql_attr_timestamp" },
+	{ "sql_str2ordinal_column",	KEY_LIST | KEY_DEPRECATED, "sql_attr_str2ordinal" },
+	{ NULL,						0, NULL }
+};
+
+/// allowed keys for index section
+static KeyDesc_t g_dKeysIndex[] =
+{
+	{ "source",					KEY_LIST, NULL },
+	{ "path",					0, NULL },
+	{ "docinfo",				0, NULL },
+	{ "mlock",					0, NULL },
+	{ "morphology",				0, NULL },
+	{ "stopwords",				0, NULL },
+	{ "synonyms",				0, NULL },
+	{ "min_word_len",			0, NULL },
+	{ "charset_type",			0, NULL },
+	{ "charset_table",			0, NULL },
+	{ "min_prefix_len",			0, NULL },
+	{ "min_infix_len",			0, NULL },
+	{ "prefix_fields",			0, NULL },
+	{ "infix_fields",			0, NULL },
+	{ "enable_star",			0, NULL },
+	{ "ngram_len",				0, NULL },
+	{ "ngram_chars",			0, NULL },
+	{ "phrase_boundary",		0, NULL },
+	{ "phrase_boundary_step",	0, NULL },
+	{ "type",					0, NULL },
+	{ "local",					KEY_LIST, NULL },
+	{ "agent",					KEY_LIST, NULL },
+	{ "agent_connect_timeout",	0, NULL },
+	{ "agent_query_timeout",	0, NULL },
+	{ NULL,						0, NULL }
+};
+
+/// allowed keys for indexer section
+static KeyDesc_t g_dKeysIndexer[] =
+{
+	{ "mem_limit",				0, NULL },
+	{ NULL,						0, NULL }
+};
+
+/// allowed keys for searchd section
+static KeyDesc_t g_dKeysSearchd[] =
+{
+	{ "address",				0, NULL },
+	{ "port",					0, NULL },
+	{ "log",					0, NULL },
+	{ "query_log",				0, NULL },
+	{ "read_timeout",			0, NULL },
+	{ "max_children",			0, NULL },
+	{ "pid_file",				0, NULL },
+	{ "max_matches",			0, NULL },
+	{ "seamless_rotate",		0, NULL },
+	{ NULL,						0, NULL }
+};
+
+//////////////////////////////////////////////////////////////////////////
 
 CSphConfigParser::CSphConfigParser ()
 	: m_sFileName ( "" )
 	, m_iLine ( -1 )
 {
-}
-
-
-bool CSphConfigParser::ValidateKey ( const char * sKey, const char ** dKnownKeys )
-{
-	// no validation requested
-	if ( dKnownKeys==NULL )
-		return true;
-
-	while ( *dKnownKeys )
-	{
-		if ( strcmp ( *dKnownKeys, sKey )==0 )
-			return true;
-		dKnownKeys++;
-	}
-
-	fprintf ( stdout, "WARNING: error in %s:%d, unknown key '%s' in section [%s]\n",
-		m_sFileName.cstr(), m_iLine, sKey, m_sSectionName.cstr() );
-	return false;
 }
 
 
@@ -206,6 +231,48 @@ void CSphConfigParser::AddKey ( const char * sKey, char * sValue )
 }
 
 
+bool CSphConfigParser::ValidateKey ( const char * sKey )
+{
+	// get proper descriptor table
+	// OPTIMIZE! move lookup to AddSection
+	const KeyDesc_t * pDesc = NULL;
+	if ( m_sSectionType=="source" )			pDesc = g_dKeysSource;
+	else if ( m_sSectionType=="index" )		pDesc = g_dKeysIndex;
+	else if ( m_sSectionType=="indexer" )	pDesc = g_dKeysIndexer;
+	else if ( m_sSectionType=="searchd" )	pDesc = g_dKeysSearchd;
+	if ( !pDesc )
+	{
+		snprintf ( m_sError, sizeof(m_sError), "unknown section type '%s'", m_sSectionType.cstr() );
+		return false;
+	}
+
+	// check if the key is known
+	while ( pDesc->m_sKey && strcasecmp ( pDesc->m_sKey, sKey ) )
+		pDesc++;
+	if ( !pDesc->m_sKey )
+	{
+		snprintf  ( m_sError, sizeof(m_sError), "unknown key name '%s'", sKey );
+		return false;
+	}
+
+	// warn about deprecate keys
+	if ( pDesc->m_iFlags & KEY_DEPRECATED )
+		if ( ++m_iWarnings<=WARNS_THRESH )
+			fprintf ( stdout, "WARNING: key '%s' is deprecated in %s line %d; use '%s' instead.\n", sKey, m_sFileName.cstr(), m_iLine, pDesc->m_sExtra );
+
+	// warn about list/non-list keys
+	if (!( pDesc->m_iFlags & KEY_LIST ))
+	{
+		CSphConfigSection & tSec = m_tConf[m_sSectionType][m_sSectionName];
+		if ( tSec(sKey) && !tSec[sKey].m_bTag )
+			if ( ++m_iWarnings<=WARNS_THRESH )
+				fprintf ( stdout, "WARNING: key '%s' is not multi-value; value in %s line %d will be ignored.\n", sKey, m_sFileName.cstr(), m_iLine );
+	}
+
+	return true;
+}
+
+
 bool CSphConfigParser::Parse ( const char * sFileName )
 {
 	const int L_STEPBACK	= 16;
@@ -215,11 +282,12 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 	// open file
 	FILE * fp = fopen ( sFileName, "rb" );
 	if ( !fp )
-		return 0;
+		return false;
 
 	// init parser
 	m_sFileName = sFileName;
 	m_iLine = 0;
+	m_iWarnings = 0;
 
 	char * p = NULL;
 	char * pEnd = NULL;
@@ -229,7 +297,7 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 	int iToken = 0;
 	int iCh = -1;
 
-	enum { S_TOP, S_SKIP2NL, S_TOK, S_TYPE, S_SEC, S_CHR, S_VALUE, S_SECNAME, S_SECBASE } eState = S_TOP, eStack[8];
+	enum { S_TOP, S_SKIP2NL, S_TOK, S_TYPE, S_SEC, S_CHR, S_VALUE, S_SECNAME, S_SECBASE, S_KEY } eState = S_TOP, eStack[8];
 	int iStack = 0;
 
 	int iValue = 0, iValueMax = 65535;
@@ -321,9 +389,21 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 			if ( isspace(*p) )				continue;
 			if ( *p=='#' )					{ LOC_PUSH ( S_SKIP2NL ); continue; }
 			if ( *p=='}' )					{ LOC_POP (); continue; }
-			if ( sphIsAlpha(*p) )			{ LOC_PUSH ( S_VALUE ); LOC_PUSH ( S_CHR ); iCh = '='; LOC_PUSH ( S_TOK ); LOC_BACK(); iValue = 0; sValue[0] = '\0'; continue; }
+			if ( sphIsAlpha(*p) )			{ LOC_PUSH ( S_KEY ); LOC_PUSH ( S_TOK ); LOC_BACK(); iValue = 0; sValue[0] = '\0'; continue; }
 											LOC_ERROR2 ( "section contents: expected token, got '%c'", *p );
 
+		}
+
+		// handle S_KEY state
+		if ( eState==S_KEY )
+		{
+			// validate the key
+			if ( !ValidateKey ( sToken ) ) 
+				break;
+
+			// an assignment operator and a value must follow
+			LOC_POP (); LOC_PUSH ( S_VALUE ); LOC_PUSH ( S_CHR ); iCh = '='; 
+			continue;
 		}
 
 		// handle S_VALUE state
@@ -387,9 +467,13 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 	fclose ( fp );
 	SafeDeleteArray ( sValue );
 
+	if ( m_iWarnings>WARNS_THRESH )
+		fprintf ( stdout, "WARNING: %d more warnings skipped.\n", m_iWarnings-WARNS_THRESH );
+
 	if ( strlen(m_sError) )
 	{
 		int iCol = (int)(p-sBuf+1);
+
 		int iCtx = Min ( L_STEPBACK, iCol ); // error context is upto L_STEPBACK chars back, but never going to prev line
 		const char * sCtx = p-iCtx+1;
 		if ( sCtx<sBuf )
@@ -399,10 +483,10 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 		memcpy ( sStepback, sCtx, iCtx );
 		sStepback[iCtx] = '\0';
 
-		fprintf ( stdout, "%s line %d col %d: %s near '%s'\n", m_sFileName.cstr(), m_iLine, iCol,
-			m_sError, sStepback );
+		fprintf ( stdout, "ERROR: %s in %s line %d col %d.\n", m_sError, m_sFileName.cstr(), m_iLine, iCol );
 		return false;
 	}
+
 	return true;
 }
 

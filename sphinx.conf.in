@@ -72,11 +72,29 @@ source src1
 
 
 	# pre-query, executed before the main fetch query
-	# useful eg. to setup encoding or mark records
-	# optional, default is empty
+	#
+	# useful eg. to setup encoding, mark records as indexed, or set various
+	# SQL server or application specific options.
+	#
+	# you can specify several pre-queries. they will be executed in the
+	# order of appearance in the configuration file.
+	#
+	# one especially frequent pre-query usage is to specify the encoding
+	# the server should use for returned rows. it must match the encoding
+	# that Sphinx expects, specified by charset_type and charset_table
+	# options (see below). MySQL specific examples are:
 	#
 	# sql_query_pre		= SET CHARACTER_SET_RESULTS=cp1251
-	sql_query_pre		=
+	# sql_query_pre		= SET NAMES utf8
+	#
+	# for MySQL sources, it makes sense to disable query cache (for indexer
+	# connection only) in pre-query, because indexing queries are not going
+	# to be re-run frequently anyway. this could be achieved with:
+	#
+	# sql_query_pre		= SET SESSION query_cache_type=OFF
+	#
+	# optional, default is empty
+
 
 	# main document fetch query
 	#

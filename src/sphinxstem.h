@@ -35,6 +35,9 @@ void	stem_ru_utf8 ( WORD * pWord );
 /// do nothing if it's not
 void	stem_soundex ( BYTE * pWord );
 
+/// double metaphone stemmer
+void	stem_dmetaphone ( BYTE * pWord, bool bUTF8 );
+
 #endif // _sphinxstem_
 
 //

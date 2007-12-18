@@ -11549,7 +11549,9 @@ enum
 	SPH_MORPH_STEM_RU_CP1251	= (1UL<<2),
 	SPH_MORPH_STEM_RU_UTF8		= (1UL<<3),
 	SPH_MORPH_SOUNDEX			= (1UL<<4),
-	SPH_MORPH_LIBSTEMMER		= (1UL<<5)
+	SPH_MORPH_LIBSTEMMER		= (1UL<<5),
+	SPH_MORPH_METAPHONE_SBCS	= (1UL<<6),
+	SPH_MORPH_METAPHONE_UTF8	= (1UL<<7)
 };
 
 
@@ -11777,6 +11779,12 @@ void CSphDictCRC::ApplyStemmers ( BYTE * pWord )
 	if ( m_iMorph & SPH_MORPH_SOUNDEX )
 		stem_soundex ( pWord );
 
+	if ( m_iMorph & SPH_MORPH_METAPHONE_SBCS )
+		stem_dmetaphone ( pWord, false );
+
+	if ( m_iMorph & SPH_MORPH_METAPHONE_UTF8 )
+		stem_dmetaphone ( pWord, true );
+
 #if USE_LIBSTEMMER
 	if ( m_iMorph & SPH_MORPH_LIBSTEMMER )
 	{
@@ -11943,7 +11951,8 @@ bool CSphDictCRC::SetMorphology ( const CSphVariant * sMorph, bool bUseUTF8, CSp
 	{
 		m_iMorph = SPH_MORPH_SOUNDEX;
 
-	}
+	} else if ( sOption == "metaphone" )
+		m_iMorph = bUseUTF8 ? SPH_MORPH_METAPHONE_UTF8 : SPH_MORPH_METAPHONE_SBCS;
 	
 #if USE_LIBSTEMMER
 	else if ( sOption.Begins ( "libstemmer_" ) )

@@ -93,11 +93,10 @@ enum ESphLogLevel
 	LOG_INFO	= 2
 };
 
-#define					SEARCHD_SERVICE_NAME	"searchd"
-
 static bool				g_bService		= false;
 #if USE_WINDOWS
 static bool				g_bServiceStop	= false;
+static const char *		g_sServiceName	= "searchd";
 #endif
 
 static CSphVector<CSphString>	g_dArgs;
@@ -303,10 +302,10 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 		HANDLE hEventSource;
 		LPCTSTR lpszStrings[2];
 
-		hEventSource = RegisterEventSource ( NULL, SEARCHD_SERVICE_NAME );
+		hEventSource = RegisterEventSource ( NULL, g_sServiceName );
 		if ( hEventSource )
 		{
-			lpszStrings[0] = SEARCHD_SERVICE_NAME;
+			lpszStrings[0] = g_sServiceName;
 			lpszStrings[1] = sBuf;
 
 			WORD eType = EVENTLOG_INFORMATION_TYPE;
@@ -4555,8 +4554,8 @@ void ServiceInstall ( int argc, char ** argv )
 	SC_HANDLE hSCM = ServiceOpenManager ();
 	SC_HANDLE hService = CreateService (
 		hSCM,							// SCM database 
-		SEARCHD_SERVICE_NAME,			// name of service 
-		SEARCHD_SERVICE_NAME,			// service name to display 
+		g_sServiceName,					// name of service 
+		g_sServiceName,					// service name to display 
 		SERVICE_ALL_ACCESS,				// desired access 
 		SERVICE_WIN32_OWN_PROCESS,		// service type 
 		SERVICE_AUTO_START,				// start type 
@@ -4575,11 +4574,14 @@ void ServiceInstall ( int argc, char ** argv )
 
 	} else
 	{
-		sphInfo ( "Service '%s' installed succesfully.", SEARCHD_SERVICE_NAME ); 
+		sphInfo ( "Service '%s' installed succesfully.", g_sServiceName ); 
 	}
 
+	CSphString sDesc;
+	sDesc.SetSprintf ( "%s-%s", g_sServiceName, SPHINX_VERSION );
+
 	SERVICE_DESCRIPTION tDesc;
-	tDesc.lpDescription = SEARCHD_SERVICE_NAME "-" SPHINX_VERSION;
+	tDesc.lpDescription = (LPSTR) sDesc.cstr();
 	if ( !ChangeServiceConfig2 ( hService, SERVICE_CONFIG_DESCRIPTION, &tDesc ) )
 		sphWarning ( "failed to set service description" );
 
@@ -4599,7 +4601,7 @@ void ServiceDelete ()
 	SC_HANDLE hSCM = ServiceOpenManager ();
 
 	// open service
-	SC_HANDLE hService = OpenService ( hSCM, SEARCHD_SERVICE_NAME, DELETE );
+	SC_HANDLE hService = OpenService ( hSCM, g_sServiceName, DELETE );
 	if ( !hService )
 	{ 
 		CloseServiceHandle ( hSCM );
@@ -4614,7 +4616,7 @@ void ServiceDelete ()
 	if ( !bRes ) 
 		sphFatal ( "DeleteService() failed: %s", WinErrorInfo() );
 	else
-		sphInfo ( "Service '%s' deleted succesfully.", SEARCHD_SERVICE_NAME ); 
+		sphInfo ( "Service '%s' deleted succesfully.", g_sServiceName ); 
 
 }
 #endif // USE_WINDOWS
@@ -4634,6 +4636,7 @@ void ShowHelp ()
 #if USE_WINDOWS
 		"--install\t\tinstall as Windows service\n"
 		"--delete\t\tdelete Windows service\n"
+		"--servicename <name>\tuse given service name (default is 'searchd')\n"
 #endif
 		"\n"
 		"Debugging options are:\n"
@@ -4677,7 +4680,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	CSphVector<char *> dArgs;
 	if ( g_bService )
 	{
-		g_ssHandle = RegisterServiceCtrlHandler ( SEARCHD_SERVICE_NAME, ServiceControl );
+		g_ssHandle = RegisterServiceCtrlHandler ( g_sServiceName, ServiceControl );
 		if ( !g_ssHandle )
 			sphFatal ( "failed to start service: RegisterServiceCtrlHandler() failed: %s", WinErrorInfo() );
 
@@ -4740,6 +4743,9 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		OPT ( "-c", "--config" )	sOptConfig = argv[++i];
 		OPT ( "-p", "--port" )		iOptPort = atoi ( argv[++i] );
 		OPT ( "-i", "--index" )		sOptIndex = argv[++i];
+#if USE_WINDOWS
+		OPT1 ( "--servicename" )	; // it's valid but handled elsewhere
+#endif
 
 		// handle unknown options
 		else break;
@@ -5435,11 +5441,17 @@ int WINAPI ServiceMain ( int argc, char **argv )
 int main ( int argc, char **argv )
 {
 #if USE_WINDOWS
+	int iNameIndex = -1;
 	for ( int i=1; i<argc; i++ )
-		if ( strcmp ( argv[i], "--ntservice" )==0 )
 	{
-		g_bService = true;
-		break;
+		if ( strcmp ( argv[i], "--ntservice" )==0 )
+			g_bService = true;
+
+		if ( strcmp ( argv[i], "--servicename" )==0 && (i+1)<argc )
+		{
+			iNameIndex = i+1;
+			g_sServiceName = argv[iNameIndex];
+		}
 	}
 
 	if ( g_bService )
@@ -5447,9 +5459,12 @@ int main ( int argc, char **argv )
 		for ( int i=0; i<argc; i++ )
 			g_dArgs.Add ( argv[i] );
 
+		if ( iNameIndex>=0 )
+			g_sServiceName = g_dArgs[iNameIndex].cstr ();
+
 		SERVICE_TABLE_ENTRY dDispatcherTable[] =
 		{
-			{ SEARCHD_SERVICE_NAME, (LPSERVICE_MAIN_FUNCTION)ServiceMain },
+			{ (LPSTR) g_sServiceName, (LPSERVICE_MAIN_FUNCTION)ServiceMain },
 			{ NULL, NULL }
 		};
 		if ( !StartServiceCtrlDispatcher ( dDispatcherTable ) )

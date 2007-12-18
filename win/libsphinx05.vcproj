@@ -163,6 +163,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\src\sphinxmetaphone.cpp"
+				>
+			</File>
+			<File
 				RelativePath="..\src\sphinxquery.cpp"
 				>
 			</File>

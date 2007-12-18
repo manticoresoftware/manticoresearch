@@ -1134,8 +1134,8 @@ static ESortClauseParseResult sphParseSortClause ( const char * sClause, const C
 	ESphSortFunc & eFunc, CSphMatchComparatorState & tState, CSphString & sError )
 {
 	// mini parser
-	ISphTokenizer * pTokenizer = sphCreateSBCSTokenizer ();
-	if ( !pTokenizer )
+	CSphScopedPtr<ISphTokenizer> pTokenizer ( sphCreateSBCSTokenizer () );
+	if ( !pTokenizer.Ptr() )
 	{
 		sError.SetSprintf ( "INTERNAL ERROR: failed to create tokenizer when parsing sort clause" );
 		return SORT_CLAUSE_ERROR;

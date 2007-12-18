@@ -223,7 +223,7 @@ CSphBooleanQueryExpr * CSphBooleanQueryParser::Parse ( const char * sQuery, cons
 	// a buffer of my own
 	CSphString sBuffer ( sQuery );
 
-	ISphTokenizer * pMyTokenizer = pTokenizer->Clone ();
+	CSphScopedPtr<ISphTokenizer> pMyTokenizer ( pTokenizer->Clone () );
 	pMyTokenizer->AddSpecials ( "&|()-!" );
 	pMyTokenizer->SetBuffer ( (BYTE*)sBuffer.cstr(), strlen ( sBuffer.cstr() ) );
 
@@ -320,9 +320,10 @@ CSphBooleanQueryExpr * CSphBooleanQueryParser::Parse ( const char * sQuery, cons
 				} else
 				{
 					// just chop it off the end
+					CSphBooleanQueryExpr * pToKill = m_pCur;
 					m_pCur = m_pCur->m_pPrev;
-					m_pCur->m_pNext->Detach ();
-					SafeDelete ( m_pCur->m_pNext );
+					pToKill->Detach ();
+					SafeDelete ( pToKill );
 				}
 
 				if ( iSpecial!=QUERY_END || !m_pCur || !m_pCur->IsNull() )
@@ -858,7 +859,7 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 
 	// a buffer of my own
 	CSphString sBuffer ( sQuery );
-	ISphTokenizer * pMyTokenizer = pTokenizer->Clone ();
+	CSphScopedPtr<ISphTokenizer> pMyTokenizer ( pTokenizer->Clone () );
 	pMyTokenizer->AddSpecials ( "()|-!@~\"*" ); // MUST be in sync with IsSpecial()
 	pMyTokenizer->SetBuffer ( (BYTE*)sBuffer.cstr(), strlen ( sBuffer.cstr() ) );
 

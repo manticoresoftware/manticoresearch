@@ -9048,6 +9048,8 @@ class ExtRanker_c
 {
 public:
 								ExtRanker_c ( const CSphExtendedQueryNode * pAccept, const CSphExtendedQueryNode * pReject, const CSphTermSetup & tSetup );
+	virtual						~ExtRanker_c () { SafeDelete ( m_pRoot ); }
+
 	virtual int					GetMatches ( int iFields, const int * pWeights ) = 0;
 
 	void						GetQwords ( ExtQwordsHash_t & hQwords )				{ if ( m_pRoot ) m_pRoot->GetQwords ( hQwords ); }
@@ -10293,7 +10295,7 @@ bool CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, CSphQueryResult * 
 	CheckExtendedQuery ( tParsed.m_pReject, pResult );
 
 	// setup eval-tree
-	ExtRanker_c * pRoot = NULL;
+	CSphScopedPtr<ExtRanker_c> pRoot ( NULL );
 	switch ( pQuery->m_eRanker )
 	{
 		case SPH_RANK_PROXIMITY_BM25:	pRoot = new ExtRanker_ProximityBM25_c ( tParsed.m_pAccept, tParsed.m_pReject, tTermSetup ); break;
@@ -10305,7 +10307,7 @@ bool CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, CSphQueryResult * 
 			pRoot = new ExtRanker_ProximityBM25_c ( tParsed.m_pAccept, tParsed.m_pReject, tTermSetup );
 			break;
 	}
-	assert ( pRoot );
+	assert ( pRoot.Ptr() );
 
 	// setup word stats and IDFs
 	ExtQwordsHash_t hQwords;

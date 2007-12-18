@@ -2052,15 +2052,12 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, Agent_t & tAgent
 
 /////////////////////////////////////////////////////////////////////////////
 
-// returns true if dst was empty or both were equal; false otherwise
+// returns true both schemas were equal; false otherwise
 bool MinimizeSchema ( CSphSchema & tDst, const CSphSchema & tSrc )
 {
-	// if dst is empty, just copy it
+	// if dst is empty, result is also empty
 	if ( tDst.GetAttrsCount()==0 )
-	{
-		tDst = tSrc;
-		return true;
-	}
+		return tSrc.GetAttrsCount()==0;
 
 	// check for equality, and remove all dst attributes that are not present in src
 	CSphVector<CSphColumnInfo> dDst;
@@ -2721,10 +2718,12 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery )
 
 	// build minimal schema
 	bool bAllEqual = true;
-	tRes.m_tSchema.Reset();
-	ARRAY_FOREACH ( i, tRes.m_dSchemas )
+	tRes.m_tSchema = tRes.m_dSchemas[0];
+	for ( int i=1; i<tRes.m_dSchemas.GetLength(); i++ )
+	{
 		if ( !MinimizeSchema ( tRes.m_tSchema, tRes.m_dSchemas[i] ) )
 			bAllEqual = false;
+	}
 
 	// convert all matches to minimal schema
 	if ( !bAllEqual )

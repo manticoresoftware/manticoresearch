@@ -3985,7 +3985,7 @@ void CSphReader_VLN::UpdateCache ()
 
 	// stream position could be changed externally
 	// so let's just hope that the OS optimizes redundant seeks
-	SphOffset_t iNewPos = m_iPos + m_iBuffUsed;
+	SphOffset_t iNewPos = m_iPos + Min ( m_iBuffPos, m_iBuffUsed );
 	if ( sphSeek ( m_iFD, iNewPos, SEEK_SET )==-1 )
 	{
 		// unexpected io failure

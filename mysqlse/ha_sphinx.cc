@@ -88,6 +88,8 @@ enum ESphMatchMode
 	SPH_MATCH_PHRASE,			///< match this exact phrase
 	SPH_MATCH_BOOLEAN,			///< match this boolean query
 	SPH_MATCH_EXTENDED,			///< match this extended query
+	SPH_MATCH_FULLSCAN,			///< match all document IDs w/o fulltext query, apply filters
+	SPH_MATCH_EXTENDED2,		///< extended engine V2 (TEMPORARY, WILL BE REMOVED IN 0.9.8-RELEASE)
 
 	SPH_MATCH_TOTAL
 };
@@ -858,8 +860,12 @@ static CSphSEShare * get_share ( const char * table_name, TABLE * table )
 #if MYSQL_VERSION_ID>=50120
 		pShare = (CSphSEShare*) hash_search ( &sphinx_open_tables, (const uchar *) table_name, strlen(table_name) );
 #else
+#ifdef __WIN__
+		pShare = (CSphSEShare*) hash_search ( &sphinx_open_tables, (const byte *) table_name, strlen(table_name) );
+#else
 		pShare = (CSphSEShare*) hash_search ( &sphinx_open_tables, table_name, strlen(table_name) );
-#endif
+#endif // win
+#endif // pre-5.1.20
 
 		if ( pShare )
 		{
@@ -1093,7 +1099,10 @@ bool CSphSEQuery::ParseField ( char * sField )
 		if ( !strcmp ( sValue, "any") )				m_eMode = SPH_MATCH_ANY;
 		else if ( !strcmp ( sValue, "phrase" ) )	m_eMode = SPH_MATCH_PHRASE;
 		else if ( !strcmp ( sValue, "boolean") )	m_eMode = SPH_MATCH_BOOLEAN;
+		else if ( !strcmp ( sValue, "ext") )		m_eMode = SPH_MATCH_EXTENDED;
 		else if ( !strcmp ( sValue, "extended") )	m_eMode = SPH_MATCH_EXTENDED;
+		else if ( !strcmp ( sValue, "ext2") )		m_eMode = SPH_MATCH_EXTENDED2;
+		else if ( !strcmp ( sValue, "extended2") )	m_eMode = SPH_MATCH_EXTENDED2;
 		else if ( !strcmp ( sValue, "all") )		m_eMode = SPH_MATCH_ALL;
 		else
 		{

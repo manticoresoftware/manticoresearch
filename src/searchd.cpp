@@ -4744,7 +4744,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		OPT ( "-p", "--port" )		iOptPort = atoi ( argv[++i] );
 		OPT ( "-i", "--index" )		sOptIndex = argv[++i];
 #if USE_WINDOWS
-		OPT1 ( "--servicename" )	; // it's valid but handled elsewhere
+		OPT1 ( "--servicename" )	++i; // it's valid but handled elsewhere
 #endif
 
 		// handle unknown options

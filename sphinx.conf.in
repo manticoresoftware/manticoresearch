@@ -401,7 +401,8 @@ index test1
 	# enabled at compile time using --with-libstemmer configure option.
 	#
 	# built-in values are "none", "stem_en", "stem_ru", "stem_enru",
-	# and "soundex".
+	# "soundex", and "metaphone". double metaphone implementation is used;
+	# primary code will be indexed.
 	#
 	# additional values provided by libstemmer are in "libstemmer_XXX"
 	# format, where XXX is libstemmer algorithm codename (refer to
@@ -414,6 +415,7 @@ index test1
 	# morphology		= stem_ru
 	# morphology		= stem_enru
 	# morphology		= soundex
+	# morphology		= metaphone
 	#
 	# morphology		= libstemmer_german
 	# morphology		= libstemmer_dan

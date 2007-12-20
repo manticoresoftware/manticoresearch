@@ -1333,6 +1333,11 @@ number of options can be specified. Available options are:
 
       | ... WHERE query='test;groupsort=@count desc;';
 
+   * indexweights - comma-separated list of index names and weights to use
+     when searching through several indexes:
+
+      | ... WHERE query='test;indexweights=idx_exact,2,idx_stemmed,1;';
+
 One very important note that it is much more efficient to allow Sphinx to
 perform sorting, filtering and slicing the result set than to raise max
 matches count and use WHERE, ORDER BY and LIMIT clauses on MySQL side. This

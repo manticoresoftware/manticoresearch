@@ -1476,6 +1476,12 @@ attribute name (or sorting clause for "extended") is also required after a colon
 ... WHERE query='test;groupsort=@count desc;';
 </programlisting>
 </listitem>
+<listitem>indexweights - comma-separated list of index names and weights
+to use when searching through several indexes:
+<programlisting>
+... WHERE query='test;indexweights=idx_exact,2,idx_stemmed,1;';
+</programlisting>
+</listitem>
 </itemizedlist>
 </para>
 <para>

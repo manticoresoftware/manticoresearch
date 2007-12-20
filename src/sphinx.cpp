@@ -6927,7 +6927,7 @@ SphWordID_t	CSphDictStarV8::GetWordID ( BYTE * pWord )
 		} else
 		{
 			sBuf[iLen] = MAGIC_WORD_TAIL; // no star, add tail marker
-			sBuf[iLen+1] = '\0';
+			sBuf[++iLen] = '\0';
 		}
 
 	} else
@@ -6953,17 +6953,18 @@ SphWordID_t	CSphDictStarV8::GetWordID ( BYTE * pWord )
 			memcpy ( sBuf+1, pWord, iLen );
 			sBuf[iLen+1] = MAGIC_WORD_TAIL;
 			sBuf[iLen+2] = '\0';
+			iLen += 2;
 
 		} else
 		{
 			// prefix search request, mangles to word itself (just chop away the star)
 			memcpy ( sBuf, pWord, iLen );
-			sBuf[iLen-1] = '\0';
+			sBuf[--iLen] = '\0';
 		}
 	}
 
 	// calc id for mangled word
-	return m_pDict->GetWordID ( (BYTE*)sBuf );
+	return m_pDict->GetWordID ( (BYTE*)sBuf, iLen );
 }
 
 /////////////////////////////////////////////////////////////////////////////

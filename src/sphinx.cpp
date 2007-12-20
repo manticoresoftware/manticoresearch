@@ -12473,6 +12473,7 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 				sBuf [0]			= MAGIC_WORD_HEAD;
 				sBuf [iBytes + 1]	= '\0';
 
+				// stemmed word w/markers
 				SphWordID_t iWord = m_pDict->GetWordIDWithMarkers ( sBuf );
 				if ( iWord )
 				{
@@ -12480,6 +12481,23 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 					tHit.m_iDocID = m_tDocInfo.m_iDocID;
 					tHit.m_iWordID = iWord;
 					tHit.m_iWordPos = iPos;
+				}
+
+				// restore stemmed word
+				int iStemmedLen = strlen ( ( const char *)sBuf );
+				sBuf [iStemmedLen - 1] = '\0';
+
+				// stemmed word w/o markers
+				if ( strcmp ( (const char *)sBuf + 1, (const char *)sWord ) )
+				{
+					SphWordID_t iWord = m_pDict->GetWordID ( sBuf + 1, iStemmedLen - 2 );
+					if ( iWord )
+					{
+						CSphWordHit & tHit = m_dHits.Add ();
+						tHit.m_iDocID = m_tDocInfo.m_iDocID;
+						tHit.m_iWordID = iWord;
+						tHit.m_iWordPos = iPos;
+					}
 				}
 
 				// restore word

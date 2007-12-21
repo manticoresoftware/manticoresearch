@@ -560,6 +560,8 @@ class SphinxConfig
 	/// write difference from the reference result sets
 	function WriteReferenceResultsDiff ( $handle )
 	{
+		global $windows;
+
 		$nquery = 0;
 		foreach ( $this->_results_model [ $this->SubtestNo() ] as $ref )
 		{
@@ -574,7 +576,12 @@ class SphinxConfig
 
 			file_put_contents ( "current", $result_f_cur );
 			file_put_contents ( "reference", $result_f_ref );
-			system ( "diff -u3 reference current > diffed.txt" );
+
+			if ( $windows )
+				system ( "diff -u3 reference current > diffed.txt" );
+			else
+				system ( "diff reference current > diffed.txt" );
+
 			$diffed = file_get_contents ( "diffed.txt" );
 			unlink ( "current" );
 			unlink ( "reference" );

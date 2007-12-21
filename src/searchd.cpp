@@ -103,14 +103,18 @@ static CSphVector<CSphString>	g_dArgs;
 
 static bool				g_bHeadDaemon	= false;
 static bool				g_bLogStdout	= true;
-static int				g_iLogFile		= STDOUT_FILENO;
+
 static ESphLogLevel		g_eLogLevel		= LOG_INFO;
+static int				g_iLogFile		= STDOUT_FILENO;	// log file descriptor
+static CSphString		g_sLogFile;							// log file name
+static bool				g_bLogTty		= false;			// cached isatty(g_iLogFile)
 
 static int				g_iReadTimeout	= 5;	// sec
 static int				g_iChildren		= 0;
 static int				g_iMaxChildren	= 0;
 static int				g_iSocket		= 0;
 static int				g_iQueryLogFile	= -1;
+static CSphString		g_sQueryLogFile;
 static const char *		g_sPidFile		= NULL;
 static int				g_iPidFD		= -1;
 static int				g_iMaxMatches	= 1000;
@@ -120,6 +124,7 @@ static volatile bool	g_bDoRotate			= false;	// flag that we are rotating now; se
 static volatile bool	g_bGotSighup		= false;	// we just received SIGHUP; need to log
 static volatile bool	g_bGotSigterm		= false;	// we just received SIGTERM; need to shutdown
 static volatile bool	g_bGotSigchld		= false;	// we just received SIGCHLD; need to count dead children
+static volatile bool	g_bGotSigusr1		= false;	// we just received SIGUSR1; need to reopen logs
 
 static SmallStringHash_T<ServedIndex_t>		g_hIndexes;				// served indexes hash
 static CSphVector<const char *>				g_dRotating;			// names of indexes to be rotated this time
@@ -288,7 +293,7 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	if ( eLevel==LOG_WARNING )	sBanner = "WARNING: ";
 
 	char sBuf [ 1024 ];
-	if ( !isatty ( g_iLogFile ) )
+	if ( !g_bLogTty )
 		snprintf ( sBuf, sizeof(sBuf)-1, "[%s] [%5d] %s", sTimeBuf, (int)getpid(), sBanner );
 	else
 		strcpy ( sBuf, sBanner );
@@ -334,10 +339,8 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	{
 		strncat ( sBuf, "\n", sizeof(sBuf) );
 
-		sphLockEx ( g_iLogFile, true );
 		lseek ( g_iLogFile, 0, SEEK_END );
 		write ( g_iLogFile, sBuf, strlen(sBuf) );
-		sphLockUn ( g_iLogFile );
 
 		if ( g_bLogStdout && g_iLogFile!=STDOUT_FILENO )
 		{
@@ -707,6 +710,12 @@ void sigterm ( int )
 void sigchld ( int )
 {
 	g_bGotSigchld = true;
+}
+
+
+void sigusr1 ( int )
+{
+	g_bGotSigusr1 = true;
 }
 #endif // !USE_WINDOWS
 
@@ -2465,10 +2474,8 @@ void LogQuery ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 	sBuf[sizeof(sBuf)-2] = '\n';
 	sBuf[sizeof(sBuf)-1] = '\0';
 
-	sphLockEx ( g_iQueryLogFile, true );
 	lseek ( g_iQueryLogFile, 0, SEEK_END );
 	write ( g_iQueryLogFile, sBuf, strlen(sBuf) );
-	sphLockUn ( g_iQueryLogFile );
 }
 
 
@@ -4080,10 +4087,8 @@ void CheckLeaks ()
 
 	if ( iHeadAllocs!=sphAllocsCount() )
 	{
-		sphLockEx ( g_iLogFile, false );
 		lseek ( g_iLogFile, 0, SEEK_END );
 		sphAllocsDump ( g_iLogFile, iHeadCheckpoint );
-		sphLockUn ( g_iLogFile );
 
 		iHeadAllocs = sphAllocsCount ();
 		iHeadCheckpoint = sphAllocsLastID ();
@@ -4445,6 +4450,44 @@ void CheckRotate ()
 }
 
 
+void CheckReopen ()
+{
+	if ( !g_bGotSigusr1 )
+		return;
+
+	// reopen searchd log
+	if ( g_iLogFile>=0 && !g_bLogTty )
+	{
+		int iFD = ::open ( g_sLogFile.cstr(), O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
+		if ( iFD<0 )
+		{
+			sphWarning ( "failed to reopen log file '%s': %s", g_sLogFile.cstr(), strerror(errno) );
+		} else
+		{
+			g_iLogFile = iFD;
+			g_bLogTty = ( isatty(g_iLogFile)!=0 );
+			sphInfo ( "log reopened" );
+		}
+	}
+
+	// reopen query log
+	if ( g_iQueryLogFile!=g_iLogFile && g_iQueryLogFile>=0 && !isatty(g_iQueryLogFile) )
+	{
+		int iFD = ::open ( g_sQueryLogFile.cstr(), O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
+		if ( iFD<0 )
+		{
+			sphWarning ( "failed to reopen query log file '%s': %s", g_sQueryLogFile.cstr(), strerror(errno) );
+		} else
+		{
+			g_iQueryLogFile = iFD;
+			sphInfo ( "query log reopened" );
+		}
+	}
+
+	g_bGotSigusr1 = false;
+}
+
+
 #if !USE_WINDOWS
 #define WINAPI
 #else
@@ -4676,6 +4719,8 @@ BOOL CALLBACK TerminateAppEnum ( HWND hwnd, LPARAM lParam )
 
 int WINAPI ServiceMain ( int argc, char **argv )
 {
+	g_bLogTty = isatty ( g_iLogFile )!=0;
+
 #if USE_WINDOWS
 	CSphVector<char *> dArgs;
 	if ( g_bService )
@@ -5159,6 +5204,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	signal ( SIGTERM, sigterm );
 	signal ( SIGINT, sigterm );
 	signal ( SIGHUP, sighup );
+	signal ( SIGUSR1, sigusr1 );
 	#endif // !USE_WINDOWS
 
 	// daemonize
@@ -5177,12 +5223,16 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			sphFatal ( "failed to open log file '%s': %s", sLog, strerror(errno) );
 		}
 
+		g_bLogTty = isatty ( g_iLogFile )!=0;
+		g_sLogFile = sLog;
+
 		// create query log if required
 		if ( hSearchd.Exists ( "query_log" ) )
 		{
 			g_iQueryLogFile = open ( hSearchd["query_log"].cstr(), O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
 			if ( g_iQueryLogFile<0 )
 				sphFatal ( "failed to open query log file '%s': %s", hSearchd["query_log"].cstr(), strerror(errno) );
+			g_sQueryLogFile = hSearchd["query_log"].cstr();
 		}
 
 		// do daemonize
@@ -5362,6 +5412,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		CheckLeaks ();
 		CheckPipes ();
 		CheckRotate ();
+		CheckReopen ();
 
 		// we can't simply accept, because of the need to react to HUPs
 		fd_set fdsAccept;

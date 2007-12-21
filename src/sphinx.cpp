@@ -6923,7 +6923,7 @@ SphWordID_t	CSphDictStarV8::GetWordID ( BYTE * pWord )
 		// handle tail star
 		if ( bTailStar )
 		{
-			sBuf[iLen-1] = '\0'; // got star, just chop it away
+			sBuf[--iLen] = '\0'; // got star, just chop it away
 		} else
 		{
 			sBuf[iLen] = MAGIC_WORD_TAIL; // no star, add tail marker

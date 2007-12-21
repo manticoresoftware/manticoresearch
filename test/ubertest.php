@@ -70,8 +70,11 @@ if ( !is_array($args) || empty($args) )
 	exit ( 0 );
 }
 
-if ( $_ENV["DBUSER"] )	$db_user = $_ENV["DBUSER"];
-if ( $_ENV["DBPASS"] )  $db_pwd = $_ENV["DBPASS"];
+if ( array_key_exists ( "DBUSER", $_ENV ) && $_ENV["DBUSER"] )
+	$db_user = $_ENV["DBUSER"];
+
+if ( array_key_exists ( "DBPASS", $_ENV ) && $_ENV["DBPASS"] ) 
+	$db_pwd = $_ENV["DBPASS"];
 
 $run = false;
 for ( $i=0; $i<count($args); $i++ )

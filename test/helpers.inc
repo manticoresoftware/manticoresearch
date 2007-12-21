@@ -454,91 +454,99 @@ class SphinxConfig
 	}
 
 
+	function FormatResultSet ( $nquery, $result )
+	{
+		$str = "--- Query $nquery ---\n";
+
+		$txt_q = $result["query"];
+		$txt_found = $result ["total_found"];
+		$txt_total = $result ["total"];
+		$txt_time = $result ["time"];
+
+		$str .= "Query '$txt_q': retrieved $txt_found of $txt_total matches in $txt_time sec.\n";
+
+		if ( $result["warning"] )
+			$str .= "Warning: " . $result["warning"] . "\n";
+
+		if ( array_key_exists ( "words", $result ) && is_array( $result ["words"] ) )
+		{
+			$str .= "Word stats:\n";
+			foreach ( $result ["words"] as $word => $word_result )
+			{
+				$hits = $word_result ["hits"];
+				$docs = $word_result ["docs"];
+				$str .= "\t'$word' found $hits times in $docs documents\n";
+			}
+		}
+
+		$str .= "\n";
+
+		if ( array_key_exists ( "matches", $result ) && is_array ( $result ["matches"] ) )
+		{
+			$n = 1;
+			$str .= "Matches:\n";
+			foreach ( $result ["matches"] as $doc => $docinfo )
+			{
+				$weight = $docinfo ["weight"];
+
+				$str .= "$n. doc_id=$doc, weight=$weight";
+
+				if ( empty ( $this->_query_attributes ) )
+				{
+					$query_res = mysql_query ( "select * from test_table where document_id = $doc" );
+
+					if ( $query_res === FALSE )
+						$str .= "\n";
+					else
+					{
+						while ( $row = mysql_fetch_array ( $query_res, MYSQL_ASSOC ) )
+						{
+							foreach ( $row as $col_name => $col_content )
+							{
+								if ( array_search ( $col_name, $result ["fields"] ) !== FALSE )
+								   	$str .= " $col_name=\"$col_content\"";
+							}
+
+							$str .= "\n";
+				    	}
+					}
+				}
+				else
+				{
+					foreach ( $this->_query_attributes as $attribute )
+						if ( array_key_exists ( $attribute, $docinfo ["attrs"] ) )
+						{
+							$attrtmp = $docinfo ["attrs"][$attribute];
+							if ( is_array ( $attrtmp ) )
+							{
+                   				$str .= " $attribute=";
+								foreach ( $attrtmp as $valuetmp )
+									$str .= " $valuetmp";
+							}
+							else
+								$str .= " $attribute=$attrtmp";
+						}
+
+					$str .= "\n";
+				}
+
+				$n++;
+			}
+
+			$str .= "\n";
+		}
+
+		$str .= "\n";
+	
+		return $str;
+	}
+
 	/// format and write a single result set into log file
 	function WriteQuery ( $handle, $nquery, $result )
 	{
-			fwrite ( $handle, "--- Query $nquery ---\n" );
-			$txt_q = $result["query"];
-			$txt_found = $result ["total_found"];
-			$txt_total = $result ["total"];
-			$txt_time = $result ["time"];
-
-			fwrite ( $handle, "Query '$txt_q': retrieved $txt_found of $txt_total matches in $txt_time sec.\n" );
-			if ( $result["warning"] )
-				fwrite ( $handle, "Warning: " . $result["warning"] . "\n" );
-
-			if ( array_key_exists ( "words", $result ) && is_array( $result ["words"] ) )
-			{
-				fwrite ( $handle, "Word stats:\n" );
-
-				foreach ( $result ["words"] as $word => $word_result )
-				{
-					$hits = $word_result ["hits"];
-					$docs = $word_result ["docs"];
-					fwrite ( $handle, "\t'$word' found $hits times in $docs documents\n" );
-				}
-			}
-
-			fwrite ( $handle, "\n" );
-
-			if ( array_key_exists ( "matches", $result ) && is_array ( $result ["matches"] ) )
-			{
-				$n = 1;
-				fwrite ( $handle, "Matches:\n" );
-				foreach ( $result ["matches"] as $doc => $docinfo )
-				{
-					$weight = $docinfo ["weight"];
-
-					fwrite ( $handle, "$n. doc_id=$doc, weight=$weight" );
-
-					if ( empty ( $this->_query_attributes ) )
-					{
-						$query_res = mysql_query ( "select * from test_table where document_id = $doc" );
-
-						if ( $query_res === FALSE )
-							fwrite ( $handle, "\n" );						
-						else
-						{
-							while ( $row = mysql_fetch_array ( $query_res, MYSQL_ASSOC ) )
-							{
-								foreach ( $row as $col_name => $col_content )
-								{
-									if ( array_search ( $col_name, $result ["fields"] ) !== FALSE )
-									   	fwrite ( $handle, " $col_name=\"$col_content\"" );
-								}
-
-								fwrite ( $handle, "\n" );
-					    	}
-						}
-					}
-					else
-					{
-						foreach ( $this->_query_attributes as $attribute )
-							if ( array_key_exists ( $attribute, $docinfo ["attrs"] ) )
-							{
-								$attrtmp = $docinfo ["attrs"][$attribute];
-								if ( is_array ( $attrtmp ) )
-								{
-                    				fwrite ( $handle, " $attribute=");
-									foreach ( $attrtmp as $valuetmp )
-										fwrite ( $handle, " $valuetmp");
-								}
-								else
-									fwrite ( $handle, " $attribute=".$attrtmp );
-							}
-
-						fwrite ( $handle, "\n" );
-					}
-
-					$n++;
-				}
-
-				fwrite ( $handle, "\n" );
-			}
-
-			fwrite ( $handle, "\n" );
+		$res_fmt = $this->FormatResultSet ( $nquery, $result );
+		fwrite ( $handle, $res_fmt );
 	}
-
 
 	/// write all the result sets
     function WriteResults ( $handle )
@@ -555,10 +563,28 @@ class SphinxConfig
 		$nquery = 0;
 		foreach ( $this->_results_model [ $this->SubtestNo() ] as $ref )
 		{
-			if ( $ref==$this->_results[$nquery++] )
+			if ( $ref==$this->_results[$nquery] )
+			{
+				$nquery++;
 				continue;
+			}
 
-			$this->WriteQuery ( $handle, $nquery, $ref );
+			$result_f_cur = $this->FormatResultSet ( $nquery, $this->_results[$nquery] );
+			$result_f_ref = $this->FormatResultSet ( $nquery, $ref );
+
+			file_put_contents ( "current", $result_f_cur );
+			file_put_contents ( "reference", $result_f_ref );
+			system ( "diff -u3 reference current > diffed.txt" );
+			$diffed = file_get_contents ( "diffed.txt" );
+			unlink ( "current" );
+			unlink ( "reference" );
+			unlink ( "diffed.txt" );
+
+			fwrite ( $handle, "=== diff start ===\n" );
+			fwrite ( $handle, $diffed );
+			fwrite ( $handle, "=== diff end ===\n" );
+
+			$nquery++;
 		}
 	}
 
@@ -775,6 +801,7 @@ function RunTest ( $test_dir )
 		EraseDirContents ( $indexer_data_path );
 
 		$indexer_ret = RunIndexer ( $error );
+
 		if ( $indexer_ret==1 )
 		{
 			if ( !HandleFailure ( $config, $report, $error, $nfailed ) )

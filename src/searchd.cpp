@@ -77,6 +77,9 @@ struct ServedIndex_t
 	bool				m_bEnabled;		///< to disable index in cases when rotation fails
 	bool				m_bMlock;
 	bool				m_bStar;
+	bool				m_bHtmlStrip;			///< html stripping settings for excerpts
+	CSphString			m_sHtmlIndexAttrs;		///< html stripping settings for excerpts
+	CSphString			m_sHtmlRemoveElements;	///< html stripping settings for excerpts
 
 public:
 						ServedIndex_t ();
@@ -3505,13 +3508,14 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	int iFlags = tReq.GetInt ();
 	CSphString sIndex = tReq.GetString ();
 
-	if ( !g_hIndexes(sIndex) )
+	const ServedIndex_t * pIndex = g_hIndexes(sIndex);
+	if ( !pIndex )
 	{
 		tReq.SendErrorReply ( "unknown local index '%s' in search request", sIndex.cstr() );
 		return;
 	}
-	CSphDict * pDict = g_hIndexes[sIndex].m_pDict;
-	ISphTokenizer * pTokenizer = g_hIndexes[sIndex].m_pTokenizer;
+	CSphDict * pDict = pIndex->m_pDict;
+	ISphTokenizer * pTokenizer = pIndex->m_pTokenizer;
 
 	q.m_sWords = tReq.GetString ();
 	q.m_sBeforeMatch = tReq.GetString ();
@@ -3542,6 +3546,21 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 			tReq.SendErrorReply ( "invalid or truncated request" );
 			return;
 		}
+
+		if ( pIndex->m_bHtmlStrip )
+		{
+			CSphString sError;
+			CSphHTMLStripper tStripper;
+			if (
+				!tStripper.SetIndexedAttrs ( pIndex->m_sHtmlIndexAttrs.cstr(), sError ) ||
+				!tStripper.SetRemovedElements ( pIndex->m_sHtmlRemoveElements.cstr(), sError ) )
+			{
+				tReq.SendErrorReply ( "HTML stripper config error: %s", sError.cstr() );
+				return;
+			}
+			tStripper.Strip ( (BYTE*)q.m_sSource.cstr() );
+		}
+
 		dExcerpts.Add ( sphBuildExcerpt ( q, pDict, pTokenizer ) );
 	}
 
@@ -4847,7 +4866,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	sphInfo ( "using config file '%s'...", sOptConfig );
 
 	// do parse
-	// FIXME! add key validation here. g_dSphKeysCommon, g_dSphKeysSearchd
 	CSphConfigParser cp;
 	if ( !cp.Parse ( sOptConfig ) )
 		sphFatal ( "failed to parse config file '%s'", sOptConfig );
@@ -5158,6 +5176,15 @@ int WINAPI ServiceMain ( int argc, char **argv )
 				tIdx.m_bMlock = true;
 			if ( hIndex("enable_star") && hIndex["enable_star"].intval() )
 				tIdx.m_bStar = true;
+
+			// configure html stripping
+			tIdx.m_bHtmlStrip = false;
+			if ( hIndex.GetInt ( "html_strip" ) )
+			{
+				tIdx.m_bHtmlStrip = true;
+				tIdx.m_sHtmlIndexAttrs = hIndex.GetStr ( "html_index_attrs" );
+				tIdx.m_sHtmlRemoveElements = hIndex.GetStr ( "html_remove_elements" );
+			}
 
 			// try to create index
 			CSphString sWarning;

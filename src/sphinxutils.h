@@ -49,14 +49,14 @@ class CSphConfigSection : public SmallStringHash_T < CSphVariant >
 {
 public:
 	/// get integer option value by key and default value
-	int GetInt ( const char * sKey, int iDefault ) const
+	int GetInt ( const char * sKey, int iDefault=0 ) const
 	{
 		CSphVariant * pEntry = (*this)( sKey );
 		return pEntry ? pEntry->intval() : iDefault;
 	}
 
 	/// get string option value by key and default value
-	const char * GetStr ( const char * sKey, const char * sDefault ) const
+	const char * GetStr ( const char * sKey, const char * sDefault="" ) const
 	{
 		CSphVariant * pEntry = (*this)( sKey );
 		return pEntry ? pEntry->cstr() : sDefault;

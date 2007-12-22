@@ -616,6 +616,21 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 	// spawn datasources
 	/////////////////////
 
+	// check for per-index HTML stipping override
+	bool bStripOverride = false;
+
+	bool bHtmlStrip = false;
+	CSphString sHtmlIndexAttrs, sHtmlRemoveElements;
+
+	if ( hIndex("html_strip") )
+	{
+		bStripOverride = true;
+		bHtmlStrip = hIndex.GetInt ( "html_strip" )!=0;
+		sHtmlIndexAttrs = hIndex.GetStr ( "html_index_attrs" );
+		sHtmlRemoveElements = hIndex.GetStr ( "html_remove_elements" );
+	}
+
+	// parse all sources
 	CSphVector<CSphSource*> dSources;
 	bool bGotAttrs = false;
 
@@ -638,13 +653,23 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		pSource->SetupFieldMatch ( sPrefixFields.cstr (), sInfixFields.cstr () );
 
 		// strip_html, index_html_attrs
-		if ( hSource.GetInt ( "strip_html", 0 ) )
+		CSphString sError;
+		if ( bStripOverride )
 		{
-			CSphString sError;
-			if ( !pSource->SetStripHTML (
-				hSource.GetStr ( "index_html_attrs", "" ),
-				hSource.GetStr ( "html_remove_elements", "" ),
-				sError ) )
+			// apply per-index overrides
+			if ( bHtmlStrip )
+			{
+				if ( !pSource->SetStripHTML ( sHtmlIndexAttrs.cstr(), sHtmlRemoveElements.cstr(), sError ) )
+				{
+					fprintf ( stdout, "ERROR: source '%s': %s.\n", pSourceName->cstr(), sError.cstr() );
+					return false;
+				}
+			}
+
+		} else if ( hSource.GetInt ( "strip_html" ) )
+		{
+			// apply deprecated per-source settings if there are no overrides
+			if ( !pSource->SetStripHTML ( hSource.GetStr ( "index_html_attrs" ), "", sError ) )
 			{
 				fprintf ( stdout, "ERROR: source '%s': %s.\n", pSourceName->cstr(), sError.cstr() );
 				return false;
@@ -1029,7 +1054,6 @@ int main ( int argc, char ** argv )
 	if ( !g_bQuiet )
 		fprintf ( stdout, "using config file '%s'...\n", sOptConfig );
 
-	// FIXME! add key validation here. g_dSphKeysCommon, g_dSphKeysIndexer
 	CSphConfigParser cp;
 	if ( !cp.Parse ( sOptConfig ) )
 	{

@@ -71,9 +71,8 @@ struct KeyDesc_t
 static KeyDesc_t g_dKeysSource[] =
 {
 	{ "type",					0, NULL },
-	{ "strip_html",				0, NULL },
-	{ "index_html_attrs",		0, NULL },
-	{ "html_remove_elements",	0, NULL },
+	{ "strip_html",				KEY_DEPRECATED, "html_strip (per-index)" },
+	{ "index_html_attrs",		KEY_DEPRECATED, "html_index_attrs (per-index)" },
 	{ "sql_host",				0, NULL },
 	{ "sql_user",				0, NULL },
 	{ "sql_pass",				0, NULL },
@@ -129,6 +128,9 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "agent",					KEY_LIST, NULL },
 	{ "agent_connect_timeout",	0, NULL },
 	{ "agent_query_timeout",	0, NULL },
+	{ "html_strip",				0, NULL },
+	{ "html_index_attrs",		0, NULL },
+	{ "html_remove_elements",	0, NULL },
 	{ NULL,						0, NULL }
 };
 

@@ -13,8 +13,11 @@
 
 #include "sphinx.h"
 
+//////////////////////////////////////////////////////////////////////////
 
 const char * g_sTmpfile = "__libsphinxtest.tmp";
+
+//////////////////////////////////////////////////////////////////////////
 
 bool CreateSynonymsFile ( const char * sMagic )
 {
@@ -263,7 +266,7 @@ void BenchTokenizer ( bool bUTF8 )
 			pTokenizer->LoadSynonyms ( g_sTmpfile, sError );
 		pTokenizer->AddSpecials ( "!-" );
 
-		const int iPasses = 50;
+		const int iPasses = 10;
 		int iTokens = 0;
 
 		float fTime = -sphLongTimer ();
@@ -282,15 +285,92 @@ void BenchTokenizer ( bool bUTF8 )
 	}
 }
 
+//////////////////////////////////////////////////////////////////////////
+
+void TestStripper ()
+{
+	const char * sTests[][4] =
+	{
+		// source-data, index-attrs, remove-elements, expected-results
+		{ "<html>trivial test</html>", "", "", " trivial test " },
+		{ "<html>lets <img src=\"g/smth.jpg\" alt=\"nice picture\"> index attrs</html>", "img=alt", "", " lets nice picture index attrs " },
+		{ "<html>   lets  also<script> whatever here; a<b</script>remove scripts", "", "script, style", "    lets  also remove scripts" },
+		{ "testing in<b><font color='red'>line</font> ele<em>men</em>ts", "", "", "testing inline elements" },
+		{ "testing non<p>inline</h1>elements", "", "", "testing non inline elements" },
+		{ "testing&nbsp;entities&amp;stuff", "", "", "testing entities&stuff" },
+		{ "testing &#1040;&#1041;&#1042; utf encoding", "", "", "testing \xD0\x90\xD0\x91\xD0\x92 utf encoding" }
+	};
+
+	for ( int iTest=0; iTest<sizeof(sTests)/sizeof(sTests[0]); iTest++ )
+	{
+		printf ( "testing HTML stripper, test %d\n", 1+iTest );
+
+		CSphString sError;
+		CSphHTMLStripper tStripper;
+		assert ( tStripper.SetIndexedAttrs ( sTests[iTest][1], sError ) );
+		assert ( tStripper.SetRemovedElements ( sTests[iTest][2], sError ) );
+
+		CSphString sBuf ( sTests[iTest][0] );
+		tStripper.Strip ( (BYTE*)sBuf.cstr() );
+		assert ( strcmp ( sBuf.cstr(), sTests[iTest][3] )==0 );
+	}
+}
+
+void BenchStripper ()
+{
+	printf ( "benchmarking HTML stripper\n" );
+
+	FILE * fp = fopen ( "doc/sphinx.html", "rb" );
+	if ( !fp )
+	{
+		printf ( "benchmark failed: unable to read doc/sphinx.html\n" );
+		return;
+	}
+
+	const int MAX_SIZE = 1048576;
+	char * sBuf = new char [ MAX_SIZE ];
+	int iLen = fread ( sBuf, 1, MAX_SIZE-1, fp );
+	fclose ( fp );
+
+	char * sRef = new char [ MAX_SIZE ];
+	sBuf[iLen] = '\0';
+	strcpy ( sRef, sBuf );
+
+	for ( int iRun=0; iRun<2; iRun++ )
+	{
+		CSphString sError;
+		CSphHTMLStripper tStripper;
+		if ( iRun==1 )
+			tStripper.SetRemovedElements ( "style, script", sError );
+
+		const int iPasses = 50;
+		float fTime = -sphLongTimer ();
+		for ( int iPass=0; iPass<iPasses; iPass++ )
+		{
+			tStripper.Strip ( (BYTE*)sBuf );
+			strcpy ( sBuf, sRef );
+		}
+		fTime += sphLongTimer ();
+
+		printf ( "run %d: %d bytes, %.3f ms, %.3f MB/sec\n", iRun, iLen, 1000.0f*fTime/float(iPasses), iLen*float(iPasses)/fTime/1000000.0f );
+	}
+
+	SafeDeleteArray ( sBuf );
+	SafeDeleteArray ( sRef );
+}
+
+//////////////////////////////////////////////////////////////////////////
 
 void main ()
 {
 	printf ( "RUNNING INTERNAL LIBSPHINX TESTS\n\n" );
 
 #ifdef NDEBUG
+	BenchStripper ();
 	BenchTokenizer ( false );
 	BenchTokenizer ( true );
 #else
+	TestStripper ();
 	TestTokenizer ( false );
 	TestTokenizer ( true );
 #endif

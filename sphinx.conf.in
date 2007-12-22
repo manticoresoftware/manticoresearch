@@ -13,12 +13,21 @@ source src1
 	# MUST be defined
 	type				= mysql
 
-	# whether to strip HTML
-	# values can be 0 (don't strip) or 1 (do strip)
-	# WARNING, only works with mysql source for now
-	# WARNING, should work ok for PERFECTLY formed XHTML for now
-	# WARNING, POSSIBLE TO BUG on malformed everday HTML
-	# optional, default is 0
+	# whether to strip HTML tags
+	#
+	# possible values are 0 (don't strip) or 1 (do strip).
+	# only the tags themselves (and comments) are stripped.
+	# to strip the contents too (eg. to strip embedded scripts),
+	# see html_remove_elements option.
+	#
+	# there are no restrictions on tag names; ie. everything
+	# that looks like a valid tag start, or end, or a comment
+	# will be stripped.
+	#
+	# WARNING, should work ok for PERFECTLY formed HTML/XHTML for now
+	# WARNING, COULD BUG on malformed everday HTML
+	#
+	# optional, default is 0 (don't strip)
 	strip_html			= 0
 
 	# what HTML attributes to index if stripping HTML
@@ -28,6 +37,23 @@ source src1
 	#
 	# optional, default is to not index anything
 	index_html_attrs	=
+
+	# what HTML elements contents to strip
+	#
+	# allows to strip element contents, ie. everything which is between
+	# opening and closing tag. useful to remove embedded scripts, CSS, etc.
+	# short tag form for empty elements (ie. <element />) is supported;
+	# ie. the text that follows such tag will *not* be removed.
+	#
+	# the value should contain a list of tag names to strip.
+	# tag names are case insensitive. there are no restrictions
+	# on list separators; you can use any separator.
+	#
+	# at the moment, only works if strip_html is enabled.
+	#
+	# optional, default is empty (do not strip element contents)
+	#
+	# html_remove_elements = style, script
 
 	#####################################################################
 

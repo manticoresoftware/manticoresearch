@@ -45,7 +45,23 @@ class SmallStringHash_T : public CSphOrderedHash < T, CSphString, CSphStrHashFun
 /////////////////////////////////////////////////////////////////////////////
 
 /// config section (hash of variant values)
-typedef SmallStringHash_T < CSphVariant >		CSphConfigSection;
+class CSphConfigSection : public SmallStringHash_T < CSphVariant >
+{
+public:
+	/// get integer option value by key and default value
+	int GetInt ( const char * sKey, int iDefault ) const
+	{
+		CSphVariant * pEntry = (*this)( sKey );
+		return pEntry ? pEntry->intval() : iDefault;
+	}
+
+	/// get string option value by key and default value
+	const char * GetStr ( const char * sKey, const char * sDefault ) const
+	{
+		CSphVariant * pEntry = (*this)( sKey );
+		return pEntry ? pEntry->cstr() : sDefault;
+	}
+};
 
 /// config section type (hash of sections)
 typedef SmallStringHash_T < CSphConfigSection >	CSphConfigType;

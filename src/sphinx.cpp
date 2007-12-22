@@ -1506,66 +1506,6 @@ public:
 };
 
 /////////////////////////////////////////////////////////////////////////////
-
-class CSphHTMLStripper
-{
-public:
-						CSphHTMLStripper ();
-						~CSphHTMLStripper ();
-	void				AddAttr ( const char * sTag, const char * sAttr );
-	const char *		SetAttrs ( const char * sConfig );
-	BYTE *				Strip ( BYTE * sData );
-
-protected:
-	struct AttrLink_t
-	{
-		char *			m_sAttr;
-		AttrLink_t *	m_pNext;
-
-		AttrLink_t ( const char * sAttr )
-		{
-			m_sAttr = new char [ 1+strlen(sAttr) ];
-			m_pNext = NULL;
-			strcpy ( m_sAttr, sAttr );
-		}
-
-		~AttrLink_t ()
-		{
-			SafeDeleteArray ( m_sAttr );
-		}
-	};
-
-	struct TagLink_t
-	{
-		char *			m_sTag;
-		TagLink_t *		m_pNext;
-		AttrLink_t *	m_pAttrs;
-
-		TagLink_t ( const char * sTag )
-		{
-			m_sTag = new char [ 1+strlen(sTag) ];
-			m_pNext = NULL;
-			m_pAttrs = NULL;
-			strcpy ( m_sTag, sTag );
-		}
-
-		~TagLink_t ()
-		{
-			SafeDeleteArray ( m_sTag );
-
-			while ( m_pAttrs )
-			{
-				AttrLink_t * pKill = m_pAttrs;
-				m_pAttrs = m_pAttrs->m_pNext;
-				SafeDelete ( pKill );
-			}
-		}
-	};
-
-	TagLink_t *			m_pTags;
-};
-
-/////////////////////////////////////////////////////////////////////////////
 // UTILITY FUNCTIONS
 /////////////////////////////////////////////////////////////////////////////
 
@@ -12001,71 +11941,74 @@ CSphDict * sphCreateDictionaryCRC ()
 // HTML STRIPPER
 /////////////////////////////////////////////////////////////////////////////
 
+static inline int sphIsTag ( int c )
+{
+	return sphIsAlpha(c) || c=='.' || c==':';
+}
+
+
 CSphHTMLStripper::CSphHTMLStripper ()
-	: m_pTags ( NULL )
 {
+	// known inline tags
+	const char * dKnown[] =
+	{
+		"a", "b", "i", "s", "u",
+		"basefont", "big", "em", "font", "img",
+		"label", "small", "span", "strike", "strong",
+		"sub", "sup", "tt"
+	};
+
+	m_dTags.Resize ( sizeof(dKnown)/sizeof(dKnown[0]) );
+	ARRAY_FOREACH ( i, m_dTags )
+	{
+		m_dTags[i].m_sTag = dKnown[i];
+		m_dTags[i].m_iTagLen = strlen(dKnown[i]);
+		m_dTags[i].m_bInline = true;
+	}
+
+	UpdateTags ();
 }
 
 
-CSphHTMLStripper::~CSphHTMLStripper ()
+int CSphHTMLStripper::GetCharIndex ( int iCh )
 {
-	// kill tags list
-	while ( m_pTags )
-	{
-		TagLink_t * pKill = m_pTags;
-		m_pTags = m_pTags->m_pNext;
-		SafeDelete ( pKill );
-	}
+	if ( iCh>='a' && iCh<='z' ) return iCh-'a';
+	if ( iCh>='A' && iCh<='Z' ) return iCh-'A';
+	if ( iCh=='_' ) return 26;
+	if ( iCh==':' ) return 27;
+	return -1;
 }
 
 
-void CSphHTMLStripper::AddAttr ( const char * sTag, const char * sAttr )
+void CSphHTMLStripper::UpdateTags ()
 {
-	// find matching tag in list
-	TagLink_t * pTag = m_pTags;
-	TagLink_t * pPrev = NULL;
-	while ( pTag && strcasecmp ( pTag->m_sTag, sTag ) )
+	m_dTags.Sort ();
+
+	for ( int i=0; i<MAX_CHAR_INDEX; i++ )
 	{
-		pPrev = pTag;
-		pTag = pTag->m_pNext;
+		m_dStart[i] = INT_MAX;
+		m_dEnd[i] = -1;
 	}
 
-	// chain to the list if not found
-	if ( !pTag )
+	ARRAY_FOREACH ( i, m_dTags )
 	{
-		pTag = new TagLink_t ( sTag );
-		if ( pPrev )
-			pPrev->m_pNext = pTag;
-		else
-			m_pTags = pTag;
-	}
+		int iIdx = GetCharIndex ( m_dTags[i].m_sTag.cstr()[0] );
+		if ( iIdx<0 )
+			continue;
 
-	// find matching attr in list
-	AttrLink_t * pAttr = pTag->m_pAttrs;
-	AttrLink_t * pPrevA = NULL;
-	while ( pAttr && strcasecmp ( pAttr->m_sAttr, sAttr ) )
-	{
-		pPrevA = pAttr;
-		pAttr = pAttr->m_pNext;
-	}
-
-	// chain to the list if not found
-	if ( !pAttr )
-	{
-		pAttr = new AttrLink_t ( sAttr );
-		if ( pPrevA )
-			pPrevA->m_pNext = pAttr;
-		else
-			pTag->m_pAttrs = pAttr;
+		m_dStart[iIdx] = Min ( m_dStart[iIdx], i );
+		m_dEnd[iIdx] = Max ( m_dEnd[iIdx], i );
 	}
 }
 
 
-const char * CSphHTMLStripper::SetAttrs ( const char * sConfig )
+bool CSphHTMLStripper::SetIndexedAttrs ( const char * sConfig, CSphString & sError )
 {
 	char sTag[256], sAttr[256];
 
 	const char * p = sConfig, * s;
+	#define LOC_ERROR(_msg,_pos) { sError.SetSprintf ( "SetIndexedAttrs(): %s near '%s'", _msg, _pos ); return false; }
+
 	while ( *p )
 	{
 		// skip spaces
@@ -12073,20 +12016,38 @@ const char * CSphHTMLStripper::SetAttrs ( const char * sConfig )
 		if ( !*p ) break;
 
 		// check tag name
-		s = p; while ( isalpha(*p) ) p++;
-		if ( s==p ) return s; // error: non-alphas in tag name
+		s = p; while ( sphIsTag(*p) ) p++;
+		if ( s==p ) LOC_ERROR ( "invalid character in tag name", s );
 
 		// get tag name
-		if ( p-s>=(int)sizeof(sTag) ) return s; // error: tag name too long
+		if ( p-s>=(int)sizeof(sTag) ) LOC_ERROR ( "tag name too long", s );
 		strncpy ( sTag, s, p-s );
 		sTag[p-s] = '\0';
 
 		// skip spaces
 		while ( *p && isspace(*p) ) p++;
-		if ( !*p ) break;
+		if ( *p++!='=' ) LOC_ERROR ( "'=' expected", p-1 );
 
-		// check '='
-		if ( *p++!='=' ) return p-1; // error: '=' expected
+		// add indexed tag entry, if not there yet
+		strlwr ( sTag );
+
+		int iIndexTag = -1;
+		ARRAY_FOREACH ( i, m_dTags )
+			if ( m_dTags[i].m_sTag==sTag )
+		{
+			iIndexTag = i;
+			break;
+		}
+		if ( iIndexTag<0 )
+		{
+			m_dTags.Resize ( m_dTags.GetLength()+1 );
+			m_dTags.Last().m_sTag = sTag;
+			m_dTags.Last().m_iTagLen = strlen ( sTag );
+			iIndexTag = m_dTags.GetLength()-1;
+		}
+
+		m_dTags[iIndexTag].m_bIndexAttrs = true;
+		CSphVector<CSphString> & dAttrs = m_dTags[iIndexTag].m_dAttrs;
 
 		// scan attributes
 		while ( *p )
@@ -12096,18 +12057,22 @@ const char * CSphHTMLStripper::SetAttrs ( const char * sConfig )
 			if ( !*p ) break;
 
 			// check attr name
-			s = p; while ( isalpha(*p) ) p++;
-			if ( s==p ) return s; // error: non-alphas in attr name
+			s = p; while ( sphIsTag(*p) ) p++;
+			if ( s==p ) LOC_ERROR ( "invalid character in attribute name", s );
 
 			// get attr name
-			if ( p-s>=(int)sizeof(sAttr) ) return s; // error: attr name too long
+			if ( p-s>=(int)sizeof(sAttr) ) LOC_ERROR ( "attribute name too long", s );
 			strncpy ( sAttr, s, p-s );
 			sAttr[p-s] = '\0';
 
-			// add it
-			strlwr ( sTag );
-			strlwr ( sAttr );
-			AddAttr ( sTag, sAttr );
+			// add attr, if not there yet
+			int iAttr;
+			for ( iAttr=0; iAttr<dAttrs.GetLength(); iAttr++ )
+				if ( dAttrs[iAttr]==sAttr )
+					break;
+
+			if ( iAttr==dAttrs.GetLength() )
+				dAttrs.Add ( sAttr );
 
 			// skip spaces
 			while ( *p && isspace(*p) ) p++;
@@ -12116,10 +12081,54 @@ const char * CSphHTMLStripper::SetAttrs ( const char * sConfig )
 			// check if there's next attr or tag
 			if ( *p==',' ) { p++; continue; } // next attr
 			if ( *p==';' ) { p++; break; } // next tag
-			return p; // error: ',' or ';' or line end expected
+			LOC_ERROR ( "',' or ';' or end of line expected", p );
 		}
 	}
-	return NULL;
+
+	#undef LOC_ERROR
+
+	UpdateTags ();
+	return true;
+}
+
+
+bool CSphHTMLStripper::SetRemovedElements ( const char * sConfig, CSphString & )
+{
+	const char * p = sConfig;
+	while ( *p )
+	{
+		// skip separators
+		while ( *p && !sphIsTag(*p) ) p++;
+		if ( !*p ) break;
+
+		// get tag name
+		const char * s = p;
+		while ( sphIsTag(*p) ) p++;
+
+		CSphString sTag;
+		sTag.SetBinary ( s, p-s );
+		sTag.ToLower ();
+
+		// mark it 
+		int iTag;
+		for ( iTag=0; iTag<m_dTags.GetLength(); iTag++ )
+			if ( m_dTags[iTag].m_sTag==sTag )
+		{
+			m_dTags[iTag].m_bRemove = true;
+			break;
+		}
+
+		if ( iTag==m_dTags.GetLength() )
+		{
+			m_dTags.Resize ( m_dTags.GetLength()+1 );
+			m_dTags.Last().m_sTag = sTag;
+			m_dTags.Last().m_iTagLen = strlen ( sTag.cstr() );
+			m_dTags.Last().m_bRemove = true;
+		}
+	}
+
+	UpdateTags ();
+	return true;
 }
 
 
@@ -12148,12 +12157,13 @@ static const HtmlEntity_t g_dHtmlEntities[] =
 	{ "&lt;",		4,	'<' },
 	{ "&gt;",		4,	'>' },
 	{ "&quot;",		6,	'"' },
-	{ "&apos;",		6,	'\'' }
+	{ "&apos;",		6,	'\'' },
+	{ "&nbsp;",		6,	' ' },
 };
 static const int g_iHtmlEntities = sizeof(g_dHtmlEntities)/sizeof(HtmlEntity_t);
 
 
-BYTE * CSphHTMLStripper::Strip ( BYTE * sData )
+void CSphHTMLStripper::Strip ( BYTE * sData )
 {
 	const BYTE * s = sData;
 	BYTE * d = sData;
@@ -12205,7 +12215,7 @@ BYTE * CSphHTMLStripper::Strip ( BYTE * sData )
 
 		// handle tag
 		assert ( *s=='<' );
-		if ( !isalpha(s[1]) && s[1]!='/' && s[1]!='!' )
+		if ( GetCharIndex(s[1])<0 && s[1]!='/' && s[1]!='!' )
 		{
 			*d++ = *s++;
 			continue;
@@ -12229,20 +12239,38 @@ BYTE * CSphHTMLStripper::Strip ( BYTE * sData )
 			continue;
 		}
 
-		// check if it's known tag or what
-		TagLink_t * pTag;
-		int iLen = 0;
-		for ( pTag=m_pTags; pTag; pTag=pTag->m_pNext )
+		// lookup this tag in known tags list
+		int iTag = -1;
+		const BYTE * sTagName = ( s[0]=='/' ) ? s+1 : s;
+		int iIdx = GetCharIndex ( sTagName[0] );
+
+		if ( m_dEnd[iIdx]>=0 )
 		{
-			iLen = (int)strlen(pTag->m_sTag); // OPTIMIZE! cache strlen() result
-			if ( strncasecmp ( pTag->m_sTag, (const char*)s, iLen ) )
-				continue;
-			if ( !isalpha ( s[iLen] ) )
-				break;
+			int iStart = m_dStart[iIdx];
+			int iEnd = m_dEnd[iIdx];
+
+			for ( int i=iStart; i<=iEnd; i++ )
+			{
+				int iLen = m_dTags[i].m_iTagLen;
+				int iCmp = strncasecmp ( m_dTags[i].m_sTag.cstr(), (const char*)sTagName, iLen );
+
+				// the tags are sorted; so if current candidate is already greater, rest can be skipped
+				if ( iCmp>0 )
+					break;
+
+				// do we have a match?
+				if ( iCmp==0 && !sphIsTag(sTagName[iLen]) )
+				{
+					iTag = i;
+					s = sTagName + iLen; // skip tag name
+					assert ( !sphIsTag(*s) );
+					break;
+				}
+			}
 		}
 
-		// processing unknown tags is somewhat easy
-		if ( !pTag )
+		// skip unknown or do-not-index-attrs tag
+		if ( iTag<0 || !m_dTags[iTag].m_bIndexAttrs )
 		{
 			// we just scan until EOLN or tag end
 			while ( *s && *s!='>' )
@@ -12254,14 +12282,22 @@ BYTE * CSphHTMLStripper::Strip ( BYTE * sData )
 			}
 			if ( *s )
 				s++;
-			continue;
+
+			// unknown tag is done; others might require a bit more work
+			if ( iTag<0 )
+			{
+				*d++ = ' '; // unknown tags are *not* inline by default
+				continue;
+			}
 		}
 
-		// remove tag name
-		while ( iLen-- ) s++;
-		assert ( !isalpha(*s) );
+		// work this known tag
+		assert ( iTag>=0 );
+		const StripperTag_t & tTag = m_dTags[iTag];
 
-		while ( *s && *s!='>' )
+		// handle index-attrs
+		if ( tTag.m_bIndexAttrs )
+			while ( *s && *s!='>' )
 		{
 			// skip non-alphas
 			while ( *s && *s!='>' )
@@ -12271,37 +12307,37 @@ BYTE * CSphHTMLStripper::Strip ( BYTE * sData )
 					s = SkipQuoted ( s );
 					while ( isspace(*s) ) s++;
 				}
-				if ( isalpha(*s) )
+				if ( sphIsTag(*s) )
 					break;
 				s++;
 			}
-			if ( !isalpha(*s) )
+			if ( !sphIsTag(*s) )
 			{
 				if ( *s ) s++;
 				break;
 			}
 
 			// check attribute name
-			AttrLink_t * pAttr;
-			int iLen2 = 0;
-			for ( pAttr=pTag->m_pAttrs; pAttr; pAttr=pAttr->m_pNext )
+			// OPTIMIZE! remove linear search
+			int iAttr;
+			for ( iAttr=0; iAttr<tTag.m_dAttrs.GetLength(); iAttr++ )
 			{
-				iLen2 = (int)strlen(pAttr->m_sAttr); // OPTIMIZE! cache strlen() result
-				if ( strncasecmp ( pAttr->m_sAttr, (const char*)s, iLen2 ) )
+				int iLen = strlen ( tTag.m_dAttrs[iAttr].cstr() );
+				if ( strncasecmp ( tTag.m_dAttrs[iAttr].cstr(), (const char*)s, iLen ) )
 					continue;
-				if ( s[iLen2]=='=' || isspace(s[iLen2]) )
+				if ( s[iLen]=='=' || isspace(s[iLen]) )
+				{
+					s += iLen;
 					break;
+				}
 			}
 
 			// if attribute is unknown or malformed, we just skip all alphas and rescan
-			if ( !pAttr )
+			if ( iAttr==tTag.m_dAttrs.GetLength() )
 			{
-				while ( isalpha(*s) ) s++;
+				while ( sphIsTag(*s) ) s++;
 				continue;
 			}
-
-			// attribute is known
-			while ( iLen2-- ) s++;
 
 			// skip spaces, check for '=', and skip spaces again
 			while ( isspace(*s) ) s++; if ( !*s ) break;
@@ -12322,10 +12358,47 @@ BYTE * CSphHTMLStripper::Strip ( BYTE * sData )
 			while ( *s && !isspace(*s) && *s!='>' ) *d++ = *s++;
 		}
 		if ( *s=='>' ) s++;
+
+		// in all cases, the tag must be fully processed at this point
+		// not a remove-tag? we're done
+		if ( !tTag.m_bRemove )
+		{
+			if ( !tTag.m_bInline ) *d++ = ' ';
+			continue;
+		}
+
+		// sudden eof? bail out
+		if ( !*s )
+			break;
+
+		// must be a proper remove-tag end, then
+		assert ( tTag.m_bRemove && s[-1]=='>' );
+
+		// short-form? we're done
+		if ( s[-2]=='/' )
+			continue;
+
+		// skip everything until the closing tag
+		// FIXME! should we handle insane cases with quoted closing tag within tag?
+		for ( ;; )
+		{
+			while ( *s && ( s[0]!='<' || s[1]!='/' ) ) s++;
+			if ( !*s ) break;
+
+			s += 2; // skip </
+			if ( strncasecmp ( tTag.m_sTag.cstr(), (const char*)s, tTag.m_iTagLen )!=0 ) continue;
+			if ( !sphIsTag(s[tTag.m_iTagLen]) )
+			{
+				s += tTag.m_iTagLen; // skip tag
+				if ( *s=='>' ) s++;
+				break;
+			}
+		}
+
+		if ( !tTag.m_bInline ) *d++ = ' ';
 	}
 
 	*d++ = '\0';
-	return sData;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -12364,13 +12437,14 @@ const CSphSourceStats & CSphSource::GetStats ()
 }
 
 
-const char * CSphSource::SetStripHTML ( const char * sExtractAttrs )
+bool CSphSource::SetStripHTML ( const char * sExtractAttrs, const char * sRemoveElements, CSphString & sError )
 {
 	m_bStripHTML = ( sExtractAttrs!=NULL );
-	if ( m_bStripHTML )
-		return m_pStripper->SetAttrs ( sExtractAttrs );
-	else
-		return NULL;
+	if ( !m_bStripHTML )
+		return false;
+
+	return m_pStripper->SetIndexedAttrs ( sExtractAttrs, sError )
+		&& m_pStripper->SetRemovedElements ( sRemoveElements, sError );
 }
 
 

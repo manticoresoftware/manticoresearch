@@ -663,8 +663,52 @@ protected:
 };
 
 
+/// HTML stripper
+class CSphHTMLStripper
+{
+public:
+								CSphHTMLStripper ();
+	bool						SetIndexedAttrs ( const char * sConfig, CSphString & sError );
+	bool						SetRemovedElements ( const char * sConfig, CSphString & sError );
+	void						Strip ( BYTE * sData );
+
+protected:
+	struct StripperTag_t
+	{
+		CSphString				m_sTag;			///< tag name
+		int						m_iTagLen;		///< tag name length
+		bool					m_bInline;		///< whether this tag is inline
+		bool					m_bIndexAttrs;	///< whether to index attrs
+		bool					m_bRemove;		///< whethet to remove contents
+		CSphVector<CSphString>	m_dAttrs;		///< attr names to index
+
+		StripperTag_t ()
+			: m_iTagLen ( 0 )
+			, m_bInline ( false )
+			, m_bIndexAttrs ( false )
+			, m_bRemove ( false )
+		{}
+
+		inline bool operator < ( const StripperTag_t & rhs ) const
+		{
+			return strcmp ( m_sTag.cstr(), rhs.m_sTag.cstr() )<0; 
+		}
+	};
+
+protected:
+	static const int			MAX_CHAR_INDEX = 28;		///< max valid char index (a-z, underscore, colon)
+
+	CSphVector<StripperTag_t>	m_dTags;					///< known tags to index attrs and/or to remove contents
+	int							m_dStart[MAX_CHAR_INDEX];	///< maps index of the first tag name char to start offset in m_dTags
+	int							m_dEnd[MAX_CHAR_INDEX];		///< maps index of the first tag name char to end offset in m_dTags
+
+protected:
+	int							GetCharIndex ( int iCh );	///< calcs index by raw char
+	void						UpdateTags ();				///< sorts tags, updates internal helpers
+};
+
+
 /// generic data source
-class CSphHTMLStripper;
 class CSphSource
 {
 public:
@@ -683,13 +727,14 @@ public:
 	void								SetDict ( CSphDict * dict );
 
 	/// set HTML stripping mode
-	/// sExtractAttrs defines what attributes to store
-	/// sExtractAttrs format is "img=alt; a=alt,title"
-	/// sExtractAttrs can be empty, this means that all the HTML will be stripped
-	/// sExtractAttrs can be NULL, this means that no HTML stripping will be performed
-	/// returns NULL on success
-	/// returns error position on sConfig parsing failure
-	const char *						SetStripHTML ( const char * sExtractAttrs );
+	///
+	/// sExtractAttrs defines what attributes to store. format is "img=alt; a=alt,title".
+	/// empty string means to strip all tags; NULL means to disable stripping.
+	///
+	/// sRemoveElements defines what elements to cleanup. format is "style, script"
+	///
+	/// on failure, returns false and fills sError
+	bool								SetStripHTML ( const char * sExtractAttrs, const char * sRemoveElements, CSphString & sError );
 
 	/// set tokenizer
 	void								SetTokenizer ( ISphTokenizer * pTokenizer );

@@ -638,20 +638,17 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		pSource->SetupFieldMatch ( sPrefixFields.cstr (), sInfixFields.cstr () );
 
 		// strip_html, index_html_attrs
-		if ( hSource("strip_html") )
+		if ( hSource.GetInt ( "strip_html", 0 ) )
 		{
-			const char * sAttrs = NULL;
-			if ( hSource["strip_html"].intval() )
+			CSphString sError;
+			if ( !pSource->SetStripHTML (
+				hSource.GetStr ( "index_html_attrs", "" ),
+				hSource.GetStr ( "html_remove_elements", "" ),
+				sError ) )
 			{
-				if ( hSource("index_html_attrs") )
-					sAttrs = hSource["index_html_attrs"].cstr();
-				if ( !sAttrs )
-					sAttrs = "";
+				fprintf ( stdout, "ERROR: source '%s': %s.\n", pSourceName->cstr(), sError.cstr() );
+				return false;
 			}
-			sAttrs = pSource->SetStripHTML ( sAttrs );
-			if ( sAttrs )
-				fprintf ( stdout, "ERROR: source '%s': syntax error in 'index_html_attrs' near '%s'.\n",
-				pSourceName->cstr(), sAttrs );
 		}
 
 		pSource->SetTokenizer ( pTokenizer );

@@ -73,6 +73,7 @@ static KeyDesc_t g_dKeysSource[] =
 	{ "type",					0, NULL },
 	{ "strip_html",				0, NULL },
 	{ "index_html_attrs",		0, NULL },
+	{ "html_remove_elements",	0, NULL },
 	{ "sql_host",				0, NULL },
 	{ "sql_user",				0, NULL },
 	{ "sql_pass",				0, NULL },

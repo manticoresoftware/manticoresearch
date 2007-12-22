@@ -687,6 +687,10 @@ void stem_dmetaphone ( BYTE * pWord, bool bUTF8 )
 		if ( iCode <= 0 )
 			break;
 
+		// unknown code: don't copy, just return
+		if ( bUTF8 && iCode > 128 && iCode != 0xC7 && iCode != 0xE7 && iCode != 0xD1 && iCode != 0xF1 )
+			return;
+
 		iAdvance = ProcessCode ( iCode, ( bUTF8 ? pLastPtr : pPtr ) - sOriginal, Word, sPrimary, sSecondary );
 	}
 

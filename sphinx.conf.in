@@ -594,7 +594,7 @@ index test1
 	#
 	# optional, default is empty
 	#
-	# ngrams_chars = U+3000..U+2FA1F
+	# ngram_chars = U+3000..U+2FA1F
 
 
 	# phrase boundary characters table

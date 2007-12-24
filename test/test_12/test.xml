@@ -1,6 +1,6 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Test>
-  <Name>stemmer+infixes</Name>
+  <Name>stemmers + infixes</Name>
   <Config>
     <Static>indexer
 {
@@ -28,8 +28,14 @@ index lj
 	source			= srclj
 	path			= </Static><Data_Path/><Static>/lj
 	charset_type	= utf-8
-	morphology		= stem_en
+	min_word_len	= 0
 </Static>
+    <Dynamic>
+      <Variant>	morphology		= stem_en </Variant>
+      <Variant>	morphology		= stem_ru </Variant>
+      <Variant>	morphology		= soundex </Variant>
+      <Variant>	morphology		= metaphone </Variant>
+    </Dynamic>
     <Dynamic>
       <Variant>	min_infix_len	= 0</Variant>
       <Variant>	min_infix_len	= 3</Variant>
@@ -41,11 +47,16 @@ index lj
     <Static>}</Static>
   </Config>
   <Query>
-    <Query_0>author</Query_0>
-    <Query_1>search</Query_1>
-    <Query_2>search*</Query_2>
-    <Query_3>author*</Query_3>
-    <Query_4>searches</Query_4>
+    <Query_0>admin</Query_0>
+    <Query_1>*earc*</Query_1>
+    <Query_2>up*</Query_2>
+    <Query_3>dmin</Query_3>
+    <Query_4>rep</Query_4>
+    <Query_5>pda</Query_5>
+    <Query_6>алго*</Query_6>
+    <Query_7>*лиз</Query_7>
+    <Query_8>*бот*</Query_8>
+    <Query_8>сравнительный</Query_8>
   </Query>
   <DB_Create>
 CREATE TABLE `test_table` (
@@ -63,6 +74,7 @@ DROP TABLE IF EXISTS `test_table`
 INSERT INTO `test_table` VALUES
 (1,1,'Problem with enable_star searches','Having star searches is great! Just what we needed','Maurice Makaay'),
 (2,2,'Problem with enable_star searches',' But the thing is, that I cannot search for authors anymore','admin'),
-(3,3,'Problem with enable_star searches','I will try to repro it here and update you','shodan')
+(3,3,'Problem with enable_star searches','I will try to repro it here and update you','shodan'),
+(4,4,'Алгоритмы', 'Недавно захотел провести сравнительный анализ алгоритмов работы средств полнотекстового поиска.', 'Yuriy' )
   </DB_Insert>
 </Test>

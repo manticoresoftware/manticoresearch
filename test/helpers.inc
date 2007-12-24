@@ -85,8 +85,26 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error )
 	else
 		system ( "$searchd_path --config $config_file > $error_file", $retval );
 
-	if ( $retval != 0 )
-		$error = file_get_contents ( $error_file );
+	if ( $retval == 0 )
+	{
+		$error = "";
+		$log_raw = explode ( '\n', file_get_contents ( $error_file ) );
+		foreach ( $log_raw as $msg )
+		{
+			$warn = stristr ( $msg, 'WARNING' );
+			if ( $warn )
+				$error .= $warn;
+
+			$warn = stristr ( $warn, 'ERROR' );
+			if ( $warn )
+				$error .= $warn;
+		}
+
+		if ( empty ( $error ) )
+			return 0;
+		else
+			return 2;
+	}
 
 	return $retval;
 }
@@ -563,6 +581,9 @@ class SphinxConfig
 		global $windows;
 
 		$nquery = 0;
+		if ( !is_array ( $this->_results_model [ $this->SubtestNo() ] ) )
+			return;
+
 		foreach ( $this->_results_model [ $this->SubtestNo() ] as $ref )
 		{
 			if ( $ref==$this->_results[$nquery] )
@@ -824,12 +845,18 @@ function RunTest ( $test_dir )
 
 		if ( $config->NumAgents () == 1 )
 		{
-			if ( StartSearchd ( "config.conf", "error.txt", $sd_pid_file, $error ) != 0 )
+			$searchd_ret = StartSearchd ( "config.conf", "error.txt", $sd_pid_file, $error );
+
+			if ( $searchd_ret == 1 )
 			{
 				if ( !HandleFailure ( $config, $report, $error, $nfailed ) )
 					$log .= "\tsubtest $subtest: error starting searchd; see $report_file\n";
 				
 				$searchd_error = TRUE;
+			}
+			else if ( $searchd_ret==2 )
+			{
+				fwrite ( $report, "$error\n" );
 			}
 		}
 		else
@@ -842,13 +869,22 @@ function RunTest ( $test_dir )
 				$config->SetPIDFile ( $pid_file );
 				$config->Write ( $config_file );
 
-				if ( StartSearchd ( $config_file, "error_$i.txt", $pid_file, $error ) != 0 )
+				
+				$searchd_ret = StartSearchd ( $config_file, "error_$i.txt", $pid_file, $error );
+
+				if ( $searchd_ret == 1 )
 				{
 					if ( !HandleFailure ( $config, $report, $error, $nfailed ) )
 						$log .= "\tsubtest $subtest: error starting searchd; see $report_file\n";
 				
 					$searchd_error = TRUE;
+		
 				}
+				else if ( $searchd_ret==2 )
+				{
+					fwrite ( $report, "$error\n" );
+				}
+
     		}
 
 		if ( $searchd_error )

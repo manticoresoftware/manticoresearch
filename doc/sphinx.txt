@@ -237,15 +237,22 @@ Currently known systems Sphinx has been successfully running on are:
    * Linux 2.4.x, 2.6.x (various distributions)
    * Windows 2000, XP
    * FreeBSD 4.x, 5.x, 6.x
-   * NetBSD 1.6
-   * Solaris 9
+   * NetBSD 1.6, 3.0
+   * Solaris 9, 11
    * Mac OS X
+
+CPU architectures known to work include X86, X86-64, SPARC64.
 
 I hope Sphinx will work on other Unix platforms as well. If the platform
 you run Sphinx on is not in this list, please do report it.
 
-At the moment, Windows version of Sphinx's searchd daemon is not intended
-to be used in production because it can only handle one client at a time.
+At the moment, Windows version of Sphinx is not intended to be used in
+production, but rather for testing and debugging only. Two most prominent
+issues are missing concurrent queries support (client queries are stacked
+on TCP connection level instead), and missing index data rotation support.
+There are succesful production installations which workaround these issues.
+However, running high-volume search service under Windows is still not
+recommended.
 
 2.2. Required tools
 -------------------

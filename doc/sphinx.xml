@@ -535,7 +535,7 @@ which is going to be indexed by Sphinx, of which the single most
 important one is:
 </para>
 <para><emphasis role="bold">
-ALL DOCUMENT IDS MUST BE UNIQUE UNSIGNED NON-ZERO 32-BIT INTEGER NUMBERS.
+ALL DOCUMENT IDS MUST BE UNIQUE UNSIGNED NON-ZERO INTEGER NUMBERS (32-BIT OR 64-BIT, DEPENDING ON BUILD TIME SETTINGS).
 </emphasis></para>
 <para>
 If this requirement is not met, different bad things can happen.

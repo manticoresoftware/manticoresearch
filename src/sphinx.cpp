@@ -9550,8 +9550,12 @@ const ExtDoc_t * ExtOr_c::GetDocsChunk ()
 		{
 			// copy tail if we don't have both lists
 			const ExtDoc_t * pList = pCur0 ? pCur0 : pCur1;
-			while ( pList->m_uDocid!=DOCID_MAX && iDoc<MAX_DOCS-1 )
-				m_dDocs[iDoc++] = *pList++;
+			if ( pList->m_uDocid!=DOCID_MAX && iDoc<MAX_DOCS-1 )
+			{
+				while ( pList->m_uDocid!=DOCID_MAX && iDoc<MAX_DOCS-1 )
+					m_dDocs[iDoc++] = *pList++;
+				uTouched |= pCur0 ? 1 : 2;
+			}
 
 			if ( pList->m_uDocid==DOCID_MAX ) pList = NULL;
 			if ( pCur0 ) pCur0 = pList; else pCur1 = pList;

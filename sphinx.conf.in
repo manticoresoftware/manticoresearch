@@ -535,36 +535,42 @@ index test1
 	# through indexes whcih were created with prefix or infix indexing
 	# enabled.
 	#
-	# possible values are 0, which means to disable star-syntax
-	# and treat all keywords as prefixs or infixes respectively,
-	# and 1, which means that:
-	# 1) keywords without stars will be treated as full words;
-	# 2) keywords with star at the end will be treated as prefixes;
-	# 3) keywords with stars at the start and the end will be treated
-	# as infixes (provided that the index was built with infixes).
+	# enable_star only affects searching; so it can be changed
+	# without reindexing (one would need to restart searchd, though).
+	#
+	# possible values are 0 and 1.
+	#
+	# the default value is 0, which means to disable star-syntax
+	# and treat all keywords as prefixes or infixes respectively,
+	# depending on indexing-time min_prefix_len/min_infix_len settings.
+	#
+	# the value of 1 means that
+	# 1) star can be used at the start and/or the end of the keyword;
+	# 2) star will match zero or more characters.
 	#
 	# for example, assume that the index was built with infixes and
 	# that enable_star is 1. searching should work as follows:
 	#
-	# 1) "abcdef" query will match only those documents which have
+	# 1) "abcdef" query will match only those documents which contain
 	# the exact "abcdef" word in them;
 	#
-	# 2) "abc*" query will match those documents which have any
-	# words starting with "abc", but *not* in the middle; including
-	# the documents which have "abc" word;
+	# 2) "abc*" query will match those documents which contain
+	# any words starting with "abc" (including the documents which
+	# contain the exact "abc" word only);
 	#
-	# 3) "*cde*" query will match those documents which have any
-	# words either starting with "cde", or with "cde" in the middle;
-	# including the documents which have "cde" word".
+	# 3) "*cde*" query will match those documents which contain
+	# any words which have "cde" characters in any part of the word
+	# (including the documents which contain the exact "cde" word only).
 	#
-	# enable_star only affects searching; so it can be changed
-	# without reindexing (one would need to restart searchd, though).
+	# 4) "*def" query will match those documents which contain
+	# any words ending with "def" (including the documents which
+	# contain the exact "def" word only).
 	#
 	# optional, default value is 0 (to keep compatibility with 0.9.7).
 	#
 	# enable_star		= 1
 
-	
+
 	# n-grams length
 	#
 	# n-grams provide basic CJK support for unsegmented texts. if using
@@ -737,6 +743,27 @@ indexer
 	#
 	# optional, default is 32M
 	mem_limit			= 32M
+
+	# maximum IO call size, bytes
+	#
+	# this option is for IO throttling. it controls maximum file
+	# IO operation (read or write) length performed by indexer.
+	# 0 means that no limit is imposed.
+	#
+	# optional, default is 0
+	#
+	# max_iosize		= 1048576
+
+
+	# maximum IO calls per second
+	#
+	# this option is for IO throttling. it controls guaranteed delay
+	# between subsequent file IO operations performed by indexer.
+	# 0 means that no limit is imposed.
+	#
+	# optional, default is 0
+	#
+	# max_iops			= 40
 }
 
 #############################################################################

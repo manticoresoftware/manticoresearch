@@ -1,10 +1,12 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Test>
-  <Name>stemmers + infixes</Name>
+  <Name>stemmers + infixes (throttled)</Name>
   <Config>
     <Static>indexer
 {
 	mem_limit			= 128M
+	max_iops			= 20
+	max_iosize			= 131072
 }
 
 searchd

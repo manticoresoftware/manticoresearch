@@ -8578,6 +8578,7 @@ CSphMatch * CSphExtendedEvalNode::GetNextDoc ( SphDocID_t iMinID )
 
 			if ( !pCur )
 			{
+				SafeDelete ( m_dChildren[i] );
 				m_dChildren.RemoveFast ( i-- );
 				if ( !m_dChildren.GetLength() )
 				{

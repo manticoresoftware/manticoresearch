@@ -87,6 +87,7 @@ void sphAssert ( const char * sExpr, const char * sFile, int iLine )
 
 // forward decl
 void sphWarn ( char * sTemplate, ... );
+int sphReadThrottled ( int iFD, void * pBuf, size_t iCount );
 
 /////////////////////////////////////////////////////////////////////////////
 // GLOBALS
@@ -495,7 +496,7 @@ public:
 
 	bool Read ( void * pBuf, size_t uCount, CSphString & sError )
 	{
-		size_t uRead = (size_t) ::read ( GetFD(), pBuf, uCount );
+		size_t uRead = (size_t) sphReadThrottled ( GetFD(), pBuf, uCount );
 		if ( uRead!=uCount )
 		{
 			sError.SetSprintf ( "read error in %s; %u of %u bytes read",
@@ -1576,6 +1577,90 @@ bool sphWrite ( int iFD, const void * pBuf, size_t iCount, const char * sName, C
 	else
 		sError.SetSprintf ( "%s: write error: %d of %d bytes written", sName, iWritten, int(iCount) );
 	return false;
+}
+
+
+static int		g_iMaxIOps		= 0;
+static int		g_iMaxIOSize	= 0;
+static float	g_fLastIOTime	= 0.0f;
+
+void sphSetThrottling ( int iMaxIOps, int iMaxIOSize )
+{
+	g_iMaxIOps	 = iMaxIOps;
+	g_iMaxIOSize = iMaxIOSize;
+}
+
+
+bool sphWriteThrottled ( int iFD, const void * pBuf, size_t iCount, const char * sName, CSphString & sError )
+{
+	if ( g_iMaxIOSize && int (iCount) > g_iMaxIOSize )
+	{
+		int nChunks		= iCount / g_iMaxIOSize;
+		int nBytesLeft	= iCount % g_iMaxIOSize;
+
+		for ( int i = 0; i < nChunks; ++i )
+		{
+			if ( !sphWriteThrottled ( iFD, (const char *)pBuf + i*g_iMaxIOSize, g_iMaxIOSize, sName, sError ) )
+				return false;
+		}
+
+		if ( nBytesLeft > 0 )
+			if ( !sphWriteThrottled ( iFD, (const char *)pBuf + nChunks*g_iMaxIOSize, nBytesLeft, sName, sError ) )
+				return false;
+
+		return true;
+	}
+
+	if ( g_iMaxIOps > 0 )
+	{
+		float fTime = sphLongTimer ();
+		float fSleep = Max ( 0.0f, g_fLastIOTime + 1.0f / g_iMaxIOps - fTime );
+		sphUsleep ( int ( fSleep * 1000.0f ) );
+		g_fLastIOTime = fTime + fSleep;
+	}
+
+	return sphWrite ( iFD, pBuf, iCount, sName, sError );
+}
+
+
+int sphReadThrottled ( int iFD, void * pBuf, size_t iCount )
+{
+	if ( g_iMaxIOSize && int (iCount) > g_iMaxIOSize )
+	{
+		int nChunks		= iCount / g_iMaxIOSize;
+		int nBytesLeft	= iCount % g_iMaxIOSize;
+
+		int nBytesRead = 0;
+		int iRead = 0;
+
+		for ( int i = 0; i < nChunks; ++i )
+		{
+			iRead = sphReadThrottled ( iFD, (char *)pBuf + i*g_iMaxIOSize, g_iMaxIOSize );
+			nBytesRead += iRead;
+			if ( iRead != g_iMaxIOSize )
+				return nBytesRead;
+		}
+
+		if ( nBytesLeft > 0 )
+		{
+			iRead = sphReadThrottled ( iFD, (char *)pBuf + nChunks*g_iMaxIOSize, nBytesLeft );
+			nBytesRead += iRead;
+			if ( iRead != nBytesLeft )
+				return nBytesRead;
+		}
+
+		return nBytesRead;
+	}
+
+	if ( g_iMaxIOps > 0 )
+	{
+		float fTime = sphLongTimer ();
+		float fSleep = Max ( 0.0f, g_fLastIOTime + 1.0f / g_iMaxIOps - fTime );
+		sphUsleep ( int ( fSleep * 1000.0f ) );
+		g_fLastIOTime = fTime + fSleep;
+	}
+
+	return ::read ( iFD, pBuf, iCount );
 }
 
 
@@ -3822,7 +3907,7 @@ void CSphWriter::Flush ()
 {
 	PROFILE ( write_hits );
 
-	if ( !sphWrite ( m_iFD, m_pBuffer, m_iPoolUsed, m_sName.cstr(), *m_pError ) )
+	if ( !sphWriteThrottled ( m_iFD, m_pBuffer, m_iPoolUsed, m_sName.cstr(), *m_pError ) )
 		m_bError = true;
 
 	m_iPoolUsed = 0;
@@ -3943,7 +4028,7 @@ void CSphReader_VLN::UpdateCache ()
 
 	int iReadLen = Min ( m_iSizeHint, m_iBufSize );
 	m_iBuffPos = 0;
-	m_iBuffUsed = ::read ( m_iFD, m_pBuff, iReadLen );
+	m_iBuffUsed = sphReadThrottled ( m_iFD, m_pBuff, iReadLen );
 	m_iPos = iNewPos;
 
 	if ( m_iBuffUsed>0 )
@@ -4213,7 +4298,7 @@ int CSphBin::ReadByte ()
 		{
 			assert ( m_dBuffer );
 
-			if ( ::read ( m_iFile, m_dBuffer, n )!=n )
+			if ( sphReadThrottled ( m_iFile, m_dBuffer, n )!=n )
 				return -2;
 			m_iLeft = n;
 
@@ -4259,7 +4344,7 @@ int CSphBin::ReadBytes ( void * pDest, int iBytes )
 		assert ( m_dBuffer );
 		memmove ( m_dBuffer, m_pCurrent, m_iLeft );
 
-		if ( ::read ( m_iFile, m_dBuffer + m_iLeft, n )!=n )
+		if ( sphReadThrottled ( m_iFile, m_dBuffer + m_iLeft, n )!=n )
 			return -2;
 
 		m_iLeft += n;
@@ -4502,13 +4587,10 @@ bool CSphIndex_VLN::SaveAttributes ()
 
 	size_t uStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 	size_t uSize = uStride*size_t(m_uDocinfo)*sizeof(DWORD);
-	size_t uWrote = ::write ( fdTmpnew.GetFD(), m_pDocinfo.GetWritePtr(), uSize );
 
-	if ( uWrote!=uSize )
-	{
-		m_sLastError.SetSprintf ( "write error: %s", strerror(errno) );
+	if ( !sphWriteThrottled ( fdTmpnew.GetFD(), m_pDocinfo.GetWritePtr(), uSize, "docinfo", m_sLastError ) )
 		return false;
-	}
+
 	fdTmpnew.Close ();
 
 	// do some juggling
@@ -5060,7 +5142,7 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWOR
 		if ( pBuf>maxP )
 		{
 			w = (int)(pBuf - m_pWriteBuffer);
-			if ( !sphWrite ( fd, m_pWriteBuffer, w, "raw_hits", m_sLastError ) )
+			if ( !sphWriteThrottled ( fd, m_pWriteBuffer, w, "raw_hits", m_sLastError ) )
 				return -1;
 			n += w;
 			pBuf = m_pWriteBuffer;
@@ -5070,7 +5152,7 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWOR
 	pBuf += encodeVLB ( pBuf, 0 );
 	pBuf += encodeVLB ( pBuf, 0 );
 	w = (int)(pBuf - m_pWriteBuffer);
-	if ( !sphWrite ( fd, m_pWriteBuffer, w, "raw_hits", m_sLastError ) )
+	if ( !sphWriteThrottled ( fd, m_pWriteBuffer, w, "raw_hits", m_sLastError ) )
 		return -1;
 	n += w;
 
@@ -5309,7 +5391,7 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAut
 				if ( ++pMva>=pMvaMax )
 				{
 					sphSort ( pMvaPool, pMva-pMvaPool );
-					if ( !sphWrite ( fdTmpMva.GetFD(), pMvaPool, (pMva-pMvaPool)*sizeof(MvaEntry_t), "temp_mva", m_sLastError ) )
+					if ( !sphWriteThrottled ( fdTmpMva.GetFD(), pMvaPool, (pMva-pMvaPool)*sizeof(MvaEntry_t), "temp_mva", m_sLastError ) )
 						return false;
 
 					dBlockLens.Add ( pMva-pMvaPool );
@@ -5328,7 +5410,7 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAut
 	if ( pMva>pMvaPool )
 	{
 		sphSort ( pMvaPool, pMva-pMvaPool );
-		if ( !sphWrite ( fdTmpMva.GetFD(), pMvaPool, (pMva-pMvaPool)*sizeof(MvaEntry_t), "temp_mva", m_sLastError ) )
+		if ( !sphWriteThrottled ( fdTmpMva.GetFD(), pMvaPool, (pMva-pMvaPool)*sizeof(MvaEntry_t), "temp_mva", m_sLastError ) )
 			return false;
 
 		dBlockLens.Add ( pMva-pMvaPool );
@@ -5693,7 +5775,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 					int iLen = iDocinfoMax*iDocinfoStride*sizeof(DWORD);
 
 					sphSortDocinfos ( dDocinfos, iDocinfoMax, iDocinfoStride );
-					if ( !sphWrite ( fdTmpDocinfos.GetFD(), dDocinfos, iLen, "raw_docinfos", m_sLastError ) )
+					if ( !sphWriteThrottled ( fdTmpDocinfos.GetFD(), dDocinfos, iLen, "raw_docinfos", m_sLastError ) )
 						return 0;
 
 					pDocinfo = dDocinfos;
@@ -5794,7 +5876,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 
 		int iLen = iDocinfoLastBlockSize*iDocinfoStride*sizeof(DWORD);
 		sphSortDocinfos ( dDocinfos, iDocinfoLastBlockSize, iDocinfoStride );
-		if ( !sphWrite ( fdTmpDocinfos.GetFD(), dDocinfos, iLen, "raw_docinfos", m_sLastError ) )
+		if ( !sphWriteThrottled ( fdTmpDocinfos.GetFD(), dDocinfos, iLen, "raw_docinfos", m_sLastError ) )
 			return 0;
 
 		iDocinfoBlocks++;
@@ -5962,7 +6044,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 			if ( pDocinfo>=pDocinfoMax )
 			{
 				int iLen = iDocinfoMax*iDocinfoStride*sizeof(DWORD);
-				if ( !sphWrite ( fdDocinfo.GetFD(), dDocinfos, iLen, "sort_docinfo", m_sLastError ) )
+				if ( !sphWriteThrottled ( fdDocinfo.GetFD(), dDocinfos, iLen, "sort_docinfo", m_sLastError ) )
 					return 0;
 				pDocinfo = dDocinfos;
 			}
@@ -5982,7 +6064,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 		{
 			assert ( 0 == ( pDocinfo-dDocinfos ) % iDocinfoStride );
 			int iLen = ( pDocinfo - dDocinfos )*sizeof(DWORD);
-			if ( !sphWrite ( fdDocinfo.GetFD(), dDocinfos, iLen, "sort_docinfo", m_sLastError ) )
+			if ( !sphWriteThrottled ( fdDocinfo.GetFD(), dDocinfos, iLen, "sort_docinfo", m_sLastError ) )
 				return 0;
 		}
 
@@ -6284,7 +6366,7 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 						pAttrs [ dRowItemOffset[i] ] = tDstMVA.m_dOffsets[i];
 				}
 
-				sphWrite ( fdSpa.GetFD(), pDstRow, sizeof(DWORD)*iStride, "doc_attr", m_sLastError );
+				sphWriteThrottled ( fdSpa.GetFD(), pDstRow, sizeof(DWORD)*iStride, "doc_attr", m_sLastError );
 				pDstRow += iStride;
 				iDstCount++;
 
@@ -6302,7 +6384,7 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 						pAttrs [ dRowItemOffset[i] ] = tSrcMVA.m_dOffsets[i];
 				}
 
-				sphWrite( fdSpa.GetFD(), pSrcRow, sizeof( DWORD ) * iStride, "doc_attr", m_sLastError );
+				sphWriteThrottled( fdSpa.GetFD(), pSrcRow, sizeof( DWORD ) * iStride, "doc_attr", m_sLastError );
 				pSrcRow += iStride;
 				iSrcCount++;
 

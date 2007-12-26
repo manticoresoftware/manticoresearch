@@ -137,6 +137,9 @@ void			sphUsleep ( int iMsec );
 /// check if file exists and is a readable file
 bool			sphIsReadable ( const char * sFilename, CSphString * pError=NULL );
 
+/// set throttling options
+void			sphSetThrottling ( int iMaxIOps, int iMaxIOSize );
+
 /////////////////////////////////////////////////////////////////////////////
 // TOKENIZERS
 /////////////////////////////////////////////////////////////////////////////

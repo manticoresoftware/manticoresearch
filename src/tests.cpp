@@ -298,7 +298,9 @@ void TestStripper ()
 		{ "testing in<b><font color='red'>line</font> ele<em>men</em>ts", "", "", "testing inline elements" },
 		{ "testing non<p>inline</h1>elements", "", "", "testing non inline elements" },
 		{ "testing&nbsp;entities&amp;stuff", "", "", "testing entities&stuff" },
-		{ "testing &#1040;&#1041;&#1042; utf encoding", "", "", "testing \xD0\x90\xD0\x91\xD0\x92 utf encoding" }
+		{ "testing &#1040;&#1041;&#1042; utf encoding", "", "", "testing \xD0\x90\xD0\x91\xD0\x92 utf encoding" },
+		{ "testing <1 <\" <\x80 <\xe0 <\xff </3 malformed tags", "", "", "testing <1 <\" <\x80 <\xe0 <\xff </3 malformed tags" },
+		{ "testing comm<!--comm-->ents", "", "", "testing comments" }
 	};
 
 	for ( int iTest=0; iTest<sizeof(sTests)/sizeof(sTests[0]); iTest++ )

@@ -12297,34 +12297,54 @@ void CSphHTMLStripper::Strip ( BYTE * sData )
 
 		// handle tag
 		assert ( *s=='<' );
-		if ( GetCharIndex(s[1])<0 && s[1]!='/' && s[1]!='!' )
+		if ( GetCharIndex(s[1])<0 )
 		{
-			*d++ = *s++;
-			continue;
+			if ( s[1]=='/' )
+			{
+				// check if it's valid closing tag
+				if ( GetCharIndex(s[2])<0 )
+				{
+					*d++ = *s++;
+					continue;
+				}
+
+			} else if ( s[1]=='!' )
+			{
+				// check if it's valid comment
+				if (!( s[2]=='-' && s[3]=='-' ))
+				{
+					*d++ = *s++;
+					continue;
+				};
+
+				// scan until comment end
+				s += 4; // skip opening '<!--'
+				while ( *s )
+				{
+					if ( s[0]=='-' && s[1]=='-' && s[2]=='>' )
+						break;
+					s++;
+				}
+				if ( !*s )
+					break;
+				s += 3; // skip closing '-->'
+				continue;
+
+			} else
+			{
+				// simply malformed
+				*d++ = *s++;
+				continue;
+			}
 		}
 		s++; // skip '<'
-
-		// check if it's a comment
-		if ( s[0]=='!' && s[1]=='-' && s[2]=='-' )
-		{
-			// scan until comment end
-			s += 3; // skip opening '!--'
-			while ( *s )
-			{
-				if ( s[0]=='-' && s[1]=='-' && s[2]=='>' )
-					break;
-				s++;
-			}
-			if ( !*s )
-				break;
-			s += 3; // skip closing '-->'
-			continue;
-		}
 
 		// lookup this tag in known tags list
 		int iTag = -1;
 		const BYTE * sTagName = ( s[0]=='/' ) ? s+1 : s;
+
 		int iIdx = GetCharIndex ( sTagName[0] );
+		assert ( iIdx>=0 && iIdx<MAX_CHAR_INDEX );
 
 		if ( m_dEnd[iIdx]>=0 )
 		{

@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Test>
+  <Name>n-grams</Name>
+  <Config>
+    <Static>indexer
+{
+	mem_limit			= 128M
+}
+
+searchd
+{
+</Static>
+<Searchd_Settings/><Static>
+}
+
+source srclj
+{
+	type			= mysql
+</Static>
+<Sql_Settings/>
+<Static>
+	sql_query = SELECT id, body FROM test_table
+}
+</Static>
+<Static>
+index lj
+{
+	source			= srclj
+	path			= </Static><Data_Path/><Static>/lj
+	charset_type	= utf-8
+	charset_table	= 0..9, A..Z->a..z, _, a..z
+	ngram_chars		= U+410..U+42F->U+430..U+44F, U+430..U+44F
+	ngram_len 		= 1
+}</Static>
+  </Config>
+  <Query>
+    <Query_0>ABCDEF</Query_0>
+    <Query_1>A</Query_1>
+    <Query_2>B</Query_2>
+    <Query_3>C</Query_3>
+    <Query_4>D</Query_4>
+    <Query_5>E</Query_5>
+    <Query_6>F</Query_6>
+	<Query_7>АБВГДЕЖ</Query_7>
+	<Query_8>А</Query_8>
+	<Query_9>Б</Query_9>
+	<Query_10>В</Query_10>
+	<Query_11>Г</Query_11>
+	<Query_12>Д</Query_12>
+	<Query_13>Е</Query_13>
+	<Query_14>Ж</Query_14>
+  </Query>
+  <DB_Create>
+CREATE TABLE `test_table` (
+  `id` int(11) NOT NULL default '0',
+  `document_id` int(5) NOT NULL default '0',
+  `body` varchar(255) NOT NULL default ''
+)
+  </DB_Create>
+  <DB_Drop>
+DROP TABLE IF EXISTS `test_table`
+  </DB_Drop>
+  <DB_Insert>
+INSERT INTO `test_table` VALUES
+(1,1,'ABCDEF АБВГДЕЖ')
+  </DB_Insert>
+</Test>

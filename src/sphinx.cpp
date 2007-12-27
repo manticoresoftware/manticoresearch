@@ -9101,6 +9101,7 @@ public:
 
 protected:
 	int							m_iMaxDistance;
+	int							m_iNumWords;
 };
 
 
@@ -9983,6 +9984,7 @@ void ExtPhrase_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 ExtProximity_c::ExtProximity_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, const CSphTermSetup & tSetup, DWORD uQuerypos )
 	: ExtPhrase_c ( pNode, uFields, tSetup, uQuerypos )
 	, m_iMaxDistance ( pNode->m_tAtom.m_iMaxDistance )
+	, m_iNumWords ( pNode->m_tAtom.m_dWords.GetLength() )
 {
 	assert ( pNode->IsPlain() );
 	assert ( m_iMaxDistance>0 );
@@ -10003,10 +10005,10 @@ const ExtDoc_t * ExtProximity_c::GetDocsChunk ()
 	const ExtDoc_t * pDoc = pDocs;
 
 	CSphVector<DWORD> dProx; // proximity hit position for i-th word
-	DWORD iProxWords = 0;
+	int iProxWords = 0;
 	int iProxMinEntry = -1;
 
-	dProx.Resize ( m_uMaxQpos-m_uMinQpos );
+	dProx.Resize ( m_uMaxQpos-m_uMinQpos+1 );
 	ARRAY_FOREACH ( i, dProx )
 		dProx[i] = UINT_MAX;
 
@@ -10060,7 +10062,7 @@ const ExtDoc_t * ExtProximity_c::GetDocsChunk ()
 				dProx[iEntry] = pHit->m_uHitpos;
 				iProxMinEntry = iEntry;
 
-				int iMinPos = pHit->m_uHitpos - ( m_uMaxQpos-m_uMinQpos-1 ) - m_iMaxDistance;
+				int iMinPos = pHit->m_uHitpos - ( m_uMaxQpos-m_uMinQpos ) - m_iMaxDistance;
 				DWORD uMin = pHit->m_uHitpos;
 				ARRAY_FOREACH ( i, dProx )
 					if ( dProx[i]!=UINT_MAX )
@@ -10079,7 +10081,7 @@ const ExtDoc_t * ExtProximity_c::GetDocsChunk ()
 				}
 			}
 
-			m_uExpPos = dProx[iProxMinEntry] + ( m_uMaxQpos-m_uMinQpos-1 ) + m_iMaxDistance;
+			m_uExpPos = dProx[iProxMinEntry] + ( m_uMaxQpos-m_uMinQpos ) + m_iMaxDistance;
 
 		} else
 		{
@@ -10092,7 +10094,7 @@ const ExtDoc_t * ExtProximity_c::GetDocsChunk ()
 		}
 
 		// all words were found within given distance?
-		if ( iProxWords==m_uMaxQpos-m_uMinQpos )
+		if ( iProxWords==m_iNumWords )
 		{
 			// emit document, if it's new
 			if ( pHit->m_uDocid!=m_uLastDocID )
@@ -10112,9 +10114,9 @@ const ExtDoc_t * ExtProximity_c::GetDocsChunk ()
 			// compute phrase weight
 			//
 			// FIXME! should also account for proximity factor, which is in 1 to maxdistance range:
-			// m_iMaxDistance - ( pHit->m_uHitpos - dProx[iProxMinEntry] - ( m_uMaxQpos-m_uMinQpos-1 ) )
+			// m_iMaxDistance - ( pHit->m_uHitpos - dProx[iProxMinEntry] - ( m_uMaxQpos-m_uMinQpos ) )
 			CSphVector<int> dDeltas;
-			dDeltas.Resize ( m_uMaxQpos-m_uMinQpos );
+			dDeltas.Resize ( m_uMaxQpos-m_uMinQpos+1 );
 
 			ARRAY_FOREACH ( i, dProx )
 				dDeltas[i] = dProx[i] - i;

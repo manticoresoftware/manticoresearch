@@ -358,6 +358,12 @@ public:
 		return (*this) [ m_iLength-1 ];
 	}
 
+	/// get last entry
+	const T & Last () const
+	{
+		return (*this) [ m_iLength-1 ];
+	}
+
 	/// remove element by index
 	void Remove ( int iIndex )
 	{

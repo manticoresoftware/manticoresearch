@@ -9046,8 +9046,9 @@ protected:
 	SphDocID_t					m_uExpID;
 	DWORD						m_uExpPos;
 	DWORD						m_uExpQpos;
-	DWORD						m_uMinQpos;
-	DWORD						m_uMaxQpos;
+	DWORD						m_uMinQpos;				///< min qpos through my keywords
+	DWORD						m_uMaxQpos;				///< max qpos through my keywords
+	CSphVector<int>				m_dQposDelta;			///< next expected qpos delta for each existing qpos (for skipped stopwords case)
 	ExtHit_t					m_dMyHits[MAX_HITS];	///< buffer for all my phrase hits; inherited m_dHits will receive filtered results
 	SphDocID_t					m_uMatchedDocid;
 	SphDocID_t					m_uHitsOverFor;			///< there are no more hits for matches block starting with this ID
@@ -9744,16 +9745,24 @@ ExtPhrase_c::ExtPhrase_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, c
 
 	m_uFields = uFields;
 
-	int iWords = pNode->m_tAtom.m_dWords.GetLength();
+	const CSphVector<CSphExtendedQueryAtomWord> & dWords = pNode->m_tAtom.m_dWords;
+	int iWords = dWords.GetLength();
 	assert ( iWords>1 );
 
-	ExtNode_i * pCur = new ExtTerm_c ( pNode->m_tAtom.m_dWords[0].m_sWord, uFields, tSetup, uQuerypos );
-	for ( int i=1; i<iWords; i++ )
-		pCur = new ExtAnd_c ( pCur, new ExtTerm_c ( pNode->m_tAtom.m_dWords[i].m_sWord, uFields, tSetup, uQuerypos+i ) );
-	m_pNode = pCur;
+	m_uMinQpos = uQuerypos+dWords[0].m_iAtomPos;
+	m_uMaxQpos = uQuerypos+dWords.Last().m_iAtomPos;
 
-	m_uMinQpos = uQuerypos;
-	m_uMaxQpos = uQuerypos+iWords;
+	m_dQposDelta.Resize ( m_uMaxQpos-m_uMinQpos+1 );
+	ARRAY_FOREACH ( i, m_dQposDelta )
+		m_dQposDelta[i] = -INT_MAX;
+
+	ExtNode_i * pCur = new ExtTerm_c ( dWords[0].m_sWord, uFields, tSetup, uQuerypos+dWords[0].m_iAtomPos );
+	for ( int i=1; i<iWords; i++ )
+	{
+		pCur = new ExtAnd_c ( pCur, new ExtTerm_c ( dWords[i].m_sWord, uFields, tSetup, uQuerypos+dWords[i].m_iAtomPos ) );
+		m_dQposDelta [ dWords[i-1].m_iAtomPos - dWords[0].m_iAtomPos ] = dWords[i].m_iAtomPos - dWords[i-1].m_iAtomPos;
+	}
+	m_pNode = pCur;
 }
 
 ExtPhrase_c::~ExtPhrase_c ()
@@ -9801,9 +9810,6 @@ const ExtDoc_t * ExtPhrase_c::GetDocsChunk ()
 
 		if ( pHit->m_uDocid==m_uExpID && pHit->m_uHitpos==m_uExpPos && pHit->m_uQuerypos==m_uExpQpos )
 		{
-			m_uExpPos++;
-			m_uExpQpos++;
-
 			if ( m_uExpQpos==m_uMaxQpos )
 			{
 				if ( pHit->m_uDocid!=m_uLastDocID )
@@ -9820,22 +9826,28 @@ const ExtDoc_t * ExtPhrase_c::GetDocsChunk ()
 					m_uLastDocID = pHit->m_uDocid;
 				}
 
-				DWORD uPhraseWords = m_uMaxQpos - m_uMinQpos;
+				DWORD uSpanlen = m_uMaxQpos - m_uMinQpos;
 				m_dMyHits[iHit].m_uDocid = pHit->m_uDocid;
-				m_dMyHits[iHit].m_uHitpos = pHit->m_uHitpos - uPhraseWords + 1;
+				m_dMyHits[iHit].m_uHitpos = pHit->m_uHitpos - uSpanlen;
 				m_dMyHits[iHit].m_uQuerypos = m_uMinQpos;
-				m_dMyHits[iHit].m_uSpanlen = uPhraseWords;
+				m_dMyHits[iHit].m_uSpanlen = uSpanlen + 1;
 				iHit++;
 
 				m_uExpID = m_uExpPos = m_uExpQpos = 0;
+			} else
+			{
+				int iDelta = m_dQposDelta [ pHit->m_uQuerypos - m_uMinQpos ];
+				m_uExpPos += iDelta;
+				m_uExpQpos += iDelta;
 			}
+
 		} else
 		{
 			if ( pHit->m_uQuerypos==m_uMinQpos )
 			{
 				m_uExpID = pHit->m_uDocid;
-				m_uExpPos = pHit->m_uHitpos+1;
-				m_uExpQpos = pHit->m_uQuerypos+1;
+				m_uExpPos = pHit->m_uHitpos + m_dQposDelta[0];
+				m_uExpQpos = pHit->m_uQuerypos + m_dQposDelta[0];
 			} else
 			{
 				m_uExpID = m_uExpPos = m_uExpQpos = 0;

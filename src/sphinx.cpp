@@ -404,6 +404,42 @@ protected:
 
 #endif // USE_WINDOWS
 
+static bool g_bIOStats = false;
+static CSphIOStats g_IOStats;
+
+
+void sphStartIOStats ()
+{
+	g_bIOStats = true;
+	memset ( &g_IOStats, 0, sizeof ( g_IOStats ) );
+}
+
+
+const CSphIOStats & sphStopIOStats ()
+{
+	g_bIOStats = false;
+	return g_IOStats;
+}
+
+
+int sphRead ( int iFD, void * pBuf, size_t iCount )
+{
+	float fTimer = 0.0f;
+	if ( g_bIOStats )
+		fTimer = sphLongTimer ();
+
+	size_t uRead = (size_t) ::read ( iFD, pBuf, iCount );
+
+	if ( g_bIOStats )
+	{
+		g_IOStats.m_fReadTime += sphLongTimer () - fTimer;
+		g_IOStats.m_iReadOps++;
+		g_IOStats.m_fReadKBytes += float ( iCount ) / 1024.0f;
+	}
+
+	return uRead;
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // INTERNAL SPHINX CLASSES DECLARATIONS
 /////////////////////////////////////////////////////////////////////////////
@@ -496,7 +532,8 @@ public:
 
 	bool Read ( void * pBuf, size_t uCount, CSphString & sError )
 	{
-		size_t uRead = (size_t) sphReadThrottled ( GetFD(), pBuf, uCount );
+		size_t uRead = (size_t) sphRead ( GetFD(), pBuf, uCount );
+
 		if ( uRead!=uCount )
 		{
 			sError.SetSprintf ( "read error in %s; %u of %u bytes read",
@@ -1660,7 +1697,7 @@ int sphReadThrottled ( int iFD, void * pBuf, size_t iCount )
 		g_fLastIOTime = fTime + fSleep;
 	}
 
-	return ::read ( iFD, pBuf, iCount );
+	return sphRead ( iFD, pBuf, iCount );
 }
 
 

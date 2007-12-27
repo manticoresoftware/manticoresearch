@@ -140,6 +140,19 @@ bool			sphIsReadable ( const char * sFilename, CSphString * pError=NULL );
 /// set throttling options
 void			sphSetThrottling ( int iMaxIOps, int iMaxIOSize );
 
+struct CSphIOStats
+{
+	float		m_fReadTime;
+	int			m_iReadOps;
+	float		m_fReadKBytes;
+};
+
+/// clear stats, starts collecting
+void			sphStartIOStats ();
+
+/// stops collecting stats, returns results
+const CSphIOStats & sphStopIOStats ();
+
 /////////////////////////////////////////////////////////////////////////////
 // TOKENIZERS
 /////////////////////////////////////////////////////////////////////////////

@@ -122,6 +122,7 @@ static const char *		g_sPidFile		= NULL;
 static int				g_iPidFD		= -1;
 static int				g_iMaxMatches	= 1000;
 static bool				g_bSeamlessRotate	= true;
+static bool				g_bIOStats		= false;
 
 static volatile bool	g_bDoRotate			= false;	// flag that we are rotating now; set from SIGHUP; cleared on rotation success
 static volatile bool	g_bGotSighup		= false;	// we just received SIGHUP; need to log
@@ -2456,7 +2457,7 @@ void LogQuery ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 		return;
 
 	char sTimeBuf[128], sGroupBuf[128];
-	char sBuf[1024];
+	char sBuf[1024], sPerfBuf [512];
 
 	sphFormatCurrentTime ( sTimeBuf );
 
@@ -2467,11 +2468,33 @@ void LogQuery ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 	static const char * sModes [ SPH_MATCH_TOTAL ] = { "all", "any", "phr", "bool", "ext", "scan", "ext2" };
 	static const char * sSort [ SPH_SORT_TOTAL ] = { "rel", "attr-", "attr+", "tsegs", "ext" };
 
-	snprintf ( sBuf, sizeof(sBuf), "[%s] %d.%03d sec [%s/%d/%s %d (%d,%d)%s] [%s] %s\n",
+	if ( g_bIOStats )
+	{
+		const CSphIOStats & IOStats = sphStopIOStats ();
+		float fReadKB   = IOStats.m_iReadOps ? IOStats.m_fReadKBytes / IOStats.m_iReadOps : 0;
+		float fReadTime = IOStats.m_iReadOps ? IOStats.m_fReadTime / IOStats.m_iReadOps * 1000.0f : 0;
+
+#if USE_WINDOWS
+		snprintf ( sPerfBuf, sizeof(sPerfBuf), "[reads=%d avgread=%.1f kb, %.1f ms]", 
+			IOStats.m_iReadOps, fReadKB, fReadTime );
+#else
+		struct rusage usage;
+		getrusage ( RUSAGE_SELF, &usage );
+
+		snprintf ( sPerfBuf, sizeof(sPerfBuf), "[user=%.1f ms, system=%.1f ms, blocks in=%ld, blocks out=%ld reads=%d avgread=%.1f kb, %.1f ms]", 
+				   float ( usage.ru_utime.tv_sec ) * 1000.0f + float ( usage.ru_utime.tv_usec ) / 1000.0f, 
+				   float ( usage.ru_stime.tv_sec ) * 1000.0f + float ( usage.ru_stime.tv_usec ) / 1000.0f,
+				   usage.ru_inblock, usage.ru_oublock, IOStats.m_iReadOps, fReadKB, fReadTime );
+#endif
+	}
+	else
+		sPerfBuf [0] = '\0';
+
+	snprintf ( sBuf, sizeof(sBuf), "[%s] %d.%03d sec [%s/%d/%s %d (%d,%d)%s] [%s] %s %s\n",
 		sTimeBuf, tRes.m_iQueryTime/1000, tRes.m_iQueryTime%1000,
 		sModes [ tQuery.m_eMode ], tQuery.m_dFilters.GetLength(), sSort [ tQuery.m_eSort ],
 		tRes.m_iTotalMatches, tQuery.m_iOffset, tQuery.m_iLimit, sGroupBuf,
-		tQuery.m_sIndexes.cstr(), tQuery.m_sQuery.cstr() );
+		tQuery.m_sIndexes.cstr(), sPerfBuf, tQuery.m_sQuery.cstr() );
 
 	// snprintf does not emit zero at some runtimes (eg. VS2005)
 	sBuf[sizeof(sBuf)-2] = '\n';
@@ -2897,6 +2920,9 @@ void SearchHandler_c::RunQueries ()
 	///////////////////////////////
 	// choose path and run queries
 	///////////////////////////////
+
+	if ( g_bIOStats )
+		sphStartIOStats ();
 
 	g_dMvaStorage.Reserve ( 1024 );
 	g_dMvaStorage.Resize ( 0 );
@@ -4695,6 +4721,7 @@ void ShowHelp ()
 		"\t\t\t(default is sphinx.conf)\n"
 		"--stop\t\t\tsend SIGTERM to currently running searchd\n"
 		"\t\t\t(PID is taken from pid_file specified in config file)\n"
+		"--iostats\t\tlog per-query io stats\n"
 #if USE_WINDOWS
 		"--install\t\tinstall as Windows service\n"
 		"--delete\t\tdelete Windows service\n"
@@ -4796,6 +4823,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		OPT1 ( "--console" )		bOptConsole = true;
 		OPT1 ( "--stop" )			bOptStop = true;
 		OPT1 ( "--pidfile" )		bOptPIDFile = true;
+		OPT1 ( "--iostats" )		g_bIOStats = true;
 #if USE_WINDOWS
 		OPT1 ( "--install" )		{ if ( !g_bService ) { ServiceInstall ( argc, argv ); return 0; } }
 		OPT1 ( "--delete" )			{ if ( !g_bService ) { ServiceDelete (); return 0; } }

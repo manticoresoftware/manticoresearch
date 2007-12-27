@@ -9544,6 +9544,7 @@ const ExtDoc_t * ExtOr_c::GetDocsChunk ()
 					iDoc++;
 					pCur0++;
 					pCur1++;
+					uTouched |= 3;
 				}
 				if ( pCur0->m_uDocid==DOCID_MAX ) { pCur0 = NULL; break; }
 				if ( pCur1->m_uDocid==DOCID_MAX ) { pCur1 = NULL; break; }

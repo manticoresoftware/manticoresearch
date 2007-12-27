@@ -408,6 +408,7 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 
 			// an assignment operator and a value must follow
 			LOC_POP (); LOC_PUSH ( S_VALUE ); LOC_PUSH ( S_CHR ); iCh = '='; 
+			LOC_BACK(); // because we did not work the char at all
 			continue;
 		}
 

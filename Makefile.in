@@ -617,7 +617,7 @@ uninstall-info: uninstall-info-recursive
 
 
 install-data-hook:
-	mkdir -p $(localstatedir)/data && mkdir -p $(localstatedir)/log
+	mkdir -p $(DESTDIR)$(localstatedir)/data && mkdir -p $(DESTDIR)$(localstatedir)/log
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.
 .NOEXPORT:

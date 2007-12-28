@@ -4020,6 +4020,7 @@ void CSphReader_VLN::SeekTo ( SphOffset_t iPos, int iSizeHint )
 	} else
 	{
 		m_iPos = iPos;
+		m_iBuffPos = 0; // for GetPos() to work properly, aaaargh
 		m_iBuffUsed = 0;
 		m_iSizeHint = iSizeHint;
 	}

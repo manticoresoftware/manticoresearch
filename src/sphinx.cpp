@@ -1015,6 +1015,7 @@ public:
 	CSphString		m_sWord;		///< my copy of word
 	int				m_iQueryPos;	///< word position, from query (WARNING! reused for index into TF array in extended mode)
 	SphWordID_t		m_iWordID;		///< word ID, from dictionary
+	bool			m_bDupe;		///< whether the word occurs only once in current query
 
 	int				m_iDocs;		///< document count, from wordlist
 	int				m_iHits;		///< hit count, from wordlist
@@ -1042,6 +1043,7 @@ public:
 		: m_sWord ( NULL )
 		, m_iQueryPos ( -1 )
 		, m_iWordID ( 0 )
+		, m_bDupe ( false )
 		, m_iDocs ( 0 )
 		, m_iHits ( 0 )
 		, m_uFields ( 0 )
@@ -7079,7 +7081,7 @@ struct CSphSimpleQueryParser
 bool operator < ( const CSphQueryWord & a, const CSphQueryWord & b )
 {
 	return ( a.m_iDocs==b.m_iDocs )
-		? ( a.m_iQueryPos > b.m_iQueryPos ) // this is tricky. with "xxx yyy xxx" queries, we must advance 2nd "xxx" entry first when scanning. hence, it must be first in the list!
+		? ( a.m_iQueryPos < b.m_iQueryPos ) // this is tricky. with "xxx yyy xxx" queries, we need first query word to emit positions first
 		: ( a.m_iDocs < b.m_iDocs );
 }
 
@@ -7452,9 +7454,22 @@ void CSphIndex_VLN::MatchAll ( const CSphQuery * pQuery, int iSorters, ISphMatch
 
 		} else
 		{
-			// preload hitlist entries
+			// preload hitlist entries, and check for dupes
+			CSphVector<uint64_t> dCheck;
 			for ( i=0; i<m_dQueryWords.GetLength(); i++ )
+			{
 				m_dQueryWords[i].GetHitlistEntry ();
+				m_dQueryWords[i].m_bDupe = false;
+				dCheck.Add ( i + (uint64_t(m_dQueryWords[i].m_iWordID)<<32) );
+			}
+
+			dCheck.Sort ();
+			for ( i=1; i<dCheck.GetLength(); i++ )
+				if ( dCheck[i]>>32==dCheck[i-1]>>32 )
+			{
+				m_dQueryWords [ int( dCheck[i] & U64C(0xffff) ) ].m_bDupe = true;
+				m_dQueryWords [ int( dCheck[i-1] & U64C(0xffff) ) ].m_bDupe = true;
+			}
 
 			// init weighting
 			BYTE curPhraseWeight [ SPH_MAX_FIELDS ];
@@ -7489,7 +7504,21 @@ void CSphIndex_VLN::MatchAll ( const CSphQuery * pQuery, int iSorters, ISphMatch
 				}
 				if ( imin<0 )
 					break;
-				m_dQueryWords[imin].GetHitlistEntry ();
+
+				if ( m_dQueryWords[imin].m_bDupe )
+				{
+					for ( i=imin; i<m_dQueryWords.GetLength(); i++ )
+						if ( m_dQueryWords[i].m_iHitPos==pmin )
+					{
+						if ( m_dQueryWords[i].m_iQueryPos-pmin==k )
+							imin = i;
+						m_dQueryWords[i].GetHitlistEntry ();
+					}
+
+				} else
+				{
+					m_dQueryWords[imin].GetHitlistEntry ();
+				}
 
 				// get field number and mark a simple match
 				int j = pmin >> 24;

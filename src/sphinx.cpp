@@ -9848,10 +9848,20 @@ const ExtDoc_t * ExtPhrase_c::GetDocsChunk ()
 			continue;
 		}
 
-		if ( pHit->m_uDocid==m_uExpID && pHit->m_uHitpos==m_uExpPos && pHit->m_uQuerypos==m_uExpQpos )
+		if ( pHit->m_uDocid==m_uExpID && pHit->m_uHitpos==m_uExpPos )
 		{
-			if ( m_uExpQpos==m_uMaxQpos )
+			// stream position is as expected; let's check query position
+			if ( pHit->m_uQuerypos!=m_uExpQpos )
 			{
+				// unexpected query position
+				// do nothing; there might be other words in same (!) expected position following
+				// (eg. if the query words are repeated)
+
+			} else if ( m_uExpQpos==m_uMaxQpos )
+			{
+				// expected position which concludes the phrase; emit next match
+				assert ( pHit->m_uQuerypos==m_uExpQpos );
+
 				if ( pHit->m_uDocid!=m_uLastDocID )
 				{
 					assert ( pDoc->m_uDocid<=pHit->m_uDocid );
@@ -9876,6 +9886,8 @@ const ExtDoc_t * ExtPhrase_c::GetDocsChunk ()
 				m_uExpID = m_uExpPos = m_uExpQpos = 0;
 			} else
 			{
+				// intermediate expected position; keep looking
+				assert ( pHit->m_uQuerypos==m_uExpQpos );
 				int iDelta = m_dQposDelta [ pHit->m_uQuerypos - m_uMinQpos ];
 				m_uExpPos += iDelta;
 				m_uExpQpos += iDelta;
@@ -9883,6 +9895,7 @@ const ExtDoc_t * ExtPhrase_c::GetDocsChunk ()
 
 		} else
 		{
+			// stream position out of sequence; reset expected positions
 			if ( pHit->m_uQuerypos==m_uMinQpos )
 			{
 				m_uExpID = pHit->m_uDocid;

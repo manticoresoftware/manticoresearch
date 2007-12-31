@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>phrase matching vs. duplicate keywords</name>
+
+<config>
+indexer
+{
+	mem_limit		= 128M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT id, body FROM test_table
+}
+index test
+{
+	source			= srctest
+	path			= <data_path/>/test
+	charset_type	= utf-8
+	charset_table	= 0..9, A..Z->a..z, _, a..z
+	ngram_chars		= U+410..U+42F->U+430..U+44F, U+430..U+44F
+	ngram_len 		= 1
+}
+</config>
+
+<queries>
+<query mode="phrase">bar baz bar</query>
+<query mode="phrase">foo bar baz bar</query>
+<query mode="extended2">"bar baz bar"</query>
+<query mode="extended2">"foo bar baz bar"</query>
+</queries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`id` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 111, 'lets test foo bar baz bar stuff' ),
+( 222, 'bar baz foo' ),
+( 333, 'foo baz bar' )
+</db_insert>
+
+</test>

@@ -51,7 +51,7 @@ array_shift ( $args );
 
 if ( !is_array($args) || empty($args) )
 {
-	print ( "Usage: php -f ubertest.php <MODE> [OPTIONS]\n" );
+	print ( "Usage: php -f ubertest.php <MODE> [OPTIONS] [TESTDIR]\n" );
 	print ( "\nModes are:\n" );
 	print ( "g, gen\t\t\tgenerate reference ('model') test results\n" );
 	print ( "t, test\t\t\trun tests and compare results to reference\n" );
@@ -66,6 +66,7 @@ if ( !is_array($args) || empty($args) )
 	print ( "\nUsage examples:\n" );
 	print ( "php ubertest.php gen\n" );
 	print ( "php ubertest.php t --user test --password test\n" );
+	print ( "php ubertest.php t test_15\n" );
 	print ( "DBPASS=test make check\n" );
 	exit ( 0 );
 }
@@ -77,6 +78,7 @@ if ( array_key_exists ( "DBPASS", $_ENV ) && $_ENV["DBPASS"] )
 	$db_pwd = $_ENV["DBPASS"];
 
 $run = false;
+$test_dir = "";
 for ( $i=0; $i<count($args); $i++ )
 {
 	$arg = $args[$i];
@@ -88,6 +90,7 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="-p" || $arg=="--password" )	$db_pwd = $args[++$i];
 	else if ( $arg=="-i" || $arg=="--indexer" )		$indexer_path = $args[++$i];
 	else if ( $arg=="-s" || $arg=="--searchd" )		$searchd_path = $args[++$i];
+	else if ( is_dir($arg) )						$test_dir = $arg;
 	else
 	{
 		print ( "ERROR: unknown option '$arg'; run with no arguments for help screen.\n" );
@@ -116,8 +119,13 @@ $tests = array ();
 $dh = opendir ( "." );
 while ( $entry = readdir($dh) )
 {
-	if ( substr ( $entry,0,4 )=="test" )
-		$tests[] = $entry;
+	if ( substr ( $entry,0,4 )!="test" )
+		continue;
+
+	if ( !empty($test_dir) && $entry!=$test_dir )
+		continue;
+
+	$tests[] = $entry;
 }
 sort ( $tests );
 

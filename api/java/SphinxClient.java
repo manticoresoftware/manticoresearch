@@ -3,7 +3,7 @@
  *
  * Java version of Sphinx searchd client (Java API)
  *
- * Copyright (c) 2007, Andrew Aksyonoff
+ * Copyright (c) 2007-2008, Andrew Aksyonoff
  * Copyright (c) 2007, Vladimir Fedorkov
  * All rights reserved
  *

@@ -3,7 +3,7 @@
 #
 # Python version of Sphinx searchd client (Python API)
 #
-# Copyright (c) 2006-2007, Andrew Aksyonoff
+# Copyright (c) 2006-2008, Andrew Aksyonoff
 # Copyright (c) 2006, Mike Osadnik
 # All rights reserved
 #

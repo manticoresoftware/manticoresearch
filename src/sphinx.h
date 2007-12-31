@@ -3,7 +3,7 @@
 //
 
 //
-// Copyright (c) 2001-2007, Andrew Aksyonoff. All rights reserved.
+// Copyright (c) 2001-2008, Andrew Aksyonoff. All rights reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License. You should have
@@ -103,7 +103,7 @@ inline const DWORD *	DOCINFO2ATTRS ( const DWORD * pDocinfo ){ return pDocinfo+D
 #include "sphinxversion.h"
 
 #define SPHINX_VERSION			"0.9.8" SPHINX_BITS_TAG "-dev (" SPH_SVN_TAGREV ")"
-#define SPHINX_BANNER			"Sphinx " SPHINX_VERSION "\nCopyright (c) 2001-2007, Andrew Aksyonoff\n\n"
+#define SPHINX_BANNER			"Sphinx " SPHINX_VERSION "\nCopyright (c) 2001-2008, Andrew Aksyonoff\n\n"
 #define SPHINX_SEARCHD_PROTO	1
 
 #define SPH_MAX_QUERY_WORDS		10

@@ -4,7 +4,7 @@ Sphinx 0.9.7 reference manual
 Free open-source SQL full-text search engine
 --------------------------------------------
 
-Copyright (c) 2001-2007 Andrew Aksyonoff, <shodan(at)shodan.ru>
+Copyright (c) 2001-2008 Andrew Aksyonoff, <shodan(at)shodan.ru>
 
 ----------------------------------------------------------------------------
 

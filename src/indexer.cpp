@@ -522,7 +522,7 @@ CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char 
 	}
 #if USE_LIBEXPAT
 	else if ( hSource["type"]=="xmlpipe2" )
-		pSrcXML = sphCreateSourceXmlpipe2 ( sSourceName, hSource["xmlpipe_command"].cstr() );
+		pSrcXML = sphCreateSourceXmlpipe2 ( &hSource, sSourceName );
 #endif
 	else
 		fprintf ( stdout, "WARNING: '%s' unknown source type\n", sSourceName );

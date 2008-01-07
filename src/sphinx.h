@@ -1101,7 +1101,8 @@ private:
 
 #if USE_LIBEXPAT
 
-CSphSource * sphCreateSourceXmlpipe2 ( const char * szName, const char * szCommand );
+class CSphConfigSection;
+CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, const char * szSourceName );
 
 #endif
 

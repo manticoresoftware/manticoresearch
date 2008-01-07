@@ -13832,6 +13832,8 @@ CSphSource_XMLPipe::~CSphSource_XMLPipe ()
 
 void CSphSource_XMLPipe::Disconnect ()
 {
+	m_tSchema.Reset ();
+
 	if ( m_pPipe )
 	{
 		pclose ( m_pPipe );
@@ -13854,8 +13856,6 @@ bool CSphSource_XMLPipe::Connect ( CSphString & sError )
 	
 	m_bEOF		= false;
 	m_bWarned	= false;
-
-	m_tSchema.Reset ();
 
 	m_tSchema.m_dFields.Reset ();
 	m_tSchema.m_dFields.Add ( CSphColumnInfo ( "title" ) );
@@ -14274,7 +14274,7 @@ public:
 					CSphSource_XMLPipe2 ( const char * sName );	///< ctor
 					~CSphSource_XMLPipe2 ();					///< dtor
 
-	bool			Setup ( const char * sCommand );			///< memorize the command
+	bool			Setup ( const CSphConfigSection & hSource );			///< memorize the command
 	virtual bool	Connect ( CSphString & sError );			///< run the command and open the pipe
 	virtual void	Disconnect ();								///< close the pipe
 
@@ -14322,7 +14322,12 @@ private:
 	int				m_iCurField;
 	int				m_iCurAttr;
 
-	void *			m_pParser;
+	XML_Parser		m_pParser;
+
+	void			Error ( const char * sTemplate, ... );
+	void			ConfigureAttrs ( const CSphVariant * pHead, DWORD uAttrType );
+	void			ConfigureFields ( const CSphVariant * pHead );
+	void			AddFieldToSchema ( const char * szName );
 };
 
 // callbacks
@@ -14349,17 +14354,17 @@ static void xmlCharacters ( void * user_data, const XML_Char * ch, int len )
 
 CSphSource_XMLPipe2::CSphSource_XMLPipe2 ( const char * sName )
 	: CSphSource_Document ( sName )
-	, m_pPipe		( NULL )
-	, m_iBufferSize	( 1048576 )
-	, m_bInDocset	( false )
-	, m_bInSchema	( false )
-	, m_bInDocument	( false )
-	, m_bFirstTagAfterDocset ( false )
-	, m_bRemoveParsed ( false )
-	, m_iCurField	( -1 )
-	, m_iCurAttr	( -1 )
+	, m_pPipe			( NULL )
+	, m_iBufferSize		( 1048576 )
+	, m_bInDocset		( false )
+	, m_bInSchema		( false )
+	, m_bInDocument		( false )
+	, m_bFirstTagAfterDocset( false )
+	, m_bRemoveParsed	( false )
+	, m_iCurField		( -1 )
+	, m_iCurAttr		( -1 )
 	, m_iElementDepth	( 0 )
-	, m_pParser		( NULL )
+	, m_pParser			( NULL )
 {
 	m_pBuffer = new BYTE [m_iBufferSize];
 }
@@ -14382,16 +14387,124 @@ void CSphSource_XMLPipe2::Disconnect ()
 
 	if ( m_pParser )
 	{
-		XML_ParserFree ( (XML_Parser)m_pParser );
+		XML_ParserFree ( m_pParser );
 		m_pParser = NULL;
 	}
 }
 
 
-bool CSphSource_XMLPipe2::Setup ( const char * sCommand )
+void CSphSource_XMLPipe2::Error ( const char * sTemplate, ... )
 {
-	assert ( sCommand );
-	m_sCommand = sCommand;
+	if ( m_sError.IsEmpty () )
+	{
+		char sBuf[1024];
+
+		strcpy ( sBuf, "xmlpipe2: " );
+		int iBufLen = strlen ( sBuf );
+		int iLeft = 1024 - iBufLen;
+		char * szBufStart = sBuf + iBufLen;
+
+		va_list ap;
+
+		va_start ( ap, sTemplate );
+		vsnprintf ( szBufStart, iLeft, sTemplate, ap );
+		va_end ( ap );
+
+		m_sError = sBuf;
+	}
+}
+
+
+void CSphSource_XMLPipe2::AddFieldToSchema ( const char * szName )
+{
+	CSphColumnInfo tCol ( szName );
+
+	tCol.m_eWordpart = SPH_WORDPART_WHOLE;
+
+	bool bPrefix = m_iMinPrefixLen > 0 && IsPrefixMatch ( tCol.m_sName.cstr () );
+	bool bInfix =  m_iMinInfixLen > 0  && IsInfixMatch ( tCol.m_sName.cstr () );
+
+	if ( bPrefix && m_iMinPrefixLen > 0 && bInfix && m_iMinInfixLen > 0)
+	{
+		Error ( "field '%s' is marked for both infix and prefix indexing", tCol.m_sName.cstr() );
+		return;
+	}
+
+	if ( bPrefix )
+		tCol.m_eWordpart = SPH_WORDPART_PREFIX;
+
+	if ( bInfix )
+		tCol.m_eWordpart = SPH_WORDPART_INFIX;
+
+	m_tSchema.m_dFields.Add ( tCol );
+}
+
+
+void CSphSource_XMLPipe2::ConfigureAttrs ( const CSphVariant * pHead, DWORD uAttrType )
+{
+	for ( const CSphVariant * pCur = pHead; pCur; pCur= pCur->m_pNext )
+	{
+		CSphColumnInfo tCol ( pCur->cstr(), uAttrType );
+		char * pColon = strchr ( const_cast<char*>(tCol.m_sName.cstr()), ':' );
+		if ( pColon )
+		{
+			*pColon = '\0';
+
+			if ( uAttrType == SPH_ATTR_INTEGER )
+			{
+				int iBits = strtol ( pColon+1, NULL, 10 );
+				if ( iBits<=0 || iBits>ROWITEM_BITS )
+				{
+					sphWarn ( "xmlpipe2: source '%s': attribute '%s': invalid bitcount=%d (bitcount ignored)", m_tSchema.m_sName.cstr (), tCol.m_sName.cstr(), iBits );
+					iBits = -1;
+				}
+
+				tCol.m_iBitCount = iBits;
+			}
+			else
+				sphWarn ( "xmlpipe2: source '%s': attribute '%s': bitcount is only supported for integer types", m_tSchema.m_sName.cstr (), tCol.m_sName.cstr() );
+		}
+
+		tCol.m_iIndex = m_tSchema.GetAttrsCount ();
+		m_tSchema.AddAttr ( tCol );
+	}
+}
+
+
+void CSphSource_XMLPipe2::ConfigureFields ( const CSphVariant * pHead )
+{
+	for ( const CSphVariant * pCur = pHead; pCur; pCur= pCur->m_pNext )
+	{
+		CSphString sFieldName = pCur->cstr ();
+
+		bool bFound = false;
+		for ( int i = 0; i < m_tSchema.m_dFields.GetLength () && !bFound; i++ )
+			bFound = m_tSchema.m_dFields [i].m_sName == sFieldName;
+		
+		if ( bFound )
+			sphWarn ( "xmlpipe2: source '%s': duplicate field '%s'", m_tSchema.m_sName.cstr (), sFieldName.cstr () );
+		else
+			AddFieldToSchema ( sFieldName.cstr () );
+	}
+}
+
+
+bool CSphSource_XMLPipe2::Setup ( const CSphConfigSection & hSource )
+{
+	m_tSchema.Reset ();
+
+	m_sCommand = hSource["xmlpipe_command"].cstr ();
+
+	ConfigureAttrs ( hSource("xmlpipe_attr_uint"),			SPH_ATTR_INTEGER );
+	ConfigureAttrs ( hSource("xmlpipe_attr_timestamp"),		SPH_ATTR_TIMESTAMP );
+	ConfigureAttrs ( hSource("xmlpipe_attr_str2ordinal"),	SPH_ATTR_ORDINAL );
+	ConfigureAttrs ( hSource("xmlpipe_attr_bool"),			SPH_ATTR_BOOL );
+	ConfigureAttrs ( hSource("xmlpipe_attr_float"),			SPH_ATTR_FLOAT );
+
+	m_tDocInfo.Reset ( m_tSchema.GetRowSize () );
+
+	ConfigureFields ( hSource("xmlpipe_field") );
+
 	return true;
 }
 
@@ -14403,11 +14516,9 @@ bool CSphSource_XMLPipe2::Connect ( CSphString & sError )
 		sError.SetSprintf ( "xmlpipe: failed to popen '%s'", m_sCommand.cstr() );
 
 	m_pParser = XML_ParserCreate(NULL);
-	XML_SetUserData ( (XML_Parser)m_pParser, this );	
-	XML_SetElementHandler ( (XML_Parser)m_pParser, xmlStartElement, xmlEndElement );
-	XML_SetCharacterDataHandler ( (XML_Parser)m_pParser, xmlCharacters );
-
-	m_tSchema.Reset ();
+	XML_SetUserData ( m_pParser, this );	
+	XML_SetElementHandler ( m_pParser, xmlStartElement, xmlEndElement );
+	XML_SetCharacterDataHandler ( m_pParser, xmlCharacters );
 
 	m_bRemoveParsed = false;
 	m_bInDocset	= false;
@@ -14443,9 +14554,9 @@ BYTE **	CSphSource_XMLPipe2::NextDocument ( CSphString & sError )
 	int iBytesRead = 0;
 	while ( m_dParsedDocuments.GetLength () == 0 && ( iBytesRead = fread ( m_pBuffer, 1, m_iBufferSize, m_pPipe ) ) != 0 )
 	{
-		if ( XML_Parse ( (XML_Parser)m_pParser, (const char*) m_pBuffer, iBytesRead, iBytesRead != m_iBufferSize ) != XML_STATUS_OK )
+		if ( XML_Parse ( m_pParser, (const char*) m_pBuffer, iBytesRead, iBytesRead != m_iBufferSize ) != XML_STATUS_OK )
 		{
-			sError = XML_ErrorString ( XML_GetErrorCode ( (XML_Parser)m_pParser ) ) ;
+			sError = XML_ErrorString ( XML_GetErrorCode ( m_pParser ) ) ;
 			m_tDocInfo.m_iDocID = 1;
 			return NULL;
 		}
@@ -14469,7 +14580,7 @@ BYTE **	CSphSource_XMLPipe2::NextDocument ( CSphString & sError )
 		// attributes
 		for ( int i = 0; i < nAttrs; i++ )
 		{
-			const CSphString & sAttrValue = tDocument.m_dAttrs [i].IsEmpty () ? m_dDefaultAttrs [i] : tDocument.m_dAttrs [i];
+			const CSphString & sAttrValue = tDocument.m_dAttrs [i].IsEmpty () && m_dDefaultAttrs.GetLength () ? m_dDefaultAttrs [i] : tDocument.m_dAttrs [i];
 			const CSphColumnInfo & tAttr = m_tSchema.GetAttr ( i );
 
 			switch ( tAttr.m_eAttrType )
@@ -14522,14 +14633,14 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 	{
 		if ( !m_bInDocset || !m_bFirstTagAfterDocset )
 		{
-			m_sError.SetSprintf ( "<sphinx:schema> is only allowed immediately after <sphinx:docset>" );
+			Error ( "<sphinx:schema> is only allowed immediately after <sphinx:docset>" );
 			return;
 		}
 
 		if ( m_tSchema.m_dFields.GetLength () > 0 || m_tSchema.GetAttrsCount () > 0 )
 		{
-			m_sError.SetSprintf ( "only one <sphinx:schema> is allowed" );
-			return;
+			sphWarn ( "xmlpipe2: both embedded and configured schemas found; using embedded" );
+			m_tSchema.Reset ();
 		}
 
 		m_bFirstTagAfterDocset = false;
@@ -14541,7 +14652,7 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 	{
 		if ( !m_bInDocset || !m_bInSchema )
 		{
-			m_sError.SetSprintf ( "<sphinx:field> is only allowed inside <sphinx:schema>" );
+			Error ( "<sphinx:field> is only allowed inside <sphinx:schema>" );
 			return;
 		}
 
@@ -14550,7 +14661,7 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 		while ( dAttrs[0] && dAttrs[1] && dAttrs[0][0] && dAttrs[1][0] )
 		{
 			if ( !strcmp ( dAttrs[0], "name" ) )
-				m_tSchema.m_dFields.Add ( dAttrs[1] );
+				AddFieldToSchema ( dAttrs[1] );
 
 			dAttrs += 2;
 		}
@@ -14561,7 +14672,7 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 	{
 		if ( !m_bInDocset || !m_bInSchema )
 		{
-			m_sError.SetSprintf ( "<sphinx:attr> is only allowed inside <sphinx:schema>" );
+			Error ( "<sphinx:attr> is only allowed inside <sphinx:schema>" );
 			return;
 		}
 
@@ -14589,7 +14700,7 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 				else if ( !strcmp ( szType, "float" ) )			Info.m_eAttrType = SPH_ATTR_FLOAT;
 				else
 				{
-					m_sError.SetSprintf ( "Unknown column type" );
+					Error ( "Unknown column type" );
 					bError = true;
 				}
 			}
@@ -14600,23 +14711,6 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 		if ( !bError )
 		{
 			Info.m_iIndex = m_tSchema.GetAttrsCount ();
-			Info.m_eWordpart = SPH_WORDPART_WHOLE;
-
-			bool bPrefix = m_iMinPrefixLen > 0 && IsPrefixMatch ( Info.m_sName.cstr () );
-			bool bInfix =  m_iMinInfixLen > 0  && IsInfixMatch ( Info.m_sName.cstr () );
-
-			if ( bPrefix && m_iMinPrefixLen > 0 && bInfix && m_iMinInfixLen > 0)
-			{
-				m_sError.SetSprintf ( "field '%s' is marked for both infix and prefix indexing", Info.m_sName.cstr() );
-				return;
-			}
-
-			if ( bPrefix )
-				Info.m_eWordpart = SPH_WORDPART_PREFIX;
-
-			if ( bInfix )
-				Info.m_eWordpart = SPH_WORDPART_INFIX;
-
 			m_tSchema.AddAttr ( Info );
 			m_dDefaultAttrs.Add ( sDefault );
 		}
@@ -14627,7 +14721,13 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 	if ( !strcmp ( szName, "sphinx:document" ) )
 	{
 		if ( !m_bInDocset || m_bInSchema )
-			m_sError.SetSprintf ( "<sphinx:document> is not allowed inside <sphinx:schema>" );
+			Error ( "<sphinx:document> is not allowed inside <sphinx:schema>" );
+
+		if ( m_tSchema.m_dFields.GetLength () == 0 && m_tSchema.GetAttrsCount () == 0 )
+		{
+			Error ( "no schema configured, and no embedded schema found" );
+			return;
+		}
 
 		m_bInDocument = true;
 
@@ -14646,7 +14746,7 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 				m_tCurDocument.m_iDocID = sphToDocid ( pAttrs[1] );
 
 		if ( m_tCurDocument.m_iDocID == 0 )
-			m_sError.SetSprintf ( "document id expected in <sphinx:document>" );
+			Error ( "document id expected in <sphinx:document>" );
 
 		return;
 	}
@@ -14670,7 +14770,7 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 					bInvalidFound = m_dInvalid [i] == szName;
 
 				if ( !bInvalidFound )
-					sphWarn ( "unknown field/attribute: '%s'", szName );
+					sphWarn ( "xmlpipe2: unknown field/attribute: '%s'", szName );
 
 				m_dInvalid.Add ( szName );
 			}
@@ -14740,10 +14840,10 @@ void CSphSource_XMLPipe2::XMLError ( const char * szError )
 }
 
 
-CSphSource * sphCreateSourceXmlpipe2 ( const char * szName, const char * szCommand )
+CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, const char * szSourceName )
 {
-	CSphSource_XMLPipe2 * pPipe = new CSphSource_XMLPipe2 ( szName );
-	if ( !pPipe->Setup ( szCommand ) )
+	CSphSource_XMLPipe2 * pPipe = new CSphSource_XMLPipe2 ( szSourceName );
+	if ( !pPipe->Setup ( *pSource ) )
 		SafeDelete ( pPipe );
 
 	return pPipe;

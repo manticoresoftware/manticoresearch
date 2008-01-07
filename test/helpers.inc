@@ -21,8 +21,7 @@ function CreateDB ( $db_drop, $db_create, $db_insert )
 	global $db_host, $db_user, $db_pwd, $db_name, $db_port;
 	return
 		@mysql_connect ( $db_host.":".$db_port, $db_user, $db_pwd ) &&
-		@mysql_query ( "DROP DATABASE $db_name" ) &&
-		@mysql_query ( "CREATE DATABASE $db_name" ) &&
+		@mysql_query ( "CREATE DATABASE IF NOT EXISTS $db_name" ) &&
 		@mysql_select_db ( $db_name ) &&
 		@mysql_query ( $db_drop ) &&
 		@mysql_query ( $db_create ) &&

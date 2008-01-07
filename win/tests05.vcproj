@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="windows-1251"?>
 <VisualStudioProject
 	ProjectType="Visual C++"
-	Version="8.00"
+	Version="8,00"
 	Name="tests"
 	ProjectGUID="{B47166A1-4827-4D80-97E3-743BDE61146F}"
+	RootNamespace="tests"
 	Keyword="Win32Proj"
 	>
 	<Platforms>
@@ -64,7 +65,7 @@
 				Name="VCLinkerTool"
 				OutputFile="$(OutDir)/tests.exe"
 				LinkIncremental="2"
-				AdditionalLibraryDirectories="$(SolutionDir)/libstemmer_c/lib/$(ConfigurationName)"
+				AdditionalLibraryDirectories="$(SolutionDir)/libstemmer_c/lib/$(ConfigurationName); $(SolutionDir)/libexpat/lib/$(ConfigurationName)"
 				GenerateDebugInformation="true"
 				ProgramDatabaseFile="$(OutDir)/tests.pdb"
 				SubSystem="1"
@@ -142,7 +143,7 @@
 				Name="VCLinkerTool"
 				OutputFile="$(OutDir)/tests.exe"
 				LinkIncremental="1"
-				AdditionalLibraryDirectories="$(SolutionDir)/libstemmer_c/lib/$(ConfigurationName)"
+				AdditionalLibraryDirectories="$(SolutionDir)/libstemmer_c/lib/$(ConfigurationName); $(SolutionDir)/libexpat/lib/$(ConfigurationName)"
 				GenerateDebugInformation="true"
 				SubSystem="1"
 				OptimizeReferences="2"

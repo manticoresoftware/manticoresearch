@@ -506,13 +506,26 @@ CSphSource * SpawnSourceMySQL ( const CSphConfigSection & hSource, const char * 
 
 CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char * sSourceName )
 {
-	assert ( hSource["type"]=="xmlpipe" );
+	assert ( hSource["type"]=="xmlpipe" || hSource["type"]=="xmlpipe2" );
 	
 	LOC_CHECK ( hSource, "xmlpipe_command", "in source '%s'.", sSourceName );
 
-	CSphSource_XMLPipe * pSrcXML = new CSphSource_XMLPipe ( sSourceName );
-	if ( !pSrcXML->Setup ( hSource["xmlpipe_command"].cstr() ) )
-		SafeDelete ( pSrcXML );
+	CSphSource * pSrcXML = NULL;
+
+	if ( hSource["type"]=="xmlpipe" )
+	{
+		CSphSource_XMLPipe * pXmlPipe = new CSphSource_XMLPipe ( sSourceName );
+		if ( !pXmlPipe->Setup ( hSource["xmlpipe_command"].cstr() ) )
+			SafeDelete ( pXmlPipe );
+
+		pSrcXML = pXmlPipe;
+	}
+#if USE_LIBEXPAT
+	else if ( hSource["type"]=="xmlpipe2" )
+		pSrcXML = sphCreateSourceXmlpipe2 ( sSourceName, hSource["xmlpipe_command"].cstr() );
+#endif
+	else
+		fprintf ( stdout, "WARNING: '%s' unknown source type\n", sSourceName );
 
 	return pSrcXML;
 }
@@ -536,7 +549,7 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 		return SpawnSourceMySQL ( hSource, sSourceName );
 	#endif
 
-	if ( hSource["type"]=="xmlpipe")
+	if ( hSource["type"]=="xmlpipe" || hSource["type"]=="xmlpipe2" )
 		return SpawnSourceXMLPipe ( hSource, sSourceName );
 
 	fprintf ( stdout, "ERROR: source '%s': unknown type '%s'; skipping.\n", sSourceName,

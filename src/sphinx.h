@@ -18,6 +18,7 @@
 
 #ifdef _WIN32
 	#define USE_MYSQL		1	/// whether to compile MySQL support
+	#define USE_LIBEXPAT	0	/// whether to compile libexpat support
 	#define USE_WINDOWS		1	/// whether to compile for Windows
 #else
 	#define USE_WINDOWS		0	/// whether to compile for Windows
@@ -1096,6 +1097,14 @@ private:
 	/// scan for tag with string value
 	bool			ScanStr ( const char * sTag, char * pRes, int iMaxLength, CSphString & sError );
 };
+
+
+#if USE_LIBEXPAT
+
+CSphSource * sphCreateSourceXmlpipe2 ( const char * szName, const char * szCommand );
+
+#endif
+
 
 /////////////////////////////////////////////////////////////////////////////
 // SEARCH QUERIES

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="windows-1251"?>
 <VisualStudioProject
 	ProjectType="Visual C++"
-	Version="8.00"
+	Version="8,00"
 	Name="indexer"
 	ProjectGUID="{405619C7-CC22-4FB8-9237-B196CB897355}"
 	RootNamespace="indexer"
@@ -41,6 +41,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
+				AdditionalIncludeDirectories=""
 				PreprocessorDefinitions="WIN32;_DEBUG;_CONSOLE"
 				MinimalRebuild="true"
 				ExceptionHandling="0"
@@ -65,7 +66,7 @@
 				Name="VCLinkerTool"
 				OutputFile="$(OutDir)/indexer.exe"
 				LinkIncremental="2"
-				AdditionalLibraryDirectories="$(SolutionDir)/libstemmer_c/lib/$(ConfigurationName)"
+				AdditionalLibraryDirectories="$(SolutionDir)/libstemmer_c/lib/$(ConfigurationName); $(SolutionDir)/libexpat/lib/$(ConfigurationName)"
 				GenerateDebugInformation="true"
 				ProgramDatabaseFile="$(OutDir)/indexer.pdb"
 				SubSystem="1"
@@ -121,6 +122,7 @@
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
+				AdditionalIncludeDirectories=""
 				PreprocessorDefinitions="WIN32;NDEBUG;_CONSOLE"
 				ExceptionHandling="0"
 				RuntimeLibrary="0"
@@ -143,7 +145,7 @@
 				Name="VCLinkerTool"
 				OutputFile="$(OutDir)/indexer.exe"
 				LinkIncremental="1"
-				AdditionalLibraryDirectories="$(SolutionDir)/libstemmer_c/lib/$(ConfigurationName)"
+				AdditionalLibraryDirectories="$(SolutionDir)/libstemmer_c/lib/$(ConfigurationName); $(SolutionDir)/libexpat/lib/$(ConfigurationName)"
 				GenerateDebugInformation="true"
 				SubSystem="1"
 				OptimizeReferences="2"

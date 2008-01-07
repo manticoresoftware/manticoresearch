@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="windows-1251"?>
 <VisualStudioProject
 	ProjectType="Visual C++"
-	Version="8.00"
+	Version="8,00"
 	Name="searchd"
 	ProjectGUID="{0BBD34CB-5891-477F-B665-3D7C9FC22A02}"
+	RootNamespace="searchd"
 	Keyword="Win32Proj"
 	>
 	<Platforms>
@@ -65,7 +66,7 @@
 				AdditionalDependencies="wsock32.lib"
 				OutputFile="$(OutDir)/searchd.exe"
 				LinkIncremental="2"
-				AdditionalLibraryDirectories="$(SolutionDir)/libstemmer_c/lib/$(ConfigurationName)"
+				AdditionalLibraryDirectories="$(SolutionDir)/libstemmer_c/lib/$(ConfigurationName); $(SolutionDir)/libexpat/lib/$(ConfigurationName)"
 				GenerateDebugInformation="true"
 				ProgramDatabaseFile="$(OutDir)/searchd.pdb"
 				SubSystem="1"
@@ -144,7 +145,7 @@
 				AdditionalDependencies="wsock32.lib"
 				OutputFile="$(OutDir)/searchd.exe"
 				LinkIncremental="1"
-				AdditionalLibraryDirectories="$(SolutionDir)/libstemmer_c/lib/$(ConfigurationName)"
+				AdditionalLibraryDirectories="$(SolutionDir)/libstemmer_c/lib/$(ConfigurationName); $(SolutionDir)/libexpat/lib/$(ConfigurationName)"
 				GenerateDebugInformation="true"
 				SubSystem="1"
 				OptimizeReferences="2"

@@ -33,6 +33,11 @@
 #include "libstemmer.h"
 #endif
 
+#if USE_LIBEXPAT
+#define XMLIMPORT
+#include "expat.h"
+#endif
+
 #if USE_WINDOWS
 	#include <io.h> // for open()
 
@@ -57,8 +62,13 @@
 #endif
 
 #if ( USE_WINDOWS && USE_LIBSTEMMER )
-#pragma comment(linker, "/defaultlib:libstemmer_c.lib")
-#pragma message("Automatically linking with libstemmer_c.lib")
+	#pragma comment(linker, "/defaultlib:libstemmer_c.lib")
+	#pragma message("Automatically linking with libstemmer_c.lib")
+#endif
+
+#if ( USE_WINDOWS && USE_LIBEXPAT )
+	#pragma comment(linker, "/defaultlib:libexpat.lib")
+	#pragma message("Automatically linking with libexpat.lib")
 #endif
 
 /////////////////////////////////////////////////////////////////////////////
@@ -13863,9 +13873,12 @@ bool CSphSource_XMLPipe::Connect ( CSphString & sError )
 	m_tSchema.m_sName = sBuf;
 
 	if ( !m_pPipe )
+	{
 		sError.SetSprintf ( "xmlpipe: failed to popen '%s'", m_sCommand.cstr() );
+		return false;
+	}
 
-	return ( m_pPipe!=NULL );
+	return true;
 }
 
 
@@ -14246,6 +14259,497 @@ bool CSphSource_XMLPipe::ScanStr ( const char * sTag, char * pRes, int iMaxLengt
 
 	return true;
 }
+
+
+/////////////////////////////////////////////////////////////////////////////
+// XMLPIPE (v2)
+/////////////////////////////////////////////////////////////////////////////
+
+#if USE_LIBEXPAT
+
+/// XML pipe source implementation (v2)
+class CSphSource_XMLPipe2 : public CSphSource_Document
+{
+public:
+					CSphSource_XMLPipe2 ( const char * sName );	///< ctor
+					~CSphSource_XMLPipe2 ();					///< dtor
+
+	bool			Setup ( const char * sCommand );			///< memorize the command
+	virtual bool	Connect ( CSphString & sError );			///< run the command and open the pipe
+	virtual void	Disconnect ();								///< close the pipe
+
+	virtual bool	IterateHitsStart ( CSphString & ) { return true; }	///< Connect() starts getting documents automatically, so this one is empty
+	virtual BYTE **	NextDocument ( CSphString & sError );			///< parse incoming chunk and emit some hits
+
+	virtual bool	HasAttrsConfigured ()							{ return true; }	///< xmlpipe always has some attrs for now
+	virtual bool	IterateMultivaluedStart ( int, CSphString & )	{ return false; }	///< xmlpipe does not support multi-valued attrs for now
+	virtual bool	IterateMultivaluedNext ()						{ return false; }	///< xmlpipe does not support multi-valued attrs for now
+
+	void			StartElement ( const char * szName, const char ** pAttrs );
+	void			EndElement ( const char * pName );
+	void			Characters ( const char * pCharacters, int iLen );
+	void			XMLError ( const char * szError );
+
+private:
+	struct Document_t
+	{
+		SphDocID_t				m_iDocID;
+		CSphVector<CSphString>	m_dFields;
+		CSphVector<CSphString>	m_dAttrs;
+	};
+
+	Document_t					m_tCurDocument;
+	CSphVector<Document_t>		m_dParsedDocuments;
+
+	FILE *			m_pPipe;			///< incoming stream
+	CSphString		m_sCommand;			///< my command
+	CSphString		m_sError;
+	CSphVector<CSphString> m_dDefaultAttrs;
+	CSphVector<CSphString> m_dInvalid;
+	int				m_iElementDepth;
+
+	BYTE *			m_pBuffer;
+	int				m_iBufferSize;
+
+	CSphVector<BYTE*>m_dFieldPtrs;
+	bool			m_bRemoveParsed;
+
+	bool			m_bInDocset;
+	bool			m_bInSchema;
+	bool			m_bInDocument;
+	bool			m_bFirstTagAfterDocset;
+
+	int				m_iCurField;
+	int				m_iCurAttr;
+
+	void *			m_pParser;
+};
+
+// callbacks
+static void XMLCALL xmlStartElement ( void * user_data,  const XML_Char * name, const XML_Char ** attrs )
+{
+	CSphSource_XMLPipe2 * pSource = (CSphSource_XMLPipe2 *) user_data;
+	pSource->StartElement ( name, attrs );
+}
+
+
+static void XMLCALL xmlEndElement ( void * user_data, const XML_Char * name )
+{
+	CSphSource_XMLPipe2 * pSource = (CSphSource_XMLPipe2 *) user_data;
+	pSource->EndElement ( name );
+}
+
+
+static void xmlCharacters ( void * user_data, const XML_Char * ch, int len )
+{
+	CSphSource_XMLPipe2 * pSource = (CSphSource_XMLPipe2 *) user_data;
+	pSource->Characters ( ch, len );
+}
+
+
+CSphSource_XMLPipe2::CSphSource_XMLPipe2 ( const char * sName )
+	: CSphSource_Document ( sName )
+	, m_pPipe		( NULL )
+	, m_iBufferSize	( 1048576 )
+	, m_bInDocset	( false )
+	, m_bInSchema	( false )
+	, m_bInDocument	( false )
+	, m_bFirstTagAfterDocset ( false )
+	, m_bRemoveParsed ( false )
+	, m_iCurField	( -1 )
+	, m_iCurAttr	( -1 )
+	, m_iElementDepth	( 0 )
+	, m_pParser		( NULL )
+{
+	m_pBuffer = new BYTE [m_iBufferSize];
+}
+
+
+CSphSource_XMLPipe2::~CSphSource_XMLPipe2 ()
+{
+	Disconnect ();
+	SafeDeleteArray ( m_pBuffer );
+}
+
+
+void CSphSource_XMLPipe2::Disconnect ()
+{
+	if ( m_pPipe )
+	{
+		pclose ( m_pPipe );
+		m_pPipe = NULL;
+	}
+
+	if ( m_pParser )
+	{
+		XML_ParserFree ( (XML_Parser)m_pParser );
+		m_pParser = NULL;
+	}
+}
+
+
+bool CSphSource_XMLPipe2::Setup ( const char * sCommand )
+{
+	assert ( sCommand );
+	m_sCommand = sCommand;
+	return true;
+}
+
+
+bool CSphSource_XMLPipe2::Connect ( CSphString & sError )
+{
+	m_pPipe = popen ( m_sCommand.cstr(), "r" );
+	if ( !m_pPipe )
+		sError.SetSprintf ( "xmlpipe: failed to popen '%s'", m_sCommand.cstr() );
+
+	m_pParser = XML_ParserCreate(NULL);
+	XML_SetUserData ( (XML_Parser)m_pParser, this );	
+	XML_SetElementHandler ( (XML_Parser)m_pParser, xmlStartElement, xmlEndElement );
+	XML_SetCharacterDataHandler ( (XML_Parser)m_pParser, xmlCharacters );
+
+	m_tSchema.Reset ();
+
+	m_bRemoveParsed = false;
+	m_bInDocset	= false;
+	m_bInSchema	= false;
+	m_bInDocument = false;
+	m_bFirstTagAfterDocset = false;
+	m_iCurField	= -1;
+	m_iCurAttr	= -1;
+	m_iElementDepth = 0;
+
+	m_dParsedDocuments.Reset ();
+	m_dDefaultAttrs.Reset ();
+	m_dInvalid.Reset ();
+
+	m_sError = "";
+
+	char sBuf [ 1024 ];
+	snprintf ( sBuf, sizeof(sBuf), "xmlpipe(%s)", m_sCommand.cstr() );
+	m_tSchema.m_sName = sBuf;
+
+	return !!m_pPipe;
+}
+
+
+BYTE **	CSphSource_XMLPipe2::NextDocument ( CSphString & sError )
+{
+	if ( m_bRemoveParsed )
+	{
+		m_dParsedDocuments.RemoveFast ( 0 );
+		m_bRemoveParsed = false;
+	}
+
+	int iBytesRead = 0;
+	while ( m_dParsedDocuments.GetLength () == 0 && ( iBytesRead = fread ( m_pBuffer, 1, m_iBufferSize, m_pPipe ) ) != 0 )
+	{
+		if ( XML_Parse ( (XML_Parser)m_pParser, (const char*) m_pBuffer, iBytesRead, iBytesRead != m_iBufferSize ) != XML_STATUS_OK )
+		{
+			sError = XML_ErrorString ( XML_GetErrorCode ( (XML_Parser)m_pParser ) ) ;
+			m_tDocInfo.m_iDocID = 1;
+			return NULL;
+		}
+
+		if ( !m_sError.IsEmpty () )
+		{
+			sError = m_sError;
+			m_tDocInfo.m_iDocID = 1;
+			return NULL;
+		}
+	}
+
+	if ( m_dParsedDocuments.GetLength () != 0 )
+	{
+		Document_t & tDocument = m_dParsedDocuments [0];
+		int nAttrs = m_tSchema.GetAttrsCount ();
+
+		// docid
+		m_tDocInfo.m_iDocID = m_dParsedDocuments [0].m_iDocID;
+
+		// attributes
+		for ( int i = 0; i < nAttrs; i++ )
+		{
+			const CSphString & sAttrValue = tDocument.m_dAttrs [i].IsEmpty () ? m_dDefaultAttrs [i] : tDocument.m_dAttrs [i];
+			const CSphColumnInfo & tAttr = m_tSchema.GetAttr ( i );
+
+			switch ( tAttr.m_eAttrType )
+			{
+				case SPH_ATTR_ORDINAL:
+					m_dStrAttrs [i] = sAttrValue;
+					if ( !m_dStrAttrs[i].cstr() )
+						m_dStrAttrs[i] = "";
+
+					m_tDocInfo.SetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount, 0 );
+					break;
+
+				case SPH_ATTR_FLOAT:
+					m_tDocInfo.SetAttrFloat ( tAttr.m_iRowitem, sphToFloat ( sAttrValue.cstr () ) );
+					break;
+
+				default:
+					m_tDocInfo.SetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount,	sphToDword ( sAttrValue.cstr () ) );
+					break;
+			}
+		}
+
+		m_bRemoveParsed = true;
+
+		int nFields = m_tSchema.m_dFields.GetLength ();
+		m_dFieldPtrs.Resize ( nFields );
+		for ( int i = 0; i < nFields; ++i )
+			m_dFieldPtrs [i] = (BYTE*) tDocument.m_dFields [i].cstr ();
+
+		return (BYTE **)&( m_dFieldPtrs [0]);
+	}
+
+	if ( !iBytesRead )
+		m_tDocInfo.m_iDocID = 0;
+
+	return NULL;
+}
+
+
+void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAttrs )
+{
+	if ( !strcmp ( szName, "sphinx:docset" ) )
+	{
+		m_bInDocset = true;
+		m_bFirstTagAfterDocset = true;
+		return;
+	}
+
+	if ( !strcmp ( szName, "sphinx:schema" ) )
+	{
+		if ( !m_bInDocset || !m_bFirstTagAfterDocset )
+		{
+			m_sError.SetSprintf ( "<sphinx:schema> is only allowed immediately after <sphinx:docset>" );
+			return;
+		}
+
+		if ( m_tSchema.m_dFields.GetLength () > 0 || m_tSchema.GetAttrsCount () > 0 )
+		{
+			m_sError.SetSprintf ( "only one <sphinx:schema> is allowed" );
+			return;
+		}
+
+		m_bFirstTagAfterDocset = false;
+		m_bInSchema = true;
+		return;
+	}
+
+	if ( !strcmp ( szName, "sphinx:field" ) )
+	{
+		if ( !m_bInDocset || !m_bInSchema )
+		{
+			m_sError.SetSprintf ( "<sphinx:field> is only allowed inside <sphinx:schema>" );
+			return;
+		}
+
+		const char ** dAttrs = pAttrs;
+
+		while ( dAttrs[0] && dAttrs[1] && dAttrs[0][0] && dAttrs[1][0] )
+		{
+			if ( !strcmp ( dAttrs[0], "name" ) )
+				m_tSchema.m_dFields.Add ( dAttrs[1] );
+
+			dAttrs += 2;
+		}
+		return;
+	}
+
+	if ( !strcmp ( szName, "sphinx:attr" ) )
+	{
+		if ( !m_bInDocset || !m_bInSchema )
+		{
+			m_sError.SetSprintf ( "<sphinx:attr> is only allowed inside <sphinx:schema>" );
+			return;
+		}
+
+		bool bError = false;
+		CSphColumnInfo Info;
+		CSphString sDefault;
+
+		const char ** dAttrs = pAttrs;
+
+		while ( dAttrs[0] && dAttrs[1] && dAttrs[0][0] && dAttrs[1][0] && !bError )
+		{
+			if ( !strcmp ( *dAttrs, "name" ) )
+				Info.m_sName = dAttrs[1];
+			else if ( !strcmp ( *dAttrs, "bits" ) )
+				Info.m_iBitCount = strtol ( dAttrs[1], NULL, 10 );
+			else if ( !strcmp ( *dAttrs, "default" ) )
+				sDefault = dAttrs[1];
+			else if ( !strcmp ( *dAttrs, "type" ) )
+			{
+				const char * szType = dAttrs[1];
+				if ( !strcmp ( szType, "int" ) )				Info.m_eAttrType = SPH_ATTR_INTEGER;
+				else if ( !strcmp ( szType, "timestamp" ) )		Info.m_eAttrType = SPH_ATTR_TIMESTAMP;
+				else if ( !strcmp ( szType, "str2ordinal" ) )	Info.m_eAttrType = SPH_ATTR_ORDINAL;
+				else if ( !strcmp ( szType, "bool" ) )			Info.m_eAttrType = SPH_ATTR_BOOL;
+				else if ( !strcmp ( szType, "float" ) )			Info.m_eAttrType = SPH_ATTR_FLOAT;
+				else
+				{
+					m_sError.SetSprintf ( "Unknown column type" );
+					bError = true;
+				}
+			}
+
+			dAttrs += 2;
+		}
+
+		if ( !bError )
+		{
+			Info.m_iIndex = m_tSchema.GetAttrsCount ();
+			Info.m_eWordpart = SPH_WORDPART_WHOLE;
+
+			bool bPrefix = m_iMinPrefixLen > 0 && IsPrefixMatch ( Info.m_sName.cstr () );
+			bool bInfix =  m_iMinInfixLen > 0  && IsInfixMatch ( Info.m_sName.cstr () );
+
+			if ( bPrefix && m_iMinPrefixLen > 0 && bInfix && m_iMinInfixLen > 0)
+			{
+				m_sError.SetSprintf ( "field '%s' is marked for both infix and prefix indexing", Info.m_sName.cstr() );
+				return;
+			}
+
+			if ( bPrefix )
+				Info.m_eWordpart = SPH_WORDPART_PREFIX;
+
+			if ( bInfix )
+				Info.m_eWordpart = SPH_WORDPART_INFIX;
+
+			m_tSchema.AddAttr ( Info );
+			m_dDefaultAttrs.Add ( sDefault );
+		}
+
+		return;
+	}
+
+	if ( !strcmp ( szName, "sphinx:document" ) )
+	{
+		if ( !m_bInDocset || m_bInSchema )
+			m_sError.SetSprintf ( "<sphinx:document> is not allowed inside <sphinx:schema>" );
+
+		m_bInDocument = true;
+
+		m_tCurDocument.m_iDocID = 0;
+		m_tCurDocument.m_dFields.Resize ( m_tSchema.m_dFields.GetLength () );
+		m_tCurDocument.m_dAttrs.Resize ( m_tSchema.GetAttrsCount () );
+
+		for ( int i = 0; i < m_tSchema.m_dFields.GetLength (); ++i )
+			m_tCurDocument.m_dFields [i] = "";
+
+		for ( int i = 0; i < m_tSchema.GetAttrsCount (); ++i )
+			m_tCurDocument.m_dAttrs [i] = "";
+
+		if ( pAttrs[0] && pAttrs[1] && pAttrs[0][0] && pAttrs[1][0] )
+			if ( !strcmp ( pAttrs[0], "id" ) )
+				m_tCurDocument.m_iDocID = sphToDocid ( pAttrs[1] );
+
+		if ( m_tCurDocument.m_iDocID == 0 )
+			m_sError.SetSprintf ( "document id expected in <sphinx:document>" );
+
+		return;
+	}
+
+	if ( m_bInDocument )
+	{
+		if ( m_iCurField == -1 && m_iCurAttr == -1 )
+		{
+			for ( int i = 0; i < m_tSchema.m_dFields.GetLength () && m_iCurField == -1; i++ )
+				if ( m_tSchema.m_dFields [i].m_sName == szName )
+					m_iCurField = i;
+
+			for ( int i = 0; i < m_tSchema.GetAttrsCount () && m_iCurAttr == -1 && m_iCurField == -1; i++ )
+				if ( m_tSchema.GetAttr ( i ).m_sName == szName )
+					m_iCurAttr = i;
+
+			if ( m_iCurAttr == -1 && m_iCurField == -1 )
+			{
+				bool bInvalidFound = false;
+				for ( int i = 0; i < m_dInvalid.GetLength () && !bInvalidFound; i++ )
+					bInvalidFound = m_dInvalid [i] == szName;
+
+				if ( !bInvalidFound )
+					sphWarn ( "unknown field/attribute: '%s'", szName );
+
+				m_dInvalid.Add ( szName );
+			}
+		}
+		else
+			m_iElementDepth++;
+	}
+}
+
+
+void CSphSource_XMLPipe2::EndElement ( const char * szName )
+{
+	if ( !strcmp ( szName, "sphinx:docset" ) )
+		m_bInDocset = false;
+	else if ( !strcmp ( szName, "sphinx:schema" ) )
+	{
+		m_bInSchema = false;
+		m_tDocInfo.Reset ( m_tSchema.GetRowSize () );
+	}
+	else if ( !strcmp ( szName, "sphinx:document" ) )
+	{
+		m_bInDocument = false;
+		m_dParsedDocuments.Add ( m_tCurDocument );
+	}
+	else if ( m_bInDocument && ( m_iCurAttr != -1 || m_iCurField != -1 ) )
+	{
+		if ( m_iElementDepth == 0 )
+		{
+			m_iCurAttr = -1;
+			m_iCurField = -1;
+		}
+		else
+			m_iElementDepth--;
+	}
+}
+
+
+void CSphSource_XMLPipe2::Characters ( const char * pCharacters, int iLen )
+{
+	if ( m_iCurAttr == -1 && m_iCurField == -1 )
+		return;
+	
+	if ( m_iCurField != -1 )
+	{
+		if ( !m_tCurDocument.m_dFields [m_iCurField].IsEmpty () )
+		{
+			CSphString & sStr = m_tCurDocument.m_dFields [m_iCurField];
+			CSphString sTmp = sStr;
+			int iStrLen = strlen ( sStr.cstr () );
+			sStr.Reserve ( iStrLen + iLen + 1 );
+			
+			memcpy ( ((char*)sStr.cstr ()), sTmp.cstr (), iStrLen );
+			memcpy ( ((char*)sStr.cstr ()) + iStrLen, pCharacters, iLen );
+			((char*)sStr.cstr ()) [iStrLen + iLen] = '\0';
+		}
+		else
+			m_tCurDocument.m_dFields [m_iCurField].SetBinary ( (const char *)pCharacters, iLen );
+	}
+	else if ( m_iCurAttr != -1 )
+		m_tCurDocument.m_dAttrs [m_iCurAttr].SetBinary ( (const char *)pCharacters, iLen );
+}
+
+
+void CSphSource_XMLPipe2::XMLError ( const char * szError )
+{
+	m_sError = szError;
+}
+
+
+CSphSource * sphCreateSourceXmlpipe2 ( const char * szName, const char * szCommand )
+{
+	CSphSource_XMLPipe2 * pPipe = new CSphSource_XMLPipe2 ( szName );
+	if ( !pPipe->Setup ( szCommand ) )
+		SafeDelete ( pPipe );
+
+	return pPipe;
+}
+
+#endif
 
 /////////////////////////////////////////////////////////////////////////////
 // MERGER HELPERS

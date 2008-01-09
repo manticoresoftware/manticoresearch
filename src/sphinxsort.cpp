@@ -476,7 +476,22 @@ SphGroupKey_t sphCalcGroupKey ( const CSphMatch & tMatch, ESphGroupBy eGroupBy, 
 	switch ( eGroupBy )
 	{
 		case SPH_GROUPBY_DAY:	return (pSplit->tm_year+1900)*10000 + (1+pSplit->tm_mon)*100 + pSplit->tm_mday;
-		case SPH_GROUPBY_WEEK:	return (pSplit->tm_year+1900)*1000 + (1+pSplit->tm_yday) - pSplit->tm_wday;
+		case SPH_GROUPBY_WEEK:
+		{
+			int iPrevSunday = (1+pSplit->tm_yday) - pSplit->tm_wday; // prev Sunday day of year, base 1
+			int iYear = pSplit->tm_year+1900;
+			if ( iPrevSunday<=0 ) // check if we crossed year boundary
+			{
+				// adjust day and year
+				iPrevSunday += 365;
+				iYear--;
+
+				// adjust for leap years
+				if ( iYear%4==0 && ( iYear%100!=0 || iYear%400==0 ) )
+					iPrevSunday++;
+			}
+			return iYear*1000 + iPrevSunday;
+		}
 		case SPH_GROUPBY_MONTH:	return (pSplit->tm_year+1900)*100 + (1+pSplit->tm_mon);
 		case SPH_GROUPBY_YEAR:	return (pSplit->tm_year+1900);
 		default:				assert ( 0 ); return 0;

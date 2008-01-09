@@ -172,7 +172,7 @@ enum
 {
 	VER_COMMAND_SEARCH		= 0x110,
 	VER_COMMAND_EXCERPT		= 0x100,
-	VER_COMMAND_UPDATE		= 0x100
+	VER_COMMAND_UPDATE		= 0x101
 };
 
 
@@ -3650,7 +3650,7 @@ void UpdateRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuff
 	ARRAY_FOREACH ( i, m_tUpd.m_dAttrs )
 		iReqSize += 4+strlen(m_tUpd.m_dAttrs[i].m_sName.cstr());
 	iReqSize += 4; // values array len, data
-	iReqSize += 4*( 1+m_tUpd.m_dAttrs.GetLength() )*m_tUpd.m_iUpdates;
+	iReqSize += 4*( DOCINFO_IDSIZE+m_tUpd.m_dAttrs.GetLength() )*m_tUpd.m_iUpdates;
 
 	// header
 	tOut.SendDword ( SPHINX_SEARCHD_PROTO );
@@ -3668,10 +3668,13 @@ void UpdateRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuff
 	DWORD * pUpdMax = pUpd + ( DOCINFO_IDSIZE+m_tUpd.m_dAttrs.GetLength() )*m_tUpd.m_iUpdates;
 	for ( ; pUpd<pUpdMax; )
 	{
-		tOut.SendDword ( *pUpd++ );
 		#if USE_64BIT
-		pUpd++;
+		tOut.SendUint64 ( DOCINFO2ID(pUpd) );
+		#else
+		tOut.SendDword ( 0 ); // padding high dword
+		tOut.SendDword ( *pUpd );
 		#endif
+		pUpd += DOCINFO_IDSIZE;
 
 		for ( int j=0; j<m_tUpd.m_dAttrs.GetLength(); j++ )
 			tOut.SendDword ( *pUpd++ );
@@ -3702,10 +3705,11 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 	int iPos = 0;
 	for ( int i=0; i<tUpd.m_iUpdates; i++ )
 	{
-		tUpd.m_pUpdates[iPos++] = tReq.GetDword();
-		#if USE_64BIT
-		tUpd.m_pUpdates[iPos++] = 0;
-		#endif
+		// v.1.0 always sends 32-bit ids; v.1.1+ always send 64-bit ones
+		uint64_t uValue = ( iVer>=0x101 ) ? tReq.GetUint64 () : tReq.GetDword ();
+
+		DOCINFO2ID(tUpd.m_pUpdates+iPos) = (SphDocID_t)uValue; // FIXME! maybe warn on truncation?
+		iPos += DOCINFO_IDSIZE;
 
 		ARRAY_FOREACH ( j, tUpd.m_dAttrs )
 			tUpd.m_pUpdates[iPos++] = tReq.GetDword();
@@ -5482,8 +5486,13 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		SPH_FD_SET ( g_iSocket, &fdsAccept );
 
 		struct timeval tvTimeout;
+#if USE_WINDOWS
+		tvTimeout.tv_sec = 0;
+		tvTimeout.tv_usec = 50000;
+#else
 		tvTimeout.tv_sec = 1;
 		tvTimeout.tv_usec = 0;
+#endif
 
 		if ( select ( 1+g_iSocket, &fdsAccept, NULL, &fdsAccept, &tvTimeout )<=0 )
 			continue;

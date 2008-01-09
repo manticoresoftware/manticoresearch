@@ -25,7 +25,7 @@ define ( "SEARCHD_COMMAND_UPDATE",	2 );
 /// current client-side command implementation versions
 define ( "VER_COMMAND_SEARCH",		0x110 );
 define ( "VER_COMMAND_EXCERPT",		0x100 );
-define ( "VER_COMMAND_UPDATE",		0x100 );
+define ( "VER_COMMAND_UPDATE",		0x101 );
 
 /// known searchd status codes
 define ( "SEARCHD_OK",				0 );
@@ -74,6 +74,76 @@ define ( "SPH_GROUPBY_MONTH",		2 );
 define ( "SPH_GROUPBY_YEAR",		3 );
 define ( "SPH_GROUPBY_ATTR",		4 );
 define ( "SPH_GROUPBY_ATTRPAIR",	5 );
+
+
+/// portably pack numeric to 64 unsigned bits, network order
+function sphPack64 ( $v )
+{
+	assert ( is_numeric($v) );
+
+	// x64 route
+	if ( PHP_INT_SIZE>=8 )
+	{
+		$i = (int)$v;
+		return pack ( "NN", $i>>32, $i&((1<<32)-1) );
+	}
+
+	// x32 route, bcmath
+	$x = "4294967296";
+	if ( function_exists("bcmul") )
+	{
+		$h = bcdiv ( $v, $x, 0 );
+		$l = bcmod ( $v, $x );
+		return pack ( "NN", (float)$h, (float)$l ); // conversion to float is intentional; int would lose 31st bit
+	}
+
+	// x32 route, 15 or less decimal digits
+	// we can use float, because its actually double and has 52 precision bits
+	if ( strlen($v)<=15 )
+	{
+		$f = (float)$v;
+		$h = (int)($f/$x);
+		$l = (int)($f-$x*$h);
+		return pack ( "NN", $h, $l );
+	}
+
+	// x32 route, 16 or more decimal digits
+	// well, let me know if you *really* need this
+	die ( "INTERNAL ERROR: packing more than 15-digit numeric on 32-bit PHP is not implemented yet (contact support)" );
+}
+
+
+/// portably unpack 64 unsigned bits, network order to numeric
+function sphUnpack64 ( $v )
+{
+	list($h,$l) = array_values ( unpack ( "N*N*", $v ) );
+
+	// x64 route
+	if ( PHP_INT_SIZE>=8 )
+		return ($h<<32) + $l;
+
+	// x32 route
+	$h = sprintf ( "%u", $h );
+	$l = sprintf ( "%u", $l );
+	$x = "4294967296";
+
+	// bcmath
+	if ( function_exists("bcmul") )
+		return bcadd ( $l, bcmul ( $x, $h ) );
+
+	// no bcmath, 15 or less decimal digits
+	// we can use float, because its actually double and has 52 precision bits
+	if ( $h<1048576 )
+	{
+		$f = ((float)$h)*$x + (float)$l;
+		return sprintf ( "%.0f", $f ); // builtin conversion is only about 39-40 bits precise!
+	}
+
+	// x32 route, 16 or more decimal digits
+	// well, let me know if you *really* need this
+	die ( "INTERNAL ERROR: unpacking more than 15-digit numeric on 32-bit PHP is not implemented yet (contact support)" );
+}
+
 
 /// sphinx searchd client class
 class SphinxClient
@@ -345,8 +415,8 @@ class SphinxClient
 	/// is beetwen $min and $max (including $min and $max)
 	function SetIDRange ( $min, $max )
 	{
-		assert ( is_int($min) );
-		assert ( is_int($max) );
+		assert ( is_numeric($min) );
+		assert ( is_numeric($max) );
 		assert ( $min<=$max );
 		$this->_min_id = $min;
 		$this->_max_id = $max;
@@ -580,7 +650,8 @@ class SphinxClient
 		foreach ( $this->_weights as $weight )
 			$req .= pack ( "N", (int)$weight );
 		$req .= pack ( "N", strlen($index) ) . $index; // indexes
-		$req .= pack ( "NNN", 0, (int)$this->_min_id, (int)$this->_max_id ); // id32 range
+		$req .= pack ( "N", 1 ); // id64 range marker
+		$req .= sphPack64 ( $this->_min_id ) . sphPack64 ( $this->_max_id ); // id64 range
 
 		// filters
 		$req .= pack ( "N", count($this->_filters) );
@@ -742,10 +813,8 @@ class SphinxClient
 			{
 				if ( $id64 )
 				{
-					list ( $dochi, $doclo, $weight ) = array_values ( unpack ( "N*N*N*",
-						substr ( $response, $p, 12 ) ) );
-					$p += 12;
-					$doc = (((int)$dochi)<<32) + ((int)$doclo);
+					$doc = sphUnpack64 ( substr ( $response, $p, 8 ) ); $p += 8;
+					list(,$weight) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
 				} else
 				{
 					list ( $doc, $weight ) = array_values ( unpack ( "N*N*",
@@ -952,7 +1021,7 @@ class SphinxClient
 		assert ( is_array($values) );
 		foreach ( $values as $id=>$entry )
 		{
-			assert ( is_int($id) );
+			assert ( is_numeric($id) );
 			assert ( is_array($entry) );
 			assert ( count($entry)==count($attrs) );
 			foreach ( $entry as $v )
@@ -969,7 +1038,7 @@ class SphinxClient
 		$req .= pack ( "N", count($values) );
 		foreach ( $values as $id=>$entry )
 		{
-			$req .= pack ( "N", $id );
+			$req .= sphPack64 ( $id );
 			foreach ( $entry as $v )
 				$req .= pack ( "N", $v );
 		}

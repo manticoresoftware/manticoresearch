@@ -7408,6 +7408,37 @@ void CSphIndex_VLN::MatchAll ( const CSphQuery * pQuery, int iSorters, ISphMatch
 	}
 	iMaxQpos--; // because we'll check base-0 count
 
+	// check for dupes
+	struct Check_t
+	{
+		SphWordID_t		m_uWordID;
+		int				m_iIndex;
+
+		bool operator < ( const Check_t & rhs ) const
+		{
+			return m_uWordID < rhs.m_uWordID;
+		}
+	};
+
+	CSphVector<Check_t> dCheck;
+	dCheck.Resize ( m_dQueryWords.GetLength() );
+
+	for ( i=0; i<m_dQueryWords.GetLength(); i++ )
+	{
+		m_dQueryWords[i].m_bDupe = false;
+		dCheck[i].m_uWordID = m_dQueryWords[i].m_iWordID;
+		dCheck[i].m_iIndex = i;
+	}
+
+	dCheck.Sort ();
+	for ( i=1; i<dCheck.GetLength(); i++ )
+		if ( dCheck[i].m_uWordID==dCheck[i-1].m_uWordID )
+	{
+		m_dQueryWords [ dCheck[i].m_iIndex ].m_bDupe = true;
+		m_dQueryWords [ dCheck[i-1].m_iIndex ].m_bDupe = true;
+	}
+
+	// main loop
 	i = 0;
 	SphDocID_t docID = 0;
 	for ( ;; )
@@ -7464,22 +7495,9 @@ void CSphIndex_VLN::MatchAll ( const CSphQuery * pQuery, int iSorters, ISphMatch
 
 		} else
 		{
-			// preload hitlist entries, and check for dupes
-			CSphVector<uint64_t> dCheck;
+			// preload hitlist entries
 			for ( i=0; i<m_dQueryWords.GetLength(); i++ )
-			{
 				m_dQueryWords[i].GetHitlistEntry ();
-				m_dQueryWords[i].m_bDupe = false;
-				dCheck.Add ( i + (uint64_t(m_dQueryWords[i].m_iWordID)<<32) );
-			}
-
-			dCheck.Sort ();
-			for ( i=1; i<dCheck.GetLength(); i++ )
-				if ( dCheck[i]>>32==dCheck[i-1]>>32 )
-			{
-				m_dQueryWords [ int( dCheck[i] & U64C(0xffff) ) ].m_bDupe = true;
-				m_dQueryWords [ int( dCheck[i-1] & U64C(0xffff) ) ].m_bDupe = true;
-			}
 
 			// init weighting
 			BYTE curPhraseWeight [ SPH_MAX_FIELDS ];

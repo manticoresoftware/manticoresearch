@@ -1005,6 +1005,7 @@ struct CSphTermSetup : ISphNoncopyable
 	int						m_iToCalc;
 	const CSphAutofile &	m_tDoclist;
 	const CSphAutofile &	m_tHitlist;
+	DWORD					m_uMaxStamp;
 
 	CSphTermSetup ( const CSphAutofile & tDoclist, const CSphAutofile & tHitlist )
 		: m_pTokenizer ( NULL )
@@ -1014,6 +1015,7 @@ struct CSphTermSetup : ISphNoncopyable
 		, m_iToCalc ( 0 )
 		, m_tDoclist ( tDoclist )
 		, m_tHitlist ( tHitlist )
+		, m_uMaxStamp ( 0 )
 	{}
 };
 
@@ -1570,7 +1572,7 @@ void sphWarn ( char * sTemplate, ... )
 }
 
 
-/// time, in seconds
+/// time since start, in seconds
 float sphLongTimer ()
 {
 #if USE_WINDOWS
@@ -1609,6 +1611,13 @@ float sphLongTimer ()
 	return float(tv.tv_sec-s_sec) + float(tv.tv_usec-s_usec)/1000000.0f;
 
 #endif // USE_WINDOWS
+}
+
+
+/// time since start, in milliseconds
+DWORD sphTimerMsec ()
+{
+	return (DWORD)( sphLongTimer()*1000.0f );
 }
 
 
@@ -3580,16 +3589,15 @@ CSphQuery::CSphQuery ()
 	, m_iMaxID		( DOCID_MAX )
 	, m_sGroupSortBy	( "@group desc" )
 	, m_sGroupDistinct	( "" )
-	, m_iCutoff		( 0 )
-	, m_iRetryCount	( 0 )
-	, m_iRetryDelay	( 0 )
-
+	, m_iCutoff			( 0 )
+	, m_iRetryCount		( 0 )
+	, m_iRetryDelay		( 0 )
 	, m_bGeoAnchor		( false )
 	, m_fGeoLatitude	( 0.0f )
 	, m_fGeoLongitude	( 0.0f )
+	, m_uMaxQueryMsec	( 0 )
 
 	, m_bCalcGeodist	( false )
-
 	, m_iPresortRowitems( -1 )
 	, m_iGroupbyOffset	( -1 )
 	, m_iGroupbyCount	( -1 )
@@ -7438,6 +7446,12 @@ void CSphIndex_VLN::MatchAll ( const CSphQuery * pQuery, int iSorters, ISphMatch
 		m_dQueryWords [ dCheck[i-1].m_iIndex ].m_bDupe = true;
 	}
 
+	// max_query_time
+	DWORD uMaxStamp = 0;
+	if ( pQuery->m_uMaxQueryMsec )
+		uMaxStamp = sphTimerMsec () + pQuery->m_uMaxQueryMsec;
+	int iScannedEntries = 0;
+
 	// main loop
 	i = 0;
 	SphDocID_t docID = 0;
@@ -7449,7 +7463,20 @@ void CSphIndex_VLN::MatchAll ( const CSphQuery * pQuery, int iSorters, ISphMatch
 
 		// scan lists until *all* the ids match
 		while ( m_dQueryWords[i].m_tDoc.m_iDocID && docID>m_dQueryWords[i].m_tDoc.m_iDocID )
+		{
 			m_dQueryWords[i].GetDoclistEntry ();
+
+			// max_query_time
+			if ( uMaxStamp && ++iScannedEntries==1000 )
+			{
+				iScannedEntries = 0;
+				if ( sphTimerMsec()>=uMaxStamp )
+				{
+					m_dQueryWords[i].m_tDoc.m_iDocID = 0;
+					break;
+				}
+			}
+		}
 		if ( m_dQueryWords[i].m_tDoc.m_iDocID==0 )
 			break;
 
@@ -7627,6 +7654,12 @@ void CSphIndex_VLN::MatchAny ( const CSphQuery * pQuery, int iSorters, ISphMatch
 	for ( i=0; i<m_iWeights; i++ )
 		iPhraseK += m_dWeights[i] * m_dQueryWords.GetLength();
 
+	// max_query_time
+	DWORD uMaxStamp = 0;
+	if ( pQuery->m_uMaxQueryMsec )
+		uMaxStamp = sphTimerMsec () + pQuery->m_uMaxQueryMsec;
+	int iScannedEntries = 0;
+
 	for ( ;; )
 	{
 		// update active pointers to document lists, kill empty ones,
@@ -7664,6 +7697,14 @@ void CSphIndex_VLN::MatchAny ( const CSphQuery * pQuery, int iSorters, ISphMatch
 		assert ( iMinIndex>=0 );
 		assert ( iLastMatchID );
 		assert ( iLastMatchID!=DOCID_MAX );
+
+		// max_query_time
+		if ( uMaxStamp && ++iScannedEntries==1000 )
+		{
+			iScannedEntries = 0;
+			if ( sphTimerMsec()>=uMaxStamp )
+				break;
+		}
 
 		// early reject by group id, doc id or timestamp
 		CSphMatch & tMatch = m_dQueryWords[iMinIndex].m_tDoc;
@@ -7774,6 +7815,10 @@ public:
 	CSphMatch *				MatchNode ( SphDocID_t iMinID );	///< get next match at this node, with ID greater than iMinID
 	CSphMatch *				MatchLevel ( SphDocID_t iMinID );	///< get next match at this level, with ID greater than iMinID
 	bool					IsRejected ( SphDocID_t iID );		///< check if this match should be rejected
+
+protected:
+	DWORD					m_uMaxStamp;
+	int						m_iScannedEntries;
 };
 
 
@@ -7810,6 +7855,9 @@ CSphBooleanEvalNode::CSphBooleanEvalNode ( const CSphBooleanQueryExpr * pNode, c
 	m_pParent = NULL;
 
 	SetupAttrs ( tTermSetup );
+
+	m_uMaxStamp = tTermSetup.m_uMaxStamp;
+	m_iScannedEntries = 0;
 }
 
 
@@ -7896,6 +7944,17 @@ CSphMatch * CSphBooleanEvalNode::MatchNode ( SphDocID_t iMinID )
 		GetDoclistEntry ();
 		if ( !m_tDoc.m_iDocID )
 			return NULL;
+
+		// max_query_time
+		if ( m_uMaxStamp && ++m_iScannedEntries==1000 )
+		{
+			if ( sphTimerMsec()>=m_uMaxStamp )
+			{
+				m_pLast = NULL;
+				return NULL;
+			}
+			m_iScannedEntries = 0;
+		}
 	}
 	return &m_tDoc;
 }
@@ -8137,11 +8196,16 @@ public:
 
 	CSphVector<CSphQueryWord>	m_dTerms;	///< query term readers
 	CSphMatch *					m_pLast;	///< term with the highest position. NULL if this atom has no more matches
+
+	DWORD				m_uMaxStamp;
+	int					m_iScannedEntries;
 };
 
 
 CSphExtendedEvalAtom::CSphExtendedEvalAtom ( const CSphExtendedQueryAtom & tAtom, const CSphTermSetup & tSetup )
 	: m_pLast ( NULL )
+	, m_uMaxStamp ( tSetup.m_uMaxStamp )
+	, m_iScannedEntries ( 0 )
 {
 	assert ( tSetup.m_pDict );
 
@@ -8357,6 +8421,17 @@ CSphMatch * CSphExtendedEvalAtom::GetNextDoc ( SphDocID_t iMinID )
 				{
 					m_pLast = NULL;
 					return NULL;
+				}
+
+				// max_query_time
+				if ( m_uMaxStamp && ++m_iScannedEntries==1000 )
+				{
+					if ( sphTimerMsec()>=m_uMaxStamp )
+					{
+						m_pLast = NULL;
+						return NULL;
+					}
+					m_iScannedEntries = 0;
 				}
 			}
 
@@ -9070,6 +9145,7 @@ protected:
 	SphDocID_t					m_uHitsOverFor;	///< there are no more hits for matches block starting with this ID
 	DWORD						m_uFields;		///< accepted fields mask
 	float						m_fIDF;			///< IDF for this term (might be 0.0f for non-1st occurences in query)
+	DWORD						m_uMaxStamp;	///< work until this timestamp 
 };
 
 
@@ -9263,11 +9339,17 @@ ExtTerm_c::ExtTerm_c ( const CSphString & sTerm, DWORD uFields, const CSphTermSe
 	m_pHitDoc = NULL;
 	m_uHitsOverFor = 0;
 	m_uFields = uFields;
+	m_uMaxStamp = tSetup.m_uMaxStamp;
 }
+
 
 const ExtDoc_t * ExtTerm_c::GetDocsChunk ()
 {
 	if ( !m_tQword.m_iDocs )
+		return NULL;
+
+	// max_query_time
+	if ( m_uMaxStamp>0 && sphTimerMsec()>=m_uMaxStamp )
 		return NULL;
 
 	int iDoc = 0;
@@ -11463,6 +11545,8 @@ bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, C
 	tTermSetup.m_eDocinfo = m_eDocinfo;
 	tTermSetup.m_tMin = m_tMin;
 	tTermSetup.m_iToCalc = pQuery->m_bCalcGeodist ? 1 : 0;
+	if ( pQuery->m_uMaxQueryMsec>0 )
+		tTermSetup.m_uMaxStamp = sphTimerMsec() + pQuery->m_uMaxQueryMsec; // max_query_time
 
 	PROFILE_END ( query_init );
 

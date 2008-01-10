@@ -1281,6 +1281,8 @@ public:
 
 	CSphVector<CSphNamedInt>	m_dIndexWeights;	///< per-index weights
 
+	DWORD			m_uMaxQueryMsec;	///< max local index search time, in milliseconds (default is 0; means no limit)
+
 public:
 	bool			m_bCalcGeodist;		///< whether this query needs to calc @geodist
 	int				m_iPresortRowitems;	///< row size submitted to sorter (with calculated attributes, but without groupby/count attributes added by sorters)

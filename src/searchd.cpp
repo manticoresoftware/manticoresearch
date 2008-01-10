@@ -170,7 +170,7 @@ enum SearchdCommand_e
 /// known command versions
 enum
 {
-	VER_COMMAND_SEARCH		= 0x110,
+	VER_COMMAND_SEARCH		= 0x111,
 	VER_COMMAND_EXCERPT		= 0x100,
 	VER_COMMAND_UPDATE		= 0x101
 };
@@ -1822,7 +1822,7 @@ protected:
 
 int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuery & q ) const
 {
-	int iReqSize = 84 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
+	int iReqSize = 88 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
 		+ strlen ( q.m_sSortBy.cstr() )
 		+ strlen ( q.m_sQuery.cstr() )
 		+ strlen ( sIndexes )
@@ -1917,6 +1917,7 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 		tOut.SendString ( q.m_dIndexWeights[i].m_sName.cstr() );
 		tOut.SendInt ( q.m_dIndexWeights[i].m_iValue );
 	}
+	tOut.SendDword ( q.m_uMaxQueryMsec );
 }
 
 
@@ -2388,6 +2389,10 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 			tQuery.m_dIndexWeights[i].m_iValue = tReq.GetInt ();
 		}
 	}
+
+	// v1.17
+	if ( iVer>=0x111 )
+		tQuery.m_uMaxQueryMsec = tReq.GetDword ();
 
 	/////////////////////
 	// additional checks

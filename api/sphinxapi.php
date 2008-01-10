@@ -23,7 +23,7 @@ define ( "SEARCHD_COMMAND_EXCERPT",	1 );
 define ( "SEARCHD_COMMAND_UPDATE",	2 );
 
 /// current client-side command implementation versions
-define ( "VER_COMMAND_SEARCH",		0x110 );
+define ( "VER_COMMAND_SEARCH",		0x111 );
 define ( "VER_COMMAND_EXCERPT",		0x100 );
 define ( "VER_COMMAND_UPDATE",		0x101 );
 
@@ -170,6 +170,7 @@ class SphinxClient
 	var $_anchor;		///< geographical anchor point
 	var $_indexweights;	///< per-index weights
 	var $_ranker;		///< ranking mode (default is SPH_RANK_PROXIMITY_BM25)
+	var $_maxquerytime;	///< max query time, milliseconds (default is 0, do not limit)
 
 	var $_error;		///< last error message
 	var $_warning;		///< last warning message
@@ -208,6 +209,7 @@ class SphinxClient
 		$this->_anchor		= array ();
 		$this->_indexweights= array ();
 		$this->_ranker		= SPH_RANK_PROXIMITY_BM25;
+		$this->_maxquerytime= 0;
 
 		// per-reply fields (for single-query case)
 		$this->_error		= "";
@@ -349,6 +351,16 @@ class SphinxClient
 			$this->_maxmatches = $max;
 		if ( $cutoff>0 )
 			$this->_cutoff = $cutoff;
+	}
+
+	/// set maximum query time, in milliseconds
+	/// local searches will be terminated once this time has elapsed
+	/// must not be negative; 0 means "do not limit"
+	function SetMaxQueryTime ( $max )
+	{
+		assert ( is_int($max) );
+		assert ( $max>=0 );
+		$this->_maxquerytime = $max;
 	}
 
 	/// set match mode
@@ -705,6 +717,9 @@ class SphinxClient
 		$req .= pack ( "N", count($this->_indexweights) );
 		foreach ( $this->_indexweights as $idx=>$weight )
 			$req .= pack ( "N", strlen($idx) ) . $idx . pack ( "N", $weight );
+
+		// max query time
+		$req .= pack ( "N", $this->_maxquerytime );
 
 		// store request to requests array
 		$this->_reqs[] = $req;

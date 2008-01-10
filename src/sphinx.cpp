@@ -7395,6 +7395,19 @@ void CSphIndex_VLN::LookupDocinfo ( CSphMatch & tMatch )
 			break;
 
 
+// check for dupes
+struct WordDupeCheck_t
+{
+	SphWordID_t		m_uWordID;
+	int				m_iIndex;
+
+	bool operator < ( const WordDupeCheck_t & rhs ) const
+	{
+		return m_uWordID < rhs.m_uWordID;
+	}
+};
+
+
 void CSphIndex_VLN::MatchAll ( const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters )
 {
 	bool bRandomize = ppSorters[0]->m_bRandomize;
@@ -7417,18 +7430,7 @@ void CSphIndex_VLN::MatchAll ( const CSphQuery * pQuery, int iSorters, ISphMatch
 	iMaxQpos--; // because we'll check base-0 count
 
 	// check for dupes
-	struct Check_t
-	{
-		SphWordID_t		m_uWordID;
-		int				m_iIndex;
-
-		bool operator < ( const Check_t & rhs ) const
-		{
-			return m_uWordID < rhs.m_uWordID;
-		}
-	};
-
-	CSphVector<Check_t> dCheck;
+	CSphVector<WordDupeCheck_t> dCheck;
 	dCheck.Resize ( m_dQueryWords.GetLength() );
 
 	for ( i=0; i<m_dQueryWords.GetLength(); i++ )

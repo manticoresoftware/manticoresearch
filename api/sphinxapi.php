@@ -176,6 +176,7 @@ class SphinxClient
 	var $_warning;		///< last warning message
 
 	var $_reqs;			///< requests array for multi-query
+	var $_mbenc;		///< stored mbstring encoding
 
 	/////////////////////////////////////////////////////////////////////////////
 	// common stuff
@@ -211,12 +212,10 @@ class SphinxClient
 		$this->_ranker		= SPH_RANK_PROXIMITY_BM25;
 		$this->_maxquerytime= 0;
 
-		// per-reply fields (for single-query case)
-		$this->_error		= "";
+		$this->_error		= ""; // per-reply fields (for single-query case)
 		$this->_warning		= "";
-
-		// requests storage (for multi-query case)
-		$this->_reqs		= array ();
+		$this->_reqs		= array ();	// requests storage (for multi-query case)
+		$this->_mbenc		= "";
 	}
 
 	/// get last error message (string)
@@ -241,6 +240,24 @@ class SphinxClient
 	}
 
 	/////////////////////////////////////////////////////////////////////////////
+
+	/// enter mbstring workaround mode
+	function _MBPush ()
+	{
+		$this->_mbenc = "";
+		if ( ini_get ( "mbstring.func_overload " ) & 2 )
+		{
+			$this->_mbenc = mb_internal_encoding();
+			mb_internal_encoding ( "latin1" );
+		}
+    }
+
+	/// leave mbstring workaround mode
+	function _MBPop ()
+	{
+		if ( $this->_mbenc )
+			mb_internal_encoding ( $this->_mbenc );
+	}
 
 	/// connect to searchd server
 	function _Connect ()
@@ -654,6 +671,9 @@ class SphinxClient
 	/// returns index to results array returned by RunQueries() call
 	function AddQuery ( $query, $index="*" )
 	{
+		// mbstring workaround
+		$this->_MBPush ();
+
 		// build request
 		$req = pack ( "NNNNN", $this->_offset, $this->_limit, $this->_mode, $this->_ranker, $this->_sort ); // mode and limits
 		$req .= pack ( "N", strlen($this->_sortby) ) . $this->_sortby;
@@ -721,6 +741,9 @@ class SphinxClient
 		// max query time
 		$req .= pack ( "N", $this->_maxquerytime );
 
+		// mbstring workaround
+		$this->_MBPop ();
+
 		// store request to requests array
 		$this->_reqs[] = $req;
 		return count($this->_reqs)-1;
@@ -745,8 +768,14 @@ class SphinxClient
 			return false;
 		}
 
+		// mbstring workaround
+		$this->_MBPush ();
+
 		if (!( $fp = $this->_Connect() ))
+		{
+			$this->_MBPop ();
 			return false;
+		}
 
 		////////////////////////////
 		// send query, get response
@@ -759,7 +788,10 @@ class SphinxClient
 
 		fwrite ( $fp, $req, $len+8 );
 		if (!( $response = $this->_GetResponse ( $fp, VER_COMMAND_SEARCH ) ))
+		{
+			$this->_MBPop ();
 			return false;
+		}
 
 		$this->_reqs = array ();
 
@@ -890,6 +922,7 @@ class SphinxClient
 			}
 		}
 
+		$this->_MBPop ();
 		return $results;
 	}
 
@@ -928,8 +961,13 @@ class SphinxClient
 		assert ( is_string($words) );
 		assert ( is_array($opts) );
 
+		$this->_MBPush ();
+
 		if (!( $fp = $this->_Connect() ))
+		{
+			$this->_MBPop();
 			return false;
+		}
 
 		/////////////////
 		// fixup options
@@ -982,7 +1020,10 @@ class SphinxClient
 		$req = pack ( "nnN", SEARCHD_COMMAND_EXCERPT, VER_COMMAND_EXCERPT, $len ) . $req; // add header
 		$wrote = fwrite ( $fp, $req, $len+8 );
 		if (!( $response = $this->_GetResponse ( $fp, VER_COMMAND_EXCERPT ) ))
+		{
+			$this->_MBPop ();
 			return false;
+		}
 
 		//////////////////
 		// parse response
@@ -999,12 +1040,14 @@ class SphinxClient
 			if ( $pos+$len > $rlen )
 			{
 				$this->_error = "incomplete reply";
+				$this->_MBPop ();
 				return false;
 			}
 			$res[] = $len ? substr ( $response, $pos, $len ) : "";
 			$pos += $len;
 		}
 
+		$this->_MBPop ();
 		return $res;
 	}
 
@@ -1058,19 +1101,29 @@ class SphinxClient
 				$req .= pack ( "N", $v );
 		}
 
+		// mbstring workaround
+		$this->_MBPush ();
+
 		// connect, send query, get response
 		if (!( $fp = $this->_Connect() ))
+		{
+			$this->_MBPop ();
 			return -1;
+		}
 
 		$len = strlen($req);
 		$req = pack ( "nnN", SEARCHD_COMMAND_UPDATE, VER_COMMAND_UPDATE, $len ) . $req; // add header
 		fwrite ( $fp, $req, $len+8 );
 
 		if (!( $response = $this->_GetResponse ( $fp, VER_COMMAND_UPDATE ) ))
+		{
+			$this->_MBPop ();
 			return -1;
+		}
 
 		// parse response
 		list(,$updated) = unpack ( "N*", substr ( $response, 0, 4 ) );
+		$this->_MBPop ();
 		return $updated;
 	}
 }

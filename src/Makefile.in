@@ -15,7 +15,7 @@
 @SET_MAKE@
 
 
-SOURCES = $(libsphinx_a_SOURCES) $(indexer_SOURCES) $(search_SOURCES) $(searchd_SOURCES)
+SOURCES = $(libsphinx_a_SOURCES) $(indexer_SOURCES) $(search_SOURCES) $(searchd_SOURCES) $(spelldump_SOURCES)
 
 srcdir = @srcdir@
 top_srcdir = @top_srcdir@
@@ -37,7 +37,8 @@ POST_INSTALL = :
 NORMAL_UNINSTALL = :
 PRE_UNINSTALL = :
 POST_UNINSTALL = :
-bin_PROGRAMS = indexer$(EXEEXT) searchd$(EXEEXT) search$(EXEEXT)
+bin_PROGRAMS = indexer$(EXEEXT) searchd$(EXEEXT) search$(EXEEXT) \
+	spelldump$(EXEEXT)
 subdir = src
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
@@ -78,6 +79,10 @@ am_searchd_OBJECTS = searchd.$(OBJEXT)
 searchd_OBJECTS = $(am_searchd_OBJECTS)
 searchd_DEPENDENCIES = libsphinx.a $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_2) $(am__DEPENDENCIES_2)
+am_spelldump_OBJECTS = spelldump.$(OBJEXT)
+spelldump_OBJECTS = $(am_spelldump_OBJECTS)
+spelldump_DEPENDENCIES = libsphinx.a $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_2) $(am__DEPENDENCIES_2)
 DEFAULT_INCLUDES = -I. -I$(srcdir) -I$(top_builddir)/config
 depcomp = $(SHELL) $(top_srcdir)/config/depcomp
 am__depfiles_maybe = depfiles
@@ -87,9 +92,9 @@ CXXLD = $(CXX)
 CXXLINK = $(CXXLD) $(AM_CXXFLAGS) $(CXXFLAGS) $(AM_LDFLAGS) $(LDFLAGS) \
 	-o $@
 SOURCES = $(libsphinx_a_SOURCES) $(indexer_SOURCES) $(search_SOURCES) \
-	$(searchd_SOURCES)
+	$(searchd_SOURCES) $(spelldump_SOURCES)
 DIST_SOURCES = $(libsphinx_a_SOURCES) $(indexer_SOURCES) \
-	$(search_SOURCES) $(searchd_SOURCES)
+	$(search_SOURCES) $(searchd_SOURCES) $(spelldump_SOURCES)
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
@@ -193,6 +198,7 @@ libsphinx_a_SOURCES = $(SRC_SPHINX)
 indexer_SOURCES = indexer.cpp
 searchd_SOURCES = searchd.cpp
 search_SOURCES = search.cpp
+spelldump_SOURCES = spelldump.cpp
 BUILT_SOURCES = extract-version
 @USE_LIBSTEMMER_FALSE@LIBSTEMMER_LIBS = 
 @USE_LIBSTEMMER_TRUE@LIBSTEMMER_LIBS = $(top_srcdir)/libstemmer_c/libstemmer.a
@@ -201,6 +207,7 @@ BUILT_SOURCES = extract-version
 indexer_LDADD = libsphinx.a $(LIBSTEMMER_LIBS) $(MYSQL_LIBS) $(PGSQL_LIBS)
 searchd_LDADD = libsphinx.a $(LIBSTEMMER_LIBS) $(MYSQL_LIBS) $(PGSQL_LIBS) -lz
 search_LDADD = libsphinx.a $(LIBSTEMMER_LIBS) $(MYSQL_LIBS) $(PGSQL_LIBS)
+spelldump_LDADD = libsphinx.a $(LIBSTEMMER_LIBS) $(MYSQL_LIBS) $(PGSQL_LIBS)
 EXTRA_DIST = indexer.vcproj libsphinx.vcproj searchd.vcproj search.vcproj
 all: $(BUILT_SOURCES)
 	$(MAKE) $(AM_MAKEFLAGS) all-am
@@ -275,6 +282,9 @@ search$(EXEEXT): $(search_OBJECTS) $(search_DEPENDENCIES)
 searchd$(EXEEXT): $(searchd_OBJECTS) $(searchd_DEPENDENCIES) 
 	@rm -f searchd$(EXEEXT)
 	$(CXXLINK) $(searchd_LDFLAGS) $(searchd_OBJECTS) $(searchd_LDADD) $(LIBS)
+spelldump$(EXEEXT): $(spelldump_OBJECTS) $(spelldump_DEPENDENCIES) 
+	@rm -f spelldump$(EXEEXT)
+	$(CXXLINK) $(spelldump_LDFLAGS) $(spelldump_OBJECTS) $(spelldump_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -286,6 +296,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/md5.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/search.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/searchd.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/spelldump.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sphinx.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sphinxexcerpt.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sphinxmetaphone.Po@am__quote@

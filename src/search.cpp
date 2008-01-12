@@ -288,15 +288,12 @@ int main ( int argc, char ** argv )
 		#endif
 
 		// create dict
-		CSphDict * pDict = sphCreateDictionaryCRC ();
+		CSphDict * pDict = sphCreateDictionaryCRC ( hIndex ("morphology"), hIndex.Exists ( "stopwords" ) ? hIndex["stopwords"].cstr () : NULL,
+								hIndex.Exists ( "wordforms" ) ? hIndex ["wordforms"].cstr () : NULL, pTokenizer, sError );
 		assert ( pDict );
 
-		if ( !pDict->SetMorphology ( hIndex("morphology"), pTokenizer->IsUtf8(), sError ) )
+		if ( !sError.IsEmpty () )
 			fprintf ( stdout, "WARNING: index '%s': %s\n", sIndexName, sError.cstr() );	
-
-		// configure stopwords
-		pDict->LoadStopwords ( hIndex.Exists ( "stopwords" ) ? hIndex["stopwords"].cstr() : NULL,
-			pTokenizer );
 
 		//////////
 		// search
@@ -450,6 +447,8 @@ int main ( int argc, char ** argv )
 		SafeDelete ( pDict );
 		SafeDelete ( pTokenizer );
 	}
+
+	sphShutdownWordforms ();
 }
 
 //

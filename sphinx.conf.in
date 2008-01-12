@@ -394,12 +394,15 @@ index test1
 	#
 	# optional, default is "none"
 	#
+	# several stemmers can be specified (comma-separated)
+	#
 	# morphology		= none
 	# morphology		= stem_en
 	# morphology		= stem_ru
 	# morphology		= stem_enru
 	# morphology		= soundex
-	# morphology		= metaphone
+	# morphology        = metaphone
+	# morphology 		= stem_en, stem_ru, soundex
 	#
 	# morphology		= libstemmer_german
 	# morphology		= libstemmer_dan
@@ -416,9 +419,25 @@ index test1
 	# stopwords			= @CONFDIR@/data/stopwords.txt
 	stopwords			=
 
+	# word forms file
+	#
+	# each line should contain source and destination word forms,
+	# in exactly the same encoding as specified in charset_table
+	# separated by "greater" sign:
+	#
+	#	walks > walk
+	#	walked > walk
+	#	walking > walk
+	#
+	# this file can be generated from ispell dictionaries using
+	# bundled spelldump utility
+	#
+	# optional, default is empty
+	wordforms =
+
 	# synonyms file
 	#
-	# synonyms allow to explicilty map different word spellings
+	# synonyms allow to explicitly map different word spellings
 	# to a normal form, as well as support special characters
 	# which would normally be treated as whitespace.
 	#

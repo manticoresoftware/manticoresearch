@@ -117,6 +117,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "morphology",				0, NULL },
 	{ "stopwords",				0, NULL },
 	{ "synonyms",				0, NULL },
+	{ "wordforms",				0, NULL },
 	{ "min_word_len",			0, NULL },
 	{ "charset_type",			0, NULL },
 	{ "charset_table",			0, NULL },

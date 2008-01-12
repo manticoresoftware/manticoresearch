@@ -47,7 +47,7 @@
 	#define snprintf	_snprintf
 	#define sphSeek		_lseeki64
 	#define strtoull	_strtoui64
-
+	#define stat		_stat
 #else
 	#include <unistd.h>
 	#include <sys/time.h>
@@ -1905,27 +1905,6 @@ void sphSetInternalErrorCallback ( void (*fnCallback) ( const char * ) )
 /////////////////////////////////////////////////////////////////////////////
 // TOKENIZERS
 /////////////////////////////////////////////////////////////////////////////
-
-/// parser to build lowercaser from textual config
-class CSphCharsetDefinitionParser
-{
-public:
-						CSphCharsetDefinitionParser ();
-	bool				Parse ( const char * sConfig, CSphVector<CSphRemapRange> & dRanges );
-	const char *		GetLastError ();
-
-protected:
-	bool				m_bError;
-	char				m_sError [ 1024 ];
-	const char *		m_pCurrent;
-
-	bool				Error ( const char * sMessage );
-	void				SkipSpaces ();
-	bool				IsEof ();
-	bool				CheckEof ();
-	int					HexDigit ( int c );
-	int					ParseCharsetCode ();
-};
 
 
 #if USE_WINDOWS
@@ -11785,22 +11764,24 @@ bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, C
 	return true;
 }
 
+
+/// morphology
+enum
+{
+	 SPH_MORPH_STEM_EN
+	,SPH_MORPH_STEM_RU_CP1251
+	,SPH_MORPH_STEM_RU_UTF8
+	,SPH_MORPH_SOUNDEX
+	,SPH_MORPH_METAPHONE_SBCS
+	,SPH_MORPH_METAPHONE_UTF8
+	,SPH_MORPH_LIBSTEMMER_FIRST
+	,SPH_MORPH_LIBSTEMMER_LAST = SPH_MORPH_LIBSTEMMER_FIRST + 64
+};
+
+
 /////////////////////////////////////////////////////////////////////////////
 // CRC32/64 DICTIONARIES
 /////////////////////////////////////////////////////////////////////////////
-
-/// morphology flags
-enum
-{
-	SPH_MORPH_STEM_EN			= (1UL<<1),
-	SPH_MORPH_STEM_RU_CP1251	= (1UL<<2),
-	SPH_MORPH_STEM_RU_UTF8		= (1UL<<3),
-	SPH_MORPH_SOUNDEX			= (1UL<<4),
-	SPH_MORPH_LIBSTEMMER		= (1UL<<5),
-	SPH_MORPH_METAPHONE_SBCS	= (1UL<<6),
-	SPH_MORPH_METAPHONE_UTF8	= (1UL<<7)
-};
-
 
 /// CRC32/64 dictionary
 struct CSphDictCRC : CSphDict
@@ -11811,22 +11792,56 @@ struct CSphDictCRC : CSphDict
 	virtual SphWordID_t	GetWordID ( BYTE * pWord );
 	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen );
 	virtual void		LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer );
+	virtual bool		LoadWordforms ( const char * szFile );
 	virtual bool		SetMorphology ( const CSphVariant * sMorph, bool bUseUTF8, CSphString & sError );
 	virtual SphWordID_t	GetWordIDWithMarkers ( BYTE * pWord );
 	virtual void		ApplyStemmers ( BYTE * pWord );
 
+	static void			SweepWordformContainers ( const char * szFile );
+
 protected:
-	DWORD				m_iMorph;		///< morphology flags
+	CSphVector < int >	m_dMorph;
 #if USE_LIBSTEMMER
-	sb_stemmer *		m_pStemmer;
+	CSphVector < sb_stemmer * >	m_dStemmers;
 #endif
 
 	int					m_iStopwords;	///< stopwords count
 	SphWordID_t *		m_pStopwords;	///< stopwords ID list
 
 protected:
+	bool				ToNormalForm ( BYTE * pWord );
+	bool				ParseMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sError );
 	SphWordID_t			FilterStopword ( SphWordID_t uID );	///< filter ID against stopwords list
+
+private:
+	typedef CSphOrderedHash < int, CSphString, CSphStrHashFunc, 1048576, 117 > CWordHash;
+
+	struct WordformContainer
+	{
+		int							m_iRefCount;
+		CSphString					m_sFilename;
+		struct stat				m_Stat;
+		CSphVector <CSphString>		m_dNormalForms;
+		CWordHash					m_dHash;
+
+									WordformContainer ();
+
+		bool						IsEqual ( const char * szFile );
+	};
+
+	WordformContainer *	m_pWordforms;
+
+	static CSphVector <WordformContainer*> m_dWordformContainers;
+
+	static WordformContainer *	GetWordformContainer ( const char * szFile );
+	static WordformContainer *	LoadWordformContainer ( const char * szFile );
+
+	bool				InitMorph ( const char * szMorph, int iLength, bool bUseUTF8, CSphString & sError );
+	bool				AddMorph ( int iMorph );
+	bool				StemById ( BYTE * pWord, int iStemmer );
 };
+
+CSphVector <CSphDictCRC::WordformContainer*> CSphDictCRC::m_dWordformContainers;
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -11951,14 +11966,31 @@ uint64_t sphFNV64 ( const BYTE * s, int iLen )
 
 /////////////////////////////////////////////////////////////////////////////
 
-CSphDictCRC::CSphDictCRC ()
-	: m_iMorph		( 0 )
-#if USE_LIBSTEMMER
-	, m_pStemmer	( NULL )
-#endif
+CSphDictCRC::WordformContainer::WordformContainer ()
+	: m_iRefCount ( 0 )
+{
+}
 
-	, m_iStopwords	( 0 )
+
+bool CSphDictCRC::WordformContainer::IsEqual ( const char * szFile )
+{
+	if ( ! szFile )
+		return false;
+
+	struct stat FileStat;
+	if ( stat ( szFile, &FileStat ) == -1 )
+		return false;
+
+	return m_sFilename == szFile && m_Stat.st_ctime == FileStat.st_ctime
+		&& m_Stat.st_mtime == FileStat.st_mtime && m_Stat.st_size == FileStat.st_size;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+CSphDictCRC::CSphDictCRC ()
+	: m_iStopwords	( 0 )
 	, m_pStopwords	( NULL )
+	, m_pWordforms	( NULL )
 {
 }
 
@@ -11966,8 +11998,12 @@ CSphDictCRC::CSphDictCRC ()
 CSphDictCRC::~CSphDictCRC ()
 {
 #if USE_LIBSTEMMER
-	sb_stemmer_delete ( m_pStemmer );
+	ARRAY_FOREACH ( i, m_dStemmers )
+		sb_stemmer_delete ( m_dStemmers [i] );
 #endif
+
+	if ( m_pWordforms )
+		--m_pWordforms->m_iRefCount;
 }
 
 
@@ -12001,6 +12037,155 @@ SphWordID_t CSphDictCRC::FilterStopword ( SphWordID_t uID )
 	return uID;
 }
 
+
+bool CSphDictCRC::ToNormalForm ( BYTE * pWord )
+{
+	if ( ! m_pWordforms )
+		return false;
+
+	if ( m_pWordforms )
+	{
+		int * pIndex = m_pWordforms->m_dHash ( (char *)pWord );
+		if ( ! pIndex )
+			return false;
+
+		if ( *pIndex < 0 || *pIndex >= m_pWordforms->m_dNormalForms.GetLength () )
+			return false;
+
+		if ( m_pWordforms->m_dNormalForms [*pIndex].IsEmpty () )
+			return false;
+
+		strcpy ( (char *)pWord, m_pWordforms->m_dNormalForms [*pIndex].cstr () );
+
+		return true;
+	}
+
+	return false;
+}
+
+bool CSphDictCRC::ParseMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sError )
+{
+	const char * szStart = szMorph;
+
+	while ( *szStart )
+	{
+		while ( *szStart && ( sphIsSpace ( *szStart ) || *szStart == ',' ) )
+			++szStart;
+
+		if ( !*szStart )
+			break;
+
+		const char * szWordStart = szStart;
+
+		while ( *szStart && !sphIsSpace ( *szStart ) && *szStart != ',' )
+			++szStart;
+
+		if ( szStart - szWordStart > 0 )
+		{
+			if ( !InitMorph ( szWordStart, szStart - szWordStart, bUseUTF8, sError ) )
+				return false;
+		}
+	}
+
+	return true;
+}
+
+
+bool CSphDictCRC::InitMorph ( const char * szMorph, int iLength, bool bUseUTF8, CSphString & sError )
+{
+	if ( iLength == 0 )
+		return false;
+
+	if ( iLength == 4 && !strncmp ( szMorph, "none", iLength ) )
+		return true;
+
+	if ( iLength == 7 && !strncmp ( szMorph, "stem_en", iLength ) )
+	{
+		stem_en_init ();
+		return AddMorph ( SPH_MORPH_STEM_EN );
+	}
+	
+	if ( iLength == 7 && !strncmp ( szMorph, "stem_ru", iLength ) )
+	{
+		stem_ru_init ();
+		return AddMorph ( bUseUTF8 ? SPH_MORPH_STEM_RU_UTF8 : SPH_MORPH_STEM_RU_CP1251 );
+	}
+
+	if ( iLength == 9 && !strncmp ( szMorph, "stem_enru", iLength ) )
+	{
+		stem_en_init ();
+		stem_ru_init ();
+
+		if ( ! AddMorph ( SPH_MORPH_STEM_EN ) )
+			return false;
+
+		return AddMorph ( bUseUTF8 ? SPH_MORPH_STEM_RU_UTF8 : SPH_MORPH_STEM_RU_CP1251 );
+	}
+	
+	if ( iLength == 7 && !strncmp ( szMorph, "soundex", iLength ) )
+		return AddMorph ( SPH_MORPH_SOUNDEX );
+
+	if ( iLength==9 && !strncmp ( szMorph, "metaphone", iLength ) )
+		return AddMorph ( bUseUTF8 ? SPH_MORPH_METAPHONE_UTF8 : SPH_MORPH_METAPHONE_SBCS );
+
+	sError = "";
+
+#if USE_LIBSTEMMER
+	const int LIBSTEMMER_LEN = 11;
+	const int MAX_ALGO_LENGTH = 64;
+	if ( iLength > LIBSTEMMER_LEN && iLength - LIBSTEMMER_LEN < MAX_ALGO_LENGTH && !strncmp ( szMorph, "libstemmer_", LIBSTEMMER_LEN ) )
+	{
+		char szAlgo [MAX_ALGO_LENGTH];
+
+		strncpy ( szAlgo, szMorph + LIBSTEMMER_LEN, iLength - LIBSTEMMER_LEN );
+		szAlgo [iLength - LIBSTEMMER_LEN] = '\0';
+
+		sb_stemmer * pStemmer = NULL;
+
+		if ( bUseUTF8 )
+			pStemmer = sb_stemmer_new ( szAlgo, "UTF_8" );
+		else
+		{
+			pStemmer = sb_stemmer_new ( szAlgo, "ISO_8859_1" );
+
+			if ( !pStemmer )
+				pStemmer = sb_stemmer_new ( szAlgo, "ISO_8859_2" );
+
+			if ( !pStemmer )
+				pStemmer = sb_stemmer_new ( szAlgo, "KOI8_R" );
+		}
+
+		if ( !pStemmer )
+		{
+			sError.SetSprintf ( "libstemmer morphology algorithm '%s' not available for %s encoding - IGNORED",
+				szAlgo, bUseUTF8 ? "UTF-8" : "SBCS" );
+			return false;
+		}
+
+		AddMorph ( SPH_MORPH_LIBSTEMMER_FIRST + m_dStemmers.GetLength () );
+		ARRAY_FOREACH ( i, m_dStemmers )
+			if ( m_dStemmers [i] == pStemmer )
+				return false;
+
+		m_dStemmers.Add ( pStemmer );
+		return true;
+	}
+#endif
+
+	return false;
+}
+
+
+bool CSphDictCRC::AddMorph ( int iMorph )
+{
+	ARRAY_FOREACH ( i, m_dMorph )
+		if ( m_dMorph [i] == iMorph )
+			return false;
+
+	m_dMorph.Add ( iMorph );
+	return true;
+}
+
 /////////////////////////////////////////////////////////////////////////////
 
 template < typename T > T sphCRCWord ( const BYTE * pWord );
@@ -12014,36 +12199,12 @@ template<> DWORD sphCRCWord ( const BYTE * pWord, int iLen ) { return sphCRC32 (
 
 void CSphDictCRC::ApplyStemmers ( BYTE * pWord )
 {
-	if ( m_iMorph & SPH_MORPH_STEM_EN )
-		stem_en ( pWord );
-
-	if ( m_iMorph & SPH_MORPH_STEM_RU_CP1251 )
-		stem_ru_cp1251 ( pWord );
-
-	if ( m_iMorph & SPH_MORPH_STEM_RU_UTF8 )
-		stem_ru_utf8 ( (WORD*)pWord );
-
-	if ( m_iMorph & SPH_MORPH_SOUNDEX )
-		stem_soundex ( pWord );
-
-	if ( m_iMorph & SPH_MORPH_METAPHONE_SBCS )
-		stem_dmetaphone ( pWord, false );
-
-	if ( m_iMorph & SPH_MORPH_METAPHONE_UTF8 )
-		stem_dmetaphone ( pWord, true );
-
-#if USE_LIBSTEMMER
-	if ( m_iMorph & SPH_MORPH_LIBSTEMMER )
+	if ( ! ToNormalForm ( pWord ) )
 	{
-		assert ( m_pStemmer );
-
-		const sb_symbol * sStemmed = sb_stemmer_stem ( m_pStemmer, (sb_symbol*)pWord, strlen((const char*)pWord) );
-		int iLen = sb_stemmer_length ( m_pStemmer );
-
-		memcpy ( pWord, sStemmed, iLen );
-		pWord[iLen] = '\0';		
+		for ( int i = 0; i < m_dMorph.GetLength (); ++i )
+			if ( StemById ( pWord, m_dMorph [i] ) )
+				break;
 	}
-#endif
 }
 
 
@@ -12161,86 +12322,205 @@ void CSphDictCRC::LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenize
 }
 
 
+void CSphDictCRC::SweepWordformContainers ( const char * szFile )
+{
+	for ( int i = 0; i < m_dWordformContainers.GetLength (); )
+	{
+		WordformContainer * WC = m_dWordformContainers [i];
+		if ( WC->m_iRefCount == 0 && !WC->IsEqual ( szFile ) )
+		{
+			delete WC;
+			m_dWordformContainers.Remove ( i );
+		}
+		else
+			++i;
+	}
+}
+
+
+CSphDictCRC::WordformContainer * CSphDictCRC::GetWordformContainer ( const char * szFile )
+{
+	ARRAY_FOREACH ( i, m_dWordformContainers )
+		if ( m_dWordformContainers [i]->IsEqual ( szFile ) )
+			return m_dWordformContainers [i];
+
+	WordformContainer * pContainer = LoadWordformContainer ( szFile );
+	if ( pContainer )
+		m_dWordformContainers.Add ( pContainer );
+
+	return pContainer;
+}
+
+
+CSphDictCRC::WordformContainer * CSphDictCRC::LoadWordformContainer ( const char * szFile )
+{
+	if ( !szFile )
+		return NULL;
+
+	struct stat FileStat;
+	if ( stat ( szFile, &FileStat ) == -1 )
+		return NULL;
+
+	FILE * pFile = fopen ( szFile, "rt" );
+	if ( !pFile )
+		return NULL;
+
+	WordformContainer * pContainer = new WordformContainer;
+	if ( !pContainer )
+		return NULL;
+
+	pContainer->m_sFilename = szFile;
+	pContainer->m_Stat = FileStat;
+
+	const int MAX_WORD_LENGTH = 512;
+	char szBuffer	[MAX_WORD_LENGTH];
+	char szWord		[MAX_WORD_LENGTH];
+	char szNormal	[MAX_WORD_LENGTH];
+
+	bool bOk = true;
+
+	while ( !feof ( pFile ) && bOk )
+	{
+		if ( !fgets ( szBuffer, MAX_WORD_LENGTH, pFile ) )
+			bOk = !!feof ( pFile );
+		else
+		{
+			int nRead = sscanf ( szBuffer, "%s > %s", szWord, szNormal );
+			if ( nRead == 2 )
+			{
+				pContainer->m_dNormalForms.AddUnique ( szNormal );
+				pContainer->m_dHash.Add ( pContainer->m_dNormalForms.GetLength () - 1 , szWord );
+			}
+		}
+	}
+
+
+	fclose ( pFile );
+
+	return pContainer;
+}
+
+
+
+bool CSphDictCRC::LoadWordforms ( const char * szFile )
+{
+	SweepWordformContainers ( szFile );
+	m_pWordforms = GetWordformContainer ( szFile );
+	if ( m_pWordforms )
+		m_pWordforms->m_iRefCount++;
+
+	return !!m_pWordforms;
+}
+
+
 bool CSphDictCRC::SetMorphology ( const CSphVariant * sMorph, bool bUseUTF8, CSphString & sError )
 {
-	m_iMorph = 0;
+	m_dMorph.Reset ();
+
 #if USE_LIBSTEMMER
-	sb_stemmer_delete ( m_pStemmer );
-	m_pStemmer = NULL;
+	ARRAY_FOREACH ( i, m_dStemmers )
+		sb_stemmer_delete ( m_dStemmers [i] );
+
+	m_dStemmers.Reset ();
 #endif
 
 	if ( !sMorph )
 		return true;
 
-	DWORD iStemRu = ( bUseUTF8 ? SPH_MORPH_STEM_RU_UTF8 : SPH_MORPH_STEM_RU_CP1251 );
 	CSphString sOption = *sMorph;
 	sOption.ToLower ();
 
-	if ( sOption.IsEmpty() || sOption=="none" )
+	sError = "";
+	if ( !ParseMorphology ( sOption.cstr (), bUseUTF8, sError ) )
 	{
-		return true;
+		m_dMorph.Reset ();
 
-	} else if ( sOption=="stem_en" )
-	{
-		m_iMorph = SPH_MORPH_STEM_EN;
+		if ( sError.IsEmpty () )
+			sError.SetSprintf ( "invalid morphology option '%s' - IGNORED", sOption.cstr() );
 
-	} else if ( sOption=="stem_ru" )
-	{
-		m_iMorph = iStemRu;
-		stem_ru_init ();
-
-	} else if ( sOption=="stem_enru" )
-	{
-		m_iMorph = iStemRu | SPH_MORPH_STEM_EN;
-		stem_ru_init ();
-
-	} else if ( sOption=="soundex" )
-	{
-		m_iMorph = SPH_MORPH_SOUNDEX;
-
-	} else if ( sOption == "metaphone" )
-		m_iMorph = bUseUTF8 ? SPH_MORPH_METAPHONE_UTF8 : SPH_MORPH_METAPHONE_SBCS;
-	
-#if USE_LIBSTEMMER
-	else if ( sOption.Begins ( "libstemmer_" ) )
-	{
-		const char * sAlgo = sOption.cstr() + strlen ( "libstemmer_" );
-		if ( bUseUTF8 )
-		{
-			m_pStemmer = sb_stemmer_new ( sAlgo, "UTF_8" );
-		} else
-		{
-			m_pStemmer = sb_stemmer_new ( sAlgo, "ISO_8859_1" );
-			if ( !m_pStemmer )
-				m_pStemmer = sb_stemmer_new ( sAlgo, "ISO_8859_2" );
-			if ( !m_pStemmer )
-				m_pStemmer = sb_stemmer_new ( sAlgo, "KOI8_R" );
-		}
-
-		if ( !m_pStemmer )
-		{
-			sError.SetSprintf ( "libstemmer morphology algorithm '%s' not available for %s encoding - IGNORED",
-				sAlgo, bUseUTF8 ? "UTF-8" : "SBCS" );
-			return false;
-		}
-
-		m_iMorph = SPH_MORPH_LIBSTEMMER;
-
-	}
-#endif
-
-	else
-	{
-		sError.SetSprintf ( "unknown morphology option '%s' - IGNORED", sOption.cstr() );
 		return false;
 	}
+
 	return true;
 }
 
-
-CSphDict * sphCreateDictionaryCRC ()
+/// common id-based stemmer
+bool CSphDictCRC::StemById ( BYTE * pWord, int iStemmer )
 {
-	return new CSphDictCRC ();
+	char szBuf [4*SPH_MAX_WORD_LEN];
+	strcpy ( szBuf, (char *)pWord );
+
+	switch ( iStemmer )
+	{
+	case SPH_MORPH_STEM_EN:
+		stem_en ( pWord );
+		break;
+
+	case SPH_MORPH_STEM_RU_CP1251:
+		stem_ru_cp1251 ( pWord );
+		break;
+
+	case SPH_MORPH_STEM_RU_UTF8:
+		stem_ru_utf8 ( (WORD*)pWord );
+		break;
+
+	case SPH_MORPH_SOUNDEX:
+		stem_soundex ( pWord );
+		break;
+
+	case SPH_MORPH_METAPHONE_SBCS:
+		stem_dmetaphone ( pWord, false );
+
+	case SPH_MORPH_METAPHONE_UTF8:
+		stem_dmetaphone ( pWord, true );
+
+	default:
+#if USE_LIBSTEMMER
+		if ( iStemmer >= SPH_MORPH_LIBSTEMMER_FIRST && iStemmer < SPH_MORPH_LIBSTEMMER_LAST )
+		{
+			sb_stemmer * pStemmer = m_dStemmers [iStemmer - SPH_MORPH_LIBSTEMMER_FIRST];
+			assert ( pStemmer );
+			
+			const sb_symbol * sStemmed = sb_stemmer_stem ( pStemmer, (sb_symbol*)pWord, strlen((const char*)pWord) );
+			int iLen = sb_stemmer_length ( pStemmer );
+
+			memcpy ( pWord, sStemmed, iLen );
+			pWord[iLen] = '\0';
+		}
+		else
+			return false;
+
+	break;
+#else
+		return false;
+#endif
+	}
+
+	return strcmp ( (char *)pWord, szBuf ) != 0;
+}
+
+
+CSphDict * sphCreateDictionaryCRC ( const CSphVariant * pMorph, const char * szStopwords, const char * szWordforms, ISphTokenizer * pTokenizer, CSphString & sError )
+{
+	assert ( pTokenizer );
+
+	CSphDict * pDict = new CSphDictCRC ();
+	if ( ! pDict  )
+		return NULL;
+
+	if ( pDict->SetMorphology ( pMorph, pTokenizer->IsUtf8(), sError ) )
+		sError = "";
+
+	pDict->LoadStopwords ( szStopwords, pTokenizer );
+	pDict->LoadWordforms ( szWordforms );
+
+	return pDict;
+}
+
+
+void sphShutdownWordforms ()
+{
+	CSphDictCRC::SweepWordformContainers ( NULL );
 }
 
 /////////////////////////////////////////////////////////////////////////////

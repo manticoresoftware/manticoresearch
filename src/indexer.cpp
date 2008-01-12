@@ -756,15 +756,12 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		///////////////
 
 		// create dict
-		CSphDict * pDict = sphCreateDictionaryCRC ();
+		CSphDict * pDict = sphCreateDictionaryCRC ( hIndex ( "morphology" ), hIndex.Exists ( "stopwords" ) ? hIndex ["stopwords"].cstr () : NULL,
+									hIndex.Exists ( "wordforms" ) ? hIndex ["wordforms"].cstr () : NULL, pTokenizer, sError );
 		assert ( pDict );
 
-		if ( !pDict->SetMorphology ( hIndex("morphology"), pTokenizer->IsUtf8(), sError ) )
+		if ( !sError.IsEmpty () )
 			fprintf ( stdout, "WARNING: index '%s': %s\n", sIndexName, sError.cstr() );	
-
-		// configure stops
-		if ( hIndex.Exists ( "stopwords" ) )
-			pDict->LoadStopwords ( hIndex["stopwords"].cstr(), pTokenizer );
 
 		//////////
 		// index!
@@ -1170,6 +1167,8 @@ int main ( int argc, char ** argv )
 				bIndexedOk |= DoIndex ( hConf["index"][dIndexes[i]], dIndexes[i], hConf["source"] );
 		}
 	}
+
+	sphShutdownWordforms ();
 
 	////////////////////////////
 	// rotating searchd indices

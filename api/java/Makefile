@@ -24,6 +24,7 @@ sphinxapi.jar: $(CLASSES)
 	jar cfm sphinxapi.jar MANIFEST.MF org/sphx/api
 
 .SUFFIXES: .java .class
+vpath %.class org/sphx/api
 .java.class:
 	javac -cp . -d . $<
 

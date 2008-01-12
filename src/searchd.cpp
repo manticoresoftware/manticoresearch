@@ -676,6 +676,8 @@ void Shutdown ()
 			g_hIndexes.IterateGet().m_pIndex->Unlock();
 		g_hIndexes.Reset();
 
+		sphShutdownWordforms ();
+
 		// remove pid
 		if ( g_sPidFile )
 		{
@@ -5198,15 +5200,16 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			}
 
 			// conifgure dict
-			tIdx.m_pDict = sphCreateDictionaryCRC ();
+			tIdx.m_pDict = sphCreateDictionaryCRC ( hIndex ("morphology"), hIndex.Exists ( "stopwords" ) ? hIndex["stopwords"].cstr () : NULL,
+								hIndex.Exists ( "wordforms" ) ? hIndex ["wordforms"].cstr () : NULL, tIdx.m_pTokenizer, sError );
 			if ( !tIdx.m_pDict )
 			{
 				sphWarning ( "index '%s': failed to create dictionary - NOT SERVING", sIndexName );
 				continue;
 			}
-			if ( !tIdx.m_pDict->SetMorphology ( hIndex("morphology"), tIdx.m_pTokenizer->IsUtf8(), sError ) )
+
+			if ( !sError.IsEmpty () )
 				sphWarning ( "index '%s': %s", sIndexName, sError.cstr() );	
-			tIdx.m_pDict->LoadStopwords ( hIndex.Exists ( "stopwords" ) ? hIndex["stopwords"].cstr() : NULL, tIdx.m_pTokenizer );
 
 			// configure memlocking, star
 			if ( hIndex("mlock") && hIndex["mlock"].intval() )

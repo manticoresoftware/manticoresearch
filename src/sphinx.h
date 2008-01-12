@@ -230,6 +230,29 @@ protected:
 };
 
 /////////////////////////////////////////////////////////////////////////////
+/// parser to build lowercaser from textual config
+class CSphCharsetDefinitionParser
+{
+public:
+						CSphCharsetDefinitionParser ();
+	bool				Parse ( const char * sConfig, CSphVector<CSphRemapRange> & dRanges );
+	const char *		GetLastError ();
+
+protected:
+	bool				m_bError;
+	char				m_sError [ 1024 ];
+	const char *		m_pCurrent;
+
+	bool				Error ( const char * sMessage );
+	void				SkipSpaces ();
+	bool				IsEof ();
+	bool				CheckEof ();
+	int					HexDigit ( int c );
+	int					ParseCharsetCode ();
+};
+
+
+/////////////////////////////////////////////////////////////////////////////
 
 /// synonym list entry
 struct CSphSynonym
@@ -366,13 +389,19 @@ struct CSphDict
 	/// load stopwords from given files
 	virtual void		LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer ) = 0;
 
+	/// load wordforms from a given file 
+	virtual bool		LoadWordforms ( const char * ) { return false; }
+
 	/// set morphology
 	virtual bool		SetMorphology ( const CSphVariant * sMorph, bool bUseUTF8, CSphString & sError ) = 0;
 };
 
 
 /// dictionary factory
-CSphDict *				sphCreateDictionaryCRC ();
+CSphDict * sphCreateDictionaryCRC ( const CSphVariant * pMorph, const char * szStopwords, const char * szWordforms, ISphTokenizer * pTokenizer, CSphString & sError );
+
+/// clear wordform cache
+void sphShutdownWordforms ();
 
 /////////////////////////////////////////////////////////////////////////////
 // DATASOURCES

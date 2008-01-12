@@ -15,6 +15,88 @@ AC_CONFIG_HEADER([config/config.h])
 
 dnl --------------------------------------------------------------------------
 
+SPHINX_CONFIGURE_PART([checking for compiler programs])
+
+AC_ARG_WITH([debug],
+	AC_HELP_STRING([--with-debug], [compile slower debug version (default is disabled)]),
+	[ac_cv_use_debug=$withval], [ac_cv_use_debug=no]
+)
+
+AC_MSG_CHECKING([whether to compile debug version])
+if test x$ac_cv_use_debug != xno; then
+	SPHINX_CFLAGS="-Wall -g -D_FILE_OFFSET_BITS=64"
+	SPHINX_INJECT_FLAGS="-D_FILE_OFFSET_BITS=64"
+	AC_MSG_RESULT([yes])
+else
+	SPHINX_CFLAGS="-Wall -g -D_FILE_OFFSET_BITS=64 -O3 -DNDEBUG"
+	SPHINX_INJECT_FLAGS="-D_FILE_OFFSET_BITS=64 -DNDEBUG"
+	AC_MSG_RESULT([no])
+fi
+
+dnl set flags for C compiler if there are no user overrides
+dnl inject required defines if there are
+if test x$ac_env_CFLAGS_set != xset; then
+	CFLAGS=$SPHINX_CFLAGS
+else
+	CFLAGS="$CFLAGS $SPHINX_INJECT_FLAGS"
+fi
+
+dnl set flags for C++ compiler if there are no user overrides
+dnl inject required defines if there are
+if test x$ac_env_CXXFLAGS_set != xset; then
+	CXXFLAGS=$SPHINX_CFLAGS
+else
+	CXXFLAGS="$CXXFLAGS $SPHINX_INJECT_FLAGS"
+fi
+
+AC_PROG_CC
+AC_PROG_CXX
+AC_PROG_RANLIB
+
+dnl --------------------------------------------------------------------------
+
+SPHINX_CONFIGURE_PART([checking for header files])
+
+# Checks for header files.
+AC_HEADER_STDC
+AC_HEADER_SYS_WAIT
+AC_CHECK_HEADERS([fcntl.h limits.h netdb.h netinet/in.h stdlib.h string.h sys/file.h sys/socket.h sys/time.h unistd.h])
+AC_CHECK_HEADER(expat.h,[have_expat_h=yes],[have_expat_h=no])
+
+dnl --------------------------------------------------------------------------
+
+SPHINX_CONFIGURE_PART([checking for types])
+
+# Checks for typedefs, structures, and compiler characteristics.
+AC_HEADER_STDBOOL
+AC_C_CONST
+AC_C_INLINE
+AC_TYPE_OFF_T
+AC_TYPE_SIZE_T
+AC_HEADER_TIME
+
+dnl --------------------------------------------------------------------------
+
+SPHINX_CONFIGURE_PART([checking for library functions])
+
+# Checks for library functions.
+AC_FUNC_FORK
+AC_FUNC_MALLOC
+AC_FUNC_REALLOC
+AC_FUNC_SELECT_ARGTYPES
+AC_TYPE_SIGNAL
+AC_FUNC_STAT
+AC_FUNC_VPRINTF
+AC_SEARCH_LIBS([setsockopt],[socket])
+AC_SEARCH_LIBS([gethostbyname],[nsl socket resolv])
+AC_SEARCH_LIBS([XML_Parse],[expat],[have_libexpat=yes],[have_libexpat=no])
+AC_CHECK_FUNCS([dup2 gethostbyname gettimeofday memmove memset select socket strcasecmp strchr strerror strncasecmp strstr strtol])
+
+SPHINX_CHECK_DEFINE(LOCK_EX,sys/file.h)
+SPHINX_CHECK_DEFINE(F_SETLKW,fcntl.h)
+
+dnl --------------------------------------------------------------------------
+
 SPHINX_CONFIGURE_PART([configuring Sphinx])
 
 # check if we should compile with MySQL support
@@ -52,6 +134,9 @@ else
 fi
 AM_CONDITIONAL(USE_PGSQL, test x$ac_cv_use_pgsql != xno)
 
+
+# we can now set preprocessor flags for both C and C++ compilers
+CPPFLAGS="$CPPFLAGS $MYSQL_CFLAGS $PGSQL_CFLAGS"
 
 dnl ---
 
@@ -94,88 +179,16 @@ else
 fi
 AM_CONDITIONAL(USE_LIBSTEMMER, test x$ac_cv_use_libstemmer != xno)
 
-dnl --------------------------------------------------------------------------
+dnl ---
 
-SPHINX_CONFIGURE_PART([checking for compiler programs])
-
-AC_ARG_WITH([debug],
-	AC_HELP_STRING([--with-debug], [compile slower debug version (default is disabled)]),
-	[ac_cv_use_debug=$withval], [ac_cv_use_debug=no]
-)
-
-AC_MSG_CHECKING([whether to compile debug version])
-if test x$ac_cv_use_debug != xno; then
-	SPHINX_CFLAGS="-Wall -g -D_FILE_OFFSET_BITS=64"
-	SPHINX_INJECT_FLAGS="-D_FILE_OFFSET_BITS=64"
-	AC_MSG_RESULT([yes])
+AC_MSG_CHECKING([for libexpat])
+if test [ $have_expat_h = yes -a $have_libexpat = yes ]; then
+	AC_DEFINE([USE_LIBEXPAT],1,[define to use expat XML library])
+	AC_MSG_RESULT([found])
 else
-	SPHINX_CFLAGS="-Wall -g -D_FILE_OFFSET_BITS=64 -O3 -DNDEBUG"
-	SPHINX_INJECT_FLAGS="-D_FILE_OFFSET_BITS=64 -DNDEBUG"
-	AC_MSG_RESULT([no])
+	AC_MSG_RESULT([not found])
+	AC_MSG_WARN([xmlpipe2 will NOT be available])
 fi
-
-dnl always set preprocessor flags for both C and C++ compilers
-CPPFLAGS="$CPPFLAGS $MYSQL_CFLAGS $PGSQL_CFLAGS"
-
-dnl set flags for C compiler if there are no user overrides
-dnl inject required defines if there are
-if test x$ac_env_CFLAGS_set != xset; then
-	CFLAGS=$SPHINX_CFLAGS
-else
-	CFLAGS="$CFLAGS $SPHINX_INJECT_FLAGS"
-fi
-
-dnl set flags for C++ compiler if there are no user overrides
-dnl inject required defines if there are
-if test x$ac_env_CXXFLAGS_set != xset; then
-	CXXFLAGS=$SPHINX_CFLAGS
-else
-	CXXFLAGS="$CXXFLAGS $SPHINX_INJECT_FLAGS"
-fi
-
-AC_PROG_CC
-AC_PROG_CXX
-AC_PROG_RANLIB
-
-dnl --------------------------------------------------------------------------
-
-SPHINX_CONFIGURE_PART([checking for header files])
-
-# Checks for header files.
-AC_HEADER_STDC
-AC_HEADER_SYS_WAIT
-AC_CHECK_HEADERS([fcntl.h limits.h netdb.h netinet/in.h stdlib.h string.h sys/file.h sys/socket.h sys/time.h unistd.h])
-
-dnl --------------------------------------------------------------------------
-
-SPHINX_CONFIGURE_PART([checking for types])
-
-# Checks for typedefs, structures, and compiler characteristics.
-AC_HEADER_STDBOOL
-AC_C_CONST
-AC_C_INLINE
-AC_TYPE_OFF_T
-AC_TYPE_SIZE_T
-AC_HEADER_TIME
-
-dnl --------------------------------------------------------------------------
-
-SPHINX_CONFIGURE_PART([checking for library functions])
-
-# Checks for library functions.
-AC_FUNC_FORK
-AC_FUNC_MALLOC
-AC_FUNC_REALLOC
-AC_FUNC_SELECT_ARGTYPES
-AC_TYPE_SIGNAL
-AC_FUNC_STAT
-AC_FUNC_VPRINTF
-AC_SEARCH_LIBS([setsockopt],[socket])
-AC_SEARCH_LIBS([gethostbyname],[nsl socket resolv])
-AC_CHECK_FUNCS([dup2 gethostbyname gettimeofday memmove memset select socket strcasecmp strchr strerror strncasecmp strstr strtol])
-
-SPHINX_CHECK_DEFINE(LOCK_EX,sys/file.h)
-SPHINX_CHECK_DEFINE(F_SETLKW,fcntl.h)
 
 dnl --------------------------------------------------------------------------
 

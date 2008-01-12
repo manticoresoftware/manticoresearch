@@ -311,7 +311,7 @@ ac_includes_default="\
 # include <unistd.h>
 #endif"
 
-ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS INSTALL_PROGRAM INSTALL_SCRIPT INSTALL_DATA CYGPATH_W PACKAGE VERSION ACLOCAL AUTOCONF AUTOMAKE AUTOHEADER MAKEINFO install_sh STRIP ac_ct_STRIP INSTALL_STRIP_PROGRAM mkdir_p AWK SET_MAKE am__leading_dot AMTAR am__tar am__untar MAINTAINER_MODE_TRUE MAINTAINER_MODE_FALSE MAINT MYSQL_LIBS MYSQL_CFLAGS USE_MYSQL_TRUE USE_MYSQL_FALSE pgconfig PGSQL_LIBS PGSQL_CFLAGS USE_PGSQL_TRUE USE_PGSQL_FALSE USE_LIBSTEMMER_TRUE USE_LIBSTEMMER_FALSE CC CFLAGS LDFLAGS CPPFLAGS ac_ct_CC EXEEXT OBJEXT DEPDIR am__include am__quote AMDEP_TRUE AMDEP_FALSE AMDEPBACKSLASH CCDEPMODE am__fastdepCC_TRUE am__fastdepCC_FALSE CXX CXXFLAGS ac_ct_CXX CXXDEPMODE am__fastdepCXX_TRUE am__fastdepCXX_FALSE RANLIB ac_ct_RANLIB CPP EGREP LIBOBJS CONFDIR LTLIBOBJS'
+ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS INSTALL_PROGRAM INSTALL_SCRIPT INSTALL_DATA CYGPATH_W PACKAGE VERSION ACLOCAL AUTOCONF AUTOMAKE AUTOHEADER MAKEINFO install_sh STRIP ac_ct_STRIP INSTALL_STRIP_PROGRAM mkdir_p AWK SET_MAKE am__leading_dot AMTAR am__tar am__untar MAINTAINER_MODE_TRUE MAINTAINER_MODE_FALSE MAINT CC CFLAGS LDFLAGS CPPFLAGS ac_ct_CC EXEEXT OBJEXT DEPDIR am__include am__quote AMDEP_TRUE AMDEP_FALSE AMDEPBACKSLASH CCDEPMODE am__fastdepCC_TRUE am__fastdepCC_FALSE CXX CXXFLAGS ac_ct_CXX CXXDEPMODE am__fastdepCXX_TRUE am__fastdepCXX_FALSE RANLIB ac_ct_RANLIB CPP EGREP LIBOBJS MYSQL_LIBS MYSQL_CFLAGS USE_MYSQL_TRUE USE_MYSQL_FALSE pgconfig PGSQL_LIBS PGSQL_CFLAGS USE_PGSQL_TRUE USE_PGSQL_FALSE USE_LIBSTEMMER_TRUE USE_LIBSTEMMER_FALSE CONFDIR LTLIBOBJS'
 ac_subst_files=''
 
 # Initialize some variables set by options.
@@ -859,13 +859,14 @@ Optional Features:
   --enable-FEATURE[=ARG]  include FEATURE [ARG=yes]
   --enable-maintainer-mode  enable make rules and dependencies not useful
 			  (and sometimes confusing) to the casual installer
-  --enable-id64           use 64-bit document and word IDs (default is no)
   --disable-dependency-tracking  speeds up one-time build
   --enable-dependency-tracking   do not reject slow dependency extractors
+  --enable-id64           use 64-bit document and word IDs (default is no)
 
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
   --without-PACKAGE       do not use PACKAGE (same as --with-PACKAGE=no)
+  --with-debug            compile slower debug version (default is disabled)
   --with-mysql            compile with MySQL support (default is enabled)
   --with-mysql-includes   path to MySQL header files
   --with-mysql-libs       path to MySQL libraries
@@ -875,7 +876,6 @@ Optional Packages:
   --with-pgsql-libs       path to PostgreSQL libraries
   --with-libstemmer       compile with libstemmer support (default is
                           disabled)
-  --with-debug            compile slower debug version (default is disabled)
 
 Some influential environment variables:
   CC          C compiler command
@@ -1820,549 +1820,6 @@ fi
 
 	echo "$as_me:$LINENO: result: " >&5
 echo "${ECHO_T}" >&6
-	echo "$as_me:$LINENO: result: configuring Sphinx" >&5
-echo "${ECHO_T}configuring Sphinx" >&6
-	TMP=`echo configuring Sphinx | sed -e sX.X-Xg`
-	echo "$as_me:$LINENO: result: $TMP" >&5
-echo "${ECHO_T}$TMP" >&6
-	echo "$as_me:$LINENO: result: " >&5
-echo "${ECHO_T}" >&6
-
-
-# check if we should compile with MySQL support
-
-# Check whether --with-mysql or --without-mysql was given.
-if test "${with_mysql+set}" = set; then
-  withval="$with_mysql"
-  ac_cv_use_mysql=$withval
-else
-  ac_cv_use_mysql=yes
-
-fi;
-echo "$as_me:$LINENO: checking whether to compile with MySQL support" >&5
-echo $ECHO_N "checking whether to compile with MySQL support... $ECHO_C" >&6
-if test x$ac_cv_use_mysql != xno; then
-	echo "$as_me:$LINENO: result: yes" >&5
-echo "${ECHO_T}yes" >&6
-
-
-mysqlconfig_locations="mysql_config /usr/bin/mysql_config /usr/local/bin/mysql_config /usr/local/mysql/bin/mysql_config /opt/mysql/bin/mysql_config /usr/pkg/bin/mysql_config"
-user_mysql_includes=
-user_mysql_libs=
-
-# check explicit MySQL root for mysql_config, include, lib
-if test  x$ac_cv_use_mysql != xyes -a x$ac_cv_use_mysql != xno
-then
-	mysqlroot=`echo $ac_cv_use_mysql | sed -e 's+/$++'`
-	if test  -x "$mysqlroot/bin/mysql_config"
-	then
-		# if there's mysql_config, that's the best route
-		mysqlconfig_locations="$mysqlroot/bin/mysql_config"
-	elif test  -d "$mysqlroot/include" -a -d "$mysqlroot/lib"
-	then
-		# explicit root; do not check well-known paths
-		mysqlconfig_locations=
-
-		# includes
-		if test  -d "$mysqlroot/include/mysql"
-		then
-			user_mysql_includes="$mysqlroot/include/mysql"
-		else
-			user_mysql_includes="$mysqlroot/include"
-		fi
-
-		# libs
-		if test  -d "$mysqlroot/lib/mysql"
-		then
-			user_mysql_libs="$mysqlroot/lib/mysql"
-		else
-			user_mysql_libs="$mysqlroot/lib"
-		fi
-	else
-		{ { echo "$as_me:$LINENO: error: invalid MySQL root directory '$mysqlroot'; neither bin/mysql_config, nor include/ and lib/ were found there" >&5
-echo "$as_me: error: invalid MySQL root directory '$mysqlroot'; neither bin/mysql_config, nor include/ and lib/ were found there" >&2;}
-   { (exit 1); exit 1; }; }
-	fi
-fi
-
-
-# try running mysql_config
-echo "$as_me:$LINENO: checking for mysql_config" >&5
-echo $ECHO_N "checking for mysql_config... $ECHO_C" >&6
-for mysqlconfig in $mysqlconfig_locations
-do
-	if test  -n "$mysqlconfig"
-	then
-		MYSQL_CFLAGS=`${mysqlconfig} --cflags 2>/dev/null`
-		MYSQL_LIBS=`${mysqlconfig} --libs 2>/dev/null`
-
-		if test  $? -eq 0
-		then
-			echo "$as_me:$LINENO: result: $mysqlconfig" >&5
-echo "${ECHO_T}$mysqlconfig" >&6
-			mysqlconfig=
-			break
-		else
-			MYSQL_CFLAGS=
-			MYSQL_LIBS=
-		fi
-	fi
-done
-if test  -n "$mysqlconfig"
-then
-	echo "$as_me:$LINENO: result: not found" >&5
-echo "${ECHO_T}not found" >&6
-fi
-
-
-# if there's nothing from mysql_config, check well-known include paths
-# explicit overrides will be applied later
-if test  -z "$MYSQL_CFLAGS"
-then
-	for CANDIDATE in "$user_mysql_includes" "/usr/local/mysql/include" "/usr/local/mysql/include/mysql" \
-		"/usr/include/mysql"
-	do
-		if test  -n "$CANDIDATE" -a -r "$CANDIDATE/mysql.h"
-		then
-			MYSQL_CFLAGS="-I$CANDIDATE"
-			break
-		fi
-	done
-fi
-
-
-# if there's nothing from mysql_config, check well-known library paths
-# explicit overrides will be applied later
-if test  -z "$MYSQL_LIBS"
-then
-	for CANDIDATE in "$user_mysql_libs" "/usr/lib64/mysql" \
-		"/usr/local/mysql/lib/mysql" "/usr/local/mysql/lib" \
-		"/usr/local/lib/mysql" "/usr/lib/mysql" \
-		"/opt/mysql/lib/mysql" "/usr/pkg/lib/mysql"
-	do
-		if test  -n "$CANDIDATE" -a -d "$CANDIDATE"
-		then
-			MYSQL_LIBS="-L$CANDIDATE -lmysqlclient -lz"
-			break
-		fi
-	done
-fi
-
-
-# apply explicit include path overrides
-
-# Check whether --with-mysql-includes or --without-mysql-includes was given.
-if test "${with_mysql_includes+set}" = set; then
-  withval="$with_mysql_includes"
-  ac_cv_mysql_includes=$withval
-fi;
-if test  -n "$ac_cv_mysql_includes"
-then
-	MYSQL_CFLAGS="-I$ac_cv_mysql_includes"
-fi
-
-
-# apply explicit lib path overrides
-
-# Check whether --with-mysql-libs or --without-mysql-libs was given.
-if test "${with_mysql_libs+set}" = set; then
-  withval="$with_mysql_libs"
-  ac_cv_mysql_libs=$withval
-fi;
-if test  -n "$ac_cv_mysql_libs"
-then
-	# Trim trailing '.libs' if user passed it in --with-mysql-libs option
-	ac_cv_mysql_libs=`echo ${ac_cv_mysql_libs} | sed -e 's/.libs$//' \
-		-e 's+.libs/$++'`
-	MYSQL_LIBS="-L$ac_cv_mysql_libs -lmysqlclient -lz"
-fi
-
-
-# now that we did all we could, perform final checks
-echo "$as_me:$LINENO: checking MySQL include files" >&5
-echo $ECHO_N "checking MySQL include files... $ECHO_C" >&6
-if test  -z "$MYSQL_CFLAGS"
-then
-	{ { echo "$as_me:$LINENO: error: missing include files.
-
-******************************************************************************
-ERROR: cannot find MySQL include files.
-
-Check that you do have MySQL include files installed.
-The package name is typically 'mysql-devel'.
-
-If include files are installed on your system, but you are still getting
-this message, you should do one of the following:
-
-1) either specify includes location explicitly, using --with-mysql-includes;
-2) or specify MySQL installation root location explicitly, using --with-mysql;
-3) or make sure that the path to 'mysql_config' program is listed in
-   your PATH environment variable.
-
-To disable MySQL support, use --without-mysql option.
-******************************************************************************
-" >&5
-echo "$as_me: error: missing include files.
-
-******************************************************************************
-ERROR: cannot find MySQL include files.
-
-Check that you do have MySQL include files installed.
-The package name is typically 'mysql-devel'.
-
-If include files are installed on your system, but you are still getting
-this message, you should do one of the following:
-
-1) either specify includes location explicitly, using --with-mysql-includes;
-2) or specify MySQL installation root location explicitly, using --with-mysql;
-3) or make sure that the path to 'mysql_config' program is listed in
-   your PATH environment variable.
-
-To disable MySQL support, use --without-mysql option.
-******************************************************************************
-" >&2;}
-   { (exit 1); exit 1; }; }
-else
-	echo "$as_me:$LINENO: result: $MYSQL_CFLAGS" >&5
-echo "${ECHO_T}$MYSQL_CFLAGS" >&6
-fi
-
-
-echo "$as_me:$LINENO: checking MySQL libraries" >&5
-echo $ECHO_N "checking MySQL libraries... $ECHO_C" >&6
-if test  -z "$MYSQL_LIBS"
-then
-	{ { echo "$as_me:$LINENO: error: missing libraries.
-
-******************************************************************************
-ERROR: cannot find MySQL libraries.
-
-Check that you do have MySQL libraries installed.
-The package name is typically 'mysql-devel'.
-
-If libraries are installed on your system, but you are still getting
-this message, you should do one of the following:
-
-1) either specify libraries location explicitly, using --with-mysql-libs;
-2) or specify MySQL installation root location explicitly, using --with-mysql;
-3) or make sure that the path to 'mysql_config' program is listed in
-   your PATH environment variable.
-
-To disable MySQL support, use --without-mysql option.
-******************************************************************************
-" >&5
-echo "$as_me: error: missing libraries.
-
-******************************************************************************
-ERROR: cannot find MySQL libraries.
-
-Check that you do have MySQL libraries installed.
-The package name is typically 'mysql-devel'.
-
-If libraries are installed on your system, but you are still getting
-this message, you should do one of the following:
-
-1) either specify libraries location explicitly, using --with-mysql-libs;
-2) or specify MySQL installation root location explicitly, using --with-mysql;
-3) or make sure that the path to 'mysql_config' program is listed in
-   your PATH environment variable.
-
-To disable MySQL support, use --without-mysql option.
-******************************************************************************
-" >&2;}
-   { (exit 1); exit 1; }; }
-else
-	echo "$as_me:$LINENO: result: $MYSQL_LIBS" >&5
-echo "${ECHO_T}$MYSQL_LIBS" >&6
-fi
-
-
-
-
-cat >>confdefs.h <<\_ACEOF
-#define USE_MYSQL 1
-_ACEOF
-
-
-
-else
-	echo "$as_me:$LINENO: result: no" >&5
-echo "${ECHO_T}no" >&6
-fi
-
-
-if test x$ac_cv_use_mysql != xno; then
-  USE_MYSQL_TRUE=
-  USE_MYSQL_FALSE='#'
-else
-  USE_MYSQL_TRUE='#'
-  USE_MYSQL_FALSE=
-fi
-
-
-
-# check if we should compile with PostgreSQL support
-
-# Check whether --with-pgsql or --without-pgsql was given.
-if test "${with_pgsql+set}" = set; then
-  withval="$with_pgsql"
-  ac_cv_use_pgsql=$withval
-else
-  ac_cv_use_pgsql=no
-
-fi;
-echo "$as_me:$LINENO: checking whether to compile with PostgreSQL support" >&5
-echo $ECHO_N "checking whether to compile with PostgreSQL support... $ECHO_C" >&6
-if test x$ac_cv_use_pgsql != xno; then
-	echo "$as_me:$LINENO: result: yes" >&5
-echo "${ECHO_T}yes" >&6
-
-
-# Check for custom includes path
-if test  -z "$ac_cv_pgsql_includes"
-then
-
-# Check whether --with-pgsql-includes or --without-pgsql-includes was given.
-if test "${with_pgsql_includes+set}" = set; then
-  withval="$with_pgsql_includes"
-  ac_cv_pgsql_includes=$withval
-fi;
-fi
-if test  -n "$ac_cv_pgsql_includes"
-then
-	echo "$as_me:$LINENO: checking PostgreSQL includes" >&5
-echo $ECHO_N "checking PostgreSQL includes... $ECHO_C" >&6
-if test "${ac_cv_pgsql_includes+set}" = set; then
-  echo $ECHO_N "(cached) $ECHO_C" >&6
-else
-  ac_cv_pgsql_includes=""
-fi
-echo "$as_me:$LINENO: result: $ac_cv_pgsql_includes" >&5
-echo "${ECHO_T}$ac_cv_pgsql_includes" >&6
-	PGSQL_CFLAGS="-I$ac_cv_pgsql_includes"
-fi
-
-# Check for custom library path
-if test  -z "$ac_cv_pgsql_libs"
-then
-
-# Check whether --with-pgsql-libs or --without-pgsql-libs was given.
-if test "${with_pgsql_libs+set}" = set; then
-  withval="$with_pgsql_libs"
-  ac_cv_pgsql_libs=$withval
-fi;
-fi
-if test  -n "$ac_cv_pgsql_libs"
-then
-	echo "$as_me:$LINENO: checking PostgreSQL libraries" >&5
-echo $ECHO_N "checking PostgreSQL libraries... $ECHO_C" >&6
-if test "${ac_cv_pgsql_libs+set}" = set; then
-  echo $ECHO_N "(cached) $ECHO_C" >&6
-else
-  ac_cv_pgsql_libs=""
-fi
-echo "$as_me:$LINENO: result: $ac_cv_pgsql_libs" >&5
-echo "${ECHO_T}$ac_cv_pgsql_libs" >&6
-	PGSQL_LIBS="-L$ac_cv_pgsql_libs -lpq"
-fi
-
-# If some path is missing, try to autodetermine with pgsql_config
-if test  -z "$ac_cv_pgsql_includes" -o -z "$ac_cv_pgsql_libs"
-then
-    if test  -z "$pgconfig"
-    then
-        # Extract the first word of "pg_config", so it can be a program name with args.
-set dummy pg_config; ac_word=$2
-echo "$as_me:$LINENO: checking for $ac_word" >&5
-echo $ECHO_N "checking for $ac_word... $ECHO_C" >&6
-if test "${ac_cv_path_pgconfig+set}" = set; then
-  echo $ECHO_N "(cached) $ECHO_C" >&6
-else
-  case $pgconfig in
-  [\\/]* | ?:[\\/]*)
-  ac_cv_path_pgconfig="$pgconfig" # Let the user override the test with a path.
-  ;;
-  *)
-  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
-for as_dir in $PATH
-do
-  IFS=$as_save_IFS
-  test -z "$as_dir" && as_dir=.
-  for ac_exec_ext in '' $ac_executable_extensions; do
-  if $as_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
-    ac_cv_path_pgconfig="$as_dir/$ac_word$ac_exec_ext"
-    echo "$as_me:$LINENO: found $as_dir/$ac_word$ac_exec_ext" >&5
-    break 2
-  fi
-done
-done
-
-  ;;
-esac
-fi
-pgconfig=$ac_cv_path_pgconfig
-
-if test -n "$pgconfig"; then
-  echo "$as_me:$LINENO: result: $pgconfig" >&5
-echo "${ECHO_T}$pgconfig" >&6
-else
-  echo "$as_me:$LINENO: result: no" >&5
-echo "${ECHO_T}no" >&6
-fi
-
-    fi
-    if test  -z "$pgconfig"
-    then
-        { { echo "$as_me:$LINENO: error: pg_config executable not found
-********************************************************************************
-ERROR: cannot find PostgreSQL libraries. If you want to compile with PosgregSQL support,
-       you must either specify file locations explicitly using
-       --with-pgsql-includes and --with-pgsql-libs options, or make sure path to
-       pg_config is listed in your PATH environment variable. If you want to
-       disable PostgreSQL support, use --without-pgsql option.
-********************************************************************************
-" >&5
-echo "$as_me: error: pg_config executable not found
-********************************************************************************
-ERROR: cannot find PostgreSQL libraries. If you want to compile with PosgregSQL support,
-       you must either specify file locations explicitly using
-       --with-pgsql-includes and --with-pgsql-libs options, or make sure path to
-       pg_config is listed in your PATH environment variable. If you want to
-       disable PostgreSQL support, use --without-pgsql option.
-********************************************************************************
-" >&2;}
-   { (exit 1); exit 1; }; }
-    else
-        if test  -z "$ac_cv_pgsql_includes"
-        then
-            echo "$as_me:$LINENO: checking PostgreSQL C flags" >&5
-echo $ECHO_N "checking PostgreSQL C flags... $ECHO_C" >&6
-            PGSQL_CFLAGS="-I`${pgconfig} --includedir`"
-            echo "$as_me:$LINENO: result: $PGSQL_CFLAGS" >&5
-echo "${ECHO_T}$PGSQL_CFLAGS" >&6
-        fi
-        if test  -z "$ac_cv_pgsql_libs"
-        then
-            echo "$as_me:$LINENO: checking PostgreSQL linker flags" >&5
-echo $ECHO_N "checking PostgreSQL linker flags... $ECHO_C" >&6
-            PGSQL_LIBS="-L`${pgconfig} --libdir` -lpq"
-            echo "$as_me:$LINENO: result: $PGSQL_LIBS" >&5
-echo "${ECHO_T}$PGSQL_LIBS" >&6
-        fi
-    fi
-fi
-
-
-cat >>confdefs.h <<\_ACEOF
-#define USE_PGSQL 1
-_ACEOF
-
-
-
-else
-	echo "$as_me:$LINENO: result: no" >&5
-echo "${ECHO_T}no" >&6
-fi
-
-
-if test x$ac_cv_use_pgsql != xno; then
-  USE_PGSQL_TRUE=
-  USE_PGSQL_FALSE='#'
-else
-  USE_PGSQL_TRUE='#'
-  USE_PGSQL_FALSE=
-fi
-
-
-
-
-echo "$as_me:$LINENO: checking whether to use 64-bit document/word IDs" >&5
-echo $ECHO_N "checking whether to use 64-bit document/word IDs... $ECHO_C" >&6
-sph_enable_id64=no
-# Check whether --enable-id64 or --disable-id64 was given.
-if test "${enable_id64+set}" = set; then
-  enableval="$enable_id64"
-  sph_enable_id64=$enableval
-fi;
-if test x$sph_enable_id64 != xno; then
-
-cat >>confdefs.h <<\_ACEOF
-#define USE_64BIT 1
-_ACEOF
-
-	echo "$as_me:$LINENO: result: yes" >&5
-echo "${ECHO_T}yes" >&6
-else
-
-cat >>confdefs.h <<\_ACEOF
-#define USE_64BIT 0
-_ACEOF
-
-	echo "$as_me:$LINENO: result: no" >&5
-echo "${ECHO_T}no" >&6
-fi
-
-
-
-# Check whether --with-libstemmer or --without-libstemmer was given.
-if test "${with_libstemmer+set}" = set; then
-  withval="$with_libstemmer"
-  ac_cv_use_libstemmer=$withval
-else
-  ac_cv_use_libstemmer=no
-
-fi;
-
-echo "$as_me:$LINENO: checking whether to compile with libstemmer support" >&5
-echo $ECHO_N "checking whether to compile with libstemmer support... $ECHO_C" >&6
-if test x$ac_cv_use_libstemmer != xno; then
-	if test -d libstemmer_c && test -f libstemmer_c/include/libstemmer.h; then
-		echo "$as_me:$LINENO: result: yes" >&5
-echo "${ECHO_T}yes" >&6
-
-cat >>confdefs.h <<\_ACEOF
-#define USE_LIBSTEMMER 1
-_ACEOF
-
-	else
-		{ { echo "$as_me:$LINENO: error: missing libstemmer sources from libstemmer_c.
-
-Please download the C version of libstemmer library from
-http://snowball.tartarus.org/ and extract its sources over libstemmer_c/
-subdirectory in order to build Sphinx with libstemmer support.
-" >&5
-echo "$as_me: error: missing libstemmer sources from libstemmer_c.
-
-Please download the C version of libstemmer library from
-http://snowball.tartarus.org/ and extract its sources over libstemmer_c/
-subdirectory in order to build Sphinx with libstemmer support.
-" >&2;}
-   { (exit 1); exit 1; }; }
-	fi
-else
-	echo "$as_me:$LINENO: result: no" >&5
-echo "${ECHO_T}no" >&6
-
-cat >>confdefs.h <<\_ACEOF
-#define USE_LIBSTEMMER 0
-_ACEOF
-
-fi
-
-
-if test x$ac_cv_use_libstemmer != xno; then
-  USE_LIBSTEMMER_TRUE=
-  USE_LIBSTEMMER_FALSE='#'
-else
-  USE_LIBSTEMMER_TRUE='#'
-  USE_LIBSTEMMER_FALSE=
-fi
-
-
-
-
-	echo "$as_me:$LINENO: result: " >&5
-echo "${ECHO_T}" >&6
 	echo "$as_me:$LINENO: result: checking for compiler programs" >&5
 echo "${ECHO_T}checking for compiler programs" >&6
 	TMP=`echo checking for compiler programs | sed -e sX.X-Xg`
@@ -2395,8 +1852,6 @@ else
 	echo "$as_me:$LINENO: result: no" >&5
 echo "${ECHO_T}no" >&6
 fi
-
-CPPFLAGS="$CPPFLAGS $MYSQL_CFLAGS $PGSQL_CFLAGS"
 
 if test x$ac_env_CFLAGS_set != xset; then
 	CFLAGS=$SPHINX_CFLAGS
@@ -4791,6 +4246,150 @@ _ACEOF
 fi
 
 done
+
+if test "${ac_cv_header_expat_h+set}" = set; then
+  echo "$as_me:$LINENO: checking for expat.h" >&5
+echo $ECHO_N "checking for expat.h... $ECHO_C" >&6
+if test "${ac_cv_header_expat_h+set}" = set; then
+  echo $ECHO_N "(cached) $ECHO_C" >&6
+fi
+echo "$as_me:$LINENO: result: $ac_cv_header_expat_h" >&5
+echo "${ECHO_T}$ac_cv_header_expat_h" >&6
+else
+  # Is the header compilable?
+echo "$as_me:$LINENO: checking expat.h usability" >&5
+echo $ECHO_N "checking expat.h usability... $ECHO_C" >&6
+cat >conftest.$ac_ext <<_ACEOF
+/* confdefs.h.  */
+_ACEOF
+cat confdefs.h >>conftest.$ac_ext
+cat >>conftest.$ac_ext <<_ACEOF
+/* end confdefs.h.  */
+$ac_includes_default
+#include <expat.h>
+_ACEOF
+rm -f conftest.$ac_objext
+if { (eval echo "$as_me:$LINENO: \"$ac_compile\"") >&5
+  (eval $ac_compile) 2>conftest.er1
+  ac_status=$?
+  grep -v '^ *+' conftest.er1 >conftest.err
+  rm -f conftest.er1
+  cat conftest.err >&5
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); } &&
+	 { ac_try='test -z "$ac_c_werror_flag"
+			 || test ! -s conftest.err'
+  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); }; } &&
+	 { ac_try='test -s conftest.$ac_objext'
+  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); }; }; then
+  ac_header_compiler=yes
+else
+  echo "$as_me: failed program was:" >&5
+sed 's/^/| /' conftest.$ac_ext >&5
+
+ac_header_compiler=no
+fi
+rm -f conftest.err conftest.$ac_objext conftest.$ac_ext
+echo "$as_me:$LINENO: result: $ac_header_compiler" >&5
+echo "${ECHO_T}$ac_header_compiler" >&6
+
+# Is the header present?
+echo "$as_me:$LINENO: checking expat.h presence" >&5
+echo $ECHO_N "checking expat.h presence... $ECHO_C" >&6
+cat >conftest.$ac_ext <<_ACEOF
+/* confdefs.h.  */
+_ACEOF
+cat confdefs.h >>conftest.$ac_ext
+cat >>conftest.$ac_ext <<_ACEOF
+/* end confdefs.h.  */
+#include <expat.h>
+_ACEOF
+if { (eval echo "$as_me:$LINENO: \"$ac_cpp conftest.$ac_ext\"") >&5
+  (eval $ac_cpp conftest.$ac_ext) 2>conftest.er1
+  ac_status=$?
+  grep -v '^ *+' conftest.er1 >conftest.err
+  rm -f conftest.er1
+  cat conftest.err >&5
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); } >/dev/null; then
+  if test -s conftest.err; then
+    ac_cpp_err=$ac_c_preproc_warn_flag
+    ac_cpp_err=$ac_cpp_err$ac_c_werror_flag
+  else
+    ac_cpp_err=
+  fi
+else
+  ac_cpp_err=yes
+fi
+if test -z "$ac_cpp_err"; then
+  ac_header_preproc=yes
+else
+  echo "$as_me: failed program was:" >&5
+sed 's/^/| /' conftest.$ac_ext >&5
+
+  ac_header_preproc=no
+fi
+rm -f conftest.err conftest.$ac_ext
+echo "$as_me:$LINENO: result: $ac_header_preproc" >&5
+echo "${ECHO_T}$ac_header_preproc" >&6
+
+# So?  What about this header?
+case $ac_header_compiler:$ac_header_preproc:$ac_c_preproc_warn_flag in
+  yes:no: )
+    { echo "$as_me:$LINENO: WARNING: expat.h: accepted by the compiler, rejected by the preprocessor!" >&5
+echo "$as_me: WARNING: expat.h: accepted by the compiler, rejected by the preprocessor!" >&2;}
+    { echo "$as_me:$LINENO: WARNING: expat.h: proceeding with the compiler's result" >&5
+echo "$as_me: WARNING: expat.h: proceeding with the compiler's result" >&2;}
+    ac_header_preproc=yes
+    ;;
+  no:yes:* )
+    { echo "$as_me:$LINENO: WARNING: expat.h: present but cannot be compiled" >&5
+echo "$as_me: WARNING: expat.h: present but cannot be compiled" >&2;}
+    { echo "$as_me:$LINENO: WARNING: expat.h:     check for missing prerequisite headers?" >&5
+echo "$as_me: WARNING: expat.h:     check for missing prerequisite headers?" >&2;}
+    { echo "$as_me:$LINENO: WARNING: expat.h: see the Autoconf documentation" >&5
+echo "$as_me: WARNING: expat.h: see the Autoconf documentation" >&2;}
+    { echo "$as_me:$LINENO: WARNING: expat.h:     section \"Present But Cannot Be Compiled\"" >&5
+echo "$as_me: WARNING: expat.h:     section \"Present But Cannot Be Compiled\"" >&2;}
+    { echo "$as_me:$LINENO: WARNING: expat.h: proceeding with the preprocessor's result" >&5
+echo "$as_me: WARNING: expat.h: proceeding with the preprocessor's result" >&2;}
+    { echo "$as_me:$LINENO: WARNING: expat.h: in the future, the compiler will take precedence" >&5
+echo "$as_me: WARNING: expat.h: in the future, the compiler will take precedence" >&2;}
+    (
+      cat <<\_ASBOX
+## ---------------------------------- ##
+## Report this to shodan(at)shodan.ru ##
+## ---------------------------------- ##
+_ASBOX
+    ) |
+      sed "s/^/$as_me: WARNING:     /" >&2
+    ;;
+esac
+echo "$as_me:$LINENO: checking for expat.h" >&5
+echo $ECHO_N "checking for expat.h... $ECHO_C" >&6
+if test "${ac_cv_header_expat_h+set}" = set; then
+  echo $ECHO_N "(cached) $ECHO_C" >&6
+else
+  ac_cv_header_expat_h=$ac_header_preproc
+fi
+echo "$as_me:$LINENO: result: $ac_cv_header_expat_h" >&5
+echo "${ECHO_T}$ac_cv_header_expat_h" >&6
+
+fi
+if test $ac_cv_header_expat_h = yes; then
+  have_expat_h=yes
+else
+  have_expat_h=no
+fi
+
 
 
 
@@ -7278,6 +6877,134 @@ if test "$ac_cv_search_gethostbyname" != no; then
 
 fi
 
+echo "$as_me:$LINENO: checking for library containing XML_Parse" >&5
+echo $ECHO_N "checking for library containing XML_Parse... $ECHO_C" >&6
+if test "${ac_cv_search_XML_Parse+set}" = set; then
+  echo $ECHO_N "(cached) $ECHO_C" >&6
+else
+  ac_func_search_save_LIBS=$LIBS
+ac_cv_search_XML_Parse=no
+cat >conftest.$ac_ext <<_ACEOF
+/* confdefs.h.  */
+_ACEOF
+cat confdefs.h >>conftest.$ac_ext
+cat >>conftest.$ac_ext <<_ACEOF
+/* end confdefs.h.  */
+
+/* Override any gcc2 internal prototype to avoid an error.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+/* We use char because int might match the return type of a gcc2
+   builtin and then its argument prototype would still apply.  */
+char XML_Parse ();
+int
+main ()
+{
+XML_Parse ();
+  ;
+  return 0;
+}
+_ACEOF
+rm -f conftest.$ac_objext conftest$ac_exeext
+if { (eval echo "$as_me:$LINENO: \"$ac_link\"") >&5
+  (eval $ac_link) 2>conftest.er1
+  ac_status=$?
+  grep -v '^ *+' conftest.er1 >conftest.err
+  rm -f conftest.er1
+  cat conftest.err >&5
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); } &&
+	 { ac_try='test -z "$ac_c_werror_flag"
+			 || test ! -s conftest.err'
+  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); }; } &&
+	 { ac_try='test -s conftest$ac_exeext'
+  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); }; }; then
+  ac_cv_search_XML_Parse="none required"
+else
+  echo "$as_me: failed program was:" >&5
+sed 's/^/| /' conftest.$ac_ext >&5
+
+fi
+rm -f conftest.err conftest.$ac_objext \
+      conftest$ac_exeext conftest.$ac_ext
+if test "$ac_cv_search_XML_Parse" = no; then
+  for ac_lib in expat; do
+    LIBS="-l$ac_lib  $ac_func_search_save_LIBS"
+    cat >conftest.$ac_ext <<_ACEOF
+/* confdefs.h.  */
+_ACEOF
+cat confdefs.h >>conftest.$ac_ext
+cat >>conftest.$ac_ext <<_ACEOF
+/* end confdefs.h.  */
+
+/* Override any gcc2 internal prototype to avoid an error.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+/* We use char because int might match the return type of a gcc2
+   builtin and then its argument prototype would still apply.  */
+char XML_Parse ();
+int
+main ()
+{
+XML_Parse ();
+  ;
+  return 0;
+}
+_ACEOF
+rm -f conftest.$ac_objext conftest$ac_exeext
+if { (eval echo "$as_me:$LINENO: \"$ac_link\"") >&5
+  (eval $ac_link) 2>conftest.er1
+  ac_status=$?
+  grep -v '^ *+' conftest.er1 >conftest.err
+  rm -f conftest.er1
+  cat conftest.err >&5
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); } &&
+	 { ac_try='test -z "$ac_c_werror_flag"
+			 || test ! -s conftest.err'
+  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); }; } &&
+	 { ac_try='test -s conftest$ac_exeext'
+  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); }; }; then
+  ac_cv_search_XML_Parse="-l$ac_lib"
+break
+else
+  echo "$as_me: failed program was:" >&5
+sed 's/^/| /' conftest.$ac_ext >&5
+
+fi
+rm -f conftest.err conftest.$ac_objext \
+      conftest$ac_exeext conftest.$ac_ext
+  done
+fi
+LIBS=$ac_func_search_save_LIBS
+fi
+echo "$as_me:$LINENO: result: $ac_cv_search_XML_Parse" >&5
+echo "${ECHO_T}$ac_cv_search_XML_Parse" >&6
+if test "$ac_cv_search_XML_Parse" != no; then
+  test "$ac_cv_search_XML_Parse" = "none required" || LIBS="$ac_cv_search_XML_Parse $LIBS"
+  have_libexpat=yes
+else
+  have_libexpat=no
+fi
+
 
 
 
@@ -7478,6 +7205,570 @@ _ACEOF
 
 	echo "$as_me:$LINENO: result: " >&5
 echo "${ECHO_T}" >&6
+	echo "$as_me:$LINENO: result: configuring Sphinx" >&5
+echo "${ECHO_T}configuring Sphinx" >&6
+	TMP=`echo configuring Sphinx | sed -e sX.X-Xg`
+	echo "$as_me:$LINENO: result: $TMP" >&5
+echo "${ECHO_T}$TMP" >&6
+	echo "$as_me:$LINENO: result: " >&5
+echo "${ECHO_T}" >&6
+
+
+# check if we should compile with MySQL support
+
+# Check whether --with-mysql or --without-mysql was given.
+if test "${with_mysql+set}" = set; then
+  withval="$with_mysql"
+  ac_cv_use_mysql=$withval
+else
+  ac_cv_use_mysql=yes
+
+fi;
+echo "$as_me:$LINENO: checking whether to compile with MySQL support" >&5
+echo $ECHO_N "checking whether to compile with MySQL support... $ECHO_C" >&6
+if test x$ac_cv_use_mysql != xno; then
+	echo "$as_me:$LINENO: result: yes" >&5
+echo "${ECHO_T}yes" >&6
+
+
+mysqlconfig_locations="mysql_config /usr/bin/mysql_config /usr/local/bin/mysql_config /usr/local/mysql/bin/mysql_config /opt/mysql/bin/mysql_config /usr/pkg/bin/mysql_config"
+user_mysql_includes=
+user_mysql_libs=
+
+# check explicit MySQL root for mysql_config, include, lib
+if test  x$ac_cv_use_mysql != xyes -a x$ac_cv_use_mysql != xno
+then
+	mysqlroot=`echo $ac_cv_use_mysql | sed -e 's+/$++'`
+	if test  -x "$mysqlroot/bin/mysql_config"
+	then
+		# if there's mysql_config, that's the best route
+		mysqlconfig_locations="$mysqlroot/bin/mysql_config"
+	elif test  -d "$mysqlroot/include" -a -d "$mysqlroot/lib"
+	then
+		# explicit root; do not check well-known paths
+		mysqlconfig_locations=
+
+		# includes
+		if test  -d "$mysqlroot/include/mysql"
+		then
+			user_mysql_includes="$mysqlroot/include/mysql"
+		else
+			user_mysql_includes="$mysqlroot/include"
+		fi
+
+		# libs
+		if test  -d "$mysqlroot/lib/mysql"
+		then
+			user_mysql_libs="$mysqlroot/lib/mysql"
+		else
+			user_mysql_libs="$mysqlroot/lib"
+		fi
+	else
+		{ { echo "$as_me:$LINENO: error: invalid MySQL root directory '$mysqlroot'; neither bin/mysql_config, nor include/ and lib/ were found there" >&5
+echo "$as_me: error: invalid MySQL root directory '$mysqlroot'; neither bin/mysql_config, nor include/ and lib/ were found there" >&2;}
+   { (exit 1); exit 1; }; }
+	fi
+fi
+
+
+# try running mysql_config
+echo "$as_me:$LINENO: checking for mysql_config" >&5
+echo $ECHO_N "checking for mysql_config... $ECHO_C" >&6
+for mysqlconfig in $mysqlconfig_locations
+do
+	if test  -n "$mysqlconfig"
+	then
+		MYSQL_CFLAGS=`${mysqlconfig} --cflags 2>/dev/null`
+		MYSQL_LIBS=`${mysqlconfig} --libs 2>/dev/null`
+
+		if test  $? -eq 0
+		then
+			echo "$as_me:$LINENO: result: $mysqlconfig" >&5
+echo "${ECHO_T}$mysqlconfig" >&6
+			mysqlconfig=
+			break
+		else
+			MYSQL_CFLAGS=
+			MYSQL_LIBS=
+		fi
+	fi
+done
+if test  -n "$mysqlconfig"
+then
+	echo "$as_me:$LINENO: result: not found" >&5
+echo "${ECHO_T}not found" >&6
+fi
+
+
+# if there's nothing from mysql_config, check well-known include paths
+# explicit overrides will be applied later
+if test  -z "$MYSQL_CFLAGS"
+then
+	for CANDIDATE in "$user_mysql_includes" "/usr/local/mysql/include" "/usr/local/mysql/include/mysql" \
+		"/usr/include/mysql"
+	do
+		if test  -n "$CANDIDATE" -a -r "$CANDIDATE/mysql.h"
+		then
+			MYSQL_CFLAGS="-I$CANDIDATE"
+			break
+		fi
+	done
+fi
+
+
+# if there's nothing from mysql_config, check well-known library paths
+# explicit overrides will be applied later
+if test  -z "$MYSQL_LIBS"
+then
+	for CANDIDATE in "$user_mysql_libs" "/usr/lib64/mysql" \
+		"/usr/local/mysql/lib/mysql" "/usr/local/mysql/lib" \
+		"/usr/local/lib/mysql" "/usr/lib/mysql" \
+		"/opt/mysql/lib/mysql" "/usr/pkg/lib/mysql"
+	do
+		if test  -n "$CANDIDATE" -a -d "$CANDIDATE"
+		then
+			MYSQL_LIBS="-L$CANDIDATE -lmysqlclient -lz"
+			break
+		fi
+	done
+fi
+
+
+# apply explicit include path overrides
+
+# Check whether --with-mysql-includes or --without-mysql-includes was given.
+if test "${with_mysql_includes+set}" = set; then
+  withval="$with_mysql_includes"
+  ac_cv_mysql_includes=$withval
+fi;
+if test  -n "$ac_cv_mysql_includes"
+then
+	MYSQL_CFLAGS="-I$ac_cv_mysql_includes"
+fi
+
+
+# apply explicit lib path overrides
+
+# Check whether --with-mysql-libs or --without-mysql-libs was given.
+if test "${with_mysql_libs+set}" = set; then
+  withval="$with_mysql_libs"
+  ac_cv_mysql_libs=$withval
+fi;
+if test  -n "$ac_cv_mysql_libs"
+then
+	# Trim trailing '.libs' if user passed it in --with-mysql-libs option
+	ac_cv_mysql_libs=`echo ${ac_cv_mysql_libs} | sed -e 's/.libs$//' \
+		-e 's+.libs/$++'`
+	MYSQL_LIBS="-L$ac_cv_mysql_libs -lmysqlclient -lz"
+fi
+
+
+# now that we did all we could, perform final checks
+echo "$as_me:$LINENO: checking MySQL include files" >&5
+echo $ECHO_N "checking MySQL include files... $ECHO_C" >&6
+if test  -z "$MYSQL_CFLAGS"
+then
+	{ { echo "$as_me:$LINENO: error: missing include files.
+
+******************************************************************************
+ERROR: cannot find MySQL include files.
+
+Check that you do have MySQL include files installed.
+The package name is typically 'mysql-devel'.
+
+If include files are installed on your system, but you are still getting
+this message, you should do one of the following:
+
+1) either specify includes location explicitly, using --with-mysql-includes;
+2) or specify MySQL installation root location explicitly, using --with-mysql;
+3) or make sure that the path to 'mysql_config' program is listed in
+   your PATH environment variable.
+
+To disable MySQL support, use --without-mysql option.
+******************************************************************************
+" >&5
+echo "$as_me: error: missing include files.
+
+******************************************************************************
+ERROR: cannot find MySQL include files.
+
+Check that you do have MySQL include files installed.
+The package name is typically 'mysql-devel'.
+
+If include files are installed on your system, but you are still getting
+this message, you should do one of the following:
+
+1) either specify includes location explicitly, using --with-mysql-includes;
+2) or specify MySQL installation root location explicitly, using --with-mysql;
+3) or make sure that the path to 'mysql_config' program is listed in
+   your PATH environment variable.
+
+To disable MySQL support, use --without-mysql option.
+******************************************************************************
+" >&2;}
+   { (exit 1); exit 1; }; }
+else
+	echo "$as_me:$LINENO: result: $MYSQL_CFLAGS" >&5
+echo "${ECHO_T}$MYSQL_CFLAGS" >&6
+fi
+
+
+echo "$as_me:$LINENO: checking MySQL libraries" >&5
+echo $ECHO_N "checking MySQL libraries... $ECHO_C" >&6
+if test  -z "$MYSQL_LIBS"
+then
+	{ { echo "$as_me:$LINENO: error: missing libraries.
+
+******************************************************************************
+ERROR: cannot find MySQL libraries.
+
+Check that you do have MySQL libraries installed.
+The package name is typically 'mysql-devel'.
+
+If libraries are installed on your system, but you are still getting
+this message, you should do one of the following:
+
+1) either specify libraries location explicitly, using --with-mysql-libs;
+2) or specify MySQL installation root location explicitly, using --with-mysql;
+3) or make sure that the path to 'mysql_config' program is listed in
+   your PATH environment variable.
+
+To disable MySQL support, use --without-mysql option.
+******************************************************************************
+" >&5
+echo "$as_me: error: missing libraries.
+
+******************************************************************************
+ERROR: cannot find MySQL libraries.
+
+Check that you do have MySQL libraries installed.
+The package name is typically 'mysql-devel'.
+
+If libraries are installed on your system, but you are still getting
+this message, you should do one of the following:
+
+1) either specify libraries location explicitly, using --with-mysql-libs;
+2) or specify MySQL installation root location explicitly, using --with-mysql;
+3) or make sure that the path to 'mysql_config' program is listed in
+   your PATH environment variable.
+
+To disable MySQL support, use --without-mysql option.
+******************************************************************************
+" >&2;}
+   { (exit 1); exit 1; }; }
+else
+	echo "$as_me:$LINENO: result: $MYSQL_LIBS" >&5
+echo "${ECHO_T}$MYSQL_LIBS" >&6
+fi
+
+
+
+
+cat >>confdefs.h <<\_ACEOF
+#define USE_MYSQL 1
+_ACEOF
+
+
+
+else
+	echo "$as_me:$LINENO: result: no" >&5
+echo "${ECHO_T}no" >&6
+fi
+
+
+if test x$ac_cv_use_mysql != xno; then
+  USE_MYSQL_TRUE=
+  USE_MYSQL_FALSE='#'
+else
+  USE_MYSQL_TRUE='#'
+  USE_MYSQL_FALSE=
+fi
+
+
+
+# check if we should compile with PostgreSQL support
+
+# Check whether --with-pgsql or --without-pgsql was given.
+if test "${with_pgsql+set}" = set; then
+  withval="$with_pgsql"
+  ac_cv_use_pgsql=$withval
+else
+  ac_cv_use_pgsql=no
+
+fi;
+echo "$as_me:$LINENO: checking whether to compile with PostgreSQL support" >&5
+echo $ECHO_N "checking whether to compile with PostgreSQL support... $ECHO_C" >&6
+if test x$ac_cv_use_pgsql != xno; then
+	echo "$as_me:$LINENO: result: yes" >&5
+echo "${ECHO_T}yes" >&6
+
+
+# Check for custom includes path
+if test  -z "$ac_cv_pgsql_includes"
+then
+
+# Check whether --with-pgsql-includes or --without-pgsql-includes was given.
+if test "${with_pgsql_includes+set}" = set; then
+  withval="$with_pgsql_includes"
+  ac_cv_pgsql_includes=$withval
+fi;
+fi
+if test  -n "$ac_cv_pgsql_includes"
+then
+	echo "$as_me:$LINENO: checking PostgreSQL includes" >&5
+echo $ECHO_N "checking PostgreSQL includes... $ECHO_C" >&6
+if test "${ac_cv_pgsql_includes+set}" = set; then
+  echo $ECHO_N "(cached) $ECHO_C" >&6
+else
+  ac_cv_pgsql_includes=""
+fi
+echo "$as_me:$LINENO: result: $ac_cv_pgsql_includes" >&5
+echo "${ECHO_T}$ac_cv_pgsql_includes" >&6
+	PGSQL_CFLAGS="-I$ac_cv_pgsql_includes"
+fi
+
+# Check for custom library path
+if test  -z "$ac_cv_pgsql_libs"
+then
+
+# Check whether --with-pgsql-libs or --without-pgsql-libs was given.
+if test "${with_pgsql_libs+set}" = set; then
+  withval="$with_pgsql_libs"
+  ac_cv_pgsql_libs=$withval
+fi;
+fi
+if test  -n "$ac_cv_pgsql_libs"
+then
+	echo "$as_me:$LINENO: checking PostgreSQL libraries" >&5
+echo $ECHO_N "checking PostgreSQL libraries... $ECHO_C" >&6
+if test "${ac_cv_pgsql_libs+set}" = set; then
+  echo $ECHO_N "(cached) $ECHO_C" >&6
+else
+  ac_cv_pgsql_libs=""
+fi
+echo "$as_me:$LINENO: result: $ac_cv_pgsql_libs" >&5
+echo "${ECHO_T}$ac_cv_pgsql_libs" >&6
+	PGSQL_LIBS="-L$ac_cv_pgsql_libs -lpq"
+fi
+
+# If some path is missing, try to autodetermine with pgsql_config
+if test  -z "$ac_cv_pgsql_includes" -o -z "$ac_cv_pgsql_libs"
+then
+    if test  -z "$pgconfig"
+    then
+        # Extract the first word of "pg_config", so it can be a program name with args.
+set dummy pg_config; ac_word=$2
+echo "$as_me:$LINENO: checking for $ac_word" >&5
+echo $ECHO_N "checking for $ac_word... $ECHO_C" >&6
+if test "${ac_cv_path_pgconfig+set}" = set; then
+  echo $ECHO_N "(cached) $ECHO_C" >&6
+else
+  case $pgconfig in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_pgconfig="$pgconfig" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  test -z "$as_dir" && as_dir=.
+  for ac_exec_ext in '' $ac_executable_extensions; do
+  if $as_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
+    ac_cv_path_pgconfig="$as_dir/$ac_word$ac_exec_ext"
+    echo "$as_me:$LINENO: found $as_dir/$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+done
+
+  ;;
+esac
+fi
+pgconfig=$ac_cv_path_pgconfig
+
+if test -n "$pgconfig"; then
+  echo "$as_me:$LINENO: result: $pgconfig" >&5
+echo "${ECHO_T}$pgconfig" >&6
+else
+  echo "$as_me:$LINENO: result: no" >&5
+echo "${ECHO_T}no" >&6
+fi
+
+    fi
+    if test  -z "$pgconfig"
+    then
+        { { echo "$as_me:$LINENO: error: pg_config executable not found
+********************************************************************************
+ERROR: cannot find PostgreSQL libraries. If you want to compile with PosgregSQL support,
+       you must either specify file locations explicitly using
+       --with-pgsql-includes and --with-pgsql-libs options, or make sure path to
+       pg_config is listed in your PATH environment variable. If you want to
+       disable PostgreSQL support, use --without-pgsql option.
+********************************************************************************
+" >&5
+echo "$as_me: error: pg_config executable not found
+********************************************************************************
+ERROR: cannot find PostgreSQL libraries. If you want to compile with PosgregSQL support,
+       you must either specify file locations explicitly using
+       --with-pgsql-includes and --with-pgsql-libs options, or make sure path to
+       pg_config is listed in your PATH environment variable. If you want to
+       disable PostgreSQL support, use --without-pgsql option.
+********************************************************************************
+" >&2;}
+   { (exit 1); exit 1; }; }
+    else
+        if test  -z "$ac_cv_pgsql_includes"
+        then
+            echo "$as_me:$LINENO: checking PostgreSQL C flags" >&5
+echo $ECHO_N "checking PostgreSQL C flags... $ECHO_C" >&6
+            PGSQL_CFLAGS="-I`${pgconfig} --includedir`"
+            echo "$as_me:$LINENO: result: $PGSQL_CFLAGS" >&5
+echo "${ECHO_T}$PGSQL_CFLAGS" >&6
+        fi
+        if test  -z "$ac_cv_pgsql_libs"
+        then
+            echo "$as_me:$LINENO: checking PostgreSQL linker flags" >&5
+echo $ECHO_N "checking PostgreSQL linker flags... $ECHO_C" >&6
+            PGSQL_LIBS="-L`${pgconfig} --libdir` -lpq"
+            echo "$as_me:$LINENO: result: $PGSQL_LIBS" >&5
+echo "${ECHO_T}$PGSQL_LIBS" >&6
+        fi
+    fi
+fi
+
+
+cat >>confdefs.h <<\_ACEOF
+#define USE_PGSQL 1
+_ACEOF
+
+
+
+else
+	echo "$as_me:$LINENO: result: no" >&5
+echo "${ECHO_T}no" >&6
+fi
+
+
+if test x$ac_cv_use_pgsql != xno; then
+  USE_PGSQL_TRUE=
+  USE_PGSQL_FALSE='#'
+else
+  USE_PGSQL_TRUE='#'
+  USE_PGSQL_FALSE=
+fi
+
+
+
+# we can now set preprocessor flags for both C and C++ compilers
+CPPFLAGS="$CPPFLAGS $MYSQL_CFLAGS $PGSQL_CFLAGS"
+
+
+echo "$as_me:$LINENO: checking whether to use 64-bit document/word IDs" >&5
+echo $ECHO_N "checking whether to use 64-bit document/word IDs... $ECHO_C" >&6
+sph_enable_id64=no
+# Check whether --enable-id64 or --disable-id64 was given.
+if test "${enable_id64+set}" = set; then
+  enableval="$enable_id64"
+  sph_enable_id64=$enableval
+fi;
+if test x$sph_enable_id64 != xno; then
+
+cat >>confdefs.h <<\_ACEOF
+#define USE_64BIT 1
+_ACEOF
+
+	echo "$as_me:$LINENO: result: yes" >&5
+echo "${ECHO_T}yes" >&6
+else
+
+cat >>confdefs.h <<\_ACEOF
+#define USE_64BIT 0
+_ACEOF
+
+	echo "$as_me:$LINENO: result: no" >&5
+echo "${ECHO_T}no" >&6
+fi
+
+
+
+# Check whether --with-libstemmer or --without-libstemmer was given.
+if test "${with_libstemmer+set}" = set; then
+  withval="$with_libstemmer"
+  ac_cv_use_libstemmer=$withval
+else
+  ac_cv_use_libstemmer=no
+
+fi;
+
+echo "$as_me:$LINENO: checking whether to compile with libstemmer support" >&5
+echo $ECHO_N "checking whether to compile with libstemmer support... $ECHO_C" >&6
+if test x$ac_cv_use_libstemmer != xno; then
+	if test -d libstemmer_c && test -f libstemmer_c/include/libstemmer.h; then
+		echo "$as_me:$LINENO: result: yes" >&5
+echo "${ECHO_T}yes" >&6
+
+cat >>confdefs.h <<\_ACEOF
+#define USE_LIBSTEMMER 1
+_ACEOF
+
+	else
+		{ { echo "$as_me:$LINENO: error: missing libstemmer sources from libstemmer_c.
+
+Please download the C version of libstemmer library from
+http://snowball.tartarus.org/ and extract its sources over libstemmer_c/
+subdirectory in order to build Sphinx with libstemmer support.
+" >&5
+echo "$as_me: error: missing libstemmer sources from libstemmer_c.
+
+Please download the C version of libstemmer library from
+http://snowball.tartarus.org/ and extract its sources over libstemmer_c/
+subdirectory in order to build Sphinx with libstemmer support.
+" >&2;}
+   { (exit 1); exit 1; }; }
+	fi
+else
+	echo "$as_me:$LINENO: result: no" >&5
+echo "${ECHO_T}no" >&6
+
+cat >>confdefs.h <<\_ACEOF
+#define USE_LIBSTEMMER 0
+_ACEOF
+
+fi
+
+
+if test x$ac_cv_use_libstemmer != xno; then
+  USE_LIBSTEMMER_TRUE=
+  USE_LIBSTEMMER_FALSE='#'
+else
+  USE_LIBSTEMMER_TRUE='#'
+  USE_LIBSTEMMER_FALSE=
+fi
+
+
+
+echo "$as_me:$LINENO: checking for libexpat" >&5
+echo $ECHO_N "checking for libexpat... $ECHO_C" >&6
+if test  $have_expat_h = yes -a $have_libexpat = yes ; then
+
+cat >>confdefs.h <<\_ACEOF
+#define USE_LIBEXPAT 1
+_ACEOF
+
+	echo "$as_me:$LINENO: result: found" >&5
+echo "${ECHO_T}found" >&6
+else
+	echo "$as_me:$LINENO: result: not found" >&5
+echo "${ECHO_T}not found" >&6
+	{ echo "$as_me:$LINENO: WARNING: xmlpipe2 will NOT be available" >&5
+echo "$as_me: WARNING: xmlpipe2 will NOT be available" >&2;}
+fi
+
+
+
+	echo "$as_me:$LINENO: result: " >&5
+echo "${ECHO_T}" >&6
 	echo "$as_me:$LINENO: result: generating configuration files" >&5
 echo "${ECHO_T}generating configuration files" >&6
 	TMP=`echo generating configuration files | sed -e sX.X-Xg`
@@ -7597,27 +7888,6 @@ echo "$as_me: error: conditional \"MAINTAINER_MODE\" was never defined.
 Usually this means the macro was only invoked conditionally." >&2;}
    { (exit 1); exit 1; }; }
 fi
-if test -z "${USE_MYSQL_TRUE}" && test -z "${USE_MYSQL_FALSE}"; then
-  { { echo "$as_me:$LINENO: error: conditional \"USE_MYSQL\" was never defined.
-Usually this means the macro was only invoked conditionally." >&5
-echo "$as_me: error: conditional \"USE_MYSQL\" was never defined.
-Usually this means the macro was only invoked conditionally." >&2;}
-   { (exit 1); exit 1; }; }
-fi
-if test -z "${USE_PGSQL_TRUE}" && test -z "${USE_PGSQL_FALSE}"; then
-  { { echo "$as_me:$LINENO: error: conditional \"USE_PGSQL\" was never defined.
-Usually this means the macro was only invoked conditionally." >&5
-echo "$as_me: error: conditional \"USE_PGSQL\" was never defined.
-Usually this means the macro was only invoked conditionally." >&2;}
-   { (exit 1); exit 1; }; }
-fi
-if test -z "${USE_LIBSTEMMER_TRUE}" && test -z "${USE_LIBSTEMMER_FALSE}"; then
-  { { echo "$as_me:$LINENO: error: conditional \"USE_LIBSTEMMER\" was never defined.
-Usually this means the macro was only invoked conditionally." >&5
-echo "$as_me: error: conditional \"USE_LIBSTEMMER\" was never defined.
-Usually this means the macro was only invoked conditionally." >&2;}
-   { (exit 1); exit 1; }; }
-fi
 if test -z "${AMDEP_TRUE}" && test -z "${AMDEP_FALSE}"; then
   { { echo "$as_me:$LINENO: error: conditional \"AMDEP\" was never defined.
 Usually this means the macro was only invoked conditionally." >&5
@@ -7636,6 +7906,27 @@ if test -z "${am__fastdepCXX_TRUE}" && test -z "${am__fastdepCXX_FALSE}"; then
   { { echo "$as_me:$LINENO: error: conditional \"am__fastdepCXX\" was never defined.
 Usually this means the macro was only invoked conditionally." >&5
 echo "$as_me: error: conditional \"am__fastdepCXX\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test -z "${USE_MYSQL_TRUE}" && test -z "${USE_MYSQL_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"USE_MYSQL\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"USE_MYSQL\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test -z "${USE_PGSQL_TRUE}" && test -z "${USE_PGSQL_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"USE_PGSQL\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"USE_PGSQL\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test -z "${USE_LIBSTEMMER_TRUE}" && test -z "${USE_LIBSTEMMER_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"USE_LIBSTEMMER\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"USE_LIBSTEMMER\" was never defined.
 Usually this means the macro was only invoked conditionally." >&2;}
    { (exit 1); exit 1; }; }
 fi
@@ -8199,17 +8490,6 @@ s,@am__untar@,$am__untar,;t t
 s,@MAINTAINER_MODE_TRUE@,$MAINTAINER_MODE_TRUE,;t t
 s,@MAINTAINER_MODE_FALSE@,$MAINTAINER_MODE_FALSE,;t t
 s,@MAINT@,$MAINT,;t t
-s,@MYSQL_LIBS@,$MYSQL_LIBS,;t t
-s,@MYSQL_CFLAGS@,$MYSQL_CFLAGS,;t t
-s,@USE_MYSQL_TRUE@,$USE_MYSQL_TRUE,;t t
-s,@USE_MYSQL_FALSE@,$USE_MYSQL_FALSE,;t t
-s,@pgconfig@,$pgconfig,;t t
-s,@PGSQL_LIBS@,$PGSQL_LIBS,;t t
-s,@PGSQL_CFLAGS@,$PGSQL_CFLAGS,;t t
-s,@USE_PGSQL_TRUE@,$USE_PGSQL_TRUE,;t t
-s,@USE_PGSQL_FALSE@,$USE_PGSQL_FALSE,;t t
-s,@USE_LIBSTEMMER_TRUE@,$USE_LIBSTEMMER_TRUE,;t t
-s,@USE_LIBSTEMMER_FALSE@,$USE_LIBSTEMMER_FALSE,;t t
 s,@CC@,$CC,;t t
 s,@CFLAGS@,$CFLAGS,;t t
 s,@LDFLAGS@,$LDFLAGS,;t t
@@ -8237,6 +8517,17 @@ s,@ac_ct_RANLIB@,$ac_ct_RANLIB,;t t
 s,@CPP@,$CPP,;t t
 s,@EGREP@,$EGREP,;t t
 s,@LIBOBJS@,$LIBOBJS,;t t
+s,@MYSQL_LIBS@,$MYSQL_LIBS,;t t
+s,@MYSQL_CFLAGS@,$MYSQL_CFLAGS,;t t
+s,@USE_MYSQL_TRUE@,$USE_MYSQL_TRUE,;t t
+s,@USE_MYSQL_FALSE@,$USE_MYSQL_FALSE,;t t
+s,@pgconfig@,$pgconfig,;t t
+s,@PGSQL_LIBS@,$PGSQL_LIBS,;t t
+s,@PGSQL_CFLAGS@,$PGSQL_CFLAGS,;t t
+s,@USE_PGSQL_TRUE@,$USE_PGSQL_TRUE,;t t
+s,@USE_PGSQL_FALSE@,$USE_PGSQL_FALSE,;t t
+s,@USE_LIBSTEMMER_TRUE@,$USE_LIBSTEMMER_TRUE,;t t
+s,@USE_LIBSTEMMER_FALSE@,$USE_LIBSTEMMER_FALSE,;t t
 s,@CONFDIR@,$CONFDIR,;t t
 s,@LTLIBOBJS@,$LTLIBOBJS,;t t
 CEOF

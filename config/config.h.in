@@ -181,6 +181,9 @@
 /* 64-bit document and word IDs */
 #undef USE_64BIT
 
+/* define to use expat XML library */
+#undef USE_LIBEXPAT
+
 /* libstemmer support */
 #undef USE_LIBSTEMMER
 

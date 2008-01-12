@@ -30,6 +30,9 @@
 /* Define if LOCK_EX is defined in sys/file.h */
 #undef HAVE_LOCK_EX
 
+/* Define to 1 if you have the `logf' function. */
+#undef HAVE_LOGF
+
 /* Define to 1 if your system has a GNU libc compatible `malloc' function, and
    to 0 otherwise. */
 #undef HAVE_MALLOC

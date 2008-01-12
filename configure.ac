@@ -90,7 +90,8 @@ AC_FUNC_VPRINTF
 AC_SEARCH_LIBS([setsockopt],[socket])
 AC_SEARCH_LIBS([gethostbyname],[nsl socket resolv])
 AC_SEARCH_LIBS([XML_Parse],[expat],[have_libexpat=yes],[have_libexpat=no])
-AC_CHECK_FUNCS([dup2 gethostbyname gettimeofday memmove memset select socket strcasecmp strchr strerror strncasecmp strstr strtol])
+AC_SEARCH_LIBS([logf],[m])
+AC_CHECK_FUNCS([dup2 gethostbyname gettimeofday memmove memset select socket strcasecmp strchr strerror strncasecmp strstr strtol logf])
 
 SPHINX_CHECK_DEFINE(LOCK_EX,sys/file.h)
 SPHINX_CHECK_DEFINE(F_SETLKW,fcntl.h)

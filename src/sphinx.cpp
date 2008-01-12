@@ -74,7 +74,7 @@
 /////////////////////////////////////////////////////////////////////////////
 
 // logf() is not there sometimes (eg. Solaris 9)
-#if !HAVE_LOGF
+#if !USE_WINDOWS && !HAVE_LOGF
 static inline float logf ( float v )
 {
 	return (float) log ( v );

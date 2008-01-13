@@ -12470,9 +12470,11 @@ bool CSphDictCRC::StemById ( BYTE * pWord, int iStemmer )
 
 	case SPH_MORPH_METAPHONE_SBCS:
 		stem_dmetaphone ( pWord, false );
+		break;
 
 	case SPH_MORPH_METAPHONE_UTF8:
 		stem_dmetaphone ( pWord, true );
+		break;
 
 	default:
 #if USE_LIBSTEMMER

@@ -1254,8 +1254,8 @@ Let's begin with an example create statement and search query:
 
 First 3 columns of search table must be INTEGER, INTEGER and VARCHAR which
 will be mapped to document ID, match weight and search query accordingly.
-There also must be indexes on document ID and search query columns. These
-columns' names are insignficant.
+Query column must be indexed; all the others must be kept unindexed.
+Columns' names are ignored so you can use arbitrary ones.
 
 Additional columns must be either INTEGER or TIMESTAMP. They will be bound
 to attributes provided in Sphinx result set by name, so their names must

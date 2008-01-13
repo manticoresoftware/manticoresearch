@@ -1386,8 +1386,9 @@ SELECT * FROM t1 WHERE query='test it;mode=any';
 <para>
 First 3 columns of search table <emphasis>must</emphasis> be <code>INTEGER</code>,
 <code>INTEGER</code> and <code>VARCHAR</code> which will be mapped to document ID,
-match weight and search query accordingly. There also must be indexes on document ID
-and search query columns. These columns' names are insignficant.
+match weight and search query accordingly. Query column must be indexed;
+all the others must be kept unindexed. Columns' names are ignored so you
+can use arbitrary ones.
 </para>
 <para>
 Additional columns must be either <code>INTEGER</code> or <code>TIMESTAMP</code>.

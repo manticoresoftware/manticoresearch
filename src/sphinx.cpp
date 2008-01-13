@@ -14694,14 +14694,15 @@ private:
 		CSphVector<CSphString>	m_dAttrs;
 	};
 
-	Document_t					m_tCurDocument;
-	CSphVector<Document_t>		m_dParsedDocuments;
+	Document_t *				m_pCurDocument;
+	CSphVector<Document_t *>	m_dParsedDocuments;
 
 	FILE *			m_pPipe;			///< incoming stream
 	CSphString		m_sCommand;			///< my command
 	CSphString		m_sError;
 	CSphVector<CSphString> m_dDefaultAttrs;
 	CSphVector<CSphString> m_dInvalid;
+	CSphVector<CSphString> m_dWarned;
 	int				m_iElementDepth;
 
 	BYTE *			m_pBuffer;
@@ -14719,6 +14720,10 @@ private:
 	int				m_iCurAttr;
 
 	XML_Parser		m_pParser;
+
+	static const int MAX_FIELD_LENGTH = 2097152;
+	BYTE * 			m_pFieldBuffer;
+	int				m_iFieldBufferLen;
 
 	void			Error ( const char * sTemplate, ... );
 	void			ConfigureAttrs ( const CSphVariant * pHead, DWORD uAttrType );
@@ -14761,8 +14766,11 @@ CSphSource_XMLPipe2::CSphSource_XMLPipe2 ( const char * sName )
 	, m_iCurField		( -1 )
 	, m_iCurAttr		( -1 )
 	, m_pParser			( NULL )
+	, m_iFieldBufferLen	( 0 )
+	, m_pCurDocument	( NULL )
 {
 	m_pBuffer = new BYTE [m_iBufferSize];
+	m_pFieldBuffer = new BYTE [MAX_FIELD_LENGTH];
 }
 
 
@@ -14770,6 +14778,9 @@ CSphSource_XMLPipe2::~CSphSource_XMLPipe2 ()
 {
 	Disconnect ();
 	SafeDeleteArray ( m_pBuffer );
+	SafeDeleteArray ( m_pFieldBuffer );
+	ARRAY_FOREACH ( i, m_dParsedDocuments )
+		SafeDeleteArray ( m_dParsedDocuments [i] );
 }
 
 
@@ -14928,6 +14939,9 @@ bool CSphSource_XMLPipe2::Connect ( CSphString & sError )
 	m_dParsedDocuments.Reset ();
 	m_dDefaultAttrs.Reset ();
 	m_dInvalid.Reset ();
+	m_dWarned.Reset ();
+
+	m_dParsedDocuments.Reserve ( 1024 );
 
 	m_sError = "";
 
@@ -14943,6 +14957,7 @@ BYTE **	CSphSource_XMLPipe2::NextDocument ( CSphString & sError )
 {
 	if ( m_bRemoveParsed )
 	{
+		SafeDelete ( m_dParsedDocuments [0] );
 		m_dParsedDocuments.RemoveFast ( 0 );
 		m_bRemoveParsed = false;
 	}
@@ -14967,16 +14982,16 @@ BYTE **	CSphSource_XMLPipe2::NextDocument ( CSphString & sError )
 
 	if ( m_dParsedDocuments.GetLength () != 0 )
 	{
-		Document_t & tDocument = m_dParsedDocuments [0];
+		Document_t * pDocument = m_dParsedDocuments [0];
 		int nAttrs = m_tSchema.GetAttrsCount ();
 
 		// docid
-		m_tDocInfo.m_iDocID = m_dParsedDocuments [0].m_iDocID;
+		m_tDocInfo.m_iDocID = pDocument->m_iDocID;
 
 		// attributes
 		for ( int i = 0; i < nAttrs; i++ )
 		{
-			const CSphString & sAttrValue = tDocument.m_dAttrs [i].IsEmpty () && m_dDefaultAttrs.GetLength () ? m_dDefaultAttrs [i] : tDocument.m_dAttrs [i];
+			const CSphString & sAttrValue = pDocument->m_dAttrs [i].IsEmpty () && m_dDefaultAttrs.GetLength () ? m_dDefaultAttrs [i] : pDocument->m_dAttrs [i];
 			const CSphColumnInfo & tAttr = m_tSchema.GetAttr ( i );
 
 			switch ( tAttr.m_eAttrType )
@@ -15004,7 +15019,7 @@ BYTE **	CSphSource_XMLPipe2::NextDocument ( CSphString & sError )
 		int nFields = m_tSchema.m_dFields.GetLength ();
 		m_dFieldPtrs.Resize ( nFields );
 		for ( int i = 0; i < nFields; ++i )
-			m_dFieldPtrs [i] = (BYTE*) tDocument.m_dFields [i].cstr ();
+			m_dFieldPtrs [i] = (BYTE*) ( pDocument->m_dFields [i].cstr () );
 
 		return (BYTE **)&( m_dFieldPtrs [0]);
 	}
@@ -15127,21 +15142,18 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 
 		m_bInDocument = true;
 
-		m_tCurDocument.m_iDocID = 0;
-		m_tCurDocument.m_dFields.Resize ( m_tSchema.m_dFields.GetLength () );
-		m_tCurDocument.m_dAttrs.Resize ( m_tSchema.GetAttrsCount () );
+		assert ( !m_pCurDocument );
+		m_pCurDocument = new Document_t;
 
-		for ( int i = 0; i < m_tSchema.m_dFields.GetLength (); ++i )
-			m_tCurDocument.m_dFields [i] = "";
-
-		for ( int i = 0; i < m_tSchema.GetAttrsCount (); ++i )
-			m_tCurDocument.m_dAttrs [i] = "";
+		m_pCurDocument->m_iDocID = 0;
+		m_pCurDocument->m_dFields.Resize ( m_tSchema.m_dFields.GetLength () );
+		m_pCurDocument->m_dAttrs.Resize ( m_tSchema.GetAttrsCount () );
 
 		if ( pAttrs[0] && pAttrs[1] && pAttrs[0][0] && pAttrs[1][0] )
 			if ( !strcmp ( pAttrs[0], "id" ) )
-				m_tCurDocument.m_iDocID = sphToDocid ( pAttrs[1] );
+				m_pCurDocument->m_iDocID = sphToDocid ( pAttrs[1] );
 
-		if ( m_tCurDocument.m_iDocID == 0 )
+		if ( m_pCurDocument->m_iDocID == 0 )
 			Error ( "document id expected in <sphinx:document>" );
 
 		return;
@@ -15189,12 +15201,26 @@ void CSphSource_XMLPipe2::EndElement ( const char * szName )
 	else if ( !strcmp ( szName, "sphinx:document" ) )
 	{
 		m_bInDocument = false;
-		m_dParsedDocuments.Add ( m_tCurDocument );
+		m_dParsedDocuments.Add ( m_pCurDocument );
+		m_pCurDocument = NULL;
 	}
 	else if ( m_bInDocument && ( m_iCurAttr != -1 || m_iCurField != -1 ) )
 	{
 		if ( m_iElementDepth == 0 )
 		{
+			if ( m_iCurField != -1 )
+			{
+				assert ( m_pCurDocument );
+				m_pCurDocument->m_dFields [m_iCurField].SetBinary ( (char*)m_pFieldBuffer, m_iFieldBufferLen );
+			}
+			else if ( m_iCurAttr != -1 )
+			{
+				assert ( m_pCurDocument );
+				m_pCurDocument->m_dAttrs [m_iCurAttr].SetBinary ( (char*)m_pFieldBuffer, m_iFieldBufferLen );
+			}
+
+			m_iFieldBufferLen = 0;
+
 			m_iCurAttr = -1;
 			m_iCurField = -1;
 		}
@@ -15209,24 +15235,25 @@ void CSphSource_XMLPipe2::Characters ( const char * pCharacters, int iLen )
 	if ( m_iCurAttr == -1 && m_iCurField == -1 )
 		return;
 	
-	if ( m_iCurField != -1 )
+	if ( iLen + m_iFieldBufferLen < MAX_FIELD_LENGTH )
 	{
-		if ( !m_tCurDocument.m_dFields [m_iCurField].IsEmpty () )
-		{
-			CSphString & sStr = m_tCurDocument.m_dFields [m_iCurField];
-			CSphString sTmp = sStr;
-			int iStrLen = strlen ( sStr.cstr () );
-			sStr.Reserve ( iStrLen + iLen + 1 );
-			
-			memcpy ( ((char*)sStr.cstr ()), sTmp.cstr (), iStrLen );
-			memcpy ( ((char*)sStr.cstr ()) + iStrLen, pCharacters, iLen );
-			((char*)sStr.cstr ()) [iStrLen + iLen] = '\0';
-		}
-		else
-			m_tCurDocument.m_dFields [m_iCurField].SetBinary ( (const char *)pCharacters, iLen );
+		memcpy ( m_pFieldBuffer + m_iFieldBufferLen, pCharacters, iLen );
+		m_iFieldBufferLen += iLen;
 	}
-	else if ( m_iCurAttr != -1 )
-		m_tCurDocument.m_dAttrs [m_iCurAttr].SetBinary ( (const char *)pCharacters, iLen );
+	else
+	{
+		const CSphString & sName = ( m_iCurField != -1 ) ? m_tSchema.m_dFields [m_iCurField].m_sName : m_tSchema.GetAttr ( m_iCurAttr ).m_sName;
+
+		bool bWarned = false;
+		for ( int i = 0; i < m_dWarned.GetLength () && !bWarned; i++ )
+			bWarned = m_dWarned [i] == sName;
+
+		if ( !bWarned )
+		{
+			sphWarn ( "xmlpipe2: field/attribute '%s' length exceeds max length", sName.cstr () );
+			m_dWarned.Add ( sName );
+		}
+	}
 }
 
 

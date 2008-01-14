@@ -106,7 +106,7 @@ void sphAssert ( const char * sExpr, const char * sFile, int iLine )
 #endif // USE_WINDOWS
 
 // forward decl
-void sphWarn ( char * sTemplate, ... );
+void sphWarn ( const char * sTemplate, ... );
 int sphReadThrottled ( int iFD, void * pBuf, size_t iCount );
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1572,7 +1572,7 @@ public:
 // UTILITY FUNCTIONS
 /////////////////////////////////////////////////////////////////////////////
 
-void sphWarn ( char * sTemplate, ... )
+void sphWarn ( const char * sTemplate, ... )
 {
 	va_list ap;
 	va_start ( ap, sTemplate );
@@ -14752,6 +14752,9 @@ private:
 	int				m_iFieldBufferLen;
 
 	void			Error ( const char * sTemplate, ... );
+	const char *	DecorateMessage ( const char * sTemplate, ... );
+	const char *	DecorateMessageVA ( const char * sTemplate, va_list ap );
+
 	void			ConfigureAttrs ( const CSphVariant * pHead, DWORD uAttrType );
 	void			ConfigureFields ( const CSphVariant * pHead );
 	void			AddFieldToSchema ( const char * szName );
@@ -14828,23 +14831,52 @@ void CSphSource_XMLPipe2::Disconnect ()
 
 void CSphSource_XMLPipe2::Error ( const char * sTemplate, ... )
 {
-	if ( m_sError.IsEmpty () )
+	if ( !m_sError.IsEmpty() )
+		return;
+
+	va_list ap;
+	va_start ( ap, sTemplate );
+	m_sError = DecorateMessageVA ( sTemplate, ap );
+	va_end ( ap );
+}
+
+
+const char * CSphSource_XMLPipe2::DecorateMessage ( const char * sTemplate, ... )
+{
+	va_list ap;
+	va_start ( ap, sTemplate );
+	const char * sRes = DecorateMessageVA ( sTemplate, ap );
+	va_end ( ap );
+	return sRes;
+}
+
+
+const char * CSphSource_XMLPipe2::DecorateMessageVA ( const char * sTemplate, va_list ap )
+{
+	static char sBuf[1024];
+
+	snprintf ( sBuf, sizeof(sBuf), "source '%s': ",m_tSchema.m_sName.cstr() );
+	int iBufLen = strlen ( sBuf );
+	int iLeft = sizeof(sBuf) - iBufLen;
+	char * szBufStart = sBuf + iBufLen;
+
+	vsnprintf ( szBufStart, iLeft, sTemplate, ap );
+	iBufLen = strlen ( sBuf );
+	iLeft = sizeof(sBuf) - iBufLen;
+	szBufStart = sBuf + iBufLen;
+
+	if ( m_pParser )
 	{
-		char sBuf[1024];
+		SphDocID_t uFailedID = 0;
+		if ( m_dParsedDocuments.GetLength() )
+			uFailedID = m_dParsedDocuments.Last()->m_iDocID;
 
-		strcpy ( sBuf, "xmlpipe2: " );
-		int iBufLen = strlen ( sBuf );
-		int iLeft = 1024 - iBufLen;
-		char * szBufStart = sBuf + iBufLen;
-
-		va_list ap;
-
-		va_start ( ap, sTemplate );
-		vsnprintf ( szBufStart, iLeft, sTemplate, ap );
-		va_end ( ap );
-
-		m_sError = sBuf;
+		snprintf ( szBufStart, iLeft,  " (line=%d, pos=%d, docid=" DOCID_FMT ")",
+			XML_GetCurrentLineNumber(m_pParser), XML_GetCurrentColumnNumber(m_pParser),
+			uFailedID );
 	}
+
+	return sBuf;
 }
 
 
@@ -14888,14 +14920,14 @@ void CSphSource_XMLPipe2::ConfigureAttrs ( const CSphVariant * pHead, DWORD uAtt
 				int iBits = strtol ( pColon+1, NULL, 10 );
 				if ( iBits<=0 || iBits>ROWITEM_BITS )
 				{
-					sphWarn ( "xmlpipe2: source '%s': attribute '%s': invalid bitcount=%d (bitcount ignored)", m_tSchema.m_sName.cstr (), tCol.m_sName.cstr(), iBits );
+					sphWarn ( "%s", DecorateMessage ( "attribute '%s': invalid bitcount=%d (bitcount ignored)", tCol.m_sName.cstr(), iBits ) );
 					iBits = -1;
 				}
 
 				tCol.m_iBitCount = iBits;
 			}
 			else
-				sphWarn ( "xmlpipe2: source '%s': attribute '%s': bitcount is only supported for integer types", m_tSchema.m_sName.cstr (), tCol.m_sName.cstr() );
+				sphWarn ( "%s", DecorateMessage ( "attribute '%s': bitcount is only supported for integer types", tCol.m_sName.cstr() ) );
 		}
 
 		tCol.m_iIndex = m_tSchema.GetAttrsCount ();
@@ -14915,7 +14947,7 @@ void CSphSource_XMLPipe2::ConfigureFields ( const CSphVariant * pHead )
 			bFound = m_tSchema.m_dFields [i].m_sName == sFieldName;
 		
 		if ( bFound )
-			sphWarn ( "xmlpipe2: source '%s': duplicate field '%s'", m_tSchema.m_sName.cstr (), sFieldName.cstr () );
+			sphWarn ( "%s", DecorateMessage ( "duplicate field '%s'", sFieldName.cstr () ) );
 		else
 			AddFieldToSchema ( sFieldName.cstr () );
 	}
@@ -15073,13 +15105,13 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 	{
 		if ( !m_bInDocset || !m_bFirstTagAfterDocset )
 		{
-			Error ( "<sphinx:schema> is only allowed immediately after <sphinx:docset>" );
+			Error ( "<sphinx:schema> is allowed immediately after <sphinx:docset> only" );
 			return;
 		}
 
 		if ( m_tSchema.m_dFields.GetLength () > 0 || m_tSchema.GetAttrsCount () > 0 )
 		{
-			sphWarn ( "xmlpipe2: both embedded and configured schemas found; using embedded" );
+			sphWarn ( "%s", DecorateMessage ( "both embedded and configured schemas found; using embedded" ) );
 			m_tSchema.Reset ();
 		}
 
@@ -15092,7 +15124,7 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 	{
 		if ( !m_bInDocset || !m_bInSchema )
 		{
-			Error ( "<sphinx:field> is only allowed inside <sphinx:schema>" );
+			Error ( "<sphinx:field> is allowed inside <sphinx:schema> only" );
 			return;
 		}
 
@@ -15112,7 +15144,7 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 	{
 		if ( !m_bInDocset || !m_bInSchema )
 		{
-			Error ( "<sphinx:attr> is only allowed inside <sphinx:schema>" );
+			Error ( "<sphinx:attr> is allowed inside <sphinx:schema> only" );
 			return;
 		}
 
@@ -15140,7 +15172,7 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 				else if ( !strcmp ( szType, "float" ) )			Info.m_eAttrType = SPH_ATTR_FLOAT;
 				else
 				{
-					Error ( "Unknown column type" );
+					Error ( "unknown column type '%s'", szType );
 					bError = true;
 				}
 			}
@@ -15161,7 +15193,10 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 	if ( !strcmp ( szName, "sphinx:document" ) )
 	{
 		if ( !m_bInDocset || m_bInSchema )
+		{
 			Error ( "<sphinx:document> is not allowed inside <sphinx:schema>" );
+			return;
+		}
 
 		if ( m_tSchema.m_dFields.GetLength () == 0 && m_tSchema.GetAttrsCount () == 0 )
 		{
@@ -15183,7 +15218,7 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 				m_pCurDocument->m_iDocID = sphToDocid ( pAttrs[1] );
 
 		if ( m_pCurDocument->m_iDocID == 0 )
-			Error ( "document id expected in <sphinx:document>" );
+			Error ( "attribute 'id' required in <sphinx:document>" );
 
 		return;
 	}
@@ -15207,7 +15242,7 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 					bInvalidFound = m_dInvalid [i] == szName;
 
 				if ( !bInvalidFound )
-					sphWarn ( "xmlpipe2: unknown field/attribute: '%s'", szName );
+					sphWarn ( "%s", DecorateMessage ( "unknown field/attribute '%s'; ignored", szName ) );
 
 				m_dInvalid.Add ( szName );
 			}

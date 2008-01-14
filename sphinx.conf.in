@@ -9,13 +9,15 @@
 source src1
 {
 	# data source type
-	# for now, known types are 'mysql', 'pgsql' and 'xmlpipe'
+	# known types are 'mysql', 'pgsql', 'xmlpipe', 'xmlpipe2'
 	# MUST be defined
 	type				= mysql
 
 	#####################################################################
+	## SQL settings (for 'mysql' and 'pgsql' types)
+	#####################################################################
 
-	# some straightforward parameters for 'mysql' source type
+	# some straightforward parameters for SQL source types
 	sql_host			= localhost
 	sql_user			= test
 	sql_pass			=
@@ -260,8 +262,10 @@ source src1
 	sql_query_info		= SELECT * FROM documents WHERE id=$id
 
 	#####################################################################
+	## xmlpipe settings
+	#####################################################################
 
-	# demo config for 'xmlpipe' source type is a little below
+	# demo config for 'xmlpipe' source type is shown below
 	#
 	# with xmlpipe, indexer opens a pipe to a given command,
 	# and then reads documents from stdin
@@ -284,6 +288,71 @@ source src1
 
 	# type				= xmlpipe
 	# xmlpipe_command	= cat @CONFDIR@/test.xml
+
+	#####################################################################
+	## xmlpipe2 settings
+	#####################################################################
+
+	# when indexing xmlpipe2 source, indexer runs the given command
+	# and expects well-formed XML stream at stdin.
+	#
+	# here's sample stream data:
+	#
+	# <?xml version="1.0" encoding="utf-8"?>
+	# <sphinx:docset>
+	#
+	# <sphinx:schema>
+	# <sphinx:field name="subject"/> 
+	# <sphinx:field name="content"/>
+	# <sphinx:attr name="published" type="timestamp"/>
+	# <sphinx:attr name="author_id" type="int" bits="16" default="1"/>
+	# </sphinx:schema>
+	#
+	# <sphinx:document id="1234">
+	# <content>this is the main content <![CDATA[[and this <cdata> entry must be handled properly by xml parser lib]]></content>
+	# <published>1012325463</published>
+	# <subject>note how field/attr tags can be in <b class="red">randomized</b> order</subject>
+	# <misc>some undeclared element</misc>
+	# </sphinx:document>
+	#
+	# <!-- ... more documents here ... -->
+	#
+	# </sphinx:docset>
+	#
+	# arbitrary fields and attributes are allowed. they can occur in the
+	# stream in any order within a document.
+	#
+	# schema, ie. complete fields and attributes list, must be declared
+	# before any document could be parsed. this can be done either in the
+	# config file using xmlpipe_field and xmlpipe_attr_XXX settings
+	# shown below, or right in the stream using <sphinx:schema>.
+	#
+	# <sphinx:schema> is optional. it is allowed to occur as the very
+	# first sub-element in <sphinx:docset> only. if there is no in-stream
+	# schema definition, settings from the config file will be used.
+	# otherwise, stream settings take precedence.
+	#
+	# unknown tags (which were not declared neither as fields,
+	# nor as attributes) will be ignored with a warning. in the example
+	# above, <misc> will be ignored.
+	#
+	# all embedded tags and their attributes (see <b> in <subject>
+	# in the example) are silently ignored.
+	#
+	# xmlpipe_field declares XML element names which will be treated
+	# as full-text searchable fields when found in <sphinx:document>.
+	#
+	# xmlpipe_attr_XXX declare XML element names which will be treated
+	# as attribute values when found in <sphinx:document>. they are similar
+	# to sql_attr_XXX settings.
+
+
+	# type						= xmlpipe2
+	# xmlpipe_command			= cat @CONFDIR@/test2.xml
+	# xmlpipe_field				= subject
+	# xmlpipe_field				= content
+	# xmlpipe_attr_timestamp	= published
+	# xmlpipe_attr_uint			= author_id
 }
 
 

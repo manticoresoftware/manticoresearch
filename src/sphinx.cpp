@@ -11507,7 +11507,7 @@ void CSphIndex_VLN::BindWeights ( const CSphQuery * pQuery )
 	if ( pQuery->m_pWeights )
 	{
 		for ( int i=0; i<Min ( m_iWeights, pQuery->m_iWeights ); i++ )
-			m_dWeights[i] = Max ( MIN_WEIGHT, pQuery->m_pWeights[i] );
+			m_dWeights[i] = Max ( MIN_WEIGHT, (int)pQuery->m_pWeights[i] );
 	}
 }
 
@@ -14781,6 +14781,7 @@ static void xmlCharacters ( void * user_data, const XML_Char * ch, int len )
 
 CSphSource_XMLPipe2::CSphSource_XMLPipe2 ( const char * sName )
 	: CSphSource_Document ( sName )
+	, m_pCurDocument	( NULL )
 	, m_pPipe			( NULL )
 	, m_iElementDepth	( 0 )
 	, m_iBufferSize		( 1048576 )
@@ -14793,7 +14794,6 @@ CSphSource_XMLPipe2::CSphSource_XMLPipe2 ( const char * sName )
 	, m_iCurAttr		( -1 )
 	, m_pParser			( NULL )
 	, m_iFieldBufferLen	( 0 )
-	, m_pCurDocument	( NULL )
 {
 	m_pBuffer = new BYTE [m_iBufferSize];
 	m_pFieldBuffer = new BYTE [MAX_FIELD_LENGTH];

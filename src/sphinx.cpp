@@ -36,6 +36,11 @@
 #if USE_LIBEXPAT
 #define XMLIMPORT
 #include "expat.h"
+
+// workaround for expat versions prior to 1.95.7
+#ifndef XMLCALL
+#define XMLCALL
+#endif
 #endif
 
 #if USE_WINDOWS

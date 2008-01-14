@@ -115,25 +115,39 @@ else
 
 $t = MyMicrotime ();
 
+// build test lists
 $tests = array ();
 $dh = opendir ( "." );
-while ( $entry = readdir($dh) )
+while ( $entry=readdir($dh) )
 {
-	if ( substr ( $entry,0,4 )!="test" )
-		continue;
-
-	if ( !empty($test_dir) && $entry!=$test_dir )
-		continue;
-
+	if ( substr ( $entry,0,4 )!="test" )			continue;
+	if ( !empty($test_dir) && $entry!=$test_dir )	continue;
 	$tests[] = $entry;
 }
 sort ( $tests );
 
+// run tests
+$total_tests = 0;
+$total_tests_failed = 0;
+$total_subtests = 0;
+$total_subtests_failed = 0;
 foreach ( $tests as $test )
-	RunTest ( $test );
+{
+	$res = RunTest ( $test );
 
+	if ( !is_array($res) )
+		continue; // failed to run that test at all
 
-// perform cleanup
+	$total_tests++;
+	$total_subtests += $res["tests_total"];
+	if ( $res["tests_failed"] )
+	{
+		$total_tests_failed++;
+		$total_subtests_failed += $res["tests_failed"];
+	}
+}
+
+// cleanup
 @unlink ( "config.conf" );
 @unlink ( "error.txt" );
 
@@ -151,7 +165,19 @@ while ( file_exists ( "error_$nfile.txt" ) )
 	$nfile++;
 }
 
-printf ( "%.2f sec elapsed\n", MyMicrotime()-$t );
+// summarize
+if ( $total_tests_failed )
+{
+	printf ( "\n%d of %d tests and %d of %d subtests failed, %.2f sec elapsed\nTHERE WERE FAILURES!\n",
+		$total_tests_failed, $total_tests,
+		$total_subtests_failed, $total_subtests,
+		MyMicrotime()-$t );
+} else
+{
+	printf ( "\n%d tests and %d subtests succesful, %.2f sec elapsed\nALL OK\n",
+		$total_tests, $total_subtests,
+		MyMicrotime()-$t );
+}
 
 //
 // $Id$

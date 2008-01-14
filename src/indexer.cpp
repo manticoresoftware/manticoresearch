@@ -525,7 +525,7 @@ CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char 
 		pSrcXML = sphCreateSourceXmlpipe2 ( &hSource, sSourceName );
 #endif
 	else
-		fprintf ( stdout, "WARNING: '%s' unknown source type\n", sSourceName );
+		fprintf ( stdout, "WARNING: source '%s': unknown source type '%s' (missing libexpat?).\n", sSourceName, hSource["type"].cstr() );
 
 	return pSrcXML;
 }

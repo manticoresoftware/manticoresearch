@@ -14780,7 +14780,7 @@ CSphSource_XMLPipe2::~CSphSource_XMLPipe2 ()
 	SafeDeleteArray ( m_pBuffer );
 	SafeDeleteArray ( m_pFieldBuffer );
 	ARRAY_FOREACH ( i, m_dParsedDocuments )
-		SafeDeleteArray ( m_dParsedDocuments [i] );
+		SafeDelete ( m_dParsedDocuments [i] );
 }
 
 
@@ -14945,10 +14945,6 @@ bool CSphSource_XMLPipe2::Connect ( CSphString & sError )
 
 	m_sError = "";
 
-	char sBuf [ 1024 ];
-	snprintf ( sBuf, sizeof(sBuf), "xmlpipe(%s)", m_sCommand.cstr() );
-	m_tSchema.m_sName = sBuf;
-
 	return !!m_pPipe;
 }
 
@@ -14967,7 +14963,14 @@ BYTE **	CSphSource_XMLPipe2::NextDocument ( CSphString & sError )
 	{
 		if ( XML_Parse ( m_pParser, (const char*) m_pBuffer, iBytesRead, iBytesRead != m_iBufferSize ) != XML_STATUS_OK )
 		{
-			sError = XML_ErrorString ( XML_GetErrorCode ( m_pParser ) ) ;
+			SphDocID_t uFailedID = 0;
+			if ( m_dParsedDocuments.GetLength() )
+				uFailedID = m_dParsedDocuments.Last()->m_iDocID;
+
+			sError.SetSprintf ( "source '%s': XML parse error: %s (line=%d, pos=%d, docid=" DOCID_FMT ")",
+				m_tSchema.m_sName.cstr(),  XML_ErrorString ( XML_GetErrorCode(m_pParser) ),
+				XML_GetCurrentLineNumber(m_pParser), XML_GetCurrentColumnNumber(m_pParser),
+				uFailedID );
 			m_tDocInfo.m_iDocID = 1;
 			return NULL;
 		}
@@ -15250,7 +15253,10 @@ void CSphSource_XMLPipe2::Characters ( const char * pCharacters, int iLen )
 
 		if ( !bWarned )
 		{
-			sphWarn ( "xmlpipe2: field/attribute '%s' length exceeds max length", sName.cstr () );
+			sphWarn ( "source '%s': field/attribute '%s' length exceeds max length (line=%d, pos=%d, docid=" DOCID_FMT ")",
+				m_tSchema.m_sName.cstr(), sName.cstr(),
+				XML_GetCurrentLineNumber(m_pParser), XML_GetCurrentColumnNumber(m_pParser),
+				m_pCurDocument->m_iDocID );
 			m_dWarned.Add ( sName );
 		}
 	}

@@ -1448,6 +1448,7 @@ struct CSphIndex_VLN : CSphIndex
 	virtual bool				Lock ();
 	virtual void				Unlock ();
 
+	void						BindWeights ( const CSphQuery * pQuery );
 	virtual CSphQueryResult *	Query ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery );
 	virtual bool				QueryEx ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchSorter * pTop );
 	virtual bool				MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters );
@@ -11481,6 +11482,36 @@ bool CSphIndex_VLN::QueryEx ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSph
 }
 
 
+void CSphIndex_VLN::BindWeights ( const CSphQuery * pQuery )
+{
+	const int MIN_WEIGHT = 1;
+
+	// defaults
+	m_iWeights = Min ( m_tSchema.m_dFields.GetLength(), SPH_MAX_FIELDS );
+	for ( int i=0; i<m_iWeights; i++ )
+		m_dWeights[i] = MIN_WEIGHT;
+
+	// name-bound weights
+	if ( pQuery->m_dFieldWeights.GetLength() )
+	{
+		ARRAY_FOREACH ( i, pQuery->m_dFieldWeights )
+		{
+			int j = m_tSchema.GetFieldIndex ( pQuery->m_dFieldWeights[i].m_sName.cstr() );
+			if ( j>=0 && j<SPH_MAX_FIELDS )
+				m_dWeights[j] = Max ( MIN_WEIGHT, pQuery->m_dFieldWeights[i].m_iValue );
+		}
+		return;
+	}
+
+	// order-bound weights
+	if ( pQuery->m_pWeights )
+	{
+		for ( int i=0; i<Min ( m_iWeights, pQuery->m_iWeights ); i++ )
+			m_dWeights[i] = Max ( MIN_WEIGHT, pQuery->m_pWeights[i] );
+	}
+}
+
+
 bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters )
 {
 	assert ( pTokenizer );
@@ -11638,13 +11669,8 @@ bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, C
 		tFilter.m_bMva = ( ( tAttr.m_eAttrType & SPH_ATTR_MULTI )!=0 );
 	}
 
-	// build weights
-	m_iWeights = m_tSchema.m_dFields.GetLength();
-	for ( int i=0; i<m_iWeights; i++ ) // defaults
-		m_dWeights[i] = 1;
-	if ( pQuery->m_pWeights ) // user-supplied
-		for ( int i=0; i<Min ( m_iWeights, pQuery->m_iWeights ); i++ )
-			m_dWeights[i] = Max ( 1, pQuery->m_pWeights[i] );
+	// bind weights
+	BindWeights ( pQuery );
 
 	// setup lookup
 	m_bEarlyLookup = ( m_eDocinfo==SPH_DOCINFO_EXTERN ) && pQuery->m_dFilters.GetLength();

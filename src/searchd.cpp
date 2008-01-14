@@ -170,7 +170,7 @@ enum SearchdCommand_e
 /// known command versions
 enum
 {
-	VER_COMMAND_SEARCH		= 0x111,
+	VER_COMMAND_SEARCH		= 0x112,
 	VER_COMMAND_EXCERPT		= 0x100,
 	VER_COMMAND_UPDATE		= 0x101
 };
@@ -1824,7 +1824,7 @@ protected:
 
 int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuery & q ) const
 {
-	int iReqSize = 88 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
+	int iReqSize = 92 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
 		+ strlen ( q.m_sSortBy.cstr() )
 		+ strlen ( q.m_sQuery.cstr() )
 		+ strlen ( sIndexes )
@@ -1851,6 +1851,8 @@ int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuer
 		iReqSize += 16 + strlen ( q.m_sGeoLatAttr.cstr() ) + strlen ( q.m_sGeoLongAttr.cstr() ); // string lat-attr, long-attr; float lat, long
 	ARRAY_FOREACH ( i, q.m_dIndexWeights )
 		iReqSize += 8 + strlen ( q.m_dIndexWeights[i].m_sName.cstr() ); // string index-name; int index-weight
+	ARRAY_FOREACH ( i, q.m_dFieldWeights )
+		iReqSize += 8 + strlen ( q.m_dFieldWeights[i].m_sName.cstr() ); // string field-name; int field-weight
 	return iReqSize;
 }
 
@@ -1920,6 +1922,12 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 		tOut.SendInt ( q.m_dIndexWeights[i].m_iValue );
 	}
 	tOut.SendDword ( q.m_uMaxQueryMsec );
+	tOut.SendInt ( q.m_dFieldWeights.GetLength() );
+	ARRAY_FOREACH ( i, q.m_dFieldWeights )
+	{
+		tOut.SendString ( q.m_dFieldWeights[i].m_sName.cstr() );
+		tOut.SendInt ( q.m_dFieldWeights[i].m_iValue );
+	}
 }
 
 
@@ -2392,9 +2400,20 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 		}
 	}
 
-	// v1.17
+	// v.1.17
 	if ( iVer>=0x111 )
 		tQuery.m_uMaxQueryMsec = tReq.GetDword ();
+
+	// v.1.18
+	if ( iVer>=0x112 )
+	{
+		tQuery.m_dFieldWeights.Resize ( tReq.GetInt() ); // FIXME! add sanity check
+		ARRAY_FOREACH ( i, tQuery.m_dFieldWeights )
+		{
+			tQuery.m_dFieldWeights[i].m_sName = tReq.GetString ();
+			tQuery.m_dFieldWeights[i].m_iValue = tReq.GetInt ();
+		}
+	}
 
 	/////////////////////
 	// additional checks

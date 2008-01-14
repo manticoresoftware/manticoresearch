@@ -1309,6 +1309,7 @@ public:
 	float			m_fGeoLongitude;	///< anchor longitude
 
 	CSphVector<CSphNamedInt>	m_dIndexWeights;	///< per-index weights
+	CSphVector<CSphNamedInt>	m_dFieldWeights;	///< per-field weights
 
 	DWORD			m_uMaxQueryMsec;	///< max local index search time, in milliseconds (default is 0; means no limit)
 

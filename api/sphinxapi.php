@@ -23,7 +23,7 @@ define ( "SEARCHD_COMMAND_EXCERPT",	1 );
 define ( "SEARCHD_COMMAND_UPDATE",	2 );
 
 /// current client-side command implementation versions
-define ( "VER_COMMAND_SEARCH",		0x111 );
+define ( "VER_COMMAND_SEARCH",		0x112 );
 define ( "VER_COMMAND_EXCERPT",		0x100 );
 define ( "VER_COMMAND_UPDATE",		0x101 );
 
@@ -171,6 +171,7 @@ class SphinxClient
 	var $_indexweights;	///< per-index weights
 	var $_ranker;		///< ranking mode (default is SPH_RANK_PROXIMITY_BM25)
 	var $_maxquerytime;	///< max query time, milliseconds (default is 0, do not limit)
+	var $_fieldweights;	///< per-field-name weights
 
 	var $_error;		///< last error message
 	var $_warning;		///< last warning message
@@ -211,6 +212,7 @@ class SphinxClient
 		$this->_indexweights= array ();
 		$this->_ranker		= SPH_RANK_PROXIMITY_BM25;
 		$this->_maxquerytime= 0;
+		$this->_fieldweights= array();
 
 		$this->_error		= ""; // per-reply fields (for single-query case)
 		$this->_warning		= "";
@@ -417,7 +419,8 @@ class SphinxClient
 		$this->_sortby = $sortby;
 	}
 
-	/// set per-field weights
+	/// bind per-field weights by order
+	/// deprecated; do not use it! use SetFieldWeights() instead
 	function SetWeights ( $weights )
 	{
 		assert ( is_array($weights) );
@@ -425,6 +428,22 @@ class SphinxClient
 			assert ( is_int($weight) );
 
 		$this->_weights = $weights;
+	}
+
+	/// bind per-field weights by name
+	/// takes string (field name) to integer name (field weight) hash as an argument
+	/// takes precedence over SetWeights()
+	/// unknown names will be silently ignored
+	/// unbound fields will be silently given a weight of 1
+	function SetFieldWeights ( $weights )
+	{
+		assert ( is_array($weights) );
+		foreach ( $weights as $name=>$weight )
+		{
+			assert ( is_string($name) );
+			assert ( is_int($weight) );
+		}
+		$this->_fieldweights = $weights;
 	}
 
 	/// set per-index weights
@@ -740,6 +759,11 @@ class SphinxClient
 
 		// max query time
 		$req .= pack ( "N", $this->_maxquerytime );
+
+		// per-field weights
+		$req .= pack ( "N", count($this->_fieldweights) );
+		foreach ( $this->_fieldweights as $field=>$weight )
+			$req .= pack ( "N", strlen($field) ) . $field . pack ( "N", $weight );
 
 		// mbstring workaround
 		$this->_MBPop ();

@@ -1614,7 +1614,7 @@ private:
 
 	int							ReadOrdinal ( CSphBin & Reader, Ordinal_t & Ordinal );
 	SphOffset_t					DumpOrdinals ( CSphWriter & Writer, CSphVector<Ordinal_t> & dOrdinals );
-	bool						SortOrdinals ( const char * szToFile, int iFromFD, int iArenaSize, int iOrdinalsInPool, const CSphVector<CSphVector<SphOffset_t>> & dOrdBlockSize );
+	bool						SortOrdinals ( const char * szToFile, int iFromFD, int iArenaSize, int iOrdinalsInPool, const CSphVector< CSphVector<SphOffset_t> > & dOrdBlockSize );
 	bool						SortOrdinalIds ( const char * szToFile, int iFromFD, int nAttrs, int nOrdinals, int iArenaSize, int iNumPoolOrdinals );
 
 public:
@@ -5717,7 +5717,7 @@ int CSphIndex_VLN::ReadOrdinal ( CSphBin & Reader, Ordinal_t & Ordinal )
 	if ( iRes != 1 )
 		return iRes;
 
-	if ( uStrLen >= MAX_ORDINAL_STR_LEN )
+	if ( uStrLen >= (DWORD)MAX_ORDINAL_STR_LEN )
 		return -2;
 
 	char dBuffer [MAX_ORDINAL_STR_LEN];

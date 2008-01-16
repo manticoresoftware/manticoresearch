@@ -847,7 +847,7 @@ public:
 		return (*this);
 	}
 
-	const CSphString & SetSprintf ( const char * sTemplate, va_list ap )
+	const CSphString & SetSprintfVa ( const char * sTemplate, va_list ap )
 	{
 		char sBuf[1024];
 		vsnprintf ( sBuf, sizeof(sBuf), sTemplate, ap );

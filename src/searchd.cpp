@@ -22,7 +22,6 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/resource.h>
 #include <time.h>
 #include <stdarg.h>
 #include <limits.h>
@@ -46,6 +45,7 @@
 	#include <sys/socket.h>
 	#include <sys/time.h>
 	#include <sys/wait.h>
+	#include <sys/resource.h>
 	#include <netdb.h>
 
 	// for cache
@@ -504,7 +504,7 @@ public:
 	{
 		va_list ap;
 		va_start ( ap, sTemplate );
-		m_sPrefix.SetSprintf ( sTemplate, ap );
+		m_sPrefix.SetSprintfVa ( sTemplate, ap );
 		va_end ( ap );
 	}
 
@@ -530,7 +530,7 @@ public:
 public:
 	void VaSetPrefix ( va_list ap, const char * sTemplate )
 	{
-		m_sPrefix.SetSprintf ( sTemplate, ap );
+		m_sPrefix.SetSprintfVa ( sTemplate, ap );
 	}
 
 	void VaSubmit ( va_list ap, const char * sTemplate )
@@ -1340,6 +1340,7 @@ public:
 	AgentState_e	m_eState;		///< current state
 
 	bool			m_bSuccess;		///< whether last request was succesful (ie. there are available results)
+	CSphString		m_sFailure;		///< failure message
 
 	int				m_iReplyStatus;	///< reply status code
 	int				m_iReplySize;	///< how many reply bytes are there
@@ -1425,11 +1426,11 @@ struct IRequestBuilder_t : public ISphNoncopyable
 struct IReplyParser_t
 {
 	virtual ~IReplyParser_t () {} // to avoid gcc4 warns
-	virtual bool ParseReply ( MemInputBuffer_c & tReq, Agent_t & tAgent, SearchFailuresLogset_c & dFailures ) const = 0;
+	virtual bool ParseReply ( MemInputBuffer_c & tReq, Agent_t & tAgent ) const = 0;
 };
 
 
-void ConnectToRemoteAgents ( CSphVector<Agent_t> & dAgents, bool bRetryOnly, SearchFailuresLog_i & dFailures )
+void ConnectToRemoteAgents ( CSphVector<Agent_t> & dAgents, bool bRetryOnly )
 {
 	ARRAY_FOREACH ( iAgent, dAgents )
 	{
@@ -1437,7 +1438,6 @@ void ConnectToRemoteAgents ( CSphVector<Agent_t> & dAgents, bool bRetryOnly, Sea
 		if ( bRetryOnly && tAgent.m_eState!=AGENT_RETRY )
 			continue;
 
-		dFailures.SetPrefix ( "agent %s:%d: ", tAgent.m_sHost.cstr(), tAgent.m_iPort );
 		tAgent.m_eState = AGENT_UNUSED;
 		tAgent.m_bSuccess = false;
 
@@ -1450,13 +1450,13 @@ void ConnectToRemoteAgents ( CSphVector<Agent_t> & dAgents, bool bRetryOnly, Sea
 		tAgent.m_iSock = socket ( tAgent.GetAddrType(), SOCK_STREAM, 0 );
 		if ( tAgent.m_iSock<0 )
 		{
-			dFailures.Submit ( "socket() failed: %s", sphSockError() );
+			tAgent.m_sFailure.SetSprintf ( "socket() failed: %s", sphSockError() );
 			return;
 		}
 
 		if ( sphSetSockNB ( tAgent.m_iSock )<0 )
 		{
-			dFailures.Submit ( "sphSetSockNB() failed: %s", sphSockError() );
+			tAgent.m_sFailure.SetSprintf ( "sphSetSockNB() failed: %s", sphSockError() );
 			return;
 		}
 
@@ -1466,8 +1466,10 @@ void ConnectToRemoteAgents ( CSphVector<Agent_t> & dAgents, bool bRetryOnly, Sea
 			if ( iErr!=EINPROGRESS && iErr!=EINTR && iErr!=EWOULDBLOCK ) // check for EWOULDBLOCK is for winsock only
 			{
 				tAgent.Close ();
-				dFailures.Submit ( "connect() failed: %s", sphSockError(iErr) );
+				tAgent.m_sFailure.SetSprintf ( "connect() failed: %s", sphSockError(iErr) );
+				tAgent.m_eState = AGENT_RETRY; // do retry on connect() failures
 				return;
+
 			} else
 			{
 				// connection in progress
@@ -1482,7 +1484,7 @@ void ConnectToRemoteAgents ( CSphVector<Agent_t> & dAgents, bool bRetryOnly, Sea
 }
 
 
-int QueryRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, const IRequestBuilder_t & tBuilder, SearchFailuresLog_i & dFailures )
+int QueryRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, const IRequestBuilder_t & tBuilder )
 {
 	int iAgents = 0;
 	assert ( iTimeout>=0 );
@@ -1528,7 +1530,6 @@ int QueryRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, const IRequ
 		ARRAY_FOREACH ( i, dAgents )
 		{
 			Agent_t & tAgent = dAgents[i];
-			dFailures.SetPrefix ( "agent %s:%d: ", tAgent.m_sHost.cstr(), tAgent.m_iPort );
 
 			// check if connection completed
 			if ( tAgent.m_eState==AGENT_CONNECT && FD_ISSET ( tAgent.m_iSock, &fdsWrite ) )
@@ -1539,7 +1540,7 @@ int QueryRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, const IRequ
 				if ( iErr )
 				{
 					// connect() failure
-					dFailures.Submit ( "connect() failed: %s", sphSockError(iErr) );
+					tAgent.m_sFailure.SetSprintf ( "connect() failed: %s", sphSockError(iErr) );
 					tAgent.Close ();
 				} else
 				{
@@ -1558,7 +1559,7 @@ int QueryRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, const IRequ
 				iRemoteVer = ntohl ( iRemoteVer );
 				if ( iRes!=sizeof(iRemoteVer) || iRemoteVer<=0 )
 				{
-					dFailures.Submit ( "expected protocol v.%d, got v.%d", SPHINX_SEARCHD_PROTO, iRemoteVer );
+					tAgent.m_sFailure.SetSprintf ( "expected protocol v.%d, got v.%d", SPHINX_SEARCHD_PROTO, iRemoteVer );
 					tAgent.Close ();
 					continue;
 				}
@@ -1581,8 +1582,8 @@ int QueryRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, const IRequ
 		if ( tAgent.m_eState!=AGENT_QUERY && tAgent.m_eState!=AGENT_UNUSED )
 		{
 			tAgent.Close ();
-			dFailures.SetPrefix ( "agent %s:%d: ", tAgent.m_sHost.cstr(), tAgent.m_iPort );
-			dFailures.Submit ( "%s() timed out", tAgent.m_eState==AGENT_HELLO ? "read" : "connect" );
+			tAgent.m_sFailure.SetSprintf ( "%s() timed out", tAgent.m_eState==AGENT_HELLO ? "read" : "connect" );
+			tAgent.m_eState = AGENT_RETRY; // do retry on connect() failures
 		}
 	}
 
@@ -1590,8 +1591,7 @@ int QueryRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, const IRequ
 }
 
 
-int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout,
-	IReplyParser_t & tParser, SearchFailuresLogset_c & dFailuresSet )
+int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, IReplyParser_t & tParser )
 {
 	assert ( iTimeout>=0 );
 
@@ -1640,7 +1640,6 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout,
 				continue;
 
 			// if there was no reply yet, read reply header
-			dFailuresSet.SetPrefix ( "agent %s:%d: ", tAgent.m_sHost.cstr(), tAgent.m_iPort );
 			bool bFailure = true;
 			for ( ;; )
 			{
@@ -1658,7 +1657,7 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout,
 					if ( sphSockRecv ( tAgent.m_iSock, (char*)&tReplyHeader, sizeof(tReplyHeader) )!=sizeof(tReplyHeader) )
 					{
 						// bail out if failed
-						dFailuresSet.Submit ( "failed to receive reply header" );
+						tAgent.m_sFailure.SetSprintf ( "failed to receive reply header" );
 						break;
 					}
 
@@ -1669,7 +1668,7 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout,
 					// check the packet
 					if ( tReplyHeader.m_iLength<0 || tReplyHeader.m_iLength>MAX_PACKET_SIZE ) // FIXME! add reasonable max packet len too
 					{
-						dFailuresSet.Submit ( "invalid packet size (status=%d, len=%d, max_packet_size=%d)", tReplyHeader.m_iStatus, tReplyHeader.m_iLength, MAX_PACKET_SIZE );
+						tAgent.m_sFailure.SetSprintf ( "invalid packet size (status=%d, len=%d, max_packet_size=%d)", tReplyHeader.m_iStatus, tReplyHeader.m_iLength, MAX_PACKET_SIZE );
 						break;
 					}
 
@@ -1684,7 +1683,7 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout,
 					if ( !tAgent.m_pReplyBuf )
 					{
 						// bail out if failed
-						dFailuresSet.Submit ( "failed to alloc %d bytes for reply buffer", tAgent.m_iReplySize );
+						tAgent.m_sFailure.SetSprintf ( "failed to alloc %d bytes for reply buffer", tAgent.m_iReplySize );
 						break;
 					}
 				}
@@ -1700,7 +1699,7 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout,
 					// bail out if read failed
 					if ( iRes<0 )
 					{
-						dFailuresSet.Submit ( "failed to receive reply body: %s", sphSockError() );
+						tAgent.m_sFailure.SetSprintf ( "failed to receive reply body: %s", sphSockError() );
 						break;
 					}
 
@@ -1714,11 +1713,14 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout,
 				{
 					MemInputBuffer_c tReq ( tAgent.m_pReplyBuf, tAgent.m_iReplySize );
 
+					// absolve thy former sins
+					tAgent.m_sFailure = "";
+
 					// check for general errors/warnings first
 					if ( tAgent.m_iReplyStatus==SEARCHD_WARNING )
 					{
 						CSphString sAgentWarning = tReq.GetString ();
-						dFailuresSet.Submit ( "remote warning: %s", sAgentWarning.cstr() );
+						tAgent.m_sFailure.SetSprintf ( "remote warning: %s", sAgentWarning.cstr() );
 
 					} else if ( tAgent.m_iReplyStatus==SEARCHD_RETRY )
 					{
@@ -1728,18 +1730,18 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout,
 					} else if ( tAgent.m_iReplyStatus!=SEARCHD_OK )
 					{
 						CSphString sAgentError = tReq.GetString ();
-						dFailuresSet.Submit ( "remote error: %s", sAgentError.cstr() );
+						tAgent.m_sFailure.SetSprintf ( "remote error: %s", sAgentError.cstr() );
 						break;
 					}
 
 					// call parser
-					if ( !tParser.ParseReply ( tReq, tAgent, dFailuresSet ) )
+					if ( !tParser.ParseReply ( tReq, tAgent ) )
 						break;
 
 					// check if there was enough data
 					if ( tReq.GetError() )
 					{
-						dFailuresSet.Submit ( "incomplete reply" );
+						tAgent.m_sFailure.SetSprintf ( "incomplete reply" );
 						return false;
 					}
 
@@ -1772,9 +1774,7 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout,
 			assert ( !tAgent.m_dResults.GetLength() );
 			assert ( !tAgent.m_bSuccess );
 			tAgent.Close ();
-
-			dFailuresSet.SetPrefix ( "agent %s:%d: ", tAgent.m_sHost.cstr(), tAgent.m_iPort );
-			dFailuresSet.Submit ( "query timed out" );
+			tAgent.m_sFailure.SetSprintf ( "query timed out" );
 		}
 	}
 
@@ -1814,7 +1814,7 @@ protected:
 struct SearchReplyParser_t : public IReplyParser_t
 {
 						SearchReplyParser_t ( int iStart, int iEnd ) : m_iStart ( iStart ), m_iEnd ( iEnd ) {}
-	virtual bool		ParseReply ( MemInputBuffer_c & tReq, Agent_t & tAgent, SearchFailuresLogset_c & dFailures ) const;
+	virtual bool		ParseReply ( MemInputBuffer_c & tReq, Agent_t & tAgent ) const;
 
 protected:
 	int					m_iStart;
@@ -1950,7 +1950,7 @@ void SearchRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuff
 
 /////////////////////////////////////////////////////////////////////////////
 
-bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, Agent_t & tAgent, SearchFailuresLogset_c & dFailuresSet ) const
+bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, Agent_t & tAgent ) const
 {
 	int iResults = m_iEnd-m_iStart+1;
 	assert ( iResults>0 );
@@ -1961,16 +1961,22 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, Agent_t & tAgent
 
 	for ( int iRes=0; iRes<iResults; iRes++ )
 	{
-		SearchFailuresLog_c & dFailures = dFailuresSet [ iRes+m_iStart ];
 		CSphQueryResult & tRes = tAgent.m_dResults [ iRes ];
+		tRes.m_sError = "";
+		tRes.m_sWarning = "";
 
-		// get status
+		// get status and message
 		DWORD eStatus = tReq.GetDword ();
 		if ( eStatus!=SEARCHD_OK )
 		{
-			dFailures.Submit ( tReq.GetString().cstr() );
-			if ( eStatus==SEARCHD_ERROR )
-				continue;
+			CSphString sMessage = tReq.GetString ();
+			switch ( eStatus )
+			{
+				case SEARCHD_ERROR:		tRes.m_sError = sMessage; continue;
+				case SEARCHD_RETRY:		tRes.m_sError = sMessage; break;
+				case SEARCHD_WARNING:	tRes.m_sWarning = sMessage; break;
+				default:				tAgent.m_sFailure.SetSprintf ( "internal error: unknown status %d", eStatus ); break;
+			}
 		}
 
 		// get schema
@@ -1994,14 +2000,14 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, Agent_t & tAgent
 		int iMatches = tReq.GetInt ();
 		if ( iMatches<0 || iMatches>g_iMaxMatches )
 		{
-			dFailures.Submit ( "invalid match count received (count=%d)", iMatches );
+			tAgent.m_sFailure.SetSprintf ( "invalid match count received (count=%d)", iMatches );
 			return false;
 		}
 
 		int bAgent64 = tReq.GetInt ();
 #if !USE_64BIT
 		if ( bAgent64 )
-			dFailures.Submit ( "id64 agent, id32 master, docids might be wrapped" );
+			tAgent.m_sFailure.SetSprintf ( "id64 agent, id32 master, docids might be wrapped" );
 #endif
 
 		assert ( !tRes.m_dMatches.GetLength() );
@@ -2047,7 +2053,7 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, Agent_t & tAgent
 		tRes.m_iNumWords = tReq.GetInt ();
 		if ( iRetrieved!=iMatches )
 		{
-			dFailures.Submit ( "expected %d retrieved documents, got %d", iMatches, iRetrieved );
+			tAgent.m_sFailure.SetSprintf ( "expected %d retrieved documents, got %d", iMatches, iRetrieved );
 			return false;
 		}
 
@@ -3120,10 +3126,10 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		if ( pDist )
 		{
 			m_dFailuresSet.SetIndex ( tFirst.m_sIndexes.cstr() );
-			ConnectToRemoteAgents ( pDist->m_dAgents, iRetry!=0, m_dFailuresSet );
+			ConnectToRemoteAgents ( pDist->m_dAgents, iRetry!=0  );
 
 			SearchRequestBuilder_t tReqBuilder ( m_dQueries, iStart, iEnd );
-			iRemote = QueryRemoteAgents ( pDist->m_dAgents, pDist->m_iAgentConnectTimeout, tReqBuilder, m_dFailuresSet );
+			iRemote = QueryRemoteAgents ( pDist->m_dAgents, pDist->m_iAgentConnectTimeout, tReqBuilder );
 		}
 
 		/////////////////////
@@ -3289,7 +3295,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 			SearchReplyParser_t tParser ( iStart, iEnd );
 			int iMsecLeft = pDist->m_iAgentQueryTimeout - int(tmQuery*1000.0f);
-			int iReplys = WaitForRemoteAgents ( pDist->m_dAgents, Max(iMsecLeft,0), tParser, m_dFailuresSet );
+			int iReplys = WaitForRemoteAgents ( pDist->m_dAgents, Max(iMsecLeft,0), tParser );
 
 			// check if there were valid (though might be 0-matches) replys, and merge them
 			if ( iReplys )
@@ -3303,6 +3309,14 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				for ( int iRes=iStart; iRes<=iEnd; iRes++ )
 				{
 					const CSphQueryResult & tRemoteResult = tAgent.m_dResults[iRes-iStart];
+
+					// copy errors or warnings
+					m_dFailuresSet[iRes].SetPrefix ( "agent %s:%d: ", tAgent.m_sHost.cstr(), tAgent.m_iPort );
+					if ( !tRemoteResult.m_sError.IsEmpty() )
+						m_dFailuresSet[iRes].Submit ( "remote query error: %s", tRemoteResult.m_sError.cstr() );
+					if ( !tRemoteResult.m_sWarning.IsEmpty() )
+						m_dFailuresSet[iRes].Submit ( "remote query warning: %s", tRemoteResult.m_sWarning.cstr() );
+
 					if ( tRemoteResult.m_iSuccesses<=0 )
 						continue;
 
@@ -3317,7 +3331,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 					tRes.m_dMatchCounts.Add ( tRemoteResult.m_dMatches.GetLength() );
 					tRes.m_dSchemas.Add ( tRemoteResult.m_tSchema );
-					// note how we do NOT* add per-index weight here; remote agents are all tagged 0 (which contains weight 1)
+					// note how we do NOT add per-index weight here; remote agents are all tagged 0 (which contains weight 1)
 
 					// merge this agent's stats
 					tRes.m_iTotalMatches += tRemoteResult.m_iTotalMatches;
@@ -3350,7 +3364,6 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 						} else
 						{
 							// there are mismatches, warn
-							m_dFailuresSet[iRes].SetPrefix ( "agent %s:%d: ", tAgent.m_sHost.cstr(), tAgent.m_iPort );
 							m_dFailuresSet[iRes].Submit ( "query words mismatch" );
 						}
 					}
@@ -3369,6 +3382,18 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 					iToRetry++;
 		if ( !iToRetry )
 			break;
+	}
+
+	// submit failures from failed agents
+	if ( pDist )
+	{
+		m_dFailuresSet.SetIndex ( tFirst.m_sIndexes.cstr() );
+		ARRAY_FOREACH ( i, pDist->m_dAgents )
+		{
+			const Agent_t & tAgent = pDist->m_dAgents[i];
+			if ( !tAgent.m_bSuccess && !tAgent.m_sFailure.IsEmpty() )
+				m_dFailuresSet.Submit  ( "agent %s:%d: %s", tAgent.m_sHost.cstr(), tAgent.m_iPort, tAgent.m_sFailure.cstr() );
+		}
 	}
 
 	assert ( m_iTag==m_dTag2MVA.GetLength() );
@@ -3659,7 +3684,7 @@ struct UpdateReplyParser_t : public IReplyParser_t
 		: m_pUpdated ( pUpd )
 	{}
 
-	virtual bool ParseReply ( MemInputBuffer_c & tReq, Agent_t &, SearchFailuresLogset_c & ) const
+	virtual bool ParseReply ( MemInputBuffer_c & tReq, Agent_t & ) const
 	{
 		*m_pUpdated += tReq.GetDword ();
 		return true;
@@ -3828,15 +3853,15 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 			dFailuresSet.SetIndex ( sReqIndex );
 
 			// connect to remote agents and query them
-			ConnectToRemoteAgents ( tDist.m_dAgents, false, dFailuresSet );
+			ConnectToRemoteAgents ( tDist.m_dAgents, false );
 
 			UpdateRequestBuilder_t tReqBuilder ( tUpd );
-			int iRemote = QueryRemoteAgents ( tDist.m_dAgents, tDist.m_iAgentConnectTimeout, tReqBuilder, dFailuresSet );
+			int iRemote = QueryRemoteAgents ( tDist.m_dAgents, tDist.m_iAgentConnectTimeout, tReqBuilder );
 
 			if ( iRemote )
 			{
 				UpdateReplyParser_t tParser ( &iUpdated );
-				iSuccesses += WaitForRemoteAgents ( tDist.m_dAgents, tDist.m_iAgentQueryTimeout, tParser, dFailuresSet );
+				iSuccesses += WaitForRemoteAgents ( tDist.m_dAgents, tDist.m_iAgentQueryTimeout, tParser );
 			}
 		}
 	}
@@ -3917,7 +3942,10 @@ void HandleClient ( int iSock, const char * sClientIP, int iPipeFD )
 	int iLength = tBuf.GetInt ();
 	if ( tBuf.GetError() )
 	{
-		sphWarning ( "failed to receive client version and request (client=%s, error=%s)", sClientIP, sphSockError() );
+		// under high load, there can be pretty frequent accept() vs connect() timeouts
+		// lets avoid agent log flood
+		//
+		// sphWarning ( "failed to receive client version and request (client=%s, error=%s)", sClientIP, sphSockError() );
 		return;
 	}
 

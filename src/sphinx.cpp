@@ -1599,8 +1599,8 @@ private:
 	void						WriteSchemaColumn ( CSphWriter & fdInfo, const CSphColumnInfo & tCol );
 	void						ReadSchemaColumn ( CSphReader_VLN & rdInfo, CSphColumnInfo & tCol );
 
-	void						MatchAll ( const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters );
-	void						MatchAny ( const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters );
+	void						MatchAll ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters );
+	void						MatchAny ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters );
 	bool						MatchBoolean ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphTermSetup & tTermSetup );
 	bool						MatchExtended ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphTermSetup & tTermSetup );
 	bool						MatchExtendedV1 ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphTermSetup & tTermSetup );
@@ -7896,7 +7896,7 @@ struct WordDupeCheck_t
 };
 
 
-void CSphIndex_VLN::MatchAll ( const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters )
+void CSphIndex_VLN::MatchAll ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters )
 {
 	bool bRandomize = ppSorters[0]->m_bRandomize;
 	int iCutoff = pQuery->m_iCutoff;
@@ -7963,6 +7963,7 @@ void CSphIndex_VLN::MatchAll ( const CSphQuery * pQuery, int iSorters, ISphMatch
 				if ( sphTimerMsec()>=uMaxStamp )
 				{
 					m_dQueryWords[i].m_tDoc.m_iDocID = 0;
+					pResult->m_sWarning = "query time exceeded max_query_time";
 					break;
 				}
 			}
@@ -8120,7 +8121,7 @@ void CSphIndex_VLN::MatchAll ( const CSphQuery * pQuery, int iSorters, ISphMatch
 }
 
 
-void CSphIndex_VLN::MatchAny ( const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters )
+void CSphIndex_VLN::MatchAny ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters )
 {
 	bool bRandomize = ppSorters[0]->m_bRandomize;
 	int iCutoff = pQuery->m_iCutoff;
@@ -8193,7 +8194,10 @@ void CSphIndex_VLN::MatchAny ( const CSphQuery * pQuery, int iSorters, ISphMatch
 		{
 			iScannedEntries = 0;
 			if ( sphTimerMsec()>=uMaxStamp )
+			{
+				pResult->m_sWarning = "query time exceeded max_query_time";
 				break;
+			}
 		}
 
 		// early reject by group id, doc id or timestamp
@@ -8302,9 +8306,9 @@ public:
 							~CSphBooleanEvalNode ();
 
 	void					SetFile ( CSphIndex_VLN * pIndex, const CSphTermSetup & tTermSetup );
-	CSphMatch *				MatchNode ( SphDocID_t iMinID );	///< get next match at this node, with ID greater than iMinID
-	CSphMatch *				MatchLevel ( SphDocID_t iMinID );	///< get next match at this level, with ID greater than iMinID
-	bool					IsRejected ( SphDocID_t iID );		///< check if this match should be rejected
+	CSphMatch *				MatchNode ( SphDocID_t iMinID, CSphString & sWarning );	///< get next match at this node, with ID greater than iMinID
+	CSphMatch *				MatchLevel ( SphDocID_t iMinID, CSphString & sWarning );	///< get next match at this level, with ID greater than iMinID
+	bool					IsRejected ( SphDocID_t iID, CSphString & sWarning );		///< check if this match should be rejected
 
 protected:
 	DWORD					m_uMaxStamp;
@@ -8377,7 +8381,7 @@ void CSphBooleanEvalNode::SetFile ( CSphIndex_VLN * pIndex, const CSphTermSetup 
 }
 
 
-bool CSphBooleanEvalNode::IsRejected ( SphDocID_t iID )
+bool CSphBooleanEvalNode::IsRejected ( SphDocID_t iID, CSphString & sWarning )
 {
 	assert ( !m_bEvaluable );
 	assert ( m_pPrev ); // filter node can't start a level
@@ -8392,12 +8396,12 @@ bool CSphBooleanEvalNode::IsRejected ( SphDocID_t iID )
 		if ( m_bInvert )
 		{
 			// subexpr is directly evaluable
-			m_pLast = m_pExpr->MatchNode ( iID );
+			m_pLast = m_pExpr->MatchNode ( iID, sWarning );
 			return ( m_pLast && m_pLast->m_iDocID==iID );
 		} else
 		{
 			// subexpr is not evaluable as well
-			return m_pExpr->IsRejected ( iID );
+			return m_pExpr->IsRejected ( iID, sWarning );
 		}
 	}
 
@@ -8416,7 +8420,7 @@ bool CSphBooleanEvalNode::IsRejected ( SphDocID_t iID )
 }
 
 
-CSphMatch * CSphBooleanEvalNode::MatchNode ( SphDocID_t iMinID )
+CSphMatch * CSphBooleanEvalNode::MatchNode ( SphDocID_t iMinID, CSphString & sWarning )
 {
 	assert ( m_bEvaluable );
 
@@ -8426,7 +8430,7 @@ CSphMatch * CSphBooleanEvalNode::MatchNode ( SphDocID_t iMinID )
 
 	// subexpr case
 	if ( m_pExpr )
-		return m_pExpr->MatchLevel ( iMinID );
+		return m_pExpr->MatchLevel ( iMinID, sWarning );
 
 	// plain word case
 	while ( iMinID > m_tDoc.m_iDocID )
@@ -8440,6 +8444,7 @@ CSphMatch * CSphBooleanEvalNode::MatchNode ( SphDocID_t iMinID )
 		{
 			if ( sphTimerMsec()>=m_uMaxStamp )
 			{
+				sWarning = "query time exceeded max_query_time";
 				m_pLast = NULL;
 				return NULL;
 			}
@@ -8450,7 +8455,7 @@ CSphMatch * CSphBooleanEvalNode::MatchNode ( SphDocID_t iMinID )
 }
 
 
-CSphMatch * CSphBooleanEvalNode::MatchLevel ( SphDocID_t iMinID )
+CSphMatch * CSphBooleanEvalNode::MatchLevel ( SphDocID_t iMinID, CSphString & sWarning )
 {
 	assert ( m_bEvaluable );
 	if ( m_eType==NODE_AND )
@@ -8465,7 +8470,7 @@ CSphMatch * CSphBooleanEvalNode::MatchLevel ( SphDocID_t iMinID )
 				// as all evaluatable siblings matched last time,
 				// we are positive that it is time to advance the pointer
 				// and fetch the next id
-				CSphMatch * pCandidate = pNode->MatchNode ( iMinID );
+				CSphMatch * pCandidate = pNode->MatchNode ( iMinID, sWarning );
 				if ( !pCandidate )
 					return NULL;
 
@@ -8486,7 +8491,7 @@ CSphMatch * CSphBooleanEvalNode::MatchLevel ( SphDocID_t iMinID )
 			{
 				// if this node is a filter, well, we need some value to pass through it!
 				assert ( pCur );
-				if ( pNode->IsRejected ( pCur->m_iDocID ) )
+				if ( pNode->IsRejected ( pCur->m_iDocID, sWarning ) )
 				{
 					// oh, the doc's rejected. restart scanning
 					iMinID = 1 + pCur->m_iDocID;
@@ -8519,7 +8524,7 @@ CSphMatch * CSphBooleanEvalNode::MatchLevel ( SphDocID_t iMinID )
 			{
 				while ( pNode->m_pLast->m_iDocID < iMinID )
 				{
-					pNode->m_pLast = pNode->MatchNode ( iMinID );
+					pNode->m_pLast = pNode->MatchNode ( iMinID, sWarning );
 					if ( !pNode->m_pLast )
 						break;
 				}
@@ -8623,7 +8628,7 @@ bool CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, CSphQueryResult * p
 	SphDocID_t iMinID = 1;
 	for ( ;; )
 	{
-		CSphMatch * pMatch = tTree.MatchLevel ( iMinID );
+		CSphMatch * pMatch = tTree.MatchLevel ( iMinID, pResult->m_sWarning );
 		if ( !pMatch )
 			break;
 		iMinID = 1 + pMatch->m_iDocID;
@@ -8675,7 +8680,7 @@ class CSphExtendedEvalAtom : public CSphExtendedQueryAtom
 {
 public:
 						CSphExtendedEvalAtom ( const CSphExtendedQueryAtom & tAtom, const CSphTermSetup & tSetup );
-	CSphMatch *			GetNextDoc ( SphDocID_t iMinID );
+	CSphMatch *			GetNextDoc ( SphDocID_t iMinID, CSphString & sWarning );
 	void				GetNextHit ( DWORD iMinPos );
 	void				GetLastTF ( DWORD * pTF ) const;
 	inline CSphMatch *	GetLastMatch () const { return m_pLast; }
@@ -8881,7 +8886,7 @@ void CSphExtendedEvalAtom::GetNextHit ( DWORD iMinPos )
 }
 
 
-CSphMatch * CSphExtendedEvalAtom::GetNextDoc ( SphDocID_t iMinID )
+CSphMatch * CSphExtendedEvalAtom::GetNextDoc ( SphDocID_t iMinID, CSphString & sWarning )
 {
 	if ( !m_pLast )
 		return NULL;
@@ -8918,6 +8923,7 @@ CSphMatch * CSphExtendedEvalAtom::GetNextDoc ( SphDocID_t iMinID )
 				{
 					if ( sphTimerMsec()>=m_uMaxStamp )
 					{
+						sWarning = "query time exceeded max_query_time";
 						m_pLast = NULL;
 						return NULL;
 					}
@@ -9085,10 +9091,10 @@ public:
 
 public:
 	void				CollectQwords ( CSphQwordsHash & dHash, int & iCount );	///< collects all unique query words into dHash
-	CSphMatch *			GetNextMatch ( SphDocID_t iMinID, int iTerms, float * pIDF, int iFields, int * pWeights );	///< iTF==0 means that no weighting is required
+	CSphMatch *			GetNextMatch ( SphDocID_t iMinID, int iTerms, float * pIDF, int iFields, int * pWeights, CSphString & sWarning );	///< iTF==0 means that no weighting is required
 
 protected:
-	CSphMatch *			GetNextDoc ( SphDocID_t iMinID );
+	CSphMatch *			GetNextDoc ( SphDocID_t iMinID, CSphString & sWarning );
 	DWORD				GetNextHitNode ( DWORD iMinPos );
 	void				GetLastTF ( DWORD * pTF ) const;
 	inline CSphMatch *	GetLastDoc () const { return m_pLast; }
@@ -9197,7 +9203,7 @@ DWORD CSphExtendedEvalNode::GetNextHitNode ( DWORD uMinPos )
 }
 
 
-CSphMatch * CSphExtendedEvalNode::GetNextDoc ( SphDocID_t iMinID )
+CSphMatch * CSphExtendedEvalNode::GetNextDoc ( SphDocID_t iMinID, CSphString & sWarning )
 {
 	if ( m_bDone )
 		return NULL;
@@ -9211,7 +9217,7 @@ CSphMatch * CSphExtendedEvalNode::GetNextDoc ( SphDocID_t iMinID )
 		assert ( !m_bAny );
 		assert ( !m_tAtom.IsEmpty() );
 
-		m_pLast = m_tAtom.GetNextDoc ( iMinID );
+		m_pLast = m_tAtom.GetNextDoc ( iMinID, sWarning );
 		m_uLastHitPos = m_tAtom.m_uLastHitPos;
 		if ( !m_pLast )
 			m_bDone = true;
@@ -9233,7 +9239,7 @@ CSphMatch * CSphExtendedEvalNode::GetNextDoc ( SphDocID_t iMinID )
 		ARRAY_FOREACH ( i, m_dChildren )
 		{
 			// get next candidate
-			CSphMatch * pCur = m_dChildren[i]->GetNextDoc ( iMinID );
+			CSphMatch * pCur = m_dChildren[i]->GetNextDoc ( iMinID, sWarning );
 			assert ( pCur==m_dChildren[i]->GetLastDoc() );
 
 			if ( !pCur )
@@ -9267,7 +9273,7 @@ CSphMatch * CSphExtendedEvalNode::GetNextDoc ( SphDocID_t iMinID )
 		ARRAY_FOREACH ( i, m_dChildren )
 		{
 			CSphExtendedEvalNode * pChild = m_dChildren[i];
-			pMatch = pChild->GetNextDoc ( iMinID );
+			pMatch = pChild->GetNextDoc ( iMinID, sWarning );
 			if ( !pMatch )
 			{
 				m_bDone = true;
@@ -9324,9 +9330,9 @@ void CSphExtendedEvalNode::UpdateLCS ( CSphLCSState & tState )
 
 
 CSphMatch * CSphExtendedEvalNode::GetNextMatch ( SphDocID_t iMinID, int iTerms, float * pIDF,
-	int iFields, int * pWeights )
+	int iFields, int * pWeights, CSphString & sWarning )
 {
-	CSphMatch * pMatch = GetNextDoc ( iMinID );
+	CSphMatch * pMatch = GetNextDoc ( iMinID, sWarning );
 	m_pLast = pMatch;
 
 	if ( !pMatch || !iTerms ) // if there's no match or no need to rank, we're done
@@ -9534,12 +9540,12 @@ bool CSphIndex_VLN::MatchExtendedV1 ( const CSphQuery * pQuery, CSphQueryResult 
 	SphDocID_t iMinID = 1;
 	for ( ;; )
 	{
-		CSphMatch * pAccept = tAccept.GetNextMatch ( iMinID, iQwords, dIDF, m_iWeights, m_dWeights );
+		CSphMatch * pAccept = tAccept.GetNextMatch ( iMinID, iQwords, dIDF, m_iWeights, m_dWeights, pResult->m_sWarning );
 		if ( !pAccept )
 			break;
 		iMinID = 1 + pAccept->m_iDocID;
 
-		CSphMatch * pReject = tReject.GetNextMatch ( pAccept->m_iDocID, 0, NULL, 0, NULL );
+		CSphMatch * pReject = tReject.GetNextMatch ( pAccept->m_iDocID, 0, NULL, 0, NULL, pResult->m_sWarning );
 		if ( pReject && pReject->m_iDocID==pAccept->m_iDocID )
 			continue;
 
@@ -12216,9 +12222,9 @@ bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, C
 	bool bMatch = true;
 	switch ( pQuery->m_eMode )
 	{
-		case SPH_MATCH_ALL:			MatchAll ( pQuery, iSorters, ppSorters ); break;
-		case SPH_MATCH_PHRASE:		MatchAll ( pQuery, iSorters, ppSorters ); break;
-		case SPH_MATCH_ANY:			MatchAny ( pQuery, iSorters, ppSorters ); break;
+		case SPH_MATCH_ALL:			MatchAll ( pQuery, pResult, iSorters, ppSorters ); break;
+		case SPH_MATCH_PHRASE:		MatchAll ( pQuery, pResult, iSorters, ppSorters ); break;
+		case SPH_MATCH_ANY:			MatchAny ( pQuery, pResult, iSorters, ppSorters ); break;
 		case SPH_MATCH_BOOLEAN:		bMatch = MatchBoolean ( pQuery, pResult, iSorters, ppSorters, tTermSetup ); break;
 		case SPH_MATCH_EXTENDED:	bMatch = MatchExtendedV1 ( pQuery, pResult, iSorters, ppSorters, tTermSetup ); break;
 		case SPH_MATCH_EXTENDED2:	bMatch = MatchExtended ( pQuery, pResult, iSorters, ppSorters, tTermSetup ); break;

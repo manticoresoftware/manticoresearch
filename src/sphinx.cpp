@@ -9607,7 +9607,7 @@ class ExtNode_i
 public:
 								ExtNode_i ();
 	virtual						~ExtNode_i () {}
-	static ExtNode_i *			Create ( const CSphExtendedQueryNode * pNode, const CSphTermSetup & tSetup, DWORD uQuerypos );
+	static ExtNode_i *			Create ( const CSphExtendedQueryNode * pNode, const CSphTermSetup & tSetup, DWORD uQuerypos, CSphString * pWarning );
 
 	virtual const ExtDoc_t *	GetDocsChunk () = 0;
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs ) = 0;
@@ -9628,7 +9628,7 @@ public:
 class ExtTerm_c : public ExtNode_i
 {
 public:
-								ExtTerm_c ( const CSphString & sTerm, DWORD uFields, const CSphTermSetup & tSetup, DWORD uQuerypos );
+								ExtTerm_c ( const CSphString & sTerm, DWORD uFields, const CSphTermSetup & tSetup, DWORD uQuerypos, CSphString * pWarning );
 	virtual const ExtDoc_t *	GetDocsChunk ();
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs );
 	virtual void				GetQwords ( ExtQwordsHash_t & hQwords );
@@ -9642,6 +9642,7 @@ protected:
 	DWORD						m_uFields;		///< accepted fields mask
 	float						m_fIDF;			///< IDF for this term (might be 0.0f for non-1st occurences in query)
 	DWORD						m_uMaxStamp;	///< work until this timestamp 
+	CSphString *				m_pWarning;
 };
 
 
@@ -9699,7 +9700,7 @@ protected:
 class ExtPhrase_c : public ExtNode_i
 {
 public:
-								ExtPhrase_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, const CSphTermSetup & tSetup, DWORD uQuerypos );
+								ExtPhrase_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, const CSphTermSetup & tSetup, DWORD uQuerypos, CSphString * pWarning );
 								~ExtPhrase_c ();
 	virtual const ExtDoc_t *	GetDocsChunk ();
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs );
@@ -9726,7 +9727,7 @@ protected:
 class ExtProximity_c : public ExtPhrase_c
 {
 public:
-								ExtProximity_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, const CSphTermSetup & tSetup, DWORD uQuerypos );
+								ExtProximity_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, const CSphTermSetup & tSetup, DWORD uQuerypos, CSphString * pWarning );
 	virtual const ExtDoc_t *	GetDocsChunk ();
 
 protected:
@@ -9740,7 +9741,7 @@ protected:
 class ExtRanker_c
 {
 public:
-								ExtRanker_c ( const CSphExtendedQueryNode * pAccept, const CSphExtendedQueryNode * pReject, const CSphTermSetup & tSetup );
+								ExtRanker_c ( const CSphExtendedQueryNode * pAccept, const CSphExtendedQueryNode * pReject, const CSphTermSetup & tSetup, CSphString * pWarning );
 	virtual						~ExtRanker_c () { SafeDelete ( m_pRoot ); }
 
 	virtual int					GetMatches ( int iFields, const int * pWeights ) = 0;
@@ -9762,8 +9763,8 @@ protected:
 	class ExtRanker_##_name##_c : public ExtRanker_c \
 	{ \
 	public: \
-		ExtRanker_##_name##_c ( const CSphExtendedQueryNode * pAccept, const CSphExtendedQueryNode * pReject, const CSphTermSetup & tSetup ) \
-			: ExtRanker_c ( pAccept, pReject, tSetup ) \
+		ExtRanker_##_name##_c ( const CSphExtendedQueryNode * pAccept, const CSphExtendedQueryNode * pReject, const CSphTermSetup & tSetup, CSphString * pWarning ) \
+			: ExtRanker_c ( pAccept, pReject, tSetup, pWarning ) \
 		{} \
 	\
 		virtual int GetMatches ( int iFields, const int * pWeights ); \
@@ -9781,7 +9782,7 @@ ExtNode_i::ExtNode_i ()
 	m_dHits[0].m_uDocid = DOCID_MAX;
 }
 
-ExtNode_i * ExtNode_i::Create ( const CSphExtendedQueryNode * pNode, const CSphTermSetup & tSetup, DWORD uQuerypos )
+ExtNode_i * ExtNode_i::Create ( const CSphExtendedQueryNode * pNode, const CSphTermSetup & tSetup, DWORD uQuerypos, CSphString * pWarning )
 {
 	if ( pNode->IsPlain() )
 	{
@@ -9796,26 +9797,26 @@ ExtNode_i * ExtNode_i::Create ( const CSphExtendedQueryNode * pNode, const CSphT
 			uFields = ( 1UL << tAtom.m_iField );
 
 		if ( iWords==1 )
-			return new ExtTerm_c ( tAtom.m_dWords[0].m_sWord, uFields, tSetup, uQuerypos );
+			return new ExtTerm_c ( tAtom.m_dWords[0].m_sWord, uFields, tSetup, uQuerypos, pWarning );
 
 		assert ( tAtom.m_iMaxDistance>=0 );
 		if ( tAtom.m_iMaxDistance==0 )
-			return new ExtPhrase_c ( pNode, uFields, tSetup, uQuerypos );
+			return new ExtPhrase_c ( pNode, uFields, tSetup, uQuerypos, pWarning );
 		else
-			return new ExtProximity_c ( pNode, uFields, tSetup, uQuerypos );
+			return new ExtProximity_c ( pNode, uFields, tSetup, uQuerypos, pWarning );
 
 	} else
 	{
 		int iChildren = pNode->m_dChildren.GetLength ();
 		assert ( iChildren>0 );
 
-		ExtNode_i * pCur = ExtNode_i::Create ( pNode->m_dChildren[0], tSetup, uQuerypos );
+		ExtNode_i * pCur = ExtNode_i::Create ( pNode->m_dChildren[0], tSetup, uQuerypos, pWarning );
 		for ( int i=1; i<iChildren; i++ )
 		{
 			if ( pNode->m_bAny )
-				pCur = new ExtOr_c ( pCur, ExtNode_i::Create ( pNode->m_dChildren[i], tSetup, uQuerypos ) );
+				pCur = new ExtOr_c ( pCur, ExtNode_i::Create ( pNode->m_dChildren[i], tSetup, uQuerypos, pWarning ) );
 			else
-				pCur = new ExtAnd_c ( pCur, ExtNode_i::Create ( pNode->m_dChildren[i], tSetup, uQuerypos+i ) );
+				pCur = new ExtAnd_c ( pCur, ExtNode_i::Create ( pNode->m_dChildren[i], tSetup, uQuerypos+i, pWarning ) );
 		}
 		return pCur;
 	}
@@ -9823,7 +9824,8 @@ ExtNode_i * ExtNode_i::Create ( const CSphExtendedQueryNode * pNode, const CSphT
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtTerm_c::ExtTerm_c ( const CSphString & sTerm, DWORD uFields, const CSphTermSetup & tSetup, DWORD uQuerypos )
+ExtTerm_c::ExtTerm_c ( const CSphString & sTerm, DWORD uFields, const CSphTermSetup & tSetup, DWORD uQuerypos, CSphString * pWarning )
+	: m_pWarning ( pWarning )
 {
 	CSphString sBuf ( sTerm );
 	m_tQword.m_sWord = sBuf;
@@ -9846,7 +9848,11 @@ const ExtDoc_t * ExtTerm_c::GetDocsChunk ()
 
 	// max_query_time
 	if ( m_uMaxStamp>0 && sphTimerMsec()>=m_uMaxStamp )
+	{
+		if ( m_pWarning )
+			*m_pWarning = "query time exceeded max_query_time";
 		return NULL;
+	}
 
 	int iDoc = 0;
 	while ( iDoc<MAX_DOCS-1 )
@@ -10405,7 +10411,7 @@ const ExtHit_t * ExtAndNot_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtPhrase_c::ExtPhrase_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, const CSphTermSetup & tSetup, DWORD uQuerypos )
+ExtPhrase_c::ExtPhrase_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, const CSphTermSetup & tSetup, DWORD uQuerypos, CSphString * pWarning )
 	: m_uFields ( uFields )
 	, m_uLastDocID ( 0 )
 	, m_uExpID ( 0 )
@@ -10431,10 +10437,10 @@ ExtPhrase_c::ExtPhrase_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, c
 	ARRAY_FOREACH ( i, m_dQposDelta )
 		m_dQposDelta[i] = -INT_MAX;
 
-	ExtNode_i * pCur = new ExtTerm_c ( dWords[0].m_sWord, uFields, tSetup, uQuerypos+dWords[0].m_iAtomPos );
+	ExtNode_i * pCur = new ExtTerm_c ( dWords[0].m_sWord, uFields, tSetup, uQuerypos+dWords[0].m_iAtomPos, pWarning );
 	for ( int i=1; i<iWords; i++ )
 	{
-		pCur = new ExtAnd_c ( pCur, new ExtTerm_c ( dWords[i].m_sWord, uFields, tSetup, uQuerypos+dWords[i].m_iAtomPos ) );
+		pCur = new ExtAnd_c ( pCur, new ExtTerm_c ( dWords[i].m_sWord, uFields, tSetup, uQuerypos+dWords[i].m_iAtomPos, pWarning ) );
 		m_dQposDelta [ dWords[i-1].m_iAtomPos - dWords[0].m_iAtomPos ] = dWords[i].m_iAtomPos - dWords[i-1].m_iAtomPos;
 	}
 	m_pNode = pCur;
@@ -10630,8 +10636,8 @@ void ExtPhrase_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtProximity_c::ExtProximity_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, const CSphTermSetup & tSetup, DWORD uQuerypos )
-	: ExtPhrase_c ( pNode, uFields, tSetup, uQuerypos )
+ExtProximity_c::ExtProximity_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, const CSphTermSetup & tSetup, DWORD uQuerypos, CSphString * pWarning )
+	: ExtPhrase_c ( pNode, uFields, tSetup, uQuerypos, pWarning )
 	, m_iMaxDistance ( pNode->m_tAtom.m_iMaxDistance )
 	, m_iNumWords ( pNode->m_tAtom.m_dWords.GetLength() )
 {
@@ -10807,17 +10813,17 @@ const ExtDoc_t * ExtProximity_c::GetDocsChunk ()
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtRanker_c::ExtRanker_c ( const CSphExtendedQueryNode * pAccept, const CSphExtendedQueryNode * pReject, const CSphTermSetup & tSetup )
+ExtRanker_c::ExtRanker_c ( const CSphExtendedQueryNode * pAccept, const CSphExtendedQueryNode * pReject, const CSphTermSetup & tSetup, CSphString * pWarning )
 {
 	for ( int i=0; i<ExtNode_i::MAX_DOCS; i++ )
 		m_dMatches[i].Reset ( tSetup.m_tMin.m_iRowitems + tSetup.m_iToCalc );
 
 	assert ( pAccept );
-	m_pRoot = ExtNode_i::Create ( pAccept, tSetup, 1 );
+	m_pRoot = ExtNode_i::Create ( pAccept, tSetup, 1, pWarning );
 
 	if ( pReject )
 	{
-		ExtNode_i * pRej = ExtNode_i::Create ( pReject, tSetup, 1 );
+		ExtNode_i * pRej = ExtNode_i::Create ( pReject, tSetup, 1, pWarning );
 		if ( pRej )
 			m_pRoot = new ExtAndNot_c ( m_pRoot, pRej );
 	}
@@ -11027,13 +11033,13 @@ bool CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, CSphQueryResult * 
 	CSphScopedPtr<ExtRanker_c> pRoot ( NULL );
 	switch ( pQuery->m_eRanker )
 	{
-		case SPH_RANK_PROXIMITY_BM25:	pRoot = new ExtRanker_ProximityBM25_c ( tParsed.m_pAccept, tParsed.m_pReject, tTermSetup ); break;
-		case SPH_RANK_BM25:				pRoot = new ExtRanker_BM25_c ( tParsed.m_pAccept, tParsed.m_pReject, tTermSetup ); break;
-		case SPH_RANK_NONE:				pRoot = new ExtRanker_None_c ( tParsed.m_pAccept, tParsed.m_pReject, tTermSetup ); break;
+		case SPH_RANK_PROXIMITY_BM25:	pRoot = new ExtRanker_ProximityBM25_c ( tParsed.m_pAccept, tParsed.m_pReject, tTermSetup, &(pResult->m_sWarning) ); break;
+		case SPH_RANK_BM25:				pRoot = new ExtRanker_BM25_c ( tParsed.m_pAccept, tParsed.m_pReject, tTermSetup, &(pResult->m_sWarning) ); break;
+		case SPH_RANK_NONE:				pRoot = new ExtRanker_None_c ( tParsed.m_pAccept, tParsed.m_pReject, tTermSetup, &(pResult->m_sWarning) ); break;
 
 		default:
 			pResult->m_sWarning.SetSprintf ( "unknown ranking mode %d; using default", (int)pQuery->m_eRanker );
-			pRoot = new ExtRanker_ProximityBM25_c ( tParsed.m_pAccept, tParsed.m_pReject, tTermSetup );
+			pRoot = new ExtRanker_ProximityBM25_c ( tParsed.m_pAccept, tParsed.m_pReject, tTermSetup, &(pResult->m_sWarning) );
 			break;
 	}
 	assert ( pRoot.Ptr() );

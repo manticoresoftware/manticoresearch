@@ -855,6 +855,14 @@ enum ESphBinState
 };
 
 
+enum ESphBinRead
+{
+	 BIN_READ_OK				///< bin read ok
+	,BIN_READ_EOF				///< bin end
+	,BIN_READ_ERROR			///< bin read error
+};
+
+
 /// bin, block input buffer
 struct CSphBin
 {
@@ -886,7 +894,7 @@ public:
 	void				Init ( int iFD, SphOffset_t * pSharedOffset, const int iBinSize );
 
 	int					ReadByte ();
-	int					ReadBytes ( void * pDest, int iBytes );
+	ESphBinRead			ReadBytes ( void * pDest, int iBytes );
 	int					ReadHit ( CSphWordHit * e, int iRowitems, CSphRowitem * pRowitems );
 };
 
@@ -1612,7 +1620,7 @@ private:
 	static const int MAX_ORDINAL_STR_LEN	= 1024;		///< maximum ordinal string length in bytes
 	static const int ORDINAL_READ_SIZE		= 262144;	///< sorted ordinal id read buffer size in bytes
 
-	int							ReadOrdinal ( CSphBin & Reader, Ordinal_t & Ordinal );
+	ESphBinRead					ReadOrdinal ( CSphBin & Reader, Ordinal_t & Ordinal );
 	SphOffset_t					DumpOrdinals ( CSphWriter & Writer, CSphVector<Ordinal_t> & dOrdinals );
 	bool						SortOrdinals ( const char * szToFile, int iFromFD, int iArenaSize, int iOrdinalsInPool, const CSphVector< CSphVector<SphOffset_t> > & dOrdBlockSize );
 	bool						SortOrdinalIds ( const char * szToFile, int iFromFD, int nAttrs, int nOrdinals, int iArenaSize, int iNumPoolOrdinals );
@@ -4420,13 +4428,13 @@ int CSphBin::ReadByte ()
 }
 
 
-int CSphBin::ReadBytes ( void * pDest, int iBytes )
+ESphBinRead CSphBin::ReadBytes ( void * pDest, int iBytes )
 {
 	assert ( iBytes>0 );
 	assert ( iBytes<=m_iSize );
 
 	if ( m_iDone )
-		return 0;
+		return BIN_READ_EOF;
 
 	if ( m_iLeft<iBytes )
 	{
@@ -4440,14 +4448,14 @@ int CSphBin::ReadBytes ( void * pDest, int iBytes )
 		if ( n==0 )
 		{
 			m_iDone = 1;
-			return 0;
+			return BIN_READ_EOF;
 		}
 
 		assert ( m_dBuffer );
 		memmove ( m_dBuffer, m_pCurrent, m_iLeft );
 
 		if ( sphReadThrottled ( m_iFile, m_dBuffer + m_iLeft, n )!=n )
-			return -2;
+			return BIN_READ_ERROR;
 
 		m_iLeft += n;
 		m_iFilePos += n;
@@ -4462,7 +4470,7 @@ int CSphBin::ReadBytes ( void * pDest, int iBytes )
 	memcpy ( pDest, m_pCurrent, iBytes );
 	m_pCurrent += iBytes;
 
-	return 1;
+	return BIN_READ_OK;
 }
 
 
@@ -5567,7 +5575,7 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAut
 	ARRAY_FOREACH ( i, dBlockLens )
 	{
 		MvaEntryTag_t tEntry;
-		if ( dBins[i]->ReadBytes ( (MvaEntry_t*) &tEntry, sizeof(MvaEntry_t) )<=0 )
+		if ( dBins[i]->ReadBytes ( (MvaEntry_t*) &tEntry, sizeof(MvaEntry_t) ) != BIN_READ_OK )
 		{
 			m_sLastError.SetSprintf ( "sort_mva: warmup failed (io error?)" );
 			return false;
@@ -5621,12 +5629,13 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAut
 		qMva.Pop ();
 
 		MvaEntryTag_t tEntry;
-		int iRes = dBins[iBin]->ReadBytes ( (MvaEntry_t*)&tEntry, sizeof(MvaEntry_t) );
+		ESphBinRead iRes = dBins[iBin]->ReadBytes ( (MvaEntry_t*)&tEntry, sizeof(MvaEntry_t) );
 		tEntry.m_iTag = iBin;
-		if ( iRes>0 )
+
+		if ( iRes == BIN_READ_OK )
 			qMva.Push ( tEntry );
 
-		if ( iRes<0 )
+		if ( iRes == BIN_READ_ERROR )
 		{
 			m_sLastError.SetSprintf ( "sort_mva: read error" );
 			return false;
@@ -5706,33 +5715,33 @@ SphOffset_t CSphIndex_VLN::DumpOrdinals ( CSphWriter & Writer, CSphVector<Ordina
 }
 
 
-int CSphIndex_VLN::ReadOrdinal ( CSphBin & Reader, Ordinal_t & Ordinal )
+ESphBinRead CSphIndex_VLN::ReadOrdinal ( CSphBin & Reader, Ordinal_t & Ordinal )
 {
-	int iRes = Reader.ReadBytes ( &Ordinal.m_uDocID, sizeof ( Ordinal.m_uDocID ) );
-	if ( iRes != 1 )
-		return iRes;
+	ESphBinRead eRes = Reader.ReadBytes ( &Ordinal.m_uDocID, sizeof ( Ordinal.m_uDocID ) );
+	if ( eRes != BIN_READ_OK )
+		return eRes;
 
 	DWORD uStrLen;
-	iRes = Reader.ReadBytes ( &uStrLen, sizeof ( DWORD ) );
-	if ( iRes != 1 )
-		return iRes;
+	eRes = Reader.ReadBytes ( &uStrLen, sizeof ( DWORD ) );
+	if ( eRes != BIN_READ_OK )
+		return eRes;
 
 	if ( uStrLen >= (DWORD)MAX_ORDINAL_STR_LEN )
-		return -2;
+		return BIN_READ_ERROR;
 
 	char dBuffer [MAX_ORDINAL_STR_LEN];
 
 	if ( uStrLen > 0 )
 	{
-		iRes = Reader.ReadBytes ( dBuffer, uStrLen );
-		if ( iRes != 1 )
-			return iRes;
+		eRes = Reader.ReadBytes ( dBuffer, uStrLen );
+		if ( eRes != BIN_READ_OK )
+			return eRes;
 	}
 
 	dBuffer [uStrLen] = '\0';
 	Ordinal.m_sValue = dBuffer;
 
-	return 1;
+	return BIN_READ_OK;
 }
 
 
@@ -5782,7 +5791,7 @@ bool CSphIndex_VLN::SortOrdinals ( const char * szToFile, int iFromFD, int iAren
 
 		for ( int iBlock = 0; iBlock < nBlocks; iBlock++ )
 		{
-			if ( ReadOrdinal ( dBins [iBlock], tOrdinalEntry ) <= 0 )
+			if ( ReadOrdinal ( dBins [iBlock], tOrdinalEntry ) != BIN_READ_OK )
 			{
 				m_sLastError = "sort_ordinals: warmup failed (io error?)";
 				return false;
@@ -5829,12 +5838,12 @@ bool CSphIndex_VLN::SortOrdinals ( const char * szToFile, int iFromFD, int iAren
 			int iBlock = qOrdinals.Root().m_iTag;
 			qOrdinals.Pop ();
 
-			int iRes = ReadOrdinal ( dBins [iBlock], tOrdinalEntry );
+			ESphBinRead eRes = ReadOrdinal ( dBins [iBlock], tOrdinalEntry );
 			tOrdinalEntry.m_iTag = iBlock;
-			if ( iRes>0 )
+			if ( eRes == BIN_READ_OK )
 				qOrdinals.Push ( tOrdinalEntry );
 
-			if ( iRes<0 )
+			if ( eRes == BIN_READ_ERROR )
 			{
 				m_sLastError = "sort_ordinals: read error";
 				return false;
@@ -5898,7 +5907,7 @@ bool CSphIndex_VLN::SortOrdinalIds ( const char * szToFile, int iFromFD, int nAt
 
 		for ( int iBlock = 0; iBlock < nBlocks; iBlock++ )
 		{
-			if ( dBins [iBlock].ReadBytes ( &tOrdinalId, sizeof ( tOrdinalId ) ) <= 0 )
+			if ( dBins [iBlock].ReadBytes ( &tOrdinalId, sizeof ( tOrdinalId ) ) != BIN_READ_OK )
 			{
 				m_sLastError = "sort_ordinals: warmup failed (io error?)";
 				return false;
@@ -5938,14 +5947,14 @@ bool CSphIndex_VLN::SortOrdinalIds ( const char * szToFile, int iFromFD, int nAt
 			int iBlock = qOrdinalIds.Root().m_iTag;
 			qOrdinalIds.Pop ();
 
-			int iRes = dBins [iBlock].ReadBytes ( &tOrdinalId, sizeof ( tOrdinalId ) );
+			ESphBinRead eRes = dBins [iBlock].ReadBytes ( &tOrdinalId, sizeof ( tOrdinalId ) );
 			tOrdinalIdEntry.m_uDocID = tOrdinalId.m_uDocID;
 			tOrdinalIdEntry.m_uId = tOrdinalId.m_uId;
 			tOrdinalIdEntry.m_iTag = iBlock;
-			if ( iRes>0 )
+			if ( eRes == BIN_READ_OK )
 				qOrdinalIds.Push ( tOrdinalIdEntry );
 
-			if ( iRes<0 )
+			if ( eRes == BIN_READ_ERROR )
 			{
 				m_sLastError = "sort_ordinals: read error";
 				return false;
@@ -6484,7 +6493,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 		pDocinfo = dDocinfoQueue;
 		for ( int i=0; i<iDocinfoBlocks; i++ )
 		{
-			if ( dBins[i]->ReadBytes ( pDocinfo, iDocinfoStride*sizeof(DWORD) )<=0 )
+			if ( dBins[i]->ReadBytes ( pDocinfo, iDocinfoStride*sizeof(DWORD) ) != BIN_READ_OK )
 			{
 				m_sLastError.SetSprintf ( "sort_docinfos: warmup failed (io error?)" );
 				return 0;
@@ -6525,7 +6534,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 			ARRAY_FOREACH ( i, dOrdinalAttrs )
 			{
 				OrdinalId_t Id;
-				if ( dOrdReaders [i].ReadBytes ( &Id, sizeof ( Id ) ) != 1 )
+				if ( dOrdReaders [i].ReadBytes ( &Id, sizeof ( Id ) ) != BIN_READ_OK )
 				{
 					m_sLastError = "update ordinals: io error";
 					return 0;
@@ -6580,13 +6589,13 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 
 			// pop its index, update it, push its index again
 			qDocinfo.Pop ();
-			int iRes = dBins[iBin]->ReadBytes ( pEntry, iDocinfoStride*sizeof(DWORD) );
-			if ( iRes<0 )
+			ESphBinRead eRes = dBins[iBin]->ReadBytes ( pEntry, iDocinfoStride*sizeof(DWORD) );
+			if ( eRes == BIN_READ_ERROR )
 			{
 				m_sLastError.SetSprintf ( "sort_docinfo: failed to read entry" );
 				return 0;
 			}
-			if ( iRes>0 )
+			if ( eRes == BIN_READ_OK )
 				qDocinfo.Push ( iBin );
 		}
 

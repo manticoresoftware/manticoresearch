@@ -3371,6 +3371,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 				// dismissed
 				tAgent.m_dResults.Reset ();
+				tAgent.m_bSuccess = false;
+				tAgent.m_sFailure = "";
 			}
 		}
 

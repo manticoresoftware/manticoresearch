@@ -1013,6 +1013,9 @@ bool CSphExtendedQueryParser::ParseFields ( DWORD & uFields, ISphTokenizer * pTo
 
 static void DeleteNodesWOFields ( CSphExtendedQueryNode * pNode )
 {
+	if ( !pNode )
+		return;
+
 	for ( int i = 0; i < pNode->m_dChildren.GetLength (); )
 	{
 		if ( pNode->m_dChildren [i]->m_tAtom.m_uFields == 0 )
@@ -1179,7 +1182,7 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 			if ( !ParseFields ( uFields, pMyTokenizer.Ptr (), pSchema ) )
 				return false;
 
-			uFields &= ( 1 << pSchema->m_dFields.GetLength () ) - 1;
+			uFields &= ( 1UL << pSchema->m_dFields.GetLength () ) - 1;
 			continue;
 		}
 

@@ -458,15 +458,8 @@ void CSphUniqounter::Compact ( SphGroupKey_t * pRemoveGroups, int iRemoveGroups 
 
 /////////////////////////////////////////////////////////////////////////////
 
-SphGroupKey_t sphCalcGroupKey ( const CSphMatch & tMatch, ESphGroupBy eGroupBy, int iAttrOffset, int iAttrBits )
+static inline SphGroupKey_t sphCalcGroupKey ( ESphGroupBy eGroupBy, CSphRowitem iAttr )
 {
-	if ( eGroupBy==SPH_GROUPBY_ATTRPAIR )
-	{
-		int iItem = iAttrOffset/ROWITEM_BITS;
-		return *(SphGroupKey_t*)( tMatch.m_pRowitems+iItem );
-	}
-
-	CSphRowitem iAttr = tMatch.GetAttr ( iAttrOffset, iAttrBits );
 	if ( eGroupBy==SPH_GROUPBY_ATTR )
 		return iAttr;
 
@@ -499,6 +492,19 @@ SphGroupKey_t sphCalcGroupKey ( const CSphMatch & tMatch, ESphGroupBy eGroupBy, 
 }
 
 
+static inline SphGroupKey_t sphCalcGroupKey ( const CSphMatch & tMatch, ESphGroupBy eGroupBy, int iAttrOffset, int iAttrBits )
+{
+	if ( eGroupBy==SPH_GROUPBY_ATTRPAIR )
+	{
+		int iItem = iAttrOffset/ROWITEM_BITS;
+		return *(SphGroupKey_t*)( tMatch.m_pRowitems+iItem );
+	}
+
+	CSphRowitem iAttr = tMatch.GetAttr ( iAttrOffset, iAttrBits );
+	return sphCalcGroupKey ( eGroupBy, iAttr );
+}
+
+
 /// attribute magic
 enum
 {
@@ -522,11 +528,12 @@ struct ISphMatchComparator
 };
 
 
-/// match sorter with k-buffering and group-by
 #if USE_WINDOWS
 #pragma warning(disable:4127)
 #endif
 
+
+/// match sorter with k-buffering and group-by
 template < typename COMPGROUP, bool DISTINCT >
 class CSphKBufferGroupSorter : public CSphMatchQueueTraits
 {
@@ -580,12 +587,18 @@ public:
 	/// add entry to the queue
 	virtual bool Push ( const CSphMatch & tEntry )
 	{
+		SphGroupKey_t uGroupKey = sphCalcGroupKey ( tEntry, m_eGroupBy, m_iGroupbyOffset, m_iGroupbyCount );
+		return PushEx ( tEntry, uGroupKey );
+	}
 
+	/// add entry to the queue
+	virtual bool PushEx ( const CSphMatch & tEntry, const SphGroupKey_t uGroupKey )
+	{
+		// check whether incoming match is already grouped
 		const int ADD_ITEMS_TOTAL = DISTINCT ? ADD_ITEMS_DISTINCT : ADD_ITEMS_GROUP;
 		assert ( tEntry.m_iRowitems==m_iRowitems || tEntry.m_iRowitems==m_iRowitems+ADD_ITEMS_TOTAL );
 
 		bool bGrouped = ( tEntry.m_iRowitems!=m_iRowitems );
-		SphGroupKey_t uGroupKey = sphCalcGroupKey ( tEntry, m_eGroupBy, m_iGroupbyOffset, m_iGroupbyCount );
 
 		// if this group is already hashed, we only need to update the corresponding match
 		CSphMatch ** ppMatch = m_hGroup2Match ( uGroupKey );
@@ -812,6 +825,59 @@ protected:
 		}
 	}
 };
+
+
+/// match sorter with k-buffering and group-by for MVAs
+template < typename COMPGROUP, bool DISTINCT >
+class CSphKBufferMVAGroupSorter : public CSphKBufferGroupSorter < COMPGROUP, DISTINCT >
+{
+protected:
+	const DWORD *		m_pMva;		///< pointer to MVA pool for incoming matches
+
+public:
+	/// ctor
+	CSphKBufferMVAGroupSorter ( const ISphMatchComparator * pComp, const CSphQuery * pQuery )
+		: CSphKBufferGroupSorter ( pComp, pQuery )
+		, m_pMva ( NULL )
+	{}
+
+	/// set MVA pool for subsequent matches
+	void SetMVAPool ( const DWORD * pMva )
+	{
+		m_pMva = pMva;
+	}
+
+	/// add entry to the queue
+	virtual bool Push ( const CSphMatch & tEntry )
+	{
+		// check whether incoming match is already grouped
+		if ( tEntry.m_iRowitems!=m_iRowitems )
+		{
+			// it must be pre-grouped; well, just re-group it based on the group key
+			return PushEx ( tEntry, tEntry.m_pRowitems[m_iRowitems+OFF_POSTCALC_GROUP] );
+		}
+
+		// ungrouped match
+		if ( !m_pMva )
+			return false;
+
+		DWORD iMvaIndex = tEntry.m_pRowitems [ m_iGroupbyOffset/ROWITEM_BITS ]; // optimize away division?
+		if ( !iMvaIndex )
+			return false;
+
+		const DWORD * pValues = m_pMva + iMvaIndex;
+		DWORD iValues = *pValues++;
+
+		bool bRes = false;
+		while ( iValues-- )
+		{
+			SphGroupKey_t uGroupkey = sphCalcGroupKey ( m_eGroupBy, *pValues++ );
+			bRes |= PushEx ( tEntry, uGroupkey );
+		}
+		return bRes;
+	}
+};
+
 
 #if USE_WINDOWS
 #pragma warning(default:4127)
@@ -1286,44 +1352,53 @@ static ESortClauseParseResult sphParseSortClause ( const char * sClause, const C
 //////////////////////////////////////////////////////////////////////////
 
 template < typename COMPGROUP >
-static ISphMatchSorter * sphCreateSorter3rd ( bool bDistinct, const ISphMatchComparator * pComp, const CSphQuery * pQuery )
+static ISphMatchSorter * sphCreateSorter3rd ( bool bDistinct, bool bMVA, const ISphMatchComparator * pComp, const CSphQuery * pQuery )
 {
-	if ( bDistinct==true )
-		return new CSphKBufferGroupSorter<COMPGROUP,true> ( pComp, pQuery );
-	else
-		return new CSphKBufferGroupSorter<COMPGROUP,false> ( pComp, pQuery );
+	if ( bMVA==true )
+	{
+		if ( bDistinct==true )
+			return new CSphKBufferMVAGroupSorter<COMPGROUP,true> ( pComp, pQuery );
+		else
+			return new CSphKBufferMVAGroupSorter<COMPGROUP,false> ( pComp, pQuery );
+	} else
+	{
+		if ( bDistinct==true )
+			return new CSphKBufferGroupSorter<COMPGROUP,true> ( pComp, pQuery );
+		else
+			return new CSphKBufferGroupSorter<COMPGROUP,false> ( pComp, pQuery );
+	}
 }
 
 
-static ISphMatchSorter * sphCreateSorter2nd ( ESphSortFunc eGroupFunc, bool bGroupBits, bool bDistinct, const ISphMatchComparator * pComp, const CSphQuery * pQuery )
+static ISphMatchSorter * sphCreateSorter2nd ( ESphSortFunc eGroupFunc, bool bGroupBits, bool bDistinct, bool bMVA, const ISphMatchComparator * pComp, const CSphQuery * pQuery )
 {
 	if ( bGroupBits )
 	{
 		switch ( eGroupFunc )
 		{
-			case FUNC_GENERIC2:		return sphCreateSorter3rd<MatchGeneric2_fn<true> >	( bDistinct, pComp, pQuery ); break;
-			case FUNC_GENERIC3:		return sphCreateSorter3rd<MatchGeneric3_fn<true> >	( bDistinct, pComp, pQuery ); break;
-			case FUNC_GENERIC4:		return sphCreateSorter3rd<MatchGeneric4_fn<true> >	( bDistinct, pComp, pQuery ); break;
-			case FUNC_GENERIC5:		return sphCreateSorter3rd<MatchGeneric5_fn<true> >	( bDistinct, pComp, pQuery ); break;
-			case FUNC_CUSTOM:		return sphCreateSorter3rd<MatchCustom_fn<true>   >	( bDistinct, pComp, pQuery ); break;
+			case FUNC_GENERIC2:		return sphCreateSorter3rd<MatchGeneric2_fn<true> >	( bDistinct, bMVA, pComp, pQuery ); break;
+			case FUNC_GENERIC3:		return sphCreateSorter3rd<MatchGeneric3_fn<true> >	( bDistinct, bMVA, pComp, pQuery ); break;
+			case FUNC_GENERIC4:		return sphCreateSorter3rd<MatchGeneric4_fn<true> >	( bDistinct, bMVA, pComp, pQuery ); break;
+			case FUNC_GENERIC5:		return sphCreateSorter3rd<MatchGeneric5_fn<true> >	( bDistinct, bMVA, pComp, pQuery ); break;
+			case FUNC_CUSTOM:		return sphCreateSorter3rd<MatchCustom_fn<true>   >	( bDistinct, bMVA, pComp, pQuery ); break;
 			default:				return NULL;
 		}
 	} else
 	{
 		switch ( eGroupFunc )
 		{
-			case FUNC_GENERIC2:		return sphCreateSorter3rd<MatchGeneric2_fn<false> >	( bDistinct, pComp, pQuery ); break;
-			case FUNC_GENERIC3:		return sphCreateSorter3rd<MatchGeneric3_fn<false> >	( bDistinct, pComp, pQuery ); break;
-			case FUNC_GENERIC4:		return sphCreateSorter3rd<MatchGeneric4_fn<false> >	( bDistinct, pComp, pQuery ); break;
-			case FUNC_GENERIC5:		return sphCreateSorter3rd<MatchGeneric5_fn<false> >	( bDistinct, pComp, pQuery ); break;
-			case FUNC_CUSTOM:		return sphCreateSorter3rd<MatchCustom_fn<false>   >	( bDistinct, pComp, pQuery ); break;
+			case FUNC_GENERIC2:		return sphCreateSorter3rd<MatchGeneric2_fn<false> >	( bDistinct, bMVA, pComp, pQuery ); break;
+			case FUNC_GENERIC3:		return sphCreateSorter3rd<MatchGeneric3_fn<false> >	( bDistinct, bMVA, pComp, pQuery ); break;
+			case FUNC_GENERIC4:		return sphCreateSorter3rd<MatchGeneric4_fn<false> >	( bDistinct, bMVA, pComp, pQuery ); break;
+			case FUNC_GENERIC5:		return sphCreateSorter3rd<MatchGeneric5_fn<false> >	( bDistinct, bMVA, pComp, pQuery ); break;
+			case FUNC_CUSTOM:		return sphCreateSorter3rd<MatchCustom_fn<false>   >	( bDistinct, bMVA, pComp, pQuery ); break;
 			default:				return NULL;
 		}
 	}
 }
 
 
-static ISphMatchSorter * sphCreateSorter1st ( ESphSortFunc eMatchFunc, bool bMatchBits, ESphSortFunc eGroupFunc, bool bGroupBits, bool bDistinct, const CSphQuery * pQuery )
+static ISphMatchSorter * sphCreateSorter1st ( ESphSortFunc eMatchFunc, bool bMatchBits, ESphSortFunc eGroupFunc, bool bGroupBits, bool bDistinct, bool bMVA, const CSphQuery * pQuery )
 {
 	ISphMatchComparator * pComp = NULL;
 	if ( bMatchBits )
@@ -1357,7 +1432,7 @@ static ISphMatchSorter * sphCreateSorter1st ( ESphSortFunc eMatchFunc, bool bMat
 	}
 
 	return pComp
-		? sphCreateSorter2nd ( eGroupFunc, bGroupBits, bDistinct, pComp, pQuery )
+		? sphCreateSorter2nd ( eGroupFunc, bGroupBits, bDistinct, bMVA, pComp, pQuery )
 		: NULL;
 }
 
@@ -1436,7 +1511,7 @@ ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchem
 			false, eMatchFunc, tStateMatch, sError );
 
 		if ( eRes==SORT_CLAUSE_ERROR )
-			return false;
+			return NULL;
 
 		if ( eRes==SORT_CLAUSE_RANDOM )
 			bRandomize = true;
@@ -1461,7 +1536,7 @@ ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchem
 			if ( tStateMatch.m_iAttr[0]<0 )
 			{
 				sError.SetSprintf ( "sort-by attribute '%s' not found", pQuery->m_sSortBy.cstr() );
-				return false;
+				return NULL;
 			}
 
 			const CSphColumnInfo & tAttr = tSchema.GetAttr ( tStateMatch.m_iAttr[0] );
@@ -1480,7 +1555,7 @@ ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchem
 			case SPH_SORT_RELEVANCE:		eMatchFunc = FUNC_REL_DESC; bUsesAttrs = false; break;
 			default:
 				sError.SetSprintf ( "unknown sorting mode %d", pQuery->m_eSort );
-				return false;
+				return NULL;
 		}
 	}
 
@@ -1494,7 +1569,7 @@ ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchem
 		{
 			if ( eRes==SORT_CLAUSE_RANDOM )
 				sError.SetSprintf ( "groups can not be sorted by @random" );
-			return false;
+			return NULL;
 		}
 	}
 
@@ -1541,6 +1616,19 @@ ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchem
 	bool bMatchBits = tStateMatch.UsesBitfields ();
 	bool bGroupBits = tStateGroup.UsesBitfields ();
 
+	bool bMVA = false;
+	if ( pQuery->m_iGroupbyOffset>=0 )
+	{
+		int iAttr = tSchema.GetAttrIndex ( pQuery->m_sGroupBy.cstr() );
+		const CSphColumnInfo & tAttr = tSchema.GetAttr ( iAttr );
+		bMVA = ( tAttr.m_eAttrType & SPH_ATTR_MULTI )!=0;
+	}
+	if ( bMVA && eGroupFunc==SPH_GROUPBY_ATTRPAIR )
+	{
+		sError.SetSprintf ( "GROUPBY_ATTRPAIR is for non-MVA attributes only" );
+		return NULL;
+	}
+
 	if ( pQuery->m_iGroupbyOffset<0 )
 	{
 		if ( bMatchBits )
@@ -1577,14 +1665,14 @@ ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchem
 
 	} else
 	{
-		pTop = sphCreateSorter1st ( eMatchFunc, bMatchBits, eGroupFunc, bGroupBits, pQuery->m_iDistinctOffset>=0, pQuery );
+		pTop = sphCreateSorter1st ( eMatchFunc, bMatchBits, eGroupFunc, bGroupBits, pQuery->m_iDistinctOffset>=0, bMVA, pQuery );
 	}
 
 	if ( !pTop )
 	{
 		sError.SetSprintf ( "internal error: unhandled sorting mode (match-sort=%d, group=%d, group-sort=%d)",
 			pQuery->m_iGroupbyOffset>=0, eMatchFunc, eGroupFunc );
-		return false;
+		return NULL;
 	}
 
 	assert ( pTop );

@@ -178,6 +178,7 @@ class SphinxClient
 
 	var $_reqs;			///< requests array for multi-query
 	var $_mbenc;		///< stored mbstring encoding
+	var $_arrayresult;	///< whether $result["matches"] should be a hash or an array
 
 	/////////////////////////////////////////////////////////////////////////////
 	// common stuff
@@ -218,6 +219,7 @@ class SphinxClient
 		$this->_warning		= "";
 		$this->_reqs		= array ();	// requests storage (for multi-query case)
 		$this->_mbenc		= "";
+		$this->_arrayresult	= false;
 	}
 
 	/// get last error message (string)
@@ -600,6 +602,15 @@ class SphinxClient
 		$this->_retrydelay = $delay;
 	}
 
+	/// set result set format (hash or array)
+	/// PHP specific function needed for group-by-MVA result sets
+	/// (because they may contain duplicate document IDs)
+	function SetArrayResult ( $arrayresult )
+	{
+		assert ( is_bool($arrayresult) );
+		$this->_arrayresult = $arrayresult;
+	}
+
 	//////////////////////////////////////////////////////////////////////////////
 
 	/// clear all filters (for multi-queries)
@@ -880,8 +891,13 @@ class SphinxClient
 			list(,$id64) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
 
 			// read matches
+			$idx = -1;
 			while ( $count-->0 && $p<$max )
 			{
+				// index into result array
+				$idx++;
+
+				// parse document id and weight
 				if ( $id64 )
 				{
 					$doc = sphUnpack64 ( substr ( $response, $p, 8 ) ); $p += 8;
@@ -893,10 +909,15 @@ class SphinxClient
 					$p += 8;
 					$doc = sprintf ( "%u", $doc ); // workaround for php signed/unsigned braindamage
 				}
-
 				$weight = sprintf ( "%u", $weight );
-				$result["matches"][$doc]["weight"] = $weight;
 
+				// create match entry
+				if ( $this->_arrayresult )
+					$result["matches"][$idx] = array ( "id"=>$doc, "weight"=>$weight );
+				else
+					$result["matches"][$doc]["weight"] = $weight;
+
+				// parse and create attributes
 				$attrvals = array ();
 				foreach ( $attrs as $attr=>$type )
 				{
@@ -925,7 +946,11 @@ class SphinxClient
 						$attrvals[$attr] = sprintf ( "%u", $val );
 					}
 				}
-				$result["matches"][$doc]["attrs"] = $attrvals;
+
+				if ( $this->_arrayresult )
+					$result["matches"][$idx]["attrs"] = $attrvals;
+				else
+					$result["matches"][$doc]["attrs"] = $attrvals;
 			}
 
 			list ( $total, $total_found, $msecs, $words ) =

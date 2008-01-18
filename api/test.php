@@ -72,7 +72,7 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="-g" || $arg=="--groupby" )		$groupby = $args[++$i];
 	else if ( $arg=="-gs"|| $arg=="--groupsort" )	$groupsort = $args[++$i];
 	else if ( $arg=="-d" || $arg=="--distinct" )	$distinct = $args[++$i];
-	else if ( $arg=="-l" || $arg=="--limit" )		$limit = $args[++$i];
+	else if ( $arg=="-l" || $arg=="--limit" )		$limit = (int)$args[++$i];
 	else if ( $arg=="-r" )
 	{
 		$arg = strtolower($args[++$i]);
@@ -97,6 +97,7 @@ if ( $sortby )				$cl->SetSortMode ( SPH_SORT_EXTENDED, $sortby );
 if ( $distinct )			$cl->SetGroupDistinct ( $distinct );
 if ( $limit )				$cl->SetLimits ( 0, $limit, ( $limit>1000 ) ? $limit : 1000 );
 $cl->SetRankingMode ( $ranker );
+$cl->SetArrayResult ( true );
 $res = $cl->Query ( $q, $index );
 
 ////////////////
@@ -123,9 +124,9 @@ if ( $res===false )
 	{
 		$n = 1;
 		print "Matches:\n";
-		foreach ( $res["matches"] as $doc => $docinfo )
+		foreach ( $res["matches"] as $docinfo )
 		{
-			print "$n. doc_id=$doc, weight=$docinfo[weight]";
+			print "$n. doc_id=$docinfo[id], weight=$docinfo[weight]";
 			foreach ( $res["attrs"] as $attrname => $attrtype )
 			{
 				$value = $docinfo["attrs"][$attrname];

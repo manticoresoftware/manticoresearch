@@ -1498,6 +1498,9 @@ public:
 	/// set group comparator state
 	virtual void		SetGroupState ( const CSphMatchComparatorState & ) {}
 
+	/// set MVA pool pointer (for MVA+groupby sorters)
+	virtual void		SetMVAPool ( const DWORD * ) {}
+
 	/// base push
 	/// returns false if the entry was rejected as duplicate
 	/// returns true otherwise (even if it was not actually inserted)

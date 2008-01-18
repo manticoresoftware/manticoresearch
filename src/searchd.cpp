@@ -2846,20 +2846,22 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery )
 	if ( !pSorter )
 		return false;
 
-	// sort by docid and then by tag
-	tRes.m_dMatches.Sort ();
-
 	// kill all dupes
 	int iDupes = 0;
 	if ( tQuery.m_iGroupbyOffset>=0 )
 	{
-		// groupby sorters does that automagically
+		// groupby sorter does that automagically
+		pSorter->SetMVAPool ( NULL ); // because we must be able to group on @groupby anyway
 		ARRAY_FOREACH ( i, tRes.m_dMatches )
 			if ( !pSorter->Push ( tRes.m_dMatches[i] ) )
 				iDupes++;
 	} else
 	{
 		// normal sorter needs massasging
+		// sort by docid and then by tag to guarantee the replacement order
+		tRes.m_dMatches.Sort ();
+
+		// fold them matches
 		if ( tQuery.m_dIndexWeights.GetLength() )
 		{
 			// if there were per-index weights, compute weighted ranks sum

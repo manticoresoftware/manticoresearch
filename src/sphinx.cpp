@@ -12253,6 +12253,10 @@ bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, C
 		m_fGeoAnchorLong = pQuery->m_fGeoLongitude;
 	}
 
+	// setup sorters vs. MVA
+	for ( int i=0; i<iSorters; i++ )
+		(ppSorters[i])->SetMVAPool ( m_pMva.GetWritePtr() );
+
 	//////////////////////////////////////
 	// find and weight matching documents
 	//////////////////////////////////////

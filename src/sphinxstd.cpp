@@ -283,7 +283,7 @@ void operator delete [] ( void * pPtr )
 // HELPERS
 /////////////////////////////////////////////////////////////////////////////
 
-void sphDie ( char * sTemplate, ... )
+void sphDie ( const char * sTemplate, ... )
 {
 	va_list ap;
 	va_start ( ap, sTemplate );

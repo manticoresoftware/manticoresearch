@@ -159,7 +159,7 @@ void			operator delete [] ( void * pPtr );
 /////////////////////////////////////////////////////////////////////////////
 
 /// crash with an error message
-void			sphDie ( char * sMessage, ... );
+void			sphDie ( const char * sMessage, ... );
 
 
 /// how much bits do we need for given int

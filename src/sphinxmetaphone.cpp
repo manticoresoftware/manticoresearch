@@ -144,7 +144,7 @@ static bool StrAt ( const CurrentWord_t & Word, int iStart, int iLength, const c
 
 
 
-static void MetaphAdd ( BYTE * pPrimary, BYTE * pSecondary, char * szAddPrimary, char * szAddSecondary )
+static void MetaphAdd ( BYTE * pPrimary, BYTE * pSecondary, const char * szAddPrimary, const char * szAddSecondary )
 {
 	strcat ( (char *)pPrimary,	 szAddPrimary );
 	strcat ( (char *)pSecondary, szAddSecondary );

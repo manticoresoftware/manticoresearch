@@ -1044,6 +1044,17 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 	assert ( m_dStack.GetLength()==0 );
 	m_pRes = &tParsed;
 
+	// check for relaxed syntax
+	const char * OPTION_RELAXED = "@@relaxed";
+	const int OPTION_RELAXED_LEN = strlen ( OPTION_RELAXED );
+
+	m_bStopOnInvalid = true;
+	if ( strncmp ( sQuery, OPTION_RELAXED, OPTION_RELAXED_LEN )==0 && !sphIsAlpha ( sQuery[OPTION_RELAXED_LEN]) )
+	{
+		sQuery += OPTION_RELAXED_LEN;
+		m_bStopOnInvalid = false;
+	}
+
 	// a buffer of my own
 	CSphString sBuffer ( sQuery );
 	CSphScopedPtr<ISphTokenizer> pMyTokenizer ( pTokenizer->Clone () );

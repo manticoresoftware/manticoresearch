@@ -1984,6 +1984,10 @@ class CSphTokenizerTraits : public ISphTokenizer
 public:
 	CSphTokenizerTraits ();
 
+	virtual const BYTE *	GetBufferPtr () const;
+	virtual const BYTE *	GetBufferEnd () const;
+	virtual void			AdvanceBufferPtr ( int iOffset );
+
 protected:
 	BYTE * GetTokenSyn ();
 
@@ -2909,6 +2913,27 @@ CSphTokenizerTraits<IS_UTF8>::CSphTokenizerTraits ()
 	, m_pCur		( NULL )
 	, m_iAccum		( 0 )
 {
+	m_pAccum = m_sAccum;
+}
+
+template < bool IS_UTF8 >
+const BYTE * CSphTokenizerTraits<IS_UTF8>::GetBufferPtr () const
+{
+	return m_pCur;
+}
+
+template < bool IS_UTF8 >
+const BYTE * CSphTokenizerTraits<IS_UTF8>::GetBufferEnd () const
+{
+	return m_pBufferMax;
+}
+
+template < bool IS_UTF8 >
+void CSphTokenizerTraits<IS_UTF8>::AdvanceBufferPtr ( int iOffset )
+{
+	assert ( iOffset >= 0 );
+	m_pCur = Min ( m_pBufferMax, m_pCur + iOffset );
+	m_iAccum = 0;
 	m_pAccum = m_sAccum;
 }
 
@@ -8693,6 +8718,8 @@ public:
 	CSphMatch *					m_pLast;	///< term with the highest position. NULL if this atom has no more matches
 
 	DWORD				m_uMaxStamp;
+	DWORD				m_uMinHitpos;
+	DWORD				m_uMaxHitpos;
 	int					m_iScannedEntries;
 };
 
@@ -8706,8 +8733,24 @@ CSphExtendedEvalAtom::CSphExtendedEvalAtom ( const CSphExtendedQueryAtom & tAtom
 
 	// atom assignment
 	m_dWords = tAtom.m_dWords;
-	m_iField = tAtom.m_iField;
+	m_uFields = tAtom.m_uFields;
 	m_iMaxDistance = tAtom.m_iMaxDistance;
+
+	int iMin = 0;
+	int iMax = 0;
+	for ( int i = 0; i < 32; ++i )
+		if ( m_uFields & ( 1 << i ) )
+		{
+			if ( iMin == -1 )
+				iMin = i;
+			iMax = i;
+		}
+
+	if ( iMin == -1 )
+		iMin = 0;
+
+	m_uMinHitpos = ( iMin << 24 ) + 1;
+	m_uMaxHitpos = ( 1 + iMax ) << 24;
 
 	// setup words
 	m_dTerms.Resize ( m_dWords.GetLength() );
@@ -8751,13 +8794,7 @@ void CSphExtendedEvalAtom::GetNextHit ( DWORD iMinPos )
 	// it means that nothing was found
 	m_uLastHitPos = 0;
 
-	// OPTIMIZE? these are invariant during evaluation
-	assert ( m_iField<0 || m_iField<255 );
-#ifndef NDEBUG
-	const DWORD uMinHitpos = ( m_iField<0 ) ? 1 : ( m_iField<<24 )+1;
-#endif
-	const DWORD uMaxHitpos = ( m_iField<0 ) ? UINT_MAX : (1+m_iField)<<24;
-	if ( uMaxHitpos<=iMinPos )
+	if ( m_uMaxHitpos <= iMinPos )
 		return;
 
 	// skip to necessary min pos
@@ -8766,7 +8803,7 @@ void CSphExtendedEvalAtom::GetNextHit ( DWORD iMinPos )
 		while ( m_dTerms[i].m_iHitPos && m_dTerms[i].m_iHitPos<iMinPos ) // OPTIMIZE? can remove check for 0
 			m_dTerms[i].GetHitlistEntry ();
 
-		if ( !m_dTerms[i].m_iHitPos || m_dTerms[i].m_iHitPos>=uMaxHitpos )
+		if ( !m_dTerms[i].m_iHitPos || m_dTerms[i].m_iHitPos>=m_uMaxHitpos )
 			return;
 	}
 
@@ -8778,7 +8815,7 @@ void CSphExtendedEvalAtom::GetNextHit ( DWORD iMinPos )
 
 		assert ( m_dTerms.GetLength()==1 ); // OPTIMIZE R&D single-atom leaves; should profile
 		assert ( m_dTerms[0].m_iHitPos );
-		assert ( m_dTerms[0].m_iHitPos>=uMinHitpos );
+		assert ( m_dTerms[0].m_iHitPos>=m_uMinHitpos );
 
 		m_uLastHitPos = m_dTerms[0].m_iHitPos;
 		return;
@@ -8800,8 +8837,9 @@ void CSphExtendedEvalAtom::GetNextHit ( DWORD iMinPos )
 			// calc min/max pos
 			ARRAY_FOREACH ( i, m_dTerms )
 			{
-				assert ( m_dTerms[i].m_iHitPos>=uMinHitpos && m_dTerms[i].m_iHitPos<uMaxHitpos );
-				assert ( m_iField<0 || int(m_dTerms[i].m_iHitPos>>24)==m_iField );
+				assert ( m_dTerms[i].m_iHitPos>=m_uMinHitpos && m_dTerms[i].m_iHitPos<m_uMaxHitpos );
+				if ( !( ( 1 << (m_dTerms[i].m_iHitPos>>24) ) & m_uFields ) )
+					continue;
 
 				DWORD uPos = m_dTerms[i].m_iHitPos;
 				if ( uMin>uPos )
@@ -8827,7 +8865,7 @@ void CSphExtendedEvalAtom::GetNextHit ( DWORD iMinPos )
 			// next one
 			// if one hitlist is over, document is over, because *all* words must be within specified proximity
 			m_dTerms[iMin].GetHitlistEntry ();
-			if ( !m_dTerms[iMin].m_iHitPos || m_dTerms[iMin].m_iHitPos>=uMaxHitpos )
+			if ( !m_dTerms[iMin].m_iHitPos || m_dTerms[iMin].m_iHitPos>=m_uMaxHitpos )
 				break;
 		}
 
@@ -8845,8 +8883,10 @@ void CSphExtendedEvalAtom::GetNextHit ( DWORD iMinPos )
 		for ( i=0; i<m_dTerms.GetLength(); i++ )
 		{
 			const DWORD & uPos = m_dTerms[i].m_iHitPos;
-			assert ( uPos>=uMinHitpos && uPos<uMaxHitpos );
-			assert ( m_iField<0 || int(uPos>>24)==m_iField );
+			assert ( uPos>=m_uMinHitpos && uPos<m_uMaxHitpos );
+
+			if ( !( ( 1 << (m_dTerms[i].m_iHitPos>>24) ) & m_uFields ) )
+				continue;
 
 			// scan forward until this hit is not too early
 			const DWORD uRequiredPos = uCandidate + m_dWords[i].m_iAtomPos;
@@ -8854,7 +8894,7 @@ void CSphExtendedEvalAtom::GetNextHit ( DWORD iMinPos )
 			{
 				// if one hitlist is over, document is over, because all words must be in the phrase
 				m_dTerms[i].GetHitlistEntry ();
-				if ( !uPos || uPos>=uMaxHitpos )
+				if ( !uPos || uPos>=m_uMaxHitpos )
 				{
 					i = -1;
 					break;
@@ -8878,7 +8918,7 @@ void CSphExtendedEvalAtom::GetNextHit ( DWORD iMinPos )
 		// so do we have a match?
 		if ( i==m_dTerms.GetLength() )
 		{
-			assert ( uCandidate>=uMinHitpos && uCandidate<uMaxHitpos );
+			assert ( uCandidate>=m_uMinHitpos && uCandidate<m_uMaxHitpos );
 			assert ( uCandidate>=iMinPos );
 			m_uLastHitPos = uCandidate;
 		}
@@ -8898,7 +8938,6 @@ CSphMatch * CSphExtendedEvalAtom::GetNextDoc ( SphDocID_t iMinID, CSphString & s
 	}
 
 	// OPTIMIZE?
-	const DWORD uField = ( m_iField>=0 ) ? ( 1UL<<m_iField ) : 0xffffffffUL;
 	for ( ;; )
 	{
 		/////////////////
@@ -8932,7 +8971,7 @@ CSphMatch * CSphExtendedEvalAtom::GetNextDoc ( SphDocID_t iMinID, CSphString & s
 			}
 
 			// check fields
-			if (!( tTerm.m_uFields & uField ))
+			if (!( tTerm.m_uFields & m_uFields ))
 			{
 				i = -1;
 				iMinID = 1 + tTerm.m_tDoc.m_iDocID;
@@ -8957,17 +8996,11 @@ CSphMatch * CSphExtendedEvalAtom::GetNextDoc ( SphDocID_t iMinID, CSphString & s
 
 		// preload hitlists
 		// !COMMIT OPTIMIZE 1-word query case
-		assert ( m_iField<0 || m_iField<255 );
-		const DWORD uMinHitpos = ( m_iField<0 ) ? 1 : ( m_iField<<24 )+1;
-#ifndef NDEBUG
-		const DWORD uMaxHitpos = ( m_iField<0 ) ? UINT_MAX : (1+m_iField)<<24;
-#endif
-
 		ARRAY_FOREACH ( i, m_dTerms )
 		{
 			// do preload
 			assert ( !m_dTerms[i].m_iHitPos );
-			while ( m_dTerms[i].m_iHitPos<uMinHitpos )
+			while ( m_dTerms[i].m_iHitPos<m_uMinHitpos )
 			{
 				m_dTerms[i].GetHitlistEntry ();
 
@@ -8985,7 +9018,7 @@ CSphMatch * CSphExtendedEvalAtom::GetNextDoc ( SphDocID_t iMinID, CSphString & s
 			}
 
 			// according to fields mask, there should be at least one hit, so check it
-			assert ( m_dTerms[i].m_iHitPos>=uMinHitpos && m_dTerms[i].m_iHitPos<uMaxHitpos );
+			assert ( m_dTerms[i].m_iHitPos>=m_uMinHitpos && m_dTerms[i].m_iHitPos<m_uMaxHitpos );
 		}		
 
 		// if we just needed to match all words, we're done
@@ -9000,7 +9033,7 @@ CSphMatch * CSphExtendedEvalAtom::GetNextDoc ( SphDocID_t iMinID, CSphString & s
 
 		// scan hitlists to enforce proximity and/or exact phrase constraints
 		assert ( m_iMaxDistance>=0 );
-		GetNextHit ( uMinHitpos );
+		GetNextHit ( m_uMinHitpos );
 
 		if ( m_uLastHitPos )
 			return m_pLast;
@@ -9471,6 +9504,8 @@ bool CSphIndex_VLN::MatchExtendedV1 ( const CSphQuery * pQuery, CSphQueryResult 
 		return false;
 	}
 
+	pResult->m_sWarning = tParsed.m_sParseWarning;
+
 	CheckExtendedQuery ( tParsed.m_pAccept, pResult );
 	CheckExtendedQuery ( tParsed.m_pReject, pResult );
 
@@ -9792,9 +9827,7 @@ ExtNode_i * ExtNode_i::Create ( const CSphExtendedQueryNode * pNode, const CSphT
 		if ( iWords<=0 )
 			return NULL; // empty reject node
 
-		DWORD uFields = 0xffffffffUL;
-		if ( tAtom.m_iField>=0 )
-			uFields = ( 1UL << tAtom.m_iField );
+		DWORD uFields = tAtom.m_uFields;
 
 		if ( iWords==1 )
 			return new ExtTerm_c ( tAtom.m_dWords[0].m_sWord, uFields, tSetup, uQuerypos, pWarning );

@@ -86,12 +86,12 @@ struct CSphExtendedQueryAtomWord
 struct CSphExtendedQueryAtom
 {
 	CSphVector<CSphExtendedQueryAtomWord>	m_dWords;
-	int		m_iField;
-	int		m_iMaxDistance;
+	DWORD		m_uFields;
+	int			m_iMaxDistance;
 
 	/// default ctor
 	CSphExtendedQueryAtom ()
-		: m_iField ( -1 )
+		: m_uFields		 ( 0xFFFFFFFF )
 		, m_iMaxDistance ( -1 )
 	{}
 
@@ -166,6 +166,7 @@ public:
 struct CSphExtendedQuery : public ISphNoncopyable
 {
 	CSphString					m_sParseError;
+	CSphString					m_sParseWarning;
 	CSphExtendedQueryNode *		m_pAccept;
 	CSphExtendedQueryNode *		m_pReject;
 

@@ -4,6 +4,7 @@
 
 #include "sphinx.h"
 #include "sphinxquery.h"
+#include "sphinxutils.h"
 #include <stdarg.h>
 
 /////////////////////////////////////////////////////////////////////////////
@@ -677,8 +678,13 @@ protected:
 	CSphVector<CNodeStackEntry>		m_dStack;	///< open nodes stack
 
 protected:
+	bool				m_bStopOnInvalid;		///< stop on invalid fields or skip them
+
 	int					IsSpecial ( int iCh );
 	bool				Error ( const char * sTemplate, ... );
+	void				Warning ( const char * sTemplate, ... );
+	bool				ParseFields ( DWORD & uFields, ISphTokenizer * pTokenizer, const CSphSchema * pSchema );
+	bool				AddField ( DWORD & uFields, const char * szField, int iLen, const CSphSchema * pSchema );
 
 	void				PushNode ();					///< push new empty node onto stack
 	void				PopNode ( bool bReject=false);	///< pop node off the stack to proper list
@@ -736,7 +742,7 @@ void CSphExtendedQueryNode::Submit ( CSphExtendedQueryNode * & pNew, bool bAny )
 
 	// incoming conjunction. merge plain dst and src nodes if we can
 	if ( bAny==false
-		&& IsPlain() && pNew->IsPlain() && m_tAtom.m_iField==pNew->m_tAtom.m_iField
+		&& IsPlain() && pNew->IsPlain() && m_tAtom.m_uFields==pNew->m_tAtom.m_uFields
 		&& m_tAtom.m_iMaxDistance==-1 && pNew->m_tAtom.m_iMaxDistance==-1 )
 	{
 		ARRAY_FOREACH ( i, pNew->m_tAtom.m_dWords )
@@ -757,7 +763,7 @@ void CSphExtendedQueryNode::Submit ( CSphExtendedQueryNode * & pNew, bool bAny )
 		{
 			pChop = new CSphExtendedQueryNode ();
 			pChop->m_pParent = this;
-			pChop->m_tAtom.m_iField = m_tAtom.m_iField;
+			pChop->m_tAtom.m_uFields = m_tAtom.m_uFields;
 			pChop->m_tAtom.m_dWords.Add ( m_tAtom.m_dWords.Last() );
 			m_tAtom.m_dWords.Resize ( m_tAtom.m_dWords.GetLength()-1 );
 		} else
@@ -778,6 +784,7 @@ void CSphExtendedQueryNode::Submit ( CSphExtendedQueryNode * & pNew, bool bAny )
 
 
 CSphExtendedQueryParser::CSphExtendedQueryParser ()
+	: m_bStopOnInvalid ( true )
 {
 }
 
@@ -806,6 +813,24 @@ bool CSphExtendedQueryParser::Error ( const char * sTemplate, ... )
 	m_pRes->m_sParseError = sBuf;
 	m_pRes = NULL;
 	return false;
+}
+
+
+void CSphExtendedQueryParser::Warning ( const char * sTemplate, ... )
+{
+	assert ( m_pRes );
+	char sBuf[256];
+
+	const char * sPrefix = "query warning: ";
+	int iPrefix = strlen(sPrefix);
+	strcpy ( sBuf, sPrefix );
+
+	va_list ap;
+	va_start ( ap, sTemplate );
+	vsnprintf ( sBuf+iPrefix, sizeof(sBuf)-iPrefix, sTemplate, ap );
+	va_end ( ap );
+
+	m_pRes->m_sParseWarning = sBuf;
 }
 
 
@@ -847,6 +872,165 @@ void CSphExtendedQueryParser::PushNode ()
 }
 
 
+bool CSphExtendedQueryParser::AddField ( DWORD & uFields, const char * szField, int iLen, const CSphSchema * pSchema )
+{
+	CSphString sField;
+	sField.SetBinary ( szField, iLen );
+
+	int iField = pSchema->GetFieldIndex ( sField.cstr () );
+	if ( iField < 0 )
+	{
+		if ( m_bStopOnInvalid )
+			return Error ( "no field '%s' found in schema", sField.cstr () );
+		else
+			Warning ( "no field '%s' found in schema", sField.cstr () );
+	}
+	else
+	{
+		if ( iField >= 32 )
+			return Error ( " max 32 fields allowed" );
+
+		uFields |= 1 << iField;
+	}
+
+	return true;
+}
+
+
+bool CSphExtendedQueryParser::ParseFields ( DWORD & uFields, ISphTokenizer * pTokenizer, const CSphSchema * pSchema )
+{
+	uFields = 0;
+
+	if ( m_dStack.GetLength() )
+		return Error ( "field specification is only allowed at top level" );
+
+	const char * pStart = (const char *)pTokenizer->GetBufferPtr ();
+	const char * pLastPtr = (const char *)pTokenizer->GetBufferEnd ();
+	const char * pPtr = pStart;
+
+	if ( pPtr == pLastPtr )
+		return Error ( "empty field" );
+
+	bool bNegate = false;
+	bool bBlock = false;
+	bool bAnyField = false;
+
+	while ( pPtr < pLastPtr && !sphIsAlpha ( *pPtr ) )
+	{
+		if ( *pPtr == '!' )
+			bNegate = !bNegate;
+		else if ( *pPtr == '*' )
+		{
+			bAnyField = true;
+			pPtr++;
+			break;
+		}
+		else if ( *pPtr == '(' )
+		{
+			bBlock = true;
+			pPtr++;
+			break;
+		}
+		else
+			return Error ( "unknown symbol '%c' in query", *pPtr );
+
+		pPtr++;
+	}
+
+	if ( bAnyField )
+		uFields = 0xFFFFFFFF;
+
+	if ( pPtr == pLastPtr )
+		if ( !bAnyField )
+			return Error ( "empty field" );
+
+	if ( bAnyField )
+	{
+		pTokenizer->AdvanceBufferPtr ( pPtr - pStart );
+		return true;
+	}
+
+	const char * pFieldStart = NULL;
+	while ( pPtr < pLastPtr )
+	{
+		if ( !sphIsAlpha ( *pPtr ) )
+		{
+			if ( bBlock )
+			{
+				if ( *pPtr == ',' )
+				{
+					if ( !AddField ( uFields, pFieldStart, pPtr - pFieldStart, pSchema ) )
+						return false;
+
+					pFieldStart = NULL;
+				}
+				else if ( *pPtr == ')' )
+				{
+					if ( !AddField ( uFields, pFieldStart, pPtr - pFieldStart, pSchema ) )
+						return false;
+
+					pTokenizer->AdvanceBufferPtr ( pPtr - pStart + 1 );
+					if ( bNegate && uFields )
+						uFields = ~uFields;
+
+					return true;
+				}
+				else
+					return Error ( "unknown symbol '%c' in field block", *pPtr );
+			}
+			else
+			{
+				if ( !AddField ( uFields, pFieldStart, pPtr - pFieldStart, pSchema ) )
+					return false;
+
+				pTokenizer->AdvanceBufferPtr ( pPtr - pStart );
+				if ( bNegate && uFields )
+					uFields = ~uFields;
+
+				return true;
+			}
+		}
+		else
+			if ( !pFieldStart )
+				pFieldStart = pPtr;
+
+		pPtr++;
+	}
+
+	if ( bBlock )
+		return Error ( "missing ')' after a field block" );
+
+	if ( !AddField ( uFields, pFieldStart, pPtr - pFieldStart, pSchema ) )
+		return false;
+
+	pTokenizer->AdvanceBufferPtr ( pPtr - pStart );
+	if ( bNegate && uFields )
+		uFields = ~uFields;
+
+	return true;
+}
+
+
+static void DeleteNodesWOFields ( CSphExtendedQueryNode * pNode )
+{
+	for ( int i = 0; i < pNode->m_dChildren.GetLength (); )
+	{
+		if ( pNode->m_dChildren [i]->m_tAtom.m_uFields == 0 )
+		{
+			// this should be a leaf node
+			assert ( pNode->m_dChildren [i]->m_dChildren.GetLength () == 0 );
+			SafeDelete ( pNode->m_dChildren [i] );
+			pNode->m_dChildren.RemoveFast ( i );
+		}
+		else
+		{
+			DeleteNodesWOFields ( pNode->m_dChildren [i] );
+			i++;
+		}
+	}
+}
+
+
 bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict )
 {
 	assert ( sQuery );
@@ -863,29 +1047,24 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 	pMyTokenizer->AddSpecials ( "()|-!@~\"*" ); // MUST be in sync with IsSpecial()
 	pMyTokenizer->SetBuffer ( (BYTE*)sBuffer.cstr(), strlen ( sBuffer.cstr() ) );
 
-	// underscore must be accepted in field names
-	CSphRemapRange tUnderscore ( '_', '_', '_' );
-	pMyTokenizer->AddCaseFolding ( tUnderscore );
-
 	// iterate all tokens
 	const int QUERY_END = -1;
 
 	enum
 	{
 		XQS_TEXT		= 0,
-		XQS_FIELD		= 1,
-		XQS_PHRASE		= 2,
-		XQS_PROXIMITYOP	= 3,
-		XQS_PROXIMITY	= 4,
-		XQS_NEGATION	= 5,
-		XQS_NEGTEXT		= 6
+		XQS_PHRASE		= 1,
+		XQS_PROXIMITYOP	= 2,
+		XQS_PROXIMITY	= 3,
+		XQS_NEGATION	= 4,
+		XQS_NEGTEXT		= 5
 	};
 
 	CSphVector<int> dState;
 	dState.Add ( XQS_TEXT );
 
 	bool bAny = false;
-	int iField = -1;
+	DWORD uFields = 0xFFFFFFFF;
 	int iAtomPos = 0;
 
 	bool bRedo = false;
@@ -965,19 +1144,6 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 
 		if ( !iSpecial )
 		{
-			// handle field names
-			if ( dState.Last()==XQS_FIELD )
-			{
-				iField = pSchema->GetFieldIndex ( sToken );
-				if ( iField<0 )
-					return Error ( "no field '%s' found in schema", sToken );
-
-				dState.Pop ();
-				while ( m_dStack.GetLength() ) // flush stack
-					PopNode ();
-				continue;
-			}
-
 			// handle in-phrase terms
 			if ( dState.Last()==XQS_PHRASE )
 			{
@@ -995,7 +1161,7 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 			CSphExtendedQueryAtomWord tAW ( sToken, -1 );
 			PushNode ();
 			m_dStack.Last().m_bAny = bAny;
-			m_dStack.Last().m_pNode->m_tAtom.m_iField = iField;
+			m_dStack.Last().m_pNode->m_tAtom.m_uFields = uFields;
 			m_dStack.Last().m_pNode->m_tAtom.m_dWords.Add ( tAW );
 			bAny = false;
 			PopNode ();
@@ -1008,18 +1174,13 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 
 		assert ( iSpecial );
 
-		// filed unlimit
-		if ( dState.Last()==XQS_FIELD )
+		if ( iSpecial=='@' )
 		{
-			dState.Pop ();
-			if ( iSpecial=='*' )
-			{
-				iField = -1;
-				while ( m_dStack.GetLength() ) // flush stack
-					PopNode ();
-				continue;
-			}
-			// do *not* continue here, just handle the special
+			if ( !ParseFields ( uFields, pMyTokenizer.Ptr (), pSchema ) )
+				return false;
+
+			uFields &= ( 1 << pSchema->m_dFields.GetLength () ) - 1;
+			continue;
 		}
 
 		// block start
@@ -1051,16 +1212,6 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 
 			dState.Pop ();
 			PopNode ();
-			continue;
-		}
-
-		// field limit
-		if ( iSpecial=='@' )
-		{
-			if ( m_dStack.GetLength() )
-				return Error ( "field specification is only allowed at top level" );
-
-			dState.Add ( XQS_FIELD );
 			continue;
 		}
 
@@ -1106,7 +1257,7 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 				// opening quote
 				PushNode ();
 				m_dStack.Last().m_bAny = bAny;
-				m_dStack.Last().m_pNode->m_tAtom.m_iField = iField;
+				m_dStack.Last().m_pNode->m_tAtom.m_uFields = uFields;
 				m_dStack.Last().m_pNode->m_tAtom.m_iMaxDistance = 0;
 				bAny = false;
 				dState.Add ( XQS_PHRASE );
@@ -1133,6 +1284,9 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 
 		assert ( 0 && "INTERNAL ERROR: unhandled special token" );
 	}
+
+	DeleteNodesWOFields ( m_pRes->m_pAccept );
+	DeleteNodesWOFields ( m_pRes->m_pReject );
 
 	m_pRes = NULL;
 	return true;

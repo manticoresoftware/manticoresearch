@@ -908,106 +908,103 @@ bool CSphExtendedQueryParser::ParseFields ( DWORD & uFields, ISphTokenizer * pTo
 	const char * pLastPtr = (const char *)pTokenizer->GetBufferEnd ();
 	const char * pPtr = pStart;
 
-	if ( pPtr == pLastPtr )
-		return Error ( "empty field" );
+	if ( pPtr==pLastPtr )
+		return true; // silently ignore trailing field operator
 
 	bool bNegate = false;
 	bool bBlock = false;
-	bool bAnyField = false;
 
-	while ( pPtr < pLastPtr && !sphIsAlpha ( *pPtr ) )
+	// handle special modifiers
+	if ( *pPtr=='!' )
 	{
-		if ( *pPtr == '!' )
-			bNegate = !bNegate;
-		else if ( *pPtr == '*' )
-		{
-			bAnyField = true;
-			pPtr++;
-			break;
-		}
-		else if ( *pPtr == '(' )
-		{
-			bBlock = true;
-			pPtr++;
-			break;
-		}
-		else
-			return Error ( "unknown symbol '%c' in query", *pPtr );
+		// handle @! and @!(
+		bNegate = true; pPtr++;
+		if ( *pPtr=='(' ) { bBlock = true; pPtr++; }
 
-		pPtr++;
+	} else if ( *pPtr=='*' )
+	{
+		// handle @*
+		uFields = 0xFFFFFFFF;
+		pTokenizer->AdvanceBufferPtr ( pPtr+1-pStart );
+		return true;
+
+	} else if ( *pPtr=='(' )
+	{
+		// handle @(
+		bBlock = true; pPtr++;
+
 	}
 
-	if ( bAnyField )
-		uFields = 0xFFFFFFFF;
-
-	if ( pPtr == pLastPtr )
-		if ( !bAnyField )
-			return Error ( "empty field" );
-
-	if ( bAnyField )
+	// handle invalid chars
+	if ( !sphIsAlpha(*pPtr) )
 	{
-		pTokenizer->AdvanceBufferPtr ( pPtr - pStart );
+		pTokenizer->AdvanceBufferPtr ( pPtr-pStart ); // ignore and re-parse (FIXME! maybe warn?)
+		return true;
+	}
+	assert ( sphIsAlpha(*pPtr) ); // i think i'm paranoid
+
+	// handle standalone field specification
+	if ( !bBlock )
+	{
+		const char * pFieldStart = pPtr;
+		while ( sphIsAlpha(*pPtr) && pPtr<pLastPtr )
+			pPtr++;
+
+		assert ( pPtr-pFieldStart>0 );
+		if ( !AddField ( uFields, pFieldStart, pPtr-pFieldStart, pSchema ) )
+			return false;
+
+		pTokenizer->AdvanceBufferPtr ( pPtr-pStart );
+		if ( bNegate && uFields )
+			uFields = ~uFields;
 		return true;
 	}
 
+	// handle fields block specification
+	assert ( sphIsAlpha(*pPtr) && bBlock ); // and complicated
+
 	const char * pFieldStart = NULL;
-	while ( pPtr < pLastPtr )
+	while ( pPtr<pLastPtr )
 	{
-		if ( !sphIsAlpha ( *pPtr ) )
+		// accumulate field name, while we can
+		if ( sphIsAlpha(*pPtr) )
 		{
-			if ( bBlock )
-			{
-				if ( *pPtr == ',' )
-				{
-					if ( !AddField ( uFields, pFieldStart, pPtr - pFieldStart, pSchema ) )
-						return false;
-
-					pFieldStart = NULL;
-				}
-				else if ( *pPtr == ')' )
-				{
-					if ( !AddField ( uFields, pFieldStart, pPtr - pFieldStart, pSchema ) )
-						return false;
-
-					pTokenizer->AdvanceBufferPtr ( pPtr - pStart + 1 );
-					if ( bNegate && uFields )
-						uFields = ~uFields;
-
-					return true;
-				}
-				else
-					return Error ( "unknown symbol '%c' in field block", *pPtr );
-			}
-			else
-			{
-				if ( !AddField ( uFields, pFieldStart, pPtr - pFieldStart, pSchema ) )
-					return false;
-
-				pTokenizer->AdvanceBufferPtr ( pPtr - pStart );
-				if ( bNegate && uFields )
-					uFields = ~uFields;
-
-				return true;
-			}
-		}
-		else
 			if ( !pFieldStart )
 				pFieldStart = pPtr;
+			pPtr++;
+			continue;
+		}
 
-		pPtr++;
+		// separator found
+		if ( pFieldStart==NULL )
+		{
+			return Error ( "separator without preceding field name in field block operator", *pPtr );
+
+		} if ( *pPtr==',' )
+		{
+			if ( !AddField ( uFields, pFieldStart, pPtr-pFieldStart, pSchema ) )
+				return false;
+
+			pFieldStart = NULL;
+			pPtr++;
+
+		} else if ( *pPtr==')' )
+		{
+			if ( !AddField ( uFields, pFieldStart, pPtr-pFieldStart, pSchema ) )
+				return false;
+
+			pTokenizer->AdvanceBufferPtr ( pPtr-pStart+1 );
+			if ( bNegate && uFields )
+				uFields = ~uFields;
+			return true;
+
+		} else
+		{
+			return Error ( "invalid character '%c' in field block operator", *pPtr );
+		}
 	}
 
-	if ( bBlock )
-		return Error ( "missing ')' after a field block" );
-
-	if ( !AddField ( uFields, pFieldStart, pPtr - pFieldStart, pSchema ) )
-		return false;
-
-	pTokenizer->AdvanceBufferPtr ( pPtr - pStart );
-	if ( bNegate && uFields )
-		uFields = ~uFields;
-
-	return true;
+	return Error ( "missing closing ')' in field block operator" );
 }
 
 

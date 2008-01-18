@@ -837,7 +837,7 @@ protected:
 public:
 	/// ctor
 	CSphKBufferMVAGroupSorter ( const ISphMatchComparator * pComp, const CSphQuery * pQuery )
-		: CSphKBufferGroupSorter ( pComp, pQuery )
+		: CSphKBufferGroupSorter < COMPGROUP, DISTINCT > ( pComp, pQuery )
 		, m_pMva ( NULL )
 	{}
 
@@ -851,17 +851,17 @@ public:
 	virtual bool Push ( const CSphMatch & tEntry )
 	{
 		// check whether incoming match is already grouped
-		if ( tEntry.m_iRowitems!=m_iRowitems )
+		if ( tEntry.m_iRowitems!=this->m_iRowitems )
 		{
 			// it must be pre-grouped; well, just re-group it based on the group key
-			return PushEx ( tEntry, tEntry.m_pRowitems[m_iRowitems+OFF_POSTCALC_GROUP] );
+			return this->PushEx ( tEntry, tEntry.m_pRowitems[this->m_iRowitems+OFF_POSTCALC_GROUP] );
 		}
 
 		// ungrouped match
 		if ( !m_pMva )
 			return false;
 
-		DWORD iMvaIndex = tEntry.m_pRowitems [ m_iGroupbyOffset/ROWITEM_BITS ]; // optimize away division?
+		DWORD iMvaIndex = tEntry.m_pRowitems [ this->m_iGroupbyOffset/ROWITEM_BITS ]; // optimize away division?
 		if ( !iMvaIndex )
 			return false;
 
@@ -871,8 +871,8 @@ public:
 		bool bRes = false;
 		while ( iValues-- )
 		{
-			SphGroupKey_t uGroupkey = sphCalcGroupKey ( m_eGroupBy, *pValues++ );
-			bRes |= PushEx ( tEntry, uGroupkey );
+			SphGroupKey_t uGroupkey = sphCalcGroupKey ( this->m_eGroupBy, *pValues++ );
+			bRes |= this->PushEx ( tEntry, uGroupkey );
 		}
 		return bRes;
 	}
@@ -1623,7 +1623,7 @@ ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchem
 		const CSphColumnInfo & tAttr = tSchema.GetAttr ( iAttr );
 		bMVA = ( tAttr.m_eAttrType & SPH_ATTR_MULTI )!=0;
 	}
-	if ( bMVA && eGroupFunc==SPH_GROUPBY_ATTRPAIR )
+	if ( bMVA && pQuery->m_eGroupFunc==SPH_GROUPBY_ATTRPAIR )
 	{
 		sError.SetSprintf ( "GROUPBY_ATTRPAIR is for non-MVA attributes only" );
 		return NULL;

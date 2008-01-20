@@ -446,15 +446,17 @@ class SphinxConfig
 				unset ( $query1[$i]["time"] );
 				unset ( $query1[$i]["warning"] );
 				unset ( $query1[$i]["status"] );
+				unset ( $query1[$i]["fields"] );
 			}
 			if ( is_array($query2[$i]) )
 			{
 				unset ( $query2[$i]["time"] );
 				unset ( $query2[$i]["warning"] );
 				unset ( $query2[$i]["status"] );
+				unset ( $query2[$i]["fields"] );
 			}
 		}
-	
+
 		return $query1==$query2;
 	}
 
@@ -491,7 +493,6 @@ class SphinxConfig
 		}
 
 		$str .= "\n";
-
 		if ( isset($result["matches"]) && is_array($result["matches"]) )
 		{
 			$n = 1;
@@ -600,11 +601,10 @@ class SphinxConfig
 			unlink ( "reference" );
 			unlink ( "diffed.txt" );
 
-			fwrite ( $fp, "=== diff start ===\n" );
-			fwrite ( $fp, $diffed );
-			fwrite ( $fp, "=== diff end ===\n" );
-
 			$nquery++;
+			fwrite ( $fp, "=== query $nquery diff start ===\n" );
+			fwrite ( $fp, $diffed );
+			fwrite ( $fp, "=== query $nquery diff end ===\n" );
 		}
 	}
 

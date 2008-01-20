@@ -45,7 +45,6 @@
 	#include <sys/socket.h>
 	#include <sys/time.h>
 	#include <sys/wait.h>
-	#include <sys/resource.h>
 	#include <netdb.h>
 
 	// for cache
@@ -2499,26 +2498,13 @@ void LogQuery ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 	if ( g_bIOStats )
 	{
 		const CSphIOStats & IOStats = sphStopIOStats ();
-		float fReadKB   = IOStats.m_iReadOps ? IOStats.m_fReadKBytes / IOStats.m_iReadOps : 0;
-		float fReadTime = IOStats.m_iReadOps ? IOStats.m_fReadTime / IOStats.m_iReadOps * 1000.0f : 0;
-
-#if USE_WINDOWS
-		snprintf ( sPerfBuf, sizeof(sPerfBuf), "[reads=%d avgread=%.1f kb, %.1f ms]", 
-			IOStats.m_iReadOps, fReadKB, fReadTime );
-#else
-		struct rusage usage;
-		getrusage ( RUSAGE_SELF, &usage );
-
-		snprintf ( sPerfBuf, sizeof(sPerfBuf), "[user=%.1f ms, system=%.1f ms, blocks in=%ld, blocks out=%ld reads=%d avgread=%.1f kb, %.1f ms]", 
-				   float ( usage.ru_utime.tv_sec ) * 1000.0f + float ( usage.ru_utime.tv_usec ) / 1000.0f, 
-				   float ( usage.ru_stime.tv_sec ) * 1000.0f + float ( usage.ru_stime.tv_usec ) / 1000.0f,
-				   usage.ru_inblock, usage.ru_oublock, IOStats.m_iReadOps, fReadKB, fReadTime );
-#endif
+		snprintf ( sPerfBuf, sizeof(sPerfBuf), " [ios=%d kb=%.1f ms=%.1f]", 
+			IOStats.m_iReadOps, IOStats.m_fReadKBytes, IOStats.m_fReadTime*1000.0f );
 	}
 	else
 		sPerfBuf [0] = '\0';
 
-	snprintf ( sBuf, sizeof(sBuf), "[%s] %d.%03d sec [%s/%d/%s %d (%d,%d)%s] [%s] %s %s\n",
+	snprintf ( sBuf, sizeof(sBuf), "[%s] %d.%03d sec [%s/%d/%s %d (%d,%d)%s] [%s]%s %s\n",
 		sTimeBuf, tRes.m_iQueryTime/1000, tRes.m_iQueryTime%1000,
 		sModes [ tQuery.m_eMode ], tQuery.m_dFilters.GetLength(), sSort [ tQuery.m_eSort ],
 		tRes.m_iTotalMatches, tQuery.m_iOffset, tQuery.m_iLimit, sGroupBuf,

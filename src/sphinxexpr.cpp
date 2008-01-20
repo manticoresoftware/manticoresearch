@@ -277,9 +277,15 @@ void yyerror ( ExprParser_t * pParser, char * sMessage )
 	pParser->m_sParserError.SetSprintf ( "%s near '%s'", sMessage, pParser->m_pLastTokenStart );
 }
 
+#if USE_WINDOWS
 #pragma warning(push,1)
+#endif
+
 #include "sphinxexpryy.cpp"
+
+#if USE_WINDOWS
 #pragma warning(pop)
+#endif
 
 //////////////////////////////////////////////////////////////////////////
 

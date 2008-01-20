@@ -368,6 +368,10 @@ bool ExprParser_t::Parse ( const char * sExpr, const CSphSchema & tSchema, CSphE
 // PUBLIC STUFF
 //////////////////////////////////////////////////////////////////////////
 
+/// max evaluation stack size
+static const int STACK_SIZE = 64;
+
+/// expression evaluation
 float CSphExpr::Eval ( const CSphMatch & tMatch ) const
 {
 	// safety check
@@ -375,7 +379,6 @@ float CSphExpr::Eval ( const CSphMatch & tMatch ) const
 		return 0.0f;
 
 	// do evaluation
-	const int STACK_SIZE = 64;
 	float dStack[STACK_SIZE];
 	int iTop = -1; // used==top+1
 
@@ -399,10 +402,64 @@ float CSphExpr::Eval ( const CSphMatch & tMatch ) const
 	}
 }
 
+/// parser entry point
 bool sphExprParse ( const char * sExpr, const CSphSchema & tSchema, CSphExpr & tOutExpr, CSphString & sError )
 {
+	// parse into opcodes
 	ExprParser_t tParser;
-	return tParser.Parse ( sExpr, tSchema, tOutExpr, sError );
+	if ( !tParser.Parse ( sExpr, tSchema, tOutExpr, sError ) )
+		return false;
+
+	// expression sanity checks
+	if ( !tOutExpr.GetLength() )		{ sError.SetSprintf ( "empty expression" ); return false; }
+	if ( tOutExpr.Last()!=OPCODE_STOP )	{ sError.SetSprintf ( "internal error: unterminated opcodes list" ); return false; }
+
+	// run simulation, check stack usage
+	int iTop = -1;
+	const DWORD * pOpcodes = &tOutExpr[0];
+	for ( ;; ) switch ( *pOpcodes++ )
+	{
+		// push ops
+		case OPCODE_PUSH_ATTR:
+		case OPCODE_PUSH_CONST:
+			if ( iTop>=STACK_SIZE-1 ) { sError = "internal error: opcodes stack overflow"; return false; }
+			pOpcodes++;
+			iTop++;
+			break;
+
+		case OPCODE_PUSH_ID:
+		case OPCODE_PUSH_WEIGHT:
+			if ( iTop>=STACK_SIZE-1 ) { sError = "internal error: opcodes stack overflow"; return false; }
+			iTop++;
+			break;
+
+		// unary ops
+		case OPCODE_NEG:
+		case OPCODE_ABS:
+			if ( iTop<0 ) { sError = "internal error: no args to unary operation"; return false; }
+			break;
+
+		// binary ops
+		case OPCODE_ADD:
+		case OPCODE_SUB:
+		case OPCODE_MUL:
+		case OPCODE_DIV:
+		case OPCODE_LT:
+		case OPCODE_GT:
+			if ( iTop<1 ) { sError = "internal error: no args to binary operation"; return false; }
+			iTop--;
+			break;
+
+		// stop
+		case OPCODE_STOP:
+			if ( iTop!=0 ) { sError = "internal error: extra opcodes in stack on STOP"; return false; }
+			return true; // clean stop, all ok
+
+		// unhandled
+		default:
+			sError.SetSprintf ( "internal error: unhandled opcode (code=%d)", pOpcodes[-1] );
+			return false;
+	}
 }
 
 //

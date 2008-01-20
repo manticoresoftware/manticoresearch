@@ -393,6 +393,14 @@ void TestExpr ()
 	};
 	ExprTest_t dTests[] =
 	{
+		{ "if(2<2,3,4)",					4.0f },
+		{ "if(2>=2,3,4)",					3.0f },
+		{ "pow(7,5)",						16807.f },
+		{ "sqrt(3)",						1.7320508f },
+		{ "log2((2+2)*(2+2))",				4.0f },
+		{ "min(3,15)",						3.0f },
+		{ "max(3,15)",						15.0f },
+		{ "if(3<15,bbb,ccc)",				2.0f },
 		{ "@id+@weight",					579.0f },
 		{ "abs(-3-ccc)",					6.0f },
 		{ "(aaa+bbb)*(ccc-aaa)",			6.0f },
@@ -412,7 +420,7 @@ void TestExpr ()
 	const int iTests = sizeof(dTests)/sizeof(dTests[0]);
 	for ( int iTest=0; iTest<iTests; iTest++ )
 	{
-		printf ( "testing expression %d/%d... ", 1+iTest, iTests );
+		printf ( "testing expression evaluation, test %d/%d... ", 1+iTest, iTests );
 		bool bRes = sphExprParse ( dTests[iTest].m_sExpr, tSchema, tExpr, sError );
 		if ( bRes!=true )
 		{

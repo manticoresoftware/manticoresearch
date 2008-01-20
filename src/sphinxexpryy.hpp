@@ -33,14 +33,18 @@
      TOK_ATTR = 259,
      TOK_FUNC = 260,
      TOK_DOCINFO = 261,
-     OP_UMINUS = 262
+     TOK_GTE = 262,
+     TOK_LTE = 263,
+     TOK_NEG = 264
    };
 #endif
 #define TOK_NUMBER 258
 #define TOK_ATTR 259
 #define TOK_FUNC 260
 #define TOK_DOCINFO 261
-#define OP_UMINUS 262
+#define TOK_GTE 262
+#define TOK_LTE 263
+#define TOK_NEG 264
 
 
 
@@ -50,7 +54,7 @@
 typedef union YYSTYPE {
 	float			fNumber;	// constant value
 	int				iRowitem;	// attribute rowitem index
-	Func_e			eFunc;		// function id
+	int				iFunc;		// function id
 	Docinfo_e		eDocinfo;	// docinfo entry id
 	int				iNode;		// node index
 } YYSTYPE;

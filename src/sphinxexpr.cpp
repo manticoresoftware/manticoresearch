@@ -13,6 +13,17 @@
 
 #include "sphinx.h"
 #include "sphinxexpr.h"
+#include <math.h>
+
+//////////////////////////////////////////////////////////////////////////
+
+#ifndef M_LOG2E
+#define M_LOG2E    1.44269504088896340736
+#endif
+
+#ifndef M_LOG10E
+#define M_LOG10E   0.434294481903251827651
+#endif
 
 //////////////////////////////////////////////////////////////////////////
 // PARSER INTERNALS
@@ -25,15 +36,73 @@ enum Docinfo_e
 	DI_WEIGHT
 };
 
-/// expression functions list
-enum Func_e
+#include "sphinxexpryy.hpp"
+
+//////////////////////////////////////////////////////////////////////////
+
+/// VM opcodes
+enum Opcode_e
 {
-	FUNC_ABS,
-	FUNC_MIN,
-	FUNC_IF,
+	OPCODE_STOP,
+	OPCODE_PUSH_ATTR,
+	OPCODE_PUSH_CONST,
+	OPCODE_PUSH_ID,
+	OPCODE_PUSH_WEIGHT,
+
+	OPCODE_ADD,
+	OPCODE_SUB,
+	OPCODE_MUL,
+	OPCODE_DIV,
+	OPCODE_LT,
+	OPCODE_GT,
+	OPCODE_LTE,
+	OPCODE_GTE,
+
+	OPCODE_NEG,
+	OPCODE_ABS,
+	OPCODE_CEIL,
+	OPCODE_FLOOR,
+	OPCODE_SIN,
+	OPCODE_COS,
+	OPCODE_LN,
+	OPCODE_LOG2,
+	OPCODE_LOG10,
+	OPCODE_EXP,
+	OPCODE_SQRT,
+
+	OPCODE_MIN,
+	OPCODE_MAX,
+	OPCODE_POW,
+
+	OPCODE_IF,
 };
 
-#include "sphinxexpryy.hpp"
+/// known functions
+struct FuncDesc_t
+{
+	const char *	m_sName;
+	int				m_iArgs;
+	Opcode_e		m_eOpcode;
+};
+static FuncDesc_t g_dFuncs[] =
+{
+	{ "abs",	1,	OPCODE_ABS },
+	{ "ceil",	1,	OPCODE_CEIL },
+	{ "floor",	1,	OPCODE_FLOOR },
+	{ "sin",	1,	OPCODE_SIN },
+	{ "cos",	1,	OPCODE_COS },
+	{ "ln",		1,	OPCODE_LN },
+	{ "log2",	1,	OPCODE_LOG2 },
+	{ "log10",	1,	OPCODE_LOG10 },
+	{ "exp",	1,	OPCODE_EXP },
+	{ "sqrt",	1,	OPCODE_SQRT },
+
+	{ "min",	2,	OPCODE_MIN },
+	{ "max",	2,	OPCODE_MAX },
+	{ "pow",	2,	OPCODE_POW },
+
+	{ "if",		3,	OPCODE_IF },
+};
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -45,7 +114,7 @@ struct ExprNode_t
 	{
 		int			m_iRowitem;	///< attribute rowitem, for TOK_ATTR type
 		float		m_fConst;	///< constant value, for TOK_CONST type
-		Func_e		m_eFunc;	///< built-in function id, for TOK_FUNC type
+		int			m_iFunc;	///< built-in function id, for TOK_FUNC type
 		Docinfo_e	m_eDocinfo;	///< docinfo field id, for TOK_DOCINFO type
 	};
 	int				m_iLeft;
@@ -73,11 +142,12 @@ protected:
 	CSphString				m_sParserError;
 
 protected:
+	int						CountCommas ( int iRoot );
 	int						AddNodeNumber ( float fValue );
 	int						AddNodeAttr ( int iRowitem );
 	int						AddNodeDocinfo ( Docinfo_e eDocinfo );
 	int						AddNodeOp ( int iOp, int iLeft, int iRight );
-	int						AddNodeFunc ( Func_e eFunc, int iLeft );
+	int						AddNodeFunc ( int iFunc, int iLeft );
 
 private:
 	const char *			m_sExpr;
@@ -89,26 +159,6 @@ private:
 private:
 	int						GetToken ( YYSTYPE * lvalp );
 	void					FoldTree ( int iNode, CSphExpr & tOutExpr );
-};
-
-//////////////////////////////////////////////////////////////////////////
-
-/// VM opcodes
-enum Opcode_e
-{
-	OPCODE_STOP,
-	OPCODE_PUSH_ATTR,
-	OPCODE_PUSH_CONST,
-	OPCODE_PUSH_ID,
-	OPCODE_PUSH_WEIGHT,
-	OPCODE_ADD,
-	OPCODE_SUB,
-	OPCODE_MUL,
-	OPCODE_DIV,
-	OPCODE_LT,
-	OPCODE_GT,
-	OPCODE_NEG,
-	OPCODE_ABS
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -185,9 +235,12 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 
 		// check for function
 		sTok.ToLower();
-		if ( sTok=="abs" )		{ lvalp->eFunc = FUNC_ABS; return TOK_FUNC; }
-		if ( sTok=="min" )		{ lvalp->eFunc = FUNC_MIN; return TOK_FUNC; }
-		if ( sTok=="if" )		{ lvalp->eFunc = FUNC_IF; return TOK_FUNC; }
+		for ( int i=0; i<sizeof(g_dFuncs)/sizeof(g_dFuncs[0]); i++ )
+			if ( sTok==g_dFuncs[i].m_sName )
+		{
+			lvalp->iFunc = i;
+			return TOK_FUNC;
+		}
 
 		m_sLexerError.SetSprintf ( "unknown identifier '%s' (not an attribute, not a function)", sTok.cstr() );
 		return -1;
@@ -202,10 +255,14 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 		case '/':
 		case '(':
 		case ')':
-		case '<':
-		case '>':
 		case ',':
 			return *m_pCur++;
+
+		case '<':
+		case '>':
+			if ( m_pCur[1]!='=' ) return *m_pCur++;
+			m_pCur += 2;
+			return m_pCur[-2]=='<' ? TOK_LTE : TOK_GTE;
 	}
 
 	m_sLexerError.SetSprintf ( "unknown operator '%c' near '%s'", *m_pCur, m_pCur );
@@ -240,14 +297,14 @@ void ExprParser_t::FoldTree ( int iNode, CSphExpr & tOutExpr )
 		case '/':		tOutExpr.Add ( OPCODE_DIV ); break;
 		case '<':		tOutExpr.Add ( OPCODE_LT ); break;
 		case '>':		tOutExpr.Add ( OPCODE_GT ); break;
-		case OP_UMINUS:	tOutExpr.Add ( OPCODE_NEG ); break;
+		case TOK_LTE:	tOutExpr.Add ( OPCODE_LTE ); break;
+		case TOK_GTE:	tOutExpr.Add ( OPCODE_GTE ); break;
+		case ',':		break;
+		case TOK_NEG:	tOutExpr.Add ( OPCODE_NEG ); break;
 
 		case TOK_FUNC:
-			switch ( tNode.m_eFunc )
-			{
-				case FUNC_ABS:	tOutExpr.Add ( OPCODE_ABS ); break;
-				default:		assert ( 0 && "unhandled function" ); break;
-			}
+			assert ( tNode.m_iFunc>=0 && tNode.m_iFunc<sizeof(g_dFuncs)/sizeof(g_dFuncs[0]) );
+			tOutExpr.Add ( g_dFuncs[tNode.m_iFunc].m_eOpcode );
 			break;
 
 		case TOK_DOCINFO:
@@ -289,6 +346,14 @@ void yyerror ( ExprParser_t * pParser, char * sMessage )
 
 //////////////////////////////////////////////////////////////////////////
 
+int ExprParser_t::CountCommas ( int iRoot )
+{
+	if ( iRoot<0 ) return 0;
+	return ( ( m_dNodes[iRoot].m_iToken==',' ) ? 1 : 0 )
+		+ CountCommas ( m_dNodes[iRoot].m_iLeft )
+		+ CountCommas ( m_dNodes[iRoot].m_iRight );
+}
+
 int ExprParser_t::AddNodeNumber ( float fValue )
 {
 	ExprNode_t & tNode = m_dNodes.Add ();
@@ -322,12 +387,23 @@ int ExprParser_t::AddNodeOp ( int iOp, int iLeft, int iRight )
 	return m_dNodes.GetLength()-1;
 }
 
-int ExprParser_t::AddNodeFunc ( Func_e eFunc, int iArgs )
+int ExprParser_t::AddNodeFunc ( int iFunc, int iArgsNode )
 {
+	// check args count
+	assert ( iFunc>=0 && iFunc<sizeof(g_dFuncs)/sizeof(g_dFuncs[0]) );
+	int iExpectedArgc = g_dFuncs[iFunc].m_iArgs;
+	int iArgc = 1 + CountCommas ( iArgsNode );
+	if ( iArgc!=iExpectedArgc )
+	{
+		m_sParserError.SetSprintf ( "%s() called with %d args, %d args expected", g_dFuncs[iFunc].m_sName, iArgc, iExpectedArgc );
+		return -1;
+	}
+
+	// do add
 	ExprNode_t & tNode = m_dNodes.Add ();
 	tNode.m_iToken = TOK_FUNC;
-	tNode.m_eFunc = eFunc;
-	tNode.m_iLeft = iArgs;
+	tNode.m_iFunc = iFunc;
+	tNode.m_iLeft = iArgsNode;
 	return m_dNodes.GetLength()-1;
 }
 
@@ -385,19 +461,39 @@ float CSphExpr::Eval ( const CSphMatch & tMatch ) const
 	const DWORD * pOpcodes = m_pData;
 	for ( ;; ) switch ( *pOpcodes++ )
 	{
+		case OPCODE_STOP:		assert ( iTop==0 ); return dStack[0];
+		case OPCODE_PUSH_ATTR:	assert ( iTop<STACK_SIZE-1 ); dStack[++iTop] = (float)tMatch.m_pRowitems[*pOpcodes++]; break;
+		case OPCODE_PUSH_CONST:	assert ( iTop<STACK_SIZE-1 ); dStack[++iTop] = sphDW2F(*pOpcodes++); break;
+		case OPCODE_PUSH_ID:	assert ( iTop<STACK_SIZE-1 ); dStack[++iTop] = (float)tMatch.m_iDocID; break;
+		case OPCODE_PUSH_WEIGHT:assert ( iTop<STACK_SIZE-1 ); dStack[++iTop] = (float)tMatch.m_iWeight; break;
+
 		case OPCODE_ADD:		assert ( iTop>=1 ); dStack[iTop-1] += dStack[iTop]; iTop--; break;
 		case OPCODE_SUB:		assert ( iTop>=1 ); dStack[iTop-1] -= dStack[iTop]; iTop--; break;
 		case OPCODE_MUL:		assert ( iTop>=1 ); dStack[iTop-1] *= dStack[iTop]; iTop--; break;
 		case OPCODE_DIV:		assert ( iTop>=1 ); dStack[iTop-1] /= dStack[iTop]; iTop--; break;
-		case OPCODE_STOP:		assert ( iTop==0 ); return dStack[0];
-		case OPCODE_PUSH_ATTR:	assert ( iTop<STACK_SIZE-1 ); dStack[++iTop] = (float)tMatch.m_pRowitems[*pOpcodes++]; break;
-		case OPCODE_PUSH_CONST:	assert ( iTop<STACK_SIZE-1 ); dStack[++iTop] = sphDW2F(*pOpcodes++); break;
 		case OPCODE_LT:			assert ( iTop>=1 ); dStack[iTop-1] = ( dStack[iTop-1] < dStack[iTop] ) ? 1.0f : 0.0f; iTop--; break;
 		case OPCODE_GT:			assert ( iTop>=1 ); dStack[iTop-1] = ( dStack[iTop-1] > dStack[iTop] ) ? 1.0f : 0.0f; iTop--; break;
+		case OPCODE_LTE:		assert ( iTop>=1 ); dStack[iTop-1] = ( dStack[iTop-1] <= dStack[iTop] ) ? 1.0f : 0.0f; iTop--; break;
+		case OPCODE_GTE:		assert ( iTop>=1 ); dStack[iTop-1] = ( dStack[iTop-1] >= dStack[iTop] ) ? 1.0f : 0.0f; iTop--; break;
+
 		case OPCODE_NEG:		assert ( iTop>=0 ); dStack[iTop] = -dStack[iTop]; break;
 		case OPCODE_ABS:		assert ( iTop>=0 ); if ( dStack[iTop]<0.0f ) dStack[iTop] = -dStack[iTop]; break;
-		case OPCODE_PUSH_ID:	assert ( iTop<STACK_SIZE-1 ); dStack[++iTop] = (float)tMatch.m_iDocID; break;
-		case OPCODE_PUSH_WEIGHT:assert ( iTop<STACK_SIZE-1 ); dStack[++iTop] = (float)tMatch.m_iWeight; break;
+		case OPCODE_CEIL:		assert ( iTop>=0 ); dStack[iTop] = (float)ceil ( dStack[iTop] ); break;
+		case OPCODE_FLOOR:		assert ( iTop>=0 ); dStack[iTop] = (float)floor ( dStack[iTop] ); break;
+		case OPCODE_SIN:		assert ( iTop>=0 ); dStack[iTop] = (float)sin ( dStack[iTop] ); break;
+		case OPCODE_COS:		assert ( iTop>=0 ); dStack[iTop] = (float)cos ( dStack[iTop] ); break;
+		case OPCODE_LN:			assert ( iTop>=0 ); dStack[iTop] = (float)log ( dStack[iTop] ); break;
+		case OPCODE_LOG2:		assert ( iTop>=0 ); dStack[iTop] = (float)( log ( dStack[iTop] ) * M_LOG2E ); break;
+		case OPCODE_LOG10:		assert ( iTop>=0 ); dStack[iTop] = (float)( log ( dStack[iTop] ) * M_LOG10E ); break;
+		case OPCODE_EXP:		assert ( iTop>=0 ); dStack[iTop] = (float)exp ( dStack[iTop] ); break;
+		case OPCODE_SQRT:		assert ( iTop>=0 ); dStack[iTop] = (float)sqrt ( dStack[iTop] ); break;
+
+		case OPCODE_MIN:		assert ( iTop>=1 ); dStack[iTop-1] = Min ( dStack[iTop-1], dStack[iTop] ); iTop--; break;
+		case OPCODE_MAX:		assert ( iTop>=1 ); dStack[iTop-1] = Max ( dStack[iTop-1], dStack[iTop] ); iTop--; break;
+		case OPCODE_POW:		assert ( iTop>=1 ); dStack[iTop-1] = (float)pow ( dStack[iTop-1], dStack[iTop] ); iTop--; break;
+
+		case OPCODE_IF:			assert ( iTop>=2 ); dStack[iTop-2] = ( dStack[iTop-2]!=0.0f ) ? dStack[iTop-1] : dStack[iTop]; iTop-=2; break;
+
 		default:				assert ( 0 && "unhandled opcode" );
 	}
 }
@@ -436,6 +532,15 @@ bool sphExprParse ( const char * sExpr, const CSphSchema & tSchema, CSphExpr & t
 		// unary ops
 		case OPCODE_NEG:
 		case OPCODE_ABS:
+		case OPCODE_CEIL:
+		case OPCODE_FLOOR:
+		case OPCODE_SIN:
+		case OPCODE_COS:
+		case OPCODE_LN:
+		case OPCODE_LOG2:
+		case OPCODE_LOG10:
+		case OPCODE_EXP:
+		case OPCODE_SQRT:
 			if ( iTop<0 ) { sError = "internal error: no args to unary operation"; return false; }
 			break;
 
@@ -446,8 +551,19 @@ bool sphExprParse ( const char * sExpr, const CSphSchema & tSchema, CSphExpr & t
 		case OPCODE_DIV:
 		case OPCODE_LT:
 		case OPCODE_GT:
+		case OPCODE_LTE:
+		case OPCODE_GTE:
+		case OPCODE_MIN:
+		case OPCODE_MAX:
+		case OPCODE_POW:
 			if ( iTop<1 ) { sError = "internal error: no args to binary operation"; return false; }
 			iTop--;
+			break;
+
+		// ternary ops
+		case OPCODE_IF:
+			if ( iTop<2 ) { sError = "internal error: no args to 3-arg function"; return false; }
+			iTop-=2;
 			break;
 
 		// stop

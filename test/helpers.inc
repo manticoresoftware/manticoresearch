@@ -739,16 +739,14 @@ function RunTest ( $test_dir )
 {
 	global $indexer_data_path, $agents, $sd_pid_file;
 
-	$test_dir = $test_dir."/";
-
-	$model_file = $test_dir."model.bin";
-	$conf_dir 	= $test_dir."Conf";
+	$model_file = $test_dir."/model.bin";
+	$conf_dir 	= $test_dir."/Conf";
 
 	$config = new SphinxConfig;
-	if ( !$config->Load ( $test_dir."test.xml" ) )
+	if ( !$config->Load ( $test_dir."/test.xml" ) )
 		return;
 
-	$prefix = sprintf ( "testing %s...", $config->Name () );
+	$prefix = sprintf ( "testing %s, %s...", $test_dir, $config->Name () );
 
 	if ( !CreateDB ( $config->DB_Drop(), $config->DB_Create(), $config->DB_Insert() ) )
 	{
@@ -765,7 +763,7 @@ function RunTest ( $test_dir )
 	if ( !file_exists ( $conf_dir ) )
 		mkdir ( $conf_dir );
 
-	$report_file = $test_dir."report.txt";
+	$report_file = $test_dir."/report.txt";
 	$report = fopen ( $report_file, "w" );
 
 	$nfailed = 0;

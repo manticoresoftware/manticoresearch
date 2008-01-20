@@ -1,10 +1,10 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Test>
-  <Name>Prefixes/infixes + UTF-8</Name>
+  <Name>prefixes/infixes + UTF-8</Name>
   <Config>
     <Static>indexer
 {
-	mem_limit			= 128M
+	mem_limit			= 16M
 }
 
 searchd

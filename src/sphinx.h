@@ -696,12 +696,6 @@ public:
 	/// get attrs count
 	int						GetAttrsCount () const			{ return m_dAttrs.GetLength(); }
 
-	/// get non-virtual row size
-	int						GetRealRowSize () const;
-
-	/// get non-virtual attributes count
-	int						GetRealAttrsCount () const;
-
 	/// get attr
 	const CSphColumnInfo &	GetAttr ( int iIndex ) const	{ return m_dAttrs[iIndex]; }
 
@@ -1179,6 +1173,7 @@ enum ESphSortOrder
 	SPH_SORT_ATTR_ASC		= 2,	///< sort by document date asc, then by relevance desc
 	SPH_SORT_TIME_SEGMENTS	= 3,	///< sort by time segments (hour/day/week/etc) desc, then by relevance desc
 	SPH_SORT_EXTENDED		= 4,	///< sort by SQL-like expression (eg. "@relevance DESC, price ASC, @id DESC")
+	SPH_SORT_EXPR			= 5,	///< sort by arithmetic expression in descending order (eg. "@id + max(@weight,1000)*boost + log(price)")
 
 	SPH_SORT_TOTAL
 };
@@ -1278,6 +1273,9 @@ struct CSphNamedInt
 	CSphNamedInt () : m_iValue ( 0 ) {}
 };
 
+/// unclean, i know
+#include "sphinxexpr.h"
+
 
 /// search query
 class CSphQuery
@@ -1329,6 +1327,7 @@ public:
 	int				m_iGroupbyCount;	///< group-by attr bit count
 	int				m_iDistinctOffset;	///< distinct-counted attr bit offset
 	int				m_iDistinctCount;	///< distinct-counted attr bit count
+	CSphExpr		m_tCalcExpr;		///< expression opcodes for SPH_SORT_EXPR mode
 
 public:
 	int				m_iOldVersion;		///< version, to fixup old queries

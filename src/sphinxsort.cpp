@@ -1206,7 +1206,8 @@ enum
 	FIXUP_GEODIST	= -1000,
 	FIXUP_COUNT		= -1001,
 	FIXUP_GROUP		= -1002,
-	FIXUP_DISTINCT	= -1003
+	FIXUP_DISTINCT	= -1003,
+	FIXUP_EXPR		= -1004
 };
 
 
@@ -1527,6 +1528,17 @@ ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchem
 			}
 		}
 
+	} else if ( pQuery->m_eSort==SPH_SORT_EXPR )
+	{	
+		if ( !sphExprParse ( pQuery->m_sSortBy.cstr(), tSchema, pQuery->m_tCalcExpr, sError ) )
+			return NULL;
+
+		tStateMatch.m_iAttr[0] = FIXUP_EXPR;
+		tStateMatch.m_iAttr[1] = SPH_VATTR_ID;
+		tStateMatch.m_uAttrDesc = 1;
+		eMatchFunc = FUNC_GENERIC2;
+		bUsesAttrs = true;
+
 	} else
 	{
 		// check sort-by attribute
@@ -1581,11 +1593,44 @@ ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchem
 		break;
 	}
 
-	bool bHaveGeo = tSchema.GetAttrIndex ( "@geodist" ) >= 0 ;
-	int iToCalc = ( pQuery->m_bCalcGeodist ? ( bHaveGeo ? 0 : 1 ) : 0 );
+	// incoming schema should contain either no virtual columns at all,
+	// or both calculated and groupby virtual columns. let's handle that.
 
-	pQuery->m_iPresortRowitems = tSchema.GetRealRowSize() + iToCalc;
+	// check what the schema already has
+	int iGeoAttr = tSchema.GetAttrIndex ( "@geodist" );
+	int iExprAttr = tSchema.GetAttrIndex ( "@expr" );
+	int iGroupbyAttr = tSchema.GetAttrIndex ( "@groupby" );
 
+	// check the schema for calculated attributes, if needed
+	bool bNeedCalcdAttrs = ( pQuery->m_bCalcGeodist || pQuery->m_eSort==SPH_SORT_EXPR );
+	int iToCalc = 0;
+
+	if ( bNeedCalcdAttrs )
+	{
+		if ( iGeoAttr<0 && iExprAttr<0 && iGroupbyAttr<0 )
+		{
+			// first case, we have no attrs yet but we must sort
+			// lets do our predictions (must by in sync with SetupCalc() and groupby sorters)
+			if ( pQuery->m_bCalcGeodist )			iGeoAttr = tSchema.GetAttrsCount() + iToCalc++;
+			if ( pQuery->m_eSort==SPH_SORT_EXPR )	iExprAttr = tSchema.GetAttrsCount() + iToCalc++;
+			if ( pQuery->m_iGroupbyOffset>=0 )		iGroupbyAttr = tSchema.GetAttrsCount() + iToCalc; // no post-increment; groupby is *not* calc'd
+
+		} else
+		{
+			// second case, verify that we do have everything
+			if ( pQuery->m_bCalcGeodist && iGeoAttr<0 )				{ sError.SetSprintf ( "internal error: schema '%s': got virtual attrs, but missing '@geodist'", tSchema.m_sName.cstr() ); return NULL; }
+			if ( pQuery->m_eSort==SPH_SORT_EXPR && iExprAttr<0 )	{ sError.SetSprintf ( "internal error: schema '%s': got virtual attrs, but missing '@expr'", tSchema.m_sName.cstr() ); return NULL; }
+			if ( pQuery->m_iGroupbyOffset>=0 && iGroupbyAttr<0 )	{ sError.SetSprintf ( "internal error: schema '%s': got virtual attrs, but missing '@groupby'", tSchema.m_sName.cstr() ); return NULL; }
+		}
+	}
+
+	// how much raw (non-groupby) rowitems should the sorter expect
+	if ( iGroupbyAttr>=0 && iGroupbyAttr<tSchema.GetAttrsCount() )
+		pQuery->m_iPresortRowitems = tSchema.GetAttr ( iGroupbyAttr ).m_iRowitem; // we do have incoming groupby attrs already; draw the line there
+	else
+		pQuery->m_iPresortRowitems = tSchema.GetRowSize() + iToCalc; // we do not have anything; we'll be adding iToCalc full-rowitem attrs and then groupby attrs
+
+	// perform fixup
 	for ( int iState=0; iState<2; iState++ )
 	{
 		CSphMatchComparatorState & tState = iState ? tStateMatch : tStateGroup;
@@ -1594,15 +1639,28 @@ ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchem
 			int iOffset = -1;
 			switch ( tState.m_iAttr[i] )
 			{
-				case FIXUP_GEODIST:		iOffset = 0; break;
-				case FIXUP_COUNT:		iOffset = iToCalc+OFF_POSTCALC_COUNT; break;
-				case FIXUP_GROUP:		iOffset = iToCalc+OFF_POSTCALC_GROUP; break;
-				case FIXUP_DISTINCT:	iOffset = iToCalc+OFF_POSTCALC_DISTINCT; break;
+				case FIXUP_GEODIST:		iOffset = iGeoAttr; break;
+				case FIXUP_EXPR:		iOffset = iExprAttr; break;
+				case FIXUP_GROUP:		iOffset = iGroupbyAttr+OFF_POSTCALC_GROUP; break;
+				case FIXUP_COUNT:		iOffset = iGroupbyAttr+OFF_POSTCALC_COUNT; break;
+				case FIXUP_DISTINCT:	iOffset = iGroupbyAttr+OFF_POSTCALC_DISTINCT; break;
+				default:				continue;
 			}
-			if ( iOffset>=0 )
+
+			assert ( iOffset>=0 );
+			if ( iOffset<tSchema.GetAttrsCount() )
 			{
-				tState.m_iAttr[i] = tSchema.GetRealAttrsCount() + iOffset;
-				tState.m_iRowitem[i] = tSchema.GetRealRowSize() + iOffset + ( bHaveGeo ? -1 : 0 );
+				// attribute which is already there; copy
+				const CSphColumnInfo & tCol = tSchema.GetAttr(iOffset);
+				tState.m_iAttr[i] = iOffset;
+				tState.m_iRowitem[i] = tCol.m_iRowitem;
+				tState.m_iBitOffset[i] = tCol.m_iBitOffset; assert ( ( tState.m_iBitOffset[i] % ROWITEM_BITS )==0 );
+				tState.m_iBitCount[i] = tCol.m_iBitCount; assert ( tState.m_iBitCount[i]==ROWITEM_BITS );
+			} else
+			{
+				// attribute which is to be added; predict
+				tState.m_iAttr[i] = iOffset;
+				tState.m_iRowitem[i] = tSchema.GetRowSize() + iOffset - tSchema.GetAttrsCount();
 				tState.m_iBitOffset[i] = tState.m_iRowitem[i]*ROWITEM_BITS;
 				tState.m_iBitCount[i] = ROWITEM_BITS;
 			}

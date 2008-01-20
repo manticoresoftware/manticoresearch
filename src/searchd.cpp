@@ -930,11 +930,6 @@ int sphSockRead ( int iSock, void * buf, int iLen )
 // NETWORK BUFFERS
 /////////////////////////////////////////////////////////////////////////////
 
-/// float vs dword conversions
-inline DWORD F2DW ( float f )	{ return *(DWORD *)&f; }
-inline float DW2F ( DWORD d )	{ return *(float *)&d; }
-
-
 /// fixed-memory response buffer
 /// tracks usage, and flushes to network when necessary
 class NetOutputBuffer_c
@@ -946,7 +941,7 @@ public:
 	bool		SendDword ( DWORD iValue )		{ return SendT<DWORD> ( htonl ( iValue ) ); }
 	bool		SendWord ( WORD iValue )		{ return SendT<WORD> ( htons ( iValue ) ); }
 	bool		SendUint64 ( uint64_t iValue )	{ SendT<DWORD> ( htonl ( (DWORD)(iValue>>32) ) ); return SendT<DWORD> ( htonl ( (DWORD)(iValue&0xffffffffUL) ) ); }
-	bool		SendFloat ( float fValue )		{ return SendT<DWORD> ( htonl ( F2DW ( fValue ) ) ); }
+	bool		SendFloat ( float fValue )		{ return SendT<DWORD> ( htonl ( sphF2DW ( fValue ) ) ); }
 
 #if USE_64BIT
 	bool		SendDocid ( SphDocID_t iValue )	{ return SendUint64 ( iValue ); }
@@ -988,7 +983,7 @@ public:
 	DWORD			GetDword () { return ntohl ( GetT<DWORD> () ); }
 	uint64_t		GetUint64() { uint64_t uRes = GetDword(); return (uRes<<32)+GetDword(); };
 	BYTE			GetByte () { return GetT<BYTE> (); }
-	float			GetFloat () { return DW2F ( ntohl ( GetT<DWORD> () ) ); }
+	float			GetFloat () { return sphDW2F ( ntohl ( GetT<DWORD> () ) ); }
 	CSphString		GetString ();
 	int				GetDwords ( DWORD ** pBuffer, int iMax, const char * sErrorTemplate );
 	bool			GetDwords ( CSphVector<DWORD> & dBuffer, int iMax, const char * sErrorTemplate );
@@ -2499,7 +2494,7 @@ void LogQuery ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 		snprintf ( sGroupBuf, sizeof(sGroupBuf), " @%s", tQuery.m_sGroupBy.cstr() );
 
 	static const char * sModes [ SPH_MATCH_TOTAL ] = { "all", "any", "phr", "bool", "ext", "scan", "ext2" };
-	static const char * sSort [ SPH_SORT_TOTAL ] = { "rel", "attr-", "attr+", "tsegs", "ext" };
+	static const char * sSort [ SPH_SORT_TOTAL ] = { "rel", "attr-", "attr+", "tsegs", "ext", "expr" };
 
 	if ( g_bIOStats )
 	{

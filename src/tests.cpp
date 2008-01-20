@@ -12,6 +12,8 @@
 //
 
 #include "sphinx.h"
+#include "sphinxexpr.h"
+#include <math.h>
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -363,6 +365,74 @@ void BenchStripper ()
 
 //////////////////////////////////////////////////////////////////////////
 
+void TestExpr ()
+{
+	CSphColumnInfo tCol;
+	tCol.m_eAttrType = SPH_ATTR_INTEGER;
+
+	CSphSchema tSchema;
+	tCol.m_sName = "aaa"; tSchema.AddAttr ( tCol );
+	tCol.m_sName = "bbb"; tSchema.AddAttr ( tCol );
+	tCol.m_sName = "ccc"; tSchema.AddAttr ( tCol );
+
+	CSphMatch tMatch;
+	tMatch.m_iDocID = 123;
+	tMatch.m_iWeight = 456;
+	tMatch.m_iRowitems = tSchema.GetRowSize();
+	tMatch.m_pRowitems = new CSphRowitem [ tMatch.m_iRowitems ];
+	for ( int i=0; i<tMatch.m_iRowitems; i++ )
+		tMatch.m_pRowitems[i] = 1+i;
+
+	CSphString sError;
+	CSphExpr tExpr;
+
+	struct ExprTest_t
+	{ 
+		const char *	m_sExpr;
+		float			m_fValue;
+	};
+	ExprTest_t dTests[] =
+	{
+		{ "@id+@weight",					579.0f },
+		{ "abs(-3-ccc)",					6.0f },
+		{ "(aaa+bbb)*(ccc-aaa)",			6.0f },
+		{ "(((aaa)))",						1.0f },
+		{ "aaa-bbb*ccc",					-5.0f },
+		{ " aaa    -\tbbb *\t\t\tccc ",		-5.0f },
+		{ "bbb+123*aaa",					125.0f },
+		{ "2.000*2e+1+2",					42.0f },
+		{ "3<5",							1.0f },
+		{ "1 + 2*3 > 4*4",					0.0f },
+		{ "aaa/-bbb",						-0.5f, },
+		{ "-10*-10",						100.0f },
+		{ "aaa+-bbb*-5",					11.0f },
+		{ "-aaa>-bbb",						1.0f },
+	};
+
+	const int iTests = sizeof(dTests)/sizeof(dTests[0]);
+	for ( int iTest=0; iTest<iTests; iTest++ )
+	{
+		printf ( "testing expression %d/%d... ", 1+iTest, iTests );
+		bool bRes = sphExprParse ( dTests[iTest].m_sExpr, tSchema, tExpr, sError );
+		if ( bRes!=true )
+		{
+			printf ( "FAILED; %s\n", sError.cstr() );
+			assert ( 0 );
+		}
+
+		float fValue = tExpr.Eval(tMatch);
+		if ( fabs ( fValue - dTests[iTest].m_fValue )>=0.0001f )
+		{
+			printf ( "FAILED; expected %.3f, got %.3f\n", dTests[iTest].m_fValue, fValue );
+			assert ( 0 );
+		}
+
+		printf ( "ok\n" );
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 void main ()
 {
 	printf ( "RUNNING INTERNAL LIBSPHINX TESTS\n\n" );
@@ -375,6 +445,7 @@ void main ()
 	TestStripper ();
 	TestTokenizer ( false );
 	TestTokenizer ( true );
+	TestExpr ();
 #endif
 
 	unlink ( g_sTmpfile );

@@ -174,6 +174,12 @@ inline int		sphLog2 ( uint64_t iValue )
 	return iBits;
 }
 
+/// float vs dword conversion
+inline DWORD sphF2DW ( float f )	{ return *(DWORD *)&f; }
+
+/// dword vs float conversion
+inline float sphDW2F ( DWORD d )	{ return *(float *)&d; }
+
 /////////////////////////////////////////////////////////////////////////////
 // DEBUGGING
 /////////////////////////////////////////////////////////////////////////////
@@ -974,9 +980,10 @@ public:
 	T *				operator -> () const		{ return m_pPtr; }
 	T *				Ptr () const				{ return m_pPtr; }
 	CSphScopedPtr &	operator = ( T * pPtr )		{ SafeDelete ( m_pPtr ); m_pPtr = pPtr; return *this; }
+	T *				LeakPtr ()					{ T * pPtr = m_pPtr; m_pPtr = NULL; return pPtr; }
 
 protected:
-	T *			m_pPtr;
+	T *				m_pPtr;
 };
 
 #endif // _sphinxstd_

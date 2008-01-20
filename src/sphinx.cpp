@@ -15,6 +15,7 @@
 #include "sphinxstem.h"
 #include "sphinxquery.h"
 #include "sphinxutils.h"
+#include "sphinxexpr.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -1502,6 +1503,8 @@ struct CSphIndex_VLN : CSphIndex
 	virtual void				Unlock ();
 
 	void						BindWeights ( const CSphQuery * pQuery );
+	bool						SetupCalc ( CSphQueryResult * pResult, const CSphQuery * pQuery );
+
 	virtual CSphQueryResult *	Query ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery );
 	virtual bool				QueryEx ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchSorter * pTop );
 	virtual bool				MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters );
@@ -1582,11 +1585,14 @@ private:
 	bool						m_bEarlyLookup;			///< whether early attr value lookup is needed
 	bool						m_bLateLookup;			///< whether late attr value lookup is needed
 
-	bool						m_bCalcGeodist;			///< whether to compute geodistance
+	int							m_iCalcGeodist;			///< compute geodistance to this rowitem (-1 means do not compute)
 	int							m_iGeoLatRowitem;		///< latitude rowitem
 	int							m_iGeoLongRowitem;		///< longitude rowitem
 	float						m_fGeoAnchorLat;		///< anchor latitude
 	float						m_fGeoAnchorLong;		///< anchor longitude
+
+	int							m_iCalcExpr;			///< compute sorting expr to this rowitem (-1 means do not compute)
+	CSphExpr					m_tCalcExpr;			///< expression opcodes
 
 private:
 	const char *				GetIndexFileName ( const char * sExt ) const;	///< WARNING, non-reenterable, static buffer!
@@ -3703,51 +3709,28 @@ int CSphQuery::GetIndexWeight ( const char * sName ) const
 // SCHEMA
 /////////////////////////////////////////////////////////////////////////////
 
-int CSphSchema::GetRealAttrsCount () const
-{
-	// FIXME! add some bool instead of magic attr naming?
-	int iGroupby = GetAttrIndex ( "@groupby" );
-	return ( iGroupby>=0 ) ? iGroupby : GetAttrsCount();
-}
-
-
-int CSphSchema::GetRealRowSize () const
-{
-	// FIXME! add some bool instead of magic attr naming?
-	int iGroupby = GetAttrIndex ( "@groupby" );
-	return ( iGroupby>=0 ) ? GetAttr(iGroupby).m_iRowitem : GetRowSize();
-}
-
-
 ESphSchemaCompare CSphSchema::CompareTo ( const CSphSchema & rhs, CSphString & sError ) const
 {
-	char sTmp [ 1024 ];
-	sError = "";
-
 	/////////////////////////
 	// incompatibility tests
 	/////////////////////////
 
 	// check attrs count
-	int iRealAttrs = GetRealAttrsCount();
-	if ( iRealAttrs!=rhs.GetRealAttrsCount() )
+	if ( GetAttrsCount()!=rhs.GetAttrsCount() )
 	{
-		snprintf ( sTmp, sizeof(sTmp), "non-virtual attributes count mismatch: %d in schema '%s', %d in schema '%s'",
-			m_dAttrs.GetLength(), m_sName.cstr(),
-			rhs.m_dAttrs.GetLength(), rhs.m_sName.cstr() );
-		sError = sTmp;
+		sError.SetSprintf ( "attribute count mismatch: %d in schema '%s', %d in schema '%s'",
+			GetAttrsCount(), m_sName.cstr(), rhs.GetAttrsCount(), rhs.m_sName.cstr() );
 		return SPH_SCHEMAS_INCOMPATIBLE;
 	}
 
 	// check attr types
-	for ( int i=0; i<iRealAttrs; i++ )
+	ARRAY_FOREACH ( i, m_dAttrs )
 		if ( rhs.m_dAttrs[i].m_eAttrType!=m_dAttrs[i].m_eAttrType )
 	{
-		snprintf ( sTmp, sizeof(sTmp), "attribute %d/%d type mismatch: name='%s', type=%d in schema '%s'; name='%s', type=%d in schema '%s'",
-			i, iRealAttrs,
+		sError.SetSprintf ( "attribute %d/%d type mismatch: name='%s', type=%d in schema '%s'; name='%s', type=%d in schema '%s'",
+			i, m_dAttrs.GetLength(),
 			m_dAttrs[i].m_sName.cstr(), m_dAttrs[i].m_eAttrType, m_sName.cstr(),
 			rhs.m_dAttrs[i].m_sName.cstr(), rhs.m_dAttrs[i].m_eAttrType, rhs.m_sName.cstr() );
-		sError = sTmp;
 		return SPH_SCHEMAS_INCOMPATIBLE;
 	}
 
@@ -3758,10 +3741,9 @@ ESphSchemaCompare CSphSchema::CompareTo ( const CSphSchema & rhs, CSphString & s
 	// check fulltext fields count
 	if ( rhs.m_dFields.GetLength()!=m_dFields.GetLength() )
 	{
-		snprintf ( sTmp, sizeof(sTmp), "fulltext fields count mismatch: %d in schema '%s', %d in schema '%s'",
+		sError.SetSprintf ( "fulltext fields count mismatch: %d in schema '%s', %d in schema '%s'",
 			m_dFields.GetLength(), m_sName.cstr(),
 			rhs.m_dFields.GetLength(), rhs.m_sName.cstr() );
-		sError = sTmp;
 		return SPH_SCHEMAS_COMPATIBLE;
 	}
 
@@ -3769,20 +3751,19 @@ ESphSchemaCompare CSphSchema::CompareTo ( const CSphSchema & rhs, CSphString & s
 	ARRAY_FOREACH ( i, rhs.m_dFields )
 		if ( rhs.m_dFields[i].m_sName!=m_dFields[i].m_sName )
 	{
-		snprintf ( sTmp, sizeof(sTmp), "fulltext field %d/%d name mismatch: name='%s' in schema '%s'; name='%s' in schema '%s'",
+		sError.SetSprintf ( "fulltext field %d/%d name mismatch: name='%s' in schema '%s'; name='%s' in schema '%s'",
 			i, m_dFields.GetLength(),
 			m_dFields[i].m_sName.cstr(), m_sName.cstr(),
 			rhs.m_dFields[i].m_sName.cstr(), rhs.m_sName.cstr() );
-		sError = sTmp;
 		return SPH_SCHEMAS_COMPATIBLE;
 	}
 
 	// check attr names
-	for ( int i=0; i<iRealAttrs; i++ )
+	ARRAY_FOREACH ( i, m_dAttrs )
 		if ( rhs.m_dAttrs[i].m_sName!=m_dAttrs[i].m_sName )
 	{
-		snprintf ( sTmp, sizeof(sTmp), "attribute %d/%d name mismatch: name='%s' in schema '%s', name='%s' in schema '%s'",
-			i, iRealAttrs,
+		sError.SetSprintf ( "attribute %d/%d name mismatch: name='%s' in schema '%s', name='%s' in schema '%s'",
+			i, m_dAttrs.GetLength(),
 			m_dAttrs[i].m_sName.cstr(), m_sName.cstr(),
 			rhs.m_dAttrs[i].m_sName.cstr(), rhs.m_sName.cstr() );
 		return SPH_SCHEMAS_COMPATIBLE;
@@ -7866,11 +7847,11 @@ static inline double sphSqr ( double v )
 void CSphIndex_VLN::CalcDocinfo ( CSphMatch & tMatch, const DWORD * pInfo )
 {
 	assert ( tMatch.m_pRowitems );
-	assert ( tMatch.m_iRowitems==m_tSchema.GetRowSize() + ( m_bCalcGeodist ? 1 : 0 ) );
+//	assert ( tMatch.m_iRowitems==m_tSchema.GetRowSize() + ( m_bCalcGeodist ? 1 : 0 ) );
 	assert ( DOCINFO2ID(pInfo)==tMatch.m_iDocID );
 	memcpy ( tMatch.m_pRowitems, DOCINFO2ATTRS(pInfo), m_tSchema.GetRowSize()*sizeof(CSphRowitem) );
 
-	if ( m_bCalcGeodist )
+	if ( m_iCalcGeodist>=0 )
 	{
 		const double R = 6384000;
 		float plat = tMatch.GetAttrFloat ( m_iGeoLatRowitem );
@@ -7879,7 +7860,13 @@ void CSphIndex_VLN::CalcDocinfo ( CSphMatch & tMatch, const DWORD * pInfo )
 		double dlon = plon - m_fGeoAnchorLong;
 		double a = sphSqr(sin(dlat/2)) + cos(plat)*cos(m_fGeoAnchorLat)*sphSqr(sin(dlon/2));
 		double c = 2*asin ( Min ( 1, sqrt(a) ) );
-		tMatch.SetAttrFloat ( m_tSchema.GetRowSize(), float(R*c) ); // FIXME! magic offset
+		tMatch.SetAttrFloat ( m_iCalcGeodist, float(R*c) );
+	}
+
+	if ( m_iCalcExpr>=0 )
+	{
+		float fRes = m_tCalcExpr.Eval ( tMatch );
+		tMatch.SetAttrFloat ( m_iCalcExpr, fRes );
 	}
 }
 
@@ -11185,7 +11172,7 @@ void CSphIndex_VLN::MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISph
 			if ( tFilter.m_iBitOffset<0 )
 				continue;
 
-			if ( tFilter.m_iBitOffset>=m_tSchema.GetRealRowSize()*ROWITEM_BITS )
+			if ( tFilter.m_iBitOffset>=m_tSchema.GetRowSize()*ROWITEM_BITS ) // index schema only contains non-computed attrs
 				continue; // no early reject for computed attrs
 
 			if ( tFilter.m_eType==SPH_FILTER_VALUES )
@@ -12055,6 +12042,62 @@ void CSphIndex_VLN::BindWeights ( const CSphQuery * pQuery )
 }
 
 
+bool CSphIndex_VLN::SetupCalc ( CSphQueryResult * pResult, const CSphQuery * pQuery )
+{
+	// base schema
+	pResult->m_tSchema = m_tSchema;
+
+	// geodist
+	m_iCalcGeodist = -1;
+	if ( pQuery->m_bCalcGeodist )
+	{
+		CSphColumnInfo tGeodist ( "@geodist", SPH_ATTR_FLOAT );
+		pResult->m_tSchema.AddAttr ( tGeodist );
+
+		m_iCalcGeodist = pResult->m_tSchema.GetAttrIndex ( "@geodist" );
+		assert ( m_iCalcGeodist>=0 );
+
+		if ( !pQuery->m_bGeoAnchor )
+		{
+			m_sLastError.SetSprintf ( "no geo-anchor point specified in search query, @geodist not available" );
+			return false;
+		}
+
+		int iLat = m_tSchema.GetAttrIndex ( pQuery->m_sGeoLatAttr.cstr() );
+		if ( iLat<0 )
+		{
+			m_sLastError.SetSprintf ( "unknown latitude attribute '%s'", pQuery->m_sGeoLatAttr.cstr() );
+			return false;
+		}
+
+		int iLong = m_tSchema.GetAttrIndex ( pQuery->m_sGeoLongAttr.cstr() );
+		if ( iLong<0 )
+		{
+			m_sLastError.SetSprintf ( "unknown latitude attribute '%s'", pQuery->m_sGeoLongAttr.cstr() );
+			return false;
+		}
+
+		m_iGeoLatRowitem = m_tSchema.GetAttr(iLat).m_iRowitem;
+		m_iGeoLongRowitem = m_tSchema.GetAttr(iLong).m_iRowitem;
+		m_fGeoAnchorLat = pQuery->m_fGeoLatitude;
+		m_fGeoAnchorLong = pQuery->m_fGeoLongitude;
+	}
+
+	// sorting expression
+	m_iCalcExpr = -1;
+	if ( pQuery->m_eSort==SPH_SORT_EXPR )
+	{
+		CSphColumnInfo tExpr ( "@expr", SPH_ATTR_FLOAT );
+		pResult->m_tSchema.AddAttr ( tExpr );
+
+		m_iCalcExpr = pResult->m_tSchema.GetAttrIndex ( "@expr" );
+		m_tCalcExpr = pQuery->m_tCalcExpr;
+	}
+
+	return true;
+}
+
+
 bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters )
 {
 	assert ( pTokenizer );
@@ -12102,6 +12145,10 @@ bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, C
 		pTokenizer->AddCaseFolding ( tStar );
 	}
 
+	// setup calculations and result schema
+	if ( !SetupCalc ( pResult, pQuery ) )
+		return false;
+
 	// prepare for setup
 	CSphTermSetup tTermSetup ( tDoclist, tHitlist );
 	tTermSetup.m_pTokenizer = pTokenizer;
@@ -12109,7 +12156,7 @@ bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, C
 	tTermSetup.m_pIndex = this;
 	tTermSetup.m_eDocinfo = m_eDocinfo;
 	tTermSetup.m_tMin = m_tMin;
-	tTermSetup.m_iToCalc = pQuery->m_bCalcGeodist ? 1 : 0;
+	tTermSetup.m_iToCalc = pResult->m_tSchema.GetRowSize() - m_tSchema.GetRowSize();
 	if ( pQuery->m_uMaxQueryMsec>0 )
 		tTermSetup.m_uMaxStamp = sphTimerMsec() + pQuery->m_uMaxQueryMsec; // max_query_time
 
@@ -12189,19 +12236,8 @@ bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, C
 		tFilter.m_iBitOffset = -1; // filters with negative bit-offset will be ignored
 		tFilter.m_iRowitem = INT_MAX;
 
-		// special handling for in-match property
-		if ( tFilter.m_sAttrName=="@geodist" )
-		{
-			assert ( pQuery->m_bCalcGeodist );
-			tFilter.m_iBitOffset = m_tSchema.GetRealRowSize() * ROWITEM_BITS; // to avoid ignoring
-			tFilter.m_iBitCount = 0;
-			tFilter.m_bMva = false;
-			tFilter.m_iRowitem = m_tSchema.GetRealRowSize ();
-			continue;
-		}
-
-		// lookup it in user attributes
-		int iAttr = m_tSchema.GetAttrIndex ( tFilter.m_sAttrName.cstr() );
+		// lookup it
+		int iAttr = pResult->m_tSchema.GetAttrIndex ( tFilter.m_sAttrName.cstr() );
 		if ( iAttr<0 )
 			continue; // FIXME! simply continue? should at least warn about bad attr name
 
@@ -12222,36 +12258,6 @@ bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, C
 		for ( int iSorter=0; iSorter<iSorters && !m_bLateLookup; iSorter++ )
 			if ( ppSorters[iSorter]->UsesAttrs() )
 				m_bLateLookup = true;
-
-	// setup calculations
-	m_bCalcGeodist = pQuery->m_bCalcGeodist;
-	if ( m_bCalcGeodist )
-	{
-		if ( !pQuery->m_bGeoAnchor )
-		{
-			m_sLastError.SetSprintf ( "no geo-anchor point specified in search query, @geodist not available" );
-			return false;
-		}
-
-		int iLat = m_tSchema.GetAttrIndex ( pQuery->m_sGeoLatAttr.cstr() );
-		if ( iLat<0 )
-		{
-			m_sLastError.SetSprintf ( "unknown latitude attribute '%s'", pQuery->m_sGeoLatAttr.cstr() );
-			return false;
-		}
-
-		int iLong = m_tSchema.GetAttrIndex ( pQuery->m_sGeoLongAttr.cstr() );
-		if ( iLong<0 )
-		{
-			m_sLastError.SetSprintf ( "unknown latitude attribute '%s'", pQuery->m_sGeoLongAttr.cstr() );
-			return false;
-		}
-
-		m_iGeoLatRowitem = m_tSchema.GetAttr(iLat).m_iRowitem;
-		m_iGeoLongRowitem = m_tSchema.GetAttr(iLong).m_iRowitem;
-		m_fGeoAnchorLat = pQuery->m_fGeoLatitude;
-		m_fGeoAnchorLong = pQuery->m_fGeoLongitude;
-	}
 
 	// setup sorters vs. MVA
 	for ( int i=0; i<iSorters; i++ )
@@ -12319,14 +12325,6 @@ bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, C
 
 		// mva ptr
 		pResult->m_pMva = m_pMva.GetWritePtr();
-
-		// schema
-		pResult->m_tSchema = m_tSchema;
-		if ( m_bCalcGeodist )
-		{
-			CSphColumnInfo tGeodist ( "@geodist", SPH_ATTR_FLOAT );
-			pResult->m_tSchema.AddAttr ( tGeodist );
-		}
 	}
 
 	PROFILER_DONE ();

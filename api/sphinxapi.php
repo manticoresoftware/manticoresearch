@@ -53,6 +53,7 @@ define ( "SPH_SORT_ATTR_DESC",		1 );
 define ( "SPH_SORT_ATTR_ASC",		2 );
 define ( "SPH_SORT_TIME_SEGMENTS", 	3 );
 define ( "SPH_SORT_EXTENDED", 		4 );
+define ( "SPH_SORT_EXPR", 			5 );
 
 /// known filter types
 define ( "SPH_FILTER_VALUES",		0 );
@@ -413,7 +414,8 @@ class SphinxClient
 			$mode==SPH_SORT_ATTR_DESC ||
 			$mode==SPH_SORT_ATTR_ASC ||
 			$mode==SPH_SORT_TIME_SEGMENTS ||
-			$mode==SPH_SORT_EXTENDED );
+			$mode==SPH_SORT_EXTENDED ||
+			$mode==SPH_SORT_EXPR );
 		assert ( is_string($sortby) );
 		assert ( $mode==SPH_SORT_RELEVANCE || strlen($sortby)>0 );
 

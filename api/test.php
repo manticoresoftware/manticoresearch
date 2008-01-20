@@ -23,7 +23,8 @@ if ( !is_array($_SERVER["argv"]) || empty($_SERVER["argv"]) )
 	print ( "-h, --host <HOST>\tconnect to searchd at host HOST\n" );
 	print ( "-p, --port\t\tconnect to searchd at port PORT\n" );
 	print ( "-i, --index <IDX>\tsearch through index(es) specified by IDX\n" );
-	print ( "-s, --sortby <EXPR>\tsort matches by 'EXPR'\n" );
+	print ( "-s, --sortby <CLAUSE>\tsort matches by 'CLAUSE' in sort_extended mode\n" );
+	print ( "-S, --sortexpr <EXPR>\tsort matches by 'EXPR' DESC in sort_expr mode\n" );
 	print ( "-a, --any\t\tuse 'match any word' matching mode\n" );
 	print ( "-b, --boolean\t\tuse 'boolean query' matching mode\n" );
 	print ( "-e, --extended\t\tuse 'extended query' matching mode\n" );
@@ -61,7 +62,8 @@ for ( $i=0; $i<count($args); $i++ )
 	if ( $arg=="-h" || $arg=="--host" )				$host = $args[++$i];
 	else if ( $arg=="-p" || $arg=="--port" )		$port = (int)$args[++$i];
 	else if ( $arg=="-i" || $arg=="--index" )		$index = $args[++$i];
-	else if ( $arg=="-s" || $arg=="--sortby" )		$sortby = $args[++$i];
+	else if ( $arg=="-s" || $arg=="--sortby" )		{ $sortby = $args[++$i]; $sortexpr = ""; }
+	else if ( $arg=="-S" || $arg=="--sortexpr" )	{ $sortexpr = $args[++$i]; $sortby = ""; }
 	else if ( $arg=="-a" || $arg=="--any" )			$mode = SPH_MATCH_ANY;
 	else if ( $arg=="-b" || $arg=="--boolean" )		$mode = SPH_MATCH_BOOLEAN;
 	else if ( $arg=="-e" || $arg=="--extended" )	$mode = SPH_MATCH_EXTENDED;
@@ -94,6 +96,7 @@ $cl->SetMatchMode ( $mode );
 if ( count($filtervals) )	$cl->SetFilter ( $filter, $filtervals );
 if ( $groupby )				$cl->SetGroupBy ( $groupby, SPH_GROUPBY_ATTR, $groupsort );
 if ( $sortby )				$cl->SetSortMode ( SPH_SORT_EXTENDED, $sortby );
+if ( $sortexpr )			$cl->SetSortMode ( SPH_SORT_EXPR, $sortexpr );
 if ( $distinct )			$cl->SetGroupDistinct ( $distinct );
 if ( $limit )				$cl->SetLimits ( 0, $limit, ( $limit>1000 ) ? $limit : 1000 );
 $cl->SetRankingMode ( $ranker );

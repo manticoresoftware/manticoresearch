@@ -12241,7 +12241,7 @@ bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, C
 		if ( iAttr<0 )
 			continue; // FIXME! simply continue? should at least warn about bad attr name
 
-		const CSphColumnInfo & tAttr = m_tSchema.GetAttr(iAttr);
+		const CSphColumnInfo & tAttr = pResult->m_tSchema.GetAttr(iAttr);
 		tFilter.m_iRowitem = tAttr.m_iRowitem;
 		tFilter.m_iBitOffset = tAttr.m_iBitOffset;
 		tFilter.m_iBitCount = tAttr.m_iBitCount;

@@ -250,7 +250,7 @@ class SphinxClient
 	function _MBPush ()
 	{
 		$this->_mbenc = "";
-		if ( ini_get ( "mbstring.func_overload " ) & 2 )
+		if ( ini_get ( "mbstring.func_overload" ) & 2 )
 		{
 			$this->_mbenc = mb_internal_encoding();
 			mb_internal_encoding ( "latin1" );

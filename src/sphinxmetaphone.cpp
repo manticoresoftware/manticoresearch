@@ -102,7 +102,7 @@ static bool StrAt ( const CurrentWord_t & Word, int iStart, int iLength, const c
 }
 
 
-static bool StrAt ( const CurrentWord_t & Word, int iStart, int iLength, const char * szStr1, char * szStr2 )
+static bool StrAt ( const CurrentWord_t & Word, int iStart, int iLength, const char * szStr1, const char * szStr2 )
 {
 	if ( iStart < 0 || iStart >= Word.iLengthPadded )
 		return false;
@@ -112,7 +112,7 @@ static bool StrAt ( const CurrentWord_t & Word, int iStart, int iLength, const c
 }
 
 
-static bool StrAt ( const CurrentWord_t & Word, int iStart, int iLength, const char * szStr1, char * szStr2, char * szStr3 )
+static bool StrAt ( const CurrentWord_t & Word, int iStart, int iLength, const char * szStr1, const char * szStr2, const char * szStr3 )
 {
 	if ( iStart < 0 || iStart >= Word.iLengthPadded )
 		return false;
@@ -122,7 +122,7 @@ static bool StrAt ( const CurrentWord_t & Word, int iStart, int iLength, const c
 }
 
 
-static bool StrAt ( const CurrentWord_t & Word, int iStart, int iLength, const char * szStr1, char * szStr2, char * szStr3, char * szStr4 )
+static bool StrAt ( const CurrentWord_t & Word, int iStart, int iLength, const char * szStr1, const char * szStr2, const char * szStr3, const char * szStr4 )
 {
 	if ( iStart < 0 || iStart >= Word.iLengthPadded )
 		return false;
@@ -132,7 +132,7 @@ static bool StrAt ( const CurrentWord_t & Word, int iStart, int iLength, const c
 		|| !strncmp ( szPos, szStr4, iLength );
 }
 
-static bool StrAt ( const CurrentWord_t & Word, int iStart, int iLength, const char * szStr1, char * szStr2, char * szStr3, char * szStr4, char * szStr5 )
+static bool StrAt ( const CurrentWord_t & Word, int iStart, int iLength, const char * szStr1, const char * szStr2, char * const szStr3, char * const szStr4, const char * szStr5 )
 {
 	if ( iStart < 0 || iStart >= Word.iLengthPadded )
 		return false;

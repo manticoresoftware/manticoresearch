@@ -54,21 +54,25 @@
       know about them.  */
    enum yytokentype {
      TOK_NUMBER = 258,
-     TOK_ATTR = 259,
-     TOK_FUNC = 260,
-     TOK_DOCINFO = 261,
-     TOK_GTE = 262,
-     TOK_LTE = 263,
-     TOK_NEG = 264
+     TOK_ATTR_INT = 259,
+     TOK_ATTR_BITS = 260,
+     TOK_ATTR_FLOAT = 261,
+     TOK_FUNC = 262,
+     TOK_DOCINFO = 263,
+     TOK_GTE = 264,
+     TOK_LTE = 265,
+     TOK_NEG = 266
    };
 #endif
 #define TOK_NUMBER 258
-#define TOK_ATTR 259
-#define TOK_FUNC 260
-#define TOK_DOCINFO 261
-#define TOK_GTE 262
-#define TOK_LTE 263
-#define TOK_NEG 264
+#define TOK_ATTR_INT 259
+#define TOK_ATTR_BITS 260
+#define TOK_ATTR_FLOAT 261
+#define TOK_FUNC 262
+#define TOK_DOCINFO 263
+#define TOK_GTE 264
+#define TOK_LTE 265
+#define TOK_NEG 266
 
 
 
@@ -92,11 +96,11 @@
 #if ! defined (YYSTYPE) && ! defined (YYSTYPE_IS_DECLARED)
 
 typedef union YYSTYPE {
-	float			fNumber;	// constant value
-	int				iRowitem;	// attribute rowitem index
-	int				iFunc;		// function id
-	Docinfo_e		eDocinfo;	// docinfo entry id
-	int				iNode;		// node index
+	float			fNumber;		// constant value
+	int				iAttrLocator;	// attribute locator (rowitem for int/float; offset+size for bits)
+	int				iFunc;			// function id
+	Docinfo_e		eDocinfo;		// docinfo entry id
+	int				iNode;			// node index
 } YYSTYPE;
 /* Line 191 of yacc.c.  */
 
@@ -208,22 +212,22 @@ union yyalloc
 #endif
 
 /* YYFINAL -- State number of the termination state. */
-#define YYFINAL  13
+#define YYFINAL  15
 /* YYLAST -- Last index in YYTABLE.  */
-#define YYLAST   49
+#define YYLAST   51
 
 /* YYNTOKENS -- Number of terminals. */
-#define YYNTOKENS  19
+#define YYNTOKENS  21
 /* YYNNTS -- Number of nonterminals. */
 #define YYNNTS  5
 /* YYNRULES -- Number of rules. */
-#define YYNRULES  19
+#define YYNRULES  21
 /* YYNRULES -- Number of states. */
-#define YYNSTATES  36
+#define YYNSTATES  38
 
 /* YYTRANSLATE(YYLEX) -- Bison symbol number corresponding to YYLEX.  */
 #define YYUNDEFTOK  2
-#define YYMAXUTOK   264
+#define YYMAXUTOK   266
 
 #define YYTRANSLATE(YYX) 						\
   ((unsigned int) (YYX) <= YYMAXUTOK ? yytranslate[YYX] : YYUNDEFTOK)
@@ -235,9 +239,9 @@ static const unsigned char yytranslate[] =
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
-      16,    17,    13,    11,    18,    12,     2,    14,     2,     2,
+      18,    19,    15,    13,    20,    14,     2,    16,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
-       7,     2,     8,     2,     2,     2,     2,     2,     2,     2,
+       9,     2,    10,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
@@ -257,7 +261,7 @@ static const unsigned char yytranslate[] =
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     1,     2,     3,     4,
-       5,     6,     9,    10,    15
+       5,     6,     7,     8,    11,    12,    17
 };
 
 #if YYDEBUG
@@ -265,27 +269,29 @@ static const unsigned char yytranslate[] =
    YYRHS.  */
 static const unsigned char yyprhs[] =
 {
-       0,     0,     3,     5,     7,     9,    11,    14,    18,    22,
-      26,    30,    34,    38,    42,    46,    50,    52,    54,    58
+       0,     0,     3,     5,     7,     9,    11,    13,    15,    18,
+      22,    26,    30,    34,    38,    42,    46,    50,    54,    56,
+      58,    62
 };
 
 /* YYRHS -- A `-1'-separated list of the rules' RHS. */
 static const yysigned_char yyrhs[] =
 {
-      20,     0,    -1,    21,    -1,     3,    -1,     4,    -1,     6,
-      -1,    12,    21,    -1,    21,    11,    21,    -1,    21,    12,
-      21,    -1,    21,    13,    21,    -1,    21,    14,    21,    -1,
-      21,     7,    21,    -1,    21,     8,    21,    -1,    21,    10,
-      21,    -1,    21,     9,    21,    -1,    16,    21,    17,    -1,
-      23,    -1,    21,    -1,    22,    18,    21,    -1,     5,    16,
-      22,    17,    -1
+      22,     0,    -1,    23,    -1,     3,    -1,     4,    -1,     5,
+      -1,     6,    -1,     8,    -1,    14,    23,    -1,    23,    13,
+      23,    -1,    23,    14,    23,    -1,    23,    15,    23,    -1,
+      23,    16,    23,    -1,    23,     9,    23,    -1,    23,    10,
+      23,    -1,    23,    12,    23,    -1,    23,    11,    23,    -1,
+      18,    23,    19,    -1,    25,    -1,    23,    -1,    24,    20,
+      23,    -1,     7,    18,    24,    19,    -1
 };
 
 /* YYRLINE[YYN] -- source line where rule number YYN was defined.  */
 static const unsigned char yyrline[] =
 {
-       0,    31,    31,    35,    36,    37,    38,    39,    40,    41,
-      42,    43,    44,    45,    46,    47,    48,    52,    53,    57
+       0,    33,    33,    37,    38,    39,    40,    41,    42,    43,
+      44,    45,    46,    47,    48,    49,    50,    51,    52,    56,
+      57,    61
 };
 #endif
 
@@ -294,10 +300,11 @@ static const unsigned char yyrline[] =
    First, the terminals, then, starting at YYNTOKENS, nonterminals. */
 static const char *const yytname[] =
 {
-  "$end", "error", "$undefined", "TOK_NUMBER", "TOK_ATTR", "TOK_FUNC", 
-  "TOK_DOCINFO", "'<'", "'>'", "TOK_GTE", "TOK_LTE", "'+'", "'-'", "'*'", 
-  "'/'", "TOK_NEG", "'('", "')'", "','", "$accept", "exprline", "expr", 
-  "arglist", "function", 0
+  "$end", "error", "$undefined", "TOK_NUMBER", "TOK_ATTR_INT", 
+  "TOK_ATTR_BITS", "TOK_ATTR_FLOAT", "TOK_FUNC", "TOK_DOCINFO", "'<'", 
+  "'>'", "TOK_GTE", "TOK_LTE", "'+'", "'-'", "'*'", "'/'", "TOK_NEG", 
+  "'('", "')'", "','", "$accept", "exprline", "expr", "arglist", 
+  "function", 0
 };
 #endif
 
@@ -306,23 +313,26 @@ static const char *const yytname[] =
    token YYLEX-NUM.  */
 static const unsigned short yytoknum[] =
 {
-       0,   256,   257,   258,   259,   260,   261,    60,    62,   262,
-     263,    43,    45,    42,    47,   264,    40,    41,    44
+       0,   256,   257,   258,   259,   260,   261,   262,   263,    60,
+      62,   264,   265,    43,    45,    42,    47,   266,    40,    41,
+      44
 };
 # endif
 
 /* YYR1[YYN] -- Symbol number of symbol that rule YYN derives.  */
 static const unsigned char yyr1[] =
 {
-       0,    19,    20,    21,    21,    21,    21,    21,    21,    21,
-      21,    21,    21,    21,    21,    21,    21,    22,    22,    23
+       0,    21,    22,    23,    23,    23,    23,    23,    23,    23,
+      23,    23,    23,    23,    23,    23,    23,    23,    23,    24,
+      24,    25
 };
 
 /* YYR2[YYN] -- Number of symbols composing right hand side of rule YYN.  */
 static const unsigned char yyr2[] =
 {
-       0,     2,     1,     1,     1,     1,     2,     3,     3,     3,
-       3,     3,     3,     3,     3,     3,     1,     1,     3,     4
+       0,     2,     1,     1,     1,     1,     1,     1,     2,     3,
+       3,     3,     3,     3,     3,     3,     3,     3,     1,     1,
+       3,     4
 };
 
 /* YYDEFACT[STATE-NAME] -- Default rule to reduce with in state
@@ -330,33 +340,33 @@ static const unsigned char yyr2[] =
    means the default is an error.  */
 static const unsigned char yydefact[] =
 {
-       0,     3,     4,     0,     5,     0,     0,     0,     2,    16,
-       0,     6,     0,     1,     0,     0,     0,     0,     0,     0,
-       0,     0,    17,     0,    15,    11,    12,    14,    13,     7,
-       8,     9,    10,    19,     0,    18
+       0,     3,     4,     5,     6,     0,     7,     0,     0,     0,
+       2,    18,     0,     8,     0,     1,     0,     0,     0,     0,
+       0,     0,     0,     0,    19,     0,    17,    13,    14,    16,
+      15,     9,    10,    11,    12,    21,     0,    20
 };
 
 /* YYDEFGOTO[NTERM-NUM]. */
 static const yysigned_char yydefgoto[] =
 {
-      -1,     7,     8,    23,     9
+      -1,     9,    10,    25,    11
 };
 
 /* YYPACT[STATE-NUM] -- Index in YYTABLE of the portion describing
    STATE-NUM.  */
-#define YYPACT_NINF -16
+#define YYPACT_NINF -18
 static const yysigned_char yypact[] =
 {
-      14,   -16,   -16,   -12,   -16,    14,    14,     8,    35,   -16,
-      14,   -16,    24,   -16,    14,    14,    14,    14,    14,    14,
-      14,    14,    35,   -15,   -16,    10,    10,    10,    10,    -7,
-      -7,   -16,   -16,   -16,    14,    35
+      14,   -18,   -18,   -18,   -18,   -14,   -18,    14,    14,     8,
+      35,   -18,    14,   -18,    24,   -18,    14,    14,    14,    14,
+      14,    14,    14,    14,    35,   -17,   -18,    10,    10,    10,
+      10,    -9,    -9,   -18,   -18,   -18,    14,    35
 };
 
 /* YYPGOTO[NTERM-NUM].  */
 static const yysigned_char yypgoto[] =
 {
-     -16,   -16,    -5,   -16,   -16
+     -18,   -18,    -7,   -18,   -18
 };
 
 /* YYTABLE[YYPACT[STATE-NUM]].  What to do in state STATE-NUM.  If
@@ -366,30 +376,32 @@ static const yysigned_char yypgoto[] =
 #define YYTABLE_NINF -1
 static const unsigned char yytable[] =
 {
-      11,    12,    33,    34,    10,    22,    20,    21,    13,    25,
-      26,    27,    28,    29,    30,    31,    32,     1,     2,     3,
-       4,    18,    19,    20,    21,     0,     5,     0,     0,    35,
-       6,    14,    15,    16,    17,    18,    19,    20,    21,     0,
-       0,    24,    14,    15,    16,    17,    18,    19,    20,    21
+      13,    14,    35,    36,    12,    24,    22,    23,    15,    27,
+      28,    29,    30,    31,    32,    33,    34,     1,     2,     3,
+       4,     5,     6,    20,    21,    22,    23,     0,     7,    37,
+       0,     0,     8,    16,    17,    18,    19,    20,    21,    22,
+      23,     0,     0,    26,    16,    17,    18,    19,    20,    21,
+      22,    23
 };
 
 static const yysigned_char yycheck[] =
 {
-       5,     6,    17,    18,    16,    10,    13,    14,     0,    14,
-      15,    16,    17,    18,    19,    20,    21,     3,     4,     5,
-       6,    11,    12,    13,    14,    -1,    12,    -1,    -1,    34,
-      16,     7,     8,     9,    10,    11,    12,    13,    14,    -1,
-      -1,    17,     7,     8,     9,    10,    11,    12,    13,    14
+       7,     8,    19,    20,    18,    12,    15,    16,     0,    16,
+      17,    18,    19,    20,    21,    22,    23,     3,     4,     5,
+       6,     7,     8,    13,    14,    15,    16,    -1,    14,    36,
+      -1,    -1,    18,     9,    10,    11,    12,    13,    14,    15,
+      16,    -1,    -1,    19,     9,    10,    11,    12,    13,    14,
+      15,    16
 };
 
 /* YYSTOS[STATE-NUM] -- The (internal number of the) accessing
    symbol of state STATE-NUM.  */
 static const unsigned char yystos[] =
 {
-       0,     3,     4,     5,     6,    12,    16,    20,    21,    23,
-      16,    21,    21,     0,     7,     8,     9,    10,    11,    12,
-      13,    14,    21,    22,    17,    21,    21,    21,    21,    21,
-      21,    21,    21,    17,    18,    21
+       0,     3,     4,     5,     6,     7,     8,    14,    18,    22,
+      23,    25,    18,    23,    23,     0,     9,    10,    11,    12,
+      13,    14,    15,    16,    23,    24,    19,    23,    23,    23,
+      23,    23,    23,    23,    23,    19,    20,    23
 };
 
 #if ! defined (YYSIZE_T) && defined (__SIZE_TYPE__)
@@ -1010,80 +1022,90 @@ yyreduce:
 
   case 4:
 
-    { yyval.iNode = pParser->AddNodeAttr ( yyvsp[0].iRowitem ); ;}
+    { yyval.iNode = pParser->AddNodeAttr ( TOK_ATTR_INT, yyvsp[0].iAttrLocator ); ;}
     break;
 
   case 5:
 
-    { yyval.iNode = pParser->AddNodeDocinfo ( yyvsp[0].eDocinfo ); ;}
+    { yyval.iNode = pParser->AddNodeAttr ( TOK_ATTR_BITS, yyvsp[0].iAttrLocator ); ;}
     break;
 
   case 6:
 
-    { yyval.iNode = pParser->AddNodeOp ( TOK_NEG, yyvsp[0].iNode, -1 ); ;}
+    { yyval.iNode = pParser->AddNodeAttr ( TOK_ATTR_FLOAT, yyvsp[0].iAttrLocator ); ;}
     break;
 
   case 7:
 
-    { yyval.iNode = pParser->AddNodeOp ( '+', yyvsp[-2].iNode, yyvsp[0].iNode ); ;}
+    { yyval.iNode = pParser->AddNodeDocinfo ( yyvsp[0].eDocinfo ); ;}
     break;
 
   case 8:
 
-    { yyval.iNode = pParser->AddNodeOp ( '-', yyvsp[-2].iNode, yyvsp[0].iNode ); ;}
+    { yyval.iNode = pParser->AddNodeOp ( TOK_NEG, yyvsp[0].iNode, -1 ); ;}
     break;
 
   case 9:
 
-    { yyval.iNode = pParser->AddNodeOp ( '*', yyvsp[-2].iNode, yyvsp[0].iNode ); ;}
+    { yyval.iNode = pParser->AddNodeOp ( '+', yyvsp[-2].iNode, yyvsp[0].iNode ); ;}
     break;
 
   case 10:
 
-    { yyval.iNode = pParser->AddNodeOp ( '/', yyvsp[-2].iNode, yyvsp[0].iNode ); ;}
+    { yyval.iNode = pParser->AddNodeOp ( '-', yyvsp[-2].iNode, yyvsp[0].iNode ); ;}
     break;
 
   case 11:
 
-    { yyval.iNode = pParser->AddNodeOp ( '<', yyvsp[-2].iNode, yyvsp[0].iNode ); ;}
+    { yyval.iNode = pParser->AddNodeOp ( '*', yyvsp[-2].iNode, yyvsp[0].iNode ); ;}
     break;
 
   case 12:
 
-    { yyval.iNode = pParser->AddNodeOp ( '>', yyvsp[-2].iNode, yyvsp[0].iNode ); ;}
+    { yyval.iNode = pParser->AddNodeOp ( '/', yyvsp[-2].iNode, yyvsp[0].iNode ); ;}
     break;
 
   case 13:
 
-    { yyval.iNode = pParser->AddNodeOp ( TOK_LTE, yyvsp[-2].iNode, yyvsp[0].iNode ); ;}
+    { yyval.iNode = pParser->AddNodeOp ( '<', yyvsp[-2].iNode, yyvsp[0].iNode ); ;}
     break;
 
   case 14:
 
-    { yyval.iNode = pParser->AddNodeOp ( TOK_GTE, yyvsp[-2].iNode, yyvsp[0].iNode ); ;}
+    { yyval.iNode = pParser->AddNodeOp ( '>', yyvsp[-2].iNode, yyvsp[0].iNode ); ;}
     break;
 
   case 15:
 
-    { yyval.iNode = yyvsp[-1].iNode; ;}
+    { yyval.iNode = pParser->AddNodeOp ( TOK_LTE, yyvsp[-2].iNode, yyvsp[0].iNode ); ;}
     break;
 
   case 16:
 
-    { yyval.iNode = yyvsp[0].iNode; ;}
+    { yyval.iNode = pParser->AddNodeOp ( TOK_GTE, yyvsp[-2].iNode, yyvsp[0].iNode ); ;}
     break;
 
   case 17:
 
-    { yyval.iNode = yyvsp[0].iNode; ;}
+    { yyval.iNode = yyvsp[-1].iNode; ;}
     break;
 
   case 18:
 
-    { yyval.iNode = pParser->AddNodeOp ( ',', yyvsp[-2].iNode, yyvsp[0].iNode ); ;}
+    { yyval.iNode = yyvsp[0].iNode; ;}
     break;
 
   case 19:
+
+    { yyval.iNode = yyvsp[0].iNode; ;}
+    break;
+
+  case 20:
+
+    { yyval.iNode = pParser->AddNodeOp ( ',', yyvsp[-2].iNode, yyvsp[0].iNode ); ;}
+    break;
+
+  case 21:
 
     { yyval.iNode = pParser->AddNodeFunc ( yyvsp[-3].iFunc, yyvsp[-1].iNode ); if ( yyval.iNode<0 ) YYERROR; ;}
     break;

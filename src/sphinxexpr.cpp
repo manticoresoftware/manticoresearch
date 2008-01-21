@@ -44,7 +44,9 @@ enum Docinfo_e
 enum Opcode_e
 {
 	OPCODE_STOP,
-	OPCODE_PUSH_ATTR,
+	OPCODE_PUSH_ATTR_INT,
+	OPCODE_PUSH_ATTR_BITS,
+	OPCODE_PUSH_ATTR_FLOAT,
 	OPCODE_PUSH_CONST,
 	OPCODE_PUSH_ID,
 	OPCODE_PUSH_WEIGHT,
@@ -112,10 +114,11 @@ struct ExprNode_t
 	int				m_iToken;	///< token type, including operators
 	union
 	{
-		int			m_iRowitem;	///< attribute rowitem, for TOK_ATTR type
-		float		m_fConst;	///< constant value, for TOK_CONST type
-		int			m_iFunc;	///< built-in function id, for TOK_FUNC type
-		Docinfo_e	m_eDocinfo;	///< docinfo field id, for TOK_DOCINFO type
+
+		int			m_iAttrLocator;	///< attribute locator, for TOK_ATTR type
+		float		m_fConst;		///< constant value, for TOK_CONST type
+		int			m_iFunc;		///< built-in function id, for TOK_FUNC type
+		Docinfo_e	m_eDocinfo;		///< docinfo field id, for TOK_DOCINFO type
 	};
 	int				m_iLeft;
 	int				m_iRight;
@@ -144,7 +147,7 @@ protected:
 protected:
 	int						CountCommas ( int iRoot );
 	int						AddNodeNumber ( float fValue );
-	int						AddNodeAttr ( int iRowitem );
+	int						AddNodeAttr ( int iTokenType, int iAttrLocator );
 	int						AddNodeDocinfo ( Docinfo_e eDocinfo );
 	int						AddNodeOp ( int iOp, int iLeft, int iRight );
 	int						AddNodeFunc ( int iFunc, int iLeft );
@@ -190,12 +193,21 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 	}
 
 	// check for magic names
-	if ( *m_pCur=='@' )
+	if ( *m_pCur=='@' && sphIsAttr(m_pCur[1]) && !isdigit(m_pCur[1]) )
 	{
-		m_pCur++;
-		if ( strncasecmp ( m_pCur, "id", 2 )==0		)	{ m_pCur += 2; lvalp->eDocinfo = DI_ID; return TOK_DOCINFO; }
-		if ( strncasecmp ( m_pCur, "weight", 6 )==0 )	{ m_pCur += 6; lvalp->eDocinfo = DI_WEIGHT; return TOK_DOCINFO; }
-		m_pCur--; // let the check for bad operator fail
+		// get token
+		const char * pStart = ++m_pCur;
+		while ( sphIsAttr(*m_pCur) ) m_pCur++;
+
+		CSphString sTok;
+		sTok.SetBinary ( pStart, m_pCur-pStart );
+		sTok.ToLower ();
+
+		if ( sTok=="id" )		{ lvalp->eDocinfo = DI_ID; return TOK_DOCINFO; }
+		if ( sTok=="weight" )	{ lvalp->eDocinfo = DI_WEIGHT; return TOK_DOCINFO; }
+
+		m_sLexerError.SetSprintf ( "unknown magic name '@%s'", sTok.cstr() );
+		return -1;
 	}
 
 	// check for field or function name
@@ -217,20 +229,35 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 		{
 			// check attribute type and width
 			const CSphColumnInfo & tCol = m_pSchema->GetAttr ( iAttr );
-			if ( tCol.m_eAttrType!=SPH_ATTR_INTEGER )
+			if ( tCol.m_eAttrType==SPH_ATTR_INTEGER || tCol.m_eAttrType==SPH_ATTR_TIMESTAMP || tCol.m_eAttrType==SPH_ATTR_BOOL )
 			{
-				m_sLexerError.SetSprintf ( "attribute '%s' is not integer, not supported yet", sTok.cstr() );
-				return -1;
-			}
-			if ( tCol.m_iRowitem<0 )
-			{
-				m_sLexerError.SetSprintf ( "attribute '%s' is a bitfield, not supported yet", sTok.cstr() );
-				return -1;
-			}
+				if ( tCol.m_iRowitem>=0 )
+				{
+					lvalp->iAttrLocator = tCol.m_iRowitem;
+					return TOK_ATTR_INT;
+				} else
+				{
+					DWORD uRowitem = tCol.m_iBitOffset / ROWITEM_BITS;
+					DWORD uItemOff = tCol.m_iBitOffset % ROWITEM_BITS;
 
-			// we're done
-			lvalp->iRowitem = tCol.m_iRowitem;
-			return TOK_ATTR;
+					assert ( uRowitem<=65535 );
+					assert ( uItemOff<=255 );
+					assert ( tCol.m_iBitCount<=255 );
+					lvalp->iAttrLocator = ( uRowitem<<16 ) + ( uItemOff<<8 ) + tCol.m_iBitCount;
+					return TOK_ATTR_BITS;
+				}
+			} else if ( tCol.m_eAttrType==SPH_ATTR_FLOAT )
+			{
+				lvalp->iAttrLocator = tCol.m_iRowitem;
+				return TOK_ATTR_FLOAT;
+			} else
+			{
+				if ( tCol.m_eAttrType & SPH_ATTR_MULTI )
+					m_sLexerError.SetSprintf ( "attribute '%s' is MVA, can not be used in expressions", sTok.cstr() );
+				else
+					m_sLexerError.SetSprintf ( "attribute '%s' is of unsupported type (type=%d)", sTok.cstr(), tCol.m_eAttrType );
+				return -1;
+			}
 		}
 
 		// check for function
@@ -281,9 +308,19 @@ void ExprParser_t::FoldTree ( int iNode, CSphExpr & tOutExpr )
 
 	switch ( tNode.m_iToken )
 	{
-		case TOK_ATTR:
-			tOutExpr.Add ( OPCODE_PUSH_ATTR );
-			tOutExpr.Add ( tNode.m_iRowitem );
+		case TOK_ATTR_INT:
+			tOutExpr.Add ( OPCODE_PUSH_ATTR_INT );
+			tOutExpr.Add ( tNode.m_iAttrLocator );
+			break;
+
+		case TOK_ATTR_BITS:
+			tOutExpr.Add ( OPCODE_PUSH_ATTR_BITS );
+			tOutExpr.Add ( tNode.m_iAttrLocator );
+			break;
+
+		case TOK_ATTR_FLOAT:
+			tOutExpr.Add ( OPCODE_PUSH_ATTR_FLOAT );
+			tOutExpr.Add ( tNode.m_iAttrLocator );
 			break;
 
 		case TOK_NUMBER:
@@ -362,11 +399,12 @@ int ExprParser_t::AddNodeNumber ( float fValue )
 	return m_dNodes.GetLength()-1;
 }
 
-int ExprParser_t::AddNodeAttr ( int iRowitem )
+int ExprParser_t::AddNodeAttr ( int iTokenType, int iAttrLocator )
 {
+	assert ( iTokenType==TOK_ATTR_INT || iTokenType==TOK_ATTR_BITS || iTokenType==TOK_ATTR_FLOAT );
 	ExprNode_t & tNode = m_dNodes.Add ();
-	tNode.m_iToken = TOK_ATTR;
-	tNode.m_iRowitem = iRowitem;
+	tNode.m_iToken = iTokenType;
+	tNode.m_iAttrLocator = iAttrLocator;
 	return m_dNodes.GetLength()-1;
 }
 
@@ -419,9 +457,10 @@ bool ExprParser_t::Parse ( const char * sExpr, const CSphSchema & tSchema, CSphE
 	yyparse ( this );
 
 	// handle errors
-	if ( m_iParsed<0 )
+	if ( m_iParsed<0 || !m_sLexerError.IsEmpty() || !m_sParserError.IsEmpty() )
 	{
 		sError = !m_sLexerError.IsEmpty() ? m_sLexerError : m_sParserError;
+		if ( sError.IsEmpty() ) sError = "general parsing error";
 		return false;
 	}
 
@@ -461,11 +500,20 @@ float CSphExpr::Eval ( const CSphMatch & tMatch ) const
 	const DWORD * pOpcodes = m_pData;
 	for ( ;; ) switch ( *pOpcodes++ )
 	{
-		case OPCODE_STOP:		assert ( iTop==0 ); return dStack[0];
-		case OPCODE_PUSH_ATTR:	assert ( iTop<STACK_SIZE-1 ); dStack[++iTop] = (float)tMatch.m_pRowitems[*pOpcodes++]; break;
-		case OPCODE_PUSH_CONST:	assert ( iTop<STACK_SIZE-1 ); dStack[++iTop] = sphDW2F(*pOpcodes++); break;
-		case OPCODE_PUSH_ID:	assert ( iTop<STACK_SIZE-1 ); dStack[++iTop] = (float)tMatch.m_iDocID; break;
-		case OPCODE_PUSH_WEIGHT:assert ( iTop<STACK_SIZE-1 ); dStack[++iTop] = (float)tMatch.m_iWeight; break;
+		case OPCODE_STOP:			assert ( iTop==0 ); return dStack[0];
+		case OPCODE_PUSH_ATTR_INT:	assert ( iTop<STACK_SIZE-1 ); dStack[++iTop] = (float)tMatch.m_pRowitems[*pOpcodes++]; break;
+		case OPCODE_PUSH_ATTR_BITS:
+			{
+				assert ( iTop<STACK_SIZE-1 );
+				DWORD uLoc = *pOpcodes++;
+				dStack[++iTop] = (float)( ( tMatch.m_pRowitems[uLoc>>16] >> ((uLoc>>8)&255) ) // val = rowitems[item] >> shift
+					& ( (1UL<<(uLoc&255)) - 1 ) ); // mask = (1<<bitcount)-1
+				break;
+			}
+		case OPCODE_PUSH_ATTR_FLOAT:assert ( iTop<STACK_SIZE-1 ); dStack[++iTop] = sphDW2F(tMatch.m_pRowitems[*pOpcodes++]); break;
+		case OPCODE_PUSH_CONST:		assert ( iTop<STACK_SIZE-1 ); dStack[++iTop] = sphDW2F(*pOpcodes++); break;
+		case OPCODE_PUSH_ID:		assert ( iTop<STACK_SIZE-1 ); dStack[++iTop] = (float)tMatch.m_iDocID; break;
+		case OPCODE_PUSH_WEIGHT:	assert ( iTop<STACK_SIZE-1 ); dStack[++iTop] = (float)tMatch.m_iWeight; break;
 
 		case OPCODE_ADD:		assert ( iTop>=1 ); dStack[iTop-1] += dStack[iTop]; iTop--; break;
 		case OPCODE_SUB:		assert ( iTop>=1 ); dStack[iTop-1] -= dStack[iTop]; iTop--; break;
@@ -516,7 +564,9 @@ bool sphExprParse ( const char * sExpr, const CSphSchema & tSchema, CSphExpr & t
 	for ( ;; ) switch ( *pOpcodes++ )
 	{
 		// push ops
-		case OPCODE_PUSH_ATTR:
+		case OPCODE_PUSH_ATTR_INT:
+		case OPCODE_PUSH_ATTR_BITS:
+		case OPCODE_PUSH_ATTR_FLOAT:
 		case OPCODE_PUSH_CONST:
 			if ( iTop>=STACK_SIZE-1 ) { sError = "internal error: opcodes stack overflow"; return false; }
 			pOpcodes++;

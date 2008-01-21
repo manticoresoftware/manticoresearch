@@ -4,20 +4,22 @@
 %error-verbose
 
 %union {
-	float			fNumber;	// constant value
-	int				iRowitem;	// attribute rowitem index
-	int				iFunc;		// function id
-	Docinfo_e		eDocinfo;	// docinfo entry id
-	int				iNode;		// node index
+	float			fNumber;		// constant value
+	int				iAttrLocator;	// attribute locator (rowitem for int/float; offset+size for bits)
+	int				iFunc;			// function id
+	Docinfo_e		eDocinfo;		// docinfo entry id
+	int				iNode;			// node index
 };
 
-%token <fNumber>	TOK_NUMBER
-%token <iRowitem>	TOK_ATTR
-%token <iFunc>		TOK_FUNC
-%token <eDocinfo>	TOK_DOCINFO
-%type <iNode>		function
-%type <iNode>		arglist
-%type <iNode>		expr
+%token <fNumber>		TOK_NUMBER
+%token <iAttrLocator>	TOK_ATTR_INT
+%token <iAttrLocator>	TOK_ATTR_BITS
+%token <iAttrLocator>	TOK_ATTR_FLOAT
+%token <iFunc>			TOK_FUNC
+%token <eDocinfo>		TOK_DOCINFO
+%type <iNode>			function
+%type <iNode>			arglist
+%type <iNode>			expr
 
 %left '<' '>' TOK_LTE TOK_GTE
 %left '+' '-'
@@ -33,7 +35,9 @@ exprline:
 
 expr:
 	TOK_NUMBER						{ $$ = pParser->AddNodeNumber ( $1 ); }
-	| TOK_ATTR						{ $$ = pParser->AddNodeAttr ( $1 ); }
+	| TOK_ATTR_INT					{ $$ = pParser->AddNodeAttr ( TOK_ATTR_INT, $1 ); }
+	| TOK_ATTR_BITS					{ $$ = pParser->AddNodeAttr ( TOK_ATTR_BITS, $1 ); }
+	| TOK_ATTR_FLOAT				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_FLOAT, $1 ); }
 	| TOK_DOCINFO					{ $$ = pParser->AddNodeDocinfo ( $1 ); }
 	| '-' expr %prec TOK_NEG		{ $$ = pParser->AddNodeOp ( TOK_NEG, $2, -1 ); }
 	| expr '+' expr					{ $$ = pParser->AddNodeOp ( '+', $1, $3 ); }

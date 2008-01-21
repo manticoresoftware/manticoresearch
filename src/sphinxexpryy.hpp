@@ -30,21 +30,25 @@
       know about them.  */
    enum yytokentype {
      TOK_NUMBER = 258,
-     TOK_ATTR = 259,
-     TOK_FUNC = 260,
-     TOK_DOCINFO = 261,
-     TOK_GTE = 262,
-     TOK_LTE = 263,
-     TOK_NEG = 264
+     TOK_ATTR_INT = 259,
+     TOK_ATTR_BITS = 260,
+     TOK_ATTR_FLOAT = 261,
+     TOK_FUNC = 262,
+     TOK_DOCINFO = 263,
+     TOK_GTE = 264,
+     TOK_LTE = 265,
+     TOK_NEG = 266
    };
 #endif
 #define TOK_NUMBER 258
-#define TOK_ATTR 259
-#define TOK_FUNC 260
-#define TOK_DOCINFO 261
-#define TOK_GTE 262
-#define TOK_LTE 263
-#define TOK_NEG 264
+#define TOK_ATTR_INT 259
+#define TOK_ATTR_BITS 260
+#define TOK_ATTR_FLOAT 261
+#define TOK_FUNC 262
+#define TOK_DOCINFO 263
+#define TOK_GTE 264
+#define TOK_LTE 265
+#define TOK_NEG 266
 
 
 
@@ -52,11 +56,11 @@
 #if ! defined (YYSTYPE) && ! defined (YYSTYPE_IS_DECLARED)
 
 typedef union YYSTYPE {
-	float			fNumber;	// constant value
-	int				iRowitem;	// attribute rowitem index
-	int				iFunc;		// function id
-	Docinfo_e		eDocinfo;	// docinfo entry id
-	int				iNode;		// node index
+	float			fNumber;		// constant value
+	int				iAttrLocator;	// attribute locator (rowitem for int/float; offset+size for bits)
+	int				iFunc;			// function id
+	Docinfo_e		eDocinfo;		// docinfo entry id
+	int				iNode;			// node index
 } YYSTYPE;
 /* Line 1248 of yacc.c.  */
 

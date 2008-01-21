@@ -1295,7 +1295,7 @@ static ESortClauseParseResult sphParseSortClause ( const char * sClause, const C
 			}
 			tState.m_iAttr[iField] = FIXUP_COUNT;
 
-		} else if ( !strcasecmp ( pTok, "@group" ) && bGroupClause )
+		} else if ( ( !strcasecmp ( pTok, "@group" ) || !strcasecmp ( pTok, "@groupby" ) ) && bGroupClause )
 		{
 			if ( pQuery->m_iGroupbyOffset<0 )
 			{
@@ -1628,7 +1628,10 @@ ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchem
 	if ( iGroupbyAttr>=0 && iGroupbyAttr<tSchema.GetAttrsCount() )
 		pQuery->m_iPresortRowitems = tSchema.GetAttr ( iGroupbyAttr ).m_iRowitem; // we do have incoming groupby attrs already; draw the line there
 	else
+	{
 		pQuery->m_iPresortRowitems = tSchema.GetRowSize() + iToCalc; // we do not have anything; we'll be adding iToCalc full-rowitem attrs and then groupby attrs
+		iGroupbyAttr = pQuery->m_iPresortRowitems;
+	}
 
 	// perform fixup
 	for ( int iState=0; iState<2; iState++ )

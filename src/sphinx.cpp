@@ -12051,12 +12051,6 @@ bool CSphIndex_VLN::SetupCalc ( CSphQueryResult * pResult, const CSphQuery * pQu
 	m_iCalcGeodist = -1;
 	if ( pQuery->m_bCalcGeodist )
 	{
-		CSphColumnInfo tGeodist ( "@geodist", SPH_ATTR_FLOAT );
-		pResult->m_tSchema.AddAttr ( tGeodist );
-
-		m_iCalcGeodist = pResult->m_tSchema.GetAttrIndex ( "@geodist" );
-		assert ( m_iCalcGeodist>=0 );
-
 		if ( !pQuery->m_bGeoAnchor )
 		{
 			m_sLastError.SetSprintf ( "no geo-anchor point specified in search query, @geodist not available" );
@@ -12077,6 +12071,13 @@ bool CSphIndex_VLN::SetupCalc ( CSphQueryResult * pResult, const CSphQuery * pQu
 			return false;
 		}
 
+		CSphColumnInfo tGeodist ( "@geodist", SPH_ATTR_FLOAT );
+		pResult->m_tSchema.AddAttr ( tGeodist );
+
+		int iAttr = pResult->m_tSchema.GetAttrIndex ( "@geodist" );
+		m_iCalcGeodist = pResult->m_tSchema.GetAttr ( iAttr ).m_iRowitem;
+		assert ( m_iCalcGeodist>=0 );
+
 		m_iGeoLatRowitem = m_tSchema.GetAttr(iLat).m_iRowitem;
 		m_iGeoLongRowitem = m_tSchema.GetAttr(iLong).m_iRowitem;
 		m_fGeoAnchorLat = pQuery->m_fGeoLatitude;
@@ -12090,7 +12091,10 @@ bool CSphIndex_VLN::SetupCalc ( CSphQueryResult * pResult, const CSphQuery * pQu
 		CSphColumnInfo tExpr ( "@expr", SPH_ATTR_FLOAT );
 		pResult->m_tSchema.AddAttr ( tExpr );
 
-		m_iCalcExpr = pResult->m_tSchema.GetAttrIndex ( "@expr" );
+		int iAttr = pResult->m_tSchema.GetAttrIndex ( "@expr" );
+		m_iCalcExpr = pResult->m_tSchema.GetAttr ( iAttr ).m_iRowitem;
+		assert ( m_iCalcExpr>=0 );
+
 		m_tCalcExpr = pQuery->m_tCalcExpr;
 	}
 

@@ -4431,25 +4431,27 @@ void CheckPipes ()
 				{
 					// FIXME! rollback inside Rename() call potentially fail
 					sphWarning ( "rotating index '%s': cur to old rename failed: %s", sPrereading, pOld->GetLastError().cstr() );
-					continue;
-				}
-				// FIXME! at this point there's no cur lock file; ie. potential race
-				if ( !pNew->Rename ( tServed.m_sIndexPath.cstr() ) )
-				{
-					sphWarning ( "rotating index '%s': new to cur rename failed: %s", sPrereading, pNew->GetLastError().cstr() );
-					if ( !pOld->Rename ( tServed.m_sIndexPath.cstr() ) )
-					{
-						sphWarning ( "rotating index '%s': old to cur rename failed: %s; INDEX UNUSABLE", sPrereading, pOld->GetLastError().cstr() );
-						tServed.m_bEnabled = false;
-					}
-					continue;
-				}
 
-				// all went fine; swap them
-				Swap ( tServed.m_pIndex, g_pPrereading );
-				tServed.m_pSchema = tServed.m_pIndex->GetSchema ();
-				tServed.m_bEnabled = true;
-				sphInfo ( "rotating index '%s': success", sPrereading );
+				} else
+				{
+					// FIXME! at this point there's no cur lock file; ie. potential race
+					if ( !pNew->Rename ( tServed.m_sIndexPath.cstr() ) )
+					{
+						sphWarning ( "rotating index '%s': new to cur rename failed: %s", sPrereading, pNew->GetLastError().cstr() );
+						if ( !pOld->Rename ( tServed.m_sIndexPath.cstr() ) )
+						{
+							sphWarning ( "rotating index '%s': old to cur rename failed: %s; INDEX UNUSABLE", sPrereading, pOld->GetLastError().cstr() );
+							tServed.m_bEnabled = false;
+						}
+					} else
+					{
+						// all went fine; swap them
+						Swap ( tServed.m_pIndex, g_pPrereading );
+						tServed.m_pSchema = tServed.m_pIndex->GetSchema ();
+						tServed.m_bEnabled = true;
+						sphInfo ( "rotating index '%s': success", sPrereading );
+					}
+				}
 
 			} else
 			{

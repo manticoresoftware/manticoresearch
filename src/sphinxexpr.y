@@ -21,6 +21,7 @@
 %type <iNode>			arglist
 %type <iNode>			expr
 
+%left TOK_EQ TOK_NE
 %left '<' '>' TOK_LTE TOK_GTE
 %left '+' '-'
 %left '*' '/'
@@ -48,6 +49,8 @@ expr:
 	| expr '>' expr					{ $$ = pParser->AddNodeOp ( '>', $1, $3 ); }
 	| expr TOK_LTE expr				{ $$ = pParser->AddNodeOp ( TOK_LTE, $1, $3 ); }
 	| expr TOK_GTE expr				{ $$ = pParser->AddNodeOp ( TOK_GTE, $1, $3 ); }
+	| expr TOK_EQ expr				{ $$ = pParser->AddNodeOp ( TOK_EQ, $1, $3 ); }
+	| expr TOK_NE expr				{ $$ = pParser->AddNodeOp ( TOK_NE, $1, $3 ); }
 	| '(' expr ')'					{ $$ = $2; }
 	| function						{ $$ = $1; }
 	;

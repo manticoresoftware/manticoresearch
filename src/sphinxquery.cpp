@@ -792,7 +792,7 @@ CSphExtendedQueryParser::CSphExtendedQueryParser ()
 int CSphExtendedQueryParser::IsSpecial ( int iCh )
 {
 	return ( iCh=='(' || iCh==')' || iCh=='|' || iCh=='-' || iCh=='!'
-		|| iCh=='@' || iCh=='~' || iCh=='"' || iCh=='*' );
+		|| iCh=='@' || iCh=='~' || iCh=='"' );
 }
 
 
@@ -1055,7 +1055,7 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 	// a buffer of my own
 	CSphString sBuffer ( sQuery );
 	CSphScopedPtr<ISphTokenizer> pMyTokenizer ( pTokenizer->Clone () );
-	pMyTokenizer->AddSpecials ( "()|-!@~\"*" ); // MUST be in sync with IsSpecial()
+	pMyTokenizer->AddSpecials ( "()|-!@~\"" ); // MUST be in sync with IsSpecial()
 	pMyTokenizer->SetBuffer ( (BYTE*)sBuffer.cstr(), strlen ( sBuffer.cstr() ) );
 
 	// iterate all tokens
@@ -1289,8 +1289,8 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 			continue;
 		}
 
-		// proximity operator or stray '*' out of its state. just ignore
-		if ( iSpecial=='~' || iSpecial=='*' )
+		// proximity operator out of its state. just ignore
+		if ( iSpecial=='~' )
 			continue;
 
 		assert ( 0 && "INTERNAL ERROR: unhandled special token" );

@@ -969,6 +969,7 @@ public:
 	DWORD		GetDword ();
 	SphOffset_t	GetOffset ();
 	CSphString	GetString ();
+	int			GetLine ( char * sBuffer, int iMaxLen );
 
 	DWORD		UnzipInt ();
 	SphOffset_t	UnzipOffset ();
@@ -4201,6 +4202,55 @@ void CSphReader_VLN::GetBytes ( void *data, int size )
 		*b++ = (BYTE) GetByte ();
 }
 
+
+int CSphReader_VLN::GetLine ( char * sBuffer, int iMaxLen )
+{
+	int iOutPos = 0;
+	iMaxLen--; // reserve space for trailing '\0'
+
+	// grab as many chars as we can
+	while ( iOutPos<iMaxLen )
+	{
+		// read next chunk if necessary
+		if ( m_iBuffPos>=m_iBuffUsed )
+		{
+			UpdateCache ();
+			if ( m_iBuffPos>=m_iBuffUsed )
+			{
+				if ( iOutPos==0 ) return -1; // current line is empty; indicate eof
+				break; // return current line; will return eof next time
+			}
+		}
+
+		// break on CR or LF
+		if ( m_pBuff[m_iBuffPos]=='\r' || m_pBuff[m_iBuffPos]=='\n' )
+			break;
+
+		// one more valid char
+		sBuffer[iOutPos++] = m_pBuff[m_iBuffPos++];
+	}
+
+	// skip everything until the newline or eof
+	for ( ;; )
+	{
+		// read next chunk if necessary
+		if ( m_iBuffPos>=m_iBuffUsed )
+			UpdateCache ();
+
+		// eof?
+		if ( m_iBuffPos>=m_iBuffUsed )
+			break;
+
+		// newline?
+		if ( m_pBuff[m_iBuffPos++]=='\n' )
+			break;
+	}
+
+	// finalize
+	sBuffer[iOutPos] = '\0';
+	return iOutPos;
+}
+
 /////////////////////////////////////////////////////////////////////////////
 
 #if PARANOID
@@ -7383,33 +7433,16 @@ class CSphDictStar : public CSphDict
 public:
 						CSphDictStar ( CSphDict * pDict ) : m_pDict ( pDict ) { assert ( m_pDict ); }
 
-	void				LoadStopwords ( const char * sStops, ISphTokenizer * pTok );
-	bool				SetMorphology ( const CSphVariant * sMorph, bool bUseUTF8, CSphString & sError );
+	void				LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer ) { m_pDict->LoadStopwords ( sFiles, pTokenizer ); }
+	bool				LoadWordforms ( const char * sFile, ISphTokenizer * pTokenizer ) { return m_pDict->LoadWordforms ( sFile, pTokenizer ); }
+	bool				SetMorphology ( const CSphVariant * sMorph, bool bUseUTF8, CSphString & sError ) { return m_pDict->SetMorphology ( sMorph, bUseUTF8, sError ); }
 
 	virtual SphWordID_t	GetWordID ( BYTE * pWord );
-	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen );
+	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen ) { return m_pDict->GetWordID ( pWord, iLen ); }
 
 protected:
 	CSphDict *			m_pDict;
 };
-
-
-void CSphDictStar::LoadStopwords ( const char * sStops, ISphTokenizer * pTok )
-{
-	m_pDict->LoadStopwords ( sStops, pTok );
-}
-
-
-bool CSphDictStar::SetMorphology ( const CSphVariant * sMorph, bool bUseUTF8, CSphString & sError )
-{
-	return m_pDict->SetMorphology ( sMorph, bUseUTF8, sError );
-}
-
-
-SphWordID_t CSphDictStar::GetWordID ( const BYTE * pWord, int iLen )
-{
-	return m_pDict->GetWordID ( pWord, iLen );
-}
 
 
 SphWordID_t CSphDictStar::GetWordID ( BYTE * pWord )
@@ -12367,7 +12400,7 @@ struct CSphDictCRC : CSphDict
 	virtual SphWordID_t	GetWordID ( BYTE * pWord );
 	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen );
 	virtual void		LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer );
-	virtual bool		LoadWordforms ( const char * szFile );
+	virtual bool		LoadWordforms ( const char * szFile, ISphTokenizer * pTokenizer );
 	virtual bool		SetMorphology ( const CSphVariant * sMorph, bool bUseUTF8, CSphString & sError );
 	virtual SphWordID_t	GetWordIDWithMarkers ( BYTE * pWord );
 	virtual void		ApplyStemmers ( BYTE * pWord );
@@ -12408,8 +12441,8 @@ private:
 
 	static CSphVector <WordformContainer*> m_dWordformContainers;
 
-	static WordformContainer *	GetWordformContainer ( const char * szFile );
-	static WordformContainer *	LoadWordformContainer ( const char * szFile );
+	static WordformContainer *	GetWordformContainer ( const char * szFile, const ISphTokenizer * pTokenizer );
+	static WordformContainer *	LoadWordformContainer ( const char * szFile, const ISphTokenizer * pTokenizer );
 
 	bool				InitMorph ( const char * szMorph, int iLength, bool bUseUTF8, CSphString & sError );
 	bool				AddMorph ( int iMorph );
@@ -12827,7 +12860,7 @@ void CSphDictCRC::LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenize
 	assert ( !m_iStopwords );
 
 	// tokenize file list
-	if ( !sFiles )
+	if ( !sFiles || !*sFiles )
 		return;
 
 	char * sList = new char [ 1+strlen(sFiles) ];
@@ -12913,13 +12946,13 @@ void CSphDictCRC::SweepWordformContainers ( const char * szFile )
 }
 
 
-CSphDictCRC::WordformContainer * CSphDictCRC::GetWordformContainer ( const char * szFile )
+CSphDictCRC::WordformContainer * CSphDictCRC::GetWordformContainer ( const char * szFile, const ISphTokenizer * pTokenizer )
 {
 	ARRAY_FOREACH ( i, m_dWordformContainers )
 		if ( m_dWordformContainers [i]->IsEqual ( szFile ) )
 			return m_dWordformContainers [i];
 
-	WordformContainer * pContainer = LoadWordformContainer ( szFile );
+	WordformContainer * pContainer = LoadWordformContainer ( szFile, pTokenizer );
 	if ( pContainer )
 		m_dWordformContainers.Add ( pContainer );
 
@@ -12927,60 +12960,67 @@ CSphDictCRC::WordformContainer * CSphDictCRC::GetWordformContainer ( const char 
 }
 
 
-CSphDictCRC::WordformContainer * CSphDictCRC::LoadWordformContainer ( const char * szFile )
+CSphDictCRC::WordformContainer * CSphDictCRC::LoadWordformContainer ( const char * szFile, const ISphTokenizer * pTokenizer )
 {
-	if ( !szFile )
-		return NULL;
-
+	// stat it; we'll store stats for later checks
 	struct stat FileStat;
-	if ( stat ( szFile, &FileStat ) == -1 )
+	if ( !szFile || !*szFile || stat ( szFile, &FileStat )<0 )
 		return NULL;
 
-	FILE * pFile = fopen ( szFile, "rt" );
-	if ( !pFile )
-		return NULL;
-
+	// allocate it
 	WordformContainer * pContainer = new WordformContainer;
 	if ( !pContainer )
 		return NULL;
-
 	pContainer->m_sFilename = szFile;
 	pContainer->m_Stat = FileStat;
 
-	const int MAX_WORD_LENGTH = 512;
-	char szBuffer	[MAX_WORD_LENGTH];
-	char szWord		[MAX_WORD_LENGTH];
-	char szNormal	[MAX_WORD_LENGTH];
+	// open it
+	CSphString sError;
+	CSphAutofile fdWordforms ( szFile, SPH_O_READ, sError );
+	if ( fdWordforms.GetFD()<0 )
+		return NULL;
 
-	bool bOk = true;
+	CSphReader_VLN rdWordforms;
+	rdWordforms.SetFile ( fdWordforms );
 
-	while ( !feof ( pFile ) && bOk )
+	// my tokenizer
+	CSphScopedPtr<ISphTokenizer> pMyTokenizer ( pTokenizer->Clone() );
+	pMyTokenizer->AddSpecials ( ">" );
+
+	// scan it line by line
+	char sBuffer [ 6*SPH_MAX_WORD_LEN + 512 ]; // enough to hold 2 UTF-8 words, plus some whitespace overhead
+	int iLen;
+	while ( ( iLen=rdWordforms.GetLine ( sBuffer, sizeof(sBuffer) ) )>=0 )
 	{
-		if ( !fgets ( szBuffer, MAX_WORD_LENGTH, pFile ) )
-			bOk = !!feof ( pFile );
-		else
-		{
-			int nRead = sscanf ( szBuffer, "%s > %s", szWord, szNormal );
-			if ( nRead == 2 )
-			{
-				pContainer->m_dNormalForms.AddUnique ( szNormal );
-				pContainer->m_dHash.Add ( pContainer->m_dNormalForms.GetLength () - 1 , szWord );
-			}
-		}
+		// parse the line
+		pMyTokenizer->SetBuffer ( (BYTE*)sBuffer, iLen );
+
+		BYTE * pFrom = pMyTokenizer->GetToken ();
+		if ( !pFrom ) continue; // FIXME! report parsing error
+
+		CSphString sFrom ( (const char*)pFrom );
+		const BYTE * pStart = pMyTokenizer->GetBufferPtr ();
+		const BYTE * pCur = pStart;
+		while ( isspace(*pCur) ) pCur++;
+		if ( *pCur!='>' ) continue; // FIXME! report parsing error
+		pMyTokenizer->AdvanceBufferPtr ( pCur+1-pStart ); // FIXME! replace with SetBufferPtr()
+
+		BYTE * pTo = pMyTokenizer->GetToken ();
+		if ( !pTo ) continue; // FIXME! report parsing error
+
+		pContainer->m_dNormalForms.AddUnique ( (const char*)pTo );
+		pContainer->m_dHash.Add ( pContainer->m_dNormalForms.GetLength()-1, sFrom.cstr() );
 	}
-
-
-	fclose ( pFile );
 
 	return pContainer;
 }
 
 
 
-bool CSphDictCRC::LoadWordforms ( const char * szFile )
+bool CSphDictCRC::LoadWordforms ( const char * szFile, ISphTokenizer * pTokenizer )
 {
 	SweepWordformContainers ( szFile );
-	m_pWordforms = GetWordformContainer ( szFile );
+	m_pWordforms = GetWordformContainer ( szFile, pTokenizer );
 	if ( m_pWordforms )
 		m_pWordforms->m_iRefCount++;
 
@@ -13089,7 +13129,7 @@ CSphDict * sphCreateDictionaryCRC ( const CSphVariant * pMorph, const char * szS
 		sError = "";
 
 	pDict->LoadStopwords ( szStopwords, pTokenizer );
-	pDict->LoadWordforms ( szWordforms );
+	pDict->LoadWordforms ( szWordforms, pTokenizer );
 
 	return pDict;
 }

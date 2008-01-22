@@ -399,7 +399,7 @@ struct CSphDict
 	virtual void		LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer ) = 0;
 
 	/// load wordforms from a given file 
-	virtual bool		LoadWordforms ( const char * ) { return false; }
+	virtual bool		LoadWordforms ( const char * sFile, ISphTokenizer * pTokenizer ) = 0;
 
 	/// set morphology
 	virtual bool		SetMorphology ( const CSphVariant * sMorph, bool bUseUTF8, CSphString & sError ) = 0;

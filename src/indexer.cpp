@@ -178,6 +178,7 @@ public:
 	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen );
 
 	virtual void		LoadStopwords ( const char *, ISphTokenizer * ) {}
+	virtual bool		LoadWordforms ( const char *, ISphTokenizer * ) { return true; }
 	virtual bool		SetMorphology ( const CSphVariant *, bool, CSphString & ) { return true; }
 
 protected:
@@ -760,8 +761,8 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		///////////////
 
 		// create dict
-		CSphDict * pDict = sphCreateDictionaryCRC ( hIndex ( "morphology" ), hIndex.Exists ( "stopwords" ) ? hIndex ["stopwords"].cstr () : NULL,
-									hIndex.Exists ( "wordforms" ) ? hIndex ["wordforms"].cstr () : NULL, pTokenizer, sError );
+		CSphDict * pDict = sphCreateDictionaryCRC ( hIndex("morphology"), hIndex.GetStr("stopwords"),
+			hIndex.GetStr("wordforms"), pTokenizer, sError );
 		assert ( pDict );
 
 		if ( !sError.IsEmpty () )

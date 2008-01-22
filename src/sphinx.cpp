@@ -12669,7 +12669,7 @@ bool CSphDictCRC::ParseMorphology ( const char * szMorph, bool bUseUTF8, CSphStr
 bool CSphDictCRC::InitMorph ( const char * szMorph, int iLength, bool bUseUTF8, CSphString & sError )
 {
 	if ( iLength == 0 )
-		return false;
+		return true;
 
 	if ( iLength == 4 && !strncmp ( szMorph, "none", iLength ) )
 		return true;

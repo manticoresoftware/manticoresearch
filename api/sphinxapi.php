@@ -121,6 +121,9 @@ function sphUnpack64 ( $v )
 
 	// x64 route
 	if ( PHP_INT_SIZE>=8 )
+	{
+		if ( $h<0 ) $h += (1<<32); // because php 5.2.2 to 5.2.5 is totally fucked up again
+		if ( $l<0 ) $l += (1<<32);
 		return ($h<<32) + $l;
 
 	// x32 route

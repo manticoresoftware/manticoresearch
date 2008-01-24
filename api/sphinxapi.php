@@ -239,7 +239,7 @@ class SphinxClient
 		return $this->_warning;
 	}
 
-	/// set searchd server
+	/// set searchd host name (string) and port (integer)
 	function SetServer ( $host, $port )
 	{
 		assert ( is_string($host) );
@@ -363,7 +363,7 @@ class SphinxClient
 	/////////////////////////////////////////////////////////////////////////////
 
 	/// set offset and count into result set,
-	/// and max-matches and cutoff to use while searching
+	/// and optionally set max-matches and cutoff limits
 	function SetLimits ( $offset, $limit, $max=0, $cutoff=0 )
 	{
 		assert ( is_int($offset) );
@@ -379,9 +379,8 @@ class SphinxClient
 			$this->_cutoff = $cutoff;
 	}
 
-	/// set maximum query time, in milliseconds
-	/// local searches will be terminated once this time has elapsed
-	/// must not be negative; 0 means "do not limit"
+	/// set maximum query time, in milliseconds, per-index
+	/// integer, 0 means "do not limit"
 	function SetMaxQueryTime ( $max )
 	{
 		assert ( is_int($max) );
@@ -389,7 +388,7 @@ class SphinxClient
 		$this->_maxquerytime = $max;
 	}
 
-	/// set match mode
+	/// set matching mode
 	function SetMatchMode ( $mode )
 	{
 		assert ( $mode==SPH_MATCH_ALL
@@ -428,7 +427,7 @@ class SphinxClient
 	}
 
 	/// bind per-field weights by order
-	/// deprecated; do not use it! use SetFieldWeights() instead
+	/// DEPRECATED; use SetFieldWeights() instead
 	function SetWeights ( $weights )
 	{
 		assert ( is_array($weights) );
@@ -439,10 +438,6 @@ class SphinxClient
 	}
 
 	/// bind per-field weights by name
-	/// takes string (field name) to integer name (field weight) hash as an argument
-	/// takes precedence over SetWeights()
-	/// unknown names will be silently ignored
-	/// unbound fields will be silently given a weight of 1
 	function SetFieldWeights ( $weights )
 	{
 		assert ( is_array($weights) );
@@ -454,7 +449,7 @@ class SphinxClient
 		$this->_fieldweights = $weights;
 	}
 
-	/// set per-index weights
+	/// bind per-index weights by name
 	function SetIndexWeights ( $weights )
 	{
 		assert ( is_array($weights) );
@@ -467,8 +462,7 @@ class SphinxClient
 	}
 
 	/// set IDs range to match
-	/// only match those records where document ID
-	/// is beetwen $min and $max (including $min and $max)
+	/// only match records if document ID is beetwen $min and $max (inclusive)
 	function SetIDRange ( $min, $max )
 	{
 		assert ( is_numeric($min) );
@@ -478,9 +472,8 @@ class SphinxClient
 		$this->_max_id = $max;
 	}
 
-	/// set values filter
-	/// only match those records where $attribute column values
-	/// are in specified set
+	/// set values set filter
+	/// only match records where $attribute value is in given set
 	function SetFilter ( $attribute, $values, $exclude=false )
 	{
 		assert ( is_string($attribute) );
@@ -497,8 +490,7 @@ class SphinxClient
 	}
 
 	/// set range filter
-	/// only match those records where $attribute column value
-	/// is beetwen $min and $max (including $min and $max)
+	/// only match records if $attribute value is beetwen $min and $max (inclusive)
 	function SetFilterRange ( $attribute, $min, $max, $exclude=false )
 	{
 		assert ( is_string($attribute) );
@@ -510,8 +502,7 @@ class SphinxClient
 	}
 
 	/// set float range filter
-	/// only match those records where $attribute column value
-	/// is beetwen $min and $max (including $min and $max)
+	/// only match records if $attribute value is beetwen $min and $max (inclusive)
 	function SetFilterFloatRange ( $attribute, $min, $max, $exclude=false )
 	{
 		assert ( is_string($attribute) );
@@ -522,14 +513,9 @@ class SphinxClient
 		$this->_filters[] = array ( "type"=>SPH_FILTER_FLOATRANGE, "attr"=>$attribute, "exclude"=>$exclude, "min"=>$min, "max"=>$max );
 	}
 
-	/// setup geographical anchor point
+	/// setup anchor point for geosphere distance calculations
 	/// required to use @geodist in filters and sorting
-	/// distance will be computed to this point
-	///
-	/// $attrlat is the name of latitude attribute
-	/// $attrlong is the name of longitude attribute
-	/// $lat is anchor point latitude, in radians
-	/// $long is anchor point longitude, in radians
+	/// latitude and longitude must be in radians
 	function SetGeoAnchor ( $attrlat, $attrlong, $lat, $long )
 	{
 		assert ( is_string($attrlat) );
@@ -541,41 +527,6 @@ class SphinxClient
 	}
 
 	/// set grouping attribute and function
-	///
-	/// in grouping mode, all matches are assigned to different groups
-	/// based on grouping function value.
-	///
-	/// each group keeps track of the total match count, and the best match
-	/// (in this group) according to current sorting function.
-	///
-	/// the final result set contains one best match per group, with
-	/// grouping function value and matches count attached.
-	///
-	/// groups in result set could be sorted by any sorting clause,
-	/// including both document attributes and the following special
-	/// internal Sphinx attributes:
-	///
-	/// - @id - match document ID;
-	/// - @weight, @rank, @relevance -  match weight;
-	/// - @group - groupby function value;
-	/// - @count - amount of matches in group.
-	///
-	/// the default mode is to sort by groupby value in descending order,
-	/// ie. by "@group desc".
-	///
-	/// "total_found" would contain total amount of matching groups over
-	/// the whole index.
-	///
-	/// WARNING: grouping is done in fixed memory and thus its results
-	/// are only approximate; so there might be more groups reported
-	/// in total_found than actually present. @count might also
-	/// be underestimated. 
-	///
-	/// for example, if sorting by relevance and grouping by "published"
-	/// attribute with SPH_GROUPBY_DAY function, then the result set will
-	/// contain one most relevant match per each day when there were any
-	/// matches published, with day number and per-day match count attached,
-	/// and sorted by day number in descending order (ie. recent days first).
 	function SetGroupBy ( $attribute, $func, $groupsort="@group desc" )
 	{
 		assert ( is_string($attribute) );
@@ -608,9 +559,8 @@ class SphinxClient
 		$this->_retrydelay = $delay;
 	}
 
-	/// set result set format (hash or array)
-	/// PHP specific function needed for group-by-MVA result sets
-	/// (because they may contain duplicate document IDs)
+	/// set result set format (hash or array; hash by default)
+	/// PHP specific; needed for group-by-MVA result sets that may contain duplicate IDs
 	function SetArrayResult ( $arrayresult )
 	{
 		assert ( is_bool($arrayresult) );
@@ -626,7 +576,7 @@ class SphinxClient
 		$this->_anchor = array();
 	}
 
-	/// clear groupby settings
+	/// clear groupby settings (for multi-queries)
 	function ResetGroupBy ()
 	{
 		$this->_groupby		= "";
@@ -637,36 +587,8 @@ class SphinxClient
 
 	//////////////////////////////////////////////////////////////////////////////
 
-	/// connect to searchd server and run given search query
-	///
-	/// $query is query string
-	///
-	/// $index is index name (or names) to query. default value is "*" which means
-	/// to query all indexes. accepted characters for index names are letters, numbers,
-	/// dash, and underscore; everything else is considered a separator. therefore,
-	/// all the following calls are valid and will search two indexes:
-	///
-	///		$cl->Query ( "test query", "main delta" );
-	///		$cl->Query ( "test query", "main;delta" );
-	///		$cl->Query ( "test query", "main, delta" );
-	///
-	/// index order matters. if identical IDs are found in two or more indexes,
-	/// weight and attribute values from the very last matching index will be used
-	/// for sorting and returning to client. therefore, in the example above,
-	/// matches from "delta" index will always "win" over matches from "main".
-	///
-	/// returns false on failure
-	/// returns hash which has the following keys on success:
-	///		"matches"
-	///			hash which maps found document_id to ( "weight", "group" ) hash
-	///		"total"
-	///			total amount of matches retrieved (upto SPH_MAX_MATCHES, see sphinx.h)
-	///		"total_found"
-	///			total amount of matching documents in index
-	///		"time"
-	///			search time
-	///		"words"
-	///			hash which maps query terms (stemmed!) to ( "docs", "hits" ) hash
+	/// connect to searchd server, run given search query through given indexes,
+	/// and return the search results
 	function Query ( $query, $index="*" )
 	{
 		assert ( empty($this->_reqs) );
@@ -693,18 +615,8 @@ class SphinxClient
 		return pack ( "N", $t2 );
 	}
 
-	/// add query to batch
-	///
-	/// batch queries enable searchd to perform internal optimizations,
-	/// if possible; and reduce network connection overheads in all cases.
-	///
-	/// for instance, running exactly the same query with different
-	/// groupby settings will enable searched to perform expensive
-	/// full-text search and ranking operation only once, but compute
-	/// multiple groupby results from its output.
-	///
-	/// parameters are exactly the same as in Query() call
-	/// returns index to results array returned by RunQueries() call
+	/// add query to multi-query batch
+	/// returns index into results array from RunQueries() call
 	function AddQuery ( $query, $index="*" )
 	{
 		// mbstring workaround
@@ -790,17 +702,7 @@ class SphinxClient
 		return count($this->_reqs)-1;
 	}
 
-	/// run queries batch
-	///
-	/// returns an array of result sets on success
-	/// returns false on network IO failure
-	///
-	/// each result set in returned array is a hash which containts
-	/// the same keys as the hash returned by Query(), plus:
-	///		"error"
-	///			search error for this query
-	///		"words"
-	///			hash which maps query terms (stemmed!) to ( "docs", "hits" ) hash
+	/// connect to searchd, run queries batch, and return an array of result sets
 	function RunQueries ()
 	{
 		if ( empty($this->_reqs) )
@@ -985,30 +887,9 @@ class SphinxClient
 	// excerpts generation
 	/////////////////////////////////////////////////////////////////////////////
 
-	/// connect to searchd server and generate exceprts from given documents
-	///
-	/// $docs is an array of strings which represent the documents' contents
-	/// $index is a string specifiying the index which settings will be used
-	///		for stemming, lexing and case folding
-	/// $words is a string which contains the words to highlight
-	/// $opts is a hash which contains additional optional highlighting parameters:
-	///		"before_match"
-	///			a string to insert before a set of matching words, default is "<b>"
-	///		"after_match"
-	///			a string to insert after a set of matching words, default is "<b>"
-	///		"chunk_separator"
-	///			a string to insert between excerpts chunks, default is " ... "
-	///		"limit"
-	///			max excerpt size in symbols (codepoints), default is 256
-	///		"around"
-	///			how much words to highlight around each match, default is 5
-	///		"exact_phrase"
-	///			whether to highlight exact phrase matches only, default is false
-	///		"single_passage"
-	///			whether to extract single best passage only, default is false
-	///
-	/// returns false on failure
-	/// returns an array of string excerpts on success
+	/// connect to searchd server, and generate exceprts (snippets)
+	/// of given documents for given query. returns false on failure,
+	/// an array of snippets on success
 	function BuildExcerpts ( $docs, $index, $words, $opts=array() )
 	{
 		assert ( is_array($docs) );
@@ -1110,18 +991,8 @@ class SphinxClient
 	// attribute updates
 	/////////////////////////////////////////////////////////////////////////////
 
-	/// update specified attributes on specified documents
-	///
-	/// $index is a name of the index to be updated
-	/// $attrs is an array of attribute name strings
-	/// $values is a hash where key is document id, and value is an array of
-	///		new attribute values
-	///
-	/// returns number of actually updated documents (0 or more) on success
-	/// returns -1 on failure
-	///
-	/// usage example:
-	///		$cl->UpdateAttributes ( "test1", array("group_id"), array(1=>array(456)) );
+	/// update given attribute values on given documents in given indexes
+	/// returns amount of updated documents (0 or more) on success, or -1 on failure
 	function UpdateAttributes ( $index, $attrs, $values )
 	{
 		// verify everything

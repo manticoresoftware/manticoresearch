@@ -1,4 +1,4 @@
-<html><head><meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1"><title>Sphinx 0.9.7 reference manual</title><style type="text/css">
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1"><title>Sphinx 0.9.8 reference manual</title><style type="text/css">
 pre.programlisting
 {
 	background-color:	#f0f0f0;
@@ -6,7 +6,7 @@ pre.programlisting
 	margin-left:		2em;
 	margin-right:		2em;
 }
-</style><meta name="generator" content="DocBook XSL Stylesheets V1.70.1"></head><body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="article" lang="en"><div class="titlepage"><div><div><h1 class="title"><a name="id94316"></a>Sphinx 0.9.7 reference manual</h1></div><div><h3 class="subtitle"><i>Free open-source SQL full-text search engine</i></h3></div><div><p class="copyright">Copyright &copy; 2001-2008 Andrew Aksyonoff, <code class="email">&lt;<a href="mailto:shodan(at)shodan.ru">shodan(at)shodan.ru</a>&gt;</code></p></div></div><hr></div><div class="toc"><p><b>Table of Contents</b></p><dl><dt><span class="sect1"><a href="#intro">1. Introduction</a></span></dt><dd><dl><dt><span class="sect2"><a href="#about">1.1. About</a></span></dt><dt><span class="sect2"><a href="#features">1.2. Sphinx features</a></span></dt><dt><span class="sect2"><a href="#getting">1.3. Where to get Sphinx</a></span></dt><dt><span class="sect2"><a href="#license">1.4. License</a></span></dt><dt><span class="sect2"><a href="#author">1.5. Author and contributors</a></span></dt><dt><span class="sect2"><a href="#history">1.6. History</a></span></dt></dl></dd><dt><span class="sect1"><a href="#installation">2. Installation</a></span></dt><dd><dl><dt><span class="sect2"><a href="#supported-system">2.1. Supported systems</a></span></dt><dt><span class="sect2"><a href="#required-tools">2.2. Required tools</a></span></dt><dt><span class="sect2"><a href="#installing">2.3. Installing Sphinx</a></span></dt><dt><span class="sect2"><a href="#install-problems">2.4. Known installation issues</a></span></dt><dt><span class="sect2"><a href="#quick-tour">2.5. Quick Sphinx usage tour</a></span></dt></dl></dd><dt><span class="sect1"><a href="#indexing">3. Indexing</a></span></dt><dd><dl><dt><span class="sect2"><a href="#sources">3.1. Data sources</a></span></dt><dt><span class="sect2"><a href="#attributes">3.2. Attributes</a></span></dt><dt><span class="sect2"><a href="#indexes">3.3. Indexes</a></span></dt><dt><span class="sect2"><a href="#data-restrictions">3.4. Restrictions on the source data</a></span></dt><dt><span class="sect2"><a href="#charsets">3.5. Charsets, case folding, and translation tables</a></span></dt><dt><span class="sect2"><a href="#sql">3.6. SQL data sources (MySQL, PostgreSQL)</a></span></dt><dt><span class="sect2"><a href="#xmlpipe">3.7. XMLpipe data source</a></span></dt><dt><span class="sect2"><a href="#live-updates">3.8. Live index updates</a></span></dt></dl></dd><dt><span class="sect1"><a href="#searching">4. Searching</a></span></dt><dd><dl><dt><span class="sect2"><a href="#matching-modes">4.1. Matching modes</a></span></dt><dt><span class="sect2"><a href="#boolean-syntax">4.2. Boolean query syntax</a></span></dt><dt><span class="sect2"><a href="#extended-syntax">4.3. Extended query syntax</a></span></dt><dt><span class="sect2"><a href="#weighting">4.4. Weighting</a></span></dt><dt><span class="sect2"><a href="#sorting-modes">4.5. Sorting modes</a></span></dt><dt><span class="sect2"><a href="#clustering">4.6. Grouping (clustering) search results </a></span></dt><dt><span class="sect2"><a href="#distributed">4.7. Distributed searching</a></span></dt><dt><span class="sect2"><a href="#query-log-format">4.8. <code class="filename">searchd</code> query log format</a></span></dt></dl></dd><dt><span class="sect1"><a href="#sphinxse">5. MySQL storage engine (SphinxSE)</a></span></dt><dd><dl><dt><span class="sect2"><a href="#sphinxse-overview">5.1. SphinxSE overview</a></span></dt><dt><span class="sect2"><a href="#sphinxse-installing">5.2. Installing SphinxSE</a></span></dt><dd><dl><dt><span class="sect3"><a href="#sphinxse-mysql50">5.2.1. Compiling MySQL 5.0.x with SphinxSE</a></span></dt><dt><span class="sect3"><a href="#sphinxse-mysql51">5.2.2. Compiling MySQL 5.1.x with SphinxSE</a></span></dt><dt><span class="sect3"><a href="#sphinxse-checking">5.2.3. Checking SphinxSE installation</a></span></dt></dl></dd><dt><span class="sect2"><a href="#sphinxse-using">5.3. Using SphinxSE</a></span></dt></dl></dd><dt><span class="sect1"><a href="#reporting-bugs">6. Reporting bugs</a></span></dt><dt><span class="sect1"><a href="#reference">7. <code class="filename">sphinx.conf</code> options reference</a></span></dt><dd><dl><dt><span class="sect2"><a href="#ref-source">7.1. Data source configuration options</a></span></dt><dd><dl><dt><span class="sect3"><a href="#ref-source-type">7.1.1. type</a></span></dt><dt><span class="sect3"><a href="#ref-strip-html">7.1.2. strip_html</a></span></dt><dt><span class="sect3"><a href="#ref-index-html-attrs">7.1.3. index_html_attrs</a></span></dt><dt><span class="sect3"><a href="#ref-sql-host">7.1.4. sql_host</a></span></dt><dt><span class="sect3"><a href="#ref-sql-port">7.1.5. sql_port</a></span></dt><dt><span class="sect3"><a href="#ref-sql-user">7.1.6. sql_user</a></span></dt><dt><span class="sect3"><a href="#ref-sql-pass">7.1.7. sql_pass</a></span></dt><dt><span class="sect3"><a href="#ref-sql-db">7.1.8. sql_db</a></span></dt><dt><span class="sect3"><a href="#ref-sql-sock">7.1.9. sql_sock</a></span></dt><dt><span class="sect3"><a href="#ref-sql-query-pre">7.1.10. sql_query_pre</a></span></dt><dt><span class="sect3"><a href="#ref-sql-query">7.1.11. sql_query</a></span></dt><dt><span class="sect3"><a href="#ref-sql-query-range">7.1.12. sql_query_range</a></span></dt><dt><span class="sect3"><a href="#ref-sql-range-step">7.1.13. sql_range_step</a></span></dt><dt><span class="sect3"><a href="#ref-sql-group-column">7.1.14. sql_group_column</a></span></dt><dt><span class="sect3"><a href="#ref-sql-date-column">7.1.15. sql_date_column</a></span></dt><dt><span class="sect3"><a href="#ref-sql-str2ordinal-column">7.1.16. sql_str2ordinal_column</a></span></dt><dt><span class="sect3"><a href="#ref-sql-query-post">7.1.17. sql_query_post</a></span></dt><dt><span class="sect3"><a href="#ref-sql-query-post-index">7.1.18. sql_query_post_index</a></span></dt><dt><span class="sect3"><a href="#ref-sql-query-info">7.1.19. sql_query_info</a></span></dt><dt><span class="sect3"><a href="#ref-xmlpipe-command">7.1.20. xmlpipe_command</a></span></dt></dl></dd><dt><span class="sect2"><a href="#ref-searchd">7.2. <code class="filename">searchd</code> program configuration options</a></span></dt><dd><dl><dt><span class="sect3"><a href="#seamless-rotate">7.2.1. seamless_rotate</a></span></dt></dl></dd></dl></dd><dt><span class="appendix"><a href="#changelog">A. Sphinx revision history</a></span></dt></dl></div><div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="intro"></a>1.&nbsp;Introduction</h2></div></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="about"></a>1.1.&nbsp;About</h3></div></div></div><p>
+</style><meta name="generator" content="DocBook XSL Stylesheets V1.70.1"></head><body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="article" lang="en"><div class="titlepage"><div><div><h1 class="title"><a name="id94317"></a>Sphinx 0.9.8 reference manual</h1></div><div><h3 class="subtitle"><i>Free open-source SQL full-text search engine</i></h3></div><div><p class="copyright">Copyright &copy; 2001-2008 Andrew Aksyonoff, <code class="email">&lt;<a href="mailto:shodan(at)shodan.ru">shodan(at)shodan.ru</a>&gt;</code></p></div></div><hr></div><div class="toc"><p><b>Table of Contents</b></p><dl><dt><span class="sect1"><a href="#intro">1. Introduction</a></span></dt><dd><dl><dt><span class="sect2"><a href="#about">1.1. About</a></span></dt><dt><span class="sect2"><a href="#features">1.2. Sphinx features</a></span></dt><dt><span class="sect2"><a href="#getting">1.3. Where to get Sphinx</a></span></dt><dt><span class="sect2"><a href="#license">1.4. License</a></span></dt><dt><span class="sect2"><a href="#author">1.5. Author and contributors</a></span></dt><dt><span class="sect2"><a href="#history">1.6. History</a></span></dt></dl></dd><dt><span class="sect1"><a href="#installation">2. Installation</a></span></dt><dd><dl><dt><span class="sect2"><a href="#supported-system">2.1. Supported systems</a></span></dt><dt><span class="sect2"><a href="#required-tools">2.2. Required tools</a></span></dt><dt><span class="sect2"><a href="#installing">2.3. Installing Sphinx</a></span></dt><dt><span class="sect2"><a href="#install-problems">2.4. Known installation issues</a></span></dt><dt><span class="sect2"><a href="#quick-tour">2.5. Quick Sphinx usage tour</a></span></dt></dl></dd><dt><span class="sect1"><a href="#indexing">3. Indexing</a></span></dt><dd><dl><dt><span class="sect2"><a href="#sources">3.1. Data sources</a></span></dt><dt><span class="sect2"><a href="#attributes">3.2. Attributes</a></span></dt><dt><span class="sect2"><a href="#indexes">3.3. Indexes</a></span></dt><dt><span class="sect2"><a href="#data-restrictions">3.4. Restrictions on the source data</a></span></dt><dt><span class="sect2"><a href="#charsets">3.5. Charsets, case folding, and translation tables</a></span></dt><dt><span class="sect2"><a href="#sql">3.6. SQL data sources (MySQL, PostgreSQL)</a></span></dt><dt><span class="sect2"><a href="#xmlpipe">3.7. XMLpipe data source</a></span></dt><dt><span class="sect2"><a href="#live-updates">3.8. Live index updates</a></span></dt></dl></dd><dt><span class="sect1"><a href="#searching">4. Searching</a></span></dt><dd><dl><dt><span class="sect2"><a href="#matching-modes">4.1. Matching modes</a></span></dt><dt><span class="sect2"><a href="#boolean-syntax">4.2. Boolean query syntax</a></span></dt><dt><span class="sect2"><a href="#extended-syntax">4.3. Extended query syntax</a></span></dt><dt><span class="sect2"><a href="#weighting">4.4. Weighting</a></span></dt><dt><span class="sect2"><a href="#sorting-modes">4.5. Sorting modes</a></span></dt><dt><span class="sect2"><a href="#clustering">4.6. Grouping (clustering) search results </a></span></dt><dt><span class="sect2"><a href="#distributed">4.7. Distributed searching</a></span></dt><dt><span class="sect2"><a href="#query-log-format">4.8. <code class="filename">searchd</code> query log format</a></span></dt></dl></dd><dt><span class="sect1"><a href="#api-reference">5. API reference</a></span></dt><dd><dl><dt><span class="sect2"><a href="#api-funcgroup-general">5.1. General API functions</a></span></dt><dd><dl><dt><span class="sect3"><a href="#api-func-getlasterror">5.1.1. GetLastError</a></span></dt><dt><span class="sect3"><a href="#api-func-getlastwarning">5.1.2. GetLastWarning</a></span></dt><dt><span class="sect3"><a href="#api-func-setserver">5.1.3. SetServer</a></span></dt><dt><span class="sect3"><a href="#api-func-setarrayresult">5.1.4. SetArrayResult</a></span></dt></dl></dd><dt><span class="sect2"><a href="#api-funcgroup-general-query-settings">5.2. General query settings</a></span></dt><dd><dl><dt><span class="sect3"><a href="#api-func-setlimits">5.2.1. SetLimits</a></span></dt><dt><span class="sect3"><a href="#api-func-setmaxquerytime">5.2.2. SetMaxQueryTime</a></span></dt></dl></dd><dt><span class="sect2"><a href="#api-funcgroup-fulltext-query-settings">5.3. Full-text search query settings</a></span></dt><dd><dl><dt><span class="sect3"><a href="#api-func-setmatchmode">5.3.1. SetMatchMode</a></span></dt><dt><span class="sect3"><a href="#api-func-setrankingmode">5.3.2. SetRankingMode</a></span></dt><dt><span class="sect3"><a href="#api-func-setsortmode">5.3.3. SetSortMode</a></span></dt><dt><span class="sect3"><a href="#api-func-setweights">5.3.4. SetWeights</a></span></dt><dt><span class="sect3"><a href="#api-func-setfieldweights">5.3.5. SetFieldWeights</a></span></dt><dt><span class="sect3"><a href="#api-func-setindexweights">5.3.6. SetIndexWeights</a></span></dt></dl></dd><dt><span class="sect2"><a href="#api-funcgroup-filtering">5.4. Result set filtering settings</a></span></dt><dd><dl><dt><span class="sect3"><a href="#api-func-setidrange">5.4.1. SetIDRange</a></span></dt><dt><span class="sect3"><a href="#api-func-setfilter">5.4.2. SetFilter</a></span></dt><dt><span class="sect3"><a href="#api-func-setfilterrange">5.4.3. SetFilterRange</a></span></dt><dt><span class="sect3"><a href="#api-func-setfilterfloatrange">5.4.4. SetFilterFloatRange</a></span></dt><dt><span class="sect3"><a href="#api-func-setgeoanchor">5.4.5. SetGeoAnchor</a></span></dt></dl></dd><dt><span class="sect2"><a href="#api-funcgroup-groupby">5.5. GROUP BY settings</a></span></dt><dd><dl><dt><span class="sect3"><a href="#api-func-setgroupby">5.5.1. SetGroupBy</a></span></dt><dt><span class="sect3"><a href="#api-func-setgroupdistinct">5.5.2. SetGroupDistinct</a></span></dt></dl></dd><dt><span class="sect2"><a href="#api-funcgroup-querying">5.6. Querying</a></span></dt><dd><dl><dt><span class="sect3"><a href="#api-func-query">5.6.1. Query</a></span></dt><dt><span class="sect3"><a href="#api-func-addquery">5.6.2. AddQuery</a></span></dt><dt><span class="sect3"><a href="#api-func-runqueries">5.6.3. RunQueries</a></span></dt><dt><span class="sect3"><a href="#api-func-resetfilters">5.6.4. ResetFilters</a></span></dt><dt><span class="sect3"><a href="#api-func-resetgroupby">5.6.5. ResetGroupBy</a></span></dt></dl></dd><dt><span class="sect2"><a href="#api-funcgroup-additional-functionality">5.7. Additional functionality</a></span></dt><dd><dl><dt><span class="sect3"><a href="#api-func-buildexcerpts">5.7.1. BuildExcerpts</a></span></dt><dt><span class="sect3"><a href="#api-func-updateatttributes">5.7.2. UpdateAttributes</a></span></dt></dl></dd></dl></dd><dt><span class="sect1"><a href="#sphinxse">6. MySQL storage engine (SphinxSE)</a></span></dt><dd><dl><dt><span class="sect2"><a href="#sphinxse-overview">6.1. SphinxSE overview</a></span></dt><dt><span class="sect2"><a href="#sphinxse-installing">6.2. Installing SphinxSE</a></span></dt><dd><dl><dt><span class="sect3"><a href="#sphinxse-mysql50">6.2.1. Compiling MySQL 5.0.x with SphinxSE</a></span></dt><dt><span class="sect3"><a href="#sphinxse-mysql51">6.2.2. Compiling MySQL 5.1.x with SphinxSE</a></span></dt><dt><span class="sect3"><a href="#sphinxse-checking">6.2.3. Checking SphinxSE installation</a></span></dt></dl></dd><dt><span class="sect2"><a href="#sphinxse-using">6.3. Using SphinxSE</a></span></dt></dl></dd><dt><span class="sect1"><a href="#reporting-bugs">7. Reporting bugs</a></span></dt><dt><span class="sect1"><a href="#reference">8. <code class="filename">sphinx.conf</code> options reference</a></span></dt><dd><dl><dt><span class="sect2"><a href="#ref-source">8.1. Data source configuration options</a></span></dt><dd><dl><dt><span class="sect3"><a href="#ref-source-type">8.1.1. type</a></span></dt><dt><span class="sect3"><a href="#ref-strip-html">8.1.2. strip_html</a></span></dt><dt><span class="sect3"><a href="#ref-index-html-attrs">8.1.3. index_html_attrs</a></span></dt><dt><span class="sect3"><a href="#ref-sql-host">8.1.4. sql_host</a></span></dt><dt><span class="sect3"><a href="#ref-sql-port">8.1.5. sql_port</a></span></dt><dt><span class="sect3"><a href="#ref-sql-user">8.1.6. sql_user</a></span></dt><dt><span class="sect3"><a href="#ref-sql-pass">8.1.7. sql_pass</a></span></dt><dt><span class="sect3"><a href="#ref-sql-db">8.1.8. sql_db</a></span></dt><dt><span class="sect3"><a href="#ref-sql-sock">8.1.9. sql_sock</a></span></dt><dt><span class="sect3"><a href="#ref-sql-query-pre">8.1.10. sql_query_pre</a></span></dt><dt><span class="sect3"><a href="#ref-sql-query">8.1.11. sql_query</a></span></dt><dt><span class="sect3"><a href="#ref-sql-query-range">8.1.12. sql_query_range</a></span></dt><dt><span class="sect3"><a href="#ref-sql-range-step">8.1.13. sql_range_step</a></span></dt><dt><span class="sect3"><a href="#ref-sql-group-column">8.1.14. sql_group_column</a></span></dt><dt><span class="sect3"><a href="#ref-sql-date-column">8.1.15. sql_date_column</a></span></dt><dt><span class="sect3"><a href="#ref-sql-str2ordinal-column">8.1.16. sql_str2ordinal_column</a></span></dt><dt><span class="sect3"><a href="#ref-sql-query-post">8.1.17. sql_query_post</a></span></dt><dt><span class="sect3"><a href="#ref-sql-query-post-index">8.1.18. sql_query_post_index</a></span></dt><dt><span class="sect3"><a href="#ref-sql-query-info">8.1.19. sql_query_info</a></span></dt><dt><span class="sect3"><a href="#ref-xmlpipe-command">8.1.20. xmlpipe_command</a></span></dt></dl></dd><dt><span class="sect2"><a href="#ref-searchd">8.2. <code class="filename">searchd</code> program configuration options</a></span></dt><dd><dl><dt><span class="sect3"><a href="#seamless-rotate">8.2.1. seamless_rotate</a></span></dt></dl></dd></dl></dd><dt><span class="appendix"><a href="#changelog">A. Sphinx revision history</a></span></dt></dl></div><div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="intro"></a>1.&nbsp;Introduction</h2></div></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="about"></a>1.1.&nbsp;About</h3></div></div></div><p>
 Sphinx is a full-text search engine, distributed under GPL version 2.
 Commercial licensing (eg. for embedded use) is also available upon request. 
 </p><p>
@@ -17,10 +17,10 @@ SQL databases and scripting languages.
 </p><p>
 Currently built-in data source drivers support fetching data either via
 direct connection to MySQL, or PostgreSQL, or from a pipe in a custom XML
-format. Adding new drivers (eg. to natively support some other DBMS)
+format. Adding new drivers (eg. to natively support some other DBMSes)
 is designed to be as easy as possible.
 </p><p>
-Search API is natively ported to PHP, Python, Perl and Ruby and
+Search API is natively ported to PHP, Python, Perl, Ruby, Java, and
 also available as a pluggable MySQL storage engine. API is very
 lightweight so porting it to new language is known to take a few hours.
 </p><p>
@@ -51,10 +51,10 @@ if you would like to embed Sphinx in your software, but would not
 like to disclose its source code), please contact
 <a href="#author" title="1.5.&nbsp;Author and contributors">the author</a> to obtain
 a commercial license.
-</p></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="author"></a>1.5.&nbsp;Author and contributors</h3></div></div></div><h4><a name="id344104"></a>Author</h4><p>
+</p></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="author"></a>1.5.&nbsp;Author and contributors</h3></div></div></div><h4><a name="id344123"></a>Author</h4><p>
 Sphinx initial author and current primary developer is:
 </p><div class="itemizedlist"><ul type="disc"><li>Andrew Aksyonoff, <code class="email">&lt;<a href="mailto:shodan(at)shodan.ru">shodan(at)shodan.ru</a>&gt;</code></li></ul></div><p>
-</p><h4><a name="id343861"></a>Contributors</h4><p>People who contributed to Sphinx and their contributions (in no particular order) are:
+</p><h4><a name="id343862"></a>Contributors</h4><p>People who contributed to Sphinx and their contributions (in no particular order) are:
 </p><div class="itemizedlist"><ul type="disc"><li>Robert "coredev" Bengtsson (Sweden), initial version of PostgreSQL data source;</li><li>Len Kranendonk, Perl API</li><li>Dmytro Shteflyuk, Ruby API</li></ul></div><p>
 </p><p>
 Many other people have contributed ideas, bug reports, fixes, etc.
@@ -227,7 +227,7 @@ This can be achieved by specifying all the mentioned columns
 (excluding 'title' and 'content' which are full-text fields) as
 attributes and then using API calls to setup filtering, sorting,
 and grouping. Here as an example.
-</p><h4><a name="id350670"></a>Example sphinx.conf part:</h4><p>
+</p><h4><a name="id350664"></a>Example sphinx.conf part:</h4><p>
 </p><pre class="programlisting">
 ...
 sql_query = SELECT id, title, content, \
@@ -237,7 +237,7 @@ sql_group_column = forum_id
 sql_date_column = post_date
 ...
 </pre><p>
-</p><h4><a name="id350682"></a>Example application code (in PHP):</h4><p>
+</p><h4><a name="id350676"></a>Example application code (in PHP):</h4><p>
 </p><pre class="programlisting">
 // only search posts by author whose ID is 123
 $cl-&gt;SetFilter ( "author_id", array ( 123 ) );
@@ -345,9 +345,9 @@ Default tables currently include English and Russian characters.
 Please do submit your tables for other languages!
 </p></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="sql"></a>3.6.&nbsp;SQL data sources (MySQL, PostgreSQL)</h3></div></div></div><p>
 With all the SQL drivers, indexing generally works as follows.
-</p><div class="itemizedlist"><ul type="disc"><li>connection to the database is established;</li><li>pre-query (see <a href="#ref-sql-query-pre" title="7.1.10.&nbsp;sql_query_pre">Section&nbsp;7.1.10, &#8220;sql_query_pre&#8221;</a>) is executed
-	to perform any necessary initial setup, such as setting per-connection encoding with MySQL;</li><li>main query (see <a href="#ref-sql-query" title="7.1.11.&nbsp;sql_query">Section&nbsp;7.1.11, &#8220;sql_query&#8221;</a>) is executed and the rows it returns are indexed;</li><li>post-query (see <a href="#ref-sql-query-post" title="7.1.17.&nbsp;sql_query_post">Section&nbsp;7.1.17, &#8220;sql_query_post&#8221;</a>) is executed
-	to perform any necessary cleanup;</li><li>connection to the database is closed;</li><li>indexer does the sorting phase (to be pedantic, index-type specific post-processing);</li><li>connection to the database is established again;</li><li>post-index query (see <a href="#ref-sql-query-post-index" title="7.1.18.&nbsp;sql_query_post_index">Section&nbsp;7.1.18, &#8220;sql_query_post_index&#8221;</a>) is executed
+</p><div class="itemizedlist"><ul type="disc"><li>connection to the database is established;</li><li>pre-query (see <a href="#ref-sql-query-pre" title="8.1.10.&nbsp;sql_query_pre">Section&nbsp;8.1.10, &#8220;sql_query_pre&#8221;</a>) is executed
+	to perform any necessary initial setup, such as setting per-connection encoding with MySQL;</li><li>main query (see <a href="#ref-sql-query" title="8.1.11.&nbsp;sql_query">Section&nbsp;8.1.11, &#8220;sql_query&#8221;</a>) is executed and the rows it returns are indexed;</li><li>post-query (see <a href="#ref-sql-query-post" title="8.1.17.&nbsp;sql_query_post">Section&nbsp;8.1.17, &#8220;sql_query_post&#8221;</a>) is executed
+	to perform any necessary cleanup;</li><li>connection to the database is closed;</li><li>indexer does the sorting phase (to be pedantic, index-type specific post-processing);</li><li>connection to the database is established again;</li><li>post-index query (see <a href="#ref-sql-query-post-index" title="8.1.18.&nbsp;sql_query_post_index">Section&nbsp;8.1.18, &#8220;sql_query_post_index&#8221;</a>) is executed
 	to perform any necessary final cleanup;</li><li>connection to the database is closed again.</li></ul></div><p>
 Most options, such as database user/host/password, are straightforward.
 However, there are a few subtle things, which are discussed in more detail here.
@@ -373,7 +373,7 @@ be run three times:
 Obviously, that's not much of a difference for 2000-row table,
 but when it comes to indexing 10-million-row MyISAM table,
 ranged queries might be of some help.
-</p><h4><a name="id351247"></a><code class="option">sql_post</code> vs. <code class="option">sql_post_index</code></h4><p>
+</p><h4><a name="id351239"></a><code class="option">sql_post</code> vs. <code class="option">sql_post_index</code></h4><p>
 The difference between post-query and post-index query is in that post-query
 is run immediately when Sphinx received all the documents, but further indexing
 <span class="bold"><strong>may</strong></span> still fail for some other reason. On the contrary,
@@ -394,7 +394,7 @@ source example_xmlpipe_source
 }
 </pre><p>
 The <code class="filename">indexer</code> will run the command specified
-in <code class="option"><a href="#ref-xmlpipe-command" title="7.1.20.&nbsp;xmlpipe_command">xmlpipe_command</a></code>,
+in <code class="option"><a href="#ref-xmlpipe-command" title="8.1.20.&nbsp;xmlpipe_command">xmlpipe_command</a></code>,
 and then read, parse and index the data it prints to <code class="filename">stdout</code>.
 </p><p>
 XMLpipe driver expects the data to be in special XML format.
@@ -743,7 +743,481 @@ Sort mode can take one of the following values:
 
 </p><div class="itemizedlist"><ul type="disc"><li>"rel" for SPH_SORT_RELEVANCE mode;</li><li>"attr-" for SPH_SORT_ATTR_DESC mode;</li><li>"attr+" for SPH_SORT_ATTR_ASC mode;</li><li>"tsegs" for SPH_SORT_TIME_SEGMENTS mode;</li><li>"ext" for SPH_SORT_EXTENDED mode.</li></ul></div><p>
 
-</p></div></div><div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="sphinxse"></a>5.&nbsp;MySQL storage engine (SphinxSE)</h2></div></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="sphinxse-overview"></a>5.1.&nbsp;SphinxSE overview</h3></div></div></div><p>
+</p></div></div><div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="api-reference"></a>5.&nbsp;API reference</h2></div></div></div><p>
+There is a number of native searchd client API implementations
+for Sphinx. As of time of this writing, we officially support our own
+PHP, Python, and Java implementations. There also are third party
+free, open-source API implementations for Perl, Ruby, and C++.
+</p><p>
+The reference API implementation is in PHP, because (we believe)
+Sphinx is most widely used with PHP than any other language.
+This reference documentation is in turn based on reference PHP API,
+and all code samples in this section will be given in PHP.
+</p><p>
+However, all other APIs provide the same methods and implement
+the very same network protocol. Therefore the documentation does
+apply to them as well. There might be minor differences as to the
+method naming conventions or specific data structures used.
+But the provided functionality must not differ across languages.
+</p><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="api-funcgroup-general"></a>5.1.&nbsp;General API functions</h3></div></div></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="api-func-getlasterror"></a>5.1.1.&nbsp;GetLastError</h4></div></div></div><p><span class="bold"><strong>Prototype:</strong></span> function GetLastError()</p><p>
+Returns last error message, as a string, in human readable format.
+If there were no errors during the previous API call, empty string is returned.
+</p><p>
+You should call it when any other function (such as <a href="#api-func-query" title="5.6.1.&nbsp;Query">Section&nbsp;5.6.1, &#8220;Query&#8221;</a>)
+fails (typically, the failing function returns false). The returned string will
+contain the error description.
+</p><p>
+The error message is <span class="emphasis"><em>not</em></span> reset by this call; so you can safely
+call it several times if needed.
+</p></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="api-func-getlastwarning"></a>5.1.2.&nbsp;GetLastWarning</h4></div></div></div><p><span class="bold"><strong>Prototype:</strong></span> function GetLastWarning ()</p><p>
+Returns last warning message, as a string, in human readable format.
+If there were no warnings during the previous API call, empty string is returned.
+</p><p>
+You should call it to verify whether your request
+(such as <a href="#api-func-query" title="5.6.1.&nbsp;Query">Section&nbsp;5.6.1, &#8220;Query&#8221;</a>) was completed but with warnings.
+For instance, search query against a distributed index might complete
+succesfully even if several remote agents timed out. In that case,
+a warning message would be produced.
+</p><p>
+The warning message is <span class="emphasis"><em>not</em></span> reset by this call; so you can safely
+call it several times if needed.
+</p></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="api-func-setserver"></a>5.1.3.&nbsp;SetServer</h4></div></div></div><p><span class="bold"><strong>Prototype:</strong></span> function SetServer ( $host, $port )</p><p>
+Sets <code class="filename">searchd</code> host name and TCP port.
+All subsequent requests will use the new host and port settings.
+Default host and port are "localhost" and 3312, respectively.
+</p></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="api-func-setarrayresult"></a>5.1.4.&nbsp;SetArrayResult</h4></div></div></div><p><span class="bold"><strong>Prototype:</strong></span> function SetArrayResult ( $arrayresult )</p><p>
+PHP specific. Controls matches format in the search results set
+(whether matches should be returned as an array or a hash).
+</p><p>
+<code class="code">$arrayresult</code> argument must be boolean. If <code class="code">$arrayresult</code> is <code class="code">false</code>
+(the default mode), matches will returned in PHP hash format with
+document IDs as keys, and other information (weight, attributes)
+as values. If <code class="code">$arrayresult</code> is true, matches will be returned
+as a plain array with complete per-match information including
+document ID.
+</p><p>
+Introduced along with GROUP BY support on MVA attributes.
+Group-by-MVA result sets may contain duplicate document IDs.
+Thus they need to be returned as plain arrays, because hashes
+will only keep one entry per document ID.
+</p></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="api-funcgroup-general-query-settings"></a>5.2.&nbsp;General query settings</h3></div></div></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="api-func-setlimits"></a>5.2.1.&nbsp;SetLimits</h4></div></div></div><p><span class="bold"><strong>Prototype:</strong></span> function SetLimits ( $offset, $limit, $max_matches=0, $cutoff=0 )</p><p>
+Sets offset into server-side result set (<code class="code">$offset</code>) and amount of matches
+to return to client starting from that offset (<code class="code">$limit</code>). Can additionally
+control maximum server-side result set size for current query (<code class="code">$max_matches</code>)
+and the threshold amount of matches to stop searching at (<code class="code">$cutoff</code>).
+All parameters must be non-negative integers.
+</p><p>
+First two parameters to SetLimits() are identical in behaviour to MySQL
+LIMIT clause. They instruct <code class="filename">searchd</code> to return at
+most <code class="code">$limit</code> matches starting from match number <code class="code">$offset</code>.
+The default offset and limit settings are 0 and 20, that is, to return
+first 20 matches.
+</p><p>
+<code class="code">max_matches</code> setting controls how much matches <code class="filename">searchd</code>
+will keep in RAM while searching. <span class="bold"><strong>All</strong></span> matching documents will be normally
+processed, ranked, filtered, and sorted even if <code class="code">max_matches</code> is set to 1.
+But only best N documents are stored in memory at any given moment for performance
+and RAM usage reasons, and this setting controls that N. Note that there are
+<span class="bold"><strong>two</strong></span> places where <code class="code">max_matches</code> limit is enforced. Per-query
+limit is controlled by this API call, but there also is per-server limit
+controlled by <code class="code">max_matches</code> setting in the config file. To prevent
+RAM usage abuse, server will not allow to set per-query limit
+higher than the per-server limit.
+</p><p>
+You can't retrieve more than <code class="code">max_matches</code> matches to the client application.
+The default limit is set to 1000. Normally, you must not have to go over
+this limit. One thousand records is enough to present to the end user.
+And if you're thinking about pulling the results to application
+for further sorting or filtering, that would be <span class="bold"><strong>much</strong></span> more efficient
+if performed on Sphinx side.
+</p><p>
+<code class="code">$cutoff</code> setting is intended for advanced performance control.
+It tells <code class="filename">searchd</code> to forcibly stop search query
+once <code class="code">$cutoff</code> matches had been found and processed.
+</p></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="api-func-setmaxquerytime"></a>5.2.2.&nbsp;SetMaxQueryTime</h4></div></div></div><p><span class="bold"><strong>Prototype:</strong></span> function SetMaxQueryTime ( $max_query_time )</p><p>
+Sets maximum search query time, in milliseconds. Parameter must be
+a non-negative integer. Default valus is 0 which means "do not limit".
+</p><p>Similar to <code class="code">$cutoff</code> setting from <a href="#api-func-setlimits" title="5.2.1.&nbsp;SetLimits">Section&nbsp;5.2.1, &#8220;SetLimits&#8221;</a>,
+but limits elapsed query time instead of processed matches count. Local search queries
+will be stopped once that much time has elapsed. Note that if you're performing
+a search which queries several local indexes, this limit applies to each index
+separately.
+</p></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="api-funcgroup-fulltext-query-settings"></a>5.3.&nbsp;Full-text search query settings</h3></div></div></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="api-func-setmatchmode"></a>5.3.1.&nbsp;SetMatchMode</h4></div></div></div><p><span class="bold"><strong>Prototype:</strong></span> function SetMatchMode ( $mode )</p><p>
+Sets full-text query matching mode, as described in <a href="#matching-modes" title="4.1.&nbsp;Matching modes">Section&nbsp;4.1, &#8220;Matching modes&#8221;</a>.
+Parameter must be a constant specifying one of the known modes.
+</p><p>
+<span class="bold"><strong>WARNING:</strong></span> (PHP specific) you <span class="bold"><strong>must not</strong></span> take the matching mode
+constant name in quotes, that syntax specifies a string and is incorrect:
+</p><pre class="programlisting">
+$cl-&gt;SetMatchMode ( "SPH_MATCH_ANY" ); // INCORRECT! will not work as expected
+$cl-&gt;SetMatchMode ( SPH_MATCH_ANY ); // correct, works OK
+</pre><p>
+</p></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="api-func-setrankingmode"></a>5.3.2.&nbsp;SetRankingMode</h4></div></div></div><p><span class="bold"><strong>Prototype:</strong></span> function SetRankingMode ( $ranker )</p><p>
+Sets ranking mode. Only available in SPH_MATCH_EXTENDED2 matching
+mode at the time of this writing. Parameter must be a constant
+specifying one of the known modes.
+</p><p>
+By default, Sphinx computes two factors which contribute to the final
+match weight. The major part is query phrase proximity to document text.
+The minor part is so-called BM25 statistical function, which varies
+from 0 to 1 depending on the keyword frequency within document
+(more occurrences yield higher weight) and within the whole index
+(more rare keywords yield higher weight).
+</p><p>
+However, in some cases you'd want to compute weight differently -
+or maybe avoid computing it at all for performance reasons because
+you're sorting the result set by something else anyway. This can be
+accomplished by setting the appropriate ranking mode.
+</p><p>
+Currently implemented modes are:
+</p><div class="itemizedlist"><ul type="disc"><li>SPH_RANK_PROXIMITY_BM25, default ranking mode which uses and combines
+	both phrase proximity and BM25 ranking.</li><li>SPH_RANK_BM25, statistical ranking mode which uses BM25 ranking only (similar to
+	most other full-text engines). This mode is faster but may result in worse quality
+	on queries which contain more than 1 keyword.</li><li>SPH_RANK_NONE, disabled ranking mode. This mode is the fastest.
+	It is essentially equivalent to boolean searching. A weight of 1 is assigned
+	to all matches.</li></ul></div><p>
+</p></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="api-func-setsortmode"></a>5.3.3.&nbsp;SetSortMode</h4></div></div></div><p><span class="bold"><strong>Prototype:</strong></span> function SetSortMode ( $mode, $sortby="" )</p><p>
+Set matches sorting mode, as described in <a href="#sorting-modes" title="4.5.&nbsp;Sorting modes">Section&nbsp;4.5, &#8220;Sorting modes&#8221;</a>.
+Parameter must be a constant specifying one of the known modes.
+</p><p>
+<span class="bold"><strong>WARNING:</strong></span> (PHP specific) you <span class="bold"><strong>must not</strong></span> take the matching mode
+constant name in quotes, that syntax specifies a string and is incorrect:
+</p><pre class="programlisting">
+$cl-&gt;SetSortMode ( "SPH_SORT_ATTR_DESC" ); // INCORRECT! will not work as expected
+$cl-&gt;SetSortMode ( SPH_SORT_ATTR_ASC ); // correct, works OK
+</pre><p>
+</p></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="api-func-setweights"></a>5.3.4.&nbsp;SetWeights</h4></div></div></div><p><span class="bold"><strong>Prototype:</strong></span> function SetWeights ( $weights )</p><p>
+Binds per-field weights in the order of appearance in the index.
+<span class="bold"><strong>DEPRECATED</strong></span>, use <a href="#api-func-setfieldweights" title="5.3.5.&nbsp;SetFieldWeights">Section&nbsp;5.3.5, &#8220;SetFieldWeights&#8221;</a> instead.
+</p></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="api-func-setfieldweights"></a>5.3.5.&nbsp;SetFieldWeights</h4></div></div></div><p><span class="bold"><strong>Prototype:</strong></span> function SetFieldWeights ( $weights )</p><p>
+Binds per-field weights by name. Parameter must be a hash (associative array)
+mapping string field names to integer weights.
+</p><p>
+Match ranking can be affected by per-field weights. For instance,
+see <a href="#weighting" title="4.4.&nbsp;Weighting">Section&nbsp;4.4, &#8220;Weighting&#8221;</a> for an explanation how phrase proximity
+ranking is affected. This call lets you specify what non-default
+weights to assign to different full-text fields.
+</p><p>
+The weights must be positive 32-bit integers. The final weight
+will be a 32-bit integer too. Default weight value is 1. Unknown
+field names will be silently ignored.
+</p><p>
+There is no enforced limit on the maximum weight value at the
+moment. However, beware that if you set it too high you can start
+hitting 32-bit wraparound issues. For instance, if you set
+a weight of 10,000,000 and search in extended mode, then
+maximum possible weight will be equal to 10 million (your weight)
+by 1 thousand (internal BM25 scaling factor, see <a href="#weighting" title="4.4.&nbsp;Weighting">Section&nbsp;4.4, &#8220;Weighting&#8221;</a>)
+by 1 or more (phrase proximity rank). The result is at least 10 billion
+that does not fit in 32 bits and will be wrapped around, producing
+unexpected results.
+</p></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="api-func-setindexweights"></a>5.3.6.&nbsp;SetIndexWeights</h4></div></div></div><p><span class="bold"><strong>Prototype:</strong></span> function SetIndexWeights ( $weights )</p><p>
+Sets per-index weights, and enables weighted summing of match weights
+across different indexes. Parameter must be a hash (associative array)
+mapping string index names to integer weights. Default is empty array
+that means to disable weighting summing.
+</p><p>
+When a match with the same document ID is found in several different
+local indexes, by default Sphinx simply chooses the match from the index
+specified last in the query. This is to support searching through
+partially overlapping index partitions.
+</p><p>
+However in some cases the indexes are not just partitions, and you
+might want to sum the weights across the indexes instead of picking one.
+<code class="code">SetIndexWeights()</code> lets you do that. With summing enabled,
+final match weight in result set will be computed as a sum of match
+weight coming from the given index multiplied by respective per-index
+weight specified in this call. Ie. if the document 123 is found in
+index A with the weight of 2, and also in index B with the weight of 3,
+and you called <code class="code">SetIndexWeights ( array ( "A"=&gt;100, "B"=&gt;10 ) )</code>,
+the final weight return to the client will be 2*100+3*10 = 230.
+</p></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="api-funcgroup-filtering"></a>5.4.&nbsp;Result set filtering settings</h3></div></div></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="api-func-setidrange"></a>5.4.1.&nbsp;SetIDRange</h4></div></div></div><p><span class="bold"><strong>Prototype:</strong></span> function SetIDRange ( $min, $max )</p><p>
+Sets an accepted range of document IDs. Parameters must be integers.
+Defaults are 0 and 0; that combination means to not limit by range.
+</p><p>
+After this call, only those records that have document ID
+between <code class="code">$min</code> and <code class="code">$max</code> (including IDs
+exactly equal to <code class="code">$min</code> or <code class="code">$max</code>)
+will be matched.
+</p></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="api-func-setfilter"></a>5.4.2.&nbsp;SetFilter</h4></div></div></div><p><span class="bold"><strong>Prototype:</strong></span> function SetFilter ( $attribute, $values, $exclude=false )</p><p>
+Adds new integer values set filter. 
+</p><p>
+On this call, additional new filter is added to the existing
+list of filters. <code class="code">$attribute</code> must be a string with
+attribute name. <code class="code">$values</code> must be a plain array
+containing integer values. <code class="code">$exclude</code> must be a boolean
+value; it controls whether to accept the matching documents
+(default mode, when <code class="code">$exclude</code> is false) or reject them.
+</p><p>
+Only those documents where <code class="code">$attribute</code> column value
+stored in the index matches any of the values from <code class="code">$values</code>
+array will be matched (or rejected, if <code class="code">$exclude</code> is true).
+</p></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="api-func-setfilterrange"></a>5.4.3.&nbsp;SetFilterRange</h4></div></div></div><p><span class="bold"><strong>Prototype:</strong></span> function SetFilterRange ( $attribute, $min, $max, $exclude=false )</p><p>
+Adds new integer range filter.
+</p><p>
+On this call, additional new filter is added to the existing
+list of filters. <code class="code">$attribute</code> must be a string with
+attribute name. <code class="code">$min</code> and <code class="code">$max</code> must be
+integers that define the acceptable attribute values range
+(including the boundaries). <code class="code">$exclude</code> must be a boolean
+value; it controls whether to accept the matching documents
+(default mode, when <code class="code">$exclude</code> is false) or reject them.
+</p><p>
+Only those documents where <code class="code">$attribute</code> column value
+stored in the index is between <code class="code">$min</code> and <code class="code">$max</code>
+(including values that are exactly equal to <code class="code">$min</code> or <code class="code">$max</code>)
+will be matched (or rejected, if <code class="code">$exclude</code> is true).
+</p></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="api-func-setfilterfloatrange"></a>5.4.4.&nbsp;SetFilterFloatRange</h4></div></div></div><p><span class="bold"><strong>Prototype:</strong></span> function SetFilterFloatRange ( $attribute, $min, $max, $exclude=false )</p><p>
+Adds new float range filter.
+</p><p>
+On this call, additional new filter is added to the existing
+list of filters. <code class="code">$attribute</code> must be a string with
+attribute name. <code class="code">$min</code> and <code class="code">$max</code> must be
+floats that define the acceptable attribute values range
+(including the boundaries). <code class="code">$exclude</code> must be a boolean
+value; it controls whether to accept the matching documents
+(default mode, when <code class="code">$exclude</code> is false) or reject them.
+</p><p>
+Only those documents where <code class="code">$attribute</code> column value
+stored in the index is between <code class="code">$min</code> and <code class="code">$max</code>
+(including values that are exactly equal to <code class="code">$min</code> or <code class="code">$max</code>)
+will be matched (or rejected, if <code class="code">$exclude</code> is true).
+</p></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="api-func-setgeoanchor"></a>5.4.5.&nbsp;SetGeoAnchor</h4></div></div></div><p><span class="bold"><strong>Prototype:</strong></span> function SetGeoAnchor ( $attrlat, $attrlong, $lat, $long )</p><p>
+Sets anchor point for and geosphere distance (geodistance) calculations, and enable them.
+</p><p>
+<code class="code">$attrlat</code> and <code class="code">$attrlong</code> must be strings that contain the names
+of latitude and longitude attributes, respectively. <code class="code">$lat</code> and <code class="code">$long</code>
+are floats that specify anchor point latitude and longitude, in radians.
+</p><p>
+Once an anchor point is set, you can use magic <code class="code">"@geodist"</code> attribute
+name in your filters and/or sorting expressions. Sphinx will compute geosphere distance
+between the given anchor point and a point specified by latitude and lognitude
+attributes from each full-text match, and attach this value to the resulting match.
+The latitude and longitude values both in <code class="code">SetGeoAnchor</code> and the index
+attribute data are expected to be in radians. The result will be returned in meters,
+so geodistance value of 1000.0 means 1 km. 1 mile is approximately 1609.344 meters.
+</p></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="api-funcgroup-groupby"></a>5.5.&nbsp;GROUP BY settings</h3></div></div></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="api-func-setgroupby"></a>5.5.1.&nbsp;SetGroupBy</h4></div></div></div><p><span class="bold"><strong>Prototype:</strong></span> function SetGroupBy ( $attribute, $func, $groupsort="@group desc" )</p><p>
+Sets grouping attribute, function, and groups sorting mode; and enables grouping
+(as described in <a href="#clustering" title="4.6.&nbsp;Grouping (clustering) search results ">Section&nbsp;4.6, &#8220;Grouping (clustering) search results &#8221;</a>).
+</p><p>
+<code class="code">$attribute</code> is a string that contains group-by attribute name.
+<code class="code">$func</code> is a constant that chooses a function applied to the attribute value in order to compute group-by key.
+<code class="code">$groupsort</code> is a clause that controls how the groups will be sorted. Its syntax is similar
+to that described in <a href="#sort-extended">Section&nbsp;4.5, &#8220;SPH_SORT_EXTENDED mode&#8221;</a>.
+</p><p>
+Grouping feature is very similar in nature to GROUP BY clause from SQL.
+Results produces by this function call are going to be the same as produced
+by the following pseudo code:
+</p><pre class="programlisting">
+SELECT ... GROUP BY $func($attribute) ORDER BY $groupsort
+</pre><p>
+Note that it's <code class="code">$groupsort</code> that affects the order of matches
+in the final result set. Sorting mode (<a href="#api-func-setsortmode" title="5.3.3.&nbsp;SetSortMode">Section&nbsp;5.3.3, &#8220;SetSortMode&#8221;</a>)
+affect the ordering of matches <span class="emphasis"><em>within</em></span> group, ie.
+what match will be selected as the best one from the group.
+So you can for instance order the groups by matches count
+and select the most relevant match within each group at the same time.
+</p></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="api-func-setgroupdistinct"></a>5.5.2.&nbsp;SetGroupDistinct</h4></div></div></div><p><span class="bold"><strong>Prototype:</strong></span> function SetGroupDistinct ( $attribute )</p><p>
+Sets attribute name for per-group distinct values count calculations.
+Only available for grouping queries.
+</p><p>
+<code class="code">$attribute</code> is a string that contains the attribute name.
+For each group, all values of this attribute will be stored (as RAM limits
+permit), then the amount of distinct values will be calculated and returned
+to the client. This feature is similar to <code class="code">COUNT(DISTINCT)</code>
+clause in standard SQL; so these Sphinx calls:
+</p><pre class="programlisting">
+$cl-&gt;SetGroupBy ( "category", SPH_GROUPBY_ATTR, "@count desc" );
+$cl-&gt;SetGroupDistinct ( "vendor" );
+</pre><p>
+can be expressed using the following SQL clauses:
+</p><pre class="programlisting">
+SELECT id, weight, all-attributes,
+	COUNT(DISTINCT vendor) AS @distinct,
+	COUNT(*) AS @count
+FROM products
+GROUP BY category
+ORDER BY @count DESC
+</pre><p>
+In the sample pseudo code shown just above, <code class="code">SetGroupDistinct()</code> call
+corresponds to <code class="code">COUNT(DISINCT vendor)</code> clause only.
+<code class="code">GROUP BY</code>, <code class="code">ORDER BY</code>, and  <code class="code">COUNT(*)</code>
+clauses are all an equivalent of <code class="code">SetGroupBy()</code> settings. Both queries
+will return one matching row for each category. In addition to indexed attributes,
+matches will also contain total per-category matches count, and the count
+of distinct vendor IDs within each category.
+</p></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="api-funcgroup-querying"></a>5.6.&nbsp;Querying</h3></div></div></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="api-func-query"></a>5.6.1.&nbsp;Query</h4></div></div></div><p><span class="bold"><strong>Prototype:</strong></span> function Query ( $query, $index="*" )</p><p>
+Connects to <code class="filename">searchd</code> server, runs given search query
+with current settings, obtains and returns the result set.
+</p><p>
+<code class="code">$query</code> is a query string. <code class="code">$index</code> is an index name (or names) string.
+Returns false and sets <code class="code">GetLastError()</code> message on general error. 
+Returns search result set on success.
+</p><p>
+Default value for <code class="code">$index</code> is <code class="code">"*"</code> that means
+to query all local indexes. Characters allowed in index names include
+Latin letters (a-z), numbers (0-9), minus sign (-), and underscore (_);
+everything else is considered a separator. Therefore, all of the
+following samples calls are valid and will search the same
+two indexes:
+</p><pre class="programlisting">
+$cl-&gt;Query ( "test query", "main delta" );
+$cl-&gt;Query ( "test query", "main;delta" );
+$cl-&gt;Query ( "test query", "main, delta" );
+</pre><p>
+Index specification order matters. If document with identical IDs are found
+in two or more indexes, weight and attribute values from the very last matching 
+index will be used for sorting and returning to client (unless explicitly
+overridden with <a href="#api-func-setindexweights" title="5.3.6.&nbsp;SetIndexWeights">Section&nbsp;5.3.6, &#8220;SetIndexWeights&#8221;</a>). Therefore,
+in the example above, matches from "delta" index will always win over
+matches from "main".
+</p><p>
+On success, <code class="code">Query()</code> returns a result set that contains
+some of the found matches (as requested by <a href="#api-func-setlimits" title="5.2.1.&nbsp;SetLimits">Section&nbsp;5.2.1, &#8220;SetLimits&#8221;</a>)
+and additional general per-query statistics. The result set is a hash
+(PHP specific; other languages might utilize other structures instead
+of hash) with the following keys and values:
+</p><div class="variablelist"><dl><dt><span class="term">"matches":</span></dt><dd>Hash which maps found document IDs to another small hash containing document weight and attribute values
+		(or an array of the similar small hashes if <a href="#api-func-setarrayresult" title="5.1.4.&nbsp;SetArrayResult">Section&nbsp;5.1.4, &#8220;SetArrayResult&#8221;</a> was enabled).
+	</dd><dt><span class="term">"total":</span></dt><dd>Total amount of matches retrieved <span class="emphasis"><em>on server</em></span> (ie. to the server side result set) by this query.
+		You can retrieve up to this amount of matches from server for this query text with current query settings.
+	</dd><dt><span class="term">"total_found":</span></dt><dd>Total amount of matching documents in index (that were found and procesed on server).</dd><dt><span class="term">"words":</span></dt><dd>Hash which maps query keywords (case-folded, stemmed, and otherwise processed) to a small hash with per-keyword statitics ("docs", "hits").</dd><dt><span class="term">"error":</span></dt><dd>Query error message reported by <code class="filename">searchd</code> (string, human readable). Empty if there were no errors.</dd><dt><span class="term">"warning":</span></dt><dd>Query warning message reported by <code class="filename">searchd</code> (string, human readable). Empty if there were no warnings.</dd></dl></div><p>
+</p></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="api-func-addquery"></a>5.6.2.&nbsp;AddQuery</h4></div></div></div><p><span class="bold"><strong>Prototype:</strong></span> function AddQuery ( $query, $index="*" )</p><p>
+Adds additional query with current settings to multi-query batch.
+<code class="code">$query</code> is a query string. <code class="code">$index</code> is an index name (or names) string.
+Returns index to results array returned from <a href="#api-func-runqueries" title="5.6.3.&nbsp;RunQueries">Section&nbsp;5.6.3, &#8220;RunQueries&#8221;</a>.
+</p><p>
+Batch queries (or multi-queries) enable <code class="filename">searchd</code> to perform internal
+optimizations if possible. They also reduce network connection overheads and search process
+creation overheads in all cases. They do not result in any additional overheads compared
+to simple queries. Thus, if you run several different queries from your web page,
+you should always consider using multi-queries.
+</p><p>
+For instance, running the same full-text query but with different
+sorting or group-by settings will enable <code class="filename">searchd</code>
+to perform expensive full-text search and ranking operation only once,
+but compute multiple group-by results from its output.
+</p><p>
+This can be a big saver when you need to display not just plain
+search results but also some per-category counts, such as the amount of
+products grouped by vendor. Without multi-query, you would have to run several
+queries which perform essentially the same search and retrieve the
+same matches, but create result sets differently. With multi-query,
+you simply pass all these querys in a single batch and Sphinx
+optimizes the redundant full-text search internally.
+</p><p>
+<code class="code">AddQuery()</code> internally saves full current settings state
+along with the query, and you can safely change them afterwards for subsequent
+<code class="code">AddQuery()</code> calls. Already added queries will not be affected;
+there's actually no way to change them at all. Here's an example:
+</p><pre class="programlisting">
+$cl-&gt;SetSortMode ( SPH_SORT_RELEVANCE );
+$cl-&gt;AddQuery ( "hello world", "documents" );
+
+$cl-&gt;SetSortMode ( SPH_SORT_ATTR_DESC, "price" );
+$cl-&gt;AddQuery ( "ipod", "products" );
+
+$cl-&gt;AddQuery ( "harry potter", "books" );
+
+$results = $cl-&gt;RunQueries ();
+</pre><p>
+With the code above, 1st query will search for "hello world" in "documents" index
+and sort results by relevance, 2nd query will search for "ipod" in "products"
+index and sort results by price, and 3rd query will search for "harry potter"
+in "books" index while still sorting by price. Note that 2nd <code class="code">SetSortMode()</code> call
+does not affect the first query (because it's already added) but affects both other
+subsequent queries.
+</p><p>
+<code class="code">AddQuery()</code> does <span class="bold"><strong>not</strong></span> modify the current state. That is,
+all current sorting, filtering, and grouping settings will not be affected by
+this call; so subsequent queries can easily reuse current query settings.
+</p><p>
+<code class="code">AddQuery()</code> returns an index into an array of results
+that will be returned from <code class="code">RunQueries()</code> call. It is simply
+a sequentially increasing 0-based integer, ie. first call will return 0,
+second will return 1, and so on. Just a small helper so you won't have
+to track the indexes manualy if you need then.
+</p></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="api-func-runqueries"></a>5.6.3.&nbsp;RunQueries</h4></div></div></div><p><span class="bold"><strong>Prototype:</strong></span> function RunQueries ()</p><p>
+Connect to searchd, runs a batch of all queries added using <code class="code">AddQuery()</code>,
+obtains and returns the result sets. Returns false and sets <code class="code">GetLastError()</code>
+message on general error (such as network I/O failure). Returns a plain array
+of result sets on success.
+</p><p>
+Each result set in the returned array is exactly the same as
+the result set returned from <a href="#api-func-query" title="5.6.1.&nbsp;Query"><code class="code">Query()</code></a>.
+</p><p>
+Note that the batch query request itself almost always succeds -
+unless there's a network error, blocking index rotation in progress,
+or another general failure which prevents the whole request from being
+processed.
+</p><p>
+However individual queries within the batch might very well fail.
+In this case their respective result sets will contain non-empty <code class="code">"error"</code> message,
+but no matches or query statistics. In the extreme case all queries within the batch
+could fail. There still will be no general error reported, because API was able to
+succesfully connect to <code class="filename">searchd</code>, submit the batch, and receive
+the results - but every result set will have a specific error message.
+</p></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="api-func-resetfilters"></a>5.6.4.&nbsp;ResetFilters</h4></div></div></div><p><span class="bold"><strong>Prototype:</strong></span> function ResetFilters ()</p><p>
+Clears all currently set filters.
+</p><p>
+This call is only normally required when using multi-queries. You might want
+to set different filters for different queries in the batch. To do that,
+you should call <code class="code">ResetFilters()</code> and add new filters using
+the respective calls.
+</p></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="api-func-resetgroupby"></a>5.6.5.&nbsp;ResetGroupBy</h4></div></div></div><p><span class="bold"><strong>Prototype:</strong></span> function ResetGroupBy ()</p><p>
+Clears all currently group-by settings, and disables group-by.
+</p><p>
+This call is only normally required when using multi-queries.
+You can change individual group-by settings using <code class="code">SetGroupBy()</code>
+and <code class="code">SetGroupDistinct()</code> calls, but you can not disable
+group-by using those calls. <code class="code">ResetGroupBy()</code>
+fully resets previous group-by settings and disables group-by mode
+in the current state, so that subsequent <code class="code">AddQuery()</code>
+calls can perform non-grouping searches.
+</p></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="api-funcgroup-additional-functionality"></a>5.7.&nbsp;Additional functionality</h3></div></div></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="api-func-buildexcerpts"></a>5.7.1.&nbsp;BuildExcerpts</h4></div></div></div><p><span class="bold"><strong>Prototype:</strong></span> function BuildExcerpts ( $docs, $index, $words, $opts=array() )</p><p>
+Excerpts (snippets) builder function. Connects to <code class="filename">searchd</code>,
+asks it to generate excerpts (snippets) from given documents, and returns the results.
+</p><p>
+<code class="code">$docs</code> is a plain array of strings that carry the documents' contents.
+<code class="code">$index</code> is an index name string. Different settings (such as charset,
+morphology, wordforms) from given index will be used.
+<code class="code">$words</code> is a string that contains the keywords to highlight. They will
+be processed with respect to index settings. For instance, if English stemming
+is enabled in the index, "shoes" will be highlighted even if keyword is "shoe".
+<code class="code">$opts</code> is a hash which contains additional optional highlighting parameters:
+</p><div class="variablelist"><dl><dt><span class="term">"before_match":</span></dt><dd>A string to insert before a keyword match. Default is "&lt;b&gt;".</dd><dt><span class="term">"after_match":</span></dt><dd>A string to insert after a keyword match. Default is "&lt;b&gt;".</dd><dt><span class="term">"chunk_separator":</span></dt><dd>A string to insert between snippet chunks (passages). Default is " ... ".</dd><dt><span class="term">"limit":</span></dt><dd>Maximum snippet size, in symbols (codepoints). Integer, default is 256.</dd><dt><span class="term">"around":</span></dt><dd>How much words to pick around each matching keywords block. Integer, default is 5.</dd><dt><span class="term">"exact_phrase":</span></dt><dd>Whether to highlight exact query phrase matches only instead of individual keywords. Boolean, default is false.</dd><dt><span class="term">"single_passage":</span></dt><dd>whether to extract single best passage only. Boolean, default is false.</dd></dl></div><p>
+</p><p>
+Returns false on failure. Returns a plain array of strings with excerpts (snippets) on success.
+</p></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="api-func-updateatttributes"></a>5.7.2.&nbsp;UpdateAttributes</h4></div></div></div><p><span class="bold"><strong>Prototype:</strong></span> function UpdateAttributes ( $index, $attrs, $values )</p><p>
+Instantly updates given attribute values in given documents.
+Returns number of actually updated documents (0 or more) on success, or -1 on failure.
+</p><p>
+<code class="code">$index</code> is a name of the index (or indexes) to be updated.
+<code class="code">$attrs</code> is a plain array with string attribute names, listing attributes that are updated.
+<code class="code">$values</code> is a hash where key is document ID, and value is a plain array of new attribute values.
+</p><p>
+<code class="code">$index</code> can be either a single index name or a list, like in <code class="code">Query()</code>.
+Unlike <code class="code">Query()</code>, wildcard is not allowed and all the indexes
+to update must be specified explicitly. The list of indexes can include
+distributed index names. Updates on distributed indexes will be pushed
+to all agents.
+</p><p>
+The updates only work with <code class="code">docinfo=extern</code> storage strategy.
+They are very fast because they're working fully in RAM, but they can also
+be made persistent: updates are saved on disk on clean <code class="filename">searchd</code>
+shutdown initiated by SIGTERM signal.
+</p><p>
+Usage example:
+</p><pre class="programlisting">
+$cl-&gt;UpdateAttributes ( "test1", array("group_id"), array(1=&gt;array(456)) );
+$cl-&gt;UpdateAttributes ( "products", array ( "price", "amount_in_stock" ),
+	array ( 1001=&gt;array(123,5), 1002=&gt;array(37,11), 1003=&gt;(25,129) ) );
+</pre><p>
+The first sample statement will update document 1 in index "test1", setting "group_id" to 456.
+The second one will update documents 1001, 1002 and 1003 in index "products". For document 1001,
+the new price will be set to 123 and the new amount in stock to 5; for document 1002, the new price
+will be 37 and the new amount will be 11; etc.
+</p></div></div></div><div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="sphinxse"></a>6.&nbsp;MySQL storage engine (SphinxSE)</h2></div></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="sphinxse-overview"></a>6.1.&nbsp;SphinxSE overview</h3></div></div></div><p>
 SphinxSE is MySQL storage engine which can be compiled
 into MySQL server 5.x using its pluggable architecure.
 It is not available for MySQL 4.x series. It also requires
@@ -759,7 +1233,7 @@ searching happen outside MySQL.
 Obvious SphinxSE applications include:
 </p><div class="itemizedlist"><ul type="disc"><li>easier porting of MySQL FTS applications to Sphinx;</li><li>allowing Sphinx use with progamming languages for which native APIs are not available yet;</li><li>optimizations when additional Sphinx result set processing on MySQL side is required
 	(eg. JOINs with original document tables, additional MySQL-side filtering, etc).</li></ul></div><p>
-</p></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="sphinxse-installing"></a>5.2.&nbsp;Installing SphinxSE</h3></div></div></div><p>
+</p></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="sphinxse-installing"></a>6.2.&nbsp;Installing SphinxSE</h3></div></div></div><p>
 You will need to obtain a copy of MySQL sources, prepare those,
 and then recompile MySQL binary.
 MySQL sources (mysql-5.x.yy.tar.gz) could be obtained from 
@@ -774,7 +1248,7 @@ If such tarball is not available, or does not work for you for any
 reason, you would have to prepare sources manually. You will need to
 GNU Autotools framework (autoconf, automake and libtool) installed
 to do that.
-</p><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="sphinxse-mysql50"></a>5.2.1.&nbsp;Compiling MySQL 5.0.x with SphinxSE</h4></div></div></div><p>
+</p><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="sphinxse-mysql50"></a>6.2.1.&nbsp;Compiling MySQL 5.0.x with SphinxSE</h4></div></div></div><p>
 Skips steps 1-3 if using already prepared delta tarball.
 </p><div class="orderedlist"><ol type="1"><li><p>copy <code class="filename">sphinx.5.0.yy.diff</code> patch file
 into MySQL sources directory and run
@@ -801,7 +1275,7 @@ build and install MySQL:
 <pre class="programlisting">
 make
 make install
-</pre></li></ol></div></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="sphinxse-mysql51"></a>5.2.2.&nbsp;Compiling MySQL 5.1.x with SphinxSE</h4></div></div></div><p>
+</pre></li></ol></div></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="sphinxse-mysql51"></a>6.2.2.&nbsp;Compiling MySQL 5.1.x with SphinxSE</h4></div></div></div><p>
 Skip steps 1-2 if using already prepared delta tarball.
 </p><div class="orderedlist"><ol type="1"><li>in MySQL sources directory, create <code class="filename">storage/sphinx</code>
 directory in and copy all files in <code class="filename">mysqlse</code> directory 
@@ -820,7 +1294,7 @@ build and install MySQL:
 <pre class="programlisting">
 make
 make install
-</pre></li></ol></div></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="sphinxse-checking"></a>5.2.3.&nbsp;Checking SphinxSE installation</h4></div></div></div>
+</pre></li></ol></div></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="sphinxse-checking"></a>6.2.3.&nbsp;Checking SphinxSE installation</h4></div></div></div>
 To check whether SphinxSE has been succesfully compiled
 into MySQL, launch newly built servers, run mysql client and
 issue <code class="code">SHOW ENGINES</code> query. You should see a list
@@ -838,7 +1312,7 @@ mysql&gt; show engines;
   ...
 +------------+----------+----------------------------------------------------------------+
 13 rows in set (0.00 sec)    
-</pre></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="sphinxse-using"></a>5.3.&nbsp;Using SphinxSE</h3></div></div></div><p>
+</pre></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="sphinxse-using"></a>6.3.&nbsp;Using SphinxSE</h3></div></div></div><p>
 To search via SphinxSE, you would need to create special ENGINE=SPHINX "search table",
 and then SELECT from it with full text query put into WHERE clause for query column.
 </p><p>
@@ -981,7 +1455,7 @@ mysql&gt; SHOW ENGINE SPHINX STATUS;
 +--------+-------+---------------------------------------------+
 2 rows in set (0.00 sec)
 </pre><p>
-</p></div></div><div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="reporting-bugs"></a>6.&nbsp;Reporting bugs</h2></div></div></div><p>
+</p></div></div><div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="reporting-bugs"></a>7.&nbsp;Reporting bugs</h2></div></div></div><p>
 Unfortunately, Sphinx is not yet 100% bug free (even though I'm working hard
 towards that), so you might occasionally run into some issues.
 </p><p>
@@ -989,7 +1463,7 @@ Reporting as much as possible about each bug is very important -
 because to fix it, I need to be able either to reproduce and debug the bug,
 or to deduce what's causing it from the information that you provide.
 So here are some instructions on how to do that.
-</p><h3><a name="id349760"></a>Build-time issues</h3><p>If Sphinx fails to build for some reason, please do the following:</p><div class="orderedlist"><ol type="1"><li>check that headers and libraries for your DBMS are properly installed
+</p><h3><a name="id355627"></a>Build-time issues</h3><p>If Sphinx fails to build for some reason, please do the following:</p><div class="orderedlist"><ol type="1"><li>check that headers and libraries for your DBMS are properly installed
 (for instance, check that <code class="filename">mysql-devel</code> package is present);
 </li><li>report Sphinx version and config file (be sure to remove the passwords!),
 MySQL (or PostgreSQL) configuration info, gcc version, OS version and CPU type
@@ -1002,7 +1476,7 @@ uname -a
 report the error message which is produced by <code class="filename">configure</code>
 or <code class="filename">gcc</code> (it should be to include error message itself only,
 not the whole build log).
-</li></ol></div><h3><a name="id349813"></a>Run-time issues</h3><p>
+</li></ol></div><h3><a name="id355680"></a>Run-time issues</h3><p>
 If Sphinx builds and runs, but there are any problems running it,
 please do the following:
 </p><div class="orderedlist"><ol type="1"><li>describe the bug (ie. both the expected behavior and actual behavior)
@@ -1033,7 +1507,7 @@ relevant entries from <code class="filename">searchd.log</code> and
 running it in console mode and check if it dies with an assertion:
 <pre class="programlisting">
 ./searchd --console
-</pre></li><li>if any program dies with an assertion, provide the assertion message.</li></ol></div><h3><a name="id353589"></a>Debugging assertions, crashes and hangups</h3><p>
+</pre></li><li>if any program dies with an assertion, provide the assertion message.</li></ol></div><h3><a name="id355793"></a>Debugging assertions, crashes and hangups</h3><p>
 If any program dies with an assertion, crashes without an assertion or hangs up,
 you would additionally need to generate a core dump and examine it.
 </p><div class="orderedlist"><ol type="1"><li>
@@ -1088,14 +1562,14 @@ be additional helpful information which could be retrieved from it.
 You do not need to send me this file (as the debug info there is
 closely tied to your system) but I might need to ask
 you a few additional questions about it.
-</p></div><div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="reference"></a>7.&nbsp;<code class="filename">sphinx.conf</code> options reference</h2></div></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="ref-source"></a>7.1.&nbsp;Data source configuration options</h3></div></div></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-source-type"></a>7.1.1.&nbsp;type</h4></div></div></div><p>
+</p></div><div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="reference"></a>8.&nbsp;<code class="filename">sphinx.conf</code> options reference</h2></div></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="ref-source"></a>8.1.&nbsp;Data source configuration options</h3></div></div></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-source-type"></a>8.1.1.&nbsp;type</h4></div></div></div><p>
 Data source type. Available types are <code class="option">mysql</code>, <code class="option">pgsql</code>
 and <code class="option">xmlpipe</code>.
 </p><p>
 This option is <span class="bold"><strong>mandatory</strong></span>.
-</p><h5><a name="id353773"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id355972"></a>Example:</h5><pre class="programlisting">
 type = mysql
-</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-strip-html"></a>7.1.2.&nbsp;strip_html</h4></div></div></div><p>
+</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-strip-html"></a>8.1.2.&nbsp;strip_html</h4></div></div></div><p>
 Whether to strip HTML formatting from incoming full-text data.
 0 means that stripping should be disabled; 1 that it should be enabled.
 </p><p>
@@ -1108,54 +1582,54 @@ HTML (such as well-formed XHTML) but MAY bug on malformed HTML
 This option is optional.
 Default value is 0 (do not strip HTML).
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id353835"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id356035"></a>Example:</h5><pre class="programlisting">
 strip_html = 0
-</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-index-html-attrs"></a>7.1.3.&nbsp;index_html_attrs</h4></div></div></div><p>
+</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-index-html-attrs"></a>8.1.3.&nbsp;index_html_attrs</h4></div></div></div><p>
 Specifies which HTML attributes' contents still should be indexed when stripping HTML.
 The format is per-tag enumeration of indexable attributes, as shown in the example below.
 </p><p>
 This option is optional.
 Default value is empty (do not index anything).
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id353877"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id356077"></a>Example:</h5><pre class="programlisting">
 index_html_attrs = img=alt,title; a=title;
-</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-host"></a>7.1.4.&nbsp;sql_host</h4></div></div></div><p>
+</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-host"></a>8.1.4.&nbsp;sql_host</h4></div></div></div><p>
 SQL server host to connect to.
 </p><p>
 This option is <span class="bold"><strong>mandatory</strong></span>.
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id353921"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id356121"></a>Example:</h5><pre class="programlisting">
 sql_host = localhost
-</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-port"></a>7.1.5.&nbsp;sql_port</h4></div></div></div><p>
+</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-port"></a>8.1.5.&nbsp;sql_port</h4></div></div></div><p>
 SQL server IP port to connect to.
 </p><p>
 This option is optional.
 Default value is 3306 for <code class="option">mysql</code> source type and 5432 for <code class="option">pgsql</code> type.
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id353968"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id356168"></a>Example:</h5><pre class="programlisting">
 sql_port = 3306
-</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-user"></a>7.1.6.&nbsp;sql_user</h4></div></div></div><p>
-SQL user to use on <a href="#ref-sql-host" title="7.1.4.&nbsp;sql_host">sql_host</a>.
+</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-user"></a>8.1.6.&nbsp;sql_user</h4></div></div></div><p>
+SQL user to use on <a href="#ref-sql-host" title="8.1.4.&nbsp;sql_host">sql_host</a>.
 </p><p>
 This option is <span class="bold"><strong>mandatory</strong></span>.
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id354017"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id356217"></a>Example:</h5><pre class="programlisting">
 sql_user = test
-</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-pass"></a>7.1.7.&nbsp;sql_pass</h4></div></div></div><p>
-SQL user password to use on <a href="#ref-sql-host" title="7.1.4.&nbsp;sql_host">sql_host</a>.
+</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-pass"></a>8.1.7.&nbsp;sql_pass</h4></div></div></div><p>
+SQL user password to use on <a href="#ref-sql-host" title="8.1.4.&nbsp;sql_host">sql_host</a>.
 </p><p>
 This option is <span class="bold"><strong>mandatory</strong></span>.
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id354066"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id356266"></a>Example:</h5><pre class="programlisting">
 sql_pass = mysecretpassword
-</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-db"></a>7.1.8.&nbsp;sql_db</h4></div></div></div><p>
+</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-db"></a>8.1.8.&nbsp;sql_db</h4></div></div></div><p>
 SQL database (in MySQL terms) to use after connection and perform further queries in.
 </p><p>
 This option is <span class="bold"><strong>mandatory</strong></span>.
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id354111"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id356311"></a>Example:</h5><pre class="programlisting">
 sql_db = test
-</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-sock"></a>7.1.9.&nbsp;sql_sock</h4></div></div></div><p>
+</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-sock"></a>8.1.9.&nbsp;sql_sock</h4></div></div></div><p>
 UNIX socket name to connect to local MySQL server.
 </p><p>
 On Linux, it would typically be <code class="filename">/var/lib/mysql/mysql.sock</code>.
@@ -1163,13 +1637,13 @@ On FreeBSD, it would typically be <code class="filename">/tmp/mysql.sock</code>.
 </p><p>
 This option is optional.
 This option only applies to <code class="option">mysql</code> source type.
-</p><h5><a name="id354158"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id356358"></a>Example:</h5><pre class="programlisting">
 sql_sock = /tmp/mysql.sock
-</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-query-pre"></a>7.1.10.&nbsp;sql_query_pre</h4></div></div></div><p>
+</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-query-pre"></a>8.1.10.&nbsp;sql_query_pre</h4></div></div></div><p>
 Pre-fetch query, or pre-query.
 </p><p>
 There might be multiple pre-queries specified. They are executed
-before <a href="#ref-sql-query" title="7.1.11.&nbsp;sql_query">the main fetch query</a>
+before <a href="#ref-sql-query" title="8.1.11.&nbsp;sql_query">the main fetch query</a>
 in exactly the same order they were specified in config file.
 Pre-query results are ignored.
 </p><p>
@@ -1178,9 +1652,9 @@ which are going to be indexed, or update internal counters, etc.
 </p><p>
 This option is optional.
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id354220"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id356420"></a>Example:</h5><pre class="programlisting">
 sql_query_pre = SET CHARACTER_SET_RESULTS=utf-8
-</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-query"></a>7.1.11.&nbsp;sql_query</h4></div></div></div><p>
+</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-query"></a>8.1.11.&nbsp;sql_query</h4></div></div></div><p>
 Main document fetch query.
 </p><p>
 There can be only one main query. This is the query which is used to
@@ -1194,50 +1668,50 @@ and it <span class="bold"><strong>MUST BE UNIQUE UNSIGNED NON-ZERO 32-BIT INTEGE
 </p><p>
 This option is <span class="bold"><strong>mandatory</strong></span>.
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id354299"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id356499"></a>Example:</h5><pre class="programlisting">
 sql_query = \
 	SELECT id, group_id, UNIX_TIMESTAMP(date_added) AS date_added, \
 		title, content \
 	FROM documents
-</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-query-range"></a>7.1.12.&nbsp;sql_query_range</h4></div></div></div><p>
+</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-query-range"></a>8.1.12.&nbsp;sql_query_range</h4></div></div></div><p>
 Query which fetches min/max document IDs range to be used in ranged query (see <a href="#ranged-queries">Section&nbsp;3.6, &#8220;Ranged queries&#8221;</a>).
 </p><p>
 This option is optional.
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id354344"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id356544"></a>Example:</h5><pre class="programlisting">
 sql_query_range = SELECT MIN(id),MAX(id) FROM documents
-</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-range-step"></a>7.1.13.&nbsp;sql_range_step</h4></div></div></div><p>
+</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-range-step"></a>8.1.13.&nbsp;sql_range_step</h4></div></div></div><p>
 How much records to index per one ranged query step (see <a href="#ranged-queries">Section&nbsp;3.6, &#8220;Ranged queries&#8221;</a>).
 </p><p>
 This option is optional.
 Default value is 1024.
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id354387"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id356587"></a>Example:</h5><pre class="programlisting">
 sql_range_step = 1000
-</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-group-column"></a>7.1.14.&nbsp;sql_group_column</h4></div></div></div><p>
+</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-group-column"></a>8.1.14.&nbsp;sql_group_column</h4></div></div></div><p>
 Integer attribute column declaration. Specified column should be present among
-those fetched by <a href="#ref-sql-query" title="7.1.11.&nbsp;sql_query">Section&nbsp;7.1.11, &#8220;sql_query&#8221;</a>.
+those fetched by <a href="#ref-sql-query" title="8.1.11.&nbsp;sql_query">Section&nbsp;8.1.11, &#8220;sql_query&#8221;</a>.
 </p><p>
 There might be multiple attributes specified.
 </p><p>
 This option is optional.
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id354437"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id356637"></a>Example:</h5><pre class="programlisting">
 sql_group_column = group_id    # declare 1st attribute
 sql_group_column = author_id   # declare 2nd attribute
-</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-date-column"></a>7.1.15.&nbsp;sql_date_column</h4></div></div></div><p>
+</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-date-column"></a>8.1.15.&nbsp;sql_date_column</h4></div></div></div><p>
 UNIX timestamp attribute column declaration. Specified column should be present among
-those fetched by <a href="#ref-sql-query" title="7.1.11.&nbsp;sql_query">Section&nbsp;7.1.11, &#8220;sql_query&#8221;</a>.
+those fetched by <a href="#ref-sql-query" title="8.1.11.&nbsp;sql_query">Section&nbsp;8.1.11, &#8220;sql_query&#8221;</a>.
 </p><p>
 There might be multiple attributes specified.
 </p><p>
 This option is optional.
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id354490"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id356690"></a>Example:</h5><pre class="programlisting">
 sql_date_column = added_ts
-</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-str2ordinal-column"></a>7.1.16.&nbsp;sql_str2ordinal_column</h4></div></div></div><p>
+</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-str2ordinal-column"></a>8.1.16.&nbsp;sql_str2ordinal_column</h4></div></div></div><p>
 Ordinal string number attribute column declaration. Specified column should be present among
-those fetched by <a href="#ref-sql-query" title="7.1.11.&nbsp;sql_query">Section&nbsp;7.1.11, &#8220;sql_query&#8221;</a>.
+those fetched by <a href="#ref-sql-query" title="8.1.11.&nbsp;sql_query">Section&nbsp;8.1.11, &#8220;sql_query&#8221;</a>.
 </p><p>
 When indexing such attributes, string values are fetched from database,
 stored, sorted and then replaced by ordinal number (integer) in the sorted
@@ -1253,11 +1727,11 @@ There might be multiple attributes specified.
 </p><p>
 This option is optional.
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id354573"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id356773"></a>Example:</h5><pre class="programlisting">
 sql_str2ordinal_column = author_name
-</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-query-post"></a>7.1.17.&nbsp;sql_query_post</h4></div></div></div><p>
+</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-query-post"></a>8.1.17.&nbsp;sql_query_post</h4></div></div></div><p>
 Post-fetch query, executed immediately after main fetch
-query (<a href="#ref-sql-query" title="7.1.11.&nbsp;sql_query">Section&nbsp;7.1.11, &#8220;sql_query&#8221;</a>) ends. If this query produces
+query (<a href="#ref-sql-query" title="8.1.11.&nbsp;sql_query">Section&nbsp;8.1.11, &#8220;sql_query&#8221;</a>) ends. If this query produces
 errors, they are reported as warnings, but indexing is NOT terminated.
 It's result set is ignored.
 </p><p>
@@ -1266,9 +1740,9 @@ gets executed, and further indexing might fail.
 </p><p>
 This option is optional.
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id354628"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id356828"></a>Example:</h5><pre class="programlisting">
 sql_query_post = DROP TABLE my_tmp_table
-</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-query-post-index"></a>7.1.18.&nbsp;sql_query_post_index</h4></div></div></div><p>
+</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-query-post-index"></a>8.1.18.&nbsp;sql_query_post_index</h4></div></div></div><p>
 Post-index query, executed when indexing is succesfully completed.
 If this query produces errors, they are reported as warnings,
 but indexing is NOT terminated. It's result set is ignored.
@@ -1279,10 +1753,10 @@ during indexing.
 </p><p>
 This option is optional.
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id354680"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id356880"></a>Example:</h5><pre class="programlisting">
 sql_query_post_index = REPLACE INTO counters ( id, val ) \
     VALUES ( 'max_indexed_id', $maxid )
-</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-query-info"></a>7.1.19.&nbsp;sql_query_info</h4></div></div></div><p>
+</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-sql-query-info"></a>8.1.19.&nbsp;sql_query_info</h4></div></div></div><p>
 Document info query. Only used by CLI search to fetch and display
 document information; and only intended for debugging purposes.
 </p><p>
@@ -1291,17 +1765,17 @@ by document ID. Therefore, it must contain <code class="code">$id</code> macro.
 </p><p>
 This option is optional.
 This option only applies to <code class="option">mysql</code> and <code class="option">pgsql</code> source types.
-</p><h5><a name="id354735"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id356934"></a>Example:</h5><pre class="programlisting">
 sql_query_info = SELECT * FROM documents WHERE id=$id
-</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-xmlpipe-command"></a>7.1.20.&nbsp;xmlpipe_command</h4></div></div></div><p>
+</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="ref-xmlpipe-command"></a>8.1.20.&nbsp;xmlpipe_command</h4></div></div></div><p>
 Command which will be executed in xmlpipe mode to obtain documents.
 See <a href="#xmlpipe" title="3.7.&nbsp;XMLpipe data source">Section&nbsp;3.7, &#8220;XMLpipe data source&#8221;</a> for output format description.
 </p><p>
 This option is <span class="bold"><strong>mandatory</strong></span>.
 This option only applies to <code class="option">xmlpipe</code> source type.
-</p><h5><a name="id354783"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id356982"></a>Example:</h5><pre class="programlisting">
 xmlpipe_command = cat /home/sphinx/test.xml
-</pre></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="ref-searchd"></a>7.2.&nbsp;<code class="filename">searchd</code> program configuration options</h3></div></div></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="seamless-rotate"></a>7.2.1.&nbsp;seamless_rotate</h4></div></div></div><p>
+</pre></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="ref-searchd"></a>8.2.&nbsp;<code class="filename">searchd</code> program configuration options</h3></div></div></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="seamless-rotate"></a>8.2.1.&nbsp;seamless_rotate</h4></div></div></div><p>
 This feature prevents short periods of <code class="filename">searchd</code> being inaccessible
 while rotating indexes with huge attribute and/or dictionary files
 (<code class="filename">.spa</code> and <code class="filename">.spi</code> respectively).
@@ -1321,6 +1795,6 @@ memory usage during the rotation (because both old and new copies of
 in RAM while preloading new copy). Average usage stays the same.
 </p><p>
 This option is optional. Default values is 1, which means to enable seamless rotate.
-</p><h5><a name="id354956"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id357156"></a>Example:</h5><pre class="programlisting">
 seamless_rotate = 1
 </pre></div></div></div><div class="appendix" lang="en"><h2 class="title" style="clear: both"><a name="changelog"></a>A.&nbsp;Sphinx revision history</h2><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="ver_0_9_7"></a>A.1.&nbsp;Version 0.9.7, 02 apr 2007</h3></div></div></div><div class="itemizedlist"><ul type="disc"><li>added support for <code class="option">sql_str2ordinal_column</code></li><li>added support for upto 5 sort-by attrs (in extended sorting mode)</li><li>added support for separate groups sorting clause (in group-by mode)</li><li>added support for on-the-fly attribute updates (PRE-ALPHA; will change heavily; use for preliminary testing ONLY)</li><li>added support for zero/NULL attributes</li><li>added support for 0.9.7 features to SphinxSE</li><li>added support for n-grams (alpha, 1-grams only for now)</li><li>added support for warnings reported to client</li><li>added support for exclude-filters</li><li>added support for prefix and infix indexing (see <code class="option">max_prefix_len</code>, <code class="option">max_infix_len</code>)</li><li>added <code class="option">@*</code> syntax to reset current field to query language</li><li>added removal of duplicate entries in query index order</li><li>added PHP API workarounds for PHP signed/unsigned braindamage</li><li>added locks to avoid two concurrent indexers working on same index</li><li>added check for existing attributes vs. <code class="option">docinfo=none</code> case</li><li>improved groupby code a lot (better precision, and upto 25x times faster in extreme cases)</li><li>improved error handling and reporting</li><li>improved handling of broken indexes (reports error instead of hanging/crashing)</li><li>improved <code class="option">mmap()</code> limits for attributes and wordlists (now able to map over 4 GB on x64 and over 2 GB on x32 where possible)</li><li>improved <code class="option">malloc()</code> pressure in head daemon (search time should not degrade with time any more)</li><li>improved <code class="filename">test.php</code> command line options</li><li>improved error reporting (distributed query, broken index etc issues now reported to client)</li><li>changed default network packet size to be 8M, added extra checks</li><li>fixed division by zero in BM25 on 1-document collections (in extended matching mode)</li><li>fixed <code class="filename">.spl</code> files getting unlinked</li><li>fixed crash in schema compatibility test</li><li>fixed UTF-8 Russian stemmer</li><li>fixed requested matches count when querying distributed agents</li><li>fixed signed vs. unsigned issues everywhere (ranged queries, CLI search output, and obtaining docid)</li><li>fixed potential crashes vs. negative query offsets</li><li>fixed 0-match docs vs. extended mode vs. stats</li><li>fixed group/timestamp filters being ignored if querying from older clients</li><li>fixed docs to mention <code class="option">pgsql</code> source type</li><li>fixed issues with explicit '&amp;' in extended matching mode</li><li>fixed wrong assertion in SBCS encoder</li><li>fixed crashes with no-attribute indexes after rotate</li></ul></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="ver_0_9_7_rc2"></a>A.2.&nbsp;Version 0.9.7-RC2, 15 dec 2006</h3></div></div></div><div class="itemizedlist"><ul type="disc"><li>added support for extended matching mode (query language)</li><li>added support for extended sorting mode (sorting clauses)</li><li>added support for SBCS excerpts</li><li>added <code class="option">mmap()ing</code> for attributes and wordlist (improves search time, speeds up <code class="option">fork()</code> greatly)</li><li>fixed attribute name handling to be case insensitive</li><li>fixed default compiler options to simplify post-mortem debugging (added <code class="option">-g</code>, removed <code class="option">-fomit-frame-pointer</code>)</li><li>fixed rare memory leak</li><li>fixed "hello hello" queries in "match phrase" mode</li><li>fixed issue with excerpts, texts and overlong queries</li><li>fixed logging multiple index name (no longer tokenized)</li><li>fixed trailing stopword not flushed from tokenizer</li><li>fixed boolean evaluation</li><li>fixed pidfile being wrongly <code class="option">unlink()ed</code> on <code class="option">bind()</code> failure</li><li>fixed <code class="option">--with-mysql-includes/libs</code> (they conflicted with well-known paths)</li><li>fixes for 64-bit platforms</li></ul></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="ver_0_9_7_rc1"></a>A.3.&nbsp;Version 0.9.7-RC1, 26 oct 2006</h3></div></div></div><div class="itemizedlist"><ul type="disc"><li>added alpha index merging code</li><li>added an option to decrease <code class="option">max_matches</code> per-query</li><li>added an option to specify IP address for searchd to listen on</li><li>added support for unlimited amount of configured sources and indexes</li><li>added support for group-by queries</li><li>added support for /2 range modifier in charset_table</li><li>added support for arbitrary amount of document attributes</li><li>added logging filter count and index name</li><li>added <code class="option">--with-debug</code> option to configure to compile in debug mode</li><li>added <code class="option">-DNDEBUG</code> when compiling in default mode</li><li>improved search time (added doclist size hints, in-memory wordlist cache, and used VLB coding everywhere)</li><li>improved (refactored) SQL driver code (adding new drivers should be very easy now)</li><li>improved exceprts generation</li><li>fixed issue with empty sources and ranged queries</li><li>fixed querying purely remote distributed indexes</li><li>fixed suffix length check in English stemmer in some cases</li><li>fixed UTF-8 decoder for codes over U+20000 (for CJK)</li><li>fixed UTF-8 encoder for 3-byte sequences (for CJK)</li><li>fixed overshort (less than <code class="option">min_word_len</code>) words prepended to next field</li><li>fixed source connection order (indexer does not connect to all sources at once now)</li><li>fixed line numbering in config parser</li><li>fixed some issues with index rotation</li></ul></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="ver_0_9_6"></a>A.4.&nbsp;Version 0.9.6, 24 jul 2006</h3></div></div></div><div class="itemizedlist"><ul type="disc"><li>added support for empty indexes</li><li>added support for multiple sql_query_pre/post/post_index</li><li>fixed timestamp ranges filter in "match any" mode</li><li>fixed configure issues with --without-mysql and --with-pgsql options</li><li>fixed building on Solaris 9</li></ul></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="ver_0_9_6_rc1"></a>A.5.&nbsp;Version 0.9.6-RC1, 26 jun 2006</h3></div></div></div><div class="itemizedlist"><ul type="disc"><li>added boolean queries support (experimental, beta version)</li><li>added simple file-based query cache (experimental, beta version)</li><li>added storage engine for MySQL 5.0 and 5.1 (experimental, beta version)</li><li>added GNU style <code class="filename">configure</code> script</li><li>added new searchd protocol (all binary, and should be backwards compatible)</li><li>added distributed searching support to searchd</li><li>added PostgreSQL driver</li><li>added excerpts generation</li><li>added <code class="option">min_word_len</code> option to index</li><li>added <code class="option">max_matches</code> option to searchd, removed hardcoded MAX_MATCHES limit</li><li>added initial documentation, and a working <code class="filename">example.sql</code></li><li>added support for multiple sources per index</li><li>added soundex support</li><li>added group ID ranges support</li><li>added <code class="option">--stdin</code> command-line option to search utility</li><li>added <code class="option">--noprogress</code> option to indexer</li><li>added <code class="option">--index</code> option to search</li><li>fixed UTF-8 decoder (3-byte codepoints did not work)</li><li>fixed PHP API to handle big result sets faster</li><li>fixed config parser to handle empty values properly</li><li>fixed redundant <code class="code">time(NULL)</code> calls in time-segments mode</li></ul></div></div></div></div></body></html>

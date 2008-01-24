@@ -1,4 +1,4 @@
-Sphinx 0.9.7 reference manual
+Sphinx 0.9.8 reference manual
 =============================
 
 Free open-source SQL full-text search engine
@@ -45,39 +45,74 @@ Table of Contents
       4.7. Distributed searching
       4.8. searchd query log format
 
-   5. MySQL storage engine (SphinxSE)
-      5.1. SphinxSE overview
-      5.2. Installing SphinxSE
-         5.2.1. Compiling MySQL 5.0.x with SphinxSE
-         5.2.2. Compiling MySQL 5.1.x with SphinxSE
-         5.2.3. Checking SphinxSE installation
-      5.3. Using SphinxSE
+   5. API reference
+      5.1. General API functions
+         5.1.1. GetLastError
+         5.1.2. GetLastWarning
+         5.1.3. SetServer
+         5.1.4. SetArrayResult
+      5.2. General query settings
+         5.2.1. SetLimits
+         5.2.2. SetMaxQueryTime
+      5.3. Full-text search query settings
+         5.3.1. SetMatchMode
+         5.3.2. SetRankingMode
+         5.3.3. SetSortMode
+         5.3.4. SetWeights
+         5.3.5. SetFieldWeights
+         5.3.6. SetIndexWeights
+      5.4. Result set filtering settings
+         5.4.1. SetIDRange
+         5.4.2. SetFilter
+         5.4.3. SetFilterRange
+         5.4.4. SetFilterFloatRange
+         5.4.5. SetGeoAnchor
+      5.5. GROUP BY settings
+         5.5.1. SetGroupBy
+         5.5.2. SetGroupDistinct
+      5.6. Querying
+         5.6.1. Query
+         5.6.2. AddQuery
+         5.6.3. RunQueries
+         5.6.4. ResetFilters
+         5.6.5. ResetGroupBy
+      5.7. Additional functionality
+         5.7.1. BuildExcerpts
+         5.7.2. UpdateAttributes
 
-   6. Reporting bugs
-   7. sphinx.conf options reference
-      7.1. Data source configuration options
-         7.1.1. type
-         7.1.2. strip_html
-         7.1.3. index_html_attrs
-         7.1.4. sql_host
-         7.1.5. sql_port
-         7.1.6. sql_user
-         7.1.7. sql_pass
-         7.1.8. sql_db
-         7.1.9. sql_sock
-         7.1.10. sql_query_pre
-         7.1.11. sql_query
-         7.1.12. sql_query_range
-         7.1.13. sql_range_step
-         7.1.14. sql_group_column
-         7.1.15. sql_date_column
-         7.1.16. sql_str2ordinal_column
-         7.1.17. sql_query_post
-         7.1.18. sql_query_post_index
-         7.1.19. sql_query_info
-         7.1.20. xmlpipe_command
-      7.2. searchd program configuration options
-         7.2.1. seamless_rotate
+   6. MySQL storage engine (SphinxSE)
+      6.1. SphinxSE overview
+      6.2. Installing SphinxSE
+         6.2.1. Compiling MySQL 5.0.x with SphinxSE
+         6.2.2. Compiling MySQL 5.1.x with SphinxSE
+         6.2.3. Checking SphinxSE installation
+      6.3. Using SphinxSE
+
+   7. Reporting bugs
+   8. sphinx.conf options reference
+      8.1. Data source configuration options
+         8.1.1. type
+         8.1.2. strip_html
+         8.1.3. index_html_attrs
+         8.1.4. sql_host
+         8.1.5. sql_port
+         8.1.6. sql_user
+         8.1.7. sql_pass
+         8.1.8. sql_db
+         8.1.9. sql_sock
+         8.1.10. sql_query_pre
+         8.1.11. sql_query
+         8.1.12. sql_query_range
+         8.1.13. sql_range_step
+         8.1.14. sql_group_column
+         8.1.15. sql_date_column
+         8.1.16. sql_str2ordinal_column
+         8.1.17. sql_query_post
+         8.1.18. sql_query_post_index
+         8.1.19. sql_query_info
+         8.1.20. xmlpipe_command
+      8.2. searchd program configuration options
+         8.2.1. seamless_rotate
 
    A. Sphinx revision history
 
@@ -97,10 +132,10 @@ databases and scripting languages.
 
 Currently built-in data source drivers support fetching data either via
 direct connection to MySQL, or PostgreSQL, or from a pipe in a custom XML
-format. Adding new drivers (eg. to natively support some other DBMS) is
+format. Adding new drivers (eg. to natively support some other DBMSes) is
 designed to be as easy as possible.
 
-Search API is natively ported to PHP, Python, Perl and Ruby and also
+Search API is natively ported to PHP, Python, Perl, Ruby, Java, and also
 available as a pluggable MySQL storage engine. API is very lightweight so
 porting it to new language is known to take a few hours.
 
@@ -570,18 +605,18 @@ submit your tables for other languages!
 With all the SQL drivers, indexing generally works as follows.
 
    * connection to the database is established;
-   * pre-query (see Section 7.1.10, <<sql_query_pre>>) is executed to
+   * pre-query (see Section 8.1.10, <<sql_query_pre>>) is executed to
      perform any necessary initial setup, such as setting per-connection
      encoding with MySQL;
-   * main query (see Section 7.1.11, <<sql_query>>) is executed and the
+   * main query (see Section 8.1.11, <<sql_query>>) is executed and the
      rows it returns are indexed;
-   * post-query (see Section 7.1.17, <<sql_query_post>>) is executed to
+   * post-query (see Section 8.1.17, <<sql_query_post>>) is executed to
      perform any necessary cleanup;
    * connection to the database is closed;
    * indexer does the sorting phase (to be pedantic, index-type specific
      post-processing);
    * connection to the database is established again;
-   * post-index query (see Section 7.1.18, <<sql_query_post_index>>) is
+   * post-index query (see Section 8.1.18, <<sql_query_post_index>>) is
      executed to perform any necessary final cleanup;
    * connection to the database is closed again.
 
@@ -1115,10 +1150,671 @@ Sort mode can take one of the following values:
    * "tsegs" for SPH_SORT_TIME_SEGMENTS mode;
    * "ext" for SPH_SORT_EXTENDED mode.
 
-5. MySQL storage engine (SphinxSE)
+5. API reference
+================
+
+There is a number of native searchd client API implementations for Sphinx.
+As of time of this writing, we officially support our own PHP, Python, and
+Java implementations. There also are third party free, open-source API
+implementations for Perl, Ruby, and C++.
+
+The reference API implementation is in PHP, because (we believe) Sphinx is
+most widely used with PHP than any other language. This reference
+documentation is in turn based on reference PHP API, and all code samples
+in this section will be given in PHP.
+
+However, all other APIs provide the same methods and implement the very
+same network protocol. Therefore the documentation does apply to them as
+well. There might be minor differences as to the method naming conventions
+or specific data structures used. But the provided functionality must not
+differ across languages.
+
+5.1. General API functions
+--------------------------
+
+5.1.1. GetLastError
+-------------------
+
+Prototype: function GetLastError()
+
+Returns last error message, as a string, in human readable format. If there
+were no errors during the previous API call, empty string is returned.
+
+You should call it when any other function (such as Section 5.6.1,
+<<Query>>) fails (typically, the failing function returns false). The
+returned string will contain the error description.
+
+The error message is not reset by this call; so you can safely call it
+several times if needed.
+
+5.1.2. GetLastWarning
+---------------------
+
+Prototype: function GetLastWarning ()
+
+Returns last warning message, as a string, in human readable format. If
+there were no warnings during the previous API call, empty string is
+returned.
+
+You should call it to verify whether your request (such as Section 5.6.1,
+<<Query>>) was completed but with warnings. For instance, search query
+against a distributed index might complete succesfully even if several
+remote agents timed out. In that case, a warning message would be produced.
+
+The warning message is not reset by this call; so you can safely call it
+several times if needed.
+
+5.1.3. SetServer
+----------------
+
+Prototype: function SetServer ( $host, $port )
+
+Sets searchd host name and TCP port. All subsequent requests will use the
+new host and port settings. Default host and port are "localhost" and 3312,
+respectively.
+
+5.1.4. SetArrayResult
+---------------------
+
+Prototype: function SetArrayResult ( $arrayresult )
+
+PHP specific. Controls matches format in the search results set (whether
+matches should be returned as an array or a hash).
+
+$arrayresult argument must be boolean. If $arrayresult is false (the
+default mode), matches will returned in PHP hash format with document IDs
+as keys, and other information (weight, attributes) as values. If
+$arrayresult is true, matches will be returned as a plain array with
+complete per-match information including document ID.
+
+Introduced along with GROUP BY support on MVA attributes. Group-by-MVA
+result sets may contain duplicate document IDs. Thus they need to be
+returned as plain arrays, because hashes will only keep one entry per
+document ID.
+
+5.2. General query settings
+---------------------------
+
+5.2.1. SetLimits
+----------------
+
+Prototype: function SetLimits ( $offset, $limit, $max_matches=0, $cutoff=0
+)
+
+Sets offset into server-side result set ($offset) and amount of matches to
+return to client starting from that offset ($limit). Can additionally
+control maximum server-side result set size for current query
+($max_matches) and the threshold amount of matches to stop searching at
+($cutoff). All parameters must be non-negative integers.
+
+First two parameters to SetLimits() are identical in behaviour to MySQL
+LIMIT clause. They instruct searchd to return at most $limit matches
+starting from match number $offset. The default offset and limit settings
+are 0 and 20, that is, to return first 20 matches.
+
+max_matches setting controls how much matches searchd will keep in RAM
+while searching. All matching documents will be normally processed, ranked,
+filtered, and sorted even if max_matches is set to 1. But only best
+N documents are stored in memory at any given moment for performance and
+RAM usage reasons, and this setting controls that N. Note that there are
+two places where max_matches limit is enforced. Per-query limit is
+controlled by this API call, but there also is per-server limit controlled
+by max_matches setting in the config file. To prevent RAM usage abuse,
+server will not allow to set per-query limit higher than the per-server
+limit.
+
+You can't retrieve more than max_matches matches to the client application.
+The default limit is set to 1000. Normally, you must not have to go over
+this limit. One thousand records is enough to present to the end user. And
+if you're thinking about pulling the results to application for further
+sorting or filtering, that would be much more efficient if performed on
+Sphinx side.
+
+$cutoff setting is intended for advanced performance control. It tells
+searchd to forcibly stop search query once $cutoff matches had been found
+and processed.
+
+5.2.2. SetMaxQueryTime
+----------------------
+
+Prototype: function SetMaxQueryTime ( $max_query_time )
+
+Sets maximum search query time, in milliseconds. Parameter must be
+a non-negative integer. Default valus is 0 which means "do not limit".
+
+Similar to $cutoff setting from Section 5.2.1, <<SetLimits>>, but limits
+elapsed query time instead of processed matches count. Local search queries
+will be stopped once that much time has elapsed. Note that if you're
+performing a search which queries several local indexes, this limit applies
+to each index separately.
+
+5.3. Full-text search query settings
+------------------------------------
+
+5.3.1. SetMatchMode
+-------------------
+
+Prototype: function SetMatchMode ( $mode )
+
+Sets full-text query matching mode, as described in Section 4.1, <<Matching
+modes>>. Parameter must be a constant specifying one of the known modes.
+
+WARNING: (PHP specific) you must not take the matching mode constant name
+in quotes, that syntax specifies a string and is incorrect:
+
+   | $cl->SetMatchMode ( "SPH_MATCH_ANY" ); // INCORRECT! will not work as expected
+   | $cl->SetMatchMode ( SPH_MATCH_ANY ); // correct, works OK
+
+5.3.2. SetRankingMode
+---------------------
+
+Prototype: function SetRankingMode ( $ranker )
+
+Sets ranking mode. Only available in SPH_MATCH_EXTENDED2 matching mode at
+the time of this writing. Parameter must be a constant specifying one of
+the known modes.
+
+By default, Sphinx computes two factors which contribute to the final match
+weight. The major part is query phrase proximity to document text. The
+minor part is so-called BM25 statistical function, which varies from 0 to
+1 depending on the keyword frequency within document (more occurrences
+yield higher weight) and within the whole index (more rare keywords yield
+higher weight).
+
+However, in some cases you'd want to compute weight differently - or maybe
+avoid computing it at all for performance reasons because you're sorting
+the result set by something else anyway. This can be accomplished by
+setting the appropriate ranking mode.
+
+Currently implemented modes are:
+
+   * SPH_RANK_PROXIMITY_BM25, default ranking mode which uses and combines
+     both phrase proximity and BM25 ranking.
+   * SPH_RANK_BM25, statistical ranking mode which uses BM25 ranking only
+     (similar to most other full-text engines). This mode is faster but may
+     result in worse quality on queries which contain more than 1 keyword.
+   * SPH_RANK_NONE, disabled ranking mode. This mode is the fastest. It is
+     essentially equivalent to boolean searching. A weight of 1 is assigned
+     to all matches.
+
+5.3.3. SetSortMode
+------------------
+
+Prototype: function SetSortMode ( $mode, $sortby="" )
+
+Set matches sorting mode, as described in Section 4.5, <<Sorting modes>>.
+Parameter must be a constant specifying one of the known modes.
+
+WARNING: (PHP specific) you must not take the matching mode constant name
+in quotes, that syntax specifies a string and is incorrect:
+
+   | $cl->SetSortMode ( "SPH_SORT_ATTR_DESC" ); // INCORRECT! will not work as expected
+   | $cl->SetSortMode ( SPH_SORT_ATTR_ASC ); // correct, works OK
+
+5.3.4. SetWeights
+-----------------
+
+Prototype: function SetWeights ( $weights )
+
+Binds per-field weights in the order of appearance in the index.
+DEPRECATED, use Section 5.3.5, <<SetFieldWeights>> instead.
+
+5.3.5. SetFieldWeights
+----------------------
+
+Prototype: function SetFieldWeights ( $weights )
+
+Binds per-field weights by name. Parameter must be a hash (associative
+array) mapping string field names to integer weights.
+
+Match ranking can be affected by per-field weights. For instance, see
+Section 4.4, <<Weighting>> for an explanation how phrase proximity ranking
+is affected. This call lets you specify what non-default weights to assign
+to different full-text fields.
+
+The weights must be positive 32-bit integers. The final weight will be
+a 32-bit integer too. Default weight value is 1. Unknown field names will
+be silently ignored.
+
+There is no enforced limit on the maximum weight value at the moment.
+However, beware that if you set it too high you can start hitting 32-bit
+wraparound issues. For instance, if you set a weight of 10,000,000 and
+search in extended mode, then maximum possible weight will be equal to 10
+million (your weight) by 1 thousand (internal BM25 scaling factor, see
+Section 4.4, <<Weighting>>) by 1 or more (phrase proximity rank). The
+result is at least 10 billion that does not fit in 32 bits and will be
+wrapped around, producing unexpected results.
+
+5.3.6. SetIndexWeights
+----------------------
+
+Prototype: function SetIndexWeights ( $weights )
+
+Sets per-index weights, and enables weighted summing of match weights
+across different indexes. Parameter must be a hash (associative array)
+mapping string index names to integer weights. Default is empty array that
+means to disable weighting summing.
+
+When a match with the same document ID is found in several different local
+indexes, by default Sphinx simply chooses the match from the index
+specified last in the query. This is to support searching through partially
+overlapping index partitions.
+
+However in some cases the indexes are not just partitions, and you might
+want to sum the weights across the indexes instead of picking one.
+SetIndexWeights() lets you do that. With summing enabled, final match
+weight in result set will be computed as a sum of match weight coming from
+the given index multiplied by respective per-index weight specified in this
+call. Ie. if the document 123 is found in index A with the weight of 2, and
+also in index B with the weight of 3, and you called SetIndexWeights (
+array ( "A"=>100, "B"=>10 ) ), the final weight return to the client will
+be 2*100+3*10 = 230.
+
+5.4. Result set filtering settings
+----------------------------------
+
+5.4.1. SetIDRange
+-----------------
+
+Prototype: function SetIDRange ( $min, $max )
+
+Sets an accepted range of document IDs. Parameters must be integers.
+Defaults are 0 and 0; that combination means to not limit by range.
+
+After this call, only those records that have document ID between $min and
+$max (including IDs exactly equal to $min or $max) will be matched.
+
+5.4.2. SetFilter
+----------------
+
+Prototype: function SetFilter ( $attribute, $values, $exclude=false )
+
+Adds new integer values set filter.
+
+On this call, additional new filter is added to the existing list of
+filters. $attribute must be a string with attribute name. $values must be
+a plain array containing integer values. $exclude must be a boolean value;
+it controls whether to accept the matching documents (default mode, when
+$exclude is false) or reject them.
+
+Only those documents where $attribute column value stored in the index
+matches any of the values from $values array will be matched (or rejected,
+if $exclude is true).
+
+5.4.3. SetFilterRange
+---------------------
+
+Prototype: function SetFilterRange ( $attribute, $min, $max, $exclude=false
+)
+
+Adds new integer range filter.
+
+On this call, additional new filter is added to the existing list of
+filters. $attribute must be a string with attribute name. $min and $max
+must be integers that define the acceptable attribute values range
+(including the boundaries). $exclude must be a boolean value; it controls
+whether to accept the matching documents (default mode, when $exclude is
+false) or reject them.
+
+Only those documents where $attribute column value stored in the index is
+between $min and $max (including values that are exactly equal to $min or
+$max) will be matched (or rejected, if $exclude is true).
+
+5.4.4. SetFilterFloatRange
+--------------------------
+
+Prototype: function SetFilterFloatRange ( $attribute, $min, $max,
+$exclude=false )
+
+Adds new float range filter.
+
+On this call, additional new filter is added to the existing list of
+filters. $attribute must be a string with attribute name. $min and $max
+must be floats that define the acceptable attribute values range (including
+the boundaries). $exclude must be a boolean value; it controls whether to
+accept the matching documents (default mode, when $exclude is false) or
+reject them.
+
+Only those documents where $attribute column value stored in the index is
+between $min and $max (including values that are exactly equal to $min or
+$max) will be matched (or rejected, if $exclude is true).
+
+5.4.5. SetGeoAnchor
+-------------------
+
+Prototype: function SetGeoAnchor ( $attrlat, $attrlong, $lat, $long )
+
+Sets anchor point for and geosphere distance (geodistance) calculations,
+and enable them.
+
+$attrlat and $attrlong must be strings that contain the names of latitude
+and longitude attributes, respectively. $lat and $long are floats that
+specify anchor point latitude and longitude, in radians.
+
+Once an anchor point is set, you can use magic "@geodist" attribute name in
+your filters and/or sorting expressions. Sphinx will compute geosphere
+distance between the given anchor point and a point specified by latitude
+and lognitude attributes from each full-text match, and attach this value
+to the resulting match. The latitude and longitude values both in
+SetGeoAnchor and the index attribute data are expected to be in radians.
+The result will be returned in meters, so geodistance value of 1000.0 means
+1 km. 1 mile is approximately 1609.344 meters.
+
+5.5. GROUP BY settings
+----------------------
+
+5.5.1. SetGroupBy
+-----------------
+
+Prototype: function SetGroupBy ( $attribute, $func, $groupsort="@group
+desc" )
+
+Sets grouping attribute, function, and groups sorting mode; and enables
+grouping (as described in Section 4.6, <<Grouping (clustering) search
+results >>).
+
+$attribute is a string that contains group-by attribute name. $func is
+a constant that chooses a function applied to the attribute value in order
+to compute group-by key. $groupsort is a clause that controls how the
+groups will be sorted. Its syntax is similar to that described in
+Section 4.5, <<SPH_SORT_EXTENDED mode>>.
+
+Grouping feature is very similar in nature to GROUP BY clause from SQL.
+Results produces by this function call are going to be the same as produced
+by the following pseudo code:
+
+   | SELECT ... GROUP BY $func($attribute) ORDER BY $groupsort
+
+Note that it's $groupsort that affects the order of matches in the final
+result set. Sorting mode (Section 5.3.3, <<SetSortMode>>) affect the
+ordering of matches within group, ie. what match will be selected as the
+best one from the group. So you can for instance order the groups by
+matches count and select the most relevant match within each group at the
+same time.
+
+5.5.2. SetGroupDistinct
+-----------------------
+
+Prototype: function SetGroupDistinct ( $attribute )
+
+Sets attribute name for per-group distinct values count calculations. Only
+available for grouping queries.
+
+$attribute is a string that contains the attribute name. For each group,
+all values of this attribute will be stored (as RAM limits permit), then
+the amount of distinct values will be calculated and returned to the
+client. This feature is similar to COUNT(DISTINCT) clause in standard SQL;
+so these Sphinx calls:
+
+   | $cl->SetGroupBy ( "category", SPH_GROUPBY_ATTR, "@count desc" );
+   | $cl->SetGroupDistinct ( "vendor" );
+
+can be expressed using the following SQL clauses:
+
+   | SELECT id, weight, all-attributes,
+   | 	COUNT(DISTINCT vendor) AS @distinct,
+   | 	COUNT(*) AS @count
+   | FROM products
+   | GROUP BY category
+   | ORDER BY @count DESC
+
+In the sample pseudo code shown just above, SetGroupDistinct() call
+corresponds to COUNT(DISINCT vendor) clause only. GROUP BY, ORDER BY, and
+COUNT(*) clauses are all an equivalent of SetGroupBy() settings. Both
+queries will return one matching row for each category. In addition to
+indexed attributes, matches will also contain total per-category matches
+count, and the count of distinct vendor IDs within each category.
+
+5.6. Querying
+-------------
+
+5.6.1. Query
+------------
+
+Prototype: function Query ( $query, $index="*" )
+
+Connects to searchd server, runs given search query with current settings,
+obtains and returns the result set.
+
+$query is a query string. $index is an index name (or names) string.
+Returns false and sets GetLastError() message on general error. Returns
+search result set on success.
+
+Default value for $index is "*" that means to query all local indexes.
+Characters allowed in index names include Latin letters (a-z), numbers
+(0-9), minus sign (-), and underscore (_); everything else is considered
+a separator. Therefore, all of the following samples calls are valid and
+will search the same two indexes:
+
+   | $cl->Query ( "test query", "main delta" );
+   | $cl->Query ( "test query", "main;delta" );
+   | $cl->Query ( "test query", "main, delta" );
+
+Index specification order matters. If document with identical IDs are found
+in two or more indexes, weight and attribute values from the very last
+matching index will be used for sorting and returning to client (unless
+explicitly overridden with Section 5.3.6, <<SetIndexWeights>>). Therefore,
+in the example above, matches from "delta" index will always win over
+matches from "main".
+
+On success, Query() returns a result set that contains some of the found
+matches (as requested by Section 5.2.1, <<SetLimits>>) and additional
+general per-query statistics. The result set is a hash (PHP specific; other
+languages might utilize other structures instead of hash) with the
+following keys and values:
+
+   "matches":
+   Hash which maps found document IDs to another small hash containing
+   document weight and attribute values (or an array of the similar small
+   hashes if Section 5.1.4, <<SetArrayResult>> was enabled).
+   "total":
+   Total amount of matches retrieved on server (ie. to the server side
+   result set) by this query. You can retrieve up to this amount of matches
+   from server for this query text with current query settings.
+   "total_found":
+   Total amount of matching documents in index (that were found and
+   procesed on server).
+   "words":
+   Hash which maps query keywords (case-folded, stemmed, and otherwise
+   processed) to a small hash with per-keyword statitics ("docs", "hits").
+   "error":
+   Query error message reported by searchd (string, human readable). Empty
+   if there were no errors.
+   "warning":
+   Query warning message reported by searchd (string, human readable).
+   Empty if there were no warnings.
+
+5.6.2. AddQuery
+---------------
+
+Prototype: function AddQuery ( $query, $index="*" )
+
+Adds additional query with current settings to multi-query batch. $query is
+a query string. $index is an index name (or names) string. Returns index to
+results array returned from Section 5.6.3, <<RunQueries>>.
+
+Batch queries (or multi-queries) enable searchd to perform internal
+optimizations if possible. They also reduce network connection overheads
+and search process creation overheads in all cases. They do not result in
+any additional overheads compared to simple queries. Thus, if you run
+several different queries from your web page, you should always consider
+using multi-queries.
+
+For instance, running the same full-text query but with different sorting
+or group-by settings will enable searchd to perform expensive full-text
+search and ranking operation only once, but compute multiple group-by
+results from its output.
+
+This can be a big saver when you need to display not just plain search
+results but also some per-category counts, such as the amount of products
+grouped by vendor. Without multi-query, you would have to run several
+queries which perform essentially the same search and retrieve the same
+matches, but create result sets differently. With multi-query, you simply
+pass all these querys in a single batch and Sphinx optimizes the redundant
+full-text search internally.
+
+AddQuery() internally saves full current settings state along with the
+query, and you can safely change them afterwards for subsequent AddQuery()
+calls. Already added queries will not be affected; there's actually no way
+to change them at all. Here's an example:
+
+   | $cl->SetSortMode ( SPH_SORT_RELEVANCE );
+   | $cl->AddQuery ( "hello world", "documents" );
+   | 
+   | $cl->SetSortMode ( SPH_SORT_ATTR_DESC, "price" );
+   | $cl->AddQuery ( "ipod", "products" );
+   | 
+   | $cl->AddQuery ( "harry potter", "books" );
+   | 
+   | $results = $cl->RunQueries ();
+
+With the code above, 1st query will search for "hello world" in "documents"
+index and sort results by relevance, 2nd query will search for "ipod" in
+"products" index and sort results by price, and 3rd query will search for
+"harry potter" in "books" index while still sorting by price. Note that 2nd
+SetSortMode() call does not affect the first query (because it's already
+added) but affects both other subsequent queries.
+
+AddQuery() does not modify the current state. That is, all current sorting,
+filtering, and grouping settings will not be affected by this call; so
+subsequent queries can easily reuse current query settings.
+
+AddQuery() returns an index into an array of results that will be returned
+from RunQueries() call. It is simply a sequentially increasing 0-based
+integer, ie. first call will return 0, second will return 1, and so on.
+Just a small helper so you won't have to track the indexes manualy if you
+need then.
+
+5.6.3. RunQueries
+-----------------
+
+Prototype: function RunQueries ()
+
+Connect to searchd, runs a batch of all queries added using AddQuery(),
+obtains and returns the result sets. Returns false and sets GetLastError()
+message on general error (such as network I/O failure). Returns a plain
+array of result sets on success.
+
+Each result set in the returned array is exactly the same as the result set
+returned from Query().
+
+Note that the batch query request itself almost always succeds - unless
+there's a network error, blocking index rotation in progress, or another
+general failure which prevents the whole request from being processed.
+
+However individual queries within the batch might very well fail. In this
+case their respective result sets will contain non-empty "error" message,
+but no matches or query statistics. In the extreme case all queries within
+the batch could fail. There still will be no general error reported,
+because API was able to succesfully connect to searchd, submit the batch,
+and receive the results - but every result set will have a specific error
+message.
+
+5.6.4. ResetFilters
+-------------------
+
+Prototype: function ResetFilters ()
+
+Clears all currently set filters.
+
+This call is only normally required when using multi-queries. You might
+want to set different filters for different queries in the batch. To do
+that, you should call ResetFilters() and add new filters using the
+respective calls.
+
+5.6.5. ResetGroupBy
+-------------------
+
+Prototype: function ResetGroupBy ()
+
+Clears all currently group-by settings, and disables group-by.
+
+This call is only normally required when using multi-queries. You can
+change individual group-by settings using SetGroupBy() and
+SetGroupDistinct() calls, but you can not disable group-by using those
+calls. ResetGroupBy() fully resets previous group-by settings and disables
+group-by mode in the current state, so that subsequent AddQuery() calls can
+perform non-grouping searches.
+
+5.7. Additional functionality
+-----------------------------
+
+5.7.1. BuildExcerpts
+--------------------
+
+Prototype: function BuildExcerpts ( $docs, $index, $words, $opts=array() )
+
+Excerpts (snippets) builder function. Connects to searchd, asks it to
+generate excerpts (snippets) from given documents, and returns the results.
+
+$docs is a plain array of strings that carry the documents' contents.
+$index is an index name string. Different settings (such as charset,
+morphology, wordforms) from given index will be used. $words is a string
+that contains the keywords to highlight. They will be processed with
+respect to index settings. For instance, if English stemming is enabled in
+the index, "shoes" will be highlighted even if keyword is "shoe". $opts is
+a hash which contains additional optional highlighting parameters:
+
+   "before_match":
+   A string to insert before a keyword match. Default is "<b>".
+   "after_match":
+   A string to insert after a keyword match. Default is "<b>".
+   "chunk_separator":
+   A string to insert between snippet chunks (passages). Default is " ...
+   ".
+   "limit":
+   Maximum snippet size, in symbols (codepoints). Integer, default is 256.
+   "around":
+   How much words to pick around each matching keywords block. Integer,
+   default is 5.
+   "exact_phrase":
+   Whether to highlight exact query phrase matches only instead of
+   individual keywords. Boolean, default is false.
+   "single_passage":
+   whether to extract single best passage only. Boolean, default is false.
+
+Returns false on failure. Returns a plain array of strings with excerpts
+(snippets) on success.
+
+5.7.2. UpdateAttributes
+-----------------------
+
+Prototype: function UpdateAttributes ( $index, $attrs, $values )
+
+Instantly updates given attribute values in given documents. Returns number
+of actually updated documents (0 or more) on success, or -1 on failure.
+
+$index is a name of the index (or indexes) to be updated. $attrs is a plain
+array with string attribute names, listing attributes that are updated.
+$values is a hash where key is document ID, and value is a plain array of
+new attribute values.
+
+$index can be either a single index name or a list, like in Query(). Unlike
+Query(), wildcard is not allowed and all the indexes to update must be
+specified explicitly. The list of indexes can include distributed index
+names. Updates on distributed indexes will be pushed to all agents.
+
+The updates only work with docinfo=extern storage strategy. They are very
+fast because they're working fully in RAM, but they can also be made
+persistent: updates are saved on disk on clean searchd shutdown initiated
+by SIGTERM signal.
+
+Usage example:
+
+   | $cl->UpdateAttributes ( "test1", array("group_id"), array(1=>array(456)) );
+   | $cl->UpdateAttributes ( "products", array ( "price", "amount_in_stock" ),
+   | 	array ( 1001=>array(123,5), 1002=>array(37,11), 1003=>(25,129) ) );
+
+The first sample statement will update document 1 in index "test1", setting
+"group_id" to 456. The second one will update documents 1001, 1002 and 1003
+in index "products". For document 1001, the new price will be set to 123
+and the new amount in stock to 5; for document 1002, the new price will be
+37 and the new amount will be 11; etc.
+
+6. MySQL storage engine (SphinxSE)
 ==================================
 
-5.1. SphinxSE overview
+6.1. SphinxSE overview
 ----------------------
 
 SphinxSE is MySQL storage engine which can be compiled into MySQL server
@@ -1140,7 +1836,7 @@ Obvious SphinxSE applications include:
      side is required (eg. JOINs with original document tables, additional
      MySQL-side filtering, etc).
 
-5.2. Installing SphinxSE
+6.2. Installing SphinxSE
 ------------------------
 
 You will need to obtain a copy of MySQL sources, prepare those, and then
@@ -1156,7 +1852,7 @@ If such tarball is not available, or does not work for you for any reason,
 you would have to prepare sources manually. You will need to GNU Autotools
 framework (autoconf, automake and libtool) installed to do that.
 
-5.2.1. Compiling MySQL 5.0.x with SphinxSE
+6.2.1. Compiling MySQL 5.0.x with SphinxSE
 ------------------------------------------
 
 Skips steps 1-3 if using already prepared delta tarball.
@@ -1188,7 +1884,7 @@ Skips steps 1-3 if using already prepared delta tarball.
       | make
       | make install
 
-5.2.2. Compiling MySQL 5.1.x with SphinxSE
+6.2.2. Compiling MySQL 5.1.x with SphinxSE
 ------------------------------------------
 
 Skip steps 1-2 if using already prepared delta tarball.
@@ -1212,7 +1908,7 @@ Skip steps 1-2 if using already prepared delta tarball.
       | make
       | make install
 
-5.2.3. Checking SphinxSE installation
+6.2.3. Checking SphinxSE installation
 -------------------------------------
 
 To check whether SphinxSE has been succesfully compiled into MySQL, launch
@@ -1232,7 +1928,7 @@ should see a list of all available engines. Sphinx should be present and
    | +------------+----------+----------------------------------------------------------------+
    | 13 rows in set (0.00 sec)    
 
-5.3. Using SphinxSE
+6.3. Using SphinxSE
 -------------------
 
 To search via SphinxSE, you would need to create special ENGINE=SPHINX
@@ -1388,7 +2084,7 @@ engines. Here's an example with "documents" from example.sql:
    | +--------+-------+---------------------------------------------+
    | 2 rows in set (0.00 sec)
 
-6. Reporting bugs
+7. Reporting bugs
 =================
 
 Unfortunately, Sphinx is not yet 100% bug free (even though I'm working
@@ -1507,13 +2203,13 @@ additional helpful information which could be retrieved from it. You do not
 need to send me this file (as the debug info there is closely tied to your
 system) but I might need to ask you a few additional questions about it.
 
-7. sphinx.conf options reference
+8. sphinx.conf options reference
 ================================
 
-7.1. Data source configuration options
+8.1. Data source configuration options
 --------------------------------------
 
-7.1.1. type
+8.1.1. type
 -----------
 
 Data source type. Available types are mysql, pgsql and xmlpipe.
@@ -1524,7 +2220,7 @@ Example:
 
    | type = mysql
 
-7.1.2. strip_html
+8.1.2. strip_html
 -----------------
 
 Whether to strip HTML formatting from incoming full-text data. 0 means that
@@ -1542,7 +2238,7 @@ Example:
 
    | strip_html = 0
 
-7.1.3. index_html_attrs
+8.1.3. index_html_attrs
 -----------------------
 
 Specifies which HTML attributes' contents still should be indexed when
@@ -1556,7 +2252,7 @@ Example:
 
    | index_html_attrs = img=alt,title; a=title;
 
-7.1.4. sql_host
+8.1.4. sql_host
 ---------------
 
 SQL server host to connect to.
@@ -1568,7 +2264,7 @@ Example:
 
    | sql_host = localhost
 
-7.1.5. sql_port
+8.1.5. sql_port
 ---------------
 
 SQL server IP port to connect to.
@@ -1581,7 +2277,7 @@ Example:
 
    | sql_port = 3306
 
-7.1.6. sql_user
+8.1.6. sql_user
 ---------------
 
 SQL user to use on sql_host.
@@ -1593,7 +2289,7 @@ Example:
 
    | sql_user = test
 
-7.1.7. sql_pass
+8.1.7. sql_pass
 ---------------
 
 SQL user password to use on sql_host.
@@ -1605,7 +2301,7 @@ Example:
 
    | sql_pass = mysecretpassword
 
-7.1.8. sql_db
+8.1.8. sql_db
 -------------
 
 SQL database (in MySQL terms) to use after connection and perform further
@@ -1618,7 +2314,7 @@ Example:
 
    | sql_db = test
 
-7.1.9. sql_sock
+8.1.9. sql_sock
 ---------------
 
 UNIX socket name to connect to local MySQL server.
@@ -1632,7 +2328,7 @@ Example:
 
    | sql_sock = /tmp/mysql.sock
 
-7.1.10. sql_query_pre
+8.1.10. sql_query_pre
 ---------------------
 
 Pre-fetch query, or pre-query.
@@ -1651,7 +2347,7 @@ Example:
 
    | sql_query_pre = SET CHARACTER_SET_RESULTS=utf-8
 
-7.1.11. sql_query
+8.1.11. sql_query
 -----------------
 
 Main document fetch query.
@@ -1676,7 +2372,7 @@ Example:
    | 		title, content \
    | 	FROM documents
 
-7.1.12. sql_query_range
+8.1.12. sql_query_range
 -----------------------
 
 Query which fetches min/max document IDs range to be used in ranged query
@@ -1689,7 +2385,7 @@ Example:
 
    | sql_query_range = SELECT MIN(id),MAX(id) FROM documents
 
-7.1.13. sql_range_step
+8.1.13. sql_range_step
 ----------------------
 
 How much records to index per one ranged query step (see Section 3.6,
@@ -1702,11 +2398,11 @@ Example:
 
    | sql_range_step = 1000
 
-7.1.14. sql_group_column
+8.1.14. sql_group_column
 ------------------------
 
 Integer attribute column declaration. Specified column should be present
-among those fetched by Section 7.1.11, <<sql_query>>.
+among those fetched by Section 8.1.11, <<sql_query>>.
 
 There might be multiple attributes specified.
 
@@ -1718,11 +2414,11 @@ Example:
    | sql_group_column = group_id    # declare 1st attribute
    | sql_group_column = author_id   # declare 2nd attribute
 
-7.1.15. sql_date_column
+8.1.15. sql_date_column
 -----------------------
 
 UNIX timestamp attribute column declaration. Specified column should be
-present among those fetched by Section 7.1.11, <<sql_query>>.
+present among those fetched by Section 8.1.11, <<sql_query>>.
 
 There might be multiple attributes specified.
 
@@ -1733,11 +2429,11 @@ Example:
 
    | sql_date_column = added_ts
 
-7.1.16. sql_str2ordinal_column
+8.1.16. sql_str2ordinal_column
 ------------------------------
 
 Ordinal string number attribute column declaration. Specified column should
-be present among those fetched by Section 7.1.11, <<sql_query>>.
+be present among those fetched by Section 8.1.11, <<sql_query>>.
 
 When indexing such attributes, string values are fetched from database,
 stored, sorted and then replaced by ordinal number (integer) in the sorted
@@ -1758,11 +2454,11 @@ Example:
 
    | sql_str2ordinal_column = author_name
 
-7.1.17. sql_query_post
+8.1.17. sql_query_post
 ----------------------
 
 Post-fetch query, executed immediately after main fetch query
-(Section 7.1.11, <<sql_query>>) ends. If this query produces errors, they
+(Section 8.1.11, <<sql_query>>) ends. If this query produces errors, they
 are reported as warnings, but indexing is NOT terminated. It's result set
 is ignored.
 
@@ -1776,7 +2472,7 @@ Example:
 
    | sql_query_post = DROP TABLE my_tmp_table
 
-7.1.18. sql_query_post_index
+8.1.18. sql_query_post_index
 ----------------------------
 
 Post-index query, executed when indexing is succesfully completed. If this
@@ -1794,7 +2490,7 @@ Example:
    | sql_query_post_index = REPLACE INTO counters ( id, val ) \
    |     VALUES ( 'max_indexed_id', $maxid )
 
-7.1.19. sql_query_info
+8.1.19. sql_query_info
 ----------------------
 
 Document info query. Only used by CLI search to fetch and display document
@@ -1810,7 +2506,7 @@ Example:
 
    | sql_query_info = SELECT * FROM documents WHERE id=$id
 
-7.1.20. xmlpipe_command
+8.1.20. xmlpipe_command
 -----------------------
 
 Command which will be executed in xmlpipe mode to obtain documents. See
@@ -1822,10 +2518,10 @@ Example:
 
    | xmlpipe_command = cat /home/sphinx/test.xml
 
-7.2. searchd program configuration options
+8.2. searchd program configuration options
 ------------------------------------------
 
-7.2.1. seamless_rotate
+8.2.1. seamless_rotate
 ----------------------
 
 This feature prevents short periods of searchd being inaccessible while

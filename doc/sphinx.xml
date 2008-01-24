@@ -2,7 +2,7 @@
 
 
 <articleinfo>
-<title>Sphinx 0.9.7 reference manual</title>
+<title>Sphinx 0.9.8 reference manual</title>
 <subtitle>Free open-source SQL full-text search engine</subtitle>
 <copyright>
 <year>2001-2008</year>
@@ -28,11 +28,11 @@ SQL databases and scripting languages.
 <para>
 Currently built-in data source drivers support fetching data either via
 direct connection to MySQL, or PostgreSQL, or from a pipe in a custom XML
-format. Adding new drivers (eg. to natively support some other DBMS)
+format. Adding new drivers (eg. to natively support some other DBMSes)
 is designed to be as easy as possible.
 </para>
 <para>
-Search API is natively ported to PHP, Python, Perl and Ruby and
+Search API is natively ported to PHP, Python, Perl, Ruby, Java, and
 also available as a pluggable MySQL storage engine. API is very
 lightweight so porting it to new language is known to take a few hours.
 </para>
@@ -789,6 +789,12 @@ index delta : main
 <sect1 id="searching"><title>Searching</title>
 
 
+<!-- TODO 
+<sect2 id="searching-overview"><title>Overview</title>
+</sect2>
+-->
+
+
 <sect2 id="matching-modes"><title>Matching modes</title>
 <para>
 There are the following matching modes available:
@@ -1211,6 +1217,765 @@ Sort mode can take one of the following values:
 </sect2>
 
 
+</sect1>
+<sect1 id="api-reference"><title>API reference</title>
+
+
+<para>
+There is a number of native searchd client API implementations
+for Sphinx. As of time of this writing, we officially support our own
+PHP, Python, and Java implementations. There also are third party
+free, open-source API implementations for Perl, Ruby, and C++.
+</para>
+<para>
+The reference API implementation is in PHP, because (we believe)
+Sphinx is most widely used with PHP than any other language.
+This reference documentation is in turn based on reference PHP API,
+and all code samples in this section will be given in PHP.
+</para>
+<para>
+However, all other APIs provide the same methods and implement
+the very same network protocol. Therefore the documentation does
+apply to them as well. There might be minor differences as to the
+method naming conventions or specific data structures used.
+But the provided functionality must not differ across languages.
+</para>
+
+
+<sect2 id="api-funcgroup-general"><title>General API functions</title>
+
+
+<sect3 id="api-func-getlasterror"><title>GetLastError</title>
+<para><b>Prototype:</b> function GetLastError()</para>
+<para>
+Returns last error message, as a string, in human readable format.
+If there were no errors during the previous API call, empty string is returned.
+</para>
+<para>
+You should call it when any other function (such as <xref linkend="api-func-query"/>)
+fails (typically, the failing function returns false). The returned string will
+contain the error description.
+</para>
+<para>
+The error message is <emphasis>not</emphasis> reset by this call; so you can safely
+call it several times if needed.
+</para>
+</sect3>
+
+<sect3 id="api-func-getlastwarning"><title>GetLastWarning</title>
+<para><b>Prototype:</b> function GetLastWarning ()</para>
+<para>
+Returns last warning message, as a string, in human readable format.
+If there were no warnings during the previous API call, empty string is returned.
+</para>
+<para>
+You should call it to verify whether your request
+(such as <xref linkend="api-func-query"/>) was completed but with warnings.
+For instance, search query against a distributed index might complete
+succesfully even if several remote agents timed out. In that case,
+a warning message would be produced.
+</para>
+<para>
+The warning message is <emphasis>not</emphasis> reset by this call; so you can safely
+call it several times if needed.
+</para>
+</sect3>
+
+<sect3 id="api-func-setserver"><title>SetServer</title>
+<para><b>Prototype:</b> function SetServer ( $host, $port )</para>
+<para>
+Sets <filename>searchd</filename> host name and TCP port.
+All subsequent requests will use the new host and port settings.
+Default host and port are "localhost" and 3312, respectively.
+</para>
+</sect3>
+
+<sect3 id="api-func-setarrayresult"><title>SetArrayResult</title>
+<para><b>Prototype:</b> function SetArrayResult ( $arrayresult )</para>
+<para>
+PHP specific. Controls matches format in the search results set
+(whether matches should be returned as an array or a hash).
+</para>
+<para>
+<code>$arrayresult</code> argument must be boolean. If <code>$arrayresult</code> is <code>false</code>
+(the default mode), matches will returned in PHP hash format with
+document IDs as keys, and other information (weight, attributes)
+as values. If <code>$arrayresult</code> is true, matches will be returned
+as a plain array with complete per-match information including
+document ID.
+</para>
+<para>
+Introduced along with GROUP BY support on MVA attributes.
+Group-by-MVA result sets may contain duplicate document IDs.
+Thus they need to be returned as plain arrays, because hashes
+will only keep one entry per document ID.
+</para>
+</sect3>
+
+
+</sect2>
+<sect2 id="api-funcgroup-general-query-settings"><title>General query settings</title>
+
+
+<sect3 id="api-func-setlimits"><title>SetLimits</title>
+<para><b>Prototype:</b> function SetLimits ( $offset, $limit, $max_matches=0, $cutoff=0 )</para>
+<para>
+Sets offset into server-side result set (<code>$offset</code>) and amount of matches
+to return to client starting from that offset (<code>$limit</code>). Can additionally
+control maximum server-side result set size for current query (<code>$max_matches</code>)
+and the threshold amount of matches to stop searching at (<code>$cutoff</code>).
+All parameters must be non-negative integers.
+</para>
+<para>
+First two parameters to SetLimits() are identical in behaviour to MySQL
+LIMIT clause. They instruct <filename>searchd</filename> to return at
+most <code>$limit</code> matches starting from match number <code>$offset</code>.
+The default offset and limit settings are 0 and 20, that is, to return
+first 20 matches.
+</para>
+<para>
+<code>max_matches</code> setting controls how much matches <filename>searchd</filename>
+will keep in RAM while searching. <b>All</b> matching documents will be normally
+processed, ranked, filtered, and sorted even if <code>max_matches</code> is set to 1.
+But only best N documents are stored in memory at any given moment for performance
+and RAM usage reasons, and this setting controls that N. Note that there are
+<b>two</b> places where <code>max_matches</code> limit is enforced. Per-query
+limit is controlled by this API call, but there also is per-server limit
+controlled by <code>max_matches</code> setting in the config file. To prevent
+RAM usage abuse, server will not allow to set per-query limit
+higher than the per-server limit.
+</para>
+<para>
+You can't retrieve more than <code>max_matches</code> matches to the client application.
+The default limit is set to 1000. Normally, you must not have to go over
+this limit. One thousand records is enough to present to the end user.
+And if you're thinking about pulling the results to application
+for further sorting or filtering, that would be <b>much</b> more efficient
+if performed on Sphinx side.
+</para>
+<para>
+<code>$cutoff</code> setting is intended for advanced performance control.
+It tells <filename>searchd</filename> to forcibly stop search query
+once <code>$cutoff</code> matches had been found and processed.
+</para>
+</sect3>
+
+<sect3 id="api-func-setmaxquerytime"><title>SetMaxQueryTime</title>
+<para><b>Prototype:</b> function SetMaxQueryTime ( $max_query_time )</para>
+<para>
+Sets maximum search query time, in milliseconds. Parameter must be
+a non-negative integer. Default valus is 0 which means "do not limit".
+</para>
+<para>Similar to <code>$cutoff</code> setting from <xref linkend="api-func-setlimits"/>,
+but limits elapsed query time instead of processed matches count. Local search queries
+will be stopped once that much time has elapsed. Note that if you're performing
+a search which queries several local indexes, this limit applies to each index
+separately.
+</para>
+</sect3>
+
+
+</sect2>
+<sect2 id="api-funcgroup-fulltext-query-settings"><title>Full-text search query settings</title>
+
+
+<sect3 id="api-func-setmatchmode"><title>SetMatchMode</title>
+<para><b>Prototype:</b> function SetMatchMode ( $mode )</para>
+<para>
+Sets full-text query matching mode, as described in <xref linkend="matching-modes"/>.
+Parameter must be a constant specifying one of the known modes.
+</para>
+<para>
+<b>WARNING:</b> (PHP specific) you <b>must not</b> take the matching mode
+constant name in quotes, that syntax specifies a string and is incorrect:
+<programlisting>
+$cl->SetMatchMode ( "SPH_MATCH_ANY" ); // INCORRECT! will not work as expected
+$cl->SetMatchMode ( SPH_MATCH_ANY ); // correct, works OK
+</programlisting>
+</para>
+</sect3>
+
+<sect3 id="api-func-setrankingmode"><title>SetRankingMode</title>
+<para><b>Prototype:</b> function SetRankingMode ( $ranker )</para>
+<para>
+Sets ranking mode. Only available in SPH_MATCH_EXTENDED2 matching
+mode at the time of this writing. Parameter must be a constant
+specifying one of the known modes.
+</para>
+<para>
+By default, Sphinx computes two factors which contribute to the final
+match weight. The major part is query phrase proximity to document text.
+The minor part is so-called BM25 statistical function, which varies
+from 0 to 1 depending on the keyword frequency within document
+(more occurrences yield higher weight) and within the whole index
+(more rare keywords yield higher weight).
+</para>
+<para>
+However, in some cases you'd want to compute weight differently -
+or maybe avoid computing it at all for performance reasons because
+you're sorting the result set by something else anyway. This can be
+accomplished by setting the appropriate ranking mode.
+</para>
+<para>
+Currently implemented modes are:
+<itemizedlist>
+<listitem>SPH_RANK_PROXIMITY_BM25, default ranking mode which uses and combines
+	both phrase proximity and BM25 ranking.</listitem>
+<listitem>SPH_RANK_BM25, statistical ranking mode which uses BM25 ranking only (similar to
+	most other full-text engines). This mode is faster but may result in worse quality
+	on queries which contain more than 1 keyword.</listitem>
+<listitem>SPH_RANK_NONE, disabled ranking mode. This mode is the fastest.
+	It is essentially equivalent to boolean searching. A weight of 1 is assigned
+	to all matches.</listitem>
+</itemizedlist>
+</para>
+</sect3>
+
+<sect3 id="api-func-setsortmode"><title>SetSortMode</title>
+<para><b>Prototype:</b> function SetSortMode ( $mode, $sortby="" )</para>
+<para>
+Set matches sorting mode, as described in <xref linkend="sorting-modes"/>.
+Parameter must be a constant specifying one of the known modes.
+</para>
+<para>
+<b>WARNING:</b> (PHP specific) you <b>must not</b> take the matching mode
+constant name in quotes, that syntax specifies a string and is incorrect:
+<programlisting>
+$cl->SetSortMode ( "SPH_SORT_ATTR_DESC" ); // INCORRECT! will not work as expected
+$cl->SetSortMode ( SPH_SORT_ATTR_ASC ); // correct, works OK
+</programlisting>
+</para>
+</sect3>
+
+<sect3 id="api-func-setweights"><title>SetWeights</title>
+<para><b>Prototype:</b> function SetWeights ( $weights )</para>
+<para>
+Binds per-field weights in the order of appearance in the index.
+<b>DEPRECATED</b>, use <xref linkend="api-func-setfieldweights"/> instead.
+</para>
+</sect3>
+
+<sect3 id="api-func-setfieldweights"><title>SetFieldWeights</title>
+<para><b>Prototype:</b> function SetFieldWeights ( $weights )</para>
+<para>
+Binds per-field weights by name. Parameter must be a hash (associative array)
+mapping string field names to integer weights.
+</para>
+<para>
+Match ranking can be affected by per-field weights. For instance,
+see <xref linkend="weighting"/> for an explanation how phrase proximity
+ranking is affected. This call lets you specify what non-default
+weights to assign to different full-text fields.
+</para>
+<para>
+The weights must be positive 32-bit integers. The final weight
+will be a 32-bit integer too. Default weight value is 1. Unknown
+field names will be silently ignored.
+</para>
+<para>
+There is no enforced limit on the maximum weight value at the
+moment. However, beware that if you set it too high you can start
+hitting 32-bit wraparound issues. For instance, if you set
+a weight of 10,000,000 and search in extended mode, then
+maximum possible weight will be equal to 10 million (your weight)
+by 1 thousand (internal BM25 scaling factor, see <xref linkend="weighting"/>)
+by 1 or more (phrase proximity rank). The result is at least 10 billion
+that does not fit in 32 bits and will be wrapped around, producing
+unexpected results.
+</para>
+</sect3>
+
+<sect3 id="api-func-setindexweights"><title>SetIndexWeights</title>
+<para><b>Prototype:</b> function SetIndexWeights ( $weights )</para>
+<para>
+Sets per-index weights, and enables weighted summing of match weights
+across different indexes. Parameter must be a hash (associative array)
+mapping string index names to integer weights. Default is empty array
+that means to disable weighting summing.
+</para>
+<para>
+When a match with the same document ID is found in several different
+local indexes, by default Sphinx simply chooses the match from the index
+specified last in the query. This is to support searching through
+partially overlapping index partitions.
+</para>
+<para>
+However in some cases the indexes are not just partitions, and you
+might want to sum the weights across the indexes instead of picking one.
+<code>SetIndexWeights()</code> lets you do that. With summing enabled,
+final match weight in result set will be computed as a sum of match
+weight coming from the given index multiplied by respective per-index
+weight specified in this call. Ie. if the document 123 is found in
+index A with the weight of 2, and also in index B with the weight of 3,
+and you called <code>SetIndexWeights ( array ( "A"=>100, "B"=>10 ) )</code>,
+the final weight return to the client will be 2*100+3*10 = 230.
+</para>
+</sect3>
+
+
+</sect2>
+<sect2 id="api-funcgroup-filtering"><title>Result set filtering settings</title>
+
+
+<sect3 id="api-func-setidrange"><title>SetIDRange</title>
+<para><b>Prototype:</b> function SetIDRange ( $min, $max )</para>
+<para>
+Sets an accepted range of document IDs. Parameters must be integers.
+Defaults are 0 and 0; that combination means to not limit by range.
+</para>
+<para>
+After this call, only those records that have document ID
+between <code>$min</code> and <code>$max</code> (including IDs
+exactly equal to <code>$min</code> or <code>$max</code>)
+will be matched.
+</para>
+</sect3>
+
+<sect3 id="api-func-setfilter"><title>SetFilter</title>
+<para><b>Prototype:</b> function SetFilter ( $attribute, $values, $exclude=false )</para>
+<para>
+Adds new integer values set filter. 
+</para>
+<para>
+On this call, additional new filter is added to the existing
+list of filters. <code>$attribute</code> must be a string with
+attribute name. <code>$values</code> must be a plain array
+containing integer values. <code>$exclude</code> must be a boolean
+value; it controls whether to accept the matching documents
+(default mode, when <code>$exclude</code> is false) or reject them.
+</para>
+<para>
+Only those documents where <code>$attribute</code> column value
+stored in the index matches any of the values from <code>$values</code>
+array will be matched (or rejected, if <code>$exclude</code> is true).
+</para>
+</sect3>
+
+<sect3 id="api-func-setfilterrange"><title>SetFilterRange</title>
+<para><b>Prototype:</b> function SetFilterRange ( $attribute, $min, $max, $exclude=false )</para>
+<para>
+Adds new integer range filter.
+</para>
+<para>
+On this call, additional new filter is added to the existing
+list of filters. <code>$attribute</code> must be a string with
+attribute name. <code>$min</code> and <code>$max</code> must be
+integers that define the acceptable attribute values range
+(including the boundaries). <code>$exclude</code> must be a boolean
+value; it controls whether to accept the matching documents
+(default mode, when <code>$exclude</code> is false) or reject them.
+</para>
+<para>
+Only those documents where <code>$attribute</code> column value
+stored in the index is between <code>$min</code> and <code>$max</code>
+(including values that are exactly equal to <code>$min</code> or <code>$max</code>)
+will be matched (or rejected, if <code>$exclude</code> is true).
+</para>
+</sect3>
+
+<sect3 id="api-func-setfilterfloatrange"><title>SetFilterFloatRange</title>
+<para><b>Prototype:</b> function SetFilterFloatRange ( $attribute, $min, $max, $exclude=false )</para>
+<para>
+Adds new float range filter.
+</para>
+<para>
+On this call, additional new filter is added to the existing
+list of filters. <code>$attribute</code> must be a string with
+attribute name. <code>$min</code> and <code>$max</code> must be
+floats that define the acceptable attribute values range
+(including the boundaries). <code>$exclude</code> must be a boolean
+value; it controls whether to accept the matching documents
+(default mode, when <code>$exclude</code> is false) or reject them.
+</para>
+<para>
+Only those documents where <code>$attribute</code> column value
+stored in the index is between <code>$min</code> and <code>$max</code>
+(including values that are exactly equal to <code>$min</code> or <code>$max</code>)
+will be matched (or rejected, if <code>$exclude</code> is true).
+</para>
+</sect3>
+
+<sect3 id="api-func-setgeoanchor"><title>SetGeoAnchor</title>
+<para><b>Prototype:</b> function SetGeoAnchor ( $attrlat, $attrlong, $lat, $long )</para>
+<para>
+Sets anchor point for and geosphere distance (geodistance) calculations, and enable them.
+</para>
+<para>
+<code>$attrlat</code> and <code>$attrlong</code> must be strings that contain the names
+of latitude and longitude attributes, respectively. <code>$lat</code> and <code>$long</code>
+are floats that specify anchor point latitude and longitude, in radians.
+</para>
+<para>
+Once an anchor point is set, you can use magic <code>"@geodist"</code> attribute
+name in your filters and/or sorting expressions. Sphinx will compute geosphere distance
+between the given anchor point and a point specified by latitude and lognitude
+attributes from each full-text match, and attach this value to the resulting match.
+The latitude and longitude values both in <code>SetGeoAnchor</code> and the index
+attribute data are expected to be in radians. The result will be returned in meters,
+so geodistance value of 1000.0 means 1 km. 1 mile is approximately 1609.344 meters.
+</para>
+</sect3>
+
+
+</sect2>
+<sect2 id="api-funcgroup-groupby"><title>GROUP BY settings</title>
+
+
+<sect3 id="api-func-setgroupby"><title>SetGroupBy</title>
+<para><b>Prototype:</b> function SetGroupBy ( $attribute, $func, $groupsort="@group desc" )</para>
+<para>
+Sets grouping attribute, function, and groups sorting mode; and enables grouping
+(as described in <xref linkend="clustering"/>).
+</para>
+<para>
+<code>$attribute</code> is a string that contains group-by attribute name.
+<code>$func</code> is a constant that chooses a function applied to the attribute value in order to compute group-by key.
+<code>$groupsort</code> is a clause that controls how the groups will be sorted. Its syntax is similar
+to that described in <xref linkend="sort-extended"/>.
+</para>
+<para>
+Grouping feature is very similar in nature to GROUP BY clause from SQL.
+Results produces by this function call are going to be the same as produced
+by the following pseudo code:
+<programlisting>
+SELECT ... GROUP BY $func($attribute) ORDER BY $groupsort
+</programlisting>
+Note that it's <code>$groupsort</code> that affects the order of matches
+in the final result set. Sorting mode (<xref linkend="api-func-setsortmode"/>)
+affect the ordering of matches <emphasis>within</emphasis> group, ie.
+what match will be selected as the best one from the group.
+So you can for instance order the groups by matches count
+and select the most relevant match within each group at the same time.
+</para>
+</sect3>
+
+<sect3 id="api-func-setgroupdistinct"><title>SetGroupDistinct</title>
+<para><b>Prototype:</b> function SetGroupDistinct ( $attribute )</para>
+<para>
+Sets attribute name for per-group distinct values count calculations.
+Only available for grouping queries.
+</para>
+<para>
+<code>$attribute</code> is a string that contains the attribute name.
+For each group, all values of this attribute will be stored (as RAM limits
+permit), then the amount of distinct values will be calculated and returned
+to the client. This feature is similar to <code>COUNT(DISTINCT)</code>
+clause in standard SQL; so these Sphinx calls:
+<programlisting>
+$cl->SetGroupBy ( "category", SPH_GROUPBY_ATTR, "@count desc" );
+$cl->SetGroupDistinct ( "vendor" );
+</programlisting>
+can be expressed using the following SQL clauses:
+<programlisting>
+SELECT id, weight, all-attributes,
+	COUNT(DISTINCT vendor) AS @distinct,
+	COUNT(*) AS @count
+FROM products
+GROUP BY category
+ORDER BY @count DESC
+</programlisting>
+In the sample pseudo code shown just above, <code>SetGroupDistinct()</code> call
+corresponds to <code>COUNT(DISINCT vendor)</code> clause only.
+<code>GROUP BY</code>, <code>ORDER BY</code>, and  <code>COUNT(*)</code>
+clauses are all an equivalent of <code>SetGroupBy()</code> settings. Both queries
+will return one matching row for each category. In addition to indexed attributes,
+matches will also contain total per-category matches count, and the count
+of distinct vendor IDs within each category.
+</para>
+</sect3>
+
+
+</sect2>
+<sect2 id="api-funcgroup-querying"><title>Querying</title>
+
+
+<sect3 id="api-func-query"><title>Query</title>
+<para><b>Prototype:</b> function Query ( $query, $index="*" )</para>
+<para>
+Connects to <filename>searchd</filename> server, runs given search query
+with current settings, obtains and returns the result set.
+</para>
+<para>
+<code>$query</code> is a query string. <code>$index</code> is an index name (or names) string.
+Returns false and sets <code>GetLastError()</code> message on general error. 
+Returns search result set on success.
+</para>
+<para>
+Default value for <code>$index</code> is <code>"*"</code> that means
+to query all local indexes. Characters allowed in index names include
+Latin letters (a-z), numbers (0-9), minus sign (-), and underscore (_);
+everything else is considered a separator. Therefore, all of the
+following samples calls are valid and will search the same
+two indexes:
+<programlisting>
+$cl->Query ( "test query", "main delta" );
+$cl->Query ( "test query", "main;delta" );
+$cl->Query ( "test query", "main, delta" );
+</programlisting>
+Index specification order matters. If document with identical IDs are found
+in two or more indexes, weight and attribute values from the very last matching 
+index will be used for sorting and returning to client (unless explicitly
+overridden with <xref linkend="api-func-setindexweights"/>). Therefore,
+in the example above, matches from "delta" index will always win over
+matches from "main".
+</para>
+<para>
+On success, <code>Query()</code> returns a result set that contains
+some of the found matches (as requested by <xref linkend="api-func-setlimits"/>)
+and additional general per-query statistics. The result set is a hash
+(PHP specific; other languages might utilize other structures instead
+of hash) with the following keys and values:
+<variablelist>
+<varlistentry>
+	<term>"matches":</term>
+	<listitem>Hash which maps found document IDs to another small hash containing document weight and attribute values
+		(or an array of the similar small hashes if <xref linkend="api-func-setarrayresult"/> was enabled).
+	</listitem>
+</varlistentry>
+<varlistentry>
+	<term>"total":</term>
+	<listitem>Total amount of matches retrieved <emphasis>on server</emphasis> (ie. to the server side result set) by this query.
+		You can retrieve up to this amount of matches from server for this query text with current query settings.
+	</listitem>
+</varlistentry>
+<varlistentry>
+	<term>"total_found":</term>
+	<listitem>Total amount of matching documents in index (that were found and procesed on server).</listitem>
+</varlistentry>
+<varlistentry>
+	<term>"words":</term>
+	<listitem>Hash which maps query keywords (case-folded, stemmed, and otherwise processed) to a small hash with per-keyword statitics ("docs", "hits").</listitem>
+</varlistentry>
+<varlistentry>
+	<term>"error":</term>
+	<listitem>Query error message reported by <filename>searchd</filename> (string, human readable). Empty if there were no errors.</listitem>
+</varlistentry>
+<varlistentry>
+	<term>"warning":</term>
+	<listitem>Query warning message reported by <filename>searchd</filename> (string, human readable). Empty if there were no warnings.</listitem>
+</varlistentry>
+</variablelist>
+</para>
+</sect3>
+
+<sect3 id="api-func-addquery"><title>AddQuery</title>
+<para><b>Prototype:</b> function AddQuery ( $query, $index="*" )</para>
+<para>
+Adds additional query with current settings to multi-query batch.
+<code>$query</code> is a query string. <code>$index</code> is an index name (or names) string.
+Returns index to results array returned from <xref linkend="api-func-runqueries"/>.
+</para>
+<para>
+Batch queries (or multi-queries) enable <filename>searchd</filename> to perform internal
+optimizations if possible. They also reduce network connection overheads and search process
+creation overheads in all cases. They do not result in any additional overheads compared
+to simple queries. Thus, if you run several different queries from your web page,
+you should always consider using multi-queries.
+</para>
+<para>
+For instance, running the same full-text query but with different
+sorting or group-by settings will enable <filename>searchd</filename>
+to perform expensive full-text search and ranking operation only once,
+but compute multiple group-by results from its output.
+</para>
+<para>
+This can be a big saver when you need to display not just plain
+search results but also some per-category counts, such as the amount of
+products grouped by vendor. Without multi-query, you would have to run several
+queries which perform essentially the same search and retrieve the
+same matches, but create result sets differently. With multi-query,
+you simply pass all these querys in a single batch and Sphinx
+optimizes the redundant full-text search internally.
+</para>
+<para>
+<code>AddQuery()</code> internally saves full current settings state
+along with the query, and you can safely change them afterwards for subsequent
+<code>AddQuery()</code> calls. Already added queries will not be affected;
+there's actually no way to change them at all. Here's an example:
+<programlisting>
+$cl->SetSortMode ( SPH_SORT_RELEVANCE );
+$cl->AddQuery ( "hello world", "documents" );
+
+$cl->SetSortMode ( SPH_SORT_ATTR_DESC, "price" );
+$cl->AddQuery ( "ipod", "products" );
+
+$cl->AddQuery ( "harry potter", "books" );
+
+$results = $cl->RunQueries ();
+</programlisting>
+With the code above, 1st query will search for "hello world" in "documents" index
+and sort results by relevance, 2nd query will search for "ipod" in "products"
+index and sort results by price, and 3rd query will search for "harry potter"
+in "books" index while still sorting by price. Note that 2nd <code>SetSortMode()</code> call
+does not affect the first query (because it's already added) but affects both other
+subsequent queries.
+</para>
+<para>
+<code>AddQuery()</code> does <b>not</b> modify the current state. That is,
+all current sorting, filtering, and grouping settings will not be affected by
+this call; so subsequent queries can easily reuse current query settings.
+</para>
+<para>
+<code>AddQuery()</code> returns an index into an array of results
+that will be returned from <code>RunQueries()</code> call. It is simply
+a sequentially increasing 0-based integer, ie. first call will return 0,
+second will return 1, and so on. Just a small helper so you won't have
+to track the indexes manualy if you need then.
+</para>
+</sect3>
+
+<sect3 id="api-func-runqueries"><title>RunQueries</title>
+<para><b>Prototype:</b> function RunQueries ()</para>
+<para>
+Connect to searchd, runs a batch of all queries added using <code>AddQuery()</code>,
+obtains and returns the result sets. Returns false and sets <code>GetLastError()</code>
+message on general error (such as network I/O failure). Returns a plain array
+of result sets on success.
+</para>
+<para>
+Each result set in the returned array is exactly the same as
+the result set returned from <link linkend="api-func-query"><code>Query()</code></link>.
+</para>
+<para>
+Note that the batch query request itself almost always succeds -
+unless there's a network error, blocking index rotation in progress,
+or another general failure which prevents the whole request from being
+processed.
+</para>
+<para>
+However individual queries within the batch might very well fail.
+In this case their respective result sets will contain non-empty <code>"error"</code> message,
+but no matches or query statistics. In the extreme case all queries within the batch
+could fail. There still will be no general error reported, because API was able to
+succesfully connect to <filename>searchd</filename>, submit the batch, and receive
+the results - but every result set will have a specific error message.
+</para>
+</sect3>
+
+<sect3 id="api-func-resetfilters"><title>ResetFilters</title>
+<para><b>Prototype:</b> function ResetFilters ()</para>
+<para>
+Clears all currently set filters.
+</para>
+<para>
+This call is only normally required when using multi-queries. You might want
+to set different filters for different queries in the batch. To do that,
+you should call <code>ResetFilters()</code> and add new filters using
+the respective calls.
+</para>
+</sect3>
+
+<sect3 id="api-func-resetgroupby"><title>ResetGroupBy</title>
+<para><b>Prototype:</b> function ResetGroupBy ()</para>
+<para>
+Clears all currently group-by settings, and disables group-by.
+</para>
+<para>
+This call is only normally required when using multi-queries.
+You can change individual group-by settings using <code>SetGroupBy()</code>
+and <code>SetGroupDistinct()</code> calls, but you can not disable
+group-by using those calls. <code>ResetGroupBy()</code>
+fully resets previous group-by settings and disables group-by mode
+in the current state, so that subsequent <code>AddQuery()</code>
+calls can perform non-grouping searches.
+</para>
+</sect3>
+
+
+</sect2>
+<sect2 id="api-funcgroup-additional-functionality"><title>Additional functionality</title>
+
+
+<sect3 id="api-func-buildexcerpts"><title>BuildExcerpts</title>
+<para><b>Prototype:</b> function BuildExcerpts ( $docs, $index, $words, $opts=array() )</para>
+<para>
+Excerpts (snippets) builder function. Connects to <filename>searchd</filename>,
+asks it to generate excerpts (snippets) from given documents, and returns the results.
+</para>
+<para>
+<code>$docs</code> is a plain array of strings that carry the documents' contents.
+<code>$index</code> is an index name string. Different settings (such as charset,
+morphology, wordforms) from given index will be used.
+<code>$words</code> is a string that contains the keywords to highlight. They will
+be processed with respect to index settings. For instance, if English stemming
+is enabled in the index, "shoes" will be highlighted even if keyword is "shoe".
+<code>$opts</code> is a hash which contains additional optional highlighting parameters:
+<variablelist>
+<varlistentry>
+	<term>"before_match":</term>
+	<listitem>A string to insert before a keyword match. Default is "&lt;b&gt;".</listitem>
+</varlistentry>
+<varlistentry>
+	<term>"after_match":</term>
+	<listitem>A string to insert after a keyword match. Default is "&lt;b&gt;".</listitem>
+</varlistentry>
+<varlistentry>
+	<term>"chunk_separator":</term>
+	<listitem>A string to insert between snippet chunks (passages). Default is " ... ".</listitem>
+</varlistentry>
+<varlistentry>
+	<term>"limit":</term>
+	<listitem>Maximum snippet size, in symbols (codepoints). Integer, default is 256.</listitem>
+</varlistentry>
+<varlistentry>
+	<term>"around":</term>
+	<listitem>How much words to pick around each matching keywords block. Integer, default is 5.</listitem>
+</varlistentry>
+<varlistentry>
+	<term>"exact_phrase":</term>
+	<listitem>Whether to highlight exact query phrase matches only instead of individual keywords. Boolean, default is false.</listitem>
+</varlistentry>
+<varlistentry>
+	<term>"single_passage":</term>
+	<listitem>whether to extract single best passage only. Boolean, default is false.</listitem>
+</varlistentry>
+</variablelist>
+</para>
+<para>
+Returns false on failure. Returns a plain array of strings with excerpts (snippets) on success.
+</para>
+</sect3>
+
+<sect3 id="api-func-updateatttributes"><title>UpdateAttributes</title>
+<para><b>Prototype:</b> function UpdateAttributes ( $index, $attrs, $values )</para>
+<para>
+Instantly updates given attribute values in given documents.
+Returns number of actually updated documents (0 or more) on success, or -1 on failure.
+</para>
+<para>
+<code>$index</code> is a name of the index (or indexes) to be updated.
+<code>$attrs</code> is a plain array with string attribute names, listing attributes that are updated.
+<code>$values</code> is a hash where key is document ID, and value is a plain array of new attribute values.
+</para>
+<para>
+<code>$index</code> can be either a single index name or a list, like in <code>Query()</code>.
+Unlike <code>Query()</code>, wildcard is not allowed and all the indexes
+to update must be specified explicitly. The list of indexes can include
+distributed index names. Updates on distributed indexes will be pushed
+to all agents.
+</para>
+<para>
+The updates only work with <code>docinfo=extern</code> storage strategy.
+They are very fast because they're working fully in RAM, but they can also
+be made persistent: updates are saved on disk on clean <filename>searchd</filename>
+shutdown initiated by SIGTERM signal.
+</para>
+<para>
+Usage example:
+<programlisting>
+$cl->UpdateAttributes ( "test1", array("group_id"), array(1=>array(456)) );
+$cl->UpdateAttributes ( "products", array ( "price", "amount_in_stock" ),
+	array ( 1001=>array(123,5), 1002=>array(37,11), 1003=>(25,129) ) );
+</programlisting>
+The first sample statement will update document 1 in index "test1", setting "group_id" to 456.
+The second one will update documents 1001, 1002 and 1003 in index "products". For document 1001,
+the new price will be set to 123 and the new amount in stock to 5; for document 1002, the new price
+will be 37 and the new amount will be 11; etc.
+</para>
+</sect3>
+
+
+</sect2>
 </sect1>
 <sect1 id="sphinxse"><title>MySQL storage engine (SphinxSE)</title>
 

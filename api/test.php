@@ -80,6 +80,7 @@ for ( $i=0; $i<count($args); $i++ )
 		$arg = strtolower($args[++$i]);
 		if ( $arg=="bm25" )		$ranker = SPH_RANK_BM25;
 		if ( $arg=="none" )		$ranker = SPH_RANK_NONE;
+		if ( $arg=="wordcount" )$ranker = SPH_RANK_WORDCOUNT;
 	}
 	else
 		$q .= $args[$i] . " ";

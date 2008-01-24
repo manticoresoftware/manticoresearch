@@ -9828,6 +9828,7 @@ protected:
 DECLARE_RANKER ( ProximityBM25 )
 DECLARE_RANKER ( BM25 )
 DECLARE_RANKER ( None )
+DECLARE_RANKER ( Wordcount )
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -10895,7 +10896,6 @@ int ExtRanker_ProximityBM25_c::GetMatches ( int iFields, const int * pWeights )
 	BYTE uLCS[SPH_MAX_FIELDS];
 	memset ( uLCS, 0, sizeof(uLCS) );
 
-	DWORD uRank = 0;
 	BYTE uCurLCS = 0;
 	int iExpDelta = -INT_MAX;
 
@@ -10936,9 +10936,8 @@ int ExtRanker_ProximityBM25_c::GetMatches ( int iFields, const int * pWeights )
 			// otherwise (new match or no next hits block), flush current doc
 			if ( uCurDocid )
 			{
-				uRank = 0;
-				iExpDelta = -1;
 				uCurLCS = 0;
+				DWORD uRank = 0;
 				for ( int i=0; i<iFields; i++ )
 				{
 					uRank += uLCS[i]*pWeights[i];
@@ -10947,6 +10946,7 @@ int ExtRanker_ProximityBM25_c::GetMatches ( int iFields, const int * pWeights )
 				m_dMatches[iMatches].m_iDocID = uCurDocid;
 				m_dMatches[iMatches].m_iWeight = uRank*SPH_BM25_SCALE + int( (uCurTFIDF+0.5f)*SPH_BM25_SCALE );
 				iMatches++;
+				iExpDelta = -1;
 			}
 
 			// boundary checks
@@ -11054,6 +11054,90 @@ int ExtRanker_None_c::GetMatches ( int, const int * )
 
 //////////////////////////////////////////////////////////////////////////
 
+int ExtRanker_Wordcount_c::GetMatches ( int, const int * pWeights )
+{
+	if ( !m_pRoot )
+		return 0;
+
+	int iMatches = 0;
+	const ExtHit_t * pHlist = m_pHitlist;
+	const ExtDoc_t * pDocs = m_pDoclist;
+
+	// warmup if necessary
+	if ( !pHlist )
+	{
+		if ( !pDocs ) pDocs = m_pRoot->GetDocsChunk ();
+		if ( !pDocs ) return iMatches;
+
+		pHlist = m_pRoot->GetHitsChunk ( pDocs );
+		if ( !pHlist ) return iMatches;
+	}
+
+	// main matching loop
+	const ExtDoc_t * pDoc = pDocs;
+	DWORD uRank = 0;
+	for ( SphDocID_t uCurDocid=0; iMatches<ExtNode_i::MAX_DOCS; )
+	{
+		assert ( pHlist );
+
+		// next match (or block end)? compute final weight, and flush prev one
+		if ( pHlist->m_uDocid!=uCurDocid )
+		{
+			// if hits block is over, get next block, but do *not* flush current doc
+			if ( pHlist->m_uDocid==DOCID_MAX )
+			{
+				assert ( pDocs );
+				pHlist = m_pRoot->GetHitsChunk ( pDocs );
+				if ( pHlist )
+					continue;
+			}
+
+			// otherwise (new match or no next hits block), flush current doc
+			if ( uCurDocid )
+			{
+				m_dMatches[iMatches].m_iDocID = uCurDocid;
+				m_dMatches[iMatches].m_iWeight = uRank;
+				iMatches++;
+				uRank = 0;
+			}
+
+			// boundary checks
+			if ( !pHlist )
+			{
+				// there are no more hits for current docs block; do we have a next one?
+				assert ( pDocs );
+				pDoc = pDocs = m_pRoot->GetDocsChunk ();
+
+				// we don't, so bail out
+				if ( !pDocs )
+					break;
+
+				// we do, get some hits
+				pHlist = m_pRoot->GetHitsChunk ( pDocs );
+				assert ( pHlist ); // fresh docs block, must have hits
+			}
+
+			// carry on
+			assert ( pDoc->m_uDocid<=pHlist->m_uDocid );
+			while ( pDoc->m_uDocid<pHlist->m_uDocid ) pDoc++;
+			assert ( pDoc->m_uDocid==pHlist->m_uDocid );
+
+			uCurDocid = pHlist->m_uDocid;
+			continue; // we might had flushed the match; need to check the limit
+		}
+
+		// upd rank
+		uRank += pWeights [ pHlist->m_uHitpos>>24 ]; // FIXME! boundary check
+		pHlist++;
+	}
+
+	m_pDoclist = pDocs;
+	m_pHitlist = pHlist;
+	return iMatches;	
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 void CSphIndex_VLN::CheckExtendedQuery ( const CSphExtendedQueryNode * pNode, CSphQueryResult * pResult )
 {
 	ARRAY_FOREACH ( i, pNode->m_tAtom.m_dWords )
@@ -11089,6 +11173,7 @@ bool CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, CSphQueryResult * 
 		case SPH_RANK_PROXIMITY_BM25:	pRoot = new ExtRanker_ProximityBM25_c ( tParsed.m_pAccept, tParsed.m_pReject, tTermSetup, &(pResult->m_sWarning) ); break;
 		case SPH_RANK_BM25:				pRoot = new ExtRanker_BM25_c ( tParsed.m_pAccept, tParsed.m_pReject, tTermSetup, &(pResult->m_sWarning) ); break;
 		case SPH_RANK_NONE:				pRoot = new ExtRanker_None_c ( tParsed.m_pAccept, tParsed.m_pReject, tTermSetup, &(pResult->m_sWarning) ); break;
+		case SPH_RANK_WORDCOUNT:		pRoot = new ExtRanker_Wordcount_c ( tParsed.m_pAccept, tParsed.m_pReject, tTermSetup, &(pResult->m_sWarning) ); break;
 
 		default:
 			pResult->m_sWarning.SetSprintf ( "unknown ranking mode %d; using default", (int)pQuery->m_eRanker );

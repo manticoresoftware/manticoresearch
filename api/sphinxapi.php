@@ -46,6 +46,7 @@ define ( "SPH_MATCH_EXTENDED2",		6 );	// extended engine V2 (TEMPORARY, WILL BE 
 define ( "SPH_RANK_PROXIMITY_BM25",	0 );	///< default mode, phrase proximity major factor and BM25 minor one
 define ( "SPH_RANK_BM25",			1 );	///< statistical mode, BM25 ranking only (faster but worse quality)
 define ( "SPH_RANK_NONE",			2 );	///< no ranking, all matches get a weight of 1
+define ( "SPH_RANK_WORDCOUNT",		3 );	///< simple word-count weighting, rank is a weighted sum of per-field keyword occurence counts
 
 /// known sort modes
 define ( "SPH_SORT_RELEVANCE",		0 );
@@ -405,7 +406,8 @@ class SphinxClient
 	{
 		assert ( $ranker==SPH_RANK_PROXIMITY_BM25
 			|| $ranker==SPH_RANK_BM25
-			|| $ranker==SPH_RANK_NONE );
+			|| $ranker==SPH_RANK_NONE
+			|| $ranker==SPH_RANK_WORDCOUNT );
 		$this->_ranker = $ranker;
 	}
 

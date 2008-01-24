@@ -566,6 +566,22 @@ index test1
 	# charset_table		= 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F
 
 
+	# ignored characters list
+	#
+	# for the cases when some characters such as soft hyphenation
+	# mark (U+00AD) should be not just treated as separators, but
+	# fully ignored.
+	#
+	# for example, if '-' is simply not in the charset_table,
+	# "abc-def" text will be indexed as "abc" and "def" keywords.
+	# if '-' is ignored, it will be indexed as a single "abcdef"
+	# keyword.
+	#
+	# optional, default value is empty
+	#
+	# ignore_chars		= U+00AD
+
+
 	# minimum prefix length
 	#
 	# if prefix length is positive, indexer will not only index all words,

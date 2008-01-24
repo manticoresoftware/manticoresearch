@@ -291,6 +291,9 @@ public:
 	/// updates lowercaser so that these remap to -1
 	virtual void					AddSpecials ( const char * sSpecials );
 
+	/// set ignored characters
+	virtual bool					SetIgnoreChars ( const char * sIgnored, CSphString & sError );
+
 	/// set min word length
 	virtual void					SetMinWordLen ( int iLen ) { m_iMinWordLen = Max ( iLen, 1 ); }
 

@@ -2246,7 +2246,8 @@ enum
 	FLAG_CODEPOINT_DUAL		= 0x02000000UL,	// this codepoint is special but also a valid word part
 	FLAG_CODEPOINT_NGRAM	= 0x04000000UL,	// this codepoint is n-gram indexed
 	FLAG_CODEPOINT_SYNONYM	= 0x08000000UL,	// this codepoint is used in synonym tokens only
-	FLAG_CODEPOINT_BOUNDARY	= 0x10000000UL	// this codepoint is phrase boundary
+	FLAG_CODEPOINT_BOUNDARY	= 0x10000000UL,	// this codepoint is phrase boundary
+	FLAG_CODEPOINT_IGNORE	= 0x20000000UL	// this codepoint is ignored
 };
 
 
@@ -3318,13 +3319,49 @@ bool ISphTokenizer::SetBoundary ( const char * sConfig, CSphString & sError )
 		for ( int j=dRemaps[i].m_iStart; j<=dRemaps[i].m_iEnd; j++ )
 			if ( m_tLC.ToLower(j) )
 		{
-			sError.SetSprintf ( "phrase boundary characters must not be present in characters table, nor synonyms list, nor N-gram chars list (code=U+%x)", j );
+			sError.SetSprintf ( "phrase boundary characters must not be referenced anywhere else (code=U+%x)", j );
 			return false;
 		}
 	}
 
 	// add mapping
 	m_tLC.AddRemaps ( dRemaps, FLAG_CODEPOINT_BOUNDARY, 0 );
+	return true;
+}
+
+
+// FIXME! refactor and merge with SetBoundary()
+bool ISphTokenizer::SetIgnoreChars ( const char * sConfig, CSphString & sError )
+{
+	// parse
+	CSphVector<CSphRemapRange> dRemaps;
+	CSphCharsetDefinitionParser tParser;
+	if ( !tParser.Parse ( sConfig, dRemaps ) )
+	{
+		sError = tParser.GetLastError();
+		return false;
+	}
+
+	// check
+	ARRAY_FOREACH ( i, dRemaps )
+	{
+		if ( dRemaps[i].m_iStart!=dRemaps[i].m_iRemapStart )
+		{
+			sError.SetSprintf ( "ignored characters must not be remapped (map-from=U+%x, map-to=U+%x)",
+				dRemaps[i].m_iStart, dRemaps[i].m_iRemapStart );
+			return false;
+		}
+
+		for ( int j=dRemaps[i].m_iStart; j<=dRemaps[i].m_iEnd; j++ )
+			if ( m_tLC.ToLower(j) )
+		{
+			sError.SetSprintf ( "ignored characters must not be referenced anywhere else (code=U+%x)", j );
+			return false;
+		}
+	}
+
+	// add mapping
+	m_tLC.AddRemaps ( dRemaps, FLAG_CODEPOINT_IGNORE, 0 );
 	return true;
 }
 
@@ -3373,6 +3410,10 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 		{
 			iCode = m_tLC.ToLower ( *m_pCur++ );
 		}
+
+		// handle ignored chars
+		if ( iCode & FLAG_CODEPOINT_IGNORE )
+			continue;
 
 		// handle whitespace and boundary
 		if ( m_bBoundary && ( iCode==0 ) ) m_bTokenBoundary = true;
@@ -3494,6 +3535,10 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 			// return trailing word
 			return m_sAccum;
 		}
+
+		// handle ignored chars
+		if ( iCode & FLAG_CODEPOINT_IGNORE )
+			continue;
 
 		// handle whitespace and boundary
 		if ( m_bBoundary && ( iCode==0 ) ) m_bTokenBoundary = true;

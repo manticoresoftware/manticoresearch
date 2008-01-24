@@ -121,6 +121,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "min_word_len",			0, NULL },
 	{ "charset_type",			0, NULL },
 	{ "charset_table",			0, NULL },
+	{ "ignore_chars",			0, NULL },
 	{ "min_prefix_len",			0, NULL },
 	{ "min_infix_len",			0, NULL },
 	{ "prefix_fields",			0, NULL },
@@ -517,7 +518,7 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 ISphTokenizer * sphConfTokenizer ( const CSphConfigSection & hIndex, CSphString & sError )
 {
 	// charset_type
-	ISphTokenizer * pTokenizer = NULL;
+	CSphScopedPtr<ISphTokenizer> pTokenizer ( NULL );
 
 	if ( !hIndex("charset_type") || hIndex["charset_type"]=="sbcs" )
 	{
@@ -535,13 +536,12 @@ ISphTokenizer * sphConfTokenizer ( const CSphConfigSection & hIndex, CSphString 
 		return NULL;
 	}
 
-	assert ( pTokenizer );
+	assert ( pTokenizer.Ptr() );
 
 	// charset_table
 	if ( hIndex("charset_table") )
 		if ( !pTokenizer->SetCaseFolding ( hIndex["charset_table"].cstr(), sError ) )
 	{
-		SafeDelete ( pTokenizer );
 		sError.SetSprintf ( "'charset_table': %s", sError.cstr() );
 		return NULL;
 	}
@@ -555,7 +555,6 @@ ISphTokenizer * sphConfTokenizer ( const CSphConfigSection & hIndex, CSphString 
 	if ( hIndex("ngram_chars") )
 		if ( !pTokenizer->SetNgramChars ( hIndex["ngram_chars"].cstr(), sError ) )
 	{
-		SafeDelete ( pTokenizer );
 		sError.SetSprintf ( "'ngram_chars': %s", sError.cstr() );
 		return NULL;
 	}
@@ -569,7 +568,6 @@ ISphTokenizer * sphConfTokenizer ( const CSphConfigSection & hIndex, CSphString 
 	if ( hIndex("synonyms") )
 		if ( !pTokenizer->LoadSynonyms ( hIndex["synonyms"].cstr(), sError ) )
 	{
-		SafeDelete ( pTokenizer );
 		sError.SetSprintf ( "'synonyms': %s", sError.cstr() );
 		return NULL;
 	}
@@ -579,12 +577,19 @@ ISphTokenizer * sphConfTokenizer ( const CSphConfigSection & hIndex, CSphString 
 	if ( iBoundaryStep>0 && hIndex("phrase_boundary") )
 		if ( !pTokenizer->SetBoundary ( hIndex["phrase_boundary"].cstr(), sError ) )
 	{
-		SafeDelete ( pTokenizer );
 		sError.SetSprintf ( "'phrase_boundary': %s", sError.cstr() );
 		return NULL;
 	}
 
-	return pTokenizer;
+	// ignore_chars
+	if ( hIndex("ignore_chars") )
+		if ( !pTokenizer->SetIgnoreChars ( hIndex["ignore_chars"].cstr(), sError ) )
+	{
+		sError.SetSprintf ( "'ignore_chars': %s", sError.cstr() );
+		return NULL;
+	}
+
+	return pTokenizer.LeakPtr();
 }
 
 //

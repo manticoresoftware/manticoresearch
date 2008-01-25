@@ -16007,7 +16007,8 @@ void CSphSource_XMLPipe2::EndElement ( const char * szName )
 	else if ( !strcmp ( szName, "sphinx:document" ) )
 	{
 		m_bInDocument = false;
-		m_dParsedDocuments.Add ( m_pCurDocument );
+		if ( m_pCurDocument )
+			m_dParsedDocuments.Add ( m_pCurDocument );
 		m_pCurDocument = NULL;
 	}
 	else if ( m_bInDocument && ( m_iCurAttr != -1 || m_iCurField != -1 ) )

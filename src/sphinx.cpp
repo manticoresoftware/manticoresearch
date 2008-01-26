@@ -44,6 +44,14 @@
 #endif
 #endif
 
+#if USE_LIBXML
+#include <libxml/xmlreader.h>
+#endif
+
+#if USE_LIBICONV
+#include "iconv.h"
+#endif
+
 #if USE_WINDOWS
 	#include <io.h> // for open()
 
@@ -75,6 +83,16 @@
 #if ( USE_WINDOWS && USE_LIBEXPAT )
 	#pragma comment(linker, "/defaultlib:libexpat.lib")
 	#pragma message("Automatically linking with libexpat.lib")
+#endif
+
+#if ( USE_WINDOWS && USE_LIBICONV )
+	#pragma comment(linker, "/defaultlib:iconv.lib")	
+	#pragma message("Automatically linking with iconv.lib")
+#endif
+
+#if ( USE_WINDOWS && USE_LIBXML )
+	#pragma comment(linker, "/defaultlib:libxml.lib")
+	#pragma message("Automatically linking with libxml.lib")
 #endif
 
 /////////////////////////////////////////////////////////////////////////////
@@ -15406,7 +15424,7 @@ bool CSphSource_XMLPipe::ScanStr ( const char * sTag, char * pRes, int iMaxLengt
 // XMLPIPE (v2)
 /////////////////////////////////////////////////////////////////////////////
 
-#if USE_LIBEXPAT
+#if USE_LIBEXPAT || USE_LIBXML
 
 /// XML pipe source implementation (v2)
 class CSphSource_XMLPipe2 : public CSphSource_Document
@@ -15429,7 +15447,13 @@ public:
 	void			StartElement ( const char * szName, const char ** pAttrs );
 	void			EndElement ( const char * pName );
 	void			Characters ( const char * pCharacters, int iLen );
-	void			XMLError ( const char * szError );
+
+#if USE_LIBXML
+	int				ReadBuffer ( BYTE * pBuffer, int iLen );
+	void			ProcessNode ( xmlTextReaderPtr pReader );
+#endif
+
+	void			Error ( const char * sTemplate, ... );
 
 private:
 	struct Document_t
@@ -15464,23 +15488,42 @@ private:
 	int				m_iCurField;
 	int				m_iCurAttr;
 
+#if USE_LIBEXPAT
 	XML_Parser		m_pParser;
+#endif
+
+#if USE_LIBXML
+	xmlTextReaderPtr m_pParser;
+
+	BYTE *			m_pBufferPtr;
+	BYTE *			m_pBufferEnd;
+	bool			m_bPassedBufferEnd;
+	CSphVector <const char *> m_dAttrs;
+#endif
 
 	static const int MAX_FIELD_LENGTH = 2097152;
 	BYTE * 			m_pFieldBuffer;
 	int				m_iFieldBufferLen;
 
-	void			Error ( const char * sTemplate, ... );
 	const char *	DecorateMessage ( const char * sTemplate, ... );
 	const char *	DecorateMessageVA ( const char * sTemplate, va_list ap );
 
 	void			ConfigureAttrs ( const CSphVariant * pHead, DWORD uAttrType );
 	void			ConfigureFields ( const CSphVariant * pHead );
 	void			AddFieldToSchema ( const char * szName );
+	void			SetupFieldMatch ( CSphColumnInfo & tCol );
 
+#if USE_LIBEXPAT
 	bool			ParseNextChunk ( int iBufferLen, CSphString & sError );
+#endif
+
+#if USE_LIBXML
+	int				ParseNextChunk ( CSphString & sError );
+#endif
 };
 
+
+#if USE_LIBEXPAT
 // callbacks
 static void XMLCALL xmlStartElement ( void * user_data,  const XML_Char * name, const XML_Char ** attrs )
 {
@@ -15496,11 +15539,61 @@ static void XMLCALL xmlEndElement ( void * user_data, const XML_Char * name )
 }
 
 
-static void xmlCharacters ( void * user_data, const XML_Char * ch, int len )
+static void XMLCALL xmlCharacters ( void * user_data, const XML_Char * ch, int len )
 {
 	CSphSource_XMLPipe2 * pSource = (CSphSource_XMLPipe2 *) user_data;
 	pSource->Characters ( ch, len );
 }
+
+#if USE_LIBICONV
+static int XMLCALL xmlUnknownEncoding ( void *, const XML_Char * name, XML_Encoding * info )
+{
+	iconv_t pDesc = iconv_open ( "UTF-16", name );
+	if ( !pDesc )
+		return XML_STATUS_ERROR;
+
+	for ( size_t i = 0; i < 256; i++ )
+	{
+		char cIn = (char) i;
+		char dOut [4];
+		memset ( dOut, 0, sizeof ( dOut ) );
+		const char * pInbuf = &cIn;
+		char * pOutbuf = dOut;
+		size_t iInBytesLeft = 1;
+		size_t iOutBytesLeft = 4;
+
+		if ( iconv ( pDesc, &pInbuf, &iInBytesLeft, &pOutbuf, &iOutBytesLeft ) != size_t (-1) )
+			info->map [i] = int ( BYTE ( dOut [0] ) ) << 8 | int ( BYTE ( dOut [1] ) );
+		else
+			info->map [i] = 0;
+	}
+
+	iconv_close ( pDesc );
+
+	return XML_STATUS_OK;
+
+}
+#endif
+
+#endif
+
+#if USE_LIBXML
+int	xmlReadBuffers (void * context, char * buffer, int len )
+{
+	CSphSource_XMLPipe2 * pSource = (CSphSource_XMLPipe2 *) context;
+	return pSource->ReadBuffer ( (BYTE*)buffer, len );
+}
+
+void xmlErrorHandler ( void * arg, const char * msg, xmlParserSeverities severity, xmlTextReaderLocatorPtr locator)
+{
+	if ( severity == XML_PARSER_SEVERITY_ERROR )
+	{
+		int iLine = xmlTextReaderLocatorLineNumber ( locator );
+		CSphSource_XMLPipe2 * pSource = (CSphSource_XMLPipe2 *) arg;
+		pSource->Error ( "%s (line=%d)", msg, iLine );
+	}
+}
+#endif
 
 
 CSphSource_XMLPipe2::CSphSource_XMLPipe2 ( const char * sName )
@@ -15518,6 +15611,11 @@ CSphSource_XMLPipe2::CSphSource_XMLPipe2 ( const char * sName )
 	, m_iCurAttr		( -1 )
 	, m_pParser			( NULL )
 	, m_iFieldBufferLen	( 0 )
+#if USE_LIBXML
+	, m_pBufferPtr		( NULL )
+	, m_pBufferEnd		( NULL )
+	, m_bPassedBufferEnd( false )
+#endif
 {
 	m_pBuffer = new BYTE [m_iBufferSize];
 	m_pFieldBuffer = new BYTE [MAX_FIELD_LENGTH];
@@ -15542,11 +15640,21 @@ void CSphSource_XMLPipe2::Disconnect ()
 		m_pPipe = NULL;
 	}
 
+#if USE_LIBEXPAT
 	if ( m_pParser )
 	{
 		XML_ParserFree ( m_pParser );
 		m_pParser = NULL;
 	}
+#endif
+
+#if USE_LIBXML
+	if ( m_pParser )
+	{
+		xmlFreeTextReader ( m_pParser );
+		m_pParser = NULL;
+	}
+#endif
 }
 
 
@@ -15586,6 +15694,7 @@ const char * CSphSource_XMLPipe2::DecorateMessageVA ( const char * sTemplate, va
 	iLeft = sizeof(sBuf) - iBufLen;
 	szBufStart = sBuf + iBufLen;
 
+#if USE_LIBEXPAT
 	if ( m_pParser )
 	{
 		SphDocID_t uFailedID = 0;
@@ -15596,6 +15705,18 @@ const char * CSphSource_XMLPipe2::DecorateMessageVA ( const char * sTemplate, va
 			XML_GetCurrentLineNumber(m_pParser), XML_GetCurrentColumnNumber(m_pParser),
 			uFailedID );
 	}
+#endif
+
+#if USE_LIBXML
+	if ( m_pParser )
+	{
+		SphDocID_t uFailedID = 0;
+		if ( m_dParsedDocuments.GetLength() )
+			uFailedID = m_dParsedDocuments.Last()->m_iDocID;
+
+		snprintf ( szBufStart, iLeft,  " (docid=" DOCID_FMT ")", uFailedID );
+	}
+#endif
 
 	return sBuf;
 }
@@ -15604,24 +15725,7 @@ const char * CSphSource_XMLPipe2::DecorateMessageVA ( const char * sTemplate, va
 void CSphSource_XMLPipe2::AddFieldToSchema ( const char * szName )
 {
 	CSphColumnInfo tCol ( szName );
-
-	tCol.m_eWordpart = SPH_WORDPART_WHOLE;
-
-	bool bPrefix = m_iMinPrefixLen > 0 && IsPrefixMatch ( tCol.m_sName.cstr () );
-	bool bInfix =  m_iMinInfixLen > 0  && IsInfixMatch ( tCol.m_sName.cstr () );
-
-	if ( bPrefix && m_iMinPrefixLen > 0 && bInfix && m_iMinInfixLen > 0)
-	{
-		Error ( "field '%s' is marked for both infix and prefix indexing", tCol.m_sName.cstr() );
-		return;
-	}
-
-	if ( bPrefix )
-		tCol.m_eWordpart = SPH_WORDPART_PREFIX;
-
-	if ( bInfix )
-		tCol.m_eWordpart = SPH_WORDPART_INFIX;
-
+	SetupFieldMatch ( tCol );
 	m_tSchema.m_dFields.Add ( tCol );
 }
 
@@ -15697,6 +15801,25 @@ bool CSphSource_XMLPipe2::Setup ( const CSphConfigSection & hSource )
 }
 
 
+void CSphSource_XMLPipe2::SetupFieldMatch ( CSphColumnInfo & tCol )
+{
+	bool bPrefix = m_iMinPrefixLen > 0 && IsPrefixMatch ( tCol.m_sName.cstr () );
+	bool bInfix =  m_iMinInfixLen > 0  && IsInfixMatch ( tCol.m_sName.cstr () );
+
+	if ( bPrefix && m_iMinPrefixLen > 0 && bInfix && m_iMinInfixLen > 0)
+	{
+		Error ( "field '%s' is marked for both infix and prefix indexing", tCol.m_sName.cstr() );
+		return;
+	}
+
+	if ( bPrefix )
+		tCol.m_eWordpart = SPH_WORDPART_PREFIX;
+
+	if ( bInfix )
+		tCol.m_eWordpart = SPH_WORDPART_INFIX;
+}
+
+
 bool CSphSource_XMLPipe2::Connect ( CSphString & sError )
 {
 	m_pPipe = popen ( m_sCommand.cstr(), "r" );
@@ -15706,10 +15829,43 @@ bool CSphSource_XMLPipe2::Connect ( CSphString & sError )
 		return false;
 	}
 
+	ARRAY_FOREACH ( i, m_tSchema.m_dFields )
+		SetupFieldMatch ( m_tSchema.m_dFields [i] );
+
+#if USE_LIBEXPAT
 	m_pParser = XML_ParserCreate(NULL);
+	if ( !m_pParser )
+	{
+		sError.SetSprintf ( "xmlpipe: failed to create XML parser" );
+		return false;
+	}
+
 	XML_SetUserData ( m_pParser, this );	
 	XML_SetElementHandler ( m_pParser, xmlStartElement, xmlEndElement );
 	XML_SetCharacterDataHandler ( m_pParser, xmlCharacters );
+
+#if USE_LIBICONV
+	XML_SetUnknownEncodingHandler ( m_pParser, xmlUnknownEncoding, NULL );
+#endif
+
+#endif
+
+#if USE_LIBXML
+	m_pBufferPtr = NULL;
+	m_pBufferEnd = NULL;
+	m_bPassedBufferEnd = false;
+	m_dAttrs.Reserve ( 16 );
+	m_dAttrs.Resize ( 0 );
+
+	m_pParser = xmlReaderForIO ( (xmlInputReadCallback)xmlReadBuffers, NULL, this, NULL, NULL, 0 );
+	if ( !m_pParser )
+	{
+		sError.SetSprintf ( "xmlpipe: failed to create XML parser" );
+		return false;
+	}
+
+	xmlTextReaderSetErrorHandler ( m_pParser, xmlErrorHandler,  this );
+#endif
 
 	m_bRemoveParsed = false;
 	m_bInDocset	= false;
@@ -15726,17 +15882,57 @@ bool CSphSource_XMLPipe2::Connect ( CSphString & sError )
 	m_dWarned.Reset ();
 
 	m_dParsedDocuments.Reserve ( 1024 );
+	m_dParsedDocuments.Resize ( 0 );
 
 	m_sError = "";
 
+#if USE_LIBEXPAT
 	int iBytesRead = fread ( m_pBuffer, 1, m_iBufferSize, m_pPipe );
 	if ( !ParseNextChunk ( iBytesRead, sError ) )
 		return false;
+#endif
+
+#if USE_LIBXML
+	if ( ParseNextChunk ( sError ) == -1 )
+		return false;
+#endif
 
 	return true;
 }
 
 
+#if USE_LIBXML
+int CSphSource_XMLPipe2::ParseNextChunk ( CSphString & sError )
+{
+	int iRet = xmlTextReaderRead ( m_pParser );
+	while ( iRet == 1 && !m_bPassedBufferEnd )
+	{
+		ProcessNode ( m_pParser );
+		if ( !m_sError.IsEmpty () )
+		{
+			sError = m_sError;
+			m_tDocInfo.m_iDocID = 1;
+			return false;
+		}
+
+		iRet = xmlTextReaderRead ( m_pParser );
+	}
+
+	m_bPassedBufferEnd = false;
+
+	if ( !m_sError.IsEmpty () || iRet == -1 )
+	{
+		sError = m_sError;
+		m_tDocInfo.m_iDocID = 1;
+		return -1;
+	}
+
+	return iRet;
+}
+#endif
+
+
+#if USE_LIBEXPAT
 bool CSphSource_XMLPipe2::ParseNextChunk ( int iBufferLen, CSphString & sError )
 {
 	if ( !iBufferLen )
@@ -15765,6 +15961,7 @@ bool CSphSource_XMLPipe2::ParseNextChunk ( int iBufferLen, CSphString & sError )
 
 	return true;
 }
+#endif
 
 
 BYTE **	CSphSource_XMLPipe2::NextDocument ( CSphString & sError )
@@ -15776,10 +15973,17 @@ BYTE **	CSphSource_XMLPipe2::NextDocument ( CSphString & sError )
 		m_bRemoveParsed = false;
 	}
 
-	int iBytesRead = 0;
-	while ( m_dParsedDocuments.GetLength () == 0 && ( iBytesRead = fread ( m_pBuffer, 1, m_iBufferSize, m_pPipe ) ) != 0 )
-		if ( !ParseNextChunk ( iBytesRead, sError ) )
+	int iReadResult = 0;
+
+#if USE_LIBEXPAT
+	while ( m_dParsedDocuments.GetLength () == 0 && ( iReadResult = fread ( m_pBuffer, 1, m_iBufferSize, m_pPipe ) ) != 0 )
+		if ( !ParseNextChunk ( iReadResult, sError ) )
 			return NULL;
+#endif
+
+#if USE_LIBXML
+	while ( m_dParsedDocuments.GetLength () == 0 && ( iReadResult = ParseNextChunk ( sError ) ) == 1 );
+#endif
 		
 	if ( m_dParsedDocuments.GetLength () != 0 )
 	{
@@ -15825,7 +16029,7 @@ BYTE **	CSphSource_XMLPipe2::NextDocument ( CSphString & sError )
 		return (BYTE **)&( m_dFieldPtrs [0]);
 	}
 
-	if ( !iBytesRead )
+	if ( !iReadResult )
 		m_tDocInfo.m_iDocID = 0;
 
 	return NULL;
@@ -16057,21 +16261,93 @@ void CSphSource_XMLPipe2::Characters ( const char * pCharacters, int iLen )
 
 		if ( !bWarned )
 		{
+#if USE_LIBEXPAT
 			sphWarn ( "source '%s': field/attribute '%s' length exceeds max length (line=%d, pos=%d, docid=" DOCID_FMT ")",
 				m_tSchema.m_sName.cstr(), sName.cstr(),
 				XML_GetCurrentLineNumber(m_pParser), XML_GetCurrentColumnNumber(m_pParser),
 				m_pCurDocument->m_iDocID );
+#endif
+
+#if USE_LIBXML
+			sphWarn ( "source '%s': field/attribute '%s' length exceeds max length (docid=" DOCID_FMT ")",
+				m_tSchema.m_sName.cstr(), sName.cstr(), m_pCurDocument->m_iDocID );
+#endif
 			m_dWarned.Add ( sName );
 		}
 	}
 }
 
 
-void CSphSource_XMLPipe2::XMLError ( const char * szError )
+#if USE_LIBXML
+int CSphSource_XMLPipe2::ReadBuffer ( BYTE * pBuffer, int iLen )
 {
-	m_sError = szError;
+	int iLeft = Max ( m_pBufferEnd - m_pBufferPtr, 0 );
+	if ( iLeft < iLen )
+	{
+		m_bPassedBufferEnd = !!m_pBufferEnd;
+
+		memmove ( m_pBuffer, m_pBufferPtr, iLeft );
+		size_t iRead = fread ( m_pBuffer + iLeft, 1, m_iBufferSize - iLeft, m_pPipe );
+		m_pBufferPtr = m_pBuffer;
+		m_pBufferEnd = m_pBuffer + iLeft + iRead;
+
+		iLeft = Max ( m_pBufferEnd - m_pBuffer, 0 );
+	}
+
+	int iToCopy = Min ( iLen, iLeft );
+	memcpy ( pBuffer, m_pBufferPtr, iToCopy );
+	m_pBufferPtr += iToCopy;
+
+	return iToCopy;
 }
 
+
+void CSphSource_XMLPipe2::ProcessNode ( xmlTextReaderPtr pReader )
+{
+	int iType = xmlTextReaderNodeType ( pReader );
+	switch ( iType )
+	{
+	case XML_READER_TYPE_ELEMENT:
+		{
+			const char * szName = (char*)xmlTextReaderName ( pReader );
+
+			m_dAttrs.Resize ( 0 );
+
+			if ( xmlTextReaderHasAttributes ( pReader ) )
+			{
+				if ( xmlTextReaderMoveToFirstAttribute ( pReader ) != 1 )
+					return;
+
+				do
+				{
+					int iLen = m_dAttrs.GetLength ();
+					m_dAttrs.Resize ( iLen + 2 );
+					m_dAttrs [iLen  ] = (char*)xmlTextReaderName ( pReader );
+					m_dAttrs [iLen+1] = (char*)xmlTextReaderValue ( pReader );
+				}
+				while ( xmlTextReaderMoveToNextAttribute ( pReader ) == 1 );
+			}
+
+			int iLen = m_dAttrs.GetLength ();
+			m_dAttrs.Resize ( iLen + 2 );
+			m_dAttrs [iLen  ] = NULL;
+			m_dAttrs [iLen+1] = NULL;
+
+			StartElement ( szName, &(m_dAttrs [0]) );
+		}
+		break;
+	case XML_READER_TYPE_END_ELEMENT:
+		EndElement ( (char*)xmlTextReaderName ( pReader ) );
+		break;	
+	case XML_TEXT_NODE:
+		{
+			const char * szText = (char*)xmlTextReaderValue	( pReader );
+			Characters ( szText, strlen ( szText ) );
+		}
+		break;
+	}	
+}
+#endif
 
 CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, const char * szSourceName )
 {

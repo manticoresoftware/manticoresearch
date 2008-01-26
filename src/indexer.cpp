@@ -521,7 +521,7 @@ CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char 
 
 		pSrcXML = pXmlPipe;
 	}
-#if USE_LIBEXPAT
+#if USE_LIBEXPAT || USE_LIBXML
 	else if ( hSource["type"]=="xmlpipe2" )
 		pSrcXML = sphCreateSourceXmlpipe2 ( &hSource, sSourceName );
 #endif

@@ -13,6 +13,10 @@ AM_MAINTAINER_MODE
 AC_CONFIG_SRCDIR([src/searchd.cpp])
 AC_CONFIG_HEADER([config/config.h])
 
+# hack to locate expat/iconv in /usr/local on BSD systems
+CPPFLAGS="$CPPFLAGS -I/usr/local/include"
+LIBS="$LIBS -L/usr/local/lib"
+
 dnl --------------------------------------------------------------------------
 
 SPHINX_CONFIGURE_PART([checking for compiler programs])
@@ -62,6 +66,7 @@ AC_HEADER_STDC
 AC_HEADER_SYS_WAIT
 AC_CHECK_HEADERS([fcntl.h limits.h netdb.h netinet/in.h stdlib.h string.h sys/file.h sys/socket.h sys/time.h unistd.h])
 AC_CHECK_HEADER(expat.h,[have_expat_h=yes],[have_expat_h=no])
+AC_CHECK_HEADER(iconv.h,[have_iconv_h=yes],[have_iconv_h=no])
 
 dnl --------------------------------------------------------------------------
 
@@ -90,6 +95,7 @@ AC_FUNC_VPRINTF
 AC_SEARCH_LIBS([setsockopt],[socket])
 AC_SEARCH_LIBS([gethostbyname],[nsl socket resolv])
 AC_SEARCH_LIBS([XML_Parse],[expat],[have_libexpat=yes],[have_libexpat=no])
+AC_SEARCH_LIBS([iconv],[iconv],[have_libiconv=yes],[have_libiconv=no])
 AC_SEARCH_LIBS([logf],[m])
 AC_CHECK_FUNCS([dup2 gethostbyname gettimeofday memmove memset select socket strcasecmp strchr strerror strncasecmp strstr strtol logf])
 
@@ -182,13 +188,28 @@ AM_CONDITIONAL(USE_LIBSTEMMER, test x$ac_cv_use_libstemmer != xno)
 
 dnl ---
 
+got_expat=0
 AC_MSG_CHECKING([for libexpat])
 if test [ $have_expat_h = yes -a $have_libexpat = yes ]; then
 	AC_DEFINE([USE_LIBEXPAT],1,[define to use expat XML library])
 	AC_MSG_RESULT([found])
+	got_expat=1
 else
 	AC_MSG_RESULT([not found])
 	AC_MSG_WARN([xmlpipe2 will NOT be available])
+fi
+
+dnl ---
+
+AC_MSG_CHECKING([for libiconv])
+if test [ $have_iconv_h = yes -a $have_libiconv = yes ]; then
+	AC_DEFINE([USE_LIBICONV],1,[define to use iconv library])
+	AC_MSG_RESULT([found])
+else
+	AC_MSG_RESULT([not found])
+	if test [ $got_expat -eq 1 ]; then
+		AC_MSG_WARN([xmlpipe2 will only support default encodings (latin-1, utf-8)])
+	fi
 fi
 
 dnl --------------------------------------------------------------------------

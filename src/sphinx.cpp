@@ -15557,7 +15557,7 @@ static int XMLCALL xmlUnknownEncoding ( void *, const XML_Char * name, XML_Encod
 		char cIn = (char) i;
 		char dOut [4];
 		memset ( dOut, 0, sizeof ( dOut ) );
-		const char * pInbuf = &cIn;
+		char * pInbuf = &cIn;
 		char * pOutbuf = dOut;
 		size_t iInBytesLeft = 1;
 		size_t iOutBytesLeft = 4;
@@ -15702,7 +15702,7 @@ const char * CSphSource_XMLPipe2::DecorateMessageVA ( const char * sTemplate, va
 			uFailedID = m_dParsedDocuments.Last()->m_iDocID;
 
 		snprintf ( szBufStart, iLeft,  " (line=%d, pos=%d, docid=" DOCID_FMT ")",
-			XML_GetCurrentLineNumber(m_pParser), XML_GetCurrentColumnNumber(m_pParser),
+			(int)XML_GetCurrentLineNumber(m_pParser), (int)XML_GetCurrentColumnNumber(m_pParser),
 			uFailedID );
 	}
 #endif

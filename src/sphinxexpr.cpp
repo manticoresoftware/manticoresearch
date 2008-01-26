@@ -264,7 +264,7 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 
 		// check for function
 		sTok.ToLower();
-		for ( int i=0; i<sizeof(g_dFuncs)/sizeof(g_dFuncs[0]); i++ )
+		for ( int i=0; i<int(sizeof(g_dFuncs)/sizeof(g_dFuncs[0])); i++ )
 			if ( sTok==g_dFuncs[i].m_sName )
 		{
 			lvalp->iFunc = i;
@@ -354,7 +354,7 @@ void ExprParser_t::FoldTree ( int iNode, CSphExpr & tOutExpr )
 		case TOK_NEG:	tOutExpr.Add ( OPCODE_NEG ); break;
 
 		case TOK_FUNC:
-			assert ( tNode.m_iFunc>=0 && tNode.m_iFunc<sizeof(g_dFuncs)/sizeof(g_dFuncs[0]) );
+			assert ( tNode.m_iFunc>=0 && tNode.m_iFunc<int(sizeof(g_dFuncs)/sizeof(g_dFuncs[0])) );
 			tOutExpr.Add ( g_dFuncs[tNode.m_iFunc].m_eOpcode );
 			break;
 
@@ -440,7 +440,7 @@ int ExprParser_t::AddNodeOp ( int iOp, int iLeft, int iRight )
 int ExprParser_t::AddNodeFunc ( int iFunc, int iArgsNode )
 {
 	// check args count
-	assert ( iFunc>=0 && iFunc<sizeof(g_dFuncs)/sizeof(g_dFuncs[0]) );
+	assert ( iFunc>=0 && iFunc<int(sizeof(g_dFuncs)/sizeof(g_dFuncs[0])) );
 	int iExpectedArgc = g_dFuncs[iFunc].m_iArgs;
 	int iArgc = ( m_dNodes[iArgsNode].m_iToken==',' ) ? m_dNodes[iArgsNode].m_iArgs : 1;
 	if ( iArgc!=iExpectedArgc )

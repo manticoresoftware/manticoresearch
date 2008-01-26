@@ -187,6 +187,9 @@
 /* define to use expat XML library */
 #undef USE_LIBEXPAT
 
+/* define to use iconv library */
+#undef USE_LIBICONV
+
 /* libstemmer support */
 #undef USE_LIBSTEMMER
 

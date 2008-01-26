@@ -1816,6 +1816,10 @@ fi
           ac_config_headers="$ac_config_headers config/config.h"
 
 
+# hack to locate expat/iconv in /usr/local on BSD systems
+CPPFLAGS="$CPPFLAGS -I/usr/local/include"
+LIBS="$LIBS -L/usr/local/lib"
+
 
 
 	echo "$as_me:$LINENO: result: " >&5
@@ -4388,6 +4392,150 @@ if test $ac_cv_header_expat_h = yes; then
   have_expat_h=yes
 else
   have_expat_h=no
+fi
+
+
+if test "${ac_cv_header_iconv_h+set}" = set; then
+  echo "$as_me:$LINENO: checking for iconv.h" >&5
+echo $ECHO_N "checking for iconv.h... $ECHO_C" >&6
+if test "${ac_cv_header_iconv_h+set}" = set; then
+  echo $ECHO_N "(cached) $ECHO_C" >&6
+fi
+echo "$as_me:$LINENO: result: $ac_cv_header_iconv_h" >&5
+echo "${ECHO_T}$ac_cv_header_iconv_h" >&6
+else
+  # Is the header compilable?
+echo "$as_me:$LINENO: checking iconv.h usability" >&5
+echo $ECHO_N "checking iconv.h usability... $ECHO_C" >&6
+cat >conftest.$ac_ext <<_ACEOF
+/* confdefs.h.  */
+_ACEOF
+cat confdefs.h >>conftest.$ac_ext
+cat >>conftest.$ac_ext <<_ACEOF
+/* end confdefs.h.  */
+$ac_includes_default
+#include <iconv.h>
+_ACEOF
+rm -f conftest.$ac_objext
+if { (eval echo "$as_me:$LINENO: \"$ac_compile\"") >&5
+  (eval $ac_compile) 2>conftest.er1
+  ac_status=$?
+  grep -v '^ *+' conftest.er1 >conftest.err
+  rm -f conftest.er1
+  cat conftest.err >&5
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); } &&
+	 { ac_try='test -z "$ac_c_werror_flag"
+			 || test ! -s conftest.err'
+  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); }; } &&
+	 { ac_try='test -s conftest.$ac_objext'
+  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); }; }; then
+  ac_header_compiler=yes
+else
+  echo "$as_me: failed program was:" >&5
+sed 's/^/| /' conftest.$ac_ext >&5
+
+ac_header_compiler=no
+fi
+rm -f conftest.err conftest.$ac_objext conftest.$ac_ext
+echo "$as_me:$LINENO: result: $ac_header_compiler" >&5
+echo "${ECHO_T}$ac_header_compiler" >&6
+
+# Is the header present?
+echo "$as_me:$LINENO: checking iconv.h presence" >&5
+echo $ECHO_N "checking iconv.h presence... $ECHO_C" >&6
+cat >conftest.$ac_ext <<_ACEOF
+/* confdefs.h.  */
+_ACEOF
+cat confdefs.h >>conftest.$ac_ext
+cat >>conftest.$ac_ext <<_ACEOF
+/* end confdefs.h.  */
+#include <iconv.h>
+_ACEOF
+if { (eval echo "$as_me:$LINENO: \"$ac_cpp conftest.$ac_ext\"") >&5
+  (eval $ac_cpp conftest.$ac_ext) 2>conftest.er1
+  ac_status=$?
+  grep -v '^ *+' conftest.er1 >conftest.err
+  rm -f conftest.er1
+  cat conftest.err >&5
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); } >/dev/null; then
+  if test -s conftest.err; then
+    ac_cpp_err=$ac_c_preproc_warn_flag
+    ac_cpp_err=$ac_cpp_err$ac_c_werror_flag
+  else
+    ac_cpp_err=
+  fi
+else
+  ac_cpp_err=yes
+fi
+if test -z "$ac_cpp_err"; then
+  ac_header_preproc=yes
+else
+  echo "$as_me: failed program was:" >&5
+sed 's/^/| /' conftest.$ac_ext >&5
+
+  ac_header_preproc=no
+fi
+rm -f conftest.err conftest.$ac_ext
+echo "$as_me:$LINENO: result: $ac_header_preproc" >&5
+echo "${ECHO_T}$ac_header_preproc" >&6
+
+# So?  What about this header?
+case $ac_header_compiler:$ac_header_preproc:$ac_c_preproc_warn_flag in
+  yes:no: )
+    { echo "$as_me:$LINENO: WARNING: iconv.h: accepted by the compiler, rejected by the preprocessor!" >&5
+echo "$as_me: WARNING: iconv.h: accepted by the compiler, rejected by the preprocessor!" >&2;}
+    { echo "$as_me:$LINENO: WARNING: iconv.h: proceeding with the compiler's result" >&5
+echo "$as_me: WARNING: iconv.h: proceeding with the compiler's result" >&2;}
+    ac_header_preproc=yes
+    ;;
+  no:yes:* )
+    { echo "$as_me:$LINENO: WARNING: iconv.h: present but cannot be compiled" >&5
+echo "$as_me: WARNING: iconv.h: present but cannot be compiled" >&2;}
+    { echo "$as_me:$LINENO: WARNING: iconv.h:     check for missing prerequisite headers?" >&5
+echo "$as_me: WARNING: iconv.h:     check for missing prerequisite headers?" >&2;}
+    { echo "$as_me:$LINENO: WARNING: iconv.h: see the Autoconf documentation" >&5
+echo "$as_me: WARNING: iconv.h: see the Autoconf documentation" >&2;}
+    { echo "$as_me:$LINENO: WARNING: iconv.h:     section \"Present But Cannot Be Compiled\"" >&5
+echo "$as_me: WARNING: iconv.h:     section \"Present But Cannot Be Compiled\"" >&2;}
+    { echo "$as_me:$LINENO: WARNING: iconv.h: proceeding with the preprocessor's result" >&5
+echo "$as_me: WARNING: iconv.h: proceeding with the preprocessor's result" >&2;}
+    { echo "$as_me:$LINENO: WARNING: iconv.h: in the future, the compiler will take precedence" >&5
+echo "$as_me: WARNING: iconv.h: in the future, the compiler will take precedence" >&2;}
+    (
+      cat <<\_ASBOX
+## ---------------------------------- ##
+## Report this to shodan(at)shodan.ru ##
+## ---------------------------------- ##
+_ASBOX
+    ) |
+      sed "s/^/$as_me: WARNING:     /" >&2
+    ;;
+esac
+echo "$as_me:$LINENO: checking for iconv.h" >&5
+echo $ECHO_N "checking for iconv.h... $ECHO_C" >&6
+if test "${ac_cv_header_iconv_h+set}" = set; then
+  echo $ECHO_N "(cached) $ECHO_C" >&6
+else
+  ac_cv_header_iconv_h=$ac_header_preproc
+fi
+echo "$as_me:$LINENO: result: $ac_cv_header_iconv_h" >&5
+echo "${ECHO_T}$ac_cv_header_iconv_h" >&6
+
+fi
+if test $ac_cv_header_iconv_h = yes; then
+  have_iconv_h=yes
+else
+  have_iconv_h=no
 fi
 
 
@@ -7005,6 +7153,134 @@ else
   have_libexpat=no
 fi
 
+echo "$as_me:$LINENO: checking for library containing iconv" >&5
+echo $ECHO_N "checking for library containing iconv... $ECHO_C" >&6
+if test "${ac_cv_search_iconv+set}" = set; then
+  echo $ECHO_N "(cached) $ECHO_C" >&6
+else
+  ac_func_search_save_LIBS=$LIBS
+ac_cv_search_iconv=no
+cat >conftest.$ac_ext <<_ACEOF
+/* confdefs.h.  */
+_ACEOF
+cat confdefs.h >>conftest.$ac_ext
+cat >>conftest.$ac_ext <<_ACEOF
+/* end confdefs.h.  */
+
+/* Override any gcc2 internal prototype to avoid an error.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+/* We use char because int might match the return type of a gcc2
+   builtin and then its argument prototype would still apply.  */
+char iconv ();
+int
+main ()
+{
+iconv ();
+  ;
+  return 0;
+}
+_ACEOF
+rm -f conftest.$ac_objext conftest$ac_exeext
+if { (eval echo "$as_me:$LINENO: \"$ac_link\"") >&5
+  (eval $ac_link) 2>conftest.er1
+  ac_status=$?
+  grep -v '^ *+' conftest.er1 >conftest.err
+  rm -f conftest.er1
+  cat conftest.err >&5
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); } &&
+	 { ac_try='test -z "$ac_c_werror_flag"
+			 || test ! -s conftest.err'
+  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); }; } &&
+	 { ac_try='test -s conftest$ac_exeext'
+  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); }; }; then
+  ac_cv_search_iconv="none required"
+else
+  echo "$as_me: failed program was:" >&5
+sed 's/^/| /' conftest.$ac_ext >&5
+
+fi
+rm -f conftest.err conftest.$ac_objext \
+      conftest$ac_exeext conftest.$ac_ext
+if test "$ac_cv_search_iconv" = no; then
+  for ac_lib in iconv; do
+    LIBS="-l$ac_lib  $ac_func_search_save_LIBS"
+    cat >conftest.$ac_ext <<_ACEOF
+/* confdefs.h.  */
+_ACEOF
+cat confdefs.h >>conftest.$ac_ext
+cat >>conftest.$ac_ext <<_ACEOF
+/* end confdefs.h.  */
+
+/* Override any gcc2 internal prototype to avoid an error.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+/* We use char because int might match the return type of a gcc2
+   builtin and then its argument prototype would still apply.  */
+char iconv ();
+int
+main ()
+{
+iconv ();
+  ;
+  return 0;
+}
+_ACEOF
+rm -f conftest.$ac_objext conftest$ac_exeext
+if { (eval echo "$as_me:$LINENO: \"$ac_link\"") >&5
+  (eval $ac_link) 2>conftest.er1
+  ac_status=$?
+  grep -v '^ *+' conftest.er1 >conftest.err
+  rm -f conftest.er1
+  cat conftest.err >&5
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); } &&
+	 { ac_try='test -z "$ac_c_werror_flag"
+			 || test ! -s conftest.err'
+  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); }; } &&
+	 { ac_try='test -s conftest$ac_exeext'
+  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); }; }; then
+  ac_cv_search_iconv="-l$ac_lib"
+break
+else
+  echo "$as_me: failed program was:" >&5
+sed 's/^/| /' conftest.$ac_ext >&5
+
+fi
+rm -f conftest.err conftest.$ac_objext \
+      conftest$ac_exeext conftest.$ac_ext
+  done
+fi
+LIBS=$ac_func_search_save_LIBS
+fi
+echo "$as_me:$LINENO: result: $ac_cv_search_iconv" >&5
+echo "${ECHO_T}$ac_cv_search_iconv" >&6
+if test "$ac_cv_search_iconv" != no; then
+  test "$ac_cv_search_iconv" = "none required" || LIBS="$ac_cv_search_iconv $LIBS"
+  have_libiconv=yes
+else
+  have_libiconv=no
+fi
+
 echo "$as_me:$LINENO: checking for library containing logf" >&5
 echo $ECHO_N "checking for library containing logf... $ECHO_C" >&6
 if test "${ac_cv_search_logf+set}" = set; then
@@ -7875,6 +8151,7 @@ fi
 
 
 
+got_expat=0
 echo "$as_me:$LINENO: checking for libexpat" >&5
 echo $ECHO_N "checking for libexpat... $ECHO_C" >&6
 if test  $have_expat_h = yes -a $have_libexpat = yes ; then
@@ -7885,11 +8162,32 @@ _ACEOF
 
 	echo "$as_me:$LINENO: result: found" >&5
 echo "${ECHO_T}found" >&6
+	got_expat=1
 else
 	echo "$as_me:$LINENO: result: not found" >&5
 echo "${ECHO_T}not found" >&6
 	{ echo "$as_me:$LINENO: WARNING: xmlpipe2 will NOT be available" >&5
 echo "$as_me: WARNING: xmlpipe2 will NOT be available" >&2;}
+fi
+
+
+echo "$as_me:$LINENO: checking for libiconv" >&5
+echo $ECHO_N "checking for libiconv... $ECHO_C" >&6
+if test  $have_iconv_h = yes -a $have_libiconv = yes ; then
+
+cat >>confdefs.h <<\_ACEOF
+#define USE_LIBICONV 1
+_ACEOF
+
+	echo "$as_me:$LINENO: result: found" >&5
+echo "${ECHO_T}found" >&6
+else
+	echo "$as_me:$LINENO: result: not found" >&5
+echo "${ECHO_T}not found" >&6
+	if test  $got_expat -eq 1 ; then
+		{ echo "$as_me:$LINENO: WARNING: xmlpipe2 will only support default encodings (latin-1, utf-8)" >&5
+echo "$as_me: WARNING: xmlpipe2 will only support default encodings (latin-1, utf-8)" >&2;}
+	fi
 fi
 
 

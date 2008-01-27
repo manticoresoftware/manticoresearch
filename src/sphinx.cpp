@@ -15561,7 +15561,11 @@ static int XMLCALL xmlUnknownEncoding ( void *, const XML_Char * name, XML_Encod
 		char cIn = (char) i;
 		char dOut [4];
 		memset ( dOut, 0, sizeof ( dOut ) );
+#if ICONV_INBUF_CONST
+		const char * pInbuf = &cIn;
+#else
 		char * pInbuf = &cIn;
+#endif
 		char * pOutbuf = dOut;
 		size_t iInBytesLeft = 1;
 		size_t iOutBytesLeft = 4;

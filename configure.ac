@@ -205,6 +205,27 @@ AC_MSG_CHECKING([for libiconv])
 if test [ $have_iconv_h = yes -a $have_libiconv = yes ]; then
 	AC_DEFINE([USE_LIBICONV],1,[define to use iconv library])
 	AC_MSG_RESULT([found])
+
+	AC_MSG_CHECKING([for iconv() arg types])
+	AC_LANG_PUSH([C++])
+	AC_COMPILE_IFELSE(
+		[AC_LANG_PROGRAM([[
+			#include <iconv.h>	
+			#include <stdio.h>]],
+			[const char * inbuf;
+			iconv_t cd;
+			iconv ( cd, &inbuf, NULL, NULL, NULL );
+			])],
+		[iconv_inbuf_const=yes],
+		[iconv_inbuf_const=no])
+	AC_LANG_POP([C++])
+	if test [ $iconv_inbuf_const = yes ]; then
+		AC_DEFINE([ICONV_INBUF_CONST],1,[whether 2nd arg to iconv() is const ptr])
+		AC_MSG_RESULT([const char **])
+	else
+		AC_DEFINE([ICONV_INBUF_CONST],0,[whether 2nd arg to iconv() is const ptr])
+		AC_MSG_RESULT([char **])
+	fi
 else
 	AC_MSG_RESULT([not found])
 	if test [ $got_expat -eq 1 ]; then

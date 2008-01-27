@@ -6536,7 +6536,6 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 	if ( bHaveOrdinals && !dOrdBlockSize [0].GetLength () )
 	{
 		bHaveOrdinals = false;
-		fdRawOrdinals.Close ();
 		::unlink ( sRawOrdinalsFile.cstr () );
 	}
 

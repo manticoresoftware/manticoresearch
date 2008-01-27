@@ -6211,7 +6211,8 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 	CSphAutofile fdTmpDocinfos ( GetIndexFileName("tmp2"), SPH_O_NEW, m_sLastError );
 	CSphWriter tOrdWriter;
 
-	if ( bHaveOrdinals && !tOrdWriter.OpenFile ( GetIndexFileName("tmp3"), m_sLastError ) )
+	CSphString sRawOrdinalsFile = GetIndexFileName("tmp3");
+	if ( bHaveOrdinals && !tOrdWriter.OpenFile ( sRawOrdinalsFile.cstr (), m_sLastError ) )
 		return 0;
 
 	if ( fdLock.GetFD()<0 || fdTmpHits.GetFD()<0 || fdTmpDocinfos.GetFD()<0 )
@@ -6478,7 +6479,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 	}
 
 	// flush last ordinals block
-	if ( bHaveOrdinals )
+	if ( bHaveOrdinals && dOrdinals [0].GetLength () )
 	{
 		nOrdinals += dOrdinals[0].GetLength ();
 
@@ -6532,9 +6533,15 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 	CSphString sSortedOrdinalIdFile = GetIndexFileName("tmp5");
 
 	// sort ordinals
+	if ( bHaveOrdinals && !dOrdBlockSize [0].GetLength () )
+	{
+		bHaveOrdinals = false;
+		fdRawOrdinals.Close ();
+		::unlink ( sRawOrdinalsFile.cstr () );
+	}
+
 	if ( bHaveOrdinals )
 	{
-		CSphString sRawOrdinalsFile = GetIndexFileName("tmp3");
 		CSphString sUnsortedIdFile = GetIndexFileName("tmp4");
 
 		CSphAutofile fdRawOrdinals ( sRawOrdinalsFile.cstr (), SPH_O_READ, m_sLastError );

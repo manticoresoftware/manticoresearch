@@ -62,6 +62,8 @@
 	#define sphSeek		_lseeki64
 	#define strtoull	_strtoui64
 	#define stat		_stat
+
+	#define ICONV_INBUF_CONST	1
 #else
 	#include <unistd.h>
 	#include <sys/time.h>

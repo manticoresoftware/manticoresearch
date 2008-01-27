@@ -3395,7 +3395,6 @@ CSphTokenizer_SBCS::CSphTokenizer_SBCS ()
 void CSphTokenizer_SBCS::SetBuffer ( BYTE * sBuffer, int iLength )
 {
 	// check that old one is over and that new length is sane
-	assert ( m_pCur>=m_pBufferMax );
 	assert ( iLength>=0 );
 
 	// set buffer
@@ -3510,7 +3509,6 @@ CSphTokenizer_UTF8::CSphTokenizer_UTF8 ()
 void CSphTokenizer_UTF8::SetBuffer ( BYTE * sBuffer, int iLength )
 {
 	// check that old one is over and that new length is sane
-	assert ( m_pCur>=m_pBufferMax );
 	assert ( iLength>=0 );
 
 	// set buffer
@@ -5822,7 +5820,7 @@ SphOffset_t CSphIndex_VLN::DumpOrdinals ( CSphWriter & Writer, CSphVector<Ordina
 
 		DWORD uValueLen = Ord.m_sValue.cstr () ? strlen ( Ord.m_sValue.cstr () ) : 0;
 		Writer.PutBytes ( &(Ord.m_uDocID), sizeof ( Ord.m_uDocID ) );
-		Writer.PutDword ( uValueLen );
+		Writer.PutBytes ( &uValueLen, sizeof ( uValueLen ) );
 		Writer.PutBytes ( Ord.m_sValue.cstr (), uValueLen );
 		uSize += uValueLen;
 

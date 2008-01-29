@@ -134,7 +134,7 @@ class ExprParser_t
 {
 	friend int				yylex ( YYSTYPE * lvalp, ExprParser_t * pParser );
 	friend int				yyparse ( ExprParser_t * pParser );
-	friend void				yyerror ( ExprParser_t * pParser, char * sMessage );
+	friend void				yyerror ( ExprParser_t * pParser, const char * sMessage );
 
 public:	
 							ExprParser_t () {}
@@ -380,7 +380,7 @@ int yylex ( YYSTYPE * lvalp, ExprParser_t * pParser )
 	return pParser->GetToken ( lvalp );
 }
 
-void yyerror ( ExprParser_t * pParser, char * sMessage )
+void yyerror ( ExprParser_t * pParser, const char * sMessage )
 {
 	pParser->m_sParserError.SetSprintf ( "%s near '%s'", sMessage, pParser->m_pLastTokenStart );
 }

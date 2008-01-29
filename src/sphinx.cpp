@@ -13507,7 +13507,7 @@ struct HtmlEntity_t
 };
 
 
-static inline DWORD HtmlEntityHash ( const BYTE * str, DWORD len )
+static inline DWORD HtmlEntityHash ( const BYTE * str, int len )
 {
 	static const unsigned short asso_values[] =
 	{
@@ -13553,7 +13553,7 @@ static inline DWORD HtmlEntityHash ( const BYTE * str, DWORD len )
 }
 
 
-static inline int HtmlEntityLookup ( const BYTE * str, DWORD len )
+static inline int HtmlEntityLookup ( const BYTE * str, int len )
 {
 	static const unsigned char lengthtable[] =
 	{
@@ -13976,7 +13976,7 @@ void CSphHTMLStripper::Strip ( BYTE * sData )
 
 					if ( *s==';' )
 					{
-						int iCode = HtmlEntityLookup ( sStart, s-sStart );
+						int iCode = HtmlEntityLookup ( sStart, (int)(s-sStart) );
 						if ( iCode>0 )
 						{
 							// this is a known entity; encode it

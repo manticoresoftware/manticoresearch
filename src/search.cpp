@@ -54,10 +54,13 @@ int main ( int argc, char ** argv )
 			"-p, --phrase\t\tmatch exact phrase\n"
 			"-e, --extended\t\tmatch in extended mode\n"
 			"-f, --filter <attr> <v>\tonly match if attribute attr value is v\n"
-			"-s, --start <offset>\tprint matches starting from this offset (default: 0)\n"
+			"-s, --sortby <CLAUSE>\tsort matches by 'CLAUSE' in sort_extended mode\n"
+			"-S, --sortexpr <EXPR>\tsort matches by 'EXPR' DESC in sort_expr mode\n"
+			"-o, --offset <offset>\tprint matches starting from this offset (default: 0)\n"
 			"-l, --limit <count>\tprint this many matches (default: 20)\n"
 			"-q, --noinfo\t\tdon't print document info from SQL database\n"
 			"-g, --group <attr>\tgroup by attribute named attr\n"
+			"-gs,--groupsort <expr>\tsort groups by <expr>\n"
 			"--sort=date\t\tsort by date, descending\n"
 			"--rsort=date\t\tsort by date, ascending\n"
 			"--sort=ts\t\tsort by time segments\n"
@@ -106,11 +109,14 @@ int main ( int argc, char ** argv )
 			OPT1 ( "--stdin" )			bStdin = true;
 
 			else if ( (i+1)>=argc )		break;
-			OPT ( "-s", "--start" )		iStart = atoi ( argv[++i] );
+			OPT ( "-o", "--offset" )	iStart = atoi ( argv[++i] );
 			OPT ( "-l", "--limit" )		iLimit = atoi ( argv[++i] );
 			OPT ( "-c", "--config" )	sOptConfig = argv[++i];
 			OPT ( "-i", "--index" )		sIndex = argv[++i];
 			OPT ( "-g", "--group" )		{ tQuery.m_eGroupFunc = SPH_GROUPBY_ATTR; tQuery.m_sGroupBy = argv[++i]; }
+			OPT ( "-gs","--groupsort" )	{ tQuery.m_sGroupSortBy = argv[++i]; }
+			OPT ( "-s", "--sortby" )	{ tQuery.m_eSort = SPH_SORT_EXTENDED; tQuery.m_sSortBy = argv[++i]; }
+			OPT ( "-S", "--sortexpr" )	{ tQuery.m_eSort = SPH_SORT_EXPR; tQuery.m_sSortBy = argv[++i]; }
 
 			else if ( (i+2)>=argc )		break;
 			OPT ( "-f", "--filter" )

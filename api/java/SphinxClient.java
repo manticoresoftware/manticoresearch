@@ -28,6 +28,8 @@ public class SphinxClient
 	public final static int SPH_MATCH_PHRASE		= 2;
 	public final static int SPH_MATCH_BOOLEAN		= 3;
 	public final static int SPH_MATCH_EXTENDED		= 4;
+	public final static int SPH_MATCH_FULLSCAN		= 5;
+	public final static int SPH_MATCH_EXTENDED2		= 6;
 
 	/* sorting modes */
 	public final static int SPH_SORT_RELEVANCE		= 0;
@@ -35,6 +37,7 @@ public class SphinxClient
 	public final static int SPH_SORT_ATTR_ASC		= 2;
 	public final static int SPH_SORT_TIME_SEGMENTS	= 3;
 	public final static int SPH_SORT_EXTENDED		= 4;
+	public final static int SPH_SORT_EXPR			= 5;
 
 	/* grouping functions */
 	public final static int SPH_GROUPBY_DAY			= 0;
@@ -867,7 +870,7 @@ public class SphinxClient
 
 				res.total = in.readInt();
 				res.totalFound = in.readInt();
-				res.time = in.readInt() / 1000; /* FIXME! format should be %.3f */
+				res.time = in.readInt() / 1000.0f;
 
 				res.words = new SphinxWordInfo [ in.readInt() ];
 				for ( int i=0; i<res.words.length; i++ )

@@ -11,73 +11,82 @@ import java.util.*;
  */
 public class test
 {
-	private static final int RESULT_LIMIT	= 20;
-	private static final int MAX_RESULTS	= 1000;
-
 	public static void main ( String[] argv ) throws SphinxException
 	{
 		if ( argv==null || argv.length<2 )
 		{
-			System.out.println ( "usage: test [-a] <word [word [word [...]]]> [-g <group>] [-p <port>] [-h <host>] [-i <index>] [-e] [-b]" );
-			System.out.println ( "or: test [-any] <word [word [word [...]]]> [--group <group>] [--port <port>] [--host <host>] [--index <index>] [--extended] [--boolean]\n" );
+			System.out.print ( "Usage: java -jar sphinxapi.jar [OPTIONS] query words\n\n" );
+			System.out.print ( "Options are:\n" );
+			System.out.print ( "-h, --host <HOST>\tconnect to searchd at host HOST\n" );
+			System.out.print ( "-p, --port\t\tconnect to searchd at port PORT\n" );
+			System.out.print ( "-i, --index <IDX>\tsearch through index(es) specified by IDX\n" );
+			System.out.print ( "-s, --sortby <CLAUSE>\tsort matches by 'CLAUSE' in sort_extended mode\n" );
+			System.out.print ( "-S, --sortexpr <EXPR>\tsort matches by 'EXPR' DESC in sort_expr mode\n" );
+			System.out.print ( "-a, --any\t\tuse 'match any word' matching mode\n" );
+			System.out.print ( "-b, --boolean\t\tuse 'boolean query' matching mode\n" );
+			System.out.print ( "-e, --extended\t\tuse 'extended query' matching mode\n" );
+			System.out.print ( "-ph,--phrase\t\tuse 'exact phrase' matching mode\n" );
+//			System.out.print ( "-f, --filter <ATTR>\tfilter by attribute 'ATTR' (default is 'group_id')\n" );
+//			System.out.print ( "-v, --value <VAL>\tadd VAL to allowed 'group_id' values list\n" );
+			System.out.print ( "-g, --groupby <EXPR>\tgroup matches by 'EXPR'\n" );
+			System.out.print ( "-gs,--groupsort <EXPR>\tsort groups by 'EXPR'\n" );
+//			System.out.print ( "-d, --distinct <ATTR>\tcount distinct values of 'ATTR''\n" );
+			System.out.print ( "-l, --limit <COUNT>\tretrieve COUNT matches (default: 20)\n" );
+			System.out.print ( "-ga, --geoanchor <LATATTR> <LONGATTR> <LAT> <LONG>\n" );
+			System.out.print ( "\t\t\tset anchor for geodistance\n" );
+			System.exit ( 0 );
 		}
 
 		StringBuffer q = new StringBuffer();
 		String host = "localhost";
 		int port = 3312;
 		int mode = SphinxClient.SPH_MATCH_ALL;
-		Set groups = new LinkedHashSet();
 		String index = "*";
 		int offset = 0;
+		int limit = 20;
+		int sortMode = SphinxClient.SPH_SORT_RELEVANCE;
+		String sortClause = "";
+		String groupBy = "";
+		String groupSort = "";
+
+		SphinxClient cl = new SphinxClient();
 
 		/* parse arguments */
 		if ( argv!=null)
 			for ( int i=0; i<argv.length; i++ )
 		{
 			String arg = argv[i];
-			if ( "-a".equals(arg) || "--any".equals(arg) )				mode = SphinxClient.SPH_MATCH_ANY;
+			if ( "-h".equals(arg) || "--host".equals(arg) )				host = argv[++i];
+			else if ( "-p".equals(arg) || "--port".equals(arg) )		port = Integer.parseInt ( argv[++i] );
+			else if ( "-i".equals(arg) || "--index".equals(arg) )		index = argv[++i];
+			else if ( "-s".equals(arg) || "--sortby".equals(arg) )		{ sortMode = SphinxClient.SPH_SORT_EXTENDED; sortClause = argv[++i]; }
+			else if ( "-S".equals(arg) || "--sortexpr".equals(arg) )	{ sortMode = SphinxClient.SPH_SORT_EXPR; sortClause = argv[++i]; }
+			else if ( "-a".equals(arg) || "--any".equals(arg) )			mode = SphinxClient.SPH_MATCH_ANY;
 			else if ( "-b".equals(arg) || "--boolean".equals(arg) )		mode = SphinxClient.SPH_MATCH_BOOLEAN;
 			else if ( "-e".equals(arg) || "--extended".equals(arg) )	mode = SphinxClient.SPH_MATCH_EXTENDED;
-			else if ( "-g".equals(arg) || "--group".equals(arg) )		groups.add ( argv[++i] );
-			else if ( "-p".equals(arg) || "--port".equals(arg) )		port = Integer.parseInt ( argv[++i] );
-			else if ( "-h".equals(arg) || "--host".equals(arg) )		host = argv[++i];
-			else if ( "-o".equals(arg) || "--offsset".equals(arg) )		offset = Integer.parseInt(argv[++i]);
-			else if ( "-i".equals(arg) || "--index".equals(arg) )		index = argv[++i];
+			else if ( "-ph".equals(arg)|| "--phrase".equals(arg) )		mode = SphinxClient.SPH_MATCH_PHRASE;
+			else if ( "-e2".equals(arg) )								mode = SphinxClient.SPH_MATCH_EXTENDED2;
+			else if ( "-g".equals(arg) || "--group".equals(arg) )		groupBy = argv[++i];
+			else if ( "-gs".equals(arg)|| "--groupsort".equals(arg) )	groupSort = argv[++i];
+			else if ( "-o".equals(arg) || "--offset".equals(arg) )		offset = Integer.parseInt(argv[++i]);
+			else if ( "-l".equals(arg) || "--limit".equals(arg) )		limit = Integer.parseInt(argv[++i]);
+			else if ( "-ga".equals(arg)|| "--geoanchor".equals(arg) )	cl.SetGeoAnchor ( argv[++i], argv[++i], Float.parseFloat(argv[++i]), Float.parseFloat(argv[++i]) );
 			else q.append ( argv[i] ).append ( " " );
 		}
 
-		SphinxClient cl = new SphinxClient();
 		cl.SetServer ( host, port );
 		cl.SetWeights ( new int[] { 100, 1 } );
 		cl.SetMatchMode ( mode );
-		cl.SetLimits ( offset, RESULT_LIMIT, MAX_RESULTS );
-
-		/* convert groups to int[] */
-		if ( groups.size()>0 )
-		{
-			int[] groupList = new int[groups.size()];
-			String group = null;
-			int i = 0;
-			try
-			{
-				for (Iterator e = groups.iterator(); e.hasNext(); i++)
-				{
-					group = (String) e.next();
-					groupList[i] = Integer.parseInt(group);
-				}
-			} catch (Exception ex)
-			{
-				System.out.println("Groups must be integer. Failed to convert group " + group);
-				return;
-			}
-			cl.SetFilter("group_id", groupList, false);
-		}
+		cl.SetLimits ( offset, limit );
+		cl.SetSortMode ( sortMode, sortClause );
+		if ( groupBy.length()>0 )
+			cl.SetGroupBy ( groupBy, SphinxClient.SPH_GROUPBY_ATTR, groupSort );
 
 		SphinxResult res = cl.Query(q.toString(), index);
-		if (res == null || (cl.GetLastError() != null && cl.GetLastError().length() > 0))
+		if ( res==null )
 		{
-			System.err.println("Error: " + cl.GetLastError());
-			System.exit(1);
+			System.err.println ( "Error: " + cl.GetLastError() );
+			System.exit ( 1 );
 		}
 		if ( cl.GetLastWarning()!=null && cl.GetLastWarning().length()>0 )
 			System.out.println ( "WARNING: " + cl.GetLastWarning() + "\n" );

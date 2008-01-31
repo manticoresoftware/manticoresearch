@@ -817,7 +817,16 @@ class SphinxClient
 					list ( $doc, $weight ) = array_values ( unpack ( "N*N*",
 						substr ( $response, $p, 8 ) ) );
 					$p += 8;
-					$doc = sprintf ( "%u", $doc ); // workaround for php signed/unsigned braindamage
+
+					if ( PHP_INT_SIZE>=8 )
+					{
+						// x64 route, workaround broken unpack() in 5.2.2+
+						if ( $doc<0 ) $doc += (1<<32);
+					} else
+					{
+						// x32 route, workaround php signed/unsigned braindamage
+						$doc = sprintf ( "%u", $doc );
+					}
 				}
 				$weight = sprintf ( "%u", $weight );
 

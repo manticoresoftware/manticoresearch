@@ -233,6 +233,30 @@ else
 	fi
 fi
 
+dnl ---
+
+AC_MSG_CHECKING([for unaligned RAM access])
+AC_LANG_PUSH([C++])
+AC_RUN_IFELSE(
+	[AC_LANG_PROGRAM([[
+		#include <stdlib.h>
+		#include <string.h>]],
+		[[char * sBuf = new char [ 8*sizeof(int) ];
+		memset ( sBuf, 0, 8*sizeof(int) );
+		volatile int iRes = 0;
+		for ( int i=0; i<(int)sizeof(int); i++ )
+		{
+			int * pPtr = (int*)( sBuf+i );
+			iRes += *pPtr;
+		}
+		return iRes-iRes;]])],
+	[AC_MSG_RESULT([yes])
+		AC_DEFINE([UNALIGNED_RAM_ACCESS],1,[whether unaligned RAM access is possible])],
+	[AC_MSG_RESULT([no])
+		AC_DEFINE([UNALIGNED_RAM_ACCESS],0)],
+	[AC_MSG_RESULT([unknown (cross-compiling), assume yes])
+		AC_DEFINE([UNALIGNED_RAM_ACCESS],1)])
+
 dnl --------------------------------------------------------------------------
 
 SPHINX_CONFIGURE_PART([generating configuration files])

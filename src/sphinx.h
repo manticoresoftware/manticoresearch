@@ -156,6 +156,48 @@ void			sphStartIOStats ();
 /// stops collecting stats, returns results
 const CSphIOStats & sphStopIOStats ();
 
+//////////////////////////////////////////////////////////////////////////
+
+#if UNALIGNED_RAM_ACCESS
+
+/// pass-through wrapper
+template < typename T > inline T sphUnalignedRead ( const T & tRef )
+{
+	return tRef;
+}
+
+/// pass-through wrapper
+template < typename T > void sphUnalignedWrite ( void * pPtr, const T & tVal )
+{
+	*(T*)pPtr = tVal;
+}
+
+#else
+
+/// unaligned read wrapper for some architectures (eg. SPARC)
+template < typename T >
+inline T sphUnalignedRead ( const T & tRef )
+{
+	T uTmp;
+	BYTE * pSrc = (BYTE *) &tRef;
+	BYTE * pDst = (BYTE *) &uTmp;
+	for ( int i=0; i<(int)sizeof(T); i++ )
+		*pDst++ = *pSrc++;
+	return uTmp;
+}
+
+/// unaligned write wrapper for some architectures (eg. SPARC)
+template < typename T >
+void sphUnalignedWrite ( void * pPtr, const T & tVal )
+{
+	BYTE * pDst = (BYTE *) pPtr;
+	BYTE * pSrc = (BYTE *) &tVal;
+	for ( int i=0; i<(int)sizeof(T); i++ )
+		*pDst++ = *pSrc++;
+}
+
+#endif
+
 /////////////////////////////////////////////////////////////////////////////
 // TOKENIZERS
 /////////////////////////////////////////////////////////////////////////////

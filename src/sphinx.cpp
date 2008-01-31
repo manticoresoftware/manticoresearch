@@ -11481,24 +11481,24 @@ bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, const CSphTermSetup 
 	CSphWordlistCheckpoint * pStart = m_pWordlistCheckpoints;
 	CSphWordlistCheckpoint * pEnd = m_pWordlistCheckpoints + m_iWordlistCheckpoints - 1;
 
-	if ( tWord.m_iWordID<pStart->m_iWordID )
+	if ( tWord.m_iWordID < sphUnalignedRead ( pStart->m_iWordID ) )
 		return false;
 
-	if ( tWord.m_iWordID>=pEnd->m_iWordID )
+	if ( tWord.m_iWordID >= sphUnalignedRead ( pEnd->m_iWordID ) )
 	{
-		iWordlistOffset = pEnd->m_iWordlistOffset;
+		iWordlistOffset = sphUnalignedRead ( pEnd->m_iWordlistOffset );
 	} else
 	{
 		while ( pEnd-pStart>1 )
 		{
 			CSphWordlistCheckpoint * pMid = pStart + (pEnd-pStart)/2;
 
-			if ( tWord.m_iWordID==pMid->m_iWordID )
+			if ( tWord.m_iWordID == sphUnalignedRead ( pMid->m_iWordID ) )
 			{
 				pStart = pEnd = pMid;
 				break;
 
-			} else if ( tWord.m_iWordID<pMid->m_iWordID )
+			} else if ( tWord.m_iWordID < sphUnalignedRead ( pMid->m_iWordID ) )
 			{
 				pEnd = pMid;
 
@@ -11510,8 +11510,8 @@ bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, const CSphTermSetup 
 
 		assert ( pStart >= m_pWordlistCheckpoints );
 		assert ( pStart <= m_pWordlistCheckpoints+m_iWordlistCheckpoints-1 );
-		assert ( tWord.m_iWordID >= pStart[0].m_iWordID && tWord.m_iWordID < pStart[1].m_iWordID );
-		iWordlistOffset = pStart->m_iWordlistOffset;
+		assert ( tWord.m_iWordID >= sphUnalignedRead(pStart->m_iWordID) && tWord.m_iWordID < sphUnalignedRead((pStart+1)->m_iWordID) );
+		iWordlistOffset = sphUnalignedRead ( pStart->m_iWordlistOffset );
 	}
 	assert ( iWordlistOffset>=0 );
 

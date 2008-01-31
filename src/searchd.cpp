@@ -1045,7 +1045,7 @@ template < typename T > bool NetOutputBuffer_c::SendT ( T tValue )
 
 	FlushIf ( sizeof(T) );
 
-	*(T*)m_pBuffer = tValue;
+	sphUnalignedWrite ( m_pBuffer, tValue );
 	m_pBuffer += sizeof(T);
 	assert ( m_pBuffer<m_dBuffer+sizeof(m_dBuffer) );
 	return true;
@@ -1060,9 +1060,7 @@ bool NetOutputBuffer_c::SendString ( const char * sStr )
 	FlushIf ( sizeof(DWORD) );
 
 	int iLen = strlen(sStr);
-	*(int*)m_pBuffer = htonl(iLen);
-	m_pBuffer += sizeof(int);
-
+	SendInt ( iLen );
 	return SendBytes ( sStr, iLen );
 }
 
@@ -1138,7 +1136,7 @@ template < typename T > T InputBuffer_c::GetT ()
 		return 0;
 	}
 
-	T iRes = *(T*)m_pCur;
+	T iRes = sphUnalignedRead ( *(T*)m_pCur );
 	m_pCur += sizeof(T);
 	return iRes;
 }

@@ -8274,6 +8274,82 @@ echo "$as_me: WARNING: xmlpipe2 will only support default encodings (latin-1, ut
 fi
 
 
+echo "$as_me:$LINENO: checking for unaligned RAM access" >&5
+echo $ECHO_N "checking for unaligned RAM access... $ECHO_C" >&6
+ac_ext=cc
+ac_cpp='$CXXCPP $CPPFLAGS'
+ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
+ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
+ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
+
+if test "$cross_compiling" = yes; then
+  echo "$as_me:$LINENO: result: unknown (cross-compiling), assume yes" >&5
+echo "${ECHO_T}unknown (cross-compiling), assume yes" >&6
+		cat >>confdefs.h <<\_ACEOF
+#define UNALIGNED_RAM_ACCESS 1
+_ACEOF
+
+else
+  cat >conftest.$ac_ext <<_ACEOF
+/* confdefs.h.  */
+_ACEOF
+cat confdefs.h >>conftest.$ac_ext
+cat >>conftest.$ac_ext <<_ACEOF
+/* end confdefs.h.  */
+
+		#include <stdlib.h>
+		#include <string.h>
+int
+main ()
+{
+char * sBuf = new char [ 8*sizeof(int) ];
+		memset ( sBuf, 0, 8*sizeof(int) );
+		volatile int iRes = 0;
+		for ( int i=0; i<(int)sizeof(int); i++ )
+		{
+			int * pPtr = (int*)( sBuf+i );
+			iRes += *pPtr;
+		}
+		return iRes-iRes;
+  ;
+  return 0;
+}
+_ACEOF
+rm -f conftest$ac_exeext
+if { (eval echo "$as_me:$LINENO: \"$ac_link\"") >&5
+  (eval $ac_link) 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); } && { ac_try='./conftest$ac_exeext'
+  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); }; }; then
+  echo "$as_me:$LINENO: result: yes" >&5
+echo "${ECHO_T}yes" >&6
+
+cat >>confdefs.h <<\_ACEOF
+#define UNALIGNED_RAM_ACCESS 1
+_ACEOF
+
+else
+  echo "$as_me: program exited with status $ac_status" >&5
+echo "$as_me: failed program was:" >&5
+sed 's/^/| /' conftest.$ac_ext >&5
+
+( exit $ac_status )
+echo "$as_me:$LINENO: result: no" >&5
+echo "${ECHO_T}no" >&6
+		cat >>confdefs.h <<\_ACEOF
+#define UNALIGNED_RAM_ACCESS 0
+_ACEOF
+
+fi
+rm -f core *.core gmon.out bb.out conftest$ac_exeext conftest.$ac_objext conftest.$ac_ext
+fi
+
+
 
 	echo "$as_me:$LINENO: result: " >&5
 echo "${ECHO_T}" >&6

@@ -184,6 +184,9 @@
 /* Define to 1 if you can safely include both <sys/time.h> and <time.h>. */
 #undef TIME_WITH_SYS_TIME
 
+/* whether unaligned RAM access is possible */
+#undef UNALIGNED_RAM_ACCESS
+
 /* 64-bit document and word IDs */
 #undef USE_64BIT
 

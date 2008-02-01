@@ -885,6 +885,7 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 	const char * sPath = hDst["path"].cstr();
 	char sFrom [ SPH_MAX_FILENAME_LEN ];
 	char sTo [ SPH_MAX_FILENAME_LEN ];
+	struct stat tFileInfo; 
 
 	int iExt;
 	for ( iExt=0; iExt<EXT_COUNT; iExt++ )
@@ -899,23 +900,29 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 
 		sTo [ sizeof(sTo)-1 ] = '\0';
 
-		if ( remove ( sTo ) )
-		{
-			fprintf ( stdout, "WARNING: index '%s': delete '%s' failed: %s",
-				sDst, sTo, strerror(errno) );
-			break;
+		if ( !stat( sTo, &tFileInfo ) )
+		{		
+			if ( remove ( sTo ) )
+			{
+				fprintf ( stdout, "ERROR: index '%s': failed to delete '%s': %s",
+					sDst, sTo, strerror(errno) );
+				break;			
+			}
 		}
 
 		if ( rename ( sFrom, sTo ) )
 		{
-			fprintf ( stdout, "WARNING: index '%s': rename '%s' to '%s' failed: %s",
+			fprintf ( stdout, "ERROR: index '%s': failed to rename '%s' to '%s': %s",
 				sDst, sFrom, sTo, strerror(errno) );
 			break;
 		}
 	}
 
-	pSrc->Unlock();
-	pDst->Unlock();
+	if ( !bRotate )
+	{
+		pSrc->Unlock();
+		pDst->Unlock();
+	}
 
 	SafeDelete ( pSrc );
 	SafeDelete ( pDst );

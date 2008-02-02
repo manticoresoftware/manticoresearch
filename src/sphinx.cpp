@@ -1907,8 +1907,29 @@ uint64_t sphToQword ( const char * s )
 
 #if USE_WINDOWS || !HAVE_F_SETLKW
 
-bool sphLockEx ( int, bool )	{ return true; }
-void sphLockUn ( int )			{}
+bool sphLockEx ( int iFile, bool bWait )
+{
+	HANDLE hHandle = (HANDLE) _get_osfhandle ( iFile );
+	if ( hHandle != INVALID_HANDLE_VALUE )
+	{
+		OVERLAPPED tOverlapped;
+		memset ( &tOverlapped, 0, sizeof ( tOverlapped ) );
+		return !!LockFileEx ( hHandle, LOCKFILE_EXCLUSIVE_LOCK | ( bWait ? 0 : LOCKFILE_FAIL_IMMEDIATELY ), 0, 1, 0, &tOverlapped );
+	}
+
+	return false;
+}
+
+void sphLockUn ( int iFile )
+{
+	HANDLE hHandle = (HANDLE) _get_osfhandle ( iFile );
+	if ( hHandle != INVALID_HANDLE_VALUE )
+	{
+		OVERLAPPED tOverlapped;
+		memset ( &tOverlapped, 0, sizeof ( tOverlapped ) );
+		UnlockFileEx ( hHandle, 0, 1, 0, &tOverlapped );
+	}
+}
 
 #else
 
@@ -12304,8 +12325,22 @@ bool CSphIndex_VLN::Rename ( const char * sNewBase )
 			continue;
 		if ( !strcmp ( sExt, "spm" ) && m_uVersion<4 ) // .spm files are v4+
 			continue;
+
+#if !USE_WINDOWS
 		if ( !strcmp ( sExt, "spl" ) && m_iLockFD<0 ) // .spl files are locks
 			continue;
+#else
+		if ( !strcmp ( sExt, "spl" ) )
+		{
+			if ( m_iLockFD >= 0 )
+			{
+				::close ( m_iLockFD );
+				::unlink ( GetIndexFileName ( "spl" ) );
+				m_iLockFD = -1;
+			}
+			continue;
+		}
+#endif
 
 		snprintf ( sFrom, sizeof(sFrom), "%s.%s", m_sFilename.cstr(), sExt );
 		snprintf ( sTo, sizeof(sTo), "%s.%s", sNewBase, sExt );

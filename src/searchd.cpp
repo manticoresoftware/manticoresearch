@@ -5049,6 +5049,11 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( hSearchd("seamless_rotate") )
 		g_bSeamlessRotate = ( hSearchd["seamless_rotate"].intval()!=0 );
 
+#if USE_WINDOWS
+	if ( g_bSeamlessRotate )
+		sphFatal ( "seamless_rotate is not supported in windows; set seamless_rotate=0" );
+#endif
+
 	//////////////////////
 	// build indexes hash
 	//////////////////////
@@ -5395,10 +5400,12 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	if ( bOptPIDFile )
 	{
+#if !USE_WINDOWS
 		// re-lock pid
 		// FIXME! there's a potential race here
 		if ( !sphLockEx ( g_iPidFD, true ) )
 			sphFatal ( "failed to re-lock pid file '%s': %s", g_sPidFile, strerror(errno) );
+#endif
 
 		char sPid[16];
 		snprintf ( sPid, sizeof(sPid), "%d\n", getpid() );
@@ -5513,6 +5520,21 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			while ( waitpid ( 0, NULL, WNOHANG ) > 0 )
 				g_iChildren--;
 			g_bGotSigchld = false;
+		}
+#endif
+
+#if USE_WINDOWS
+		MSG tMsg;
+		while ( PeekMessage ( &tMsg, NULL, 0, 0, PM_REMOVE ) )
+		{
+			if ( tMsg.message == WM_USER )
+			{
+				g_bDoRotate = true;
+				g_bGotSighup = true;
+			}
+
+			TranslateMessage ( &tMsg );
+			DispatchMessage ( &tMsg );
 		}
 #endif
 

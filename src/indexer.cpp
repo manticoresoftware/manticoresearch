@@ -931,6 +931,27 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 	return ( iExt==EXT_COUNT );
 }
 
+#if USE_WINDOWS
+
+bool g_bPIDFound = false;
+bool g_bSendSuccess = false;
+
+BOOL CALLBACK UpdateWinEnum ( HWND hwnd, LPARAM lParam )
+{
+	DWORD dwID;
+	DWORD uThread = GetWindowThreadProcessId ( hwnd, &dwID ) ;
+
+	if( dwID == (DWORD)lParam )
+	{
+		g_bPIDFound = true;
+		g_bSendSuccess = !!PostThreadMessage ( uThread, WM_USER, 0, 0 );
+	}
+
+	return TRUE;
+}
+
+#endif
+
 //////////////////////////////////////////////////////////////////////////
 // ENTRY
 //////////////////////////////////////////////////////////////////////////
@@ -978,11 +999,10 @@ int main ( int argc, char ** argv )
 				break;
 			i += 2;
 
-#if !USE_WINDOWS
 		} else if ( strcasecmp ( argv[i], "--rotate" )==0 )
 		{
 			g_bRotate = true;
-#endif
+
 		} else if ( strcasecmp ( argv[i], "--buildfreqs" )==0 )
 		{
 			g_bBuildFreqs = true;
@@ -1186,7 +1206,6 @@ int main ( int argc, char ** argv )
 	// rotating searchd indices
 	////////////////////////////
 
-#if !USE_WINDOWS
 	if ( bIndexedOk )
 	{
 		bool bOK = false;
@@ -1221,6 +1240,18 @@ int main ( int argc, char ** argv )
 			}
 			fclose ( fp );
 
+#if USE_WINDOWS
+			g_bPIDFound = false;
+			g_bSendSuccess = false;
+			EnumWindows ( (WNDENUMPROC)UpdateWinEnum, (LPARAM) iPID );
+			if ( !g_bPIDFound )
+				fprintf ( stdout, "WARNING: no process found by PID %d.\n", iPID );
+			else
+				if ( !g_bSendSuccess )
+					fprintf ( stdout, "WARNING: failed to send SIGHUP to searchd (pid=%d).\n", iPID );
+				else
+					fprintf ( stdout, "rotating indices: succesfully sent SIGHUP to searchd (pid=%d).\n", iPID );
+#else
 			// signal
 			int iErr = kill ( iPID, SIGHUP );
 			if ( iErr==0 )
@@ -1237,6 +1268,7 @@ int main ( int argc, char ** argv )
 				}
 				break;
 			}
+#endif
 
 			// all ok
 			bOK = true;
@@ -1249,7 +1281,6 @@ int main ( int argc, char ** argv )
 				fprintf ( stdout, "WARNING: indices NOT rotated.\n" );
 		}
 	}
-#endif
 
 #if SPH_DEBUG_LEAKS
 	sphAllocsStats ();

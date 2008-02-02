@@ -47,6 +47,56 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
+/// unaligned RAM accesses are forbidden on SPARC
+#if defined(sparc) || defined(__sparc__)
+#define UNALIGNED_RAM_ACCESS 0
+#else
+#define UNALIGNED_RAM_ACCESS 1
+#endif
+
+
+#if UNALIGNED_RAM_ACCESS
+
+/// pass-through wrapper
+template < typename T > inline T sphUnalignedRead ( const T & tRef )
+{
+	return tRef;
+}
+
+/// pass-through wrapper
+template < typename T > void sphUnalignedWrite ( void * pPtr, const T & tVal )
+{
+	*(T*)pPtr = tVal;
+}
+
+#else
+
+/// unaligned read wrapper for some architectures (eg. SPARC)
+template < typename T >
+inline T sphUnalignedRead ( const T & tRef )
+{
+	T uTmp;
+	byte * pSrc = (byte *) &tRef;
+	byte * pDst = (byte *) &uTmp;
+	for ( int i=0; i<(int)sizeof(T); i++ )
+		*pDst++ = *pSrc++;
+	return uTmp;
+}
+
+/// unaligned write wrapper for some architectures (eg. SPARC)
+template < typename T >
+void sphUnalignedWrite ( void * pPtr, const T & tVal )
+{
+	byte * pDst = (byte *) pPtr;
+	byte * pSrc = (byte *) &tVal;
+	for ( int i=0; i<(int)sizeof(T); i++ )
+		*pDst++ = *pSrc++;
+}
+
+#endif
+
+/////////////////////////////////////////////////////////////////////////////
+
 // FIXME! make this all dynamic
 #define SPHINXSE_MAX_FILTERS		32
 
@@ -128,17 +178,19 @@ enum
 
 #include <stdarg.h>
 
+#if SPHINX_DEBUG_OUTPUT
 inline void SPH_DEBUG ( const char * format, ... )
 {
-	#if SPHINX_DEBUG_OUTPUT
 	va_list ap;
 	va_start ( ap, format );
 	fprintf ( stderr, "SphinxSE: " );
 	vfprintf ( stderr, format, ap );
 	fprintf ( stderr, "\n" );
 	va_end ( ap );
-	#endif
 }
+#else
+inline void SPH_DEBUG ( const char *, ... ) {}
+#endif
 
 #if SPHINX_DEBUG_CALLS
 
@@ -1640,7 +1692,7 @@ uint32 ha_sphinx::UnpackDword ()
 		return 0;
 	}
 
-	uint32 uRes = ntohl ( *( (uint32*)m_pCur ) );
+	uint32 uRes = ntohl ( sphUnalignedRead ( *(uint32*)m_pCur ) );
 	m_pCur += sizeof(uint32);
 	return uRes;
 }
@@ -1838,9 +1890,9 @@ int ha_sphinx::index_read ( byte * buf, const byte * key, uint key_len, enum ha_
 		SPH_RET ( HA_ERR_END_OF_FILE );
 	}
 
-	short int uRespStatus = ntohs ( *(short int*)( &sHeader[0] ) );
-	short int uRespVersion = ntohs ( *(short int*)( &sHeader[2] ) );
-	uint uRespLength = ntohl ( *(uint *)( &sHeader[4] ) );
+	short int uRespStatus = ntohs ( sphUnalignedRead ( *(short int*)( &sHeader[0] ) ) );
+	short int uRespVersion = ntohs ( sphUnalignedRead ( *(short int*)( &sHeader[2] ) ) );
+	uint uRespLength = ntohl ( sphUnalignedRead ( *(uint *)( &sHeader[4] ) ) );
 	SPH_DEBUG ( "got response header (status=%d version=%d length=%d)",
 		uRespStatus, uRespVersion, uRespLength );
 

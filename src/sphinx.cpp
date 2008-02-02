@@ -911,7 +911,7 @@ public:
 						CSphBin ();
 						~CSphBin ();
 
-	static int			CalcBinSize ( int iMemoryLimit, int iBlocks, const char * sPhase );
+	static int			CalcBinSize ( int iMemoryLimit, int iBlocks, const char * sPhase, bool bWarn = true );
 	void				Init ( int iFD, SphOffset_t * pSharedOffset, const int iBinSize );
 
 	int					ReadByte ();
@@ -1637,7 +1637,7 @@ private:
 	void						CalcDocinfo ( CSphMatch & tMatch, const DWORD * pDocinfo );
 	void						LookupDocinfo ( CSphMatch & tMatch );
 
-	bool						BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAutoArray<CSphWordHit> & dHits, int iArenaSize );
+	bool						BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAutoArray<CSphWordHit> & dHits, int iArenaSize, int iFieldFD, int nFieldMVAs, int iFieldMVAInPool );
 
 	void						CheckQueryWord ( const char * szWord, CSphQueryResult * pResult );
 	void						CheckExtendedQuery ( const CSphExtendedQueryNode * pNode, CSphQueryResult * pResult );
@@ -1649,8 +1649,8 @@ private:
 
 	ESphBinRead					ReadOrdinal ( CSphBin & Reader, Ordinal_t & Ordinal );
 	SphOffset_t					DumpOrdinals ( CSphWriter & Writer, CSphVector<Ordinal_t> & dOrdinals );
-	bool						SortOrdinals ( const char * szToFile, int iFromFD, int iArenaSize, int iOrdinalsInPool, const CSphVector< CSphVector<SphOffset_t> > & dOrdBlockSize );
-	bool						SortOrdinalIds ( const char * szToFile, int iFromFD, int nAttrs, int nOrdinals, int iArenaSize, int iNumPoolOrdinals );
+	bool						SortOrdinals ( const char * szToFile, int iFromFD, int iArenaSize, int iOrdinalsInPool, const CSphVector< CSphVector<SphOffset_t> > & dOrdBlockSize, bool bWarnOfMem );
+	bool						SortOrdinalIds ( const char * szToFile, int iFromFD, int nAttrs, int nOrdinals, int iArenaSize, int iNumPoolOrdinals, bool bWarnOfMem );
 
 public:
 	// FIXME! this needs to be protected, and refactored as well
@@ -4454,7 +4454,7 @@ CSphBin::CSphBin ()
 }
 
 
-int CSphBin::CalcBinSize ( int iMemoryLimit, int iBlocks, const char * sPhase )
+int CSphBin::CalcBinSize ( int iMemoryLimit, int iBlocks, const char * sPhase, bool bWarn )
 {
 	if ( iBlocks<=0 )
 		return CSphBin::MIN_SIZE;
@@ -4468,7 +4468,7 @@ int CSphBin::CalcBinSize ( int iMemoryLimit, int iBlocks, const char * sPhase )
 			sPhase, iMemoryLimit/1024, iBinSize*iBlocks/1024 );
 	}
 
-	if ( iBinSize<CSphBin::WARN_SIZE )
+	if ( iBinSize<CSphBin::WARN_SIZE && bWarn )
 	{
 		sphWarn ( "%s: merge_block_size=%d kb too low, increasing mem_limit may improve performance",
 			sPhase, iBinSize/1024 );
@@ -5565,7 +5565,8 @@ struct MvaEntryCmp_fn
 };
 
 
-bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAutoArray<CSphWordHit> & dHits, int iArenaSize )
+bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAutoArray<CSphWordHit> & dHits, int iArenaSize,
+							  int iFieldFD, int nFieldMVAs, int iFieldMVAInPool )
 {
 	// initialize writer (data file must always exist)
 	CSphWriter wrMva;
@@ -5573,10 +5574,18 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAut
 		return false;
 
 	// calcs and checks
+	bool bOnlyFieldMVAs = true;
 	CSphVector<int> dMvaIndexes;
 	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
-		if ( m_tSchema.GetAttr(i).m_eAttrType & SPH_ATTR_MULTI )
+	{
+		const CSphColumnInfo & tAttr = m_tSchema.GetAttr(i);
+		if ( tAttr.m_eAttrType & SPH_ATTR_MULTI )
+		{
 			dMvaIndexes.Add ( i );
+			if ( tAttr.m_eSrc != SPH_ATTRSRC_FIELD )
+				bOnlyFieldMVAs = false;
+		}
+	}
 
 	if ( dMvaIndexes.GetLength()<=0 )
 		return true;
@@ -5602,56 +5611,63 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAut
 	m_tProgress.m_ePhase = CSphIndexProgress::PHASE_COLLECT_MVA;
 	m_tProgress.m_iAttrs = 0;
 
-	ARRAY_FOREACH ( iSource, dSources )
+	if ( !bOnlyFieldMVAs )
 	{
-		CSphSource * pSource = dSources[iSource];
-		if ( !pSource->Connect ( m_sLastError ) )
-			return false;
-
-		ARRAY_FOREACH ( i, dMvaIndexes )
+		ARRAY_FOREACH ( iSource, dSources )
 		{
-			int iAttr = dMvaIndexes[i];
-
-			int iRowitem = m_tSchema.GetAttr(iAttr).m_iRowitem;
-			assert ( iRowitem>=0 );
-
-			if ( !pSource->IterateMultivaluedStart ( iAttr, m_sLastError ) )
+			CSphSource * pSource = dSources[iSource];
+			if ( !pSource->Connect ( m_sLastError ) )
 				return false;
 
-			while ( pSource->IterateMultivaluedNext () )
+			ARRAY_FOREACH ( i, dMvaIndexes )
 			{
-				pMva->m_uDocID = pSource->m_tDocInfo.m_iDocID;
-				pMva->m_iAttr = i;
-				pMva->m_uValue = pSource->m_tDocInfo.m_pRowitems[iRowitem];
+				int iAttr = dMvaIndexes[i];
+				const CSphColumnInfo & tAttr = m_tSchema.GetAttr(iAttr);
 
-				if ( ++pMva>=pMvaMax )
+				if ( tAttr.m_eSrc == SPH_ATTRSRC_FIELD )
+					continue;
+
+				int iRowitem = tAttr.m_iRowitem;
+				assert ( iRowitem>=0 );
+
+				if ( !pSource->IterateMultivaluedStart ( iAttr, m_sLastError ) )
+					return false;
+
+				while ( pSource->IterateMultivaluedNext () )
 				{
-					sphSort ( pMvaPool, pMva-pMvaPool );
-					if ( !sphWriteThrottled ( fdTmpMva.GetFD(), pMvaPool, (pMva-pMvaPool)*sizeof(MvaEntry_t), "temp_mva", m_sLastError ) )
-						return false;
+					pMva->m_uDocID = pSource->m_tDocInfo.m_iDocID;
+					pMva->m_iAttr = i;
+					pMva->m_uValue = pSource->m_tDocInfo.m_pRowitems[iRowitem];
 
-					dBlockLens.Add ( pMva-pMvaPool );
-					m_tProgress.m_iAttrs += pMva-pMvaPool;
-					pMva = pMvaPool;
+					if ( ++pMva>=pMvaMax )
+					{
+						sphSort ( pMvaPool, pMva-pMvaPool );
+						if ( !sphWriteThrottled ( fdTmpMva.GetFD(), pMvaPool, (pMva-pMvaPool)*sizeof(MvaEntry_t), "temp_mva", m_sLastError ) )
+							return false;
 
-					if ( m_pProgress )
-						m_pProgress ( &m_tProgress, false );
+						dBlockLens.Add ( pMva-pMvaPool );
+						m_tProgress.m_iAttrs += pMva-pMvaPool;
+						pMva = pMvaPool;
+
+						if ( m_pProgress )
+							m_pProgress ( &m_tProgress, false );
+					}
 				}
 			}
+
+			pSource->Disconnect ();
 		}
 
-		pSource->Disconnect ();
-	}
+		if ( pMva>pMvaPool )
+		{
+			sphSort ( pMvaPool, pMva-pMvaPool );
+			if ( !sphWriteThrottled ( fdTmpMva.GetFD(), pMvaPool, (pMva-pMvaPool)*sizeof(MvaEntry_t), "temp_mva", m_sLastError ) )
+				return false;
 
-	if ( pMva>pMvaPool )
-	{
-		sphSort ( pMvaPool, pMva-pMvaPool );
-		if ( !sphWriteThrottled ( fdTmpMva.GetFD(), pMvaPool, (pMva-pMvaPool)*sizeof(MvaEntry_t), "temp_mva", m_sLastError ) )
-			return false;
-
-		dBlockLens.Add ( pMva-pMvaPool );
-		m_tProgress.m_iAttrs += pMva-pMvaPool;
-		pMva = pMvaPool;
+			dBlockLens.Add ( pMva-pMvaPool );
+			m_tProgress.m_iAttrs += pMva-pMvaPool;
+			pMva = pMvaPool;
+		}
 	}
 
 	if ( m_pProgress )
@@ -5670,15 +5686,19 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAut
 	if ( m_pProgress )
 	{
 		m_tProgress.m_ePhase = CSphIndexProgress::PHASE_SORT_MVA;
+		m_tProgress.m_iAttrs = m_tProgress.m_iAttrs + nFieldMVAs;
 		m_tProgress.m_iAttrsTotal = m_tProgress.m_iAttrs;
 		m_pProgress ( &m_tProgress, false );
 	}
 
+	int	nLastBlockFieldMVAs = iFieldMVAInPool ? ( nFieldMVAs % iFieldMVAInPool ) : 0;
+	int nFieldBlocks = iFieldMVAInPool ? ( nFieldMVAs / iFieldMVAInPool + ( nLastBlockFieldMVAs ? 1 : 0 ) ) : 0;
+
 	// initialize readers
 	CSphVector<CSphBin*> dBins;
-	dBins.Reserve ( dBlockLens.GetLength() );
+	dBins.Reserve ( dBlockLens.GetLength() + nFieldBlocks );
 
-	int iBinSize = CSphBin::CalcBinSize ( iArenaSize, dBlockLens.GetLength(), "sort_mva" );
+	int iBinSize = CSphBin::CalcBinSize ( iArenaSize, dBlockLens.GetLength() + nFieldBlocks, "sort_mva" );
 	SphOffset_t iSharedOffset = -1;
 
 	ARRAY_FOREACH ( i, dBlockLens )
@@ -5689,9 +5709,23 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAut
 		dBins[i]->Init ( fdTmpMva.GetFD(), &iSharedOffset, iBinSize );
 	}
 
+	SphOffset_t iSharedFieldOffset = -1;
+	SphOffset_t uStart = 0;
+	for ( int i = 0; i < nFieldBlocks; i++ )
+	{
+		dBins.Add ( new CSphBin() );
+		int iBin = dBins.GetLength () - 1;
+
+		dBins[iBin]->m_iFileLeft = ( i == nFieldBlocks - 1 ? ( nLastBlockFieldMVAs ? nLastBlockFieldMVAs : iFieldMVAInPool ): iFieldMVAInPool ) * sizeof ( MvaEntry_t );
+		dBins[iBin]->m_iFilePos = uStart;
+		dBins[iBin]->Init ( iFieldFD, &iSharedFieldOffset, iBinSize );
+
+		uStart += dBins [iBin]->m_iFileLeft;
+	}
+
 	// do the sort
-	CSphQueue < MvaEntryTag_t, MvaEntryCmp_fn > qMva ( Max ( 1, dBlockLens.GetLength() ) );
-	ARRAY_FOREACH ( i, dBlockLens )
+	CSphQueue < MvaEntryTag_t, MvaEntryCmp_fn > qMva ( Max ( 1, dBins.GetLength() ) );
+	ARRAY_FOREACH ( i, dBins )
 	{
 		MvaEntryTag_t tEntry;
 		if ( dBins[i]->ReadBytes ( (MvaEntry_t*) &tEntry, sizeof(MvaEntry_t) ) != BIN_READ_OK )
@@ -5803,6 +5837,14 @@ struct CmpOrdinalsDocid_fn
 };
 
 
+struct CmpMvaEntries_fn
+{
+	inline int operator () ( const MvaEntry_t & a, const MvaEntry_t & b )
+	{
+		return a<b;
+	}
+};
+
 struct CmpOrdinalIdEntry_fn
 {
 	static inline bool IsLess ( const OrdinalIdEntry_t & a, const OrdinalIdEntry_t & b )
@@ -5864,7 +5906,7 @@ ESphBinRead CSphIndex_VLN::ReadOrdinal ( CSphBin & Reader, Ordinal_t & Ordinal )
 }
 
 
-bool CSphIndex_VLN::SortOrdinals ( const char * szToFile, int iFromFD, int iArenaSize, int iOrdinalsInPool, const CSphVector < CSphVector < SphOffset_t > > & dOrdBlockSize )
+bool CSphIndex_VLN::SortOrdinals ( const char * szToFile, int iFromFD, int iArenaSize, int iOrdinalsInPool, const CSphVector < CSphVector < SphOffset_t > > & dOrdBlockSize, bool bWarnOfMem )
 {
 	int nAttrs = dOrdBlockSize.GetLength ();
 	int nBlocks = dOrdBlockSize [0].GetLength ();
@@ -5873,7 +5915,7 @@ bool CSphIndex_VLN::SortOrdinals ( const char * szToFile, int iFromFD, int iAren
 	if ( !Writer.OpenFile ( szToFile, m_sLastError ) )
 		return false;
 
-	int iBinSize = CSphBin::CalcBinSize ( iArenaSize, nBlocks, "ordinals" );
+	int iBinSize = CSphBin::CalcBinSize ( iArenaSize, nBlocks, "ordinals", bWarnOfMem );
 	SphOffset_t iSharedOffset = -1;
 
 	CSphQueue < OrdinalEntry_t, CmpOrdinalsEntry_fn > qOrdinals ( Max ( 1, nBlocks ) );
@@ -5922,6 +5964,9 @@ bool CSphIndex_VLN::SortOrdinals ( const char * szToFile, int iFromFD, int iAren
 
 		SphDocID_t uCurID = 0;
 
+		CSphString sLastOrdValue;
+		int iBlock = 0;
+
 		for ( ;; )
 		{
 			if ( !qOrdinals.GetLength () || qOrdinals.Root ().m_uDocID != uCurID )
@@ -5930,8 +5975,17 @@ bool CSphIndex_VLN::SortOrdinals ( const char * szToFile, int iFromFD, int iAren
 				{
 					OrdinalId_t tId;
 					tId.m_uDocID = uCurID;
-					tId.m_uId = uOrdinalId++;
+					tId.m_uId = uOrdinalId;
 					dOrdinalIdPool.Add ( tId );
+
+					if ( qOrdinals.GetLength () > 0 )
+					{
+						if ( sLastOrdValue.cstr () [0] != qOrdinals.Root ().m_sValue.cstr () [0] )
+							uOrdinalId++;
+						else
+							if ( strcmp ( sLastOrdValue.cstr (), qOrdinals.Root ().m_sValue.cstr () ) )
+								uOrdinalId++;
+					}
 
 					if ( dOrdinalIdPool.GetLength () == iOrdinalsInPool )
 					{
@@ -5951,10 +6005,11 @@ bool CSphIndex_VLN::SortOrdinals ( const char * szToFile, int iFromFD, int iAren
 					break;
 
 				uCurID = qOrdinals.Root().m_uDocID;
+				const_cast < CSphString & > ( qOrdinals.Root ().m_sValue ).Swap ( sLastOrdValue );
 			}
 
 			// get next entry
-			int iBlock = qOrdinals.Root().m_iTag;
+			iBlock = qOrdinals.Root().m_iTag;
 			qOrdinals.Pop ();
 
 			ESphBinRead eRes = ReadOrdinal ( dBins [iBlock], tOrdinalEntry );
@@ -5992,7 +6047,7 @@ bool CSphIndex_VLN::SortOrdinals ( const char * szToFile, int iFromFD, int iAren
 }
 
 
-bool CSphIndex_VLN::SortOrdinalIds ( const char * szToFile, int iFromFD, int nAttrs, int nOrdinals, int iArenaSize, int iOrdinalsInPool )
+bool CSphIndex_VLN::SortOrdinalIds ( const char * szToFile, int iFromFD, int nAttrs, int nOrdinals, int iArenaSize, int iOrdinalsInPool, bool bWarnOfMem )
 {
 	int nLastBlockIds = nOrdinals % iOrdinalsInPool;
 	int nBlocks = nOrdinals / iOrdinalsInPool + ( nLastBlockIds ? 1 : 0 );
@@ -6002,7 +6057,7 @@ bool CSphIndex_VLN::SortOrdinalIds ( const char * szToFile, int iFromFD, int nAt
 		return false;
 
 	SphOffset_t iSharedOffset = -1;
-	int iBinSize = CSphBin::CalcBinSize ( iArenaSize, nBlocks, "ordinals" );
+	int iBinSize = CSphBin::CalcBinSize ( iArenaSize, nBlocks, "ordinals", bWarnOfMem );
 
 	CSphQueue < OrdinalIdEntry_t, CmpOrdinalIdEntry_fn > qOrdinalIds ( Max ( 1, nBlocks ) );
 
@@ -6084,6 +6139,13 @@ bool CSphIndex_VLN::SortOrdinalIds ( const char * szToFile, int iFromFD, int nAt
 	return true;
 }
 
+struct FieldMVARedirect_t
+{
+	int		m_iAttr;
+	int		m_iMVAAttr;
+	int		m_iRowItem;
+};
+
 
 int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSources, int iMemoryLimit, ESphDocinfo eDocinfo )
 {
@@ -6130,12 +6192,16 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 		return 0;
 	}
 
+	bool bHaveFieldMVAs = false;
 	CSphVector<int> dMvaIndexes, dMvaRowitem;
 	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tCol = m_tSchema.GetAttr(i);
 		if ( tCol.m_eAttrType & SPH_ATTR_MULTI )
 		{
+			if ( tCol.m_eSrc == SPH_ATTRSRC_FIELD )
+				bHaveFieldMVAs = true;
+
 			dMvaIndexes.Add ( i );
 			dMvaRowitem.Add ( tCol.m_iRowitem );
 		}
@@ -6173,7 +6239,11 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 	if ( dOrdinalAttrs.GetLength () == 0 )
 		iOrdinalPoolSize = 0;
 
-	int iHitsMax = ( iMemoryLimit - iDocinfoMax*iDocinfoStride*sizeof(DWORD) - iOrdinalPoolSize ) / sizeof(CSphWordHit);
+	int iFieldMVAPoolSize = Max ( 32768, iMemoryLimit/16 );
+	if ( bHaveFieldMVAs  == 0 )
+		iFieldMVAPoolSize = 0;
+
+	int iHitsMax = ( iMemoryLimit - iDocinfoMax*iDocinfoStride*sizeof(DWORD) - iOrdinalPoolSize - iFieldMVAPoolSize ) / sizeof(CSphWordHit);
 
 	// allocate raw hits block
 	CSphAutoArray<CSphWordHit> dHits ( iHitsMax );
@@ -6205,17 +6275,32 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 	ARRAY_FOREACH ( i, dOrdBlockSize )
 		dOrdBlockSize [i].Reserve ( 8192 );
 
+	CSphVector < MvaEntry_t > dFieldMVAs;
+	dFieldMVAs.Reserve ( 16384 );
+
+	CSphVector < SphOffset_t > dFieldMVABlocks;
+	dFieldMVABlocks.Reserve ( 4096 );
+
+	CSphVector < FieldMVARedirect_t > dFieldMvaIndexes;
+
+	if ( bHaveFieldMVAs )
+		dFieldMvaIndexes.Reserve ( 8 );
+
+	int iMaxPoolFieldMVAs = iFieldMVAPoolSize / sizeof ( MvaEntry_t );
+	int nFieldMVAs = 0;
+
 	// create temp files
 	CSphAutofile fdLock ( GetIndexFileName("tmp0"), SPH_O_NEW, m_sLastError );
 	CSphAutofile fdTmpHits ( GetIndexFileName("tmp1"), SPH_O_NEW, m_sLastError );
 	CSphAutofile fdTmpDocinfos ( GetIndexFileName("tmp2"), SPH_O_NEW, m_sLastError );
+	CSphAutofile fdTmpFieldMVAs ( GetIndexFileName("tmp7"), SPH_O_NEW, m_sLastError );
 	CSphWriter tOrdWriter;
 
-	CSphString sRawOrdinalsFile = GetIndexFileName("tmp3");
+	CSphString sRawOrdinalsFile = GetIndexFileName("tmp4");
 	if ( bHaveOrdinals && !tOrdWriter.OpenFile ( sRawOrdinalsFile.cstr (), m_sLastError ) )
 		return 0;
 
-	if ( fdLock.GetFD()<0 || fdTmpHits.GetFD()<0 || fdTmpDocinfos.GetFD()<0 )
+	if ( fdLock.GetFD()<0 || fdTmpHits.GetFD()<0 || fdTmpDocinfos.GetFD()<0 || fdTmpFieldMVAs.GetFD ()<0 )
 		return 0;
 
 	if ( !sphLockEx ( fdLock.GetFD(), false ) )
@@ -6255,6 +6340,22 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 				return 0;
 			}
 
+		dFieldMvaIndexes.Resize ( 0 );
+
+		ARRAY_FOREACH ( i, dMvaIndexes )
+		{
+			int iAttr = dMvaIndexes [i];
+
+			if ( m_tSchema.GetAttr ( iAttr ).m_eSrc == SPH_ATTRSRC_FIELD )
+			{
+				dFieldMvaIndexes.Resize ( dFieldMvaIndexes.GetLength() + 1 );
+				FieldMVARedirect_t & tRedirect = dFieldMvaIndexes.Last ();
+				tRedirect.m_iAttr	 = iAttr; 
+				tRedirect.m_iMVAAttr = i;
+				tRedirect.m_iRowItem = m_tSchema.GetAttr ( iAttr ).m_iRowitem;
+			}
+		}
+
 		// fetch documents
 		for ( ;; )
 		{
@@ -6280,9 +6381,43 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 			if ( iDocHits<=0 )
 				continue;
 
-			iCurrentBlockSize += ( sizeof ( SphOffset_t ) + sizeof ( DWORD ) ) * dOrdinalAttrs.GetLength ();
+			// store field MVAs
+			if ( bHaveFieldMVAs )
+			{
+				ARRAY_FOREACH ( i, dFieldMvaIndexes )
+				{
+					int iAttr	= dFieldMvaIndexes [i].m_iAttr;
+					int iMVA	= dFieldMvaIndexes [i].m_iMVAAttr;
+					int iRowitem= dFieldMvaIndexes [i].m_iRowItem;
+
+					// store per-document MVAs
+					if ( pSource->IterateFieldMVAStart ( iAttr, m_sLastError ) )
+						while ( pSource->IterateFieldMVANext () )
+						{
+							dFieldMVAs.Resize ( dFieldMVAs.GetLength() + 1 );
+
+							dFieldMVAs.Last ().m_uDocID = pSource->m_tDocInfo.m_iDocID;
+							dFieldMVAs.Last ().m_iAttr = iMVA;
+							dFieldMVAs.Last ().m_uValue = pSource->m_tDocInfo.m_pRowitems[iRowitem];
+							
+							int iLength = dFieldMVAs.GetLength ();
+							if ( iLength == iMaxPoolFieldMVAs )
+							{
+								dFieldMVAs.Sort ( CmpMvaEntries_fn () );
+								if ( !sphWriteThrottled ( fdTmpFieldMVAs.GetFD (), &(dFieldMVAs [0]), iLength*sizeof(MvaEntry_t), "temp_field_mva", m_sLastError ) )
+									return 0;
+
+								dFieldMVAs.Resize ( 0 );
+
+								nFieldMVAs += iMaxPoolFieldMVAs;
+							}
+						}
+				}
+			}
 
 			// store ordinals
+			iCurrentBlockSize += ( sizeof ( SphOffset_t ) + sizeof ( DWORD ) ) * dOrdinalAttrs.GetLength ();
+
 			ARRAY_FOREACH ( i, dOrdinalAttrs )
 			{
 				CSphVector<Ordinal_t> & dCol = dOrdinals[i];
@@ -6478,6 +6613,19 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 			return 0;
 	}
 
+	// flush last field MVA block
+	if ( bHaveFieldMVAs && dFieldMVAs.GetLength () )
+	{
+		int iLength = dFieldMVAs.GetLength ();
+		nFieldMVAs += iLength;
+
+		dFieldMVAs.Sort ( CmpMvaEntries_fn () );
+		if ( !sphWriteThrottled ( fdTmpFieldMVAs.GetFD (), &(dFieldMVAs [0]), iLength*sizeof(MvaEntry_t), "temp_field_mva", m_sLastError ) )
+			return 0;
+
+		dFieldMVAs.Reset ();
+	}
+
 	// flush last ordinals block
 	if ( bHaveOrdinals && dOrdinals [0].GetLength () )
 	{
@@ -6516,11 +6664,15 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 	// collect and sort multi-valued attrs
 	///////////////////////////////////////
 
-	if ( !BuildMVA ( dSources, dHits, iHitsMax*sizeof(CSphWordHit) ) )
+	if ( !BuildMVA ( dSources, dHits, iHitsMax*sizeof(CSphWordHit), fdTmpFieldMVAs.GetFD (), nFieldMVAs, iMaxPoolFieldMVAs ) )
 		return 0;
 
 	// reset hits pool
 	dHits.Reset ();
+
+	CSphString sFieldMVAFile = fdTmpFieldMVAs.GetFilename ();
+	fdTmpFieldMVAs.Close ();
+	::unlink ( sFieldMVAFile.cstr () );
 
 	/////////////////
 	// sort docinfos
@@ -6530,7 +6682,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 	if ( tOrdWriter.IsError () )
 		return 0;
 
-	CSphString sSortedOrdinalIdFile = GetIndexFileName("tmp5");
+	CSphString sSortedOrdinalIdFile = GetIndexFileName("tmp6");
 
 	// sort ordinals
 	if ( bHaveOrdinals && !dOrdBlockSize [0].GetLength () )
@@ -6541,7 +6693,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 
 	if ( bHaveOrdinals )
 	{
-		CSphString sUnsortedIdFile = GetIndexFileName("tmp4");
+		CSphString sUnsortedIdFile = GetIndexFileName("tmp5");
 
 		CSphAutofile fdRawOrdinals ( sRawOrdinalsFile.cstr (), SPH_O_READ, m_sLastError );
 		if ( fdRawOrdinals.GetFD () < 0 )
@@ -6558,16 +6710,16 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 
 		int iOrdinalsInPool = (int) Min ( SphOffset_t ( iMemoryLimit * ( 1.0f - ARENA_PERCENT ) ), uMemNeededForSorting ) / sizeof ( OrdinalId_t );
 
-		SortOrdinals ( sUnsortedIdFile.cstr (), fdRawOrdinals.GetFD (), iArenaSize, iOrdinalsInPool, dOrdBlockSize );
+		SortOrdinals ( sUnsortedIdFile.cstr (), fdRawOrdinals.GetFD (), iArenaSize, iOrdinalsInPool, dOrdBlockSize, iArenaSize < uMemNeededForReaders );
 
 		CSphAutofile fdUnsortedId ( sUnsortedIdFile.cstr (), SPH_O_READ, m_sLastError );
 		if ( fdUnsortedId.GetFD () < 0 )
 			return 0;
 
-		iArenaSize = Min ( iMemoryLimit, nOrdinals * (int)sizeof ( OrdinalId_t ) );
+		iArenaSize = Min ( iMemoryLimit, (int)uMemNeededForSorting );
 		iArenaSize = Max ( CSphBin::MIN_SIZE * ( nOrdinals / iOrdinalsInPool + 1 ), iArenaSize );
 
-		SortOrdinalIds ( sSortedOrdinalIdFile.cstr (), fdUnsortedId.GetFD (), dOrdinalAttrs.GetLength (), nOrdinals, iArenaSize, iOrdinalsInPool );
+		SortOrdinalIds ( sSortedOrdinalIdFile.cstr (), fdUnsortedId.GetFD (), dOrdinalAttrs.GetLength (), nOrdinals, iArenaSize, iOrdinalsInPool, iArenaSize < uMemNeededForSorting );
 
 		fdRawOrdinals.Close ();
 		fdUnsortedId.Close ();
@@ -14521,6 +14673,48 @@ bool CSphSource_Document::IsInfixMatch ( const char * szField ) const
 }
 
 
+void CSphSource_Document::ParseFieldMVA ( CSphVector < CSphVector < DWORD > >  & dFieldMVAs, int iFieldMVA, const char * szValue )
+{
+	dFieldMVAs [iFieldMVA].Resize ( 0 );
+
+	if ( !szValue )
+		return;
+
+	const char * pPtr = szValue;
+	const char * pDigit = NULL;
+	const int MAX_NUMBER_LEN = 64;
+	char szBuf [MAX_NUMBER_LEN];
+
+	while ( *pPtr )
+	{
+		if ( *pPtr >= '0' && *pPtr <= '9' )
+		{
+			if ( !pDigit )
+				pDigit = pPtr;
+		}
+		else
+		{
+			if ( pDigit )
+			{
+				if ( pPtr - pDigit < MAX_NUMBER_LEN )
+				{
+					strncpy ( szBuf, pDigit, pPtr - pDigit );
+					szBuf [pPtr - pDigit] = '\0';
+					dFieldMVAs [iFieldMVA].Add ( sphToDword ( szBuf ) );
+				}
+
+				pDigit = NULL;
+			}
+		}
+	
+		pPtr++;
+	}
+
+	if ( pDigit )
+		dFieldMVAs [iFieldMVA].Add ( sphToDword ( pDigit ) );
+}
+
+
 bool CSphSource_Document::IsFieldInStr ( const char * szField, const char * szString ) const
 {
 	if ( !szString || szString [0] == '\0' )
@@ -14567,6 +14761,8 @@ CSphSource_SQL::CSphSource_SQL ( const char * sName )
 	, m_uCurrentID			( 0 )
 	, m_uMaxFetchedID		( 0 )
 	, m_iMultiAttr			( -1 )
+	, m_iFieldMVA			( 0 )
+	, m_iFieldMVAIterator	( 0 )
 {
 }
 
@@ -14896,6 +15092,24 @@ bool CSphSource_SQL::IterateHitsStart ( CSphString & sError )
 		if ( !dFound[i] )
 			sphWarn ( "attribute '%s' not found - IGNORING", m_tParams.m_dAttrs[i].m_sName.cstr() );
 
+	m_iFieldMVA = 0;
+	m_iFieldMVAIterator = 0;
+	m_dAttrToFieldMVA.Resize ( 0 );
+
+	int iFieldMVA = 0;
+	for ( int i = 0; i < m_tSchema.GetAttrsCount (); i++ )
+	{
+		const CSphColumnInfo & tCol = m_tSchema.GetAttr ( i );
+		if ( ( tCol.m_eAttrType & SPH_ATTR_MULTI ) && tCol.m_eSrc == SPH_ATTRSRC_FIELD )
+			m_dAttrToFieldMVA.Add ( iFieldMVA++ );
+		else
+			m_dAttrToFieldMVA.Add ( -1 );
+	}
+
+	m_dFieldMVAs.Resize ( iFieldMVA );
+	ARRAY_FOREACH ( i, m_dFieldMVAs )
+		m_dFieldMVAs [i].Reserve ( 16 );
+
 	// alloc storage
 	m_tDocInfo.Reset ( m_tSchema.GetRowSize() );
 	m_dStrAttrs.Resize ( m_tSchema.GetAttrsCount() );
@@ -14983,6 +15197,7 @@ BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 	ARRAY_FOREACH ( i, m_tSchema.m_dFields )
 		m_dFields[i] = (BYTE*) SqlColumn ( m_tSchema.m_dFields[i].m_iIndex );
 
+	int iFieldMVA = 0;
 	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tAttr = m_tSchema.GetAttr(i); // shortcut
@@ -14990,6 +15205,9 @@ BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 		if ( tAttr.m_eAttrType & SPH_ATTR_MULTI )
 		{
 			m_tDocInfo.SetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount, 0 );
+			if ( tAttr.m_eSrc == SPH_ATTRSRC_FIELD )
+				ParseFieldMVA ( m_dFieldMVAs, iFieldMVA++, SqlColumn ( tAttr.m_iIndex ) );
+
 			continue;
 		}
 
@@ -15123,6 +15341,37 @@ bool CSphSource_SQL::IterateMultivaluedNext ()
 	m_tDocInfo.m_pRowitems[iRowitem] = sphToDword ( SqlColumn(1) );
 	return true;
 }
+
+
+bool CSphSource_SQL::IterateFieldMVAStart ( int iAttr, CSphString & )
+{
+	if ( iAttr<0 || iAttr>=m_tSchema.GetAttrsCount() )
+		return false;
+
+	if ( m_dAttrToFieldMVA [iAttr] == -1 )
+		return false;
+
+	m_iFieldMVA = iAttr;
+	m_iFieldMVAIterator = 0;
+
+	return true;
+}
+
+
+bool CSphSource_SQL::IterateFieldMVANext ()
+{
+	int iFieldMVA = m_dAttrToFieldMVA [m_iFieldMVA];
+	if ( m_iFieldMVAIterator >= m_dFieldMVAs [iFieldMVA].GetLength () )
+		return false;
+
+	const CSphColumnInfo & tAttr = m_tSchema.GetAttr ( m_iFieldMVA );
+	m_tDocInfo.SetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount, m_dFieldMVAs [iFieldMVA][m_iFieldMVAIterator] );
+
+	++m_iFieldMVAIterator;
+
+	return true;
+}
+
 
 /////////////////////////////////////////////////////////////////////////////
 // MYSQL SOURCE
@@ -15873,8 +16122,11 @@ public:
 	virtual BYTE **	NextDocument ( CSphString & sError );			///< parse incoming chunk and emit some hits
 
 	virtual bool	HasAttrsConfigured ()							{ return true; }	///< xmlpipe always has some attrs for now
-	virtual bool	IterateMultivaluedStart ( int, CSphString & )	{ return false; }	///< xmlpipe does not support multi-valued attrs for now
-	virtual bool	IterateMultivaluedNext ()						{ return false; }	///< xmlpipe does not support multi-valued attrs for now
+	virtual bool	IterateMultivaluedStart ( int, CSphString & )	{ return false; }
+	virtual bool	IterateMultivaluedNext ()						{ return false; }
+	virtual bool	IterateFieldMVAStart ( int iAttr, CSphString & sError );
+	virtual bool	IterateFieldMVANext ();
+
 
 	void			StartElement ( const char * szName, const char ** pAttrs );
 	void			EndElement ( const char * pName );
@@ -15916,6 +16168,11 @@ private:
 	bool			m_bInSchema;
 	bool			m_bInDocument;
 	bool			m_bFirstTagAfterDocset;
+
+	int				m_iMVA;
+	int				m_iMVAIterator;
+	CSphVector < CSphVector <DWORD> > m_dFieldMVAs;
+	CSphVector < int > m_dAttrToMVA;
 
 	int				m_iCurField;
 	int				m_iCurAttr;
@@ -16043,6 +16300,8 @@ CSphSource_XMLPipe2::CSphSource_XMLPipe2 ( const char * sName )
 	, m_bInSchema		( false )
 	, m_bInDocument		( false )
 	, m_bFirstTagAfterDocset( false )
+	, m_iMVA			( 0 )
+	, m_iMVAIterator	( 0 )
 	, m_iCurField		( -1 )
 	, m_iCurAttr		( -1 )
 	, m_pParser			( NULL )
@@ -16192,6 +16451,13 @@ void CSphSource_XMLPipe2::ConfigureAttrs ( const CSphVariant * pHead, DWORD uAtt
 		}
 
 		tCol.m_iIndex = m_tSchema.GetAttrsCount ();
+
+		if ( uAttrType == SPH_ATTR_MULTI )
+		{
+			tCol.m_eAttrType = SPH_ATTR_INTEGER | SPH_ATTR_MULTI;
+			tCol.m_eSrc = SPH_ATTRSRC_FIELD;
+		}
+
 		m_tSchema.AddAttr ( tCol );
 	}
 }
@@ -16226,6 +16492,7 @@ bool CSphSource_XMLPipe2::Setup ( const CSphConfigSection & hSource )
 	ConfigureAttrs ( hSource("xmlpipe_attr_str2ordinal"),	SPH_ATTR_ORDINAL );
 	ConfigureAttrs ( hSource("xmlpipe_attr_bool"),			SPH_ATTR_BOOL );
 	ConfigureAttrs ( hSource("xmlpipe_attr_float"),			SPH_ATTR_FLOAT );
+	ConfigureAttrs ( hSource("xmlpipe_attr_multi"),			SPH_ATTR_MULTI );
 
 	m_tDocInfo.Reset ( m_tSchema.GetRowSize () );
 
@@ -16320,6 +16587,9 @@ bool CSphSource_XMLPipe2::Connect ( CSphString & sError )
 	m_dParsedDocuments.Reserve ( 1024 );
 	m_dParsedDocuments.Resize ( 0 );
 
+	m_iMVA = 0;
+	m_iMVAIterator = 0;
+
 	m_sError = "";
 
 #if USE_LIBEXPAT
@@ -16332,6 +16602,22 @@ bool CSphSource_XMLPipe2::Connect ( CSphString & sError )
 	if ( ParseNextChunk ( sError ) == -1 )
 		return false;
 #endif
+
+	m_dAttrToMVA.Resize ( 0 );
+
+	int iFieldMVA = 0;
+	for ( int i = 0; i < m_tSchema.GetAttrsCount (); i++ )
+	{
+		const CSphColumnInfo & tCol = m_tSchema.GetAttr ( i );
+		if ( ( tCol.m_eAttrType & SPH_ATTR_MULTI ) && tCol.m_eSrc == SPH_ATTRSRC_FIELD )
+			m_dAttrToMVA.Add ( iFieldMVA++ );
+		else
+			m_dAttrToMVA.Add ( -1 );
+	}
+
+	m_dFieldMVAs.Resize ( iFieldMVA );
+	ARRAY_FOREACH ( i, m_dFieldMVAs )
+		m_dFieldMVAs [i].Reserve ( 16 );
 
 	return true;
 }
@@ -16430,10 +16716,18 @@ BYTE **	CSphSource_XMLPipe2::NextDocument ( CSphString & sError )
 		m_tDocInfo.m_iDocID = pDocument->m_iDocID;
 
 		// attributes
+		int iFieldMVA = 0;
 		for ( int i = 0; i < nAttrs; i++ )
 		{
 			const CSphString & sAttrValue = pDocument->m_dAttrs [i].IsEmpty () && m_dDefaultAttrs.GetLength () ? m_dDefaultAttrs [i] : pDocument->m_dAttrs [i];
 			const CSphColumnInfo & tAttr = m_tSchema.GetAttr ( i );
+
+			if ( tAttr.m_eAttrType & SPH_ATTR_MULTI )
+			{
+				m_tDocInfo.SetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount, 0 );
+				ParseFieldMVA ( m_dFieldMVAs, iFieldMVA++, sAttrValue.cstr () );
+				continue;
+			}
 
 			switch ( tAttr.m_eAttrType )
 			{
@@ -16469,6 +16763,36 @@ BYTE **	CSphSource_XMLPipe2::NextDocument ( CSphString & sError )
 		m_tDocInfo.m_iDocID = 0;
 
 	return NULL;
+}
+
+
+bool CSphSource_XMLPipe2::IterateFieldMVAStart ( int iAttr, CSphString & )
+{
+	if ( iAttr<0 || iAttr>=m_tSchema.GetAttrsCount() )
+		return false;
+
+	if ( m_dAttrToMVA [iAttr] == -1 )
+		return false;
+
+	m_iMVA = iAttr;
+	m_iMVAIterator = 0;
+
+	return true;
+}
+
+
+bool CSphSource_XMLPipe2::IterateFieldMVANext ()
+{
+	int iFieldMVA = m_dAttrToMVA [m_iMVA];
+	if ( m_iMVAIterator >= m_dFieldMVAs [iFieldMVA].GetLength () )
+		return false;
+
+	const CSphColumnInfo & tAttr = m_tSchema.GetAttr ( m_iMVA );
+	m_tDocInfo.SetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount, m_dFieldMVAs [iFieldMVA][m_iMVAIterator] );
+
+	++m_iMVAIterator;
+
+	return true;
 }
 
 
@@ -16550,6 +16874,11 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 				else if ( !strcmp ( szType, "str2ordinal" ) )	Info.m_eAttrType = SPH_ATTR_ORDINAL;
 				else if ( !strcmp ( szType, "bool" ) )			Info.m_eAttrType = SPH_ATTR_BOOL;
 				else if ( !strcmp ( szType, "float" ) )			Info.m_eAttrType = SPH_ATTR_FLOAT;
+				else if ( !strcmp ( szType, "multi" ) )
+				{
+					Info.m_eAttrType = SPH_ATTR_INTEGER | SPH_ATTR_MULTI;
+					Info.m_eSrc = SPH_ATTRSRC_FIELD;
+				}
 				else
 				{
 					Error ( "unknown column type '%s'", szType );

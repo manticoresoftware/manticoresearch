@@ -180,7 +180,7 @@ int main ( int argc, char ** argv )
 	// configure
 	/////////////
 
-	tQuery.m_iMaxMatches = 1000; // iStart + iLimit;
+	tQuery.m_iMaxMatches = Max ( 1000, iStart + iLimit );
 
 	// fallback to defaults if there was no explicit config specified
 	while ( !sOptConfig )
@@ -319,8 +319,9 @@ int main ( int argc, char ** argv )
 				break;
 			}
 
-			// if we're not sorting by relevance, lookup first timestamp column
-			if ( tQuery.m_eSort!=SPH_SORT_RELEVANCE )
+			// lookup first timestamp if needed
+			// FIXME! remove this?
+			if ( tQuery.m_eSort!=SPH_SORT_RELEVANCE && tQuery.m_eSort!=SPH_SORT_EXTENDED && tQuery.m_eSort!=SPH_SORT_EXPR )
 			{
 				int iTS = -1;
 				for ( int i=0; i<pSchema->GetAttrsCount(); i++ )

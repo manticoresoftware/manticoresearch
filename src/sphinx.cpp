@@ -10006,6 +10006,12 @@ public:
 
 protected:
 	ExtNode_i *					m_pNode;				///< my and-node for all the terms
+	const ExtDoc_t *			m_pDocs;				///< current docs chunk from and-node
+	const ExtHit_t *			m_pHits;				///< current hits chunk from and-node
+	const ExtDoc_t *			m_pDoc;					///< current doc from and-node
+	const ExtHit_t *			m_pHit;					///< current hit from and-node
+	const ExtDoc_t *			m_pMyDoc;				///< current doc for hits getter
+	const ExtHit_t *			m_pMyHit;				///< current hit for hits getter
 	DWORD						m_uFields;				///< what fields is the search restricted to
 	SphDocID_t					m_uLastDocID;			///< last emitted hit
 	SphDocID_t					m_uExpID;
@@ -10413,20 +10419,20 @@ const ExtHit_t * ExtAnd_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 			}
 
 			// copy tail, while possible
-			if ( pCur0 && pCur0->m_uDocid==m_uMatchedDocid )
+			if ( pCur0 && pCur0->m_uDocid==m_uMatchedDocid && !( pCur1 && pCur1->m_uDocid==DOCID_MAX ) )
 			{
 				while ( pCur0->m_uDocid==m_uMatchedDocid && iHit<MAX_HITS-1 )
 					m_dHits[iHit++] = *pCur0++;
-			} else
+			}
+			if ( pCur1 && pCur1->m_uDocid==m_uMatchedDocid && !( pCur0 && pCur0->m_uDocid==DOCID_MAX ) )
 			{
-				assert ( pCur1 && pCur1->m_uDocid==m_uMatchedDocid );
 				while ( pCur1->m_uDocid==m_uMatchedDocid && iHit<MAX_HITS-1 )
 					m_dHits[iHit++] = *pCur1++;
 			}
 		}
 
 		// move on
-		if ( ( pCur0 && pCur0->m_uDocid!=m_uMatchedDocid ) && ( pCur1 && pCur1->m_uDocid!=m_uMatchedDocid ) )
+		if ( ( pCur0 && pCur0->m_uDocid!=m_uMatchedDocid && pCur0->m_uDocid!=DOCID_MAX ) && ( pCur1 && pCur1->m_uDocid!=m_uMatchedDocid && pCur1->m_uDocid!=DOCID_MAX ) )
 			m_uMatchedDocid = 0;
 
 		// warmup if needed
@@ -10708,7 +10714,13 @@ const ExtHit_t * ExtAndNot_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 //////////////////////////////////////////////////////////////////////////
 
 ExtPhrase_c::ExtPhrase_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, const CSphTermSetup & tSetup, DWORD uQuerypos, CSphString * pWarning )
-	: m_uFields ( uFields )
+	: m_pDocs ( NULL )
+	, m_pHits ( NULL )
+	, m_pDoc ( NULL )
+	, m_pHit ( NULL )
+	, m_pMyDoc ( NULL )
+	, m_pMyHit ( NULL )
+	, m_uFields ( uFields )
 	, m_uLastDocID ( 0 )
 	, m_uExpID ( 0 )
 	, m_uExpPos ( 0 )
@@ -10749,50 +10761,71 @@ ExtPhrase_c::~ExtPhrase_c ()
 
 const ExtDoc_t * ExtPhrase_c::GetDocsChunk ()
 {
-	const ExtDoc_t * pDocs = NULL;
-	const ExtHit_t * pHits = NULL;
-
-	if ( !pDocs ) pDocs = m_pNode->GetDocsChunk ();
-	if ( !pDocs ) return NULL;
-
-	if ( !pHits ) pHits = m_pNode->GetHitsChunk ( pDocs );
-	assert ( pHits );
-
-	const ExtHit_t * pHit = pHits;
-	const ExtDoc_t * pDoc = pDocs;
-
-	int iDoc = 0;
-	int iHit = 0;
-	while ( iHit<MAX_HITS-1 )
+	// initial warmup
+	if ( !m_pDoc )
 	{
-		if ( pHit->m_uDocid==DOCID_MAX )
+		if ( !m_pDocs ) m_pDocs = m_pNode->GetDocsChunk ();
+		if ( !m_pDocs ) return NULL; // no more docs
+		m_pDoc = m_pDocs;
+	}
+
+	// shortcuts
+	const ExtDoc_t * pDoc = m_pDoc;
+	const ExtHit_t * pHit = m_pHit;
+
+	// search for phrase matches
+	int iDoc = 0;
+	int iMyHit = 0;
+	while ( iMyHit<MAX_HITS-1 )
+	{
+		// out of hits?
+		if ( !pHit || pHit->m_uDocid==DOCID_MAX )
 		{
-			m_uExpID = m_uExpPos = m_uExpQpos = 0;
+			// grab more hits
+			pHit = m_pHits = m_pNode->GetHitsChunk ( m_pDocs );
+			if ( m_pHits ) continue;
 
-			pHits = m_pNode->GetHitsChunk ( pDocs );
-			if ( pHits )
-			{
-				pHit = pHits;
-				continue;
-			}
+			// no more hits for current docs chunk; grab more docs
+			pDoc = m_pDocs = m_pNode->GetDocsChunk ();
+			if ( !m_pDocs ) break;
 
-			pDoc = pDocs = m_pNode->GetDocsChunk ();
-			if ( !pDocs )
-				break;
-
-			pHit = pHits = m_pNode->GetHitsChunk ( pDocs );
+			// we got docs, there must be hits
+			pHit = m_pHits = m_pNode->GetHitsChunk ( m_pDocs );
 			assert ( pHit );
 			continue;
 		}
 
-		if ( pHit->m_uDocid==m_uExpID && pHit->m_uHitpos==m_uExpPos )
+		// unexpected position? reset and continue
+		if ( pHit->m_uDocid!=m_uExpID || pHit->m_uHitpos!=m_uExpPos )
+		{
+			// stream position out of sequence; reset expected positions
+			if ( pHit->m_uQuerypos==m_uMinQpos )
+			{
+				m_uExpID = pHit->m_uDocid;
+				m_uExpPos = pHit->m_uHitpos + m_dQposDelta[0];
+				m_uExpQpos = pHit->m_uQuerypos + m_dQposDelta[0];
+			} else
+			{
+				m_uExpID = m_uExpPos = m_uExpQpos = 0;
+			}
+			pHit++;
+			continue;
+		}
+
+		// scan all hits with matching stream position
+		// duplicate stream positions occur when there are duplicate query words
+		const ExtHit_t * pStart = NULL;
+		for ( ; pHit->m_uDocid==m_uExpID && pHit->m_uHitpos==m_uExpPos; pHit++ )
 		{
 			// stream position is as expected; let's check query position
 			if ( pHit->m_uQuerypos!=m_uExpQpos )
 			{
 				// unexpected query position
-				// do nothing; there might be other words in same (!) expected position following
+				// do nothing; there might be other words in same (!) expected position following, with proper query positions
 				// (eg. if the query words are repeated)
+				if ( pHit->m_uQuerypos==m_uMinQpos )
+					pStart = pHit;
+				continue;
 
 			} else if ( m_uExpQpos==m_uMaxQpos )
 			{
@@ -10814,13 +10847,14 @@ const ExtDoc_t * ExtPhrase_c::GetDocsChunk ()
 				}
 
 				DWORD uSpanlen = m_uMaxQpos - m_uMinQpos;
-				m_dMyHits[iHit].m_uDocid = pHit->m_uDocid;
-				m_dMyHits[iHit].m_uHitpos = pHit->m_uHitpos - uSpanlen;
-				m_dMyHits[iHit].m_uQuerypos = m_uMinQpos;
-				m_dMyHits[iHit].m_uSpanlen = uSpanlen + 1;
-				iHit++;
+				m_dMyHits[iMyHit].m_uDocid = pHit->m_uDocid;
+				m_dMyHits[iMyHit].m_uHitpos = pHit->m_uHitpos - uSpanlen;
+				m_dMyHits[iMyHit].m_uQuerypos = m_uMinQpos;
+				m_dMyHits[iMyHit].m_uSpanlen = uSpanlen + 1;
+				iMyHit++;
 
 				m_uExpID = m_uExpPos = m_uExpQpos = 0;
+
 			} else
 			{
 				// intermediate expected position; keep looking
@@ -10828,29 +10862,37 @@ const ExtDoc_t * ExtPhrase_c::GetDocsChunk ()
 				int iDelta = m_dQposDelta [ pHit->m_uQuerypos - m_uMinQpos ];
 				m_uExpPos += iDelta;
 				m_uExpQpos += iDelta;
+				// FIXME! what if there *more* hits with current pos following?
 			}
 
-		} else
-		{
-			// stream position out of sequence; reset expected positions
-			if ( pHit->m_uQuerypos==m_uMinQpos )
-			{
-				m_uExpID = pHit->m_uDocid;
-				m_uExpPos = pHit->m_uHitpos + m_dQposDelta[0];
-				m_uExpQpos = pHit->m_uQuerypos + m_dQposDelta[0];
-			} else
-			{
-				m_uExpID = m_uExpPos = m_uExpQpos = 0;
-			}
+			pHit++;
+			pStart = NULL;
+			break;
 		}
-		pHit++;
+
+		// there was a phrase start we now need to handle
+		if ( pStart )
+		{
+			m_uExpID = pStart->m_uDocid;
+			m_uExpPos = pStart->m_uHitpos + m_dQposDelta[0];
+			m_uExpQpos = pStart->m_uQuerypos + m_dQposDelta[0];
+		}
 	}
 
+	// save shortcuts
+	m_pDoc = pDoc;
+	m_pHit = pHit;
+
+	// reset current positions for hits chunk getter
+	m_pMyDoc = m_dDocs;
+	m_pMyHit = m_dMyHits;
+
+	// emit markes and return found matches
 	assert ( iDoc>=0 && iDoc<MAX_DOCS );
 	m_dDocs[iDoc].m_uDocid = DOCID_MAX; // end marker
 
-	assert ( iHit>=0 && iHit<MAX_HITS );
-	m_dMyHits[iHit].m_uDocid = DOCID_MAX; // end marker
+	assert ( iMyHit>=0 && iMyHit<MAX_HITS );
+	m_dMyHits[iMyHit].m_uDocid = DOCID_MAX; // end marker
 	return iDoc ? m_dDocs : NULL;
 }
 
@@ -10861,9 +10903,13 @@ const ExtHit_t * ExtPhrase_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 	if ( uFirstMatch==m_uHitsOverFor )
 		return NULL;
 
-	const ExtDoc_t * pMyDoc = m_dDocs;
-	const ExtHit_t * pMyHit = m_dMyHits;
+	// shortcuts
+	const ExtDoc_t * pMyDoc = m_pMyDoc;
+	const ExtHit_t * pMyHit = m_pMyHit;
+	assert ( pMyDoc );
+	assert ( pMyHit );
 
+	// filter and copy hits from m_dMyHits
 	int iHit = 0;
 	while ( iHit<MAX_HITS-1 )
 	{
@@ -10895,23 +10941,154 @@ const ExtHit_t * ExtPhrase_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 
 		// skip until we have to
 		while ( pMyHit->m_uDocid < m_uMatchedDocid ) pMyHit++;
-		assert ( pMyHit->m_uDocid==m_uMatchedDocid );
 
 		// copy while we can
-		assert ( m_uMatchedDocid!=0 && m_uMatchedDocid!=DOCID_MAX );
-		while ( pMyHit->m_uDocid==m_uMatchedDocid && iHit<MAX_HITS-1 )
-			m_dHits[iHit++] = *pMyHit++;
-
-		// if this hitlist is over, tell the doclist scanner to pull next doc
-		if ( pMyHit->m_uDocid!=m_uMatchedDocid )
+		if ( pMyHit->m_uDocid!=DOCID_MAX )
 		{
+			assert ( pMyHit->m_uDocid==m_uMatchedDocid );
+			assert ( m_uMatchedDocid!=0 && m_uMatchedDocid!=DOCID_MAX );
+
+			while ( pMyHit->m_uDocid==m_uMatchedDocid && iHit<MAX_HITS-1 )
+				m_dHits[iHit++] = *pMyHit++;
+		}
+
+		// handle different end conditions
+		if ( pMyHit->m_uDocid!=m_uMatchedDocid && pMyHit->m_uDocid!=DOCID_MAX )
+		{
+			// it's simply next document in the line; switch to it
 			m_uMatchedDocid = 0;
 			pMyDoc++;
+
+		} else if ( pMyHit->m_uDocid==DOCID_MAX && !m_pHit )
+		{
+			// it's the end
+			break;
+
+		} else if ( pMyHit->m_uDocid==DOCID_MAX && m_pHit && iHit<MAX_HITS-1 )
+		{
+			// the trickiest part; handle the end of my (phrase) hitlist chunk
+			// phrase doclist chunk was built from it; so it must be the end of doclist as well
+			assert ( pMyDoc[1].m_uDocid==DOCID_MAX );
+
+			// keep scanning and-node hits while there are hits for the last matched document
+			assert ( m_uMatchedDocid==pMyDoc->m_uDocid );
+			assert ( m_uMatchedDocid==m_uLastDocID );
+			assert ( !m_pDoc || m_uMatchedDocid==m_pDoc->m_uDocid );
+			m_uExpID = m_uMatchedDocid;
+
+			const ExtHit_t * pHit = m_pHit;
+			int iMyHit = 0;
+			while ( iMyHit<MAX_HITS-1 )
+			{
+				// and-node hits chunk end reached? get some more
+				if ( pHit->m_uDocid==DOCID_MAX )
+				{
+					pHit = m_pHits = m_pNode->GetHitsChunk ( m_pDocs );
+					if ( !pHit )
+					{
+						m_uMatchedDocid = 0;
+						pMyDoc++;
+						break;
+					}
+				}
+
+				// stop and finish on the first new id
+				if ( pHit->m_uDocid!=m_uExpID )
+				{
+					// reset phrase ranking
+					m_uExpID = m_uExpPos = m_uExpQpos = 0;
+
+					// reset hits getter; this docs chunk from above is finally over
+					m_uHitsOverFor = uFirstMatch;
+					m_uMatchedDocid = 0;
+					pMyDoc++;
+					break;
+				}
+
+				// unexpected position? reset and continue
+				if ( pHit->m_uHitpos!=m_uExpPos )
+				{
+					// stream position out of sequence; reset expected positions
+					if ( pHit->m_uQuerypos==m_uMinQpos )
+					{
+						m_uExpID = pHit->m_uDocid;
+						m_uExpPos = pHit->m_uHitpos + m_dQposDelta[0];
+						m_uExpQpos = pHit->m_uQuerypos + m_dQposDelta[0];
+					} else
+					{
+						m_uExpID = m_uExpPos = m_uExpQpos = 0;
+					}
+					pHit++;
+					continue;
+				}
+
+				// scan all hits with matching stream position
+				// duplicate stream positions occur when there are duplicate query words
+				const ExtHit_t * pStart = NULL;
+				for ( ; pHit->m_uDocid==m_uExpID && pHit->m_uHitpos==m_uExpPos; pHit++ )
+				{
+					// stream position is as expected; let's check query position
+					if ( pHit->m_uQuerypos!=m_uExpQpos )
+					{
+						// unexpected query position
+						// do nothing; there might be other words in same (!) expected position following, with proper query positions
+						// (eg. if the query words are repeated)
+						if ( pHit->m_uQuerypos==m_uMinQpos )
+							pStart = pHit;
+						continue;
+
+					} else if ( m_uExpQpos==m_uMaxQpos )
+					{
+						// expected position which concludes the phrase; emit next match
+						assert ( pHit->m_uQuerypos==m_uExpQpos );
+
+						DWORD uSpanlen = m_uMaxQpos - m_uMinQpos;
+						m_dMyHits[iMyHit].m_uDocid = pHit->m_uDocid;
+						m_dMyHits[iMyHit].m_uHitpos = pHit->m_uHitpos - uSpanlen;
+						m_dMyHits[iMyHit].m_uQuerypos = m_uMinQpos;
+						m_dMyHits[iMyHit].m_uSpanlen = uSpanlen + 1;
+						iMyHit++;
+
+						m_uExpID = m_uExpPos = m_uExpQpos = 0;
+
+					} else
+					{
+						// intermediate expected position; keep looking
+						assert ( pHit->m_uQuerypos==m_uExpQpos );
+						int iDelta = m_dQposDelta [ pHit->m_uQuerypos - m_uMinQpos ];
+						m_uExpPos += iDelta;
+						m_uExpQpos += iDelta;
+						// FIXME! what if there *more* hits with current pos following?
+					}
+
+					pHit++;
+					pStart = NULL;
+					break;
+				}
+
+				// there was a phrase start we now need to handle
+				if ( pStart )
+				{
+					m_uExpID = pStart->m_uDocid;
+					m_uExpPos = pStart->m_uHitpos + m_dQposDelta[0];
+					m_uExpQpos = pStart->m_uQuerypos + m_dQposDelta[0];
+				}
+			}
+
+			// save shortcut
+			m_pHit = pHit;
+
+			// at this point, we have more hits for the trailing document in m_dMyHits
+			// adjust pointers, keep returning hits until the end
+			// FIXME! check what happens when we get more than MAX_HITS for this trailing doc
+			m_dMyHits[iMyHit].m_uDocid = DOCID_MAX;
+			m_pMyHit = m_dMyHits;
 		}
 	}
 
-	if ( iHit==0 || iHit<MAX_HITS-1 )
-		m_uHitsOverFor = uFirstMatch;
+	// save shortcuts
+	m_pMyDoc = pMyDoc;
+	m_pMyHit = pMyHit;
 
 	assert ( iHit>=0 && iHit<MAX_HITS );
 	m_dHits[iHit].m_uDocid = DOCID_MAX; // end marker

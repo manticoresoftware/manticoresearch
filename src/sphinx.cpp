@@ -16839,7 +16839,7 @@ bool CSphSource_XMLPipe2::Connect ( CSphString & sError )
 int CSphSource_XMLPipe2::ParseNextChunk ( CSphString & sError )
 {
 	int iRet = xmlTextReaderRead ( m_pParser );
-	while ( iRet == 1 && !m_bPassedBufferEnd )
+	while ( iRet == 1 )
 	{
 		ProcessNode ( m_pParser );
 		if ( !m_sError.IsEmpty () )
@@ -16848,6 +16848,9 @@ int CSphSource_XMLPipe2::ParseNextChunk ( CSphString & sError )
 			m_tDocInfo.m_iDocID = 1;
 			return false;
 		}
+
+		if ( m_bPassedBufferEnd )
+			break;
 
 		iRet = xmlTextReaderRead ( m_pParser );
 	}
@@ -17261,10 +17264,11 @@ int CSphSource_XMLPipe2::ReadBuffer ( BYTE * pBuffer, int iLen )
 	int iLeft = Max ( m_pBufferEnd - m_pBufferPtr, 0 );
 	if ( iLeft < iLen )
 	{
-		m_bPassedBufferEnd = !!m_pBufferEnd;
-
 		memmove ( m_pBuffer, m_pBufferPtr, iLeft );
 		size_t iRead = fread ( m_pBuffer + iLeft, 1, m_iBufferSize - iLeft, m_pPipe );
+
+		m_bPassedBufferEnd = !!m_pBufferEnd && ( m_iBufferSize - iLeft == int ( iRead ) );
+
 		m_pBufferPtr = m_pBuffer;
 		m_pBufferEnd = m_pBuffer + iLeft + iRead;
 

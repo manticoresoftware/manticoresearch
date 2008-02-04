@@ -1120,10 +1120,10 @@ protected:
 class CSphSource_XMLPipe : public CSphSource
 {
 public:
-					CSphSource_XMLPipe ( const char * sName );	///< ctor
+					CSphSource_XMLPipe ( BYTE * dInitialBuf, int iBufLen, const char * sName );	///< ctor
 					~CSphSource_XMLPipe ();						///< dtor
 
-	bool			Setup ( const char * sCommand );			///< memorize the command
+	bool			Setup ( FILE * pPipe, const char * sCommand );			///< memorize the command
 	virtual bool	Connect ( CSphString & sError );			///< run the command and open the pipe
 	virtual void	Disconnect ();								///< close the pipe
 
@@ -1156,6 +1156,7 @@ private:
 	int				m_iBufferSize;		///< buffer size
 	bool			m_bEOF;				///< EOF encountered
 	bool			m_bWarned;			///< warned of buffer size already
+	int				m_iInitialBufLen;	///< initial buffer len
 	
 	FILE *			m_pPipe;			///< incoming stream
 	BYTE *			m_sBuffer;			///< buffer
@@ -1201,9 +1202,11 @@ private:
 #if USE_LIBEXPAT || USE_LIBXML
 
 class CSphConfigSection;
-CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, const char * szSourceName );
+CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, FILE * pPipe, BYTE * dInitialBuf, int iBufLen, const char * szSourceName );
 
 #endif
+
+FILE * sphDetectXMLPipe ( const char * szCommand, BYTE * dBuf, int & iBufSize, int iMaxBufSize, bool & bUsePipe2 );
 
 
 /////////////////////////////////////////////////////////////////////////////

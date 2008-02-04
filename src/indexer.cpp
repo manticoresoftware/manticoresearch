@@ -506,7 +506,7 @@ CSphSource * SpawnSourceMySQL ( const CSphConfigSection & hSource, const char * 
 #endif // USE_MYSQL
 
 
-CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char * sSourceName )
+CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char * sSourceName, bool bUTF8 )
 {
 	assert ( hSource["type"]=="xmlpipe" || hSource["type"]=="xmlpipe2" );
 	
@@ -514,26 +514,47 @@ CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char 
 
 	CSphSource * pSrcXML = NULL;
 
-	if ( hSource["type"]=="xmlpipe" )
+	CSphString sCommand = hSource["xmlpipe_command"];
+	const int MAX_BUF_SIZE = 128;
+	BYTE dBuffer [MAX_BUF_SIZE];
+	int iBufSize = 0;
+	bool bUsePipe2 = true;
+
+	FILE * pPipe = sphDetectXMLPipe ( sCommand.cstr (), dBuffer, iBufSize, MAX_BUF_SIZE, bUsePipe2 );
+	if ( !pPipe )
 	{
-		CSphSource_XMLPipe * pXmlPipe = new CSphSource_XMLPipe ( sSourceName );
-		if ( !pXmlPipe->Setup ( hSource["xmlpipe_command"].cstr() ) )
+		fprintf ( stdout, "ERROR: xmlpipe: failed to popen '%s'", sCommand.cstr() );
+		return NULL;
+	}	
+
+	if ( bUsePipe2 )
+	{
+#if USE_LIBEXPAT || USE_LIBXML
+		pSrcXML = sphCreateSourceXmlpipe2 ( &hSource, pPipe, dBuffer, iBufSize, sSourceName );
+
+		if ( !bUTF8 )
+		{
+			SafeDelete ( pSrcXML );
+			fprintf ( stdout, "ERROR: source '%s': xmlpipe2 should only be used with charset_type=utf-8\n", sSourceName );
+		}
+#else
+		fprintf ( stdout, "WARNING: source '%s': unknown source type '%s' (missing libexpat/libxml2?)\n", sSourceName, hSource["type"].cstr() );
+#endif
+	}
+	else
+	{
+		CSphSource_XMLPipe * pXmlPipe = new CSphSource_XMLPipe ( dBuffer, iBufSize, sSourceName );
+		if ( !pXmlPipe->Setup ( pPipe, sCommand.cstr () ) )
 			SafeDelete ( pXmlPipe );
 
 		pSrcXML = pXmlPipe;
 	}
-#if USE_LIBEXPAT || USE_LIBXML
-	else if ( hSource["type"]=="xmlpipe2" )
-		pSrcXML = sphCreateSourceXmlpipe2 ( &hSource, sSourceName );
-#endif
-	else
-		fprintf ( stdout, "WARNING: source '%s': unknown source type '%s' (missing libexpat?).\n", sSourceName, hSource["type"].cstr() );
 
 	return pSrcXML;
 }
 
 
-CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSourceName )
+CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSourceName, bool bUTF8 )
 {
 	if ( !hSource.Exists ( "type" ) )
 	{
@@ -552,7 +573,12 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 	#endif
 
 	if ( hSource["type"]=="xmlpipe" || hSource["type"]=="xmlpipe2" )
-		return SpawnSourceXMLPipe ( hSource, sSourceName );
+	{
+		if ( hSource["type"]=="xmlpipe2" )
+			fprintf ( stdout, "WARNING: xmlpipe2 source type is deprecated; use xmlpipe\n" );
+
+		return SpawnSourceXMLPipe ( hSource, sSourceName, bUTF8 );
+	}
 
 	fprintf ( stdout, "ERROR: source '%s': unknown type '%s'; skipping.\n", sSourceName,
 		hSource["type"].cstr() );
@@ -669,7 +695,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		}
 		const CSphConfigSection & hSource = hSources [ pSourceName->cstr() ];
 
-		CSphSource * pSource = SpawnSource ( hSource, pSourceName->cstr() );
+		CSphSource * pSource = SpawnSource ( hSource, pSourceName->cstr(), pTokenizer->IsUtf8 () );
 		if ( !pSource )
 			continue;
 

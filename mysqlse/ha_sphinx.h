@@ -25,7 +25,7 @@ struct CSphReqQuery;
 struct CSphSEShare;
 struct CSphSEAttr;
 struct CSphSEStats;
-
+struct CSphSEThreadData;
 
 /// Sphinx SE handler class
 class ha_sphinx : public handler
@@ -114,7 +114,7 @@ public:
 #endif
 
 	int				extra ( enum ha_extra_function operation );
-	int				reset ();
+	int				reset() { return extra(HA_EXTRA_RESET); } // default does not do that in 5.1.x
 	int				external_lock ( THD * thd, int lock_type );
 	int				delete_all_rows ();
 	ha_rows			records_in_range ( uint inx, key_range * min_key, key_range * max_key );
@@ -124,6 +124,10 @@ public:
 	int				create ( const char * name, TABLE * form, HA_CREATE_INFO * create_info );
 
 	THR_LOCK_DATA **store_lock ( THD * thd, THR_LOCK_DATA ** to, enum thr_lock_type lock_type );
+
+public:
+	virtual const COND *	cond_push ( const COND *cond );
+	virtual void			cond_pop ();
 
 private:
 	uint32			m_iFields;
@@ -142,6 +146,8 @@ private:
 	char *			UnpackString ();
 	bool			UnpackSchema ();
 	bool			UnpackStats ( CSphSEStats * pStats );
+
+	CSphSEThreadData *	GetTls ();
 };
 
 

@@ -120,7 +120,7 @@ while ( $html =~ s/^(.*?)<([\/]*\w+)(\s+.*?)*>//ms )
 			$res .= "-" x $Text::Wrap::columns . "\n\n";
 		}
 
-		if ( in ( [ "dl","ol","ul" ], $tag ) )
+		if ( in ( [ "dd","ol","ul" ], $tag ) )
 		{
 			$left += 3;
 			$li = 1 if ( $tag eq "ol" ); # fixme! allow nested ol
@@ -128,11 +128,12 @@ while ( $html =~ s/^(.*?)<([\/]*\w+)(\s+.*?)*>//ms )
 			next;
 		}
 
-		if ( in ( [ "/dl","/ol","/ul" ], $tag ) )
+		if ( in ( [ "/dd","/ol","/ul" ], $tag ) )
 		{
 			$left -= 3;
 			pop @lists;
 			$red = ""; # just in case
+			$res .= "\n";
 			next;
 		}
 

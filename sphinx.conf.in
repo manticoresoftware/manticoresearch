@@ -1,6 +1,10 @@
 #
 # Sphinx configuration file sample
 #
+# WARNING! While this sample file mentions all available options,
+# it contains (very) short helper descriptions only. Please refer to
+# doc/sphinx.html for details.
+#
 
 #############################################################################
 ## data source definition
@@ -8,213 +12,116 @@
 
 source src1
 {
-	# data source type
+	# data source type. mandatory, no default value
 	# known types are 'mysql', 'pgsql', 'xmlpipe', 'xmlpipe2'
-	# MUST be defined
-	type				= mysql
+	type					= mysql
 
 	#####################################################################
 	## SQL settings (for 'mysql' and 'pgsql' types)
 	#####################################################################
 
 	# some straightforward parameters for SQL source types
-	sql_host			= localhost
-	sql_user			= test
-	sql_pass			=
-	sql_db				= test
-	sql_port			= 3306	# optional, default is 3306
+	sql_host				= localhost
+	sql_user				= test
+	sql_pass				=
+	sql_db					= test
+	sql_port				= 3306	# optional, default is 3306
 
-	# sql_sock			= /tmp/mysql.sock
-	#
-	# optional
+	# UNIX socket name
+	# optional, default is empty (reuse client library defaults)
 	# usually '/var/lib/mysql/mysql.sock' on Linux
 	# usually '/tmp/mysql.sock' on FreeBSD
+	#
+	# sql_sock				= /tmp/mysql.sock
 
 
 	# MySQL specific client connection flags
-	#
-	# must contain an integer value with the sum of the flags.
-	# the value will be passed to mysql_real_connect. the flags are
-	# enumerated in mysql_com.h include file.
-	#
-	# here are some flags which could be useful for indexing,
-	# with their respective values:
-	#
-	# CLIENT_COMPRESS = 32; can use compression protocol
-	# CLIENT_SSL = 2048; switch to SSL after handshake
-	# CLIENT_SECURE_CONNECTION = 32768; new 4.1 authentication
-	#
-	# for example, specify 2080 (2048+32) to use both compression
-	# and SSL, or 32768 to use new authentication only.
-	#
-	# compression on 1 Gbps links is most likely to hurt indexing
-	# time though it reduces traffic. however it was reported that
-	# enabling compression on 100 mbps links can improve indexing
-	# time significantly.
-	#
 	# optional, default is 0
 	#
-	# mysql_connect_flags	= 32
+	# mysql_connect_flags	= 32 # enable compression
 
 
 	# pre-query, executed before the main fetch query
+	# multi-value, optional, default is empty list of queries
 	#
-	# useful eg. to setup encoding, mark records as indexed, or set various
-	# SQL server or application specific options.
-	#
-	# you can specify several pre-queries. they will be executed in the
-	# order of appearance in the configuration file.
-	#
-	# one especially frequent pre-query usage is to specify the encoding
-	# the server should use for returned rows. it must match the encoding
-	# that Sphinx expects, specified by charset_type and charset_table
-	# options (see below). MySQL specific examples are:
-	#
-	# sql_query_pre		= SET CHARACTER_SET_RESULTS=cp1251
-	# sql_query_pre		= SET NAMES utf8
-	#
-	# for MySQL sources, it makes sense to disable query cache (for indexer
-	# connection only) in pre-query, because indexing queries are not going
-	# to be re-run frequently anyway. this could be achieved with:
-	#
-	# sql_query_pre		= SET SESSION query_cache_type=OFF
-	#
-	# optional, default is empty
+	# sql_query_pre			= SET NAMES utf8
+	# sql_query_pre			= SET SESSION query_cache_type=OFF
 
 
 	# main document fetch query
-	#
-	# you can specify up to 32 (formally SPH_MAX_FIELDS in sphinx.h) fields;
-	# all of the fields which are not document_id or attributes (see below)
-	# will be full-text indexed
-	#
-	# document_id MUST be the very first field
-	# document_id MUST be positive (non-zero, non-negative)
-	# document_id MUST fit into 32 bits
-	# document_id MUST be unique
-	#
-	# mandatory
-	sql_query			= \
+	# mandatory, integer document ID field MUST be the first selected column
+	sql_query				= \
 		SELECT id, group_id, UNIX_TIMESTAMP(date_added) AS date_added, title, content \
 		FROM documents
 
-	# query range setup
+	# range query setup, query that must return min and max ID values
+	# optional, default is empty
 	#
-	# useful to avoid MyISAM table locks and big result sets
-	# when indexing lots of data
+	# sql_query will need to reference $start and $end boundaries
+	# if using ranged query:
 	#
-	# to use query ranges, you should
-	# 1) provide a query to fetch min/max id (ie. id range) from data set;
-	# 2) configure step size in which this range will be walked;
-	# 3) use $start and $end macros somewhere in the main fetch query.
-	#
-	# 'sql_query_range' must return exactly two integer fields
-	# in exactly min_id, max_id order
-	#
-	# 'sql_range_step' must be a positive integer
-	# optional, default is 1024
-	#
-	# 'sql_query' must contain both '$start' and '$end' macros
-	# if you are using query ranges (because it obviously would be an
-	# error to index the whole table many times)
-	#
-	# note that the intervals specified by $start/$end do not
-	# overlap, so you should NOT remove document ids which are exactly
-	# equal to $start or $end in your query
-	#
-	# here's an example which will index 'documents' table
-	# fetching (at most) one thousand entries at a time:
-	#
-	# sql_query_range		= SELECT MIN(id),MAX(id) FROM documents
-	# sql_range_step		= 1000
-	# sql_query			= \
+	# sql_query				= \
 	#	SELECT doc.id, doc.id AS group, doc.title, doc.data \
 	#	FROM documents doc \
 	#	WHERE id>=$start AND id<=$end
+	#
+	# sql_query_range		= SELECT MIN(id),MAX(id) FROM documents
 
 
-	# attribute columns
+	# range query step
+	# optional, default is 1024
 	#
-	# attribute values MUST be non-negative 32-bit integers
-	# (negative values will be wrapped around)
+	# sql_range_step		= 1000
+
+
+	# unsigned integer attribute declaration
+	# multi-value (an arbitrary number of attributes is allowed), optional
+	# optional bit size can be specified, default is 32
 	#
-	# attributes are additional values associated with each document which
-	# may be used to perform additional filtering and sorting during search.
-	# attributes are NOT full-text indexed; they are stored in the full text
-	# index as is.
-	#
-	# a good example would be a forum posts table. one might need to search
-	# through 'title' and 'content' fields but to limit search to specific
-	# values of 'author_id', or 'forum_id', or to sort by 'post_date', or to
-	# group matches by 'thread_id', or to group posts by month of the
-	# 'post_date' and provide statistics.
-	#
-	# this all can be achieved by specifying all the mentioned columns
-	# (excluding 'title' and 'content' which are full-text fields) as
-	# attributes and then using API calls to setup filtering, sorting,
-	# and grouping.
-	#
-	# sql_attr_uint is used to declare unsigned integer attributes.
-	# sql_group_column is deprecated alias for sql_attr_uint.
-	#
-	# you can specify bit count for integer attributes by appending
-	# ':BITCOUNT' to attribute name (see examples below). such bitfields
-	# would be packed together in 32-bit chunks, to reduce storage space
-	# requirements.
-	#
-	# sql_attr_bool is used to declare boolean attributes.
-	# these are packed to 1 bit of storage (along with other bitfields).
-	#
-	# sql_attr_timestamp is used to declare UNIX timestamp attributes.
-	# sql_date_column is deprecated alias for sql_attr_timestamp.
-	#
-	# sql_attr_str2ordinal is used to declare integer attributes whose
-	# values are computed as ordinal numbers of corresponding column value
-	# in sorted list of column values. WARNING, all such strings values
-	# are going to be stored in RAM while indexing, and "C" locale will
-	# be used when sorting!
-	# sql_str2ordinal_column is deprecated alias for sql_attr_str2ordinal.
-	#
-	# sql_attr_float are used to declare float attributes. the values
-	# are intended to be stored as "single", ie. in 32-bit IEEE format.
-	#
-	# there may be multiple attribute columns specified.
-	# here's an example for that mentioned posts table:
-	#
-	# sql_attr_uint = author_id
-	# sql_attr_uint = forum_id:9 # 9 bits for forum id
-	# sql_attr_uint = thread_id
-	# sql_attr_uint = country_id:12 # 12 bits for country id
-	# sql_attr_timestamp = post_unix_timestamp
-	# sql_attr_timestamp = last_edit_unix_timestamp
-	# sql_attr_float = lat_radians
-	# sql_attr_float = long_radians
-	#
-	# optional, default is empty
+	# sql_attr_uint			= author_id
+	# sql_attr_uint			= forum_id:9 # 9 bits for forum_id
 	sql_attr_uint			= group_id
+
+	# boolean attribute declaration
+	# multi-value (an arbitrary number of attributes is allowed), optional
+	# equivalent to sql_attr_uint with 1-bit size
+	#
+	# sql_attr_bool			= is_deleted
+
+	
+	# UNIX timestamp attribute declaration
+	# multi-value (an arbitrary number of attributes is allowed), optional
+	# similar to integer, but can also be used in date functions
+	#
+	# sql_attr_timestamp	= posted_ts
+	# sql_attr_timestamp	= last_edited_ts
 	sql_attr_timestamp		= date_added
+
+	# string ordinal attribute declaration
+	# multi-value (an arbitrary number of attributes is allowed), optional
+	# sorts strings (bytewise), and stores their indexes in the sorted list
+	# sorting by this attr is equivalent to sorting by the original strings
+	#
 	# sql_attr_str2ordinal	= author_name
 
 
-	# multi-valued attribute (MVA) columns
+	# floating point attribute declaration
+	# multi-value (an arbitrary number of attributes is allowed), optional
+	# values are stored in single precision, 32-bit IEEE 754 format
 	#
-	# plain attributes only allow to attach 1 value per each document.
-	# however, there are cases (such as tags or categories) when it is
-	# desired to attach multiple values of the same attribute and be able
-	# to apply filtering to value lists.
+	# sql_attr_float = lat_radians
+	# sql_attr_float = long_radians
+
+
+	# multi-valued attribute (MVA) attribute declaration
+	# multi-value (an arbitrary number of attributes is allowed), optional
+	# MVA values are variable length lists of unsigned 32-bit integers
 	#
-	# 'sql_attr_multi' option is used to declare such attributes.
-	# its value format is as follows:
-	#
-	#	ATTR-TYPE ATTR-NAME 'from' SOURCE-TYPE [;QUERY] [;RANGE-QUERY]
-	#
-	# where
+	# syntax is ATTR-TYPE ATTR-NAME 'from' SOURCE-TYPE [;QUERY] [;RANGE-QUERY]
 	# ATTR-TYPE is 'uint' or 'timestamp'
 	# SOURCE-TYPE is 'field', 'query', or 'ranged-query'
 	# QUERY is SQL query used to fetch all ( docid, attrvalue ) pairs
 	# RANGE-QUERY is SQL query used to fetch min and max ID values, similar to 'sql_query_range'
-	#
-	# optional, default is empty
 	#
 	# sql_attr_multi	= uint tag from query; SELECT id, tag FROM tags
 	# sql_attr_multi	= uint tag from ranged-query; \
@@ -222,135 +129,61 @@ source src1
 	#	SELECT MIN(id), MAX(id) FROM tags
 
 
-	# post-query, executed on the end of main fetch query
-	#
-	# note that indexing is NOT completed at the point when post-query
-	# gets executed and might very well fail
-	#
+	# post-query, executed on sql_query completion
 	# optional, default is empty
-	sql_query_post		=
+	#
+	# sql_query_post		=
 
-	# post-index-query, executed on succsefully completed indexing
-	#
-	# $maxid macro is the max document ID which was actually
-	# fetched from the database
-	#
+	
+	# post-index-query, executed on successful indexing completion
 	# optional, default is empty
+	# $maxid expands to max document ID actually fetched from DB
 	#
 	# sql_query_post_index = REPLACE INTO counters ( id, val ) \
 	#	VALUES ( 'max_indexed_id', $maxid )
 
 
-	# ranged query throttling
-	#
-	# useful in cases when indexer imposes too much load on DBMS,
-	# throttling causes indexer to sleep for N milliseconds once
-	# per each ranged query step
-	#
-	# sql_ranged_throttle is delay time in milliseconds
+	# ranged query throttling, in milliseconds
 	# optional, default is 0 which means no delay
+	# enforces given delay before each query step
 	sql_ranged_throttle	= 0
 
 	
-	# document info query
-	#
-	# ONLY used by search utility to display document information
-	# MUST be able to fetch document info by its id, therefore
-	# MUST contain '$id' macro 
-	#
+	# document info query, ONLY for CLI search (ie. testing and debugging)
 	# optional, default is empty
+	# must contain $id macro and must fetch the document by that id
 	sql_query_info		= SELECT * FROM documents WHERE id=$id
 
 	#####################################################################
 	## xmlpipe settings
 	#####################################################################
 
-	# demo config for 'xmlpipe' source type is shown below
-	#
-	# with xmlpipe, indexer opens a pipe to a given command,
-	# and then reads documents from stdin
-	#
-	# indexer expects one or more documents from xmlpipe stdin
-	# each document must be formatted exactly as follows:
-	#
-	# <document>
-	# <id>123</id>
-	# <group>45</group>
-	# <timestamp>1132223498</timestamp>
-	# <title>test title</title>
-	# <body>
-	# this is my document body
-	# </body>
-	# </document>
-	#
-	# timestamp element is optional, its default value is 1
-	# all the other elements are mandatory
-
 	# type				= xmlpipe
+
+	# shell command to invoke xmlpipe stream producer
+	# mandatory
+	#
 	# xmlpipe_command	= cat @CONFDIR@/test.xml
 
 	#####################################################################
 	## xmlpipe2 settings
 	#####################################################################
 
-	# when indexing xmlpipe2 source, indexer runs the given command
-	# and expects well-formed XML stream at stdin.
-	#
-	# here's sample stream data:
-	#
-	# <?xml version="1.0" encoding="utf-8"?>
-	# <sphinx:docset>
-	#
-	# <sphinx:schema>
-	# <sphinx:field name="subject"/> 
-	# <sphinx:field name="content"/>
-	# <sphinx:attr name="published" type="timestamp"/>
-	# <sphinx:attr name="author_id" type="int" bits="16" default="1"/>
-	# </sphinx:schema>
-	#
-	# <sphinx:document id="1234">
-	# <content>this is the main content <![CDATA[[and this <cdata> entry must be handled properly by xml parser lib]]></content>
-	# <published>1012325463</published>
-	# <subject>note how field/attr tags can be in <b class="red">randomized</b> order</subject>
-	# <misc>some undeclared element</misc>
-	# </sphinx:document>
-	#
-	# <!-- ... more documents here ... -->
-	#
-	# </sphinx:docset>
-	#
-	# arbitrary fields and attributes are allowed. they can occur in the
-	# stream in any order within a document.
-	#
-	# schema, ie. complete fields and attributes list, must be declared
-	# before any document could be parsed. this can be done either in the
-	# config file using xmlpipe_field and xmlpipe_attr_XXX settings
-	# shown below, or right in the stream using <sphinx:schema>.
-	#
-	# <sphinx:schema> is optional. it is allowed to occur as the very
-	# first sub-element in <sphinx:docset> only. if there is no in-stream
-	# schema definition, settings from the config file will be used.
-	# otherwise, stream settings take precedence.
-	#
-	# unknown tags (which were not declared neither as fields,
-	# nor as attributes) will be ignored with a warning. in the example
-	# above, <misc> will be ignored.
-	#
-	# all embedded tags and their attributes (see <b> in <subject>
-	# in the example) are silently ignored.
-	#
-	# xmlpipe_field declares XML element names which will be treated
-	# as full-text searchable fields when found in <sphinx:document>.
-	#
-	# xmlpipe_attr_XXX declare XML element names which will be treated
-	# as attribute values when found in <sphinx:document>. they are similar
-	# to sql_attr_XXX settings.
+	# type				= xmlpipe2
+	# xmlpipe_command	= cat @CONFDIR@/test2.xml
 
 
-	# type						= xmlpipe2
-	# xmlpipe_command			= cat @CONFDIR@/test2.xml
+	# xmlpipe2 field declaration
+	# multi-value, optional, default is empty
+	#
 	# xmlpipe_field				= subject
 	# xmlpipe_field				= content
+
+
+	# xmlpipe2 attribute declaration
+	# multi-value, optional, default is empty
+	# all xmlpipe_attr_XXX options are fully similar to sql_attr_XXX
+	#
 	# xmlpipe_attr_timestamp	= published
 	# xmlpipe_attr_uint			= author_id
 }
@@ -360,9 +193,9 @@ source src1
 #
 # all the parameters are copied from the parent source,
 # and may then be overridden in this source definition
-source src1stripped : src1
+source src1throttled : src1
 {
-	strip_html			= 1
+	sql_ranged_throttle			= 100
 }
 
 #############################################################################
@@ -377,186 +210,74 @@ source src1stripped : src1
 # are configured per local index
 index test1
 {
-	# which document source to index
-	# at least one MUST be defined
-	#
-	# multiple sources MAY be specified; to do so, just add more
-	# "source = NAME" lines. in this case, ALL the document IDs
-	# in ALL the specified sources MUST be unique
+	# document source(s) to index
+	# multi-value, mandatory
+	# document IDs must be globally unique across all sources
 	source			= src1
 
-	# this is path and index file name without extension
-	#
-	# indexer will append different extensions to this path to
-	# generate names for both permanent and temporary index files
-	#
-	# .tmp* files are temporary and can be safely removed
-	# if indexer fails to remove them automatically
-	#
-	# .sp* files are fulltext index data files. specifically,
-	# .spa contains attribute values attached to each document id
-	# .spd contains doclists and hitlists
-	# .sph contains index header (schema and other settings)
-	# .spi contains wordlists
-	#
-	# MUST be defined
+	# index files path and file name, without extension
+	# mandatory, path must be writable, extensions will be auto-appended
 	path			= @CONFDIR@/data/test1
 
-	# docinfo (ie. per-document attribute values) storage strategy
-	# defines how docinfo will be stored
-	#
-	# available values are "none", "inline" and "extern"
-	#
-	# "none" means there'll be no docinfo at all (no groups/dates)
-	#
-	# "inline" means that the docinfo will be stored in the .spd
-	# file along with the document ID lists (doclists)
-	#
-	# "extern" means that the docinfo will be stored in the .spa
-	# file separately
-	#
-	# externally stored docinfo should (basically) be kept in RAM
-	# when querying; therefore, "inline" may be the only viable option
-	# for really huge (50-100+ million docs) datasets. however, for
-	# smaller datasets "extern" storage makes both indexing and
-	# searching MUCH more efficient.
-	#
-	# additional search-time memory requirements for extern storage are
-	#
-	#	( 1 + number_of_attrs )*number_of_docs*4 bytes
-	#
-	# so 10 million docs with 2 groups and 1 timestamp will take
-	# (1+2+1)*10M*4 = 160 MB of RAM. this is PER DAEMON, ie. searchd
-	# will alloc 160 MB on startup, read the data and keep it shared
-	# between queries; the children will NOT allocate additional
-	# copies of this data.
-	#
-	# default is "extern" (as most collections are smaller than 100M docs)
+	# document attribute values (docinfo) storage mode
+	# optional, default is 'extern'
+	# known values are 'none', 'extern' and 'inline'
 	docinfo			= extern
 
-	# memory locking for cached data
-	#
-	# if set to 1, mlock() will be called to prevent cached index data
-	# (ie. spi and spa files) from being swapped out. requires searchd to
-	# be run under root account.
-	#
-	# optional, default is 0
+	# memory locking for cached data (.spa and .spi), to prevent swapping
+	# optional, default is 0 (do not mlock)
+	# requires searchd to be run from root
 	mlock			= 0
 
-	# morphology
-	#
-	# built-in morphology preprocessors include English stemmer,
-	# Russian stemmer (works with UTF-8 and Windows-1251 encodings),
-	# and Soundex.
-	#
-	# additional stemmers provided by Snowball project libstemmer
-	# library (available at http://snowball.tartarus.org/) may also be
-	# enabled at compile time using --with-libstemmer configure option.
-	#
-	# built-in values are "none", "stem_en", "stem_ru", "stem_enru",
-	# "soundex", and "metaphone". double metaphone implementation is used;
-	# primary code will be indexed.
-	#
-	# additional values provided by libstemmer are in "libstemmer_XXX"
-	# format, where XXX is libstemmer algorithm codename (refer to
-	# libstemmer_c/libstemmer/modules.txt for a complete list)
-	#
-	# optional, default is "none"
-	#
-	# several stemmers can be specified (comma-separated)
-	#
-	# morphology		= none
-	# morphology		= stem_en
-	# morphology		= stem_ru
-	# morphology		= stem_enru
-	# morphology		= soundex
-	# morphology        = metaphone
-	# morphology 		= stem_en, stem_ru, soundex
-	#
-	# morphology		= libstemmer_german
-	# morphology		= libstemmer_dan
-	# morphology		= libstemmer_sv
-	morphology			= none
-
-	# stopwords file
-	#
-	# format is plain text in whatever encoding you use
-	# note that if using stemming, stopwords are stemmed as well
-	#
+	# a list of morphology preprocessors to apply
 	# optional, default is empty
+	#
+	# builtin preprocessors are 'none', 'stem_en', 'stem_ru', 'stem_enru',
+	# 'soundex', and 'metaphone'; additional preprocessors available from
+	# libstemmer are 'libstemmer_XXX', where XXX is algorithm code
+	# (see libstemmer_c/libstemmer/modules.txt)
+	#
+	# morphology 	= stem_en, stem_ru, soundex
+	# morphology	= libstemmer_german
+	# morphology	= libstemmer_sv
+	morphology		= none
+
+	# stopword files list (space separated)
+	# optional, default is empty
+	# contents are plain text, charset_table and stemming are both applied
 	#
 	# stopwords			= @CONFDIR@/data/stopwords.txt
-	stopwords			=
 
-	# word forms file
-	#
-	# each line should contain source and destination word forms,
-	# in exactly the same encoding as specified in charset_table
-	# separated by "greater" sign:
-	#
-	#	walks > walk
-	#	walked > walk
-	#	walking > walk
-	#
-	# this file can be generated from ispell dictionaries using
-	# bundled spelldump utility
-	#
-	# optional, default is empty
-	wordforms =
 
-	# synonyms file
-	#
-	# synonyms allow to explicitly map different word spellings
-	# to a normal form, as well as support special characters
-	# which would normally be treated as whitespace.
-	#
-	# synonyms file contains one line per synonym,
-	# and the line format is as follows:
-	#
-	# map-from-tokens => map-to-token
-	#
-	# example file contents:
-	#
-	# AT & T => AT&T
-	# AT&T => AT&T
-	# Standarten Fuehrer => standartenfuhrer
-	# Standarten Fuhrer => standartenfuhrer
-	#
-	# all tokens are case sensitive; thus, in the example above,
-	# "At&t" text will be tokenized as "at" and "t" tokens - unlike
-	# "AT&T" which will produce single "AT&T" token.
-	#
-	# whitespace in map-from matters but is not counted;
-	# ie. "AT & T" map-from will match "AT    &   T" text,
-	# whatever the amount of space in both map-from part
-	# and the text.
-	#
+	# wordforms file, in "mapfrom > mapto" plain text format
 	# optional, default is empty
+	#
+	# wordforms			= @CONFDIR@/data/wordforms.txt
+
+
+	# tokenizing exceptions ("synonyms") file
+	# optional, default is empty
+	#
+	# plain text, case sensitive, space insensitive in map-from part
+	# one "Map Several Words => ToASingleOne" entry per line
 	#
 	# synonyms 			= @CONFDIR@/data/synonyms.txt
 
 
-	# minimum word length
-	#
-	# only the words that are of this length and above will be indexed;
-	# for example, if min_word_len is 4, "the" won't be indexed,
-	# but "they" will be.
-	#
-	# default is 1, which (obviously) means to index everything
+	# minimum indexed word length
+	# default is 1 (index everything)
 	min_word_len		= 1
 
 	# charset encoding type
-	#
+	# optional, default is 'sbcs'
 	# known types are 'sbcs' (Single Byte CharSet) and 'utf-8'
-	#
-	# optional, default is sbcs
 	charset_type		= sbcs
 
 	# charset definition and case folding rules "table"
-	#
 	# optional, default value depends on charset_type
 	#
-	# for now, defaults are configured to support English and Russian
+	# defaults are configured to include English and Russian characters only
+	# you need to change the table to include additional ones
 	# this behavior MAY change in future versions
 	#
 	# 'sbcs' default value is
@@ -567,211 +288,77 @@ index test1
 
 
 	# ignored characters list
-	#
-	# for the cases when some characters such as soft hyphenation
-	# mark (U+00AD) should be not just treated as separators, but
-	# fully ignored.
-	#
-	# for example, if '-' is simply not in the charset_table,
-	# "abc-def" text will be indexed as "abc" and "def" keywords.
-	# if '-' is ignored, it will be indexed as a single "abcdef"
-	# keyword.
-	#
 	# optional, default value is empty
 	#
 	# ignore_chars		= U+00AD
 
 
-	# minimum prefix length
+	# minimum word prefix length to index
+	# optional, default is 0 (do not index prefixes)
 	#
-	# if prefix length is positive, indexer will not only index all words,
-	# but all the possible prefixes (ie. word beginnings) as well
-	#
-	# for instance, "exam" query against such index will match documents
-	# which contain "example" word, even if they do not contain "exam"
-	#
-	# indexing prefixes will make the index grow significantly
-	# and could degrade search times
-	#
-	# currently there's no way to rank perfect word matches higher
-	# than prefix matches using only one index; you could setup two
-	# indexes for that
-	#
-	# default is 0, which means NOT to index prefixes
-	min_prefix_len		= 0
+	# min_prefix_len	= 0
 
-	# minimum infix length
-	#
-	# if infix length is positive, indexer will not only index all words,
-	# but all the possible infixes (ie. characters subsequences starting
-	# anywhere inside the word) as well
-	#
-	# for instance, "amp" query against such index will match documents
-	# which contain "example" word, even if they do not contain "amp"
-	#
-	# indexing prefixes will make the index grow significantly
-	# and could degrade search times
-	#
-	# currently there's no way to rank perfect word matches higher
-	# than infix matches using only one index; you could setup two
-	# indexes for that
-	#
-	# default is 0, which means NOT to index infixes
-	min_infix_len		= 0
 
-	# prefix_fields
-	# infix_fields
+	# minimum word infix length to index
+	# optional, default is 0 (do not index infixes)
 	#
-	# these features can be used to limit prefix or infix indexing
-	# to several explicitly specified fields, and retain normal
-	# "whole word" indexing on all others.
-	#
-	# optional, default value is empty, which means to index
-	# prefixes or infixes in all available full-text fields
+	# min_infix_len		= 0
+
+
+	# list of fields to limit prefix/infix indexing to
+	# optional, default value is empty (index all fields in prefix/infix mode)
 	#
 	# prefix_fields		= filename
 	# infix_fields		= url, domain
 
 
-	# enable_star
-	#
-	# this feature enables "star-syntax" in keywords when searching
-	# through indexes whcih were created with prefix or infix indexing
-	# enabled.
-	#
-	# enable_star only affects searching; so it can be changed
-	# without reindexing (one would need to restart searchd, though).
-	#
-	# possible values are 0 and 1.
-	#
-	# the default value is 0, which means to disable star-syntax
-	# and treat all keywords as prefixes or infixes respectively,
-	# depending on indexing-time min_prefix_len/min_infix_len settings.
-	#
-	# the value of 1 means that
-	# 1) star can be used at the start and/or the end of the keyword;
-	# 2) star will match zero or more characters.
-	#
-	# for example, assume that the index was built with infixes and
-	# that enable_star is 1. searching should work as follows:
-	#
-	# 1) "abcdef" query will match only those documents which contain
-	# the exact "abcdef" word in them;
-	#
-	# 2) "abc*" query will match those documents which contain
-	# any words starting with "abc" (including the documents which
-	# contain the exact "abc" word only);
-	#
-	# 3) "*cde*" query will match those documents which contain
-	# any words which have "cde" characters in any part of the word
-	# (including the documents which contain the exact "cde" word only).
-	#
-	# 4) "*def" query will match those documents which contain
-	# any words ending with "def" (including the documents which
-	# contain the exact "def" word only).
-	#
-	# optional, default value is 0 (to keep compatibility with 0.9.7).
+	# enable star-syntax (wildcards) when searching prefix/infix indexes
+	# known values are 0 and 1
+	# optional, default is 0 (do not use wildcard syntax)
 	#
 	# enable_star		= 1
 
 
-	# n-grams length
+	# n-gram length to index, for CJK indexing
+	# only supports 0 and 1 for now, other lengths to be implemented
+	# optional, default is 0 (disable n-grams)
 	#
-	# n-grams provide basic CJK support for unsegmented texts. if using
-	# n-grams, streams of CJK characters are indexed as n-grams. for example,
-	# if incoming stream is ABCDEF and n is 2, this text would be indexed
-	# as if it was AB BC CD DE EF.
-	#
-	# this feature is in alpha version state and only n=1 is currently
-	# supported; this is going to be improved.
-	#
-	# note that if search query is segmented (ie. words are separated with
-	# whitespace), words are in quotes and extended matching mode is used,
-	# then all matching documents will be returned even if their text was
-	# *not* segmented. in the example above, ABCDEF text will be indexed as
-	# A B C D E F, and "BCD" query will be transformed to "B C D" (where
-	# quotes is phrase matching operator), so the document will match.
-	#
-	# optional, default is 0, which means NOT to use n-grams
-	#
-	# ngram_len = 1
+	# ngram_len				= 1
 
 
-	# n-gram characters table
-	#
-	# specifies what specific characters are subject to n-gram
-	# extraction. format is similar to charset_table.
-	#
+	# n-gram characters list, for CJK indexing
 	# optional, default is empty
 	#
-	# ngram_chars = U+3000..U+2FA1F
+	# ngram_chars			= U+3000..U+2FA1F
 
 
-	# phrase boundary characters table
-	#
-	# controls what characters will be treated as phrase boundary
-	# (if and only if followed by a separator, to avoid abbreviations
-	# such as S.T.A.L.K.E.R or URLs being treated as several phrases).
-	#
-	# additional word position increment (see phrase_boundary_step)
-	# will be added to current word position on boundary. this enables
-	# phrase-level searching through proximity queries.
-	#
+	# phrase boundary characters list
 	# optional, default is empty
 	#
-	# phrase_boundary = ., ?, !, U+2026 # horizontal ellipsis
+	# phrase_boundary		= ., ?, !, U+2026 # horizontal ellipsis
 
 
-	# phrase boundary word-position increment
-	#
-	# see phrase_boundary for description
-	#
+	# phrase boundary word position increment
 	# optional, default is 0
 	#
-	# phrase_boundary_step = 100
+	# phrase_boundary_step	= 100
 
 
 	# whether to strip HTML tags from incoming documents
-	#
-	# possible values are 0 (don't strip) or 1 (do strip).
-	# only the tags themselves (and comments) are stripped.
-	# to strip the contents too (eg. to strip embedded scripts),
-	# see html_remove_elements option.
-	#
-	# there are no restrictions on tag names; ie. everything
-	# that looks like a valid tag start, or end, or a comment
-	# will be stripped.
-	#
-	# WARNING, should work ok for PERFECTLY formed HTML/XHTML for now
-	# WARNING, COULD BUG on malformed everday HTML
-	#
-	# optional, default is 0 (don't strip)
-	html_strip			= 0
+	# known values are 0 (do not strip) and 1 (do strip)
+	# optional, default is 0
+	html_strip				= 0
 
 	# what HTML attributes to index if stripping HTML
-	# format is as follows:
+	# optional, default is empty (do not index anything)
 	#
-	# html_index_attrs	= img=alt,title; a=title;
-	#
-	# optional, default is to not index anything
-	html_index_attrs	=
+	# html_index_attrs		= img=alt,title; a=title;
+
 
 	# what HTML elements contents to strip
-	#
-	# allows to strip element contents, ie. everything which is between
-	# opening and closing tag. useful to remove embedded scripts, CSS, etc.
-	# short tag form for empty elements (ie. <element />) is supported;
-	# ie. the text that follows such tag will *not* be removed.
-	#
-	# the value should contain a list of tag names to strip.
-	# tag names are case insensitive. there are no restrictions
-	# on list separators; you can use any separator.
-	#
-	# at the moment, only works if strip_html is enabled.
-	#
 	# optional, default is empty (do not strip element contents)
 	#
-	# html_remove_elements = style, script
+	# html_remove_elements	= style, script
 }
 
 

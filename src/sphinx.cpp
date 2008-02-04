@@ -7090,6 +7090,52 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 	return 1;
 }
 
+static bool CopyFile( const char * sSrc, const char * sDst, CSphString & sErrStr )
+{
+	assert( sSrc );
+	assert( sDst );
+	
+	const DWORD iMaxBufSize = 1024 * 1024;
+	
+	CSphAutofile	tSrcFile( sSrc, SPH_O_READ, sErrStr );
+	CSphAutofile	tDstFile( sDst, SPH_O_NEW, sErrStr );
+	
+	if ( tSrcFile.GetFD()<0 || tDstFile.GetFD()<0 )
+		return false;
+	
+	SphOffset_t iFileSize = tSrcFile.GetSize();
+	DWORD 		iBufSize = Min( iFileSize, iMaxBufSize );
+	
+	BYTE * pData = new BYTE[iBufSize];
+	
+	if ( !pData )
+	{
+		sErrStr.SetSprintf ( "memory allocation error" );
+		return false;
+	}
+	
+	bool bError = true;
+	
+	while( iFileSize > 0 )
+	{
+		DWORD iSize = Min( iFileSize, iBufSize );
+		
+		if ( !tSrcFile.Read( pData, iSize, sErrStr ) )
+			break;
+		
+		if ( !sphWriteThrottled( tDstFile.GetFD(), pData, iSize, "CopyFile", sErrStr ) )
+			break;
+		
+		iFileSize -= iSize;
+		
+		if ( !iFileSize )
+			bError = false;
+	}
+	
+	SafeDeleteArray( pData );
+	
+	return ( bError == false );	
+}
 
 bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 {
@@ -7115,11 +7161,12 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 	}
 	 
 	// FIXME!
-	if ( m_eDocinfo!=pSrcIndex->m_eDocinfo )
+	if ( m_eDocinfo!=pSrcIndex->m_eDocinfo && !( m_eDocinfo == SPH_DOCINFO_EXTERN && !pSrcIndex->m_tStats.m_iTotalDocuments ) )
 	{
 		m_sLastError.SetSprintf ( "docinfo storage must be the same" );
 		return false;
 	}
+
 
 	int iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 
@@ -7241,6 +7288,14 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 			}
 		}
 	}
+	else if ( m_eDocinfo == SPH_DOCINFO_EXTERN && pSrcIndex->m_eDocinfo == SPH_DOCINFO_INLINE && !pSrcIndex->m_tStats.m_iTotalDocuments )
+	{
+		CSphString	sSrc = GetIndexFileName("spa");
+		CSphString	sDst = GetIndexFileName("spa.tmp");
+		
+		if ( !CopyFile( sSrc.cstr(), sDst.cstr(), m_sLastError ) )
+			return false;
+	} 
 	else
 	{
 		CSphAutofile fdSpa ( GetIndexFileName("spa.tmp"), SPH_O_NEW, m_sLastError );
@@ -17476,9 +17531,10 @@ void CSphWordDataRecord::Read( CSphMergeSource * pSource, CSphMergeData * pMerge
 
 	CSphDoclistRecord tDoc;
 
+	tDoc.Inititalize ( m_iRowitems);
+		
 	for( int i = 0; i < iDocNum; i++ )
-	{
-		tDoc.Inititalize ( m_iRowitems);
+	{		
 		tDoc.Read ( pSource );
 
 		if ( pMergeData->m_pPurgeData->IsEnabled() )

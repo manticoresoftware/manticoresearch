@@ -23,6 +23,7 @@
 	#define snprintf	_snprintf
 
 	#include <io.h>
+	#include <tlhelp32.h>
 #else
 	#include <unistd.h>
 #endif
@@ -931,27 +932,6 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 	return ( iExt==EXT_COUNT );
 }
 
-#if USE_WINDOWS
-
-bool g_bPIDFound = false;
-bool g_bSendSuccess = false;
-
-BOOL CALLBACK UpdateWinEnum ( HWND hwnd, LPARAM lParam )
-{
-	DWORD dwID;
-	DWORD uThread = GetWindowThreadProcessId ( hwnd, &dwID ) ;
-
-	if( dwID == (DWORD)lParam )
-	{
-		g_bPIDFound = true;
-		g_bSendSuccess = !!PostThreadMessage ( uThread, WM_USER, 0, 0 );
-	}
-
-	return TRUE;
-}
-
-#endif
-
 //////////////////////////////////////////////////////////////////////////
 // ENTRY
 //////////////////////////////////////////////////////////////////////////
@@ -1241,13 +1221,33 @@ int main ( int argc, char ** argv )
 			fclose ( fp );
 
 #if USE_WINDOWS
-			g_bPIDFound = false;
-			g_bSendSuccess = false;
-			EnumWindows ( (WNDENUMPROC)UpdateWinEnum, (LPARAM) iPID );
-			if ( !g_bPIDFound )
+			bool bPIDFound = false;
+			bool bSendSuccess = false;
+			HANDLE hSnapshot = CreateToolhelp32Snapshot ( TH32CS_SNAPTHREAD, 0 );
+			if ( hSnapshot != INVALID_HANDLE_VALUE )
+			{
+				THREADENTRY32 tEntry;
+				tEntry.dwSize = sizeof ( tEntry );
+				if ( Thread32First ( hSnapshot, &tEntry ) )
+				{
+					do 
+					{
+						if ( tEntry.th32OwnerProcessID == DWORD ( iPID ) )
+						{
+							bPIDFound = true;
+							bSendSuccess = !!PostThreadMessage ( tEntry.th32ThreadID, WM_USER, 0, 0 );
+						}
+					}
+					while ( Thread32Next ( hSnapshot, &tEntry ) );
+				}
+				
+				CloseHandle ( hSnapshot );
+			}
+			
+			if ( !bPIDFound )
 				fprintf ( stdout, "WARNING: no process found by PID %d.\n", iPID );
 			else
-				if ( !g_bSendSuccess )
+				if ( !bSendSuccess )
 					fprintf ( stdout, "WARNING: failed to send SIGHUP to searchd (pid=%d).\n", iPID );
 				else
 					fprintf ( stdout, "rotating indices: succesfully sent SIGHUP to searchd (pid=%d).\n", iPID );

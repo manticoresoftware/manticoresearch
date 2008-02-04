@@ -32,6 +32,7 @@
 	// Win-specific headers and calls
 	#include <io.h>
 	#include <winsock2.h>
+	#include <tlhelp32.h>
 
 	#define sphSockRecv(_sock,_buf,_len)	::recv(_sock,_buf,_len,0)
 	#define sphSockSend(_sock,_buf,_len)	::send(_sock,_buf,_len,0)
@@ -4689,7 +4690,7 @@ void ServiceInstall ( int argc, char ** argv )
 		g_sServiceName,					// name of service 
 		g_sServiceName,					// service name to display 
 		SERVICE_ALL_ACCESS,				// desired access 
-		SERVICE_WIN32_OWN_PROCESS,		// service type 
+		SERVICE_WIN32_OWN_PROCESS | SERVICE_INTERACTIVE_PROCESS,		// service type 
 		SERVICE_AUTO_START,				// start type 
 		SERVICE_ERROR_NORMAL,			// error control type 
 		szPath,							// path to service's binary 
@@ -4792,18 +4793,6 @@ BOOL WINAPI CtrlHandler ( DWORD )
 	g_bGotSigterm = true;
 	return TRUE;
 }
-
-BOOL CALLBACK TerminateAppEnum ( HWND hwnd, LPARAM lParam )
-{
-	DWORD dwID;
-
-	GetWindowThreadProcessId ( hwnd, &dwID ) ;
-
-	if( dwID == (DWORD)lParam )
-		PostMessage(hwnd, WM_CLOSE, 0, 0) ;
-
-	return TRUE;
-}
 #endif
 
 
@@ -4819,7 +4808,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		if ( !g_ssHandle )
 			sphFatal ( "failed to start service: RegisterServiceCtrlHandler() failed: %s", WinErrorInfo() );
 
-		g_ss.dwServiceType = SERVICE_WIN32_OWN_PROCESS;
+		g_ss.dwServiceType = SERVICE_WIN32_OWN_PROCESS | SERVICE_INTERACTIVE_PROCESS;
 		MySetServiceStatus ( SERVICE_START_PENDING, NO_ERROR, 4000 );
 
 		if ( argc<=1 )
@@ -4973,21 +4962,49 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			sphFatal ( "stop: failed to read valid pid from '%s'", sPid );
 
 #if USE_WINDOWS
-		bool bTerminatedOk = true;
+		bool bTerminatedOk = false;
 
 		HANDLE hProc = OpenProcess ( SYNCHRONIZE, FALSE, iPid );
 
 		if ( hProc )
 		{
-			EnumWindows ( (WNDENUMPROC)TerminateAppEnum, (LPARAM) iPid );
+			bool bPIDFound = false;
+			bool bSendSuccess = false;
+			HANDLE hSnapshot = CreateToolhelp32Snapshot ( TH32CS_SNAPTHREAD, 0 );
+			if ( hSnapshot != INVALID_HANDLE_VALUE )
+			{
+				THREADENTRY32 tEntry;
+				tEntry.dwSize = sizeof ( tEntry );
+				if ( Thread32First ( hSnapshot, &tEntry ) )
+				{
+					do 
+					{
+						if ( tEntry.th32OwnerProcessID == DWORD ( iPid ) )
+						{
+							bPIDFound = true;
+							bSendSuccess = !!PostThreadMessage ( tEntry.th32ThreadID, WM_CLOSE, 0, 0 );
+						}
+					}
+					while ( Thread32Next ( hSnapshot, &tEntry ) );
+				}
 
-			if ( WaitForSingleObject ( hProc, 5000 ) != WAIT_OBJECT_0 )
-				bTerminatedOk = false;
+				CloseHandle ( hSnapshot );
+			}
 
-			CloseHandle(hProc) ;
+			if ( !bPIDFound )
+				fprintf ( stdout, "WARNING: no process found by PID %d.\n", iPid );
+			else
+				if ( !bSendSuccess )
+					fprintf ( stdout, "WARNING: failed to send SIGTERM to searchd (pid=%d).\n", iPid );
+
+			if ( bPIDFound && bSendSuccess )
+			{
+				if ( WaitForSingleObject ( hProc, 10000 ) == WAIT_OBJECT_0 )
+					bTerminatedOk = true;
+			}
+
+			CloseHandle ( hProc ) ;
 		}
-		else
-			bTerminatedOk = false;
 
 		if ( bTerminatedOk )
 		{
@@ -4995,7 +5012,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			exit ( 0 );
 		}			
 		else
-			sphFatal ( "stop: error terminating pid %d" );
+			sphFatal ( "stop: error terminating pid %d", iPid );
 #else
 		if ( kill ( iPid, SIGTERM ) )
 			sphFatal ( "stop: kill() on pid %d failed: %s", iPid, strerror(errno) );
@@ -5527,10 +5544,18 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		MSG tMsg;
 		while ( PeekMessage ( &tMsg, NULL, 0, 0, PM_REMOVE ) )
 		{
-			if ( tMsg.message == WM_USER )
+			switch ( tMsg.message )
 			{
+			case WM_USER:
 				g_bDoRotate = true;
 				g_bGotSighup = true;
+				break;
+
+			case WM_CLOSE:
+				g_bGotSigterm = true;
+				if ( g_bService )
+					g_bServiceStop = true;
+				break;
 			}
 
 			TranslateMessage ( &tMsg );

@@ -122,7 +122,13 @@ static CSphString		g_sQueryLogFile;
 static const char *		g_sPidFile		= NULL;
 static int				g_iPidFD		= -1;
 static int				g_iMaxMatches	= 1000;
+
+#if USE_WINDOWS
+static bool				g_bSeamlessRotate	= false;
+#else
 static bool				g_bSeamlessRotate	= true;
+#endif
+
 static bool				g_bIOStats		= false;
 
 static volatile bool	g_bDoRotate			= false;	// flag that we are rotating now; set from SIGHUP; cleared on rotation success

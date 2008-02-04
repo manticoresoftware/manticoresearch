@@ -3984,6 +3984,11 @@ bool TryRename ( const char * sIndex, const char * sPrefix, const char * sFromPo
 
 	snprintf ( sFrom, sizeof(sFrom), "%s%s", sPrefix, sFromPostfix );
 	snprintf ( sTo, sizeof(sTo), "%s%s", sPrefix, sToPostfix );
+
+#if USE_WINDOWS
+	::unlink ( sTo );
+#endif
+
 	if ( rename ( sFrom, sTo ) )
 	{
 		if ( bFatal )

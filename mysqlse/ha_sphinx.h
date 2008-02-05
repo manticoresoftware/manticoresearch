@@ -35,7 +35,6 @@ protected:
 
 	CSphSEShare *	m_pShare;				///< shared lock info
 
-	int				m_iStartOfScan;
 	uint			m_iMatchesTotal;
 	uint			m_iCurrentPos;
 	const byte *	m_pCurrentKey;

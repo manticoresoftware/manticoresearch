@@ -1510,7 +1510,6 @@ ha_sphinx::ha_sphinx ( handlerton * hton, TABLE_ARG * table )
 	: handler ( hton, table )
 #endif
 	, m_pShare ( NULL )
-	, m_iStartOfScan ( 0 )
 	, m_iMatchesTotal ( 0 )
 	, m_iCurrentPos ( 0 )
 	, m_pCurrentKey ( NULL )
@@ -1527,6 +1526,7 @@ ha_sphinx::ha_sphinx ( handlerton * hton, TABLE_ARG * table )
 	, m_dUnboundFields ( NULL )
 {
 	SPH_ENTER_METHOD();
+	table->in_use->variables.engine_condition_pushdown = true;
 	SPH_VOID_RET();
 }
 
@@ -1688,7 +1688,6 @@ int ha_sphinx::delete_row ( const uchar * )
 int ha_sphinx::index_init ( uint keynr, bool )
 {
 	SPH_ENTER_METHOD();
-	m_iStartOfScan = 1;
 	active_index = keynr;
 	SPH_RET(0);
 }
@@ -1939,10 +1938,6 @@ int ha_sphinx::index_read ( byte * buf, const byte * key, uint key_len, enum ha_
 	SPH_ENTER_METHOD();
 	char sError[256];
 
-	m_pCurrentKey = key;
-	m_iCurrentKeyLen = key_len;
-	m_iStartOfScan = 1;
-
 	// set new data for thd->ha_data, it is used in show_status
 	CSphSEThreadData * pTls = GetTls();
 	if ( !pTls )
@@ -1953,22 +1948,19 @@ int ha_sphinx::index_read ( byte * buf, const byte * key, uint key_len, enum ha_
 	pTls->m_tStats.Reset ();
 
 	// parse query
-	const char * sQuery;
-	int iQueryLen;
-
 	if ( pTls->m_bQuery )
 	{
 		// we have a query from condition pushdown
-		sQuery = pTls->m_sQuery;
-		iQueryLen = strlen(sQuery);
+		m_pCurrentKey = (const byte *) pTls->m_sQuery;
+		m_iCurrentKeyLen = strlen(pTls->m_sQuery);
 	} else
 	{
 		// just use the key (might be truncated)
-		sQuery = (char*)key+HA_KEY_BLOB_LENGTH;
-		iQueryLen = uint2korr(key);
+		m_pCurrentKey = key+HA_KEY_BLOB_LENGTH;
+		m_iCurrentKeyLen = uint2korr(key); // or maybe key_len?
 	}
 
-	CSphSEQuery q ( sQuery, iQueryLen, m_pShare->m_sIndex );
+	CSphSEQuery q ( (const char*)m_pCurrentKey, m_iCurrentKeyLen, m_pShare->m_sIndex );
 	if ( !q.Parse () )
 	{
 		my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), q.m_sParseError );
@@ -2109,7 +2101,7 @@ int ha_sphinx::index_next_same ( byte * buf, const byte * key, uint keylen )
 }
 
 
-int ha_sphinx::get_rec ( byte * buf, const byte * key, uint keylen )
+int ha_sphinx::get_rec ( byte * buf, const byte *, uint )
 {
 	SPH_ENTER_METHOD();
 
@@ -2132,11 +2124,10 @@ int ha_sphinx::get_rec ( byte * buf, const byte * key, uint keylen )
 
 	field[0]->store ( uMatchID, 1 );
 	field[1]->store ( uMatchWeight, 1 );
-	#if MYSQL_VERSION_ID>=50120
-	field[2]->set_key_image ( key, keylen ); // store requested query. it's necessary, otherwise mysql goes crazy
-	#else
-	field[2]->set_key_image ( (char*)key, keylen ); // store requested query. it's necessary, otherwise mysql goes crazy
-	#endif
+
+	int iBytes = min ( m_iCurrentKeyLen+HA_KEY_BLOB_LENGTH, field[2]->pack_length() );
+	int2store ( field[2]->ptr, m_iCurrentKeyLen );
+	memcpy ( field[2]->ptr+HA_KEY_BLOB_LENGTH, m_pCurrentKey, iBytes );
 
 	for ( uint32 i=0; i<m_iAttrs; i++ )
 	{

@@ -7104,7 +7104,7 @@ static bool CopyFile( const char * sSrc, const char * sDst, CSphString & sErrStr
 		return false;
 	
 	SphOffset_t iFileSize = tSrcFile.GetSize();
-	DWORD 		iBufSize = Min( iFileSize, iMaxBufSize );
+	DWORD 		iBufSize = (DWORD) Min( iFileSize, (SphOffset_t)iMaxBufSize );
 	
 	BYTE * pData = new BYTE[iBufSize];
 	
@@ -7118,7 +7118,7 @@ static bool CopyFile( const char * sSrc, const char * sDst, CSphString & sErrStr
 	
 	while( iFileSize > 0 )
 	{
-		DWORD iSize = Min( iFileSize, iBufSize );
+		DWORD iSize = (DWORD) Min( iFileSize, (SphOffset_t)iBufSize );
 		
 		if ( !tSrcFile.Read( pData, iSize, sErrStr ) )
 			break;

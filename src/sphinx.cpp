@@ -16583,8 +16583,8 @@ CSphSource_XMLPipe2::CSphSource_XMLPipe2 ( BYTE * dInitialBuf, int iBufLen, cons
 	, m_pBufferEnd		( NULL )
 	, m_bPassedBufferEnd( false )
 #endif
-	, m_iFieldBufferLen	( 0 )
 	, m_iInitialBufSize	( iBufLen )
+	, m_iFieldBufferLen	( 0 )
 {
 	assert ( m_iBufferSize > iBufLen );
 

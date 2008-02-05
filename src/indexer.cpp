@@ -1247,36 +1247,43 @@ int main ( int argc, char ** argv )
 			fclose ( fp );
 
 #if USE_WINDOWS
-			bool bPIDFound = false;
-			bool bSendSuccess = false;
-			HANDLE hSnapshot = CreateToolhelp32Snapshot ( TH32CS_SNAPTHREAD, 0 );
-			if ( hSnapshot != INVALID_HANDLE_VALUE )
-			{
-				THREADENTRY32 tEntry;
-				tEntry.dwSize = sizeof ( tEntry );
-				if ( Thread32First ( hSnapshot, &tEntry ) )
+			char szPipeName [64];
+			sprintf ( szPipeName, "\\\\.\\pipe\\searchd_%d", iPID );
+
+			HANDLE hPipe = INVALID_HANDLE_VALUE;
+
+			while ( hPipe == INVALID_HANDLE_VALUE ) 
+			{ 
+				hPipe = CreateFile ( szPipeName, GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL );
+
+				if ( hPipe == INVALID_HANDLE_VALUE ) 
 				{
-					do 
+					if ( GetLastError () != ERROR_PIPE_BUSY ) 
 					{
-						if ( tEntry.th32OwnerProcessID == DWORD ( iPID ) )
-						{
-							bPIDFound = true;
-							bSendSuccess = !!PostThreadMessage ( tEntry.th32ThreadID, WM_USER, 0, 0 );
-						}
+						fprintf ( stdout, "WARNING: could not open pipe (GetLastError()=%d)\n", GetLastError () );
+						break;
 					}
-					while ( Thread32Next ( hSnapshot, &tEntry ) );
+
+					if ( !WaitNamedPipe ( szPipeName, 1000 ) ) 
+					{ 
+						fprintf ( stdout, "WARNING: could not open pipe (GetLastError()=%d)\n", GetLastError () );
+						break;
+					} 
 				}
-				
-				CloseHandle ( hSnapshot );
-			}
-			
-			if ( !bPIDFound )
-				fprintf ( stdout, "WARNING: no process found by PID %d.\n", iPID );
-			else
-				if ( !bSendSuccess )
-					fprintf ( stdout, "WARNING: failed to send SIGHUP to searchd (pid=%d).\n", iPID );
-				else
+			} 
+
+			if ( hPipe != INVALID_HANDLE_VALUE )
+			{	
+				DWORD uWritten = 0;
+				BYTE uWrite = 0;
+				BOOL bResult = WriteFile ( hPipe, &uWrite, 1, &uWritten, NULL );
+				if ( bResult )
 					fprintf ( stdout, "rotating indices: succesfully sent SIGHUP to searchd (pid=%d).\n", iPID );
+				else
+					fprintf ( stdout, "WARNING: failed to send SIGHUP to searchd (pid=%d, GetLastError()=%d)\n", iPID, GetLastError () );
+
+				CloseHandle ( hPipe );
+			}
 #else
 			// signal
 			int iErr = kill ( iPID, SIGHUP );

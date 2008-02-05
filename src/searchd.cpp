@@ -101,6 +101,7 @@ static bool				g_bService		= false;
 #if USE_WINDOWS
 static bool				g_bServiceStop	= false;
 static const char *		g_sServiceName	= "searchd";
+HANDLE					g_hPipe			= INVALID_HANDLE_VALUE;
 #endif
 
 static CSphVector<CSphString>	g_dArgs;
@@ -695,6 +696,10 @@ void Shutdown ()
 
 	if ( g_iSocket )
 		sphSockClose ( g_iSocket );
+
+#if USE_WINDOWS
+	CloseHandle ( g_hPipe );
+#endif
 
 	if ( g_bHeadDaemon )
 		sphInfo ( "shutdown complete" );
@@ -4832,6 +4837,12 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			argv = &dArgs[0];
 		}
 	}
+
+	const int PIPE_BUFSIZE = 32;
+	char szPipeName [64];
+	sprintf ( szPipeName, "\\\\.\\pipe\\searchd_%d", getpid() );
+	g_hPipe = CreateNamedPipe ( szPipeName, PIPE_ACCESS_INBOUND, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_NOWAIT, PIPE_UNLIMITED_INSTANCES, 0, PIPE_BUFSIZE, NMPWAIT_NOWAIT, NULL );
+	ConnectNamedPipe ( g_hPipe, NULL ); 
 #endif
 
 	int rsock;
@@ -4975,46 +4986,42 @@ int WINAPI ServiceMain ( int argc, char **argv )
 #if USE_WINDOWS
 		bool bTerminatedOk = false;
 
-		HANDLE hProc = OpenProcess ( SYNCHRONIZE, FALSE, iPid );
+		char szPipeName [64];
+		sprintf ( szPipeName, "\\\\.\\pipe\\searchd_%d", iPid );
 
-		if ( hProc )
-		{
-			bool bPIDFound = false;
-			bool bSendSuccess = false;
-			HANDLE hSnapshot = CreateToolhelp32Snapshot ( TH32CS_SNAPTHREAD, 0 );
-			if ( hSnapshot != INVALID_HANDLE_VALUE )
+		HANDLE hPipe = INVALID_HANDLE_VALUE;
+
+		while ( hPipe == INVALID_HANDLE_VALUE ) 
+		{ 
+			hPipe = CreateFile ( szPipeName, GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL );
+
+			if ( hPipe == INVALID_HANDLE_VALUE ) 
 			{
-				THREADENTRY32 tEntry;
-				tEntry.dwSize = sizeof ( tEntry );
-				if ( Thread32First ( hSnapshot, &tEntry ) )
+				if ( GetLastError () != ERROR_PIPE_BUSY ) 
 				{
-					do 
-					{
-						if ( tEntry.th32OwnerProcessID == DWORD ( iPid ) )
-						{
-							bPIDFound = true;
-							bSendSuccess = !!PostThreadMessage ( tEntry.th32ThreadID, WM_CLOSE, 0, 0 );
-						}
-					}
-					while ( Thread32Next ( hSnapshot, &tEntry ) );
+					fprintf ( stdout, "WARNING: could not open pipe (GetLastError()=%d)\n", GetLastError () );
+					break;
 				}
 
-				CloseHandle ( hSnapshot );
+				if ( !WaitNamedPipe ( szPipeName, 1000 ) ) 
+				{ 
+					fprintf ( stdout, "WARNING: could not open pipe (GetLastError()=%d)\n", GetLastError () );
+					break;
+				} 
 			}
+		} 
 
-			if ( !bPIDFound )
-				fprintf ( stdout, "WARNING: no process found by PID %d.\n", iPid );
-			else
-				if ( !bSendSuccess )
-					fprintf ( stdout, "WARNING: failed to send SIGTERM to searchd (pid=%d).\n", iPid );
+		if ( hPipe != INVALID_HANDLE_VALUE )
+		{	
+			DWORD uWritten = 0;
+			BYTE uWrite = 1;
+			BOOL bResult = WriteFile ( hPipe, &uWrite, 1, &uWritten, NULL );
+			if ( !bResult )
+				fprintf ( stdout, "WARNING: failed to send SIGHTERM to searchd (pid=%d, GetLastError()=%d)\n", iPid, GetLastError () );
 
-			if ( bPIDFound && bSendSuccess )
-			{
-				if ( WaitForSingleObject ( hProc, 10000 ) == WAIT_OBJECT_0 )
-					bTerminatedOk = true;
-			}
+			bTerminatedOk = !!bResult;
 
-			CloseHandle ( hProc ) ;
+			CloseHandle ( hPipe );
 		}
 
 		if ( bTerminatedOk )
@@ -5552,25 +5559,31 @@ int WINAPI ServiceMain ( int argc, char **argv )
 #endif
 
 #if USE_WINDOWS
-		MSG tMsg;
-		while ( PeekMessage ( &tMsg, NULL, 0, 0, PM_REMOVE ) )
+		BYTE dPipeInBuf [PIPE_BUFSIZE];
+		DWORD nBytesRead = 0;
+		BOOL bSuccess = ReadFile ( g_hPipe, dPipeInBuf, PIPE_BUFSIZE, &nBytesRead, NULL );
+		if ( nBytesRead > 0 && bSuccess )
 		{
-			switch ( tMsg.message )
+			for ( DWORD i = 0; i < nBytesRead; i++ )
 			{
-			case WM_USER:
-				g_bDoRotate = true;
-				g_bGotSighup = true;
-				break;
+				switch ( dPipeInBuf [i] )
+				{
+				case 0:
+					g_bDoRotate = true;
+					g_bGotSighup = true;
+					break;
 
-			case WM_CLOSE:
-				g_bGotSigterm = true;
-				if ( g_bService )
-					g_bServiceStop = true;
-				break;
+				case 1:
+					g_bGotSigterm = true;
+					if ( g_bService )
+						g_bServiceStop = true;
+					break;
+				}
+
 			}
 
-			TranslateMessage ( &tMsg );
-			DispatchMessage ( &tMsg );
+			DisconnectNamedPipe ( g_hPipe );
+			ConnectNamedPipe ( g_hPipe, NULL ); 
 		}
 #endif
 
@@ -5578,7 +5591,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		CheckPipes ();
 		CheckRotate ();
 		CheckReopen ();
-
+	
 		// we can't simply accept, because of the need to react to HUPs
 		fd_set fdsAccept;
 		FD_ZERO ( &fdsAccept );

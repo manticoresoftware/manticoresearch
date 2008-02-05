@@ -12576,6 +12576,11 @@ bool CSphIndex_VLN::Rename ( const char * sNewBase )
 
 		snprintf ( sFrom, sizeof(sFrom), "%s.%s", m_sFilename.cstr(), sExt );
 		snprintf ( sTo, sizeof(sTo), "%s.%s", sNewBase, sExt );
+
+#if USE_WINDOWS
+		::unlink ( sTo );
+#endif
+
 		if ( ::rename ( sFrom, sTo ) )
 		{
 			m_sLastError.SetSprintf ( "rename %s to %s failed: %s", sFrom, sTo, strerror(errno) );

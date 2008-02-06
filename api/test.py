@@ -18,7 +18,8 @@ if not sys.argv[1:]:
 	print "-f, --filter <ATTR>\tfilter by attribute 'ATTR' (default is 'group_id')"
 	print "-v, --value <VAL>\tadd VAL to allowed 'group_id' values list"
 	print "-g, --groupby <EXPR>\tgroup matches by 'EXPR'"
-	print "-gs, --groupsort <EXPR>\tsort groups by 'EXPR'"
+	print "-gs,--groupsort <EXPR>\tsort groups by 'EXPR'"
+	print "-l, --limit <COUNT>\tretrieve COUNT matches (default is 20)"
 	sys.exit(0)
 
 q = ''
@@ -31,6 +32,7 @@ filtervals = []
 sortby = ''
 groupby = ''
 groupsort = '@group desc'
+limit = 0
 
 i = 1
 while (i<len(sys.argv)):
@@ -65,6 +67,9 @@ while (i<len(sys.argv)):
 	elif arg=='-gs' or arg=='--groupsort':
 		i += 1
 		groupsort = sys.argv[i]
+	elif arg=='-l' or arg=='--limit':
+		i += 1
+		limit = int(sys.argv[i])
 	else:
 		q = '%s%s ' % ( q, arg )
 	i += 1
@@ -80,6 +85,8 @@ if groupby:
 	cl.SetGroupBy ( groupby, SPH_GROUPBY_ATTR, groupsort )
 if sortby:
 	cl.SetSortMode ( SPH_SORT_EXTENDED, sortby )
+if limit:
+	cl.SetLimits ( 0, limit, max(limit,1000) )
 res = cl.Query ( q, index )
 
 if not res:

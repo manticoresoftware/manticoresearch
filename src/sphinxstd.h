@@ -175,10 +175,10 @@ inline int		sphLog2 ( uint64_t iValue )
 }
 
 /// float vs dword conversion
-inline DWORD sphF2DW ( float f )	{ return *(DWORD *)&f; }
+inline DWORD sphF2DW ( float f )	{ union { float f; DWORD d; } u; u.f = f; return u.d; }
 
 /// dword vs float conversion
-inline float sphDW2F ( DWORD d )	{ return *(float *)&d; }
+inline float sphDW2F ( DWORD d )	{ union { float f; DWORD d; } u; u.d = d; return u.f; }
 
 /////////////////////////////////////////////////////////////////////////////
 // DEBUGGING

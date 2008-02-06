@@ -48,11 +48,6 @@
 	#include <sys/wait.h>
 	#include <netdb.h>
 
-	// for cache
-	#include <zlib.h>
-	#include <sys/mman.h>
-	#include <md5.h>
-
 	// there's no MSG_NOSIGNAL on OS X
 	#ifndef MSG_NOSIGNAL
 	#define MSG_NOSIGNAL 0
@@ -2040,7 +2035,7 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, Agent_t & tAgent
 					else if ( tAttr.m_eAttrType == SPH_ATTR_FLOAT )
 					{
 						float fRes = tReq.GetFloat();
-						tMatch.SetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount, *(DWORD*)&fRes  );
+						tMatch.SetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount, sphF2DW(fRes) );
 					}
 					else
 					{
@@ -3096,6 +3091,30 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				dLocal.Add ( pDist->m_dLocal[i] );
 	}
 
+	/////////////////////////////////////////////////////
+	// optimize single-query, same-schema local searches
+	/////////////////////////////////////////////////////
+
+	ISphMatchSorter * pLocalSorter = NULL;
+	while ( iStart==iEnd && dLocal.GetLength()>1 )
+	{
+		CSphString sError;
+
+		// check if all schemas are equal
+		bool bAllEqual = true;
+		const CSphSchema * pFirstSchema = g_hIndexes [ dLocal[0] ].m_pSchema;
+		for ( int i=1; i<dLocal.GetLength() && bAllEqual; i++ )
+		{
+			if ( pFirstSchema->CompareTo ( *g_hIndexes [ dLocal[i] ].m_pSchema, sError )!=SPH_SCHEMAS_EQUAL )
+				bAllEqual = false;
+		}
+
+		// we can reuse the very same sorter
+		if ( FixupQuery ( &m_dQueries[iStart], pFirstSchema, "local-sorter", sError ) )
+			pLocalSorter = sphCreateQueue ( &m_dQueries[iStart], *pFirstSchema, sError );
+		break;
+	}
+
 	///////////////////////////////////////////////////////////
 	// main query loop (with multiple retries for distributed)
 	///////////////////////////////////////////////////////////
@@ -3142,6 +3161,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			}
 
 			tmQuery = -sphLongTimer ();
+
 			ARRAY_FOREACH ( iLocal, dLocal )
 			{
 				const ServedIndex_t & tServed = g_hIndexes [ dLocal[iLocal] ];
@@ -3239,19 +3259,24 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 						CSphQuery & tQuery = m_dQueries[iQuery];
 						CSphString sError;
 
-						// fixup old queries
-						if ( !FixupQuery ( &tQuery, tServed.m_pSchema, dLocal[iLocal].cstr(), sError ) )
+						// create sorter, if needed
+						ISphMatchSorter * pSorter = pLocalSorter;
+						if ( !pLocalSorter )
 						{
-							m_dFailuresSet[iQuery].SubmitEx ( dLocal[iLocal].cstr(), "%s", sError.cstr() );
-							continue;
-						}
+							// fixup old queries
+							if ( !FixupQuery ( &tQuery, tServed.m_pSchema, dLocal[iLocal].cstr(), sError ) )
+							{
+								m_dFailuresSet[iQuery].SubmitEx ( dLocal[iLocal].cstr(), "%s", sError.cstr() );
+								continue;
+							}
 
-						// create queue
-						ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, *tServed.m_pSchema, sError );
-						if ( !pSorter )
-						{
-							m_dFailuresSet[iQuery].SubmitEx ( dLocal[iLocal].cstr(), "%s", sError.cstr() );
-							continue;
+							// create queue
+							pSorter = sphCreateQueue ( &tQuery, *tServed.m_pSchema, sError );
+							if ( !pSorter )
+							{
+								m_dFailuresSet[iQuery].SubmitEx ( dLocal[iLocal].cstr(), "%s", sError.cstr() );
+								continue;
+							}
 						}
 
 						// do query
@@ -3270,7 +3295,10 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 							m_dTag2MVA.Add ( tRes.m_pMva );
 							sphFlattenQueue ( pSorter, &tRes, m_iTag++ );
 						}
-						SafeDelete ( pSorter );
+
+						// throw away the sorter
+						if ( !pLocalSorter )
+							SafeDelete ( pSorter );
 					}
 				}
 			}
@@ -3392,6 +3420,9 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	}
 
 	assert ( m_iTag==m_dTag2MVA.GetLength() );
+
+	// cleanup
+	SafeDelete ( pLocalSorter );
 
 	/////////////////////
 	// merge all results

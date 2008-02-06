@@ -8117,20 +8117,25 @@ const DWORD * CSphIndex_VLN::FindDocinfo ( SphDocID_t uDocID )
 	assert ( m_tSchema.GetAttrsCount() );
 
 	int iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
-	SphDocID_t uFirst = DOCINFO2ID ( &m_pDocinfo[0] );
-	SphDocID_t uLast = DOCINFO2ID ( &m_pDocinfo[(m_uDocinfo-1)*iStride] );
-	if ( uDocID<uFirst || uDocID>uLast )
-		return NULL;
+	int iStart = 0;
+	int iEnd = m_uDocinfo-1;
 
-	DWORD uHash = (DWORD)( ( uDocID - uFirst ) >> m_pDocinfoHash[0] );
-	if ( uHash>(1<<DOCINFO_HASH_BITS) ) // possible in case of broken data, for instance
-		return NULL;
+	if ( m_pDocinfoHash.GetLength() )
+	{
+		SphDocID_t uFirst = DOCINFO2ID ( &m_pDocinfo[0] );
+		SphDocID_t uLast = DOCINFO2ID ( &m_pDocinfo[(m_uDocinfo-1)*iStride] );
+		if ( uDocID<uFirst || uDocID>uLast )
+			return NULL;
 
-	int iStart = m_pDocinfoHash [ uHash+1 ];
-	int iEnd = m_pDocinfoHash [ uHash+2 ] - 1;
+		DWORD uHash = (DWORD)( ( uDocID - uFirst ) >> m_pDocinfoHash[0] );
+		if ( uHash>(1<<DOCINFO_HASH_BITS) ) // possible in case of broken data, for instance
+			return NULL;
+
+		iStart = m_pDocinfoHash [ uHash+1 ];
+		iEnd = m_pDocinfoHash [ uHash+2 ] - 1;
+	}
 
 	const DWORD * pFound = NULL;
-
 	if ( uDocID==DOCINFO2ID ( &m_pDocinfo [ iStart*iStride ] ) )
 	{
 		pFound = &m_pDocinfo [ iStart*iStride ];
@@ -12191,11 +12196,12 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString * sWarning 
 			return NULL;
 		}
 
-		// prealloc
+		// prealloc docinfo
 		if ( !m_pDocinfo.Alloc ( DWORD(iDocinfoSize/sizeof(DWORD)), m_sLastError, sWarning ) )
 			return NULL;
 
-		if ( m_pDocinfoHash.IsEmpty() )
+		// prealloc docinfo hash but only if docinfo is big enough (in other words if hash is 8x+ less in size)
+		if ( m_pDocinfoHash.IsEmpty() && m_pDocinfo.GetLength() > (32<<DOCINFO_HASH_BITS) )
 			if ( !m_pDocinfoHash.Alloc ( (1<<DOCINFO_HASH_BITS)+4, m_sLastError, sWarning ) )
 				return NULL;
 
@@ -12319,7 +12325,7 @@ bool CSphIndex_VLN::Preread ()
 	//////////////////////
 
 	// build attributes hash
-	if ( m_pDocinfo.GetLength() )
+	if ( m_pDocinfo.GetLength() && m_pDocinfoHash.GetLength() )
 	{
 		int iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 		SphDocID_t uFirst = DOCINFO2ID ( &m_pDocinfo[0] );

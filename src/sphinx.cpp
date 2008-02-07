@@ -10000,6 +10000,7 @@ protected:
 	float						m_fIDF;			///< IDF for this term (might be 0.0f for non-1st occurences in query)
 	DWORD						m_uMaxStamp;	///< work until this timestamp 
 	CSphString *				m_pWarning;
+	bool						m_bOver;
 };
 
 
@@ -10200,6 +10201,7 @@ ExtTerm_c::ExtTerm_c ( const CSphString & sTerm, DWORD uFields, const CSphTermSe
 	m_uHitsOverFor = 0;
 	m_uFields = uFields;
 	m_uMaxStamp = tSetup.m_uMaxStamp;
+	m_bOver = false;
 }
 
 
@@ -10244,7 +10246,7 @@ const ExtDoc_t * ExtTerm_c::GetDocsChunk ()
 
 const ExtHit_t * ExtTerm_c::GetHitsChunk ( const ExtDoc_t * pMatched )
 {
-	if ( !pMatched )
+	if ( !pMatched || m_bOver )
 		return NULL;
 	SphDocID_t uFirstMatch = pMatched->m_uDocid;
 
@@ -10256,17 +10258,28 @@ const ExtHit_t * ExtTerm_c::GetHitsChunk ( const ExtDoc_t * pMatched )
 	{
 		// if we already emitted hits for this matches block, do not do that again
 		if ( uFirstMatch==m_uHitsOverFor )
+		{
+			if ( !m_tQword.m_iDocs ) m_bOver = true;
 			return NULL;
+		}
 
 		// find match
 		pDoc = m_dDocs;
 		do
 		{
 			while ( pDoc->m_uDocid < pMatched->m_uDocid ) pDoc++;
-			if ( pDoc->m_uDocid==DOCID_MAX ) return NULL; // matched docs block is over for me, gimme another one
+			if ( pDoc->m_uDocid==DOCID_MAX )
+			{
+				if ( !m_tQword.m_iDocs ) m_bOver = true;
+				return NULL; // matched docs block is over for me, gimme another one
+			}
 
 			while ( pMatched->m_uDocid < pDoc->m_uDocid ) pMatched++;
-			if ( pMatched->m_uDocid==DOCID_MAX ) return NULL; // matched doc block did not yet begin for me, gimme another one
+			if ( pMatched->m_uDocid==DOCID_MAX )
+			{
+				if ( !m_tQword.m_iDocs ) m_bOver = true;
+				return NULL; // matched doc block did not yet begin for me, gimme another one
+			}
 
 		} while ( pDoc->m_uDocid!=pMatched->m_uDocid );
 
@@ -10329,6 +10342,7 @@ const ExtHit_t * ExtTerm_c::GetHitsChunk ( const ExtDoc_t * pMatched )
 	assert ( iHit>=0 && iHit<MAX_HITS );
 	m_dHits[iHit].m_uDocid = DOCID_MAX;
 
+	if ( iHit==0 && !m_tQword.m_iDocs ) m_bOver = true;
 	return ( iHit!=0 ) ? m_dHits : NULL;
 }
 

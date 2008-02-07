@@ -9966,8 +9966,8 @@ public:
 	virtual						~ExtNode_i () {}
 	static ExtNode_i *			Create ( const CSphExtendedQueryNode * pNode, const CSphTermSetup & tSetup, DWORD uQuerypos, CSphString * pWarning );
 
-	virtual const ExtDoc_t *	GetDocsChunk () = 0;
-	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs ) = 0;
+	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID ) = 0;
+	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID ) = 0;
 
 	virtual void				GetQwords ( ExtQwordsHash_t & hQwords ) = 0;
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords ) = 0;
@@ -9976,8 +9976,22 @@ public:
 	static const int			MAX_DOCS = 512;
 	static const int			MAX_HITS = 512;
 
+protected:
 	ExtDoc_t					m_dDocs[MAX_DOCS];
 	ExtHit_t					m_dHits[MAX_HITS];
+	SphDocID_t					m_uMaxID;
+
+protected:
+	inline const ExtDoc_t *		ReturnDocsChunk ( int iCount, SphDocID_t * pMaxID )
+	{
+		assert ( iCount>=0 && iCount<MAX_DOCS );
+		m_dDocs[iCount].m_uDocid = DOCID_MAX;
+
+		m_uMaxID = iCount ? m_dDocs[iCount-1].m_uDocid : 0;
+		if ( pMaxID ) *pMaxID = m_uMaxID;
+
+		return iCount ? m_dDocs : NULL;
+	}
 };
 
 
@@ -9986,8 +10000,8 @@ class ExtTerm_c : public ExtNode_i
 {
 public:
 								ExtTerm_c ( const CSphString & sTerm, DWORD uFields, const CSphTermSetup & tSetup, DWORD uQuerypos, CSphString * pWarning );
-	virtual const ExtDoc_t *	GetDocsChunk ();
-	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs );
+	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
+	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
 	virtual void				GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
 
@@ -10000,7 +10014,6 @@ protected:
 	float						m_fIDF;			///< IDF for this term (might be 0.0f for non-1st occurences in query)
 	DWORD						m_uMaxStamp;	///< work until this timestamp 
 	CSphString *				m_pWarning;
-	bool						m_bOver;
 };
 
 
@@ -10026,8 +10039,8 @@ class ExtAnd_c : public ExtTwofer_c
 {
 public:
 								ExtAnd_c ( ExtNode_i * pFirst, ExtNode_i * pSecond ) : ExtTwofer_c ( pFirst, pSecond ) {}
-	virtual const ExtDoc_t *	GetDocsChunk ();
-	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs );
+	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
+	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
 };
 
 
@@ -10036,8 +10049,8 @@ class ExtOr_c : public ExtTwofer_c
 {
 public:
 								ExtOr_c ( ExtNode_i * pFirst, ExtNode_i * pSecond ) : ExtTwofer_c ( pFirst, pSecond ) {}
-	virtual const ExtDoc_t *	GetDocsChunk ();
-	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs );
+	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
+	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
 };
 
 
@@ -10046,8 +10059,8 @@ class ExtAndNot_c : public ExtTwofer_c
 {
 public:
 								ExtAndNot_c ( ExtNode_i * pFirst, ExtNode_i * pSecond );
-	virtual const ExtDoc_t *	GetDocsChunk ();
-	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs );
+	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
+	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
 
 protected:
 	bool						m_bPassthrough;
@@ -10060,14 +10073,15 @@ class ExtPhrase_c : public ExtNode_i
 public:
 								ExtPhrase_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, const CSphTermSetup & tSetup, DWORD uQuerypos, CSphString * pWarning );
 								~ExtPhrase_c ();
-	virtual const ExtDoc_t *	GetDocsChunk ();
-	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs );
+	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
+	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
 	virtual void				GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
 
 protected:
 	ExtNode_i *					m_pNode;				///< my and-node for all the terms
 	const ExtDoc_t *			m_pDocs;				///< current docs chunk from and-node
+	SphDocID_t					m_uDocsMaxID;			///< max id in current docs chunk
 	const ExtHit_t *			m_pHits;				///< current hits chunk from and-node
 	const ExtDoc_t *			m_pDoc;					///< current doc from and-node
 	const ExtHit_t *			m_pHit;					///< current hit from and-node
@@ -10092,7 +10106,7 @@ class ExtProximity_c : public ExtPhrase_c
 {
 public:
 								ExtProximity_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, const CSphTermSetup & tSetup, DWORD uQuerypos, CSphString * pWarning );
-	virtual const ExtDoc_t *	GetDocsChunk ();
+	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 
 protected:
 	int							m_iMaxDistance;
@@ -10201,14 +10215,15 @@ ExtTerm_c::ExtTerm_c ( const CSphString & sTerm, DWORD uFields, const CSphTermSe
 	m_uHitsOverFor = 0;
 	m_uFields = uFields;
 	m_uMaxStamp = tSetup.m_uMaxStamp;
-	m_bOver = false;
 }
 
 
-const ExtDoc_t * ExtTerm_c::GetDocsChunk ()
+const ExtDoc_t * ExtTerm_c::GetDocsChunk ( SphDocID_t * pMaxID )
 {
 	if ( !m_tQword.m_iDocs )
 		return NULL;
+
+	m_uMaxID = 0;
 
 	// max_query_time
 	if ( m_uMaxStamp>0 && sphTimerMsec()>=m_uMaxStamp )
@@ -10239,14 +10254,12 @@ const ExtDoc_t * ExtTerm_c::GetDocsChunk ()
 
 	m_pHitDoc = NULL;
 
-	assert ( iDoc>=0 && iDoc<MAX_DOCS );
-	m_dDocs[iDoc].m_uDocid = DOCID_MAX; // end marker
-	return iDoc ? m_dDocs : NULL;
+	return ReturnDocsChunk ( iDoc, pMaxID );
 }
 
-const ExtHit_t * ExtTerm_c::GetHitsChunk ( const ExtDoc_t * pMatched )
+const ExtHit_t * ExtTerm_c::GetHitsChunk ( const ExtDoc_t * pMatched, SphDocID_t uMaxID )
 {
-	if ( !pMatched || m_bOver )
+	if ( !pMatched )
 		return NULL;
 	SphDocID_t uFirstMatch = pMatched->m_uDocid;
 
@@ -10258,10 +10271,11 @@ const ExtHit_t * ExtTerm_c::GetHitsChunk ( const ExtDoc_t * pMatched )
 	{
 		// if we already emitted hits for this matches block, do not do that again
 		if ( uFirstMatch==m_uHitsOverFor )
-		{
-			if ( !m_tQword.m_iDocs ) m_bOver = true;
 			return NULL;
-		}
+
+		// early reject whole block
+		if ( pMatched->m_uDocid > m_uMaxID ) return NULL;
+		if ( m_uMaxID && m_dDocs[0].m_uDocid > uMaxID ) return NULL;
 
 		// find match
 		pDoc = m_dDocs;
@@ -10270,14 +10284,14 @@ const ExtHit_t * ExtTerm_c::GetHitsChunk ( const ExtDoc_t * pMatched )
 			while ( pDoc->m_uDocid < pMatched->m_uDocid ) pDoc++;
 			if ( pDoc->m_uDocid==DOCID_MAX )
 			{
-				if ( !m_tQword.m_iDocs ) m_bOver = true;
+				m_uHitsOverFor = uFirstMatch;
 				return NULL; // matched docs block is over for me, gimme another one
 			}
 
 			while ( pMatched->m_uDocid < pDoc->m_uDocid ) pMatched++;
 			if ( pMatched->m_uDocid==DOCID_MAX )
 			{
-				if ( !m_tQword.m_iDocs ) m_bOver = true;
+				m_uHitsOverFor = uFirstMatch;
 				return NULL; // matched doc block did not yet begin for me, gimme another one
 			}
 
@@ -10341,8 +10355,6 @@ const ExtHit_t * ExtTerm_c::GetHitsChunk ( const ExtDoc_t * pMatched )
 
 	assert ( iHit>=0 && iHit<MAX_HITS );
 	m_dHits[iHit].m_uDocid = DOCID_MAX;
-
-	if ( iHit==0 && !m_tQword.m_iDocs ) m_bOver = true;
 	return ( iHit!=0 ) ? m_dHits : NULL;
 }
 
@@ -10402,8 +10414,9 @@ void ExtTwofer_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 
 //////////////////////////////////////////////////////////////////////////
 
-const ExtDoc_t * ExtAnd_c::GetDocsChunk ()
+const ExtDoc_t * ExtAnd_c::GetDocsChunk ( SphDocID_t * pMaxID )
 {
+	m_uMaxID = 0;
 	const ExtDoc_t * pCur0 = m_pCurDoc[0];
 	const ExtDoc_t * pCur1 = m_pCurDoc[1];
 
@@ -10417,8 +10430,8 @@ const ExtDoc_t * ExtAnd_c::GetDocsChunk ()
 			if ( iDoc!=0 )
 				break;
 
-			if ( !pCur0 ) pCur0 = m_pChildren[0]->GetDocsChunk ();
-			if ( !pCur1 ) pCur1 = m_pChildren[1]->GetDocsChunk ();
+			if ( !pCur0 ) pCur0 = m_pChildren[0]->GetDocsChunk ( NULL );
+			if ( !pCur1 ) pCur1 = m_pChildren[1]->GetDocsChunk ( NULL );
 			if ( !pCur0 || !pCur1 )
 			{
 				m_pCurDoc[0] = NULL;
@@ -10457,12 +10470,10 @@ const ExtDoc_t * ExtAnd_c::GetDocsChunk ()
 	m_pCurDoc[0] = pCur0;
 	m_pCurDoc[1] = pCur1;
 
-	assert ( iDoc>=0 && iDoc<MAX_DOCS );
-	m_dDocs[iDoc].m_uDocid = DOCID_MAX; // end marker
-	return iDoc ? m_dDocs : NULL;
+	return ReturnDocsChunk ( iDoc, pMaxID );
 }
 
-const ExtHit_t * ExtAnd_c::GetHitsChunk ( const ExtDoc_t * pDocs )
+const ExtHit_t * ExtAnd_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID )
 {
 	const ExtHit_t * pCur0 = m_pCurHit[0];
 	const ExtHit_t * pCur1 = m_pCurHit[1];
@@ -10510,10 +10521,10 @@ const ExtHit_t * ExtAnd_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 			m_uMatchedDocid = 0;
 
 		// warmup if needed
-		if ( !pCur0 || pCur0->m_uDocid==DOCID_MAX ) pCur0 = m_pChildren[0]->GetHitsChunk ( pDocs );
+		if ( !pCur0 || pCur0->m_uDocid==DOCID_MAX ) pCur0 = m_pChildren[0]->GetHitsChunk ( pDocs, uMaxID );
 		if ( !pCur0 ) break;
 
-		if ( !pCur1 || pCur1->m_uDocid==DOCID_MAX ) pCur1 = m_pChildren[1]->GetHitsChunk ( pDocs );
+		if ( !pCur1 || pCur1->m_uDocid==DOCID_MAX ) pCur1 = m_pChildren[1]->GetHitsChunk ( pDocs, uMaxID );
 		if ( !pCur1 ) break;
 
 		assert ( pCur0 && pCur1 );
@@ -10536,14 +10547,14 @@ const ExtHit_t * ExtAnd_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 
 	assert ( iHit>=0 && iHit<MAX_HITS );
 	m_dHits[iHit].m_uDocid = DOCID_MAX;
-
-	return ( iHit!=0 ) ? m_dHits : NULL;
+	return iHit ? m_dHits : NULL;
 }
 
 //////////////////////////////////////////////////////////////////////////
 
-const ExtDoc_t * ExtOr_c::GetDocsChunk ()
+const ExtDoc_t * ExtOr_c::GetDocsChunk ( SphDocID_t * pMaxID )
 {
+	m_uMaxID = 0;
 	const ExtDoc_t * pCur0 = m_pCurDoc[0];
 	const ExtDoc_t * pCur1 = m_pCurDoc[1];
 
@@ -10555,12 +10566,12 @@ const ExtDoc_t * ExtOr_c::GetDocsChunk ()
 		if ( !pCur0 || pCur0->m_uDocid==DOCID_MAX )
 		{
 			if ( uTouched&1 ) break; // it was touched, so we can't advance, because child hitlist offsets would be lost
-			pCur0 = m_pChildren[0]->GetDocsChunk ();
+			pCur0 = m_pChildren[0]->GetDocsChunk ( NULL );
 		}
 		if ( !pCur1 || pCur1->m_uDocid==DOCID_MAX )
 		{
 			if ( uTouched&2 ) break; // it was touched, so we can't advance, because child hitlist offsets would be lost
-			pCur1 = m_pChildren[1]->GetDocsChunk ();
+			pCur1 = m_pChildren[1]->GetDocsChunk ( NULL );
 		}
 
 		// check if we're over
@@ -10624,12 +10635,10 @@ const ExtDoc_t * ExtOr_c::GetDocsChunk ()
 	m_pCurDoc[0] = pCur0;
 	m_pCurDoc[1] = pCur1;
 
-	assert ( iDoc>=0 && iDoc<MAX_DOCS );
-	m_dDocs[iDoc].m_uDocid = DOCID_MAX; // end marker
-	return iDoc ? m_dDocs : NULL;
+	return ReturnDocsChunk ( iDoc, pMaxID );
 }
 
-const ExtHit_t * ExtOr_c::GetHitsChunk ( const ExtDoc_t * pDocs )
+const ExtHit_t * ExtOr_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID )
 {
 	const ExtHit_t * pCur0 = m_pCurHit[0];
 	const ExtHit_t * pCur1 = m_pCurHit[1];
@@ -10677,8 +10686,8 @@ const ExtHit_t * ExtOr_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 			m_uMatchedDocid = 0;
 
 		// warmup if needed
-		if ( !pCur0 || pCur0->m_uDocid==DOCID_MAX ) pCur0 = m_pChildren[0]->GetHitsChunk ( pDocs );
-		if ( !pCur1 || pCur1->m_uDocid==DOCID_MAX ) pCur1 = m_pChildren[1]->GetHitsChunk ( pDocs );
+		if ( !pCur0 || pCur0->m_uDocid==DOCID_MAX ) pCur0 = m_pChildren[0]->GetHitsChunk ( pDocs, uMaxID );
+		if ( !pCur1 || pCur1->m_uDocid==DOCID_MAX ) pCur1 = m_pChildren[1]->GetHitsChunk ( pDocs, uMaxID );
 
 		if ( !pCur0 && !pCur1 ) break;
 		m_uMatchedDocid = ( pCur0 && pCur1 )
@@ -10702,13 +10711,14 @@ ExtAndNot_c::ExtAndNot_c ( ExtNode_i * pFirst, ExtNode_i * pSecond )
 {
 }
 
-const ExtDoc_t * ExtAndNot_c::GetDocsChunk ()
+const ExtDoc_t * ExtAndNot_c::GetDocsChunk ( SphDocID_t * pMaxID )
 {
 	// if reject-list is over, simply pass through to accept-list
 	if ( m_bPassthrough )
-		return m_pChildren[0]->GetDocsChunk ();
+		return m_pChildren[0]->GetDocsChunk ( pMaxID );
 
 	// otherwise, do some removals
+	m_uMaxID = 0;
 	const ExtDoc_t * pCur0 = m_pCurDoc[0];
 	const ExtDoc_t * pCur1 = m_pCurDoc[1];
 
@@ -10723,14 +10733,14 @@ const ExtDoc_t * ExtAndNot_c::GetDocsChunk ()
 				break;
 
 			// no matches so far; go pull
-			pCur0 = m_pChildren[0]->GetDocsChunk();
+			pCur0 = m_pChildren[0]->GetDocsChunk( NULL );
 			if ( !pCur0 )
 				break;
 		}
 
 		// pull more docs from reject, if nedeed
 		if ( !pCur1 || pCur1->m_uDocid==DOCID_MAX )
-			pCur1 = m_pChildren[1]->GetDocsChunk();
+			pCur1 = m_pChildren[1]->GetDocsChunk( NULL );
 
 		// if there's nothing to filter against, simply copy leftovers
 		if ( !pCur1 )
@@ -10775,14 +10785,12 @@ const ExtDoc_t * ExtAndNot_c::GetDocsChunk ()
 	m_pCurDoc[0] = pCur0;
 	m_pCurDoc[1] = pCur1;
 
-	assert ( iDoc>=0 && iDoc<MAX_DOCS );
-	m_dDocs[iDoc].m_uDocid = DOCID_MAX; // end marker
-	return iDoc ? m_dDocs : NULL;
+	return ReturnDocsChunk ( iDoc, pMaxID );
 }
 
-const ExtHit_t * ExtAndNot_c::GetHitsChunk ( const ExtDoc_t * pDocs )
+const ExtHit_t * ExtAndNot_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID )
 {
-	return m_pChildren[0]->GetHitsChunk ( pDocs );
+	return m_pChildren[0]->GetHitsChunk ( pDocs, uMaxID );
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -10833,12 +10841,14 @@ ExtPhrase_c::~ExtPhrase_c ()
 	SafeDelete ( m_pNode );
 }
 
-const ExtDoc_t * ExtPhrase_c::GetDocsChunk ()
+const ExtDoc_t * ExtPhrase_c::GetDocsChunk ( SphDocID_t * pMaxID )
 {
+	m_uMaxID = 0;
+
 	// initial warmup
 	if ( !m_pDoc )
 	{
-		if ( !m_pDocs ) m_pDocs = m_pNode->GetDocsChunk ();
+		if ( !m_pDocs ) m_pDocs = m_pNode->GetDocsChunk ( &m_uDocsMaxID );
 		if ( !m_pDocs ) return NULL; // no more docs
 		m_pDoc = m_pDocs;
 	}
@@ -10856,15 +10866,15 @@ const ExtDoc_t * ExtPhrase_c::GetDocsChunk ()
 		if ( !pHit || pHit->m_uDocid==DOCID_MAX )
 		{
 			// grab more hits
-			pHit = m_pHits = m_pNode->GetHitsChunk ( m_pDocs );
+			pHit = m_pHits = m_pNode->GetHitsChunk ( m_pDocs, m_uDocsMaxID );
 			if ( m_pHits ) continue;
 
 			// no more hits for current docs chunk; grab more docs
-			pDoc = m_pDocs = m_pNode->GetDocsChunk ();
+			pDoc = m_pDocs = m_pNode->GetDocsChunk ( &m_uDocsMaxID );
 			if ( !m_pDocs ) break;
 
 			// we got docs, there must be hits
-			pHit = m_pHits = m_pNode->GetHitsChunk ( m_pDocs );
+			pHit = m_pHits = m_pNode->GetHitsChunk ( m_pDocs, m_uDocsMaxID );
 			assert ( pHit );
 			continue;
 		}
@@ -10962,20 +10972,22 @@ const ExtDoc_t * ExtPhrase_c::GetDocsChunk ()
 	m_pMyHit = m_dMyHits;
 
 	// emit markes and return found matches
-	assert ( iDoc>=0 && iDoc<MAX_DOCS );
-	m_dDocs[iDoc].m_uDocid = DOCID_MAX; // end marker
-
 	assert ( iMyHit>=0 && iMyHit<MAX_HITS );
 	m_dMyHits[iMyHit].m_uDocid = DOCID_MAX; // end marker
-	return iDoc ? m_dDocs : NULL;
+
+	return ReturnDocsChunk ( iDoc, pMaxID );
 }
 
-const ExtHit_t * ExtPhrase_c::GetHitsChunk ( const ExtDoc_t * pDocs )
+const ExtHit_t * ExtPhrase_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID )
 {
 	// if we already emitted hits for this matches block, do not do that again
 	SphDocID_t uFirstMatch = pDocs->m_uDocid;
 	if ( uFirstMatch==m_uHitsOverFor )
 		return NULL;
+
+	// early reject whole block
+	if ( pDocs->m_uDocid > m_uMaxID ) return NULL;
+	if ( m_uMaxID && m_dDocs[0].m_uDocid > uMaxID ) return NULL;
 
 	// shortcuts
 	const ExtDoc_t * pMyDoc = m_pMyDoc;
@@ -11057,7 +11069,7 @@ const ExtHit_t * ExtPhrase_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 				// and-node hits chunk end reached? get some more
 				if ( pHit->m_uDocid==DOCID_MAX )
 				{
-					pHit = m_pHits = m_pNode->GetHitsChunk ( m_pDocs );
+					pHit = m_pHits = m_pNode->GetHitsChunk ( m_pDocs, m_uDocsMaxID );
 					if ( !pHit )
 					{
 						m_uMatchedDocid = 0;
@@ -11192,15 +11204,17 @@ ExtProximity_c::ExtProximity_c ( const CSphExtendedQueryNode * pNode, DWORD uFie
 	assert ( m_iMaxDistance>0 );
 }
 
-const ExtDoc_t * ExtProximity_c::GetDocsChunk ()
+const ExtDoc_t * ExtProximity_c::GetDocsChunk ( SphDocID_t * pMaxID )
 {
+	m_uMaxID = 0;
 	const ExtDoc_t * pDocs = NULL;
 	const ExtHit_t * pHits = NULL;
 
-	if ( !pDocs ) pDocs = m_pNode->GetDocsChunk ();
+	SphDocID_t uMaxID = 0;
+	if ( !pDocs ) pDocs = m_pNode->GetDocsChunk ( &uMaxID  );
 	if ( !pDocs ) return NULL;
 
-	if ( !pHits ) pHits = m_pNode->GetHitsChunk ( pDocs );
+	if ( !pHits ) pHits = m_pNode->GetHitsChunk ( pDocs, uMaxID );
 	assert ( pHits );
 
 	const ExtHit_t * pHit = pHits;
@@ -11223,18 +11237,18 @@ const ExtDoc_t * ExtProximity_c::GetDocsChunk ()
 		{
 			m_uExpID = m_uExpPos = m_uExpQpos = 0;
 
-			pHits = m_pNode->GetHitsChunk ( pDocs );
+			pHits = m_pNode->GetHitsChunk ( pDocs, uMaxID );
 			if ( pHits )
 			{
 				pHit = pHits;
 				continue;
 			}
 
-			pDoc = pDocs = m_pNode->GetDocsChunk ();
+			pDoc = pDocs = m_pNode->GetDocsChunk ( &uMaxID );
 			if ( !pDocs )
 				break;
 
-			pHit = pHits = m_pNode->GetHitsChunk ( pDocs );
+			pHit = pHits = m_pNode->GetHitsChunk ( pDocs, uMaxID );
 			assert ( pHit );
 			continue;
 		}
@@ -11350,12 +11364,10 @@ const ExtDoc_t * ExtProximity_c::GetDocsChunk ()
 		pHit++;
 	}
 
-	assert ( iDoc>=0 && iDoc<MAX_DOCS );
-	m_dDocs[iDoc].m_uDocid = DOCID_MAX; // end marker
-
 	assert ( iHit>=0 && iHit<MAX_HITS );
 	m_dMyHits[iHit].m_uDocid = DOCID_MAX; // end marker
-	return iDoc ? m_dDocs : NULL;
+
+	return ReturnDocsChunk ( iDoc, pMaxID );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -11395,14 +11407,15 @@ int ExtRanker_ProximityBM25_c::GetMatches ( int iFields, const int * pWeights )
 	int iMatches = 0;
 	const ExtHit_t * pHlist = m_pHitlist;
 	const ExtDoc_t * pDocs = m_pDoclist;
+	SphDocID_t uMaxID = 0;
 
 	// warmup if necessary
 	if ( !pHlist )
 	{
-		if ( !pDocs ) pDocs = m_pRoot->GetDocsChunk ();
+		if ( !pDocs ) pDocs = m_pRoot->GetDocsChunk ( &uMaxID );
 		if ( !pDocs ) return iMatches;
 
-		pHlist = m_pRoot->GetHitsChunk ( pDocs );
+		pHlist = m_pRoot->GetHitsChunk ( pDocs, uMaxID );
 		if ( !pHlist ) return iMatches;
 	}
 
@@ -11421,7 +11434,7 @@ int ExtRanker_ProximityBM25_c::GetMatches ( int iFields, const int * pWeights )
 			if ( pHlist->m_uDocid==DOCID_MAX )
 			{
 				assert ( pDocs );
-				pHlist = m_pRoot->GetHitsChunk ( pDocs );
+				pHlist = m_pRoot->GetHitsChunk ( pDocs, uMaxID );
 				if ( pHlist )
 					continue;
 			}
@@ -11447,14 +11460,14 @@ int ExtRanker_ProximityBM25_c::GetMatches ( int iFields, const int * pWeights )
 			{
 				// there are no more hits for current docs block; do we have a next one?
 				assert ( pDocs );
-				pDoc = pDocs = m_pRoot->GetDocsChunk ();
+				pDoc = pDocs = m_pRoot->GetDocsChunk ( &uMaxID );
 
 				// we don't, so bail out
 				if ( !pDocs )
 					break;
 
 				// we do, get some hits
-				pHlist = m_pRoot->GetHitsChunk ( pDocs );
+				pHlist = m_pRoot->GetHitsChunk ( pDocs, uMaxID );
 				assert ( pHlist ); // fresh docs block, must have hits
 			}
 
@@ -11501,7 +11514,7 @@ int ExtRanker_BM25_c::GetMatches ( int iFields, const int * pWeights )
 
 	while ( iMatches<ExtNode_i::MAX_DOCS )
 	{
-		if ( !pDoc || pDoc->m_uDocid==DOCID_MAX ) pDoc = m_pRoot->GetDocsChunk ();
+		if ( !pDoc || pDoc->m_uDocid==DOCID_MAX ) pDoc = m_pRoot->GetDocsChunk ( NULL );
 		if ( !pDoc ) { m_pDoclist = NULL; return iMatches; }
 
 		DWORD uRank = 0;
@@ -11531,7 +11544,7 @@ int ExtRanker_None_c::GetMatches ( int, const int * )
 
 	while ( iMatches<ExtNode_i::MAX_DOCS )
 	{
-		if ( !pDoc || pDoc->m_uDocid==DOCID_MAX ) pDoc = m_pRoot->GetDocsChunk ();
+		if ( !pDoc || pDoc->m_uDocid==DOCID_MAX ) pDoc = m_pRoot->GetDocsChunk ( NULL );
 		if ( !pDoc ) { m_pDoclist = NULL; return iMatches; }
 
 		m_dMatches[iMatches].m_iDocID = pDoc->m_uDocid;
@@ -11555,14 +11568,15 @@ int ExtRanker_Wordcount_c::GetMatches ( int, const int * pWeights )
 	int iMatches = 0;
 	const ExtHit_t * pHlist = m_pHitlist;
 	const ExtDoc_t * pDocs = m_pDoclist;
+	SphDocID_t uMaxID = 0;
 
 	// warmup if necessary
 	if ( !pHlist )
 	{
-		if ( !pDocs ) pDocs = m_pRoot->GetDocsChunk ();
+		if ( !pDocs ) pDocs = m_pRoot->GetDocsChunk ( &uMaxID );
 		if ( !pDocs ) return iMatches;
 
-		pHlist = m_pRoot->GetHitsChunk ( pDocs );
+		pHlist = m_pRoot->GetHitsChunk ( pDocs, uMaxID );
 		if ( !pHlist ) return iMatches;
 	}
 
@@ -11580,7 +11594,7 @@ int ExtRanker_Wordcount_c::GetMatches ( int, const int * pWeights )
 			if ( pHlist->m_uDocid==DOCID_MAX )
 			{
 				assert ( pDocs );
-				pHlist = m_pRoot->GetHitsChunk ( pDocs );
+				pHlist = m_pRoot->GetHitsChunk ( pDocs, uMaxID );
 				if ( pHlist )
 					continue;
 			}
@@ -11599,14 +11613,14 @@ int ExtRanker_Wordcount_c::GetMatches ( int, const int * pWeights )
 			{
 				// there are no more hits for current docs block; do we have a next one?
 				assert ( pDocs );
-				pDoc = pDocs = m_pRoot->GetDocsChunk ();
+				pDoc = pDocs = m_pRoot->GetDocsChunk ( &uMaxID );
 
 				// we don't, so bail out
 				if ( !pDocs )
 					break;
 
 				// we do, get some hits
-				pHlist = m_pRoot->GetHitsChunk ( pDocs );
+				pHlist = m_pRoot->GetHitsChunk ( pDocs, uMaxID );
 				assert ( pHlist ); // fresh docs block, must have hits
 			}
 

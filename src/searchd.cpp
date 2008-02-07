@@ -3110,8 +3110,9 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		}
 
 		// we can reuse the very same sorter
-		if ( FixupQuery ( &m_dQueries[iStart], pFirstSchema, "local-sorter", sError ) )
-			pLocalSorter = sphCreateQueue ( &m_dQueries[iStart], *pFirstSchema, sError );
+		if ( bAllEqual )
+			if ( FixupQuery ( &m_dQueries[iStart], pFirstSchema, "local-sorter", sError ) )
+				pLocalSorter = sphCreateQueue ( &m_dQueries[iStart], *pFirstSchema, sError );
 		break;
 	}
 

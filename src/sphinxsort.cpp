@@ -694,6 +694,8 @@ public:
 
 		m_iUsed = 0;
 		m_iTotal = 0;
+
+		m_hGroup2Match.Reset ();
 	}
 
 	/// get entries count

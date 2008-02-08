@@ -143,6 +143,11 @@ bool			sphIsReadable ( const char * sFilename, CSphString * pError=NULL );
 /// set throttling options
 void			sphSetThrottling ( int iMaxIOps, int iMaxIOSize );
 
+#if !USE_WINDOWS
+/// set process info
+void			sphSetProcessInfo ( bool bHead );
+#endif
+
 struct CSphIOStats
 {
 	float		m_fReadTime;

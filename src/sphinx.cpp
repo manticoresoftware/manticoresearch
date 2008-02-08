@@ -448,6 +448,15 @@ protected:
 	INT64 *		m_pTarget;
 };
 
+#else
+
+static bool g_bHeadProcess = true;
+
+void sphSetProcessInfo ( bool bHead )
+{
+	g_bHeadProcess = bHead;
+}
+
 #endif // USE_WINDOWS
 
 static bool g_bIOStats = false;
@@ -712,9 +721,12 @@ public:
 #if USE_WINDOWS
 		delete [] m_pData;
 #else
-		int iRes = munmap ( m_pData, m_iLength );
-		if ( iRes )
-			sphWarn ( "munmap() failed: %s", strerror(errno) );
+		if ( g_bHeadProcess )
+		{
+			int iRes = munmap ( m_pData, m_iLength );
+			if ( iRes )
+				sphWarn ( "munmap() failed: %s", strerror(errno) );
+		}
 #endif // USE_WINDOWS
 
 		m_pData = NULL;

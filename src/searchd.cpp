@@ -4199,6 +4199,7 @@ int PipeAndFork ( bool bFatal, bool bPrereader )
 		// child process, handle client
 		case 0:
 			g_bHeadDaemon = false;
+			sphSetProcessInfo ( false );
 			ARRAY_FOREACH ( i, g_dPipes )
 				SafeClose ( g_dPipes[i].m_iFD );
 			break;
@@ -5459,6 +5460,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 			default:
 				// tty-controlled parent
+				sphSetProcessInfo ( false );
 				exit ( 0 );
 		}
 	}
@@ -5618,6 +5620,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			ConnectNamedPipe ( g_hPipe, NULL ); 
 		}
 #endif
+
 
 		CheckLeaks ();
 		CheckPipes ();

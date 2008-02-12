@@ -5380,11 +5380,23 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	// handle my signals
 	#if !USE_WINDOWS
-	signal ( SIGCHLD, sigchld );
-	signal ( SIGTERM, sigterm );
-	signal ( SIGINT, sigterm );
-	signal ( SIGHUP, sighup );
-	signal ( SIGUSR1, sigusr1 );
+	struct sigaction sa;
+	sigfillset ( &sa.sa_mask );
+	sa.sa_flags = SA_NOCLDSTOP | SA_NOCLDWAIT;
+
+	bool bSignalsSet = false;
+	for ( ;; )
+	{
+		sa.sa_handler = sigterm;	if ( sigaction ( SIGTERM, &sa, NULL )!=0 ) break;
+		sa.sa_handler = sigterm;	if ( sigaction ( SIGINT, &sa, NULL )!=0 ) break;
+		sa.sa_handler = sighup;		if ( sigaction ( SIGHUP, &sa, NULL )!=0 ) break;
+		sa.sa_handler = sigusr1;	if ( sigaction ( SIGUSR1, &sa, NULL )!=0 ) break;
+		sa.sa_handler = sigchld;	if ( sigaction ( SIGCHLD, &sa, NULL )!=0 ) break;
+		bSignalsSet = true;
+		break;
+	}
+	if ( !bSignalsSet )
+		sphFatal ( "sigaction(): %s", strerror(errno) );
 	#endif // !USE_WINDOWS
 
 	// daemonize
@@ -5586,7 +5598,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 #if !USE_WINDOWS
 		if ( g_bGotSigchld )
 		{
-			while ( waitpid ( 0, NULL, WNOHANG ) > 0 )
+			while ( waitpid ( -1, NULL, WNOHANG ) > 0 )
 				g_iChildren--;
 			g_bGotSigchld = false;
 		}

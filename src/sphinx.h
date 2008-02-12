@@ -1340,6 +1340,16 @@ protected:
 };
 
 
+// keyword info
+struct CSphKeywordInfo
+{
+	CSphString		m_sTokenized;
+	CSphString		m_sNormalized;
+	int				m_iDocs;
+	int				m_iHits;
+};
+
+
 /// name+int pair
 struct CSphNamedInt
 {
@@ -1692,6 +1702,7 @@ public:
 	virtual CSphQueryResult *	Query ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery ) = 0;
 	virtual bool				QueryEx ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchSorter * pTop ) = 0;
 	virtual bool				MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters ) = 0;
+	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, ISphTokenizer * pTokenizer, CSphDict * pDict, const char * szQuery, bool bGetStats ) = 0;
 
 public:
 	/// updates memory-cached attributes in real time

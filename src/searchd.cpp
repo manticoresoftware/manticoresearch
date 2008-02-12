@@ -165,6 +165,7 @@ enum SearchdCommand_e
 	SEARCHD_COMMAND_SEARCH		= 0,
 	SEARCHD_COMMAND_EXCERPT		= 1,
 	SEARCHD_COMMAND_UPDATE		= 2,
+	SEARCHD_COMMAND_KEYWORDS	= 3,
 
 	SEARCHD_COMMAND_TOTAL
 };
@@ -175,7 +176,8 @@ enum
 {
 	VER_COMMAND_SEARCH		= 0x112,
 	VER_COMMAND_EXCERPT		= 0x100,
-	VER_COMMAND_UPDATE		= 0x101
+	VER_COMMAND_UPDATE		= 0x101,
+	VER_COMMAND_KEYWORDS	= 0x100
 };
 
 
@@ -3692,6 +3694,64 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 }
 
 /////////////////////////////////////////////////////////////////////////////
+// KEYWORDS HANDLER
+/////////////////////////////////////////////////////////////////////////////
+void HandleCommandKeywords ( int iSock, int iVer, InputBuffer_c & tReq )
+{
+	if ( !CheckCommandVersion ( iVer, VER_COMMAND_KEYWORDS, tReq ) )
+		return;
+
+	CSphString sQuery = tReq.GetString ();
+	CSphString sIndex = tReq.GetString ();
+	bool bGetStats = !!tReq.GetInt ();
+
+	const ServedIndex_t * pIndex = g_hIndexes(sIndex);
+	if ( !pIndex )
+	{
+		tReq.SendErrorReply ( "unknown local index '%s' in search request", sIndex.cstr() );
+		return;
+	}
+
+	CSphVector < CSphKeywordInfo > dKeywords;
+	dKeywords.Reserve ( SPH_MAX_QUERY_WORDS );
+
+	if ( !pIndex->m_pIndex->GetKeywords ( dKeywords, pIndex->m_pTokenizer, pIndex->m_pDict, sQuery.cstr (), bGetStats ) )
+	{
+		tReq.SendErrorReply ( "error generating keywords: %s", pIndex->m_pIndex->GetLastError ().cstr () );
+		return;
+	}
+
+	int iRespLen = 4;
+	ARRAY_FOREACH ( i, dKeywords )
+	{
+		iRespLen += 4 + strlen ( dKeywords [i].m_sTokenized.cstr () );
+		iRespLen += 4 + strlen ( dKeywords [i].m_sNormalized.cstr () );
+		if ( bGetStats )
+			iRespLen += 8;
+	}
+
+	NetOutputBuffer_c tOut ( iSock );
+	tOut.SendWord ( SEARCHD_OK );
+	tOut.SendWord ( VER_COMMAND_KEYWORDS );
+	tOut.SendInt ( iRespLen );
+	tOut.SendInt ( dKeywords.GetLength () );
+	ARRAY_FOREACH ( i, dKeywords )
+	{
+		tOut.SendString ( dKeywords [i].m_sTokenized.cstr () );
+		tOut.SendString ( dKeywords [i].m_sNormalized.cstr () );
+		if ( bGetStats )
+		{
+			tOut.SendInt ( dKeywords [i].m_iDocs );
+			tOut.SendInt ( dKeywords [i].m_iHits );
+		}
+	}
+
+	tOut.Flush ();
+	assert ( tOut.GetError()==true || tOut.GetSentCount()==iRespLen+8 );
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
 // UPDATES HANDLER
 /////////////////////////////////////////////////////////////////////////////
 
@@ -4005,6 +4065,7 @@ void HandleClient ( int iSock, const char * sClientIP, int iPipeFD )
 	{
 		case SEARCHD_COMMAND_SEARCH:	SafeClose ( iPipeFD ); HandleCommandSearch ( iSock, iCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_EXCERPT:	SafeClose ( iPipeFD ); HandleCommandExcerpt ( iSock, iCommandVer, tBuf ); break;
+		case SEARCHD_COMMAND_KEYWORDS:	SafeClose ( iPipeFD ); HandleCommandKeywords ( iSock, iCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_UPDATE:	HandleCommandUpdate ( iSock, iCommandVer, tBuf, iPipeFD ); SafeClose ( iPipeFD ); break;
 		default:						assert ( 0 && "INTERNAL ERROR: unhandled command" ); break;
 	}

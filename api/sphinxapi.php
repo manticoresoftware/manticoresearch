@@ -21,11 +21,13 @@
 define ( "SEARCHD_COMMAND_SEARCH",	0 );
 define ( "SEARCHD_COMMAND_EXCERPT",	1 );
 define ( "SEARCHD_COMMAND_UPDATE",	2 );
+define ( "SEARCHD_COMMAND_KEYWORDS",3 );
 
 /// current client-side command implementation versions
 define ( "VER_COMMAND_SEARCH",		0x112 );
 define ( "VER_COMMAND_EXCERPT",		0x100 );
 define ( "VER_COMMAND_UPDATE",		0x101 );
+define ( "VER_COMMAND_KEYWORDS",	0x100 );
 
 /// known searchd status codes
 define ( "SEARCHD_OK",				0 );
@@ -992,6 +994,91 @@ class SphinxClient
 			}
 			$res[] = $len ? substr ( $response, $pos, $len ) : "";
 			$pos += $len;
+		}
+
+		$this->_MBPop ();
+		return $res;
+	}
+
+
+	/////////////////////////////////////////////////////////////////////////////
+	// keyword generation
+	/////////////////////////////////////////////////////////////////////////////
+
+	/// connect to searchd server, and generate keyword list for a given query
+	/// returns false on failure,
+	/// an array of words on success
+	function BuildKeywords ( $query, $index, $hits )
+	{
+		assert ( is_string($query) );
+		assert ( is_string($index) );
+		assert ( is_bool($hits) );
+
+		$this->_MBPush ();
+
+		if (!( $fp = $this->_Connect() ))
+		{
+			$this->_MBPop();
+			return false;
+		}
+
+		/////////////////
+		// build request
+		/////////////////
+
+		// v.1.0 req
+		$req  = pack ( "N", strlen($query) ) . $query; // req query
+		$req .= pack ( "N", strlen($index) ) . $index; // req index
+		$req .= pack ( "N", (int)$hits );
+
+		////////////////////////////
+		// send query, get response
+		////////////////////////////
+
+		$len = strlen($req);
+		$req = pack ( "nnN", SEARCHD_COMMAND_KEYWORDS, VER_COMMAND_KEYWORDS, $len ) . $req; // add header
+		$wrote = fwrite ( $fp, $req, $len+8 );
+		if (!( $response = $this->_GetResponse ( $fp, VER_COMMAND_KEYWORDS ) ))
+		{
+			$this->_MBPop ();
+			return false;
+		}
+
+		//////////////////
+		// parse response
+		//////////////////
+
+		$pos = 0;
+		$res = array ();
+		$rlen = strlen($response);
+		list(,$nwords) = unpack ( "N*", substr ( $response, $pos, 4 ) );
+		$pos += 4;
+		for ( $i=0; $i<$nwords; $i++ )
+		{
+			list(,$len) = unpack ( "N*", substr ( $response, $pos, 4 ) );	$pos += 4;
+			$tokenized = $len ? substr ( $response, $pos, $len ) : "";
+			$pos += $len;
+
+			list(,$len) = unpack ( "N*", substr ( $response, $pos, 4 ) );	$pos += 4;
+			$normalized = $len ? substr ( $response, $pos, $len ) : "";
+			$pos += $len;
+
+			$res[] = array ( "tokenized"=>$tokenized, "normalized"=>$normalized );
+
+			if ( $hits )
+			{
+				list($ndocs,$nhits) = array_values ( unpack ( "N*N*", substr ( $response, $pos, 8 ) ) );
+				$pos += 8;
+				$res [$i]["docs"] = $ndocs;
+				$res [$i]["hits"] = $nhits;
+			}
+
+			if ( $pos > $rlen )
+			{
+				$this->_error = "incomplete reply";
+				$this->_MBPop ();
+				return false;
+			}
 		}
 
 		$this->_MBPop ();

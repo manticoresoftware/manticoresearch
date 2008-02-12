@@ -1060,18 +1060,22 @@ struct CSphTermSetup : ISphNoncopyable
 	ESphDocinfo				m_eDocinfo;
 	CSphDocInfo				m_tMin;
 	int						m_iToCalc;
-	const CSphAutofile &	m_tDoclist;
-	const CSphAutofile &	m_tHitlist;
+	int						m_iDoclistFD;
+	const CSphString &		m_sDoclistFilename;
+	int						m_iHitlistFD;
+	const CSphString &		m_sHitlistFilename;
 	DWORD					m_uMaxStamp;
 
-	CSphTermSetup ( const CSphAutofile & tDoclist, const CSphAutofile & tHitlist )
+	CSphTermSetup ( int iDoclistFD, const CSphString & sDoclistFilename, int iHitlistFD, const CSphString & sHitlistFilename )
 		: m_pTokenizer ( NULL )
 		, m_pDict ( NULL )
 		, m_pIndex ( NULL )
 		, m_eDocinfo ( SPH_DOCINFO_NONE )
 		, m_iToCalc ( 0 )
-		, m_tDoclist ( tDoclist )
-		, m_tHitlist ( tHitlist )
+		, m_iDoclistFD ( iDoclistFD )
+		, m_sDoclistFilename ( sDoclistFilename )
+		, m_iHitlistFD ( iHitlistFD )
+		, m_sHitlistFilename ( sHitlistFilename )
 		, m_uMaxStamp ( 0 )
 	{}
 };
@@ -1542,6 +1546,8 @@ struct CSphIndex_VLN : CSphIndex
 	virtual bool				QueryEx ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchSorter * pTop );
 	virtual bool				MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters );
 
+	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, ISphTokenizer * pTokenizer, CSphDict * pDict, const char * szQuery, bool bGetStats );
+
 	virtual bool				Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData );
 	void						MergeWordData ( CSphWordRecord & tDstWord, CSphWordRecord & tSrcWord );
 
@@ -1655,6 +1661,8 @@ private:
 	void						CheckExtendedQuery ( const CSphExtendedQueryNode * pNode, CSphQueryResult * pResult );
 	void						CheckBooleanQuery ( const CSphBooleanQueryExpr * pExpr, CSphQueryResult * pResult );
 
+	CSphDict *					SetupStarDict ( ISphTokenizer * pTokenizer, CSphDict * pDict );
+
 private:
 	static const int MAX_ORDINAL_STR_LEN	= 1024;		///< maximum ordinal string length in bytes
 	static const int ORDINAL_READ_SIZE		= 262144;	///< sorted ordinal id read buffer size in bytes
@@ -1666,7 +1674,7 @@ private:
 
 public:
 	// FIXME! this needs to be protected, and refactored as well
-	bool						SetupQueryWord ( CSphQueryWord & tWord, const CSphTermSetup & tTermSetup );
+	bool						SetupQueryWord ( CSphQueryWord & tWord, const CSphTermSetup & tTermSetup, bool bSetupReaders = true );
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -11915,7 +11923,7 @@ void CSphIndex_VLN::CheckQueryWord ( const char * szWord, CSphQueryResult * pRes
 
 //////////////////////////////////////////////////////////////////////////////
 
-bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, const CSphTermSetup & tTermSetup )
+bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, const CSphTermSetup & tTermSetup, bool bSetupReaders )
 {
 	tWord.m_iDocs = 0;
 	tWord.m_iHits = 0;
@@ -11998,15 +12006,20 @@ bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, const CSphTermSetup 
 		// it matches?!
 		if ( iWordID==tWord.m_iWordID )
 		{
-			// unpack next word ID and offset delta (ie. hitlist length)
-			sphUnzipWordid ( pBuf ); // might be 0 at checkpoint
-			SphOffset_t iDoclistLen = sphUnzipOffset ( pBuf );
-
-			tWord.m_rdDoclist.SetFile ( tTermSetup.m_tDoclist );
-			tWord.m_rdDoclist.SeekTo ( iDoclistOffset, (int)iDoclistLen );
-			tWord.m_rdHitlist.SetFile ( tTermSetup.m_tHitlist );
 			tWord.m_iDocs = iDocs;
 			tWord.m_iHits = iHits;
+
+			if ( bSetupReaders )
+			{
+				// unpack next word ID and offset delta (ie. hitlist length)
+				sphUnzipWordid ( pBuf ); // might be 0 at checkpoint
+				SphOffset_t iDoclistLen = sphUnzipOffset ( pBuf );
+
+				tWord.m_rdDoclist.SetFile ( tTermSetup.m_iDoclistFD, tTermSetup.m_sDoclistFilename.cstr () );
+				tWord.m_rdDoclist.SeekTo ( iDoclistOffset, (int)iDoclistLen );
+				tWord.m_rdHitlist.SetFile ( tTermSetup.m_iHitlistFD, tTermSetup.m_sHitlistFilename.cstr () );
+			}
+
 			return true;
 		}
 	}
@@ -12759,6 +12772,94 @@ bool CSphIndex_VLN::SetupCalc ( CSphQueryResult * pResult, const CSphQuery * pQu
 }
 
 
+CSphDict * CSphIndex_VLN::SetupStarDict  ( ISphTokenizer * pTokenizer, CSphDict * pDict )
+{
+	// setup proper dict
+	bool bUseStarDict = false;
+	if (
+		( m_uVersion>=7 && ( m_iMinPrefixLen>0 || m_iMinInfixLen>0 ) && m_bEnableStar ) || // v.7 added mangling to infixes
+		( m_uVersion==6 && ( m_iMinPrefixLen>0 ) && m_bEnableStar ) ) // v.6 added mangling to prefixes
+	{
+		bUseStarDict = true;
+	}
+
+	CSphDictStar tDictStar ( pDict );
+	CSphDictStarV8 tDictStarV8 ( pDict, m_iMinPrefixLen>0, m_iMinInfixLen>0 );
+	if ( bUseStarDict )
+	{
+		pDict = ( m_uVersion>=8 ) ? &tDictStarV8 : &tDictStar; // v.8 introduced new mangling rules
+
+		CSphRemapRange tStar ( '*', '*', '*' ); // FIXME? check and warn if star was already there
+		pTokenizer->AddCaseFolding ( tStar );
+	}
+
+	return pDict;
+}
+
+
+bool CSphIndex_VLN::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, ISphTokenizer * pTokenizer, CSphDict * pDict, const char * szQuery, bool bGetStats )
+{
+	assert ( pTokenizer );
+	assert ( pDict );
+
+	if ( m_bPreread.IsEmpty() || !m_bPreread[0] )
+	{
+		m_sLastError = "index not preread";
+		return false;
+	}
+
+	CSphScopedPtr <CSphAutofile> pDoclist ( NULL );
+	CSphScopedPtr <CSphAutofile> pHitlist ( NULL );
+
+	pDict = SetupStarDict ( pTokenizer, pDict );
+
+	// prepare for setup
+	CSphTermSetup tTermSetup ( -1, "", -1, "" );
+	tTermSetup.m_pTokenizer = pTokenizer;
+	tTermSetup.m_pDict = pDict;
+	tTermSetup.m_pIndex = this;
+	tTermSetup.m_eDocinfo = m_eDocinfo;
+	tTermSetup.m_tMin = m_tMin;
+
+	dKeywords.Resize ( 0 );
+
+	CSphQueryWord QueryWord;
+	CSphString sTokenized;
+	BYTE * sWord;
+	int nWords = 0;
+
+	CSphString sQbuf ( szQuery );
+	pTokenizer->SetBuffer ( (BYTE*)sQbuf.cstr(), strlen(szQuery) );
+
+	while ( ( sWord = pTokenizer->GetToken() )!=NULL && nWords<SPH_MAX_QUERY_WORDS )
+	{
+		sTokenized = (const char*)sWord;
+
+		SphWordID_t iWord = pDict->GetWordID ( sWord );
+		if ( iWord )
+		{
+			if ( bGetStats )
+			{
+				QueryWord.Reset ();
+				QueryWord.m_sWord = (const char*)sWord;
+				QueryWord.m_iWordID = iWord;
+				SetupQueryWord ( QueryWord, tTermSetup, false );
+			}
+
+			dKeywords.Resize ( dKeywords.GetLength () + 1 );
+			CSphKeywordInfo & tInfo = dKeywords.Last ();
+			Swap ( tInfo.m_sTokenized, sTokenized );
+			tInfo.m_sNormalized = (const char*)sWord;
+			tInfo.m_iDocs = bGetStats ? QueryWord.m_iDocs : 0;
+			tInfo.m_iHits = bGetStats ? QueryWord.m_iHits : 0;
+			++nWords;
+		}
+	}
+
+	return true;
+}
+
+
 bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters )
 {
 	assert ( pTokenizer );
@@ -12787,31 +12888,14 @@ bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, C
 	if ( tHitlist.GetFD()<0 )
 		return false;
 
-	// setup proper dict
-	bool bUseStarDict = false;
-	if (
-		( m_uVersion>=7 && ( m_iMinPrefixLen>0 || m_iMinInfixLen>0 ) && m_bEnableStar ) || // v.7 added mangling to infixes
-		( m_uVersion==6 && ( m_iMinPrefixLen>0 ) && m_bEnableStar ) ) // v.6 added mangling to prefixes
-	{
-		bUseStarDict = true;
-	}
-
-	CSphDictStar tDictStar ( pDict );
-	CSphDictStarV8 tDictStarV8 ( pDict, m_iMinPrefixLen>0, m_iMinInfixLen>0 );
-	if ( bUseStarDict )
-	{
-		pDict = ( m_uVersion>=8 ) ? &tDictStarV8 : &tDictStar; // v.8 introduced new mangling rules
-
-		CSphRemapRange tStar ( '*', '*', '*' ); // FIXME? check and warn if star was already there
-		pTokenizer->AddCaseFolding ( tStar );
-	}
+	pDict = SetupStarDict  ( pTokenizer, pDict );
 
 	// setup calculations and result schema
 	if ( !SetupCalc ( pResult, pQuery ) )
 		return false;
 
 	// prepare for setup
-	CSphTermSetup tTermSetup ( tDoclist, tHitlist );
+	CSphTermSetup tTermSetup ( tDoclist.GetFD (), tDoclist.GetFilename (), tHitlist.GetFD (), tHitlist.GetFilename () );
 	tTermSetup.m_pTokenizer = pTokenizer;
 	tTermSetup.m_pDict = pDict;
 	tTermSetup.m_pIndex = this;

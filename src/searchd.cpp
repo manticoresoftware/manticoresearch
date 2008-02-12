@@ -174,7 +174,7 @@ enum SearchdCommand_e
 /// known command versions
 enum
 {
-	VER_COMMAND_SEARCH		= 0x112,
+	VER_COMMAND_SEARCH		= 0x113,
 	VER_COMMAND_EXCERPT		= 0x100,
 	VER_COMMAND_UPDATE		= 0x101,
 	VER_COMMAND_KEYWORDS	= 0x100
@@ -1826,13 +1826,14 @@ protected:
 
 int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuery & q ) const
 {
-	int iReqSize = 92 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
+	int iReqSize = 96 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
 		+ strlen ( q.m_sSortBy.cstr() )
 		+ strlen ( q.m_sQuery.cstr() )
 		+ strlen ( sIndexes )
 		+ strlen ( q.m_sGroupBy.cstr() )
 		+ strlen ( q.m_sGroupSortBy.cstr() )
-		+ strlen ( q.m_sGroupDistinct.cstr() );
+		+ strlen ( q.m_sGroupDistinct.cstr() )
+		+ strlen ( q.m_sComment.cstr() );
 	ARRAY_FOREACH ( j, q.m_dFilters )
 	{
 		const CSphFilter & tFilter = q.m_dFilters[j];
@@ -1930,6 +1931,7 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 		tOut.SendString ( q.m_dFieldWeights[i].m_sName.cstr() );
 		tOut.SendInt ( q.m_dFieldWeights[i].m_iValue );
 	}
+	tOut.SendString ( q.m_sComment.cstr() );
 }
 
 
@@ -2423,6 +2425,10 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 		}
 	}
 
+	// v.1.19
+	if ( iVer>=0x113 )
+		tQuery.m_sComment = tReq.GetString ();
+
 	/////////////////////
 	// additional checks
 	/////////////////////
@@ -2490,8 +2496,7 @@ void LogQuery ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 	if ( g_iQueryLogFile<0 || !tRes.m_sError.IsEmpty() )
 		return;
 
-	char sTimeBuf[128], sGroupBuf[128];
-	char sBuf[1024], sPerfBuf [512];
+	char sTimeBuf[128], sGroupBuf[128], sPerfBuf[128], sTagBuf[128], sBuf[2048];
 
 	sphFormatCurrentTime ( sTimeBuf );
 
@@ -2509,13 +2514,19 @@ void LogQuery ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 			IOStats.m_iReadOps, IOStats.m_fReadKBytes, IOStats.m_fReadTime*1000.0f );
 	}
 	else
-		sPerfBuf [0] = '\0';
+		sPerfBuf[0] = '\0';
 
-	snprintf ( sBuf, sizeof(sBuf), "[%s] %d.%03d sec [%s/%d/%s %d (%d,%d)%s] [%s]%s %s\n",
+	if ( tQuery.m_sComment.IsEmpty() )
+		sTagBuf[0] = '\0';
+	else
+		snprintf ( sTagBuf, sizeof(sTagBuf), " [%s]", tQuery.m_sComment.cstr() );
+
+
+	snprintf ( sBuf, sizeof(sBuf), "[%s] %d.%03d sec [%s/%d/%s %d (%d,%d)%s] [%s]%s%s %s\n",
 		sTimeBuf, tRes.m_iQueryTime/1000, tRes.m_iQueryTime%1000,
 		sModes [ tQuery.m_eMode ], tQuery.m_dFilters.GetLength(), sSort [ tQuery.m_eSort ],
 		tRes.m_iTotalMatches, tQuery.m_iOffset, tQuery.m_iLimit, sGroupBuf,
-		tQuery.m_sIndexes.cstr(), sPerfBuf, tQuery.m_sQuery.cstr() );
+		tQuery.m_sIndexes.cstr(), sPerfBuf, sTagBuf, tQuery.m_sQuery.cstr() );
 
 	// snprintf does not emit zero at some runtimes (eg. VS2005)
 	sBuf[sizeof(sBuf)-2] = '\n';

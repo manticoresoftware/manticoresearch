@@ -3784,6 +3784,7 @@ CSphQuery::CSphQuery ()
 	, m_fGeoLatitude	( 0.0f )
 	, m_fGeoLongitude	( 0.0f )
 	, m_uMaxQueryMsec	( 0 )
+	, m_sComment		( "" )
 
 	, m_bCalcGeodist	( false )
 	, m_iPresortRowitems( -1 )

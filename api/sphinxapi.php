@@ -24,7 +24,7 @@ define ( "SEARCHD_COMMAND_UPDATE",	2 );
 define ( "SEARCHD_COMMAND_KEYWORDS",3 );
 
 /// current client-side command implementation versions
-define ( "VER_COMMAND_SEARCH",		0x112 );
+define ( "VER_COMMAND_SEARCH",		0x113 );
 define ( "VER_COMMAND_EXCERPT",		0x100 );
 define ( "VER_COMMAND_UPDATE",		0x101 );
 define ( "VER_COMMAND_KEYWORDS",	0x100 );
@@ -593,11 +593,11 @@ class SphinxClient
 
 	/// connect to searchd server, run given search query through given indexes,
 	/// and return the search results
-	function Query ( $query, $index="*" )
+	function Query ( $query, $index="*", $comment="" )
 	{
 		assert ( empty($this->_reqs) );
 
-		$this->AddQuery ( $query, $index );
+		$this->AddQuery ( $query, $index, $comment );
 		$results = $this->RunQueries ();
 
 		if ( !is_array($results) )
@@ -621,7 +621,7 @@ class SphinxClient
 
 	/// add query to multi-query batch
 	/// returns index into results array from RunQueries() call
-	function AddQuery ( $query, $index="*" )
+	function AddQuery ( $query, $index="*", $comment="" )
 	{
 		// mbstring workaround
 		$this->_MBPush ();
@@ -697,6 +697,9 @@ class SphinxClient
 		$req .= pack ( "N", count($this->_fieldweights) );
 		foreach ( $this->_fieldweights as $field=>$weight )
 			$req .= pack ( "N", strlen($field) ) . $field . pack ( "N", $weight );
+
+		// comment
+		$req .= pack ( "N", strlen($comment) ) . $comment;
 
 		// mbstring workaround
 		$this->_MBPop ();

@@ -1405,6 +1405,7 @@ public:
 	CSphVector<CSphNamedInt>	m_dFieldWeights;	///< per-field weights
 
 	DWORD			m_uMaxQueryMsec;	///< max local index search time, in milliseconds (default is 0; means no limit)
+	CSphString		m_sComment;			///< comment to pass verbatim in the log file
 
 public:
 	bool			m_bCalcGeodist;		///< whether this query needs to calc @geodist

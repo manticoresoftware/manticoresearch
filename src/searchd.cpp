@@ -5454,7 +5454,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	#if !USE_WINDOWS
 	struct sigaction sa;
 	sigfillset ( &sa.sa_mask );
-	sa.sa_flags = SA_NOCLDSTOP | SA_NOCLDWAIT;
+	sa.sa_flags = SA_NOCLDSTOP;
 
 	bool bSignalsSet = false;
 	for ( ;; )

@@ -58,9 +58,9 @@ public:
 	const char **	bas_ext () const;								///< my file extensions
 
 	#if MYSQL_VERSION_ID>50100
-	ulonglong		table_flags () const	{ return 0; }			///< bitmap of implemented flags (see handler.h for more info)
+	ulonglong		table_flags () const	{ return HA_CAN_INDEX_BLOBS; }			///< bitmap of implemented flags (see handler.h for more info)
 	#else
-	ulong			table_flags () const	{ return 0; }			///< bitmap of implemented flags (see handler.h for more info)
+	ulong			table_flags () const	{ return HA_CAN_INDEX_BLOBS; }			///< bitmap of implemented flags (see handler.h for more info)
 	#endif
 
 	ulong			index_flags ( uint, uint, bool ) const	{ return 0; }	///< bitmap of flags that says how SE implements indexes
@@ -112,8 +112,7 @@ public:
 	void			info ( uint );
 #endif
 
-	int				extra ( enum ha_extra_function operation );
-	int				reset() { return extra(HA_EXTRA_RESET); } // default does not do that in 5.1.x
+	int				reset();
 	int				external_lock ( THD * thd, int lock_type );
 	int				delete_all_rows ();
 	ha_rows			records_in_range ( uint inx, key_range * min_key, key_range * max_key );

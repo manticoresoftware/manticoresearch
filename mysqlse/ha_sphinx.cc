@@ -346,7 +346,7 @@ public:
 /// thread local storage
 struct CSphSEThreadData
 {
-	static const int	MAX_QUERY_LEN	= 65536; // 64k should be enough, right?
+	static const int	MAX_QUERY_LEN	= 262144; // 256k should be enough, right?
 
 	bool				m_bStats;
 	CSphSEStats			m_tStats;
@@ -571,7 +571,7 @@ static int sphinx_close_connection ( handlerton * hton, THD * thd )
 	SPH_ENTER_FUNC();
 	void ** tmp = thd_ha_data ( thd, hton );
 	CSphSEThreadData * pTls = (CSphSEThreadData*) (*tmp);
-	SafeDelete ( pStats );
+	SafeDelete ( pTls );
 	*tmp = NULL;
 	SPH_RET(0);
 }
@@ -595,7 +595,7 @@ static int sphinx_done_func ( void * p )
 }
 
 
-static int sphinx_panic ( handlerton * hton, enum ha_panic_function flag )
+static int sphinx_panic ( handlerton * hton, enum ha_panic_function )
 {
 	return sphinx_done_func ( hton );
 }
@@ -620,7 +620,7 @@ static int sphinx_close_connection ( THD * thd )
 
 #if MYSQL_VERSION_ID>50100
 static bool sphinx_show_status ( handlerton * hton, THD * thd, stat_print_fn * stat_print,
-	enum ha_stat_type stat_type )
+	enum ha_stat_type )
 #else
 bool sphinx_show_status ( THD * thd )
 #endif
@@ -1526,7 +1526,8 @@ ha_sphinx::ha_sphinx ( handlerton * hton, TABLE_ARG * table )
 	, m_dUnboundFields ( NULL )
 {
 	SPH_ENTER_METHOD();
-	table->in_use->variables.engine_condition_pushdown = true;
+	if ( current_thd )
+		current_thd->variables.engine_condition_pushdown = true;
 	SPH_VOID_RET();
 }
 
@@ -2274,15 +2275,12 @@ void ha_sphinx::info ( uint )
 }
 
 
-int ha_sphinx::extra ( enum ha_extra_function eFunc )
+int ha_sphinx::reset ()
 {
 	SPH_ENTER_METHOD();
-	if ( eFunc==HA_EXTRA_RESET )
-	{
-		CSphSEThreadData * pTls = GetTls ();
-		if ( pTls )
-			pTls->m_bQuery = false;
-	}
+	CSphSEThreadData * pTls = GetTls ();
+	if ( pTls )
+		pTls->m_bQuery = false;
 	SPH_RET(0);
 }
 
@@ -2408,9 +2406,11 @@ int ha_sphinx::create ( const char * name, TABLE * table, HA_CREATE_INFO * )
 			break;
 		}
 
-		if ( table->field[2]->type()!=MYSQL_TYPE_VARCHAR )
+		enum_field_types f2 = table->field[2]->type();
+		if ( f2!=MYSQL_TYPE_VARCHAR
+			&& f2!=MYSQL_TYPE_BLOB && f2!=MYSQL_TYPE_MEDIUM_BLOB && f2!=MYSQL_TYPE_LONG_BLOB && f2!=MYSQL_TYPE_TINY_BLOB )
 		{
-			my_snprintf ( sError, sizeof(sError), "%s: 3rd column (search query) MUST be varchar", name );
+			my_snprintf ( sError, sizeof(sError), "%s: 3rd column (search query) MUST be varchar or text", name );
 			break;
 		}
 

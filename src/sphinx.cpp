@@ -1661,7 +1661,7 @@ private:
 	void						CheckExtendedQuery ( const CSphExtendedQueryNode * pNode, CSphQueryResult * pResult );
 	void						CheckBooleanQuery ( const CSphBooleanQueryExpr * pExpr, CSphQueryResult * pResult );
 
-	CSphDict *					SetupStarDict ( ISphTokenizer * pTokenizer, CSphDict * pDict );
+	CSphDict *					SetupStarDict ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphScopedPtr<CSphDict> & tContainer );
 
 private:
 	static const int MAX_ORDINAL_STR_LEN	= 1024;		///< maximum ordinal string length in bytes
@@ -12773,7 +12773,7 @@ bool CSphIndex_VLN::SetupCalc ( CSphQueryResult * pResult, const CSphQuery * pQu
 }
 
 
-CSphDict * CSphIndex_VLN::SetupStarDict  ( ISphTokenizer * pTokenizer, CSphDict * pDict )
+CSphDict * CSphIndex_VLN::SetupStarDict  ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphScopedPtr<CSphDict> & tContainer )
 {
 	// setup proper dict
 	bool bUseStarDict = false;
@@ -12784,17 +12784,21 @@ CSphDict * CSphIndex_VLN::SetupStarDict  ( ISphTokenizer * pTokenizer, CSphDict 
 		bUseStarDict = true;
 	}
 
-	CSphDictStar tDictStar ( pDict );
-	CSphDictStarV8 tDictStarV8 ( pDict, m_iMinPrefixLen>0, m_iMinInfixLen>0 );
-	if ( bUseStarDict )
-	{
-		pDict = ( m_uVersion>=8 ) ? &tDictStarV8 : &tDictStar; // v.8 introduced new mangling rules
+	// no star? just return the original one
+	if ( !bUseStarDict )
+		return pDict;
 
-		CSphRemapRange tStar ( '*', '*', '*' ); // FIXME? check and warn if star was already there
-		pTokenizer->AddCaseFolding ( tStar );
-	}
+	// spawn wrapper, and put it in the box
+	// wrapper type depends on version; v.8 introduced new mangling rules
+	if ( m_uVersion>=8 )
+		tContainer = new CSphDictStarV8 ( pDict, m_iMinPrefixLen>0, m_iMinInfixLen>0 );
+	else
+		tContainer = new CSphDictStar ( pDict );
 
-	return pDict;
+	CSphRemapRange tStar ( '*', '*', '*' ); // FIXME? check and warn if star was already there
+	pTokenizer->AddCaseFolding ( tStar );
+
+	return tContainer.Ptr();
 }
 
 
@@ -12812,7 +12816,8 @@ bool CSphIndex_VLN::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, ISph
 	CSphScopedPtr <CSphAutofile> pDoclist ( NULL );
 	CSphScopedPtr <CSphAutofile> pHitlist ( NULL );
 
-	pDict = SetupStarDict ( pTokenizer, pDict );
+	CSphScopedPtr<CSphDict> tDict ( NULL );
+	pDict = SetupStarDict ( pTokenizer, pDict, tDict );
 
 	// prepare for setup
 	CSphTermSetup tTermSetup ( -1, "", -1, "" );
@@ -12889,7 +12894,8 @@ bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, C
 	if ( tHitlist.GetFD()<0 )
 		return false;
 
-	pDict = SetupStarDict  ( pTokenizer, pDict );
+	CSphScopedPtr<CSphDict> tDict ( NULL );
+	pDict = SetupStarDict  ( pTokenizer, pDict, tDict );
 
 	// setup calculations and result schema
 	if ( !SetupCalc ( pResult, pQuery ) )

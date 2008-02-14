@@ -72,6 +72,7 @@ struct ServedIndex_t
 	CSphString			m_sIndexPath;
 	bool				m_bEnabled;		///< to disable index in cases when rotation fails
 	bool				m_bMlock;
+	bool				m_bPreopen;
 	bool				m_bStar;
 	bool				m_bHtmlStrip;			///< html stripping settings for excerpts
 	CSphString			m_sHtmlIndexAttrs;		///< html stripping settings for excerpts
@@ -112,6 +113,7 @@ static bool				g_bLogTty		= false;			// cached isatty(g_iLogFile)
 static int				g_iReadTimeout	= 5;	// sec
 static int				g_iChildren		= 0;
 static int				g_iMaxChildren	= 0;
+static bool				g_bPreopenIndexes = false;
 static int				g_iSocket		= 0;
 static int				g_iQueryLogFile	= -1;
 static CSphString		g_sQueryLogFile;
@@ -234,6 +236,7 @@ void ServedIndex_t::Reset ()
 	m_pTokenizer= NULL;
 	m_bEnabled	= true;
 	m_bMlock	= false;
+	m_bPreopen	= false;
 	m_bStar		= false;
 }
 
@@ -4308,10 +4311,6 @@ void CheckLeaks ()
 
 void SeamlessTryToForkPrereader ()
 {
-	// alloc buffer index (once per run)
-	if ( !g_pPrereading )
-		g_pPrereading = sphCreateIndexPhrase ( NULL, false ); // FIXME! check if it's ok
-
 	// next in line
 	const char * sPrereading = g_dRotating.Pop ();
 	if ( !sPrereading || !g_hIndexes(sPrereading) )
@@ -4320,6 +4319,10 @@ void SeamlessTryToForkPrereader ()
 		return;
 	}
 	const ServedIndex_t & tServed = g_hIndexes[sPrereading];
+
+	// alloc buffer index (once per run)
+	if ( !g_pPrereading )
+		g_pPrereading = sphCreateIndexPhrase ( NULL, false, tServed.m_bPreopen || g_bPreopenIndexes ); // FIXME! check if it's ok
 
 	// rebase buffer index
 	char sNewPath [ SPH_MAX_FILENAME_LEN ];
@@ -5174,6 +5177,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( hSearchd.Exists ( "max_children" ) && hSearchd["max_children"].intval()>=0 )
 		g_iMaxChildren = hSearchd["max_children"].intval();
 
+	g_bPreopenIndexes = hSearchd.GetInt ( "preopen_indexes", (int)g_bPreopenIndexes ) != 0;
+
 	if ( hSearchd("max_matches") )
 	{
 		int iMax = hSearchd["max_matches"].intval();
@@ -5188,6 +5193,9 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	if ( hSearchd("seamless_rotate") )
 		g_bSeamlessRotate = ( hSearchd["seamless_rotate"].intval()!=0 );
+
+	if ( !g_bSeamlessRotate && g_bPreopenIndexes )
+		sphWarning ( "preopen_indexes=1 has no effect with seamless_rotate=0" );
 
 #if USE_WINDOWS
 	if ( g_bSeamlessRotate )
@@ -5406,7 +5414,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 			// try to create index
 			CSphString sWarning;
-			tIdx.m_pIndex = sphCreateIndexPhrase ( hIndex["path"].cstr(), tIdx.m_bStar );
+			tIdx.m_bPreopen = hIndex.GetInt ( "preopen", (int)tIdx.m_bPreopen ) != 0;
+			tIdx.m_pIndex = sphCreateIndexPhrase ( hIndex["path"].cstr(), tIdx.m_bStar, tIdx.m_bPreopen || g_bPreopenIndexes );
 			tIdx.m_pSchema = tIdx.m_pIndex->Prealloc ( tIdx.m_bMlock, &sWarning );
 			if ( !tIdx.m_pSchema || !tIdx.m_pIndex->Preread() )
 			{

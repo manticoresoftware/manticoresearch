@@ -517,19 +517,33 @@ protected:
 	CSphString	m_sFilename;	///< my file name
 
 public:
+	CSphAutofile ()
+		: m_iFD ( -1 )
+	{
+	}
+
 	CSphAutofile ( const char * sName, int iMode, CSphString & sError )
 	{
-		assert ( sName );
-		m_iFD = ::open ( sName, iMode, 0644 );
-		m_sFilename = sName;
-
-		if ( m_iFD<0 )
-			sError.SetSprintf ( "failed to open %s: %s", sName, strerror(errno) );
+		Open ( sName, iMode, sError );
 	}
 
 	~CSphAutofile ()
 	{
 		Close ();
+	}
+
+	int Open ( const char * szName, int iMode, CSphString & sError )
+	{
+		assert ( m_iFD == -1 && m_sFilename.IsEmpty () );
+		assert ( szName );
+
+		m_iFD = ::open ( szName, iMode, 0644 );
+		m_sFilename = szName;
+
+		if ( m_iFD<0 )
+			sError.SetSprintf ( "failed to open %s: %s", szName, strerror(errno) );
+
+		return m_iFD;
 	}
 
 	void Close ()
@@ -1060,22 +1074,18 @@ struct CSphTermSetup : ISphNoncopyable
 	ESphDocinfo				m_eDocinfo;
 	CSphDocInfo				m_tMin;
 	int						m_iToCalc;
-	int						m_iDoclistFD;
-	const CSphString &		m_sDoclistFilename;
-	int						m_iHitlistFD;
-	const CSphString &		m_sHitlistFilename;
+	const CSphAutofile &	m_tDoclist;
+	const CSphAutofile &	m_tHitlist;
 	DWORD					m_uMaxStamp;
 
-	CSphTermSetup ( int iDoclistFD, const CSphString & sDoclistFilename, int iHitlistFD, const CSphString & sHitlistFilename )
+	CSphTermSetup ( const CSphAutofile & tDoclist, const CSphAutofile & tHitlist )
 		: m_pTokenizer ( NULL )
 		, m_pDict ( NULL )
 		, m_pIndex ( NULL )
 		, m_eDocinfo ( SPH_DOCINFO_NONE )
 		, m_iToCalc ( 0 )
-		, m_iDoclistFD ( iDoclistFD )
-		, m_sDoclistFilename ( sDoclistFilename )
-		, m_iHitlistFD ( iHitlistFD )
-		, m_sHitlistFilename ( sHitlistFilename )
+		, m_tDoclist ( tDoclist )
+		, m_tHitlist ( tHitlist )
 		, m_uMaxStamp ( 0 )
 	{}
 };
@@ -1521,7 +1531,7 @@ struct CSphIndex_VLN : CSphIndex
 {
 	friend struct CSphDoclistRecord;
 
-								CSphIndex_VLN ( const char * sFilename, bool bEnableStar );
+								CSphIndex_VLN ( const char * sFilename, bool bEnableStar, bool bKeepFilesOpen );
 								~CSphIndex_VLN ();
 
 	virtual int					Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSources, int iMemoryLimit, ESphDocinfo eDocinfo );
@@ -1614,6 +1624,10 @@ private:
 	CSphSharedBuffer<BYTE>		m_pWordlist;			///< my wordlist cache
 	CSphWordlistCheckpoint *	m_pWordlistCheckpoints;	///< my wordlist cache checkpoints
 	int							m_iWordlistCheckpoints;	///< my wordlist cache checkpoints count
+
+	bool						m_bKeepFilesOpen;		///< keep files open to avoid race on seamless rotation
+	CSphAutofile				m_tDoclistFile;			///< doclist file
+	CSphAutofile				m_tHitlistFile;			///< hitlist file
 
 	bool						m_bPreallocated;		///< are we ready to preread
 	CSphSharedBuffer<BYTE>		m_bPreread;				///< are we ready to search
@@ -4747,16 +4761,17 @@ void CSphIndex::SetBoundaryStep ( int iBoundaryStep )
 
 /////////////////////////////////////////////////////////////////////////////
 
-CSphIndex * sphCreateIndexPhrase ( const char * sFilename, bool bEnableStar )
+CSphIndex * sphCreateIndexPhrase ( const char * sFilename, bool bEnableStar, bool bKeepFilesOpen )
 {
-	return new CSphIndex_VLN ( sFilename, bEnableStar );
+	return new CSphIndex_VLN ( sFilename, bEnableStar, bKeepFilesOpen );
 }
 
 
-CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename, bool bEnableStar )
-	: CSphIndex ( sFilename )
-	, m_iLockFD ( -1 )
-	, m_bEnableStar ( bEnableStar )
+CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename, bool bEnableStar, bool bKeepFilesOpen )
+	: CSphIndex			( sFilename )
+	, m_iLockFD			( -1 )
+	, m_bKeepFilesOpen	( bKeepFilesOpen )
+	, m_bEnableStar		( bEnableStar )
 {
 	m_sFilename = sFilename;
 
@@ -12016,9 +12031,9 @@ bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, const CSphTermSetup 
 				sphUnzipWordid ( pBuf ); // might be 0 at checkpoint
 				SphOffset_t iDoclistLen = sphUnzipOffset ( pBuf );
 
-				tWord.m_rdDoclist.SetFile ( tTermSetup.m_iDoclistFD, tTermSetup.m_sDoclistFilename.cstr () );
+				tWord.m_rdDoclist.SetFile ( tTermSetup.m_tDoclist );
 				tWord.m_rdDoclist.SeekTo ( iDoclistOffset, (int)iDoclistLen );
-				tWord.m_rdHitlist.SetFile ( tTermSetup.m_iHitlistFD, tTermSetup.m_sHitlistFilename.cstr () );
+				tWord.m_rdHitlist.SetFile ( tTermSetup.m_tHitlist );
 			}
 
 			return true;
@@ -12081,6 +12096,8 @@ void CSphIndex_VLN::Dealloc ()
 	if ( !m_bPreallocated )
 		return;
 
+	m_tDoclistFile.Close ();
+	m_tHitlistFile.Close ();
 	m_pDocinfo.Reset ();
 	m_pDocinfoHash.Reset ();
 	m_pWordlist.Reset ();
@@ -12304,6 +12321,15 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString * sWarning 
 	m_pWordlistCheckpoints = ( iCheckpointsPos>=iWordlistLen )
 		? NULL
 		: (CSphWordlistCheckpoint *)( &m_pWordlist[int(iCheckpointsPos)] );
+
+	if ( m_bKeepFilesOpen )
+	{
+		if ( m_tDoclistFile.Open ( GetIndexFileName("spd"), SPH_O_READ, m_sLastError ) < 0 )
+			return NULL;
+
+		if ( m_tHitlistFile.Open ( GetIndexFileName ( m_uVersion>=3 ? "spp" : "spd" ), SPH_O_READ, m_sLastError ) < 0 )
+			return NULL;
+	}
 
 	// all done
 	m_bPreallocated = true;
@@ -12820,7 +12846,8 @@ bool CSphIndex_VLN::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, ISph
 	pDict = SetupStarDict ( pTokenizer, pDict, tDict );
 
 	// prepare for setup
-	CSphTermSetup tTermSetup ( -1, "", -1, "" );
+	CSphAutofile tDummy1, tDummy2;
+	CSphTermSetup tTermSetup ( tDummy1, tDummy2 );
 	tTermSetup.m_pTokenizer = pTokenizer;
 	tTermSetup.m_pDict = pDict;
 	tTermSetup.m_pIndex = this;
@@ -12886,13 +12913,17 @@ bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, C
 		return false;
 	}
 
-	CSphAutofile tDoclist ( GetIndexFileName("spd"), SPH_O_READ, m_sLastError );
-	if ( tDoclist.GetFD()<0 )
-		return false;
+	CSphAutofile tDoclist;
+	CSphAutofile tHitlist;
 
-	CSphAutofile tHitlist ( GetIndexFileName ( m_uVersion>=3 ? "spp" : "spd" ), SPH_O_READ, m_sLastError );
-	if ( tHitlist.GetFD()<0 )
-		return false;
+	if ( !m_bKeepFilesOpen )
+	{
+		if ( tDoclist.Open ( GetIndexFileName("spd"), SPH_O_READ, m_sLastError ) < 0 )
+			return false;
+
+		if ( tHitlist.Open ( GetIndexFileName ( m_uVersion>=3 ? "spp" : "spd" ), SPH_O_READ, m_sLastError ) < 0 )
+			return false;
+	}
 
 	CSphScopedPtr<CSphDict> tDict ( NULL );
 	pDict = SetupStarDict  ( pTokenizer, pDict, tDict );
@@ -12902,7 +12933,7 @@ bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, C
 		return false;
 
 	// prepare for setup
-	CSphTermSetup tTermSetup ( tDoclist.GetFD (), tDoclist.GetFilename (), tHitlist.GetFD (), tHitlist.GetFilename () );
+	CSphTermSetup tTermSetup ( m_bKeepFilesOpen ? m_tDoclistFile : tDoclist, m_bKeepFilesOpen ? m_tHitlistFile : tHitlist );
 	tTermSetup.m_pTokenizer = pTokenizer;
 	tTermSetup.m_pDict = pDict;
 	tTermSetup.m_pIndex = this;

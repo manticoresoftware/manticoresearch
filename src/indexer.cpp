@@ -804,7 +804,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		sIndexPath.SetSprintf ( g_bRotate ? "%s.tmp" : "%s", hIndex["path"].cstr() );
 
 		// do index
-		CSphIndex * pIndex = sphCreateIndexPhrase ( sIndexPath.cstr(), hIndex ("enable_star" ) ? hIndex ["enable_star"].intval () != 0 : false );
+		CSphIndex * pIndex = sphCreateIndexPhrase ( sIndexPath.cstr(), hIndex.GetInt ( "enable_star" ) != 0, false );
 		assert ( pIndex );
 
 		// check lock file
@@ -883,8 +883,8 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 	}
 
 	// do the merge
-	CSphIndex * pSrc = sphCreateIndexPhrase ( hSrc["path"].cstr(), hSrc ("enable_star" ) ? hSrc ["enable_star"].intval () != 0 : false );
-	CSphIndex * pDst = sphCreateIndexPhrase ( hDst["path"].cstr(), hDst ("enable_star" ) ? hDst ["enable_star"].intval () != 0 : false );
+	CSphIndex * pSrc = sphCreateIndexPhrase ( hSrc["path"].cstr(), hSrc.GetInt ( "enable_star" ) != 0, false );
+	CSphIndex * pDst = sphCreateIndexPhrase ( hDst["path"].cstr(), hDst.GetInt ( "enable_star" ) != 0, false );
 	assert ( pSrc );
 	assert ( pDst );
 

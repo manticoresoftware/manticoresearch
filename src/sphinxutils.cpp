@@ -140,6 +140,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "html_strip",				0, NULL },
 	{ "html_index_attrs",		0, NULL },
 	{ "html_remove_elements",	0, NULL },
+	{ "preopen",				0, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -164,6 +165,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "pid_file",				0, NULL },
 	{ "max_matches",			0, NULL },
 	{ "seamless_rotate",		0, NULL },
+	{ "preopen_indexes",		0, NULL },
 	{ NULL,						0, NULL }
 };
 

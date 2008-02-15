@@ -523,6 +523,7 @@ public:
 	}
 
 	CSphAutofile ( const char * sName, int iMode, CSphString & sError )
+		: m_iFD ( -1 )
 	{
 		Open ( sName, iMode, sError );
 	}

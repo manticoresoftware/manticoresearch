@@ -11907,6 +11907,7 @@ void CSphIndex_VLN::MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISph
 		{
 			tMatch.m_iDocID = DOCINFO2ID(pDocinfo);
 			CopyDocinfo ( tMatch, pDocinfo );
+			EarlyCalc ( tMatch );
 
 			if ( EarlyReject ( tMatch, pQuery ) )
 				continue;

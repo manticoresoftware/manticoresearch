@@ -72,14 +72,14 @@ void TestTokenizer ( bool bUTF8 )
 	for ( int iRun=1; iRun<=2; iRun++ )
 	{
 		// simple "one-line" tests
-		char * sMagic = bUTF8
+		const char * sMagic = bUTF8
 			? "\xD1\x82\xD0\xB5\xD1\x81\xD1\x82\xD1\x82\xD1\x82" // valid UTF-8
 			: "\xC0\xC1\xF5\xF6"; // valid SBCS but invalid UTF-8
 
 		assert ( CreateSynonymsFile ( sMagic ) );
 		ISphTokenizer * pTokenizer = CreateTestTokenizer ( bUTF8, iRun==2 );
 
-		char * dTests[] =
+		const char * dTests[] =
 		{
 			"1", "",							NULL,								// test that empty strings work
 			"1", "this is my rifle",			"this", "is", "my", "rifle", NULL,	// test that tokenizing works
@@ -306,7 +306,7 @@ void TestStripper ()
 		{ "&lt; &gt; &thetasym; &somethingverylong; &the", "", "", "< > \xCF\x91 &somethingverylong; &the" }
 	};
 
-	for ( int iTest=0; iTest<sizeof(sTests)/sizeof(sTests[0]); iTest++ )
+	for ( int iTest=0; iTest<(int)(sizeof(sTests)/sizeof(sTests[0])); iTest++ )
 	{
 		printf ( "testing HTML stripper, test %d\n", 1+iTest );
 
@@ -441,9 +441,66 @@ void TestExpr ()
 	}
 }
 
+
+#if USE_WINDOWS
+__declspec(noinline)
+#endif
+float ExprNative ( const CSphMatch & tMatch )
+{
+	return float(tMatch.m_pRowitems[0]) + float(tMatch.m_pRowitems[1]) * ( float(tMatch.m_pRowitems[2]) ) - 0.75f;
+}
+
+
+void BenchExpr ()
+{
+	printf ( "benchmarking expressions\n" );
+
+	CSphColumnInfo tCol;
+	tCol.m_eAttrType = SPH_ATTR_INTEGER;
+
+	CSphSchema tSchema;
+	tCol.m_sName = "aaa"; tSchema.AddAttr ( tCol );
+	tCol.m_sName = "bbb"; tSchema.AddAttr ( tCol );
+	tCol.m_sName = "ccc"; tSchema.AddAttr ( tCol );
+
+	CSphMatch tMatch;
+	tMatch.m_iDocID = 123;
+	tMatch.m_iWeight = 456;
+	tMatch.m_iRowitems = tSchema.GetRowSize();
+	tMatch.m_pRowitems = new CSphRowitem [ tMatch.m_iRowitems ];
+	for ( int i=0; i<tMatch.m_iRowitems; i++ )
+		tMatch.m_pRowitems[i] = 1+i;
+
+	CSphString sError;
+	CSphExpr tExpr;
+	bool bRes = sphExprParse ( "aaa+bbb*(ccc)-0.75", tSchema, tExpr, sError );
+	if ( bRes!=true )
+	{
+		printf ( "FAILED; %s\n", sError.cstr() );
+		assert ( 0 );
+	}
+
+	const int NRUNS = 1000000;
+
+	volatile float fValue = 0.0f;
+	float fTime = sphLongTimer ();
+	for ( int i=0; i<NRUNS; i++ )
+		fValue += tExpr.Eval(tMatch);
+	fTime = sphLongTimer() - fTime;
+
+	float fTimeNative = sphLongTimer ();
+	for ( int i=0; i<NRUNS; i++ )
+		fValue += ExprNative ( tMatch );
+	fTimeNative = sphLongTimer() - fTimeNative;
+
+	printf ( "bytecode %.1f Mcalls/sec\nnative %.1f Mcalls/sec\n",
+		float(NRUNS)/float(1000000.0f)/fTime,
+		float(NRUNS)/float(1000000.0f)/fTimeNative );
+}
+
 //////////////////////////////////////////////////////////////////////////
 
-void main ()
+int main ()
 {
 	printf ( "RUNNING INTERNAL LIBSPHINX TESTS\n\n" );
 
@@ -451,6 +508,7 @@ void main ()
 	BenchStripper ();
 	BenchTokenizer ( false );
 	BenchTokenizer ( true );
+	BenchExpr ();
 #else
 	TestStripper ();
 	TestTokenizer ( false );
@@ -460,7 +518,7 @@ void main ()
 
 	unlink ( g_sTmpfile );
 	printf ( "\nSUCCESS\n" );
-	exit ( 0 );
+	return 0;
 }
 
 //

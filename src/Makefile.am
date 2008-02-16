@@ -1,14 +1,18 @@
-SRC_SPHINX = sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp sphinxsoundex.cpp sphinxmetaphone.cpp sphinxstemen.cpp sphinxstemru.cpp sphinxutils.cpp md5.cpp sphinxstd.cpp sphinxsort.cpp sphinxexpr.cpp
+SRC_SPHINX = sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp \
+	sphinxsoundex.cpp sphinxmetaphone.cpp sphinxstemen.cpp sphinxstemru.cpp \
+	sphinxutils.cpp md5.cpp sphinxstd.cpp sphinxsort.cpp sphinxexpr.cpp
 
 noinst_LIBRARIES = libsphinx.a
 libsphinx_a_SOURCES = $(SRC_SPHINX)
 
 bin_PROGRAMS = indexer searchd search spelldump
+noinst_PROGRAMS = tests
 
 indexer_SOURCES = indexer.cpp
 searchd_SOURCES = searchd.cpp
 search_SOURCES = search.cpp
 spelldump_SOURCES = spelldump.cpp
+tests_SOURCES = tests.cpp
 
 BUILT_SOURCES = extract-version
 .PHONY: extract-version
@@ -23,9 +27,11 @@ LIBSTEMMER_LIBS =
 AM_CPPFLAGS = -DSYSCONFDIR="\"$(sysconfdir)\""
 endif
 
-indexer_LDADD = libsphinx.a $(LIBSTEMMER_LIBS) $(MYSQL_LIBS) $(PGSQL_LIBS)
-searchd_LDADD = libsphinx.a $(LIBSTEMMER_LIBS) $(MYSQL_LIBS) $(PGSQL_LIBS) -lz
-search_LDADD = libsphinx.a $(LIBSTEMMER_LIBS) $(MYSQL_LIBS) $(PGSQL_LIBS)
-spelldump_LDADD = libsphinx.a $(LIBSTEMMER_LIBS) $(MYSQL_LIBS) $(PGSQL_LIBS)
+COMMON_LIBS = libsphinx.a $(LIBSTEMMER_LIBS) $(MYSQL_LIBS) $(PGSQL_LIBS)
+indexer_LDADD = $(COMMON_LIBS)
+searchd_LDADD = $(COMMON_LIBS) -lz
+search_LDADD = $(COMMON_LIBS)
+spelldump_LDADD = $(COMMON_LIBS)
+tests_LDADD = $(COMMON_LIBS)
 
 EXTRA_DIST = indexer.vcproj libsphinx.vcproj searchd.vcproj search.vcproj

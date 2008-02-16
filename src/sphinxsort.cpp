@@ -1438,6 +1438,7 @@ static ISphMatchSorter * sphCreateSorter1st ( ESphSortFunc eMatchFunc, bool bMat
 			case FUNC_GENERIC4:		pComp = new MatchGeneric4_fn<true>(); break;
 			case FUNC_GENERIC5:		pComp = new MatchGeneric5_fn<true>(); break;
 			case FUNC_CUSTOM:		pComp = new MatchCustom_fn<true>(); break;
+			case FUNC_EXPR:			pComp = NULL; break; // expr can't be bitfield
 		}
 	} else
 	{

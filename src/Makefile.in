@@ -15,7 +15,7 @@
 @SET_MAKE@
 
 
-SOURCES = $(libsphinx_a_SOURCES) $(indexer_SOURCES) $(search_SOURCES) $(searchd_SOURCES) $(spelldump_SOURCES)
+SOURCES = $(libsphinx_a_SOURCES) $(indexer_SOURCES) $(search_SOURCES) $(searchd_SOURCES) $(spelldump_SOURCES) $(tests_SOURCES)
 
 srcdir = @srcdir@
 top_srcdir = @top_srcdir@
@@ -39,6 +39,7 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 bin_PROGRAMS = indexer$(EXEEXT) searchd$(EXEEXT) search$(EXEEXT) \
 	spelldump$(EXEEXT)
+noinst_PROGRAMS = tests$(EXEEXT)
 subdir = src
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
@@ -63,26 +64,27 @@ am_libsphinx_a_OBJECTS = $(am__objects_1)
 libsphinx_a_OBJECTS = $(am_libsphinx_a_OBJECTS)
 am__installdirs = "$(DESTDIR)$(bindir)"
 binPROGRAMS_INSTALL = $(INSTALL_PROGRAM)
-PROGRAMS = $(bin_PROGRAMS)
+PROGRAMS = $(bin_PROGRAMS) $(noinst_PROGRAMS)
 am_indexer_OBJECTS = indexer.$(OBJEXT)
 indexer_OBJECTS = $(am_indexer_OBJECTS)
 @USE_LIBSTEMMER_TRUE@am__DEPENDENCIES_1 =  \
 @USE_LIBSTEMMER_TRUE@	$(top_srcdir)/libstemmer_c/libstemmer.a
 am__DEPENDENCIES_2 =
-indexer_DEPENDENCIES = libsphinx.a $(am__DEPENDENCIES_1) \
+am__DEPENDENCIES_3 = libsphinx.a $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_2) $(am__DEPENDENCIES_2)
+indexer_DEPENDENCIES = $(am__DEPENDENCIES_3)
 am_search_OBJECTS = search.$(OBJEXT)
 search_OBJECTS = $(am_search_OBJECTS)
-search_DEPENDENCIES = libsphinx.a $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_2) $(am__DEPENDENCIES_2)
+search_DEPENDENCIES = $(am__DEPENDENCIES_3)
 am_searchd_OBJECTS = searchd.$(OBJEXT)
 searchd_OBJECTS = $(am_searchd_OBJECTS)
-searchd_DEPENDENCIES = libsphinx.a $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_2) $(am__DEPENDENCIES_2)
+searchd_DEPENDENCIES = $(am__DEPENDENCIES_3)
 am_spelldump_OBJECTS = spelldump.$(OBJEXT)
 spelldump_OBJECTS = $(am_spelldump_OBJECTS)
-spelldump_DEPENDENCIES = libsphinx.a $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_2) $(am__DEPENDENCIES_2)
+spelldump_DEPENDENCIES = $(am__DEPENDENCIES_3)
+am_tests_OBJECTS = tests.$(OBJEXT)
+tests_OBJECTS = $(am_tests_OBJECTS)
+tests_DEPENDENCIES = $(am__DEPENDENCIES_3)
 DEFAULT_INCLUDES = -I. -I$(srcdir) -I$(top_builddir)/config
 depcomp = $(SHELL) $(top_srcdir)/config/depcomp
 am__depfiles_maybe = depfiles
@@ -92,9 +94,10 @@ CXXLD = $(CXX)
 CXXLINK = $(CXXLD) $(AM_CXXFLAGS) $(CXXFLAGS) $(AM_LDFLAGS) $(LDFLAGS) \
 	-o $@
 SOURCES = $(libsphinx_a_SOURCES) $(indexer_SOURCES) $(search_SOURCES) \
-	$(searchd_SOURCES) $(spelldump_SOURCES)
+	$(searchd_SOURCES) $(spelldump_SOURCES) $(tests_SOURCES)
 DIST_SOURCES = $(libsphinx_a_SOURCES) $(indexer_SOURCES) \
-	$(search_SOURCES) $(searchd_SOURCES) $(spelldump_SOURCES)
+	$(search_SOURCES) $(searchd_SOURCES) $(spelldump_SOURCES) \
+	$(tests_SOURCES)
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
@@ -192,22 +195,28 @@ sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 sysconfdir = @sysconfdir@
 target_alias = @target_alias@
-SRC_SPHINX = sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp sphinxsoundex.cpp sphinxmetaphone.cpp sphinxstemen.cpp sphinxstemru.cpp sphinxutils.cpp md5.cpp sphinxstd.cpp sphinxsort.cpp sphinxexpr.cpp
+SRC_SPHINX = sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp \
+	sphinxsoundex.cpp sphinxmetaphone.cpp sphinxstemen.cpp sphinxstemru.cpp \
+	sphinxutils.cpp md5.cpp sphinxstd.cpp sphinxsort.cpp sphinxexpr.cpp
+
 noinst_LIBRARIES = libsphinx.a
 libsphinx_a_SOURCES = $(SRC_SPHINX)
 indexer_SOURCES = indexer.cpp
 searchd_SOURCES = searchd.cpp
 search_SOURCES = search.cpp
 spelldump_SOURCES = spelldump.cpp
+tests_SOURCES = tests.cpp
 BUILT_SOURCES = extract-version
 @USE_LIBSTEMMER_FALSE@LIBSTEMMER_LIBS = 
 @USE_LIBSTEMMER_TRUE@LIBSTEMMER_LIBS = $(top_srcdir)/libstemmer_c/libstemmer.a
 @USE_LIBSTEMMER_FALSE@AM_CPPFLAGS = -DSYSCONFDIR="\"$(sysconfdir)\""
 @USE_LIBSTEMMER_TRUE@AM_CPPFLAGS = -I$(top_srcdir)/libstemmer_c/include -DSYSCONFDIR="\"$(sysconfdir)\""
-indexer_LDADD = libsphinx.a $(LIBSTEMMER_LIBS) $(MYSQL_LIBS) $(PGSQL_LIBS)
-searchd_LDADD = libsphinx.a $(LIBSTEMMER_LIBS) $(MYSQL_LIBS) $(PGSQL_LIBS) -lz
-search_LDADD = libsphinx.a $(LIBSTEMMER_LIBS) $(MYSQL_LIBS) $(PGSQL_LIBS)
-spelldump_LDADD = libsphinx.a $(LIBSTEMMER_LIBS) $(MYSQL_LIBS) $(PGSQL_LIBS)
+COMMON_LIBS = libsphinx.a $(LIBSTEMMER_LIBS) $(MYSQL_LIBS) $(PGSQL_LIBS)
+indexer_LDADD = $(COMMON_LIBS)
+searchd_LDADD = $(COMMON_LIBS) -lz
+search_LDADD = $(COMMON_LIBS)
+spelldump_LDADD = $(COMMON_LIBS)
+tests_LDADD = $(COMMON_LIBS)
 EXTRA_DIST = indexer.vcproj libsphinx.vcproj searchd.vcproj search.vcproj
 all: $(BUILT_SOURCES)
 	$(MAKE) $(AM_MAKEFLAGS) all-am
@@ -273,6 +282,9 @@ uninstall-binPROGRAMS:
 
 clean-binPROGRAMS:
 	-test -z "$(bin_PROGRAMS)" || rm -f $(bin_PROGRAMS)
+
+clean-noinstPROGRAMS:
+	-test -z "$(noinst_PROGRAMS)" || rm -f $(noinst_PROGRAMS)
 indexer$(EXEEXT): $(indexer_OBJECTS) $(indexer_DEPENDENCIES) 
 	@rm -f indexer$(EXEEXT)
 	$(CXXLINK) $(indexer_LDFLAGS) $(indexer_OBJECTS) $(indexer_LDADD) $(LIBS)
@@ -285,6 +297,9 @@ searchd$(EXEEXT): $(searchd_OBJECTS) $(searchd_DEPENDENCIES)
 spelldump$(EXEEXT): $(spelldump_OBJECTS) $(spelldump_DEPENDENCIES) 
 	@rm -f spelldump$(EXEEXT)
 	$(CXXLINK) $(spelldump_LDFLAGS) $(spelldump_OBJECTS) $(spelldump_LDADD) $(LIBS)
+tests$(EXEEXT): $(tests_OBJECTS) $(tests_DEPENDENCIES) 
+	@rm -f tests$(EXEEXT)
+	$(CXXLINK) $(tests_LDFLAGS) $(tests_OBJECTS) $(tests_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -308,6 +323,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sphinxstemen.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sphinxstemru.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sphinxutils.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tests.Po@am__quote@
 
 .cpp.o:
 @am__fastdepCXX_TRUE@	if $(CXXCOMPILE) -MT $@ -MD -MP -MF "$(DEPDIR)/$*.Tpo" -c -o $@ $<; \
@@ -436,7 +452,7 @@ maintainer-clean-generic:
 clean: clean-am
 
 clean-am: clean-binPROGRAMS clean-generic clean-noinstLIBRARIES \
-	mostlyclean-am
+	clean-noinstPROGRAMS mostlyclean-am
 
 distclean: distclean-am
 	-rm -rf ./$(DEPDIR)
@@ -484,15 +500,15 @@ ps-am:
 uninstall-am: uninstall-binPROGRAMS uninstall-info-am
 
 .PHONY: CTAGS GTAGS all all-am check check-am clean clean-binPROGRAMS \
-	clean-generic clean-noinstLIBRARIES ctags distclean \
-	distclean-compile distclean-generic distclean-tags distdir dvi \
-	dvi-am html html-am info info-am install install-am \
-	install-binPROGRAMS install-data install-data-am install-exec \
-	install-exec-am install-info install-info-am install-man \
-	install-strip installcheck installcheck-am installdirs \
-	maintainer-clean maintainer-clean-generic mostlyclean \
-	mostlyclean-compile mostlyclean-generic pdf pdf-am ps ps-am \
-	tags uninstall uninstall-am uninstall-binPROGRAMS \
+	clean-generic clean-noinstLIBRARIES clean-noinstPROGRAMS ctags \
+	distclean distclean-compile distclean-generic distclean-tags \
+	distdir dvi dvi-am html html-am info info-am install \
+	install-am install-binPROGRAMS install-data install-data-am \
+	install-exec install-exec-am install-info install-info-am \
+	install-man install-strip installcheck installcheck-am \
+	installdirs maintainer-clean maintainer-clean-generic \
+	mostlyclean mostlyclean-compile mostlyclean-generic pdf pdf-am \
+	ps ps-am tags uninstall uninstall-am uninstall-binPROGRAMS \
 	uninstall-info-am
 
 .PHONY: extract-version

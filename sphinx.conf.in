@@ -359,6 +359,12 @@ index test1
 	# optional, default is empty (do not strip element contents)
 	#
 	# html_remove_elements	= style, script
+
+
+	# whether to preopen index data files on startup
+	# optional, default is 0 (do not preopen)
+	#
+	# preopen				= 1
 }
 
 
@@ -377,22 +383,6 @@ index test1stemmed : test1
 #
 # this is a virtual index which can NOT be directly indexed,
 # and only contains references to other local and/or remote indexes
-#
-# if searchd receives a query against this index,
-# it does the following:
-#
-# 1) connects to all the specified remote agents,
-# 2) issues the query,
-# 3) searches local indexes (while the remote agents are searching),
-# 4) collects remote search results,
-# 5) merges all the results together (removing the duplicates),
-# 6) sends the merged resuls to client.
-#
-# this index type is primarily intenteded to be able to split huge (100GB+)
-# datasets into chunks placed on different physical servers and them search
-# through those chunks in parallel, reducing response times and server load;
-# it seems, however, that it could also be used to take advantage of
-# multi-processor systems or to implement HA (high-availability) search.
 index dist1
 {
 	# 'distributed' index type MUST be specified
@@ -424,37 +414,20 @@ index dist1
 
 indexer
 {
-	# memory limit
-	#
-	# may be specified in bytes (no postfix), kilobytes (mem_limit=1000K)
-	# or megabytes (mem_limit=10M)
-	#
-	# will grow if set unacceptably low
-	# will warn if set too low and potentially hurting the performance
-	#
-	# optional, default is 32M
+	# memory limit, in bytes, kiloytes (16384K) or megabytes (256M)
+	# optional, default is 32M, max is 2047M, recommended is 256M to 1024M
 	mem_limit			= 32M
 
-	# maximum IO call size, bytes
-	#
-	# this option is for IO throttling. it controls maximum file
-	# IO operation (read or write) length performed by indexer.
-	# 0 means that no limit is imposed.
-	#
-	# optional, default is 0
-	#
-	# max_iosize		= 1048576
-
-
-	# maximum IO calls per second
-	#
-	# this option is for IO throttling. it controls guaranteed delay
-	# between subsequent file IO operations performed by indexer.
-	# 0 means that no limit is imposed.
-	#
-	# optional, default is 0
+	# maximum IO calls per second (for I/O throttling)
+	# optional, default is 0 (unlimited)
 	#
 	# max_iops			= 40
+
+
+	# maximum IO call size, bytes (for I/O throttling)
+	# optional, default is 0 (unlimited)
+	#
+	# max_iosize		= 1048576
 }
 
 #############################################################################
@@ -463,66 +436,49 @@ indexer
 
 searchd
 {
-	# IP address on which search daemon will bind and accept
-	# incoming network requests
-	#
-	# optional, default is to listen on all addresses,
-	# ie. address = 0.0.0.0
+	# IP address to bind on
+	# optional, default is 0.0.0.0 (ie. listen on all interfaces)
 	#
 	# address				= 127.0.0.1
 	# address				= 192.168.0.1
 
 
-	# port on which search daemon will listen
+	# searchd TCP port number
+	# mandatory, default is 3312
 	port				= 3312
 
-
-	# log file
-	# searchd run info is logged here
+	# log file, searchd run info is logged here
+	# optional, default is 'searchd.log'
 	log					= @CONFDIR@/log/searchd.log
 
-
-	# query log file
-	# all the search queries are logged here
+	# query log file, all search queries are logged here
+	# optional, default is empty (do not log queries)
 	query_log			= @CONFDIR@/log/query.log
 
-
 	# client read timeout, seconds
+	# optional, default is 5
 	read_timeout		= 5
 
-
-	# maximum amount of children to fork
-	# useful to control server load
+	# maximum amount of children to fork (concurrent searches to run)
+	# optional, default is 0 (unlimited)
 	max_children		= 30
 
-
-	# a file which will contain searchd process ID
-	# used for different external automation scripts
-	# MUST be present
+	# PID file, searchd process ID file name
+	# mandatory
 	pid_file			= @CONFDIR@/log/searchd.pid
 
-
-	# maximum amount of matches this daemon would ever retrieve
-	# from each index and serve to client
-	#
-	# this parameter affects per-client memory and CPU usage
-	# (16+ bytes per match) in match sorting phase; so blindly raising
-	# it to 1 million is definitely NOT recommended
-	#
-	# max_matches can be decreased on the fly through the corresponding
-	# API call; increasing is prohibited to protect against malicious
-	# and/or malformed requests
-	#
-	# default is 1000 (just like with Google)
+	# max amount of matches the daemon ever keeps in RAM, per-index
+	# WARNING, THERE'S ALSO PER-QUERY LIMIT, SEE SetLimits() API CALL
+	# default is 1000 (just like Google)
 	max_matches			= 1000
 
-	# seamless rotate
-	#
-	# prevents short periods of searchd being inaccessible when rotating
-	# indexes with huge attribute and/or dictionary files
-	#
+	# seamless rotate, prevents rotate stalls if precaching huge datasets
 	# optional, default is 1
 	seamless_rotate		= 1
+
+	# whether to forcibly preopen all indexes on startup
+	# optional, default is 0 (do not preopen)
+	preopen_indexes		= 0
 }
 
 # --eof--

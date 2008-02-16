@@ -1412,7 +1412,23 @@ call it several times if needed.
 <para>
 Sets <filename>searchd</filename> host name and TCP port.
 All subsequent requests will use the new host and port settings.
-Default host and port are "localhost" and 3312, respectively.
+Default host and port are 'localhost' and 3312, respectively.
+</para>
+</sect3>
+
+<sect3 id="api-func-setretries"><title>SetRetries</title>
+<para><b>Prototype:</b> function SetRetries ( $count, $delay=0 )</para>
+<para>
+Sets distributed retry count and delay.
+</para>
+<para>
+On temporary failures <filename>searchd</filename> will attempt up to
+<code>$count</code> retries per agent. <code>$delay</code> is the delay
+between the retries, in milliseconds. Retries are disabled by default.
+Note that this call will <b>not</b> make the API itself retry on
+temporary failure; it only tells <filename>searchd</filename> to do so.
+Currently, the list of temporary failures includes all kinds of connect()
+failures and maxed out (too busy) remote agents.
 </para>
 </sect3>
 
@@ -2910,6 +2926,20 @@ sql_attr_uint = forum_id:9 # 9 bits for forum_id
 </sect3>
 
 
+<sect3 id="conf-sql-attr-bool"><title>sql_attr_bool</title>
+<para>
+Boolean <link linkend="attributes">attribute</link> declaration.
+Multi-value (there might be multiple attributes declared), optional.
+Applies to SQL source types (<option>mysql</option> and <option>pgsql</option>) only.
+Equivalent to <link linkend="conf-sql-attr-uint">sql_attr_uint</link> declaration with a bit count of 1.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+sql_attr_bool = is_deleted # will be packed to 1 bit
+</programlisting>
+</sect3>
+
+
 <sect3 id="conf-sql-attr-timestamp"><title>sql_attr_timestamp</title>
 <para>
 UNIX timestamp <link linkend="attributes">attribute</link> declaration.
@@ -3165,6 +3195,20 @@ xmlpipe_attr_uint = author
 </sect3>
 
 
+<sect3 id="conf-xmlpipe-attr-bool"><title>xmlpipe_attr_bool</title>
+<para>
+xmlpipe boolean attribute declaration.
+Multi-value, optional.
+Applies to <option>xmlpipe2</option> source type only.
+Syntax fully matches that of <link linkend="conf-sql-attr-bool">sql_attr_bool</link>.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+xmlpipe_attr_bool = is_deleted # will be packed to 1 bit
+</programlisting>
+</sect3>
+
+
 <sect3 id="conf-xmlpipe-attr-timestamp"><title>xmlpipe_attr_timestamp</title>
 <para>
 xmlpipe UNIX timestamp attribute declaration.
@@ -3208,6 +3252,26 @@ xmlpipe_attr_float = long_radians
 </sect3>
 
 
+<sect3 id="conf-xmlpipe-attr-multi"><title>xmlpipe_attr_multi</title>
+<para>
+xmlpipe MVA attribute declaration.
+Multi-value, optional.
+Applies to <option>xmlpipe2</option> source type only.
+</para>
+<para>
+This setting declares an MVA attribute tag in xmlpipe2 stream.
+The contents of the specified tag will be parsed and a list of integers
+that will constitute the MVA will be extracted, similar to how
+<link linkend="conf-sql-attr-multi">sql_attr_multi</link> parses
+SQL column contents when 'field' MVA source type is specified.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+xmlpipe_attr_multi = taglist
+</programlisting>
+</sect3>
+
+
 </sect2>
 <sect2 id="confgroup-index"><title>Index configuration options</title>
 
@@ -3223,7 +3287,7 @@ Sphinx supports two different types of indexes: local, that are stored
 and processed on the local machine; and distributed, that involve not only
 local searching but querying remote <filename>searchd</filename> instances
 over the network as well. Index type settings lets you choose this type.
-By default, indexes are local. Specifying "distributed" for type enables
+By default, indexes are local. Specifying 'distributed' for type enables
 distributed searching, see <xref linkend="distributed"/>.
 </para>
 <bridgehead>Example:</bridgehead>
@@ -4131,21 +4195,417 @@ html_remove_elements = style, script
 </sect3>
 
 
+<sect3 id="conf-local"><title>local</title>
+<para>
+Local index declaration in the <link linkend="distributed">distributed index</link>.
+Multi-value, optional, default is empty.
+</para>
+<para>
+This setting is used to declare local indexes that will be searched when
+given distributed index is searched. All local indexes will be searched
+<b>sequentially</b>, utilizing only 1 CPU or core; to parallelize processing,
+you can configure <filename>searchd</filename> to query itself (refer to
+<xref linkend="conf-agent"/> for the details). There might be several local
+indexes declared per each distributed index. Any local index can be mentioned
+several times in other distributed indexes.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+local = chunk1
+local = chunk2
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-agent"><title>agent</title>
+<para>
+Remote agents and indexes declaration in the <link linkend="distributed">distributed index</link>.
+Multi-value, optional, default is empty.
+</para>
+<para>
+This setting is used to declare remote agents that will be searched
+when given distributed index is searched. The agents can be thought of
+as network pointers that specify host, port, and index names. In the basic
+case agents would correspond to remote physical machines. More formally,
+that is not always correct: you can point several agents to the
+same remote machine; or you can even point agents to the very same
+single instance of <filename>searchd</filename> (in order to utilize
+many CPUs or cores).
+</para>
+<para>
+The value format is as follows:
+<programlisting>
+agent = hostname:port:remote-indexes-list
+</programlisting>
+where 'hostname' is remote host name; 'port' is remote TCP port;
+and 'remote-indexes-list' is a comma-separated list of remote index
+names.
+</para>
+<para>
+All agents will be searched in parallel. However, all indexes
+specified for a given agent will be searched sequentially
+in this agent. This lets you fine-tune the configuration
+to the hardware. For instance, if two remote indexes are stored
+on the same physical HDD, it's better to configure one agent
+with several sequentially searched indexes to avoid HDD steping.
+If they are stored on different HDDs, having two agents will be
+advantageous, because the work will be fully parallelized.
+The same applies to CPUs; though CPU performance impact caused
+by two processes stepping on each other is somewhat smaller
+and frequently can be ignored at all.
+</para>
+<para>
+On machines with many CPUs and/or HDDs, agents can be pointed
+to the same machine to utilize all of the hardware in parallel
+and reduce query latency. There is no need to setup several
+<filename>searchd</filename> instances for that; it's legal
+to configure the instance to contact itself. Here's an example
+setup, intended for a 4-CPU machine, that will use up to
+4 CPUs in parallel to process each query:
+<programlisting>
+index dist
+{
+	type = distributed
+	local = chunk1
+	agent = localhost:3312:chunk2
+	agent = localhost:3312:chunk3
+	agent = localhost:3312:chunk4
+}
+</programlisting>
+Note how one of the chunks is searched locally and the same instance
+of searchd queries itself to launch searches through three other ones
+in parallel.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+agent = localhost:3312:chunk2 # contact itself
+agent = searchbox2:3312:chunk3,chunk4 # search remote indexes
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-agent-connect-timeout"><title>agent_connect_timeout</title>
+<para>
+Remote agent connection timeout, in milliseconds.
+Optional, default is 1000 (ie. 1 second).
+</para>
+<para>
+When connecting to remote agents, <filename>searchd</filename>
+will wait at most this much time for connect() call to complete
+succesfully. If the timeout is reached but connect() does not complete,
+and <link linkend="api-func-setretries">retries</link> are enabled,
+retry will be initiated.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+agent_connect_timeout = 300
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-agent-query-timeout"><title>agent_query_timeout</title>
+<para>
+Remote agent query timeout, in milliseconds.
+Optional, default is 3000 (ie. 3 seconds).
+</para>
+<para>
+After connection, <filename>searchd</filename> will wait at most this
+much time for remote queries to complete. This timeout is fully separate
+from connection timeout; so the maximum possible delay caused by
+a remote agent equals to the sum of <code>agent_connection_timeout</code> and
+<code>agent_query_timeout</code>. Queries will <b>not</b> be retried
+if this timeout is reached; a warning will be produced instead.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+agent_query_timeout = 10000 # our query can be long, allow up to 10 sec
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-preopen"><title>preopen</title>
+<para>
+Whether to pre-open all index files, or open them per each query.
+Optional, default is 0 (do not preopen).
+</para>
+<para>
+This option tells <filename>searchd</filename> that it should pre-open
+all index files on startup (or rotation) and keep them open while it runs.
+Currently, the default mode is <b>not</b> to pre-open the files (this may
+change in the future). Preopened indexes take a few (currently 2) file
+descriptors per index. However, they save on per-query <code>open()</code> calls;
+and also they are invulnerable to subtle race conditions that may happen during
+index rotation under high load. On the other hand, when serving many indexes
+(100s to 1000s), it still might be desired to open the on per-query basis
+in order to save file descriptors.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+preopen = 1
+</programlisting>
+</sect3>
+
+
 </sect2>
 <sect2 id="confgroup-indexer"><title><filename>indexer</filename> program configuration options</title>
-<!--TODO-->
+
+
+<sect3 id="conf-mem-limit"><title>mem_limit</title>
+<para>
+Indexing RAM usage limit.
+Optional, default is 32M.
+</para>
+<para>
+Enforced memory usage limit that the <filename>indexer</filename>
+will not go above. Can be specified in bytes, or kilobytes
+(using K postfix), or megabytes (using M postfix); see the example.
+This limit will be automatically raised if set to extremely low value
+causing I/O buffers to be less than 8 KB; the exact lower bound
+for that depends on the indexed data size. If the buffers are
+less than 256 KB, a warning will be produced.
+</para>
+<para>
+Maximum possible limit is 2047M. Too low values can hurt
+indexing speed, but 256M to 1024M should be enough for most
+if not all datasets. Setting this value too high can cause
+SQL server timeouts. During the document collection phase,
+there will be periods when the memory buffer is partially
+sorted and no communication with the database is performed;
+and the database server can timeout. You can resolve that
+either by raising timeouts on SQL server side or by lowering
+<code>mem_limit</code>.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+mem_limit = 256M
+# mem_limit = 262144K # same, but in KB
+# mem_limit = 268435456 # same, but in bytes
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-max-iops"><title>max_iops</title>
+<para>
+Maximum I/O operations per second, for I/O throttling.
+Optional, default is 0 (unlimited).
+</para>
+<para>
+I/O throttling related option.
+It limits maximum count of I/O operations (reads or writes) per any given second.
+A value of 0 means that no limit is imposed.
+</para>
+<para>
+<filename>indexer</filename> can cause bursts of intensive disk I/O during
+indexing, and it might desired to limit its disk activity  (and keep something
+for other programs running on the same machine, such as <filename>searchd</filename>).
+I/O throttling helps to do that. It works by enforcing a minimum guaranteed
+delay between subsequent disk I/O operations performed by <filename>indexer</filename>. 
+Modern SATA HDDs are able to perform up to 70-100+ I/O operations per second
+(that's mostly limited by disk heads seek time). Limiting indexing I/O
+to a fraction of that can help reduce search performance dedgradation
+caused by indexing.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+max_iops = 40
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-max-iosize"><title>max_iosize</title>
+<para>
+Maximum allowed I/O operation size, in bytes, for I/O throttling.
+Optional, default is 0 (unlimited).
+</para>
+<para>
+I/O throttling related option. It limits maximum file I/O operation
+(read or write) size for all operations performed by <filename>indexer</filename>.
+A value of 0 means that no limit is imposed.
+Reads or writes that are bigger than the limit
+will be split in several smaller operations, and counted as several operation
+by <link linkend="conf-max-iops">max_iops</link> setting. At the time of this
+writing, all I/O calls should be under 256 KB (default internal buffer size)
+anyway, so <code>max_iosize</code> values higher than 256 KB must not affect anything.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+max_iosize = 1048576
+</programlisting>
+</sect3>
+
 
 </sect2>
 <sect2 id="confgroup-searchd"><title><filename>searchd</filename> program configuration options</title>
 
-<sect3 id="conf-seamless-rotate"><title>seamless_rotate</title>
+
+<sect3 id="conf-address"><title>address</title>
 <para>
-This feature prevents short periods of <filename>searchd</filename> being inaccessible
-while rotating indexes with huge attribute and/or dictionary files
-(<filename>.spa</filename> and <filename>.spi</filename> respectively).
+Interface IP address to bind on.
+Optional, default is 0.0.0.0 (ie. listen on all interfaces).
 </para>
 <para>
-Normally, rotating an index works as follows:
+<code>address</code> setting lets you specify which network interface
+<filename>searchd</filename> will bind to, listen on, and accept incoming
+network connections on. The default value is 0.0.0.0 which means to listen
+on all interfaces. At the time, you can <b>not</b> specify multiple interfaces.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+address = 192.168.0.1
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-port"><title>port</title>
+<para>
+<filename>searchd</filename> TCP port number.
+Mandatory, default is 3312.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+port = 3312
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-log"><title>log</title>
+<para>
+Log file name.
+Optional, default is 'searchd.log'.
+All <filename>searchd</filename> run time events will be logged in this file.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+log = /var/log/searchd.log
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-query-log"><title>query_log</title>
+<para>
+Query log file name.
+Optional, default is empty (do not log queries).
+All search queries will be logged in this file. The format is described in <xref linkend="query-log-format"/>.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+query_log = /var/log/query.log
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-read-timeout"><title>read_timeout</title>
+<para>
+Network client request read timeout, in seconds.
+Optional, default is 5 seconds.
+<filename>searchd</filename> will forcibly close the client connections which fail to send a query within this timeout.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+read_timeout = 1
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-max-children"><title>max_children</title>
+<para>
+Maximum amount of children to fork (or in other words, concurrent searches to run in parallel).
+Optional, default is 0 (unlimited).
+</para>
+<para>
+Useful to control server load. There will be no more than this much concurrent
+searches running, at all times. When the limit is reached, additional incoming
+clients are dismissed with temporarily failure (SEARCHD_RETRY) status code
+and a message stating that the server is maxed out.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+max_children = 10
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-pid-file"><title>pid_file</title>
+<para>
+<filename>searchd</filename> process ID file name.
+Mandatory.
+</para>
+<para>
+PID file will be re-created (and locked) on startup. It will contain
+head daemon process ID while the daemon is running, and it will be unlinked
+on daemon shutdown. It's mandatory because Sphinx uses it internally
+for a number of things: to check whether there already is a running instance
+of <filename>searchd</filename>; to stop <filename>searchd</filename>;
+to notify it that it should rotate the indexes. Can also be used for
+different external automation scripts.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+pid_file = /var/run/searchd.pid
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-max-matches"><title>max_matches</title>
+<para>
+Maximum amount of matches that the daemon keeps in RAM for each index and can return to the client.
+Optional, default is 1000.
+</para>
+<para>
+Introduced in order to control and limit RAM usage, <code>max_matches</code>
+setting defines how much matches will be kept in RAM while searching each index.
+Every match found will still be <emphasis>processed</emphasis>; but only
+best N of them will be kept in memory and return to the client in the end.
+Assume that the index contains 2,000,000 matches for the query. You rarely
+(if ever) need to retrieve <emphasis>all</emphasis> of them. Rather, you need
+to scan all of them, but only choose "best" at most, say, 500 by some criteria
+(ie. sorted by relevance, or price, or anything else), and display those
+500 matches to the end user in pages of 20 to 100 matches. And tracking
+only the best 500 matches is much more RAM and CPU efficient than keeping
+all 2,000,000 matches, sorting them, and then discarding everything but
+the first 20 needed to display the search results page. <code>max_matches</code>
+controls N in that "best N" amount.
+</para>
+<para>
+This parameter noticeably affects per-query RAM and CPU usage.
+Values of 1,000 to 10,000 are generally fine, but higher limits must be
+used with care. Recklessly raising <code>max_matches</code> to 1,000,000
+means that <filename>searchd</filename> will have to allocate and
+initialize 1-million-entry matches buffer for <emphasis>every</emphasis>
+query. That will obviously increase per-query RAM usage, and in some cases
+can also noticeably impact performance.
+</para>
+<para>
+<b>CAVEAT EMPTOR!</b> Note that there also is <b>another</b> place where this limit
+is enforced. <code>max_matches</code> can be decreased on the fly
+through the <link linkend="api-func-setlimits">corresponding API call</link>,
+and the default value in the API is <b>also</b> set to 1,000. So in order
+to retrieve more than 1,000 matches to your application, you will have
+to change the configuration file, restart searchd, and set proper limit
+in <link linkend="api-func-setlimits">SetLimits()</link> call.
+Also note that you can not set the value in the API higher than the value
+in the .conf file. This is prohibited in order to have some protection
+against malicious and/or malformed requests.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+max_matches = 10000
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-seamless-rotate"><title>seamless_rotate</title>
+<para>
+Prevents <filename>searchd</filename> stalls while rotating indexes with huge amounts of data to precache.
+Optional, default is 1 (enable seamless rotation).
+</para>
+<para>
+Indexes may contain some data that needs to be precached in RAM.
+At the moment, <filename>.spa</filename>, <filename>.spi</filename> and
+<filename>.spm</filename> files are fully precached (they contain attribute data,
+MVA data, and keyword index, respectively.)
+Without seamless rotate, rotating an index tries to use as little RAM
+as possible and works as follows:
 <orderedlist>
 <listitem>new queries are temporarly rejected (with "retry" error code);</listitem>
 <listitem><filename>searchd</filename> waits for all currently running queries to finish;</listitem>
@@ -4160,7 +4620,7 @@ However, if there's a lot of attribute or dictionary data, then preloading step
 could take noticeble time - up to several minutes in case of preloading 1-5+ GB files.
 </para>
 <para>
-With seamless rotate enabled, rotating works as follows:
+With seamless rotate enabled, rotation works as follows:
 <orderedlist>
 <listitem>new index RAM storage is allocated;</listitem>
 <listitem>new index attribute and dictionary data is asynchronously preloaded to RAM;</listitem>
@@ -4172,17 +4632,29 @@ With seamless rotate enabled, rotating works as follows:
 <para>
 Seamless rotate comes at the cost of higher <emphasis role="bold">peak</emphasis>
 memory usage during the rotation (because both old and new copies of
-<filename>.spa</filename> and <filename>.spd</filename> data need to be
-in RAM while preloading new copy). Average usage stays the same.
-</para>
-<para>
-This option is optional. Default values is 1, which means to enable seamless rotate.
+<filename>.spa/.spi/.spm</filename> data need to be in RAM while
+preloading new copy). Average usage stays the same.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
 seamless_rotate = 1
 </programlisting>
 </sect3>
+
+
+<sect3 id="conf-preopen-indexes"><title>preopen_indexes</title>
+<para>
+Whether to forcibly preopen all indexes on startup.
+Optional, default is 0 (do not preopen).
+Enforces enabled <link linkend="conf-preopen">preopen</link> on all served indexes,
+to avoid manually specifying it in every index.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+preopen_indexes = 1
+</programlisting>
+</sect3>
+
 
 </sect2>
 

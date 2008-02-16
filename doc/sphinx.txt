@@ -51,7 +51,8 @@ Table of Contents
       5.1.1. GetLastError
       5.1.2. GetLastWarning
       5.1.3. SetServer
-      5.1.4. SetArrayResult
+      5.1.4. SetRetries
+      5.1.5. SetArrayResult
 
    5.2. General query settings
       5.2.1. SetLimits
@@ -112,20 +113,23 @@ Table of Contents
       8.1.11. sql_query_range
       8.1.12. sql_range_step
       8.1.13. sql_attr_uint
-      8.1.14. sql_attr_timestamp
-      8.1.15. sql_attr_str2ordinal
-      8.1.16. sql_attr_float
-      8.1.17. sql_attr_multi
-      8.1.18. sql_query_post
-      8.1.19. sql_query_post_index
-      8.1.20. sql_ranged_throttle
-      8.1.21. sql_query_info
-      8.1.22. xmlpipe_command
-      8.1.23. xmlpipe_field
-      8.1.24. xmlpipe_attr_uint
-      8.1.25. xmlpipe_attr_timestamp
-      8.1.26. xmlpipe_attr_str2ordinal
-      8.1.27. xmlpipe_attr_float
+      8.1.14. sql_attr_bool
+      8.1.15. sql_attr_timestamp
+      8.1.16. sql_attr_str2ordinal
+      8.1.17. sql_attr_float
+      8.1.18. sql_attr_multi
+      8.1.19. sql_query_post
+      8.1.20. sql_query_post_index
+      8.1.21. sql_ranged_throttle
+      8.1.22. sql_query_info
+      8.1.23. xmlpipe_command
+      8.1.24. xmlpipe_field
+      8.1.25. xmlpipe_attr_uint
+      8.1.26. xmlpipe_attr_bool
+      8.1.27. xmlpipe_attr_timestamp
+      8.1.28. xmlpipe_attr_str2ordinal
+      8.1.29. xmlpipe_attr_float
+      8.1.30. xmlpipe_attr_multi
 
    8.2. Index configuration options
       8.2.1. type
@@ -153,10 +157,28 @@ Table of Contents
       8.2.23. html_strip
       8.2.24. html_index_attrs
       8.2.25. html_remove_elements
+      8.2.26. local
+      8.2.27. agent
+      8.2.28. agent_connect_timeout
+      8.2.29. agent_query_timeout
+      8.2.30. preopen
 
    8.3. indexer program configuration options
+      8.3.1. mem_limit
+      8.3.2. max_iops
+      8.3.3. max_iosize
+
    8.4. searchd program configuration options
-      8.4.1. seamless_rotate
+      8.4.1. address
+      8.4.2. port
+      8.4.3. log
+      8.4.4. query_log
+      8.4.5. read_timeout
+      8.4.6. max_children
+      8.4.7. pid_file
+      8.4.8. max_matches
+      8.4.9. seamless_rotate
+      8.4.10. preopen_indexes
 
 A. Sphinx revision history
 
@@ -664,13 +686,13 @@ With all the SQL drivers, indexing generally works as follows.
      encoding with MySQL;
    * main query (see Section 8.1.10, <<sql_query>>) is executed and the
      rows it returns are indexed;
-   * post-query (see Section 8.1.18, <<sql_query_post>>) is executed to
+   * post-query (see Section 8.1.19, <<sql_query_post>>) is executed to
      perform any necessary cleanup;
    * connection to the database is closed;
    * indexer does the sorting phase (to be pedantic, index-type specific
      post-processing);
    * connection to the database is established again;
-   * post-index query (see Section 8.1.19, <<sql_query_post_index>>) is
+   * post-index query (see Section 8.1.20, <<sql_query_post_index>>) is
      executed to perform any necessary final cleanup;
    * connection to the database is closed again.
 
@@ -1369,10 +1391,24 @@ several times if needed.
 Prototype: function SetServer ( $host, $port )
 
 Sets searchd host name and TCP port. All subsequent requests will use the
-new host and port settings. Default host and port are "localhost" and 3312,
+new host and port settings. Default host and port are 'localhost' and 3312,
 respectively.
 
-5.1.4. SetArrayResult
+5.1.4. SetRetries
+-----------------
+
+Prototype: function SetRetries ( $count, $delay=0 )
+
+Sets distributed retry count and delay.
+
+On temporary failures searchd will attempt up to $count retries per agent.
+$delay is the delay between the retries, in milliseconds. Retries are
+disabled by default. Note that this call will not make the API itself retry
+on temporary failure; it only tells searchd to do so. Currently, the list
+of temporary failures includes all kinds of connect() failures and maxed
+out (too busy) remote agents.
+
+5.1.5. SetArrayResult
 ---------------------
 
 Prototype: function SetArrayResult ( $arrayresult )
@@ -2631,7 +2667,18 @@ Example:
    | sql_attr_uint = group_id
    | sql_attr_uint = forum_id:9 # 9 bits for forum_id
 
-8.1.14. sql_attr_timestamp
+8.1.14. sql_attr_bool
+---------------------
+
+Boolean attribute declaration. Multi-value (there might be multiple
+attributes declared), optional. Applies to SQL source types (mysql and
+pgsql) only. Equivalent to sql_attr_uint declaration with a bit count of 1.
+
+Example:
+
+   | sql_attr_bool = is_deleted # will be packed to 1 bit
+
+8.1.15. sql_attr_timestamp
 --------------------------
 
 UNIX timestamp attribute declaration. Multi-value (there might be multiple
@@ -2652,7 +2699,7 @@ Example:
 
    | sql_attr_timestamp = UNIX_TIMESTAMP(added_datetime) AS added_ts
 
-8.1.15. sql_attr_str2ordinal
+8.1.16. sql_attr_str2ordinal
 ----------------------------
 
 Ordinal string number attribute declaration. Multi-value (there might be
@@ -2684,7 +2731,7 @@ Example:
 
    | sql_attr_str2ordinal = author_name
 
-8.1.16. sql_attr_float
+8.1.17. sql_attr_float
 ----------------------
 
 Floating point attribute declaration. Multi-value (there might be multiple
@@ -2703,7 +2750,7 @@ Example:
    | sql_attr_float = lat_radians
    | sql_attr_float = long_radians
 
-8.1.17. sql_attr_multi
+8.1.18. sql_attr_multi
 ----------------------
 
 Multi-valued attribute (MVA) declaration. Multi-value (there might be
@@ -2737,7 +2784,7 @@ Example:
    | 	SELECT id, tag FROM tags WHERE id>=$start AND id<=$end; \
    | 	SELECT MIN(id), MAX(id) FROM tags
 
-8.1.18. sql_query_post
+8.1.19. sql_query_post
 ----------------------
 
 Post-fetch query. Optional, default value is empty. Applies to SQL source
@@ -2756,7 +2803,7 @@ Example:
 
    | sql_query_post = DROP TABLE my_tmp_table
 
-8.1.19. sql_query_post_index
+8.1.20. sql_query_post_index
 ----------------------------
 
 Post-index query. Optional, default value is empty. Applies to SQL source
@@ -2773,7 +2820,7 @@ Example:
    | sql_query_post_index = REPLACE INTO counters ( id, val ) \
    |     VALUES ( 'max_indexed_id', $maxid )
 
-8.1.20. sql_ranged_throttle
+8.1.21. sql_ranged_throttle
 ---------------------------
 
 Ranged query throttling period, in milliseconds. Optional, default is 0 (no
@@ -2788,7 +2835,7 @@ Example:
 
    | sql_ranged_throttle = 1000 # sleep for 1 sec before each query step
 
-8.1.21. sql_query_info
+8.1.22. sql_query_info
 ----------------------
 
 Document info query. Optional, default is empty. Applies to mysql source
@@ -2804,7 +2851,7 @@ Example:
 
    | sql_query_info = SELECT * FROM documents WHERE id=$id
 
-8.1.22. xmlpipe_command
+8.1.23. xmlpipe_command
 -----------------------
 
 Shell command that invokes xmlpipe stream producer. Mandatory. Applies to
@@ -2818,7 +2865,7 @@ Example:
 
    | xmlpipe_command = cat /home/sphinx/test.xml
 
-8.1.23. xmlpipe_field
+8.1.24. xmlpipe_field
 ---------------------
 
 xmlpipe field declaration. Multi-value, optional. Applies to xmlpipe2
@@ -2829,7 +2876,7 @@ Example:
    | xmlpipe_field = subject
    | xmlpipe_field = content
 
-8.1.24. xmlpipe_attr_uint
+8.1.25. xmlpipe_attr_uint
 -------------------------
 
 xmlpipe integer attribute declaration. Multi-value, optional. Applies to
@@ -2839,7 +2886,17 @@ Example:
 
    | xmlpipe_attr_uint = author
 
-8.1.25. xmlpipe_attr_timestamp
+8.1.26. xmlpipe_attr_bool
+-------------------------
+
+xmlpipe boolean attribute declaration. Multi-value, optional. Applies to
+xmlpipe2 source type only. Syntax fully matches that of sql_attr_bool.
+
+Example:
+
+   | xmlpipe_attr_bool = is_deleted # will be packed to 1 bit
+
+8.1.27. xmlpipe_attr_timestamp
 ------------------------------
 
 xmlpipe UNIX timestamp attribute declaration. Multi-value, optional.
@@ -2850,7 +2907,7 @@ Example:
 
    | xmlpipe_attr_timestamp = published
 
-8.1.26. xmlpipe_attr_str2ordinal
+8.1.28. xmlpipe_attr_str2ordinal
 --------------------------------
 
 xmlpipe string ordinal attribute declaration. Multi-value, optional.
@@ -2861,7 +2918,7 @@ Example:
 
    | xmlpipe_attr_str2ordinal = author_sort
 
-8.1.27. xmlpipe_attr_float
+8.1.29. xmlpipe_attr_float
 --------------------------
 
 xmlpipe floating point attribute declaration. Multi-value, optional.
@@ -2872,6 +2929,21 @@ Example:
 
    | xmlpipe_attr_float = lat_radians
    | xmlpipe_attr_float = long_radians
+
+8.1.30. xmlpipe_attr_multi
+--------------------------
+
+xmlpipe MVA attribute declaration. Multi-value, optional. Applies to
+xmlpipe2 source type only.
+
+This setting declares an MVA attribute tag in xmlpipe2 stream. The contents
+of the specified tag will be parsed and a list of integers that will
+constitute the MVA will be extracted, similar to how sql_attr_multi parses
+SQL column contents when 'field' MVA source type is specified.
+
+Example:
+
+   | xmlpipe_attr_multi = taglist
 
 8.2. Index configuration options
 --------------------------------
@@ -2886,7 +2958,7 @@ Sphinx supports two different types of indexes: local, that are stored and
 processed on the local machine; and distributed, that involve not only
 local searching but querying remote searchd instances over the network as
 well. Index type settings lets you choose this type. By default, indexes
-are local. Specifying "distributed" for type enables distributed searching,
+are local. Specifying 'distributed' for type enables distributed searching,
 see Section 4.7, <<Distributed searching>>.
 
 Example:
@@ -3620,20 +3692,344 @@ Example:
 
    | html_remove_elements = style, script
 
+8.2.26. local
+-------------
+
+Local index declaration in the distributed index. Multi-value, optional,
+default is empty.
+
+This setting is used to declare local indexes that will be searched when
+given distributed index is searched. All local indexes will be searched
+sequentially, utilizing only 1 CPU or core; to parallelize processing, you
+can configure searchd to query itself (refer to Section 8.2.27, <<agent>>
+for the details). There might be several local indexes declared per each
+distributed index. Any local index can be mentioned several times in other
+distributed indexes.
+
+Example:
+
+   | local = chunk1
+   | local = chunk2
+
+8.2.27. agent
+-------------
+
+Remote agents and indexes declaration in the distributed index.
+Multi-value, optional, default is empty.
+
+This setting is used to declare remote agents that will be searched when
+given distributed index is searched. The agents can be thought of as
+network pointers that specify host, port, and index names. In the basic
+case agents would correspond to remote physical machines. More formally,
+that is not always correct: you can point several agents to the same remote
+machine; or you can even point agents to the very same single instance of
+searchd (in order to utilize many CPUs or cores).
+
+The value format is as follows:
+
+   | agent = hostname:port:remote-indexes-list
+
+where 'hostname' is remote host name; 'port' is remote TCP port; and
+'remote-indexes-list' is a comma-separated list of remote index names.
+
+All agents will be searched in parallel. However, all indexes specified for
+a given agent will be searched sequentially in this agent. This lets you
+fine-tune the configuration to the hardware. For instance, if two remote
+indexes are stored on the same physical HDD, it's better to configure one
+agent with several sequentially searched indexes to avoid HDD steping. If
+they are stored on different HDDs, having two agents will be advantageous,
+because the work will be fully parallelized. The same applies to CPUs;
+though CPU performance impact caused by two processes stepping on each
+other is somewhat smaller and frequently can be ignored at all.
+
+On machines with many CPUs and/or HDDs, agents can be pointed to the same
+machine to utilize all of the hardware in parallel and reduce query
+latency. There is no need to setup several searchd instances for that; it's
+legal to configure the instance to contact itself. Here's an example setup,
+intended for a 4-CPU machine, that will use up to 4 CPUs in parallel to
+process each query:
+
+   | index dist
+   | {
+   | 	type = distributed
+   | 	local = chunk1
+   | 	agent = localhost:3312:chunk2
+   | 	agent = localhost:3312:chunk3
+   | 	agent = localhost:3312:chunk4
+   | }
+
+Note how one of the chunks is searched locally and the same instance of
+searchd queries itself to launch searches through three other ones in
+parallel.
+
+Example:
+
+   | agent = localhost:3312:chunk2 # contact itself
+   | agent = searchbox2:3312:chunk3,chunk4 # search remote indexes
+
+8.2.28. agent_connect_timeout
+-----------------------------
+
+Remote agent connection timeout, in milliseconds. Optional, default is 1000
+(ie. 1 second).
+
+When connecting to remote agents, searchd will wait at most this much time
+for connect() call to complete succesfully. If the timeout is reached but
+connect() does not complete, and retries are enabled, retry will be
+initiated.
+
+Example:
+
+   | agent_connect_timeout = 300
+
+8.2.29. agent_query_timeout
+---------------------------
+
+Remote agent query timeout, in milliseconds. Optional, default is 3000 (ie.
+3 seconds).
+
+After connection, searchd will wait at most this much time for remote
+queries to complete. This timeout is fully separate from connection
+timeout; so the maximum possible delay caused by a remote agent equals to
+the sum of agent_connection_timeout and agent_query_timeout. Queries will
+not be retried if this timeout is reached; a warning will be produced
+instead.
+
+Example:
+
+   | agent_query_timeout = 10000 # our query can be long, allow up to 10 sec
+
+8.2.30. preopen
+---------------
+
+Whether to pre-open all index files, or open them per each query. Optional,
+default is 0 (do not preopen).
+
+This option tells searchd that it should pre-open all index files on
+startup (or rotation) and keep them open while it runs. Currently, the
+default mode is not to pre-open the files (this may change in the future).
+Preopened indexes take a few (currently 2) file descriptors per index.
+However, they save on per-query open() calls; and also they are
+invulnerable to subtle race conditions that may happen during index
+rotation under high load. On the other hand, when serving many indexes
+(100s to 1000s), it still might be desired to open the on per-query basis
+in order to save file descriptors.
+
+Example:
+
+   | preopen = 1
+
 8.3. indexer program configuration options
 ------------------------------------------
+
+8.3.1. mem_limit
+----------------
+
+Indexing RAM usage limit. Optional, default is 32M.
+
+Enforced memory usage limit that the indexer will not go above. Can be
+specified in bytes, or kilobytes (using K postfix), or megabytes (using
+M postfix); see the example. This limit will be automatically raised if set
+to extremely low value causing I/O buffers to be less than 8 KB; the exact
+lower bound for that depends on the indexed data size. If the buffers are
+less than 256 KB, a warning will be produced.
+
+Maximum possible limit is 2047M. Too low values can hurt indexing speed,
+but 256M to 1024M should be enough for most if not all datasets. Setting
+this value too high can cause SQL server timeouts. During the document
+collection phase, there will be periods when the memory buffer is partially
+sorted and no communication with the database is performed; and the
+database server can timeout. You can resolve that either by raising
+timeouts on SQL server side or by lowering mem_limit.
+
+Example:
+
+   | mem_limit = 256M
+   | # mem_limit = 262144K # same, but in KB
+   | # mem_limit = 268435456 # same, but in bytes
+
+8.3.2. max_iops
+---------------
+
+Maximum I/O operations per second, for I/O throttling. Optional, default is
+0 (unlimited).
+
+I/O throttling related option. It limits maximum count of I/O operations
+(reads or writes) per any given second. A value of 0 means that no limit is
+imposed.
+
+indexer can cause bursts of intensive disk I/O during indexing, and it
+might desired to limit its disk activity (and keep something for other
+programs running on the same machine, such as searchd). I/O throttling
+helps to do that. It works by enforcing a minimum guaranteed delay between
+subsequent disk I/O operations performed by indexer. Modern SATA HDDs are
+able to perform up to 70-100+ I/O operations per second (that's mostly
+limited by disk heads seek time). Limiting indexing I/O to a fraction of
+that can help reduce search performance dedgradation caused by indexing.
+
+Example:
+
+   | max_iops = 40
+
+8.3.3. max_iosize
+-----------------
+
+Maximum allowed I/O operation size, in bytes, for I/O throttling. Optional,
+default is 0 (unlimited).
+
+I/O throttling related option. It limits maximum file I/O operation (read
+or write) size for all operations performed by indexer. A value of 0 means
+that no limit is imposed. Reads or writes that are bigger than the limit
+will be split in several smaller operations, and counted as several
+operation by max_iops setting. At the time of this writing, all I/O calls
+should be under 256 KB (default internal buffer size) anyway, so max_iosize
+values higher than 256 KB must not affect anything.
+
+Example:
+
+   | max_iosize = 1048576
 
 8.4. searchd program configuration options
 ------------------------------------------
 
-8.4.1. seamless_rotate
+8.4.1. address
+--------------
+
+Interface IP address to bind on. Optional, default is 0.0.0.0 (ie. listen
+on all interfaces).
+
+address setting lets you specify which network interface searchd will bind
+to, listen on, and accept incoming network connections on. The default
+value is 0.0.0.0 which means to listen on all interfaces. At the time, you
+can not specify multiple interfaces.
+
+Example:
+
+   | address = 192.168.0.1
+
+8.4.2. port
+-----------
+
+searchd TCP port number. Mandatory, default is 3312.
+
+Example:
+
+   | port = 3312
+
+8.4.3. log
+----------
+
+Log file name. Optional, default is 'searchd.log'. All searchd run time
+events will be logged in this file.
+
+Example:
+
+   | log = /var/log/searchd.log
+
+8.4.4. query_log
+----------------
+
+Query log file name. Optional, default is empty (do not log queries). All
+search queries will be logged in this file. The format is described in
+Section 4.8, <<searchd query log format>>.
+
+Example:
+
+   | query_log = /var/log/query.log
+
+8.4.5. read_timeout
+-------------------
+
+Network client request read timeout, in seconds. Optional, default is
+5 seconds. searchd will forcibly close the client connections which fail to
+send a query within this timeout.
+
+Example:
+
+   | read_timeout = 1
+
+8.4.6. max_children
+-------------------
+
+Maximum amount of children to fork (or in other words, concurrent searches
+to run in parallel). Optional, default is 0 (unlimited).
+
+Useful to control server load. There will be no more than this much
+concurrent searches running, at all times. When the limit is reached,
+additional incoming clients are dismissed with temporarily failure
+(SEARCHD_RETRY) status code and a message stating that the server is maxed
+out.
+
+Example:
+
+   | max_children = 10
+
+8.4.7. pid_file
+---------------
+
+searchd process ID file name. Mandatory.
+
+PID file will be re-created (and locked) on startup. It will contain head
+daemon process ID while the daemon is running, and it will be unlinked on
+daemon shutdown. It's mandatory because Sphinx uses it internally for
+a number of things: to check whether there already is a running instance of
+searchd; to stop searchd; to notify it that it should rotate the indexes.
+Can also be used for different external automation scripts.
+
+Example:
+
+   | pid_file = /var/run/searchd.pid
+
+8.4.8. max_matches
+------------------
+
+Maximum amount of matches that the daemon keeps in RAM for each index and
+can return to the client. Optional, default is 1000.
+
+Introduced in order to control and limit RAM usage, max_matches setting
+defines how much matches will be kept in RAM while searching each index.
+Every match found will still be processed; but only best N of them will be
+kept in memory and return to the client in the end. Assume that the index
+contains 2,000,000 matches for the query. You rarely (if ever) need to
+retrieve all of them. Rather, you need to scan all of them, but only choose
+"best" at most, say, 500 by some criteria (ie. sorted by relevance, or
+price, or anything else), and display those 500 matches to the end user in
+pages of 20 to 100 matches. And tracking only the best 500 matches is much
+more RAM and CPU efficient than keeping all 2,000,000 matches, sorting
+them, and then discarding everything but the first 20 needed to display the
+search results page. max_matches controls N in that "best N" amount.
+
+This parameter noticeably affects per-query RAM and CPU usage. Values of
+1,000 to 10,000 are generally fine, but higher limits must be used with
+care. Recklessly raising max_matches to 1,000,000 means that searchd will
+have to allocate and initialize 1-million-entry matches buffer for every
+query. That will obviously increase per-query RAM usage, and in some cases
+can also noticeably impact performance.
+
+CAVEAT EMPTOR! Note that there also is another place where this limit is
+enforced. max_matches can be decreased on the fly through the corresponding
+API call, and the default value in the API is also set to 1,000. So in
+order to retrieve more than 1,000 matches to your application, you will
+have to change the configuration file, restart searchd, and set proper
+limit in SetLimits() call. Also note that you can not set the value in the
+API higher than the value in the .conf file. This is prohibited in order to
+have some protection against malicious and/or malformed requests.
+
+Example:
+
+   | max_matches = 10000
+
+8.4.9. seamless_rotate
 ----------------------
 
-This feature prevents short periods of searchd being inaccessible while
-rotating indexes with huge attribute and/or dictionary files (.spa and .spi
-respectively).
+Prevents searchd stalls while rotating indexes with huge amounts of data to
+precache. Optional, default is 1 (enable seamless rotation).
 
-Normally, rotating an index works as follows:
+Indexes may contain some data that needs to be precached in RAM. At the
+moment, .spa, .spi and .spm files are fully precached (they contain
+attribute data, MVA data, and keyword index, respectively.) Without
+seamless rotate, rotating an index tries to use as little RAM as possible
+and works as follows:
 
    1. new queries are temporarly rejected (with "retry" error code);
    2. searchd waits for all currently running queries to finish;
@@ -3646,7 +4042,7 @@ However, if there's a lot of attribute or dictionary data, then preloading
 step could take noticeble time - up to several minutes in case of
 preloading 1-5+ GB files.
 
-With seamless rotate enabled, rotating works as follows:
+With seamless rotate enabled, rotation works as follows:
 
    1. new index RAM storage is allocated;
    2. new index attribute and dictionary data is asynchronously preloaded
@@ -3658,15 +4054,23 @@ With seamless rotate enabled, rotating works as follows:
       copy.
 
 Seamless rotate comes at the cost of higher peak memory usage during the
-rotation (because both old and new copies of .spa and .spd data need to be
+rotation (because both old and new copies of .spa/.spi/.spm data need to be
 in RAM while preloading new copy). Average usage stays the same.
-
-This option is optional. Default values is 1, which means to enable
-seamless rotate.
 
 Example:
 
    | seamless_rotate = 1
+
+8.4.10. preopen_indexes
+-----------------------
+
+Whether to forcibly preopen all indexes on startup. Optional, default is
+0 (do not preopen). Enforces enabled preopen on all served indexes, to
+avoid manually specifying it in every index.
+
+Example:
+
+   | preopen_indexes = 1
 
 A. Sphinx revision history
 ==========================

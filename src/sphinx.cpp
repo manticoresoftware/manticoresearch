@@ -1666,9 +1666,11 @@ private:
 	bool						MatchExtendedV1 ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphTermSetup & tTermSetup );
 	void						MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, const CSphTermSetup & tTermSetup );
 
-	const DWORD *				FindDocinfo ( SphDocID_t uDocID );
-	void						CalcDocinfo ( CSphMatch & tMatch, const DWORD * pDocinfo );
-	void						LookupDocinfo ( CSphMatch & tMatch );
+	const DWORD *				FindDocinfo ( SphDocID_t uDocID ) const;
+	void						CopyDocinfo ( CSphMatch & tMatch, const DWORD * pFound ) const;
+	void						EarlyCalc ( CSphMatch & tMatch ) const;
+	void						LateCalc ( CSphMatch & tMatch ) const;
+	bool						EarlyReject ( CSphMatch & tMatch, const CSphQuery * pQuery ) const;
 
 	bool						BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAutoArray<CSphWordHit> & dHits, int iArenaSize, int iFieldFD, int nFieldMVAs, int iFieldMVAInPool );
 
@@ -8028,13 +8030,17 @@ CSphQueryResult * CSphIndex_VLN::Query ( ISphTokenizer * pTokenizer, CSphDict * 
 }
 
 
-static inline bool sphMatchEarlyReject ( const CSphMatch & tMatch, const CSphQuery * pQuery, CSphSharedBuffer<DWORD> & pMvaStorage )
+bool CSphIndex_VLN::EarlyReject ( CSphMatch & tMatch, const CSphQuery * pQuery ) const
 {
 	if ( tMatch.m_iDocID < pQuery->m_iMinID || tMatch.m_iDocID > pQuery->m_iMaxID )
 		return true;
 
 	if ( !pQuery->m_dFilters.GetLength() )
 		return false;
+
+	if ( m_bEarlyLookup )
+		CopyDocinfo ( tMatch, FindDocinfo ( tMatch.m_iDocID ) );
+	EarlyCalc ( tMatch );
 
 	ARRAY_FOREACH ( i, pQuery->m_dFilters )
 	{
@@ -8051,7 +8057,7 @@ static inline bool sphMatchEarlyReject ( const CSphMatch & tMatch, const CSphQue
 			const DWORD * pMvaMax = NULL;
 			if ( uOff )
 			{
-				pMva = &pMvaStorage [ uOff ];
+				pMva = &m_pMva [ uOff ];
 				pMvaMax = pMva + (*pMva) + 1;
 				pMva++;
 			}
@@ -8144,7 +8150,7 @@ static inline bool sphMatchEarlyReject ( const CSphMatch & tMatch, const CSphQue
 }
 
 
-const DWORD * CSphIndex_VLN::FindDocinfo ( SphDocID_t uDocID )
+const DWORD * CSphIndex_VLN::FindDocinfo ( SphDocID_t uDocID ) const
 {
 	if ( m_uDocinfo<=0 )
 		return NULL;
@@ -8210,19 +8216,25 @@ const DWORD * CSphIndex_VLN::FindDocinfo ( SphDocID_t uDocID )
 }
 
 
+void CSphIndex_VLN::CopyDocinfo ( CSphMatch & tMatch, const DWORD * pFound ) const
+{
+	if ( pFound )
+	{
+		assert ( tMatch.m_pRowitems );
+		assert ( DOCINFO2ID(pFound)==tMatch.m_iDocID );
+		memcpy ( tMatch.m_pRowitems, DOCINFO2ATTRS(pFound), m_tSchema.GetRowSize()*sizeof(CSphRowitem) );
+	}
+}
+
+
 static inline double sphSqr ( double v )
 {
 	return v*v;
 }
 
 
-void CSphIndex_VLN::CalcDocinfo ( CSphMatch & tMatch, const DWORD * pInfo )
+void CSphIndex_VLN::EarlyCalc ( CSphMatch & tMatch ) const
 {
-	assert ( tMatch.m_pRowitems );
-//	assert ( tMatch.m_iRowitems==m_tSchema.GetRowSize() + ( m_bCalcGeodist ? 1 : 0 ) );
-	assert ( DOCINFO2ID(pInfo)==tMatch.m_iDocID );
-	memcpy ( tMatch.m_pRowitems, DOCINFO2ATTRS(pInfo), m_tSchema.GetRowSize()*sizeof(CSphRowitem) );
-
 	if ( m_iCalcGeodist>=0 )
 	{
 		const double R = 6384000;
@@ -8234,7 +8246,11 @@ void CSphIndex_VLN::CalcDocinfo ( CSphMatch & tMatch, const DWORD * pInfo )
 		double c = 2*asin ( Min ( 1, sqrt(a) ) );
 		tMatch.SetAttrFloat ( m_iCalcGeodist, float(R*c) );
 	}
+}
 
+
+void CSphIndex_VLN::LateCalc ( CSphMatch & tMatch ) const
+{
 	if ( m_iCalcExpr>=0 )
 	{
 		float fRes = m_tCalcExpr.Eval ( tMatch );
@@ -8243,17 +8259,10 @@ void CSphIndex_VLN::CalcDocinfo ( CSphMatch & tMatch, const DWORD * pInfo )
 }
 
 
-void CSphIndex_VLN::LookupDocinfo ( CSphMatch & tMatch )
-{
-	const DWORD * pFound = FindDocinfo ( tMatch.m_iDocID );
-	if ( pFound )
-		CalcDocinfo ( tMatch, pFound );
-}
-
-
 #define SPH_SUBMIT_MATCH(_match) \
 	if ( m_bLateLookup ) \
-		LookupDocinfo ( _match ); \
+		CopyDocinfo ( _match, FindDocinfo ( (_match).m_iDocID ) ); \
+	LateCalc ( _match ); \
 	\
 	if ( bRandomize ) \
 		(_match).m_iWeight = rand(); \
@@ -8368,9 +8377,7 @@ void CSphIndex_VLN::MatchAll ( const CSphQuery * pQuery, CSphQueryResult * pResu
 		CSphMatch & tMatch = m_dQueryWords[0].m_tDoc;
 
 		// early reject by group id, doc id or timestamp
-		if ( m_bEarlyLookup )
-			LookupDocinfo ( tMatch );
-		if ( sphMatchEarlyReject ( tMatch, pQuery, m_pMva ) )
+		if ( EarlyReject ( tMatch, pQuery ) )
 		{
 			docID++;
 			i = 0;
@@ -8586,9 +8593,7 @@ void CSphIndex_VLN::MatchAny ( const CSphQuery * pQuery, CSphQueryResult * pResu
 
 		// early reject by group id, doc id or timestamp
 		CSphMatch & tMatch = m_dQueryWords[iMinIndex].m_tDoc;
-		if ( m_bEarlyLookup )
-			LookupDocinfo ( tMatch );
-		if ( sphMatchEarlyReject ( tMatch, pQuery, m_pMva ) )
+		if ( EarlyReject ( tMatch, pQuery ) )
 			continue;
 
 		// get the words we're matching current document against (let's call them "terms")
@@ -9018,9 +9023,7 @@ bool CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, CSphQueryResult * p
 		iMinID = 1 + pMatch->m_iDocID;
 
 		// early reject by group id, doc id or timestamp
-		if ( m_bEarlyLookup )
-			LookupDocinfo ( *pMatch );
-		if ( sphMatchEarlyReject ( *pMatch, pQuery, m_pMva ) )
+		if ( EarlyReject ( *pMatch, pQuery ) )
 			continue;
 
 		// set weight and push it to the queue
@@ -9944,10 +9947,7 @@ bool CSphIndex_VLN::MatchExtendedV1 ( const CSphQuery * pQuery, CSphQueryResult 
 			continue;
 
 		// early reject by group id, doc id or timestamp
-		if ( m_bEarlyLookup )
-			LookupDocinfo ( *pAccept );
-
-		if ( sphMatchEarlyReject ( *pAccept, pQuery, m_pMva ) )
+		if ( EarlyReject ( *pAccept, pQuery ) )
 			continue;
 
 		// submit
@@ -11780,10 +11780,7 @@ bool CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, CSphQueryResult * 
 			CSphMatch & tMatch = pRoot->m_dMatches[i];
 
 			// early reject by group id, doc id or timestamp
-			if ( m_bEarlyLookup )
-				LookupDocinfo ( tMatch );
-
-			if ( sphMatchEarlyReject ( tMatch, pQuery, m_pMva ) )
+			if ( EarlyReject ( tMatch, pQuery ) )
 				continue;
 
 			// submit
@@ -11807,6 +11804,8 @@ void CSphIndex_VLN::MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISph
 	CSphMatch tMatch;
 	tMatch.Reset ( tSetup.m_tMin.m_iRowitems + tSetup.m_iToCalc );
 	tMatch.m_iWeight = 1;
+
+	m_bEarlyLookup = false; // we'll do it manually
 
 	DWORD uStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 	for ( DWORD uIndexEntry=0; uIndexEntry<m_uDocinfoIndex; uIndexEntry++ )
@@ -11907,9 +11906,9 @@ void CSphIndex_VLN::MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISph
 		for ( const DWORD * pDocinfo=pBlockStart; pDocinfo<=pBlockEnd; pDocinfo+=uStride )
 		{
 			tMatch.m_iDocID = DOCINFO2ID(pDocinfo);
-			CalcDocinfo ( tMatch, pDocinfo );
+			CopyDocinfo ( tMatch, pDocinfo );
 
-			if ( sphMatchEarlyReject ( tMatch, pQuery, m_pMva ) )
+			if ( EarlyReject ( tMatch, pQuery ) )
 				continue;
 
 			SPH_SUBMIT_MATCH ( tMatch );
@@ -13104,7 +13103,11 @@ bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, C
 			CSphMatch * const pTail = pHead + iCount;
 
 			for ( CSphMatch * pCur=pHead; pCur<pTail; pCur++ )
-				LookupDocinfo ( *pCur );
+			{
+				CopyDocinfo ( *pCur, FindDocinfo ( pCur->m_iDocID ) );
+				EarlyCalc ( *pCur );
+				LateCalc ( *pCur );
+			}
 		}
 
 		// mva ptr
@@ -17639,7 +17642,7 @@ void CSphDoclistRecord::Read( CSphMergeSource * pSource )
 	if ( pSource->m_bForceDocinfo )
 	{	
 		pSource->m_tMatch.m_iDocID = m_iDocID;
-		pSource->m_pIndex->LookupDocinfo ( pSource->m_tMatch );
+		pSource->m_pIndex->CopyDocinfo ( pSource->m_tMatch, pSource->m_pIndex->FindDocinfo ( pSource->m_tMatch.m_iDocID ) );
 	}
 
 	for ( int i=0; i<m_iRowitems; i++ )

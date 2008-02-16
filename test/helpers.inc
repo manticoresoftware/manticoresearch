@@ -299,15 +299,14 @@ class SphinxConfig
 			// new and cool
 			foreach ( ChildrenArray ( $qs, "query" ) as $q )
 			{
+				$res = array ( "query"=>$q->nodeValue );
+
 				// parse query mode
 				$mode = 0;
 				$mode_s = $q->getAttribute("mode");
-
-				if ( !$mode_s )
+				switch ( $mode_s )
 				{
-					$mode_s = "(default)";
-				} else switch ( $mode_s )
-				{
+					case "":			$mode_s = "(default)"; break;
 					case "all":			$mode = SPH_MATCH_ALL; break;
 					case "any":			$mode = SPH_MATCH_ANY; break;
 					case "phrase":		$mode = SPH_MATCH_PHRASE; break;
@@ -317,9 +316,30 @@ class SphinxConfig
 						printf ( "$config_file: unknown matching mode '%s'\n", $mode_s );
 						return false;
 				}
+				$res["mode"] = $mode;
+				$res["mode_s"] = $mode_s;
+
+				// parse filter
+				$res["filter"] = $q->getAttribute("filter");
+				$res["filtervalue"] = $q->getAttribute("filtervalue" );
+
+				// parse sort mode and get clause
+				$sortmode = 0;
+				$sortmode_s = $q->getAttribute("sortmode");
+				switch ( $sortmode_s )
+				{
+					case "":			$sortmode_s = "(default)"; break;
+					case "expr":		$sortmode = SPH_SORT_EXPR; break;
+					default:
+						printf ( "$config_file: unknown sorting mode '%s'\n", $sortmode_s );
+						return false;
+				}
+				$res["sortmode"] = $sortmode;
+				$res["sortmode_s" ] = $sortmode_s;
+				$res["sortby"] = $q->getAttribute("sortby");
 
 				// add query
-				$this->_queries[] = array ( "query"=>$q->nodeValue, "mode"=>$mode, "mode_s"=>$mode_s );
+				$this->_queries[] = $res;
 			}
 
 		} else
@@ -373,9 +393,9 @@ class SphinxConfig
 				$results = 0;
 				if ( empty($this->_query_settings) )
 				{
-					if ( $qinfo["mode"] )
-						$cl->SetMatchMode ( $qinfo["mode"] );
-
+					if ( $qinfo["mode"] )		$cl->SetMatchMode ( $qinfo["mode"] );
+					if ( $qinfo["sortmode"] )	$cl->SetSortMode ( $qinfo["sortmode"], $qinfo["sortby"] );
+					if ( $qinfo["filter"] )		$cl->SetFilter ( $qinfo["filter"], array ( $qinfo["filtervalue"] ) );
 	            	$results = $cl->Query ( $query, $index );
 
             	} else

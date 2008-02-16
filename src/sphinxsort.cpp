@@ -995,6 +995,25 @@ protected:
 	}
 };
 
+
+/// match sorter
+struct MatchExpr_fn : public ISphMatchComparator
+{
+	virtual bool VirtualIsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t ) const
+	{
+		return IsLess ( a, b, t );
+	}
+
+	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
+	{
+		float aa = sphDW2F ( a.m_pRowitems [ t.m_iRowitem[0] ] );
+		float bb = sphDW2F ( b.m_pRowitems [ t.m_iRowitem[0] ] );
+		if ( aa!=bb )
+			return aa<bb;
+		return a.m_iDocID>b.m_iDocID;
+	}
+};
+
 /////////////////////////////////////////////////////////////////////////////
 
 #define SPH_TEST_PAIR(_aa,_bb,_idx ) \
@@ -1191,7 +1210,8 @@ enum ESphSortFunc
 	FUNC_GENERIC3,
 	FUNC_GENERIC4,
 	FUNC_GENERIC5,
-	FUNC_CUSTOM
+	FUNC_CUSTOM,
+	FUNC_EXPR
 };
 
 
@@ -1395,6 +1415,7 @@ static ISphMatchSorter * sphCreateSorter2nd ( ESphSortFunc eGroupFunc, bool bGro
 			case FUNC_GENERIC4:		return sphCreateSorter3rd<MatchGeneric4_fn<false> >	( bDistinct, bMVA, pComp, pQuery ); break;
 			case FUNC_GENERIC5:		return sphCreateSorter3rd<MatchGeneric5_fn<false> >	( bDistinct, bMVA, pComp, pQuery ); break;
 			case FUNC_CUSTOM:		return sphCreateSorter3rd<MatchCustom_fn<false>   >	( bDistinct, bMVA, pComp, pQuery ); break;
+			case FUNC_EXPR:			return sphCreateSorter3rd<MatchExpr_fn>				( bDistinct, bMVA, pComp, pQuery ); break;
 			default:				return NULL;
 		}
 	}
@@ -1431,6 +1452,7 @@ static ISphMatchSorter * sphCreateSorter1st ( ESphSortFunc eMatchFunc, bool bMat
 			case FUNC_GENERIC4:		pComp = new MatchGeneric4_fn<false>(); break;
 			case FUNC_GENERIC5:		pComp = new MatchGeneric5_fn<false>(); break;
 			case FUNC_CUSTOM:		pComp = new MatchCustom_fn<false>(); break;
+			case FUNC_EXPR:			pComp = new MatchExpr_fn(); break; // only for non-bitfields, obviously
 		}
 	}
 
@@ -1538,7 +1560,7 @@ ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchem
 		tStateMatch.m_iAttr[0] = FIXUP_EXPR;
 		tStateMatch.m_iAttr[1] = SPH_VATTR_ID;
 		tStateMatch.m_uAttrDesc = 1;
-		eMatchFunc = FUNC_GENERIC2;
+		eMatchFunc = FUNC_EXPR;
 		bUsesAttrs = true;
 
 	} else
@@ -1722,6 +1744,7 @@ ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchem
 				case FUNC_GENERIC4:	pTop = new CSphMatchQueue<MatchGeneric4_fn<false> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
 				case FUNC_GENERIC5:	pTop = new CSphMatchQueue<MatchGeneric5_fn<false> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
 				case FUNC_CUSTOM:	pTop = new CSphMatchQueue<MatchCustom_fn<false> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+				case FUNC_EXPR:		pTop = new CSphMatchQueue<MatchExpr_fn>					( pQuery->m_iMaxMatches, bUsesAttrs ); break;
 				default:			pTop = NULL;
 			}
 		}
@@ -1734,7 +1757,7 @@ ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchem
 	if ( !pTop )
 	{
 		sError.SetSprintf ( "internal error: unhandled sorting mode (match-sort=%d, group=%d, group-sort=%d)",
-			pQuery->m_iGroupbyOffset>=0, eMatchFunc, eGroupFunc );
+			eMatchFunc, pQuery->m_iGroupbyOffset>=0, eGroupFunc );
 		return NULL;
 	}
 

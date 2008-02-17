@@ -1414,7 +1414,7 @@ public:
 	int				m_iGroupbyCount;	///< group-by attr bit count
 	int				m_iDistinctOffset;	///< distinct-counted attr bit offset
 	int				m_iDistinctCount;	///< distinct-counted attr bit count
-	CSphExpr		m_tCalcExpr;		///< expression opcodes for SPH_SORT_EXPR mode
+	ISphExpr *		m_pExpr;			///< expression opcodes for SPH_SORT_EXPR mode
 
 public:
 	int				m_iOldVersion;		///< version, to fixup old queries
@@ -1427,7 +1427,7 @@ public:
 
 public:
 					CSphQuery ();		///< ctor, fills defaults
-					~CSphQuery () {}	///< dtor, frees owned stuff
+					~CSphQuery ();		///< dtor, frees owned stuff
 
 	int				GetIndexWeight ( const char * sName ) const;	///< return index weight from m_dIndexWeights; or 1 by default
 };

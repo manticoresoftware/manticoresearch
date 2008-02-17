@@ -1646,7 +1646,7 @@ private:
 	float						m_fGeoAnchorLong;		///< anchor longitude
 
 	int							m_iCalcExpr;			///< compute sorting expr to this rowitem (-1 means do not compute)
-	CSphExpr					m_tCalcExpr;			///< expression opcodes
+	ISphExpr *					m_pExpr;				///< expression opcodes
 
 private:
 	const char *				GetIndexFileName ( const char * sExt ) const;	///< WARNING, non-reenterable, static buffer!
@@ -3809,6 +3809,7 @@ CSphQuery::CSphQuery ()
 	, m_iGroupbyCount	( -1 )
 	, m_iDistinctOffset	( -1 )
 	, m_iDistinctCount	( -1 )
+	, m_pExpr			( NULL )
 
 	, m_iOldVersion		( 0 )
 	, m_iOldGroups		( 0 )
@@ -3818,6 +3819,12 @@ CSphQuery::CSphQuery ()
 	, m_iOldMinGID		( 0 )
 	, m_iOldMaxGID		( UINT_MAX )
 {}
+
+
+CSphQuery::~CSphQuery ()
+{
+	SafeDelete ( m_pExpr );
+}
 
 
 int CSphQuery::GetIndexWeight ( const char * sName ) const
@@ -8253,7 +8260,7 @@ void CSphIndex_VLN::LateCalc ( CSphMatch & tMatch ) const
 {
 	if ( m_iCalcExpr>=0 )
 	{
-		float fRes = m_tCalcExpr.Eval ( tMatch );
+		float fRes = m_pExpr->Eval ( tMatch );
 		tMatch.SetAttrFloat ( m_iCalcExpr, fRes );
 	}
 }
@@ -12793,7 +12800,7 @@ bool CSphIndex_VLN::SetupCalc ( CSphQueryResult * pResult, const CSphQuery * pQu
 		m_iCalcExpr = pResult->m_tSchema.GetAttr ( iAttr ).m_iRowitem;
 		assert ( m_iCalcExpr>=0 );
 
-		m_tCalcExpr = pQuery->m_tCalcExpr;
+		m_pExpr = pQuery->m_pExpr;
 	}
 
 	return true;

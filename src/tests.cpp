@@ -384,9 +384,6 @@ void TestExpr ()
 	for ( int i=0; i<tMatch.m_iRowitems; i++ )
 		tMatch.m_pRowitems[i] = 1+i;
 
-	CSphString sError;
-	CSphExpr tExpr;
-
 	struct ExprTest_t
 	{ 
 		const char *	m_sExpr;
@@ -394,7 +391,9 @@ void TestExpr ()
 	};
 	ExprTest_t dTests[] =
 	{
-		{ "if(pow(sqrt(2),2)=2,123,456)",		123.0f },
+		{ "1*2*3*4*5*6*7*8*9*10",			3628800.0f },
+		{ "aaa+bbb*sin(0)*ccc",				1.0f },
+		{ "if(pow(sqrt(2),2)=2,123,456)",	123.0f },
 		{ "if(2<2,3,4)",					4.0f },
 		{ "if(2>=2,3,4)",					3.0f },
 		{ "pow(7,5)",						16807.f },
@@ -423,14 +422,16 @@ void TestExpr ()
 	for ( int iTest=0; iTest<iTests; iTest++ )
 	{
 		printf ( "testing expression evaluation, test %d/%d... ", 1+iTest, iTests );
-		bool bRes = sphExprParse ( dTests[iTest].m_sExpr, tSchema, tExpr, sError );
-		if ( bRes!=true )
+
+		CSphString sError;
+		CSphScopedPtr<ISphExpr> pExpr ( sphExprParse ( dTests[iTest].m_sExpr, tSchema, sError ) );
+		if ( !pExpr.Ptr() )
 		{
 			printf ( "FAILED; %s\n", sError.cstr() );
 			assert ( 0 );
 		}
 
-		float fValue = tExpr.Eval(tMatch);
+		float fValue = pExpr->Eval(tMatch);
 		if ( fabs ( fValue - dTests[iTest].m_fValue )>=0.0001f )
 		{
 			printf ( "FAILED; expected %.3f, got %.3f\n", dTests[iTest].m_fValue, fValue );
@@ -443,11 +444,24 @@ void TestExpr ()
 
 
 #if USE_WINDOWS
-__declspec(noinline)
+#define NOINLINE __declspec(noinline)
+#else
+#define NOINLINE
 #endif
-float ExprNative ( const CSphMatch & tMatch )
+
+#define AAA float(tMatch.m_pRowitems[0])
+#define BBB float(tMatch.m_pRowitems[1])
+#define CCC float(tMatch.m_pRowitems[2])
+
+
+NOINLINE float ExprNative1 ( const CSphMatch & tMatch )
 {
-	return float(tMatch.m_pRowitems[0]) + float(tMatch.m_pRowitems[1]) * ( float(tMatch.m_pRowitems[2]) ) - 0.75f;
+	return AAA+BBB*CCC-0.75f;
+}
+
+NOINLINE float ExprNative2 ( const CSphMatch & tMatch )
+{
+	return AAA+BBB*CCC*2.0f-3.0f/4.0f*BBB;
 }
 
 
@@ -471,31 +485,44 @@ void BenchExpr ()
 	for ( int i=0; i<tMatch.m_iRowitems; i++ )
 		tMatch.m_pRowitems[i] = 1+i;
 
-	CSphString sError;
-	CSphExpr tExpr;
-	bool bRes = sphExprParse ( "aaa+bbb*(ccc)-0.75", tSchema, tExpr, sError );
-	if ( bRes!=true )
+	struct ExprBench_t
 	{
-		printf ( "FAILED; %s\n", sError.cstr() );
-		assert ( 0 );
+		const char *	m_sExpr;
+		float			(*m_pFunc)( const CSphMatch & );
+	};
+	ExprBench_t dBench[] =
+	{
+		{ "aaa+bbb*(ccc)-0.75",			ExprNative1 },
+		{ "aaa+bbb*ccc*2-3/4*bbb",		ExprNative2 }
+	};
+
+	for ( int iRun=0; iRun<2; iRun++ )
+	{
+		printf ( "run %d: ", iRun+1 );
+
+		CSphString sError;
+		CSphScopedPtr<ISphExpr> pExpr ( sphExprParse ( dBench[iRun].m_sExpr, tSchema, sError ) );
+		if ( !pExpr.Ptr() )
+		{
+			printf ( "FAILED; %s\n", sError.cstr() );
+			return;
+		}
+
+		const int NRUNS = 1000000;
+
+		volatile float fValue = 0.0f;
+		float fTime = sphLongTimer ();
+		for ( int i=0; i<NRUNS; i++ ) fValue += pExpr->Eval(tMatch);
+		fTime = sphLongTimer() - fTime;
+
+		float fTimeNative = sphLongTimer ();
+		for ( int i=0; i<NRUNS; i++ ) fValue += dBench[iRun].m_pFunc ( tMatch );
+		fTimeNative = sphLongTimer() - fTimeNative;
+
+		printf ( "interpreted %.1f Mcalls/sec, native %.1f Mcalls/sec\n",
+			float(NRUNS)/float(1000000.0f)/fTime,
+			float(NRUNS)/float(1000000.0f)/fTimeNative );
 	}
-
-	const int NRUNS = 1000000;
-
-	volatile float fValue = 0.0f;
-	float fTime = sphLongTimer ();
-	for ( int i=0; i<NRUNS; i++ )
-		fValue += tExpr.Eval(tMatch);
-	fTime = sphLongTimer() - fTime;
-
-	float fTimeNative = sphLongTimer ();
-	for ( int i=0; i<NRUNS; i++ )
-		fValue += ExprNative ( tMatch );
-	fTimeNative = sphLongTimer() - fTimeNative;
-
-	printf ( "bytecode %.1f Mcalls/sec\nnative %.1f Mcalls/sec\n",
-		float(NRUNS)/float(1000000.0f)/fTime,
-		float(NRUNS)/float(1000000.0f)/fTimeNative );
 }
 
 //////////////////////////////////////////////////////////////////////////

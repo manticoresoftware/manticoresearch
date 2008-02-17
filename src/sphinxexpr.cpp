@@ -26,6 +26,174 @@
 #endif
 
 //////////////////////////////////////////////////////////////////////////
+// EVALUATION ENGINE
+//////////////////////////////////////////////////////////////////////////
+
+struct Expr_GetInt_c : public ISphExpr
+{
+	int m_iRowitem;
+	Expr_GetInt_c ( int iLocator ) : m_iRowitem ( iLocator ) {}
+	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)tMatch.m_pRowitems[m_iRowitem]; }
+};
+
+
+struct Expr_GetBits_c : public ISphExpr
+{
+	int m_iRowitem;
+	int m_iShift;
+	DWORD m_uMask;
+	Expr_GetBits_c ( int iLocator ) : m_iRowitem ( iLocator>>16 ), m_iShift ( (iLocator>>8)&255 ), m_uMask ( (1UL<<(iLocator&255)) - 1 ) {}
+	virtual float Eval ( const CSphMatch & tMatch ) const { return float ( ( tMatch.m_pRowitems[m_iRowitem]>>m_iShift ) & m_uMask ); }
+};
+
+
+struct Expr_GetFloat_c : public ISphExpr
+{
+	int m_iRowitem;
+	Expr_GetFloat_c ( int iLocator ) : m_iRowitem ( iLocator ) {}
+	virtual float Eval ( const CSphMatch & tMatch ) const { return sphDW2F(tMatch.m_pRowitems[m_iRowitem]); }
+};
+
+
+struct Expr_GetConst_c : public ISphExpr
+{
+	float m_fValue;
+	Expr_GetConst_c ( float fValue ) : m_fValue ( fValue ) {}
+	virtual float Eval ( const CSphMatch & ) const { return m_fValue; }
+};
+
+
+struct Expr_GetId_c : public ISphExpr
+{
+	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)tMatch.m_iDocID; }
+};
+
+
+struct Expr_GetWeight_c : public ISphExpr
+{
+	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)tMatch.m_iWeight; }
+};
+
+//////////////////////////////////////////////////////////////////////////
+
+struct Expr_Arglist_c : public ISphExpr
+{
+	CSphVector<ISphExpr *> m_dArgs;
+
+	Expr_Arglist_c ( ISphExpr * pLeft, ISphExpr * pRight )
+	{
+		AddArgs ( pLeft );
+		AddArgs ( pRight );
+	}
+
+	~Expr_Arglist_c ()
+	{
+		ARRAY_FOREACH ( i, m_dArgs )
+			SafeDelete ( m_dArgs[i] );
+	}
+
+	void AddArgs ( ISphExpr * pExpr )
+	{
+		// not an arglist? just add it
+		if ( !pExpr->IsArglist() )
+		{
+			m_dArgs.Add ( pExpr );
+			return;
+		}
+
+		// arglist? take ownership of its args, and dismiss it
+		Expr_Arglist_c * pArgs = (Expr_Arglist_c *) pExpr;
+		ARRAY_FOREACH ( i, pArgs->m_dArgs )
+		{
+			m_dArgs.Add ( pArgs->m_dArgs[i] );
+			pArgs->m_dArgs[i] = NULL;
+		}
+		SafeDelete ( pExpr );
+	}
+
+	virtual bool IsArglist () const
+	{
+		return true;
+	}
+
+	virtual float Eval ( const CSphMatch & ) const
+	{
+		assert ( 0 && "internal error: Eval() must not be explicitly called on arglist" );
+		return 0.0f;
+	}
+};
+
+//////////////////////////////////////////////////////////////////////////
+
+#define FIRST	m_pFirst->Eval(tMatch)
+#define SECOND	m_pSecond->Eval(tMatch)
+#define THIRD	m_pThird->Eval(tMatch)
+
+#define DECLARE_UNARY(_classname,_expr) \
+	struct _classname : public ISphExpr \
+	{ \
+		ISphExpr * m_pFirst; \
+		_classname ( ISphExpr * pFirst ) : m_pFirst ( pFirst ) {}; \
+		~_classname () { SafeDelete ( m_pFirst ); } \
+		virtual float Eval ( const CSphMatch & tMatch ) const { return _expr; } \
+	};
+
+DECLARE_UNARY ( Expr_Neg_c,		-FIRST )
+DECLARE_UNARY ( Expr_Abs_c,		fabs(FIRST) )
+DECLARE_UNARY ( Expr_Ceil_c,	float(ceil(FIRST)) )
+DECLARE_UNARY ( Expr_Floor_c,	float(floor(FIRST)) )
+DECLARE_UNARY ( Expr_Sin_c,		float(sin(FIRST)) )
+DECLARE_UNARY ( Expr_Cos_c,		float(cos(FIRST)) )
+DECLARE_UNARY ( Expr_Ln_c,		float(log(FIRST)) )
+DECLARE_UNARY ( Expr_Log2_c,	float(log(FIRST)*M_LOG2E) )
+DECLARE_UNARY ( Expr_Log10_c,	float(log(FIRST)*M_LOG10E) )
+DECLARE_UNARY ( Expr_Exp_c,		float(exp(FIRST)) )
+DECLARE_UNARY ( Expr_Sqrt_c,	float(sqrt(FIRST)) )
+
+//////////////////////////////////////////////////////////////////////////
+
+#define DECLARE_BINARY(_classname,_expr) \
+	struct _classname : public ISphExpr \
+	{ \
+		ISphExpr * m_pFirst; \
+		ISphExpr * m_pSecond; \
+		_classname ( ISphExpr * pFirst, ISphExpr * pSecond ) : m_pFirst ( pFirst ), m_pSecond ( pSecond ) {} \
+		~_classname () { SafeDelete ( m_pFirst ); SafeDelete ( m_pSecond ); } \
+		virtual float Eval ( const CSphMatch & tMatch ) const { return _expr; } \
+	};
+
+DECLARE_BINARY ( Expr_Add_c,	FIRST + SECOND ) 
+DECLARE_BINARY ( Expr_Sub_c,	FIRST - SECOND ) 
+DECLARE_BINARY ( Expr_Mul_c,	FIRST * SECOND ) 
+DECLARE_BINARY ( Expr_Div_c,	FIRST / SECOND ) 
+DECLARE_BINARY ( Expr_Lt_c,		(FIRST < SECOND) ? 1.0f : 0.0f ) 
+DECLARE_BINARY ( Expr_Gt_c,		(FIRST > SECOND) ? 1.0f : 0.0f ) 
+DECLARE_BINARY ( Expr_Lte_c,	(FIRST <= SECOND) ? 1.0f : 0.0f ) 
+DECLARE_BINARY ( Expr_Gte_c,	(FIRST >= SECOND) ? 1.0f : 0.0f ) 
+DECLARE_BINARY ( Expr_Eq_c,		fabs(FIRST-SECOND)<=1e-6 ? 1.0f : 0.0f ) 
+DECLARE_BINARY ( Expr_Ne_c,		fabs(FIRST-SECOND)>1e-6 ? 1.0f : 0.0f ) 
+
+DECLARE_BINARY ( Expr_Min_c,	Min(FIRST,SECOND) )
+DECLARE_BINARY ( Expr_Max_c,	Max(FIRST,SECOND) )
+DECLARE_BINARY ( Expr_Pow_c,	float(pow(FIRST,SECOND)) )
+
+//////////////////////////////////////////////////////////////////////////
+
+#define DECLARE_TERNARY(_classname,_expr) \
+	struct _classname : public ISphExpr \
+	{ \
+		ISphExpr * m_pFirst; \
+		ISphExpr * m_pSecond; \
+		ISphExpr * m_pThird; \
+		_classname ( ISphExpr * pFirst, ISphExpr * pSecond, ISphExpr * pThird ) : m_pFirst ( pFirst ), m_pSecond ( pSecond ), m_pThird ( pThird ) {} \
+		~_classname () { SafeDelete ( m_pFirst ); SafeDelete ( m_pSecond ); SafeDelete ( m_pThird ); } \
+		virtual float Eval ( const CSphMatch & tMatch ) const { return _expr; } \
+	};
+
+DECLARE_TERNARY ( Expr_If_c,	( FIRST!=0.0f ) ? SECOND : THIRD )
+DECLARE_TERNARY ( Expr_Madd_c,	FIRST*SECOND+THIRD )
+
+//////////////////////////////////////////////////////////////////////////
 // PARSER INTERNALS
 //////////////////////////////////////////////////////////////////////////
 
@@ -40,72 +208,56 @@ enum Docinfo_e
 
 //////////////////////////////////////////////////////////////////////////
 
-/// VM opcodes
-enum Opcode_e
+/// known functions
+enum Func_e
 {
-	OPCODE_STOP,
-	OPCODE_PUSH_ATTR_INT,
-	OPCODE_PUSH_ATTR_BITS,
-	OPCODE_PUSH_ATTR_FLOAT,
-	OPCODE_PUSH_CONST,
-	OPCODE_PUSH_ID,
-	OPCODE_PUSH_WEIGHT,
+	FUNC_ABS,
+	FUNC_CEIL,
+	FUNC_FLOOR,
+	FUNC_SIN,
+	FUNC_COS,
+	FUNC_LN,
+	FUNC_LOG2,
+	FUNC_LOG10,
+	FUNC_EXP,
+	FUNC_SQRT,
 
-	OPCODE_ADD,
-	OPCODE_SUB,
-	OPCODE_MUL,
-	OPCODE_DIV,
-	OPCODE_LT,
-	OPCODE_GT,
-	OPCODE_LTE,
-	OPCODE_GTE,
-	OPCODE_EQ,
-	OPCODE_NE,
+	FUNC_MIN,
+	FUNC_MAX,
+	FUNC_POW,
 
-	OPCODE_NEG,
-	OPCODE_ABS,
-	OPCODE_CEIL,
-	OPCODE_FLOOR,
-	OPCODE_SIN,
-	OPCODE_COS,
-	OPCODE_LN,
-	OPCODE_LOG2,
-	OPCODE_LOG10,
-	OPCODE_EXP,
-	OPCODE_SQRT,
-
-	OPCODE_MIN,
-	OPCODE_MAX,
-	OPCODE_POW,
-
-	OPCODE_IF,
+	FUNC_IF,
+	FUNC_MADD
 };
 
-/// known functions
+
 struct FuncDesc_t
 {
 	const char *	m_sName;
 	int				m_iArgs;
-	Opcode_e		m_eOpcode;
+	Func_e			m_eFunc;
 };
+
+
 static FuncDesc_t g_dFuncs[] =
 {
-	{ "abs",	1,	OPCODE_ABS },
-	{ "ceil",	1,	OPCODE_CEIL },
-	{ "floor",	1,	OPCODE_FLOOR },
-	{ "sin",	1,	OPCODE_SIN },
-	{ "cos",	1,	OPCODE_COS },
-	{ "ln",		1,	OPCODE_LN },
-	{ "log2",	1,	OPCODE_LOG2 },
-	{ "log10",	1,	OPCODE_LOG10 },
-	{ "exp",	1,	OPCODE_EXP },
-	{ "sqrt",	1,	OPCODE_SQRT },
+	{ "abs",	1,	FUNC_ABS },
+	{ "ceil",	1,	FUNC_CEIL },
+	{ "floor",	1,	FUNC_FLOOR },
+	{ "sin",	1,	FUNC_SIN },
+	{ "cos",	1,	FUNC_COS },
+	{ "ln",		1,	FUNC_LN },
+	{ "log2",	1,	FUNC_LOG2 },
+	{ "log10",	1,	FUNC_LOG10 },
+	{ "exp",	1,	FUNC_EXP },
+	{ "sqrt",	1,	FUNC_SQRT },
 
-	{ "min",	2,	OPCODE_MIN },
-	{ "max",	2,	OPCODE_MAX },
-	{ "pow",	2,	OPCODE_POW },
+	{ "min",	2,	FUNC_MIN },
+	{ "max",	2,	FUNC_MAX },
+	{ "pow",	2,	FUNC_POW },
 
-	{ "if",		3,	OPCODE_IF },
+	{ "if",		3,	FUNC_IF },
+	{ "madd",	3,	FUNC_MADD }
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -140,7 +292,7 @@ public:
 							ExprParser_t () {}
 							~ExprParser_t () {}
 
-	bool					Parse ( const char * sExpr, const CSphSchema & tSchema, CSphExpr & tOutExpr, CSphString & sError );
+	ISphExpr *				Parse ( const char * sExpr, const CSphSchema & tSchema, CSphString & sError );
 
 protected:
 	int						m_iParsed;	///< filled by yyparse() at the very end
@@ -163,7 +315,8 @@ private:
 
 private:
 	int						GetToken ( YYSTYPE * lvalp );
-	void					FoldTree ( int iNode, CSphExpr & tOutExpr );
+	void					Optimize ( int iNode );
+	ISphExpr *				CreateTree ( int iNode );
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -308,69 +461,133 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 	return -1;
 }
 
-/// fold nodes subtree into opcodes
-void ExprParser_t::FoldTree ( int iNode, CSphExpr & tOutExpr )
+/// optimize subtree
+void ExprParser_t::Optimize ( int iNode )
 {
 	if ( iNode<0 )
 		return;
 
+	ExprNode_t * pRoot = &m_dNodes[iNode];
+	Optimize ( pRoot->m_iLeft );
+	Optimize ( pRoot->m_iRight );
+
+	// madd
+	if ( pRoot->m_iToken=='+' &&
+		( m_dNodes[pRoot->m_iLeft].m_iToken=='*' || m_dNodes[pRoot->m_iRight].m_iToken=='*' ) )
+	{
+		if ( m_dNodes[pRoot->m_iLeft].m_iToken!='*' )
+			Swap ( pRoot->m_iLeft, pRoot->m_iRight );
+		assert ( m_dNodes[pRoot->m_iLeft].m_iToken=='*' );
+
+		m_dNodes.Resize ( m_dNodes.GetLength()+1 );
+		pRoot = &m_dNodes[iNode];
+
+		m_dNodes[pRoot->m_iLeft].m_iToken = ',';
+
+		m_dNodes.Last().m_iToken = ',';
+		m_dNodes.Last().m_iLeft = pRoot->m_iLeft;
+		m_dNodes.Last().m_iRight = pRoot->m_iRight;
+
+		pRoot->m_iToken = TOK_FUNC;
+		pRoot->m_iFunc = FUNC_MADD; assert ( g_dFuncs[pRoot->m_iFunc].m_eFunc==FUNC_MADD );
+		pRoot->m_iLeft = m_dNodes.GetLength()-1;
+		pRoot->m_iRight = -1;
+		return;
+	}
+}
+
+/// fold nodes subtree into opcodes
+ISphExpr * ExprParser_t::CreateTree ( int iNode )
+{
+	if ( iNode<0 )
+		return NULL;
+
 	const ExprNode_t & tNode = m_dNodes[iNode];
-	FoldTree ( tNode.m_iLeft, tOutExpr );
-	FoldTree ( tNode.m_iRight, tOutExpr );
+	ISphExpr * pLeft = CreateTree ( tNode.m_iLeft );
+	ISphExpr * pRight = CreateTree ( tNode.m_iRight );
 
 	switch ( tNode.m_iToken )
 	{
-		case TOK_ATTR_INT:
-			tOutExpr.Add ( OPCODE_PUSH_ATTR_INT );
-			tOutExpr.Add ( tNode.m_iAttrLocator );
-			break;
-
-		case TOK_ATTR_BITS:
-			tOutExpr.Add ( OPCODE_PUSH_ATTR_BITS );
-			tOutExpr.Add ( tNode.m_iAttrLocator );
-			break;
-
-		case TOK_ATTR_FLOAT:
-			tOutExpr.Add ( OPCODE_PUSH_ATTR_FLOAT );
-			tOutExpr.Add ( tNode.m_iAttrLocator );
-			break;
-
-		case TOK_NUMBER:
-			tOutExpr.Add ( OPCODE_PUSH_CONST );
-			tOutExpr.Add ( sphF2DW(tNode.m_fConst) );
-			break;
-
-		case '+':		tOutExpr.Add ( OPCODE_ADD ); break;
-		case '-':		tOutExpr.Add ( OPCODE_SUB ); break;
-		case '*':		tOutExpr.Add ( OPCODE_MUL ); break;
-		case '/':		tOutExpr.Add ( OPCODE_DIV ); break;
-		case '<':		tOutExpr.Add ( OPCODE_LT ); break;
-		case '>':		tOutExpr.Add ( OPCODE_GT ); break;
-		case TOK_LTE:	tOutExpr.Add ( OPCODE_LTE ); break;
-		case TOK_GTE:	tOutExpr.Add ( OPCODE_GTE ); break;
-		case TOK_EQ:	tOutExpr.Add ( OPCODE_EQ ); break;
-		case TOK_NE:	tOutExpr.Add ( OPCODE_NE ); break;
-		case ',':		break;
-		case TOK_NEG:	tOutExpr.Add ( OPCODE_NEG ); break;
-
-		case TOK_FUNC:
-			assert ( tNode.m_iFunc>=0 && tNode.m_iFunc<int(sizeof(g_dFuncs)/sizeof(g_dFuncs[0])) );
-			tOutExpr.Add ( g_dFuncs[tNode.m_iFunc].m_eOpcode );
-			break;
-
+		case TOK_ATTR_INT:		return new Expr_GetInt_c ( tNode.m_iAttrLocator );
+		case TOK_ATTR_BITS:		return new Expr_GetBits_c ( tNode.m_iAttrLocator );
+		case TOK_ATTR_FLOAT:	return new Expr_GetFloat_c ( tNode.m_iAttrLocator );
+		case TOK_NUMBER:		return new Expr_GetConst_c ( tNode.m_fConst );
 		case TOK_DOCINFO:
 			switch ( tNode.m_eDocinfo )
 			{
-				case DI_ID:		tOutExpr.Add ( OPCODE_PUSH_ID ); break;
-				case DI_WEIGHT:	tOutExpr.Add ( OPCODE_PUSH_WEIGHT ); break;
+				case DI_ID:		return new Expr_GetId_c ();
+				case DI_WEIGHT:	return new Expr_GetWeight_c ();
 				default:		assert ( 0 && "unhandled docinfo element id" ); break;
 			}
 			break;
 
-		default:
-			assert ( 0 && "unhandled token type" );
-			break;
+		case '+':				return new Expr_Add_c ( pLeft, pRight ); break;
+		case '-':				return new Expr_Sub_c ( pLeft, pRight ); break;
+		case '*':				return new Expr_Mul_c ( pLeft, pRight ); break;
+		case '/':				return new Expr_Div_c ( pLeft, pRight ); break;
+		case '<':				return new Expr_Lt_c ( pLeft, pRight ); break;
+		case '>':				return new Expr_Gt_c ( pLeft, pRight ); break;
+		case TOK_LTE:			return new Expr_Lte_c ( pLeft, pRight ); break;
+		case TOK_GTE:			return new Expr_Gte_c ( pLeft, pRight ); break;
+		case TOK_EQ:			return new Expr_Eq_c ( pLeft, pRight ); break;
+		case TOK_NE:			return new Expr_Ne_c ( pLeft, pRight ); break;
+
+		case ',':				return new Expr_Arglist_c ( pLeft, pRight ); break;
+		case TOK_NEG:			assert ( pRight==NULL ); return new Expr_Neg_c ( pLeft ); break;
+		case TOK_FUNC:
+			{
+				// fold arglist to array
+				CSphVector<ISphExpr *> dArgs;
+				assert ( pLeft );
+				if ( pLeft->IsArglist() )
+				{
+					assert ( !pRight );
+					Expr_Arglist_c * pArgs = (Expr_Arglist_c *) pLeft;
+
+					dArgs = pArgs->m_dArgs;
+					pArgs->m_dArgs.Reset ();
+					SafeDelete ( pLeft );
+
+				} else
+				{
+					dArgs.Add ( pLeft );
+				}
+
+				// spawn proper function
+				assert ( tNode.m_iFunc>=0 && tNode.m_iFunc<int(sizeof(g_dFuncs)/sizeof(g_dFuncs[0])) );
+				assert ( g_dFuncs[tNode.m_iFunc].m_iArgs==dArgs.GetLength() );
+
+				switch ( g_dFuncs[tNode.m_iFunc].m_eFunc )
+				{
+					case FUNC_ABS:		return new Expr_Abs_c ( dArgs[0] ); break;
+					case FUNC_CEIL:		return new Expr_Ceil_c ( dArgs[0] ); break;
+					case FUNC_FLOOR:	return new Expr_Floor_c ( dArgs[0] ); break;
+					case FUNC_SIN:		return new Expr_Sin_c ( dArgs[0] ); break;
+					case FUNC_COS:		return new Expr_Cos_c ( dArgs[0] ); break;
+					case FUNC_LN:		return new Expr_Ln_c ( dArgs[0] ); break;
+					case FUNC_LOG2:		return new Expr_Log2_c ( dArgs[0] ); break;
+					case FUNC_LOG10:	return new Expr_Log10_c ( dArgs[0] ); break;
+					case FUNC_EXP:		return new Expr_Exp_c ( dArgs[0] ); break;
+					case FUNC_SQRT:		return new Expr_Sqrt_c ( dArgs[0] ); break;
+
+					case FUNC_MIN:		return new Expr_Min_c ( dArgs[0], dArgs[1] ); break;
+					case FUNC_MAX:		return new Expr_Max_c ( dArgs[0], dArgs[1] ); break;
+					case FUNC_POW:		return new Expr_Pow_c ( dArgs[0], dArgs[1] ); break;
+
+					case FUNC_IF:		return new Expr_If_c ( dArgs[0], dArgs[1], dArgs[2] ); break;
+					case FUNC_MADD:		return new Expr_Madd_c ( dArgs[0], dArgs[1], dArgs[2] ); break;
+				}
+				assert ( 0 && "unhandled function id" );
+				break;
+			}
+
+		default:				assert ( 0 && "unhandled token type" ); break;
 	}
+
+	// fire exit
+	SafeDelete ( pLeft );
+	SafeDelete ( pRight );
+	return NULL;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -457,7 +674,7 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArgsNode )
 	return m_dNodes.GetLength()-1;
 }
 
-bool ExprParser_t::Parse ( const char * sExpr, const CSphSchema & tSchema, CSphExpr & tOutExpr, CSphString & sError )
+ISphExpr * ExprParser_t::Parse ( const char * sExpr, const CSphSchema & tSchema, CSphString & sError )
 {
 	// setup lexer
 	m_sExpr = sExpr;
@@ -473,175 +690,27 @@ bool ExprParser_t::Parse ( const char * sExpr, const CSphSchema & tSchema, CSphE
 	{
 		sError = !m_sLexerError.IsEmpty() ? m_sLexerError : m_sParserError;
 		if ( sError.IsEmpty() ) sError = "general parsing error";
-		return false;
+		return NULL;
 	}
 
-	// fold the tree to opcodes
-	tOutExpr.Reset ();
-	tOutExpr.Reserve ( 128 );
-
-	FoldTree ( m_iParsed, tOutExpr );
-	if ( !tOutExpr.GetLength() )
-	{
+	// perform optimizations, create evaluator
+	Optimize ( m_iParsed );
+	ISphExpr * pRes = CreateTree ( m_iParsed );
+	if ( !pRes )
 		sError.SetSprintf ( "empty expression" );
-		return false;
-	}
-
-	tOutExpr.Add ( OPCODE_STOP );
-	return true;
+	return pRes;
 }
 
 //////////////////////////////////////////////////////////////////////////
 // PUBLIC STUFF
 //////////////////////////////////////////////////////////////////////////
 
-/// max evaluation stack size
-static const int STACK_SIZE = 64;
-
-/// expression evaluation
-float CSphExpr::Eval ( const CSphMatch & tMatch ) const
-{
-	// safety check
-	if ( !m_iLength )
-		return 0.0f;
-
-	// do evaluation
-	float dStack[STACK_SIZE];
-	int iTop = -1; // used==top+1
-
-	const DWORD * pOpcodes = m_pData;
-	for ( ;; ) switch ( *pOpcodes++ )
-	{
-		case OPCODE_STOP:			assert ( iTop==0 ); return dStack[0];
-		case OPCODE_PUSH_ATTR_INT:	assert ( iTop<STACK_SIZE-1 ); dStack[++iTop] = (float)tMatch.m_pRowitems[*pOpcodes++]; break;
-		case OPCODE_PUSH_ATTR_BITS:
-			{
-				assert ( iTop<STACK_SIZE-1 );
-				DWORD uLoc = *pOpcodes++;
-				dStack[++iTop] = (float)( ( tMatch.m_pRowitems[uLoc>>16] >> ((uLoc>>8)&255) ) // val = rowitems[item] >> shift
-					& ( (1UL<<(uLoc&255)) - 1 ) ); // mask = (1<<bitcount)-1
-				break;
-			}
-		case OPCODE_PUSH_ATTR_FLOAT:assert ( iTop<STACK_SIZE-1 ); dStack[++iTop] = sphDW2F(tMatch.m_pRowitems[*pOpcodes++]); break;
-		case OPCODE_PUSH_CONST:		assert ( iTop<STACK_SIZE-1 ); dStack[++iTop] = sphDW2F(*pOpcodes++); break;
-		case OPCODE_PUSH_ID:		assert ( iTop<STACK_SIZE-1 ); dStack[++iTop] = (float)tMatch.m_iDocID; break;
-		case OPCODE_PUSH_WEIGHT:	assert ( iTop<STACK_SIZE-1 ); dStack[++iTop] = (float)tMatch.m_iWeight; break;
-
-		case OPCODE_ADD:		assert ( iTop>=1 ); dStack[iTop-1] += dStack[iTop]; iTop--; break;
-		case OPCODE_SUB:		assert ( iTop>=1 ); dStack[iTop-1] -= dStack[iTop]; iTop--; break;
-		case OPCODE_MUL:		assert ( iTop>=1 ); dStack[iTop-1] *= dStack[iTop]; iTop--; break;
-		case OPCODE_DIV:		assert ( iTop>=1 ); dStack[iTop-1] /= dStack[iTop]; iTop--; break;
-		case OPCODE_LT:			assert ( iTop>=1 ); dStack[iTop-1] = ( dStack[iTop-1] < dStack[iTop] ) ? 1.0f : 0.0f; iTop--; break;
-		case OPCODE_GT:			assert ( iTop>=1 ); dStack[iTop-1] = ( dStack[iTop-1] > dStack[iTop] ) ? 1.0f : 0.0f; iTop--; break;
-		case OPCODE_LTE:		assert ( iTop>=1 ); dStack[iTop-1] = ( dStack[iTop-1] <= dStack[iTop] ) ? 1.0f : 0.0f; iTop--; break;
-		case OPCODE_GTE:		assert ( iTop>=1 ); dStack[iTop-1] = ( dStack[iTop-1] >= dStack[iTop] ) ? 1.0f : 0.0f; iTop--; break;
-		case OPCODE_EQ:			assert ( iTop>=1 ); dStack[iTop-1] = fabs ( dStack[iTop-1]-dStack[iTop] ) <= 1e-6 ? 1.0f : 0.0f; iTop--; break;
-		case OPCODE_NE:			assert ( iTop>=1 ); dStack[iTop-1] = fabs ( dStack[iTop-1]-dStack[iTop] ) > 1e-6 ? 1.0f : 0.0f; iTop--; break;
-
-		case OPCODE_NEG:		assert ( iTop>=0 ); dStack[iTop] = -dStack[iTop]; break;
-		case OPCODE_ABS:		assert ( iTop>=0 ); if ( dStack[iTop]<0.0f ) dStack[iTop] = -dStack[iTop]; break;
-		case OPCODE_CEIL:		assert ( iTop>=0 ); dStack[iTop] = (float)ceil ( dStack[iTop] ); break;
-		case OPCODE_FLOOR:		assert ( iTop>=0 ); dStack[iTop] = (float)floor ( dStack[iTop] ); break;
-		case OPCODE_SIN:		assert ( iTop>=0 ); dStack[iTop] = (float)sin ( dStack[iTop] ); break;
-		case OPCODE_COS:		assert ( iTop>=0 ); dStack[iTop] = (float)cos ( dStack[iTop] ); break;
-		case OPCODE_LN:			assert ( iTop>=0 ); dStack[iTop] = (float)log ( dStack[iTop] ); break;
-		case OPCODE_LOG2:		assert ( iTop>=0 ); dStack[iTop] = (float)( log ( dStack[iTop] ) * M_LOG2E ); break;
-		case OPCODE_LOG10:		assert ( iTop>=0 ); dStack[iTop] = (float)( log ( dStack[iTop] ) * M_LOG10E ); break;
-		case OPCODE_EXP:		assert ( iTop>=0 ); dStack[iTop] = (float)exp ( dStack[iTop] ); break;
-		case OPCODE_SQRT:		assert ( iTop>=0 ); dStack[iTop] = (float)sqrt ( dStack[iTop] ); break;
-
-		case OPCODE_MIN:		assert ( iTop>=1 ); dStack[iTop-1] = Min ( dStack[iTop-1], dStack[iTop] ); iTop--; break;
-		case OPCODE_MAX:		assert ( iTop>=1 ); dStack[iTop-1] = Max ( dStack[iTop-1], dStack[iTop] ); iTop--; break;
-		case OPCODE_POW:		assert ( iTop>=1 ); dStack[iTop-1] = (float)pow ( dStack[iTop-1], dStack[iTop] ); iTop--; break;
-
-		case OPCODE_IF:			assert ( iTop>=2 ); dStack[iTop-2] = ( dStack[iTop-2]!=0.0f ) ? dStack[iTop-1] : dStack[iTop]; iTop-=2; break;
-
-		default:				assert ( 0 && "unhandled opcode" );
-	}
-}
-
 /// parser entry point
-bool sphExprParse ( const char * sExpr, const CSphSchema & tSchema, CSphExpr & tOutExpr, CSphString & sError )
+ISphExpr * sphExprParse ( const char * sExpr, const CSphSchema & tSchema, CSphString & sError )
 {
 	// parse into opcodes
 	ExprParser_t tParser;
-	if ( !tParser.Parse ( sExpr, tSchema, tOutExpr, sError ) )
-		return false;
-
-	// expression sanity checks
-	if ( !tOutExpr.GetLength() )		{ sError.SetSprintf ( "empty expression" ); return false; }
-	if ( tOutExpr.Last()!=OPCODE_STOP )	{ sError.SetSprintf ( "internal error: unterminated opcodes list" ); return false; }
-
-	// run simulation, check stack usage
-	int iTop = -1;
-	const DWORD * pOpcodes = &tOutExpr[0];
-	for ( ;; ) switch ( *pOpcodes++ )
-	{
-		// push ops
-		case OPCODE_PUSH_ATTR_INT:
-		case OPCODE_PUSH_ATTR_BITS:
-		case OPCODE_PUSH_ATTR_FLOAT:
-		case OPCODE_PUSH_CONST:
-			if ( iTop>=STACK_SIZE-1 ) { sError = "internal error: opcodes stack overflow"; return false; }
-			pOpcodes++;
-			iTop++;
-			break;
-
-		case OPCODE_PUSH_ID:
-		case OPCODE_PUSH_WEIGHT:
-			if ( iTop>=STACK_SIZE-1 ) { sError = "internal error: opcodes stack overflow"; return false; }
-			iTop++;
-			break;
-
-		// unary ops
-		case OPCODE_NEG:
-		case OPCODE_ABS:
-		case OPCODE_CEIL:
-		case OPCODE_FLOOR:
-		case OPCODE_SIN:
-		case OPCODE_COS:
-		case OPCODE_LN:
-		case OPCODE_LOG2:
-		case OPCODE_LOG10:
-		case OPCODE_EXP:
-		case OPCODE_SQRT:
-			if ( iTop<0 ) { sError = "internal error: no args to unary operation"; return false; }
-			break;
-
-		// binary ops
-		case OPCODE_ADD:
-		case OPCODE_SUB:
-		case OPCODE_MUL:
-		case OPCODE_DIV:
-		case OPCODE_LT:
-		case OPCODE_GT:
-		case OPCODE_LTE:
-		case OPCODE_GTE:
-		case OPCODE_EQ:
-		case OPCODE_NE:
-		case OPCODE_MIN:
-		case OPCODE_MAX:
-		case OPCODE_POW:
-			if ( iTop<1 ) { sError = "internal error: no args to binary operation"; return false; }
-			iTop--;
-			break;
-
-		// ternary ops
-		case OPCODE_IF:
-			if ( iTop<2 ) { sError = "internal error: no args to 3-arg function"; return false; }
-			iTop-=2;
-			break;
-
-		// stop
-		case OPCODE_STOP:
-			if ( iTop!=0 ) { sError = "internal error: extra opcodes in stack on STOP"; return false; }
-			return true; // clean stop, all ok
-
-		// unhandled
-		default:
-			sError.SetSprintf ( "internal error: unhandled opcode (code=%d)", pOpcodes[-1] );
-			return false;
-	}
+	return tParser.Parse ( sExpr, tSchema, sError );
 }
 
 //

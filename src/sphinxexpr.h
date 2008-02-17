@@ -16,16 +16,23 @@
 
 #include "sphinx.h"
 
-/// expression opcodes container
-class CSphExpr : public CSphVector<DWORD>
+/// expression evaluator
+struct ISphExpr
 {
-public:
-	/// evalaute this expression for that match
-	float Eval ( const CSphMatch & tMatch ) const;
+	/// virtualize dtor
+	virtual ~ISphExpr () {}
+
+	/// evaluate this expression for that match
+	virtual float Eval ( const CSphMatch & tMatch ) const = 0;
+
+	/// check for arglist subtype
+	virtual bool IsArglist () const { return false; }
 };
 
-/// parses given expression, builds opcodes
-bool sphExprParse ( const char * sExpr, const CSphSchema & tSchema, CSphExpr & tOutExpr, CSphString & sError );
+/// parses given expression, builds evaluator
+/// returns NULL and fills sError on failure
+/// returns pointer to evaluator on success
+ISphExpr * sphExprParse ( const char * sExpr, const CSphSchema & tSchema, CSphString & sError );
 
 #endif // _sphinxexpr_
 

@@ -1554,8 +1554,10 @@ ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchem
 		}
 
 	} else if ( pQuery->m_eSort==SPH_SORT_EXPR )
-	{	
-		if ( !sphExprParse ( pQuery->m_sSortBy.cstr(), tSchema, pQuery->m_tCalcExpr, sError ) )
+	{
+		SafeDelete ( pQuery->m_pExpr );
+		pQuery->m_pExpr = sphExprParse ( pQuery->m_sSortBy.cstr(), tSchema, sError );
+		if ( !pQuery->m_pExpr )
 			return NULL;
 
 		tStateMatch.m_iAttr[0] = FIXUP_EXPR;

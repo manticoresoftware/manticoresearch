@@ -491,7 +491,7 @@ void BenchExpr ()
 		{ "sqrt(2)",						ExprNative3 }
 	};
 
-	for ( int iRun=0; iRun<sizeof(dBench)/sizeof(dBench[0]); iRun++ )
+	for ( int iRun=0; iRun<int(sizeof(dBench)/sizeof(dBench[0])); iRun++ )
 	{
 		printf ( "run %d: ", iRun+1 );
 

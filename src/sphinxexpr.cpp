@@ -548,6 +548,7 @@ void ExprParser_t::Optimize ( int iNode )
 			case FUNC_LOG10:	pRoot->m_iToken = TOK_NUMBER; pRoot->m_fConst = float(log(fLeft)*M_LOG10E); break;
 			case FUNC_EXP:		pRoot->m_iToken = TOK_NUMBER; pRoot->m_fConst = float(exp(fLeft)); break;
 			case FUNC_SQRT:		pRoot->m_iToken = TOK_NUMBER; pRoot->m_fConst = float(sqrt(fLeft)); break;
+			default:			break;
 		}
 		return;
 	}

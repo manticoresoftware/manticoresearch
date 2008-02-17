@@ -192,6 +192,7 @@ DECLARE_BINARY ( Expr_Pow_c,	float(pow(FIRST,SECOND)) )
 
 DECLARE_TERNARY ( Expr_If_c,	( FIRST!=0.0f ) ? SECOND : THIRD )
 DECLARE_TERNARY ( Expr_Madd_c,	FIRST*SECOND+THIRD )
+DECLARE_TERNARY ( Expr_Mul3_c,	FIRST*SECOND*THIRD )
 
 //////////////////////////////////////////////////////////////////////////
 // PARSER INTERNALS
@@ -227,7 +228,8 @@ enum Func_e
 	FUNC_POW,
 
 	FUNC_IF,
-	FUNC_MADD
+	FUNC_MADD,
+	FUNC_MUL3
 };
 
 
@@ -257,7 +259,8 @@ static FuncDesc_t g_dFuncs[] =
 	{ "pow",	2,	FUNC_POW },
 
 	{ "if",		3,	FUNC_IF },
-	{ "madd",	3,	FUNC_MADD }
+	{ "madd",	3,	FUNC_MADD },
+	{ "mul3",	3,	FUNC_MUL3 }
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -461,19 +464,26 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 	return -1;
 }
 
+/// is arithmetic?
+static inline bool IsAri ( int iTok )
+{
+	return iTok=='+' || iTok=='-' || iTok=='*' || iTok=='/';
+}
+
 /// optimize subtree
 void ExprParser_t::Optimize ( int iNode )
 {
 	if ( iNode<0 )
 		return;
 
-	ExprNode_t * pRoot = &m_dNodes[iNode];
-	Optimize ( pRoot->m_iLeft );
-	Optimize ( pRoot->m_iRight );
+	Optimize ( m_dNodes[iNode].m_iLeft );
+	Optimize ( m_dNodes[iNode].m_iRight );
 
-	// madd
-	if ( pRoot->m_iToken=='+' &&
-		( m_dNodes[pRoot->m_iLeft].m_iToken=='*' || m_dNodes[pRoot->m_iRight].m_iToken=='*' ) )
+	ExprNode_t * pRoot = &m_dNodes[iNode];
+
+	// madd, mul3
+	if ( ( pRoot->m_iToken=='+' || pRoot->m_iToken=='*' )
+		&& ( m_dNodes[pRoot->m_iLeft].m_iToken=='*' || m_dNodes[pRoot->m_iRight].m_iToken=='*' ) )
 	{
 		if ( m_dNodes[pRoot->m_iLeft].m_iToken!='*' )
 			Swap ( pRoot->m_iLeft, pRoot->m_iRight );
@@ -488,10 +498,57 @@ void ExprParser_t::Optimize ( int iNode )
 		m_dNodes.Last().m_iLeft = pRoot->m_iLeft;
 		m_dNodes.Last().m_iRight = pRoot->m_iRight;
 
+		pRoot->m_iFunc = ( pRoot->m_iToken=='+' ) ? FUNC_MADD : FUNC_MUL3;
 		pRoot->m_iToken = TOK_FUNC;
-		pRoot->m_iFunc = FUNC_MADD; assert ( g_dFuncs[pRoot->m_iFunc].m_eFunc==FUNC_MADD );
+		assert ( g_dFuncs[pRoot->m_iFunc].m_eFunc==pRoot->m_iFunc );
+
 		pRoot->m_iLeft = m_dNodes.GetLength()-1;
 		pRoot->m_iRight = -1;
+		return;
+	}
+
+	// constant arithmetic expression
+	if ( IsAri ( pRoot->m_iToken )
+		&& m_dNodes[pRoot->m_iLeft].m_iToken==TOK_NUMBER
+		&& m_dNodes[pRoot->m_iRight].m_iToken==TOK_NUMBER )
+	{
+		float fLeft = m_dNodes[pRoot->m_iLeft].m_fConst;
+		float fRight = m_dNodes[pRoot->m_iRight].m_fConst;
+		switch ( pRoot->m_iToken )
+		{
+			case '+':	pRoot->m_iToken = TOK_NUMBER; pRoot->m_fConst = fLeft + fRight; break;
+			case '-':	pRoot->m_iToken = TOK_NUMBER; pRoot->m_fConst = fLeft - fRight; break;
+			case '*':	pRoot->m_iToken = TOK_NUMBER; pRoot->m_fConst = fLeft * fRight; break;
+			case '/':	pRoot->m_iToken = TOK_NUMBER; pRoot->m_fConst = fLeft / fRight; break;
+		}
+		return;
+	}
+
+	// division by a constant (replace with multiplication by inverse)
+	if ( pRoot->m_iToken=='/' && m_dNodes[pRoot->m_iRight].m_iToken==TOK_NUMBER )
+	{
+		m_dNodes[pRoot->m_iRight].m_fConst = 1.0f / m_dNodes[pRoot->m_iRight].m_fConst;
+		pRoot->m_iToken = '*';
+		return;
+	}
+
+	// unary function from a constant
+	if ( pRoot->m_iToken==TOK_FUNC && g_dFuncs[pRoot->m_iFunc].m_iArgs==1 && m_dNodes[pRoot->m_iLeft].m_iToken==TOK_NUMBER )
+	{
+		float fLeft = m_dNodes[pRoot->m_iLeft].m_fConst;
+		switch ( g_dFuncs[pRoot->m_iFunc].m_eFunc )
+		{
+			case FUNC_ABS:		pRoot->m_iToken = TOK_NUMBER; pRoot->m_fConst = fabs(fLeft); break;
+			case FUNC_CEIL:		pRoot->m_iToken = TOK_NUMBER; pRoot->m_fConst = float(ceil(fLeft)); break;
+			case FUNC_FLOOR:	pRoot->m_iToken = TOK_NUMBER; pRoot->m_fConst = float(floor(fLeft)); break;
+			case FUNC_SIN:		pRoot->m_iToken = TOK_NUMBER; pRoot->m_fConst = float(sin(fLeft)); break;
+			case FUNC_COS:		pRoot->m_iToken = TOK_NUMBER; pRoot->m_fConst = float(cos(fLeft)); break;
+			case FUNC_LN:		pRoot->m_iToken = TOK_NUMBER; pRoot->m_fConst = float(log(fLeft)); break;
+			case FUNC_LOG2:		pRoot->m_iToken = TOK_NUMBER; pRoot->m_fConst = float(log(fLeft)*M_LOG2E); break;
+			case FUNC_LOG10:	pRoot->m_iToken = TOK_NUMBER; pRoot->m_fConst = float(log(fLeft)*M_LOG10E); break;
+			case FUNC_EXP:		pRoot->m_iToken = TOK_NUMBER; pRoot->m_fConst = float(exp(fLeft)); break;
+			case FUNC_SQRT:		pRoot->m_iToken = TOK_NUMBER; pRoot->m_fConst = float(sqrt(fLeft)); break;
+		}
 		return;
 	}
 }
@@ -576,6 +633,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 
 					case FUNC_IF:		return new Expr_If_c ( dArgs[0], dArgs[1], dArgs[2] ); break;
 					case FUNC_MADD:		return new Expr_Madd_c ( dArgs[0], dArgs[1], dArgs[2] ); break;
+					case FUNC_MUL3:		return new Expr_Mul3_c ( dArgs[0], dArgs[1], dArgs[2] ); break;
 				}
 				assert ( 0 && "unhandled function id" );
 				break;

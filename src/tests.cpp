@@ -391,6 +391,7 @@ void TestExpr ()
 	};
 	ExprTest_t dTests[] =
 	{
+		{ "ccc/2",							1.5f },
 		{ "1*2*3*4*5*6*7*8*9*10",			3628800.0f },
 		{ "aaa+bbb*sin(0)*ccc",				1.0f },
 		{ "if(pow(sqrt(2),2)=2,123,456)",	123.0f },
@@ -453,16 +454,9 @@ void TestExpr ()
 #define BBB float(tMatch.m_pRowitems[1])
 #define CCC float(tMatch.m_pRowitems[2])
 
-
-NOINLINE float ExprNative1 ( const CSphMatch & tMatch )
-{
-	return AAA+BBB*CCC-0.75f;
-}
-
-NOINLINE float ExprNative2 ( const CSphMatch & tMatch )
-{
-	return AAA+BBB*CCC*2.0f-3.0f/4.0f*BBB;
-}
+NOINLINE float ExprNative1 ( const CSphMatch & tMatch )	{ return AAA+BBB*CCC-0.75f;}
+NOINLINE float ExprNative2 ( const CSphMatch & tMatch )	{ return AAA+BBB*CCC*2.0f-3.0f/4.0f*5.0f/6.0f*BBB; }
+NOINLINE float ExprNative3 ( const CSphMatch & )		{ return (float)sqrt ( 2.0f ); }
 
 
 void BenchExpr ()
@@ -492,11 +486,12 @@ void BenchExpr ()
 	};
 	ExprBench_t dBench[] =
 	{
-		{ "aaa+bbb*(ccc)-0.75",			ExprNative1 },
-		{ "aaa+bbb*ccc*2-3/4*bbb",		ExprNative2 }
+		{ "aaa+bbb*(ccc)-0.75",				ExprNative1 },
+		{ "aaa+bbb*ccc*2-3/4*5/6*bbb",		ExprNative2 },
+		{ "sqrt(2)",						ExprNative3 }
 	};
 
-	for ( int iRun=0; iRun<2; iRun++ )
+	for ( int iRun=0; iRun<sizeof(dBench)/sizeof(dBench[0]); iRun++ )
 	{
 		printf ( "run %d: ", iRun+1 );
 

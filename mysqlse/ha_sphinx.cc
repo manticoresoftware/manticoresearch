@@ -27,11 +27,15 @@
 	// UNIX-specific
 	#include <my_net.h>
 	#include <netdb.h>
+
+	#define	RECV_FLAGS	MSG_WAITALL
 #else
 	// Windows-specific
 	#include <io.h>
 	#define strcasecmp	stricmp
 	#define snprintf	_snprintf
+
+	#define	RECV_FLAGS	0
 #endif
 
 #include <ctype.h>
@@ -1988,7 +1992,8 @@ int ha_sphinx::index_read ( byte * buf, const byte * key, uint key_len, enum ha_
 
 	// receive reply
 	char sHeader[8];
-	if ( ::recv ( iSocket, sHeader, sizeof(sHeader), MSG_WAITALL )!=sizeof(sHeader) )
+	int iGot = ::recv ( iSocket, sHeader, sizeof(sHeader), RECV_FLAGS );
+	if ( iGot!=sizeof(sHeader) )
 	{
 		my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), "failed to receive response header (searchd went away?)" );
 		SPH_RET ( HA_ERR_END_OF_FILE );
@@ -2014,7 +2019,7 @@ int ha_sphinx::index_read ( byte * buf, const byte * key, uint key_len, enum ha_
 	int iRecvLength = 0;
 	while ( iRecvLength<(int)uRespLength )
 	{
-		int iRecv = ::recv ( iSocket, m_pResponse+iRecvLength, uRespLength-iRecvLength, MSG_WAITALL );
+		int iRecv = ::recv ( iSocket, m_pResponse+iRecvLength, uRespLength-iRecvLength, RECV_FLAGS );
 		if ( iRecv<0 )
 			break;
 		iRecvLength += iRecv;
@@ -2125,10 +2130,7 @@ int ha_sphinx::get_rec ( byte * buf, const byte *, uint )
 
 	field[0]->store ( uMatchID, 1 );
 	field[1]->store ( uMatchWeight, 1 );
-
-	int iBytes = min ( m_iCurrentKeyLen+HA_KEY_BLOB_LENGTH, field[2]->pack_length() );
-	int2store ( field[2]->ptr, m_iCurrentKeyLen );
-	memcpy ( field[2]->ptr+HA_KEY_BLOB_LENGTH, m_pCurrentKey, iBytes );
+	field[2]->store ( (const char*)m_pCurrentKey, m_iCurrentKeyLen, &my_charset_bin );
 
 	for ( uint32 i=0; i<m_iAttrs; i++ )
 	{
@@ -2450,21 +2452,6 @@ int ha_sphinx::create ( const char * name, TABLE * table, HA_CREATE_INFO * )
 		my_error ( ER_CANT_CREATE_TABLE, MYF(0), sError, -1 );
 		SPH_RET(-1);
 	}
-
-
-/*
-		MYSQL_TYPE_DECIMAL,
-		MYSQL_TYPE_LONG,
-		MYSQL_TYPE_LONGLONG,
-
-		MYSQL_TYPE_TIMESTAMP,
-		MYSQL_TYPE_DATETIME,
-		MYSQL_TYPE_NEWDATE,
-		
-		MYSQL_TYPE_VARCHAR,
-		MYSQL_TYPE_VAR_STRING,
-		MYSQL_TYPE_STRING,
-*/
 
 	SPH_RET(0);
 }

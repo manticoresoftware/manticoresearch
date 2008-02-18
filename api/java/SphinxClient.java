@@ -71,7 +71,7 @@ public class SphinxClient
 	private final static int VER_MAJOR_PROTO		= 0x1;
 	private final static int VER_COMMAND_SEARCH		= 0x10F;
 	private final static int VER_COMMAND_EXCERPT	= 0x100;
-	private final static int VER_COMMAND_UPDATE		= 0x100;
+	private final static int VER_COMMAND_UPDATE		= 0x101;
 
 	/* filter types */
 	private final static int SPH_FILTER_VALUES		= 0;
@@ -245,7 +245,7 @@ public class SphinxClient
 	}
 
 	/** Get and check response packet from searchd (internal method). */
-	private byte[] _GetResponse ( Socket sock, int client_ver ) throws SphinxException
+	private byte[] _GetResponse ( Socket sock ) throws SphinxException
 	{
 		/* connect */
 		DataInputStream sIn = null;
@@ -321,7 +321,7 @@ public class SphinxClient
 				String sTrace = ew.toString ();
 
 				/* build error message */
-				_error =  "failed to read searchd response (status=" + status + ", ver=" + ver + ", len=" + len + ", trace=" + sTrace +")";
+				_error = "failed to read searchd response (status=" + status + ", ver=" + ver + ", len=" + len + ", trace=" + sTrace +")";
 			} else
 			{
 				_error = "received zero-sized searchd response (searchd crashed?): " + e.getMessage();
@@ -780,7 +780,7 @@ public class SphinxClient
 
 		/* get response */
 		byte[] response = null;
-		response = _GetResponse(sock, VER_COMMAND_SEARCH);
+		response = _GetResponse ( sock );
 		if (response == null) return null;
 
 		/* parse response */
@@ -987,7 +987,7 @@ public class SphinxClient
 			/* get response */
 			byte[] response = null;
 			String[] docsXrpt = new String[docs.length];
-			response = _GetResponse(sock, VER_COMMAND_SEARCH);
+			response = _GetResponse ( sock );
 			if (response == null) return null;
 
 			/* parse response */
@@ -1000,6 +1000,110 @@ public class SphinxClient
 		} catch (Exception e) {
 			myAssert(false, "BuildExcerpts: incomplete response " + e.getMessage());
 			return null;
+		}
+	}
+
+	/**
+	 * Connect to searchd server and update given attributes on given documents in given indexes.
+	 * Sample code that will set group_id=123 where id=1 and group_id=456 where id=3:
+	 *
+	 * <pre>
+	 * String[] attrs = new String[1];
+	 *
+	 * attrs[0] = "group_id";
+	 * long[][] values = new long[2][2];
+	 *
+	 * values[0] = new long[2]; values[0][0] = 1; values[0][1] = 123;
+	 * values[1] = new long[2]; values[1][0] = 3; values[1][1] = 456;
+	 *
+	 * int res = cl.UpdateAttributes ( "test1", attrs, values );
+	 * </pre>
+	 *
+	 * @param index		index name(s) to update; might be distributed
+	 * @param attrs		array with the names of the attributes to update
+	 * @param values	array of updates; each long[] entry must contains document ID
+	 *					in the first element, and all new attribute values in the following ones
+	 * @return			-1 on failure, amount of actually found and updated documents (might be 0) on success
+	 *
+	 * @throws			SphinxException on invalid parameters
+	 */
+	public int UpdateAttributes ( String index, String[] attrs, long[][] values ) throws SphinxException
+	{
+		/* check args */
+		myAssert ( index!=null && index.length()>0, "no index name provided" );
+		myAssert ( attrs!=null && attrs.length>0, "no attribute names provided" );
+		myAssert ( values!=null && values.length>0, "no update entries provided" );
+		for ( int i=0; i<values.length; i++ )
+		{
+			myAssert ( values[i]!=null, "update entry #" + i + " is null" );
+			myAssert ( values[i].length==1+attrs.length, "update entry #" + i + " has wrong length" );
+		}
+
+		/* connect */
+		Socket sock = _Connect();
+		if ( sock==null )
+			return -1;
+		
+		/* build and send request */
+		ByteArrayOutputStream req = new ByteArrayOutputStream();
+		DataOutputStream reqData = null;
+		DataOutputStream socketDS = null;
+		try
+		{
+			reqData = new DataOutputStream ( req );
+
+			/* index name */
+			writeNetUTF8 ( reqData, index );
+
+			/* attribute names array */
+			reqData.writeInt ( attrs.length );
+			for ( int i=0; i<attrs.length; i++ )
+				writeNetUTF8 ( reqData, attrs[i] );
+
+			/* docid and new values array */
+			reqData.writeInt ( values.length );
+			for ( int i=0; i<values.length; i++ )
+			{
+				reqData.writeLong ( values[i][0] ); /* send docid as 64bit value */
+				for ( int j=1; j<values[i].length; j++ )
+					reqData.writeInt ( (int)values[i][j] ); /* send values as 32bit values; FIXME! what happens when they are over 2^31? */
+			}
+
+			/* send query, get response */
+			reqData.flush();
+			byte[] byteReq = req.toByteArray();
+
+			OutputStream SockOut = sock.getOutputStream ();
+			socketDS = new DataOutputStream ( SockOut );
+			socketDS.writeShort ( SEARCHD_COMMAND_UPDATE );
+			socketDS.writeShort ( VER_COMMAND_UPDATE );
+			socketDS.writeInt ( byteReq.length );
+			socketDS.write ( byteReq );
+			socketDS.flush ();
+
+		} catch ( Exception ex )
+		{
+			myAssert ( false, "UpdateAttributes(): unable to create read/write streams: " + ex.getMessage());
+			return -1;
+		}
+
+		/* get and parse response */
+		try
+		{
+			/* get */
+			byte[] response = _GetResponse ( sock );
+			if ( response==null )
+				return -1;
+
+			/* parse */
+			DataInputStream in;
+			in = new DataInputStream ( new ByteArrayInputStream ( response ) );
+			return in.readInt ();
+
+		} catch ( Exception e )
+		{
+			myAssert(false, "UpdateAttributes(): incomplete response: " + e.getMessage() );
+			return -1;
 		}
 	}
 

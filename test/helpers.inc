@@ -393,9 +393,9 @@ class SphinxConfig
 				$results = 0;
 				if ( empty($this->_query_settings) )
 				{
-					if ( $qinfo["mode"] )		$cl->SetMatchMode ( $qinfo["mode"] );
-					if ( $qinfo["sortmode"] )	$cl->SetSortMode ( $qinfo["sortmode"], $qinfo["sortby"] );
-					if ( $qinfo["filter"] )		$cl->SetFilter ( $qinfo["filter"], array ( $qinfo["filtervalue"] ) );
+					if ( @$qinfo["mode"] )		$cl->SetMatchMode ( $qinfo["mode"] );
+					if ( @$qinfo["sortmode"] )	$cl->SetSortMode ( $qinfo["sortmode"], $qinfo["sortby"] );
+					if ( @$qinfo["filter"] )		$cl->SetFilter ( $qinfo["filter"], array ( $qinfo["filtervalue"] ) );
 	            	$results = $cl->Query ( $query, $index );
 
             	} else

@@ -2135,7 +2135,7 @@ public:
 
 	virtual void				SetBuffer ( BYTE * sBuffer, int iLength );
 	virtual BYTE *				GetToken ();
-	virtual ISphTokenizer *		Clone () const;
+	virtual ISphTokenizer *		Clone ( bool bEscaped ) const;
 	virtual bool				IsUtf8 () const { return false; }
 	virtual int					GetCodepointLength ( int ) const { return 1; }
 };
@@ -2149,7 +2149,7 @@ public:
 
 	virtual void				SetBuffer ( BYTE * sBuffer, int iLength );
 	virtual BYTE *				GetToken ();
-	virtual ISphTokenizer *		Clone () const;
+	virtual ISphTokenizer *		Clone ( bool bEscaped ) const;
 	virtual bool				IsUtf8 () const { return true; }
 	virtual int					GetCodepointLength ( int iCode ) const;
 
@@ -2713,6 +2713,8 @@ ISphTokenizer::ISphTokenizer ()
 	, m_iLastTokenLen ( 0 )
 	, m_bTokenBoundary ( false )
 	, m_bBoundary ( false )
+	, m_bWasSpecial ( false )
+	, m_bEscaped ( false )
 {}
 
 
@@ -3089,6 +3091,8 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 {
 	assert ( m_dSynonyms.GetLength() );
 
+	bool bEscaped = m_bEscaped;
+
 	m_bTokenBoundary = false;
 	for ( ;; )
 	{
@@ -3102,6 +3106,7 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 		int iSynEnd = m_dSynonyms.GetLength()-1;
 		int iSynOff = 0;
 
+		int iLastCodepoint = 0;
 		int iLastFolded = 0;
 		BYTE * pRescan = NULL;
 
@@ -3139,11 +3144,30 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 			// skip continuous whitespace
 			if ( iLastFolded==0 && iFolded==0 )
 				continue;
+
+			if ( bEscaped )
+			{
+				if ( iCode == '\\' && iLastCodepoint != '\\' )
+				{
+					iLastCodepoint = iCode;
+					continue;
+				}
+				else
+				{
+					if ( iLastCodepoint == '\\' )
+						iFolded &= ~( FLAG_CODEPOINT_SPECIAL | FLAG_CODEPOINT_DUAL );
+				}
+
+				iLastCodepoint = iCode;
+			}
+
 			iLastFolded = iFolded;
 
 			// handle specials at the very word start
 			if ( ( iFolded & FLAG_CODEPOINT_SPECIAL ) && m_iAccum==0 )
 			{
+				m_bWasSpecial = true;
+
 				AccumCodepoint ( iFolded & MASK_CODEPOINT );
 				*m_pAccum = '\0';
 
@@ -3331,7 +3355,7 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 		{
 			m_pCur = pRescan;
 			continue;
-		}			
+		}
 
 		// at this point, it also started with a valid char
 		assert ( m_iAccum>0 );
@@ -3339,13 +3363,24 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 		// find the proper separator
 		if ( !pFirstSeparator )
 		{
+			int iLast = 0;
+
 			// if there was none, scan until found
 			for ( ;; )
 			{
 				BYTE * pCur = m_pCur;
+				int iCode = *pCur;
 				int iFolded = m_tLC.ToLower ( GetCodepoint() );
 				if ( iFolded<0 )
 					break; // eof
+
+				if ( bEscaped )
+				{
+					if ( iCode != '\\' && iLast == '\\' )
+						iFolded &= ~FLAG_CODEPOINT_SPECIAL;
+
+					iLast = iCode;
+				}
 
 				if ( IsSeparator ( iFolded, false ) )
 				{
@@ -3354,7 +3389,13 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 					break;
 				}
 
-				AccumCodepoint ( iFolded & MASK_CODEPOINT );
+				if ( bEscaped )
+				{
+					if ( iCode != '\\' )
+						AccumCodepoint ( iFolded & MASK_CODEPOINT );
+				}
+				else
+					AccumCodepoint ( iFolded & MASK_CODEPOINT );
 			}
 		} else
 		{
@@ -3466,9 +3507,14 @@ void CSphTokenizer_SBCS::SetBuffer ( BYTE * sBuffer, int iLength )
 
 BYTE * CSphTokenizer_SBCS::GetToken ()
 {
+	m_bWasSpecial = false;
+
 	if ( m_dSynonyms.GetLength() )
 		return GetTokenSyn ();
 
+	bool bEscaped = m_bEscaped;
+	int iCodepoint = 0;
+	int iLastCodepoint = 0;
 	m_bTokenBoundary = false;
 	for ( ;; )
 	{
@@ -3485,12 +3531,27 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 			}
 		} else
 		{
-			iCode = m_tLC.ToLower ( *m_pCur++ );
+			iCodepoint = *m_pCur++;
+			iCode = m_tLC.ToLower ( iCodepoint );
 		}
 
 		// handle ignored chars
 		if ( iCode & FLAG_CODEPOINT_IGNORE )
 			continue;
+
+		if ( bEscaped )
+		{
+			if ( iCodepoint == '\\' && iLastCodepoint != '\\' )
+			{
+				iLastCodepoint = iCodepoint;
+				continue;
+			}
+
+			if ( iLastCodepoint == '\\' )
+				iCode &= ~FLAG_CODEPOINT_SPECIAL;
+
+			iLastCodepoint = iCodepoint;
+		}
 
 		// handle whitespace and boundary
 		if ( m_bBoundary && ( iCode==0 ) ) m_bTokenBoundary = true;
@@ -3528,6 +3589,8 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 				m_iLastTokenLen = 1;
 				m_sAccum[0] = (BYTE)iCode;
 				m_sAccum[1] = '\0';
+
+				m_bWasSpecial = true;
 			} else
 			{
 				// flush prev accum and redo this special
@@ -3547,13 +3610,24 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 	}
 }
 
-ISphTokenizer * CSphTokenizer_SBCS::Clone () const
+ISphTokenizer * CSphTokenizer_SBCS::Clone ( bool bEscaped ) const
 {
 	CSphTokenizer_SBCS * pClone = new CSphTokenizer_SBCS ();
 	pClone->m_tLC = m_tLC;
 	pClone->m_dSynonyms = m_dSynonyms;
 	pClone->m_dSynStart = m_dSynStart;
 	pClone->m_dSynEnd = m_dSynEnd;
+	pClone->m_bEscaped = bEscaped;
+
+	if ( bEscaped )
+	{
+		CSphVector<CSphRemapRange> dRemaps;
+		CSphRemapRange Range;
+		Range.m_iStart = Range.m_iEnd = Range.m_iRemapStart = '\\';
+		dRemaps.Add ( Range );
+		pClone->m_tLC.AddRemaps ( dRemaps, 0, 0 );
+	}
+
 	return pClone;
 }
 
@@ -3585,15 +3659,20 @@ void CSphTokenizer_UTF8::SetBuffer ( BYTE * sBuffer, int iLength )
 
 BYTE * CSphTokenizer_UTF8::GetToken ()
 {
+	m_bWasSpecial = false;
+
 	if ( m_dSynonyms.GetLength() )
 		return GetTokenSyn ();
 
+	bool bEscaped = m_bEscaped;
+	int iLastCodepoint = 0;
 	m_bTokenBoundary = false;
 	for ( ;; )
 	{
 		// get next codepoint
 		BYTE * pCur = m_pCur; // to redo special char, if there's a token already
-		int iCode = m_tLC.ToLower ( GetCodepoint() ); // advances m_pCur
+		int iCodePoint = GetCodepoint();  // advances m_pCur
+		int iCode = m_tLC.ToLower ( iCodePoint );
 
 		// handle eof
 		if ( iCode<0 )
@@ -3615,6 +3694,20 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 		// handle ignored chars
 		if ( iCode & FLAG_CODEPOINT_IGNORE )
 			continue;
+
+		if ( bEscaped )
+		{
+			if ( iCodePoint == '\\' && iLastCodepoint != '\\' )
+			{
+				iLastCodepoint = iCodePoint;
+				continue;
+			}
+
+			if ( iLastCodepoint == '\\' )
+				iCode &= ~FLAG_CODEPOINT_SPECIAL;
+
+			iLastCodepoint = iCodePoint;
+		}
 
 		// handle whitespace and boundary
 		if ( m_bBoundary && ( iCode==0 ) ) m_bTokenBoundary = true;
@@ -3643,6 +3736,7 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 
 			if ( m_iAccum==0 )
 			{
+				m_bWasSpecial = true;
 				AccumCodepoint ( iCode ); // handle special as a standalone token
 			} else
 			{
@@ -3669,13 +3763,24 @@ void CSphTokenizer_UTF8::FlushAccum ()
 }
 
 
-ISphTokenizer * CSphTokenizer_UTF8::Clone () const
+ISphTokenizer * CSphTokenizer_UTF8::Clone ( bool bEscaped ) const
 {
 	CSphTokenizer_UTF8 * pClone = new CSphTokenizer_UTF8 ();
 	pClone->m_tLC = m_tLC;
 	pClone->m_dSynonyms = m_dSynonyms;
 	pClone->m_dSynStart = m_dSynStart;
 	pClone->m_dSynEnd = m_dSynEnd;
+	pClone->m_bEscaped = bEscaped;
+
+	if ( bEscaped )
+	{
+		CSphVector<CSphRemapRange> dRemaps;
+		CSphRemapRange Range;
+		Range.m_iStart = Range.m_iEnd = Range.m_iRemapStart = '\\';
+		dRemaps.Add ( Range );
+		pClone->m_tLC.AddRemaps ( dRemaps, 0, 0 );
+	}
+
 	return pClone;
 }
 
@@ -13742,7 +13847,7 @@ CSphDictCRC::WordformContainer * CSphDictCRC::LoadWordformContainer ( const char
 	rdWordforms.SetFile ( fdWordforms );
 
 	// my tokenizer
-	CSphScopedPtr<ISphTokenizer> pMyTokenizer ( pTokenizer->Clone() );
+	CSphScopedPtr<ISphTokenizer> pMyTokenizer ( pTokenizer->Clone ( false ) );
 	pMyTokenizer->AddSpecials ( ">" );
 
 	// scan it line by line

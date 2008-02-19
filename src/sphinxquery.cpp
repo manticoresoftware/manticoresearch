@@ -99,15 +99,8 @@ protected:
 	CSphBooleanQueryExpr *	m_pCur;
 
 protected:
-	int						IsSpecial ( int iCh );
 	void					HandleOperator ( int iCh );
 };
-
-
-int CSphBooleanQueryParser::IsSpecial ( int iCh )
-{
-	return ( iCh=='(' || iCh==')' || iCh=='&' || iCh=='|' || iCh=='-' || iCh=='!' );
-}
 
 
 void CSphBooleanQueryParser::HandleOperator ( int iCh )
@@ -224,7 +217,7 @@ CSphBooleanQueryExpr * CSphBooleanQueryParser::Parse ( const char * sQuery, cons
 	// a buffer of my own
 	CSphString sBuffer ( sQuery );
 
-	CSphScopedPtr<ISphTokenizer> pMyTokenizer ( pTokenizer->Clone () );
+	CSphScopedPtr<ISphTokenizer> pMyTokenizer ( pTokenizer->Clone ( true ) );
 	pMyTokenizer->AddSpecials ( "&|()-!" );
 	pMyTokenizer->SetBuffer ( (BYTE*)sBuffer.cstr(), strlen ( sBuffer.cstr() ) );
 
@@ -242,9 +235,7 @@ CSphBooleanQueryExpr * CSphBooleanQueryParser::Parse ( const char * sQuery, cons
 		assert ( m_pCur->IsNull() );
 
 		int iSpecial = pToken
-			? ( IsSpecial(pToken[0])
-				? pToken[0]
-				: 0 )
+			? ( pMyTokenizer->WasTokenSpecial () ? pToken[0] : 0 )
 			: QUERY_END;
 		assert ( !( iSpecial>0 && pToken[1]!=0 ) );
 
@@ -680,7 +671,6 @@ protected:
 protected:
 	bool				m_bStopOnInvalid;		///< stop on invalid fields or skip them
 
-	int					IsSpecial ( int iCh );
 	bool				Error ( const char * sTemplate, ... );
 	void				Warning ( const char * sTemplate, ... );
 	bool				ParseFields ( DWORD & uFields, ISphTokenizer * pTokenizer, const CSphSchema * pSchema );
@@ -786,13 +776,6 @@ void CSphExtendedQueryNode::Submit ( CSphExtendedQueryNode * & pNew, bool bAny )
 CSphExtendedQueryParser::CSphExtendedQueryParser ()
 	: m_bStopOnInvalid ( true )
 {
-}
-
-
-int CSphExtendedQueryParser::IsSpecial ( int iCh )
-{
-	return ( iCh=='(' || iCh==')' || iCh=='|' || iCh=='-' || iCh=='!'
-		|| iCh=='@' || iCh=='~' || iCh=='"' );
 }
 
 
@@ -1054,8 +1037,8 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 
 	// a buffer of my own
 	CSphString sBuffer ( sQuery );
-	CSphScopedPtr<ISphTokenizer> pMyTokenizer ( pTokenizer->Clone () );
-	pMyTokenizer->AddSpecials ( "()|-!@~\"" ); // MUST be in sync with IsSpecial()
+	CSphScopedPtr<ISphTokenizer> pMyTokenizer ( pTokenizer->Clone ( true ) );
+	pMyTokenizer->AddSpecials ( "()|-!@~\"" );
 	pMyTokenizer->SetBuffer ( (BYTE*)sBuffer.cstr(), strlen ( sBuffer.cstr() ) );
 
 	// iterate all tokens
@@ -1088,7 +1071,7 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 		bRedo = false;
 
 		int iSpecial = sToken
-			? ( IsSpecial(sToken[0]) ? sToken[0] : 0 )
+			? ( pMyTokenizer->WasTokenSpecial () ? sToken[0] : 0 )
 			: QUERY_END;
 		assert ( !( iSpecial>0 && sToken[1]!=0 ) );
 

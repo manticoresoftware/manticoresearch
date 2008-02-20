@@ -10263,6 +10263,29 @@ protected:
 };
 
 
+/// quorum streamer
+class ExtQuorum_c : public ExtNode_i
+{
+public:
+								ExtQuorum_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, const CSphTermSetup & tSetup, DWORD uQuerypos, CSphString * pWarning );
+	virtual						~ExtQuorum_c ();
+
+	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
+	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
+
+	virtual void				GetQwords ( ExtQwordsHash_t & hQwords );
+	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
+
+protected:
+	int							m_iThresh;		///< keyword count threshold 
+	CSphVector<ExtNode_i*>		m_dChildren;	///< my children nodes (simply ExtTerm_c for now)
+	CSphVector<const ExtDoc_t*>	m_pCurDoc;		///< current positions into children doclists
+	CSphVector<const ExtHit_t*>	m_pCurHit;		///< current positions into children doclists
+	bool						m_bDone;		///< am i done
+	SphDocID_t					m_uMatchedDocid;///< current docid for hitlist emission
+};
+
+
 /// ranker interface
 /// ranker folds incoming hitstream into simple match chunks, and computes relevance rank
 class ExtRanker_c
@@ -10328,6 +10351,8 @@ ExtNode_i * ExtNode_i::Create ( const CSphExtendedQueryNode * pNode, const CSphT
 		assert ( tAtom.m_iMaxDistance>=0 );
 		if ( tAtom.m_iMaxDistance==0 )
 			return new ExtPhrase_c ( pNode, uFields, tSetup, uQuerypos, pWarning );
+		else if ( tAtom.m_bQuorum )
+			return new ExtQuorum_c ( pNode, uFields, tSetup, uQuerypos, pWarning );
 		else
 			return new ExtProximity_c ( pNode, uFields, tSetup, uQuerypos, pWarning );
 
@@ -11517,6 +11542,197 @@ const ExtDoc_t * ExtProximity_c::GetDocsChunk ( SphDocID_t * pMaxID )
 	m_dMyHits[iHit].m_uDocid = DOCID_MAX; // end marker
 
 	return ReturnDocsChunk ( iDoc, pMaxID );
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+ExtQuorum_c::ExtQuorum_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, const CSphTermSetup & tSetup, DWORD uQuerypos, CSphString * pWarning )
+{
+	assert ( pNode );
+	assert ( pNode->IsPlain() );
+	assert ( pNode->m_tAtom.m_bQuorum );
+
+	m_iThresh = pNode->m_tAtom.m_iMaxDistance;
+	m_bDone = false;
+
+	const CSphVector<CSphExtendedQueryAtomWord> & dWords = pNode->m_tAtom.m_dWords;
+	assert ( dWords.GetLength()>1 ); // use TERM instead
+	assert ( dWords.GetLength()<=32 ); // internal masks are 32 bits
+	assert ( m_iThresh>=1 ); // 1 is also OK; it's a bit different from just OR
+	assert ( m_iThresh<dWords.GetLength() ); // use AND instead
+
+	ARRAY_FOREACH ( i, dWords )
+	{
+		m_dChildren.Add ( new ExtTerm_c ( dWords[i].m_sWord, uFields, tSetup, uQuerypos+dWords[i].m_iAtomPos, pWarning ) );
+		m_pCurDoc.Add ( NULL );
+		m_pCurHit.Add ( NULL );
+	}
+}
+
+ExtQuorum_c::~ExtQuorum_c ()
+{
+	ARRAY_FOREACH ( i, m_dChildren )
+		SafeDelete ( m_dChildren[i] );
+}
+
+void ExtQuorum_c::GetQwords ( ExtQwordsHash_t & hQwords )
+{
+	ARRAY_FOREACH ( i, m_dChildren )
+		m_dChildren[i]->GetQwords ( hQwords );
+}
+
+void ExtQuorum_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
+{
+	ARRAY_FOREACH ( i, m_dChildren )
+		m_dChildren[i]->SetQwordsIDF ( hQwords );
+}
+
+const ExtDoc_t * ExtQuorum_c::GetDocsChunk ( SphDocID_t * pMaxID )
+{
+	// warmup
+	ARRAY_FOREACH ( i, m_pCurDoc )
+		if ( !m_pCurDoc[i] || m_pCurDoc[i]->m_uDocid==DOCID_MAX )
+	{
+		m_pCurDoc[i] = m_dChildren[i]->GetDocsChunk ( NULL );
+		if ( m_pCurDoc[i] )
+			continue;
+
+		if ( m_dChildren.GetLength()==m_iThresh )
+		{
+			m_bDone = true;
+			break;
+		}
+
+		m_dChildren.RemoveFast ( i );
+		m_pCurDoc.RemoveFast ( i );
+		m_pCurHit.RemoveFast ( i );
+		i--;
+	}
+
+	// early out
+	if ( m_bDone )
+		return NULL;
+
+	// main loop
+	DWORD uTouched = 0; // bitmask of children that actually produced matches this time
+	int iDoc = 0;
+	bool bDone = false;
+	while ( iDoc<MAX_DOCS-1 && !bDone )
+	{
+		// find min document ID, count occurences
+		ExtDoc_t tCand;
+		tCand.m_uDocid = DOCID_MAX; // current candidate id
+		int iCandMatches = 0; // amount of children that match current candidate
+		ARRAY_FOREACH ( i, m_pCurDoc )
+		{
+			assert ( m_pCurDoc[i]->m_uDocid && m_pCurDoc[i]->m_uDocid!=DOCID_MAX );
+			if ( m_pCurDoc[i]->m_uDocid < tCand.m_uDocid )
+			{
+				tCand = *m_pCurDoc[i];
+				iCandMatches = 1;
+
+			} else if ( m_pCurDoc[i]->m_uDocid==tCand.m_uDocid )
+			{
+				tCand.m_uFields |= m_pCurDoc[i]->m_uFields;
+				tCand.m_fTFIDF += m_pCurDoc[i]->m_fTFIDF;
+				iCandMatches++;
+			}
+		}
+
+		// submit match
+		if ( iCandMatches>=m_iThresh )
+			m_dDocs[iDoc++] = tCand;
+
+		// advance children
+		ARRAY_FOREACH ( i, m_pCurDoc )
+			if ( m_pCurDoc[i]->m_uDocid==tCand.m_uDocid )
+		{
+			if ( iCandMatches>=m_iThresh )
+				uTouched |= ( 1UL<<i );
+
+			m_pCurDoc[i]++;
+			if ( m_pCurDoc[i]->m_uDocid!=DOCID_MAX )
+				continue;
+
+			if ( uTouched & ( 1UL<<i) )
+			{
+				bDone = true;
+				continue; // NOT break. because we still need to advance some further children!
+			}
+
+			m_pCurDoc[i] = m_dChildren[i]->GetDocsChunk ( NULL );
+			if ( m_pCurDoc[i] )
+				continue;
+
+			if ( m_dChildren.GetLength()==m_iThresh )
+			{
+				bDone = m_bDone = true;
+				break;
+			}
+
+			m_dChildren.RemoveFast ( i );
+			m_pCurDoc.RemoveFast ( i );
+			m_pCurHit.RemoveFast ( i );
+			i--;
+		}
+	}
+
+	return ReturnDocsChunk ( iDoc, pMaxID );
+}
+
+const ExtHit_t * ExtQuorum_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID )
+{
+	// warmup
+	ARRAY_FOREACH ( i, m_pCurHit )
+		if ( !m_pCurHit[i] || m_pCurHit[i]->m_uDocid==DOCID_MAX )
+			m_pCurHit[i] = m_dChildren[i]->GetHitsChunk ( pDocs, uMaxID );
+
+	// main loop
+	int iHit = 0;
+	while ( iHit<MAX_HITS-1 )
+	{
+		// get min id
+		if ( !m_uMatchedDocid )
+		{
+			m_uMatchedDocid = DOCID_MAX;
+			ARRAY_FOREACH ( i, m_pCurHit )
+				if ( m_pCurHit[i] )
+			{
+				assert ( m_pCurHit[i]->m_uDocid!=DOCID_MAX );
+				m_uMatchedDocid = Min ( m_uMatchedDocid, m_pCurHit[i]->m_uDocid );
+			}
+			if ( m_uMatchedDocid==DOCID_MAX )
+				break;
+		}
+
+		// emit that id while possible
+		// OPTIMIZE: full linear scan for min pos and emission, eww
+		int iMinChild = -1;
+		DWORD uMinPos = UINT_MAX;
+		ARRAY_FOREACH ( i, m_pCurHit )
+			if ( m_pCurHit[i] && m_pCurHit[i]->m_uDocid==m_uMatchedDocid )
+				if ( m_pCurHit[i]->m_uHitpos < uMinPos )
+		{
+			uMinPos = m_pCurHit[i]->m_uHitpos;
+			iMinChild = i;
+		}
+
+		if ( iMinChild<0 )
+		{
+			m_uMatchedDocid = 0;
+			continue;
+		}
+
+		m_dHits[iHit++] = *m_pCurHit[iMinChild];
+		m_pCurHit[iMinChild]++;
+
+		if ( m_pCurHit[iMinChild]->m_uDocid==DOCID_MAX )
+			m_pCurHit[iMinChild] = m_dChildren[iMinChild]->GetHitsChunk ( pDocs, uMaxID );
+	}
+
+	assert ( iHit>=0 && iHit<MAX_HITS );
+	m_dHits[iHit].m_uDocid = DOCID_MAX;
+	return ( iHit!=0 ) ? m_dHits : NULL;
 }
 
 //////////////////////////////////////////////////////////////////////////

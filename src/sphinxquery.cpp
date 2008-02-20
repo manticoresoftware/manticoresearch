@@ -1038,7 +1038,7 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 	// a buffer of my own
 	CSphString sBuffer ( sQuery );
 	CSphScopedPtr<ISphTokenizer> pMyTokenizer ( pTokenizer->Clone ( true ) );
-	pMyTokenizer->AddSpecials ( "()|-!@~\"" );
+	pMyTokenizer->AddSpecials ( "()|-!@~\"/" );
 	pMyTokenizer->SetBuffer ( (BYTE*)sBuffer.cstr(), strlen ( sBuffer.cstr() ) );
 
 	// iterate all tokens
@@ -1048,10 +1048,11 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 	{
 		XQS_TEXT		= 0,
 		XQS_PHRASE		= 1,
-		XQS_PROXIMITYOP	= 2,
+		XQS_PHRASE_END	= 2,
 		XQS_PROXIMITY	= 3,
 		XQS_NEGATION	= 4,
-		XQS_NEGTEXT		= 5
+		XQS_NEGTEXT		= 5,
+		XQS_QUORUM		= 6
 	};
 
 	CSphVector<int> dState;
@@ -1101,8 +1102,8 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 			PopNode ( true );
 		}
 
-		// handle "expect proximity operator" state. everything except '~' flushes it
-		if ( dState.Last()==XQS_PROXIMITYOP )
+		// handle "phrase end" state. there can be proximity or quorum modifier. everything else flushes it
+		if ( dState.Last()==XQS_PHRASE_END )
 		{
 			assert ( m_dStack.Last().m_pNode->m_tAtom.m_iMaxDistance==0 );
 			dState.Pop ();
@@ -1110,6 +1111,9 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 			if ( iSpecial=='~' )
 			{
 				dState.Add ( XQS_PROXIMITY );
+			} else if ( iSpecial=='/' )
+			{
+				dState.Add ( XQS_QUORUM );
 			} else
 			{
 				bRedo = true;
@@ -1118,13 +1122,16 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 			continue;
 		}
 
-		// handle "expect proximity distance" state. everything except valid distance flushes it
-		if ( dState.Last()==XQS_PROXIMITY )
+		// handle two "expect number" state (proximity and quorum). everything except valid number flushes it
+		if ( dState.Last()==XQS_PROXIMITY || dState.Last()==XQS_QUORUM )
 		{
 			int iProx = iSpecial ? 0 : atoi ( sToken );
 			if ( iProx>0 )
+			{
 				m_dStack.Last().m_pNode->m_tAtom.m_iMaxDistance = iProx;
-			else
+				if ( dState.Last()==XQS_QUORUM )
+					m_dStack.Last().m_pNode->m_tAtom.m_bQuorum = true;
+			} else
 				bRedo = true;
 
 			dState.Pop ();
@@ -1267,7 +1274,7 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 					dState.Pop ();
 
 				// we don't pop the node yet, because we need to handle proximity
-				dState.Add ( XQS_PROXIMITYOP );
+				dState.Add ( XQS_PHRASE_END );
 			}
 			continue;
 		}

@@ -88,11 +88,13 @@ struct CSphExtendedQueryAtom
 	CSphVector<CSphExtendedQueryAtomWord>	m_dWords;
 	DWORD		m_uFields;
 	int			m_iMaxDistance;
+	bool		m_bQuorum;
 
 	/// default ctor
 	CSphExtendedQueryAtom ()
-		: m_uFields		 ( 0xFFFFFFFF )
-		, m_iMaxDistance ( -1 )
+		: m_uFields		( 0xFFFFFFFF )
+		, m_iMaxDistance( -1 )
+		, m_bQuorum		( false )
 	{}
 
 	/// default dtor

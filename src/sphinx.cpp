@@ -6638,7 +6638,6 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 
 			// store docinfo
 			if ( m_eDocinfo!=SPH_DOCINFO_NONE )
-				if ( pDocinfo==dDocinfos || DOCINFO2ID(pDocinfo)!=pSource->m_tDocInfo.m_iDocID )
 			{
 				// store next entry
 				DOCINFO2ID(pDocinfo) = pSource->m_tDocInfo.m_iDocID;

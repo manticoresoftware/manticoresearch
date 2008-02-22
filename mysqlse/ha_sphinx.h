@@ -138,7 +138,7 @@ private:
 	int *			m_dUnboundFields;
 
 private:
-	int				ConnectToSearchd ();
+	int				ConnectToSearchd ( const char * sQueryHost, int iQueryPort );
 
 	uint32			UnpackDword ();
 	char *			UnpackString ();

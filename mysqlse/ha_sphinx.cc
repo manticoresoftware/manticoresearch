@@ -395,6 +395,10 @@ public:
 /// client-side search query
 struct CSphSEQuery
 {
+public:
+	const char *	m_sHost;
+	int				m_iPort;
+
 private:
 	char *			m_sQueryBuffer;
 
@@ -1007,7 +1011,9 @@ static handler * sphinx_create_handler ( handlerton * hton, TABLE_SHARE * table,
 //////////////////////////////////////////////////////////////////////////////
 
 CSphSEQuery::CSphSEQuery ( const char * sQuery, int iLength, const char * sIndex )
-	: m_sIndex ( sIndex ? sIndex : "*" )
+	: m_sHost ( "" )
+	, m_iPort ( 0 )
+	, m_sIndex ( sIndex ? sIndex : "*" )
 	, m_iOffset ( 0 )
 	, m_iLimit ( 20 )
 	, m_sQuery ( "" )
@@ -1155,6 +1161,8 @@ bool CSphSEQuery::ParseField ( char * sField )
 	char * sName = chop ( sField );
 
 	if ( !strcmp ( sName, "query" ) )			m_sQuery = sValue;
+	else if ( !strcmp ( sName, "host" ) )		m_sHost = sValue;
+	else if ( !strcmp ( sName, "port" ) )		m_iPort = iValue;
 	else if ( !strcmp ( sName, "index" ) )		m_sIndex = sValue;
 	else if ( !strcmp ( sName, "offset" ) )		m_iOffset = iValue;
 	else if ( !strcmp ( sName, "limit" ) )		m_iLimit = iValue;
@@ -1571,7 +1579,7 @@ int ha_sphinx::open ( const char * name, int, uint )
 }
 
 
-int ha_sphinx::ConnectToSearchd ()
+int ha_sphinx::ConnectToSearchd ( const char * sQueryHost, int iQueryPort )
 {
 	SPH_ENTER_METHOD();
 
@@ -1580,11 +1588,14 @@ int ha_sphinx::ConnectToSearchd ()
 	int version;
 	uint uClientVersion = htonl ( SPHINX_SEARCHD_PROTO );
 
+	const char * sHost = ( sQueryHost && *sQueryHost ) ? sQueryHost : m_pShare->m_sHost;
+	ushort iPort = iQueryPort ? (ushort)iQueryPort : m_pShare->m_iPort;
+
 	memset ( &sa, 0, sizeof(sa) );
 	sa.sin_family = AF_INET;
 
 	// prepare host address
-	if ( (int)( ip_addr=inet_addr(m_pShare->m_sHost) ) != (int)INADDR_NONE )
+	if ( (int)( ip_addr=inet_addr(sHost) ) != (int)INADDR_NONE )
 	{ 
 		memcpy ( &sa.sin_addr, &ip_addr, sizeof(ip_addr) );
 	} else
@@ -1593,14 +1604,14 @@ int ha_sphinx::ConnectToSearchd ()
 		struct hostent tmp_hostent, *hp;
 		char buff2 [ GETHOSTBYNAME_BUFF_SIZE ];
 
-		hp = my_gethostbyname_r ( m_pShare->m_sHost, &tmp_hostent,
+		hp = my_gethostbyname_r ( sHost, &tmp_hostent,
 			buff2, sizeof(buff2), &tmp_errno );
 		if ( !hp )
 		{ 
 			my_gethostbyname_r_free();
 
 			char sError[256];
-			my_snprintf ( sError, sizeof(sError), "failed to resolve searchd host (name=%s)", m_pShare->m_sHost );
+			my_snprintf ( sError, sizeof(sError), "failed to resolve searchd host (name=%s)", sHost );
 
 			my_error ( ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), sError );
 			SPH_RET(-1);
@@ -1611,7 +1622,7 @@ int ha_sphinx::ConnectToSearchd ()
 		my_gethostbyname_r_free();
 	}
 
-	sa.sin_port = htons(m_pShare->m_iPort);
+	sa.sin_port = htons(iPort);
 
 	char sError[256];
 	int iSocket = socket ( AF_INET, SOCK_STREAM, 0 );
@@ -1625,7 +1636,7 @@ int ha_sphinx::ConnectToSearchd ()
 	if ( connect ( iSocket, (struct sockaddr *) &sa, sizeof(sa) )<0 )
 	{
 		my_snprintf ( sError, sizeof(sError), "failed to connect to searchd (host=%s, port=%d)",
-			m_pShare->m_sHost, m_pShare->m_iPort );
+			sHost, iPort );
 		my_error ( ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), sError );
 		SPH_RET(-1);
 	}
@@ -1634,7 +1645,7 @@ int ha_sphinx::ConnectToSearchd ()
 	{
 		::closesocket ( iSocket );
 		my_snprintf ( sError, sizeof(sError), "failed to receive searchd version (host=%s, port=%d)",
-			m_pShare->m_sHost, m_pShare->m_iPort );
+			sHost, iPort );
 		my_error ( ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), sError );
 		SPH_RET(-1);
 	}
@@ -1643,7 +1654,7 @@ int ha_sphinx::ConnectToSearchd ()
 	{
 		::closesocket ( iSocket );
 		my_snprintf ( sError, sizeof(sError), "failed to send client version (host=%s, port=%d)",
-			m_pShare->m_sHost, m_pShare->m_iPort );
+			sHost, iPort );
 		my_error ( ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), sError );
 		SPH_RET(-1);
 	}
@@ -1973,7 +1984,7 @@ int ha_sphinx::index_read ( byte * buf, const byte * key, uint key_len, enum ha_
 	}
 
 	// do connect
-	int iSocket = ConnectToSearchd ();
+	int iSocket = ConnectToSearchd ( q.m_sHost, q.m_iPort );
 	if ( iSocket<0 )
 		SPH_RET ( HA_ERR_END_OF_FILE );
 

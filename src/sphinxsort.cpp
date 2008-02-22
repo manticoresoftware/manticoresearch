@@ -856,14 +856,16 @@ public:
 		if ( tEntry.m_iRowitems!=this->m_iRowitems )
 		{
 			// it must be pre-grouped; well, just re-group it based on the group key
-			return PushEx ( tEntry, tEntry.GetAttr ( m_iRowitems+OFF_POSTCALC_GROUP ) );
+			// (this pointer is for gcc; it doesn't work otherwise)
+			return PushEx ( tEntry, tEntry.GetAttr ( this->m_iRowitems+OFF_POSTCALC_GROUP ) );
 		}
 
 		// ungrouped match
 		if ( !m_pMva )
 			return false;
 
-		SphAttr_t iMvaIndex = tEntry.GetAttr ( m_iGroupbyOffset, m_iGroupbyCount ); // FIXME! OPTIMIZE! use simpler locator than full bits/count here
+		// (this pointer is for gcc; it doesn't work otherwise)
+		SphAttr_t iMvaIndex = tEntry.GetAttr ( this->m_iGroupbyOffset, this->m_iGroupbyCount ); // FIXME! OPTIMIZE! use simpler locator than full bits/count here
 		if ( !iMvaIndex )
 			return false;
 

@@ -390,12 +390,18 @@ public:
 	/// was last token a special one?
 	inline bool						WasTokenSpecial () { return m_bWasSpecial; }
 
+	/// get amount of overshort keywords skipped before this token
+	inline int						GetOvershortCount () { return m_iOvershortCount; }
+
 public:
 	/// get lowercaser
 	virtual const CSphLowercaser *	GetLowercaser () const { return &m_tLC; }
 
 	/// spawn a clone of my own
 	virtual ISphTokenizer *			Clone ( bool bEscaped ) const = 0;
+
+	/// clone base stuff
+	virtual void					CloneBase ( const ISphTokenizer * pFrom, bool bEscaped );
 
 	/// SBCS or UTF-8?
 	virtual bool					IsUtf8 () const = 0;
@@ -419,6 +425,7 @@ protected:
 	bool							m_bBoundary;				///< boundary flag (true immediately after boundary codepoint)
 	bool							m_bWasSpecial;				///< special token flag
 	bool							m_bEscaped;					///< backslash handling flag
+	int								m_iOvershortCount;			///< skipped overshort tokens count
 
 	CSphVector<CSphSynonym>			m_dSynonyms;				///< active synonyms
 	CSphVector<int>					m_dSynStart;				///< map 1st byte to candidate range start

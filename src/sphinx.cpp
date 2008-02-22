@@ -2715,6 +2715,7 @@ ISphTokenizer::ISphTokenizer ()
 	, m_bBoundary ( false )
 	, m_bWasSpecial ( false )
 	, m_bEscaped ( false )
+	, m_iOvershortCount ( 0 )
 {}
 
 
@@ -3405,7 +3406,11 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 
 		// return accumulated token
 		if ( m_iAccum<m_iMinWordLen )
+		{
+			if ( m_iAccum )
+				m_iOvershortCount++;
 			continue;
+		}
 
 		*m_pAccum = '\0';
 		m_iLastTokenLen = m_iAccum;
@@ -3484,6 +3489,26 @@ bool ISphTokenizer::SetIgnoreChars ( const char * sConfig, CSphString & sError )
 	return true;
 }
 
+
+void ISphTokenizer::CloneBase ( const ISphTokenizer * pFrom, bool bEscaped )
+{
+	m_tLC = pFrom->m_tLC;
+	m_iMinWordLen = pFrom->m_iMinWordLen;
+	m_dSynonyms = pFrom->m_dSynonyms;
+	m_dSynStart = pFrom->m_dSynStart;
+	m_dSynEnd = pFrom->m_dSynEnd;
+	m_bEscaped = bEscaped;
+
+	if ( bEscaped )
+	{
+		CSphVector<CSphRemapRange> dRemaps;
+		CSphRemapRange Range;
+		Range.m_iStart = Range.m_iEnd = Range.m_iRemapStart = '\\';
+		dRemaps.Add ( Range );
+		m_tLC.AddRemaps ( dRemaps, 0, 0 );
+	}
+}
+
 /////////////////////////////////////////////////////////////////////////////
 
 CSphTokenizer_SBCS::CSphTokenizer_SBCS ()
@@ -3502,12 +3527,15 @@ void CSphTokenizer_SBCS::SetBuffer ( BYTE * sBuffer, int iLength )
 	m_pBuffer = sBuffer;
 	m_pBufferMax = sBuffer + iLength;
 	m_pCur = sBuffer;
+
+	m_iOvershortCount = 0;
 }
 
 
 BYTE * CSphTokenizer_SBCS::GetToken ()
 {
 	m_bWasSpecial = false;
+	m_iOvershortCount = 0;
 
 	if ( m_dSynonyms.GetLength() )
 		return GetTokenSyn ();
@@ -3560,6 +3588,8 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 		{
 			if ( m_iAccum<m_iMinWordLen )
 			{
+				if ( m_iAccum )
+					m_iOvershortCount++;
 				m_iAccum = 0;
 				continue;
 			}
@@ -3581,7 +3611,11 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 		{
 			// skip short words
 			if ( m_iAccum<m_iMinWordLen )
+			{
 				m_iAccum = 0;
+				if ( m_iAccum )
+					m_iOvershortCount++;
+			}
 
 			if ( m_iAccum==0 )
 			{
@@ -3613,21 +3647,7 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 ISphTokenizer * CSphTokenizer_SBCS::Clone ( bool bEscaped ) const
 {
 	CSphTokenizer_SBCS * pClone = new CSphTokenizer_SBCS ();
-	pClone->m_tLC = m_tLC;
-	pClone->m_dSynonyms = m_dSynonyms;
-	pClone->m_dSynStart = m_dSynStart;
-	pClone->m_dSynEnd = m_dSynEnd;
-	pClone->m_bEscaped = bEscaped;
-
-	if ( bEscaped )
-	{
-		CSphVector<CSphRemapRange> dRemaps;
-		CSphRemapRange Range;
-		Range.m_iStart = Range.m_iEnd = Range.m_iRemapStart = '\\';
-		dRemaps.Add ( Range );
-		pClone->m_tLC.AddRemaps ( dRemaps, 0, 0 );
-	}
-
+	pClone->CloneBase ( this, bEscaped );
 	return pClone;
 }
 
@@ -3654,12 +3674,15 @@ void CSphTokenizer_UTF8::SetBuffer ( BYTE * sBuffer, int iLength )
 	for ( BYTE * p = m_pBuffer; p < m_pBufferMax; p++ )
 		if ( !*p )
 			*p = ' ';
+
+	m_iOvershortCount = 0;
 }
 
 
 BYTE * CSphTokenizer_UTF8::GetToken ()
 {
 	m_bWasSpecial = false;
+	m_iOvershortCount = 0;
 
 	if ( m_dSynonyms.GetLength() )
 		return GetTokenSyn ();
@@ -3716,8 +3739,11 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 		{
 			FlushAccum ();
 			if ( m_iLastTokenLen<m_iMinWordLen )
+			{
+				if ( m_iLastTokenLen )
+					m_iOvershortCount++;
 				continue;
-			else
+			} else
 				return m_sAccum;
 		}
 
@@ -3732,7 +3758,11 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 		{
 			// skip short words preceding specials
 			if ( m_iAccum<m_iMinWordLen )
+			{
+				if ( m_iAccum )
+					m_iOvershortCount++;
 				FlushAccum ();
+			}
 
 			if ( m_iAccum==0 )
 			{
@@ -3766,21 +3796,7 @@ void CSphTokenizer_UTF8::FlushAccum ()
 ISphTokenizer * CSphTokenizer_UTF8::Clone ( bool bEscaped ) const
 {
 	CSphTokenizer_UTF8 * pClone = new CSphTokenizer_UTF8 ();
-	pClone->m_tLC = m_tLC;
-	pClone->m_dSynonyms = m_dSynonyms;
-	pClone->m_dSynStart = m_dSynStart;
-	pClone->m_dSynEnd = m_dSynEnd;
-	pClone->m_bEscaped = bEscaped;
-
-	if ( bEscaped )
-	{
-		CSphVector<CSphRemapRange> dRemaps;
-		CSphRemapRange Range;
-		Range.m_iStart = Range.m_iEnd = Range.m_iRemapStart = '\\';
-		dRemaps.Add ( Range );
-		pClone->m_tLC.AddRemaps ( dRemaps, 0, 0 );
-	}
-
+	pClone->CloneBase ( this, bEscaped );
 	return pClone;
 }
 
@@ -8053,14 +8069,15 @@ struct CSphSimpleQueryParser
 			SphWordID_t iWord = pDict->GetWordID ( sWord );
 			if ( iWord )
 			{
+				iPos += 1+pTokenizer->GetOvershortCount(); // properly advance position
 				m_dWords[iWords].m_sWord = (const char*)sWord;
 				m_dWords[iWords].m_uWordID = iWord;
-				m_dWords[iWords].m_iQueryPos = ++iPos;
-				++iWords;
+				m_dWords[iWords].m_iQueryPos = iPos;
+				iWords++;
 			} else
 			{
 				if ( iPos )
-					++iPos;
+					iPos++; // advance position on stopwords, but not at the very start
 			}
 		}
 
@@ -15249,7 +15266,7 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 		m_pTokenizer->SetBuffer ( sField, iFieldBytes );
 
 		BYTE * sWord;
-		int iPos = ( j<<24 ) + 1;
+		int iPos = ( j<<24 );
 
 		bool bPrefixField = m_tSchema.m_dFields [j].m_eWordpart == SPH_WORDPART_PREFIX;
 		bool bInfixMode = m_iMinInfixLen > 0;
@@ -15265,6 +15282,7 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 			{
 				if ( m_pTokenizer->GetBoundary() )
 					iPos += m_iBoundaryStep;
+				iPos += 1+m_pTokenizer->GetOvershortCount();
 
 				int iLen = m_pTokenizer->GetLastTokenLen ();
 
@@ -15318,8 +15336,6 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 						tHit.m_iWordID = iWord;
 						tHit.m_iWordPos = iPos;
 					}
-
-					iPos++;
 					continue;
 				}
 
@@ -15377,9 +15393,6 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 
 					sInfix += m_pTokenizer->GetCodepointLength ( *sInfix );
 				}
-
-				// move on
-				iPos++; 
 			}
 		} else
 		{
@@ -15388,6 +15401,7 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 			{
 				if ( m_pTokenizer->GetBoundary() )
 					iPos += m_iBoundaryStep;
+				iPos += 1+m_pTokenizer->GetOvershortCount();
 
 				if ( bGlobalPartialMatch )
 				{
@@ -15414,7 +15428,6 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 					tHit.m_iWordID = iWord;
 					tHit.m_iWordPos = iPos;
 				}
-				iPos++;
 			}
 		}
 	}

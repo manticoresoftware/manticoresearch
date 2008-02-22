@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>phrase matching vs. stop words and short words</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT document_id, body FROM test_table
+}
+
+index test
+{
+	source			= srctest
+	path			= <data_path/>/test
+	stopwords		= stopwords.txt
+	min_word_len	= 3
+}
+</config>
+
+<queries>
+<query mode="phrase">walking shoes</query>
+<query mode="phrase">walking in my shoes</query>
+<query mode="phrase">microsoft office</query>
+<query mode="phrase">microsoft a office</query>
+<query mode="extended2">"walking shoes"</query>
+<query mode="extended2">"walking in my shoes"</query>
+<query mode="extended2">"microsoft office"</query>
+<query mode="extended2">"microsoft a office"</query>
+</queries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 'walking shoes' ),
+( 2, 'try walking in my shoes' ),
+( 3, 'Microsoft. The Office.' ),
+( 4, 'Microsoft Office' )
+</db_insert>
+
+</test>

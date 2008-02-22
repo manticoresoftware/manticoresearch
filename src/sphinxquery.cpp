@@ -1076,18 +1076,18 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 			: QUERY_END;
 		assert ( !( iSpecial>0 && sToken[1]!=0 ) );
 
-		// ignore stopwords
+		// ignore stopwords, update positions
 		if ( !iSpecial )
 		{
 			// GetWordID() may modify the word in-place; so we alloc a tempbuffer
 			CSphString sTmp ( sToken );
 			SphWordID_t iWordID = pDict->GetWordID ( (BYTE*)sTmp.cstr() );
-			if ( iWordID==0 )
-			{
-				if ( iAtomPos )
-					iAtomPos++;
+
+			if ( iWordID || iAtomPos ) // fully ignore starting stopwords; update positions for everything else
+				iAtomPos += 1+pMyTokenizer->GetOvershortCount();
+
+			if ( !iWordID ) // skip stopwords
 				continue;
-			}
 		}
 
 		///////////////////////////
@@ -1149,7 +1149,7 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 			if ( dState.Last()==XQS_PHRASE )
 			{
 				assert ( m_dStack.Last().m_pNode->m_tAtom.m_iMaxDistance==0 );
-				CSphExtendedQueryAtomWord tAW ( sToken, iAtomPos++ );
+				CSphExtendedQueryAtomWord tAW ( sToken, iAtomPos );
 				m_dStack.Last().m_pNode->m_tAtom.m_dWords.Add ( tAW );
 				continue;
 			}

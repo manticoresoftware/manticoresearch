@@ -232,6 +232,7 @@ struct CSphSEShare
 	ushort			m_iPort;
 	uint			m_iTableNameLen;
 	uint			m_iUseCount;
+	CHARSET_INFO *	m_pTableQueryCharset;
 
 	int					m_iTableFields;
 	char **				m_sTableField;
@@ -246,6 +247,7 @@ struct CSphSEShare
 		, m_iPort ( 0 )
 		, m_iTableNameLen ( 0 )
 		, m_iUseCount ( 1 )
+		, m_pTableQueryCharset ( NULL )
 
 		, m_iTableFields ( 0 )
 		, m_sTableField ( NULL )
@@ -358,9 +360,12 @@ struct CSphSEThreadData
 	bool				m_bQuery;
 	char				m_sQuery[MAX_QUERY_LEN];
 
+	CHARSET_INFO *		m_pQueryCharset;
+
 	CSphSEThreadData ()
 		: m_bStats ( false )
 		, m_bQuery ( false )
+		, m_pQueryCharset ( NULL )
 	{}
 };
 
@@ -696,14 +701,27 @@ bool sphinx_show_status ( THD * thd )
 					buf2, tWord.m_sWord, tWord.m_iDocs, tWord.m_iHits );
 			}
 
+			// convert it if we can
+			const char * sWord = buf2;
+			int iWord = buf2len;
+
+			String sBuf3;
+			if ( pTls->m_pQueryCharset )
+			{
+				uint iErrors;
+				sBuf3.copy ( buf2, buf2len, pTls->m_pQueryCharset, system_charset_info, &iErrors );
+				sWord = sBuf3.c_ptr();
+				iWord = sBuf3.length();
+			}
+
 #if MYSQL_VERSION_ID>50100
 			stat_print ( thd, sphinx_hton_name, strlen(sphinx_hton_name),
-				STRING_WITH_LEN("words"), buf2, buf2len );
+				STRING_WITH_LEN("words"), sWord, iWord );
 #else
 			protocol->prepare_for_resend ();
 			protocol->store ( STRING_WITH_LEN("SPHINX"), system_charset_info );
 			protocol->store ( STRING_WITH_LEN("words"), system_charset_info );
-			protocol->store ( buf2, buf2len, system_charset_info );
+			protocol->store ( sWord, iWord, system_charset_info );
 			if ( protocol->write() )
 				SPH_RET(TRUE);
 #endif
@@ -957,6 +975,7 @@ static CSphSEShare * get_share ( const char * table_name, TABLE * table )
 			break;
 
 		// try to setup it
+		pShare->m_pTableQueryCharset = table->field[2]->charset();
 		if ( !ParseUrl ( pShare, table, false ) )
 		{
 			SafeDelete ( pShare );
@@ -1908,6 +1927,7 @@ const COND * ha_sphinx::cond_push ( const COND * cond )
 		pTls->m_bQuery = true;
 		strncpy ( pTls->m_sQuery, pString->str_value.c_ptr(), sizeof(pTls->m_sQuery) );
 		pTls->m_sQuery[sizeof(pTls->m_sQuery)-1] = '\0';
+		pTls->m_pQueryCharset = pString->str_value.charset();
 		return NULL;
 	}
 
@@ -1974,6 +1994,7 @@ int ha_sphinx::index_read ( byte * buf, const byte * key, uint key_len, enum ha_
 		// just use the key (might be truncated)
 		m_pCurrentKey = key+HA_KEY_BLOB_LENGTH;
 		m_iCurrentKeyLen = uint2korr(key); // or maybe key_len?
+		pTls->m_pQueryCharset = m_pShare ? m_pShare->m_pTableQueryCharset : NULL;
 	}
 
 	CSphSEQuery q ( (const char*)m_pCurrentKey, m_iCurrentKeyLen, m_pShare->m_sIndex );

@@ -97,6 +97,19 @@ STATIC_SIZE_ASSERT ( SphDocID_t, 4 );
 
 #endif // USE_64BIT
 
+//////////////////////////////////////////////////////////////////////////
+
+/// row entry (storage only, does not necessarily map 1:1 to attributes)
+typedef DWORD			CSphRowitem;
+
+/// widest integer type that can be be stored as an attribute (ideally, fully decoupled from rowitem size!)
+typedef DWORD			SphAttr_t;
+
+const CSphRowitem		ROWITEM_MAX		= UINT_MAX;
+const int				ROWITEM_BITS	= 8*sizeof(CSphRowitem);
+
+STATIC_ASSERT ( sizeof(CSphRowitem)==sizeof(float), ROWITEM_AND_FLOAT_SIZE_MISMATCH );
+
 inline SphDocID_t &		DOCINFO2ID ( const DWORD * pDocinfo )	{ return *(SphDocID_t*)pDocinfo; }
 inline DWORD *			DOCINFO2ATTRS ( DWORD * pDocinfo )		{ return pDocinfo+DOCINFO_IDSIZE; }
 inline const DWORD *	DOCINFO2ATTRS ( const DWORD * pDocinfo ){ return pDocinfo+DOCINFO_IDSIZE; }
@@ -481,16 +494,9 @@ struct CSphWordHit
 	DWORD			m_iWordPos;		///< word position in current document
 };
 
-/// row entry (storage only, does not necessarily map 1:1 to attributes)
-typedef DWORD		CSphRowitem;
-
-const CSphRowitem	ROWITEM_MAX		= UINT_MAX;
-const int			ROWITEM_BITS	= 8*sizeof(CSphRowitem);
-
-STATIC_ASSERT ( sizeof(CSphRowitem)==sizeof(float), ROWITEM_AND_FLOAT_SIZE_MISMATCH );
 
 /// getter
-inline CSphRowitem sphGetRowAttr ( const DWORD * pRow, int iBitOffset, int iBitCount )
+inline SphAttr_t sphGetRowAttr ( const CSphRowitem * pRow, int iBitOffset, int iBitCount )
 {
 	int iItem = iBitOffset / ROWITEM_BITS;
 	if ( iBitCount==ROWITEM_BITS )
@@ -502,7 +508,7 @@ inline CSphRowitem sphGetRowAttr ( const DWORD * pRow, int iBitOffset, int iBitC
 
 
 /// setter
-inline void sphSetRowAttr ( CSphRowitem * pRow, int iBitOffset, int iBitCount, CSphRowitem uValue )
+inline void sphSetRowAttr ( CSphRowitem * pRow, int iBitOffset, int iBitCount, SphAttr_t uValue )
 {
 	int iItem = iBitOffset / ROWITEM_BITS;
 	if ( iBitCount==ROWITEM_BITS )
@@ -581,14 +587,14 @@ struct CSphDocInfo
 
 public:
 	/// get attr by item index
-	CSphRowitem GetAttr ( int iItem ) const
+	SphAttr_t GetAttr ( int iItem ) const
 	{
 		assert ( iItem>=0 && iItem<m_iRowitems );
 		return m_pRowitems[iItem];
 	}
 
 	/// get attr by bit offset/count
-	CSphRowitem GetAttr ( int iBitOffset, int iBitCount ) const
+	SphAttr_t GetAttr ( int iBitOffset, int iBitCount ) const
 	{
 		assert ( iBitOffset>=0 && iBitOffset<m_iRowitems*ROWITEM_BITS );
 		assert ( iBitCount>0 && iBitOffset+iBitCount<=m_iRowitems*ROWITEM_BITS );
@@ -599,12 +605,19 @@ public:
 	float GetAttrFloat ( int iItem ) const
 	{
 		assert ( iItem>=0 && iItem<m_iRowitems );
-		return *( reinterpret_cast<float*> ( m_pRowitems+iItem ) );
+		return sphDW2F ( m_pRowitems[iItem] );
 	};
 
 public:
+	/// set attr by item index
+	void SetAttr ( int iItem, SphAttr_t uValue )
+	{
+		assert ( iItem>=0 && iItem<m_iRowitems );
+		m_pRowitems[iItem] = uValue;
+	}
+
 	/// set attr by bit offset/count
-	void SetAttr ( int iBitOffset, int iBitCount, CSphRowitem uValue ) const
+	void SetAttr ( int iBitOffset, int iBitCount, SphAttr_t uValue ) const
 	{
 		assert ( iBitOffset>=0 && iBitOffset<m_iRowitems*ROWITEM_BITS );
 		assert ( iBitCount>0 && iBitOffset+iBitCount<=m_iRowitems*ROWITEM_BITS );
@@ -615,7 +628,7 @@ public:
 	void SetAttrFloat ( int iItem, float fValue ) const
 	{
 		assert ( iItem>=0 && iItem<m_iRowitems );
-		*( reinterpret_cast<float*> ( m_pRowitems+iItem ) ) = fValue;
+		m_pRowitems[iItem] = sphF2DW ( fValue );
 	};
 };
 

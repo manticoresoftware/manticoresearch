@@ -27,16 +27,16 @@
 
 /// helper to get i-th sorter attr from match
 template<bool BITS>
-inline CSphRowitem sphGetCompAttr ( const CSphMatchComparatorState & t, const CSphMatch & m, int i );
+inline SphAttr_t sphGetCompAttr ( const CSphMatchComparatorState & t, const CSphMatch & m, int i );
 
 template<>
-inline CSphRowitem sphGetCompAttr<false> ( const CSphMatchComparatorState & t, const CSphMatch & m, int i )
+inline SphAttr_t sphGetCompAttr<false> ( const CSphMatchComparatorState & t, const CSphMatch & m, int i )
 {
 	return m.GetAttr ( t.m_iRowitem[i] );
 }
 
 template<>
-inline CSphRowitem sphGetCompAttr<true> ( const CSphMatchComparatorState & t, const CSphMatch & m, int i )
+inline SphAttr_t sphGetCompAttr<true> ( const CSphMatchComparatorState & t, const CSphMatch & m, int i )
 {
 	return m.GetAttr ( t.m_iBitOffset[i], t.m_iBitCount[i] );
 }
@@ -458,7 +458,7 @@ void CSphUniqounter::Compact ( SphGroupKey_t * pRemoveGroups, int iRemoveGroups 
 
 /////////////////////////////////////////////////////////////////////////////
 
-static inline SphGroupKey_t sphCalcGroupKey ( ESphGroupBy eGroupBy, CSphRowitem iAttr )
+static inline SphGroupKey_t sphCalcGroupKey ( ESphGroupBy eGroupBy, SphAttr_t iAttr )
 {
 	if ( eGroupBy==SPH_GROUPBY_ATTR )
 		return iAttr;
@@ -500,7 +500,7 @@ static inline SphGroupKey_t sphCalcGroupKey ( const CSphMatch & tMatch, ESphGrou
 		return *(SphGroupKey_t*)( tMatch.m_pRowitems+iItem );
 	}
 
-	CSphRowitem iAttr = tMatch.GetAttr ( iAttrOffset, iAttrBits );
+	SphAttr_t iAttr = tMatch.GetAttr ( iAttrOffset, iAttrBits );
 	return sphCalcGroupKey ( eGroupBy, iAttr );
 }
 
@@ -606,23 +606,23 @@ public:
 		{
 			CSphMatch * pMatch = (*ppMatch);
 			assert ( pMatch );
-			assert ( m_eGroupBy==SPH_GROUPBY_ATTRPAIR || pMatch->m_pRowitems [ m_iRowitems+OFF_POSTCALC_GROUP ]==uGroupKey );
+			assert ( m_eGroupBy==SPH_GROUPBY_ATTRPAIR || pMatch->GetAttr ( m_iRowitems+OFF_POSTCALC_GROUP )==uGroupKey );
 
 			if ( bGrouped )
 			{
 				// it's already grouped match
 				// sum grouped matches count
 				assert ( pMatch->m_iRowitems==tEntry.m_iRowitems );
-				pMatch->m_pRowitems [ m_iRowitems+OFF_POSTCALC_COUNT ] += tEntry.m_pRowitems [ m_iRowitems+OFF_POSTCALC_COUNT ];
+				pMatch->SetAttr ( m_iRowitems+OFF_POSTCALC_COUNT, pMatch->GetAttr ( m_iRowitems+OFF_POSTCALC_COUNT ) + tEntry.GetAttr ( m_iRowitems+OFF_POSTCALC_COUNT ) ); // OPTIMIZE! AddAttr()?
 				if ( DISTINCT )
-					pMatch->m_pRowitems [ m_iRowitems+OFF_POSTCALC_DISTINCT ] += tEntry.m_pRowitems [ m_iRowitems+OFF_POSTCALC_DISTINCT ];
+					pMatch->SetAttr ( m_iRowitems+OFF_POSTCALC_DISTINCT, pMatch->GetAttr ( m_iRowitems+OFF_POSTCALC_DISTINCT ) + tEntry.GetAttr ( m_iRowitems+OFF_POSTCALC_DISTINCT ) );
 
 			} else
 			{
 				// it's a simple match
 				// increase grouped matches count
 				assert ( pMatch->m_iRowitems==tEntry.m_iRowitems+ADD_ITEMS_TOTAL );
-				pMatch->m_pRowitems [ m_iRowitems+OFF_POSTCALC_COUNT ]++;
+				pMatch->SetAttr ( m_iRowitems+OFF_POSTCALC_COUNT, 1+pMatch->GetAttr ( m_iRowitems+OFF_POSTCALC_COUNT ) ); // OPTIMIZE! IncAttr()?
 			}
 
 			// if new entry is more relevant, update from it
@@ -639,7 +639,7 @@ public:
 
 		// submit actual distinct value in all cases
 		if ( DISTINCT && !bGrouped )
-			m_tUniq.Add ( SphGroupedValue_t ( uGroupKey, tEntry.GetAttr ( m_iDistinctOffset, m_iDistinctCount ) ) );
+			m_tUniq.Add ( SphGroupedValue_t ( uGroupKey, tEntry.GetAttr ( m_iDistinctOffset, m_iDistinctCount ) ) ); // OPTIMIZE! use simpler locator here?
 
 		// it's a dupe anyway, so we shouldn't update total matches count
 		if ( ppMatch )
@@ -667,10 +667,10 @@ public:
 		memcpy ( tNew.m_pRowitems, tEntry.m_pRowitems, tEntry.m_iRowitems*sizeof(CSphRowitem) );
 		if ( !bGrouped )
 		{
-			tNew.m_pRowitems [ m_iRowitems+OFF_POSTCALC_GROUP ] = (DWORD)uGroupKey; // intentionally truncate
-			tNew.m_pRowitems [ m_iRowitems+OFF_POSTCALC_COUNT ] = 1;
+			tNew.SetAttr ( m_iRowitems+OFF_POSTCALC_GROUP, (DWORD)uGroupKey ); // intentionally truncate
+			tNew.SetAttr ( m_iRowitems+OFF_POSTCALC_COUNT, 1 );
 			if ( DISTINCT )
-				tNew.m_pRowitems [ m_iRowitems+OFF_POSTCALC_DISTINCT ] = 0;
+				tNew.SetAttr ( m_iRowitems+OFF_POSTCALC_DISTINCT, 0 );
 		}
 
 		m_hGroup2Match.Add ( &tNew, uGroupKey );
@@ -730,7 +730,7 @@ protected:
 			{
 				CSphMatch ** ppMatch = m_hGroup2Match(uGroup);
 				if ( ppMatch )
-					(*ppMatch)->m_pRowitems[m_iRowitems+OFF_POSTCALC_DISTINCT] = iCount;
+					(*ppMatch)->SetAttr ( m_iRowitems+OFF_POSTCALC_DISTINCT, iCount );
 			}
 		}
 	}
@@ -761,7 +761,7 @@ protected:
 			} else
 			{
 				for ( int i=0; i<iCut; i++ )
-					dRemove[i] = m_pData[m_iUsed+i].m_pRowitems[m_iRowitems+OFF_POSTCALC_GROUP];
+					dRemove[i] = m_pData[m_iUsed+i].GetAttr ( m_iRowitems+OFF_POSTCALC_GROUP );
 			}
 
 			// sort and compact
@@ -782,7 +782,7 @@ protected:
 		} else
 		{
 			for ( int i=0; i<m_iUsed; i++ )
-				m_hGroup2Match.Add ( m_pData+i, m_pData[i].m_pRowitems[ m_iRowitems+OFF_POSTCALC_GROUP ] );
+				m_hGroup2Match.Add ( m_pData+i, m_pData[i].GetAttr ( m_iRowitems+OFF_POSTCALC_GROUP ) );
 		}
 	}
 
@@ -856,18 +856,18 @@ public:
 		if ( tEntry.m_iRowitems!=this->m_iRowitems )
 		{
 			// it must be pre-grouped; well, just re-group it based on the group key
-			return this->PushEx ( tEntry, tEntry.m_pRowitems[this->m_iRowitems+OFF_POSTCALC_GROUP] );
+			return PushEx ( tEntry, tEntry.GetAttr ( m_iRowitems+OFF_POSTCALC_GROUP ) );
 		}
 
 		// ungrouped match
 		if ( !m_pMva )
 			return false;
 
-		DWORD iMvaIndex = tEntry.m_pRowitems [ this->m_iGroupbyOffset/ROWITEM_BITS ]; // optimize away division?
+		SphAttr_t iMvaIndex = tEntry.GetAttr ( m_iGroupbyOffset, m_iGroupbyCount ); // FIXME! OPTIMIZE! use simpler locator than full bits/count here
 		if ( !iMvaIndex )
 			return false;
 
-		const DWORD * pValues = m_pMva + iMvaIndex;
+		const DWORD * pValues = m_pMva + iMvaIndex; // FIXME! hardcoded MVA type
 		DWORD iValues = *pValues++;
 
 		bool bRes = false;
@@ -919,8 +919,8 @@ struct MatchAttrLt_fn : public ISphMatchComparator
 
 	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
 	{
-		CSphRowitem aa = sphGetCompAttr<BITS> ( t, a, 0 );
-		CSphRowitem bb = sphGetCompAttr<BITS> ( t, b, 0 );
+		SphAttr_t aa = sphGetCompAttr<BITS> ( t, a, 0 );
+		SphAttr_t bb = sphGetCompAttr<BITS> ( t, b, 0 );
 		if ( aa!=bb )
 			return aa<bb;
 
@@ -943,8 +943,8 @@ struct MatchAttrGt_fn : public ISphMatchComparator
 
 	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
 	{
-		CSphRowitem aa = sphGetCompAttr<BITS> ( t, a, 0 );
-		CSphRowitem bb = sphGetCompAttr<BITS> ( t, b, 0 );
+		SphAttr_t aa = sphGetCompAttr<BITS> ( t, a, 0 );
+		SphAttr_t bb = sphGetCompAttr<BITS> ( t, b, 0 );
 		if ( aa!=bb )
 			return aa>bb;
 
@@ -967,8 +967,8 @@ struct MatchTimeSegments_fn : public ISphMatchComparator
 
 	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
 	{
-		CSphRowitem aa = sphGetCompAttr<BITS> ( t, a, 0 );
-		CSphRowitem bb = sphGetCompAttr<BITS> ( t, b, 0 );
+		SphAttr_t aa = sphGetCompAttr<BITS> ( t, a, 0 );
+		SphAttr_t bb = sphGetCompAttr<BITS> ( t, b, 0 );
 		int iA = GetSegment ( aa, t.m_iNow );
 		int iB = GetSegment ( bb, t.m_iNow );
 		if ( iA!=iB )
@@ -1006,8 +1006,8 @@ struct MatchExpr_fn : public ISphMatchComparator
 
 	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
 	{
-		float aa = sphDW2F ( a.m_pRowitems [ t.m_iRowitem[0] ] );
-		float bb = sphDW2F ( b.m_pRowitems [ t.m_iRowitem[0] ] );
+		float aa = a.GetAttrFloat ( t.m_iRowitem[0] );
+		float bb = b.GetAttrFloat ( t.m_iRowitem[0] );
 		if ( aa!=bb )
 			return aa<bb;
 		return a.m_iDocID>b.m_iDocID;
@@ -1028,8 +1028,8 @@ struct MatchExpr_fn : public ISphMatchComparator
 		case SPH_VATTR_RELEVANCE:	SPH_TEST_PAIR ( a.m_iWeight, b.m_iWeight, _idx ); break; \
 		default: \
 		{ \
-			register CSphRowitem aa = sphGetCompAttr<BITS> ( t, a, _idx ); \
-			register CSphRowitem bb = sphGetCompAttr<BITS> ( t, b, _idx ); \
+			register SphAttr_t aa = sphGetCompAttr<BITS> ( t, a, _idx ); \
+			register SphAttr_t bb = sphGetCompAttr<BITS> ( t, b, _idx ); \
 			SPH_TEST_PAIR ( aa, bb, _idx ); \
 			break; \
 		} \

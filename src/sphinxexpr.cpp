@@ -33,17 +33,15 @@ struct Expr_GetInt_c : public ISphExpr
 {
 	int m_iRowitem;
 	Expr_GetInt_c ( int iLocator ) : m_iRowitem ( iLocator ) {}
-	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)tMatch.m_pRowitems[m_iRowitem]; }
+	virtual float Eval ( const CSphMatch & tMatch ) const { return (float) tMatch.GetAttr ( m_iRowitem ); }
 };
 
 
 struct Expr_GetBits_c : public ISphExpr
 {
-	int m_iRowitem;
-	int m_iShift;
-	DWORD m_uMask;
-	Expr_GetBits_c ( int iLocator ) : m_iRowitem ( iLocator>>16 ), m_iShift ( (iLocator>>8)&255 ), m_uMask ( (1UL<<(iLocator&255)) - 1 ) {}
-	virtual float Eval ( const CSphMatch & tMatch ) const { return float ( ( tMatch.m_pRowitems[m_iRowitem]>>m_iShift ) & m_uMask ); }
+	int m_iBitOffset, m_iBitCount;
+	Expr_GetBits_c ( int iLocator ) : m_iBitOffset ( iLocator>>16 ), m_iBitCount ( iLocator&0xffff ) {}
+	virtual float Eval ( const CSphMatch & tMatch ) const { return (float) tMatch.GetAttr ( m_iBitOffset, m_iBitCount ); }
 };
 
 
@@ -51,7 +49,7 @@ struct Expr_GetFloat_c : public ISphExpr
 {
 	int m_iRowitem;
 	Expr_GetFloat_c ( int iLocator ) : m_iRowitem ( iLocator ) {}
-	virtual float Eval ( const CSphMatch & tMatch ) const { return sphDW2F(tMatch.m_pRowitems[m_iRowitem]); }
+	virtual float Eval ( const CSphMatch & tMatch ) const { return tMatch.GetAttrFloat ( m_iRowitem ); }
 };
 
 
@@ -395,13 +393,9 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 					return TOK_ATTR_INT;
 				} else
 				{
-					DWORD uRowitem = tCol.m_iBitOffset / ROWITEM_BITS;
-					DWORD uItemOff = tCol.m_iBitOffset % ROWITEM_BITS;
-
-					assert ( uRowitem<=65535 );
-					assert ( uItemOff<=255 );
-					assert ( tCol.m_iBitCount<=255 );
-					lvalp->iAttrLocator = ( uRowitem<<16 ) + ( uItemOff<<8 ) + tCol.m_iBitCount;
+					assert ( tCol.m_iBitOffset>=0 && tCol.m_iBitOffset<=0xffff );
+					assert ( tCol.m_iBitCount>=0 && tCol.m_iBitCount<=0xffff );
+					lvalp->iAttrLocator = ( tCol.m_iBitOffset<<16 ) + tCol.m_iBitCount;
 					return TOK_ATTR_BITS;
 				}
 			} else if ( tCol.m_eAttrType==SPH_ATTR_FLOAT )

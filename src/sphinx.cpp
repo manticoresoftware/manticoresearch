@@ -1271,7 +1271,7 @@ struct CSphMergeSource
 	CSphIndex_VLN *		m_pIndex;
 	CSphReader_VLN *	m_pDoclistReader;
 	CSphReader_VLN *	m_pHitlistReader;
-	CSphRowitem *		m_pMinAttrs;
+	CSphRowitem *		m_pMinRowitems;
 	int					m_iWordlistEntries;
 	int					m_iMaxWordlistEntries;
 
@@ -1285,7 +1285,7 @@ struct CSphMergeSource
 		, m_pIndex ( NULL )
 		, m_pDoclistReader ( NULL )
 		, m_pHitlistReader ( NULL )
-		, m_pMinAttrs ( NULL )
+		, m_pMinRowitems ( NULL )
 		, m_iWordlistEntries ( 0 )
 		, m_iMaxWordlistEntries ( 0 )
 	{}
@@ -1320,7 +1320,7 @@ struct CSphMergeData
 
 	CSphPurgeData *		m_pPurgeData;
 	CSphSourceStats		m_tStats;
-	DWORD *				m_pMinAttrs;
+	CSphRowitem *		m_pMinRowitems;
 	ESphDocinfo			m_eDocinfo;
 
 	CSphMergeData ()
@@ -1338,13 +1338,13 @@ struct CSphMergeData
 		, m_iMinDocID ( 0 )
 
 		, m_pPurgeData ( NULL )
-		, m_pMinAttrs ( NULL )
+		, m_pMinRowitems ( NULL )
 		, m_eDocinfo ( SPH_DOCINFO_NONE )
 	{}
 
 	virtual ~CSphMergeData ()
 	{
-		SafeDeleteArray ( m_pMinAttrs );
+		SafeDeleteArray ( m_pMinRowitems );
 	}
 };
 
@@ -5809,7 +5809,7 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAut
 				{
 					pMva->m_uDocID = pSource->m_tDocInfo.m_iDocID;
 					pMva->m_iAttr = i;
-					pMva->m_uValue = pSource->m_tDocInfo.m_pRowitems[iRowitem];
+					pMva->m_uValue = pSource->m_tDocInfo.GetAttr ( iRowitem );
 
 					if ( ++pMva>=pMvaMax )
 					{
@@ -6570,7 +6570,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 
 							dFieldMVAs.Last ().m_uDocID = pSource->m_tDocInfo.m_iDocID;
 							dFieldMVAs.Last ().m_iAttr = iMVA;
-							dFieldMVAs.Last ().m_uValue = pSource->m_tDocInfo.m_pRowitems[iRowitem];
+							dFieldMVAs.Last ().m_uValue = pSource->m_tDocInfo.GetAttr ( iRowitem );
 							
 							int iLength = dFieldMVAs.GetLength ();
 							if ( iLength == iMaxPoolFieldMVAs )
@@ -7526,7 +7526,7 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 	tDstSource.m_iRowitems = ( m_eDocinfo == SPH_DOCINFO_INLINE )? m_tSchema.GetRowSize() : 0;
 	tDstSource.m_iLastDocID = m_tMin.m_iDocID;
 	tDstSource.m_iMinDocID = m_tMin.m_iDocID;
-	tDstSource.m_pMinAttrs = m_tMin.m_pRowitems;
+	tDstSource.m_pMinRowitems = m_tMin.m_pRowitems;
 	tDstSource.m_pIndex = this;
 	tDstSource.m_iMaxWordlistEntries = WORDLIST_CHECKPOINT;
 	
@@ -7537,7 +7537,7 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 	tSrcSource.m_iRowitems = ( pSrcIndex->m_eDocinfo == SPH_DOCINFO_INLINE )? pSrcIndex->m_tSchema.GetRowSize() : 0;
 	tSrcSource.m_iLastDocID = pSrcIndex->m_tMin.m_iDocID;
 	tSrcSource.m_iMinDocID = pSrcIndex->m_tMin.m_iDocID;
-	tSrcSource.m_pMinAttrs = pSrcIndex->m_tMin.m_pRowitems;
+	tSrcSource.m_pMinRowitems = pSrcIndex->m_tMin.m_pRowitems;
 	tSrcSource.m_pIndex = pSrcIndex;
 	tSrcSource.m_iMaxWordlistEntries = WORDLIST_CHECKPOINT;
 
@@ -7567,15 +7567,15 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 	int iMinAttrSize = m_tSchema.GetRowSize();
 	assert ( iMinAttrSize );
 
-	tMerge.m_pMinAttrs = new CSphRowitem [ iMinAttrSize ];
+	tMerge.m_pMinRowitems = new CSphRowitem [ iMinAttrSize ];
 	for( int i = 0; i < iMinAttrSize; i++ )
 	{
 		if ( bDstEmpty )
-			tMerge.m_pMinAttrs[i] = pSrcIndex->m_tMin.m_pRowitems[i];
+			tMerge.m_pMinRowitems[i] = pSrcIndex->m_tMin.m_pRowitems[i];
 		else if ( bSrcEmpty )
-			tMerge.m_pMinAttrs[i] = m_tMin.m_pRowitems[i];
+			tMerge.m_pMinRowitems[i] = m_tMin.m_pRowitems[i];
 		else
-			tMerge.m_pMinAttrs[i] = Min ( m_tMin.m_pRowitems[i], pSrcIndex->m_tMin.m_pRowitems[i] );
+			tMerge.m_pMinRowitems[i] = Min ( m_tMin.m_pRowitems[i], pSrcIndex->m_tMin.m_pRowitems[i] );
 	}
 
 	CSphWordRecord		tDstWord ( &tDstSource, &tMerge );
@@ -7700,7 +7700,7 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 	fdInfo.PutOffset ( tMerge.m_iMinDocID );
 
 	for ( int i = 0; i < m_tMin.m_iRowitems; i++ )
-		m_tMin.m_pRowitems[i] = tMerge.m_pMinAttrs[i];
+		m_tMin.m_pRowitems[i] = tMerge.m_pMinRowitems[i];
 
 	if ( m_eDocinfo==SPH_DOCINFO_INLINE )
 		fdInfo.PutBytes ( m_tMin.m_pRowitems, m_tMin.m_iRowitems*sizeof(CSphRowitem) );
@@ -8162,7 +8162,7 @@ bool CSphIndex_VLN::EarlyReject ( CSphMatch & tMatch, const CSphQuery * pQuery )
 		if ( tFilter.m_bMva )
 		{
 			// multiple values
-			CSphRowitem uOff = tMatch.GetAttr ( tFilter.m_iRowitem );
+			SphAttr_t uOff = tMatch.GetAttr ( tFilter.m_iRowitem );
 
 			const DWORD * pMva = NULL;
 			const DWORD * pMvaMax = NULL;
@@ -8228,7 +8228,7 @@ bool CSphIndex_VLN::EarlyReject ( CSphMatch & tMatch, const CSphQuery * pQuery )
 		} else
 		{
 			// single value
-			DWORD uValue;
+			SphAttr_t uValue;
 			float fValue;
 			switch ( tFilter.m_eType )
 			{
@@ -12169,8 +12169,8 @@ void CSphIndex_VLN::MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISph
 					continue; // no early reject for this case yet
 
 				// check all acceptable values against the range
-				DWORD uBlockMin = sphGetRowAttr ( DOCINFO2ATTRS(pMin), tFilter.m_iBitOffset, tFilter.m_iBitCount );
-				DWORD uBlockMax = sphGetRowAttr ( DOCINFO2ATTRS(pMax), tFilter.m_iBitOffset, tFilter.m_iBitCount );
+				SphAttr_t uBlockMin = sphGetRowAttr ( DOCINFO2ATTRS(pMin), tFilter.m_iBitOffset, tFilter.m_iBitCount );
+				SphAttr_t uBlockMax = sphGetRowAttr ( DOCINFO2ATTRS(pMax), tFilter.m_iBitOffset, tFilter.m_iBitCount );
 				bool bBlockMatches = false;
 
 				ARRAY_FOREACH ( i, tFilter.m_dValues )
@@ -12186,8 +12186,8 @@ void CSphIndex_VLN::MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISph
 
 			} else if ( tFilter.m_eType==SPH_FILTER_RANGE )
 			{
-				DWORD uBlockMin = sphGetRowAttr ( DOCINFO2ATTRS(pMin), tFilter.m_iBitOffset, tFilter.m_iBitCount );
-				DWORD uBlockMax = sphGetRowAttr ( DOCINFO2ATTRS(pMax), tFilter.m_iBitOffset, tFilter.m_iBitCount );
+				SphAttr_t uBlockMin = sphGetRowAttr ( DOCINFO2ATTRS(pMin), tFilter.m_iBitOffset, tFilter.m_iBitCount );
+				SphAttr_t uBlockMax = sphGetRowAttr ( DOCINFO2ATTRS(pMax), tFilter.m_iBitOffset, tFilter.m_iBitCount );
 
 				if ( !tFilter.m_bExclude )
 				{
@@ -12799,7 +12799,7 @@ bool CSphIndex_VLN::Preread ()
 		}
 
 		// min/max storage
-		CSphVector<CSphRowitem> dIntMin ( dIntAttrs.GetLength() ), dIntMax ( dIntAttrs.GetLength() );
+		CSphVector<SphAttr_t> dIntMin ( dIntAttrs.GetLength() ), dIntMax ( dIntAttrs.GetLength() );
 		CSphVector<float> dFloatMin ( dFloatAttrs.GetLength() ), dFloatMax ( dFloatAttrs.GetLength() );
 		CSphVector<DWORD> dMvaMin ( dMvaAttrs.GetLength() ), dMvaMax ( dMvaAttrs.GetLength() );
 
@@ -12842,7 +12842,7 @@ bool CSphIndex_VLN::Preread ()
 				ARRAY_FOREACH ( i, dIntAttrs )
 				{
 					int uRowitem = dIntAttrs[i].m_iRowitem;
-					DWORD uVal = ( uRowitem<0 )
+					SphAttr_t uVal = ( uRowitem<0 )
 						? sphGetRowAttr ( pRow, dIntAttrs[i].m_iBitOffset, dIntAttrs[i].m_iBitCount )
 						: pRow [ uRowitem ];
 					dIntMin[i] = Min ( dIntMin[i], uVal );
@@ -16110,7 +16110,7 @@ bool CSphSource_SQL::IterateMultivaluedNext ()
 	// return that tuple
 	int iRowitem = m_tSchema.GetAttr(m_iMultiAttr).m_iRowitem;
 	m_tDocInfo.m_iDocID = sphToDocid ( SqlColumn(0) );
-	m_tDocInfo.m_pRowitems[iRowitem] = sphToDword ( SqlColumn(1) );
+	m_tDocInfo.SetAttr ( iRowitem, sphToDword ( SqlColumn(1) ) );
 	return true;
 }
 
@@ -16530,10 +16530,10 @@ bool CSphSource_XMLPipe::IterateHitsNext ( CSphString & sError )
 	m_tStats.m_iTotalDocuments++;
 
 	if ( !ScanInt ( "group", &m_tDocInfo.m_pRowitems[0], sError ) )
-		m_tDocInfo.m_pRowitems[0] = 1;
+		m_tDocInfo.SetAttr ( 0, 1 );
 
 	if ( !ScanInt ( "timestamp", &m_tDocInfo.m_pRowitems[1], sError ) )
-		m_tDocInfo.m_pRowitems[1] = 1;
+		m_tDocInfo.SetAttr ( 1, 1 );
 
 	if ( !ScanStr ( "title", sTitle, sizeof(sTitle), sError ) )
 		return false;
@@ -17975,11 +17975,11 @@ void CSphDoclistRecord::Read( CSphMergeSource * pSource )
 
 	for ( int i=0; i<m_iRowitems; i++ )
 	{
-		assert ( pSource->m_pMinAttrs );
+		assert ( pSource->m_pMinRowitems );
 		if ( pSource->m_bForceDocinfo )
 			m_pRowitems[i] = pSource->m_tMatch.m_pRowitems[i];
 		else
-			m_pRowitems[i] = pReader->UnzipInt() + pSource->m_pMinAttrs[i];
+			m_pRowitems[i] = pReader->UnzipInt() + pSource->m_pMinRowitems[i];
 	}
 
 	m_iPos = pReader->UnzipOffset();
@@ -17997,14 +17997,14 @@ void CSphDoclistRecord::Write ( CSphMergeData * pData )
 	pWriter->ZipOffset ( m_iDocID - pData->m_iLastDocID );
 	pData->m_iLastDocID = m_iDocID;
 
-	assert ( pData->m_pMinAttrs );
+	assert ( pData->m_pMinRowitems );
 
 	if ( m_iRowitems )
 	{
 		if ( pData->m_eDocinfo == SPH_DOCINFO_INLINE )
 		{
 			for ( int i=0; i<m_iRowitems; i++ )
-				pWriter->ZipInt ( m_pRowitems[i] - pData->m_pMinAttrs[i] );
+				pWriter->ZipInt ( m_pRowitems[i] - pData->m_pMinRowitems[i] );
 		}
 		else if ( pData->m_eDocinfo == SPH_DOCINFO_EXTERN )
 		{

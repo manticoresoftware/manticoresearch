@@ -31,6 +31,12 @@ public class SphinxClient
 	public final static int SPH_MATCH_FULLSCAN		= 5;
 	public final static int SPH_MATCH_EXTENDED2		= 6;
 
+	/* ranking modes (extended2 only) */
+	public final static int SPH_RANK_PROXIMITY_BM25	= 0;
+	public final static int SPH_RANK_BM25			= 1;
+	public final static int SPH_RANK_NONE			= 2;
+	public final static int SPH_RANK_WORDCOUNT		= 3;
+
 	/* sorting modes */
 	public final static int SPH_SORT_RELEVANCE		= 0;
 	public final static int SPH_SORT_ATTR_DESC		= 1;
@@ -69,7 +75,7 @@ public class SphinxClient
 
 	/* searchd command versions */
 	private final static int VER_MAJOR_PROTO		= 0x1;
-	private final static int VER_COMMAND_SEARCH		= 0x10F;
+	private final static int VER_COMMAND_SEARCH		= 0x113;
 	private final static int VER_COMMAND_EXCERPT	= 0x100;
 	private final static int VER_COMMAND_UPDATE		= 0x101;
 
@@ -108,6 +114,9 @@ public class SphinxClient
 	private String		_warning;
 	private ArrayList	_reqs;
 	private Map			_indexWeights;
+	private int			_ranker;
+	private int			_maxQueryTime;
+	private Map			_fieldWeights;
 
 	private static final int SPH_CLIENT_TIMEOUT_MILLISEC	= 30000;
 
@@ -168,6 +177,8 @@ public class SphinxClient
 		_reqs			= new ArrayList();
 		_weights		= null;
 		_indexWeights	= new LinkedHashMap();
+		_fieldWeights	= new LinkedHashMap();
+		_ranker			= SPH_RANK_PROXIMITY_BM25;
 	}
 
 	/**
@@ -346,10 +357,10 @@ public class SphinxClient
 	/** Set matches offset and limit to return to client, max matches to retrieve on server, and cutoff. */
 	public void SetLimits ( int offset, int limit, int max, int cutoff ) throws SphinxException
 	{
-		myAssert ( offset>=0, "offset must be greater than or equal to 0" );
-		myAssert ( limit>0, "limit must be greater than 0" );
-		myAssert ( max>0, "max must be greater than 0" );
-		myAssert ( cutoff>=0, "max must be greater than or equal to 0" );
+		myAssert ( offset>=0, "offset must not be negative" );
+		myAssert ( limit>0, "limit must be positive" );
+		myAssert ( max>0, "max must be positive" );
+		myAssert ( cutoff>=0, "cutoff must not be negative" );
 
 		_offset = offset;
 		_limit = limit;
@@ -369,6 +380,13 @@ public class SphinxClient
 		SetLimits ( offset, limit, _maxMatches, _cutoff );
 	}
 
+	/** Set maximum query time, in milliseconds, per-index, 0 means "do not limit". */
+	public void SetMaxQueryTime ( int maxTime ) throws SphinxException
+	{
+		myAssert ( maxTime>=0, "max_query_time must not be negative" );
+		_maxQueryTime = maxTime;
+	}
+
 	/** Set matching mode. */
 	public void SetMatchMode(int mode) throws SphinxException
 	{
@@ -377,8 +395,19 @@ public class SphinxClient
 			mode==SPH_MATCH_ANY ||
 			mode==SPH_MATCH_PHRASE ||
 			mode==SPH_MATCH_BOOLEAN ||
-			mode==SPH_MATCH_EXTENDED, "unknown mode value; use one of the available SPH_MATCH_xxx constants" );
+			mode==SPH_MATCH_EXTENDED ||
+			mode==SPH_MATCH_EXTENDED2, "unknown mode value; use one of the SPH_MATCH_xxx constants" );
 		_mode = mode;
+	}
+
+	/** Set ranking mode. */
+	public void SetRankingMode ( int ranker ) throws SphinxException
+	{
+		myAssert ( ranker==SPH_RANK_PROXIMITY_BM25
+			|| ranker==SPH_RANK_BM25
+			|| ranker==SPH_RANK_NONE
+			|| ranker==SPH_RANK_WORDCOUNT, "unknown ranker value; use one of the SPH_RANK_xxx constants" );
+		_ranker = ranker;
 	}
 
 	/** Set sorting mode. */
@@ -396,7 +425,7 @@ public class SphinxClient
 		_sortby = ( sortby==null ) ? "" : sortby;
 	}
 
-	/** Set per-field weights (all values must be positive). */
+	/** Set per-field weights (all values must be positive). WARNING: DEPRECATED, use SetFieldWeights() instead. */
 	public void SetWeights(int[] weights) throws SphinxException
 	{
 		myAssert ( weights!=null, "weights must not be null" );
@@ -408,14 +437,25 @@ public class SphinxClient
 	}
 
 	/**
-	 * Set per-index weights
+	 * Bind per-field weights by field name.
+	 *
+	 * @param fieldWeights hash which maps String index names to Integer weights
+	 */
+	public void SetFieldeights ( Map fieldWeights ) throws SphinxException
+	{
+		/* FIXME! implement checks here */
+		_fieldWeights = ( fieldWeights==null ) ? new LinkedHashMap () : fieldWeights;
+	}
+
+	/**
+	 * Bind per-index weights by index name (and enable summing the weights on duplicate matches, instead of replacing them).
 	 *
 	 * @param indexWeights hash which maps String index names to Integer weights
 	 */
 	public void SetIndexWeights ( Map indexWeights ) throws SphinxException
 	{
 		/* FIXME! implement checks here */
-		_indexWeights = indexWeights;
+		_indexWeights = ( indexWeights==null ) ? new LinkedHashMap () : indexWeights;
 	}
 
 	/**
@@ -621,9 +661,15 @@ public class SphinxClient
 	}
 
 	/** Connect to searchd server and run current search query against all indexes (syntax sugar). */
-	public SphinxResult Query(String query) throws SphinxException
+	public SphinxResult Query ( String query ) throws SphinxException
 	{
-		return Query(query, "*");
+		return Query ( query, "*", "" );
+	}
+
+	/** Connect to searchd server and run current search query against all indexes (syntax sugar). */
+	public SphinxResult Query ( String query, String index ) throws SphinxException
+	{
+		return Query ( query, index, "" );
 	}
 
 	/**
@@ -632,15 +678,16 @@ public class SphinxClient
 	 * @param query		query string
 	 * @param index		index name(s) to query. May contain anything-separated
 	 *					list of index names, or "*" which means to query all indexes.
+	 * @param comment	comment that will be passed to query.log for this query
 	 * @return			{@link SphinxResult} object
 	 *
 	 * @throws SphinxException on invalid parameters
 	 */
-	public SphinxResult Query ( String query, String index ) throws SphinxException
+	public SphinxResult Query ( String query, String index, String comment ) throws SphinxException
 	{
 		myAssert ( _reqs==null || _reqs.size()==0, "AddQuery() and Query() can not be combined; use RunQueries() instead" );
 
-		AddQuery(query, index);
+		AddQuery ( query, index, comment );
 		SphinxResult[] results = RunQueries();
 		if (results == null || results.length < 1) {
 			return null; /* probably network error; error message should be already filled */
@@ -658,7 +705,7 @@ public class SphinxClient
 	}
 
 	/** Add new query with current settings to current search request. */
-	public int AddQuery ( String query, String index ) throws SphinxException
+	public int AddQuery ( String query, String index, String comment ) throws SphinxException
 	{
 		ByteArrayOutputStream req = new ByteArrayOutputStream();
 
@@ -668,6 +715,7 @@ public class SphinxClient
 			out.writeInt(_offset);
 			out.writeInt(_limit);
 			out.writeInt(_mode);
+			out.writeInt(_ranker);
 			out.writeInt(_sort);
 			writeNetUTF8(out, _sortby);
 			writeNetUTF8(out, query);
@@ -720,18 +768,42 @@ public class SphinxClient
 				writeNetUTF8(out, indexName);
 				out.writeInt(weight.intValue());
 			}
-			out.flush();
+
+			/* max query time */
+			out.writeInt ( _maxQueryTime );
+
+			/* per-field weights */
+			out.writeInt ( _fieldWeights.size() );
+			for ( Iterator e=_fieldWeights.keySet().iterator(); e.hasNext(); )
+			{
+				String field = (String) e.next();
+				Integer weight = (Integer) _fieldWeights.get ( field );
+				writeNetUTF8 ( out, field );
+				out.writeInt ( weight.intValue() );
+			}
+
+			/* comment */
+			writeNetUTF8 ( out, comment );
+
+			/* done! */
+			out.flush ();
 			int qIndex = _reqs.size();
-			_reqs.add(qIndex, req.toByteArray());
+			_reqs.add ( qIndex, req.toByteArray() );
 			return qIndex;
-		} catch (Exception ex) {
-			myAssert(false, "error on AddQuery: " + ex.getMessage());
-		} finally {
-			try {
-				_filters.close();
-				_rawFilters.close();
-			} catch (IOException e) {
-				myAssert(false, "error on AddQuery: " + e.getMessage());
+
+		} catch ( Exception ex )
+		{
+			myAssert ( false, "error in AddQuery(): " + ex + ": " + ex.getMessage() );
+
+		} finally
+		{
+			try
+			{
+				_filters.close ();
+				_rawFilters.close ();
+			} catch ( IOException ex )
+			{
+				myAssert ( false, "error in AddQuery(): " + ex + ": " + ex.getMessage() );
 			}
 		}
 		return -1;
@@ -1118,10 +1190,16 @@ public class SphinxClient
 	}
 
 	/** String IO helper (internal method). */
-	private static void writeNetUTF8(DataOutputStream ostream, String str) throws IOException
+	private static void writeNetUTF8 ( DataOutputStream ostream, String str ) throws IOException
 	{
-		ostream.writeShort(0);
-		ostream.writeUTF(str);
+		if ( str==null )
+		{
+			ostream.writeInt ( 0 );
+		} else
+		{
+			ostream.writeShort ( 0 );
+			ostream.writeUTF ( str );
+		}
 	}
 
 	/** String IO helper (internal method). */

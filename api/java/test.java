@@ -13,7 +13,7 @@ public class test
 {
 	public static void main ( String[] argv ) throws SphinxException
 	{
-		if ( argv==null || argv.length<2 )
+		if ( argv==null || argv.length<1 )
 		{
 			System.out.print ( "Usage: java -jar sphinxapi.jar [OPTIONS] query words\n\n" );
 			System.out.print ( "Options are:\n" );

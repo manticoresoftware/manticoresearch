@@ -69,15 +69,17 @@ public class SphinxClient
 
 
 	/* searchd commands */
-	private final static int SEARCHD_COMMAND_SEARCH	= 0;
-	private final static int SEARCHD_COMMAND_EXCERPT= 1;
-	private final static int SEARCHD_COMMAND_UPDATE	= 2;
+	private final static int SEARCHD_COMMAND_SEARCH		= 0;
+	private final static int SEARCHD_COMMAND_EXCERPT	= 1;
+	private final static int SEARCHD_COMMAND_UPDATE		= 2;
+	private final static int SEARCHD_COMMAND_KEYWORDS	= 3;
 
 	/* searchd command versions */
 	private final static int VER_MAJOR_PROTO		= 0x1;
 	private final static int VER_COMMAND_SEARCH		= 0x113;
 	private final static int VER_COMMAND_EXCERPT	= 0x100;
 	private final static int VER_COMMAND_UPDATE		= 0x101;
+	private final static int VER_COMMAND_KEYWORDS	= 0x100;
 
 	/* filter types */
 	private final static int SPH_FILTER_VALUES		= 0;
@@ -120,26 +122,13 @@ public class SphinxClient
 
 	private static final int SPH_CLIENT_TIMEOUT_MILLISEC	= 30000;
 
-
-	/**
-	 * Creates new SphinxClient instance.
-	 *
-	 * Default host and port that the instance will connect to are
-	 * localhost:3312. That can be overriden using {@link #SetServer SetServer()}.
-	 */
+	/** Creates a new SphinxClient instance. */
 	public SphinxClient()
 	{
 		this("localhost", 3312);
 	}
 
-	/**
-	 * Creates new SphinxClient instance, with host:port specification.
-	 *
-	 * Host and port can be later overriden using {@link #SetServer SetServer()}.
-	 *
-	 * @param host searchd host name (default: localhost)
-	 * @param port searchd port number (default: 3312)
-	 */
+	/** Creates a new SphinxClient instance, with host:port specification. */
 	public SphinxClient(String host, int port)
 	{
 		_host	= host;
@@ -181,34 +170,19 @@ public class SphinxClient
 		_ranker			= SPH_RANK_PROXIMITY_BM25;
 	}
 
-	/**
-	 * Get last error message, if any.
-	 *
-	 * @return string with last error message (empty string if no errors occured)
-	 */
+	/** Get last error message, if any. */
 	public String GetLastError()
 	{
 		return _error;
 	}
 
-	/**
-	 * Get last warning message, if any.
-	 *
-	 * @return string with last warning message (empty string if no errors occured)
-	 */
+	/** Get last warning message, if any. */
 	public String GetLastWarning()
 	{
 		return _warning;
 	}
 
-	/**
-	 * Set searchd host and port to connect to.
-	 *
-	 * @param host searchd host name (default: localhost)
-	 * @param port searchd port number (default: 3312)
-	 *
-	 * @throws SphinxException on invalid parameters
-	 */
+	/** Set searchd host and port to connect to. */
 	public void SetServer(String host, int port) throws SphinxException
 	{
 		myAssert ( host!=null && host.length()>0, "host name must not be empty" );
@@ -217,46 +191,83 @@ public class SphinxClient
 		_port = port;
 	}
 
-	/** Connect to searchd and exchange versions (internal method). */
+	/** Internal method. Sanity check. */
+	private void myAssert ( boolean condition, String err ) throws SphinxException
+	{
+		if ( !condition )
+		{
+			_error = err;
+			throw new SphinxException ( err );
+		}
+	}
+
+	/** Internal method. String IO helper. */
+	private static void writeNetUTF8 ( DataOutputStream ostream, String str ) throws IOException
+	{
+		if ( str==null )
+		{
+			ostream.writeInt ( 0 );
+		} else
+		{
+			ostream.writeShort ( 0 );
+			ostream.writeUTF ( str );
+		}
+	}
+
+	/** Internal method. String IO helper. */
+	private static String readNetUTF8(DataInputStream istream) throws IOException
+	{
+		istream.readUnsignedShort (); /* searchd emits dword lengths, but Java expects words; lets just skip first 2 bytes */
+		return istream.readUTF ();
+	}
+
+	/** Internal method. Unsigned int IO helper. */
+	private static long readDword ( DataInputStream istream ) throws IOException
+	{
+		long v = (long) istream.readInt ();
+		if ( v<0 )
+			v += 4294967296L;
+		return v;
+	}
+
+	/** Internal method. Connect to searchd and exchange versions. */
 	private Socket _Connect()
 	{
-		Socket sock;
-		try {
-			sock = new Socket(_host, _port);
-			sock.setSoTimeout(SPH_CLIENT_TIMEOUT_MILLISEC);
-		} catch (IOException e) {
-			_error = "connection to " + _host + ":" + _port + " failed: " + e.getMessage();
-			return null;
-		}
+		Socket sock = null;
+		try
+		{
+			sock = new Socket ( _host, _port );
+			sock.setSoTimeout ( SPH_CLIENT_TIMEOUT_MILLISEC );
 
-		DataInputStream sIn;
-		DataOutputStream sOut;
-		try {
-			InputStream sockInput = sock.getInputStream();
-			OutputStream sockOutput = sock.getOutputStream();
-			sIn = new DataInputStream(sockInput);
+			DataInputStream sIn = new DataInputStream ( sock.getInputStream() );
 			int version = sIn.readInt();
-			if (version < 1) {
-				sock.close();
+			if ( version<1 )
+			{
+				sock.close ();
 				_error = "expected searchd protocol version 1+, got version " + version;
 				return null;
 			}
-			sOut = new DataOutputStream(sockOutput);
-			sOut.writeInt(VER_MAJOR_PROTO);
-		} catch (IOException e) {
-			_error = "Connect: Read from socket failed: " + e.getMessage();
-			try {
-				sock.close();
-			} catch (IOException e1) {
-				_error = _error + " Cannot close socket: " + e1.getMessage();
-			}
+
+			DataOutputStream sOut = new DataOutputStream ( sock.getOutputStream() );
+			sOut.writeInt ( VER_MAJOR_PROTO );
+
+		} catch ( IOException e )
+		{
+			_error = "connection to " + _host + ":" + _port + " failed: " + e;
+
+			try
+			{
+				if ( sock!=null )
+					sock.close ();
+			} catch ( IOException e1 ) {}
 			return null;
 		}
+
 		return sock;
 	}
 
-	/** Get and check response packet from searchd (internal method). */
-	private byte[] _GetResponse ( Socket sock ) throws SphinxException
+	/** Internal method. Get and check response packet from searchd. */
+	private byte[] _GetResponse ( Socket sock )
 	{
 		/* connect */
 		DataInputStream sIn = null;
@@ -268,7 +279,7 @@ public class SphinxClient
 
 		} catch ( IOException e )
 		{
-			myAssert ( false, "getInputStream() failed: " + e.getMessage() );
+			_error = "getInputStream() failed: " + e;
 			return null;
 		}
 
@@ -284,15 +295,14 @@ public class SphinxClient
 			len = sIn.readInt();
 
 			/* read response if non-empty */
-			myAssert ( len>0, "zero-sized searchd response body" );
-			if ( len>0 )
+			if ( len<=0 )
 			{
-				response = new byte[len];
-				sIn.readFully ( response, 0, len );
-			} else
-			{
-				/* FIXME! no response, return null? */
+				_error = "invalid response packet size (len=" + len + ")";
+				return null;
 			}
+
+			response = new byte[len];
+			sIn.readFully ( response, 0, len );
 
 			/* check status */
 			if ( status==SEARCHD_WARNING )
@@ -352,6 +362,39 @@ public class SphinxClient
 		}
 
 		return response;
+	}
+
+	/** Internal method. Connect to searchd, send request, get response as DataInputStream. */
+	private DataInputStream _DoRequest ( int command, int version, ByteArrayOutputStream req )
+	{
+		/* connect */
+		Socket sock = _Connect();
+		if ( sock==null )
+			return null;
+
+		/* send request */
+	   	byte[] reqBytes = req.toByteArray();
+	   	try
+	   	{
+			DataOutputStream sockDS = new DataOutputStream ( sock.getOutputStream() );
+			sockDS.writeShort ( command );
+			sockDS.writeShort ( version );
+			sockDS.writeInt ( reqBytes.length );
+			sockDS.write ( reqBytes );
+
+		} catch ( Exception e )
+		{
+			_error = "network error: " + e;
+			return null;
+		}
+
+		/* get response */
+		byte[] response = _GetResponse ( sock );
+		if ( response==null )
+			return null;
+
+		/* spawn that tampon */
+		return new DataInputStream ( new ByteArrayInputStream ( response ) );
 	}
 
 	/** Set matches offset and limit to return to client, max matches to retrieve on server, and cutoff. */
@@ -438,7 +481,6 @@ public class SphinxClient
 
 	/**
 	 * Bind per-field weights by field name.
-	 *
 	 * @param fieldWeights hash which maps String index names to Integer weights
 	 */
 	public void SetFieldeights ( Map fieldWeights ) throws SphinxException
@@ -449,7 +491,6 @@ public class SphinxClient
 
 	/**
 	 * Bind per-index weights by index name (and enable summing the weights on duplicate matches, instead of replacing them).
-	 *
 	 * @param indexWeights hash which maps String index names to Integer weights
 	 */
 	public void SetIndexWeights ( Map indexWeights ) throws SphinxException
@@ -458,17 +499,7 @@ public class SphinxClient
 		_indexWeights = ( indexWeights==null ) ? new LinkedHashMap () : indexWeights;
 	}
 
-	/**
-	 * Set document IDs range to match.
-	 *
-	 * Only match those documents where document ID is beetwen given
-	 * min and max values (including themselves).
-	 *
-	 * @param min minimum document ID to match
-	 * @param max maximum document ID to match
-	 *
-	 * @throws SphinxException on invalid parameters
-	 */
+	/** Set document IDs range to match. */
 	public void SetIDRange ( int min, int max ) throws SphinxException
 	{
 		myAssert ( min<=max, "min must be less or equal to max" );
@@ -476,18 +507,7 @@ public class SphinxClient
 		_maxId = max;
 	}
 
-	/**
-	 * Set values filter.
-	 *
-	 * Only match those documents where <code>attribute</code> column value
-	 * is in given values set.
-	 *
-	 * @param attribute		attribute name to filter by
-	 * @param values		values set to match the attribute value by
-	 * @param exclude		whether to exclude matching documents instead
-	 *
-	 * @throws SphinxException on invalid parameters
-	 */
+	/** Set values filter. Only match records where attribute value is in given set. */
 	public void SetFilter ( String attribute, int[] values, boolean exclude ) throws SphinxException
 	{
 		myAssert ( values!=null && values.length>0, "values array must not be null or empty" );
@@ -516,19 +536,7 @@ public class SphinxClient
 		SetFilter ( attribute, values, exclude );
 	}
 
-	/**
-	 * Set integer range filter.
-	 *
-	 * Only match those documents where <code>attribute</code> column value
-	 * is beetwen given min and max values (including themselves).
-	 *
-	 * @param attribute		attribute name to filter by
-	 * @param min			min attribute value
-	 * @param max			max attribute value
-	 * @param exclude		whether to exclude matching documents instead
-	 *
-	 * @throws SphinxException on invalid parameters
-	 */
+	/** Set integer range filter.  Only match records if attribute value is beetwen min and max (inclusive). */
 	public void SetFilterRange ( String attribute, int min, int max, boolean exclude ) throws SphinxException
 	{
 		myAssert ( min<=max, "min must be less or equal to max" );
@@ -547,20 +555,7 @@ public class SphinxClient
 		_filterCount++;
 	}
 
-	/**
-	 * Set float range filter.
-	 *
-	 * Only match those documents where <code>attribute</code> column value
-	 * is beetwen given min and max values (including themselves).
-	 *
-	 * @param attribute		attribute name to filter by
-	 * @param min			min attribute value
-	 * @param max			max attribute value
-	 * @param exclude		whether to exclude matching documents instead
-	 *
-	 * @throws SphinxException on invalid parameters
-	 * Set float range filter.
-	 */
+	/** Set float range filter.  Only match records if attribute value is beetwen min and max (inclusive). */
 	public void SetFilterFloatRange ( String attribute, float min, float max, boolean exclude ) throws SphinxException
 	{
 		myAssert ( min<=max, "min must be less or equal to max" );
@@ -578,19 +573,7 @@ public class SphinxClient
 		_filterCount++;
 	}
 
-	/**
-	 * Setup geographical anchor point.
-	 *
-	 * Required to use @geodist in filters and sorting.
-	 * Distance will be computed to this point.
-	 *
-	 * @param latitudeAttr		the name of latitude attribute
-	 * @param longitudeAttr		the name of longitude attribute
-	 * @param latitude			anchor point latitude, in radians
-	 * @param longitude			anchor point longitude, in radians
-	 *
-	 * @throws SphinxException on invalid parameters
-	 */
+	/** Setup geographical anchor point. Required to use @geodist in filters and sorting; distance will be computed to this point. */
 	public void SetGeoAnchor ( String latitudeAttr, String longitudeAttr, float latitude, float longitude ) throws SphinxException
 	{
 		myAssert ( latitudeAttr!=null && latitudeAttr.length()>0, "longitudeAttr string must not be null or empty" );
@@ -672,17 +655,7 @@ public class SphinxClient
 		return Query ( query, index, "" );
 	}
 
-	/**
-	 * Connect to searchd server and run current search query.
-	 *
-	 * @param query		query string
-	 * @param index		index name(s) to query. May contain anything-separated
-	 *					list of index names, or "*" which means to query all indexes.
-	 * @param comment	comment that will be passed to query.log for this query
-	 * @return			{@link SphinxResult} object
-	 *
-	 * @throws SphinxException on invalid parameters
-	 */
+	/** Connect to searchd server and run current search query. */
 	public SphinxResult Query ( String query, String index, String comment ) throws SphinxException
 	{
 		myAssert ( _reqs==null || _reqs.size()==0, "AddQuery() and Query() can not be combined; use RunQueries() instead" );
@@ -791,9 +764,9 @@ public class SphinxClient
 			_reqs.add ( qIndex, req.toByteArray() );
 			return qIndex;
 
-		} catch ( Exception ex )
+		} catch ( Exception e )
 		{
-			myAssert ( false, "error in AddQuery(): " + ex + ": " + ex.getMessage() );
+			myAssert ( false, "error in AddQuery(): " + e + ": " + e.getMessage() );
 
 		} finally
 		{
@@ -801,9 +774,9 @@ public class SphinxClient
 			{
 				_filters.close ();
 				_rawFilters.close ();
-			} catch ( IOException ex )
+			} catch ( IOException e )
 			{
-				myAssert ( false, "error in AddQuery(): " + ex + ": " + ex.getMessage() );
+				myAssert ( false, "error in AddQuery(): " + e + ": " + e.getMessage() );
 			}
 		}
 		return -1;
@@ -812,64 +785,45 @@ public class SphinxClient
 	/** Run all previously added search queries. */
 	public SphinxResult[] RunQueries() throws SphinxException
 	{
-		if (_reqs == null || _reqs.size() < 1) {
+		if ( _reqs==null || _reqs.size()<1 )
+		{
 			_error = "no queries defined, issue AddQuery() first";
 			return null;
 		}
 
-		Socket sock = _Connect();
-		if (sock == null) return null;
-
-		/* send query, get response */
-		ByteArrayOutputStream req = new ByteArrayOutputStream();
-		DataOutputStream prepareRQ = null;
+		/* build the mega-request */
 		int nreqs = _reqs.size();
-		try {
-			prepareRQ = new DataOutputStream(req);
-			prepareRQ.writeShort(SEARCHD_COMMAND_SEARCH);
-			prepareRQ.writeShort(VER_COMMAND_SEARCH);
-			int rqLen = 4;
-			for (int i = 0; i < nreqs; i++) {
-				byte[] subRq = (byte[]) _reqs.get(i);
-				rqLen += subRq.length;
-			}
-			prepareRQ.writeInt(rqLen);
-			prepareRQ.writeInt(nreqs);
-			for (int i = 0; i < nreqs; i++) {
-				byte[] subRq = (byte[]) _reqs.get(i);
-				prepareRQ.write(subRq);
-			}
-			OutputStream SockOut = sock.getOutputStream();
-			byte[] reqBytes = req.toByteArray();
-			SockOut.write(reqBytes);
-		} catch (Exception e) {
-			myAssert(false, "Query: Unable to create read/write streams: " + e.getMessage());
+		ByteArrayOutputStream reqBuf = new ByteArrayOutputStream();
+		try
+		{
+			DataOutputStream req = new DataOutputStream ( reqBuf );
+			req.writeInt ( nreqs );
+			for ( int i=0; i<nreqs; i++ )
+				req.write ( (byte[]) _reqs.get(i) );
+			req.flush ();
+
+		} catch ( Exception e )
+		{
+			_error = "internal error: failed to build request: " + e;
 			return null;
 		}
 
-		/* reset requests */
+		DataInputStream in =_DoRequest ( SEARCHD_COMMAND_SEARCH, VER_COMMAND_SEARCH, reqBuf );
+		if ( in==null )
+			return null;
+
+		SphinxResult[] results = new SphinxResult [ nreqs ];
 		_reqs = new ArrayList();
 
-		/* get response */
-		byte[] response = null;
-		response = _GetResponse ( sock );
-		if (response == null) return null;
-
-		/* parse response */
-		SphinxResult[] results = new SphinxResult[nreqs];
-
-		DataInputStream in;
-		in = new DataInputStream(new ByteArrayInputStream(response));
-
-		/* read schema */
-		int ires;
-		try {
-			for (ires = 0; ires < nreqs; ires++) {
+		try
+		{
+			for ( int ires=0; ires<nreqs; ires++ )
+			{
 				SphinxResult res = new SphinxResult();
 				results[ires] = res;
 
 				int status = in.readInt();
-				res.setStatus(status);
+				res.setStatus ( status );
 				if (status != SEARCHD_OK) {
 					String message = readNetUTF8(in);
 					if (status == SEARCHD_WARNING) {
@@ -948,44 +902,19 @@ public class SphinxClient
 				for ( int i=0; i<res.words.length; i++ )
 					res.words[i] = new SphinxWordInfo ( readNetUTF8(in), readDword(in), readDword(in) );
 			}
-			in.close();
 			return results;
 
 		} catch ( IOException e )
 		{
-			myAssert ( false, "unable to parse response: " + e.getMessage() );
-
-		} finally
-		{
-			try
-			{
-				in.close ();
-			} catch ( IOException e )
-			{
-				myAssert ( false, "unable to close DataInputStream: " + e.getMessage() );
-			}
+			_error = "incomplete reply";
+			return null;
 		}
-
-		return null;
 	}
 
 	/**
-	 * Connect to searchd server and generate exceprts from given documents.
-	 *
-	 * @param docs		an array of strings which represent the documents' contents
-	 * @param index		a string with the name of the index which settings will be used for stemming, lexing and case folding
-	 * @param words		a string which contains the query words to highlight
-	 * @param opts		a hash (String keys, String/Int values) with optional highlighting parameters:
-	 *					<ul>
-	 *					<li>"before_match" - a string to insert before a set of matching words (default is "&lt;b&gt;");
-	 *					<li>"after_match" - a string to insert after a set of matching words (default is "&lt;/b&gt;");
-	 *					<li>"chunk_separator" - a string to insert between excerpts chunks (default is "...");
-	 *					<li>"limit" - max excerpt size in codepoints (default is 256);
-	 *					<li>"around" - how much words to highlight around each match (default is 5).
-	 *					</ul>
-	 * @return			null on failure, an array of string excerpts on success
-	 *
-	 * @throws SphinxException on invalid parameters
+	 * Connect to searchd server and generate excerpts (snippets) from given documents.
+	 * @param opts maps String keys to String or Integer values (see the documentation for complete keys list).
+	 * @return null on failure, array of snippets on success.
 	 */
 	public String[] BuildExcerpts ( String[] docs, String index, String words, Map opts ) throws SphinxException
 	{
@@ -993,9 +922,6 @@ public class SphinxClient
 		myAssert(index != null && index.length() > 0, "BuildExcerpts: Have no index to process documents");
 		myAssert(words != null && words.length() > 0, "BuildExcerpts: Have no words to highlight");
 		if (opts == null) opts = new LinkedHashMap();
-
-		Socket sock = _Connect();
-		if (sock == null) return null;
 
 		/* fixup options */
 		if (!opts.containsKey("before_match")) opts.put("before_match", "<b>");
@@ -1009,68 +935,53 @@ public class SphinxClient
 		if (!opts.containsKey("weight_order")) opts.put("weight_order", new Integer(0));
 
 		/* build request */
-		ByteArrayOutputStream req = new ByteArrayOutputStream();
-		DataOutputStream rqData = null;
-		DataOutputStream socketDS = null;
-		try {
-			rqData = new DataOutputStream(req);
-
-			/* v.1.0 req */
-			rqData.writeInt(0);
+		ByteArrayOutputStream reqBuf = new ByteArrayOutputStream();
+		DataOutputStream req = new DataOutputStream ( reqBuf );
+		try
+		{
+			req.writeInt(0);
 			int iFlags = 1; /* remove_spaces */
 			if ( ((Integer)opts.get("exact_phrase"))!=0 )	iFlags |= 2;
 			if ( ((Integer)opts.get("single_passage"))!=0 )	iFlags |= 4;
 			if ( ((Integer)opts.get("use_boundaries"))!=0 )	iFlags |= 8;
 			if ( ((Integer)opts.get("weight_order"))!=0 )	iFlags |= 16;
-			rqData.writeInt ( iFlags );
-			writeNetUTF8(rqData, index);
-			writeNetUTF8(rqData, words);
+			req.writeInt ( iFlags );
+			writeNetUTF8 ( req, index );
+			writeNetUTF8 ( req, words );
 
 			/* send options */
-			writeNetUTF8(rqData, (String) opts.get("before_match"));
-			writeNetUTF8(rqData, (String) opts.get("after_match"));
-			writeNetUTF8(rqData, (String) opts.get("chunk_separator"));
-			rqData.writeInt(((Integer) opts.get("limit")).intValue());
-			rqData.writeInt(((Integer) opts.get("around")).intValue());
+			writeNetUTF8 ( req, (String) opts.get("before_match") );
+			writeNetUTF8 ( req, (String) opts.get("after_match") );
+			writeNetUTF8 ( req, (String) opts.get("chunk_separator") );
+			req.writeInt ( ((Integer) opts.get("limit")).intValue() );
+			req.writeInt ( ((Integer) opts.get("around")).intValue() );
 
 			/* send documents */
-			for (int i = 0; i < docs.length; i++) {
-				myAssert(docs[i] != null, "BuildExcerpts: empty document #" + i);
-				writeNetUTF8(rqData, docs[i]);
-			}
+			for ( int i=0; i<docs.length; i++ )
+				writeNetUTF8 ( req, docs[i] );
 
-			rqData.flush();
-			byte[] byteRq = req.toByteArray();
+			req.flush();
 
-			/* send query, get response */
-			OutputStream SockOut = sock.getOutputStream();
-			socketDS = new DataOutputStream(SockOut);
-			socketDS.writeShort(SEARCHD_COMMAND_EXCERPT);
-			socketDS.writeShort(VER_COMMAND_EXCERPT);
-			socketDS.writeInt(byteRq.length + 8);
-			socketDS.write(byteRq);
-
-		} catch (Exception ex) {
-			myAssert(false, "BuildExcerpts: Unable to create read/write streams: " + ex.getMessage());
+		} catch ( Exception e )
+		{
+			_error = "internal error: failed to build request: " + e;
 			return null;
 		}
 
-		try {
-			/* get response */
-			byte[] response = null;
-			String[] docsXrpt = new String[docs.length];
-			response = _GetResponse ( sock );
-			if (response == null) return null;
+		DataInputStream in = _DoRequest ( SEARCHD_COMMAND_EXCERPT, VER_COMMAND_EXCERPT, reqBuf );
+		if ( in==null )
+			return null;
 
-			/* parse response */
-			DataInputStream in;
-			in = new DataInputStream(new ByteArrayInputStream(response));
-			for (int i = 0; i < docs.length; i++) {
-				docsXrpt[i] = readNetUTF8(in);
-			}
-			return docsXrpt;
-		} catch (Exception e) {
-			myAssert(false, "BuildExcerpts: incomplete response " + e.getMessage());
+		try
+		{
+			String[] res = new String [ docs.length ];
+			for ( int i=0; i<docs.length; i++ )
+				res[i] = readNetUTF8 ( in );
+			return res;
+
+		} catch ( Exception e )
+		{
+			_error = "incomplete reply";
 			return null;
 		}
 	}
@@ -1111,111 +1022,98 @@ public class SphinxClient
 			myAssert ( values[i].length==1+attrs.length, "update entry #" + i + " has wrong length" );
 		}
 
-		/* connect */
-		Socket sock = _Connect();
-		if ( sock==null )
-			return -1;
-		
 		/* build and send request */
-		ByteArrayOutputStream req = new ByteArrayOutputStream();
-		DataOutputStream reqData = null;
-		DataOutputStream socketDS = null;
+		ByteArrayOutputStream reqBuf = new ByteArrayOutputStream();
+		DataOutputStream req = new DataOutputStream ( reqBuf );
 		try
 		{
-			reqData = new DataOutputStream ( req );
+			writeNetUTF8 ( req, index );
 
-			/* index name */
-			writeNetUTF8 ( reqData, index );
-
-			/* attribute names array */
-			reqData.writeInt ( attrs.length );
+			req.writeInt ( attrs.length );
 			for ( int i=0; i<attrs.length; i++ )
-				writeNetUTF8 ( reqData, attrs[i] );
+				writeNetUTF8 ( req, attrs[i] );
 
-			/* docid and new values array */
-			reqData.writeInt ( values.length );
+			req.writeInt ( values.length );
 			for ( int i=0; i<values.length; i++ )
 			{
-				reqData.writeLong ( values[i][0] ); /* send docid as 64bit value */
+				req.writeLong ( values[i][0] ); /* send docid as 64bit value */
 				for ( int j=1; j<values[i].length; j++ )
-					reqData.writeInt ( (int)values[i][j] ); /* send values as 32bit values; FIXME! what happens when they are over 2^31? */
+					req.writeInt ( (int)values[i][j] ); /* send values as 32bit values; FIXME! what happens when they are over 2^31? */
 			}
 
-			/* send query, get response */
-			reqData.flush();
-			byte[] byteReq = req.toByteArray();
+			req.flush();
 
-			OutputStream SockOut = sock.getOutputStream ();
-			socketDS = new DataOutputStream ( SockOut );
-			socketDS.writeShort ( SEARCHD_COMMAND_UPDATE );
-			socketDS.writeShort ( VER_COMMAND_UPDATE );
-			socketDS.writeInt ( byteReq.length );
-			socketDS.write ( byteReq );
-			socketDS.flush ();
-
-		} catch ( Exception ex )
+		} catch ( Exception e )
 		{
-			myAssert ( false, "UpdateAttributes(): unable to create read/write streams: " + ex.getMessage());
+			_error = "internal error: failed to build request: " + e;
 			return -1;
 		}
 
 		/* get and parse response */
+		DataInputStream in = _DoRequest ( SEARCHD_COMMAND_UPDATE, VER_COMMAND_UPDATE, reqBuf );
+		if ( in==null )
+			return -1;
+
 		try
 		{
-			/* get */
-			byte[] response = _GetResponse ( sock );
-			if ( response==null )
-				return -1;
-
-			/* parse */
-			DataInputStream in;
-			in = new DataInputStream ( new ByteArrayInputStream ( response ) );
 			return in.readInt ();
-
 		} catch ( Exception e )
 		{
-			myAssert(false, "UpdateAttributes(): incomplete response: " + e.getMessage() );
+			_error = "incomplete reply";
 			return -1;
 		}
 	}
 
-	/** Internal sanity check. */
-	private void myAssert ( boolean condition, String err ) throws SphinxException
+	/**
+     * Connect to searchd server, and generate keyword list for a given query.
+     * Returns null on failure, an array of Maps with misc per-keyword info on success.
+     */
+	public Map[] BuildKeywords ( String query, String index, boolean hits ) throws SphinxException
 	{
-		if ( !condition )
+		/* build request */
+		ByteArrayOutputStream reqBuf = new ByteArrayOutputStream();
+		DataOutputStream req = new DataOutputStream ( reqBuf );
+		try
 		{
-			_error = err;
-			throw new SphinxException ( err );
+			writeNetUTF8 ( req, query );
+			writeNetUTF8 ( req, index );
+			req.writeInt ( hits ? 1 : 0 );
+
+		} catch ( Exception e )
+		{
+			_error = "internal error: failed to build request: " + e;
+			return null;
 		}
-	}
 
-	/** String IO helper (internal method). */
-	private static void writeNetUTF8 ( DataOutputStream ostream, String str ) throws IOException
-	{
-		if ( str==null )
+		/* run request */
+		DataInputStream in = _DoRequest ( SEARCHD_COMMAND_KEYWORDS, VER_COMMAND_KEYWORDS, reqBuf );
+		if ( in==null )
+			return null;
+
+		/* parse reply */
+		try
 		{
-			ostream.writeInt ( 0 );
-		} else
+			int iNumWords = in.readInt ();
+			Map[] res = new Map[iNumWords];
+
+			for ( int i=0; i<iNumWords; i++ )
+			{
+				res[i] = new LinkedHashMap ();
+				res[i].put ( "tokenized", readNetUTF8 ( in ) );
+				res[i].put ( "normalized", readNetUTF8 ( in ) );
+				if ( hits )
+				{
+					res[i].put ( "docs", readDword ( in ) );
+					res[i].put ( "hits", readDword ( in ) );
+				}
+			}
+			return res;
+
+		} catch ( Exception e )
 		{
-			ostream.writeShort ( 0 );
-			ostream.writeUTF ( str );
+			_error = "incomplete reply";
+			return null;
 		}
-	}
-
-	/** String IO helper (internal method). */
-	private static String readNetUTF8(DataInputStream istream) throws IOException
-	{
-		istream.readUnsignedShort (); /* searchd emits dword lengths, but Java expects words; lets just skip first 2 bytes */
-		return istream.readUTF ();
-	}
-
-	/** Unsigned int IO helper (internal method). */
-	private static long readDword ( DataInputStream istream ) throws IOException
-	{
-		long v = (long) istream.readInt ();
-		if ( v<0 )
-			v += 4294967296L;
-		return v;
 	}
 }
 

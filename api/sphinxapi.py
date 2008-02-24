@@ -13,6 +13,7 @@
 # did not, you can find it at http://www.gnu.org/
 #
 
+import sys
 import select
 import socket
 from struct import *
@@ -21,10 +22,14 @@ from struct import *
 # known searchd commands
 SEARCHD_COMMAND_SEARCH	= 0
 SEARCHD_COMMAND_EXCERPT	= 1
+SEARCHD_COMMAND_UPDATE	= 2
+SEARCHD_COMMAND_KEYWORDS= 3
 
 # current client-side command implementation versions
-VER_COMMAND_SEARCH		= 0x107
+VER_COMMAND_SEARCH		= 0x113
 VER_COMMAND_EXCERPT		= 0x100
+VER_COMMAND_UPDATE		= 0x101
+VER_COMMAND_KEYWORDS	= 0x100
 
 # known searchd status codes
 SEARCHD_OK				= 0
@@ -38,6 +43,14 @@ SPH_MATCH_ANY			= 1
 SPH_MATCH_PHRASE		= 2
 SPH_MATCH_BOOLEAN		= 3
 SPH_MATCH_EXTENDED		= 4
+SPH_MATCH_FULLSCAN		= 5
+SPH_MATCH_EXTENDED2		= 6
+
+# known ranking modes (extended2 mode only)
+SPH_RANK_PROXIMITY_BM25	= 0 # default mode, phrase proximity major factor and BM25 minor one
+SPH_RANK_BM25			= 1 # statistical mode, BM25 ranking only (faster but worse quality)
+SPH_RANK_NONE			= 2 # no ranking, all matches get a weight of 1
+SPH_RANK_WORDCOUNT		= 3 # simple word-count weighting, rank is a weighted sum of per-field keyword occurence counts
 
 # known sort modes
 SPH_SORT_RELEVANCE		= 0
@@ -45,10 +58,21 @@ SPH_SORT_ATTR_DESC		= 1
 SPH_SORT_ATTR_ASC		= 2
 SPH_SORT_TIME_SEGMENTS	= 3
 SPH_SORT_EXTENDED		= 4
+SPH_SORT_EXPR			= 5
+
+# known filter types
+SPH_FILTER_VALUES		= 0
+SPH_FILTER_RANGE		= 1
+SPH_FILTER_FLOATRANGE	= 2
 
 # known attribute types
+SPH_ATTR_NONE			= 0
 SPH_ATTR_INTEGER		= 1
 SPH_ATTR_TIMESTAMP		= 2
+SPH_ATTR_ORDINAL		= 3
+SPH_ATTR_BOOL			= 4
+SPH_ATTR_FLOAT			= 5
+SPH_ATTR_MULTI			= 0X40000000L
 
 # known grouping functions
 SPH_GROUPBY_DAY	 		= 0
@@ -59,60 +83,67 @@ SPH_GROUPBY_ATTR		= 4
 
 
 class SphinxClient:
-	_host		= 'localhost'			# searchd host (default is "localhost")
-	_port		= 3312					# searchd port (default is 3312)
-	_offset		= 0						# how much records to seek from result-set start (default is 0)
-	_limit		= 20					# how much records to return from result-set starting at offset (default is 20)
-	_mode		= SPH_MATCH_ALL			# query matching mode (default is SPH_MATCH_ALL)
-	_weights	= []					# per-field weights (default is 1 for all fields)
-	_sort		= SPH_SORT_RELEVANCE	# match sorting mode (default is SPH_SORT_RELEVANCE)
-	_sortby		= ''					# attribute to sort by (defualt is "")
-	_min_id		= 0						# min ID to match (default is 0)
-	_max_id		= 0xFFFFFFFF			# max ID to match (default is UINT_MAX)
-	_filters	= []					# search filters
-	_groupby	= ''					# group-by attribute name
-	_groupfunc	= SPH_GROUPBY_DAY		# group-by function (to pre-process group-by attribute value with)
-	_groupsort	= '@group desc'			# group-by sorting clause (to sort groups in result set with)
-	_maxmatches	= 1000					# max matches to retrieve
-	_error		= ''					# last error message
-	_warning	= ''					# last warning message
-
-
 	def __init__ (self):
 		"""
-		create a new client object and fill defaults
+		Create a new client object, and fill defaults.
 		"""
-		pass
+		self._host			= 'localhost'					# searchd host (default is "localhost")
+		self._port			= 3312							# searchd port (default is 3312)
+		self._offset		= 0								# how much records to seek from result-set start (default is 0)
+		self._limit			= 20							# how much records to return from result-set starting at offset (default is 20)
+		self._mode			= SPH_MATCH_ALL					# query matching mode (default is SPH_MATCH_ALL)
+		self._weights		= []							# per-field weights (default is 1 for all fields)
+		self._sort			= SPH_SORT_RELEVANCE			# match sorting mode (default is SPH_SORT_RELEVANCE)
+		self._sortby		= ''							# attribute to sort by (defualt is "")
+		self._min_id		= 0								# min ID to match (default is 0)
+		self._max_id		= 0xFFFFFFFF					# max ID to match (default is UINT_MAX)
+		self._filters		= []							# search filters
+		self._groupby		= ''							# group-by attribute name
+		self._groupfunc		= SPH_GROUPBY_DAY				# group-by function (to pre-process group-by attribute value with)
+		self._groupsort		= '@group desc'					# group-by sorting clause (to sort groups in result set with)
+		self._groupdistinct	= ''							# group-by count-distinct attribute
+		self._maxmatches	= 1000							# max matches to retrieve
+		self._cutoff		= 0								# cutoff to stop searching at
+		self._retrycount	= 0								# distributed retry count
+		self._retrydelay	= 0								# distributed retry delay
+		self._anchor		= {}							# geographical anchor point
+		self._indexweights	= {}							# per-index weights
+		self._ranker		= SPH_RANK_PROXIMITY_BM25		# ranking mode
+		self._maxquerytime	= 0								# max query time, milliseconds (default is 0, do not limit)
+		self._fieldweights	= {}							# per-field-name weights
+		self._error			= ''							# last error message
+		self._warning		= ''							# last warning message
+		self._reqs			= []							# requests array for multi-query
+		return
 
 
 	def GetLastError (self):
 		"""
-		get last error message (string)
+		Get last error message (string).
 		"""
 		return self._error
 
 
 	def GetLastWarning (self):
 		"""
-		get last warning message (string)
+		Get last warning message (string).
 		"""
 		return self._warning
 
 
 	def SetServer (self, host, port):
 		"""
-		set searchd server
+		Set searchd server host and port.
 		"""
 		assert(isinstance(host, str))
 		assert(isinstance(port, int))
-
 		self._host = host
 		self._port = port
 
 
 	def _Connect (self):
 		"""
-		connect to searchd server
+		INTERNAL METHOD, DO NOT CALL. Connects to searchd server.
 		"""
 		try:
 			sock = socket.socket ( socket.AF_INET, socket.SOCK_STREAM )
@@ -136,7 +167,7 @@ class SphinxClient:
 
 	def _GetResponse (self, sock, client_ver):
 		"""
-		get and check response packet from searchd server
+		INTERNAL METHOD, DO NOT CALL. Gets and checks response packet from searchd server.
 		"""
 		(status, ver, length) = unpack('>2HL', sock.recv(8))
 		response = ''
@@ -187,9 +218,9 @@ class SphinxClient:
 		return response
 
 
-	def SetLimits (self, offset, limit, maxmatches=0):
+	def SetLimits (self, offset, limit, maxmatches=0, cutoff=0):
 		"""
-		set match offset, count, and max number to retrieve
+		Set offset and count into result set, and optionally set max-matches and cutoff limits.
 		"""
 		assert(isinstance(offset, int) and offset>=0)
 		assert(isinstance(limit, int) and limit>0)
@@ -198,21 +229,39 @@ class SphinxClient:
 		self._limit = limit
 		if maxmatches>0:
 			self._maxmatches = maxmatches
+		if cutoff>=0:
+			self._cutoff = cutoff
+
+
+	def SetMaxQueryTime (self, maxquerytime):
+		"""
+		Set maximum query time, in milliseconds, per-index. 0 means 'do not limit'.
+		"""
+		assert(isinstance(maxquerytime,int) and maxquerytime>0)
+		self._maxquerytime = maxquerytime
 
 
 	def SetMatchMode (self, mode):
 		"""
-		set match mode
+		Set matching mode.
 		"""
-		assert(mode in [SPH_MATCH_ALL, SPH_MATCH_ANY, SPH_MATCH_PHRASE, SPH_MATCH_BOOLEAN, SPH_MATCH_EXTENDED])
+		assert(mode in [SPH_MATCH_ALL, SPH_MATCH_ANY, SPH_MATCH_PHRASE, SPH_MATCH_BOOLEAN, SPH_MATCH_EXTENDED, SPH_MATCH_FULLSCAN, SPH_MATCH_EXTENDED2])
 		self._mode = mode
+
+
+	def SetRankingMode (self, ranker):
+		"""
+		Set ranking mode.
+		"""
+		assert(ranker in [SPH_RANK_PROXIMITY_BM25, SPH_RANK_BM25, SPH_RANK_NONE, SPH_RANK_WORDCOUNT])
+		self._ranker = ranker
 
 
 	def SetSortMode ( self, mode, clause='' ):
 		"""
-		set sort mode
+		Set sorting mode.
 		"""
-		assert ( mode in [SPH_SORT_RELEVANCE, SPH_SORT_ATTR_DESC, SPH_SORT_ATTR_ASC, SPH_SORT_TIME_SEGMENTS, SPH_SORT_EXTENDED] )
+		assert ( mode in [SPH_SORT_RELEVANCE, SPH_SORT_ATTR_DESC, SPH_SORT_ATTR_ASC, SPH_SORT_TIME_SEGMENTS, SPH_SORT_EXTENDED, SPH_SORT_EXPR] )
 		assert ( isinstance ( clause, str ) )
 		self._sort = mode
 		self._sortby = clause
@@ -220,7 +269,8 @@ class SphinxClient:
 
 	def SetWeights (self, weights): 
 		"""
-		set per-field weights
+		Set per-field weights.
+		WARNING, DEPRECATED; do not use it! use SetFieldWeights() instead
 		"""
 		assert(isinstance(weights, list))
 		for w in weights:
@@ -228,11 +278,32 @@ class SphinxClient:
 		self._weights = weights
 
 
+	def SetFieldWeights (self, weights):
+		"""
+		Bind per-field weights by name; expects (name,field_weight) dictionary as argument.
+		"""
+		assert(isinstance(weights,dict))
+		for key,val in weights.items():
+			assert(isinstance(key,str))
+			assert(isinstance(val,int))
+		self._fieldweights = weights
+
+
+	def SetIndexWeights (self, weights):
+		"""
+		Bind per-index weights by name; expects (name,index_weight) dictionary as argument.
+		"""
+		assert(isinstance(weights,dict))
+		for key,val in weights.items():
+			assert(isinstance(key,str))
+			assert(isinstance(val,int))
+		self._indexweights = weights
+
+
 	def SetIDRange (self, minid, maxid):
 		"""
-		set IDs range to match
-		only match those records where document ID
-		is beetwen minid and maxid (including minid and maxid)
+		Set IDs range to match.
+		Only match records if document ID is beetwen $min and $max (inclusive).
 		"""
 		assert(isinstance(minid, int))
 		assert(isinstance(maxid, int))
@@ -243,9 +314,8 @@ class SphinxClient:
 
 	def SetFilter ( self, attribute, values, exclude=0 ):
 		"""
-		set values filter
-		only match those records where $attribute column values
-		are in specified set
+		Set values set filter.
+		Only match records where 'attribute' value is in given 'values' set.
 		"""
 		assert(isinstance(attribute, str))
 		assert(isinstance(values, list))
@@ -254,61 +324,44 @@ class SphinxClient:
 		for value in values:
 			assert(isinstance(value, int))
 
-		self._filters.append ( { 'attr':attribute, 'exclude':exclude, 'values':values } )
+		self._filters.append ( { 'type':SPH_FILTER_VALUES, 'attr':attribute, 'exclude':exclude, 'values':values } )
 
 
 	def SetFilterRange (self, attribute, min_, max_, exclude=0 ):
 		"""
-		set range filter
-		only match those records where $attribute column value
-		is beetwen $min and $max (including $min and $max)
+		Set range filter.
+		Only match records if 'attribute' value is beetwen 'min_' and 'max_' (inclusive).
 		"""
 		assert(isinstance(attribute, str))
 		assert(isinstance(min_, int))
 		assert(isinstance(max_, int))
 		assert(min_<=max_)
 
-		self._filters.append ( { 'attr':attribute, 'exclude':exclude, 'min':min_, 'max':max_ } )
+		self._filters.append ( { 'type':SPH_FILTER_RANGE, 'attr':attribute, 'exclude':exclude, 'min':min_, 'max':max_ } )
+
+
+	def SetFilterFloatRange (self, attribute, min_, max_, exclude=0 ):
+		assert(isinstance(attribute,str))
+		assert(isinstance(min_,float))
+		assert(isinstance(max_,float))
+		assert(min_ <= max_)
+		self._filters.append ( {'type':SPH_FILTER_FLOATRANGE, 'attr':attribute, 'exclude':exclude, 'min':min_, 'max':max_} ) 
+
+
+	def SetGeoAnchor (self, attrlat, attrlong, latitude, longitude):
+		assert(isinstance(attrlat,str))
+		assert(isinstance(attrlong,str))
+		assert(isinstance(latitude,float))
+		assert(isinstance(longitude,float))
+		self._anchor['attrlat'] = attrlat
+		self._anchor['attrlong'] = attrlong
+		self._anchor['lat'] = latitude
+		self._anchor['long'] = longitude
 
 
 	def SetGroupBy ( self, attribute, func, groupsort='@group desc' ):
 		"""
-		set grouping attribute and function
-
-		in grouping mode, all matches are assigned to different groups
-		based on grouping function value.
-
-		each group keeps track of the total match count, and the best match
-		(in this group) according to current sorting function.
-
-		the final result set contains one best match per group, with
-		grouping function value and matches count attached.
-
-		groups in result set could be sorted by any sorting clause,
-		including both document attributes and the following special
-		internal Sphinx attributes:
-
-		- @id - match document ID;
-		- @weight, @rank, @relevance -  match weight;
-		- @group - groupby function value;
-		- @count - amount of matches in group.
-
-		the default mode is to sort by groupby value in descending order,
-		ie. by "@group desc".
-
-		"total_found" would contain total amount of matching groups over
-		the whole index.
-
-		WARNING: grouping is done in fixed memory and thus its results
-		are only approximate; so there might be more groups reported
-		in total_found than actually present. @count might also
-		be underestimated. 
-
-		for example, if sorting by relevance and grouping by "published"
-		attribute with SPH_GROUPBY_DAY function, then the result set will
-		contain one most relevant match per each day when there were any
-		matches published, with day number and per-day match count attached,
-		and sorted by day number in descending order (ie. recent days first).
+		Set grouping attribute and function.
 		"""
 		assert(isinstance(attribute, str))
 		assert(func in [SPH_GROUPBY_DAY, SPH_GROUPBY_WEEK, SPH_GROUPBY_MONTH, SPH_GROUPBY_YEAR, SPH_GROUPBY_ATTR] )
@@ -319,34 +372,60 @@ class SphinxClient:
 		self._groupsort = groupsort
 
 
-	def Query (self, query, index='*'):
+	def SetGroupDistinct (self, attribute):
+		assert(isinstance(attribute,str))
+		self._groupdistinct = attribute
+
+
+	def SetRetries (self, count, delay=0):
+		assert(isinstance(count,int) and count>=0)
+		assert(isinstance(delay,int) and delay>=0)
+		self._retrycount = count
+		self._retrydelay = delay
+
+
+	def ResetFilters (self):
 		"""
-		connect to searchd server and run given search query
-
-		"query" is query string
-		"index" is index name to query, default is "*" which means to query all indexes
-
-		returns false on failure
-		returns hash which has the following keys on success:
-			"matches"
-				an array of found matches represented as ( "id", "weight", "attrs" ) hashes
-			"total"
-				total amount of matches retrieved (upto SPH_MAX_MATCHES, see sphinx.h)
-			"total_found"
-				total amount of matching documents in index
-			"time"
-				search time
-			"words"
-				an array of ( "word", "docs", "hits" ) hashes which contains
-				docs and hits count for stemmed (!) query words
+		Clear all filters (for multi-queries).
 		"""
-		sock = self._Connect()
-		if not sock:
-			return {}
+		self._filters = []
+		self._anchor = {}
 
+
+	def ResetGroupBy (self):
+		"""
+		Clear groupby settings (for multi-queries).
+		"""
+		self._groupby = ''
+		self._groupfunc = SPH_GROUPBY_DAY
+		self._groupsort = '@group desc'
+		self._groupdistinct = ''
+
+
+	def Query (self, query, index='*', comment=''):
+		"""
+		Connect to searchd server and run given search query.
+		Returns None on failure; result set hash on success (see documentation for details).
+		"""
+		assert(len(self._reqs)==0)
+		self.AddQuery(query,index,comment)
+		results = self.RunQueries()
+
+		if len(results)==0:
+			return None
+		self._error = results[0]['error']
+		self._warning = results[0]['warning']
+		if results[0]['status'] == SEARCHD_ERROR:
+			return None
+		return results[0]
+
+
+	def AddQuery (self, query, index='*', comment=''):
+		"""
+		Add query to batch.
+		"""
 		# build request
-		req = [pack('>4L', self._offset, self._limit, self._mode, self._sort)]
-
+		req = [pack('>5L', self._offset, self._limit, self._mode, self._ranker, self._sort)]
 		req.append(pack('>L', len(self._sortby)))
 		req.append(self._sortby)
 
@@ -360,23 +439,26 @@ class SphinxClient:
 		req.append(pack('>L', len(self._weights)))
 		for w in self._weights:
 			req.append(pack('>L', w))
-
 		req.append(pack('>L', len(index)))
 		req.append(index)
+		req.append(pack('>L',0)) # id64 range marker FIXME! IMPLEMENT!
 		req.append(pack('>L', self._min_id))
 		req.append(pack('>L', self._max_id))
-
+		
 		# filters
 		req.append ( pack ( '>L', len(self._filters) ) )
 		for f in self._filters:
-			req.append ( pack ( '>L', len(f['attr']) ) )
-			req.append ( f['attr'] )
-			if ( 'values' in f ):
-				req.append ( pack ( '>L', len(f['values']) ) )
-				for v in f['values']:
-					req.append ( pack ( '>L', v ) )
-			else:
-				req.append ( pack ( '>3L', 0, f['min'], f['max'] ) )
+			req.append ( pack ( '>L', len(f['attr'])) + f['attr'])
+			filtertype = f['type']
+			req.append ( pack ( '>L', filtertype))
+			if filtertype == SPH_FILTER_VALUES:
+				req.append ( pack ('>L', len(f['values'])))
+				for val in f['values']:
+					req.append ( pack ('>L', val))
+			elif filtertype == SPH_FILTER_RANGE:
+				req.append ( pack ('>2L', f['min'], f['max']))
+			elif filtertype == SPH_FILTER_FLOATRANGE:
+				req.append ( pack ('>2f', f['min'], f['max']))
 			req.append ( pack ( '>L', f['exclude'] ) )
 
 		# group-by, max-matches, group-sort
@@ -384,114 +466,184 @@ class SphinxClient:
 		req.append ( self._groupby )
 		req.append ( pack ( '>2L', self._maxmatches, len(self._groupsort) ) )
 		req.append ( self._groupsort )
+		req.append ( pack ( '>LLL', self._cutoff, self._retrycount, self._retrydelay)) 
+		req.append ( pack ( '>L', len(self._groupdistinct)))
+		req.append ( self._groupdistinct)
+
+		# anchor point
+		if len(self._anchor) == 0:
+			req.append ( pack ('>L', 0))
+		else:
+			attrlat, attrlong = self._anchor['attrlat'], self._anchor['attrlong']
+			latitude, longitude = self._anchor['lat'], self._anchor['long']
+			req.append ( pack ('>L', 1))
+			req.append ( pack ('>L', len(attrlat)) + attrlat)
+			req.append ( pack ('>L', len(attrlong)) + attrlong)
+			req.append ( pack ('>f', latitude) + pack ('>f', longitude))
+
+		# per-index weights
+		req.append ( pack ('>L',len(self._indexweights)))
+		for indx,weight in self._indexweights.items():
+			req.append ( pack ('>L',len(indx)) + indx + pack ('>L',weight))
+
+		# max query time
+		req.append ( pack ('>L', self._maxquerytime) ) 
+
+		# per-field weights
+		req.append ( pack ('>L',len(self._fieldweights) ) )
+		for field,weight in self._fieldweights.items():
+			req.append ( pack ('>L',len(field)) + field + pack ('>L',weight) )
+
+		# comment
+		req.append ( pack('>L',len(comment)) + comment )
 
 		# send query, get response
 		req = ''.join(req)
 
-		length = len(req)
-		req = pack('>2HL', SEARCHD_COMMAND_SEARCH, VER_COMMAND_SEARCH, length)+req
+		self._reqs.append(req)
+		return
+
+
+	def RunQueries (self):
+		"""
+		Run queries batch.
+		Returns None on network IO failure; or an array of result set hashes on success.
+		"""
+		if len(self._reqs)==0:
+			self._error = 'no queries defined, issue AddQuery() first'
+			return None
+
+		sock = self._Connect()
+		if not sock:
+			return None
+
+		req = ''.join(self._reqs)
+		length = len(req)+4
+		req = pack('>HHLL', SEARCHD_COMMAND_SEARCH, VER_COMMAND_SEARCH, length, len(self._reqs))+req
 		sock.send(req)
+
 		response = self._GetResponse(sock, VER_COMMAND_SEARCH)
 		if not response:
-			return {}
+			return None
+
+		nreqs = len(self._reqs)
 
 		# parse response
-		result = {}
 		max_ = len(response)
-
-		# read schema
 		p = 0
-		fields = []
-		attrs = []
 
-		nfields = unpack('>L', response[p:p+4])[0]
-		p += 4
-		while nfields>0 and p<max_:
-			nfields -= 1
-			length = unpack('>L', response[p:p+4])[0]
+		results = []
+		for i in range(0,nreqs,1):
+			result = {}
+			result['error'] = ''
+			result['warning'] = ''
+			status = unpack('>L', response[p:p+4])[0]
 			p += 4
-			fields.append(response[p:p+length])
-			p += length
-
-		result['fields'] = fields
-
-		nattrs = unpack('>L', response[p:p+4])[0]
-		p += 4
-		while nattrs>0 and p<max_:
-			nattrs -= 1
-			length = unpack('>L', response[p:p+4])[0]
-			p += 4
-			attr = response[p:p+length]
-			p += length
-			type_ = unpack('>L', response[p:p+4])[0]
-			p += 4
-			attrs.append([attr,type_])
-
-		result['attrs'] = attrs
-
-		# read match count
-		count = unpack('>L', response[p:p+4])[0]
-		p += 4
-
-		# read matches
-		result['matches'] = []
-		while count>0 and p<max_:
-			count -= 1
-			doc, weight = unpack('>2L', response[p:p+8])
-			p += 8
-
-			match = { 'id':doc, 'weight':weight, 'attrs':{} }
-			for i in range(len(attrs)):
-				match['attrs'][attrs[i][0]] = unpack('>L', response[p:p+4])[0]
+			result['status'] = status
+			if status != SEARCHD_OK:
+				length = unpack('>L', response[p:p+4])[0]
 				p += 4
+				message = response[p:p+length]
+				p += length
 
-			result['matches'].append ( match )
+				if status == SEARCHD_WARNING:
+					result['warning'] = message
+				else:
+					result['error'] = message
+					continue
 
-		result['total'], result['total_found'], result['time'], words = \
-			unpack('>4L', response[p:p+16])
+			# read schema
+			fields = []
+			attrs = []
 
-		result['time'] = '%.3f' % (result['time']/1000.0)
-		p += 16
-
-		result['words'] = []
-		while words>0:
-			words -= 1
-			length = unpack('>L', response[p:p+4])[0]
+			nfields = unpack('>L', response[p:p+4])[0]
 			p += 4
-			word = response[p:p+length]
-			p += length
-			docs, hits = unpack('>2L', response[p:p+8])
-			p += 8
+			while nfields>0 and p<max_:
+				nfields -= 1
+				length = unpack('>L', response[p:p+4])[0]
+				p += 4
+				fields.append(response[p:p+length])
+				p += length
 
-			result['words'].append({'word':word, 'docs':docs, 'hits':hits})
+			result['fields'] = fields
 
+			nattrs = unpack('>L', response[p:p+4])[0]
+			p += 4
+			while nattrs>0 and p<max_:
+				nattrs -= 1
+				length = unpack('>L', response[p:p+4])[0]
+				p += 4
+				attr = response[p:p+length]
+				p += length
+				type_ = unpack('>L', response[p:p+4])[0]
+				p += 4
+				attrs.append([attr,type_])
+
+			result['attrs'] = attrs
+
+			# read match count
+			count = unpack('>L', response[p:p+4])[0]
+			p += 4
+			id64 = unpack('>L', response[p:p+4])[0]
+			p += 4
+		
+			# read matches
+			result['matches'] = []
+			while count>0 and p<max_:
+				count -= 1
+				if id64:
+					doc, dochi, weight = unpack('>3L', response[p:p+12])
+					doc += (dochi<<32)
+					p += 12
+				else:
+					doc, weight = unpack('>2L', response[p:p+8])
+					p += 8
+
+				match = { 'id':doc, 'weight':weight, 'attrs':{} }
+				for i in range(len(attrs)):
+					if attrs[i][1] == SPH_ATTR_FLOAT:
+						match['attrs'][attrs[i][0]] = unpack('>f', response[p:p+4])[0]
+					elif attrs[i][1] == (SPH_ATTR_MULTI | SPH_ATTR_INTEGER):
+						match['attrs'][attrs[i][0]] = []
+						nvals = unpack('>L', response[p:p+4])[0]
+						p += 4
+						for n in range(0,nvals,1):
+							match['attrs'][attrs[i][0]].append(unpack('>L', response[p:p+4])[0])
+							p += 4
+						p -= 4
+					else:
+						match['attrs'][attrs[i][0]] = unpack('>L', response[p:p+4])[0]
+					p += 4
+
+				result['matches'].append ( match )
+
+			result['total'], result['total_found'], result['time'], words = unpack('>4L', response[p:p+16])
+
+			result['time'] = '%.3f' % (result['time']/1000.0)
+			p += 16
+
+			result['words'] = []
+			while words>0:
+				words -= 1
+				length = unpack('>L', response[p:p+4])[0]
+				p += 4
+				word = response[p:p+length]
+				p += length
+				docs, hits = unpack('>2L', response[p:p+8])
+				p += 8
+
+				result['words'].append({'word':word, 'docs':docs, 'hits':hits})
+
+			results.append(result)
+
+		self._reqs = []
 		sock.close()
-
-		return result	
-
+		return results
+	
 
 	def BuildExcerpts (self, docs, index, words, opts=None):
 		"""
-		connect to searchd server and generate exceprts from given documents
-
-		"docs" is an array of strings which represent the documents' contents
-		"index" is a string specifiying the index which settings will be used
-			for stemming, lexing and case folding
-		"words" is a string which contains the words to highlight
-		"opts" is a hash which contains additional optional highlighting parameters:
-			"before_match"
-				a string to insert before a set of matching words, default is "<b>"
-			"after_match"
-				a string to insert after a set of matching words, default is "<b>"
-			"chunk_separator"
-				a string to insert between excerpts chunks, default is " ... "
-			"limit"
-				max excerpt size in symbols (codepoints), default is 256
-			"around"
-				how much words to highlight around each match, default is 5
-
-		returns false on failure
-		returns an array of string excerpts on success
+		Connect to searchd server and generate exceprts from given documents.
 		"""
 		if not opts:
 			opts = {}
@@ -506,7 +658,7 @@ class SphinxClient:
 		sock = self._Connect()
 
 		if not sock:
-			return []
+			return None
 
 		# fixup options
 		opts.setdefault('before_match', '<b>')
@@ -582,6 +734,122 @@ class SphinxClient:
 
 		return res
 
+
+	def UpdateAttributes ( self, index, attrs, values ):
+		"""
+		Update given attribute values on given documents in given indexes.
+		Returns amount of updated documents (0 or more) on success, or -1 on failure.
+
+		'attrs' must be a list of strings.
+		'values' must be a dict with int key (document ID) and list of int values (new attribute values).
+
+		Example:
+			res = cl.UpdateAttributes ( 'test1', [ 'group_id', 'date_added' ], { 2:[123,1000000000], 4:[456,1234567890] } )
+		"""
+		assert ( isinstance ( index, str ) )
+		assert ( isinstance ( attrs, list ) )
+		assert ( isinstance ( values, dict ) )
+		for attr in attrs:
+			assert ( isinstance ( attr, str ) )
+		for docid, entry in values.items():
+			assert ( isinstance ( docid, int ) )
+			assert ( isinstance ( entry, list ) )
+			assert ( len(attrs)==len(entry) )
+			for val in entry:
+				assert ( isinstance ( val, int ) )
+
+		# build request
+		req = [ pack('>L',len(index)), index ]
+
+		req.append ( pack('>L',len(attrs)) )
+		for attr in attrs:
+			req.append ( pack('>L',len(attr)) + attr )
+
+		req.append ( pack('>L',len(values)) )
+		for docid, entry in values.items():
+			req.append ( pack('>q',docid) )
+			for val in entry:
+				req.append ( pack('>L',val) )
+
+		# connect, send query, get response
+		sock = self._Connect()
+		if not sock:
+			return None
+
+		req = ''.join(req)
+		length = len(req)
+		req = pack ( '>2HL', SEARCHD_COMMAND_UPDATE, VER_COMMAND_UPDATE, length ) + req
+		wrote = sock.send ( req )
+
+		response = self._GetResponse ( sock, VER_COMMAND_UPDATE )
+		if not response:
+			return -1
+
+		# parse response
+		updated = unpack ( '>L', response[0:4] )[0]
+		return updated
+
+
+	def BuildKeywords ( self, query, index, hits ):
+		"""
+		Connect to searchd server, and generate keywords list for a given query.
+		Returns None on failure, or a list of keywords on success.
+		"""
+		assert ( isinstance ( query, str ) )
+		assert ( isinstance ( index, str ) )
+		assert ( isinstance ( hits, int ) )
+
+		# build request
+		req = [ pack ( '>L', len(query) ) + query ]
+		req.append ( pack ( '>L', len(index) ) + index )
+		req.append ( pack ( '>L', hits ) )
+
+		# connect, send query, get response
+		sock = self._Connect()
+		if not sock:
+			return None
+
+		req = ''.join(req)
+		length = len(req)
+		req = pack ( '>2HL', SEARCHD_COMMAND_KEYWORDS, VER_COMMAND_KEYWORDS, length ) + req
+		wrote = sock.send ( req )
+
+		response = self._GetResponse ( sock, VER_COMMAND_KEYWORDS )
+		if not response:
+			return None
+
+		# parse response
+		res = []
+
+		nwords = unpack ( '>L', response[0:4] )[0]
+		p = 4
+		max_ = len(response)
+
+		while nwords>0 and p<max_:
+			nwords -= 1
+
+			length = unpack ( '>L', response[p:p+4] )[0]
+			p += 4
+			tokenized = response[p:p+length]
+			p += length
+
+			length = unpack ( '>L', response[p:p+4] )[0]
+			p += 4
+			normalized = response[p:p+length]
+			p += length
+
+			entry = { 'tokenized':tokenized, 'normalized':normalized }
+			if hits:
+				entry['docs'], entry['hits'] = unpack ( '>2L', response[p:p+8] )
+				p += 8
+
+			res.append ( entry )
+
+		if nwords>0 or p>max_:
+			self._error = 'incomplete reply'
+			return None
+
+		return res
 #
 # $Id$
 #

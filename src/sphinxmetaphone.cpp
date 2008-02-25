@@ -694,7 +694,9 @@ void stem_dmetaphone ( BYTE * pWord, bool bUTF8 )
 		iAdvance = ProcessCode ( iCode, ( bUTF8 ? pLastPtr : pPtr ) - sOriginal, Word, sPrimary, sSecondary );
 	}
 
-	strcpy ( (char*)pWord, (char*)sPrimary );
+	if ( !pWord [0] || sPrimary [0] )
+		strcpy ( (char*)pWord, (char*)sPrimary );
+
 	// TODO: handle secondary too
 }
 

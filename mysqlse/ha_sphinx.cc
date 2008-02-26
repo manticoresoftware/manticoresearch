@@ -453,6 +453,7 @@ private:
 	int				m_iOffset;
 	int				m_iLimit;
 
+	bool			m_bQuery;
 	char *			m_sQuery;
 	uint32 *		m_pWeights;
 	int				m_iWeights;
@@ -1095,6 +1096,7 @@ CSphSEQuery::CSphSEQuery ( const char * sQuery, int iLength, const char * sIndex
 	, m_sIndex ( sIndex ? sIndex : "*" )
 	, m_iOffset ( 0 )
 	, m_iLimit ( 20 )
+	, m_bQuery ( false )
 	, m_sQuery ( "" )
 	, m_pWeights ( NULL )
 	, m_iWeights ( 0 )
@@ -1232,11 +1234,21 @@ bool CSphSEQuery::ParseField ( char * sField )
 
 	// look for option name/value separator
 	char * sValue = strchr ( sField, '=' );
-	if ( !sValue )
+	if ( !sValue || sValue==sField || sValue[-1]=='\\' )
 	{
 		// by default let's assume it's just query
 		if ( sField[0] )
-			m_sQuery = sField;
+		{
+			if ( m_bQuery )
+			{
+				snprintf ( m_sParseError, sizeof(m_sParseError), "search query already specified; '%s' is redundant", sField );
+				SPH_RET(false);
+			} else
+			{
+				m_sQuery = sField;
+				m_bQuery = true;
+			}
+		}
 		SPH_RET(true);
 	}
 
@@ -1522,11 +1534,20 @@ bool CSphSEQuery::Parse ()
 	SPH_ENTER_METHOD();
 	SPH_DEBUG ( "query [[ %s ]]", m_sQueryBuffer );
 
-	char * pNext;
+	m_bQuery = false;
 	char * pCur = m_sQueryBuffer;
+	char * pNext = pCur;
 
-	while (( pNext = strchr(  pCur, ';' ) ))
+	while (( pNext = strchr ( pNext, ';' ) ))
 	{
+		// handle escaped semicolons
+		if ( pNext>m_sQueryBuffer && pNext[-1]=='\\' && pNext[1]!='\0' )
+		{
+			pNext++;
+			continue;
+		}
+
+		// handle semicolon-separated clauses
 		*pNext++ = '\0';
 		if ( !ParseField ( pCur ) )
 			SPH_RET(false);

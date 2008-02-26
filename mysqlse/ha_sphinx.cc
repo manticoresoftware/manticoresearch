@@ -111,6 +111,7 @@ void sphUnalignedWrite ( void * pPtr, const T & tVal )
 #define SPHINXSE_SYSTEM_COLUMNS		3
 
 #define SPHINXSE_MAX_ALLOC			(16*1024*1024)
+#define SPHINXSE_MAX_KEYWORDSTATS	4096
 
 // FIXME! all the following is cut-n-paste from sphinx.h and searchd.cpp
 #define SPHINX_VERSION		"0.9.8"
@@ -119,7 +120,7 @@ enum
 {
 	SPHINX_SEARCHD_PROTO	= 1,
 	SEARCHD_COMMAND_SEARCH	= 0,
-	VER_COMMAND_SEARCH		= 0x10B,
+	VER_COMMAND_SEARCH		= 0x113,
 };
 
 /// search query sorting orders
@@ -130,6 +131,7 @@ enum ESphSortOrder
 	SPH_SORT_ATTR_ASC		= 2,	///< sort by document date asc, then by relevance desc
 	SPH_SORT_TIME_SEGMENTS	= 3,	///< sort by time segments (hour/day/week/etc) desc, then by relevance desc
 	SPH_SORT_EXTENDED		= 4,	///< sort by SQL-like expression (eg. "@relevance DESC, price ASC, @id DESC")
+	SPH_SORT_EXPR			= 5,	///< sort by expression
 
 	SPH_SORT_TOTAL
 };
@@ -148,6 +150,18 @@ enum ESphMatchMode
 	SPH_MATCH_TOTAL
 };
 
+/// search query relevance ranking mode
+enum ESphRankMode
+{
+	SPH_RANK_PROXIMITY_BM25		= 0,	///< default mode, phrase proximity major factor and BM25 minor one
+	SPH_RANK_BM25				= 1,	///< statistical mode, BM25 ranking only (faster but worse quality)
+	SPH_RANK_NONE				= 2,	///< no ranking, all matches get a weight of 1
+	SPH_RANK_WORDCOUNT			= 3,	///< simple word-count weighting, rank is a weighted sum of per-field keyword occurence counts
+
+	SPH_RANK_TOTAL,
+	SPH_RANK_DEFAULT			= SPH_RANK_PROXIMITY_BM25
+};
+
 /// search query grouping mode
 enum ESphGroupBy
 {
@@ -159,11 +173,16 @@ enum ESphGroupBy
 };
 
 /// known attribute types
-enum ESphAttrType
+enum
 {
-	SPH_ATTR_NONE		= 0,	///< not an attribute at all
-	SPH_ATTR_INTEGER	= 1,	///< this attr is just an integer
-	SPH_ATTR_TIMESTAMP	= 2		///< this attr is a timestamp
+	SPH_ATTR_NONE		= 0,			///< not an attribute at all
+	SPH_ATTR_INTEGER	= 1,			///< this attr is just an integer
+	SPH_ATTR_TIMESTAMP	= 2,			///< this attr is a timestamp
+	SPH_ATTR_ORDINAL	= 3,			///< this attr is an ordinal string number (integer at search time, specially handled at indexing time)
+	SPH_ATTR_BOOL		= 4,			///< this attr is a boolean bit field
+	SPH_ATTR_FLOAT		= 5,
+
+	SPH_ATTR_MULTI		= 0x40000000UL	///< this attr has multiple values (0 or more)
 };
 
 /// known answers
@@ -280,12 +299,12 @@ struct CSphSEShare
 struct CSphSEAttr
 {
 	char *			m_sName;		///< attribute name (received from Sphinx)
-	ESphAttrType	m_eType;		///< attribute type (received from Sphinx)
+	uint32			m_uType;		///< attribute type (received from Sphinx)
 	int				m_iField;		///< field index in current table (-1 if none)
 
 	CSphSEAttr()
 		: m_sName ( NULL )
-		, m_eType ( SPH_ATTR_NONE )
+		, m_uType ( SPH_ATTR_NONE )
 		, m_iField ( -1 )
 	{}
 
@@ -369,22 +388,37 @@ struct CSphSEThreadData
 	{}
 };
 
+/// filter types
+enum ESphFilter
+{
+	SPH_FILTER_VALUES		= 0,	///< filter by integer values set
+	SPH_FILTER_RANGE		= 1,	///< filter by integer range
+	SPH_FILTER_FLOATRANGE	= 2		///< filter by float range
+};
+
+
 /// search query filter
 struct CSphSEFilter
 {
 public:
+	ESphFilter		m_eType;
 	char *			m_sAttrName;
 	uint32			m_uMinValue;
 	uint32			m_uMaxValue;
+	float			m_fMinValue;
+	float			m_fMaxValue;
 	int				m_iValues;
 	uint32 *		m_pValues;
 	int				m_bExclude;
 
 public:
 	CSphSEFilter ()
-		: m_sAttrName ( NULL )
+		: m_eType ( SPH_FILTER_VALUES )
+		, m_sAttrName ( NULL )
 		, m_uMinValue ( 0 )
 		, m_uMaxValue ( UINT_MAX )
+		, m_fMinValue ( 0.0f )
+		, m_fMaxValue ( 0.0f )
 		, m_iValues ( 0 )
 		, m_pValues ( NULL )
 		, m_bExclude ( 0 )
@@ -396,6 +430,14 @@ public:
 		SafeDeleteArray ( m_pValues );
 	}
 };
+
+
+/// float vs dword conversion
+inline uint32 sphF2DW ( float f )	{ union { float f; uint32 d; } u; u.f = f; return u.d; }
+
+/// dword vs float conversion
+inline float sphDW2F ( uint32 d )	{ union { float f; uint32 d; } u; u.d = d; return u.f; }
+
 
 /// client-side search query
 struct CSphSEQuery
@@ -415,9 +457,11 @@ private:
 	uint32 *		m_pWeights;
 	int				m_iWeights;
 	ESphMatchMode	m_eMode;
+	ESphRankMode	m_eRanker;
 	ESphSortOrder	m_eSort;
 	char *			m_sSortBy;
 	int				m_iMaxMatches;
+	int				m_iMaxQueryTime;
 	uint32			m_iMinID;
 	uint32			m_iMaxID;
 
@@ -434,6 +478,17 @@ private:
 	int				m_iIndexWeights;
 	char *			m_sIndexWeight[SPHINXSE_MAX_FILTERS];		///< points to query buffer; do NOT delete
 	int				m_iIndexWeight[SPHINXSE_MAX_FILTERS];
+	int				m_iFieldWeights;
+	char *			m_sFieldWeight[SPHINXSE_MAX_FILTERS];		///< points to query buffer; do NOT delete
+	int				m_iFieldWeight[SPHINXSE_MAX_FILTERS];
+
+	bool			m_bGeoAnchor;
+	char *			m_sGeoLatAttr;
+	char *			m_sGeoLongAttr;
+	float			m_fGeoLatitude;
+	float			m_fGeoLongitude;
+
+	char *			m_sComment;
 
 public:
 	char			m_sParseError[256];
@@ -459,6 +514,7 @@ protected:
 	void			SendInt ( int v )				{ v = ntohl(v); SendBytes ( &v, sizeof(int) ); }
 	void			SendDword ( uint v )			{ v = ntohl(v) ;SendBytes ( &v, sizeof(uint) ); }
 	void			SendString ( const char * v )	{ int iLen = strlen(v); SendDword(iLen); SendBytes ( v, iLen ); }
+	void			SendFloat ( float v )			{ SendDword ( sphF2DW(v) ); }
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -543,7 +599,11 @@ static byte * sphinx_get_key ( const byte * pSharePtr, GetKeyLength_t * pLength,
 	return (byte*) pShare->m_sTable;
 }
 
+#if MYSQL_VERSION_ID<50100
+static int sphinx_init_func ( void * ) // to avoid unused arg warning
+#else
 static int sphinx_init_func ( void * p )
+#endif
 {
 	SPH_ENTER_FUNC();
 	if ( !sphinx_init )
@@ -1039,11 +1099,13 @@ CSphSEQuery::CSphSEQuery ( const char * sQuery, int iLength, const char * sIndex
 	, m_pWeights ( NULL )
 	, m_iWeights ( 0 )
 	, m_eMode ( SPH_MATCH_ALL )
+	, m_eRanker ( SPH_RANK_PROXIMITY_BM25 )
 	, m_eSort ( SPH_SORT_RELEVANCE )
 	, m_sSortBy ( "" )
 	, m_iMaxMatches ( 1000 )
+	, m_iMaxQueryTime ( 0 )
 	, m_iMinID ( 0 )
-	, m_iMaxID ( UINT_MAX )
+	, m_iMaxID ( 0 )
 	, m_iFilters ( 0 )
 	, m_eGroupFunc ( SPH_GROUPBY_DAY )
 	, m_sGroupBy ( "" )
@@ -1053,6 +1115,13 @@ CSphSEQuery::CSphSEQuery ( const char * sQuery, int iLength, const char * sIndex
 	, m_iRetryDelay ( 0 )
 	, m_sGroupDistinct ( "" )
 	, m_iIndexWeights ( 0 )
+	, m_iFieldWeights ( 0 )
+	, m_bGeoAnchor ( false )
+	, m_sGeoLatAttr ( "" )
+	, m_sGeoLongAttr ( "" )
+	, m_fGeoLatitude ( 0.0f )
+	, m_fGeoLongitude ( 0.0f )
+	, m_sComment ( "" )
 
 	, m_pBuf ( NULL )
 	, m_pCur ( NULL )
@@ -1189,9 +1258,11 @@ bool CSphSEQuery::ParseField ( char * sField )
 	else if ( !strcmp ( sName, "minid" ) )		m_iMinID = iValue;
 	else if ( !strcmp ( sName, "maxid" ) )		m_iMaxID = iValue;
 	else if ( !strcmp ( sName, "maxmatches" ) )	m_iMaxMatches = iValue;
+	else if ( !strcmp ( sName, "maxquerytime" ) )	m_iMaxQueryTime = iValue;
 	else if ( !strcmp ( sName, "groupsort" ) )	m_sGroupSortBy = sValue;
 	else if ( !strcmp ( sName, "distinct" ) )	m_sGroupDistinct = sValue;
 	else if ( !strcmp ( sName, "cutoff" ) )		m_iCutoff = iValue;
+	else if ( !strcmp ( sName, "comment" ) )	m_sComment = sValue;
 
 	else if ( !strcmp ( sName, "mode" ) )
 	{
@@ -1210,7 +1281,19 @@ bool CSphSEQuery::ParseField ( char * sField )
 			snprintf ( m_sParseError, sizeof(m_sParseError), "unknown matching mode '%s'", sValue );
 			SPH_RET(false);
 		}
+	} else if ( !strcmp ( sName, "ranker" ) )
+	{
 
+		m_eRanker = SPH_RANK_PROXIMITY_BM25;
+		if ( !strcmp ( sValue, "proximity_bm25") )	m_eRanker = SPH_RANK_PROXIMITY_BM25;
+		else if ( !strcmp ( sValue, "bm25" ) )		m_eRanker = SPH_RANK_BM25;
+		else if ( !strcmp ( sValue, "none" ) )		m_eRanker = SPH_RANK_NONE;
+		else if ( !strcmp ( sValue, "wordcount" ) )	m_eRanker = SPH_RANK_WORDCOUNT;
+		else
+		{
+			snprintf ( m_sParseError, sizeof(m_sParseError), "unknown ranking mode '%s'", sValue );
+			SPH_RET(false);
+		}
 	} else if ( !strcmp ( sName, "sort" ) )
 	{
 		static const struct 
@@ -1224,6 +1307,7 @@ bool CSphSEQuery::ParseField ( char * sField )
 			{ "attr_asc:",		SPH_SORT_ATTR_ASC },
 			{ "time_segments:",	SPH_SORT_TIME_SEGMENTS },
 			{ "extended:",		SPH_SORT_EXTENDED },
+			{ "expr:",			SPH_SORT_EXPR }
 		};
 
 		int i;
@@ -1272,13 +1356,14 @@ bool CSphSEQuery::ParseField ( char * sField )
 		}
 
 	} else if ( m_iFilters<SPHINXSE_MAX_FILTERS &&
-		( !strcmp ( sName, "range" ) || !strcmp ( sName, "!range" ) ) )
+		( !strcmp ( sName, "range" ) || !strcmp ( sName, "!range" ) || !strcmp ( sName, "floatrange" ) || !strcmp ( sName, "!floatrange" ) ) )
 	{
 		for ( ;; )
 		{
+			char * p = sName;
 			CSphSEFilter & tFilter = m_dFilters [ m_iFilters ];
-			tFilter.m_bExclude = ( strcmp ( sName, "!range")==0 );
-			char * p;
+			tFilter.m_bExclude = ( *p=='!' ); if ( tFilter.m_bExclude ) p++;
+			tFilter.m_eType = ( *p=='f' ) ? SPH_FILTER_FLOATRANGE : SPH_FILTER_RANGE;
 
 			if (!( p = strchr ( sValue, ',' ) ))
 				break;
@@ -1291,8 +1376,15 @@ bool CSphSEQuery::ParseField ( char * sField )
 				break;
 			*p++ = '\0';
 
-			tFilter.m_uMinValue = atoi(sValue);
-			tFilter.m_uMaxValue = atoi(p);
+			if ( tFilter.m_eType==SPH_FILTER_RANGE )
+			{
+				tFilter.m_uMinValue = atoi(sValue);
+				tFilter.m_uMaxValue = atoi(p);
+			} else
+			{
+				tFilter.m_fMinValue = (float)atof(sValue);
+				tFilter.m_fMaxValue = (float)atof(p);
+			}
 
 			// all ok
 			m_iFilters++;
@@ -1305,6 +1397,7 @@ bool CSphSEQuery::ParseField ( char * sField )
 		for ( ;; )
 		{
 			CSphSEFilter & tFilter = m_dFilters [ m_iFilters ];
+			tFilter.m_eType = SPH_FILTER_VALUES;
 			tFilter.m_bExclude = ( strcmp ( sName, "!filter")==0 );
 
 			// get the attr name
@@ -1333,26 +1426,31 @@ bool CSphSEQuery::ParseField ( char * sField )
 			break;
 		}
 
-	} else if ( !strcmp ( sName, "indexweights" ) )
+	} else if ( !strcmp ( sName, "indexweights" ) || !strcmp ( sName, "fieldweights" ) )
 	{
-		m_iIndexWeights = 0;
+		bool bIndex = !strcmp ( sName, "indexweights" );
+		int * pCount = bIndex ? &m_iIndexWeights : &m_iFieldWeights;
+		char ** pNames = bIndex ? &m_sIndexWeight[0] : &m_sFieldWeight[0];
+		int * pWeights = bIndex ? &m_iIndexWeight[0] : &m_iFieldWeight[0];
+
+		*pCount = 0;
 
 		char * p = sValue;
-		while ( *p && m_iIndexWeights<SPHINXSE_MAX_FILTERS )
+		while ( *p && *pCount<SPHINXSE_MAX_FILTERS )
 		{
 			// extract attr name
 			if ( !myisattr(*p) )
 			{
-				snprintf ( m_sParseError, sizeof(m_sParseError), "indexweights: index name expected near '%s'", p );
+				snprintf ( m_sParseError, sizeof(m_sParseError), "%s: index name expected near '%s'", sName, p );
 				SPH_RET(false);
 			}
 
-			m_sIndexWeight[m_iIndexWeights] = p;
+			pNames[*pCount] = p;
 			while ( myisattr(*p) ) p++;
 
 			if ( *p!=',' )
 			{
-				snprintf ( m_sParseError, sizeof(m_sParseError), "indexweights: comma expected near '%s'", p );
+				snprintf ( m_sParseError, sizeof(m_sParseError), "%s: comma expected near '%s'", sName, p );
 				SPH_RET(false);
 			}
 			*p++ = '\0';
@@ -1362,19 +1460,49 @@ bool CSphSEQuery::ParseField ( char * sField )
 			while ( isdigit(*p) ) p++;
 			if ( p==sVal )
 			{
-				snprintf ( m_sParseError, sizeof(m_sParseError), "indexweights: integer weight expected near '%s'", sVal );
+				snprintf ( m_sParseError, sizeof(m_sParseError), "%s: integer weight expected near '%s'", sName, sVal );
 				SPH_RET(false);
 			}
-			m_iIndexWeight[m_iIndexWeights] = atoi(sVal);
-			m_iIndexWeights++;
+			pWeights[*pCount] = atoi(sVal);
+			(*pCount)++;
 
 			if ( !*p )  break;
 			if ( *p!=',' )
 			{
-				snprintf ( m_sParseError, sizeof(m_sParseError), "indexweights: comma expected near '%s'", p );
+				snprintf ( m_sParseError, sizeof(m_sParseError), "%s: comma expected near '%s'", sName, p );
 				SPH_RET(false);
 			}
 			p++;
+		}
+
+	} else if ( !strcmp ( sName, "geoanchor" ) )
+	{
+		m_bGeoAnchor = false;
+		for ( ;; )
+		{
+			char * sLat = sValue;
+			char * p = sValue;
+
+			if (!( p = strchr ( p, ',' ) )) break; *p++ = '\0';
+			char * sLong = p;
+
+			if (!( p = strchr ( p, ',' ) )) break; *p++ = '\0';
+			char * sLatVal = p;
+
+			if (!( p = strchr ( p, ',' ) )) break; *p++ = '\0';
+			char * sLongVal = p;
+
+			m_sGeoLatAttr = chop(sLat);
+			m_sGeoLongAttr = chop(sLong);
+			m_fGeoLatitude = (float)atof(sLatVal);
+			m_fGeoLongitude = (float)atof(sLongVal);
+			m_bGeoAnchor = true;
+			break;
+		}
+		if ( !m_bGeoAnchor )
+		{
+			snprintf ( m_sParseError, sizeof(m_sParseError), "geoanchor: parse error, not enough comma-separated arguments" );
+			SPH_RET(false);
 		}
 
 	} else
@@ -1431,27 +1559,26 @@ int CSphSEQuery::BuildRequest ( char ** ppBuffer )
 	SPH_ENTER_METHOD();
 
 	// calc request length
-	int iReqSize = 88 + 4*m_iWeights
+	int iReqSize = 116 + 4*m_iWeights
 		+ strlen ( m_sSortBy )
 		+ strlen ( m_sQuery )
 		+ strlen ( m_sIndex )
 		+ strlen ( m_sGroupBy )
 		+ strlen ( m_sGroupSortBy )
-		+ strlen ( m_sGroupDistinct );
+		+ strlen ( m_sGroupDistinct )
+		+ strlen ( m_sComment );
 	for ( int i=0; i<m_iFilters; i++ )
 	{
 		const CSphSEFilter & tFilter = m_dFilters[i];
-		iReqSize +=
-			12
-			+ strlen ( tFilter.m_sAttrName )
-			+ 4*tFilter.m_iValues
-			+ ( tFilter.m_iValues ? 0 : 8 );
+		iReqSize += 12 + strlen ( tFilter.m_sAttrName ) // string attr-name; int type; int exclude-flag
+			+ ( ( tFilter.m_eType==SPH_FILTER_VALUES ) ? 4+4*tFilter.m_iValues : 8 );
 	}
-
-#if 0
-	for ( int i=0; i<m_iIndexWeights; i++ ) // 1.12+
+	if ( m_bGeoAnchor ) // 1.14+
+		iReqSize += 16 + strlen ( m_sGeoLatAttr ) + strlen  ( m_sGeoLongAttr );
+	for ( int i=0; i<m_iIndexWeights; i++ ) // 1.15+
 		iReqSize += 8 + strlen(m_sIndexWeight[i] );
-#endif
+	for ( int i=0; i<m_iFieldWeights; i++ ) // 1.18+
+		iReqSize += 8 + strlen(m_sFieldWeight[i] );
 
 	m_iBufLeft = 0;
 	SafeDeleteArray ( m_pBuf );
@@ -1468,11 +1595,13 @@ int CSphSEQuery::BuildRequest ( char ** ppBuffer )
 	// build request
 	SendWord ( SEARCHD_COMMAND_SEARCH ); // command id
 	SendWord ( VER_COMMAND_SEARCH ); // command version
-	SendInt ( iReqSize-8 ); // request body length
+	SendInt ( iReqSize-8 ); // packet body length
 
+	SendInt ( 1 ); // number of queries
 	SendInt ( m_iOffset );
 	SendInt ( m_iLimit );
 	SendInt ( m_eMode );
+	SendInt ( m_eRanker ); // 1.16+
 	SendInt ( m_eSort );
 	SendString ( m_sSortBy ); // sort attr
 	SendString ( m_sQuery ); // query
@@ -1489,14 +1618,27 @@ int CSphSEQuery::BuildRequest ( char ** ppBuffer )
 	{
 		const CSphSEFilter & tFilter = m_dFilters[j];
 		SendString ( tFilter.m_sAttrName );
-		SendInt ( tFilter.m_iValues );
-		for ( int k=0; k<tFilter.m_iValues; k++ )
-			SendInt ( tFilter.m_pValues[k] );
-		if ( !tFilter.m_iValues )
+		SendInt ( tFilter.m_eType );
+
+		switch ( tFilter.m_eType )
 		{
-			SendDword ( tFilter.m_uMinValue );
-			SendDword ( tFilter.m_uMaxValue );
+			case SPH_FILTER_VALUES:
+				SendInt ( tFilter.m_iValues );
+				for ( int k=0; k<tFilter.m_iValues; k++ )
+					SendInt ( tFilter.m_pValues[k] );
+				break;
+
+			case SPH_FILTER_RANGE:
+				SendDword ( tFilter.m_uMinValue );
+				SendDword ( tFilter.m_uMaxValue );
+				break;
+
+			case SPH_FILTER_FLOATRANGE:
+				SendFloat ( tFilter.m_fMinValue );
+				SendFloat ( tFilter.m_fMaxValue );
+				break;
 		}
+
 		SendInt ( tFilter.m_bExclude );
 	}
 
@@ -1508,15 +1650,28 @@ int CSphSEQuery::BuildRequest ( char ** ppBuffer )
 	SendInt ( m_iRetryCount ); // 1.10+
 	SendInt ( m_iRetryDelay );
 	SendString ( m_sGroupDistinct ); // 1.11+
-
-#if 0
-	SendInt ( m_iIndexWeights );
-	for ( int i=0; i<m_iIndexWeights; i++ ) // 1.12+
+	SendInt ( m_bGeoAnchor ); // 1.14+
+	if ( m_bGeoAnchor )
+	{
+		SendString ( m_sGeoLatAttr );
+		SendString ( m_sGeoLongAttr );
+		SendFloat ( m_fGeoLatitude );
+		SendFloat ( m_fGeoLongitude );
+	}
+	SendInt ( m_iIndexWeights ); // 1.15+
+	for ( int i=0; i<m_iIndexWeights; i++ )
 	{
 		SendString ( m_sIndexWeight[i] );
 		SendInt ( m_iIndexWeight[i] );
 	}
-#endif
+	SendInt ( m_iMaxQueryTime ); // 1.17+
+	SendInt ( m_iFieldWeights ); // 1.18+
+	for ( int i=0; i<m_iFieldWeights; i++ )
+	{
+		SendString ( m_sFieldWeight[i] );
+		SendInt ( m_iFieldWeight[i] );
+	}
+	SendString ( m_sComment );
 
 	// detect buffer overruns and underruns, and report internal error
 	if ( m_bBufOverrun || m_iBufLeft!=0 || m_pCur-m_pBuf!=iReqSize )
@@ -1781,16 +1936,43 @@ bool ha_sphinx::UnpackSchema ()
 {
 	SPH_ENTER_METHOD();
 
-	// unpack network packet
+	// cleanup
 	if ( m_dFields )
 		for ( int i=0; i<(int)m_iFields; i++ )
 			SafeDeleteArray ( m_dFields[i] );
 	SafeDeleteArray ( m_dFields );
 
+	// unpack network packet
+	uint32 uStatus = UnpackDword ();
+	char * sMessage = NULL;
+
+	if ( uStatus!=SEARCHD_OK )
+	{
+		sMessage = UnpackString ();
+		CSphSEThreadData * pTls = GetTls ();
+		if ( pTls )
+		{
+			strncpy ( pTls->m_tStats.m_sLastMessage, sMessage, sizeof(pTls->m_tStats.m_sLastMessage) );
+			pTls->m_tStats.m_bLastError = ( uStatus==SEARCHD_ERROR );
+		}
+
+		if ( uStatus==SEARCHD_ERROR )
+		{
+			char sError[1024];
+			my_snprintf ( sError, sizeof(sError), "searchd error: %s", sMessage );
+			my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), sError );
+			SafeDeleteArray ( sMessage );
+			SPH_RET ( false );
+		}
+	}
+
 	m_iFields = UnpackDword ();
 	m_dFields = new char * [ m_iFields ];
 	if ( !m_dFields )
+	{
+		my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), "INTERNAL ERROR: UnpackSchema() failed (fields alloc error)" );
 		SPH_RET(false);
+	}
 
 	for ( uint32 i=0; i<m_iFields; i++ )
 		m_dFields[i] = UnpackString ();
@@ -1803,13 +1985,16 @@ bool ha_sphinx::UnpackSchema ()
 		for ( int i=0; i<(int)m_iFields; i++ )
 			SafeDeleteArray ( m_dFields[i] );
 		SafeDeleteArray ( m_dFields );
+		my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), "INTERNAL ERROR: UnpackSchema() failed (attrs alloc error)" );
 		SPH_RET(false);
 	}
 
 	for ( uint32 i=0; i<m_iAttrs; i++ )
 	{
 		m_dAttrs[i].m_sName = UnpackString ();
-		m_dAttrs[i].m_eType = (ESphAttrType) UnpackDword ();
+		m_dAttrs[i].m_uType = UnpackDword ();
+		if ( m_bUnpackError ) // m_sName may be null
+			break;
 
 		m_dAttrs[i].m_iField = -1;
 		for ( int j=SPHINXSE_SYSTEM_COLUMNS; j<m_pShare->m_iTableFields; j++ )
@@ -1827,7 +2012,10 @@ bool ha_sphinx::UnpackSchema ()
 
 			if ( !strcasecmp ( sAttrField, sTableField ) )
 			{
-				m_dAttrs[i].m_iField = j;
+				// we're almost good, but
+				// let's enforce that timestamp columns can only receive timestamp attributes
+				if ( m_pShare->m_eTableFieldType[j]!=MYSQL_TYPE_TIMESTAMP || m_dAttrs[i].m_uType==SPH_ATTR_TIMESTAMP )
+					m_dAttrs[i].m_iField = j;
 				break;
 			}
 		}
@@ -1856,6 +2044,9 @@ bool ha_sphinx::UnpackSchema ()
 		if ( m_dAttrs[i].m_iField>=0 )
 			m_dUnboundFields [ m_dAttrs[i].m_iField ] = SPH_ATTR_NONE;
 
+	if ( m_bUnpackError )
+		my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), "INTERNAL ERROR: UnpackSchema() failed (unpack error)" );
+
 	SPH_RET(!m_bUnpackError);
 }
 
@@ -1865,8 +2056,24 @@ bool ha_sphinx::UnpackStats ( CSphSEStats * pStats )
 	assert ( pStats );
 
 	char * pCurSave = m_pCur;
-	m_pCur = m_pCur + m_iMatchesTotal*(2+m_bId64+m_iAttrs)*sizeof(uint); // id+weight+attrs
-
+	for ( uint i=0; i<m_iMatchesTotal && m_pCur<m_pResponseEnd-sizeof(uint32); i++ )
+	{
+		m_pCur += m_bId64 ? 12 : 8; // skip id+weight
+		for ( uint32 i=0; i<m_iAttrs && m_pCur<m_pResponseEnd-sizeof(uint32); i++ )
+		{
+			if ( m_dAttrs[i].m_uType & SPH_ATTR_MULTI )
+			{
+				// skip MVA list
+				uint32 uCount = UnpackDword ();
+				m_pCur += uCount*4;
+			} else
+			{
+				// skip normal value
+				m_pCur += 4;
+			}
+		}
+	}
+	
 	pStats->m_iMatchesTotal = UnpackDword ();
 	pStats->m_iMatchesFound = UnpackDword ();
 	pStats->m_iQueryMsec = UnpackDword ();
@@ -1876,7 +2083,9 @@ bool ha_sphinx::UnpackStats ( CSphSEStats * pStats )
 		return false;
 
 	SafeDeleteArray ( pStats->m_dWords );
-	pStats->m_dWords = new CSphSEWordStats [ pStats->m_iWords ]; // !COMMIT not bad-value safe
+	if ( pStats->m_iWords<0 || pStats->m_iWords>=SPHINXSE_MAX_KEYWORDSTATS )
+		return false;
+	pStats->m_dWords = new CSphSEWordStats [ pStats->m_iWords ];
 	if ( !pStats->m_dWords )
 		return false;
 
@@ -2100,10 +2309,7 @@ int ha_sphinx::index_read ( byte * buf, const byte * key, uint key_len, enum ha_
 	}
 
 	if ( !UnpackSchema () )
-	{
-		my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), "INTERNAL ERROR: UnpackSchema() failed" );
 		SPH_RET ( HA_ERR_END_OF_FILE );
-	}
 
 	if ( !UnpackStats ( &pTls->m_tStats ) )
 	{
@@ -2155,9 +2361,9 @@ int ha_sphinx::get_rec ( byte * buf, const byte *, uint )
 	Field ** field = table->field;
 
 	// unpack and return the match
+	longlong uMatchID = UnpackDword ();
 	if ( m_bId64 )
-		UnpackDword (); // FIXME! add full id64 support later here; for now, it ignores high bits
-	uint32 uMatchID = UnpackDword ();
+		uMatchID = ( uMatchID<<32 ) + UnpackDword();
 	uint32 uMatchWeight = UnpackDword ();
 
 	field[0]->store ( uMatchID, 1 );
@@ -2168,16 +2374,64 @@ int ha_sphinx::get_rec ( byte * buf, const byte *, uint )
 	{
 		uint32 uValue = UnpackDword ();
 		if ( m_dAttrs[i].m_iField<0 )
+		{
+			// skip MVA
+			if ( m_dAttrs[i].m_uType & SPH_ATTR_MULTI )
+				for ( ; uValue>0 && !m_bUnpackError; uValue-- )
+					UnpackDword();
 			continue;
+		}
 
 		Field * af = field [ m_dAttrs[i].m_iField ];
-		switch ( m_dAttrs[i].m_eType )
+		switch ( m_dAttrs[i].m_uType )
 		{
-			case SPH_ATTR_INTEGER:		af->store ( uValue, 1 ); break;
-			case SPH_ATTR_TIMESTAMP:	longstore ( af->ptr, uValue ); break;
+			case SPH_ATTR_INTEGER:
+			case SPH_ATTR_ORDINAL:
+			case SPH_ATTR_BOOL:
+				af->store ( uValue, 1 );
+				break;
+
+			case SPH_ATTR_FLOAT:
+				af->store ( sphDW2F(uValue) );
+				break;
+
+			case SPH_ATTR_TIMESTAMP:
+				if ( af->type()==MYSQL_TYPE_TIMESTAMP )
+					longstore ( af->ptr, uValue ); // because store() does not accept timestamps
+				else
+					af->store ( uValue, 1 );
+				break;
+
+			case ( SPH_ATTR_MULTI | SPH_ATTR_INTEGER ):
+				if ( uValue<=0 )
+				{
+					// shortcut, empty MVA set
+					af->store ( "", 0, &my_charset_bin );
+
+				} else
+				{
+					// convert MVA set to comma-separated string
+					char sBuf[1024]; // FIXME! magic size
+					char * pCur = sBuf;
+
+					for ( ; uValue>0 && !m_bUnpackError; uValue-- )
+					{
+						uint32 uEntry = UnpackDword ();
+						if ( pCur < sBuf+sizeof(sBuf)-16 ) // 10 chars per 32bit value plus some safety bytes
+						{
+							sprintf ( pCur, "%u", uEntry );
+							while ( *pCur ) *pCur++;
+							if ( uValue>1 )
+								*pCur++ = ','; // non-trailing commas
+						}
+					}
+
+					af->store ( sBuf, pCur-sBuf, &my_charset_bin );
+				}
+				break;
+
 			default:
-				my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0),
-					"INTERNAL ERROR: unhandled attr type %d", m_dAttrs[i].m_eType );
+				my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), "INTERNAL ERROR: unhandled attr type" );
 				SafeDeleteArray ( m_pResponse );
 				SPH_RET ( HA_ERR_END_OF_FILE ); 
 		}
@@ -2381,24 +2635,16 @@ int ha_sphinx::rename_table ( const char *, const char * )
 // if start_key matches any rows.
 //
 // Called from opt_range.cc by check_quick_keys().
-ha_rows ha_sphinx::records_in_range ( uint, key_range * min_key, key_range * max_key )
+ha_rows ha_sphinx::records_in_range ( uint, key_range *, key_range * )
 {
 	SPH_ENTER_METHOD();
-
-#if SPHINX_DEBUG_OUTPUT
-	String varchar;
-	uint var_length = uint2korr(min_key->key);
-	varchar.set_quick ( (char*)min_key->key+HA_KEY_BLOB_LENGTH, var_length, &my_charset_bin );
-	SPH_DEBUG ( "%s: key_val=%s, key_len=%d", __FUNCTION__, varchar.ptr(), var_length );
-#endif
-
 	SPH_RET(3); // low number to force index usage
 }
 
 
 static inline bool IsIntegerFieldType ( enum_field_types eType )
 {
-	return eType==MYSQL_TYPE_LONG;
+	return eType==MYSQL_TYPE_LONG || eType==MYSQL_TYPE_LONGLONG;
 }
 
 
@@ -2430,13 +2676,13 @@ int ha_sphinx::create ( const char * name, TABLE * table, HA_CREATE_INFO * )
 
 		if ( !IsIntegerFieldType ( table->field[0]->type() ) )
 		{
-			my_snprintf ( sError, sizeof(sError), "%s: 1st column (docid) MUST be integer", name );
+			my_snprintf ( sError, sizeof(sError), "%s: 1st column (docid) MUST be integer or bigint", name );
 			break;
 		}
 
 		if ( !IsIntegerFieldType ( table->field[1]->type() ) )
 		{
-			my_snprintf ( sError, sizeof(sError), "%s: 2nd column (weight) MUST be integer", name );
+			my_snprintf ( sError, sizeof(sError), "%s: 2nd column (weight) MUST be integer or bigint", name );
 			break;
 		}
 
@@ -2453,9 +2699,9 @@ int ha_sphinx::create ( const char * name, TABLE * table, HA_CREATE_INFO * )
 		for ( i=3; i<(int)table->s->fields; i++ )
 		{
 			enum_field_types eType = table->field[i]->type();
-			if ( eType!=MYSQL_TYPE_TIMESTAMP && !IsIntegerFieldType(eType) )
+			if ( eType!=MYSQL_TYPE_TIMESTAMP && !IsIntegerFieldType(eType) && eType!=MYSQL_TYPE_VARCHAR && eType!=MYSQL_TYPE_FLOAT )
 			{
-				my_snprintf ( sError, sizeof(sError), "%s: %dth column (attribute %s) MUST be integer or timestamp",
+				my_snprintf ( sError, sizeof(sError), "%s: %dth column (attribute %s) MUST be integer, bigint, timestamp, varchar, or float",
 					name, i+1, table->field[i]->field_name );
 				break;
 			}

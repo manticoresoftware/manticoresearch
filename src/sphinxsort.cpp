@@ -1659,7 +1659,7 @@ ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchem
 	else
 	{
 		pQuery->m_iPresortRowitems = tSchema.GetRowSize() + iToCalc; // we do not have anything; we'll be adding iToCalc full-rowitem attrs and then groupby attrs
-		iGroupbyAttr = pQuery->m_iPresortRowitems;
+		iGroupbyAttr = tSchema.GetAttrsCount() + iToCalc;
 	}
 
 	// perform fixup

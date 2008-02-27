@@ -343,7 +343,7 @@ bool ParseMultiAttr ( const char * sBuf, CSphColumnInfo & tAttr, const char * sS
 
 	// handle RANGE-QUERY
 	LOC_TEXT();
-	if ( iTokLen )							tAttr.m_sQuery.SetBinary ( sTok, iTokLen );
+	if ( iTokLen )							tAttr.m_sQueryRange.SetBinary ( sTok, iTokLen );
 	else									LOC_ERR ( "range query", sTok );
 
 #undef LOC_ERR

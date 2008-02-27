@@ -1048,7 +1048,8 @@ protected:
 	static const char * const	MACRO_VALUES [ MACRO_COUNT ];
 
 protected:
-	bool					RunQueryStep ( CSphString & sError );
+	bool					SetupRanges ( const char * sRangeQuery, const char * sQuery, const char * sPrefix, CSphString & sError );
+	bool					RunQueryStep ( const char * sQuery, CSphString & sError );
 
 protected:
 	virtual void			SqlDismissResult () = 0;

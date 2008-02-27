@@ -15587,7 +15587,7 @@ bool CSphSource_SQL::Setup ( const CSphSourceParams_SQL & tParams )
 }
 
 
-bool CSphSource_SQL::RunQueryStep ( CSphString & sError )
+bool CSphSource_SQL::RunQueryStep ( const char * sQuery, CSphString & sError )
 {
 	if ( m_tParams.m_iRangeStep<=0 )
 		return false;
@@ -15606,7 +15606,7 @@ bool CSphSource_SQL::RunQueryStep ( CSphString & sError )
 	assert ( m_uMinID>0 );
 	assert ( m_uMaxID>0 );
 	assert ( m_uMinID<=m_uMaxID );
-	assert ( m_tParams.m_sQuery.cstr() );
+	assert ( sQuery );
 
 	char sValues [ MACRO_COUNT ] [ iBufSize ];
 	SphDocID_t uNextID = Min ( m_uCurrentID + m_tParams.m_iRangeStep - 1, m_uMaxID );
@@ -15615,7 +15615,7 @@ bool CSphSource_SQL::RunQueryStep ( CSphString & sError )
 	m_uCurrentID = 1 + uNextID;
 
 	// OPTIMIZE? things can be precalculated
-	const char * sCur = m_tParams.m_sQuery.cstr();
+	const char * sCur = sQuery;
 	int iLen = 0;
 	while ( *sCur )
 	{
@@ -15640,7 +15640,7 @@ bool CSphSource_SQL::RunQueryStep ( CSphString & sError )
 
 	// do interpolation
 	sRes = new char [ iLen ];
-	sCur = m_tParams.m_sQuery.cstr();
+	sCur = sQuery;
 
 	char * sDst = sRes;
 	while ( *sCur )
@@ -15698,7 +15698,71 @@ bool CSphSource_SQL::Connect ( CSphString & sError )
 
 #define LOC_ERROR(_msg,_arg)			{ sError.SetSprintf ( _msg, _arg ); return false; }
 #define LOC_ERROR2(_msg,_arg,_arg2)		{ sError.SetSprintf ( _msg, _arg, _arg2 ); return false; }
-#define LOC_SQL_ERROR(_msg)				{ sSqlError = _msg; break; }
+
+/// setup them ranges (called both for document range-queries and MVA range-queries)
+bool CSphSource_SQL::SetupRanges ( const char * sRangeQuery, const char * sQuery, const char * sPrefix, CSphString & sError )
+{
+	// check step
+	if ( m_tParams.m_iRangeStep<=0 )
+		LOC_ERROR ( "sql_range_step=%d: must be positive", m_tParams.m_iRangeStep );
+
+	if ( m_tParams.m_iRangeStep<128 )
+	{
+		sphWarn ( "sql_range_step=%d: too small; increased to 128", m_tParams.m_iRangeStep );
+		m_tParams.m_iRangeStep = 128;
+	}
+
+	// check query for macros
+	for ( int i=0; i<MACRO_COUNT; i++ )
+		if ( !strstr ( sQuery, MACRO_VALUES[i] ) )
+			LOC_ERROR2 ( "%s: macro '%s' not found in match fetch query", sPrefix, MACRO_VALUES[i] );
+
+	// run query
+	if ( !SqlQuery ( sRangeQuery ) )
+	{
+		sError.SetSprintf ( "%s: range-query failed: %s (DSN=%s)", sPrefix, SqlError(), m_sSqlDSN.cstr() );
+		return false;
+	}
+
+	// fetch min/max
+	int iCols = SqlNumFields ();
+	if ( iCols!=2 )
+		LOC_ERROR2 ( "%s: expected 2 columns (min_id/max_id), got %d", sPrefix, iCols );
+
+	if ( !SqlFetchRow() )
+	{
+		sError.SetSprintf ( "%s: range-query fetch failed: %s (DSN=%s)", sPrefix, SqlError(), m_sSqlDSN.cstr() );
+		return false;
+	}
+
+	if ( SqlColumn(0)==NULL && SqlColumn(1)==NULL )
+	{
+		// the source seems to be empty; workaround
+		m_uMinID = 1;
+		m_uMaxID = 1;
+
+	} else
+	{
+		// get and check min/max id
+		const char * sCol0 = SqlColumn(0);
+		const char * sCol1 = SqlColumn(1);
+		m_uMinID = sphToDocid ( sCol0 );
+		m_uMaxID = sphToDocid ( sCol1 );
+		if ( !sCol0 ) sCol0 = "(null)";
+		if ( !sCol1 ) sCol1 = "(null)";
+
+		if ( m_uMinID<=0 )
+			LOC_ERROR ( "sql_query_range: min_id='%s': must be positive 32/64-bit unsigned integer", sCol0 );
+		if ( m_uMaxID<=0 )
+			LOC_ERROR ( "sql_query_range: max_id='%s': must be positive 32/64-bit unsigned integer", sCol1 );
+		if ( m_uMinID>m_uMaxID )
+			LOC_ERROR2 ( "sql_query_range: min_id='%s', max_id='%s': min_id must be less than max_id", sCol0, sCol1 );
+	}
+
+	SqlDismissResult ();
+	return true;
+}
+
 
 /// issue main rows fetch query
 bool CSphSource_SQL::IterateHitsStart ( CSphString & sError )
@@ -15717,93 +15781,30 @@ bool CSphSource_SQL::IterateHitsStart ( CSphString & sError )
 		SqlDismissResult ();
 	}
 
-	const char * sSqlError = NULL;
 	for ( ;; )
 	{
 		// issue first fetch query
 		if ( !m_tParams.m_sQueryRange.IsEmpty() )
 		{
-			///////////////
-			// range query
-			///////////////
-
-			// check step
-			if ( m_tParams.m_iRangeStep<=0 )
-				LOC_ERROR ( "sql_range_step=%d: must be positive", m_tParams.m_iRangeStep );
-
-			if ( m_tParams.m_iRangeStep<128 )
-			{
-				sphWarn ( "sql_range_step=%d: too small; increased to 128", m_tParams.m_iRangeStep );
-				m_tParams.m_iRangeStep = 128;
-			}
-
-			// check query for macros
-			for ( int i=0; i<MACRO_COUNT; i++ )
-				if ( !strstr ( m_tParams.m_sQuery.cstr(), MACRO_VALUES[i] ) )
-					LOC_ERROR ( "sql_query: macro '%s' not found", MACRO_VALUES[i] );
-
-			// run query
-			if ( !SqlQuery ( m_tParams.m_sQueryRange.cstr() ) )
-				LOC_SQL_ERROR ( "sql_query_range" );
-
-			// fetch min/max
-			int iCols = SqlNumFields ();
-			if ( iCols!=2 )
-				LOC_ERROR ( "sql_query_range: expected 2 columns (min_id/max_id), got %d", iCols );
-
-			if ( !SqlFetchRow() )
-				LOC_SQL_ERROR ( "sql_query_range: fetch_row" );
-
-			if ( SqlColumn(0)==NULL && SqlColumn(1)==NULL )
-			{
-				// the source seems to be empty; workaround
-				m_uMinID = 1;
-				m_uMaxID = 1;
-
-			} else
-			{
-				// get and check min/max id
-				const char * sCol0 = SqlColumn(0);
-				const char * sCol1 = SqlColumn(1);
-				m_uMinID = sphToDocid ( sCol0 );
-				m_uMaxID = sphToDocid ( sCol1 );
-				if ( !sCol0 ) sCol0 = "(null)";
-				if ( !sCol1 ) sCol1 = "(null)";
-
-				if ( m_uMinID<=0 )
-					LOC_ERROR ( "sql_query_range: min_id='%s': must be positive 32-bit unsigned integer", sCol0 );
-				if ( m_uMaxID<=0 )
-					LOC_ERROR ( "sql_query_range: max_id='%s': must be positive 32-bit unsigned integer", sCol1 );
-				if ( m_uMinID>m_uMaxID )
-					LOC_ERROR2 ( "sql_query_range: min_id='%s', max_id='%s': min_id must be less than max_id", sCol0, sCol1 );
-			}
-
-			SqlDismissResult ();
+			// run range-query; setup ranges
+			if ( !SetupRanges ( m_tParams.m_sQueryRange.cstr(), m_tParams.m_sQuery.cstr(), "sql_query_range: ", sError ) )
+				return false;
 
 			// issue query
 			m_uCurrentID = m_uMinID;
-			if ( !RunQueryStep ( sError ) )
+			if ( !RunQueryStep ( m_tParams.m_sQuery.cstr(), sError ) )
 				return false;
-
 		} else
 		{
-			////////////////
-			// normal query
-			////////////////
-
+			// normal query; just issue
 			if ( !SqlQuery ( m_tParams.m_sQuery.cstr() ) )
-				LOC_SQL_ERROR ( "sql_query" );
-
+			{
+				sError.SetSprintf ( "sql_query: %s (DSN=%s)", SqlError(), m_sSqlDSN.cstr() );
+				return false;
+			}
 			m_tParams.m_iRangeStep = 0;
 		}
 		break;
-	}
-
-	// errors, anyone?
-	if ( sSqlError )
-	{
-		sError.SetSprintf ( "%s: %s (DSN=%s)", sSqlError, SqlError(), m_sSqlDSN.cstr() );
-		return false;
 	}
 
 	// some post-query setup
@@ -15943,7 +15944,7 @@ BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 			}
 
 			// maybe we can do next step yet?
-			if ( RunQueryStep ( sError ) )
+			if ( RunQueryStep ( m_tParams.m_sQuery.cstr(), sError ) )
 			{
 				bGotRow = SqlFetchRow ();
 				continue;
@@ -16073,6 +16074,7 @@ bool CSphSource_SQL::IterateMultivaluedStart ( int iAttr, CSphString & sError )
 	if ( !(tAttr.m_eAttrType & SPH_ATTR_MULTI) )
 		return false;
 
+	CSphString sPrefix;
 	switch ( tAttr.m_eSrc )
 	{
 	case SPH_ATTRSRC_FIELD:
@@ -16085,43 +16087,64 @@ bool CSphSource_SQL::IterateMultivaluedStart ( int iAttr, CSphString & sError )
 			sError.SetSprintf ( "multi-valued attr '%s' query failed: %s", tAttr.m_sName.cstr(), SqlError() );
 			return false;
 		}
-		if ( SqlNumFields()!=2 )
-		{
-			sError.SetSprintf ( "multi-valued attr '%s' query returned %d fields (expected 2)", tAttr.m_sName.cstr(), SqlNumFields() );
-			SqlDismissResult ();
-			return false;
-		}
-		return true;
+		break;
 
 	case SPH_ATTRSRC_RANGEDQUERY:
-		// !COMMIT support ranged as well
-		return false;
+			// setup ranges
+			sPrefix.SetSprintf ( "multi-valued attr '%s' ranged query: ", tAttr.m_sName.cstr() );
+			if ( !SetupRanges ( tAttr.m_sQueryRange.cstr(), tAttr.m_sQuery.cstr(), sPrefix.cstr(), sError ) )
+				return false;
+
+			// run first step (in order to report errors)
+			m_uCurrentID = m_uMinID;
+			if ( !RunQueryStep ( tAttr.m_sQuery.cstr(), sError ) )
+				return false;
+
+			break;
 
 	default:
 		sError.SetSprintf ( "INTERNAL ERROR: unknown multi-valued attr source type %d", tAttr.m_eSrc );
 		return false;
 	}
+
+	// check fields count
+	if ( SqlNumFields()!=2 )
+	{
+		sError.SetSprintf ( "multi-valued attr '%s' query returned %d fields (expected 2)", tAttr.m_sName.cstr(), SqlNumFields() );
+		SqlDismissResult ();
+		return false;
+	}
+	return true;
 }
 
 
 bool CSphSource_SQL::IterateMultivaluedNext ()
 {
+	const CSphColumnInfo & tAttr = m_tSchema.GetAttr(m_iMultiAttr);
+
 	assert ( m_bSqlConnected );
-	assert ( m_tSchema.GetAttr(m_iMultiAttr).m_eAttrType & SPH_ATTR_MULTI );
+	assert ( tAttr.m_eAttrType & SPH_ATTR_MULTI );
 
 	// fetch next row
 	bool bGotRow = SqlFetchRow ();
 	while ( !bGotRow )
 	{
 		if ( SqlIsError() )
-			sphDie ( "sql_fetch_row: %s", SqlError() );
+			sphDie ( "sql_fetch_row: %s", SqlError() ); // FIXME! this should be reported
 
-		// !COMMIT run next ranged step here
-		return false;
+		if ( tAttr.m_eSrc!=SPH_ATTRSRC_RANGEDQUERY )
+			return false;
+
+		CSphString sTmp;
+		if ( !RunQueryStep ( tAttr.m_sQuery.cstr(), sTmp ) ) // FIXME! this should be reported
+			return false;
+
+		bGotRow = SqlFetchRow ();
+		continue;
 	}
 
 	// return that tuple
-	int iRowitem = m_tSchema.GetAttr(m_iMultiAttr).m_iRowitem;
+	int iRowitem = tAttr.m_iRowitem;
 	m_tDocInfo.m_iDocID = sphToDocid ( SqlColumn(0) );
 	m_tDocInfo.SetAttr ( iRowitem, sphToDword ( SqlColumn(1) ) );
 	return true;

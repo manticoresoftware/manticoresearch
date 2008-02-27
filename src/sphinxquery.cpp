@@ -1187,6 +1187,9 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 		// block start
 		if ( iSpecial=='(' )
 		{
+			if ( dState.Last()==XQS_PHRASE )
+				continue; // ignore parens within quotes
+
 			if ( dState.Last()!=XQS_TEXT && dState.Last()!=XQS_NEGTEXT )
 				return Error ( "INTERNAL ERROR: '(' in unexpected state %d", dState.Last() );
 
@@ -1205,6 +1208,9 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 		// block end
 		if ( iSpecial==')' )
 		{
+			if ( dState.Last()==XQS_PHRASE )
+				continue; // ignore parens within quotes
+
 			if ( dState.Last()!=XQS_TEXT )
 				return Error ( "INTERNAL ERROR: ')' in unexpected state %d", dState.Last() );
 

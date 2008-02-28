@@ -1188,7 +1188,7 @@ public:
 		}
 	}
 
-	void GetDoclistEntryOnly ()
+	void GetDoclistEntryOnly ( CSphRowitem * pDocinfo )
 	{
 		SphDocID_t iDeltaDoc = m_rdDoclist.UnzipDocid ();
 		if ( iDeltaDoc )
@@ -1198,7 +1198,7 @@ public:
 			m_tDoc.m_iDocID += iDeltaDoc;
 
 			for ( int i=0; i<m_iInlineAttrs; i++ )
-				m_tDoc.m_pRowitems[i] = m_rdDoclist.UnzipInt () + m_pInlineFixup[i];
+				pDocinfo[i] = m_rdDoclist.UnzipInt () + m_pInlineFixup[i];
 
 			SphOffset_t iDeltaPos = m_rdDoclist.UnzipOffset ();
 			assert ( iDeltaPos>0 );
@@ -10092,10 +10092,11 @@ bool CSphIndex_VLN::MatchExtendedV1 ( const CSphQuery * pQuery, CSphQueryResult 
 /// match in the stream
 struct ExtDoc_t
 {
-	SphDocID_t	m_uDocid;
-	SphOffset_t	m_uHitlistOffset;
-	DWORD		m_uFields;
-	float		m_fTFIDF;
+	SphDocID_t		m_uDocid;
+	CSphRowitem *	m_pDocinfo;			///< for inline storage only
+	SphOffset_t		m_uHitlistOffset;
+	DWORD			m_uFields;
+	float			m_fTFIDF;
 };
 
 
@@ -10165,6 +10166,7 @@ class ExtTerm_c : public ExtNode_i
 {
 public:
 								ExtTerm_c ( const CSphString & sTerm, DWORD uFields, const CSphTermSetup & tSetup, DWORD uQuerypos, CSphString * pWarning );
+								~ExtTerm_c ();
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
 	virtual void				GetQwords ( ExtQwordsHash_t & hQwords );
@@ -10179,6 +10181,8 @@ protected:
 	float						m_fIDF;			///< IDF for this term (might be 0.0f for non-1st occurences in query)
 	DWORD						m_uMaxStamp;	///< work until this timestamp 
 	CSphString *				m_pWarning;
+	int							m_iStride;		///< docinfo stride (for inline mode only)
+	CSphRowitem *				m_pDocinfo;		///< docinfo storage (for inline mode only)
 };
 
 
@@ -10319,6 +10323,7 @@ public:
 	CSphMatch					m_dMatches[ExtNode_i::MAX_DOCS];
 
 protected:
+	int							m_iInlineRowitems;
 	ExtNode_i *					m_pRoot;
 	const ExtDoc_t *			m_pDoclist;
 	const ExtHit_t *			m_pHitlist;
@@ -10405,6 +10410,20 @@ ExtTerm_c::ExtTerm_c ( const CSphString & sTerm, DWORD uFields, const CSphTermSe
 	m_uHitsOverFor = 0;
 	m_uFields = uFields;
 	m_uMaxStamp = tSetup.m_uMaxStamp;
+
+	m_iStride = 0;
+	m_pDocinfo = NULL;
+	if ( tSetup.m_eDocinfo==SPH_DOCINFO_INLINE )
+	{
+		m_iStride = tSetup.m_tMin.m_iRowitems;
+		m_pDocinfo = new CSphRowitem [ MAX_DOCS*m_iStride ];
+	}
+}
+
+
+ExtTerm_c::~ExtTerm_c ()
+{
+	SafeDeleteArray ( m_pDocinfo );
 }
 
 
@@ -10424,9 +10443,10 @@ const ExtDoc_t * ExtTerm_c::GetDocsChunk ( SphDocID_t * pMaxID )
 	}
 
 	int iDoc = 0;
+	CSphRowitem * pDocinfo = m_pDocinfo;
 	while ( iDoc<MAX_DOCS-1 )
 	{
-		m_tQword.GetDoclistEntryOnly();
+		m_tQword.GetDoclistEntryOnly ( pDocinfo );
 		if ( !m_tQword.m_tDoc.m_iDocID )
 		{
 			m_tQword.m_iDocs = 0;
@@ -10437,9 +10457,11 @@ const ExtDoc_t * ExtTerm_c::GetDocsChunk ( SphDocID_t * pMaxID )
 
 		ExtDoc_t & tDoc = m_dDocs[iDoc++];
 		tDoc.m_uDocid = m_tQword.m_tDoc.m_iDocID;
+		tDoc.m_pDocinfo = pDocinfo;
 		tDoc.m_uHitlistOffset = m_tQword.m_iHitlistPos;
 		tDoc.m_uFields = m_tQword.m_uFields; // OPTIMIZE: only needed for phrase node
 		tDoc.m_fTFIDF = float(m_tQword.m_uMatchHits) / float(m_tQword.m_uMatchHits+SPH_BM25_K1) * m_fIDF;
+		pDocinfo += m_iStride;
 	}
 
 	m_pHitDoc = NULL;
@@ -10646,6 +10668,7 @@ const ExtDoc_t * ExtAnd_c::GetDocsChunk ( SphDocID_t * pMaxID )
 			// emit it
 			ExtDoc_t & tDoc = m_dDocs[iDoc++];	
 			tDoc.m_uDocid = pCur0->m_uDocid;
+			tDoc.m_pDocinfo = pCur0->m_pDocinfo;
 			tDoc.m_uFields = pCur0->m_uFields | pCur1->m_uFields;
 			tDoc.m_uHitlistOffset = -1;
 			tDoc.m_fTFIDF = pCur0->m_fTFIDF + pCur1->m_fTFIDF;
@@ -11113,6 +11136,7 @@ const ExtDoc_t * ExtPhrase_c::GetDocsChunk ( SphDocID_t * pMaxID )
 					assert ( pDoc->m_uDocid==pHit->m_uDocid );
 
 					m_dDocs[iDoc].m_uDocid = pHit->m_uDocid;
+					m_dDocs[iDoc].m_pDocinfo = pDoc->m_pDocinfo;
 					m_dDocs[iDoc].m_uFields = ( 1UL<<(pHit->m_uHitpos>>24) );
 					m_dDocs[iDoc].m_uHitlistOffset = -1;
 					m_dDocs[iDoc].m_fTFIDF = pDoc->m_fTFIDF;
@@ -11510,6 +11534,7 @@ const ExtDoc_t * ExtProximity_c::GetDocsChunk ( SphDocID_t * pMaxID )
 				assert ( pDoc->m_uDocid==pHit->m_uDocid );
 
 				m_dDocs[iDoc].m_uDocid = pHit->m_uDocid;
+				m_dDocs[iDoc].m_pDocinfo = pDoc->m_pDocinfo;
 				m_dDocs[iDoc].m_uFields = ( 1UL<<(pHit->m_uHitpos>>24) );
 				m_dDocs[iDoc].m_uHitlistOffset = -1;
 				m_dDocs[iDoc].m_fTFIDF = pDoc->m_fTFIDF;
@@ -11755,6 +11780,7 @@ const ExtHit_t * ExtQuorum_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t 
 
 ExtRanker_c::ExtRanker_c ( const CSphExtendedQueryNode * pAccept, const CSphExtendedQueryNode * pReject, const CSphTermSetup & tSetup, CSphString * pWarning )
 {
+	m_iInlineRowitems = ( tSetup.m_eDocinfo==SPH_DOCINFO_INLINE ) ? tSetup.m_tMin.m_iRowitems : 0;
 	for ( int i=0; i<ExtNode_i::MAX_DOCS; i++ )
 		m_dMatches[i].Reset ( tSetup.m_tMin.m_iRowitems + tSetup.m_iToCalc );
 
@@ -11803,6 +11829,7 @@ int ExtRanker_ProximityBM25_c::GetMatches ( int iFields, const int * pWeights )
 	// main matching loop
 	const ExtDoc_t * pDoc = pDocs;
 	float uCurTFIDF = 0.0f;
+	CSphRowitem * pCurDocinfo = NULL;
 
 	for ( SphDocID_t uCurDocid=0; iMatches<ExtNode_i::MAX_DOCS; )
 	{
@@ -11832,6 +11859,8 @@ int ExtRanker_ProximityBM25_c::GetMatches ( int iFields, const int * pWeights )
 				}
 				m_dMatches[iMatches].m_iDocID = uCurDocid;
 				m_dMatches[iMatches].m_iWeight = uRank*SPH_BM25_SCALE + int( (uCurTFIDF+0.5f)*SPH_BM25_SCALE );
+				if ( pCurDocinfo )
+					memcpy ( m_dMatches[iMatches].m_pRowitems, pCurDocinfo, m_iInlineRowitems*sizeof(CSphRowitem) );
 				iMatches++;
 				iExpDelta = -1;
 			}
@@ -11859,6 +11888,7 @@ int ExtRanker_ProximityBM25_c::GetMatches ( int iFields, const int * pWeights )
 
 			uCurDocid = pHlist->m_uDocid;
 			uCurTFIDF = pDoc->m_fTFIDF;
+			pCurDocinfo = pDoc->m_pDocinfo;
 
 			continue; // we might had flushed the match; need to check the limit
 		}

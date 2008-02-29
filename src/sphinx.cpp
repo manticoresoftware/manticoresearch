@@ -2069,6 +2069,8 @@ class CSphTokenizerTraits : public ISphTokenizer
 public:
 	CSphTokenizerTraits ();
 
+	virtual const BYTE *	GetTokenStart () const;
+	virtual const BYTE *	GetTokenEnd () const;
 	virtual const BYTE *	GetBufferPtr () const;
 	virtual const BYTE *	GetBufferEnd () const;
 	virtual void			AdvanceBufferPtr ( int iOffset );
@@ -2120,6 +2122,8 @@ protected:
 	BYTE *				m_pBuffer;							///< my buffer
 	BYTE *				m_pBufferMax;						///< max buffer ptr, exclusive (ie. this ptr is invalid, but every ptr below is ok)
 	BYTE *				m_pCur;								///< current position
+	BYTE *				m_pTokenStart;						///< last token start point
+	BYTE *				m_pTokenEnd;						///< last token end point
 
 	BYTE				m_sAccum [ 3*SPH_MAX_WORD_LEN+3 ];	///< folded token accumulator
 	BYTE *				m_pAccum;							///< current accumulator position
@@ -2614,7 +2618,7 @@ bool CSphCharsetDefinitionParser::Parse ( const char * sConfig, CSphVector<CSphR
 /////////////////////////////////////////////////////////////////////////////
 
 /// check if the code is whitespace
-inline bool sphIsSpace ( int iCode )
+bool sphIsSpace ( int iCode )
 {
 	return iCode==' ' || iCode=='\t' || iCode=='\n' || iCode=='\r';
 }
@@ -2694,7 +2698,7 @@ inline int sphUTF8Encode ( BYTE * pBuf, int iCode )
 }
 
 
-static int sphUTF8Len ( const char * pStr )
+int sphUTF8Len ( const char * pStr )
 {
 	BYTE * pBuf = (BYTE*) pStr;
 	int iRes = 0, iCode;
@@ -3000,9 +3004,23 @@ CSphTokenizerTraits<IS_UTF8>::CSphTokenizerTraits ()
 	: m_pBuffer		( NULL )
 	, m_pBufferMax	( NULL )
 	, m_pCur		( NULL )
+	, m_pTokenStart ( NULL )
+	, m_pTokenEnd	( NULL )
 	, m_iAccum		( 0 )
 {
 	m_pAccum = m_sAccum;
+}
+
+template < bool IS_UTF8 >
+const BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenStart () const
+{
+	return m_pTokenStart;
+}
+
+template < bool IS_UTF8 >
+const BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenEnd () const
+{
+	return m_pTokenEnd;
 }
 
 template < bool IS_UTF8 >
@@ -3093,6 +3111,7 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 	assert ( m_dSynonyms.GetLength() );
 
 	bool bEscaped = m_bEscaped;
+	BYTE * pCur;
 
 	m_bTokenBoundary = false;
 	for ( ;; )
@@ -3118,7 +3137,7 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 		for ( ;; )
 		{
 			// store current position (to be able to restart from it on folded boundary)
-			BYTE * pCur = m_pCur;
+			pCur = m_pCur;
 
 			// get next codepoint
 			int iCode = GetCodepoint();
@@ -3173,6 +3192,8 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 				*m_pAccum = '\0';
 
 				m_iLastTokenLen = 1;
+				m_pTokenStart = pCur;
+				m_pTokenEnd = m_pCur;
 				return m_sAccum;
 			}
 
@@ -3188,9 +3209,14 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 				{
 					if ( m_iAccum )
 						pFirstSeparator = pCur;
+				}
+				else
+				{
+					if ( m_iAccum == 0 )
+						m_pTokenStart = pCur;
 
-				} else
 					AccumCodepoint ( iFolded & MASK_CODEPOINT );
+				}
 			}
 
 			// accumulate next raw synonym symbol to refine
@@ -3224,6 +3250,7 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 			// refine synonyms range
 			#define LOC_RETURN_SYNONYM(_idx) \
 			{ \
+				m_pTokenEnd = pCur; \
 				strcpy ( (char*)m_sAccum, m_dSynonyms[_idx].m_sTo.cstr() ); \
 				m_iLastTokenLen = m_dSynonyms[_idx].m_iToLen; \
 				return m_sAccum; \
@@ -3369,7 +3396,7 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 			// if there was none, scan until found
 			for ( ;; )
 			{
-				BYTE * pCur = m_pCur;
+				pCur = m_pCur;
 				int iCode = *pCur;
 				int iFolded = m_tLC.ToLower ( GetCodepoint() );
 				if ( iFolded<0 )
@@ -3402,6 +3429,7 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 		{
 			// if there was, token is ready but we should restart from that separator
 			m_pCur = pFirstSeparator;
+			pCur = m_pCur;
 		}
 
 		// return accumulated token
@@ -3414,6 +3442,7 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 
 		*m_pAccum = '\0';
 		m_iLastTokenLen = m_iAccum;
+		m_pTokenEnd = pCur;
 		return m_sAccum;
 	}
 }
@@ -3543,6 +3572,7 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 	bool bEscaped = m_bEscaped;
 	int iCodepoint = 0;
 	int iLastCodepoint = 0;
+	BYTE * pCur = m_pCur;
 	m_bTokenBoundary = false;
 	for ( ;; )
 	{
@@ -3550,6 +3580,7 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 		int iCode = 0;
 		if ( m_pCur>=m_pBufferMax )
 		{
+			pCur = m_pCur;
 			if ( m_iAccum<m_iMinWordLen )
 			{
 				m_bBoundary = m_bTokenBoundary = false;
@@ -3559,6 +3590,7 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 			}
 		} else
 		{
+			pCur = m_pCur;
 			iCodepoint = *m_pCur++;
 			iCode = m_tLC.ToLower ( iCodepoint );
 		}
@@ -3597,6 +3629,7 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 			m_iLastTokenLen = m_iAccum;
 			m_sAccum[m_iAccum] = '\0';
 			m_iAccum = 0;
+			m_pTokenEnd = pCur >= m_pBufferMax ? m_pCur : pCur;
 			return m_sAccum;
 		}
 
@@ -3617,22 +3650,25 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 					m_iOvershortCount++;
 			}
 
+			m_pTokenEnd = m_pCur;
+
 			if ( m_iAccum==0 )
 			{
 				// nice standalone special
 				m_iLastTokenLen = 1;
 				m_sAccum[0] = (BYTE)iCode;
 				m_sAccum[1] = '\0';
-
+				m_pTokenStart = pCur;
 				m_bWasSpecial = true;
-			} else
+			}
+			else
 			{
 				// flush prev accum and redo this special
 				m_iLastTokenLen = m_iAccum;
 				m_sAccum[m_iAccum] = '\0';
 				m_pCur--;
 			}
-
+			
 			m_iAccum = 0;
 			return m_sAccum;
 		}
@@ -3640,7 +3676,12 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 		// just accumulate
 		assert ( iCode>0 );
 		if ( m_iAccum<SPH_MAX_WORD_LEN )
+		{
+			if ( m_iAccum == 0 )
+				m_pTokenStart = pCur;
+
 			m_sAccum[m_iAccum++] = (BYTE)iCode;
+		}
 	}
 }
 
@@ -3711,6 +3752,7 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 			}
 
 			// return trailing word
+			m_pTokenEnd = m_pCur;
 			return m_sAccum;
 		}
 
@@ -3743,8 +3785,12 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 				if ( m_iLastTokenLen )
 					m_iOvershortCount++;
 				continue;
-			} else
+			}
+			else
+			{
+				m_pTokenEnd = pCur;
 				return m_sAccum;
+			}
 		}
 
 		// handle specials
@@ -3764,18 +3810,23 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 				FlushAccum ();
 			}
 
+			m_pTokenEnd = m_pCur;
+
 			if ( m_iAccum==0 )
 			{
 				m_bWasSpecial = true;
+				m_pTokenStart = pCur;
 				AccumCodepoint ( iCode ); // handle special as a standalone token
-			} else
-			{
-				m_pCur = pCur; // we need to flush current accum and then redo special char again
 			}
+			else
+				m_pCur = pCur; // we need to flush current accum and then redo special char again
 
 			FlushAccum ();
 			return m_sAccum;
 		}
+
+		if ( m_iAccum==0 )
+			m_pTokenStart = pCur;
 
 		// just accumulate
 		AccumCodepoint ( iCode );

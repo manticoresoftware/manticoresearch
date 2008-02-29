@@ -216,6 +216,9 @@ void sphUnalignedWrite ( void * pPtr, const T & tVal )
 
 #endif
 
+int sphUTF8Len ( const char * pStr );
+bool sphIsSpace ( int iCode );
+
 /////////////////////////////////////////////////////////////////////////////
 // TOKENIZERS
 /////////////////////////////////////////////////////////////////////////////
@@ -405,6 +408,12 @@ public:
 
 	/// SBCS or UTF-8?
 	virtual bool					IsUtf8 () const = 0;
+
+	/// start buffer point of last token
+	virtual const BYTE *			GetTokenStart () const = 0;
+
+	/// end buffer point of last token
+	virtual const BYTE *			GetTokenEnd () const = 0;
 
 	/// current buffer ptr
 	virtual const BYTE *			GetBufferPtr () const = 0;

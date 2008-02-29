@@ -142,6 +142,7 @@ class SphinxConfig
 	private $_queries;
 	private $_query_settings;
 	private $_query_attributes;
+	private $_custom_test;
 	private	$_sd_address;
 	private	$_sd_port;
 	private	$_sd_pid_file;
@@ -169,6 +170,7 @@ class SphinxConfig
 		$this->_sd_address		= $sd_address;
 		$this->_sd_port			= $sd_port;
 		$this->_sd_pid_file		= $sd_pid_file;
+		$this->_custom_test		= "";
 	}
 
 	
@@ -179,6 +181,8 @@ class SphinxConfig
 	function DB_Create ()			{ return $this->_db_create; }
 	function DB_Insert ()			{ return $this->_db_insert; }
 	function NumAgents ()			{ return $this->_num_agents; }
+	function IsQueryTest ()			{ return strlen ( $this->_custom_test ) == 0;	}
+
 
 
 	function CreateNextConfig ()
@@ -252,7 +256,14 @@ class SphinxConfig
 
 		return TRUE;
 	}
-
+	
+	
+	function WriteCustomTestResults ( $fp )
+	{
+		$res_fmt = $this->FormatResultSet ( 0, $this->_results );
+		fwrite ( $fp, $res_fmt );
+	}
+     
 
 	function GatherEntities ( $node, &$array )
 	{
@@ -291,6 +302,10 @@ class SphinxConfig
 		$xml = $xml->childNodes->item(0);
 		if ( strtolower($xml->nodeName)!="test" )
 			return false;
+
+		$custom = GetFirstChild ( $xml, "custom_test" );
+		if ( $custom )
+			$this->_custom_test = $custom->nodeValue;
 
 		// extract queries
 		$qs = GetFirstChild ( $xml, "queries" );
@@ -429,6 +444,29 @@ class SphinxConfig
 		return TRUE;
 	}
 
+	
+	function RunCustomTest ( & $error )
+	{
+		global $sd_address, $sd_port;
+
+		$cl = new SphinxClient ();
+		$cl->SetServer ( $sd_address, $sd_port );
+
+		$results = 0;
+		$run_func = create_function( '$client, &$results', $this->_custom_test );
+		$run_func ( $cl, $results ); 
+
+		$my_results = array ();
+		$my_results [] = $results;
+
+		$this->_results = $my_results;
+
+		if ( IsModelGenMode () )
+			array_push ( $this->_results_model, $my_results );
+
+		return TRUE;
+	}
+
 
 	function LoadModel ( $filename )
 	{
@@ -495,6 +533,9 @@ class SphinxConfig
 
 	function FormatResultSet ( $nquery, $result )
 	{
+		if ( !$this->IsQueryTest () )
+			return var_export ( $result, true )."\n";
+
 		$qinfo = $this->_queries[$nquery-1];
 		$str = "--- Query $nquery (mode=$qinfo[mode_s]) ---\n";
 		$str .= "Query '$result[query]': retrieved $result[total_found] of $result[total] matches in $result[time] sec.\n";
@@ -583,9 +624,14 @@ class SphinxConfig
 	/// write all the result sets
     function WriteResults ( $fp )
     {
-        $nquery = 1;
-        foreach ( $this->_results as $result )
-			$this->WriteQuery ( $fp, $nquery++, $result );
+		if ( $this->IsQueryTest () )
+		{
+	        $nquery = 1;
+	        foreach ( $this->_results as $result )
+				$this->WriteQuery ( $fp, $nquery++, $result );
+		}
+		else
+			$this->WriteCustomTestResults ( $fp );
 	}
 
 	/// write difference from the reference result sets
@@ -808,6 +854,7 @@ function RunTest ( $test_dir )
 		{
 			if ( !HandleFailure ( $config, $report, $error, $nfailed ) )
 				$log .= "\tsubtest $subtest: error running indexer; see $report_file\n";
+
 			continue;
 
 		} else if ( $indexer_ret==2 )
@@ -864,12 +911,24 @@ function RunTest ( $test_dir )
 		if ( $searchd_error )
 			continue;
 
-		$error = "";
-		if ( ! $config->RunQuery ( "*", $error ) )
+		if ( $config->IsQueryTest () )
 		{
-			if ( !HandleFailure ( $config, $report, "$error\n", $nfailed ) )
-				$log .= "\tsubtest $subtest: query error: $error\n";
-			continue;
+			$error = "";
+			if ( ! $config->RunQuery ( "*", $error ) )
+			{
+				if ( !HandleFailure ( $config, $report, "$error\n", $nfailed ) )
+					$log .= "\tsubtest $subtest: query error: $error\n";
+				continue;
+			}
+		}
+		else
+		{
+			if ( ! $config->RunCustomTest ( $error ) )
+			{
+				if ( !HandleFailure ( $config, $report, "$error\n", $nfailed ) )
+					$log .= "\tsubtest $subtest: query error: $error\n";
+				continue;
+			}
 		}
 
 		$mismatch = ( !IsModelGenMode() && !$config->CompareToModel() );
@@ -880,6 +939,7 @@ function RunTest ( $test_dir )
 		}
 
 		$config->WriteResults ( $report );
+
 		if ( $mismatch )
 		{
 			fwrite ( $report, "SUBTEST FAILED, RESULTS ARE DIFFERENT FROM THE REFERENCE:\n\n" );

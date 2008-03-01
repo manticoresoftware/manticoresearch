@@ -4840,7 +4840,7 @@ void ServiceInstall ( int argc, char ** argv )
 		g_sServiceName,					// name of service 
 		g_sServiceName,					// service name to display 
 		SERVICE_ALL_ACCESS,				// desired access 
-		SERVICE_WIN32_OWN_PROCESS | SERVICE_INTERACTIVE_PROCESS,		// service type 
+		SERVICE_WIN32_OWN_PROCESS,		// service type 
 		SERVICE_AUTO_START,				// start type 
 		SERVICE_ERROR_NORMAL,			// error control type 
 		szPath,							// path to service's binary 
@@ -4940,7 +4940,8 @@ void ShowHelp ()
 #if USE_WINDOWS
 BOOL WINAPI CtrlHandler ( DWORD )
 {
-	g_bGotSigterm = true;
+	if ( !g_bService )
+		g_bGotSigterm = true;
 	return TRUE;
 }
 #endif
@@ -4958,7 +4959,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		if ( !g_ssHandle )
 			sphFatal ( "failed to start service: RegisterServiceCtrlHandler() failed: %s", WinErrorInfo() );
 
-		g_ss.dwServiceType = SERVICE_WIN32_OWN_PROCESS | SERVICE_INTERACTIVE_PROCESS;
+		g_ss.dwServiceType = SERVICE_WIN32_OWN_PROCESS;
 		MySetServiceStatus ( SERVICE_START_PENDING, NO_ERROR, 4000 );
 
 		if ( argc<=1 )

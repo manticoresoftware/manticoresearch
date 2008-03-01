@@ -166,6 +166,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "max_matches",			0, NULL },
 	{ "seamless_rotate",		0, NULL },
 	{ "preopen_indexes",		0, NULL },
+	{ "unlink_old",				0, NULL },
 	{ NULL,						0, NULL }
 };
 

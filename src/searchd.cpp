@@ -114,6 +114,7 @@ static int				g_iReadTimeout	= 5;	// sec
 static int				g_iChildren		= 0;
 static int				g_iMaxChildren	= 0;
 static bool				g_bPreopenIndexes = false;
+static bool				g_bUnlinkOld	= true;
 static int				g_iSocket		= 0;
 static int				g_iQueryLogFile	= -1;
 static CSphString		g_sQueryLogFile;
@@ -4203,6 +4204,15 @@ void RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 			sphWarning ( "rotating index '%s': %s", sIndex, sWarning.cstr() );
 	}
 
+	// unlink .old
+	if ( g_bUnlinkOld )
+		for ( int i=0; i<EXT_COUNT; i++ )
+		{
+			snprintf ( sFile, sizeof(sFile), "%s%s", sPath, dOld[i] );
+			if ( ::unlink ( sFile ) )
+				sphWarning ( "rotating index '%s': unable to unlink '%s': %s", sIndex, sFile, strerror(errno) );
+		}
+
 	// uff. all done
 	tIndex.m_pSchema = pNewSchema;
 	tIndex.m_bEnabled = true;
@@ -4572,6 +4582,22 @@ void CheckPipes ()
 						Swap ( tServed.m_pIndex, g_pPrereading );
 						tServed.m_pSchema = tServed.m_pIndex->GetSchema ();
 						tServed.m_bEnabled = true;
+
+						// unlink .old
+						if ( g_bUnlinkOld )
+						{
+							const int EXT_COUNT = 6;
+							const char * dExt [EXT_COUNT] = { ".sph", ".spa", ".spi", ".spd", ".spp", ".spm" };
+							char sFile [ SPH_MAX_FILENAME_LEN ];
+
+							for ( int i=0; i<EXT_COUNT; i++ )
+							{
+								snprintf ( sFile, sizeof(sFile), "%s%s", sOld, dExt[i] );
+								if ( ::unlink ( sFile ) )
+									sphWarning ( "rotating index '%s': unable to unlink '%s': %s", sPrereading, sFile, strerror(errno) );
+							}
+						}
+
 						sphInfo ( "rotating index '%s': success", sPrereading );
 					}
 				}
@@ -5178,6 +5204,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		g_iMaxChildren = hSearchd["max_children"].intval();
 
 	g_bPreopenIndexes = hSearchd.GetInt ( "preopen_indexes", (int)g_bPreopenIndexes ) != 0;
+	g_bUnlinkOld = hSearchd.GetInt ( "unlink_old", (int)g_bUnlinkOld ) != 0;
 
 	if ( hSearchd("max_matches") )
 	{

@@ -27,6 +27,11 @@ inline int sphIsAlpha ( int c )
 	return ( c>='0' && c<='9' ) || ( c>='a' && c<='z' ) || ( c>='A' && c<='Z' ) || c=='-' || c=='_';
 }
 
+inline bool sphIsSpace ( int iCode )
+{
+	return iCode==' ' || iCode=='\t' || iCode=='\n' || iCode=='\r';
+}
+
 /////////////////////////////////////////////////////////////////////////////
 
 /// string hash function
@@ -77,7 +82,7 @@ public:
 
 public:
 					CSphConfigParser ();
-	bool			Parse ( const char * sFile );
+	bool			Parse ( const char * sFileName, const char * pBuffer = NULL );
 
 protected:
 	CSphString		m_sFileName;
@@ -95,6 +100,11 @@ protected:
 	bool			AddSection ( const char * sType, const char * sSection );
 	void			AddKey ( const char * sKey, char * sValue );
 	bool			ValidateKey ( const char * sKey );
+
+#if !USE_WINDOWS
+	bool			TryToExec ( char * pBuffer, char * pEnd, const char * szFilename, CSphVector<char> & dResult );
+#endif
+	char *			GetBufferString ( char * szDest, int iMax, const char * & szSource );
 };
 
 /////////////////////////////////////////////////////////////////////////////

@@ -217,7 +217,6 @@ void sphUnalignedWrite ( void * pPtr, const T & tVal )
 #endif
 
 int sphUTF8Len ( const char * pStr );
-bool sphIsSpace ( int iCode );
 
 /////////////////////////////////////////////////////////////////////////////
 // TOKENIZERS

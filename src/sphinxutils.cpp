@@ -18,9 +18,12 @@
 #include "sphinxutils.h"
 #include <ctype.h>
 #include <fcntl.h>
+#include <errno.h>
 
 #if USE_WINDOWS
-#include <io.h> // for ::open on windows
+	#include <io.h> // for ::open on windows
+#else
+	#include <sys/wait.h>
 #endif
 
 /////////////////////////////////////////////////////////////////////////////
@@ -290,17 +293,138 @@ bool CSphConfigParser::ValidateKey ( const char * sKey )
 	return true;
 }
 
+#if !USE_WINDOWS
+static void sigchld ( int )
+{
+}
 
-bool CSphConfigParser::Parse ( const char * sFileName )
+
+bool CSphConfigParser::TryToExec ( char * pBuffer, char * pEnd, const char * szFilename, CSphVector<char> & dResult )
+{
+	int dPipe[2] = { -1, -1 };
+
+	if ( pipe ( dPipe ) )
+	{
+		snprintf ( m_sError, sizeof ( m_sError ), "pipe() failed (error=%s)", strerror(errno) );
+		return false;
+	}
+
+	pBuffer = trim ( pBuffer );
+
+	int iRead  = dPipe [0];
+	int iWrite = dPipe [1];
+
+	signal ( SIGCHLD, sigchld );
+
+	int iChild = fork();
+
+	if ( iChild == 0 )
+	{
+		close ( iRead );
+		close ( STDOUT_FILENO );
+		dup2 ( iWrite, STDOUT_FILENO );
+
+		char * pPtr = pBuffer;
+		char * pArgs = NULL;
+		while ( *pPtr )
+		{
+			if ( sphIsSpace ( *pPtr ) )
+			{
+				*pPtr = '\0';
+				pArgs = trim ( pPtr+1 );
+				break;
+			}
+
+			pPtr++;
+		}
+		
+		if ( pArgs )
+			execl ( pBuffer, pBuffer, pArgs, szFilename, NULL );
+		else
+			execl ( pBuffer, pBuffer, szFilename, NULL );
+
+		exit ( 1 );
+	}
+	else
+		if ( iChild == -1 )
+		{
+			snprintf ( m_sError, sizeof ( m_sError ), "fork failed (error=%s)", strerror(errno) );
+			return false;
+		}
+
+	close ( iWrite );
+
+	int iBytesRead, iTotalRead = 0;
+	const int BUFFER_SIZE = 65536;
+	
+	dResult.Reset ();
+
+	do
+	{
+		dResult.Resize ( iTotalRead + BUFFER_SIZE );
+		iBytesRead = read ( iRead, (void*)&(dResult [iTotalRead]), BUFFER_SIZE );
+		iTotalRead += iBytesRead;
+	}
+	while ( iBytesRead > 0 );
+
+	int iStatus;
+	wait ( &iStatus );
+	iStatus = (signed char) WEXITSTATUS (iStatus);
+
+	if ( iStatus )
+	{
+		snprintf ( m_sError, sizeof ( m_sError ), "error executing '%s'", pBuffer );
+		return false;
+	}
+
+	if ( iBytesRead < 0  )
+	{
+		snprintf ( m_sError, sizeof ( m_sError ), "pipe read error (error=%s)", strerror(errno) );
+		return false;
+	}
+
+	dResult.Resize ( iTotalRead + 1 );
+	dResult [iTotalRead] = '\0';
+
+	return true;
+}
+#endif
+
+
+char * CSphConfigParser::GetBufferString ( char * szDest, int iMax, const char * & szSource )
+{
+	int nCopied = 0;
+
+	while ( nCopied < iMax-1 && szSource [nCopied] && ( nCopied == 0 || szSource [nCopied-1] != '\n' ) )
+	{
+		szDest [nCopied] = szSource [nCopied];
+		nCopied++;
+	}
+
+	if ( !nCopied )
+		return NULL;
+
+	szSource += nCopied;
+	szDest [nCopied] = '\0';
+
+	return szDest;
+}
+
+
+bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 {
 	const int L_STEPBACK	= 16;
 	const int L_TOKEN		= 64;
 	const int L_BUFFER		= 8192;
 
-	// open file
-	FILE * fp = fopen ( sFileName, "rb" );
-	if ( !fp )
-		return false;
+	FILE * fp = NULL;
+	if ( !pBuffer )
+	{
+		// open file
+		fp = fopen ( sFileName, "rb" );
+		if ( !fp )
+			return false;
+	}
 
 	// init parser
 	m_sFileName = sFileName;
@@ -311,6 +435,7 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 	char * pEnd = NULL;
 
 	char sBuf [ L_BUFFER ];
+
 	char sToken [ L_TOKEN ];
 	int iToken = 0;
 	int iCh = -1;
@@ -332,12 +457,14 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 
 	m_sError[0] = '\0';
 
+	bool bFirstChars = !pBuffer;
 	for ( ; ; p++ )
 	{
 		// if this line is over, load next line
 		if ( p>=pEnd )
 		{
-			if ( !fgets ( sBuf, L_BUFFER, fp ) )
+			char * szResult = pBuffer ? GetBufferString ( sBuf, L_BUFFER, pBuffer ) : fgets ( sBuf, L_BUFFER, fp );
+			if ( !szResult )
 				break; // FIXME! check for read error
 
 			m_iLine++;
@@ -354,11 +481,38 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 			}
 		}
 
+#if !USE_WINDOWS
+		bool bWasFirstChar = bFirstChars;
+#endif
+		bFirstChars = false;
+
 		// handle S_TOP state
 		if ( eState==S_TOP )
 		{
 			if ( isspace(*p) )				continue;
-			if ( *p=='#' )					{ LOC_PUSH ( S_SKIP2NL ); continue; }
+
+			if ( *p=='#' )
+			{
+#if !USE_WINDOWS
+				if ( bWasFirstChar )
+				{
+					if ( *(p+1) == '!' )
+					{
+						CSphVector<char> dResult;
+						if ( TryToExec ( p+2, pEnd, sFileName, dResult ) )
+							Parse ( sFileName, &dResult [0] );
+
+						break;
+					}
+				}
+				else
+#endif
+				{
+					LOC_PUSH ( S_SKIP2NL );
+					continue;
+				}
+			}
+
 			if ( !sphIsAlpha(*p) )			LOC_ERROR ( "invalid token" );
 											iToken = 0; LOC_PUSH ( S_TYPE ); LOC_PUSH ( S_TOK ); LOC_BACK(); continue;
 		}
@@ -492,7 +646,9 @@ bool CSphConfigParser::Parse ( const char * sFileName )
 	#undef LOC_PUSH
 	#undef LOC_ERROR
 
-	fclose ( fp );
+	if ( !pBuffer )
+		fclose ( fp );
+
 	SafeDeleteArray ( sValue );
 
 	if ( m_iWarnings>WARNS_THRESH )

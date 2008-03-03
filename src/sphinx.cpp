@@ -2617,13 +2617,6 @@ bool CSphCharsetDefinitionParser::Parse ( const char * sConfig, CSphVector<CSphR
 
 /////////////////////////////////////////////////////////////////////////////
 
-/// check if the code is whitespace
-bool sphIsSpace ( int iCode )
-{
-	return iCode==' ' || iCode=='\t' || iCode=='\n' || iCode=='\r';
-}
-
-
 /// UTF-8 decode codepoint
 /// advances buffer ptr in all cases but end of buffer
 ///

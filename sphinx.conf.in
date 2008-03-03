@@ -255,13 +255,13 @@ index test1
 	# wordforms			= @CONFDIR@/data/wordforms.txt
 
 
-	# tokenizing exceptions ("synonyms") file
+	# tokenizing exceptions file
 	# optional, default is empty
 	#
 	# plain text, case sensitive, space insensitive in map-from part
 	# one "Map Several Words => ToASingleOne" entry per line
 	#
-	# synonyms 			= @CONFDIR@/data/synonyms.txt
+	# exceptions		= @CONFDIR@/data/exceptions.txt
 
 
 	# minimum indexed word length
@@ -479,6 +479,10 @@ searchd
 	# whether to forcibly preopen all indexes on startup
 	# optional, default is 0 (do not preopen)
 	preopen_indexes		= 0
+
+	# whether to unlink .old index copies on succesful rotation.
+	# optional, default is 1 (do unlink)
+	unlink_old			= 1
 }
 
 # --eof--

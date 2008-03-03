@@ -3599,9 +3599,9 @@ wordforms = /usr/local/sphinx/data/wordforms.txt
 </sect3>
 
 
-<sect3 id="conf-synonyms"><title>synonyms</title>
+<sect3 id="conf-exceptions"><title>exceptions</title>
 <para>
-Tokenizing exceptions ("synonyms") file.
+Tokenizing exceptions file.
 Optional, default is empty.
 </para>
 <para>
@@ -3614,14 +3614,14 @@ differences.
 <para>
 Short summary of the differences is as follows:
 <itemizedlist>
-<listitem>synonyms are case sensitive, wordforms are not;</listitem>
-<listitem>synonyms allow to detect sequences of tokens, wordforms work with single words only;</listitem>
-<listitem>synonyms can use special characters that are <b>not</b> in charset_table, wordforms fully obey charset_table;</listitem>
-<listitem>synonyms can underperform on huge dictionaries, wordforms handle millions of entries well.</listitem>
+<listitem>exceptions are case sensitive, wordforms are not;</listitem>
+<listitem>exceptions allow to detect sequences of tokens, wordforms work with single words only;</listitem>
+<listitem>exceptions can use special characters that are <b>not</b> in charset_table, wordforms fully obey charset_table;</listitem>
+<listitem>exceptions can underperform on huge dictionaries, wordforms handle millions of entries well.</listitem>
 </itemizedlist>
 </para>
 <para>
-The expected file format is also plain text, with one line per synonym,
+The expected file format is also plain text, with one line per exception,
 and the line format is as follows:
 <programlisting>
 map-from-tokens => map-to-token
@@ -3640,7 +3640,7 @@ C plus plus => cplusplus
 </programlisting>
 All tokens here are case sensitive: they will <b>not</b> be processed by
 <link linkend="conf-charset-table">charset_table</link> rules. Thus, with
-the example synonyms file above, "At&amp;t" text will be tokenized as two
+the example exceptions file above, "At&amp;t" text will be tokenized as two
 keywords "at" and "t", because of lowercase letters. On the other hand,
 "AT&amp;T" will match exactly and produce single "AT&amp;T" keyword.
 </para>
@@ -3684,7 +3684,7 @@ changes in the file it's required to reindex and restart
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
-synonyms = /usr/local/sphinx/data/synonyms.txt
+exceptions = /usr/local/sphinx/data/exceptions.txt
 </programlisting>
 </sect3>
 
@@ -4652,6 +4652,18 @@ to avoid manually specifying it in every index.
 <bridgehead>Example:</bridgehead>
 <programlisting>
 preopen_indexes = 1
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-unlink-old"><title>unlink_old</title>
+<para>
+Whether to unlink .old index copies on succesful rotation.
+Optional, default is 1 (do unlink).
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+unlink_old = 0
 </programlisting>
 </sect3>
 

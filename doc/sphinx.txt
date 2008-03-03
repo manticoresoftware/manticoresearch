@@ -140,7 +140,7 @@ Table of Contents
       8.2.6. morphology
       8.2.7. stopwords
       8.2.8. wordforms
-      8.2.9. synonyms
+      8.2.9. exceptions
       8.2.10. min_word_len
       8.2.11. charset_type
       8.2.12. charset_table
@@ -179,6 +179,7 @@ Table of Contents
       8.4.8. max_matches
       8.4.9. seamless_rotate
       8.4.10. preopen_indexes
+      8.4.11. unlink_old
 
 A. Sphinx revision history
 
@@ -3207,10 +3208,10 @@ Example:
 
    | wordforms = /usr/local/sphinx/data/wordforms.txt
 
-8.2.9. synonyms
----------------
+8.2.9. exceptions
+-----------------
 
-Tokenizing exceptions ("synonyms") file. Optional, default is empty.
+Tokenizing exceptions file. Optional, default is empty.
 
 Exceptions allow to map one or more tokens (including tokens with
 characters that would normally be excluded) to a single keyword. They are
@@ -3219,16 +3220,16 @@ of important differences.
 
 Short summary of the differences is as follows:
 
-   * synonyms are case sensitive, wordforms are not;
-   * synonyms allow to detect sequences of tokens, wordforms work with
+   * exceptions are case sensitive, wordforms are not;
+   * exceptions allow to detect sequences of tokens, wordforms work with
      single words only;
-   * synonyms can use special characters that are not in charset_table,
+   * exceptions can use special characters that are not in charset_table,
      wordforms fully obey charset_table;
-   * synonyms can underperform on huge dictionaries, wordforms handle
+   * exceptions can underperform on huge dictionaries, wordforms handle
      millions of entries well.
 
-The expected file format is also plain text, with one line per synonym, and
-the line format is as follows:
+The expected file format is also plain text, with one line per exception,
+and the line format is as follows:
 
    | map-from-tokens => map-to-token
 
@@ -3245,7 +3246,7 @@ Example file:
    | C plus plus => cplusplus
 
 All tokens here are case sensitive: they will not be processed by
-charset_table rules. Thus, with the example synonyms file above, "At&t"
+charset_table rules. Thus, with the example exceptions file above, "At&t"
 text will be tokenized as two keywords "at" and "t", because of lowercase
 letters. On the other hand, "AT&T" will match exactly and produce single
 "AT&T" keyword.
@@ -3283,7 +3284,7 @@ file it's required to reindex and restart searchd.
 
 Example:
 
-   | synonyms = /usr/local/sphinx/data/synonyms.txt
+   | exceptions = /usr/local/sphinx/data/exceptions.txt
 
 8.2.10. min_word_len
 --------------------
@@ -4071,6 +4072,16 @@ avoid manually specifying it in every index.
 Example:
 
    | preopen_indexes = 1
+
+8.4.11. unlink_old
+------------------
+
+Whether to unlink .old index copies on succesful rotation. Optional,
+default is 1 (do unlink).
+
+Example:
+
+   | unlink_old = 0
 
 A. Sphinx revision history
 ==========================

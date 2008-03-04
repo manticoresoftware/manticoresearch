@@ -7321,35 +7321,40 @@ static bool CopyFile( const char * sSrc, const char * sDst, CSphString & sErrStr
 	SphOffset_t iFileSize = tSrcFile.GetSize();
 	DWORD 		iBufSize = (DWORD) Min( iFileSize, (SphOffset_t)iMaxBufSize );
 	
-	BYTE * pData = new BYTE[iBufSize];
-	
-	if ( !pData )
+	if ( iFileSize )
 	{
-		sErrStr.SetSprintf ( "memory allocation error" );
-		return false;
+		BYTE * pData = new BYTE[iBufSize];
+		
+		if ( !pData )
+		{
+			sErrStr.SetSprintf ( "memory allocation error" );
+			return false;
+		}
+		
+		bool bError = true;
+		
+		while( iFileSize > 0 )
+		{
+			DWORD iSize = (DWORD) Min( iFileSize, (SphOffset_t)iBufSize );
+			
+			if ( !tSrcFile.Read( pData, iSize, sErrStr ) )
+				break;
+			
+			if ( !sphWriteThrottled( tDstFile.GetFD(), pData, iSize, "CopyFile", sErrStr ) )
+				break;
+			
+			iFileSize -= iSize;
+			
+			if ( !iFileSize )
+				bError = false;
+		}
+		
+		SafeDeleteArray( pData );
+		
+		return ( bError == false );
 	}
 	
-	bool bError = true;
-	
-	while( iFileSize > 0 )
-	{
-		DWORD iSize = (DWORD) Min( iFileSize, (SphOffset_t)iBufSize );
-		
-		if ( !tSrcFile.Read( pData, iSize, sErrStr ) )
-			break;
-		
-		if ( !sphWriteThrottled( tDstFile.GetFD(), pData, iSize, "CopyFile", sErrStr ) )
-			break;
-		
-		iFileSize -= iSize;
-		
-		if ( !iFileSize )
-			bError = false;
-	}
-	
-	SafeDeleteArray( pData );
-	
-	return ( bError == false );	
+	return true;
 }
 
 bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
@@ -7376,9 +7381,10 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 	}
 	 
 	// FIXME!
-	if (!( m_eDocinfo==pSrcIndex->m_eDocinfo || !m_tStats.m_iTotalDocuments || !pSrcIndex->m_tStats.m_iTotalDocuments ))
+	if ( m_eDocinfo!=pSrcIndex->m_eDocinfo && !( !m_tStats.m_iTotalDocuments || !pSrcIndex->m_tStats.m_iTotalDocuments ) )
 	{
-		m_sLastError.SetSprintf ( "docinfo storage must be the same" );
+		m_sLastError.SetSprintf ( "docinfo storage on non-empty indexes  must be the same (dst docinfo %d, docs %d, src docinfo %d, docs %d",
+				m_eDocinfo, m_tStats.m_iTotalDocuments, pSrcIndex->m_eDocinfo, pSrcIndex->m_tStats.m_iTotalDocuments );
 		return false;
 	}
 
@@ -7518,7 +7524,7 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 		CSphAutofile fdSpa ( GetIndexFileName("spa.tmp"), SPH_O_NEW, m_sLastError );
 		fdSpa.Close();
 	}
-
+	
 	/////////////////
 	/// merging .spd
 	/////////////////

@@ -1708,6 +1708,9 @@ public:
 	virtual bool				Merge ( CSphIndex * pSource, CSphPurgeData & tPurgeData ) = 0;
 
 public:
+	/// dump human-readable header info to given file
+	virtual void				DumpHeader ( FILE * fp, const char * sHeaderName ) = 0;
+
 	/// check all data files, preload schema, and preallocate enough shared RAM to load memory-cached data
 	virtual const CSphSchema *	Prealloc ( bool bMlock, CSphString * sWarning ) = 0;
 

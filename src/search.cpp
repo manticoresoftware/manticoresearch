@@ -38,6 +38,13 @@ const char * myctime ( DWORD uStamp )
 }
 
 
+void DumpHeader ( const char * sHeaderName )
+{
+	CSphIndex * pIndex = sphCreateIndexPhrase ( "", false, false );
+	pIndex->DumpHeader ( stdout, sHeaderName );
+}
+
+
 int main ( int argc, char ** argv )
 {
 	fprintf ( stdout, SPHINX_BANNER );
@@ -117,6 +124,7 @@ int main ( int argc, char ** argv )
 			OPT ( "-gs","--groupsort" )	{ tQuery.m_sGroupSortBy = argv[++i]; }
 			OPT ( "-s", "--sortby" )	{ tQuery.m_eSort = SPH_SORT_EXTENDED; tQuery.m_sSortBy = argv[++i]; }
 			OPT ( "-S", "--sortexpr" )	{ tQuery.m_eSort = SPH_SORT_EXPR; tQuery.m_sSortBy = argv[++i]; }
+			OPT1 ( "--dumpheader" )		{ DumpHeader ( argv[++i] ); exit ( 0 ); } // my secret option
 
 			else if ( (i+2)>=argc )		break;
 			OPT ( "-f", "--filter" )

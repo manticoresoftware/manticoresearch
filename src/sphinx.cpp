@@ -7376,7 +7376,7 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 	}
 	 
 	// FIXME!
-	if ( m_eDocinfo!=pSrcIndex->m_eDocinfo && !( m_eDocinfo == SPH_DOCINFO_EXTERN && !pSrcIndex->m_tStats.m_iTotalDocuments ) )
+	if (!( m_eDocinfo==pSrcIndex->m_eDocinfo || !m_tStats.m_iTotalDocuments || !pSrcIndex->m_tStats.m_iTotalDocuments ))
 	{
 		m_sLastError.SetSprintf ( "docinfo storage must be the same" );
 		return false;
@@ -7502,21 +7502,23 @@ bool CSphIndex_VLN::Merge( CSphIndex * pSource, CSphPurgeData & tPurgeData )
 				}
 			}
 		}
-	}
-	else if ( m_eDocinfo == SPH_DOCINFO_EXTERN && pSrcIndex->m_eDocinfo == SPH_DOCINFO_INLINE && !pSrcIndex->m_tStats.m_iTotalDocuments )
+
+	} else if ( !m_tStats.m_iTotalDocuments || !pSrcIndex->m_tStats.m_iTotalDocuments )
 	{
-		CSphString	sSrc = GetIndexFileName("spa");
-		CSphString	sDst = GetIndexFileName("spa.tmp");
-		
-		if ( !CopyFile( sSrc.cstr(), sDst.cstr(), m_sLastError ) )
+		// one of the indexes has no documents; copy the .spa file from the other one
+		CSphString sSrc = m_tStats.m_iTotalDocuments ? GetIndexFileName("spa") : pSrcIndex->GetIndexFileName("spa");
+		CSphString sDst = GetIndexFileName("spa.tmp");
+
+		if ( !CopyFile ( sSrc.cstr(), sDst.cstr(), m_sLastError ) )
 			return false;
-	} 
-	else
+
+	} else
 	{
+		// storage is not extern; create dummy .spa file
 		CSphAutofile fdSpa ( GetIndexFileName("spa.tmp"), SPH_O_NEW, m_sLastError );
 		fdSpa.Close();
 	}
-	
+
 	/////////////////
 	/// merging .spd
 	/////////////////

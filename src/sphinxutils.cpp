@@ -457,7 +457,6 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 
 	m_sError[0] = '\0';
 
-	bool bFirstChars = !pBuffer;
 	for ( ; ; p++ )
 	{
 		// if this line is over, load next line
@@ -481,11 +480,6 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 			}
 		}
 
-#if !USE_WINDOWS
-		bool bWasFirstChar = bFirstChars;
-#endif
-		bFirstChars = false;
-
 		// handle S_TOP state
 		if ( eState==S_TOP )
 		{
@@ -494,18 +488,13 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 			if ( *p=='#' )
 			{
 #if !USE_WINDOWS
-				if ( bWasFirstChar )
+				if ( !pBuffer && p==pBuffer && p[1]=='!' )
 				{
-					if ( *(p+1) == '!' )
-					{
-						CSphVector<char> dResult;
-						if ( TryToExec ( p+2, pEnd, sFileName, dResult ) )
-							Parse ( sFileName, &dResult [0] );
-
-						break;
-					}
-				}
-				else
+					CSphVector<char> dResult;
+					if ( TryToExec ( p+2, pEnd, sFileName, dResult ) )
+						Parse ( sFileName, &dResult [0] );
+					break;
+				} else
 #endif
 				{
 					LOC_PUSH ( S_SKIP2NL );

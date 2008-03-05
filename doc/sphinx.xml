@@ -466,7 +466,7 @@ Currently supported attribute types are:
 <listitem>UNIX timestamps;</listitem>
 <listitem>floating point values (32-bit, IEEE 754 single precision);</listitem>
 <listitem>string ordinals (specially computed integers);</listitem>
-<listitem>MVA, multi-value attributes (variable-length lists of 32-bit unsigned integers).</listitem>
+<listitem><link linkend="mva">MVA</link>, multi-value attributes (variable-length lists of 32-bit unsigned integers).</listitem>
 </itemizedlist>
 </para>
 <para>
@@ -499,6 +499,46 @@ This is <emphasis>PER DAEMON</emphasis>, not per query. <filename>searchd</filen
 will allocate 160 MB on startup, read the data and keep it shared between queries.
 The children will <emphasis>NOT</emphasis> allocate any additional
 copies of this data.
+</para>
+</sect2>
+
+
+<sect2 id="mva"><title>MVA (multi-valued attributes)</title>
+<para>
+MVAs, or multi-valued attributes, are an important special type of per-document attributes in Sphinx.
+MVAs make it possible to attach lists of values to every document.
+They are useful for article tags, product categories, etc.
+Filtering and group-by (but not sorting) on MVA attributes is supported.
+</para>
+<para>
+Currently, MVA list entries are limited to unsigned 32-bit integers.
+The list length is not limited, you can have an arbitrary number of values
+attached to each document as long as RAM permits (<filename>.spm</filename> file
+that contains the MVA values will be precached in RAM by <filename>searchd</filename>).
+The source data can be taken either from a separate query, or from a document field;
+see source type in <link linkend="conf-sql-attr-multi">sql_attr_multi</link>.
+In the first case the query will have to return pairs of document ID and MVA values,
+in the second one the field will be parsed for integer values.
+There are absolutely no requirements as to incoming data order; the values will be
+automatically grouped by document ID (and internally sorted within the same ID)
+during indexing anyway.
+</para>
+<para>
+When filtering, a document will match the filter on MVA attribute
+if <emphasis>any</emphasis> of the values satisfy the filtering condition.
+(Therefore, documents that pass through exclude filters will not
+contain any of the forbidden values.)
+When grouping by MVA attribute, a document will contribute to as
+many groups as there are different MVA values associated with that document.
+For instance, if the collection contains exactly 1 document having a 'tag' MVA
+with values 5, 7, and 11, grouping on 'tag' will produce 3 groups with
+'@count' equal to 1 and '@groupby' key values of 5, 7, and 11 respectively.
+Also note that grouping by MVA might lead to duplicate documents in the result set:
+because each document can participate in many groups, it can be chosen as the best
+one in in more than one group, leading to duplicate IDs. PHP API historically
+uses ordered hash on the document ID for the resulting rows; so you'll also need to use
+<link linkend="api-func-setarrayresult">SetArrayResult()</link> in order
+to employ group-by on MVA with PHP API.
 </para>
 </sect2>
 
@@ -911,6 +951,36 @@ index delta : main
 </sect2>
 
 
+<sect2 id="index-merging"><title>Index merging</title>
+<para>
+Merging two existing indexes can be more efficient that indexing the data
+from scratch, and desired in some cases (such as merging 'main' and 'delta'
+indexes instead of simply reindexing 'main' in 'main+delta' partitioning
+scheme). So <filename>indexer</filename> has an option to do that.
+Merging the indexes is normally faster than reindexing but still
+<emphasis>not</emphasis> instant on huge indexes. Basically,
+it will need to read the contents of both indexes once and write
+the result once. Merging 100 GB and 1 GB index, for example,
+will result in 202 GB of IO (but that's still likely less than
+the indexing from scratch requires).
+</para>
+<para>
+The command syntax is as follows:
+<programlisting>
+indexer --merge DSTINDEX SRCINDEX [--rotate]
+</programlisting>
+Only the DSTINDEX index will be affected: the contents of SRCINDEX will be merged into it.
+<option>--rotate</option> switch will be required if DSTINDEX is already being served by <filename>searchd</filename>.
+The initially devised usage pattern is to merge a smaller update from SRCINDEX into DSTINDEX.
+Thus, when merging the attributes, values from SRCINDEX will win if duplicate document IDs are encountered.
+Note, however, that the "old" keywords will <emphasis>not</emphasis> be automatically removed in such cases.
+For example, if there's a keyword "old" associated with document 123 in DSTINDEX, and a keyword "new" associated
+with it in SRCINDEX, document 123 will be found by <emphasis>both</emphasis> keywords after the merge.
+You can supply an explicit condition to remove documents from DSTINDEX to mitigate that.
+</para>
+</sect2>
+
+
 </sect1>
 <sect1 id="searching"><title>Searching</title>
 
@@ -931,6 +1001,16 @@ There are the following matching modes available:
 <listitem>SPH_MATCH_BOOLEAN, matches query as a boolean expression (see <xref linkend="boolean-syntax"/>);</listitem>
 <listitem>SPH_MATCH_EXTENDED, matches query as an expression in Sphinx internal query language (see <xref linkend="extended-syntax"/>).</listitem>
 </itemizedlist>
+</para>
+<para>
+There also is a special "full scan" mode that will be automatically activated when the following conditions are met:
+<orderedlist>
+<listitem>The query string is empty (ie. its length is zero).</listitem>
+<listitem><link linkend="conf-docinfo">docinfo</link> storage is set to <code>extern</code>.</listitem>
+</orderedlist>
+In full scan mode, all the indexed documents will be considered as matching.
+Such queries will still apply filters, sorting, or group by, but will not perform any real full-text searching.
+This can be useful to unify full-text and non-full-text searching code, or to offload SQL server (there are cases when Sphinx scans will perform better than analogous MySQL queries).
 </para>
 </sect2>
 
@@ -976,7 +1056,7 @@ evaluating such queries could take very long.
 
 <sect2 id="extended-syntax"><title>Extended query syntax</title>
 <para>
-Extended queries allow the following special operators to be used:
+The following special operators can be used when using the extended matching mode:
 <itemizedlist>
 <listitem>operator OR: <programlisting>hello | world</programlisting></listitem>
 <listitem>operator NOT:
@@ -988,9 +1068,10 @@ hello !world
 <listitem>field search operator: <programlisting>@title hello @body world</programlisting></listitem>
 <listitem>phrase search operator: <programlisting>"hello world"</programlisting></listitem>
 <listitem>proximity search operator: <programlisting>"hello world"~10</programlisting></listitem>
+<listitem>quorum matching operator: <programlisting>"the world is a wonderful place"/3</programlisting></listitem>
 </itemizedlist>
 
-Here's an example query which uses all these operators:
+Here's an example query which uses most of these operators:
 <example id="ex-extended-query"><title>Extended query example</title>
 <programlisting>
 "hello world" @title "example program"~5 @body python -(php|perl)
@@ -1012,6 +1093,12 @@ applies to all words within quotes. For instance, "cat dog mouse"~5 query
 means that there must be less than 8-word span which contains all 3 words,
 ie. "CAT aaa bbb ccc DOG eee fff MOUSE" document will <emphasis>not</emphasis>
 match this query, because this span is exactly 8 words long.
+</para>
+<para>
+Quorum matching operator introduces a kind of fuzzy matching.
+It will only match those documents that pass a given threshold of given words.
+The example above ("the world is a wonderful place"/3) will match all documents
+that have at least 3 of the 6 specified words.
 </para>
 <para>
 Nested brackets, as in queries like
@@ -1096,16 +1183,23 @@ which is commonly used in other search engines).
 <para>
 There are the following result sorting modes available:
 <itemizedlist>
-<listitem>SPH_SORT_RELEVANCE, sorts by relevance in descending order (best matches first);</listitem>
-<listitem>SPH_SORT_ATTR_DESC, sorts by attribute in descending order (bigger attribute values first);</listitem>
-<listitem>SPH_SORT_ATTR_ASC, sorts by attribute in ascending order (smaller attribute values first);</listitem>
-<listitem>SPH_SORT_TIME_SEGMENTS, sorts by time segments (last hour/day/week/month) in descending order, and then by relevance in descending order;</listitem>
-<listitem>SPH_SORT_EXTENDED, sorts by SQL-like expression.</listitem>
+<listitem>SPH_SORT_RELEVANCE mode, that sorts by relevance in descending order (best matches first);</listitem>
+<listitem>SPH_SORT_ATTR_DESC mode, that sorts by an attribute in descending order (bigger attribute values first);</listitem>
+<listitem>SPH_SORT_ATTR_ASC mode, that sorts by an attribute in ascending order (smaller attribute values first);</listitem>
+<listitem>SPH_SORT_TIME_SEGMENTS mode, that sorts by time segments (last hour/day/week/month) in descending order, and then by relevance in descending order;</listitem>
+<listitem>SPH_SORT_EXTENDED mode, that sorts by SQL-like combination of columns in ASC/DESC order;</listitem>
+<listitem>SPH_SORT_EXPR mode, that sorts by an arithmetic expression.</listitem>
 </itemizedlist>
 </para>
 <para>
-SPH_SORT_ATTR_ASC, SPH_SORT_ATTR_DESC and SPH_SORT_TIME_SEGMENTS modes
-require an attribute to sort by to be specified.
+SPH_SORT_RELEVANCE ignores any additional parameters and always sorts matches
+by relevance rank. All other modes require an additional sorting clause, with the
+syntax depending on specific mode. SPH_SORT_ATTR_ASC, SPH_SORT_ATTR_DESC and
+SPH_SORT_TIME_SEGMENTS modes require simply an attribute name.
+
+SPH_SORT_RELEVANCE is equivalent to sorting by "@weight DESC, @id ASC" in extended mode,
+SPH_SORT_ATTR_ASC is equivalent to "attribute ASC, @weight DESC, @id ASC",
+and SPH_SORT_ATTR_DESC to "attribute DESC, @weight DESC, @id ASC" respectively.
 </para>
 
 <bridgehead>SPH_SORT_TIME_SEGMENTS mode</bridgehead>
@@ -1137,28 +1231,76 @@ into account at all.
 
 <bridgehead id="sort-extended">SPH_SORT_EXTENDED mode</bridgehead>
 <para>
-In SPH_SORT_EXTENDED mode, you would specify an SQL-like sort
-expression to sort by:
+In SPH_SORT_EXTENDED mode, you can specify an SQL-like sort expression
+with up to 5 attributes (including internal attributes), eg:
 <programlisting>
 @relevance DESC, price ASC, @id DESC
 </programlisting>
 </para>
 <para>
-Both internal attributes (their names start with @) and externally
-specified user attributes (their names are as is) can be allowed.
-In the example above, <option>@relevance</option> and <option>@id</option>
-are internal attributes and <option>price</option> is user-speficied.
+Both internal attributes (that are computed by the engine on the fly)
+and user attributes that were configured for this index are allowed.
+Internal attribute names must start with magic @-symbol; user attribute
+names can be used as is. In the example above, <option>@relevance</option>
+and <option>@id</option> are internal attributes and <option>price</option> is user-specified.
 </para>
 <para>
 Known internal attributes are:
 <itemizedlist>
 <listitem>@id (match ID)</listitem>
-<listitem>@rank (match weight)</listitem>
 <listitem>@weight (match weight)</listitem>
+<listitem>@rank (match weight)</listitem>
 <listitem>@relevance (match weight)</listitem>
 </itemizedlist>
-<option>@rank</option>, <option>@weight</option> and <option>@relevance</option>
-are just aliases; there's no actual difference between them.
+<option>@rank</option> and <option>@relevance</option> are just additional
+aliases to <option>@weight</option>.
+</para>
+
+<bridgehead id="sort-expr">SPH_SORT_EXPR mode</bridgehead>
+<para>
+Expression sorting mode lets you sort the matches by an arbitrary arithmetic
+expression, involving attribute values, internal attributes (@id and @weight),
+arithmetic operations, and a number of built-in functions. Here's an example:
+<programlisting>
+$cl->SetSortMode ( SPH_SORT_EXPR,
+	"@weight + ( user_karma + ln(pageviews) )*0.1" );
+</programlisting>
+</para>
+<para>
+The following operators and functions are supported. They are mimiced after MySQL.
+The functions take a number of arguments depending on the specific function.
+<itemizedlist>
+<listitem>Operators: +, -, *, /, &lt;, &gt; &lt;=, &gt;=, =, &lt;&gt;.</listitem>
+<listitem>Unary (1-argument) functions: abs(), ceil(), floor(), sin(), cos(), ln(), log2(), log10(), exp(), sqrt().</listitem>
+<listitem>Binary (2-argument) functions: min(), max(), pow().</listitem>
+<listitem>Ternary (3-argument) functions: if().</listitem>
+</itemizedlist>
+</para>
+<para>
+All calculations are performed in single-precision, 32-bit IEEE 754 floating point format.
+Comparison operators (eg. = or &lt;=) return 1.0 when the condition is true and 0.0 otherwise.
+For instance, <code>(a=b)+3</code> will evaluate to 4 when attribute 'a' is equal to attribute 'b', and to 3 when 'a' is not.
+Unlike MySQL, the equality comparisons (ie. = and &lt;&gt; operators) introduce a small equality threshold (1e-6 by default).
+If the difference between compared values is within the threshold, they will be considered equal.
+</para>
+<para>
+All unary and binary functions are straightforward, they behave just like their mathematical counterparts.
+But <code>IF()</code> behavior needs to be explained in more detail.
+It takes 3 arguments, check whether the 1st argument is equal to 0.0, returns the 2nd argument if it is not zero, or the 3rd one when it is.
+Note that unlike comparison operators, <code>IF()</code> does <b>not</b> use a threshold!
+Therefore, it's safe to use comparison results as its 1st argument, but arithmetic operators might produce unexpected results.
+For instance, the following two calls will produce <emphasis>different</emphasis> results even though they are logically equivalent:
+<programlisting>
+IF ( sqrt(3)*sqrt(3)-3&lt;&gt;0, a, b )
+IF ( sqrt(3)*sqrt(3)-3, a, b )
+</programlisting>
+In the first case, the comparison operator &lt;&gt; will return 0.0 (false)
+because of a threshold, and <code>IF()</code> will always return 'b' as a result.
+In the second one, the same <code>sqrt(3)*sqrt(3)-3</code> expression will be compared
+with zero <emphasis>without</emphasis> threshold by the <code>IF()</code> function itself.
+But its value will be slightly different from zero because of limited floating point
+calculations precision. Because of that, the comparison with 0.0 done by <code>IF()</code>
+will not pass, and the second variant will return 'a' as a result.
 </para>
 </sect2>
 
@@ -1469,7 +1611,7 @@ and the threshold amount of matches to stop searching at (<code>$cutoff</code>).
 All parameters must be non-negative integers.
 </para>
 <para>
-First two parameters to SetLimits() are identical in behaviour to MySQL
+First two parameters to SetLimits() are identical in behavior to MySQL
 LIMIT clause. They instruct <filename>searchd</filename> to return at
 most <code>$limit</code> matches starting from match number <code>$offset</code>.
 The default offset and limit settings are 0 and 20, that is, to return
@@ -3028,8 +3170,8 @@ sql_attr_float = long_radians
 
 <sect3 id="conf-sql-attr-multi"><title>sql_attr_multi</title>
 <para>
-Multi-valued <link linkend="attributes">attribute</link> (MVA) declaration.
-Multi-value (there might be multiple attributes declared), optional.
+<link linkend="mva">Multi-valued attribute</link> (MVA) declaration.
+Multi-value (ie. there may be more than one such attribute declared), optional.
 Applies to SQL source types (<option>mysql</option> and <option>pgsql</option>) only.
 </para>
 <para>

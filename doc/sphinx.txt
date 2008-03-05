@@ -28,13 +28,15 @@ Table of Contents
 3. Indexing
    3.1. Data sources
    3.2. Attributes
-   3.3. Indexes
-   3.4. Restrictions on the source data
-   3.5. Charsets, case folding, and translation tables
-   3.6. SQL data sources (MySQL, PostgreSQL)
-   3.7. xmlpipe data source
-   3.8. xmlpipe2 data source
-   3.9. Live index updates
+   3.3. MVA (multi-valued attributes)
+   3.4. Indexes
+   3.5. Restrictions on the source data
+   3.6. Charsets, case folding, and translation tables
+   3.7. SQL data sources (MySQL, PostgreSQL)
+   3.8. xmlpipe data source
+   3.9. xmlpipe2 data source
+   3.10. Live index updates
+   3.11. Index merging
 
 4. Searching
    4.1. Matching modes
@@ -506,7 +508,7 @@ At the time of this writing, there are drivers for MySQL and PostgreSQL
 databases, which can connect to the database using its native C/C++ API,
 run queries and fetch the data. There's also a driver called xmlpipe, which
 runs a specified command and reads the data from its stdout. See
-Section 3.7, <<xmlpipe data source>> section for the format description.
+Section 3.8, <<xmlpipe data source>> section for the format description.
 
 There can be as many sources per index as necessary. They will be
 sequentially processed in the very same order which was specifed in index
@@ -603,7 +605,42 @@ PER DAEMON, not per query. searchd will allocate 160 MB on startup, read
 the data and keep it shared between queries. The children will NOT allocate
 any additional copies of this data.
 
-3.3. Indexes
+3.3. MVA (multi-valued attributes)
+----------------------------------
+
+MVAs, or multi-valued attributes, are an important special type of
+per-document attributes in Sphinx. MVAs make it possible to attach lists of
+values to every document. They are useful for article tags, product
+categories, etc. Filtering and group-by (but not sorting) on MVA attributes
+is supported.
+
+Currently, MVA list entries are limited to unsigned 32-bit integers. The
+list length is not limited, you can have an arbitrary number of values
+attached to each document as long as RAM permits (.spm file that contains
+the MVA values will be precached in RAM by searchd). The source data can be
+taken either from a separate query, or from a document field; see source
+type in sql_attr_multi. In the first case the query will have to return
+pairs of document ID and MVA values, in the second one the field will be
+parsed for integer values. There are absolutely no requirements as to
+incoming data order; the values will be automatically grouped by document
+ID (and internally sorted within the same ID) during indexing anyway.
+
+When filtering, a document will match the filter on MVA attribute if any of
+the values satisfy the filtering condition. (Therefore, documents that pass
+through exclude filters will not contain any of the forbidden values.) When
+grouping by MVA attribute, a document will contribute to as many groups as
+there are different MVA values associated with that document. For instance,
+if the collection contains exactly 1 document having a 'tag' MVA with
+values 5, 7, and 11, grouping on 'tag' will produce 3 groups with '@count'
+equal to 1 and '@groupby' key values of 5, 7, and 11 respectively. Also
+note that grouping by MVA might lead to duplicate documents in the result
+set: because each document can participate in many groups, it can be chosen
+as the best one in in more than one group, leading to duplicate IDs. PHP
+API historically uses ordered hash on the document ID for the resulting
+rows; so you'll also need to use SetArrayResult() in order to employ
+group-by on MVA with PHP API.
+
+3.4. Indexes
 ------------
 
 To be able to answer full-text search queries fast, Sphinx needs to build
@@ -620,7 +657,7 @@ The only index type which is implemented in Sphinx at the moment is
 designed for maximum indexing and searching speed. This comes at a cost of
 updates being really slow; theoretically, it might be slower to update this
 type of index than than to reindex it from scratch. However, this very
-frequently could be worked around with muiltiple indexes, see Section 3.9,
+frequently could be worked around with muiltiple indexes, see Section 3.10,
 <<Live index updates>> for details.
 
 It is planned to implement more index types, including the type which would
@@ -632,7 +669,7 @@ a certain explicitly specified subset. searchd utility will serve all the
 specified indexes, and the clients can specify what indexes to search in
 run time.
 
-3.4. Restrictions on the source data
+3.5. Restrictions on the source data
 ------------------------------------
 
 There are a few different restrictions imposed on the source data which is
@@ -647,7 +684,7 @@ produce strange results when searching due to conflicting IDs. Also,
 a 1000-pound gorilla might eventually come out of your display and start
 throwing barrels at you. You've been warned.
 
-3.5. Charsets, case folding, and translation tables
+3.6. Charsets, case folding, and translation tables
 ---------------------------------------------------
 
 When indexing some index, Sphinx fetches documents from the specified
@@ -676,7 +713,7 @@ space-separated word sets would index as a single search query term.
 Default tables currently include English and Russian characters. Please do
 submit your tables for other languages!
 
-3.6. SQL data sources (MySQL, PostgreSQL)
+3.7. SQL data sources (MySQL, PostgreSQL)
 -----------------------------------------
 
 With all the SQL drivers, indexing generally works as follows.
@@ -741,13 +778,13 @@ the time the post-index query gets executed, it is guaranteed that the
 indexing was succesful. Database connection is dropped and re-established
 because sorting phase can be very lengthy and would just timeout otherwise.
 
-3.7. xmlpipe data source
+3.8. xmlpipe data source
 ------------------------
 
 xmlpipe data source was designed to enable users to plug data into Sphinx
 without having to implement new data sources drivers themselves. It is
 limited to 2 fixed fields and 2 fixed attributes, and is deprecated in
-favor of Section 3.8, <<xmlpipe2 data source>> now. For new streams, use
+favor of Section 3.9, <<xmlpipe2 data source>> now. For new streams, use
 xmlpipe2.
 
 To use xmlpipe, configure the data source in your configuration file as
@@ -794,7 +831,7 @@ the fields must be present, formatted exactly as in this example, and occur
 exactly in the same order. The only optional field is timestamp; it
 defaults to 1.
 
-3.8. xmlpipe2 data source
+3.9. xmlpipe2 data source
 -------------------------
 
 xmlpipe2 lets you pass arbitrary full-text and attribute data to Sphinx in
@@ -894,8 +931,8 @@ sphinx:document
    configuration file. The only known attribute is "id" that must contain
    the unique integer document ID.
 
-3.9. Live index updates
------------------------
+3.10. Live index updates
+------------------------
 
 There's a frequent situation when the total dataset is too big to be
 reindexed from scratch often, but the amount of new records is rather
@@ -957,6 +994,35 @@ Example 4. Fully automated live updates
    |     path = /path/to/delta
    | }
 
+3.11. Index merging
+-------------------
+
+Merging two existing indexes can be more efficient that indexing the data
+from scratch, and desired in some cases (such as merging 'main' and 'delta'
+indexes instead of simply reindexing 'main' in 'main+delta' partitioning
+scheme). So indexer has an option to do that. Merging the indexes is
+normally faster than reindexing but still not instant on huge indexes.
+Basically, it will need to read the contents of both indexes once and write
+the result once. Merging 100 GB and 1 GB index, for example, will result in
+202 GB of IO (but that's still likely less than the indexing from scratch
+requires).
+
+The command syntax is as follows:
+
+   | indexer --merge DSTINDEX SRCINDEX [--rotate]
+
+Only the DSTINDEX index will be affected: the contents of SRCINDEX will be
+merged into it. --rotate switch will be required if DSTINDEX is already
+being served by searchd. The initially devised usage pattern is to merge
+a smaller update from SRCINDEX into DSTINDEX. Thus, when merging the
+attributes, values from SRCINDEX will win if duplicate document IDs are
+encountered. Note, however, that the "old" keywords will not be
+automatically removed in such cases. For example, if there's a keyword
+"old" associated with document 123 in DSTINDEX, and a keyword "new"
+associated with it in SRCINDEX, document 123 will be found by both keywords
+after the merge. You can supply an explicit condition to remove documents
+from DSTINDEX to mitigate that.
+
 4. Searching
 ============
 
@@ -972,6 +1038,19 @@ There are the following matching modes available:
      Section 4.2, <<Boolean query syntax>>);
    * SPH_MATCH_EXTENDED, matches query as an expression in Sphinx internal
      query language (see Section 4.3, <<Extended query syntax>>).
+
+There also is a special "full scan" mode that will be automatically
+activated when the following conditions are met:
+
+   1. The query string is empty (ie. its length is zero).
+   2. docinfo storage is set to extern.
+
+In full scan mode, all the indexed documents will be considered as
+matching. Such queries will still apply filters, sorting, or group by, but
+will not perform any real full-text searching. This can be useful to unify
+full-text and non-full-text searching code, or to offload SQL server (there
+are cases when Sphinx scans will perform better than analogous MySQL
+queries).
 
 4.2. Boolean query syntax
 -------------------------
@@ -1017,7 +1096,8 @@ evaluating such queries could take very long.
 4.3. Extended query syntax
 --------------------------
 
-Extended queries allow the following special operators to be used:
+The following special operators can be used when using the extended
+matching mode:
 
    * operator OR:
 
@@ -1040,7 +1120,11 @@ Extended queries allow the following special operators to be used:
 
       | "hello world"~10
 
-Here's an example query which uses all these operators:
+   * quorum matching operator:
+
+      | "the world is a wonderful place"/3
+
+Here's an example query which uses most of these operators:
 
 Example 6. Extended query example
 
@@ -1058,6 +1142,11 @@ applies to all words within quotes. For instance, "cat dog mouse"~5 query
 means that there must be less than 8-word span which contains all 3 words,
 ie. "CAT aaa bbb ccc DOG eee fff MOUSE" document will not match this query,
 because this span is exactly 8 words long.
+
+Quorum matching operator introduces a kind of fuzzy matching. It will only
+match those documents that pass a given threshold of given words. The
+example above ("the world is a wonderful place"/3) will match all documents
+that have at least 3 of the 6 specified words.
 
 Nested brackets, as in queries like
 
@@ -1125,19 +1214,27 @@ BM25, which is commonly used in other search engines).
 
 There are the following result sorting modes available:
 
-   * SPH_SORT_RELEVANCE, sorts by relevance in descending order (best
-     matches first);
-   * SPH_SORT_ATTR_DESC, sorts by attribute in descending order (bigger
-     attribute values first);
-   * SPH_SORT_ATTR_ASC, sorts by attribute in ascending order (smaller
-     attribute values first);
-   * SPH_SORT_TIME_SEGMENTS, sorts by time segments (last
+   * SPH_SORT_RELEVANCE mode, that sorts by relevance in descending order
+     (best matches first);
+   * SPH_SORT_ATTR_DESC mode, that sorts by an attribute in descending
+     order (bigger attribute values first);
+   * SPH_SORT_ATTR_ASC mode, that sorts by an attribute in ascending order
+     (smaller attribute values first);
+   * SPH_SORT_TIME_SEGMENTS mode, that sorts by time segments (last
      hour/day/week/month) in descending order, and then by relevance in
      descending order;
-   * SPH_SORT_EXTENDED, sorts by SQL-like expression.
+   * SPH_SORT_EXTENDED mode, that sorts by SQL-like combination of columns
+     in ASC/DESC order;
+   * SPH_SORT_EXPR mode, that sorts by an arithmetic expression.
 
-SPH_SORT_ATTR_ASC, SPH_SORT_ATTR_DESC and SPH_SORT_TIME_SEGMENTS modes
-require an attribute to sort by to be specified.
+SPH_SORT_RELEVANCE ignores any additional parameters and always sorts
+matches by relevance rank. All other modes require an additional sorting
+clause, with the syntax depending on specific mode. SPH_SORT_ATTR_ASC,
+SPH_SORT_ATTR_DESC and SPH_SORT_TIME_SEGMENTS modes require simply an
+attribute name. SPH_SORT_RELEVANCE is equivalent to sorting by "@weight
+DESC, @id ASC" in extended mode, SPH_SORT_ATTR_ASC is equivalent to
+"attribute ASC, @weight DESC, @id ASC", and SPH_SORT_ATTR_DESC to
+"attribute DESC, @weight DESC, @id ASC" respectively.
 
 SPH_SORT_TIME_SEGMENTS mode
 ---------------------------
@@ -1169,25 +1266,76 @@ which would not take relevance into account at all.
 SPH_SORT_EXTENDED mode
 ----------------------
 
-In SPH_SORT_EXTENDED mode, you would specify an SQL-like sort expression to
-sort by:
+In SPH_SORT_EXTENDED mode, you can specify an SQL-like sort expression with
+up to 5 attributes (including internal attributes), eg:
 
    | @relevance DESC, price ASC, @id DESC
 
-Both internal attributes (their names start with @) and externally
-specified user attributes (their names are as is) can be allowed. In the
-example above, @relevance and @id are internal attributes and price is
-user-speficied.
+Both internal attributes (that are computed by the engine on the fly) and
+user attributes that were configured for this index are allowed. Internal
+attribute names must start with magic @-symbol; user attribute names can be
+used as is. In the example above, @relevance and @id are internal
+attributes and price is user-specified.
 
 Known internal attributes are:
 
    * @id (match ID)
-   * @rank (match weight)
    * @weight (match weight)
+   * @rank (match weight)
    * @relevance (match weight)
 
-@rank, @weight and @relevance are just aliases; there's no actual
-difference between them.
+@rank and @relevance are just additional aliases to @weight.
+
+SPH_SORT_EXPR mode
+------------------
+
+Expression sorting mode lets you sort the matches by an arbitrary
+arithmetic expression, involving attribute values, internal attributes (@id
+and @weight), arithmetic operations, and a number of built-in functions.
+Here's an example:
+
+   | $cl->SetSortMode ( SPH_SORT_EXPR,
+   | 	"@weight + ( user_karma + ln(pageviews) )*0.1" );
+
+The following operators and functions are supported. They are mimiced after
+MySQL. The functions take a number of arguments depending on the specific
+function.
+
+   * Operators: +, -, *, /, <, > <=, >=, =, <>.
+   * Unary (1-argument) functions: abs(), ceil(), floor(), sin(), cos(),
+     ln(), log2(), log10(), exp(), sqrt().
+   * Binary (2-argument) functions: min(), max(), pow().
+   * Ternary (3-argument) functions: if().
+
+All calculations are performed in single-precision, 32-bit IEEE 754
+floating point format. Comparison operators (eg. = or <=) return 1.0 when
+the condition is true and 0.0 otherwise. For instance, (a=b)+3 will
+evaluate to 4 when attribute 'a' is equal to attribute 'b', and to 3 when
+'a' is not. Unlike MySQL, the equality comparisons (ie. = and <> operators)
+introduce a small equality threshold (1e-6 by default). If the difference
+between compared values is within the threshold, they will be considered
+equal.
+
+All unary and binary functions are straightforward, they behave just like
+their mathematical counterparts. But IF() behavior needs to be explained in
+more detail. It takes 3 arguments, check whether the 1st argument is equal
+to 0.0, returns the 2nd argument if it is not zero, or the 3rd one when it
+is. Note that unlike comparison operators, IF() does not use a threshold!
+Therefore, it's safe to use comparison results as its 1st argument, but
+arithmetic operators might produce unexpected results. For instance, the
+following two calls will produce different results even though they are
+logically equivalent:
+
+   | IF ( sqrt(3)*sqrt(3)-3<>0, a, b )
+   | IF ( sqrt(3)*sqrt(3)-3, a, b )
+
+In the first case, the comparison operator <> will return 0.0 (false)
+because of a threshold, and IF() will always return 'b' as a result. In the
+second one, the same sqrt(3)*sqrt(3)-3 expression will be compared with
+zero without threshold by the IF() function itself. But its value will be
+slightly different from zero because of limited floating point calculations
+precision. Because of that, the comparison with 0.0 done by IF() will not
+pass, and the second variant will return 'a' as a result.
 
 4.6. Grouping (clustering) search results
 -----------------------------------------
@@ -1443,7 +1591,7 @@ control maximum server-side result set size for current query
 ($max_matches) and the threshold amount of matches to stop searching at
 ($cutoff). All parameters must be non-negative integers.
 
-First two parameters to SetLimits() are identical in behaviour to MySQL
+First two parameters to SetLimits() are identical in behavior to MySQL
 LIMIT clause. They instruct searchd to return at most $limit matches
 starting from match number $offset. The default offset and limit settings
 are 0 and 20, that is, to return first 20 matches.
@@ -2601,7 +2749,7 @@ Example:
 Range query setup. Optional, default is empty. Applies to SQL source types
 (mysql and pgsql) only.
 
-Setting this option enables ranged document fetch queries (see Section 3.6,
+Setting this option enables ranged document fetch queries (see Section 3.7,
 <<Ranged queries>>). Ranged queries are useful to avoid notorious MyISAM
 table locks when indexing lots of data. (They also help with other less
 notorious issues, such as reduced performance caused by big result sets, or
@@ -2617,7 +2765,7 @@ $start and $end macros (because it obviously would be a mistake to index
 the whole table many times over). Note that the intervals specified by
 $start..$end will not overlap, so you should not remove document IDs that
 are exactly equal to $start or $end from your query. The example in
-Section 3.6, <<Ranged queries>>) illustrates that; note how it uses
+Section 3.7, <<Ranged queries>>) illustrates that; note how it uses
 greater-or-equal and less-or-equal comparisons.
 
 Example:
@@ -2754,9 +2902,9 @@ Example:
 8.1.18. sql_attr_multi
 ----------------------
 
-Multi-valued attribute (MVA) declaration. Multi-value (there might be
-multiple attributes declared), optional. Applies to SQL source types (mysql
-and pgsql) only.
+Multi-valued attribute (MVA) declaration. Multi-value (ie. there may be
+more than one such attribute declared), optional. Applies to SQL source
+types (mysql and pgsql) only.
 
 Plain attributes only allow to attach 1 value per each document. However,
 there are cases (such as tags or categories) when it is desired to attach
@@ -2859,8 +3007,8 @@ Shell command that invokes xmlpipe stream producer. Mandatory. Applies to
 xmlpipe and xmlpipe2 source types only.
 
 Specifies a command that will be executed and which output will be parsed
-for documents. Refer to Section 3.7, <<xmlpipe data source>> or
-Section 3.8, <<xmlpipe2 data source>> for specific format description.
+for documents. Refer to Section 3.8, <<xmlpipe data source>> or
+Section 3.9, <<xmlpipe2 data source>> for specific format description.
 
 Example:
 
@@ -2870,7 +3018,7 @@ Example:
 ---------------------
 
 xmlpipe field declaration. Multi-value, optional. Applies to xmlpipe2
-source type only. Refer to Section 3.8, <<xmlpipe2 data source>>.
+source type only. Refer to Section 3.9, <<xmlpipe2 data source>>.
 
 Example:
 

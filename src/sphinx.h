@@ -1653,35 +1653,6 @@ enum ESphDocinfo
 	SPH_DOCINFO_EXTERN		= 2		///< store docinfo separately
 };
 
-/// purging data
-struct CSphPurgeData
-{
-	CSphString		m_sKey;
-	int				m_iAttrIndex;
-	DWORD			m_dwMinValue;
-	DWORD			m_dwMaxValue;
-	bool			m_bPurge;
-
-	CSphPurgeData()
-		: m_iAttrIndex ( -1 )
-		, m_dwMinValue ( 0 )
-		, m_dwMaxValue ( 0 )
-		, m_bPurge ( false )
-	{}
-
-	bool IsShouldPurge ( const DWORD * pAttrs )
-	{
-		if ( ( m_iAttrIndex == -1 ) || !m_bPurge || !pAttrs )
-			return false;
-		else
-			return ( ( m_dwMinValue > pAttrs[m_iAttrIndex] ) || ( m_dwMaxValue < pAttrs[m_iAttrIndex] ) );
-	}
-
-	bool IsEnabled ()
-	{
-		return m_bPurge;
-	}
-};
 
 /// generic fulltext index interface
 class CSphIndex
@@ -1705,7 +1676,7 @@ public:
 	virtual int					Build ( CSphDict * dict, const CSphVector<CSphSource*> & dSources, int iMemoryLimit, ESphDocinfo eDocinfo ) = 0;
 
 	/// build index by mering current index with given index
-	virtual bool				Merge ( CSphIndex * pSource, CSphPurgeData & tPurgeData ) = 0;
+	virtual bool				Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilters ) = 0;
 
 public:
 	/// dump human-readable header info to given file

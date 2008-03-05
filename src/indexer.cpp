@@ -868,7 +868,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 //////////////////////////////////////////////////////////////////////////
 
 bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
-	const CSphConfigSection & hSrc, const char * sSrc, CSphPurgeData & tPurge, bool bRotate )
+	const CSphConfigSection & hSrc, const char * sSrc, CSphVector<CSphFilter> & tPurge, bool bRotate )
 {
 	// check config
 	if ( !hDst("path") )
@@ -966,7 +966,7 @@ int main ( int argc, char ** argv )
 {
 	const char * sOptConfig = NULL;
 	bool bMerge = false;	
-	CSphPurgeData	tPurge;
+	CSphVector<CSphFilter> dMergeDstFilters;
 
 	CSphVector<const char *> dIndexes;
 	bool bIndexAll = false;
@@ -987,14 +987,13 @@ int main ( int argc, char ** argv )
 			dIndexes.Add ( argv[i+2] );
 			i += 2;
 		}
-		else if ( bMerge && strcasecmp ( argv[i], "--purge" )==0 && (i+3)<argc )
+		else if ( bMerge && strcasecmp ( argv[i], "--merge-dst-range" )==0 && (i+3)<argc )
 		{
-			tPurge.m_bPurge = true;
-			tPurge.m_sKey = argv[i+1];
-			
-			char * sStopStr;
-			tPurge.m_dwMinValue = strtoul( argv[i+2], &sStopStr, 10 );
-			tPurge.m_dwMaxValue = strtoul( argv[i+3], &sStopStr, 10 );
+			dMergeDstFilters.Resize ( dMergeDstFilters.GetLength()+1 );
+			dMergeDstFilters.Last().m_eType = SPH_FILTER_RANGE;
+			dMergeDstFilters.Last().m_sAttrName = argv[i+1];
+			dMergeDstFilters.Last().m_uMinValue = (SphAttr_t) strtoull ( argv[i+2], NULL, 10 );
+			dMergeDstFilters.Last().m_uMaxValue = (SphAttr_t) strtoull ( argv[i+3], NULL, 10 );
 			i += 3;
 		}
 		else if ( strcasecmp ( argv[i], "--buildstops" )==0 && (i+2)<argc )
@@ -1054,25 +1053,31 @@ int main ( int argc, char ** argv )
 				"Usage: indexer [OPTIONS] [indexname1 [indexname2 [...]]]\n"
 				"\n"
 				"Options are:\n"
-				"--config <file>\t\t\tread configuration from specified file\n"
-				"\t\t\t\t(default is sphinx.conf)\n"
-				"--all\t\t\t\treindex all configured indexes\n"
-				"--quiet\t\t\t\tbe quiet, only print errors\n"
-				"--noprogress\t\t\tdo not display progress\n"
-				"\t\t\t\t(automatically on if output is not to a tty)\n"
+				"--config <file>\t\tread configuration from specified file\n"
+				"\t\t\t(default is sphinx.conf)\n"
+				"--all\t\t\treindex all configured indexes\n"
+				"--quiet\t\t\tbe quiet, only print errors\n"
+				"--noprogress\t\tdo not display progress\n"
+				"\t\t\t(automatically on if output is not to a tty)\n"
 #if !USE_WINDOWS
-				"--rotate\t\t\tsend SIGHUP to searchd when indexing is over\n"
-				"\t\t\t\tto rotate updated indexes automatically\n"
+				"--rotate\t\tsend SIGHUP to searchd when indexing is over\n"
+				"\t\t\tto rotate updated indexes automatically\n"
 #endif
-				"--buildstops <output.txt> <N>\tbuild top N stopwords and write them\n"
-				"\t\t\t\tto specifed file\n"
-				"--buildfreqs\t\t\tstore words frequencies to output.txt\n"
-				"\t\t\t\t(used with --buildstops only)\n"
-				"--merge <dst-index> <src-index>\tmerge source index to destination index\n"
+				"--buildstops <output.txt> <N>\n"
+				"\t\t\tbuild top N stopwords and write them to given file\n"
+				"--buildfreqs\t\tstore words frequencies to output.txt\n"
+				"\t\t\t(used with --buildstops only)\n"
+				"--merge <dst-index> <src-index>\n"
+				"\t\t\tmerge 'src-index' into 'dst-index'\n"
+				"\t\t\t'dst-index' will receive merge result\n"
+				"\t\t\t'src-index' will not be modified\n"
+				"--merge-dst-range <attr> <min> <max>\n"
+				"\t\t\tfilter 'dst-index' on merge, keep only those documents\n"
+				"\t\t\twhere 'attr' is between 'min' and 'max' (inclusive)\n"
 				"\n"
 				"Examples:\n"
-				"indexer --quiet myidx1\t\treindex 'myidx1' defined in 'sphinx.conf'\n"
-				"indexer --all\t\t\treindex all indexes defined in 'sphinx.conf'\n" );
+				"indexer --quiet myidx1\treindex 'myidx1' defined in 'sphinx.conf'\n"
+				"indexer --all\t\treindex all indexes defined in 'sphinx.conf'\n" );
 		}
 
 		return 1;
@@ -1189,7 +1194,7 @@ int main ( int argc, char ** argv )
 
 		bIndexedOk = DoMerge (
 			hConf["index"][dIndexes[0]], dIndexes[0],
-			hConf["index"][dIndexes[1]], dIndexes[1], tPurge, g_bRotate );
+			hConf["index"][dIndexes[1]], dIndexes[1], dMergeDstFilters, g_bRotate );
 	} else if ( bIndexAll )
 	{
 		hConf["index"].IterateStart ();

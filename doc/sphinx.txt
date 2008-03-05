@@ -1007,7 +1007,7 @@ the result once. Merging 100 GB and 1 GB index, for example, will result in
 202 GB of IO (but that's still likely less than the indexing from scratch
 requires).
 
-The command syntax is as follows:
+The basic command syntax is as follows:
 
    | indexer --merge DSTINDEX SRCINDEX [--rotate]
 
@@ -1021,7 +1021,16 @@ automatically removed in such cases. For example, if there's a keyword
 "old" associated with document 123 in DSTINDEX, and a keyword "new"
 associated with it in SRCINDEX, document 123 will be found by both keywords
 after the merge. You can supply an explicit condition to remove documents
-from DSTINDEX to mitigate that.
+from DSTINDEX to mitigate that; the relevant switch is --merge-dst-range:
+
+   | indexer --merge main delta --merge-dst-range deleted 0 0
+
+This switch lets you apply filters to the destination index along with
+merging. There can be several filters; all of their conditions must be met
+in order to include the document in the resulting mergid index. In the
+example above, the filter passes only those records where 'deleted' is 0,
+eliminating all records that were flagged as deleted (for instance, using
+UpdateAttributes() call).
 
 4. Searching
 ============

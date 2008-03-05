@@ -965,7 +965,7 @@ will result in 202 GB of IO (but that's still likely less than
 the indexing from scratch requires).
 </para>
 <para>
-The command syntax is as follows:
+The basic command syntax is as follows:
 <programlisting>
 indexer --merge DSTINDEX SRCINDEX [--rotate]
 </programlisting>
@@ -976,7 +976,17 @@ Thus, when merging the attributes, values from SRCINDEX will win if duplicate do
 Note, however, that the "old" keywords will <emphasis>not</emphasis> be automatically removed in such cases.
 For example, if there's a keyword "old" associated with document 123 in DSTINDEX, and a keyword "new" associated
 with it in SRCINDEX, document 123 will be found by <emphasis>both</emphasis> keywords after the merge.
-You can supply an explicit condition to remove documents from DSTINDEX to mitigate that.
+You can supply an explicit condition to remove documents from DSTINDEX to mitigate that;
+the relevant switch is <option>--merge-dst-range</option>:
+<programlisting>
+indexer --merge main delta --merge-dst-range deleted 0 0
+</programlisting>
+This switch lets you apply filters to the destination index along with merging.
+There can be several filters; all of their conditions must be met in order
+to include the document in the resulting mergid index. In the example above,
+the filter passes only those records where 'deleted' is 0, eliminating all
+records that were flagged as deleted (for instance, using
+<link linkend="api-func-updateatttributes">UpdateAttributes()</link> call).
 </para>
 </sect2>
 

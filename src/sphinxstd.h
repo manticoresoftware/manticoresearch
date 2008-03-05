@@ -58,6 +58,7 @@
 #define strcasecmp			strcmpi
 #define strncasecmp			_strnicmp
 #define snprintf			_snprintf
+#define strtoull			_strtoui64
 
 #else
 

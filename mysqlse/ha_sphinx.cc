@@ -51,6 +51,9 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
+/// there might be issues with min() on different platforms (eg. Gentoo, they say)
+#define Min(a,b) ((a)<(b)?(a):(b))
+
 /// unaligned RAM accesses are forbidden on SPARC
 #if defined(sparc) || defined(__sparc__)
 #define UNALIGNED_RAM_ACCESS 0
@@ -651,7 +654,7 @@ static int sphinx_close_connection ( handlerton * hton, THD * thd )
 }
 
 
-static int sphinx_done_func ( void * p )
+static int sphinx_done_func ( void * )
 {
 	SPH_ENTER_FUNC();
 
@@ -1813,7 +1816,7 @@ int ha_sphinx::ConnectToSearchd ( const char * sQueryHost, int iQueryPort )
 		}
 
 		memcpy ( &sa.sin_addr, hp->h_addr,
-			min ( sizeof(sa.sin_addr), (size_t)hp->h_length ) );
+			Min ( sizeof(sa.sin_addr), (size_t)hp->h_length ) );
 		my_gethostbyname_r_free();
 	}
 

@@ -24,6 +24,7 @@
 	#include <io.h> // for ::open on windows
 #else
 	#include <sys/wait.h>
+	#include <signal.h>
 #endif
 
 /////////////////////////////////////////////////////////////////////////////

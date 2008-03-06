@@ -40,7 +40,7 @@ const char * myctime ( DWORD uStamp )
 
 void DumpHeader ( const char * sHeaderName )
 {
-	CSphIndex * pIndex = sphCreateIndexPhrase ( "", false, false );
+	CSphIndex * pIndex = sphCreateIndexPhrase ( "" );
 	pIndex->DumpHeader ( stdout, sHeaderName );
 }
 
@@ -313,7 +313,9 @@ int main ( int argc, char ** argv )
 		tQuery.m_sQuery = sQuery;
 		CSphQueryResult * pResult = NULL;
 
-		CSphIndex * pIndex = sphCreateIndexPhrase ( hIndex["path"].cstr(), hIndex.GetInt ( "enable_star" ) != 0, false );
+		CSphIndex * pIndex = sphCreateIndexPhrase ( hIndex["path"].cstr() );
+		pIndex->SetStar ( hIndex.GetInt("enable_star")!=0 );
+
 		sError = "could not create index (check that files exist)";
 		for ( ; pIndex; )
 		{

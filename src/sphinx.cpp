@@ -1533,7 +1533,7 @@ struct CSphIndex_VLN : CSphIndex
 {
 	friend struct CSphDoclistRecord;
 
-								CSphIndex_VLN ( const char * sFilename, bool bEnableStar, bool bKeepFilesOpen );
+								CSphIndex_VLN ( const char * sFilename );
 								~CSphIndex_VLN ();
 
 	virtual int					Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSources, int iMemoryLimit, ESphDocinfo eDocinfo );
@@ -1631,7 +1631,6 @@ private:
 	CSphWordlistCheckpoint *	m_pWordlistCheckpoints;	///< my wordlist cache checkpoints
 	int							m_iWordlistCheckpoints;	///< my wordlist cache checkpoints count
 
-	bool						m_bKeepFilesOpen;		///< keep files open to avoid race on seamless rotation
 	CSphAutofile				m_tDoclistFile;			///< doclist file
 	CSphAutofile				m_tHitlistFile;			///< hitlist file
 
@@ -1639,8 +1638,6 @@ private:
 	CSphSharedBuffer<BYTE>		m_bPreread;				///< are we ready to search
 	DWORD						m_uVersion;				///< data files version
 	bool						m_bUse64;				///< whether the header is id64
-
-	bool						m_bEnableStar;			///< enable star-syntax
 
 	bool						m_bEarlyLookup;			///< whether early attr value lookup is needed
 	bool						m_bLateLookup;			///< whether late attr value lookup is needed
@@ -4924,6 +4921,8 @@ CSphIndex::CSphIndex ( const char * sName )
 	, m_iMinInfixLen ( 0 )
 	, m_iBoundaryStep ( 0 )
 	, m_bAttrsUpdated ( false )
+	, m_bEnableStar ( false )
+	, m_bKeepFilesOpen ( false )
 {
 }
 
@@ -4942,17 +4941,15 @@ void CSphIndex::SetBoundaryStep ( int iBoundaryStep )
 
 /////////////////////////////////////////////////////////////////////////////
 
-CSphIndex * sphCreateIndexPhrase ( const char * sFilename, bool bEnableStar, bool bKeepFilesOpen )
+CSphIndex * sphCreateIndexPhrase ( const char * sFilename )
 {
-	return new CSphIndex_VLN ( sFilename, bEnableStar, bKeepFilesOpen );
+	return new CSphIndex_VLN ( sFilename );
 }
 
 
-CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename, bool bEnableStar, bool bKeepFilesOpen )
-	: CSphIndex			( sFilename )
-	, m_iLockFD			( -1 )
-	, m_bKeepFilesOpen	( bKeepFilesOpen )
-	, m_bEnableStar		( bEnableStar )
+CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename )
+	: CSphIndex ( sFilename )
+	, m_iLockFD ( -1 )
 {
 	m_sFilename = sFilename;
 

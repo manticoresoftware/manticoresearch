@@ -1670,6 +1670,8 @@ public:
 	virtual	void				SetProgressCallback ( ProgressCallback_t * pfnProgress ) { m_pProgress = pfnProgress; }
 	virtual void				SetInfixIndexing ( int iPrefixLen, int iInfixLen );
 	virtual void				SetBoundaryStep ( int iBoundaryStep );
+	virtual void				SetStar ( bool bValue ) { m_bEnableStar = bValue; }
+	virtual void				SetPreopen ( bool bValue ) { m_bKeepFilesOpen = bValue; }
 
 public:
 	/// build index by indexing given sources
@@ -1737,12 +1739,15 @@ protected:
 	int							m_iBoundaryStep;///< on-boundary additional word position step (0 means index all words continuously)
 
 	bool						m_bAttrsUpdated;///< whether in-memory attrs are updated (compared to disk state)
+
+	bool						m_bEnableStar;			///< enable star-syntax
+	bool						m_bKeepFilesOpen;		///< keep files open to avoid race on seamless rotation
 };
 
 /////////////////////////////////////////////////////////////////////////////
 
 /// create phrase fulltext index implemntation
-CSphIndex *			sphCreateIndexPhrase ( const char * sFilename, bool bEnableStar, bool bKeepFilesOpen );
+CSphIndex *			sphCreateIndexPhrase ( const char * sFilename );
 
 /// tell libsphinx to be quiet or not (logs and loglevels to come later)
 void				sphSetQuiet ( bool bQuiet );

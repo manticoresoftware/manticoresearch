@@ -4332,7 +4332,10 @@ void SeamlessTryToForkPrereader ()
 
 	// alloc buffer index (once per run)
 	if ( !g_pPrereading )
-		g_pPrereading = sphCreateIndexPhrase ( NULL, false, tServed.m_bPreopen || g_bPreopenIndexes ); // FIXME! check if it's ok
+		g_pPrereading = sphCreateIndexPhrase ( NULL ); // FIXME! check if it's ok
+
+	g_pPrereading->SetStar ( tServed.m_bStar );
+	g_pPrereading->SetPreopen ( tServed.m_bPreopen || g_bPreopenIndexes ); 
 
 	// rebase buffer index
 	char sNewPath [ SPH_MAX_FILENAME_LEN ];
@@ -5443,7 +5446,9 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			// try to create index
 			CSphString sWarning;
 			tIdx.m_bPreopen = hIndex.GetInt ( "preopen", (int)tIdx.m_bPreopen ) != 0;
-			tIdx.m_pIndex = sphCreateIndexPhrase ( hIndex["path"].cstr(), tIdx.m_bStar, tIdx.m_bPreopen || g_bPreopenIndexes );
+			tIdx.m_pIndex = sphCreateIndexPhrase ( hIndex["path"].cstr() );
+			tIdx.m_pIndex->SetStar ( tIdx.m_bStar );
+			tIdx.m_pIndex->SetPreopen ( tIdx.m_bPreopen || g_bPreopenIndexes );
 			tIdx.m_pSchema = tIdx.m_pIndex->Prealloc ( tIdx.m_bMlock, &sWarning );
 			if ( !tIdx.m_pSchema || !tIdx.m_pIndex->Preread() )
 			{

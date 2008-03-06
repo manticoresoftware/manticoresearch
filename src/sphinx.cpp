@@ -1692,7 +1692,7 @@ private:
 
 	ESphBinRead					ReadOrdinal ( CSphBin & Reader, Ordinal_t & Ordinal );
 	SphOffset_t					DumpOrdinals ( CSphWriter & Writer, CSphVector<Ordinal_t> & dOrdinals );
-	bool						SortOrdinals ( const char * szToFile, int iFromFD, int iArenaSize, int iOrdinalsInPool, const CSphVector< CSphVector<SphOffset_t> > & dOrdBlockSize, bool bWarnOfMem );
+	int							SortOrdinals ( const char * szToFile, int iFromFD, int iArenaSize, int iOrdinalsInPool, const CSphVector< CSphVector<SphOffset_t> > & dOrdBlockSize, bool bWarnOfMem );
 	bool						SortOrdinalIds ( const char * szToFile, int iFromFD, int nAttrs, int nOrdinals, int iArenaSize, int iNumPoolOrdinals, bool bWarnOfMem );
 
 public:
@@ -6144,14 +6144,14 @@ ESphBinRead CSphIndex_VLN::ReadOrdinal ( CSphBin & Reader, Ordinal_t & Ordinal )
 }
 
 
-bool CSphIndex_VLN::SortOrdinals ( const char * szToFile, int iFromFD, int iArenaSize, int iOrdinalsInPool, const CSphVector < CSphVector < SphOffset_t > > & dOrdBlockSize, bool bWarnOfMem )
+int CSphIndex_VLN::SortOrdinals ( const char * szToFile, int iFromFD, int iArenaSize, int iOrdinalsInPool, const CSphVector < CSphVector < SphOffset_t > > & dOrdBlockSize, bool bWarnOfMem )
 {
 	int nAttrs = dOrdBlockSize.GetLength ();
 	int nBlocks = dOrdBlockSize [0].GetLength ();
 
 	CSphWriter Writer;
 	if ( !Writer.OpenFile ( szToFile, m_sLastError ) )
-		return false;
+		return -1;
 
 	int iBinSize = CSphBin::CalcBinSize ( iArenaSize, nBlocks, "ordinals", bWarnOfMem );
 	SphOffset_t iSharedOffset = -1;
@@ -6176,6 +6176,8 @@ bool CSphIndex_VLN::SortOrdinals ( const char * szToFile, int iFromFD, int iAren
 			uStart += dOrdBlockSize [iAttr][iBlock];
 		}
 
+	int nIdsWritten = 0;
+
 	for ( int iAttr = 0; iAttr < nAttrs; iAttr++ )
 	{
 		CSphVector < CSphBin > dBins;
@@ -6193,7 +6195,7 @@ bool CSphIndex_VLN::SortOrdinals ( const char * szToFile, int iFromFD, int iAren
 			if ( ReadOrdinal ( dBins [iBlock], tOrdinalEntry ) != BIN_READ_OK )
 			{
 				m_sLastError = "sort_ordinals: warmup failed (io error?)";
-				return false;
+				return -1;
 			}
 
 			tOrdinalEntry.m_iTag = iBlock;
@@ -6227,12 +6229,13 @@ bool CSphIndex_VLN::SortOrdinals ( const char * szToFile, int iFromFD, int iAren
 
 					if ( dOrdinalIdPool.GetLength () == iOrdinalsInPool )
 					{
+						nIdsWritten += dOrdinalIdPool.GetLength ();
 						dOrdinalIdPool.Sort ( CmpOrdinalsDocid_fn () );
 						Writer.PutBytes ( &(dOrdinalIdPool [0]), sizeof ( OrdinalId_t ) * dOrdinalIdPool.GetLength () );
 						if ( Writer.IsError () )
 						{
 							m_sLastError = "sort_ordinals: io error";
-							return false;
+							return -1;
 						}
 
 						dOrdinalIdPool.Resize ( 0 );
@@ -6258,19 +6261,20 @@ bool CSphIndex_VLN::SortOrdinals ( const char * szToFile, int iFromFD, int iAren
 			if ( eRes == BIN_READ_ERROR )
 			{
 				m_sLastError = "sort_ordinals: read error";
-				return false;
+				return -1;
 			}
 		}
 
 		// flush last ordinal ids
 		if ( dOrdinalIdPool.GetLength () )
 		{
+			nIdsWritten += dOrdinalIdPool.GetLength ();
 			dOrdinalIdPool.Sort ( CmpOrdinalsDocid_fn () );
 			Writer.PutBytes ( &(dOrdinalIdPool [0]), sizeof ( OrdinalId_t ) * dOrdinalIdPool.GetLength () );
 			if ( Writer.IsError () )
 			{
 				m_sLastError = "sort_ordinals: io error";
-				return false;
+				return -1;
 			}
 
 			dOrdinalIdPool.Resize ( 0 );
@@ -6279,9 +6283,9 @@ bool CSphIndex_VLN::SortOrdinals ( const char * szToFile, int iFromFD, int iAren
 
 	Writer.CloseFile ();
 	if ( Writer.IsError () )
-		return false;
+		return -1;
 
-	return true;
+	return nIdsWritten / nAttrs;
 }
 
 
@@ -6947,22 +6951,27 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 
 		int iOrdinalsInPool = (int) Min ( SphOffset_t ( iMemoryLimit * ( 1.0f - ARENA_PERCENT ) ), uMemNeededForSorting ) / sizeof ( OrdinalId_t );
 
-		SortOrdinals ( sUnsortedIdFile.cstr (), fdRawOrdinals.GetFD (), iArenaSize, iOrdinalsInPool, dOrdBlockSize, iArenaSize < uMemNeededForReaders );
+		int nIdsWritten = SortOrdinals ( sUnsortedIdFile.cstr (), fdRawOrdinals.GetFD (), iArenaSize, iOrdinalsInPool, dOrdBlockSize, iArenaSize < uMemNeededForReaders );
+		if ( nIdsWritten == -1 )
+			return 0;
 
 		CSphAutofile fdUnsortedId ( sUnsortedIdFile.cstr (), SPH_O_READ, m_sLastError );
 		if ( fdUnsortedId.GetFD () < 0 )
 			return 0;
 
 		iArenaSize = Min ( iMemoryLimit, (int)uMemNeededForSorting );
-		iArenaSize = Max ( CSphBin::MIN_SIZE * ( nOrdinals / iOrdinalsInPool + 1 ), iArenaSize );
+		iArenaSize = Max ( CSphBin::MIN_SIZE * ( nIdsWritten / iOrdinalsInPool + 1 ), iArenaSize );
 
-		SortOrdinalIds ( sSortedOrdinalIdFile.cstr (), fdUnsortedId.GetFD (), dOrdinalAttrs.GetLength (), nOrdinals, iArenaSize, iOrdinalsInPool, iArenaSize < uMemNeededForSorting );
+		if ( !SortOrdinalIds ( sSortedOrdinalIdFile.cstr (), fdUnsortedId.GetFD (), dOrdinalAttrs.GetLength (), nIdsWritten, iArenaSize, iOrdinalsInPool, iArenaSize < uMemNeededForSorting ) )
+			return 0;
 
 		fdRawOrdinals.Close ();
 		fdUnsortedId.Close ();
 
 		::unlink ( sRawOrdinalsFile.cstr () );
 		::unlink ( sUnsortedIdFile.cstr () );
+
+		nOrdinals = nIdsWritten;
 	}
 
 	// initialize MVA reader
@@ -6979,6 +6988,8 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 	CSphAutofile fdDocinfo ( GetIndexFileName("spa"), SPH_O_NEW, m_sLastError );
 	if ( fdDocinfo.GetFD()<0 )
 		return 0;
+
+	bool bWarnAboutDupes = false;
 
 	if ( m_eDocinfo==SPH_DOCINFO_EXTERN && dHitBlocks.GetLength() )
 	{
@@ -7038,68 +7049,78 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 		// while the queue has data for us
 		int iOrd = 0;
 		pDocinfo = dDocinfos;
+		SphDocID_t uLastId = 0;
 		while ( qDocinfo.GetLength() )
 		{
 			// obtain bin index and next entry
 			int iBin = qDocinfo.Root();
 			DWORD * pEntry = dDocinfoQueue + iBin*iDocinfoStride;
 
-			// update ordinals
-			ARRAY_FOREACH ( i, dOrdinalAttrs )
+			// skip duplicates
+			bool bDuplicate = DOCINFO2ID ( pEntry ) == uLastId;
+			if ( !bDuplicate )
 			{
-				OrdinalId_t Id;
-				if ( dOrdReaders [i].ReadBytes ( &Id, sizeof ( Id ) ) != BIN_READ_OK )
+				// update ordinals
+				ARRAY_FOREACH ( i, dOrdinalAttrs )
 				{
-					m_sLastError = "update ordinals: io error";
-					return 0;
-				}
-
-				assert ( Id.m_uDocID == DOCINFO2ID(pEntry) );
-				DOCINFO2ATTRS(pEntry) [ dOrdinalAttrs[i] ] = Id.m_uId;
-			}
-			iOrd++;
-
-			// update MVA
-			if ( bGotMVA )
-			{
-				// go to next id
-				while ( uMvaID<DOCINFO2ID(pEntry) )
-				{
-					ARRAY_FOREACH ( i, dMvaIndexes )
-						rdMva.SkipBytes ( rdMva.GetDword()*sizeof(DWORD) );
-
-					uMvaID = rdMva.GetDocid();
-					if ( !uMvaID )
-						uMvaID = DOCID_MAX;
-				}
-
-				assert ( uMvaID>=DOCINFO2ID(pEntry) );
-				if ( uMvaID==DOCINFO2ID(pEntry) )
-				{
-					ARRAY_FOREACH ( i, dMvaIndexes )
+					OrdinalId_t Id;
+					if ( dOrdReaders [i].ReadBytes ( &Id, sizeof ( Id ) ) != BIN_READ_OK )
 					{
-						DOCINFO2ATTRS(pEntry) [ dMvaRowitem[i] ] = (DWORD)( rdMva.GetPos()/sizeof(DWORD) ); // intentional clamp; we'll check for 32bit overflow later
-						rdMva.SkipBytes ( rdMva.GetDword()*sizeof(DWORD) );
+						m_sLastError = "update ordinals: io error";
+						return 0;
 					}
 
-					uMvaID = rdMva.GetDocid();
-					if ( !uMvaID )
-						uMvaID = DOCID_MAX;
+					assert ( Id.m_uDocID == DOCINFO2ID(pEntry) );
+					DOCINFO2ATTRS(pEntry) [ dOrdinalAttrs[i] ] = Id.m_uId;
+				}
+				iOrd++;
+
+				// update MVA
+				if ( bGotMVA )
+				{
+					// go to next id
+					while ( uMvaID<DOCINFO2ID(pEntry) )
+					{
+						ARRAY_FOREACH ( i, dMvaIndexes )
+							rdMva.SkipBytes ( rdMva.GetDword()*sizeof(DWORD) );
+
+						uMvaID = rdMva.GetDocid();
+						if ( !uMvaID )
+							uMvaID = DOCID_MAX;
+					}
+
+					assert ( uMvaID>=DOCINFO2ID(pEntry) );
+					if ( uMvaID==DOCINFO2ID(pEntry) )
+					{
+						ARRAY_FOREACH ( i, dMvaIndexes )
+						{
+							DOCINFO2ATTRS(pEntry) [ dMvaRowitem[i] ] = (DWORD)( rdMva.GetPos()/sizeof(DWORD) ); // intentional clamp; we'll check for 32bit overflow later
+							rdMva.SkipBytes ( rdMva.GetDword()*sizeof(DWORD) );
+						}
+
+						uMvaID = rdMva.GetDocid();
+						if ( !uMvaID )
+							uMvaID = DOCID_MAX;
+					}
+				}
+
+				// emit it
+				memcpy ( pDocinfo, pEntry, iDocinfoStride*sizeof(DWORD) );
+				pDocinfo += iDocinfoStride;
+
+				uLastId = DOCINFO2ID(pEntry);
+
+				if ( pDocinfo>=pDocinfoMax )
+				{
+					int iLen = iDocinfoMax*iDocinfoStride*sizeof(DWORD);
+					if ( !sphWriteThrottled ( fdDocinfo.GetFD(), dDocinfos, iLen, "sort_docinfo", m_sLastError ) )
+						return 0;
+
+					pDocinfo = dDocinfos;
 				}
 			}
-
-			// emit it
-			memcpy ( pDocinfo, pEntry, iDocinfoStride*sizeof(DWORD) );
-			pDocinfo += iDocinfoStride;
-
-			if ( pDocinfo>=pDocinfoMax )
-			{
-				int iLen = iDocinfoMax*iDocinfoStride*sizeof(DWORD);
-				if ( !sphWriteThrottled ( fdDocinfo.GetFD(), dDocinfos, iLen, "sort_docinfo", m_sLastError ) )
-					return 0;
-
-				pDocinfo = dDocinfos;
-			}
+			else
+				bWarnAboutDupes = true;
 
 			// pop its index, update it, push its index again
 			qDocinfo.Pop ();
@@ -7279,6 +7300,9 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 		tFlush.m_iWordPos = 0;
 		cidxHit ( &tFlush, NULL );
 	}
+
+	if ( bWarnAboutDupes )
+		sphWarn ( "duplicate document ids found" );
 
 	PROFILE_END ( invert_hits );
 

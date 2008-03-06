@@ -488,7 +488,7 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 			if ( *p=='#' )
 			{
 #if !USE_WINDOWS
-				if ( !pBuffer && p==pBuffer && p[1]=='!' )
+				if ( !pBuffer && m_iLine==1 && p==sBuf && p[1]=='!' )
 				{
 					CSphVector<char> dResult;
 					if ( TryToExec ( p+2, pEnd, sFileName, dResult ) )

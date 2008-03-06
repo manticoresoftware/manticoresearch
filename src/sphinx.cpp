@@ -9472,7 +9472,7 @@ void CSphExtendedEvalAtom::GetNextHit ( DWORD iMinPos )
 				continue;
 
 			// scan forward until this hit is not too early
-			const DWORD uRequiredPos = uCandidate + m_dWords[i].m_iAtomPos;
+			const DWORD uRequiredPos = uCandidate + m_dWords[i].m_iAtomPos - 1;
 			while ( uPos < uRequiredPos )
 			{
 				// if one hitlist is over, document is over, because all words must be in the phrase

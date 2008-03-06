@@ -1689,8 +1689,8 @@ private:
 
 	ESphBinRead					ReadOrdinal ( CSphBin & Reader, Ordinal_t & Ordinal );
 	SphOffset_t					DumpOrdinals ( CSphWriter & Writer, CSphVector<Ordinal_t> & dOrdinals );
-	int							SortOrdinals ( const char * szToFile, int iFromFD, int iArenaSize, int iOrdinalsInPool, const CSphVector< CSphVector<SphOffset_t> > & dOrdBlockSize, bool bWarnOfMem );
-	bool						SortOrdinalIds ( const char * szToFile, int iFromFD, int nAttrs, int nOrdinals, int iArenaSize, int iNumPoolOrdinals, bool bWarnOfMem );
+	bool						SortOrdinals ( const char * szToFile, int iFromFD, int iArenaSize, int iOrdinalsInPool, CSphVector< CSphVector<SphOffset_t> > & dOrdBlockSize, bool bWarnOfMem );
+	bool						SortOrdinalIds ( const char * szToFile, int iFromFD, int iArenaSize, CSphVector < CSphVector < SphOffset_t > > & dOrdBlockSize, bool bWarnOfMem );
 
 public:
 	// FIXME! this needs to be protected, and refactored as well
@@ -6141,14 +6141,14 @@ ESphBinRead CSphIndex_VLN::ReadOrdinal ( CSphBin & Reader, Ordinal_t & Ordinal )
 }
 
 
-int CSphIndex_VLN::SortOrdinals ( const char * szToFile, int iFromFD, int iArenaSize, int iOrdinalsInPool, const CSphVector < CSphVector < SphOffset_t > > & dOrdBlockSize, bool bWarnOfMem )
+bool CSphIndex_VLN::SortOrdinals ( const char * szToFile, int iFromFD, int iArenaSize, int iOrdinalsInPool, CSphVector < CSphVector < SphOffset_t > > & dOrdBlockSize, bool bWarnOfMem )
 {
 	int nAttrs = dOrdBlockSize.GetLength ();
 	int nBlocks = dOrdBlockSize [0].GetLength ();
 
 	CSphWriter Writer;
 	if ( !Writer.OpenFile ( szToFile, m_sLastError ) )
-		return -1;
+		return false;
 
 	int iBinSize = CSphBin::CalcBinSize ( iArenaSize, nBlocks, "ordinals", bWarnOfMem );
 	SphOffset_t iSharedOffset = -1;
@@ -6173,8 +6173,6 @@ int CSphIndex_VLN::SortOrdinals ( const char * szToFile, int iFromFD, int iArena
 			uStart += dOrdBlockSize [iAttr][iBlock];
 		}
 
-	int nIdsWritten = 0;
-
 	for ( int iAttr = 0; iAttr < nAttrs; iAttr++ )
 	{
 		CSphVector < CSphBin > dBins;
@@ -6187,12 +6185,14 @@ int CSphIndex_VLN::SortOrdinals ( const char * szToFile, int iFromFD, int iArena
 			dBins [i].Init ( iFromFD, &iSharedOffset, iBinSize );
 		}
 
+		dOrdBlockSize [iAttr].Resize ( 0 );
+
 		for ( int iBlock = 0; iBlock < nBlocks; iBlock++ )
 		{
 			if ( ReadOrdinal ( dBins [iBlock], tOrdinalEntry ) != BIN_READ_OK )
 			{
 				m_sLastError = "sort_ordinals: warmup failed (io error?)";
-				return -1;
+				return false;
 			}
 
 			tOrdinalEntry.m_iTag = iBlock;
@@ -6226,15 +6226,15 @@ int CSphIndex_VLN::SortOrdinals ( const char * szToFile, int iFromFD, int iArena
 
 					if ( dOrdinalIdPool.GetLength () == iOrdinalsInPool )
 					{
-						nIdsWritten += dOrdinalIdPool.GetLength ();
 						dOrdinalIdPool.Sort ( CmpOrdinalsDocid_fn () );
 						Writer.PutBytes ( &(dOrdinalIdPool [0]), sizeof ( OrdinalId_t ) * dOrdinalIdPool.GetLength () );
 						if ( Writer.IsError () )
 						{
 							m_sLastError = "sort_ordinals: io error";
-							return -1;
+							return false;
 						}
 
+						dOrdBlockSize [iAttr].Add ( dOrdinalIdPool.GetLength () * sizeof ( OrdinalId_t ) );
 						dOrdinalIdPool.Resize ( 0 );
 					}
 				}
@@ -6258,47 +6258,47 @@ int CSphIndex_VLN::SortOrdinals ( const char * szToFile, int iFromFD, int iArena
 			if ( eRes == BIN_READ_ERROR )
 			{
 				m_sLastError = "sort_ordinals: read error";
-				return -1;
+				return false;
 			}
 		}
 
 		// flush last ordinal ids
 		if ( dOrdinalIdPool.GetLength () )
 		{
-			nIdsWritten += dOrdinalIdPool.GetLength ();
 			dOrdinalIdPool.Sort ( CmpOrdinalsDocid_fn () );
 			Writer.PutBytes ( &(dOrdinalIdPool [0]), sizeof ( OrdinalId_t ) * dOrdinalIdPool.GetLength () );
 			if ( Writer.IsError () )
 			{
 				m_sLastError = "sort_ordinals: io error";
-				return -1;
+				return false;
 			}
 
+			dOrdBlockSize [iAttr].Add ( dOrdinalIdPool.GetLength () * sizeof ( OrdinalId_t ) );
 			dOrdinalIdPool.Resize ( 0 );
 		}
 	}
 
 	Writer.CloseFile ();
 	if ( Writer.IsError () )
-		return -1;
+		return false;
 
-	return nIdsWritten / nAttrs;
+	return true;
 }
 
 
-bool CSphIndex_VLN::SortOrdinalIds ( const char * szToFile, int iFromFD, int nAttrs, int nOrdinals, int iArenaSize, int iOrdinalsInPool, bool bWarnOfMem )
+bool CSphIndex_VLN::SortOrdinalIds ( const char * szToFile, int iFromFD, int iArenaSize, CSphVector < CSphVector < SphOffset_t > > & dOrdBlockSize, bool bWarnOfMem )
 {
-	int nLastBlockIds = nOrdinals % iOrdinalsInPool;
-	int nBlocks = nOrdinals / iOrdinalsInPool + ( nLastBlockIds ? 1 : 0 );
+	int nAttrs = dOrdBlockSize.GetLength ();
+	int nMaxBlocks = 0;
+	ARRAY_FOREACH ( i, dOrdBlockSize )
+		if ( dOrdBlockSize [i].GetLength () > nMaxBlocks )
+			nMaxBlocks = dOrdBlockSize [i].GetLength ();
 
 	CSphWriter Writer;
 	if ( !Writer.OpenFile ( szToFile, m_sLastError ) )
 		return false;
 
-	SphOffset_t iSharedOffset = -1;
-	int iBinSize = CSphBin::CalcBinSize ( iArenaSize, nBlocks, "ordinals", bWarnOfMem );
-
-	CSphQueue < OrdinalIdEntry_t, CmpOrdinalIdEntry_fn > qOrdinalIds ( Max ( 1, nBlocks ) );
+	int iBinSize = CSphBin::CalcBinSize ( iArenaSize, nMaxBlocks, "ordinals", bWarnOfMem );
 
 	SphOffset_t uStart = 0;
 	OrdinalIdEntry_t tOrdinalIdEntry;
@@ -6306,12 +6306,16 @@ bool CSphIndex_VLN::SortOrdinalIds ( const char * szToFile, int iFromFD, int nAt
 
 	for ( int iAttr = 0; iAttr < nAttrs; ++iAttr )
 	{
+		int nBlocks = dOrdBlockSize [iAttr].GetLength ();
+		CSphQueue < OrdinalIdEntry_t, CmpOrdinalIdEntry_fn > qOrdinalIds ( Max ( 1, nBlocks ) );
 		CSphVector < CSphBin > dBins;
 		dBins.Resize ( nBlocks );
 
+		SphOffset_t iSharedOffset = -1;
+
 		ARRAY_FOREACH ( i, dBins )
 		{
-			dBins [i].m_iFileLeft = ( i == nBlocks - 1 ? ( nLastBlockIds ? nLastBlockIds : iOrdinalsInPool ): iOrdinalsInPool ) * sizeof ( OrdinalId_t );
+			dBins [i].m_iFileLeft = (int)dOrdBlockSize [iAttr][i];
 			dBins [i].m_iFilePos = uStart;
 			dBins [i].Init ( iFromFD, &iSharedOffset, iBinSize );
 
@@ -6335,12 +6339,15 @@ bool CSphIndex_VLN::SortOrdinalIds ( const char * szToFile, int iFromFD, int nAt
 		OrdinalId_t tCachedId;
 		tCachedId.m_uDocID = 0;
 
+		SphOffset_t uResultSize = 0;
+
 		for ( ;; )
 		{
 			if ( !qOrdinalIds.GetLength () || qOrdinalIds.Root ().m_uDocID != tCachedId.m_uDocID )
 			{
 				if ( tCachedId.m_uDocID )
 				{
+					uResultSize += sizeof ( OrdinalId_t );
 					Writer.PutBytes ( &tCachedId, sizeof ( OrdinalId_t ) );
 					if ( Writer.IsError () )
 					{
@@ -6373,6 +6380,9 @@ bool CSphIndex_VLN::SortOrdinalIds ( const char * szToFile, int iFromFD, int nAt
 				return false;
 			}
 		}
+
+		dOrdBlockSize [iAttr].Resize ( 0 );
+		dOrdBlockSize [iAttr].Add ( uResultSize );
 	}
 
 	return true;
@@ -6948,8 +6958,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 
 		int iOrdinalsInPool = (int) Min ( SphOffset_t ( iMemoryLimit * ( 1.0f - ARENA_PERCENT ) ), uMemNeededForSorting ) / sizeof ( OrdinalId_t );
 
-		int nIdsWritten = SortOrdinals ( sUnsortedIdFile.cstr (), fdRawOrdinals.GetFD (), iArenaSize, iOrdinalsInPool, dOrdBlockSize, iArenaSize < uMemNeededForReaders );
-		if ( nIdsWritten == -1 )
+		if ( !SortOrdinals ( sUnsortedIdFile.cstr (), fdRawOrdinals.GetFD (), iArenaSize, iOrdinalsInPool, dOrdBlockSize, iArenaSize < uMemNeededForReaders ) )
 			return 0;
 
 		CSphAutofile fdUnsortedId ( sUnsortedIdFile.cstr (), SPH_O_READ, m_sLastError );
@@ -6957,9 +6966,9 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 			return 0;
 
 		iArenaSize = Min ( iMemoryLimit, (int)uMemNeededForSorting );
-		iArenaSize = Max ( CSphBin::MIN_SIZE * ( nIdsWritten / iOrdinalsInPool + 1 ), iArenaSize );
+		iArenaSize = Max ( CSphBin::MIN_SIZE * ( nOrdinals / iOrdinalsInPool + 1 ), iArenaSize );
 
-		if ( !SortOrdinalIds ( sSortedOrdinalIdFile.cstr (), fdUnsortedId.GetFD (), dOrdinalAttrs.GetLength (), nIdsWritten, iArenaSize, iOrdinalsInPool, iArenaSize < uMemNeededForSorting ) )
+		if ( !SortOrdinalIds ( sSortedOrdinalIdFile.cstr (), fdUnsortedId.GetFD (), iArenaSize, dOrdBlockSize, iArenaSize < uMemNeededForSorting ) )
 			return 0;
 
 		fdRawOrdinals.Close ();
@@ -6967,8 +6976,6 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 
 		::unlink ( sRawOrdinalsFile.cstr () );
 		::unlink ( sUnsortedIdFile.cstr () );
-
-		nOrdinals = nIdsWritten;
 	}
 
 	// initialize MVA reader
@@ -7035,11 +7042,13 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 				return 0;
 
 			dOrdReaders.Resize ( dOrdinalAttrs.GetLength () );
+			SphOffset_t uStart = 0;
 			ARRAY_FOREACH ( i, dOrdReaders )
 			{
-				dOrdReaders [i].m_iFileLeft = nOrdinals * sizeof ( OrdinalId_t );
-				dOrdReaders [i].m_iFilePos = ( i==0 ) ? 0 : dOrdReaders[i-1].m_iFilePos + dOrdReaders[i-1].m_iFileLeft;
+				dOrdReaders [i].m_iFileLeft = (int)dOrdBlockSize [i][0];
+				dOrdReaders [i].m_iFilePos = uStart;
 				dOrdReaders [i].Init ( fdTmpSortedIds.GetFD(), &iSharedOffset, ORDINAL_READ_SIZE );
+				uStart += dOrdReaders [i].m_iFileLeft;
 			}
 		}
 

@@ -449,12 +449,28 @@ class SphinxConfig
 	{
 		global $sd_address, $sd_port;
 
-		$cl = new SphinxClient ();
-		$cl->SetServer ( $sd_address, $sd_port );
+		$bOk = false;
+		$results = false;
 
-		$results = 0;
-		$run_func = create_function( '$client, &$results', $this->_custom_test );
-		$run_func ( $cl, $results ); 
+		for ( $i = 0; $i < 3 && !$bOk; $i++ )
+		{
+    		$cl = new SphinxClient ();
+			$cl->SetServer ( $sd_address, $sd_port );
+
+			$run_func = create_function( '$client, &$results', $this->_custom_test );
+			$run_func ( $cl, $results ); 
+
+			if ( $results )
+				$bOk = TRUE;
+			else
+				usleep ( 50000 );
+		}
+
+		if ( !$bOk )
+		{
+			$error = $cl->GetLastError ();
+			return FALSE;
+		}
 
 		$my_results = array ();
 		$my_results [] = $results;

@@ -79,7 +79,13 @@ $opts = array
 
 $results = array ();
 $results [] = $opts;
-$results [] = $client->BuildExcerpts ( $docs, "test_idx", $words, $opts );
+$res = $client->BuildExcerpts ( $docs, "test_idx", $words, $opts );
+if ( !$res )
+{
+	$results = false;
+	return;
+}
+$results [] = $res;
 
 $opts = array
 (
@@ -91,7 +97,13 @@ $opts = array
 );
 
 $results [] = $opts;
-$results [] = $client->BuildExcerpts ( $docs, "test_idx", $words, $opts );
+$res = $client->BuildExcerpts ( $docs, "test_idx", $words, $opts );
+if ( !$res )
+{
+	$results = false;
+	return;
+}
+$results [] = $res;
 
 $opts = array
 (
@@ -103,7 +115,14 @@ $opts = array
 );
 
 $results [] = $opts;
-$results [] = $client->BuildExcerpts ( $docs, "test_idx", $words, $opts );
+$res = $client->BuildExcerpts ( $docs, "test_idx", $words, $opts );
+if ( !$res )
+{
+	$results = false;
+	return;
+}
+$results [] = $res;
+
 </Custom_test>
 
 </Test>

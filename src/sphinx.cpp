@@ -11209,6 +11209,13 @@ const ExtDoc_t * ExtPhrase_c::GetDocsChunk ( SphDocID_t * pMaxID )
 			continue;
 		}
 
+		// unexpected too-low position? must be duplicate keywords for the previous one ("aaa bbb aaa ccc" case); just skip them
+		if ( pHit->m_uDocid==m_uExpID && pHit->m_uHitpos<m_uExpPos )
+		{
+			pHit++;
+			continue;
+		}
+
 		// unexpected position? reset and continue
 		if ( pHit->m_uDocid!=m_uExpID || pHit->m_uHitpos!=m_uExpPos )
 		{

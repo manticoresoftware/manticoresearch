@@ -1684,7 +1684,7 @@ private:
 	CSphDict *					SetupStarDict ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphScopedPtr<CSphDict> & tContainer );
 
 private:
-	static const int MAX_ORDINAL_STR_LEN	= 1024;		///< maximum ordinal string length in bytes
+	static const int MAX_ORDINAL_STR_LEN	= 4096;	///< maximum ordinal string length in bytes
 	static const int ORDINAL_READ_SIZE		= 262144;	///< sorted ordinal id read buffer size in bytes
 
 	ESphBinRead					ReadOrdinal ( CSphBin & Reader, Ordinal_t & Ordinal );
@@ -6524,6 +6524,8 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 	ARRAY_FOREACH ( i, dOrdBlockSize )
 		dOrdBlockSize [i].Reserve ( 8192 );
 
+	int iMaxOrdLen = 0;
+
 	CSphVector < MvaEntry_t > dFieldMVAs;
 	dFieldMVAs.Reserve ( 16384 );
 
@@ -6672,10 +6674,20 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 				CSphVector<Ordinal_t> & dCol = dOrdinals[i];
 				dCol.Resize ( 1+dCol.GetLength() );
 
-				dCol.Last().m_uDocID = pSource->m_tDocInfo.m_iDocID;
-				Swap ( dCol.Last().m_sValue, pSource->m_dStrAttrs[dOrdinalAttrs[i]] );
+				Ordinal_t & tLastOrd = dCol.Last();
+				tLastOrd.m_uDocID = pSource->m_tDocInfo.m_iDocID;
+				Swap ( tLastOrd.m_sValue, pSource->m_dStrAttrs[dOrdinalAttrs[i]] );
+				int iOrdStrLen = strlen ( tLastOrd.m_sValue.cstr () );
+				if ( iOrdStrLen > MAX_ORDINAL_STR_LEN )
+				{
+					iMaxOrdLen = iOrdStrLen;
 
-				iCurrentBlockSize += strlen ( dCol.Last ().m_sValue.cstr () );
+					// truncate
+					iOrdStrLen = MAX_ORDINAL_STR_LEN;
+					tLastOrd.m_sValue = tLastOrd.m_sValue.SubString ( 0, iOrdStrLen - 1 );
+				}
+
+				iCurrentBlockSize += iOrdStrLen;
 			}
 
 			if ( bHaveOrdinals )
@@ -6941,6 +6953,9 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 
 	if ( bHaveOrdinals )
 	{
+		if ( iMaxOrdLen > MAX_ORDINAL_STR_LEN )
+			sphWarn ( "some ordinal attributes are too long (len=%d,max=%d)", iMaxOrdLen, MAX_ORDINAL_STR_LEN );
+
 		CSphString sUnsortedIdFile = GetIndexFileName("tmp5");
 
 		CSphAutofile fdRawOrdinals ( sRawOrdinalsFile.cstr (), SPH_O_READ, m_sLastError );

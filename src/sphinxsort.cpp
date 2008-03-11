@@ -894,7 +894,7 @@ public:
 		bool bRes = false;
 		while ( iValues-- )
 		{
-			SphGroupKey_t uGroupkey = m_pGrouper->KeyFromValue ( *pValues++ );
+			SphGroupKey_t uGroupkey = this->m_pGrouper->KeyFromValue ( *pValues++ );
 			bRes |= this->PushEx ( tEntry, uGroupkey );
 		}
 		return bRes;
@@ -1065,7 +1065,7 @@ struct MatchGeneric2_fn : public ISphMatchComparator
 		return IsLess ( a, b, t );
 	}
 
-	static inline __forceinline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
+	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
 	{
 		SPH_TEST_KEYPART(0);
 		SPH_TEST_KEYPART(1);

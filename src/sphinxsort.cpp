@@ -184,6 +184,82 @@ public:
 // SORTING+GROUPING QUEUE
 //////////////////////////////////////////////////////////////////////////
 
+/// groupers
+#define GROUPER_BEGIN(_name) \
+	class _name : public CSphGrouper \
+	{ \
+	protected: \
+		CSphAttrLocator m_tLocator; \
+	public: \
+		_name ( const CSphAttrLocator & tLoc ) : m_tLocator ( tLoc ) {} \
+		virtual void GetLocator ( CSphAttrLocator & tOut ) const { tOut = m_tLocator; } \
+		virtual SphGroupKey_t KeyFromMatch ( const CSphMatch & tMatch ) const { return KeyFromValue ( tMatch.GetAttr ( m_tLocator ) ); } \
+		virtual SphGroupKey_t KeyFromValue ( SphAttr_t uValue ) const \
+		{
+
+#define GROUPER_END \
+		} \
+	};
+
+
+#define GROUPER_BEGIN_SPLIT(_name) \
+	GROUPER_BEGIN(_name) \
+	time_t tStamp = (time_t)uValue; \
+	struct tm * pSplit = localtime ( &tStamp );
+
+
+GROUPER_BEGIN ( CSphGrouperAttr )
+	return uValue;
+GROUPER_END
+
+
+GROUPER_BEGIN_SPLIT ( CSphGrouperDay )
+	return (pSplit->tm_year+1900)*10000 + (1+pSplit->tm_mon)*100 + pSplit->tm_mday;
+GROUPER_END
+
+
+GROUPER_BEGIN_SPLIT ( CSphGrouperWeek )
+	int iPrevSunday = (1+pSplit->tm_yday) - pSplit->tm_wday; // prev Sunday day of year, base 1
+	int iYear = pSplit->tm_year+1900;
+	if ( iPrevSunday<=0 ) // check if we crossed year boundary
+	{
+		// adjust day and year
+		iPrevSunday += 365;
+		iYear--;
+
+		// adjust for leap years
+		if ( iYear%4==0 && ( iYear%100!=0 || iYear%400==0 ) )
+			iPrevSunday++;
+	}
+	return iYear*1000 + iPrevSunday;
+GROUPER_END
+
+
+GROUPER_BEGIN_SPLIT ( CSphGrouperMonth )
+	return (pSplit->tm_year+1900)*100 + (1+pSplit->tm_mon);
+GROUPER_END
+
+
+GROUPER_BEGIN_SPLIT ( CSphGrouperYear )
+	return (pSplit->tm_year+1900);
+GROUPER_END
+
+
+/// HACK HACK HACK
+class CSphGrouperAttrdiv : public CSphGrouper
+{
+protected:
+	CSphAttrLocator m_tLocator;
+	int m_iDiv;
+public:
+	CSphGrouperAttrdiv ( const CSphAttrLocator & tLoc, int iDiv ) : m_tLocator ( tLoc ), m_iDiv ( iDiv ) {}
+	virtual void GetLocator ( CSphAttrLocator & tOut ) const { tOut = m_tLocator; }
+	virtual SphGroupKey_t KeyFromMatch ( const CSphMatch & tMatch ) const { return KeyFromValue ( tMatch.GetAttr ( m_tLocator ) ); }
+	virtual SphGroupKey_t KeyFromValue ( SphAttr_t uValue ) const { return uValue/m_iDiv; }
+};
+
+//////////////////////////////////////////////////////////////////////////
+
 /// simple fixed-size hash
 /// doesn't keep the order
 template < typename T, typename KEY, typename HASHFUNC >
@@ -458,40 +534,6 @@ void CSphUniqounter::Compact ( SphGroupKey_t * pRemoveGroups, int iRemoveGroups 
 
 /////////////////////////////////////////////////////////////////////////////
 
-static inline SphGroupKey_t sphCalcGroupKey ( ESphGroupBy eGroupBy, SphAttr_t iAttr )
-{
-	if ( eGroupBy==SPH_GROUPBY_ATTR )
-		return iAttr;
-
-	time_t tStamp = iAttr;
-	struct tm * pSplit = localtime ( &tStamp ); // FIXME! use _r on UNIX
-
-	switch ( eGroupBy )
-	{
-		case SPH_GROUPBY_DAY:	return (pSplit->tm_year+1900)*10000 + (1+pSplit->tm_mon)*100 + pSplit->tm_mday;
-		case SPH_GROUPBY_WEEK:
-		{
-			int iPrevSunday = (1+pSplit->tm_yday) - pSplit->tm_wday; // prev Sunday day of year, base 1
-			int iYear = pSplit->tm_year+1900;
-			if ( iPrevSunday<=0 ) // check if we crossed year boundary
-			{
-				// adjust day and year
-				iPrevSunday += 365;
-				iYear--;
-
-				// adjust for leap years
-				if ( iYear%4==0 && ( iYear%100!=0 || iYear%400==0 ) )
-					iPrevSunday++;
-			}
-			return iYear*1000 + iPrevSunday;
-		}
-		case SPH_GROUPBY_MONTH:	return (pSplit->tm_year+1900)*100 + (1+pSplit->tm_mon);
-		case SPH_GROUPBY_YEAR:	return (pSplit->tm_year+1900);
-		default:				assert ( 0 ); return 0;
-	}
-}
-
-
 /// attribute magic
 enum
 {
@@ -528,7 +570,7 @@ protected:
 	const int		m_iRowitems;		///< normal match rowitems count (to distinguish already grouped matches)
 
 	ESphGroupBy		m_eGroupBy;			///< group-by function
-	CSphAttrLocator	m_tGroupbyLoc;		///< group-by attr locator
+	CSphGrouper *	m_pGrouper;
 
 	CSphFixedHash < CSphMatch *, SphGroupKey_t, IdentityHash_fn >	m_hGroup2Match;
 
@@ -554,7 +596,7 @@ public:
 		: CSphMatchQueueTraits ( pQuery->m_iMaxMatches*GROUPBY_FACTOR, true )
 		, m_iRowitems		( pQuery->m_iPresortRowitems )
 		, m_eGroupBy		( pQuery->m_eGroupFunc )
-		, m_tGroupbyLoc		( pQuery->m_tGroupbyLoc	)
+		, m_pGrouper		( pQuery->m_pGrouper )
 		, m_hGroup2Match	( pQuery->m_iMaxMatches*GROUPBY_FACTOR )
 		, m_iLimit			( pQuery->m_iMaxMatches )
 		, m_tDistinctLoc	( pQuery->m_tDistinctLoc )
@@ -579,7 +621,7 @@ public:
 	/// add entry to the queue
 	virtual bool Push ( const CSphMatch & tEntry )
 	{
-		SphGroupKey_t uGroupKey = sphCalcGroupKey ( m_eGroupBy, tEntry.GetAttr ( m_tGroupbyLoc ) );
+		SphGroupKey_t uGroupKey = m_pGrouper->KeyFromMatch ( tEntry );
 		return PushEx ( tEntry, uGroupKey );
 	}
 
@@ -746,7 +788,7 @@ protected:
 			CSphVector<SphGroupKey_t> dRemove;
 			dRemove.Resize ( iCut );
 			for ( int i=0; i<iCut; i++ )
-				dRemove[i] = m_pData[m_iUsed+i].GetAttr ( m_tGroupbyLoc );
+				dRemove[i] = m_pData[m_iUsed+i].GetAttr ( m_tLocGroupby );
 
 			// sort and compact
 			if ( !m_bSortByDistinct )
@@ -809,13 +851,16 @@ class CSphKBufferMVAGroupSorter : public CSphKBufferGroupSorter < COMPGROUP, DIS
 {
 protected:
 	const DWORD *		m_pMva;		///< pointer to MVA pool for incoming matches
+	CSphAttrLocator		m_tMvaLocator;
 
 public:
 	/// ctor
 	CSphKBufferMVAGroupSorter ( const ISphMatchComparator * pComp, const CSphQuery * pQuery )
 		: CSphKBufferGroupSorter < COMPGROUP, DISTINCT > ( pComp, pQuery )
 		, m_pMva ( NULL )
-	{}
+	{
+		this->m_pGrouper->GetLocator ( m_tMvaLocator );
+	}
 
 	/// set MVA pool for subsequent matches
 	void SetMVAPool ( const DWORD * pMva )
@@ -839,7 +884,7 @@ public:
 			return false;
 
 		// (this pointer is for gcc; it doesn't work otherwise)
-		SphAttr_t iMvaIndex = tEntry.GetAttr ( this->m_tGroupbyLoc ); // FIXME! OPTIMIZE! use simpler locator than full bits/count here
+		SphAttr_t iMvaIndex = tEntry.GetAttr ( this->m_tMvaLocator ); // FIXME! OPTIMIZE! use simpler locator than full bits/count here
 		if ( !iMvaIndex )
 			return false;
 
@@ -849,7 +894,7 @@ public:
 		bool bRes = false;
 		while ( iValues-- )
 		{
-			SphGroupKey_t uGroupkey = sphCalcGroupKey ( this->m_eGroupBy, *pValues++ );
+			SphGroupKey_t uGroupkey = m_pGrouper->KeyFromValue ( *pValues++ );
 			bRes |= this->PushEx ( tEntry, uGroupkey );
 		}
 		return bRes;
@@ -1438,9 +1483,9 @@ static ISphMatchSorter * sphCreateSorter1st ( ESphSortFunc eMatchFunc, bool bMat
 // PUBLIC FUNCTIONS (FACTORY AND FLATTENING)
 //////////////////////////////////////////////////////////////////////////
 
-static bool UpdateQueryForSchema ( CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError )
+static bool UpdateQueryForSchema ( CSphQuery * pQuery, const CSphSchema & tSchema, bool & bMVA, CSphString & sError )
 {
-	pQuery->m_tGroupbyLoc.m_iBitOffset = -1;
+	SafeDelete ( pQuery->m_pGrouper );
 	pQuery->m_tDistinctLoc.m_iBitOffset = -1;
 
 	if ( pQuery->m_sGroupBy.IsEmpty() )
@@ -1452,14 +1497,64 @@ static bool UpdateQueryForSchema ( CSphQuery * pQuery, const CSphSchema & tSchem
 		return false;
 	}
 
-	// setup gropuby attr
-	int iGroupBy = tSchema.GetAttrIndex ( pQuery->m_sGroupBy.cstr() );
-	if ( iGroupBy<0 )
+	// setup groupby attr
+	int iGroupBy = -1;
+	if ( pQuery->m_eGroupFunc==SPH_GROUPBY_EXTENDED )
 	{
-		sError.SetSprintf ( "group-by attribute '%s' not found", pQuery->m_sGroupBy.cstr() );
-		return false;
+		// groupby clause
+		// HACK HACK HACK, implement full blown expr support here
+		CSphString sBuf = pQuery->m_sGroupBy;
+
+		char * p = strchr ( (char*)sBuf.cstr(), '/' );
+		if ( p )
+			*p++ = '\0';
+
+		iGroupBy = tSchema.GetAttrIndex ( sBuf.cstr() );
+		if ( iGroupBy<0 )
+		{
+			sError.SetSprintf ( "group-by attribute '%s' not found", sBuf.cstr() );
+			return false;
+		}
+
+		if ( p )
+		{
+			int iDiv = strtoul ( p, NULL, 10 );
+			if ( !iDiv )
+			{
+				sError.SetSprintf ( "group-by clause: division by zero" );
+				return false;
+			}
+			pQuery->m_pGrouper = new CSphGrouperAttrdiv ( tSchema.GetAttr(iGroupBy).m_tLocator, iDiv );
+		} else
+		{
+			pQuery->m_pGrouper = new CSphGrouperAttr ( tSchema.GetAttr(iGroupBy).m_tLocator );
+		}
+
+	} else
+	{
+		// plain old name
+		iGroupBy = tSchema.GetAttrIndex ( pQuery->m_sGroupBy.cstr() );
+		if ( iGroupBy<0 )
+		{
+			sError.SetSprintf ( "group-by attribute '%s' not found", pQuery->m_sGroupBy.cstr() );
+			return false;
+		}
+
+		CSphAttrLocator tLoc = tSchema.GetAttr(iGroupBy).m_tLocator;
+		switch ( pQuery->m_eGroupFunc )
+		{
+			case SPH_GROUPBY_DAY:		pQuery->m_pGrouper = new CSphGrouperDay ( tLoc ); break;
+			case SPH_GROUPBY_WEEK:		pQuery->m_pGrouper = new CSphGrouperWeek ( tLoc ); break;
+			case SPH_GROUPBY_MONTH:		pQuery->m_pGrouper = new CSphGrouperMonth ( tLoc ); break;
+			case SPH_GROUPBY_YEAR:		pQuery->m_pGrouper = new CSphGrouperYear ( tLoc ); break;
+			case SPH_GROUPBY_ATTR:		pQuery->m_pGrouper = new CSphGrouperAttr ( tLoc ); break;
+			default:
+				sError.SetSprintf ( "invalid group-by mode (mode=%d)", pQuery->m_eGroupFunc );
+				return false;
+		}
 	}
-	pQuery->m_tGroupbyLoc = tSchema.GetAttr(iGroupBy).m_tLocator;
+
+	bMVA = ( tSchema.GetAttr(iGroupBy).m_eAttrType & SPH_ATTR_MULTI )!=0;
 
 	// setup distinct attr
 	if ( !pQuery->m_sGroupDistinct.IsEmpty() )
@@ -1481,7 +1576,8 @@ static bool UpdateQueryForSchema ( CSphQuery * pQuery, const CSphSchema & tSchem
 ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError )
 {
 	// lookup proper attribute index to group by, if any
-	if ( !UpdateQueryForSchema ( pQuery, tSchema, sError ) )
+	bool bMVA = false;
+	if ( !UpdateQueryForSchema ( pQuery, tSchema, bMVA, sError ) )
 		return NULL;
 	assert ( pQuery->m_sGroupBy.IsEmpty() || pQuery->IsGroupby() );
 
@@ -1670,14 +1766,6 @@ ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchem
 
 	bool bMatchBits = tStateMatch.UsesBitfields ();
 	bool bGroupBits = tStateGroup.UsesBitfields ();
-
-	bool bMVA = false;
-	if ( pQuery->IsGroupby() )
-	{
-		int iAttr = tSchema.GetAttrIndex ( pQuery->m_sGroupBy.cstr() );
-		const CSphColumnInfo & tAttr = tSchema.GetAttr ( iAttr );
-		bMVA = ( tAttr.m_eAttrType & SPH_ATTR_MULTI )!=0;
-	}
 
 	if ( !pQuery->IsGroupby() )
 	{

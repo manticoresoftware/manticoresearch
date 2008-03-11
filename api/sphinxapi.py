@@ -80,6 +80,8 @@ SPH_GROUPBY_WEEK		= 1
 SPH_GROUPBY_MONTH		= 2
 SPH_GROUPBY_YEAR		= 3
 SPH_GROUPBY_ATTR		= 4
+SPH_GROUPBY_ATTRPAIR	= 5
+SPH_GROUPBY_EXTENDED	= 6
 
 
 class SphinxClient:
@@ -364,7 +366,7 @@ class SphinxClient:
 		Set grouping attribute and function.
 		"""
 		assert(isinstance(attribute, str))
-		assert(func in [SPH_GROUPBY_DAY, SPH_GROUPBY_WEEK, SPH_GROUPBY_MONTH, SPH_GROUPBY_YEAR, SPH_GROUPBY_ATTR] )
+		assert(func in [SPH_GROUPBY_DAY, SPH_GROUPBY_WEEK, SPH_GROUPBY_MONTH, SPH_GROUPBY_YEAR, SPH_GROUPBY_ATTR, SPH_GROUPBY_ATTRPAIR, SPH_GROUPBY_EXTENDED] )
 		assert(isinstance(groupsort, str))
 
 		self._groupby = attribute

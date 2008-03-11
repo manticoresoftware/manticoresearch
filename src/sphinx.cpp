@@ -3975,6 +3975,7 @@ CSphQuery::CSphQuery ()
 
 	, m_bCalcGeodist	( false )
 	, m_iPresortRowitems( -1 )
+	, m_pGrouper		( NULL )
 	, m_pExpr			( NULL )
 
 	, m_iOldVersion		( 0 )
@@ -3990,6 +3991,7 @@ CSphQuery::CSphQuery ()
 CSphQuery::~CSphQuery ()
 {
 	SafeDelete ( m_pExpr );
+	SafeDelete ( m_pGrouper );
 }
 
 

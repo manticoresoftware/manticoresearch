@@ -1318,7 +1318,8 @@ enum ESphGroupBy
 	SPH_GROUPBY_MONTH	= 2,	///< group by month
 	SPH_GROUPBY_YEAR	= 3,	///< group by year
 	SPH_GROUPBY_ATTR	= 4,	///< group by attribute value
-	SPH_GROUPBY_ATTRPAIR= 5		///< group by sequential attrs pair (rendered redundant by 64bit attrs support; removed)
+	SPH_GROUPBY_ATTRPAIR= 5,	///< group by sequential attrs pair (rendered redundant by 64bit attrs support; removed)
+	SPH_GROUPBY_EXTENDED= 6		///< group by an expression (pretty limited for now)
 };
 
 
@@ -1389,6 +1390,20 @@ struct CSphNamedInt
 #include "sphinxexpr.h"
 
 
+/// groupby key type
+typedef uint64_t	SphGroupKey_t;
+
+
+/// base grouper (class that computes groupby key)
+class CSphGrouper
+{
+public:
+	virtual SphGroupKey_t	KeyFromValue ( SphAttr_t uValue ) const = 0;
+	virtual SphGroupKey_t	KeyFromMatch ( const CSphMatch & tMatch ) const = 0;
+	virtual void			GetLocator ( CSphAttrLocator & tOut ) const = 0;
+};
+
+
 /// search query
 class CSphQuery
 {
@@ -1436,7 +1451,7 @@ public:
 public:
 	bool			m_bCalcGeodist;		///< whether this query needs to calc @geodist
 	int				m_iPresortRowitems;	///< row size submitted to sorter (with calculated attributes, but without groupby/count attributes added by sorters)
-	CSphAttrLocator	m_tGroupbyLoc;		///< group-by attr locator
+	CSphGrouper *	m_pGrouper;			///< object that know how to compute group-by key for me
 	CSphAttrLocator	m_tDistinctLoc;		///< count-distinct attr locator
 	ISphExpr *		m_pExpr;			///< expression opcodes for SPH_SORT_EXPR mode
 
@@ -1453,10 +1468,11 @@ public:
 					CSphQuery ();		///< ctor, fills defaults
 					~CSphQuery ();		///< dtor, frees owned stuff
 
-	int				GetIndexWeight ( const char * sName ) const;	///< return index weight from m_dIndexWeights; or 1 by default
+	/// return index weight from m_dIndexWeights; or 1 by default
+	int				GetIndexWeight ( const char * sName ) const;
 
 	/// check whether this query is group-by
-	bool			IsGroupby () const { return m_tGroupbyLoc.m_iBitOffset>=0; }
+	bool			IsGroupby () const { return m_pGrouper!=NULL; }
 
 	/// check whether this query is group-by and has distinct
 	bool			HasDistinct () const { return IsGroupby() && m_tDistinctLoc.m_iBitOffset>=0; }

@@ -24,7 +24,7 @@ define ( "SEARCHD_COMMAND_UPDATE",	2 );
 define ( "SEARCHD_COMMAND_KEYWORDS",3 );
 
 /// current client-side command implementation versions
-define ( "VER_COMMAND_SEARCH",		0x113 );
+define ( "VER_COMMAND_SEARCH",		0x114 );
 define ( "VER_COMMAND_EXCERPT",		0x100 );
 define ( "VER_COMMAND_UPDATE",		0x101 );
 define ( "VER_COMMAND_KEYWORDS",	0x100 );
@@ -69,6 +69,7 @@ define ( "SPH_ATTR_TIMESTAMP",		2 );
 define ( "SPH_ATTR_ORDINAL",		3 );
 define ( "SPH_ATTR_BOOL",			4 );
 define ( "SPH_ATTR_FLOAT",			5 );
+define ( "SPH_ATTR_BIGINT",			6 );
 define ( "SPH_ATTR_MULTI",			0x40000000 );
 
 /// known grouping functions
@@ -498,8 +499,8 @@ class SphinxClient
 	function SetFilterRange ( $attribute, $min, $max, $exclude=false )
 	{
 		assert ( is_string($attribute) );
-		assert ( is_int($min) );
-		assert ( is_int($max) );
+		assert ( is_numeric($min) );
+		assert ( is_numeric($max) );
 		assert ( $min<=$max );
 
 		$this->_filters[] = array ( "type"=>SPH_FILTER_RANGE, "attr"=>$attribute, "exclude"=>$exclude, "min"=>$min, "max"=>$max );
@@ -648,11 +649,11 @@ class SphinxClient
 				case SPH_FILTER_VALUES:
 					$req .= pack ( "N", count($filter["values"]) );
 					foreach ( $filter["values"] as $value )
-						$req .= pack ( "N", floatval($value) ); // this uberhack is to workaround 32bit signed int limit on x32 platforms
+						$req .= sphPack64 ( $value );
 					break;
 
 				case SPH_FILTER_RANGE:
-					$req .= pack ( "NN", $filter["min"], $filter["max"] );
+					$req .= sphPack64 ( $filter["min"] ) . sphPack64 ( $filter["max"] );
 					break;
 
 				case SPH_FILTER_FLOATRANGE:
@@ -845,6 +846,13 @@ class SphinxClient
 				$attrvals = array ();
 				foreach ( $attrs as $attr=>$type )
 				{
+					// handle 64bit ints
+					if ( $type==SPH_ATTR_BIGINT )
+					{
+						$attrvals[$attr] = sphUnpack64 ( substr ( $response, $p, 8 ) ); $p += 8;
+						continue;
+					}
+
 					// handle floats
 					if ( $type==SPH_ATTR_FLOAT )
 					{

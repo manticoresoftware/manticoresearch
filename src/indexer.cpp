@@ -399,7 +399,7 @@ void SqlAttrsConfigure ( CSphSourceParams_SQL & tParams, const CSphVariant * pHe
 						sSourceName, tCol.m_sName.cstr(), iBits );
 					iBits = -1;
 				}
-				tCol.m_iBitCount = iBits;
+				tCol.m_tLocator.m_iBitCount = iBits;
 
 			} else
 			{
@@ -444,6 +444,7 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 	SqlAttrsConfigure ( tParams,	hSource("sql_attr_str2ordinal"),	SPH_ATTR_ORDINAL,	sSourceName );
 	SqlAttrsConfigure ( tParams,	hSource("sql_attr_bool"),			SPH_ATTR_BOOL,		sSourceName );
 	SqlAttrsConfigure ( tParams,	hSource("sql_attr_float"),			SPH_ATTR_FLOAT,		sSourceName );
+	SqlAttrsConfigure ( tParams,	hSource("sql_attr_bigint"),			SPH_ATTR_BIGINT,	sSourceName );
 
 	// parse multi-attrs
 	for ( CSphVariant * pVal = hSource("sql_attr_multi"); pVal; pVal = pVal->m_pNext )

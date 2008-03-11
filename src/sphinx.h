@@ -103,12 +103,13 @@ STATIC_SIZE_ASSERT ( SphDocID_t, 4 );
 typedef DWORD			CSphRowitem;
 
 /// widest integer type that can be be stored as an attribute (ideally, fully decoupled from rowitem size!)
-typedef DWORD			SphAttr_t;
+typedef uint64_t		SphAttr_t;
 
 const CSphRowitem		ROWITEM_MAX		= UINT_MAX;
 const int				ROWITEM_BITS	= 8*sizeof(CSphRowitem);
+const int				ROWITEM_SHIFT	= 5;
 
-STATIC_ASSERT ( sizeof(CSphRowitem)==sizeof(float), ROWITEM_AND_FLOAT_SIZE_MISMATCH );
+STATIC_ASSERT ( (1<<ROWITEM_SHIFT)==ROWITEM_BITS, INVALID_ROWITEM_SHIFT );
 
 inline SphDocID_t &		DOCINFO2ID ( const DWORD * pDocinfo )	{ return *(SphDocID_t*)pDocinfo; }
 inline DWORD *			DOCINFO2ATTRS ( DWORD * pDocinfo )		{ return pDocinfo+DOCINFO_IDSIZE; }
@@ -509,30 +510,66 @@ struct CSphWordHit
 	DWORD			m_iWordPos;		///< word position in current document
 };
 
+/// attribute locator within the row
+struct CSphAttrLocator
+{
+	int				m_iBitOffset;
+	int				m_iBitCount;
+
+	CSphAttrLocator ()
+		: m_iBitOffset ( -1 )
+		, m_iBitCount ( -1 )
+	{}
+
+	inline bool IsBitfield () const
+	{
+		return ( m_iBitCount!=ROWITEM_BITS || ( m_iBitOffset%ROWITEM_BITS )!=0 );
+	}
+
+	int CalcRowitem () const
+	{
+		return IsBitfield() ? - 1 : ( m_iBitOffset / ROWITEM_BITS );
+	}
+};
+
 
 /// getter
-inline SphAttr_t sphGetRowAttr ( const CSphRowitem * pRow, int iBitOffset, int iBitCount )
+inline SphAttr_t sphGetRowAttr ( const CSphRowitem * pRow, const CSphAttrLocator & tLoc )
 {
-	int iItem = iBitOffset / ROWITEM_BITS;
-	if ( iBitCount==ROWITEM_BITS )
+	int iItem = tLoc.m_iBitOffset>>ROWITEM_SHIFT;
+
+	if ( tLoc.m_iBitCount==ROWITEM_BITS )
 		return pRow[iItem];
 
-	int iShift = iBitOffset % ROWITEM_BITS;
-	return ( pRow[iItem]>>iShift ) & ( (1UL<<iBitCount)-1 );
+	if ( tLoc.m_iBitCount==2*ROWITEM_BITS ) // FIXME? write a generalized version, perhaps
+		return SphAttr_t(pRow[iItem]) + ( SphAttr_t(pRow[iItem+1])<<ROWITEM_BITS );
+
+	int iShift = tLoc.m_iBitOffset & ((1<<ROWITEM_SHIFT)-1);
+	return ( pRow[iItem]>>iShift ) & ( (1UL<<tLoc.m_iBitCount)-1 );
 }
 
 
 /// setter
-inline void sphSetRowAttr ( CSphRowitem * pRow, int iBitOffset, int iBitCount, SphAttr_t uValue )
+inline void sphSetRowAttr ( CSphRowitem * pRow, const CSphAttrLocator & tLoc, SphAttr_t uValue )
 {
-	int iItem = iBitOffset / ROWITEM_BITS;
-	if ( iBitCount==ROWITEM_BITS )
-		pRow[iItem] = uValue;
+	int iItem = tLoc.m_iBitOffset>>ROWITEM_SHIFT;
+	if ( tLoc.m_iBitCount==2*ROWITEM_BITS )
+	{
+		// FIXME? write a generalized version, perhaps
+		pRow[iItem] = CSphRowitem ( uValue & ( (SphAttr_t(1)<<ROWITEM_BITS)-1 ) );
+		pRow[iItem+1] = CSphRowitem ( uValue >> ROWITEM_BITS );
 
-	int iShift = iBitOffset % ROWITEM_BITS;
-	CSphRowitem uMask = ( (1UL<<iBitCount)-1 ) << iShift;
-	pRow[iItem] &= ~uMask;
-	pRow[iItem] |= ( uMask & (uValue<<iShift) );
+	} else if ( tLoc.m_iBitCount==ROWITEM_BITS )
+	{
+		pRow[iItem] = CSphRowitem ( uValue );
+
+	} else
+	{
+		int iShift = tLoc.m_iBitOffset & ((1<<ROWITEM_SHIFT)-1);
+		CSphRowitem uMask = ( (1UL<<tLoc.m_iBitCount)-1 ) << iShift;
+		pRow[iItem] &= ~uMask;
+		pRow[iItem] |= ( uMask & (uValue<<iShift) );
+	}
 }
 
 
@@ -601,50 +638,11 @@ struct CSphDocInfo
 	}
 
 public:
-	/// get attr by item index
-	SphAttr_t GetAttr ( int iItem ) const
-	{
-		assert ( iItem>=0 && iItem<m_iRowitems );
-		return m_pRowitems[iItem];
-	}
+	SphAttr_t	GetAttr ( const CSphAttrLocator & tLoc ) const				{ return sphGetRowAttr ( m_pRowitems, tLoc ); }
+	float		GetAttrFloat ( const CSphAttrLocator & tLoc ) const			{ return sphDW2F ( (DWORD)sphGetRowAttr ( m_pRowitems, tLoc ) ); };
 
-	/// get attr by bit offset/count
-	SphAttr_t GetAttr ( int iBitOffset, int iBitCount ) const
-	{
-		assert ( iBitOffset>=0 && iBitOffset<m_iRowitems*ROWITEM_BITS );
-		assert ( iBitCount>0 && iBitOffset+iBitCount<=m_iRowitems*ROWITEM_BITS );
-		return sphGetRowAttr ( m_pRowitems, iBitOffset, iBitCount );
-	}
-
-	/// get float attr
-	float GetAttrFloat ( int iItem ) const
-	{
-		assert ( iItem>=0 && iItem<m_iRowitems );
-		return sphDW2F ( m_pRowitems[iItem] );
-	};
-
-public:
-	/// set attr by item index
-	void SetAttr ( int iItem, SphAttr_t uValue )
-	{
-		assert ( iItem>=0 && iItem<m_iRowitems );
-		m_pRowitems[iItem] = uValue;
-	}
-
-	/// set attr by bit offset/count
-	void SetAttr ( int iBitOffset, int iBitCount, SphAttr_t uValue ) const
-	{
-		assert ( iBitOffset>=0 && iBitOffset<m_iRowitems*ROWITEM_BITS );
-		assert ( iBitCount>0 && iBitOffset+iBitCount<=m_iRowitems*ROWITEM_BITS );
-		sphSetRowAttr ( m_pRowitems, iBitOffset, iBitCount, uValue );
-	}
-
-	/// set float attr
-	void SetAttrFloat ( int iItem, float fValue ) const
-	{
-		assert ( iItem>=0 && iItem<m_iRowitems );
-		m_pRowitems[iItem] = sphF2DW ( fValue );
-	};
+	void		SetAttr ( const CSphAttrLocator & tLoc, SphAttr_t uValue )	{ sphSetRowAttr ( m_pRowitems, tLoc, uValue ); }
+	void		SetAttrFloat ( const CSphAttrLocator & tLoc, float fValue )	{ sphSetRowAttr ( m_pRowitems, tLoc, sphF2DW ( fValue ) ); }
 };
 
 
@@ -681,6 +679,7 @@ enum
 	SPH_ATTR_ORDINAL	= 3,			///< this attr is an ordinal string number (integer at search time, specially handled at indexing time)
 	SPH_ATTR_BOOL		= 4,			///< this attr is a boolean bit field
 	SPH_ATTR_FLOAT		= 5,
+	SPH_ATTR_BIGINT		= 6,
 
 	SPH_ATTR_MULTI		= 0x40000000UL	///< this attr has multiple values (0 or more)
 };
@@ -712,9 +711,7 @@ struct CSphColumnInfo
 	ESphWordpart	m_eWordpart;	///< wordpart processing type
 
 	int				m_iIndex;		///< index into source result set
-	int				m_iRowitem;		///< index into document info row (only if attr spans whole rowitem; -1 otherwise)
-	int				m_iBitOffset;	///< bit offset into row
-	int				m_iBitCount;	///< bit count
+	CSphAttrLocator	m_tLocator;		///< attribute locator in the row
 
 	ESphAttrSrc		m_eSrc;			///< attr source (for multi-valued attrs only)
 	CSphString		m_sQuery;		///< query to retrieve values (for multi-valued attrs only)
@@ -726,9 +723,6 @@ struct CSphColumnInfo
 		, m_eAttrType ( eType )
 		, m_eWordpart ( SPH_WORDPART_WHOLE )
 		, m_iIndex ( -1 )
-		, m_iRowitem ( -1 )
-		, m_iBitOffset ( -1 )
-		, m_iBitCount ( -1 )
 		, m_eSrc ( SPH_ATTRSRC_NONE )
 	{
 		m_sName.ToLower ();
@@ -1324,7 +1318,7 @@ enum ESphGroupBy
 	SPH_GROUPBY_MONTH	= 2,	///< group by month
 	SPH_GROUPBY_YEAR	= 3,	///< group by year
 	SPH_GROUPBY_ATTR	= 4,	///< group by attribute value
-	SPH_GROUPBY_ATTRPAIR= 5		///< group by sequential attrs pair
+	SPH_GROUPBY_ATTRPAIR= 5		///< group by sequential attrs pair (rendered redundant by 64bit attrs support; removed)
 };
 
 
@@ -1347,21 +1341,19 @@ public:
 	ESphFilter			m_eType;		///< filter type
 	union
 	{
-		DWORD			m_uMinValue;	///< range min
+		SphAttr_t		m_uMinValue;	///< range min
 		float			m_fMinValue;	///< range min
 	};
 	union
 	{
-		DWORD			m_uMaxValue;	///< range max
+		SphAttr_t		m_uMaxValue;	///< range max
 		float			m_fMaxValue;	///< range max
 	};
-	CSphVector<DWORD>	m_dValues;		///< integer values set
+	CSphVector<SphAttr_t>	m_dValues;		///< integer values set
 
 public:
 	bool				m_bMva;			///< whether this filter is against multi-valued attribute
-	int					m_iRowitem;		///< attr item offset into row, for full-item attrs
-	int					m_iBitOffset;	///< attr bit offset into row
-	int					m_iBitCount;	///< attr bit count
+	CSphAttrLocator		m_tLocator;		///< attr locator
 
 public:
 						CSphFilter ();
@@ -1444,10 +1436,8 @@ public:
 public:
 	bool			m_bCalcGeodist;		///< whether this query needs to calc @geodist
 	int				m_iPresortRowitems;	///< row size submitted to sorter (with calculated attributes, but without groupby/count attributes added by sorters)
-	int				m_iGroupbyOffset;	///< group-by attr bit offset
-	int				m_iGroupbyCount;	///< group-by attr bit count
-	int				m_iDistinctOffset;	///< distinct-counted attr bit offset
-	int				m_iDistinctCount;	///< distinct-counted attr bit count
+	CSphAttrLocator	m_tGroupbyLoc;		///< group-by attr locator
+	CSphAttrLocator	m_tDistinctLoc;		///< count-distinct attr locator
 	ISphExpr *		m_pExpr;			///< expression opcodes for SPH_SORT_EXPR mode
 
 public:
@@ -1464,6 +1454,12 @@ public:
 					~CSphQuery ();		///< dtor, frees owned stuff
 
 	int				GetIndexWeight ( const char * sName ) const;	///< return index weight from m_dIndexWeights; or 1 by default
+
+	/// check whether this query is group-by
+	bool			IsGroupby () const { return m_tGroupbyLoc.m_iBitOffset>=0; }
+
+	/// check whether this query is group-by and has distinct
+	bool			HasDistinct () const { return IsGroupby() && m_tDistinctLoc.m_iBitOffset>=0; }
 };
 
 
@@ -1562,9 +1558,7 @@ struct CSphMatchComparatorState
 	static const int	MAX_ATTRS = 5;
 
 	int					m_iAttr[MAX_ATTRS];			///< sort-by attr index
-	int					m_iRowitem[MAX_ATTRS];		///< sort-by attr row item (-1 if not maps to full item)
-	int					m_iBitOffset[MAX_ATTRS];	///< sort-by attr bit offset into row
-	int					m_iBitCount[MAX_ATTRS];		///< sort-by attr bit count
+	CSphAttrLocator		m_tLocator[MAX_ATTRS];		///< sort-by attr locator 
 
 	DWORD				m_uAttrDesc;				///< sort order mask (if i-th bit is set, i-th attr order is DESC)
 	DWORD				m_iNow;						///< timestamp (for timesegments sorting mode)
@@ -1575,12 +1569,7 @@ struct CSphMatchComparatorState
 		, m_iNow ( 0 )
 	{
 		for ( int i=0; i<MAX_ATTRS; i++ )
-		{
 			m_iAttr[i] = -1;
-			m_iRowitem[i] = -1;
-			m_iBitOffset[i] = -1;
-			m_iBitCount[i] = -1;
-		}
 	}
 
 	/// check if any of my attrs are bitfields
@@ -1588,7 +1577,7 @@ struct CSphMatchComparatorState
 	{
 		for ( int i=0; i<MAX_ATTRS; i++ )
 			if ( m_iAttr[i]>=0 )
-				if ( m_iBitCount[i]!=ROWITEM_BITS || (m_iBitOffset[i]%ROWITEM_BITS )!=0 )
+				if ( m_tLocator[i].IsBitfield() )
 					return true;
 		return false;
 	}

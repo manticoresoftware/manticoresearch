@@ -93,6 +93,7 @@ static KeyDesc_t g_dKeysSource[] =
 	{ "sql_attr_timestamp",		KEY_LIST, NULL },
 	{ "sql_attr_str2ordinal",	KEY_LIST, NULL },
 	{ "sql_attr_float",			KEY_LIST, NULL },
+	{ "sql_attr_bigint",		KEY_LIST, NULL },
 	{ "sql_attr_multi",			KEY_LIST, NULL },
 	{ "sql_query_post",			KEY_LIST, NULL },
 	{ "sql_query_post_index",	KEY_LIST, NULL },

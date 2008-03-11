@@ -31,25 +31,25 @@
 
 struct Expr_GetInt_c : public ISphExpr
 {
-	int m_iRowitem;
-	Expr_GetInt_c ( int iLocator ) : m_iRowitem ( iLocator ) {}
-	virtual float Eval ( const CSphMatch & tMatch ) const { return (float) tMatch.GetAttr ( m_iRowitem ); }
+	CSphAttrLocator m_tLocator;
+	Expr_GetInt_c ( const CSphAttrLocator & tLocator ) : m_tLocator ( tLocator ) {}
+	virtual float Eval ( const CSphMatch & tMatch ) const { return (float) tMatch.GetAttr ( m_tLocator ); } // FIXME! OPTIMIZE!!! we can go the short route here
 };
 
 
 struct Expr_GetBits_c : public ISphExpr
 {
-	int m_iBitOffset, m_iBitCount;
-	Expr_GetBits_c ( int iLocator ) : m_iBitOffset ( iLocator>>16 ), m_iBitCount ( iLocator&0xffff ) {}
-	virtual float Eval ( const CSphMatch & tMatch ) const { return (float) tMatch.GetAttr ( m_iBitOffset, m_iBitCount ); }
+	CSphAttrLocator m_tLocator;
+	Expr_GetBits_c ( const CSphAttrLocator & tLocator ) : m_tLocator ( tLocator ) {}
+	virtual float Eval ( const CSphMatch & tMatch ) const { return (float) tMatch.GetAttr ( m_tLocator ); }
 };
 
 
 struct Expr_GetFloat_c : public ISphExpr
 {
-	int m_iRowitem;
-	Expr_GetFloat_c ( int iLocator ) : m_iRowitem ( iLocator ) {}
-	virtual float Eval ( const CSphMatch & tMatch ) const { return tMatch.GetAttrFloat ( m_iRowitem ); }
+	CSphAttrLocator m_tLocator;
+	Expr_GetFloat_c ( const CSphAttrLocator & tLocator ) : m_tLocator ( tLocator ) {}
+	virtual float Eval ( const CSphMatch & tMatch ) const { return tMatch.GetAttrFloat ( m_tLocator ); }
 };
 
 
@@ -267,10 +267,9 @@ static FuncDesc_t g_dFuncs[] =
 struct ExprNode_t
 {
 	int				m_iToken;	///< token type, including operators
+	CSphAttrLocator	m_tLocator;	///< attribute locator, for TOK_ATTR type
 	union
 	{
-
-		int			m_iAttrLocator;	///< attribute locator, for TOK_ATTR type
 		float		m_fConst;		///< constant value, for TOK_CONST type
 		int			m_iFunc;		///< built-in function id, for TOK_FUNC type
 		Docinfo_e	m_eDocinfo;		///< docinfo field id, for TOK_DOCINFO type
@@ -385,23 +384,16 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 		{
 			// check attribute type and width
 			const CSphColumnInfo & tCol = m_pSchema->GetAttr ( iAttr );
-			if ( tCol.m_eAttrType==SPH_ATTR_INTEGER || tCol.m_eAttrType==SPH_ATTR_TIMESTAMP || tCol.m_eAttrType==SPH_ATTR_BOOL )
+			if ( tCol.m_eAttrType==SPH_ATTR_INTEGER || tCol.m_eAttrType==SPH_ATTR_TIMESTAMP || tCol.m_eAttrType==SPH_ATTR_BOOL
+				|| tCol.m_eAttrType==SPH_ATTR_FLOAT || tCol.m_eAttrType==SPH_ATTR_BIGINT )
 			{
-				if ( tCol.m_iRowitem>=0 )
-				{
-					lvalp->iAttrLocator = tCol.m_iRowitem;
-					return TOK_ATTR_INT;
-				} else
-				{
-					assert ( tCol.m_iBitOffset>=0 && tCol.m_iBitOffset<=0xffff );
-					assert ( tCol.m_iBitCount>=0 && tCol.m_iBitCount<=0xffff );
-					lvalp->iAttrLocator = ( tCol.m_iBitOffset<<16 ) + tCol.m_iBitCount;
-					return TOK_ATTR_BITS;
-				}
-			} else if ( tCol.m_eAttrType==SPH_ATTR_FLOAT )
-			{
-				lvalp->iAttrLocator = tCol.m_iRowitem;
-				return TOK_ATTR_FLOAT;
+				lvalp->iAttrLocator = ( tCol.m_tLocator.m_iBitOffset<<16 ) + tCol.m_tLocator.m_iBitCount;
+
+				if ( tCol.m_eAttrType==SPH_ATTR_FLOAT )
+					return TOK_ATTR_FLOAT;
+				else
+					return tCol.m_tLocator.IsBitfield() ? TOK_ATTR_BITS : TOK_ATTR_INT;
+
 			} else
 			{
 				if ( tCol.m_eAttrType & SPH_ATTR_MULTI )
@@ -560,9 +552,9 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 
 	switch ( tNode.m_iToken )
 	{
-		case TOK_ATTR_INT:		return new Expr_GetInt_c ( tNode.m_iAttrLocator );
-		case TOK_ATTR_BITS:		return new Expr_GetBits_c ( tNode.m_iAttrLocator );
-		case TOK_ATTR_FLOAT:	return new Expr_GetFloat_c ( tNode.m_iAttrLocator );
+		case TOK_ATTR_INT:		return new Expr_GetInt_c ( tNode.m_tLocator );
+		case TOK_ATTR_BITS:		return new Expr_GetBits_c ( tNode.m_tLocator );
+		case TOK_ATTR_FLOAT:	return new Expr_GetFloat_c ( tNode.m_tLocator );
 		case TOK_NUMBER:		return new Expr_GetConst_c ( tNode.m_fConst );
 		case TOK_DOCINFO:
 			switch ( tNode.m_eDocinfo )
@@ -680,7 +672,8 @@ int ExprParser_t::AddNodeAttr ( int iTokenType, int iAttrLocator )
 	assert ( iTokenType==TOK_ATTR_INT || iTokenType==TOK_ATTR_BITS || iTokenType==TOK_ATTR_FLOAT );
 	ExprNode_t & tNode = m_dNodes.Add ();
 	tNode.m_iToken = iTokenType;
-	tNode.m_iAttrLocator = iAttrLocator;
+	tNode.m_tLocator.m_iBitOffset = iAttrLocator>>16;
+	tNode.m_tLocator.m_iBitCount = iAttrLocator&0xffff;
 	return m_dNodes.GetLength()-1;
 }
 
@@ -688,7 +681,7 @@ int ExprParser_t::AddNodeDocinfo ( Docinfo_e eDocinfo )
 {
 	ExprNode_t & tNode = m_dNodes.Add ();
 	tNode.m_iToken = TOK_DOCINFO;
-	tNode.m_eDocinfo  = eDocinfo;
+	tNode.m_eDocinfo = eDocinfo;
 	return m_dNodes.GetLength()-1;
 }
 

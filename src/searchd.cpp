@@ -63,6 +63,8 @@
 // MISC GLOBALS
 /////////////////////////////////////////////////////////////////////////////
 
+#define MVA_DOWNSIZE DWORD
+
 struct ServedIndex_t
 {
 	CSphIndex *			m_pIndex;
@@ -177,7 +179,7 @@ enum SearchdCommand_e
 /// known command versions
 enum
 {
-	VER_COMMAND_SEARCH		= 0x113,
+	VER_COMMAND_SEARCH		= 0x114,
 	VER_COMMAND_EXCERPT		= 0x100,
 	VER_COMMAND_UPDATE		= 0x101,
 	VER_COMMAND_KEYWORDS	= 0x100
@@ -998,8 +1000,10 @@ public:
 	float			GetFloat () { return sphDW2F ( ntohl ( GetT<DWORD> () ) ); }
 	CSphString		GetString ();
 	int				GetDwords ( DWORD ** pBuffer, int iMax, const char * sErrorTemplate );
-	bool			GetDwords ( CSphVector<DWORD> & dBuffer, int iMax, const char * sErrorTemplate );
 	bool			GetError () { return m_bError; }
+
+	template < typename T > bool	GetDwords ( CSphVector<T> & dBuffer, int iMax, const char * sErrorTemplate );
+	template < typename T > bool	GetQwords ( CSphVector<T> & dBuffer, int iMax, const char * sErrorTemplate );
 
 	virtual void	SendErrorReply ( const char *, ... ) = 0;
 
@@ -1185,7 +1189,7 @@ bool InputBuffer_c::GetBytes ( void * pBuf, int iLen )
 
 	memcpy ( pBuf, m_pCur, iLen );
 	m_pCur += iLen;
-	return true;;
+	return true;
 }
 
 
@@ -1217,7 +1221,7 @@ int InputBuffer_c::GetDwords ( DWORD ** ppBuffer, int iMax, const char * sErrorT
 }
 
 
-bool InputBuffer_c::GetDwords ( CSphVector<DWORD> & dBuffer, int iMax, const char * sErrorTemplate )
+template < typename T > bool InputBuffer_c::GetDwords ( CSphVector<T> & dBuffer, int iMax, const char * sErrorTemplate )
 {
 	int iCount = GetInt ();
 	if ( iCount<0 || iCount>iMax )
@@ -1228,20 +1232,35 @@ bool InputBuffer_c::GetDwords ( CSphVector<DWORD> & dBuffer, int iMax, const cha
 	}
 
 	dBuffer.Resize ( iCount );
-	if ( iCount )
-	{
-		if ( !GetBytes ( &dBuffer[0], sizeof(int)*iCount ) )
-		{
-			dBuffer.Reset ();
-			return false;
-		}
-		ARRAY_FOREACH ( i, dBuffer )
-			dBuffer[i] = htonl ( dBuffer[i] );
-	}
+	ARRAY_FOREACH ( i, dBuffer )
+		dBuffer[i] = GetDword ();
 
-	return true;
+	if ( m_bError )
+		dBuffer.Reset ();
+
+	return !m_bError;
 }
 
+
+template < typename T > bool InputBuffer_c::GetQwords ( CSphVector<T> & dBuffer, int iMax, const char * sErrorTemplate )
+{
+	int iCount = GetInt ();
+	if ( iCount<0 || iCount>iMax )
+	{
+		SendErrorReply ( sErrorTemplate, iCount, iMax );
+		SetError ( true );
+		return false;
+	}
+
+	dBuffer.Resize ( iCount );
+	ARRAY_FOREACH ( i, dBuffer )
+		dBuffer[i] = GetUint64 ();
+
+	if ( m_bError )
+		dBuffer.Reset ();
+
+	return !m_bError;
+}
 /////////////////////////////////////////////////////////////////////////////
 
 NetInputBuffer_c::NetInputBuffer_c ( int iSock )
@@ -1844,14 +1863,9 @@ int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuer
 		iReqSize += 12 + strlen ( tFilter.m_sAttrName.cstr() ); // string attr-name; int type; int exclude-flag
 		switch ( tFilter.m_eType )
 		{
-			case SPH_FILTER_VALUES:
-				iReqSize += 4 + 4*tFilter.m_dValues.GetLength(); // int values-count; int[] values
-				break;
-
-			case SPH_FILTER_RANGE:
-			case SPH_FILTER_FLOATRANGE:
-				iReqSize += 8; // int/float min-val,max-val
-				break;
+			case SPH_FILTER_VALUES:		iReqSize += 4 + 8*tFilter.m_dValues.GetLength(); break; // int values-count; uint64[] values
+			case SPH_FILTER_RANGE:		iReqSize += 16; break; // uint64 min-val, max-val
+			case SPH_FILTER_FLOATRANGE:	iReqSize += 8; break; // int/float min-val,max-val
 		}
 	}
 	if ( q.m_bGeoAnchor )
@@ -1891,12 +1905,12 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 			case SPH_FILTER_VALUES:
 				tOut.SendInt ( tFilter.m_dValues.GetLength() );
 				ARRAY_FOREACH ( k, tFilter.m_dValues )
-					tOut.SendInt ( tFilter.m_dValues[k] );
+					tOut.SendUint64 ( tFilter.m_dValues[k] );
 				break;
 
 			case SPH_FILTER_RANGE:
-				tOut.SendDword ( tFilter.m_uMinValue );
-				tOut.SendDword ( tFilter.m_uMaxValue );
+				tOut.SendUint64 ( tFilter.m_uMinValue );
+				tOut.SendUint64 ( tFilter.m_uMaxValue );
 				break;
 
 			case SPH_FILTER_FLOATRANGE:
@@ -2032,7 +2046,7 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, Agent_t & tAgent
 					const CSphColumnInfo & tAttr = tSchema.GetAttr(j);
 					if ( tAttr.m_eAttrType & SPH_ATTR_MULTI )
 					{
-						tMatch.SetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount, g_dMvaStorage.GetLength() );
+						tMatch.SetAttr ( tAttr.m_tLocator, g_dMvaStorage.GetLength() );
 
 						int iValues = tReq.GetDword ();
 						g_dMvaStorage.Add ( iValues );
@@ -2043,11 +2057,15 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, Agent_t & tAgent
 					else if ( tAttr.m_eAttrType == SPH_ATTR_FLOAT )
 					{
 						float fRes = tReq.GetFloat();
-						tMatch.SetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount, sphF2DW(fRes) );
+						tMatch.SetAttr ( tAttr.m_tLocator, sphF2DW(fRes) );
+					}
+					else if ( tAttr.m_eAttrType == SPH_ATTR_BIGINT )
+					{
+						tMatch.SetAttr ( tAttr.m_tLocator, tReq.GetUint64() );
 					}
 					else
 					{
-						tMatch.SetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount, tReq.GetDword() );
+						tMatch.SetAttr ( tAttr.m_tLocator, tReq.GetDword() );
 					}
 				}
 			}
@@ -2288,8 +2306,8 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 				switch ( tFilter.m_eType )
 				{
 					case SPH_FILTER_RANGE:
-						tFilter.m_uMinValue = tReq.GetDword ();
-						tFilter.m_uMaxValue = tReq.GetDword ();
+						tFilter.m_uMinValue = ( iVer>=0x114 ) ? tReq.GetUint64() : tReq.GetDword ();
+						tFilter.m_uMaxValue = ( iVer>=0x114 ) ? tReq.GetUint64() : tReq.GetDword ();
 						break;
 
 					case SPH_FILTER_FLOATRANGE:
@@ -2298,8 +2316,13 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 						break;
 
 					case SPH_FILTER_VALUES:
-						if ( !tReq.GetDwords ( tFilter.m_dValues, SEARCHD_MAX_ATTR_VALUES, "invalid attribute set length %d (should be in 0..%d range)" ) )
-							return false;
+						{
+							bool bRes = ( iVer>=0x114 )
+								? tReq.GetQwords ( tFilter.m_dValues, SEARCHD_MAX_ATTR_VALUES, "invalid attribute set length %d (should be in 0..%d range)" )
+								: tReq.GetDwords ( tFilter.m_dValues, SEARCHD_MAX_ATTR_VALUES, "invalid attribute set length %d (should be in 0..%d range)" );
+							if ( !bRes )
+								return false;
+						}
 						break;
 
 					default:
@@ -2505,7 +2528,7 @@ void LogQuery ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 	sphFormatCurrentTime ( sTimeBuf );
 
 	sGroupBuf[0] = '\0';
-	if ( tQuery.m_iGroupbyOffset>=0 )
+	if ( tQuery.IsGroupby() )
 		snprintf ( sGroupBuf, sizeof(sGroupBuf), " @%s", tQuery.m_sGroupBy.cstr() );
 
 	static const char * sModes [ SPH_MATCH_TOTAL ] = { "all", "any", "phr", "bool", "ext", "scan", "ext2" };
@@ -2585,19 +2608,26 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 	else
 		iRespLen += 4 + ( 8+4*USE_64BIT+4*pRes->m_tSchema.GetAttrsCount() )*pRes->m_iCount; // id64 tag and matches
 
+	if ( iVer>=0x114 )
+	{
+		// 64bit matches
+		int iWideAttrs = 0;
+		for ( int i=0; i<pRes->m_tSchema.GetAttrsCount(); i++ )
+			if ( pRes->m_tSchema.GetAttr(i).m_eAttrType==SPH_ATTR_BIGINT )
+				iWideAttrs++;
+		iRespLen += 4*pRes->m_iCount*iWideAttrs; // extra 4 bytes per attr per match
+	}
+
 	for ( int i=0; i<pRes->m_iNumWords; i++ ) // per-word stats
 		iRespLen += 12 + strlen ( pRes->m_tWordStats[i].m_sWord.cstr() ); // wordlen, word, docs, hits
 
 	// MVA values
-	CSphVector<int> dMvaItems;
+	CSphVector<CSphAttrLocator> dMvaItems;
 	for ( int i=0; i<pRes->m_tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tCol = pRes->m_tSchema.GetAttr(i);
 		if ( tCol.m_eAttrType & SPH_ATTR_MULTI )
-		{
-			assert ( tCol.m_iRowitem>=0 );
-			dMvaItems.Add ( tCol.m_iRowitem );
-		}
+			dMvaItems.Add ( tCol.m_tLocator );
 	}
 
 	if ( iVer>=0x10C && dMvaItems.GetLength() )
@@ -2608,7 +2638,7 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 			const DWORD * pMva = dTag2MVA [ tMatch.m_iTag ];
 			ARRAY_FOREACH ( j, dMvaItems )
 			{
-				DWORD iMvaIndex = tMatch.GetAttr ( dMvaItems[j] );
+				DWORD iMvaIndex = MVA_DOWNSIZE ( tMatch.GetAttr ( dMvaItems[j] ) );
 				if ( iMvaIndex )
 					iRespLen += 4*pMva[iMvaIndex]; // FIXME? maybe add some sanity check here
 			}
@@ -2660,29 +2690,25 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 		tOut.SendInt ( pRes->m_tSchema.GetAttrsCount() );
 		for ( int i=0; i<pRes->m_tSchema.GetAttrsCount(); i++ )
 		{
-			tOut.SendString ( pRes->m_tSchema.GetAttr(i).m_sName.cstr() );
-			tOut.SendDword ( (DWORD)pRes->m_tSchema.GetAttr(i).m_eAttrType );
+			const CSphColumnInfo & tCol = pRes->m_tSchema.GetAttr(i);
+			tOut.SendString ( tCol.m_sName.cstr() );
+			tOut.SendDword ( (DWORD)tCol.m_eAttrType );
 		}
 	}
 
 	// send matches
-	int iGIDOffset = -1, iGIDCount = -1;
-	int iTSOffset = -1, iTSCount = -1;
+	CSphAttrLocator iGIDLoc, iTSLoc;
 	if ( iVer<=0x101 )
 	{
 		for ( int i=0; i<pRes->m_tSchema.GetAttrsCount(); i++ )
 		{
 			const CSphColumnInfo & tAttr = pRes->m_tSchema.GetAttr(i);
-			if ( iTSOffset<0 && tAttr.m_eAttrType==SPH_ATTR_TIMESTAMP )
-			{
-				iTSOffset = tAttr.m_iBitOffset;
-				iTSCount = tAttr.m_iBitCount;
-			}
-			if ( iGIDOffset<0 && tAttr.m_eAttrType==SPH_ATTR_INTEGER )
-			{
-				iGIDOffset = tAttr.m_iBitOffset;
-				iGIDCount = tAttr.m_iBitCount;
-			}
+
+			if ( iTSLoc.m_iBitOffset<0 && tAttr.m_eAttrType==SPH_ATTR_TIMESTAMP )
+				iTSLoc = tAttr.m_tLocator;
+
+			if ( iGIDLoc.m_iBitOffset<0 && tAttr.m_eAttrType==SPH_ATTR_INTEGER )
+				iGIDLoc = tAttr.m_tLocator;
 		}
 	}
 
@@ -2702,8 +2728,8 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 
 		if ( iVer<=0x101 )
 		{
-			tOut.SendDword ( iGIDOffset>=0 ? tMatch.GetAttr ( iGIDOffset, iGIDCount ) : 1 );
-			tOut.SendDword ( iTSOffset>=0 ? tMatch.GetAttr ( iTSOffset, iTSCount ) : 1 );
+			tOut.SendDword ( iGIDLoc.m_iBitOffset>=0 ? (DWORD) tMatch.GetAttr ( iGIDLoc ) : 1 );
+			tOut.SendDword ( iTSLoc.m_iBitOffset>=0 ? (DWORD) tMatch.GetAttr ( iTSLoc ) : 1 );
 			tOut.SendInt ( tMatch.m_iWeight );
 		} else
 		{
@@ -2717,7 +2743,7 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 				const CSphColumnInfo & tAttr = pRes->m_tSchema.GetAttr(j);
 				if ( tAttr.m_eAttrType & SPH_ATTR_MULTI )
 				{
-					DWORD iMvaIndex = tMatch.GetAttr ( tAttr.m_iRowitem );
+					DWORD iMvaIndex = MVA_DOWNSIZE ( tMatch.GetAttr ( tAttr.m_tLocator ) );
 					if ( iVer<0x10C || iMvaIndex==0 )
 					{
 						// for older clients, fixups column value to 0
@@ -2737,9 +2763,11 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 				{
 					// send plain attr
 					if ( tAttr.m_eAttrType==SPH_ATTR_FLOAT )
-						tOut.SendFloat ( tMatch.GetAttrFloat ( tAttr.m_iRowitem ) );
+						tOut.SendFloat ( tMatch.GetAttrFloat ( tAttr.m_tLocator ) );
+					else if ( iVer>=0x114 && tAttr.m_eAttrType==SPH_ATTR_BIGINT )
+						tOut.SendUint64 ( tMatch.GetAttr ( tAttr.m_tLocator ) );
 					else
-						tOut.SendDword ( tMatch.GetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount ) );
+						tOut.SendDword ( (DWORD)tMatch.GetAttr ( tAttr.m_tLocator ) );
 				}
 			}
 		}
@@ -2826,9 +2854,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery )
 					{
 						const CSphColumnInfo & tDst = tRes.m_tSchema.GetAttr(j);
 						const CSphColumnInfo & tSrc = tRes.m_dSchemas[iSchema].GetAttr ( dMapFrom[j] );
-
-						tRow.SetAttr ( tDst.m_iBitOffset, tDst.m_iBitCount,
-							tMatch.GetAttr ( tSrc.m_iBitOffset, tSrc.m_iBitCount ) );
+						tRow.SetAttr ( tDst.m_tLocator, tMatch.GetAttr(tSrc.m_tLocator) );
 					}
 
 					for ( int j=0; j<tRow.m_iRowitems; j++ )
@@ -2851,7 +2877,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery )
 
 	// kill all dupes
 	int iDupes = 0;
-	if ( tQuery.m_iGroupbyOffset>=0 )
+	if ( tQuery.IsGroupby() )
 	{
 		// groupby sorter does that automagically
 		pSorter->SetMVAPool ( NULL ); // because we must be able to group on @groupby anyway

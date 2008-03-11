@@ -106,6 +106,10 @@ static inline float logf ( float v )
 }
 #endif
 
+//////////////////////////////////////////////////////////////////////////
+
+#define MVA_DOWNSIZE DWORD
+
 /////////////////////////////////////////////////////////////////////////////
 
 #if USE_WINDOWS
@@ -1642,13 +1646,13 @@ private:
 	bool						m_bEarlyLookup;			///< whether early attr value lookup is needed
 	bool						m_bLateLookup;			///< whether late attr value lookup is needed
 
-	int							m_iCalcGeodist;			///< compute geodistance to this rowitem (-1 means do not compute)
-	int							m_iGeoLatRowitem;		///< latitude rowitem
-	int							m_iGeoLongRowitem;		///< longitude rowitem
+	CSphAttrLocator				m_tGeoDistLoc;			///< geodistance locator (bitoffset -1 means do not compute)
+	CSphAttrLocator				m_tGeoLatLoc;			///< latitude locator
+	CSphAttrLocator				m_tGeoLongLoc;			///< latitude locator
 	float						m_fGeoAnchorLat;		///< anchor latitude
 	float						m_fGeoAnchorLong;		///< anchor longitude
 
-	int							m_iCalcExpr;			///< compute sorting expr to this rowitem (-1 means do not compute)
+	CSphAttrLocator				m_tExprLoc;				///< sorting expr locator (bitoffset -1 means do not compute)
 	ISphExpr *					m_pExpr;				///< expression opcodes
 
 private:
@@ -3907,8 +3911,6 @@ CSphFilter::CSphFilter ()
 	, m_uMinValue	( 0 )
 	, m_uMaxValue	( UINT_MAX )
 	, m_bMva		( false )
-	, m_iBitOffset	( -1 )
-	, m_iBitCount	( -1 )
 {}
 
 
@@ -3973,10 +3975,6 @@ CSphQuery::CSphQuery ()
 
 	, m_bCalcGeodist	( false )
 	, m_iPresortRowitems( -1 )
-	, m_iGroupbyOffset	( -1 )
-	, m_iGroupbyCount	( -1 )
-	, m_iDistinctOffset	( -1 )
-	, m_iDistinctCount	( -1 )
 	, m_pExpr			( NULL )
 
 	, m_iOldVersion		( 0 )
@@ -4116,18 +4114,18 @@ void CSphSchema::AddAttr ( const CSphColumnInfo & tCol )
 	m_dAttrs.Add ( tCol );
 
 	int iBits = ROWITEM_BITS;
-	if ( tCol.m_iBitCount>0 )
-		iBits = tCol.m_iBitCount;
-	if ( tCol.m_eAttrType==SPH_ATTR_BOOL )
-		iBits = 1;
+	if ( tCol.m_tLocator.m_iBitCount>0 )		iBits = tCol.m_tLocator.m_iBitCount;
+	if ( tCol.m_eAttrType==SPH_ATTR_BOOL )		iBits = 1;
+	if ( tCol.m_eAttrType==SPH_ATTR_BIGINT )	iBits = 64;
+	m_dAttrs.Last().m_tLocator.m_iBitCount = iBits;
 
-	m_dAttrs.Last().m_iBitCount = iBits;
-
-	if ( iBits==ROWITEM_BITS )
+	if ( iBits>=ROWITEM_BITS )
 	{
-		m_dAttrs.Last().m_iRowitem = m_dRowUsed.GetLength();
-		m_dAttrs.Last().m_iBitOffset = m_dRowUsed.GetLength()*ROWITEM_BITS;
-		m_dRowUsed.Add ( ROWITEM_BITS );
+		m_dAttrs.Last().m_tLocator.m_iBitOffset = m_dRowUsed.GetLength()*ROWITEM_BITS;
+
+		int iItems = (iBits+ROWITEM_BITS-1) / ROWITEM_BITS;
+		for ( int i=0; i<iItems; i++ )
+			m_dRowUsed.Add ( ROWITEM_BITS );
 
 	} else
 	{
@@ -4138,8 +4136,7 @@ void CSphSchema::AddAttr ( const CSphColumnInfo & tCol )
 		if ( iItem==m_dRowUsed.GetLength() )
 			m_dRowUsed.Add(0);
 
-		m_dAttrs.Last().m_iRowitem = -1;
-		m_dAttrs.Last().m_iBitOffset = iItem*ROWITEM_BITS + m_dRowUsed[iItem];
+		m_dAttrs.Last().m_tLocator.m_iBitOffset = iItem*ROWITEM_BITS + m_dRowUsed[iItem];
 		m_dRowUsed[iItem] += iBits;
 	}
 }
@@ -4147,7 +4144,7 @@ void CSphSchema::AddAttr ( const CSphColumnInfo & tCol )
 
 void CSphSchema::BuildResultSchema ( const CSphQuery * pQuery )
 {
-	if ( pQuery->m_iGroupbyOffset<0 )
+	if ( !pQuery->IsGroupby() )
 		return;
 
 	CSphColumnInfo tGroupby ( "@groupby", SPH_ATTR_INTEGER );
@@ -4156,7 +4153,7 @@ void CSphSchema::BuildResultSchema ( const CSphQuery * pQuery )
 
 	AddAttr ( tGroupby );
 	AddAttr ( tCount );
-	if ( pQuery->m_iDistinctOffset>=0 )
+	if ( pQuery->HasDistinct() )
 		AddAttr ( tDistinct );
 }
 
@@ -5029,10 +5026,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate_t & tUpd )
 		ARRAY_FOREACH ( i, dAttrIndex )
 		{
 			const CSphColumnInfo & tCol = m_tSchema.GetAttr ( dAttrIndex[i] );
-			if ( tCol.m_iRowitem>=0 )
-				pEntry [ tCol.m_iRowitem ] = pUpdate [ DOCINFO_IDSIZE+i ];
-			else
-				sphSetRowAttr ( pEntry, tCol.m_iBitOffset, tCol.m_iBitCount, pUpdate [ DOCINFO_IDSIZE+i ] );
+			sphSetRowAttr ( pEntry, tCol.m_tLocator, pUpdate [ DOCINFO_IDSIZE+i ] );
 		}
 
 		iUpdated++;
@@ -5325,9 +5319,9 @@ void CSphIndex_VLN::WriteSchemaColumn ( CSphWriter & fdInfo, const CSphColumnInf
 	fdInfo.PutBytes ( tCol.m_sName.cstr(), iLen );
 	fdInfo.PutDword ( tCol.m_eAttrType );
 
-	fdInfo.PutDword ( tCol.m_iRowitem );
-	fdInfo.PutDword ( tCol.m_iBitOffset );
-	fdInfo.PutDword ( tCol.m_iBitCount );
+	fdInfo.PutDword ( tCol.m_tLocator.CalcRowitem() ); // for backwards compatibility
+	fdInfo.PutDword ( tCol.m_tLocator.m_iBitOffset );
+	fdInfo.PutDword ( tCol.m_tLocator.m_iBitCount );
 }
 
 
@@ -5339,14 +5333,13 @@ void CSphIndex_VLN::ReadSchemaColumn ( CSphReader_VLN & rdInfo, CSphColumnInfo &
 
 	if ( m_uVersion>=5 )
 	{
-		tCol.m_iRowitem = rdInfo.GetDword ();
-		tCol.m_iBitOffset = rdInfo.GetDword ();
-		tCol.m_iBitCount = rdInfo.GetDword ();
+		rdInfo.GetDword (); // ignore rowitem
+		tCol.m_tLocator.m_iBitOffset = rdInfo.GetDword ();
+		tCol.m_tLocator.m_iBitCount = rdInfo.GetDword ();
 	} else
 	{
-		tCol.m_iRowitem = -1;
-		tCol.m_iBitOffset = -1;
-		tCol.m_iBitCount = -1;
+		tCol.m_tLocator.m_iBitOffset = -1;
+		tCol.m_tLocator.m_iBitCount = -1;
 	}
 }
 
@@ -5862,9 +5855,6 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAut
 				if ( tAttr.m_eSrc == SPH_ATTRSRC_FIELD )
 					continue;
 
-				int iRowitem = tAttr.m_iRowitem;
-				assert ( iRowitem>=0 );
-
 				if ( !pSource->IterateMultivaluedStart ( iAttr, m_sLastError ) )
 					return false;
 
@@ -5872,7 +5862,7 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAut
 				{
 					pMva->m_uDocID = pSource->m_tDocInfo.m_iDocID;
 					pMva->m_iAttr = i;
-					pMva->m_uValue = pSource->m_tDocInfo.GetAttr ( iRowitem );
+					pMva->m_uValue = MVA_DOWNSIZE ( pSource->m_tDocInfo.GetAttr ( tAttr.m_tLocator ) );
 
 					if ( ++pMva>=pMvaMax )
 					{
@@ -6390,11 +6380,10 @@ bool CSphIndex_VLN::SortOrdinalIds ( const char * szToFile, int iFromFD, int iAr
 
 struct FieldMVARedirect_t
 {
-	int		m_iAttr;
-	int		m_iMVAAttr;
-	int		m_iRowItem;
+	int					m_iAttr;
+	int					m_iMVAAttr;
+	CSphAttrLocator		m_tLocator;
 };
-
 
 int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSources, int iMemoryLimit, ESphDocinfo eDocinfo )
 {
@@ -6442,7 +6431,8 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 	}
 
 	bool bHaveFieldMVAs = false;
-	CSphVector<int> dMvaIndexes, dMvaRowitem;
+	CSphVector<int> dMvaIndexes;
+	CSphVector<CSphAttrLocator> dMvaLocators;
 	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tCol = m_tSchema.GetAttr(i);
@@ -6452,7 +6442,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 				bHaveFieldMVAs = true;
 
 			dMvaIndexes.Add ( i );
-			dMvaRowitem.Add ( tCol.m_iRowitem );
+			dMvaLocators.Add ( tCol.m_tLocator );
 		}
 	}
 
@@ -6601,9 +6591,9 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 			{
 				dFieldMvaIndexes.Resize ( dFieldMvaIndexes.GetLength() + 1 );
 				FieldMVARedirect_t & tRedirect = dFieldMvaIndexes.Last ();
-				tRedirect.m_iAttr	 = iAttr; 
+				tRedirect.m_iAttr = iAttr; 
 				tRedirect.m_iMVAAttr = i;
-				tRedirect.m_iRowItem = m_tSchema.GetAttr ( iAttr ).m_iRowitem;
+				tRedirect.m_tLocator = m_tSchema.GetAttr ( iAttr ).m_tLocator;
 			}
 		}
 
@@ -6637,9 +6627,9 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 			{
 				ARRAY_FOREACH ( i, dFieldMvaIndexes )
 				{
-					int iAttr	= dFieldMvaIndexes [i].m_iAttr;
-					int iMVA	= dFieldMvaIndexes [i].m_iMVAAttr;
-					int iRowitem= dFieldMvaIndexes [i].m_iRowItem;
+					int iAttr = dFieldMvaIndexes[i].m_iAttr;
+					int iMVA = dFieldMvaIndexes[i].m_iMVAAttr;
+					CSphAttrLocator tLoc = dFieldMvaIndexes[i].m_tLocator;
 
 					// store per-document MVAs
 					if ( pSource->IterateFieldMVAStart ( iAttr, m_sLastError ) )
@@ -6649,7 +6639,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 
 							dFieldMVAs.Last ().m_uDocID = pSource->m_tDocInfo.m_iDocID;
 							dFieldMVAs.Last ().m_iAttr = iMVA;
-							dFieldMVAs.Last ().m_uValue = pSource->m_tDocInfo.GetAttr ( iRowitem );
+							dFieldMVAs.Last ().m_uValue = MVA_DOWNSIZE ( pSource->m_tDocInfo.GetAttr ( tLoc ) );
 							
 							int iLength = dFieldMVAs.GetLength ();
 							if ( iLength == iMaxPoolFieldMVAs )
@@ -7115,7 +7105,7 @@ int CSphIndex_VLN::Build ( CSphDict * pDict, const CSphVector<CSphSource*> & dSo
 					{
 						ARRAY_FOREACH ( i, dMvaIndexes )
 						{
-							DOCINFO2ATTRS(pEntry) [ dMvaRowitem[i] ] = (DWORD)( rdMva.GetPos()/sizeof(DWORD) ); // intentional clamp; we'll check for 32bit overflow later
+							sphSetRowAttr ( DOCINFO2ATTRS(pEntry), dMvaLocators[i], SphAttr_t(rdMva.GetPos()/sizeof(DWORD)) ); // intentional clamp; we'll check for 32bit overflow later
 							rdMva.SkipBytes ( rdMva.GetDword()*sizeof(DWORD) );
 						}
 
@@ -7460,23 +7450,15 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilte
 		return false;
 
 	/// merging
-	int iAttrNum = pDstSchema->GetAttrsCount();
-	int iMVANum = 0;
-	CSphVector<DWORD> dRowItemOffset;
-	for( int i = 0; i < iAttrNum; ++i )
+	CSphVector<CSphAttrLocator> dMvaLocators;
+	for ( int i=0; i<pDstSchema->GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tInfo = pDstSchema->GetAttr( i );
 		if ( tInfo.m_eAttrType & SPH_ATTR_MULTI )
-		{
-			assert ( tInfo.m_iRowitem >= 0 );
-			assert ( tInfo.m_iRowitem < iStride );
-
-			dRowItemOffset.Add( tInfo.m_iRowitem );
-			iMVANum++;
-		}
+			dMvaLocators.Add ( tInfo.m_tLocator );
 	}
 
-	CSphDocMVA	tDstMVA( iMVANum ), tSrcMVA( iMVANum );
+	CSphDocMVA	tDstMVA ( dMvaLocators.GetLength() ), tSrcMVA ( dMvaLocators.GetLength() );
 
 	int iDeltaTotalDocs = 0;
 	if ( m_eDocinfo == SPH_DOCINFO_EXTERN && pSrcIndex->m_eDocinfo == SPH_DOCINFO_EXTERN )
@@ -7518,10 +7500,9 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilte
 
 				if ( tDstMVA.m_iDocID==iDstDocID )
 				{
-					tDstMVA.Write( tSPMWriter );
-					DWORD * pAttrs = DOCINFO2ATTRS(pDstRow);
+					tDstMVA.Write ( tSPMWriter );
 					ARRAY_FOREACH ( i, tDstMVA.m_dMVA )
-						pAttrs [ dRowItemOffset[i] ] = tDstMVA.m_dOffsets[i];
+						sphSetRowAttr ( DOCINFO2ATTRS(pDstRow), dMvaLocators[i], tDstMVA.m_dOffsets[i] );
 				}
 
 				sphWriteThrottled ( fdSpa.GetFD(), pDstRow, sizeof(DWORD)*iStride, "doc_attr", m_sLastError );
@@ -7537,9 +7518,8 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilte
 				if ( tSrcMVA.m_iDocID==iSrcDocID )
 				{
 					tSrcMVA.Write ( tSPMWriter );
-					DWORD * pAttrs = DOCINFO2ATTRS(pSrcRow);
 					ARRAY_FOREACH ( i, tSrcMVA.m_dMVA )
-						pAttrs [ dRowItemOffset[i] ] = tSrcMVA.m_dOffsets[i];
+						sphSetRowAttr ( DOCINFO2ATTRS(pSrcRow), dMvaLocators[i], tSrcMVA.m_dOffsets[i] );
 				}
 
 				sphWriteThrottled( fdSpa.GetFD(), pSrcRow, sizeof( DWORD ) * iStride, "doc_attr", m_sLastError );
@@ -7704,9 +7684,7 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilte
 			continue;
 
 		const CSphColumnInfo & tCol = m_tSchema.GetAttr(i);
-		dFilters[i].m_iBitOffset = tCol.m_iBitOffset;
-		dFilters[i].m_iBitCount = tCol.m_iBitCount;
-		dFilters[i].m_iRowitem = tCol.m_iRowitem;
+		dFilters[i].m_tLocator = tCol.m_tLocator;
 
 		tMerge.m_dFilters.Add ( dFilters[i] );
 	}
@@ -8223,17 +8201,17 @@ inline int sphBitCount ( DWORD n )
 }
 
 
-inline bool sphGroupMatch ( DWORD iGroup, const DWORD * pGroups, int iGroups )
+inline bool sphGroupMatch ( SphAttr_t iGroup, const SphAttr_t * pGroups, int iGroups )
 {
 	if ( !pGroups ) return true;
-	const DWORD * pA = pGroups;
-	const DWORD * pB = pGroups+iGroups-1;
+	const SphAttr_t * pA = pGroups;
+	const SphAttr_t * pB = pGroups+iGroups-1;
 	if ( iGroup==*pA || iGroup==*pB ) return true;
 	if ( iGroup<(*pA) || iGroup>(*pB) ) return false;
 
 	while ( pB-pA>1 )
 	{
-		const DWORD * pM = pA + ((pB-pA)/2);
+		const SphAttr_t * pM = pA + ((pB-pA)/2);
 		if ( iGroup==(*pM) )
 			return true;
 		if ( iGroup<(*pM) )
@@ -8290,19 +8268,19 @@ bool CSphIndex_VLN::EarlyReject ( CSphMatch & tMatch, const CSphQuery * pQuery )
 	ARRAY_FOREACH ( i, pQuery->m_dFilters )
 	{
 		const CSphFilter & tFilter = pQuery->m_dFilters[i];
-		if ( tFilter.m_iBitOffset<0 )
+		if ( tFilter.m_tLocator.m_iBitOffset<0 )
 			continue;
 
 		if ( tFilter.m_bMva )
 		{
 			// multiple values
-			SphAttr_t uOff = tMatch.GetAttr ( tFilter.m_iRowitem );
+			SphAttr_t uOff = tMatch.GetAttr ( tFilter.m_tLocator );
 
 			const DWORD * pMva = NULL;
 			const DWORD * pMvaMax = NULL;
 			if ( uOff )
 			{
-				pMva = &m_pMva [ uOff ];
+				pMva = &m_pMva [ MVA_DOWNSIZE ( uOff ) ];
 				pMvaMax = pMva + (*pMva) + 1;
 				pMva++;
 			}
@@ -8315,8 +8293,8 @@ bool CSphIndex_VLN::EarlyReject ( CSphMatch & tMatch, const CSphQuery * pQuery )
 				case SPH_FILTER_VALUES:
 				{
 					// walk both attr values and filter values lists, and ok match if there's any intersection
-					const DWORD * pFilter = &tFilter.m_dValues[0];
-					const DWORD * pFilterMax = pFilter + tFilter.m_dValues.GetLength();
+					const SphAttr_t * pFilter = &tFilter.m_dValues[0];
+					const SphAttr_t * pFilterMax = pFilter + tFilter.m_dValues.GetLength();
 
 					while ( pMva<pMvaMax && pFilter<pFilterMax && pMva[0]!=pFilter[0] )
 					{
@@ -8367,19 +8345,19 @@ bool CSphIndex_VLN::EarlyReject ( CSphMatch & tMatch, const CSphQuery * pQuery )
 			switch ( tFilter.m_eType )
 			{
 				case SPH_FILTER_VALUES:
-					uValue = tMatch.GetAttr ( tFilter.m_iBitOffset, tFilter.m_iBitCount );
+					uValue = tMatch.GetAttr ( tFilter.m_tLocator );
 					if ( !( tFilter.m_bExclude ^ sphGroupMatch ( uValue, &tFilter.m_dValues[0], tFilter.m_dValues.GetLength() ) ) )
 						return true;
 					break;
 
 				case SPH_FILTER_RANGE:
-					uValue = tMatch.GetAttr ( tFilter.m_iBitOffset, tFilter.m_iBitCount );
+					uValue = tMatch.GetAttr ( tFilter.m_tLocator );
 					if ( tFilter.m_bExclude ^ ( uValue<tFilter.m_uMinValue || uValue>tFilter.m_uMaxValue ) )
 						return true;
 					break;
 
 				case SPH_FILTER_FLOATRANGE:
-					fValue = tMatch.GetAttrFloat ( tFilter.m_iRowitem );
+					fValue = tMatch.GetAttrFloat ( tFilter.m_tLocator );
 					if ( tFilter.m_bExclude ^ ( fValue<tFilter.m_fMinValue || fValue>tFilter.m_fMaxValue ) )
 						return true;
 					break;
@@ -8480,26 +8458,26 @@ static inline double sphSqr ( double v )
 
 void CSphIndex_VLN::EarlyCalc ( CSphMatch & tMatch ) const
 {
-	if ( m_iCalcGeodist>=0 )
+	if ( m_tGeoDistLoc.m_iBitOffset>=0 )
 	{
 		const double R = 6384000;
-		float plat = tMatch.GetAttrFloat ( m_iGeoLatRowitem );
-		float plon = tMatch.GetAttrFloat ( m_iGeoLongRowitem );
+		float plat = tMatch.GetAttrFloat ( m_tGeoLatLoc );
+		float plon = tMatch.GetAttrFloat ( m_tGeoLongLoc );
 		double dlat = plat - m_fGeoAnchorLat;
 		double dlon = plon - m_fGeoAnchorLong;
 		double a = sphSqr(sin(dlat/2)) + cos(plat)*cos(m_fGeoAnchorLat)*sphSqr(sin(dlon/2));
 		double c = 2*asin ( Min ( 1, sqrt(a) ) );
-		tMatch.SetAttrFloat ( m_iCalcGeodist, float(R*c) );
+		tMatch.SetAttrFloat ( m_tGeoDistLoc, float(R*c) );
 	}
 }
 
 
 void CSphIndex_VLN::LateCalc ( CSphMatch & tMatch ) const
 {
-	if ( m_iCalcExpr>=0 )
+	if ( m_tExprLoc.m_iBitOffset>=0 )
 	{
 		float fRes = m_pExpr->Eval ( tMatch );
-		tMatch.SetAttrFloat ( m_iCalcExpr, fRes );
+		tMatch.SetAttrFloat ( m_tExprLoc, fRes );
 	}
 }
 
@@ -12328,10 +12306,10 @@ void CSphIndex_VLN::MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISph
 		for ( int iFilter=0; iFilter<pQuery->m_dFilters.GetLength() && !bReject; iFilter++ )
 		{
 			const CSphFilter & tFilter = pQuery->m_dFilters[iFilter];
-			if ( tFilter.m_iBitOffset<0 )
+			if ( tFilter.m_tLocator.m_iBitOffset<0 )
 				continue;
 
-			if ( tFilter.m_iBitOffset>=m_tSchema.GetRowSize()*ROWITEM_BITS ) // index schema only contains non-computed attrs
+			if ( tFilter.m_tLocator.m_iBitOffset>=m_tSchema.GetRowSize()*ROWITEM_BITS ) // index schema only contains non-computed attrs
 				continue; // no early reject for computed attrs
 
 			if ( tFilter.m_eType==SPH_FILTER_VALUES )
@@ -12340,8 +12318,8 @@ void CSphIndex_VLN::MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISph
 					continue; // no early reject for this case yet
 
 				// check all acceptable values against the range
-				SphAttr_t uBlockMin = sphGetRowAttr ( DOCINFO2ATTRS(pMin), tFilter.m_iBitOffset, tFilter.m_iBitCount );
-				SphAttr_t uBlockMax = sphGetRowAttr ( DOCINFO2ATTRS(pMax), tFilter.m_iBitOffset, tFilter.m_iBitCount );
+				SphAttr_t uBlockMin = sphGetRowAttr ( DOCINFO2ATTRS(pMin), tFilter.m_tLocator );
+				SphAttr_t uBlockMax = sphGetRowAttr ( DOCINFO2ATTRS(pMax), tFilter.m_tLocator );
 				bool bBlockMatches = false;
 
 				ARRAY_FOREACH ( i, tFilter.m_dValues )
@@ -12357,8 +12335,8 @@ void CSphIndex_VLN::MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISph
 
 			} else if ( tFilter.m_eType==SPH_FILTER_RANGE )
 			{
-				SphAttr_t uBlockMin = sphGetRowAttr ( DOCINFO2ATTRS(pMin), tFilter.m_iBitOffset, tFilter.m_iBitCount );
-				SphAttr_t uBlockMax = sphGetRowAttr ( DOCINFO2ATTRS(pMax), tFilter.m_iBitOffset, tFilter.m_iBitCount );
+				SphAttr_t uBlockMin = sphGetRowAttr ( DOCINFO2ATTRS(pMin), tFilter.m_tLocator );
+				SphAttr_t uBlockMax = sphGetRowAttr ( DOCINFO2ATTRS(pMax), tFilter.m_tLocator );
 
 				if ( !tFilter.m_bExclude )
 				{
@@ -12374,8 +12352,8 @@ void CSphIndex_VLN::MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISph
 
 			} else if ( tFilter.m_eType==SPH_FILTER_FLOATRANGE )
 			{
-				float fBlockMin = *( reinterpret_cast<const float*> ( DOCINFO2ATTRS(pMin)+tFilter.m_iRowitem ) );
-				float fBlockMax = *( reinterpret_cast<const float*> ( DOCINFO2ATTRS(pMax)+tFilter.m_iRowitem ) );
+				float fBlockMin = sphDW2F ( (DWORD)sphGetRowAttr ( DOCINFO2ATTRS(pMin), tFilter.m_tLocator ) );
+				float fBlockMax = sphDW2F ( (DWORD)sphGetRowAttr ( DOCINFO2ATTRS(pMax), tFilter.m_tLocator ) );
 
 				if ( !tFilter.m_bExclude )
 				{
@@ -12736,15 +12714,16 @@ void CSphIndex_VLN::DumpHeader ( FILE * fp, const char * sHeaderName )
 		fprintf ( fp, "  attr %d: %s, ", i, tAttr.m_sName.cstr() );
 		switch ( tAttr.m_eAttrType )
 		{
-			case SPH_ATTR_INTEGER:						fprintf ( fp, "integer, bits %d", tAttr.m_iBitCount ); break;
+			case SPH_ATTR_INTEGER:						fprintf ( fp, "integer, bits %d", tAttr.m_tLocator.m_iBitCount ); break;
 			case SPH_ATTR_TIMESTAMP:					fprintf ( fp, "timestamp" ); break;
 			case SPH_ATTR_ORDINAL:						fprintf ( fp, "ordinal" ); break;
 			case SPH_ATTR_BOOL:							fprintf ( fp, "boolean" ); break;
 			case SPH_ATTR_FLOAT:						fprintf ( fp, "float" ); break;
+			case SPH_ATTR_BIGINT:						fprintf ( fp, "bigint" ); break;
 			case SPH_ATTR_MULTI | SPH_ATTR_INTEGER:		fprintf ( fp, "mva" ); break;
-			default:									fprintf ( fp, "unknown-%d, bits %d", tAttr.m_eAttrType, tAttr.m_iBitCount ); break;
+			default:									fprintf ( fp, "unknown-%d, bits %d", tAttr.m_eAttrType, tAttr.m_tLocator.m_iBitCount ); break;
 		}
-		fprintf ( fp, ", bitoff %d, rowitem %d\n", tAttr.m_iBitOffset, tAttr.m_iRowitem );
+		fprintf ( fp, ", bitoff %d\n", tAttr.m_tLocator.m_iBitOffset );
 	}
 
 	// skipped min doc, wordlist checkpoints
@@ -12906,27 +12885,6 @@ template < typename T > bool CSphIndex_VLN::PrereadSharedBuffer ( CSphSharedBuff
 }
 
 
-/// attribute value location in the row
-struct AttrLocator_t
-{
-	int m_iRowitem;
-	int m_iBitOffset;
-	int m_iBitCount;
-
-	AttrLocator_t ()
-		: m_iRowitem ( -1 )
-		, m_iBitOffset ( -1 )
-		, m_iBitCount ( -1 )
-	{}
-
-	AttrLocator_t ( const CSphColumnInfo & tCol )
-		: m_iRowitem	( tCol.m_iRowitem )
-		, m_iBitOffset	( tCol.m_iBitOffset )
-		, m_iBitCount	( tCol.m_iBitCount )
-	{}
-};
-
-
 bool CSphIndex_VLN::Preread ()
 {
 	if ( !m_bPreallocated )
@@ -12993,16 +12951,14 @@ bool CSphIndex_VLN::Preread ()
 	if ( m_pDocinfoIndex.GetLength() )
 	{
 		// int attrs to the left, float attrs to the right
-		CSphVector<AttrLocator_t> dIntAttrs;
-		CSphVector<int> dFloatAttrs, dMvaAttrs;
-
+		CSphVector<CSphAttrLocator> dIntAttrs, dFloatAttrs, dMvaAttrs;
 		for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
 		{
 			const CSphColumnInfo & tCol = m_tSchema.GetAttr(i);
 
 			if ( tCol.m_eAttrType & SPH_ATTR_MULTI )
 			{
-				dMvaAttrs.Add ( tCol.m_iRowitem );
+				dMvaAttrs.Add ( tCol.m_tLocator );
 				continue;
 			}
 
@@ -13011,11 +12967,12 @@ bool CSphIndex_VLN::Preread ()
 				case SPH_ATTR_INTEGER:
 				case SPH_ATTR_TIMESTAMP:
 				case SPH_ATTR_BOOL:
-					dIntAttrs.Add ( tCol );
+				case SPH_ATTR_BIGINT:
+					dIntAttrs.Add ( tCol.m_tLocator );
 					break;
 
 				case SPH_ATTR_FLOAT:
-					dFloatAttrs.Add ( tCol.m_iRowitem );
+					dFloatAttrs.Add ( tCol.m_tLocator );
 					break;
 
 				default:
@@ -13066,10 +13023,7 @@ bool CSphIndex_VLN::Preread ()
 				// ints
 				ARRAY_FOREACH ( i, dIntAttrs )
 				{
-					int uRowitem = dIntAttrs[i].m_iRowitem;
-					SphAttr_t uVal = ( uRowitem<0 )
-						? sphGetRowAttr ( pRow, dIntAttrs[i].m_iBitOffset, dIntAttrs[i].m_iBitCount )
-						: pRow [ uRowitem ];
+					SphAttr_t uVal = sphGetRowAttr ( pRow, dIntAttrs[i] );
 					dIntMin[i] = Min ( dIntMin[i], uVal );
 					dIntMax[i] = Max ( dIntMax[i], uVal );
 				}
@@ -13077,7 +13031,7 @@ bool CSphIndex_VLN::Preread ()
 				// floats
 				ARRAY_FOREACH ( i, dFloatAttrs )
 				{
-					float fVal = *( reinterpret_cast<const float*> ( pRow + dFloatAttrs[i] ) );
+					float fVal = sphDW2F ( (DWORD)sphGetRowAttr ( pRow, dFloatAttrs[i] ) );
 					dFloatMin[i] = Min ( dFloatMin[i], fVal );
 					dFloatMax[i] = Max ( dFloatMax[i], fVal );
 				}
@@ -13085,11 +13039,11 @@ bool CSphIndex_VLN::Preread ()
 				// MVAs
 				ARRAY_FOREACH ( i, dMvaAttrs )
 				{
-					DWORD uOff = pRow [ dMvaAttrs[i] ];
+					SphAttr_t uOff = sphGetRowAttr ( pRow, dMvaAttrs[i] );
 					if ( !uOff )
 						continue;
 
-					const DWORD * pMva = &m_pMva [ uOff ];
+					const DWORD * pMva = &m_pMva [ MVA_DOWNSIZE ( uOff ) ];
 					for ( DWORD uCount = *pMva++; uCount>0; uCount--, pMva++ )
 					{
 						dMvaMin[i] = Min ( dMvaMin[i], *pMva );
@@ -13109,18 +13063,18 @@ bool CSphIndex_VLN::Preread ()
 
 			ARRAY_FOREACH ( i, dIntAttrs )
 			{
-				sphSetRowAttr ( pMinAttrs, dIntAttrs[i].m_iBitOffset, dIntAttrs[i].m_iBitCount, dIntMin[i] );
-				sphSetRowAttr ( pMaxAttrs, dIntAttrs[i].m_iBitOffset, dIntAttrs[i].m_iBitCount, dIntMax[i] );
+				sphSetRowAttr ( pMinAttrs, dIntAttrs[i], dIntMin[i] );
+				sphSetRowAttr ( pMaxAttrs, dIntAttrs[i], dIntMax[i] );
 			}
 			ARRAY_FOREACH ( i, dFloatAttrs )
 			{
-				*( reinterpret_cast<float*> ( pMinAttrs+dFloatAttrs[i] ) ) = dFloatMin[i];
-				*( reinterpret_cast<float*> ( pMaxAttrs+dFloatAttrs[i] ) ) = dFloatMax[i];
+				sphSetRowAttr ( pMinAttrs, dFloatAttrs[i], sphF2DW ( dFloatMin[i] ) );
+				sphSetRowAttr ( pMaxAttrs, dFloatAttrs[i], sphF2DW ( dFloatMax[i] ) );
 			}
 			ARRAY_FOREACH ( i, dMvaAttrs )
 			{
-				pMinAttrs [ dMvaAttrs[i] ] = dMvaMin[i];
-				pMaxAttrs [ dMvaAttrs[i] ] = dMvaMax[i];
+				sphSetRowAttr ( pMinAttrs, dMvaAttrs[i], dMvaMin[i] );
+				sphSetRowAttr ( pMaxAttrs, dMvaAttrs[i], dMvaMax[i] );
 			}
 		}
 	}
@@ -13298,7 +13252,7 @@ bool CSphIndex_VLN::SetupCalc ( CSphQueryResult * pResult, const CSphQuery * pQu
 	pResult->m_tSchema = m_tSchema;
 
 	// geodist
-	m_iCalcGeodist = -1;
+	m_tGeoDistLoc.m_iBitOffset = -1;
 	if ( pQuery->m_bCalcGeodist )
 	{
 		if ( !pQuery->m_bGeoAnchor )
@@ -13325,25 +13279,25 @@ bool CSphIndex_VLN::SetupCalc ( CSphQueryResult * pResult, const CSphQuery * pQu
 		pResult->m_tSchema.AddAttr ( tGeodist );
 
 		int iAttr = pResult->m_tSchema.GetAttrIndex ( "@geodist" );
-		m_iCalcGeodist = pResult->m_tSchema.GetAttr ( iAttr ).m_iRowitem;
-		assert ( m_iCalcGeodist>=0 );
+		m_tGeoDistLoc = pResult->m_tSchema.GetAttr ( iAttr ).m_tLocator;
+		assert ( m_tGeoDistLoc.m_iBitOffset>=0 );
 
-		m_iGeoLatRowitem = m_tSchema.GetAttr(iLat).m_iRowitem;
-		m_iGeoLongRowitem = m_tSchema.GetAttr(iLong).m_iRowitem;
+		m_tGeoLatLoc = m_tSchema.GetAttr(iLat).m_tLocator;
+		m_tGeoLongLoc = m_tSchema.GetAttr(iLong).m_tLocator;
 		m_fGeoAnchorLat = pQuery->m_fGeoLatitude;
 		m_fGeoAnchorLong = pQuery->m_fGeoLongitude;
 	}
 
 	// sorting expression
-	m_iCalcExpr = -1;
+	m_tExprLoc.m_iBitOffset = -1;
 	if ( pQuery->m_eSort==SPH_SORT_EXPR )
 	{
 		CSphColumnInfo tExpr ( "@expr", SPH_ATTR_FLOAT );
 		pResult->m_tSchema.AddAttr ( tExpr );
 
 		int iAttr = pResult->m_tSchema.GetAttrIndex ( "@expr" );
-		m_iCalcExpr = pResult->m_tSchema.GetAttr ( iAttr ).m_iRowitem;
-		assert ( m_iCalcExpr>=0 );
+		m_tExprLoc = pResult->m_tSchema.GetAttr ( iAttr ).m_tLocator;
+		assert ( m_tExprLoc.m_iBitOffset>=0 );
 
 		m_pExpr = pQuery->m_pExpr;
 	}
@@ -13569,8 +13523,7 @@ bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, C
 	{
 		CSphFilter & tFilter = pQuery->m_dFilters[i];
 		tFilter.m_dValues.Sort ();
-		tFilter.m_iBitOffset = -1; // filters with negative bit-offset will be ignored
-		tFilter.m_iRowitem = INT_MAX;
+		tFilter.m_tLocator.m_iBitOffset = -1; // filters with negative bit-offset will be ignored
 
 		// lookup it
 		int iAttr = pResult->m_tSchema.GetAttrIndex ( tFilter.m_sAttrName.cstr() );
@@ -13578,9 +13531,7 @@ bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, C
 			continue; // FIXME! simply continue? should at least warn about bad attr name
 
 		const CSphColumnInfo & tAttr = pResult->m_tSchema.GetAttr(iAttr);
-		tFilter.m_iRowitem = tAttr.m_iRowitem;
-		tFilter.m_iBitOffset = tAttr.m_iBitOffset;
-		tFilter.m_iBitCount = tAttr.m_iBitCount;
+		tFilter.m_tLocator = tAttr.m_tLocator;
 		tFilter.m_bMva = ( ( tAttr.m_eAttrType & SPH_ATTR_MULTI )!=0 );
 	}
 
@@ -16198,7 +16149,7 @@ BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 
 		if ( tAttr.m_eAttrType & SPH_ATTR_MULTI )
 		{
-			m_tDocInfo.SetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount, 0 );
+			m_tDocInfo.SetAttr ( tAttr.m_tLocator, 0 );
 			if ( tAttr.m_eSrc == SPH_ATTRSRC_FIELD )
 				ParseFieldMVA ( m_dFieldMVAs, iFieldMVA++, SqlColumn ( tAttr.m_iIndex ) );
 
@@ -16213,18 +16164,20 @@ BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 				if ( !m_dStrAttrs[i].cstr() )
 					m_dStrAttrs[i] = "";
 
-				m_tDocInfo.SetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount, 0 );
+				m_tDocInfo.SetAttr ( tAttr.m_tLocator, 0 );
 				break;
 
 			case SPH_ATTR_FLOAT:
-				m_tDocInfo.SetAttrFloat ( tAttr.m_iRowitem,
-					sphToFloat ( SqlColumn ( tAttr.m_iIndex ) ) ); // FIXME? report conversion errors maybe?
+				m_tDocInfo.SetAttrFloat ( tAttr.m_tLocator, sphToFloat ( SqlColumn ( tAttr.m_iIndex ) ) ); // FIXME? report conversion errors maybe?
+				break;
+
+			case SPH_ATTR_BIGINT:
+				m_tDocInfo.SetAttr ( tAttr.m_tLocator, sphToQword ( SqlColumn ( tAttr.m_iIndex ) ) ); // FIXME? report conversion errors maybe?
 				break;
 
 			default:
 				// just store as uint by default
-				m_tDocInfo.SetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount,
-					sphToDword ( SqlColumn ( tAttr.m_iIndex ) ) ); // FIXME? report conversion errors maybe?
+				m_tDocInfo.SetAttr ( tAttr.m_tLocator, sphToDword ( SqlColumn ( tAttr.m_iIndex ) ) ); // FIXME? report conversion errors maybe?
 				break;
 		}
 	}
@@ -16352,9 +16305,9 @@ bool CSphSource_SQL::IterateMultivaluedNext ()
 	}
 
 	// return that tuple
-	int iRowitem = tAttr.m_iRowitem;
+	const CSphAttrLocator & tLoc = m_tSchema.GetAttr(m_iMultiAttr).m_tLocator;
 	m_tDocInfo.m_iDocID = sphToDocid ( SqlColumn(0) );
-	m_tDocInfo.SetAttr ( iRowitem, sphToDword ( SqlColumn(1) ) );
+	m_tDocInfo.SetAttr ( tLoc, sphToDword ( SqlColumn(1) ) );
 	return true;
 }
 
@@ -16381,7 +16334,7 @@ bool CSphSource_SQL::IterateFieldMVANext ()
 		return false;
 
 	const CSphColumnInfo & tAttr = m_tSchema.GetAttr ( m_iFieldMVA );
-	m_tDocInfo.SetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount, m_dFieldMVAs [iFieldMVA][m_iFieldMVAIterator] );
+	m_tDocInfo.SetAttr ( tAttr.m_tLocator, m_dFieldMVAs [iFieldMVA][m_iFieldMVAIterator] );
 
 	++m_iFieldMVAIterator;
 
@@ -16773,11 +16726,9 @@ bool CSphSource_XMLPipe::IterateHitsNext ( CSphString & sError )
 		return false;
 	m_tStats.m_iTotalDocuments++;
 
-	if ( !ScanInt ( "group", &m_tDocInfo.m_pRowitems[0], sError ) )
-		m_tDocInfo.SetAttr ( 0, 1 );
-
-	if ( !ScanInt ( "timestamp", &m_tDocInfo.m_pRowitems[1], sError ) )
-		m_tDocInfo.SetAttr ( 1, 1 );
+	SphAttr_t uVal;
+	if ( !ScanInt ( "group", &uVal, sError ) ) uVal = 1; m_tDocInfo.SetAttr ( m_tSchema.GetAttr(0).m_tLocator, uVal );
+	if ( !ScanInt ( "timestamp", &uVal, sError ) ) uVal = 1; m_tDocInfo.SetAttr ( m_tSchema.GetAttr(1).m_tLocator, uVal );
 
 	if ( !ScanStr ( "title", sTitle, sizeof(sTitle), sError ) )
 		return false;
@@ -17476,7 +17427,7 @@ void CSphSource_XMLPipe2::ConfigureAttrs ( const CSphVariant * pHead, DWORD uAtt
 					iBits = -1;
 				}
 
-				tCol.m_iBitCount = iBits;
+				tCol.m_tLocator.m_iBitCount = iBits;
 			}
 			else
 				sphWarn ( "%s", DecorateMessage ( "attribute '%s': bitcount is only supported for integer types", tCol.m_sName.cstr() ) );
@@ -17526,6 +17477,7 @@ bool CSphSource_XMLPipe2::Setup ( FILE * pPipe, const CSphConfigSection & hSourc
 	ConfigureAttrs ( hSource("xmlpipe_attr_str2ordinal"),	SPH_ATTR_ORDINAL );
 	ConfigureAttrs ( hSource("xmlpipe_attr_bool"),			SPH_ATTR_BOOL );
 	ConfigureAttrs ( hSource("xmlpipe_attr_float"),			SPH_ATTR_FLOAT );
+	ConfigureAttrs ( hSource("xmlpipe_attr_bigint"),		SPH_ATTR_BIGINT );
 	ConfigureAttrs ( hSource("xmlpipe_attr_multi"),			SPH_ATTR_MULTI );
 
 	m_tDocInfo.Reset ( m_tSchema.GetRowSize () );
@@ -17757,7 +17709,7 @@ BYTE **	CSphSource_XMLPipe2::NextDocument ( CSphString & sError )
 
 			if ( tAttr.m_eAttrType & SPH_ATTR_MULTI )
 			{
-				m_tDocInfo.SetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount, 0 );
+				m_tDocInfo.SetAttr ( tAttr.m_tLocator, 0 );
 				ParseFieldMVA ( m_dFieldMVAs, iFieldMVA++, sAttrValue.cstr () );
 				continue;
 			}
@@ -17769,15 +17721,15 @@ BYTE **	CSphSource_XMLPipe2::NextDocument ( CSphString & sError )
 					if ( !m_dStrAttrs[i].cstr() )
 						m_dStrAttrs[i] = "";
 
-					m_tDocInfo.SetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount, 0 );
+					m_tDocInfo.SetAttr ( tAttr.m_tLocator, 0 );
 					break;
 
 				case SPH_ATTR_FLOAT:
-					m_tDocInfo.SetAttrFloat ( tAttr.m_iRowitem, sphToFloat ( sAttrValue.cstr () ) );
+					m_tDocInfo.SetAttrFloat ( tAttr.m_tLocator, sphToFloat ( sAttrValue.cstr () ) );
 					break;
 
 				default:
-					m_tDocInfo.SetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount,	sphToDword ( sAttrValue.cstr () ) );
+					m_tDocInfo.SetAttr ( tAttr.m_tLocator, sphToDword ( sAttrValue.cstr () ) );
 					break;
 			}
 		}
@@ -17821,7 +17773,7 @@ bool CSphSource_XMLPipe2::IterateFieldMVANext ()
 		return false;
 
 	const CSphColumnInfo & tAttr = m_tSchema.GetAttr ( m_iMVA );
-	m_tDocInfo.SetAttr ( tAttr.m_iBitOffset, tAttr.m_iBitCount, m_dFieldMVAs [iFieldMVA][m_iMVAIterator] );
+	m_tDocInfo.SetAttr ( tAttr.m_tLocator, m_dFieldMVAs [iFieldMVA][m_iMVAIterator] );
 
 	++m_iMVAIterator;
 
@@ -17896,7 +17848,7 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 			if ( !strcmp ( *dAttrs, "name" ) )
 				Info.m_sName = dAttrs[1];
 			else if ( !strcmp ( *dAttrs, "bits" ) )
-				Info.m_iBitCount = strtol ( dAttrs[1], NULL, 10 );
+				Info.m_tLocator.m_iBitCount = strtol ( dAttrs[1], NULL, 10 );
 			else if ( !strcmp ( *dAttrs, "default" ) )
 				sDefault = dAttrs[1];
 			else if ( !strcmp ( *dAttrs, "type" ) )
@@ -17907,6 +17859,7 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 				else if ( !strcmp ( szType, "str2ordinal" ) )	Info.m_eAttrType = SPH_ATTR_ORDINAL;
 				else if ( !strcmp ( szType, "bool" ) )			Info.m_eAttrType = SPH_ATTR_BOOL;
 				else if ( !strcmp ( szType, "float" ) )			Info.m_eAttrType = SPH_ATTR_FLOAT;
+				else if ( !strcmp ( szType, "bigint" ) )		Info.m_eAttrType = SPH_ATTR_BIGINT;
 				else if ( !strcmp ( szType, "multi" ) )
 				{
 					Info.m_eAttrType = SPH_ATTR_INTEGER | SPH_ATTR_MULTI;
@@ -18327,7 +18280,7 @@ void CSphWordDataRecord::Read( CSphMergeSource * pSource, CSphMergeData * pMerge
 			const CSphFilter & tFilter = pMergeData->m_dFilters[i];
 			if ( tFilter.m_eType==SPH_FILTER_RANGE )
 			{
-				SphAttr_t uValue = sphGetRowAttr ( tDoc.m_pRowitems, tFilter.m_iBitOffset, tFilter.m_iBitCount );
+				SphAttr_t uValue = sphGetRowAttr ( tDoc.m_pRowitems, tFilter.m_tLocator );
 				if ( tFilter.m_bExclude ^ ( uValue<tFilter.m_uMinValue || uValue>tFilter.m_uMaxValue ) )
 				{
 					bOK = true;

@@ -179,7 +179,7 @@ enum SearchdCommand_e
 /// known command versions
 enum
 {
-	VER_COMMAND_SEARCH		= 0x114,
+	VER_COMMAND_SEARCH		= 0x115,
 	VER_COMMAND_EXCERPT		= 0x100,
 	VER_COMMAND_UPDATE		= 0x101,
 	VER_COMMAND_KEYWORDS	= 0x100
@@ -1849,7 +1849,7 @@ protected:
 
 int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuery & q ) const
 {
-	int iReqSize = 96 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
+	int iReqSize = 100 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
 		+ strlen ( q.m_sSortBy.cstr() )
 		+ strlen ( q.m_sQuery.cstr() )
 		+ strlen ( sIndexes )
@@ -1874,6 +1874,9 @@ int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuer
 		iReqSize += 8 + strlen ( q.m_dIndexWeights[i].m_sName.cstr() ); // string index-name; int index-weight
 	ARRAY_FOREACH ( i, q.m_dFieldWeights )
 		iReqSize += 8 + strlen ( q.m_dFieldWeights[i].m_sName.cstr() ); // string field-name; int field-weight
+	ARRAY_FOREACH ( i, q.m_dOverrides )
+		iReqSize += 12 + strlen ( q.m_dOverrides[i].m_sAttr.cstr() ) + // string attr-name; int type; int values-count
+			( q.m_dOverrides[i].m_uAttrType==SPH_ATTR_BIGINT ? 16 : 12 )*q.m_dOverrides[i].m_dValues.GetLength(); // ( bigint id; int/float/bigint value )[] values
 	return iReqSize;
 }
 
@@ -1950,6 +1953,24 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 		tOut.SendInt ( q.m_dFieldWeights[i].m_iValue );
 	}
 	tOut.SendString ( q.m_sComment.cstr() );
+	tOut.SendInt ( q.m_dOverrides.GetLength() );
+	ARRAY_FOREACH ( i, q.m_dOverrides )
+	{
+		const CSphAttrOverride & tEntry = q.m_dOverrides[i];
+		tOut.SendString ( tEntry.m_sAttr.cstr() );
+		tOut.SendDword ( tEntry.m_uAttrType );
+		tOut.SendInt ( tEntry.m_dValues.GetLength() );
+		ARRAY_FOREACH ( j, tEntry.m_dValues )
+		{
+			tOut.SendUint64 ( tEntry.m_dValues[j].m_uDocID );
+			switch ( tEntry.m_uAttrType )
+			{
+				case SPH_ATTR_FLOAT:	tOut.SendFloat ( tEntry.m_dValues[j].m_fValue ); break;
+				case SPH_ATTR_BIGINT:	tOut.SendUint64 ( tEntry.m_dValues[j].m_uValue ); break;
+				default:				tOut.SendDword ( (DWORD)tEntry.m_dValues[j].m_uValue ); break;
+			}
+		}
+	}
 }
 
 
@@ -2455,6 +2476,29 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 	// v.1.19
 	if ( iVer>=0x113 )
 		tQuery.m_sComment = tReq.GetString ();
+
+	// v.1.21
+	if ( iVer>=0x115 )
+	{
+		tQuery.m_dOverrides.Resize ( tReq.GetInt() ); // FIXME! add sanity check
+		ARRAY_FOREACH ( i, tQuery.m_dOverrides )
+		{
+			CSphAttrOverride & tOverride = tQuery.m_dOverrides[i];
+			tOverride.m_sAttr = tReq.GetString ();
+			tOverride.m_uAttrType = tReq.GetDword ();
+
+			tOverride.m_dValues.Resize ( tReq.GetInt() ); // FIXME! add sanity check
+			ARRAY_FOREACH ( iVal, tOverride.m_dValues )
+			{
+				CSphAttrOverride::IdValuePair_t & tEntry = tOverride.m_dValues[iVal];
+				tEntry.m_uDocID = (SphDocID_t) tReq.GetUint64 ();
+
+				if ( tOverride.m_uAttrType==SPH_ATTR_FLOAT )		tEntry.m_fValue = tReq.GetFloat ();
+				else if ( tOverride.m_uAttrType==SPH_ATTR_BIGINT )	tEntry.m_uValue = tReq.GetUint64 ();
+				else												tEntry.m_uValue = tReq.GetDword ();
+			}
+		}
+	}
 
 	/////////////////////
 	// additional checks

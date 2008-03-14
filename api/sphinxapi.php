@@ -24,7 +24,7 @@ define ( "SEARCHD_COMMAND_UPDATE",	2 );
 define ( "SEARCHD_COMMAND_KEYWORDS",3 );
 
 /// current client-side command implementation versions
-define ( "VER_COMMAND_SEARCH",		0x114 );
+define ( "VER_COMMAND_SEARCH",		0x115 );
 define ( "VER_COMMAND_EXCERPT",		0x100 );
 define ( "VER_COMMAND_UPDATE",		0x101 );
 define ( "VER_COMMAND_KEYWORDS",	0x100 );
@@ -182,6 +182,7 @@ class SphinxClient
 	var $_ranker;		///< ranking mode (default is SPH_RANK_PROXIMITY_BM25)
 	var $_maxquerytime;	///< max query time, milliseconds (default is 0, do not limit)
 	var $_fieldweights;	///< per-field-name weights
+	var $_overrides;	///< per-query attribute values overrides
 
 	var $_error;		///< last error message
 	var $_warning;		///< last warning message
@@ -224,6 +225,7 @@ class SphinxClient
 		$this->_ranker		= SPH_RANK_PROXIMITY_BM25;
 		$this->_maxquerytime= 0;
 		$this->_fieldweights= array();
+		$this->_overrides 	= array();
 
 		$this->_error		= ""; // per-reply fields (for single-query case)
 		$this->_warning		= "";
@@ -574,6 +576,18 @@ class SphinxClient
 		$this->_arrayresult = $arrayresult;
 	}
 
+	/// set attribute values override
+	/// there can be only one override per attribute
+	/// $values must be a hash that maps document IDs to attribute values
+	function SetOverride ( $attrname, $attrtype, $values )
+	{
+		assert ( is_string ( $attrname ) );
+		assert ( in_array ( $attrtype, array ( SPH_ATTR_INTEGER, SPH_ATTR_TIMESTAMP, SPH_ATTR_BOOL, SPH_ATTR_FLOAT, SPH_ATTR_BIGINT ) ) );
+		assert ( is_array ( $values ) );
+
+		$this->_overrides[$attrname] = array ( "attr"=>$attrname, "type"=>$attrtype, "values"=>$values );
+	}
+
 	//////////////////////////////////////////////////////////////////////////////
 
 	/// clear all filters (for multi-queries)
@@ -591,6 +605,12 @@ class SphinxClient
 		$this->_groupsort	= "@group desc";
 		$this->_groupdistinct= "";
 	}
+
+	/// clear all attribute value overrides (for multi-queries)
+	function ResetOverrides ()
+    {
+    	$this->_overrides = array ();
+    }
 
 	//////////////////////////////////////////////////////////////////////////////
 
@@ -703,6 +723,27 @@ class SphinxClient
 
 		// comment
 		$req .= pack ( "N", strlen($comment) ) . $comment;
+
+		// attribute overrides
+		$req .= pack ( "N", count($this->_overrides) );
+		foreach ( $this->_overrides as $key => $entry )
+		{
+			$req .= pack ( "N", strlen($entry["attr"]) ) . $entry["attr"];
+			$req .= pack ( "NN", $entry["type"], count($entry["values"]) );
+			foreach ( $entry["values"] as $id=>$val )
+			{
+				assert ( is_numeric($id) );
+				assert ( is_numeric($val) );
+
+				$req .= sphPack64 ( $id );
+				switch ( $entry["type"] )
+				{
+					case SPH_ATTR_FLOAT:	$req .= $this->_PackFloat ( $val ); break;
+					case SPH_ATTR_BIGINT:	$req .= sphPack64 ( $val ); break;
+					default:				$req .= pack ( "N", $val ); break;
+				}
+			}
+		}
 
 		// mbstring workaround
 		$this->_MBPop ();

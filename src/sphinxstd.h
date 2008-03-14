@@ -515,6 +515,40 @@ public:
 		Swap ( m_pData, rhs.m_pData );
 	}
 
+	/// generic binary search
+	/// assumes that the array is sorted in ascending order
+	template < typename U > const T * BinarySearch ( const U & tRefValue ) const
+	{
+		if ( !m_pData || m_iLength<=0 )
+			return NULL;
+
+		const T * pStart = m_pData;
+		if ( tRefValue==(*pStart) )
+			return pStart;
+
+		const T * pEnd = m_pData + m_iLength - 1;
+		if ( tRefValue==(*pEnd) )
+			return pEnd;
+
+		while ( pEnd-pStart>1 )
+		{
+			if ( tRefValue<(*pStart) || tRefValue>(*pEnd) )
+				break;
+			assert ( tRefValue>(*pStart) );
+			assert ( tRefValue<(*pEnd) );
+
+			const T * pMid = pStart + (pEnd-pStart)/2;
+			if ( tRefValue==(*pMid) )
+				return pMid;
+
+			if ( tRefValue<(*pMid) )
+				pEnd = pMid;
+			else
+				pStart = pMid;
+		}
+		return NULL;
+	}
+
 protected:
 	int		m_iLength;		///< entries actually used
 	int		m_iLimit;		///< entries allocated

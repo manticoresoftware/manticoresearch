@@ -1655,6 +1655,8 @@ private:
 	CSphAttrLocator				m_tExprLoc;				///< sorting expr locator (bitoffset -1 means do not compute)
 	ISphExpr *					m_pExpr;				///< expression opcodes
 
+	CSphVector<CSphAttrOverride> *	m_pOverrides;		///< overridden attribute values
+
 private:
 	const char *				GetIndexFileName ( const char * sExt ) const;	///< WARNING, non-reenterable, static buffer!
 	int							AdjustMemoryLimit ( int iMemoryLimit );
@@ -1674,10 +1676,10 @@ private:
 	void						MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, const CSphTermSetup & tTermSetup );
 
 	const DWORD *				FindDocinfo ( SphDocID_t uDocID ) const;
-	void						CopyDocinfo ( CSphMatch & tMatch, const DWORD * pFound ) const;
+	void						CopyDocinfo ( CSphMatch & tMatch, const DWORD * pFound );
 	void						EarlyCalc ( CSphMatch & tMatch ) const;
 	void						LateCalc ( CSphMatch & tMatch ) const;
-	bool						EarlyReject ( CSphMatch & tMatch, const CSphQuery * pQuery ) const;
+	bool						EarlyReject ( CSphMatch & tMatch, const CSphQuery * pQuery );
 
 	bool						BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAutoArray<CSphWordHit> & dHits, int iArenaSize, int iFieldFD, int nFieldMVAs, int iFieldMVAInPool );
 
@@ -4970,6 +4972,8 @@ CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename )
 
 	m_bPreallocated = false;
 	m_uVersion = INDEX_FORMAT_VERSION;
+
+	m_pOverrides = NULL;
 }
 
 
@@ -8255,7 +8259,7 @@ CSphQueryResult * CSphIndex_VLN::Query ( ISphTokenizer * pTokenizer, CSphDict * 
 }
 
 
-bool CSphIndex_VLN::EarlyReject ( CSphMatch & tMatch, const CSphQuery * pQuery ) const
+bool CSphIndex_VLN::EarlyReject ( CSphMatch & tMatch, const CSphQuery * pQuery )
 {
 	if ( tMatch.m_iDocID < pQuery->m_iMinID || tMatch.m_iDocID > pQuery->m_iMaxID )
 		return true;
@@ -8441,13 +8445,28 @@ const DWORD * CSphIndex_VLN::FindDocinfo ( SphDocID_t uDocID ) const
 }
 
 
-void CSphIndex_VLN::CopyDocinfo ( CSphMatch & tMatch, const DWORD * pFound ) const
+inline bool operator == ( const SphDocID_t & a, const CSphAttrOverride::IdValuePair_t & b )	{ return a==b.m_uDocID; }
+inline bool operator < ( const SphDocID_t & a, const CSphAttrOverride::IdValuePair_t & b )		{ return a<b.m_uDocID; }
+inline bool operator > ( const SphDocID_t & a, const CSphAttrOverride::IdValuePair_t & b )		{ return a>b.m_uDocID; }
+
+
+void CSphIndex_VLN::CopyDocinfo ( CSphMatch & tMatch, const DWORD * pFound )
 {
-	if ( pFound )
+	if ( !pFound )
+		return;
+
+	// copy from storage
+	assert ( tMatch.m_pRowitems );
+	assert ( DOCINFO2ID(pFound)==tMatch.m_iDocID );
+	memcpy ( tMatch.m_pRowitems, DOCINFO2ATTRS(pFound), m_tSchema.GetRowSize()*sizeof(CSphRowitem) );
+
+	// patch if necessary
+	if ( m_pOverrides )
+		ARRAY_FOREACH ( i, (*m_pOverrides) )
 	{
-		assert ( tMatch.m_pRowitems );
-		assert ( DOCINFO2ID(pFound)==tMatch.m_iDocID );
-		memcpy ( tMatch.m_pRowitems, DOCINFO2ATTRS(pFound), m_tSchema.GetRowSize()*sizeof(CSphRowitem) );
+		const CSphAttrOverride::IdValuePair_t * pEntry = (*m_pOverrides)[i].m_dValues.BinarySearch ( tMatch.m_iDocID );
+		if ( pEntry )
+			tMatch.SetAttr ( (*m_pOverrides)[i].m_tLocator, pEntry->m_uValue );
 	}
 }
 
@@ -13551,6 +13570,31 @@ bool CSphIndex_VLN::MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, C
 	// setup sorters vs. MVA
 	for ( int i=0; i<iSorters; i++ )
 		(ppSorters[i])->SetMVAPool ( m_pMva.GetWritePtr() );
+
+	// setup overrides
+	m_pOverrides = NULL;
+	ARRAY_FOREACH ( i, pQuery->m_dOverrides )
+	{
+		int iAttr = m_tSchema.GetAttrIndex ( pQuery->m_dOverrides[i].m_sAttr.cstr() );
+		if ( iAttr<0 )
+		{
+			m_sLastError.SetSprintf ( "attribute override: unknown attribute name '%s'", pQuery->m_dOverrides[i].m_sAttr.cstr() );
+			return false;
+		}
+
+		const CSphColumnInfo & tCol = m_tSchema.GetAttr ( iAttr );
+		if ( tCol.m_eAttrType!=pQuery->m_dOverrides[i].m_uAttrType )
+		{
+			m_sLastError.SetSprintf ( "attribute override: attribute '%s' type mismatch (index=%d, query=%d)",
+				tCol.m_sName.cstr(), tCol.m_eAttrType, pQuery->m_dOverrides[i].m_uAttrType );
+			return false;
+		}
+
+		pQuery->m_dOverrides[i].m_tLocator = tCol.m_tLocator;
+		pQuery->m_dOverrides[i].m_dValues.Sort ();
+	}
+	if ( pQuery->m_dOverrides.GetLength() )
+		m_pOverrides = &pQuery->m_dOverrides;
 
 	//////////////////////////////////////
 	// find and weight matching documents

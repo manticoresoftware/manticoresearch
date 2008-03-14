@@ -1404,6 +1404,34 @@ public:
 };
 
 
+/// per-attribute value overrides
+class CSphAttrOverride
+{
+public:
+	/// docid+attrvalue pair
+	struct IdValuePair_t
+	{
+		SphDocID_t				m_uDocID;		///< document ID
+		union
+		{
+			SphAttr_t			m_uValue;		///< attribute value
+			float				m_fValue;		///< attribute value
+		};
+
+		inline bool operator < ( const IdValuePair_t & rhs ) const
+		{
+			return m_uDocID<rhs.m_uDocID;
+		}
+	};
+
+public:
+	CSphString					m_sAttr;		///< attribute name
+	DWORD						m_uAttrType;	///< attribute type
+	CSphAttrLocator				m_tLocator;		///< attribute locator
+	CSphVector<IdValuePair_t>	m_dValues;		///< id-value overrides
+};
+
+
 /// search query
 class CSphQuery
 {
@@ -1447,6 +1475,8 @@ public:
 
 	DWORD			m_uMaxQueryMsec;	///< max local index search time, in milliseconds (default is 0; means no limit)
 	CSphString		m_sComment;			///< comment to pass verbatim in the log file
+
+	CSphVector<CSphAttrOverride>	m_dOverrides;	///< per-query attribute value overrides
 
 public:
 	bool			m_bCalcGeodist;		///< whether this query needs to calc @geodist

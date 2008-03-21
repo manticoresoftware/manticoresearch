@@ -3964,7 +3964,7 @@ CSphQuery::CSphQuery ()
 	, m_iMaxMatches	( 1000 )
 	, m_iMinID		( 0 )
 	, m_iMaxID		( DOCID_MAX )
-	, m_sGroupSortBy	( "@group desc" )
+	, m_sGroupSortBy	( "@groupby desc" )
 	, m_sGroupDistinct	( "" )
 	, m_iCutoff			( 0 )
 	, m_iRetryCount		( 0 )
@@ -3976,8 +3976,6 @@ CSphQuery::CSphQuery ()
 	, m_sComment		( "" )
 
 	, m_bCalcGeodist	( false )
-	, m_iPresortRowitems( -1 )
-	, m_pGrouper		( NULL )
 	, m_pExpr			( NULL )
 
 	, m_iOldVersion		( 0 )
@@ -3993,7 +3991,6 @@ CSphQuery::CSphQuery ()
 CSphQuery::~CSphQuery ()
 {
 	SafeDelete ( m_pExpr );
-	SafeDelete ( m_pGrouper );
 }
 
 
@@ -4143,22 +4140,6 @@ void CSphSchema::AddAttr ( const CSphColumnInfo & tCol )
 		m_dAttrs.Last().m_tLocator.m_iBitOffset = iItem*ROWITEM_BITS + m_dRowUsed[iItem];
 		m_dRowUsed[iItem] += iBits;
 	}
-}
-
-
-void CSphSchema::BuildResultSchema ( const CSphQuery * pQuery )
-{
-	if ( !pQuery->IsGroupby() )
-		return;
-
-	CSphColumnInfo tGroupby ( "@groupby", SPH_ATTR_INTEGER );
-	CSphColumnInfo tCount ( "@count", SPH_ATTR_INTEGER );
-	CSphColumnInfo tDistinct ( "@distinct", SPH_ATTR_INTEGER );
-
-	AddAttr ( tGroupby );
-	AddAttr ( tCount );
-	if ( pQuery->HasDistinct() )
-		AddAttr ( tDistinct );
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -13232,7 +13213,7 @@ bool CSphIndex_VLN::QueryEx ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSph
 {
 	bool bRes = MultiQuery ( pTokenizer, pDict, pQuery, pResult, 1, &pTop );
 	pResult->m_iTotalMatches += bRes ? pTop->GetTotalCount () : 0;
-	pResult->m_tSchema.BuildResultSchema ( pQuery ); 
+	pResult->m_tSchema = pTop->m_tSchema;
 	return bRes;
 }
 

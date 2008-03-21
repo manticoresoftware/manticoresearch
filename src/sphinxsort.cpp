@@ -43,6 +43,21 @@ inline SphAttr_t sphGetCompAttr<true> ( const CSphMatchComparatorState & t, cons
 
 //////////////////////////////////////////////////////////////////////////
 
+/// groupby key type
+typedef uint64_t	SphGroupKey_t;
+
+
+/// base grouper (class that computes groupby key)
+class CSphGrouper
+{
+public:
+	virtual SphGroupKey_t	KeyFromValue ( SphAttr_t uValue ) const = 0;
+	virtual SphGroupKey_t	KeyFromMatch ( const CSphMatch & tMatch ) const = 0;
+	virtual void			GetLocator ( CSphAttrLocator & tOut ) const = 0;
+	virtual DWORD			GetResultType () const = 0;
+};
+
+
 /// match-sorting priority queue traits
 class CSphMatchQueueTraits : public ISphMatchSorter, ISphNoncopyable
 {
@@ -193,6 +208,7 @@ public:
 	public: \
 		_name ( const CSphAttrLocator & tLoc ) : m_tLocator ( tLoc ) {} \
 		virtual void GetLocator ( CSphAttrLocator & tOut ) const { tOut = m_tLocator; } \
+		virtual DWORD GetResultType () const { return m_tLocator.m_iBitCount>=sizeof(DWORD) ? SPH_ATTR_BIGINT : SPH_ATTR_INTEGER; } \
 		virtual SphGroupKey_t KeyFromMatch ( const CSphMatch & tMatch ) const { return KeyFromValue ( tMatch.GetAttr ( m_tLocator ) ); } \
 		virtual SphGroupKey_t KeyFromValue ( SphAttr_t uValue ) const \
 		{
@@ -256,6 +272,7 @@ public:
 	virtual void GetLocator ( CSphAttrLocator & tOut ) const { tOut = m_tLocator; }
 	virtual SphGroupKey_t KeyFromMatch ( const CSphMatch & tMatch ) const { return KeyFromValue ( tMatch.GetAttr ( m_tLocator ) ); }
 	virtual SphGroupKey_t KeyFromValue ( SphAttr_t uValue ) const { return uValue/m_iDiv; }
+	virtual DWORD GetResultType () const { return m_tLocator.m_iBitCount>=sizeof(DWORD) ? SPH_ATTR_BIGINT : SPH_ATTR_INTEGER; }
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -539,13 +556,6 @@ enum
 {
 	SPH_VATTR_ID			= -1,	///< tells match sorter to use doc id
 	SPH_VATTR_RELEVANCE		= -2,	///< tells match sorter to use match weight
-
-	OFF_POSTCALC_GROUP		= 0,	///< @group attr offset after normal and calculated attrs
-	OFF_POSTCALC_COUNT		= 1,	///< @count attr offset after normal and calculated attrs
-	OFF_POSTCALC_DISTINCT	= 2,	///< @distinct attr offset after normal and calculated attrs
-
-	ADD_ITEMS_GROUP			= 2,	///< how much items to add in plain group-by mode
-	ADD_ITEMS_DISTINCT		= 3		///< how much items to add in count-distinct mode
 };
 
 
@@ -554,6 +564,27 @@ struct ISphMatchComparator
 {
 	virtual ~ISphMatchComparator () {}
 	virtual bool VirtualIsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & tState ) const = 0;
+};
+
+
+/// additional group-by sorter settings
+struct CSphGroupSorterSettings
+{
+	CSphAttrLocator		m_tLocGroupby;		///< locator for @groupby
+	CSphAttrLocator		m_tLocCount;		///< locator for @count
+	CSphAttrLocator		m_tLocDistinct;		///< locator for @distinct
+	int					m_iPresortRowitems;	///< how much raw (non-groupby) rowitems should the sorter expect
+	int					m_iAddRowitems;		///< how much rowitems to add for non-grouped matches
+	bool				m_bDistinct;		///< whether we need distinct
+	bool				m_bMVA;				///< whether we're grouping by MVA attribute
+	CSphGrouper *		m_pGrouper;			///< group key calculator
+
+	CSphGroupSorterSettings ()
+		: m_iPresortRowitems ( 0 )
+		, m_iAddRowitems ( 0 )
+		, m_bDistinct ( false )
+		, m_bMVA ( false )
+	{}
 };
 
 
@@ -584,38 +615,33 @@ protected:
 	CSphMatchComparatorState	m_tStateGroup;
 	const ISphMatchComparator *	m_pComp;
 
-	CSphAttrLocator	m_tLocGroupby;	///< locator for @groupby
-	CSphAttrLocator	m_tLocCount;	///< locator for @count
-	CSphAttrLocator	m_tLocDistinct;	///< locator for @distinct
+	CSphGroupSorterSettings		m_tSettings;
 
 	static const int			GROUPBY_FACTOR = 4;	///< allocate this times more storage when doing group-by (k, as in k-buffer)
 
 public:
 	/// ctor
-	CSphKBufferGroupSorter ( const ISphMatchComparator * pComp, const CSphQuery * pQuery ) // FIXME! make k configurable
+	CSphKBufferGroupSorter ( const ISphMatchComparator * pComp, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings ) // FIXME! make k configurable
 		: CSphMatchQueueTraits ( pQuery->m_iMaxMatches*GROUPBY_FACTOR, true )
-		, m_iRowitems		( pQuery->m_iPresortRowitems )
+		, m_iRowitems		( tSettings.m_iPresortRowitems )
 		, m_eGroupBy		( pQuery->m_eGroupFunc )
-		, m_pGrouper		( pQuery->m_pGrouper )
+		, m_pGrouper		( tSettings.m_pGrouper )
 		, m_hGroup2Match	( pQuery->m_iMaxMatches*GROUPBY_FACTOR )
 		, m_iLimit			( pQuery->m_iMaxMatches )
 		, m_tDistinctLoc	( pQuery->m_tDistinctLoc )
 		, m_bSortByDistinct	( false )
 		, m_pComp			( pComp )
+		, m_tSettings		( tSettings )
 	{
 		assert ( GROUPBY_FACTOR>1 );
 		assert ( DISTINCT==false || m_tDistinctLoc.m_iBitOffset>=0 );
-
-		// FIXME! this MUST be in sync with sorter fixup; should unify the code somehow
-		m_tLocGroupby.m_iBitOffset = ROWITEM_BITS*(m_iRowitems+OFF_POSTCALC_GROUP); m_tLocGroupby.m_iBitCount = ROWITEM_BITS;
-		m_tLocCount.m_iBitOffset = ROWITEM_BITS*(m_iRowitems+OFF_POSTCALC_COUNT); m_tLocCount.m_iBitCount = ROWITEM_BITS;
-		m_tLocDistinct.m_iBitOffset = ROWITEM_BITS*(m_iRowitems+OFF_POSTCALC_DISTINCT); m_tLocDistinct.m_iBitCount = ROWITEM_BITS;
 	}
 
 	/// dtor
 	~CSphKBufferGroupSorter ()
 	{
 		SafeDelete ( m_pComp );
+		SafeDelete ( m_pGrouper );
 	}
 
 	/// add entry to the queue
@@ -629,8 +655,7 @@ public:
 	virtual bool PushEx ( const CSphMatch & tEntry, const SphGroupKey_t uGroupKey )
 	{
 		// check whether incoming match is already grouped
-		const int ADD_ITEMS_TOTAL = DISTINCT ? ADD_ITEMS_DISTINCT : ADD_ITEMS_GROUP;
-		assert ( tEntry.m_iRowitems==m_iRowitems || tEntry.m_iRowitems==m_iRowitems+ADD_ITEMS_TOTAL );
+		assert ( tEntry.m_iRowitems==m_iRowitems || tEntry.m_iRowitems==m_iRowitems+m_tSettings.m_iAddRowitems );
 
 		bool bGrouped = ( tEntry.m_iRowitems!=m_iRowitems );
 
@@ -640,23 +665,23 @@ public:
 		{
 			CSphMatch * pMatch = (*ppMatch);
 			assert ( pMatch );
-			assert ( pMatch->GetAttr(m_tLocGroupby)==uGroupKey );
+			assert ( pMatch->GetAttr(m_tSettings.m_tLocGroupby)==uGroupKey );
 
 			if ( bGrouped )
 			{
 				// it's already grouped match
 				// sum grouped matches count
 				assert ( pMatch->m_iRowitems==tEntry.m_iRowitems );
-				pMatch->SetAttr ( m_tLocCount, pMatch->GetAttr(m_tLocCount) + tEntry.GetAttr(m_tLocCount) ); // OPTIMIZE! AddAttr()?
+				pMatch->SetAttr ( m_tSettings.m_tLocCount, pMatch->GetAttr(m_tSettings.m_tLocCount) + tEntry.GetAttr(m_tSettings.m_tLocCount) ); // OPTIMIZE! AddAttr()?
 				if ( DISTINCT )
-					pMatch->SetAttr ( m_tLocDistinct, pMatch->GetAttr(m_tLocDistinct) + tEntry.GetAttr(m_tLocDistinct) );
+					pMatch->SetAttr ( m_tSettings.m_tLocDistinct, pMatch->GetAttr(m_tSettings.m_tLocDistinct) + tEntry.GetAttr(m_tSettings.m_tLocDistinct) );
 
 			} else
 			{
 				// it's a simple match
 				// increase grouped matches count
-				assert ( pMatch->m_iRowitems==tEntry.m_iRowitems+ADD_ITEMS_TOTAL );
-				pMatch->SetAttr ( m_tLocCount, 1+pMatch->GetAttr(m_tLocCount) ); // OPTIMIZE! IncAttr()?
+				assert ( pMatch->m_iRowitems==tEntry.m_iRowitems+m_tSettings.m_iAddRowitems );
+				pMatch->SetAttr ( m_tSettings.m_tLocCount, 1+pMatch->GetAttr(m_tSettings.m_tLocCount) ); // OPTIMIZE! IncAttr()?
 			}
 
 			// if new entry is more relevant, update from it
@@ -666,7 +691,7 @@ public:
 				pMatch->m_iWeight = tEntry.m_iWeight;
 				pMatch->m_iTag = tEntry.m_iTag;
 
-				for ( int i=0; i<pMatch->m_iRowitems-ADD_ITEMS_TOTAL; i++ )
+				for ( int i=0; i<pMatch->m_iRowitems-m_tSettings.m_iAddRowitems; i++ )
 					pMatch->m_pRowitems[i] = tEntry.m_pRowitems[i];
 			}
 		}
@@ -687,7 +712,7 @@ public:
 		assert ( m_iUsed<m_iSize );
 		CSphMatch & tNew = m_pData [ m_iUsed++ ];
 
-		int iNewSize = tEntry.m_iRowitems + ( bGrouped ? 0 : ADD_ITEMS_TOTAL );
+		int iNewSize = tEntry.m_iRowitems + ( bGrouped ? 0 : m_tSettings.m_iAddRowitems );
 		assert ( tNew.m_iRowitems==0 || tNew.m_iRowitems==iNewSize );
 
 		if ( !tNew.m_iRowitems )
@@ -701,10 +726,10 @@ public:
 
 		if ( !bGrouped )
 		{
-			tNew.SetAttr ( m_tLocGroupby, (DWORD)uGroupKey ); // intentionally truncate
-			tNew.SetAttr ( m_tLocCount, 1 );
+			tNew.SetAttr ( m_tSettings.m_tLocGroupby, uGroupKey );
+			tNew.SetAttr ( m_tSettings.m_tLocCount, 1 );
 			if ( DISTINCT )
-				tNew.SetAttr ( m_tLocDistinct, 0 );
+				tNew.SetAttr ( m_tSettings.m_tLocDistinct, 0 );
 		}
 
 		m_hGroup2Match.Add ( &tNew, uGroupKey );
@@ -764,7 +789,7 @@ protected:
 			{
 				CSphMatch ** ppMatch = m_hGroup2Match(uGroup);
 				if ( ppMatch )
-					(*ppMatch)->SetAttr ( m_tLocDistinct, iCount );
+					(*ppMatch)->SetAttr ( m_tSettings.m_tLocDistinct, iCount );
 			}
 		}
 	}
@@ -788,7 +813,7 @@ protected:
 			CSphVector<SphGroupKey_t> dRemove;
 			dRemove.Resize ( iCut );
 			for ( int i=0; i<iCut; i++ )
-				dRemove[i] = m_pData[m_iUsed+i].GetAttr ( m_tLocGroupby );
+				dRemove[i] = m_pData[m_iUsed+i].GetAttr ( m_tSettings.m_tLocGroupby );
 
 			// sort and compact
 			if ( !m_bSortByDistinct )
@@ -799,7 +824,7 @@ protected:
 		// rehash
 		m_hGroup2Match.Reset ();
 		for ( int i=0; i<m_iUsed; i++ )
-			m_hGroup2Match.Add ( m_pData+i, m_pData[i].GetAttr ( m_tLocGroupby ) );
+			m_hGroup2Match.Add ( m_pData+i, m_pData[i].GetAttr ( m_tSettings.m_tLocGroupby ) );
 	}
 
 	/// sort groups buffer
@@ -855,8 +880,8 @@ protected:
 
 public:
 	/// ctor
-	CSphKBufferMVAGroupSorter ( const ISphMatchComparator * pComp, const CSphQuery * pQuery )
-		: CSphKBufferGroupSorter < COMPGROUP, DISTINCT > ( pComp, pQuery )
+	CSphKBufferMVAGroupSorter ( const ISphMatchComparator * pComp, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings )
+		: CSphKBufferGroupSorter < COMPGROUP, DISTINCT > ( pComp, pQuery, tSettings )
 		, m_pMva ( NULL )
 	{
 		this->m_pGrouper->GetLocator ( m_tMvaLocator );
@@ -876,7 +901,7 @@ public:
 		{
 			// it must be pre-grouped; well, just re-group it based on the group key
 			// (this pointer is for gcc; it doesn't work otherwise)
-			return PushEx ( tEntry, tEntry.GetAttr(this->m_tLocGroupby) );
+			return PushEx ( tEntry, tEntry.GetAttr(this->m_tSettings.m_tLocGroupby) );
 		}
 
 		// ungrouped match
@@ -1340,7 +1365,7 @@ static ESortClauseParseResult sphParseSortClause ( const char * sClause, const C
 		{
 			if ( !pQuery->IsGroupby() )
 			{
-				sError.SetSprintf ( "no group-by attribute; can not sort by @group" );
+				sError.SetSprintf ( "no group-by attribute; can not sort by @groupby" );
 				return SORT_CLAUSE_ERROR;
 			}
 			tState.m_iAttr[iField] = FIXUP_GROUP;
@@ -1392,54 +1417,54 @@ static ESortClauseParseResult sphParseSortClause ( const char * sClause, const C
 //////////////////////////////////////////////////////////////////////////
 
 template < typename COMPGROUP >
-static ISphMatchSorter * sphCreateSorter3rd ( bool bDistinct, bool bMVA, const ISphMatchComparator * pComp, const CSphQuery * pQuery )
+static ISphMatchSorter * sphCreateSorter3rd ( const ISphMatchComparator * pComp, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings )
 {
-	if ( bMVA==true )
+	if ( tSettings.m_bMVA==true )
 	{
-		if ( bDistinct==true )
-			return new CSphKBufferMVAGroupSorter<COMPGROUP,true> ( pComp, pQuery );
+		if ( tSettings.m_bDistinct==true )
+			return new CSphKBufferMVAGroupSorter<COMPGROUP,true> ( pComp, pQuery, tSettings);
 		else
-			return new CSphKBufferMVAGroupSorter<COMPGROUP,false> ( pComp, pQuery );
+			return new CSphKBufferMVAGroupSorter<COMPGROUP,false> ( pComp, pQuery, tSettings );
 	} else
 	{
-		if ( bDistinct==true )
-			return new CSphKBufferGroupSorter<COMPGROUP,true> ( pComp, pQuery );
+		if ( tSettings.m_bDistinct==true )
+			return new CSphKBufferGroupSorter<COMPGROUP,true> ( pComp, pQuery, tSettings );
 		else
-			return new CSphKBufferGroupSorter<COMPGROUP,false> ( pComp, pQuery );
+			return new CSphKBufferGroupSorter<COMPGROUP,false> ( pComp, pQuery, tSettings );
 	}
 }
 
 
-static ISphMatchSorter * sphCreateSorter2nd ( ESphSortFunc eGroupFunc, bool bGroupBits, bool bDistinct, bool bMVA, const ISphMatchComparator * pComp, const CSphQuery * pQuery )
+static ISphMatchSorter * sphCreateSorter2nd ( ESphSortFunc eGroupFunc, bool bGroupBits, const ISphMatchComparator * pComp, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings )
 {
 	if ( bGroupBits )
 	{
 		switch ( eGroupFunc )
 		{
-			case FUNC_GENERIC2:		return sphCreateSorter3rd<MatchGeneric2_fn<true> >	( bDistinct, bMVA, pComp, pQuery ); break;
-			case FUNC_GENERIC3:		return sphCreateSorter3rd<MatchGeneric3_fn<true> >	( bDistinct, bMVA, pComp, pQuery ); break;
-			case FUNC_GENERIC4:		return sphCreateSorter3rd<MatchGeneric4_fn<true> >	( bDistinct, bMVA, pComp, pQuery ); break;
-			case FUNC_GENERIC5:		return sphCreateSorter3rd<MatchGeneric5_fn<true> >	( bDistinct, bMVA, pComp, pQuery ); break;
-			case FUNC_CUSTOM:		return sphCreateSorter3rd<MatchCustom_fn<true>   >	( bDistinct, bMVA, pComp, pQuery ); break;
+			case FUNC_GENERIC2:		return sphCreateSorter3rd<MatchGeneric2_fn<true> >	( pComp, pQuery, tSettings ); break;
+			case FUNC_GENERIC3:		return sphCreateSorter3rd<MatchGeneric3_fn<true> >	( pComp, pQuery, tSettings ); break;
+			case FUNC_GENERIC4:		return sphCreateSorter3rd<MatchGeneric4_fn<true> >	( pComp, pQuery, tSettings ); break;
+			case FUNC_GENERIC5:		return sphCreateSorter3rd<MatchGeneric5_fn<true> >	( pComp, pQuery, tSettings ); break;
+			case FUNC_CUSTOM:		return sphCreateSorter3rd<MatchCustom_fn<true>   >	( pComp, pQuery, tSettings ); break;
 			default:				return NULL;
 		}
 	} else
 	{
 		switch ( eGroupFunc )
 		{
-			case FUNC_GENERIC2:		return sphCreateSorter3rd<MatchGeneric2_fn<false> >	( bDistinct, bMVA, pComp, pQuery ); break;
-			case FUNC_GENERIC3:		return sphCreateSorter3rd<MatchGeneric3_fn<false> >	( bDistinct, bMVA, pComp, pQuery ); break;
-			case FUNC_GENERIC4:		return sphCreateSorter3rd<MatchGeneric4_fn<false> >	( bDistinct, bMVA, pComp, pQuery ); break;
-			case FUNC_GENERIC5:		return sphCreateSorter3rd<MatchGeneric5_fn<false> >	( bDistinct, bMVA, pComp, pQuery ); break;
-			case FUNC_CUSTOM:		return sphCreateSorter3rd<MatchCustom_fn<false>   >	( bDistinct, bMVA, pComp, pQuery ); break;
-			case FUNC_EXPR:			return sphCreateSorter3rd<MatchExpr_fn>				( bDistinct, bMVA, pComp, pQuery ); break;
+			case FUNC_GENERIC2:		return sphCreateSorter3rd<MatchGeneric2_fn<false> >	( pComp, pQuery, tSettings ); break;
+			case FUNC_GENERIC3:		return sphCreateSorter3rd<MatchGeneric3_fn<false> >	( pComp, pQuery, tSettings ); break;
+			case FUNC_GENERIC4:		return sphCreateSorter3rd<MatchGeneric4_fn<false> >	( pComp, pQuery, tSettings ); break;
+			case FUNC_GENERIC5:		return sphCreateSorter3rd<MatchGeneric5_fn<false> >	( pComp, pQuery, tSettings ); break;
+			case FUNC_CUSTOM:		return sphCreateSorter3rd<MatchCustom_fn<false>   >	( pComp, pQuery, tSettings ); break;
+			case FUNC_EXPR:			return sphCreateSorter3rd<MatchExpr_fn>				( pComp, pQuery, tSettings ); break;
 			default:				return NULL;
 		}
 	}
 }
 
 
-static ISphMatchSorter * sphCreateSorter1st ( ESphSortFunc eMatchFunc, bool bMatchBits, ESphSortFunc eGroupFunc, bool bGroupBits, bool bDistinct, bool bMVA, const CSphQuery * pQuery )
+static ISphMatchSorter * sphCreateSorter1st ( ESphSortFunc eMatchFunc, bool bMatchBits, ESphSortFunc eGroupFunc, bool bGroupBits, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings )
 {
 	ISphMatchComparator * pComp = NULL;
 	if ( bMatchBits )
@@ -1475,7 +1500,7 @@ static ISphMatchSorter * sphCreateSorter1st ( ESphSortFunc eMatchFunc, bool bMat
 	}
 
 	return pComp
-		? sphCreateSorter2nd ( eGroupFunc, bGroupBits, bDistinct, bMVA, pComp, pQuery )
+		? sphCreateSorter2nd ( eGroupFunc, bGroupBits, pComp, pQuery, tSettings )
 		: NULL;
 }
 
@@ -1483,9 +1508,8 @@ static ISphMatchSorter * sphCreateSorter1st ( ESphSortFunc eMatchFunc, bool bMat
 // PUBLIC FUNCTIONS (FACTORY AND FLATTENING)
 //////////////////////////////////////////////////////////////////////////
 
-static bool UpdateQueryForSchema ( CSphQuery * pQuery, const CSphSchema & tSchema, bool & bMVA, CSphString & sError )
+static bool UpdateQueryForSchema ( CSphQuery * pQuery, const CSphSchema & tSchema, CSphGroupSorterSettings & tSettings, CSphString & sError )
 {
-	SafeDelete ( pQuery->m_pGrouper );
 	pQuery->m_tDistinctLoc.m_iBitOffset = -1;
 
 	if ( pQuery->m_sGroupBy.IsEmpty() )
@@ -1524,10 +1548,10 @@ static bool UpdateQueryForSchema ( CSphQuery * pQuery, const CSphSchema & tSchem
 				sError.SetSprintf ( "group-by clause: division by zero" );
 				return false;
 			}
-			pQuery->m_pGrouper = new CSphGrouperAttrdiv ( tSchema.GetAttr(iGroupBy).m_tLocator, iDiv );
+			tSettings.m_pGrouper = new CSphGrouperAttrdiv ( tSchema.GetAttr(iGroupBy).m_tLocator, iDiv );
 		} else
 		{
-			pQuery->m_pGrouper = new CSphGrouperAttr ( tSchema.GetAttr(iGroupBy).m_tLocator );
+			tSettings.m_pGrouper = new CSphGrouperAttr ( tSchema.GetAttr(iGroupBy).m_tLocator );
 		}
 
 	} else
@@ -1543,18 +1567,18 @@ static bool UpdateQueryForSchema ( CSphQuery * pQuery, const CSphSchema & tSchem
 		CSphAttrLocator tLoc = tSchema.GetAttr(iGroupBy).m_tLocator;
 		switch ( pQuery->m_eGroupFunc )
 		{
-			case SPH_GROUPBY_DAY:		pQuery->m_pGrouper = new CSphGrouperDay ( tLoc ); break;
-			case SPH_GROUPBY_WEEK:		pQuery->m_pGrouper = new CSphGrouperWeek ( tLoc ); break;
-			case SPH_GROUPBY_MONTH:		pQuery->m_pGrouper = new CSphGrouperMonth ( tLoc ); break;
-			case SPH_GROUPBY_YEAR:		pQuery->m_pGrouper = new CSphGrouperYear ( tLoc ); break;
-			case SPH_GROUPBY_ATTR:		pQuery->m_pGrouper = new CSphGrouperAttr ( tLoc ); break;
+			case SPH_GROUPBY_DAY:		tSettings.m_pGrouper = new CSphGrouperDay ( tLoc ); break;
+			case SPH_GROUPBY_WEEK:		tSettings.m_pGrouper = new CSphGrouperWeek ( tLoc ); break;
+			case SPH_GROUPBY_MONTH:		tSettings.m_pGrouper = new CSphGrouperMonth ( tLoc ); break;
+			case SPH_GROUPBY_YEAR:		tSettings.m_pGrouper = new CSphGrouperYear ( tLoc ); break;
+			case SPH_GROUPBY_ATTR:		tSettings.m_pGrouper = new CSphGrouperAttr ( tLoc ); break;
 			default:
 				sError.SetSprintf ( "invalid group-by mode (mode=%d)", pQuery->m_eGroupFunc );
 				return false;
 		}
 	}
 
-	bMVA = ( tSchema.GetAttr(iGroupBy).m_eAttrType & SPH_ATTR_MULTI )!=0;
+	tSettings.m_bMVA = ( tSchema.GetAttr(iGroupBy).m_eAttrType & SPH_ATTR_MULTI )!=0;
 
 	// setup distinct attr
 	if ( !pQuery->m_sGroupDistinct.IsEmpty() )
@@ -1575,9 +1599,10 @@ static bool UpdateQueryForSchema ( CSphQuery * pQuery, const CSphSchema & tSchem
 
 ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError )
 {
+	CSphGroupSorterSettings tSettings;
+
 	// lookup proper attribute index to group by, if any
-	bool bMVA = false;
-	if ( !UpdateQueryForSchema ( pQuery, tSchema, bMVA, sError ) )
+	if ( !UpdateQueryForSchema ( pQuery, tSchema, tSettings, sError ) )
 		return NULL;
 	assert ( pQuery->m_sGroupBy.IsEmpty() || pQuery->IsGroupby() );
 
@@ -1685,44 +1710,51 @@ ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchem
 		break;
 	}
 
-	// incoming schema should contain either no virtual columns at all,
-	// or both calculated and groupby virtual columns. let's handle that.
+	// create the new schema
+	// (note that in theory incoming schema should contain either no virtual columns at all, or both calculated and groupby virtual columns already)
+	// WARNING, THIS MUST BE IN SYNC WITH WHAT INDEX ACTUALLY DOES
+	CSphSchema tNewSchema = tSchema;
 
-	// check what the schema already has
-	int iGeoAttr = tSchema.GetAttrIndex ( "@geodist" );
-	int iExprAttr = tSchema.GetAttrIndex ( "@expr" );
-	int iGroupbyAttr = tSchema.GetAttrIndex ( "@groupby" );
-
-	// check the schema for calculated attributes, if needed
-	bool bNeedCalcdAttrs = ( pQuery->m_bCalcGeodist || pQuery->m_eSort==SPH_SORT_EXPR );
-	int iToCalc = 0;
-
-	if ( bNeedCalcdAttrs )
+	if ( pQuery->m_bCalcGeodist && tNewSchema.GetAttrIndex ( "@geodist" )<0 )
 	{
-		if ( iGeoAttr<0 && iExprAttr<0 && iGroupbyAttr<0 )
-		{
-			// first case, we have no attrs yet but we must sort
-			// lets do our predictions (must by in sync with SetupCalc() and groupby sorters)
-			if ( pQuery->m_bCalcGeodist )			iGeoAttr = tSchema.GetAttrsCount() + iToCalc++;
-			if ( pQuery->m_eSort==SPH_SORT_EXPR )	iExprAttr = tSchema.GetAttrsCount() + iToCalc++;
-			if ( pQuery->IsGroupby() )				iGroupbyAttr = tSchema.GetAttrsCount() + iToCalc; // no post-increment; groupby is *not* calc'd
-
-		} else
-		{
-			// second case, verify that we do have everything
-			if ( pQuery->m_bCalcGeodist && iGeoAttr<0 )				{ sError.SetSprintf ( "internal error: schema '%s': got virtual attrs, but missing '@geodist'", tSchema.m_sName.cstr() ); return NULL; }
-			if ( pQuery->m_eSort==SPH_SORT_EXPR && iExprAttr<0 )	{ sError.SetSprintf ( "internal error: schema '%s': got virtual attrs, but missing '@expr'", tSchema.m_sName.cstr() ); return NULL; }
-			if ( pQuery->IsGroupby() && iGroupbyAttr<0 )			{ sError.SetSprintf ( "internal error: schema '%s': got virtual attrs, but missing '@groupby'", tSchema.m_sName.cstr() ); return NULL; }
-		}
+		CSphColumnInfo tCol ( "@geodist", SPH_ATTR_FLOAT );
+		tNewSchema.AddAttr ( tCol );
 	}
 
-	// how much raw (non-groupby) rowitems should the sorter expect
-	if ( iGroupbyAttr>=0 && iGroupbyAttr<tSchema.GetAttrsCount() )
-		pQuery->m_iPresortRowitems = tSchema.GetAttr ( iGroupbyAttr ).m_tLocator.CalcRowitem(); // we do have incoming groupby attrs already; draw the line there
-	else
+	if ( pQuery->m_eSort==SPH_SORT_EXPR && tNewSchema.GetAttrIndex ( "@expr" )<0 )
 	{
-		pQuery->m_iPresortRowitems = tSchema.GetRowSize() + iToCalc; // we do not have anything; we'll be adding iToCalc full-rowitem attrs and then groupby attrs
-		iGroupbyAttr = tSchema.GetAttrsCount() + iToCalc;
+		CSphColumnInfo tCol ( "@expr", SPH_ATTR_FLOAT );
+		tNewSchema.AddAttr ( tCol );
+	}
+
+	if ( pQuery->IsGroupby() && tNewSchema.GetAttrIndex ( "@groupby" )<0 )
+	{
+		CSphColumnInfo tGroupby ( "@groupby", tSettings.m_pGrouper->GetResultType() );
+		CSphColumnInfo tCount ( "@count", SPH_ATTR_INTEGER );
+		CSphColumnInfo tDistinct ( "@distinct", SPH_ATTR_INTEGER );
+
+		tNewSchema.AddAttr ( tGroupby );
+		tNewSchema.AddAttr ( tCount );
+		if ( pQuery->HasDistinct() )
+			tNewSchema.AddAttr ( tDistinct );
+	}
+
+	int iGroupby = tNewSchema.GetAttrIndex ( "@groupby" );
+	if ( iGroupby>=0 )
+	{
+		tSettings.m_iPresortRowitems = tNewSchema.GetAttr ( iGroupby ).m_tLocator.CalcRowitem(); // how much raw (non-groupby) rowitems should the sorter expect
+		tSettings.m_iAddRowitems = tNewSchema.GetRowSize() - tSettings.m_iPresortRowitems; // how much groupby rowitems the sorter should add for non-grouped matches
+		tSettings.m_bDistinct = ( pQuery->m_tDistinctLoc.m_iBitOffset>=0 );
+
+		tSettings.m_tLocGroupby = tNewSchema.GetAttr ( iGroupby ).m_tLocator;
+
+		int iCount = tNewSchema.GetAttrIndex ( "@count" );
+		if ( iCount>=0 )
+			tSettings.m_tLocCount = tNewSchema.GetAttr ( iCount ).m_tLocator;
+
+		int iDistinct = tNewSchema.GetAttrIndex ( "@distinct" );
+		if ( iDistinct>=0 )
+			tSettings.m_tLocDistinct = tNewSchema.GetAttr ( iDistinct ).m_tLocator;
 	}
 
 	// perform fixup
@@ -1731,32 +1763,29 @@ ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchem
 		CSphMatchComparatorState & tState = iState ? tStateMatch : tStateGroup;
 		for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
 		{
-			int iOffset = -1;
+			const char * sName = NULL;
 			switch ( tState.m_iAttr[i] )
 			{
-				case FIXUP_GEODIST:		iOffset = iGeoAttr; break;
-				case FIXUP_EXPR:		iOffset = iExprAttr; break;
-				case FIXUP_GROUP:		iOffset = iGroupbyAttr+OFF_POSTCALC_GROUP; break;
-				case FIXUP_COUNT:		iOffset = iGroupbyAttr+OFF_POSTCALC_COUNT; break;
-				case FIXUP_DISTINCT:	iOffset = iGroupbyAttr+OFF_POSTCALC_DISTINCT; break;
+				case FIXUP_GEODIST:		sName = "@geodist"; break;
+				case FIXUP_EXPR:		sName = "@expr"; break;
+				case FIXUP_GROUP:		sName = "@groupby"; break;
+				case FIXUP_COUNT:		sName = "@count"; break;
+				case FIXUP_DISTINCT:	sName = "@distinct"; break;
 				default:				continue;
 			}
 
-			assert ( iOffset>=0 );
-			if ( iOffset<tSchema.GetAttrsCount() )
+			assert ( sName );
+			int iAttr = tNewSchema.GetAttrIndex(sName);
+
+			if ( iAttr<0 || iAttr>=tNewSchema.GetAttrsCount() )
 			{
-				// attribute which is already there; copy
-				const CSphColumnInfo & tCol = tSchema.GetAttr(iOffset);
-				tState.m_iAttr[i] = iOffset;
-				tState.m_tLocator[i] = tCol.m_tLocator;
-				assert ( !tState.m_tLocator[i].IsBitfield() );
-			} else
-			{
-				// attribute which is to be added; predict
-				tState.m_iAttr[i] = iOffset;
-				tState.m_tLocator[i].m_iBitOffset = ( tSchema.GetRowSize() + iOffset - tSchema.GetAttrsCount() )*ROWITEM_BITS; // FIXME! unwanted dependcy on rowitem size
-				tState.m_tLocator[i].m_iBitCount = ROWITEM_BITS;
+				sError.SetSprintf ( "INTERNAL ERROR: fixup failed for '%s' virtual attribute", sName );
+				return NULL;
 			}
+
+			const CSphColumnInfo & tCol = tNewSchema.GetAttr(iAttr);
+			tState.m_iAttr[i] = iAttr;
+			tState.m_tLocator[i] = tCol.m_tLocator;
 		}
 	}
 
@@ -1804,7 +1833,7 @@ ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchem
 
 	} else
 	{
-		pTop = sphCreateSorter1st ( eMatchFunc, bMatchBits, eGroupFunc, bGroupBits, pQuery->m_tDistinctLoc.m_iBitOffset>=0, bMVA, pQuery );
+		pTop = sphCreateSorter1st ( eMatchFunc, bMatchBits, eGroupFunc, bGroupBits, pQuery, tSettings );
 	}
 
 	if ( !pTop )
@@ -1818,6 +1847,7 @@ ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchem
 	pTop->SetState ( tStateMatch );
 	pTop->SetGroupState ( tStateGroup );
 	pTop->m_bRandomize = bRandomize;
+	pTop->m_tSchema = tNewSchema;
 	return pTop;
 }
 

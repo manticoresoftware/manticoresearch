@@ -523,7 +523,7 @@ struct CSphAttrLocator
 
 	inline bool IsBitfield () const
 	{
-		return ( m_iBitCount!=ROWITEM_BITS || ( m_iBitOffset%ROWITEM_BITS )!=0 );
+		return ( m_iBitCount<ROWITEM_BITS || ( m_iBitOffset%ROWITEM_BITS )!=0 );
 	}
 
 	int CalcRowitem () const
@@ -780,10 +780,6 @@ public:
 
 	/// add attr
 	void					AddAttr ( const CSphColumnInfo & tAttr );
-
-	/// build result schema from current contents and query
-	/// adds virtual columns such as @group etc
-	void					BuildResultSchema ( const CSphQuery * pQuery );
 
 protected:
 	CSphVector<CSphColumnInfo>		m_dAttrs;		///< all my attributes
@@ -1390,20 +1386,6 @@ struct CSphNamedInt
 #include "sphinxexpr.h"
 
 
-/// groupby key type
-typedef uint64_t	SphGroupKey_t;
-
-
-/// base grouper (class that computes groupby key)
-class CSphGrouper
-{
-public:
-	virtual SphGroupKey_t	KeyFromValue ( SphAttr_t uValue ) const = 0;
-	virtual SphGroupKey_t	KeyFromMatch ( const CSphMatch & tMatch ) const = 0;
-	virtual void			GetLocator ( CSphAttrLocator & tOut ) const = 0;
-};
-
-
 /// per-attribute value overrides
 class CSphAttrOverride
 {
@@ -1480,8 +1462,6 @@ public:
 
 public:
 	bool			m_bCalcGeodist;		///< whether this query needs to calc @geodist
-	int				m_iPresortRowitems;	///< row size submitted to sorter (with calculated attributes, but without groupby/count attributes added by sorters)
-	CSphGrouper *	m_pGrouper;			///< object that know how to compute group-by key for me
 	CSphAttrLocator	m_tDistinctLoc;		///< count-distinct attr locator
 	ISphExpr *		m_pExpr;			///< expression opcodes for SPH_SORT_EXPR mode
 
@@ -1502,7 +1482,7 @@ public:
 	int				GetIndexWeight ( const char * sName ) const;
 
 	/// check whether this query is group-by
-	bool			IsGroupby () const { return m_pGrouper!=NULL; }
+	bool			IsGroupby () const { return !m_sGroupBy.IsEmpty(); }
 
 	/// check whether this query is group-by and has distinct
 	bool			HasDistinct () const { return IsGroupby() && m_tDistinctLoc.m_iBitOffset>=0; }
@@ -1636,6 +1616,7 @@ class ISphMatchSorter
 public:
 	bool				m_bRandomize;
 	int					m_iTotal;
+	CSphSchema			m_tSchema;		///< "outgoing" schema
 
 public:
 	/// ctor

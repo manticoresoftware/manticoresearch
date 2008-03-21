@@ -3316,8 +3316,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 								for ( int i=0; i<tRes.m_iNumWords; i++ )
 									tRes.m_tWordStats[i] = tStats.m_tWordStats[i];
 
-								tRes.m_tSchema = tStats.m_tSchema;
-								tRes.m_tSchema.BuildResultSchema ( &m_dQueries[iQuery] ); 
+								tRes.m_tSchema = pSorter->m_tSchema;
 
 								// extract matches from sorter
 								assert ( pSorter );

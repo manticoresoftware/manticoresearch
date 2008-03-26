@@ -333,6 +333,32 @@ struct CSphSynonym
 	}
 };
 
+struct CSphSavedFile
+{
+	CSphString			m_sFilename;
+	SphOffset_t			m_uSize;
+	SphOffset_t			m_uCTime;
+	SphOffset_t			m_uMTime;
+	DWORD				m_uCRC32;
+
+						CSphSavedFile ();
+};
+
+
+struct CSphTokenizerSettings
+{
+	int					m_iType;
+	CSphString			m_sCaseFolding;
+	int					m_iMinWordLen;
+	CSphString			m_sSynonymsFile;
+	CSphString			m_sBoundary;
+	CSphString			m_sIgnoreChars;
+	int					m_iNgramLen;
+	CSphString			m_sNgramChars;
+
+						CSphTokenizerSettings ();
+};
+
 
 /// generic tokenizer
 class ISphTokenizer
@@ -359,9 +385,6 @@ public:
 	/// set ignored characters
 	virtual bool					SetIgnoreChars ( const char * sIgnored, CSphString & sError );
 
-	/// set min word length
-	virtual void					SetMinWordLen ( int iLen ) { m_iMinWordLen = Max ( iLen, 1 ); }
-
 	/// set n-gram characters (for CJK n-gram indexing)
 	virtual bool					SetNgramChars ( const char *, CSphString & ) { return true; }
 
@@ -373,6 +396,18 @@ public:
 
 	/// set phrase boundary chars
 	virtual bool					SetBoundary ( const char * sConfig, CSphString & sError );
+
+	/// setup tokenizer using given settings
+	virtual void					Setup ( const CSphTokenizerSettings & tSettings );
+
+	/// create a tokenizer using the given settings
+	static ISphTokenizer *			Create ( const CSphTokenizerSettings & tSettings, CSphString & sError );
+
+	/// save tokenizer settings to a stream
+	virtual const CSphTokenizerSettings &	GetSettings () const { return m_tSettings; }
+
+	/// get synonym file info
+	virtual const CSphSavedFile &	GetSynFileInfo () const { return m_tSynFileInfo; }
 
 public:
 	/// pass next buffer
@@ -428,13 +463,15 @@ protected:
 	static const int				MAX_SYNONYM_LEN		= 1024;	///< max synonyms map-from length, bytes
 
 	CSphLowercaser					m_tLC;						///< my lowercaser
-	int								m_iMinWordLen;				///< minimal word length, in codepoints
 	int								m_iLastTokenLen;			///< last token length, in codepoints
 	bool							m_bTokenBoundary;			///< last token boundary flag (true after boundary codepoint followed by separator)
 	bool							m_bBoundary;				///< boundary flag (true immediately after boundary codepoint)
 	bool							m_bWasSpecial;				///< special token flag
 	bool							m_bEscaped;					///< backslash handling flag
 	int								m_iOvershortCount;			///< skipped overshort tokens count
+
+	CSphTokenizerSettings			m_tSettings;				///< tokenizer settings
+	CSphSavedFile					m_tSynFileInfo;				///< synonyms file info
 
 	CSphVector<CSphSynonym>			m_dSynonyms;				///< active synonyms
 	CSphVector<int>					m_dSynStart;				///< map 1st byte to candidate range start
@@ -453,6 +490,13 @@ ISphTokenizer *			sphCreateUTF8NgramTokenizer ();
 /////////////////////////////////////////////////////////////////////////////
 // DICTIONARIES
 /////////////////////////////////////////////////////////////////////////////
+struct CSphDictSettings
+{
+	CSphString		m_sMorphology;
+	CSphString		m_sStopwords;
+	CSphString		m_sWordforms;
+};
+
 
 /// abstract word dictionary interface
 struct CSphDict
@@ -488,12 +532,24 @@ struct CSphDict
 	virtual bool		LoadWordforms ( const char * sFile, ISphTokenizer * pTokenizer ) = 0;
 
 	/// set morphology
-	virtual bool		SetMorphology ( const CSphVariant * sMorph, bool bUseUTF8, CSphString & sError ) = 0;
+	virtual bool		SetMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sError ) = 0;
+
+	/// setup dictionary using settings
+	virtual void		Setup ( const CSphDictSettings & tSettings ) = 0;
+
+	/// get dictionary settings
+	virtual const CSphDictSettings & GetSettings () const = 0;
+
+	/// stopwords file infos
+	virtual const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () = 0;
+
+	/// wordforms file infos
+	virtual const CSphSavedFile & GetWordformsFileInfo () = 0;
 };
 
 
 /// dictionary factory
-CSphDict * sphCreateDictionaryCRC ( const CSphVariant * pMorph, const char * szStopwords, const char * szWordforms, ISphTokenizer * pTokenizer, CSphString & sError );
+CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, ISphTokenizer * pTokenizer, CSphString & sError );
 
 /// clear wordform cache
 void sphShutdownWordforms ();
@@ -1670,6 +1726,19 @@ enum ESphDocinfo
 };
 
 
+struct CSphIndexSettings
+{
+	ESphDocinfo		m_eDocinfo;
+	int				m_iMinPrefixLen;
+	int				m_iMinInfixLen;
+	bool			m_bHtmlStrip;
+	CSphString		m_sHtmlIndexAttrs;
+	CSphString		m_sHtmlRemoveElements;
+					
+					CSphIndexSettings ();
+};
+
+
 /// generic fulltext index interface
 class CSphIndex
 {
@@ -1678,20 +1747,28 @@ public:
 
 public:
 								CSphIndex ( const char * sName );
-	virtual						~CSphIndex () {}
+	virtual						~CSphIndex ();
 
 	virtual const CSphString &	GetLastError () const { return m_sLastError; }
 	virtual const CSphSchema *	GetSchema () const { return &m_tSchema; }
 
 	virtual	void				SetProgressCallback ( ProgressCallback_t * pfnProgress ) { m_pProgress = pfnProgress; }
-	virtual void				SetInfixIndexing ( int iPrefixLen, int iInfixLen );
 	virtual void				SetBoundaryStep ( int iBoundaryStep );
 	virtual void				SetStar ( bool bValue ) { m_bEnableStar = bValue; }
 	virtual void				SetPreopen ( bool bValue ) { m_bKeepFilesOpen = bValue; }
+	void						SetTokenizer ( ISphTokenizer * pTokenizer );
+	ISphTokenizer *				GetTokenizer () { return m_pTokenizer; }
+	ISphTokenizer *				LeakTokenizer ();
+	void						SetDictionary ( CSphDict * pDict );
+	CSphDict *					GetDictionary () { return m_pDict; }
+	CSphDict *					LeakDictionary ();
+	void						Setup ( const CSphIndexSettings & tSettings );
+	const CSphIndexSettings &	GetSettings () { return m_tSettings; }
+	bool						IsStripperInited () const { return m_bStripperInited; }
 
 public:
 	/// build index by indexing given sources
-	virtual int					Build ( CSphDict * dict, const CSphVector<CSphSource*> & dSources, int iMemoryLimit, ESphDocinfo eDocinfo ) = 0;
+	virtual int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit ) = 0;
 
 	/// build index by mering current index with given index
 	virtual bool				Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilters ) = 0;
@@ -1701,7 +1778,7 @@ public:
 	virtual void				DumpHeader ( FILE * fp, const char * sHeaderName ) = 0;
 
 	/// check all data files, preload schema, and preallocate enough shared RAM to load memory-cached data
-	virtual const CSphSchema *	Prealloc ( bool bMlock, CSphString * sWarning ) = 0;
+	virtual const CSphSchema *	Prealloc ( bool bMlock, CSphString & sWarning ) = 0;
 
 	/// deallocate all previously preallocated shared data
 	virtual void				Dealloc () = 0;
@@ -1726,10 +1803,10 @@ public:
 	virtual bool				Mlock () = 0;
 
 public:
-	virtual CSphQueryResult *	Query ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery ) = 0;
-	virtual bool				QueryEx ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchSorter * pTop ) = 0;
-	virtual bool				MultiQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters ) = 0;
-	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, ISphTokenizer * pTokenizer, CSphDict * pDict, const char * szQuery, bool bGetStats ) = 0;
+	virtual CSphQueryResult *	Query ( CSphQuery * pQuery ) = 0;
+	virtual bool				QueryEx ( CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchSorter * pTop ) = 0;
+	virtual bool				MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters ) = 0;
+	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats ) = 0;
 
 public:
 	/// updates memory-cached attributes in real time
@@ -1750,14 +1827,18 @@ protected:
 	CSphSchema					m_tSchema;
 	CSphString					m_sLastError;
 
-	int							m_iMinPrefixLen;///< min indexable prefix length (0 means don't index prefixes)
-	int							m_iMinInfixLen;	///< min indexable infix length (0 means don't index infixes)
 	int							m_iBoundaryStep;///< on-boundary additional word position step (0 means index all words continuously)
 
 	bool						m_bAttrsUpdated;///< whether in-memory attrs are updated (compared to disk state)
 
 	bool						m_bEnableStar;			///< enable star-syntax
 	bool						m_bKeepFilesOpen;		///< keep files open to avoid race on seamless rotation
+
+	bool						m_bStripperInited;		///< was stripper initialized (old index version (<9) handling)
+	CSphIndexSettings			m_tSettings;
+
+	ISphTokenizer *				m_pTokenizer;
+	CSphDict *					m_pDict;
 };
 
 /////////////////////////////////////////////////////////////////////////////

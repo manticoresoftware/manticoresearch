@@ -667,81 +667,111 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 
 /////////////////////////////////////////////////////////////////////////////
 
-ISphTokenizer * sphConfTokenizer ( const CSphConfigSection & hIndex, CSphString & sError )
+bool sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSettings & tSettings, CSphString & sError )
 {
 	// charset_type
 	CSphScopedPtr<ISphTokenizer> pTokenizer ( NULL );
 
 	if ( !hIndex("charset_type") || hIndex["charset_type"]=="sbcs" )
 	{
-		pTokenizer = sphCreateSBCSTokenizer ();
-
-	} else if ( hIndex["charset_type"]=="utf-8" )
+		tSettings.m_iType = TOKENIZER_SBCS;
+	}
+	else if ( hIndex["charset_type"]=="utf-8" )
 	{
-		pTokenizer = hIndex("ngram_chars")
-			? sphCreateUTF8NgramTokenizer ()
-			: sphCreateUTF8Tokenizer ();
-
-	} else
+		tSettings.m_iType = hIndex("ngram_chars") ? TOKENIZER_NGRAM : TOKENIZER_UTF8;
+	}
+	else
 	{
 		sError.SetSprintf ( "unknown charset type '%s'", hIndex["charset_type"].cstr() );
-		return NULL;
+		return false;
 	}
 
-	assert ( pTokenizer.Ptr() );
-
-	// charset_table
-	if ( hIndex("charset_table") )
-		if ( !pTokenizer->SetCaseFolding ( hIndex["charset_table"].cstr(), sError ) )
-	{
-		sError.SetSprintf ( "'charset_table': %s", sError.cstr() );
-		return NULL;
-	}
-
-	// min_word_len
-	int iMinWordLen = hIndex("min_word_len") ? Max ( hIndex["min_word_len"].intval(), 0 ) : 0;
-	if ( iMinWordLen )
-		pTokenizer->SetMinWordLen ( iMinWordLen );
-
-	// ngram_chars
-	if ( hIndex("ngram_chars") )
-		if ( !pTokenizer->SetNgramChars ( hIndex["ngram_chars"].cstr(), sError ) )
-	{
-		sError.SetSprintf ( "'ngram_chars': %s", sError.cstr() );
-		return NULL;
-	}
-
-	// ngram_len
-	int iNgramLen = hIndex("ngram_len") ? Max ( hIndex["ngram_len"].intval(), 0 ) : 0;
-	if ( iNgramLen )
-		pTokenizer->SetNgramLen ( iNgramLen );
-
-	// synonyms
-	if ( hIndex("synonyms") )
-		if ( !pTokenizer->LoadSynonyms ( hIndex["synonyms"].cstr(), sError ) )
-	{
-		sError.SetSprintf ( "'synonyms': %s", sError.cstr() );
-		return NULL;
-	}
+	tSettings.m_sCaseFolding	= hIndex.GetStr ( "charset_table" );
+	tSettings.m_iMinWordLen		= Max ( hIndex.GetInt ( "min_word_len" ), 0 );
+	tSettings.m_sNgramChars		= hIndex.GetStr ( "ngram_chars" );
+	tSettings.m_iNgramLen		= Max ( hIndex.GetInt ( "ngram_len" ), 0 );
+	tSettings.m_sSynonymsFile	= hIndex.GetStr ( "synonyms" );
+	tSettings.m_sIgnoreChars	= hIndex.GetStr ( "ignore_chars" );
 
 	// phrase boundaries
-	int iBoundaryStep = hIndex("phrase_boundary_step") ? Max ( hIndex["phrase_boundary_step"].intval(), 0 ) : 0;
-	if ( iBoundaryStep>0 && hIndex("phrase_boundary") )
-		if ( !pTokenizer->SetBoundary ( hIndex["phrase_boundary"].cstr(), sError ) )
+	int iBoundaryStep = Max ( hIndex.GetInt ( "phrase_boundary_step" ), 0 );
+	if ( iBoundaryStep>0 )
+		tSettings.m_sBoundary	= hIndex.GetStr ( "phrase_boundary" );
+
+	return true;
+}
+
+void sphConfDictionary ( const CSphConfigSection & hIndex, CSphDictSettings & tSettings )
+{
+	tSettings.m_sMorphology = hIndex.GetStr ( "morphology" );
+	tSettings.m_sStopwords	= hIndex.GetStr ( "stopwords" );
+	tSettings.m_sWordforms	= hIndex.GetStr ( "wordforms" );
+}
+
+
+void sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSettings )
+{
+	tSettings.m_iMinPrefixLen = Max ( hIndex.GetInt ( "min_prefix_len" ), 0 );
+	tSettings.m_iMinInfixLen  = Max ( hIndex.GetInt ( "min_infix_len" ), 0 );
+
+	if ( hIndex ( "html_strip" ) )
 	{
-		sError.SetSprintf ( "'phrase_boundary': %s", sError.cstr() );
-		return NULL;
+		tSettings.m_bHtmlStrip			= hIndex.GetInt ( "html_strip" )!=0;
+		tSettings.m_sHtmlIndexAttrs		= hIndex.GetStr ( "html_index_attrs" );
+		tSettings.m_sHtmlRemoveElements	= hIndex.GetStr ( "html_remove_elements" );
 	}
 
-	// ignore_chars
-	if ( hIndex("ignore_chars") )
-		if ( !pTokenizer->SetIgnoreChars ( hIndex["ignore_chars"].cstr(), sError ) )
+	tSettings.m_eDocinfo = SPH_DOCINFO_EXTERN;
+
+	if ( hIndex ("docinfo") )
 	{
-		sError.SetSprintf ( "'ignore_chars': %s", sError.cstr() );
-		return NULL;
+		if ( hIndex["docinfo"]=="none" )	tSettings.m_eDocinfo = SPH_DOCINFO_NONE;
+		if ( hIndex["docinfo"]=="inline" )	tSettings.m_eDocinfo = SPH_DOCINFO_INLINE;
+	}
+}
+
+
+bool FixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, CSphString & sError )
+{
+	if ( !pIndex->GetTokenizer () )
+	{
+		CSphTokenizerSettings tSettings;
+		if ( !sphConfTokenizer ( hIndex, tSettings, sError ) )
+			return false;
+
+		ISphTokenizer * pTokenizer = ISphTokenizer::Create ( tSettings, sError );
+		if ( !pTokenizer )
+			return false;
+
+		pIndex->SetTokenizer ( pTokenizer );
 	}
 
-	return pTokenizer.LeakPtr();
+	if ( !pIndex->GetDictionary () )
+	{
+		CSphDictSettings tSettings;
+		sphConfDictionary ( hIndex, tSettings );
+		CSphDict * pDict = sphCreateDictionaryCRC ( tSettings, pIndex->GetTokenizer (), sError );
+		if ( !pDict )
+			return false;
+
+		pIndex->SetDictionary ( pDict );
+	}
+
+	if ( !pIndex->IsStripperInited () )
+	{
+		CSphIndexSettings tSettings = pIndex->GetSettings ();
+
+		if ( hIndex ( "html_strip" ) )
+		{
+			tSettings.m_bHtmlStrip			= hIndex.GetInt ( "html_strip" )!=0;
+			tSettings.m_sHtmlIndexAttrs		= hIndex.GetStr ( "html_index_attrs" );
+			tSettings.m_sHtmlRemoveElements	= hIndex.GetStr ( "html_remove_elements" );
+		}
+
+		pIndex->Setup ( tSettings );
+	}
+
+	return true;
 }
 
 //

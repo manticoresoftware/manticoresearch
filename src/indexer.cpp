@@ -180,7 +180,12 @@ public:
 
 	virtual void		LoadStopwords ( const char *, ISphTokenizer * ) {}
 	virtual bool		LoadWordforms ( const char *, ISphTokenizer * ) { return true; }
-	virtual bool		SetMorphology ( const CSphVariant *, bool, CSphString & ) { return true; }
+	virtual bool		SetMorphology ( const char *, bool, CSphString & ) { return true; }
+
+	virtual void		Setup ( const CSphDictSettings & tSettings ) { m_tSettings = tSettings; }
+	virtual const CSphDictSettings & GetSettings () const { return m_tSettings; }
+	virtual const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () { return m_dSWFileInfos; }
+	virtual const CSphSavedFile & GetWordformsFileInfo () { return m_tWFFileInfo; }
 
 protected:
 	struct HashFunc_t
@@ -193,6 +198,11 @@ protected:
 
 protected:
 	CSphMTFHash < int, 1048576, HashFunc_t >	m_hWords;
+
+	// fake setttings
+	CSphDictSettings			m_tSettings;
+	CSphVector <CSphSavedFile>	m_dSWFileInfos;
+	CSphSavedFile				m_tWFFileInfo;
 };
 
 
@@ -638,7 +648,11 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 	///////////////////
 
 	CSphString sError;
-	ISphTokenizer * pTokenizer = sphConfTokenizer ( hIndex, sError );
+	CSphTokenizerSettings tTokSettings;
+	if ( !sphConfTokenizer ( hIndex, tTokSettings, sError ) )
+		sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
+
+	ISphTokenizer * pTokenizer = ISphTokenizer::Create ( tTokSettings, sError );
 	if ( !pTokenizer )
 		sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 
@@ -739,19 +753,6 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		return false;
 	}
 
-	// configure docinfo storage
-	ESphDocinfo eDocinfo = SPH_DOCINFO_EXTERN;
-	if ( hIndex("docinfo") )
-	{
-		if ( hIndex["docinfo"]=="none" )	eDocinfo = SPH_DOCINFO_NONE;
-		if ( hIndex["docinfo"]=="inline" )	eDocinfo = SPH_DOCINFO_INLINE;
-	}
-	if ( bGotAttrs && eDocinfo==SPH_DOCINFO_NONE )
-	{
-		fprintf ( stdout, "FATAL: index '%s': got attributes, but docinfo is 'none' (fix your config file).\n", sIndexName );
-		exit ( 1 );
-	}
-
 	///////////
 	// do work
 	///////////
@@ -782,16 +783,20 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		}
 		tDict.Save ( g_sBuildStops, g_iTopStops, g_bBuildFreqs );
 
-	} else
+		SafeDelete ( pTokenizer );
+	}
+	else
 	{
 		///////////////
 		// create dict
 		///////////////
 
 		// create dict
-		CSphDict * pDict = sphCreateDictionaryCRC ( hIndex("morphology"), hIndex.GetStr("stopwords"),
-			hIndex.GetStr("wordforms"), pTokenizer, sError );
-		assert ( pDict );
+		CSphDictSettings tDictSettings;
+		sphConfDictionary ( hIndex, tDictSettings );
+		CSphDict * pDict = sphCreateDictionaryCRC ( tDictSettings, pTokenizer, sError );
+		if ( !pDict )
+			sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 
 		if ( !sError.IsEmpty () )
 			fprintf ( stdout, "WARNING: index '%s': %s\n", sIndexName, sError.cstr() );	
@@ -815,11 +820,22 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 			exit ( 1 );
 		}
 
-		pIndex->SetProgressCallback ( ShowProgress );
-		pIndex->SetInfixIndexing ( iPrefix, iInfix );
-		pIndex->SetBoundaryStep ( iBoundaryStep );
+		CSphIndexSettings tSettings;
+		sphConfIndex ( hIndex, tSettings );
 
-		bOK = pIndex->Build ( pDict, dSources, g_iMemLimit, eDocinfo )!=0;
+		if ( bGotAttrs && tSettings.m_eDocinfo==SPH_DOCINFO_NONE )
+		{
+			fprintf ( stdout, "FATAL: index '%s': got attributes, but docinfo is 'none' (fix your config file).\n", sIndexName );
+			exit ( 1 );
+		}
+
+		pIndex->SetProgressCallback ( ShowProgress );
+		pIndex->SetBoundaryStep ( iBoundaryStep );
+		pIndex->SetTokenizer ( pTokenizer );
+		pIndex->SetDictionary ( pDict );
+		pIndex->Setup ( tSettings );
+
+		bOK = pIndex->Build ( dSources, g_iMemLimit )!=0;
 		if ( bOK && g_bRotate )
 		{
 			sIndexPath.SetSprintf ( "%s.new", hIndex["path"].cstr() );
@@ -832,7 +848,6 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		pIndex->Unlock ();
 
 		SafeDelete ( pIndex );
-		SafeDelete ( pDict );
 	}
 
 	// trip report
@@ -859,7 +874,6 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 	// cleanup and go on
 	ARRAY_FOREACH ( i, dSources )
 		SafeDelete ( dSources[i] );
-	SafeDelete ( pTokenizer );
 
 	return bOK;
 }

@@ -69,16 +69,11 @@ struct ServedIndex_t
 {
 	CSphIndex *			m_pIndex;
 	const CSphSchema *	m_pSchema;		///< pointer to index schema, managed by the index itself
-	CSphDict *			m_pDict;
-	ISphTokenizer *		m_pTokenizer;
 	CSphString			m_sIndexPath;
 	bool				m_bEnabled;		///< to disable index in cases when rotation fails
 	bool				m_bMlock;
 	bool				m_bPreopen;
 	bool				m_bStar;
-	bool				m_bHtmlStrip;			///< html stripping settings for excerpts
-	CSphString			m_sHtmlIndexAttrs;		///< html stripping settings for excerpts
-	CSphString			m_sHtmlRemoveElements;	///< html stripping settings for excerpts
 
 public:
 						ServedIndex_t ();
@@ -123,6 +118,7 @@ static CSphString		g_sQueryLogFile;
 static const char *		g_sPidFile		= NULL;
 static int				g_iPidFD		= -1;
 static int				g_iMaxMatches	= 1000;
+static CSphString		g_sConfigFile;
 
 #if USE_WINDOWS
 static bool				g_bSeamlessRotate	= false;
@@ -235,8 +231,6 @@ ServedIndex_t::ServedIndex_t ()
 void ServedIndex_t::Reset ()
 {
 	m_pIndex	= NULL;
-	m_pDict		= NULL;
-	m_pTokenizer= NULL;
 	m_bEnabled	= true;
 	m_bMlock	= false;
 	m_bPreopen	= false;
@@ -246,8 +240,6 @@ void ServedIndex_t::Reset ()
 ServedIndex_t::~ServedIndex_t ()
 {
 	SafeDelete ( m_pIndex );
-	SafeDelete ( m_pDict );
-	SafeDelete ( m_pTokenizer );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -3254,8 +3246,6 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			{
 				const ServedIndex_t & tServed = g_hIndexes [ dLocal[iLocal] ];
 				assert ( tServed.m_pIndex );
-				assert ( tServed.m_pDict );
-				assert ( tServed.m_pTokenizer );
 				assert ( tServed.m_bEnabled );
 
 				if ( bMultiQueue )
@@ -3288,7 +3278,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 					if ( dSorters.GetLength() )
 					{
 						AggrResult_t tStats;
-						if ( !tServed.m_pIndex->MultiQuery ( tServed.m_pTokenizer, tServed.m_pDict, &m_dQueries[iStart], &tStats,
+						if ( !tServed.m_pIndex->MultiQuery ( &m_dQueries[iStart], &tStats,
 							dSorters.GetLength(), &dSorters[0] ) )
 						{
 							// failed
@@ -3368,7 +3358,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 						// do query
 						AggrResult_t & tRes = m_dResults[iQuery];
-						if ( !tServed.m_pIndex->QueryEx ( tServed.m_pTokenizer, tServed.m_pDict, &tQuery, &tRes, pSorter ) )
+						if ( !tServed.m_pIndex->QueryEx ( &tQuery, &tRes, pSorter ) )
 							m_dFailuresSet[iQuery].SubmitEx ( dLocal[iLocal].cstr(), "%s", tServed.m_pIndex->GetLastError().cstr() );
 						else
 							tRes.m_iSuccesses++;
@@ -3705,8 +3695,8 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 		tReq.SendErrorReply ( "unknown local index '%s' in search request", sIndex.cstr() );
 		return;
 	}
-	CSphDict * pDict = pIndex->m_pDict;
-	ISphTokenizer * pTokenizer = pIndex->m_pTokenizer;
+	CSphDict * pDict = pIndex->m_pIndex->GetDictionary ();
+	ISphTokenizer * pTokenizer = pIndex->m_pIndex->GetTokenizer ();
 
 	q.m_sWords = tReq.GetString ();
 	q.m_sBeforeMatch = tReq.GetString ();
@@ -3738,13 +3728,14 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 			return;
 		}
 
-		if ( pIndex->m_bHtmlStrip )
+		const CSphIndexSettings & tSettings = pIndex->m_pIndex->GetSettings ();
+		if ( tSettings.m_bHtmlStrip )
 		{
 			CSphString sError;
 			CSphHTMLStripper tStripper;
 			if (
-				!tStripper.SetIndexedAttrs ( pIndex->m_sHtmlIndexAttrs.cstr(), sError ) ||
-				!tStripper.SetRemovedElements ( pIndex->m_sHtmlRemoveElements.cstr(), sError ) )
+				!tStripper.SetIndexedAttrs ( tSettings.m_sHtmlIndexAttrs.cstr (), sError ) ||
+				!tStripper.SetRemovedElements ( tSettings.m_sHtmlRemoveElements.cstr (), sError ) )
 			{
 				tReq.SendErrorReply ( "HTML stripper config error: %s", sError.cstr() );
 				return;
@@ -3799,7 +3790,7 @@ void HandleCommandKeywords ( int iSock, int iVer, InputBuffer_c & tReq )
 	CSphVector < CSphKeywordInfo > dKeywords;
 	dKeywords.Reserve ( SPH_MAX_QUERY_WORDS );
 
-	if ( !pIndex->m_pIndex->GetKeywords ( dKeywords, pIndex->m_pTokenizer, pIndex->m_pDict, sQuery.cstr (), bGetStats ) )
+	if ( !pIndex->m_pIndex->GetKeywords ( dKeywords, sQuery.cstr (), bGetStats ) )
 	{
 		tReq.SendErrorReply ( "error generating keywords: %s", pIndex->m_pIndex->GetLastError ().cstr () );
 		return;
@@ -4242,7 +4233,10 @@ void RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 
 	// try to use new index
 	CSphString sWarning;
-	const CSphSchema * pNewSchema = tIndex.m_pIndex->Prealloc ( tIndex.m_bMlock, &sWarning );
+	ISphTokenizer * pTokenizer = tIndex.m_pIndex->LeakTokenizer ();
+	CSphDict * pDictionary = tIndex.m_pIndex->LeakDictionary ();
+
+	const CSphSchema * pNewSchema = tIndex.m_pIndex->Prealloc ( tIndex.m_bMlock, sWarning );
 	if ( !pNewSchema || !tIndex.m_pIndex->Preread() )
 	{
 		sphWarning ( "rotating index '%s': .new preload failed: %s", sIndex, tIndex.m_pIndex->GetLastError().cstr() );
@@ -4254,7 +4248,7 @@ void RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 			TryRename ( sIndex, sPath, dOld[j], dCur[j], true );
 		}
 
-		pNewSchema = tIndex.m_pIndex->Prealloc ( tIndex.m_bMlock, &sWarning );
+		pNewSchema = tIndex.m_pIndex->Prealloc ( tIndex.m_bMlock, sWarning );
 		if ( !pNewSchema || !tIndex.m_pIndex->Preread() )
 		{
 			sphWarning ( "rotating index '%s': .new preload failed; ROLLBACK FAILED; INDEX UNUSABLE", sIndex );
@@ -4265,6 +4259,17 @@ void RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 			if ( !sWarning.IsEmpty() )
 				sphWarning ( "rotating index '%s': %s", sIndex, sWarning.cstr() );
 		}
+
+		if ( !tIndex.m_pIndex->GetTokenizer () )
+			tIndex.m_pIndex->SetTokenizer ( pTokenizer );
+		else
+			SafeDelete ( pTokenizer );
+
+		if ( !tIndex.m_pIndex->GetDictionary () )
+			tIndex.m_pIndex->SetDictionary ( pDictionary );
+		else
+			SafeDelete ( pDictionary );
+
 		return;
 
 	} else
@@ -4272,6 +4277,16 @@ void RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 		if ( !sWarning.IsEmpty() )
 			sphWarning ( "rotating index '%s': %s", sIndex, sWarning.cstr() );
 	}
+
+	if ( !tIndex.m_pIndex->GetTokenizer () )
+		tIndex.m_pIndex->SetTokenizer ( pTokenizer );
+	else
+		SafeDelete ( pTokenizer );
+
+	if ( !tIndex.m_pIndex->GetDictionary () )
+		tIndex.m_pIndex->SetDictionary ( pDictionary );
+	else
+		SafeDelete ( pDictionary );
 
 	// unlink .old
 	if ( g_bUnlinkOld )
@@ -4413,7 +4428,7 @@ void SeamlessTryToForkPrereader ()
 
 	// prealloc enough RAM and lock new index
 	CSphString sWarn;
-	if ( !g_pPrereading->Prealloc ( tServed.m_bMlock, &sWarn ) )
+	if ( !g_pPrereading->Prealloc ( tServed.m_bMlock, sWarn ) )
 	{
 		sphWarning ( "rotating index '%s': prealloc: %s; using old index", sPrereading, g_pPrereading->GetLastError().cstr() );
 		return;
@@ -4651,6 +4666,18 @@ void CheckPipes ()
 					} else
 					{
 						// all went fine; swap them
+						if ( !g_pPrereading->GetTokenizer () )
+						{
+							g_pPrereading->SetTokenizer ( tServed.m_pIndex->GetTokenizer () );
+							tServed.m_pIndex->SetTokenizer ( NULL );
+						}
+
+						if ( !g_pPrereading->GetDictionary () )
+						{
+							g_pPrereading->SetDictionary ( tServed.m_pIndex->GetDictionary () );
+							tServed.m_pIndex->SetTokenizer ( NULL );
+						}
+
 						Swap ( tServed.m_pIndex, g_pPrereading );
 						tServed.m_pSchema = tServed.m_pIndex->GetSchema ();
 						tServed.m_bEnabled = true;
@@ -5064,7 +5091,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	// parse command line
 	//////////////////////
 
-	const char *	sOptConfig		= NULL;
 	bool			bOptConsole		= false;
 	bool			bOptStop		= false;
 	bool			bOptPIDFile		= false;
@@ -5094,7 +5120,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 		// handle 1-arg options
 		else if ( (i+1)>=argc )		break;
-		OPT ( "-c", "--config" )	sOptConfig = argv[++i];
+		OPT ( "-c", "--config" )	g_sConfigFile = argv[++i];
 		OPT ( "-p", "--port" )		iOptPort = atoi ( argv[++i] );
 		OPT ( "-i", "--index" )		sOptIndex = argv[++i];
 #if USE_WINDOWS
@@ -5130,40 +5156,40 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	/////////////////////
 
 	// fallback to defaults if there was no explicit config specified
-	while ( !sOptConfig )
+	while ( !g_sConfigFile.cstr() )
 	{
 #ifdef SYSCONFDIR
-		sOptConfig = SYSCONFDIR "/sphinx.conf";
-		if ( sphIsReadable(sOptConfig) )
+		g_sConfigFile = SYSCONFDIR "/sphinx.conf";
+		if ( sphIsReadable ( g_sConfigFile.cstr () ) )
 			break;
 #endif
 
-		sOptConfig = "./sphinx.conf";
-		if ( sphIsReadable(sOptConfig) )
+		g_sConfigFile = "./sphinx.conf";
+		if ( sphIsReadable ( g_sConfigFile.cstr () ) )
 			break;
 
-		sOptConfig = NULL;
+		g_sConfigFile = NULL;
 		break;
 	}
 
-	if ( !sOptConfig )
+	if ( !g_sConfigFile.cstr () )
 		sphFatal ( "no readable config file (looked in "
 #ifdef SYSCONFDIR
 			SYSCONFDIR "/sphinx.conf, "
 #endif
 			"./sphinx.conf)." );
 
-	sphInfo ( "using config file '%s'...", sOptConfig );
+	sphInfo ( "using config file '%s'...", g_sConfigFile.cstr () );
 
 	// do parse
 	CSphConfigParser cp;
-	if ( !cp.Parse ( sOptConfig ) )
-		sphFatal ( "failed to parse config file '%s'", sOptConfig );
+	if ( !cp.Parse ( g_sConfigFile.cstr () ) )
+		sphFatal ( "failed to parse config file '%s'", g_sConfigFile.cstr () );
 
 	const CSphConfig & hConf = cp.m_tConf;
 
 	if ( !hConf.Exists ( "searchd" ) || !hConf["searchd"].Exists ( "searchd" ) )
-		sphFatal ( "'searchd' config section not found in '%s'", sOptConfig );
+		sphFatal ( "'searchd' config section not found in '%s'", g_sConfigFile.cstr () );
 
 	const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
 
@@ -5174,7 +5200,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( bOptStop )
 	{
 		if ( !hSearchd("pid_file") )
-			sphFatal ( "stop: option 'pid_file' not found in '%s' section 'searchd'", sOptConfig );
+			sphFatal ( "stop: option 'pid_file' not found in '%s' section 'searchd'", g_sConfigFile.cstr () );
 
 		const char * sPid = hSearchd["pid_file"].cstr(); // shortcut
 		FILE * fp = fopen ( sPid, "r" );
@@ -5254,7 +5280,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	/////////////////////
 
 	if ( !hConf.Exists ( "index" ) )
-		sphFatal ( "no indexes found in '%s'", sOptConfig );
+		sphFatal ( "no indexes found in '%s'", g_sConfigFile.cstr () );
 
 	#define CONF_CHECK(_hash,_key,_msg,_add) \
 		if (!( _hash.Exists ( _key ) )) \
@@ -5478,21 +5504,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			}
 			// configure tokenizer
 			CSphString sError;
-			tIdx.m_pTokenizer = sphConfTokenizer ( hIndex, sError );
-			if ( !tIdx.m_pTokenizer )
-			{
-				sphWarning ( "index '%s': %s - NOT SERVING", sIndexName, sError.cstr() );
-				continue;
-			}
-
-			// conifgure dict
-			tIdx.m_pDict = sphCreateDictionaryCRC ( hIndex ("morphology"), hIndex.Exists ( "stopwords" ) ? hIndex["stopwords"].cstr () : NULL,
-								hIndex.Exists ( "wordforms" ) ? hIndex ["wordforms"].cstr () : NULL, tIdx.m_pTokenizer, sError );
-			if ( !tIdx.m_pDict )
-			{
-				sphWarning ( "index '%s': failed to create dictionary - NOT SERVING", sIndexName );
-				continue;
-			}
 
 			if ( !sError.IsEmpty () )
 				sphWarning ( "index '%s': %s", sIndexName, sError.cstr() );	
@@ -5503,22 +5514,13 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			if ( hIndex("enable_star") && hIndex["enable_star"].intval() )
 				tIdx.m_bStar = true;
 
-			// configure html stripping
-			tIdx.m_bHtmlStrip = false;
-			if ( hIndex.GetInt ( "html_strip" ) )
-			{
-				tIdx.m_bHtmlStrip = true;
-				tIdx.m_sHtmlIndexAttrs = hIndex.GetStr ( "html_index_attrs" );
-				tIdx.m_sHtmlRemoveElements = hIndex.GetStr ( "html_remove_elements" );
-			}
-
 			// try to create index
 			CSphString sWarning;
 			tIdx.m_bPreopen = hIndex.GetInt ( "preopen", (int)tIdx.m_bPreopen ) != 0;
 			tIdx.m_pIndex = sphCreateIndexPhrase ( hIndex["path"].cstr() );
 			tIdx.m_pIndex->SetStar ( tIdx.m_bStar );
 			tIdx.m_pIndex->SetPreopen ( tIdx.m_bPreopen || g_bPreopenIndexes );
-			tIdx.m_pSchema = tIdx.m_pIndex->Prealloc ( tIdx.m_bMlock, &sWarning );
+			tIdx.m_pSchema = tIdx.m_pIndex->Prealloc ( tIdx.m_bMlock, sWarning );
 			if ( !tIdx.m_pSchema || !tIdx.m_pIndex->Preread() )
 			{
 				sphWarning ( "index '%s': preload: %s; NOT SERVING", sIndexName, tIdx.m_pIndex->GetLastError().cstr() );
@@ -5526,6 +5528,12 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			}
 			if ( !sWarning.IsEmpty() )
 				sphWarning ( "index '%s': %s", sIndexName, sWarning.cstr() );
+
+			if ( !FixupIndexSettings ( tIdx.m_pIndex, hIndex, sError ) )
+			{
+				sphWarning ( "index '%s': %s - NOT SERVING", sIndexName, sError.cstr() );
+				continue;
+			}
 
 			// try to lock it
 			if ( !bOptConsole && !tIdx.m_pIndex->Lock() )

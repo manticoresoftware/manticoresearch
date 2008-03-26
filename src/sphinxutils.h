@@ -109,8 +109,24 @@ protected:
 
 /////////////////////////////////////////////////////////////////////////////
 
-/// create and configure tokenizer from index definition section
-ISphTokenizer *		sphConfTokenizer ( const CSphConfigSection & hIndex, CSphString & sError );
+enum
+{
+	 TOKENIZER_SBCS		= 1
+	,TOKENIZER_UTF8		= 2
+	,TOKENIZER_NGRAM	= 3
+};
+
+/// configure tokenizer from index definition section
+bool	sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSettings & tSettings, CSphString & sError );
+
+/// configure dictionary from index definition section
+void	sphConfDictionary ( const CSphConfigSection & hIndex, CSphDictSettings & tSettings );
+
+/// configure index from index definition section
+void	sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSettings );
+
+/// try to set dictionary, tokenizer and misc settings for an index (if not already set)
+bool	FixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, CSphString & sError );
 
 #endif // _sphinxutils_
 

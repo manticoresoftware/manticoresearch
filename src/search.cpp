@@ -241,11 +241,7 @@ int main ( int argc, char ** argv )
 		if ( !hIndex.Exists ( "path" ) )
 			sphDie ( "key 'path' not found in index '%s'", sIndexName );
 
-		// configure charset_type
 		CSphString sError;
-		ISphTokenizer * pTokenizer = sphConfTokenizer ( hIndex, sError );
-		if ( !pTokenizer )
-			sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 
 		// do we want to show document info from database?
 		#if USE_MYSQL
@@ -298,14 +294,6 @@ int main ( int argc, char ** argv )
 		}
 		#endif
 
-		// create dict
-		CSphDict * pDict = sphCreateDictionaryCRC ( hIndex ("morphology"), hIndex.Exists ( "stopwords" ) ? hIndex["stopwords"].cstr () : NULL,
-								hIndex.Exists ( "wordforms" ) ? hIndex ["wordforms"].cstr () : NULL, pTokenizer, sError );
-		assert ( pDict );
-
-		if ( !sError.IsEmpty () )
-			fprintf ( stdout, "WARNING: index '%s': %s\n", sIndexName, sError.cstr() );	
-
 		//////////
 		// search
 		//////////
@@ -316,15 +304,25 @@ int main ( int argc, char ** argv )
 		CSphIndex * pIndex = sphCreateIndexPhrase ( hIndex["path"].cstr() );
 		pIndex->SetStar ( hIndex.GetInt("enable_star")!=0 );
 
+		CSphString sWarning;
+
 		sError = "could not create index (check that files exist)";
 		for ( ; pIndex; )
 		{
-			const CSphSchema * pSchema = pIndex->Prealloc ( false, NULL );
+			const CSphSchema * pSchema = pIndex->Prealloc ( false, sWarning );
+
 			if ( !pSchema || !pIndex->Preread() )
 			{
 				sError = pIndex->GetLastError ();
 				break;
 			}
+
+			if ( !sWarning.IsEmpty () )
+				fprintf ( stdout, "WARNING: index '%s': %s\n", sIndexName, sWarning.cstr () );
+
+			// handle older index versions (<9)
+			if ( !FixupIndexSettings ( pIndex, hIndex, sError ) )
+				sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 
 			// lookup first timestamp if needed
 			// FIXME! remove this?
@@ -345,7 +343,8 @@ int main ( int argc, char ** argv )
 				}
 			}
 
-			pResult = pIndex->Query ( pTokenizer, pDict, &tQuery );
+			pResult = pIndex->Query ( &tQuery );
+
 			if ( !pResult )
 				sError = pIndex->GetLastError ();
 
@@ -459,8 +458,6 @@ int main ( int argc, char ** argv )
 		///////////
 
 		SafeDelete ( pIndex );
-		SafeDelete ( pDict );
-		SafeDelete ( pTokenizer );
 	}
 
 	sphShutdownWordforms ();

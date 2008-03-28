@@ -20,6 +20,8 @@
 // THE EXCERPTS GENERATOR
 /////////////////////////////////////////////////////////////////////////////
 
+static const int MAX_HIGHLIGHT_WORDS = 256;
+
 class ExcerptGen_c
 {
 public:
@@ -239,8 +241,8 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict, 
 	m_bExactPhrase = q.m_bExactPhrase && ( m_dWords.GetLength()>1 );
 
 	// truncate the array
-	if ( m_dWords.GetLength()>SPH_MAX_QUERY_WORDS )
-		m_dWords.Resize ( SPH_MAX_QUERY_WORDS );
+	if ( m_dWords.GetLength()>MAX_HIGHLIGHT_WORDS )
+		m_dWords.Resize ( MAX_HIGHLIGHT_WORDS );
 
 	// assign word weights
 	ARRAY_FOREACH ( i, m_dWords )

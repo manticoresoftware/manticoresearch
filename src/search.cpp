@@ -365,6 +365,9 @@ int main ( int argc, char ** argv )
 			sIndexName, sQuery, pResult->m_dMatches.GetLength(), pResult->m_iTotalMatches,
 			pResult->m_iQueryTime/1000, pResult->m_iQueryTime%1000 );
 
+		if ( !pResult->m_sWarning.IsEmpty() )
+			fprintf ( stdout, "WARNING: %s\n", pResult->m_sWarning.cstr() );
+
 		if ( pResult->m_dMatches.GetLength() )
 		{
 			fprintf ( stdout, "\ndisplaying matches:\n" );

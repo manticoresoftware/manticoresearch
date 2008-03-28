@@ -108,6 +108,9 @@
 				RelativePath="..\src\sphinxexcerpt.cpp">
 			</File>
 			<File
+				RelativePath="..\src\sphinxexpr.cpp">
+			</File>
+			<File
 				RelativePath="..\src\sphinxmetaphone.cpp">
 			</File>
 			<File
@@ -142,19 +145,24 @@
 					Name="Debug|Win32">
 					<Tool
 						Name="VCCustomBuildTool"
-						CommandLine="$(SolutionDir)\src\svnxrev.cmd $(SolutionDir)"
+						CommandLine="$(SolutionDir)\src\svnxrev.cmd $(SolutionDir)
+"
 						Outputs="$(SolutionDir)\src\nonexistent"/>
 				</FileConfiguration>
 				<FileConfiguration
 					Name="Release|Win32">
 					<Tool
 						Name="VCCustomBuildTool"
-						CommandLine="$(SolutionDir)\src\svnxrev.cmd $(SolutionDir)"
+						CommandLine="$(SolutionDir)\src\svnxrev.cmd $(SolutionDir)
+"
 						Outputs="$(SolutionDir)\src\nonexistent"/>
 				</FileConfiguration>
 			</File>
 			<File
 				RelativePath="..\src\sphinxexcerpt.h">
+			</File>
+			<File
+				RelativePath="..\src\sphinxexpr.h">
 			</File>
 			<File
 				RelativePath="..\src\sphinxquery.h">

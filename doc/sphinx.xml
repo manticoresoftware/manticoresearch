@@ -3149,6 +3149,20 @@ characters encoded by 0xE1 and 0xE2. Unfortunately, Sphinx
 does not support that at the moment and will simply sort
 the strings bytewise.
 </para>
+<para>
+Note that the ordinals are by construction local to each index,
+and it's therefore impossible to merge ordinals while retaining
+the proper order. The processed strings are replaced by their
+sequential number in the index they occurred in, but different
+indexes have different sets of strings. For instance, if 'main' index
+contains strings "aaa", "bbb", "ccc", and so on up to "zzz",
+they'll be assigned numbers 1, 2, 3, and so on up to 26,
+respectively. But then if 'delta' only contains "zzz" the assigned
+number will be 1. And after the merge, the order will be broken.
+Unfortunately, this is impossible to workaround without storing
+the original strings (and once Sphinx supports storing the
+original strings, ordinals will not be necessary any more). 
+</para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
 sql_attr_str2ordinal = author_name

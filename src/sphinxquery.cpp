@@ -1064,15 +1064,50 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 
 	bool bRedo = false;
 	const char * sToken = NULL;
+
 	for ( ;; )
 	{
 		// get next token
+		bool bSpecial = false;
 		if ( !bRedo )
-			sToken = (const char *) pMyTokenizer->GetToken ();
+		{
+			// tricky stuff
+			// we need to manually check for numbers in "expect number" states
+			// required because if 0-9 are not in charset_table, or min_word_len is too high,
+			// the tokenizer will *not* return the number as a token!
+			if ( dState.Last()==XQS_PROXIMITY || dState.Last()==XQS_QUORUM )
+			{
+				const char * sStart = (const char*) pMyTokenizer->GetBufferPtr ();
+				const char * sEnd = (const char*) pMyTokenizer->GetBufferEnd ();
+
+				const char * p = sStart;
+				while ( p<sEnd && isspace(*p) ) p++;
+
+				sToken = p;
+				while ( p<sEnd && isdigit(*p) ) p++;
+
+				if ( p>sToken )
+				{
+					// got a number, skip it
+					pMyTokenizer->AdvanceBufferPtr ( p-sStart );
+
+				} else
+				{
+					// not a number, fallback
+					sToken = (const char *) pMyTokenizer->GetToken ();
+					bSpecial = pMyTokenizer->WasTokenSpecial ();
+				}
+
+			} else
+			{
+				sToken = (const char *) pMyTokenizer->GetToken ();
+				bSpecial = pMyTokenizer->WasTokenSpecial ();
+			}
+		}
 		bRedo = false;
 
 		int iSpecial = sToken
-			? ( pMyTokenizer->WasTokenSpecial () ? sToken[0] : 0 )
+			? ( bSpecial ? sToken[0] : 0 )
 			: QUERY_END;
 		assert ( !( iSpecial>0 && sToken[1]!=0 ) );
 
@@ -1122,7 +1157,7 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 			continue;
 		}
 
-		// handle two "expect number" state (proximity and quorum). everything except valid number flushes it
+		// handle two "expect number" states (proximity and quorum). everything except valid number flushes it
 		if ( dState.Last()==XQS_PROXIMITY || dState.Last()==XQS_QUORUM )
 		{
 			int iProx = iSpecial ? 0 : atoi ( sToken );
@@ -1130,7 +1165,12 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 			{
 				m_dStack.Last().m_pNode->m_tAtom.m_iMaxDistance = iProx;
 				if ( dState.Last()==XQS_QUORUM )
+				{
 					m_dStack.Last().m_pNode->m_tAtom.m_bQuorum = true;
+					if ( m_dStack.Last().m_pNode->m_tAtom.m_dWords.GetLength()>=32 ) // FIXME! must be in sync with eval engine
+						return Error ( "too many keywords in the quorum operator (max=32)" );
+				}
+
 			} else
 				bRedo = true;
 
@@ -1285,8 +1325,8 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 			continue;
 		}
 
-		// proximity operator out of its state. just ignore
-		if ( iSpecial=='~' )
+		// proximity or quorum operator out of its state. just ignore
+		if ( iSpecial=='~' || iSpecial=='/' )
 			continue;
 
 		assert ( 0 && "INTERNAL ERROR: unhandled special token" );

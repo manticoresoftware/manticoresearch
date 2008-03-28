@@ -413,7 +413,7 @@ class SphinxClient:
 		self.AddQuery(query,index,comment)
 		results = self.RunQueries()
 
-		if len(results)==0:
+		if not results or len(results)==0:
 			return None
 		self._error = results[0]['error']
 		self._warning = results[0]['warning']
@@ -594,7 +594,7 @@ class SphinxClient:
 			while count>0 and p<max_:
 				count -= 1
 				if id64:
-					doc, dochi, weight = unpack('>3L', response[p:p+12])
+					dochi, doc, weight = unpack('>3L', response[p:p+12])
 					doc += (dochi<<32)
 					p += 12
 				else:

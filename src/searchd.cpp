@@ -2825,9 +2825,11 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 
 struct AggrResult_t : CSphQueryResult
 {
+	int							m_iTag;			///< current tag
 	CSphVector<CSphSchema>		m_dSchemas;		///< aggregated resultsets schemas (for schema minimization)
 	CSphVector<int>				m_dMatchCounts;	///< aggregated resultsets lengths (for schema minimization)
 	CSphVector<int>				m_dIndexWeights;///< aggregated resultsets per-index weights (optional)
+	CSphVector<const DWORD *>	m_dTag2MVA;		///< tag to mva-storage-ptr mapping
 };
 
 
@@ -2989,9 +2991,6 @@ public:
 	CSphVector<AggrResult_t>		m_dResults;						///< results which i obtained
 	SearchFailuresLogset_c			m_dFailuresSet;					///< failure logs for each query
 
-	int								m_iTag;							///< current tag
-	CSphVector<const DWORD *>		m_dTag2MVA;						///< tag to mva-storage-ptr mapping
-
 protected:
 	void							RunSubset ( int iStart, int iEnd );	///< run queries against index(es) from first query in the subset
 };
@@ -3000,9 +2999,6 @@ protected:
 SearchHandler_c::SearchHandler_c ( int iQueries, int iClientVer )
 {
 	m_iClientVer = iClientVer;
-	m_iTag = 1; // first avail tag for local storage ptrs
-	m_dTag2MVA.Add ( NULL ); // reserve index 0 for remote mva storage ptr; we'll fix this up later
-
 	m_dQueries.Resize ( iQueries );
 	m_dResults.Resize ( iQueries );
 	m_dFailuresSet.SetSize ( iQueries );
@@ -3010,7 +3006,9 @@ SearchHandler_c::SearchHandler_c ( int iQueries, int iClientVer )
 	ARRAY_FOREACH ( i, m_dResults )
 	{
 		assert ( m_dResults[i].m_dIndexWeights.GetLength()==0 );
+		m_dResults[i].m_iTag = 1; // first avail tag for local storage ptrs
 		m_dResults[i].m_dIndexWeights.Add ( 1 ); // reserved index 0 with weight 1 for remote matches
+		m_dResults[i].m_dTag2MVA.Add ( NULL ); // reserved index 0 for remote mva storage ptr; we'll fix this up later
 	}
 }
 
@@ -3064,7 +3062,8 @@ void SearchHandler_c::RunQueries ()
 	}
 
 	// final fixup
-	m_dTag2MVA[0] = g_dMvaStorage.GetLength() ? &g_dMvaStorage[0] : NULL;
+	ARRAY_FOREACH ( i, m_dResults )
+		m_dResults[i].m_dTag2MVA[0] = g_dMvaStorage.GetLength() ? &g_dMvaStorage[0] : NULL;
 }
 
 
@@ -3316,8 +3315,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 									tRes.m_dMatchCounts.Add ( pSorter->GetLength() );
 									tRes.m_dSchemas.Add ( tRes.m_tSchema );
 									tRes.m_dIndexWeights.Add ( m_dQueries[iQuery].GetIndexWeight ( dLocal[iLocal].cstr() ) );
-									m_dTag2MVA.Add ( tRes.m_pMva );
-									sphFlattenQueue ( pSorter, &tRes, m_iTag++ );
+									tRes.m_dTag2MVA.Add ( tRes.m_pMva );
+									sphFlattenQueue ( pSorter, &tRes, tRes.m_iTag++ );
 								}
 							}
 						}
@@ -3369,8 +3368,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 							tRes.m_dMatchCounts.Add ( pSorter->GetLength() );
 							tRes.m_dSchemas.Add ( tRes.m_tSchema );
 							tRes.m_dIndexWeights.Add ( tQuery.GetIndexWeight ( dLocal[iLocal].cstr() ) );
-							m_dTag2MVA.Add ( tRes.m_pMva );
-							sphFlattenQueue ( pSorter, &tRes, m_iTag++ );
+							tRes.m_dTag2MVA.Add ( tRes.m_pMva );
+							sphFlattenQueue ( pSorter, &tRes, tRes.m_iTag++ );
 						}
 
 						// throw away the sorter
@@ -3496,7 +3495,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		}
 	}
 
-	assert ( m_iTag==m_dTag2MVA.GetLength() );
+	ARRAY_FOREACH ( i, m_dResults )
+		assert ( m_dResults[i].m_iTag==m_dResults[i].m_dTag2MVA.GetLength() );
 
 	// cleanup
 	SafeDelete ( pLocalSorter );
@@ -3619,7 +3619,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	{
 		assert ( tHandler.m_dQueries.GetLength()==1 );
 		assert ( tHandler.m_dResults.GetLength()==1 );
-		const CSphQueryResult & tRes = tHandler.m_dResults[0];
+		const AggrResult_t & tRes = tHandler.m_dResults[0];
 
 		if ( !tRes.m_sError.IsEmpty() )
 		{
@@ -3627,7 +3627,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 			return;
 		}
 
-		iReplyLen = CalcResultLength ( iVer, &tRes, tHandler.m_dTag2MVA );
+		iReplyLen = CalcResultLength ( iVer, &tRes, tRes.m_dTag2MVA );
 		bool bWarning = ( iVer>=0x106 && !tRes.m_sWarning.IsEmpty() );
 
 		// send it
@@ -3635,12 +3635,12 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		tOut.SendWord ( VER_COMMAND_SEARCH );
 		tOut.SendInt ( iReplyLen );
 
-		SendResult ( iVer, tOut, &tRes, tHandler.m_dTag2MVA );
+		SendResult ( iVer, tOut, &tRes, tRes.m_dTag2MVA );
 
 	} else
 	{
 		ARRAY_FOREACH ( i, tHandler.m_dQueries )
-			iReplyLen += CalcResultLength ( iVer, &tHandler.m_dResults[i], tHandler.m_dTag2MVA );
+			iReplyLen += CalcResultLength ( iVer, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2MVA );
 
 		// send it
 		tOut.SendWord ( (WORD)SEARCHD_OK );
@@ -3648,7 +3648,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 		tOut.SendInt ( iReplyLen );
 
 		ARRAY_FOREACH ( i, tHandler.m_dQueries )
-			SendResult ( iVer, tOut, &tHandler.m_dResults[i], tHandler.m_dTag2MVA );
+			SendResult ( iVer, tOut, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2MVA );
 	}
 
 	tOut.Flush ();

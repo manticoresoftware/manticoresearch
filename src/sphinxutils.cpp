@@ -690,7 +690,9 @@ bool sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSettings 
 	tSettings.m_iMinWordLen		= Max ( hIndex.GetInt ( "min_word_len" ), 0 );
 	tSettings.m_sNgramChars		= hIndex.GetStr ( "ngram_chars" );
 	tSettings.m_iNgramLen		= Max ( hIndex.GetInt ( "ngram_len" ), 0 );
-	tSettings.m_sSynonymsFile	= hIndex.GetStr ( "synonyms" );
+	tSettings.m_sSynonymsFile	= hIndex.GetStr ( "exceptions" ); // new option name
+	if ( tSettings.m_sSynonymsFile.IsEmpty() )
+		tSettings.m_sSynonymsFile = hIndex.GetStr ( "synonyms" ); // deprecated option name
 	tSettings.m_sIgnoreChars	= hIndex.GetStr ( "ignore_chars" );
 
 	// phrase boundaries

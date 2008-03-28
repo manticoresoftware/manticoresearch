@@ -7,6 +7,8 @@
 require_once ( "../api/sphinxapi.php" );
 
 $windows = isset($_SERVER["WINDIR"]) || isset($_SERVER["windir"]) || isset($_SERVER["HOMEDRIVE"]);
+$action_retries			= 200;
+$action_wait_timeout	= 50000;
 
 
 function MyMicrotime ()
@@ -43,7 +45,7 @@ function RunIndexer ( &$error )
 
 function StartSearchd ( $config_file, $error_file, $pidfile, &$error )
 {
-	global $windows, $searchd_path;
+	global $windows, $searchd_path, $action_retries, $action_wait_timeout;
 
 	$retval = 0;
 
@@ -51,12 +53,12 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error )
 	{
 		$process = popen ("start /min $searchd_path --config $config_file --pidfile > $error_file", "r" );
 		pclose ( $process );
-
-		for ( $i=0; $i<10 && !file_exists($pidfile); $i++ )
-			usleep ( 50000 );
 	}
 	else
 		system ( "$searchd_path --config $config_file > $error_file", $retval );
+
+	for ( $i=0; $i<$action_retries && !file_exists($pidfile); $i++ )
+		usleep ( $action_wait_timeout );
 
 	if ( $retval == 0 )
 	{
@@ -85,13 +87,18 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error )
 
 function StopSearchd ( $config, $pidfile )
 {
-	global $searchd_path;
+	global $searchd_path, $action_retries, $action_wait_timeout;
 
 	if ( file_exists($pidfile) )
 	{
 		exec ( "$searchd_path --config $config --stop" );
-		while ( file_exists ( $pidfile ) )
-			usleep ( 50000 );
+
+		$i = 0;
+		while ( file_exists ( $pidfile ) && $i < $action_retries )
+		{
+			usleep ( $action_wait_timeout );
+			$i++;
+		}
 	}
 }
 
@@ -392,7 +399,7 @@ class SphinxConfig
 
 	function RunQuery ( $index, &$error )
 	{
-		global $sd_address, $sd_port;
+		global $sd_address, $sd_port, $action_retries, $action_wait_timeout;
 
 		$query_results = array ();
 
@@ -400,7 +407,8 @@ class SphinxConfig
 		{
 			$query = $qinfo["query"];
 			$bOk = FALSE;
-			for ( $i = 0; $i < 3 && !$bOk; $i++ )
+
+			for ( $i = 0; $i < $action_retries && !$bOk; $i++ )
 			{
 				$cl = new SphinxClient ();
 				$cl->SetServer ( $sd_address, $sd_port );
@@ -426,7 +434,7 @@ class SphinxConfig
         			array_push ( $query_results, $results );
             	}
 				else
-					usleep ( 50000 );
+					usleep ( $action_wait_timeout );
 			}
 
 			if ( !$bOk )
@@ -447,12 +455,12 @@ class SphinxConfig
 	
 	function RunCustomTest ( & $error )
 	{
-		global $sd_address, $sd_port;
+		global $sd_address, $sd_port, $action_retries, $action_wait_timeout;
 
 		$bOk = false;
 		$results = false;
 
-		for ( $i = 0; $i < 3 && !$bOk; $i++ )
+		for ( $i = 0; $i < $action_retries && !$bOk; $i++ )
 		{
     		$cl = new SphinxClient ();
 			$cl->SetServer ( $sd_address, $sd_port );
@@ -463,7 +471,7 @@ class SphinxConfig
 			if ( $results )
 				$bOk = TRUE;
 			else
-				usleep ( 50000 );
+				usleep ( $action_wait_timeout );
 		}
 
 		if ( !$bOk )
@@ -934,6 +942,8 @@ function RunTest ( $test_dir )
 			{
 				if ( !HandleFailure ( $config, $report, "$error\n", $nfailed ) )
 					$log .= "\tsubtest $subtest: query error: $error\n";
+
+				StopSearchd ( "config.conf", $sd_pid_file );
 				continue;
 			}
 		}
@@ -943,6 +953,8 @@ function RunTest ( $test_dir )
 			{
 				if ( !HandleFailure ( $config, $report, "$error\n", $nfailed ) )
 					$log .= "\tsubtest $subtest: query error: $error\n";
+
+				StopSearchd ( "config.conf", $sd_pid_file );
 				continue;
 			}
 		}

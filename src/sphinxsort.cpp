@@ -208,7 +208,7 @@ public:
 	public: \
 		_name ( const CSphAttrLocator & tLoc ) : m_tLocator ( tLoc ) {} \
 		virtual void GetLocator ( CSphAttrLocator & tOut ) const { tOut = m_tLocator; } \
-		virtual DWORD GetResultType () const { return m_tLocator.m_iBitCount>=sizeof(DWORD) ? SPH_ATTR_BIGINT : SPH_ATTR_INTEGER; } \
+		virtual DWORD GetResultType () const { return m_tLocator.m_iBitCount>=(int)sizeof(DWORD) ? SPH_ATTR_BIGINT : SPH_ATTR_INTEGER; } \
 		virtual SphGroupKey_t KeyFromMatch ( const CSphMatch & tMatch ) const { return KeyFromValue ( tMatch.GetAttr ( m_tLocator ) ); } \
 		virtual SphGroupKey_t KeyFromValue ( SphAttr_t uValue ) const \
 		{
@@ -272,7 +272,7 @@ public:
 	virtual void GetLocator ( CSphAttrLocator & tOut ) const { tOut = m_tLocator; }
 	virtual SphGroupKey_t KeyFromMatch ( const CSphMatch & tMatch ) const { return KeyFromValue ( tMatch.GetAttr ( m_tLocator ) ); }
 	virtual SphGroupKey_t KeyFromValue ( SphAttr_t uValue ) const { return uValue/m_iDiv; }
-	virtual DWORD GetResultType () const { return m_tLocator.m_iBitCount>=sizeof(DWORD) ? SPH_ATTR_BIGINT : SPH_ATTR_INTEGER; }
+	virtual DWORD GetResultType () const { return m_tLocator.m_iBitCount>=(int)sizeof(DWORD) ? SPH_ATTR_BIGINT : SPH_ATTR_INTEGER; }
 };
 
 //////////////////////////////////////////////////////////////////////////

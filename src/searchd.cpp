@@ -78,6 +78,7 @@ struct ServedIndex_t
 	bool				m_bStar;
 	bool				m_bToDelete;
 	bool				m_bAdded;
+	int					m_iUpdateTag;
 
 public:
 						ServedIndex_t ();
@@ -122,6 +123,8 @@ static CSphString		g_sQueryLogFile;
 static const char *		g_sPidFile		= NULL;
 static int				g_iPidFD		= -1;
 static int				g_iMaxMatches	= 1000;
+static int				g_iAttrFlushPeriod	= 0;		// in seconds; 0 means "do not flush"
+
 static CSphString		g_sConfigFile;
 static DWORD			g_uCfgCRC32		= 0;
 static struct stat		g_tCfgStat;
@@ -147,6 +150,10 @@ static CSphVector<const char *>				g_dRotating;			// names of indexes to be rota
 static const char *							g_sPrereading	= NULL;	// name of index currently being preread
 static CSphIndex *							g_pPrereading	= NULL;	// rotation "buffer"
 
+static int				g_iUpdateTag		= 0;		// ever-growing update tag
+static bool				g_bFlushing			= false;	// update flushing in progress
+static int				g_iFlushTag			= 0;		// last flushed tag
+
 enum
 {
 	SPH_PIPE_UPDATED_ATTRS,
@@ -157,9 +164,9 @@ enum
 struct  PipeInfo_t
 {
 	int		m_iFD;			///< read-pipe to child
-	bool	m_bPrereader;	///< is that one prereader or "normal" child
+	int		m_iHandler;		///< who's my handler (SPH_PIPE_xxx)
 
-	PipeInfo_t () : m_iFD ( -1 ), m_bPrereader ( false ) {}
+	PipeInfo_t () : m_iFD ( -1 ), m_iHandler ( -1 ) {}
 };
 
 static CSphVector<PipeInfo_t>	g_dPipes;		///< currently open read-pipes to children processes
@@ -245,6 +252,7 @@ void ServedIndex_t::Reset ()
 	m_bStar		= false;
 	m_bToDelete	= false;
 	m_bAdded	= false;
+	m_iUpdateTag= 0;
 }
 
 ServedIndex_t::~ServedIndex_t ()
@@ -4430,6 +4438,7 @@ int PipeAndFork ( bool bFatal, bool bPrereader )
 
 		// parent process, continue accept()ing
 		default:
+			g_iChildren++;
 			SafeClose ( iChildPipe );
 			break;
 	}
@@ -4497,7 +4506,6 @@ void SeamlessTryToForkPrereader ()
 
 	// fork async reader
 	g_sPrereading = sPrereading;
-	g_iChildren++;
 	int iPipeFD = PipeAndFork ( true, true );
 
 	// in parent, wait for prereader process to finish
@@ -4626,6 +4634,175 @@ protected:
 };
 
 
+/// handle pipe notifications from attribute updating
+void HandlePipeUpdate ( PipeReader_t & tPipe, bool bFailure )
+{
+	if ( bFailure )
+		return; // silently ignore errors
+
+	++g_iUpdateTag;
+
+	int iUpdIndexes = tPipe.GetInt ();
+	for ( int i=0; i<iUpdIndexes; i++ )
+	{
+		// index name must follow
+		CSphString sIndex = tPipe.GetString ();
+		if ( tPipe.IsError() )
+			break;
+
+		ServedIndex_t * pServed = g_hIndexes(sIndex);
+		if ( pServed )
+		{
+			pServed->m_iUpdateTag = g_iUpdateTag;
+			pServed->m_pIndex->SetAttrsUpdated ( true );
+		} else
+			sphWarning ( "INTERNAL ERROR: unknown index '%s' in HandlePipeUpdate()", sIndex.cstr() );
+	}
+}
+
+
+/// handle pipe notifications from prereading
+void HandlePipePreread ( PipeReader_t & tPipe, bool bFailure )
+{
+	if ( bFailure )
+	{
+		// clean up previous one and launch next one
+		g_sPrereading = NULL;
+
+		// in any case, buffer index should now be deallocated
+		g_pPrereading->Dealloc ();
+		g_pPrereading->Unlock ();
+
+		// work next one
+		SeamlessForkPrereader ();
+		return;
+	}
+
+	assert ( g_bDoRotate && g_bSeamlessRotate && g_sPrereading );
+
+	// whatever the outcome, we will be done with this one
+	const char * sPrereading = g_sPrereading;
+	g_sPrereading = NULL;
+
+	// notice that this will block!
+	int iRes = tPipe.GetInt();
+	if ( !tPipe.IsError() && iRes )
+	{
+		// if preread was succesful, exchange served index and prereader buffer index
+		ServedIndex_t & tServed = g_hIndexes[sPrereading];
+		CSphIndex * pOld = tServed.m_pIndex;
+		CSphIndex * pNew = g_pPrereading;
+
+		char sOld [ SPH_MAX_FILENAME_LEN ];
+		snprintf ( sOld, sizeof(sOld), "%s.old", tServed.m_sIndexPath.cstr() );
+
+		if ( !tServed.m_bAdded && !pOld->Rename ( sOld ) )
+		{
+			// FIXME! rollback inside Rename() call potentially fail
+			sphWarning ( "rotating index '%s': cur to old rename failed: %s", sPrereading, pOld->GetLastError().cstr() );
+
+		} else
+		{
+			// FIXME! at this point there's no cur lock file; ie. potential race
+			if ( !pNew->Rename ( tServed.m_sIndexPath.cstr() ) )
+			{
+				sphWarning ( "rotating index '%s': new to cur rename failed: %s", sPrereading, pNew->GetLastError().cstr() );
+				if ( !tServed.m_bAdded && !pOld->Rename ( tServed.m_sIndexPath.cstr() ) )
+				{
+					sphWarning ( "rotating index '%s': old to cur rename failed: %s; INDEX UNUSABLE", sPrereading, pOld->GetLastError().cstr() );
+					tServed.m_bEnabled = false;
+				}
+			} else
+			{
+				// all went fine; swap them
+				if ( !g_pPrereading->GetTokenizer () )
+				{
+					g_pPrereading->SetTokenizer ( tServed.m_pIndex->GetTokenizer () );
+					tServed.m_pIndex->SetTokenizer ( NULL );
+				}
+
+				if ( !g_pPrereading->GetDictionary () )
+				{
+					g_pPrereading->SetDictionary ( tServed.m_pIndex->GetDictionary () );
+					tServed.m_pIndex->SetTokenizer ( NULL );
+				}
+
+				Swap ( tServed.m_pIndex, g_pPrereading );
+				tServed.m_pSchema = tServed.m_pIndex->GetSchema ();
+				tServed.m_bEnabled = true;
+
+				// unlink .old
+				if ( g_bUnlinkOld && !tServed.m_bAdded )
+				{
+					const int EXT_COUNT = 6;
+					const char * dExt [EXT_COUNT] = { ".sph", ".spa", ".spi", ".spd", ".spp", ".spm" };
+					char sFile [ SPH_MAX_FILENAME_LEN ];
+
+					for ( int i=0; i<EXT_COUNT; i++ )
+					{
+						snprintf ( sFile, sizeof(sFile), "%s%s", sOld, dExt[i] );
+						if ( ::unlink ( sFile ) )
+							sphWarning ( "rotating index '%s': unable to unlink '%s': %s", sPrereading, sFile, strerror(errno) );
+					}
+				}
+
+				tServed.m_bAdded = false;
+				sphInfo ( "rotating index '%s': success", sPrereading );
+			}
+		}
+
+	} else
+	{
+		if ( tPipe.IsError() )
+			sphWarning ( "rotating index '%s': pipe read failed" );
+		else
+			sphWarning ( "rotating index '%s': preread failure reported" );
+	}
+
+	// in any case, buffer index should now be deallocated
+	g_pPrereading->Dealloc ();
+	g_pPrereading->Unlock ();
+
+	// work next one
+	SeamlessForkPrereader ();
+}
+
+
+/// handle pipe notifications from attribute saving
+void HandlePipeSave ( PipeReader_t & tPipe, bool bFailure )
+{
+	// in any case, we're no more flushing
+	g_bFlushing = false;
+
+	// silently ignore errors
+	if ( bFailure )
+		return;
+
+	// handle response
+	int iSavedIndexes = tPipe.GetInt ();
+	for ( int i=0; i<iSavedIndexes; i++ )
+	{
+		// index name must follow
+		CSphString sIndex = tPipe.GetString ();
+		if ( tPipe.IsError() )
+			break;
+
+		ServedIndex_t * pServed = g_hIndexes(sIndex);
+		if ( pServed )
+		{
+			if ( pServed->m_iUpdateTag<=g_iFlushTag )
+				pServed->m_pIndex->SetAttrsUpdated ( false );
+
+			sphInfo ( "flushed attr updates for '%s' (update-tag=%d, flush-tag=%d)", pServed->m_iUpdateTag, g_iFlushTag );
+
+		} else
+		{
+			sphWarning ( "INTERNAL ERROR: unknown index '%s' in HandlePipeSave()", sIndex.cstr() );
+		}
+	}
+}
+
+
 /// check if there are any notifications from the children and handle them
 void CheckPipes ()
 {
@@ -4641,142 +4818,25 @@ void CheckPipes ()
 
 		// either if there's eof, or error, or valid data - this pipe is over
 		PipeReader_t tPipe ( g_dPipes[i].m_iFD );
-		bool bPrereader = g_dPipes[i].m_bPrereader;
+		int iHandler = g_dPipes[i].m_iHandler;
 		g_dPipes.Remove ( i-- );
 
 		// check for eof/error
+		bool bFailure = false;
 		if ( iRes!=sizeof(DWORD) )
 		{
-			// report problems
-			if ( iRes!=0 || bPrereader )
-				sphWarning ( "pipe status read failed (prereader=%d)", bPrereader );
-
-			// if that was prereader who failed, clean up previous one and launch next one
-			if ( bPrereader )
-			{
-				g_sPrereading = NULL;
-
-				// in any case, buffer index should now be deallocated
-				g_pPrereading->Dealloc ();
-				g_pPrereading->Unlock ();
-
-				// work next one
-				SeamlessForkPrereader ();
-			}
-			continue;
+			bFailure = true;
+			if ( iRes!=0 || iHandler>=0 )
+				sphWarning ( "pipe status read failed (handler=%d)", iHandler );
 		}
 
-		// handle
-		if ( uStatus==SPH_PIPE_UPDATED_ATTRS )
+		// FIXME! verify status against handler too?
+		switch ( uStatus )
 		{
-			int iUpdIndexes = tPipe.GetInt ();
-			for ( int i=0; i<iUpdIndexes; i++ )
-			{
-				// index name must follow
-				CSphString sIndex = tPipe.GetString ();
-				if ( tPipe.IsError() )
-					break;
-
-				if ( g_hIndexes(sIndex) )
-					g_hIndexes(sIndex)->m_pIndex->SetAttrsUpdated ( true );
-				else
-					sphWarning ( "INTERNAL ERROR: unknown index '%s' in piped notification (updated)", sIndex.cstr() );
-			}
-
-		} else if ( uStatus==SPH_PIPE_PREREAD )
-		{
-			assert ( g_bDoRotate && g_bSeamlessRotate && g_sPrereading && bPrereader );
-
-			// whatever the outcome, we will be done with this one
-			const char * sPrereading = g_sPrereading;
-			g_sPrereading = NULL;
-
-			// notice that this will block!
-			int iRes = tPipe.GetInt();
-			if ( !tPipe.IsError() && iRes )
-			{
-				// if preread was succesful, exchange served index and prereader buffer index
-				ServedIndex_t & tServed = g_hIndexes[sPrereading];
-				CSphIndex * pOld = tServed.m_pIndex;
-				CSphIndex * pNew = g_pPrereading;
-
-				char sOld [ SPH_MAX_FILENAME_LEN ];
-				snprintf ( sOld, sizeof(sOld), "%s.old", tServed.m_sIndexPath.cstr() );
-
-				if ( !tServed.m_bAdded && !pOld->Rename ( sOld ) )
-				{
-					// FIXME! rollback inside Rename() call potentially fail
-					sphWarning ( "rotating index '%s': cur to old rename failed: %s", sPrereading, pOld->GetLastError().cstr() );
-
-				} else
-				{
-					// FIXME! at this point there's no cur lock file; ie. potential race
-					if ( !pNew->Rename ( tServed.m_sIndexPath.cstr() ) )
-					{
-						sphWarning ( "rotating index '%s': new to cur rename failed: %s", sPrereading, pNew->GetLastError().cstr() );
-						if ( !tServed.m_bAdded && !pOld->Rename ( tServed.m_sIndexPath.cstr() ) )
-						{
-							sphWarning ( "rotating index '%s': old to cur rename failed: %s; INDEX UNUSABLE", sPrereading, pOld->GetLastError().cstr() );
-							tServed.m_bEnabled = false;
-						}
-					} else
-					{
-						// all went fine; swap them
-						if ( !g_pPrereading->GetTokenizer () )
-						{
-							g_pPrereading->SetTokenizer ( tServed.m_pIndex->GetTokenizer () );
-							tServed.m_pIndex->SetTokenizer ( NULL );
-						}
-
-						if ( !g_pPrereading->GetDictionary () )
-						{
-							g_pPrereading->SetDictionary ( tServed.m_pIndex->GetDictionary () );
-							tServed.m_pIndex->SetTokenizer ( NULL );
-						}
-
-						Swap ( tServed.m_pIndex, g_pPrereading );
-						tServed.m_pSchema = tServed.m_pIndex->GetSchema ();
-						tServed.m_bEnabled = true;
-
-						// unlink .old
-						if ( g_bUnlinkOld && !tServed.m_bAdded )
-						{
-							const int EXT_COUNT = 6;
-							const char * dExt [EXT_COUNT] = { ".sph", ".spa", ".spi", ".spd", ".spp", ".spm" };
-							char sFile [ SPH_MAX_FILENAME_LEN ];
-
-							for ( int i=0; i<EXT_COUNT; i++ )
-							{
-								snprintf ( sFile, sizeof(sFile), "%s%s", sOld, dExt[i] );
-								if ( ::unlink ( sFile ) )
-									sphWarning ( "rotating index '%s': unable to unlink '%s': %s", sPrereading, sFile, strerror(errno) );
-							}
-						}
-
-						tServed.m_bAdded = false;
-						sphInfo ( "rotating index '%s': success", sPrereading );
-					}
-				}
-
-			} else
-			{
-				if ( tPipe.IsError() )
-					sphWarning ( "rotating index '%s': pipe read failed" );
-				else
-					sphWarning ( "rotating index '%s': preread failure reported" );
-			}
-
-			// in any case, buffer index should now be deallocated
-			g_pPrereading->Dealloc ();
-			g_pPrereading->Unlock ();
-
-			// work next one
-			SeamlessForkPrereader ();
-
-		} else
-		{
-			// unhandled status code
-			sphWarning ( "INTERNAL ERROR: unknown pipe status=%d", uStatus );
+			case SPH_PIPE_UPDATED_ATTRS:	HandlePipeUpdate ( tPipe, bFailure ); break;
+			case SPH_PIPE_SAVED_ATTRS:		HandlePipeSave ( tPipe, bFailure ); break;
+			case SPH_PIPE_PREREAD:			HandlePipePreread ( tPipe, bFailure ); break;
+			default:						sphWarning ( "INTERNAL ERROR: unknown pipe status=%d", uStatus ); break;
 		}
 	}
 }
@@ -5233,6 +5293,76 @@ void CheckReopen ()
 	}
 
 	g_bGotSigusr1 = false;
+}
+
+
+void CheckFlush ()
+{
+	if ( g_iAttrFlushPeriod<=0 || g_bFlushing )
+		return;
+
+	static float fLastCheck = -0.001f;
+	float fNow = sphLongTimer ();
+
+	if ( fLastCheck+float(g_iAttrFlushPeriod)<=fNow )
+	{
+		fLastCheck = fNow;
+		return;
+	}
+	fLastCheck = fNow;
+
+	// check if there are dirty indexes
+	bool bDirty = false;
+	g_hIndexes.IterateStart ();
+	while ( g_hIndexes.IterateNext () )
+	{
+		const ServedIndex_t & tServed = g_hIndexes.IterateGet ();
+		if ( tServed.m_bEnabled && tServed.m_iUpdateTag>g_iFlushTag )
+		{
+			bDirty = true;
+			break;
+		}
+	}
+	if ( !bDirty )
+		return;
+
+	// launch the flush!
+	g_bFlushing = true;
+	int iPipeFD = PipeAndFork ( false, false ); // FIXME! gracefully handle fork() failures, Windows, etc
+	if ( g_bHeadDaemon )
+	{
+		g_iFlushTag = g_iUpdateTag;
+		return;
+	}
+
+	// child process, do the work
+	CSphVector<CSphString> dSaved;
+
+	g_hIndexes.IterateStart ();
+	while ( g_hIndexes.IterateNext () )
+	{
+		const ServedIndex_t & tServed = g_hIndexes.IterateGet ();
+		if ( tServed.m_bEnabled && tServed.m_iUpdateTag>g_iFlushTag )
+			if ( tServed.m_pIndex->SaveAttributes () ) // FIXME? report errors somehow?
+				dSaved.Add ( g_hIndexes.IterateGetKey() );
+	}
+
+	// report and exit
+	DWORD uTmp = SPH_PIPE_SAVED_ATTRS;
+	::write ( iPipeFD, &uTmp, sizeof(DWORD) );
+
+	uTmp = dSaved.GetLength();
+	::write ( iPipeFD, &uTmp, sizeof(DWORD) );
+
+	ARRAY_FOREACH ( i, dSaved )
+	{
+		uTmp = strlen ( dSaved[i].cstr() );
+		::write ( iPipeFD, &uTmp, sizeof(DWORD) );
+		::write ( iPipeFD, dSaved[i].cstr(), uTmp );
+	}
+
+	::close ( iPipeFD );
+	exit ( 0 );
 }
 
 
@@ -5801,6 +5931,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		sphFatal ( "seamless_rotate is not supported in windows; set seamless_rotate=0" );
 #endif
 
+	g_iAttrFlushPeriod = hSearchd.GetInt ( "attr_flush_period", g_iAttrFlushPeriod );
+
 	//////////////////////
 	// build indexes hash
 	//////////////////////
@@ -6021,7 +6153,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		CheckDelete ();
 		CheckRotate ();
 		CheckReopen ();
-	
+		CheckFlush ();
+
 		// we can't simply accept, because of the need to react to HUPs
 		fd_set fdsAccept;
 		FD_ZERO ( &fdsAccept );
@@ -6079,7 +6212,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 		// handle that client
 		#if !USE_WINDOWS
-		g_iChildren++;
 		int iChildPipe = PipeAndFork ( false, false );
 
 		if ( !g_bHeadDaemon )

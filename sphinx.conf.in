@@ -483,6 +483,12 @@ searchd
 	# whether to unlink .old index copies on succesful rotation.
 	# optional, default is 1 (do unlink)
 	unlink_old			= 1
+
+	# attribute updates periodic flush timeout, seconds
+	# updates will be automatically dumped to disk this frequently
+	# optional, default is 0 (disable periodic flush)
+	#
+	# attr_flush_period	= 900
 }
 
 # --eof--

@@ -138,6 +138,9 @@ float			sphLongTimer ();
 /// Sphinx CRC32 implementation
 DWORD			sphCRC32 ( const BYTE * pString );
 
+/// calculate file crc32
+bool			sphCalcFileCRC32 ( const char * szFilename, DWORD & uCRC32 );
+
 /// replaces all occurences of sMacro in sTemplate with textual representation of uValue
 char *			sphStrMacro ( const char * sTemplate, const char * sMacro, SphDocID_t uValue );
 

@@ -126,7 +126,7 @@ void	sphConfDictionary ( const CSphConfigSection & hIndex, CSphDictSettings & tS
 void	sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSettings );
 
 /// try to set dictionary, tokenizer and misc settings for an index (if not already set)
-bool	FixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, CSphString & sError );
+bool	sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, CSphString & sError );
 
 #endif // _sphinxutils_
 

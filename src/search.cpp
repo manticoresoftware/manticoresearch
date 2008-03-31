@@ -321,7 +321,7 @@ int main ( int argc, char ** argv )
 				fprintf ( stdout, "WARNING: index '%s': %s\n", sIndexName, sWarning.cstr () );
 
 			// handle older index versions (<9)
-			if ( !FixupIndexSettings ( pIndex, hIndex, sError ) )
+			if ( !sphFixupIndexSettings ( pIndex, hIndex, sError ) )
 				sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 
 			// lookup first timestamp if needed

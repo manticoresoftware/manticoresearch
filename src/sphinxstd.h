@@ -572,6 +572,7 @@ protected:
 		KEY				m_tKey;				///< key, owned by the hash
 		T 				m_tValue;			///< data, owned by the hash
 		HashEntry_t *	m_pNextByHash;		///< next entry in hash list
+		HashEntry_t *	m_pPrevByOrder;		///< prev entry in the insertion order
 		HashEntry_t *	m_pNextByOrder;		///< next entry in the insertion order
 	};
 
@@ -663,6 +664,7 @@ public:
 		pEntry->m_tKey = tKey;
 		pEntry->m_tValue = tValue;
 		pEntry->m_pNextByHash = NULL;
+		pEntry->m_pPrevByOrder = NULL;
 		pEntry->m_pNextByOrder = NULL;
 
 		*ppEntry = pEntry;
@@ -675,10 +677,55 @@ public:
 			assert ( !m_pLastByOrder->m_pNextByOrder );
 			assert ( !pEntry->m_pNextByOrder );
 			m_pLastByOrder->m_pNextByOrder = pEntry;
+			pEntry->m_pPrevByOrder = m_pLastByOrder;
 		}
 		m_pLastByOrder = pEntry;
 
 		m_iLength++;
+		return true;
+	}
+
+	/// delete an entry
+	bool Delete ( const KEY & tKey )
+	{
+		unsigned int uHash = ( (unsigned int) HASHFUNC::Hash ( tKey ) ) % LENGTH;
+		HashEntry_t * pEntry = m_dHash [ uHash ];
+
+		HashEntry_t * pPrevEntry = NULL;
+		HashEntry_t * pToDelete = NULL;
+		while ( pEntry )
+		{
+			if ( pEntry->m_tKey==tKey )
+			{
+				pToDelete = pEntry;
+				if ( pPrevEntry )
+					pPrevEntry->m_pNextByHash = pEntry->m_pNextByHash;
+				else
+					m_dHash [ uHash ] = pEntry->m_pNextByHash;
+
+				break;
+			}
+
+			pPrevEntry = pEntry;
+			pEntry = pEntry->m_pNextByHash;
+		}
+
+		if ( !pToDelete )
+			return false;
+
+		if ( pToDelete->m_pPrevByOrder )
+			pToDelete->m_pPrevByOrder->m_pNextByOrder = pToDelete->m_pNextByOrder;
+		else
+			m_pFirstByOrder = pToDelete->m_pNextByOrder;
+
+		if ( pToDelete->m_pNextByOrder )
+			pToDelete->m_pNextByOrder->m_pPrevByOrder = pToDelete->m_pPrevByOrder;
+		else
+			m_pLastByOrder = pToDelete->m_pPrevByOrder;
+
+		SafeDelete ( pToDelete );
+		--m_iLength;
+
 		return true;
 	}
 

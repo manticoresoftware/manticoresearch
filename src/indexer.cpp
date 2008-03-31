@@ -638,7 +638,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		const char * szMorph = hIndex.GetStr ( "morphology", "" );
 		if ( szMorph && *szMorph && strcmp ( szMorph, "none" ) )
 		{
-			fprintf ( stdout, "ERROR: index '%s': infixes and morphology are enabled, enable_star=0", sIndexName );
+			fprintf ( stdout, "ERROR: index '%s': infixes and morphology are enabled, enable_star=0\n", sIndexName );
 			return false;
 		}
 	}

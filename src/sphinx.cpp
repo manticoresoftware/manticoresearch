@@ -504,7 +504,6 @@ int sphRead ( int iFD, void * pBuf, size_t iCount )
 }
 
 
-static bool CalcFileCRC32 ( const char * szFilename, DWORD & uCRC32 );
 static void GetFileStats ( const char * szFilename, CSphSavedFile & tInfo );
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1559,7 +1558,7 @@ static void ReadFileInfo ( CSphReader_VLN & tReader, const char * szFilename, CS
 		else
 		{
 			DWORD uMyCRC32 = 0;
-			if ( !CalcFileCRC32 ( szFilename, uMyCRC32 ) )
+			if ( !sphCalcFileCRC32 ( szFilename, uMyCRC32 ) )
 				sWarning.SetSprintf ( "failed to calculate CRC32 for %s", szFilename );
 			else
 				if ( uMyCRC32 != uCRC32 || tFileInfo.st_size != uSize || tFileInfo.st_ctime != uCTime || tFileInfo.st_mtime != uMTime )
@@ -14258,8 +14257,10 @@ uint64_t sphFNV64 ( const BYTE * s, int iLen )
 }
 
 /////////////////////////////////////////////////////////////////////////////
-static bool CalcFileCRC32 ( const char * szFilename, DWORD & uCRC32 )
+bool sphCalcFileCRC32 ( const char * szFilename, DWORD & uCRC32 )
 {
+	uCRC32 = 0;
+
 	if ( !szFilename )
 		return false;
 
@@ -14268,7 +14269,7 @@ static bool CalcFileCRC32 ( const char * szFilename, DWORD & uCRC32 )
 		return false;
 
 	DWORD crc = ~((DWORD)0);
-	
+
 	const int BUFFER_SIZE = 131072;
 	BYTE * pBuffer = new BYTE [BUFFER_SIZE];
 	int iBytesRead;
@@ -14283,6 +14284,7 @@ static bool CalcFileCRC32 ( const char * szFilename, DWORD & uCRC32 )
 	uCRC32 = ~crc;
 	return true;
 }
+
 
 static void GetFileStats ( const char * szFilename, CSphSavedFile & tInfo )
 {
@@ -14304,8 +14306,7 @@ static void GetFileStats ( const char * szFilename, CSphSavedFile & tInfo )
 	tInfo.m_uMTime	= tStat.st_mtime;
 
 	DWORD uCRC32 = 0;
-	if ( !CalcFileCRC32 ( szFilename, uCRC32 ) )
-		uCRC32 = 0;
+	sphCalcFileCRC32 ( szFilename, uCRC32 );
 
 	tInfo.m_uCRC32 = uCRC32;
 }

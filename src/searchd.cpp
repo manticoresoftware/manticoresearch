@@ -775,6 +775,7 @@ void SetSignalHandlers ()
 const int		MAX_PACKET_SIZE			= 8*1024*1024;
 const int		SEARCHD_MAX_ATTRS		= 256;
 const int		SEARCHD_MAX_ATTR_VALUES	= 4096;
+const int		WIN32_PIPE_BUFSIZE		= 32;
 
 
 // wrap FD_SET to prevent warnings on Windows
@@ -5454,6 +5455,74 @@ BOOL WINAPI CtrlHandler ( DWORD )
 #endif
 
 
+/// check for incoming signals, and react on them
+void CheckSignals ()
+{
+#if USE_WINDOWS
+	if ( g_bService && g_bServiceStop )
+	{
+		Shutdown ();
+		MySetServiceStatus ( SERVICE_STOPPED, NO_ERROR, 0 );
+		exit ( 0 );
+	}
+#endif
+
+	if ( g_bGotSighup )
+	{
+		sphInfo ( "rotating indices (seamless=%d)", (int)g_bSeamlessRotate ); // this might hang if performed from SIGHUP
+		g_bGotSighup = false;
+	}
+
+	if ( g_bGotSigterm )
+	{
+		assert ( g_bHeadDaemon );
+		sphInfo ( "caught SIGTERM, shutting down" );
+
+		Shutdown ();
+		exit ( 0 );
+	}
+
+#if !USE_WINDOWS
+	if ( g_bGotSigchld )
+	{
+		while ( waitpid ( -1, NULL, WNOHANG ) > 0 )
+			g_iChildren--;
+
+		g_bGotSigchld = false;
+	}
+#endif
+
+#if USE_WINDOWS
+	BYTE dPipeInBuf [ WIN32_PIPE_BUFSIZE ];
+	DWORD nBytesRead = 0;
+	BOOL bSuccess = ReadFile ( g_hPipe, dPipeInBuf, WIN32_PIPE_BUFSIZE, &nBytesRead, NULL );
+	if ( nBytesRead > 0 && bSuccess )
+	{
+		for ( DWORD i = 0; i < nBytesRead; i++ )
+		{
+			switch ( dPipeInBuf [i] )
+			{
+			case 0:
+				g_bDoRotate = true;
+				g_bGotSighup = true;
+				break;
+
+			case 1:
+				g_bGotSigterm = true;
+				if ( g_bService )
+					g_bServiceStop = true;
+				break;
+			}
+
+		}
+
+		DisconnectNamedPipe ( g_hPipe );
+		ConnectNamedPipe ( g_hPipe, NULL ); 
+	}
+#endif
+}
+
+
 int WINAPI ServiceMain ( int argc, char **argv )
 {
 	g_bLogTty = isatty ( g_iLogFile )!=0;
@@ -5480,17 +5549,11 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		}
 	}
 
-	const int PIPE_BUFSIZE = 32;
 	char szPipeName [64];
 	sprintf ( szPipeName, "\\\\.\\pipe\\searchd_%d", getpid() );
-	g_hPipe = CreateNamedPipe ( szPipeName, PIPE_ACCESS_INBOUND, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_NOWAIT, PIPE_UNLIMITED_INSTANCES, 0, PIPE_BUFSIZE, NMPWAIT_NOWAIT, NULL );
+	g_hPipe = CreateNamedPipe ( szPipeName, PIPE_ACCESS_INBOUND, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_NOWAIT, PIPE_UNLIMITED_INSTANCES, 0, WIN32_PIPE_BUFSIZE, NMPWAIT_NOWAIT, NULL );
 	ConnectNamedPipe ( g_hPipe, NULL ); 
 #endif
-
-	int rsock;
-	struct sockaddr_in remote_iaddr;
-	socklen_t len;
-	CSphConfig conf;
 
 	if ( !g_bService )
 		fprintf ( stdout, SPHINX_BANNER );
@@ -5499,6 +5562,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	// parse command line
 	//////////////////////
 
+	CSphConfig		conf;
 	bool			bOptStop		= false;
 	bool			bOptPIDFile		= false;
 	const char *	sOptIndex		= NULL;
@@ -5951,70 +6015,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	for ( ;; )
 	{
-#if USE_WINDOWS
-		if ( g_bService && g_bServiceStop )
-		{
-			Shutdown ();
-			MySetServiceStatus ( SERVICE_STOPPED, NO_ERROR, 0 );
-			exit ( 0 );
-		}
-#endif
-
-		if ( g_bGotSighup )
-		{
-			sphInfo ( "rotating indices (seamless=%d)", (int)g_bSeamlessRotate ); // this might hang if performed from SIGHUP
-			g_bGotSighup = false;
-		}
-
-		if ( g_bGotSigterm )
-		{
-			assert ( g_bHeadDaemon );
-			sphInfo ( "caught SIGTERM, shutting down" );
-
-			Shutdown ();
-			exit ( 0 );
-		}
-
-#if !USE_WINDOWS
-		if ( g_bGotSigchld )
-		{
-			while ( waitpid ( -1, NULL, WNOHANG ) > 0 )
-				g_iChildren--;
-
-			g_bGotSigchld = false;
-		}
-#endif
-
-#if USE_WINDOWS
-		BYTE dPipeInBuf [PIPE_BUFSIZE];
-		DWORD nBytesRead = 0;
-		BOOL bSuccess = ReadFile ( g_hPipe, dPipeInBuf, PIPE_BUFSIZE, &nBytesRead, NULL );
-		if ( nBytesRead > 0 && bSuccess )
-		{
-			for ( DWORD i = 0; i < nBytesRead; i++ )
-			{
-				switch ( dPipeInBuf [i] )
-				{
-				case 0:
-					g_bDoRotate = true;
-					g_bGotSighup = true;
-					break;
-
-				case 1:
-					g_bGotSigterm = true;
-					if ( g_bService )
-						g_bServiceStop = true;
-					break;
-				}
-
-			}
-
-			DisconnectNamedPipe ( g_hPipe );
-			ConnectNamedPipe ( g_hPipe, NULL ); 
-		}
-#endif
-
-
+		CheckSignals ();
 		CheckLeaks ();
 		CheckPipes ();
 		CheckDelete ();
@@ -6027,20 +6028,16 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		SPH_FD_SET ( g_iSocket, &fdsAccept );
 
 		struct timeval tvTimeout;
-#if USE_WINDOWS
-		tvTimeout.tv_sec = 0;
-		tvTimeout.tv_usec = 50000;
-#else
-		tvTimeout.tv_sec = 1;
-		tvTimeout.tv_usec = 0;
-#endif
+		tvTimeout.tv_sec = USE_WINDOWS ? 0 : 1;
+		tvTimeout.tv_usec = USE_WINDOWS ? 50000 : 0;
 
 		if ( select ( 1+g_iSocket, &fdsAccept, NULL, &fdsAccept, &tvTimeout )<=0 )
 			continue;
 
 		// select says something interesting happened, so let's accept
-		len = sizeof ( remote_iaddr );
-		rsock = accept ( g_iSocket, (struct sockaddr*)&remote_iaddr, &len );
+		struct sockaddr_in remote_iaddr;
+		socklen_t len = sizeof ( remote_iaddr );
+		int rsock = accept ( g_iSocket, (struct sockaddr*)&remote_iaddr, &len );
 
 		int iErr = sphSockGetErrno();
 		if ( rsock<0 && ( iErr==EINTR || iErr==EAGAIN || iErr==EWOULDBLOCK ) )

@@ -1065,10 +1065,10 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 	bool bRedo = false;
 	const char * sToken = NULL;
 
+	bool bSpecial = false;
 	for ( ;; )
 	{
 		// get next token
-		bool bSpecial = false;
 		if ( !bRedo )
 		{
 			// tricky stuff
@@ -1090,6 +1090,7 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 				{
 					// got a number, skip it
 					pMyTokenizer->AdvanceBufferPtr ( p-sStart );
+					bSpecial = false;
 
 				} else
 				{

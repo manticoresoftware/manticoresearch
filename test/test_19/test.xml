@@ -45,6 +45,8 @@ index test
 <query mode="extended2">"hello program"~4</query>
 <query mode="extended2">吐</query>
 <query mode="extended2">我</query>
+<query mode="extended2">basic | china</query>
+<query mode="extended2">"test program" | basic</query>
 </queries>
 
 <db_create>

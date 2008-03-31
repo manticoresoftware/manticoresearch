@@ -4372,14 +4372,14 @@ void RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 
 #if USE_WINDOWS
 
-int CreatePipe ( bool, bool )	{ return -1; }
-int PipeAndFork ( bool, bool )	{ return -1; }
+int CreatePipe ( bool, int )	{ return -1; }
+int PipeAndFork ( bool, int )	{ return -1; }
 
 #else
 
 // open new pipe to be able to receive notifications from children
 // adds read-end fd to g_dPipes; returns write-end fd for child
-int CreatePipe ( bool bFatal, bool bPrereader )
+int CreatePipe ( bool bFatal, int iHandler )
 {
 	assert ( g_bHeadDaemon );
 	int dPipe[2] = { -1, -1 };
@@ -4405,7 +4405,7 @@ int CreatePipe ( bool bFatal, bool bPrereader )
 
 		PipeInfo_t tAdd;
 		tAdd.m_iFD = dPipe[0];
-		tAdd.m_bPrereader = bPrereader;
+		tAdd.m_iHandler = iHandler;
 		g_dPipes.Add ( tAdd );
 		break;
 	}
@@ -4419,9 +4419,9 @@ int CreatePipe ( bool bFatal, bool bPrereader )
 //
 /// in child, returns write-end pipe fd (might be -1!) and sets g_bHeadDaemon to false
 /// in parent, returns -1 and leaves g_bHeadDaemon unaffected
-int PipeAndFork ( bool bFatal, bool bPrereader )
+int PipeAndFork ( bool bFatal, int iHandler )
 {
-	int iChildPipe = CreatePipe ( bFatal, bPrereader );
+	int iChildPipe = CreatePipe ( bFatal, iHandler );
 	switch ( fork() )
 	{
 		// fork() failed
@@ -4506,7 +4506,7 @@ void SeamlessTryToForkPrereader ()
 
 	// fork async reader
 	g_sPrereading = sPrereading;
-	int iPipeFD = PipeAndFork ( true, true );
+	int iPipeFD = PipeAndFork ( true, SPH_PIPE_PREREAD );
 
 	// in parent, wait for prereader process to finish
 	if ( g_bHeadDaemon )
@@ -4792,9 +4792,6 @@ void HandlePipeSave ( PipeReader_t & tPipe, bool bFailure )
 		{
 			if ( pServed->m_iUpdateTag<=g_iFlushTag )
 				pServed->m_pIndex->SetAttrsUpdated ( false );
-
-			sphInfo ( "flushed attr updates for '%s' (update-tag=%d, flush-tag=%d)", pServed->m_iUpdateTag, g_iFlushTag );
-
 		} else
 		{
 			sphWarning ( "INTERNAL ERROR: unknown index '%s' in HandlePipeSave()", sIndex.cstr() );
@@ -4826,17 +4823,32 @@ void CheckPipes ()
 		if ( iRes!=sizeof(DWORD) )
 		{
 			bFailure = true;
+
+			if ( iHandler<0 )
+				continue; // no handler; we're not expecting anything
+
 			if ( iRes!=0 || iHandler>=0 )
 				sphWarning ( "pipe status read failed (handler=%d)", iHandler );
 		}
 
-		// FIXME! verify status against handler too?
-		switch ( uStatus )
+		// check for handler/status mismatch
+		if ( !bFailure && ( iHandler>=0 && (int)uStatus!=iHandler ) )
+		{
+			bFailure = true;
+			sphWarning ( "INTERNAL ERROR: pipe status mismatch (handler=%d, status=%d)", iHandler, uStatus );
+		}
+
+		// check for handler promotion (ie: we did not expect anything particular, but something happened anyway)
+		if ( !bFailure && iHandler<0 )
+			iHandler = (int)uStatus;
+
+		// run the proper handler
+		switch ( iHandler )
 		{
 			case SPH_PIPE_UPDATED_ATTRS:	HandlePipeUpdate ( tPipe, bFailure ); break;
 			case SPH_PIPE_SAVED_ATTRS:		HandlePipeSave ( tPipe, bFailure ); break;
 			case SPH_PIPE_PREREAD:			HandlePipePreread ( tPipe, bFailure ); break;
-			default:						sphWarning ( "INTERNAL ERROR: unknown pipe status=%d", uStatus ); break;
+			default:						if ( !bFailure ) sphWarning ( "INTERNAL ERROR: unknown pipe handler (handler=%d, status=%d)", iHandler, uStatus ); break;
 		}
 	}
 }
@@ -5304,11 +5316,9 @@ void CheckFlush ()
 	static float fLastCheck = -0.001f;
 	float fNow = sphLongTimer ();
 
-	if ( fLastCheck+float(g_iAttrFlushPeriod)<=fNow )
-	{
-		fLastCheck = fNow;
+	if ( fLastCheck+float(g_iAttrFlushPeriod)>=fNow )
 		return;
-	}
+
 	fLastCheck = fNow;
 
 	// check if there are dirty indexes
@@ -5328,7 +5338,7 @@ void CheckFlush ()
 
 	// launch the flush!
 	g_bFlushing = true;
-	int iPipeFD = PipeAndFork ( false, false ); // FIXME! gracefully handle fork() failures, Windows, etc
+	int iPipeFD = PipeAndFork ( false, SPH_PIPE_SAVED_ATTRS ); // FIXME! gracefully handle fork() failures, Windows, etc
 	if ( g_bHeadDaemon )
 	{
 		g_iFlushTag = g_iUpdateTag;
@@ -6212,7 +6222,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 		// handle that client
 		#if !USE_WINDOWS
-		int iChildPipe = PipeAndFork ( false, false );
+		int iChildPipe = PipeAndFork ( false, -1 );
 
 		if ( !g_bHeadDaemon )
 		{

@@ -77,7 +77,7 @@ struct ServedIndex_t
 	bool				m_bPreopen;
 	bool				m_bStar;
 	bool				m_bToDelete;
-	bool				m_bAdded;
+	bool				m_bOnlyNew;
 	int					m_iUpdateTag;
 
 public:
@@ -128,6 +128,8 @@ static int				g_iAttrFlushPeriod	= 0;		// in seconds; 0 means "do not flush"
 static CSphString		g_sConfigFile;
 static DWORD			g_uCfgCRC32		= 0;
 static struct stat		g_tCfgStat;
+
+static CSphConfigParser * g_pCfg			= NULL;
 
 #if USE_WINDOWS
 static bool				g_bSeamlessRotate	= false;
@@ -234,6 +236,12 @@ const int	MAX_RETRY_DELAY		= 1000;
 
 #endif // USE_WINDOWS
 
+const int EXT_COUNT = 6;
+const char * g_dNewExts[EXT_COUNT] = { ".new.sph", ".new.spa", ".new.spi", ".new.spd", ".new.spp", ".new.spm" };
+const char * g_dOldExts[EXT_COUNT] = { ".old.sph", ".old.spa", ".old.spi", ".old.spd", ".old.spp", ".old.spm" };
+const char * g_dCurExts[EXT_COUNT] = { ".sph", ".spa", ".spi", ".spd", ".spp", ".spm" };
+
+
 /////////////////////////////////////////////////////////////////////////////
 // MISC
 /////////////////////////////////////////////////////////////////////////////
@@ -251,7 +259,7 @@ void ServedIndex_t::Reset ()
 	m_bPreopen	= false;
 	m_bStar		= false;
 	m_bToDelete	= false;
-	m_bAdded	= false;
+	m_bOnlyNew	= false;
 	m_iUpdateTag= 0;
 }
 
@@ -678,6 +686,8 @@ void Shutdown ()
 	// some head-only shutdown procedures
 	if ( g_bHeadDaemon )
 	{
+		SafeDelete ( g_pCfg );
+
 		// save attribute updates for all local indexes
 		g_hIndexes.IterateStart ();
 		while ( g_hIndexes.IterateNext () )
@@ -4227,64 +4237,78 @@ bool TryRename ( const char * sIndex, const char * sPrefix, const char * sFromPo
 }
 
 
-void RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
+bool HasFiles ( const ServedIndex_t & tIndex, const char ** dExts )
 {
 	char sFile [ SPH_MAX_FILENAME_LEN ];
 	const char * sPath = tIndex.m_sIndexPath.cstr();
 
-	// check files
-	const int EXT_COUNT = 6;
-	const char * dNew[EXT_COUNT] = { ".new.sph", ".new.spa", ".new.spi", ".new.spd", ".new.spp", ".new.spm" };
-	const char * dOld[EXT_COUNT] = { ".old.sph", ".old.spa", ".old.spi", ".old.spd", ".old.spp", ".old.spm" };
-	const char * dCur[EXT_COUNT] = { ".sph", ".spa", ".spi", ".spd", ".spp", ".spm" };
+	for ( int i=0; i<EXT_COUNT; i++ )
+	{
+		snprintf ( sFile, sizeof(sFile), "%s%s", sPath, dExts [i] );
+		if ( !sphIsReadable ( sFile ) )
+			return false;
+	}
+
+	return true;
+}
+
+/// returns true if any version of the index (old or new one) has been preread
+bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
+{
+	char sFile [ SPH_MAX_FILENAME_LEN ];
+	const char * sPath = tIndex.m_sIndexPath.cstr();
 
 	for ( int i=0; i<EXT_COUNT; i++ )
 	{
-		snprintf ( sFile, sizeof(sFile), "%s%s", sPath, dNew[i] );
+		snprintf ( sFile, sizeof(sFile), "%s%s", sPath, g_dNewExts[i] );
 		if ( !sphIsReadable ( sFile ) )
 		{
 			if ( i>0 )
 			{
-				if ( tIndex.m_bAdded )
+				if ( tIndex.m_bOnlyNew )
 					sphWarning ( "rotating index '%s': '%s' unreadable: %s; NOT SERVING", sIndex, sFile, strerror(errno) );
 				else
 					sphWarning ( "rotating index '%s': '%s' unreadable: %s; using old index", sIndex, sFile, strerror(errno) );
 			}
-			return;
+			return false;
 		}
 	}
 
-	if ( !tIndex.m_bAdded )
+	if ( !tIndex.m_bOnlyNew )
 	{
 		// rename current to old
 		for ( int i=0; i<EXT_COUNT; i++ )
 		{
-			if ( TryRename ( sIndex, sPath, dCur[i], dOld[i], false ) )
+			if ( TryRename ( sIndex, sPath, g_dCurExts[i], g_dOldExts[i], false ) )
 				continue;
 
 			// rollback
 			for ( int j=0; j<i; j++ )
-				TryRename ( sIndex, sPath, dOld[j], dCur[j], true );
+				TryRename ( sIndex, sPath, g_dOldExts[j], g_dCurExts[j], true );
 
 			sphWarning ( "rotating index '%s': rename to .old failed; using old index", sIndex );
-			return;
+			return false;
 		}
 	}
 
 	// rename new to current
 	for ( int i=0; i<EXT_COUNT; i++ )
 	{
-		if ( TryRename ( sIndex, sPath, dNew[i], dCur[i], false ) )
+		if ( TryRename ( sIndex, sPath, g_dNewExts[i], g_dCurExts[i], false ) )
 			continue;
 
 		// rollback new ones we already renamed
 		for ( int j=0; j<i; j++ )
-			TryRename ( sIndex, sPath, dCur[j], dNew[j], true );
+			TryRename ( sIndex, sPath, g_dCurExts[j], g_dNewExts[j], true );
 
 		// rollback old ones
 		for ( int j=0; j<EXT_COUNT; j++ )
-			TryRename ( sIndex, sPath, dOld[j], dCur[j], true );
+			TryRename ( sIndex, sPath, g_dOldExts[j], g_dCurExts[j], true );
+
+		return false;
 	}
+
+	bool bPreread = false;
 
 	// try to use new index
 	CSphString sWarning;
@@ -4294,8 +4318,11 @@ void RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 	const CSphSchema * pNewSchema = tIndex.m_pIndex->Prealloc ( tIndex.m_bMlock, sWarning );
 	if ( !pNewSchema || !tIndex.m_pIndex->Preread() )
 	{
-		if ( tIndex.m_bAdded )
+		if ( tIndex.m_bOnlyNew )
+		{
 			sphWarning ( "rotating index '%s': .new preload failed: %s; NOT SERVING", sIndex, tIndex.m_pIndex->GetLastError().cstr() );
+			return false;
+		}
 		else
 		{
 			sphWarning ( "rotating index '%s': .new preload failed: %s", sIndex, tIndex.m_pIndex->GetLastError().cstr() );
@@ -4303,8 +4330,8 @@ void RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 			// try to recover
 			for ( int j=0; j<EXT_COUNT; j++ )
 			{
-				TryRename ( sIndex, sPath, dCur[j], dNew[j], true );
-				TryRename ( sIndex, sPath, dOld[j], dCur[j], true );
+				TryRename ( sIndex, sPath, g_dCurExts[j], g_dNewExts[j], true );
+				TryRename ( sIndex, sPath, g_dOldExts[j], g_dCurExts[j], true );
 			}
 
 			pNewSchema = tIndex.m_pIndex->Prealloc ( tIndex.m_bMlock, sWarning );
@@ -4315,6 +4342,9 @@ void RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 			}
 			else
 			{
+				tIndex.m_bEnabled = true;
+				bPreread = true;
+
 				sphWarning ( "rotating index '%s': .new preload failed; using old index", sIndex );
 				if ( !sWarning.IsEmpty() )
 					sphWarning ( "rotating index '%s': %s", sIndex, sWarning.cstr() );
@@ -4331,11 +4361,12 @@ void RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 				SafeDelete ( pDictionary );
 		}
 	
-		return;
-
+		return bPreread;
 	}
 	else
 	{
+		bPreread = true;
+
 		if ( !sWarning.IsEmpty() )
 			sphWarning ( "rotating index '%s': %s", sIndex, sWarning.cstr() );
 	}
@@ -4351,10 +4382,10 @@ void RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 		SafeDelete ( pDictionary );
 
 	// unlink .old
-	if ( g_bUnlinkOld && !tIndex.m_bAdded )
+	if ( g_bUnlinkOld && !tIndex.m_bOnlyNew )
 		for ( int i=0; i<EXT_COUNT; i++ )
 		{
-			snprintf ( sFile, sizeof(sFile), "%s%s", sPath, dOld[i] );
+			snprintf ( sFile, sizeof(sFile), "%s%s", sPath, g_dOldExts[i] );
 			if ( ::unlink ( sFile ) )
 				sphWarning ( "rotating index '%s': unable to unlink '%s': %s", sIndex, sFile, strerror(errno) );
 		}
@@ -4362,8 +4393,9 @@ void RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 	// uff. all done
 	tIndex.m_pSchema = pNewSchema;
 	tIndex.m_bEnabled = true;
-	tIndex.m_bAdded = false;
+	tIndex.m_bOnlyNew = false;
 	sphInfo ( "rotating index '%s': success", sIndex );
+	return bPreread;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -4502,6 +4534,17 @@ void SeamlessTryToForkPrereader ()
 		sphWarning ( "rotating index '%s': lock: %s; using old index", sPrereading, g_pPrereading->GetLastError().cstr() );
 		g_pPrereading->Dealloc ();
 		return;
+	}
+
+	if ( tServed.m_bOnlyNew && g_pCfg && g_pCfg->m_tConf.Exists ( "index" ) && g_pCfg->m_tConf["index"].Exists ( sPrereading ) )
+	{
+		CSphString sError;
+
+		if ( !sphFixupIndexSettings ( g_pPrereading, g_pCfg->m_tConf["index"][sPrereading], sError ) )
+		{
+			sphWarning ( "rotating index '%s': fixup: %s; using old index", sPrereading, sError.cstr() );
+			return;
+		}
 	}
 
 	// fork async reader
@@ -4696,7 +4739,7 @@ void HandlePipePreread ( PipeReader_t & tPipe, bool bFailure )
 		char sOld [ SPH_MAX_FILENAME_LEN ];
 		snprintf ( sOld, sizeof(sOld), "%s.old", tServed.m_sIndexPath.cstr() );
 
-		if ( !tServed.m_bAdded && !pOld->Rename ( sOld ) )
+		if ( !tServed.m_bOnlyNew && !pOld->Rename ( sOld ) )
 		{
 			// FIXME! rollback inside Rename() call potentially fail
 			sphWarning ( "rotating index '%s': cur to old rename failed: %s", sPrereading, pOld->GetLastError().cstr() );
@@ -4707,7 +4750,7 @@ void HandlePipePreread ( PipeReader_t & tPipe, bool bFailure )
 			if ( !pNew->Rename ( tServed.m_sIndexPath.cstr() ) )
 			{
 				sphWarning ( "rotating index '%s': new to cur rename failed: %s", sPrereading, pNew->GetLastError().cstr() );
-				if ( !tServed.m_bAdded && !pOld->Rename ( tServed.m_sIndexPath.cstr() ) )
+				if ( !tServed.m_bOnlyNew && !pOld->Rename ( tServed.m_sIndexPath.cstr() ) )
 				{
 					sphWarning ( "rotating index '%s': old to cur rename failed: %s; INDEX UNUSABLE", sPrereading, pOld->GetLastError().cstr() );
 					tServed.m_bEnabled = false;
@@ -4716,37 +4759,29 @@ void HandlePipePreread ( PipeReader_t & tPipe, bool bFailure )
 			{
 				// all went fine; swap them
 				if ( !g_pPrereading->GetTokenizer () )
-				{
-					g_pPrereading->SetTokenizer ( tServed.m_pIndex->GetTokenizer () );
-					tServed.m_pIndex->SetTokenizer ( NULL );
-				}
+					g_pPrereading->SetTokenizer ( tServed.m_pIndex->LeakTokenizer () );
 
 				if ( !g_pPrereading->GetDictionary () )
-				{
-					g_pPrereading->SetDictionary ( tServed.m_pIndex->GetDictionary () );
-					tServed.m_pIndex->SetTokenizer ( NULL );
-				}
+					g_pPrereading->SetDictionary ( tServed.m_pIndex->LeakDictionary () );
 
 				Swap ( tServed.m_pIndex, g_pPrereading );
 				tServed.m_pSchema = tServed.m_pIndex->GetSchema ();
 				tServed.m_bEnabled = true;
 
 				// unlink .old
-				if ( g_bUnlinkOld && !tServed.m_bAdded )
+				if ( g_bUnlinkOld && !tServed.m_bOnlyNew )
 				{
-					const int EXT_COUNT = 6;
-					const char * dExt [EXT_COUNT] = { ".sph", ".spa", ".spi", ".spd", ".spp", ".spm" };
 					char sFile [ SPH_MAX_FILENAME_LEN ];
 
 					for ( int i=0; i<EXT_COUNT; i++ )
 					{
-						snprintf ( sFile, sizeof(sFile), "%s%s", sOld, dExt[i] );
+						snprintf ( sFile, sizeof(sFile), "%s%s", sOld, g_dCurExts[i] );
 						if ( ::unlink ( sFile ) )
 							sphWarning ( "rotating index '%s': unable to unlink '%s': %s", sPrereading, sFile, strerror(errno) );
 					}
 				}
 
-				tServed.m_bAdded = false;
+				tServed.m_bOnlyNew = false;
 				sphInfo ( "rotating index '%s': success", sPrereading );
 			}
 		}
@@ -4862,7 +4897,39 @@ void ConfigureIndex ( ServedIndex_t & tIdx, const CSphConfigSection & hIndex )
 }
 
 
-void AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bPreread = true )
+bool PrereadNewIndex ( ServedIndex_t & tIdx, const CSphConfigSection & hIndex, const char * szIndexName )
+{
+	CSphString sWarning;
+
+	tIdx.m_pSchema = tIdx.m_pIndex->Prealloc ( tIdx.m_bMlock, sWarning );
+	if ( !tIdx.m_pSchema || !tIdx.m_pIndex->Preread() )
+	{
+		sphWarning ( "index '%s': preload: %s; NOT SERVING", szIndexName, tIdx.m_pIndex->GetLastError().cstr() );
+		return false;
+	}
+
+	if ( !sWarning.IsEmpty() )
+		sphWarning ( "index '%s': %s", szIndexName, sWarning.cstr() );
+
+	CSphString sError;
+	if ( !sphFixupIndexSettings ( tIdx.m_pIndex, hIndex, sError ) )
+	{
+		sphWarning ( "index '%s': %s - NOT SERVING", szIndexName, sError.cstr() );
+		return false;
+	}
+
+	// try to lock it
+	if ( !g_bOptConsole && !tIdx.m_pIndex->Lock() )
+	{
+		sphWarning ( "index '%s': lock: %s; NOT SERVING", szIndexName, tIdx.m_pIndex->GetLastError().cstr() );
+		return false;
+	}
+
+	return true;
+}
+
+
+void AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex )
 {
 	if ( hIndex("type") && hIndex["type"]=="distributed" )
 	{
@@ -5026,35 +5093,7 @@ void AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool
 		tIdx.m_pIndex = sphCreateIndexPhrase ( hIndex["path"].cstr() );
 		tIdx.m_pIndex->SetStar ( tIdx.m_bStar );
 		tIdx.m_pIndex->SetPreopen ( tIdx.m_bPreopen || g_bPreopenIndexes );
-
-		if ( bPreread )
-		{
-			tIdx.m_pSchema = tIdx.m_pIndex->Prealloc ( tIdx.m_bMlock, sWarning );
-			if ( !tIdx.m_pSchema || !tIdx.m_pIndex->Preread() )
-			{
-				sphWarning ( "index '%s': preload: %s; NOT SERVING", szIndexName, tIdx.m_pIndex->GetLastError().cstr() );
-				return;
-			}
-
-			if ( !sWarning.IsEmpty() )
-				sphWarning ( "index '%s': %s", szIndexName, sWarning.cstr() );
-
-			CSphString sError;
-			if ( !sphFixupIndexSettings ( tIdx.m_pIndex, hIndex, sError ) )
-			{
-				sphWarning ( "index '%s': %s - NOT SERVING", szIndexName, sError.cstr() );
-				return;
-			}
-
-			// try to lock it
-			if ( !g_bOptConsole && !tIdx.m_pIndex->Lock() )
-			{
-				sphWarning ( "index '%s': lock: %s; NOT SERVING", szIndexName, tIdx.m_pIndex->GetLastError().cstr() );
-				return;
-			}
-		}
-		else
-			tIdx.m_bEnabled = false;
+		tIdx.m_bEnabled = false;
 
 		// done
 		tIdx.m_sIndexPath = hIndex["path"];
@@ -5089,8 +5128,10 @@ bool CheckConfigChanges ()
 }
 
 
-void ReloadIndexSettings ()
+void ReloadIndexSettings ( CSphConfigParser * pCP )
 {
+	assert ( pCP );
+
 	g_bDoDelete = false;
 
 	g_hIndexes.IterateStart ();
@@ -5101,8 +5142,7 @@ void ReloadIndexSettings ()
 	while ( g_hDistIndexes.IterateNext () )
 		g_hDistIndexes.IterateGet ().m_bToDelete = true;
 	
-	CSphConfigParser cp;
-	if ( !cp.Parse ( g_sConfigFile.cstr () ) )
+	if ( !pCP->Parse ( g_sConfigFile.cstr () ) )
 		sphWarning ( "failed to parse config file '%s'", g_sConfigFile.cstr () );
 
 	SetSignalHandlers ();
@@ -5110,7 +5150,7 @@ void ReloadIndexSettings ()
 	int nTotalIndexes = g_hIndexes.GetLength () + g_hDistIndexes.GetLength ();
 	int nChecked = 0;
 
-	const CSphConfig & hConf = cp.m_tConf;
+	const CSphConfig & hConf = pCP->m_tConf;
 	hConf["index"].IterateStart ();
 	while ( hConf["index"].IterateNext() )
 	{
@@ -5132,12 +5172,9 @@ void ReloadIndexSettings ()
 		}
 		else
 		{
-			AddIndex ( sIndexName, hIndex, false );
-			if ( g_hIndexes.Exists ( sIndexName ) )
-			{
-				ServedIndex_t & tIndex = g_hIndexes[sIndexName];
-				tIndex.m_bAdded = true;
-			}
+			AddIndex ( sIndexName, hIndex );
+			ServedIndex_t & tIndex = g_hIndexes[sIndexName];
+			tIndex.m_bOnlyNew = true;
 		}
 	}
 
@@ -5216,8 +5253,13 @@ void CheckRotate ()
 		if ( g_iChildren )
 			return;
 
+		CSphConfigParser * pCP = NULL;
+
 		if ( CheckConfigChanges () )
-			ReloadIndexSettings ();
+		{
+			pCP = new CSphConfigParser;
+			ReloadIndexSettings ( pCP );
+		}
 
 		g_hIndexes.IterateStart();
 		while ( g_hIndexes.IterateNext() )
@@ -5226,8 +5268,24 @@ void CheckRotate ()
 			const char * sIndex = g_hIndexes.IterateGetKey().cstr();
 			assert ( tIndex.m_pIndex );
 
+			bool bWasAdded = tIndex.m_bOnlyNew;
 			RotateIndexGreedy ( tIndex, sIndex );
+			if ( bWasAdded && tIndex.m_bEnabled )
+			{
+				const CSphConfigType & hConf = pCP->m_tConf ["index"];
+				if ( hConf.Exists ( sIndex ) )
+				{
+					CSphString sError;
+					if ( !sphFixupIndexSettings ( tIndex.m_pIndex, hConf [sIndex], sError ) )
+					{
+						sphWarning ( "index '%s': %s - NOT SERVING", sIndex, sError.cstr() );
+						tIndex.m_bEnabled = false;
+					}
+				}		
+			}
 		}
+
+		SafeDelete ( pCP );
 
 		g_bDoRotate = false;
 		sphInfo ( "rotating finished" );
@@ -5242,8 +5300,12 @@ void CheckRotate ()
 	if ( g_dRotating.GetLength() || g_sPrereading )
 		return; // rotate in progress already; will be handled in CheckPipes()
 
+	SafeDelete ( g_pCfg );
 	if ( CheckConfigChanges () )
-		ReloadIndexSettings ();
+	{
+		g_pCfg = new CSphConfigParser;
+		ReloadIndexSettings ( g_pCfg );
+	}
 
 	// check what indexes need to be rotated
 	g_hIndexes.IterateStart();
@@ -5972,6 +6034,35 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			continue;
 
 		AddIndex ( sIndexName, hIndex );
+		if ( g_hIndexes.Exists ( sIndexName ) )
+		{
+			ServedIndex_t & tIndex = g_hIndexes [sIndexName];
+
+			if ( HasFiles ( tIndex, g_dNewExts ) )
+			{
+				tIndex.m_bOnlyNew = !HasFiles ( tIndex, g_dCurExts );
+				if ( RotateIndexGreedy ( tIndex, sIndexName ) )
+				{
+					CSphString sError;
+					if ( !sphFixupIndexSettings ( tIndex.m_pIndex, hIndex, sError ) )
+					{
+						sphWarning ( "index '%s': %s - NOT SERVING", sIndexName, sError.cstr() );
+						tIndex.m_bEnabled = false;
+					}
+				}
+				else
+				{
+					if ( PrereadNewIndex ( tIndex, hIndex, sIndexName ) )
+						tIndex.m_bEnabled = true;
+				}
+			}
+			else
+			{
+				tIndex.m_bOnlyNew = false;
+				if ( PrereadNewIndex ( tIndex, hIndex, sIndexName ) )
+					tIndex.m_bEnabled = true;
+			}
+		}
 
 		iValidIndexes++;
 	}

@@ -1821,7 +1821,19 @@ bool sphWrite ( int iFD, const void * pBuf, size_t iCount, const char * sName, C
 	if ( iCount<=0 )
 		return true;
 
+	float fTimer = 0.0f;
+	if ( g_bIOStats )
+		fTimer = sphLongTimer ();
+
 	int iWritten = ::write ( iFD, pBuf, iCount );
+
+	if ( g_bIOStats && iCount > 0 )
+	{
+		g_IOStats.m_fWriteTime += sphLongTimer () - fTimer;
+		g_IOStats.m_iWriteOps++;
+		g_IOStats.m_fWriteKBytes += float ( iCount ) / 1024.0f;
+	}
+
 	if ( iWritten==(int)iCount )
 		return true;
 

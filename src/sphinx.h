@@ -168,8 +168,11 @@ void			sphSetProcessInfo ( bool bHead );
 struct CSphIOStats
 {
 	float		m_fReadTime;
-	int			m_iReadOps;
+	DWORD		m_iReadOps;
 	float		m_fReadKBytes;
+	float		m_fWriteTime;
+	DWORD		m_iWriteOps;
+	float		m_fWriteKBytes;
 };
 
 /// clear stats, starts collecting

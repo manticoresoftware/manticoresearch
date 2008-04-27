@@ -903,6 +903,22 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 	assert ( pSrc );
 	assert ( pDst );
 
+	CSphString sError;
+	if ( !sphFixupIndexSettings ( pSrc, hSrc, sError ) )
+	{
+		fprintf ( stdout, "ERROR: index '%s': %s\n", sSrc, sError.cstr () );
+		return false;
+	}
+
+	if ( !sphFixupIndexSettings ( pDst, hDst, sError ) )
+	{
+		fprintf ( stdout, "ERROR: index '%s': %s\n", sDst, sError.cstr () );
+		return false;
+	}
+
+	pSrc->SetWordlistPreload ( hSrc.GetInt ( "preload_wordlist", 1 ) != 0 );
+	pDst->SetWordlistPreload ( hDst.GetInt ( "preload_wordlist", 1 ) != 0 );
+
 	if ( !pSrc->Lock() && !bRotate )
 	{
 		fprintf ( stdout, "ERROR: index '%s' is already locked; lock: %s\n", sSrc, pSrc->GetLastError().cstr() );

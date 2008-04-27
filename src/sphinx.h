@@ -1762,6 +1762,7 @@ public:
 	virtual void				SetBoundaryStep ( int iBoundaryStep );
 	virtual void				SetStar ( bool bValue ) { m_bEnableStar = bValue; }
 	virtual void				SetPreopen ( bool bValue ) { m_bKeepFilesOpen = bValue; }
+	virtual void				SetWordlistPreload ( bool bValue ) { m_bPreloadWordlist = bValue; }
 	void						SetTokenizer ( ISphTokenizer * pTokenizer );
 	ISphTokenizer *				GetTokenizer () { return m_pTokenizer; }
 	ISphTokenizer *				LeakTokenizer ();
@@ -1828,6 +1829,11 @@ public:
 	/// needed because updates and saves may be performed by other processes
 	virtual void				SetAttrsUpdated ( bool bFlag ) { m_bAttrsUpdated = bFlag; }
 
+	/// wordlist iteration. used to merge several indexes
+	virtual bool				IterateWordlistStart () = 0;
+	virtual bool				IterateWordlistNext ( SphWordID_t & iWordID, SphOffset_t & iDoclistPos, int & iDocNum, int & iHitNum ) = 0;
+	virtual void				IterateWordlistStop () = 0;
+
 protected:
 	ProgressCallback_t *		m_pProgress;
 	CSphSchema					m_tSchema;
@@ -1839,6 +1845,7 @@ protected:
 
 	bool						m_bEnableStar;			///< enable star-syntax
 	bool						m_bKeepFilesOpen;		///< keep files open to avoid race on seamless rotation
+	bool						m_bPreloadWordlist;		///< preload wordlists or keep them on disk
 
 	bool						m_bStripperInited;		///< was stripper initialized (old index version (<9) handling)
 	CSphIndexSettings			m_tSettings;

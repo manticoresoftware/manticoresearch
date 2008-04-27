@@ -1089,16 +1089,18 @@ struct CSphTermSetup : ISphNoncopyable
 	int						m_iToCalc;
 	const CSphAutofile &	m_tDoclist;
 	const CSphAutofile &	m_tHitlist;
+	const CSphAutofile &	m_tWordlist;
 	DWORD					m_uMaxStamp;
 	const CSphQuery *		m_pQuery;		///< for extended2 filtering only
 
-	CSphTermSetup ( const CSphAutofile & tDoclist, const CSphAutofile & tHitlist )
+	CSphTermSetup ( const CSphAutofile & tDoclist, const CSphAutofile & tHitlist, const CSphAutofile & tWordlist )
 		: m_pDict ( NULL )
 		, m_pIndex ( NULL )
 		, m_eDocinfo ( SPH_DOCINFO_NONE )
 		, m_iToCalc ( 0 )
 		, m_tDoclist ( tDoclist )
 		, m_tHitlist ( tHitlist )
+		, m_tWordlist ( tWordlist )
 		, m_uMaxStamp ( 0 )
 		, m_pQuery ( NULL )
 	{}
@@ -1274,8 +1276,6 @@ struct CSphWordlistCheckpoint
 
 struct CSphMergeSource
 {	
-	const BYTE *		m_pWordlist;
-	const BYTE *		m_pWordlistEnd;
 	int					m_iRowitems;
 	SphDocID_t			m_iLastDocID;
 	SphDocID_t			m_iMinDocID;
@@ -1285,13 +1285,9 @@ struct CSphMergeSource
 	CSphReader_VLN *	m_pDoclistReader;
 	CSphReader_VLN *	m_pHitlistReader;
 	CSphRowitem *		m_pMinRowitems;
-	int					m_iWordlistEntries;
-	int					m_iMaxWordlistEntries;
 
 	CSphMergeSource()
-		: m_pWordlist ( NULL )
-		, m_pWordlistEnd ( NULL )
-		, m_iRowitems ( 0 )
+		: m_iRowitems ( 0 )
 		, m_iLastDocID ( 0 )
 		, m_iMinDocID ( 0 )
 		, m_bForceDocinfo ( false )
@@ -1299,20 +1295,11 @@ struct CSphMergeSource
 		, m_pDoclistReader ( NULL )
 		, m_pHitlistReader ( NULL )
 		, m_pMinRowitems ( NULL )
-		, m_iWordlistEntries ( 0 )
-		, m_iMaxWordlistEntries ( 0 )
 	{}
 
 	bool Check ()
 	{
-		return ( m_pWordlist && m_pDoclistReader && m_pHitlistReader );
-	}
-
-	DWORD	GetWordlistSize() const
-	{
-		assert ( m_pWordlist && m_pWordlistEnd );
-		
-		return ( m_pWordlistEnd - m_pWordlist );
+		return ( m_pDoclistReader && m_pHitlistReader );
 	}
 };
 
@@ -1404,7 +1391,7 @@ struct CSphWordIndexRecord
 		, m_iHitNum ( 0 )
 	{}
 
-	bool Read ( const BYTE * & pSource, CSphMergeSource * pMergeSource );
+	bool Read ( CSphMergeSource * pMergeSource );
 	void Write ( CSphWriter * pWriter, CSphMergeData * pMergeData );
 
 	bool operator < ( const CSphWordIndexRecord & rhs ) const
@@ -1621,6 +1608,10 @@ struct CSphIndex_VLN : CSphIndex
 
 	bool						EarlyReject ( CSphMatch & tMatch, const CSphQuery * pQuery ) const;
 
+	virtual bool				IterateWordlistStart ();
+	virtual bool				IterateWordlistNext ( SphWordID_t & iWordID, SphOffset_t & iDoclistPos, int & iDocNum, int & iHitNum );
+	virtual void				IterateWordlistStop ();
+
 private:
 	static const int			WORDLIST_CHECKPOINT		= 1024;		///< wordlist checkpoints frequency
 	static const int			WRITE_BUFFER_SIZE		= 262144;	///< my write buffer size
@@ -1660,6 +1651,14 @@ private:
 	CSphIndexProgress			m_tProgress;
 
 private:
+	// merge stuff
+	CSphAutofile				m_tMergeWordlistFile;	///< wordlist file (merge)
+	const BYTE *				m_pMergeWordlist;
+	int							m_iMergeCheckpoint;
+
+	bool						UpdateMergeWordlist ();
+
+private:
 	// searching-only
 	CSphVector<CSphQueryWord>	m_dQueryWords;			///< search query words for "simple" query types (ie. match all/any/phrase)
 
@@ -1682,8 +1681,12 @@ private:
 	CSphWordlistCheckpoint *	m_pWordlistCheckpoints;	///< my wordlist cache checkpoints
 	int							m_iWordlistCheckpoints;	///< my wordlist cache checkpoints count
 
+	SphOffset_t					m_iWordlistSize;		///< wordlist file size
+	BYTE *						m_pWordlistChunkBuf;	///< buffer for wordlist chunks
+
 	CSphAutofile				m_tDoclistFile;			///< doclist file
 	CSphAutofile				m_tHitlistFile;			///< hitlist file
+	CSphAutofile				m_tWordlistFile;		///< wordlist file
 
 	bool						m_bPreallocated;		///< are we ready to preread
 	CSphSharedBuffer<BYTE>		m_bPreread;				///< are we ready to search
@@ -5141,6 +5144,7 @@ CSphIndex::CSphIndex ( const char * sName )
 	, m_bAttrsUpdated ( false )
 	, m_bEnableStar ( false )
 	, m_bKeepFilesOpen ( false )
+	, m_bPreloadWordlist ( true )
 	, m_bStripperInited ( true )
 	, m_pTokenizer ( NULL )
 	, m_pDict ( NULL )
@@ -5227,6 +5231,7 @@ CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename )
 	m_iLastWordDocs = 0;
 	m_iLastWordHits = 0;
 	m_iWordlistEntries = 0;
+	m_iWordlistSize = 0;
 
 	m_uDocinfo = 0;
 
@@ -5234,12 +5239,17 @@ CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename )
 	m_uVersion = INDEX_FORMAT_VERSION;
 
 	m_pOverrides = NULL;
+	m_pWordlistCheckpoints = NULL;
+	m_pWordlistChunkBuf = NULL;
+	m_pMergeWordlist = NULL;
+	m_iMergeCheckpoint = 0;
 }
 
 
 CSphIndex_VLN::~CSphIndex_VLN ()
 {
 	SafeDeleteArray ( m_pWriteBuffer );
+	m_tMergeWordlistFile.Close ();
 }
 
 
@@ -7902,8 +7912,6 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilte
 	int iWordListEntries = 0;
 	CSphMergeSource tDstSource, tSrcSource;
 
-	tDstSource.m_pWordlist = !bDstEmpty? &m_pWordlist[1] : NULL;
-	tDstSource.m_pWordlistEnd = ( const BYTE * )m_pWordlistCheckpoints;
 	tDstSource.m_pDoclistReader = &rdDstData;	
 	tDstSource.m_pHitlistReader = &rdDstHitlist;
 	tDstSource.m_iRowitems = ( m_tSettings.m_eDocinfo == SPH_DOCINFO_INLINE )? m_tSchema.GetRowSize() : 0;
@@ -7911,10 +7919,7 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilte
 	tDstSource.m_iMinDocID = m_tMin.m_iDocID;
 	tDstSource.m_pMinRowitems = m_tMin.m_pRowitems;
 	tDstSource.m_pIndex = this;
-	tDstSource.m_iMaxWordlistEntries = WORDLIST_CHECKPOINT;
 	
-	tSrcSource.m_pWordlist = !bSrcEmpty? &pSrcIndex->m_pWordlist[1] : NULL;
-	tSrcSource.m_pWordlistEnd = ( const BYTE * )pSrcIndex->m_pWordlistCheckpoints;
 	tSrcSource.m_pDoclistReader = &rdSrcData;
 	tSrcSource.m_pHitlistReader = &rdSrcHitlist;
 	tSrcSource.m_iRowitems = ( pSrcIndex->m_tSettings.m_eDocinfo == SPH_DOCINFO_INLINE )? pSrcIndex->m_tSchema.GetRowSize() : 0;
@@ -7922,7 +7927,6 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilte
 	tSrcSource.m_iMinDocID = pSrcIndex->m_tMin.m_iDocID;
 	tSrcSource.m_pMinRowitems = pSrcIndex->m_tMin.m_pRowitems;
 	tSrcSource.m_pIndex = pSrcIndex;
-	tSrcSource.m_iMaxWordlistEntries = WORDLIST_CHECKPOINT;
 
 	if ( m_pProgress )
 	{
@@ -7972,6 +7976,12 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilte
 
 		tMerge.m_dFilters.Add ( dFilters[i] );
 	}
+
+	if ( !tSrcSource.m_pIndex->IterateWordlistStart () )
+		return false;
+
+	if ( !tDstSource.m_pIndex->IterateWordlistStart () )
+		return false;
 
 	CSphWordRecord tDstWord ( &tDstSource, &tMerge, true );
 	CSphWordRecord tSrcWord ( &tSrcSource, &tMerge, false );
@@ -8064,6 +8074,9 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilte
 	wrDstIndex.ZipOffset ( wrDstData.GetPos() - tMerge.m_iDoclistPos );	
 
 	SphOffset_t iCheckpointsPos = wrDstIndex.GetPos();
+
+	tSrcSource.m_pIndex->IterateWordlistStop ();
+	tDstSource.m_pIndex->IterateWordlistStop ();
 
 	if ( dWordlistCheckpoints.GetLength() )
 		wrDstIndex.PutBytes ( &dWordlistCheckpoints[0], dWordlistCheckpoints.GetLength() * sizeof ( CSphWordlistCheckpoint ) );
@@ -8627,6 +8640,117 @@ bool CSphIndex_VLN::EarlyReject ( CSphMatch & tMatch, const CSphQuery * pQuery )
 	}
 
 	return false;
+}
+
+
+bool CSphIndex_VLN::IterateWordlistStart ()
+{
+	if ( m_bPreloadWordlist )
+	{
+		assert ( m_pWordlist.GetLength () );
+		if ( m_pWordlist.GetLength () == 1 )
+			m_pMergeWordlist = NULL;
+		else
+			m_pMergeWordlist = &(m_pWordlist [1]);
+	}
+	else
+	{
+		CSphString sError;
+		m_tMergeWordlistFile.Open ( GetIndexFileName("spi"), SPH_O_READ, sError );
+		m_iMergeCheckpoint = 0;
+		if ( !UpdateMergeWordlist () )
+			return false;
+	}
+
+	return true;
+}
+
+bool CSphIndex_VLN::UpdateMergeWordlist ()
+{
+	assert ( !m_bPreloadWordlist && m_pWordlistChunkBuf );
+
+	if ( m_tMergeWordlistFile.GetFD () < 0 )
+		return false;
+
+	if ( !m_iMergeCheckpoint && !m_iWordlistCheckpoints )
+		return true;
+
+	if ( m_iMergeCheckpoint >= m_iWordlistCheckpoints )
+		return false;
+
+	CSphWordlistCheckpoint * pCheck = m_pWordlistCheckpoints+m_iMergeCheckpoint;
+	SphOffset_t uWordlistOffset = sphUnalignedRead ( pCheck->m_iWordlistOffset );
+
+	int iChunkLength = 0;
+
+	if ( m_iMergeCheckpoint == m_iWordlistCheckpoints - 1 )
+	{
+		CSphWordlistCheckpoint * pLast = m_pWordlistCheckpoints+m_iWordlistCheckpoints-1;
+		iChunkLength = DWORD (m_iWordlistSize - sphUnalignedRead ( pLast->m_iWordlistOffset ));
+	}
+	else
+		iChunkLength = DWORD ( sphUnalignedRead ( (pCheck + 1)->m_iWordlistOffset ) - uWordlistOffset );
+	
+	if ( sphSeek ( m_tMergeWordlistFile.GetFD (), uWordlistOffset, SEEK_SET ) < 0 )
+		return false;
+
+	if ( sphReadThrottled ( m_tMergeWordlistFile.GetFD (), m_pWordlistChunkBuf, iChunkLength ) != iChunkLength )
+		return false;
+
+	m_iMergeCheckpoint++;
+	m_pMergeWordlist = m_pWordlistChunkBuf;
+
+	return true;
+}
+
+
+bool CSphIndex_VLN::IterateWordlistNext ( SphWordID_t & iWordID, SphOffset_t & iDoclistPos, int & iDocNum, int & iHitNum )
+{
+	if ( m_iWordlistEntries == WORDLIST_CHECKPOINT )
+	{
+		sphUnzipInt ( m_pMergeWordlist ); /// reading '0'
+		sphUnzipOffset ( m_pMergeWordlist ); /// reading doclist length
+		iWordID = 0;
+		m_iWordlistEntries = 0;
+
+		if ( !m_bPreloadWordlist )
+		{
+			if ( !UpdateMergeWordlist () )
+				return false;
+		}
+		else
+			if ( m_pMergeWordlist == (BYTE *)m_pWordlistCheckpoints )
+				return false;
+	}
+
+	SphWordID_t iNewWordID = sphUnzipWordid( m_pMergeWordlist );
+
+	if ( !iNewWordID )
+	{
+		iDoclistPos = sphUnzipOffset( m_pMergeWordlist );
+		iWordID = 0;
+
+		return false;
+	}
+	else
+	{
+		iWordID += iNewWordID;
+		iDoclistPos = sphUnzipOffset( m_pMergeWordlist );
+		iDocNum = sphUnzipInt( m_pMergeWordlist );
+		assert ( iDocNum );
+
+		iHitNum = sphUnzipInt ( m_pMergeWordlist );
+		assert ( iHitNum );
+	}
+
+	m_iWordlistEntries++;
+
+	return true;
+}
+
+void CSphIndex_VLN::IterateWordlistStop ()
+{
+	m_tMergeWordlistFile.Close ();
 }
 
 
@@ -12765,23 +12889,27 @@ bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, const CSphTermSetup 
 	tWord.m_iHits = 0;
 
 	// binary search through checkpoints for a one whose range matches word ID
-	assert ( m_bPreread[0] && !m_pWordlist.IsEmpty() );
+	assert ( m_bPreread[0] );
+	assert ( !m_bPreloadWordlist || !m_pWordlist.IsEmpty() );
 
 	// empty index?
 	if ( !m_iWordlistCheckpoints )
 		return false;
 
-	int iWordlistOffset = -1;
+	DWORD uWordlistOffset = 0;
 	CSphWordlistCheckpoint * pStart = m_pWordlistCheckpoints;
 	CSphWordlistCheckpoint * pEnd = m_pWordlistCheckpoints + m_iWordlistCheckpoints - 1;
 
 	if ( tWord.m_iWordID < sphUnalignedRead ( pStart->m_iWordID ) )
 		return false;
 
+	bool bLastChunk = false;
 	if ( tWord.m_iWordID >= sphUnalignedRead ( pEnd->m_iWordID ) )
 	{
-		iWordlistOffset = sphUnalignedRead ( pEnd->m_iWordlistOffset );
-	} else
+		bLastChunk = true;
+		uWordlistOffset = sphUnalignedRead ( pEnd->m_iWordlistOffset );
+	}
+	else
 	{
 		while ( pEnd-pStart>1 )
 		{
@@ -12805,12 +12933,37 @@ bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, const CSphTermSetup 
 		assert ( pStart >= m_pWordlistCheckpoints );
 		assert ( pStart <= m_pWordlistCheckpoints+m_iWordlistCheckpoints-1 );
 		assert ( tWord.m_iWordID >= sphUnalignedRead(pStart->m_iWordID) && tWord.m_iWordID < sphUnalignedRead((pStart+1)->m_iWordID) );
-		iWordlistOffset = sphUnalignedRead ( pStart->m_iWordlistOffset );
+		uWordlistOffset = sphUnalignedRead ( pStart->m_iWordlistOffset );
 	}
-	assert ( iWordlistOffset>=0 );
+	assert ( uWordlistOffset>0 );
 
 	// decode wordlist chunk
-	const BYTE * pBuf = &m_pWordlist[iWordlistOffset];
+	const BYTE * pBuf = NULL;
+
+	if ( m_bPreloadWordlist )
+		pBuf = &m_pWordlist[uWordlistOffset];
+	else
+	{
+		assert ( m_pWordlistChunkBuf );
+
+		int iChunkLength = 0;
+
+		// not the end?
+		if ( !bLastChunk && pStart < m_pWordlistCheckpoints+m_iWordlistCheckpoints-1 )
+			iChunkLength = sphUnalignedRead ( ( pStart + 1)->m_iWordlistOffset ) - uWordlistOffset;
+		else
+			iChunkLength = DWORD (m_iWordlistSize - uWordlistOffset);
+
+		if ( sphSeek ( tTermSetup.m_tWordlist.GetFD (), uWordlistOffset, SEEK_SET ) < 0 )
+			return false;
+
+		if ( sphReadThrottled ( tTermSetup.m_tWordlist.GetFD (), m_pWordlistChunkBuf, iChunkLength ) != iChunkLength )
+			return false;
+
+		pBuf = m_pWordlistChunkBuf;
+	}
+
+	assert ( pBuf );
 
 	SphWordID_t iWordID = 0;
 	SphOffset_t iDoclistOffset = 0;
@@ -12905,7 +13058,10 @@ bool CSphIndex_VLN::Mlock ()
 {
 	bool bRes = true;
 	bRes &= m_pDocinfo.Mlock ( "docinfo", m_sLastError );
-	bRes &= m_pWordlist.Mlock ( "wordlist", m_sLastError );
+
+	if ( m_bPreloadWordlist )
+		bRes &= m_pWordlist.Mlock ( "wordlist", m_sLastError );
+
 	bRes &= m_pMva.Mlock ( "mva", m_sLastError );
 	return bRes;
 }
@@ -12918,6 +13074,7 @@ void CSphIndex_VLN::Dealloc ()
 
 	m_tDoclistFile.Close ();
 	m_tHitlistFile.Close ();
+	m_tWordlistFile.Close ();
 	m_pDocinfo.Reset ();
 	m_pDocinfoHash.Reset ();
 	m_pWordlist.Reset ();
@@ -12931,6 +13088,11 @@ void CSphIndex_VLN::Dealloc ()
 	m_bPreallocated = false;
 	SafeDelete ( m_pTokenizer );
 	SafeDelete ( m_pDict );
+
+	if ( !m_bPreloadWordlist )
+		SafeDeleteArray ( m_pWordlistCheckpoints );
+
+	SafeDeleteArray ( m_pWordlistChunkBuf );
 }
 
 
@@ -13215,21 +13377,24 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 	// prealloc wordlist
 	/////////////////////
 
-	CSphAutofile tWordlist ( GetIndexFileName("spi"), SPH_O_READ, m_sLastError );
-	if ( tWordlist.GetFD()<0 )
-		return NULL;
+	if ( m_bPreloadWordlist )
+	{
+		CSphAutofile tWordlist ( GetIndexFileName("spi"), SPH_O_READ, m_sLastError );
+		if ( tWordlist.GetFD()<0 )
+			return NULL;
 
-	SphOffset_t iWordlistLen = tWordlist.GetSize ( 1, true, m_sLastError );
-	if ( iWordlistLen<0 )
-		return NULL;
+		m_iWordlistSize = tWordlist.GetSize ( 1, true, m_sLastError );
+		if ( m_iWordlistSize<0 )
+			return NULL;
 
-	if ( !m_pWordlist.Alloc ( DWORD(iWordlistLen), m_sLastError, sWarning ) )
-		return NULL;
+		if ( !m_pWordlist.Alloc ( DWORD(m_iWordlistSize), m_sLastError, sWarning ) )
+			return NULL;
 
-	assert ( m_iCheckpointsPos>0 && m_iCheckpointsPos<INT_MAX );
-	m_pWordlistCheckpoints = ( m_iCheckpointsPos>=iWordlistLen )
-		? NULL
-		: (CSphWordlistCheckpoint *)( &m_pWordlist[int(m_iCheckpointsPos)] );
+		assert ( m_iCheckpointsPos>0 && m_iCheckpointsPos<INT_MAX );
+		m_pWordlistCheckpoints = ( m_iCheckpointsPos>=m_iWordlistSize )
+			? NULL
+			: (CSphWordlistCheckpoint *)( &m_pWordlist[int(m_iCheckpointsPos)] );
+	}
 
 	if ( m_bKeepFilesOpen )
 	{
@@ -13238,6 +13403,9 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 
 		if ( m_tHitlistFile.Open ( GetIndexFileName ( m_uVersion>=3 ? "spp" : "spd" ), SPH_O_READ, m_sLastError ) < 0 )
 			return NULL;
+
+		if ( !m_bPreloadWordlist && m_tWordlistFile.Open ( GetIndexFileName("spi"), SPH_O_READ, m_sLastError ) < 0 )
+			return false;
 	}
 
 	// all done
@@ -13285,8 +13453,67 @@ bool CSphIndex_VLN::Preread ()
 	if ( !PrereadSharedBuffer ( m_pMva, "spm" ) )
 		return false;
 
-	if ( !PrereadSharedBuffer ( m_pWordlist, "spi" ) )
-		return false;
+	if ( m_bPreloadWordlist )
+	{
+		if ( !PrereadSharedBuffer ( m_pWordlist, "spi" ) )
+			return false;
+	}
+	else
+	{
+		int iFD = -1;
+		CSphAutofile tWordlist;
+
+		if ( m_bKeepFilesOpen )
+			iFD = m_tWordlistFile.GetFD ();
+		else
+		{
+			tWordlist.Open ( GetIndexFileName("spi"), SPH_O_READ, m_sLastError );
+			iFD = tWordlist.GetFD ();
+		}
+
+		if ( iFD < 0 )
+			return false;
+
+		struct stat st;
+		if ( stat ( GetIndexFileName("spi"), &st ) < 0 )
+		{
+			m_sLastError.SetSprintf ( "failed to stat %s: %s", GetIndexFileName("spi"), strerror(errno) );
+			return false;
+		}
+
+		m_iWordlistSize = st.st_size;
+
+		assert ( m_iCheckpointsPos>0 && m_iCheckpointsPos<INT_MAX );
+		assert ( !m_pWordlistCheckpoints );
+
+		m_pWordlistCheckpoints = new CSphWordlistCheckpoint [m_iWordlistCheckpoints];
+
+		if ( sphSeek ( iFD, m_iCheckpointsPos, READ_NO_SIZE_HINT ) < 0 )
+		{
+			m_sLastError.SetSprintf ( "failed to seek %s: %s", GetIndexFileName("spi"), strerror(errno) );
+			return false;
+		}
+
+		int iToRead = sizeof ( CSphWordlistCheckpoint ) * m_iWordlistCheckpoints;
+		if ( sphReadThrottled ( iFD, m_pWordlistCheckpoints, iToRead ) != iToRead )
+		{
+			m_sLastError.SetSprintf ( "failed to read %s: %s", GetIndexFileName("spi"), strerror(errno) );
+			return false;
+		}
+
+		DWORD uMaxWordlistChunkSize = 0;
+		for ( int i = 0; i < m_iWordlistCheckpoints - 1; i++ )
+		{
+			DWORD uChunkSize = m_pWordlistCheckpoints [i+1].m_iWordlistOffset - m_pWordlistCheckpoints [i].m_iWordlistOffset;
+			if ( uChunkSize > uMaxWordlistChunkSize )
+				uMaxWordlistChunkSize = uChunkSize;
+		}
+
+		if ( m_iWordlistCheckpoints > 0 && m_iWordlistSize - m_pWordlistCheckpoints [m_iWordlistCheckpoints-1].m_iWordlistOffset > uMaxWordlistChunkSize )
+			uMaxWordlistChunkSize = DWORD (m_iWordlistSize - m_pWordlistCheckpoints [m_iWordlistCheckpoints-1].m_iWordlistOffset);
+
+		m_pWordlistChunkBuf = new BYTE [uMaxWordlistChunkSize];
+	}
 
 	//////////////////////
 	// precalc everything
@@ -13764,8 +13991,15 @@ bool CSphIndex_VLN::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, cons
 	CSphDict * pDict = SetupStarDict ( tDict );
 
 	// prepare for setup
-	CSphAutofile tDummy1, tDummy2;
-	CSphTermSetup tTermSetup ( tDummy1, tDummy2 );
+	CSphAutofile tDummy1, tDummy2, tDummy3, tWordlist;
+
+	if ( !m_bKeepFilesOpen )
+	{
+		if ( tWordlist.Open ( GetIndexFileName ( "spi" ), SPH_O_READ, m_sLastError ) < 0 )
+			return false;
+	}
+
+	CSphTermSetup tTermSetup ( tDummy1, tDummy2, m_bPreloadWordlist ? tDummy3 : ( m_bKeepFilesOpen ? m_tWordlistFile : tWordlist ) );
 	tTermSetup.m_pDict = pDict;
 	tTermSetup.m_pIndex = this;
 	tTermSetup.m_eDocinfo = m_tSettings.m_eDocinfo;
@@ -13828,8 +14062,7 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 		return false;
 	}
 
-	CSphAutofile tDoclist;
-	CSphAutofile tHitlist;
+	CSphAutofile tDoclist, tHitlist, tWordlist, tDummy;
 
 	if ( !m_bKeepFilesOpen )
 	{
@@ -13837,6 +14070,9 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 			return false;
 
 		if ( tHitlist.Open ( GetIndexFileName ( m_uVersion>=3 ? "spp" : "spd" ), SPH_O_READ, m_sLastError ) < 0 )
+			return false;
+
+		if ( tWordlist.Open ( GetIndexFileName ( "spi" ), SPH_O_READ, m_sLastError ) < 0 )
 			return false;
 	}
 
@@ -13848,7 +14084,9 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 		return false;
 
 	// prepare for setup
-	CSphTermSetup tTermSetup ( m_bKeepFilesOpen ? m_tDoclistFile : tDoclist, m_bKeepFilesOpen ? m_tHitlistFile : tHitlist );
+	CSphTermSetup tTermSetup ( m_bKeepFilesOpen ? m_tDoclistFile : tDoclist,
+							   m_bKeepFilesOpen ? m_tHitlistFile : tHitlist,
+							   m_bPreloadWordlist ? tDummy : ( m_bKeepFilesOpen ? m_tWordlistFile : tWordlist ) );
 	tTermSetup.m_pDict = pDict;
 	tTermSetup.m_pIndex = this;
 	tTermSetup.m_eDocinfo = m_tSettings.m_eDocinfo;
@@ -18871,44 +19109,10 @@ void CSphWordDataRecord::Write ( CSphMergeData * pMergeData )
 	pMergeData->m_tStats.m_iTotalDocuments += m_dDoclist.GetLength();
 }
 
-bool CSphWordIndexRecord::Read ( const BYTE * & pSource, CSphMergeSource * pMergeSource )
+bool CSphWordIndexRecord::Read ( CSphMergeSource * pMergeSource )
 {
-	assert ( pSource );
-	assert ( pMergeSource );
-	assert ( pMergeSource->m_iMaxWordlistEntries );
-
-	if ( pMergeSource->m_iWordlistEntries == pMergeSource->m_iMaxWordlistEntries )
-	{
-		sphUnzipInt( pSource ); /// reading '0'
-		sphUnzipOffset( pSource ); /// reading doclist length
-		m_iWordID = 0;
-		pMergeSource->m_iWordlistEntries = 0;
-
-		if ( pMergeSource->GetWordlistSize() == 0 )
-			return false;
-	}
-
-	SphWordID_t iWordID = sphUnzipWordid( pSource );
-	
-	if ( !iWordID )
-	{
-		m_iDoclistPos = sphUnzipOffset( pSource );		
-		m_iWordID = 0;
-
-		return false;
-	}
-	else
-	{
-		m_iWordID += iWordID;
-		m_iDoclistPos = sphUnzipOffset( pSource );
-		m_iDocNum = sphUnzipInt( pSource );
-		assert ( m_iDocNum );
-
-		m_iHitNum = sphUnzipInt( pSource );		
-		assert ( m_iHitNum );
-	}
-
-	return true;
+	assert ( pMergeSource && pMergeSource->m_pIndex );
+	return pMergeSource->m_pIndex->IterateWordlistNext ( m_iWordID, m_iDoclistPos, m_iDocNum, m_iHitNum );
 }
 
 void CSphWordIndexRecord::Write ( CSphWriter * pWriter, CSphMergeData * pMergeData )
@@ -18933,10 +19137,8 @@ bool CSphWordRecord::Read ()
 	assert ( m_pMergeSource->Check() );
 
 	// read word index data
-	if ( m_tWordIndex.Read( m_pMergeSource->m_pWordlist, m_pMergeSource ) )
+	if ( m_tWordIndex.Read ( m_pMergeSource ) )
 	{
-		m_pMergeSource->m_iWordlistEntries++;
-
 		// setup
 		m_tWordData.m_iWordID = m_tWordIndex.m_iWordID;
 		m_tWordData.m_iRowitems = m_pMergeSource->m_iRowitems;

@@ -980,6 +980,12 @@ public:
 	/// get next multi-valued (id,attr-value) tuple to m_tDocInfo
 	virtual bool						IterateFieldMVANext () = 0;
 
+	/// begin iterating kill list
+	virtual bool						IterateKillListStart ( CSphString & sError ) = 0;
+
+	/// get next kill list doc id
+	virtual bool						IterateKillListNext ( SphDocID_t & tDocId ) = 0;
+
 	/// post-index callback
 	/// gets called when the indexing is succesfully (!) over
 	virtual void						PostIndex () {}
@@ -1040,6 +1046,7 @@ struct CSphSourceParams_SQL
 	// query params
 	CSphString						m_sQuery;
 	CSphString						m_sQueryRange;
+	CSphString						m_sQueryKilllist;
 	int								m_iRangeStep;
 
 	CSphVector<CSphString>			m_dQueryPre;
@@ -1082,6 +1089,9 @@ struct CSphSource_SQL : CSphSource_Document
 
 	virtual bool		IterateFieldMVAStart ( int iAttr, CSphString & sError );
 	virtual bool		IterateFieldMVANext ();
+
+	virtual bool		IterateKillListStart ( CSphString & sError );
+	virtual bool		IterateKillListNext ( SphDocID_t & tDocId );
 
 private:
 	bool				m_bSqlConnected;///< am i connected?
@@ -1226,6 +1236,8 @@ public:
 	virtual bool	IterateMultivaluedNext ()						{ return false; }	///< xmlpipe does not support multi-valued attrs for now
 	virtual bool	IterateFieldMVAStart ( int, CSphString & )		{ return false; }
 	virtual bool	IterateFieldMVANext ()							{ return false; }
+	virtual bool	IterateKillListStart ( CSphString & )			{ return false; }
+	virtual bool	IterateKillListNext ( SphDocID_t & )			{ return false; }
 
 
 private:
@@ -1417,10 +1429,22 @@ public:
 public:
 						CSphFilter ();
 
+	bool				Setup ( CSphSchema * pSchema );
+	bool				IsValid () const;
+	inline int			GetAttrType () const { return m_iAttrType; }
+	inline SphAttr_t	GetValue ( int iIndex ) const;
+	inline const SphAttr_t * GetValueArray () const;
+	inline int			GetNumValues () const;
+	void				SetExternalValues ( const SphAttr_t * pValues, int nValues );
+
 	bool				operator == ( const CSphFilter & rhs ) const;
 	bool				operator != ( const CSphFilter & rhs ) const { return !( (*this)==rhs ); }
 
 protected:
+	int					m_iAttrType;	///< filter attr type
+	const SphAttr_t *	m_pValues;		///< external value array
+	int					m_nValues;		///< external array size
+
 						CSphFilter ( const CSphFilter & rhs );
 };
 
@@ -1772,6 +1796,8 @@ public:
 	void						Setup ( const CSphIndexSettings & tSettings );
 	const CSphIndexSettings &	GetSettings () { return m_tSettings; }
 	bool						IsStripperInited () const { return m_bStripperInited; }
+	virtual SphAttr_t *			GetKillList () const = 0;
+	virtual int					GetKillListSize ()const = 0;
 
 public:
 	/// build index by indexing given sources

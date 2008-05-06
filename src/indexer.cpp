@@ -40,8 +40,8 @@ bool			g_bBuildFreqs	= false;
 
 int				g_iMemLimit		= 0;
 
-const int		EXT_COUNT = 6;
-const char *	g_dExt[EXT_COUNT] = { "sph", "spa", "spi", "spd", "spp", "spm" };
+const int		EXT_COUNT = 7;
+const char *	g_dExt[EXT_COUNT] = { "sph", "spa", "spi", "spd", "spp", "spm", "spk" };
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -442,6 +442,7 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 	LOC_GETS ( tParams.m_sQueryRange,		"sql_query_range" );
 	LOC_GETAS( tParams.m_dQueryPostIndex,	"sql_query_post_index" );
 	LOC_GETI ( tParams.m_iRangeStep,		"sql_range_step" );
+	LOC_GETS ( tParams.m_sQueryKilllist,	"sql_query_killlist" );
 
 	LOC_GETI ( tParams.m_iRangedThrottle,	"sql_ranged_throttle" );
 
@@ -1248,8 +1249,10 @@ int main ( int argc, char ** argv )
 
 	const CSphIOStats & tStats = sphStopIOStats ();
 
-	fprintf ( stdout, "total %d reads, %.1f sec, %.1f kb/read avg, %.1f msec/read avg\n", tStats.m_iReadOps, tStats.m_fReadTime, tStats.m_fReadKBytes / tStats.m_iReadOps, tStats.m_fReadTime / tStats.m_iReadOps * 1000.0f );
-	fprintf ( stdout, "total %d writes, %.1f sec, %.1f kb/write avg, %.1f msec/write avg\n", tStats.m_iWriteOps, tStats.m_fWriteTime, tStats.m_fWriteKBytes / tStats.m_iWriteOps, tStats.m_fWriteTime / tStats.m_iWriteOps * 1000.0f );
+	fprintf ( stdout, "total %d reads, %.1f sec, %.1f kb/read avg, %.1f msec/read avg\n", tStats.m_iReadOps, tStats.m_fReadTime,
+		tStats.m_iReadOps ? tStats.m_fReadKBytes / tStats.m_iReadOps : 0.0f, tStats.m_iReadOps ? tStats.m_fReadTime / tStats.m_iReadOps * 1000.0f : 0.0f );
+	fprintf ( stdout, "total %d writes, %.1f sec, %.1f kb/write avg, %.1f msec/write avg\n", tStats.m_iWriteOps, tStats.m_fWriteTime,
+		tStats.m_iWriteOps ? tStats.m_fWriteKBytes / tStats.m_iWriteOps : 0.0f, tStats.m_iWriteOps ? tStats.m_fWriteTime / tStats.m_iWriteOps * 1000.0f : 0.0f );
 
 	////////////////////////////
 	// rotating searchd indices

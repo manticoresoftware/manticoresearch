@@ -238,10 +238,10 @@ const int	MAX_RETRY_DELAY		= 1000;
 
 #endif // USE_WINDOWS
 
-const int EXT_COUNT = 6;
-const char * g_dNewExts[EXT_COUNT] = { ".new.sph", ".new.spa", ".new.spi", ".new.spd", ".new.spp", ".new.spm" };
-const char * g_dOldExts[EXT_COUNT] = { ".old.sph", ".old.spa", ".old.spi", ".old.spd", ".old.spp", ".old.spm" };
-const char * g_dCurExts[EXT_COUNT] = { ".sph", ".spa", ".spi", ".spd", ".spp", ".spm" };
+const int EXT_COUNT = 7;
+const char * g_dNewExts[EXT_COUNT] = { ".new.sph", ".new.spa", ".new.spi", ".new.spd", ".new.spp", ".new.spm", ".new.spk" };
+const char * g_dOldExts[EXT_COUNT] = { ".old.sph", ".old.spa", ".old.spi", ".old.spd", ".old.spp", ".old.spm", ".old.spk" };
+const char * g_dCurExts[EXT_COUNT] = { ".sph", ".spa", ".spi", ".spd", ".spp", ".spm", ".spk" };
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1915,7 +1915,7 @@ int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuer
 		iReqSize += 12 + strlen ( tFilter.m_sAttrName.cstr() ); // string attr-name; int type; int exclude-flag
 		switch ( tFilter.m_eType )
 		{
-			case SPH_FILTER_VALUES:		iReqSize += 4 + 8*tFilter.m_dValues.GetLength(); break; // int values-count; uint64[] values
+			case SPH_FILTER_VALUES:		iReqSize += 4 + 8*tFilter.GetNumValues (); break; // int values-count; uint64[] values
 			case SPH_FILTER_RANGE:		iReqSize += 16; break; // uint64 min-val, max-val
 			case SPH_FILTER_FLOATRANGE:	iReqSize += 8; break; // int/float min-val,max-val
 		}
@@ -1958,9 +1958,9 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 		switch ( tFilter.m_eType )
 		{
 			case SPH_FILTER_VALUES:
-				tOut.SendInt ( tFilter.m_dValues.GetLength() );
-				ARRAY_FOREACH ( k, tFilter.m_dValues )
-					tOut.SendUint64 ( tFilter.m_dValues[k] );
+				tOut.SendInt ( tFilter.GetNumValues () );
+				for ( int k = 0; k < tFilter.GetNumValues (); k++ )
+					tOut.SendUint64 ( tFilter.GetValue ( k ) );
 				break;
 
 			case SPH_FILTER_RANGE:
@@ -3037,6 +3037,19 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery )
 	return true;
 }
 
+
+void SetupKillListFilter ( CSphFilter & tFilter, const SphAttr_t * pKillList, int nEntries )
+{
+	assert ( nEntries && pKillList );
+
+	tFilter.m_bExclude = true;
+	tFilter.m_eType = SPH_FILTER_VALUES;
+	tFilter.m_uMinValue = pKillList [0];
+	tFilter.m_uMaxValue = pKillList [nEntries-1];
+	tFilter.m_sAttrName = "@id";
+	tFilter.SetExternalValues ( pKillList, nEntries );
+}
+
 /////////////////////////////////////////////////////////////////////////////
 
 class SearchHandler_c
@@ -3337,6 +3350,18 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 					if ( dSorters.GetLength() )
 					{
 						AggrResult_t tStats;
+
+						// set killlist
+						CSphQuery * pQuery = &m_dQueries[iStart];
+
+						int iNumFilters = pQuery->m_dFilters.GetLength ();
+						for ( int i = iLocal + 1; i < dLocal.GetLength (); i++ )
+						{
+							CSphFilter tKillListFilter;
+							SetupKillListFilter ( tKillListFilter, tServed.m_pIndex->GetKillList (), tServed.m_pIndex->GetKillListSize () );
+							pQuery->m_dFilters.Add ( tKillListFilter );
+						}
+
 						if ( !tServed.m_pIndex->MultiQuery ( &m_dQueries[iStart], &tStats,
 							dSorters.GetLength(), &dSorters[0] ) )
 						{
@@ -3380,6 +3405,9 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 								}
 							}
 						}
+
+						pQuery->m_dFilters.Resize ( iNumFilters );
+
 						ARRAY_FOREACH ( i, dSorters )
 							SafeDelete ( dSorters[i] );
 					}
@@ -3394,6 +3422,18 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 					{
 						CSphQuery & tQuery = m_dQueries[iQuery];
 						CSphString sError;
+
+						int iNumFilters = tQuery.m_dFilters.GetLength ();
+						for ( int i = iLocal + 1; i < dLocal.GetLength (); i++ )
+						{
+							const ServedIndex_t & tServed = g_hIndexes [ dLocal[i] ];
+							if ( tServed.m_pIndex->GetKillListSize () )
+							{
+								CSphFilter tKillListFilter;
+								SetupKillListFilter ( tKillListFilter, tServed.m_pIndex->GetKillList (), tServed.m_pIndex->GetKillListSize () );
+								tQuery.m_dFilters.Add ( tKillListFilter );
+							}
+						}
 
 						// create sorter, if needed
 						ISphMatchSorter * pSorter = pLocalSorter;
@@ -3435,6 +3475,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 						// throw away the sorter
 						if ( !pLocalSorter )
 							SafeDelete ( pSorter );
+
+						tQuery.m_dFilters.Resize ( iNumFilters );
 					}
 				}
 			}

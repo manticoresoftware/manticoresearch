@@ -456,6 +456,26 @@ public:
 	}
 
 public:
+	/// filter unique
+	void Uniq ()
+	{
+		if ( !m_iLength )
+			return;
+
+		Sort ();
+
+		int iSrc = 0, iDst = 0;
+		while ( iSrc<m_iLength )
+		{
+			if ( iDst>0 && m_pData[iDst-1]==m_pData[iSrc] )
+				iSrc++;
+			else
+				m_pData[iDst++] = m_pData[iSrc++];
+		}
+
+		Resize ( iDst );
+	}
+
 	/// default sort
 	void Sort ( int iStart=0, int iEnd=-1 )
 	{

@@ -88,6 +88,7 @@ static KeyDesc_t g_dKeysSource[] =
 	{ "sql_query",				0, NULL },
 	{ "sql_query_range",		0, NULL },
 	{ "sql_range_step",			0, NULL },
+	{ "sql_query_killlist",		0, NULL },
 	{ "sql_attr_uint",			KEY_LIST, NULL },
 	{ "sql_attr_bool",			KEY_LIST, NULL },
 	{ "sql_attr_timestamp",		KEY_LIST, NULL },

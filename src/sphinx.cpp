@@ -1077,6 +1077,14 @@ private:
 
 /////////////////////////////////////////////////////////////////////////////
 
+/// search filter attribute types
+enum ESphFilterAttr
+{
+	SPH_FILTERATTR_ATTR		= 0,
+	SPH_FILTERATTR_ID		= 1,
+	SPH_FILTERATTR_WEIGHT	= 2
+};
+
 struct CSphIndex_VLN;
 
 /// everything required to setup search term
@@ -1607,17 +1615,21 @@ struct CSphIndex_VLN : CSphIndex
 	virtual bool				SaveAttributes ();
 
 	bool						EarlyReject ( CSphMatch & tMatch, const CSphQuery * pQuery ) const;
+	bool						LateReject ( CSphMatch & tMatch, const CSphQuery * pQuery ) const;
 
 	virtual bool				IterateWordlistStart ();
 	virtual bool				IterateWordlistNext ( SphWordID_t & iWordID, SphOffset_t & iDoclistPos, int & iDocNum, int & iHitNum );
 	virtual void				IterateWordlistStop ();
+
+	virtual SphAttr_t *			GetKillList () const;
+	virtual int					GetKillListSize ()const { return m_iKillListSize; }
 
 private:
 	static const int			WORDLIST_CHECKPOINT		= 1024;		///< wordlist checkpoints frequency
 	static const int			WRITE_BUFFER_SIZE		= 262144;	///< my write buffer size
 
 	static const DWORD			INDEX_MAGIC_HEADER		= 0x58485053;	///< my magic 'SPHX' header
-	static const DWORD			INDEX_FORMAT_VERSION	= 9;			///< my format version
+	static const DWORD			INDEX_FORMAT_VERSION	= 10;			///< my format version
 
 private:
 	// common stuff
@@ -1681,6 +1693,9 @@ private:
 	CSphWordlistCheckpoint *	m_pWordlistCheckpoints;	///< my wordlist cache checkpoints
 	int							m_iWordlistCheckpoints;	///< my wordlist cache checkpoints count
 
+	CSphSharedBuffer<SphAttr_t>	m_pKillList;			///< killlist
+	DWORD						m_iKillListSize;		///< killlist size (in elements)
+
 	SphOffset_t					m_iWordlistSize;		///< wordlist file size
 	BYTE *						m_pWordlistChunkBuf;	///< buffer for wordlist chunks
 
@@ -1695,6 +1710,7 @@ private:
 
 	bool						m_bEarlyLookup;			///< whether early attr value lookup is needed
 	bool						m_bLateLookup;			///< whether late attr value lookup is needed
+	bool						m_bLateReject;			///< whether to check filters after rank calculation
 
 	CSphAttrLocator				m_tGeoDistLoc;			///< geodistance locator (bitoffset -1 means do not compute)
 	CSphAttrLocator				m_tGeoLatLoc;			///< latitude locator
@@ -4134,9 +4150,12 @@ BYTE * CSphTokenizer_UTF8Ngram::GetToken ()
 CSphFilter::CSphFilter ()
 	: m_sAttrName	( "" )
 	, m_bExclude	( false )
+	, m_iAttrType	( SPH_FILTERATTR_ATTR )
 	, m_uMinValue	( 0 )
 	, m_uMaxValue	( UINT_MAX )
 	, m_bMva		( false )
+	, m_pValues		( NULL )
+	, m_nValues		( 0 )
 {}
 
 
@@ -4147,10 +4166,80 @@ CSphFilter::CSphFilter ( const CSphFilter & rhs )
 }
 
 
+bool CSphFilter::Setup ( CSphSchema * pSchema )
+{
+	if ( !m_pValues )
+		m_dValues.Sort ();
+
+	bool bLateReject = false;
+
+	m_iAttrType = SPH_FILTERATTR_ATTR;
+	m_bMva = false;
+
+	if ( m_sAttrName.Begins ( "@" ) )
+	{
+		if ( m_sAttrName == "@id" )
+			m_iAttrType = SPH_FILTERATTR_ID;
+		else if ( m_sAttrName == "@weight" )
+		{
+			m_iAttrType = SPH_FILTERATTR_WEIGHT;
+			bLateReject = true;
+		}
+	}
+
+	if ( m_iAttrType == SPH_FILTERATTR_ATTR )
+	{
+		assert ( pSchema );
+
+		int iAttr = pSchema->GetAttrIndex ( m_sAttrName.cstr() );
+		if ( iAttr>=0 )
+		{
+			const CSphColumnInfo & tAttr = pSchema->GetAttr(iAttr);
+			m_tLocator = tAttr.m_tLocator;
+			m_bMva = ( tAttr.m_eAttrType & SPH_ATTR_MULTI )!=0;
+		}
+	}
+
+	return bLateReject;
+}
+
+
+bool CSphFilter::IsValid () const
+{
+	return m_tLocator.m_iBitOffset >= 0 || m_iAttrType != SPH_FILTERATTR_ATTR;
+}
+
+
+SphAttr_t CSphFilter::GetValue ( int iIndex ) const
+{
+	assert ( iIndex < GetNumValues () );
+	return m_pValues ? m_pValues [iIndex] : m_dValues [iIndex];
+}
+
+
+const SphAttr_t * CSphFilter::GetValueArray () const
+{
+	return m_pValues ? m_pValues : &(m_dValues [0]);
+}
+
+
+int CSphFilter::GetNumValues () const
+{
+	return m_pValues ? m_nValues : m_dValues.GetLength ();
+}
+
+
+void CSphFilter::SetExternalValues ( const SphAttr_t * pValues, int nValues )
+{
+	m_pValues = pValues;
+	m_nValues = nValues;
+}
+
+
 bool CSphFilter::operator == ( const CSphFilter & rhs ) const
 {
 	// check name, mode, type
-	if ( m_sAttrName!=rhs.m_sAttrName || m_bExclude!=rhs.m_bExclude || m_eType==rhs.m_eType )
+	if ( m_sAttrName!=rhs.m_sAttrName || m_bExclude!=rhs.m_bExclude || m_eType!=rhs.m_eType || m_iAttrType!=rhs.m_iAttrType )
 		return false;
 
 	switch ( m_eType )
@@ -5243,6 +5332,10 @@ CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename )
 	m_pWordlistChunkBuf = NULL;
 	m_pMergeWordlist = NULL;
 	m_iMergeCheckpoint = 0;
+
+	m_iKillListSize = 0;
+
+	m_bLateReject = false;
 }
 
 
@@ -5667,6 +5760,8 @@ bool CSphIndex_VLN::WriteHeader ( CSphWriter & fdInfo, SphOffset_t iCheckpointsP
 	// dictionary info
 	assert ( m_pDict );
 	SaveDictionarySettings ( fdInfo, m_pDict );
+
+	fdInfo.PutDword ( m_iKillListSize );
 
 	return true;
 }
@@ -6749,6 +6844,9 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	// collect and partially sort hits and docinfos
 	////////////////////////////////////////////////
 
+	// killlist storage
+	CSphVector <SphAttr_t> dKillList;
+
 	// ordinals storage
 	CSphVector<int> dOrdinalAttrs;
 	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN )
@@ -7108,6 +7206,14 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			}
 		}
 
+		// FIXME! uncontrolled memory usage; add checks and/or diskbased sort in the future?
+		if ( pSource->IterateKillListStart ( m_sLastError ) )
+		{
+			SphDocID_t tDocId;
+			while ( pSource->IterateKillListNext ( tDocId ) )
+				dKillList.Add ( tDocId );
+		}
+
 		// this source is over, disconnect and update stats
 		pSource->Disconnect ();
 
@@ -7462,6 +7568,23 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	pDocinfo = NULL;
 
 	fdDocinfo.Close (); // it might be zero-length, but it must exist
+
+	// dump killlist
+	CSphAutofile fdKillList ( GetIndexFileName("spk"), SPH_O_NEW, m_sLastError );
+	if ( fdKillList.GetFD()<0 )
+		return 0;
+
+	if ( dKillList.GetLength () )
+	{
+		dKillList.Uniq ();
+
+		m_iKillListSize = dKillList.GetLength ();
+
+		if ( !sphWriteThrottled ( fdKillList.GetFD (), &dKillList [0], m_iKillListSize*sizeof (SphAttr_t), "kill list", m_sLastError ) )
+			return 0;
+	}
+
+	fdKillList.Close ();
 
 	///////////////////////////////////
 	// sort and write compressed index
@@ -8081,6 +8204,29 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilte
 	if ( dWordlistCheckpoints.GetLength() )
 		wrDstIndex.PutBytes ( &dWordlistCheckpoints[0], dWordlistCheckpoints.GetLength() * sizeof ( CSphWordlistCheckpoint ) );
 
+	// merge spk
+	CSphVector<SphAttr_t> dKillList;
+	dKillList.Reserve ( 1024 );
+	for ( int i = 0; i < tSrcSource.m_pIndex->GetKillListSize (); i++ )
+		dKillList.Add ( tSrcSource.m_pIndex->GetKillList () [i] );
+
+	for ( int i = 0; i < tDstSource.m_pIndex->GetKillListSize (); i++ )
+		dKillList.Add ( tDstSource.m_pIndex->GetKillList () [i] );
+
+	dKillList.Uniq ();
+
+	CSphAutofile fdKillList ( GetIndexFileName("spk.tmp"), SPH_O_NEW, m_sLastError );
+	if ( fdKillList.GetFD () < 0 )
+		return false;
+
+	if ( dKillList.GetLength () )
+	{
+		if ( !sphWriteThrottled ( fdKillList.GetFD (), &(dKillList [0]), dKillList.GetLength ()*sizeof (SphAttr_t), "kill_list", m_sLastError ) )
+			return false;
+	}
+
+	fdKillList.Close ();
+	
 	CSphWriter fdInfo;
 	if ( !fdInfo.OpenFile ( GetIndexFileName("sph.tmp"), m_sLastError ) )
 		return false;
@@ -8538,7 +8684,7 @@ bool CSphIndex_VLN::EarlyReject ( CSphMatch & tMatch, const CSphQuery * pQuery )
 	ARRAY_FOREACH ( i, pQuery->m_dFilters )
 	{
 		const CSphFilter & tFilter = pQuery->m_dFilters[i];
-		if ( tFilter.m_tLocator.m_iBitOffset<0 )
+		if ( !tFilter.IsValid () )
 			continue;
 
 		if ( tFilter.m_bMva )
@@ -8563,8 +8709,8 @@ bool CSphIndex_VLN::EarlyReject ( CSphMatch & tMatch, const CSphQuery * pQuery )
 				case SPH_FILTER_VALUES:
 				{
 					// walk both attr values and filter values lists, and ok match if there's any intersection
-					const SphAttr_t * pFilter = &tFilter.m_dValues[0];
-					const SphAttr_t * pFilterMax = pFilter + tFilter.m_dValues.GetLength();
+					const SphAttr_t * pFilter = tFilter.GetValueArray ();
+					const SphAttr_t * pFilterMax = pFilter + tFilter.GetNumValues  ();
 
 					while ( pMva<pMvaMax && pFilter<pFilterMax && pMva[0]!=pFilter[0] )
 					{
@@ -8610,18 +8756,27 @@ bool CSphIndex_VLN::EarlyReject ( CSphMatch & tMatch, const CSphQuery * pQuery )
 		} else
 		{
 			// single value
-			SphAttr_t uValue;
+			SphAttr_t uValue = 0;
+			if ( tFilter.m_eType == SPH_FILTER_VALUES || tFilter.m_eType == SPH_FILTER_RANGE )
+			{
+				switch ( tFilter.GetAttrType () )
+				{
+				case SPH_FILTERATTR_ATTR:	uValue = tMatch.GetAttr ( tFilter.m_tLocator ); break;
+				case SPH_FILTERATTR_ID:		uValue = tMatch.m_iDocID; break;
+				case SPH_FILTERATTR_WEIGHT:	return false;
+				default: assert ( 0 && "internal error: unhandled filter attribute type" ); break;
+				}
+			}
+
 			float fValue;
 			switch ( tFilter.m_eType )
 			{
-				case SPH_FILTER_VALUES:
-					uValue = tMatch.GetAttr ( tFilter.m_tLocator );
-					if ( !( tFilter.m_bExclude ^ sphGroupMatch ( uValue, &tFilter.m_dValues[0], tFilter.m_dValues.GetLength() ) ) )
+				case SPH_FILTER_VALUES:	
+					if ( !( tFilter.m_bExclude ^ sphGroupMatch ( uValue, tFilter.GetValueArray (), tFilter.GetNumValues () ) ) )
 						return true;
 					break;
 
 				case SPH_FILTER_RANGE:
-					uValue = tMatch.GetAttr ( tFilter.m_tLocator );
 					if ( tFilter.m_bExclude ^ ( uValue<tFilter.m_uMinValue || uValue>tFilter.m_uMaxValue ) )
 						return true;
 					break;
@@ -8636,6 +8791,38 @@ bool CSphIndex_VLN::EarlyReject ( CSphMatch & tMatch, const CSphQuery * pQuery )
 					assert ( 0 && "internal error: unhandled filter type" );
 					break;
 			}
+		}
+	}
+
+	return false;
+}
+
+
+bool CSphIndex_VLN::LateReject ( CSphMatch & tMatch, const CSphQuery * pQuery ) const
+{
+	if ( !pQuery->m_dFilters.GetLength() )
+		return false;
+
+	ARRAY_FOREACH ( i, pQuery->m_dFilters )
+	{
+		const CSphFilter & tFilter = pQuery->m_dFilters[i];
+
+		if ( tFilter.m_eType != SPH_FILTER_VALUES && tFilter.m_eType != SPH_FILTER_RANGE || tFilter.GetAttrType () != SPH_FILTERATTR_WEIGHT )
+			continue;
+
+		SphAttr_t uValue = tMatch.m_iWeight;
+
+		switch ( tFilter.m_eType )
+		{
+		case SPH_FILTER_VALUES:	
+			if ( !( tFilter.m_bExclude ^ sphGroupMatch ( uValue, tFilter.GetValueArray (), tFilter.GetNumValues () ) ) )
+				return true;
+			break;
+
+		case SPH_FILTER_RANGE:
+			if ( tFilter.m_bExclude ^ ( uValue<tFilter.m_uMinValue || uValue>tFilter.m_uMaxValue ) )
+				return true;
+			break;
 		}
 	}
 
@@ -8751,6 +8938,12 @@ bool CSphIndex_VLN::IterateWordlistNext ( SphWordID_t & iWordID, SphOffset_t & i
 void CSphIndex_VLN::IterateWordlistStop ()
 {
 	m_tMergeWordlistFile.Close ();
+}
+
+
+SphAttr_t * CSphIndex_VLN::GetKillList () const
+{
+	return m_pKillList.GetWritePtr ();
 }
 
 
@@ -8886,13 +9079,17 @@ void CSphIndex_VLN::LateCalc ( CSphMatch & tMatch ) const
 	if ( bRandomize ) \
 		(_match).m_iWeight = rand(); \
 	\
-	bool bNewMatch = false; \
-	for ( int iSorter=0; iSorter<iSorters; iSorter++ ) \
-		bNewMatch |= ppSorters[iSorter]->Push ( _match ); \
-	\
-	if ( bNewMatch ) \
-		if ( --iCutoff==0 ) \
-			break;
+	if ( !m_bLateReject || !LateReject ( _match, pQuery ) ) \
+	{ \
+		\
+		bool bNewMatch = false; \
+		for ( int iSorter=0; iSorter<iSorters; iSorter++ ) \
+			bNewMatch |= ppSorters[iSorter]->Push ( _match ); \
+		\
+		if ( bNewMatch ) \
+			if ( --iCutoff==0 ) \
+				break; \
+	}
 
 
 // check for dupes
@@ -12750,6 +12947,18 @@ void CSphIndex_VLN::MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISph
 
 	m_bEarlyLookup = false; // we'll do it manually
 
+	// no late reject on weight
+	if ( m_bLateReject )
+	{
+		bool bOnlyWeight = true;
+		for ( int iFilter=0; iFilter<pQuery->m_dFilters.GetLength() && bOnlyWeight; iFilter++ )
+			if ( pQuery->m_dFilters[iFilter].GetAttrType () != SPH_FILTERATTR_WEIGHT )
+				bOnlyWeight = false;
+
+		if ( bOnlyWeight )
+			m_bLateReject = false;
+	}
+
 	DWORD uStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 	for ( DWORD uIndexEntry=0; uIndexEntry<m_uDocinfoIndex; uIndexEntry++ )
 	{
@@ -12773,11 +12982,14 @@ void CSphIndex_VLN::MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISph
 		for ( int iFilter=0; iFilter<pQuery->m_dFilters.GetLength() && !bReject; iFilter++ )
 		{
 			const CSphFilter & tFilter = pQuery->m_dFilters[iFilter];
-			if ( tFilter.m_tLocator.m_iBitOffset<0 )
-				continue;
+			if ( tFilter.GetAttrType () == SPH_FILTERATTR_ATTR )
+			{
+				if ( tFilter.m_tLocator.m_iBitOffset<0  )
+					continue;
 
-			if ( tFilter.m_tLocator.m_iBitOffset>=m_tSchema.GetRowSize()*ROWITEM_BITS ) // index schema only contains non-computed attrs
-				continue; // no early reject for computed attrs
+				if ( tFilter.m_tLocator.m_iBitOffset>=m_tSchema.GetRowSize()*ROWITEM_BITS ) // index schema only contains non-computed attrs
+					continue; // no early reject for computed attrs
+			}
 
 			if ( tFilter.m_eType==SPH_FILTER_VALUES )
 			{
@@ -12785,12 +12997,33 @@ void CSphIndex_VLN::MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISph
 					continue; // no early reject for this case yet
 
 				// check all acceptable values against the range
-				SphAttr_t uBlockMin = sphGetRowAttr ( DOCINFO2ATTRS(pMin), tFilter.m_tLocator );
-				SphAttr_t uBlockMax = sphGetRowAttr ( DOCINFO2ATTRS(pMax), tFilter.m_tLocator );
+				SphAttr_t uBlockMin = 0;
+				SphAttr_t uBlockMax = 0;
+				
+				switch ( tFilter.GetAttrType () )
+				{
+				case SPH_FILTERATTR_ATTR:
+					uBlockMin = sphGetRowAttr ( DOCINFO2ATTRS(pMin), tFilter.m_tLocator );
+					uBlockMax = sphGetRowAttr ( DOCINFO2ATTRS(pMax), tFilter.m_tLocator );
+					break;
+
+				case SPH_FILTERATTR_ID:
+					uBlockMin = DOCINFO2ID(pMin);
+					uBlockMax = DOCINFO2ID(pMax);
+					break;
+
+				case SPH_FILTERATTR_WEIGHT:
+					continue;
+
+				default:
+					assert ( 0 && "internal error: unhandled filter attribute type" );
+					break;
+				}
+
 				bool bBlockMatches = false;
 
-				ARRAY_FOREACH ( i, tFilter.m_dValues )
-					if ( tFilter.m_dValues[i]>=uBlockMin && tFilter.m_dValues[i]<=uBlockMax )
+				for ( int i = 0; i < tFilter.GetNumValues (); i++ )
+					if ( tFilter.GetValue(i)>=uBlockMin && tFilter.GetValue(i)<=uBlockMax )
 				{
 					bBlockMatches = true;
 					break;
@@ -12802,8 +13035,28 @@ void CSphIndex_VLN::MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISph
 
 			} else if ( tFilter.m_eType==SPH_FILTER_RANGE )
 			{
-				SphAttr_t uBlockMin = sphGetRowAttr ( DOCINFO2ATTRS(pMin), tFilter.m_tLocator );
-				SphAttr_t uBlockMax = sphGetRowAttr ( DOCINFO2ATTRS(pMax), tFilter.m_tLocator );
+				SphAttr_t uBlockMin = 0;
+				SphAttr_t uBlockMax = 0;
+
+				switch ( tFilter.GetAttrType () )
+				{
+				case SPH_FILTERATTR_ATTR:
+					uBlockMin = sphGetRowAttr ( DOCINFO2ATTRS(pMin), tFilter.m_tLocator );
+					uBlockMax = sphGetRowAttr ( DOCINFO2ATTRS(pMax), tFilter.m_tLocator );
+					break;
+
+				case SPH_FILTERATTR_ID:
+					uBlockMin = DOCINFO2ID(pMin);
+					uBlockMax = DOCINFO2ID(pMax);
+					break;
+
+				case SPH_FILTERATTR_WEIGHT:
+					continue;
+
+				default:
+					assert ( 0 && "internal error: unhandled filter attribute type" );
+					break;
+				}
 
 				if ( !tFilter.m_bExclude )
 				{
@@ -13185,6 +13438,9 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, CSphString & sWarning
 		SetDictionary ( pDict );
 	}
 
+	if ( m_uVersion>=10 )
+		m_iKillListSize = rdInfo.GetDword ();
+
 	if ( rdInfo.GetErrorFlag() )
 		m_sLastError.SetSprintf ( "%s: failed to parse header (unexpected eof)", sHeaderName );
 
@@ -13270,6 +13526,8 @@ void CSphIndex_VLN::DumpHeader ( FILE * fp, const char * sHeaderName )
 		fprintf ( fp, "dictionary-stopwords: %s\n", tSettings.m_sStopwords.cstr () );
 		fprintf ( fp, "dictionary-wordforms: %s\n", tSettings.m_sWordforms.cstr () );
 	}
+
+	fprintf ( fp, "killlist-size: %d\n", m_iKillListSize );
 }
 
 
@@ -13290,6 +13548,7 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 	m_pDocinfo.SetMlock ( bMlock );
 	m_pWordlist.SetMlock ( bMlock );
 	m_pMva.SetMlock ( bMlock );
+	m_pKillList.SetMlock ( bMlock );
 
 	// preload schema
 	if ( !LoadHeader ( GetIndexFileName("sph"), sWarning ) )
@@ -13408,6 +13667,28 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 			return false;
 	}
 
+	// prealloc killlist
+	if ( m_uVersion>=10 )
+	{
+		CSphAutofile fdKillList( GetIndexFileName("spk"), SPH_O_READ, m_sLastError );
+		if ( fdKillList.GetFD()<0 )
+			return NULL;
+
+		SphOffset_t iSize = fdKillList.GetSize ( 0, true, m_sLastError );
+		if ( iSize<0 )
+			return NULL;
+
+		if ( iSize != m_iKillListSize * sizeof(SphAttr_t) )
+		{
+			m_sLastError.SetSprintf ( "header killlist size (%d) does not match with spk file size (%d)", m_iKillListSize * sizeof(SphAttr_t), iSize );
+			return NULL;
+		}
+
+		// prealloc
+		if ( iSize>0 && !m_pKillList.Alloc ( m_iKillListSize, m_sLastError, sWarning ) )
+			return NULL;
+	}
+
 	// all done
 	m_bPreallocated = true;
 	return &m_tSchema;
@@ -13452,6 +13733,14 @@ bool CSphIndex_VLN::Preread ()
 
 	if ( !PrereadSharedBuffer ( m_pMva, "spm" ) )
 		return false;
+
+	if ( !PrereadSharedBuffer ( m_pKillList, "spk" ) )
+		return false;
+
+#if PARANOID
+	for ( int i = 1; i < (int)m_iKillListSize; i++ )
+		assert ( m_pKillList [i-1] < m_pKillList [i] );
+#endif
 
 	if ( m_bPreloadWordlist )
 	{
@@ -13742,8 +14031,8 @@ bool CSphIndex_VLN::Rename ( const char * sNewBase )
 	char sFrom [ SPH_MAX_FILENAME_LEN ];
 	char sTo [ SPH_MAX_FILENAME_LEN ];
 
-	const int EXT_COUNT = 7;
-	const char * sExts[EXT_COUNT] = { "spa", "spd", "sph", "spi", "spl", "spm", "spp" };
+	const int EXT_COUNT = 8;
+	const char * sExts[EXT_COUNT] = { "spa", "spd", "sph", "spi", "spl", "spm", "spp", "spk" };
 	DWORD uMask = 0;
 
 	int iExt;
@@ -14164,21 +14453,17 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 		PROFILE_END ( query_load_words );
 	}
 
+	m_bLateReject = false;
+
 	// reorder attr set values and lookup indexes
 	ARRAY_FOREACH ( i, pQuery->m_dFilters )
 	{
 		CSphFilter & tFilter = pQuery->m_dFilters[i];
-		tFilter.m_dValues.Sort ();
 		tFilter.m_tLocator.m_iBitOffset = -1; // filters with negative bit-offset will be ignored
 
 		// lookup it
-		int iAttr = pResult->m_tSchema.GetAttrIndex ( tFilter.m_sAttrName.cstr() );
-		if ( iAttr<0 )
-			continue; // FIXME! simply continue? should at least warn about bad attr name
-
-		const CSphColumnInfo & tAttr = pResult->m_tSchema.GetAttr(iAttr);
-		tFilter.m_tLocator = tAttr.m_tLocator;
-		tFilter.m_bMva = ( ( tAttr.m_eAttrType & SPH_ATTR_MULTI )!=0 );
+		if ( tFilter.Setup ( &(pResult->m_tSchema) ) )
+			m_bLateReject = true;
 	}
 
 	// bind weights
@@ -16961,6 +17246,7 @@ void CSphSource_SQL::PostIndex ()
 
 			SqlDismissResult ();
 		}
+
 		break;
 	}
 
@@ -17090,6 +17376,39 @@ bool CSphSource_SQL::IterateFieldMVANext ()
 	return true;
 }
 
+
+bool CSphSource_SQL::IterateKillListStart ( CSphString & sError )
+{
+	if ( m_tParams.m_sQueryKilllist.IsEmpty () )
+		return false;
+
+	if ( !SqlQuery ( m_tParams.m_sQueryKilllist.cstr () ) )
+	{
+		sError.SetSprintf ( "killlist query failed: %s", SqlError() );
+		return false;
+	}
+
+	return true;
+}
+
+
+bool CSphSource_SQL::IterateKillListNext ( SphDocID_t & tDocId )
+{
+	if ( SqlFetchRow () )
+		tDocId = sphToDocid ( SqlColumn(0) );
+	else
+	{
+		if ( SqlIsError() )
+			sphDie ( "sql_query_killlist: %s", SqlError() ); // FIXME! this should be reported
+		else
+		{
+			SqlDismissResult ();
+			return false;
+		}
+	}
+
+	return true;
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // MYSQL SOURCE
@@ -17846,6 +18165,8 @@ public:
 	virtual bool	IterateMultivaluedNext ()						{ return false; }
 	virtual bool	IterateFieldMVAStart ( int iAttr, CSphString & sError );
 	virtual bool	IterateFieldMVANext ();
+	virtual bool	IterateKillListStart ( CSphString & );
+	virtual bool	IterateKillListNext ( SphDocID_t & tDocId );
 
 
 	void			StartElement ( const char * szName, const char ** pAttrs );
@@ -17887,7 +18208,12 @@ private:
 	bool			m_bInDocset;
 	bool			m_bInSchema;
 	bool			m_bInDocument;
+	bool			m_bInKillList;
+	bool			m_bInId;
 	bool			m_bFirstTagAfterDocset;
+
+	int				m_iKillListIterator;
+	CSphVector < SphDocID_t > m_dKillList;
 
 	int				m_iMVA;
 	int				m_iMVAIterator;
@@ -18021,7 +18347,10 @@ CSphSource_XMLPipe2::CSphSource_XMLPipe2 ( BYTE * dInitialBuf, int iBufLen, cons
 	, m_bInDocset		( false )
 	, m_bInSchema		( false )
 	, m_bInDocument		( false )
+	, m_bInKillList		( false )
+	, m_bInId			( false )
 	, m_bFirstTagAfterDocset( false )
+	, m_iKillListIterator ( 0 )
 	, m_iMVA			( 0 )
 	, m_iMVAIterator	( 0 )
 	, m_iCurField		( -1 )
@@ -18299,10 +18628,15 @@ bool CSphSource_XMLPipe2::Connect ( CSphString & sError )
 	xmlTextReaderSetErrorHandler ( m_pParser, xmlErrorHandler,  this );
 #endif
 
+	m_dKillList.Reserve ( 1024 );
+	m_dKillList.Resize ( 0 );
+
 	m_bRemoveParsed = false;
 	m_bInDocset	= false;
 	m_bInSchema	= false;
 	m_bInDocument = false;
+	m_bInKillList = false;
+	m_bInId = false;
 	m_bFirstTagAfterDocset = false;
 	m_iCurField	= -1;
 	m_iCurAttr	= -1;
@@ -18315,6 +18649,8 @@ bool CSphSource_XMLPipe2::Connect ( CSphString & sError )
 
 	m_dParsedDocuments.Reserve ( 1024 );
 	m_dParsedDocuments.Resize ( 0 );
+
+	m_iKillListIterator = 0;
 
 	m_iMVA = 0;
 	m_iMVAIterator = 0;
@@ -18530,6 +18866,23 @@ bool CSphSource_XMLPipe2::IterateFieldMVANext ()
 }
 
 
+bool CSphSource_XMLPipe2::IterateKillListStart ( CSphString & )
+{
+	m_iKillListIterator = 0;
+	return true;
+}
+
+
+bool CSphSource_XMLPipe2::IterateKillListNext ( SphDocID_t & tDocId )
+{
+	if ( m_iKillListIterator >= m_dKillList.GetLength () )
+		return false;
+
+	tDocId = m_dKillList [m_iKillListIterator++];
+	return true;
+}
+
+
 void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAttrs )
 {
 	if ( !strcmp ( szName, "sphinx:docset" ) )
@@ -18642,6 +18995,12 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 			return;
 		}
 
+		if ( m_bInKillList )
+		{
+			Error ( "<sphinx:document> is not allowed inside <sphinx:killlist>" );
+			return;
+		}
+
 		if ( m_tSchema.m_dFields.GetLength () == 0 && m_tSchema.GetAttrsCount () == 0 )
 		{
 			Error ( "no schema configured, and no embedded schema found" );
@@ -18665,6 +19024,34 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 			Error ( "attribute 'id' required in <sphinx:document>" );
 
 		return;
+	}
+
+	if ( !strcmp ( szName, "sphinx:killlist" ) )
+	{
+		if ( !m_bInDocset || m_bInDocument || m_bInSchema )
+		{
+			Error ( "<sphinx:killlist> is not allowed inside <sphinx:schema> or <sphinx:document>" );
+			return;
+		}
+
+		m_bInKillList = true;
+		return;
+	}
+
+	if ( m_bInKillList )
+	{
+		if ( !m_bInId )
+		{
+			if ( strcmp ( szName, "id" ) )
+			{
+				Error ( "only 'id' is allowed inside <sphinx:killlist>" );
+				return;
+			}
+
+			m_bInId = true;
+		}
+		else
+			++m_iElementDepth;
 	}
 
 	if ( m_bInDocument )
@@ -18715,6 +19102,25 @@ void CSphSource_XMLPipe2::EndElement ( const char * szName )
 			m_dParsedDocuments.Add ( m_pCurDocument );
 		m_pCurDocument = NULL;
 	}
+	else if ( !strcmp ( szName, "sphinx:killlist" ) )
+	{
+		m_bInKillList = false;
+	}
+	else if ( m_bInKillList )
+	{
+		if ( m_iElementDepth == 0 )
+		{
+			if ( m_bInId )
+			{
+				m_pFieldBuffer [Min ( m_iFieldBufferLen, MAX_FIELD_LENGTH-1) ] = '\0';
+				m_dKillList.Add ( sphToDocid ( (const char *)m_pFieldBuffer ) );
+				m_iFieldBufferLen = 0;
+				m_bInId = false;
+			}
+		}
+		else
+			m_iElementDepth--;
+	}
 	else if ( m_bInDocument && ( m_iCurAttr != -1 || m_iCurField != -1 ) )
 	{
 		if ( m_iElementDepth == 0 )
@@ -18743,7 +19149,7 @@ void CSphSource_XMLPipe2::EndElement ( const char * szName )
 
 void CSphSource_XMLPipe2::Characters ( const char * pCharacters, int iLen )
 {
-	if ( m_iCurAttr == -1 && m_iCurField == -1 )
+	if ( ( m_iCurAttr == -1 && m_iCurField == -1 ) && !m_bInId )
 		return;
 	
 	if ( iLen + m_iFieldBufferLen < MAX_FIELD_LENGTH )

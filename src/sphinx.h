@@ -1804,7 +1804,7 @@ public:
 	virtual int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit ) = 0;
 
 	/// build index by mering current index with given index
-	virtual bool				Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilters ) = 0;
+	virtual bool				Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilters, bool bMergeKillLists ) = 0;
 
 public:
 	/// dump human-readable header info to given file

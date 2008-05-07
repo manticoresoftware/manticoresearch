@@ -884,7 +884,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 //////////////////////////////////////////////////////////////////////////
 
 bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
-	const CSphConfigSection & hSrc, const char * sSrc, CSphVector<CSphFilter> & tPurge, bool bRotate )
+	const CSphConfigSection & hSrc, const char * sSrc, CSphVector<CSphFilter> & tPurge, bool bRotate, bool bMergeKillLists )
 {
 	// check config
 	if ( !hDst("path") )
@@ -935,7 +935,7 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 	pDst->SetProgressCallback ( ShowProgress );
 
 	float tmMerge = -sphLongTimer ();
-	if ( !pDst->Merge ( pSrc, tPurge ) )
+	if ( !pDst->Merge ( pSrc, tPurge, bMergeKillLists ) )
 		sphDie ( "failed to merge index '%s' into index '%s': %s", sSrc, sDst, pDst->GetLastError().cstr() );
 	tmMerge += sphLongTimer ();
 	printf ( "merged in %.1f sec\n", tmMerge );
@@ -1002,6 +1002,7 @@ int main ( int argc, char ** argv )
 
 	CSphVector<const char *> dIndexes;
 	bool bIndexAll = false;
+	bool bMergeKillLists = false;
 
 	int i;
 	for ( i=1; i<argc; i++ )
@@ -1057,6 +1058,10 @@ int main ( int argc, char ** argv )
 		{
 			bIndexAll = true;
 
+		} else if ( strcasecmp ( argv[i], "--merge-killlists" )==0 )
+		{
+			bMergeKillLists = true;
+
 		} else if ( sphIsAlpha(argv[i][0]) )
 		{
 			dIndexes.Add ( argv[i] );
@@ -1106,6 +1111,8 @@ int main ( int argc, char ** argv )
 				"--merge-dst-range <attr> <min> <max>\n"
 				"\t\t\tfilter 'dst-index' on merge, keep only those documents\n"
 				"\t\t\twhere 'attr' is between 'min' and 'max' (inclusive)\n"
+				"--merge-killlists"
+				"\t\t\tmerge src and dst killlists instead of applying src killlist to dst"
 				"\n"
 				"Examples:\n"
 				"indexer --quiet myidx1\treindex 'myidx1' defined in 'sphinx.conf'\n"
@@ -1228,7 +1235,7 @@ int main ( int argc, char ** argv )
 
 		bIndexedOk = DoMerge (
 			hConf["index"][dIndexes[0]], dIndexes[0],
-			hConf["index"][dIndexes[1]], dIndexes[1], dMergeDstFilters, g_bRotate );
+			hConf["index"][dIndexes[1]], dIndexes[1], dMergeDstFilters, g_bRotate, bMergeKillLists );
 	} else if ( bIndexAll )
 	{
 		hConf["index"].IterateStart ();

@@ -1576,6 +1576,7 @@ static void WriteFileInfo ( CSphWriter & tWriter, const CSphSavedFile & tInfo )
 struct CSphIndex_VLN : CSphIndex
 {
 	friend struct CSphDoclistRecord;
+	friend struct CSphWordDataRecord;
 
 								CSphIndex_VLN ( const char * sFilename );
 								~CSphIndex_VLN ();
@@ -1608,7 +1609,7 @@ struct CSphIndex_VLN : CSphIndex
 
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats );
 
-	virtual bool				Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilters );
+	virtual bool				Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilters, bool bMergeKillLists );
 	void						MergeWordData ( CSphWordRecord & tDstWord, CSphWordRecord & tSrcWord );
 
 	virtual int					UpdateAttributes ( const CSphAttrUpdate_t & tUpd );
@@ -5744,7 +5745,7 @@ bool CSphIndex_VLN::WriteHeader ( CSphWriter & fdInfo, SphOffset_t iCheckpointsP
 
 	// wordlist checkpoints
 	fdInfo.PutBytes ( &iCheckpointsPos, sizeof(SphOffset_t) );
-	fdInfo.PutDword ( m_dWordlistCheckpoints.GetLength() );
+	fdInfo.PutDword ( m_dWordlistCheckpoints.GetLength () );
 
 	// index stats
 	fdInfo.PutDword ( m_tStats.m_iTotalDocuments );
@@ -7808,7 +7809,7 @@ static bool CopyFile( const char * sSrc, const char * sDst, CSphString & sErrStr
 	return true;
 }
 
-bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilters )
+bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilters, bool bMergeKillLists )
 {
 	assert( pSource );
 
@@ -8029,9 +8030,6 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilte
 	wrDstIndex.PutBytes ( &bDummy, 1 );
 	wrDstHitlist.PutBytes ( &bDummy, 1 );
 
-	CSphVector<CSphWordlistCheckpoint> dWordlistCheckpoints;
-	dWordlistCheckpoints.Reserve ( 1024 );
-
 	int iWordListEntries = 0;
 	CSphMergeSource tDstSource, tSrcSource;
 
@@ -8098,6 +8096,26 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilte
 		dFilters[i].m_tLocator = tCol.m_tLocator;
 
 		tMerge.m_dFilters.Add ( dFilters[i] );
+	}
+
+	// add killlist filters (if any)
+	if ( !bMergeKillLists )
+	{
+		DWORD nKillListSize = pSrcIndex->GetKillListSize ();
+		if ( nKillListSize )
+		{
+			CSphFilter tKillListFilter;
+			SphAttr_t * pKillList = pSrcIndex->GetKillList ();
+
+			tKillListFilter.m_bExclude = true;
+			tKillListFilter.m_eType = SPH_FILTER_VALUES;
+			tKillListFilter.m_uMinValue = pKillList [0];
+			tKillListFilter.m_uMaxValue = pKillList [nKillListSize -1];
+			tKillListFilter.m_sAttrName = "@id";
+			tKillListFilter.SetExternalValues ( pKillList, nKillListSize );
+			tKillListFilter.Setup ( NULL );
+			tMerge.m_dFilters.Add ( tKillListFilter );
+		}
 	}
 
 	if ( !tSrcSource.m_pIndex->IterateWordlistStart () )
@@ -8184,7 +8202,7 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilte
 			tCheckpoint.m_iWordID = tMerge.m_iLastWordID;
 			tCheckpoint.m_iWordlistOffset = ( DWORD ) tMerge.m_iWordlistOffset;
 
-			dWordlistCheckpoints.Add ( tCheckpoint );
+			m_dWordlistCheckpoints.Add ( tCheckpoint );
 		}
 
 		iWordListEntries++;
@@ -8201,28 +8219,31 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilte
 	tSrcSource.m_pIndex->IterateWordlistStop ();
 	tDstSource.m_pIndex->IterateWordlistStop ();
 
-	if ( dWordlistCheckpoints.GetLength() )
-		wrDstIndex.PutBytes ( &dWordlistCheckpoints[0], dWordlistCheckpoints.GetLength() * sizeof ( CSphWordlistCheckpoint ) );
-
-	// merge spk
-	CSphVector<SphAttr_t> dKillList;
-	dKillList.Reserve ( 1024 );
-	for ( int i = 0; i < tSrcSource.m_pIndex->GetKillListSize (); i++ )
-		dKillList.Add ( tSrcSource.m_pIndex->GetKillList () [i] );
-
-	for ( int i = 0; i < tDstSource.m_pIndex->GetKillListSize (); i++ )
-		dKillList.Add ( tDstSource.m_pIndex->GetKillList () [i] );
-
-	dKillList.Uniq ();
+	if ( m_dWordlistCheckpoints.GetLength() )
+		wrDstIndex.PutBytes ( &m_dWordlistCheckpoints[0], m_dWordlistCheckpoints.GetLength() * sizeof ( CSphWordlistCheckpoint ) );
 
 	CSphAutofile fdKillList ( GetIndexFileName("spk.tmp"), SPH_O_NEW, m_sLastError );
 	if ( fdKillList.GetFD () < 0 )
 		return false;
 
-	if ( dKillList.GetLength () )
+	if ( bMergeKillLists )
 	{
-		if ( !sphWriteThrottled ( fdKillList.GetFD (), &(dKillList [0]), dKillList.GetLength ()*sizeof (SphAttr_t), "kill_list", m_sLastError ) )
-			return false;
+		// merge spk
+		CSphVector<SphAttr_t> dKillList;
+		dKillList.Reserve ( 1024 );
+		for ( int i = 0; i < tSrcSource.m_pIndex->GetKillListSize (); i++ )
+			dKillList.Add ( tSrcSource.m_pIndex->GetKillList () [i] );
+
+		for ( int i = 0; i < tDstSource.m_pIndex->GetKillListSize (); i++ )
+			dKillList.Add ( tDstSource.m_pIndex->GetKillList () [i] );
+
+		dKillList.Uniq ();
+
+		if ( dKillList.GetLength () )
+		{
+			if ( !sphWriteThrottled ( fdKillList.GetFD (), &(dKillList [0]), dKillList.GetLength ()*sizeof (SphAttr_t), "kill_list", m_sLastError ) )
+				return false;
+		}
 	}
 
 	fdKillList.Close ();
@@ -19430,19 +19451,41 @@ void CSphWordDataRecord::Read( CSphMergeSource * pSource, CSphMergeData * pMerge
 		tDoc.Read ( pSource );
 
 		bool bOK = true;
-		if ( m_bFilter ) ARRAY_FOREACH ( i, pMergeData->m_dFilters )
-		{
-			const CSphFilter & tFilter = pMergeData->m_dFilters[i];
-			if ( tFilter.m_eType==SPH_FILTER_RANGE )
+		if ( m_bFilter )
+			for ( int i = 0; i < pMergeData->m_dFilters.GetLength () && bOK; i++ )
 			{
-				SphAttr_t uValue = sphGetRowAttr ( tDoc.m_pRowitems, tFilter.m_tLocator );
-				if ( tFilter.m_bExclude ^ ( uValue<tFilter.m_uMinValue || uValue>tFilter.m_uMaxValue ) )
+				const CSphFilter & tFilter = pMergeData->m_dFilters[i];
+				SphAttr_t uValue = 0;
+
+				switch ( tFilter.GetAttrType () )
 				{
-					bOK = true;
+				case SPH_FILTERATTR_ATTR:
+					if ( tDoc.m_pRowitems )
+						uValue = sphGetRowAttr ( tDoc.m_pRowitems, tFilter.m_tLocator );
+					else
+					{
+						const DWORD * pDocinfo = pSource->m_pIndex->FindDocinfo ( tDoc.m_iDocID );
+						uValue = sphGetRowAttr ( pDocinfo, tFilter.m_tLocator );
+					}
+					break;
+				case SPH_FILTERATTR_ID:	
+					uValue = tDoc.m_iDocID;
+					break;
+				}
+
+				switch ( tFilter.m_eType )
+				{
+				case SPH_FILTER_RANGE:
+					if ( tFilter.m_bExclude ^ ( uValue<tFilter.m_uMinValue || uValue>tFilter.m_uMaxValue ) )
+						bOK = false;
+					break;
+
+				case SPH_FILTER_VALUES:
+					if ( !( tFilter.m_bExclude ^ sphGroupMatch ( uValue, tFilter.GetValueArray (), tFilter.GetNumValues () ) ) )
+						bOK = false;
 					break;
 				}
 			}
-		}
 
 		if ( bOK )
 		{

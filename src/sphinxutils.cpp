@@ -139,7 +139,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "ngram_chars",			0, NULL },
 	{ "phrase_boundary",		0, NULL },
 	{ "phrase_boundary_step",	0, NULL },
-	{ "preload_wordlist",		0, NULL },
+	{ "ondisk_dict",			0, NULL },
 	{ "type",					0, NULL },
 	{ "local",					KEY_LIST, NULL },
 	{ "agent",					KEY_LIST, NULL },
@@ -175,7 +175,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "seamless_rotate",		0, NULL },
 	{ "preopen_indexes",		0, NULL },
 	{ "unlink_old",				0, NULL },
-	{ "preload_wordlist",		0, NULL },
+	{ "ondisk_dict_default",	0, NULL },
 	{ "attr_flush_period",		0, NULL },
 	{ NULL,						0, NULL }
 };

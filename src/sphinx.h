@@ -1855,11 +1855,6 @@ public:
 	/// needed because updates and saves may be performed by other processes
 	virtual void				SetAttrsUpdated ( bool bFlag ) { m_bAttrsUpdated = bFlag; }
 
-	/// wordlist iteration. used to merge several indexes
-	virtual bool				IterateWordlistStart () = 0;
-	virtual bool				IterateWordlistNext ( SphWordID_t & iWordID, SphOffset_t & iDoclistPos, int & iDocNum, int & iHitNum ) = 0;
-	virtual void				IterateWordlistStop () = 0;
-
 protected:
 	ProgressCallback_t *		m_pProgress;
 	CSphSchema					m_tSchema;

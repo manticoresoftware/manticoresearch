@@ -75,7 +75,7 @@ struct ServedIndex_t
 	bool				m_bEnabled;		///< to disable index in cases when rotation fails
 	bool				m_bMlock;
 	bool				m_bPreopen;
-	bool				m_bPreloadWordlist;
+	bool				m_bOnDiskDict;
 	bool				m_bStar;
 	bool				m_bToDelete;
 	bool				m_bOnlyNew;
@@ -117,7 +117,7 @@ static int				g_iReadTimeout	= 5;	// sec
 static int				g_iChildren		= 0;
 static int				g_iMaxChildren	= 0;
 static bool				g_bPreopenIndexes = false;
-static bool				g_bPreloadWordlists = true;
+static bool				g_bOnDiskDicts	= false;
 static bool				g_bUnlinkOld	= true;
 static int				g_iSocket		= 0;
 static int				g_iQueryLogFile	= -1;
@@ -259,7 +259,7 @@ void ServedIndex_t::Reset ()
 	m_bEnabled	= true;
 	m_bMlock	= false;
 	m_bPreopen	= false;
-	m_bPreloadWordlist = true;
+	m_bOnDiskDict = false;
 	m_bStar		= false;
 	m_bToDelete	= false;
 	m_bOnlyNew	= false;
@@ -4561,7 +4561,7 @@ void SeamlessTryToForkPrereader ()
 
 	g_pPrereading->SetStar ( tServed.m_bStar );
 	g_pPrereading->SetPreopen ( tServed.m_bPreopen || g_bPreopenIndexes ); 
-	g_pPrereading->SetWordlistPreload ( tServed.m_bPreloadWordlist && g_bPreloadWordlists );
+	g_pPrereading->SetWordlistPreload ( !tServed.m_bOnDiskDict && !g_bOnDiskDicts );
 
 	// rebase buffer index
 	char sNewPath [ SPH_MAX_FILENAME_LEN ];
@@ -4937,10 +4937,10 @@ void CheckPipes ()
 
 void ConfigureIndex ( ServedIndex_t & tIdx, const CSphConfigSection & hIndex )
 {
-	tIdx.m_bMlock =				hIndex.GetInt ( "mlock", 0 )		!= 0;
-	tIdx.m_bStar =				hIndex.GetInt ( "enable_star", 0 )	!= 0;
-	tIdx.m_bPreopen =			hIndex.GetInt ( "preopen", 0 )		!= 0;
-	tIdx.m_bPreloadWordlist =	hIndex.GetInt ( "preload_wordlist", 0 )	!= 0;
+	tIdx.m_bMlock =			hIndex.GetInt ( "mlock", 0 )		!= 0;
+	tIdx.m_bStar =			hIndex.GetInt ( "enable_star", 0 )	!= 0;
+	tIdx.m_bPreopen =		hIndex.GetInt ( "preopen", 0 )		!= 0;
+	tIdx.m_bOnDiskDict =	hIndex.GetInt ( "ondisk_dict", 0 )	!= 0;
 }
 
 
@@ -5140,7 +5140,7 @@ void AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex )
 		tIdx.m_pIndex = sphCreateIndexPhrase ( hIndex["path"].cstr() );
 		tIdx.m_pIndex->SetStar ( tIdx.m_bStar );
 		tIdx.m_pIndex->SetPreopen ( tIdx.m_bPreopen || g_bPreopenIndexes );
-		tIdx.m_pIndex->SetWordlistPreload ( tIdx.m_bPreloadWordlist && g_bPreloadWordlists );
+		tIdx.m_pIndex->SetWordlistPreload ( !tIdx.m_bOnDiskDict && !g_bOnDiskDicts );
 		tIdx.m_bEnabled = false;
 
 		// done
@@ -6026,7 +6026,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		g_iMaxChildren = hSearchd["max_children"].intval();
 
 	g_bPreopenIndexes = hSearchd.GetInt ( "preopen_indexes", (int)g_bPreopenIndexes ) != 0;
-	g_bPreloadWordlists = hSearchd.GetInt ( "preload_wordlist", (int)g_bPreloadWordlists ) != 0;
+	g_bOnDiskDicts = hSearchd.GetInt ( "ondisk_dict_default", (int)g_bOnDiskDicts ) != 0;
 	g_bUnlinkOld = hSearchd.GetInt ( "unlink_old", (int)g_bUnlinkOld ) != 0;
 
 	if ( hSearchd("max_matches") )

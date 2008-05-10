@@ -917,8 +917,8 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 		return false;
 	}
 
-	pSrc->SetWordlistPreload ( hSrc.GetInt ( "preload_wordlist", 1 ) != 0 );
-	pDst->SetWordlistPreload ( hDst.GetInt ( "preload_wordlist", 1 ) != 0 );
+	pSrc->SetWordlistPreload ( hSrc.GetInt ( "ondisk_dict" ) == 0 );
+	pDst->SetWordlistPreload ( hDst.GetInt ( "ondisk_dict" ) == 0 );
 
 	if ( !pSrc->Lock() && !bRotate )
 	{

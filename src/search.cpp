@@ -303,7 +303,7 @@ int main ( int argc, char ** argv )
 
 		CSphIndex * pIndex = sphCreateIndexPhrase ( hIndex["path"].cstr() );
 		pIndex->SetStar ( hIndex.GetInt("enable_star")!=0 );
-		pIndex->SetWordlistPreload ( hIndex.GetInt("preload_wordlist")!=0 );
+		pIndex->SetWordlistPreload ( hIndex.GetInt("ondisk_dict")==0 );
 
 		CSphString sWarning;
 

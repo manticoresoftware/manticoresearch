@@ -10934,7 +10934,9 @@ class ExtNode_i
 public:
 								ExtNode_i ();
 	virtual						~ExtNode_i () {}
+
 	static ExtNode_i *			Create ( const CSphExtendedQueryNode * pNode, const CSphTermSetup & tSetup, DWORD uQuerypos, CSphString * pWarning );
+	static ExtNode_i *			Create ( const CSphString & sTerm, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup, DWORD uQuerypos, CSphString * pWarning );
 
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID ) = 0;
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID ) = 0;
@@ -10987,6 +10989,27 @@ protected:
 	CSphString *				m_pWarning;
 	int							m_iStride;		///< docinfo stride (for inline mode only)
 	CSphRowitem *				m_pDocinfo;		///< docinfo storage (for inline mode only)
+};
+
+
+/// single keyword streamer, with position filtering
+class ExtTermPos_c : public ExtTerm_c
+{
+public:
+								ExtTermPos_c ( const CSphString & sTerm, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup, DWORD uQuerypos, CSphString * pWarning );
+	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
+	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
+
+protected:
+	int							m_iMaxFieldPos;
+	SphDocID_t					m_uTermMaxID;
+	const ExtDoc_t *			m_pRawDocs;
+	const ExtHit_t *			m_pRawHits;
+	SphDocID_t					m_uLastID;
+	const ExtHit_t *			m_pMyHit;					///< current hit for hits getter
+	ExtDoc_t					m_dMyDocs[MAX_DOCS];		///< all documents within the required pos range
+	ExtHit_t					m_dMyHits[MAX_HITS];		///< all hits within the required pos range
+	ExtHit_t					m_dFilteredHits[MAX_HITS];	///< hits from requested subset of the documents (for GetHitsChunk())
 };
 
 
@@ -11165,6 +11188,16 @@ ExtNode_i::ExtNode_i ()
 	m_dHits[0].m_uDocid = DOCID_MAX;
 }
 
+
+ExtNode_i * ExtNode_i::Create ( const CSphString & sTerm, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup, DWORD uQuerypos, CSphString * pWarning )
+{
+	if ( iMaxFieldPos>0 )
+		return new ExtTermPos_c ( sTerm, uFields, iMaxFieldPos, tSetup, uQuerypos, pWarning );
+	else
+		return new ExtTerm_c ( sTerm, uFields, tSetup, uQuerypos, pWarning );
+}
+
+
 ExtNode_i * ExtNode_i::Create ( const CSphExtendedQueryNode * pNode, const CSphTermSetup & tSetup, DWORD uQuerypos, CSphString * pWarning )
 {
 	if ( pNode->IsPlain() )
@@ -11178,7 +11211,7 @@ ExtNode_i * ExtNode_i::Create ( const CSphExtendedQueryNode * pNode, const CSphT
 		DWORD uFields = tAtom.m_uFields;
 
 		if ( iWords==1 )
-			return new ExtTerm_c ( tAtom.m_dWords[0].m_sWord, uFields, tSetup, uQuerypos, pWarning );
+			return Create ( tAtom.m_dWords[0].m_sWord, uFields, tAtom.m_iMaxFieldPos, tSetup, uQuerypos, pWarning );
 
 		assert ( tAtom.m_iMaxDistance>=0 );
 		if ( tAtom.m_iMaxDistance==0 )
@@ -11196,9 +11229,9 @@ ExtNode_i * ExtNode_i::Create ( const CSphExtendedQueryNode * pNode, const CSphT
 
 				// create AND node
 				const CSphVector<CSphExtendedQueryAtomWord> & dWords = pNode->m_tAtom.m_dWords;
-				ExtNode_i * pCur = new ExtTerm_c ( dWords[0].m_sWord, uFields, tSetup, uQuerypos+dWords[0].m_iAtomPos, pWarning );
+				ExtNode_i * pCur = Create ( dWords[0].m_sWord, uFields, tAtom.m_iMaxFieldPos, tSetup, uQuerypos+dWords[0].m_iAtomPos, pWarning );
 				for ( int i=1; i<dWords.GetLength(); i++ )
-					pCur = new ExtAnd_c ( pCur, new ExtTerm_c ( dWords[i].m_sWord, uFields, tSetup, uQuerypos+dWords[i].m_iAtomPos, pWarning ) );
+					pCur = new ExtAnd_c ( pCur, Create ( dWords[i].m_sWord, uFields, tAtom.m_iMaxFieldPos, tSetup, uQuerypos+dWords[i].m_iAtomPos, pWarning ) );
 				return pCur;
 
 			} else
@@ -11424,6 +11457,144 @@ void ExtTerm_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 		assert ( hQwords(m_tQword.m_sWord) );
 		m_fIDF = hQwords(m_tQword.m_sWord)->m_fIDF;
 	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+const DWORD MAGIC_POS_MASK = 0xffffffUL;
+
+
+ExtTermPos_c::ExtTermPos_c ( const CSphString & sTerm, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup, DWORD uQuerypos, CSphString * pWarning )
+	: ExtTerm_c			( sTerm, uFields, tSetup, uQuerypos, pWarning )
+	, m_iMaxFieldPos	( iMaxFieldPos )
+	, m_uTermMaxID		( 0 )
+	, m_pRawDocs		( NULL )
+	, m_pRawHits		( NULL )
+	, m_uLastID			( 0 )
+	, m_pMyHit			( 0 )
+{
+}
+
+
+const ExtDoc_t * ExtTermPos_c::GetDocsChunk ( SphDocID_t * pMaxID )
+{
+	// fetch more docs if needed
+	if ( !m_pRawDocs ) m_pRawDocs = ExtTerm_c::GetDocsChunk ( &m_uTermMaxID );
+	if ( !m_pRawDocs ) return NULL;
+
+	// filter the hits, and build the documents list
+	int iMyDoc = 0;
+	int iMyHit = 0;
+
+	const ExtDoc_t * pDocs = m_pRawDocs;
+	const ExtHit_t * pHits = m_pRawHits;
+	m_uLastID = 0;
+
+	while ( iMyHit<MAX_HITS-1 )
+	{
+		// fetch more hits if needed
+		if ( !pHits || pHits->m_uDocid==DOCID_MAX ) pHits = ExtTerm_c::GetHitsChunk ( m_pRawDocs, m_uTermMaxID );
+		if ( !pHits ) break;
+
+		// scan until next acceptable hit
+		while ( pHits->m_uDocid < pDocs->m_uDocid ) pHits++; // skip leftovers
+		while ( pHits->m_uDocid!=DOCID_MAX && (int)( pHits->m_uHitpos & MAGIC_POS_MASK )>m_iMaxFieldPos ) pHits++;
+		if ( pHits->m_uDocid==DOCID_MAX ) continue;
+
+		// find and emit new document
+		while ( pDocs->m_uDocid<pHits->m_uDocid ) pDocs++; // FIXME? unsafe in broken cases
+		assert ( pDocs->m_uDocid==pHits->m_uDocid );
+
+		SphDocID_t uLastID = pDocs->m_uDocid;
+		m_dMyDocs[iMyDoc++] = *pDocs++;
+
+		// copy acceptable hits for this document
+		while ( iMyHit<MAX_HITS-1 && pHits->m_uDocid==uLastID )
+		{
+			if ( (int)( pHits->m_uHitpos & MAGIC_POS_MASK )<=m_iMaxFieldPos )
+				m_dMyHits[iMyHit++] = *pHits;
+			pHits++;
+		}
+
+		if ( iMyHit==MAX_HITS-1 )
+		{
+			// there is no more space for acceptable hits; but further calls to GetHits() *might* produce some
+			// we need to memorize the trailing document id
+			m_uLastID = uLastID;
+		}
+	}
+
+	m_pRawHits = pHits;
+
+	assert ( iMyDoc>=0 && iMyDoc<MAX_DOCS );
+	assert ( iMyHit>=0 && iMyHit<MAX_DOCS );
+
+	m_dMyDocs[iMyDoc].m_uDocid = DOCID_MAX;
+	m_dMyHits[iMyHit].m_uDocid = DOCID_MAX;
+	m_pMyHit = iMyHit ? m_dMyHits : NULL;
+
+	m_uMaxID = iMyDoc ? m_dDocs[iMyDoc-1].m_uDocid : 0;
+	if ( pMaxID ) *pMaxID = m_uMaxID;
+
+	return iMyDoc ? m_dMyDocs : NULL;
+}
+
+
+const ExtHit_t * ExtTermPos_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t ) // OPTIMIZE: could possibly use uMaxID
+{
+	const ExtHit_t * pMyHit = m_pMyHit;
+	if ( !pMyHit )
+		return NULL;
+
+	int iFilteredHits = 0;
+	while ( iFilteredHits<MAX_HITS-1 )
+	{
+		// skip hits that the caller is not interested in
+		while ( pMyHit->m_uDocid < pDocs->m_uDocid ) pMyHit++; // OPTIMIZE: save both current positions between calls
+		if ( pMyHit->m_uDocid==DOCID_MAX )
+		{
+			if ( !m_uLastID )
+			{
+				pMyHit = NULL;
+				break;
+			}
+
+			// handle trailing hits for the last emitted document
+			const ExtHit_t * pRaw = m_pRawHits;
+			if ( !pRaw || pRaw->m_uDocid==DOCID_MAX ) pRaw = m_pRawHits = ExtTerm_c::GetHitsChunk ( m_pRawDocs, m_uTermMaxID );
+			if ( !pRaw ) break;
+
+			while ( pRaw->m_uDocid==m_uLastID && iFilteredHits<MAX_HITS-1 ) 
+			{
+				if ( (int)( pRaw->m_uHitpos & MAGIC_POS_MASK )<=m_iMaxFieldPos )
+					m_dFilteredHits[iFilteredHits++] = *pRaw;
+				pRaw++;
+			}
+
+			if ( pRaw->m_uDocid!=m_uLastID && pRaw->m_uDocid!=DOCID_MAX )
+			{
+				m_uLastID = 0;
+				pMyHit = NULL;
+			}
+
+			m_pRawHits = pRaw;
+			break;
+		}
+
+		// skip docs that i do not have
+		while ( pDocs->m_uDocid < pMyHit->m_uDocid ) pDocs++;
+		if ( pDocs->m_uDocid==DOCID_MAX )
+			break;
+
+		// copy matching hits
+		while ( iFilteredHits<MAX_HITS-1 && pDocs->m_uDocid==pMyHit->m_uDocid )
+			m_dFilteredHits[iFilteredHits++] = *pMyHit++;
+	}
+
+	m_pMyHit = pMyHit;
+
+	m_dFilteredHits[iFilteredHits].m_uDocid = DOCID_MAX;
+	return iFilteredHits ? m_dFilteredHits : NULL;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -11876,10 +12047,10 @@ ExtPhrase_c::ExtPhrase_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, c
 	ARRAY_FOREACH ( i, m_dQposDelta )
 		m_dQposDelta[i] = -INT_MAX;
 
-	ExtNode_i * pCur = new ExtTerm_c ( dWords[0].m_sWord, uFields, tSetup, uQuerypos+dWords[0].m_iAtomPos, pWarning );
+	ExtNode_i * pCur = Create ( dWords[0].m_sWord, uFields, pNode->m_tAtom.m_iMaxFieldPos, tSetup, uQuerypos+dWords[0].m_iAtomPos, pWarning );
 	for ( int i=1; i<iWords; i++ )
 	{
-		pCur = new ExtAnd_c ( pCur, new ExtTerm_c ( dWords[i].m_sWord, uFields, tSetup, uQuerypos+dWords[i].m_iAtomPos, pWarning ) );
+		pCur = new ExtAnd_c ( pCur, Create ( dWords[i].m_sWord, uFields, pNode->m_tAtom.m_iMaxFieldPos, tSetup, uQuerypos+dWords[i].m_iAtomPos, pWarning ) );
 		m_dQposDelta [ dWords[i-1].m_iAtomPos - dWords[0].m_iAtomPos ] = dWords[i].m_iAtomPos - dWords[i-1].m_iAtomPos;
 	}
 	m_pNode = pCur;

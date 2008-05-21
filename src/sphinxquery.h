@@ -87,12 +87,14 @@ struct CSphExtendedQueryAtom
 {
 	CSphVector<CSphExtendedQueryAtomWord>	m_dWords;
 	DWORD		m_uFields;
+	int			m_iMaxFieldPos;		/// max acceptable position within field; 0 means no limit
 	int			m_iMaxDistance;
 	bool		m_bQuorum;
 
 	/// default ctor
 	CSphExtendedQueryAtom ()
 		: m_uFields		( 0xFFFFFFFF )
+		, m_iMaxFieldPos( 0 )
 		, m_iMaxDistance( -1 )
 		, m_bQuorum		( false )
 	{}

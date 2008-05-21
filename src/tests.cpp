@@ -14,6 +14,7 @@
 #include "sphinx.h"
 #include "sphinxexpr.h"
 #include "sphinxutils.h"
+#include "sphinxquery.h"
 #include <math.h>
 
 //////////////////////////////////////////////////////////////////////////
@@ -38,7 +39,7 @@ bool CreateSynonymsFile ( const char * sMagic )
 		"MS DOS => MS-DOS\n"
 		"feat. => featuring\n"
 		"U.S. => US\n"
-		"U.S.A => USA\n"
+		"U.S.A. => USA\n"
 		"U.S.B. => USB\n"
 		"U.S.D. => USD\n"
 		"U.S.P. => USP\n"
@@ -119,6 +120,7 @@ void TestTokenizer ( bool bUTF8, bool bEscaped = false )
 			"2", "AT*&*T",						"at", NULL,
 			"2", "# OS/2's system install",		"OS/2", "system", "install", NULL,
 			"2", "IBM-s/OS/2/Merlin",			"ibm-s", "OS/2", "merlin", NULL,
+			"2", "U.S.A",						"US", NULL,
 			"2", "MS DOSS feat.Deskview.MS DOS",			"ms", "doss", "featuring", "deskview", "MS-DOS", NULL,
 			"2", sMagic,									"test", NULL,
 			"2", "U.S. U.S.A. U.S.A.F.",					"US", "USA", "USAF", NULL,
@@ -196,6 +198,44 @@ void TestTokenizer ( bool bUTF8, bool bEscaped = false )
 		pTokenizer->SetBuffer ( (BYTE*)sLine4, strlen(sLine4) );
 		assert ( !strcmp ( (char*)pTokenizer->GetToken(), sTok4 ) );
 		assert ( pTokenizer->GetToken()==NULL );
+
+		// test short word callbacks
+		printf ( "%s for short token handling\n", sPrefix );
+		ISphTokenizer * pShortTokenizer = pTokenizer->Clone ( bEscaped );
+
+		CSphRemapRange tStar ( '*', '*', '*' );
+		pShortTokenizer->AddCaseFolding ( tStar );
+
+		CSphTokenizerSettings tSettings = pShortTokenizer->GetSettings();
+		tSettings.m_iMinWordLen = 5;
+		pShortTokenizer->Setup ( tSettings );
+
+		pShortTokenizer->EnableQueryParserMode ( true );
+
+		char * dTestsShort[] =
+		{
+			"ab*",		"ab*",		NULL,
+			"*ab",		"*ab",		NULL,
+			"abcdef",	"abcdef",	NULL,
+			"ab *ab* abc", "*ab*",	NULL,
+			NULL
+		};
+
+		for ( int iCur=0; dTestsShort[iCur]; )
+		{
+			pShortTokenizer->SetBuffer ( (BYTE*)(dTestsShort [iCur]), strlen ( (const char*)dTestsShort [iCur] ) );
+			iCur++;
+			for ( BYTE * pToken=pShortTokenizer->GetToken(); pToken; pToken=pShortTokenizer->GetToken() )
+			{
+				assert ( dTestsShort[iCur] && strcmp ( (const char*)pToken, dTestsShort[iCur] )==0 );
+				iCur++;
+			}
+
+			assert ( !dTestsShort [iCur] );
+			iCur++;
+		}
+
+		SafeDelete ( pShortTokenizer );
 
 		// test uberlong synonym-only tokens
 		if ( iRun==2 )
@@ -337,7 +377,7 @@ void TestStripper ()
 	{
 		// source-data, index-attrs, remove-elements, expected-results
 		{ "<html>trivial test</html>", "", "", " trivial test " },
-		{ "<html>lets <img src=\"g/smth.jpg\" alt=\"nice picture\"> index attrs</html>", "img=alt", "", " lets nice picture index attrs " },
+		{ "<html>lets <img src=\"g/smth.jpg\" alt=\"nice picture\">index attrs</html>", "img=alt", "", " lets nice picture index attrs " },
 		{ "<html>   lets  also<script> whatever here; a<b</script>remove scripts", "", "script, style", "    lets  also remove scripts" },
 		{ "testing in<b><font color='red'>line</font> ele<em>men</em>ts", "", "", "testing inline elements" },
 		{ "testing non<p>inline</h1>elements", "", "", "testing non inline elements" },
@@ -345,7 +385,8 @@ void TestStripper ()
 		{ "testing &#1040;&#1041;&#1042; utf encoding", "", "", "testing \xD0\x90\xD0\x91\xD0\x92 utf encoding" },
 		{ "testing <1 <\" <\x80 <\xe0 <\xff </3 malformed tags", "", "", "testing <1 <\" <\x80 <\xe0 <\xff </3 malformed tags" },
 		{ "testing comm<!--comm-->ents", "", "", "testing comments" },
-		{ "&lt; &gt; &thetasym; &somethingverylong; &the", "", "", "< > \xCF\x91 &somethingverylong; &the" }
+		{ "&lt; &gt; &thetasym; &somethingverylong; &the", "", "", "< > \xCF\x91 &somethingverylong; &the" },
+		{ "testing <img src=\"g/smth.jpg\" alt=\"nice picture\" rel=anotherattr junk=throwaway>inline tags vs attr indexing", "img=alt,rel", "", "testing nice picture anotherattr inline tags vs attr indexing" }
 	};
 
 	for ( int iTest=0; iTest<(int)(sizeof(sTests)/sizeof(sTests[0])); iTest++ )
@@ -564,6 +605,111 @@ void BenchExpr ()
 
 //////////////////////////////////////////////////////////////////////////
 
+CSphString ReconstructNode ( const CSphExtendedQueryNode * pNode )
+{
+	CSphString sRes ( "" );
+
+	if ( pNode->IsPlain() )
+	{
+		// say just words to me
+		const CSphExtendedQueryAtom & tAtom = pNode->m_tAtom;
+		const CSphVector<CSphExtendedQueryAtomWord> & dWords = tAtom.m_dWords;
+		ARRAY_FOREACH ( i, dWords )
+			sRes.SetSprintf ( "%s %s", sRes.cstr(), dWords[i].m_sWord.cstr() );
+		sRes.Chop ();
+
+		if ( tAtom.m_bQuorum || tAtom.m_iMaxDistance>0 )
+		{
+			sRes.SetSprintf ( "\"%s\"%c%d", sRes.cstr(), tAtom.m_bQuorum ? '/' : '~', tAtom.m_iMaxDistance ); // quorum or proximity
+		
+		} else if ( dWords.GetLength()>1 )
+		{
+			if ( tAtom.m_iMaxDistance==0 )
+				sRes.SetSprintf ( "\"%s\"", sRes.cstr() ); // phrase
+			else
+				sRes.SetSprintf ( "( %s )", sRes.cstr() ); // just bag of words
+		}
+
+	} else
+	{
+		ARRAY_FOREACH ( i, pNode->m_dChildren )
+		{
+			if ( !i )
+				sRes = ReconstructNode ( pNode->m_dChildren[i] );
+			else
+				sRes.SetSprintf ( "%s %s %s", sRes.cstr(), pNode->m_bAny ? "OR" : "AND", ReconstructNode ( pNode->m_dChildren[i] ).cstr() );
+		}
+
+		if ( pNode->m_dChildren.GetLength()>1 )
+			sRes.SetSprintf ( "( %s )", sRes.cstr() );
+	}
+
+	return sRes;
+}
+
+CSphString ReconstructQuery ( const CSphExtendedQuery & tQuery )
+{
+	CSphString sAccept = ReconstructNode ( tQuery.m_pAccept );
+	CSphString sReject = ReconstructNode ( tQuery.m_pReject );
+
+	if ( !sReject.IsEmpty () )
+		sAccept.SetSprintf ( "( %s ) AND NOT ( %s )", sAccept.cstr(), sReject.cstr() );
+
+	return sAccept;
+}
+
+void TestQueryParser ()
+{
+	CSphString sTmp;
+
+	CSphSchema tSchema;
+	CSphColumnInfo tCol;
+	tCol.m_sName = "title"; tSchema.m_dFields.Add ( tCol );
+	tCol.m_sName = "content"; tSchema.m_dFields.Add ( tCol );
+
+	CSphDictSettings tDictSettings;
+	CSphScopedPtr<ISphTokenizer> pTokenizer ( sphCreateSBCSTokenizer () );
+	CSphScopedPtr<CSphDict> pDict ( sphCreateDictionaryCRC ( tDictSettings, pTokenizer.Ptr(), sTmp ) );
+	assert ( pTokenizer.Ptr() );
+	assert ( pDict.Ptr() );
+
+	struct QueryTest_t
+	{
+		const char *	m_sQuery;
+		const char *	m_sReconst;
+	};
+	const QueryTest_t dTest[] =
+	{
+		{ "aaa bbb ccc",					"( aaa AND bbb AND ccc )" },
+		{ "aaa|bbb ccc",					"( ( aaa OR bbb ) AND ccc )" },
+		{ "aaa bbb|ccc",					"( aaa AND ( bbb OR ccc ) )" },
+		{ "aaa (bbb ccc)|ddd",				"( aaa AND ( ( bbb AND ccc ) OR ddd ) )" },
+		{ "aaa bbb|(ccc ddd)",				"( aaa AND ( bbb OR ( ccc AND ddd ) ) )" },
+		{ "aaa bbb|(ccc ddd)|eee|(fff)",	"( aaa AND ( ( ( bbb OR ( ccc AND ddd ) ) OR eee ) OR fff ) )" },
+		{ "aaa bbb|(ccc ddd) eee|(fff)",	"( ( aaa AND ( bbb OR ( ccc AND ddd ) ) ) AND ( eee OR fff ) )" },
+		{ "aaa (ccc ddd)|bbb|eee|(fff)",	"( aaa AND ( ( ( ( ccc AND ddd ) OR bbb ) OR eee ) OR fff ) )" },
+		{ "aaa (ccc ddd)|bbb eee|(fff)",	"( ( aaa AND ( ( ccc AND ddd ) OR bbb ) ) AND ( eee OR fff ) )" },
+		{ "aaa \"bbb ccc\"~5|ddd",			"( aaa AND ( \"bbb ccc\"~5 OR ddd ) )" },
+		{ "aaa bbb|\"ccc ddd\"~5",			"( aaa AND ( bbb OR \"ccc ddd\"~5 ) )" },
+	};
+
+	int nTests = sizeof(dTest)/sizeof(dTest[0]);
+	for ( int i=0; i<nTests; i++ )
+	{
+		printf ( "testing query parser, test %d/%d... ", i+1, nTests );
+
+		CSphExtendedQuery tQuery;
+		sphParseExtendedQuery ( tQuery, dTest[i].m_sQuery, pTokenizer.Ptr(), &tSchema, pDict.Ptr() );
+
+		CSphString sReconst = ReconstructQuery ( tQuery );
+		assert ( sReconst==dTest[i].m_sReconst );
+
+		printf ( "ok\n" );
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 int main ()
 {
 	printf ( "RUNNING INTERNAL LIBSPHINX TESTS\n\n" );
@@ -574,6 +720,7 @@ int main ()
 	BenchTokenizer ( true );
 	BenchExpr ();
 #else
+	TestQueryParser ();
 	TestStripper ();
 	TestTokenizer ( false );
 	TestTokenizer ( true );

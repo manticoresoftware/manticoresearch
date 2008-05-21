@@ -220,6 +220,7 @@ CSphBooleanQueryExpr * CSphBooleanQueryParser::Parse ( const char * sQuery, cons
 	CSphScopedPtr<ISphTokenizer> pMyTokenizer ( pTokenizer->Clone ( true ) );
 	pMyTokenizer->AddSpecials ( "&|()-!" );
 	pMyTokenizer->SetBuffer ( (BYTE*)sBuffer.cstr(), strlen ( sBuffer.cstr() ) );
+	pMyTokenizer->EnableQueryParserMode ( true );
 
 	// iterate all tokens
 	const int QUERY_END = -1;
@@ -747,6 +748,8 @@ void CSphExtendedQueryNode::Submit ( CSphExtendedQueryNode * & pNew, bool bAny )
 		( IsPlain() && m_tAtom.m_dWords.GetLength()>1 && m_tAtom.m_iMaxDistance==-1 ) ||
 		( !IsPlain() && m_dChildren.GetLength()>1 ) ) )
 	{
+		assert ( IsPlain() || m_bAny==false );
+
 		// detach last word/child if we can, and build a new sublevel
 		CSphExtendedQueryNode * pChop;
 		if ( IsPlain() )
@@ -761,7 +764,7 @@ void CSphExtendedQueryNode::Submit ( CSphExtendedQueryNode * & pNew, bool bAny )
 			pChop = m_dChildren.Pop ();
 		}
 
-		pChop->Submit ( pNew, true );
+		pChop->Sublevelize ( pNew, true );
 		assert ( !pChop->IsPlain() );
 
 		Sublevelize ( pChop, false );
@@ -887,9 +890,8 @@ bool CSphExtendedQueryParser::ParseFields ( DWORD & uFields, ISphTokenizer * pTo
 	if ( m_dStack.GetLength() )
 		return Error ( "field specification is only allowed at top level" );
 
-	const char * pStart = (const char *)pTokenizer->GetBufferPtr ();
-	const char * pLastPtr = (const char *)pTokenizer->GetBufferEnd ();
-	const char * pPtr = pStart;
+	const char * pPtr = pTokenizer->GetBufferPtr ();
+	const char * pLastPtr = pTokenizer->GetBufferEnd ();
 
 	if ( pPtr==pLastPtr )
 		return true; // silently ignore trailing field operator
@@ -908,7 +910,7 @@ bool CSphExtendedQueryParser::ParseFields ( DWORD & uFields, ISphTokenizer * pTo
 	{
 		// handle @*
 		uFields = 0xFFFFFFFF;
-		pTokenizer->AdvanceBufferPtr ( pPtr+1-pStart );
+		pTokenizer->SetBufferPtr ( pPtr+1 );
 		return true;
 
 	} else if ( *pPtr=='(' )
@@ -921,7 +923,7 @@ bool CSphExtendedQueryParser::ParseFields ( DWORD & uFields, ISphTokenizer * pTo
 	// handle invalid chars
 	if ( !sphIsAlpha(*pPtr) )
 	{
-		pTokenizer->AdvanceBufferPtr ( pPtr-pStart ); // ignore and re-parse (FIXME! maybe warn?)
+		pTokenizer->SetBufferPtr ( pPtr ); // ignore and re-parse (FIXME! maybe warn?)
 		return true;
 	}
 	assert ( sphIsAlpha(*pPtr) ); // i think i'm paranoid
@@ -937,7 +939,7 @@ bool CSphExtendedQueryParser::ParseFields ( DWORD & uFields, ISphTokenizer * pTo
 		if ( !AddField ( uFields, pFieldStart, pPtr-pFieldStart, pSchema ) )
 			return false;
 
-		pTokenizer->AdvanceBufferPtr ( pPtr-pStart );
+		pTokenizer->SetBufferPtr ( pPtr );
 		if ( bNegate && uFields )
 			uFields = ~uFields;
 		return true;
@@ -976,7 +978,7 @@ bool CSphExtendedQueryParser::ParseFields ( DWORD & uFields, ISphTokenizer * pTo
 			if ( !AddField ( uFields, pFieldStart, pPtr-pFieldStart, pSchema ) )
 				return false;
 
-			pTokenizer->AdvanceBufferPtr ( pPtr-pStart+1 );
+			pTokenizer->SetBufferPtr ( pPtr+1 );
 			if ( bNegate && uFields )
 				uFields = ~uFields;
 			return true;
@@ -1039,6 +1041,7 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 	CSphString sBuffer ( sQuery );
 	CSphScopedPtr<ISphTokenizer> pMyTokenizer ( pTokenizer->Clone ( true ) );
 	pMyTokenizer->AddSpecials ( "()|-!@~\"/" );
+	pMyTokenizer->EnableQueryParserMode ( true );
 	pMyTokenizer->SetBuffer ( (BYTE*)sBuffer.cstr(), strlen ( sBuffer.cstr() ) );
 
 	// iterate all tokens
@@ -1077,10 +1080,9 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 			// the tokenizer will *not* return the number as a token!
 			if ( dState.Last()==XQS_PROXIMITY || dState.Last()==XQS_QUORUM )
 			{
-				const char * sStart = (const char*) pMyTokenizer->GetBufferPtr ();
-				const char * sEnd = (const char*) pMyTokenizer->GetBufferEnd ();
+				const char * sEnd = pMyTokenizer->GetBufferEnd ();
 
-				const char * p = sStart;
+				const char * p = pMyTokenizer->GetBufferPtr ();
 				while ( p<sEnd && isspace(*p) ) p++;
 
 				sToken = p;
@@ -1089,7 +1091,7 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 				if ( p>sToken )
 				{
 					// got a number, skip it
-					pMyTokenizer->AdvanceBufferPtr ( p-sStart );
+					pMyTokenizer->SetBufferPtr ( p );
 					bSpecial = false;
 
 				} else
@@ -1221,7 +1223,8 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 			if ( !ParseFields ( uFields, pMyTokenizer.Ptr (), pSchema ) )
 				return false;
 
-			uFields &= ( 1UL << pSchema->m_dFields.GetLength () ) - 1;
+			if ( pSchema->m_dFields.GetLength () != 32 )
+				uFields &=  ( 1UL << pSchema->m_dFields.GetLength () ) - 1;
 			continue;
 		}
 
@@ -1365,8 +1368,8 @@ static void xqDump ( CSphExtendedQueryNode * pNode, const CSphSchema & tSch, int
 	{
 		const CSphExtendedQueryAtom & tAtom = pNode->m_tAtom;
 		xqIndent ( iIndent );
-		printf ( "MATCH(%s,%d):",
-			tAtom.m_iField>=0 ? tSch.m_dFields[tAtom.m_iField].m_sName.cstr() : "-",
+		printf ( "MATCH(%d,%d):",
+			tAtom.m_uFields,
 			tAtom.m_iMaxDistance );
 		ARRAY_FOREACH ( i, tAtom.m_dWords )
 			printf ( " %s (pos %d)", tAtom.m_dWords[i].m_sWord.cstr(), tAtom.m_dWords[i].m_iAtomPos );

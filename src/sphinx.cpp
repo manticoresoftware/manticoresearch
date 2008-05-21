@@ -2159,11 +2159,11 @@ class CSphTokenizerTraits : public ISphTokenizer
 public:
 	CSphTokenizerTraits ();
 
-	virtual const BYTE *	GetTokenStart () const;
-	virtual const BYTE *	GetTokenEnd () const;
-	virtual const BYTE *	GetBufferPtr () const;
-	virtual const BYTE *	GetBufferEnd () const;
-	virtual void			AdvanceBufferPtr ( int iOffset );
+	virtual const char *	GetTokenStart () const		{ return (const char *) m_pTokenStart; }
+	virtual const char *	GetTokenEnd () const		{ return (const char *) m_pTokenEnd; }
+	virtual const char *	GetBufferPtr () const		{ return (const char *) m_pCur; }
+	virtual const char *	GetBufferEnd () const		{ return (const char *) m_pBufferMax; }
+	virtual void			SetBufferPtr ( const char * sNewPtr );
 
 protected:
 	BYTE * GetTokenSyn ();
@@ -2887,6 +2887,12 @@ void SaveDictionarySettings ( CSphWriter & tWriter, CSphDict * pDict )
 	WriteFileInfo ( tWriter, tWFFileInfo );
 }
 
+
+static inline bool ShortTokenFilter ( BYTE * pToken, int iLen )
+{
+	return pToken [0] == '*' || ( iLen > 0 && pToken [iLen-1] == '*' );
+}
+
 /////////////////////////////////////////////////////////////////////////////
 
 ISphTokenizer::ISphTokenizer ()
@@ -2896,6 +2902,7 @@ ISphTokenizer::ISphTokenizer ()
 	, m_bWasSpecial ( false )
 	, m_bEscaped ( false )
 	, m_iOvershortCount ( 0 )
+	, m_bShortTokenFilter ( false )
 {}
 
 
@@ -3250,35 +3257,12 @@ CSphTokenizerTraits<IS_UTF8>::CSphTokenizerTraits ()
 	m_pAccum = m_sAccum;
 }
 
-template < bool IS_UTF8 >
-const BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenStart () const
-{
-	return m_pTokenStart;
-}
 
 template < bool IS_UTF8 >
-const BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenEnd () const
+void CSphTokenizerTraits<IS_UTF8>::SetBufferPtr ( const char * sNewPtr )
 {
-	return m_pTokenEnd;
-}
-
-template < bool IS_UTF8 >
-const BYTE * CSphTokenizerTraits<IS_UTF8>::GetBufferPtr () const
-{
-	return m_pCur;
-}
-
-template < bool IS_UTF8 >
-const BYTE * CSphTokenizerTraits<IS_UTF8>::GetBufferEnd () const
-{
-	return m_pBufferMax;
-}
-
-template < bool IS_UTF8 >
-void CSphTokenizerTraits<IS_UTF8>::AdvanceBufferPtr ( int iOffset )
-{
-	assert ( iOffset >= 0 );
-	m_pCur = Min ( m_pBufferMax, m_pCur + iOffset );
+	assert ( (BYTE*)sNewPtr>=m_pBuffer && (BYTE*)sNewPtr<=m_pBufferMax );
+	m_pCur = Min ( m_pBufferMax, Max ( m_pBuffer, (BYTE*)sNewPtr ) );
 	m_iAccum = 0;
 	m_pAccum = m_sAccum;
 }
@@ -3327,7 +3311,7 @@ static inline SynCheck_e SynCheckPrefix ( const CSphSynonym & tCandidate, int iO
 static inline bool IsSeparator ( int iFolded, bool bFirst )
 {
 	// eternal separator
-	if ( ( iFolded & MASK_CODEPOINT )==0 )
+	if ( iFolded<0 || ( iFolded & MASK_CODEPOINT )==0 )
 		return true;
 
 	// just a codepoint
@@ -3463,7 +3447,7 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 			int iTest;
 
 			int iMasked = ( iCode & MASK_CODEPOINT );
-			if ( iFolded==0 )
+			if ( iFolded<=0 )
 			{
 				sTest[0] = MAGIC_SYNONYM_WHITESPACE;
 				iTest = 1;
@@ -3496,7 +3480,7 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 
 			#define LOC_REFINE_BREAK() \
 			{ \
-				if ( iExact>=0 ) { m_pCur = pExact; LOC_RETURN_SYNONYM ( iExact ); } \
+				if ( iExact>=0 ) { m_pCur = pCur = pExact; LOC_RETURN_SYNONYM ( iExact ); } \
 				break; \
 			}
 
@@ -3510,7 +3494,7 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 			}
 
 			// this is to catch intermediate separators (eg. "OS/2/3")
-			bool bMaybeSeparator = ( iFolded & FLAG_CODEPOINT_SYNONYM )!=0;
+			bool bMaybeSeparator = ( iFolded & FLAG_CODEPOINT_SYNONYM )!=0 || ( iFolded<0 );
 
 			SynCheck_e eStart = SynCheckPrefix ( m_dSynonyms[iSynStart], iSynOff, sTest, iTest, bMaybeSeparator );
 			if ( eStart==SYNCHECK_EXACT )
@@ -3673,8 +3657,23 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 		// return accumulated token
 		if ( m_iAccum<m_tSettings.m_iMinWordLen )
 		{
+			if ( m_bShortTokenFilter )
+			{
+				*m_pAccum = '\0';
+
+				if ( ShortTokenFilter ( m_sAccum, m_iAccum ) )
+				{
+					m_iLastTokenLen = m_iAccum;
+					m_pTokenEnd = pCur;
+					m_iAccum = 0;
+					return m_sAccum;
+				}
+			}
+
 			if ( m_iAccum )
 				m_iOvershortCount++;
+
+			m_iAccum = 0;
 			continue;
 		}
 
@@ -3822,10 +3821,21 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 			pCur = m_pCur;
 			if ( m_iAccum<m_tSettings.m_iMinWordLen )
 			{
-				m_bBoundary = m_bTokenBoundary = false;
-				m_iAccum = 0;
-				m_iLastTokenLen = 0;
-				return NULL;
+				bool bShortToken = false;
+				if ( m_bShortTokenFilter )
+				{
+					m_sAccum [m_iAccum] = '\0';
+					if ( ShortTokenFilter ( m_sAccum, m_iAccum ) )
+						bShortToken = true;
+				}
+
+				if ( !bShortToken )
+				{
+					m_bBoundary = m_bTokenBoundary = false;
+					m_iAccum = 0;
+					m_iLastTokenLen = 0;
+					return NULL;
+				}
 			}
 		} else
 		{
@@ -3859,10 +3869,22 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 		{
 			if ( m_iAccum<m_tSettings.m_iMinWordLen )
 			{
-				if ( m_iAccum )
-					m_iOvershortCount++;
-				m_iAccum = 0;
-				continue;
+				bool bShortToken = false;
+				if ( m_bShortTokenFilter )
+				{
+					m_sAccum[m_iAccum] = '\0';
+					if ( ShortTokenFilter ( m_sAccum, m_iAccum ) )
+						bShortToken = true;
+				}
+
+				if ( !bShortToken )
+				{
+					if ( m_iAccum )
+						m_iOvershortCount++;
+
+					m_iAccum = 0;
+					continue;
+				}
 			}
 
 			m_iLastTokenLen = m_iAccum;
@@ -3884,9 +3906,24 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 			// skip short words
 			if ( m_iAccum<m_tSettings.m_iMinWordLen )
 			{
-				m_iAccum = 0;
 				if ( m_iAccum )
 					m_iOvershortCount++;
+
+				bool bShortToken = false;
+				if ( m_bShortTokenFilter )
+				{
+					m_sAccum[m_iAccum] = '\0';
+					if ( ShortTokenFilter ( m_sAccum, m_iAccum ) )
+						bShortToken = true;
+				}
+
+				if ( !bShortToken )
+				{
+					if ( m_iAccum )
+						m_iOvershortCount++;
+
+					m_iAccum = 0;
+				}
 			}
 
 			m_pTokenEnd = m_pCur;
@@ -3987,8 +4024,12 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 			FlushAccum ();
 			if ( m_iLastTokenLen<m_tSettings.m_iMinWordLen )
 			{
-				m_iLastTokenLen = 0;
-				return NULL;
+				
+				if ( !m_bShortTokenFilter || !ShortTokenFilter ( m_sAccum, m_iLastTokenLen ) )
+				{
+					m_iLastTokenLen = 0;
+					return NULL;
+				}
 			}
 
 			// return trailing word
@@ -4022,9 +4063,18 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 			FlushAccum ();
 			if ( m_iLastTokenLen<m_tSettings.m_iMinWordLen )
 			{
-				if ( m_iLastTokenLen )
-					m_iOvershortCount++;
-				continue;
+				if ( m_bShortTokenFilter && ShortTokenFilter ( m_sAccum, m_iLastTokenLen ) )
+				{
+					m_pTokenEnd = pCur;
+					return m_sAccum;
+				}
+				else
+				{
+					if ( m_iLastTokenLen )
+						m_iOvershortCount++;
+
+					continue;
+				}
 			}
 			else
 			{
@@ -4044,9 +4094,15 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 			// skip short words preceding specials
 			if ( m_iAccum<m_tSettings.m_iMinWordLen )
 			{
-				if ( m_iAccum )
-					m_iOvershortCount++;
-				FlushAccum ();
+				m_sAccum[m_iAccum] = '\0';
+
+				if ( !m_bShortTokenFilter || !ShortTokenFilter ( m_sAccum, m_iAccum ) )
+				{
+					if ( m_iAccum )
+						m_iOvershortCount++;
+
+					FlushAccum ();
+				}
 			}
 
 			m_pTokenEnd = m_pCur;
@@ -8072,17 +8128,18 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilte
 	tMerge.m_eDocinfo = m_tSettings.m_eDocinfo;
 
 	int iMinAttrSize = m_tSchema.GetRowSize();
-	assert ( iMinAttrSize );
-
-	tMerge.m_pMinRowitems = new CSphRowitem [ iMinAttrSize ];
-	for( int i = 0; i < iMinAttrSize; i++ )
+	if ( iMinAttrSize )
 	{
-		if ( bDstEmpty )
-			tMerge.m_pMinRowitems[i] = pSrcIndex->m_tMin.m_pRowitems[i];
-		else if ( bSrcEmpty )
-			tMerge.m_pMinRowitems[i] = m_tMin.m_pRowitems[i];
-		else
-			tMerge.m_pMinRowitems[i] = Min ( m_tMin.m_pRowitems[i], pSrcIndex->m_tMin.m_pRowitems[i] );
+		tMerge.m_pMinRowitems = new CSphRowitem [ iMinAttrSize ];
+		for( int i = 0; i < iMinAttrSize; i++ )
+		{
+			if ( bDstEmpty )
+				tMerge.m_pMinRowitems[i] = pSrcIndex->m_tMin.m_pRowitems[i];
+			else if ( bSrcEmpty )
+				tMerge.m_pMinRowitems[i] = m_tMin.m_pRowitems[i];
+			else
+				tMerge.m_pMinRowitems[i] = Min ( m_tMin.m_pRowitems[i], pSrcIndex->m_tMin.m_pRowitems[i] );
+		}
 	}
 
 	// fixup filters
@@ -8184,9 +8241,16 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilte
 		{
 			assert ( uProgress & 0x03 );
 
-			MergeWordData ( tDstWord, tSrcWord );
-			
-			tDstWord.Write();
+			if ( tDstWord.IsEmpty () )
+				tSrcWord.Write();
+			else if ( tSrcWord.IsEmpty () )
+				tDstWord.Write ();
+			else
+			{
+				MergeWordData ( tDstWord, tSrcWord );
+				tDstWord.Write();
+			}
+
 			m_tProgress.m_iWords++;
 
 			if ( !tDstWord.Read() )
@@ -8443,10 +8507,13 @@ protected:
 SphWordID_t CSphDictStar::GetWordID ( BYTE * pWord )
 {
 	char sBuf [ 16+3*SPH_MAX_WORD_LEN ];
+	assert ( strlen ( (const char*)pWord ) < 16+3*SPH_MAX_WORD_LEN );
 
 	m_pDict->ApplyStemmers ( pWord );
 
 	int iLen = strlen ( (const char*)pWord );
+	assert ( iLen < 16+3*SPH_MAX_WORD_LEN - 1 );
+
 	memcpy ( sBuf, pWord, iLen+1 );
 
 	if ( iLen )
@@ -8493,6 +8560,8 @@ SphWordID_t	CSphDictStarV8::GetWordID ( BYTE * pWord )
 	char sBuf [ 16+3*SPH_MAX_WORD_LEN ];
 
 	int iLen = strlen ( (const char*)pWord );
+	assert ( iLen < 16+3*SPH_MAX_WORD_LEN );
+
 	if ( !iLen )
 		return 0;
 
@@ -8503,6 +8572,8 @@ SphWordID_t	CSphDictStarV8::GetWordID ( BYTE * pWord )
 		m_pDict->ApplyStemmers ( pWord );
 
 	iLen = strlen ( (const char*)pWord );
+	assert ( iLen < 16+3*SPH_MAX_WORD_LEN - 2 );
+
 	if ( !iLen )
 		return 0;
 
@@ -8581,7 +8652,12 @@ struct CSphSimpleQueryParser
 		int				m_iQueryPos;
 	} m_dWords [ SPH_MAX_QUERY_WORDS ];
 
-	CSphSimpleQueryParser () {}
+	bool m_bUseStarDict;
+
+	CSphSimpleQueryParser ( bool bStarDict )
+		: m_bUseStarDict ( bStarDict )
+	{
+	}
 
 	int Parse ( const char * sQuery, ISphTokenizer * pTokenizer, CSphDict * pDict )
 	{
@@ -8591,6 +8667,9 @@ struct CSphSimpleQueryParser
 
 		CSphString sQbuf ( sQuery );
 		pTokenizer->SetBuffer ( (BYTE*)sQbuf.cstr(), strlen(sQuery) );
+
+		if ( m_bUseStarDict )
+			pTokenizer->EnableQueryParserMode ( true );
 
 		int iWords = 0;
 		int iPos = 0;
@@ -8612,6 +8691,9 @@ struct CSphSimpleQueryParser
 					iPos++; // advance position on stopwords, but not at the very start
 			}
 		}
+
+		if ( m_bUseStarDict )
+			pTokenizer->EnableQueryParserMode ( false );
 
 		return iWords;
 	}
@@ -9211,6 +9293,10 @@ void CSphIndex_VLN::MatchAll ( const CSphQuery * pQuery, CSphQueryResult * pResu
 		if ( ++i != m_dQueryWords.GetLength() )
 			continue;
 
+		// forcibly break on DOCID_MAX matches
+		if ( docID==DOCID_MAX )
+			break;
+
 		// this is my match
 		CSphMatch & tMatch = m_dQueryWords[0].m_tDoc;
 
@@ -9410,7 +9496,7 @@ void CSphIndex_VLN::MatchAny ( const CSphQuery * pQuery, CSphQueryResult * pResu
 				iMinIndex = i;
 			}
 		}
-		if ( iActive==0 )
+		if ( iActive==0 || iMinID==DOCID_MAX )
 			break;
 
 		iLastMatchID = iMinID;
@@ -9859,6 +9945,10 @@ bool CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, CSphQueryResult * p
 		if ( !pMatch )
 			break;
 		iMinID = 1 + pMatch->m_iDocID;
+
+		// forcibly break on DOCID_MAX matches
+		if ( pMatch->m_iDocID==DOCID_MAX )
+			break;
 
 		// early reject by group id, doc id or timestamp
 		if ( EarlyReject ( *pMatch, pQuery ) )
@@ -10779,6 +10869,10 @@ bool CSphIndex_VLN::MatchExtendedV1 ( const CSphQuery * pQuery, CSphQueryResult 
 		if ( !pAccept )
 			break;
 		iMinID = 1 + pAccept->m_iDocID;
+
+		// forcibly break on DOCID_MAX matches
+		if ( pAccept->m_iDocID==DOCID_MAX )
+			break;
 
 		CSphMatch * pReject = tReject.GetNextMatch ( pAccept->m_iDocID, 0, NULL, 0, NULL, pResult->m_sWarning );
 		if ( pReject && pReject->m_iDocID==pAccept->m_iDocID )
@@ -14385,7 +14479,14 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 	}
 
 	CSphScopedPtr<CSphDict> tDict ( NULL );
-	CSphDict * pDict = SetupStarDict  ( tDict );
+	CSphDict * pDict = m_pDict;
+	CSphDict * pStarDict = SetupStarDict ( tDict );
+	bool bUseStarDict = false;
+	if ( pStarDict != pDict )
+	{
+		bUseStarDict = true;
+		pDict = pStarDict;
+	}
 
 	// setup calculations and result schema
 	if ( !SetupCalc ( pResult, pQuery ) )
@@ -14421,7 +14522,7 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 		|| pQuery->m_eMode==SPH_MATCH_FULLSCAN );
 	if ( bSimpleQuery && pQuery->m_eMode!=SPH_MATCH_FULLSCAN )
 	{
-		CSphSimpleQueryParser qp;
+		CSphSimpleQueryParser qp ( bUseStarDict ) ;
 		int iRealWords = qp.Parse ( pQuery->m_sQuery.cstr(), m_pTokenizer, pDict );
 		if ( !iRealWords )
 		{
@@ -15301,11 +15402,10 @@ CSphDictCRC::WordformContainer * CSphDictCRC::LoadWordformContainer ( const char
 		if ( !pFrom ) continue; // FIXME! report parsing error
 
 		CSphString sFrom ( (const char*)pFrom );
-		const BYTE * pStart = pMyTokenizer->GetBufferPtr ();
-		const BYTE * pCur = pStart;
+		const char * pCur = pMyTokenizer->GetBufferPtr ();
 		while ( isspace(*pCur) ) pCur++;
 		if ( *pCur!='>' ) continue; // FIXME! report parsing error
-		pMyTokenizer->AdvanceBufferPtr ( pCur+1-pStart ); // FIXME! replace with SetBufferPtr()
+		pMyTokenizer->SetBufferPtr ( pCur+1 );
 
 		BYTE * pTo = pMyTokenizer->GetToken ();
 		if ( !pTo ) continue; // FIXME! report parsing error
@@ -16307,12 +16407,14 @@ void CSphHTMLStripper::Strip ( BYTE * sData )
 				char cEnd = *s;
 				s++;
 				while ( *s && *s!=cEnd ) *d++ = *s++;
+				*d++ = ' ';
 				if ( *s==cEnd ) s++;
 				continue;
 			}
 
 			// handle unquoted value
 			while ( *s && !isspace(*s) && *s!='>' ) *d++ = *s++;
+			*d++ = ' ';
 		}
 		if ( *s=='>' ) s++;
 
@@ -16761,6 +16863,8 @@ CSphSource_SQL::CSphSource_SQL ( const char * sName )
 	, m_iMultiAttr			( -1 )
 	, m_iFieldMVA			( 0 )
 	, m_iFieldMVAIterator	( 0 )
+	, m_bWarnedNull			( false )
+	, m_bWarnedMax			( false )
 {
 }
 
@@ -16982,6 +17086,9 @@ bool CSphSource_SQL::IterateHitsStart ( CSphString & sError )
 {
 	assert ( m_bSqlConnected );
 
+	m_bWarnedNull = false;
+	m_bWarnedMax = false;
+
 	// run pre-queries
 	ARRAY_FOREACH ( i, m_tParams.m_dQueryPre )
 	{
@@ -17163,6 +17270,8 @@ BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 				continue;
 			}
 
+			SqlDismissResult ();
+
 			// ok, we're over
 			ARRAY_FOREACH ( i, m_tParams.m_dQueryPost )
 			{
@@ -17184,7 +17293,19 @@ BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 		m_uMaxFetchedID = Max ( m_uMaxFetchedID, m_tDocInfo.m_iDocID );
 
 		if ( !m_tDocInfo.m_iDocID )
-			sphWarn ( "zero/NULL document_id, skipping" );
+		{
+			if ( !m_bWarnedNull )
+				sphWarn ( "zero/NULL document_id, skipping" );
+			m_bWarnedNull = true;
+		}
+
+		if ( m_tDocInfo.m_iDocID==DOCID_MAX )
+		{
+			if ( !m_bWarnedMax )
+				sphWarn ( "DOCID_MAX document_id, skipping" );
+			m_bWarnedMax = true;
+			m_tDocInfo.m_iDocID = 0;
+		}
 
 	} while ( !m_tDocInfo.m_iDocID );
 
@@ -18269,6 +18390,7 @@ private:
 	void			ConfigureFields ( const CSphVariant * pHead );
 	void			AddFieldToSchema ( const char * szName );
 	void			SetupFieldMatch ( CSphColumnInfo & tCol );
+	void			UnexpectedCharaters ( const char * pCharacters, int iLen, const char * szComment );
 
 #if USE_LIBEXPAT
 	bool			ParseNextChunk ( int iBufferLen, CSphString & sError );
@@ -19167,11 +19289,59 @@ void CSphSource_XMLPipe2::EndElement ( const char * szName )
 }
 
 
+void CSphSource_XMLPipe2::UnexpectedCharaters ( const char * pCharacters, int iLen, const char * szComment )
+{
+	const int MAX_WARNING_LENGTH = 64;
+
+	bool bSpaces = true;
+	for ( int i = 0; i < iLen && bSpaces; i++ )
+		if ( !sphIsSpace ( pCharacters [i] ) )
+			bSpaces = false;
+
+	if ( !bSpaces )
+	{
+		CSphString sWarning;
+#if USE_LIBEXPAT
+		sWarning.SetBinary ( pCharacters, Min ( iLen, MAX_WARNING_LENGTH ) );
+		sphWarn ( "source '%s': unexpected string '%s' (line=%d, pos=%d) %s",
+			m_tSchema.m_sName.cstr(), sWarning.cstr (),
+			XML_GetCurrentLineNumber(m_pParser), XML_GetCurrentColumnNumber(m_pParser), szComment );
+#endif
+
+#if USE_LIBXML
+		int i = 0;
+		for ( i = 0; i < iLen && sphIsSpace ( pCharacters [i] ); i++ );
+		sWarning.SetBinary ( pCharacters + i, Min ( iLen - i, MAX_WARNING_LENGTH ) );
+		for ( i = iLen - i - 1; i >= 0 && sphIsSpace ( sWarning.cstr () [i] ); i-- );
+		if ( i >= 0 )
+			((char *) sWarning.cstr ()) [i+1] = '\0';
+
+		sphWarn ( "source '%s': unexpected string '%s' %s", m_tSchema.m_sName.cstr(), sWarning.cstr(), szComment );
+#endif
+	}
+}
+
+
 void CSphSource_XMLPipe2::Characters ( const char * pCharacters, int iLen )
 {
-	if ( ( m_iCurAttr == -1 && m_iCurField == -1 ) && !m_bInId )
+	if ( !m_bInDocset )
+	{
+		UnexpectedCharaters ( pCharacters, iLen, "outside of <sphinx:docset>" );
 		return;
-	
+	}
+
+	if ( !m_bInSchema && !m_bInDocument )
+	{
+		UnexpectedCharaters ( pCharacters, iLen, "outside of <sphinx:schema> and <sphinx:document>" );
+		return;
+	}
+
+	if ( m_iCurAttr == -1 && m_iCurField == -1 )
+	{
+		UnexpectedCharaters ( pCharacters, iLen, m_bInDocument ? "inside <sphinx:document>" : ( m_bInSchema ? "inside <sphinx:schema>" : "" ) );
+		return;
+	}
+
 	if ( iLen + m_iFieldBufferLen < MAX_FIELD_LENGTH )
 	{
 		memcpy ( m_pFieldBuffer + m_iFieldBufferLen, pCharacters, iLen );
@@ -19369,17 +19539,17 @@ void CSphDoclistRecord::Write ( CSphMergeData * pData )
 	pWriter->ZipOffset ( m_iDocID - pData->m_iLastDocID );
 	pData->m_iLastDocID = m_iDocID;
 
-	assert ( pData->m_pMinRowitems );
-
 	if ( m_iRowitems )
 	{
 		if ( pData->m_eDocinfo == SPH_DOCINFO_INLINE )
 		{
+			assert ( pData->m_pMinRowitems );
 			for ( int i=0; i<m_iRowitems; i++ )
 				pWriter->ZipInt ( m_pRowitems[i] - pData->m_pMinRowitems[i] );
 		}
 		else if ( pData->m_eDocinfo == SPH_DOCINFO_EXTERN )
 		{
+			assert ( pData->m_pMinRowitems );
 			for ( int i=0; i<m_iRowitems; i++ )
 				pWriter->ZipInt ( m_pRowitems[i] );
 		}

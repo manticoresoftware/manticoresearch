@@ -425,6 +425,9 @@ public:
 	/// calc codepoint length
 	virtual int						GetCodepointLength ( int iCode ) const = 0;
 
+	/// handle tokens less than min_word_len if they match filter
+	inline void						EnableQueryParserMode ( bool bEnable ) { m_bShortTokenFilter = bEnable; }
+
 	/// get last token length, in codepoints
 	inline int						GetLastTokenLen () { return m_iLastTokenLen; }
 
@@ -451,19 +454,19 @@ public:
 	virtual bool					IsUtf8 () const = 0;
 
 	/// start buffer point of last token
-	virtual const BYTE *			GetTokenStart () const = 0;
+	virtual const char *			GetTokenStart () const = 0;
 
 	/// end buffer point of last token
-	virtual const BYTE *			GetTokenEnd () const = 0;
+	virtual const char *			GetTokenEnd () const = 0;
 
 	/// current buffer ptr
-	virtual const BYTE *			GetBufferPtr () const = 0;
+	virtual const char *			GetBufferPtr () const = 0;
 
 	/// buffer end
-	virtual const BYTE *			GetBufferEnd () const = 0;
+	virtual const char *			GetBufferEnd () const = 0;
 
-	/// advance ptr by iOffset bytes
-	virtual void					AdvanceBufferPtr ( int iOffset ) = 0;
+	/// set new buffer ptr (must be within current bounds)
+	virtual void					SetBufferPtr ( const char * sNewPtr ) = 0;
 
 protected:
 	static const int				MAX_SYNONYM_LEN		= 1024;	///< max synonyms map-from length, bytes
@@ -475,6 +478,7 @@ protected:
 	bool							m_bWasSpecial;				///< special token flag
 	bool							m_bEscaped;					///< backslash handling flag
 	int								m_iOvershortCount;			///< skipped overshort tokens count
+	bool							m_bShortTokenFilter;		///< short token filter flag
 
 	CSphTokenizerSettings			m_tSettings;				///< tokenizer settings
 	CSphSavedFile					m_tSynFileInfo;				///< synonyms file info
@@ -1113,6 +1117,9 @@ protected:
 	CSphVector < int >	m_dAttrToFieldMVA;
 
 	CSphSourceParams_SQL		m_tParams;
+
+	bool				m_bWarnedNull;
+	bool				m_bWarnedMax;
 
 	static const int			MACRO_COUNT = 2;
 	static const char * const	MACRO_VALUES [ MACRO_COUNT ];

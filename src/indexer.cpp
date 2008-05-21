@@ -938,7 +938,8 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 	if ( !pDst->Merge ( pSrc, tPurge, bMergeKillLists ) )
 		sphDie ( "failed to merge index '%s' into index '%s': %s", sSrc, sDst, pDst->GetLastError().cstr() );
 	tmMerge += sphLongTimer ();
-	printf ( "merged in %.1f sec\n", tmMerge );
+	if ( !g_bQuiet )
+		printf ( "merged in %.1f sec\n", tmMerge );
 
 	// pick up merge result
 	const char * sPath = hDst["path"].cstr();

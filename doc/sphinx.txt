@@ -967,6 +967,7 @@ Example 4. Fully automated live updates
    | source main
    | {
    |     # ...
+   |     sql_query_pre = SET NAMES utf8
    |     sql_query_pre = REPLACE INTO sph_counter SELECT 1, MAX(id) FROM documents
    |     sql_query = SELECT id, title, body FROM documents \
    |         WHERE id<=( SELECT max_doc_id FROM sph_counter WHERE counter_id=1 )
@@ -974,7 +975,7 @@ Example 4. Fully automated live updates
    | 
    | source delta : main
    | {
-   |     sql_query_pre =
+   |     sql_query_pre = SET NAMES utf8
    |     sql_query = SELECT id, title, body FROM documents \
    |         WHERE id>( SELECT max_doc_id FROM sph_counter WHERE counter_id=1 )
    | }
@@ -993,6 +994,14 @@ Example 4. Fully automated live updates
    |     source = delta
    |     path = /path/to/delta
    | }
+
+Note how we're overriding sql_query_pre in the delta source. We need to
+explicitly have that override. Otherwise REPLACE query would be run when
+indexing delta source too, effectively nullifying it. However, when we
+issue the directive in the inherited source for the first time, it removes
+all inherited values, so the encoding setup is also lost. So sql_query_pre
+in the delta can not just be empty; and we need to issue the encoding setup
+query explicitly once again.
 
 3.11. Index merging
 -------------------

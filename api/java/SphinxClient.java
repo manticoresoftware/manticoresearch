@@ -959,6 +959,7 @@ public class SphinxClient
 			req.writeInt ( ((Integer) opts.get("around")).intValue() );
 
 			/* send documents */
+			req.writeInt ( docs.length );
 			for ( int i=0; i<docs.length; i++ )
 				writeNetUTF8 ( req, docs[i] );
 

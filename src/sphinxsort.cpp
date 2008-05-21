@@ -208,7 +208,7 @@ public:
 	public: \
 		_name ( const CSphAttrLocator & tLoc ) : m_tLocator ( tLoc ) {} \
 		virtual void GetLocator ( CSphAttrLocator & tOut ) const { tOut = m_tLocator; } \
-		virtual DWORD GetResultType () const { return m_tLocator.m_iBitCount>=(int)sizeof(DWORD) ? SPH_ATTR_BIGINT : SPH_ATTR_INTEGER; } \
+		virtual DWORD GetResultType () const { return m_tLocator.m_iBitCount>8*(int)sizeof(DWORD) ? SPH_ATTR_BIGINT : SPH_ATTR_INTEGER; } \
 		virtual SphGroupKey_t KeyFromMatch ( const CSphMatch & tMatch ) const { return KeyFromValue ( tMatch.GetAttr ( m_tLocator ) ); } \
 		virtual SphGroupKey_t KeyFromValue ( SphAttr_t uValue ) const \
 		{
@@ -272,7 +272,7 @@ public:
 	virtual void GetLocator ( CSphAttrLocator & tOut ) const { tOut = m_tLocator; }
 	virtual SphGroupKey_t KeyFromMatch ( const CSphMatch & tMatch ) const { return KeyFromValue ( tMatch.GetAttr ( m_tLocator ) ); }
 	virtual SphGroupKey_t KeyFromValue ( SphAttr_t uValue ) const { return uValue/m_iDiv; }
-	virtual DWORD GetResultType () const { return m_tLocator.m_iBitCount>=(int)sizeof(DWORD) ? SPH_ATTR_BIGINT : SPH_ATTR_INTEGER; }
+	virtual DWORD GetResultType () const { return m_tLocator.m_iBitCount>8*(int)sizeof(DWORD) ? SPH_ATTR_BIGINT : SPH_ATTR_INTEGER; }
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -497,7 +497,7 @@ int CSphUniqounter::CountNext ( SphGroupKey_t * pOutGroup )
 	*pOutGroup = uGroup;
 
 	int iCount = 1;
-	while ( m_pData[m_iCountPos].m_uGroup==uGroup )
+	while ( m_iCountPos<m_iLength && m_pData[m_iCountPos].m_uGroup==uGroup )
 	{
 		if ( m_pData[m_iCountPos].m_uValue!=uValue )
 			iCount++;
@@ -556,6 +556,7 @@ enum
 {
 	SPH_VATTR_ID			= -1,	///< tells match sorter to use doc id
 	SPH_VATTR_RELEVANCE		= -2,	///< tells match sorter to use match weight
+	SPH_VATTR_FLOAT			= 10000	///< tells match sorter to compare floats
 };
 
 
@@ -755,6 +756,8 @@ public:
 		m_iTotal = 0;
 
 		m_hGroup2Match.Reset ();
+		if ( DISTINCT )
+			m_tUniq.Resize ( 0 );
 	}
 
 	/// get entries count
@@ -1072,6 +1075,13 @@ struct MatchExpr_fn : public ISphMatchComparator
 	{ \
 		case SPH_VATTR_ID:			SPH_TEST_PAIR ( a.m_iDocID, b.m_iDocID, _idx ); break; \
 		case SPH_VATTR_RELEVANCE:	SPH_TEST_PAIR ( a.m_iWeight, b.m_iWeight, _idx ); break; \
+		case SPH_VATTR_FLOAT: \
+		{ \
+			register float aa = a.GetAttrFloat ( t.m_tLocator[_idx] ); \
+			register float bb = b.GetAttrFloat ( t.m_tLocator[_idx] ); \
+			SPH_TEST_PAIR ( aa, bb, _idx ) \
+			break; \
+		} \
 		default: \
 		{ \
 			register SphAttr_t aa = sphGetCompAttr<BITS> ( t, a, _idx ); \
@@ -1387,7 +1397,7 @@ static ESortClauseParseResult sphParseSortClause ( const char * sClause, const C
 				sError.SetSprintf ( "sort-by attribute '%s' not found", pTok );
 				return SORT_CLAUSE_ERROR;
 			}
-			tState.m_iAttr[iField] = iAttr;
+			tState.m_iAttr[iField] = ( tSchema.GetAttr(iAttr).m_eAttrType==SPH_ATTR_FLOAT ) ? SPH_VATTR_FLOAT : iAttr;
 			tState.m_tLocator[iField] = tSchema.GetAttr(iAttr).m_tLocator;
 		}
 	}

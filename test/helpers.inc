@@ -31,12 +31,12 @@ function CreateDB ( $db_drop, $db_create, $db_insert )
 }
 
 
-function RunIndexer ( &$error )
+function RunIndexer ( &$error, $params )
 {
 	global $indexer_path;
 
 	$retval = 0;
-	exec ( "$indexer_path --quiet --config config.conf --all", $error, $retval );
+	exec ( "$indexer_path --quiet --config config.conf $params", $error, $retval );
 
 	$error = join ( "\n", $error );
 	return ( $retval==0 && !empty($error) ) ? 2 : $retval;
@@ -149,6 +149,7 @@ class SphinxConfig
 	private $_queries;
 	private $_query_settings;
 	private $_query_attributes;
+	private $_indexer_runs;
 	private $_custom_test;
 	private	$_sd_address;
 	private	$_sd_port;
@@ -171,6 +172,7 @@ class SphinxConfig
 		$this->_results			= array ();
 		$this->_results_model	= array ();
 		$this->_query_attributes = array ();
+		$this->_indexer_runs	= array ();
 		$this->_num_agents		= 1;
 		$this->_subtest 		= 0;
 		$this->_subtestcount	= 0;
@@ -314,6 +316,14 @@ class SphinxConfig
 		if ( $custom )
 			$this->_custom_test = $custom->nodeValue;
 
+		// extract indexer run params
+		$indexer_run = GetFirstChild ( $xml, "indexer" );
+		if ( $indexer_run )
+		{
+			foreach ( ChildrenArray ( $indexer_run, "run" ) as $run )
+				$this->_indexer_runs [] = $run->nodeValue;
+		}
+
 		// extract queries
 		$qs = GetFirstChild ( $xml, "queries" );
 		if ( $qs )
@@ -351,6 +361,7 @@ class SphinxConfig
 				switch ( $sortmode_s )
 				{
 					case "":			$sortmode_s = "(default)"; break;
+					case "extended":	$sortmode = SPH_SORT_EXTENDED; break;
 					case "expr":		$sortmode = SPH_SORT_EXPR; break;
 					default:
 						printf ( "$config_file: unknown sorting mode '%s'\n", $sortmode_s );
@@ -360,11 +371,41 @@ class SphinxConfig
 				$res["sortmode_s" ] = $sortmode_s;
 				$res["sortby"] = $q->getAttribute("sortby");
 
+				// groupby
+				$groupfunc = 0;
+				$groupfunc_s = $q->getAttribute("groupfunc");
+				switch ( $groupfunc_s )
+				{
+					case "":			$groupfunc_s = "(default)"; break;
+					case "day":			$groupfunc = SPH_GROUPBY_DAY; break;
+					case "week":		$groupfunc = SPH_GROUPBY_WEEK; break;
+					case "month":		$groupfunc = SPH_GROUPBY_MONTH; break;
+					case "year":		$groupfunc = SPH_GROUPBY_YEAR; break;
+					case "attr":		$groupfunc = SPH_GROUPBY_ATTR; break;
+					case "attrpair":	$groupfunc = SPH_GROUPBY_ATTRPAIR; break;
+					default:
+						printf ( "$config_file: unknown groupby func '%s'\n", $groupfunc_s );
+						return false;
+				}
+
+				$res["groupfunc"] = $groupfunc;
+				$res["groupfunc_s"] = $groupfunc_s;
+				$res["groupattr"] = $q->getAttribute("groupattr");
+				$groupsort = $q->getAttribute("groupsort");
+				if ( $groupsort == "" )
+					$groupsort = "@group desc";
+
+				$res["groupsort"] = $groupsort;
+				$res["groupdistinct"] = $q->getAttribute("groupdistinct");
+
+				$res["resarray"] = $q->getAttribute("resarray");
+				$res["index"] = $q->getAttribute("index");
+
 				// add query
 				$this->_queries[] = $res;
 			}
-
-		} else
+		}
+		else
 		{
 			// legacy
 			$qs = array ();
@@ -397,6 +438,19 @@ class SphinxConfig
 	}
 
 
+	function RunIndexerEx ( &$error )
+	{
+		foreach ( $this->_indexer_runs as $param )
+		{
+			$retval = RunIndexer ( $error, $param );
+			if ( $retval != 0 )
+				return $retval;
+		}
+
+		return 0;
+	}
+
+
 	function RunQuery ( $index, &$error )
 	{
 		global $sd_address, $sd_port, $action_retries, $action_wait_timeout;
@@ -416,12 +470,20 @@ class SphinxConfig
 				$results = 0;
 				if ( empty($this->_query_settings) )
 				{
+					$my_index = $index;
 					if ( @$qinfo["mode"] )		$cl->SetMatchMode ( $qinfo["mode"] );
 					if ( @$qinfo["sortmode"] )	$cl->SetSortMode ( $qinfo["sortmode"], $qinfo["sortby"] );
-					if ( @$qinfo["filter"] )		$cl->SetFilter ( $qinfo["filter"], array ( $qinfo["filtervalue"] ) );
-	            	$results = $cl->Query ( $query, $index );
+					if ( @$qinfo["filter"] )	$cl->SetFilter ( $qinfo["filter"], array ( $qinfo["filtervalue"] ) );
+					if ( @$qinfo["groupattr"] )	$cl->SetGroupBy ( $qinfo["groupattr"], $qinfo["groupfunc"], $qinfo["groupsort"] );
+					if ( @$qinfo["groupdistinct"] )	$cl->SetGroupDistinct ( $qinfo["groupdistinct"] );
+					if ( @$qinfo["resarray"] )	$cl->SetArrayResult ( true );
+					if ( @$qinfo["index"] )		$my_index = $qinfo["index"];
 
-            	} else
+	            	$results = $cl->Query ( $query, $my_index );
+					if ( @$qinfo["resarray"] )
+						$results ["resarray"] = 1;
+                }
+				else
 				{
 					$run_func = create_function( '$client, $query, $index, &$results', $this->_query_settings );
 					$run_func ( $cl, $query, $index, $results ); 
@@ -561,10 +623,22 @@ class SphinxConfig
 			return var_export ( $result, true )."\n";
 
 		$qinfo = $this->_queries[$nquery-1];
-		$str = "--- Query $nquery (mode=$qinfo[mode_s]) ---\n";
+		if ( array_key_exists ( "index", $qinfo ) && $qinfo ["index"] != '*' )
+			$str = "--- Query $nquery (mode=$qinfo[mode_s],index=$qinfo[index]) ---\n";
+		else
+			$str = "--- Query $nquery (mode=$qinfo[mode_s]) ---\n";
+
+		if ( @$qinfo["groupattr"] )
+			$str .= "GroupBy: attr: '".$qinfo["groupattr"]."' func: '".$qinfo["groupfunc_s"]."' sort: '".$qinfo["groupsort"]."'\n";
+
+		if ( @$qinfo["sortmode"] == SPH_SORT_EXPR )
+			$str .= "Sort: expr: ".$qinfo["sortby"]."\n";
+
 		$str .= "Query '$result[query]': retrieved $result[total_found] of $result[total] matches in $result[time] sec.\n";
 		if ( $result["warning"] )
 			$str .= "Warning: $result[warning]\n";
+
+		$array_result = @$result["resarray"];
 
 		if ( isset($result["words"]) && is_array($result["words"]) )
 		{
@@ -584,13 +658,18 @@ class SphinxConfig
 			$str .= "Matches:\n";
 			foreach ( $result ["matches"] as $doc => $docinfo )
 			{
+				if ( $array_result )
+					$doc_id = $docinfo ["id"];
+				else
+					$doc_id = $doc;
+
 				$weight = $docinfo ["weight"];
 
-				$str .= "$n. doc_id=$doc, weight=$weight";
+				$str .= "$n. doc_id=$doc_id, weight=$weight";
 
 				if ( empty ( $this->_query_attributes ) )
 				{
-					$query_res = mysql_query ( "select * from test_table where document_id = $doc" );
+					$query_res = mysql_query ( "select * from test_table where document_id = $doc_id" );
 
 					if ( $query_res === FALSE )
 						$str .= "\n";
@@ -603,9 +682,23 @@ class SphinxConfig
 								if ( array_search ( $col_name, $result ["fields"] ) !== FALSE )
 								   	$str .= " $col_name=\"$col_content\"";
 							}
-
-							$str .= "\n";
 				    	}
+
+						foreach ( $docinfo ["attrs"] as $attr => $value )
+						{
+							if ( is_array ( $value ) )
+							{
+								$str .= " $attr=\"";
+								foreach ( $value as $v )
+									$str .= $v." ";
+
+								$str .= "\"";
+							}
+							else
+						   		$str .= " $attr=\"$value\"";
+						}
+
+						$str .= "\n";
 					}
 				}
 				else
@@ -675,8 +768,8 @@ class SphinxConfig
 				continue;
 			}
 
-			$result_f_cur = $this->FormatResultSet ( $nquery, $this->_results[$nquery] );
-			$result_f_ref = $this->FormatResultSet ( $nquery, $ref );
+			$result_f_cur = $this->FormatResultSet ( $nquery + 1, $this->_results[$nquery] );
+			$result_f_ref = $this->FormatResultSet ( $nquery + 1, $ref );
 
 			file_put_contents ( "current", $result_f_cur );
 			file_put_contents ( "reference", $result_f_ref );
@@ -872,7 +965,7 @@ function RunTest ( $test_dir )
 
 		EraseDirContents ( $indexer_data_path );
 
-		$indexer_ret = RunIndexer ( $error );
+		$indexer_ret = RunIndexer ( $error, "--all" );
 
 		if ( $indexer_ret==1 )
 		{
@@ -881,7 +974,22 @@ function RunTest ( $test_dir )
 
 			continue;
 
-		} else if ( $indexer_ret==2 )
+		}
+		else if ( $indexer_ret==2 )
+		{
+			fwrite ( $report, "$error\n" );
+		}
+
+		$indexer_ret = $config->RunIndexerEx ( $error );
+		if ( $indexer_ret==1 )
+		{
+			if ( !HandleFailure ( $config, $report, $error, $nfailed ) )
+				$log .= "\tsubtest $subtest: error running indexer; see $report_file\n";
+
+			continue;
+
+		}
+		else if ( $indexer_ret==2 )
 		{
 			fwrite ( $report, "$error\n" );
 		}

@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>groupby</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query_pre 	= set time_zone='+0:00'
+	sql_query		= SELECT document_id, tag, UNIX_TIMESTAMP(time) as time, mva, body FROM test_table
+	sql_attr_uint	= tag
+	sql_attr_timestamp = time
+	sql_attr_multi	= uint mva from field;
+}
+
+index test
+{
+	source			= srctest
+	path			= <data_path/>/test
+	min_word_len	= 1
+	min_prefix_len	= 1
+	enable_star		= 1
+    charset_type 	= utf-8
+}
+
+source srctest2 : srctest
+{
+	sql_query		= SELECT document_id+10, tag+20 AS tag, UNIX_TIMESTAMP(time) as time, mva, body FROM test_table
+}
+
+index test2 : test
+{
+	source			= srctest2
+	path			= <data_path/>/test2
+}
+
+source srcmini1 : srctest
+{
+	sql_query		= SELECT document_id, tag, UNIX_TIMESTAMP(time) as time, mva, body FROM test_table WHERE document_id IN (1,7)
+}
+
+index mini1 : test
+{
+	source			= srcmini1
+	path			= <data_path/>/mini1
+}
+
+source srcmini2 : srctest
+{
+	sql_query		= SELECT document_id, tag, UNIX_TIMESTAMP(time) as time, mva, body FROM test_table WHERE document_id IN (1)
+}
+
+index mini2 : test
+{
+	source			= srcmini2
+	path			= <data_path/>/mini2
+}
+</config>
+
+<queries>
+<query mode="extended2" index="test" groupattr="tag" groupfunc="attr" groupsort="@group desc"></query>
+<query mode="extended2" index="test" groupattr="tag" groupfunc="attr" groupsort="@group asc"></query>
+<query mode="extended2" index="test" groupattr="tag" groupfunc="attr" groupsort="@count desc"></query>
+<query mode="extended2" index="test" groupattr="tag" groupfunc="attr" groupsort="@count asc"></query>
+<query mode="extended2" index="test" groupattr="tag" groupfunc="attr" groupsort="tag desc"></query>
+<query mode="extended2" index="test" groupattr="time" groupfunc="day">test*</query>
+<query mode="extended2" index="test" groupattr="time" groupfunc="week">test*</query>
+<query mode="extended2" index="test" groupattr="time" groupfunc="month">test*</query>
+<query mode="extended2" index="test" groupattr="time" groupfunc="year">test*</query>
+<query mode="extended2" index="test" groupattr="mva" groupfunc="attr" groupsort="@group desc" resarray="1">test*</query>
+<query mode="extended2" index="test" groupattr="mva" groupfunc="attr" groupsort="@group asc" resarray="1">test*</query>
+
+<query mode="extended2" index="test" groupattr="time" groupfunc="year" groupdistinct="tag"></query>
+<query mode="extended2" index="test2" groupattr="time" groupfunc="year" groupdistinct="tag"></query>
+<query mode="extended2" index="test,test2" groupattr="time" groupfunc="year" groupdistinct="tag"></query>
+
+<query mode="extended2" index="mini1,mini2" groupattr="time" groupfunc="year" groupdistinct="tag"></query>
+</queries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`tag` int(11) NOT NULL default '0',
+	`time` datetime,
+	`mva` varchar(255) NOT NULL default '',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 1, '2007-12-01 12:00:00', '1,2,3',	'test1' ),
+( 2, 2, '2006-05-02 12:00:00', '3,4,5',	'test2' ),
+( 3, 2, '2005-06-03 12:00:00', '4,5,6',	'test3' ),
+( 4, 3, '2005-07-04 12:00:00', '1,2,3',	'test4' ),
+( 5, 3, '2003-09-05 12:00:00', '3,5',	'test5' ),
+( 6, 3, '2003-09-06 12:00:00', '3,5',	'test6' ),
+( 7, 4, '2007-12-01 12:00:00', '4,5',	'test7' ),
+( 8, 4, '2006-05-02 12:00:00', '4,5,6',	'test8' ),
+( 9, 4, '2005-06-03 12:00:00', '4',		'test9' ),
+( 10, 4,'2005-07-04 12:00:00', '3,4,5',	'test10' )
+</db_insert>
+
+</test>

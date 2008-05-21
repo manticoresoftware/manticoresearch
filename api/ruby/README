@@ -1,4 +1,4 @@
-=Sphinx Client Library 0.1.0
+=Sphinx Client API 0.4.0-r1112
 
 This document gives an overview of what is Sphinx itself and how to use in 
 within Ruby on Rails. For more information or documentation, 
@@ -24,7 +24,7 @@ You can create the documentation by running:
 ==Latest version
 
 You can always get latest version from
-http://kpumuk.info/projects/ror-plugins/using-sphinx-search-engine-in-ruby-on-rails
+http://kpumuk.info/projects/ror-plugins/sphinx
 
 ==Credits
 

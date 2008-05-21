@@ -167,11 +167,11 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict, 
 
 	pTokenizer->SetBuffer ( (BYTE*)q.m_sSource.cstr (), strlen ( q.m_sSource.cstr () ) );
 	BYTE * sWord;
-	const BYTE * pStartPtr = pTokenizer->GetBufferPtr ();
-	const BYTE * pLastTokenEnd = pStartPtr;
+	const char * pStartPtr = pTokenizer->GetBufferPtr ();
+	const char * pLastTokenEnd = pStartPtr;
 	while ( ( sWord = pTokenizer->GetToken() ) != NULL )
 	{
-		const BYTE * pTokenStart = pTokenizer->GetTokenStart ();
+		const char * pTokenStart = pTokenizer->GetTokenStart ();
 
 		if ( pTokenStart != pStartPtr )
 			AddJunk ( pLastTokenEnd - pStartPtr, pTokenStart - pLastTokenEnd );

@@ -996,6 +996,19 @@ public:
 			return false;
 		return strncmp ( m_sValue, sPrefix, strlen(sPrefix) )==0;
 	}
+
+	void Chop ()
+	{
+		if ( m_sValue )
+		{
+			const char * sStart = m_sValue;
+			const char * sEnd = m_sValue + strlen(m_sValue) - 1;
+			while ( sStart<=sEnd && isspace(*sStart) ) sStart++;
+			while ( sStart<=sEnd && isspace(*sEnd) ) sEnd--;
+			memmove ( m_sValue, sStart, sEnd-sStart+1 );
+			m_sValue [ sEnd-sStart+1 ] = '\0';
+		}
+	}
 };
 
 /// string swapper

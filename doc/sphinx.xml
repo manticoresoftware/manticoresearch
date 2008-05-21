@@ -919,6 +919,7 @@ CREATE TABLE sph_counter
 source main
 {
     # ...
+    sql_query_pre = SET NAMES utf8
     sql_query_pre = REPLACE INTO sph_counter SELECT 1, MAX(id) FROM documents
     sql_query = SELECT id, title, body FROM documents \
         WHERE id&lt;=( SELECT max_doc_id FROM sph_counter WHERE counter_id=1 )
@@ -926,7 +927,7 @@ source main
 
 source delta : main
 {
-    sql_query_pre =
+    sql_query_pre = SET NAMES utf8
     sql_query = SELECT id, title, body FROM documents \
         WHERE id&gt;( SELECT max_doc_id FROM sph_counter WHERE counter_id=1 )
 }
@@ -947,6 +948,15 @@ index delta : main
 }
 </programlisting>
 </example>
+</para>
+<para>
+Note how we're overriding <code>sql_query_pre</code> in the delta source.
+We need to explicitly have that override. Otherwise <code>REPLACE</code> query
+would be run when indexing delta source too, effectively nullifying it. However,
+when we issue the directive in the inherited source for the first time, it removes 
+<emphasis>all</emphasis> inherited values, so the encoding setup is also lost.
+So <code>sql_query_pre</code> in the delta can not just be empty; and we need
+to issue the encoding setup query explicitly once again.
 </para>
 </sect2>
 

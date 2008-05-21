@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>min_word_len vs queries (part 1)</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT * FROM test_table
+}
+
+index test
+{
+	source			= srctest
+	path			= <data_path/>/test
+    charset_type 	= utf-8
+	enable_star		= 1
+
+    <Dynamic>
+      <Variant>	min_word_len = 3 </Variant>
+      <Variant>	min_word_len = 4 </Variant>
+      <Variant>	min_word_len = 5 </Variant>
+    </Dynamic>
+
+    <Dynamic>
+      <Variant>	min_prefix_len = 3 </Variant>
+      <Variant>	min_prefix_len = 4 </Variant>
+      <Variant>	min_prefix_len = 5 </Variant>
+    </Dynamic>
+}
+</config>
+
+<queries>
+<query>a</query>
+<query>bb</query>
+<query>ccc</query>
+<query>dddd</query>
+<query>eeeee</query>
+<query>ffffff</query>
+<query>ggggggg</query>
+<query>b*</query>
+<query>cc*</query>
+<query>ddd*</query>
+<query>eeee*</query>
+<query>fffff*</query>
+<query>gggggg*</query>
+<query mode="extended2">a</query>
+<query mode="extended2">bb</query>
+<query mode="extended2">ccc</query>
+<query mode="extended2">dddd</query>
+<query mode="extended2">eeeee</query>
+<query mode="extended2">ffffff</query>
+<query mode="extended2">ggggggg</query>
+<query mode="extended2">b*</query>
+<query mode="extended2">cc*</query>
+<query mode="extended2">ddd*</query>
+<query mode="extended2">eeee*</query>
+<query mode="extended2">fffff*</query>
+<query mode="extended2">gggggg*</query>
+<query mode="phrase">hello world</query>
+<query mode="phrase">hello me world</query>
+<query mode="phrase">hello two world</query>
+<query mode="phrase">hello four world</query>
+<query mode="phrase">hello me* world</query>
+<query mode="phrase">hello two* world</query>
+<query mode="phrase">hello four* world</query>
+</queries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1,  'a' ),
+( 2,  'bb' ),
+( 3,  'ccc' ),
+( 4,  'dddd' ),
+( 5,  'eeeee' ),
+( 6,  'ffffff' ),
+( 7,  'ggggggg' ),
+( 8,  'hello world' ),
+( 9,  'hello a world' ),
+( 10, 'hello aa world' ),
+( 11, 'hello aaa world' ),
+( 12, 'hello aaaa world' ),
+( 13, 'hello aaaaa world' ),
+( 14, 'hello me world' ),
+( 15, 'hello two world' ),
+( 16, 'hello four world' )
+</db_insert>
+
+</test>

@@ -1438,11 +1438,13 @@ public:
 
 	bool				Setup ( CSphSchema * pSchema );
 	bool				IsValid () const;
-	inline int			GetAttrType () const { return m_iAttrType; }
-	inline SphAttr_t	GetValue ( int iIndex ) const;
-	inline const SphAttr_t * GetValueArray () const;
-	inline int			GetNumValues () const;
+
 	void				SetExternalValues ( const SphAttr_t * pValues, int nValues );
+
+	inline int					GetAttrType () const		{ return m_iAttrType; }
+	inline SphAttr_t			GetValue ( int iIdx ) const	{ assert ( iIdx<GetNumValues() ); return m_pValues ? m_pValues[iIdx] : m_dValues[iIdx]; }
+	inline const SphAttr_t *	GetValueArray () const		{ return m_pValues ? m_pValues : &(m_dValues [0]); }
+	inline int					GetNumValues () const		{ return m_pValues ? m_nValues : m_dValues.GetLength (); }
 
 	bool				operator == ( const CSphFilter & rhs ) const;
 	bool				operator != ( const CSphFilter & rhs ) const { return !( (*this)==rhs ); }

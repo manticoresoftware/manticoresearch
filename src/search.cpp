@@ -401,7 +401,7 @@ int main ( int argc, char ** argv )
 					{
 						case SPH_ATTR_INTEGER:
 						case SPH_ATTR_ORDINAL:
-						case SPH_ATTR_BOOL:			fprintf ( stdout, "%u", tMatch.GetAttr ( tAttr.m_tLocator ) ); break;
+						case SPH_ATTR_BOOL:			fprintf ( stdout, "%u", (int)tMatch.GetAttr ( tAttr.m_tLocator ) ); break;
 						case SPH_ATTR_TIMESTAMP:	fprintf ( stdout, "%s", myctime ( (DWORD)tMatch.GetAttr ( tAttr.m_tLocator ) ) ); break;
 						case SPH_ATTR_FLOAT:		fprintf ( stdout, "%f", tMatch.GetAttrFloat ( tAttr.m_tLocator ) ); break;
 						case SPH_ATTR_BIGINT:		fprintf ( stdout, "%"PRIu64, tMatch.GetAttr ( tAttr.m_tLocator ) ); break;

@@ -4207,10 +4207,10 @@ BYTE * CSphTokenizer_UTF8Ngram::GetToken ()
 CSphFilter::CSphFilter ()
 	: m_sAttrName	( "" )
 	, m_bExclude	( false )
-	, m_iAttrType	( SPH_FILTERATTR_ATTR )
 	, m_uMinValue	( 0 )
 	, m_uMaxValue	( UINT_MAX )
 	, m_bMva		( false )
+	, m_iAttrType	( SPH_FILTERATTR_ATTR )
 	, m_pValues		( NULL )
 	, m_nValues		( 0 )
 {}
@@ -4264,25 +4264,6 @@ bool CSphFilter::Setup ( CSphSchema * pSchema )
 bool CSphFilter::IsValid () const
 {
 	return m_tLocator.m_iBitOffset >= 0 || m_iAttrType != SPH_FILTERATTR_ATTR;
-}
-
-
-SphAttr_t CSphFilter::GetValue ( int iIndex ) const
-{
-	assert ( iIndex < GetNumValues () );
-	return m_pValues ? m_pValues [iIndex] : m_dValues [iIndex];
-}
-
-
-const SphAttr_t * CSphFilter::GetValueArray () const
-{
-	return m_pValues ? m_pValues : &(m_dValues [0]);
-}
-
-
-int CSphFilter::GetNumValues () const
-{
-	return m_pValues ? m_nValues : m_dValues.GetLength ();
 }
 
 
@@ -8904,22 +8885,22 @@ bool CSphIndex_VLN::LateReject ( CSphMatch & tMatch, const CSphQuery * pQuery ) 
 	{
 		const CSphFilter & tFilter = pQuery->m_dFilters[i];
 
-		if ( tFilter.m_eType != SPH_FILTER_VALUES && tFilter.m_eType != SPH_FILTER_RANGE || tFilter.GetAttrType () != SPH_FILTERATTR_WEIGHT )
+		if (!( tFilter.GetAttrType()==SPH_FILTERATTR_WEIGHT
+			&& ( tFilter.m_eType==SPH_FILTER_VALUES || tFilter.m_eType==SPH_FILTER_RANGE ) ))
+		{
 			continue;
+		}
 
 		SphAttr_t uValue = tMatch.m_iWeight;
-
-		switch ( tFilter.m_eType )
+		if ( tFilter.m_eType==SPH_FILTER_VALUES )
 		{
-		case SPH_FILTER_VALUES:	
 			if ( !( tFilter.m_bExclude ^ sphGroupMatch ( uValue, tFilter.GetValueArray (), tFilter.GetNumValues () ) ) )
 				return true;
-			break;
-
-		case SPH_FILTER_RANGE:
+		} else
+		{
+			assert ( tFilter.m_eType==SPH_FILTER_RANGE );
 			if ( tFilter.m_bExclude ^ ( uValue<tFilter.m_uMinValue || uValue>tFilter.m_uMaxValue ) )
 				return true;
-			break;
 		}
 	}
 
@@ -12675,7 +12656,13 @@ const ExtDoc_t * ExtQuorum_c::GetDocsChunk ( SphDocID_t * pMaxID )
 	{
 		// find min document ID, count occurences
 		ExtDoc_t tCand;
+
 		tCand.m_uDocid = DOCID_MAX; // current candidate id
+		tCand.m_uHitlistOffset = 0; // suppress gcc warnings
+		tCand.m_pDocinfo = NULL;
+		tCand.m_uFields = 0;
+		tCand.m_fTFIDF = 0.0f;
+
 		int iCandMatches = 0; // amount of children that match current candidate
 		ARRAY_FOREACH ( i, m_pCurDoc )
 		{
@@ -19823,6 +19810,9 @@ void CSphWordDataRecord::Read( CSphMergeSource * pSource, CSphMergeData * pMerge
 				case SPH_FILTER_VALUES:
 					if ( !( tFilter.m_bExclude ^ sphGroupMatch ( uValue, tFilter.GetValueArray (), tFilter.GetNumValues () ) ) )
 						bOK = false;
+					break;
+
+				default:
 					break;
 				}
 			}

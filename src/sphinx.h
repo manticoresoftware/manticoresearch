@@ -1797,16 +1797,16 @@ public:
 	virtual void				SetPreopen ( bool bValue ) { m_bKeepFilesOpen = bValue; }
 	virtual void				SetWordlistPreload ( bool bValue ) { m_bPreloadWordlist = bValue; }
 	void						SetTokenizer ( ISphTokenizer * pTokenizer );
-	ISphTokenizer *				GetTokenizer () { return m_pTokenizer; }
+	ISphTokenizer *				GetTokenizer () const { return m_pTokenizer; }
 	ISphTokenizer *				LeakTokenizer ();
 	void						SetDictionary ( CSphDict * pDict );
-	CSphDict *					GetDictionary () { return m_pDict; }
+	CSphDict *					GetDictionary () const { return m_pDict; }
 	CSphDict *					LeakDictionary ();
 	void						Setup ( const CSphIndexSettings & tSettings );
 	const CSphIndexSettings &	GetSettings () { return m_tSettings; }
 	bool						IsStripperInited () const { return m_bStripperInited; }
 	virtual SphAttr_t *			GetKillList () const = 0;
-	virtual int					GetKillListSize ()const = 0;
+	virtual int					GetKillListSize () const = 0;
 
 public:
 	/// build index by indexing given sources

@@ -1091,7 +1091,7 @@ struct CSphIndex_VLN;
 struct CSphTermSetup : ISphNoncopyable
 {
 	CSphDict *				m_pDict;
-	CSphIndex_VLN *			m_pIndex;
+	const CSphIndex_VLN *	m_pIndex;
 	ESphDocinfo				m_eDocinfo;
 	CSphDocInfo				m_tMin;
 	int						m_iToCalc;
@@ -1679,12 +1679,7 @@ private:
 	void						IterateWordlistStop ();
 
 private:
-	// searching-only
-	CSphVector<CSphQueryWord>	m_dQueryWords;			///< search query words for "simple" query types (ie. match all/any/phrase)
-
-	int							m_iWeights;						///< search query field weights count
-	int							m_dWeights [ SPH_MAX_FIELDS ];	///< search query field weights
-
+	// searching-only, per-index
 	static const int			DOCINFO_HASH_BITS	= 18;	// FIXME! make this configurable
 	static const int			DOCINFO_INDEX_FREQ	= 128;	// FIXME! make this configurable
 
@@ -1716,6 +1711,13 @@ private:
 	CSphSharedBuffer<BYTE>		m_bPreread;				///< are we ready to search
 	DWORD						m_uVersion;				///< data files version
 	bool						m_bUse64;				///< whether the header is id64
+
+private:
+	// searching-only, per-query
+	CSphVector<CSphQueryWord>	m_dQueryWords;			///< search query words for "simple" query types (ie. match all/any/phrase)
+
+	int							m_iWeights;						///< search query field weights count
+	int							m_dWeights [ SPH_MAX_FIELDS ];	///< search query field weights
 
 	bool						m_bEarlyLookup;			///< whether early attr value lookup is needed
 	bool						m_bLateLookup;			///< whether late attr value lookup is needed
@@ -1757,11 +1759,11 @@ private:
 
 	bool						BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAutoArray<CSphWordHit> & dHits, int iArenaSize, int iFieldFD, int nFieldMVAs, int iFieldMVAInPool );
 
-	void						CheckQueryWord ( const char * szWord, CSphQueryResult * pResult );
-	void						CheckExtendedQuery ( const CSphExtendedQueryNode * pNode, CSphQueryResult * pResult );
-	void						CheckBooleanQuery ( const CSphBooleanQueryExpr * pExpr, CSphQueryResult * pResult );
+	void						CheckQueryWord ( const char * szWord, CSphQueryResult * pResult ) const;
+	void						CheckExtendedQuery ( const CSphExtendedQueryNode * pNode, CSphQueryResult * pResult ) const;
+	void						CheckBooleanQuery ( const CSphBooleanQueryExpr * pExpr, CSphQueryResult * pResult ) const;
 
-	CSphDict *					SetupStarDict ( CSphScopedPtr<CSphDict> & tContainer );
+	CSphDict *					SetupStarDict ( CSphScopedPtr<CSphDict> & tContainer ) const;
 
 	void						LoadSettings ( CSphReader_VLN & tReader );
 	void						SaveSettings ( CSphWriter & tWriter );
@@ -1777,7 +1779,7 @@ private:
 
 public:
 	// FIXME! this needs to be protected, and refactored as well
-	bool						SetupQueryWord ( CSphQueryWord & tWord, const CSphTermSetup & tTermSetup, bool bSetupReaders = true );
+	bool						SetupQueryWord ( CSphQueryWord & tWord, const CSphTermSetup & tTermSetup, bool bSetupReaders = true ) const;
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -9602,7 +9604,7 @@ public:
 							CSphBooleanEvalNode ( const CSphBooleanQueryExpr * pNode, const CSphTermSetup & tTermSetup );
 							~CSphBooleanEvalNode ();
 
-	void					SetFile ( CSphIndex_VLN * pIndex, const CSphTermSetup & tTermSetup );
+	void					SetFile ( const CSphIndex_VLN * pIndex, const CSphTermSetup & tTermSetup );
 	CSphMatch *				MatchNode ( SphDocID_t iMinID, CSphString & sWarning );	///< get next match at this node, with ID greater than iMinID
 	CSphMatch *				MatchLevel ( SphDocID_t iMinID, CSphString & sWarning );	///< get next match at this level, with ID greater than iMinID
 	bool					IsRejected ( SphDocID_t iID, CSphString & sWarning );		///< check if this match should be rejected
@@ -9659,7 +9661,7 @@ CSphBooleanEvalNode::~CSphBooleanEvalNode ()
 }
 
 
-void CSphBooleanEvalNode::SetFile ( CSphIndex_VLN * pIndex, const CSphTermSetup & tTermSetup )
+void CSphBooleanEvalNode::SetFile ( const CSphIndex_VLN * pIndex, const CSphTermSetup & tTermSetup )
 {
 	// setup self
 	if ( pIndex->SetupQueryWord ( *this, tTermSetup ) )
@@ -9845,7 +9847,7 @@ CSphMatch * CSphBooleanEvalNode::MatchLevel ( SphDocID_t iMinID, CSphString & sW
 }
 
 
-void CSphIndex_VLN::CheckBooleanQuery ( const CSphBooleanQueryExpr * pExpr, CSphQueryResult * pResult )
+void CSphIndex_VLN::CheckBooleanQuery ( const CSphBooleanQueryExpr * pExpr, CSphQueryResult * pResult ) const
 {
 	const CSphBooleanQueryExpr * pTestExpr = pExpr;
 
@@ -13106,7 +13108,7 @@ int ExtRanker_Wordcount_c::GetMatches ( int, const int * pWeights )
 
 //////////////////////////////////////////////////////////////////////////
 
-void CSphIndex_VLN::CheckExtendedQuery ( const CSphExtendedQueryNode * pNode, CSphQueryResult * pResult )
+void CSphIndex_VLN::CheckExtendedQuery ( const CSphExtendedQueryNode * pNode, CSphQueryResult * pResult ) const
 {
 	ARRAY_FOREACH ( i, pNode->m_tAtom.m_dWords )
 		CheckQueryWord ( pNode->m_tAtom.m_dWords [i].m_sWord.cstr (), pResult );
@@ -13392,7 +13394,7 @@ void CSphIndex_VLN::MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISph
 
 //////////////////////////////////////////////////////////////////////////////
 
-void CSphIndex_VLN::CheckQueryWord ( const char * szWord, CSphQueryResult * pResult )
+void CSphIndex_VLN::CheckQueryWord ( const char * szWord, CSphQueryResult * pResult ) const
 {
 	if ( ( !m_tSettings.m_iMinPrefixLen && !m_tSettings.m_iMinInfixLen ) || !m_bEnableStar || !szWord )
 		return;
@@ -13413,7 +13415,7 @@ void CSphIndex_VLN::CheckQueryWord ( const char * szWord, CSphQueryResult * pRes
 
 //////////////////////////////////////////////////////////////////////////////
 
-bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, const CSphTermSetup & tTermSetup, bool bSetupReaders )
+bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, const CSphTermSetup & tTermSetup, bool bSetupReaders ) const
 {
 	tWord.m_iDocs = 0;
 	tWord.m_iHits = 0;
@@ -14528,7 +14530,7 @@ bool CSphIndex_VLN::SetupCalc ( CSphQueryResult * pResult, const CSphQuery * pQu
 }
 
 
-CSphDict * CSphIndex_VLN::SetupStarDict  ( CSphScopedPtr<CSphDict> & tContainer )
+CSphDict * CSphIndex_VLN::SetupStarDict  ( CSphScopedPtr<CSphDict> & tContainer ) const
 {
 	// setup proper dict
 	bool bUseStarDict = false;

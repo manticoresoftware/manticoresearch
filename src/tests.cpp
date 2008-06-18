@@ -75,13 +75,13 @@ ISphTokenizer * CreateTestTokenizer ( bool bUTF8, bool bSynonyms, bool bEscaped 
 }
 
 
-void TestTokenizer ( bool bUTF8, bool bEscaped = false )
+void TestTokenizer ( bool bUTF8 )
 {
 	const char * sPrefix = bUTF8 
 		? "testing UTF8 tokenizer"
 		: "testing SBCS tokenizer";
 
-	for ( int iRun=1; iRun<=2; iRun++ )
+	for ( int iRun=1; iRun<=3; iRun++ )
 	{
 		// simple "one-line" tests
 		const char * sMagic = bUTF8
@@ -89,7 +89,8 @@ void TestTokenizer ( bool bUTF8, bool bEscaped = false )
 			: "\xC0\xC1\xF5\xF6"; // valid SBCS but invalid UTF-8
 
 		assert ( CreateSynonymsFile ( sMagic ) );
-		ISphTokenizer * pTokenizer = CreateTestTokenizer ( bUTF8, iRun==2, bEscaped );
+		bool bEscaped = iRun==3;
+		ISphTokenizer * pTokenizer = CreateTestTokenizer ( bUTF8, iRun>=2, bEscaped );
 
 		const char * dTests[] =
 		{
@@ -127,8 +128,8 @@ void TestTokenizer ( bool bUTF8, bool bEscaped = false )
 			"2", "U.S.AB U.S.A. U.S.B.U.S.D.U.S.U.S.A.F.",	"US", "ab", "USA", "USB", "USD", "US", "USAF", NULL,
 			"3", "phon\\e",						"phone", NULL,
 			"3", "\\thephone",					"thephone",  NULL,
-			"3", "the\\!phone",					"the!phone", NULL,
-			"3", "\\!phone",					"!phone", NULL,
+			"3", "the\\!phone",					"the", "phone", NULL,
+			"3", "\\!phone",					"phone", NULL,
 			NULL
 		};
 
@@ -279,33 +280,6 @@ void TestTokenizer ( bool bUTF8, bool bEscaped = false )
 		assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "world" ) ); assert ( !pTokenizer->GetBoundary() );
 		assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "testing" ) ); assert ( pTokenizer->GetBoundary() );
 		assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "boundaries" ) ); assert ( !pTokenizer->GetBoundary() );
-
-		// check escaped sequences
-		if ( bEscaped )
-		{
-			int iRun = 3;
-			for ( int iCur=0; dTests[iCur] && atoi(dTests[iCur++])<=iRun; )
-			{
-				if ( atoi(dTests[iCur-1])!=iRun )
-				{
-					while ( dTests [iCur++] );
-					continue;
-				}
-
-				printf ( "%s, run=%d, line=%s\n", sPrefix, iRun, dTests[iCur] );
-				pTokenizer->SetBuffer ( (BYTE*)dTests[iCur], strlen(dTests[iCur]) );
-				iCur++;
-
-				for ( BYTE * pToken=pTokenizer->GetToken(); pToken; pToken=pTokenizer->GetToken() )
-				{
-					assert ( dTests[iCur] && strcmp ( (const char*)pToken, dTests[iCur] )==0 );
-					iCur++;
-				}
-
-				assert ( dTests[iCur]==NULL );
-				iCur++;
-			}
-		}
 
 		// done
 		SafeDelete ( pTokenizer );
@@ -724,8 +698,6 @@ int main ()
 	TestStripper ();
 	TestTokenizer ( false );
 	TestTokenizer ( true );
-	TestTokenizer ( false, true );
-	TestTokenizer ( true, true );
 	TestExpr ();
 #endif
 

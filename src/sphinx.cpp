@@ -1714,8 +1714,6 @@ private:
 
 private:
 	// searching-only, per-query
-	CSphVector<CSphQueryWord>	m_dQueryWords;			///< search query words for "simple" query types (ie. match all/any/phrase)
-
 	int							m_iWeights;						///< search query field weights count
 	int							m_dWeights [ SPH_MAX_FIELDS ];	///< search query field weights
 
@@ -1745,11 +1743,8 @@ private:
 	void						WriteSchemaColumn ( CSphWriter & fdInfo, const CSphColumnInfo & tCol );
 	void						ReadSchemaColumn ( CSphReader_VLN & rdInfo, CSphColumnInfo & tCol );
 
-	void						MatchAll ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters );
-	void						MatchAny ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters );
 	bool						MatchBoolean ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphTermSetup & tTermSetup );
 	bool						MatchExtended ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphTermSetup & tTermSetup );
-	bool						MatchExtendedV1 ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphTermSetup & tTermSetup );
 	void						MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, const CSphTermSetup & tTermSetup );
 
 	const DWORD *				FindDocinfo ( SphDocID_t uDocID ) const;
@@ -2303,6 +2298,19 @@ ISphTokenizer * sphCreateUTF8NgramTokenizer ()
 
 /////////////////////////////////////////////////////////////////////////////
 
+enum
+{
+	MASK_CODEPOINT			= 0x00ffffffUL,	// mask off codepoint flags
+	MASK_FLAGS				= 0xff000000UL, // mask off codepoint value
+	FLAG_CODEPOINT_SPECIAL	= 0x01000000UL,	// this codepoint is special
+	FLAG_CODEPOINT_DUAL		= 0x02000000UL,	// this codepoint is special but also a valid word part
+	FLAG_CODEPOINT_NGRAM	= 0x04000000UL,	// this codepoint is n-gram indexed
+	FLAG_CODEPOINT_SYNONYM	= 0x08000000UL,	// this codepoint is used in synonym tokens only
+	FLAG_CODEPOINT_BOUNDARY	= 0x10000000UL,	// this codepoint is phrase boundary
+	FLAG_CODEPOINT_IGNORE	= 0x20000000UL	// this codepoint is ignored
+};
+
+
 CSphLowercaser::CSphLowercaser ()
 	: m_pData ( NULL )
 {
@@ -2415,23 +2423,11 @@ void CSphLowercaser::AddRemaps ( const CSphVector<CSphRemapRange> & dRemaps, DWO
 		{
 			assert ( m_pChunk [ j>>CHUNK_BITS ] );
 			int & iCodepoint = m_pChunk [ j>>CHUNK_BITS ] [ j & CHUNK_MASK ];
-			iCodepoint = ( iCodepoint ? uFlagsIfExists : uFlags ) | iRemapped;
+			bool bWordPart = ( iCodepoint & MASK_CODEPOINT ) && !( iCodepoint & FLAG_CODEPOINT_SYNONYM );
+			iCodepoint = ( bWordPart ? uFlagsIfExists : uFlags ) | ( iCodepoint & MASK_FLAGS ) | iRemapped;
 		}
 	}
 }
-
-
-enum
-{
-	MASK_CODEPOINT			= 0x00ffffffUL,	// mask off codepoint flags
-	MASK_FLAGS				= 0xff000000UL, // mask off codepoint value
-	FLAG_CODEPOINT_SPECIAL	= 0x01000000UL,	// this codepoint is special
-	FLAG_CODEPOINT_DUAL		= 0x02000000UL,	// this codepoint is special but also a valid word part
-	FLAG_CODEPOINT_NGRAM	= 0x04000000UL,	// this codepoint is n-gram indexed
-	FLAG_CODEPOINT_SYNONYM	= 0x08000000UL,	// this codepoint is used in synonym tokens only
-	FLAG_CODEPOINT_BOUNDARY	= 0x10000000UL,	// this codepoint is phrase boundary
-	FLAG_CODEPOINT_IGNORE	= 0x20000000UL	// this codepoint is ignored
-};
 
 
 void CSphLowercaser::AddSpecials ( const char * sSpecials )
@@ -3336,6 +3332,21 @@ static inline bool IsSeparator ( int iFolded, bool bFirst )
 	return bFirst;
 }
 
+// handles escaped specials that are not in the character set
+// returns true if the codepoint should be processed as a simple codepoint,
+//		false if it should be processed as a whitespace
+// for example: aaa\!bbb => aaa bbb
+static inline bool Special2Simple ( int & iCodepoint )
+{
+	if ( ( iCodepoint & FLAG_CODEPOINT_DUAL ) || !( iCodepoint & FLAG_CODEPOINT_SPECIAL ) )
+	{
+		iCodepoint &= ~( FLAG_CODEPOINT_SPECIAL | FLAG_CODEPOINT_DUAL );
+		return true;
+	}
+
+	return false;
+}
+
 
 template < bool IS_UTF8 >
 BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
@@ -3404,10 +3415,10 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 					iLastCodepoint = iCode;
 					continue;
 				}
-				else
-				{
-					if ( iLastCodepoint == '\\' )
-						iFolded &= ~( FLAG_CODEPOINT_SPECIAL | FLAG_CODEPOINT_DUAL );
+				else if ( iLastCodepoint == '\\' && !Special2Simple( iFolded ) )
+ 				{
+					iLastCodepoint = 0;
+					continue;
 				}
 
 				iLastCodepoint = iCode;
@@ -3636,8 +3647,8 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 
 				if ( bEscaped )
 				{
-					if ( iCode != '\\' && iLast == '\\' )
-						iFolded &= ~FLAG_CODEPOINT_SPECIAL;
+					if ( iCode != '\\' && iLast == '\\' && !Special2Simple ( iFolded ) )
+						break;
 
 					iLast = iCode;
 				}
@@ -3866,8 +3877,8 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 				continue;
 			}
 
-			if ( iLastCodepoint == '\\' )
-				iCode &= ~FLAG_CODEPOINT_SPECIAL;
+			if ( iLastCodepoint == '\\' && !Special2Simple ( iCode ) )
+				iCode = 0;
 
 			iLastCodepoint = iCodepoint;
 		}
@@ -4059,8 +4070,8 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 				continue;
 			}
 
-			if ( iLastCodepoint == '\\' )
-				iCode &= ~FLAG_CODEPOINT_SPECIAL;
+			if ( iLastCodepoint == '\\' && !Special2Simple ( iCode ) )
+				iCode = 0;
 
 			iLastCodepoint = iCodePoint;
 		}
@@ -8628,64 +8639,6 @@ SphWordID_t	CSphDictStarV8::GetWordID ( BYTE * pWord )
 
 /////////////////////////////////////////////////////////////////////////////
 
-/// my simple query parser
-struct CSphSimpleQueryParser
-{
-	struct
-	{
-		CSphString		m_sWord;
-		SphWordID_t		m_uWordID;
-		int				m_iQueryPos;
-	} m_dWords [ SPH_MAX_QUERY_WORDS ];
-
-	bool m_bUseStarDict;
-
-	CSphSimpleQueryParser ( bool bStarDict )
-		: m_bUseStarDict ( bStarDict )
-	{
-	}
-
-	int Parse ( const char * sQuery, ISphTokenizer * pTokenizer, CSphDict * pDict )
-	{
-		assert ( sQuery );
-		assert ( pTokenizer );
-		assert ( pDict );
-
-		CSphString sQbuf ( sQuery );
-		pTokenizer->SetBuffer ( (BYTE*)sQbuf.cstr(), strlen(sQuery) );
-
-		if ( m_bUseStarDict )
-			pTokenizer->EnableQueryParserMode ( true );
-
-		int iWords = 0;
-		int iPos = 0;
-
-		BYTE * sWord;
-		while ( ( sWord = pTokenizer->GetToken() )!=NULL && iWords<SPH_MAX_QUERY_WORDS )
-		{
-			SphWordID_t iWord = pDict->GetWordID ( sWord );
-			if ( iWord )
-			{
-				iPos += 1+pTokenizer->GetOvershortCount(); // properly advance position
-				m_dWords[iWords].m_sWord = (const char*)sWord;
-				m_dWords[iWords].m_uWordID = iWord;
-				m_dWords[iWords].m_iQueryPos = iPos;
-				iWords++;
-			} else
-			{
-				if ( iPos )
-					iPos++; // advance position on stopwords, but not at the very start
-			}
-		}
-
-		if ( m_bUseStarDict )
-			pTokenizer->EnableQueryParserMode ( false );
-
-		return iWords;
-	}
-};
-
-
 /// query-word comparator
 bool operator < ( const CSphQueryWord & a, const CSphQueryWord & b )
 {
@@ -9193,396 +9146,6 @@ struct WordDupeCheck_t
 		return m_uWordID < rhs.m_uWordID;
 	}
 };
-
-
-void CSphIndex_VLN::MatchAll ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters )
-{
-	bool bRandomize = ppSorters[0]->m_bRandomize;
-	int iCutoff = pQuery->m_iCutoff;
-
-	///////////////////
-	// match all words
-	///////////////////
-
-	if ( !m_dQueryWords[0].m_iDocs )
-		return;
-
-	// preload doclist entries, and calc max qpos
-	int i, iMaxQpos = 0;
-	for ( i=0; i<m_dQueryWords.GetLength(); i++ )
-	{
-		m_dQueryWords[i].GetDoclistEntry ();
-		iMaxQpos = Max ( iMaxQpos, m_dQueryWords[i].m_iQueryPos );
-	}
-	iMaxQpos--; // because we'll check base-0 count
-
-	// check for dupes
-	CSphVector<WordDupeCheck_t> dCheck;
-	dCheck.Resize ( m_dQueryWords.GetLength() );
-
-	for ( i=0; i<m_dQueryWords.GetLength(); i++ )
-	{
-		m_dQueryWords[i].m_bDupe = false;
-		dCheck[i].m_uWordID = m_dQueryWords[i].m_iWordID;
-		dCheck[i].m_iIndex = i;
-	}
-
-	dCheck.Sort ();
-	for ( i=1; i<dCheck.GetLength(); i++ )
-		if ( dCheck[i].m_uWordID==dCheck[i-1].m_uWordID )
-	{
-		m_dQueryWords [ dCheck[i].m_iIndex ].m_bDupe = true;
-		m_dQueryWords [ dCheck[i-1].m_iIndex ].m_bDupe = true;
-	}
-
-	// max_query_time
-	DWORD uMaxStamp = 0;
-	if ( pQuery->m_uMaxQueryMsec )
-		uMaxStamp = sphTimerMsec () + pQuery->m_uMaxQueryMsec;
-	int iScannedEntries = 0;
-
-	// main loop
-	i = 0;
-	SphDocID_t docID = 0;
-	for ( ;; )
-	{
-		/////////////////////
-		// obtain next match
-		/////////////////////
-
-		// scan lists until *all* the ids match
-		while ( m_dQueryWords[i].m_tDoc.m_iDocID && docID>m_dQueryWords[i].m_tDoc.m_iDocID )
-		{
-			m_dQueryWords[i].GetDoclistEntry ();
-
-			// max_query_time
-			if ( uMaxStamp && ++iScannedEntries==1000 )
-			{
-				iScannedEntries = 0;
-				if ( sphTimerMsec()>=uMaxStamp )
-				{
-					m_dQueryWords[i].m_tDoc.m_iDocID = 0;
-					pResult->m_sWarning = "query time exceeded max_query_time";
-					break;
-				}
-			}
-		}
-		if ( m_dQueryWords[i].m_tDoc.m_iDocID==0 )
-			break;
-
-		if ( docID<m_dQueryWords[i].m_tDoc.m_iDocID )
-		{
-			docID = m_dQueryWords[i].m_tDoc.m_iDocID;
-			i = 0;
-			continue;
-		}
-		if ( ++i != m_dQueryWords.GetLength() )
-			continue;
-
-		// forcibly break on DOCID_MAX matches
-		if ( docID==DOCID_MAX )
-			break;
-
-		// this is my match
-		CSphMatch & tMatch = m_dQueryWords[0].m_tDoc;
-
-		// early reject by group id, doc id or timestamp
-		if ( EarlyReject ( tMatch, pQuery ) )
-		{
-			docID++;
-			i = 0;
-			continue;
-		}
-
-		//////////////
-		// rank match
-		//////////////
-
-		if ( m_dQueryWords.GetLength()==1 )
-		{
-			// sum simple match weights and phrase match weights
-			tMatch.m_iWeight = 0;
-
-			// FIXME? incompatible with 096
-			DWORD uFields = m_dQueryWords[0].m_uFields;
-			for ( int iField = 0; uFields; iField++ )
-			{
-				if ( uFields & 1 )
-					tMatch.m_iWeight += m_dWeights[iField];
-				uFields >>= 1;
-			}
-
-		} else
-		{
-			// preload hitlist entries
-			for ( i=0; i<m_dQueryWords.GetLength(); i++ )
-				m_dQueryWords[i].GetHitlistEntry ();
-
-			// init weighting
-			BYTE curPhraseWeight [ SPH_MAX_FIELDS ];
-			BYTE phraseWeight [ SPH_MAX_FIELDS ];
-			BYTE matchWeight [ SPH_MAX_FIELDS ];
-			for ( i=0; i<m_iWeights; i++ )
-			{
-				curPhraseWeight[i] = 0;
-				phraseWeight[i] = 0;
-				matchWeight[i] = 0;
-			}
-
-			DWORD uSpanStart = UINT_MAX;
-			DWORD uSpanEnd = UINT_MAX;
-			bool bPhraseMatch = false;
-
-			DWORD k = INT_MAX;
-			for ( ;; )
-			{
-				// scan until next hit in this document
-				DWORD pmin = INT_MAX;
-				int imin = -1;
-				for ( i=0; i<m_dQueryWords.GetLength(); i++ )
-				{
-					if ( !m_dQueryWords[i].m_iHitPos )
-						continue;
-					if ( pmin>m_dQueryWords[i].m_iHitPos )
-					{
-						pmin = m_dQueryWords[i].m_iHitPos;
-						imin = i;
-					}
-				}
-				if ( imin<0 )
-					break;
-
-				if ( m_dQueryWords[imin].m_bDupe )
-				{
-					for ( i=imin; i<m_dQueryWords.GetLength(); i++ )
-						if ( m_dQueryWords[i].m_iHitPos==pmin )
-					{
-						if ( m_dQueryWords[i].m_iQueryPos-pmin==k )
-							imin = i;
-						m_dQueryWords[i].GetHitlistEntry ();
-					}
-
-				} else
-				{
-					m_dQueryWords[imin].GetHitlistEntry ();
-				}
-
-				// get field number and mark a simple match
-				int j = pmin >> 24;
-				assert ( j>=0 && j<m_tSchema.m_dFields.GetLength() );
-				matchWeight[j] = 1;
-
-				// find max proximity relevance
-				if ( m_dQueryWords[imin].m_iQueryPos - pmin == k )
-				{
-					uSpanStart = Min ( uSpanStart, pmin );
-					uSpanEnd = Max ( uSpanEnd, pmin );
-
-					curPhraseWeight[j]++;
-					if ( phraseWeight[j] < curPhraseWeight[j] )
-					{
-						phraseWeight[j] = curPhraseWeight[j];
-
-						if ( (int)(uSpanEnd-uSpanStart)==iMaxQpos )
-							if ( curPhraseWeight[j]==m_dQueryWords.GetLength()-1 )
-								bPhraseMatch = true;
-					}
-
-				} else
-				{
-					curPhraseWeight[j] = 0;
-					uSpanStart = uSpanEnd = pmin;
-				}
-
-				k = m_dQueryWords[imin].m_iQueryPos - pmin;
-			}
-
-			// check if there was a perfect match
-			if ( pQuery->m_eMode==SPH_MATCH_PHRASE && m_dQueryWords.GetLength()>1 && !bPhraseMatch )
-			{
-				// there was not. continue
-				i = 0;
-				docID++;
-				continue;
-			}
-
-			// sum simple match weights and phrase match weights
-			tMatch.m_iWeight = 0;
-			for ( i=0; i<m_iWeights; i++ )
-				tMatch.m_iWeight += m_dWeights[i] * ( matchWeight[i] + phraseWeight[i] );
-		}
-
-		// submit
-		SPH_SUBMIT_MATCH ( tMatch );
-
-		// continue looking for next matches
-		i = 0;
-		docID++;
-	}
-}
-
-
-void CSphIndex_VLN::MatchAny ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters )
-{
-	bool bRandomize = ppSorters[0]->m_bRandomize;
-	int iCutoff = pQuery->m_iCutoff;
-
-	//////////////////
-	// match any word
-	//////////////////
-
-	int iActive = m_dQueryWords.GetLength(); // total number of words still active
-	SphDocID_t iLastMatchID = 0;
-
-	// preload entries
-	int i;
-	for ( i=0; i<m_dQueryWords.GetLength(); i++ )
-		if ( m_dQueryWords[i].m_iDocs )
-			m_dQueryWords[i].GetDoclistEntry ();
-
-	// find a multiplier for phrase match
-	// so that it will weight more than any word match
-	int iPhraseK = 0;
-	for ( i=0; i<m_iWeights; i++ )
-		iPhraseK += m_dWeights[i] * m_dQueryWords.GetLength();
-
-	// max_query_time
-	DWORD uMaxStamp = 0;
-	if ( pQuery->m_uMaxQueryMsec )
-		uMaxStamp = sphTimerMsec () + pQuery->m_uMaxQueryMsec;
-	int iScannedEntries = 0;
-
-	for ( ;; )
-	{
-		// update active pointers to document lists, kill empty ones,
-		// and get min current document id
-		SphDocID_t iMinID = DOCID_MAX;
-		int iMinIndex = -1;
-
-		for ( i=0; i<iActive; i++ )
-		{
-			// move to next document
-			if ( m_dQueryWords[i].m_tDoc.m_iDocID==iLastMatchID && iLastMatchID )
-				m_dQueryWords[i].GetDoclistEntry ();
-
-			// remove emptied words
-			if ( m_dQueryWords[i].m_tDoc.m_iDocID==0 )
-			{
-				m_dQueryWords[i] = m_dQueryWords[iActive-1];
-				i--;
-				iActive--;
-				continue;
-			}
-
-			// get new min id
-			assert ( m_dQueryWords[i].m_tDoc.m_iDocID > iLastMatchID );
-			if ( m_dQueryWords[i].m_tDoc.m_iDocID < iMinID )
-			{
-				iMinID = m_dQueryWords[i].m_tDoc.m_iDocID;
-				iMinIndex = i;
-			}
-		}
-		if ( iActive==0 || iMinID==DOCID_MAX )
-			break;
-
-		iLastMatchID = iMinID;
-		assert ( iMinIndex>=0 );
-		assert ( iLastMatchID );
-		assert ( iLastMatchID!=DOCID_MAX );
-
-		// max_query_time
-		if ( uMaxStamp && ++iScannedEntries==1000 )
-		{
-			iScannedEntries = 0;
-			if ( sphTimerMsec()>=uMaxStamp )
-			{
-				pResult->m_sWarning = "query time exceeded max_query_time";
-				break;
-			}
-		}
-
-		// early reject by group id, doc id or timestamp
-		CSphMatch & tMatch = m_dQueryWords[iMinIndex].m_tDoc;
-		if ( EarlyReject ( tMatch, pQuery ) )
-			continue;
-
-		// get the words we're matching current document against (let's call them "terms")
-		CSphQueryWord * pHit [ SPH_MAX_QUERY_WORDS ];
-		int iTerms = 0;
-
-		for ( i=0; i<iActive; i++ )
-			if ( m_dQueryWords[i].m_tDoc.m_iDocID==iLastMatchID )
-		{
-			pHit[iTerms++] = &m_dQueryWords[i];
-			m_dQueryWords[i].GetHitlistEntry ();
-		}
-		assert ( iTerms>0 );
-
-		// init weighting
-		struct
-		{
-			int		m_iCurPhrase;	// current phrase-match weight
-			int		m_iMaxPhrase;	// max phrase-match weight
-			DWORD	m_uMatch;		// matching terms bitmap
-		} dWeights [ SPH_MAX_FIELDS ];
-		memset ( dWeights, 0, sizeof(dWeights) ); // OPTIMIZE: only zero out m_iWeights, not total
-
-		// do matching
-		// OPTIMIZE: implement simplified matching for iTerms==1 case
-		DWORD k = INT_MAX;
-		for ( ;; )
-		{
-			// get next good hit in this document
-			DWORD pmin = INT_MAX;
-			int imin = -1;
-			for ( i=0; i<iTerms; i++ )
-			{
-				// if hit list for this term is no longer active, remove it
-				if ( !pHit[i]->m_iHitPos )
-				{
-					pHit[i] = pHit[iTerms-1];
-					i--;
-					iTerms--;
-					continue;
-				}
-
-				// my current best match
-				if ( pmin>pHit[i]->m_iHitPos )
-				{
-					pmin = pHit[i]->m_iHitPos;
-					imin = i;
-				}
-			}
-			if ( imin<0 )
-				break;
-			pHit[imin]->GetHitlistEntry ();
-
-			// get field number and mark a simple match
-			int iField = pmin >> 24;
-			dWeights[iField].m_uMatch |= ( 1<<pHit[imin]->m_iQueryPos );
-
-			// find max proximity relevance
-			if ( pHit[imin]->m_iQueryPos - pmin == k )
-			{
-				dWeights[iField].m_iCurPhrase++;
-				if ( dWeights[iField].m_iMaxPhrase < dWeights[iField].m_iCurPhrase )
-					dWeights[iField].m_iMaxPhrase = dWeights[iField].m_iCurPhrase;
-			} else
-			{
-				dWeights[iField].m_iCurPhrase = 0;
-			}
-			k = pHit[imin]->m_iQueryPos - pmin;
-		}
-
-		// sum simple match weights and phrase match weights
-		tMatch.m_iWeight = 0;
-		for ( i=0; i<m_iWeights; i++ )
-			tMatch.m_iWeight += m_dWeights[i] * ( sphBitCount(dWeights[i].m_uMatch) + dWeights[i].m_iMaxPhrase*iPhraseK );
-
-		// submit
-		SPH_SUBMIT_MATCH ( tMatch );
-	}
-}
 
 
 struct CSphBooleanEvalNode : public CSphQueryWord
@@ -10375,7 +9938,6 @@ void CSphExtendedEvalAtom::UpdateLCS ( CSphLCSState & tState )
 
 //////////////////////////////////////////////////////////////////////////////
 
-#define SPH_BM25_MAX_TERMS		256
 #define SPH_BM25_K1				1.2f
 #define SPH_BM25_SCALE			1000
 
@@ -10391,489 +9953,6 @@ struct QwordsHash_fn
 
 typedef CSphOrderedHash < CSphQueryWord, CSphString, QwordsHash_fn, 256, 13 > CSphQwordsHash;
 
-
-class CSphExtendedEvalNode
-{
-public:
-						CSphExtendedEvalNode ( const CSphExtendedQueryNode * pNode, const CSphTermSetup & tSetup );
-						~CSphExtendedEvalNode ();
-
-public:
-	void				CollectQwords ( CSphQwordsHash & dHash, int & iCount );	///< collects all unique query words into dHash
-	CSphMatch *			GetNextMatch ( SphDocID_t iMinID, int iTerms, float * pIDF, int iFields, int * pWeights, CSphString & sWarning );	///< iTF==0 means that no weighting is required
-
-protected:
-	CSphMatch *			GetNextDoc ( SphDocID_t iMinID, CSphString & sWarning );
-	DWORD				GetNextHitNode ( DWORD iMinPos );
-	void				GetLastTF ( DWORD * pTF ) const;
-	inline CSphMatch *	GetLastDoc () const { return m_pLast; }
-	void				UpdateLCS ( CSphLCSState & tState );
-
-public:
-	DWORD				m_uLastHitPos;
-	int					m_iLastHitChild;
-
-protected:
-	CSphExtendedEvalAtom				m_tAtom;		///< plain node atom
-	bool								m_bAny;			///< whether to match any or all children (ie. OR or AND)
-	CSphVector<CSphExtendedEvalNode*>	m_dChildren;	///< non-plain node children
-	bool								m_bDone;		///< whether this node has any more matches
-	CSphMatch *							m_pLast;		///< my last match
-};
-
-
-CSphExtendedEvalNode::CSphExtendedEvalNode ( const CSphExtendedQueryNode * pNode, const CSphTermSetup & tSetup )
-	: m_iLastHitChild ( -1 )
-	, m_tAtom ( pNode->m_tAtom, tSetup )
-	, m_bAny ( pNode->m_bAny )
-	, m_bDone ( false )
-	, m_pLast ( NULL )
-{
-	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		m_dChildren.Add ( new CSphExtendedEvalNode ( pNode->m_dChildren[i], tSetup ) );
-
-	if ( pNode->IsEmpty() )
-		m_bDone = true;
-}
-
-
-CSphExtendedEvalNode::~CSphExtendedEvalNode ()
-{
-	ARRAY_FOREACH ( i, m_dChildren )
-		SafeDelete ( m_dChildren[i] );
-}
-
-
-DWORD CSphExtendedEvalNode::GetNextHitNode ( DWORD uMinPos )
-{
-	assert ( !m_bDone );
-
-	// plain node
-	if ( !m_dChildren.GetLength() )
-	{
-		assert ( !m_bAny );
-		assert ( !m_tAtom.IsEmpty() );
-
-		m_tAtom.GetNextHit ( uMinPos );
-		m_uLastHitPos = m_tAtom.m_uLastHitPos;
-		return m_uLastHitPos;
-	}
-
-	// expression node
-	DWORD uChildPos = UINT_MAX;
-	int iMinChild = -1;
-
-	if ( m_bAny )
-	{
-		ARRAY_FOREACH ( i, m_dChildren )
-			if ( m_dChildren[i]->m_uLastHitPos && m_dChildren[i]->m_pLast->m_iDocID==m_pLast->m_iDocID )
-		{
-			CSphExtendedEvalNode * pChild = m_dChildren[i];
-			do
-			{
-				pChild->GetNextHitNode ( uMinPos );
-			} while ( pChild->m_uLastHitPos && pChild->m_uLastHitPos<uMinPos );
-
-			if ( pChild->m_uLastHitPos && pChild->m_uLastHitPos<uChildPos )
-			{
-				uChildPos = pChild->m_uLastHitPos;
-				iMinChild = i;
-			}
-		}
-
-		assert ( iMinChild<0 || m_dChildren[iMinChild]->m_uLastHitPos==uChildPos );
-
-	} else
-	{
-		ARRAY_FOREACH ( i, m_dChildren )
-		{
-			CSphExtendedEvalNode * pChild = m_dChildren[i];
-
-			DWORD uPos = pChild->m_uLastHitPos;
-			if ( !uPos )
-				continue;
-
-			if ( i==m_iLastHitChild )
-				uPos = pChild->GetNextHitNode ( uMinPos );
-
-			if ( uPos && uPos<uChildPos )
-			{
-				uChildPos = uPos;
-				iMinChild = i;
-			}
-		}
-	}
-
-	if ( iMinChild<0 )
-		uChildPos = 0;
-	m_uLastHitPos = uChildPos;
-	m_iLastHitChild = iMinChild;
-	return uChildPos;
-}
-
-
-CSphMatch * CSphExtendedEvalNode::GetNextDoc ( SphDocID_t iMinID, CSphString & sWarning )
-{
-	if ( m_bDone )
-		return NULL;
-
-	////////////////////
-	// match plain node
-	////////////////////
-
-	if ( !m_dChildren.GetLength() )
-	{
-		assert ( !m_bAny );
-		assert ( !m_tAtom.IsEmpty() );
-
-		m_pLast = m_tAtom.GetNextDoc ( iMinID, sWarning );
-		m_uLastHitPos = m_tAtom.m_uLastHitPos;
-		if ( !m_pLast )
-			m_bDone = true;
-		return m_pLast;
-	}
-
-	/////////////////////////
-	// match expression node
-	/////////////////////////
-
-	CSphMatch * pMatch = NULL;
-
-	if ( m_bAny )
-	{
-		////////////////////////
-		// match any child node
-		////////////////////////
-
-		ARRAY_FOREACH ( i, m_dChildren )
-		{
-			// get next candidate
-			CSphMatch * pCur = m_dChildren[i]->GetNextDoc ( iMinID, sWarning );
-			assert ( pCur==m_dChildren[i]->GetLastDoc() );
-
-			if ( !pCur )
-			{
-				SafeDelete ( m_dChildren[i] );
-				m_dChildren.RemoveFast ( i-- );
-				if ( !m_dChildren.GetLength() )
-				{
-					m_bDone = true;
-					return false;
-				}
-				continue;
-			}
-
-			// if it's better than current, make it current match
-			if ( !pMatch || pCur->m_iDocID < pMatch->m_iDocID )
-			{
-				pMatch = pCur;
-				m_uLastHitPos = m_dChildren[i]->m_uLastHitPos;
-				m_iLastHitChild = i;
-			}
-		}
-
-	} else
-	{
-		////////////////////////////
-		// match all children nodes
-		////////////////////////////
-
-		// find a match
-		ARRAY_FOREACH ( i, m_dChildren )
-		{
-			CSphExtendedEvalNode * pChild = m_dChildren[i];
-			pMatch = pChild->GetNextDoc ( iMinID, sWarning );
-			if ( !pMatch )
-			{
-				m_bDone = true;
-				m_pLast = NULL;
-				return NULL;
-			}
-
-			if ( pMatch->m_iDocID > iMinID )
-				i = -1;
-
-			iMinID = pMatch->m_iDocID;
-		}
-
-		assert ( pMatch );
-
-		m_uLastHitPos = UINT_MAX;
-		ARRAY_FOREACH ( i, m_dChildren )
-		{
-			DWORD uPos = m_dChildren[i]->m_uLastHitPos;
-			assert ( uPos );
-
-			if ( uPos<m_uLastHitPos )
-			{
-				m_uLastHitPos = uPos;
-				m_iLastHitChild = i;
-			}
-		}
-	}
-
-	m_pLast = pMatch;
-	return pMatch;
-}
-
-
-void CSphExtendedEvalNode::UpdateLCS ( CSphLCSState & tState )
-{
-	if ( m_dChildren.GetLength() )
-	{
-		if ( !m_bAny )
-		{
-			ARRAY_FOREACH ( i, m_dChildren )
-				if ( m_dChildren[i]->m_uLastHitPos )
-					m_dChildren[i]->UpdateLCS ( tState );
-		} else
-		{
-			assert ( m_dChildren[m_iLastHitChild]->m_uLastHitPos==m_uLastHitPos );
-			m_dChildren[m_iLastHitChild]->UpdateLCS ( tState );
-		}
-	} else
-	{
-		m_tAtom.UpdateLCS ( tState );
-	}
-}
-
-
-CSphMatch * CSphExtendedEvalNode::GetNextMatch ( SphDocID_t iMinID, int iTerms, float * pIDF,
-	int iFields, int * pWeights, CSphString & sWarning )
-{
-	CSphMatch * pMatch = GetNextDoc ( iMinID, sWarning );
-	m_pLast = pMatch;
-
-	if ( !pMatch || !iTerms ) // if there's no match or no need to rank, we're done
-		return pMatch;
-
-	////////////////////
-	// weight the match
-	////////////////////
-
-#ifndef NDEBUG
-	// check that every actually matching child has its hitlist ready
-	assert ( m_uLastHitPos );
-	ARRAY_FOREACH ( i, m_dChildren )
-	{
-		assert ( m_dChildren[i]->GetLastDoc() );
-		if ( m_bAny )
-		{
-			assert ( m_dChildren[i]->GetLastDoc()->m_iDocID>=pMatch->m_iDocID );
-			if ( m_dChildren[i]->GetLastDoc()->m_iDocID==pMatch->m_iDocID )
-				assert ( m_dChildren[i]->m_uLastHitPos );
-		} else
-		{
-			assert ( m_dChildren[i]->GetLastDoc()->m_iDocID==pMatch->m_iDocID );
-			assert ( m_dChildren[i]->m_uLastHitPos );
-		}
-	}
-#endif
-
-	// calc LCS rank
-	CSphLCSState tState ( iFields );
-	do 
-	{
-		tState.CleanCurrent ( iFields );
-		UpdateLCS ( tState );
-		GetNextHitNode ( 1+m_uLastHitPos );
-	} while ( m_uLastHitPos );
-
-	int iMaxLCS = 0;
-	for ( int i=0; i<iFields; i++ )
-		iMaxLCS += tState.m_dMaxLCS[i] * pWeights[i];
-
-	// calc simplified BM25 rank
-	DWORD uTF [ SPH_BM25_MAX_TERMS ]; // FIXME? maybe a dynamic array
-	assert ( iTerms<SPH_BM25_MAX_TERMS );
-
-	for ( int i=0; i<iTerms; i++ ) // FIXME? could be avoided if GetLastTF() returns a mask..
-		uTF[i] = 0;
-	GetLastTF ( uTF );
-
-	float fBM25 = 0.0f;
-	for ( int i=0; i<iTerms; i++ )
-		fBM25 += float(uTF[i]) / float(uTF[i]+SPH_BM25_K1) * pIDF[i]; // TF*IDF
-
-	// calc combined rank
-	// !COMMIT must account for field weights everywhere, document length in BM25, etc
-	int iBM25 = int ( ( fBM25 + 0.5f )*SPH_BM25_SCALE );
-	assert ( iBM25>=0 && iBM25<SPH_BM25_SCALE );
-
-	pMatch->m_iWeight = iMaxLCS*SPH_BM25_SCALE + iBM25;
-	return pMatch;
-}
-
-
-void CSphExtendedEvalNode::GetLastTF ( DWORD * pTF ) const
-{
-	if ( m_bDone )
-		return;
-
-	assert ( m_pLast );
-
-	if ( !m_dChildren.GetLength() )
-	{
-		m_tAtom.GetLastTF ( pTF );
-		return;
-	}
-
-	SphDocID_t uID = m_pLast->m_iDocID;
-	if ( m_bAny )
-	{
-		ARRAY_FOREACH ( i, m_dChildren )
-			if ( m_dChildren[i]->GetLastDoc()->m_iDocID==uID )
-				m_dChildren[i]->GetLastTF ( pTF );
-	} else
-	{
-		ARRAY_FOREACH ( i, m_dChildren )
-		{
-			assert ( m_dChildren[i]->GetLastDoc()->m_iDocID==uID );
-			m_dChildren[i]->GetLastTF ( pTF );
-		}
-	}
-}
-
-
-void CSphExtendedEvalNode::CollectQwords ( CSphQwordsHash & dHash, int & iCount )
-{
-	if ( m_dChildren.GetLength() )
-	{
-		ARRAY_FOREACH ( i, m_dChildren )
-			m_dChildren[i]->CollectQwords ( dHash, iCount );
-	} else
-	{
-		ARRAY_FOREACH ( i, m_tAtom.m_dTerms )
-		{
-			bool bAdded = dHash.Add ( m_tAtom.m_dTerms[i], m_tAtom.m_dTerms[i].m_sWord );
-
-			CSphQueryWord * pWord = dHash ( m_tAtom.m_dTerms[i].m_sWord );
-			assert ( pWord );
-
-			if ( bAdded )
-				pWord->m_iQueryPos = iCount++;
-
-			m_tAtom.m_dTerms[i].m_iQueryPos = pWord->m_iQueryPos;
-		}
-	}
-}
-
-//////////////////////////////////////////////////////////////////////////////
-
-bool CSphIndex_VLN::MatchExtendedV1 ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphTermSetup & tTermSetup )
-{
-	bool bRandomize = ppSorters[0]->m_bRandomize;
-	int iCutoff = pQuery->m_iCutoff;
-
-	assert ( m_tMin.m_iRowitems==m_tSchema.GetRowSize() );
-
-	//////////////////////////
-	// match in extended mode
-	//////////////////////////
-
-	// parse query
-	CSphExtendedQuery tParsed;
-	if ( !sphParseExtendedQuery ( tParsed, pQuery->m_sQuery.cstr(), tTermSetup.m_pIndex->GetTokenizer (),
-		&m_tSchema, tTermSetup.m_pDict ) )
-	{
-		m_sLastError = tParsed.m_sParseError;
-		return false;
-	}
-
-	pResult->m_sWarning = tParsed.m_sParseWarning;
-
-	CheckExtendedQuery ( tParsed.m_pAccept, pResult );
-	CheckExtendedQuery ( tParsed.m_pReject, pResult );
-
-	CSphExtendedEvalNode tAccept ( tParsed.m_pAccept, tTermSetup );
-	CSphExtendedEvalNode tReject ( tParsed.m_pReject, tTermSetup );
-
-	////////////////////
-	// build word stats
-	////////////////////
-
-	CSphQwordsHash hQwords;
-	int iQwords = 0;
-	tAccept.CollectQwords ( hQwords, iQwords );
-
-	if ( iQwords >= SPH_BM25_MAX_TERMS )
-	{
-		m_sLastError.SetSprintf ( "too many keywords (keywords=%d, max=%d)", iQwords, SPH_BM25_MAX_TERMS );
-		return false;
-	}
-
-	int iIDF = 0;
-	float dIDF [ SPH_BM25_MAX_TERMS ];
-
-	pResult->m_iNumWords = 0;
-
-	hQwords.IterateStart ();
-	while ( hQwords.IterateNext() )
-	{
-		CSphQueryWord & tWord = hQwords.IterateGet ();
-
-		// build IDF
-		float fIDF = 0.0f;
-		if ( tWord.m_iDocs )
-		{
-			float fLogTotal = logf ( float(1+m_tStats.m_iTotalDocuments) );
-			fIDF = logf ( float(m_tStats.m_iTotalDocuments-tWord.m_iDocs+1)/float(tWord.m_iDocs) )
-				/ ( 2*iQwords*fLogTotal );
-		}
-		dIDF[iIDF++] = fIDF;
-
-		// update word stats
-		if ( pResult->m_iNumWords<SPH_MAX_QUERY_WORDS )
-		{
-			CSphQueryResult::WordStat_t & tStats = pResult->m_tWordStats [ pResult->m_iNumWords++ ];
-			if ( tStats.m_sWord.cstr() )
-			{
-				assert ( tStats.m_sWord==tWord.m_sWord );
-				tStats.m_iDocs += tWord.m_iDocs;
-				tStats.m_iHits += tWord.m_iHits;
-			} else
-			{
-				tStats.m_sWord = tWord.m_sWord;
-				tStats.m_iDocs = tWord.m_iDocs;
-				tStats.m_iHits = tWord.m_iHits;
-			}
-		}
-	}
-
-	//////////////////////////
-	// do that matching thing
-	//////////////////////////
-
-	// randomizing trick. setting iQwords to 0 prevents weighting
-	if ( bRandomize )
-		iQwords = 0;
-
-	SphDocID_t iMinID = 1;
-	for ( ;; )
-	{
-		CSphMatch * pAccept = tAccept.GetNextMatch ( iMinID, iQwords, dIDF, m_iWeights, m_dWeights, pResult->m_sWarning );
-		if ( !pAccept )
-			break;
-		iMinID = 1 + pAccept->m_iDocID;
-
-		// forcibly break on DOCID_MAX matches
-		if ( pAccept->m_iDocID==DOCID_MAX )
-			break;
-
-		CSphMatch * pReject = tReject.GetNextMatch ( pAccept->m_iDocID, 0, NULL, 0, NULL, pResult->m_sWarning );
-		if ( pReject && pReject->m_iDocID==pAccept->m_iDocID )
-			continue;
-
-		// early reject by group id, doc id or timestamp
-		if ( EarlyReject ( *pAccept, pQuery ) )
-			continue;
-
-		// submit
-		SPH_SUBMIT_MATCH ( *pAccept );
-	}
-
-	return true;
-}
 
 //////////////////////////////////////////////////////////////////////////
 // EXTENDED MATCHING V2
@@ -11131,7 +10210,7 @@ public:
 	virtual int					GetMatches ( int iFields, const int * pWeights ) = 0;
 
 	void						GetQwords ( ExtQwordsHash_t & hQwords )				{ if ( m_pRoot ) m_pRoot->GetQwords ( hQwords ); }
-	void						SetQwordsIDF ( const ExtQwordsHash_t & hQwords )	{ if ( m_pRoot ) m_pRoot->SetQwordsIDF ( hQwords ); }
+	void						SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
 
 public:
 	CSphMatch					m_dMatches[ExtNode_i::MAX_DOCS];
@@ -11142,6 +10221,7 @@ protected:
 	const ExtDoc_t *			m_pDoclist;
 	const ExtHit_t *			m_pHitlist;
 	SphDocID_t					m_uMaxID;
+	DWORD						m_uQWords;
 	ExtDoc_t					m_dMyDocs[ExtNode_i::MAX_DOCS];		///< my local documents pool; for filtering
 	CSphMatch					m_dMyMatches[ExtNode_i::MAX_DOCS];	///< my local matches pool; for filtering
 	CSphMatch					m_tTestMatch;
@@ -11165,6 +10245,8 @@ DECLARE_RANKER ( ProximityBM25 )
 DECLARE_RANKER ( BM25 )
 DECLARE_RANKER ( None )
 DECLARE_RANKER ( Wordcount )
+DECLARE_RANKER ( Proximity )
+DECLARE_RANKER ( MatchAny )
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -12812,6 +11894,7 @@ ExtRanker_c::ExtRanker_c ( const CSphExtendedQueryNode * pAccept, const CSphExte
 	m_pDoclist = NULL;
 	m_pHitlist = NULL;
 	m_uMaxID = 0;
+	m_uQWords = 0;
 	m_pIndex = tSetup.m_pIndex;
 	m_pQuery = tSetup.m_pQuery;
 }
@@ -12854,6 +11937,15 @@ const ExtDoc_t * ExtRanker_c::GetFilteredDocs ()
 			return m_dMyDocs;
 		}
 	}
+}
+
+
+void ExtRanker_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
+{
+	m_uQWords = hQwords.GetLength ();
+
+	if ( m_pRoot )
+		m_pRoot->SetQwordsIDF ( hQwords );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -13108,6 +12200,236 @@ int ExtRanker_Wordcount_c::GetMatches ( int, const int * pWeights )
 
 //////////////////////////////////////////////////////////////////////////
 
+int ExtRanker_Proximity_c::GetMatches ( int iFields, const int * pWeights )
+{
+	if ( !m_pRoot )
+		return 0;
+
+	BYTE uLCS[SPH_MAX_FIELDS];
+	memset ( uLCS, 0, sizeof(uLCS) );
+
+	BYTE uCurLCS = 0;
+	int iExpDelta = -INT_MAX;
+
+	int iMatches = 0;
+	const ExtHit_t * pHlist = m_pHitlist;
+	const ExtDoc_t * pDocs = m_pDoclist;
+
+	// warmup if necessary
+	if ( !pHlist )
+	{
+		if ( !pDocs ) pDocs = GetFilteredDocs ();
+		if ( !pDocs ) return iMatches;
+
+		pHlist = m_pRoot->GetHitsChunk ( pDocs, m_uMaxID );
+		if ( !pHlist ) return iMatches;
+	}
+
+	// main matching loop
+	const ExtDoc_t * pDoc = pDocs;
+	for ( SphDocID_t uCurDocid=0; iMatches<ExtNode_i::MAX_DOCS; )
+	{
+		assert ( pHlist );
+
+		// next match (or block end)? compute final weight, and flush prev one
+		if ( pHlist->m_uDocid!=uCurDocid )
+		{
+			// if hits block is over, get next block, but do *not* flush current doc
+			if ( pHlist->m_uDocid==DOCID_MAX )
+			{
+				assert ( pDocs );
+				pHlist = m_pRoot->GetHitsChunk ( pDocs, m_uMaxID );
+				if ( pHlist )
+					continue;
+			}
+
+			// otherwise (new match or no next hits block), flush current doc
+			if ( uCurDocid )
+			{
+				uCurLCS = 0;
+				iExpDelta = -1;
+
+				DWORD uRank = 0;
+				for ( int i=0; i<iFields; i++ )
+				{
+					uRank += uLCS[i]*pWeights[i];
+					uLCS[i] = 0;
+				}
+
+				assert ( uCurDocid==pDoc->m_uDocid );
+				Swap ( m_dMatches[iMatches], m_dMyMatches[pDoc-m_dMyDocs] );
+				m_dMatches[iMatches].m_iWeight = uRank;
+				iMatches++;
+			}
+
+			// boundary checks
+			if ( !pHlist )
+			{
+				// there are no more hits for current docs block; do we have a next one?
+				assert ( pDocs );
+				pDoc = pDocs = GetFilteredDocs ();
+
+				// we don't, so bail out
+				if ( !pDocs )
+					break;
+
+				// we do, get some hits
+				pHlist = m_pRoot->GetHitsChunk ( pDocs, m_uMaxID );
+				assert ( pHlist ); // fresh docs block, must have hits
+			}
+
+			// carry on
+			assert ( pDoc->m_uDocid<=pHlist->m_uDocid );
+			while ( pDoc->m_uDocid<pHlist->m_uDocid ) pDoc++;
+			assert ( pDoc->m_uDocid==pHlist->m_uDocid );
+
+			uCurDocid = pHlist->m_uDocid;
+			continue; // we might had flushed the match; need to check the limit
+		}
+
+		// upd LCS
+		DWORD uQueryPos = pHlist->m_uQuerypos;
+		int iDelta = pHlist->m_uHitpos - uQueryPos;
+		if ( iDelta==iExpDelta )
+			uCurLCS = uCurLCS + BYTE(pHlist->m_uSpanlen);
+		else
+			uCurLCS = BYTE(pHlist->m_uSpanlen);
+
+		DWORD uField = pHlist->m_uHitpos >> 24;
+		if ( uCurLCS>uLCS[uField] )
+			uLCS[uField] = uCurLCS;
+
+		iExpDelta = iDelta + pHlist->m_uSpanlen - 1;
+		pHlist++;
+	}
+
+	m_pDoclist = pDocs;
+	m_pHitlist = pHlist;
+	return iMatches;
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+int ExtRanker_MatchAny_c::GetMatches ( int iFields, const int * pWeights )
+{
+	if ( !m_pRoot )
+		return 0;
+
+	BYTE uLCS[SPH_MAX_FIELDS];
+	memset ( uLCS, 0, sizeof(uLCS) );
+
+	BYTE uMatchMask[SPH_MAX_FIELDS];
+	memset ( uMatchMask, 0, sizeof(uMatchMask) );
+
+	BYTE uCurLCS = 0;
+	int iExpDelta = -INT_MAX;
+
+	int iMatches = 0;
+	const ExtHit_t * pHlist = m_pHitlist;
+	const ExtDoc_t * pDocs = m_pDoclist;
+
+	// warmup if necessary
+	if ( !pHlist )
+	{
+		if ( !pDocs ) pDocs = GetFilteredDocs ();
+		if ( !pDocs ) return iMatches;
+
+		pHlist = m_pRoot->GetHitsChunk ( pDocs, m_uMaxID );
+		if ( !pHlist ) return iMatches;
+	}
+
+	int iPhraseK = 0;
+	for ( int i=0; i<iFields; i++ )
+		iPhraseK += pWeights[i] * m_uQWords;
+
+	// main matching loop
+	const ExtDoc_t * pDoc = pDocs;
+	for ( SphDocID_t uCurDocid=0; iMatches<ExtNode_i::MAX_DOCS; )
+	{
+		assert ( pHlist );
+
+		// next match (or block end)? compute final weight, and flush prev one
+		if ( pHlist->m_uDocid!=uCurDocid )
+		{
+			// if hits block is over, get next block, but do *not* flush current doc
+			if ( pHlist->m_uDocid==DOCID_MAX )
+			{
+				assert ( pDocs );
+				pHlist = m_pRoot->GetHitsChunk ( pDocs, m_uMaxID );
+				if ( pHlist )
+					continue;
+			}
+
+			// otherwise (new match or no next hits block), flush current doc
+			if ( uCurDocid )
+			{
+				uCurLCS = 0;
+				iExpDelta = -1;
+
+				DWORD uRank = 0;
+				for ( int i=0; i<iFields; i++ )
+				{
+					uRank += ( sphBitCount(uMatchMask[i]) + (uLCS[i]-1)*iPhraseK )*pWeights[i];
+					uMatchMask[i] = 0;
+					uLCS[i] = 0;
+				}
+
+				assert ( uCurDocid==pDoc->m_uDocid );
+				Swap ( m_dMatches[iMatches], m_dMyMatches[pDoc-m_dMyDocs] );
+				m_dMatches[iMatches].m_iWeight = uRank;
+				iMatches++;
+			}
+
+			// boundary checks
+			if ( !pHlist )
+			{
+				// there are no more hits for current docs block; do we have a next one?
+				assert ( pDocs );
+				pDoc = pDocs = GetFilteredDocs ();
+
+				// we don't, so bail out
+				if ( !pDocs )
+					break;
+
+				// we do, get some hits
+				pHlist = m_pRoot->GetHitsChunk ( pDocs, m_uMaxID );
+				assert ( pHlist ); // fresh docs block, must have hits
+			}
+
+			// carry on
+			assert ( pDoc->m_uDocid<=pHlist->m_uDocid );
+			while ( pDoc->m_uDocid<pHlist->m_uDocid ) pDoc++;
+			assert ( pDoc->m_uDocid==pHlist->m_uDocid );
+
+			uCurDocid = pHlist->m_uDocid;
+			continue; // we might had flushed the match; need to check the limit
+		}
+
+		// upd LCS
+		DWORD uQueryPos = pHlist->m_uQuerypos;
+		int iDelta = pHlist->m_uHitpos - uQueryPos;
+		if ( iDelta==iExpDelta )
+			uCurLCS = uCurLCS + BYTE(pHlist->m_uSpanlen);
+		else
+			uCurLCS = BYTE(pHlist->m_uSpanlen);
+
+		DWORD uField = pHlist->m_uHitpos >> 24;
+		if ( uCurLCS>uLCS[uField] )
+			uLCS[uField] = uCurLCS;
+
+		uMatchMask[uField] |= ( 1<<(uQueryPos-1) );
+
+		iExpDelta = iDelta + pHlist->m_uSpanlen - 1;
+		pHlist++;
+	}
+
+	m_pDoclist = pDocs;
+	m_pHitlist = pHlist;
+	return iMatches;
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 void CSphIndex_VLN::CheckExtendedQuery ( const CSphExtendedQueryNode * pNode, CSphQueryResult * pResult ) const
 {
 	ARRAY_FOREACH ( i, pNode->m_tAtom.m_dWords )
@@ -13144,6 +12466,8 @@ bool CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, CSphQueryResult * 
 		case SPH_RANK_BM25:				pRoot = new ExtRanker_BM25_c ( tParsed.m_pAccept, tParsed.m_pReject, tTermSetup, &(pResult->m_sWarning) ); break;
 		case SPH_RANK_NONE:				pRoot = new ExtRanker_None_c ( tParsed.m_pAccept, tParsed.m_pReject, tTermSetup, &(pResult->m_sWarning) ); break;
 		case SPH_RANK_WORDCOUNT:		pRoot = new ExtRanker_Wordcount_c ( tParsed.m_pAccept, tParsed.m_pReject, tTermSetup, &(pResult->m_sWarning) ); break;
+		case SPH_RANK_PROXIMITY:		pRoot = new ExtRanker_Proximity_c ( tParsed.m_pAccept, tParsed.m_pReject, tTermSetup, &(pResult->m_sWarning) ); break;
+		case SPH_RANK_MATCHANY:			pRoot = new ExtRanker_MatchAny_c ( tParsed.m_pAccept, tParsed.m_pReject, tTermSetup, &(pResult->m_sWarning) ); break;
 
 		default:
 			pResult->m_sWarning.SetSprintf ( "unknown ranking mode %d; using default", (int)pQuery->m_eRanker );
@@ -14662,6 +13986,53 @@ bool CSphIndex_VLN::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, cons
 }
 
 
+void PrepareQueryEmulation ( CSphQuery * pQuery )
+{
+	if ( pQuery->m_eMode!=SPH_MATCH_ALL && pQuery->m_eMode!=SPH_MATCH_ANY && pQuery->m_eMode!=SPH_MATCH_PHRASE )
+		return;
+
+	const char * szQuery = pQuery->m_sQuery.cstr ();
+	int iQueryLen = szQuery ? strlen(szQuery) : 0;
+	CSphString sDest;
+	sDest.Reserve ( iQueryLen*2+4 );
+	char * szRes = (char*)sDest.cstr ();
+	char c;
+
+	if ( pQuery->m_eMode == SPH_MATCH_ANY || pQuery->m_eMode == SPH_MATCH_PHRASE )
+		*szRes++ = '\"';
+
+	while ( ( c = *szQuery++ ) != 0 )
+	{
+		// must be in sync with EscapeString (php api)
+		if ( c=='(' || c==')' || c=='|' || c=='-' || c=='!' || c=='@' || c=='~' || c=='\"' || c=='&' || c=='/' )
+			*szRes++ = '\\';
+
+		*szRes++ = c;
+	}
+
+	switch ( pQuery->m_eMode )
+	{
+	case SPH_MATCH_ALL:
+		pQuery->m_eRanker = SPH_RANK_PROXIMITY;
+		*szRes='\0';
+		break;
+
+	case SPH_MATCH_ANY:
+		pQuery->m_eRanker = SPH_RANK_MATCHANY;
+		strcpy ( szRes, "\"/1" );
+		break;
+
+	case SPH_MATCH_PHRASE:
+		pQuery->m_eRanker = SPH_RANK_PROXIMITY;
+		*szRes++ = '\"';
+		*szRes='\0';
+		break;
+	}
+
+	Swap ( pQuery->m_sQuery, sDest );
+}
+
+
 bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters )
 {
 	assert ( pQuery );
@@ -14727,65 +14098,6 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 	// fixup "empty query" at low level
 	if ( pQuery->m_sQuery.IsEmpty() )
 		pQuery->m_eMode = SPH_MATCH_FULLSCAN;
-
-	// split query into words
-	bool bSimpleQuery = ( pQuery->m_eMode==SPH_MATCH_ALL
-		|| pQuery->m_eMode==SPH_MATCH_ANY
-		|| pQuery->m_eMode==SPH_MATCH_PHRASE
-		|| pQuery->m_eMode==SPH_MATCH_FULLSCAN );
-	if ( bSimpleQuery && pQuery->m_eMode!=SPH_MATCH_FULLSCAN )
-	{
-		CSphSimpleQueryParser qp ( bUseStarDict ) ;
-		int iRealWords = qp.Parse ( pQuery->m_sQuery.cstr(), m_pTokenizer, pDict );
-		if ( !iRealWords )
-		{
-			pResult->m_iQueryTime += int ( 1000.0f*( sphLongTimer() - tmQueryStart ) );
-			return true;
-		}
-
-		assert ( iRealWords<=SPH_MAX_QUERY_WORDS );
-		m_dQueryWords.Resize ( iRealWords );
-		ARRAY_FOREACH ( i, m_dQueryWords )
-		{
-			CheckQueryWord ( qp.m_dWords[i].m_sWord.cstr (), pResult );
-
-			m_dQueryWords[i].Reset ();
-			m_dQueryWords[i].m_sWord = qp.m_dWords[i].m_sWord;
-			m_dQueryWords[i].m_iWordID = qp.m_dWords[i].m_uWordID;
-			m_dQueryWords[i].m_iQueryPos = qp.m_dWords[i].m_iQueryPos;
-
-			assert ( m_tMin.m_iRowitems==m_tSchema.GetRowSize() );
-			m_dQueryWords[i].SetupAttrs ( tTermSetup );
-		}
-
-		// setup words from the wordlist
-		PROFILE_BEGIN ( query_load_words );
-
-		ARRAY_FOREACH ( i, m_dQueryWords )
-			SetupQueryWord ( m_dQueryWords[i], tTermSetup );
-
-		// build word stats
-		pResult->m_iNumWords = m_dQueryWords.GetLength();
-		ARRAY_FOREACH ( i, m_dQueryWords )
-		{
-			CSphQueryResult::WordStat_t & tWordStats = pResult->m_tWordStats[i];
-			if ( tWordStats.m_sWord.cstr() )
-			{
-				tWordStats.m_iDocs += m_dQueryWords[i].m_iDocs;
-				tWordStats.m_iHits += m_dQueryWords[i].m_iHits;
-			} else
-			{
-				tWordStats.m_sWord = m_dQueryWords[i].m_sWord;
-				tWordStats.m_iDocs = m_dQueryWords[i].m_iDocs;
-				tWordStats.m_iHits = m_dQueryWords[i].m_iHits;
-			}
-		}
-
-		// reorder hit lists
-		m_dQueryWords.Sort ();
-
-		PROFILE_END ( query_load_words );
-	}
 
 	// empty index, empty response!
 	if ( !m_tStats.m_iTotalDocuments )
@@ -14857,12 +14169,14 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 	bool bMatch = true;
 	switch ( pQuery->m_eMode )
 	{
-		case SPH_MATCH_ALL:			MatchAll ( pQuery, pResult, iSorters, ppSorters ); break;
-		case SPH_MATCH_PHRASE:		MatchAll ( pQuery, pResult, iSorters, ppSorters ); break;
-		case SPH_MATCH_ANY:			MatchAny ( pQuery, pResult, iSorters, ppSorters ); break;
-		case SPH_MATCH_BOOLEAN:		bMatch = MatchBoolean ( pQuery, pResult, iSorters, ppSorters, tTermSetup ); break;
-		case SPH_MATCH_EXTENDED:	bMatch = MatchExtendedV1 ( pQuery, pResult, iSorters, ppSorters, tTermSetup ); break;
-		case SPH_MATCH_EXTENDED2:	bMatch = MatchExtended ( pQuery, pResult, iSorters, ppSorters, tTermSetup ); break;
+		case SPH_MATCH_ALL:
+		case SPH_MATCH_PHRASE:
+		case SPH_MATCH_ANY:
+		case SPH_MATCH_EXTENDED:
+		case SPH_MATCH_EXTENDED2:
+			bMatch = MatchExtended ( pQuery, pResult, iSorters, ppSorters, tTermSetup );
+			break;
+		case SPH_MATCH_BOOLEAN:		bMatch = MatchBoolean ( pQuery, pResult, iSorters, ppSorters, tTermSetup );	break;
 		case SPH_MATCH_FULLSCAN:	MatchFullScan ( pQuery, iSorters, ppSorters, tTermSetup ); break;
 		default:					sphDie ( "INTERNAL ERROR: unknown matching mode (mode=%d)", pQuery->m_eMode );
 	}
@@ -14871,23 +14185,6 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 	// check if there was error while matching (boolean or extended query parsing error, for one)
 	if ( !bMatch )
 		return false;
-
-	if ( bSimpleQuery )
-		ARRAY_FOREACH ( i, m_dQueryWords )
-	{
-		if ( m_dQueryWords[i].m_rdDoclist.GetErrorFlag() )
-		{
-			m_sLastError = m_dQueryWords[i].m_rdDoclist.GetErrorMessage ();
-			return false;
-		}
-		if ( m_dQueryWords[i].m_rdHitlist.GetErrorFlag() )
-		{
-			m_sLastError = m_dQueryWords[i].m_rdHitlist.GetErrorMessage ();
-			return false;
-		}
-	}
-
-	m_dQueryWords.Reset ();
 
 	////////////////////
 	// cook result sets

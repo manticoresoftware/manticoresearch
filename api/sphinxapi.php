@@ -49,6 +49,7 @@ define ( "SPH_RANK_PROXIMITY_BM25",	0 );	///< default mode, phrase proximity maj
 define ( "SPH_RANK_BM25",			1 );	///< statistical mode, BM25 ranking only (faster but worse quality)
 define ( "SPH_RANK_NONE",			2 );	///< no ranking, all matches get a weight of 1
 define ( "SPH_RANK_WORDCOUNT",		3 );	///< simple word-count weighting, rank is a weighted sum of per-field keyword occurence counts
+define ( "SPH_RANK_PROXIMITY",		4 );
 
 /// known sort modes
 define ( "SPH_SORT_RELEVANCE",		0 );
@@ -413,7 +414,8 @@ class SphinxClient
 		assert ( $ranker==SPH_RANK_PROXIMITY_BM25
 			|| $ranker==SPH_RANK_BM25
 			|| $ranker==SPH_RANK_NONE
-			|| $ranker==SPH_RANK_WORDCOUNT );
+			|| $ranker==SPH_RANK_WORDCOUNT
+			|| $ranker==SPH_RANK_PROXIMITY );
 		$this->_ranker = $ranker;
 	}
 
@@ -1141,8 +1143,8 @@ class SphinxClient
 
 	function EscapeString ( $string )
 	{
-		$from = array ( '(',')','|','-','!','@','~','\"','&' );
-		$to   = array ( '\\(','\\)','\\|','\\-','\\!','\\@','\\~','\\\"', '\\&' );
+		$from = array ( '(',')','|','-','!','@','~','"','&', '/' );
+		$to   = array ( '\(','\)','\|','\-','\!','\@','\~','\"', '\&', '\/' );
 
 		return str_replace ( $from, $to, $string );
 	}

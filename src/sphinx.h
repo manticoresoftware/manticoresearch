@@ -365,6 +365,7 @@ struct CSphTokenizerSettings
 						CSphTokenizerSettings ();
 };
 
+struct CSphMultiformContainer;
 
 /// generic tokenizer
 class ISphTokenizer
@@ -409,6 +410,9 @@ public:
 	/// create a tokenizer using the given settings
 	static ISphTokenizer *			Create ( const CSphTokenizerSettings & tSettings, CSphString & sError );
 
+	/// create a token filter
+	static ISphTokenizer *			CreateTokenFilter ( ISphTokenizer * pTokenizer, const CSphMultiformContainer * pContainer );
+
 	/// save tokenizer settings to a stream
 	virtual const CSphTokenizerSettings &	GetSettings () const { return m_tSettings; }
 
@@ -426,19 +430,19 @@ public:
 	virtual int						GetCodepointLength ( int iCode ) const = 0;
 
 	/// handle tokens less than min_word_len if they match filter
-	inline void						EnableQueryParserMode ( bool bEnable ) { m_bShortTokenFilter = bEnable; }
+	virtual void					EnableQueryParserMode ( bool bEnable ) { m_bShortTokenFilter = bEnable; }
 
 	/// get last token length, in codepoints
-	inline int						GetLastTokenLen () { return m_iLastTokenLen; }
+	virtual int						GetLastTokenLen () const { return m_iLastTokenLen; }
 
 	/// get last token boundary flag (true if there was a boundary before the token)
-	inline bool						GetBoundary () { return m_bTokenBoundary; }
+	virtual bool					GetBoundary () { return m_bTokenBoundary; }
 
 	/// was last token a special one?
-	inline bool						WasTokenSpecial () { return m_bWasSpecial; }
+	virtual bool					WasTokenSpecial () { return m_bWasSpecial; }
 
 	/// get amount of overshort keywords skipped before this token
-	inline int						GetOvershortCount () { return m_iOvershortCount; }
+	virtual int						GetOvershortCount () { return m_iOvershortCount; }
 
 public:
 	/// get lowercaser
@@ -555,6 +559,9 @@ struct CSphDict
 
 	/// wordforms file infos
 	virtual const CSphSavedFile & GetWordformsFileInfo () = 0;
+
+	/// get multiwordforms
+	virtual const CSphMultiformContainer *  GetMultiWordforms () const = 0;
 };
 
 

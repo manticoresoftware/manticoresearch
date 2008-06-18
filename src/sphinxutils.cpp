@@ -739,6 +739,8 @@ void sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 
 bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, CSphString & sError )
 {
+	bool bTokenizerSpawned = false;
+
 	if ( !pIndex->GetTokenizer () )
 	{
 		CSphTokenizerSettings tSettings;
@@ -749,6 +751,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 		if ( !pTokenizer )
 			return false;
 
+		bTokenizerSpawned = true;
 		pIndex->SetTokenizer ( pTokenizer );
 	}
 
@@ -762,6 +765,13 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 
 		pIndex->SetDictionary ( pDict );
 	}
+
+	if ( bTokenizerSpawned )
+	{
+		ISphTokenizer * pTokenizer = pIndex->LeakTokenizer ();
+		ISphTokenizer * pTokenFilter = ISphTokenizer::CreateTokenFilter ( pTokenizer, pIndex->GetDictionary ()->GetMultiWordforms () );
+		pIndex->SetTokenizer ( pTokenFilter ? pTokenFilter : pTokenizer );
+ 	}
 
 	if ( !pIndex->IsStripperInited () )
 	{

@@ -186,6 +186,7 @@ public:
 	virtual const CSphDictSettings & GetSettings () const { return m_tSettings; }
 	virtual const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () { return m_dSWFileInfos; }
 	virtual const CSphSavedFile & GetWordformsFileInfo () { return m_tWFFileInfo; }
+	virtual const CSphMultiformContainer * GetMultiWordforms () const { return NULL; }
 
 protected:
 	struct HashFunc_t
@@ -657,6 +658,25 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 	if ( !pTokenizer )
 		sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 
+	CSphDict * pDict = NULL;
+
+	if ( !g_sBuildStops )
+	{
+		ISphTokenizer * pTokenFilter = NULL;
+
+		CSphDictSettings tDictSettings;
+		sphConfDictionary ( hIndex, tDictSettings );
+		pDict = sphCreateDictionaryCRC ( tDictSettings, pTokenizer, sError );
+		if ( !pDict )
+			sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
+
+		if ( !sError.IsEmpty () )
+			fprintf ( stdout, "WARNING: index '%s': %s\n", sIndexName, sError.cstr() );
+
+		pTokenFilter = ISphTokenizer::CreateTokenFilter ( pTokenizer, pDict->GetMultiWordforms () );
+		pTokenizer = pTokenFilter ? pTokenFilter : pTokenizer;
+	}
+
 	// prefix/infix indexing
 	int iPrefix = hIndex("min_prefix_len") ? hIndex["min_prefix_len"].intval() : 0;
 	int iInfix = hIndex("min_infix_len") ? hIndex["min_infix_len"].intval() : 0;
@@ -788,20 +808,6 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 	}
 	else
 	{
-		///////////////
-		// create dict
-		///////////////
-
-		// create dict
-		CSphDictSettings tDictSettings;
-		sphConfDictionary ( hIndex, tDictSettings );
-		CSphDict * pDict = sphCreateDictionaryCRC ( tDictSettings, pTokenizer, sError );
-		if ( !pDict )
-			sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
-
-		if ( !sError.IsEmpty () )
-			fprintf ( stdout, "WARNING: index '%s': %s\n", sIndexName, sError.cstr() );	
-
 		//////////
 		// index!
 		//////////

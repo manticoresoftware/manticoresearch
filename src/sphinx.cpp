@@ -4328,7 +4328,7 @@ CSphTokenizer_Filter::CSphTokenizer_Filter ( ISphTokenizer * pTokenizer, const C
 	, m_pLastToken		( NULL )
 {
 	assert ( pTokenizer && pContainer );
-	m_dStoredTokens.Resize ( pContainer->m_iMaxTokens );
+	m_dStoredTokens.Resize ( pContainer->m_iMaxTokens + 1);
 }
 
 
@@ -4357,6 +4357,8 @@ BYTE * CSphTokenizer_Filter::GetToken ()
 
 	if ( !pToken )
 		return NULL;
+
+	int iSize = m_dStoredTokens.GetLength ();
 	
 	CSphMultiforms ** pWordforms = m_pMultiWordforms->m_Hash ( (const char *)pToken );
 	if ( !pWordforms )
@@ -4365,7 +4367,7 @@ BYTE * CSphTokenizer_Filter::GetToken ()
 		{
 			m_pLastToken = &(m_dStoredTokens[m_iStoredStart]);
 			m_iStoredLen--;
-			m_iStoredStart = (m_iStoredStart + 1) % m_pMultiWordforms->m_iMaxTokens;
+			m_iStoredStart = (m_iStoredStart + 1) % iSize;
 		}
 		else
 		{
@@ -4376,27 +4378,35 @@ BYTE * CSphTokenizer_Filter::GetToken ()
 		return pToken;
 	}
 
-	bool bSkipToken = m_iStoredLen == 0;
-	int iTokensNeeded = (*pWordforms)->m_iMaxTokens - m_iStoredLen;
+	if ( !m_iStoredLen )
+	{
+		FillTokenInfo ( &m_dStoredTokens[m_iStoredStart] );
+		strcpy ( (char *)m_dStoredTokens[m_iStoredStart].m_sToken, (const char *)pToken );
+		m_iStoredLen++;
+	}
+
+	int iTokensNeeded = (*pWordforms)->m_iMaxTokens - m_iStoredLen + 1;
 	for ( int i = 0; i < iTokensNeeded; i++ )
 	{
-		if ( !bSkipToken || i )
-			pToken = m_pTokenizer->GetToken ();
+		pToken = m_pTokenizer->GetToken ();
 
 		if ( !pToken )
 			break;
 
-		int iIndex = (m_iStoredStart+m_iStoredLen) % m_pMultiWordforms->m_iMaxTokens;
+		int iIndex = (m_iStoredStart+m_iStoredLen) % iSize;
 		FillTokenInfo ( &(m_dStoredTokens[iIndex]) );
 		strcpy ( (char *)m_dStoredTokens[iIndex].m_sToken, (const char *)pToken );
 		m_iStoredLen++;
 	}
 
-	if ( m_iStoredLen < (*pWordforms)->m_iMinTokens )
+	if ( !m_iStoredLen )
+		return NULL;
+
+	if ( m_iStoredLen <= (*pWordforms)->m_iMinTokens )
 	{
 		m_pLastToken = &(m_dStoredTokens [m_iStoredStart]);
 		m_iStoredLen--;
-		m_iStoredStart = (m_iStoredStart + 1) % m_pMultiWordforms->m_iMaxTokens;
+		m_iStoredStart = (m_iStoredStart + 1) % iSize;
 		return m_pLastToken->m_sToken;
 	}
 
@@ -4404,43 +4414,44 @@ BYTE * CSphTokenizer_Filter::GetToken ()
 	{
 		CSphMultiform * pCurForm = (*pWordforms)->m_dWordforms [i];
 
-		if ( pCurForm->m_dTokens.GetLength () + 1 >= m_iStoredLen )
+		if ( m_iStoredLen <= pCurForm->m_dTokens.GetLength () )
+			continue;
+
+		bool bFound = true;
+		for ( int j = 0; j < pCurForm->m_dTokens.GetLength (); j++ )
 		{
-			bool bFound = true;
-			for ( int j = 0; j < m_iStoredLen - 1; j++ )
+			int iIndex = ( m_iStoredStart + j + 1 ) % iSize;
+			const char * szStored = (const char*)m_dStoredTokens[iIndex].m_sToken;
+			const char * szNormal = pCurForm->m_dTokens [j].cstr ();
+
+			if ( *szNormal != *szStored || strcasecmp ( szNormal, szStored ) )
 			{
-				int iIndex = ( m_iStoredStart + 1 ) % m_pMultiWordforms->m_iMaxTokens;
-				const char * szStored = (const char*)m_dStoredTokens[iIndex].m_sToken;
-				const char * szNormal = pCurForm->m_dTokens [j].cstr ();
-
-				if ( *szNormal != *szStored || strcasecmp ( szNormal, szStored ) )
-				{
-					bFound = false;
-					break;
-				}
+				bFound = false;
+				break;
 			}
+		}
 
-			if ( bFound )
-			{
-				m_tLastToken.m_bBoundary		= false;
-				m_tLastToken.m_bSpecial			= false;
-				m_tLastToken.m_iOvershortCount	= m_dStoredTokens[m_iStoredStart].m_iOvershortCount;
-				m_tLastToken.m_iTokenLen		= pCurForm->m_iNormalTokenLen;
-				m_tLastToken.m_szTokenStart		= m_dStoredTokens[m_iStoredStart].m_szTokenStart;
-				m_tLastToken.m_szTokenEnd		= m_dStoredTokens[(m_iStoredStart+m_iStoredLen-1) % m_pMultiWordforms->m_iMaxTokens].m_szTokenEnd;
-				m_pLastToken = &m_tLastToken;
+		if ( bFound )
+		{
+			m_tLastToken.m_bBoundary		= false;
+			m_tLastToken.m_bSpecial			= false;
+			m_tLastToken.m_iOvershortCount	= m_dStoredTokens[m_iStoredStart].m_iOvershortCount;
+			m_tLastToken.m_iTokenLen		= pCurForm->m_iNormalTokenLen;
+			m_tLastToken.m_szTokenStart		= m_dStoredTokens[m_iStoredStart].m_szTokenStart;
+			m_tLastToken.m_szTokenEnd		= m_dStoredTokens[(m_iStoredStart+m_iStoredLen-1) % iSize].m_szTokenEnd;
+			m_pLastToken = &m_tLastToken;
 
-				m_iStoredStart = ( m_iStoredStart + pCurForm->m_dTokens.GetLength () + 1 ) % m_pMultiWordforms->m_iMaxTokens;
-				m_iStoredLen -= pCurForm->m_dTokens.GetLength () + 1;
-				return (BYTE*)pCurForm->m_sNormalForm.cstr ();
-			}
+			m_iStoredStart = ( m_iStoredStart + pCurForm->m_dTokens.GetLength () + 1 ) % iSize;
+			m_iStoredLen -= pCurForm->m_dTokens.GetLength () + 1;
+			assert ( m_iStoredLen >= 0 );
+			return (BYTE*)pCurForm->m_sNormalForm.cstr ();
 		}
 	}
 
 	pToken = m_dStoredTokens[m_iStoredStart].m_sToken;
 	m_pLastToken = &(m_dStoredTokens[m_iStoredStart]);
 
-	m_iStoredStart = (m_iStoredStart + 1) % m_pMultiWordforms->m_iMaxTokens;
+	m_iStoredStart = (m_iStoredStart + 1) % iSize;
 	m_iStoredLen--;
 
 	return pToken;
@@ -15230,16 +15241,16 @@ CSphDictCRC::WordformContainer * CSphDictCRC::LoadWordformContainer ( const char
 			if ( pWordforms )
 			{
 				(*pWordforms)->m_dWordforms.Add ( pMultiWordform );
-				(*pWordforms)->m_iMinTokens = Min ( (*pWordforms)->m_iMinTokens, pMultiWordform->m_dTokens.GetLength () + 1 );
-				(*pWordforms)->m_iMaxTokens = Max ( (*pWordforms)->m_iMaxTokens, pMultiWordform->m_dTokens.GetLength () + 1 );
+				(*pWordforms)->m_iMinTokens = Min ( (*pWordforms)->m_iMinTokens, pMultiWordform->m_dTokens.GetLength () );
+				(*pWordforms)->m_iMaxTokens = Max ( (*pWordforms)->m_iMaxTokens, pMultiWordform->m_dTokens.GetLength () );
 				pContainer->m_pMultiWordforms->m_iMaxTokens = Max ( pContainer->m_pMultiWordforms->m_iMaxTokens, (*pWordforms)->m_iMaxTokens );
 			}
 			else
 			{
 				CSphMultiforms * pNewWordforms = new CSphMultiforms;
 				pNewWordforms->m_dWordforms.Add ( pMultiWordform );
-				pNewWordforms->m_iMinTokens = pMultiWordform->m_dTokens.GetLength () + 1;
-				pNewWordforms->m_iMaxTokens = pMultiWordform->m_dTokens.GetLength () + 1;
+				pNewWordforms->m_iMinTokens = pMultiWordform->m_dTokens.GetLength ();
+				pNewWordforms->m_iMaxTokens = pMultiWordform->m_dTokens.GetLength ();
 				pContainer->m_pMultiWordforms->m_iMaxTokens = Max ( pContainer->m_pMultiWordforms->m_iMaxTokens, pNewWordforms->m_iMaxTokens );
 				pContainer->m_pMultiWordforms->m_Hash.Add ( pNewWordforms, sKey );
 			}

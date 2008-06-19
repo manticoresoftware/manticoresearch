@@ -1263,10 +1263,17 @@ int main ( int argc, char ** argv )
 
 	const CSphIOStats & tStats = sphStopIOStats ();
 
-	fprintf ( stdout, "total %d reads, %.1f sec, %.1f kb/read avg, %.1f msec/read avg\n", tStats.m_iReadOps, tStats.m_fReadTime,
-		tStats.m_iReadOps ? tStats.m_fReadKBytes / tStats.m_iReadOps : 0.0f, tStats.m_iReadOps ? tStats.m_fReadTime / tStats.m_iReadOps * 1000.0f : 0.0f );
-	fprintf ( stdout, "total %d writes, %.1f sec, %.1f kb/write avg, %.1f msec/write avg\n", tStats.m_iWriteOps, tStats.m_fWriteTime,
-		tStats.m_iWriteOps ? tStats.m_fWriteKBytes / tStats.m_iWriteOps : 0.0f, tStats.m_iWriteOps ? tStats.m_fWriteTime / tStats.m_iWriteOps * 1000.0f : 0.0f );
+	if ( !g_bQuiet )
+	{
+		fprintf ( stdout, "total %d reads, %.1f sec, %.1f kb/read avg, %.1f msec/read avg\n",
+			tStats.m_iReadOps, tStats.m_fReadTime,
+			tStats.m_iReadOps ? tStats.m_fReadKBytes / tStats.m_iReadOps : 0.0f,
+			tStats.m_iReadOps ? tStats.m_fReadTime / tStats.m_iReadOps * 1000.0f : 0.0f );
+		fprintf ( stdout, "total %d writes, %.1f sec, %.1f kb/write avg, %.1f msec/write avg\n",
+			tStats.m_iWriteOps, tStats.m_fWriteTime,
+			tStats.m_iWriteOps ? tStats.m_fWriteKBytes / tStats.m_iWriteOps : 0.0f,
+			tStats.m_iWriteOps ? tStats.m_fWriteTime / tStats.m_iWriteOps * 1000.0f : 0.0f );
+	}
 
 	////////////////////////////
 	// rotating searchd indices

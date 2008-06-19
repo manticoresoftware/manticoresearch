@@ -4413,7 +4413,7 @@ BYTE * CSphTokenizer_Filter::GetToken ()
 				const char * szStored = (const char*)m_dStoredTokens[iIndex].m_sToken;
 				const char * szNormal = pCurForm->m_dTokens [j].cstr ();
 
-				if ( *szNormal != *szStored || stricmp ( szNormal, szStored ) )
+				if ( *szNormal != *szStored || strcasecmp ( szNormal, szStored ) )
 				{
 					bFound = false;
 					break;
@@ -14256,21 +14256,11 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 
 	switch ( pQuery->m_eMode )
 	{
-	case SPH_MATCH_ALL:
-		pQuery->m_eRanker = SPH_RANK_PROXIMITY;
-		*szRes='\0';
-		break;
-
-	case SPH_MATCH_ANY:
-		pQuery->m_eRanker = SPH_RANK_MATCHANY;
-		strcpy ( szRes, "\"/1" );
-		break;
-
-	case SPH_MATCH_PHRASE:
-		pQuery->m_eRanker = SPH_RANK_PROXIMITY;
-		*szRes++ = '\"';
-		*szRes='\0';
-		break;
+		case SPH_MATCH_ALL:		pQuery->m_eRanker = SPH_RANK_PROXIMITY; *szRes='\0'; break;
+		case SPH_MATCH_ANY:		pQuery->m_eRanker = SPH_RANK_MATCHANY; strcpy ( szRes, "\"/1" ); break;
+		case SPH_MATCH_PHRASE:	pQuery->m_eRanker = SPH_RANK_PROXIMITY; *szRes++ = '\"';
+*szRes='\0'; break;
+		default:				return;
 	}
 
 	Swap ( pQuery->m_sQuery, sDest );

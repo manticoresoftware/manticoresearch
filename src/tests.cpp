@@ -482,7 +482,7 @@ void TestExpr ()
 		printf ( "testing expression evaluation, test %d/%d... ", 1+iTest, iTests );
 
 		CSphString sError;
-		CSphScopedPtr<ISphExpr> pExpr ( sphExprParse ( dTests[iTest].m_sExpr, tSchema, sError ) );
+		CSphScopedPtr<ISphExpr> pExpr ( sphExprParse ( dTests[iTest].m_sExpr, tSchema, NULL, sError ) );
 		if ( !pExpr.Ptr() )
 		{
 			printf ( "FAILED; %s\n", sError.cstr() );
@@ -511,7 +511,7 @@ void TestExpr ()
 #define BBB float(tMatch.m_pRowitems[1])
 #define CCC float(tMatch.m_pRowitems[2])
 
-NOINLINE float ExprNative1 ( const CSphMatch & tMatch )	{ return AAA+BBB*CCC-0.75f;}
+NOINLINE float ExprNative1 ( const CSphMatch & tMatch )	{ return AAA+BBB*CCC-1.0f;}
 NOINLINE float ExprNative2 ( const CSphMatch & tMatch )	{ return AAA+BBB*CCC*2.0f-3.0f/4.0f*5.0f/6.0f*BBB; }
 NOINLINE float ExprNative3 ( const CSphMatch & )		{ return (float)sqrt ( 2.0f ); }
 
@@ -543,7 +543,7 @@ void BenchExpr ()
 	};
 	ExprBench_t dBench[] =
 	{
-		{ "aaa+bbb*(ccc)-0.75",				ExprNative1 },
+		{ "aaa+bbb*(ccc)-1",				ExprNative1 },
 		{ "aaa+bbb*ccc*2-3/4*5/6*bbb",		ExprNative2 },
 		{ "sqrt(2)",						ExprNative3 }
 	};
@@ -552,8 +552,9 @@ void BenchExpr ()
 	{
 		printf ( "run %d: ", iRun+1 );
 
+		DWORD uType;
 		CSphString sError;
-		CSphScopedPtr<ISphExpr> pExpr ( sphExprParse ( dBench[iRun].m_sExpr, tSchema, sError ) );
+		CSphScopedPtr<ISphExpr> pExpr ( sphExprParse ( dBench[iRun].m_sExpr, tSchema, &uType, sError ) );
 		if ( !pExpr.Ptr() )
 		{
 			printf ( "FAILED; %s\n", sError.cstr() );
@@ -567,11 +568,22 @@ void BenchExpr ()
 		for ( int i=0; i<NRUNS; i++ ) fValue += pExpr->Eval(tMatch);
 		fTime = sphLongTimer() - fTime;
 
+		float fTimeInt = sphLongTimer ();
+		if ( uType==SPH_ATTR_INTEGER )
+		{
+			int uValue = 0;
+			for ( int i=0; i<NRUNS; i++ ) uValue += pExpr->IntEval(tMatch);
+		}
+		fTimeInt = sphLongTimer() - fTimeInt;
+
 		float fTimeNative = sphLongTimer ();
 		for ( int i=0; i<NRUNS; i++ ) fValue += dBench[iRun].m_pFunc ( tMatch );
 		fTimeNative = sphLongTimer() - fTimeNative;
 
-		printf ( "interpreted %.1f Mcalls/sec, native %.1f Mcalls/sec\n",
+		if ( uType==SPH_ATTR_INTEGER )
+			printf ( "int-eval %.1fM/sec, ", float(NRUNS)/float(1000000.0f)/fTimeInt );
+
+		printf ( "flt-eval %.1fM/sec, native %.1fM/sec\n",
 			float(NRUNS)/float(1000000.0f)/fTime,
 			float(NRUNS)/float(1000000.0f)/fTimeNative );
 	}

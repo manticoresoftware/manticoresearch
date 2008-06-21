@@ -110,6 +110,12 @@ public:
 		: CSphMatchQueueTraits ( iSize, bUsesAttrs )
 	{}
 
+	/// check if this sorter does groupby
+	virtual bool IsGroupby ()
+	{
+		return false;
+	}
+
 	/// add entry to the queue
 	virtual bool Push ( const CSphMatch & tEntry )
 	{
@@ -575,6 +581,7 @@ struct CSphGroupSorterSettings
 	CSphAttrLocator		m_tLocGroupby;		///< locator for @groupby
 	CSphAttrLocator		m_tLocCount;		///< locator for @count
 	CSphAttrLocator		m_tLocDistinct;		///< locator for @distinct
+	CSphAttrLocator		m_tDistinctLoc;		///< locator for attribute to compute count(distinct) for
 	int					m_iPresortRowitems;	///< how much raw (non-groupby) rowitems should the sorter expect
 	int					m_iAddRowitems;		///< how much rowitems to add for non-grouped matches
 	bool				m_bDistinct;		///< whether we need distinct
@@ -611,7 +618,6 @@ protected:
 	int				m_iLimit;		///< max matches to be retrieved
 
 	CSphUniqounter	m_tUniq;
-	CSphAttrLocator	m_tDistinctLoc;
 	bool			m_bSortByDistinct;
 
 	CSphMatchComparatorState	m_tStateGroup;
@@ -630,13 +636,12 @@ public:
 		, m_pGrouper		( tSettings.m_pGrouper )
 		, m_hGroup2Match	( pQuery->m_iMaxMatches*GROUPBY_FACTOR )
 		, m_iLimit			( pQuery->m_iMaxMatches )
-		, m_tDistinctLoc	( pQuery->m_tDistinctLoc )
 		, m_bSortByDistinct	( false )
 		, m_pComp			( pComp )
 		, m_tSettings		( tSettings )
 	{
 		assert ( GROUPBY_FACTOR>1 );
-		assert ( DISTINCT==false || m_tDistinctLoc.m_iBitOffset>=0 );
+		assert ( DISTINCT==false || tSettings.m_tDistinctLoc.m_iBitOffset>=0 );
 	}
 
 	/// dtor
@@ -644,6 +649,12 @@ public:
 	{
 		SafeDelete ( m_pComp );
 		SafeDelete ( m_pGrouper );
+	}
+
+	/// check if this sorter does groupby
+	virtual bool IsGroupby ()
+	{
+		return true;
 	}
 
 	/// add entry to the queue
@@ -700,7 +711,7 @@ public:
 
 		// submit actual distinct value in all cases
 		if ( DISTINCT && !bGrouped )
-			m_tUniq.Add ( SphGroupedValue_t ( uGroupKey, tEntry.GetAttr(m_tDistinctLoc) ) ); // OPTIMIZE! use simpler locator here?
+			m_tUniq.Add ( SphGroupedValue_t ( uGroupKey, tEntry.GetAttr(m_tSettings.m_tDistinctLoc) ) ); // OPTIMIZE! use simpler locator here?
 
 		// it's a dupe anyway, so we shouldn't update total matches count
 		if ( ppMatch )
@@ -772,9 +783,9 @@ public:
 	{
 		m_tStateGroup = tState;
 
-		if ( DISTINCT && m_tDistinctLoc.m_iBitOffset>=0 )
+		if ( DISTINCT && m_tSettings.m_tDistinctLoc.m_iBitOffset>=0 )
 			for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
-				if ( m_tStateGroup.m_tLocator[i].m_iBitOffset==m_tDistinctLoc.m_iBitOffset )
+				if ( m_tStateGroup.m_tLocator[i].m_iBitOffset==m_tSettings.m_tDistinctLoc.m_iBitOffset )
 			{
 				m_bSortByDistinct = true;
 				break;
@@ -889,6 +900,12 @@ public:
 		, m_pMva ( NULL )
 	{
 		this->m_pGrouper->GetLocator ( m_tMvaLocator );
+	}
+
+	/// check if this sorter does groupby
+	virtual bool IsGroupby ()
+	{
+		return true;
 	}
 
 	/// set MVA pool for subsequent matches
@@ -1278,18 +1295,7 @@ enum ESortClauseParseResult
 };
 
 
-enum
-{
-	FIXUP_GEODIST	= -1000,
-	FIXUP_COUNT		= -1001,
-	FIXUP_GROUP		= -1002,
-	FIXUP_DISTINCT	= -1003,
-	FIXUP_EXPR		= -1004
-};
-
-
-static ESortClauseParseResult sphParseSortClause ( const char * sClause, const CSphQuery * pQuery,
-	const CSphSchema & tSchema, bool bGroupClause,
+static ESortClauseParseResult sphParseSortClause ( const char * sClause, const CSphSchema & tSchema,
 	ESphSortFunc & eFunc, CSphMatchComparatorState & tState, CSphString & sError )
 {
 	// mini parser
@@ -1359,45 +1365,18 @@ static ESortClauseParseResult sphParseSortClause ( const char * sClause, const C
 		{
 			tState.m_iAttr[iField] = SPH_VATTR_ID;
 
-		} else if ( !strcasecmp ( pTok, "@geodist" ) )
-		{
-			tState.m_iAttr[iField] = FIXUP_GEODIST;
-
-		} else if ( !strcasecmp ( pTok, "@count" ) && bGroupClause )
-		{
-			if ( !pQuery->IsGroupby() )
-			{
-				sError.SetSprintf ( "no group-by attribute; can not sort by @count" );
-				return SORT_CLAUSE_ERROR;
-			}
-			tState.m_iAttr[iField] = FIXUP_COUNT;
-
-		} else if ( ( !strcasecmp ( pTok, "@group" ) || !strcasecmp ( pTok, "@groupby" ) ) && bGroupClause )
-		{
-			if ( !pQuery->IsGroupby() )
-			{
-				sError.SetSprintf ( "no group-by attribute; can not sort by @groupby" );
-				return SORT_CLAUSE_ERROR;
-			}
-			tState.m_iAttr[iField] = FIXUP_GROUP;
-
-		} else if ( !strcasecmp ( pTok, "@distinct" ) && bGroupClause )
-		{
-			if ( pQuery->m_tDistinctLoc.m_iBitOffset<0 )
-			{
-				sError.SetSprintf ( "no count-distinct attribute; can not sort by @distinct" );
-				return SORT_CLAUSE_ERROR;
-			}
-			tState.m_iAttr[iField] = FIXUP_DISTINCT;
-
 		} else
 		{
+			if ( !strcasecmp ( pTok, "@group" ) )
+				pTok = "@groupby";
+
 			int iAttr = tSchema.GetAttrIndex ( pTok );
 			if ( iAttr<0 )
 			{
 				sError.SetSprintf ( "sort-by attribute '%s' not found", pTok );
 				return SORT_CLAUSE_ERROR;
 			}
+
 			tState.m_iAttr[iField] = ( tSchema.GetAttr(iAttr).m_eAttrType==SPH_ATTR_FLOAT ) ? SPH_VATTR_FLOAT : iAttr;
 			tState.m_tLocator[iField] = tSchema.GetAttr(iAttr).m_tLocator;
 		}
@@ -1516,12 +1495,79 @@ static ISphMatchSorter * sphCreateSorter1st ( ESphSortFunc eMatchFunc, bool bMat
 }
 
 //////////////////////////////////////////////////////////////////////////
+// GEODIST
+//////////////////////////////////////////////////////////////////////////
+
+struct ExprGeodist_t : public ISphExpr
+{
+public:
+						ExprGeodist_t () {}
+	bool				Setup ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError );
+	virtual float		Eval ( const CSphMatch & tMatch ) const;
+
+protected:
+	CSphAttrLocator		m_tGeoLatLoc;
+	CSphAttrLocator		m_tGeoLongLoc;
+	float				m_fGeoAnchorLat;
+	float				m_fGeoAnchorLong;
+};
+
+
+bool ExprGeodist_t::Setup ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError )
+{
+	if ( !pQuery->m_bGeoAnchor )
+	{
+		sError.SetSprintf ( "INTERNAL ERROR: no geoanchor, can not create geodist evaluator" );
+		return false;
+	}
+
+	int iLat = tSchema.GetAttrIndex ( pQuery->m_sGeoLatAttr.cstr() );
+	if ( iLat<0 )
+	{
+		sError.SetSprintf ( "unknown latitude attribute '%s'", pQuery->m_sGeoLatAttr.cstr() );
+		return false;
+	}
+
+	int iLong = tSchema.GetAttrIndex ( pQuery->m_sGeoLongAttr.cstr() );
+	if ( iLong<0 )
+	{
+		sError.SetSprintf ( "unknown latitude attribute '%s'", pQuery->m_sGeoLongAttr.cstr() );
+		return false;
+	}
+
+	m_tGeoLatLoc = tSchema.GetAttr(iLat).m_tLocator;
+	m_tGeoLongLoc = tSchema.GetAttr(iLong).m_tLocator;
+	m_fGeoAnchorLat = pQuery->m_fGeoLatitude;
+	m_fGeoAnchorLong = pQuery->m_fGeoLongitude;
+	return true;
+}
+
+
+static inline double sphSqr ( double v )
+{
+	return v*v;
+}
+
+
+float ExprGeodist_t::Eval ( const CSphMatch & tMatch ) const
+{
+	const double R = 6384000;
+	float plat = tMatch.GetAttrFloat ( m_tGeoLatLoc );
+	float plon = tMatch.GetAttrFloat ( m_tGeoLongLoc );
+	double dlat = plat - m_fGeoAnchorLat;
+	double dlon = plon - m_fGeoAnchorLong;
+	double a = sphSqr(sin(dlat/2)) + cos(plat)*cos(m_fGeoAnchorLat)*sphSqr(sin(dlon/2));
+	double c = 2*asin ( Min ( 1, sqrt(a) ) );
+	return float(R*c);
+}
+
+//////////////////////////////////////////////////////////////////////////
 // PUBLIC FUNCTIONS (FACTORY AND FLATTENING)
 //////////////////////////////////////////////////////////////////////////
 
-static bool UpdateQueryForSchema ( CSphQuery * pQuery, const CSphSchema & tSchema, CSphGroupSorterSettings & tSettings, CSphString & sError )
+static bool SetupGroupbySettings ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphGroupSorterSettings & tSettings, CSphString & sError )
 {
-	pQuery->m_tDistinctLoc.m_iBitOffset = -1;
+	tSettings.m_tDistinctLoc.m_iBitOffset = -1;
 
 	if ( pQuery->m_sGroupBy.IsEmpty() )
 		return true;
@@ -1601,27 +1647,159 @@ static bool UpdateQueryForSchema ( CSphQuery * pQuery, const CSphSchema & tSchem
 			return false;
 		}
 
-		pQuery->m_tDistinctLoc = tSchema.GetAttr(iDistinct).m_tLocator;
+		tSettings.m_tDistinctLoc = tSchema.GetAttr(iDistinct).m_tLocator;
 	}
 
 	return true;
 }
 
 
-ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError )
+ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError )
 {
-	CSphGroupSorterSettings tSettings;
-
-	// lookup proper attribute index to group by, if any
-	if ( !UpdateQueryForSchema ( pQuery, tSchema, tSettings, sError ) )
-		return NULL;
-	assert ( pQuery->m_sGroupBy.IsEmpty() || pQuery->IsGroupby() );
-
-	// prepare
+	// prepare for descent
 	ISphMatchSorter * pTop = NULL;
 	CSphMatchComparatorState tStateMatch, tStateGroup;
 
 	sError = "";
+
+	///////////////////////////////////////
+	// build incoming and outgoing schemas
+	///////////////////////////////////////
+
+	// incoming schema adds computed expressions on top of the original index schema
+	CSphSchema tInSchema = tSchema;
+
+	// setup @geodist
+	if ( pQuery->m_bGeoAnchor && tInSchema.GetAttrIndex ( "@geodist" )<0 )
+	{
+		ExprGeodist_t * pExpr = new ExprGeodist_t ();
+		if ( !pExpr->Setup ( pQuery, tSchema, sError ) )
+		{
+			pExpr->Release ();
+			return NULL;
+		}
+
+		CSphColumnInfo tCol ( "@geodist", SPH_ATTR_FLOAT );
+		tCol.m_pExpr = pExpr; // takes ownership, no need to for explicit pExpr release
+		tInSchema.AddAttr ( tCol );
+	}
+
+	// setup @expr
+	if ( pQuery->m_eSort==SPH_SORT_EXPR && tInSchema.GetAttrIndex ( "@expr" )<0 )
+	{
+		CSphColumnInfo tCol ( "@expr", SPH_ATTR_FLOAT ); // enforce float type for backwards compatibility (ie. too lazy to fix those tests right now)
+		tCol.m_pExpr = sphExprParse ( pQuery->m_sSortBy.cstr(), tSchema, NULL, sError );
+		if ( !tCol.m_pExpr )
+			return NULL;
+		tCol.m_bLateCalc = true;
+		tInSchema.AddAttr ( tCol );
+	}
+
+	// expressions from select items
+	ARRAY_FOREACH ( i, pQuery->m_dItems )
+	{
+		const CSphQueryItem & tItem = pQuery->m_dItems[i];
+		const CSphString & sExpr = tItem.m_sExpr;
+
+		// for now, just always pass "plain" attrs from index to sorter; they will be filtered on searchd level
+		if ( sExpr=="*" || tSchema.GetAttrIndex(sExpr.cstr())>=0 )
+			continue;
+
+		// not an attribute? must be an expression, and must be aliased
+		if ( tItem.m_sAlias.IsEmpty() )
+		{
+			sError.SetSprintf ( "expression '%s' must be aliased (use 'expr AS alias' syntax)", tItem.m_sExpr.cstr() );
+			return NULL;
+		}
+
+		// tricky part
+		// we might be we're fed with precomputed matches, but it's all or nothing
+		// the incoming match either does not have anything computed, or it has everything
+		if ( tSchema.GetAttrsCount()==tInSchema.GetAttrsCount() )
+		{
+			// so far we had everything, so we might be precomputed, and the alias just might already exist
+			int iSuspect = tSchema.GetAttrIndex(tItem.m_sAlias.cstr());
+			if ( iSuspect>=0 )
+			{
+				// however, let's ensure that it was an expression
+				if ( tSchema.GetAttr(iSuspect).m_pExpr.Ptr()!=NULL )
+					continue;
+
+				// otherwise we're not precomputed, *and* have a duplicate name
+				sError.SetSprintf ( "alias '%s' must be unique (conflicts with an index attribute)", tItem.m_sAlias.cstr() );
+				return NULL;
+			}
+		} else
+		{
+			// we are adding stuff, must not be precomputed, check for both kinds of dupes
+			if ( tSchema.GetAttrIndex(tItem.m_sAlias.cstr())>=0 )
+			{
+				sError.SetSprintf ( "alias '%s' must be unique (conflicts with an index attribute)", tItem.m_sAlias.cstr() );
+				return NULL;
+			}
+			if ( tInSchema.GetAttrIndex(tInSchema.m_sName.cstr())>=0 )
+			{
+				sError.SetSprintf ( "alias '%s' must be unique (conflicts with another alias)", tItem.m_sAlias.cstr() );
+				return NULL;
+			}
+		}
+
+		// a new and shiny expression, lets parse
+		CSphColumnInfo tExprCol ( tItem.m_sAlias.cstr(), SPH_ATTR_NONE );
+		tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), tSchema, &tExprCol.m_eAttrType, sError );
+		if ( !tExprCol.m_pExpr )
+		{
+			sError.SetSprintf ( "parse error: %s", sError.cstr() );
+			return NULL;
+		}
+
+		// do add
+		tInSchema.AddAttr ( tExprCol );
+	}
+
+	////////////////////////////////////////////
+	// setup groupby settings, create shortcuts
+	////////////////////////////////////////////
+
+	CSphGroupSorterSettings tSettings;
+	if ( !SetupGroupbySettings ( pQuery, tInSchema, tSettings, sError ) )
+		return NULL;
+
+	const bool bGotGroupby = !pQuery->m_sGroupBy.IsEmpty(); // or else, check in SetupGroupbySettings() would already fail
+	const bool bGotDistinct = ( tSettings.m_tDistinctLoc.m_iBitOffset>=0 );
+
+	// outgoing schema adds @groupby etc if needed on top of incoming schema
+	CSphSchema tOutSchema = tInSchema;
+
+	if ( bGotGroupby && tOutSchema.GetAttrIndex ( "@groupby" )<0 )
+	{
+		CSphColumnInfo tGroupby ( "@groupby", tSettings.m_pGrouper->GetResultType() );
+		CSphColumnInfo tCount ( "@count", SPH_ATTR_INTEGER );
+		CSphColumnInfo tDistinct ( "@distinct", SPH_ATTR_INTEGER );
+
+		tOutSchema.AddAttr ( tGroupby );
+		tOutSchema.AddAttr ( tCount );
+		if ( bGotDistinct )
+			tOutSchema.AddAttr ( tDistinct );
+	}
+
+	int iGroupby = tOutSchema.GetAttrIndex ( "@groupby" );
+	if ( iGroupby>=0 )
+	{
+		tSettings.m_iPresortRowitems = tOutSchema.GetAttr ( iGroupby ).m_tLocator.CalcRowitem(); // how much raw (non-groupby) rowitems should the sorter expect
+		tSettings.m_iAddRowitems = tOutSchema.GetRowSize() - tSettings.m_iPresortRowitems; // how much groupby rowitems the sorter should add for non-grouped matches
+		tSettings.m_bDistinct = bGotDistinct;
+
+		tSettings.m_tLocGroupby = tOutSchema.GetAttr ( iGroupby ).m_tLocator;
+
+		int iCount = tOutSchema.GetAttrIndex ( "@count" );
+		if ( iCount>=0 )
+			tSettings.m_tLocCount = tOutSchema.GetAttr ( iCount ).m_tLocator;
+
+		int iDistinct = tOutSchema.GetAttrIndex ( "@distinct" );
+		if ( iDistinct>=0 )
+			tSettings.m_tLocDistinct = tOutSchema.GetAttr ( iDistinct ).m_tLocator;
+	}
 
 	////////////////////////////////////
 	// choose and setup sorting functor
@@ -1631,13 +1809,11 @@ ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchem
 	ESphSortFunc eGroupFunc = FUNC_REL_DESC;
 	bool bUsesAttrs = false;
 	bool bRandomize = false;
-	pQuery->m_bCalcGeodist = false;
 
 	// matches sorting function
 	if ( pQuery->m_eSort==SPH_SORT_EXTENDED )
 	{
-		ESortClauseParseResult eRes = sphParseSortClause ( pQuery->m_sSortBy.cstr(), pQuery, tSchema,
-			false, eMatchFunc, tStateMatch, sError );
+		ESortClauseParseResult eRes = sphParseSortClause ( pQuery->m_sSortBy.cstr(), tInSchema, eMatchFunc, tStateMatch, sError );
 
 		if ( eRes==SORT_CLAUSE_ERROR )
 			return NULL;
@@ -1646,24 +1822,13 @@ ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchem
 			bRandomize = true;
 
 		for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
-		{
 			if ( tStateMatch.m_iAttr[i]>=0 )
 				bUsesAttrs = true;
-			if ( tStateMatch.m_iAttr[i]==FIXUP_GEODIST )
-			{
-				bUsesAttrs = true;
-				pQuery->m_bCalcGeodist = true;
-			}
-		}
 
 	} else if ( pQuery->m_eSort==SPH_SORT_EXPR )
 	{
-		SafeDelete ( pQuery->m_pExpr );
-		pQuery->m_pExpr = sphExprParse ( pQuery->m_sSortBy.cstr(), tSchema, sError );
-		if ( !pQuery->m_pExpr )
-			return NULL;
-
-		tStateMatch.m_iAttr[0] = FIXUP_EXPR;
+		tStateMatch.m_iAttr[0] = tInSchema.GetAttrIndex ( "@expr" );
+		tStateMatch.m_tLocator[0] = tInSchema.GetAttr ( tStateMatch.m_iAttr[0] ).m_tLocator;
 		tStateMatch.m_iAttr[1] = SPH_VATTR_ID;
 		tStateMatch.m_uAttrDesc = 1;
 		eMatchFunc = FUNC_EXPR;
@@ -1684,7 +1849,7 @@ ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchem
 			const CSphColumnInfo & tAttr = tSchema.GetAttr ( tStateMatch.m_iAttr[0] );
 			tStateMatch.m_tLocator[0] = tAttr.m_tLocator;
 		}
-	
+
 		// find out what function to use and whether it needs attributes
 		bUsesAttrs = true;
 		switch ( pQuery->m_eSort )
@@ -1700,103 +1865,15 @@ ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchem
 	}
 
 	// groups sorting function
-	if ( pQuery->IsGroupby() )
+	if ( bGotGroupby )
 	{
-		ESortClauseParseResult eRes = sphParseSortClause ( pQuery->m_sGroupSortBy.cstr(), pQuery, tSchema,
-			true, eGroupFunc, tStateGroup, sError );
+		ESortClauseParseResult eRes = sphParseSortClause ( pQuery->m_sGroupSortBy.cstr(), tOutSchema, eGroupFunc, tStateGroup, sError );
 
 		if ( eRes==SORT_CLAUSE_ERROR || eRes==SORT_CLAUSE_RANDOM )
 		{
 			if ( eRes==SORT_CLAUSE_RANDOM )
 				sError.SetSprintf ( "groups can not be sorted by @random" );
 			return NULL;
-		}
-	}
-
-	// update for calculated stuff
-	ARRAY_FOREACH ( i, pQuery->m_dFilters )
-		if ( pQuery->m_dFilters[i].m_sAttrName=="@geodist" )
-	{
-		pQuery->m_bCalcGeodist = true;
-		break;
-	}
-
-	// create the new schema
-	// (note that in theory incoming schema should contain either no virtual columns at all, or both calculated and groupby virtual columns already)
-	// WARNING, THIS MUST BE IN SYNC WITH WHAT INDEX ACTUALLY DOES
-	CSphSchema tNewSchema = tSchema;
-
-	if ( pQuery->m_bCalcGeodist && tNewSchema.GetAttrIndex ( "@geodist" )<0 )
-	{
-		CSphColumnInfo tCol ( "@geodist", SPH_ATTR_FLOAT );
-		tNewSchema.AddAttr ( tCol );
-	}
-
-	if ( pQuery->m_eSort==SPH_SORT_EXPR && tNewSchema.GetAttrIndex ( "@expr" )<0 )
-	{
-		CSphColumnInfo tCol ( "@expr", SPH_ATTR_FLOAT );
-		tNewSchema.AddAttr ( tCol );
-	}
-
-	if ( pQuery->IsGroupby() && tNewSchema.GetAttrIndex ( "@groupby" )<0 )
-	{
-		CSphColumnInfo tGroupby ( "@groupby", tSettings.m_pGrouper->GetResultType() );
-		CSphColumnInfo tCount ( "@count", SPH_ATTR_INTEGER );
-		CSphColumnInfo tDistinct ( "@distinct", SPH_ATTR_INTEGER );
-
-		tNewSchema.AddAttr ( tGroupby );
-		tNewSchema.AddAttr ( tCount );
-		if ( pQuery->HasDistinct() )
-			tNewSchema.AddAttr ( tDistinct );
-	}
-
-	int iGroupby = tNewSchema.GetAttrIndex ( "@groupby" );
-	if ( iGroupby>=0 )
-	{
-		tSettings.m_iPresortRowitems = tNewSchema.GetAttr ( iGroupby ).m_tLocator.CalcRowitem(); // how much raw (non-groupby) rowitems should the sorter expect
-		tSettings.m_iAddRowitems = tNewSchema.GetRowSize() - tSettings.m_iPresortRowitems; // how much groupby rowitems the sorter should add for non-grouped matches
-		tSettings.m_bDistinct = ( pQuery->m_tDistinctLoc.m_iBitOffset>=0 );
-
-		tSettings.m_tLocGroupby = tNewSchema.GetAttr ( iGroupby ).m_tLocator;
-
-		int iCount = tNewSchema.GetAttrIndex ( "@count" );
-		if ( iCount>=0 )
-			tSettings.m_tLocCount = tNewSchema.GetAttr ( iCount ).m_tLocator;
-
-		int iDistinct = tNewSchema.GetAttrIndex ( "@distinct" );
-		if ( iDistinct>=0 )
-			tSettings.m_tLocDistinct = tNewSchema.GetAttr ( iDistinct ).m_tLocator;
-	}
-
-	// perform fixup
-	for ( int iState=0; iState<2; iState++ )
-	{
-		CSphMatchComparatorState & tState = iState ? tStateMatch : tStateGroup;
-		for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
-		{
-			const char * sName = NULL;
-			switch ( tState.m_iAttr[i] )
-			{
-				case FIXUP_GEODIST:		sName = "@geodist"; break;
-				case FIXUP_EXPR:		sName = "@expr"; break;
-				case FIXUP_GROUP:		sName = "@groupby"; break;
-				case FIXUP_COUNT:		sName = "@count"; break;
-				case FIXUP_DISTINCT:	sName = "@distinct"; break;
-				default:				continue;
-			}
-
-			assert ( sName );
-			int iAttr = tNewSchema.GetAttrIndex(sName);
-
-			if ( iAttr<0 || iAttr>=tNewSchema.GetAttrsCount() )
-			{
-				sError.SetSprintf ( "INTERNAL ERROR: fixup failed for '%s' virtual attribute", sName );
-				return NULL;
-			}
-
-			const CSphColumnInfo & tCol = tNewSchema.GetAttr(iAttr);
-			tState.m_iAttr[i] = iAttr;
-			tState.m_tLocator[i] = tCol.m_tLocator;
 		}
 	}
 
@@ -1807,7 +1884,7 @@ ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchem
 	bool bMatchBits = tStateMatch.UsesBitfields ();
 	bool bGroupBits = tStateGroup.UsesBitfields ();
 
-	if ( !pQuery->IsGroupby() )
+	if ( !bGotGroupby )
 	{
 		if ( bMatchBits )
 		{
@@ -1850,7 +1927,7 @@ ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchem
 	if ( !pTop )
 	{
 		sError.SetSprintf ( "internal error: unhandled sorting mode (match-sort=%d, group=%d, group-sort=%d)",
-			eMatchFunc, pQuery->IsGroupby(), eGroupFunc );
+			eMatchFunc, bGotGroupby, eGroupFunc );
 		return NULL;
 	}
 
@@ -1858,7 +1935,8 @@ ISphMatchSorter * sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchem
 	pTop->SetState ( tStateMatch );
 	pTop->SetGroupState ( tStateGroup );
 	pTop->m_bRandomize = bRandomize;
-	pTop->m_tSchema = tNewSchema;
+	pTop->m_tIncomingSchema = tInSchema;
+	pTop->m_tOutgoingSchema = tOutSchema;
 	return pTop;
 }
 

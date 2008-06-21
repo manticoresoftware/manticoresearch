@@ -24,7 +24,7 @@ define ( "SEARCHD_COMMAND_UPDATE",	2 );
 define ( "SEARCHD_COMMAND_KEYWORDS",3 );
 
 /// current client-side command implementation versions
-define ( "VER_COMMAND_SEARCH",		0x115 );
+define ( "VER_COMMAND_SEARCH",		0x116 );
 define ( "VER_COMMAND_EXCERPT",		0x100 );
 define ( "VER_COMMAND_UPDATE",		0x101 );
 define ( "VER_COMMAND_KEYWORDS",	0x100 );
@@ -184,6 +184,7 @@ class SphinxClient
 	var $_maxquerytime;	///< max query time, milliseconds (default is 0, do not limit)
 	var $_fieldweights;	///< per-field-name weights
 	var $_overrides;	///< per-query attribute values overrides
+	var $_select;		///< select-list (attributes or expressions, with optional aliases)
 
 	var $_error;		///< last error message
 	var $_warning;		///< last warning message
@@ -227,6 +228,7 @@ class SphinxClient
 		$this->_maxquerytime= 0;
 		$this->_fieldweights= array();
 		$this->_overrides 	= array();
+		$this->_select		= "*";
 
 		$this->_error		= ""; // per-reply fields (for single-query case)
 		$this->_warning		= "";
@@ -590,6 +592,13 @@ class SphinxClient
 		$this->_overrides[$attrname] = array ( "attr"=>$attrname, "type"=>$attrtype, "values"=>$values );
 	}
 
+	/// set select-list (attributes or expressions), SQL-like syntax
+	function SetSelect ( $select )
+	{
+		assert ( is_string ( $select ) );
+		$this->_select = $select;
+	}
+
 	//////////////////////////////////////////////////////////////////////////////
 
 	/// clear all filters (for multi-queries)
@@ -746,6 +755,9 @@ class SphinxClient
 				}
 			}
 		}
+
+		// select-list
+		$req .= pack ( "N", strlen($this->_select) ) . $this->_select;
 
 		// mbstring workaround
 		$this->_MBPop ();

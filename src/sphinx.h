@@ -29,6 +29,7 @@
 /////////////////////////////////////////////////////////////////////////////
 
 #include "sphinxstd.h"
+#include "sphinxexpr.h" // to remove?
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -224,6 +225,13 @@ void sphUnalignedWrite ( void * pPtr, const T & tVal )
 #endif
 
 int sphUTF8Len ( const char * pStr );
+
+/// check for valid attribute name char
+inline int sphIsAttr ( int c )
+{
+	// different from sphIsAlpha() in that we don't allow minus
+	return ( c>='0' && c<='9' ) || ( c>='a' && c<='z' ) || ( c>='A' && c<='Z' ) || c=='_';
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // TOKENIZERS
@@ -747,12 +755,12 @@ struct CSphSourceStats
 enum
 {
 	SPH_ATTR_NONE		= 0,			///< not an attribute at all
-	SPH_ATTR_INTEGER	= 1,			///< this attr is just an integer
+	SPH_ATTR_INTEGER	= 1,			///< unsigned 32-bit integer
 	SPH_ATTR_TIMESTAMP	= 2,			///< this attr is a timestamp
 	SPH_ATTR_ORDINAL	= 3,			///< this attr is an ordinal string number (integer at search time, specially handled at indexing time)
 	SPH_ATTR_BOOL		= 4,			///< this attr is a boolean bit field
-	SPH_ATTR_FLOAT		= 5,
-	SPH_ATTR_BIGINT		= 6,
+	SPH_ATTR_FLOAT		= 5,			///< floating point number (IEEE 32-bit)
+	SPH_ATTR_BIGINT		= 6,			///< unsigned 64-bit integer
 
 	SPH_ATTR_MULTI		= 0x40000000UL	///< this attr has multiple values (0 or more)
 };
@@ -790,6 +798,9 @@ struct CSphColumnInfo
 	CSphString		m_sQuery;		///< query to retrieve values (for multi-valued attrs only)
 	CSphString		m_sQueryRange;	///< query to retrieve range (for multi-valued attrs only)
 
+	CSphRefcountedPtr<ISphExpr>		m_pExpr;		///< evaluator for expression items
+	bool							m_bLateCalc;	///< early calc or late calc
+
 	/// handy ctor
 	CSphColumnInfo ( const char * sName=NULL, DWORD eType=SPH_ATTR_NONE )
 		: m_sName ( sName )
@@ -797,8 +808,22 @@ struct CSphColumnInfo
 		, m_eWordpart ( SPH_WORDPART_WHOLE )
 		, m_iIndex ( -1 )
 		, m_eSrc ( SPH_ATTRSRC_NONE )
+		, m_pExpr ( NULL )
+		, m_bLateCalc ( false )
 	{
 		m_sName.ToLower ();
+	}
+
+	/// equality comparison checks name, type, and locator
+	bool operator == ( const CSphColumnInfo & rhs ) const
+	{
+		return m_sName==rhs.m_sName && m_eAttrType==rhs.m_eAttrType && m_tLocator.m_iBitCount==rhs.m_tLocator.m_iBitCount && m_tLocator.m_iBitOffset==rhs.m_tLocator.m_iBitOffset;
+	}
+
+	/// equality comparison checks name, type, and locator
+	bool operator != ( const CSphColumnInfo & rhs ) const
+	{
+		return !((*this)==rhs);
 	}
 };
 
@@ -1486,9 +1511,6 @@ struct CSphNamedInt
 	CSphNamedInt () : m_iValue ( 0 ) {}
 };
 
-/// unclean, i know
-#include "sphinxexpr.h"
-
 
 /// per-attribute value overrides
 class CSphAttrOverride
@@ -1515,6 +1537,14 @@ public:
 	DWORD						m_uAttrType;	///< attribute type
 	CSphAttrLocator				m_tLocator;		///< attribute locator
 	CSphVector<IdValuePair_t>	m_dValues;		///< id-value overrides
+};
+
+
+/// query selection item
+struct CSphQueryItem
+{
+	CSphString		m_sExpr;		///< expression to compute
+	CSphString		m_sAlias;		///< alias to return
 };
 
 
@@ -1564,10 +1594,7 @@ public:
 
 	CSphVector<CSphAttrOverride>	m_dOverrides;	///< per-query attribute value overrides
 
-public:
-	bool			m_bCalcGeodist;		///< whether this query needs to calc @geodist
-	CSphAttrLocator	m_tDistinctLoc;		///< count-distinct attr locator
-	ISphExpr *		m_pExpr;			///< expression opcodes for SPH_SORT_EXPR mode
+	CSphString		m_sSelect;			///< select-list (attributes and/or expressions)
 
 public:
 	int				m_iOldVersion;		///< version, to fixup old queries
@@ -1579,17 +1606,17 @@ public:
 	DWORD			m_iOldMaxGID;		///< 0.9.6 max group id
 
 public:
+	CSphVector<CSphQueryItem>		m_dItems;	///< parsed select-list
+
+public:
 					CSphQuery ();		///< ctor, fills defaults
 					~CSphQuery ();		///< dtor, frees owned stuff
 
 	/// return index weight from m_dIndexWeights; or 1 by default
 	int				GetIndexWeight ( const char * sName ) const;
 
-	/// check whether this query is group-by
-	bool			IsGroupby () const { return !m_sGroupBy.IsEmpty(); }
-
-	/// check whether this query is group-by and has distinct
-	bool			HasDistinct () const { return IsGroupby() && m_tDistinctLoc.m_iBitOffset>=0; }
+	/// parse select list string into items
+	bool			ParseSelectList ( CSphString & sError );
 };
 
 
@@ -1720,7 +1747,8 @@ class ISphMatchSorter
 public:
 	bool				m_bRandomize;
 	int					m_iTotal;
-	CSphSchema			m_tSchema;		///< "outgoing" schema
+	CSphSchema			m_tIncomingSchema;		///< incoming schema (adds computed attributes on top of index schema)
+	CSphSchema			m_tOutgoingSchema;		///< outgoing schema (adds @groupby etc if needed on top of incoming)
 
 public:
 	/// ctor
@@ -1731,6 +1759,9 @@ public:
 
 	/// check if this sorter needs attr values
 	virtual bool		UsesAttrs () = 0;
+
+	/// check if this sorter does groupby
+	virtual bool		IsGroupby () = 0;
 
 	/// set match comparator state
 	virtual void		SetState ( const CSphMatchComparatorState & ) = 0;
@@ -1902,9 +1933,8 @@ CSphIndex *			sphCreateIndexPhrase ( const char * sFilename );
 void				sphSetQuiet ( bool bQuiet );
 
 /// creates proper queue for given query
-/// modifies pQuery, setups several field locators
 /// may return NULL on error; in this case, error message is placed in sError
-ISphMatchSorter *	sphCreateQueue ( CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError );
+ISphMatchSorter *	sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError );
 
 /// convert queue to sorted array, and add its entries to result's matches array
 void				sphFlattenQueue ( ISphMatchSorter * pQueue, CSphQueryResult * pResult, int iTag );

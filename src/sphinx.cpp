@@ -1608,7 +1608,7 @@ struct CSphIndex_VLN : CSphIndex
 	virtual void				Unlock ();
 
 	void						BindWeights ( const CSphQuery * pQuery );
-	bool						SetupCalc ( CSphQueryResult * pResult, const CSphQuery * pQuery );
+	bool						SetupCalc ( CSphQueryResult * pResult, const CSphSchema & tInSchema );
 
 	virtual CSphQueryResult *	Query ( CSphQuery * pQuery );
 	virtual bool				QueryEx ( CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchSorter * pTop );
@@ -1721,14 +1721,14 @@ private:
 	bool						m_bLateLookup;			///< whether late attr value lookup is needed
 	bool						m_bLateReject;			///< whether to check filters after rank calculation
 
-	CSphAttrLocator				m_tGeoDistLoc;			///< geodistance locator (bitoffset -1 means do not compute)
-	CSphAttrLocator				m_tGeoLatLoc;			///< latitude locator
-	CSphAttrLocator				m_tGeoLongLoc;			///< latitude locator
-	float						m_fGeoAnchorLat;		///< anchor latitude
-	float						m_fGeoAnchorLong;		///< anchor longitude
-
-	CSphAttrLocator				m_tExprLoc;				///< sorting expr locator (bitoffset -1 means do not compute)
-	ISphExpr *					m_pExpr;				///< expression opcodes
+	struct CalcItem_t
+	{
+		CSphAttrLocator			m_tLoc;					///< result locator
+		DWORD					m_uType;				///< result type
+		ISphExpr *				m_pExpr;				///< evaluator (non-owned)
+	};
+	CSphVector<CalcItem_t>		m_dEarlyCalc;			///< early-calc evaluators
+	CSphVector<CalcItem_t>		m_dLateCalc;			///< late-calc evaluators
 
 	CSphVector<CSphAttrOverride> *	m_pOverrides;		///< overridden attribute values
 
@@ -4598,9 +4598,6 @@ CSphQuery::CSphQuery ()
 	, m_uMaxQueryMsec	( 0 )
 	, m_sComment		( "" )
 
-	, m_bCalcGeodist	( false )
-	, m_pExpr			( NULL )
-
 	, m_iOldVersion		( 0 )
 	, m_iOldGroups		( 0 )
 	, m_pOldGroups		( NULL )
@@ -4613,7 +4610,6 @@ CSphQuery::CSphQuery ()
 
 CSphQuery::~CSphQuery ()
 {
-	SafeDelete ( m_pExpr );
 }
 
 
@@ -4623,6 +4619,113 @@ int CSphQuery::GetIndexWeight ( const char * sName ) const
 		if ( m_dIndexWeights[i].m_sName==sName )
 			return m_dIndexWeights[i].m_iValue;
 	return 1;
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+struct SelectBounds_t
+{
+	int		m_iStart;
+	int		m_iEnd;
+};
+#define YYSTYPE SelectBounds_t
+#include "sphinxselectyy.hpp"
+
+
+class SelectParser_t
+{
+public:
+	int				GetToken ( YYSTYPE * lvalp );
+	void			AddItem ( YYSTYPE * pExpr, YYSTYPE * pAlias );
+
+public:
+	CSphString		m_sParserError;
+	const char *	m_pLastTokenStart;
+
+	const char *	m_pStart;
+	const char *	m_pCur;
+
+	CSphQuery *		m_pQuery;
+};
+
+int yylex ( YYSTYPE * lvalp, SelectParser_t * pParser )				{ return pParser->GetToken ( lvalp );}
+void yyerror ( SelectParser_t * pParser, const char * sMessage )	{ pParser->m_sParserError.SetSprintf ( "%s near '%s'", sMessage, pParser->m_pLastTokenStart ); }
+#include "sphinxselectyy.cpp"
+
+
+int SelectParser_t::GetToken ( YYSTYPE * lvalp )
+{
+	// skip whitespace, check eof
+	while ( isspace(*m_pCur) ) m_pCur++;
+	if ( !*m_pCur ) return 0;
+
+	m_pLastTokenStart = m_pCur;
+	lvalp->m_iStart = m_pCur-m_pStart;
+
+	// check for token
+	if ( sphIsAttr(m_pCur[0]) || ( m_pCur[0]=='@' && sphIsAttr(m_pCur[1]) ) )
+	{
+		m_pCur++;
+		while ( sphIsAttr(*m_pCur) ) m_pCur++;
+		lvalp->m_iEnd = m_pCur-m_pStart;
+
+		return ( lvalp->m_iEnd==2+lvalp->m_iStart && strncasecmp ( m_pStart+lvalp->m_iStart, "AS", 2 )==0 )
+			? SEL_AS
+			: SEL_TOKEN;
+	}
+
+	// check for equality checks
+	lvalp->m_iEnd = 1+lvalp->m_iStart;
+	switch ( *m_pCur )
+	{
+		case '<':
+			m_pCur++;
+			if ( *m_pCur=='>' ) { m_pCur++; lvalp->m_iEnd++; return TOK_NE; }
+			if ( *m_pCur=='=' ) { m_pCur++; lvalp->m_iEnd++; return TOK_LTE; }
+			return '<';
+
+		case '>':
+			m_pCur++;
+			if ( *m_pCur=='=' ) { m_pCur++; lvalp->m_iEnd++; return TOK_GTE; }
+			return '>';
+
+		case '=':
+			m_pCur++;
+			if ( *m_pCur=='=' ) { m_pCur++; lvalp->m_iEnd++; }
+			return TOK_EQ;
+	}
+
+	// return char as a token
+	return *m_pCur++;
+}
+
+
+void SelectParser_t::AddItem ( YYSTYPE * pExpr, YYSTYPE * pAlias )
+{
+	CSphQueryItem tItem;
+	tItem.m_sExpr.SetBinary ( m_pStart + pExpr->m_iStart, pExpr->m_iEnd - pExpr->m_iStart );
+	if ( pAlias )
+		tItem.m_sAlias.SetBinary ( m_pStart + pAlias->m_iStart, pAlias->m_iEnd - pAlias->m_iStart );
+
+	m_pQuery->m_dItems.Add ( tItem );
+}
+
+
+bool CSphQuery::ParseSelectList ( CSphString & sError )
+{
+	m_dItems.Reset ();
+	if ( m_sSelect.IsEmpty() )
+		return true; // empty is ok; will just return everything
+
+	SelectParser_t tParser;
+	tParser.m_pStart = m_sSelect.cstr();
+	tParser.m_pCur = m_sSelect.cstr();
+	tParser.m_pQuery = this;
+
+	yyparse ( &tParser );
+
+	sError = tParser.m_sParserError;
+	return sError.IsEmpty ();
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -9334,34 +9437,28 @@ void CSphIndex_VLN::CopyDocinfo ( CSphMatch & tMatch, const DWORD * pFound ) con
 }
 
 
-static inline double sphSqr ( double v )
-{
-	return v*v;
-}
-
-
 void CSphIndex_VLN::EarlyCalc ( CSphMatch & tMatch ) const
 {
-	if ( m_tGeoDistLoc.m_iBitOffset>=0 )
+	ARRAY_FOREACH ( i, m_dEarlyCalc )
 	{
-		const double R = 6384000;
-		float plat = tMatch.GetAttrFloat ( m_tGeoLatLoc );
-		float plon = tMatch.GetAttrFloat ( m_tGeoLongLoc );
-		double dlat = plat - m_fGeoAnchorLat;
-		double dlon = plon - m_fGeoAnchorLong;
-		double a = sphSqr(sin(dlat/2)) + cos(plat)*cos(m_fGeoAnchorLat)*sphSqr(sin(dlon/2));
-		double c = 2*asin ( Min ( 1, sqrt(a) ) );
-		tMatch.SetAttrFloat ( m_tGeoDistLoc, float(R*c) );
+		const CalcItem_t & tCalc = m_dEarlyCalc[i];
+		if ( tCalc.m_uType==SPH_ATTR_INTEGER )
+			tMatch.SetAttr ( tCalc.m_tLoc, tCalc.m_pExpr->IntEval(tMatch) );
+		else
+			tMatch.SetAttrFloat ( tCalc.m_tLoc, tCalc.m_pExpr->Eval(tMatch) );
 	}
 }
 
 
 void CSphIndex_VLN::LateCalc ( CSphMatch & tMatch ) const
 {
-	if ( m_tExprLoc.m_iBitOffset>=0 )
+	ARRAY_FOREACH ( i, m_dLateCalc )
 	{
-		float fRes = m_pExpr->Eval ( tMatch );
-		tMatch.SetAttrFloat ( m_tExprLoc, fRes );
+		const CalcItem_t & tCalc = m_dLateCalc[i];
+		if ( tCalc.m_uType==SPH_ATTR_INTEGER )
+			tMatch.SetAttr ( tCalc.m_tLoc, tCalc.m_pExpr->IntEval(tMatch) );
+		else
+			tMatch.SetAttrFloat ( tCalc.m_tLoc, tCalc.m_pExpr->Eval(tMatch) );
 	}
 }
 
@@ -9376,7 +9473,6 @@ void CSphIndex_VLN::LateCalc ( CSphMatch & tMatch ) const
 	\
 	if ( !m_bLateReject || !LateReject ( _match, pQuery ) ) \
 	{ \
-		\
 		bool bNewMatch = false; \
 		for ( int iSorter=0; iSorter<iSorters; iSorter++ ) \
 			bNewMatch |= ppSorters[iSorter]->Push ( _match ); \
@@ -13343,7 +13439,7 @@ void CSphIndex_VLN::DumpHeader ( FILE * fp, const char * sHeaderName )
 		fprintf ( fp, "  attr %d: %s, ", i, tAttr.m_sName.cstr() );
 		switch ( tAttr.m_eAttrType )
 		{
-			case SPH_ATTR_INTEGER:						fprintf ( fp, "integer, bits %d", tAttr.m_tLocator.m_iBitCount ); break;
+			case SPH_ATTR_INTEGER:						fprintf ( fp, "uint, bits %d", tAttr.m_tLocator.m_iBitCount ); break;
 			case SPH_ATTR_TIMESTAMP:					fprintf ( fp, "timestamp" ); break;
 			case SPH_ATTR_ORDINAL:						fprintf ( fp, "ordinal" ); break;
 			case SPH_ATTR_BOOL:							fprintf ( fp, "boolean" ); break;
@@ -14015,7 +14111,7 @@ bool CSphIndex_VLN::QueryEx ( CSphQuery * pQuery, CSphQueryResult * pResult, ISp
 {
 	bool bRes = MultiQuery ( pQuery, pResult, 1, &pTop );
 	pResult->m_iTotalMatches += bRes ? pTop->GetTotalCount () : 0;
-	pResult->m_tSchema = pTop->m_tSchema;
+	pResult->m_tSchema = pTop->m_tOutgoingSchema;
 	return bRes;
 }
 
@@ -14050,60 +14146,47 @@ void CSphIndex_VLN::BindWeights ( const CSphQuery * pQuery )
 }
 
 
-bool CSphIndex_VLN::SetupCalc ( CSphQueryResult * pResult, const CSphQuery * pQuery )
+bool CSphIndex_VLN::SetupCalc ( CSphQueryResult * pResult, const CSphSchema & tInSchema )
 {
-	// base schema
-	pResult->m_tSchema = m_tSchema;
+	m_dEarlyCalc.Resize ( 0 );
+	m_dLateCalc.Resize ( 0 );
 
-	// geodist
-	m_tGeoDistLoc.m_iBitOffset = -1;
-	if ( pQuery->m_bCalcGeodist )
+	// verify that my real attributes match
+	if ( tInSchema.GetAttrsCount() < m_tSchema.GetAttrsCount() )
 	{
-		if ( !pQuery->m_bGeoAnchor )
-		{
-			m_sLastError.SetSprintf ( "no geo-anchor point specified in search query, @geodist not available" );
-			return false;
-		}
-
-		int iLat = m_tSchema.GetAttrIndex ( pQuery->m_sGeoLatAttr.cstr() );
-		if ( iLat<0 )
-		{
-			m_sLastError.SetSprintf ( "unknown latitude attribute '%s'", pQuery->m_sGeoLatAttr.cstr() );
-			return false;
-		}
-
-		int iLong = m_tSchema.GetAttrIndex ( pQuery->m_sGeoLongAttr.cstr() );
-		if ( iLong<0 )
-		{
-			m_sLastError.SetSprintf ( "unknown latitude attribute '%s'", pQuery->m_sGeoLongAttr.cstr() );
-			return false;
-		}
-
-		CSphColumnInfo tGeodist ( "@geodist", SPH_ATTR_FLOAT );
-		pResult->m_tSchema.AddAttr ( tGeodist );
-
-		int iAttr = pResult->m_tSchema.GetAttrIndex ( "@geodist" );
-		m_tGeoDistLoc = pResult->m_tSchema.GetAttr ( iAttr ).m_tLocator;
-		assert ( m_tGeoDistLoc.m_iBitOffset>=0 );
-
-		m_tGeoLatLoc = m_tSchema.GetAttr(iLat).m_tLocator;
-		m_tGeoLongLoc = m_tSchema.GetAttr(iLong).m_tLocator;
-		m_fGeoAnchorLat = pQuery->m_fGeoLatitude;
-		m_fGeoAnchorLong = pQuery->m_fGeoLongitude;
+		m_sLastError.SetSprintf ( "INTERNAL ERROR: incoming-schema mismatch (incount=%d, mycount=%d)", tInSchema.GetAttrsCount(), m_tSchema.GetAttrsCount() );
+		return false;
 	}
 
-	// sorting expression
-	m_tExprLoc.m_iBitOffset = -1;
-	if ( pQuery->m_eSort==SPH_SORT_EXPR )
+	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
 	{
-		CSphColumnInfo tExpr ( "@expr", SPH_ATTR_FLOAT );
-		pResult->m_tSchema.AddAttr ( tExpr );
+		if ( tInSchema.GetAttr(i)!=m_tSchema.GetAttr(i) )
+		{
+			m_sLastError.SetSprintf ( "INTERNAL ERROR: incoming-schema mismatch (attridx=%d, in=%s, intype=%d, my=%s, mytype=%d)", i,
+				tInSchema.GetAttr(i).m_sName.cstr(), tInSchema.GetAttr(i).m_eAttrType,
+				m_tSchema.GetAttr(i).m_sName.cstr(), m_tSchema.GetAttr(i).m_eAttrType );
+			return false;
+		}
+	}
 
-		int iAttr = pResult->m_tSchema.GetAttrIndex ( "@expr" );
-		m_tExprLoc = pResult->m_tSchema.GetAttr ( iAttr ).m_tLocator;
-		assert ( m_tExprLoc.m_iBitOffset>=0 );
+	// ok, i can emit matches in this schema (it's incoming for sorter, but outgoing for me)
+	pResult->m_tSchema = tInSchema;
 
-		m_pExpr = pQuery->m_pExpr;
+	// setup early-calc stuff
+	for ( int i=m_tSchema.GetAttrsCount(); i<tInSchema.GetAttrsCount(); i++ )
+	{
+		const CSphColumnInfo & tCol = tInSchema.GetAttr(i);
+		assert ( tCol.m_pExpr.Ptr() );
+
+		CalcItem_t tCalc;
+		tCalc.m_uType = tCol.m_eAttrType;
+		tCalc.m_tLoc = tCol.m_tLocator;
+		tCalc.m_pExpr = tCol.m_pExpr.Ptr();
+
+		if ( tCol.m_bLateCalc )
+			m_dLateCalc.Add ( tCalc );
+		else
+			m_dEarlyCalc.Add ( tCalc );
 	}
 
 	return true;
@@ -14322,7 +14405,7 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 	}
 
 	// setup calculations and result schema
-	if ( !SetupCalc ( pResult, pQuery ) )
+	if ( !SetupCalc ( pResult, ppSorters[0]->m_tIncomingSchema ) )
 		return false;
 
 	// prepare for setup

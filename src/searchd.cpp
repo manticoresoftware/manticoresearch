@@ -194,7 +194,7 @@ enum SearchdCommand_e
 /// known command versions
 enum
 {
-	VER_COMMAND_SEARCH		= 0x115,
+	VER_COMMAND_SEARCH		= 0x116,
 	VER_COMMAND_EXCERPT		= 0x100,
 	VER_COMMAND_UPDATE		= 0x101,
 	VER_COMMAND_KEYWORDS	= 0x100
@@ -1901,14 +1901,15 @@ protected:
 
 int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuery & q ) const
 {
-	int iReqSize = 100 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
+	int iReqSize = 104 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
 		+ strlen ( q.m_sSortBy.cstr() )
 		+ strlen ( q.m_sQuery.cstr() )
 		+ strlen ( sIndexes )
 		+ strlen ( q.m_sGroupBy.cstr() )
 		+ strlen ( q.m_sGroupSortBy.cstr() )
 		+ strlen ( q.m_sGroupDistinct.cstr() )
-		+ strlen ( q.m_sComment.cstr() );
+		+ strlen ( q.m_sComment.cstr() )
+		+ strlen ( q.m_sSelect.cstr() );
 	ARRAY_FOREACH ( j, q.m_dFilters )
 	{
 		const CSphFilter & tFilter = q.m_dFilters[j];
@@ -2023,6 +2024,7 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 			}
 		}
 	}
+	tOut.SendString ( q.m_sSelect.cstr() );
 }
 
 
@@ -2552,6 +2554,19 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 		}
 	}
 
+	// v.1.22
+	if ( iVer>=0x116 )
+	{
+		tQuery.m_sSelect = tReq.GetString ();
+
+		CSphString sError;
+		if ( !tQuery.ParseSelectList ( sError ) )
+		{
+			tReq.SendErrorReply ( "select: %s", sError.cstr() );
+			return false;
+		}
+	}
+
 	/////////////////////
 	// additional checks
 	/////////////////////
@@ -2624,7 +2639,7 @@ void LogQuery ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 	sphFormatCurrentTime ( sTimeBuf );
 
 	sGroupBuf[0] = '\0';
-	if ( tQuery.IsGroupby() )
+	if ( !tQuery.m_sGroupBy.IsEmpty() )
 		snprintf ( sGroupBuf, sizeof(sGroupBuf), " @%s", tQuery.m_sGroupBy.cstr() );
 
 	static const char * sModes [ SPH_MATCH_TOTAL ] = { "all", "any", "phr", "bool", "ext", "scan", "ext2" };
@@ -2893,7 +2908,7 @@ struct AggrResult_t : CSphQueryResult
 };
 
 
-bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery )
+bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery )
 {
 	// sanity check
 	int iExpected = 0;
@@ -2917,6 +2932,44 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery )
 	{
 		if ( !MinimizeSchema ( tRes.m_tSchema, tRes.m_dSchemas[i] ) )
 			bAllEqual = false;
+	}
+
+	// apply select-items on top of that
+	bool bStar = false;
+	ARRAY_FOREACH ( i, tQuery.m_dItems )
+		if ( tQuery.m_dItems[i].m_sExpr=="*" )
+	{
+		bStar = true;
+		break;
+	}
+
+	if ( !bStar && tQuery.m_dItems.GetLength() )
+	{
+		CSphSchema tItems;
+		for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); i++ )
+		{
+			const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
+			if ( !tCol.m_pExpr )
+			{
+				bool bAdd = false;
+				ARRAY_FOREACH ( i, tQuery.m_dItems )
+					if ( tQuery.m_dItems[i].m_sExpr==tCol.m_sName )
+				{
+					bAdd = true;
+					break;
+				}
+
+				if ( !bAdd )
+					continue;
+			}
+			tItems.AddAttr ( tCol );
+		}
+
+		if ( tRes.m_tSchema.GetAttrsCount()!=tItems.GetAttrsCount() )
+		{
+			tRes.m_tSchema = tItems;
+			bAllEqual = false;
+		}
 	}
 
 	// convert all matches to minimal schema
@@ -2968,6 +3021,10 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery )
 		SafeDeleteArray ( dMapFrom );
 	}
 
+	// we do not need to re-sort if there's exactly one result set
+	if ( tRes.m_iSuccesses==1 )
+		return true;
+
 	// create queue
 	ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, tRes.m_tSchema, tRes.m_sError );
 	if ( !pSorter )
@@ -2975,7 +3032,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery )
 
 	// kill all dupes
 	int iDupes = 0;
-	if ( tQuery.IsGroupby() )
+	if ( pSorter->IsGroupby () )
 	{
 		// groupby sorter does that automagically
 		pSorter->SetMVAPool ( NULL ); // because we must be able to group on @groupby anyway
@@ -3390,7 +3447,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 								for ( int i=0; i<tRes.m_iNumWords; i++ )
 									tRes.m_tWordStats[i] = tStats.m_tWordStats[i];
 
-								tRes.m_tSchema = pSorter->m_tSchema;
+								tRes.m_tSchema = pSorter->m_tOutgoingSchema;
 
 								// extract matches from sorter
 								assert ( pSorter );
@@ -3636,7 +3693,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		if ( tRes.m_dSchemas.GetLength() )
 			tRes.m_tSchema = tRes.m_dSchemas[0];
 
-		if ( tRes.m_iSuccesses>1 )
+		if ( tRes.m_iSuccesses>1 || tQuery.m_dItems.GetLength() )
 			if ( !MinimizeAggrResult ( tRes, tQuery ) )
 				return;
 

@@ -204,6 +204,7 @@ void sphAssert ( const char * sExpr, const char * sFile, int iLine );
 #define Max(a,b)			((a)>(b)?(a):(b))
 #define SafeDelete(_x)		{ if (_x) { delete (_x); (_x) = NULL; } }
 #define SafeDeleteArray(_x)	{ if (_x) { delete [] (_x); (_x) = NULL; } }
+#define SafeRelease(_x)		{ if (_x) { (_x)->Release(); (_x) = NULL; } }
 
 /// swap
 template < typename T > inline void Swap ( T & v1, T & v2 )
@@ -1096,6 +1097,44 @@ public:
 	T *				Ptr () const				{ return m_pPtr; }
 	CSphScopedPtr &	operator = ( T * pPtr )		{ SafeDelete ( m_pPtr ); m_pPtr = pPtr; return *this; }
 	T *				LeakPtr ()					{ T * pPtr = m_pPtr; m_pPtr = NULL; return pPtr; }
+
+protected:
+	T *				m_pPtr;
+};
+
+//////////////////////////////////////////////////////////////////////////
+
+/// refcounted base
+struct ISphRefcounted : public ISphNoncopyable
+{
+protected:
+					ISphRefcounted () : m_iRefCount ( 1 ) {}
+	virtual			~ISphRefcounted () {}
+
+public:
+	void			AddRef () const		{ m_iRefCount++; }
+	void			Release () const	{ --m_iRefCount; assert ( m_iRefCount>=0 ); if ( m_iRefCount==0 ) delete this; }
+
+protected:
+	mutable int		m_iRefCount;
+};
+
+
+/// automatic pointer wrapper for refcounted objects
+template < typename T >
+class CSphRefcountedPtr
+{
+public:
+	explicit		CSphRefcountedPtr ( T * pPtr )	{ m_pPtr = pPtr; }
+					~CSphRefcountedPtr ()			{ if ( m_pPtr ) m_pPtr->Release(); }
+
+	T *				Ptr () const					{ return m_pPtr; }
+	T *				operator -> () const			{ return m_pPtr; }
+	bool			operator ! () const				{ return m_pPtr==NULL; }
+
+public:
+	CSphRefcountedPtr<T> &	operator = ( T * pPtr )								{ if ( m_pPtr ) m_pPtr->Release(); m_pPtr = pPtr; return *this; }
+	CSphRefcountedPtr<T> &	operator = ( const CSphRefcountedPtr<T> & rhs )		{ if ( rhs.m_pPtr ) rhs.m_pPtr->AddRef(); if ( m_pPtr ) m_pPtr->Release(); m_pPtr = rhs.m_pPtr; return *this; }
 
 protected:
 	T *				m_pPtr;

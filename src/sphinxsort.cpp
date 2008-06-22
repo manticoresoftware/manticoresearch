@@ -921,8 +921,8 @@ public:
 		if ( tEntry.m_iRowitems!=this->m_iRowitems )
 		{
 			// it must be pre-grouped; well, just re-group it based on the group key
-			// (this pointer is for gcc; it doesn't work otherwise)
-			return PushEx ( tEntry, tEntry.GetAttr(this->m_tSettings.m_tLocGroupby) );
+			// (first 'this' is for icc; second 'this' is for gcc)
+			return this->PushEx ( tEntry, tEntry.GetAttr(this->m_tSettings.m_tLocGroupby) );
 		}
 
 		// ungrouped match

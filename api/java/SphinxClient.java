@@ -66,8 +66,8 @@ public class SphinxClient
 	public final static int SPH_ATTR_ORDINAL		= 3;
 	public final static int SPH_ATTR_BOOL			= 4;
 	public final static int SPH_ATTR_FLOAT			= 5;
+	public final static int SPH_ATTR_BIGINT			= 6;
 	public final static int SPH_ATTR_MULTI			= 0x40000000;
-
 
 	/* searchd commands */
 	private final static int SEARCHD_COMMAND_SEARCH		= 0;
@@ -77,7 +77,7 @@ public class SphinxClient
 
 	/* searchd command versions */
 	private final static int VER_MAJOR_PROTO		= 0x1;
-	private final static int VER_COMMAND_SEARCH		= 0x113;
+	private final static int VER_COMMAND_SEARCH		= 0x116;
 	private final static int VER_COMMAND_EXCERPT	= 0x100;
 	private final static int VER_COMMAND_UPDATE		= 0x101;
 	private final static int VER_COMMAND_KEYWORDS	= 0x100;
@@ -120,6 +120,9 @@ public class SphinxClient
 	private int			_ranker;
 	private int			_maxQueryTime;
 	private Map			_fieldWeights;
+	private Map			_overrideTypes;
+	private Map			_overrideValues;
+	private String		_select;
 
 	private static final int SPH_CLIENT_TIMEOUT_MILLISEC	= 30000;
 
@@ -169,6 +172,10 @@ public class SphinxClient
 		_indexWeights	= new LinkedHashMap();
 		_fieldWeights	= new LinkedHashMap();
 		_ranker			= SPH_RANK_PROXIMITY_BM25;
+
+		_overrideTypes	= new LinkedHashMap();
+		_overrideValues	= new LinkedHashMap();
+		_select			= "*";
 	}
 
 	/** Get last error message, if any. */
@@ -520,7 +527,29 @@ public class SphinxClient
 			_filters.writeInt ( SPH_FILTER_VALUES );
 			_filters.writeInt ( values.length );
 			for ( int i=0; i<values.length; i++ )
-				_filters.writeInt ( values[i] );
+				_filters.writeLong ( values[i] );
+			_filters.writeInt ( exclude ? 1 : 0 );
+
+		} catch ( Exception e )
+		{
+			myAssert ( false, "IOException: " + e.getMessage() );
+		}
+		_filterCount++;
+	}
+
+	/** Set values filter. Only match records where attribute value is in given set. */
+	public void SetFilter ( String attribute, long[] values, boolean exclude ) throws SphinxException
+	{
+		myAssert ( values!=null && values.length>0, "values array must not be null or empty" );
+		myAssert ( attribute!=null && attribute.length()>0, "attribute name must not be null or empty" );
+
+		try
+		{
+			writeNetUTF8 ( _filters, attribute );
+			_filters.writeInt ( SPH_FILTER_VALUES );
+			_filters.writeInt ( values.length );
+			for ( int i=0; i<values.length; i++ )
+				_filters.writeLong ( values[i] );
 			_filters.writeInt ( exclude ? 1 : 0 );
 
 		} catch ( Exception e )
@@ -533,20 +562,27 @@ public class SphinxClient
 	/** Set values filter with a single value (syntax sugar; see {@link #SetFilter(String,int[],boolean)}). */
 	public void SetFilter ( String attribute, int value, boolean exclude ) throws SphinxException
 	{
-		int[] values = new int[] { value };
+		long[] values = new long[] { value };
+		SetFilter ( attribute, values, exclude );
+	}
+
+	/** Set values filter with a single value (syntax sugar; see {@link #SetFilter(String,int[],boolean)}). */
+	public void SetFilter ( String attribute, long value, boolean exclude ) throws SphinxException
+	{
+		long[] values = new long[] { value };
 		SetFilter ( attribute, values, exclude );
 	}
 
 	/** Set integer range filter.  Only match records if attribute value is beetwen min and max (inclusive). */
-	public void SetFilterRange ( String attribute, int min, int max, boolean exclude ) throws SphinxException
+	public void SetFilterRange ( String attribute, long min, long max, boolean exclude ) throws SphinxException
 	{
 		myAssert ( min<=max, "min must be less or equal to max" );
 		try
 		{
 			writeNetUTF8 ( _filters, attribute );
 			_filters.writeInt ( SPH_FILTER_RANGE );
-			_filters.writeInt ( min );
-			_filters.writeInt ( max );
+			_filters.writeLong ( min );
+			_filters.writeLong ( max );
 			_filters.writeInt ( exclude ? 1 : 0 );
 
 		} catch ( Exception e )
@@ -554,6 +590,12 @@ public class SphinxClient
 			myAssert ( false, "IOException: " + e.getMessage() );
 		}
 		_filterCount++;
+	}
+
+	/** Set integer range filter.  Only match records if attribute value is beetwen min and max (inclusive). */
+	public void SetFilterRange ( String attribute, int min, int max, boolean exclude ) throws SphinxException
+	{
+		SetFilterRange ( attribute, (long)min, (long)max, exclude );
 	}
 
 	/** Set float range filter.  Only match records if attribute value is beetwen min and max (inclusive). */
@@ -630,6 +672,28 @@ public class SphinxClient
 		SetRetries ( count, 0 );
 	}
 
+	/**
+	 * Set attribute values override (one override list per attribute).
+	 * @param values maps Long document IDs to Int/Long/Float values (as specified in attrtype).
+	 */
+	public void SetOverride ( String attrname, int attrtype, Map values ) throws SphinxException
+	{
+		myAssert ( attrname!=null && attrname.length()>0, "attrname must not be empty" );
+		myAssert ( attrtype==SPH_ATTR_INTEGER || attrtype==SPH_ATTR_TIMESTAMP || attrtype==SPH_ATTR_BOOL || attrtype==SPH_ATTR_FLOAT || attrtype==SPH_ATTR_BIGINT,
+			"unsupported attrtype (must be one of INTEGER, TIMESTAMP, BOOL, FLOAT, or BIGINT)" );
+		_overrideTypes.put ( attrname, attrtype );
+		_overrideValues.put ( attrname, values );
+	}
+
+	/** Set select-list (attributes or expressions), SQL-like syntax. */
+	public void SetSelect ( String select ) throws SphinxException
+	{
+		myAssert ( select!=null, "select clause string must not be null" );
+		_select = select;
+	}
+
+
+
 	/** Reset all currently set filters (for multi-queries). */
 	public void ResetFilters()
 	{
@@ -644,6 +708,24 @@ public class SphinxClient
 		_latitude = 0;
 		_longitude = 0;
 	}
+
+	/** Clear groupby settings (for multi-queries). */
+	public void ResetGroupBy ()
+	{
+		_groupBy = "";
+		_groupFunc = SPH_GROUPBY_DAY;
+		_groupSort = "@group desc";
+		_groupDistinct = "";
+	}
+
+	/** Clear all attribute value overrides (for multi-queries). */
+	public void ResetOverrides ()
+    {
+		_overrideTypes.clear ();
+		_overrideValues.clear ();
+    }
+
+
 
 	/** Connect to searchd server and run current search query against all indexes (syntax sugar). */
 	public SphinxResult Query ( String query ) throws SphinxException
@@ -760,6 +842,34 @@ public class SphinxClient
 			/* comment */
 			writeNetUTF8 ( out, comment );
 
+			/* overrides */
+			out.writeInt ( _overrideTypes.size() );
+			for ( Iterator e=_overrideTypes.keySet().iterator(); e.hasNext(); )
+			{
+				String attr = (String) e.next();
+				Integer type = (Integer) _overrideTypes.get ( attr );
+				Map values = (Map) _overrideValues.get ( attr );
+
+				writeNetUTF8 ( out, attr );
+				out.writeInt ( type );
+				out.writeInt ( values.size() );
+
+				for ( Iterator e2=values.keySet().iterator(); e2.hasNext(); )
+				{
+					Long id = (Long) e2.next ();
+					out.writeLong ( id );
+					switch ( type )
+					{
+						case SPH_ATTR_FLOAT:	out.writeFloat ( (Float) values.get ( id ) ); break;
+						case SPH_ATTR_BIGINT:	out.writeLong ( (Long) values.get ( id ) ); break;
+						default:				out.writeInt ( (Integer) values.get ( id ) ); break;
+					}
+				}
+			}
+
+			/* select-list */
+			writeNetUTF8 ( out, _select );
+
 			/* done! */
 			out.flush ();
 			int qIndex = _reqs.size();
@@ -871,6 +981,13 @@ public class SphinxClient
 						String attrName = res.attrNames[attrNumber];
 						int type = res.attrTypes[attrNumber];
 
+						/* handle bigints */
+						if ( type==SPH_ATTR_BIGINT )
+						{
+							docInfo.attrValues.add ( attrNumber, new Long ( in.readLong() ) );
+							continue;
+						}
+
 						/* handle floats */
 						if ( type==SPH_ATTR_FLOAT )
 						{
@@ -912,6 +1029,8 @@ public class SphinxClient
 			return null;
 		}
 	}
+
+
 
 	/**
 	 * Connect to searchd server and generate excerpts (snippets) from given documents.
@@ -988,6 +1107,8 @@ public class SphinxClient
 			return null;
 		}
 	}
+
+
 
 	/**
 	 * Connect to searchd server and update given attributes on given documents in given indexes.
@@ -1067,6 +1188,8 @@ public class SphinxClient
 		}
 	}
 
+
+
 	/**
      * Connect to searchd server, and generate keyword list for a given query.
      * Returns null on failure, an array of Maps with misc per-keyword info on success.
@@ -1117,6 +1240,12 @@ public class SphinxClient
 			_error = "incomplete reply";
 			return null;
 		}
+	}
+
+	/** Escape the characters with special meaning in query syntax. */
+	public String EscapeString ( String s )
+	{
+		return s.replaceAll ( "[\\(\\)\\|\\-\\!\\@\\~\\\"\\&\\/]", "\\1" );
 	}
 }
 

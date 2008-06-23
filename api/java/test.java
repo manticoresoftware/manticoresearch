@@ -34,6 +34,8 @@ public class test
 			System.out.print ( "-l, --limit <COUNT>\tretrieve COUNT matches (default: 20)\n" );
 			System.out.print ( "-ga, --geoanchor <LATATTR> <LONGATTR> <LAT> <LONG>\n" );
 			System.out.print ( "\t\t\tset anchor for geodistance\n" );
+			System.out.print ( "--select <EXPRS>\tselect the listed expressions only\n" );
+
 			System.exit ( 0 );
 		}
 
@@ -71,6 +73,7 @@ public class test
 			else if ( "-o".equals(arg) || "--offset".equals(arg) )		offset = Integer.parseInt(argv[++i]);
 			else if ( "-l".equals(arg) || "--limit".equals(arg) )		limit = Integer.parseInt(argv[++i]);
 			else if ( "-ga".equals(arg)|| "--geoanchor".equals(arg) )	cl.SetGeoAnchor ( argv[++i], argv[++i], Float.parseFloat(argv[++i]), Float.parseFloat(argv[++i]) );
+			else if ( "--select".equals(arg) )							cl.SetSelect ( argv[++i] );
 			else q.append ( argv[i] ).append ( " " );
 		}
 

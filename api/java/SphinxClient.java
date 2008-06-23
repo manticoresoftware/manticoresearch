@@ -681,7 +681,7 @@ public class SphinxClient
 		myAssert ( attrname!=null && attrname.length()>0, "attrname must not be empty" );
 		myAssert ( attrtype==SPH_ATTR_INTEGER || attrtype==SPH_ATTR_TIMESTAMP || attrtype==SPH_ATTR_BOOL || attrtype==SPH_ATTR_FLOAT || attrtype==SPH_ATTR_BIGINT,
 			"unsupported attrtype (must be one of INTEGER, TIMESTAMP, BOOL, FLOAT, or BIGINT)" );
-		_overrideTypes.put ( attrname, attrtype );
+		_overrideTypes.put ( attrname, new Integer ( attrtype ) );
 		_overrideValues.put ( attrname, values );
 	}
 
@@ -851,18 +851,18 @@ public class SphinxClient
 				Map values = (Map) _overrideValues.get ( attr );
 
 				writeNetUTF8 ( out, attr );
-				out.writeInt ( type );
+				out.writeInt ( type.intValue() );
 				out.writeInt ( values.size() );
 
 				for ( Iterator e2=values.keySet().iterator(); e2.hasNext(); )
 				{
 					Long id = (Long) e2.next ();
-					out.writeLong ( id );
-					switch ( type )
+					out.writeLong ( id.longValue() );
+					switch ( type.intValue() )
 					{
-						case SPH_ATTR_FLOAT:	out.writeFloat ( (Float) values.get ( id ) ); break;
-						case SPH_ATTR_BIGINT:	out.writeLong ( (Long) values.get ( id ) ); break;
-						default:				out.writeInt ( (Integer) values.get ( id ) ); break;
+						case SPH_ATTR_FLOAT:	out.writeFloat ( ( (Float) values.get ( id ) ).floatValue() ); break;
+						case SPH_ATTR_BIGINT:	out.writeLong ( ( (Long)values.get ( id ) ).longValue() ); break;
+						default:				out.writeInt ( ( (Integer)values.get ( id ) ).intValue() ); break;
 					}
 				}
 			}
@@ -1062,10 +1062,10 @@ public class SphinxClient
 		{
 			req.writeInt(0);
 			int iFlags = 1; /* remove_spaces */
-			if ( ((Integer)opts.get("exact_phrase"))!=0 )	iFlags |= 2;
-			if ( ((Integer)opts.get("single_passage"))!=0 )	iFlags |= 4;
-			if ( ((Integer)opts.get("use_boundaries"))!=0 )	iFlags |= 8;
-			if ( ((Integer)opts.get("weight_order"))!=0 )	iFlags |= 16;
+			if ( ((Integer)opts.get("exact_phrase")).intValue()!=0 )	iFlags |= 2;
+			if ( ((Integer)opts.get("single_passage")).intValue()!=0 )	iFlags |= 4;
+			if ( ((Integer)opts.get("use_boundaries")).intValue()!=0 )	iFlags |= 8;
+			if ( ((Integer)opts.get("weight_order")).intValue()!=0 )	iFlags |= 16;
 			req.writeInt ( iFlags );
 			writeNetUTF8 ( req, index );
 			writeNetUTF8 ( req, words );
@@ -1229,8 +1229,8 @@ public class SphinxClient
 				res[i].put ( "normalized", readNetUTF8 ( in ) );
 				if ( hits )
 				{
-					res[i].put ( "docs", readDword ( in ) );
-					res[i].put ( "hits", readDword ( in ) );
+					res[i].put ( "docs", new Long ( readDword ( in ) ) );
+					res[i].put ( "hits", new Long ( readDword ( in ) ) );
 				}
 			}
 			return res;

@@ -26,7 +26,7 @@ sphinxapi.jar: $(CLASSES)
 .SUFFIXES: .java .class
 vpath %.class org/sphx/api
 .java.class:
-	javac -cp . -d . $<
+	javac -classpath . -d . $<
 
 #
 # $Id$

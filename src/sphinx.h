@@ -104,7 +104,7 @@ STATIC_SIZE_ASSERT ( SphDocID_t, 4 );
 typedef DWORD			CSphRowitem;
 
 /// widest integer type that can be be stored as an attribute (ideally, fully decoupled from rowitem size!)
-typedef uint64_t		SphAttr_t;
+typedef int64_t			SphAttr_t;
 
 const CSphRowitem		ROWITEM_MAX		= UINT_MAX;
 const int				ROWITEM_BITS	= 8*sizeof(CSphRowitem);
@@ -760,7 +760,7 @@ enum
 	SPH_ATTR_ORDINAL	= 3,			///< this attr is an ordinal string number (integer at search time, specially handled at indexing time)
 	SPH_ATTR_BOOL		= 4,			///< this attr is a boolean bit field
 	SPH_ATTR_FLOAT		= 5,			///< floating point number (IEEE 32-bit)
-	SPH_ATTR_BIGINT		= 6,			///< unsigned 64-bit integer
+	SPH_ATTR_BIGINT		= 6,			///< signed 64-bit integer
 
 	SPH_ATTR_MULTI		= 0x40000000UL	///< this attr has multiple values (0 or more)
 };
@@ -1336,6 +1336,9 @@ private:
 	/// scan for tag with integer value
 	bool			ScanInt ( const char * sTag, uint64_t * pRes, CSphString & sError );
 
+	/// scan for tag with integer value
+	bool			ScanInt ( const char * sTag, int64_t * pRes, CSphString & sError ) { return ScanInt ( sTag, (uint64_t*)pRes, sError ); }
+
 	/// scan for tag with string value
 	bool			ScanStr ( const char * sTag, char * pRes, int iMaxLength, CSphString & sError );
 };
@@ -1688,8 +1691,8 @@ struct CSphIndexProgress
 	int				m_iDocuments;	///< PHASE_COLLECT: documents collected so far
 	SphOffset_t		m_iBytes;		///< PHASE_COLLECT: bytes collected so far
 
-	uint64_t		m_iAttrs;		///< PHASE_COLLECT_MVA, PHASE_SORT_MVA: attrs processed so far
-	uint64_t		m_iAttrsTotal;	///< PHASE_SORT_MVA: attrs total
+	int64_t			m_iAttrs;		///< PHASE_COLLECT_MVA, PHASE_SORT_MVA: attrs processed so far
+	int64_t			m_iAttrsTotal;	///< PHASE_SORT_MVA: attrs total
 
 	SphOffset_t		m_iHits;		///< PHASE_SORT: hits sorted so far
 	SphOffset_t		m_iHitsTotal;	///< PHASE_SORT: hits total

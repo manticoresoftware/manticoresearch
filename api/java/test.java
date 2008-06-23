@@ -136,6 +136,7 @@ public class test
 						case SphinxClient.SPH_ATTR_INTEGER:
 						case SphinxClient.SPH_ATTR_ORDINAL:
 						case SphinxClient.SPH_ATTR_FLOAT:
+						case SphinxClient.SPH_ATTR_BIGINT:
 							/* longs or floats; print as is */
 							System.out.print ( info.attrValues.get(a) );
 							break;

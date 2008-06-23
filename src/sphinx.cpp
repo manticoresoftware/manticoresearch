@@ -2023,15 +2023,22 @@ DWORD sphToDword ( const char * s )
 }
 
 
-uint64_t sphToQword ( const char * s )
+uint64_t sphToUint64 ( const char * s )
 {
 	if ( !s ) return 0;
 	return strtoull ( s, NULL, 10 );
 }
 
 
+int64_t sphToInt64 ( const char * s )
+{
+	if ( !s ) return 0;
+	return strtoll ( s, NULL, 10 );
+}
+
+
 #if USE_64BIT
-#define sphToDocid sphToQword
+#define sphToDocid sphToUint64
 #else
 #define sphToDocid sphToDword
 #endif
@@ -17272,7 +17279,7 @@ BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 				break;
 
 			case SPH_ATTR_BIGINT:
-				m_tDocInfo.SetAttr ( tAttr.m_tLocator, sphToQword ( SqlColumn ( tAttr.m_iIndex ) ) ); // FIXME? report conversion errors maybe?
+				m_tDocInfo.SetAttr ( tAttr.m_tLocator, sphToInt64 ( SqlColumn ( tAttr.m_iIndex ) ) ); // FIXME? report conversion errors maybe?
 				break;
 
 			default:
@@ -18878,6 +18885,10 @@ BYTE **	CSphSource_XMLPipe2::NextDocument ( CSphString & sError )
 
 				case SPH_ATTR_FLOAT:
 					m_tDocInfo.SetAttrFloat ( tAttr.m_tLocator, sphToFloat ( sAttrValue.cstr () ) );
+					break;
+
+				case SPH_ATTR_BIGINT:
+					m_tDocInfo.SetAttr ( tAttr.m_tLocator, sphToInt64 ( sAttrValue.cstr () ) );
 					break;
 
 				default:

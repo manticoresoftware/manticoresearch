@@ -44,7 +44,7 @@ inline SphAttr_t sphGetCompAttr<true> ( const CSphMatchComparatorState & t, cons
 //////////////////////////////////////////////////////////////////////////
 
 /// groupby key type
-typedef uint64_t	SphGroupKey_t;
+typedef int64_t				SphGroupKey_t;
 
 
 /// base grouper (class that computes groupby key)
@@ -419,14 +419,12 @@ public:
 
 struct IdentityHash_fn
 {
-	static inline uint64_t	Hash ( uint64_t iValue )	{ return iValue; }
+	static inline int64_t	Hash ( int64_t iValue )		{ return iValue; }
 	static inline DWORD		Hash ( DWORD iValue )		{ return iValue; }
 	static inline int		Hash ( int iValue )			{ return iValue; }
 };
 
 /////////////////////////////////////////////////////////////////////////////
-
-typedef uint64_t	SphGroupKey_t;
 
 /// (group,attrvalue) pair
 struct SphGroupedValue_t

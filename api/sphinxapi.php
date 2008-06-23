@@ -120,7 +120,7 @@ function sphPack64 ( $v )
 }
 
 
-/// portably unpack 64 unsigned bits, network order to numeric
+/// portably unpack 64 signed bits, network order to numeric
 function sphUnpack64 ( $v )
 {
 	list($h,$l) = array_values ( unpack ( "N*N*", $v ) );
@@ -134,20 +134,29 @@ function sphUnpack64 ( $v )
 	}
 
 	// x32 route
+	$x = "4294967296";
+	$y = 0;
+	$p = "";
+	if ( $h<0 )
+	{
+		$h = ~$h;
+		$l = ~$l;
+		$y = 1;
+		$p = "-";
+	}
 	$h = sprintf ( "%u", $h );
 	$l = sprintf ( "%u", $l );
-	$x = "4294967296";
 
 	// bcmath
 	if ( function_exists("bcmul") )
-		return bcadd ( $l, bcmul ( $x, $h ) );
+		return $p . bcadd ( bcadd ( $l, bcmul ( $x, $h ) ), $y );
 
 	// no bcmath, 15 or less decimal digits
 	// we can use float, because its actually double and has 52 precision bits
 	if ( $h<1048576 )
 	{
-		$f = ((float)$h)*$x + (float)$l;
-		return sprintf ( "%.0f", $f ); // builtin conversion is only about 39-40 bits precise!
+		$f = ((float)$h)*$x + (float)$l + (float)$y;
+		return $p . sprintf ( "%.0f", $f ); // builtin conversion is only about 39-40 bits precise!
 	}
 
 	// x32 route, 16 or more decimal digits

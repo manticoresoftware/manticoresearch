@@ -293,7 +293,62 @@ template < typename T > void sphSort ( T * pData, int iCount )
 	sphSort ( pData, iCount, SphLess_T<T>() );
 }
 
-//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////
+
+/// member functor, wraps object member access
+template < typename T, typename CLASS >
+struct SphMemberFunctor_T
+{
+	const T CLASS::*	m_pMember;
+
+						SphMemberFunctor_T ( T CLASS::* pMember )	: m_pMember ( pMember ) {}
+	const T &			operator () ( const CLASS & arg ) const		{ return (&arg)->*m_pMember; }
+};
+
+
+/// handy member functor generator
+template < typename T, typename CLASS >
+inline SphMemberFunctor_T < T, CLASS >
+bind ( T CLASS::* ptr )
+{
+	return SphMemberFunctor_T < T, CLASS > ( ptr );
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+/// generic binary search
+template < typename T, typename U, typename PRED >
+T * sphBinarySearch ( T * pStart, T * pEnd, const PRED & tPred, U tRef )
+{
+	if ( !pStart || pEnd<pStart )
+		return NULL;
+
+	if ( tPred(*pStart)==tRef )
+		return pStart;
+
+	if ( tPred(*pEnd)==tRef )
+		return pEnd;
+
+	while ( pEnd-pStart>1 )
+	{
+		if ( tRef<tPred(*pStart) || tRef>tPred(*pEnd) )
+			break;
+		assert ( tRef>tPred(*pStart) );
+		assert ( tRef<tPred(*pEnd) );
+
+		T * pMid = pStart + (pEnd-pStart)/2;
+		if ( tRef==tPred(*pMid) )
+			return pMid;
+
+		if ( tRef<tPred(*pMid) )
+			pEnd = pMid;
+		else
+			pStart = pMid;
+	}
+	return NULL;
+}
+
+//////////////////////////////////////////////////////////////////////////
 
 /// generic vector
 /// (don't even ask why it's not std::vector)
@@ -539,36 +594,10 @@ public:
 
 	/// generic binary search
 	/// assumes that the array is sorted in ascending order
-	template < typename U > const T * BinarySearch ( const U & tRefValue ) const
+	template < typename U, typename PRED >
+	const T * BinarySearch ( const PRED & tPred, U tRef ) const
 	{
-		if ( !m_pData || m_iLength<=0 )
-			return NULL;
-
-		const T * pStart = m_pData;
-		if ( tRefValue==(*pStart) )
-			return pStart;
-
-		const T * pEnd = m_pData + m_iLength - 1;
-		if ( tRefValue==(*pEnd) )
-			return pEnd;
-
-		while ( pEnd-pStart>1 )
-		{
-			if ( tRefValue<(*pStart) || tRefValue>(*pEnd) )
-				break;
-			assert ( tRefValue>(*pStart) );
-			assert ( tRefValue<(*pEnd) );
-
-			const T * pMid = pStart + (pEnd-pStart)/2;
-			if ( tRefValue==(*pMid) )
-				return pMid;
-
-			if ( tRefValue<(*pMid) )
-				pEnd = pMid;
-			else
-				pStart = pMid;
-		}
-		return NULL;
+		return sphBinarySearch ( m_pData, m_pData+m_iLength-1, tPred, tRef );
 	}
 
 protected:

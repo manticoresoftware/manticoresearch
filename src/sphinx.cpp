@@ -9418,11 +9418,6 @@ const DWORD * CSphIndex_VLN::FindDocinfo ( SphDocID_t uDocID ) const
 }
 
 
-inline bool operator == ( const SphDocID_t & a, const CSphAttrOverride::IdValuePair_t & b )	{ return a==b.m_uDocID; }
-inline bool operator < ( const SphDocID_t & a, const CSphAttrOverride::IdValuePair_t & b )		{ return a<b.m_uDocID; }
-inline bool operator > ( const SphDocID_t & a, const CSphAttrOverride::IdValuePair_t & b )		{ return a>b.m_uDocID; }
-
-
 void CSphIndex_VLN::CopyDocinfo ( CSphMatch & tMatch, const DWORD * pFound ) const
 {
 	if ( !pFound )
@@ -9437,7 +9432,7 @@ void CSphIndex_VLN::CopyDocinfo ( CSphMatch & tMatch, const DWORD * pFound ) con
 	if ( m_pOverrides )
 		ARRAY_FOREACH ( i, (*m_pOverrides) )
 	{
-		const CSphAttrOverride::IdValuePair_t * pEntry = (*m_pOverrides)[i].m_dValues.BinarySearch ( tMatch.m_iDocID );
+		const CSphAttrOverride::IdValuePair_t * pEntry = (*m_pOverrides)[i].m_dValues.BinarySearch ( bind(&CSphAttrOverride::IdValuePair_t::m_uDocID), tMatch.m_iDocID );
 		if ( pEntry )
 			tMatch.SetAttr ( (*m_pOverrides)[i].m_tLocator, pEntry->m_uValue );
 	}

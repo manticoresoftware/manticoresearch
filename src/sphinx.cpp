@@ -13723,10 +13723,10 @@ bool CSphIndex_VLN::Preread ()
 
 		assert ( m_iCheckpointsPos>0 && m_iCheckpointsPos<UINT_MAX );
 
-		if ( m_uVersion < 11 )
+		if ( m_uVersion<11 && m_iWordlistCheckpoints )
 		{
 			CSphWordlistCheckpoint_v10 * pOldCheckpoints = (CSphWordlistCheckpoint_v10 *)( &m_pWordlist[DWORD(m_iCheckpointsPos)] );
-			for ( int i = 0; i < m_iWordlistCheckpoints; i++ )
+			for ( int i=0; i<m_iWordlistCheckpoints; i++ )
 			{
 				m_pWordlistCheckpoints [i].m_iWordID = sphUnalignedRead ( pOldCheckpoints [i].m_iWordID );
 				m_pWordlistCheckpoints [i].m_iWordlistOffset = sphUnalignedRead ( pOldCheckpoints [i].m_iWordlistOffset );

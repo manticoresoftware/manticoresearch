@@ -89,6 +89,14 @@ public:
 
 /////////////////////////////////////////////////////////////////////////////
 
+enum ESphAddIndex
+{
+	ADD_ERROR	= 0,
+	ADD_LOCAL	= 1,
+	ADD_DISTR	= 2
+};
+
+
 enum ESphLogLevel
 {
 	LOG_FATAL	= 0,
@@ -5033,7 +5041,7 @@ bool PrereadNewIndex ( ServedIndex_t & tIdx, const CSphConfigSection & hIndex, c
 }
 
 
-void AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex )
+ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex )
 {
 	if ( hIndex("type") && hIndex["type"]=="distributed" )
 	{
@@ -5149,16 +5157,18 @@ void AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex )
 		{
 			sphWarning ( "index '%s': no valid local/remote indexes in distributed index - NOT SERVING",
 				szIndexName );
-			return;
+			return ADD_ERROR;
 		}
 		else
 		{
 			if ( !g_hDistIndexes.Add ( tIdx, szIndexName ) )
 			{
 				sphWarning ( "index '%s': duplicate name in hash?! INTERNAL ERROR - NOT SERVING", szIndexName );
-				return;
+				return ADD_ERROR;
 			}
 		}
+
+		return ADD_DISTR;
 	}
 	else
 	{
@@ -5172,21 +5182,21 @@ void AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex )
 		if ( !hIndex.Exists ( "path" ) )
 		{
 			sphWarning ( "index '%s': key 'path' not found' - NOT SERVING", szIndexName );
-			return;
+			return ADD_ERROR;
 		}
 
 		// check name
 		if ( g_hIndexes.Exists ( szIndexName ) )
 		{
 			sphWarning ( "index '%s': duplicate name in hash?! INTERNAL ERROR - NOT SERVING", szIndexName );
-			return;
+			return ADD_ERROR;
 		}
 
 		if (  ( hIndex.GetInt ( "min_prefix_len", 0 ) > 0 || hIndex.GetInt ( "min_infix_len", 0 ) > 0 )
 			&& strlen ( hIndex.GetStr ( "morphology", "" ) ) > 0  && hIndex.GetInt ( "enable_star", 0 ) == 0 )
 		{
 			sphWarning ( "index '%s': infixes and morphology are enabled, enable_star=0; NOT SERVING", szIndexName );
-			return;
+			return ADD_ERROR;
 		}
 
 		// configure memlocking, star
@@ -5205,10 +5215,12 @@ void AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex )
 		if ( !g_hIndexes.Add ( tIdx, szIndexName ) )
 		{
 			sphWarning ( "INTERNAL ERROR: index '%s': hash add failed - NOT SERVING", szIndexName );
-			return;
+			return ADD_ERROR;
 		}
 
 		tIdx.Reset (); // so that the dtor wouln't delete everything
+
+		return ADD_LOCAL;
 	}
 }
 
@@ -5275,9 +5287,8 @@ void ReloadIndexSettings ( CSphConfigParser * pCP )
 			tIndex.m_bToDelete = false;
 			nChecked++;
 		}
-		else
+		else if ( AddIndex ( sIndexName, hIndex ) == ADD_LOCAL )
 		{
-			AddIndex ( sIndexName, hIndex );
 			ServedIndex_t & tIndex = g_hIndexes[sIndexName];
 			tIndex.m_bOnlyNew = true;
 		}

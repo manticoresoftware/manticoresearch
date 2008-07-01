@@ -13149,7 +13149,7 @@ bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, const CSphTermSetup 
 
 	if ( m_bPreloadWordlist )
 	{
-		assert ( uWordlistOffset>0 && uWordlistOffset<=ULONG_MAX );
+		assert ( uWordlistOffset>0 && uWordlistOffset<=(SphOffset_t)ULONG_MAX );
 		pBuf = &m_pWordlist[(DWORD)uWordlistOffset];
 	}
 	else
@@ -13652,7 +13652,7 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 		if ( iSize<0 )
 			return NULL;
 
-		if ( iSize != m_iKillListSize * sizeof(SphAttr_t) )
+		if ( iSize != SphOffset_t ( m_iKillListSize * sizeof(SphAttr_t) ) )
 		{
 			m_sLastError.SetSprintf ( "header killlist size (%d) does not match with spk file size (%d)", m_iKillListSize * sizeof(SphAttr_t), iSize );
 			return NULL;

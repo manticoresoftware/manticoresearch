@@ -415,6 +415,7 @@ class SphinxClient
 			|| $mode==SPH_MATCH_PHRASE
 			|| $mode==SPH_MATCH_BOOLEAN
 			|| $mode==SPH_MATCH_EXTENDED
+			|| $mode==SPH_MATCH_FULLSCAN
 			|| $mode==SPH_MATCH_EXTENDED2 );
 		$this->_mode = $mode;
 	}

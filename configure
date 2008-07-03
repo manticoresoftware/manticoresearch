@@ -876,6 +876,7 @@ Optional Packages:
   --with-pgsql-libs       path to PostgreSQL libraries
   --with-libstemmer       compile with libstemmer support (default is
                           disabled)
+  --with-iconv            compile with iconv support (default is autodetect)
 
 Some influential environment variables:
   CC          C compiler command
@@ -8171,9 +8172,22 @@ echo "$as_me: WARNING: xmlpipe2 will NOT be available" >&2;}
 fi
 
 
+
+# Check whether --with-iconv or --without-iconv was given.
+if test "${with_iconv+set}" = set; then
+  withval="$with_iconv"
+  ac_cv_use_iconv=$withval
+else
+  ac_cv_use_iconv=yes
+
+fi;
 echo "$as_me:$LINENO: checking for libiconv" >&5
 echo $ECHO_N "checking for libiconv... $ECHO_C" >&6
-if test  $have_iconv_h = yes -a $have_libiconv = yes ; then
+if test  $have_iconv_h = yes \
+	-a $have_libiconv = yes \
+	-a $got_expat -eq 1 \
+	-a $ac_cv_use_iconv != no ; \
+then
 
 cat >>confdefs.h <<\_ACEOF
 #define USE_LIBICONV 1
@@ -8265,11 +8279,19 @@ _ACEOF
 echo "${ECHO_T}char **" >&6
 	fi
 else
-	echo "$as_me:$LINENO: result: not found" >&5
-echo "${ECHO_T}not found" >&6
 	if test  $got_expat -eq 1 ; then
+		if test  $ac_cv_use_iconv = no ; then
+			echo "$as_me:$LINENO: result: disabled" >&5
+echo "${ECHO_T}disabled" >&6
+		else
+			echo "$as_me:$LINENO: result: not found" >&5
+echo "${ECHO_T}not found" >&6
+		fi
 		{ echo "$as_me:$LINENO: WARNING: xmlpipe2 will only support default encodings (latin-1, utf-8)" >&5
 echo "$as_me: WARNING: xmlpipe2 will only support default encodings (latin-1, utf-8)" >&2;}
+	else
+		echo "$as_me:$LINENO: result: not required" >&5
+echo "${ECHO_T}not required" >&6
 	fi
 fi
 
@@ -8372,7 +8394,7 @@ fi
 CONFDIR=`eval echo "${my_op_prefix}"`
 
 
-                                        ac_config_files="$ac_config_files Makefile src/Makefile libstemmer_c/Makefile sphinx.conf.dist:sphinx.conf.in"
+                                                  ac_config_files="$ac_config_files Makefile src/Makefile libstemmer_c/Makefile sphinx.conf.dist:sphinx.conf.in sphinx-min.conf.dist:sphinx-min.conf.in"
 
 cat >confcache <<\_ACEOF
 # This file is a shell script that caches the results of configure
@@ -8962,6 +8984,7 @@ do
   "src/Makefile" ) CONFIG_FILES="$CONFIG_FILES src/Makefile" ;;
   "libstemmer_c/Makefile" ) CONFIG_FILES="$CONFIG_FILES libstemmer_c/Makefile" ;;
   "sphinx.conf.dist" ) CONFIG_FILES="$CONFIG_FILES sphinx.conf.dist:sphinx.conf.in" ;;
+  "sphinx-min.conf.dist" ) CONFIG_FILES="$CONFIG_FILES sphinx-min.conf.dist:sphinx-min.conf.in" ;;
   "depfiles" ) CONFIG_COMMANDS="$CONFIG_COMMANDS depfiles" ;;
   "config/config.h" ) CONFIG_HEADERS="$CONFIG_HEADERS config/config.h" ;;
   *) { { echo "$as_me:$LINENO: error: invalid argument: $ac_config_target" >&5

@@ -1,0 +1,53 @@
+#
+# Minimal Sphinx configuration sample (clean, simple, functional)
+#
+
+source src1
+{
+	type					= mysql
+
+	sql_host				= localhost
+	sql_user				= test
+	sql_pass				=
+	sql_db					= test
+	sql_port				= 3306	# optional, default is 3306
+
+	sql_query				= \
+		SELECT id, group_id, UNIX_TIMESTAMP(date_added) AS date_added, title, content \
+		FROM documents
+
+	sql_attr_uint			= group_id
+	sql_attr_timestamp		= date_added
+
+	sql_query_info			= SELECT * FROM documents WHERE id=$id
+}
+
+
+index test1
+{
+	source					= src1
+	path					= @CONFDIR@/data/test1
+	docinfo					= extern
+	charset_type			= sbcs
+}
+
+
+indexer
+{
+	mem_limit				= 32M
+}
+
+
+searchd
+{
+	port					= 3312
+	log						= @CONFDIR@/log/searchd.log
+	query_log				= @CONFDIR@/log/query.log
+	read_timeout			= 5
+	max_children			= 30
+	pid_file				= @CONFDIR@/log/searchd.pid
+	max_matches				= 1000
+	seamless_rotate			= 1
+	preopen_indexes			= 0
+	unlink_old				= 1
+}

@@ -2962,7 +2962,7 @@ sql_query_pre = SET SESSION query_cache_type=OFF
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
-sql_query_pre = SET NAMES=utf8
+sql_query_pre = SET NAMES utf8
 sql_query_pre = SET SESSION query_cache_type=OFF
 </programlisting>
 </sect3>

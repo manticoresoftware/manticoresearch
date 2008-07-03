@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>ext2 ranking</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT document_id, body FROM test_table
+}
+
+index test
+{
+	source			= srctest
+	path			= <data_path/>/test
+	stopwords		= stopwords.txt
+	min_word_len	= 3
+}
+</config>
+
+<queries>
+<query mode="extended2">one two three</query>
+<query mode="extended2">senior pastor of riverside church</query>
+</queries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 'one two three' ),
+( 2, 'one two three four' ),
+( 3, 'one then two then three then four' ),
+( 4, 'senior pastor of Riverside church' ),
+( 5, 'senior pastor and the Riverside church' )
+</db_insert>
+
+</test>

@@ -392,6 +392,7 @@ static int ParseNumeric ( YYSTYPE * lvalp, const char ** ppStr )
 	}
 }
 
+
 static bool IsNumericAttrType ( DWORD eType )
 {
 	return eType==SPH_ATTR_INTEGER
@@ -400,6 +401,7 @@ static bool IsNumericAttrType ( DWORD eType )
 		|| eType==SPH_ATTR_FLOAT
 		|| eType==SPH_ATTR_BIGINT;
 }
+
 
 /// a lexer of my own
 /// returns token id and fills lvalp on success
@@ -415,36 +417,21 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 	if ( isdigit(*m_pCur) )
 		return ParseNumeric ( lvalp, &m_pCur );
 
-	// check for magic names
-	if ( *m_pCur=='@' && sphIsAttr(m_pCur[1]) && !isdigit(m_pCur[1]) )
+	// check for field, function, or magic name
+	if ( sphIsAttr(m_pCur[0]) 
+		|| ( m_pCur[0]=='@' && sphIsAttr(m_pCur[1]) && !isdigit(m_pCur[1]) ) )
 	{
 		// get token
-		const char * pStart = ++m_pCur;
+		const char * pStart = m_pCur++;
 		while ( sphIsAttr(*m_pCur) ) m_pCur++;
 
 		CSphString sTok;
 		sTok.SetBinary ( pStart, m_pCur-pStart );
 		sTok.ToLower ();
 
-		if ( sTok=="id" )		{ lvalp->eDocinfo = DI_ID; return TOK_DOCINFO; }
-		if ( sTok=="weight" )	{ lvalp->eDocinfo = DI_WEIGHT; return TOK_DOCINFO; }
-
-		m_sLexerError.SetSprintf ( "unknown magic name '@%s'", sTok.cstr() );
-		return -1;
-	}
-
-	// check for field or function name
-	if ( sphIsAttr(*m_pCur) )
-	{
-		// get token
-		const char * pStart = m_pCur;
-		assert ( !isdigit(*m_pCur) ); // can't start with a digit, right?
-
-		while ( sphIsAttr(*m_pCur) ) m_pCur++;
-		assert ( !sphIsAttr(*m_pCur) );
-
-		CSphString sTok;
-		sTok.SetBinary ( pStart, m_pCur-pStart );
+		// check for magic name
+		if ( sTok=="@id" )		{ lvalp->eDocinfo = DI_ID; return TOK_DOCINFO; }
+		if ( sTok=="@weight" )	{ lvalp->eDocinfo = DI_WEIGHT; return TOK_DOCINFO; }
 
 		// check for attribute
 		int iAttr = m_pSchema->GetAttrIndex ( sTok.cstr() );

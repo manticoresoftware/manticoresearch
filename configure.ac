@@ -201,8 +201,16 @@ fi
 
 dnl ---
 
+AC_ARG_WITH([iconv],
+	AC_HELP_STRING([--with-iconv], [compile with iconv support (default is autodetect)]),
+	[ac_cv_use_iconv=$withval], [ac_cv_use_iconv=yes]
+)
 AC_MSG_CHECKING([for libiconv])
-if test [ $have_iconv_h = yes -a $have_libiconv = yes ]; then
+if test [ $have_iconv_h = yes \
+	-a $have_libiconv = yes \
+	-a $got_expat -eq 1 \
+	-a $ac_cv_use_iconv != no ]; \
+then
 	AC_DEFINE([USE_LIBICONV],1,[define to use iconv library])
 	AC_MSG_RESULT([found])
 
@@ -227,9 +235,15 @@ if test [ $have_iconv_h = yes -a $have_libiconv = yes ]; then
 		AC_MSG_RESULT([char **])
 	fi
 else
-	AC_MSG_RESULT([not found])
 	if test [ $got_expat -eq 1 ]; then
+		if test [ $ac_cv_use_iconv = no ]; then
+			AC_MSG_RESULT([disabled])
+		else
+			AC_MSG_RESULT([not found])
+		fi
 		AC_MSG_WARN([xmlpipe2 will only support default encodings (latin-1, utf-8)])
+	else
+		AC_MSG_RESULT([not required])
 	fi
 fi
 
@@ -271,7 +285,8 @@ fi
 CONFDIR=`eval echo "${my_op_prefix}"`
 AC_SUBST(CONFDIR)
 
-AC_CONFIG_FILES([Makefile src/Makefile libstemmer_c/Makefile sphinx.conf.dist:sphinx.conf.in])
+AC_CONFIG_FILES([Makefile src/Makefile libstemmer_c/Makefile sphinx.conf.dist:sphinx.conf.in \
+	sphinx-min.conf.dist:sphinx-min.conf.in])
 AC_OUTPUT
 
 dnl --------------------------------------------------------------------------

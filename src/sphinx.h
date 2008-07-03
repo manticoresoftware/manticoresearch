@@ -1231,6 +1231,7 @@ struct CSphSource_PgSQL : CSphSource_SQL
 {
 							CSphSource_PgSQL ( const char * sName );
 	bool					Setup ( const CSphSourceParams_PgSQL & pParams );
+	virtual bool			IterateHitsStart ( CSphString & sError );
 
 protected:
 	PGresult * 				m_pPgResult;	///< postgresql execution restult context
@@ -1240,6 +1241,7 @@ protected:
 	int						m_iPgRow;		///< current row (0 based, as in PQgetvalue)
 
 	CSphString				m_sPgClientEncoding;
+	CSphVector<bool>		m_dIsColumnBool;
 
 protected:
 	virtual void			SqlDismissResult ();

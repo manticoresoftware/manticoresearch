@@ -1227,7 +1227,7 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 			if ( dState.Last()==XQS_NEGTEXT )
 				dState.Pop ();
 
-			CSphExtendedQueryAtomWord tAW ( sToken, -1 );
+			CSphExtendedQueryAtomWord tAW ( sToken, iAtomPos );
 			PushNode ();
 			m_dStack.Last().m_bAny = bAny;
 			m_dStack.Last().m_pNode->m_tAtom.m_uFields = uFields;

@@ -658,7 +658,7 @@ bool CISpellAffix::AddToCharset ( char * szRangeL, char * szRangeU )
 		if ( cMaxU - cMinU != cMaxL - cMinL )
 			return false;
 
-		for ( char i = 0; i < cMaxL - cMinL; ++i )
+		for ( char i = 0; i <= cMaxL - cMinL; ++i )
 			if ( IsInSet ( cMinL + i, szRangeL ) && IsInSet ( cMinU + i, szRangeU ) )
 				AddCharPair ( cMinL + i, cMinU + i );
 	}
@@ -676,7 +676,7 @@ bool CISpellAffix::AddToCharset ( char * szRangeL, char * szRangeU )
 
 void CISpellAffix::AddCharPair ( char cCharL, char cCharU )
 {
-	m_dCharset [(BYTE)cCharL] = cCharU;
+	m_dCharset [(BYTE)cCharU] = cCharL;
 }
 
 

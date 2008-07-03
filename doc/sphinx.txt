@@ -2733,7 +2733,7 @@ results. That could be achieved with:
 
 Example:
 
-   | sql_query_pre = SET NAMES=utf8
+   | sql_query_pre = SET NAMES utf8
    | sql_query_pre = SET SESSION query_cache_type=OFF
 
 8.1.10. sql_query

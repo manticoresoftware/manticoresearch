@@ -133,17 +133,33 @@ $total_subtests = 0;
 $total_subtests_failed = 0;
 foreach ( $tests as $test )
 {
-	$res = RunTest ( $test );
-
-	if ( !is_array($res) )
-		continue; // failed to run that test at all
-
-	$total_tests++;
-	$total_subtests += $res["tests_total"];
-	if ( $res["tests_failed"] )
+	if ( file_exists ( $test."/test.xml" ) )
 	{
-		$total_tests_failed++;
-		$total_subtests_failed += $res["tests_failed"];
+		$res = RunTest ( $test );
+
+		if ( !is_array($res) )
+			continue; // failed to run that test at all
+
+		$total_tests++;
+		$total_subtests += $res["tests_total"];
+		if ( $res["tests_failed"] )
+		{
+			$total_tests_failed++;
+			$total_subtests_failed += $res["tests_failed"];
+		}
+	}
+	elseif ( file_exists ( $test."/test.inc" ) )
+	{
+		$run_func = create_function ( '$test_path', file_get_contents ( $test."/test.inc" ) );
+
+		$total_tests++;
+		$total_subtests++;
+
+		if ( !$run_func ( $test ) )
+		{
+			$total_tests_failed++;
+			$total_subtests_failed++;
+    	}
 	}
 }
 

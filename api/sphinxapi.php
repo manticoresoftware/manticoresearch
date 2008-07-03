@@ -26,7 +26,7 @@ define ( "SEARCHD_COMMAND_KEYWORDS",3 );
 /// current client-side command implementation versions
 define ( "VER_COMMAND_SEARCH",		0x116 );
 define ( "VER_COMMAND_EXCERPT",		0x100 );
-define ( "VER_COMMAND_UPDATE",		0x101 );
+define ( "VER_COMMAND_UPDATE",		0x102 );
 define ( "VER_COMMAND_KEYWORDS",	0x100 );
 
 /// known searchd status codes
@@ -1175,12 +1175,13 @@ class SphinxClient
 	// attribute updates
 	/////////////////////////////////////////////////////////////////////////////
 
-	/// update given attribute values on given documents in given indexes
+	/// batch update given attributes in given rows in given indexes
 	/// returns amount of updated documents (0 or more) on success, or -1 on failure
-	function UpdateAttributes ( $index, $attrs, $values )
+	function UpdateAttributes ( $index, $attrs, $values, $mva=false )
 	{
 		// verify everything
 		assert ( is_string($index) );
+		assert ( is_bool($mva) );
 
 		assert ( is_array($attrs) );
 		foreach ( $attrs as $attr )
@@ -1193,7 +1194,15 @@ class SphinxClient
 			assert ( is_array($entry) );
 			assert ( count($entry)==count($attrs) );
 			foreach ( $entry as $v )
-				assert ( is_int($v) );
+			{
+				if ( $mva )
+				{
+					assert ( is_array($v) );
+					foreach ( $v as $vv )
+						assert ( is_int($vv) );
+				} else
+					assert ( is_int($v) );
+			}
 		}
 
 		// build request
@@ -1201,39 +1210,37 @@ class SphinxClient
 
 		$req .= pack ( "N", count($attrs) );
 		foreach ( $attrs as $attr )
+		{
 			$req .= pack ( "N", strlen($attr) ) . $attr;
+			$req .= pack ( "N", $mva ? 1 : 0 );
+		}
 
 		$req .= pack ( "N", count($values) );
 		foreach ( $values as $id=>$entry )
 		{
 			$req .= sphPack64 ( $id );
 			foreach ( $entry as $v )
-				$req .= pack ( "N", $v );
+			{
+				$req .= pack ( "N", $mva ? count($v) : $v );
+				if ( $mva )
+					foreach ( $v as $vv )
+						$req .= pack ( "N", $vv );
+			}
 		}
-
-		// mbstring workaround
-		$this->_MBPush ();
 
 		// connect, send query, get response
 		if (!( $fp = $this->_Connect() ))
-		{
-			$this->_MBPop ();
 			return -1;
-		}
 
 		$len = strlen($req);
 		$req = pack ( "nnN", SEARCHD_COMMAND_UPDATE, VER_COMMAND_UPDATE, $len ) . $req; // add header
 		fwrite ( $fp, $req, $len+8 );
 
 		if (!( $response = $this->_GetResponse ( $fp, VER_COMMAND_UPDATE ) ))
-		{
-			$this->_MBPop ();
 			return -1;
-		}
 
 		// parse response
 		list(,$updated) = unpack ( "N*", substr ( $response, 0, 4 ) );
-		$this->_MBPop ();
 		return $updated;
 	}
 }

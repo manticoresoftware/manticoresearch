@@ -64,7 +64,7 @@ SPHINX_CONFIGURE_PART([checking for header files])
 # Checks for header files.
 AC_HEADER_STDC
 AC_HEADER_SYS_WAIT
-AC_CHECK_HEADERS([fcntl.h limits.h netdb.h netinet/in.h stdlib.h string.h sys/file.h sys/socket.h sys/time.h unistd.h])
+AC_CHECK_HEADERS([fcntl.h limits.h netdb.h netinet/in.h stdlib.h string.h sys/file.h sys/socket.h sys/time.h unistd.h pthread.h])
 AC_CHECK_HEADER(expat.h,[have_expat_h=yes],[have_expat_h=no])
 AC_CHECK_HEADER(iconv.h,[have_iconv_h=yes],[have_iconv_h=no])
 
@@ -105,6 +105,88 @@ SPHINX_CHECK_DEFINE(F_SETLKW,fcntl.h)
 dnl --------------------------------------------------------------------------
 
 SPHINX_CONFIGURE_PART([configuring Sphinx])
+
+dnl ---
+
+# check for pthreads
+
+dnl helper that runs a test program and checks for success
+AC_DEFUN([PTHREADS_TRY_RUN],[
+AC_TRY_RUN([
+#include <pthread.h>
+#include <stddef.h>
+
+void * thread_routine ( void * data )
+{
+	return data;
+}
+
+int main ()
+{
+	pthread_t thd;
+	pthread_mutexattr_t mattr;
+	pthread_once_t once_init = PTHREAD_ONCE_INIT;
+	int data = 1;
+
+	pthread_mutexattr_init ( &mattr );
+	return pthread_create ( &thd, NULL, thread_routine, &data );
+}
+], [pthreads_try_run=yes], [pthreads_try_run=no], [pthreads_try_run=no])
+
+if test $pthreads_try_run = yes; then
+	$1
+fi
+])
+
+# check for needed cflags
+AC_CACHE_CHECK([for CFLAGS needed for pthreads], [pthreads_cflags],
+[
+	save_cflags=$CFLAGS
+	for flag in none -kthread -pthread -pthreads -mt -mthreads -Kthread -threads; do
+		CFLAGS=$save_cflags
+	test "x$flag" != "xnone" && CFLAGS="$CFLAGS $flag"
+		PTHREADS_TRY_RUN([
+			pthreads_cflags="$flag"
+			break
+		])
+	done
+	CFLAGS=$save_cflags
+])
+
+if test -n "$pthreads_cflags"; then
+	have_pthreads=yes
+	if test "x$pthreads_cflags" != "xnone"; then
+		CPPFLAGS="$CPPFLAGS $pthreads_cflags"
+	fi
+fi
+
+# check for needed libs
+AC_CACHE_CHECK([for LIBS needed for pthreads], [pthreads_libs], [
+	save_libs=$LIBS
+	for lib in -lpthread -lpthreads -lc_r; do
+	LIBS="$save_libs $lib"
+	PTHREADS_TRY_RUN([
+		pthreads_libs=$lib
+		break
+	])
+	done
+	LIBS=$save_libs
+])
+
+if test -n "$pthreads_libs"; then
+	have_pthreads=yes
+	LIBS="$LIBS $pthreads_libs"
+fi
+
+# final check
+AC_MSG_CHECKING([for pthreads])
+if test x$have_pthreads = xyes; then
+	AC_MSG_RESULT([found])
+else
+	AC_MSG_ERROR([no working pthreads library found])
+fi
+
+dnl ---
 
 # check if we should compile with MySQL support
 AC_ARG_WITH([mysql], 

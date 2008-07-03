@@ -1181,45 +1181,14 @@ int main ( int argc, char ** argv )
 
 	// configure memlimit
 	g_iMemLimit = 0;
-	if ( hConf("indexer")
-		&& hConf["indexer"]("indexer") )
+	if ( hConf("indexer") && hConf["indexer"]("indexer") )
 	{
-		if ( hConf["indexer"]["indexer"]("mem_limit") )
-		{
-			CSphString sBuf = hConf["indexer"]["indexer"]["mem_limit"];
+		CSphConfigSection & hIndexer = hConf["indexer"]["indexer"];
 
-			char sMemLimit[256];
-			strncpy ( sMemLimit, sBuf.cstr(), sizeof(sMemLimit) );
-
-			int iLen = strlen ( sMemLimit );
-			if ( iLen )
-			{
-				iLen--;
-				int iScale = 1;
-				if ( toupper(sMemLimit[iLen])=='K' )
-				{
-					iScale = 1024;
-					sMemLimit[iLen] = '\0';
-				} else if ( toupper(sMemLimit[iLen])=='M' )
-				{
-					iScale = 1048576;
-					sMemLimit[iLen] = '\0';
-				}
-
-				char * sErr;
-				int iRes = strtol ( sMemLimit, &sErr, 10 );
-				if ( *sErr )
-				{
-					fprintf ( stdout, "WARNING: bad mem_limit value '%s', using default.\n", sBuf.cstr() );
-				} else
-				{
-					g_iMemLimit = iScale*iRes;
-				}
-			}
-		}
-
-		sphSetThrottling ( hConf["indexer"]["indexer"].GetInt ( "max_iops", 0 ),
-						   hConf["indexer"]["indexer"].GetInt ( "max_iosize", 0 ));
+		g_iMemLimit = hIndexer.GetSize ( "mem_limit", 0 );
+		sphSetThrottling (
+			hIndexer.GetInt ( "max_iops", 0 ),
+			hIndexer.GetSize ( "max_iosize", 0 ));
 	}
 
 	/////////////////////

@@ -927,12 +927,13 @@ public:
 		if ( !m_pMva )
 			return false;
 
-		// (this pointer is for gcc; it doesn't work otherwise)
-		SphAttr_t iMvaIndex = tEntry.GetAttr ( this->m_tMvaLocator ); // FIXME! OPTIMIZE! use simpler locator than full bits/count here
-		if ( !iMvaIndex )
+		// get that list
+		// FIXME! OPTIMIZE! use simpler locator than full bits/count here
+		// FIXME! hardcoded MVA type, so here's MVA_DOWNSIZE marker for searching
+		const DWORD * pValues = tEntry.GetAttrMVA ( this->m_tMvaLocator, m_pMva ); // (this pointer is for gcc; it doesn't work otherwise)
+		if ( !pValues )
 			return false;
 
-		const DWORD * pValues = m_pMva + iMvaIndex; // FIXME! hardcoded MVA type
 		DWORD iValues = *pValues++;
 
 		bool bRes = false;

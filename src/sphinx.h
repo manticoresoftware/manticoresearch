@@ -177,10 +177,13 @@ struct CSphIOStats
 };
 
 /// clear stats, starts collecting
-void			sphStartIOStats ();
+void				sphStartIOStats ();
 
 /// stops collecting stats, returns results
-const CSphIOStats & sphStopIOStats ();
+const CSphIOStats &	sphStopIOStats ();
+
+/// startup mva updates arena
+DWORD *				sphArenaInit ( int iMaxBytes );
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -724,6 +727,8 @@ public:
 
 	void		SetAttr ( const CSphAttrLocator & tLoc, SphAttr_t uValue )	{ sphSetRowAttr ( m_pRowitems, tLoc, uValue ); }
 	void		SetAttrFloat ( const CSphAttrLocator & tLoc, float fValue )	{ sphSetRowAttr ( m_pRowitems, tLoc, sphF2DW ( fValue ) ); }
+
+	const DWORD *	GetAttrMVA ( const CSphAttrLocator & tLoc, const DWORD * pPool ) const;
 };
 
 
@@ -1661,15 +1666,12 @@ public:
 // ATTRIBUTE UPDATE QUERY
 /////////////////////////////////////////////////////////////////////////////
 
-struct CSphAttrUpdate_t
+struct CSphAttrUpdate
 {
 	CSphVector<CSphColumnInfo>		m_dAttrs;		///< update schema (ie. what attrs to update)
-	int								m_iUpdates;		///< updates count
-	DWORD *							m_pUpdates;		///< updates data
-
-public:
-	CSphAttrUpdate_t ();		///< builds new clean structure
-	~CSphAttrUpdate_t ();		
+	CSphVector<DWORD>				m_dPool;		///< update values pool
+	CSphVector<SphDocID_t>			m_dDocids;		///< document IDs vector
+	CSphVector<int>					m_dRowOffset;	///< document row offsets in the pool
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1899,7 +1901,7 @@ public:
 	/// updates memory-cached attributes in real time
 	/// returns non-negative amount of actually found and updated records on success
 	/// on failure, -1 is returned and GetLastError() contains error message
-	virtual int					UpdateAttributes ( const CSphAttrUpdate_t & tUpd ) = 0;
+	virtual int					UpdateAttributes ( const CSphAttrUpdate & tUpd ) = 0;
 
 	/// saves memory-cached attributes, if there were any updates to them
 	/// on failure, false is returned and GetLastError() contains error message

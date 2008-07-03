@@ -66,6 +66,9 @@ public:
 		CSphVariant * pEntry = (*this)( sKey );
 		return pEntry ? pEntry->cstr() : sDefault;
 	}
+
+	/// get size option (plain int, or with K/M prefix) value by key and default value
+	int GetSize ( const char * sKey, int iDefault ) const;
 };
 
 /// config section type (hash of sections)

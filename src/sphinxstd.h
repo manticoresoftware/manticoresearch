@@ -250,6 +250,24 @@ struct SphGreater_T
 };
 
 
+/// generic comparator
+template < typename T, typename C >
+struct SphMemberLess_T
+{
+	const T C::*			m_pMember;
+
+	explicit				SphMemberLess_T ( T C::* pMember )		: m_pMember ( pMember ){}
+	inline bool operator ()	( const C & a, const C & b ) const		{ return ((&a)->*m_pMember) < ((&b)->*m_pMember); }
+};
+
+template < typename T, typename C >
+inline SphMemberLess_T<T,C>
+sphMemberLess ( T C::* pMember)
+{
+	return SphMemberLess_T<T,C> ( pMember );
+}
+
+
 /// generic sort
 template < typename T, typename F > void sphSort ( T * pData, int iCount, F COMP )
 {
@@ -600,6 +618,13 @@ public:
 		return sphBinarySearch ( m_pData, m_pData+m_iLength-1, tPred, tRef );
 	}
 
+	/// fill with given value
+	void Fill ( const T & rhs )
+	{
+		for ( int i=0; i<m_iLength; i++ )
+			m_pData[i] = rhs;
+	}
+
 protected:
 	int		m_iLength;		///< entries actually used
 	int		m_iLimit;		///< entries allocated
@@ -609,6 +634,9 @@ protected:
 
 #define ARRAY_FOREACH(_index,_array) \
 	for ( int _index=0; _index<_array.GetLength(); _index++ )
+
+#define ARRAY_FOREACH_COND(_index,_array,_cond) \
+	for ( int _index=0; _index<_array.GetLength() && (_cond); _index++ )
 
 /////////////////////////////////////////////////////////////////////////////
 

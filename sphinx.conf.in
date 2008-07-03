@@ -489,6 +489,11 @@ searchd
 	# optional, default is 0 (disable periodic flush)
 	#
 	# attr_flush_period	= 900
+
+	# MVA updates pool size
+	# shared between all instances of searchd
+	# optional, default size is 1M
+	mva_updates_pool	= 1M
 }
 
 # --eof--

@@ -65,8 +65,6 @@
 // MISC GLOBALS
 /////////////////////////////////////////////////////////////////////////////
 
-#define MVA_DOWNSIZE DWORD
-
 struct ServedIndex_t
 {
 	CSphIndex *			m_pIndex;
@@ -204,7 +202,7 @@ enum
 {
 	VER_COMMAND_SEARCH		= 0x116,
 	VER_COMMAND_EXCERPT		= 0x100,
-	VER_COMMAND_UPDATE		= 0x101,
+	VER_COMMAND_UPDATE		= 0x102,
 	VER_COMMAND_KEYWORDS	= 0x100
 };
 
@@ -2774,12 +2772,12 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 		for ( int i=0; i<pRes->m_iCount; i++ )
 		{
 			const CSphMatch & tMatch = pRes->m_dMatches [ pRes->m_iOffset+i ];
-			const DWORD * pMva = dTag2MVA [ tMatch.m_iTag ];
+			const DWORD * pMvaPool = dTag2MVA [ tMatch.m_iTag ];
 			ARRAY_FOREACH ( j, dMvaItems )
 			{
-				DWORD iMvaIndex = MVA_DOWNSIZE ( tMatch.GetAttr ( dMvaItems[j] ) );
-				if ( iMvaIndex )
-					iRespLen += 4*pMva[iMvaIndex]; // FIXME? maybe add some sanity check here
+				const DWORD * pMva = tMatch.GetAttrMVA ( dMvaItems[j], pMvaPool );
+				if ( pMva )
+					iRespLen += pMva[0]*4; // FIXME? maybe add some sanity check here
 			}
 		}
 	}
@@ -2874,7 +2872,7 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 		{
 			tOut.SendInt ( tMatch.m_iWeight );
 
-			const DWORD * pMva = dTag2MVA [ tMatch.m_iTag ];
+			const DWORD * pMvaPool = dTag2MVA [ tMatch.m_iTag ];
 
 			assert ( tMatch.m_iRowitems==pRes->m_tSchema.GetRowSize() );
 			for ( int j=0; j<pRes->m_tSchema.GetAttrsCount(); j++ )
@@ -2882,8 +2880,8 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 				const CSphColumnInfo & tAttr = pRes->m_tSchema.GetAttr(j);
 				if ( tAttr.m_eAttrType & SPH_ATTR_MULTI )
 				{
-					DWORD iMvaIndex = MVA_DOWNSIZE ( tMatch.GetAttr ( tAttr.m_tLocator ) );
-					if ( iVer<0x10C || iMvaIndex==0 )
+					const DWORD * pValues = tMatch.GetAttrMVA ( tAttr.m_tLocator, pMvaPool );
+					if ( iVer<0x10C || !pValues )
 					{
 						// for older clients, fixups column value to 0
 						// for newer clients, means that there are 0 values
@@ -2891,9 +2889,7 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 					} else
 					{
 						// send MVA values
-						const DWORD * pValues = pMva + iMvaIndex;
 						int iValues = *pValues++;
-
 						tOut.SendDword ( iValues );
 						while ( iValues-- )
 							tOut.SendDword ( *pValues++ );
@@ -4026,11 +4022,11 @@ void HandleCommandKeywords ( int iSock, int iVer, InputBuffer_c & tReq )
 
 struct UpdateRequestBuilder_t : public IRequestBuilder_t
 {
-	UpdateRequestBuilder_t ( const CSphAttrUpdate_t & pUpd ) : m_tUpd ( pUpd ) {}
+	UpdateRequestBuilder_t ( const CSphAttrUpdate & pUpd ) : m_tUpd ( pUpd ) {}
 	virtual void BuildRequest ( const char * sIndexes, NetOutputBuffer_c & tOut ) const;
 
 protected:
-	const CSphAttrUpdate_t & m_tUpd;
+	const CSphAttrUpdate & m_tUpd;
 };
 
 
@@ -4057,8 +4053,8 @@ void UpdateRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuff
 	iReqSize += 4; // attrs array len, data
 	ARRAY_FOREACH ( i, m_tUpd.m_dAttrs )
 		iReqSize += 4+strlen(m_tUpd.m_dAttrs[i].m_sName.cstr());
-	iReqSize += 4; // values array len, data
-	iReqSize += 4*( DOCINFO_IDSIZE+m_tUpd.m_dAttrs.GetLength() )*m_tUpd.m_iUpdates;
+	iReqSize += 4; // number of updates
+	iReqSize += 4*( DOCINFO_IDSIZE + m_tUpd.m_dPool.GetLength() ); // ids+values
 
 	// header
 	tOut.SendDword ( SPHINX_SEARCHD_PROTO );
@@ -4070,24 +4066,17 @@ void UpdateRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuff
 	tOut.SendInt ( m_tUpd.m_dAttrs.GetLength() );
 	ARRAY_FOREACH ( i, m_tUpd.m_dAttrs )
 		tOut.SendString ( m_tUpd.m_dAttrs[i].m_sName.cstr() );
-	tOut.SendInt ( m_tUpd.m_iUpdates );
+	tOut.SendInt ( m_tUpd.m_dDocids.GetLength() );
 
-	DWORD * pUpd = m_tUpd.m_pUpdates;
-	DWORD * pUpdMax = pUpd + ( DOCINFO_IDSIZE+m_tUpd.m_dAttrs.GetLength() )*m_tUpd.m_iUpdates;
-	for ( ; pUpd<pUpdMax; )
+	ARRAY_FOREACH ( i, m_tUpd.m_dDocids )
 	{
-		#if USE_64BIT
-		tOut.SendUint64 ( DOCINFO2ID(pUpd) );
-		#else
-		tOut.SendDword ( 0 ); // padding high dword
-		tOut.SendDword ( *pUpd );
-		#endif
-		pUpd += DOCINFO_IDSIZE;
+		int iHead = m_tUpd.m_dRowOffset[i];
+		int iTail = ( (i+1)<m_tUpd.m_dDocids.GetLength() ) ? m_tUpd.m_dRowOffset[i+1] : m_tUpd.m_dPool.GetLength ();
 
-		for ( int j=0; j<m_tUpd.m_dAttrs.GetLength(); j++ )
-			tOut.SendDword ( *pUpd++ );
+		tOut.SendUint64 ( m_tUpd.m_dDocids[i] );
+		for ( int j=iHead; j<iTail; j++ )
+			tOut.SendDword ( m_tUpd.m_dPool[j] );
 	}
-	assert ( pUpd==pUpdMax );
 }
 
 
@@ -4096,35 +4085,48 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 	if ( !CheckCommandVersion ( iVer, VER_COMMAND_UPDATE, tReq ) )
 		return;
 
-	// get index name
+	// parse request
 	CSphString sIndexes = tReq.GetString ();
+	CSphAttrUpdate tUpd;
 
-	// get update data
-	CSphAttrUpdate_t tUpd;
 	tUpd.m_dAttrs.Resize ( tReq.GetDword() ); // FIXME! check this
 	ARRAY_FOREACH ( i, tUpd.m_dAttrs )
 	{
 		tUpd.m_dAttrs[i].m_sName = tReq.GetString ();
 		tUpd.m_dAttrs[i].m_sName.ToLower ();
+
+		tUpd.m_dAttrs[i].m_eAttrType = SPH_ATTR_INTEGER;
+		if ( iVer>=0x102 )
+			if ( tReq.GetDword() )
+				tUpd.m_dAttrs[i].m_eAttrType |= SPH_ATTR_MULTI;
 	}
 
-	int iStride = DOCINFO_IDSIZE + tUpd.m_dAttrs.GetLength();
+	int iNumUpdates = tReq.GetInt (); // FIXME! check this
+	tUpd.m_dDocids.Reserve ( iNumUpdates );
+	tUpd.m_dRowOffset.Reserve ( iNumUpdates );
 
-	tUpd.m_iUpdates = tReq.GetInt (); // FIXME! check this
-	tUpd.m_pUpdates = new DWORD [ tUpd.m_iUpdates*iStride ];
-
-	int iPos = 0;
-	for ( int i=0; i<tUpd.m_iUpdates; i++ )
+	for ( int i=0; i<iNumUpdates; i++ )
 	{
 		// v.1.0 always sends 32-bit ids; v.1.1+ always send 64-bit ones
-		uint64_t uValue = ( iVer>=0x101 ) ? tReq.GetUint64 () : tReq.GetDword ();
+		uint64_t uDocid = ( iVer>=0x101 ) ? tReq.GetUint64 () : tReq.GetDword ();
 
-		DOCINFO2ID(tUpd.m_pUpdates+iPos) = (SphDocID_t)uValue; // FIXME! maybe warn on truncation?
-		iPos += DOCINFO_IDSIZE;
+		tUpd.m_dDocids.Add ( (SphDocID_t)uDocid ); // FIXME! check this
+		tUpd.m_dRowOffset.Add ( tUpd.m_dPool.GetLength() );
 
-		ARRAY_FOREACH ( j, tUpd.m_dAttrs )
-			tUpd.m_pUpdates[iPos++] = tReq.GetDword();
+		ARRAY_FOREACH ( iAttr, tUpd.m_dAttrs )
+		{
+			DWORD uCount = 1;
+			if ( tUpd.m_dAttrs[iAttr].m_eAttrType & SPH_ATTR_MULTI )
+			{
+				uCount = tReq.GetDword ();
+				tUpd.m_dPool.Add ( uCount );
+			}
+
+			for ( DWORD j=0; j<uCount; j++ )
+				tUpd.m_dPool.Add ( tReq.GetDword() );
+		}
 	}
+
 	if ( tReq.GetError() )
 	{
 		tReq.SendErrorReply ( "invalid or truncated request" );
@@ -6233,6 +6235,9 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	// handle my signals
 	SetSignalHandlers ();
+
+	// setup mva updates arena
+	sphArenaInit ( hSearchd.GetSize ( "mva_updates_pool", 1048576 ) );
 
 	// daemonize
 	if ( !g_bOptConsole )

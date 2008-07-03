@@ -67,6 +67,8 @@
 	#include <unistd.h>
 	#include <sys/time.h>
 	#include <sys/mman.h>
+	#include <sys/types.h>
+	#include <pthread.h>
 
 	#define sphSeek		lseek
 #endif
@@ -112,10 +114,6 @@ static inline float logf ( float v )
 #endif
 
 //////////////////////////////////////////////////////////////////////////
-
-#define MVA_DOWNSIZE DWORD
-
-/////////////////////////////////////////////////////////////////////////////
 
 #if USE_WINDOWS
 #ifndef NDEBUG
@@ -1619,7 +1617,7 @@ struct CSphIndex_VLN : CSphIndex
 	virtual bool				Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilters, bool bMergeKillLists );
 	void						MergeWordData ( CSphWordRecord & tDstWord, CSphWordRecord & tSrcWord );
 
-	virtual int					UpdateAttributes ( const CSphAttrUpdate_t & tUpd );
+	virtual int					UpdateAttributes ( const CSphAttrUpdate & tUpd );
 	virtual bool				SaveAttributes ();
 
 	bool						EarlyReject ( CSphMatch & tMatch, const CSphQuery * pQuery ) const;
@@ -1712,6 +1710,9 @@ private:
 	DWORD						m_uVersion;				///< data files version
 	bool						m_bUse64;				///< whether the header is id64
 
+	int							m_iIndexTag;			///< my ids for MVA updates pool
+	static int					m_iIndexTagSeq;			///< static ids sequence
+
 private:
 	// searching-only, per-query
 	int							m_iWeights;						///< search query field weights count
@@ -1776,6 +1777,8 @@ public:
 	// FIXME! this needs to be protected, and refactored as well
 	bool						SetupQueryWord ( CSphQueryWord & tWord, const CSphTermSetup & tTermSetup, bool bSetupReaders = true ) const;
 };
+
+int CSphIndex_VLN::m_iIndexTagSeq = 0;
 
 /////////////////////////////////////////////////////////////////////////////
 // UTILITY FUNCTIONS
@@ -2152,10 +2155,34 @@ void sphSetInternalErrorCallback ( void (*fnCallback) ( const char * ) )
 	g_pInternalErrorCallback = fnCallback;
 }
 
+//////////////////////////////////////////////////////////////////////////
+// DOCINFO
+//////////////////////////////////////////////////////////////////////////
+
+#define MVA_DOWNSIZE		DWORD			// MVA offset type
+#define MVA_OFFSET_MASK		0x7fffffffUL	// MVA offset mask
+#define MVA_ARENA_FLAG		0x80000000UL	// MVA global-arena flag
+
+
+static DWORD *				g_pMvaArena = NULL;		///< initialized by sphArenaInit()
+
+
+// OPTIMIZE! try to inline or otherwise simplify maybe
+const DWORD * CSphDocInfo::GetAttrMVA ( const CSphAttrLocator & tLoc, const DWORD * pPool ) const
+{
+	DWORD uIndex = MVA_DOWNSIZE ( GetAttr ( tLoc ) );
+	if ( !uIndex )
+		return NULL;
+
+	if ( uIndex & MVA_ARENA_FLAG )
+		return g_pMvaArena + ( uIndex & MVA_OFFSET_MASK );
+
+	return pPool + uIndex;
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // TOKENIZERS
 /////////////////////////////////////////////////////////////////////////////
-
 
 #if USE_WINDOWS
 #pragma warning(disable:4127) // conditional expr is const for MSVC
@@ -5377,21 +5404,6 @@ CSphQueryResult::~CSphQueryResult ()
 }
 
 /////////////////////////////////////////////////////////////////////////////
-// ATTR UPDATE
-/////////////////////////////////////////////////////////////////////////////
-
-CSphAttrUpdate_t::CSphAttrUpdate_t ()
-	: m_iUpdates ( 0 )
-	, m_pUpdates ( NULL )
-{}
-
-
-CSphAttrUpdate_t::~CSphAttrUpdate_t ()
-{
-	SafeDeleteArray ( m_pUpdates );
-}
-
-/////////////////////////////////////////////////////////////////////////////
 // CHUNK READER
 /////////////////////////////////////////////////////////////////////////////
 
@@ -5631,7 +5643,9 @@ int CSphBin::ReadHit ( CSphWordHit * e, int iRowitems, CSphRowitem * pRowitems )
 }
 
 //////////////////////////////////////////////////////////////////////////
-// index settings
+// INDEX SETTINGS
+//////////////////////////////////////////////////////////////////////////
+
 CSphIndexSettings::CSphIndexSettings ()
 	: m_eDocinfo		( SPH_DOCINFO_NONE )
 	, m_iMinPrefixLen	( 0 )
@@ -5640,6 +5654,660 @@ CSphIndexSettings::CSphIndexSettings ()
 {
 }
 
+//////////////////////////////////////////////////////////////////////////
+// PROCESS-SHARED MUTEX
+//////////////////////////////////////////////////////////////////////////
+
+/// process-shared mutex that survives fork
+class CSphProcessSharedMutex
+{
+public:
+			CSphProcessSharedMutex ();
+	void	Lock ();
+	void	Unlock ();
+
+protected:
+#if !USE_WINDOWS
+	CSphSharedBuffer<BYTE>		m_pStorage;
+	pthread_mutex_t *			m_pMutex;
+#endif
+};
+
+
+/// scoped mutex lock
+class CSphScopedMutexLock : ISphNoncopyable
+{
+public:
+	/// lock on creation
+	CSphScopedMutexLock ( CSphProcessSharedMutex & tMutex )
+		: m_tMutexRef ( tMutex )
+	{
+		m_tMutexRef.Lock();
+	}
+
+	/// unlock on going out of scope
+	~CSphScopedMutexLock ()
+	{
+		m_tMutexRef.Unlock ();
+	}
+
+protected:
+	CSphProcessSharedMutex &	m_tMutexRef;
+};
+
+//////////////////////////////////////////////////////////////////////////
+
+CSphProcessSharedMutex::CSphProcessSharedMutex ()
+{
+#if !USE_WINDOWS
+	m_pMutex = NULL;
+
+	pthread_mutexattr_t tAttr;
+	if ( pthread_mutexattr_init ( &tAttr ) || pthread_mutexattr_setpshared ( &tAttr, PTHREAD_PROCESS_SHARED ) )
+		return;
+
+	CSphString sError, sWarning;
+	if ( !m_pStorage.Alloc ( sizeof(pthread_mutex_t), sError, sWarning ) )
+		return;
+
+	m_pMutex = (pthread_mutex_t*) m_pStorage.GetWritePtr ();
+	if ( pthread_mutex_init ( m_pMutex, &tAttr ) )
+	{
+		m_pMutex = NULL;
+		m_pStorage.Reset ();
+		return;
+	}
+#endif
+}
+
+
+void CSphProcessSharedMutex::Lock ()
+{
+#if !USE_WINDOWS
+	if ( m_pMutex )
+		pthread_mutex_lock ( m_pMutex );
+#endif
+}
+
+
+void CSphProcessSharedMutex::Unlock ()
+{
+#if !USE_WINDOWS
+	if ( m_pMutex )
+		pthread_mutex_lock ( m_pMutex );
+#endif
+}
+
+//////////////////////////////////////////////////////////////////////////
+// GLOBAL MVA STORAGE ARENA
+//////////////////////////////////////////////////////////////////////////
+
+/// shared-memory arena allocator
+/// manages small tagged dword strings, upto 4096 bytes in size
+class CSphArena
+{
+public:
+							CSphArena ();
+
+	bool					Init ( int uMaxBytes );
+	DWORD *					GetBasePtr () const { return m_pBasePtr; }
+
+	int						TaggedAlloc ( int iTag, int iBytes );
+	void					TaggedFreeIndex ( int iTag, int iIndex );
+	void					TaggedFreeTag ( int iTag );
+
+protected:
+	static const int		MIN_BITS	= 4;
+	static const int		MAX_BITS	= 12;
+	static const int		NUM_SIZES	= MAX_BITS-MIN_BITS+2;	///< one for 0 (empty pages), and one for each size from min to max
+
+	static const int		PAGE_SIZE	= 1<<MAX_BITS;
+	static const int		PAGE_ALLOCS	= 1<<( MAX_BITS-MIN_BITS);
+	static const int		PAGE_BITMAP	= ( PAGE_ALLOCS+8*sizeof(DWORD)-1 )/( 8*sizeof(DWORD) );
+
+	static const int		MAX_TAGS		= 1024;
+	static const int		MAX_LOGENTRIES	= 29;
+
+	///< page descriptor
+	struct PageDesc_t
+	{
+		int					m_iSizeBits;			///< alloc size
+		int					m_iPrev;				///< prev free page of this size
+		int					m_iNext;				///< next free page of this size
+		int					m_iUsed;				///< usage count
+		DWORD				m_uBitmap[PAGE_BITMAP];	///< usage bitmap
+	};
+
+	///< tag descriptor
+	struct TagDesc_t
+	{
+		int					m_iTag;					///< tag value
+		int					m_iAllocs;				///< active allocs
+		int					m_iLogHead;				///< pointer to head allocs log entry
+	};
+
+	///< allocs log entry
+	struct AllocsLogEntry_t
+	{
+
+		int					m_iUsed;
+		int					m_iNext;
+		int					m_dEntries[MAX_LOGENTRIES];
+	};
+	STATIC_SIZE_ASSERT ( AllocsLogEntry_t, 124 );
+
+protected:
+	int						RawAlloc ( int iBytes );
+	void					RawFree ( int iIndex );
+	void					RemoveTag ( TagDesc_t * pTag );
+
+protected:
+	CSphProcessSharedMutex	m_tMutex;
+
+	int						m_iPages;			///< max pages count
+	CSphSharedBuffer<DWORD>	m_pArena;			///< arena that stores everything (all other pointers point here)
+
+	PageDesc_t *			m_pPages;			///< page descriptors
+	int *					m_pFreelistHeads;	///< free-list heads
+	int *					m_pTagCount;
+	TagDesc_t *				m_pTags;
+
+	DWORD *					m_pBasePtr;			///< base data storage pointer
+
+#if ARENADEBUG
+protected:
+	int *					m_pTotalAllocs;
+	int *					m_pTotalBytes;
+
+public:
+	void					CheckFreelists ();
+#else
+	inline void				CheckFreelists () {}
+#endif // ARENADEBUG
+};
+
+//////////////////////////////////////////////////////////////////////////
+
+CSphArena::CSphArena ()
+	: m_iPages ( 0 )
+{
+}
+
+
+bool CSphArena::Init ( int uMaxBytes )
+{
+	m_iPages = ( uMaxBytes+PAGE_SIZE-1 ) / PAGE_SIZE;
+
+	int iData = m_iPages*PAGE_SIZE; // data size, bytes
+	int iMyTaglist = sizeof(int) + MAX_TAGS*sizeof(TagDesc_t); // int length, TagDesc_t[] tags
+	int iMy = m_iPages*sizeof(PageDesc_t) + NUM_SIZES*sizeof(int) + iMyTaglist; // my internal structures size, bytes
+#if ARENADEBUG
+	iMy += 2*sizeof(int); // debugging counters
+#endif
+
+	assert ( iData%sizeof(DWORD)==0 );
+	assert ( iMy%sizeof(DWORD)==0 );
+
+	CSphString sError, sWarning;
+	if ( !m_pArena.Alloc ( (iData+iMy)/sizeof(DWORD), sError, sWarning ) )
+	{
+		m_iPages = 0;
+		return false;
+	}
+
+	// setup internal pointers
+	DWORD * pCur = m_pArena.GetWritePtr();
+
+	m_pPages = (PageDesc_t*) pCur;
+	pCur += sizeof(PageDesc_t)*m_iPages/sizeof(DWORD);
+
+	m_pFreelistHeads = (int*) pCur;
+	pCur += NUM_SIZES; // one for each size, and one extra for zero
+
+	m_pTagCount = (int*) pCur++;
+	m_pTags = (TagDesc_t*) pCur;
+	pCur += sizeof(TagDesc_t)*MAX_TAGS/sizeof(DWORD);
+
+#if ARENADEBUG
+	m_pTotalAllocs = (int*) pCur++;
+	m_pTotalBytes = (int*) pCur++;
+	*m_pTotalAllocs = 0;
+	*m_pTotalBytes = 0;
+#endif
+
+	m_pBasePtr = m_pArena.GetWritePtr() + iMy/sizeof(DWORD);
+	assert ( m_pBasePtr==pCur );
+
+	// setup initial state
+	for ( int i=0; i<m_iPages; i++ )
+	{
+		m_pPages[i].m_iSizeBits = 0; // fully empty
+		m_pPages[i].m_iPrev = ( i>0 ) ? i-1 : -1;
+		m_pPages[i].m_iNext = ( i<m_iPages-1 ) ? i+1 : -1;
+	}
+
+	m_pFreelistHeads[0] = 0;
+	for ( int i=1; i<NUM_SIZES; i++ )
+		m_pFreelistHeads[i] = -1;
+
+	*m_pTagCount = 0;
+
+	return true;
+}
+
+
+static inline int FindBit ( DWORD uValue )
+{
+	DWORD uMask = 0xffff;
+	int iIdx = 0;
+	int iBits = 16;
+
+	// we negate bits to compare with 0
+	// this makes MSVC emit 'test' instead of 'cmp'
+	uValue ^= 0xffffffff;
+	for ( int t=0; t<5; t++ )
+	{
+		if ( ( uValue & uMask )==0 )
+		{
+			iIdx += iBits;
+			uValue >>= iBits;
+		}
+		iBits >>= 1;
+		uMask >>= iBits;
+	}
+	return iIdx;
+}
+
+
+int CSphArena::RawAlloc ( int iBytes )
+{
+	CheckFreelists ();
+
+	if ( iBytes<=0 || iBytes>(1<<MAX_BITS)-(int)sizeof(int) )
+		return -1;
+
+	int iSizeBits = sphLog2 ( iBytes+sizeof(int)-1 ); // always reserve sizeof(int) for the tag
+	iSizeBits = Max ( iSizeBits, MIN_BITS );
+	assert ( iSizeBits>=MIN_BITS && iSizeBits<=MAX_BITS );
+
+	int iSizeSlot = iSizeBits-MIN_BITS+1;
+	assert ( iSizeSlot>=1 && iSizeSlot<NUM_SIZES );
+
+	// get semi-free page for this size
+	PageDesc_t * pPage = NULL;
+	if ( m_pFreelistHeads[iSizeSlot]>=0 )
+	{
+		// got something in the free-list
+		pPage = m_pPages + m_pFreelistHeads[iSizeSlot];
+
+	} else
+	{
+		// nothing in free-list, alloc next empty one
+		if ( m_pFreelistHeads[0]<0 )
+			return -1; // out of memory
+
+		// update the page
+		pPage = m_pPages + m_pFreelistHeads[0];
+		assert ( pPage->m_iPrev==-1 );
+
+		m_pFreelistHeads[iSizeSlot] = m_pFreelistHeads[0];
+		m_pFreelistHeads[0] = pPage->m_iNext;
+		if ( pPage->m_iNext>=0 )
+			m_pPages[pPage->m_iNext].m_iPrev = -1;
+
+		pPage->m_iSizeBits = iSizeBits;
+		pPage->m_iUsed = 0;
+		pPage->m_iNext = -1;
+
+		CheckFreelists ();
+
+		// setup bitmap
+		int iUsedBits = ( 1<<(MAX_BITS-iSizeBits) ); // max-used-bits = page-size/alloc-size = ( 1<<page-bitsize )/( 1<<alloc-bitsize )
+		assert ( iUsedBits>0 && iUsedBits<=(PAGE_BITMAP<<5) );
+
+		for ( int i=0; i<PAGE_BITMAP; i++ )
+			pPage->m_uBitmap[i] = ( ( i<<5 )>=iUsedBits ) ? 0xffffffffUL : 0;
+
+		if ( iUsedBits<32 )
+			pPage->m_uBitmap[0] = ( 0xffffffffUL<<iUsedBits );
+	}
+
+	// get free alloc slot and use it
+	assert ( pPage );
+	assert ( pPage->m_iSizeBits==iSizeBits );
+
+	for ( int i=0; i<PAGE_BITMAP; i++ ) // FIXME! optimize, can scan less
+	{
+		if ( pPage->m_uBitmap[i]==0xffffffffUL )
+			continue;
+
+		int iFree = FindBit ( pPage->m_uBitmap[i] );
+		pPage->m_uBitmap[i] |= ( 1<<iFree );
+
+		pPage->m_iUsed++;
+		if ( pPage->m_iUsed==( PAGE_SIZE>>pPage->m_iSizeBits ) )
+		{
+			// this page is full now, unchain from the free-list
+			assert ( m_pFreelistHeads[iSizeSlot]==pPage-m_pPages );
+			m_pFreelistHeads[iSizeSlot] = pPage->m_iNext;
+			if ( pPage->m_iNext>=0 )
+			{
+				assert ( m_pPages[pPage->m_iNext].m_iPrev==pPage-m_pPages );
+				m_pPages[pPage->m_iNext].m_iPrev = -1;
+			}
+			pPage->m_iNext = -1;
+		}
+
+#if ARENADEBUG
+		(*m_pTotalAllocs)++;
+		(*m_pTotalBytes) += ( 1<<iSizeBits );
+#endif
+
+		CheckFreelists ();
+
+		int iOffset = ( pPage-m_pPages )*PAGE_SIZE + ( i*32+iFree )*( 1<<iSizeBits ); // raw internal byte offset (FIXME! optimize with shifts?)
+		int iIndex = 1 + ( iOffset/sizeof(DWORD) ); // dword index with tag fixup
+
+		m_pBasePtr[iIndex-1] = DWORD(-1); // untagged by default
+		return iIndex;
+	}
+
+	assert ( 0 && "internal error, no free slots in free page" );
+	return -1;
+}
+
+
+void CSphArena::RawFree ( int iIndex )
+{
+	CheckFreelists ();
+
+	int iOffset = (iIndex-1)*sizeof(DWORD); // remove tag fixup, and go to raw internal byte offset
+	int iPage = iOffset / PAGE_SIZE;
+
+	if ( iPage<0 || iPage>m_iPages )
+	{
+		assert ( 0 && "internal error, freed index out of arena" );
+		return;
+	}
+
+	PageDesc_t * pPage = m_pPages + iPage;
+	int iBit = ( iOffset % PAGE_SIZE ) >> pPage->m_iSizeBits;
+	assert ( ( iOffset % PAGE_SIZE )==( iBit<<pPage->m_iSizeBits ) && "internal error, freed offset is unaligned" );
+
+	if (!( pPage->m_uBitmap[iBit>>5] & ( 1UL<<(iBit&31) ) ))
+	{
+		assert ( 0 && "internal error, freed index already freed" );
+		return;
+	}
+
+	pPage->m_uBitmap[iBit>>5] &= ~( 1UL<<(iBit&31) );
+	pPage->m_iUsed--;
+
+#if ARENADEBUG
+	(*m_pTotalAllocs)--;
+	(*m_pTotalBytes) -= ( 1<<pPage->m_iSizeBits );
+#endif
+
+	CheckFreelists ();
+
+	int iSizeSlot = pPage->m_iSizeBits-MIN_BITS+1;
+
+	if ( pPage->m_iUsed==( PAGE_SIZE>>pPage->m_iSizeBits )-1 )
+	{
+		// this page was full, but it's semi-free now
+		// chain to free-list
+		assert ( pPage->m_iPrev==-1 ); // full pages must not be in any list
+		assert ( pPage->m_iNext==-1 );
+
+		pPage->m_iNext = m_pFreelistHeads[iSizeSlot];
+		if ( pPage->m_iNext>=0 )
+		{
+			assert ( m_pPages[pPage->m_iNext].m_iPrev==-1 );
+			assert ( m_pPages[pPage->m_iNext].m_iSizeBits==pPage->m_iSizeBits );
+			m_pPages[pPage->m_iNext].m_iPrev = iPage;
+		}
+		m_pFreelistHeads[iSizeSlot] = iPage;
+	}
+
+	if ( pPage->m_iUsed==0 )
+	{
+		// this page is empty now
+		// unchain from free-list
+		if ( pPage->m_iPrev>=0 )
+		{
+			// non-head page
+			assert ( m_pPages[pPage->m_iPrev].m_iNext==iPage );
+			m_pPages[pPage->m_iPrev].m_iNext = pPage->m_iNext;
+
+			if ( pPage->m_iNext>=0 )
+			{
+				assert ( m_pPages[pPage->m_iNext].m_iPrev==iPage );
+				m_pPages[pPage->m_iNext].m_iPrev = pPage->m_iPrev;
+			}
+
+		} else
+		{
+			// head page
+			assert ( m_pFreelistHeads[iSizeSlot]==iPage );
+			assert ( pPage->m_iPrev==-1 );
+
+			if ( pPage->m_iNext>=0 )
+			{
+				assert ( m_pPages[pPage->m_iNext].m_iPrev==iPage );
+				m_pPages[pPage->m_iNext].m_iPrev = -1;
+			}
+			m_pFreelistHeads[iSizeSlot] = pPage->m_iNext;
+		}
+
+		pPage->m_iSizeBits = 0;
+		pPage->m_iPrev = -1;
+		pPage->m_iNext = m_pFreelistHeads[0];
+		if ( pPage->m_iNext>=0 )
+		{
+			assert ( m_pPages[pPage->m_iNext].m_iPrev==-1 );
+			assert ( m_pPages[pPage->m_iNext].m_iSizeBits==0 );
+			m_pPages[pPage->m_iNext].m_iPrev = iPage;
+		}
+		m_pFreelistHeads[0] = iPage;
+
+	}
+
+	CheckFreelists ();
+}
+
+
+int CSphArena::TaggedAlloc ( int iTag, int iBytes )
+{
+	if ( !m_iPages )
+		return -1; // uninitialized
+
+	assert ( iTag>=0 );
+	CSphScopedMutexLock tLock ( m_tMutex );
+
+	// find that tag first
+	TagDesc_t * pTag = sphBinarySearch ( m_pTags, m_pTags+(*m_pTagCount)-1, bind(&TagDesc_t::m_iTag), iTag );
+	if ( !pTag )
+	{
+		if ( *m_pTagCount==MAX_TAGS )
+			return -1; // out of tags
+
+		int iLogHead = RawAlloc ( sizeof(AllocsLogEntry_t) );
+		if ( iLogHead<0 )
+			return -1; // out of memory
+
+		AllocsLogEntry_t * pLog = (AllocsLogEntry_t*) ( m_pBasePtr + iLogHead );
+		pLog->m_iUsed = 0;
+		pLog->m_iNext = -1;
+
+		// add new tag
+		pTag = m_pTags + (*m_pTagCount)++;
+		pTag->m_iTag = iTag;
+		pTag->m_iAllocs = 0;
+		pTag->m_iLogHead = iLogHead;
+
+		// re-sort
+		// OPTIMIZE! full-blown sort is overkill here
+		sphSort ( m_pTags, *m_pTagCount, sphMemberLess(&TagDesc_t::m_iTag) );
+
+		// we must be able to find it now
+		pTag = sphBinarySearch ( m_pTags, m_pTags+(*m_pTagCount)-1, bind(&TagDesc_t::m_iTag), iTag );
+		assert ( pTag && "internal error, fresh tag not found in TaggedAlloc()" );
+
+		if ( !pTag )
+			return -1; // internal error
+	}
+
+	// grow the log if needed
+	AllocsLogEntry_t * pLog = (AllocsLogEntry_t*) ( m_pBasePtr + pTag->m_iLogHead );
+	if ( pLog->m_iUsed==MAX_LOGENTRIES )
+	{
+		int iNewEntry = RawAlloc ( sizeof(AllocsLogEntry_t) );
+		if ( iNewEntry<0 )
+			return -1; // out of memory
+
+		AllocsLogEntry_t * pNew = (AllocsLogEntry_t*) ( m_pBasePtr + iNewEntry );
+		pNew->m_iUsed = 0;
+		pNew->m_iNext = pTag->m_iLogHead;
+		pTag->m_iLogHead = iNewEntry;
+		pLog = pNew;
+	}
+
+	// do the alloc itself
+	int iIndex = RawAlloc ( iBytes );
+	if ( iIndex<0 )
+		return -1; // out of memory
+
+	// tag it
+	m_pBasePtr[iIndex-1] = iTag;
+
+	// log it
+	assert ( pLog->m_iUsed<MAX_LOGENTRIES );
+	pLog->m_dEntries [ pLog->m_iUsed++ ] = iIndex;
+	pTag->m_iAllocs++;
+
+	// and we're done
+	return iIndex;
+}
+
+
+void CSphArena::TaggedFreeIndex ( int iTag, int iIndex )
+{
+	if ( !m_iPages )
+		return; // uninitialized
+
+	assert ( iTag>=0 );
+	CSphScopedMutexLock tLock ( m_tMutex );
+
+	// find that tag
+	TagDesc_t * pTag = sphBinarySearch ( m_pTags, m_pTags+(*m_pTagCount)-1, bind(&TagDesc_t::m_iTag), iTag );
+	assert ( pTag && "internal error, unknown tag in TaggedFreeIndex()" );
+	assert ( m_pBasePtr[iIndex-1]==DWORD(iTag) && "internal error, tag mismatch in TaggedFreeIndex()" );
+
+	// defence against internal errors
+	if ( !pTag )
+		return;
+
+	// untag it
+	m_pBasePtr[iIndex-1] = DWORD(-1);
+
+	// free it
+	RawFree ( iIndex );
+
+	// update the tag decsriptor
+	pTag->m_iAllocs--;
+	assert ( pTag->m_iAllocs>=0 );
+
+	// remove the descriptor if its empty now
+	if ( pTag->m_iAllocs==0 )
+		RemoveTag ( pTag );
+}
+
+
+void CSphArena::TaggedFreeTag ( int iTag )
+{
+	if ( !m_iPages )
+		return; // uninitialized
+
+	assert ( iTag>=0 );
+	CSphScopedMutexLock tLock ( m_tMutex );
+
+	// find that tag
+	 TagDesc_t * pTag = sphBinarySearch ( m_pTags, m_pTags+(*m_pTagCount)-1, bind(&TagDesc_t::m_iTag), iTag );
+	if ( !pTag )
+		return;
+
+	// walk the log and free it
+	int iLog = pTag->m_iLogHead;
+	while ( iLog>=0 )
+	{
+		AllocsLogEntry_t * pLog = (AllocsLogEntry_t*) ( m_pBasePtr + iLog );
+		iLog = pLog->m_iNext;
+
+		// free each alloc if tag still matches
+		for ( int i=0; i<pLog->m_iUsed; i++ )
+		{
+			int iIndex = pLog->m_dEntries[i];
+			if ( m_pBasePtr[iIndex-1]==DWORD(iTag) )
+			{
+				m_pBasePtr[iIndex-1] = DWORD(-1); // avoid double free
+				RawFree ( iIndex );
+				pTag->m_iAllocs--;
+			}
+		}
+	}
+
+	// check for mismatches
+	assert ( pTag->m_iAllocs==0 );
+
+	// remove the descriptor
+	RemoveTag ( pTag );
+}
+
+
+void CSphArena::RemoveTag ( TagDesc_t * pTag )
+{
+	assert ( pTag );
+	assert ( pTag->m_iAllocs==0 );
+
+	// dealloc log chain
+	int iLog = pTag->m_iLogHead;
+	while ( iLog>=0 )
+	{
+		AllocsLogEntry_t * pLog = (AllocsLogEntry_t*) ( m_pBasePtr + iLog );
+		int iNext = pLog->m_iNext;
+
+		RawFree ( iLog );
+		iLog = iNext;
+	}
+
+	// remove tag from the list
+	int iTail = m_pTags + (*m_pTagCount) - pTag - 1;
+	memmove ( pTag, pTag+1, iTail*sizeof(TagDesc_t) );
+	(*m_pTagCount)--;
+}
+
+
+#if ARENADEBUG
+void CSphArena::CheckFreelists ()
+{
+	assert ( m_pFreelistHeads[0]==-1 || m_pPages[m_pFreelistHeads[0]].m_iSizeBits==0 );
+	for ( int iSizeSlot=1; iSizeSlot<NUM_SIZES; iSizeSlot++ )
+		assert ( m_pFreelistHeads[iSizeSlot]==-1 || m_pPages[m_pFreelistHeads[iSizeSlot]].m_iSizeBits-MIN_BITS+1==iSizeSlot );
+}
+#endif // ARENADEBUG
+
+//////////////////////////////////////////////////////////////////////////
+
+static CSphArena g_MvaArena; // global mega-arena
+
+DWORD * sphArenaInit ( int iMaxBytes )
+{
+	if ( !g_MvaArena.Init ( iMaxBytes ) )
+		return NULL;
+
+	g_pMvaArena = g_MvaArena.GetBasePtr ();
+	return g_pMvaArena;
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // INDEX
@@ -5757,6 +6425,8 @@ CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename )
 	m_iKillListSize = 0;
 
 	m_bLateReject = false;
+
+	m_iIndexTag = -1;
 }
 
 
@@ -5764,12 +6434,15 @@ CSphIndex_VLN::~CSphIndex_VLN ()
 {
 	SafeDeleteArray ( m_pWriteBuffer );
 	m_tMergeWordlistFile.Close ();
+
+	if ( m_iIndexTag>=0 )
+		g_MvaArena.TaggedFreeTag ( m_iIndexTag );
 }
 
 
 /////////////////////////////////////////////////////////////////////////////
 
-int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate_t & tUpd )
+int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd )
 {
 	// check if we can
 	if ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_EXTERN )
@@ -5779,14 +6452,12 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate_t & tUpd )
 	}
 
 	// check if we have to
-	if ( !m_uDocinfo || !tUpd.m_iUpdates )
+	assert ( tUpd.m_dDocids.GetLength()==tUpd.m_dRowOffset.GetLength() );
+	if ( !m_uDocinfo || !tUpd.m_dDocids.GetLength() )
 		return 0;
 
-	// check if we have what
-	assert ( tUpd.m_pUpdates );
-
 	// remap update schema to index schema
-	CSphVector<int> dAttrIndex;
+	CSphVector<CSphAttrLocator> dLocators;
 	ARRAY_FOREACH ( i, tUpd.m_dAttrs )
 	{
 		int iIndex = m_tSchema.GetAttrIndex ( tUpd.m_dAttrs[i].m_sName.cstr() );
@@ -5795,28 +6466,130 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate_t & tUpd )
 			m_sLastError.SetSprintf ( "attribute '%s' not found", tUpd.m_dAttrs[i].m_sName.cstr() );
 			return -1;
 		}
-		dAttrIndex.Add ( iIndex );
+
+		const CSphColumnInfo & tCol = m_tSchema.GetAttr(iIndex);
+		// FIXME! add type checks here
+		dLocators.Add ( tCol.m_tLocator );
 	}
-	assert ( dAttrIndex.GetLength()==tUpd.m_dAttrs.GetLength() );
+	assert ( dLocators.GetLength()==tUpd.m_dAttrs.GetLength() );
 
-	// do update
-	int iUpdated = 0;
-	int iStride = DOCINFO_IDSIZE + dAttrIndex.GetLength();
-	const DWORD * pUpdate = tUpd.m_pUpdates;
+	// FIXME! FIXME! FIXME! overwriting just-freed blocks might hurt concurrent searchers;
+	// should implement a simplistic MVCC-style delayed-free to avoid that
 
-	for ( int iUpd=0; iUpd<tUpd.m_iUpdates; iUpd++, pUpdate+=iStride )
+	// do the update
+
+	// row update must leave it in cosistent state; so let's preallocate all the needed MVA
+	// storage upfront to avoid suddenly having to rollback if allocation fails later
+	int iNumMVA = 0;
+	ARRAY_FOREACH ( i, tUpd.m_dAttrs )
+		if ( tUpd.m_dAttrs[i].m_eAttrType & SPH_ATTR_MULTI )
+			iNumMVA++;
+
+	// OPTIMIZE! execute the code below conditionally
+	CSphVector<DWORD*> dRowPtrs;
+	CSphVector<int> dMvaPtrs;
+
+	dRowPtrs.Resize ( tUpd.m_dDocids.GetLength() );
+	dMvaPtrs.Resize ( tUpd.m_dDocids.GetLength()*iNumMVA );
+	dMvaPtrs.Fill ( -1 );
+
+	// preallocate
+	bool bFailed = false;
+	ARRAY_FOREACH_COND ( iUpd, tUpd.m_dDocids, !bFailed )
 	{
-		DWORD * pEntry = const_cast < DWORD * > ( FindDocinfo ( DOCINFO2ID(pUpdate ) ) );
-		if ( !pEntry )
-			continue;
+		dRowPtrs[iUpd] = const_cast < DWORD * > ( FindDocinfo ( tUpd.m_dDocids[iUpd] ) );
+		if ( !dRowPtrs[iUpd] )
+			continue; // no such id
 
-		assert ( DOCINFO2ID(pEntry)==DOCINFO2ID(pUpdate) );
+		int iPoolPos = tUpd.m_dRowOffset[iUpd];
+		int iMvaPtr = iUpd*iNumMVA;
+		ARRAY_FOREACH_COND ( iCol, tUpd.m_dAttrs, !bFailed )
+		{
+			if (!( tUpd.m_dAttrs[iCol].m_eAttrType & SPH_ATTR_MULTI )) // FIXME! optimize using a prebuilt dword mask?
+			{
+				iPoolPos++;
+				continue;
+			}
+
+			// get the requested new count
+			int iNewCount = (int)tUpd.m_dPool[iPoolPos++];
+			iPoolPos += iNewCount;
+
+			// try to alloc
+			int iAlloc = -1;
+			if ( iNewCount )
+			{
+				iAlloc = g_MvaArena.TaggedAlloc ( m_iIndexTag, (1+iNewCount)*sizeof(DWORD) );
+				if ( iAlloc<0 )
+					bFailed = true;
+			}
+
+			// whatever the outcome, move the pointer
+			dMvaPtrs[iMvaPtr++] = iAlloc;
+		}
+	}
+
+	// if there were any allocation failures, rollback everything
+	if ( bFailed )
+	{
+		ARRAY_FOREACH ( i, dMvaPtrs )
+			if ( dMvaPtrs[i]>=0 )
+				g_MvaArena.TaggedFreeIndex ( m_iIndexTag, dMvaPtrs[i] );
+
+		m_sLastError.SetSprintf ( "out of pool memory on MVA update" );
+		return -1;
+	}
+
+	// preallocation went OK; do the actual update
+	int iUpdated = 0;
+	ARRAY_FOREACH ( iUpd, tUpd.m_dDocids )
+	{
+		DWORD * pEntry = dRowPtrs[iUpd];
+		if ( !pEntry )
+			continue; // no such id
+
+		assert ( DOCINFO2ID(pEntry)==tUpd.m_dDocids[iUpd] );
 		pEntry = DOCINFO2ATTRS(pEntry);
 
-		ARRAY_FOREACH ( i, dAttrIndex )
+		int iPos = tUpd.m_dRowOffset[iUpd];
+		int iMvaPtr = iUpd*iNumMVA;
+		ARRAY_FOREACH ( iCol, tUpd.m_dAttrs )
 		{
-			const CSphColumnInfo & tCol = m_tSchema.GetAttr ( dAttrIndex[i] );
-			sphSetRowAttr ( pEntry, tCol.m_tLocator, pUpdate [ DOCINFO_IDSIZE+i ] );
+			if (!( tUpd.m_dAttrs[iCol].m_eAttrType & SPH_ATTR_MULTI )) // FIXME! optimize using a prebuilt dword mask?
+			{
+				// plain update
+				sphSetRowAttr ( pEntry, dLocators[iCol], tUpd.m_dPool[iPos] );
+				iPos++;
+				continue;
+			}
+
+			// MVA update
+			DWORD uOldIndex = MVA_DOWNSIZE ( sphGetRowAttr ( pEntry, dLocators[iCol] ) );
+
+			// get new count, store new data if needed
+			DWORD uNew = tUpd.m_dPool[iPos++];
+			int iNewIndex = dMvaPtrs[iMvaPtr++];
+
+			if ( uNew )
+			{
+				assert ( iNewIndex>=0 );
+				DWORD * uPtr = g_pMvaArena + iNewIndex;
+
+				// copy values list
+				*uPtr++ = uNew;
+				while ( uNew-- )
+					*uPtr++ = tUpd.m_dPool[iPos++];
+
+				// setup new value to store
+				uNew = DWORD(iNewIndex) | MVA_ARENA_FLAG;
+			}
+
+			// store new value
+			sphSetRowAttr ( pEntry, dLocators[iCol], uNew );
+
+			// free old storage if needed
+			if ( uOldIndex & MVA_ARENA_FLAG )
+				g_MvaArena.TaggedFreeIndex ( m_iIndexTag, uOldIndex & MVA_OFFSET_MASK );
 		}
 
 		iUpdated++;
@@ -9094,20 +9867,17 @@ bool CSphIndex_VLN::EarlyReject ( CSphMatch & tMatch, const CSphQuery * pQuery )
 		if ( tFilter.m_bMva )
 		{
 			// multiple values
-			SphAttr_t uOff = tMatch.GetAttr ( tFilter.m_tLocator );
-
-			const DWORD * pMva = NULL;
+			const DWORD * pMva = tMatch.GetAttrMVA ( tFilter.m_tLocator, &m_pMva[0] );
 			const DWORD * pMvaMax = NULL;
-			if ( uOff )
+			if ( pMva )
 			{
-				pMva = &m_pMva [ MVA_DOWNSIZE ( uOff ) ];
 				pMvaMax = pMva + (*pMva) + 1;
 				pMva++;
 			}
 
 			// filter matches if any of multiple values match (ie. are in the set, or in the range)
 			bool bOK = false;
-			if ( uOff )
+			if ( pMva )
 				switch ( tFilter.m_eType )
 			{
 				case SPH_FILTER_VALUES:
@@ -12881,6 +13651,10 @@ void CSphIndex_VLN::Dealloc ()
 		SafeDeleteArray ( m_pWordlistCheckpoints );
 
 	SafeDeleteArray ( m_pWordlistChunkBuf );
+
+	if ( m_iIndexTag>=0 )
+		g_MvaArena.TaggedFreeTag ( m_iIndexTag );
+	m_iIndexTag = -1;
 }
 
 
@@ -13243,6 +14017,7 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 
 	// all done
 	m_bPreallocated = true;
+	m_iIndexTag = ++m_iIndexTagSeq;
 	return &m_tSchema;
 }
 
@@ -13523,7 +14298,7 @@ bool CSphIndex_VLN::Preread ()
 					if ( !uOff )
 						continue;
 
-					const DWORD * pMva = &m_pMva [ MVA_DOWNSIZE ( uOff ) ];
+					const DWORD * pMva = &m_pMva [ MVA_DOWNSIZE ( uOff ) ]; // don't care about updates at this point
 					for ( DWORD uCount = *pMva++; uCount>0; uCount--, pMva++ )
 					{
 						dMvaMin[i] = Min ( dMvaMin[i], *pMva );

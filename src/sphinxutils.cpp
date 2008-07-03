@@ -53,6 +53,43 @@ static char * trim ( char * sLine )
 }
 
 //////////////////////////////////////////////////////////////////////////
+
+int CSphConfigSection::GetSize ( const char * sKey, int iDefault ) const
+{
+	CSphVariant * pEntry = (*this)( sKey );
+	if ( !pEntry )
+		return iDefault;
+
+	char sMemLimit[256];
+	strncpy ( sMemLimit, pEntry->cstr(), sizeof(sMemLimit) );
+	sMemLimit [ sizeof(sMemLimit)-1 ] = '\0';
+
+	int iLen = strlen ( sMemLimit );
+	if ( !iLen )
+		return iDefault;
+
+	iLen--;
+	int iScale = 1;
+	if ( toupper(sMemLimit[iLen])=='K' )
+	{
+		iScale = 1024;
+		sMemLimit[iLen] = '\0';
+	} else if ( toupper(sMemLimit[iLen])=='M' )
+	{
+		iScale = 1048576;
+		sMemLimit[iLen] = '\0';
+	}
+
+	char * sErr;
+	int iRes = strtol ( sMemLimit, &sErr, 10 );
+	if ( !*sErr )
+		return iScale*iRes;
+
+	// FIXME! report syntax error here
+	return iDefault;
+}
+
+//////////////////////////////////////////////////////////////////////////
 // CONFIG PARSER
 //////////////////////////////////////////////////////////////////////////
 

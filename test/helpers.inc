@@ -578,30 +578,34 @@ class SphinxConfig
 	}
 
 
+	function CompareResultSetFixup ( &$set )
+	{
+		if ( !is_array($set) )
+			return;
+
+		unset ( $set["time"] );
+		unset ( $set["warning"] );
+		unset ( $set["status"] );
+		unset ( $set["fields"] );
+	}
+
+	function CompareResultSets ( $set1, $set2 )
+	{
+		$this->CompareResultSetFixup ( &$set1 );
+		$this->CompareResultSetFixup ( &$set2 );
+		return $set1==$set2;
+	}
+
 	function CompareResults ( $query1, $query2 )
 	{
 		if ( count($query1)!=count($query2) )
 			return false;
 
 		for ( $i=0; $i<count($query1); $i++ )
-		{
-			if ( is_array($query1[$i]) )
-			{
-				unset ( $query1[$i]["time"] );
-				unset ( $query1[$i]["warning"] );
-				unset ( $query1[$i]["status"] );
-				unset ( $query1[$i]["fields"] );
-			}
-			if ( is_array($query2[$i]) )
-			{
-				unset ( $query2[$i]["time"] );
-				unset ( $query2[$i]["warning"] );
-				unset ( $query2[$i]["status"] );
-				unset ( $query2[$i]["fields"] );
-			}
-		}
+			if ( !$this->CompareResultSets ( $query1[$i], $query2[$i] ) )
+				return false;
 
-		return $query1==$query2;
+		return true;
 	}
 
 
@@ -762,7 +766,7 @@ class SphinxConfig
 
 		foreach ( $this->_results_model [ $this->SubtestNo() ] as $ref )
 		{
-			if ( $ref==$this->_results[$nquery] )
+			if ( $this->CompareResultSets ( $ref, $this->_results[$nquery] ) )
 			{
 				$nquery++;
 				continue;
@@ -770,14 +774,10 @@ class SphinxConfig
 
 			$result_f_cur = $this->FormatResultSet ( $nquery + 1, $this->_results[$nquery] );
 			$result_f_ref = $this->FormatResultSet ( $nquery + 1, $ref );
-
 			file_put_contents ( "current", $result_f_cur );
 			file_put_contents ( "reference", $result_f_ref );
 
-			if ( $windows )
-				system ( "diff -u3 reference current > diffed.txt" );
-			else
-				system ( "diff reference current > diffed.txt" );
+			system ( "diff -u3 reference current > diffed.txt" );
 
 			$diffed = file_get_contents ( "diffed.txt" );
 			unlink ( "current" );

@@ -10671,6 +10671,7 @@ struct ExtHit_t
 	DWORD		m_uHitpos;
 	DWORD		m_uQuerypos;
 	DWORD		m_uSpanlen;
+	DWORD		m_uWeight;
 };
 
 
@@ -10855,6 +10856,7 @@ protected:
 	ExtHit_t					m_dMyHits[MAX_HITS];	///< buffer for all my phrase hits; inherited m_dHits will receive filtered results
 	SphDocID_t					m_uMatchedDocid;
 	SphDocID_t					m_uHitsOverFor;			///< there are no more hits for matches block starting with this ID
+	DWORD						m_uWords;				///< number of keywords (might be different from qpos delta because of stops and overshorts)
 };
 
 
@@ -11188,7 +11190,7 @@ const ExtHit_t * ExtTerm_c::GetHitsChunk ( const ExtDoc_t * pMatched, SphDocID_t
 		tHit.m_uDocid = pDoc->m_uDocid;
 		tHit.m_uHitpos = m_tQword.m_iHitPos;
 		tHit.m_uQuerypos = m_uQuerypos;
-		tHit.m_uSpanlen = 1;
+		tHit.m_uSpanlen = tHit.m_uWeight = 1;
 	}
 
 	m_pHitDoc = pDoc;
@@ -11794,6 +11796,7 @@ ExtPhrase_c::ExtPhrase_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, c
 	, m_uExpQpos ( 0 )
 	, m_uMatchedDocid ( 0 )
 	, m_uHitsOverFor ( 0 )
+	, m_uWords ( 0 )
 {
 	assert ( pNode );
 	assert ( pNode->IsPlain() );
@@ -11802,8 +11805,8 @@ ExtPhrase_c::ExtPhrase_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, c
 	m_uFields = uFields;
 
 	const CSphVector<CSphExtendedQueryAtomWord> & dWords = pNode->m_tAtom.m_dWords;
-	int iWords = dWords.GetLength();
-	assert ( iWords>1 );
+	m_uWords = dWords.GetLength();
+	assert ( m_uWords>1 );
 
 	m_uMinQpos = dWords[0].m_iAtomPos;
 	m_uMaxQpos = dWords.Last().m_iAtomPos;
@@ -11813,7 +11816,7 @@ ExtPhrase_c::ExtPhrase_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, c
 		m_dQposDelta[i] = -INT_MAX;
 
 	ExtNode_i * pCur = Create ( dWords[0].m_sWord, uFields, pNode->m_tAtom.m_iMaxFieldPos, tSetup, dWords[0].m_iAtomPos, pWarning );
-	for ( int i=1; i<iWords; i++ )
+	for ( int i=1; i<(int)m_uWords; i++ )
 	{
 		pCur = new ExtAnd_c ( pCur, Create ( dWords[i].m_sWord, uFields, pNode->m_tAtom.m_iMaxFieldPos, tSetup, dWords[i].m_iAtomPos, pWarning ) );
 		m_dQposDelta [ dWords[i-1].m_iAtomPos - dWords[0].m_iAtomPos ] = dWords[i].m_iAtomPos - dWords[i-1].m_iAtomPos;
@@ -11928,6 +11931,7 @@ const ExtDoc_t * ExtPhrase_c::GetDocsChunk ( SphDocID_t * pMaxID )
 				m_dMyHits[iMyHit].m_uHitpos = pHit->m_uHitpos - uSpanlen;
 				m_dMyHits[iMyHit].m_uQuerypos = m_uMinQpos;
 				m_dMyHits[iMyHit].m_uSpanlen = uSpanlen + 1;
+				m_dMyHits[iMyHit].m_uWeight = m_uWords;
 				iMyHit++;
 
 				m_uExpID = m_uExpPos = m_uExpQpos = 0;
@@ -12126,6 +12130,7 @@ const ExtHit_t * ExtPhrase_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t 
 						m_dMyHits[iMyHit].m_uHitpos = pHit->m_uHitpos - uSpanlen;
 						m_dMyHits[iMyHit].m_uQuerypos = m_uMinQpos;
 						m_dMyHits[iMyHit].m_uSpanlen = uSpanlen + 1;
+						m_dMyHits[iMyHit].m_uWeight = m_uWords;
 						iMyHit++;
 
 						m_uExpID = m_uExpPos = m_uExpQpos = 0;
@@ -12329,8 +12334,12 @@ const ExtDoc_t * ExtProximity_c::GetDocsChunk ( SphDocID_t * pMaxID )
 			CSphVector<int> dDeltas;
 			dDeltas.Resize ( m_uMaxQpos-m_uMinQpos+1 );
 
+			DWORD uMax = 0;
 			ARRAY_FOREACH ( i, dProx )
+			{
 				dDeltas[i] = dProx[i] - i;
+				uMax = Max ( uMax, dProx[i] );
+			}
 			dDeltas.Sort ();
 
 			DWORD uWeight = 0;
@@ -12345,7 +12354,8 @@ const ExtDoc_t * ExtProximity_c::GetDocsChunk ( SphDocID_t * pMaxID )
 			m_dMyHits[iHit].m_uDocid = pHit->m_uDocid;
 			m_dMyHits[iHit].m_uHitpos = dProx[iProxMinEntry];
 			m_dMyHits[iHit].m_uQuerypos = m_uMinQpos;
-			m_dMyHits[iHit].m_uSpanlen = uWeight;
+			m_dMyHits[iHit].m_uSpanlen = uMax-dProx[iProxMinEntry]+1;
+			m_dMyHits[iHit].m_uWeight = uWeight;
 			iHit++;
 
 			// remove current min, and force recompue
@@ -12737,9 +12747,9 @@ int ExtRanker_ProximityBM25_c::GetMatches ( int iFields, const int * pWeights )
 		// upd LCS
 		int iDelta = pHlist->m_uHitpos - pHlist->m_uQuerypos;
 		if ( iDelta==iExpDelta )
-			uCurLCS = uCurLCS + BYTE(pHlist->m_uSpanlen);
+			uCurLCS = uCurLCS + BYTE(pHlist->m_uWeight);
 		else
-			uCurLCS = BYTE(pHlist->m_uSpanlen);
+			uCurLCS = BYTE(pHlist->m_uWeight);
 
 		DWORD uField = pHlist->m_uHitpos >> 24;
 		if ( uCurLCS>uLCS[uField] )
@@ -12988,9 +12998,9 @@ int ExtRanker_Proximity_c::GetMatches ( int iFields, const int * pWeights )
 		DWORD uQueryPos = pHlist->m_uQuerypos;
 		int iDelta = pHlist->m_uHitpos - uQueryPos;
 		if ( iDelta==iExpDelta )
-			uCurLCS = uCurLCS + BYTE(pHlist->m_uSpanlen);
+			uCurLCS = uCurLCS + BYTE(pHlist->m_uWeight);
 		else
-			uCurLCS = BYTE(pHlist->m_uSpanlen);
+			uCurLCS = BYTE(pHlist->m_uWeight);
 
 		DWORD uField = pHlist->m_uHitpos >> 24;
 		if ( uCurLCS>uLCS[uField] )
@@ -13106,9 +13116,9 @@ int ExtRanker_MatchAny_c::GetMatches ( int iFields, const int * pWeights )
 		DWORD uQueryPos = pHlist->m_uQuerypos;
 		int iDelta = pHlist->m_uHitpos - uQueryPos;
 		if ( iDelta==iExpDelta )
-			uCurLCS = uCurLCS + BYTE(pHlist->m_uSpanlen);
+			uCurLCS = uCurLCS + BYTE(pHlist->m_uWeight);
 		else
-			uCurLCS = BYTE(pHlist->m_uSpanlen);
+			uCurLCS = BYTE(pHlist->m_uWeight);
 
 		DWORD uField = pHlist->m_uHitpos >> 24;
 		if ( uCurLCS>uLCS[uField] )

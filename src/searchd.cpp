@@ -3344,7 +3344,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		const CSphSchema * pFirstSchema = g_hIndexes [ dLocal[0] ].m_pSchema;
 		for ( int i=1; i<dLocal.GetLength() && bAllEqual; i++ )
 		{
-			if ( pFirstSchema->CompareTo ( *g_hIndexes [ dLocal[i] ].m_pSchema, sError )!=SPH_SCHEMAS_EQUAL )
+			if ( !pFirstSchema->CompareTo ( *g_hIndexes [ dLocal[i] ].m_pSchema, sError ) )
 				bAllEqual = false;
 		}
 

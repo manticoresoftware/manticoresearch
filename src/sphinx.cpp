@@ -4766,67 +4766,71 @@ bool CSphQuery::ParseSelectList ( CSphString & sError )
 // SCHEMA
 /////////////////////////////////////////////////////////////////////////////
 
-ESphSchemaCompare CSphSchema::CompareTo ( const CSphSchema & rhs, CSphString & sError ) const
+static CSphString sphDumpAttr ( const CSphColumnInfo & tAttr )
 {
-	/////////////////////////
-	// incompatibility tests
-	/////////////////////////
+	char sTypeBuf[32];
+	snprintf ( sTypeBuf, sizeof(sTypeBuf), "unknown-%d", tAttr.m_eAttrType );
 
-	// check attrs count
+	const char * sType = sTypeBuf;
+	switch ( tAttr.m_eAttrType )
+	{
+		case SPH_ATTR_NONE:							sType = "none"; break;
+		case SPH_ATTR_INTEGER:						sType = "integer"; break;
+		case SPH_ATTR_TIMESTAMP:					sType = "timestamp"; break;
+		case SPH_ATTR_ORDINAL:						sType = "ordinal"; break;
+		case SPH_ATTR_BOOL:							sType = "bool"; break;
+		case SPH_ATTR_FLOAT:						sType = "float"; break;
+		case SPH_ATTR_BIGINT:						sType = "bigint"; break;
+		case SPH_ATTR_INTEGER | SPH_ATTR_MULTI:		sType = "mva"; break;
+	}
+
+	CSphString sRes;
+	sRes.SetSprintf ( "%s %s:%d@%d", sType, tAttr.m_sName.cstr(), tAttr.m_tLocator.m_iBitCount, tAttr.m_tLocator.m_iBitOffset );
+	return sRes;
+}
+
+
+bool CSphSchema::CompareTo ( const CSphSchema & rhs, CSphString & sError ) const
+{
+	// check attr count
 	if ( GetAttrsCount()!=rhs.GetAttrsCount() )
 	{
-		sError.SetSprintf ( "attribute count mismatch: %d in schema '%s', %d in schema '%s'",
-			GetAttrsCount(), m_sName.cstr(), rhs.GetAttrsCount(), rhs.m_sName.cstr() );
-		return SPH_SCHEMAS_INCOMPATIBLE;
+		sError.SetSprintf ( "attribute count mismatch (me=%s, in=%s, myattrs=%d, inattrs=%d)",
+			m_sName.cstr(), rhs.m_sName.cstr(),
+			GetAttrsCount(), rhs.GetAttrsCount() );
+		return false;
 	}
 
-	// check attr types
+	// check attrs
 	ARRAY_FOREACH ( i, m_dAttrs )
-		if ( rhs.m_dAttrs[i].m_eAttrType!=m_dAttrs[i].m_eAttrType )
+		if (!( rhs.m_dAttrs[i]==m_dAttrs[i] ))
 	{
-		sError.SetSprintf ( "attribute %d/%d type mismatch: name='%s', type=%d in schema '%s'; name='%s', type=%d in schema '%s'",
-			i, m_dAttrs.GetLength(),
-			m_dAttrs[i].m_sName.cstr(), m_dAttrs[i].m_eAttrType, m_sName.cstr(),
-			rhs.m_dAttrs[i].m_sName.cstr(), rhs.m_dAttrs[i].m_eAttrType, rhs.m_sName.cstr() );
-		return SPH_SCHEMAS_INCOMPATIBLE;
+		sError.SetSprintf ( "attribute mismatch (me=%s, in=%s, idx=%s, myattr=%s, inattr=%s)",
+			m_sName.cstr(), rhs.m_sName.cstr(),
+			i, sphDumpAttr(m_dAttrs[i]).cstr(), sphDumpAttr(rhs.m_dAttrs[i]).cstr() );
+		return false;
 	}
 
-	//////////////////
-	// equality tests
-	//////////////////
-
-	// check fulltext fields count
+	// check field count
 	if ( rhs.m_dFields.GetLength()!=m_dFields.GetLength() )
 	{
-		sError.SetSprintf ( "fulltext fields count mismatch: %d in schema '%s', %d in schema '%s'",
-			m_dFields.GetLength(), m_sName.cstr(),
-			rhs.m_dFields.GetLength(), rhs.m_sName.cstr() );
-		return SPH_SCHEMAS_COMPATIBLE;
+		sError.SetSprintf ( "fulltext fields count mismatch (me=%s, in=%s, myfields=%d, infields=%d)",
+			m_sName.cstr(), rhs.m_sName.cstr(),
+			m_dFields.GetLength(), rhs.m_dFields.GetLength() );
+		return false;
 	}
 
 	// check fulltext field names
 	ARRAY_FOREACH ( i, rhs.m_dFields )
 		if ( rhs.m_dFields[i].m_sName!=m_dFields[i].m_sName )
 	{
-		sError.SetSprintf ( "fulltext field %d/%d name mismatch: name='%s' in schema '%s'; name='%s' in schema '%s'",
-			i, m_dFields.GetLength(),
-			m_dFields[i].m_sName.cstr(), m_sName.cstr(),
-			rhs.m_dFields[i].m_sName.cstr(), rhs.m_sName.cstr() );
-		return SPH_SCHEMAS_COMPATIBLE;
+		sError.SetSprintf ( "fulltext field mismatch (me=%s, myfield=%s, idx=%d, in=%s, infield=%s)",
+			m_sName.cstr(), rhs.m_sName.cstr(),
+			i, m_dFields[i].m_sName.cstr(), rhs.m_dFields[i].m_sName.cstr() );
+		return false;
 	}
 
-	// check attr names
-	ARRAY_FOREACH ( i, m_dAttrs )
-		if ( rhs.m_dAttrs[i].m_sName!=m_dAttrs[i].m_sName )
-	{
-		sError.SetSprintf ( "attribute %d/%d name mismatch: name='%s' in schema '%s', name='%s' in schema '%s'",
-			i, m_dAttrs.GetLength(),
-			m_dAttrs[i].m_sName.cstr(), m_sName.cstr(),
-			rhs.m_dAttrs[i].m_sName.cstr(), rhs.m_sName.cstr() );
-		return SPH_SCHEMAS_COMPATIBLE;
-	}
-
-	return SPH_SCHEMAS_EQUAL;
+	return true;
 }
 
 
@@ -9019,11 +9023,8 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilte
 		m_sLastError.SetSprintf ( "source index preload failed: %s", pSrcIndex->GetLastError().cstr() );
 		return false;
 	}
-	if ( pDstSchema->CompareTo ( *pSrcSchema, m_sLastError ) != SPH_SCHEMAS_EQUAL )
-	{
-		m_sLastError.SetSprintf ( "schemas must be the same" );
+	if ( !pDstSchema->CompareTo ( *pSrcSchema, m_sLastError ) )
 		return false;
-	}
 	 
 	// FIXME!
 	if ( m_tSettings.m_eDocinfo!=pSrcIndex->m_tSettings.m_eDocinfo && !( !m_tStats.m_iTotalDocuments || !pSrcIndex->m_tStats.m_iTotalDocuments ) )
@@ -14525,11 +14526,12 @@ bool CSphIndex_VLN::SetupCalc ( CSphQueryResult * pResult, const CSphSchema & tI
 
 	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
 	{
-		if ( tInSchema.GetAttr(i)!=m_tSchema.GetAttr(i) )
+		const CSphColumnInfo & tIn = tInSchema.GetAttr(i);
+		const CSphColumnInfo & tMy = m_tSchema.GetAttr(i);
+		if (!( tIn==tMy ))
 		{
-			m_sLastError.SetSprintf ( "INTERNAL ERROR: incoming-schema mismatch (attridx=%d, in=%s, intype=%d, my=%s, mytype=%d)", i,
-				tInSchema.GetAttr(i).m_sName.cstr(), tInSchema.GetAttr(i).m_eAttrType,
-				m_tSchema.GetAttr(i).m_sName.cstr(), m_tSchema.GetAttr(i).m_eAttrType );
+			m_sLastError.SetSprintf ( "INTERNAL ERROR: incoming-schema mismatch (idx=%d, in=%s, my=%s)",
+				i, sphDumpAttr(tIn).cstr(), sphDumpAttr(tMy).cstr() );
 			return false;
 		}
 	}
@@ -16816,16 +16818,7 @@ bool CSphSource::UpdateSchema ( CSphSchema * pInfo, CSphString & sError )
 	}
 
 	// check it
-	CSphString sCompError;
-	ESphSchemaCompare eComp = m_tSchema.CompareTo ( *pInfo, sCompError );
-	if ( eComp==SPH_SCHEMAS_INCOMPATIBLE )
-	{
-		sError.SetSprintf ( "incompatible schemas: %s", sCompError.cstr() );
-		return false;
-	}
-
-	// FIXME!!! warn if schemas are compatible but not equal!
-	return true;
+	return m_tSchema.CompareTo ( *pInfo, sError );
 }
 
 

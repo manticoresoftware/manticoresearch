@@ -824,22 +824,8 @@ struct CSphColumnInfo
 	{
 		return m_sName==rhs.m_sName && m_eAttrType==rhs.m_eAttrType && m_tLocator.m_iBitCount==rhs.m_tLocator.m_iBitCount && m_tLocator.m_iBitOffset==rhs.m_tLocator.m_iBitOffset;
 	}
-
-	/// equality comparison checks name, type, and locator
-	bool operator != ( const CSphColumnInfo & rhs ) const
-	{
-		return !((*this)==rhs);
-	}
 };
 
-
-/// schema comparison results
-enum ESphSchemaCompare
-{
-	SPH_SCHEMAS_EQUAL			= 0,	///< these schemas are fully identical
-	SPH_SCHEMAS_COMPATIBLE		= 1,	///< these schemas are compatible, ie. attribute types match
-	SPH_SCHEMAS_INCOMPATIBLE	= 2		///< these schemas are not compatible
-};
 
 /// source schema
 class CSphQuery;
@@ -861,10 +847,9 @@ public:
 	/// returns -1 if not found
 	int						GetAttrIndex ( const char * sName ) const;
 
-	/// checks if two schemas match
-	/// if result is not SPH_SCHEMAS_EQUAL, human-readable error/warning message is put to sError
-	ESphSchemaCompare		CompareTo ( const CSphSchema & rhs, CSphString & sError ) const;
-
+	/// checks if two schemas fully match (ie. fields names, attr names, types and locators are the same)
+	/// describe mismatch (if any) to sError
+	bool					CompareTo ( const CSphSchema & rhs, CSphString & sError ) const;
 
 	/// reset fields and attrs
 	void					Reset ();

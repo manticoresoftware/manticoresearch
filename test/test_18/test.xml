@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Test>
-  <Name>Excerpts</Name>
+  <Name>excerpts</Name>
 
 <Config>
 indexer
@@ -41,6 +41,9 @@ index test_idx
       <Variant>	synonyms		= synonyms.txt </Variant>
       <Variant>	</Variant>
     </Dynamic>
+
+	ngram_len		= 1
+	ngram_chars		= U+3000..U+2FA1F
 }
 </Config>
 <DB_Create>
@@ -63,7 +66,8 @@ $docs = array
 	"ab ab ab ab ab ab ab ab ab ab ab MS",
 	"   this,   is .    MS windows....?",
 	"this  ,  is a MS but not Windows",
-	"this is the Microsoft  Windows , ,"
+	"this is the Microsoft  Windows , ,",
+	"pro\xEF\xAC\x81ts, lost savings" // latin small ligature 'fi', oh my
 );
 
 $words = "MS Windows";

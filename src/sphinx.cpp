@@ -4258,16 +4258,17 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 				}
 			}
 
-			m_pTokenEnd = m_pCur;
-
 			if ( m_iAccum==0 )
 			{
 				m_bWasSpecial = !( iCode & FLAG_CODEPOINT_NGRAM );
 				m_pTokenStart = pCur;
+				m_pTokenEnd = m_pCur;
 				AccumCodepoint ( iCode & MASK_CODEPOINT ); // handle special as a standalone token
-			}
-			else
+			} else
+			{
 				m_pCur = pCur; // we need to flush current accum and then redo special char again
+				m_pTokenEnd = pCur;
+			}
 
 			FlushAccum ();
 			return m_sAccum;

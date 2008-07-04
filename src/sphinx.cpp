@@ -5738,7 +5738,7 @@ void CSphProcessSharedMutex::Unlock ()
 {
 #if !USE_WINDOWS
 	if ( m_pMutex )
-		pthread_mutex_lock ( m_pMutex );
+		pthread_mutex_unlock ( m_pMutex );
 #endif
 }
 
@@ -6439,7 +6439,7 @@ CSphIndex_VLN::~CSphIndex_VLN ()
 	SafeDeleteArray ( m_pWriteBuffer );
 	m_tMergeWordlistFile.Close ();
 
-	if ( m_iIndexTag>=0 )
+	if ( m_iIndexTag>=0 && g_bHeadProcess )
 		g_MvaArena.TaggedFreeTag ( m_iIndexTag );
 }
 

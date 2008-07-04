@@ -591,8 +591,8 @@ class SphinxConfig
 
 	function CompareResultSets ( $set1, $set2 )
 	{
-		$this->CompareResultSetFixup ( &$set1 );
-		$this->CompareResultSetFixup ( &$set2 );
+		$this->CompareResultSetFixup ( $set1 );
+		$this->CompareResultSetFixup ( $set2 );
 		return $set1==$set2;
 	}
 

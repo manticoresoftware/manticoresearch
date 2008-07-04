@@ -13508,7 +13508,7 @@ bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, const CSphTermSetup 
 
 	if ( m_bPreloadWordlist )
 	{
-		assert ( uWordlistOffset>0 && uWordlistOffset<=(SphOffset_t)ULONG_MAX );
+		assert ( uWordlistOffset>0 && uWordlistOffset<=(SphOffset_t)UINT_MAX );
 		pBuf = &m_pWordlist[(DWORD)uWordlistOffset];
 	}
 	else

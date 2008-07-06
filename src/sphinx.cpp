@@ -8139,7 +8139,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	bool bGotMVA = ( dMvaIndexes.GetLength()!=0 );
 	if ( bGotMVA && m_tSettings.m_eDocinfo!=SPH_DOCINFO_EXTERN )
 	{
-		m_sLastError.SetSprintf ( "multi-valued attributes are only supported if but docinfo is 'extern' (fix your config file)" );
+		m_sLastError.SetSprintf ( "multi-valued attributes require docinfo=extern (fix your config file)" );
 		return 0;
 	}
 
@@ -13642,6 +13642,8 @@ void CSphIndex_VLN::Dealloc ()
 	m_tWordlistFile.Close ();
 	m_pDocinfo.Reset ();
 	m_pDocinfoHash.Reset ();
+	m_dDocinfoIndexMin.Reset ();
+	m_dDocinfoIndexMax.Reset ();
 	m_pWordlist.Reset ();
 	m_pMva.Reset ();
 	m_pDocinfoIndex.Reset ();
@@ -14806,8 +14808,9 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 			m_bLateReject = true;
 
 		// check index-level early-reject
-		if ( tFilter.CheckBoundsReject ( &m_dDocinfoIndexMin[0], &m_dDocinfoIndexMax[0], m_tSchema.GetRowSize() ) )
-			return true;
+		if ( m_dDocinfoIndexMin.GetLength() )
+			if ( tFilter.CheckBoundsReject ( &m_dDocinfoIndexMin[0], &m_dDocinfoIndexMax[0], m_tSchema.GetRowSize() ) )
+				return true;
 	}
 
 	///////////////////

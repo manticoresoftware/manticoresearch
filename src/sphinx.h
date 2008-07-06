@@ -1468,6 +1468,10 @@ public:
 	bool				Setup ( CSphSchema * pSchema );
 	bool				IsValid () const;
 
+	/// returns true all rows within given bounds are guaranteed to match not
+	/// returns false otherwise, if some rows can possibly match
+	bool				CheckBoundsReject ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo, int iSchemaSize ) const;
+
 	void				SetExternalValues ( const SphAttr_t * pValues, int nValues );
 
 	inline int					GetAttrType () const		{ return m_iAttrType; }

@@ -1686,6 +1686,8 @@ private:
 	CSphSharedBuffer<DWORD>		m_pDocinfoHash;			///< hashed ids, to accelerate lookups
 	DWORD						m_uDocinfoIndex;		///< docinfo "index" entries count (each entry is 2x docinfo rows, for min/max)
 	CSphSharedBuffer<DWORD>		m_pDocinfoIndex;		///< docinfo "index", to accelerate filtering during full-scan
+	CSphVector<CSphRowitem>		m_dDocinfoIndexMin;		///< min column values over the index
+	CSphVector<CSphRowitem>		m_dDocinfoIndexMax;		///< max column values over the index
 
 	CSphSharedBuffer<DWORD>		m_pMva;					///< my multi-valued attrs cache
 
@@ -4608,6 +4610,104 @@ bool CSphFilter::operator == ( const CSphFilter & rhs ) const
 	}
 }
 
+
+bool CSphFilter::CheckBoundsReject ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo, int iSchemaSize ) const
+{
+	// fixup the type
+	int iAttrType = ( m_eType==SPH_FILTER_FLOATRANGE ) ? SPH_FILTERATTR_ATTR : GetAttrType();
+	if ( iAttrType==SPH_FILTERATTR_ATTR )
+	{
+		if ( m_tLocator.m_iBitOffset<0  )
+			return false; // no early reject for disabled filters
+
+		if ( m_tLocator.m_iBitOffset>=iSchemaSize*ROWITEM_BITS ) // index schema only contains non-computed attrs
+			return false; // no early reject for computed attrs
+	}
+
+	// sanity quick-checks
+	if (!( m_eType==SPH_FILTER_VALUES || m_eType==SPH_FILTER_RANGE || m_eType==SPH_FILTER_FLOATRANGE ))
+	{
+		assert ( 0 && "internal error, unhandled filter type in CheckBoundsReject()" );
+		return false;
+	}
+
+	if ( m_eType==SPH_FILTER_VALUES && m_bExclude )
+		return false; // no early reject for this case yet
+
+	// get the range
+	SphAttr_t uBlockMin = 0;
+	SphAttr_t uBlockMax = 0;
+
+	switch ( iAttrType )
+	{
+		case SPH_FILTERATTR_ATTR:
+			uBlockMin = sphGetRowAttr ( DOCINFO2ATTRS(pMinDocinfo), m_tLocator );
+			uBlockMax = sphGetRowAttr ( DOCINFO2ATTRS(pMaxDocinfo), m_tLocator );
+			break;
+
+		case SPH_FILTERATTR_ID:
+			uBlockMin = DOCINFO2ID(pMinDocinfo);
+			uBlockMax = DOCINFO2ID(pMaxDocinfo);
+			break;
+
+		case SPH_FILTERATTR_WEIGHT:
+			return false;
+
+		default:
+			assert ( 0 && "internal error: unhandled filter attribute type" );
+			break;
+	}
+
+	if ( m_eType==SPH_FILTER_VALUES )
+	{
+		// check all acceptable values against the range
+		bool bBlockMatches = false;
+		for ( int i=0; i<GetNumValues(); i++ )
+			if ( GetValue(i)>=uBlockMin && GetValue(i)<=uBlockMax )
+		{
+			bBlockMatches = true;
+			break;
+		}
+
+		// if all acceptable values are out of block range, we can safely reject it
+		if ( !bBlockMatches )
+			return true;
+
+	} else if ( m_eType==SPH_FILTER_RANGE )
+	{
+		if ( !m_bExclude )
+		{
+			// include-filter, non-overlapping block-range and include-range
+			if ( uBlockMin>m_uMaxValue || uBlockMax<m_uMinValue )
+				return true;
+		} else 
+		{
+			// exclude-filter, block range fully inside exclude-range
+			if ( uBlockMin>=m_uMinValue && uBlockMax<=m_uMaxValue )
+				return true;
+		}
+	} else
+	{
+		assert ( m_eType==SPH_FILTER_FLOATRANGE );
+		float fBlockMin = sphDW2F ( (DWORD)uBlockMin );
+		float fBlockMax = sphDW2F ( (DWORD)uBlockMax );
+		if ( !m_bExclude )
+		{
+			// include-filter, non-overlapping block-range and include-range
+			if ( fBlockMin>m_fMaxValue || fBlockMax<m_fMinValue )
+				return true;
+		} else
+		{
+			// exclude-filter, block range fully inside exclude-range
+			if ( fBlockMin>=m_fMinValue && fBlockMax<=m_fMaxValue )
+				return true;
+		}
+	}
+
+	// no known early reject tricks
+	return false;
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // QUERY
 /////////////////////////////////////////////////////////////////////////////
@@ -6440,7 +6540,11 @@ CSphIndex_VLN::~CSphIndex_VLN ()
 	SafeDeleteArray ( m_pWriteBuffer );
 	m_tMergeWordlistFile.Close ();
 
+#if USE_WINDOWS
+	if ( m_iIndexTag>=0 )
+#else
 	if ( m_iIndexTag>=0 && g_bHeadProcess )
+#endif
 		g_MvaArena.TaggedFreeTag ( m_iIndexTag );
 }
 
@@ -13292,115 +13396,7 @@ void CSphIndex_VLN::MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISph
 		// check applicable filters
 		bool bReject = false;
 		for ( int iFilter=0; iFilter<pQuery->m_dFilters.GetLength() && !bReject; iFilter++ )
-		{
-			const CSphFilter & tFilter = pQuery->m_dFilters[iFilter];
-			if ( tFilter.GetAttrType () == SPH_FILTERATTR_ATTR )
-			{
-				if ( tFilter.m_tLocator.m_iBitOffset<0  )
-					continue;
-
-				if ( tFilter.m_tLocator.m_iBitOffset>=m_tSchema.GetRowSize()*ROWITEM_BITS ) // index schema only contains non-computed attrs
-					continue; // no early reject for computed attrs
-			}
-
-			if ( tFilter.m_eType==SPH_FILTER_VALUES )
-			{
-				if ( tFilter.m_bExclude )
-					continue; // no early reject for this case yet
-
-				// check all acceptable values against the range
-				SphAttr_t uBlockMin = 0;
-				SphAttr_t uBlockMax = 0;
-				
-				switch ( tFilter.GetAttrType () )
-				{
-				case SPH_FILTERATTR_ATTR:
-					uBlockMin = sphGetRowAttr ( DOCINFO2ATTRS(pMin), tFilter.m_tLocator );
-					uBlockMax = sphGetRowAttr ( DOCINFO2ATTRS(pMax), tFilter.m_tLocator );
-					break;
-
-				case SPH_FILTERATTR_ID:
-					uBlockMin = DOCINFO2ID(pMin);
-					uBlockMax = DOCINFO2ID(pMax);
-					break;
-
-				case SPH_FILTERATTR_WEIGHT:
-					continue;
-
-				default:
-					assert ( 0 && "internal error: unhandled filter attribute type" );
-					break;
-				}
-
-				bool bBlockMatches = false;
-
-				for ( int i = 0; i < tFilter.GetNumValues (); i++ )
-					if ( tFilter.GetValue(i)>=uBlockMin && tFilter.GetValue(i)<=uBlockMax )
-				{
-					bBlockMatches = true;
-					break;
-				}
-
-				// if all acceptable values are out of block range, we can safely reject it
-				if ( !bBlockMatches )
-					bReject = true;
-
-			} else if ( tFilter.m_eType==SPH_FILTER_RANGE )
-			{
-				SphAttr_t uBlockMin = 0;
-				SphAttr_t uBlockMax = 0;
-
-				switch ( tFilter.GetAttrType () )
-				{
-				case SPH_FILTERATTR_ATTR:
-					uBlockMin = sphGetRowAttr ( DOCINFO2ATTRS(pMin), tFilter.m_tLocator );
-					uBlockMax = sphGetRowAttr ( DOCINFO2ATTRS(pMax), tFilter.m_tLocator );
-					break;
-
-				case SPH_FILTERATTR_ID:
-					uBlockMin = DOCINFO2ID(pMin);
-					uBlockMax = DOCINFO2ID(pMax);
-					break;
-
-				case SPH_FILTERATTR_WEIGHT:
-					continue;
-
-				default:
-					assert ( 0 && "internal error: unhandled filter attribute type" );
-					break;
-				}
-
-				if ( !tFilter.m_bExclude )
-				{
-					// include-filter, non-overlapping block-range and include-range
-					if ( uBlockMin>tFilter.m_uMaxValue || uBlockMax<tFilter.m_uMinValue )
-						bReject = true;
-				} else
-				{
-					// exclude-filter, block range fully inside exclude-range
-					if ( uBlockMin>=tFilter.m_uMinValue && uBlockMax<=tFilter.m_uMaxValue )
-						bReject = true;
-				}
-
-			} else if ( tFilter.m_eType==SPH_FILTER_FLOATRANGE )
-			{
-				float fBlockMin = sphDW2F ( (DWORD)sphGetRowAttr ( DOCINFO2ATTRS(pMin), tFilter.m_tLocator ) );
-				float fBlockMax = sphDW2F ( (DWORD)sphGetRowAttr ( DOCINFO2ATTRS(pMax), tFilter.m_tLocator ) );
-
-				if ( !tFilter.m_bExclude )
-				{
-					// include-filter, non-overlapping block-range and include-range
-					if ( fBlockMin>tFilter.m_fMaxValue || fBlockMax<tFilter.m_fMinValue )
-						bReject = true;
-				} else
-				{
-					// exclude-filter, block range fully inside exclude-range
-					if ( fBlockMin>=tFilter.m_fMinValue && fBlockMax<=tFilter.m_fMaxValue )
-						bReject = true;
-				}
-			}
-		}
-
+			bReject = pQuery->m_dFilters[iFilter].CheckBoundsReject ( pMin, pMax, m_tSchema.GetRowSize() );
 		if ( bReject )
 			continue;
 
@@ -14248,9 +14244,26 @@ bool CSphIndex_VLN::Preread ()
 		}
 
 		// min/max storage
-		CSphVector<SphAttr_t> dIntMin ( dIntAttrs.GetLength() ), dIntMax ( dIntAttrs.GetLength() );
-		CSphVector<float> dFloatMin ( dFloatAttrs.GetLength() ), dFloatMax ( dFloatAttrs.GetLength() );
-		CSphVector<DWORD> dMvaMin ( dMvaAttrs.GetLength() ), dMvaMax ( dMvaAttrs.GetLength() );
+		CSphVector<SphAttr_t> dIntMin ( dIntAttrs.GetLength() ), dIntMax ( dIntAttrs.GetLength() ), dIntIndexMin ( dIntAttrs.GetLength() ), dIntIndexMax ( dIntAttrs.GetLength() );
+		CSphVector<float> dFloatMin ( dFloatAttrs.GetLength() ), dFloatMax ( dFloatAttrs.GetLength() ), dFloatIndexMin ( dFloatAttrs.GetLength() ), dFloatIndexMax ( dFloatAttrs.GetLength() );
+		CSphVector<DWORD> dMvaMin ( dMvaAttrs.GetLength() ), dMvaMax ( dMvaAttrs.GetLength() ), dMvaIndexMin ( dMvaAttrs.GetLength() ), dMvaIndexMax ( dMvaAttrs.GetLength() );
+
+		// reset globals
+		ARRAY_FOREACH ( i, dIntMin )
+		{
+			dIntIndexMin[i] = UINT_MAX;
+			dIntIndexMax[i] = 0;
+		}
+		ARRAY_FOREACH ( i, dFloatMin )
+		{
+			dFloatIndexMin[i] = FLT_MAX;
+			dFloatIndexMax[i] = -FLT_MAX;
+		}
+		ARRAY_FOREACH ( i, dMvaMin )
+		{
+			dMvaIndexMin[i] = UINT_MAX;
+			dMvaIndexMax[i] = 0;
+		}
 
 		// scan everyone
 		DWORD uStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
@@ -14293,6 +14306,8 @@ bool CSphIndex_VLN::Preread ()
 					SphAttr_t uVal = sphGetRowAttr ( pRow, dIntAttrs[i] );
 					dIntMin[i] = Min ( dIntMin[i], uVal );
 					dIntMax[i] = Max ( dIntMax[i], uVal );
+					dIntIndexMin[i] = Min ( dIntIndexMin[i], uVal );
+					dIntIndexMax[i] = Max ( dIntIndexMax[i], uVal );
 				}
 
 				// floats
@@ -14301,6 +14316,8 @@ bool CSphIndex_VLN::Preread ()
 					float fVal = sphDW2F ( (DWORD)sphGetRowAttr ( pRow, dFloatAttrs[i] ) );
 					dFloatMin[i] = Min ( dFloatMin[i], fVal );
 					dFloatMax[i] = Max ( dFloatMax[i], fVal );
+					dFloatIndexMin[i] = Min ( dFloatIndexMin[i], fVal );
+					dFloatIndexMax[i] = Max ( dFloatIndexMax[i], fVal );
 				}
 
 				// MVAs
@@ -14315,11 +14332,13 @@ bool CSphIndex_VLN::Preread ()
 					{
 						dMvaMin[i] = Min ( dMvaMin[i], *pMva );
 						dMvaMax[i] = Max ( dMvaMax[i], *pMva );
+						dMvaIndexMin[i] = Min ( dMvaIndexMin[i], *pMva );
+						dMvaIndexMax[i] = Max ( dMvaIndexMax[i], *pMva );
 					}
 				}
 			}
 
-			// pack and emit
+			// pack and emit block-level ranges
 			DWORD * pMinEntry = const_cast<DWORD*> ( &m_pDocinfoIndex [ 2*uIndexEntry*uStride ] );
 			DWORD * pMinAttrs = DOCINFO2ATTRS(pMinEntry);
 			DWORD * pMaxEntry = pMinEntry + uStride;
@@ -14343,6 +14362,31 @@ bool CSphIndex_VLN::Preread ()
 				sphSetRowAttr ( pMinAttrs, dMvaAttrs[i], dMvaMin[i] );
 				sphSetRowAttr ( pMaxAttrs, dMvaAttrs[i], dMvaMax[i] );
 			}
+		}
+
+		// pack index-level ranges
+		m_dDocinfoIndexMin.Resize ( DOCINFO_IDSIZE + m_tSchema.GetRowSize() );
+		m_dDocinfoIndexMax.Resize ( DOCINFO_IDSIZE + m_tSchema.GetRowSize() );
+		CSphRowitem * pMinAttrs = DOCINFO2ATTRS(&m_dDocinfoIndexMin[0]);
+		CSphRowitem * pMaxAttrs = DOCINFO2ATTRS(&m_dDocinfoIndexMax[0]);
+
+		DOCINFO2ID(&m_dDocinfoIndexMin[0]) = DOCINFO2ID(&m_pDocinfo[0]);
+		DOCINFO2ID(&m_dDocinfoIndexMax[0]) = DOCINFO2ID(&m_pDocinfo[(m_uDocinfo-1)*uStride]);
+
+		ARRAY_FOREACH ( i, dIntAttrs )
+		{
+			sphSetRowAttr ( pMinAttrs, dIntAttrs[i], dIntIndexMin[i] );
+			sphSetRowAttr ( pMaxAttrs, dIntAttrs[i], dIntIndexMax[i] );
+		}
+		ARRAY_FOREACH ( i, dFloatAttrs )
+		{
+			sphSetRowAttr ( pMinAttrs, dFloatAttrs[i], sphF2DW ( dFloatIndexMin[i] ) );
+			sphSetRowAttr ( pMaxAttrs, dFloatAttrs[i], sphF2DW ( dFloatIndexMax[i] ) );
+		}
+		ARRAY_FOREACH ( i, dMvaAttrs )
+		{
+			sphSetRowAttr ( pMinAttrs, dMvaAttrs[i], dMvaIndexMin[i] );
+			sphSetRowAttr ( pMaxAttrs, dMvaAttrs[i], dMvaIndexMax[i] );
 		}
 	}
 
@@ -14721,8 +14765,7 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 	{
 		case SPH_MATCH_ALL:		pQuery->m_eRanker = SPH_RANK_PROXIMITY; *szRes='\0'; break;
 		case SPH_MATCH_ANY:		pQuery->m_eRanker = SPH_RANK_MATCHANY; strcpy ( szRes, "\"/1" ); break;
-		case SPH_MATCH_PHRASE:	pQuery->m_eRanker = SPH_RANK_PROXIMITY; *szRes++ = '\"';
-*szRes='\0'; break;
+		case SPH_MATCH_PHRASE:	pQuery->m_eRanker = SPH_RANK_PROXIMITY; *szRes++ = '\"'; *szRes='\0'; break;
 		default:				return;
 	}
 
@@ -14735,6 +14778,41 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 	assert ( pQuery );
 	assert ( pResult );
 	assert ( ppSorters );
+
+	/////////////////
+	// early rejects
+	/////////////////
+
+	pResult->m_iQueryTime = 0;
+
+	// empty index, empty response!
+	if ( !m_tStats.m_iTotalDocuments )
+		return true;
+	assert ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_EXTERN || !m_pDocinfo.IsEmpty() ); // check that docinfo is preloaded
+
+	// setup calculations and result schema
+	if ( !SetupCalc ( pResult, ppSorters[0]->m_tIncomingSchema ) )
+		return false;
+
+	// setup filters, and check if we can early reject the whole
+	m_bLateReject = false;
+	ARRAY_FOREACH ( i, pQuery->m_dFilters )
+	{
+		CSphFilter & tFilter = pQuery->m_dFilters[i];
+		tFilter.m_tLocator.m_iBitOffset = -1; // filters with negative bit-offset will be ignored
+
+		// lookup it
+		if ( tFilter.Setup ( &pResult->m_tSchema ) )
+			m_bLateReject = true;
+
+		// check index-level early-reject
+		if ( tFilter.CheckBoundsReject ( &m_dDocinfoIndexMin[0], &m_dDocinfoIndexMax[0], m_tSchema.GetRowSize() ) )
+			return true;
+	}
+
+	///////////////////
+	// setup searching
+	///////////////////
 
 	PROFILER_INIT ();
 	PROFILE_BEGIN ( query_init );
@@ -14749,7 +14827,6 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 	}
 
 	CSphAutofile tDoclist, tHitlist, tWordlist, tDummy;
-
 	if ( !m_bKeepFilesOpen )
 	{
 		if ( tDoclist.Open ( GetIndexFileName("spd"), SPH_O_READ, m_sLastError ) < 0 )
@@ -14762,6 +14839,7 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 			return false;
 	}
 
+	// setup dict
 	CSphScopedPtr<CSphDict> tDict ( NULL );
 	CSphDict * pDict = m_pDict;
 	CSphDict * pStarDict = SetupStarDict ( tDict );
@@ -14772,11 +14850,7 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 		pDict = pStarDict;
 	}
 
-	// setup calculations and result schema
-	if ( !SetupCalc ( pResult, ppSorters[0]->m_tIncomingSchema ) )
-		return false;
-
-	// prepare for setup
+	// setup search terms
 	CSphTermSetup tTermSetup ( m_bKeepFilesOpen ? m_tDoclistFile : tDoclist,
 		m_bKeepFilesOpen ? m_tHitlistFile : tHitlist,
 		m_bPreloadWordlist ? tDummy : ( m_bKeepFilesOpen ? m_tWordlistFile : tWordlist ) );
@@ -14796,29 +14870,8 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 	if ( pQuery->m_sQuery.IsEmpty() )
 		pQuery->m_eMode = SPH_MATCH_FULLSCAN;
 
+	// fixup old matching modes at low level
 	PrepareQueryEmulation ( pQuery );
-
-	// empty index, empty response!
-	if ( !m_tStats.m_iTotalDocuments )
-	{
-		pResult->m_iQueryTime += int ( 1000.0f*( sphLongTimer() - tmQueryStart ) );
-		return true;
-	}
-
-	// otherwise, check that docinfo is preloaded
-	assert ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_EXTERN || !m_pDocinfo.IsEmpty() );
-
-	// reorder attr set values and lookup indexes
-	m_bLateReject = false;
-	ARRAY_FOREACH ( i, pQuery->m_dFilters )
-	{
-		CSphFilter & tFilter = pQuery->m_dFilters[i];
-		tFilter.m_tLocator.m_iBitOffset = -1; // filters with negative bit-offset will be ignored
-
-		// lookup it
-		if ( tFilter.Setup ( &(pResult->m_tSchema) ) )
-			m_bLateReject = true;
-	}
 
 	// bind weights
 	BindWeights ( pQuery );

@@ -198,6 +198,7 @@ DECLARE_BINARY_INT ( Expr_Add_c,	FIRST + SECOND,								INTFIRST + INTSECOND )
 DECLARE_BINARY_INT ( Expr_Sub_c,	FIRST - SECOND,								INTFIRST - INTSECOND )
 DECLARE_BINARY_INT ( Expr_Mul_c,	FIRST * SECOND,								INTFIRST * INTSECOND )
 DECLARE_BINARY_FLT ( Expr_Div_c,	FIRST / SECOND )
+DECLARE_BINARY_INT ( Expr_Idiv_c,	(float)( int(FIRST) / int(SECOND) ),		INTFIRST / INTSECOND )
 DECLARE_BINARY_INT ( Expr_Lt_c,		(FIRST < SECOND) ? 1.0f : 0.0f,				( INTFIRST < INTSECOND ) ? 1 : 0 )
 DECLARE_BINARY_INT ( Expr_Gt_c,		(FIRST > SECOND) ? 1.0f : 0.0f,				( INTFIRST > INTSECOND ) ? 1 : 0 )
 DECLARE_BINARY_INT ( Expr_Lte_c,	(FIRST <= SECOND) ? 1.0f : 0.0f,			( INTFIRST <= INTSECOND ) ? 1 : 0 )
@@ -259,6 +260,7 @@ enum Func_e
 	FUNC_MIN,
 	FUNC_MAX,
 	FUNC_POW,
+	FUNC_IDIV,
 
 	FUNC_IF,
 	FUNC_MADD,
@@ -290,6 +292,7 @@ static FuncDesc_t g_dFuncs[] =
 	{ "min",	2,	FUNC_MIN },
 	{ "max",	2,	FUNC_MAX },
 	{ "pow",	2,	FUNC_POW },
+	{ "idiv",	2,	FUNC_IDIV },
 
 	{ "if",		3,	FUNC_IF },
 	{ "madd",	3,	FUNC_MADD },
@@ -707,6 +710,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode, DWORD uAttrType )
 					case FUNC_MIN:		return new Expr_Min_c ( dArgs[0], dArgs[1] ); break;
 					case FUNC_MAX:		return new Expr_Max_c ( dArgs[0], dArgs[1] ); break;
 					case FUNC_POW:		return new Expr_Pow_c ( dArgs[0], dArgs[1] ); break;
+					case FUNC_IDIV:		return new Expr_Idiv_c ( dArgs[0], dArgs[1] ); break;
 
 					case FUNC_IF:		return new Expr_If_c ( dArgs[0], dArgs[1], dArgs[2] ); break;
 					case FUNC_MADD:		return new Expr_Madd_c ( dArgs[0], dArgs[1], dArgs[2] ); break;
@@ -824,23 +828,30 @@ DWORD ExprParser_t::DeduceType ( int iNode )
 	const ExprNode_t & tNode = m_dNodes[iNode];
 	switch ( tNode.m_iToken )
 	{
+		// variables with unconditionally integer result
 		case TOK_ATTR_INT:
 		case TOK_ATTR_BITS:
 		case TOK_CONST_INT:	
 		case TOK_DOCINFO:	// FIXME!
+			return SPH_ATTR_INTEGER;
+
+		// binary ops with unconditionally float result
+		case TOK_ATTR_FLOAT:
+		case TOK_CONST_FLOAT:
+		case '/':
+			return SPH_ATTR_FLOAT;
+
+		// unary ops that can be evaluated in both modes
+		case TOK_NEG:
+			return DeduceType ( tNode.m_iLeft );
+
+		// binary ops that can be evaluated in both modes
 		case TOK_LTE:
 		case TOK_GTE:
 		case TOK_EQ:
 		case TOK_NE:
 		case '<':
 		case '>':
-			return SPH_ATTR_INTEGER;
-
-		case TOK_ATTR_FLOAT:
-		case TOK_CONST_FLOAT:
-		case '/':
-			return SPH_ATTR_FLOAT;
-
 		case '+':
 		case '-':
 		case '*':
@@ -854,9 +865,7 @@ DWORD ExprParser_t::DeduceType ( int iNode )
 					return SPH_ATTR_FLOAT;
 			}
 
-		case TOK_NEG:
-			return DeduceType ( tNode.m_iLeft );
-
+		// function calls
 		case TOK_FUNC:
 			{
 				assert ( tNode.m_iFunc>=0 && tNode.m_iFunc<int(sizeof(g_dFuncs)/sizeof(g_dFuncs[0])) );
@@ -867,13 +876,15 @@ DWORD ExprParser_t::DeduceType ( int iNode )
 					case FUNC_IF:
 					case FUNC_MADD:
 					case FUNC_MUL3:
+					case FUNC_IDIV:
 						return DeduceType ( tNode.m_iLeft );
 
 					default:
-						return SPH_ATTR_FLOAT; // most functions are in floats and/or return floats
+						return SPH_ATTR_FLOAT; // by default, functions are either on floats and/or return floats
 				}
 			}
 
+		// unknown tokens
 		default:
 			return SPH_ATTR_FLOAT;
 	}

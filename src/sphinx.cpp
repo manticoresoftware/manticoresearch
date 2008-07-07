@@ -4797,8 +4797,19 @@ int SelectParser_t::GetToken ( YYSTYPE * lvalp )
 	m_pLastTokenStart = m_pCur;
 	lvalp->m_iStart = m_pCur-m_pStart;
 
+	// check for constant
+	if ( isdigit(*m_pCur) )
+	{
+		char * pEnd = NULL;
+		strtod ( m_pCur, &pEnd );
+
+		m_pCur = pEnd;
+		lvalp->m_iEnd = m_pCur-m_pStart;
+		return SEL_TOKEN;
+	}
+
 	// check for token
-	if ( sphIsAttr(m_pCur[0]) || ( m_pCur[0]=='@' && sphIsAttr(m_pCur[1]) ) )
+	if ( sphIsAttr(m_pCur[0]) || ( m_pCur[0]=='@' && sphIsAttr(m_pCur[1]) && !isdigit(m_pCur[1]) ) )
 	{
 		m_pCur++;
 		while ( sphIsAttr(*m_pCur) ) m_pCur++;

@@ -52,7 +52,6 @@ public class SphinxClient
 	public final static int SPH_GROUPBY_YEAR		= 3;
 	public final static int SPH_GROUPBY_ATTR		= 4;
 	public final static int SPH_GROUPBY_ATTRPAIR	= 5;
-	public final static int SPH_GROUPBY_EXTENDED	= 6;
 
 	/* searchd reply status codes */
 	public final static int SEARCHD_OK				= 0;
@@ -637,8 +636,7 @@ public class SphinxClient
 			func==SPH_GROUPBY_MONTH ||
 			func==SPH_GROUPBY_YEAR ||
 			func==SPH_GROUPBY_ATTR ||
-			func==SPH_GROUPBY_ATTRPAIR ||
-			func==SPH_GROUPBY_EXTENDED, "unknown func value; use one of the available SPH_GROUPBY_xxx constants" );
+			func==SPH_GROUPBY_ATTRPAIR, "unknown func value; use one of the available SPH_GROUPBY_xxx constants" );
 
 		_groupBy = attribute;
 		_groupFunc = func;

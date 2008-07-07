@@ -1424,8 +1424,7 @@ enum ESphGroupBy
 	SPH_GROUPBY_MONTH	= 2,	///< group by month
 	SPH_GROUPBY_YEAR	= 3,	///< group by year
 	SPH_GROUPBY_ATTR	= 4,	///< group by attribute value
-	SPH_GROUPBY_ATTRPAIR= 5,	///< group by sequential attrs pair (rendered redundant by 64bit attrs support; removed)
-	SPH_GROUPBY_EXTENDED= 6		///< group by an expression (pretty limited for now)
+	SPH_GROUPBY_ATTRPAIR= 5		///< group by sequential attrs pair (rendered redundant by 64bit attrs support; removed)
 };
 
 

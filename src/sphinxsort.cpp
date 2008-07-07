@@ -267,21 +267,6 @@ GROUPER_BEGIN_SPLIT ( CSphGrouperYear )
 	return (pSplit->tm_year+1900);
 GROUPER_END
 
-
-/// HACK HACK HACK
-class CSphGrouperAttrdiv : public CSphGrouper
-{
-protected:
-	CSphAttrLocator m_tLocator;
-	int m_iDiv;
-public:
-	CSphGrouperAttrdiv ( const CSphAttrLocator & tLoc, int iDiv ) : m_tLocator ( tLoc ), m_iDiv ( iDiv ) {}
-	virtual void GetLocator ( CSphAttrLocator & tOut ) const { tOut = m_tLocator; }
-	virtual SphGroupKey_t KeyFromMatch ( const CSphMatch & tMatch ) const { return KeyFromValue ( tMatch.GetAttr ( m_tLocator ) ); }
-	virtual SphGroupKey_t KeyFromValue ( SphAttr_t uValue ) const { return uValue/m_iDiv; }
-	virtual DWORD GetResultType () const { return m_tLocator.m_iBitCount>8*(int)sizeof(DWORD) ? SPH_ATTR_BIGINT : SPH_ATTR_INTEGER; }
-};
-
 //////////////////////////////////////////////////////////////////////////
 
 /// simple fixed-size hash
@@ -1578,60 +1563,24 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const CSphSchema & 
 	}
 
 	// setup groupby attr
-	int iGroupBy = -1;
-	if ( pQuery->m_eGroupFunc==SPH_GROUPBY_EXTENDED )
+	int iGroupBy = tSchema.GetAttrIndex ( pQuery->m_sGroupBy.cstr() );
+	if ( iGroupBy<0 )
 	{
-		// groupby clause
-		// HACK HACK HACK, implement full blown expr support here
-		CSphString sBuf = pQuery->m_sGroupBy;
+		sError.SetSprintf ( "group-by attribute '%s' not found", pQuery->m_sGroupBy.cstr() );
+		return false;
+	}
 
-		char * p = strchr ( (char*)sBuf.cstr(), '/' );
-		if ( p )
-			*p++ = '\0';
-
-		iGroupBy = tSchema.GetAttrIndex ( sBuf.cstr() );
-		if ( iGroupBy<0 )
-		{
-			sError.SetSprintf ( "group-by attribute '%s' not found", sBuf.cstr() );
-			return false;
-		}
-
-		if ( p )
-		{
-			int iDiv = strtoul ( p, NULL, 10 );
-			if ( !iDiv )
-			{
-				sError.SetSprintf ( "group-by clause: division by zero" );
-				return false;
-			}
-			tSettings.m_pGrouper = new CSphGrouperAttrdiv ( tSchema.GetAttr(iGroupBy).m_tLocator, iDiv );
-		} else
-		{
-			tSettings.m_pGrouper = new CSphGrouperAttr ( tSchema.GetAttr(iGroupBy).m_tLocator );
-		}
-
-	} else
+	CSphAttrLocator tLoc = tSchema.GetAttr(iGroupBy).m_tLocator;
+	switch ( pQuery->m_eGroupFunc )
 	{
-		// plain old name
-		iGroupBy = tSchema.GetAttrIndex ( pQuery->m_sGroupBy.cstr() );
-		if ( iGroupBy<0 )
-		{
-			sError.SetSprintf ( "group-by attribute '%s' not found", pQuery->m_sGroupBy.cstr() );
+		case SPH_GROUPBY_DAY:		tSettings.m_pGrouper = new CSphGrouperDay ( tLoc ); break;
+		case SPH_GROUPBY_WEEK:		tSettings.m_pGrouper = new CSphGrouperWeek ( tLoc ); break;
+		case SPH_GROUPBY_MONTH:		tSettings.m_pGrouper = new CSphGrouperMonth ( tLoc ); break;
+		case SPH_GROUPBY_YEAR:		tSettings.m_pGrouper = new CSphGrouperYear ( tLoc ); break;
+		case SPH_GROUPBY_ATTR:		tSettings.m_pGrouper = new CSphGrouperAttr ( tLoc ); break;
+		default:
+			sError.SetSprintf ( "invalid group-by mode (mode=%d)", pQuery->m_eGroupFunc );
 			return false;
-		}
-
-		CSphAttrLocator tLoc = tSchema.GetAttr(iGroupBy).m_tLocator;
-		switch ( pQuery->m_eGroupFunc )
-		{
-			case SPH_GROUPBY_DAY:		tSettings.m_pGrouper = new CSphGrouperDay ( tLoc ); break;
-			case SPH_GROUPBY_WEEK:		tSettings.m_pGrouper = new CSphGrouperWeek ( tLoc ); break;
-			case SPH_GROUPBY_MONTH:		tSettings.m_pGrouper = new CSphGrouperMonth ( tLoc ); break;
-			case SPH_GROUPBY_YEAR:		tSettings.m_pGrouper = new CSphGrouperYear ( tLoc ); break;
-			case SPH_GROUPBY_ATTR:		tSettings.m_pGrouper = new CSphGrouperAttr ( tLoc ); break;
-			default:
-				sError.SetSprintf ( "invalid group-by mode (mode=%d)", pQuery->m_eGroupFunc );
-				return false;
-		}
 	}
 
 	tSettings.m_bMVA = ( tSchema.GetAttr(iGroupBy).m_eAttrType & SPH_ATTR_MULTI )!=0;

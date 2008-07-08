@@ -4504,7 +4504,8 @@ ISphTokenizer * CSphTokenizer_Filter::Clone ( bool bEscaped ) const
 
 void CSphTokenizer_Filter::SetBufferPtr ( const char * sNewPtr )
 {
-	m_iStoredLen = m_iStoredStart;
+	m_iStoredLen = 0;
+	m_iStoredStart = 0;
 	m_pTokenizer->SetBufferPtr ( sNewPtr );
 }
 

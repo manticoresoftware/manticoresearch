@@ -13965,6 +13965,7 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 	/////////////////////
 
 	assert ( m_iCheckpointsPos>0 );
+	bool bAllocCheckpoints = false;
 
 	if ( m_bPreloadWordlist )
 	{
@@ -13992,13 +13993,18 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 			if ( m_iCheckpointsPos>=m_iWordlistSize )
 				m_pWordlistCheckpoints = NULL;
 			else
-			{
-				if ( !m_pWordlistCheckpointCache.Alloc ( m_iWordlistCheckpoints*sizeof (CSphWordlistCheckpoint), m_sLastError, sWarning ) )
-					return NULL;
-
-				m_pWordlistCheckpoints = (CSphWordlistCheckpoint *)&(m_pWordlistCheckpointCache[0]);
-			}
+				bAllocCheckpoints = true;
 		}
+	}
+	else
+		bAllocCheckpoints = true;
+	
+	if ( bAllocCheckpoints )
+	{
+		if ( !m_pWordlistCheckpointCache.Alloc ( m_iWordlistCheckpoints*sizeof (CSphWordlistCheckpoint), m_sLastError, sWarning ) )
+			return NULL;
+
+		m_pWordlistCheckpoints = (CSphWordlistCheckpoint *)&(m_pWordlistCheckpointCache[0]);
 	}
 
 	if ( m_bKeepFilesOpen )
@@ -14132,13 +14138,6 @@ bool CSphIndex_VLN::Preread ()
 		m_iWordlistSize = st.st_size;
 
 		assert ( m_iCheckpointsPos>0 );
-		assert ( !m_pWordlistCheckpoints );
-
-		CSphString sWarning;
-		if ( !m_pWordlistCheckpointCache.Alloc ( m_iWordlistCheckpoints*sizeof (CSphWordlistCheckpoint), m_sLastError, sWarning ) )
-			return false;
-
-		m_pWordlistCheckpoints = (CSphWordlistCheckpoint *)&(m_pWordlistCheckpointCache[0]);
 
 		if ( m_uVersion >= 11 )
 		{

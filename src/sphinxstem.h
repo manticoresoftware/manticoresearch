@@ -31,6 +31,12 @@ void	stem_ru_cp1251 ( BYTE * pWord );
 /// stem lowercase Russian word in UTF-8 encoding
 void	stem_ru_utf8 ( WORD * pWord );
 
+/// initialize Czech stemmer
+void	stem_cz_init ();
+
+/// stem lowercase Czech word
+void	stem_cz ( BYTE * pWord );
+
 /// calculate soundex in-place if the word is lowercase English letters only;
 /// do nothing if it's not
 void	stem_soundex ( BYTE * pWord );

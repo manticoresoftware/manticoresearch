@@ -58,8 +58,9 @@ libsphinx_a_LIBADD =
 am__objects_1 = sphinx.$(OBJEXT) sphinxexcerpt.$(OBJEXT) \
 	sphinxquery.$(OBJEXT) sphinxsoundex.$(OBJEXT) \
 	sphinxmetaphone.$(OBJEXT) sphinxstemen.$(OBJEXT) \
-	sphinxstemru.$(OBJEXT) sphinxutils.$(OBJEXT) md5.$(OBJEXT) \
-	sphinxstd.$(OBJEXT) sphinxsort.$(OBJEXT) sphinxexpr.$(OBJEXT)
+	sphinxstemru.$(OBJEXT) sphinxstemcz.$(OBJEXT) \
+	sphinxutils.$(OBJEXT) md5.$(OBJEXT) sphinxstd.$(OBJEXT) \
+	sphinxsort.$(OBJEXT) sphinxexpr.$(OBJEXT)
 am_libsphinx_a_OBJECTS = $(am__objects_1)
 libsphinx_a_OBJECTS = $(am_libsphinx_a_OBJECTS)
 am__installdirs = "$(DESTDIR)$(bindir)"
@@ -196,7 +197,7 @@ sharedstatedir = @sharedstatedir@
 sysconfdir = @sysconfdir@
 target_alias = @target_alias@
 SRC_SPHINX = sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp \
-	sphinxsoundex.cpp sphinxmetaphone.cpp sphinxstemen.cpp sphinxstemru.cpp \
+	sphinxsoundex.cpp sphinxmetaphone.cpp sphinxstemen.cpp sphinxstemru.cpp sphinxstemcz.cpp \
 	sphinxutils.cpp md5.cpp sphinxstd.cpp sphinxsort.cpp sphinxexpr.cpp
 
 noinst_LIBRARIES = libsphinx.a
@@ -320,6 +321,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sphinxsort.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sphinxsoundex.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sphinxstd.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sphinxstemcz.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sphinxstemen.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sphinxstemru.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sphinxutils.Po@am__quote@

@@ -130,6 +130,9 @@ void TestTokenizer ( bool bUTF8 )
 			"3", "\\thephone",					"thephone",  NULL,
 			"3", "the\\!phone",					"the", "phone", NULL,
 			"3", "\\!phone",					"phone", NULL,
+			"3", "\\\\phone",					"phone", NULL,						// the correct behavior if '\' is not in charset 
+			"3", "pho\\\\ne",					"pho", "ne", NULL,
+			"3", "phon\\\\e",					"phon", NULL,
 			NULL
 		};
 

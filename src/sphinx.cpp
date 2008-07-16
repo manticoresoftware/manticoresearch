@@ -3781,7 +3781,13 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 
 				if ( bEscaped )
 				{
-					if ( iCode != '\\' && iLast == '\\' && !Special2Simple ( iFolded ) )
+					if ( iCode == '\\' && iLast != '\\' )
+					{
+						iLast = iCode;
+						continue;
+					}
+
+					if ( iLast == '\\' && !Special2Simple ( iFolded ) )
 						break;
 
 					iLast = iCode;
@@ -3794,13 +3800,7 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 					break;
 				}
 
-				if ( bEscaped )
-				{
-					if ( iCode != '\\' )
-						AccumCodepoint ( iFolded & MASK_CODEPOINT );
-				}
-				else
-					AccumCodepoint ( iFolded & MASK_CODEPOINT );
+				AccumCodepoint ( iFolded & MASK_CODEPOINT );
 			}
 		} else
 		{
@@ -3927,7 +3927,7 @@ void ISphTokenizer::CloneBase ( const ISphTokenizer * pFrom, bool bEscaped )
 		CSphRemapRange Range;
 		Range.m_iStart = Range.m_iEnd = Range.m_iRemapStart = '\\';
 		dRemaps.Add ( Range );
-		m_tLC.AddRemaps ( dRemaps, 0, 0 );
+		m_tLC.AddRemaps ( dRemaps, FLAG_CODEPOINT_SPECIAL, FLAG_CODEPOINT_SPECIAL | FLAG_CODEPOINT_DUAL );
 	}
 }
 

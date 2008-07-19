@@ -338,14 +338,23 @@ AC_RUN_IFELSE(
 		#include <stdlib.h>
 		#include <string.h>]],
 		[[char * sBuf = new char [ 8*sizeof(int) ];
-		memset ( sBuf, 0, 8*sizeof(int) );
+		for ( int i=0; i<8*sizeof(int); i++ )
+			sBuf[i] = i;
+
+		// check for crashes (SPARC)
 		volatile int iRes = 0;
 		for ( int i=0; i<(int)sizeof(int); i++ )
 		{
 			int * pPtr = (int*)( sBuf+i );
 			iRes += *pPtr;
 		}
-		return iRes-iRes;]])],
+
+		// check for correct values (ARM)
+		iRes = *(int*)( sBuf+1 );
+		if (!( iRes==0x01020304 || iRes==0x04030201 ))
+			return 1;
+		// all seems ok
+		return 0;]])],
 	[AC_MSG_RESULT([yes])
 		AC_DEFINE([UNALIGNED_RAM_ACCESS],1,[whether unaligned RAM access is possible])],
 	[AC_MSG_RESULT([no])

@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>fullscan early-reject blocks vs cutoff/updates</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source src
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT * FROM test_table
+	sql_attr_uint	= tag
+}
+
+index idx
+{
+	source			= src
+	path			= <data_path/>/main
+    charset_type 	= utf-8
+}
+
+</config>
+
+<custom_test><![CDATA[
+$results = array ();
+
+$client->SetFilter ( "tag", array(150) );
+$results[] = $client->Query ( "" );
+if ( $results[0] )
+{
+	$results[] = $client->UpdateAttributes ( "idx", array("tag"), array(137=>array(1137)) );
+
+	$client->ResetFilters ();
+	$client->SetFilter ( "tag", array(1137) );
+	$results[] = $client->Query ( "" );
+
+	if ( is_array($results) && is_array($results[0]) ) unset ( $results[0]["time"] );
+	if ( is_array($results) && is_array($results[2]) ) unset ( $results[2]["time"] );
+} else
+{
+	$results = false;
+}
+]]></custom_test>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`tag` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_insert>INSERT INTO test_table VALUES ( 1,1,'one' ), ( 2,2,'one' ), ( 3,3,'one' ), ( 4,4,'one' )</db_insert>
+<db_insert>INSERT INTO test_table SELECT document_id+4, tag+4, body FROM test_table</db_insert>
+<db_insert>INSERT INTO test_table SELECT document_id+8, tag+8, body FROM test_table</db_insert>
+<db_insert>INSERT INTO test_table SELECT document_id+16, tag+16, body FROM test_table</db_insert>
+<db_insert>INSERT INTO test_table SELECT document_id+32, tag+32, body FROM test_table</db_insert>
+<db_insert>INSERT INTO test_table SELECT document_id+64, tag+64, body FROM test_table</db_insert>
+<db_insert>INSERT INTO test_table SELECT document_id+128, tag+128, body FROM test_table</db_insert>
+<db_insert>DELETE FROM test_table WHERE document_id>200</db_insert>
+<db_insert>UPDATE test_table SET tag=200 WHERE document_id=1</db_insert>
+
+<db_drop>DROP TABLE test_table</db_drop>
+
+</test>

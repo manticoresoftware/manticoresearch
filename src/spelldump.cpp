@@ -91,7 +91,7 @@ public:
 			if ( b.m_sWord.IsEmpty () )
 				return false;
 
-			return strcmp ( a.m_sWord.cstr (), b.m_sWord.cstr () ) == -1;
+			return strcmp ( a.m_sWord.cstr (), b.m_sWord.cstr () ) < 0;
 		}
 	};
 

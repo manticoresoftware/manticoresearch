@@ -39,7 +39,7 @@ struct CSphStrHashFunc
 {
 	static inline int Hash ( const CSphString & sKey )
 	{
-		return sphCRC32 ( (const BYTE *)sKey.cstr() );
+		return sKey.IsEmpty() ? 0 : sphCRC32 ( (const BYTE *)sKey.cstr() );
 	}
 };
 

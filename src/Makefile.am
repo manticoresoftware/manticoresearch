@@ -28,10 +28,6 @@ AM_CPPFLAGS = -DSYSCONFDIR="\"$(sysconfdir)\""
 endif
 
 COMMON_LIBS = libsphinx.a $(LIBSTEMMER_LIBS) $(MYSQL_LIBS) $(PGSQL_LIBS)
-indexer_LDADD = $(COMMON_LIBS)
-searchd_LDADD = $(COMMON_LIBS) -lz
-search_LDADD = $(COMMON_LIBS)
-spelldump_LDADD = $(COMMON_LIBS)
-tests_LDADD = $(COMMON_LIBS)
+LDADD = $(COMMON_LIBS)
 
 EXTRA_DIST = indexer.vcproj libsphinx.vcproj searchd.vcproj search.vcproj

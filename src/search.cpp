@@ -250,24 +250,16 @@ int main ( int argc, char ** argv )
 
 		while ( !bNoInfo )
 		{
-			if ( !hIndex.Exists ( "source" )
-				|| !hConf.Exists ( "source" )
-				|| !hConf["source"].Exists ( hIndex["source"] ) )
-			{
+			if ( !hIndex("source") || !hConf("source") || !hConf["source"]( hIndex["source"] ) )
 				break;
-			}
+
 			const CSphConfigSection & hSource = hConf["source"][ hIndex["source"] ];
-
-			if ( !hSource.Exists ( "sql_host" )
-				|| !hSource.Exists ( "sql_user" )
-				|| !hSource.Exists ( "sql_db" )
-				|| !hSource.Exists ( "sql_pass" ) )
+			if ( !hSource("type") || hSource["type"]!="mysql"
+				|| !hSource("sql_host") || !hSource("sql_user") || !hSource("sql_db") || !hSource("sql_pass") || !hSource("sql_query_info") )
 			{
 				break;
 			}
 
-			if ( !hSource.Exists ( "sql_query_info" ) )
-				break;
 			sQueryInfo = hSource["sql_query_info"].cstr();
 			if ( !strstr ( sQueryInfo, "$id" ) )
 				sphDie ( "'sql_query_info' value must contain '$id'" );

@@ -2686,8 +2686,9 @@ void LogQuery ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 		snprintf ( sTagBuf, sizeof(sTagBuf), " [%s]", tQuery.m_sComment.cstr() );
 
 
+	int iQueryTime = Max ( tRes.m_iQueryTime, 0 );
 	snprintf ( sBuf, sizeof(sBuf), "[%s] %d.%03d sec [%s/%d/%s %d (%d,%d)%s] [%s]%s%s %s\n",
-		sTimeBuf, tRes.m_iQueryTime/1000, tRes.m_iQueryTime%1000,
+		sTimeBuf, iQueryTime/1000, iQueryTime%1000,
 		sModes [ tQuery.m_eMode ], tQuery.m_dFilters.GetLength(), sSort [ tQuery.m_eSort ],
 		tRes.m_iTotalMatches, tQuery.m_iOffset, tQuery.m_iLimit, sGroupBuf,
 		tQuery.m_sIndexes.cstr(), sPerfBuf, sTagBuf, tQuery.m_sQuery.cstr() );
@@ -2909,7 +2910,7 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 	}
 	tOut.SendInt ( pRes->m_dMatches.GetLength() );
 	tOut.SendInt ( pRes->m_iTotalMatches );
-	tOut.SendInt ( pRes->m_iQueryTime );
+	tOut.SendInt ( Max ( pRes->m_iQueryTime, 0 ) );
 	tOut.SendInt ( pRes->m_iNumWords );
 
 	for ( int i=0; i<pRes->m_iNumWords; i++ )
@@ -3259,7 +3260,10 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			( qCheck.m_iMinID!=qFirst.m_iMinID ) || // min-id filter
 			( qCheck.m_iMaxID!=qFirst.m_iMaxID ) || // max-id filter
 			( qCheck.m_dFilters.GetLength()!=qFirst.m_dFilters.GetLength() ) || // attr filters count
-			( qCheck.m_iCutoff!=qFirst.m_iCutoff ) ) // cutoff
+			( qCheck.m_iCutoff!=qFirst.m_iCutoff ) || // cutoff
+			( qCheck.m_eSort==SPH_SORT_EXPR && qFirst.m_eSort==SPH_SORT_EXPR && qCheck.m_sSortBy!=qFirst.m_sSortBy ) || // sort expressions
+			( qCheck.m_bGeoAnchor!=qFirst.m_bGeoAnchor ) || // geodist expression
+			( qCheck.m_bGeoAnchor && qFirst.m_bGeoAnchor && ( qCheck.m_fGeoLatitude!=qFirst.m_fGeoLatitude || qCheck.m_fGeoLongitude!=qFirst.m_fGeoLongitude ) ) )  // some geodist cases
 		{
 			bMultiQueue = false;
 			break;
@@ -3424,7 +3428,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 					for ( int iQuery=iStart; iQuery<=iEnd; iQuery++ )
 					{
 						CSphString sError;
-						ISphMatchSorter * pSorter = sphCreateQueue ( &m_dQueries[iQuery], *tServed.m_pSchema, sError );
+						CSphQuery & tQuery = m_dQueries[iQuery];
+						ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, *tServed.m_pSchema, sError );
 						if ( !pSorter )
 						{
 							m_dFailuresSet[iQuery].SubmitEx ( dLocal[iLocal].cstr(), "%s", sError.cstr() );
@@ -4801,16 +4806,21 @@ protected:
 			return false;
 		}
 
-		int iRes = ::read ( m_iFD, pBuf, iCount );
-		if ( iRes!=iCount )
+		for ( ;; )
 		{
-			m_bError = true;
-			sphWarning ( "pipe read failed (exp=%d, res=%d, error=%s)",
-				iCount, iRes, iRes>0 ? "(none)" : strerror(errno) );
-			return false;
-		}
+			int iRes = ::read ( m_iFD, pBuf, iCount );
+			if ( iRes<0 && errno==EINTR )
+				continue;
 
-		return true;
+			if ( iRes!=iCount )
+			{
+				m_bError = true;
+				sphWarning ( "pipe read failed (exp=%d, res=%d, error=%s)",
+					iCount, iRes, iRes>0 ? "(none)" : strerror(errno) );
+				return false;
+			}
+			return true;
+		}
 	}
 
 protected:

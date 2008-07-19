@@ -6,7 +6,7 @@ pre.programlisting
 	margin-left:		2em;
 	margin-right:		2em;
 }
-</style><meta name="generator" content="DocBook XSL Stylesheets V1.70.1"></head><body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="article" lang="en"><div class="titlepage"><div><div><h1 class="title"><a name="id104150"></a>Sphinx 0.9.8 reference manual</h1></div><div><h3 class="subtitle"><i>Free open-source SQL full-text search engine</i></h3></div><div><p class="copyright">Copyright &copy; 2001-2008 Andrew Aksyonoff, <code class="email">&lt;<a href="mailto:shodan(at)shodan.ru">shodan(at)shodan.ru</a>&gt;</code></p></div></div><hr></div><div class="toc"><p><b>Table of Contents</b></p><dl><dt><span class="sect1"><a href="#intro">1. Introduction</a></span></dt><dd><dl><dt><span class="sect2"><a href="#about">1.1. About</a></span></dt><dt><span class="sect2"><a href="#features">1.2. Sphinx features</a></span></dt><dt><span class="sect2"><a href="#getting">1.3. Where to get Sphinx</a></span></dt><dt><span class="sect2"><a href="#license">1.4. License</a></span></dt><dt><span class="sect2"><a href="#author">1.5. Author and contributors</a></span></dt><dt><span class="sect2"><a href="#history">1.6. History</a></span></dt></dl></dd><dt><span class="sect1"><a href="#installation">2. Installation</a></span></dt><dd><dl><dt><span class="sect2"><a href="#supported-system">2.1. Supported systems</a></span></dt><dt><span class="sect2"><a href="#required-tools">2.2. Required tools</a></span></dt><dt><span class="sect2"><a href="#installing">2.3. Installing Sphinx</a></span></dt><dt><span class="sect2"><a href="#install-problems">2.4. Known installation issues</a></span></dt><dt><span class="sect2"><a href="#quick-tour">2.5. Quick Sphinx usage tour</a></span></dt></dl></dd><dt><span class="sect1"><a href="#indexing">3. Indexing</a></span></dt><dd><dl><dt><span class="sect2"><a href="#sources">3.1. Data sources</a></span></dt><dt><span class="sect2"><a href="#attributes">3.2. Attributes</a></span></dt><dt><span class="sect2"><a href="#mva">3.3. MVA (multi-valued attributes)</a></span></dt><dt><span class="sect2"><a href="#indexes">3.4. Indexes</a></span></dt><dt><span class="sect2"><a href="#data-restrictions">3.5. Restrictions on the source data</a></span></dt><dt><span class="sect2"><a href="#charsets">3.6. Charsets, case folding, and translation tables</a></span></dt><dt><span class="sect2"><a href="#sql">3.7. SQL data sources (MySQL, PostgreSQL)</a></span></dt><dt><span class="sect2"><a href="#xmlpipe">3.8. xmlpipe data source</a></span></dt><dt><span class="sect2"><a href="#xmlpipe2">3.9. xmlpipe2 data source</a></span></dt><dt><span class="sect2"><a href="#live-updates">3.10. Live index updates</a></span></dt><dt><span class="sect2"><a href="#index-merging">3.11. Index merging</a></span></dt></dl></dd><dt><span class="sect1"><a href="#searching">4. Searching</a></span></dt><dd><dl><dt><span class="sect2"><a href="#matching-modes">4.1. Matching modes</a></span></dt><dt><span class="sect2"><a href="#boolean-syntax">4.2. Boolean query syntax</a></span></dt><dt><span class="sect2"><a href="#extended-syntax">4.3. Extended query syntax</a></span></dt><dt><span class="sect2"><a href="#weighting">4.4. Weighting</a></span></dt><dt><span class="sect2"><a href="#sorting-modes">4.5. Sorting modes</a></span></dt><dt><span class="sect2"><a href="#clustering">4.6. Grouping (clustering) search results </a></span></dt><dt><span class="sect2"><a href="#distributed">4.7. Distributed searching</a></span></dt><dt><span class="sect2"><a href="#query-log-format">4.8. <code class="filename">searchd</code> query log format</a></span></dt></dl></dd><dt><span class="sect1"><a href="#api-reference">5. API reference</a></span></dt><dd><dl><dt><span class="sect2"><a href="#api-funcgroup-general">5.1. General API functions</a></span></dt><dd><dl><dt><span class="sect3"><a href="#api-func-getlasterror">5.1.1. GetLastError</a></span></dt><dt><span class="sect3"><a href="#api-func-getlastwarning">5.1.2. GetLastWarning</a></span></dt><dt><span class="sect3"><a href="#api-func-setserver">5.1.3. SetServer</a></span></dt><dt><span class="sect3"><a href="#api-func-setretries">5.1.4. SetRetries</a></span></dt><dt><span class="sect3"><a href="#api-func-setarrayresult">5.1.5. SetArrayResult</a></span></dt></dl></dd><dt><span class="sect2"><a href="#api-funcgroup-general-query-settings">5.2. General query settings</a></span></dt><dd><dl><dt><span class="sect3"><a href="#api-func-setlimits">5.2.1. SetLimits</a></span></dt><dt><span class="sect3"><a href="#api-func-setmaxquerytime">5.2.2. SetMaxQueryTime</a></span></dt></dl></dd><dt><span class="sect2"><a href="#api-funcgroup-fulltext-query-settings">5.3. Full-text search query settings</a></span></dt><dd><dl><dt><span class="sect3"><a href="#api-func-setmatchmode">5.3.1. SetMatchMode</a></span></dt><dt><span class="sect3"><a href="#api-func-setrankingmode">5.3.2. SetRankingMode</a></span></dt><dt><span class="sect3"><a href="#api-func-setsortmode">5.3.3. SetSortMode</a></span></dt><dt><span class="sect3"><a href="#api-func-setweights">5.3.4. SetWeights</a></span></dt><dt><span class="sect3"><a href="#api-func-setfieldweights">5.3.5. SetFieldWeights</a></span></dt><dt><span class="sect3"><a href="#api-func-setindexweights">5.3.6. SetIndexWeights</a></span></dt></dl></dd><dt><span class="sect2"><a href="#api-funcgroup-filtering">5.4. Result set filtering settings</a></span></dt><dd><dl><dt><span class="sect3"><a href="#api-func-setidrange">5.4.1. SetIDRange</a></span></dt><dt><span class="sect3"><a href="#api-func-setfilter">5.4.2. SetFilter</a></span></dt><dt><span class="sect3"><a href="#api-func-setfilterrange">5.4.3. SetFilterRange</a></span></dt><dt><span class="sect3"><a href="#api-func-setfilterfloatrange">5.4.4. SetFilterFloatRange</a></span></dt><dt><span class="sect3"><a href="#api-func-setgeoanchor">5.4.5. SetGeoAnchor</a></span></dt></dl></dd><dt><span class="sect2"><a href="#api-funcgroup-groupby">5.5. GROUP BY settings</a></span></dt><dd><dl><dt><span class="sect3"><a href="#api-func-setgroupby">5.5.1. SetGroupBy</a></span></dt><dt><span class="sect3"><a href="#api-func-setgroupdistinct">5.5.2. SetGroupDistinct</a></span></dt></dl></dd><dt><span class="sect2"><a href="#api-funcgroup-querying">5.6. Querying</a></span></dt><dd><dl><dt><span class="sect3"><a href="#api-func-query">5.6.1. Query</a></span></dt><dt><span class="sect3"><a href="#api-func-addquery">5.6.2. AddQuery</a></span></dt><dt><span class="sect3"><a href="#api-func-runqueries">5.6.3. RunQueries</a></span></dt><dt><span class="sect3"><a href="#api-func-resetfilters">5.6.4. ResetFilters</a></span></dt><dt><span class="sect3"><a href="#api-func-resetgroupby">5.6.5. ResetGroupBy</a></span></dt></dl></dd><dt><span class="sect2"><a href="#api-funcgroup-additional-functionality">5.7. Additional functionality</a></span></dt><dd><dl><dt><span class="sect3"><a href="#api-func-buildexcerpts">5.7.1. BuildExcerpts</a></span></dt><dt><span class="sect3"><a href="#api-func-updateatttributes">5.7.2. UpdateAttributes</a></span></dt></dl></dd></dl></dd><dt><span class="sect1"><a href="#sphinxse">6. MySQL storage engine (SphinxSE)</a></span></dt><dd><dl><dt><span class="sect2"><a href="#sphinxse-overview">6.1. SphinxSE overview</a></span></dt><dt><span class="sect2"><a href="#sphinxse-installing">6.2. Installing SphinxSE</a></span></dt><dd><dl><dt><span class="sect3"><a href="#sphinxse-mysql50">6.2.1. Compiling MySQL 5.0.x with SphinxSE</a></span></dt><dt><span class="sect3"><a href="#sphinxse-mysql51">6.2.2. Compiling MySQL 5.1.x with SphinxSE</a></span></dt><dt><span class="sect3"><a href="#sphinxse-checking">6.2.3. Checking SphinxSE installation</a></span></dt></dl></dd><dt><span class="sect2"><a href="#sphinxse-using">6.3. Using SphinxSE</a></span></dt></dl></dd><dt><span class="sect1"><a href="#reporting-bugs">7. Reporting bugs</a></span></dt><dt><span class="sect1"><a href="#conf-reference">8. <code class="filename">sphinx.conf</code> options reference</a></span></dt><dd><dl><dt><span class="sect2"><a href="#confgroup-source">8.1. Data source configuration options</a></span></dt><dd><dl><dt><span class="sect3"><a href="#conf-source-type">8.1.1. type</a></span></dt><dt><span class="sect3"><a href="#conf-sql-host">8.1.2. sql_host</a></span></dt><dt><span class="sect3"><a href="#conf-sql-port">8.1.3. sql_port</a></span></dt><dt><span class="sect3"><a href="#conf-sql-user">8.1.4. sql_user</a></span></dt><dt><span class="sect3"><a href="#conf-sql-pass">8.1.5. sql_pass</a></span></dt><dt><span class="sect3"><a href="#conf-sql-db">8.1.6. sql_db</a></span></dt><dt><span class="sect3"><a href="#conf-sql-sock">8.1.7. sql_sock</a></span></dt><dt><span class="sect3"><a href="#conf-mysql-connect-flags">8.1.8. mysql_connect_flags</a></span></dt><dt><span class="sect3"><a href="#conf-sql-query-pre">8.1.9. sql_query_pre</a></span></dt><dt><span class="sect3"><a href="#conf-sql-query">8.1.10. sql_query</a></span></dt><dt><span class="sect3"><a href="#conf-sql-query-range">8.1.11. sql_query_range</a></span></dt><dt><span class="sect3"><a href="#conf-sql-range-step">8.1.12. sql_range_step</a></span></dt><dt><span class="sect3"><a href="#conf-sql-attr-uint">8.1.13. sql_attr_uint</a></span></dt><dt><span class="sect3"><a href="#conf-sql-attr-bool">8.1.14. sql_attr_bool</a></span></dt><dt><span class="sect3"><a href="#conf-sql-attr-timestamp">8.1.15. sql_attr_timestamp</a></span></dt><dt><span class="sect3"><a href="#conf-sql-attr-str2ordinal">8.1.16. sql_attr_str2ordinal</a></span></dt><dt><span class="sect3"><a href="#conf-sql-attr-float">8.1.17. sql_attr_float</a></span></dt><dt><span class="sect3"><a href="#conf-sql-attr-multi">8.1.18. sql_attr_multi</a></span></dt><dt><span class="sect3"><a href="#conf-sql-query-post">8.1.19. sql_query_post</a></span></dt><dt><span class="sect3"><a href="#conf-sql-query-post-index">8.1.20. sql_query_post_index</a></span></dt><dt><span class="sect3"><a href="#conf-sql-ranged-throttle">8.1.21. sql_ranged_throttle</a></span></dt><dt><span class="sect3"><a href="#conf-sql-query-info">8.1.22. sql_query_info</a></span></dt><dt><span class="sect3"><a href="#conf-xmlpipe-command">8.1.23. xmlpipe_command</a></span></dt><dt><span class="sect3"><a href="#conf-xmlpipe-field">8.1.24. xmlpipe_field</a></span></dt><dt><span class="sect3"><a href="#conf-xmlpipe-attr-uint">8.1.25. xmlpipe_attr_uint</a></span></dt><dt><span class="sect3"><a href="#conf-xmlpipe-attr-bool">8.1.26. xmlpipe_attr_bool</a></span></dt><dt><span class="sect3"><a href="#conf-xmlpipe-attr-timestamp">8.1.27. xmlpipe_attr_timestamp</a></span></dt><dt><span class="sect3"><a href="#conf-xmlpipe-attr-str2ordinal">8.1.28. xmlpipe_attr_str2ordinal</a></span></dt><dt><span class="sect3"><a href="#conf-xmlpipe-attr-float">8.1.29. xmlpipe_attr_float</a></span></dt><dt><span class="sect3"><a href="#conf-xmlpipe-attr-multi">8.1.30. xmlpipe_attr_multi</a></span></dt></dl></dd><dt><span class="sect2"><a href="#confgroup-index">8.2. Index configuration options</a></span></dt><dd><dl><dt><span class="sect3"><a href="#conf-index-type">8.2.1. type</a></span></dt><dt><span class="sect3"><a href="#conf-source">8.2.2. source</a></span></dt><dt><span class="sect3"><a href="#conf-path">8.2.3. path</a></span></dt><dt><span class="sect3"><a href="#conf-docinfo">8.2.4. docinfo</a></span></dt><dt><span class="sect3"><a href="#conf-mlock">8.2.5. mlock</a></span></dt><dt><span class="sect3"><a href="#conf-morphology">8.2.6. morphology</a></span></dt><dt><span class="sect3"><a href="#conf-stopwords">8.2.7. stopwords</a></span></dt><dt><span class="sect3"><a href="#conf-wordforms">8.2.8. wordforms</a></span></dt><dt><span class="sect3"><a href="#conf-exceptions">8.2.9. exceptions</a></span></dt><dt><span class="sect3"><a href="#conf-min-word-len">8.2.10. min_word_len</a></span></dt><dt><span class="sect3"><a href="#conf-charset-type">8.2.11. charset_type</a></span></dt><dt><span class="sect3"><a href="#conf-charset-table">8.2.12. charset_table</a></span></dt><dt><span class="sect3"><a href="#conf-ignore-chars">8.2.13. ignore_chars</a></span></dt><dt><span class="sect3"><a href="#conf-min-prefix-len">8.2.14. min_prefix_len</a></span></dt><dt><span class="sect3"><a href="#conf-min-infix-len">8.2.15. min_infix_len</a></span></dt><dt><span class="sect3"><a href="#conf-prefix-fields">8.2.16. prefix_fields</a></span></dt><dt><span class="sect3"><a href="#conf-infix-fields">8.2.17. infix_fields</a></span></dt><dt><span class="sect3"><a href="#conf-enable-star">8.2.18. enable_star</a></span></dt><dt><span class="sect3"><a href="#conf-ngram-len">8.2.19. ngram_len</a></span></dt><dt><span class="sect3"><a href="#conf-ngram-chars">8.2.20. ngram_chars</a></span></dt><dt><span class="sect3"><a href="#conf-phrase-boundary">8.2.21. phrase_boundary</a></span></dt><dt><span class="sect3"><a href="#conf-phrase-boundary-step">8.2.22. phrase_boundary_step</a></span></dt><dt><span class="sect3"><a href="#conf-html-strip">8.2.23. html_strip</a></span></dt><dt><span class="sect3"><a href="#conf-html-index-attrs">8.2.24. html_index_attrs</a></span></dt><dt><span class="sect3"><a href="#conf-html-remove-elements">8.2.25. html_remove_elements</a></span></dt><dt><span class="sect3"><a href="#conf-local">8.2.26. local</a></span></dt><dt><span class="sect3"><a href="#conf-agent">8.2.27. agent</a></span></dt><dt><span class="sect3"><a href="#conf-agent-connect-timeout">8.2.28. agent_connect_timeout</a></span></dt><dt><span class="sect3"><a href="#conf-agent-query-timeout">8.2.29. agent_query_timeout</a></span></dt><dt><span class="sect3"><a href="#conf-preopen">8.2.30. preopen</a></span></dt></dl></dd><dt><span class="sect2"><a href="#confgroup-indexer">8.3. <code class="filename">indexer</code> program configuration options</a></span></dt><dd><dl><dt><span class="sect3"><a href="#conf-mem-limit">8.3.1. mem_limit</a></span></dt><dt><span class="sect3"><a href="#conf-max-iops">8.3.2. max_iops</a></span></dt><dt><span class="sect3"><a href="#conf-max-iosize">8.3.3. max_iosize</a></span></dt></dl></dd><dt><span class="sect2"><a href="#confgroup-searchd">8.4. <code class="filename">searchd</code> program configuration options</a></span></dt><dd><dl><dt><span class="sect3"><a href="#conf-address">8.4.1. address</a></span></dt><dt><span class="sect3"><a href="#conf-port">8.4.2. port</a></span></dt><dt><span class="sect3"><a href="#conf-log">8.4.3. log</a></span></dt><dt><span class="sect3"><a href="#conf-query-log">8.4.4. query_log</a></span></dt><dt><span class="sect3"><a href="#conf-read-timeout">8.4.5. read_timeout</a></span></dt><dt><span class="sect3"><a href="#conf-max-children">8.4.6. max_children</a></span></dt><dt><span class="sect3"><a href="#conf-pid-file">8.4.7. pid_file</a></span></dt><dt><span class="sect3"><a href="#conf-max-matches">8.4.8. max_matches</a></span></dt><dt><span class="sect3"><a href="#conf-seamless-rotate">8.4.9. seamless_rotate</a></span></dt><dt><span class="sect3"><a href="#conf-preopen-indexes">8.4.10. preopen_indexes</a></span></dt><dt><span class="sect3"><a href="#conf-unlink-old">8.4.11. unlink_old</a></span></dt></dl></dd></dl></dd><dt><span class="appendix"><a href="#changelog">A. Sphinx revision history</a></span></dt></dl></div><div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="intro"></a>1.&nbsp;Introduction</h2></div></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="about"></a>1.1.&nbsp;About</h3></div></div></div><p>
+</style><meta name="generator" content="DocBook XSL Stylesheets V1.70.1"></head><body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="article" lang="en"><div class="titlepage"><div><div><h1 class="title"><a name="id104151"></a>Sphinx 0.9.8 reference manual</h1></div><div><h3 class="subtitle"><i>Free open-source SQL full-text search engine</i></h3></div><div><p class="copyright">Copyright &copy; 2001-2008 Andrew Aksyonoff, <code class="email">&lt;<a href="mailto:shodan(at)shodan.ru">shodan(at)shodan.ru</a>&gt;</code></p></div></div><hr></div><div class="toc"><p><b>Table of Contents</b></p><dl><dt><span class="sect1"><a href="#intro">1. Introduction</a></span></dt><dd><dl><dt><span class="sect2"><a href="#about">1.1. About</a></span></dt><dt><span class="sect2"><a href="#features">1.2. Sphinx features</a></span></dt><dt><span class="sect2"><a href="#getting">1.3. Where to get Sphinx</a></span></dt><dt><span class="sect2"><a href="#license">1.4. License</a></span></dt><dt><span class="sect2"><a href="#author">1.5. Author and contributors</a></span></dt><dt><span class="sect2"><a href="#history">1.6. History</a></span></dt></dl></dd><dt><span class="sect1"><a href="#installation">2. Installation</a></span></dt><dd><dl><dt><span class="sect2"><a href="#supported-system">2.1. Supported systems</a></span></dt><dt><span class="sect2"><a href="#required-tools">2.2. Required tools</a></span></dt><dt><span class="sect2"><a href="#installing">2.3. Installing Sphinx</a></span></dt><dt><span class="sect2"><a href="#install-problems">2.4. Known installation issues</a></span></dt><dt><span class="sect2"><a href="#quick-tour">2.5. Quick Sphinx usage tour</a></span></dt></dl></dd><dt><span class="sect1"><a href="#indexing">3. Indexing</a></span></dt><dd><dl><dt><span class="sect2"><a href="#sources">3.1. Data sources</a></span></dt><dt><span class="sect2"><a href="#attributes">3.2. Attributes</a></span></dt><dt><span class="sect2"><a href="#mva">3.3. MVA (multi-valued attributes)</a></span></dt><dt><span class="sect2"><a href="#indexes">3.4. Indexes</a></span></dt><dt><span class="sect2"><a href="#data-restrictions">3.5. Restrictions on the source data</a></span></dt><dt><span class="sect2"><a href="#charsets">3.6. Charsets, case folding, and translation tables</a></span></dt><dt><span class="sect2"><a href="#sql">3.7. SQL data sources (MySQL, PostgreSQL)</a></span></dt><dt><span class="sect2"><a href="#xmlpipe">3.8. xmlpipe data source</a></span></dt><dt><span class="sect2"><a href="#xmlpipe2">3.9. xmlpipe2 data source</a></span></dt><dt><span class="sect2"><a href="#live-updates">3.10. Live index updates</a></span></dt><dt><span class="sect2"><a href="#index-merging">3.11. Index merging</a></span></dt></dl></dd><dt><span class="sect1"><a href="#searching">4. Searching</a></span></dt><dd><dl><dt><span class="sect2"><a href="#matching-modes">4.1. Matching modes</a></span></dt><dt><span class="sect2"><a href="#boolean-syntax">4.2. Boolean query syntax</a></span></dt><dt><span class="sect2"><a href="#extended-syntax">4.3. Extended query syntax</a></span></dt><dt><span class="sect2"><a href="#weighting">4.4. Weighting</a></span></dt><dt><span class="sect2"><a href="#sorting-modes">4.5. Sorting modes</a></span></dt><dt><span class="sect2"><a href="#clustering">4.6. Grouping (clustering) search results </a></span></dt><dt><span class="sect2"><a href="#distributed">4.7. Distributed searching</a></span></dt><dt><span class="sect2"><a href="#query-log-format">4.8. <code class="filename">searchd</code> query log format</a></span></dt></dl></dd><dt><span class="sect1"><a href="#api-reference">5. API reference</a></span></dt><dd><dl><dt><span class="sect2"><a href="#api-funcgroup-general">5.1. General API functions</a></span></dt><dd><dl><dt><span class="sect3"><a href="#api-func-getlasterror">5.1.1. GetLastError</a></span></dt><dt><span class="sect3"><a href="#api-func-getlastwarning">5.1.2. GetLastWarning</a></span></dt><dt><span class="sect3"><a href="#api-func-setserver">5.1.3. SetServer</a></span></dt><dt><span class="sect3"><a href="#api-func-setretries">5.1.4. SetRetries</a></span></dt><dt><span class="sect3"><a href="#api-func-setarrayresult">5.1.5. SetArrayResult</a></span></dt></dl></dd><dt><span class="sect2"><a href="#api-funcgroup-general-query-settings">5.2. General query settings</a></span></dt><dd><dl><dt><span class="sect3"><a href="#api-func-setlimits">5.2.1. SetLimits</a></span></dt><dt><span class="sect3"><a href="#api-func-setmaxquerytime">5.2.2. SetMaxQueryTime</a></span></dt></dl></dd><dt><span class="sect2"><a href="#api-funcgroup-fulltext-query-settings">5.3. Full-text search query settings</a></span></dt><dd><dl><dt><span class="sect3"><a href="#api-func-setmatchmode">5.3.1. SetMatchMode</a></span></dt><dt><span class="sect3"><a href="#api-func-setrankingmode">5.3.2. SetRankingMode</a></span></dt><dt><span class="sect3"><a href="#api-func-setsortmode">5.3.3. SetSortMode</a></span></dt><dt><span class="sect3"><a href="#api-func-setweights">5.3.4. SetWeights</a></span></dt><dt><span class="sect3"><a href="#api-func-setfieldweights">5.3.5. SetFieldWeights</a></span></dt><dt><span class="sect3"><a href="#api-func-setindexweights">5.3.6. SetIndexWeights</a></span></dt></dl></dd><dt><span class="sect2"><a href="#api-funcgroup-filtering">5.4. Result set filtering settings</a></span></dt><dd><dl><dt><span class="sect3"><a href="#api-func-setidrange">5.4.1. SetIDRange</a></span></dt><dt><span class="sect3"><a href="#api-func-setfilter">5.4.2. SetFilter</a></span></dt><dt><span class="sect3"><a href="#api-func-setfilterrange">5.4.3. SetFilterRange</a></span></dt><dt><span class="sect3"><a href="#api-func-setfilterfloatrange">5.4.4. SetFilterFloatRange</a></span></dt><dt><span class="sect3"><a href="#api-func-setgeoanchor">5.4.5. SetGeoAnchor</a></span></dt></dl></dd><dt><span class="sect2"><a href="#api-funcgroup-groupby">5.5. GROUP BY settings</a></span></dt><dd><dl><dt><span class="sect3"><a href="#api-func-setgroupby">5.5.1. SetGroupBy</a></span></dt><dt><span class="sect3"><a href="#api-func-setgroupdistinct">5.5.2. SetGroupDistinct</a></span></dt></dl></dd><dt><span class="sect2"><a href="#api-funcgroup-querying">5.6. Querying</a></span></dt><dd><dl><dt><span class="sect3"><a href="#api-func-query">5.6.1. Query</a></span></dt><dt><span class="sect3"><a href="#api-func-addquery">5.6.2. AddQuery</a></span></dt><dt><span class="sect3"><a href="#api-func-runqueries">5.6.3. RunQueries</a></span></dt><dt><span class="sect3"><a href="#api-func-resetfilters">5.6.4. ResetFilters</a></span></dt><dt><span class="sect3"><a href="#api-func-resetgroupby">5.6.5. ResetGroupBy</a></span></dt></dl></dd><dt><span class="sect2"><a href="#api-funcgroup-additional-functionality">5.7. Additional functionality</a></span></dt><dd><dl><dt><span class="sect3"><a href="#api-func-buildexcerpts">5.7.1. BuildExcerpts</a></span></dt><dt><span class="sect3"><a href="#api-func-updateatttributes">5.7.2. UpdateAttributes</a></span></dt><dt><span class="sect3"><a href="#api-func-buildkeywords">5.7.3. BuildKeywords</a></span></dt><dt><span class="sect3"><a href="#api-func-escapestring">5.7.4. EscapeString</a></span></dt></dl></dd></dl></dd><dt><span class="sect1"><a href="#sphinxse">6. MySQL storage engine (SphinxSE)</a></span></dt><dd><dl><dt><span class="sect2"><a href="#sphinxse-overview">6.1. SphinxSE overview</a></span></dt><dt><span class="sect2"><a href="#sphinxse-installing">6.2. Installing SphinxSE</a></span></dt><dd><dl><dt><span class="sect3"><a href="#sphinxse-mysql50">6.2.1. Compiling MySQL 5.0.x with SphinxSE</a></span></dt><dt><span class="sect3"><a href="#sphinxse-mysql51">6.2.2. Compiling MySQL 5.1.x with SphinxSE</a></span></dt><dt><span class="sect3"><a href="#sphinxse-checking">6.2.3. Checking SphinxSE installation</a></span></dt></dl></dd><dt><span class="sect2"><a href="#sphinxse-using">6.3. Using SphinxSE</a></span></dt></dl></dd><dt><span class="sect1"><a href="#reporting-bugs">7. Reporting bugs</a></span></dt><dt><span class="sect1"><a href="#conf-reference">8. <code class="filename">sphinx.conf</code> options reference</a></span></dt><dd><dl><dt><span class="sect2"><a href="#confgroup-source">8.1. Data source configuration options</a></span></dt><dd><dl><dt><span class="sect3"><a href="#conf-source-type">8.1.1. type</a></span></dt><dt><span class="sect3"><a href="#conf-sql-host">8.1.2. sql_host</a></span></dt><dt><span class="sect3"><a href="#conf-sql-port">8.1.3. sql_port</a></span></dt><dt><span class="sect3"><a href="#conf-sql-user">8.1.4. sql_user</a></span></dt><dt><span class="sect3"><a href="#conf-sql-pass">8.1.5. sql_pass</a></span></dt><dt><span class="sect3"><a href="#conf-sql-db">8.1.6. sql_db</a></span></dt><dt><span class="sect3"><a href="#conf-sql-sock">8.1.7. sql_sock</a></span></dt><dt><span class="sect3"><a href="#conf-mysql-connect-flags">8.1.8. mysql_connect_flags</a></span></dt><dt><span class="sect3"><a href="#conf-sql-query-pre">8.1.9. sql_query_pre</a></span></dt><dt><span class="sect3"><a href="#conf-sql-query">8.1.10. sql_query</a></span></dt><dt><span class="sect3"><a href="#conf-sql-query-range">8.1.11. sql_query_range</a></span></dt><dt><span class="sect3"><a href="#conf-sql-range-step">8.1.12. sql_range_step</a></span></dt><dt><span class="sect3"><a href="#conf-sql-attr-uint">8.1.13. sql_attr_uint</a></span></dt><dt><span class="sect3"><a href="#conf-sql-attr-bool">8.1.14. sql_attr_bool</a></span></dt><dt><span class="sect3"><a href="#conf-sql-attr-timestamp">8.1.15. sql_attr_timestamp</a></span></dt><dt><span class="sect3"><a href="#conf-sql-attr-str2ordinal">8.1.16. sql_attr_str2ordinal</a></span></dt><dt><span class="sect3"><a href="#conf-sql-attr-float">8.1.17. sql_attr_float</a></span></dt><dt><span class="sect3"><a href="#conf-sql-attr-multi">8.1.18. sql_attr_multi</a></span></dt><dt><span class="sect3"><a href="#conf-sql-query-post">8.1.19. sql_query_post</a></span></dt><dt><span class="sect3"><a href="#conf-sql-query-post-index">8.1.20. sql_query_post_index</a></span></dt><dt><span class="sect3"><a href="#conf-sql-ranged-throttle">8.1.21. sql_ranged_throttle</a></span></dt><dt><span class="sect3"><a href="#conf-sql-query-info">8.1.22. sql_query_info</a></span></dt><dt><span class="sect3"><a href="#conf-xmlpipe-command">8.1.23. xmlpipe_command</a></span></dt><dt><span class="sect3"><a href="#conf-xmlpipe-field">8.1.24. xmlpipe_field</a></span></dt><dt><span class="sect3"><a href="#conf-xmlpipe-attr-uint">8.1.25. xmlpipe_attr_uint</a></span></dt><dt><span class="sect3"><a href="#conf-xmlpipe-attr-bool">8.1.26. xmlpipe_attr_bool</a></span></dt><dt><span class="sect3"><a href="#conf-xmlpipe-attr-timestamp">8.1.27. xmlpipe_attr_timestamp</a></span></dt><dt><span class="sect3"><a href="#conf-xmlpipe-attr-str2ordinal">8.1.28. xmlpipe_attr_str2ordinal</a></span></dt><dt><span class="sect3"><a href="#conf-xmlpipe-attr-float">8.1.29. xmlpipe_attr_float</a></span></dt><dt><span class="sect3"><a href="#conf-xmlpipe-attr-multi">8.1.30. xmlpipe_attr_multi</a></span></dt></dl></dd><dt><span class="sect2"><a href="#confgroup-index">8.2. Index configuration options</a></span></dt><dd><dl><dt><span class="sect3"><a href="#conf-index-type">8.2.1. type</a></span></dt><dt><span class="sect3"><a href="#conf-source">8.2.2. source</a></span></dt><dt><span class="sect3"><a href="#conf-path">8.2.3. path</a></span></dt><dt><span class="sect3"><a href="#conf-docinfo">8.2.4. docinfo</a></span></dt><dt><span class="sect3"><a href="#conf-mlock">8.2.5. mlock</a></span></dt><dt><span class="sect3"><a href="#conf-morphology">8.2.6. morphology</a></span></dt><dt><span class="sect3"><a href="#conf-stopwords">8.2.7. stopwords</a></span></dt><dt><span class="sect3"><a href="#conf-wordforms">8.2.8. wordforms</a></span></dt><dt><span class="sect3"><a href="#conf-exceptions">8.2.9. exceptions</a></span></dt><dt><span class="sect3"><a href="#conf-min-word-len">8.2.10. min_word_len</a></span></dt><dt><span class="sect3"><a href="#conf-charset-type">8.2.11. charset_type</a></span></dt><dt><span class="sect3"><a href="#conf-charset-table">8.2.12. charset_table</a></span></dt><dt><span class="sect3"><a href="#conf-ignore-chars">8.2.13. ignore_chars</a></span></dt><dt><span class="sect3"><a href="#conf-min-prefix-len">8.2.14. min_prefix_len</a></span></dt><dt><span class="sect3"><a href="#conf-min-infix-len">8.2.15. min_infix_len</a></span></dt><dt><span class="sect3"><a href="#conf-prefix-fields">8.2.16. prefix_fields</a></span></dt><dt><span class="sect3"><a href="#conf-infix-fields">8.2.17. infix_fields</a></span></dt><dt><span class="sect3"><a href="#conf-enable-star">8.2.18. enable_star</a></span></dt><dt><span class="sect3"><a href="#conf-ngram-len">8.2.19. ngram_len</a></span></dt><dt><span class="sect3"><a href="#conf-ngram-chars">8.2.20. ngram_chars</a></span></dt><dt><span class="sect3"><a href="#conf-phrase-boundary">8.2.21. phrase_boundary</a></span></dt><dt><span class="sect3"><a href="#conf-phrase-boundary-step">8.2.22. phrase_boundary_step</a></span></dt><dt><span class="sect3"><a href="#conf-html-strip">8.2.23. html_strip</a></span></dt><dt><span class="sect3"><a href="#conf-html-index-attrs">8.2.24. html_index_attrs</a></span></dt><dt><span class="sect3"><a href="#conf-html-remove-elements">8.2.25. html_remove_elements</a></span></dt><dt><span class="sect3"><a href="#conf-local">8.2.26. local</a></span></dt><dt><span class="sect3"><a href="#conf-agent">8.2.27. agent</a></span></dt><dt><span class="sect3"><a href="#conf-agent-connect-timeout">8.2.28. agent_connect_timeout</a></span></dt><dt><span class="sect3"><a href="#conf-agent-query-timeout">8.2.29. agent_query_timeout</a></span></dt><dt><span class="sect3"><a href="#conf-preopen">8.2.30. preopen</a></span></dt></dl></dd><dt><span class="sect2"><a href="#confgroup-indexer">8.3. <code class="filename">indexer</code> program configuration options</a></span></dt><dd><dl><dt><span class="sect3"><a href="#conf-mem-limit">8.3.1. mem_limit</a></span></dt><dt><span class="sect3"><a href="#conf-max-iops">8.3.2. max_iops</a></span></dt><dt><span class="sect3"><a href="#conf-max-iosize">8.3.3. max_iosize</a></span></dt></dl></dd><dt><span class="sect2"><a href="#confgroup-searchd">8.4. <code class="filename">searchd</code> program configuration options</a></span></dt><dd><dl><dt><span class="sect3"><a href="#conf-address">8.4.1. address</a></span></dt><dt><span class="sect3"><a href="#conf-port">8.4.2. port</a></span></dt><dt><span class="sect3"><a href="#conf-log">8.4.3. log</a></span></dt><dt><span class="sect3"><a href="#conf-query-log">8.4.4. query_log</a></span></dt><dt><span class="sect3"><a href="#conf-read-timeout">8.4.5. read_timeout</a></span></dt><dt><span class="sect3"><a href="#conf-max-children">8.4.6. max_children</a></span></dt><dt><span class="sect3"><a href="#conf-pid-file">8.4.7. pid_file</a></span></dt><dt><span class="sect3"><a href="#conf-max-matches">8.4.8. max_matches</a></span></dt><dt><span class="sect3"><a href="#conf-seamless-rotate">8.4.9. seamless_rotate</a></span></dt><dt><span class="sect3"><a href="#conf-preopen-indexes">8.4.10. preopen_indexes</a></span></dt><dt><span class="sect3"><a href="#conf-unlink-old">8.4.11. unlink_old</a></span></dt></dl></dd></dl></dd><dt><span class="appendix"><a href="#changelog">A. Sphinx revision history</a></span></dt></dl></div><div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="intro"></a>1.&nbsp;Introduction</h2></div></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="about"></a>1.1.&nbsp;About</h3></div></div></div><p>
 Sphinx is a full-text search engine, distributed under GPL version 2.
 Commercial licensing (eg. for embedded use) is also available upon request. 
 </p><p>
@@ -51,10 +51,10 @@ if you would like to embed Sphinx in your software, but would not
 like to disclose its source code), please contact
 <a href="#author" title="1.5.&nbsp;Author and contributors">the author</a> to obtain
 a commercial license.
-</p></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="author"></a>1.5.&nbsp;Author and contributors</h3></div></div></div><h4><a name="id353948"></a>Author</h4><p>
+</p></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="author"></a>1.5.&nbsp;Author and contributors</h3></div></div></div><h4><a name="id353992"></a>Author</h4><p>
 Sphinx initial author and current primary developer is:
 </p><div class="itemizedlist"><ul type="disc"><li>Andrew Aksyonoff, <code class="email">&lt;<a href="mailto:shodan(at)shodan.ru">shodan(at)shodan.ru</a>&gt;</code></li></ul></div><p>
-</p><h4><a name="id353697"></a>Contributors</h4><p>People who contributed to Sphinx and their contributions (in no particular order) are:
+</p><h4><a name="id353729"></a>Contributors</h4><p>People who contributed to Sphinx and their contributions (in no particular order) are:
 </p><div class="itemizedlist"><ul type="disc"><li>Robert "coredev" Bengtsson (Sweden), initial version of PostgreSQL data source;</li><li>Len Kranendonk, Perl API</li><li>Dmytro Shteflyuk, Ruby API</li></ul></div><p>
 </p><p>
 Many other people have contributed ideas, bug reports, fixes, etc.
@@ -229,7 +229,7 @@ This can be achieved by specifying all the mentioned columns
 (excluding title and content, that are full-text fields) as
 attributes, indexing them, and then using API calls to
 setup filtering, sorting, and grouping. Here as an example.
-</p><h4><a name="id360513"></a>Example sphinx.conf part:</h4><p>
+</p><h4><a name="id360526"></a>Example sphinx.conf part:</h4><p>
 </p><pre class="programlisting">
 ...
 sql_query = SELECT id, title, content, \
@@ -239,7 +239,7 @@ sql_attr_uint = forum_id
 sql_attr_timestamp = post_date
 ...
 </pre><p>
-</p><h4><a name="id360525"></a>Example application code (in PHP):</h4><p>
+</p><h4><a name="id360538"></a>Example application code (in PHP):</h4><p>
 </p><pre class="programlisting">
 // only search posts by author whose ID is 123
 $cl-&gt;SetFilter ( "author_id", array ( 123 ) );
@@ -410,7 +410,7 @@ be run three times:
 Obviously, that's not much of a difference for 2000-row table,
 but when it comes to indexing 10-million-row MyISAM table,
 ranged queries might be of some help.
-</p><h4><a name="id361222"></a><code class="option">sql_post</code> vs. <code class="option">sql_post_index</code></h4><p>
+</p><h4><a name="id361247"></a><code class="option">sql_post</code> vs. <code class="option">sql_post_index</code></h4><p>
 The difference between post-query and post-index query is in that post-query
 is run immediately when Sphinx received all the documents, but further indexing
 <span class="bold"><strong>may</strong></span> still fail for some other reason. On the contrary,
@@ -779,7 +779,7 @@ SPH_SORT_TIME_SEGMENTS modes require simply an attribute name.
 SPH_SORT_RELEVANCE is equivalent to sorting by "@weight DESC, @id ASC" in extended mode,
 SPH_SORT_ATTR_ASC is equivalent to "attribute ASC, @weight DESC, @id ASC",
 and SPH_SORT_ATTR_DESC to "attribute DESC, @weight DESC, @id ASC" respectively.
-</p><h4><a name="id362408"></a>SPH_SORT_TIME_SEGMENTS mode</h4><p>
+</p><h4><a name="id362427"></a>SPH_SORT_TIME_SEGMENTS mode</h4><p>
 In SPH_SORT_TIME_SEGMENTS mode, attribute values are split into so-called
 time segments, and then sorted by time segment first, and by relevance second.
 </p><p>
@@ -1442,7 +1442,31 @@ The first sample statement will update document 1 in index "test1", setting "gro
 The second one will update documents 1001, 1002 and 1003 in index "products". For document 1001,
 the new price will be set to 123 and the new amount in stock to 5; for document 1002, the new price
 will be 37 and the new amount will be 11; etc.
-</p></div></div></div><div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="sphinxse"></a>6.&nbsp;MySQL storage engine (SphinxSE)</h2></div></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="sphinxse-overview"></a>6.1.&nbsp;SphinxSE overview</h3></div></div></div><p>
+</p></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="api-func-buildkeywords"></a>5.7.3.&nbsp;BuildKeywords</h4></div></div></div><p><span class="bold"><strong>Prototype:</strong></span> function BuildKeywords ( $query, $index, $hits )</p><p>
+Extracts keywords from query using tokenizer settings for given index, optionally with per-keyword occurrence statistics.
+Returns an array of hashes with per-keyword information.
+</p><p>
+<code class="code">$query</code> is a query to extract keywords from.
+<code class="code">$index</code> is a name of the index to get tokenizing settings and keyword occurrence statistics from.
+<code class="code">$hits</code> is a boolean flag that indicates whether keyword occurrence statistics are required.
+</p><p>
+Usage example:
+</p><pre class="programlisting">
+$keywords = $cl-&gt;BuildKeywords ( "this.is.my query", "test1", false );
+</pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="api-func-escapestring"></a>5.7.4.&nbsp;EscapeString</h4></div></div></div><p><span class="bold"><strong>Prototype:</strong></span> function EscapeString ( $string )</p><p>
+Escapes characters that are treated as special operators by the query language parser.
+Returns an escaped string.
+</p><p>
+<code class="code">$string</code> is a string to escape.
+</p><p>
+This function might seem redundant because it's trivial to implement in any calling
+application. However, as the set of special characters might change over time, it makes
+sense to have an API call that is guaranteed to escape all such characters at all times.
+</p><p>
+Usage example:
+</p><pre class="programlisting">
+$escaped = $cl-&gt;EscapeString ( "escaping-sample@query/string" );
+</pre></div></div></div><div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="sphinxse"></a>6.&nbsp;MySQL storage engine (SphinxSE)</h2></div></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="sphinxse-overview"></a>6.1.&nbsp;SphinxSE overview</h3></div></div></div><p>
 SphinxSE is MySQL storage engine which can be compiled
 into MySQL server 5.x using its pluggable architecure.
 It is not available for MySQL 4.x series. It also requires
@@ -1688,7 +1712,7 @@ Reporting as much as possible about each bug is very important -
 because to fix it, I need to be able either to reproduce and debug the bug,
 or to deduce what's causing it from the information that you provide.
 So here are some instructions on how to do that.
-</p><h3><a name="id366332"></a>Build-time issues</h3><p>If Sphinx fails to build for some reason, please do the following:</p><div class="orderedlist"><ol type="1"><li>check that headers and libraries for your DBMS are properly installed
+</p><h3><a name="id366478"></a>Build-time issues</h3><p>If Sphinx fails to build for some reason, please do the following:</p><div class="orderedlist"><ol type="1"><li>check that headers and libraries for your DBMS are properly installed
 (for instance, check that <code class="filename">mysql-devel</code> package is present);
 </li><li>report Sphinx version and config file (be sure to remove the passwords!),
 MySQL (or PostgreSQL) configuration info, gcc version, OS version and CPU type
@@ -1701,7 +1725,7 @@ uname -a
 report the error message which is produced by <code class="filename">configure</code>
 or <code class="filename">gcc</code> (it should be to include error message itself only,
 not the whole build log).
-</li></ol></div><h3><a name="id366386"></a>Run-time issues</h3><p>
+</li></ol></div><h3><a name="id366532"></a>Run-time issues</h3><p>
 If Sphinx builds and runs, but there are any problems running it,
 please do the following:
 </p><div class="orderedlist"><ol type="1"><li>describe the bug (ie. both the expected behavior and actual behavior)
@@ -1732,7 +1756,7 @@ relevant entries from <code class="filename">searchd.log</code> and
 running it in console mode and check if it dies with an assertion:
 <pre class="programlisting">
 ./searchd --console
-</pre></li><li>if any program dies with an assertion, provide the assertion message.</li></ol></div><h3><a name="id366498"></a>Debugging assertions, crashes and hangups</h3><p>
+</pre></li><li>if any program dies with an assertion, provide the assertion message.</li></ol></div><h3><a name="id366644"></a>Debugging assertions, crashes and hangups</h3><p>
 If any program dies with an assertion, crashes without an assertion or hangs up,
 you would additionally need to generate a core dump and examine it.
 </p><div class="orderedlist"><ol type="1"><li>
@@ -1795,7 +1819,7 @@ Known types are <code class="option">mysql</code>, <code class="option">pgsql</c
 All other per-source options depend on source type selected by this option.
 Names of the options used for SQL sources (ie. MySQL and PostgreSQL) start with "sql_";
 names of the ones used for xmlpipe and xmlpipe2 start with "xmlpipe_".
-</p><h5><a name="id366685"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id366832"></a>Example:</h5><pre class="programlisting">
 type = mysql
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-sql-host"></a>8.1.2.&nbsp;sql_host</h4></div></div></div><p>
 SQL server host to connect to.
@@ -1810,32 +1834,32 @@ to use UNIX socket (this is the default and generally recommended mode)
 and "127.0.0.1" will force TCP/IP usage. Refer to
 <a href="http://dev.mysql.com/doc/refman/5.0/en/mysql-real-connect.html" target="_top">MySQL manual</a>
 for more details.
-</p><h5><a name="id366747"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id366888"></a>Example:</h5><pre class="programlisting">
 sql_host = localhost
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-sql-port"></a>8.1.3.&nbsp;sql_port</h4></div></div></div><p>
 SQL server IP port to connect to.
 Optional, default is 3306 for <code class="option">mysql</code> source type and 5432 for <code class="option">pgsql</code> type.
 Applies to SQL source types (<code class="option">mysql</code> and <code class="option">pgsql</code>) only.
 Note that it depends on <a href="#conf-sql-host" title="8.1.2.&nbsp;sql_host">sql_host</a> setting whether this value will actually be used.
-</p><h5><a name="id366799"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id366939"></a>Example:</h5><pre class="programlisting">
 sql_port = 3306
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-sql-user"></a>8.1.4.&nbsp;sql_user</h4></div></div></div><p>
 SQL user to use when connecting to <a href="#conf-sql-host" title="8.1.2.&nbsp;sql_host">sql_host</a>.
 Mandatory, no default value.
 Applies to SQL source types (<code class="option">mysql</code> and <code class="option">pgsql</code>) only.
-</p><h5><a name="id366838"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id366978"></a>Example:</h5><pre class="programlisting">
 sql_user = test
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-sql-pass"></a>8.1.5.&nbsp;sql_pass</h4></div></div></div><p>
 SQL user password to use when connecting to <a href="#conf-sql-host" title="8.1.2.&nbsp;sql_host">sql_host</a>.
 Mandatory, no default value.
 Applies to SQL source types (<code class="option">mysql</code> and <code class="option">pgsql</code>) only.
-</p><h5><a name="id366876"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id367016"></a>Example:</h5><pre class="programlisting">
 sql_pass = mysecretpassword
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-sql-db"></a>8.1.6.&nbsp;sql_db</h4></div></div></div><p>
 SQL database (in MySQL terms) to use after the connection and perform further queries within.
 Mandatory, no default value.
 Applies to SQL source types (<code class="option">mysql</code> and <code class="option">pgsql</code>) only.
-</p><h5><a name="id366910"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id367050"></a>Example:</h5><pre class="programlisting">
 sql_db = test
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-sql-sock"></a>8.1.7.&nbsp;sql_sock</h4></div></div></div><p>
 UNIX socket name to connect to for local SQL servers.
@@ -1845,7 +1869,7 @@ Applies to SQL source types (<code class="option">mysql</code> and <code class="
 On Linux, it would typically be <code class="filename">/var/lib/mysql/mysql.sock</code>.
 On FreeBSD, it would typically be <code class="filename">/tmp/mysql.sock</code>.
 Note that it depends on <a href="#conf-sql-host" title="8.1.2.&nbsp;sql_host">sql_host</a> setting whether this value will actually be used.
-</p><h5><a name="id366968"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id367108"></a>Example:</h5><pre class="programlisting">
 sql_sock = /tmp/mysql.sock
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-mysql-connect-flags"></a>8.1.8.&nbsp;mysql_connect_flags</h4></div></div></div><p>
 MySQL client connection flags.
@@ -1865,7 +1889,7 @@ links is most likely to hurt indexing time though it reduces network traffic,
 both in theory and in practice. However, enabling compression on 100 Mbps links
 may improve indexing time significantly (upto 20-30% of the total indexing time
 improvement was reported). Your mileage may vary.
-</p><h5><a name="id367062"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id367203"></a>Example:</h5><pre class="programlisting">
 mysql_connect_flags = 32 # enable compression
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-sql-query-pre"></a>8.1.9.&nbsp;sql_query_pre</h4></div></div></div><p>
 Pre-fetch query, or pre-query.
@@ -1897,7 +1921,7 @@ in caching their results. That could be achieved with:
 </p><pre class="programlisting">
 sql_query_pre = SET SESSION query_cache_type=OFF
 </pre><p>
-</p><h5><a name="id367170"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id367311"></a>Example:</h5><pre class="programlisting">
 sql_query_pre = SET NAMES utf8
 sql_query_pre = SET SESSION query_cache_type=OFF
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-sql-query"></a>8.1.10.&nbsp;sql_query</h4></div></div></div><p>
@@ -1916,7 +1940,7 @@ It can be either 32-bit or 64-bit, depending on how you built Sphinx;
 by default it builds with 32-bit IDs support but <code class="option">--enable-id64</code> option
 to <code class="filename">configure</code> allows to build with 64-bit document and word IDs support.
 
-</p><h5><a name="id367256"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id367397"></a>Example:</h5><pre class="programlisting">
 sql_query = \
 	SELECT id, group_id, UNIX_TIMESTAMP(date_added) AS date_added, \
 		title, content \
@@ -1944,7 +1968,7 @@ will not overlap, so you should <span class="bold"><strong>not</strong></span> r
 exactly equal to <code class="option">$start</code> or <code class="option">$end</code> from your query.
 The example in <a href="#ranged-queries">Section&nbsp;3.7, &#8220;Ranged queries&#8221;</a>) illustrates that; note how it
 uses greater-or-equal and less-or-equal comparisons.
-</p><h5><a name="id367373"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id367514"></a>Example:</h5><pre class="programlisting">
 sql_query_range = SELECT MIN(id),MAX(id) FROM documents
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-sql-range-step"></a>8.1.12.&nbsp;sql_range_step</h4></div></div></div><p>
 Range query step.
@@ -1958,7 +1982,7 @@ are 12 and 3456 respectively, and the step is 1000, indexer will call
 <a href="#conf-sql-query" title="8.1.10.&nbsp;sql_query">sql_query</a> several times with the
 following substitutions:
 </p><div class="itemizedlist"><ul type="disc"><li>$start=12, $end=1011</li><li>$start=1012, $end=2011</li><li>$start=2012, $end=3011</li><li>$start=3012, $end=3456</li></ul></div><p>
-</p><h5><a name="id367459"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id367600"></a>Example:</h5><pre class="programlisting">
 sql_range_step = 1000
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-sql-attr-uint"></a>8.1.13.&nbsp;sql_attr_uint</h4></div></div></div><p>
 Unsigned integer <a href="#attributes" title="3.2.&nbsp;Attributes">attribute</a> declaration.
@@ -1976,7 +2000,7 @@ But they require less RAM when using <a href="#conf-docinfo" title="8.2.4.&nbsp;
 such bitfields are packed together in 32-bit chunks in <code class="filename">.spa</code>
 attribute data file. Bit size settings are ignored if using
 <a href="#conf-docinfo" title="8.2.4.&nbsp;docinfo">inline storage</a>.
-</p><h5><a name="id367537"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id367678"></a>Example:</h5><pre class="programlisting">
 sql_attr_uint = group_id
 sql_attr_uint = forum_id:9 # 9 bits for forum_id
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-sql-attr-bool"></a>8.1.14.&nbsp;sql_attr_bool</h4></div></div></div><p>
@@ -1984,7 +2008,7 @@ Boolean <a href="#attributes" title="3.2.&nbsp;Attributes">attribute</a> declara
 Multi-value (there might be multiple attributes declared), optional.
 Applies to SQL source types (<code class="option">mysql</code> and <code class="option">pgsql</code>) only.
 Equivalent to <a href="#conf-sql-attr-uint" title="8.1.13.&nbsp;sql_attr_uint">sql_attr_uint</a> declaration with a bit count of 1.
-</p><h5><a name="id367587"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id367728"></a>Example:</h5><pre class="programlisting">
 sql_attr_bool = is_deleted # will be packed to 1 bit
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-sql-attr-timestamp"></a>8.1.15.&nbsp;sql_attr_timestamp</h4></div></div></div><p>
 UNIX timestamp <a href="#attributes" title="3.2.&nbsp;Attributes">attribute</a> declaration.
@@ -2000,7 +2024,7 @@ sorting mode, or day/week/month/year extraction for GROUP BY. Note that
 DATE or DATETIME column types in MySQL can <span class="bold"><strong>not</strong></span> be directly used
 as timestamps; you need to explicitly convert such columns using
 UNIX_TIMESTAMP function.
-</p><h5><a name="id367654"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id367795"></a>Example:</h5><pre class="programlisting">
 sql_attr_timestamp = UNIX_TIMESTAMP(added_datetime) AS added_ts
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-sql-attr-str2ordinal"></a>8.1.16.&nbsp;sql_attr_str2ordinal</h4></div></div></div><p>
 Ordinal string number <a href="#attributes" title="3.2.&nbsp;Attributes">attribute</a> declaration.
@@ -2043,7 +2067,7 @@ number will be 1. And after the merge, the order will be broken.
 Unfortunately, this is impossible to workaround without storing
 the original strings (and once Sphinx supports storing the
 original strings, ordinals will not be necessary any more). 
-</p><h5><a name="id367772"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id367912"></a>Example:</h5><pre class="programlisting">
 sql_attr_str2ordinal = author_name
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-sql-attr-float"></a>8.1.17.&nbsp;sql_attr_float</h4></div></div></div><p>
 Floating point <a href="#attributes" title="3.2.&nbsp;Attributes">attribute</a> declaration.
@@ -2056,7 +2080,7 @@ of decimal digits that can be stored precisely is approximately 7.
 One important usage of the float attributes is storing latitude
 and longitude values (in radians), for further usage in query-time
 geosphere distance calculations.
-</p><h5><a name="id367832"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id367970"></a>Example:</h5><pre class="programlisting">
 sql_attr_float = lat_radians
 sql_attr_float = long_radians
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-sql-attr-multi"></a>8.1.18.&nbsp;sql_attr_multi</h4></div></div></div><p>
@@ -2078,7 +2102,7 @@ sql_attr_multi = ATTR-TYPE ATTR-NAME 'from' SOURCE-TYPE \
 </pre><p>
 where
 </p><div class="itemizedlist"><ul type="disc"><li>ATTR-TYPE is 'uint' or 'timestamp'</li><li>SOURCE-TYPE is 'field', 'query', or 'ranged-query'</li><li>QUERY is SQL query used to fetch all ( docid, attrvalue ) pairs</li><li>RANGE-QUERY is SQL query used to fetch min and max ID values, similar to 'sql_query_range'</li></ul></div><p>
-</p><h5><a name="id367918"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id368050"></a>Example:</h5><pre class="programlisting">
 sql_attr_multi = uint tag from query; SELECT id, tag FROM tags
 sql_attr_multi = uint tag from ranged-query; \
 	SELECT id, tag FROM tags WHERE id&gt;=$start AND id&lt;=$end; \
@@ -2097,7 +2121,7 @@ Therefore, any permanent updates should not be done from here.
 For instance, updates on helper table that permanently change
 the last successfully indexed ID should not be run from post-fetch
 query; they should be run from <a href="#conf-sql-query-post-index" title="8.1.20.&nbsp;sql_query_post_index">post-index query</a> instead.
-</p><h5><a name="id367998"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id368131"></a>Example:</h5><pre class="programlisting">
 sql_query_post = DROP TABLE my_tmp_table
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-sql-query-post-index"></a>8.1.20.&nbsp;sql_query_post_index</h4></div></div></div><p>
 Post-index query.
@@ -2110,7 +2134,7 @@ but indexing is <span class="bold"><strong>not</strong></span> terminated. It's 
 <code class="code">$maxid</code> macro can be used in its text; it will be
 expanded to maximum document ID which was actually fetched
 from the database during indexing.
-</p><h5><a name="id368054"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id368187"></a>Example:</h5><pre class="programlisting">
 sql_query_post_index = REPLACE INTO counters ( id, val ) \
     VALUES ( 'max_indexed_id', $maxid )
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-sql-ranged-throttle"></a>8.1.21.&nbsp;sql_ranged_throttle</h4></div></div></div><p>
@@ -2122,7 +2146,7 @@ Throttling can be useful when indexer imposes too much load on the
 database server. It causes the indexer to sleep for given amount of
 milliseconds once per each ranged query step. This sleep is unconditional,
 and is performed before the fetch query.
-</p><h5><a name="id368099"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id368231"></a>Example:</h5><pre class="programlisting">
 sql_ranged_throttle = 1000 # sleep for 1 sec before each query step
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-sql-query-info"></a>8.1.22.&nbsp;sql_query_info</h4></div></div></div><p>
 Document info query.
@@ -2134,7 +2158,7 @@ only works with MySQL at the moment, and only intended for debugging purposes.
 This query fetches the row that will be displayed by CLI search utility
 for each document ID. It is required to contain <code class="code">$id</code> macro
 that expands to the queried document ID.
-</p><h5><a name="id368143"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id368275"></a>Example:</h5><pre class="programlisting">
 sql_query_info = SELECT * FROM documents WHERE id=$id
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-xmlpipe-command"></a>8.1.23.&nbsp;xmlpipe_command</h4></div></div></div><p>
 Shell command that invokes xmlpipe stream producer.
@@ -2144,13 +2168,13 @@ Applies to <code class="option">xmlpipe</code> and <code class="option">xmlpipe2
 Specifies a command that will be executed and which output
 will be parsed for documents. Refer to <a href="#xmlpipe" title="3.8.&nbsp;xmlpipe data source">Section&nbsp;3.8, &#8220;xmlpipe data source&#8221;</a>
 or <a href="#xmlpipe2" title="3.9.&nbsp;xmlpipe2 data source">Section&nbsp;3.9, &#8220;xmlpipe2 data source&#8221;</a> for specific format description.
-</p><h5><a name="id368195"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id368329"></a>Example:</h5><pre class="programlisting">
 xmlpipe_command = cat /home/sphinx/test.xml
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-xmlpipe-field"></a>8.1.24.&nbsp;xmlpipe_field</h4></div></div></div><p>
 xmlpipe field declaration.
 Multi-value, optional.
 Applies to <code class="option">xmlpipe2</code> source type only. Refer to <a href="#xmlpipe2" title="3.9.&nbsp;xmlpipe2 data source">Section&nbsp;3.9, &#8220;xmlpipe2 data source&#8221;</a>.
-</p><h5><a name="id368229"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id368363"></a>Example:</h5><pre class="programlisting">
 xmlpipe_field = subject
 xmlpipe_field = content
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-xmlpipe-attr-uint"></a>8.1.25.&nbsp;xmlpipe_attr_uint</h4></div></div></div><p>
@@ -2158,35 +2182,35 @@ xmlpipe integer attribute declaration.
 Multi-value, optional.
 Applies to <code class="option">xmlpipe2</code> source type only.
 Syntax fully matches that of <a href="#conf-sql-attr-uint" title="8.1.13.&nbsp;sql_attr_uint">sql_attr_uint</a>.
-</p><h5><a name="id368267"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id368400"></a>Example:</h5><pre class="programlisting">
 xmlpipe_attr_uint = author
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-xmlpipe-attr-bool"></a>8.1.26.&nbsp;xmlpipe_attr_bool</h4></div></div></div><p>
 xmlpipe boolean attribute declaration.
 Multi-value, optional.
 Applies to <code class="option">xmlpipe2</code> source type only.
 Syntax fully matches that of <a href="#conf-sql-attr-bool" title="8.1.14.&nbsp;sql_attr_bool">sql_attr_bool</a>.
-</p><h5><a name="id368304"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id368437"></a>Example:</h5><pre class="programlisting">
 xmlpipe_attr_bool = is_deleted # will be packed to 1 bit
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-xmlpipe-attr-timestamp"></a>8.1.27.&nbsp;xmlpipe_attr_timestamp</h4></div></div></div><p>
 xmlpipe UNIX timestamp attribute declaration.
 Multi-value, optional.
 Applies to <code class="option">xmlpipe2</code> source type only.
 Syntax fully matches that of <a href="#conf-sql-attr-timestamp" title="8.1.15.&nbsp;sql_attr_timestamp">sql_attr_timestamp</a>.
-</p><h5><a name="id368342"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id368476"></a>Example:</h5><pre class="programlisting">
 xmlpipe_attr_timestamp = published
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-xmlpipe-attr-str2ordinal"></a>8.1.28.&nbsp;xmlpipe_attr_str2ordinal</h4></div></div></div><p>
 xmlpipe string ordinal attribute declaration.
 Multi-value, optional.
 Applies to <code class="option">xmlpipe2</code> source type only.
 Syntax fully matches that of <a href="#conf-sql-attr-str2ordinal" title="8.1.16.&nbsp;sql_attr_str2ordinal">sql_attr_str2ordinal</a>.
-</p><h5><a name="id368380"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id368514"></a>Example:</h5><pre class="programlisting">
 xmlpipe_attr_str2ordinal = author_sort
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-xmlpipe-attr-float"></a>8.1.29.&nbsp;xmlpipe_attr_float</h4></div></div></div><p>
 xmlpipe floating point attribute declaration.
 Multi-value, optional.
 Applies to <code class="option">xmlpipe2</code> source type only.
 Syntax fully matches that of <a href="#conf-sql-attr-float" title="8.1.17.&nbsp;sql_attr_float">sql_attr_float</a>.
-</p><h5><a name="id368418"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id368551"></a>Example:</h5><pre class="programlisting">
 xmlpipe_attr_float = lat_radians
 xmlpipe_attr_float = long_radians
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-xmlpipe-attr-multi"></a>8.1.30.&nbsp;xmlpipe_attr_multi</h4></div></div></div><p>
@@ -2199,7 +2223,7 @@ The contents of the specified tag will be parsed and a list of integers
 that will constitute the MVA will be extracted, similar to how
 <a href="#conf-sql-attr-multi" title="8.1.18.&nbsp;sql_attr_multi">sql_attr_multi</a> parses
 SQL column contents when 'field' MVA source type is specified.
-</p><h5><a name="id368465"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id368599"></a>Example:</h5><pre class="programlisting">
 xmlpipe_attr_multi = taglist
 </pre></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="confgroup-index"></a>8.2.&nbsp;Index configuration options</h3></div></div></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-index-type"></a>8.2.1.&nbsp;type</h4></div></div></div><p>
 Index type.
@@ -2212,7 +2236,7 @@ local searching but querying remote <code class="filename">searchd</code> instan
 over the network as well. Index type settings lets you choose this type.
 By default, indexes are local. Specifying 'distributed' for type enables
 distributed searching, see <a href="#distributed" title="4.7.&nbsp;Distributed searching">Section&nbsp;4.7, &#8220;Distributed searching&#8221;</a>.
-</p><h5><a name="id368524"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id368657"></a>Example:</h5><pre class="programlisting">
 type = distributed
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-source"></a>8.2.2.&nbsp;source</h4></div></div></div><p>
 Adds document source to local index.
@@ -2264,7 +2288,7 @@ source src2
 	...
 }
 </pre></li></ol></div><p>
-</p><h5><a name="id368603"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id368740"></a>Example:</h5><pre class="programlisting">
 source = srcpart1
 source = srcpart2
 source = srcpart3
@@ -2282,7 +2306,7 @@ files is if indexer fails to remove them automatically.
 </p><p>
 For reference, different index files store the following data:
 </p><div class="itemizedlist"><ul type="disc"><li><code class="filename">.spa</code> stores document attributes (used in <a href="#conf-docinfo" title="8.2.4.&nbsp;docinfo">extern docinfo</a> storage mode only);</li><li><code class="filename">.spd</code> stores matching document ID lists for each word ID;</li><li><code class="filename">.sph</code> stores index header information;</li><li><code class="filename">.spi</code> stores word lists (word IDs and pointers to <code class="filename">.spd</code> file);</li><li><code class="filename">.spm</code> stores MVA data;</li><li><code class="filename">.spp</code> stores hit (aka posting, aka word occurence) lists for each word ID.</li></ul></div><p>
-</p><h5><a name="id368717"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id368850"></a>Example:</h5><pre class="programlisting">
 path = /var/data/test1
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-docinfo"></a>8.2.4.&nbsp;docinfo</h4></div></div></div><p>
 Document attribute values (docinfo) storage mode.
@@ -2304,7 +2328,7 @@ for performance reasons. So in some cases "inline" might be the only option.
 However, such cases are infrequent, and docinfo defaults to "extern".
 Refer to <a href="#attributes" title="3.2.&nbsp;Attributes">Section&nbsp;3.2, &#8220;Attributes&#8221;</a> for in-depth discussion
 and RAM usage estimates.
-</p><h5><a name="id368781"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id368918"></a>Example:</h5><pre class="programlisting">
 docinfo = inline
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-mlock"></a>8.2.5.&nbsp;mlock</h4></div></div></div><p>
 Memory locking for cached data.
@@ -2325,7 +2349,7 @@ so it will require <code class="filename">searchd</code> to be either run
 from root account, or be granted enough privileges otherwise.
 If mlock() fails, a warning is emitted, but index continues
 working.
-</p><h5><a name="id368848"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id368984"></a>Example:</h5><pre class="programlisting">
 mlock = 1
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-morphology"></a>8.2.6.&nbsp;morphology</h4></div></div></div><p>
 A list of morphology preprocessors to apply.
@@ -2363,7 +2387,7 @@ the word will be looked up in word forms dictionary first, and if there is
 a matching entry in the dictionary, stemmers will not be applied at all.
 Or in other words, <a href="#conf-wordforms" title="8.2.8.&nbsp;wordforms">wordforms</a> can be
 used to implement stemming exceptions.
-</p><h5><a name="id368973"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id369115"></a>Example:</h5><pre class="programlisting">
 morphology = stem_en, libstemmer_sv
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-stopwords"></a>8.2.7.&nbsp;stopwords</h4></div></div></div><p>
 Stopword files list (space separated).
@@ -2386,7 +2410,7 @@ For instance, assume that "the" is a stopword, that document 1 contains the line
 "in office", and that document 2 contains "in the office". Searching for "in office"
 as for exact phrase will only return the first document, as expected, even though
 "the" in the second one is stopped.
-</p><h5><a name="id369336"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id369200"></a>Example:</h5><pre class="programlisting">
 stopwords = /usr/local/sphinx/data/stopwords.txt
 stopwords = stopwords-ru.txt stopwords-en.txt
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-wordforms"></a>8.2.8.&nbsp;wordforms</h4></div></div></div><p>
@@ -2432,7 +2456,7 @@ There is bundled <code class="filename">spelldump</code> utility that
 helps you create a dictionary file in the format Sphinx can read
 from source <code class="filename">.dict</code> and <code class="filename">.aff</code>
 dictionary files in <code class="filename">ispell</code> format.
-</p><h5><a name="id359589"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id369338"></a>Example:</h5><pre class="programlisting">
 wordforms = /usr/local/sphinx/data/wordforms.txt
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-exceptions"></a>8.2.9.&nbsp;exceptions</h4></div></div></div><p>
 Tokenizing exceptions file.
@@ -2503,7 +2527,7 @@ Exceptions are applied to raw incoming document and query data
 during indexing  and searching respectively. Therefore, to pick up
 changes in the file it's required to reindex and restart
 <code class="filename">searchd</code>.
-</p><h5><a name="id369538"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id369539"></a>Example:</h5><pre class="programlisting">
 exceptions = /usr/local/sphinx/data/exceptions.txt
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-min-word-len"></a>8.2.10.&nbsp;min_word_len</h4></div></div></div><p>
 Minimum indexed word length.
@@ -2532,7 +2556,7 @@ may in turn treat different byte values differently, and that should be
 properly reflected in your <a href="#conf-charset-table" title="8.2.12.&nbsp;charset_table">charset_table</a> settings.
 For example, the same byte value of 224 (0xE0 hex) maps to different Russian letters
 depending on whether koi-8r or windows-1251 encoding is used.
-</p><h5><a name="id369630"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id369631"></a>Example:</h5><pre class="programlisting">
 charset_type = utf-8
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-charset-table"></a>8.2.12.&nbsp;charset_table</h4></div></div></div><p>
 Accepted characters table, with case folding rules.
@@ -2590,7 +2614,7 @@ in the mappings as is. To avoid configuration file encoding issues,
 where 'xxx' is hexadecimal codepoint number. This form can also be used
 for 7-bit ASCII characters to encode special ones: eg. use U+20 to
 encode space, U+2E to encode dot, U+2C to encode comma.
-</p><h5><a name="id369818"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id369819"></a>Example:</h5><pre class="programlisting">
 # 'sbcs' defaults for English and Russian
 charset_table = 0..9, A..Z-&gt;a..z, _, a..z, \
 	U+A8-&gt;U+B8, U+B8, U+C0..U+DF-&gt;U+E0..U+FF, U+E0..U+FF
@@ -2646,7 +2670,7 @@ enable_star = 1
 // in query
 $cl-&gt;Query ( "( keyword | keyword* ) other keywords" );
 </pre><p>
-</p><h5><a name="id369974"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id370248"></a>Example:</h5><pre class="programlisting">
 min_prefix_len = 3
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-min-infix-len"></a>8.2.15.&nbsp;min_infix_len</h4></div></div></div><p>
 Minimum infix prefix length to index.
@@ -2669,7 +2693,7 @@ and searching times.
 There's no automatic way to rank perfect word matches higher
 in an infix index, but the same tricks as with <a href="#conf-min-prefix-len" title="8.2.14.&nbsp;min_prefix_len">prefix indexes</a>
 can be applied.
-</p><h5><a name="id370044"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id370318"></a>Example:</h5><pre class="programlisting">
 min_infix_len = 3
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-prefix-fields"></a>8.2.16.&nbsp;prefix_fields</h4></div></div></div><p>
 The list of full-text fields to limit prefix indexing to.
@@ -2681,7 +2705,7 @@ for instance, to provide prefix searching through URLs, but not through
 page contents. prefix_fields specifies what fields will be prefix-indexed;
 all other fields will be indexed in normal mode. The value format is a
 comma-separated list of field names.
-</p><h5><a name="id370085"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id359664"></a>Example:</h5><pre class="programlisting">
 prefix_fields = url, domain
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-infix-fields"></a>8.2.17.&nbsp;infix_fields</h4></div></div></div><p>
 The list of full-text fields to limit infix indexing to.
@@ -2689,7 +2713,7 @@ Optional, default is empty (index all fields in infix mode).
 </p><p>
 Similar to <a href="#conf-prefix-fields" title="8.2.16.&nbsp;prefix_fields">prefix_fields</a>,
 but lets you limit infix-indexing to given fields.
-</p><h5><a name="id370124"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id359702"></a>Example:</h5><pre class="programlisting">
 infix_fields = url, domain
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-enable-star"></a>8.2.18.&nbsp;enable_star</h4></div></div></div><p>
 Enables star-syntax (or wildcard syntax) when searching through prefix/infix indexes.
@@ -2717,7 +2741,7 @@ any words which have "cde" characters in any part of the word
 (including the documents which contain the exact "cde" word only).</li><li>"*def" query will match those documents that contain
 any words ending with "def" (including the documents that
 contain the exact "def" word only).</li></ol></div><p>
-</p><h5><a name="id370232"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id370369"></a>Example:</h5><pre class="programlisting">
 enable_star = 1
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-ngram-len"></a>8.2.19.&nbsp;ngram_len</h4></div></div></div><p>
 N-gram lengths for N-gram indexing.
@@ -2755,7 +2779,7 @@ Even if the search query is not segmented, Sphinx should still produce
 good results, thanks to phrase based ranking: it will pull closer phrase
 matches (which in case of N-gram CJK words can mean closer multi-character
 word matches) to the top.
-</p><h5><a name="id370340"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id370477"></a>Example:</h5><pre class="programlisting">
 ngram_len = 1
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-ngram-chars"></a>8.2.20.&nbsp;ngram_chars</h4></div></div></div><p>
 N-gram characters list.
@@ -2765,7 +2789,7 @@ To be used in conjunction with in <a href="#conf-ngram-len" title="8.2.19.&nbsp;
 this list defines characters, sequences of which are subject to N-gram extraction.
 Words comprised of other characters will not be affected by N-gram indexing
 feature. The value format is identical to <a href="#conf-charset-table" title="8.2.12.&nbsp;charset_table">charset_table</a>.
-</p><h5><a name="id370388"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id370526"></a>Example:</h5><pre class="programlisting">
 ngram_chars = U+3000..U+2FA1F
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-phrase-boundary"></a>8.2.21.&nbsp;phrase_boundary</h4></div></div></div><p>
 Phrase boundary characters list.
@@ -2789,7 +2813,7 @@ will be equivalent to phrase-level search.
 Phrase boundary condition will be raised if and only if such character
 is followed by a separator; this is to avoid abbreviations such as
 S.T.A.L.K.E.R or URLs being treated as several phrases.
-</p><h5><a name="id370453"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id370590"></a>Example:</h5><pre class="programlisting">
 phrase_boundary = ., ?, !, U+2026 # horizontal ellipsis
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-phrase-boundary-step"></a>8.2.22.&nbsp;phrase_boundary_step</h4></div></div></div><p>
 Phrase boundary word position increment.
@@ -2797,7 +2821,7 @@ Optional, default is 0.
 </p><p>
 On phrase boundary, current word position will be additionally incremented
 by this number. See <a href="#conf-phrase-boundary" title="8.2.21.&nbsp;phrase_boundary">phrase_boundary</a> for details.
-</p><h5><a name="id370490"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id370630"></a>Example:</h5><pre class="programlisting">
 phrase_boundary_step = 100
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-html-strip"></a>8.2.23.&nbsp;html_strip</h4></div></div></div><p>
 Whether to strip HTML markup from incoming full-text data.
@@ -2816,7 +2840,7 @@ see <a href="#conf-html-remove-elements" title="8.2.25.&nbsp;html_remove_element
 There are no restrictions on tag names; ie. everything
 that looks like a valid tag start, or end, or a comment
 will be stripped.
-</p><h5><a name="id370551"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id370693"></a>Example:</h5><pre class="programlisting">
 html_strip = 1
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-html-index-attrs"></a>8.2.24.&nbsp;html_index_attrs</h4></div></div></div><p>
 A list of markup attributes to index when stripping HTML.
@@ -2825,7 +2849,7 @@ Optional, default is emptu (do not index markup attributes).
 Specifies HTML markup attributes whose contents should be retained and indexed
 even though other HTML markup is stripped. The format is per-tag enumeration of
 indexable attributes, as shown in the example below.
-</p><h5><a name="id370580"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id370728"></a>Example:</h5><pre class="programlisting">
 html_index_attrs = img=alt,title; a=title;
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-html-remove-elements"></a>8.2.25.&nbsp;html_remove_elements</h4></div></div></div><p>
 A list of HTML elements for which to strip contents along with the elements themselves.
@@ -2839,7 +2863,7 @@ follows such tag will <span class="bold"><strong>not</strong></span> be removed.
 </p><p>
 The value is a comma-separated list of element (tag) names whose
 contents should be removed. Tag names are case insensitive.
-</p><h5><a name="id370641"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id370784"></a>Example:</h5><pre class="programlisting">
 html_remove_elements = style, script
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-local"></a>8.2.26.&nbsp;local</h4></div></div></div><p>
 Local index declaration in the <a href="#distributed" title="4.7.&nbsp;Distributed searching">distributed index</a>.
@@ -2852,7 +2876,7 @@ you can configure <code class="filename">searchd</code> to query itself (refer t
 <a href="#conf-agent" title="8.2.27.&nbsp;agent">Section&nbsp;8.2.27, &#8220;agent&#8221;</a> for the details). There might be several local
 indexes declared per each distributed index. Any local index can be mentioned
 several times in other distributed indexes.
-</p><h5><a name="id370704"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id370847"></a>Example:</h5><pre class="programlisting">
 local = chunk1
 local = chunk2
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-agent"></a>8.2.27.&nbsp;agent</h4></div></div></div><p>
@@ -2908,7 +2932,7 @@ index dist
 Note how one of the chunks is searched locally and the same instance
 of searchd queries itself to launch searches through three other ones
 in parallel.
-</p><h5><a name="id370825"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id370972"></a>Example:</h5><pre class="programlisting">
 agent = localhost:3312:chunk2 # contact itself
 agent = searchbox2:3312:chunk3,chunk4 # search remote indexes
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-agent-connect-timeout"></a>8.2.28.&nbsp;agent_connect_timeout</h4></div></div></div><p>
@@ -2920,7 +2944,7 @@ will wait at most this much time for connect() call to complete
 succesfully. If the timeout is reached but connect() does not complete,
 and <a href="#api-func-setretries" title="5.1.4.&nbsp;SetRetries">retries</a> are enabled,
 retry will be initiated.
-</p><h5><a name="id370874"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id371022"></a>Example:</h5><pre class="programlisting">
 agent_connect_timeout = 300
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-agent-query-timeout"></a>8.2.29.&nbsp;agent_query_timeout</h4></div></div></div><p>
 Remote agent query timeout, in milliseconds.
@@ -2932,7 +2956,7 @@ from connection timeout; so the maximum possible delay caused by
 a remote agent equals to the sum of <code class="code">agent_connection_timeout</code> and
 <code class="code">agent_query_timeout</code>. Queries will <span class="bold"><strong>not</strong></span> be retried
 if this timeout is reached; a warning will be produced instead.
-</p><h5><a name="id370933"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id371080"></a>Example:</h5><pre class="programlisting">
 agent_query_timeout = 10000 # our query can be long, allow up to 10 sec
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-preopen"></a>8.2.30.&nbsp;preopen</h4></div></div></div><p>
 Whether to pre-open all index files, or open them per each query.
@@ -2947,7 +2971,7 @@ and also they are invulnerable to subtle race conditions that may happen during
 index rotation under high load. On the other hand, when serving many indexes
 (100s to 1000s), it still might be desired to open the on per-query basis
 in order to save file descriptors.
-</p><h5><a name="id370990"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id371141"></a>Example:</h5><pre class="programlisting">
 preopen = 1
 </pre></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="confgroup-indexer"></a>8.3.&nbsp;<code class="filename">indexer</code> program configuration options</h3></div></div></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-mem-limit"></a>8.3.1.&nbsp;mem_limit</h4></div></div></div><p>
 Indexing RAM usage limit.
@@ -2970,7 +2994,7 @@ sorted and no communication with the database is performed;
 and the database server can timeout. You can resolve that
 either by raising timeouts on SQL server side or by lowering
 <code class="code">mem_limit</code>.
-</p><h5><a name="id371062"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id371213"></a>Example:</h5><pre class="programlisting">
 mem_limit = 256M
 # mem_limit = 262144K # same, but in KB
 # mem_limit = 268435456 # same, but in bytes
@@ -2991,7 +3015,7 @@ Modern SATA HDDs are able to perform up to 70-100+ I/O operations per second
 (that's mostly limited by disk heads seek time). Limiting indexing I/O
 to a fraction of that can help reduce search performance dedgradation
 caused by indexing.
-</p><h5><a name="id371126"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id371277"></a>Example:</h5><pre class="programlisting">
 max_iops = 40
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-max-iosize"></a>8.3.3.&nbsp;max_iosize</h4></div></div></div><p>
 Maximum allowed I/O operation size, in bytes, for I/O throttling.
@@ -3005,7 +3029,7 @@ will be split in several smaller operations, and counted as several operation
 by <a href="#conf-max-iops" title="8.3.2.&nbsp;max_iops">max_iops</a> setting. At the time of this
 writing, all I/O calls should be under 256 KB (default internal buffer size)
 anyway, so <code class="code">max_iosize</code> values higher than 256 KB must not affect anything.
-</p><h5><a name="id371180"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id371327"></a>Example:</h5><pre class="programlisting">
 max_iosize = 1048576
 </pre></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="confgroup-searchd"></a>8.4.&nbsp;<code class="filename">searchd</code> program configuration options</h3></div></div></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-address"></a>8.4.1.&nbsp;address</h4></div></div></div><p>
 Interface IP address to bind on.
@@ -3015,30 +3039,30 @@ Optional, default is 0.0.0.0 (ie. listen on all interfaces).
 <code class="filename">searchd</code> will bind to, listen on, and accept incoming
 network connections on. The default value is 0.0.0.0 which means to listen
 on all interfaces. At the time, you can <span class="bold"><strong>not</strong></span> specify multiple interfaces.
-</p><h5><a name="id371242"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id371389"></a>Example:</h5><pre class="programlisting">
 address = 192.168.0.1
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-port"></a>8.4.2.&nbsp;port</h4></div></div></div><p>
 <code class="filename">searchd</code> TCP port number.
 Mandatory, default is 3312.
-</p><h5><a name="id371269"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id371416"></a>Example:</h5><pre class="programlisting">
 port = 3312
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-log"></a>8.4.3.&nbsp;log</h4></div></div></div><p>
 Log file name.
 Optional, default is 'searchd.log'.
 All <code class="filename">searchd</code> run time events will be logged in this file.
-</p><h5><a name="id371297"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id371444"></a>Example:</h5><pre class="programlisting">
 log = /var/log/searchd.log
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-query-log"></a>8.4.4.&nbsp;query_log</h4></div></div></div><p>
 Query log file name.
 Optional, default is empty (do not log queries).
 All search queries will be logged in this file. The format is described in <a href="#query-log-format" title="4.8.&nbsp;searchd query log format">Section&nbsp;4.8, &#8220;<code class="filename">searchd</code> query log format&#8221;</a>.
-</p><h5><a name="id371332"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id371479"></a>Example:</h5><pre class="programlisting">
 query_log = /var/log/query.log
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-read-timeout"></a>8.4.5.&nbsp;read_timeout</h4></div></div></div><p>
 Network client request read timeout, in seconds.
 Optional, default is 5 seconds.
 <code class="filename">searchd</code> will forcibly close the client connections which fail to send a query within this timeout.
-</p><h5><a name="id371364"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id371511"></a>Example:</h5><pre class="programlisting">
 read_timeout = 1
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-max-children"></a>8.4.6.&nbsp;max_children</h4></div></div></div><p>
 Maximum amount of children to fork (or in other words, concurrent searches to run in parallel).
@@ -3048,7 +3072,7 @@ Useful to control server load. There will be no more than this much concurrent
 searches running, at all times. When the limit is reached, additional incoming
 clients are dismissed with temporarily failure (SEARCHD_RETRY) status code
 and a message stating that the server is maxed out.
-</p><h5><a name="id371393"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id371546"></a>Example:</h5><pre class="programlisting">
 max_children = 10
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-pid-file"></a>8.4.7.&nbsp;pid_file</h4></div></div></div><p>
 <code class="filename">searchd</code> process ID file name.
@@ -3061,7 +3085,7 @@ for a number of things: to check whether there already is a running instance
 of <code class="filename">searchd</code>; to stop <code class="filename">searchd</code>;
 to notify it that it should rotate the indexes. Can also be used for
 different external automation scripts.
-</p><h5><a name="id371444"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id371596"></a>Example:</h5><pre class="programlisting">
 pid_file = /var/run/searchd.pid
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-max-matches"></a>8.4.8.&nbsp;max_matches</h4></div></div></div><p>
 Maximum amount of matches that the daemon keeps in RAM for each index and can return to the client.
@@ -3099,7 +3123,7 @@ in <a href="#api-func-setlimits" title="5.2.1.&nbsp;SetLimits">SetLimits()</a> c
 Also note that you can not set the value in the API higher than the value
 in the .conf file. This is prohibited in order to have some protection
 against malicious and/or malformed requests.
-</p><h5><a name="id371589"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id371751"></a>Example:</h5><pre class="programlisting">
 max_matches = 10000
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-seamless-rotate"></a>8.4.9.&nbsp;seamless_rotate</h4></div></div></div><p>
 Prevents <code class="filename">searchd</code> stalls while rotating indexes with huge amounts of data to precache.
@@ -3123,18 +3147,18 @@ Seamless rotate comes at the cost of higher <span class="bold"><strong>peak</str
 memory usage during the rotation (because both old and new copies of
 <code class="filename">.spa/.spi/.spm</code> data need to be in RAM while
 preloading new copy). Average usage stays the same.
-</p><h5><a name="id371740"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id371901"></a>Example:</h5><pre class="programlisting">
 seamless_rotate = 1
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-preopen-indexes"></a>8.4.10.&nbsp;preopen_indexes</h4></div></div></div><p>
 Whether to forcibly preopen all indexes on startup.
 Optional, default is 0 (do not preopen).
 Enforces enabled <a href="#conf-preopen" title="8.2.30.&nbsp;preopen">preopen</a> on all served indexes,
 to avoid manually specifying it in every index.
-</p><h5><a name="id371774"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id371934"></a>Example:</h5><pre class="programlisting">
 preopen_indexes = 1
 </pre></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="conf-unlink-old"></a>8.4.11.&nbsp;unlink_old</h4></div></div></div><p>
 Whether to unlink .old index copies on succesful rotation.
 Optional, default is 1 (do unlink).
-</p><h5><a name="id371798"></a>Example:</h5><pre class="programlisting">
+</p><h5><a name="id371959"></a>Example:</h5><pre class="programlisting">
 unlink_old = 0
-</pre></div></div></div><div class="appendix" lang="en"><h2 class="title" style="clear: both"><a name="changelog"></a>A.&nbsp;Sphinx revision history</h2><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="ver_0_9_7"></a>A.1.&nbsp;Version 0.9.7, 02 apr 2007</h3></div></div></div><div class="itemizedlist"><ul type="disc"><li>added support for <code class="option">sql_str2ordinal_column</code></li><li>added support for upto 5 sort-by attrs (in extended sorting mode)</li><li>added support for separate groups sorting clause (in group-by mode)</li><li>added support for on-the-fly attribute updates (PRE-ALPHA; will change heavily; use for preliminary testing ONLY)</li><li>added support for zero/NULL attributes</li><li>added support for 0.9.7 features to SphinxSE</li><li>added support for n-grams (alpha, 1-grams only for now)</li><li>added support for warnings reported to client</li><li>added support for exclude-filters</li><li>added support for prefix and infix indexing (see <code class="option">max_prefix_len</code>, <code class="option">max_infix_len</code>)</li><li>added <code class="option">@*</code> syntax to reset current field to query language</li><li>added removal of duplicate entries in query index order</li><li>added PHP API workarounds for PHP signed/unsigned braindamage</li><li>added locks to avoid two concurrent indexers working on same index</li><li>added check for existing attributes vs. <code class="option">docinfo=none</code> case</li><li>improved groupby code a lot (better precision, and upto 25x times faster in extreme cases)</li><li>improved error handling and reporting</li><li>improved handling of broken indexes (reports error instead of hanging/crashing)</li><li>improved <code class="option">mmap()</code> limits for attributes and wordlists (now able to map over 4 GB on x64 and over 2 GB on x32 where possible)</li><li>improved <code class="option">malloc()</code> pressure in head daemon (search time should not degrade with time any more)</li><li>improved <code class="filename">test.php</code> command line options</li><li>improved error reporting (distributed query, broken index etc issues now reported to client)</li><li>changed default network packet size to be 8M, added extra checks</li><li>fixed division by zero in BM25 on 1-document collections (in extended matching mode)</li><li>fixed <code class="filename">.spl</code> files getting unlinked</li><li>fixed crash in schema compatibility test</li><li>fixed UTF-8 Russian stemmer</li><li>fixed requested matches count when querying distributed agents</li><li>fixed signed vs. unsigned issues everywhere (ranged queries, CLI search output, and obtaining docid)</li><li>fixed potential crashes vs. negative query offsets</li><li>fixed 0-match docs vs. extended mode vs. stats</li><li>fixed group/timestamp filters being ignored if querying from older clients</li><li>fixed docs to mention <code class="option">pgsql</code> source type</li><li>fixed issues with explicit '&amp;' in extended matching mode</li><li>fixed wrong assertion in SBCS encoder</li><li>fixed crashes with no-attribute indexes after rotate</li></ul></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="ver_0_9_7_rc2"></a>A.2.&nbsp;Version 0.9.7-RC2, 15 dec 2006</h3></div></div></div><div class="itemizedlist"><ul type="disc"><li>added support for extended matching mode (query language)</li><li>added support for extended sorting mode (sorting clauses)</li><li>added support for SBCS excerpts</li><li>added <code class="option">mmap()ing</code> for attributes and wordlist (improves search time, speeds up <code class="option">fork()</code> greatly)</li><li>fixed attribute name handling to be case insensitive</li><li>fixed default compiler options to simplify post-mortem debugging (added <code class="option">-g</code>, removed <code class="option">-fomit-frame-pointer</code>)</li><li>fixed rare memory leak</li><li>fixed "hello hello" queries in "match phrase" mode</li><li>fixed issue with excerpts, texts and overlong queries</li><li>fixed logging multiple index name (no longer tokenized)</li><li>fixed trailing stopword not flushed from tokenizer</li><li>fixed boolean evaluation</li><li>fixed pidfile being wrongly <code class="option">unlink()ed</code> on <code class="option">bind()</code> failure</li><li>fixed <code class="option">--with-mysql-includes/libs</code> (they conflicted with well-known paths)</li><li>fixes for 64-bit platforms</li></ul></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="ver_0_9_7_rc1"></a>A.3.&nbsp;Version 0.9.7-RC1, 26 oct 2006</h3></div></div></div><div class="itemizedlist"><ul type="disc"><li>added alpha index merging code</li><li>added an option to decrease <code class="option">max_matches</code> per-query</li><li>added an option to specify IP address for searchd to listen on</li><li>added support for unlimited amount of configured sources and indexes</li><li>added support for group-by queries</li><li>added support for /2 range modifier in charset_table</li><li>added support for arbitrary amount of document attributes</li><li>added logging filter count and index name</li><li>added <code class="option">--with-debug</code> option to configure to compile in debug mode</li><li>added <code class="option">-DNDEBUG</code> when compiling in default mode</li><li>improved search time (added doclist size hints, in-memory wordlist cache, and used VLB coding everywhere)</li><li>improved (refactored) SQL driver code (adding new drivers should be very easy now)</li><li>improved exceprts generation</li><li>fixed issue with empty sources and ranged queries</li><li>fixed querying purely remote distributed indexes</li><li>fixed suffix length check in English stemmer in some cases</li><li>fixed UTF-8 decoder for codes over U+20000 (for CJK)</li><li>fixed UTF-8 encoder for 3-byte sequences (for CJK)</li><li>fixed overshort (less than <code class="option">min_word_len</code>) words prepended to next field</li><li>fixed source connection order (indexer does not connect to all sources at once now)</li><li>fixed line numbering in config parser</li><li>fixed some issues with index rotation</li></ul></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="ver_0_9_6"></a>A.4.&nbsp;Version 0.9.6, 24 jul 2006</h3></div></div></div><div class="itemizedlist"><ul type="disc"><li>added support for empty indexes</li><li>added support for multiple sql_query_pre/post/post_index</li><li>fixed timestamp ranges filter in "match any" mode</li><li>fixed configure issues with --without-mysql and --with-pgsql options</li><li>fixed building on Solaris 9</li></ul></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="ver_0_9_6_rc1"></a>A.5.&nbsp;Version 0.9.6-RC1, 26 jun 2006</h3></div></div></div><div class="itemizedlist"><ul type="disc"><li>added boolean queries support (experimental, beta version)</li><li>added simple file-based query cache (experimental, beta version)</li><li>added storage engine for MySQL 5.0 and 5.1 (experimental, beta version)</li><li>added GNU style <code class="filename">configure</code> script</li><li>added new searchd protocol (all binary, and should be backwards compatible)</li><li>added distributed searching support to searchd</li><li>added PostgreSQL driver</li><li>added excerpts generation</li><li>added <code class="option">min_word_len</code> option to index</li><li>added <code class="option">max_matches</code> option to searchd, removed hardcoded MAX_MATCHES limit</li><li>added initial documentation, and a working <code class="filename">example.sql</code></li><li>added support for multiple sources per index</li><li>added soundex support</li><li>added group ID ranges support</li><li>added <code class="option">--stdin</code> command-line option to search utility</li><li>added <code class="option">--noprogress</code> option to indexer</li><li>added <code class="option">--index</code> option to search</li><li>fixed UTF-8 decoder (3-byte codepoints did not work)</li><li>fixed PHP API to handle big result sets faster</li><li>fixed config parser to handle empty values properly</li><li>fixed redundant <code class="code">time(NULL)</code> calls in time-segments mode</li></ul></div></div></div></div></body></html>
+</pre></div></div></div><div class="appendix" lang="en"><h2 class="title" style="clear: both"><a name="changelog"></a>A.&nbsp;Sphinx revision history</h2><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="rel098"></a>A.1.&nbsp;Version 0.9.8, 14 jul 2008</h3></div></div></div><h4><a name="id372002"></a>Indexing</h4><div class="itemizedlist"><ul type="disc"><li>added support for 64-bit document and keyword IDs, --enable-id64 switch to configure</li><li>added support for floating point attributes</li><li>added support for bitfields in attributes, <a href="#conf-sql-attr-bool" title="8.1.14.&nbsp;sql_attr_bool">sql_attr_bool</a> directive and bit-widths part in <a href="#conf-sql-attr-uint" title="8.1.13.&nbsp;sql_attr_uint">sql_attr_uint</a> directive</li><li>added support for multi-valued attributes (MVA)</li><li>added metaphone preprocessor</li><li>added libstemmer library support, provides stemmers for a number of additional languages</li><li>added xmlpipe2 source type, that supports arbitrary fields and attributes</li><li>added word form dictionaries, <a href="#conf-wordforms" title="8.2.8.&nbsp;wordforms">wordforms</a> directive (and spelldump utility)</li><li>added tokenizing exceptions, <a href="#conf-exceptions" title="8.2.9.&nbsp;exceptions">exceptions</a> directive</li><li>added an option to fully remove element contents to HTML stripper, <a href="#conf-html-remove-elements" title="8.2.25.&nbsp;html_remove_elements">html_remove_elements</a> directive</li><li>added HTML entities decoder (with full XHTML1 set support) to HTML stripper</li><li>added per-index HTML stripping settings, <a href="#conf-html-strip" title="8.2.23.&nbsp;html_strip">html_strip</a>, <a href="#conf-html-index-attrs" title="8.2.24.&nbsp;html_index_attrs">html_index_attrs</a>, and <a href="#conf-html-remove-elements" title="8.2.25.&nbsp;html_remove_elements">html_remove_elements</a> directives</li><li>added IO load throttling, <a href="#conf-max-iops" title="8.3.2.&nbsp;max_iops">max_iops</a> and <a href="#conf-max-iosize" title="8.3.3.&nbsp;max_iosize">max_iosize</a> directives</li><li>added SQL load throttling, <a href="#conf-sql-ranged-throttle" title="8.1.21.&nbsp;sql_ranged_throttle">sql_ranged_throttle</a> directive</li><li>added an option to index prefixes/infixes for given fields only, <a href="#conf-prefix-fields" title="8.2.16.&nbsp;prefix_fields">prefix_fields</a> and <a href="#conf-infix-fields" title="8.2.17.&nbsp;infix_fields">infix_fields</a> directives</li><li>added an option to ignore certain characters (instead of just treating them as whitespace), <a href="#conf-ignore-chars" title="8.2.13.&nbsp;ignore_chars">ignore_chars</a> directive</li><li>added an option to increment word position on phrase boundary characters, <a href="#conf-phrase-boundary" title="8.2.21.&nbsp;phrase_boundary">phrase_boundary</a> and <a href="#conf-phrase-boundary-step" title="8.2.22.&nbsp;phrase_boundary_step">phrase_boundary_step</a> directives</li><li>added --merge-dst-range switch (and filters) to index merging feature (--merge switch)</li><li>added <a href="#conf-mysql-connect-flags" title="8.1.8.&nbsp;mysql_connect_flags">mysql_connect_flags</a> directive (eg. to reduce indexing time MySQL network traffic and/or time)</li><li>improved ordinals sorting; now runs in fixed RAM</li><li>improved handling of documents with zero/NULL ids, now skipping them instead of aborting</li></ul></div><h4><a name="id372229"></a>Search daemon</h4><div class="itemizedlist"><ul type="disc"><li>added an option to unlink old index on succesful rotation, <a href="#conf-unlink-old" title="8.4.11.&nbsp;unlink_old">unlink_old</a> directive</li><li>added an option to keep index files open at all times (fixes subtle races on rotation), <a href="#conf-preopen" title="8.2.30.&nbsp;preopen">preopen</a> and <a href="#conf-preopen-indexes" title="8.4.10.&nbsp;preopen_indexes">preopen_indexes</a> directives</li><li>added an option to profile searchd disk I/O, --iostats command-line option</li><li>added an option to rotate index seamlessly (fully avoids query stalls), <a href="#conf-seamless-rotate" title="8.4.9.&nbsp;seamless_rotate">seamless_rotate</a> directive</li><li>added HTML stripping support to excerpts (uses per-index settings)</li><li>added 'exact_phrase', 'single_passage', 'use_boundaries', 'weight_order 'options to <a href="#api-func-buildexcerpts" title="5.7.1.&nbsp;BuildExcerpts">BuildExcerpts()</a> API call</li><li>added distributed attribute updates propagation</li><li>added distributed retries on master node side</li><li>added log reopen on SIGUSR1</li><li>added --stop switch (sends SIGTERM to running instance)</li><li>added Windows service mode, and --servicename switch</li><li>added Windows --rotate support</li><li>improved log timestamping, now with millisecond precision</li></ul></div><h4><a name="id372334"></a>Querying</h4><div class="itemizedlist"><ul type="disc"><li>added extended engine V2 (faster, cleaner, better; SPH_MATCH_EXTENDED2 mode)</li><li>added ranking modes support (V2 engine only; <a href="#api-func-setrankingmode" title="5.3.2.&nbsp;SetRankingMode">SetRankingMode()</a> API call)</li><li>added quorum searching support to query language (V2 engine only; example: "any three of all these words"/3)</li><li>added query escaping support to query language, and <a href="#api-func-escapestring" title="5.7.4.&nbsp;EscapeString">EscapeString()</a> API call</li><li>added multi-field syntax support to query language (example: "@(field1,field2) something"), and @@relaxed field checks option</li><li>added optional star-syntax ('word*') support in keywords, <a href="#conf-enable-star" title="8.2.18.&nbsp;enable_star">enable_star</a> directive (for prefix/infix indexes only)</li><li>added full-scan support (query must be fully empty; can perform block-reject optimization)</li><li>added COUNT(DISTINCT(attr)) calculation support, <a href="#api-func-setgroupdistinct" title="5.5.2.&nbsp;SetGroupDistinct">SetGroupDistinct()</a> API call</li><li>added group-by on MVA support, <a href="#api-func-setarrayresult" title="5.1.5.&nbsp;SetArrayResult">SetArrayResult()</a> PHP API call</li><li>added per-index weights feature, <a href="#api-func-setindexweights" title="5.3.6.&nbsp;SetIndexWeights">SetIndexWeights()</a> API call</li><li>added geodistance support, <a href="#api-func-setgeoanchor" title="5.4.5.&nbsp;SetGeoAnchor">SetGeoAnchor()</a> API call</li><li>added result set sorting by arbitrary expressions in run time (eg. "@weight+log(price)*2.5"), SPH_SORT_EXPR mode</li><li>added result set sorting by @custom compile-time sorting function (see src/sphinxcustomsort.inl)</li><li>added result set sorting by @random value</li><li>added result set merging for indexes with different schemas</li><li>added query comments support (3rd arg to <a href="#api-func-query" title="5.6.1.&nbsp;Query">Query()</a>/<a href="#api-func-addquery" title="5.6.2.&nbsp;AddQuery">AddQuery()</a> API calls, copied verbatim to query log)</li><li>added keyword extraction support, <a href="#api-func-buildkeywords" title="5.7.3.&nbsp;BuildKeywords">BuildKeywords()</a> API call</li><li>added binding field weights by name, <a href="#api-func-setfieldweights" title="5.3.5.&nbsp;SetFieldWeights">SetFieldWeights()</a> API call</li><li>added optional limit on query time, <a href="#api-func-setmaxquerytime" title="5.2.2.&nbsp;SetMaxQueryTime">SetMaxQueryTime()</a> API call</li><li>added optional limit on found matches count (4rd arg to <a href="#api-func-setlimits" title="5.2.1.&nbsp;SetLimits">SetLimits()</a> API call, so-called 'cutoff')</li></ul></div><h4><a name="id372528"></a>APIs and SphinxSE</h4><div class="itemizedlist"><ul type="disc"><li>added pure C API (libsphinxclient)</li><li>added Ruby API (thanks to Dmytro Shteflyuk)</li><li>added Java API</li><li>added SphinxSE support for MVAs (use varchar), floats (use float), 64bit docids (use bigint)</li><li>added SphinxSE options "floatrange", "geoanchor", "fieldweights", "indexweights", "maxquerytime", "comment", "host" and "port"; and support for "expr:CLAUSE"</li><li>improved SphinxSE max query size (using MySQL condition pushdown), upto 256K now</li></ul></div><h4><a name="id372565"></a>General</h4><div class="itemizedlist"><ul type="disc"><li>added scripting (shebang syntax) support to config files (example: #!/usr/bin/php in the first line)</li><li>added unified config handling and validation to all programs</li><li>added unified documentation </li><li>added .spec file for RPM builds</li><li>added automated testing suite</li><li>improved index locking, now fcntl()-based instead of buggy file-existence-based</li><li>fixed unaligned RAM accesses, now works on SPARC and ARM</li></ul></div><h4><a name="rel098-fixes-since-rc2"></a>Changes and fixes since 0.9.8-RC2</h4><div class="itemizedlist"><ul type="disc"><li>added pure C API (libsphinxclient)</li><li>added Ruby API</li><li>added SetConnectTimeout() PHP API call</li><li>added allowed type check to UpdateAttributes() handler (issue #174)</li><li>added defensive MVA checks on index preload (protection against broken indexes, issue #168)</li><li>added sphinx-min.conf sample file</li><li>added --without-iconv switch to configure</li><li>removed redundant -lz dependency in searchd</li><li>removed erroneous "xmlpipe2 deprecated" warning</li><li>fixed EINTR handling in piped read (issue #166)</li><li>fixup query time before logging and sending to client (issue #153)</li><li>fixed attribute updates vs full-scan early-reject index (issue #149)</li><li>fixed gcc warnings (issue #160)</li><li>fixed mysql connection attempt vs pgsql source type (issue #165)</li><li>fixed 32-bit wraparound when preloading over 2 GB files</li><li>fixed "out of memory" message vs over 2 GB allocs (issue #116)</li><li>fixed unaligned RAM access detection on ARM (where unaligned reads do not crash but produce wrong results)</li><li>fixed missing full scan results in some cases</li><li>fixed several bugs in --merge, --merge-dst-range</li><li>fixed @geodist vs MultiQuery and filters, @expr vs MultiQuery</li><li>fixed GetTokenEnd() vs 1-grams (was causing crash in excerpts)</li><li>fixed sql_query_range to handle empty strings in addition to NULL strings (Postgres specific)</li><li>fixed morphology=none vs infixes</li><li>fixed case sensitive attributes names in UpdateAttributes()</li><li>fixed ext2 ranking vs. stopwords (now using atompos from query parser)</li><li>fixed EscapeString() call</li><li>fixed escaped specials (now handled as whitespace if not in charset)</li><li>fixed schema minimizer (now handles type/size mismatches)</li><li>fixed word stats in extended2; stemmed form is now returned</li><li>fixed spelldump case folding vs dictionary-defined character sets</li><li>fixed Postgres BOOLEAN handling </li><li>fixed enforced "inline" docinfo on empty indexes (normally ok, but index merge was really confused)</li><li>fixed rare count(distinct) out-of-bounds issue (it occasionaly caused too high @distinct values)</li><li>fixed hangups on documents with id=DOCID_MAX in some cases</li><li>fixed rare crash in tokenizer (prefixed synonym vs. input stream eof)</li><li>fixed query parser vs "aaa (bbb ccc)|ddd" queries</li><li>fixed BuildExcerpts() request in Java API</li><li>fixed Postgres specific memory leak</li><li>fixed handling of overshort keywords (less than min_word_len)</li><li>fixed HTML stripper (now emits space after indexed attributes)</li><li>fixed 32-field case in query parser</li><li>fixed rare count(distinct) vs. querying multiple local indexes vs. reusable sorter issue</li><li>fixed sorting of negative floats in SPH_SORT_EXTENDED mode</li></ul></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="rel097"></a>A.2.&nbsp;Version 0.9.7, 02 apr 2007</h3></div></div></div><div class="itemizedlist"><ul type="disc"><li>added support for <code class="option">sql_str2ordinal_column</code></li><li>added support for upto 5 sort-by attrs (in extended sorting mode)</li><li>added support for separate groups sorting clause (in group-by mode)</li><li>added support for on-the-fly attribute updates (PRE-ALPHA; will change heavily; use for preliminary testing ONLY)</li><li>added support for zero/NULL attributes</li><li>added support for 0.9.7 features to SphinxSE</li><li>added support for n-grams (alpha, 1-grams only for now)</li><li>added support for warnings reported to client</li><li>added support for exclude-filters</li><li>added support for prefix and infix indexing (see <code class="option">max_prefix_len</code>, <code class="option">max_infix_len</code>)</li><li>added <code class="option">@*</code> syntax to reset current field to query language</li><li>added removal of duplicate entries in query index order</li><li>added PHP API workarounds for PHP signed/unsigned braindamage</li><li>added locks to avoid two concurrent indexers working on same index</li><li>added check for existing attributes vs. <code class="option">docinfo=none</code> case</li><li>improved groupby code a lot (better precision, and upto 25x times faster in extreme cases)</li><li>improved error handling and reporting</li><li>improved handling of broken indexes (reports error instead of hanging/crashing)</li><li>improved <code class="option">mmap()</code> limits for attributes and wordlists (now able to map over 4 GB on x64 and over 2 GB on x32 where possible)</li><li>improved <code class="option">malloc()</code> pressure in head daemon (search time should not degrade with time any more)</li><li>improved <code class="filename">test.php</code> command line options</li><li>improved error reporting (distributed query, broken index etc issues now reported to client)</li><li>changed default network packet size to be 8M, added extra checks</li><li>fixed division by zero in BM25 on 1-document collections (in extended matching mode)</li><li>fixed <code class="filename">.spl</code> files getting unlinked</li><li>fixed crash in schema compatibility test</li><li>fixed UTF-8 Russian stemmer</li><li>fixed requested matches count when querying distributed agents</li><li>fixed signed vs. unsigned issues everywhere (ranged queries, CLI search output, and obtaining docid)</li><li>fixed potential crashes vs. negative query offsets</li><li>fixed 0-match docs vs. extended mode vs. stats</li><li>fixed group/timestamp filters being ignored if querying from older clients</li><li>fixed docs to mention <code class="option">pgsql</code> source type</li><li>fixed issues with explicit '&amp;' in extended matching mode</li><li>fixed wrong assertion in SBCS encoder</li><li>fixed crashes with no-attribute indexes after rotate</li></ul></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="rel097rc2"></a>A.3.&nbsp;Version 0.9.7-RC2, 15 dec 2006</h3></div></div></div><div class="itemizedlist"><ul type="disc"><li>added support for extended matching mode (query language)</li><li>added support for extended sorting mode (sorting clauses)</li><li>added support for SBCS excerpts</li><li>added <code class="option">mmap()ing</code> for attributes and wordlist (improves search time, speeds up <code class="option">fork()</code> greatly)</li><li>fixed attribute name handling to be case insensitive</li><li>fixed default compiler options to simplify post-mortem debugging (added <code class="option">-g</code>, removed <code class="option">-fomit-frame-pointer</code>)</li><li>fixed rare memory leak</li><li>fixed "hello hello" queries in "match phrase" mode</li><li>fixed issue with excerpts, texts and overlong queries</li><li>fixed logging multiple index name (no longer tokenized)</li><li>fixed trailing stopword not flushed from tokenizer</li><li>fixed boolean evaluation</li><li>fixed pidfile being wrongly <code class="option">unlink()ed</code> on <code class="option">bind()</code> failure</li><li>fixed <code class="option">--with-mysql-includes/libs</code> (they conflicted with well-known paths)</li><li>fixes for 64-bit platforms</li></ul></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="rel097rc"></a>A.4.&nbsp;Version 0.9.7-RC1, 26 oct 2006</h3></div></div></div><div class="itemizedlist"><ul type="disc"><li>added alpha index merging code</li><li>added an option to decrease <code class="option">max_matches</code> per-query</li><li>added an option to specify IP address for searchd to listen on</li><li>added support for unlimited amount of configured sources and indexes</li><li>added support for group-by queries</li><li>added support for /2 range modifier in charset_table</li><li>added support for arbitrary amount of document attributes</li><li>added logging filter count and index name</li><li>added <code class="option">--with-debug</code> option to configure to compile in debug mode</li><li>added <code class="option">-DNDEBUG</code> when compiling in default mode</li><li>improved search time (added doclist size hints, in-memory wordlist cache, and used VLB coding everywhere)</li><li>improved (refactored) SQL driver code (adding new drivers should be very easy now)</li><li>improved exceprts generation</li><li>fixed issue with empty sources and ranged queries</li><li>fixed querying purely remote distributed indexes</li><li>fixed suffix length check in English stemmer in some cases</li><li>fixed UTF-8 decoder for codes over U+20000 (for CJK)</li><li>fixed UTF-8 encoder for 3-byte sequences (for CJK)</li><li>fixed overshort (less than <code class="option">min_word_len</code>) words prepended to next field</li><li>fixed source connection order (indexer does not connect to all sources at once now)</li><li>fixed line numbering in config parser</li><li>fixed some issues with index rotation</li></ul></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="rel096"></a>A.5.&nbsp;Version 0.9.6, 24 jul 2006</h3></div></div></div><div class="itemizedlist"><ul type="disc"><li>added support for empty indexes</li><li>added support for multiple sql_query_pre/post/post_index</li><li>fixed timestamp ranges filter in "match any" mode</li><li>fixed configure issues with --without-mysql and --with-pgsql options</li><li>fixed building on Solaris 9</li></ul></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="rel096rc1"></a>A.6.&nbsp;Version 0.9.6-RC1, 26 jun 2006</h3></div></div></div><div class="itemizedlist"><ul type="disc"><li>added boolean queries support (experimental, beta version)</li><li>added simple file-based query cache (experimental, beta version)</li><li>added storage engine for MySQL 5.0 and 5.1 (experimental, beta version)</li><li>added GNU style <code class="filename">configure</code> script</li><li>added new searchd protocol (all binary, and should be backwards compatible)</li><li>added distributed searching support to searchd</li><li>added PostgreSQL driver</li><li>added excerpts generation</li><li>added <code class="option">min_word_len</code> option to index</li><li>added <code class="option">max_matches</code> option to searchd, removed hardcoded MAX_MATCHES limit</li><li>added initial documentation, and a working <code class="filename">example.sql</code></li><li>added support for multiple sources per index</li><li>added soundex support</li><li>added group ID ranges support</li><li>added <code class="option">--stdin</code> command-line option to search utility</li><li>added <code class="option">--noprogress</code> option to indexer</li><li>added <code class="option">--index</code> option to search</li><li>fixed UTF-8 decoder (3-byte codepoints did not work)</li><li>fixed PHP API to handle big result sets faster</li><li>fixed config parser to handle empty values properly</li><li>fixed redundant <code class="code">time(NULL)</code> calls in time-segments mode</li></ul></div></div></div></div></body></html>

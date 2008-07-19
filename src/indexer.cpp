@@ -586,12 +586,7 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 	#endif
 
 	if ( hSource["type"]=="xmlpipe" || hSource["type"]=="xmlpipe2" )
-	{
-		if ( hSource["type"]=="xmlpipe2" )
-			fprintf ( stdout, "WARNING: xmlpipe2 source type is deprecated; use xmlpipe\n" );
-
 		return SpawnSourceXMLPipe ( hSource, sSourceName, bUTF8 );
-	}
 
 	fprintf ( stdout, "ERROR: source '%s': unknown type '%s'; skipping.\n", sSourceName,
 		hSource["type"].cstr() );

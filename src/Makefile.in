@@ -68,6 +68,7 @@ binPROGRAMS_INSTALL = $(INSTALL_PROGRAM)
 PROGRAMS = $(bin_PROGRAMS) $(noinst_PROGRAMS)
 am_indexer_OBJECTS = indexer.$(OBJEXT)
 indexer_OBJECTS = $(am_indexer_OBJECTS)
+indexer_LDADD = $(LDADD)
 @USE_LIBSTEMMER_TRUE@am__DEPENDENCIES_1 =  \
 @USE_LIBSTEMMER_TRUE@	$(top_srcdir)/libstemmer_c/libstemmer.a
 am__DEPENDENCIES_2 =
@@ -76,15 +77,19 @@ am__DEPENDENCIES_3 = libsphinx.a $(am__DEPENDENCIES_1) \
 indexer_DEPENDENCIES = $(am__DEPENDENCIES_3)
 am_search_OBJECTS = search.$(OBJEXT)
 search_OBJECTS = $(am_search_OBJECTS)
+search_LDADD = $(LDADD)
 search_DEPENDENCIES = $(am__DEPENDENCIES_3)
 am_searchd_OBJECTS = searchd.$(OBJEXT)
 searchd_OBJECTS = $(am_searchd_OBJECTS)
+searchd_LDADD = $(LDADD)
 searchd_DEPENDENCIES = $(am__DEPENDENCIES_3)
 am_spelldump_OBJECTS = spelldump.$(OBJEXT)
 spelldump_OBJECTS = $(am_spelldump_OBJECTS)
+spelldump_LDADD = $(LDADD)
 spelldump_DEPENDENCIES = $(am__DEPENDENCIES_3)
 am_tests_OBJECTS = tests.$(OBJEXT)
 tests_OBJECTS = $(am_tests_OBJECTS)
+tests_LDADD = $(LDADD)
 tests_DEPENDENCIES = $(am__DEPENDENCIES_3)
 DEFAULT_INCLUDES = -I. -I$(srcdir) -I$(top_builddir)/config
 depcomp = $(SHELL) $(top_srcdir)/config/depcomp
@@ -213,11 +218,7 @@ BUILT_SOURCES = extract-version
 @USE_LIBSTEMMER_FALSE@AM_CPPFLAGS = -DSYSCONFDIR="\"$(sysconfdir)\""
 @USE_LIBSTEMMER_TRUE@AM_CPPFLAGS = -I$(top_srcdir)/libstemmer_c/include -DSYSCONFDIR="\"$(sysconfdir)\""
 COMMON_LIBS = libsphinx.a $(LIBSTEMMER_LIBS) $(MYSQL_LIBS) $(PGSQL_LIBS)
-indexer_LDADD = $(COMMON_LIBS)
-searchd_LDADD = $(COMMON_LIBS) -lz
-search_LDADD = $(COMMON_LIBS)
-spelldump_LDADD = $(COMMON_LIBS)
-tests_LDADD = $(COMMON_LIBS)
+LDADD = $(COMMON_LIBS)
 EXTRA_DIST = indexer.vcproj libsphinx.vcproj searchd.vcproj search.vcproj
 all: $(BUILT_SOURCES)
 	$(MAKE) $(AM_MAKEFLAGS) all-am

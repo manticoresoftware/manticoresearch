@@ -35,6 +35,7 @@ $tagrev = length($tag)
 $result = <<EOT;
 #define ${PREFIX}_SVN_TAG "$tag"
 #define ${PREFIX}_SVN_REV $rev
+#define ${PREFIX}_SVN_REVSTR "$rev"
 #define ${PREFIX}_SVN_TAGREV "$tagrev"
 EOT
 

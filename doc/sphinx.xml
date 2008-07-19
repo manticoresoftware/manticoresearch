@@ -2279,6 +2279,49 @@ will be 37 and the new amount will be 11; etc.
 </sect3>
 
 
+<sect3 id="api-func-buildkeywords"><title>BuildKeywords</title>
+<para><b>Prototype:</b> function BuildKeywords ( $query, $index, $hits )</para>
+<para>
+Extracts keywords from query using tokenizer settings for given index, optionally with per-keyword occurrence statistics.
+Returns an array of hashes with per-keyword information.
+</para>
+<para>
+<code>$query</code> is a query to extract keywords from.
+<code>$index</code> is a name of the index to get tokenizing settings and keyword occurrence statistics from.
+<code>$hits</code> is a boolean flag that indicates whether keyword occurrence statistics are required.
+</para>
+<para>
+Usage example:
+</para>
+<programlisting>
+$keywords = $cl->BuildKeywords ( "this.is.my query", "test1", false );
+</programlisting>
+</sect3>
+
+
+<sect3 id="api-func-escapestring"><title>EscapeString</title>
+<para><b>Prototype:</b> function EscapeString ( $string )</para>
+<para>
+Escapes characters that are treated as special operators by the query language parser.
+Returns an escaped string.
+</para>
+<para>
+<code>$string</code> is a string to escape.
+</para>
+<para>
+This function might seem redundant because it's trivial to implement in any calling
+application. However, as the set of special characters might change over time, it makes
+sense to have an API call that is guaranteed to escape all such characters at all times.
+</para>
+<para>
+Usage example:
+</para>
+<programlisting>
+$escaped = $cl->EscapeString ( "escaping-sample@query/string" );
+</programlisting>
+</sect3>
+
+
 </sect2>
 </sect1>
 <sect1 id="sphinxse"><title>MySQL storage engine (SphinxSE)</title>
@@ -4868,7 +4911,138 @@ unlink_old = 0
 
 <appendix id="changelog"><title>Sphinx revision history</title>
 
-<sect2 id="ver_0_9_7"><title>Version 0.9.7, 02 apr 2007</title>
+<sect2 id="rel098"><title>Version 0.9.8, 14 jul 2008</title>
+<bridgehead>Indexing</bridgehead>
+<itemizedlist>
+<listitem>added support for 64-bit document and keyword IDs, --enable-id64 switch to configure</listitem>
+<listitem>added support for floating point attributes</listitem>
+<listitem>added support for bitfields in attributes, <link linkend="conf-sql-attr-bool">sql_attr_bool</link> directive and bit-widths part in <link linkend="conf-sql-attr-uint">sql_attr_uint</link> directive</listitem>
+<listitem>added support for multi-valued attributes (MVA)</listitem>
+<listitem>added metaphone preprocessor</listitem>
+<listitem>added libstemmer library support, provides stemmers for a number of additional languages</listitem>
+<listitem>added xmlpipe2 source type, that supports arbitrary fields and attributes</listitem>
+<listitem>added word form dictionaries, <link linkend="conf-wordforms">wordforms</link> directive (and spelldump utility)</listitem>
+<listitem>added tokenizing exceptions, <link linkend="conf-exceptions">exceptions</link> directive</listitem>
+<listitem>added an option to fully remove element contents to HTML stripper, <link linkend="conf-html-remove-elements">html_remove_elements</link> directive</listitem>
+<listitem>added HTML entities decoder (with full XHTML1 set support) to HTML stripper</listitem>
+<listitem>added per-index HTML stripping settings, <link linkend="conf-html-strip">html_strip</link>, <link linkend="conf-html-index-attrs">html_index_attrs</link>, and <link linkend="conf-html-remove-elements">html_remove_elements</link> directives</listitem>
+<listitem>added IO load throttling, <link linkend="conf-max-iops">max_iops</link> and <link linkend="conf-max-iosize">max_iosize</link> directives</listitem>
+<listitem>added SQL load throttling, <link linkend="conf-sql-ranged-throttle">sql_ranged_throttle</link> directive</listitem>
+<listitem>added an option to index prefixes/infixes for given fields only, <link linkend="conf-prefix-fields">prefix_fields</link> and <link linkend="conf-infix-fields">infix_fields</link> directives</listitem>
+<listitem>added an option to ignore certain characters (instead of just treating them as whitespace), <link linkend="conf-ignore-chars">ignore_chars</link> directive</listitem>
+<listitem>added an option to increment word position on phrase boundary characters, <link linkend="conf-phrase-boundary">phrase_boundary</link> and <link linkend="conf-phrase-boundary-step">phrase_boundary_step</link> directives</listitem>
+<listitem>added --merge-dst-range switch (and filters) to index merging feature (--merge switch)</listitem>
+<listitem>added <link linkend="conf-mysql-connect-flags">mysql_connect_flags</link> directive (eg. to reduce indexing time MySQL network traffic and/or time)</listitem>
+<listitem>improved ordinals sorting; now runs in fixed RAM</listitem>
+<listitem>improved handling of documents with zero/NULL ids, now skipping them instead of aborting</listitem>
+</itemizedlist>
+<bridgehead>Search daemon</bridgehead>
+<itemizedlist>
+<listitem>added an option to unlink old index on succesful rotation, <link linkend="conf-unlink-old">unlink_old</link> directive</listitem>
+<listitem>added an option to keep index files open at all times (fixes subtle races on rotation), <link linkend="conf-preopen">preopen</link> and <link linkend="conf-preopen-indexes">preopen_indexes</link> directives</listitem>
+<listitem>added an option to profile searchd disk I/O, --iostats command-line option</listitem>
+<listitem>added an option to rotate index seamlessly (fully avoids query stalls), <link linkend="conf-seamless-rotate">seamless_rotate</link> directive</listitem>
+<listitem>added HTML stripping support to excerpts (uses per-index settings)</listitem>
+<listitem>added 'exact_phrase', 'single_passage', 'use_boundaries', 'weight_order 'options to <link linkend="api-func-buildexcerpts">BuildExcerpts()</link> API call</listitem>
+<listitem>added distributed attribute updates propagation</listitem>
+<listitem>added distributed retries on master node side</listitem>
+<listitem>added log reopen on SIGUSR1</listitem>
+<listitem>added --stop switch (sends SIGTERM to running instance)</listitem>
+<listitem>added Windows service mode, and --servicename switch</listitem>
+<listitem>added Windows --rotate support</listitem>
+<listitem>improved log timestamping, now with millisecond precision</listitem>
+</itemizedlist>
+<bridgehead>Querying</bridgehead>
+<itemizedlist>
+<listitem>added extended engine V2 (faster, cleaner, better; SPH_MATCH_EXTENDED2 mode)</listitem>
+<listitem>added ranking modes support (V2 engine only; <link linkend="api-func-setrankingmode">SetRankingMode()</link> API call)</listitem>
+<listitem>added quorum searching support to query language (V2 engine only; example: "any three of all these words"/3)</listitem>
+<listitem>added query escaping support to query language, and <link linkend="api-func-escapestring">EscapeString()</link> API call</listitem>
+<listitem>added multi-field syntax support to query language (example: "@(field1,field2) something"), and @@relaxed field checks option</listitem>
+<listitem>added optional star-syntax ('word*') support in keywords, <link linkend="conf-enable-star">enable_star</link> directive (for prefix/infix indexes only)</listitem>
+<listitem>added full-scan support (query must be fully empty; can perform block-reject optimization)</listitem>
+<listitem>added COUNT(DISTINCT(attr)) calculation support, <link linkend="api-func-setgroupdistinct">SetGroupDistinct()</link> API call</listitem>
+<listitem>added group-by on MVA support, <link linkend="api-func-setarrayresult">SetArrayResult()</link> PHP API call</listitem>
+<listitem>added per-index weights feature, <link linkend="api-func-setindexweights">SetIndexWeights()</link> API call</listitem>
+<listitem>added geodistance support, <link linkend="api-func-setgeoanchor">SetGeoAnchor()</link> API call</listitem>
+<listitem>added result set sorting by arbitrary expressions in run time (eg. "@weight+log(price)*2.5"), SPH_SORT_EXPR mode</listitem>
+<listitem>added result set sorting by @custom compile-time sorting function (see src/sphinxcustomsort.inl)</listitem>
+<listitem>added result set sorting by @random value</listitem>
+<listitem>added result set merging for indexes with different schemas</listitem>
+<listitem>added query comments support (3rd arg to <link linkend="api-func-query">Query()</link>/<link linkend="api-func-addquery">AddQuery()</link> API calls, copied verbatim to query log)</listitem>
+<listitem>added keyword extraction support, <link linkend="api-func-buildkeywords">BuildKeywords()</link> API call</listitem>
+<listitem>added binding field weights by name, <link linkend="api-func-setfieldweights">SetFieldWeights()</link> API call</listitem>
+<listitem>added optional limit on query time, <link linkend="api-func-setmaxquerytime">SetMaxQueryTime()</link> API call</listitem>
+<listitem>added optional limit on found matches count (4rd arg to <link linkend="api-func-setlimits">SetLimits()</link> API call, so-called 'cutoff')</listitem>
+</itemizedlist>
+<bridgehead>APIs and SphinxSE</bridgehead>
+<itemizedlist>
+<listitem>added pure C API (libsphinxclient)</listitem>
+<listitem>added Ruby API (thanks to Dmytro Shteflyuk)</listitem>
+<listitem>added Java API</listitem>
+<listitem>added SphinxSE support for MVAs (use varchar), floats (use float), 64bit docids (use bigint)</listitem>
+<listitem>added SphinxSE options "floatrange", "geoanchor", "fieldweights", "indexweights", "maxquerytime", "comment", "host" and "port"; and support for "expr:CLAUSE"</listitem>
+<listitem>improved SphinxSE max query size (using MySQL condition pushdown), upto 256K now</listitem>
+</itemizedlist>
+<bridgehead>General</bridgehead>
+<itemizedlist>
+<listitem>added scripting (shebang syntax) support to config files (example: #!/usr/bin/php in the first line)</listitem>
+<listitem>added unified config handling and validation to all programs</listitem>
+<listitem>added unified documentation </listitem>
+<listitem>added .spec file for RPM builds</listitem>
+<listitem>added automated testing suite</listitem>
+<listitem>improved index locking, now fcntl()-based instead of buggy file-existence-based</listitem>
+<listitem>fixed unaligned RAM accesses, now works on SPARC and ARM</listitem>
+</itemizedlist>
+<bridgehead id="rel098-fixes-since-rc2">Changes and fixes since 0.9.8-RC2</bridgehead>
+<itemizedlist>
+<listitem>added pure C API (libsphinxclient)</listitem>
+<listitem>added Ruby API</listitem>
+<listitem>added SetConnectTimeout() PHP API call</listitem>
+<listitem>added allowed type check to UpdateAttributes() handler (issue #174)</listitem>
+<listitem>added defensive MVA checks on index preload (protection against broken indexes, issue #168)</listitem>
+<listitem>added sphinx-min.conf sample file</listitem>
+<listitem>added --without-iconv switch to configure</listitem>
+<listitem>removed redundant -lz dependency in searchd</listitem>
+<listitem>removed erroneous "xmlpipe2 deprecated" warning</listitem>
+<listitem>fixed EINTR handling in piped read (issue #166)</listitem>
+<listitem>fixup query time before logging and sending to client (issue #153)</listitem>
+<listitem>fixed attribute updates vs full-scan early-reject index (issue #149)</listitem>
+<listitem>fixed gcc warnings (issue #160)</listitem>
+<listitem>fixed mysql connection attempt vs pgsql source type (issue #165)</listitem>
+<listitem>fixed 32-bit wraparound when preloading over 2 GB files</listitem>
+<listitem>fixed "out of memory" message vs over 2 GB allocs (issue #116)</listitem>
+<listitem>fixed unaligned RAM access detection on ARM (where unaligned reads do not crash but produce wrong results)</listitem>
+<listitem>fixed missing full scan results in some cases</listitem>
+<listitem>fixed several bugs in --merge, --merge-dst-range</listitem>
+<listitem>fixed @geodist vs MultiQuery and filters, @expr vs MultiQuery</listitem>
+<listitem>fixed GetTokenEnd() vs 1-grams (was causing crash in excerpts)</listitem>
+<listitem>fixed sql_query_range to handle empty strings in addition to NULL strings (Postgres specific)</listitem>
+<listitem>fixed morphology=none vs infixes</listitem>
+<listitem>fixed case sensitive attributes names in UpdateAttributes()</listitem>
+<listitem>fixed ext2 ranking vs. stopwords (now using atompos from query parser)</listitem>
+<listitem>fixed EscapeString() call</listitem>
+<listitem>fixed escaped specials (now handled as whitespace if not in charset)</listitem>
+<listitem>fixed schema minimizer (now handles type/size mismatches)</listitem>
+<listitem>fixed word stats in extended2; stemmed form is now returned</listitem>
+<listitem>fixed spelldump case folding vs dictionary-defined character sets</listitem>
+<listitem>fixed Postgres BOOLEAN handling </listitem>
+<listitem>fixed enforced "inline" docinfo on empty indexes (normally ok, but index merge was really confused)</listitem>
+<listitem>fixed rare count(distinct) out-of-bounds issue (it occasionaly caused too high @distinct values)</listitem>
+<listitem>fixed hangups on documents with id=DOCID_MAX in some cases</listitem>
+<listitem>fixed rare crash in tokenizer (prefixed synonym vs. input stream eof)</listitem>
+<listitem>fixed query parser vs "aaa (bbb ccc)|ddd" queries</listitem>
+<listitem>fixed BuildExcerpts() request in Java API</listitem>
+<listitem>fixed Postgres specific memory leak</listitem>
+<listitem>fixed handling of overshort keywords (less than min_word_len)</listitem>
+<listitem>fixed HTML stripper (now emits space after indexed attributes)</listitem>
+<listitem>fixed 32-field case in query parser</listitem>
+<listitem>fixed rare count(distinct) vs. querying multiple local indexes vs. reusable sorter issue</listitem>
+<listitem>fixed sorting of negative floats in SPH_SORT_EXTENDED mode</listitem>
+</itemizedlist>
+</sect2>
+
+<sect2 id="rel097"><title>Version 0.9.7, 02 apr 2007</title>
 <itemizedlist>
 <listitem>added support for <option>sql_str2ordinal_column</option></listitem>
 <listitem>added support for upto 5 sort-by attrs (in extended sorting mode)</listitem>
@@ -4909,7 +5083,7 @@ unlink_old = 0
 </itemizedlist>
 </sect2>
 
-<sect2 id="ver_0_9_7_rc2"><title>Version 0.9.7-RC2, 15 dec 2006</title>
+<sect2 id="rel097rc2"><title>Version 0.9.7-RC2, 15 dec 2006</title>
 <itemizedlist>
 <listitem>added support for extended matching mode (query language)</listitem>
 <listitem>added support for extended sorting mode (sorting clauses)</listitem>
@@ -4929,7 +5103,7 @@ unlink_old = 0
 </itemizedlist>
 </sect2>
 
-<sect2 id="ver_0_9_7_rc1"><title>Version 0.9.7-RC1, 26 oct 2006</title>
+<sect2 id="rel097rc"><title>Version 0.9.7-RC1, 26 oct 2006</title>
 <itemizedlist>
 <listitem>added alpha index merging code</listitem>
 <listitem>added an option to decrease <option>max_matches</option> per-query</listitem>
@@ -4956,7 +5130,7 @@ unlink_old = 0
 </itemizedlist>
 </sect2>
 
-<sect2 id="ver_0_9_6"><title>Version 0.9.6, 24 jul 2006</title>
+<sect2 id="rel096"><title>Version 0.9.6, 24 jul 2006</title>
 <itemizedlist>
 <listitem>added support for empty indexes</listitem>
 <listitem>added support for multiple sql_query_pre/post/post_index</listitem>
@@ -4966,7 +5140,7 @@ unlink_old = 0
 </itemizedlist>
 </sect2>
 
-<sect2 id="ver_0_9_6_rc1"><title>Version 0.9.6-RC1, 26 jun 2006</title>
+<sect2 id="rel096rc1"><title>Version 0.9.6-RC1, 26 jun 2006</title>
 <itemizedlist>
 <listitem>added boolean queries support (experimental, beta version)</listitem>
 <listitem>added simple file-based query cache (experimental, beta version)</listitem>

@@ -21,13 +21,24 @@ function MyMicrotime ()
 function CreateDB ( $db_drop, $db_create, $db_insert )
 {
 	global $db_host, $db_user, $db_pwd, $db_name, $db_port;
-	return
-		@mysql_connect ( $db_host.":".$db_port, $db_user, $db_pwd ) &&
-		@mysql_query ( "CREATE DATABASE IF NOT EXISTS $db_name" ) &&
-		@mysql_select_db ( $db_name ) &&
-		@mysql_query ( $db_drop ) &&
-		@mysql_query ( $db_create ) &&
-		@mysql_query ( $db_insert );
+	if ( !@mysql_connect ( $db_host.":".$db_port, $db_user, $db_pwd ) ||
+		!@mysql_query ( "CREATE DATABASE IF NOT EXISTS $db_name" ) ||
+		!@mysql_select_db ( $db_name ) )
+		return false;
+
+	foreach ( $db_drop as $q )
+		if ( !@mysql_query ( $q ) )
+			return false;
+
+	foreach ( $db_create as $q )
+		if ( !@mysql_query ( $q ) )
+			return false;
+
+	foreach ( $db_insert as $q )
+		if ( !@mysql_query ( $q ) )
+			return false;
+
+	return true;
 }
 
 
@@ -173,6 +184,9 @@ class SphinxConfig
 		$this->_results_model	= array ();
 		$this->_query_attributes = array ();
 		$this->_indexer_runs	= array ();
+		$this->_db_create		= array ();
+		$this->_db_drop			= array ();
+		$this->_db_create		= array ();
 		$this->_num_agents		= 1;
 		$this->_subtest 		= 0;
 		$this->_subtestcount	= 0;
@@ -419,10 +433,16 @@ class SphinxConfig
 		$this->GatherNodes ( $this->_config );
 		$this->GatherEntities ( GetFirstChild ( $xml, "query_attributes" ), $this->_query_attributes );
 
+		foreach ( ChildrenArray ( $xml, "db_create" ) as $node )
+			$this->_db_create []=$node->nodeValue;
+
+		foreach ( ChildrenArray ( $xml, "db_drop" ) as $node )
+			$this->_db_drop []=$node->nodeValue;
+
+		foreach ( ChildrenArray ( $xml, "db_insert" ) as $node )
+			$this->_db_insert []=$node->nodeValue;
+
 		$this->_name			= GetFirstChildValue ( $xml, "name" );
-		$this->_db_create		= GetFirstChildValue ( $xml, "db_create" );
-		$this->_db_drop			= GetFirstChildValue ( $xml, "db_drop" );
-		$this->_db_insert		= GetFirstChildValue ( $xml, "db_insert" );
 		$this->_query_settings	= GetFirstChildValue ( $xml, "query_settings" );
 		$this->_num_agents		= GetFirstChildValue ( $xml, "num_agents", 1 );
 
@@ -527,6 +547,7 @@ class SphinxConfig
     		$cl = new SphinxClient ();
 			$cl->SetServer ( $sd_address, $sd_port );
 
+			$results = false;
 			$run_func = create_function( '$client, &$results', $this->_custom_test );
 			$run_func ( $cl, $results ); 
 
@@ -776,8 +797,7 @@ class SphinxConfig
 			$result_f_ref = $this->FormatResultSet ( $nquery + 1, $ref );
 			file_put_contents ( "current", $result_f_cur );
 			file_put_contents ( "reference", $result_f_ref );
-
-			system ( "diff -u3 reference current > diffed.txt" );
+			system ( "diff --unified=3 reference current > diffed.txt" );
 
 			$diffed = file_get_contents ( "diffed.txt" );
 			unlink ( "current" );

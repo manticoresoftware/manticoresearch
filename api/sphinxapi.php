@@ -200,6 +200,7 @@ class SphinxClient
 	var $_reqs;			///< requests array for multi-query
 	var $_mbenc;		///< stored mbstring encoding
 	var $_arrayresult;	///< whether $result["matches"] should be a hash or an array
+	var $_timeout;		///< connect timeout
 
 	/////////////////////////////////////////////////////////////////////////////
 	// common stuff
@@ -243,6 +244,7 @@ class SphinxClient
 		$this->_reqs		= array ();	// requests storage (for multi-query case)
 		$this->_mbenc		= "";
 		$this->_arrayresult	= false;
+		$this->_timeout		= 0;
 	}
 
 	/// get last error message (string)
@@ -264,6 +266,13 @@ class SphinxClient
 		assert ( is_int($port) );
 		$this->_host = $host;
 		$this->_port = $port;
+	}
+
+	/// set server connection timeout (0 to remove)
+	function SetConnectTimeout ( $timeout )
+	{
+		assert ( is_numeric($timeout) );
+		$this->_timeout = $timeout;
 	}
 
 	/////////////////////////////////////////////////////////////////////////////
@@ -289,9 +298,17 @@ class SphinxClient
 	/// connect to searchd server
 	function _Connect ()
 	{
-		if (!( $fp = @fsockopen ( $this->_host, $this->_port ) ) )
+		$errno = 0;
+		$errstr = "";
+		if ( $this->_timeout<=0 )
+			$fp = @fsockopen ( $this->_host, $this->_port, $errno, $errstr );
+		else
+			$fp = @fsockopen ( $this->_host, $this->_port, $errno, $errstr, $this->_timeout );
+
+		if ( !$fp )
 		{
-			$this->_error = "connection to {$this->_host}:{$this->_port} failed";
+			$errstr = trim ( $errstr );
+			$this->_error = "connection to {$this->_host}:{$this->_port} failed (errno=$errno, msg=$errstr)";
 			return false;
 		}
 
@@ -641,6 +658,7 @@ class SphinxClient
 
 		$this->AddQuery ( $query, $index, $comment );
 		$results = $this->RunQueries ();
+		$this->_reqs = array (); // just in case it failed too early
 
 		if ( !is_array($results) )
 			return false; // probably network error; error message should be already filled

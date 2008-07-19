@@ -95,6 +95,7 @@ for ( $i=0; $i<count($args); $i++ )
 
 $cl = new SphinxClient ();
 $cl->SetServer ( $host, $port );
+$cl->SetConnectTimeout ( 1 );
 $cl->SetWeights ( array ( 100, 1 ) );
 $cl->SetMatchMode ( $mode );
 if ( count($filtervals) )	$cl->SetFilter ( $filter, $filtervals );

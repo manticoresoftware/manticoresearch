@@ -188,6 +188,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\src\sphinxstemcz.cpp"
+				>
+			</File>
+			<File
 				RelativePath="..\src\sphinxstemen.cpp"
 				>
 			</File>

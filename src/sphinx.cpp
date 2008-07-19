@@ -4474,16 +4474,19 @@ BYTE * CSphTokenizer_Filter::GetToken ()
 
 		if ( bFound )
 		{
+			int iTokensPerForm = 1+pCurForm->m_dTokens.GetLength();
+
 			m_tLastToken.m_bBoundary		= false;
 			m_tLastToken.m_bSpecial			= false;
 			m_tLastToken.m_iOvershortCount	= m_dStoredTokens[m_iStoredStart].m_iOvershortCount;
 			m_tLastToken.m_iTokenLen		= pCurForm->m_iNormalTokenLen;
 			m_tLastToken.m_szTokenStart		= m_dStoredTokens[m_iStoredStart].m_szTokenStart;
-			m_tLastToken.m_szTokenEnd		= m_dStoredTokens[(m_iStoredStart+m_iStoredLen-1) % iSize].m_szTokenEnd;
+			m_tLastToken.m_szTokenEnd		= m_dStoredTokens[ ( m_iStoredStart+iTokensPerForm-1 ) % iSize ].m_szTokenEnd;
 			m_pLastToken = &m_tLastToken;
 
-			m_iStoredStart = ( m_iStoredStart + pCurForm->m_dTokens.GetLength () + 1 ) % iSize;
-			m_iStoredLen -= pCurForm->m_dTokens.GetLength () + 1;
+			m_iStoredStart = ( m_iStoredStart+iTokensPerForm ) % iSize;
+			m_iStoredLen -= iTokensPerForm;
+
 			assert ( m_iStoredLen >= 0 );
 			return (BYTE*)pCurForm->m_sNormalForm.cstr ();
 		}
@@ -15822,7 +15825,7 @@ CSphDictCRC::WordformContainer * CSphDictCRC::LoadWordformContainer ( const char
 		else
 		{
 			pMultiWordform->m_sNormalForm = (const char*)pTo;
-			pMultiWordform->m_iNormalTokenLen = pTokenizer->GetLastTokenLen ();
+			pMultiWordform->m_iNormalTokenLen = pMyTokenizer->GetLastTokenLen ();
 			pMultiWordform->m_dTokens.Add ( sFrom );
 			if ( !pContainer->m_pMultiWordforms )
 				pContainer->m_pMultiWordforms = new CSphMultiformContainer;

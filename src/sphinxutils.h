@@ -60,6 +60,13 @@ public:
 		return pEntry ? pEntry->intval() : iDefault;
 	}
 
+	/// get float option value by key and default value
+	float GetFloat ( const char * sKey, float fDefault=0.0f ) const
+	{
+		CSphVariant * pEntry = (*this)( sKey );
+		return pEntry ? pEntry->floatval() : fDefault;
+	}
+
 	/// get string option value by key and default value
 	const char * GetStr ( const char * sKey, const char * sDefault="" ) const
 	{

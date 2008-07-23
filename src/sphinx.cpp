@@ -60,6 +60,7 @@
 	#define pclose		_pclose
 	#define snprintf	_snprintf
 	#define sphSeek		_lseeki64
+	#define sphTruncate(file) (SetEndOfFile((HANDLE) _get_osfhandle(file)))
 	#define stat		_stat64
 
 	#define ICONV_INBUF_CONST	1
@@ -71,6 +72,7 @@
 	#include <pthread.h>
 
 	#define sphSeek		lseek
+	#define sphTruncate(file) ftruncate(file,lseek(file,0,SEEK_CUR))
 #endif
 
 #if ( USE_WINDOWS && USE_MYSQL )
@@ -921,9 +923,11 @@ enum ESphBinState
 
 enum ESphBinRead
 {
-	 BIN_READ_OK				///< bin read ok
-	,BIN_READ_EOF				///< bin end
-	,BIN_READ_ERROR			///< bin read error
+	BIN_READ_OK,			///< bin read ok
+	BIN_READ_EOF,			///< bin end
+	BIN_READ_ERROR,			///< bin read error
+	BIN_PRECACHE_OK,		///< precache ok
+	BIN_PRECACHE_ERROR		///< precache failed
 };
 
 
@@ -960,6 +964,9 @@ public:
 	int					ReadByte ();
 	ESphBinRead			ReadBytes ( void * pDest, int iBytes );
 	int					ReadHit ( CSphWordHit * e, int iRowitems, CSphRowitem * pRowitems );
+
+	bool				IsEOF () const;
+	ESphBinRead			Precache ();
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -971,6 +978,7 @@ public:
 				~CSphWriter ();
 
 	bool		OpenFile ( const char * sName, CSphString & sErrorBuffer );
+	void		SetFile ( int iFD, SphOffset_t * pSharedOffset = NULL, int iWriteCacheSize = SPH_CACHE_WRITE );
 	void		CloseFile (); ///< note: calls Flush(), ie. IsError() might get true after this call
 
 	void		PutByte ( int uValue );
@@ -995,13 +1003,17 @@ public:
 	inline SphOffset_t	GetPos () const		{ return m_iPos; }
 
 private:
-	CSphString	m_sName;
-	SphOffset_t	m_iPos;
+	CSphString		m_sName;
+	SphOffset_t		m_iPos;
+	SphOffset_t		m_iWritten;
 
-	int			m_iFD;
-	int			m_iPoolUsed;
-	BYTE *		m_pBuffer;
-	BYTE *		m_pPool;
+	int				m_iFD;
+	int				m_iPoolUsed;
+	BYTE *			m_pBuffer;
+	BYTE *			m_pPool;
+	bool			m_bOwnFile;
+	SphOffset_t	*	m_pSharedOffset;
+	int				m_iBufferSize;
 
 	bool			m_bError;
 	CSphString *	m_pError;
@@ -1769,6 +1781,8 @@ private:
 
 	void						LoadSettings ( CSphReader_VLN & tReader );
 	void						SaveSettings ( CSphWriter & tWriter );
+
+	bool						RelocateBlock ( int iFile, BYTE * pBuffer, int iRelocationSize, SphOffset_t * pFileSize, CSphBin * pMinBin, SphOffset_t * pSharedOffset );
 
 private:
 	static const int MAX_ORDINAL_STR_LEN	= 4096;	///< maximum ordinal string length in bytes
@@ -5033,11 +5047,15 @@ void CSphSchema::AddAttr ( const CSphColumnInfo & tCol )
 CSphWriter::CSphWriter ()
 	: m_sName ( "" )
 	, m_iPos ( -1 )
+	, m_iWritten ( 0 )
 
 	, m_iFD ( -1 )
 	, m_iPoolUsed ( 0 )
 	, m_pBuffer ( NULL )
 	, m_pPool ( NULL )
+	, m_bOwnFile ( false )
+	, m_pSharedOffset ( NULL )
+	, m_iBufferSize	( SPH_CACHE_WRITE )
 
 	, m_bError ( false )
 	, m_pError ( NULL )
@@ -5050,22 +5068,42 @@ bool CSphWriter::OpenFile ( const char * sName, CSphString & sErrorBuffer )
 	assert ( sName );
 	assert ( m_iFD<0 && "already open" );
 
+	m_bOwnFile = true;
 	m_sName = sName;
 	m_pError = &sErrorBuffer;
 
 	if ( !m_pBuffer )
-		m_pBuffer = new BYTE [ SPH_CACHE_WRITE ];
+		m_pBuffer = new BYTE [ m_iBufferSize ];
 
 	m_iFD = ::open ( m_sName.cstr(), SPH_O_NEW, 0644 );
 	m_pPool = m_pBuffer;
 	m_iPoolUsed = 0;
 	m_iPos = 0;
+	m_iWritten = 0;
 	m_bError = ( m_iFD<0 );
 
 	if ( m_bError )
 		m_pError->SetSprintf ( "failed to create %s: %s" , sName, strerror(errno) );
 
 	return !m_bError;
+}
+
+
+void CSphWriter::SetFile ( int iFD, SphOffset_t * pSharedOffset, int iWriteCacheSize )
+{
+	assert ( m_iFD<0 && "already open" );
+	m_bOwnFile = false;
+	m_iBufferSize = iWriteCacheSize;
+
+	if ( !m_pBuffer )
+		m_pBuffer = new BYTE [ m_iBufferSize ];
+
+	m_iFD = iFD;
+	m_pPool = m_pBuffer;
+	m_iPoolUsed = 0;
+	m_iPos = 0;
+	m_iWritten = 0;
+	m_pSharedOffset = pSharedOffset;
 }
 
 
@@ -5081,7 +5119,8 @@ void CSphWriter::CloseFile ()
 	if ( m_iFD>=0 )
 	{
 		Flush ();
-		::close ( m_iFD );
+		if ( m_bOwnFile )
+			::close ( m_iFD );
 		m_iFD = -1;
 	}
 }
@@ -5091,7 +5130,7 @@ void CSphWriter::PutByte ( int data )
 {
 	*m_pPool++ = BYTE( data & 0xff );
 	m_iPoolUsed++;
-	if ( m_iPoolUsed==SPH_CACHE_WRITE )
+	if ( m_iPoolUsed==m_iBufferSize )
 		Flush ();
 	m_iPos++;
 }
@@ -5102,10 +5141,10 @@ void CSphWriter::PutBytes ( const void * pData, int iSize )
 	const BYTE * pBuf = (const BYTE *) pData;
 	while ( iSize>0 )
 	{
-		int iPut = Min ( iSize, SPH_CACHE_WRITE );
-		if ( m_iPoolUsed+iPut>SPH_CACHE_WRITE )
+		int iPut = Min ( iSize, m_iBufferSize );
+		if ( m_iPoolUsed+iPut>m_iBufferSize )
 			Flush ();
-		assert ( m_iPoolUsed+iPut<=SPH_CACHE_WRITE );
+		assert ( m_iPoolUsed+iPut<=m_iBufferSize );
 
 		memcpy ( m_pPool, pBuf, iPut );
 		m_pPool += iPut;
@@ -5186,11 +5225,18 @@ void CSphWriter::Flush ()
 {
 	PROFILE ( write_hits );
 
+	if ( m_pSharedOffset && *m_pSharedOffset!=m_iWritten )
+		sphSeek ( m_iFD, m_iWritten, SEEK_SET );
+
 	if ( !sphWriteThrottled ( m_iFD, m_pBuffer, m_iPoolUsed, m_sName.cstr(), *m_pError ) )
 		m_bError = true;
 
+	m_iWritten += m_iPoolUsed;
 	m_iPoolUsed = 0;
 	m_pPool = m_pBuffer;
+
+	if ( m_pSharedOffset )
+		*m_pSharedOffset = m_iWritten;
 }
 
 
@@ -5765,6 +5811,43 @@ int CSphBin::ReadHit ( CSphWordHit * e, int iRowitems, CSphRowitem * pRowitems )
 		}
 	}
 }
+
+
+bool CSphBin::IsEOF () const
+{
+	return m_iDone!=0 || m_iFileLeft<=0;
+}
+
+
+ESphBinRead CSphBin::Precache ()
+{
+	if ( m_iFileLeft > m_iSize-m_iLeft )
+		return BIN_PRECACHE_ERROR;
+
+	if ( !m_iFileLeft )
+		return BIN_PRECACHE_OK;
+
+	if ( *m_pFilePos!=m_iFilePos )
+	{
+		sphSeek ( m_iFile, m_iFilePos, SEEK_SET );
+		*m_pFilePos = m_iFilePos;
+	}
+
+	assert ( m_dBuffer );
+	memmove ( m_dBuffer, m_pCurrent, m_iLeft );
+
+	if ( sphReadThrottled ( m_iFile, m_dBuffer+m_iLeft, m_iFileLeft ) != (size_t)m_iFileLeft )
+		return BIN_READ_ERROR;
+
+	m_iLeft += m_iFileLeft;
+	m_iFilePos += m_iFileLeft;
+	m_iFileLeft -= m_iFileLeft;
+	m_pCurrent = m_dBuffer;
+	*m_pFilePos += m_iFileLeft;
+
+	return BIN_PRECACHE_OK;
+}
+
 
 //////////////////////////////////////////////////////////////////////////
 // INDEX SETTINGS
@@ -6442,6 +6525,11 @@ CSphIndex::CSphIndex ( const char * sName )
 	, m_tSchema ( sName )
 	, m_sLastError ( "(no error message)" )
 	, m_iBoundaryStep ( 0 )
+	, m_bInplaceSettings ( false )
+	, m_iHitGap ( 0 )
+	, m_iDocinfoGap ( 0 )
+	, m_fRelocFactor ( 0.0f )
+	, m_fWriteFactor ( 0.0f )
 	, m_bAttrsUpdated ( false )
 	, m_bEnableStar ( false )
 	, m_bKeepFilesOpen ( false )
@@ -6463,6 +6551,16 @@ CSphIndex::~CSphIndex ()
 void CSphIndex::SetBoundaryStep ( int iBoundaryStep )
 {
 	m_iBoundaryStep = Max ( iBoundaryStep, 0 );
+}
+
+
+void CSphIndex::SetInplaceSettings ( int iHitGap, int iDocinfoGap, float fRelocFactor, float fWriteFactor )
+{
+	m_iHitGap = iHitGap;
+	m_iDocinfoGap = iDocinfoGap;
+	m_fRelocFactor = fRelocFactor;
+	m_fWriteFactor = fWriteFactor;
+	m_bInplaceSettings = true;
 }
 
 
@@ -8126,6 +8224,62 @@ struct FieldMVARedirect_t
 	CSphAttrLocator		m_tLocator;
 };
 
+
+bool CSphIndex_VLN::RelocateBlock ( int iFile, BYTE * pBuffer, int iRelocationSize, SphOffset_t * pFileSize, CSphBin * pMinBin, SphOffset_t * pSharedOffset )
+{
+	assert ( pBuffer && pFileSize && pMinBin && pSharedOffset );
+
+	SphOffset_t iBlockStart = pMinBin->m_iFilePos;
+	SphOffset_t iBlockLeft = pMinBin->m_iFileLeft;
+
+	ESphBinRead eRes = pMinBin->Precache ();
+	switch ( eRes )
+	{
+	case BIN_PRECACHE_OK:
+		return true;
+	case BIN_READ_ERROR:
+		m_sLastError = "block relocation: preread error";
+		return false;
+	default:
+		break;
+	}
+
+	int nTransfers = (int)( ( iBlockLeft+iRelocationSize-1) / iRelocationSize );
+
+	SphOffset_t uTotalRead = 0;
+	SphOffset_t uNewBlockStart = *pFileSize;
+
+	for ( int i = 0; i < nTransfers; i++ )
+	{
+		sphSeek ( iFile, iBlockStart + uTotalRead, SEEK_SET );
+
+		int iToRead = i == nTransfers-1 ? int(iBlockLeft % iRelocationSize) : iRelocationSize;
+		size_t iRead = sphReadThrottled ( iFile, pBuffer, iToRead );
+		if ( iRead != size_t(iToRead) )
+		{
+			m_sLastError.SetSprintf ( "block relocation: read error (%d of %d bytes read): %s", iRead, iToRead, strerror(errno) );
+			return false;
+		}
+
+		sphSeek ( iFile, *pFileSize, SEEK_SET );
+		uTotalRead += iToRead;
+
+		if ( !sphWriteThrottled ( iFile, pBuffer, iToRead, "block relocation", m_sLastError ) )
+			return false;
+
+		*pFileSize += iToRead;
+	}
+
+	assert ( uTotalRead == iBlockLeft );
+
+	// update block pointers
+	pMinBin->m_iFilePos = uNewBlockStart;
+	*pSharedOffset = *pFileSize;
+
+	return true;
+}
+
+
 int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit )
 {
 	PROFILER_INIT ();
@@ -8273,8 +8427,8 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 	// create temp files
 	CSphAutofile fdLock ( GetIndexFileName("tmp0"), SPH_O_NEW, m_sLastError );
-	CSphAutofile fdTmpHits ( GetIndexFileName("tmp1"), SPH_O_NEW, m_sLastError );
-	CSphAutofile fdTmpDocinfos ( GetIndexFileName("tmp2"), SPH_O_NEW, m_sLastError );
+	CSphAutofile fdHits ( GetIndexFileName ( m_bInplaceSettings ? "spp" : "tmp1" ), SPH_O_NEW, m_sLastError );
+	CSphAutofile fdDocinfos ( GetIndexFileName ( m_bInplaceSettings ? "spa" : "tmp2" ), SPH_O_NEW, m_sLastError );
 	CSphAutofile fdTmpFieldMVAs ( GetIndexFileName("tmp7"), SPH_O_NEW, m_sLastError );
 	CSphWriter tOrdWriter;
 
@@ -8282,8 +8436,34 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	if ( bHaveOrdinals && !tOrdWriter.OpenFile ( sRawOrdinalsFile.cstr (), m_sLastError ) )
 		return 0;
 
-	if ( fdLock.GetFD()<0 || fdTmpHits.GetFD()<0 || fdTmpDocinfos.GetFD()<0 || fdTmpFieldMVAs.GetFD ()<0 )
+	if ( fdLock.GetFD()<0 || fdHits.GetFD()<0 || fdDocinfos.GetFD()<0 || fdTmpFieldMVAs.GetFD ()<0 )
 		return 0;
+
+	SphOffset_t iHitsGap = 0;
+	SphOffset_t iDocinfosGap = 0;
+
+	if ( m_bInplaceSettings )
+	{
+		const int HIT_SIZE_AVG = 4;
+		const float HIT_BLOCK_FACTOR = 1.0f;
+		const float DOCINFO_BLOCK_FACTOR = 1.0f;
+
+		if ( m_iHitGap )
+			iHitsGap = SphOffset_t(m_iHitGap);
+		else
+			iHitsGap = SphOffset_t(iHitsMax*HIT_BLOCK_FACTOR*HIT_SIZE_AVG);
+
+		iHitsGap = Max ( iHitsGap, 1 );
+		sphSeek ( fdHits.GetFD (), iHitsGap, SEEK_SET );
+
+		if ( m_iDocinfoGap )
+			iDocinfosGap = SphOffset_t(m_iDocinfoGap);
+		else
+			iDocinfosGap = SphOffset_t(iDocinfoMax*DOCINFO_BLOCK_FACTOR*iDocinfoStride*sizeof(DWORD));
+
+		iDocinfosGap = Max ( iDocinfosGap, 1 );
+		sphSeek ( fdDocinfos.GetFD (), iDocinfosGap, SEEK_SET );
+	}
 
 	if ( !sphLockEx ( fdLock.GetFD(), false ) )
 	{
@@ -8472,7 +8652,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 					int iLen = iDocinfoMax*iDocinfoStride*sizeof(DWORD);
 
 					sphSortDocinfos ( dDocinfos, iDocinfoMax, iDocinfoStride );
-					if ( !sphWriteThrottled ( fdTmpDocinfos.GetFD(), dDocinfos, iLen, "raw_docinfos", m_sLastError ) )
+					if ( !sphWriteThrottled ( fdDocinfos.GetFD(), dDocinfos, iLen, "raw_docinfos", m_sLastError ) )
 						return 0;
 
 					pDocinfo = dDocinfos;
@@ -8525,7 +8705,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 					sphSortDocinfos ( pDocinfo, iDocs, iDocinfoStride );
 
-					dHitBlocks.Add ( cidxWriteRawVLB ( fdTmpHits.GetFD(), dHits, iHits,
+					dHitBlocks.Add ( cidxWriteRawVLB ( fdHits.GetFD(), dHits, iHits,
 						dDocinfos, iDocs, iDocinfoStride ) );
 
 					// we are inlining, so if there are more hits in this document,
@@ -8539,7 +8719,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				} else
 				{
 					// we're not inlining, so only flush hits, docs are flushed independently
-					dHitBlocks.Add ( cidxWriteRawVLB ( fdTmpHits.GetFD(), dHits, iHits,
+					dHitBlocks.Add ( cidxWriteRawVLB ( fdHits.GetFD(), dHits, iHits,
 						NULL, 0, 0 ) );
 				}
 
@@ -8581,7 +8761,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 		int iLen = iDocinfoLastBlockSize*iDocinfoStride*sizeof(DWORD);
 		sphSortDocinfos ( dDocinfos, iDocinfoLastBlockSize, iDocinfoStride );
-		if ( !sphWriteThrottled ( fdTmpDocinfos.GetFD(), dDocinfos, iLen, "raw_docinfos", m_sLastError ) )
+		if ( !sphWriteThrottled ( fdDocinfos.GetFD(), dDocinfos, iLen, "raw_docinfos", m_sLastError ) )
 			return 0;
 
 		iDocinfoBlocks++;
@@ -8601,11 +8781,11 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		{
 			int iDocs = ( pDocinfo - dDocinfos ) / iDocinfoStride;
 			sphSortDocinfos ( dDocinfos, iDocs, iDocinfoStride );
-			dHitBlocks.Add ( cidxWriteRawVLB ( fdTmpHits.GetFD(), dHits, iHits,
+			dHitBlocks.Add ( cidxWriteRawVLB ( fdHits.GetFD(), dHits, iHits,
 				dDocinfos, iDocs, iDocinfoStride ) );
 		} else
 		{
-			dHitBlocks.Add ( cidxWriteRawVLB ( fdTmpHits.GetFD(), dHits, iHits, NULL, 0, 0 ) );
+			dHitBlocks.Add ( cidxWriteRawVLB ( fdHits.GetFD(), dHits, iHits, NULL, 0, 0 ) );
 		}
 
 		if ( dHitBlocks.Last()<0 )
@@ -8743,28 +8923,54 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	SphDocID_t uMvaID = rdMva.GetDocid();
 
 	// initialize writer
-	CSphAutofile fdDocinfo ( GetIndexFileName("spa"), SPH_O_NEW, m_sLastError );
-	if ( fdDocinfo.GetFD()<0 )
-		return 0;
+	int iDocinfoFD = -1;
+	SphOffset_t iDocinfoWritePos = 0;
+	CSphScopedPtr<CSphAutofile> pfdDocinfoFinal ( NULL );
+
+	if ( m_bInplaceSettings )
+		iDocinfoFD = fdDocinfos.GetFD ();
+	else
+	{
+		pfdDocinfoFinal = new CSphAutofile ( GetIndexFileName("spa"), SPH_O_NEW, m_sLastError );
+		iDocinfoFD = pfdDocinfoFinal->GetFD();
+		if ( iDocinfoFD < 0 )
+			return 0;
+	}
 
 	bool bWarnAboutDupes = false;
 
+	int iMinBlock = -1;
 	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && dHitBlocks.GetLength() )
 	{
 		// initialize readers
 		assert ( dBins.GetLength()==0 );
 		dBins.Reserve ( iDocinfoBlocks );
 
-		int iBinSize = CSphBin::CalcBinSize ( iMemoryLimit, iDocinfoBlocks, "sort_docinfos" );
+		float fReadFactor = 1.0f;
+		float fRelocFactor = 0.0f;
+		if ( m_bInplaceSettings )
+		{
+			assert ( m_fRelocFactor > 0.005f && m_fRelocFactor < 0.95f );
+			fRelocFactor = m_fRelocFactor;
+			fReadFactor -= fRelocFactor;
+		}
+
+		int iBinSize = CSphBin::CalcBinSize ( int ( iMemoryLimit * fReadFactor ), iDocinfoBlocks, "sort_docinfos" );
+		int iRelocationSize = m_bInplaceSettings ? int ( iMemoryLimit * fRelocFactor ) : 0;
+		CSphAutoArray <BYTE> pRelocationBuffer ( iRelocationSize );
 		iSharedOffset = -1;
 
 		for ( int i=0; i<iDocinfoBlocks; i++ )
 		{
 			dBins.Add ( new CSphBin() );
 			dBins[i]->m_iFileLeft = ( ( i==iDocinfoBlocks-1 ) ? iDocinfoLastBlockSize : iDocinfoMax )*iDocinfoStride*sizeof(DWORD);
-			dBins[i]->m_iFilePos = ( i==0 ) ? 0 : dBins[i-1]->m_iFilePos + dBins[i-1]->m_iFileLeft;
-			dBins[i]->Init ( fdTmpDocinfos.GetFD(), &iSharedOffset, iBinSize );
+			dBins[i]->m_iFilePos = ( i==0 ) ? iDocinfosGap : dBins[i-1]->m_iFilePos + dBins[i-1]->m_iFileLeft;
+			dBins[i]->Init ( fdDocinfos.GetFD(), &iSharedOffset, iBinSize );
 		}
+
+		SphOffset_t iDocinfoFileSize = 0;
+		if ( iDocinfoBlocks )
+			iDocinfoFileSize = dBins [iDocinfoBlocks-1]->m_iFilePos + dBins [iDocinfoBlocks-1]->m_iFileLeft;
 
 		// docinfo queue
 		CSphAutoArray<DWORD> dDocinfoQueue ( iDocinfoBlocks*iDocinfoStride );
@@ -8786,7 +8992,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		}
 
 		CSphVector < CSphBin > dOrdReaders;
-		SphOffset_t iSharedOffset = -1;
+		SphOffset_t iSharedOrdOffset = -1;
 
 		CSphAutofile fdTmpSortedIds ( sSortedOrdinalIdFile.cstr (), SPH_O_READ, m_sLastError );
 
@@ -8801,7 +9007,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			{
 				dOrdReaders [i].m_iFileLeft = (int)dOrdBlockSize [i][0];
 				dOrdReaders [i].m_iFilePos = uStart;
-				dOrdReaders [i].Init ( fdTmpSortedIds.GetFD(), &iSharedOffset, ORDINAL_READ_SIZE );
+				dOrdReaders [i].Init ( fdTmpSortedIds.GetFD(), &iSharedOrdOffset, ORDINAL_READ_SIZE );
 				uStart += dOrdReaders [i].m_iFileLeft;
 			}
 		}
@@ -8873,9 +9079,32 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				if ( pDocinfo>=pDocinfoMax )
 				{
 					int iLen = iDocinfoMax*iDocinfoStride*sizeof(DWORD);
-					if ( !sphWriteThrottled ( fdDocinfo.GetFD(), dDocinfos, iLen, "sort_docinfo", m_sLastError ) )
+
+					if ( m_bInplaceSettings )
+					{
+						if ( iMinBlock == -1 || dBins [iMinBlock]->IsEOF () )
+						{
+							iMinBlock = -1;
+							ARRAY_FOREACH ( i, dBins )
+								if ( !dBins[i]->IsEOF () && ( iMinBlock==-1 || dBins [i]->m_iFilePos<dBins [iMinBlock]->m_iFilePos ) )
+									iMinBlock = i;
+						}
+
+						if ( iMinBlock != -1 && iDocinfoWritePos + iLen > dBins [iMinBlock]->m_iFilePos )
+						{
+							if ( !RelocateBlock ( iDocinfoFD, (BYTE*)pRelocationBuffer, iRelocationSize, &iDocinfoFileSize, dBins[iMinBlock], &iSharedOffset ) )
+								return 0;
+
+							iMinBlock = (iMinBlock+1) % dBins.GetLength ();
+						}
+
+						sphSeek ( iDocinfoFD, iDocinfoWritePos, SEEK_SET );
+					}
+
+					if ( !sphWriteThrottled ( iDocinfoFD, dDocinfos, iLen, "sort_docinfo", m_sLastError ) )
 						return 0;
 
+					iDocinfoWritePos += iLen;
 					pDocinfo = dDocinfos;
 				}
 			}
@@ -8898,8 +9127,15 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		{
 			assert ( 0 == ( pDocinfo-dDocinfos ) % iDocinfoStride );
 			int iLen = ( pDocinfo - dDocinfos )*sizeof(DWORD);
-			if ( !sphWriteThrottled ( fdDocinfo.GetFD(), dDocinfos, iLen, "sort_docinfo", m_sLastError ) )
+
+			if ( m_bInplaceSettings )
+				sphSeek ( iDocinfoFD, iDocinfoWritePos, SEEK_SET );
+
+			if ( !sphWriteThrottled ( iDocinfoFD, dDocinfos, iLen, "sort_docinfo", m_sLastError ) )
 				return 0;
+
+			if ( m_bInplaceSettings )
+				sphTruncate ( iDocinfoFD );
 		}
 
 		// clean up readers
@@ -8918,7 +9154,14 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	dDocinfos.Reset ();
 	pDocinfo = NULL;
 
-	fdDocinfo.Close (); // it might be zero-length, but it must exist
+	// it might be zero-length, but it must exist
+	if ( m_bInplaceSettings )
+		fdDocinfos.Close (); 
+	else
+	{
+		assert ( pfdDocinfoFinal.Ptr () );
+		pfdDocinfoFinal->Close ();
+	}
 
 	// dump killlist
 	CSphAutofile fdKillList ( GetIndexFileName("spk"), SPH_O_NEW, m_sLastError );
@@ -8948,14 +9191,33 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	dBins.Reserve ( dHitBlocks.GetLength() );
 
 	iSharedOffset = -1;
-	int iBinSize = CSphBin::CalcBinSize ( iMemoryLimit, dHitBlocks.GetLength(), "sort_hits" );
+
+	float fReadFactor = 1.0f;
+	int iRelocationSize = 0;
+	int iWriteBuffer = 0;
+
+	if ( m_bInplaceSettings )
+	{
+		assert ( m_fRelocFactor > 0.005f && m_fRelocFactor < 0.95f );
+		assert ( m_fWriteFactor > 0.005f && m_fWriteFactor < 0.95f );
+		assert ( m_fWriteFactor+m_fRelocFactor < 1.0f );
+
+		fReadFactor -= m_fRelocFactor + m_fWriteFactor;
+
+		iRelocationSize = int ( iMemoryLimit * m_fRelocFactor );
+		iWriteBuffer = int ( iMemoryLimit * m_fWriteFactor );
+	}
+
+	int iBinSize = CSphBin::CalcBinSize ( int ( iMemoryLimit * fReadFactor ), dHitBlocks.GetLength(), "sort_hits" );
+
+	CSphAutoArray <BYTE> pRelocationBuffer ( iRelocationSize );
 
 	ARRAY_FOREACH ( i, dHitBlocks )
 	{
 		dBins.Add ( new CSphBin() );
 		dBins[i]->m_iFileLeft = dHitBlocks[i];
-		dBins[i]->m_iFilePos = ( i==0 ) ? 0 : dBins[i-1]->m_iFilePos + dBins[i-1]->m_iFileLeft;
-		dBins[i]->Init ( fdTmpHits.GetFD(), &iSharedOffset, iBinSize );
+		dBins[i]->m_iFilePos = ( i==0 ) ? iHitsGap : dBins[i-1]->m_iFilePos + dBins[i-1]->m_iFileLeft;
+		dBins[i]->Init ( fdHits.GetFD(), &iSharedOffset, iBinSize );
 	}
 
 	// if there were no hits, create zero-length index files
@@ -8970,11 +9232,19 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	m_wrHitlist.CloseFile ();
 	if (
 		!m_wrWordlist.OpenFile ( GetIndexFileName("spi"), m_sLastError ) ||
-		!m_wrDoclist.OpenFile ( GetIndexFileName("spd"), m_sLastError ) ||
-		!m_wrHitlist.OpenFile ( GetIndexFileName("spp"), m_sLastError ) )
+		!m_wrDoclist.OpenFile ( GetIndexFileName("spd"), m_sLastError ) )
 	{
 		return 0;
 	}
+
+	if ( m_bInplaceSettings )
+	{
+		sphSeek ( fdHits.GetFD(), 0, SEEK_SET );
+		m_wrHitlist.SetFile ( fdHits.GetFD(), &iSharedOffset, iWriteBuffer );
+	}
+	else
+		if ( !m_wrHitlist.OpenFile ( GetIndexFileName("spp"), m_sLastError ) )
+			return 0;
 
 	// put dummy byte (otherwise offset would start from 0, first delta would be 0
 	// and VLB encoding of offsets would fuckup)
@@ -8996,6 +9266,9 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 	if ( iRawBlocks )
 	{
+		int iLastBin = dBins.GetLength () - 1;
+		SphOffset_t iHitFileSize = dBins[iLastBin]->m_iFilePos + dBins [iLastBin]->m_iFileLeft;
+		
 		CSphHitQueue tQueue ( iRawBlocks );
 		CSphWordHit tHit;
 
@@ -9027,12 +9300,34 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		// while the queue has data for us
 		// FIXME! analyze binsRead return code
 		int iHitsSorted = 0;
+		iMinBlock = -1;
 		while ( tQueue.m_iUsed )
 		{
 			int iBin = tQueue.m_pData->m_iBin;
 
 			// pack and emit queue root
 			tQueue.m_pData->m_iDocID -= m_tMin.m_iDocID;
+			
+			if ( m_bInplaceSettings )
+			{
+				if ( iMinBlock == -1 || dBins[iMinBlock]->IsEOF () || !bActive [iMinBlock] )
+				{
+					iMinBlock = -1;
+					ARRAY_FOREACH ( i, dBins )
+						if ( !dBins [i]->IsEOF () && bActive[i] && ( iMinBlock == -1 || dBins [i]->m_iFilePos < dBins [iMinBlock]->m_iFilePos ) )
+							iMinBlock = i;
+				}
+
+				int iToWriteMax = 3*sizeof(DWORD);
+				if ( iMinBlock != -1 && m_wrHitlist.GetPos () + iToWriteMax > dBins [iMinBlock]->m_iFilePos )
+				{
+					if ( !RelocateBlock ( fdHits.GetFD (), (BYTE*)pRelocationBuffer, iRelocationSize, &iHitFileSize, dBins[iMinBlock], &iSharedOffset ) )
+						return 0;
+
+					iMinBlock = (iMinBlock+1) % dBins.GetLength ();
+				}
+			}
+			
 			cidxHit ( tQueue.m_pData, iRowitems ? dInlineAttrs+iBin*iRowitems : NULL );
 			if ( m_wrWordlist.IsError() || m_wrDoclist.IsError() || m_wrHitlist.IsError() )
 				return 0;
@@ -9074,6 +9369,9 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		tFlush.m_iWordID = 0;
 		tFlush.m_iWordPos = 0;
 		cidxHit ( &tFlush, NULL );
+
+		if ( m_bInplaceSettings )
+			sphTruncate ( fdHits.GetFD () );
 	}
 
 	if ( bWarnAboutDupes )
@@ -9083,15 +9381,20 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 	// close and unlink temp files
 	// FIXME! should be unlinked on early-exit too
-	fdTmpHits.Close ();
-	fdTmpDocinfos.Close ();
+	if ( !m_bInplaceSettings )
+		fdHits.Close ();
+
+	fdDocinfos.Close ();
 	fdLock.Close ();
 
 	char sBuf [ SPH_MAX_FILENAME_LEN ];
 	snprintf ( sBuf, sizeof(sBuf), "%s.tmp0", m_sFilename.cstr() ); unlink ( sBuf );
-	snprintf ( sBuf, sizeof(sBuf), "%s.tmp1", m_sFilename.cstr() ); unlink ( sBuf );
-	snprintf ( sBuf, sizeof(sBuf), "%s.tmp2", m_sFilename.cstr() ); unlink ( sBuf );
 
+	if ( !m_bInplaceSettings )
+	{
+		snprintf ( sBuf, sizeof(sBuf), "%s.tmp1", m_sFilename.cstr() ); unlink ( sBuf );
+		snprintf ( sBuf, sizeof(sBuf), "%s.tmp2", m_sFilename.cstr() ); unlink ( sBuf );
+	}
 	// we're done
 	if ( !cidxDone() )
 		return 0;

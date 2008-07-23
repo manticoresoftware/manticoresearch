@@ -186,6 +186,11 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "html_index_attrs",		0, NULL },
 	{ "html_remove_elements",	0, NULL },
 	{ "preopen",				0, NULL },
+	{ "inplace_enable",			0, NULL },
+	{ "inplace_hit_gap",		0, NULL },
+	{ "inplace_docinfo_gap",	0, NULL },
+	{ "inplace_reloc_factor",	0, NULL },
+	{ "inplace_write_factor",	0, NULL },
 	{ NULL,						0, NULL }
 };
 

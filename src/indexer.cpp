@@ -693,7 +693,35 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		fprintf ( stdout, "WARNING: min_infix_len = 0. infix_fields are ignored\n" );
 
 	// boundary
-	int iBoundaryStep = hIndex("phrase_boundary_step") ? Max ( hIndex["phrase_boundary_step"].intval(), 0 ) : 0;
+	int iBoundaryStep	= hIndex("phrase_boundary_step") ? Max ( hIndex["phrase_boundary_step"].intval(), 0 ) : 0;
+	bool bInplaceEnable	= hIndex.GetInt ( "inplace_enable", 0 ) != 0;
+	int iHitGap			= hIndex.GetSize ( "inplace_hit_gap", 0 );
+	int iDocinfoGap		= hIndex.GetSize ( "inplace_docinfo_gap", 0 );
+	float fRelocFactor	= hIndex.GetFloat ( "inplace_reloc_factor", 0.1f );
+	float fWriteFactor	= hIndex.GetFloat ( "inplace_write_factor", 0.1f );
+
+	if ( bInplaceEnable )
+	{
+		if ( fRelocFactor < 0.01f || fRelocFactor > 0.9f )
+		{
+			fprintf ( stdout, "WARNING: inplace_reloc_factor must be 0.01 to 0.9, clamped\n" );
+			fRelocFactor = Min ( Max ( fRelocFactor, 0.01f ), 0.9f );
+		}
+
+		if ( fWriteFactor < 0.01f || fWriteFactor > 0.9f )
+		{
+			fprintf ( stdout, "WARNING: inplace_write_factor must be 0.01 to 0.9, clamped\n" );
+			fWriteFactor = Min ( Max ( fWriteFactor, 0.01f ), 0.9f );
+		}
+
+		if ( fWriteFactor+fRelocFactor > 1.0f )
+		{
+			fprintf ( stdout, "WARNING: inplace_write_factor+inplace_reloc_factor must be less than 0.9, scaled\n" );
+			float fScale = 0.9f/(fWriteFactor+fRelocFactor);
+			fRelocFactor *= fScale;
+			fWriteFactor *= fScale;
+		}
+	}
 
 	/////////////////////
 	// spawn datasources
@@ -833,6 +861,9 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 
 		pIndex->SetProgressCallback ( ShowProgress );
 		pIndex->SetBoundaryStep ( iBoundaryStep );
+		if ( bInplaceEnable )
+			pIndex->SetInplaceSettings ( iHitGap, iDocinfoGap, fRelocFactor, fWriteFactor );
+
 		pIndex->SetTokenizer ( pTokenizer );
 		pIndex->SetDictionary ( pDict );
 		pIndex->Setup ( tSettings );

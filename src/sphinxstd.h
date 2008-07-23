@@ -1078,11 +1078,12 @@ inline void Swap ( CSphString & v1, CSphString & v2 )
 
 /////////////////////////////////////////////////////////////////////////////
 
-/// immutable string/int variant list proxy
+/// immutable string/int/float variant list proxy
 struct CSphVariant : public CSphString
 {
 protected:
 	int				m_iValue;
+	float			m_fValue;
 
 public:
 	CSphVariant *	m_pNext;
@@ -1093,6 +1094,7 @@ public:
 	CSphVariant ()
 		: CSphString ()
 		, m_iValue ( 0 )
+		, m_fValue ( 0.0f )
 		, m_pNext ( NULL )
 		, m_bTag ( false )
 	{
@@ -1102,6 +1104,7 @@ public:
 	CSphVariant ( const char * sString )
 		: CSphString ( sString )
 		, m_iValue ( atoi ( m_sValue ) )
+		, m_fValue ( (float)atof ( m_sValue ) )
 		, m_pNext ( NULL )
 	{
 	}
@@ -1110,6 +1113,7 @@ public:
 	CSphVariant ( const CSphVariant & rhs )
 		: CSphString ()
 		, m_iValue ( 0 )
+		, m_fValue ( 0.0f )
 		, m_pNext ( NULL )
 	{
 		*this = rhs;
@@ -1128,6 +1132,12 @@ public:
 		return m_iValue;
 	}
 
+	/// float value getter
+	float floatval () const
+	{
+		return m_fValue;
+	}
+
 	/// default copy operator
 	const CSphVariant & operator = ( const CSphVariant & rhs )
 	{
@@ -1137,6 +1147,7 @@ public:
 
 		CSphString::operator = ( rhs );
 		m_iValue = rhs.m_iValue;
+		m_fValue = rhs.m_fValue;
 
 		return *this;
 	}

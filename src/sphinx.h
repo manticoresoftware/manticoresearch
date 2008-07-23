@@ -1828,6 +1828,7 @@ public:
 
 	virtual	void				SetProgressCallback ( ProgressCallback_t * pfnProgress ) { m_pProgress = pfnProgress; }
 	virtual void				SetBoundaryStep ( int iBoundaryStep );
+	virtual void				SetInplaceSettings ( int iHitGap, int iDocinfoGap, float fRelocFactor, float fWriteFactor );
 	virtual void				SetStar ( bool bValue ) { m_bEnableStar = bValue; }
 	virtual void				SetPreopen ( bool bValue ) { m_bKeepFilesOpen = bValue; }
 	virtual void				SetWordlistPreload ( bool bValue ) { m_bPreloadWordlist = bValue; }
@@ -1905,6 +1906,12 @@ protected:
 	CSphString					m_sLastError;
 
 	int							m_iBoundaryStep;///< on-boundary additional word position step (0 means index all words continuously)
+
+	bool						m_bInplaceSettings;
+	int							m_iHitGap;
+	int							m_iDocinfoGap;
+	float						m_fRelocFactor;
+	float						m_fWriteFactor;
 
 	bool						m_bAttrsUpdated;///< whether in-memory attrs are updated (compared to disk state)
 

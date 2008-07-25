@@ -1830,6 +1830,7 @@ public:
 	virtual void				SetBoundaryStep ( int iBoundaryStep );
 	virtual void				SetInplaceSettings ( int iHitGap, int iDocinfoGap, float fRelocFactor, float fWriteFactor );
 	virtual void				SetStar ( bool bValue ) { m_bEnableStar = bValue; }
+	virtual bool				GetStar () const { return m_bEnableStar; }
 	virtual void				SetPreopen ( bool bValue ) { m_bKeepFilesOpen = bValue; }
 	virtual void				SetWordlistPreload ( bool bValue ) { m_bPreloadWordlist = bValue; }
 	void						SetTokenizer ( ISphTokenizer * pTokenizer );
@@ -1839,7 +1840,7 @@ public:
 	CSphDict *					GetDictionary () const { return m_pDict; }
 	CSphDict *					LeakDictionary ();
 	void						Setup ( const CSphIndexSettings & tSettings );
-	const CSphIndexSettings &	GetSettings () { return m_tSettings; }
+	const CSphIndexSettings &	GetSettings () const { return m_tSettings; }
 	bool						IsStripperInited () const { return m_bStripperInited; }
 	virtual SphAttr_t *			GetKillList () const = 0;
 	virtual int					GetKillListSize () const = 0;

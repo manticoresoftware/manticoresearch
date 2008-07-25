@@ -4646,6 +4646,26 @@ void CheckLeaks ()
 }
 
 
+bool CheckIndex ( const CSphIndex * pIndex, CSphString & sError )
+{
+	const CSphIndexSettings & tSettings = pIndex->GetSettings ();
+
+	if ( ( tSettings.m_iMinPrefixLen>0 || tSettings.m_iMinInfixLen>0 ) && !pIndex->GetStar () )
+	{
+		CSphDict * pDict = pIndex->GetDictionary ();
+		assert ( pDict );
+		const char * szMorph = pDict->GetSettings ().m_sMorphology.cstr ();
+		if ( szMorph && *szMorph && strcmp ( szMorph, "none" ) )
+		{
+			sError = "infixes and morphology are enabled, enable_star=0";
+			return false;
+		}
+	}
+
+	return true;
+}
+
+
 void SeamlessTryToForkPrereader ()
 {
 	// next in line
@@ -4671,7 +4691,7 @@ void SeamlessTryToForkPrereader ()
 	g_pPrereading->SetBase ( sNewPath );
 
 	// prealloc enough RAM and lock new index
-	CSphString sWarn;
+	CSphString sWarn, sError;
 	if ( !g_pPrereading->Prealloc ( tServed.m_bMlock, sWarn ) )
 	{
 		sphWarning ( "rotating index '%s': prealloc: %s; using old index", sPrereading, g_pPrereading->GetLastError().cstr() );
@@ -4685,14 +4705,16 @@ void SeamlessTryToForkPrereader ()
 	}
 
 	if ( tServed.m_bOnlyNew && g_pCfg && g_pCfg->m_tConf.Exists ( "index" ) && g_pCfg->m_tConf["index"].Exists ( sPrereading ) )
-	{
-		CSphString sError;
-
 		if ( !sphFixupIndexSettings ( g_pPrereading, g_pCfg->m_tConf["index"][sPrereading], sError ) )
 		{
 			sphWarning ( "rotating index '%s': fixup: %s; using old index", sPrereading, sError.cstr() );
 			return;
 		}
+
+	if ( !CheckIndex ( g_pPrereading, sError ) )
+	{
+		sphWarning ( "rotating index '%s': check: %s; using old index", sPrereading, sError.cstr() );
+		return;
 	}
 
 	// fork async reader
@@ -5234,13 +5256,6 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 			return ADD_ERROR;
 		}
 
-		if (  ( hIndex.GetInt ( "min_prefix_len", 0 ) > 0 || hIndex.GetInt ( "min_infix_len", 0 ) > 0 )
-			&& strlen ( hIndex.GetStr ( "morphology", "" ) ) > 0  && hIndex.GetInt ( "enable_star", 0 ) == 0 )
-		{
-			sphWarning ( "index '%s': infixes and morphology are enabled, enable_star=0; NOT SERVING", szIndexName );
-			return ADD_ERROR;
-		}
-
 		// configure memlocking, star
 		ConfigureIndex ( tIdx, hIndex );
 
@@ -5435,6 +5450,12 @@ void CheckRotate ()
 				{
 					CSphString sError;
 					if ( !sphFixupIndexSettings ( tIndex.m_pIndex, hConf [sIndex], sError ) )
+					{
+						sphWarning ( "index '%s': %s - NOT SERVING", sIndex, sError.cstr() );
+						tIndex.m_bEnabled = false;
+					}
+
+					if ( tIndex.m_bEnabled && !CheckIndex ( tIndex.m_pIndex, sError ) )
 					{
 						sphWarning ( "index '%s': %s - NOT SERVING", sIndex, sError.cstr() );
 						tIndex.m_bEnabled = false;
@@ -6207,6 +6228,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 					{
 						sphWarning ( "index '%s': %s - NOT SERVING", sIndexName, sError.cstr() );
 						tIndex.m_bEnabled = false;
+						continue;
 					}
 				}
 				else
@@ -6221,15 +6243,12 @@ int WINAPI ServiceMain ( int argc, char **argv )
 				if ( PrereadNewIndex ( tIndex, hIndex, sIndexName ) )
 					tIndex.m_bEnabled = true;
 			}
-		}
 
-		if ( ( hIndex.GetInt ( "min_prefix_len", 0 ) > 0 || hIndex.GetInt ( "min_infix_len", 0 ) > 0 ) 
-			&& hIndex.GetInt ( "enable_star" ) == 0 )
-		{
-			const char * szMorph = hIndex.GetStr ( "morphology", "" );
-			if ( szMorph && *szMorph && strcmp ( szMorph, "none" ) )
+			CSphString sError;
+			if ( tIndex.m_bEnabled && !CheckIndex ( tIndex.m_pIndex, sError ) )
 			{
-				sphWarning ( "index '%s': infixes and morphology are enabled, enable_star=0; NOT SERVING", sIndexName );
+				sphWarning ( "index '%s': %s - NOT SERVING", sIndexName, sError.cstr() );
+				tIndex.m_bEnabled = false;
 				continue;
 			}
 		}

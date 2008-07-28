@@ -61,7 +61,13 @@
 	#define snprintf	_snprintf
 	#define sphSeek		_lseeki64
 	#define sphTruncate(file) (SetEndOfFile((HANDLE) _get_osfhandle(file)))
+
 	#define stat		_stat64
+	#if _MSC_VER<1400
+	#define struct_stat	__stat64
+	#else
+	#define struct_stat	_stat64
+	#endif
 
 	#define ICONV_INBUF_CONST	1
 #else
@@ -73,6 +79,8 @@
 
 	#define sphSeek		lseek
 	#define sphTruncate(file) ftruncate(file,lseek(file,0,SEEK_CUR))
+
+	#define struct_stat		struct stat
 #endif
 
 #if ( USE_WINDOWS && USE_MYSQL )
@@ -580,7 +588,7 @@ public:
 
 	SphOffset_t GetSize ( SphOffset_t iMinSize, bool bCheckSizeT, CSphString & sError )
 	{
-		struct stat st;
+		struct_stat st;
 		if ( stat ( GetFilename(), &st )<0 )
 		{
 			sError.SetSprintf ( "failed to stat %s: %s", GetFilename(), strerror(errno) );
@@ -1569,7 +1577,7 @@ static void ReadFileInfo ( CSphReader_VLN & tReader, const char * szFilename, CS
 
 	if ( szFilename && *szFilename )
 	{
-		struct stat tFileInfo; 
+		struct_stat tFileInfo; 
 		if ( stat ( szFilename, &tFileInfo ) < 0 )
 			sWarning.SetSprintf ( "failed to stat %s: %s", szFilename, strerror(errno) );
 		else
@@ -14467,7 +14475,7 @@ bool CSphIndex_VLN::Preread ()
 		if ( iFD < 0 )
 			return false;
 
-		struct stat st;
+		struct_stat st;
 		if ( stat ( GetIndexFileName("spi"), &st ) < 0 )
 		{
 			m_sLastError.SetSprintf ( "failed to stat %s: %s", GetIndexFileName("spi"), strerror(errno) );
@@ -15422,7 +15430,7 @@ private:
 	{
 		int							m_iRefCount;
 		CSphString					m_sFilename;
-		struct stat					m_tStat;
+		struct_stat					m_tStat;
 		DWORD						m_uCRC32;
 		CSphVector <CSphString>		m_dNormalForms;
 		CSphMultiformContainer * m_pMultiWordforms;
@@ -15612,7 +15620,7 @@ static void GetFileStats ( const char * szFilename, CSphSavedFile & tInfo )
 
 	tInfo.m_sFilename = szFilename;
 
-	struct stat tStat;
+	struct_stat tStat;
 	memset ( &tStat, 0, sizeof ( tStat ) );
 	if ( stat ( szFilename, &tStat ) < 0 )
 		memset ( &tStat, 0, sizeof ( tStat ) );
@@ -15660,7 +15668,7 @@ bool CSphDictCRC::WordformContainer::IsEqual ( const char * szFile, DWORD uCRC32
 	if ( ! szFile )
 		return false;
 
-	struct stat FileStat;
+	struct_stat FileStat;
 	if ( stat ( szFile, &FileStat ) < 0 )
 		return false;
 
@@ -15971,7 +15979,7 @@ void CSphDictCRC::LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenize
 		m_dSWFileInfos.Add ( tInfo );
 
 		// open file
-		struct stat st;
+		struct_stat st;
 		if ( stat ( sName, &st ) == 0 )
 			pBuffer = new BYTE [(size_t)st.st_size];
 		else
@@ -16051,7 +16059,7 @@ CSphDictCRC::WordformContainer * CSphDictCRC::GetWordformContainer ( const char 
 CSphDictCRC::WordformContainer * CSphDictCRC::LoadWordformContainer ( const char * szFile, DWORD uCRC32, const ISphTokenizer * pTokenizer )
 {
 	// stat it; we'll store stats for later checks
-	struct stat FileStat;
+	struct_stat FileStat;
 	if ( !szFile || !*szFile || stat ( szFile, &FileStat )<0 )
 		return NULL;
 

@@ -3,7 +3,7 @@
 # Author::    Dmytro Shteflyuk <mailto:kpumuk@kpumuk.info>.
 # Copyright:: Copyright (c) 2006 - 2008 Dmytro Shteflyuk
 # License::   Distributes under the same terms as Ruby
-# Version::   0.5.0-r1112
+# Version::   0.9.9-r1299
 # Website::   http://kpumuk.info/projects/ror-plugins/sphinx
 #
 # This library is distributed under the terms of the Ruby license.
@@ -473,7 +473,7 @@ module Sphinx
 	  # +values+ must be a hash that maps document IDs to attribute values.
 	  def SetOverride(attrname, attrtype, values)
       assert { attrname.instance_of? String }
-      assert { [SPH_ATTR_INTEGER, SPH_ATTR_TIMESTAMP, SPH_ATTR_BOOL, SPH_ATTR_FLOAT, SPH_ATTR_BIGINT].includes?(attrtype) }
+      assert { [SPH_ATTR_INTEGER, SPH_ATTR_TIMESTAMP, SPH_ATTR_BOOL, SPH_ATTR_FLOAT, SPH_ATTR_BIGINT].include?(attrtype) }
       assert { values.instance_of? Hash }
 
       @overrides << { 'attr' => attrname, 'type' => attrtype, 'values' => values }
@@ -639,8 +639,8 @@ module Sphinx
         request.put_string entry['attr']
         request.put_int entry['type'], entry['values'].size
         entry['values'].each do |id, val|
-          assert { id.instance_of?(Fixnum) || id.instance_of?(Bigint) }
-          assert { val.instance_of?(Fixnum) || val.instance_of?(Bigint) || val.instance_of?(Float) }
+          assert { id.instance_of?(Fixnum) || id.instance_of?(Bignum) }
+          assert { val.instance_of?(Fixnum) || val.instance_of?(Bignum) || val.instance_of?(Float) }
           
           request.put_int64 id
           case entry['type']
@@ -969,7 +969,7 @@ module Sphinx
         if mva
           entry.each { |v| request.put_int_array v }
         else
-          request.put_int *entry
+          request.put_int(*entry)
         end
       end
       

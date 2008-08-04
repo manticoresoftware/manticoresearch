@@ -39,7 +39,7 @@ module Sphinx
     # Put array of 64-bit ints to request (first length, then the array itself)
     def put_int64_array(arr)
       put_int arr.length
-      put_int64 *arr
+      put_int64(*arr)
     end
     
     # Returns the entire message

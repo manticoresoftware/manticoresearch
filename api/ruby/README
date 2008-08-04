@@ -1,4 +1,4 @@
-=Sphinx Client API 0.4.0-r1112
+=Sphinx Client API 0.9.9-dev (r1299)
 
 This document gives an overview of what is Sphinx itself and how to use in 
 within Ruby on Rails. For more information or documentation, 
@@ -30,9 +30,12 @@ http://kpumuk.info/projects/ror-plugins/sphinx
 
 Dmytro Shteflyuk <kpumuk@kpumuk.info> http://kpumuk.info
 
+Andrew Aksyonoff http://sphinxsearch.com/
+
 Special thanks to Alexey Kovyrin <alexey@kovyrin.net> http://blog.kovyrin.net
 
 ==License
 
 This library is distributed under the terms of the Ruby license.
 You can freely distribute/modify this library.
+

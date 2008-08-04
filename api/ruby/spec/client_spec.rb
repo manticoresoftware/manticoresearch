@@ -357,9 +357,21 @@ describe 'The Query method of Sphinx::Client' do
     @sphinx.Query('query') rescue nil?
   end
   
-  it 'should generate valid request for SetOverride'
+  it 'should generate valid request for SetOverride' do
+    expected = sphinx_fixture('set_override')
+    @sock.should_receive(:send).with(expected, 0)
+    @sphinx.SetOverride('attr1', Sphinx::Client::SPH_ATTR_INTEGER, { 10 => 20 })
+    @sphinx.SetOverride('attr2', Sphinx::Client::SPH_ATTR_FLOAT, { 11 => 30.3 })
+    @sphinx.SetOverride('attr3', Sphinx::Client::SPH_ATTR_BIGINT, { 12 => 1099511627780 })
+    @sphinx.Query('query') rescue nil?
+  end
 
-  it 'should generate valid request for SetSelect'
+  it 'should generate valid request for SetSelect' do
+    expected = sphinx_fixture('select')
+    @sock.should_receive(:send).with(expected, 0)
+    @sphinx.SetSelect('attr1, attr2')
+    @sphinx.Query('query') rescue nil?
+  end
 end
 
 describe 'The RunQueries method of Sphinx::Client' do

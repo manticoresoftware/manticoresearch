@@ -3,7 +3,7 @@
 # Author::    Dmytro Shteflyuk <mailto:kpumuk@kpumuk.info>.
 # Copyright:: Copyright (c) 2006 - 2008 Dmytro Shteflyuk
 # License::   Distributes under the same terms as Ruby
-# Version::   0.4.0-r1112
+# Version::   0.5.0-r1112
 # Website::   http://kpumuk.info/projects/ror-plugins/sphinx
 #
 # This library is distributed under the terms of the Ruby license.
@@ -57,11 +57,11 @@ module Sphinx
     # Current client-side command implementation versions
     
     # search command version
-    VER_COMMAND_SEARCH   = 0x113
+    VER_COMMAND_SEARCH   = 0x116
     # excerpt command version
     VER_COMMAND_EXCERPT  = 0x100
     # update command version
-    VER_COMMAND_UPDATE   = 0x101
+    VER_COMMAND_UPDATE   = 0x102
     # keywords command version
     VER_COMMAND_KEYWORDS = 0x100
     
@@ -105,6 +105,8 @@ module Sphinx
     SPH_RANK_NONE           = 2
     # simple word-count weighting, rank is a weighted sum of per-field keyword occurence counts
     SPH_RANK_WORDCOUNT      = 3
+    # phrase proximity
+    SPH_RANK_PROXIMITY      = 4
     
     # Known sort modes
   
@@ -143,6 +145,8 @@ module Sphinx
     SPH_ATTR_BOOL      = 4
     # this attr is a float
     SPH_ATTR_FLOAT     = 5
+    # signed 64-bit integer
+    SPH_ATTR_BIGINT    = 6
     # this attr has multiple values (0 or more)
     SPH_ATTR_MULTI     = 0x40000000
     
@@ -190,6 +194,8 @@ module Sphinx
       @ranker        = SPH_RANK_PROXIMITY_BM25 # ranking mode (default is SPH_RANK_PROXIMITY_BM25)
       @maxquerytime  = 0                       # max query time, milliseconds (default is 0, do not limit) 
       @fieldweights  = {}                      # per-field-name weights
+      @overrides     = []                      # per-query attribute values overrides
+      @select        = '*'                     # select-list (attributes or expressions, with optional aliases)
     
       # per-reply fields (for single-query case)
       @error         = ''                      # last error message
@@ -260,7 +266,8 @@ module Sphinx
       assert { ranker == SPH_RANK_PROXIMITY_BM25 \
             || ranker == SPH_RANK_BM25 \
             || ranker == SPH_RANK_NONE \
-            || ranker == SPH_RANK_WORDCOUNT }
+            || ranker == SPH_RANK_WORDCOUNT \
+            || ranker == SPH_RANK_PROXIMITY }
 
       @ranker = ranker
     end
@@ -355,8 +362,8 @@ module Sphinx
     # is beetwen <tt>min</tt> and <tt>max</tt> (including <tt>min</tt> and <tt>max</tt>).
     def SetFilterRange(attribute, min, max, exclude = false)
       assert { attribute.instance_of? String }
-      assert { min.instance_of? Fixnum }
-      assert { max.instance_of? Fixnum }
+      assert { min.instance_of? Fixnum or min.instance_of? Bignum }
+      assert { max.instance_of? Fixnum or max.instance_of? Bignum }
       assert { min <= max }
     
       @filters << { 'type' => SPH_FILTER_RANGE, 'attr' => attribute, 'exclude' => exclude, 'min' => min, 'max' => max }
@@ -460,6 +467,24 @@ module Sphinx
       @retrydelay = delay
     end
     
+    # Set attribute values override
+    #
+	  # There can be only one override per attribute.
+	  # +values+ must be a hash that maps document IDs to attribute values.
+	  def SetOverride(attrname, attrtype, values)
+      assert { attrname.instance_of? String }
+      assert { [SPH_ATTR_INTEGER, SPH_ATTR_TIMESTAMP, SPH_ATTR_BOOL, SPH_ATTR_FLOAT, SPH_ATTR_BIGINT].includes?(attrtype) }
+      assert { values.instance_of? Hash }
+
+      @overrides << { 'attr' => attrname, 'type' => attrtype, 'values' => values }
+	  end
+
+    # Set select-list (attributes or expressions), SQL-like syntax.
+    def SetSelect(select)
+		  assert { select.instance_of? String }
+		  @select = select
+		end
+    
     # Clear all filters (for multi-queries).
     def ResetFilters
       @filters = []
@@ -472,6 +497,11 @@ module Sphinx
       @groupfunc     = SPH_GROUPBY_DAY
       @groupsort     = '@group desc'
       @groupdistinct = ''
+    end
+    
+    # Clear all attribute value overrides (for multi-queries).
+    def ResetOverrides
+      @overrides = []
     end
     
     # Connect to searchd server and run given search query.
@@ -555,9 +585,9 @@ module Sphinx
 
         case filter['type']
           when SPH_FILTER_VALUES
-            request.put_int_array filter['values']
+            request.put_int64_array filter['values']
           when SPH_FILTER_RANGE
-            request.put_int filter['min'], filter['max']
+            request.put_int64 filter['min'], filter['max']
           when SPH_FILTER_FLOATRANGE
             request.put_float filter['min'], filter['max']
           else
@@ -600,7 +630,32 @@ module Sphinx
         request.put_int weight
       end
       
+      # comment
       request.put_string comment
+      
+      # attribute overrides
+      request.put_int @overrides.length
+      for entry in @overrides do
+        request.put_string entry['attr']
+        request.put_int entry['type'], entry['values'].size
+        entry['values'].each do |id, val|
+          assert { id.instance_of?(Fixnum) || id.instance_of?(Bigint) }
+          assert { val.instance_of?(Fixnum) || val.instance_of?(Bigint) || val.instance_of?(Float) }
+          
+          request.put_int64 id
+          case entry['type']
+            when SPH_ATTR_FLOAT
+              request.put_float val
+            when SPH_ATTR_BIGINT
+              request.put_int64 val
+            else
+              request.put_int val
+          end
+        end
+      end
+      
+      # select-list
+      request.put_string @select
       
       # store request to requests array
       @reqs << request.to_s;
@@ -696,20 +751,24 @@ module Sphinx
             attrs_names_in_order.each do |a|
               r['attrs'] ||= {}
   
-              # handle floats
-              if attrs[a] == SPH_ATTR_FLOAT
-                r['attrs'][a] = response.get_float
-              else
-                # handle everything else as unsigned ints
-                val = response.get_int
-                if (attrs[a] & SPH_ATTR_MULTI) != 0
-                  r['attrs'][a] = []
-                  1.upto(val) do
-                    r['attrs'][a] << response.get_int
-                  end
+              case attrs[a]
+                when SPH_ATTR_BIGINT
+                  # handle 64-bit ints
+                  r['attrs'][a] = response.get_int64
+                when SPH_ATTR_FLOAT
+                  # handle floats
+                  r['attrs'][a] = response.get_float
                 else
-                  r['attrs'][a] = val
-                end
+                  # handle everything else as unsigned ints
+                  val = response.get_int
+                  if (attrs[a] & SPH_ATTR_MULTI) != 0
+                    r['attrs'][a] = []
+                    1.upto(val) do
+                      r['attrs'][a] << response.get_int
+                    end
+                  else
+                    r['attrs'][a] = val
+                  end
               end
             end
             result['matches'] << r
@@ -824,7 +883,7 @@ module Sphinx
     def BuildKeywords(query, index, hits)
       assert { query.instance_of? String }
       assert { index.instance_of? String }
-      assert { hits.instance_of? Boolean }
+      assert { hits.instance_of?(TrueClass) || hits.instance_of?(FalseClass) }
       
       # build request
       request = Request.new
@@ -856,11 +915,12 @@ module Sphinx
       return res
     end
 
-    # Update specified attributes on specified documents.
+    # Batch update given attributes in given rows in given indexes.
     #
-    # * <tt>index</tt> is a name of the index to be updated
-    # * <tt>attrs</tt> is an array of attribute name strings.
-    # * <tt>values</tt> is a hash where key is document id, and value is an array of
+    # * +index+ is a name of the index to be updated
+    # * +attrs+ is an array of attribute name strings.
+    # * +values+ is a hash where key is document id, and value is an array of
+    # * +mva+ identifies whether update MVA
     # new attribute values
     #
     # Returns number of actually updated documents (0 or more) on success.
@@ -868,9 +928,10 @@ module Sphinx
     #
     # Usage example:
     #    sphinx.UpdateAttributes('test1', ['group_id'], { 1 => [456] })
-    def UpdateAttributes(index, attrs, values)
+    def UpdateAttributes(index, attrs, values, mva = false)
       # verify everything
       assert { index.instance_of? String }
+      assert { mva.instance_of?(TrueClass) || mva.instance_of?(FalseClass) }
       
       assert { attrs.instance_of? Array }
       attrs.each do |attr|
@@ -883,7 +944,12 @@ module Sphinx
         assert { entry.instance_of? Array }
         assert { entry.length == attrs.length }
         entry.each do |v|
-          assert { v.instance_of? Fixnum }
+          if mva
+            assert { v.instance_of? Array }
+            v.each { |vv| assert { vv.instance_of? Fixnum } }
+          else
+            assert { v.instance_of? Fixnum }
+          end
         end
       end
       
@@ -892,12 +958,19 @@ module Sphinx
       request.put_string index
       
       request.put_int attrs.length
-      request.put_string(*attrs)
+      for attr in attrs
+        request.put_string attr
+        request.put_int mva ? 1 : 0
+      end
       
       request.put_int values.length
       values.each do |id, entry|
         request.put_int64 id
-        request.put_int(*entry)
+        if mva
+          entry.each { |v| request.put_int_array v }
+        else
+          request.put_int *entry
+        end
       end
       
       response = PerformRequest(:update, request)

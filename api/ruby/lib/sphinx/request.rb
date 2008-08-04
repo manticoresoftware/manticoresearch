@@ -14,7 +14,7 @@ module Sphinx
 
     # Put 64-bit int(s) to request.
     def put_int64(*ints)
-      ints.each { |i| @request << [i >> 32, i & ((1 << 32) - 1)].pack('NN') }
+      ints.each { |i| @request << [i].pack('q').reverse }#[i >> 32, i & ((1 << 32) - 1)].pack('NN') }
     end
 
     # Put string(s) to request (first length, then the string itself).
@@ -34,6 +34,12 @@ module Sphinx
     # Put array of ints to request (first length, then the array itself)
     def put_int_array(arr)
       put_int arr.length, *arr
+    end
+
+    # Put array of 64-bit ints to request (first length, then the array itself)
+    def put_int64_array(arr)
+      put_int arr.length
+      put_int64 *arr
     end
     
     # Returns the entire message

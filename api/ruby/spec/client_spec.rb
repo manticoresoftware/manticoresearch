@@ -1,12 +1,29 @@
 require File.dirname(__FILE__) + '/../init'
 
+class SphinxSpecError < StandardError; end
+
 module SphinxFixtureHelper
   def sphinx_fixture(name)
     `php #{File.dirname(__FILE__)}/fixtures/#{name}.php`
   end
 end
 
-describe 'The Connect method of SphinxApi' do
+module SphinxApiCall
+  def create_sphinx
+    @sphinx = Sphinx::Client.new
+    @sock = mock('TCPSocket')
+    @sphinx.stub!(:Connect).and_return(@sock)
+    @sphinx.stub!(:GetResponse).and_raise(SphinxSpecError)
+    return @sphinx
+  end
+
+  def safe_call
+    yield
+  rescue SphinxSpecError
+  end
+end
+
+describe 'The Connect method of Sphinx::Client' do
   before(:each) do
     @sphinx = Sphinx::Client.new
     @sock = mock('TCPSocket')
@@ -40,7 +57,7 @@ describe 'The Connect method of SphinxApi' do
   end
 end
 
-describe 'The GetResponse method of SphinxApi' do
+describe 'The GetResponse method of Sphinx::Client' do
   before(:each) do
     @sphinx = Sphinx::Client.new
     @sock = mock('TCPSocket')
@@ -100,14 +117,12 @@ describe 'The GetResponse method of SphinxApi' do
   end
 end
 
-describe 'The Query method of SphinxApi' do
+describe 'The Query method of Sphinx::Client' do
   include SphinxFixtureHelper
+  include SphinxApiCall
 
   before(:each) do
-    @sphinx = Sphinx::Client.new
-    @sock = mock('TCPSocket')
-    @sphinx.stub!(:Connect).and_return(@sock)
-    @sphinx.stub!(:GetResponse).and_raise(Sphinx::SphinxError)
+    @sphinx = create_sphinx
   end
 
   it 'should generate valid request with default parameters' do
@@ -150,124 +165,37 @@ describe 'The Query method of SphinxApi' do
     @sphinx.Query('query') rescue nil?
   end
 
-  it 'should generate valid request with match SPH_MATCH_ALL' do
-    expected = sphinx_fixture('match_all')
-    @sock.should_receive(:send).with(expected, 0)
-    @sphinx.SetMatchMode(Sphinx::Client::SPH_MATCH_ALL)
-    @sphinx.Query('query') rescue nil?
+  describe 'with match' do
+    [ :all, :any, :phrase, :boolean, :extended, :fullscan, :extended2 ].each do |match|
+      it "should generate valid request for SPH_MATCH_#{match.to_s.upcase}" do
+        expected = sphinx_fixture("match_#{match}")
+        @sock.should_receive(:send).with(expected, 0)
+        @sphinx.SetMatchMode(Sphinx::Client::const_get("SPH_MATCH_#{match.to_s.upcase}"))
+        @sphinx.Query('query') rescue nil?
+      end
+    end
   end
 
-  it 'should generate valid request with match SPH_MATCH_ANY' do
-    expected = sphinx_fixture('match_any')
-    @sock.should_receive(:send).with(expected, 0)
-    @sphinx.SetMatchMode(Sphinx::Client::SPH_MATCH_ANY)
-    @sphinx.Query('query') rescue nil?
+  describe 'with rank' do
+    [ :proximity_bm25, :bm25, :none, :wordcount, :proximity ].each do |rank|
+      it "should generate valid request for SPH_RANK_#{rank.to_s.upcase}" do
+        expected = sphinx_fixture("ranking_#{rank}")
+        @sock.should_receive(:send).with(expected, 0)
+        @sphinx.SetRankingMode(Sphinx::Client.const_get("SPH_RANK_#{rank.to_s.upcase}"))
+        @sphinx.Query('query') rescue nil?
+      end
+    end
   end
 
-  it 'should generate valid request with match SPH_MATCH_PHRASE' do
-    expected = sphinx_fixture('match_phrase')
-    @sock.should_receive(:send).with(expected, 0)
-    @sphinx.SetMatchMode(Sphinx::Client::SPH_MATCH_PHRASE)
-    @sphinx.Query('query') rescue nil?
-  end
-
-  it 'should generate valid request with match SPH_MATCH_BOOLEAN' do
-    expected = sphinx_fixture('match_boolean')
-    @sock.should_receive(:send).with(expected, 0)
-    @sphinx.SetMatchMode(Sphinx::Client::SPH_MATCH_BOOLEAN)
-    @sphinx.Query('query') rescue nil?
-  end
-
-  it 'should generate valid request with match SPH_MATCH_EXTENDED' do
-    expected = sphinx_fixture('match_extended')
-    @sock.should_receive(:send).with(expected, 0)
-    @sphinx.SetMatchMode(Sphinx::Client::SPH_MATCH_EXTENDED)
-    @sphinx.Query('query') rescue nil?
-  end
-
-  it 'should generate valid request with match SPH_MATCH_FULLSCAN' do
-    expected = sphinx_fixture('match_fullscan')
-    @sock.should_receive(:send).with(expected, 0)
-    @sphinx.SetMatchMode(Sphinx::Client::SPH_MATCH_FULLSCAN)
-    @sphinx.Query('query') rescue nil?
-  end
-
-  it 'should generate valid request with match SPH_MATCH_EXTENDED2' do
-    expected = sphinx_fixture('match_extended2')
-    @sock.should_receive(:send).with(expected, 0)
-    @sphinx.SetMatchMode(Sphinx::Client::SPH_MATCH_EXTENDED2)
-    @sphinx.Query('query') rescue nil?
-  end
-
-  it 'should generate valid request with ranking mode SPH_RANK_PROXIMITY_BM25' do
-    expected = sphinx_fixture('ranking_proximity_bm25')
-    @sock.should_receive(:send).with(expected, 0)
-    @sphinx.SetRankingMode(Sphinx::Client::SPH_RANK_PROXIMITY_BM25)
-    @sphinx.Query('query') rescue nil?
-  end
-
-  it 'should generate valid request with ranking mode SPH_RANK_BM25' do
-    expected = sphinx_fixture('ranking_bm25')
-    @sock.should_receive(:send).with(expected, 0)
-    @sphinx.SetRankingMode(Sphinx::Client::SPH_RANK_BM25)
-    @sphinx.Query('query') rescue nil?
-  end
-
-  it 'should generate valid request with ranking mode SPH_RANK_NONE' do
-    expected = sphinx_fixture('ranking_none')
-    @sock.should_receive(:send).with(expected, 0)
-    @sphinx.SetRankingMode(Sphinx::Client::SPH_RANK_NONE)
-    @sphinx.Query('query') rescue nil?
-  end
-
-  it 'should generate valid request with ranking mode SPH_RANK_WORDCOUNT' do
-    expected = sphinx_fixture('ranking_wordcount')
-    @sock.should_receive(:send).with(expected, 0)
-    @sphinx.SetRankingMode(Sphinx::Client::SPH_RANK_WORDCOUNT)
-    @sphinx.Query('query') rescue nil?
-  end
-
-  it 'should generate valid request with sort mode SPH_SORT_RELEVANCE' do
-    expected = sphinx_fixture('sort_relevance')
-    @sock.should_receive(:send).with(expected, 0)
-    @sphinx.SetSortMode(Sphinx::Client::SPH_SORT_RELEVANCE)
-    @sphinx.Query('query') rescue nil?
-  end
-
-  it 'should generate valid request with sort mode SPH_SORT_ATTR_DESC' do
-    expected = sphinx_fixture('sort_attr_desc')
-    @sock.should_receive(:send).with(expected, 0)
-    @sphinx.SetSortMode(Sphinx::Client::SPH_SORT_ATTR_DESC, 'sortby')
-    @sphinx.Query('query') rescue nil?
-  end
-
-  it 'should generate valid request with sort mode SPH_SORT_ATTR_ASC' do
-    expected = sphinx_fixture('sort_attr_asc')
-    @sock.should_receive(:send).with(expected, 0)
-    @sphinx.SetSortMode(Sphinx::Client::SPH_SORT_ATTR_ASC, 'sortby')
-    @sphinx.Query('query') rescue nil?
-  end
-
-  it 'should generate valid request with sort mode SPH_SORT_TIME_SEGMENTS' do
-    expected = sphinx_fixture('sort_time_segments')
-    @sock.should_receive(:send).with(expected, 0)
-    @sphinx.SetSortMode(Sphinx::Client::SPH_SORT_TIME_SEGMENTS, 'sortby')
-    @sphinx.Query('query') rescue nil?
-  end
-
-  it 'should generate valid request with sort mode SPH_SORT_EXTENDED' do
-    expected = sphinx_fixture('sort_extended')
-    @sock.should_receive(:send).with(expected, 0)
-    @sphinx.SetSortMode(Sphinx::Client::SPH_SORT_EXTENDED, 'sortby')
-    @sphinx.Query('query') rescue nil?
-  end
-
-
-  it 'should generate valid request with sort mode SPH_SORT_EXPR' do
-    expected = sphinx_fixture('sort_EXPR')
-    @sock.should_receive(:send).with(expected, 0)
-    @sphinx.SetSortMode(Sphinx::Client::SPH_SORT_EXPR, 'sortby')
-    @sphinx.Query('query') rescue nil?
+  describe 'with sorting' do
+    [ :attr_desc, :relevance, :attr_asc, :time_segments, :extended, :expr ].each do |mode|
+      it "should generate valid request for SPH_SORT_#{mode.to_s.upcase}" do
+        expected = sphinx_fixture("sort_#{mode}")
+        @sock.should_receive(:send).with(expected, 0)
+        @sphinx.SetSortMode(Sphinx::Client.const_get("SPH_SORT_#{mode.to_s.upcase}"), mode == :relevance ? '' : 'sortby')
+        @sphinx.Query('query') rescue nil?
+      end
+    end
   end
 
   it 'should generate valid request with weights' do
@@ -348,6 +276,14 @@ describe 'The Query method of SphinxApi' do
     @sphinx.SetFilterRange('attr', 10, 20, true)
     @sphinx.Query('query') rescue nil?
   end
+  
+  it 'should generate valid request with signed int64-based filter range' do
+    expected = sphinx_fixture('filter_range_int64')
+    @sock.should_receive(:send).with(expected, 0)
+    @sphinx.SetFilterRange('attr1', -10, 20)
+    @sphinx.SetFilterRange('attr2', -1099511627770, 1099511627780)
+    safe_call { @sphinx.Query('query') }
+  end
 
   it 'should generate valid request with float filter range' do
     expected = sphinx_fixture('filter_float_range')
@@ -380,62 +316,31 @@ describe 'The Query method of SphinxApi' do
     @sphinx.SetGeoAnchor('attrlat', 'attrlong', 20.3, 40.7)
     @sphinx.Query('query') rescue nil?
   end
+  
+  describe 'with group by' do
+    [ :day, :week, :month, :year, :attr, :attrpair ].each do |groupby|
+      it "should generate valid request for SPH_GROUPBY_#{groupby.to_s.upcase}" do
+        expected = sphinx_fixture("group_by_#{groupby}")
+        @sock.should_receive(:send).with(expected, 0)
+        @sphinx.SetGroupBy('attr', Sphinx::Client::const_get("SPH_GROUPBY_#{groupby.to_s.upcase}"))
+        @sphinx.Query('query') rescue nil?
+      end
+    end
 
-  it 'should generate valid request with group by SPH_GROUPBY_DAY' do
-    expected = sphinx_fixture('group_by_day')
-    @sock.should_receive(:send).with(expected, 0)
-    @sphinx.SetGroupBy('attr', Sphinx::Client::SPH_GROUPBY_DAY)
-    @sphinx.Query('query') rescue nil?
-  end
+    it 'should generate valid request for SPH_GROUPBY_DAY with sort' do
+      expected = sphinx_fixture('group_by_day_sort')
+      @sock.should_receive(:send).with(expected, 0)
+      @sphinx.SetGroupBy('attr', Sphinx::Client::SPH_GROUPBY_DAY, 'somesort')
+      @sphinx.Query('query') rescue nil?
+    end
 
-  it 'should generate valid request with group by SPH_GROUPBY_WEEK' do
-    expected = sphinx_fixture('group_by_week')
-    @sock.should_receive(:send).with(expected, 0)
-    @sphinx.SetGroupBy('attr', Sphinx::Client::SPH_GROUPBY_WEEK)
-    @sphinx.Query('query') rescue nil?
-  end
-
-  it 'should generate valid request with group by SPH_GROUPBY_MONTH' do
-    expected = sphinx_fixture('group_by_month')
-    @sock.should_receive(:send).with(expected, 0)
-    @sphinx.SetGroupBy('attr', Sphinx::Client::SPH_GROUPBY_MONTH)
-    @sphinx.Query('query') rescue nil?
-  end
-
-  it 'should generate valid request with group by SPH_GROUPBY_YEAR' do
-    expected = sphinx_fixture('group_by_year')
-    @sock.should_receive(:send).with(expected, 0)
-    @sphinx.SetGroupBy('attr', Sphinx::Client::SPH_GROUPBY_YEAR)
-    @sphinx.Query('query') rescue nil?
-  end
-
-  it 'should generate valid request with group by SPH_GROUPBY_ATTR' do
-    expected = sphinx_fixture('group_by_attr')
-    @sock.should_receive(:send).with(expected, 0)
-    @sphinx.SetGroupBy('attr', Sphinx::Client::SPH_GROUPBY_ATTR)
-    @sphinx.Query('query') rescue nil?
-  end
-
-  it 'should generate valid request with group by SPH_GROUPBY_ATTRPAIR' do
-    expected = sphinx_fixture('group_by_attrpair')
-    @sock.should_receive(:send).with(expected, 0)
-    @sphinx.SetGroupBy('attr', Sphinx::Client::SPH_GROUPBY_ATTRPAIR)
-    @sphinx.Query('query') rescue nil?
-  end
-
-  it 'should generate valid request with group by SPH_GROUPBY_DAY with sort' do
-    expected = sphinx_fixture('group_by_day_sort')
-    @sock.should_receive(:send).with(expected, 0)
-    @sphinx.SetGroupBy('attr', Sphinx::Client::SPH_GROUPBY_DAY, 'somesort')
-    @sphinx.Query('query') rescue nil?
-  end
-
-  it 'should generate valid request with count-distinct attribute' do
-    expected = sphinx_fixture('group_distinct')
-    @sock.should_receive(:send).with(expected, 0)
-    @sphinx.SetGroupBy('attr', Sphinx::Client::SPH_GROUPBY_DAY)
-    @sphinx.SetGroupDistinct('attr')
-    @sphinx.Query('query') rescue nil?
+    it 'should generate valid request with count-distinct attribute' do
+      expected = sphinx_fixture('group_distinct')
+      @sock.should_receive(:send).with(expected, 0)
+      @sphinx.SetGroupBy('attr', Sphinx::Client::SPH_GROUPBY_DAY)
+      @sphinx.SetGroupDistinct('attr')
+      @sphinx.Query('query') rescue nil?
+    end
   end
 
   it 'should generate valid request with retries count specified' do
@@ -451,9 +356,13 @@ describe 'The Query method of SphinxApi' do
     @sphinx.SetRetries(10, 20)
     @sphinx.Query('query') rescue nil?
   end
+  
+  it 'should generate valid request for SetOverride'
+
+  it 'should generate valid request for SetSelect'
 end
 
-describe 'The RunQueries method of SphinxApi' do
+describe 'The RunQueries method of Sphinx::Client' do
   include SphinxFixtureHelper
 
   before(:each) do
@@ -476,7 +385,7 @@ describe 'The RunQueries method of SphinxApi' do
   end
 end
 
-describe 'The BuildExcerpts method of SphinxApi' do
+describe 'The BuildExcerpts method of Sphinx::Client' do
   include SphinxFixtureHelper
 
   before(:each) do
@@ -511,36 +420,38 @@ describe 'The BuildExcerpts method of SphinxApi' do
   end
 end
 
-describe 'The BuildKeywords method of SphinxApi' do
+describe 'The BuildKeywords method of Sphinx::Client' do
   include SphinxFixtureHelper
+  include SphinxApiCall
 
   before(:each) do
-    @sphinx = Sphinx::Client.new
-    @sock = mock('TCPSocket')
-    @sphinx.stub!(:Connect).and_return(@sock)
-    @sphinx.stub!(:GetResponse).and_raise(Sphinx::SphinxError)
+    @sphinx = create_sphinx
   end
   
   it 'should generate valid request' do
     expected = sphinx_fixture('keywords')
     @sock.should_receive(:send).with(expected, 0)
-    @sphinx.BuildKeywords('test', 'index', true) rescue nil?
+    safe_call { @sphinx.BuildKeywords('test', 'index', true) }
   end
 end
 
-describe 'The UpdateAttributes method of SphinxApi' do
+describe 'The UpdateAttributes method of Sphinx::Client' do
   include SphinxFixtureHelper
+  include SphinxApiCall
 
   before(:each) do
-    @sphinx = Sphinx::Client.new
-    @sock = mock('TCPSocket')
-    @sphinx.stub!(:Connect).and_return(@sock)
-    @sphinx.stub!(:GetResponse).and_raise(Sphinx::SphinxError)
+    @sphinx = create_sphinx
   end
   
   it 'should generate valid request' do
     expected = sphinx_fixture('update_attributes')
     @sock.should_receive(:send).with(expected, 0)
-    @sphinx.UpdateAttributes('index', ['group'], { 123 => [456] }) rescue nil?
+    safe_call { @sphinx.UpdateAttributes('index', ['group'], { 123 => [456] }) }
+  end
+  
+  it 'should generate valid request for MVA' do
+    expected = sphinx_fixture('update_attributes_mva')
+    @sock.should_receive(:send).with(expected, 0)
+    safe_call { @sphinx.UpdateAttributes('index', ['group', 'category'], { 123 => [ [456, 789], [1, 2, 3] ] }, true) }
   end
 end

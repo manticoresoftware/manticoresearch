@@ -51,6 +51,15 @@ context 'The SphinxApi connected to Sphinx' do
     result = @sphinx.Query('wifi', 'test1')
     result['matches'][0]['attrs']['group_id'].should == 2
   end
+
+  specify 'should parse response in UpdateAttributes method with MVA' do
+    @sphinx.UpdateAttributes('test1', ['tags'], { 2 => [[1, 2, 3]] }, true).should == 1
+    result = @sphinx.Query('wifi', 'test1')
+    result['matches'][0]['attrs']['tags'].should == [1, 2, 3]
+    @sphinx.UpdateAttributes('test1', ['tags'], { 2 => [[5, 6, 7, 8]] }, true).should == 1
+    result = @sphinx.Query('wifi', 'test1')
+    result['matches'][0]['attrs']['tags'].should == [5, 6, 7, 8]
+  end
   
   specify 'should process errors in Query method' do
   	@sphinx.Query('wifi', 'fakeindex').should be_false

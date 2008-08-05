@@ -66,7 +66,7 @@
 	#if _MSC_VER<1400
 	#define struct_stat	__stat64
 	#else
-	#define struct_stat	_stat64
+	#define struct_stat	struct _stat64
 	#endif
 
 	#define ICONV_INBUF_CONST	1
@@ -20242,6 +20242,11 @@ FILE * sphDetectXMLPipe ( const char * szCommand, BYTE * dBuf, int & iBufSize, i
 	BYTE * pStart = dBuf;
 	iBufSize = (int)fread ( dBuf, 1, iMaxBufSize, pPipe );
 	BYTE * pEnd = pStart + iBufSize;
+
+	// BOM
+	if ( iBufSize >= 3 )
+		if ( !strncmp ( (char*)pStart, "\xEF\xBB\xBF", 3 ) )
+			pStart += 3;
 
 	while ( isspace ( *pStart ) && pStart < pEnd )
 		pStart++;

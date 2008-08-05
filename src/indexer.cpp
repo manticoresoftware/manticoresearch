@@ -528,7 +528,7 @@ CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char 
 	CSphSource * pSrcXML = NULL;
 
 	CSphString sCommand = hSource["xmlpipe_command"];
-	const int MAX_BUF_SIZE = 128;
+	const int MAX_BUF_SIZE = 1024;
 	BYTE dBuffer [MAX_BUF_SIZE];
 	int iBufSize = 0;
 	bool bUsePipe2 = true;
@@ -551,7 +551,7 @@ CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char 
 			fprintf ( stdout, "ERROR: source '%s': xmlpipe2 should only be used with charset_type=utf-8\n", sSourceName );
 		}
 #else
-		fprintf ( stdout, "WARNING: source '%s': unknown source type '%s' (missing libexpat/libxml2?)\n", sSourceName, hSource["type"].cstr() );
+		fprintf ( stdout, "WARNING: source '%s': xmlpipe2 support NOT compiled in. To use xmlpipe2, install missing XML libraries, reconfigure, and rebuild Sphinx\n", sSourceName );
 #endif
 	}
 	else

@@ -4085,6 +4085,14 @@ void UpdateRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuff
 }
 
 
+template < typename T, typename U >
+struct CSphPair
+{
+	T m_tFirst;
+	U m_tSecond;
+};
+
+
 void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeFD )
 {
 	if ( !CheckCommandVersion ( iVer, VER_COMMAND_UPDATE, tReq ) )
@@ -4164,7 +4172,7 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 
 	int iSuccesses = 0;
 	int iUpdated = 0;
-	CSphVector<CSphString> dUpdated;
+	CSphVector < CSphPair < CSphString, DWORD > > dUpdated;
 
 	ARRAY_FOREACH ( iIdx, dIndexNames )
 	{
@@ -4199,7 +4207,10 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 				continue;
 			}
 
+			DWORD uStatusDelta = pServed->m_pIndex->m_uAttrsStatus;
 			int iUpd = pServed->m_pIndex->UpdateAttributes ( tUpd );
+			uStatusDelta = pServed->m_pIndex->m_uAttrsStatus & ~uStatusDelta;
+
 			if ( iUpd<0 )
 			{
 				dFailuresSet.Submit ( "%s", pServed->m_pIndex->GetLastError().cstr() );
@@ -4207,8 +4218,12 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 			} else
 			{
 				iUpdated += iUpd;
-				dUpdated.Add ( sIndex );
 				iSuccesses++;
+
+				CSphPair<CSphString,DWORD> tAdd;
+				tAdd.m_tFirst = sIndex;
+				tAdd.m_tSecond = uStatusDelta;
+				dUpdated.Add ( tAdd );
 			}
 		}
 
@@ -4243,9 +4258,11 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 
 		ARRAY_FOREACH ( i, dUpdated )
 		{
-			uTmp = strlen ( dUpdated[i].cstr() );
+			uTmp = strlen ( dUpdated[i].m_tFirst.cstr() );
 			::write ( iPipeFD, &uTmp, sizeof(DWORD) );
-			::write ( iPipeFD, dUpdated[i].cstr(), uTmp );
+			::write ( iPipeFD, dUpdated[i].m_tFirst.cstr(), uTmp );
+			uTmp = dUpdated[i].m_tSecond;
+			::write ( iPipeFD, &uTmp, sizeof(DWORD) );
 		}
 	}
 
@@ -4863,8 +4880,9 @@ void HandlePipeUpdate ( PipeReader_t & tPipe, bool bFailure )
 	int iUpdIndexes = tPipe.GetInt ();
 	for ( int i=0; i<iUpdIndexes; i++ )
 	{
-		// index name must follow
+		// index name and status must follow
 		CSphString sIndex = tPipe.GetString ();
+		DWORD uStatus = tPipe.GetInt ();
 		if ( tPipe.IsError() )
 			break;
 
@@ -4872,7 +4890,7 @@ void HandlePipeUpdate ( PipeReader_t & tPipe, bool bFailure )
 		if ( pServed )
 		{
 			pServed->m_iUpdateTag = g_iUpdateTag;
-			pServed->m_pIndex->SetAttrsUpdated ( true );
+			pServed->m_pIndex->m_uAttrsStatus |= uStatus;
 		} else
 			sphWarning ( "INTERNAL ERROR: unknown index '%s' in HandlePipeUpdate()", sIndex.cstr() );
 	}
@@ -5001,7 +5019,7 @@ void HandlePipeSave ( PipeReader_t & tPipe, bool bFailure )
 		if ( pServed )
 		{
 			if ( pServed->m_iUpdateTag<=g_iFlushTag )
-				pServed->m_pIndex->SetAttrsUpdated ( false );
+				pServed->m_pIndex->m_uAttrsStatus = 0;
 		} else
 		{
 			sphWarning ( "INTERNAL ERROR: unknown index '%s' in HandlePipeSave()", sIndex.cstr() );

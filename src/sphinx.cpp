@@ -6529,7 +6529,8 @@ DWORD * sphArenaInit ( int iMaxBytes )
 /////////////////////////////////////////////////////////////////////////////
 
 CSphIndex::CSphIndex ( const char * sName )
-	: m_pProgress ( NULL )
+	: m_uAttrsStatus ( 0 )
+	, m_pProgress ( NULL )
 	, m_tSchema ( sName )
 	, m_sLastError ( "(no error message)" )
 	, m_iBoundaryStep ( 0 )
@@ -6538,7 +6539,6 @@ CSphIndex::CSphIndex ( const char * sName )
 	, m_iDocinfoGap ( 0 )
 	, m_fRelocFactor ( 0.0f )
 	, m_fWriteFactor ( 0.0f )
-	, m_bAttrsUpdated ( false )
 	, m_bEnableStar ( false )
 	, m_bKeepFilesOpen ( false )
 	, m_bPreloadWordlist ( true )
@@ -6783,6 +6783,8 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd )
 	// preallocation went OK; do the actual update
 	int iRowStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 	int iUpdated = 0;
+	DWORD uUpdateMask = 0;
+
 	ARRAY_FOREACH ( iUpd, tUpd.m_dDocids )
 	{
 		DWORD * pEntry = dRowPtrs[iUpd];
@@ -6821,6 +6823,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd )
 				}
 
 				iPos++;
+				uUpdateMask |= ATTRS_UPDATED;
 				continue;
 			}
 
@@ -6853,22 +6856,29 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd )
 			// free old storage if needed
 			if ( uOldIndex & MVA_ARENA_FLAG )
 				g_MvaArena.TaggedFreeIndex ( m_iIndexTag, uOldIndex & MVA_OFFSET_MASK );
+
+			uUpdateMask |= ATTRS_MVA_UPDATED;
 		}
 
 		iUpdated++;
 	}
 
-	if ( iUpdated>0 )
-		m_bAttrsUpdated = true;
-
+	m_uAttrsStatus |= uUpdateMask;
 	return iUpdated;
 }
 
 
 bool CSphIndex_VLN::SaveAttributes ()
 {
-	if ( !m_bAttrsUpdated || !m_uDocinfo )
+	if ( !m_uAttrsStatus || !m_uDocinfo )
 		return true;
+
+	if ( m_uAttrsStatus & ATTRS_MVA_UPDATED )
+	{
+		m_sLastError.SetSprintf ( "MVA updates are RAM-based only, saving is not (yet) possible" );
+		return false;
+	}
+
 	assert ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && m_uDocinfo && m_pDocinfo.GetWritePtr() );
 
 	// save current state
@@ -6915,7 +6925,7 @@ bool CSphIndex_VLN::SaveAttributes ()
 	// all done
 	::unlink ( sSpaOld.cstr() );
 
-	m_bAttrsUpdated = false;
+	m_uAttrsStatus = 0;
 	return true;
 }
 
@@ -14010,7 +14020,7 @@ void CSphIndex_VLN::Dealloc ()
 
 	m_uDocinfo = 0;
 	m_tSettings.m_eDocinfo = SPH_DOCINFO_NONE;
-	m_bAttrsUpdated = false;
+	m_uAttrsStatus = 0;
 
 	m_bPreallocated = false;
 	SafeDelete ( m_pTokenizer );

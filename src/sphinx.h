@@ -1819,6 +1819,12 @@ class CSphIndex
 public:
 	typedef void ProgressCallback_t ( const CSphIndexProgress * pStat, bool bPhaseEnd );
 
+	enum
+	{
+		ATTRS_UPDATED			= ( 1UL<<0 ),
+		ATTRS_MVA_UPDATED		= ( 1UL<<1 )
+	};
+
 public:
 								CSphIndex ( const char * sName );
 	virtual						~CSphIndex ();
@@ -1897,24 +1903,21 @@ public:
 	/// on failure, false is returned and GetLastError() contains error message
 	virtual bool				SaveAttributes () = 0;
 
-	/// externally set "updated" flag
-	/// needed because updates and saves may be performed by other processes
-	virtual void				SetAttrsUpdated ( bool bFlag ) { m_bAttrsUpdated = bFlag; }
+public:
+	DWORD						m_uAttrsStatus;			///< whether in-memory attrs are updated (compared to disk state)
 
 protected:
 	ProgressCallback_t *		m_pProgress;
 	CSphSchema					m_tSchema;
 	CSphString					m_sLastError;
 
-	int							m_iBoundaryStep;///< on-boundary additional word position step (0 means index all words continuously)
+	int							m_iBoundaryStep;		///< on-boundary additional word position step (0 means index all words continuously)
 
 	bool						m_bInplaceSettings;
 	int							m_iHitGap;
 	int							m_iDocinfoGap;
 	float						m_fRelocFactor;
 	float						m_fWriteFactor;
-
-	bool						m_bAttrsUpdated;///< whether in-memory attrs are updated (compared to disk state)
 
 	bool						m_bEnableStar;			///< enable star-syntax
 	bool						m_bKeepFilesOpen;		///< keep files open to avoid race on seamless rotation

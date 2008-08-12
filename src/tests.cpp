@@ -153,7 +153,7 @@ void TestTokenizer ( bool bUTF8 )
 		}
 
 		// test misc SBCS-only and UTF8-only one-liners
-		char * dTests2[] =
+		const char * dTests2[] =
 		{
 			"0", "\x80\x81\x82",				"\x80\x81\x82", NULL,
 			"1", "\xC2\x80\xC2\x81\xC2\x82",	"\xC2\x80\xC2\x81\xC2\x82", NULL,
@@ -181,7 +181,7 @@ void TestTokenizer ( bool bUTF8 )
 		if ( bUTF8 )
 		{
 			printf ( "%s for proper UTF-8 error handling\n", sPrefix );
-			char * sLine3 = "hi\xd0\xffh";
+			const char * sLine3 = "hi\xd0\xffh";
 
 			pTokenizer->SetBuffer ( (BYTE*)sLine3, 4 );
 			assert ( !strcmp ( (char*)pTokenizer->GetToken(), "hi" ) );
@@ -216,7 +216,7 @@ void TestTokenizer ( bool bUTF8 )
 
 		pShortTokenizer->EnableQueryParserMode ( true );
 
-		char * dTestsShort[] =
+		const char * dTestsShort[] =
 		{
 			"ab*",		"ab*",		NULL,
 			"*ab",		"*ab",		NULL,

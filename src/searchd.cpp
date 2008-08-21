@@ -26,6 +26,11 @@
 #include <stdarg.h>
 #include <limits.h>
 
+#define SEARCHD_BACKLOG			5
+#define SEARCHD_DEFAULT_PORT	3312
+
+#define SPH_ADDRESS_SIZE		sizeof("000.000.000.000")
+
 /////////////////////////////////////////////////////////////////////////////
 
 #if USE_WINDOWS
@@ -48,6 +53,7 @@
 	#include <sys/socket.h>
 	#include <sys/time.h>
 	#include <sys/wait.h>
+	#include <sys/un.h>
 	#include <netdb.h>
 
 	// there's no MSG_NOSIGNAL on OS X
@@ -125,7 +131,7 @@ static int				g_iMaxChildren	= 0;
 static bool				g_bPreopenIndexes = false;
 static bool				g_bOnDiskDicts	= false;
 static bool				g_bUnlinkOld	= true;
-static int				g_iSocket		= 0;
+static CSphVector<int>	g_dSockets;
 static int				g_iQueryLogFile	= -1;
 static CSphString		g_sQueryLogFile;
 static const char *		g_sPidFile		= NULL;
@@ -237,6 +243,7 @@ const int	MAX_RETRY_DELAY		= 1000;
 #define EINPROGRESS		WSAEINPROGRESS
 #define EINTR			WSAEINTR
 #define ECONNRESET		WSAECONNRESET
+#define ECONNABORTED	WSAECONNABORTED
 #define socklen_t		int
 
 #define ftruncate		_chsize
@@ -726,8 +733,9 @@ void Shutdown ()
 		}
 	}
 
-	if ( g_iSocket )
-		sphSockClose ( g_iSocket );
+	ARRAY_FOREACH ( i, g_dSockets )
+		if ( g_dSockets[i]>=0 )
+			sphSockClose ( g_dSockets[i] );
 
 #if USE_WINDOWS
 	CloseHandle ( g_hPipe );
@@ -858,24 +866,103 @@ void sphSockSetErrno ( int iErr )
 }
 
 
-int sphCreateServerSocket ( DWORD uAddr, int iPort )
+/// formats IP address given in network byte order into sBuffer
+/// returns the buffer
+char * sphFormatIP ( char * sBuffer, int iBufferSize, DWORD uAddress )
 {
-	static struct sockaddr_in iaddr;
+	const BYTE *a = (const BYTE *)&uAddress;
+	snprintf ( sBuffer, iBufferSize, "%u.%u.%u.%u", a[0], a[1], a[2], a[3] );
+	return sBuffer;
+}
 
+
+static const bool GETADDR_STRICT = true; ///< strict check, will die with sphFatal() on failure
+
+DWORD sphGetAddress ( const char * sHost, bool bFatal=false )
+{
+	struct hostent * pHost = gethostbyname ( sHost );
+
+	if ( pHost==NULL || pHost->h_addrtype!=AF_INET)
+	{
+		if ( bFatal )
+			sphFatal ( "no AF_INET address found for: %s", sHost );
+		return 0;
+	}
+
+	DWORD *addr = *(DWORD **)pHost->h_addr_list;
+	
+	assert ( sizeof(DWORD) == pHost->h_length );
+	assert ( *addr != 0 );
+	
+	if ( addr[1] )
+		sphWarning ( "multiple addresses found for '%s', using the first one", sHost );
+
+	return *addr;
+}
+
+
+#if USE_WINDOWS
+
+int sphCreateUnixSocket ( const char * )
+{
+	sphFatal ( "UNIX sockets are not supported on Windows" );
+	return -1;
+}
+
+#else // !USE_WINDOWS
+
+int sphCreateUnixSocket ( const char * sPath )
+{
+	static struct sockaddr_un uaddr;
+	size_t len = strlen ( sPath );
+
+	if ( len + 1 > sizeof( uaddr.sun_path ) )
+		sphFatal ( "UNIX socket path is too long (len=%d)", len );
+
+	sphInfo ( "listening on UNIX socket %s", sPath );
+	
+	memset ( &uaddr, 0, sizeof(uaddr) );
+	uaddr.sun_family = AF_UNIX;
+	memcpy ( uaddr.sun_path, sPath, len + 1 );
+	
+	int iSock = socket ( AF_UNIX, SOCK_STREAM, 0 );
+	if ( iSock == -1 )
+		sphFatal ( "failed to create UNIX socket: %s", sphSockError() );
+
+	if ( unlink ( sPath ) == -1 )
+		sphFatal ( "unlink() on UNIX socket file failed: %s", sphSockError() );
+	
+	if ( bind ( iSock, (struct sockaddr *)&uaddr, sizeof(uaddr) ) != 0 )
+		sphFatal ( "bind() on UNIX socket failed: %s", sphSockError() );
+
+	if ( listen ( iSock, SEARCHD_BACKLOG ) == -1 )
+		sphFatal ( "listen() on UNIX socket failed: %s", sphSockError() );
+
+	return iSock;
+}
+
+#endif // USE_WINDOWS
+
+
+int sphCreateInetSocket ( DWORD uAddr, int iPort )
+{
+	char sAddress[SPH_ADDRESS_SIZE];
+	sphFormatIP( sAddress, SPH_ADDRESS_SIZE, uAddr );
+		
+	if ( uAddr == htonl(INADDR_ANY) )
+		sphInfo ( "listening on all interfaces, port=%d", iPort );
+	else
+		sphInfo ( "listening on %s:%d", sAddress, iPort );
+	
+	static struct sockaddr_in iaddr;
+	memset ( &iaddr, 0, sizeof(iaddr) );
 	iaddr.sin_family = AF_INET;
 	iaddr.sin_addr.s_addr = uAddr;
 	iaddr.sin_port = htons ( (short)iPort );
 
-	char sAddr [ 256 ];
-	DWORD uHost = ntohl(uAddr);
-	snprintf ( sAddr, sizeof(sAddr), "%d.%d.%d.%d:%d", 
-		(uHost>>24) & 0xff, (uHost>>16) & 0xff, (uHost>>8) & 0xff, uHost & 0xff,
-		iPort );
-
-	sphInfo ( "creating server socket on %s", sAddr );
 	int iSock = socket ( AF_INET, SOCK_STREAM, 0 );
-	if ( iSock<0 )
-		sphFatal ( "failed to create server socket on %s: %s", sAddr, sphSockError() );
+	if ( iSock == -1 )
+		sphFatal ( "failed to create TCP socket: %s", sphSockError() );
 
 	int iOn = 1;
 	if ( setsockopt ( iSock, SOL_SOCKET, SO_REUSEADDR, (char*)&iOn, sizeof(iOn) ) )
@@ -889,13 +976,77 @@ int sphCreateServerSocket ( DWORD uAddr, int iPort )
 		if ( iRes==0 )
 			break;
 
-		sphInfo ( "failed to bind on %s, retrying...", sAddr );
+		sphInfo ( "bind() failed on %s, retrying...", sAddress );
 		sphUsleep ( 3000 );
 	} while ( --iTries>0 );
 	if ( iRes )
-		sphFatal ( "failed to bind on %s", sAddr );
+		sphFatal ( "bind() failed on %s: %s", sAddress, sphSockError() );
+
+	if ( listen ( iSock, SEARCHD_BACKLOG ) == -1 )
+		sphFatal ( "listen() failed: %s", sphSockError() );
 
 	return iSock;
+}
+
+
+inline bool IsPortInRange ( int iPort )
+{
+	return ( iPort > 0 ) && ( iPort <= 0xFFFF );
+}
+
+
+void CheckPort ( int iPort )
+{
+	if ( !IsPortInRange(iPort) )
+		sphFatal ( "port %d is out of range", iPort );
+}
+
+
+int sphParseAndBind ( const CSphString & sListen )
+{
+	const char * sSpec = sListen.cstr();
+		
+	if ( sSpec[0] == '/' )
+		return sphCreateUnixSocket ( sListen.cstr() );
+
+	int iLen = strlen ( sSpec );
+	int iColon = -1;
+	bool bAllDigits = true;
+	
+	for ( int i = 0; i < iLen; i++ )
+	{
+		if ( sSpec[i] == ':' )
+		{
+			iColon = i;
+			bAllDigits = false;
+		}
+		else if ( bAllDigits && !isdigit(sSpec[i]) )
+			bAllDigits = false;
+	}
+	
+	if ( bAllDigits && iLen <= 5 )
+	{
+		int iPort = atol(sSpec);
+		if ( IsPortInRange(iPort) )
+			return sphCreateInetSocket ( htonl(INADDR_ANY), iPort );
+	}
+
+	int iPort, iAddress;
+	if ( iColon == -1 )
+	{
+		iPort = SEARCHD_DEFAULT_PORT;
+		iAddress = sphGetAddress ( sSpec, GETADDR_STRICT );
+	}
+	else
+	{
+		iPort = atol ( sSpec + iColon + 1 );
+		CheckPort ( iPort );
+		iAddress = iColon == 0
+			? htonl(INADDR_ANY)
+			: sphGetAddress ( sListen.SubString ( 0, iColon ).cstr(), GETADDR_STRICT );
+	}
+	
+	return sphCreateInetSocket ( iAddress, iPort );
 }
 
 
@@ -1414,6 +1565,7 @@ struct Agent_t
 public:
 	CSphString		m_sHost;		///< remote searchd host
 	int				m_iPort;		///< remote searchd port, 0 if local
+	CSphString		m_sPath;		///< local searchd UNIX socket path
 	CSphString		m_sIndexes;		///< remote index names to query
 
 	int				m_iSock;		///< socket number, -1 if not connected
@@ -1429,8 +1581,7 @@ public:
 
 	CSphVector<CSphQueryResult>		m_dResults;		///< multi-query results
 
-protected:
-	int				m_iAddrType;
+	int				m_iFamily;
 	DWORD			m_uAddr;
 
 public:
@@ -1464,18 +1615,18 @@ public:
 		}
 	}
 
-	void SetAddr ( int iAddrType, int iAddrLen, const char * pAddr )
+	CSphString GetName() const
 	{
-		assert ( pAddr );
-		assert ( iAddrLen==sizeof(m_uAddr) );
+		CSphString sName;
 
-		m_iAddrType = iAddrType;
-		memcpy ( &m_uAddr, pAddr, iAddrLen );
+		switch ( m_iFamily )
+		{
+			case AF_INET: sName.SetSprintf ( "%s:%u", m_sHost.cstr(), m_iPort ); break;
+			case AF_UNIX: sName = m_sPath; break;
+		}
+
+		return sName;
 	}
-
-	int GetAddrType () const		{ return m_iAddrType; }
-	int GetAddrLen () const			{ return sizeof(m_uAddr); }
-	const char * GetAddr () const	{ return (const char *)&m_uAddr; }
 };
 
 /// distributed index
@@ -1523,13 +1674,28 @@ void ConnectToRemoteAgents ( CSphVector<Agent_t> & dAgents, bool bRetryOnly )
 		tAgent.m_eState = AGENT_UNUSED;
 		tAgent.m_bSuccess = false;
 
-		struct sockaddr_in sa;
-		memset ( &sa, 0, sizeof(sa) );
-		memcpy ( &sa.sin_addr, tAgent.GetAddr(), tAgent.GetAddrLen() );
-		sa.sin_family = (short)tAgent.GetAddrType();
-		sa.sin_port = htons ( (unsigned short)tAgent.m_iPort );
+		socklen_t len = 0;
+		struct sockaddr_storage ss;
+		memset ( &ss, 0, sizeof(ss) );
+		ss.ss_family = (short)tAgent.m_iFamily;
 
-		tAgent.m_iSock = socket ( tAgent.GetAddrType(), SOCK_STREAM, 0 );
+		if ( ss.ss_family == AF_INET )
+		{
+			struct sockaddr_in *in = (struct sockaddr_in *)&ss;
+			in->sin_port = htons ( (unsigned short)tAgent.m_iPort );
+			in->sin_addr.s_addr = tAgent.m_uAddr;
+			len = sizeof(*in);
+		}
+		#if !USE_WINDOWS
+		else if ( ss.ss_family == AF_UNIX )
+		{
+			struct sockaddr_un *un = (struct sockaddr_un *)&ss;
+			snprintf ( un->sun_path, sizeof(un->sun_path), tAgent.m_sPath.cstr() );
+			len = sizeof(*un);
+		}
+		#endif
+			
+		tAgent.m_iSock = socket ( tAgent.m_iFamily, SOCK_STREAM, 0 );
 		if ( tAgent.m_iSock<0 )
 		{
 			tAgent.m_sFailure.SetSprintf ( "socket() failed: %s", sphSockError() );
@@ -1542,7 +1708,7 @@ void ConnectToRemoteAgents ( CSphVector<Agent_t> & dAgents, bool bRetryOnly )
 			return;
 		}
 
-		if ( connect ( tAgent.m_iSock, (struct sockaddr*)&sa, sizeof(sa) )<0 )
+		if ( connect ( tAgent.m_iSock, (struct sockaddr*)&ss, len )<0 )
 		{
 			int iErr = sphSockGetErrno();
 			if ( iErr!=EINPROGRESS && iErr!=EINTR && iErr!=EWOULDBLOCK ) // check for EWOULDBLOCK is for winsock only
@@ -1586,7 +1752,7 @@ int QueryRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, const IRequ
 			const Agent_t & tAgent = dAgents[i];
 			if ( tAgent.m_eState==AGENT_CONNECT || tAgent.m_eState==AGENT_HELLO )
 			{
-				assert ( tAgent.m_iPort>0 );
+				assert ( !tAgent.m_sPath.IsEmpty() || tAgent.m_iPort>0 );
 				assert ( tAgent.m_iSock>0 );
 
 				SPH_FD_SET ( tAgent.m_iSock, ( tAgent.m_eState==AGENT_CONNECT ) ? &fdsWrite : &fdsRead );
@@ -1692,7 +1858,7 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, IReplyPar
 			Agent_t & tAgent = dAgents[iAgent];
 			if ( tAgent.m_eState==AGENT_QUERY || tAgent.m_eState==AGENT_REPLY )
 			{
-				assert ( tAgent.m_iPort>0 );
+				assert ( !tAgent.m_sPath.IsEmpty() || tAgent.m_iPort>0 );
 				assert ( tAgent.m_iSock>0 );
 
 				SPH_FD_SET ( tAgent.m_iSock, &fdsRead );
@@ -3603,7 +3769,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 					const CSphQueryResult & tRemoteResult = tAgent.m_dResults[iRes-iStart];
 
 					// copy errors or warnings
-					m_dFailuresSet[iRes].SetPrefix ( "agent %s:%d: ", tAgent.m_sHost.cstr(), tAgent.m_iPort );
+					m_dFailuresSet[iRes].SetPrefix ( "agent %s: ", tAgent.GetName().cstr() );
 					if ( !tRemoteResult.m_sError.IsEmpty() )
 						m_dFailuresSet[iRes].Submit ( "remote query error: %s", tRemoteResult.m_sError.cstr() );
 					if ( !tRemoteResult.m_sWarning.IsEmpty() )
@@ -3686,7 +3852,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		{
 			const Agent_t & tAgent = pDist->m_dAgents[i];
 			if ( !tAgent.m_bSuccess && !tAgent.m_sFailure.IsEmpty() )
-				m_dFailuresSet.Submit  ( "agent %s:%d: %s", tAgent.m_sHost.cstr(), tAgent.m_iPort, tAgent.m_sFailure.cstr() );
+				m_dFailuresSet.Submit  ( "agent %s: %s", tAgent.GetName().cstr(), tAgent.m_sFailure.cstr() );
 		}
 	}
 
@@ -5150,12 +5316,12 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		{
 			Agent_t tAgent;
 
-			// extract host name
+			// extract host name or path
 			const char * p = pAgent->cstr();
-			while ( sphIsAlpha(*p) || *p=='.' || *p=='-' ) p++;
+			while ( sphIsAlpha(*p) || *p=='.' || *p=='-' || *p=='/' ) p++;
 			if ( p==pAgent->cstr() )
 			{
-				sphWarning ( "index '%s': agent '%s': host name expected - SKIPPING AGENT",
+				sphWarning ( "index '%s': agent '%s': host name or path expected - SKIPPING AGENT",
 					szIndexName, pAgent->cstr() );
 				continue;
 			}
@@ -5165,25 +5331,53 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 					szIndexName, pAgent->cstr(), p );
 				continue;
 			}
-			tAgent.m_sHost = pAgent->SubString ( 0, p-1-pAgent->cstr() );
 
-			// extract port
-			if ( !isdigit(*p) )
+			CSphString sSub = pAgent->SubString ( 0, p-1-pAgent->cstr() );
+			if ( sSub.cstr()[0] == '/' )
 			{
-				sphWarning ( "index '%s': agent '%s': port number expected near '%s' - SKIPPING AGENT",
-					szIndexName, pAgent->cstr(), p );
+				#if USE_WINDOWS
+				sphWarning ( "index '%s': agent '%s': UNIX sockets are not supported on Windows - SKIPPING AGENT",
+			    	szIndexName, pAgent->cstr() );
 				continue;
+				#else
+				if ( strlen ( sSub.cstr() ) + 1 > sizeof(((struct sockaddr_un *)0)->sun_path) )
+				{
+					sphWarning ( "index '%s': agent '%s': UNIX socket path is too long - SKIPPING AGENT",
+						szIndexName, pAgent->cstr() );
+					continue;
+				}
+				
+				tAgent.m_iFamily = AF_UNIX;
+				tAgent.m_sPath = sSub;
+				#endif
+
+				p--;
 			}
-			tAgent.m_iPort = atoi(p);
-			if ( tAgent.m_iPort<=0 || tAgent.m_iPort>=65536 )
+			else
 			{
-				sphWarning ( "index '%s': agent '%s': invalid port number near '%s' - SKIPPING AGENT",
-					szIndexName, pAgent->cstr(), p );
-				continue;
+				tAgent.m_iFamily = AF_INET;
+				tAgent.m_sHost = sSub;
+
+				// extract port
+				if ( !isdigit(*p) )
+				{
+					sphWarning ( "index '%s': agent '%s': port number expected near '%s' - SKIPPING AGENT",
+						szIndexName, pAgent->cstr(), p );
+					continue;
+				}
+				tAgent.m_iPort = atoi(p);
+				
+				if ( !IsPortInRange(tAgent.m_iPort) )
+				{
+					sphWarning ( "index '%s': agent '%s': invalid port number near '%s' - SKIPPING AGENT",
+						szIndexName, pAgent->cstr(), p );
+					continue;
+				}
+
+				while ( isdigit(*p) ) p++;
 			}
 
 			// extract index list
-			while ( isdigit(*p) ) p++;
 			if ( *p++!=':' )
 			{
 				sphWarning ( "index '%s': agent '%s': colon expected near '%s' - SKIPPING AGENT",
@@ -5203,15 +5397,17 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 			}
 			tAgent.m_sIndexes = sIndexList;
 
-			// lookup address
-			struct hostent * hp = gethostbyname ( tAgent.m_sHost.cstr() );
-			if ( !hp )
+			// lookup address (if needed)
+			if ( tAgent.m_iFamily == AF_INET )
 			{
-				sphWarning ( "index '%s': agent '%s': failed to lookup host name '%s' (error=%s) - SKIPPING AGENT",
-					szIndexName, pAgent->cstr(), tAgent.m_sHost.cstr(), sphSockError() );
-				continue;
+				tAgent.m_uAddr = sphGetAddress ( tAgent.m_sHost.cstr() );
+				if ( tAgent.m_uAddr == 0 )
+				{
+					sphWarning ( "index '%s': agent '%s': failed to lookup host name '%s' (error=%s) - SKIPPING AGENT",
+						szIndexName, pAgent->cstr(), tAgent.m_sHost.cstr(), sphSockError() );
+					continue;
+				}
 			}
-			tAgent.SetAddr ( hp->h_addrtype, hp->h_length, hp->h_addr_list[0] );
 
 			// done
 			tIdx.m_dAgents.Add ( tAgent );
@@ -5833,6 +6029,8 @@ void ShowHelp ()
 		"Debugging options are:\n"
 		"--console\t\trun in console mode (do not fork, do not log to files)\n"
 		"-p, --port <port>\tlisten on given port (overrides config setting)\n"
+		"-l, --listen <spec>\tlisten on given address, port or path (overrides\n"
+		"\t\t\tconfig settings)\n"
 		"-i, --index <index>\tonly serve one given index\n"
 		"\n"
 		"Examples:\n"
@@ -5965,7 +6163,12 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	bool			bOptStop		= false;
 	bool			bOptPIDFile		= false;
 	const char *	sOptIndex		= NULL;
+	
 	int				iOptPort		= 0;
+	bool			bOptPort		= false;
+	
+	CSphString		sOptListen;
+	bool			bOptListen		= false;
 
 	#define OPT(_a1,_a2)	else if ( !strcmp(argv[i],_a1) || !strcmp(argv[i],_a2) )
 	#define OPT1(_a1)		else if ( !strcmp(argv[i],_a1) )
@@ -5991,7 +6194,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		// handle 1-arg options
 		else if ( (i+1)>=argc )		break;
 		OPT ( "-c", "--config" )	g_sConfigFile = argv[++i];
-		OPT ( "-p", "--port" )		iOptPort = atoi ( argv[++i] );
+		OPT ( "-p", "--port" )		{ bOptPort = true; iOptPort = atoi ( argv[++i] ); }
+		OPT ( "-l", "--listen" )	{ bOptListen = true; sOptListen = argv[++i]; }
 		OPT ( "-i", "--index" )		sOptIndex = argv[++i];
 #if USE_WINDOWS
 		OPT1 ( "--servicename" )	++i; // it's valid but handled elsewhere
@@ -6002,6 +6206,21 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	}
 	if ( i!=argc )
 		sphFatal ( "malformed or unknown option near '%s'; use '-h' or '--help' to see available options.", argv[i] );
+
+	// check port and listen arguments early
+	if ( !g_bOptConsole && ( bOptPort || bOptListen ) )
+	{
+		sphWarning ( "--listen and --port are only allowed in --console debug mode; switch ignored" );
+		bOptPort = bOptListen = false;
+	}
+	
+	if ( bOptPort )
+	{
+		if ( bOptListen )
+			sphFatal ( "please specify either --port or --listen, not both" );
+
+		CheckPort ( iOptPort );
+	}
 
 #if USE_WINDOWS
 	if ( !g_bService )
@@ -6158,15 +6377,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		if (!( _hash.Exists ( _key ) )) \
 			sphFatal ( "mandatory option '%s' not found " _msg, _key, _add );
 
-	CONF_CHECK ( hSearchd, "port", "in 'searchd' section", "" );
 	if ( bOptPIDFile )
 		CONF_CHECK ( hSearchd, "pid_file", "in 'searchd' section", "" );
-
-	int iPort = hSearchd["port"].intval();
-	if ( !iPort )
-		sphFatal ( "expected valid 'port', got '%s'", hSearchd["port"].cstr() );
-	if ( g_bOptConsole && iOptPort>0 )
-		iPort = iOptPort;
 
 	if ( hSearchd.Exists ( "read_timeout" ) && hSearchd["read_timeout"].intval()>=0 )
 		g_iReadTimeout = hSearchd["read_timeout"].intval();
@@ -6425,22 +6637,33 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	// network startup
 	////////////////////
 
-	// create and bind socket
-	DWORD uAddr = htonl(INADDR_ANY);
-	if ( hSearchd("address") )
+	// command line arguments override config (but only in --console)
+	if ( bOptListen )
+		g_dSockets.Add ( sphParseAndBind ( sOptListen ) );
+	else if ( bOptPort )
+		g_dSockets.Add ( sphCreateInetSocket ( htonl(INADDR_ANY), iOptPort ) );
+	else 
 	{
-		struct hostent * pHost = gethostbyname ( hSearchd["address"].cstr() );
-		if ( !pHost || pHost->h_addrtype!=AF_INET )
+		// listen directives in configuration file
+		for ( CSphVariant *v = hSearchd("listen"); v; v = v->m_pNext )
+			g_dSockets.Add ( sphParseAndBind(*v) );
+		
+		// handle deprecated directives
+		if ( hSearchd("port") )
 		{
-			sphWarning ( "no AF_INET address associated with %s, listening on INADDR_ANY", hSearchd["address"].cstr() );
-		} else
-		{
-			assert ( sizeof(DWORD)==pHost->h_length );
-			memcpy ( &uAddr, pHost->h_addr, sizeof(uAddr) );
+			DWORD uAddr = hSearchd.Exists("address") ?
+				sphGetAddress ( hSearchd["address"].cstr(), GETADDR_STRICT ) : htonl(INADDR_ANY);
+
+			int iPort = hSearchd["port"].intval();
+			CheckPort(iPort);
+			
+			g_dSockets.Add ( sphCreateInetSocket ( uAddr, iPort ) );
 		}
+		
+		// still nothing? listen on INADDR_ANY, default port
+		if ( g_dSockets.GetLength() == 0 )
+			g_dSockets.Add ( sphCreateInetSocket ( htonl(INADDR_ANY), SEARCHD_DEFAULT_PORT ) );
 	}
-	g_iSocket = sphCreateServerSocket ( uAddr, iPort );
-	listen ( g_iSocket, 5 );
 
 	/////////////////
 	// serve clients
@@ -6456,6 +6679,14 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	sphSetInternalErrorCallback ( LogInternalError );
 
+	fd_set fdsAccept;
+	FD_ZERO ( &fdsAccept );
+
+	int iNfds = 0;
+	ARRAY_FOREACH ( i, g_dSockets )
+		iNfds = Max ( iNfds, g_dSockets[i] );
+	iNfds++;
+
 	for ( ;; )
 	{
 		CheckSignals ();
@@ -6466,77 +6697,101 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		CheckReopen ();
 		CheckFlush ();
 
-		// we can't simply accept, because of the need to react to HUPs
-		fd_set fdsAccept;
-		FD_ZERO ( &fdsAccept );
-		SPH_FD_SET ( g_iSocket, &fdsAccept );
+		ARRAY_FOREACH ( i, g_dSockets )
+			SPH_FD_SET ( g_dSockets[i], &fdsAccept );
 
 		struct timeval tvTimeout;
 		tvTimeout.tv_sec = USE_WINDOWS ? 0 : 1;
 		tvTimeout.tv_usec = USE_WINDOWS ? 50000 : 0;
 
-		if ( select ( 1+g_iSocket, &fdsAccept, NULL, &fdsAccept, &tvTimeout )<=0 )
+		int iRes = select ( iNfds, &fdsAccept, NULL, NULL, &tvTimeout );
+		if ( iRes == 0 )
 			continue;
-
-		// select says something interesting happened, so let's accept
-		struct sockaddr_in remote_iaddr;
-		socklen_t len = sizeof ( remote_iaddr );
-		int rsock = accept ( g_iSocket, (struct sockaddr*)&remote_iaddr, &len );
-
-		int iErr = sphSockGetErrno();
-		if ( rsock<0 && ( iErr==EINTR || iErr==EAGAIN || iErr==EWOULDBLOCK ) )
-			continue;
-		if ( rsock<0 )
-			sphFatal ( "accept() failed (reason: %s)", sphSockError(iErr) );
-
-		if ( ( g_iMaxChildren && g_iChildren>=g_iMaxChildren )
-			|| ( g_bDoRotate && !g_bSeamlessRotate ) )
+		if ( iRes == -1 )
 		{
-			const char * sMessage = "server maxed out, retry in a second";
-			int iRespLen = 4 + strlen(sMessage);
-
-			NetOutputBuffer_c tOut ( rsock );
-			tOut.SendInt ( SPHINX_SEARCHD_PROTO );
-			tOut.SendWord ( SEARCHD_RETRY );
-			tOut.SendWord ( 0 ); // version doesn't matter
-			tOut.SendInt ( iRespLen );
-			tOut.SendString ( sMessage );
-			tOut.Flush ();
-
-			sphWarning ( "maxed out, dismissing client" );
-			sphSockClose ( rsock );
+			int iErrno = sphSockGetErrno();
+			if ( iErrno == EINTR || iErrno == EAGAIN || iErrno == EWOULDBLOCK )
+				continue;
+			
+			static int iLastErrno = -1;
+			if ( iLastErrno != iErrno )
+				sphWarning ( "select() failed: %s", sphSockError(iErrno) );
+			iLastErrno = iErrno;
 			continue;
 		}
 
-		char sClientIP [ 256 ];
-		DWORD uClientIP = ntohl ( remote_iaddr.sin_addr.s_addr );
-		snprintf ( sClientIP, sizeof(sClientIP), "%d.%d.%d.%d:%d", 
-			(uClientIP>>24) & 0xff, (uClientIP>>16) & 0xff, (uClientIP>>8) & 0xff, uClientIP & 0xff,
-			(int)ntohs(remote_iaddr.sin_port) );
-
-		if ( g_bOptConsole || g_bService )
+		ARRAY_FOREACH ( i, g_dSockets )
 		{
-			HandleClient ( rsock, sClientIP, -1 );
-			sphSockClose ( rsock );
-			continue;
+			if ( !FD_ISSET ( g_dSockets[i], &fdsAccept ) )
+				continue;
+
+			struct sockaddr_storage saStorage;
+			socklen_t uLength = sizeof(saStorage);
+			int iClientSock = accept ( g_dSockets[i], (struct sockaddr *)&saStorage, &uLength );
+
+			if ( iClientSock == -1 )
+			{
+				const int iErrno = sphSockGetErrno();
+				if ( iErrno==EINTR || iErrno==ECONNABORTED || iErrno==EAGAIN || iErrno==EWOULDBLOCK )
+					continue;
+
+				sphFatal ( "accept() failed: %s", sphSockError(iErrno) );
+			}
+			
+			if ( ( g_iMaxChildren && g_iChildren>=g_iMaxChildren )
+				 || ( g_bDoRotate && !g_bSeamlessRotate ) )
+			{
+				const char * sMessage = "server maxed out, retry in a second";
+				int iRespLen = 4 + strlen(sMessage);
+				
+				NetOutputBuffer_c tOut ( iClientSock );
+				tOut.SendInt ( SPHINX_SEARCHD_PROTO );
+				tOut.SendWord ( SEARCHD_RETRY );
+				tOut.SendWord ( 0 ); // version doesn't matter
+				tOut.SendInt ( iRespLen );
+				tOut.SendString ( sMessage );
+				tOut.Flush ();
+				
+				sphWarning ( "maxed out, dismissing client" );
+				sphSockClose ( iClientSock );
+				break;
+			}
+
+			char sClientName[SPH_ADDRESS_SIZE];
+			switch ( saStorage.ss_family )
+			{
+			case AF_INET:
+				sphFormatIP ( sClientName, sizeof(sClientName), ((struct sockaddr_in *)&saStorage)->sin_addr.s_addr );
+				break;
+
+			case AF_UNIX:
+				strncpy ( sClientName, "(local)", sizeof(sClientName) );
+				break;
+			}
+			
+			// handle the client
+			if ( g_bOptConsole || g_bService )
+			{
+				HandleClient ( iClientSock, sClientName, -1 );
+				sphSockClose ( iClientSock );
+				continue;
+			}
+
+			#if !USE_WINDOWS
+			int iChildPipe = PipeAndFork ( false, -1 );
+			if ( !g_bHeadDaemon )
+			{
+				// child process, handle client
+				HandleClient ( iClientSock, sClientName, iChildPipe );
+				sphSockClose ( iClientSock );
+				exit ( 0 );
+			} else
+			{
+				// parent process, continue accept()ing
+				sphSockClose ( iClientSock );
+			}
+			#endif // !USE_WINDOWS
 		}
-
-		// handle that client
-		#if !USE_WINDOWS
-		int iChildPipe = PipeAndFork ( false, -1 );
-
-		if ( !g_bHeadDaemon )
-		{
-			// child process, handle client
-			HandleClient ( rsock, sClientIP, iChildPipe );
-			sphSockClose ( rsock );
-			exit ( 0 );
-		} else
-		{
-			// parent process, continue accept()ing
-			sphSockClose ( rsock );
-		}
-		#endif // !USE_WINDOWS
 	}
 }
 

@@ -212,6 +212,7 @@ class SphinxClient
 		// per-client-object settings
 		$this->_host		= "localhost";
 		$this->_port		= 3312;
+		$this->_path		= false;
 
 		// per-query settings
 		$this->_offset		= 0;
@@ -260,12 +261,25 @@ class SphinxClient
 	}
 
 	/// set searchd host name (string) and port (integer)
-	function SetServer ( $host, $port )
+	function SetServer ( $host, $port = 0 )
 	{
 		assert ( is_string($host) );
+		if ( $host[0] == '/')
+		{
+			$this->_path = 'unix://' . $host;
+			return;
+		}
+		if ( substr ( $host, 7 ) == 'unix://' )
+		{
+			$this->_path = $host;
+			return;
+		}
+				
 		assert ( is_int($port) );
 		$this->_host = $host;
 		$this->_port = $port;
+		$this->_path = '';
+
 	}
 
 	/// set server connection timeout (0 to remove)
@@ -300,15 +314,32 @@ class SphinxClient
 	{
 		$errno = 0;
 		$errstr = "";
-		if ( $this->_timeout<=0 )
-			$fp = @fsockopen ( $this->_host, $this->_port, $errno, $errstr );
-		else
-			$fp = @fsockopen ( $this->_host, $this->_port, $errno, $errstr, $this->_timeout );
 
+		if ( $this->_path )
+		{
+			$host = $this->_path;
+			$port = 0;
+		}
+		else
+		{
+			$host = $this->_host;
+			$port = $this->_port;
+		}
+
+		if ( $this->_timeout<=0 )
+			$fp = @fsockopen ( $host, $port, $errno, $errstr );
+		else
+			$fp = @fsockopen ( $host, $port, $errno, $errstr, $this->_timeout );
+		
 		if ( !$fp )
 		{
+			if ( $this->_path )
+				$location = $this->_path;
+			else
+				$location = "{$this->_host}:{$this->_port}";
+			
 			$errstr = trim ( $errstr );
-			$this->_error = "connection to {$this->_host}:{$this->_port} failed (errno=$errno, msg=$errstr)";
+			$this->_error = "connection to $location failed (errno=$errno, msg=$errstr)";
 			return false;
 		}
 

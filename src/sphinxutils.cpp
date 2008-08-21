@@ -206,8 +206,9 @@ static KeyDesc_t g_dKeysIndexer[] =
 /// allowed keys for searchd section
 static KeyDesc_t g_dKeysSearchd[] =
 {
-	{ "address",				0, NULL },
-	{ "port",					0, NULL },
+	{ "address",				KEY_DEPRECATED, "listen" },
+	{ "port",					KEY_DEPRECATED, "listen" },
+	{ "listen",					KEY_LIST, NULL },
 	{ "log",					0, NULL },
 	{ "query_log",				0, NULL },
 	{ "read_timeout",			0, NULL },

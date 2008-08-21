@@ -90,6 +90,7 @@ class SphinxClient:
 		"""
 		self._host			= 'localhost'					# searchd host (default is "localhost")
 		self._port			= 3312							# searchd port (default is 3312)
+		self._path			= None							# searchd unix-domain socket path
 		self._offset		= 0								# how much records to seek from result-set start (default is 0)
 		self._limit			= 20							# how much records to return from result-set starting at offset (default is 20)
 		self._mode			= SPH_MATCH_ALL					# query matching mode (default is SPH_MATCH_ALL)
@@ -132,23 +133,36 @@ class SphinxClient:
 		return self._warning
 
 
-	def SetServer (self, host, port):
+	def SetServer (self, host, port = None):
 		"""
 		Set searchd server host and port.
 		"""
 		assert(isinstance(host, str))
+		if host.startswith('/'):
+			self._path = host
+			return
+		elif host.startswith('unix://'):
+			self._path = host[7:]
+			return
 		assert(isinstance(port, int))
 		self._host = host
 		self._port = port
+		self._path = None
 
-
+					
 	def _Connect (self):
 		"""
 		INTERNAL METHOD, DO NOT CALL. Connects to searchd server.
 		"""
 		try:
-			sock = socket.socket ( socket.AF_INET, socket.SOCK_STREAM )
-			sock.connect ( ( self._host, self._port ) )
+			if self._path:
+				af = socket.AF_UNIX
+				addr = self._path
+			else:
+				af = socket.AF_INET
+				addr = ( self._host, self._port )
+			sock = socket.socket ( af, socket.SOCK_STREAM )
+			sock.connect ( addr )
 		except socket.error, msg:
 			if sock:
 				sock.close()

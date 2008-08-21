@@ -79,6 +79,20 @@ public:
 		}
 	};
 
+	enum KeywordStar_e
+	{
+		STAR_NONE	= 0,
+		STAR_FRONT	= 1 << 0,
+		STAR_BACK	= 1 << 1,
+		STAR_BOTH	= STAR_FRONT | STAR_BACK
+	};
+
+	struct Keyword_t
+	{
+		int		m_uStar;
+		int		m_iWord;
+	};
+
 protected:
 	CSphVector<Token_t>		m_dTokens;		///< source text tokens
 	CSphVector<Token_t>		m_dWords;		///< query words tokens
@@ -93,8 +107,6 @@ protected:
 	bool					m_bExactPhrase;
 
 protected:
-	bool					TokensMatch ( const Token_t & a, const Token_t & b);
-
 	void					CalcPassageWeight ( const CSphVector<int> & dPassage, Passage_t & tPass, int iMaxWords, int iWordCountCoeff );
 	bool					ExtractPassages ( const ExcerptQuery_t & q );
 	bool					ExtractPhrases ( const ExcerptQuery_t & q );
@@ -162,13 +174,59 @@ void ExcerptGen_c::AddJunk ( int iStart, int iLength )
 char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict, ISphTokenizer * pTokenizer )
 {
 	m_dTokens.Reserve ( 1024 );
-
 	m_sBuffer = q.m_sSource;
 
-	pTokenizer->SetBuffer ( (BYTE*)q.m_sSource.cstr (), strlen ( q.m_sSource.cstr () ) );
+	// tokenize query words
+	int iWordsLength = strlen ( q.m_sWords.cstr() );
+
+	CSphVector<char> dKwBuffer ( iWordsLength );
+	CSphVector<Keyword_t> dKeywords;
+	dKeywords.Reserve ( MAX_HIGHLIGHT_WORDS );
+
 	BYTE * sWord;
+	int iKwIndex = 0;
+
+	pTokenizer->SetBuffer ( (BYTE*)q.m_sWords.cstr(), iWordsLength );
+	while ( ( sWord = pTokenizer->GetToken() ) != NULL )
+	{
+		SphWordID_t iWord = pDict->GetWordID ( sWord );
+		if ( iWord )
+		{
+			m_dWords.Resize ( m_dWords.GetLength () + 1 );
+			Token_t & tLast = m_dWords.Last ();
+			tLast.m_eType = TOK_WORD;
+			tLast.m_iWordID = iWord;
+			tLast.m_iLengthCP = sphUTF8Len ( (const char *)sWord );
+			tLast.m_iLengthBytes = strlen ( (const char *)sWord );
+
+			// store keyword
+			dKeywords.Resize( dKeywords.GetLength() + 1 );
+			Keyword_t & kwLast = dKeywords.Last ();
+
+			// find stars
+			bool bStarBack = *pTokenizer->GetTokenEnd() == '*';
+			bool bStarFront = ( pTokenizer->GetTokenStart() != pTokenizer->GetBufferPtr() ) &&
+				pTokenizer->GetTokenStart()[-1] == '*';
+			kwLast.m_uStar = ( bStarFront ? STAR_FRONT : 0 ) | ( bStarBack ? STAR_BACK : 0 );
+
+			// store token
+			const int iEndIndex = iKwIndex + tLast.m_iLengthBytes + 1;
+			dKwBuffer.Resize ( iEndIndex );
+			kwLast.m_iWord = iKwIndex;
+			strcpy ( &dKwBuffer [ iKwIndex ], (const char *)sWord );
+			iKwIndex = iEndIndex;
+
+			if ( m_dWords.GetLength() == MAX_HIGHLIGHT_WORDS )
+				break;
+		}
+	}
+
+	// tokenize document
+	pTokenizer->SetBuffer ( (BYTE*)q.m_sSource.cstr (), strlen ( q.m_sSource.cstr () ) );
+	
 	const char * pStartPtr = pTokenizer->GetBufferPtr ();
 	const char * pLastTokenEnd = pStartPtr;
+
 	while ( ( sWord = pTokenizer->GetToken() ) != NULL )
 	{
 		const char * pTokenStart = pTokenizer->GetTokenStart ();
@@ -196,6 +254,45 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict, 
 		tLast.m_iStart  = pTokenStart - pStartPtr;
 		tLast.m_iLengthBytes = pLastTokenEnd - pTokenStart;
 		tLast.m_iWordID = iWord;
+		tLast.m_uWords = 0;
+
+		// fill word mask
+		if ( iWord )
+		{
+			bool bMatch = false;
+			int iOffset;
+
+			ARRAY_FOREACH ( nWord, m_dWords )
+			{
+				const char * keyword = &dKwBuffer [ dKeywords[nWord].m_iWord ];
+				const Token_t & token = m_dWords[nWord];
+				
+				switch ( dKeywords[nWord].m_uStar )
+				{
+				case STAR_NONE:
+					bMatch = iWord == token.m_iWordID;
+					break;
+
+				case STAR_FRONT:					
+					iOffset = tLast.m_iLengthBytes - token.m_iLengthBytes;
+					bMatch = (iOffset >= 0) &&
+						( memcmp( keyword, sWord + iOffset, token.m_iLengthBytes ) == 0 );
+					break;
+
+				case STAR_BACK:
+					bMatch = ( tLast.m_iLengthBytes >= token.m_iLengthBytes ) &&
+						( memcmp( keyword, sWord, token.m_iLengthBytes ) == 0 );
+					break;
+
+				case STAR_BOTH:
+					bMatch = strstr( (const char *)sWord, keyword ) != NULL;
+					break;
+				}
+
+				if ( bMatch )
+					tLast.m_uWords |= (1UL << nWord);
+			}
+		}
 	}
 
 	// last space if any
@@ -208,7 +305,9 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict, 
 	tLast.m_iStart  = 0;
 	tLast.m_iLengthBytes = 0;
 	tLast.m_iWordID = 0;
-	
+	tLast.m_uWords = 0;
+
+	// sum token lengths
 	int iSourceCodes = 0;
 	ARRAY_FOREACH ( i, m_dTokens )
 	{
@@ -223,26 +322,7 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict, 
 			m_dTokens [i].m_iLengthCP = 0;
 	}
 
-	pTokenizer->SetBuffer ( (BYTE*)q.m_sWords.cstr (), strlen ( q.m_sWords.cstr () ) );
-
-	while ( ( sWord = pTokenizer->GetToken() ) != NULL )
-	{
-		SphWordID_t iWord = pDict->GetWordID ( sWord );
-		if ( iWord )
-		{
-			m_dWords.Resize ( m_dWords.GetLength () + 1 );
-			Token_t & tLast = m_dWords.Last ();
-			tLast.m_eType = TOK_WORD;
-			tLast.m_iWordID = iWord;
-			tLast.m_iLengthCP = sphUTF8Len ( (const char*)sWord );
-		}
-	}
-
 	m_bExactPhrase = q.m_bExactPhrase && ( m_dWords.GetLength()>1 );
-
-	// truncate the array
-	if ( m_dWords.GetLength()>MAX_HIGHLIGHT_WORDS )
-		m_dWords.Resize ( MAX_HIGHLIGHT_WORDS );
 
 	// assign word weights
 	ARRAY_FOREACH ( i, m_dWords )
@@ -252,15 +332,6 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict, 
 	m_dResult.Reserve ( 16384 );
 	m_dResult.Resize ( 0 );
 	m_iResultLen = 0;
-
-	// calc matching word masks
-	ARRAY_FOREACH ( iTok, m_dTokens )
-	{
-		m_dTokens[iTok].m_uWords = 0;
-		ARRAY_FOREACH ( iWord, m_dWords )
-			if ( TokensMatch ( m_dTokens[iTok], m_dWords[iWord] ) )
-				m_dTokens[iTok].m_uWords |= (1UL<<iWord);
-	}
 
 	// do highlighting
 	if ( q.m_iLimit<=0 || q.m_iLimit>iSourceCodes )
@@ -272,10 +343,6 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict, 
 		if ( !( ExtractPassages ( q ) && HighlightBestPassages ( q ) ) )
 			HighlightStart ( q );
 	}
-
-	// cleanup
-	m_dTokens.Reset ();
-	m_dWords.Reset ();
 
 	// alloc, fill and return the result
 	m_dResult.Add ( 0 );
@@ -373,13 +440,6 @@ void ExcerptGen_c::HighlightStart ( const ExcerptQuery_t & q )
 	}
 	ResultEmit ( q.m_sChunkSeparator.cstr() );
 }
-
-
-bool ExcerptGen_c::TokensMatch ( const Token_t & a, const Token_t & b )
-{
-	return a.m_iWordID==b.m_iWordID;
-}
-
 
 void ExcerptGen_c::ResultEmit ( const char * sLine )
 {

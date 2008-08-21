@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>excerpts - wildcard matches</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT id, body FROM test_table
+}
+
+index test_idx
+{
+	source			= srctest
+	path			= <data_path/>/test
+	charset_type	= utf-8
+	min_word_len	= 1
+}
+
+</config>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`id` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES ( 1, 'test' )
+</db_insert>
+
+<custom_test>
+
+$results = array ();
+$opts = array
+(
+	'before_match' => '[B]',
+	'after_match' => '[A]',
+	'chunk_separator' => ' ... ',
+	'limit' => 100,
+	'around' => 2,
+);
+
+$tests = array
+(
+	array
+	(
+		'docs' => array('He caught fish in deep pools with invisible fingers and ate them raw.'),
+		'q' => array
+		(
+			'he* fin*',
+			'*gers *raw',
+			'fin* *gers',
+			'*augh* *is*',
+			'*pools*',
+		),
+	),
+	
+	// utf-8
+	
+	array
+	(
+		'docs' => array('Невидимыми пальцами ловил он рыбу в глубоких омутах и ел её сырой.'),
+		'q' => array
+		(
+			'невидимыми* пальц*',
+			'*цами *сырой',
+			'пальц* *цами',
+			'*ови* *ы*',
+			'*омутах*',
+		),
+	),
+);
+
+foreach ( $tests as $test )
+{
+	foreach ( $test['q'] as $words )
+	{
+		$results [] = $words;
+		$res = $client->BuildExcerpts ( $test['docs'], 'test_idx', $words, $opts );
+		if ( !$res )
+		{
+			$results = false;
+			return;
+		}
+		$results [] = $res;
+	}
+}
+
+</custom_test>
+</test>

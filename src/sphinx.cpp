@@ -4762,6 +4762,7 @@ CSphQuery::CSphQuery ()
 	, m_fGeoLongitude	( 0.0f )
 	, m_uMaxQueryMsec	( 0 )
 	, m_sComment		( "" )
+	, m_sSelect			( "" )
 
 	, m_iOldVersion		( 0 )
 	, m_iOldGroups		( 0 )

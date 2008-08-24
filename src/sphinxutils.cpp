@@ -220,6 +220,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "unlink_old",				0, NULL },
 	{ "ondisk_dict_default",	0, NULL },
 	{ "attr_flush_period",		0, NULL },
+	{ "max_packet_size",		0, NULL },
 	{ NULL,						0, NULL }
 };
 

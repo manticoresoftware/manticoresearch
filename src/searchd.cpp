@@ -137,7 +137,10 @@ static CSphString		g_sQueryLogFile;
 static const char *		g_sPidFile		= NULL;
 static int				g_iPidFD		= -1;
 static int				g_iMaxMatches	= 1000;
-static int				g_iAttrFlushPeriod	= 0;		// in seconds; 0 means "do not flush"
+static int				g_iAttrFlushPeriod	= 0;			// in seconds; 0 means "do not flush"
+static int				g_iMaxPacketSize	= 8*1024*1024;	// in bytes; for both query packets from clients and response packets from agents
+
+//////////////////////////////////////////////////////////////////////////
 
 static CSphString		g_sConfigFile;
 static DWORD			g_uCfgCRC32		= 0;
@@ -807,7 +810,6 @@ void SetSignalHandlers ()
 // NETWORK STUFF
 /////////////////////////////////////////////////////////////////////////////
 
-const int		MAX_PACKET_SIZE			= 8*1024*1024;
 const int		SEARCHD_MAX_ATTRS		= 256;
 const int		SEARCHD_MAX_ATTR_VALUES	= 4096;
 const int		WIN32_PIPE_BUFSIZE		= 32;
@@ -1247,7 +1249,13 @@ public:
 	virtual void	SendErrorReply ( const char *, ... );
 
 protected:
-	int				m_iSock;
+	static const int	NET_MINIBUFFER_SIZE = 4096;
+
+	int					m_iSock;
+
+	BYTE				m_dMinibufer[NET_MINIBUFFER_SIZE];
+	int					m_iMaxibuffer;
+	BYTE *				m_pMaxibuffer;
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1371,7 +1379,7 @@ CSphString InputBuffer_c::GetString ()
 	CSphString sRes;
 
 	int iLen = GetInt ();
-	if ( m_bError || iLen<0 || iLen>MAX_PACKET_SIZE || ( m_pCur+iLen > m_pBuf+m_iLen ) )
+	if ( m_bError || iLen<0 || iLen>g_iMaxPacketSize || ( m_pCur+iLen > m_pBuf+m_iLen ) )
 	{
 		SetError ( true );
 		return sRes;
@@ -1386,7 +1394,7 @@ CSphString InputBuffer_c::GetString ()
 bool InputBuffer_c::GetBytes ( void * pBuf, int iLen )
 {
 	assert ( pBuf );
-	assert ( iLen>0 && iLen<=MAX_PACKET_SIZE );
+	assert ( iLen>0 && iLen<=g_iMaxPacketSize );
 
 	if ( m_bError || ( m_pCur+iLen > m_pBuf+m_iLen ) )
 	{
@@ -1471,39 +1479,42 @@ template < typename T > bool InputBuffer_c::GetQwords ( CSphVector<T> & dBuffer,
 /////////////////////////////////////////////////////////////////////////////
 
 NetInputBuffer_c::NetInputBuffer_c ( int iSock )
-	: InputBuffer_c ( new BYTE [ MAX_PACKET_SIZE ], MAX_PACKET_SIZE )
+	: InputBuffer_c ( m_dMinibufer, sizeof(m_dMinibufer) )
 	, m_iSock ( iSock )
-{
-	if ( !m_pBuf )
-		m_bError = true;
-}
+	, m_iMaxibuffer ( 0 )
+	, m_pMaxibuffer ( NULL )
+{}
 
 
 NetInputBuffer_c::~NetInputBuffer_c ()
 {
-	SafeDeleteArray ( m_pBuf );
+	SafeDeleteArray ( m_pMaxibuffer );
 }
 
 
 bool NetInputBuffer_c::ReadFrom ( int iLen )
 {
-	assert ( iLen>0 );
-	assert ( iLen<=MAX_PACKET_SIZE );
-	assert ( m_iSock>0 );
-
-	m_pCur = m_pBuf;
-
-	int iGot = sphSockRead ( m_iSock, const_cast<BYTE*>(m_pBuf), iLen );
-	if ( iGot!=iLen )
-	{
-		m_bError = true;
-		m_iLen = 0;
+	if ( iLen<=0 || iLen>g_iMaxPacketSize || m_iSock<0 )
 		return false;
+
+	BYTE * pBuf = m_dMinibufer;
+	if ( iLen>NET_MINIBUFFER_SIZE )
+	{
+		if ( iLen>m_iMaxibuffer )
+		{
+			SafeDeleteArray ( m_pMaxibuffer );
+			m_pMaxibuffer = new BYTE [ iLen ];
+			m_iMaxibuffer = iLen;
+		}
+		pBuf = m_pMaxibuffer;
 	}
 
-	m_bError = false;
-	m_iLen = iLen;
-	return true;
+	m_pCur = m_pBuf = pBuf;
+	int iGot = sphSockRead ( m_iSock, pBuf, iLen );
+
+	m_bError = ( iGot!=iLen );
+	m_iLen = m_bError ? 0 : iLen;
+	return !m_bError;
 }
 
 
@@ -1914,9 +1925,9 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, IReplyPar
 					tReplyHeader.m_iLength = ntohl ( tReplyHeader.m_iLength );
 
 					// check the packet
-					if ( tReplyHeader.m_iLength<0 || tReplyHeader.m_iLength>MAX_PACKET_SIZE ) // FIXME! add reasonable max packet len too
+					if ( tReplyHeader.m_iLength<0 || tReplyHeader.m_iLength>g_iMaxPacketSize ) // FIXME! add reasonable max packet len too
 					{
-						tAgent.m_sFailure.SetSprintf ( "invalid packet size (status=%d, len=%d, max_packet_size=%d)", tReplyHeader.m_iStatus, tReplyHeader.m_iLength, MAX_PACKET_SIZE );
+						tAgent.m_sFailure.SetSprintf ( "invalid packet size (status=%d, len=%d, max_packet_size=%d)", tReplyHeader.m_iStatus, tReplyHeader.m_iLength, g_iMaxPacketSize );
 						break;
 					}
 
@@ -4500,13 +4511,13 @@ void HandleClient ( int iSock, const char * sClientIP, int iPipeFD )
 
 	// check request
 	if ( iCommand<0 || iCommand>=SEARCHD_COMMAND_TOTAL
-		|| iLength<=0 || iLength>MAX_PACKET_SIZE )
+		|| iLength<=0 || iLength>g_iMaxPacketSize )
 	{
 		// unknown command, default response header
 		tBuf.SendErrorReply ( "unknown command (code=%d)", iCommand );
 
 		// if request length is insane, low level comm is broken, so we bail out
-		if ( iLength<=0 || iLength>MAX_PACKET_SIZE )
+		if ( iLength<=0 || iLength>g_iMaxPacketSize )
 		{
 			sphWarning ( "ill-formed client request (length=%d out of bounds)", iLength );
 			return;
@@ -4514,7 +4525,7 @@ void HandleClient ( int iSock, const char * sClientIP, int iPipeFD )
 	}
 
 	// get request body
-	assert ( iLength>0 && iLength<=MAX_PACKET_SIZE );
+	assert ( iLength>0 && iLength<=g_iMaxPacketSize );
 	if ( !tBuf.ReadFrom ( iLength ) )
 	{
 		sphWarning ( "failed to receive client request body (client=%s)", sClientIP );
@@ -6414,6 +6425,11 @@ int WINAPI ServiceMain ( int argc, char **argv )
 #endif
 
 	g_iAttrFlushPeriod = hSearchd.GetInt ( "attr_flush_period", g_iAttrFlushPeriod );
+	g_iMaxPacketSize = hSearchd.GetInt ( "max_packet_size", g_iMaxPacketSize );
+	if ( g_iMaxPacketSize<128*1024 )
+		sphFatal ( "max_packet_size must not be under 128K" );
+	if ( g_iMaxPacketSize>128*1024*1024 )
+		sphFatal ( "max_packet_size must not be over 128M" );
 
 	//////////////////////
 	// build indexes hash

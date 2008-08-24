@@ -891,15 +891,21 @@ DWORD sphGetAddress ( const char * sHost, bool bFatal=false )
 		return 0;
 	}
 
-	DWORD *addr = *(DWORD **)pHost->h_addr_list;
-	
-	assert ( sizeof(DWORD) == pHost->h_length );
-	assert ( *addr != 0 );
-	
-	if ( addr[1] )
-		sphWarning ( "multiple addresses found for '%s', using the first one", sHost );
+	struct in_addr ** ppAddrs = (struct in_addr **)pHost->h_addr_list;
+	assert ( ppAddrs[0] );
 
-	return *addr;
+	assert ( sizeof(DWORD)==pHost->h_length );
+	DWORD uAddr;
+	memcpy ( &uAddr, ppAddrs[0], sizeof(DWORD) );
+
+	if ( ppAddrs[1] )
+	{
+		char sBuf [ SPH_ADDRESS_SIZE ];
+		sphWarning ( "multiple addresses found for '%s', using the first one (ip=%s)",
+			sHost, sphFormatIP ( sBuf, sizeof(sBuf), uAddr ) );
+	}
+
+	return uAddr;
 }
 
 

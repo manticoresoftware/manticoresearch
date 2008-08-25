@@ -158,6 +158,7 @@ void ExcerptGen_c::AddJunk ( int iStart, int iLength )
 			tLast.m_iStart	= iChunkStart;
 			tLast.m_iLengthBytes = i - iChunkStart;
 			tLast.m_iWordID = 0;
+			tLast.m_uWords = 0;
 
 			iChunkStart = i;
 		}
@@ -168,6 +169,7 @@ void ExcerptGen_c::AddJunk ( int iStart, int iLength )
 	tLast.m_iStart	= iChunkStart;
 	tLast.m_iLengthBytes = iStart + iLength - iChunkStart;
 	tLast.m_iWordID = 0;
+	tLast.m_uWords = 0;
 }
 
 
@@ -242,6 +244,7 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict, 
 			tLast.m_iStart  = 0;
 			tLast.m_iLengthBytes = 0;
 			tLast.m_iWordID = 0;
+			tLast.m_uWords = 0;
 		}
 
 		SphWordID_t iWord = pDict->GetWordID ( sWord );

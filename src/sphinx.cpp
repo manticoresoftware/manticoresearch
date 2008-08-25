@@ -4419,7 +4419,11 @@ BYTE * CSphTokenizer_Filter::GetToken ()
 		: m_pTokenizer->GetToken ();
 
 	if ( !pToken )
+	{
+		memset ( &m_tLastToken, 0, sizeof ( m_tLastToken ) );
+		m_pLastToken = &m_tLastToken;
 		return NULL;
+	}
 
 	int iSize = m_dStoredTokens.GetLength ();
 	

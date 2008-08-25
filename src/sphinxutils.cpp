@@ -191,7 +191,6 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "inplace_docinfo_gap",	0, NULL },
 	{ "inplace_reloc_factor",	0, NULL },
 	{ "inplace_write_factor",	0, NULL },
-	{ "mva_updates_pool",		0, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -222,6 +221,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "ondisk_dict_default",	0, NULL },
 	{ "attr_flush_period",		0, NULL },
 	{ "max_packet_size",		0, NULL },
+	{ "mva_updates_pool",		0, NULL },
 	{ NULL,						0, NULL }
 };
 

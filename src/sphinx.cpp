@@ -6836,7 +6836,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd )
 			DWORD uOldIndex = MVA_DOWNSIZE ( sphGetRowAttr ( pEntry, dLocators[iCol] ) );
 
 			// get new count, store new data if needed
-			DWORD uNew = tUpd.m_dPool[iPos++];
+			DWORD uNew = tUpd.m_dPool[iPos++], uNewMin = UINT_MAX, uNewMax = 0;
 			int iNewIndex = dMvaPtrs[iMvaPtr++];
 
 			if ( uNew )
@@ -6846,17 +6846,40 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd )
 
 				// copy values list
 				*uPtr++ = uNew;
-				while ( uNew-- )
-					*uPtr++ = tUpd.m_dPool[iPos++];
+				DWORD * uFirst = uPtr, uCount = uNew;
 
-				// setup new value to store
+				while ( uNew-- )
+				{
+					register DWORD uValue = tUpd.m_dPool[iPos++];
+					*uPtr++ = uValue;
+					uNewMin = Min ( uNewMin, uValue );
+					uNewMax = Max ( uNewMax, uValue );
+				}
+
+				// sort values list
+				if ( uCount>1 )
+					sphSort ( uFirst, uCount );
+
+				// setup new value (flagged index) to store within row
 				uNew = DWORD(iNewIndex) | MVA_ARENA_FLAG;
 			}
 
 			// store new value
 			sphSetRowAttr ( pEntry, dLocators[iCol], uNew );
 
-			// !COMMIT add block/index updates here too. and verify sorting
+			// update block and index ranges
+			if ( uNew )
+				for ( int i=0; i<2; i++ )
+			{
+				DWORD * pBlock = i ? pBlockRanges : pIndexRanges;
+				SphAttr_t uMin = sphGetRowAttr ( DOCINFO2ATTRS(pBlock), dLocators[iCol] );
+				SphAttr_t uMax = sphGetRowAttr ( DOCINFO2ATTRS(pBlock+iRowStride), dLocators[iCol] );
+				if ( uNewMin<uMin || uNewMax>uMax )
+				{
+					sphSetRowAttr ( DOCINFO2ATTRS(pBlock), dLocators[iCol], Min ( uMin, uNewMin ) );
+					sphSetRowAttr ( DOCINFO2ATTRS(pBlock+iRowStride), dLocators[iCol], Max ( uMax, uNewMax ) );
+				}
+			}
 
 			// free old storage if needed
 			if ( uOldIndex & MVA_ARENA_FLAG )

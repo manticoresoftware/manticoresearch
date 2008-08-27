@@ -16403,6 +16403,9 @@ void CSphHTMLStripper::UpdateTags ()
 
 bool CSphHTMLStripper::SetIndexedAttrs ( const char * sConfig, CSphString & sError )
 {
+	if ( !sConfig )
+		return true;
+
 	char sTag[256], sAttr[256];
 
 	const char * p = sConfig, * s;
@@ -16493,6 +16496,9 @@ bool CSphHTMLStripper::SetIndexedAttrs ( const char * sConfig, CSphString & sErr
 
 bool CSphHTMLStripper::SetRemovedElements ( const char * sConfig, CSphString & )
 {
+	if ( !sConfig )
+		return true;
+
 	const char * p = sConfig;
 	while ( *p )
 	{

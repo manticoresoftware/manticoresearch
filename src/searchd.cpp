@@ -909,16 +909,7 @@ DWORD sphGetAddress ( const char * sHost, bool bFatal=false )
 }
 
 
-#if USE_WINDOWS
-
-int sphCreateUnixSocket ( const char * )
-{
-	sphFatal ( "UNIX sockets are not supported on Windows" );
-	return -1;
-}
-
-#else // !USE_WINDOWS
-
+#if !USE_WINDOWS
 int sphCreateUnixSocket ( const char * sPath )
 {
 	static struct sockaddr_un uaddr;
@@ -948,8 +939,7 @@ int sphCreateUnixSocket ( const char * sPath )
 
 	return iSock;
 }
-
-#endif // USE_WINDOWS
+#endif // !USE_WINDOWS
 
 
 int sphCreateInetSocket ( DWORD uAddr, int iPort )
@@ -1014,8 +1004,14 @@ int sphParseAndBind ( const CSphString & sListen )
 {
 	const char * sSpec = sListen.cstr();
 		
-	if ( sSpec[0] == '/' )
+	if ( sSpec[0]=='/' )
+	{
+#if USE_WINDOWS
+		sphFatal ( "UNIX sockets are not supported on Windows" );
+#else
 		return sphCreateUnixSocket ( sListen.cstr() );
+#endif
+	}
 
 	int iLen = strlen ( sSpec );
 	int iColon = -1;
@@ -5366,9 +5362,9 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 				
 				tAgent.m_iFamily = AF_UNIX;
 				tAgent.m_sPath = sSub;
+				p--;
 				#endif
 
-				p--;
 			}
 			else
 			{
@@ -6427,7 +6423,10 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 #if USE_WINDOWS
 	if ( g_bSeamlessRotate )
-		sphFatal ( "seamless_rotate is not supported in windows; set seamless_rotate=0" );
+	{
+		sphWarning ( "seamless_rotate is not yet supported in windows; forcing seamless_rotate=0" );
+		g_bSeamlessRotate = false;
+	}
 #endif
 
 	g_iAttrFlushPeriod = hSearchd.GetInt ( "attr_flush_period", g_iAttrFlushPeriod );

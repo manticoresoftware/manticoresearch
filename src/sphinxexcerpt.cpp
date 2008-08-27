@@ -714,39 +714,88 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & q )
 	CSphVector<Passage_t> dShow;
 	int iLeft = q.m_iLimit;
 
-	while ( ( q.m_bUseBoundaries || iLeft>0 ) && m_dPassages.GetLength() )
+	if ( ( q.m_bUseBoundaries || iLeft>0 ) && m_dPassages.GetLength() )
 	{
-		// FIXME! use heap instead of sorting again every time?
-		m_dPassages.Sort ();
-		Passage_t & tPass = m_dPassages[0];
-
-		if ( tPass.m_iCodes<=iLeft || q.m_bUseBoundaries )
+		// initial heapify
+		for ( int i=1; i<m_dPassages.GetLength(); i++ )
 		{
-			// add it to the show
-			dShow.Add ( tPass );
-			iLeft -= tPass.m_iCodes;
+			// everything upto i-th is heapified; sift up i-th element
+			for ( int j=i; j!=0 && ( m_dPassages[j] < m_dPassages[j>>1] ); j=j>>1 )
+				Swap ( m_dPassages[j>>1], m_dPassages[j] );
+		}
 
-			// sometimes be need only one best one
-			if ( q.m_bSinglePassage )
-				break;
+		// best passage extraction loop
+		DWORD uNotShown = 1UL << ( m_dWords.GetLength()-1 );
+		while ( m_dPassages.GetLength() )
+		{
+			// this is our hero
+			Passage_t & tPass = m_dPassages[0];
+
+			// emit this passage, if we can
+			DWORD uShownWords = 0;
+			if ( tPass.m_iCodes<=iLeft || q.m_bUseBoundaries )
+			{
+				// add it to the show
+				dShow.Add ( tPass );
+				iLeft -= tPass.m_iCodes;
+				uShownWords = tPass.m_uWords;
+
+				// sometimes we need only one best one
+				if ( q.m_bSinglePassage )
+					break;
+			}
+
+			// promote tail, retire head
+			m_dPassages.RemoveFast ( 0 );
+
+			// sift down former tail
+			int iEntry = 0;
+			for ( ;; )
+			{
+				// select child
+				int iChild = (iEntry<<1) + 1;
+				if ( iChild>=m_dPassages.GetLength() )
+					break;
+
+				// select smallest child
+				if ( iChild+1<m_dPassages.GetLength() )
+					if ( m_dPassages[iChild+1] < m_dPassages[iChild] )
+						iChild++;
+
+				// if smallest child is less than entry, exchange and continue
+				if (!( m_dPassages[iChild]<m_dPassages[iEntry] ))
+					break;
+				Swap ( m_dPassages[iChild], m_dPassages[iEntry] );
+				iEntry = iChild;
+			}
 
 			// we now show some of the query words,
 			// so displaying other passages containing those is less significant,
 			// so let's update all the other weights (and word masks, to avoid updating twice)
-			for ( int i=1; i<m_dPassages.GetLength(); i++ )
-				if ( m_dPassages[i].m_uWords & tPass.m_uWords )
+			// and sift up
+			if ( uNotShown )
+				for ( int i=0; i<m_dPassages.GetLength(); i++ )
 			{
-				DWORD uWords = tPass.m_uWords;
-				for ( int iWord=0; uWords; iWord++, uWords>>=1 )
-					if ( ( uWords & 1 ) && ( m_dPassages[i].m_uWords & ( 1UL<<iWord ) ) )
-						m_dPassages[i].m_iWordsWeight -= m_dWords[iWord].m_iWeight;
+				if ( m_dPassages[i].m_uWords & uShownWords )
+				{
+					// update this passage
+					DWORD uWords = uShownWords;
+					for ( int iWord=0; uWords; iWord++, uWords>>=1 )
+						if ( ( uWords & 1 ) && ( m_dPassages[i].m_uWords & ( 1UL<<iWord ) ) )
+							m_dPassages[i].m_iWordsWeight -= m_dWords[iWord].m_iWeight;
 
-				m_dPassages[i].m_uWords &= ~tPass.m_uWords;
-				assert ( m_dPassages[i].m_iWordsWeight>=0 );
+					m_dPassages[i].m_uWords &= ~uShownWords;
+					assert ( m_dPassages[i].m_iWordsWeight>=0 );
+				}
+
+				// every entry above this is both already updated and properly heapified
+				// we only need to sift up, but we need to sift up *every* entry
+				// because its parent might had been updated this time, breaking heap property
+				for ( int j=i; j!=0 && ( m_dPassages[j] < m_dPassages[j>>1] ); j=j>>1 )
+					Swap ( m_dPassages[j>>1], m_dPassages[j] );
 			}
+			uNotShown &= ~uShownWords;
 		}
-
-		m_dPassages.RemoveFast ( 0 );
 	}
 
 	if ( !dShow.GetLength() )

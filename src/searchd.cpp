@@ -6220,21 +6220,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( i!=argc )
 		sphFatal ( "malformed or unknown option near '%s'; use '-h' or '--help' to see available options.", argv[i] );
 
-	// check port and listen arguments early
-	if ( !g_bOptConsole && ( bOptPort || bOptListen ) )
-	{
-		sphWarning ( "--listen and --port are only allowed in --console debug mode; switch ignored" );
-		bOptPort = bOptListen = false;
-	}
-	
-	if ( bOptPort )
-	{
-		if ( bOptListen )
-			sphFatal ( "please specify either --port or --listen, not both" );
-
-		CheckPort ( iOptPort );
-	}
-
 #if USE_WINDOWS
 	if ( !g_bService )
 	{
@@ -6252,6 +6237,21 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	if ( !bOptPIDFile )
 		bOptPIDFile = !g_bOptConsole;
+
+	// check port and listen arguments early
+	if ( !g_bOptConsole && ( bOptPort || bOptListen ) )
+	{
+		sphWarning ( "--listen and --port are only allowed in --console debug mode; switch ignored" );
+		bOptPort = bOptListen = false;
+	}
+
+	if ( bOptPort )
+	{
+		if ( bOptListen )
+			sphFatal ( "please specify either --port or --listen, not both" );
+
+		CheckPort ( iOptPort );
+	}
 
 	/////////////////////
 	// parse config file

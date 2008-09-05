@@ -153,6 +153,12 @@ private:
 bool sphinx_show_status ( THD * thd );
 #endif
 
+int sphinx_showfunc_total_found ( THD *, SHOW_VAR *, char * );
+int sphinx_showfunc_total ( THD *, SHOW_VAR *, char * );
+int sphinx_showfunc_time ( THD *, SHOW_VAR *, char * );
+int sphinx_showfunc_word_count ( THD *, SHOW_VAR *, char * );
+int sphinx_showfunc_words ( THD *, SHOW_VAR *, char * );
+
 //
 // $Id$
 //

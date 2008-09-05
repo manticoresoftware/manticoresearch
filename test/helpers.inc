@@ -843,14 +843,13 @@ class SphinxConfig
 	{
 		global $sd_log, $sd_query_log, $sd_read_timeout, $sd_max_children, $sd_pid_file, $sd_max_matches;
 
-		fwrite ( $fp, "\taddress			= ".$this->_sd_address."\n" );
-		fwrite ( $fp, "\tport			= ".$this->_sd_port."\n" );
-		fwrite ( $fp, "\tlog				= $sd_log\n" );
+		fwrite ( $fp, "\tlisten			= {$this->_sd_address}:{$this->_sd_port}\n" );
+		fwrite ( $fp, "\tlog			= $sd_log\n" );
 		fwrite ( $fp, "\tquery_log		= $sd_query_log\n" );
 		fwrite ( $fp, "\tread_timeout	= $sd_read_timeout\n" );
 		fwrite ( $fp, "\tmax_children	= $sd_max_children\n" );
 		fwrite ( $fp, "\tpid_file		= ".$this->_sd_pid_file."\n" );
-		fwrite ( $fp, "\tmax_matches		= $sd_max_matches\n" );
+		fwrite ( $fp, "\tmax_matches	= $sd_max_matches\n" );
 	}
 
 	function WriteSqlSettings ( $fp )

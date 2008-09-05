@@ -2011,7 +2011,6 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, IReplyPar
 					tAgent.Close ();
 				
 					tAgent.m_bSuccess = true;
-					assert ( tAgent.m_dResults.GetLength() );
 				}
 
 				bFailure = false;
@@ -4236,9 +4235,9 @@ void UpdateRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuff
 	int iReqSize = 4+strlen(sIndexes); // indexes string
 	iReqSize += 4; // attrs array len, data
 	ARRAY_FOREACH ( i, m_tUpd.m_dAttrs )
-		iReqSize += 4+strlen(m_tUpd.m_dAttrs[i].m_sName.cstr());
+		iReqSize += 8+strlen(m_tUpd.m_dAttrs[i].m_sName.cstr());
 	iReqSize += 4; // number of updates
-	iReqSize += 4*( DOCINFO_IDSIZE + m_tUpd.m_dPool.GetLength() ); // ids+values
+	iReqSize += 8*m_tUpd.m_dDocids.GetLength() + 4*m_tUpd.m_dPool.GetLength(); // 64bit ids, 32bit values
 
 	// header
 	tOut.SendDword ( SPHINX_SEARCHD_PROTO );
@@ -4249,7 +4248,10 @@ void UpdateRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuff
 	tOut.SendString ( sIndexes );
 	tOut.SendInt ( m_tUpd.m_dAttrs.GetLength() );
 	ARRAY_FOREACH ( i, m_tUpd.m_dAttrs )
+	{
 		tOut.SendString ( m_tUpd.m_dAttrs[i].m_sName.cstr() );
+		tOut.SendInt ( ( m_tUpd.m_dAttrs[i].m_eAttrType & SPH_ATTR_MULTI ) ? 1 : 0 );
+	}
 	tOut.SendInt ( m_tUpd.m_dDocids.GetLength() );
 
 	ARRAY_FOREACH ( i, m_tUpd.m_dDocids )

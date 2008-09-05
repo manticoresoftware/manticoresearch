@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>distributed updates</name>
+
+<config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source src1
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT id, group_id, title FROM test_table
+	sql_attr_uint	= group_id
+}
+
+source src2 : src1
+{
+	sql_query		= SELECT 10+id, group_id, title FROM test_table
+}
+
+index block1
+{
+	source			= src1
+	path			= <data_path/>/block1
+	docinfo			= extern
+	charset_type	= utf-8
+	min_word_len	= 1
+}
+
+index block2 : block1
+{
+	source			= src2
+	path			= <data_path/>/block2
+}
+
+index dist
+{
+	type					= distributed
+	local					= block1
+	agent					= <agent_address/>:block2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+</config>
+
+<num_agents>2</num_agents>
+
+<custom_test>
+$results = array ();
+
+$results[] = $client->Query ( "", "dist" );
+if ( !end($results) )
+	return;
+
+$results[] = $client->UpdateAttributes ( "dist", array("group_id"), array(11=>array(123)) );
+if ( !end($results) )
+	return;
+
+$results[] = $client->Query ( "", "dist" );
+if ( !end($results) )
+	return;
+</custom_test>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id			INTEGER PRIMARY KEY NOT NULL AUTO_INCREMENT,
+	group_id	INTEGER NOT NULL,
+	title		VARCHAR(255) NOT NULL
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table;
+</db_drop>
+
+<db_insert>
+INSERT INTO test_table ( id, group_id, title ) VALUES 
+( 1, 1, 'test one' ),
+( 2, 1, 'test two' ),
+( 3, 2, 'test three' ),
+( 4, 2, 'test four' )
+</db_insert>
+
+</test>

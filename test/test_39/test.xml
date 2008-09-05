@@ -28,6 +28,7 @@ source src2 : src1
 	sql_query		= SELECT 10+id, group_id, title FROM test_table
 }
 
+<agent0>
 index block1
 {
 	source			= src1
@@ -36,13 +37,20 @@ index block1
 	charset_type	= utf-8
 	min_word_len	= 1
 }
+</agent0>
 
-index block2 : block1
+<agent1>
+index block2
 {
 	source			= src2
 	path			= <data_path/>/block2
+	docinfo			= extern
+	charset_type	= utf-8
+	min_word_len	= 1
 }
+</agent1>
 
+<agent0>
 index dist
 {
 	type					= distributed
@@ -51,24 +59,32 @@ index dist
 	agent_connect_timeout	= 1000
 	agent_query_timeout		= 3000
 }
+</agent0>
 </config>
 
 <num_agents>2</num_agents>
 
 <custom_test>
+<![CDATA[
 $results = array ();
 
-$results[] = $client->Query ( "", "dist" );
-if ( !end($results) )
+$res = $client->Query ( "", "dist" );
+if ( !$res )
 	return;
+unset ( $res["time"] );
+$results[] = $res;
 
-$results[] = $client->UpdateAttributes ( "dist", array("group_id"), array(11=>array(123)) );
-if ( !end($results) )
+$res = $client->UpdateAttributes ( "dist", array("group_id"), array(11=>array(123)) );
+if ( $res===false )
 	return;
+$results[] = $res;
 
-$results[] = $client->Query ( "", "dist" );
-if ( !end($results) )
+$res = $client->Query ( "", "dist" );
+if ( !$res )
 	return;
+unset ( $res["time"] );
+$results[] = $res;
+]]>
 </custom_test>
 
 <db_create>

@@ -812,13 +812,13 @@ class SphinxConfig
 	}
 
 
-	function WriteConfig ( $filename )
+	function WriteConfig ( $filename, $agentid )
 	{
 		$fp = fopen ( $filename, 'w' );
 		if ( !$fp )
 			return FALSE;
 
-		$this->Dump ( $this->_config, $fp, false );
+		$this->Dump ( $this->_config, $fp, false, $agentid );
 	
 		fclose ( $fp );
 	
@@ -828,7 +828,7 @@ class SphinxConfig
 
 	function WriteDiff ( $fp )
 	{
-		$this->Dump ( $this->_config, $fp, true );
+		$this->Dump ( $this->_config, $fp, true, "all" );
 	}
 
 
@@ -864,7 +864,7 @@ class SphinxConfig
 	}
 
 
-	function Dump ( $node, $fp, $dynamic_only )
+	function Dump ( $node, $fp, $dynamic_only, $agentid )
 	{
 		global $index_data_path, $agent_address, $agent_port;
 
@@ -879,24 +879,27 @@ class SphinxConfig
 			case "data_path":			fwrite ( $fp, $index_data_path ); return;
 		}
 
-		switch ( strtolower ( $node->nodeName ) )
+		$nodename = strtolower ( $node->nodeName );
+		if ( $nodename=="variant" )
 		{
-			case "variant":
-				fwrite ( $fp, "$node->nodeValue\n" );
-				break;
+			fwrite ( $fp, "$node->nodeValue\n" );
 
-			case "dynamic":
-				if ( !is_null($node->id) )
-				{
-					$variants = ChildrenArray ( $node,"variant" );
-					$this->Dump ( $variants[$this->_counters[$node->id]], $fp, $dynamic_only );
-				}
-				break;
-
-			default:
+		} else if ( $nodename=="dynamic" )
+		{
+			if ( !is_null($node->id) )
+			{
+				$variants = ChildrenArray ( $node,"variant" );
+				$this->Dump ( $variants[$this->_counters[$node->id]], $fp, $dynamic_only, $agentid );
+			}
+		} else if ( strpos ( $nodename, "agent" )===0 )
+		{
+				if ( $agentid==="all" || $nodename=="agent$agentid" )
+					foreach ( ChildrenArray($node) as $child )
+						$this->Dump ( $child, $fp, $dynamic_only, $agentid );
+		} else
+		{
 				foreach ( ChildrenArray($node) as $child )
-					$this->Dump ( $child, $fp, $dynamic_only );
-			break;
+					$this->Dump ( $child, $fp, $dynamic_only, $agentid );
 		}
 	}
 }
@@ -979,8 +982,8 @@ function RunTest ( $test_dir )
 		$config->WriteReportHeader ( $report );
 
 		$config->SetAgent ( $agents [0] );
-		$config->WriteConfig ( $conf_dir."/"."config_".$config->SubtestNo ().".conf" );
-		$config->WriteConfig ( "config.conf" );
+		$config->WriteConfig ( $conf_dir."/"."config_".$config->SubtestNo ().".conf", "all" );
+		$config->WriteConfig ( "config.conf", "all" );
 
 		EraseDirContents ( $indexer_data_path );
 
@@ -1039,9 +1042,8 @@ function RunTest ( $test_dir )
 
 				$config->SetAgent ( $agents [$i] );
 				$config->SetPIDFile ( $pid_file );
-				$config->WriteConfig ( $config_file );
+				$config->WriteConfig ( $config_file, $i );
 
-				
 				$searchd_ret = StartSearchd ( $config_file, "error_$i.txt", $pid_file, $error );
 
 				if ( $searchd_ret == 1 )

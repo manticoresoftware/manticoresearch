@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>wordcount</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT * FROM test_table
+}
+
+index test
+{
+	source			= srctest
+	path			= <data_path/>/test
+    charset_type 	= utf-8
+	morphology = stem_ru, stem_en
+	charset_table = 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F
+}
+</config>
+
+<queries>
+<query mode="extended2" ranker="proximity_bm25">"зимние шины"</query>
+<query mode="extended2" ranker="bm25">"зимние шины"</query>
+<query mode="extended2" ranker="none">"зимние шины"</query>
+<query mode="extended2" ranker="wordcount">"зимние шины"</query>
+</queries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 2,  'зимние шины диски чего то тут зимние шины' )
+</db_insert>
+
+</test>

@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>--merge-dst-range</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srcmain
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT * FROM test_table WHERE document_id in (1,2,3,4,5,6,7,8)
+	sql_attr_uint	= tag1
+	sql_attr_uint	= tag2
+	sql_attr_multi	= uint mva1 from field
+	sql_attr_multi	= uint mva2 from field
+}
+
+source srcdelta
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT * FROM test_table WHERE document_id in (9,10,11)
+	sql_attr_uint	= tag1
+	sql_attr_uint	= tag2
+	sql_attr_multi	= uint mva1 from field
+	sql_attr_multi	= uint mva2 from field
+}
+
+index main
+{
+	source			= srcmain
+	path			= <data_path/>/main
+    charset_type 	= utf-8
+}
+
+index delta
+{
+	source			= srcdelta
+	path			= <data_path/>/delta
+    charset_type 	= utf-8
+}
+</config>
+
+<indexer>
+<run>--merge main delta --merge-dst-range tag2 0 0</run>
+</indexer>
+
+<queries>
+<query index="main">main</query>
+<query index="main">delta</query>
+<query index="main">test1</query>
+<query index="main">test2</query>
+</queries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`tag1` int(11) NOT NULL default '0',
+	`tag2` int(11) NOT NULL default '0',
+	`mva1` varchar(255) NOT NULL default '',
+	`mva2` varchar(255) NOT NULL default '',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 0, 1, '',			'1 2 3','main' ),
+( 2, 0, 0, '2 22 222',	'',		'main' ),
+( 3, 0, 0, '3 33 333',	'5 6 7','main' ),
+( 4, 0, 1, '', 			'',		'test1' ),
+( 5, 0, 1, '', 			'',		'test1' ),
+( 6, 0, 0, '6', 		'',		'test1' ),
+( 7, 0, 1, '7', 		'',		'test2' ),
+( 8, 0, 1, '8',			'',		'test2' ),
+( 9, 0, 0, '1 10 100',	'9 0 1','delta' ),
+(10, 0, 0, '2 20 200',	'',	 	'delta' ),
+(11, 0, 0, '',			'',		'delta' )
+</db_insert>
+
+</test>

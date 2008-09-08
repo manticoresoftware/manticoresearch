@@ -365,6 +365,23 @@ class SphinxConfig
 				$res["mode"] = $mode;
 				$res["mode_s"] = $mode_s;
 
+				// parse ranker
+				$ranker = 0;
+				$ranker_s = $q->getAttribute("ranker");
+				switch ( $ranker_s )
+				{
+					case "":				$ranker_s = "(default)"; break;
+					case "proximity_bm25":	$ranker = SPH_RANK_PROXIMITY_BM25; break;
+					case "bm25":			$ranker = SPH_RANK_BM25; break;
+					case "none":			$ranker = SPH_RANK_NONE; break;
+					case "wordcount":		$ranker = SPH_RANK_WORDCOUNT; break;
+					default:
+						printf ( "$config_file: unknown ranker '%s'\n", $ranker_s );
+						return false;
+				}
+				$res["ranker"] = $ranker;
+				$res["ranker_s"] = $ranker_s;
+
 				// parse filter
 				$res["filter"] = $q->getAttribute("filter");
 				$res["filtervalue"] = $q->getAttribute("filtervalue" );
@@ -425,7 +442,7 @@ class SphinxConfig
 			$qs = array ();
 			$this->GatherEntities ( GetFirstChild ( $xml, "query" ), $qs );
 			foreach ( $qs as $q )
-				$this->_queries[] = array ( "query"=>$q, "mode"=>0, "mode_s"=>"(default)" );
+				$this->_queries[] = array ( "query"=>$q, "mode"=>0, "mode_s"=>"(default)", "ranker"=>0, "ranker_s"=>"(default)" );
 		}
 
 		// extract my settings
@@ -492,6 +509,7 @@ class SphinxConfig
 				{
 					$my_index = $index;
 					if ( @$qinfo["mode"] )		$cl->SetMatchMode ( $qinfo["mode"] );
+					if ( @$qinfo["ranker"] )	$cl->SetRankingMode ( $qinfo["ranker"] );
 					if ( @$qinfo["sortmode"] )	$cl->SetSortMode ( $qinfo["sortmode"], $qinfo["sortby"] );
 					if ( @$qinfo["filter"] )	$cl->SetFilter ( $qinfo["filter"], array ( $qinfo["filtervalue"] ) );
 					if ( @$qinfo["groupattr"] )	$cl->SetGroupBy ( $qinfo["groupattr"], $qinfo["groupfunc"], $qinfo["groupsort"] );
@@ -649,9 +667,9 @@ class SphinxConfig
 
 		$qinfo = $this->_queries[$nquery-1];
 		if ( array_key_exists ( "index", $qinfo ) && $qinfo ["index"] != '*' )
-			$str = "--- Query $nquery (mode=$qinfo[mode_s],index=$qinfo[index]) ---\n";
+			$str = "--- Query $nquery (mode=$qinfo[mode_s],ranker=$qinfo[ranker_s],index=$qinfo[index]) ---\n";
 		else
-			$str = "--- Query $nquery (mode=$qinfo[mode_s]) ---\n";
+			$str = "--- Query $nquery (mode=$qinfo[mode_s],ranker=$qinfo[ranker_s]) ---\n";
 
 		if ( @$qinfo["groupattr"] )
 			$str .= "GroupBy: attr: '".$qinfo["groupattr"]."' func: '".$qinfo["groupfunc_s"]."' sort: '".$qinfo["groupsort"]."'\n";

@@ -11,7 +11,31 @@ const int MAX_STR_LENGTH = 512;
 
 //////////////////////////////////////////////////////////////////////////
 
-bool IsInSet ( char cLetter, const char * szSet )
+BYTE GetWordchar ( const char * & szSet )
+{
+	if ( *szSet == '\\' )
+	{
+		if ( !szSet[1] || !szSet[2] || !szSet[3] )
+			return 0;
+
+		char szBuf[3];
+		memcpy ( szBuf, szSet+2, 2 );
+		szBuf[2] = 0;
+
+		char * szStop = NULL;
+		long iRes = strtol ( szBuf, &szStop, 16 );
+		if ( szStop != szBuf+2 || iRes < 0 || iRes > 255 )
+			return 0;
+
+		szSet += 4;
+		return (BYTE) iRes;
+	}
+
+	return *szSet++;
+}
+
+
+bool IsInSet ( BYTE uLetter, const char * szSet )
 {
 	if ( !szSet )
 		return false;
@@ -20,19 +44,26 @@ bool IsInSet ( char cLetter, const char * szSet )
 	if ( bInvert )
 		++szSet;
 
-	bool bRange = strlen ( szSet ) == 3 && szSet [1] == '-';
+	const char * szSep = strchr ( szSet, '-' );
+	bool bRange = szSep != NULL;
 
 	if ( bRange )
 	{
-		if ( cLetter >= Min ( szSet [0], szSet [2] ) && cLetter <= Max ( szSet [0], szSet [2] ) )
+		BYTE uRange1 = GetWordchar ( szSet );
+		szSep++;
+		BYTE uRange2 = GetWordchar ( szSep );
+
+		if ( uLetter >= Min ( uRange1, uRange2 ) && uLetter <= Max ( uRange1, uRange2 ) )
 			return !bInvert;
 	}
 	else
 	{
-		while ( *szSet && *szSet != cLetter )
-			++szSet;
+		BYTE uChar = 0;
+		while ( ( uChar = GetWordchar ( szSet ) ) != 0 )
+			if ( uChar == uLetter )
+				break;
 
-		bool bEnd = *szSet == '\0';
+		bool bEnd = !uChar;
 
 		if ( bInvert && bEnd )
 			return true;
@@ -45,26 +76,24 @@ bool IsInSet ( char cLetter, const char * szSet )
 }
 
 
-bool GetSetMinMax ( const char * szSet, char & cMin, char & cMax )
+bool GetSetMinMax ( const char * szSet, BYTE & uMin, BYTE & uMax )
 {
 	if ( !szSet || !*szSet )
 		return false;
 
-	cMin = *szSet;
-	cMax = *szSet;
+	uMin = GetWordchar ( szSet );
+	uMax = uMin;
 
-	while ( *szSet )
-	{
-		if ( *szSet != '-' )
+	BYTE uChar;
+	while ( ( uChar = GetWordchar ( szSet ) ) != 0 )
+		if ( uChar != '-' )
 		{
-			if ( *szSet < cMin )
-				cMin = *szSet;
-
-			if ( *szSet > cMax )
-				cMax = *szSet;
+			uMin = Min ( uMin, uChar );
+			uMax = Max ( uMax, uChar );
 		}
-		++szSet;
-	}
+
+	if ( !uMin || !uMax )
+		return false;
 
 	return true;
 }
@@ -412,7 +441,6 @@ public:
 	bool		Load ( const char * szFilename );
 	CISpellAffixRule * GetRule ( int iRule );
 	int			GetNumRules () const;
-	bool		HaveCharset () const;
 	bool		CheckCrosses () const;
 
 private:
@@ -428,7 +456,7 @@ private:
 	bool		m_bUseDictConversion;
 
 	bool		AddToCharset ( char * szRangeL, char * szRangeU );
-	void		AddCharPair ( char cCharL, char cCharU );
+	void		AddCharPair ( BYTE uCharL, BYTE uCharU );
 	void		Strip ( char * szText );
 	char		ToLowerCase ( char cChar );
 	void		LoadLocale ();
@@ -609,16 +637,6 @@ int CISpellAffix::GetNumRules () const
 }
 
 
-bool CISpellAffix::HaveCharset () const
-{
-	for ( int i = 0; i < 256; ++i )
-		if ( m_dCharset [i] )
-			return true;
-
-	return false;
-}
-
-
 bool CISpellAffix::CheckCrosses () const
 {
 	return m_bCheckCrosses;
@@ -647,36 +665,40 @@ bool CISpellAffix::AddToCharset ( char * szRangeL, char * szRangeU )
 		szRangeU [iLengthU - 1] = '\0';
 		szRangeU = szRangeU + 1;
 
-		char cMinL, cMaxL;
-		if ( !GetSetMinMax ( szRangeL, cMinL, cMaxL ) )
+		BYTE uMinL, uMaxL;
+		if ( !GetSetMinMax ( szRangeL, uMinL, uMaxL ) )
 			return false;
 
-		char cMinU, cMaxU;
-		if ( !GetSetMinMax ( szRangeU, cMinU, cMaxU ) )
+		BYTE uMinU, uMaxU;
+		if ( !GetSetMinMax ( szRangeU, uMinU, uMaxU ) )
 			return false;
 
-		if ( cMaxU - cMinU != cMaxL - cMinL )
+		if ( uMaxU - uMinU != uMaxL - uMinL )
 			return false;
 
-		for ( char i = 0; i <= cMaxL - cMinL; ++i )
-			if ( IsInSet ( cMinL + i, szRangeL ) && IsInSet ( cMinU + i, szRangeU ) )
-				AddCharPair ( cMinL + i, cMinU + i );
+		for ( BYTE i = 0; i <= uMaxL - uMinL; ++i )
+			if ( IsInSet ( uMinL + i, szRangeL ) && IsInSet ( uMinU + i, szRangeU ) )
+				AddCharPair ( uMinL + i, uMinU + i );
 	}
 	else
 	{
-		if ( iLengthL != 1 || iLengthU != 1 )
+		if ( iLengthL > 4 || iLengthU > 4 )
 			return false;
 
-		AddCharPair ( *szRangeL, *szRangeU );
+		const char * szL = szRangeL;
+		const char * szU = szRangeU;
+		AddCharPair ( GetWordchar(szL), GetWordchar(szU) );
 	}
+
+	m_bUseDictConversion = true;
 
 	return true;
 }
 
 
-void CISpellAffix::AddCharPair ( char cCharL, char cCharU )
+void CISpellAffix::AddCharPair ( BYTE uCharL, BYTE uCharU )
 {
-	m_dCharset [(BYTE)cCharU] = cCharL;
+	m_dCharset [uCharU] = uCharL;
 }
 
 
@@ -730,11 +752,8 @@ char CISpellAffix::ToLowerCase ( char cChar )
 
 void CISpellAffix::LoadLocale ()
 {
-	if ( HaveCharset () )
-	{
-		m_bUseDictConversion = true;
+	if ( m_bUseDictConversion )
 		printf ( "Using dictionary-defined character set\n" );
-	}
 	else
 		if ( !m_sCharsetFile.IsEmpty () )
 		{

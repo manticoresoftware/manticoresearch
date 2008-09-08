@@ -1107,21 +1107,26 @@ bool CSphExtendedQueryParser::Parse ( CSphExtendedQuery & tParsed, const char * 
 			{
 				const char * sEnd = pMyTokenizer->GetBufferEnd ();
 
-				const char * p = pMyTokenizer->GetBufferPtr ();
+				char * p = const_cast<char*> ( pMyTokenizer->GetBufferPtr () );
 				while ( p<sEnd && isspace(*p) ) p++;
 
 				sToken = p;
 				while ( p<sEnd && isdigit(*p) ) p++;
 
-				if ( p>sToken )
+				if ( p>sToken && ( *p=='\0' || isspace(*p) ) )
 				{
-					// got a number, skip it
+					// got a number followed by a whitespace, so skip it
+					if ( *p )
+					{
+						assert ( isspace(*p) );
+						*p++ = '\0';
+					}
 					pMyTokenizer->SetBufferPtr ( p );
 					bSpecial = false;
 
 				} else
 				{
-					// not a number, fallback
+					// not a number, or not followed by a whitespace, so fallback
 					sToken = (const char *) pMyTokenizer->GetToken ();
 					bSpecial = pMyTokenizer->WasTokenSpecial ();
 				}

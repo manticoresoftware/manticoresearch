@@ -142,7 +142,7 @@ public class SphinxClient
 		_sort	= SPH_SORT_RELEVANCE;
 		_sortby	= "";
 		_minId	= 0;
-		_maxId	= 0xFFFFFFFF;
+		_maxId	= 0;
 
 		_filterCount	= 0;
 		_rawFilters		= new ByteArrayOutputStream();

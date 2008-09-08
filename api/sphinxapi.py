@@ -98,7 +98,7 @@ class SphinxClient:
 		self._sort			= SPH_SORT_RELEVANCE			# match sorting mode (default is SPH_SORT_RELEVANCE)
 		self._sortby		= ''							# attribute to sort by (defualt is "")
 		self._min_id		= 0								# min ID to match (default is 0)
-		self._max_id		= 0xFFFFFFFF					# max ID to match (default is UINT_MAX)
+		self._max_id		= 0								# max ID to match (default is UINT_MAX)
 		self._filters		= []							# search filters
 		self._groupby		= ''							# group-by attribute name
 		self._groupfunc		= SPH_GROUPBY_DAY				# group-by function (to pre-process group-by attribute value with)

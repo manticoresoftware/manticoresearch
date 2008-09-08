@@ -3364,6 +3364,7 @@ void SearchHandler_c::RunQueries ()
 
 	g_dMvaStorage.Reserve ( 1024 );
 	g_dMvaStorage.Resize ( 0 );
+	g_dMvaStorage.Add ( 0 );	// dummy value
 
 	// check if all queries are to the same index
 	bool bSameIndex = false;

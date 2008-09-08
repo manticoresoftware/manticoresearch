@@ -176,7 +176,7 @@ public:
 
 public:
 	virtual SphWordID_t	GetWordID ( BYTE * pWord );
-	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen );
+	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen, bool );
 
 	virtual void		LoadStopwords ( const char *, ISphTokenizer * ) {}
 	virtual bool		LoadWordforms ( const char *, ISphTokenizer * ) { return true; }
@@ -249,7 +249,7 @@ SphWordID_t CSphStopwordBuilderDict::GetWordID ( BYTE * pWord )
 }
 
 
-SphWordID_t CSphStopwordBuilderDict::GetWordID ( const BYTE * pWord, int iLen )
+SphWordID_t CSphStopwordBuilderDict::GetWordID ( const BYTE * pWord, int iLen, bool )
 {
 	int iZero = 0;
 	m_hWords.Add ( (const char *)pWord, iLen, iZero )++;

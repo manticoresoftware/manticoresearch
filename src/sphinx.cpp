@@ -1454,6 +1454,7 @@ struct CSphWordDataRecord
 	int									m_iRowitems;
 	CSphVector<DWORD>					m_dWordPos;
 	CSphVector<CSphDoclistRecord>		m_dDoclist;
+	CSphVector<bool>					m_dFilteredDocs; // OPTIMIZE!
 	DWORD								m_iLeadingZero;
 	bool								m_bFilter;
 
@@ -1480,7 +1481,7 @@ struct CSphWordDataRecord
 	}
 
 	void Read ( CSphMergeSource * pSource, CSphMergeData * pMergeData, int iDocNum );
-	void Write ( CSphMergeData * pMergeData );
+	int Write ( CSphMergeData * pMergeData );
 
 	bool IsEmpty() const
 	{
@@ -2075,7 +2076,7 @@ int64_t sphToInt64 ( const char * s )
 #endif
 
 
-#if USE_WINDOWS || !HAVE_F_SETLKW
+#if USE_WINDOWS
 
 bool sphLockEx ( int iFile, bool bWait )
 {
@@ -2111,7 +2112,7 @@ bool sphLockEx ( int iFile, bool bWait )
 	tLock.l_start = 0;
 	tLock.l_len = 0;
 
-	int iCmd = bWait ? F_SETLKW : F_SETLK;
+	int iCmd = bWait ? F_SETLKW : F_SETLK; // FIXME! check for HAVE_F_SETLKW?
 	return ( fcntl ( iFile, iCmd, &tLock )!=-1 );
 }
 
@@ -2576,7 +2577,8 @@ void CSphLowercaser::AddRemaps ( const CSphVector<CSphRemapRange> & dRemaps, DWO
 			assert ( m_pChunk [ j>>CHUNK_BITS ] );
 			int & iCodepoint = m_pChunk [ j>>CHUNK_BITS ] [ j & CHUNK_MASK ];
 			bool bWordPart = ( iCodepoint & MASK_CODEPOINT ) && !( iCodepoint & FLAG_CODEPOINT_SYNONYM );
-			iCodepoint = ( bWordPart ? uFlagsIfExists : uFlags ) | ( iCodepoint & MASK_FLAGS ) | iRemapped;
+			iCodepoint = ( iCodepoint & FLAG_CODEPOINT_IGNORE ) ? ( iRemapped | uFlags ) :
+				( ( bWordPart ? uFlagsIfExists : uFlags ) | ( iCodepoint & MASK_FLAGS ) | iRemapped );
 		}
 	}
 }
@@ -9783,7 +9785,7 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilte
 		if ( iAttr<0 )
 			continue;
 
-		const CSphColumnInfo & tCol = m_tSchema.GetAttr(i);
+		const CSphColumnInfo & tCol = m_tSchema.GetAttr(iAttr);
 		dFilters[i].m_tLocator = tCol.m_tLocator;
 
 		tMerge.m_dFilters.Add ( dFilters[i] );
@@ -9854,6 +9856,7 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilte
 			if ( !tDstWord.IsEmpty() )
 			{
 				tDstWord.Write();
+				iWordListEntries++;
 				m_tProgress.m_iWords++;
 			}
 			
@@ -9865,6 +9868,7 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilte
 			if ( !tSrcWord.IsEmpty() )
 			{
 				tSrcWord.Write();
+				iWordListEntries++;
 				m_tProgress.m_iWords++;
 			}
 
@@ -9885,6 +9889,7 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilte
 				tDstWord.Write();
 			}
 
+			iWordListEntries++;
 			m_tProgress.m_iWords++;
 
 			if ( !tDstWord.Read() )
@@ -9894,7 +9899,7 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilte
 				uProgress &= ~0x02;
 		}
 
-		if ( iWordListEntries == 0 )
+		if ( iWordListEntries == 1 )
 		{
 			CSphWordlistCheckpoint tCheckpoint;
 			tCheckpoint.m_iWordID = tMerge.m_iLastWordID;
@@ -9902,8 +9907,6 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilte
 
 			m_dWordlistCheckpoints.Add ( tCheckpoint );
 		}
-
-		iWordListEntries++;
 
 		if ( m_pProgress && !(m_tProgress.m_iWords % 500) )
 			m_pProgress ( &m_tProgress, false );
@@ -10126,7 +10129,7 @@ public:
 	virtual bool		SetMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sError ) { return m_pDict->SetMorphology ( szMorph, bUseUTF8, sError ); }
 
 	virtual SphWordID_t	GetWordID ( BYTE * pWord );
-	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen ) { return m_pDict->GetWordID ( pWord, iLen ); }
+	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops ) { return m_pDict->GetWordID ( pWord, iLen, bFilterStops ); }
 
 	virtual void		Setup ( const CSphDictSettings & ) {}
 	virtual const CSphDictSettings & GetSettings () const { return m_pDict->GetSettings (); }
@@ -10272,7 +10275,7 @@ SphWordID_t	CSphDictStarV8::GetWordID ( BYTE * pWord )
 	}
 
 	// calc id for mangled word
-	return m_pDict->GetWordID ( (BYTE*)sBuf, iLen );
+	return m_pDict->GetWordID ( (BYTE*)sBuf, iLen, !bHeadStar && !bTailStar );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -13331,7 +13334,6 @@ int ExtRanker_Wordcount_c::GetMatches ( int, const int * pWeights )
 	int iMatches = 0;
 	const ExtHit_t * pHlist = m_pHitlist;
 	const ExtDoc_t * pDocs = m_pDoclist;
-	SphDocID_t uMaxID = 0;
 
 	// warmup if necessary
 	if ( !pHlist )
@@ -13339,7 +13341,7 @@ int ExtRanker_Wordcount_c::GetMatches ( int, const int * pWeights )
 		if ( !pDocs ) pDocs = GetFilteredDocs ();
 		if ( !pDocs ) return iMatches;
 
-		pHlist = m_pRoot->GetHitsChunk ( pDocs, uMaxID );
+		pHlist = m_pRoot->GetHitsChunk ( pDocs, m_uMaxID );
 		if ( !pHlist ) return iMatches;
 	}
 
@@ -13357,7 +13359,7 @@ int ExtRanker_Wordcount_c::GetMatches ( int, const int * pWeights )
 			if ( pHlist->m_uDocid==DOCID_MAX )
 			{
 				assert ( pDocs );
-				pHlist = m_pRoot->GetHitsChunk ( pDocs, uMaxID );
+				pHlist = m_pRoot->GetHitsChunk ( pDocs, m_uMaxID );
 				if ( pHlist )
 					continue;
 			}
@@ -13384,7 +13386,7 @@ int ExtRanker_Wordcount_c::GetMatches ( int, const int * pWeights )
 					break;
 
 				// we do, get some hits
-				pHlist = m_pRoot->GetHitsChunk ( pDocs, uMaxID );
+				pHlist = m_pRoot->GetHitsChunk ( pDocs, m_uMaxID );
 				assert ( pHlist ); // fresh docs block, must have hits
 			}
 
@@ -15432,7 +15434,7 @@ struct CSphDictCRC : CSphDict
 	virtual				~CSphDictCRC ();
 
 	virtual SphWordID_t	GetWordID ( BYTE * pWord );
-	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen );
+	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops );
 	virtual void		LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer );
 	virtual bool		LoadWordforms ( const char * szFile, ISphTokenizer * pTokenizer );
 	virtual bool		SetMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sError );
@@ -15950,9 +15952,10 @@ SphWordID_t CSphDictCRC::GetWordID ( BYTE * pWord )
 }
 
 
-SphWordID_t CSphDictCRC::GetWordID ( const BYTE * pWord, int iLen )
+SphWordID_t CSphDictCRC::GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops )
 {
-	return FilterStopword ( sphCRCWord<SphWordID_t> ( pWord, iLen ) );
+	SphWordID_t uId = sphCRCWord<SphWordID_t> ( pWord, iLen );
+	return bFilterStops ? FilterStopword ( uId ) : uId;
 }
 
 
@@ -16253,7 +16256,7 @@ bool CSphDictCRC::SetMorphology ( const char * szMorph, bool bUseUTF8, CSphStrin
 bool CSphDictCRC::StemById ( BYTE * pWord, int iStemmer )
 {
 	char szBuf [4*SPH_MAX_WORD_LEN];
-	strcpy ( szBuf, (char *)pWord );
+	strncpy ( szBuf, (char *)pWord, sizeof(szBuf) );
 
 	switch ( iStemmer )
 	{
@@ -17409,7 +17412,7 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 				// stemmed word w/o markers
 				if ( strcmp ( (const char *)sBuf + 1, (const char *)sWord ) )
 				{
-					SphWordID_t iWord = m_pDict->GetWordID ( sBuf + 1, iStemmedLen - 2 );
+					SphWordID_t iWord = m_pDict->GetWordID ( sBuf + 1, iStemmedLen - 2, true );
 					if ( iWord )
 					{
 						CSphWordHit & tHit = m_dHits.Add ();
@@ -17452,7 +17455,7 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 
 					for ( int i=iMinInfixLen; i<=iLen-iStart; i++ )
 					{
-						SphWordID_t iWord = m_pDict->GetWordID ( sInfix, sInfixEnd-sInfix );
+						SphWordID_t iWord = m_pDict->GetWordID ( sInfix, sInfixEnd-sInfix, false );
 
 						if ( iWord )
 						{
@@ -17465,7 +17468,7 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 						// word start: add magic head
 						if ( bInfixMode && iStart==0 )
 						{
-							iWord = m_pDict->GetWordID ( sInfix - 1, sInfixEnd-sInfix + 1 );
+							iWord = m_pDict->GetWordID ( sInfix - 1, sInfixEnd-sInfix + 1, false );
 							if ( iWord )
 							{
 								CSphWordHit & tHit = m_dHits.Add ();
@@ -17478,7 +17481,7 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 						// word end: add magic tail
 						if ( bInfixMode && i==iLen-iStart )
 						{
-							iWord = m_pDict->GetWordID ( sInfix, sInfixEnd-sInfix+1 );
+							iWord = m_pDict->GetWordID ( sInfix, sInfixEnd-sInfix+1, false );
 							if ( iWord )
 							{
 								CSphWordHit & tHit = m_dHits.Add ();
@@ -20407,11 +20410,7 @@ void CSphWordDataRecord::Read( CSphMergeSource * pSource, CSphMergeData * pMerge
 {
 	assert ( pSource );
 	assert ( pMergeData );
-	
-	CSphVector<DWORD> dWordPosIndex;
-	dWordPosIndex.Reserve ( 1024 );
 
-	DWORD iWordPos = 0;
 	CSphReader_VLN * pReader = pSource->m_pDoclistReader;
 	CSphReader_VLN * pHitlistReader = pSource->m_pHitlistReader;
 	assert ( pReader && pHitlistReader );
@@ -20420,18 +20419,8 @@ void CSphWordDataRecord::Read( CSphMergeSource * pSource, CSphMergeData * pMerge
 	m_dWordPos.Resize ( 0 );
 	m_dDoclist.Reserve ( 1024 );
 	m_dDoclist.Resize ( 0 );
-
-	for( int i = 0; i < iDocNum; i++ )
-	{
-		dWordPosIndex.Add( m_dWordPos.GetLength() );
-		do 
-		{
-			iWordPos = pHitlistReader->UnzipInt ();
-			m_dWordPos.Add ( iWordPos );
-			if ( iWordPos == 0 )
-				break;
-		} while ( iWordPos );
-	}
+	m_dFilteredDocs.Reserve ( 1024 );
+	m_dFilteredDocs.Resize ( 0 );
 
 	CSphDoclistRecord tDoc;
 
@@ -20456,7 +20445,7 @@ void CSphWordDataRecord::Read( CSphMergeSource * pSource, CSphMergeData * pMerge
 					else
 					{
 						const DWORD * pDocinfo = pSource->m_pIndex->FindDocinfo ( tDoc.m_iDocID );
-						uValue = sphGetRowAttr ( pDocinfo, tFilter.m_tLocator );
+						uValue = sphGetRowAttr ( DOCINFO2ATTRS(pDocinfo), tFilter.m_tLocator );
 					}
 					break;
 				case SPH_FILTERATTR_ID:	
@@ -20481,41 +20470,36 @@ void CSphWordDataRecord::Read( CSphMergeSource * pSource, CSphMergeData * pMerge
 				}
 			}
 
+		m_dFilteredDocs.Add ( bOK );
+
 		if ( bOK )
 		{
 			m_dDoclist.Add( tDoc );
 			continue;
 		}
+	}
 
-		// this document must be filtered out
-		// remove word positions
-		assert ( i < dWordPosIndex.GetLength() );
-		DWORD iStartIndex = dWordPosIndex[i];
-
-		if ( i == ( dWordPosIndex.GetLength() - 1 ) )
+	DWORD iWordPos;
+	for( int i=0; i<iDocNum; i++ )
+	{
+		if ( m_dFilteredDocs[i] )
 		{
-			if ( iStartIndex > 0)
-				m_dWordPos.Resize( iStartIndex + 1 );
-			else
-				m_dWordPos.Reset();
+			do
+			{
+				iWordPos = pHitlistReader->UnzipInt ();
+				m_dWordPos.Add ( iWordPos );
+			}
+			while ( iWordPos );
 		}
 		else
-		{
-			DWORD iLastIndex = dWordPosIndex[i + 1];
-			int iRemoveSize = iLastIndex - iStartIndex;
-			int iNewSize = m_dWordPos.GetLength() - iRemoveSize;
-
-			for ( int iWordPos = iStartIndex; iWordPos < iNewSize; iWordPos++ )
-				m_dWordPos[iWordPos] = m_dWordPos[iWordPos+iRemoveSize];
-			m_dWordPos.Resize( iNewSize );
-		}				
+			while ( pHitlistReader->UnzipInt () );
 	}
 	
 	m_iLeadingZero = pReader->UnzipInt ();
 	assert( m_iLeadingZero == 0 );
 }
 
-void CSphWordDataRecord::Write ( CSphMergeData * pMergeData )
+int CSphWordDataRecord::Write ( CSphMergeData * pMergeData )
 {
 	assert ( pMergeData );
 	assert ( m_dWordPos.GetLength() );
@@ -20531,6 +20515,7 @@ void CSphWordDataRecord::Write ( CSphMergeData * pMergeData )
 	m_dDoclist[iDocCount++].m_iPos = pHitlistWriter->GetPos() - pMergeData->m_iLastHitlistPos;
 	pMergeData->m_iLastHitlistPos = pHitlistWriter->GetPos();
 
+	int iHitNum = 0;
 	ARRAY_FOREACH ( i, m_dWordPos )
 	{
 		pHitlistWriter->ZipInt ( m_dWordPos[i] );
@@ -20540,6 +20525,8 @@ void CSphWordDataRecord::Write ( CSphMergeData * pMergeData )
 				m_dDoclist[iDocCount++].m_iPos = pHitlistWriter->GetPos() - pMergeData->m_iLastHitlistPos;
 			pMergeData->m_iLastHitlistPos = pHitlistWriter->GetPos();
 		}
+		else
+			iHitNum++;
 	}
 
 	pMergeData->m_iDoclistPos = pWriter->GetPos();
@@ -20550,6 +20537,8 @@ void CSphWordDataRecord::Write ( CSphMergeData * pMergeData )
 	pWriter->ZipInt ( 0 );
 
 	pMergeData->m_tStats.m_iTotalDocuments += m_dDoclist.GetLength();
+
+	return iHitNum;
 }
 
 
@@ -20564,6 +20553,8 @@ void CSphWordIndexRecord::Write ( CSphWriter * pWriter, CSphMergeData * pMergeDa
 	pWriter->ZipOffset ( m_iDoclistPos );
 	pWriter->ZipInt ( m_iDocNum );
 	pWriter->ZipInt ( m_iHitNum );
+
+	assert ( m_iHitNum && m_iDocNum );
 
 	pMergeData->m_iLastWordID = m_iWordID;
 }
@@ -20599,7 +20590,7 @@ void CSphWordRecord::Write ()
 	assert ( m_pMergeData );
 	assert ( m_pMergeSource->Check() );
 	
-	m_tWordData.Write ( m_pMergeData );
+	m_tWordIndex.m_iHitNum = m_tWordData.Write ( m_pMergeData );
 
 	m_tWordIndex.m_iDoclistPos = m_pMergeData->m_iDoclistPos - m_pMergeData->m_iLastDoclistPos;
 	m_pMergeData->m_iLastDoclistPos = m_pMergeData->m_iDoclistPos;
@@ -20618,7 +20609,8 @@ void CSphDocMVA::Read( CSphReader_VLN & tReader )
 		{
 			DWORD iValues = tReader.GetDword();
 			m_dMVA[i].Resize( iValues );
-			tReader.GetBytes( &m_dMVA[i][0], iValues * sizeof(DWORD) );
+			if ( iValues )
+				tReader.GetBytes( &m_dMVA[i][0], iValues * sizeof(DWORD) );
 		}
 	}	
 }
@@ -20632,7 +20624,8 @@ void CSphDocMVA::Write( CSphWriter & tWriter )
 
 		int iValues = m_dMVA[i].GetLength();
 		tWriter.PutDword ( iValues );
-		tWriter.PutBytes ( &m_dMVA[i][0], iValues*sizeof(DWORD) );
+		if ( iValues )
+			tWriter.PutBytes ( &m_dMVA[i][0], iValues*sizeof(DWORD) );
 	}
 }
 

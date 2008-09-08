@@ -544,8 +544,8 @@ struct CSphDict
 	/// get word ID by word, "binary" version
 	/// only used with prefix/infix indexing
 	/// must not apply stemming and modify anything
-	/// returns 0 for stopwords
-	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen ) = 0;
+	/// filters stopwords on request
+	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops ) = 0;
 
 	/// apply stemmers to the given word
 	virtual void		ApplyStemmers ( BYTE * ) {}

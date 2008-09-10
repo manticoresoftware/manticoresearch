@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>index_exact_words</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT document_id, body FROM test_table
+}
+
+index test
+{
+	source			= srctest
+	path			= <data_path/>/test
+
+	<dynamic>
+		<variant>index_exact_words = 0</variant>
+		<variant>index_exact_words = 1</variant>
+	</dynamic>
+
+	<dynamic>
+		<variant>morphology = none</variant>
+		<variant>morphology = stem_en</variant>
+	</dynamic>
+}
+</config>
+
+<queries>
+<query mode="extended2">work</query>
+<query mode="extended2">worked</query>
+<query mode="extended2">working</query>
+<query mode="extended2">workings</query>
+<query mode="extended2">worker</query>
+<query mode="extended2">works</query>
+<query mode="extended2">workers</query>
+<query mode="extended2">=work</query>
+<query mode="extended2">=worked</query>
+<query mode="extended2">=working</query>
+<query mode="extended2">=workings</query>
+<query mode="extended2">=worker</query>
+<query mode="extended2">=works</query>
+<query mode="extended2">=workers</query>
+</queries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 'work worked working workings worker works workers' )
+</db_insert>
+
+</test>

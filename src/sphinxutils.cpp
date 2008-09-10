@@ -191,6 +191,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "inplace_docinfo_gap",	0, NULL },
 	{ "inplace_reloc_factor",	0, NULL },
 	{ "inplace_write_factor",	0, NULL },
+	{ "index_exact_words",		0, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -764,6 +765,7 @@ void sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 {
 	tSettings.m_iMinPrefixLen = Max ( hIndex.GetInt ( "min_prefix_len" ), 0 );
 	tSettings.m_iMinInfixLen  = Max ( hIndex.GetInt ( "min_infix_len" ), 0 );
+	tSettings.m_bIndexExactWords = hIndex.GetInt ( "index_exact_words" )!=0;
 
 	if ( hIndex ( "html_strip" ) )
 	{

@@ -654,12 +654,12 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 
 	CSphDict * pDict = NULL;
+	CSphDictSettings tDictSettings;
 
 	if ( !g_sBuildStops )
 	{
 		ISphTokenizer * pTokenFilter = NULL;
 
-		CSphDictSettings tDictSettings;
 		sphConfDictionary ( hIndex, tDictSettings );
 		pDict = sphCreateDictionaryCRC ( tDictSettings, pTokenizer, sError );
 		if ( !pDict )
@@ -852,6 +852,12 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 
 		CSphIndexSettings tSettings;
 		sphConfIndex ( hIndex, tSettings );
+
+		if ( tSettings.m_bIndexExactWords && !tDictSettings.HasMorphology () )
+		{
+			tSettings.m_bIndexExactWords = false;
+			fprintf ( stdout, "WARNING: index '%s': no morphology, index_exact_words=1 has no effect, ignoring\n", sIndexName );
+		}
 
 		if ( bGotAttrs && tSettings.m_eDocinfo==SPH_DOCINFO_NONE )
 		{

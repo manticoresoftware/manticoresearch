@@ -160,6 +160,7 @@ const char *	SPHINX_DEFAULT_UTF8_TABLE	= "0..9, A..Z->a..z, _, a..z, U+410..U+42
 
 const char		MAGIC_WORD_HEAD				= 1;
 const char		MAGIC_WORD_TAIL				= 1;
+const char		MAGIC_WORD_HEAD_NONSTEMMED	= 2;
 const char		MAGIC_SYNONYM_WHITESPACE	= 1;
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1658,7 +1659,7 @@ private:
 	static const int			WRITE_BUFFER_SIZE		= 262144;	///< my write buffer size
 
 	static const DWORD			INDEX_MAGIC_HEADER		= 0x58485053;	///< my magic 'SPHX' header
-	static const DWORD			INDEX_FORMAT_VERSION	= 11;			///< my format version
+	static const DWORD			INDEX_FORMAT_VERSION	= 12;			///< my format version
 
 private:
 	// common stuff
@@ -1787,6 +1788,7 @@ private:
 	void						CheckBooleanQuery ( const CSphBooleanQueryExpr * pExpr, CSphQueryResult * pResult ) const;
 
 	CSphDict *					SetupStarDict ( CSphScopedPtr<CSphDict> & tContainer ) const;
+	CSphDict *					SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict ) const;
 
 	void						LoadSettings ( CSphReader_VLN & tReader );
 	void						SaveSettings ( CSphWriter & tWriter );
@@ -5872,6 +5874,7 @@ CSphIndexSettings::CSphIndexSettings ()
 	: m_eDocinfo		( SPH_DOCINFO_NONE )
 	, m_iMinPrefixLen	( 0 )
 	, m_iMinInfixLen	( 0 )
+	, m_bIndexExactWords( false )
 	, m_bHtmlStrip		( false )
 {
 }
@@ -8349,6 +8352,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 		pSource->SetDict ( m_pDict );
 		pSource->SetEmitInfixes ( m_tSettings.m_iMinPrefixLen, m_tSettings.m_iMinInfixLen );
+		pSource->SetEmitExactWords ( m_tSettings.m_bIndexExactWords );
 		pSource->SetBoundaryStep ( m_iBoundaryStep );
 	}
 
@@ -10118,17 +10122,16 @@ void CSphIndex_VLN::MergeWordData ( CSphWordRecord & tDstWord, CSphWordRecord & 
 // THE SEARCHER
 /////////////////////////////////////////////////////////////////////////////
 
-/// dict wrapper for star-syntax support in prefix-indexes
-class CSphDictStar : public CSphDict
+/// dict traits
+class CSphDictTraits : public CSphDict
 {
 public:
-						CSphDictStar ( CSphDict * pDict ) : m_pDict ( pDict ) { assert ( m_pDict ); }
+						CSphDictTraits ( CSphDict * pDict ) : m_pDict ( pDict ) { assert ( m_pDict ); }
 
 	virtual void		LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer ) { m_pDict->LoadStopwords ( sFiles, pTokenizer ); }
 	virtual bool		LoadWordforms ( const char * sFile, ISphTokenizer * pTokenizer ) { return m_pDict->LoadWordforms ( sFile, pTokenizer ); }
 	virtual bool		SetMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sError ) { return m_pDict->SetMorphology ( szMorph, bUseUTF8, sError ); }
 
-	virtual SphWordID_t	GetWordID ( BYTE * pWord );
 	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops ) { return m_pDict->GetWordID ( pWord, iLen, bFilterStops ); }
 
 	virtual void		Setup ( const CSphDictSettings & ) {}
@@ -10139,6 +10142,17 @@ public:
 
 protected:
 	CSphDict *			m_pDict;
+};
+
+
+/// dict wrapper for star-syntax support in prefix-indexes
+class CSphDictStar : public CSphDictTraits
+{
+public:
+						CSphDictStar ( CSphDict * pDict ) : CSphDictTraits ( pDict ) {}
+
+	virtual SphWordID_t	GetWordID ( BYTE * pWord );
+	virtual SphWordID_t	GetWordIDNonStemmed ( BYTE * pWord );
 };
 
 
@@ -10169,6 +10183,13 @@ SphWordID_t CSphDictStar::GetWordID ( BYTE * pWord )
 	return m_pDict->GetWordID ( (BYTE*)sBuf );
 }
 
+
+SphWordID_t	CSphDictStar::GetWordIDNonStemmed ( BYTE * pWord )
+{
+	return m_pDict->GetWordIDNonStemmed ( pWord );
+}
+
+
 //////////////////////////////////////////////////////////////////////////
 
 /// star dict for index v.8+
@@ -10198,7 +10219,7 @@ SphWordID_t	CSphDictStarV8::GetWordID ( BYTE * pWord )
 	char sBuf [ 16+3*SPH_MAX_WORD_LEN ];
 
 	int iLen = strlen ( (const char*)pWord );
-	assert ( iLen < 16+3*SPH_MAX_WORD_LEN );
+	iLen = Min ( iLen, 16+3*SPH_MAX_WORD_LEN - 1 );
 
 	if ( !iLen )
 		return 0;
@@ -10277,6 +10298,39 @@ SphWordID_t	CSphDictStarV8::GetWordID ( BYTE * pWord )
 	// calc id for mangled word
 	return m_pDict->GetWordID ( (BYTE*)sBuf, iLen, !bHeadStar && !bTailStar );
 }
+
+
+/// dict wrapper for exact-word syntax
+class CSphDictExact : public CSphDictTraits
+{
+public:
+						CSphDictExact ( CSphDict * pDict ) : CSphDictTraits ( pDict ) {}
+
+	virtual SphWordID_t	GetWordID ( BYTE * pWord );
+};
+
+
+SphWordID_t CSphDictExact::GetWordID ( BYTE * pWord )
+{
+	char sBuf [ 16+3*SPH_MAX_WORD_LEN ];
+
+	int iLen = strlen ( (const char*)pWord );
+	iLen = Min ( iLen, 16+3*SPH_MAX_WORD_LEN - 1 );
+
+	if ( !iLen )
+		return 0;
+
+	if ( pWord[0]=='=' )
+	{
+		memcpy ( sBuf+1, pWord+1, iLen );
+		sBuf[0] = MAGIC_WORD_HEAD_NONSTEMMED;
+		return m_pDict->GetWordIDNonStemmed ( (BYTE*)sBuf );
+	}
+
+	memcpy ( sBuf, pWord, iLen+1 );
+	return m_pDict->GetWordID ( (BYTE*)sBuf );
+}
+
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -14216,6 +14270,7 @@ void CSphIndex_VLN::DumpHeader ( FILE * fp, const char * sHeaderName )
 
 	fprintf ( fp, "min-prefix-len: %d\n", m_tSettings.m_iMinPrefixLen );
 	fprintf ( fp, "min-infix-len: %d\n", m_tSettings.m_iMinInfixLen );
+	fprintf ( fp, "exact-words: %d\n", m_tSettings.m_bIndexExactWords ? 1 : 0 );
 	fprintf ( fp, "html-strip: %d\n", m_tSettings.m_bHtmlStrip ? 1 : 0 );
 	fprintf ( fp, "html-index-attrs: %s\n", m_tSettings.m_sHtmlIndexAttrs.cstr () );
 	fprintf ( fp, "html-remove-elements: %s\n", m_tSettings.m_sHtmlRemoveElements.cstr () );
@@ -15056,6 +15111,20 @@ CSphDict * CSphIndex_VLN::SetupStarDict  ( CSphScopedPtr<CSphDict> & tContainer 
 }
 
 
+CSphDict * CSphIndex_VLN::SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict ) const
+{
+	if ( m_uVersion<12 || !m_tSettings.m_bIndexExactWords )
+		return pPrevDict;
+
+	tContainer = new CSphDictExact ( pPrevDict );
+
+	CSphRemapRange tStar ( '=', '=', '=' ); // FIXME? check and warn if star was already there
+	m_pTokenizer->AddCaseFolding ( tStar );
+
+	return tContainer.Ptr();
+}
+
+
 void CSphIndex_VLN::LoadSettings ( CSphReader_VLN & tReader )
 {
 	if ( m_uVersion>=8 )
@@ -15080,6 +15149,9 @@ void CSphIndex_VLN::LoadSettings ( CSphReader_VLN & tReader )
 	}
 	else
 		m_bStripperInited = false;
+
+	if ( m_uVersion>=12 )
+		m_tSettings.m_bIndexExactWords = !!tReader.GetByte ();
 }
 
 
@@ -15090,6 +15162,7 @@ void CSphIndex_VLN::SaveSettings ( CSphWriter & tWriter )
 	tWriter.PutByte ( m_tSettings.m_bHtmlStrip ? 1 : 0 );
 	tWriter.PutString ( m_tSettings.m_sHtmlIndexAttrs.cstr () );
 	tWriter.PutString ( m_tSettings.m_sHtmlRemoveElements.cstr () );
+	tWriter.PutByte ( m_tSettings.m_bIndexExactWords ? 1 : 0 );
 }
 
 
@@ -15106,6 +15179,9 @@ bool CSphIndex_VLN::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, cons
 
 	CSphScopedPtr<CSphDict> tDict ( NULL );
 	CSphDict * pDict = SetupStarDict ( tDict );
+
+	CSphScopedPtr<CSphDict> tDict2 ( NULL );
+	pDict = SetupExactDict ( tDict2, pDict );
 
 	// prepare for setup
 	CSphAutofile tDummy1, tDummy2, tDummy3, tWordlist;
@@ -15270,14 +15346,10 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 
 	// setup dict
 	CSphScopedPtr<CSphDict> tDict ( NULL );
-	CSphDict * pDict = m_pDict;
-	CSphDict * pStarDict = SetupStarDict ( tDict );
-	bool bUseStarDict = false;
-	if ( pStarDict != pDict )
-	{
-		bUseStarDict = true;
-		pDict = pStarDict;
-	}
+	CSphDict * pDict = SetupStarDict ( tDict );
+
+	CSphScopedPtr<CSphDict> tDict2 ( NULL );
+	pDict = SetupExactDict ( tDict2, pDict );
 
 	// setup search terms
 	CSphTermSetup tTermSetup ( m_bKeepFilesOpen ? m_tDoclistFile : tDoclist,
@@ -15439,6 +15511,7 @@ struct CSphDictCRC : CSphDict
 	virtual bool		LoadWordforms ( const char * szFile, ISphTokenizer * pTokenizer );
 	virtual bool		SetMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sError );
 	virtual SphWordID_t	GetWordIDWithMarkers ( BYTE * pWord );
+	virtual SphWordID_t	GetWordIDNonStemmed ( BYTE * pWord );
 	virtual void		ApplyStemmers ( BYTE * pWord );
 
 	virtual void		Setup ( const CSphDictSettings & tSettings ) { m_tSettings = tSettings; }
@@ -15969,6 +16042,16 @@ SphWordID_t	CSphDictCRC::GetWordIDWithMarkers ( BYTE * pWord )
 	int iLength = strlen ( (const char *)(pWord + 1) );
 	pWord [iLength + 1] = MAGIC_WORD_TAIL;
 	pWord [iLength + 2] = '\0';
+	return sphCRCWord<SphWordID_t> ( pWord );
+}
+
+
+SphWordID_t	CSphDictCRC::GetWordIDNonStemmed ( BYTE * pWord )
+{
+	SphWordID_t uWordId = sphCRCWord<SphWordID_t> ( pWord + 1 );
+	if ( !FilterStopword ( uWordId ) )
+		return 0;
+
 	return sphCRCWord<SphWordID_t> ( pWord );
 }
 
@@ -17269,6 +17352,7 @@ CSphSource::CSphSource ( const char * sName )
 	, m_iMinPrefixLen ( 0 )
 	, m_iMinInfixLen ( 0 )
 	, m_iBoundaryStep ( 0 )
+	, m_bIndexExactWords ( false )
 {
 	m_pStripper = new CSphHTMLStripper ();
 }
@@ -17333,6 +17417,13 @@ void CSphSource::SetEmitInfixes ( int iMinPrefixLen, int iMinInfixLen )
 	m_iMinInfixLen = Max ( iMinInfixLen, 0 );
 }
 
+
+void CSphSource::SetEmitExactWords ( bool bEmit )
+{
+	m_bIndexExactWords = bEmit;
+}
+
+
 /////////////////////////////////////////////////////////////////////////////
 // DOCUMENT SOURCE
 /////////////////////////////////////////////////////////////////////////////
@@ -17391,6 +17482,24 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 
 				// always index full word (with magic head/tail marker(s))
 				int iBytes = strlen ( (const char*)sWord );
+
+				if ( m_bIndexExactWords )
+				{
+					int iBytes = strlen ( (const char*)sWord );
+					memcpy ( sBuf + 1, sWord, iBytes );
+					sBuf [0]			= MAGIC_WORD_HEAD_NONSTEMMED;
+					sBuf [iBytes + 1]	= '\0';
+
+					SphWordID_t iWord = m_pDict->GetWordIDNonStemmed ( sBuf );
+					if ( iWord )
+					{
+						CSphWordHit & tHit = m_dHits.Add ();
+						tHit.m_iDocID = m_tDocInfo.m_iDocID;
+						tHit.m_iWordID = iWord;
+						tHit.m_iWordPos = iPos;
+					}
+				}
+
 				memcpy ( sBuf + 1, sWord, iBytes );
 				sBuf [0]			= MAGIC_WORD_HEAD;
 				sBuf [iBytes + 1]	= '\0';
@@ -17514,6 +17623,23 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 					sBuf [iBytes + 1]	= '\0';
 
 					SphWordID_t iWord = m_pDict->GetWordIDWithMarkers ( sBuf );
+					if ( iWord )
+					{
+						CSphWordHit & tHit = m_dHits.Add ();
+						tHit.m_iDocID = m_tDocInfo.m_iDocID;
+						tHit.m_iWordID = iWord;
+						tHit.m_iWordPos = iPos;
+					}
+				}
+
+				if ( m_bIndexExactWords )
+				{
+					int iBytes = strlen ( (const char*)sWord );
+					memcpy ( sBuf + 1, sWord, iBytes );
+					sBuf [0]			= MAGIC_WORD_HEAD_NONSTEMMED;
+					sBuf [iBytes + 1]	= '\0';
+
+					SphWordID_t iWord = m_pDict->GetWordIDNonStemmed ( sBuf );
 					if ( iWord )
 					{
 						CSphWordHit & tHit = m_dHits.Add ();

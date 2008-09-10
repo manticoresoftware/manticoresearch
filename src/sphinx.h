@@ -520,6 +520,12 @@ struct CSphDictSettings
 	CSphString		m_sMorphology;
 	CSphString		m_sStopwords;
 	CSphString		m_sWordforms;
+
+	bool			HasMorphology () const
+	{
+		const char * szMorph = m_sMorphology.cstr ();
+		return szMorph && *szMorph && strcmp ( szMorph, "none" );
+	}
 };
 
 
@@ -540,6 +546,12 @@ struct CSphDict
 	/// appends MAGIC_WORD_TAIL
 	/// returns 0 for stopwords
 	virtual SphWordID_t	GetWordIDWithMarkers ( BYTE * pWord ) { return GetWordID ( pWord ); }
+
+	/// get word ID by word, "text" version
+	/// does NOT apply stemming
+	/// accepts words with already prepended MAGIC_WORD_HEAD_NONSTEMMED
+	/// returns 0 for stopwords
+	virtual SphWordID_t	GetWordIDNonStemmed ( BYTE * pWord ) { return GetWordID ( pWord ); }
 
 	/// get word ID by word, "binary" version
 	/// only used with prefix/infix indexing
@@ -963,6 +975,9 @@ public:
 	/// passing zero to both iMinPrefixLen and iMinInfixLen means to emit the words themselves
 	void								SetEmitInfixes ( int iMinPrefixLen, int iMinInfixLen );
 
+	/// configure source to emit non-stemmed words
+	void								SetEmitExactWords ( bool bEmit );
+
 	/// set boundary step
 	void								SetBoundaryStep ( int iBoundaryStep ) { m_iBoundaryStep = Max ( iBoundaryStep, 0 ); }
 
@@ -1032,6 +1047,7 @@ protected:
 	int									m_iMinPrefixLen;///< min indexable prefix (0 means don't index prefixes)
 	int									m_iMinInfixLen;	///< min indexable infix length (0 means don't index infixes)
 	int									m_iBoundaryStep;///< additional boundary word position increment
+	bool								m_bIndexExactWords;///< exact (non-stemmed) word indexing flag
 };
 
 
@@ -1805,6 +1821,7 @@ struct CSphIndexSettings
 	ESphDocinfo		m_eDocinfo;
 	int				m_iMinPrefixLen;
 	int				m_iMinInfixLen;
+	bool			m_bIndexExactWords;
 	bool			m_bHtmlStrip;
 	CSphString		m_sHtmlIndexAttrs;
 	CSphString		m_sHtmlRemoveElements;

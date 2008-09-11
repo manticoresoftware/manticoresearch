@@ -6432,7 +6432,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 #endif
 
 	g_iAttrFlushPeriod = hSearchd.GetInt ( "attr_flush_period", g_iAttrFlushPeriod );
-	g_iMaxPacketSize = hSearchd.GetInt ( "max_packet_size", g_iMaxPacketSize );
+	g_iMaxPacketSize = hSearchd.GetSize ( "max_packet_size", g_iMaxPacketSize );
 	if ( g_iMaxPacketSize<128*1024 )
 		sphFatal ( "max_packet_size must not be under 128K" );
 	if ( g_iMaxPacketSize>128*1024*1024 )

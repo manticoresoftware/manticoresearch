@@ -22,6 +22,7 @@ define ( "SEARCHD_COMMAND_SEARCH",	0 );
 define ( "SEARCHD_COMMAND_EXCERPT",	1 );
 define ( "SEARCHD_COMMAND_UPDATE",	2 );
 define ( "SEARCHD_COMMAND_KEYWORDS",3 );
+define ( "SEARCHD_COMMAND_PERSIST",	4 );
 
 /// current client-side command implementation versions
 define ( "VER_COMMAND_SEARCH",		0x116 );
@@ -213,6 +214,7 @@ class SphinxClient
 		$this->_host		= "localhost";
 		$this->_port		= 3312;
 		$this->_path		= false;
+		$this->_socket		= false;
 
 		// per-query settings
 		$this->_offset		= 0;
@@ -246,6 +248,12 @@ class SphinxClient
 		$this->_mbenc		= "";
 		$this->_arrayresult	= false;
 		$this->_timeout		= 0;
+	}
+
+	function __destruct()
+	{
+		if ( $this->_socket !== false )
+			fclose ( $this->_socket );
 	}
 
 	/// get last error message (string)
@@ -289,6 +297,17 @@ class SphinxClient
 		$this->_timeout = $timeout;
 	}
 
+
+	function _Send ( $handle, $data, $length )
+	{
+		if ( feof($handle) || fwrite ( $handle, $data, $length ) !== $length )
+		{
+			$this->_error = 'connection unexpectedly closed (timed out?)';
+			return false;
+		}
+		return true;
+	}
+
 	/////////////////////////////////////////////////////////////////////////////
 
 	/// enter mbstring workaround mode
@@ -312,6 +331,9 @@ class SphinxClient
 	/// connect to searchd server
 	function _Connect ()
 	{
+		if ( $this->_socket !== false )
+			return $this->_socket;
+		
 		$errno = 0;
 		$errstr = "";
 
@@ -354,7 +376,8 @@ class SphinxClient
 		}
 
 		// all ok, send my version
-		fwrite ( $fp, pack ( "N", 1 ) );
+		if ( !$this->_Send ( $fp, pack ( "N", 1 ), 4 ) )
+			return false;
 		return $fp;
 	}
 
@@ -379,7 +402,8 @@ class SphinxClient
 				}
 			}
 		}
-		fclose ( $fp );
+		if ( $this->_socket === false )
+			fclose ( $fp );
 
 		// check response
 		$read = strlen ( $response );
@@ -851,8 +875,8 @@ class SphinxClient
 		$len = 4+strlen($req);
 		$req = pack ( "nnNN", SEARCHD_COMMAND_SEARCH, VER_COMMAND_SEARCH, $len, $nreqs ) . $req; // add header
 
-		fwrite ( $fp, $req, $len+8 );
-		if (!( $response = $this->_GetResponse ( $fp, VER_COMMAND_SEARCH ) ))
+		if ( !( $this->_Send ( $fp, $req, $len+8 ) ) ||
+			 !( $response = $this->_GetResponse ( $fp, VER_COMMAND_SEARCH ) ) )
 		{
 			$this->_MBPop ();
 			return false;
@@ -1092,8 +1116,8 @@ class SphinxClient
 
 		$len = strlen($req);
 		$req = pack ( "nnN", SEARCHD_COMMAND_EXCERPT, VER_COMMAND_EXCERPT, $len ) . $req; // add header
-		$wrote = fwrite ( $fp, $req, $len+8 );
-		if (!( $response = $this->_GetResponse ( $fp, VER_COMMAND_EXCERPT ) ))
+		if ( !( $this->_Send ( $fp, $req, $len+8 ) ) ||
+			 !( $response = $this->_GetResponse ( $fp, VER_COMMAND_EXCERPT ) ) )
 		{
 			$this->_MBPop ();
 			return false;
@@ -1162,8 +1186,8 @@ class SphinxClient
 
 		$len = strlen($req);
 		$req = pack ( "nnN", SEARCHD_COMMAND_KEYWORDS, VER_COMMAND_KEYWORDS, $len ) . $req; // add header
-		$wrote = fwrite ( $fp, $req, $len+8 );
-		if (!( $response = $this->_GetResponse ( $fp, VER_COMMAND_KEYWORDS ) ))
+		if ( !( $this->_Send ( $fp, $req, $len+8 ) ) ||
+			 !( $response = $this->_GetResponse ( $fp, VER_COMMAND_KEYWORDS ) ) )
 		{
 			$this->_MBPop ();
 			return false;
@@ -1281,7 +1305,8 @@ class SphinxClient
 
 		$len = strlen($req);
 		$req = pack ( "nnN", SEARCHD_COMMAND_UPDATE, VER_COMMAND_UPDATE, $len ) . $req; // add header
-		fwrite ( $fp, $req, $len+8 );
+		if ( !$this->_Send ( $fp, $req, $len+8 ) )
+			return -1;
 
 		if (!( $response = $this->_GetResponse ( $fp, VER_COMMAND_UPDATE ) ))
 			return -1;
@@ -1289,6 +1314,43 @@ class SphinxClient
 		// parse response
 		list(,$updated) = unpack ( "N*", substr ( $response, 0, 4 ) );
 		return $updated;
+	}
+
+	/////////////////////////////////////////////////////////////////////////////
+	// persistent connections
+	/////////////////////////////////////////////////////////////////////////////
+
+	function Open()
+	{
+		if ( $this->_socket !== false )
+		{
+			$this->_error = 'already connected';
+			return false;
+		}
+		if ( !$fp = $this->_Connect() )
+			return false;
+
+		// command, command version = 0, body length = 4, body = 1
+		$req = pack ( "nnNN", SEARCHD_COMMAND_PERSIST, 0, 4, 1 );
+		if ( !$this->_Send ( $fp, $req, 12 ) )
+			return false;
+
+		$this->_socket = $fp;
+		return true;
+	}
+
+	function Close()
+	{
+		if ( $this->_socket === false )
+		{
+			$this->_error = 'not connected';
+			return false;
+		}
+
+		fclose ( $this->_socket );
+		$this->_socket = false;
+		
+		return true;
 	}
 }
 

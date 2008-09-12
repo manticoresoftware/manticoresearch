@@ -2323,6 +2323,29 @@ $escaped = $cl->EscapeString ( "escaping-sample@query/string" );
 
 
 </sect2>
+
+<sect2 id="api-funcgroup-pconn"><title>Persistent connections</title>
+<para>
+Persistent connections allow to use single network connection to run
+multiple commands that would otherwise require reconnects.
+</para>
+
+<sect3 id="api-func-open"><title>Open</title>
+<para><b>Prototype:</b> function Open ()</para>
+<para>
+Opens persistent connection to the server.
+</para>
+</sect3>
+
+<sect3 id="api-func-close"><title>Close</title>
+<para><b>Prototype:</b> function Close ()</para>
+<para>
+Closes previously opened persistent connection.
+</para>
+</sect3>
+
+</sect2>
+
 </sect1>
 <sect1 id="sphinxse"><title>MySQL storage engine (SphinxSE)</title>
 
@@ -4722,6 +4745,18 @@ Optional, default is 5 seconds.
 <bridgehead>Example:</bridgehead>
 <programlisting>
 read_timeout = 1
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-client-timeout"><title>client_timeout</title>
+<para>
+Maximum time to wait between requests (in seconds) when using
+persistent connections. Optional, default is five minutes.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+client_timeout = 3600
 </programlisting>
 </sect3>
 

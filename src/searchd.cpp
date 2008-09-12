@@ -126,6 +126,7 @@ static CSphString		g_sLogFile;							// log file name
 static bool				g_bLogTty		= false;			// cached isatty(g_iLogFile)
 
 static int				g_iReadTimeout	= 5;	// sec
+static int				g_iClientTimeout = 300;
 static int				g_iChildren		= 0;
 static int				g_iMaxChildren	= 0;
 static bool				g_bPreopenIndexes = false;
@@ -201,7 +202,8 @@ enum SearchdCommand_e
 	SEARCHD_COMMAND_EXCERPT		= 1,
 	SEARCHD_COMMAND_UPDATE		= 2,
 	SEARCHD_COMMAND_KEYWORDS	= 3,
-
+	SEARCHD_COMMAND_PERSIST		= 4,
+	
 	SEARCHD_COMMAND_TOTAL
 };
 
@@ -1065,11 +1067,11 @@ int sphSetSockNB ( int iSock )
 }
 
 
-int sphSockRead ( int iSock, void * buf, int iLen )
+int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout )
 {
 	assert ( iLen>0 );
 
-	int iTimeout = 1000*Max ( 1, g_iReadTimeout ); // ms to wait total
+	int iTimeout = 1000*Max ( 1, iReadTimeout ); // ms to wait total
 	int iLeftMs = iTimeout; // ms to wait left
 	int iLeftBytes = iLen; // bytes to read left
 	float tmStart = sphLongTimer ();
@@ -1247,7 +1249,9 @@ public:
 					NetInputBuffer_c ( int iSock );
 	virtual			~NetInputBuffer_c ();
 
-	bool			ReadFrom ( int iLen );
+	bool			ReadFrom ( int iLen, int iTimeout );
+	bool			ReadFrom ( int iLen ) { return ReadFrom ( iLen, g_iReadTimeout ); };
+
 	virtual void	SendErrorReply ( const char *, ... );
 
 protected:
@@ -1494,7 +1498,7 @@ NetInputBuffer_c::~NetInputBuffer_c ()
 }
 
 
-bool NetInputBuffer_c::ReadFrom ( int iLen )
+bool NetInputBuffer_c::ReadFrom ( int iLen, int iTimeout )
 {
 	if ( iLen<=0 || iLen>g_iMaxPacketSize || m_iSock<0 )
 		return false;
@@ -1512,7 +1516,7 @@ bool NetInputBuffer_c::ReadFrom ( int iLen )
 	}
 
 	m_pCur = m_pBuf = pBuf;
-	int iGot = sphSockRead ( m_iSock, pBuf, iLen );
+	int iGot = sphSockRead ( m_iSock, pBuf, iLen, iTimeout );
 
 	m_bError = ( iGot!=iLen );
 	m_iLen = m_bError ? 0 : iLen;
@@ -4489,6 +4493,8 @@ void SafeClose ( int & iFD )
 
 void HandleClient ( int iSock, const char * sClientIP, int iPipeFD )
 {
+	bool bPersist = false;
+	int iTimeout = g_iReadTimeout;
 	NetInputBuffer_c tBuf ( iSock );
 
 	// send my version
@@ -4500,53 +4506,62 @@ void HandleClient ( int iSock, const char * sClientIP, int iPipeFD )
 	}
 
 	// get client version and request
-	tBuf.ReadFrom ( 12 ); // FIXME! magic
+	tBuf.ReadFrom ( 4 ); // FIXME! magic
 	tBuf.GetInt (); // client version is for now unused
-	int iCommand = tBuf.GetWord ();
-	int iCommandVer = tBuf.GetWord ();
-	int iLength = tBuf.GetInt ();
-	if ( tBuf.GetError() )
+	do
 	{
-		// under high load, there can be pretty frequent accept() vs connect() timeouts
-		// lets avoid agent log flood
-		//
-		// sphWarning ( "failed to receive client version and request (client=%s, error=%s)", sClientIP, sphSockError() );
-		return;
-	}
-
-	// check request
-	if ( iCommand<0 || iCommand>=SEARCHD_COMMAND_TOTAL
-		|| iLength<=0 || iLength>g_iMaxPacketSize )
-	{
-		// unknown command, default response header
-		tBuf.SendErrorReply ( "unknown command (code=%d)", iCommand );
-
-		// if request length is insane, low level comm is broken, so we bail out
-		if ( iLength<=0 || iLength>g_iMaxPacketSize )
+		tBuf.ReadFrom ( 8, iTimeout );
+		int iCommand = tBuf.GetWord ();
+		int iCommandVer = tBuf.GetWord ();
+		int iLength = tBuf.GetInt ();
+		if ( tBuf.GetError() )
 		{
-			sphWarning ( "ill-formed client request (length=%d out of bounds)", iLength );
+			// under high load, there can be pretty frequent accept() vs connect() timeouts
+			// lets avoid agent log flood
+			//
+			// sphWarning ( "failed to receive client version and request (client=%s, error=%s)", sClientIP, sphSockError() );
 			return;
 		}
-	}
+		
+		// check request
+		if ( iCommand<0 || iCommand>=SEARCHD_COMMAND_TOTAL
+			 || iLength<=0 || iLength>g_iMaxPacketSize )
+		{
+			// unknown command, default response header
+			tBuf.SendErrorReply ( "unknown command (code=%d)", iCommand );
 
-	// get request body
-	assert ( iLength>0 && iLength<=g_iMaxPacketSize );
-	if ( !tBuf.ReadFrom ( iLength ) )
-	{
-		sphWarning ( "failed to receive client request body (client=%s)", sClientIP );
-		return;
-	}
+			// if request length is insane, low level comm is broken, so we bail out
+			if ( iLength<=0 || iLength>g_iMaxPacketSize )
+			{
+				sphWarning ( "ill-formed client request (length=%d out of bounds)", iLength );
+				return;
+			}
+		}
+		
+		// get request body
+		assert ( iLength>0 && iLength<=g_iMaxPacketSize );
+		if ( !tBuf.ReadFrom ( iLength ) )
+		{
+			sphWarning ( "failed to receive client request body (client=%s)", sClientIP );
+			return;
+		}
 
-	// handle known commands
-	assert ( iCommand>=0 && iCommand<SEARCHD_COMMAND_TOTAL );
-	switch ( iCommand )
-	{
-		case SEARCHD_COMMAND_SEARCH:	SafeClose ( iPipeFD ); HandleCommandSearch ( iSock, iCommandVer, tBuf ); break;
-		case SEARCHD_COMMAND_EXCERPT:	SafeClose ( iPipeFD ); HandleCommandExcerpt ( iSock, iCommandVer, tBuf ); break;
-		case SEARCHD_COMMAND_KEYWORDS:	SafeClose ( iPipeFD ); HandleCommandKeywords ( iSock, iCommandVer, tBuf ); break;
-		case SEARCHD_COMMAND_UPDATE:	HandleCommandUpdate ( iSock, iCommandVer, tBuf, iPipeFD ); SafeClose ( iPipeFD ); break;
-		default:						assert ( 0 && "INTERNAL ERROR: unhandled command" ); break;
-	}
+		// handle known commands
+		assert ( iCommand>=0 && iCommand<SEARCHD_COMMAND_TOTAL );
+		switch ( iCommand )
+		{
+			case SEARCHD_COMMAND_SEARCH:	HandleCommandSearch ( iSock, iCommandVer, tBuf ); break;
+			case SEARCHD_COMMAND_EXCERPT:	HandleCommandExcerpt ( iSock, iCommandVer, tBuf ); break;
+			case SEARCHD_COMMAND_KEYWORDS:	HandleCommandKeywords ( iSock, iCommandVer, tBuf ); break;
+			case SEARCHD_COMMAND_UPDATE:	HandleCommandUpdate ( iSock, iCommandVer, tBuf, iPipeFD ); break;
+			case SEARCHD_COMMAND_PERSIST:
+				bPersist = tBuf.GetInt() != 0;
+				iTimeout = g_iClientTimeout;
+				break;
+			default:						assert ( 0 && "INTERNAL ERROR: unhandled command" ); break;
+		}
+	} while ( bPersist );
+	SafeClose ( iPipeFD ); 
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -6397,6 +6412,9 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	if ( hSearchd.Exists ( "read_timeout" ) && hSearchd["read_timeout"].intval()>=0 )
 		g_iReadTimeout = hSearchd["read_timeout"].intval();
+
+	if ( hSearchd.Exists ( "client_timeout" ) && hSearchd["client_timeout"].intval()>=0 )
+		g_iClientTimeout = hSearchd["client_timeout"].intval();
 
 	if ( hSearchd.Exists ( "max_children" ) && hSearchd["max_children"].intval()>=0 )
 		g_iMaxChildren = hSearchd["max_children"].intval();

@@ -2203,6 +2203,8 @@ morphology, wordforms) from given index will be used.
 <code>$words</code> is a string that contains the keywords to highlight. They will
 be processed with respect to index settings. For instance, if English stemming
 is enabled in the index, "shoes" will be highlighted even if keyword is "shoe".
+Keywords can contain wildcards, that work similarly to
+<link linkend="conf-enable-star">star-syntax</link> available in queries.
 <code>$opts</code> is a hash which contains additional optional highlighting parameters:
 <variablelist>
 <varlistentry>

@@ -50,7 +50,7 @@ DROP TABLE IF EXISTS `test_table`
 INSERT INTO `test_table` VALUES ( 1, 'test' )
 </db_insert>
 
-<custom_test>
+<custom_test><![CDATA[
 
 $results = array ();
 
@@ -64,5 +64,9 @@ $results [] = $client->GetLastError();
 
 $results [] = $client->Close();
 
-</custom_test>
+foreach ( $results as &$r )
+	if ( is_array($r) )
+		unset ( $r['time'] );
+
+]]></custom_test>
 </test>

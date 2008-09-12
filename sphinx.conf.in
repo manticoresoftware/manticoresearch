@@ -456,6 +456,10 @@ searchd
 	# optional, default is 5
 	read_timeout		= 5
 
+	# request timeout, seconds
+	# optional, default is 5 minutes
+	client_timeout		= 300
+
 	# maximum amount of children to fork (concurrent searches to run)
 	# optional, default is 0 (unlimited)
 	max_children		= 30

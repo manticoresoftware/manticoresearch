@@ -26,7 +26,7 @@ SEARCHD_COMMAND_UPDATE	= 2
 SEARCHD_COMMAND_KEYWORDS= 3
 
 # current client-side command implementation versions
-VER_COMMAND_SEARCH		= 0x113
+VER_COMMAND_SEARCH		= 0x116
 VER_COMMAND_EXCERPT		= 0x100
 VER_COMMAND_UPDATE		= 0x101
 VER_COMMAND_KEYWORDS	= 0x100
@@ -72,7 +72,17 @@ SPH_ATTR_TIMESTAMP		= 2
 SPH_ATTR_ORDINAL		= 3
 SPH_ATTR_BOOL			= 4
 SPH_ATTR_FLOAT			= 5
+SPH_ATTR_BIGINT			= 6
 SPH_ATTR_MULTI			= 0X40000000L
+
+SPH_ATTR_TYPES = (SPH_ATTR_NONE,
+				  SPH_ATTR_INTEGER,
+				  SPH_ATTR_TIMESTAMP,
+				  SPH_ATTR_ORDINAL,
+				  SPH_ATTR_BOOL,
+				  SPH_ATTR_FLOAT,
+				  SPH_ATTR_BIGINT,
+				  SPH_ATTR_MULTI)
 
 # known grouping functions
 SPH_GROUPBY_DAY	 		= 0
@@ -113,6 +123,9 @@ class SphinxClient:
 		self._ranker		= SPH_RANK_PROXIMITY_BM25		# ranking mode
 		self._maxquerytime	= 0								# max query time, milliseconds (default is 0, do not limit)
 		self._fieldweights	= {}							# per-field-name weights
+		self._overrides		= {}							# per-query attribute values overrides
+		self._select		= '*'							# select-list (attributes or expressions, with optional aliases)
+		
 		self._error			= ''							# last error message
 		self._warning		= ''							# last warning message
 		self._reqs			= []							# requests array for multi-query
@@ -320,8 +333,8 @@ class SphinxClient:
 		Set IDs range to match.
 		Only match records if document ID is beetwen $min and $max (inclusive).
 		"""
-		assert(isinstance(minid, int))
-		assert(isinstance(maxid, int))
+		assert(isinstance(minid, (int, long)))
+		assert(isinstance(maxid, (int, long)))
 		assert(minid<=maxid)
 		self._min_id = minid
 		self._max_id = maxid
@@ -399,6 +412,22 @@ class SphinxClient:
 		self._retrydelay = delay
 
 
+	def SetOverride (self, name, type, values):
+		assert(isinstance(name, str))
+		assert(type in SPH_ATTR_TYPES)
+		assert(isinstance(values, dict))
+
+		self._overrides[name] = {'name': name, 'type': type, 'values': values}
+
+	def SetSelect (self, select):
+		assert(isinstance(select, str))
+		self._select = select
+
+
+	def ResetOverrides (self):
+		self._overrides = {}
+
+
 	def ResetFilters (self):
 		"""
 		Clear all filters (for multi-queries).
@@ -456,9 +485,9 @@ class SphinxClient:
 			req.append(pack('>L', w))
 		req.append(pack('>L', len(index)))
 		req.append(index)
-		req.append(pack('>L',0)) # id64 range marker FIXME! IMPLEMENT!
-		req.append(pack('>L', self._min_id))
-		req.append(pack('>L', self._max_id))
+		req.append(pack('>L',1)) # id64 range marker
+		req.append(pack('>q', self._min_id))
+		req.append(pack('>q', self._max_id))
 		
 		# filters
 		req.append ( pack ( '>L', len(self._filters) ) )
@@ -469,9 +498,9 @@ class SphinxClient:
 			if filtertype == SPH_FILTER_VALUES:
 				req.append ( pack ('>L', len(f['values'])))
 				for val in f['values']:
-					req.append ( pack ('>L', val))
+					req.append ( pack ('>q', val))
 			elif filtertype == SPH_FILTER_RANGE:
-				req.append ( pack ('>2L', f['min'], f['max']))
+				req.append ( pack ('>2q', f['min'], f['max']))
 			elif filtertype == SPH_FILTER_FLOATRANGE:
 				req.append ( pack ('>2f', f['min'], f['max']))
 			req.append ( pack ( '>L', f['exclude'] ) )
@@ -512,6 +541,24 @@ class SphinxClient:
 		# comment
 		req.append ( pack('>L',len(comment)) + comment )
 
+		# attribute overrides
+		req.append ( pack('>L', len(self._overrides)) )
+		for v in self._overrides.values():
+			req.extend ( ( pack('>L', len(v['name'])), v['name'] ) )
+			req.append ( pack('>LL', v['type'], len(v['values'])) )
+			for id, value in v['values'].iteritems():
+				req.append ( pack('>q', id) )
+				if v['type'] == SPH_ATTR_FLOAT:
+					req.append ( pack('>f', value) )
+				elif v['type'] == SPH_ATTR_BIGINT:
+					req.append ( pack('>q', value) )
+				else:
+					req.append ( pack('>l', value) )
+
+		# select-list
+		req.append ( pack('>L', len(self._select)) )
+		req.append ( self._select )
+
 		# send query, get response
 		req = ''.join(req)
 
@@ -550,6 +597,8 @@ class SphinxClient:
 		results = []
 		for i in range(0,nreqs,1):
 			result = {}
+			results.append(result)
+
 			result['error'] = ''
 			result['warning'] = ''
 			status = unpack('>L', response[p:p+4])[0]
@@ -607,8 +656,7 @@ class SphinxClient:
 			while count>0 and p<max_:
 				count -= 1
 				if id64:
-					dochi, doc, weight = unpack('>3L', response[p:p+12])
-					doc += (dochi<<32)
+					doc, weight = unpack('>qL', response[p:p+12])
 					p += 12
 				else:
 					doc, weight = unpack('>2L', response[p:p+8])
@@ -618,6 +666,9 @@ class SphinxClient:
 				for i in range(len(attrs)):
 					if attrs[i][1] == SPH_ATTR_FLOAT:
 						match['attrs'][attrs[i][0]] = unpack('>f', response[p:p+4])[0]
+					elif attrs[i][1] == SPH_ATTR_BIGINT:
+						match['attrs'][attrs[i][0]] = unpack('>q', response[p:p+8])[0]
+						p += 4
 					elif attrs[i][1] == (SPH_ATTR_MULTI | SPH_ATTR_INTEGER):
 						match['attrs'][attrs[i][0]] = []
 						nvals = unpack('>L', response[p:p+4])[0]
@@ -648,9 +699,7 @@ class SphinxClient:
 				p += 8
 
 				result['words'].append({'word':word, 'docs':docs, 'hits':hits})
-
-			results.append(result)
-
+		
 		self._reqs = []
 		sock.close()
 		return results

@@ -436,17 +436,14 @@ indexer
 
 searchd
 {
-	# IP address to bind on
-	# optional, default is 0.0.0.0 (ie. listen on all interfaces)
-	#
-	# address				= 127.0.0.1
-	# address				= 192.168.0.1
+	# hostname, port or path to listen on
+	# optional, default is 0.0.0.0:3312 (ie. listen on all interfaces)
 
-
-	# searchd TCP port number
-	# mandatory, default is 3312
-	port				= 3312
-
+	# listen				= 127.0.0.1
+	# listen				= 192.168.0.1:3312
+	# listen				= 3312
+	# listen				= /var/run/searchd.s
+	
 	# log file, searchd run info is logged here
 	# optional, default is 'searchd.log'
 	log					= @CONFDIR@/log/searchd.log

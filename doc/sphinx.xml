@@ -4477,11 +4477,12 @@ many CPUs or cores).
 <para>
 The value format is as follows:
 <programlisting>
-agent = hostname:port:remote-indexes-list
+agent = specification:remote-indexes-list
+specification = hostname ":" port | path
 </programlisting>
-where 'hostname' is remote host name; 'port' is remote TCP port;
-and 'remote-indexes-list' is a comma-separated list of remote index
-names.
+Where 'hostname' is remote host name; 'port' is remote TCP port; 'path'
+is Unix-domain socket path and 'remote-indexes-list' is a
+comma-separated list of remote index names.
 </para>
 <para>
 All agents will be searched in parallel. However, all indexes
@@ -4521,6 +4522,7 @@ in parallel.
 <bridgehead>Example:</bridgehead>
 <programlisting>
 agent = localhost:3312:chunk2 # contact itself
+agent = /var/run/searchd.s:chunk2
 agent = searchbox2:3312:chunk3,chunk4 # search remote indexes
 </programlisting>
 </sect3>
@@ -4680,10 +4682,46 @@ max_iosize = 1048576
 <sect2 id="confgroup-searchd"><title><filename>searchd</filename> program configuration options</title>
 
 
+<sect3 id="conf-listen"><title>listen</title>
+<para>
+This setting lets you specify IP address and port, or Unix-domain
+socket path, that <code>searchd</code> will listen on.
+</para>
+<para>
+The informal grammar for <code>listen</code> setting is:
+<programlisting>
+listen = address ":" port | port | path
+</programlisting>
+I.e. you can specify either an IP address (or hostname) and port
+number, or just a port number, or Unix socket path. If you specify
+port number but not the address, <code>searchd</code> will listen on
+all network interfaces. Unix path is identified by a leading slash.
+</para>
+<bridgehead>Examples:</bridgehead>
+<programlisting>
+listen = localhost
+listen = localhost:5000
+listen = 192.168.0.1 
+listen = 192.168.0.1:5000
+listen = /var/run/sphinx.s
+listen = 3312
+</programlisting>
+<para>
+There can be multiple listen directives, <code>searchd</code> will
+listen for client connections on all specified ports and sockets.  If
+no <code>listen</code> directive is found then the server will listen
+on all available interfaces using the default port (which is 3312).
+</para>
+<para>
+Unix-domain sockets are not supported on Windows.
+</para>
+</sect3>
+
 <sect3 id="conf-address"><title>address</title>
 <para>
 Interface IP address to bind on.
 Optional, default is 0.0.0.0 (ie. listen on all interfaces).
+<b>DEPRECATED</b>, use <link linkend="conf-listen">listen</link> instead.
 </para>
 <para>
 <code>address</code> setting lets you specify which network interface
@@ -4701,7 +4739,8 @@ address = 192.168.0.1
 <sect3 id="conf-port"><title>port</title>
 <para>
 <filename>searchd</filename> TCP port number.
-Mandatory, default is 3312.
+<b>DEPRECATED</b>, use <link linkend="conf-listen">listen</link> instead.
+Used to be mandatory. Default port number is 3312.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>

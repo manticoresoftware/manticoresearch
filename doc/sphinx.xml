@@ -2650,6 +2650,21 @@ mysql> SHOW ENGINE SPHINX STATUS;
 +--------+-------+-------------------------------------------------+
 2 rows in set (0.00 sec)
 </programlisting>
+This information can also be accessed through status variables. Note
+that this method does not require super-user privileges.
+<programlisting>
+mysql> SHOW STATUS LIKE 'sphinx_%';
++--------------------+----------------------------------+
+| Variable_name      | Value                            |
++--------------------+----------------------------------+
+| sphinx_total       | 25                               | 
+| sphinx_total_found | 25                               | 
+| sphinx_time        | 126                              | 
+| sphinx_word_count  | 2                                | 
+| sphinx_words       | sphinx:591:1256 soft:11076:15945 | 
++--------------------+----------------------------------+
+5 rows in set (0.00 sec)
+</programlisting>
 </para>
 <para>
 You could perform JOINs on SphinxSE search table and tables using

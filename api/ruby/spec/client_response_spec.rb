@@ -53,9 +53,9 @@ context 'The SphinxApi connected to Sphinx' do
   end
 
   specify 'should parse response in UpdateAttributes method with MVA' do
-    @sphinx.UpdateAttributes('test1', ['tags'], { 2 => [[1, 2, 3]] }, true).should == 1
+    @sphinx.UpdateAttributes('test1', ['tags'], { 2 => [[1, 2, 3, 4, 5, 6, 7, 8, 9]] }, true).should == 1
     result = @sphinx.Query('wifi', 'test1')
-    result['matches'][0]['attrs']['tags'].should == [1, 2, 3]
+    result['matches'][0]['attrs']['tags'].should == [1, 2, 3, 4, 5, 6, 7, 8, 9]
     @sphinx.UpdateAttributes('test1', ['tags'], { 2 => [[5, 6, 7, 8]] }, true).should == 1
     result = @sphinx.Query('wifi', 'test1')
     result['matches'][0]['attrs']['tags'].should == [5, 6, 7, 8]

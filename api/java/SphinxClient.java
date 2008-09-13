@@ -217,7 +217,16 @@ public class SphinxClient
 		} else
 		{
 			ostream.writeShort ( 0 );
-			ostream.writeUTF ( str );
+			int THRESH = 65536 / 3;
+			int iLen = str.length();
+			if ( iLen<=THRESH )
+			{
+				ostream.writeUTF ( str );
+			} else
+			{
+				for ( int i=0; i<(iLen+THRESH-1)/THRESH; i++ )
+					ostream.writeUTF ( str.substring ( i*THRESH, Math.min ( i*THRESH+THRESH-1, iLen-1 ) ) );
+			}
 		}
 	}
 

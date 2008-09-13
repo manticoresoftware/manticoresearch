@@ -5973,6 +5973,7 @@ class CSphArena
 {
 public:
 							CSphArena ();
+							~CSphArena ();
 
 	bool					Init ( int uMaxBytes );
 	DWORD *					GetBasePtr () const { return m_pBasePtr; }
@@ -6056,6 +6057,13 @@ public:
 CSphArena::CSphArena ()
 	: m_iPages ( 0 )
 {
+}
+
+
+CSphArena::~CSphArena ()
+{
+	// notify callers that arena no longer exists
+	g_pMvaArena = NULL;
 }
 
 
@@ -6457,7 +6465,7 @@ void CSphArena::TaggedFreeTag ( int iTag )
 	CSphScopedMutexLock tLock ( m_tMutex );
 
 	// find that tag
-	 TagDesc_t * pTag = sphBinarySearch ( m_pTags, m_pTags+(*m_pTagCount)-1, bind(&TagDesc_t::m_iTag), iTag );
+	TagDesc_t * pTag = sphBinarySearch ( m_pTags, m_pTags+(*m_pTagCount)-1, bind(&TagDesc_t::m_iTag), iTag );
 	if ( !pTag )
 		return;
 
@@ -6527,11 +6535,14 @@ static CSphArena g_MvaArena; // global mega-arena
 
 DWORD * sphArenaInit ( int iMaxBytes )
 {
+	if ( g_pMvaArena )
+		return g_pMvaArena; // already initialized
+
 	if ( !g_MvaArena.Init ( iMaxBytes ) )
-		return NULL;
+		return NULL; // tried but failed
 
 	g_pMvaArena = g_MvaArena.GetBasePtr ();
-	return g_pMvaArena;
+	return g_pMvaArena; // all good
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -6675,9 +6686,9 @@ CSphIndex_VLN::~CSphIndex_VLN ()
 	m_tMergeWordlistFile.Close ();
 
 #if USE_WINDOWS
-	if ( m_iIndexTag>=0 )
+	if ( m_iIndexTag>=0 && g_pMvaArena )
 #else
-	if ( m_iIndexTag>=0 && g_bHeadProcess )
+	if ( m_iIndexTag>=0 && g_bHeadProcess && g_pMvaArena )
 #endif
 		g_MvaArena.TaggedFreeTag ( m_iIndexTag );
 }
@@ -6715,7 +6726,14 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd )
 		if (!( tCol.m_eAttrType==SPH_ATTR_BOOL || tCol.m_eAttrType==SPH_ATTR_INTEGER || tCol.m_eAttrType==SPH_ATTR_TIMESTAMP
 			|| tCol.m_eAttrType==( SPH_ATTR_INTEGER | SPH_ATTR_MULTI ) ))
 		{
-			m_sLastError.SetSprintf ( "attribute '%s' can not be updated (must be boolean, integer, or timestamp)", tUpd.m_dAttrs[i].m_sName.cstr() );
+			m_sLastError.SetSprintf ( "attribute '%s' can not be updated (must be boolean, integer, timestamp, or MVA)", tUpd.m_dAttrs[i].m_sName.cstr() );
+			return -1;
+		}
+
+		// forbid updates on MVA columns if there's no arena
+		if ( ( tCol.m_eAttrType & SPH_ATTR_MULTI ) && !g_pMvaArena )
+		{
+			m_sLastError.SetSprintf ( "MVA attribute '%s' can not be updated (MVA arena not initialized)" );
 			return -1;
 		}
 
@@ -14111,7 +14129,7 @@ void CSphIndex_VLN::Dealloc ()
 	SafeDelete ( m_pDict );
 	SafeDeleteArray ( m_pWordlistChunkBuf );
 
-	if ( m_iIndexTag>=0 )
+	if ( m_iIndexTag>=0 && g_pMvaArena )
 		g_MvaArena.TaggedFreeTag ( m_iIndexTag );
 	m_iIndexTag = -1;
 }

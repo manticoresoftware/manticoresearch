@@ -47,6 +47,8 @@ index test
 <query mode="extended2">我</query>
 <query mode="extended2">basic | china</query>
 <query mode="extended2">"test program" | basic</query>
+<query mode="extended2">"test that"~3 | basic</query>
+<query mode="extended2">"test that"~3|basic</query>
 </queries>
 
 <db_create>

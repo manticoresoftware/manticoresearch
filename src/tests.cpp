@@ -122,6 +122,9 @@ void TestTokenizer ( bool bUTF8 )
 			"2", "# OS/2's system install",		"OS/2", "system", "install", NULL,
 			"2", "IBM-s/OS/2/Merlin",			"ibm-s", "OS/2", "merlin", NULL,
 			"2", "U.S.A",						"US", NULL,
+			"2", "AT&T!",						"AT&T", "!", NULL,					// exceptions vs specials
+			"2", "AT&T!!!",						"AT&T", "!", "!", "!", NULL,		// exceptions vs specials
+			"2", "U.S.A.!",						"USA", "!", NULL,					// exceptions vs specials
 			"2", "MS DOSS feat.Deskview.MS DOS",			"ms", "doss", "featuring", "deskview", "MS-DOS", NULL,
 			"2", sMagic,									"test", NULL,
 			"2", "U.S. U.S.A. U.S.A.F.",					"US", "USA", "USAF", NULL,

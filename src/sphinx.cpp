@@ -1772,7 +1772,6 @@ private:
 	void						WriteSchemaColumn ( CSphWriter & fdInfo, const CSphColumnInfo & tCol );
 	void						ReadSchemaColumn ( CSphReader_VLN & rdInfo, CSphColumnInfo & tCol );
 
-	bool						MatchBoolean ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphTermSetup & tTermSetup );
 	bool						MatchExtended ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphTermSetup & tTermSetup );
 	bool						MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, const CSphTermSetup & tTermSetup );
 
@@ -1785,7 +1784,6 @@ private:
 
 	void						CheckQueryWord ( const char * szWord, CSphQueryResult * pResult ) const;
 	void						CheckExtendedQuery ( const CSphExtendedQueryNode * pNode, CSphQueryResult * pResult ) const;
-	void						CheckBooleanQuery ( const CSphBooleanQueryExpr * pExpr, CSphQueryResult * pResult ) const;
 
 	CSphDict *					SetupStarDict ( CSphScopedPtr<CSphDict> & tContainer ) const;
 	CSphDict *					SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict ) const;
@@ -10836,386 +10834,6 @@ void CSphIndex_VLN::LateCalc ( CSphMatch & tMatch ) const
 				break; \
 	}
 
-
-// check for dupes
-struct WordDupeCheck_t
-{
-	SphWordID_t		m_uWordID;
-	int				m_iIndex;
-
-	bool operator < ( const WordDupeCheck_t & rhs ) const
-	{
-		return m_uWordID < rhs.m_uWordID;
-	}
-};
-
-
-struct CSphBooleanEvalNode : public CSphQueryWord
-{
-	ESphBooleanQueryExpr	m_eType;	///< this node's type
-
-	CSphBooleanEvalNode *	m_pExpr;	///< subexperssion
-	CSphBooleanEvalNode *	m_pParent;	///< subexperssion's parent
-
-	CSphBooleanEvalNode *	m_pPrev;	///< prev expression at this level
-	CSphBooleanEvalNode *	m_pNext;	///< next expression at this level
-
-	CSphMatch *				m_pLast;	///< last matched document at this node (may point to a subexpression or sibling); we only need to store this for NODE_OR type
-
-	bool					m_bInvert;		///< whether to invert the matching logic
-	bool					m_bEvaluable;	///< whether this node is for matching or for filtering
-
-public:
-							CSphBooleanEvalNode ( const CSphBooleanQueryExpr * pNode, const CSphTermSetup & tTermSetup );
-							~CSphBooleanEvalNode ();
-
-	void					SetFile ( const CSphIndex_VLN * pIndex, const CSphTermSetup & tTermSetup );
-	CSphMatch *				MatchNode ( SphDocID_t iMinID, CSphString & sWarning );	///< get next match at this node, with ID greater than iMinID
-	CSphMatch *				MatchLevel ( SphDocID_t iMinID, CSphString & sWarning );	///< get next match at this level, with ID greater than iMinID
-	bool					IsRejected ( SphDocID_t iID, CSphString & sWarning );		///< check if this match should be rejected
-
-protected:
-	DWORD					m_uMaxStamp;
-	int						m_iScannedEntries;
-};
-
-
-CSphBooleanEvalNode::CSphBooleanEvalNode ( const CSphBooleanQueryExpr * pNode, const CSphTermSetup & tTermSetup )
-{
-	assert ( pNode );
-	assert ( tTermSetup.m_pDict );
-
-	m_eType = pNode->m_eType;
-	m_bInvert = pNode->m_bInvert;
-	m_bEvaluable = pNode->m_bEvaluable;
-
-	m_sWord = pNode->m_sWord;
-	m_iWordID = 0;
-
-	m_pExpr = pNode->m_pExpr ? new CSphBooleanEvalNode ( pNode->m_pExpr, tTermSetup ) : NULL;
-	if ( m_pExpr )
-	{
-		m_pExpr->m_pParent = this;
-		m_pLast = &m_tDoc;
-	} else
-	{
-		// GetWordID() may modify the word in-place; so we alloc a tempbuffer
-		CSphString sBuf ( m_sWord );
-		m_iWordID = tTermSetup.m_pDict->GetWordID ( (BYTE*)sBuf.cstr() );
-		m_pLast = NULL;
-	}
-
-	m_pNext = pNode->m_pNext ? new CSphBooleanEvalNode ( pNode->m_pNext, tTermSetup ) : NULL;
-	m_pPrev = NULL;
-	if ( m_pNext )
-		m_pNext->m_pPrev = this;
-
-	m_pParent = NULL;
-
-	SetupAttrs ( tTermSetup );
-
-	m_uMaxStamp = tTermSetup.m_uMaxStamp;
-	m_iScannedEntries = 0;
-}
-
-
-CSphBooleanEvalNode::~CSphBooleanEvalNode ()
-{
-	SafeDelete ( m_pExpr );
-	SafeDelete ( m_pNext );
-}
-
-
-void CSphBooleanEvalNode::SetFile ( const CSphIndex_VLN * pIndex, const CSphTermSetup & tTermSetup )
-{
-	// setup self
-	if ( pIndex->SetupQueryWord ( *this, tTermSetup ) )
-		m_pLast = &m_tDoc;
-
-	// setup children
-	if ( m_pExpr )
-		m_pExpr->SetFile ( pIndex, tTermSetup );
-
-	// setup siblings
-	if ( !m_pPrev )
-	{
-		for ( CSphBooleanEvalNode * pNode = m_pNext; pNode; pNode = pNode->m_pNext )
-			pNode->SetFile ( pIndex, tTermSetup );
-	}
-}
-
-
-bool CSphBooleanEvalNode::IsRejected ( SphDocID_t iID, CSphString & sWarning )
-{
-	assert ( !m_bEvaluable );
-	assert ( m_pPrev ); // filter node can't start a level
-
-	// "done" mark
-	if ( !m_pLast )
-		return false;
-
-	// subexpr case
-	if ( m_pExpr )
-	{
-		if ( m_bInvert )
-		{
-			// subexpr is directly evaluable
-			m_pLast = m_pExpr->MatchNode ( iID, sWarning );
-			return ( m_pLast && m_pLast->m_iDocID==iID );
-		} else
-		{
-			// subexpr is not evaluable as well
-			return m_pExpr->IsRejected ( iID, sWarning );
-		}
-	}
-
-	// plain word case
-	assert ( m_bInvert );
-	while ( iID > m_tDoc.m_iDocID )
-	{
-		GetDoclistEntry ();
-		if ( m_tDoc.m_iDocID==0 )
-		{
-			m_pLast = NULL;
-			return false;
-		}
-	}
-	return ( iID==m_tDoc.m_iDocID );
-}
-
-
-CSphMatch * CSphBooleanEvalNode::MatchNode ( SphDocID_t iMinID, CSphString & sWarning )
-{
-	assert ( m_bEvaluable );
-
-	// "done" mark
-	if ( !m_pLast )
-		return NULL;
-
-	// subexpr case
-	if ( m_pExpr )
-		return m_pExpr->MatchLevel ( iMinID, sWarning );
-
-	// plain word case
-	while ( iMinID > m_tDoc.m_iDocID )
-	{
-		GetDoclistEntry ();
-		if ( !m_tDoc.m_iDocID )
-			return NULL;
-
-		// max_query_time
-		if ( m_uMaxStamp && ++m_iScannedEntries==1000 )
-		{
-			if ( sphTimerMsec()>=m_uMaxStamp )
-			{
-				sWarning = "query time exceeded max_query_time";
-				m_pLast = NULL;
-				return NULL;
-			}
-			m_iScannedEntries = 0;
-		}
-	}
-	return &m_tDoc;
-}
-
-
-CSphMatch * CSphBooleanEvalNode::MatchLevel ( SphDocID_t iMinID, CSphString & sWarning )
-{
-	assert ( m_bEvaluable );
-	if ( m_eType==NODE_AND )
-	{
-		// match all siblings
-		// search for min equal match ID through all the siblings
-		CSphMatch * pCur = NULL;
-		for ( CSphBooleanEvalNode * pNode = this; pNode; )
-		{
-			if ( pNode->m_bEvaluable )
-			{
-				// as all evaluatable siblings matched last time,
-				// we are positive that it is time to advance the pointer
-				// and fetch the next id
-				CSphMatch * pCandidate = pNode->MatchNode ( iMinID, sWarning );
-				if ( !pCandidate )
-					return NULL;
-
-				SphDocID_t iCandidate = pCandidate->m_iDocID;
-				assert ( iCandidate );
-
-				if ( iCandidate>=iMinID )
-				{
-					if ( iCandidate>iMinID )
-						pNode = this;
-					else
-						pNode = pNode->m_pNext;
-
-					iMinID = iCandidate;
-					pCur = pCandidate;
-				}
-			} else
-			{
-				// if this node is a filter, well, we need some value to pass through it!
-				assert ( pCur );
-				if ( pNode->IsRejected ( pCur->m_iDocID, sWarning ) )
-				{
-					// oh, the doc's rejected. restart scanning
-					iMinID = 1 + pCur->m_iDocID;
-					pNode = this;
-					pCur = NULL;
-				} else
-				{
-					pNode = pNode->m_pNext;
-				}
-			}
-		}
-
-		assert ( pCur );
-		return pCur;
-
-	} else
-	{
-		// match any sibling
-		// search for min match ID through all the siblings
-
-		CSphMatch * pCur = NULL;
-		SphDocID_t iMinMatch = DOCID_MAX; // best match ID found so far
-
-		for ( CSphBooleanEvalNode * pNode = this; pNode; pNode = pNode->m_pNext )
-		{
-			assert ( pNode->m_bEvaluable );
-
-			// if the node match is not OK already, ask for next one
-			if ( pNode->m_pLast )
-			{
-				while ( pNode->m_pLast->m_iDocID < iMinID )
-				{
-					pNode->m_pLast = pNode->MatchNode ( iMinID, sWarning );
-					if ( !pNode->m_pLast )
-						break;
-				}
-			}
-			if ( !pNode->m_pLast ) // OPTIMIZE! remove this node from the tree
-				continue;
-
-			// check if this match is any better than the current one
-			SphDocID_t iCandidate = pNode->m_pLast->m_iDocID;
-			assert ( iCandidate>=iMinID );
-
-			if ( iCandidate<=iMinMatch )
-			{
-				iMinMatch = iCandidate;
-				pCur = pNode->m_pLast;
-			}
-		}
-
-		return pCur;
-	}
-}
-
-
-void CSphIndex_VLN::CheckBooleanQuery ( const CSphBooleanQueryExpr * pExpr, CSphQueryResult * pResult ) const
-{
-	const CSphBooleanQueryExpr * pTestExpr = pExpr;
-
-	while ( pTestExpr )
-	{
-		CheckQueryWord ( pTestExpr->m_sWord.cstr (), pResult );
-		if ( pTestExpr->m_pExpr )
-			CheckBooleanQuery ( pTestExpr->m_pExpr, pResult );
-
-		pTestExpr = pTestExpr->m_pNext;
-	}
-}
-
-void sphGatherBooleanWordStats ( CSphBooleanEvalNode * pTree, CSphQueryResult * pResult )
-{
-	CSphBooleanEvalNode * pNode = pTree;
-
-	while ( pNode )
-	{
-		if ( pResult->m_iNumWords >= SPH_MAX_QUERY_WORDS )
-			return;
-
-		if ( pNode->m_pExpr )
-			sphGatherBooleanWordStats ( pNode->m_pExpr, pResult );
-		else
-		{
-			CSphQueryResult::WordStat_t & tStats = pResult->m_tWordStats [ pResult->m_iNumWords++ ];
-
-			if ( tStats.m_sWord.cstr() )
-			{
-				assert ( tStats.m_sWord==pNode->m_sWord );
-
-				tStats.m_iDocs += pNode->m_iDocs;
-				tStats.m_iHits += pNode->m_iHits;
-			} else
-			{
-				tStats.m_sWord = pNode->m_sWord;
-				tStats.m_iDocs = pNode->m_iDocs;
-				tStats.m_iHits = pNode->m_iHits;
-			}
-		}
-
-		pNode = pNode->m_pNext;
-	}
-}
-
-
-bool CSphIndex_VLN::MatchBoolean ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphTermSetup & tTermSetup )
-{
-	bool bRandomize = ppSorters[0]->m_bRandomize;
-	int iCutoff = pQuery->m_iCutoff;
-
-	/////////////////////////
-	// match in boolean mode
-	/////////////////////////
-
-	// parse query
-	CSphBooleanQuery tParsed;
-	if ( !sphParseBooleanQuery ( tParsed, pQuery->m_sQuery.cstr(), tTermSetup.m_pIndex->GetTokenizer () ) )
-	{
-		m_sLastError = tParsed.m_sParseError;
-		return false;
-	}
-
-	CheckBooleanQuery ( tParsed.m_pTree, pResult );
-
-	// let's build our own tree! with doclists! and hits!
-	assert ( m_tMin.m_iRowitems==m_tSchema.GetRowSize() );
-	
-	if ( !tParsed.m_pTree )
-		return true;
-
-	CSphBooleanEvalNode tTree ( tParsed.m_pTree, tTermSetup );
-	tTree.SetFile ( this, tTermSetup );
-	sphGatherBooleanWordStats ( &tTree, pResult );
-
-	// do matching
-	SphDocID_t iMinID = 1;
-	for ( ;; )
-	{
-		CSphMatch * pMatch = tTree.MatchLevel ( iMinID, pResult->m_sWarning );
-		if ( !pMatch )
-			break;
-		iMinID = 1 + pMatch->m_iDocID;
-
-		// forcibly break on DOCID_MAX matches
-		if ( pMatch->m_iDocID==DOCID_MAX )
-			break;
-
-		// early reject by group id, doc id or timestamp
-		if ( EarlyReject ( *pMatch, pQuery ) )
-			continue;
-
-		// set weight and push it to the queue
-		pMatch->m_iWeight = 1; // set weight
-
-		// submit
-		SPH_SUBMIT_MATCH ( *pMatch );
-	}
-
-	return true;
-}
-
 //////////////////////////////////////////////////////////////////////////
 // EXTENDED MATCHING V2
 //////////////////////////////////////////////////////////////////////////
@@ -11482,7 +11100,7 @@ protected:
 class ExtRanker_c
 {
 public:
-								ExtRanker_c ( const CSphExtendedQueryNode * pAccept, const CSphExtendedQueryNode * pReject, const CSphTermSetup & tSetup, CSphString * pWarning );
+								ExtRanker_c ( const CSphExtendedQueryNode * pRoot, const CSphTermSetup & tSetup, CSphString * pWarning );
 	virtual						~ExtRanker_c () { SafeDelete ( m_pRoot ); }
 
 	virtual const ExtDoc_t *	GetFilteredDocs ();
@@ -11513,8 +11131,8 @@ protected:
 	class ExtRanker_##_name##_c : public ExtRanker_c \
 	{ \
 	public: \
-		ExtRanker_##_name##_c ( const CSphExtendedQueryNode * pAccept, const CSphExtendedQueryNode * pReject, const CSphTermSetup & tSetup, CSphString * pWarning ) \
-			: ExtRanker_c ( pAccept, pReject, tSetup, pWarning ) \
+		ExtRanker_##_name##_c ( const CSphExtendedQueryNode * pRoot, const CSphTermSetup & tSetup, CSphString * pWarning ) \
+			: ExtRanker_c ( pRoot, tSetup, pWarning ) \
 		{} \
 	\
 		virtual int GetMatches ( int iFields, const int * pWeights ); \
@@ -11597,12 +11215,14 @@ ExtNode_i * ExtNode_i::Create ( const CSphExtendedQueryNode * pNode, const CSphT
 
 		ExtNode_i * pCur = ExtNode_i::Create ( pNode->m_dChildren[0], tSetup, pWarning );
 		for ( int i=1; i<iChildren; i++ )
+			switch ( pNode->m_eOp )
 		{
-			if ( pNode->m_bAny )
-				pCur = new ExtOr_c ( pCur, ExtNode_i::Create ( pNode->m_dChildren[i], tSetup, pWarning ) );
-			else
-				pCur = new ExtAnd_c ( pCur, ExtNode_i::Create ( pNode->m_dChildren[i], tSetup, pWarning ) );
+			case SPH_QUERY_OR:		pCur = new ExtOr_c ( pCur, ExtNode_i::Create ( pNode->m_dChildren[i], tSetup, pWarning ) ); break;
+			case SPH_QUERY_AND:		pCur = new ExtAnd_c ( pCur, ExtNode_i::Create ( pNode->m_dChildren[i], tSetup, pWarning ) ); break;
+			case SPH_QUERY_ANDNOT:	pCur = new ExtAndNot_c ( pCur, ExtNode_i::Create ( pNode->m_dChildren[i], tSetup, pWarning ) ); break;
+			default:				assert ( 0 && "internal error: unhandled op in ExtNode_i::Create()" ); break;
 		}
+		
 		return pCur;
 	}
 }
@@ -13159,7 +12779,7 @@ const ExtHit_t * ExtQuorum_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t 
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtRanker_c::ExtRanker_c ( const CSphExtendedQueryNode * pAccept, const CSphExtendedQueryNode * pReject, const CSphTermSetup & tSetup, CSphString * pWarning )
+ExtRanker_c::ExtRanker_c ( const CSphExtendedQueryNode * pRoot, const CSphTermSetup & tSetup, CSphString * pWarning )
 {
 	m_iInlineRowitems = ( tSetup.m_eDocinfo==SPH_DOCINFO_INLINE ) ? tSetup.m_tMin.m_iRowitems : 0;
 	for ( int i=0; i<ExtNode_i::MAX_DOCS; i++ )
@@ -13169,15 +12789,8 @@ ExtRanker_c::ExtRanker_c ( const CSphExtendedQueryNode * pAccept, const CSphExte
 	}
 	m_tTestMatch.Reset ( tSetup.m_tMin.m_iRowitems + tSetup.m_iToCalc );
 
-	assert ( pAccept );
-	m_pRoot = ExtNode_i::Create ( pAccept, tSetup, pWarning );
-
-	if ( m_pRoot && pReject )
-	{
-		ExtNode_i * pRej = ExtNode_i::Create ( pReject, tSetup, pWarning );
-		if ( pRej )
-			m_pRoot = new ExtAndNot_c ( m_pRoot, pRej );
-	}
+	assert ( pRoot );
+	m_pRoot = ExtNode_i::Create ( pRoot, tSetup, pWarning );
 
 	m_pDoclist = NULL;
 	m_pHitlist = NULL;
@@ -13742,23 +13355,22 @@ bool CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, CSphQueryResult * 
 		return false;
 	}
 
-	CheckExtendedQuery ( tParsed.m_pAccept, pResult );
-	CheckExtendedQuery ( tParsed.m_pReject, pResult );
+	CheckExtendedQuery ( tParsed.m_pRoot, pResult );
 
 	// setup eval-tree
 	CSphScopedPtr<ExtRanker_c> pRoot ( NULL );
 	switch ( pQuery->m_eRanker )
 	{
-		case SPH_RANK_PROXIMITY_BM25:	pRoot = new ExtRanker_ProximityBM25_c ( tParsed.m_pAccept, tParsed.m_pReject, tTermSetup, &(pResult->m_sWarning) ); break;
-		case SPH_RANK_BM25:				pRoot = new ExtRanker_BM25_c ( tParsed.m_pAccept, tParsed.m_pReject, tTermSetup, &(pResult->m_sWarning) ); break;
-		case SPH_RANK_NONE:				pRoot = new ExtRanker_None_c ( tParsed.m_pAccept, tParsed.m_pReject, tTermSetup, &(pResult->m_sWarning) ); break;
-		case SPH_RANK_WORDCOUNT:		pRoot = new ExtRanker_Wordcount_c ( tParsed.m_pAccept, tParsed.m_pReject, tTermSetup, &(pResult->m_sWarning) ); break;
-		case SPH_RANK_PROXIMITY:		pRoot = new ExtRanker_Proximity_c ( tParsed.m_pAccept, tParsed.m_pReject, tTermSetup, &(pResult->m_sWarning) ); break;
-		case SPH_RANK_MATCHANY:			pRoot = new ExtRanker_MatchAny_c ( tParsed.m_pAccept, tParsed.m_pReject, tTermSetup, &(pResult->m_sWarning) ); break;
+		case SPH_RANK_PROXIMITY_BM25:	pRoot = new ExtRanker_ProximityBM25_c ( tParsed.m_pRoot, tTermSetup, &(pResult->m_sWarning) ); break;
+		case SPH_RANK_BM25:				pRoot = new ExtRanker_BM25_c ( tParsed.m_pRoot, tTermSetup, &(pResult->m_sWarning) ); break;
+		case SPH_RANK_NONE:				pRoot = new ExtRanker_None_c ( tParsed.m_pRoot, tTermSetup, &(pResult->m_sWarning) ); break;
+		case SPH_RANK_WORDCOUNT:		pRoot = new ExtRanker_Wordcount_c ( tParsed.m_pRoot, tTermSetup, &(pResult->m_sWarning) ); break;
+		case SPH_RANK_PROXIMITY:		pRoot = new ExtRanker_Proximity_c ( tParsed.m_pRoot, tTermSetup, &(pResult->m_sWarning) ); break;
+		case SPH_RANK_MATCHANY:			pRoot = new ExtRanker_MatchAny_c ( tParsed.m_pRoot, tTermSetup, &(pResult->m_sWarning) ); break;
 
 		default:
 			pResult->m_sWarning.SetSprintf ( "unknown ranking mode %d; using default", (int)pQuery->m_eRanker );
-			pRoot = new ExtRanker_ProximityBM25_c ( tParsed.m_pAccept, tParsed.m_pReject, tTermSetup, &(pResult->m_sWarning) );
+			pRoot = new ExtRanker_ProximityBM25_c ( tParsed.m_pRoot, tTermSetup, &(pResult->m_sWarning) );
 			break;
 	}
 	assert ( pRoot.Ptr() );
@@ -15259,6 +14871,9 @@ bool CSphIndex_VLN::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, cons
 
 void PrepareQueryEmulation ( CSphQuery * pQuery )
 {
+	if ( pQuery->m_eMode==SPH_MATCH_BOOLEAN )
+		pQuery->m_eRanker = SPH_RANK_NONE;
+
 	if ( pQuery->m_eMode!=SPH_MATCH_ALL && pQuery->m_eMode!=SPH_MATCH_ANY && pQuery->m_eMode!=SPH_MATCH_PHRASE )
 		return;
 
@@ -15448,10 +15063,8 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 		case SPH_MATCH_PHRASE:
 		case SPH_MATCH_ANY:
 		case SPH_MATCH_EXTENDED:
-		case SPH_MATCH_EXTENDED2:
-			bMatch = MatchExtended ( pQuery, pResult, iSorters, ppSorters, tTermSetup );
-			break;
-		case SPH_MATCH_BOOLEAN:		bMatch = MatchBoolean ( pQuery, pResult, iSorters, ppSorters, tTermSetup );	break;
+		case SPH_MATCH_EXTENDED2:	
+		case SPH_MATCH_BOOLEAN:		bMatch = MatchExtended ( pQuery, pResult, iSorters, ppSorters, tTermSetup ); break;
 		case SPH_MATCH_FULLSCAN:	bMatch = MatchFullScan ( pQuery, iSorters, ppSorters, tTermSetup ); break;
 		default:					sphDie ( "INTERNAL ERROR: unknown matching mode (mode=%d)", pQuery->m_eMode );
 	}

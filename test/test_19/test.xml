@@ -38,7 +38,7 @@ index test
 <query mode="extended2">"phrase query"</query>
 <query mode="extended2">"phrase (query)/3 ~on steroids"</query>
 <query mode="extended2">@title sample @body world</query>
-<query mode="extended2">-query</query>
+<!-- <query mode="extended2">-query</query> -->
 <query mode="extended2">"quorum query test"/1</query>
 <query mode="extended2">"quorum query test"/4</query>
 <query mode="extended2">"hello program"~3</query>

@@ -369,9 +369,10 @@ void TestStripper ()
 		{ "testing <img src=\"g/smth.jpg\" alt=\"nice picture\" rel=anotherattr junk=throwaway>inline tags vs attr indexing", "img=alt,rel", "", "testing nice picture anotherattr inline tags vs attr indexing" }
 	};
 
-	for ( int iTest=0; iTest<(int)(sizeof(sTests)/sizeof(sTests[0])); iTest++ )
+	int nTests = (int)(sizeof(sTests)/sizeof(sTests[0]));
+	for ( int iTest=0; iTest<nTests; iTest++ )
 	{
-		printf ( "testing HTML stripper, test %d\n", 1+iTest );
+		printf ( "testing HTML stripper, test %d/%d... ", 1+iTest, nTests );
 
 		CSphString sError;
 		CSphHTMLStripper tStripper;
@@ -381,6 +382,8 @@ void TestStripper ()
 		CSphString sBuf ( sTests[iTest][0] );
 		tStripper.Strip ( (BYTE*)sBuf.cstr() );
 		assert ( strcmp ( sBuf.cstr(), sTests[iTest][3] )==0 );
+
+		printf ( "ok\n" );
 	}
 }
 
@@ -482,10 +485,10 @@ void TestExpr ()
 		{ "-aaa>-bbb",						1.0f },
 	};
 
-	const int iTests = sizeof(dTests)/sizeof(dTests[0]);
-	for ( int iTest=0; iTest<iTests; iTest++ )
+	const int nTests = sizeof(dTests)/sizeof(dTests[0]);
+	for ( int iTest=0; iTest<nTests; iTest++ )
 	{
-		printf ( "testing expression evaluation, test %d/%d... ", 1+iTest, iTests );
+		printf ( "testing expression evaluation, test %d/%d... ", 1+iTest, nTests );
 
 		CSphString sError;
 		CSphScopedPtr<ISphExpr> pExpr ( sphExprParse ( dTests[iTest].m_sExpr, tSchema, NULL, sError ) );
@@ -597,7 +600,7 @@ void BenchExpr ()
 
 //////////////////////////////////////////////////////////////////////////
 
-CSphString ReconstructNode ( const CSphExtendedQueryNode * pNode )
+CSphString ReconstructNode ( const CSphExtendedQueryNode * pNode, const CSphSchema & tSchema )
 {
 	CSphString sRes ( "" );
 
@@ -613,13 +616,26 @@ CSphString ReconstructNode ( const CSphExtendedQueryNode * pNode )
 		if ( tAtom.m_bQuorum || tAtom.m_iMaxDistance>0 )
 		{
 			sRes.SetSprintf ( "\"%s\"%c%d", sRes.cstr(), tAtom.m_bQuorum ? '/' : '~', tAtom.m_iMaxDistance ); // quorum or proximity
-		
 		} else if ( dWords.GetLength()>1 )
 		{
 			if ( tAtom.m_iMaxDistance==0 )
 				sRes.SetSprintf ( "\"%s\"", sRes.cstr() ); // phrase
 			else
-				sRes.SetSprintf ( "( %s )", sRes.cstr() ); // just bag of words
+				sRes.SetSprintf ( "%s", sRes.cstr() ); // just bag of words
+		}
+
+		if ( tAtom.m_uFields!=0xFFFFFFFFUL )
+		{
+			CSphString sFields ( "" );
+			for ( int i=0; i<32; i++ )
+				if ( tAtom.m_uFields & (1<<i) )
+					sFields.SetSprintf ( "%s,%s", sFields.cstr(), tSchema.m_dFields[i].m_sName.cstr() );
+
+			sRes.SetSprintf ( "( @%s: %s )", sFields.cstr()+1, sRes.cstr() );
+		} else
+		{
+			if ( !tAtom.m_bQuorum && tAtom.m_iMaxDistance<0 && dWords.GetLength()>1 )
+				sRes.SetSprintf ( "( %s )", sRes.cstr() ); // wrap bag of words
 		}
 
 	} else
@@ -627,9 +643,19 @@ CSphString ReconstructNode ( const CSphExtendedQueryNode * pNode )
 		ARRAY_FOREACH ( i, pNode->m_dChildren )
 		{
 			if ( !i )
-				sRes = ReconstructNode ( pNode->m_dChildren[i] );
+				sRes = ReconstructNode ( pNode->m_dChildren[i], tSchema );
 			else
-				sRes.SetSprintf ( "%s %s %s", sRes.cstr(), pNode->m_bAny ? "OR" : "AND", ReconstructNode ( pNode->m_dChildren[i] ).cstr() );
+			{
+				const char * sOp = "(unknown-op)";
+				switch ( pNode->m_eOp )
+				{
+					case SPH_QUERY_AND:		sOp = "AND"; break;
+					case SPH_QUERY_OR:		sOp = "OR"; break;
+					case SPH_QUERY_NOT:		sOp = "NOT"; break;
+					case SPH_QUERY_ANDNOT:	sOp = "AND NOT"; break;
+				}
+				sRes.SetSprintf ( "%s %s %s", sRes.cstr(), sOp, ReconstructNode ( pNode->m_dChildren[i], tSchema ).cstr() );
+			}
 		}
 
 		if ( pNode->m_dChildren.GetLength()>1 )
@@ -639,16 +665,6 @@ CSphString ReconstructNode ( const CSphExtendedQueryNode * pNode )
 	return sRes;
 }
 
-CSphString ReconstructQuery ( const CSphExtendedQuery & tQuery )
-{
-	CSphString sAccept = ReconstructNode ( tQuery.m_pAccept );
-	CSphString sReject = ReconstructNode ( tQuery.m_pReject );
-
-	if ( !sReject.IsEmpty () )
-		sAccept.SetSprintf ( "( %s ) AND NOT ( %s )", sAccept.cstr(), sReject.cstr() );
-
-	return sAccept;
-}
 
 void TestQueryParser ()
 {
@@ -657,13 +673,17 @@ void TestQueryParser ()
 	CSphSchema tSchema;
 	CSphColumnInfo tCol;
 	tCol.m_sName = "title"; tSchema.m_dFields.Add ( tCol );
-	tCol.m_sName = "content"; tSchema.m_dFields.Add ( tCol );
+	tCol.m_sName = "body"; tSchema.m_dFields.Add ( tCol );
 
 	CSphDictSettings tDictSettings;
 	CSphScopedPtr<ISphTokenizer> pTokenizer ( sphCreateSBCSTokenizer () );
 	CSphScopedPtr<CSphDict> pDict ( sphCreateDictionaryCRC ( tDictSettings, pTokenizer.Ptr(), sTmp ) );
 	assert ( pTokenizer.Ptr() );
 	assert ( pDict.Ptr() );
+
+	CSphTokenizerSettings tTokenizerSetup;
+	tTokenizerSetup.m_iMinWordLen = 2;
+	pTokenizer->Setup ( tTokenizerSetup );
 
 	struct QueryTest_t
 	{
@@ -677,13 +697,29 @@ void TestQueryParser ()
 		{ "aaa bbb|ccc",					"( aaa AND ( bbb OR ccc ) )" },
 		{ "aaa (bbb ccc)|ddd",				"( aaa AND ( ( bbb AND ccc ) OR ddd ) )" },
 		{ "aaa bbb|(ccc ddd)",				"( aaa AND ( bbb OR ( ccc AND ddd ) ) )" },
-		{ "aaa bbb|(ccc ddd)|eee|(fff)",	"( aaa AND ( ( ( bbb OR ( ccc AND ddd ) ) OR eee ) OR fff ) )" },
-		{ "aaa bbb|(ccc ddd) eee|(fff)",	"( ( aaa AND ( bbb OR ( ccc AND ddd ) ) ) AND ( eee OR fff ) )" },
-		{ "aaa (ccc ddd)|bbb|eee|(fff)",	"( aaa AND ( ( ( ( ccc AND ddd ) OR bbb ) OR eee ) OR fff ) )" },
-		{ "aaa (ccc ddd)|bbb eee|(fff)",	"( ( aaa AND ( ( ccc AND ddd ) OR bbb ) ) AND ( eee OR fff ) )" },
+		{ "aaa bbb|(ccc ddd)|eee|(fff)",	"( aaa AND ( bbb OR ( ccc AND ddd ) OR eee OR fff ) )" },
+		{ "aaa bbb|(ccc ddd) eee|(fff)",	"( aaa AND ( bbb OR ( ccc AND ddd ) ) AND ( eee OR fff ) )" },
+		{ "aaa (ccc ddd)|bbb|eee|(fff)",	"( aaa AND ( ( ccc AND ddd ) OR bbb OR eee OR fff ) )" },
+		{ "aaa (ccc ddd)|bbb eee|(fff)",	"( aaa AND ( ( ccc AND ddd ) OR bbb ) AND ( eee OR fff ) )" },
 		{ "aaa \"bbb ccc\"~5|ddd",			"( aaa AND ( \"bbb ccc\"~5 OR ddd ) )" },
 		{ "aaa bbb|\"ccc ddd\"~5",			"( aaa AND ( bbb OR \"ccc ddd\"~5 ) )" },
+		{ "aaa ( ( \"bbb ccc\"~3|ddd ) eee | ( fff -ggg ) )",	"( aaa AND ( ( \"bbb ccc\"~3 OR ddd ) AND ( eee OR ( fff AND NOT ggg ) ) ) )" },
+		{ "@title aaa @body ccc|(@title ddd eee)|fff ggg",		"( ( @title: aaa ) AND ( ( @body: ccc ) OR ( ( @title: ddd ) AND ( @title: eee ) ) OR ( @body: fff ) ) AND ( @body: ggg ) )" },
+		{ "@title hello world | @body sample program",			"( ( @title: hello ) AND ( ( @title: world ) OR ( @body: sample ) ) AND ( @body: program ) )" },
+		{ "@title one two three four",							"( ( @title: one ) AND ( @title: two ) AND ( @title: three ) AND ( @title: four ) )" },
+		{ "@title one (@body two three) four",					"( ( @title: one ) AND ( ( @body: two ) AND ( @body: three ) ) AND ( @title: four ) )" },
+		{ "windows 7 2000",										"( windows AND 2000 )" },
+		{ "aaa a|bbb",											"( aaa AND bbb )" },
+		{ "aaa bbb|x y z|ccc",									"( aaa AND bbb AND ccc )" },
+		{ "a",													"" },
+		{ "hello -world",										"( hello AND NOT world )" },
+		{ "-hello world",										"( world AND NOT hello )" },
+		{ "\"phrase (query)/3 ~on steroids\"",					"\"phrase query on steroids\"" },
+		{ "hello a world",										"( hello AND world )" },
+		{ "-one",												"" },
+		{ "-one -two",											"" }
 	};
+
 
 	int nTests = sizeof(dTest)/sizeof(dTest[0]);
 	for ( int i=0; i<nTests; i++ )
@@ -693,7 +729,7 @@ void TestQueryParser ()
 		CSphExtendedQuery tQuery;
 		sphParseExtendedQuery ( tQuery, dTest[i].m_sQuery, pTokenizer.Ptr(), &tSchema, pDict.Ptr() );
 
-		CSphString sReconst = ReconstructQuery ( tQuery );
+		CSphString sReconst = ReconstructNode ( tQuery.m_pRoot, tSchema );
 		assert ( sReconst==dTest[i].m_sReconst );
 
 		printf ( "ok\n" );

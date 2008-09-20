@@ -113,8 +113,8 @@ void CSphExtendedQueryNode::SetFieldSpec ( DWORD uMask, int iMaxPos )
 XQParser_t::XQParser_t ()
 	: m_pParsed ( NULL )
 	, m_pLastTokenStart ( NULL )
-	, m_bStopOnInvalid ( true )
 	, m_pRoot ( NULL )
+	, m_bStopOnInvalid ( true )
 {
 }
 
@@ -361,7 +361,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			// got a number followed by a whitespace or special, handle it
 			char sNumberBuf[16];
 
-			int iNumberLen = Min ( sizeof(sNumberBuf)-1, p-sToken );
+			int iNumberLen = Min ( (int)sizeof(sNumberBuf)-1, int(p-sToken) );
 			memcpy ( sNumberBuf, sToken, iNumberLen );
 			sNumberBuf[iNumberLen] = '\0';
 			m_tPendingToken.tInt.iValue = atoi ( sNumberBuf );

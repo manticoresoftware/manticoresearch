@@ -67,6 +67,7 @@ AC_HEADER_SYS_WAIT
 AC_CHECK_HEADERS([fcntl.h limits.h netdb.h netinet/in.h stdlib.h string.h sys/file.h sys/socket.h sys/time.h unistd.h pthread.h])
 AC_CHECK_HEADER(expat.h,[have_expat_h=yes],[have_expat_h=no])
 AC_CHECK_HEADER(iconv.h,[have_iconv_h=yes],[have_iconv_h=no])
+AC_CHECK_HEADER(zlib.h,[have_zlib_h=yes],[have_zlib_h=no])
 
 dnl --------------------------------------------------------------------------
 
@@ -96,6 +97,7 @@ AC_SEARCH_LIBS([setsockopt],[socket])
 AC_SEARCH_LIBS([gethostbyname],[nsl socket resolv])
 AC_SEARCH_LIBS([XML_Parse],[expat],[have_libexpat=yes],[have_libexpat=no])
 AC_SEARCH_LIBS([iconv],[iconv],[have_libiconv=yes],[have_libiconv=no])
+AC_SEARCH_LIBS([inflate],[z],[have_lz=yes],[have_lz=no])
 AC_SEARCH_LIBS([logf],[m])
 AC_CHECK_FUNCS([dup2 gethostbyname gettimeofday memmove memset select socket strcasecmp strchr strerror strncasecmp strstr strtol logf])
 
@@ -327,6 +329,12 @@ else
 	else
 		AC_MSG_RESULT([not required])
 	fi
+fi
+
+dnl ---
+
+if test [ $have_zlib_h = yes -a $have_lz = yes ]; then
+   AC_DEFINE([USE_ZLIB],1,[define to use Zlib])
 fi
 
 dnl ---

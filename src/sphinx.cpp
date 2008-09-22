@@ -30,6 +30,8 @@
 #include <math.h>
 #include <float.h>
 
+#define SPH_UNPACK_BUFFER_SIZE	4096
+
 #if USE_LIBSTEMMER
 #include "libstemmer.h"
 #endif
@@ -50,6 +52,10 @@
 
 #if USE_LIBICONV
 #include "iconv.h"
+#endif
+
+#if USE_ZLIB
+#include <zlib.h>
 #endif
 
 #if USE_WINDOWS
@@ -17414,6 +17420,8 @@ CSphSource_SQL::CSphSource_SQL ( const char * sName )
 	, m_iFieldMVAIterator	( 0 )
 	, m_bWarnedNull			( false )
 	, m_bWarnedMax			( false )
+	, m_bCanUnpack			( false )
+	, m_bUnpackFailed		( false )
 {
 }
 
@@ -17679,6 +17687,9 @@ bool CSphSource_SQL::IterateHitsStart ( CSphString & sError )
 	// some post-query setup
 	m_tSchema.Reset();
 
+	for ( int i=0; i<SPH_MAX_FIELDS; i++ )
+		m_dUnpack[i] = SPH_UNPACK_NONE;
+
 	int iCols = SqlNumFields() - 1; // skip column 0, which must be the id
 
 	CSphVector<bool> dFound;
@@ -17726,7 +17737,28 @@ bool CSphSource_SQL::IterateHitsStart ( CSphString & sError )
 			tCol.m_eWordpart = SPH_WORDPART_INFIX;
 
 		if ( tCol.m_eAttrType==SPH_ATTR_NONE )
+		{
 			m_tSchema.m_dFields.Add ( tCol );
+			ARRAY_FOREACH ( k, m_tParams.m_dUnpack )
+			{
+				CSphUnpackInfo & tUnpack = m_tParams.m_dUnpack[k];
+				if ( tUnpack.m_sName == tCol.m_sName )
+				{
+					if ( !m_bCanUnpack )
+					{
+						sError.SetSprintf ( "this source does not support column unpacking" );
+						return false;
+					}
+					int iIndex = m_tSchema.m_dFields.GetLength() - 1;
+					if ( iIndex < SPH_MAX_FIELDS )
+					{
+						m_dUnpack[iIndex] = tUnpack.m_eFormat;
+						m_dUnpackBuffers[iIndex].Resize ( SPH_UNPACK_BUFFER_SIZE );
+					}
+					break;
+				}
+			}
+		}
 		else
 			m_tSchema.AddAttr ( tCol );
 	}
@@ -17864,7 +17896,16 @@ BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 
 	// split columns into fields and attrs
 	ARRAY_FOREACH ( i, m_tSchema.m_dFields )
+	{
+		#if USE_ZLIB
+		if ( m_dUnpack[i] != SPH_UNPACK_NONE )
+		{
+			m_dFields[i] = (BYTE*) SqlUnpackColumn ( i, m_dUnpack[i] );
+			continue;
+		}
+		#endif
 		m_dFields[i] = (BYTE*) SqlColumn ( m_tSchema.m_dFields[i].m_iIndex );
+	}
 
 	int iFieldMVA = 0;
 	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
@@ -18100,6 +18141,106 @@ bool CSphSource_SQL::IterateKillListNext ( SphDocID_t & tDocId )
 	return true;
 }
 
+
+void CSphSource_SQL::ReportUnpackError ( int iIndex, int iError )
+{
+	if ( !m_bUnpackFailed )
+	{
+		m_bUnpackFailed = true;
+		sphWarn ( "failed to unpack column '%s', error=%d", SqlFieldName ( iIndex ), iError );
+	}
+}
+
+
+const char * CSphSource_SQL::SqlUnpackColumn ( int iFieldIndex, ESphUnpackFormat eFormat )
+{
+	int iIndex = m_tSchema.m_dFields[iFieldIndex].m_iIndex;
+	const char * pData = SqlColumn(iIndex);
+#if !USE_ZLIB
+	return pData;
+#else
+	
+	if ( pData==NULL || pData[0]==0 )
+		return pData;
+
+	CSphVector<char> & tBuffer = m_dUnpackBuffers[iFieldIndex];
+	switch ( eFormat )
+	{
+		case SPH_UNPACK_MYSQL_COMPRESS:
+		{
+			unsigned long uSize = 0;
+			for ( int i=0; i<4; i++ )
+				uSize += (unsigned long)pData[i] << ( 8*i );
+			uSize &= 0x3FFFFFFF;
+			
+			int iResult;
+			tBuffer.Resize(uSize + 1);
+			iResult = uncompress ( (Bytef *)&tBuffer[0], &uSize, (Bytef *)pData + 4, SqlColumnLength(iIndex) );
+			if ( iResult==Z_OK )
+			{
+				tBuffer[uSize] = 0;
+				return &tBuffer[0];
+			}
+			else
+				ReportUnpackError ( iIndex, iResult );
+			return NULL;
+		}
+		
+		case SPH_UNPACK_ZLIB:
+		{
+			char * sResult = 0;
+			int iBufferOffset = 0;
+			int iResult;
+
+			z_stream tStream;
+			tStream.zalloc = Z_NULL;
+			tStream.zfree = Z_NULL;
+			tStream.opaque = Z_NULL;
+			tStream.avail_in = SqlColumnLength(iIndex);
+			tStream.next_in = (Bytef *)SqlColumn(iIndex);
+			
+			iResult = inflateInit ( &tStream );
+			if ( iResult!=Z_OK)
+				return NULL;
+
+			for (;;)
+			{
+				tStream.next_out = (Bytef *)&tBuffer[iBufferOffset];
+				tStream.avail_out = tBuffer.GetLength() - iBufferOffset - 1;
+
+				iResult = inflate ( &tStream, Z_NO_FLUSH );
+				if ( iResult==Z_STREAM_END )
+				{
+					tBuffer [ tStream.total_out ] = 0;
+					sResult = &tBuffer[0];
+					break;
+				}
+				else if ( iResult==Z_OK )
+				{
+					assert ( tStream.avail_out == 0 );
+
+					tBuffer.Resize ( tBuffer.GetLength()*2 );
+					iBufferOffset = tStream.total_out;
+				}
+				else
+				{
+					ReportUnpackError ( iIndex, iResult );
+					break;
+				}
+			}
+
+			inflateEnd ( &tStream );
+			return sResult;
+		}
+
+		case SPH_UNPACK_NONE:
+			return pData;
+	}
+	return NULL;
+#endif // USE_ZLIB
+}
+
+
 /////////////////////////////////////////////////////////////////////////////
 // MYSQL SOURCE
 /////////////////////////////////////////////////////////////////////////////
@@ -18114,11 +18255,13 @@ CSphSourceParams_MySQL::CSphSourceParams_MySQL ()
 
 
 CSphSource_MySQL::CSphSource_MySQL ( const char * sName )
-	: CSphSource_SQL ( sName )
-	, m_pMysqlResult( NULL )
-	, m_pMysqlFields( NULL )
-	, m_tMysqlRow	( NULL )
+	: CSphSource_SQL	( sName )
+	, m_pMysqlResult	( NULL )
+	, m_pMysqlFields	( NULL )
+	, m_tMysqlRow		( NULL )
+	, m_pMysqlLengths	( NULL )
 {
+	m_bCanUnpack = true;
 }
 
 
@@ -18130,6 +18273,7 @@ void CSphSource_MySQL::SqlDismissResult ()
 	mysql_free_result ( m_pMysqlResult );
 	m_pMysqlResult = NULL;
 	m_pMysqlFields = NULL;
+	m_pMysqlLengths = NULL;
 }
 
 
@@ -18208,6 +18352,18 @@ const char * CSphSource_MySQL::SqlFieldName ( int iIndex )
 		m_pMysqlFields = mysql_fetch_fields ( m_pMysqlResult );
 
 	return m_pMysqlFields[iIndex].name;
+}
+
+
+DWORD CSphSource_MySQL::SqlColumnLength ( int iIndex )
+{
+	if ( !m_pMysqlResult )
+		return 0;
+
+	if ( !m_pMysqlLengths )
+		m_pMysqlLengths = mysql_fetch_lengths ( m_pMysqlResult );
+
+	return m_pMysqlLengths[iIndex];
 }
 
 
@@ -18395,6 +18551,12 @@ bool CSphSource_PgSQL::SqlFetchRow ()
 	if ( !m_pPgResult )
 		return false;
 	return ( ++m_iPgRow<m_iPgRows );
+}
+
+
+DWORD CSphSource_PgSQL::SqlColumnLength ( int iIndex )
+{
+	return 0;
 }
 
 #endif // USE_PGSQL

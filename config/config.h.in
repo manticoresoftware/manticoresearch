@@ -208,6 +208,9 @@
 /* Define to 1 if you want to compile with PostgreSQL support */
 #undef USE_PGSQL
 
+/* define to use Zlib */
+#undef USE_ZLIB
+
 /* Version number of package */
 #undef VERSION
 

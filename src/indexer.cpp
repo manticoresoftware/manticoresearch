@@ -423,6 +423,26 @@ void SqlAttrsConfigure ( CSphSourceParams_SQL & tParams, const CSphVariant * pHe
 }
 
 
+bool ConfigureUnpack ( CSphVariant * pHead, ESphUnpackFormat eFormat, CSphSourceParams_SQL & tParams, const char * sSourceName )
+{
+#if USE_ZLIB
+	for ( CSphVariant * pVal = pHead; pVal; pVal = pVal->m_pNext )
+	{
+		CSphUnpackInfo & tUnpack = tParams.m_dUnpack.Add();
+		tUnpack.m_sName = CSphString( pVal->cstr() );
+		tUnpack.m_eFormat = eFormat;
+	}
+#else
+	if ( pHead )
+	{
+		fprintf ( stdout, "ERROR: source '%s': unpack is not supported, rebuild with zlib\n", sSourceName );
+		return false;
+	}
+#endif
+	return true;
+}
+
+
 bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSection & hSource, const char * sSourceName )
 {
 	LOC_CHECK ( hSource, "sql_host", "in source '%s'", sSourceName );
@@ -457,6 +477,13 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 	SqlAttrsConfigure ( tParams,	hSource("sql_attr_bool"),			SPH_ATTR_BOOL,		sSourceName );
 	SqlAttrsConfigure ( tParams,	hSource("sql_attr_float"),			SPH_ATTR_FLOAT,		sSourceName );
 	SqlAttrsConfigure ( tParams,	hSource("sql_attr_bigint"),			SPH_ATTR_BIGINT,	sSourceName );
+
+	// unpack
+	if ( !ConfigureUnpack ( hSource("unpack_zlib"), SPH_UNPACK_ZLIB, tParams, sSourceName ) )
+		return false;
+
+	if ( !ConfigureUnpack ( hSource("unpack_mysqlcompress"), SPH_UNPACK_MYSQL_COMPRESS, tParams, sSourceName ) )
+		return false;
 
 	// parse multi-attrs
 	for ( CSphVariant * pVal = hSource("sql_attr_multi"); pVal; pVal = pVal->m_pNext )

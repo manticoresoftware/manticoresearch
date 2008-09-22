@@ -148,6 +148,8 @@ static KeyDesc_t g_dKeysSource[] =
 	{ "sql_group_column",		KEY_LIST | KEY_DEPRECATED, "sql_attr_uint"  },
 	{ "sql_date_column",		KEY_LIST | KEY_DEPRECATED, "sql_attr_timestamp" },
 	{ "sql_str2ordinal_column",	KEY_LIST | KEY_DEPRECATED, "sql_attr_str2ordinal" },
+	{ "unpack_zlib",			KEY_LIST, NULL },
+	{ "unpack_mysqlcompress",	KEY_LIST, NULL },
 	{ NULL,						0, NULL }
 };
 

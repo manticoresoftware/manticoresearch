@@ -801,6 +801,15 @@ enum ESphWordpart
 };
 
 
+/// column unpack format
+enum ESphUnpackFormat
+{
+	SPH_UNPACK_NONE				= 0,
+	SPH_UNPACK_ZLIB				= 1,
+	SPH_UNPACK_MYSQL_COMPRESS	= 2
+};
+
+
 /// source column info
 struct CSphColumnInfo
 {
@@ -1081,6 +1090,11 @@ private:
 	bool					IsFieldInStr ( const char * szField, const char * szString ) const;
 };
 
+struct CSphUnpackInfo
+{
+	ESphUnpackFormat	m_eFormat;
+	CSphString			m_sName;
+};
 
 /// generic SQL source params
 struct CSphSourceParams_SQL
@@ -1097,6 +1111,8 @@ struct CSphSourceParams_SQL
 	CSphVector<CSphColumnInfo>		m_dAttrs;
 
 	int								m_iRangedThrottle;
+
+	CSphVector<CSphUnpackInfo>		m_dUnpack;
 
 	// connection params
 	CSphString						m_sHost;
@@ -1142,6 +1158,7 @@ protected:
 	CSphString			m_sSqlDSN;
 
 	BYTE *				m_dFields [ SPH_MAX_FIELDS ];
+	ESphUnpackFormat	m_dUnpack [ SPH_MAX_FIELDS ];
 
 	SphDocID_t			m_uMinID;		///< grand min ID
 	SphDocID_t			m_uMaxID;		///< grand max ID
@@ -1159,6 +1176,10 @@ protected:
 	bool				m_bWarnedNull;
 	bool				m_bWarnedMax;
 
+	bool				m_bCanUnpack;
+	bool				m_bUnpackFailed;
+	CSphVector<char>	m_dUnpackBuffers [ SPH_MAX_FIELDS ];
+
 	static const int			MACRO_COUNT = 2;
 	static const char * const	MACRO_VALUES [ MACRO_COUNT ];
 
@@ -1175,8 +1196,12 @@ protected:
 	virtual void			SqlDisconnect () = 0;
 	virtual int				SqlNumFields() = 0;
 	virtual bool			SqlFetchRow() = 0;
+	virtual DWORD			SqlColumnLength ( int iIndex ) = 0;
 	virtual const char *	SqlColumn ( int iIndex ) = 0;
 	virtual const char *	SqlFieldName ( int iIndex ) = 0;
+
+	const char *	SqlUnpackColumn ( int iIndex, ESphUnpackFormat eFormat );
+	void			ReportUnpackError ( int iIndex, int iError );
 };
 
 
@@ -1203,6 +1228,7 @@ protected:
 	MYSQL_FIELD *			m_pMysqlFields;
 	MYSQL_ROW				m_tMysqlRow;
 	MYSQL					m_tMysqlDriver;
+	unsigned long *			m_pMysqlLengths;
 
 	CSphString				m_sMysqlUsock;
 	int						m_iMysqlConnectFlags;
@@ -1216,6 +1242,7 @@ protected:
 	virtual void			SqlDisconnect ();
 	virtual int				SqlNumFields();
 	virtual bool			SqlFetchRow();
+	virtual DWORD			SqlColumnLength ( int iIndex );
 	virtual const char *	SqlColumn ( int iIndex );
 	virtual const char *	SqlFieldName ( int iIndex );
 };
@@ -1258,6 +1285,7 @@ protected:
 	virtual void			SqlDisconnect ();
 	virtual int				SqlNumFields();
 	virtual bool			SqlFetchRow();
+	virtual DWORD	SqlColumnLength ( int iIndex );
 	virtual const char *	SqlColumn ( int iIndex );
 	virtual const char *	SqlFieldName ( int iIndex );
 };

@@ -823,16 +823,27 @@ const int		WIN32_PIPE_BUFSIZE		= 32;
 #pragma warning(disable:4127) // conditional expr is const
 #pragma warning(disable:4389) // signed/unsigned mismatch
 
-void SPH_FD_SET ( int fd, fd_set * fdset ) { FD_SET ( fd, fdset ); }
+void _SPH_FD_SET ( int fd, fd_set * fdset ) { FD_SET ( fd, fdset ); }
 
 #pragma warning(default:4127) // conditional expr is const
 #pragma warning(default:4389) // signed/unsigned mismatch
 
 #else // !USE_WINDOWS
 
-#define	SPH_FD_SET FD_SET
+#define	_SPH_FD_SET FD_SET
 
 #endif
+
+#define SPH_FDSET_OVERFLOW(_fd) ((_fd) < 0 || (_fd) >= FD_SETSIZE)
+#define SPH_FD_SET sphFDSet
+
+void sphFDSet ( int fd, fd_set * set)
+{
+	if ( SPH_FDSET_OVERFLOW(fd) )
+		sphFatal ( "sphFDSet() failed fd=%d, FD_SETSIZE=%d", fd, FD_SETSIZE );
+	else
+		_SPH_FD_SET ( fd, set );
+}
 
 
 const char * sphSockError ( int iErr=0 )
@@ -6456,10 +6467,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( g_iMaxPacketSize>128*1024*1024 )
 		sphFatal ( "max_packet_size must not be over 128M" );
 
-	//////////////////////
-	// build indexes hash
-	//////////////////////
-
 	// create and lock pid
 	if ( bOptPIDFile )
 	{
@@ -6472,6 +6479,48 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		if ( !sphLockEx ( g_iPidFD, false ) )
 			sphFatal ( "failed to lock pid file '%s': %s (searchd already running?)", g_sPidFile, strerror(errno) );
 	}
+
+	////////////////////
+	// network startup
+	////////////////////
+
+	// command line arguments override config (but only in --console)
+	if ( bOptListen )
+		g_dSockets.Add ( sphParseAndBind ( sOptListen ) );
+	else if ( bOptPort )
+		g_dSockets.Add ( sphCreateInetSocket ( htonl(INADDR_ANY), iOptPort ) );
+	else 
+	{
+		// listen directives in configuration file
+		for ( CSphVariant *v = hSearchd("listen"); v; v = v->m_pNext )
+			g_dSockets.Add ( sphParseAndBind(*v) );
+		
+		// handle deprecated directives
+		if ( hSearchd("port") )
+		{
+			DWORD uAddr = hSearchd.Exists("address") ?
+				sphGetAddress ( hSearchd["address"].cstr(), GETADDR_STRICT ) : htonl(INADDR_ANY);
+
+			int iPort = hSearchd["port"].intval();
+			CheckPort(iPort);
+			
+			g_dSockets.Add ( sphCreateInetSocket ( uAddr, iPort ) );
+		}
+		
+		// still nothing? listen on INADDR_ANY, default port
+		if ( g_dSockets.GetLength() == 0 )
+			g_dSockets.Add ( sphCreateInetSocket ( htonl(INADDR_ANY), SEARCHD_DEFAULT_PORT ) );
+	}
+
+#if !USE_WINDOWS
+	// reserve an fd for clients
+	int iDevNull = open ( "/dev/null", O_RDWR );
+	int iClientFD = dup(iDevNull);
+#endif
+
+	//////////////////////
+	// build indexes hash
+	//////////////////////
 
 	// configure and preload
 	int iValidIndexes = 0;
@@ -6569,7 +6618,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 		// do daemonize
 #if !USE_WINDOWS
-		int iDevNull = open ( "/dev/null", O_RDWR );
 		close ( STDIN_FILENO );
 		close ( STDOUT_FILENO );
 		close ( STDERR_FILENO );
@@ -6672,38 +6720,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	{
 		// if we're running in console mode, dump queries to tty as well
 		g_iQueryLogFile = g_iLogFile;
-	}
-
-	////////////////////
-	// network startup
-	////////////////////
-
-	// command line arguments override config (but only in --console)
-	if ( bOptListen )
-		g_dSockets.Add ( sphParseAndBind ( sOptListen ) );
-	else if ( bOptPort )
-		g_dSockets.Add ( sphCreateInetSocket ( htonl(INADDR_ANY), iOptPort ) );
-	else 
-	{
-		// listen directives in configuration file
-		for ( CSphVariant *v = hSearchd("listen"); v; v = v->m_pNext )
-			g_dSockets.Add ( sphParseAndBind(*v) );
-		
-		// handle deprecated directives
-		if ( hSearchd("port") )
-		{
-			DWORD uAddr = hSearchd.Exists("address") ?
-				sphGetAddress ( hSearchd["address"].cstr(), GETADDR_STRICT ) : htonl(INADDR_ANY);
-
-			int iPort = hSearchd["port"].intval();
-			CheckPort(iPort);
-			
-			g_dSockets.Add ( sphCreateInetSocket ( uAddr, iPort ) );
-		}
-		
-		// still nothing? listen on INADDR_ANY, default port
-		if ( g_dSockets.GetLength() == 0 )
-			g_dSockets.Add ( sphCreateInetSocket ( htonl(INADDR_ANY), SEARCHD_DEFAULT_PORT ) );
 	}
 
 	/////////////////
@@ -6813,6 +6829,10 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			// handle the client
 			if ( g_bOptConsole || g_bService )
 			{
+				#if !USE_WINDOWS
+				if ( SPH_FDSET_OVERFLOW(iClientSock) )
+					iClientSock = dup2 ( iClientSock, iClientFD );
+				#endif
 				HandleClient ( iClientSock, sClientName, -1 );
 				sphSockClose ( iClientSock );
 				continue;
@@ -6823,6 +6843,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			if ( !g_bHeadDaemon )
 			{
 				// child process, handle client
+				if ( SPH_FDSET_OVERFLOW(iClientSock) )
+					iClientSock = dup2 ( iClientSock, iClientFD );
 				HandleClient ( iClientSock, sClientName, iChildPipe );
 				sphSockClose ( iClientSock );
 				exit ( 0 );

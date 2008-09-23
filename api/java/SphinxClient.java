@@ -214,20 +214,14 @@ public class SphinxClient
 		if ( str==null )
 		{
 			ostream.writeInt ( 0 );
-		} else
-		{
-			ostream.writeShort ( 0 );
-			int THRESH = 65536 / 3;
-			int iLen = str.length();
-			if ( iLen<=THRESH )
-			{
-				ostream.writeUTF ( str );
-			} else
-			{
-				for ( int i=0; i<(iLen+THRESH-1)/THRESH; i++ )
-					ostream.writeUTF ( str.substring ( i*THRESH, Math.min ( i*THRESH+THRESH-1, iLen-1 ) ) );
-			}
+			return;
 		}
+
+		byte[] sBytes = str.getBytes ( "UTF-8" );
+		int iLen = sBytes.length;
+
+		ostream.writeInt ( iLen );
+		ostream.write ( sBytes );
 	}
 
 	/** Internal method. String IO helper. */

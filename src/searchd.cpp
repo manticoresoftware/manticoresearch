@@ -126,6 +126,7 @@ static CSphString		g_sLogFile;							// log file name
 static bool				g_bLogTty		= false;			// cached isatty(g_iLogFile)
 
 static int				g_iReadTimeout	= 5;	// sec
+static int				g_iWriteTimeout	= 5;
 static int				g_iClientTimeout = 300;
 static int				g_iChildren		= 0;
 static int				g_iMaxChildren	= 0;
@@ -1350,10 +1351,79 @@ bool NetOutputBuffer_c::Flush ()
 	assert ( iLen>0 );
 	assert ( iLen<=(int)sizeof(m_dBuffer) );
 
-	int iRes = sphSockSend ( m_iSock, (char*)&m_dBuffer[0], iLen );
-	m_bError = ( iRes!=iLen );
+	char * pBuffer = (char *)&m_dBuffer[0];
+	int iTimeout = g_iWriteTimeout * 1000;
+	int iStart = (int)(sphLongTimer() * 1000);
+	for(;;)
+	{
+		int iRes = sphSockSend ( m_iSock, pBuffer, iLen );
+		if ( iRes < 0 )
+		{
+			int iErrno = sphSockGetErrno();
+			if ( iErrno != EAGAIN )
+			{
+				sphWarning ( "send() failed: %d: %s", iErrno, sphSockError(iErrno) );
+				m_bError = true;
+				break;
+			}
+		}
+		else
+		{
+			m_iSent += iRes;
+			pBuffer += iRes;
+			iLen -= iRes;
+			if ( iLen==0 )
+				break;
+		}
 
-	m_iSent += iLen;
+		if ( iTimeout > 0 )
+		{
+			fd_set fdWrite;
+			FD_ZERO ( &fdWrite );
+			SPH_FD_SET ( m_iSock, &fdWrite );
+
+			struct timeval tvTimeout;
+			tvTimeout.tv_sec = iTimeout / 1000;
+			tvTimeout.tv_usec = iTimeout % 1000;
+			
+			iRes = select ( m_iSock+1, NULL, &fdWrite, NULL, &tvTimeout );
+		}
+		else
+			iRes = 0;
+
+		switch ( iRes )
+		{
+			case 1: // ready for writing
+				break;
+
+			case 0: // timed out
+			{
+				sphWarning ( "timed out while trying to flush network buffers" );
+				m_bError = true;
+				break;
+			}
+
+			case -1: // error
+			{
+				int iErrno = sphSockGetErrno();
+				if ( iErrno == EINTR )
+					break;
+				sphWarning ( "select() failed: %d: %s", iErrno, sphSockError(iErrno) );
+				m_bError = true;
+				break;
+			}
+		}
+
+		if ( m_bError )
+			break;
+		else
+		{
+			int iNow = (int)(sphLongTimer() * 1000);
+			iTimeout -= iStart - iNow;
+			iStart = iNow;
+		}
+	}
+
 	m_pBuffer = m_dBuffer;
 	return !m_bError;
 }

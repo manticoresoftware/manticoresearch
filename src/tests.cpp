@@ -366,7 +366,8 @@ void TestStripper ()
 		{ "testing <1 <\" <\x80 <\xe0 <\xff </3 malformed tags", "", "", "testing <1 <\" <\x80 <\xe0 <\xff </3 malformed tags" },
 		{ "testing comm<!--comm-->ents", "", "", "testing comments" },
 		{ "&lt; &gt; &thetasym; &somethingverylong; &the", "", "", "< > \xCF\x91 &somethingverylong; &the" },
-		{ "testing <img src=\"g/smth.jpg\" alt=\"nice picture\" rel=anotherattr junk=throwaway>inline tags vs attr indexing", "img=alt,rel", "", "testing nice picture anotherattr inline tags vs attr indexing" }
+		{ "testing <img src=\"g/smth.jpg\" alt=\"nice picture\" rel=anotherattr junk=throwaway>inline tags vs attr indexing", "img=alt,rel", "", "testing nice picture anotherattr inline tags vs attr indexing" },
+		{ "this <?php $code = \"must be stripped\"; ?> away", "", "", "this  away" }
 	};
 
 	int nTests = (int)(sizeof(sTests)/sizeof(sTests[0]));

@@ -16806,6 +16806,21 @@ void CSphHTMLStripper::Strip ( BYTE * sData )
 				s += 3; // skip closing '-->'
 				continue;
 
+			} else if ( s[1]=='?' )
+			{
+				// scan until PI end
+				s += 2; // skip opening '<?'
+				while ( *s )
+				{
+					if ( s[0]=='?' && s[1]=='>' )
+						break;
+					s++;
+				}
+				if ( !*s )
+					break;
+				s += 2; // skip closing '?>'
+				continue;
+
 			} else
 			{
 				// simply malformed

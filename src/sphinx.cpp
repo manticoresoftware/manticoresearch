@@ -14578,6 +14578,8 @@ bool CSphIndex_VLN::Rename ( const char * sNewBase )
 			continue;
 		if ( !strcmp ( sExt, "spm" ) && m_uVersion<4 ) // .spm files are v4+
 			continue;
+		if ( !strcmp ( sExt, "spk" ) && m_uVersion<10 ) // .spk files are v10+
+			continue;
 
 #if !USE_WINDOWS
 		if ( !strcmp ( sExt, "spl" ) && m_iLockFD<0 ) // .spl files are locks

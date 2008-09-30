@@ -250,8 +250,8 @@ class SphinxClient:
 		"""
 		Set offset and count into result set, and optionally set max-matches and cutoff limits.
 		"""
-		assert(isinstance(offset, int) and offset>=0)
-		assert(isinstance(limit, int) and limit>0)
+		assert ( type(offset) in [int,long] and 0<=offset<16777216 )
+		assert ( type(limit) in [int,long] and 0<limit<16777216 )
 		assert(maxmatches>=0)
 		self._offset = offset
 		self._limit = limit

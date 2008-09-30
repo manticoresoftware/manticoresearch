@@ -541,17 +541,20 @@ class CSphAutofile : ISphNoncopyable
 protected:
 	int			m_iFD;			///< my file descriptior
 	CSphString	m_sFilename;	///< my file name
+	bool		m_bTemporary;	///< whether to unlink this file on Close()
 
 public:
 	CSphAutofile ()
 		: m_iFD ( -1 )
+		, m_bTemporary ( false )
 	{
 	}
 
-	CSphAutofile ( const char * sName, int iMode, CSphString & sError )
+	CSphAutofile ( const char * sName, int iMode, CSphString & sError, bool bTemp=false )
 		: m_iFD ( -1 )
+		, m_bTemporary ( false )
 	{
-		Open ( sName, iMode, sError );
+		Open ( sName, iMode, sError, bTemp );
 	}
 
 	~CSphAutofile ()
@@ -559,26 +562,34 @@ public:
 		Close ();
 	}
 
-	int Open ( const char * szName, int iMode, CSphString & sError )
+	int Open ( const char * szName, int iMode, CSphString & sError, bool bTemp=false )
 	{
 		assert ( m_iFD == -1 && m_sFilename.IsEmpty () );
 		assert ( szName );
 
 		m_iFD = ::open ( szName, iMode, 0644 );
-		m_sFilename = szName;
+		m_sFilename = szName; // not exactly sure why is this uncoditional. for error reporting later, i suppose
 
 		if ( m_iFD<0 )
 			sError.SetSprintf ( "failed to open %s: %s", szName, strerror(errno) );
+		else
+			m_bTemporary = bTemp; // only if we managed to actually open it
 
 		return m_iFD;
 	}
 
 	void Close ()
 	{
-		if ( m_iFD>=0 ) 
+		if ( m_iFD>=0 )
+		{
 			::close ( m_iFD );
+			if ( m_bTemporary )
+				::unlink ( m_sFilename.cstr() );
+		}
+
 		m_iFD = -1;
 		m_sFilename = "";
+		m_bTemporary = false;
 	}
 
 public:
@@ -7741,7 +7752,7 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAut
 	MvaEntry_t * pMva = pMvaPool;
 
 	// create temp file
-	CSphAutofile fdTmpMva ( GetIndexFileName("tmp3"), SPH_O_NEW, m_sLastError );
+	CSphAutofile fdTmpMva ( GetIndexFileName("tmp3"), SPH_O_NEW, m_sLastError, true );
 	if ( fdTmpMva.GetFD()<0 )
 		return false;
 
@@ -7947,8 +7958,6 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAut
 	if ( m_pProgress )
 		m_pProgress ( &m_tProgress, true );
 
-	fdTmpMva.Close ();
-	unlink ( GetIndexFileName("tmp3") );
 	return true;
 }
 
@@ -8504,10 +8513,10 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	int nFieldMVAs = 0;
 
 	// create temp files
-	CSphAutofile fdLock ( GetIndexFileName("tmp0"), SPH_O_NEW, m_sLastError );
-	CSphAutofile fdHits ( GetIndexFileName ( m_bInplaceSettings ? "spp" : "tmp1" ), SPH_O_NEW, m_sLastError );
-	CSphAutofile fdDocinfos ( GetIndexFileName ( m_bInplaceSettings ? "spa" : "tmp2" ), SPH_O_NEW, m_sLastError );
-	CSphAutofile fdTmpFieldMVAs ( GetIndexFileName("tmp7"), SPH_O_NEW, m_sLastError );
+	CSphAutofile fdLock ( GetIndexFileName("tmp0"), SPH_O_NEW, m_sLastError, true );
+	CSphAutofile fdHits ( GetIndexFileName ( m_bInplaceSettings ? "spp" : "tmp1" ), SPH_O_NEW, m_sLastError, !m_bInplaceSettings );
+	CSphAutofile fdDocinfos ( GetIndexFileName ( m_bInplaceSettings ? "spa" : "tmp2" ), SPH_O_NEW, m_sLastError, !m_bInplaceSettings );
+	CSphAutofile fdTmpFieldMVAs ( GetIndexFileName("tmp7"), SPH_O_NEW, m_sLastError, true );
 	CSphWriter tOrdWriter;
 
 	CSphString sRawOrdinalsFile = GetIndexFileName("tmp4");
@@ -8955,7 +8964,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 		CSphString sUnsortedIdFile = GetIndexFileName("tmp5");
 
-		CSphAutofile fdRawOrdinals ( sRawOrdinalsFile.cstr (), SPH_O_READ, m_sLastError );
+		CSphAutofile fdRawOrdinals ( sRawOrdinalsFile.cstr (), SPH_O_READ, m_sLastError, true );
 		if ( fdRawOrdinals.GetFD () < 0 )
 			return 0;
 
@@ -8973,7 +8982,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		if ( !SortOrdinals ( sUnsortedIdFile.cstr (), fdRawOrdinals.GetFD (), iArenaSize, iOrdinalsInPool, dOrdBlockSize, iArenaSize < uMemNeededForReaders ) )
 			return 0;
 
-		CSphAutofile fdUnsortedId ( sUnsortedIdFile.cstr (), SPH_O_READ, m_sLastError );
+		CSphAutofile fdUnsortedId ( sUnsortedIdFile.cstr (), SPH_O_READ, m_sLastError, true );
 		if ( fdUnsortedId.GetFD () < 0 )
 			return 0;
 
@@ -8982,12 +8991,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 		if ( !SortOrdinalIds ( sSortedOrdinalIdFile.cstr (), fdUnsortedId.GetFD (), iArenaSize, dOrdBlockSize, iArenaSize < uMemNeededForSorting ) )
 			return 0;
-
-		fdRawOrdinals.Close ();
-		fdUnsortedId.Close ();
-
-		::unlink ( sRawOrdinalsFile.cstr () );
-		::unlink ( sUnsortedIdFile.cstr () );
 	}
 
 	// initialize MVA reader
@@ -9072,7 +9075,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		CSphVector < CSphBin > dOrdReaders;
 		SphOffset_t iSharedOrdOffset = -1;
 
-		CSphAutofile fdTmpSortedIds ( sSortedOrdinalIdFile.cstr (), SPH_O_READ, m_sLastError );
+		CSphAutofile fdTmpSortedIds ( sSortedOrdinalIdFile.cstr (), SPH_O_READ, m_sLastError, true );
 
 		if ( bHaveOrdinals )
 		{
@@ -9219,12 +9222,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		// clean up readers
 		ARRAY_FOREACH ( i, dBins )
 			SafeDelete ( dBins[i] );
-
-		if ( bHaveOrdinals )
-		{
-			fdTmpSortedIds.Close ();
-			::unlink ( sSortedOrdinalIdFile.cstr () );
-		}
 
 		dBins.Reset ();
 	}
@@ -9457,22 +9454,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 	PROFILE_END ( invert_hits );
 
-	// close and unlink temp files
-	// FIXME! should be unlinked on early-exit too
-	if ( !m_bInplaceSettings )
-		fdHits.Close ();
-
-	fdDocinfos.Close ();
-	fdLock.Close ();
-
-	char sBuf [ SPH_MAX_FILENAME_LEN ];
-	snprintf ( sBuf, sizeof(sBuf), "%s.tmp0", m_sFilename.cstr() ); unlink ( sBuf );
-
-	if ( !m_bInplaceSettings )
-	{
-		snprintf ( sBuf, sizeof(sBuf), "%s.tmp1", m_sFilename.cstr() ); unlink ( sBuf );
-		snprintf ( sBuf, sizeof(sBuf), "%s.tmp2", m_sFilename.cstr() ); unlink ( sBuf );
-	}
 	// we're done
 	if ( !cidxDone() )
 		return 0;

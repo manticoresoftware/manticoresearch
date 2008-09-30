@@ -423,7 +423,9 @@ int main ( int argc, char ** argv )
 							LOC_MYSQL_ERROR ( "mysql_fetch_row" );
 
 						for ( int iField=0; iField<(int)pSqlResult->field_count; iField++ )
-							fprintf ( stdout, "\t%s=%s\n", pSqlResult->fields[iField].name, tRow[iField] );
+							fprintf ( stdout, "\t%s=%s\n",
+								( pSqlResult->fields && pSqlResult->fields[iField].name ) ? pSqlResult->fields[iField].name : "(NULL)",
+								tRow[iField] ? tRow[iField] : "(NULL)" );
 
 						mysql_free_result ( pSqlResult );
 						break;

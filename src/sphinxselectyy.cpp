@@ -78,6 +78,7 @@
 
 #if USE_WINDOWS
 #pragma warning(push,1)
+#pragma warning(disable:4702) // unreachable code
 #endif
 
 
@@ -282,9 +283,9 @@ static const yysigned_char yyrhs[] =
 /* YYRLINE[YYN] -- source line where rule number YYN was defined.  */
 static const unsigned char yyrline[] =
 {
-       0,    30,    30,    31,    35,    36,    37,    41,    42,    43,
-      44,    45,    46,    47,    48,    49,    50,    51,    52,    53,
-      54,    58,    62,    63
+       0,    31,    31,    32,    36,    37,    38,    42,    43,    44,
+      45,    46,    47,    48,    49,    50,    51,    52,    53,    54,
+      55,    59,    63,    64
 };
 #endif
 

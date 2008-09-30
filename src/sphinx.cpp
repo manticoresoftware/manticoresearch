@@ -18150,13 +18150,19 @@ void CSphSource_SQL::ReportUnpackError ( int iIndex, int iError )
 }
 
 
+#if !USE_ZLIB
+
+const char * CSphSource_SQL::SqlUnpackColumn ( int iFieldIndex, ESphUnpackFormat )
+{
+	return SqlColumn ( m_tSchema.m_dFields[iFieldIndex].m_iIndex );
+}
+
+#else
+
 const char * CSphSource_SQL::SqlUnpackColumn ( int iFieldIndex, ESphUnpackFormat eFormat )
 {
 	int iIndex = m_tSchema.m_dFields[iFieldIndex].m_iIndex;
 	const char * pData = SqlColumn(iIndex);
-#if !USE_ZLIB
-	return pData;
-#else
 	
 	if ( pData==NULL || pData[0]==0 )
 		return pData;
@@ -18235,9 +18241,8 @@ const char * CSphSource_SQL::SqlUnpackColumn ( int iFieldIndex, ESphUnpackFormat
 			return pData;
 	}
 	return NULL;
-#endif // USE_ZLIB
 }
-
+#endif // USE_ZLIB
 
 /////////////////////////////////////////////////////////////////////////////
 // MYSQL SOURCE

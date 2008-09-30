@@ -423,24 +423,30 @@ void SqlAttrsConfigure ( CSphSourceParams_SQL & tParams, const CSphVariant * pHe
 }
 
 
+#if USE_ZLIB
 bool ConfigureUnpack ( CSphVariant * pHead, ESphUnpackFormat eFormat, CSphSourceParams_SQL & tParams, const char * sSourceName )
 {
-#if USE_ZLIB
 	for ( CSphVariant * pVal = pHead; pVal; pVal = pVal->m_pNext )
 	{
 		CSphUnpackInfo & tUnpack = tParams.m_dUnpack.Add();
 		tUnpack.m_sName = CSphString( pVal->cstr() );
 		tUnpack.m_eFormat = eFormat;
 	}
+	return true;
+}
+
 #else
+
+bool ConfigureUnpack ( CSphVariant * pHead, ESphUnpackFormat, CSphSourceParams_SQL &, const char * sSourceName )
+{
 	if ( pHead )
 	{
 		fprintf ( stdout, "ERROR: source '%s': unpack is not supported, rebuild with zlib\n", sSourceName );
 		return false;
 	}
-#endif
 	return true;
 }
+#endif // USE_ZLIB
 
 
 bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSection & hSource, const char * sSourceName )

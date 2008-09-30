@@ -818,33 +818,34 @@ const int		SEARCHD_MAX_ATTR_VALUES	= 4096;
 const int		WIN32_PIPE_BUFSIZE		= 32;
 
 
-// wrap FD_SET to prevent warnings on Windows
 #if USE_WINDOWS
 
-#pragma warning(disable:4127) // conditional expr is const
-#pragma warning(disable:4389) // signed/unsigned mismatch
+/// on Windows, the wrapper just prevents the warnings
+void sphFDSet ( int fd, fd_set * fdset )
+{
+	#pragma warning(disable:4127) // conditional expr is const
+	#pragma warning(disable:4389) // signed/unsigned mismatch
 
-void _SPH_FD_SET ( int fd, fd_set * fdset ) { FD_SET ( fd, fdset ); }
+	FD_SET ( fd, fdset );
 
-#pragma warning(default:4127) // conditional expr is const
-#pragma warning(default:4389) // signed/unsigned mismatch
+	#pragma warning(default:4127) // conditional expr is const
+	#pragma warning(default:4389) // signed/unsigned mismatch
+}
 
 #else // !USE_WINDOWS
 
-#define	_SPH_FD_SET FD_SET
-
-#endif
-
 #define SPH_FDSET_OVERFLOW(_fd) ((_fd) < 0 || (_fd) >= FD_SETSIZE)
-#define SPH_FD_SET sphFDSet
 
+/// on UNIX, we also check that the descript won't corrupt the stack
 void sphFDSet ( int fd, fd_set * set)
 {
 	if ( SPH_FDSET_OVERFLOW(fd) )
 		sphFatal ( "sphFDSet() failed fd=%d, FD_SETSIZE=%d", fd, FD_SETSIZE );
 	else
-		_SPH_FD_SET ( fd, set );
+		FD_SET ( fd, set );
 }
+
+#endif // USE_WINDOWS
 
 
 const char * sphSockError ( int iErr=0 )
@@ -1094,11 +1095,11 @@ int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout )
 	{
 		fd_set fdRead;
 		FD_ZERO ( &fdRead );
-		SPH_FD_SET ( iSock, &fdRead );
+		sphFDSet ( iSock, &fdRead );
 
 		fd_set fdExcept;
 		FD_ZERO ( &fdExcept );
-		SPH_FD_SET ( iSock, &fdExcept );
+		sphFDSet ( iSock, &fdExcept );
 
 		struct timeval tv;
 		tv.tv_sec = iLeftMs / 1000;
@@ -1380,7 +1381,7 @@ bool NetOutputBuffer_c::Flush ()
 		{
 			fd_set fdWrite;
 			FD_ZERO ( &fdWrite );
-			SPH_FD_SET ( m_iSock, &fdWrite );
+			sphFDSet ( m_iSock, &fdWrite );
 
 			struct timeval tvTimeout;
 			tvTimeout.tv_sec = iTimeout / 1000;
@@ -1853,7 +1854,7 @@ int QueryRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, const IRequ
 				assert ( !tAgent.m_sPath.IsEmpty() || tAgent.m_iPort>0 );
 				assert ( tAgent.m_iSock>0 );
 
-				SPH_FD_SET ( tAgent.m_iSock, ( tAgent.m_eState==AGENT_CONNECT ) ? &fdsWrite : &fdsRead );
+				sphFDSet ( tAgent.m_iSock, ( tAgent.m_eState==AGENT_CONNECT ) ? &fdsWrite : &fdsRead );
 				iMax = Max ( iMax, tAgent.m_iSock );
 				bDone = false;
 			}
@@ -1959,7 +1960,7 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, IReplyPar
 				assert ( !tAgent.m_sPath.IsEmpty() || tAgent.m_iPort>0 );
 				assert ( tAgent.m_iSock>0 );
 
-				SPH_FD_SET ( tAgent.m_iSock, &fdsRead );
+				sphFDSet ( tAgent.m_iSock, &fdsRead );
 				iMax = Max ( iMax, tAgent.m_iSock );
 				bDone = false;
 			}
@@ -6825,7 +6826,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		CheckFlush ();
 
 		ARRAY_FOREACH ( i, g_dSockets )
-			SPH_FD_SET ( g_dSockets[i], &fdsAccept );
+			sphFDSet ( g_dSockets[i], &fdsAccept );
 
 		struct timeval tvTimeout;
 		tvTimeout.tv_sec = USE_WINDOWS ? 0 : 1;

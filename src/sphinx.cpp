@@ -15074,7 +15074,11 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 
 		// final lookup
 		bool bNeedLookup = !m_bEarlyLookup && !m_bLateLookup;
-		bool bNeedEarlyCalc = pQuery->m_bGeoAnchor && pQuery->m_dFilters.GetLength ()==0;
+
+		// tricky
+		// EarlyCalc() only gets called when there are filters
+		// however, even when there are none, we still might need to compute certain values (geodist, or generally select expressions)
+		bool bNeedEarlyCalc = !pQuery->m_dFilters.GetLength() && ( pQuery->m_bGeoAnchor || !pQuery->m_sSelect.IsEmpty() );
 		if ( pTop->GetLength() && ( bNeedLookup || bNeedEarlyCalc )  )
 		{
 			const int iCount = pTop->GetLength ();

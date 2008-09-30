@@ -277,7 +277,7 @@ class SphinxClient
 			$this->_path = 'unix://' . $host;
 			return;
 		}
-		if ( substr ( $host, 7 ) == 'unix://' )
+		if ( substr ( $host, 0, 7 )=="unix://" )
 		{
 			$this->_path = $host;
 			return;

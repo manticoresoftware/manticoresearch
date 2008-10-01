@@ -20436,6 +20436,12 @@ const char * CSphSource_MSSQL::SqlFieldName ( int iIndex )
 }
 
 
+DWORD CSphSource_MSSQL::SqlColumnLength ( int )
+{
+	return 0;
+}
+
+
 bool CSphSource_MSSQL::Setup ( const CSphSourceParams_MSSQL & tParams )
 {
 	if ( !CSphSource_SQL::Setup ( tParams ) )

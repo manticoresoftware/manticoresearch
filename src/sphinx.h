@@ -18,7 +18,7 @@
 
 #ifdef _WIN32
 	#define USE_MYSQL		1	/// whether to compile MySQL support
-	#define USE_MSSQL		1	/// whether to compile MSSQL support
+	#define USE_MSSQL		0	/// whether to compile MSSQL support
 	#define USE_LIBEXPAT	1	/// whether to compile libexpat support
 	#define USE_LIBICONV	1	/// whether to compile iconv support
 	#define USE_LIBXML		0	/// whether to compile libxml support
@@ -1321,6 +1321,7 @@ protected:
 	virtual bool			SqlFetchRow();
 	virtual const char *	SqlColumn ( int iIndex );
 	virtual const char *	SqlFieldName ( int iIndex );
+	virtual DWORD			SqlColumnLength ( int iIndex );
 
 private:
 	SQLHENV					m_hEnv;

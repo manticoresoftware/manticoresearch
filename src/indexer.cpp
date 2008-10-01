@@ -802,6 +802,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 	// parse all sources
 	CSphVector<CSphSource*> dSources;
 	bool bGotAttrs = false;
+	bool bSpawnFailed = false;
 
 	for ( CSphVariant * pSourceName = hIndex("source"); pSourceName; pSourceName = pSourceName->m_pNext )
 	{
@@ -814,7 +815,10 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 
 		CSphSource * pSource = SpawnSource ( hSource, pSourceName->cstr(), pTokenizer->IsUtf8 () );
 		if ( !pSource )
+		{
+			bSpawnFailed = true;
 			continue;
+		}
 
 		if ( pSource->HasAttrsConfigured() )
 			bGotAttrs = true;
@@ -847,6 +851,12 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 
 		pSource->SetTokenizer ( pTokenizer );
 		dSources.Add ( pSource );
+	}
+
+	if ( bSpawnFailed )
+	{
+		fprintf ( stdout, "ERROR: index '%s': failed to configure some of the sources, will not index.\n", sIndexName );
+		return false;
 	}
 
 	if ( !dSources.GetLength() )

@@ -8616,6 +8616,13 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			if ( !pSource->IterateHitsNext ( m_sLastError ) )
 				return 0;
 
+			// ensure docid is sane
+			if ( pSource->m_tDocInfo.m_iDocID==DOCID_MAX )
+			{
+				m_sLastError.SetSprintf ( "docid==DOCID_MAX (source broken?)" );
+				return 0;
+			}
+
 			// check for eof
 			if ( !pSource->m_tDocInfo.m_iDocID )
 				break;
@@ -14410,7 +14417,7 @@ bool CSphIndex_VLN::Preread ()
 						continue;
 
 					// sanity checks
-					if ( uOff>=m_pMva.GetLength() )
+					if ( uOff>=m_pMva.GetNumEntries() )
 					{
 						m_sLastError.SetSprintf ( "broken index: mva offset out of bounds, id=" DOCID_FMT, uDocID );
 						return false;
@@ -17000,6 +17007,8 @@ CSphSource::CSphSource ( const char * sName )
 	, m_iMinInfixLen ( 0 )
 	, m_iBoundaryStep ( 0 )
 	, m_bIndexExactWords ( false )
+	, m_bWarnedNull ( false )
+	, m_bWarnedMax ( false )
 {
 	m_pStripper = new CSphHTMLStripper ();
 }
@@ -17070,6 +17079,31 @@ void CSphSource::SetEmitExactWords ( bool bEmit )
 	m_bIndexExactWords = bEmit;
 }
 
+
+SphDocID_t CSphSource::VerifyID ( SphDocID_t uID )
+{
+	if ( uID==0 )
+	{
+		if ( !m_bWarnedNull )
+		{
+			sphWarn ( "zero/NULL document_id, skipping" );
+			m_bWarnedNull = true;
+		}
+		return 0;
+	}
+
+	if ( uID==DOCID_MAX )
+	{
+		if ( !m_bWarnedMax )
+		{
+			sphWarn ( "DOCID_MAX document_id, skipping" );
+			m_bWarnedMax = true;
+		}
+		return 0;
+	}
+
+	return uID;
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // DOCUMENT SOURCE
@@ -17424,8 +17458,6 @@ CSphSource_SQL::CSphSource_SQL ( const char * sName )
 	, m_iMultiAttr			( -1 )
 	, m_iFieldMVA			( 0 )
 	, m_iFieldMVAIterator	( 0 )
-	, m_bWarnedNull			( false )
-	, m_bWarnedMax			( false )
 	, m_bCanUnpack			( false )
 	, m_bUnpackFailed		( false )
 {
@@ -17876,23 +17908,8 @@ BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 		}
 
 		// get him!
-		m_tDocInfo.m_iDocID = sphToDocid ( SqlColumn(0) );
+		m_tDocInfo.m_iDocID = VerifyID ( sphToDocid ( SqlColumn(0) ) );
 		m_uMaxFetchedID = Max ( m_uMaxFetchedID, m_tDocInfo.m_iDocID );
-
-		if ( !m_tDocInfo.m_iDocID )
-		{
-			if ( !m_bWarnedNull )
-				sphWarn ( "zero/NULL document_id, skipping" );
-			m_bWarnedNull = true;
-		}
-
-		if ( m_tDocInfo.m_iDocID==DOCID_MAX )
-		{
-			if ( !m_bWarnedMax )
-				sphWarn ( "DOCID_MAX document_id, skipping" );
-			m_bWarnedMax = true;
-			m_tDocInfo.m_iDocID = 0;
-		}
 
 	} while ( !m_tDocInfo.m_iDocID );
 
@@ -19669,13 +19686,19 @@ BYTE **	CSphSource_XMLPipe2::NextDocument ( CSphString & sError )
 	while ( m_dParsedDocuments.GetLength () == 0 && ( iReadResult = ParseNextChunk ( sError ) ) == 1 );
 #endif
 		
-	if ( m_dParsedDocuments.GetLength () != 0 )
+	while ( m_dParsedDocuments.GetLength () != 0 )
 	{
 		Document_t * pDocument = m_dParsedDocuments [0];
 		int nAttrs = m_tSchema.GetAttrsCount ();
 
 		// docid
-		m_tDocInfo.m_iDocID = pDocument->m_iDocID;
+		m_tDocInfo.m_iDocID = VerifyID ( pDocument->m_iDocID );
+		if ( m_tDocInfo.m_iDocID==0 )
+		{
+			SafeDelete ( m_dParsedDocuments [0] );
+			m_dParsedDocuments.RemoveFast ( 0 );
+			continue;
+		}
 
 		// attributes
 		int iFieldMVA = 0;

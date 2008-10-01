@@ -1062,6 +1062,11 @@ protected:
 	int									m_iMinInfixLen;	///< min indexable infix length (0 means don't index infixes)
 	int									m_iBoundaryStep;///< additional boundary word position increment
 	bool								m_bIndexExactWords;///< exact (non-stemmed) word indexing flag
+
+	bool		m_bWarnedNull;
+	bool		m_bWarnedMax;
+
+	SphDocID_t	VerifyID ( SphDocID_t uID );
 };
 
 
@@ -1177,9 +1182,6 @@ protected:
 	CSphVector < int >	m_dAttrToFieldMVA;
 
 	CSphSourceParams_SQL		m_tParams;
-
-	bool				m_bWarnedNull;
-	bool				m_bWarnedMax;
 
 	bool				m_bCanUnpack;
 	bool				m_bUnpackFailed;

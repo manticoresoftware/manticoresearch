@@ -3719,9 +3719,13 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 						int iNumFilters = pQuery->m_dFilters.GetLength ();
 						for ( int i = iLocal + 1; i < dLocal.GetLength (); i++ )
 						{
-							CSphFilter tKillListFilter;
-							SetupKillListFilter ( tKillListFilter, tServed.m_pIndex->GetKillList (), tServed.m_pIndex->GetKillListSize () );
-							pQuery->m_dFilters.Add ( tKillListFilter );
+							const ServedIndex_t & tServed = g_hIndexes [ dLocal[i] ];
+							if ( tServed.m_pIndex->GetKillListSize () )
+							{
+								CSphFilter tKillListFilter;
+								SetupKillListFilter ( tKillListFilter, tServed.m_pIndex->GetKillList (), tServed.m_pIndex->GetKillListSize () );
+								pQuery->m_dFilters.Add ( tKillListFilter );
+							}
 						}
 
 						if ( !tServed.m_pIndex->MultiQuery ( &m_dQueries[iStart], &tStats,

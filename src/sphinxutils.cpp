@@ -121,6 +121,7 @@ static KeyDesc_t g_dKeysSource[] =
 	{ "sql_port",				0, NULL },
 	{ "sql_sock",				0, NULL },
 	{ "mysql_connect_flags",	0, NULL },
+	{ "mssql_winauth",			0, NULL },
 	{ "sql_query_pre",			KEY_LIST, NULL },
 	{ "sql_query",				0, NULL },
 	{ "sql_query_range",		0, NULL },

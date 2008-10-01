@@ -18,6 +18,7 @@
 
 #ifdef _WIN32
 	#define USE_MYSQL		1	/// whether to compile MySQL support
+	#define USE_MSSQL		1	/// whether to compile MSSQL support
 	#define USE_LIBEXPAT	1	/// whether to compile libexpat support
 	#define USE_LIBICONV	1	/// whether to compile iconv support
 	#define USE_LIBXML		0	/// whether to compile libxml support
@@ -60,6 +61,10 @@ typedef __int64				SphOffset_t;
 #define STDOUT_FILENO		fileno(stdout)
 #else
 typedef off_t				SphOffset_t;
+#endif
+
+#if ( USE_WINDOWS && USE_MSSQL )
+#include <sqlext.h>
 #endif
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1290,6 +1295,54 @@ protected:
 	virtual const char *	SqlFieldName ( int iIndex );
 };
 #endif // USE_PGSQL
+
+#if USE_WINDOWS && USE_MSSQL
+struct CSphSourceParams_MSSQL : CSphSourceParams_SQL
+{
+	bool		m_bWinAuth;					///< auth type
+
+				CSphSourceParams_MSSQL ();
+};
+
+// ms sql server source implementation
+struct CSphSource_MSSQL : CSphSource_SQL
+{
+							CSphSource_MSSQL ( const char * sName );
+	bool					Setup ( const CSphSourceParams_MSSQL & tParams );
+
+protected:
+	virtual void			SqlDismissResult ();
+	virtual bool			SqlQuery ( const char * sQuery );
+	virtual bool			SqlIsError ();
+	virtual const char *	SqlError ();
+	virtual bool			SqlConnect ();
+	virtual void			SqlDisconnect ();
+	virtual int				SqlNumFields();
+	virtual bool			SqlFetchRow();
+	virtual const char *	SqlColumn ( int iIndex );
+	virtual const char *	SqlFieldName ( int iIndex );
+
+private:
+	SQLHENV					m_hEnv;
+	SQLHDBC					m_hDBC;
+	SQLHANDLE				m_hStmt;
+	int						m_nResultCols;
+	bool					m_bWinAuth;
+	CSphString				m_sError;
+
+	struct QueryColumn_t
+	{
+		CSphVector<char>	m_dContents;
+		CSphString			m_sName;
+		SQLLEN				m_iInd;
+	};
+
+	static const int		DEFAULT_COL_SIZE = 1024;
+	CSphVector<QueryColumn_t> m_dColumns;
+
+	void					GetSqlError ( SQLSMALLINT iHandleType, SQLHANDLE hHandle );
+};
+#endif
 
 
 /// XML pipe source implementation

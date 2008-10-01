@@ -551,6 +551,26 @@ CSphSource * SpawnSourceMySQL ( const CSphConfigSection & hSource, const char * 
 }
 #endif // USE_MYSQL
 
+#if ( USE_WINDOWS && USE_MSSQL )
+CSphSource * SpawnSourceMSSQL ( const CSphConfigSection & hSource, const char * sSourceName )
+{
+	assert ( hSource["type"]=="mssql" );
+
+	CSphSourceParams_MSSQL tParams;
+	if ( !SqlParamsConfigure ( tParams, hSource, sSourceName ) )
+		return NULL;
+
+	int iAuth = 0;
+	LOC_GETI ( iAuth,	"mssql_winauth" );
+	tParams.m_bWinAuth = iAuth != 0;
+
+	CSphSource_MSSQL * pSrcMSSQL = new CSphSource_MSSQL ( sSourceName );
+	if ( !pSrcMSSQL->Setup ( tParams ) )
+		SafeDelete ( pSrcMSSQL );
+
+	return pSrcMSSQL;
+}
+#endif // USE_MSSQL
 
 CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char * sSourceName, bool bUTF8 )
 {
@@ -616,6 +636,11 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 	#if USE_MYSQL
 	if ( hSource["type"]=="mysql")
 		return SpawnSourceMySQL ( hSource, sSourceName );
+	#endif
+
+	#if USE_MSSQL
+	if ( hSource["type"]=="mssql")
+		return SpawnSourceMSSQL ( hSource, sSourceName );
 	#endif
 
 	if ( hSource["type"]=="xmlpipe" || hSource["type"]=="xmlpipe2" )

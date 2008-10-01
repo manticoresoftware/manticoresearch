@@ -61,6 +61,10 @@
 #if USE_WINDOWS
 	#include <io.h> // for open()
 
+	#if USE_MSSQL
+	#include <sql.h>
+	#endif
+
 	// workaround Windows quirks
 	#define popen		_popen
 	#define pclose		_pclose
@@ -20233,6 +20237,233 @@ FILE * sphDetectXMLPipe ( const char * szCommand, BYTE * dBuf, int & iBufSize, i
 
 	return pPipe;
 }
+
+
+#if ( USE_WINDOWS && USE_MSSQL )
+
+CSphSourceParams_MSSQL::CSphSourceParams_MSSQL ()
+	: m_bWinAuth	( false )
+{
+}
+
+
+CSphSource_MSSQL::CSphSource_MSSQL ( const char * sName )
+	: CSphSource_SQL	( sName )
+	, m_hEnv			( NULL )
+	, m_hDBC			( NULL )
+	, m_hStmt			( NULL )
+	, m_nResultCols		( 0 )
+	, m_bWinAuth		( false )
+{
+}
+
+
+void CSphSource_MSSQL::SqlDismissResult ()
+{
+	if ( m_hStmt )
+	{
+		SQLCloseCursor ( m_hStmt );
+		SQLFreeHandle ( SQL_HANDLE_STMT, m_hStmt );
+		m_hStmt = NULL;
+	}
+}
+
+
+bool CSphSource_MSSQL::SqlQuery ( const char * sQuery )
+{
+	if ( SQLAllocHandle ( SQL_HANDLE_STMT, m_hDBC, &m_hStmt ) == SQL_ERROR )
+		return false;
+
+	if ( SQLExecDirect ( m_hStmt, (SQLCHAR *)sQuery, SQL_NTS ) == SQL_ERROR )
+		return false;
+
+	SQLSMALLINT nCols = 0;
+	m_nResultCols = 0;
+	if ( SQLNumResultCols( m_hStmt, &nCols ) == SQL_ERROR )
+		return false;
+
+	m_nResultCols = nCols;
+
+	const int MAX_NAME_LEN=512;
+	char szColumnName[MAX_NAME_LEN];
+
+	m_dColumns.Resize ( m_nResultCols );
+	for ( int i = 0; i<m_nResultCols; ++i )
+	{
+		SQLUINTEGER uColSize = 0;
+		SQLSMALLINT iNameLen = 0;
+		if ( SQLDescribeCol ( m_hStmt, SQLUSMALLINT(i+1), (SQLCHAR*)szColumnName, MAX_NAME_LEN, &iNameLen, NULL, &uColSize, NULL, NULL ) == SQL_ERROR )
+			return false;
+
+		int iBuffLen = uColSize ? uColSize+1 : DEFAULT_COL_SIZE;
+		m_dColumns[i].m_dContents.Resize ( iBuffLen );
+		m_dColumns[i].m_sName = szColumnName;
+
+		if ( SQLBindCol ( m_hStmt, SQLUSMALLINT(i+1), SQL_C_CHAR, &(m_dColumns[i].m_dContents[0]), iBuffLen, &(m_dColumns[i].m_iInd) ) == SQL_ERROR )
+			return false;
+	}
+
+	return true;
+}
+
+
+bool CSphSource_MSSQL::SqlIsError ()
+{
+	return !m_sError.IsEmpty ();
+}
+
+
+const char * CSphSource_MSSQL::SqlError ()
+{
+	return m_sError.cstr();
+}
+
+
+bool CSphSource_MSSQL::SqlConnect ()
+{
+	if ( SQLAllocHandle ( SQL_HANDLE_ENV, NULL, &m_hEnv ) == SQL_ERROR )
+		return false;
+
+	SQLSetEnvAttr ( m_hEnv, SQL_ATTR_ODBC_VERSION, (void*) SQL_OV_ODBC3, SQL_IS_INTEGER );
+
+	if ( SQLAllocHandle ( SQL_HANDLE_DBC, m_hEnv, &m_hDBC ) == SQL_ERROR )
+		return false;
+
+	const int MAX_LEN = 1024;
+	char szDriver[MAX_LEN];
+	char szDriverAttrs[MAX_LEN];
+	SQLSMALLINT iDescLen = 0;
+	SQLSMALLINT iAttrLen = 0;		
+	SQLSMALLINT iDir = SQL_FETCH_FIRST;
+	bool bNativeClient = false;
+
+	while ( !bNativeClient )
+	{
+		SQLRETURN iRet = SQLDrivers ( m_hEnv, iDir, (SQLCHAR*)szDriver, MAX_LEN, &iDescLen, (SQLCHAR*)szDriverAttrs, MAX_LEN, &iAttrLen );
+		if ( iRet == SQL_NO_DATA )
+			break;
+
+		iDir = SQL_FETCH_NEXT;
+		if ( !strcmp ( szDriver, "SQL Native Client" ) )
+			bNativeClient = true;
+	}
+
+	char szBuf [1024];
+	CSphString sDriver = bNativeClient ? "SQL Native Client" : "SQL Server";
+
+	if ( m_bWinAuth )
+		snprintf ( szBuf, sizeof(szBuf), "DRIVER={%s};SERVER={%s};Database={%s};Trusted_Connection=yes",
+			sDriver.cstr (), m_tParams.m_sHost.cstr (), m_tParams.m_sDB.cstr () );
+	else
+		snprintf ( szBuf, sizeof(szBuf), "DRIVER={%s};SERVER={%s};UID={%s};PWD={%s};Database={%s}",
+			sDriver.cstr (), m_tParams.m_sHost.cstr (), m_tParams.m_sUser.cstr (), m_tParams.m_sPass.cstr (), m_tParams.m_sDB.cstr () );
+
+	char szOutConn [2048];
+	SQLSMALLINT iOutConn = 0;
+	if ( SQLDriverConnect ( m_hDBC, NULL, (SQLTCHAR*) szBuf, SQL_NTS, (SQLCHAR*)szOutConn, sizeof(szOutConn), &iOutConn, SQL_DRIVER_COMPLETE ) == SQL_ERROR )
+	{
+		GetSqlError ( SQL_HANDLE_DBC, m_hDBC );
+		return false;
+	}
+
+	return true;
+}
+
+
+void CSphSource_MSSQL::SqlDisconnect ()
+{
+	if ( m_hStmt != NULL)
+		SQLFreeHandle ( SQL_HANDLE_STMT, m_hStmt );
+
+	if ( m_hDBC )
+	{
+		SQLDisconnect ( m_hDBC );
+		SQLFreeHandle ( SQL_HANDLE_DBC, m_hDBC );
+	}
+
+	if ( m_hEnv )
+		 SQLFreeHandle ( SQL_HANDLE_ENV, m_hEnv );
+}
+
+
+int CSphSource_MSSQL::SqlNumFields ()
+{
+	if ( !m_hStmt )
+		return -1;
+
+	return m_nResultCols;
+}
+
+
+bool CSphSource_MSSQL::SqlFetchRow ()
+{
+	SQLRETURN iRet = SQLFetch ( m_hStmt );
+	if ( iRet==SQL_ERROR )
+	{
+		GetSqlError ( SQL_HANDLE_STMT, m_hStmt );
+		return false;
+	}
+
+	ARRAY_FOREACH(i, m_dColumns)
+		switch(m_dColumns[i].m_iInd)	
+		{
+		case SQL_NO_DATA:
+		case SQL_NULL_DATA:
+			m_dColumns[i].m_dContents[0] = '\0';
+			m_dColumns[i].m_dContents[0] = '\0';
+			break;
+		default:
+			m_dColumns[i].m_dContents[m_dColumns[i].m_iInd]='\0';
+			break;
+		}
+
+	return iRet!=SQL_NO_DATA;
+}
+
+
+const char * CSphSource_MSSQL::SqlColumn ( int iIndex )
+{
+	if ( !m_hStmt )
+		return NULL;
+
+	return &(m_dColumns [iIndex].m_dContents[0]);
+}
+
+
+const char * CSphSource_MSSQL::SqlFieldName ( int iIndex )
+{
+	return m_dColumns[iIndex].m_sName.cstr();
+}
+
+
+bool CSphSource_MSSQL::Setup ( const CSphSourceParams_MSSQL & tParams )
+{
+	if ( !CSphSource_SQL::Setup ( tParams ) )
+		return false;
+
+	m_bWinAuth = tParams.m_bWinAuth;
+
+	// build and store DSN for error reporting
+	char sBuf [ 1024 ];
+	snprintf ( sBuf, sizeof(sBuf), "mssql%s", m_sSqlDSN.cstr()+3 );
+	m_sSqlDSN = sBuf;
+
+	return true;
+}
+
+
+void CSphSource_MSSQL::GetSqlError ( SQLSMALLINT iHandleType, SQLHANDLE hHandle )
+{
+	char szState [16];
+	char szMessageText [1024];
+	SQLINTEGER iError;
+	SQLSMALLINT iLen;
+	SQLGetDiagRec ( iHandleType, hHandle, 1, (SQLCHAR*)szState, &iError, (SQLCHAR*)szMessageText, 1024, &iLen );
+	m_sError = szMessageText;
+}
+
+
+#endif
 
 /////////////////////////////////////////////////////////////////////////////
 // MERGER HELPERS

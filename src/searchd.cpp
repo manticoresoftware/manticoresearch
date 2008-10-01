@@ -677,20 +677,24 @@ public:
 
 	virtual void SetPrefix ( const char * sTemplate, ... )
 	{
-		va_list ap;
-		va_start ( ap, sTemplate );
 		for ( int i=m_iStart; i<=m_iEnd; i++ )
+		{
+			va_list ap;
+			va_start ( ap, sTemplate );
 			m_dLogs[i].VaSetPrefix ( ap, sTemplate );
-		va_end ( ap );
+			va_end ( ap );
+		}
 	}
 
 	virtual void Submit ( const char * sTemplate, ... )
 	{
-		va_list ap;
-		va_start ( ap, sTemplate );
 		for ( int i=m_iStart; i<=m_iEnd; i++ )
+		{
+			va_list ap;
+			va_start ( ap, sTemplate );
 			m_dLogs[i].VaSubmit ( ap, sTemplate );
-		va_end ( ap );
+			va_end ( ap );
+		}
 	}
 
 	SearchFailuresLog_c & operator [] ( int iIndex )

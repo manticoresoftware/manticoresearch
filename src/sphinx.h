@@ -1123,6 +1123,7 @@ struct CSphSourceParams_SQL
 	int								m_iRangedThrottle;
 
 	CSphVector<CSphUnpackInfo>		m_dUnpack;
+	DWORD							m_uUnpackMemoryLimit;
 
 	// connection params
 	CSphString						m_sHost;
@@ -1185,6 +1186,7 @@ protected:
 
 	bool				m_bCanUnpack;
 	bool				m_bUnpackFailed;
+	bool				m_bUnpackOverflow;
 	CSphVector<char>	m_dUnpackBuffers [ SPH_MAX_FIELDS ];
 
 	static const int			MACRO_COUNT = 2;

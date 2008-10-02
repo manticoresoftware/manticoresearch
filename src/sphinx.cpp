@@ -17460,6 +17460,7 @@ CSphSource_SQL::CSphSource_SQL ( const char * sName )
 	, m_iFieldMVAIterator	( 0 )
 	, m_bCanUnpack			( false )
 	, m_bUnpackFailed		( false )
+	, m_bUnpackOverflow		( false )
 {
 }
 
@@ -18201,6 +18202,16 @@ const char * CSphSource_SQL::SqlUnpackColumn ( int iFieldIndex, ESphUnpackFormat
 			for ( int i=0; i<4; i++ )
 				uSize += (unsigned long)pData[i] << ( 8*i );
 			uSize &= 0x3FFFFFFF;
+
+			if ( uSize > m_tParams.m_uUnpackMemoryLimit )
+			{
+				if ( !m_bUnpackOverflow )
+				{
+					m_bUnpackOverflow = true;
+					sphWarn ( "failed to unpack '%s', column size limit exceeded. size=%u", SqlFieldName ( iIndex ), uSize );
+				}
+				return NULL;
+			}
 			
 			int iResult;
 			tBuffer.Resize(uSize + 1);

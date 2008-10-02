@@ -151,6 +151,7 @@ static KeyDesc_t g_dKeysSource[] =
 	{ "sql_str2ordinal_column",	KEY_LIST | KEY_DEPRECATED, "sql_attr_str2ordinal" },
 	{ "unpack_zlib",			KEY_LIST, NULL },
 	{ "unpack_mysqlcompress",	KEY_LIST, NULL },
+	{ "unpack_mysqlcompress_maxsize", 0, NULL },
 	{ NULL,						0, NULL }
 };
 

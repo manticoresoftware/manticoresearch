@@ -346,8 +346,7 @@ class SphinxClient:
 		Only match records where 'attribute' value is in given 'values' set.
 		"""
 		assert(isinstance(attribute, str))
-		assert(isinstance(values, list))
-		assert(values)
+		assert iter(values)
 
 		for value in values:
 			assert(isinstance(value, int))

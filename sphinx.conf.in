@@ -154,6 +154,15 @@ source src1
 	# must contain $id macro and must fetch the document by that id
 	sql_query_info		= SELECT * FROM documents WHERE id=$id
 
+	# optional list of columns to unpack when indexing
+	
+	# unpack_zlib = zlib
+	# unpack_mysqlcompress = compressed_column
+	# unpack_mysqlcompress = compressed_column_2
+	#
+	# unpack_mysqlcompress_maxsize = 16M
+
+
 	#####################################################################
 	## xmlpipe settings
 	#####################################################################

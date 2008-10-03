@@ -20397,15 +20397,21 @@ bool CSphSource_MSSQL::SqlConnect ()
 	CSphString sDriver = bNativeClient ? "SQL Native Client" : "SQL Server";
 
 	if ( m_bWinAuth )
-		snprintf ( szBuf, sizeof(szBuf), "DRIVER={%s};SERVER={%s};Database={%s};Trusted_Connection=yes",
-			sDriver.cstr (), m_tParams.m_sHost.cstr (), m_tParams.m_sDB.cstr () );
+	{
+		if ( m_tParams.m_sUser.IsEmpty () )
+			snprintf ( szBuf, sizeof(szBuf), "DRIVER={%s};SERVER={%s};Database={%s};Trusted_Connection=yes",
+				sDriver.cstr (), m_tParams.m_sHost.cstr (), m_tParams.m_sDB.cstr () );
+		else
+			snprintf ( szBuf, sizeof(szBuf), "DRIVER={%s};SERVER={%s};UID={%s};PWD={%s};Database={%s};Trusted_Connection=yes",
+				sDriver.cstr (), m_tParams.m_sHost.cstr (), m_tParams.m_sUser.cstr (), m_tParams.m_sPass.cstr (), m_tParams.m_sDB.cstr () );
+	}
 	else
 		snprintf ( szBuf, sizeof(szBuf), "DRIVER={%s};SERVER={%s};UID={%s};PWD={%s};Database={%s}",
 			sDriver.cstr (), m_tParams.m_sHost.cstr (), m_tParams.m_sUser.cstr (), m_tParams.m_sPass.cstr (), m_tParams.m_sDB.cstr () );
 
 	char szOutConn [2048];
 	SQLSMALLINT iOutConn = 0;
-	if ( SQLDriverConnect ( m_hDBC, NULL, (SQLTCHAR*) szBuf, SQL_NTS, (SQLCHAR*)szOutConn, sizeof(szOutConn), &iOutConn, SQL_DRIVER_COMPLETE ) == SQL_ERROR )
+	if ( SQLDriverConnect ( m_hDBC, NULL, (SQLTCHAR*) szBuf, SQL_NTS, (SQLCHAR*)szOutConn, sizeof(szOutConn), &iOutConn, SQL_DRIVER_NOPROMPT ) == SQL_ERROR )
 	{
 		GetSqlError ( SQL_HANDLE_DBC, m_hDBC );
 		return false;

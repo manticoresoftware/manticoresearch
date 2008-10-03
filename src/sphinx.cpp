@@ -643,12 +643,23 @@ public:
 
 	bool Read ( void * pBuf, size_t uCount, CSphString & sError )
 	{
-		size_t uRead = sphRead ( GetFD(), pBuf, uCount );
-
-		if ( uRead!=uCount )
+		int64_t iCount = (int64_t) uCount;
+		int64_t iToRead = iCount;
+		BYTE * pCur = (BYTE *)pBuf;
+		while ( iToRead>0 )
 		{
-			sError.SetSprintf ( "read error in %s; %u of %u bytes read",
-				GetFilename(), uRead, uCount );
+			int64_t iGot = (int64_t) sphRead ( GetFD(), pCur, (size_t)iToRead );
+			if ( iGot<=0 )
+				break;
+
+			iToRead -= iGot;
+			pCur += iGot;
+		}
+
+		if ( iToRead!=0 )
+		{
+			sError.SetSprintf ( "read error in %s; %"PRIi64" of %"PRIi64" bytes read",
+				GetFilename(), iCount-iToRead, iCount );
 			return false;
 		}
 		return true;

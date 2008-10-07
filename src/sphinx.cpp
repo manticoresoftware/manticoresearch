@@ -20340,7 +20340,10 @@ bool CSphSource_MSSQL::SqlQuery ( const char * sQuery )
 		if ( SQLDescribeCol ( m_hStmt, SQLUSMALLINT(i+1), (SQLCHAR*)szColumnName, MAX_NAME_LEN, &iNameLen, NULL, &uColSize, NULL, NULL ) == SQL_ERROR )
 			return false;
 
-		int iBuffLen = uColSize ? uColSize+1 : DEFAULT_COL_SIZE;
+		int iBuffLen = DEFAULT_COL_SIZE;
+		if ( uColSize && uColSize<MAX_COL_SIZE )
+			iBuffLen = uColSize+1;
+
 		m_dColumns[i].m_dContents.Resize ( iBuffLen );
 		m_dColumns[i].m_sName = szColumnName;
 

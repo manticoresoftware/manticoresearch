@@ -120,6 +120,12 @@ static CSphVector<CSphString>	g_dArgs;
 static bool				g_bHeadDaemon	= false;
 static bool				g_bLogStdout	= true;
 
+static bool				g_bCrashLog_Enabled			= false;
+static const char *		g_sCrashLog_Path			= NULL;
+static const BYTE *		g_pCrashLog_LastQuery		= NULL;
+static int				g_iCrashLog_LastQuerySize	= 0;
+static BYTE				g_dCrashLog_LastHello[12];
+
 static ESphLogLevel		g_eLogLevel		= LOG_INFO;
 static int				g_iLogFile		= STDOUT_FILENO;	// log file descriptor
 static CSphString		g_sLogFile;							// log file name
@@ -757,6 +763,27 @@ void Shutdown ()
 
 
 #if !USE_WINDOWS
+
+void HandleCrash ( int )
+{
+	static char sBuffer[1024];
+	int iFd;
+
+	if ( !g_pCrashLog_LastQuery )
+		return;
+	
+	snprintf ( sBuffer, sizeof(sBuffer), "%s.%d", g_sCrashLog_Path, getpid() );
+	if ( ( iFd = open ( sBuffer, O_WRONLY | O_CREAT | O_TRUNC, 0644 ) ) != -1 )
+	{
+		const int iSize = Min( g_iCrashLog_LastQuerySize, g_iMaxPacketSize );
+		write ( iFd, g_dCrashLog_LastHello, sizeof(g_dCrashLog_LastHello) );
+		write ( iFd, g_pCrashLog_LastQuery, iSize );
+		close ( iFd );
+	}
+	else
+		sphWarning ( "crash log creation failed, errno=%d\n", errno );
+}
+
 void sighup ( int )
 {
 	g_bDoRotate = true;
@@ -804,6 +831,13 @@ void SetSignalHandlers ()
 		sa.sa_handler = sighup;		if ( sigaction ( SIGHUP, &sa, NULL )!=0 ) break;
 		sa.sa_handler = sigusr1;	if ( sigaction ( SIGUSR1, &sa, NULL )!=0 ) break;
 		sa.sa_handler = sigchld;	if ( sigaction ( SIGCHLD, &sa, NULL )!=0 ) break;
+		if ( g_bCrashLog_Enabled )
+		{
+			sa.sa_flags |= SA_RESETHAND;
+			sa.sa_handler = HandleCrash;	if ( sigaction ( SIGSEGV, &sa, NULL )!=0 ) break;
+			sa.sa_handler = HandleCrash;	if ( sigaction ( SIGBUS, &sa, NULL )!=0 ) break;
+			sa.sa_handler = HandleCrash;	if ( sigaction ( SIGABRT, &sa, NULL )!=0 ) break;
+		}
 		bSignalsSet = true;
 		break;
 	}
@@ -1273,6 +1307,8 @@ public:
 	bool			ReadFrom ( int iLen ) { return ReadFrom ( iLen, g_iReadTimeout ); };
 
 	virtual void	SendErrorReply ( const char *, ... );
+
+	const BYTE *	GetBufferPtr () const { return m_pBuf; }
 
 protected:
 	static const int	NET_MINIBUFFER_SIZE = 4096;
@@ -4603,6 +4639,8 @@ void HandleClient ( int iSock, const char * sClientIP, int iPipeFD )
 	tBuf.GetInt (); // client version is for now unused
 	do
 	{
+		g_pCrashLog_LastQuery = NULL;
+		
 		tBuf.ReadFrom ( 8, iTimeout );
 		int iCommand = tBuf.GetWord ();
 		int iCommandVer = tBuf.GetWord ();
@@ -4615,6 +4653,9 @@ void HandleClient ( int iSock, const char * sClientIP, int iPipeFD )
 			// sphWarning ( "failed to receive client version and request (client=%s, error=%s)", sClientIP, sphSockError() );
 			return;
 		}
+
+		if ( g_bCrashLog_Enabled )
+			memcpy ( g_dCrashLog_LastHello + 4, tBuf.GetBufferPtr(), sizeof(g_dCrashLog_LastHello) - 4 );
 		
 		// check request
 		if ( iCommand<0 || iCommand>=SEARCHD_COMMAND_TOTAL
@@ -4637,6 +4678,12 @@ void HandleClient ( int iSock, const char * sClientIP, int iPipeFD )
 		{
 			sphWarning ( "failed to receive client request body (client=%s)", sClientIP );
 			return;
+		}
+
+		if ( g_bCrashLog_Enabled )
+		{
+			g_pCrashLog_LastQuery = tBuf.GetBufferPtr();
+			g_iCrashLog_LastQuerySize = iLength;
 		}
 
 		// handle known commands
@@ -6560,6 +6607,23 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 		if ( !sphLockEx ( g_iPidFD, false ) )
 			sphFatal ( "failed to lock pid file '%s': %s (searchd already running?)", g_sPidFile, strerror(errno) );
+	}
+
+	if ( hSearchd("crash_log_path") )
+	{
+		g_sCrashLog_Path = hSearchd["crash_log_path"].cstr();
+		g_bCrashLog_Enabled = true;
+
+		char sPath[1024];
+		snprintf ( sPath, sizeof(sPath), "%s.test", g_sCrashLog_Path );
+		int iFd = open ( sPath, O_CREAT | O_WRONLY, 0644 );
+		if ( iFd == -1 )
+			sphWarning ( "unable to create files in crash_log_path: %s", strerror(errno) );
+		else
+		{
+			close ( iFd );
+			unlink ( sPath );
+		}
 	}
 
 	////////////////////

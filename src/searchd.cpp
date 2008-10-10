@@ -948,7 +948,10 @@ int sphCreateUnixSocket ( const char * sPath )
 		sphFatal ( "failed to create UNIX socket: %s", sphSockError() );
 
 	if ( unlink ( sPath ) == -1 )
-		sphFatal ( "unlink() on UNIX socket file failed: %s", sphSockError() );
+	{
+		if ( errno != ENOENT )
+			sphFatal ( "unlink() on UNIX socket file failed: %s", sphSockError() );
+	}
 	
 	if ( bind ( iSock, (struct sockaddr *)&uaddr, sizeof(uaddr) ) != 0 )
 		sphFatal ( "bind() on UNIX socket failed: %s", sphSockError() );

@@ -171,15 +171,17 @@ class SphinxClient:
 			if self._path:
 				af = socket.AF_UNIX
 				addr = self._path
+				desc = self._path
 			else:
 				af = socket.AF_INET
 				addr = ( self._host, self._port )
+				desc = '%s;%s' % addr
 			sock = socket.socket ( af, socket.SOCK_STREAM )
 			sock.connect ( addr )
 		except socket.error, msg:
 			if sock:
 				sock.close()
-			self._error = 'connection to %s:%s failed (%s)' % ( self._host, self._port, msg )
+			self._error = 'connection to %s failed (%s)' % ( desc, msg )
 			return 0
 
 		v = unpack('>L', sock.recv(4))

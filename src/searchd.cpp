@@ -5420,7 +5420,7 @@ void CheckPipes ()
 
 void ConfigureIndex ( ServedIndex_t & tIdx, const CSphConfigSection & hIndex )
 {
-	tIdx.m_bMlock =			hIndex.GetInt ( "mlock", 0 )		!= 0;
+	tIdx.m_bMlock =			( hIndex.GetInt ( "mlock", 0 )!=0 ) && !g_bOptConsole;
 	tIdx.m_bStar =			hIndex.GetInt ( "enable_star", 0 )	!= 0;
 	tIdx.m_bPreopen =		hIndex.GetInt ( "preopen", 0 )		!= 0;
 	tIdx.m_bOnDiskDict =	hIndex.GetInt ( "ondisk_dict", 0 )	!= 0;

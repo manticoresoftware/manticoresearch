@@ -20288,6 +20288,7 @@ FILE * sphDetectXMLPipe ( const char * szCommand, BYTE * dBuf, int & iBufSize, i
 
 CSphSourceParams_MSSQL::CSphSourceParams_MSSQL ()
 	: m_bWinAuth	( false )
+	, m_bUnicode	( false )
 {
 }
 
@@ -20299,6 +20300,7 @@ CSphSource_MSSQL::CSphSource_MSSQL ( const char * sName )
 	, m_hStmt			( NULL )
 	, m_nResultCols		( 0 )
 	, m_bWinAuth		( false )
+	, m_bUnicode		( false )
 {
 }
 
@@ -20345,10 +20347,15 @@ bool CSphSource_MSSQL::SqlQuery ( const char * sQuery )
 			iBuffLen = uColSize+1;
 
 		m_dColumns[i].m_dContents.Resize ( iBuffLen );
+		m_dColumns[i].m_dRaw.Resize ( iBuffLen );
+		m_dColumns[i].m_iBufferSize = iBuffLen;
 		m_dColumns[i].m_sName = szColumnName;
 
-		if ( SQLBindCol ( m_hStmt, SQLUSMALLINT(i+1), SQL_C_CHAR, &(m_dColumns[i].m_dContents[0]), iBuffLen, &(m_dColumns[i].m_iInd) ) == SQL_ERROR )
-			return false;
+		if ( SQLBindCol ( m_hStmt, SQLUSMALLINT(i+1),
+			m_bUnicode ? SQL_UNICODE : SQL_C_CHAR,
+			m_bUnicode ? &(m_dColumns[i].m_dRaw[0]) : &(m_dColumns[i].m_dContents[0]),
+			iBuffLen, &(m_dColumns[i].m_iInd) )==SQL_ERROR )
+				return false;
 	}
 
 	return true;
@@ -20463,18 +20470,36 @@ bool CSphSource_MSSQL::SqlFetchRow ()
 		return false;
 	}
 
-	ARRAY_FOREACH(i, m_dColumns)
-		switch(m_dColumns[i].m_iInd)	
+	ARRAY_FOREACH ( i, m_dColumns )
+	{
+		QueryColumn_t & tCol = m_dColumns[i];
+		switch ( tCol.m_iInd )
 		{
-		case SQL_NO_DATA:
-		case SQL_NULL_DATA:
-			m_dColumns[i].m_dContents[0] = '\0';
-			m_dColumns[i].m_dContents[0] = '\0';
-			break;
-		default:
-			m_dColumns[i].m_dContents[m_dColumns[i].m_iInd]='\0';
+			case SQL_NO_DATA:
+			case SQL_NULL_DATA:
+				tCol.m_dContents[0] = '\0';
+				tCol.m_dContents[0] = '\0';
+				break;
+
+			default:
+				if ( m_bUnicode )
+				{
+					int iConv = WideCharToMultiByte ( CP_UTF8, 0, LPCWSTR(&tCol.m_dRaw[0]), tCol.m_iInd/sizeof(WCHAR),
+						LPSTR(&tCol.m_dContents[0]), tCol.m_iBufferSize-1, NULL, NULL );
+
+					if ( iConv==0 )
+						if ( GetLastError()==ERROR_INSUFFICIENT_BUFFER )
+							iConv = tCol.m_iBufferSize-1;
+
+					tCol.m_dContents[iConv] = '\0';
+
+				} else
+				{
+					tCol.m_dContents[tCol.m_iInd] = '\0';
+				}
 			break;
 		}
+	}
 
 	return iRet!=SQL_NO_DATA;
 }
@@ -20507,6 +20532,7 @@ bool CSphSource_MSSQL::Setup ( const CSphSourceParams_MSSQL & tParams )
 		return false;
 
 	m_bWinAuth = tParams.m_bWinAuth;
+	m_bUnicode = tParams.m_bUnicode;
 
 	// build and store DSN for error reporting
 	char sBuf [ 1024 ];

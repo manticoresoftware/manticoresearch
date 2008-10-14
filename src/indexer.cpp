@@ -385,6 +385,11 @@ bool ParseMultiAttr ( const char * sBuf, CSphColumnInfo & tAttr, const char * sS
 	if ( hSource.Exists(_key) && hSource[_key].intval() ) \
 		_arg = hSource[_key].intval();
 
+// get bool
+#define LOC_GETB(_arg,_key) \
+	if ( hSource.Exists(_key) ) \
+		_arg = ( hSource[_key].intval()!=0 );
+
 // get array of strings
 #define LOC_GETAS(_arg,_key) \
 	for ( CSphVariant * pVal = hSource(_key); pVal; pVal = pVal->m_pNext ) \
@@ -562,9 +567,8 @@ CSphSource * SpawnSourceMSSQL ( const CSphConfigSection & hSource, const char * 
 	if ( !SqlParamsConfigure ( tParams, hSource, sSourceName ) )
 		return NULL;
 
-	int iAuth = 0;
-	LOC_GETI ( iAuth,	"mssql_winauth" );
-	tParams.m_bWinAuth = iAuth != 0;
+	LOC_GETB ( tParams.m_bWinAuth, "mssql_winauth" );
+	LOC_GETB ( tParams.m_bUnicode, "mssql_unicode" );
 
 	CSphSource_MSSQL * pSrcMSSQL = new CSphSource_MSSQL ( sSourceName );
 	if ( !pSrcMSSQL->Setup ( tParams ) )

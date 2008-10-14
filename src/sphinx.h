@@ -1303,7 +1303,8 @@ protected:
 #if USE_WINDOWS && USE_MSSQL
 struct CSphSourceParams_MSSQL : CSphSourceParams_SQL
 {
-	bool		m_bWinAuth;					///< auth type
+	bool		m_bWinAuth;			///< auth type
+	bool		m_bUnicode;			///< whether to ask for Unicode or SBCS (C char) data
 
 				CSphSourceParams_MSSQL ();
 };
@@ -1333,17 +1334,20 @@ private:
 	SQLHANDLE				m_hStmt;
 	int						m_nResultCols;
 	bool					m_bWinAuth;
+	bool					m_bUnicode;
 	CSphString				m_sError;
 
 	struct QueryColumn_t
 	{
 		CSphVector<char>	m_dContents;
+		CSphVector<char>	m_dRaw;
 		CSphString			m_sName;
 		SQLLEN				m_iInd;
+		int					m_iBufferSize;	///< size of m_dContents and m_dRaw buffers, in bytes
 	};
 
 	static const int		DEFAULT_COL_SIZE	= 1024;
-	static const int		MAX_COL_SIZE		= 16777216; // limit to 16M for now
+	static const int		MAX_COL_SIZE		= 1048576; // limit to 1M for now
 
 	CSphVector<QueryColumn_t> m_dColumns;
 

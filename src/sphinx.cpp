@@ -20383,21 +20383,26 @@ bool CSphSource_MSSQL::SqlConnect ()
 	SQLSMALLINT iDescLen = 0;
 	SQLSMALLINT iAttrLen = 0;		
 	SQLSMALLINT iDir = SQL_FETCH_FIRST;
-	bool bNativeClient = false;
+	CSphString sDriver;
 
-	while ( !bNativeClient )
+	for ( ;; )
 	{
 		SQLRETURN iRet = SQLDrivers ( m_hEnv, iDir, (SQLCHAR*)szDriver, MAX_LEN, &iDescLen, (SQLCHAR*)szDriverAttrs, MAX_LEN, &iAttrLen );
 		if ( iRet == SQL_NO_DATA )
 			break;
 
 		iDir = SQL_FETCH_NEXT;
-		if ( !strcmp ( szDriver, "SQL Native Client" ) )
-			bNativeClient = true;
+		if ( !strcmp ( szDriver, "SQL Native Client" )
+			|| !strncmp ( szDriver, "SQL Server Native Client", strlen("SQL Server Native Client") ) )
+		{
+			sDriver = szDriver;
+			break;
+		}
 	}
 
 	char szBuf [1024];
-	CSphString sDriver = bNativeClient ? "SQL Native Client" : "SQL Server";
+	if ( sDriver.IsEmpty() )
+		sDriver = "SQL Server";
 
 	if ( m_bWinAuth )
 	{

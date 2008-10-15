@@ -404,9 +404,11 @@ index dist1
 
 	# remote agent
 	# multiple remote agents may be specified
-	# syntax is 'hostname:port:index1,[index2[,...]]
+	# syntax for TCP connections is 'hostname:port:index1,[index2[,...]]'
+	# syntax for local UNIX connections is '/path/to/socket:index1,[index2[,...]]'
 	agent				= localhost:3313:remote1
 	agent				= localhost:3314:remote2,remote3
+	# agent				= /var/run/searchd.sock:remote4
 
 	# remote agent connection timeout, milliseconds
 	# optional, default is 1000 ms, ie. 1 sec
@@ -451,7 +453,7 @@ searchd
 	# listen				= 127.0.0.1
 	# listen				= 192.168.0.1:3312
 	# listen				= 3312
-	# listen				= /var/run/searchd.s
+	# listen				= /var/run/searchd.sock
 	
 	# log file, searchd run info is logged here
 	# optional, default is 'searchd.log'

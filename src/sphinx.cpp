@@ -10805,6 +10805,8 @@ void CSphIndex_VLN::EarlyCalc ( CSphMatch & tMatch ) const
 		const CalcItem_t & tCalc = m_dEarlyCalc[i];
 		if ( tCalc.m_uType==SPH_ATTR_INTEGER )
 			tMatch.SetAttr ( tCalc.m_tLoc, tCalc.m_pExpr->IntEval(tMatch) );
+		else if ( tCalc.m_uType==SPH_ATTR_BIGINT )
+			tMatch.SetAttr ( tCalc.m_tLoc, tCalc.m_pExpr->Int64Eval(tMatch) );
 		else
 			tMatch.SetAttrFloat ( tCalc.m_tLoc, tCalc.m_pExpr->Eval(tMatch) );
 	}
@@ -10818,6 +10820,8 @@ void CSphIndex_VLN::LateCalc ( CSphMatch & tMatch ) const
 		const CalcItem_t & tCalc = m_dLateCalc[i];
 		if ( tCalc.m_uType==SPH_ATTR_INTEGER )
 			tMatch.SetAttr ( tCalc.m_tLoc, tCalc.m_pExpr->IntEval(tMatch) );
+		else if ( tCalc.m_uType==SPH_ATTR_BIGINT )
+			tMatch.SetAttr ( tCalc.m_tLoc, tCalc.m_pExpr->Int64Eval(tMatch) );
 		else
 			tMatch.SetAttrFloat ( tCalc.m_tLoc, tCalc.m_pExpr->Eval(tMatch) );
 	}

@@ -35,6 +35,7 @@ struct Expr_GetInt_c : public ISphExpr
 	Expr_GetInt_c ( const CSphAttrLocator & tLocator ) : m_tLocator ( tLocator ) {}
 	virtual float Eval ( const CSphMatch & tMatch ) const { return (float) tMatch.GetAttr ( m_tLocator ); } // FIXME! OPTIMIZE!!! we can go the short route here
 	virtual int IntEval ( const CSphMatch & tMatch ) const { return (int)tMatch.GetAttr ( m_tLocator ); }
+	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return (int64_t)tMatch.GetAttr ( m_tLocator ); }
 };
 
 
@@ -44,6 +45,7 @@ struct Expr_GetBits_c : public ISphExpr
 	Expr_GetBits_c ( const CSphAttrLocator & tLocator ) : m_tLocator ( tLocator ) {}
 	virtual float Eval ( const CSphMatch & tMatch ) const { return (float) tMatch.GetAttr ( m_tLocator ); }
 	virtual int IntEval ( const CSphMatch & tMatch ) const { return (int)tMatch.GetAttr ( m_tLocator ); }
+	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return (int64_t)tMatch.GetAttr ( m_tLocator ); }
 };
 
 
@@ -69,6 +71,7 @@ struct Expr_GetIntConst_c : public ISphExpr
 	Expr_GetIntConst_c ( int iValue ) : m_iValue ( iValue ) {}
 	virtual float Eval ( const CSphMatch & ) const { return (float) m_iValue; } // no assert() here cause generic float Eval() needs to work even on int-evaluator tree
 	virtual int IntEval ( const CSphMatch & ) const { return m_iValue; }
+	virtual int64_t Int64Eval ( const CSphMatch & ) const { return m_iValue; }
 };
 
 
@@ -76,6 +79,7 @@ struct Expr_GetId_c : public ISphExpr
 {
 	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)tMatch.m_iDocID; }
 	virtual int IntEval ( const CSphMatch & tMatch ) const { return (int)tMatch.m_iDocID; }
+	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return (int64_t)tMatch.m_iDocID; }
 };
 
 
@@ -83,6 +87,7 @@ struct Expr_GetWeight_c : public ISphExpr
 {
 	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)tMatch.m_iWeight; }
 	virtual int IntEval ( const CSphMatch & tMatch ) const { return (int)tMatch.m_iWeight; }
+	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return (int64_t)tMatch.m_iWeight; }
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -144,6 +149,10 @@ struct Expr_Arglist_c : public ISphExpr
 #define INTSECOND	m_pSecond->IntEval(tMatch)
 #define INTTHIRD	m_pThird->IntEval(tMatch)
 
+#define INT64FIRST	m_pFirst->Int64Eval(tMatch)
+#define INT64SECOND	m_pSecond->Int64Eval(tMatch)
+#define INT64THIRD	m_pThird->Int64Eval(tMatch)
+
 #define DECLARE_UNARY_TRAITS(_classname,_expr) \
 	struct _classname : public ISphExpr \
 	{ \
@@ -156,12 +165,13 @@ struct Expr_Arglist_c : public ISphExpr
 		DECLARE_UNARY_TRAITS(_classname,_expr) \
 	};
 
-#define DECLARE_UNARY_INT(_classname,_expr,_expr2) \
+#define DECLARE_UNARY_INT(_classname,_expr,_expr2,_expr3) \
 		DECLARE_UNARY_TRAITS(_classname,_expr) \
 		virtual int IntEval ( const CSphMatch & tMatch ) const { return _expr2; } \
+		virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return _expr3; } \
 	};
 
-DECLARE_UNARY_INT ( Expr_Neg_c,		-FIRST,						-INTFIRST )
+DECLARE_UNARY_INT ( Expr_Neg_c,		-FIRST,						-INTFIRST,	-INT64FIRST )
 DECLARE_UNARY_FLT ( Expr_Abs_c,		fabs(FIRST) )
 DECLARE_UNARY_FLT ( Expr_Ceil_c,	float(ceil(FIRST)) )
 DECLARE_UNARY_FLT ( Expr_Floor_c,	float(floor(FIRST)) )
@@ -188,31 +198,34 @@ DECLARE_UNARY_FLT ( Expr_Sqrt_c,	float(sqrt(FIRST)) )
 		DECLARE_BINARY_TRAITS(_classname,_expr) \
 	};
 
-#define DECLARE_BINARY_INT(_classname,_expr,_expr2) \
+#define DECLARE_BINARY_INT(_classname,_expr,_expr2,_expr3) \
 		DECLARE_BINARY_TRAITS(_classname,_expr) \
 		virtual int IntEval ( const CSphMatch & tMatch ) const { return _expr2; } \
+		virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return _expr3; } \
 	};
 
+#define IFFLT(_expr)	( (_expr) ? 1.0f : 0.0f )
+#define IFINT(_expr)	( (_expr) ? 1 : 0 )
 
-DECLARE_BINARY_INT ( Expr_Add_c,	FIRST + SECOND,								INTFIRST + INTSECOND )
-DECLARE_BINARY_INT ( Expr_Sub_c,	FIRST - SECOND,								INTFIRST - INTSECOND )
-DECLARE_BINARY_INT ( Expr_Mul_c,	FIRST * SECOND,								INTFIRST * INTSECOND )
-DECLARE_BINARY_FLT ( Expr_Div_c,	FIRST / SECOND )
-DECLARE_BINARY_INT ( Expr_Idiv_c,	(float)( int(FIRST) / int(SECOND) ),		INTFIRST / INTSECOND )
-DECLARE_BINARY_INT ( Expr_Lt_c,		(FIRST < SECOND) ? 1.0f : 0.0f,				( INTFIRST < INTSECOND ) ? 1 : 0 )
-DECLARE_BINARY_INT ( Expr_Gt_c,		(FIRST > SECOND) ? 1.0f : 0.0f,				( INTFIRST > INTSECOND ) ? 1 : 0 )
-DECLARE_BINARY_INT ( Expr_Lte_c,	(FIRST <= SECOND) ? 1.0f : 0.0f,			( INTFIRST <= INTSECOND ) ? 1 : 0 )
-DECLARE_BINARY_INT ( Expr_Gte_c,	(FIRST >= SECOND) ? 1.0f : 0.0f,			( INTFIRST >= INTSECOND ) ? 1 : 0 )
-DECLARE_BINARY_INT ( Expr_Eq_c,		fabs(FIRST-SECOND)<=1e-6 ? 1.0f : 0.0f,		( INTFIRST == INTSECOND ) ? 1 : 0 )
-DECLARE_BINARY_INT ( Expr_Ne_c,		fabs(FIRST-SECOND)>1e-6 ? 1.0f : 0.0f,		( INTFIRST != INTSECOND ) ? 1 : 0 )
-
-DECLARE_BINARY_INT ( Expr_Min_c,	Min(FIRST,SECOND),							Min(INTFIRST,INTSECOND) )
-DECLARE_BINARY_INT ( Expr_Max_c,	Max(FIRST,SECOND),							Max(INTFIRST,INTSECOND) )
+DECLARE_BINARY_INT ( Expr_Add_c,	FIRST + SECOND,						INTFIRST + INTSECOND,				INT64FIRST + INT64SECOND )
+DECLARE_BINARY_INT ( Expr_Sub_c,	FIRST - SECOND,						INTFIRST - INTSECOND,				INT64FIRST - INT64SECOND )
+DECLARE_BINARY_INT ( Expr_Mul_c,	FIRST * SECOND,						INTFIRST * INTSECOND,				INT64FIRST * INT64SECOND )
+DECLARE_BINARY_FLT ( Expr_Div_c,	FIRST / SECOND )														
+DECLARE_BINARY_INT ( Expr_Idiv_c,	(float)(int(FIRST)/int(SECOND)),	INTFIRST / INTSECOND,				INT64FIRST / INT64SECOND )
+DECLARE_BINARY_INT ( Expr_Lt_c,		IFFLT ( FIRST < SECOND ),			IFINT ( INTFIRST < INTSECOND ),		IFINT ( INT64FIRST < INT64SECOND ) )
+DECLARE_BINARY_INT ( Expr_Gt_c,		IFFLT ( FIRST > SECOND ),			IFINT ( INTFIRST > INTSECOND ),		IFINT ( INT64FIRST > INT64SECOND ) )
+DECLARE_BINARY_INT ( Expr_Lte_c,	IFFLT ( FIRST <= SECOND ),			IFINT ( INTFIRST <= INTSECOND ),	IFINT ( INT64FIRST <= INT64SECOND ) )
+DECLARE_BINARY_INT ( Expr_Gte_c,	IFFLT ( FIRST >= SECOND ),			IFINT ( INTFIRST >= INTSECOND ),	IFINT ( INT64FIRST >= INT64SECOND ) )
+DECLARE_BINARY_INT ( Expr_Eq_c,		IFFLT ( fabs(FIRST-SECOND)<=1e-6 ),	IFINT ( INTFIRST == INTSECOND ),	IFINT ( INT64FIRST == INT64SECOND ) )
+DECLARE_BINARY_INT ( Expr_Ne_c,		IFFLT ( fabs(FIRST-SECOND)>1e-6 ),	IFINT ( INTFIRST != INTSECOND ),	IFINT ( INT64FIRST != INT64SECOND ) )
+																											
+DECLARE_BINARY_INT ( Expr_Min_c,	Min(FIRST,SECOND),					Min(INTFIRST,INTSECOND),			Min(INT64FIRST,INT64SECOND) )
+DECLARE_BINARY_INT ( Expr_Max_c,	Max(FIRST,SECOND),					Max(INTFIRST,INTSECOND),			Max(INT64FIRST,INT64SECOND) )
 DECLARE_BINARY_FLT ( Expr_Pow_c,	float(pow(FIRST,SECOND)) )
 
 //////////////////////////////////////////////////////////////////////////
 
-#define DECLARE_TERNARY(_classname,_expr,_expr2) \
+#define DECLARE_TERNARY(_classname,_expr,_expr2,_expr3) \
 	struct _classname : public ISphExpr \
 	{ \
 		ISphExpr * m_pFirst; \
@@ -222,11 +235,12 @@ DECLARE_BINARY_FLT ( Expr_Pow_c,	float(pow(FIRST,SECOND)) )
 		~_classname () { SafeRelease ( m_pFirst ); SafeRelease ( m_pSecond ); SafeRelease ( m_pThird ); } \
 		virtual float Eval ( const CSphMatch & tMatch ) const { return _expr; } \
 		virtual int IntEval ( const CSphMatch & tMatch ) const { return _expr2; } \
+		virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return _expr3; } \
 	};
 
-DECLARE_TERNARY ( Expr_If_c,	( FIRST!=0.0f ) ? SECOND : THIRD,	INTFIRST ? INTSECOND : INTTHIRD )
-DECLARE_TERNARY ( Expr_Madd_c,	FIRST*SECOND+THIRD,					INTFIRST*INTSECOND + INTTHIRD )
-DECLARE_TERNARY ( Expr_Mul3_c,	FIRST*SECOND*THIRD,					INTFIRST*INTSECOND*INTTHIRD )
+DECLARE_TERNARY ( Expr_If_c,	( FIRST!=0.0f ) ? SECOND : THIRD,	INTFIRST ? INTSECOND : INTTHIRD,	INT64FIRST ? INT64SECOND : INT64THIRD )
+DECLARE_TERNARY ( Expr_Madd_c,	FIRST*SECOND+THIRD,					INTFIRST*INTSECOND + INTTHIRD,		INT64FIRST*INT64SECOND + INT64THIRD )
+DECLARE_TERNARY ( Expr_Mul3_c,	FIRST*SECOND*THIRD,					INTFIRST*INTSECOND*INTTHIRD,		INT64FIRST*INT64SECOND*INT64THIRD )
 
 //////////////////////////////////////////////////////////////////////////
 // PARSER INTERNALS
@@ -256,6 +270,7 @@ enum Func_e
 	FUNC_LOG10,
 	FUNC_EXP,
 	FUNC_SQRT,
+	FUNC_BIGINT,
 
 	FUNC_MIN,
 	FUNC_MAX,
@@ -288,6 +303,7 @@ static FuncDesc_t g_dFuncs[] =
 	{ "log10",	1,	FUNC_LOG10 },
 	{ "exp",	1,	FUNC_EXP },
 	{ "sqrt",	1,	FUNC_SQRT },
+	{ "bigint",	1,	FUNC_BIGINT },	// type-enforcer special as-if-function
 
 	{ "min",	2,	FUNC_MIN },
 	{ "max",	2,	FUNC_MAX },
@@ -644,7 +660,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode, DWORD uAttrType )
 		case TOK_ATTR_FLOAT:	return new Expr_GetFloat_c ( tNode.m_tLocator );
 		case TOK_CONST_FLOAT:	return new Expr_GetConst_c ( tNode.m_fConst );
 		case TOK_CONST_INT:
-			if ( uAttrType==SPH_ATTR_INTEGER )
+			if ( uAttrType==SPH_ATTR_INTEGER || uAttrType==SPH_ATTR_BIGINT )
 				return new Expr_GetIntConst_c ( tNode.m_iConst );
 			else
 				return new Expr_GetConst_c ( float(tNode.m_iConst) );
@@ -706,6 +722,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode, DWORD uAttrType )
 					case FUNC_LOG10:	return new Expr_Log10_c ( dArgs[0] ); break;
 					case FUNC_EXP:		return new Expr_Exp_c ( dArgs[0] ); break;
 					case FUNC_SQRT:		return new Expr_Sqrt_c ( dArgs[0] ); break;
+					case FUNC_BIGINT:	return dArgs[0]; break;
 
 					case FUNC_MIN:		return new Expr_Min_c ( dArgs[0], dArgs[1] ); break;
 					case FUNC_MAX:		return new Expr_Max_c ( dArgs[0], dArgs[1] ); break;
@@ -831,9 +848,16 @@ DWORD ExprParser_t::DeduceType ( int iNode )
 		// variables with unconditionally integer result
 		case TOK_ATTR_INT:
 		case TOK_ATTR_BITS:
+			if ( tNode.m_tLocator.m_iBitCount>32 )
+				return SPH_ATTR_BIGINT;
+			else
+				return SPH_ATTR_INTEGER;
+
 		case TOK_CONST_INT:	
-		case TOK_DOCINFO:	// FIXME!
-			return SPH_ATTR_INTEGER;
+			return SPH_ATTR_INTEGER; // FIXME? add support for 64bit constants?
+
+		case TOK_DOCINFO:
+			return USE_64BIT ? SPH_ATTR_BIGINT : SPH_ATTR_INTEGER;
 
 		// binary ops with unconditionally float result
 		case TOK_ATTR_FLOAT:
@@ -859,10 +883,22 @@ DWORD ExprParser_t::DeduceType ( int iNode )
 			{
 				DWORD iLeftType = DeduceType ( tNode.m_iLeft );
 				DWORD iRightType = DeduceType ( tNode.m_iRight );
+
 				if ( iLeftType==SPH_ATTR_INTEGER && iRightType==SPH_ATTR_INTEGER )
+				{
+					// both types are int32? can compute in int32
 					return SPH_ATTR_INTEGER;
-				else
+				} else if (
+					( iLeftType==SPH_ATTR_INTEGER || iLeftType==SPH_ATTR_BIGINT ) &&
+					( iRightType==SPH_ATTR_INTEGER || iRightType==SPH_ATTR_BIGINT ) )
+				{
+					// both types are int32 or int64, but not both int32? can compute in int64
+					return SPH_ATTR_BIGINT;
+				} else
+				{
+					// there must had been a float floating around
 					return SPH_ATTR_FLOAT;
+				}
 			}
 
 		// function calls
@@ -878,6 +914,15 @@ DWORD ExprParser_t::DeduceType ( int iNode )
 					case FUNC_MUL3:
 					case FUNC_IDIV:
 						return DeduceType ( tNode.m_iLeft );
+
+					case FUNC_BIGINT:
+					{
+						DWORD uArgType = DeduceType ( tNode.m_iLeft );
+						if ( uArgType==SPH_ATTR_FLOAT )
+							return uArgType; // FIXME! silently ignores BIGINT() on floats; should warn or raise an error
+						else
+							return SPH_ATTR_BIGINT;
+					}
 
 					default:
 						return SPH_ATTR_FLOAT; // by default, functions are either on floats and/or return floats

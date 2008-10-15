@@ -33,6 +33,9 @@ public:
 	/// evaluate this expression for that match, using int math
 	virtual int IntEval ( const CSphMatch & tMatch ) const { assert ( 0 ); return (int) Eval ( tMatch ); }
 
+	/// evaluate this expression for that match, using int64 math
+	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { assert ( 0 ); return (int64_t) Eval ( tMatch ); }
+
 	/// check for arglist subtype
 	virtual bool IsArglist () const { return false; }
 };

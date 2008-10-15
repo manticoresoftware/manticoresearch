@@ -230,6 +230,8 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "max_packet_size",		0, NULL },
 	{ "mva_updates_pool",		0, NULL },
 	{ "crash_log_path",			0, NULL },
+	{ "max_filters",			0, NULL },
+	{ "max_filter_values",		0, NULL },
 	{ NULL,						0, NULL }
 };
 

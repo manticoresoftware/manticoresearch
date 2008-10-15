@@ -506,6 +506,25 @@ searchd
 	# shared between all instances of searchd
 	# optional, default size is 1M
 	mva_updates_pool	= 1M
+
+	# max allowed network packet size
+	# limits both query packets from clients, and responses from agents
+	# optional, default size is 8M
+	max_packet_size		= 8M
+
+	# crash log path
+	# searchd will (try to) log crashed query to 'crash_log_path.PID' file
+	# optional, default is empty (do not create crash logs)
+	#
+	# crash_log_path		= @CONFDIR@/log/crash
+
+	# max allowed per-query filter count
+	# optional, default is 256
+	max_filters			= 256
+
+	# max allowed per-filter values count
+	# optional, default is 4096
+	max_filter_values	= 4096
 }
 
 # --eof--

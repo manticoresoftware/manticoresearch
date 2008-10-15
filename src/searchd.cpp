@@ -145,8 +145,11 @@ static CSphString		g_sQueryLogFile;
 static const char *		g_sPidFile		= NULL;
 static int				g_iPidFD		= -1;
 static int				g_iMaxMatches	= 1000;
+
 static int				g_iAttrFlushPeriod	= 0;			// in seconds; 0 means "do not flush"
 static int				g_iMaxPacketSize	= 8*1024*1024;	// in bytes; for both query packets from clients and response packets from agents
+static int				g_iMaxFilters		= 256;
+static int				g_iMaxFilterValues	= 4096;
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -851,8 +854,6 @@ void SetSignalHandlers ()
 // NETWORK STUFF
 /////////////////////////////////////////////////////////////////////////////
 
-const int		SEARCHD_MAX_ATTRS		= 256;
-const int		SEARCHD_MAX_ATTR_VALUES	= 4096;
 const int		WIN32_PIPE_BUFSIZE		= 32;
 
 
@@ -2644,7 +2645,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 		tQuery.m_eRanker= (ESphRankMode) tReq.GetInt ();
 	tQuery.m_eSort		= (ESphSortOrder) tReq.GetInt ();
 	if ( iVer<=0x101 )
-		tQuery.m_iOldGroups = tReq.GetDwords ( &tQuery.m_pOldGroups, SEARCHD_MAX_ATTR_VALUES, "invalid group count %d (should be in 0..%d range)" );
+		tQuery.m_iOldGroups = tReq.GetDwords ( &tQuery.m_pOldGroups, g_iMaxFilterValues, "invalid group count %d (should be in 0..%d range)" );
 	if ( iVer>=0x102 )
 	{
 		tQuery.m_sSortBy = tReq.GetString ();
@@ -2694,9 +2695,9 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 	if ( iVer>=0x102 )
 	{
 		int iAttrFilters = tReq.GetInt ();
-		if ( iAttrFilters>SEARCHD_MAX_ATTRS )
+		if ( iAttrFilters>g_iMaxFilters )
 		{
-			tReq.SendErrorReply ( "too much attribute filters (req=%d, max=%d)", iAttrFilters, SEARCHD_MAX_ATTRS );
+			tReq.SendErrorReply ( "too much attribute filters (req=%d, max=%d)", iAttrFilters, g_iMaxFilters );
 			return false;
 		}
 
@@ -2726,8 +2727,8 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 					case SPH_FILTER_VALUES:
 						{
 							bool bRes = ( iVer>=0x114 )
-								? tReq.GetQwords ( tFilter.m_dValues, SEARCHD_MAX_ATTR_VALUES, "invalid attribute set length %d (should be in 0..%d range)" )
-								: tReq.GetDwords ( tFilter.m_dValues, SEARCHD_MAX_ATTR_VALUES, "invalid attribute set length %d (should be in 0..%d range)" );
+								? tReq.GetQwords ( tFilter.m_dValues, g_iMaxFilterValues, "invalid attribute set length %d (should be in 0..%d range)" )
+								: tReq.GetDwords ( tFilter.m_dValues, g_iMaxFilterValues, "invalid attribute set length %d (should be in 0..%d range)" );
 							if ( !bRes )
 								return false;
 						}
@@ -2741,7 +2742,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 			} else
 			{
 				// pre-1.14
-				if ( !tReq.GetDwords ( tFilter.m_dValues, SEARCHD_MAX_ATTR_VALUES, "invalid attribute set length %d (should be in 0..%d range)" ) )
+				if ( !tReq.GetDwords ( tFilter.m_dValues, g_iMaxFilterValues, "invalid attribute set length %d (should be in 0..%d range)" ) )
 					return false;
 
 				if ( !tFilter.m_dValues.GetLength() )
@@ -6591,10 +6592,17 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	g_iAttrFlushPeriod = hSearchd.GetInt ( "attr_flush_period", g_iAttrFlushPeriod );
 	g_iMaxPacketSize = hSearchd.GetSize ( "max_packet_size", g_iMaxPacketSize );
-	if ( g_iMaxPacketSize<128*1024 )
-		sphFatal ( "max_packet_size must not be under 128K" );
-	if ( g_iMaxPacketSize>128*1024*1024 )
-		sphFatal ( "max_packet_size must not be over 128M" );
+	g_iMaxFilters = hSearchd.GetInt ( "max_filters", g_iMaxFilters );
+	g_iMaxFilterValues = hSearchd.GetInt ( "max_filter_values", g_iMaxFilterValues );
+
+	if ( g_iMaxPacketSize<128*1024 || g_iMaxPacketSize>128*1024*1024 )
+		sphFatal ( "max_packet_size out of bounds (128K..128M)" );
+
+	if ( g_iMaxFilters<1 || g_iMaxFilters>10240 )
+		sphFatal ( "max_filters out of bounds (1..10240)" );
+
+	if ( g_iMaxFilterValues<1 || g_iMaxFilterValues>1048576 )
+		sphFatal ( "max_filter_values out of bounds (1..1048576)" );
 
 	// create and lock pid
 	if ( bOptPIDFile )

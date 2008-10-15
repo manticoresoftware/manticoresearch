@@ -1344,6 +1344,7 @@ private:
 		CSphString			m_sName;
 		SQLLEN				m_iInd;
 		int					m_iBufferSize;	///< size of m_dContents and m_dRaw buffers, in bytes
+		bool				m_bUnicode;		///< whether this column needs UCS-2 to UTF-8 translation
 	};
 
 	static const int		DEFAULT_COL_SIZE	= 1024;

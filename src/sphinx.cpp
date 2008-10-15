@@ -20337,24 +20337,29 @@ bool CSphSource_MSSQL::SqlQuery ( const char * sQuery )
 	m_dColumns.Resize ( m_nResultCols );
 	for ( int i = 0; i<m_nResultCols; ++i )
 	{
+		QueryColumn_t & tCol = m_dColumns[i];
+
 		SQLUINTEGER uColSize = 0;
 		SQLSMALLINT iNameLen = 0;
-		if ( SQLDescribeCol ( m_hStmt, SQLUSMALLINT(i+1), (SQLCHAR*)szColumnName, MAX_NAME_LEN, &iNameLen, NULL, &uColSize, NULL, NULL ) == SQL_ERROR )
+		SQLSMALLINT iDataType = 0;
+		if ( SQLDescribeCol ( m_hStmt, SQLUSMALLINT(i+1), (SQLCHAR*)szColumnName, MAX_NAME_LEN, &iNameLen, &iDataType, &uColSize, NULL, NULL ) == SQL_ERROR )
 			return false;
 
 		int iBuffLen = DEFAULT_COL_SIZE;
 		if ( uColSize && uColSize<MAX_COL_SIZE )
 			iBuffLen = uColSize+1;
 
-		m_dColumns[i].m_dContents.Resize ( iBuffLen );
-		m_dColumns[i].m_dRaw.Resize ( iBuffLen );
-		m_dColumns[i].m_iBufferSize = iBuffLen;
-		m_dColumns[i].m_sName = szColumnName;
+		tCol.m_dContents.Resize ( iBuffLen );
+		tCol.m_dRaw.Resize ( iBuffLen );
+		tCol.m_sName = szColumnName;
+		tCol.m_iInd = 0;
+		tCol.m_iBufferSize = iBuffLen;
+		tCol.m_bUnicode = m_bUnicode && ( iDataType==SQL_WCHAR || iDataType==SQL_WVARCHAR || iDataType==SQL_WLONGVARCHAR );
 
 		if ( SQLBindCol ( m_hStmt, SQLUSMALLINT(i+1),
-			m_bUnicode ? SQL_UNICODE : SQL_C_CHAR,
-			m_bUnicode ? &(m_dColumns[i].m_dRaw[0]) : &(m_dColumns[i].m_dContents[0]),
-			iBuffLen, &(m_dColumns[i].m_iInd) )==SQL_ERROR )
+			tCol.m_bUnicode ? SQL_UNICODE : SQL_C_CHAR,
+			tCol.m_bUnicode ? &(tCol.m_dRaw[0]) : &(tCol.m_dContents[0]),
+			iBuffLen, &(tCol.m_iInd) )==SQL_ERROR )
 				return false;
 	}
 
@@ -20482,7 +20487,7 @@ bool CSphSource_MSSQL::SqlFetchRow ()
 				break;
 
 			default:
-				if ( m_bUnicode )
+				if ( tCol.m_bUnicode )
 				{
 					int iConv = WideCharToMultiByte ( CP_UTF8, 0, LPCWSTR(&tCol.m_dRaw[0]), tCol.m_iInd/sizeof(WCHAR),
 						LPSTR(&tCol.m_dContents[0]), tCol.m_iBufferSize-1, NULL, NULL );

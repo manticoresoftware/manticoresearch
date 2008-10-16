@@ -24,6 +24,7 @@ SEARCHD_COMMAND_SEARCH	= 0
 SEARCHD_COMMAND_EXCERPT	= 1
 SEARCHD_COMMAND_UPDATE	= 2
 SEARCHD_COMMAND_KEYWORDS= 3
+SEARCHD_COMMAND_PERSIST	= 4
 
 # current client-side command implementation versions
 VER_COMMAND_SEARCH		= 0x116
@@ -101,6 +102,7 @@ class SphinxClient:
 		self._host			= 'localhost'					# searchd host (default is "localhost")
 		self._port			= 3312							# searchd port (default is 3312)
 		self._path			= None							# searchd unix-domain socket path
+		self._socket		= None
 		self._offset		= 0								# how much records to seek from result-set start (default is 0)
 		self._limit			= 20							# how much records to return from result-set starting at offset (default is 20)
 		self._mode			= SPH_MATCH_ALL					# query matching mode (default is SPH_MATCH_ALL)
@@ -129,7 +131,10 @@ class SphinxClient:
 		self._error			= ''							# last error message
 		self._warning		= ''							# last warning message
 		self._reqs			= []							# requests array for multi-query
-		return
+
+	def __del__ (self):
+		if self._socket:
+			self._socket.close()
 
 
 	def GetLastError (self):
@@ -167,6 +172,8 @@ class SphinxClient:
 		"""
 		INTERNAL METHOD, DO NOT CALL. Connects to searchd server.
 		"""
+		if self._socket:
+			return self._socket
 		try:
 			if self._path:
 				af = socket.AF_UNIX
@@ -182,13 +189,13 @@ class SphinxClient:
 			if sock:
 				sock.close()
 			self._error = 'connection to %s failed (%s)' % ( desc, msg )
-			return 0
+			return
 
 		v = unpack('>L', sock.recv(4))
 		if v<1:
 			sock.close()
 			self._error = 'expected searchd protocol version, got %s' % v
-			return 0
+			return
 
 		# all ok, send my version
 		sock.send(pack('>L', 1))
@@ -210,7 +217,8 @@ class SphinxClient:
 			else:
 				break
 
-		sock.close()
+		if not self._socket:
+			sock.close()
 
 		# check response
 		read = len(response)
@@ -702,7 +710,6 @@ class SphinxClient:
 				result['words'].append({'word':word, 'docs':docs, 'hits':hits})
 		
 		self._reqs = []
-		sock.close()
 		return results
 	
 
@@ -915,6 +922,31 @@ class SphinxClient:
 			return None
 
 		return res
+
+	### persistent connections
+
+	def Open(self):
+		if self._socket:
+			self._error = 'already connected'
+			return
+		
+		server = self._Connect()
+		if not server:
+			return
+
+		# command, command version = 0, body length = 4, body = 1
+		request = pack ( '>hhII', SEARCHD_COMMAND_PERSIST, 0, 4, 1 )
+		server.send ( request )
+		
+		self._socket = server
+
+	def Close(self):
+		if not self._socket:
+			self._error = 'not connected'
+			return
+		self._socket.close()
+		self._socket = None
+	
 #
 # $Id$
 #

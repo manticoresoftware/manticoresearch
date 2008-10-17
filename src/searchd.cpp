@@ -2140,7 +2140,7 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, IReplyPar
 					if ( tReq.GetError() )
 					{
 						tAgent.m_sFailure.SetSprintf ( "incomplete reply" );
-						return false;
+						break;
 					}
 
 					// all is well

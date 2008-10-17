@@ -1710,6 +1710,7 @@ public:
 	int				m_iPort;		///< remote searchd port, 0 if local
 	CSphString		m_sPath;		///< local searchd UNIX socket path
 	CSphString		m_sIndexes;		///< remote index names to query
+	bool			m_bBlackhole;	///< blackhole agent flag
 
 	int				m_iSock;		///< socket number, -1 if not connected
 	AgentState_e	m_eState;		///< current state
@@ -1730,6 +1731,7 @@ public:
 public:
 	Agent_t ()
 		: m_iPort ( -1 )
+		, m_bBlackhole ( false )
 		, m_iSock ( -1 )
 		, m_eState ( AGENT_UNUSED )
 		, m_bSuccess ( false )
@@ -1999,6 +2001,9 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, IReplyPar
 		ARRAY_FOREACH ( iAgent, dAgents )
 		{
 			Agent_t & tAgent = dAgents[iAgent];
+			if ( tAgent.m_bBlackhole )
+				continue;
+
 			if ( tAgent.m_eState==AGENT_QUERY || tAgent.m_eState==AGENT_REPLY )
 			{
 				assert ( !tAgent.m_sPath.IsEmpty() || tAgent.m_iPort>0 );
@@ -2025,6 +2030,8 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, IReplyPar
 		ARRAY_FOREACH ( iAgent, dAgents )
 		{
 			Agent_t & tAgent = dAgents[iAgent];
+			if ( tAgent.m_bBlackhole )
+				continue;
 			if (!( tAgent.m_eState==AGENT_QUERY || tAgent.m_eState==AGENT_REPLY ))
 				continue;
 			if ( !FD_ISSET ( tAgent.m_iSock, &fdsRead ) )
@@ -2159,7 +2166,9 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, IReplyPar
 	ARRAY_FOREACH ( iAgent, dAgents )
 	{
 		Agent_t & tAgent = dAgents[iAgent];
-		if ( tAgent.m_eState==AGENT_QUERY )
+		if ( tAgent.m_bBlackhole )
+			tAgent.Close ();
+		else if ( tAgent.m_eState==AGENT_QUERY )
 		{
 			assert ( !tAgent.m_dResults.GetLength() );
 			assert ( !tAgent.m_bSuccess );
@@ -5460,6 +5469,107 @@ bool PrereadNewIndex ( ServedIndex_t & tIdx, const CSphConfigSection & hIndex, c
 }
 
 
+bool ConfigureAgent ( Agent_t & tAgent, const CSphVariant * pAgent, const char * szIndexName, bool bBlackhole )
+{
+	// extract host name or path
+	const char * p = pAgent->cstr();
+	while ( sphIsAlpha(*p) || *p=='.' || *p=='-' || *p=='/' ) p++;
+	if ( p==pAgent->cstr() )
+	{
+		sphWarning ( "index '%s': agent '%s': host name or path expected - SKIPPING AGENT",
+			szIndexName, pAgent->cstr() );
+		return false;
+	}
+	if ( *p++!=':' )
+	{
+		sphWarning ( "index '%s': agent '%s': colon expected near '%s' - SKIPPING AGENT",
+			szIndexName, pAgent->cstr(), p );
+		return false;
+	}
+
+	CSphString sSub = pAgent->SubString ( 0, p-1-pAgent->cstr() );
+	if ( sSub.cstr()[0] == '/' )
+	{
+#if USE_WINDOWS
+		sphWarning ( "index '%s': agent '%s': UNIX sockets are not supported on Windows - SKIPPING AGENT",
+			szIndexName, pAgent->cstr() );
+		return false;
+#else
+		if ( strlen ( sSub.cstr() ) + 1 > sizeof(((struct sockaddr_un *)0)->sun_path) )
+		{
+			sphWarning ( "index '%s': agent '%s': UNIX socket path is too long - SKIPPING AGENT",
+				szIndexName, pAgent->cstr() );
+			continue;
+		}
+
+		tAgent.m_iFamily = AF_UNIX;
+		tAgent.m_sPath = sSub;
+		p--;
+#endif
+
+	}
+	else
+	{
+		tAgent.m_iFamily = AF_INET;
+		tAgent.m_sHost = sSub;
+
+		// extract port
+		if ( !isdigit(*p) )
+		{
+			sphWarning ( "index '%s': agent '%s': port number expected near '%s' - SKIPPING AGENT",
+				szIndexName, pAgent->cstr(), p );
+			return false;
+		}
+		tAgent.m_iPort = atoi(p);
+
+		if ( !IsPortInRange(tAgent.m_iPort) )
+		{
+			sphWarning ( "index '%s': agent '%s': invalid port number near '%s' - SKIPPING AGENT",
+				szIndexName, pAgent->cstr(), p );
+			return false;
+		}
+
+		while ( isdigit(*p) ) p++;
+	}
+
+	// extract index list
+	if ( *p++!=':' )
+	{
+		sphWarning ( "index '%s': agent '%s': colon expected near '%s' - SKIPPING AGENT",
+			szIndexName, pAgent->cstr(), p );
+		return false;
+	}
+	while ( isspace(*p) )
+		p++;
+	const char * sIndexList = p;
+	while ( sphIsAlpha(*p) || isspace(*p) || *p==',' )
+		p++;
+	if ( *p )
+	{
+		sphWarning ( "index '%s': agent '%s': index list expected near '%s' - SKIPPING AGENT",
+			szIndexName, pAgent->cstr(), p );
+		return false;
+	}
+	tAgent.m_sIndexes = sIndexList;
+
+	// lookup address (if needed)
+	if ( tAgent.m_iFamily == AF_INET )
+	{
+		tAgent.m_uAddr = sphGetAddress ( tAgent.m_sHost.cstr() );
+		if ( tAgent.m_uAddr == 0 )
+		{
+			sphWarning ( "index '%s': agent '%s': failed to lookup host name '%s' (error=%s) - SKIPPING AGENT",
+				szIndexName, pAgent->cstr(), tAgent.m_sHost.cstr(), sphSockError() );
+			return false;
+		}
+	}
+
+	tAgent.m_bBlackhole = bBlackhole;
+
+	return true;
+}
+
+
 ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex )
 {
 	if ( hIndex("type") && hIndex["type"]=="distributed" )
@@ -5486,102 +5596,15 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		for ( CSphVariant * pAgent = hIndex("agent"); pAgent; pAgent = pAgent->m_pNext )
 		{
 			Agent_t tAgent;
+			if ( ConfigureAgent ( tAgent, pAgent, szIndexName, false ) )
+				tIdx.m_dAgents.Add ( tAgent );
+		}
 
-			// extract host name or path
-			const char * p = pAgent->cstr();
-			while ( sphIsAlpha(*p) || *p=='.' || *p=='-' || *p=='/' ) p++;
-			if ( p==pAgent->cstr() )
-			{
-				sphWarning ( "index '%s': agent '%s': host name or path expected - SKIPPING AGENT",
-					szIndexName, pAgent->cstr() );
-				continue;
-			}
-			if ( *p++!=':' )
-			{
-				sphWarning ( "index '%s': agent '%s': colon expected near '%s' - SKIPPING AGENT",
-					szIndexName, pAgent->cstr(), p );
-				continue;
-			}
-
-			CSphString sSub = pAgent->SubString ( 0, p-1-pAgent->cstr() );
-			if ( sSub.cstr()[0] == '/' )
-			{
-				#if USE_WINDOWS
-				sphWarning ( "index '%s': agent '%s': UNIX sockets are not supported on Windows - SKIPPING AGENT",
-			    	szIndexName, pAgent->cstr() );
-				continue;
-				#else
-				if ( strlen ( sSub.cstr() ) + 1 > sizeof(((struct sockaddr_un *)0)->sun_path) )
-				{
-					sphWarning ( "index '%s': agent '%s': UNIX socket path is too long - SKIPPING AGENT",
-						szIndexName, pAgent->cstr() );
-					continue;
-				}
-				
-				tAgent.m_iFamily = AF_UNIX;
-				tAgent.m_sPath = sSub;
-				p--;
-				#endif
-
-			}
-			else
-			{
-				tAgent.m_iFamily = AF_INET;
-				tAgent.m_sHost = sSub;
-
-				// extract port
-				if ( !isdigit(*p) )
-				{
-					sphWarning ( "index '%s': agent '%s': port number expected near '%s' - SKIPPING AGENT",
-						szIndexName, pAgent->cstr(), p );
-					continue;
-				}
-				tAgent.m_iPort = atoi(p);
-				
-				if ( !IsPortInRange(tAgent.m_iPort) )
-				{
-					sphWarning ( "index '%s': agent '%s': invalid port number near '%s' - SKIPPING AGENT",
-						szIndexName, pAgent->cstr(), p );
-					continue;
-				}
-
-				while ( isdigit(*p) ) p++;
-			}
-
-			// extract index list
-			if ( *p++!=':' )
-			{
-				sphWarning ( "index '%s': agent '%s': colon expected near '%s' - SKIPPING AGENT",
-					szIndexName, pAgent->cstr(), p );
-				continue;
-			}
-			while ( isspace(*p) )
-				p++;
-			const char * sIndexList = p;
-			while ( sphIsAlpha(*p) || isspace(*p) || *p==',' )
-				p++;
-			if ( *p )
-			{
-				sphWarning ( "index '%s': agent '%s': index list expected near '%s' - SKIPPING AGENT",
-					szIndexName, pAgent->cstr(), p );
-				continue;
-			}
-			tAgent.m_sIndexes = sIndexList;
-
-			// lookup address (if needed)
-			if ( tAgent.m_iFamily == AF_INET )
-			{
-				tAgent.m_uAddr = sphGetAddress ( tAgent.m_sHost.cstr() );
-				if ( tAgent.m_uAddr == 0 )
-				{
-					sphWarning ( "index '%s': agent '%s': failed to lookup host name '%s' (error=%s) - SKIPPING AGENT",
-						szIndexName, pAgent->cstr(), tAgent.m_sHost.cstr(), sphSockError() );
-					continue;
-				}
-			}
-
-			// done
-			tIdx.m_dAgents.Add ( tAgent );
+		for ( CSphVariant * pAgent = hIndex("agent_blackhole"); pAgent; pAgent = pAgent->m_pNext )
+		{
+			Agent_t tAgent;
+			if ( ConfigureAgent ( tAgent, pAgent, szIndexName, true ) )
+				tIdx.m_dAgents.Add ( tAgent );
 		}
 
 		// configure options

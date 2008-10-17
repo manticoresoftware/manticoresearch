@@ -5499,7 +5499,7 @@ bool ConfigureAgent ( Agent_t & tAgent, const CSphVariant * pAgent, const char *
 		{
 			sphWarning ( "index '%s': agent '%s': UNIX socket path is too long - SKIPPING AGENT",
 				szIndexName, pAgent->cstr() );
-			continue;
+			return false;
 		}
 
 		tAgent.m_iFamily = AF_UNIX;

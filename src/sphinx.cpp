@@ -15362,7 +15362,10 @@ bool sphCalcFileCRC32 ( const char * szFilename, DWORD & uCRC32 )
 	DWORD crc = ~((DWORD)0);
 
 	const int BUFFER_SIZE = 131072;
-	BYTE * pBuffer = new BYTE [BUFFER_SIZE];
+	static BYTE * pBuffer = NULL;
+	if ( !pBuffer )
+		pBuffer = new BYTE [ BUFFER_SIZE ];
+
 	int iBytesRead;
 	while ( ( iBytesRead = fread ( pBuffer, 1, BUFFER_SIZE, pFile ) ) != 0 )
 	{

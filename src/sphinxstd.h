@@ -160,9 +160,14 @@ void			operator delete [] ( void * pPtr );
 // HELPERS
 /////////////////////////////////////////////////////////////////////////////
 
+typedef			bool (* SphDieCallback_t) ( const char * );
+
 /// crash with an error message
 void			sphDie ( const char * sMessage, ... );
 
+/// setup a callback function to call from sphDie() before exit
+/// if callback returns false, sphDie() will not log to stdout
+void			sphSetDieCallback ( SphDieCallback_t pfDieCallback );
 
 /// how much bits do we need for given int
 inline int		sphLog2 ( uint64_t iValue )

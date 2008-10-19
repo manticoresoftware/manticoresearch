@@ -442,6 +442,13 @@ void sphInfo ( const char * sFmt, ... )
 	va_end ( ap );
 }
 
+void sphLogFatal ( const char * sFmt, ... )
+{
+	va_list ap;
+	va_start ( ap, sFmt );
+	sphLog ( LOG_FATAL, sFmt, ap );
+	va_end ( ap );
+}
 
 void LogInternalError ( const char * sError )
 {
@@ -840,6 +847,8 @@ void SetSignalHandlers ()
 			sa.sa_handler = HandleCrash;	if ( sigaction ( SIGSEGV, &sa, NULL )!=0 ) break;
 			sa.sa_handler = HandleCrash;	if ( sigaction ( SIGBUS, &sa, NULL )!=0 ) break;
 			sa.sa_handler = HandleCrash;	if ( sigaction ( SIGABRT, &sa, NULL )!=0 ) break;
+			sa.sa_handler = HandleCrash;	if ( sigaction ( SIGILL, &sa, NULL )!=0 ) break;
+			sa.sa_handler = HandleCrash;	if ( sigaction ( SIGFPE, &sa, NULL )!=0 ) break;
 		}
 		bSignalsSet = true;
 		break;
@@ -7001,8 +7010,12 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			case AF_UNIX:
 				strncpy ( sClientName, "(local)", sizeof(sClientName) );
 				break;
+
+			default:
+				sClientName[0] = '\0';
+				break;
 			}
-			
+
 			// handle the client
 			if ( g_bOptConsole || g_bService )
 			{
@@ -7036,8 +7049,17 @@ int WINAPI ServiceMain ( int argc, char **argv )
 }
 
 
+bool DieCallback ( const char * sMessage )
+{
+	sphLogFatal ( "%s", sMessage );
+	return false; // caller should not log
+}
+
+
 int main ( int argc, char **argv )
 {
+	sphSetDieCallback ( DieCallback );
+
 #if USE_WINDOWS
 	int iNameIndex = -1;
 	for ( int i=1; i<argc; i++ )

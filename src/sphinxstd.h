@@ -10,6 +10,10 @@
 #define _CRT_NONSTDC_NO_DEPRECATE 1
 #endif
 
+#if (_MSC_VER >= 1000) && !defined(__midl) && defined(_PREFAST_)
+typedef int __declspec("SAL_nokernel") __declspec("SAL_nodriver") __prefast_flag_kernel_driver_mode;
+#endif
+
 #if defined(_MSC_VER) && (_MSC_VER<1400)
 #define vsnprintf _vsnprintf
 #endif
@@ -45,6 +49,11 @@
 
 #define STATIC_ASSERT(_cond,_name)		typedef char STATIC_ASSERT_FAILED_ ## _name [ (_cond) ? 1 : -1 ]
 #define STATIC_SIZE_ASSERT(_type,_size)	STATIC_ASSERT ( sizeof(_type)==_size, _type ## _MUST_BE_ ## _size ## _BYTES )
+
+
+#ifndef __analysis_assume
+#define __analysis_assume(_arg)
+#endif
 
 /////////////////////////////////////////////////////////////////////////////
 // PORTABILITY
@@ -507,6 +516,7 @@ public:
 		// realloc
 		// FIXME! optimize for POD case
 		T * pNew = new T [ m_iLimit ];
+		__analysis_assume ( m_iLength<=m_iLimit );
 		for ( int i=0; i<m_iLength; i++ )
 			pNew[i] = m_pData[i];
 		delete [] m_pData;
@@ -601,6 +611,7 @@ public:
 		m_iLength = rhs.m_iLength;
 		m_iLimit = rhs.m_iLimit;
 		m_pData = new T [ m_iLimit ];
+		__analysis_assume ( m_iLength<=m_iLimit );
 		for ( int i=0; i<rhs.m_iLength; i++ )
 			m_pData[i] = rhs.m_pData[i];
 
@@ -1067,8 +1078,8 @@ public:
 		{
 			const char * sStart = m_sValue;
 			const char * sEnd = m_sValue + strlen(m_sValue) - 1;
-			while ( sStart<=sEnd && isspace(*sStart) ) sStart++;
-			while ( sStart<=sEnd && isspace(*sEnd) ) sEnd--;
+			while ( sStart<=sEnd && isspace((unsigned char)*sStart) ) sStart++;
+			while ( sStart<=sEnd && isspace((unsigned char)*sEnd) ) sEnd--;
 			memmove ( m_sValue, sStart, sEnd-sStart+1 );
 			m_sValue [ sEnd-sStart+1 ] = '\0';
 		}

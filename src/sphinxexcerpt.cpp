@@ -876,22 +876,63 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & q )
 		if ( iTok>1+iLast || q.m_bWeightOrder )
 			ResultEmit ( q.m_sChunkSeparator.cstr() );
 
-		while ( iTok<=iEnd )
+		if ( m_bExactPhrase )
 		{
-			if ( iTok>iLast || q.m_bWeightOrder )
+			if ( q.m_bWeightOrder )
+				iTok = iLast + 1;
+
+			while ( iTok<=iEnd )
 			{
-				// FIXME! glue
-				if ( m_dTokens[iTok].m_uWords )
+				while ( iTok<=iEnd && !m_dTokens[iTok].m_uWords )
+					ResultEmit ( m_dTokens[iTok++] );
+
+				if ( iTok>iEnd )
+					break;
+
+				bool bMatch = true;
+				int iWord = 0;
+				int iStart = iTok;
+				while ( iWord<m_dWords.GetLength() )
 				{
-					ResultEmit ( q.m_sBeforeMatch.cstr() );
-					ResultEmit ( m_dTokens[iTok] );
-					ResultEmit ( q.m_sAfterMatch.cstr() );
-				} else
-				{
-					ResultEmit ( m_dTokens[iTok] );
+					if ( ( iTok > iEnd ) ||
+				    	!( m_dTokens[iTok].m_eType==TOK_SPACE || m_dTokens[iTok].m_uWords == ( 1UL<<iWord++ ) ) )
+					{
+						bMatch = false;
+						break;
+					}
+					iTok++;
 				}
+
+				if ( !bMatch )
+				{
+					ResultEmit ( m_dTokens[iStart] );
+					iTok = iStart + 1;
+					continue;
+				}
+
+				ResultEmit ( q.m_sBeforeMatch.cstr() );
+				while ( iStart<iTok )
+					ResultEmit ( m_dTokens [ iStart++ ] );
+				ResultEmit ( q.m_sAfterMatch.cstr() );
 			}
-			iTok++;
+		}
+		else // !m_bExactPhrase
+		{
+			while ( iTok<=iEnd )
+			{
+				if ( iTok>iLast || q.m_bWeightOrder )
+				{
+					if ( m_dTokens[iTok].m_uWords )
+					{
+						ResultEmit ( q.m_sBeforeMatch.cstr() );
+						ResultEmit ( m_dTokens[iTok] );
+						ResultEmit ( q.m_sAfterMatch.cstr() );
+					}
+					else
+						ResultEmit ( m_dTokens[iTok] );
+				}
+				iTok++;
+			}
 		}
 
 		iLast = iEnd;

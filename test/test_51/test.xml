@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>excerpts - exact_phrase</name>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+}
+
+source src
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1, 'text';
+}
+
+index idx
+{
+	source			= src
+	path			= <data_path/>/test
+}
+</config>
+
+<db_insert>select 1;</db_insert>
+
+<custom_test><![CDATA[
+
+$text = <<<END
+	one perfusate chubby profound chubby multiplicity promontory
+	chubby pilotfish pilotfish chubby bisect pilotfish perfusate
+	multiplicity whichsoever pilotfish INVALID CAJUPUT reedbuck
+	whichsoever disposition felspar pilotfish reedbuck pilotfish
+	detestable
+
+	two bisect reedbuck whichsoever profound comforter detestable
+	bisect comforter CAJUPUT felspar INVALID humanism profound multiplicity
+	promontory profound reedbuck perfusate promontory felspar
+	multiplicity reedbuck profound profound whirligig detestable
+	whirligig INVALID
+
+	three pilotfish promontory CAJUPUT INVALID CAJUPUT INVALID EXPOSITOR
+	whirligig felspar disposition pilotfish chubby promontory
+	pilotfish INVALID CAJUPUT detestable INVALID felspar whichsoever profound
+	whichsoever comforter humanism detestable promontory comforter
+	chubby CAJUPUT INVALID humanism CAJUPUT
+END;
+
+$words = array
+(
+	'cajuput invalid',
+	'cajuput invalid expositor'
+);
+
+$results = array();
+foreach ( $words as $query )
+{
+	$reply = $client->BuildExcerpts ( array($text), 'idx', $query, array('exact_phrase' => true) );
+	$results [] = $query;
+	$results [] = $reply;
+}
+]]></custom_test>
+
+</test>

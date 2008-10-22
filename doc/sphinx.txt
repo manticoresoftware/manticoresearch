@@ -92,6 +92,10 @@ Table of Contents
       5.7.3. BuildKeywords
       5.7.4. EscapeString
 
+   5.8. Persistent connections
+      5.8.1. Open
+      5.8.2. Close
+
 6. MySQL storage engine (SphinxSE)
    6.1. SphinxSE overview
    6.2. Installing SphinxSE
@@ -173,17 +177,19 @@ Table of Contents
       8.3.3. max_iosize
 
    8.4. searchd program configuration options
-      8.4.1. address
-      8.4.2. port
-      8.4.3. log
-      8.4.4. query_log
-      8.4.5. read_timeout
-      8.4.6. max_children
-      8.4.7. pid_file
-      8.4.8. max_matches
-      8.4.9. seamless_rotate
-      8.4.10. preopen_indexes
-      8.4.11. unlink_old
+      8.4.1. listen
+      8.4.2. address
+      8.4.3. port
+      8.4.4. log
+      8.4.5. query_log
+      8.4.6. read_timeout
+      8.4.7. client_timeout
+      8.4.8. max_children
+      8.4.9. pid_file
+      8.4.10. max_matches
+      8.4.11. seamless_rotate
+      8.4.12. preopen_indexes
+      8.4.13. unlink_old
 
 A. Sphinx revision history
 
@@ -919,7 +925,7 @@ sphinx:attr
       * "name", specifies the element name that should be treated as an
         attribute in the subsequent documents.
       * "type", specifies the attribute type. Possible values are "int",
-        "timestamp", "str2ordinal", "bool", and "float".
+        "timestamp", "str2ordinal", "bool", "float" and "multi".
       * "bits", specifies the bit size for "int" attribute type. Valid
         values are 1 to 32.
       * "default", specifies the default value for this attribute that
@@ -2120,8 +2126,10 @@ $index is an index name string. Different settings (such as charset,
 morphology, wordforms) from given index will be used. $words is a string
 that contains the keywords to highlight. They will be processed with
 respect to index settings. For instance, if English stemming is enabled in
-the index, "shoes" will be highlighted even if keyword is "shoe". $opts is
-a hash which contains additional optional highlighting parameters:
+the index, "shoes" will be highlighted even if keyword is "shoe". Keywords
+can contain wildcards, that work similarly to star-syntax available in
+queries. $opts is a hash which contains additional optional highlighting
+parameters:
 
 "before_match":
    A string to insert before a keyword match. Default is "<b>".
@@ -2221,6 +2229,26 @@ all such characters at all times.
 Usage example:
 
    | $escaped = $cl->EscapeString ( "escaping-sample@query/string" );
+
+5.8. Persistent connections
+---------------------------
+
+Persistent connections allow to use single network connection to run
+multiple commands that would otherwise require reconnects.
+
+5.8.1. Open
+-----------
+
+Prototype: function Open ()
+
+Opens persistent connection to the server.
+
+5.8.2. Close
+------------
+
+Prototype: function Close ()
+
+Closes previously opened persistent connection.
 
 6. MySQL storage engine (SphinxSE)
 ==================================
@@ -2471,6 +2499,21 @@ ENGINE SPHINX STATUS statement:
    | | SPHINX | words | sphinx:591:1256 soft:11076:15945                | 
    | +--------+-------+-------------------------------------------------+
    | 2 rows in set (0.00 sec)
+
+This information can also be accessed through status variables. Note that
+this method does not require super-user privileges.
+
+   | mysql> SHOW STATUS LIKE 'sphinx_%';
+   | +--------------------+----------------------------------+
+   | | Variable_name      | Value                            |
+   | +--------------------+----------------------------------+
+   | | sphinx_total       | 25                               | 
+   | | sphinx_total_found | 25                               | 
+   | | sphinx_time        | 126                              | 
+   | | sphinx_word_count  | 2                                | 
+   | | sphinx_words       | sphinx:591:1256 soft:11076:15945 | 
+   | +--------------------+----------------------------------+
+   | 5 rows in set (0.00 sec)
 
 You could perform JOINs on SphinxSE search table and tables using other
 engines. Here's an example with "documents" from example.sql:
@@ -3945,10 +3988,12 @@ searchd (in order to utilize many CPUs or cores).
 
 The value format is as follows:
 
-   | agent = hostname:port:remote-indexes-list
+   | agent = specification:remote-indexes-list
+   | specification = hostname ":" port | path
 
-where 'hostname' is remote host name; 'port' is remote TCP port; and
-'remote-indexes-list' is a comma-separated list of remote index names.
+Where 'hostname' is remote host name; 'port' is remote TCP port; 'path' is
+Unix-domain socket path and 'remote-indexes-list' is a comma-separated list
+of remote index names.
 
 All agents will be searched in parallel. However, all indexes specified for
 a given agent will be searched sequentially in this agent. This lets you
@@ -3983,6 +4028,7 @@ parallel.
 Example:
 
    | agent = localhost:3312:chunk2 # contact itself
+   | agent = /var/run/searchd.s:chunk2
    | agent = searchbox2:3312:chunk3,chunk4 # search remote indexes
 
 8.2.28. agent_connect_timeout
@@ -4110,11 +4156,42 @@ Example:
 8.4. searchd program configuration options
 ------------------------------------------
 
-8.4.1. address
+8.4.1. listen
+-------------
+
+This setting lets you specify IP address and port, or Unix-domain socket
+path, that searchd will listen on.
+
+The informal grammar for listen setting is:
+
+   | listen = address ":" port | port | path
+
+I.e. you can specify either an IP address (or hostname) and port number, or
+just a port number, or Unix socket path. If you specify port number but not
+the address, searchd will listen on all network interfaces. Unix path is
+identified by a leading slash.
+
+Examples:
+
+   | listen = localhost
+   | listen = localhost:5000
+   | listen = 192.168.0.1 
+   | listen = 192.168.0.1:5000
+   | listen = /var/run/sphinx.s
+   | listen = 3312
+
+There can be multiple listen directives, searchd will listen for client
+connections on all specified ports and sockets. If no listen directive is
+found then the server will listen on all available interfaces using the
+default port (which is 3312).
+
+Unix-domain sockets are not supported on Windows.
+
+8.4.2. address
 --------------
 
 Interface IP address to bind on. Optional, default is 0.0.0.0 (ie. listen
-on all interfaces).
+on all interfaces). DEPRECATED, use listen instead.
 
 address setting lets you specify which network interface searchd will bind
 to, listen on, and accept incoming network connections on. The default
@@ -4125,16 +4202,17 @@ Example:
 
    | address = 192.168.0.1
 
-8.4.2. port
+8.4.3. port
 -----------
 
-searchd TCP port number. Mandatory, default is 3312.
+searchd TCP port number. DEPRECATED, use listen instead. Used to be
+mandatory. Default port number is 3312.
 
 Example:
 
    | port = 3312
 
-8.4.3. log
+8.4.4. log
 ----------
 
 Log file name. Optional, default is 'searchd.log'. All searchd run time
@@ -4144,7 +4222,7 @@ Example:
 
    | log = /var/log/searchd.log
 
-8.4.4. query_log
+8.4.5. query_log
 ----------------
 
 Query log file name. Optional, default is empty (do not log queries). All
@@ -4155,7 +4233,7 @@ Example:
 
    | query_log = /var/log/query.log
 
-8.4.5. read_timeout
+8.4.6. read_timeout
 -------------------
 
 Network client request read timeout, in seconds. Optional, default is
@@ -4166,7 +4244,17 @@ Example:
 
    | read_timeout = 1
 
-8.4.6. max_children
+8.4.7. client_timeout
+---------------------
+
+Maximum time to wait between requests (in seconds) when using persistent
+connections. Optional, default is five minutes.
+
+Example:
+
+   | client_timeout = 3600
+
+8.4.8. max_children
 -------------------
 
 Maximum amount of children to fork (or in other words, concurrent searches
@@ -4182,7 +4270,7 @@ Example:
 
    | max_children = 10
 
-8.4.7. pid_file
+8.4.9. pid_file
 ---------------
 
 searchd process ID file name. Mandatory.
@@ -4198,8 +4286,8 @@ Example:
 
    | pid_file = /var/run/searchd.pid
 
-8.4.8. max_matches
-------------------
+8.4.10. max_matches
+-------------------
 
 Maximum amount of matches that the daemon keeps in RAM for each index and
 can return to the client. Optional, default is 1000.
@@ -4237,8 +4325,8 @@ Example:
 
    | max_matches = 10000
 
-8.4.9. seamless_rotate
-----------------------
+8.4.11. seamless_rotate
+-----------------------
 
 Prevents searchd stalls while rotating indexes with huge amounts of data to
 precache. Optional, default is 1 (enable seamless rotation).
@@ -4279,7 +4367,7 @@ Example:
 
    | seamless_rotate = 1
 
-8.4.10. preopen_indexes
+8.4.12. preopen_indexes
 -----------------------
 
 Whether to forcibly preopen all indexes on startup. Optional, default is
@@ -4290,7 +4378,7 @@ Example:
 
    | preopen_indexes = 1
 
-8.4.11. unlink_old
+8.4.13. unlink_old
 ------------------
 
 Whether to unlink .old index copies on succesful rotation. Optional,

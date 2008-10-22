@@ -75,7 +75,7 @@ as SQL Phrase Index. Yes, I know about CMU's Sphinx project.
 <listitem><filename>search</filename>: a simple command-line (CLI) test utility which searches through fulltext indexes;</listitem>
 <listitem><filename>searchd</filename>: a daemon which enables external software (eg. Web applications) to search through fulltext indexes;</listitem>
 <listitem><filename>sphinxapi</filename>: a set of searchd client API libraries for popular Web scripting languages (PHP, Python, Perl, Ruby).</listitem>
-<listitem><filename>spelldump</filename>: a simple command-line tool to extract the items from an <filename>ispell</filename> dictionary to help customize your index.</listitem>
+<listitem><filename>spelldump</filename>: a simple command-line tool to extract the items from an <filename>ispell</filename> dictionary to help customize your index, for use with <link linkend="conf-wordforms">wordforms</link>.</listitem>
 </itemizedlist>
 </para>
 </sect2>
@@ -238,7 +238,7 @@ $ cd sphinx
 	There's a number of options to configure. The complete listing may
 	be obtained by using <option>--help</option> switch. The most important ones are:
 	<itemizedlist>
-		<listitem><option>--prefix</option>, which specifies where to install Sphinx;</listitem>
+		<listitem><option>--prefix</option>, which specifies where to install Sphinx; such as <option>--prefix=/usr/local/sphinx</option> (all of the examples use this prefix)</listitem>
 		<listitem><option>--with-mysql</option>, which specifies where to look for MySQL
 			include and library files, if auto-detection fails;</listitem>
 		<listitem><option>--with-pgsql</option>, which specifies where to look for PostgreSQL
@@ -251,7 +251,7 @@ $ cd sphinx
 	<para><userinput><literallayout>$ make</literallayout></userinput></para>
 </listitem>
 <listitem>
-	<para>Install the binaries in the directory of your choice: (defaults to <filename>/usr/local/bin/</filename> on *nix systems)</para>
+	<para>Install the binaries in the directory of your choice: (defaults to <filename>/usr/local/bin/</filename> on *nix systems, but is overridden with <option>configure --prefix</option>)</para>
 	<para><userinput><literallayout>$ make install</literallayout></userinput></para>
 </listitem>
 </orderedlist></para>
@@ -296,7 +296,8 @@ do not seem to help you, please don't hesitate to contact me.
 <sect2 id="quick-tour"><title>Quick Sphinx usage tour</title>
 <para>
 All the example commands below assume that you installed Sphinx
-in <filename>/usr/local/sphinx</filename>.
+in <filename>/usr/local/sphinx</filename>, so <filename>searchd</filename> can
+be found in <filename>/usr/local/sphinx/bin/searchd</filename>.
 </para>
 <para>
 To use Sphinx, you will need to:
@@ -312,7 +313,7 @@ To use Sphinx, you will need to:
 	<para>
 	Sample configuration file, <filename>sphinx.conf.dist</filename>, which has
 	all the options documented, is created by <filename>configure</filename>.
-	Copy and edit that sample file to make your own configuration: (assuming Sphinx is unpacked into <filename>/usr/local/sphinx/</filename>)
+	Copy and edit that sample file to make your own configuration: (assuming Sphinx is installed into <filename>/usr/local/sphinx/</filename>)
 	</para>
 <para><userinput><literallayout>$ cd /usr/local/sphinx/etc
 $ cp sphinx.conf.dist sphinx.conf
@@ -337,7 +338,7 @@ $ /usr/local/sphinx/bin/indexer</literallayout></userinput></para>
 To query the index from command line, use <filename>search</filename> utility:
 </para>
 <para><userinput><literallayout>$ cd /usr/local/sphinx/etc
-$ /usr/local/bin/search test</literallayout></userinput></para>
+$ /usr/local/sphinx/bin/search test</literallayout></userinput></para>
 <para>
 To query the index from your PHP scripts, you need to:
 </para>
@@ -345,7 +346,7 @@ To query the index from your PHP scripts, you need to:
 	<listitem>
 		<para>Run the search daemon which your script will talk to:</para>
 <para><userinput><literallayout>$ cd /usr/local/sphinx/etc
-$ /usr/local/bin/searchd</literallayout></userinput></para>
+$ /usr/local/sphinx/bin/searchd</literallayout></userinput></para>
 	</listitem>
 	<listitem>
 		<para>
@@ -423,18 +424,19 @@ It's then possible to use stored values to filter, sort,
 or group full-text matches.
 </para>
 <para>Attributes, unlike the fields, are not full-text indexed. They
-are stored in the index, but they are not searchable as full-text. For
-example, to use the extended mode expression <option>@column 1</option>
-to match documents where column is 1, if column is an attribute, and this
-is still true even if the numeric digits are normally indexed.</para>
+are stored in the index, but it is not possible to search them as full-text,
+and attempting to do so results in an error.</para>
+<para>For example, it is impossible to use the extended matching mode expression
+<option>@column 1</option> to match documents where column is 1, if column is an
+attribute, and this is still true even if the numeric digits are normally indexed.</para>
 <para>Attributes can be used for filtering, though, to restrict returned
-rows, as well as sorting; it is entirely possible to sort results purely
-based on attributes, and ignore the search relevance tools. Additionally,
-attributes are returned from the search daemon, while the indexed text
-is not.</para>
+rows, as well as sorting or <link linkend="clustering">result grouping</link>;
+it is entirely possible to sort results purely based on attributes, and ignore the search
+relevance tools. Additionally, attributes are returned from the search daemon, while the
+indexed text is not.</para>
 <para>
 A good example for attributes would be a forum posts table. Assume
-that only title and contentfields need to be full-text searchable -
+that only title and content fields need to be full-text searchable -
 but that sometimes it is also required to limit search to a certain
 author or a sub-forum (ie. search only those rows that have some
 specific values of author_id or forum_id columns in the SQL table);
@@ -1030,20 +1032,22 @@ There are the following matching modes available:
 <listitem>SPH_MATCH_ANY, matches any of the query words;</listitem>
 <listitem>SPH_MATCH_PHRASE, matches query as a phrase, requiring perfect match;</listitem>
 <listitem>SPH_MATCH_BOOLEAN, matches query as a boolean expression (see <xref linkend="boolean-syntax"/>);</listitem>
-<listitem>SPH_MATCH_EXTENDED, matches query as an expression in Sphinx internal query language (see <xref linkend="extended-syntax"/>). Use of this mode is discouraged, and use of Extended2 mode is recommended.</listitem>
-<listitem>SPH_MATCH_EXTENDED2, matches query using the second version of Extended mode.</listitem>
-<listitem>SPH_MATCH_FULLSCAN, matches query, forcibly using the "full scan" mode as below. NB, applying any query terms will cause this to return nothing.</listitem>
+<listitem>SPH_MATCH_EXTENDED, matches query as an expression in Sphinx internal query language (see <xref linkend="extended-syntax"/>). Use of this mode is discouraged, and use of Extended2 matching mode is recommended.</listitem>
+<listitem>SPH_MATCH_EXTENDED2, matches query using the second version of the Extended matching mode.</listitem>
+<listitem>SPH_MATCH_FULLSCAN, matches query, forcibly using the "full scan" mode as below. NB, any query terms will be ignored, such that filters, filter-ranges and grouping will still be applied, but no text-matching.</listitem>
 </itemizedlist>
 </para>
 <para>
-There also is a special "full scan" mode that will be automatically activated when the following conditions are met:
+The SPH_MATCH_FULLSCAN mode will be automatically activated in place of the specified matching mode when the following conditions are met:
 <orderedlist>
 <listitem>The query string is empty (ie. its length is zero).</listitem>
 <listitem><link linkend="conf-docinfo">docinfo</link> storage is set to <code>extern</code>.</listitem>
 </orderedlist>
 In full scan mode, all the indexed documents will be considered as matching.
-Such queries will still apply filters, sorting, or group by, but will not perform any real full-text searching.
+Such queries will still apply filters, sorting, and group by, but will not perform any full-text searching.
 This can be useful to unify full-text and non-full-text searching code, or to offload SQL server (there are cases when Sphinx scans will perform better than analogous MySQL queries).
+
+An example of using the full scan mode might be to find posts in a forum. By selecting the forum's user ID via <code>SetFilter()</code> but not actually providing any search text, Sphinx will match every document (i.e. every post) where <code>SetFilter()</code> would match - in this case providing every post from that user. By default this will be ordered by relevancy, followed by Sphinx document ID in ascending order (earliest first).
 </para>
 </sect2>
 
@@ -1105,7 +1109,7 @@ hello !world
 </itemizedlist>
 
 Here's an example query which uses most of these operators:
-<example id="ex-extended-query"><title>Extended query example</title>
+<example id="ex-extended-query"><title>Extended matching mode: query example</title>
 <programlisting>
 "hello world" @title "example program"~5 @body python -(php|perl)
 </programlisting>
@@ -1230,7 +1234,7 @@ by relevance rank. All other modes require an additional sorting clause, with th
 syntax depending on specific mode. SPH_SORT_ATTR_ASC, SPH_SORT_ATTR_DESC and
 SPH_SORT_TIME_SEGMENTS modes require simply an attribute name.
 
-SPH_SORT_RELEVANCE is equivalent to sorting by "@weight DESC, @id ASC" in extended mode,
+SPH_SORT_RELEVANCE is equivalent to sorting by "@weight DESC, @id ASC" in extended sorting mode,
 SPH_SORT_ATTR_ASC is equivalent to "attribute ASC, @weight DESC, @id ASC",
 and SPH_SORT_ATTR_DESC to "attribute DESC, @weight DESC, @id ASC" respectively.
 </para>
@@ -1504,7 +1508,7 @@ Match mode can take one of the following values:
 <listitem>"bool" for SPH_MATCH_BOOLEAN mode;</listitem>
 <listitem>"ext" for SPH_MATCH_EXTENDED mode;</listitem>
 <listitem>"ext2" for SPH_MATCH_EXTENDED2 mode;</listitem>
-<listitem>"scan" for SPH_MATCH_FULLSCAN mode, or the query was empty.</listitem>
+<listitem>"scan" if the full scan mode was used, either by being specified with SPH_MATCH_FULLSCAN, or if the query was empty (as documented under <link linkend="matching-modes">Matching Modes</link>)</listitem>
 </itemizedlist>
 
 Sort mode can take one of the following values:
@@ -1519,20 +1523,20 @@ Sort mode can take one of the following values:
 
 </para>
 
-<para>Additionally, if <filename>searchd</filename> was started with <option>--iostats</option>, there will be an additional block of data after where the index(es) searched are listed.</para>
+<para>Additionally, if <filename>searchd</filename> was started with <option>--iostats</option>, there will be a block of data after where the index(es) searched are listed.</para>
 <para>A query log entry might take the form of:</para>
 <programlisting>
 [Fri Jun 29 21:17:58 2007] 0.004 sec [all/0/rel 35254 (0,20)] [lj] [ios=6 kb=111.1 ms=0.5] test
 </programlisting>
 
-<para>This additional block is information regarding I/O operations in performing the search, specifically listing the number of file I/O operations carried out, the amount of data in kilobytes read from the index files and the time physically spent searching.</para>
+<para>This additional block is information regarding I/O operations in performing the search: the number of file I/O operations carried out, the amount of data in kilobytes read from the index files and time spent on I/O operations and searching (there is additional processing as well).</para>
 </sect2>
 
 
 </sect1>
 
 <sect1 id="command-line-tools"><title>Command line tools reference</title>
-<para>As mentioned elsewhere, Sphinx is not a single package in itself, however there are 4 separate programs which collectively form Sphinx. This section covers these tools and how to use them.</para>
+<para>As mentioned elsewhere, Sphinx is not a single program called 'sphinx', but a collection of 4 separate programs which collectively form Sphinx. This section covers these tools and how to use them.</para>
 <sect2 id="ref-indexer"><title><filename>indexer</filename> command reference</title>
 <para><filename>indexer</filename> is the first of the two principle tools as part of Sphinx. Invoked from either the command line directly, or as part of a larger script, <filename>indexer</filename> is solely responsible for gathering the data that will be searchable.</para>
 <para>The calling syntax for <filename>indexer</filename> is as follows:</para>
@@ -1545,24 +1549,26 @@ indexer [OPTIONS] [indexname1 [indexname2 [...]]]
 $ indexer mybigindex
 $ indexer mysmallindex mybigindex
 </programlisting>
-<para>You can mix and match indexes out of all of those listed in <filename>sphinx.conf</filename>, as long as at least one is specified. Additionally, you can tell <filename>indexer</filename> to cover all available indexes, without having to name each one (it's the <option>--all</option> option, which we'll discuss in a minute)</para>
-<para>Sometimes, though you may need to pass some specific options to <filename>indexer</filename>, that you might not use every time you call <filename>indexer</filename>, or those that might differ to its usual process of just building the index from scratch. These options are:
+<para>As part of the configuration file, <filename>sphinx.conf</filename>, you specify one or more indexes for your data. You might call <filename>indexer</filename> to reindex one of them, ad-hoc, or you can tell it to process all indexes - you are not limited to calling just one, or all at once, you can always pick some combination of the available indexes.</para>
+<para>The majority of the options for <filename>indexer</filename> are given in the configuration file, however there are some options you might need to specify on the command line as well, as they can affect how the indexing operation is performed. These options are:
 <itemizedlist>
-<listitem><option>--config &lt;file&gt;</option> (<option>-c &lt;file&gt;</option> for short) tells <filename>indexer</filename> to use the given file as its configuration instead of looking for <filename>sphinx.conf</filename> in the same directory as the set of Sphinx binary files. This is most of use in shared environments where the binary files are installed somewhere like <filename>/usr/bin/sphinx/</filename> but you want to provide users with the ability to make their own custom Sphinx set-ups. In cases like those you could allow them to create their own <filename>sphinx.conf</filename> files and pass them to <filename>indexer</filename> with this option.</listitem>
-<listitem><option>--all</option> tells <filename>indexer</filename> to update every index listed in <filename>sphinx.conf</filename>, instead of listing individual indexes. This would be useful in <filename>cron</filename>-type or maintenance jobs where the entire index set will get rebuilt each day, or week, or whatever period is best.</listitem>
-<listitem><option>--rotate</option> is used for rotating indexes. Unless you have the situation where you can take the search function offline without troubling users, you will almost certainly need to keep search running whilst indexing new documents. <option>--rotate</option> creates a second index, parallel to the first (in the same place, simply including <filename>.new</filename> in the filenames). Once complete, <filename>indexer</filename> switches the two and notifies <filename>searchd</filename>, and searching will switch over to using the new index with no loss of search functionality for users.</listitem>
-<listitem><option>--quiet</option> tells <filename>indexer</filename> not to output anything, unless there is an error. Again, most used for <filename>cron</filename>-type jobs where the output is irrelevant or unnecessary, except in the event of some kind of error.</listitem>
+<listitem><option>--config &lt;file&gt;</option> (<option>-c &lt;file&gt;</option> for short) tells <filename>indexer</filename> to use the given file as its configuration. Normally, it will look for <filename>sphinx.conf</filename> in the installation directory (e.g. <filename>/usr/local/sphinx/etc/sphinx.conf</filename> if installed into <filename>/usr/local/sphinx</filename>), followed by the current directory you are in when calling <filename>indexer</filename> from the shell. This is most of use in shared environments where the binary files are installed somewhere like <filename>/usr/local/sphinx/</filename> but you want to provide users with the ability to make their own custom Sphinx set-ups, or if you want to run multiple instances on a single server. In cases like those you could allow them to create their own <filename>sphinx.conf</filename> files and pass them to <filename>indexer</filename> with this option.</listitem>
+<listitem><option>--all</option> tells <filename>indexer</filename> to update every index listed in <filename>sphinx.conf</filename>, instead of listing individual indexes. This would be useful in small configurations, or <filename>cron</filename>-type or maintenance jobs where the entire index set will get rebuilt each day, or week, or whatever period is best.</listitem>
+<listitem><option>--rotate</option> is used for rotating indexes. Unless you have the situation where you can take the search function offline without troubling users, you will almost certainly need to keep search running whilst indexing new documents. <option>--rotate</option> creates a second index, parallel to the first (in the same place, simply including <filename>.new</filename> in the filenames). Once complete, <filename>indexer</filename> notifies <filename>searchd</filename> via sending the <option>SIGHUP</option> signal, and <filename>searchd</filename> will attempt to rename the indexes (renaming the existing ones to include <filename>.old</filename> and renaming the <filename>.new</filename> to replace them), and then start serving from the newer files. Depending on the setting of <link linkend="conf-seamless-rotate">seamless_rotate</link>, there may be a slight delay in being able to search the newer indexes.</listitem>
+<listitem><option>--quiet</option> tells <filename>indexer</filename> not to output anything, unless there is an error. Again, most used for <filename>cron</filename>-type, or other script jobs where the output is irrelevant or unnecessary, except in the event of some kind of error.</listitem>
 <listitem><option>--noprogress</option> does not display progress details as they occur; instead, the final status details (such as documents indexed, speed of indexing and so on are only reported at completion of indexing. In instances where the script is not being run on a console (or 'tty'), this will be on by default.</listitem>
-<listitem><option>--buildstops &lt;outputfile.text&gt; &lt;N&gt;</option> reviews the index source, as if it were indexing the data, and produces a list of the terms that are being indexed. In other words, it produces a list of all the searchable terms that are becoming part of the index. Note; it does not update the index in question, it simply processes the data 'as if' it were indexing. <filename>outputfile.txt</filename> will contain the list of words, one per line, sorted by frequency with most frequent first, and <filename>N</filename> specifies the maximum number of words that will be listed; if sufficiently large to encompass every word in the index, only that many words will be returned. Such a dictionary list could be used for client application features around "Did you mean..." functionality.</listitem>
-<listitem><option>--buildfreqs</option> works with <option>--buildstops</option> (and is ignored if <option>--buildstops</option> is not specified). As <option>--buildstops</option> provides the list of words used within the index, <option>--buildfreqs</option> adds the quantity present in the index, which would be useful in establishing whether certain words should be considered stopwords if they are too prevalent.</listitem>
-<listitem><option>--merge &lt;dst-index&gt; &lt;src-index&gt;</option> is used for merging indexes together, for example if you have a main+delta scheme, where the main index rarely changes, but the delta index is rebuilt frequently, and <option>--merge</option> would be used to combine the two. The operation moves from right to left - the contents of <filename>src-index</filename> get added to the contents of <filename>dst-index</filename> and the result is left in <filename>dst-index</filename>. In the example of main+delta, where the main is the master, rarely modified index, and delta is the less frequently modified one, you might use the following line to call <filename>indexer</filename>, which would combine the contents of the delta into the main index and rotate the indexes: <code>indexer --merge main delta --rotate</code></listitem>
+<listitem><option>--buildstops &lt;outputfile.text&gt; &lt;N&gt;</option> reviews the index source, as if it were indexing the data, and produces a list of the terms that are being indexed. In other words, it produces a list of all the searchable terms that are becoming part of the index. Note; it does not update the index in question, it simply processes the data 'as if' it were indexing. <filename>outputfile.txt</filename> will contain the list of words, one per line, sorted by frequency with most frequent first, and <filename>N</filename> specifies the maximum number of words that will be listed; if sufficiently large to encompass every word in the index, only that many words will be returned. Such a dictionary list could be used for client application features around "Did you mean..." functionality, usually in conjunction with <option>--buildfreqs</option>, below.</listitem>
+<listitem><option>--buildfreqs</option> works with <option>--buildstops</option> (and is ignored if <option>--buildstops</option> is not specified). As <option>--buildstops</option> provides the list of words used within the index, <option>--buildfreqs</option> adds the quantity present in the index, which would be useful in establishing whether certain words should be considered stopwords if they are too prevalent. It will also help with developing "Did you mean..." features where you can how much more common a given word compared to another, similar one.</listitem>
+<listitem><option>--merge &lt;dst-index&gt; &lt;src-index&gt;</option> is used for physically merging indexes together, for example if you have a main+delta scheme, where the main index rarely changes, but the delta index is rebuilt frequently, and <option>--merge</option> would be used to combine the two. The operation moves from right to left - the contents of <filename>src-index</filename> get examined and physically combined with the contents of <filename>dst-index</filename> and the result is left in <filename>dst-index</filename>. In the example of main+delta, where the main is the master, rarely modified index, and delta is the less frequently modified one, you might use the following line to call <filename>indexer</filename>, which would combine the contents of the delta into the main index and rotate the indexes: <code>indexer --merge main delta --rotate</code>.
+	In pseudo-code, it might be expressed as: <code>dst-index += src-index</code>
+</listitem>
 <listitem><option>--merge-dst-range &lt;attr&gt; &lt;min&gt; &lt;max&gt;</option> runs the filter range given upon merging. Specifically, as the merge is applied to the destination index (as part of <option>--merge</option>, and is ignored if <option>--merge</option> is not specified), <filename>indexer</filename> will also filter the documents ending up in the destination index, and only documents will pass through the filter given will end up in the final index. This could be used for example, in an index where there is a 'deleted' attribute, where 0 means 'not deleted', to merge two indexes with <option>--merge-dst-range deleted 0 0</option> - any documents marked as deleted (value 1) would be removed from the newly-merged destination index. It can be added several times to the command line, to add successive filters to the merge, all of which must be met in order for a document to become part of the final index.</listitem>
 </itemizedlist>
 </para>
 </sect2>
 
 <sect2 id="ref-searchd"><title><filename>searchd</filename> command reference</title>
-<para><filename>searchd</filename> is the second of the two principle tools as part of Sphinx. <filename>searchd</filename> is the part of the system which actually handles searches; it functions as a form of server and is responsible for receiving queries, processing them and returning a dataset back to the different APIs for client applications.</para>
+<para><filename>searchd</filename> is the second of the two principle tools as part of Sphinx. <filename>searchd</filename> is the part of the system which actually handles searches; it functions as a server and is responsible for receiving queries, processing them and returning a dataset back to the different APIs for client applications.</para>
 <para>Unlike <filename>indexer</filename>, <filename>searchd</filename> is not designed to be run either from a regular script or command-line calling, but instead either as a daemon to be called from init.d (on Unix/Linux type systems) or to be called as a service (on Windows-type systems), so not all of the command line options will always apply, and so will be build-dependent.</para>
 <para>Calling <filename>searchd</filename> is simply a case of:</para>
 <programlisting>
@@ -1571,29 +1577,34 @@ $ searchd [OPTIONS]
 <para>The options available to <filename>searchd</filename> on all builds are:</para>
 <itemizedlist>
 <listitem><option>--help</option> (<option>-h</option> for short) lists all of the parameters that can be called in your particular build of <filename>searchd</filename></listitem>
-<listitem><option>--config &lt;file&gt;</option> (<option>-c &lt;file&gt;</option> for short) tells <filename>searchd</filename> to use the given file as its configuration instead of looking for <filename>sphinx.conf</filename> in the same directory as the set of Sphinx binary files. This is most of use in shared environments where the binary files are installed somewhere like <filename>/usr/bin/sphinx/</filename> but you want to provide users with the ability to make their own custom Sphinx set-ups. In cases like those you could allow them to create their own <filename>sphinx.conf</filename> files and users that want to enable searching can then call <filename>searchd</filename> under an appropriate account.</listitem>
-<listitem><option>--stop</option> is used to stop <filename>searchd</filename>. It will look in the configuration file for the details of the <filename>searchd</filename> process and send a message to the system to close that process. Specifically it will look for details of the PID file as specified in the <filename>sphinx.conf</filename> file, so if the configuration is somewhere other than <filename>sphinx.conf</filename> placed in the same directory as <filename>sphinx.conf</filename>, you will also need to confirm to <filename>searchd</filename> which configuration file to use with the <option>--config</option> option.</listitem>
+<listitem><option>--config &lt;file&gt;</option> (<option>-c &lt;file&gt;</option> for short) tells <filename>searchd</filename> to use the given file as its configuration, just as with <filename>indexer</filename> above.</listitem>
+<listitem><option>--stop</option> is used to stop <filename>searchd</filename>, using the details of the PID file as specified in the <filename>sphinx.conf</filename> file, so you may also need to confirm to <filename>searchd</filename> which configuration file to use with the <option>--config</option> option. NB, calling <option>--stop</option> will also make sure any changes applied to the indexes with <link linkend="api-func-updateatttributes"><code>UpdateAttributes()</code></link> will be applied to the index files themselves.</listitem>
 <listitem><option>--pidfile</option> is used to explicit use a PID file, where the process information is stored regarding <filename>searchd</filename>, used for inter-process communications (for example, <filename>indexer</filename> will need to know the PID to contact <filename>searchd</filename> when rotating indexes). Normally, <filename>searchd</filename> would use a PID if running in regular mode (i.e. not with <option>--console</option>), but it is possible that you will be running it in console mode whilst the index is being updated and rotated, for which a PID file will be needed.</listitem>
-<listitem><option>--console</option> is used to force <filename>searchd</filename> into console mode; typically it will be running as a conventional server application, and will aim to dump information into the log files (as specified in <filename>sphinx.conf</filename>). Sometimes though, when debugging issues in the configuration, or trying to diagnose hard-to-track-down problems, it may be easier to force it to dump information directly to the console/command line from which it is being called. Running in console mode also means that the process will not be forked (so searches are done in sequence) and logs will not be written to. (It should be noted that console mode is not the intended method for running <filename>searchd</filename>)</listitem>
-<listitem><option>--iostats</option> is used in conjuction with the logging options (the <option>query_log</option> will need to have been activated in <filename>sphinx.conf</filename>) to provide more detailed information on a per-query basis as to the input/output operations carried out in the course of that query. Further details are available under the <link linkend="query-log-format">query log format</link> section.</listitem>
-<listitem><option>--port portnumber</option> (<option>-p</option> for short) is used to specify the post that <filename>searchd</filename> should listen on. This will usually default to 3312, but sometimes you need to run it on a different port. Specifying it on the command line will override anything specified in the configuration file. The valid range is 0 to 65535, but ports numbered 1024 and below usually require a privileged account in order to run.</listitem>
-<listitem><option>--index &lt;index&gt;</option> forces this instance of <filename>searchd</filename> only to serve the specified index.</listitem>
+<listitem><option>--console</option> is used to force <filename>searchd</filename> into console mode; typically it will be running as a conventional server application, and will aim to dump information into the log files (as specified in <filename>sphinx.conf</filename>). Sometimes though, when debugging issues in the configuration or the daemon itself, or trying to diagnose hard-to-track-down problems, it may be easier to force it to dump information directly to the console/command line from which it is being called. Running in console mode also means that the process will not be forked (so searches are done in sequence) and logs will not be written to. (It should be noted that console mode is not the intended method for running <filename>searchd</filename>)</listitem>
+<listitem><option>--iostats</option> is used in conjuction with the logging options (the <option>query_log</option> will need to have been activated in <filename>sphinx.conf</filename>) to provide more detailed information on a per-query basis as to the input/output operations carried out in the course of that query, with a slight performance hit and of course bigger logs. Further details are available under the <link linkend="query-log-format">query log format</link> section.</listitem>
+<listitem><option>--port portnumber</option> (<option>-p</option> for short) is used to specify the post that <filename>searchd</filename> should listen on, usually for debugging purposes. This will usually default to 3312, but sometimes you need to run it on a different port. Specifying it on the command line will override anything specified in the configuration file. The valid range is 0 to 65535, but ports numbered 1024 and below usually require a privileged account in order to run.</listitem>
+<listitem><option>--index &lt;index&gt;</option> forces this instance of <filename>searchd</filename> only to serve the specified index. Like <option>--port</option>, above, this is usually for debugging purposes; more long-term changes would generally be applied to the configuration file itself.</listitem>
 </itemizedlist>
-<para>There are some options for <filename>searchd</filename> that are specific to Windows platforms, concerning handling as a service (and will only be available on Windows binaries)</para>
-<para>It should be noted for Windows platforms, that if called as a binary without installing the service, it will issue a warning about running in console mode.</para>
+<para>There are some options for <filename>searchd</filename> that are specific to Windows platforms, concerning handling as a service (and will only be available on Windows binaries.)</para>
+<para>Note that on Windows searchd will default to <option>--console</option> mode, unless you install it as a service.</para>
 <itemizedlist>
-<listitem><option>--install</option> installs <filename>searchd</filename> as a service into the Microsoft Management Console (Control Panel / Administrative Tools / Services). Any other parameters specified on the command line, where <option>--install</option> is specified will also become part of the command line on future starts of the service. For example, as part of calling <filename>searchd</filename>, you may also need to specify the configuration file with <option>--config</option>, and you would do that as well as specifying <option>--install</option>. Once called, the usual start/stop facilities will become available via the management console, so any methods you could use for starting, stopping and restarting services would also apply to <filename>searchd</filename>.</listitem>
+<listitem><option>--install</option> installs <filename>searchd</filename> as a service into the Microsoft Management Console (Control Panel / Administrative Tools / Services). Any other parameters specified on the command line, where <option>--install</option> is specified will also become part of the command line on future starts of the service. For example, as part of calling <filename>searchd</filename>, you will likely also need to specify the configuration file with <option>--config</option>, and you would do that as well as specifying <option>--install</option>. Once called, the usual start/stop facilities will become available via the management console, so any methods you could use for starting, stopping and restarting services would also apply to <filename>searchd</filename>. Example:
+<programlisting>
+C:\WINDOWS\system32&gt; C:\sphinx\searchd.exe --install --config C:\sphinx\sphinx.conf
+</programlisting>
+
+</listitem>
 <listitem><option>--delete</option> removes the service from the Microsoft Management Console and other places where services are registered, after previously installed with <option>--install</option>. Note, this does not uninstall the software or delete the indexes. It means the service will not be called from the services systems, and will not be started on the machine's next start. If currently running as a service, the current instance will not be terminated (until the next reboot, or <filename>searchd</filename> is called with <option>--stop</option>). If the service was installed with a custom name (with <option>--servicename</option>), the same name will need to be specified with <option>--servicename</option> when calling to uninstall.</listitem>
-<listitem><option>--servicename &lt;name&gt;</option> applies the given name to <filename>searchd</filename> when installing or deleting the service, as would appear in the Management Console; this will default to searchd, but if being deployed on servers where multiple administrators may log into the system, a more descriptive name may be applicable. It should be noted that unless combined with <option>--install</option> or <option>--delete</option>, this option does not do anything.</listitem>
-<listitem><option>--ntservice</option> - is the option that is passed by the Management Console to <filename>searchd</filename> to invoke it as a service on Windows platforms. It would not normally be necessary to call this directly; this would normally be called by Windows when the service would be started, although if you wanted to call this as a regular service from the command-line (as the complement to <option>--console</option>) you could do so in theory.</listitem>
+<listitem><option>--servicename &lt;name&gt;</option> applies the given name to <filename>searchd</filename> when installing or deleting the service, as would appear in the Management Console; this will default to searchd, but if being deployed on servers where multiple administrators may log into the system, or a system with multiple <filename>searchd</filename> instances, a more descriptive name may be applicable. Note that unless combined with <option>--install</option> or <option>--delete</option>, this option does not do anything.</listitem>
+<listitem><option>--ntservice</option> is the option that is passed by the Management Console to <filename>searchd</filename> to invoke it as a service on Windows platforms. It would not normally be necessary to call this directly; this would normally be called by Windows when the service would be started, although if you wanted to call this as a regular service from the command-line (as the complement to <option>--console</option>) you could do so in theory.</listitem>
 </itemizedlist>
 
 </sect2>
 
 <sect2 id="ref-search"><title><filename>search</filename> command reference</title>
 <para><filename>search</filename> is one of the two less prominent tools within the Sphinx package. Whereas <filename>searchd</filename> is responsible for searches in a server-type environment, <filename>search</filename> is aimed at testing the index from the command line, and testing the index quickly without building a framework to make the connection to the server and process its response.</para>
-<para>It should be noted that <filename>search</filename> is not intended to be deployed as part of a client application; it is unlikely you would be needing to write an interface to <filename>search</filename> instead of <filename>searchd</filename>, and none of the bundled client APIs support this method.</para>
-<para>That said, virtually every type of query that you could build in the APIs could also be made with <filename>search</filename>, however for very complex searches it may be easier to construct them using a small script and the corresponding API.</para>
+<para>Note: <filename>search</filename> is not intended to be deployed as part of a client application; it is strongly recommended you do not write an interface to <filename>search</filename> instead of <filename>searchd</filename>, and none of the bundled client APIs support this method. (In any event, <filename>search</filename> will reload files each time, whereas <filename>searchd</filename> will cache them in memory for performance.)</para>
+<para>That said, many types of query that you could build in the APIs could also be made with <filename>search</filename>, however for very complex searches it may be easier to construct them using a small script and the corresponding API. Additionally, some newer features may be available in the <filename>searchd</filename> system that have not yet been brought into <filename>search</filename>.</para>
 <para>The calling syntax for <filename>search</filename> is as follows:</para>
 <programlisting>
 search [OPTIONS] word1 [word2 [word3 [...]]]
@@ -1602,8 +1613,8 @@ search [OPTIONS] word1 [word2 [word3 [...]]]
 <para>The default behaviour is to apply a search for word1 (AND word2 AND word3... as specified) to all fields in all indexes as given in the configuration file. If constructing the equivalent in the API, this would be the equivalent to passing <option>SPH_MATCH_ALL</option> to <code>SetMatchMode</code>, and specifying <option>*</option> as the indexes to query as part of <code>Query</code>.</para>
 <para>There are many options available to <filename>search</filename>. Firstly, the general options:
 <itemizedlist>
-<listitem><option>--config &lt;file&gt;</option> (<option>-c &lt;file&gt;</option> for short) tells <filename>search</filename> to use the given file as its configuration instead of looking for <filename>sphinx.conf</filename> in the same directory as the set of Sphinx binary files. This is most of use in shared environments where the binary files are installed somewhere like <filename>/usr/bin/sphinx</filename> but you want to provide users with the ability to make their own custom Sphinx set-ups.</listitem>
-<listitem><option>--index &lt;index&gt;</option> (<option>-i &lt;index&gt;</option> for short) tells <filename>search</filename> to limit searching to the specified index only; normally it would attempt to search all of the indexes listed in <filename>sphinx.conf</filename>.</listitem>
+<listitem><option>--config &lt;file&gt;</option> (<option>-c &lt;file&gt;</option> for short) tells <filename>search</filename> to use the given file as its configuration, just as with <filename>indexer</filename> above.</listitem>
+<listitem><option>--index &lt;index&gt;</option> (<option>-i &lt;index&gt;</option> for short) tells <filename>search</filename> to limit searching to the specified index only; normally it would attempt to search all of the physical indexes listed in <filename>sphinx.conf</filename>, not any distributed ones.</listitem>
 <listitem><option>--stdin</option> tells <filename>search</filename> to accept the query from the standard input, rather than the command line. This can be useful for testing purposes whereby you could feed input via pipes and from scripts.</listitem>
 </itemizedlist>
 </para>
@@ -1624,8 +1635,8 @@ search [OPTIONS] word1 [word2 [word3 [...]]]
 <listitem><option>--offset &lt;count&gt;</option> (<option>-o &lt;count&gt;</option> for short) offsets the result list by the number of places set by the count; this would be used for pagination through results, where if you have 20 results per 'page', the second page would begin at offset 20, the third page at offset 40, etc.</listitem>
 <listitem><option>--group &lt;attr&gt;</option> (<option>-g &lt;attr&gt;</option> for short) specifies that results should be grouped together based on the attribute specified. Like the GROUP BY clause in SQL, it will combine all results where the attribute given matches, and returns a set of results where each returned result is the best from each group. Unless otherwise specified, this will be the best match on relevance.</listitem>
 <listitem><option>--groupsort &lt;expr&gt;</option> (<option>-gs &lt;expr&gt;</option> for short) instructs that when results are grouped with <option>-group</option>, the expression given in &lt;expr&gt; shall determine the order of the groups. Note, this does not specify which is the best item within the group, only the order in which the groups themselves shall be returned.</listitem>
-<listitem><option>--sortby &lt;clause&gt;</option> (<option>-s &lt;clause&gt;</option> for short) specifies that results should be sorted in the order listed in &lt;clause&gt;. This is used in conjuction with <option>--ext</option> and <option>--ext2</option> above, and allows you to specify the order you wish results to be presented in, ordering by different columns. For example, you could say <option>--sortby @weight DESC entrytime DESC</option> to sort entries first by weight (or relevance) and where two or more entries have the same weight, to then sort by the time with the highest time (newest) first. Additionally, like the regular sorting modes, if <option>--group</option> (grouping) is being used, this will state how to establish the best match within each group.</listitem>
-<listitem><option>--sortexpr expr</option> (<option>-S expr</option> for short) specifies that the search results should be presented in an order determined by an arithmetic expression, stated in expr. For example: <option>--sortexpr @weight + ( user_karma + ln(pageviews) )*0.1</option>. This is discussed in more detail under the <option>SPH_SORT_EXTENDED</option> entry under the <link linkend="sorting-modes">Sorting modes</link> chapter of the manual.</listitem>
+<listitem><option>--sortby &lt;clause&gt;</option> (<option>-s &lt;clause&gt;</option> for short) specifies that results should be sorted in the order listed in &lt;clause&gt;. This allows you to specify the order you wish results to be presented in, ordering by different columns. For example, you could say <option>--sortby "@weight DESC entrytime DESC"</option> to sort entries first by weight (or relevance) and where two or more entries have the same weight, to then sort by the time with the highest time (newest) first. You will usually need to put the items in quotes (<option>--sortby "@weight DESC"</option>) or use commas (<option>--sortby @weight,DESC</option>) to avoid the items being treated separately. Additionally, like the regular sorting modes, if <option>--group</option> (grouping) is being used, this will state how to establish the best match within each group.</listitem>
+<listitem><option>--sortexpr expr</option> (<option>-S expr</option> for short) specifies that the search results should be presented in an order determined by an arithmetic expression, stated in expr. For example: <option>--sortexpr "@weight + ( user_karma + ln(pageviews) )*0.1"</option> (again noting that this will have to be quoted to avoid the shell dealing with the asterisk). Extended sort mode is discussed in more detail under the <option>SPH_SORT_EXTENDED</option> entry under the <link linkend="sorting-modes">Sorting modes</link> chapter of the manual.</listitem>
 <listitem><option>--sort=date</option> specifies that the results should be sorted by descending (i.e. most recent first) date. This requires that there is an attribute in the index that is set as a timestamp.</listitem>
 <listitem><option>--rsort=date</option> specifies that the results should be sorted by ascending (i.e. oldest first) date. This requires that there is an attribute in the index that is set as a timestamp.</listitem>
 <listitem><option>--sort=ts</option> specifies that the results should be sorted by timestamp in groups; it will return all of the documents whose timestamp is within the last hour, then sorted within that bracket for relevance. After, it would return the documents from the last day, sorted by relevance, then the last week and then the last month. It is discussed in more detail under the <option>SPH_SORT_TIME_SEGMENTS</option> entry under the <link linkend="sorting-modes">Sorting modes</link> chapter of the manual.</listitem>
@@ -1635,7 +1646,7 @@ search [OPTIONS] word1 [word2 [word3 [...]]]
 <para>Other options:
 <itemizedlist>
 <listitem><option>--noinfo</option> (<option>-q</option> for short) instructs <filename>search</filename> not to look-up data in your SQL database. Specifically, for debugging with MySQL and <filename>search</filename>, you can provide it with a query to look up the full article based on the returned document ID. It is explained in more detail under the <link linkend="conf-sql-query-info">sql_query_info</link> directive.</listitem>
-<listitem><option>--dumpheader path</option> instructs <filename>search</filename> to investigate the field list for a given index; you would need to specify the full path to the .sph file that is part of the index you wish to examine. It will provide a breakdown of how the index is constructed, which can be useful for debugging.</listitem>
+<listitem><option>--dumpheader path</option> instructs <filename>search</filename> to report the entire attribute and field list for a given index; you would need to specify the full path to the .sph file that is part of the index you wish to examine. It will provide a breakdown of how the index is constructed, which can be useful for debugging.</listitem>
 
 </itemizedlist>
 </para>
@@ -1643,7 +1654,7 @@ search [OPTIONS] word1 [word2 [word3 [...]]]
 
 <sect2 id="ref-spelldump"><title><filename>spelldump</filename> command reference</title>
 <para><filename>spelldump</filename> is the second of the two less prominent tools within the Sphinx package.</para>
-<para>It is used to extract the contents of a dictionary file that uses <filename>ispell</filename> format, which can help build word lists for <glossterm>wordforms</glossterm>.</para>
+<para>It is used to extract the contents of a dictionary file that uses <filename>ispell</filename> format, which can help build word lists for <glossterm>wordforms</glossterm> - all of the possible forms are pre-built for you.</para>
 <para>Its general usage is:</para>
 <programlisting>
 spelldump [options] &lt;dictionary&gt; &lt;affix&gt; [result] [locale-name]
@@ -1657,7 +1668,7 @@ spelldump en.dict en.aff
 spelldump ru.dict ru.aff ru.txt ru_RU.CP1251
 spelldump ru.dict ru.aff ru.txt .1251
 </programlisting>
-<para>The results file does not, in itself, contain wordforms for use; it will contain a list of all the words in the dictionary in alphabetic order, output in the format of a wordforms file, which you can use to customise for your specific circumstances. An example of the result file:</para>
+<para>The results file will contain a list of all the words in the dictionary in alphabetic order, output in the format of a wordforms file, which you can use to customise for your specific circumstances. An example of the result file:</para>
 <programlisting>
 zone &gt; zone
 zoned &gt; zoned
@@ -1758,7 +1769,7 @@ failures and maxed out (too busy) remote agents.
 <sect3 id="api-func-setconnecttimeout"><title>SetConnectTimeout</title>
 <para><b>Prototype:</b> function SetConnectTimeout ( $timeout )</para>
 <para>
-Sets the time allowed to spend connecting to the server before aborting.
+Sets the time allowed to spend connecting to the server before giving up.
 </para>
 <para>Under some circumstances, the server can be delayed in responding, either
 due to network delays, or a query backlog. In either instance, this allows
@@ -1766,6 +1777,10 @@ the client application programmer some degree of control over how their
 program interacts with <filename>searchd</filename> when not available,
 and can ensure that the client application does not fail due to exceeding
 the script execution limits (especially in PHP).
+</para>
+<para>In the event of a failure to connect, an appropriate error code should
+be returned back to the application in order for application-level error handling
+to advise the user.
 </para>
 </sect3>
 
@@ -2238,7 +2253,7 @@ of hash) with the following keys and values:
 </varlistentry>
 </variablelist>
 </para>
-<para>It should be noted that <code>Query()</code> carries out the same actions as <code>AddQuery()</code> and <code>RunQueries()</code> without the intermediate steps; it is analoguous to a single <code>AddQuery()</code> call, followed by a corresponding <code>RunQueries()</code>, then returning the first index of matches (for the first, and only, query.)</para>
+<para>It should be noted that <code>Query()</code> carries out the same actions as <code>AddQuery()</code> and <code>RunQueries()</code> without the intermediate steps; it is analoguous to a single <code>AddQuery()</code> call, followed by a corresponding <code>RunQueries()</code>, then returning the first array element of matches (from the first, and only, query.)</para>
 </sect3>
 
 <sect3 id="api-func-addquery"><title>AddQuery</title>
@@ -2298,12 +2313,10 @@ Additionally, any filters set up before an <code>AddQuery()</code> will fall thr
 queries. So, if <code>SetFilter()</code> is called before the first query, the same filter
 will be in place for the second (and subsequent) queries batched through <code>AddQuery()</code>
 unless you call <code>ResetFilters()</code> first. Alternatively, you can add additional filters
-as well.
-</para>
-<para>
-<code>AddQuery()</code> does <b>not</b> modify the current state. That is,
-all current sorting, filtering, and grouping settings will not be affected by
-this call; so subsequent queries can easily reuse current query settings.
+as well.</para>
+<para>This would also be true for grouping options and sorting options; no current sorting,
+filtering, and grouping settings are affected by this call; so subsequent queries will reuse
+current query settings.
 </para>
 <para>
 <code>AddQuery()</code> returns an index into an array of results
@@ -3593,6 +3606,13 @@ sql_query_info = SELECT * FROM documents WHERE id=$id
 </programlisting>
 </sect3>
 
+<!-- TODO: 
+unpack_zlib = zlib
+unpack_mysqlcompress = compressed_column
+unpack_mysqlcompress = compressed_column_2
+
+unpack_mysqlcompress_maxsize = 16M
+-->
 
 <sect3 id="conf-xmlpipe-command"><title>xmlpipe_command</title>
 <para>
@@ -3951,7 +3971,6 @@ used to implement stemming exceptions.
 morphology = stem_en, libstemmer_sv
 </programlisting>
 </sect3>
-
 
 <sect3 id="conf-stopwords"><title>stopwords</title>
 <para>
@@ -5163,6 +5182,46 @@ unlink_old = 0
 </programlisting>
 </sect3>
 
+<sect3 id="conf-attr-flush-period"><title>attr_flush_period</title>
+<para>
+When calling <code>UpdateAttributes()</code> to update document attributes in
+real-time, changes are first written to the in-memory copy of attributes
+(<option>docinfo</option> must be set to <option>extern</option>).
+
+Then, once <filename>searchd</filename> shuts down normally (via <code>SIGTERM</code>
+being sent), the changes are written to disk.
+</para>
+<para>Starting with 0.9.9, it is possible to tell <filename>searchd</filename>
+to periodically write these changes back to disk, to avoid them being lost. The time
+between those intervals is set with <option>attr_flush_period</option>, in seconds.
+</para>
+<para>It defaults to 0, which disables the periodic flushing, but flushing will
+still occur at normal shut-down.
+</para>
+</sect3>
+
+<!-- TODO add the following directives:
+	mva_updates_pool	= 1M
+
+	# max allowed network packet size
+	# limits both query packets from clients, and responses from agents
+	# optional, default size is 8M
+	max_packet_size		= 8M
+
+	# crash log path
+	# searchd will (try to) log crashed query to 'crash_log_path.PID' file
+	# optional, default is empty (do not create crash logs)
+	#
+	# crash_log_path		= @CONFDIR@/log/crash
+
+	# max allowed per-query filter count
+	# optional, default is 256
+	max_filters			= 256
+
+	# max allowed per-filter values count
+	# optional, default is 4096
+	max_filter_values	= 4096
+-->
 
 </sect2>
 

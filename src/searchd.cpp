@@ -167,6 +167,7 @@ static bool				g_bSeamlessRotate	= true;
 
 static bool				g_bIOStats		= false;
 static bool				g_bOptConsole	= false;
+static bool				g_bOptNoDetach	= false;
 
 static volatile bool	g_bDoDelete			= false;	// do we need to delete any indexes?
 static volatile bool	g_bDoRotate			= false;	// flag that we are rotating now; set from SIGHUP; cleared on rotation success
@@ -6235,6 +6236,9 @@ void ShowHelp ()
 		"-l, --listen <spec>\tlisten on given address, port or path (overrides\n"
 		"\t\t\tconfig settings)\n"
 		"-i, --index <index>\tonly serve one given index\n"
+#if !USE_WINDOWS
+		"--nodetach\t\tdo not detach into background\n"
+#endif
 		"\n"
 		"Examples:\n"
 		"searchd --config /usr/local/sphinx/etc/sphinx.conf\n"
@@ -6384,7 +6388,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 		// handle no-arg options
 		OPT ( "-h", "--help" )		{ ShowHelp(); return 0; }
-		OPT1 ( "--console" )		g_bOptConsole = true;
+		OPT1 ( "--console" )		{ g_bOptConsole = true; g_bOptNoDetach = true; }
 		OPT1 ( "--stop" )			bOptStop = true;
 		OPT1 ( "--pidfile" )		bOptPIDFile = true;
 		OPT1 ( "--iostats" )		g_bIOStats = true;
@@ -6392,6 +6396,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		OPT1 ( "--install" )		{ if ( !g_bService ) { ServiceInstall ( argc, argv ); return 0; } }
 		OPT1 ( "--delete" )			{ if ( !g_bService ) { ServiceDelete (); return 0; } }
 		OPT1 ( "--ntservice" )		; // it's valid but handled elsewhere
+#else
+		OPT1 ( "--nodetach" )		g_bOptNoDetach = true;
 #endif
 
 		// handle 1-arg options
@@ -6774,7 +6780,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	// setup mva updates arena
 	sphArenaInit ( hSearchd.GetSize ( "mva_updates_pool", 1048576 ) );
 
-	// daemonize
+	// create logs
 	if ( !g_bOptConsole )
 	{
 		// create log
@@ -6801,8 +6807,11 @@ int WINAPI ServiceMain ( int argc, char **argv )
 				sphFatal ( "failed to open query log file '%s': %s", hSearchd["query_log"].cstr(), strerror(errno) );
 			g_sQueryLogFile = hSearchd["query_log"].cstr();
 		}
+	}
 
-		// do daemonize
+	// prepare to detach
+	if ( !g_bOptNoDetach )
+	{
 #if !USE_WINDOWS
 		close ( STDIN_FILENO );
 		close ( STDOUT_FILENO );
@@ -6829,8 +6838,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( bOptPIDFile )
 		sphLockUn ( g_iPidFD );
 
-	#if !USE_WINDOWS
-	if ( !g_bOptConsole )
+#if !USE_WINDOWS
+	if ( !g_bOptNoDetach )
 	{
 		switch ( fork() )
 		{
@@ -6850,8 +6859,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 				exit ( 0 );
 		}
 	}
-	#endif
-
+#endif
 
 	if ( bOptPIDFile )
 	{
@@ -6875,7 +6883,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	SetConsoleCtrlHandler ( CtrlHandler, TRUE );
 #endif
 
-	if ( !g_bOptConsole )
+	if ( !g_bOptNoDetach )
 	{
 		// re-lock indexes
 		g_hIndexes.IterateStart ();
@@ -6902,11 +6910,11 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			}
 		}
 
-	} else
-	{
-		// if we're running in console mode, dump queries to tty as well
-		g_iQueryLogFile = g_iLogFile;
 	}
+
+	// if we're running in console mode, dump queries to tty as well
+	if ( g_bOptConsole )
+		g_iQueryLogFile = g_iLogFile;
 
 	/////////////////
 	// serve clients

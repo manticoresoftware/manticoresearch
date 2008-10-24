@@ -3451,7 +3451,8 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery )
 		return true;
 
 	// create queue
-	ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, tRes.m_tSchema, tRes.m_sError );
+	// at this point, we do not need to compute anything; it all must be here
+	ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, tRes.m_tSchema, tRes.m_sError, false );
 	if ( !pSorter )
 		return false;
 
@@ -6486,7 +6487,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( !g_bService )
 	{
 		sphWarning ( "forcing --console mode on Windows" );
-		g_bOptConsole = true;
+		g_bOptConsole = g_bOptNoDetach = true;
 	}
 
 	// init WSA on Windows

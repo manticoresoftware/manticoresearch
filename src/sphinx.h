@@ -2050,7 +2050,7 @@ void				sphSetQuiet ( bool bQuiet );
 
 /// creates proper queue for given query
 /// may return NULL on error; in this case, error message is placed in sError
-ISphMatchSorter *	sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError );
+ISphMatchSorter *	sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError, bool bComputeItems=true );
 
 /// convert queue to sorted array, and add its entries to result's matches array
 void				sphFlattenQueue ( ISphMatchSorter * pQueue, CSphQueryResult * pResult, int iTag );

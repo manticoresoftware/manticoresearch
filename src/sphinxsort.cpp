@@ -1602,7 +1602,7 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const CSphSchema & 
 }
 
 
-ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError )
+ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError, bool bComputeItems )
 {
 	// prepare for descent
 	ISphMatchSorter * pTop = NULL;
@@ -1644,7 +1644,8 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 	}
 
 	// expressions from select items
-	ARRAY_FOREACH ( i, pQuery->m_dItems )
+	if ( bComputeItems )
+		ARRAY_FOREACH ( i, pQuery->m_dItems )
 	{
 		const CSphQueryItem & tItem = pQuery->m_dItems[i];
 		const CSphString & sExpr = tItem.m_sExpr;

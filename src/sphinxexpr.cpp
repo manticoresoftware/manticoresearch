@@ -739,6 +739,8 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode, DWORD uAttrType )
 
 				switch ( g_dFuncs[tNode.m_iFunc].m_eFunc )
 				{
+					case FUNC_NOW:		assert ( 0 ); break; // prevent gcc bitching
+
 					case FUNC_ABS:		return new Expr_Abs_c ( dArgs[0] );
 					case FUNC_CEIL:		return new Expr_Ceil_c ( dArgs[0] );
 					case FUNC_FLOOR:	return new Expr_Floor_c ( dArgs[0] );
@@ -815,7 +817,7 @@ public:
 		CSphMatch tDummy;
 		for ( int i=1; i<dArgs.GetLength(); i++ )
 		{
-			m_dTurnPoints.Add ( ExprEval ( dArgs[i], tDummy ) );
+			m_dTurnPoints.Add ( Expr_IntervalTraits_c<T>::ExprEval ( dArgs[i], tDummy ) );
 			SafeRelease ( dArgs[i] );
 		}
 	}
@@ -823,7 +825,7 @@ public:
 	/// evaluate arg, return interval id
 	virtual int IntEval ( const CSphMatch & tMatch ) const
 	{
-		T val = ExprEval ( m_pArg, tMatch );
+		T val = ExprEval ( this->m_pArg, tMatch ); // 'this' fixes gcc braindamage
 		ARRAY_FOREACH ( i, m_dTurnPoints ) // FIXME! OPTIMIZE! perform binary search here
 			if ( val<m_dTurnPoints[i] )
 				return i;
@@ -851,9 +853,9 @@ public:
 	/// evaluate arg, return interval id
 	virtual int IntEval ( const CSphMatch & tMatch ) const
 	{
-		T val = ExprEval ( m_pArg, tMatch );
+		T val = ExprEval ( this->m_pArg, tMatch ); // 'this' fixes gcc braindamage
 		ARRAY_FOREACH ( i, m_dTurnPoints )
-			if ( val<ExprEval ( m_dTurnPoints[i], tMatch ) )
+			if ( val < Expr_IntervalTraits_c<T>::ExprEval ( m_dTurnPoints[i], tMatch ) )
 				return i;
 		return m_dTurnPoints.GetLength();
 	}

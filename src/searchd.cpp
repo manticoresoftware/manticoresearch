@@ -306,6 +306,8 @@ ServedIndex_t::~ServedIndex_t ()
 
 void Shutdown (); // forward ref for sphFatal()
 
+
+/// format current timestamp for logging
 void sphFormatCurrentTime ( char * sTimeBuf )
 {
 #if !USE_WINDOWS
@@ -345,27 +347,11 @@ void sphFormatCurrentTime ( char * sTimeBuf )
 		1900+tmp.tm_year );
 }
 
-void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
+
+/// physically emit log entry
+/// buffer must have 1 extra byte for linefeed
+void sphLogEntry ( ESphLogLevel eLevel, char * sBuf )
 {
-	if ( eLevel>g_eLogLevel || ( g_iLogFile<0 && !g_bService ) )
-		return;
-
-	char sTimeBuf[128];
-	sphFormatCurrentTime ( sTimeBuf );
-
-	const char * sBanner = "";
-	if ( eLevel==LOG_FATAL )	sBanner = "FATAL: ";
-	if ( eLevel==LOG_WARNING )	sBanner = "WARNING: ";
-
-	char sBuf [ 1024 ];
-	if ( !g_bLogTty )
-		snprintf ( sBuf, sizeof(sBuf)-1, "[%s] [%5d] %s", sTimeBuf, (int)getpid(), sBanner );
-	else
-		strcpy ( sBuf, sBanner );
-	int iLen = strlen(sBuf);
-
-	vsnprintf ( sBuf+iLen, sizeof(sBuf)-iLen-1, sFmt, ap );
-
 #if USE_WINDOWS
 	if ( g_bService && g_iLogFile==STDOUT_FILENO )
 	{
@@ -402,7 +388,7 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	} else
 #endif
 	{
-		strncat ( sBuf, "\n", sizeof(sBuf) );
+		strcat ( sBuf, "\n" );
 
 		lseek ( g_iLogFile, 0, SEEK_END );
 		write ( g_iLogFile, sBuf, strlen(sBuf) );
@@ -412,6 +398,86 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 			write ( STDOUT_FILENO, sBuf, strlen(sBuf) );
 		}
 	}
+}
+
+
+/// log entry (with log levels, dupe catching, etc)
+/// call with NULL format for dupe flushing
+void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
+{
+	// dupe catcher state
+	static const float	FLUSH_THRESH_TIME	= 1.0f;
+	static const int	FLUSH_THRESH_COUNT	= 100;
+
+	static ESphLogLevel eLastLevel = LOG_INFO;
+	static DWORD uLastEntry = 0;
+	static float fLastStamp = -1.0f-FLUSH_THRESH_TIME;
+	static int iLastRepeats = 0;
+
+	// only if we can
+	if ( ( sFmt && eLevel>g_eLogLevel ) || ( g_iLogFile<0 && !g_bService ) )
+		return;
+
+	// format the banner
+	char sTimeBuf[128];
+	sphFormatCurrentTime ( sTimeBuf );
+
+	const char * sBanner = "";
+	if ( sFmt==NULL ) eLevel = eLastLevel;
+	if ( eLevel==LOG_FATAL ) sBanner = "FATAL: ";
+	if ( eLevel==LOG_WARNING ) sBanner = "WARNING: ";
+
+	char sBuf [ 1024 ];
+	if ( !g_bLogTty )
+		snprintf ( sBuf, sizeof(sBuf)-1, "[%s] [%5d] %s", sTimeBuf, (int)getpid(), sBanner );
+	else
+		strcpy ( sBuf, sBanner );
+	int iLen = strlen(sBuf);
+
+	// format the message
+	if ( sFmt )
+		vsnprintf ( sBuf+iLen, sizeof(sBuf)-iLen-1, sFmt, ap );
+
+	// catch dupes
+	DWORD uEntry = sFmt ? sphCRC32 ( (const BYTE*)( sBuf+iLen ) ) : 0;
+	float fNow = sphLongTimer ();
+
+	// accumulate while possible
+	if ( sFmt && eLevel==eLastLevel && uEntry==uLastEntry && iLastRepeats<FLUSH_THRESH_COUNT && fNow<fLastStamp+FLUSH_THRESH_TIME )
+	{
+		fLastStamp = fNow;
+		iLastRepeats++;
+		return;
+	}
+
+	// flush if needed
+	if ( iLastRepeats!=0 && ( sFmt || fNow>=fLastStamp+FLUSH_THRESH_TIME ) )
+	{
+		// flush if we actually have something to flush, and
+		// case 1: got a message we can't accumulate
+		// case 2: got a periodic flush and been otherwise idle for a thresh period
+		char sLast[256];
+		strncpy ( sLast, sBuf, iLen );
+		snprintf ( sLast+iLen, sizeof(sLast)-iLen, "last message repeated %d times", iLastRepeats );
+		sphLogEntry ( eLastLevel, sLast );
+
+		fLastStamp = fNow;
+		iLastRepeats = 0;
+		eLastLevel = LOG_INFO;
+		uLastEntry = 0;
+	}
+
+	// was that a flush-only call?
+	if ( !sFmt )
+		return;
+
+	fLastStamp = fNow;
+	iLastRepeats = 0;
+	eLastLevel = eLevel;
+	uLastEntry = uEntry;
+
+	// do the logging
+	sphLogEntry ( eLevel, sBuf );
 }
 
 
@@ -6947,6 +7013,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		CheckRotate ();
 		CheckReopen ();
 		CheckFlush ();
+		sphLog ( LOG_INFO, NULL, NULL ); // flush dupes
 
 		ARRAY_FOREACH ( i, g_dSockets )
 			sphFDSet ( g_dSockets[i], &fdsAccept );

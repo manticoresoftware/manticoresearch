@@ -177,8 +177,10 @@ struct Expr_Arglist_c : public ISphExpr
 		virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return _expr3; } \
 	};
 
-DECLARE_UNARY_INT ( Expr_Neg_c,		-FIRST,						-INTFIRST,	-INT64FIRST )
-DECLARE_UNARY_FLT ( Expr_Abs_c,		fabs(FIRST) )
+#define IABS(_arg) ( (_arg)>0 ? (_arg) : (-_arg) )
+
+DECLARE_UNARY_INT ( Expr_Neg_c,		-FIRST,			-INTFIRST,		-INT64FIRST )
+DECLARE_UNARY_INT ( Expr_Abs_c,		fabs(FIRST),	IABS(INTFIRST),	IABS(INT64FIRST) )
 DECLARE_UNARY_FLT ( Expr_Ceil_c,	float(ceil(FIRST)) )
 DECLARE_UNARY_FLT ( Expr_Floor_c,	float(floor(FIRST)) )
 DECLARE_UNARY_FLT ( Expr_Sin_c,		float(sin(FIRST)) )

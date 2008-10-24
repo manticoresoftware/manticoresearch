@@ -913,6 +913,7 @@ DWORD ExprParser_t::DeduceType ( int iNode )
 					case FUNC_MADD:
 					case FUNC_MUL3:
 					case FUNC_IDIV:
+					case FUNC_ABS:
 						return DeduceType ( tNode.m_iLeft );
 
 					case FUNC_BIGINT:

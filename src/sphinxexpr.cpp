@@ -13,7 +13,13 @@
 
 #include "sphinx.h"
 #include "sphinxexpr.h"
+#include <time.h>
 #include <math.h>
+
+#if !USE_WINDOWS
+#include <unistd.h>
+#include <sys/time.h>
+#endif
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -260,6 +266,8 @@ enum Docinfo_e
 /// known functions
 enum Func_e
 {
+	FUNC_NOW,
+
 	FUNC_ABS,
 	FUNC_CEIL,
 	FUNC_FLOOR,
@@ -279,7 +287,9 @@ enum Func_e
 
 	FUNC_IF,
 	FUNC_MADD,
-	FUNC_MUL3
+	FUNC_MUL3,
+
+	FUNC_INTERVAL
 };
 
 
@@ -293,6 +303,8 @@ struct FuncDesc_t
 
 static FuncDesc_t g_dFuncs[] =
 {
+	{ "now",	0,	FUNC_NOW },
+
 	{ "abs",	1,	FUNC_ABS },
 	{ "ceil",	1,	FUNC_CEIL },
 	{ "floor",	1,	FUNC_FLOOR },
@@ -312,7 +324,9 @@ static FuncDesc_t g_dFuncs[] =
 
 	{ "if",		3,	FUNC_IF },
 	{ "madd",	3,	FUNC_MADD },
-	{ "mul3",	3,	FUNC_MUL3 }
+	{ "mul3",	3,	FUNC_MUL3 },
+
+	{ "interval",	-2,	FUNC_INTERVAL }
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -369,11 +383,15 @@ private:
 	const CSphSchema *		m_pSchema;
 	CSphVector<ExprNode_t>	m_dNodes;
 
+	int						m_iConstNow;
+
 private:
 	int						GetToken ( YYSTYPE * lvalp );
 	DWORD					DeduceType ( int iNode );
 	void					Optimize ( int iNode, DWORD uAttrType );
 	ISphExpr *				CreateTree ( int iNode, DWORD uAttrType );
+	void					GatherArgTypes ( int iNode, CSphVector<int> & dTypes );
+	ISphExpr *				CreateIntervalNode ( int iArgsNode, CSphVector<ISphExpr *> & dArgs, DWORD uAttrType );
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -641,6 +659,14 @@ void ExprParser_t::Optimize ( int iNode, DWORD uAttrType )
 			return;
 		}
 	}
+
+	// constant function (such as NOW())
+	if ( pRoot->m_iToken==TOK_FUNC && pRoot->m_iFunc==FUNC_NOW )
+	{
+		pRoot->m_iToken = TOK_CONST_INT;
+		pRoot->m_iConst = m_iConstNow;
+		return;
+	}
 }
 
 /// fold nodes subtree into opcodes
@@ -691,8 +717,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode, DWORD uAttrType )
 			{
 				// fold arglist to array
 				CSphVector<ISphExpr *> dArgs;
-				assert ( pLeft );
-				if ( pLeft->IsArglist() )
+				if ( pLeft && pLeft->IsArglist() )
 				{
 					assert ( !pRight );
 					Expr_Arglist_c * pArgs = (Expr_Arglist_c *) pLeft;
@@ -708,30 +733,34 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode, DWORD uAttrType )
 
 				// spawn proper function
 				assert ( tNode.m_iFunc>=0 && tNode.m_iFunc<int(sizeof(g_dFuncs)/sizeof(g_dFuncs[0])) );
-				assert ( g_dFuncs[tNode.m_iFunc].m_iArgs==dArgs.GetLength() );
+				assert (
+					( g_dFuncs[tNode.m_iFunc].m_iArgs>=0 && g_dFuncs[tNode.m_iFunc].m_iArgs==dArgs.GetLength() ) || // arg count matches,
+					( g_dFuncs[tNode.m_iFunc].m_iArgs<0 && -g_dFuncs[tNode.m_iFunc].m_iArgs<=dArgs.GetLength() ) ); // or min vararg count reached
 
 				switch ( g_dFuncs[tNode.m_iFunc].m_eFunc )
 				{
-					case FUNC_ABS:		return new Expr_Abs_c ( dArgs[0] ); break;
-					case FUNC_CEIL:		return new Expr_Ceil_c ( dArgs[0] ); break;
-					case FUNC_FLOOR:	return new Expr_Floor_c ( dArgs[0] ); break;
-					case FUNC_SIN:		return new Expr_Sin_c ( dArgs[0] ); break;
-					case FUNC_COS:		return new Expr_Cos_c ( dArgs[0] ); break;
-					case FUNC_LN:		return new Expr_Ln_c ( dArgs[0] ); break;
-					case FUNC_LOG2:		return new Expr_Log2_c ( dArgs[0] ); break;
-					case FUNC_LOG10:	return new Expr_Log10_c ( dArgs[0] ); break;
-					case FUNC_EXP:		return new Expr_Exp_c ( dArgs[0] ); break;
-					case FUNC_SQRT:		return new Expr_Sqrt_c ( dArgs[0] ); break;
-					case FUNC_BIGINT:	return dArgs[0]; break;
+					case FUNC_ABS:		return new Expr_Abs_c ( dArgs[0] );
+					case FUNC_CEIL:		return new Expr_Ceil_c ( dArgs[0] );
+					case FUNC_FLOOR:	return new Expr_Floor_c ( dArgs[0] );
+					case FUNC_SIN:		return new Expr_Sin_c ( dArgs[0] );
+					case FUNC_COS:		return new Expr_Cos_c ( dArgs[0] );
+					case FUNC_LN:		return new Expr_Ln_c ( dArgs[0] );
+					case FUNC_LOG2:		return new Expr_Log2_c ( dArgs[0] );
+					case FUNC_LOG10:	return new Expr_Log10_c ( dArgs[0] );
+					case FUNC_EXP:		return new Expr_Exp_c ( dArgs[0] );
+					case FUNC_SQRT:		return new Expr_Sqrt_c ( dArgs[0] );
+					case FUNC_BIGINT:	return dArgs[0];
 
-					case FUNC_MIN:		return new Expr_Min_c ( dArgs[0], dArgs[1] ); break;
-					case FUNC_MAX:		return new Expr_Max_c ( dArgs[0], dArgs[1] ); break;
-					case FUNC_POW:		return new Expr_Pow_c ( dArgs[0], dArgs[1] ); break;
-					case FUNC_IDIV:		return new Expr_Idiv_c ( dArgs[0], dArgs[1] ); break;
+					case FUNC_MIN:		return new Expr_Min_c ( dArgs[0], dArgs[1] );
+					case FUNC_MAX:		return new Expr_Max_c ( dArgs[0], dArgs[1] );
+					case FUNC_POW:		return new Expr_Pow_c ( dArgs[0], dArgs[1] );
+					case FUNC_IDIV:		return new Expr_Idiv_c ( dArgs[0], dArgs[1] );
 
-					case FUNC_IF:		return new Expr_If_c ( dArgs[0], dArgs[1], dArgs[2] ); break;
-					case FUNC_MADD:		return new Expr_Madd_c ( dArgs[0], dArgs[1], dArgs[2] ); break;
-					case FUNC_MUL3:		return new Expr_Mul3_c ( dArgs[0], dArgs[1], dArgs[2] ); break;
+					case FUNC_IF:		return new Expr_If_c ( dArgs[0], dArgs[1], dArgs[2] );
+					case FUNC_MADD:		return new Expr_Madd_c ( dArgs[0], dArgs[1], dArgs[2] );
+					case FUNC_MUL3:		return new Expr_Mul3_c ( dArgs[0], dArgs[1], dArgs[2] );
+
+					case FUNC_INTERVAL:	return CreateIntervalNode ( tNode.m_iLeft, dArgs, uAttrType );
 				}
 				assert ( 0 && "unhandled function id" );
 				break;
@@ -744,6 +773,141 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode, DWORD uAttrType )
 	SafeRelease ( pLeft );
 	SafeRelease ( pRight );
 	return NULL;
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+/// INTERVAL() evaluator traits
+template < typename T >
+class Expr_IntervalTraits_c : public ISphExpr
+{
+protected:
+	ISphExpr *			m_pArg;
+
+public:
+	Expr_IntervalTraits_c ( ISphExpr * pArg ) : m_pArg ( pArg ) {}
+	~Expr_IntervalTraits_c () { SafeRelease ( m_pArg ); }
+
+	virtual float Eval ( const CSphMatch & tMatch ) const { return (float) IntEval ( tMatch ); }
+	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return IntEval ( tMatch ); }
+
+protected:
+	T ExprEval ( ISphExpr * pArg, const CSphMatch & tMatch ) const;
+};
+
+template<> int Expr_IntervalTraits_c<int>::ExprEval ( ISphExpr * pArg, const CSphMatch & tMatch ) const			{ return pArg->IntEval ( tMatch ); }
+template<> float Expr_IntervalTraits_c<float>::ExprEval ( ISphExpr * pArg, const CSphMatch & tMatch ) const		{ return pArg->Eval ( tMatch ); }
+template<> int64_t Expr_IntervalTraits_c<int64_t>::ExprEval ( ISphExpr * pArg, const CSphMatch & tMatch ) const	{ return pArg->Int64Eval ( tMatch ); }
+
+
+/// INTERVAL() evaluator for constant turn point values case
+template < typename T >
+class Expr_IntervalConst_c : public Expr_IntervalTraits_c<T>
+{
+protected:
+	CSphVector<T> m_dTurnPoints;
+
+public:
+	/// take ownership of arg, pre-evaluate and dismiss turn points
+	Expr_IntervalConst_c ( CSphVector<ISphExpr *> dArgs )
+		: Expr_IntervalTraits_c<T> ( dArgs[0] )
+	{
+		CSphMatch tDummy;
+		for ( int i=1; i<dArgs.GetLength(); i++ )
+		{
+			m_dTurnPoints.Add ( ExprEval ( dArgs[i], tDummy ) );
+			SafeRelease ( dArgs[i] );
+		}
+	}
+
+	/// evaluate arg, return interval id
+	virtual int IntEval ( const CSphMatch & tMatch ) const
+	{
+		T val = ExprEval ( m_pArg, tMatch );
+		ARRAY_FOREACH ( i, m_dTurnPoints ) // FIXME! OPTIMIZE! perform binary search here
+			if ( val<m_dTurnPoints[i] )
+				return i;
+		return m_dTurnPoints.GetLength();
+	}
+};
+
+
+/// INTERVAL() evaluator for generic case
+template < typename T >
+class Expr_Interval_c : public Expr_IntervalTraits_c<T>
+{
+protected:
+	CSphVector<ISphExpr *> m_dTurnPoints;
+
+public:
+	/// take ownership of arg and turn points
+	Expr_Interval_c ( const CSphVector<ISphExpr *> dArgs )
+		: Expr_IntervalTraits_c<T> ( dArgs[0] )
+	{
+		for ( int i=1; i<dArgs.GetLength(); i++ )
+			m_dTurnPoints.Add ( dArgs[i] );
+	}
+
+	/// evaluate arg, return interval id
+	virtual int IntEval ( const CSphMatch & tMatch ) const
+	{
+		T val = ExprEval ( m_pArg, tMatch );
+		ARRAY_FOREACH ( i, m_dTurnPoints )
+			if ( val<ExprEval ( m_dTurnPoints[i], tMatch ) )
+				return i;
+		return m_dTurnPoints.GetLength();
+	}
+};
+
+//////////////////////////////////////////////////////////////////////////
+
+void ExprParser_t::GatherArgTypes ( int iNode, CSphVector<int> & dTypes )
+{
+	if ( iNode<0 )
+		return;
+
+	const ExprNode_t & tNode = m_dNodes[iNode];
+	if ( tNode.m_iToken==',' )
+	{
+		GatherArgTypes ( tNode.m_iLeft, dTypes );
+		GatherArgTypes ( tNode.m_iRight, dTypes );
+	} else
+	{
+		dTypes.Add ( tNode.m_iToken );
+	}
+}
+
+
+ISphExpr * ExprParser_t::CreateIntervalNode ( int iArgsNode, CSphVector<ISphExpr *> & dArgs, DWORD uAttrType )
+{
+	assert ( m_dNodes[iArgsNode].m_iToken==',' );
+	assert ( dArgs.GetLength()>=2 );
+
+	CSphVector<int> dTypes;
+	GatherArgTypes ( iArgsNode, dTypes );
+
+	bool bConst = true;
+	for ( int i=1; i<dTypes.GetLength() && bConst; i++ )
+		if ( dTypes[i]!=TOK_CONST_INT && dTypes[i]!=TOK_CONST_FLOAT )
+			bConst = false;
+
+	if ( bConst )
+	{
+		switch ( uAttrType )
+		{
+			case SPH_ATTR_INTEGER:	return new Expr_IntervalConst_c<int> ( dArgs ); break;
+			case SPH_ATTR_BIGINT:	return new Expr_IntervalConst_c<int64_t> ( dArgs ); break;
+			default:				return new Expr_IntervalConst_c<float> ( dArgs ); break;
+		}
+	} else
+	{
+		switch ( uAttrType )
+		{
+			case SPH_ATTR_INTEGER:	return new Expr_Interval_c<int> ( dArgs ); break;
+			case SPH_ATTR_BIGINT:	return new Expr_Interval_c<int64_t> ( dArgs ); break;
+			default:				return new Expr_Interval_c<float> ( dArgs ); break;
+		}
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -824,8 +988,17 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArgsNode )
 	// check args count
 	assert ( iFunc>=0 && iFunc<int(sizeof(g_dFuncs)/sizeof(g_dFuncs[0])) );
 	int iExpectedArgc = g_dFuncs[iFunc].m_iArgs;
-	int iArgc = ( m_dNodes[iArgsNode].m_iToken==',' ) ? m_dNodes[iArgsNode].m_iArgs : 1;
-	if ( iArgc!=iExpectedArgc )
+	int iArgc = 0;
+	if ( iArgsNode>=0 )
+		iArgc = ( m_dNodes[iArgsNode].m_iToken==',' ) ? m_dNodes[iArgsNode].m_iArgs : 1;
+	if ( iExpectedArgc<0 )
+	{
+		if ( iArgc<-iExpectedArgc )
+		{
+			m_sParserError.SetSprintf ( "%s() called with %d args, at least %d args expected", g_dFuncs[iFunc].m_sName, iArgc, -iExpectedArgc );
+			return -1;
+		}
+	} else if ( iArgc!=iExpectedArgc )
 	{
 		m_sParserError.SetSprintf ( "%s() called with %d args, %d args expected", g_dFuncs[iFunc].m_sName, iArgc, iExpectedArgc );
 		return -1;
@@ -907,6 +1080,9 @@ DWORD ExprParser_t::DeduceType ( int iNode )
 				assert ( tNode.m_iFunc>=0 && tNode.m_iFunc<int(sizeof(g_dFuncs)/sizeof(g_dFuncs[0])) );
 				switch ( g_dFuncs[tNode.m_iFunc].m_eFunc )
 				{
+					case FUNC_NOW:
+						return SPH_ATTR_INTEGER;
+
 					case FUNC_MIN:
 					case FUNC_MAX:
 					case FUNC_IF:
@@ -914,6 +1090,7 @@ DWORD ExprParser_t::DeduceType ( int iNode )
 					case FUNC_MUL3:
 					case FUNC_IDIV:
 					case FUNC_ABS:
+					case FUNC_INTERVAL:
 						return DeduceType ( tNode.m_iLeft );
 
 					case FUNC_BIGINT:
@@ -943,6 +1120,9 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const CSphSchema & tSchema,
 	m_sExpr = sExpr;
 	m_pCur = sExpr;
 	m_pSchema = &tSchema;
+
+	// setup constant functions
+	m_iConstNow = (int) time ( NULL );
 
 	// build tree
 	m_iParsed = -1;

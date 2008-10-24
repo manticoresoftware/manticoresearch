@@ -207,16 +207,16 @@ union yyalloc
 /* YYFINAL -- State number of the termination state. */
 #define YYFINAL  12
 /* YYLAST -- Last index in YYTABLE.  */
-#define YYLAST   82
+#define YYLAST   89
 
 /* YYNTOKENS -- Number of terminals. */
 #define YYNTOKENS  19
 /* YYNNTS -- Number of nonterminals. */
 #define YYNNTS  6
 /* YYNRULES -- Number of rules. */
-#define YYNRULES  23
+#define YYNRULES  24
 /* YYNRULES -- Number of states. */
-#define YYNSTATES  43
+#define YYNSTATES  44
 
 /* YYTRANSLATE(YYLEX) -- Bison symbol number corresponding to YYLEX.  */
 #define YYUNDEFTOK  2
@@ -264,7 +264,7 @@ static const unsigned char yyprhs[] =
 {
        0,     0,     3,     5,     9,    11,    15,    17,    19,    22,
       26,    30,    34,    38,    42,    46,    50,    54,    58,    62,
-      66,    68,    73,    75
+      66,    68,    73,    77,    79
 };
 
 /* YYRHS -- A `-1'-separated list of the rules' RHS. */
@@ -277,7 +277,8 @@ static const yysigned_char yyrhs[] =
       22,    -1,    22,    11,    22,    -1,    22,     6,    22,    -1,
       22,     7,    22,    -1,    22,     8,    22,    -1,    22,     9,
       22,    -1,    17,    22,    18,    -1,    23,    -1,     3,    17,
-      24,    18,    -1,    22,    -1,    24,    16,    22,    -1
+      24,    18,    -1,     3,    17,    18,    -1,    22,    -1,    24,
+      16,    22,    -1
 };
 
 /* YYRLINE[YYN] -- source line where rule number YYN was defined.  */
@@ -285,7 +286,7 @@ static const unsigned char yyrline[] =
 {
        0,    31,    31,    32,    36,    37,    38,    42,    43,    44,
       45,    46,    47,    48,    49,    50,    51,    52,    53,    54,
-      55,    59,    63,    64
+      55,    59,    60,    64,    65
 };
 #endif
 
@@ -316,7 +317,7 @@ static const unsigned char yyr1[] =
 {
        0,    19,    20,    20,    21,    21,    21,    22,    22,    22,
       22,    22,    22,    22,    22,    22,    22,    22,    22,    22,
-      22,    23,    24,    24
+      22,    23,    23,    24,    24
 };
 
 /* YYR2[YYN] -- Number of symbols composing right hand side of rule YYN.  */
@@ -324,7 +325,7 @@ static const unsigned char yyr2[] =
 {
        0,     2,     1,     3,     1,     3,     1,     1,     2,     3,
        3,     3,     3,     3,     3,     3,     3,     3,     3,     3,
-       1,     4,     1,     3
+       1,     4,     3,     1,     3
 };
 
 /* YYDEFACT[STATE-NAME] -- Default rule to reduce with in state
@@ -334,15 +335,15 @@ static const unsigned char yydefact[] =
 {
        0,     7,     0,     6,     0,     0,     2,     4,    20,     0,
        8,     0,     1,     0,     0,     0,     0,     0,     0,     0,
-       0,     0,     0,     0,     0,    22,     0,    19,     3,     5,
-      15,    16,    17,    18,    13,    14,     9,    10,    11,    12,
-       0,    21,    23
+       0,     0,     0,     0,     0,    22,    23,     0,    19,     3,
+       5,    15,    16,    17,    18,    13,    14,     9,    10,    11,
+      12,     0,    21,    24
 };
 
 /* YYDEFGOTO[NTERM-NUM]. */
 static const yysigned_char yydefgoto[] =
 {
-      -1,     5,     6,     7,     8,    26
+      -1,     5,     6,     7,     8,    27
 };
 
 /* YYPACT[STATE-NUM] -- Index in YYTABLE of the portion describing
@@ -350,11 +351,11 @@ static const yysigned_char yydefgoto[] =
 #define YYPACT_NINF -17
 static const yysigned_char yypact[] =
 {
-      20,   -16,    22,   -17,    22,     8,   -17,    47,   -17,    22,
-     -17,    34,   -17,    20,     7,    22,    22,    22,    22,    22,
-      22,    22,    22,    22,    22,    57,    -7,   -17,   -17,   -17,
-      -9,    -9,    67,    67,    -9,    -9,    12,    12,   -17,   -17,
-      22,   -17,    57
+      27,   -16,    29,   -17,    29,     8,   -17,    54,   -17,    20,
+     -17,    41,   -17,    27,     7,    29,    29,    29,    29,    29,
+      29,    29,    29,    29,    29,   -17,    64,    -7,   -17,   -17,
+     -17,    -9,    -9,    74,    74,    -9,    -9,    11,    11,   -17,
+     -17,    29,   -17,    64
 };
 
 /* YYPGOTO[NTERM-NUM].  */
@@ -370,28 +371,28 @@ static const yysigned_char yypgoto[] =
 #define YYTABLE_NINF -1
 static const unsigned char yytable[] =
 {
-      10,     9,    11,    21,    22,    23,    24,    25,    12,    40,
-      29,    41,    28,    30,    31,    32,    33,    34,    35,    36,
-      37,    38,    39,     1,    13,     1,    23,    24,     0,     0,
-       0,     0,     0,     2,     3,     2,     0,     4,    42,     4,
+      10,     9,    11,    21,    22,    23,    24,    26,    12,    41,
+      30,    42,    29,    31,    32,    33,    34,    35,    36,    37,
+      38,    39,    40,     1,    13,    23,    24,     0,     0,     0,
+       1,     0,     1,     2,     0,     0,     0,     4,    25,    43,
+       2,     3,     2,     0,     4,     0,     4,    15,    16,    17,
+      18,    19,    20,    21,    22,    23,    24,     0,    14,    28,
       15,    16,    17,    18,    19,    20,    21,    22,    23,    24,
-       0,    14,    27,    15,    16,    17,    18,    19,    20,    21,
-      22,    23,    24,    15,    16,    17,    18,    19,    20,    21,
-      22,    23,    24,    15,    16,     0,     0,    19,    20,    21,
-      22,    23,    24
+      15,    16,    17,    18,    19,    20,    21,    22,    23,    24,
+      15,    16,     0,     0,    19,    20,    21,    22,    23,    24
 };
 
 static const yysigned_char yycheck[] =
 {
        2,    17,     4,    12,    13,    14,    15,     9,     0,    16,
        3,    18,    13,    15,    16,    17,    18,    19,    20,    21,
-      22,    23,    24,     3,    16,     3,    14,    15,    -1,    -1,
-      -1,    -1,    -1,    13,    14,    13,    -1,    17,    40,    17,
+      22,    23,    24,     3,    16,    14,    15,    -1,    -1,    -1,
+       3,    -1,     3,    13,    -1,    -1,    -1,    17,    18,    41,
+      13,    14,    13,    -1,    17,    -1,    17,     6,     7,     8,
+       9,    10,    11,    12,    13,    14,    15,    -1,     4,    18,
        6,     7,     8,     9,    10,    11,    12,    13,    14,    15,
-      -1,     4,    18,     6,     7,     8,     9,    10,    11,    12,
-      13,    14,    15,     6,     7,     8,     9,    10,    11,    12,
-      13,    14,    15,     6,     7,    -1,    -1,    10,    11,    12,
-      13,    14,    15
+       6,     7,     8,     9,    10,    11,    12,    13,    14,    15,
+       6,     7,    -1,    -1,    10,    11,    12,    13,    14,    15
 };
 
 /* YYSTOS[STATE-NUM] -- The (internal number of the) accessing
@@ -400,9 +401,9 @@ static const unsigned char yystos[] =
 {
        0,     3,    13,    14,    17,    20,    21,    22,    23,    17,
       22,    22,     0,    16,     4,     6,     7,     8,     9,    10,
-      11,    12,    13,    14,    15,    22,    24,    18,    21,     3,
-      22,    22,    22,    22,    22,    22,    22,    22,    22,    22,
-      16,    18,    22
+      11,    12,    13,    14,    15,    18,    22,    24,    18,    21,
+       3,    22,    22,    22,    22,    22,    22,    22,    22,    22,
+      22,    16,    18,    22
 };
 
 #if ! defined (YYSIZE_T) && defined (__SIZE_TYPE__)
@@ -1089,6 +1090,11 @@ yyreduce:
   case 21:
 
     { yyval = yyvsp[-3]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
+    break;
+
+  case 22:
+
+    { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd ;}
     break;
 
 

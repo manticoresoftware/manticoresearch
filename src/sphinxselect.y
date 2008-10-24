@@ -57,6 +57,7 @@ expr:
 
 function:
 	SEL_TOKEN '(' arglist ')'	{ $$ = $1; $$.m_iEnd = $4.m_iEnd; }
+	| SEL_TOKEN '(' ')'			{ $$ = $1; $$.m_iEnd = $3.m_iEnd }
 	;
 
 arglist:

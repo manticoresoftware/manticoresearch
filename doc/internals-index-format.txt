@@ -1,0 +1,115 @@
+Sphinx index format
+====================
+
+WARNING. This document is just an internal note. It might or might not be
+in sync with the actual code. Use it as an overview; refer to the source
+for precise details.
+
+General
+--------
+
+Sphinx index consists of the following files:
+
+.sph, header file
+.spi, dictionary (aka wordlist)
+.spd, document lists (aka doclists)
+.spp, keyword positions lists (aka hitlists)
+.spa, attribute values
+.spm, MVA values
+.spk, kill list (aka klist)
+
+Also, indexer and searchd utilize a dummy .spl file to establish locks
+on the whole index.
+
+Compression
+------------
+
+Values that Sphinx internally stores can frequently be compressed well.
+For instance, an ascending sequence of document IDs can clearly be stored
+much more efficiently than at 4 or 8 bytes per ID.
+
+Two techniques we currently use are delta encoding, and variable length
+byte string (or VLB) compression.
+
+Delta encoding is used when the sequence of the values to store is
+monotonically non-decreasing. Each value is replaced with its difference
+(delta) from the previous value. Example:
+
+	source-sequence = 3, 5, 7, 11, 13, 17, ...
+	delta-encoded = 3, 2, 2, 4, 2, 4, ...
+
+The resulting deltas are smaller, and compress more efficiently.
+
+VLB compression encodes a fixed-length (32-bit or 64-bit) integer value
+to a variable-length byte string, depending on the value. 7 lower bits
+of every byte contain next 7 low bits of the compressed value; and 8-th bit
+signals whether the are more bytes following. Note that high bits come first!
+Hence, values that take 7 bits (0 to 127, inclusive) are stored using 1 byte,
+values that fit in 14 bits (128 to 16383) are stored using 2 bytes, etc.
+Examples:
+
+	source-value = 0x37
+	encoded-value = 0x37
+
+	source-value = 0x12345
+	encoded-value = 0x84 0xC6 0x45
+		// 0x84 == ( ( 0x12345>>14 ) & 0x7F ) | 0x80
+		// 0xC6 == ( ( 0x12345>>7 ) & 0x7F ) | 0x80
+		// 0x45 == ( ( 0x12345>>0 ) & 0x7F )
+
+For VLB implementation, refer to ZipInt() and UnzipInt() functions.
+
+Header
+-------
+
+Header file (.sph) always contains index format version, index schema,
+index statistics, and misc other settings.
+
+Starting from 0.9.9, header now also contains the *complete* dictionary
+and tokenizer settings, except the external files contents. This was not
+the case in 0.9.8 and below, where these settings were always taken from
+config file, and thus could easily go out of sync.
+
+There are certain settings (stopwords, wordforms) that refer to external
+files that are possibly (even likely) shared between different indexes.
+For these, header in 0.9.9 stores the file name, modification time,
+and CRC32, but not the file contents.
+
+For specific data layout, refer to LoadHeader(), WriteHeader(), and
+DumpHeader() methods.
+
+Dictionary
+-----------
+
+Dictionary file (.spi) lets us quickly map keywords to document lists.
+All keywords are internally replaced with their IDs, either CRC32 or FNV64
+(depending on --enable-id64 configure time setting). Dictionary essentially
+is a huge list of per-keyword entries, sorted by keyword ID:
+
+	dictionary-entry =
+		wordid-type keyword-id
+		offset-type doclist-offset
+		int32 keyword-docs
+		int32 keyword-hits
+	
+wordid-type and offset-type might vary (ie. be either 32-bit or 64-bit)
+depending on compile-time settings.
+
+To avoid zero offsets into dictionary (zero is a magic value), a dummy byte
+is written at the very start of the file.
+
+To save space, these entries are stored in a compressed form. keyword-id
+and doclist-offset fields (that are guaranteed to grow) are delta-encoded
+and then VLB-compressed. keyword-docs and keyword-hits are VLB-compressed.
+
+To speedup lookups by an arbitrary keyword ID, delta encoding is restarted
+after every WORDLIST_CHECKPOINT entries. A special entry with keyword-id=0
+is injected into the stream at the point of every such checkpoint.
+
+Locations (offsets) and starting keyword IDs of these checkpoints are
+accumulated in RAM during indexing, and then written to disk at the end
+of the dictionary file.
+
+Almost all of dictionary writing happens in cidxHit() method.
+
+--eof--

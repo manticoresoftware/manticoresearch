@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<package>
+	<job id="svnxrev">
+		<object id="fs" progid="Scripting.FileSystemObject" events="false" reference="false"/>
+		<object id="ws" progid="WScript.Shell" events="false" reference="false"/>
+		<reference object="Scripting.FileSystemObject"/>
+		<script id="svnxrev" language="JScript">
+<![CDATA[
+	var project = "sphinx";
+	var output = "sphinxversion.h";
+	var prefix = "SPH";
+	
+	var svnrev="C:\\Program Files\\TortoiseSVN\\bin\\SubWCRev.exe";
+	
+	main();
+	
+	function main()
+	{
+		var Args = WScript.Arguments;
+		if (fs.FolderExists(fs.BuildPath(Args(0),".svn")))
+			do_generate_version(Args(0));
+	}
+	
+	function do_generate_version(projectpath)
+	{
+		var templatefile = fs.BuildPath(projectpath,"src\\svnversion.tmp");
+		var tempoutput = fs.BuildPath(projectpath,"src\\svnversion.h");
+		var finoutput = fs.BuildPath(projectpath,"src\\" + output);
+		
+		var ftemplate = fs.OpenTextFile(templatefile,ForWriting,true);
+		ftemplate.WriteLine("$WCURL$");
+		ftemplate.Close();
+		
+		// change get URL by expanding $WCURL$ macro
+		var execline = "\"" + svnrev + "\" \"" + projectpath + ".\" \"" + templatefile + "\" \"" + tempoutput + "\"";
+		ws.Run(execline,0,true);
+		
+		if (fs.FileExists(tempoutput))
+			fs.DeleteFile(templatefile,true);
+		else
+			return -1;
+			
+		var fwork = fs.OpenTextFile(tempoutput,ForReading);
+		var tmpfile = fwork.ReadLine();
+		fwork.Close();
+		fs.DeleteFile(tempoutput,true);
+		
+		// the very first line is url...		
+		RegExp("svn:\/\/.*?\/" + project + "\/","i").exec(tmpfile);
+		var prj = RegExp.$1;
+		
+		var tag = "";
+		if ("" != prj)
+		{
+			/^(?:trunk|tags\/(.*)|branches\/(.*))$/.exec(tmpfile);
+			tag = RegExp.$1 + "." + RegExp.$2;
+		}
+		
+		ftemplate = fs.OpenTextFile(templatefile,ForWriting,true);
+		ftemplate.WriteLine("#define " + prefix + "_SVN_TAG \"" + tag + "\"");
+		ftemplate.WriteLine("#define " + prefix + "_SVN_REV $WCREV$");
+		ftemplate.WriteLine("#define " + prefix + "_SVN_REVSTR \"$WCREV$\"");
+		if ("" == tag)
+			ftemplate.WriteLine("#define " + prefix + "_SVN_TAGREV \"r$WCREV$\"");
+		else
+			ftemplate.WriteLine("#define " + prefix + "_SVN_TAGREV \"" + tag + "-r$WCREV$\"");
+		ftemplate.Close();
+		
+		var execline = "\"" + svnrev + "\" \"" + projectpath + ".\" \"" + templatefile + "\" \"" + finoutput + "\"";
+		ws.Run(execline,0,true);
+		
+		fs.DeleteFile(templatefile,true);
+		
+	}
+]]>
+		</script>
+	</job>
+</package>

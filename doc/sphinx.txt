@@ -21,9 +21,10 @@ Table of Contents
 2. Installation
    2.1. Supported systems
    2.2. Required tools
-   2.3. Installing Sphinx
-   2.4. Known installation issues
-   2.5. Quick Sphinx usage tour
+   2.3. Installing Sphinx on Linux
+   2.4. Installing Sphinx on Windows
+   2.5. Known installation issues
+   2.6. Quick Sphinx usage tour
 
 3. Indexing
    3.1. Data sources
@@ -390,8 +391,8 @@ Other compilers/environments will probably work as well, but for the time
 being, you will have to build makefile (or other environment specific
 project files) manually.
 
-2.3. Installing Sphinx
-----------------------
+2.3. Installing Sphinx on Linux
+-------------------------------
 
    1. Extract everything from the distribution tarball (haven't you
       already?) and go to the sphinx subdirectory:
@@ -423,7 +424,37 @@ project files) manually.
 
       | $ make install
 
-2.4. Known installation issues
+2.4. Installing Sphinx on Windows
+---------------------------------
+
+Installing Sphinx on a Windows server is often easier than installing on
+a Linux environment; unless you are preparing code patches, you can use the
+pre-compiled binary files from the Downloads area on the website.
+
+   1. Extract everything from the .zip file you have downloaded -
+      sphinx-0.9.8-win32.zip (or sphinx-0.9.8-win32-pgsql.zip if you need
+      PostgresSQL support as well.) You can use Windows Explorer in Windows
+      XP and up to extract the files, or a freeware package like 7Zip to
+      open the archive.
+
+      For the remainder of this guide, we will assume that the folders are
+      unzipped into C:\Sphinx, such that searchd.exe can be found in
+      C:\Sphinx\bin\searchd.exe. If you decide to use any different
+      location for the folders or configuration file, please change it
+      accordingly.
+
+   2. Install the searchd system as a Windows service:
+
+      C:\Sphinx> C:\Sphinx\searchd --install --config C:\Sphinx\sphinx.conf
+      --servicename SphinxSearch
+
+   3. The searchd service will now be listed in the Services panel within
+      the Management Console, available from Administrative Tools. It will
+      not have been started, as you will need to configure it and build
+      your indexes with indexer before starting the service. A guide to do
+      this can be found under Quick tour.
+
+2.5. Known installation issues
 ------------------------------
 
 If configure fails to locate MySQL headers and/or libraries, try checking
@@ -453,7 +484,7 @@ I could properly fix them in next releases.
 If you keep getting any other error, or the suggestions above do not seem
 to help you, please don't hesitate to contact me.
 
-2.5. Quick Sphinx usage tour
+2.6. Quick Sphinx usage tour
 ----------------------------
 
 All the example commands below assume that you installed Sphinx in
@@ -1093,9 +1124,11 @@ There are the following matching modes available:
    * SPH_MATCH_BOOLEAN, matches query as a boolean expression (see
      Section 4.2, <<Boolean query syntax>>);
    * SPH_MATCH_EXTENDED, matches query as an expression in Sphinx internal
-     query language (see Section 4.3, <<Extended query syntax>>). Use of
-     this mode is discouraged, and use of Extended2 matching mode is
-     recommended.
+     query language (see Section 4.3, <<Extended query syntax>>). As of
+     0.9.9, this has been superceded by SPH_MATCH_EXTENDED2, providing
+     additional functionality and better performance. The ident is retained
+     for legacy application code that will continue to be compatible once
+     Sphinx and its components, including the API, are upgraded.
    * SPH_MATCH_EXTENDED2, matches query using the second version of the
      Extended matching mode.
    * SPH_MATCH_FULLSCAN, matches query, forcibly using the "full scan" mode
@@ -1181,6 +1214,14 @@ matching mode:
 
       | @title hello @body world
 
+   * multiple-field search operator:
+
+      | @(title, body) hello world
+
+   * all-field search operator:
+
+      | @* hello
+
    * phrase search operator:
 
       | "hello world"
@@ -1197,7 +1238,22 @@ Here's an example query which uses most of these operators:
 
 Example 6. Extended matching mode: query example
 
-   | "hello world" @title "example program"~5 @body python -(php|perl)
+   | "hello world" @title "example program"~5 @body python -(php|perl) @* code
+
+The full meaning of this search is:
+
+   * Find the words 'hello' and 'world' adjacently in any field in
+     a document;
+   * Additionally, the same document must also contain the words 'example'
+     and 'program' in the title field, with up to, but not including, 10
+     words between the words in question; (E.g. "example PHP program" would
+     be matched however "example script to introduce outside data into the
+     correct context for your program" would not because two terms have 10
+     or more words between them)
+   * Additionally, the same document must contain the word 'python' in the
+     body field, but not contain either 'php' or 'perl';
+   * Additionally, the same document must contain the word 'code' in any
+     field.
 
 There always is implicit AND operator, so "hello world" means that both
 "hello" and "world" must be present in matching document.
@@ -1564,7 +1620,8 @@ A query log entry might take the form of:
 This additional block is information regarding I/O operations in performing
 the search: the number of file I/O operations carried out, the amount of
 data in kilobytes read from the index files and time spent on I/O
-operations and searching (there is additional processing as well).
+operations (although there is a background processing component, the bulk
+of this time is the I/O operation time)
 
 5. Command line tools reference
 ===============================
@@ -1617,12 +1674,18 @@ performed. These options are:
      to make their own custom Sphinx set-ups, or if you want to run
      multiple instances on a single server. In cases like those you could
      allow them to create their own sphinx.conf files and pass them to
-     indexer with this option.
+     indexer with this option. For example:
+
+      | $ indexer --config /home/myuser/sphinx.conf myindex
+
    * --all tells indexer to update every index listed in sphinx.conf,
      instead of listing individual indexes. This would be useful in small
      configurations, or cron-type or maintenance jobs where the entire
      index set will get rebuilt each day, or week, or whatever period is
-     best.
+     best. Example usage:
+
+      | $ indexer --config /home/myuser/sphinx.conf --all
+
    * --rotate is used for rotating indexes. Unless you have the situation
      where you can take the search function offline without troubling
      users, you will almost certainly need to keep search running whilst
@@ -1633,47 +1696,73 @@ performed. These options are:
      ones to include .old and renaming the .new to replace them), and then
      start serving from the newer files. Depending on the setting of
      seamless_rotate, there may be a slight delay in being able to search
-     the newer indexes.
+     the newer indexes. Example usage:
+
+      | $ indexer --rotate --all
+
    * --quiet tells indexer not to output anything, unless there is an
      error. Again, most used for cron-type, or other script jobs where the
      output is irrelevant or unnecessary, except in the event of some kind
-     of error.
+     of error. Example usage:
+
+      | $ indexer --rotate --all --quiet
+
    * --noprogress does not display progress details as they occur; instead,
      the final status details (such as documents indexed, speed of indexing
      and so on are only reported at completion of indexing. In instances
      where the script is not being run on a console (or 'tty'), this will
-     be on by default.
+     be on by default. Example usage:
+
+      | $ indexer --rotate --all --noprogress
+
    * --buildstops <outputfile.text> <N> reviews the index source, as if it
      were indexing the data, and produces a list of the terms that are
      being indexed. In other words, it produces a list of all the
      searchable terms that are becoming part of the index. Note; it does
      not update the index in question, it simply processes the data 'as if'
-     it were indexing. outputfile.txt will contain the list of words, one
+     it were indexing, including running queries defined with sql_query_pre
+     or sql_query_post. outputfile.txt will contain the list of words, one
      per line, sorted by frequency with most frequent first, and
      N specifies the maximum number of words that will be listed; if
      sufficiently large to encompass every word in the index, only that
      many words will be returned. Such a dictionary list could be used for
      client application features around "Did you mean..." functionality,
-     usually in conjunction with --buildfreqs, below.
+     usually in conjunction with --buildfreqs, below. Example:
+
+      | $ indexer myindex --buildstops word_freq.txt 1000
+
+     This would produce a document in the current directory, word_freq.txt
+     with the 1,000 most common words in 'myindex', ordered by most common
+     first. Note that the file will pertain to the last index indexed when
+     specified with multiple indexes or --all (i.e. the last one listed in
+     the configuration file)
    * --buildfreqs works with --buildstops (and is ignored if --buildstops
      is not specified). As --buildstops provides the list of words used
      within the index, --buildfreqs adds the quantity present in the index,
      which would be useful in establishing whether certain words should be
      considered stopwords if they are too prevalent. It will also help with
      developing "Did you mean..." features where you can how much more
-     common a given word compared to another, similar one.
+     common a given word compared to another, similar one. Example:
+
+      | $ indexer myindex --buildstops word_freq.txt 1000 --buildfreqs
+
+     This would produce the word_freq.txt as above, however after each word
+     would be the number of times it occurred in the index in question.
    * --merge <dst-index> <src-index> is used for physically merging indexes
      together, for example if you have a main+delta scheme, where the main
      index rarely changes, but the delta index is rebuilt frequently, and
      --merge would be used to combine the two. The operation moves from
      right to left - the contents of src-index get examined and physically
      combined with the contents of dst-index and the result is left in
-     dst-index. In the example of main+delta, where the main is the master,
-     rarely modified index, and delta is the less frequently modified one,
-     you might use the following line to call indexer, which would combine
-     the contents of the delta into the main index and rotate the indexes:
-     indexer --merge main delta --rotate. In pseudo-code, it might be
-     expressed as: dst-index += src-index
+     dst-index. In pseudo-code, it might be expressed as: dst-index +=
+     src-index An example:
+
+      | $ indexer --merge main delta --rotate
+
+     In the above example, where the main is the master, rarely modified
+     index, and delta is the less frequently modified one, you might use
+     the above to call indexer to combine the contents of the delta into
+     the main index and rotate the indexes.
    * --merge-dst-range <attr> <min> <max> runs the filter range given upon
      merging. Specifically, as the merge is applied to the destination
      index (as part of --merge, and is ignored if --merge is not
@@ -1681,8 +1770,11 @@ performed. These options are:
      destination index, and only documents will pass through the filter
      given will end up in the final index. This could be used for example,
      in an index where there is a 'deleted' attribute, where 0 means 'not
-     deleted', to merge two indexes with --merge-dst-range deleted 0 0 -
-     any documents marked as deleted (value 1) would be removed from the
+     deleted'. Such an index could be merged with:
+
+      | $ indexer --merge main delta --merge-dst-range deleted 0 0
+
+     Any documents marked as deleted (value 1) would be removed from the
      newly-merged destination index. It can be added several times to the
      command line, to add successive filters to the merge, all of which
      must be met in order for a document to become part of the final index.
@@ -1708,7 +1800,7 @@ Calling searchd is simply a case of:
 The options available to searchd on all builds are:
 
    * --help (-h for short) lists all of the parameters that can be called
-     in your particular build of searchd
+     in your particular build of searchd.
    * --config <file> (-c <file> for short) tells searchd to use the given
      file as its configuration, just as with indexer above.
    * --stop is used to stop searchd, using the details of the PID file as
@@ -1716,13 +1808,20 @@ The options available to searchd on all builds are:
      searchd which configuration file to use with the --config option. NB,
      calling --stop will also make sure any changes applied to the indexes
      with UpdateAttributes() will be applied to the index files themselves.
-   * --pidfile is used to explicit use a PID file, where the process
+     Example:
+
+      | $ searchd --config /home/myuser/sphinx.conf --stop
+
+   * --pidfile is used to explicitly state a PID file, where the process
      information is stored regarding searchd, used for inter-process
      communications (for example, indexer will need to know the PID to
-     contact searchd when rotating indexes). Normally, searchd would use
+     contact searchd for rotating indexes). Normally, searchd would use
      a PID if running in regular mode (i.e. not with --console), but it is
      possible that you will be running it in console mode whilst the index
      is being updated and rotated, for which a PID file will be needed.
+
+      | $ searchd --config /home/myuser/sphinx.conf --pidfile /home/myuser/sphinx.pid
+
    * --console is used to force searchd into console mode; typically it
      will be running as a conventional server application, and will aim to
      dump information into the log files (as specified in sphinx.conf).
@@ -1732,28 +1831,41 @@ The options available to searchd on all builds are:
      console/command line from which it is being called. Running in console
      mode also means that the process will not be forked (so searches are
      done in sequence) and logs will not be written to. (It should be noted
-     that console mode is not the intended method for running searchd)
+     that console mode is not the intended method for running searchd) You
+     can invoke it as such:
+
+      | $ searchd --config /home/myuser/sphinx.conf --console
+
    * --iostats is used in conjuction with the logging options (the
      query_log will need to have been activated in sphinx.conf) to provide
      more detailed information on a per-query basis as to the input/output
      operations carried out in the course of that query, with a slight
      performance hit and of course bigger logs. Further details are
-     available under the query log format section.
+     available under the query log format section. You might start searchd
+     thus:
+
+      | $ searchd --config /home/myuser/sphinx.conf --iostats
+
    * --port portnumber (-p for short) is used to specify the post that
      searchd should listen on, usually for debugging purposes. This will
      usually default to 3312, but sometimes you need to run it on
      a different port. Specifying it on the command line will override
      anything specified in the configuration file. The valid range is 0 to
      65535, but ports numbered 1024 and below usually require a privileged
-     account in order to run.
+     account in order to run. An example of usage:
+
+      | $ searchd --port 3313
+
    * --index <index> forces this instance of searchd only to serve the
      specified index. Like --port, above, this is usually for debugging
      purposes; more long-term changes would generally be applied to the
-     configuration file itself.
+     configuration file itself. Example usage:
+
+      | $ searchd --index myindex
 
 There are some options for searchd that are specific to Windows platforms,
-concerning handling as a service (and will only be available on Windows
-binaries.)
+concerning handling as a service, are only be available on Windows
+binaries.
 
 Note that on Windows searchd will default to --console mode, unless you
 install it as a service.
@@ -1769,7 +1881,13 @@ install it as a service.
      console, so any methods you could use for starting, stopping and
      restarting services would also apply to searchd. Example:
 
-      | C:\WINDOWS\system32> C:\sphinx\searchd.exe --install --config C:\sphinx\sphinx.conf
+      | C:\WINDOWS\system32> C:\Sphinx\bin\searchd.exe --install --config C:\Sphinx\sphinx.conf
+
+     If you wanted to have the I/O stats every time you started searchd,
+     you would specify its option on the same line as the --install command
+     thus:
+
+      | C:\WINDOWS\system32> C:\Sphinx\bin\searchd.exe --install --config C:\Sphinx\sphinx.conf --iostats
 
    * --delete removes the service from the Microsoft Management Console and
      other places where services are registered, after previously installed
@@ -1780,14 +1898,20 @@ install it as a service.
      terminated (until the next reboot, or searchd is called with --stop).
      If the service was installed with a custom name (with --servicename),
      the same name will need to be specified with --servicename when
-     calling to uninstall.
+     calling to uninstall. Example:
+
+      | C:\WINDOWS\system32> C:\Sphinx\bin\searchd.exe --delete
+
    * --servicename <name> applies the given name to searchd when installing
      or deleting the service, as would appear in the Management Console;
      this will default to searchd, but if being deployed on servers where
      multiple administrators may log into the system, or a system with
      multiple searchd instances, a more descriptive name may be applicable.
      Note that unless combined with --install or --delete, this option does
-     not do anything.
+     not do anything. Example:
+
+      | C:\WINDOWS\system32> C:\Sphinx\bin\searchd.exe --install --config C:\Sphinx\sphinx.conf --servicename SphinxSearch
+
    * --ntservice is the option that is passed by the Management Console to
      searchd to invoke it as a service on Windows platforms. It would not
      normally be necessary to call this directly; this would normally be

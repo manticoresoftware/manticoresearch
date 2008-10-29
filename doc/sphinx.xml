@@ -220,7 +220,7 @@ specific project files) manually.
 </sect2>
 
 
-<sect2 id="installing"><title>Installing Sphinx</title>
+<sect2 id="installing"><title>Installing Sphinx on Linux</title>
 <para><orderedlist>
 <listitem>
 	<para>
@@ -257,6 +257,22 @@ $ cd sphinx
 </orderedlist></para>
 </sect2>
 
+<sect2 id="installing-windows"><title>Installing Sphinx on Windows</title>
+<para>Installing Sphinx on a Windows server is often easier than installing on a Linux environment; unless you are preparing code patches, you can use the pre-compiled binary files from the Downloads area on the website.</para>
+<orderedlist>
+<listitem>
+	<para>Extract everything from the .zip file you have downloaded - <filename>sphinx-0.9.8-win32.zip</filename> (or <filename>sphinx-0.9.8-win32-pgsql.zip</filename> if you need PostgresSQL support as well.) You can use Windows Explorer in Windows XP and up to extract the files, or a freeware package like 7Zip to open the archive.</para>
+	<para>For the remainder of this guide, we will assume that the folders are unzipped into <filename>C:\Sphinx</filename>, such that <filename>searchd.exe</filename> can be found in <filename>C:\Sphinx\bin\searchd.exe</filename>. If you decide to use any different location for the folders or configuration file, please change it accordingly.</para>
+</listitem>
+<listitem>
+	<para>Install the <filename>searchd</filename> system as a Windows service:</para>
+	<para><userinput>C:\Sphinx&gt; C:\Sphinx\searchd --install --config C:\Sphinx\sphinx.conf --servicename SphinxSearch</userinput></para>
+</listitem>
+<listitem>
+	<para>The <filename>searchd</filename> service will now be listed in the Services panel within the Management Console, available from Administrative Tools. It will not have been started, as you will need to configure it and build your indexes with <filename>indexer</filename> before starting the service. A guide to do this can be found under <link linkend="quick-tour">Quick tour</link>.</para>
+</listitem>
+</orderedlist>
+</sect2>
 
 <sect2 id="install-problems"><title>Known installation issues</title>
 <para>
@@ -1032,7 +1048,7 @@ There are the following matching modes available:
 <listitem>SPH_MATCH_ANY, matches any of the query words;</listitem>
 <listitem>SPH_MATCH_PHRASE, matches query as a phrase, requiring perfect match;</listitem>
 <listitem>SPH_MATCH_BOOLEAN, matches query as a boolean expression (see <xref linkend="boolean-syntax"/>);</listitem>
-<listitem>SPH_MATCH_EXTENDED, matches query as an expression in Sphinx internal query language (see <xref linkend="extended-syntax"/>). Use of this mode is discouraged, and use of Extended2 matching mode is recommended.</listitem>
+<listitem>SPH_MATCH_EXTENDED, matches query as an expression in Sphinx internal query language (see <xref linkend="extended-syntax"/>). As of 0.9.9, this has been superceded by SPH_MATCH_EXTENDED2, providing additional functionality and better performance. The ident is retained for legacy application code that will continue to be compatible once Sphinx and its components, including the API, are upgraded.</listitem>
 <listitem>SPH_MATCH_EXTENDED2, matches query using the second version of the Extended matching mode.</listitem>
 <listitem>SPH_MATCH_FULLSCAN, matches query, forcibly using the "full scan" mode as below. NB, any query terms will be ignored, such that filters, filter-ranges and grouping will still be applied, but no text-matching.</listitem>
 </itemizedlist>
@@ -1103,6 +1119,8 @@ hello !world
 </programlisting>
 </listitem>
 <listitem>field search operator: <programlisting>@title hello @body world</programlisting></listitem>
+<listitem>multiple-field search operator: <programlisting>@(title, body) hello world</programlisting></listitem>
+<listitem>all-field search operator: <programlisting>@* hello</programlisting></listitem>
 <listitem>phrase search operator: <programlisting>"hello world"</programlisting></listitem>
 <listitem>proximity search operator: <programlisting>"hello world"~10</programlisting></listitem>
 <listitem>quorum matching operator: <programlisting>"the world is a wonderful place"/3</programlisting></listitem>
@@ -1111,9 +1129,17 @@ hello !world
 Here's an example query which uses most of these operators:
 <example id="ex-extended-query"><title>Extended matching mode: query example</title>
 <programlisting>
-"hello world" @title "example program"~5 @body python -(php|perl)
+"hello world" @title "example program"~5 @body python -(php|perl) @* code
 </programlisting>
 </example>
+The full meaning of this search is:
+
+<itemizedlist>
+<listitem>Find the words 'hello' and 'world' adjacently in any field in a document;</listitem>
+<listitem>Additionally, the same document must also contain the words 'example' and 'program' in the title field, with up to, but not including, 10 words between the words in question; (E.g. "example PHP program" would be matched however "example script to introduce outside data into the correct context for your program" would not because two terms have 10 or more words between them)</listitem>
+<listitem>Additionally, the same document must contain the word 'python' in the body field, but not contain either 'php' or 'perl';</listitem>
+<listitem>Additionally, the same document must contain the word 'code' in any field.</listitem>
+</itemizedlist>
 </para>
 <para>
 There always is implicit AND operator, so "hello world" means that
@@ -1529,7 +1555,7 @@ Sort mode can take one of the following values:
 [Fri Jun 29 21:17:58 2007] 0.004 sec [all/0/rel 35254 (0,20)] [lj] [ios=6 kb=111.1 ms=0.5] test
 </programlisting>
 
-<para>This additional block is information regarding I/O operations in performing the search: the number of file I/O operations carried out, the amount of data in kilobytes read from the index files and time spent on I/O operations and searching (there is additional processing as well).</para>
+<para>This additional block is information regarding I/O operations in performing the search: the number of file I/O operations carried out, the amount of data in kilobytes read from the index files and time spent on I/O operations (although there is a background processing component, the bulk of this time is the I/O operation time)</para>
 </sect2>
 
 
@@ -1552,17 +1578,56 @@ $ indexer mysmallindex mybigindex
 <para>As part of the configuration file, <filename>sphinx.conf</filename>, you specify one or more indexes for your data. You might call <filename>indexer</filename> to reindex one of them, ad-hoc, or you can tell it to process all indexes - you are not limited to calling just one, or all at once, you can always pick some combination of the available indexes.</para>
 <para>The majority of the options for <filename>indexer</filename> are given in the configuration file, however there are some options you might need to specify on the command line as well, as they can affect how the indexing operation is performed. These options are:
 <itemizedlist>
-<listitem><option>--config &lt;file&gt;</option> (<option>-c &lt;file&gt;</option> for short) tells <filename>indexer</filename> to use the given file as its configuration. Normally, it will look for <filename>sphinx.conf</filename> in the installation directory (e.g. <filename>/usr/local/sphinx/etc/sphinx.conf</filename> if installed into <filename>/usr/local/sphinx</filename>), followed by the current directory you are in when calling <filename>indexer</filename> from the shell. This is most of use in shared environments where the binary files are installed somewhere like <filename>/usr/local/sphinx/</filename> but you want to provide users with the ability to make their own custom Sphinx set-ups, or if you want to run multiple instances on a single server. In cases like those you could allow them to create their own <filename>sphinx.conf</filename> files and pass them to <filename>indexer</filename> with this option.</listitem>
-<listitem><option>--all</option> tells <filename>indexer</filename> to update every index listed in <filename>sphinx.conf</filename>, instead of listing individual indexes. This would be useful in small configurations, or <filename>cron</filename>-type or maintenance jobs where the entire index set will get rebuilt each day, or week, or whatever period is best.</listitem>
-<listitem><option>--rotate</option> is used for rotating indexes. Unless you have the situation where you can take the search function offline without troubling users, you will almost certainly need to keep search running whilst indexing new documents. <option>--rotate</option> creates a second index, parallel to the first (in the same place, simply including <filename>.new</filename> in the filenames). Once complete, <filename>indexer</filename> notifies <filename>searchd</filename> via sending the <option>SIGHUP</option> signal, and <filename>searchd</filename> will attempt to rename the indexes (renaming the existing ones to include <filename>.old</filename> and renaming the <filename>.new</filename> to replace them), and then start serving from the newer files. Depending on the setting of <link linkend="conf-seamless-rotate">seamless_rotate</link>, there may be a slight delay in being able to search the newer indexes.</listitem>
-<listitem><option>--quiet</option> tells <filename>indexer</filename> not to output anything, unless there is an error. Again, most used for <filename>cron</filename>-type, or other script jobs where the output is irrelevant or unnecessary, except in the event of some kind of error.</listitem>
-<listitem><option>--noprogress</option> does not display progress details as they occur; instead, the final status details (such as documents indexed, speed of indexing and so on are only reported at completion of indexing. In instances where the script is not being run on a console (or 'tty'), this will be on by default.</listitem>
-<listitem><option>--buildstops &lt;outputfile.text&gt; &lt;N&gt;</option> reviews the index source, as if it were indexing the data, and produces a list of the terms that are being indexed. In other words, it produces a list of all the searchable terms that are becoming part of the index. Note; it does not update the index in question, it simply processes the data 'as if' it were indexing. <filename>outputfile.txt</filename> will contain the list of words, one per line, sorted by frequency with most frequent first, and <filename>N</filename> specifies the maximum number of words that will be listed; if sufficiently large to encompass every word in the index, only that many words will be returned. Such a dictionary list could be used for client application features around "Did you mean..." functionality, usually in conjunction with <option>--buildfreqs</option>, below.</listitem>
-<listitem><option>--buildfreqs</option> works with <option>--buildstops</option> (and is ignored if <option>--buildstops</option> is not specified). As <option>--buildstops</option> provides the list of words used within the index, <option>--buildfreqs</option> adds the quantity present in the index, which would be useful in establishing whether certain words should be considered stopwords if they are too prevalent. It will also help with developing "Did you mean..." features where you can how much more common a given word compared to another, similar one.</listitem>
-<listitem><option>--merge &lt;dst-index&gt; &lt;src-index&gt;</option> is used for physically merging indexes together, for example if you have a main+delta scheme, where the main index rarely changes, but the delta index is rebuilt frequently, and <option>--merge</option> would be used to combine the two. The operation moves from right to left - the contents of <filename>src-index</filename> get examined and physically combined with the contents of <filename>dst-index</filename> and the result is left in <filename>dst-index</filename>. In the example of main+delta, where the main is the master, rarely modified index, and delta is the less frequently modified one, you might use the following line to call <filename>indexer</filename>, which would combine the contents of the delta into the main index and rotate the indexes: <code>indexer --merge main delta --rotate</code>.
-	In pseudo-code, it might be expressed as: <code>dst-index += src-index</code>
+<listitem><option>--config &lt;file&gt;</option> (<option>-c &lt;file&gt;</option> for short) tells <filename>indexer</filename> to use the given file as its configuration. Normally, it will look for <filename>sphinx.conf</filename> in the installation directory (e.g. <filename>/usr/local/sphinx/etc/sphinx.conf</filename> if installed into <filename>/usr/local/sphinx</filename>), followed by the current directory you are in when calling <filename>indexer</filename> from the shell. This is most of use in shared environments where the binary files are installed somewhere like <filename>/usr/local/sphinx/</filename> but you want to provide users with the ability to make their own custom Sphinx set-ups, or if you want to run multiple instances on a single server. In cases like those you could allow them to create their own <filename>sphinx.conf</filename> files and pass them to <filename>indexer</filename> with this option. For example:
+<programlisting>
+$ indexer --config /home/myuser/sphinx.conf myindex
+</programlisting>
 </listitem>
-<listitem><option>--merge-dst-range &lt;attr&gt; &lt;min&gt; &lt;max&gt;</option> runs the filter range given upon merging. Specifically, as the merge is applied to the destination index (as part of <option>--merge</option>, and is ignored if <option>--merge</option> is not specified), <filename>indexer</filename> will also filter the documents ending up in the destination index, and only documents will pass through the filter given will end up in the final index. This could be used for example, in an index where there is a 'deleted' attribute, where 0 means 'not deleted', to merge two indexes with <option>--merge-dst-range deleted 0 0</option> - any documents marked as deleted (value 1) would be removed from the newly-merged destination index. It can be added several times to the command line, to add successive filters to the merge, all of which must be met in order for a document to become part of the final index.</listitem>
+<listitem><option>--all</option> tells <filename>indexer</filename> to update every index listed in <filename>sphinx.conf</filename>, instead of listing individual indexes. This would be useful in small configurations, or <filename>cron</filename>-type or maintenance jobs where the entire index set will get rebuilt each day, or week, or whatever period is best. Example usage:
+<programlisting>
+$ indexer --config /home/myuser/sphinx.conf --all
+</programlisting>
+</listitem>
+<listitem><option>--rotate</option> is used for rotating indexes. Unless you have the situation where you can take the search function offline without troubling users, you will almost certainly need to keep search running whilst indexing new documents. <option>--rotate</option> creates a second index, parallel to the first (in the same place, simply including <filename>.new</filename> in the filenames). Once complete, <filename>indexer</filename> notifies <filename>searchd</filename> via sending the <option>SIGHUP</option> signal, and <filename>searchd</filename> will attempt to rename the indexes (renaming the existing ones to include <filename>.old</filename> and renaming the <filename>.new</filename> to replace them), and then start serving from the newer files. Depending on the setting of <link linkend="conf-seamless-rotate">seamless_rotate</link>, there may be a slight delay in being able to search the newer indexes. Example usage:
+<programlisting>
+$ indexer --rotate --all
+</programlisting>
+</listitem>
+<listitem><option>--quiet</option> tells <filename>indexer</filename> not to output anything, unless there is an error. Again, most used for <filename>cron</filename>-type, or other script jobs where the output is irrelevant or unnecessary, except in the event of some kind of error. Example usage:
+<programlisting>
+$ indexer --rotate --all --quiet
+</programlisting>
+</listitem>
+<listitem><option>--noprogress</option> does not display progress details as they occur; instead, the final status details (such as documents indexed, speed of indexing and so on are only reported at completion of indexing. In instances where the script is not being run on a console (or 'tty'), this will be on by default. Example usage:
+<programlisting>
+$ indexer --rotate --all --noprogress
+</programlisting>
+</listitem>
+<listitem><option>--buildstops &lt;outputfile.text&gt; &lt;N&gt;</option> reviews the index source, as if it were indexing the data, and produces a list of the terms that are being indexed. In other words, it produces a list of all the searchable terms that are becoming part of the index. Note; it does not update the index in question, it simply processes the data 'as if' it were indexing, including running queries defined with <option>sql_query_pre</option> or <option>sql_query_post</option>. <filename>outputfile.txt</filename> will contain the list of words, one per line, sorted by frequency with most frequent first, and <filename>N</filename> specifies the maximum number of words that will be listed; if sufficiently large to encompass every word in the index, only that many words will be returned. Such a dictionary list could be used for client application features around "Did you mean..." functionality, usually in conjunction with <option>--buildfreqs</option>, below. Example:
+<programlisting>
+$ indexer myindex --buildstops word_freq.txt 1000
+</programlisting>
+This would produce a document in the current directory, <filename>word_freq.txt</filename> with the 1,000 most common words in 'myindex', ordered by most common first. Note that the file will pertain to the last index indexed when specified with multiple indexes or <option>--all</option> (i.e. the last one listed in the configuration file)
+</listitem>
+<listitem><option>--buildfreqs</option> works with <option>--buildstops</option> (and is ignored if <option>--buildstops</option> is not specified). As <option>--buildstops</option> provides the list of words used within the index, <option>--buildfreqs</option> adds the quantity present in the index, which would be useful in establishing whether certain words should be considered stopwords if they are too prevalent. It will also help with developing "Did you mean..." features where you can how much more common a given word compared to another, similar one. Example:
+<programlisting>
+$ indexer myindex --buildstops word_freq.txt 1000 --buildfreqs
+</programlisting>
+This would produce the <filename>word_freq.txt</filename> as above, however after each word would be the number of times it occurred in the index in question.
+</listitem>
+<listitem><option>--merge &lt;dst-index&gt; &lt;src-index&gt;</option> is used for physically merging indexes together, for example if you have a main+delta scheme, where the main index rarely changes, but the delta index is rebuilt frequently, and <option>--merge</option> would be used to combine the two. The operation moves from right to left - the contents of <filename>src-index</filename> get examined and physically combined with the contents of <filename>dst-index</filename> and the result is left in <filename>dst-index</filename>.
+	In pseudo-code, it might be expressed as: <code>dst-index += src-index</code>
+	An example:
+<programlisting>
+$ indexer --merge main delta --rotate
+</programlisting>
+In the above example, where the main is the master, rarely modified index, and delta is the less frequently modified one, you might use the above to call <filename>indexer</filename> to combine the contents of the delta into the main index and rotate the indexes.
+</listitem>
+<listitem><option>--merge-dst-range &lt;attr&gt; &lt;min&gt; &lt;max&gt;</option> runs the filter range given upon merging. Specifically, as the merge is applied to the destination index (as part of <option>--merge</option>, and is ignored if <option>--merge</option> is not specified), <filename>indexer</filename> will also filter the documents ending up in the destination index, and only documents will pass through the filter given will end up in the final index. This could be used for example, in an index where there is a 'deleted' attribute, where 0 means 'not deleted'. Such an index could be merged with:
+<programlisting>
+$ indexer --merge main delta --merge-dst-range deleted 0 0
+</programlisting>
+Any documents marked as deleted (value 1) would be removed from the newly-merged destination index. It can be added several times to the command line, to add successive filters to the merge, all of which must be met in order for a document to become part of the final index.</listitem>
 </itemizedlist>
 </para>
 </sect2>
@@ -1576,26 +1641,61 @@ $ searchd [OPTIONS]
 </programlisting>
 <para>The options available to <filename>searchd</filename> on all builds are:</para>
 <itemizedlist>
-<listitem><option>--help</option> (<option>-h</option> for short) lists all of the parameters that can be called in your particular build of <filename>searchd</filename></listitem>
+<listitem><option>--help</option> (<option>-h</option> for short) lists all of the parameters that can be called in your particular build of <filename>searchd</filename>.</listitem>
 <listitem><option>--config &lt;file&gt;</option> (<option>-c &lt;file&gt;</option> for short) tells <filename>searchd</filename> to use the given file as its configuration, just as with <filename>indexer</filename> above.</listitem>
-<listitem><option>--stop</option> is used to stop <filename>searchd</filename>, using the details of the PID file as specified in the <filename>sphinx.conf</filename> file, so you may also need to confirm to <filename>searchd</filename> which configuration file to use with the <option>--config</option> option. NB, calling <option>--stop</option> will also make sure any changes applied to the indexes with <link linkend="api-func-updateatttributes"><code>UpdateAttributes()</code></link> will be applied to the index files themselves.</listitem>
-<listitem><option>--pidfile</option> is used to explicit use a PID file, where the process information is stored regarding <filename>searchd</filename>, used for inter-process communications (for example, <filename>indexer</filename> will need to know the PID to contact <filename>searchd</filename> when rotating indexes). Normally, <filename>searchd</filename> would use a PID if running in regular mode (i.e. not with <option>--console</option>), but it is possible that you will be running it in console mode whilst the index is being updated and rotated, for which a PID file will be needed.</listitem>
-<listitem><option>--console</option> is used to force <filename>searchd</filename> into console mode; typically it will be running as a conventional server application, and will aim to dump information into the log files (as specified in <filename>sphinx.conf</filename>). Sometimes though, when debugging issues in the configuration or the daemon itself, or trying to diagnose hard-to-track-down problems, it may be easier to force it to dump information directly to the console/command line from which it is being called. Running in console mode also means that the process will not be forked (so searches are done in sequence) and logs will not be written to. (It should be noted that console mode is not the intended method for running <filename>searchd</filename>)</listitem>
-<listitem><option>--iostats</option> is used in conjuction with the logging options (the <option>query_log</option> will need to have been activated in <filename>sphinx.conf</filename>) to provide more detailed information on a per-query basis as to the input/output operations carried out in the course of that query, with a slight performance hit and of course bigger logs. Further details are available under the <link linkend="query-log-format">query log format</link> section.</listitem>
-<listitem><option>--port portnumber</option> (<option>-p</option> for short) is used to specify the post that <filename>searchd</filename> should listen on, usually for debugging purposes. This will usually default to 3312, but sometimes you need to run it on a different port. Specifying it on the command line will override anything specified in the configuration file. The valid range is 0 to 65535, but ports numbered 1024 and below usually require a privileged account in order to run.</listitem>
-<listitem><option>--index &lt;index&gt;</option> forces this instance of <filename>searchd</filename> only to serve the specified index. Like <option>--port</option>, above, this is usually for debugging purposes; more long-term changes would generally be applied to the configuration file itself.</listitem>
+<listitem><option>--stop</option> is used to stop <filename>searchd</filename>, using the details of the PID file as specified in the <filename>sphinx.conf</filename> file, so you may also need to confirm to <filename>searchd</filename> which configuration file to use with the <option>--config</option> option. NB, calling <option>--stop</option> will also make sure any changes applied to the indexes with <link linkend="api-func-updateatttributes"><code>UpdateAttributes()</code></link> will be applied to the index files themselves. Example:
+<programlisting>
+$ searchd --config /home/myuser/sphinx.conf --stop
+</programlisting>
+</listitem>
+<listitem><option>--pidfile</option> is used to explicitly state a PID file, where the process information is stored regarding <filename>searchd</filename>, used for inter-process communications (for example, <filename>indexer</filename> will need to know the PID to contact <filename>searchd</filename> for rotating indexes). Normally, <filename>searchd</filename> would use a PID if running in regular mode (i.e. not with <option>--console</option>), but it is possible that you will be running it in console mode whilst the index is being updated and rotated, for which a PID file will be needed.
+<programlisting>
+$ searchd --config /home/myuser/sphinx.conf --pidfile /home/myuser/sphinx.pid
+</programlisting>
+</listitem>
+<listitem><option>--console</option> is used to force <filename>searchd</filename> into console mode; typically it will be running as a conventional server application, and will aim to dump information into the log files (as specified in <filename>sphinx.conf</filename>). Sometimes though, when debugging issues in the configuration or the daemon itself, or trying to diagnose hard-to-track-down problems, it may be easier to force it to dump information directly to the console/command line from which it is being called. Running in console mode also means that the process will not be forked (so searches are done in sequence) and logs will not be written to. (It should be noted that console mode is not the intended method for running <filename>searchd</filename>) You can invoke it as such:
+<programlisting>
+$ searchd --config /home/myuser/sphinx.conf --console
+</programlisting>
+</listitem>
+<listitem><option>--iostats</option> is used in conjuction with the logging options (the <option>query_log</option> will need to have been activated in <filename>sphinx.conf</filename>) to provide more detailed information on a per-query basis as to the input/output operations carried out in the course of that query, with a slight performance hit and of course bigger logs. Further details are available under the <link linkend="query-log-format">query log format</link> section. You might start <filename>searchd</filename> thus:
+<programlisting>
+$ searchd --config /home/myuser/sphinx.conf --iostats
+</programlisting>
+</listitem>
+<listitem><option>--port portnumber</option> (<option>-p</option> for short) is used to specify the post that <filename>searchd</filename> should listen on, usually for debugging purposes. This will usually default to 3312, but sometimes you need to run it on a different port. Specifying it on the command line will override anything specified in the configuration file. The valid range is 0 to 65535, but ports numbered 1024 and below usually require a privileged account in order to run. An example of usage:
+<programlisting>
+$ searchd --port 3313
+</programlisting>
+</listitem>
+<listitem><option>--index &lt;index&gt;</option> forces this instance of <filename>searchd</filename> only to serve the specified index. Like <option>--port</option>, above, this is usually for debugging purposes; more long-term changes would generally be applied to the configuration file itself. Example usage:
+<programlisting>
+$ searchd --index myindex
+</programlisting>
+</listitem>
 </itemizedlist>
-<para>There are some options for <filename>searchd</filename> that are specific to Windows platforms, concerning handling as a service (and will only be available on Windows binaries.)</para>
+<para>There are some options for <filename>searchd</filename> that are specific to Windows platforms, concerning handling as a service, are only be available on Windows binaries.</para>
 <para>Note that on Windows searchd will default to <option>--console</option> mode, unless you install it as a service.</para>
 <itemizedlist>
 <listitem><option>--install</option> installs <filename>searchd</filename> as a service into the Microsoft Management Console (Control Panel / Administrative Tools / Services). Any other parameters specified on the command line, where <option>--install</option> is specified will also become part of the command line on future starts of the service. For example, as part of calling <filename>searchd</filename>, you will likely also need to specify the configuration file with <option>--config</option>, and you would do that as well as specifying <option>--install</option>. Once called, the usual start/stop facilities will become available via the management console, so any methods you could use for starting, stopping and restarting services would also apply to <filename>searchd</filename>. Example:
 <programlisting>
-C:\WINDOWS\system32&gt; C:\sphinx\searchd.exe --install --config C:\sphinx\sphinx.conf
+C:\WINDOWS\system32&gt; C:\Sphinx\bin\searchd.exe --install --config C:\Sphinx\sphinx.conf
 </programlisting>
-
+If you wanted to have the I/O stats every time you started <filename>searchd</filename>, you would specify its option on the same line as the <option>--install</option> command thus:
+<programlisting>
+C:\WINDOWS\system32&gt; C:\Sphinx\bin\searchd.exe --install --config C:\Sphinx\sphinx.conf --iostats
+</programlisting>
 </listitem>
-<listitem><option>--delete</option> removes the service from the Microsoft Management Console and other places where services are registered, after previously installed with <option>--install</option>. Note, this does not uninstall the software or delete the indexes. It means the service will not be called from the services systems, and will not be started on the machine's next start. If currently running as a service, the current instance will not be terminated (until the next reboot, or <filename>searchd</filename> is called with <option>--stop</option>). If the service was installed with a custom name (with <option>--servicename</option>), the same name will need to be specified with <option>--servicename</option> when calling to uninstall.</listitem>
-<listitem><option>--servicename &lt;name&gt;</option> applies the given name to <filename>searchd</filename> when installing or deleting the service, as would appear in the Management Console; this will default to searchd, but if being deployed on servers where multiple administrators may log into the system, or a system with multiple <filename>searchd</filename> instances, a more descriptive name may be applicable. Note that unless combined with <option>--install</option> or <option>--delete</option>, this option does not do anything.</listitem>
+<listitem><option>--delete</option> removes the service from the Microsoft Management Console and other places where services are registered, after previously installed with <option>--install</option>. Note, this does not uninstall the software or delete the indexes. It means the service will not be called from the services systems, and will not be started on the machine's next start. If currently running as a service, the current instance will not be terminated (until the next reboot, or <filename>searchd</filename> is called with <option>--stop</option>). If the service was installed with a custom name (with <option>--servicename</option>), the same name will need to be specified with <option>--servicename</option> when calling to uninstall. Example:
+<programlisting>
+C:\WINDOWS\system32&gt; C:\Sphinx\bin\searchd.exe --delete
+</programlisting>
+</listitem>
+<listitem><option>--servicename &lt;name&gt;</option> applies the given name to <filename>searchd</filename> when installing or deleting the service, as would appear in the Management Console; this will default to searchd, but if being deployed on servers where multiple administrators may log into the system, or a system with multiple <filename>searchd</filename> instances, a more descriptive name may be applicable. Note that unless combined with <option>--install</option> or <option>--delete</option>, this option does not do anything. Example:
+<programlisting>
+C:\WINDOWS\system32&gt; C:\Sphinx\bin\searchd.exe --install --config C:\Sphinx\sphinx.conf --servicename SphinxSearch
+</programlisting>
+</listitem>
 <listitem><option>--ntservice</option> is the option that is passed by the Management Console to <filename>searchd</filename> to invoke it as a service on Windows platforms. It would not normally be necessary to call this directly; this would normally be called by Windows when the service would be started, although if you wanted to call this as a regular service from the command-line (as the complement to <option>--console</option>) you could do so in theory.</listitem>
 </itemizedlist>
 

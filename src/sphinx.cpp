@@ -4990,7 +4990,7 @@ bool CSphSchema::CompareTo ( const CSphSchema & rhs, CSphString & sError ) const
 	ARRAY_FOREACH ( i, m_dAttrs )
 		if (!( rhs.m_dAttrs[i]==m_dAttrs[i] ))
 	{
-		sError.SetSprintf ( "attribute mismatch (me=%s, in=%s, idx=%s, myattr=%s, inattr=%s)",
+		sError.SetSprintf ( "attribute mismatch (me=%s, in=%s, idx=%d, myattr=%s, inattr=%s)",
 			m_sName.cstr(), rhs.m_sName.cstr(),
 			i, sphDumpAttr(m_dAttrs[i]).cstr(), sphDumpAttr(rhs.m_dAttrs[i]).cstr() );
 		return false;

@@ -82,86 +82,261 @@ define ( "SPH_GROUPBY_YEAR",		3 );
 define ( "SPH_GROUPBY_ATTR",		4 );
 define ( "SPH_GROUPBY_ATTRPAIR",	5 );
 
+// important properties of PHP's integers:
+//  - always signed (one bit short of PHP_INT_SIZE)
+//  - conversion from string to int is saturated
+//  - float is double
+//  - div converts arguments to floats
+//  - mod converts arguments to ints
 
-/// portably pack numeric to 64 unsigned bits, network order
-function sphPack64 ( $v )
+// the packing code below works as follows:
+//  - when we got an int, just pack it
+//    if performance is a problem, this is the branch users should aim for
+//
+//  - otherwise, we got a number in string form
+//    this might be due to different reasons, but we assume that this is
+//    because it didn't fit into PHP int
+//
+//  - factor the string into high and low ints for packing
+//    - if we have bcmath, then it is used
+//    - if we don't, we have to do it manually (this is the fun part)
+//
+//    - x64 branch does factoring using ints
+//    - x32 (ab)uses floats, since we can't fit unsigned 32-bit number into an int
+//
+// unpacking routines are pretty much the same.
+//  - return ints if we can
+//  - otherwise format number into a string
+
+/// pack 64-bit signed
+function sphPackI64 ( $v )
 {
 	assert ( is_numeric($v) );
-
-	// x64 route
+	
+	// x64
 	if ( PHP_INT_SIZE>=8 )
 	{
-		$i = (int)$v;
-		return pack ( "NN", $i>>32, $i&((1<<32)-1) );
+		$v = (int)$v;
+		return pack ( "NN", $v>>32, $v&0xFFFFFFFF );
 	}
 
-	// x32 route, bcmath
-	$x = "4294967296";
+	// x32, int
+	if ( is_int($v) )
+		return pack ( "NN", $v < 0 ? -1 : 0, $v );
+
+	// x32, bcmath	
 	if ( function_exists("bcmul") )
 	{
-		$h = bcdiv ( $v, $x, 0 );
-		$l = bcmod ( $v, $x );
+		if ( bccomp ( $v, 0 ) == -1 )
+			$v = bcadd ( "18446744073709551616", $v );
+		$h = bcdiv ( $v, "4294967296", 0 );
+		$l = bcmod ( $v, "4294967296" );
 		return pack ( "NN", (float)$h, (float)$l ); // conversion to float is intentional; int would lose 31st bit
 	}
 
-	// x32 route, 15 or less decimal digits
-	// we can use float, because its actually double and has 52 precision bits
-	if ( strlen($v)<=15 )
+	// x32, no-bcmath
+	$p = max(0, strlen($v) - 13);
+	$lo = abs((float)substr($v, $p));
+	$hi = abs((float)substr($v, 0, $p));
+
+	$m = $lo + $hi*1316134912.0; // (10 ^ 13) % (1 << 32) = 1316134912
+	$q = floor($m/4294967296.0);
+	$l = $m - ($q*4294967296.0);
+	$h = $hi*2328.0 + $q; // (10 ^ 13) / (1 << 32) = 2328
+
+	if ( $v<0 )
 	{
-		$f = (float)$v;
-		$h = (int)($f/$x);
-		$l = (int)($f-$x*$h);
+		$h = 4294967295.0 - $h;
+		$l = 4294967296.0 - $l;
+	}
+	return pack ( "NN", $h, $l );
+}
+
+/// pack 64-bit unsigned
+function sphPackU64 ( $v )
+{
+	assert ( is_numeric($v) );
+	
+	// x64
+	if ( PHP_INT_SIZE>=8 )
+	{
+		assert ( $v>=0 );
+		
+		// x64, int
+		if ( is_int($v) )
+			return pack ( "NN", $v>>32, $v&0xFFFFFFFF );
+						  
+		// x64, bcmath
+		if ( function_exists("bcmul") )
+		{
+			$h = bcdiv ( $v, 4294967296, 0 );
+			$l = bcmod ( $v, 4294967296 );
+			return pack ( "NN", $h, $l );
+		}
+		
+		// x64, no-bcmath
+		$p = max ( 0, strlen($v) - 13 );
+		$lo = (int)substr ( $v, $p );
+		$hi = (int)substr ( $v, 0, $p );
+	
+		$m = $lo + $hi*1316134912;
+		$l = $m % 4294967296;
+		$h = $hi*2328 + (int)($m/4294967296);
+
 		return pack ( "NN", $h, $l );
 	}
 
-	// x32 route, 16 or more decimal digits
-	// well, let me know if you *really* need this
-	die ( "INTERNAL ERROR: packing more than 15-digit numeric on 32-bit PHP is not implemented yet (contact support)" );
+	// x32, int
+	if ( is_int($v) )
+		return pack ( "NN", 0, $v );
+	
+	// x32, bcmath
+	if ( function_exists("bcmul") )
+	{
+		$h = bcdiv ( $v, "4294967296", 0 );
+		$l = bcmod ( $v, "4294967296" );
+		return pack ( "NN", (float)$h, (float)$l ); // conversion to float is intentional; int would lose 31st bit
+	}
+
+	// x32, no-bcmath
+	$p = max(0, strlen($v) - 13);
+	$lo = (float)substr($v, $p);
+	$hi = (float)substr($v, 0, $p);
+	
+	$m = $lo + $hi*1316134912.0;
+	$q = floor($m / 4294967296.0);
+	$l = $m - ($q * 4294967296.0);
+	$h = $hi*2328.0 + $q;
+
+	return pack ( "NN", $h, $l );
 }
 
-
-/// portably unpack 64 signed bits, network order to numeric
-function sphUnpack64 ( $v )
+// unpack 64-bit unsigned
+function sphUnpackU64 ( $v )
 {
-	list($h,$l) = array_values ( unpack ( "N*N*", $v ) );
+	list ( $hi, $lo ) = array_values ( unpack ( "N*N*", $v ) );
 
-	// x64 route
 	if ( PHP_INT_SIZE>=8 )
 	{
-		if ( $h<0 ) $h += (1<<32); // because php 5.2.2 to 5.2.5 is totally fucked up again
-		if ( $l<0 ) $l += (1<<32);
-		return ($h<<32) + $l;
+		if ( $hi<0 ) $hi += (1<<32); // because php 5.2.2 to 5.2.5 is totally fucked up again
+		if ( $lo<0 ) $lo += (1<<32);
+
+		// x64, int
+		if ( $hi<=2147483647 )
+			return ($hi<<32) + $lo;
+
+		// x64, bcmath
+		if ( function_exists("bcmul") )
+			return bcadd ( $lo, bcmul ( $hi, "4294967296" ) );
+
+		// x64, no-bcmath
+		$C = 100000;
+		$h = ((int)($hi / $C) << 32) + (int)($lo / $C);
+		$l = (($hi % $C) << 32) + ($lo % $C);
+		if ( $l>$C )
+		{
+			$h += (int)($l / $C);
+			$l  = $l % $C;
+		}
+
+		if ( $h==0 )
+			return $l;
+		return sprintf ( "%d%05d", $h, $l );
 	}
 
-	// x32 route
-	$x = "4294967296";
-	$y = 0;
-	$p = "";
-	if ( $h<0 )
+	// x32, int
+	if ( $hi==0 )
 	{
-		$h = ~$h;
-		$l = ~$l;
-		$y = 1;
-		$p = "-";
+		if ( $lo>0 )
+			return $lo;
+		return sprintf ( "%u", $lo );
 	}
-	$h = sprintf ( "%u", $h );
-	$l = sprintf ( "%u", $l );
 
-	// bcmath
+	$hi = sprintf ( "%u", $hi );
+	$lo = sprintf ( "%u", $lo );
+
+	// x32, bcmath
 	if ( function_exists("bcmul") )
-		return $p . bcadd ( bcadd ( $l, bcmul ( $x, $h ) ), $y );
+		return bcadd ( $lo, bcmul ( $hi, "4294967296" ) );
+	
+	// x32, no-bcmath
+	$hi = (float)$hi;
+	$lo = (float)$lo;
+	
+	$q = floor($hi/10000000.0);
+	$r = $hi - $q*10000000.0;
+	$m = $lo + $r*4967296.0;
+	$mq = floor($m/10000000.0);
+	$l = $m - $mq*10000000.0;
+	$h = $q*4294967296.0 + $r*429.0 + $mq;
 
-	// no bcmath, 15 or less decimal digits
-	// we can use float, because its actually double and has 52 precision bits
-	if ( $h<1048576 )
+	$h = sprintf ( "%.0f", $h );
+	$l = sprintf ( "%07.0f", $l );
+	if ( $h=="0" )
+		return sprintf( "%.0f", (float)$l );
+	return $h . $l;
+}
+
+// unpack 64-bit signed
+function sphUnpackI64 ( $v )
+{
+	list ( $hi, $lo ) = array_values ( unpack ( "N*N*", $v ) );
+
+	// x64
+	if ( PHP_INT_SIZE>=8 )
 	{
-		$f = ((float)$h)*$x + (float)$l + (float)$y;
-		return $p . sprintf ( "%.0f", $f ); // builtin conversion is only about 39-40 bits precise!
+		if ( $hi<0 ) $hi += (1<<32); // because php 5.2.2 to 5.2.5 is totally fucked up again
+		if ( $lo<0 ) $lo += (1<<32);
+
+		return ($hi<<32) + $lo;
 	}
 
-	// x32 route, 16 or more decimal digits
-	// well, let me know if you *really* need this
-	die ( "INTERNAL ERROR: unpacking more than 15-digit numeric on 32-bit PHP is not implemented yet (contact support)" );
+	// x32, int
+	if ( $hi==0 )
+	{
+		if ( $lo>0 )
+			return $lo;
+		return sprintf ( "%u", $lo );
+	}
+	// x32, int
+	elseif ( $hi==-1 )
+	{
+		if ( $lo>0 )
+			return sprintf ( "%.0f", $lo - 4294967296.0 );
+		return $lo;
+	}
+	
+	$neg = "";
+	if ( $hi<0 )
+	{
+		$hi = ~$hi;
+		$lo = ~($lo - 1);
+		$neg = "-";
+	}	
+
+	$hi = sprintf ( "%u", $hi );
+	$lo = sprintf ( "%u", $lo );
+
+	// x32, bcmath
+	if ( function_exists("bcmul") )
+		return $neg . bcadd ( $lo, bcmul ( $hi, "4294967296" ) );
+
+	// x32, no-bcmath
+	$hi = (float)$hi;
+	$lo = (float)$lo;
+	
+	$q = floor($hi/10000000.0);
+	$r = $hi - $q*10000000.0;
+	$m = $lo + $r*4967296.0;
+	$mq = floor($m/10000000.0);
+	$l = $m - $mq*10000000.0;
+	$h = $q*4294967296.0 + $r*429.0 + $mq;
+
+	$h = sprintf ( "%.0f", $h );
+	$l = sprintf ( "%07.0f", $l );
+	if ( $h=="0" )
+		return $neg . sprintf( "%.0f", (float)$l );
+	return $neg . $h . $l;
 }
 
 
@@ -750,7 +925,7 @@ class SphinxClient
 			$req .= pack ( "N", (int)$weight );
 		$req .= pack ( "N", strlen($index) ) . $index; // indexes
 		$req .= pack ( "N", 1 ); // id64 range marker
-		$req .= sphPack64 ( $this->_min_id ) . sphPack64 ( $this->_max_id ); // id64 range
+		$req .= sphPackU64 ( $this->_min_id ) . sphPackU64 ( $this->_max_id ); // id64 range
 
 		// filters
 		$req .= pack ( "N", count($this->_filters) );
@@ -763,11 +938,11 @@ class SphinxClient
 				case SPH_FILTER_VALUES:
 					$req .= pack ( "N", count($filter["values"]) );
 					foreach ( $filter["values"] as $value )
-						$req .= sphPack64 ( $value );
+						$req .= sphPackI64 ( $value );
 					break;
 
 				case SPH_FILTER_RANGE:
-					$req .= sphPack64 ( $filter["min"] ) . sphPack64 ( $filter["max"] );
+					$req .= sphPackI64 ( $filter["min"] ) . sphPackI64 ( $filter["max"] );
 					break;
 
 				case SPH_FILTER_FLOATRANGE:
@@ -827,11 +1002,11 @@ class SphinxClient
 				assert ( is_numeric($id) );
 				assert ( is_numeric($val) );
 
-				$req .= sphPack64 ( $id );
+				$req .= sphPackU64 ( $id );
 				switch ( $entry["type"] )
 				{
 					case SPH_ATTR_FLOAT:	$req .= $this->_PackFloat ( $val ); break;
-					case SPH_ATTR_BIGINT:	$req .= sphPack64 ( $val ); break;
+					case SPH_ATTR_BIGINT:	$req .= sphPackI64 ( $val ); break;
 					default:				$req .= pack ( "N", $val ); break;
 				}
 			}
@@ -954,9 +1129,10 @@ class SphinxClient
 				// parse document id and weight
 				if ( $id64 )
 				{
-					$doc = sphUnpack64 ( substr ( $response, $p, 8 ) ); $p += 8;
+					$doc = sphUnpackU64 ( substr ( $response, $p, 8 ) ); $p += 8;
 					list(,$weight) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
-				} else
+				}
+				else
 				{
 					list ( $doc, $weight ) = array_values ( unpack ( "N*N*",
 						substr ( $response, $p, 8 ) ) );
@@ -987,7 +1163,7 @@ class SphinxClient
 					// handle 64bit ints
 					if ( $type==SPH_ATTR_BIGINT )
 					{
-						$attrvals[$attr] = sphUnpack64 ( substr ( $response, $p, 8 ) ); $p += 8;
+						$attrvals[$attr] = sphUnpackI64 ( substr ( $response, $p, 8 ) ); $p += 8;
 						continue;
 					}
 
@@ -1289,7 +1465,7 @@ class SphinxClient
 		$req .= pack ( "N", count($values) );
 		foreach ( $values as $id=>$entry )
 		{
-			$req .= sphPack64 ( $id );
+			$req .= sphPackU64 ( $id );
 			foreach ( $entry as $v )
 			{
 				$req .= pack ( "N", $mva ? count($v) : $v );

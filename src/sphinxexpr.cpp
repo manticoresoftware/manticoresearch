@@ -81,6 +81,16 @@ struct Expr_GetIntConst_c : public ISphExpr
 };
 
 
+struct Expr_GetInt64Const_c : public ISphExpr
+{
+	int64_t m_iValue;
+	Expr_GetInt64Const_c ( int64_t iValue ) : m_iValue ( iValue ) {}
+	virtual float Eval ( const CSphMatch & ) const { return (float) m_iValue; } // no assert() here cause generic float Eval() needs to work even on int-evaluator tree
+	virtual int IntEval ( const CSphMatch & ) const { assert ( 0 ); return (int)m_iValue; }
+	virtual int64_t Int64Eval ( const CSphMatch & ) const { return m_iValue; }
+};
+
+
 struct Expr_GetId_c : public ISphExpr
 {
 	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)tMatch.m_iDocID; }
@@ -340,7 +350,7 @@ struct ExprNode_t
 	CSphAttrLocator	m_tLocator;	///< attribute locator, for TOK_ATTR type
 	union
 	{
-		int			m_iConst;		///< constant value, for TOK_CONST_INT type
+		int64_t		m_iConst;		///< constant value, for TOK_CONST_INT type
 		float		m_fConst;		///< constant value, for TOK_CONST_FLOAT type
 		int			m_iFunc;		///< built-in function id, for TOK_FUNC type
 		Docinfo_e	m_eDocinfo;		///< docinfo field id, for TOK_DOCINFO type
@@ -371,7 +381,7 @@ protected:
 	CSphString				m_sParserError;
 
 protected:
-	int						AddNodeInt ( int iValue );
+	int						AddNodeInt ( int64_t iValue );
 	int						AddNodeFloat ( float fValue );
 	int						AddNodeAttr ( int iTokenType, int iAttrLocator );
 	int						AddNodeDocinfo ( Docinfo_e eDocinfo );
@@ -408,7 +418,7 @@ static int ParseNumeric ( YYSTYPE * lvalp, const char ** ppStr )
 	float fRes = (float) strtod ( *ppStr, &pEnd );
 
 	// try int route
-	int iRes = 0;
+	int64_t iRes = 0;
 	bool bInt = true;
 	for ( const char * p=(*ppStr); p<pEnd; p++ && bInt )
 	{
@@ -688,8 +698,10 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode, DWORD uAttrType )
 		case TOK_ATTR_FLOAT:	return new Expr_GetFloat_c ( tNode.m_tLocator );
 		case TOK_CONST_FLOAT:	return new Expr_GetConst_c ( tNode.m_fConst );
 		case TOK_CONST_INT:
-			if ( uAttrType==SPH_ATTR_INTEGER || uAttrType==SPH_ATTR_BIGINT )
-				return new Expr_GetIntConst_c ( tNode.m_iConst );
+			if ( uAttrType==SPH_ATTR_INTEGER )
+				return new Expr_GetIntConst_c ( (int)tNode.m_iConst );
+			else if ( uAttrType==SPH_ATTR_BIGINT )
+				return new Expr_GetInt64Const_c ( tNode.m_iConst );
 			else
 				return new Expr_GetConst_c ( float(tNode.m_iConst) );
 			break;
@@ -938,7 +950,7 @@ void yyerror ( ExprParser_t * pParser, const char * sMessage )
 
 //////////////////////////////////////////////////////////////////////////
 
-int ExprParser_t::AddNodeInt ( int iValue )
+int ExprParser_t::AddNodeInt ( int64_t iValue )
 {
 	ExprNode_t & tNode = m_dNodes.Add ();
 	tNode.m_iToken = TOK_CONST_INT;
@@ -1031,7 +1043,10 @@ DWORD ExprParser_t::DeduceType ( int iNode )
 				return SPH_ATTR_INTEGER;
 
 		case TOK_CONST_INT:	
-			return SPH_ATTR_INTEGER; // FIXME? add support for 64bit constants?
+			if ( tNode.m_iConst>=(int64_t)INT_MIN && tNode.m_iConst<=(int64_t)INT_MAX )
+				return SPH_ATTR_INTEGER;
+			else
+				return SPH_ATTR_BIGINT;
 
 		case TOK_DOCINFO:
 			return USE_64BIT ? SPH_ATTR_BIGINT : SPH_ATTR_INTEGER;

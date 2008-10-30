@@ -102,7 +102,7 @@
 #if ! defined (YYSTYPE) && ! defined (YYSTYPE_IS_DECLARED)
 
 typedef union YYSTYPE {
-	int				iConst;			// constant value
+	int64_t			iConst;			// constant value
 	float			fConst;			// constant value
 	int				iAttrLocator;	// attribute locator (rowitem for int/float; offset+size for bits)
 	int				iFunc;			// function id

@@ -62,7 +62,7 @@
 	#endif
 
 	#define sphSockRecv(_sock,_buf,_len)	::recv(_sock,_buf,_len,MSG_NOSIGNAL)
-	#define sphSockSend(_sock,_buf,_len)	::send(_sock,_buf,_len,0)
+	#define sphSockSend(_sock,_buf,_len)	::send(_sock,_buf,_len,MSG_NOSIGNAL)
 	#define sphSockClose(_sock)				::close(_sock)
 
 #endif
@@ -908,6 +908,7 @@ void SetSignalHandlers ()
 		sa.sa_handler = sighup;		if ( sigaction ( SIGHUP, &sa, NULL )!=0 ) break;
 		sa.sa_handler = sigusr1;	if ( sigaction ( SIGUSR1, &sa, NULL )!=0 ) break;
 		sa.sa_handler = sigchld;	if ( sigaction ( SIGCHLD, &sa, NULL )!=0 ) break;
+		sa.sa_handler = SIG_IGN;	if ( sigaction ( SIGPIPE, &sa, NULL )!=0 ) break;
 		if ( g_bCrashLog_Enabled )
 		{
 			sa.sa_flags |= SA_RESETHAND;

@@ -111,6 +111,7 @@ protected:
 	bool					ExtractPassages ( const ExcerptQuery_t & q );
 	bool					ExtractPhrases ( const ExcerptQuery_t & q );
 
+	void					HighlightPhrase ( const ExcerptQuery_t & q, int iStart, int iEnd );
 	void					HighlightAll ( const ExcerptQuery_t & q );
 	void					HighlightStart ( const ExcerptQuery_t & q );
 	bool					HighlightBestPassages ( const ExcerptQuery_t & q );
@@ -357,63 +358,53 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict, 
 }
 
 
+void ExcerptGen_c::HighlightPhrase ( const ExcerptQuery_t & q, int iTok, int iEnd )
+{
+	while ( iTok<=iEnd )
+	{
+		while ( iTok<=iEnd && !m_dTokens[iTok].m_uWords )
+			ResultEmit ( m_dTokens[iTok++] );
+		
+		if ( iTok>iEnd )
+			break;
+		
+		bool bMatch = true;
+		int iWord = 0;
+		int iStart = iTok;
+		while ( iWord<m_dWords.GetLength() )
+		{
+			if ( ( iTok > iEnd ) ||
+				 !( m_dTokens[iTok].m_eType==TOK_SPACE || m_dTokens[iTok].m_uWords == ( 1UL<<iWord++ ) ) )
+			{
+				bMatch = false;
+				break;
+			}
+			iTok++;
+		}
+		
+		if ( !bMatch )
+		{
+			ResultEmit ( m_dTokens[iStart] );
+			iTok = iStart + 1;
+			continue;
+		}
+		
+		ResultEmit ( q.m_sBeforeMatch.cstr() );
+		while ( iStart<iTok )
+			ResultEmit ( m_dTokens [ iStart++ ] );
+		ResultEmit ( q.m_sAfterMatch.cstr() );
+	}
+}
+
+
 void ExcerptGen_c::HighlightAll ( const ExcerptQuery_t & q )
 {
 	bool bOpen = false;
 	const int iMaxTok = m_dTokens.GetLength()-1; // skip last one, it's TOK_NONE
 
 	if ( m_bExactPhrase )
-	{
-		// exact phrase
-		for ( int iCur=0; iCur<iMaxTok; )
-		{
-			// skip non-opening words
-			while ( iCur<iMaxTok && !( m_dTokens[iCur].m_uWords & 1 ))
-				ResultEmit ( m_dTokens[iCur++] );
-
-			// check if we have enough words left
-			if ( iCur+m_dWords.GetLength()-1>=iMaxTok )
-			{
-				// not enough, just copy the tail
-				while ( iCur<iMaxTok )
-					ResultEmit ( m_dTokens[iCur++] );
-				break;
-			}
-
-			// lookahead
-			assert ( iCur>=0 && iCur<iMaxTok );
-			assert ( m_dTokens[iCur].m_uWords & 1 );
-
-			int iLookahead = 1; // current lookahead position
-			int iMatched = 1; // phrase words matched so far
-			while ( iCur+iLookahead<iMaxTok && iMatched<m_dWords.GetLength() )
-			{
-				const Token_t & tTok = m_dTokens[iCur+iLookahead];
-				if ( !tTok.m_uWords )
-				{
-					iLookahead++;
-					continue;
-				}
-
-				if (!( tTok.m_uWords & (1<<iMatched) ))
-					break;
-
-				iLookahead++;
-				iMatched++;
-			}
-
-			// emit looked-ahead tokens
-			if ( iMatched==m_dWords.GetLength() )
-				ResultEmit ( q.m_sBeforeMatch.cstr() );
-
-			while ( iLookahead-- )
-				ResultEmit ( m_dTokens[iCur++] );
-
-			if ( iMatched==m_dWords.GetLength() )
-				ResultEmit ( q.m_sAfterMatch.cstr() );
-		}
-
-	} else
+		HighlightPhrase ( q, 0, iMaxTok-1 );
+	else
 	{
 		// bag of words
 		for ( int iTok=0; iTok<iMaxTok; iTok++ )
@@ -881,40 +872,7 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & q )
 			if ( q.m_bWeightOrder )
 				iTok = iLast + 1;
 
-			while ( iTok<=iEnd )
-			{
-				while ( iTok<=iEnd && !m_dTokens[iTok].m_uWords )
-					ResultEmit ( m_dTokens[iTok++] );
-
-				if ( iTok>iEnd )
-					break;
-
-				bool bMatch = true;
-				int iWord = 0;
-				int iStart = iTok;
-				while ( iWord<m_dWords.GetLength() )
-				{
-					if ( ( iTok > iEnd ) ||
-				    	!( m_dTokens[iTok].m_eType==TOK_SPACE || m_dTokens[iTok].m_uWords == ( 1UL<<iWord++ ) ) )
-					{
-						bMatch = false;
-						break;
-					}
-					iTok++;
-				}
-
-				if ( !bMatch )
-				{
-					ResultEmit ( m_dTokens[iStart] );
-					iTok = iStart + 1;
-					continue;
-				}
-
-				ResultEmit ( q.m_sBeforeMatch.cstr() );
-				while ( iStart<iTok )
-					ResultEmit ( m_dTokens [ iStart++ ] );
-				ResultEmit ( q.m_sAfterMatch.cstr() );
-			}
+			HighlightPhrase ( q, iTok, iEnd );
 		}
 		else // !m_bExactPhrase
 		{

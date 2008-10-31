@@ -996,7 +996,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 //////////////////////////////////////////////////////////////////////////
 
 bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
-	const CSphConfigSection & hSrc, const char * sSrc, CSphVector<CSphFilter> & tPurge, bool bRotate, bool bMergeKillLists )
+	const CSphConfigSection & hSrc, const char * sSrc, CSphVector<CSphFilterSettings> & tPurge, bool bRotate, bool bMergeKillLists )
 {
 	// check config
 	if ( !hDst("path") )
@@ -1111,7 +1111,7 @@ int main ( int argc, char ** argv )
 {
 	const char * sOptConfig = NULL;
 	bool bMerge = false;	
-	CSphVector<CSphFilter> dMergeDstFilters;
+	CSphVector<CSphFilterSettings> dMergeDstFilters;
 
 	CSphVector<const char *> dIndexes;
 	bool bIndexAll = false;

@@ -1547,7 +1547,7 @@ enum ESphFilter
 
 
 /// search query filter
-class CSphFilter
+class CSphFilterSettings
 {
 public:
 	CSphString			m_sAttrName;	///< filtered attribute name
@@ -1567,35 +1567,30 @@ public:
 	CSphVector<SphAttr_t>	m_dValues;		///< integer values set
 
 public:
-	bool				m_bMva;			///< whether this filter is against multi-valued attribute
-	CSphAttrLocator		m_tLocator;		///< attr locator
-
-public:
-						CSphFilter ();
-
-	bool				Setup ( CSphSchema * pSchema );
-	bool				IsValid () const;
-
-	/// returns true all rows within given bounds are guaranteed to match not
-	/// returns false otherwise, if some rows can possibly match
-	bool				CheckBoundsReject ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo, int iSchemaSize ) const;
+						CSphFilterSettings ();
 
 	void				SetExternalValues ( const SphAttr_t * pValues, int nValues );
 
-	inline int					GetAttrType () const		{ return m_iAttrType; }
-	inline SphAttr_t			GetValue ( int iIdx ) const	{ assert ( iIdx<GetNumValues() ); return m_pValues ? m_pValues[iIdx] : m_dValues[iIdx]; }
-	inline const SphAttr_t *	GetValueArray () const		{ return m_pValues ? m_pValues : &(m_dValues [0]); }
-	inline int					GetNumValues () const		{ return m_pValues ? m_nValues : m_dValues.GetLength (); }
+	SphAttr_t			GetValue ( int iIdx ) const	{ assert ( iIdx<GetNumValues() ); return m_pValues ? m_pValues[iIdx] : m_dValues[iIdx]; }
+	const SphAttr_t *	GetValueArray () const		{ return m_pValues ? m_pValues : &(m_dValues [0]); }
+	int					GetNumValues () const		{ return m_pValues ? m_nValues : m_dValues.GetLength (); }
 
-	bool				operator == ( const CSphFilter & rhs ) const;
-	bool				operator != ( const CSphFilter & rhs ) const { return !( (*this)==rhs ); }
+	void				SortValues ()
+						{
+							if ( !m_pValues )
+								m_dValues.Sort();
+						}
+	
+	bool				operator == ( const CSphFilterSettings & rhs ) const;
+	bool				operator != ( const CSphFilterSettings & rhs ) const { return !( (*this)==rhs ); }
+
+	
 
 protected:
-	int					m_iAttrType;	///< filter attr type
 	const SphAttr_t *	m_pValues;		///< external value array
 	int					m_nValues;		///< external array size
 
-						CSphFilter ( const CSphFilter & rhs );
+						CSphFilterSettings ( const CSphFilterSettings & rhs );
 };
 
 
@@ -1675,7 +1670,7 @@ public:
 	SphDocID_t		m_iMinID;		///< min ID to match, 0 by default
 	SphDocID_t		m_iMaxID;		///< max ID to match, UINT_MAX by default
 
-	CSphVector<CSphFilter>	m_dFilters;	///< filters
+	CSphVector<CSphFilterSettings>	m_dFilters;	///< filters
 
 	CSphString		m_sGroupBy;		///< group-by attribute name
 	ESphGroupBy		m_eGroupFunc;	///< function to pre-process group-by attribute value with
@@ -1966,7 +1961,7 @@ public:
 	virtual int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit ) = 0;
 
 	/// build index by mering current index with given index
-	virtual bool				Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilters, bool bMergeKillLists ) = 0;
+	virtual bool				Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> & dFilters, bool bMergeKillLists ) = 0;
 
 public:
 	/// dump human-readable header info to given file

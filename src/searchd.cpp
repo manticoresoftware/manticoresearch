@@ -2312,7 +2312,7 @@ int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuer
 		+ strlen ( q.m_sSelect.cstr() );
 	ARRAY_FOREACH ( j, q.m_dFilters )
 	{
-		const CSphFilter & tFilter = q.m_dFilters[j];
+		const CSphFilterSettings & tFilter = q.m_dFilters[j];
 		iReqSize += 12 + strlen ( tFilter.m_sAttrName.cstr() ); // string attr-name; int type; int exclude-flag
 		switch ( tFilter.m_eType )
 		{
@@ -2353,7 +2353,7 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 	tOut.SendInt ( q.m_dFilters.GetLength() );
 	ARRAY_FOREACH ( j, q.m_dFilters )
 	{
-		const CSphFilter & tFilter = q.m_dFilters[j];
+		const CSphFilterSettings & tFilter = q.m_dFilters[j];
 		tOut.SendString ( tFilter.m_sAttrName.cstr() );
 		tOut.SendInt ( tFilter.m_eType );
 		switch ( tFilter.m_eType )
@@ -2659,7 +2659,7 @@ bool FixupQuery ( CSphQuery * pQuery, const CSphSchema * pSchema, const char * s
 			return false;
 		}
 
-		CSphFilter tFilter;
+		CSphFilterSettings tFilter;
 		tFilter.m_sAttrName = pSchema->GetAttr(iAttr).m_sName;
 		tFilter.m_dValues.Resize ( pQuery->m_iOldGroups );
 		ARRAY_FOREACH ( i, tFilter.m_dValues )
@@ -2685,7 +2685,7 @@ bool FixupQuery ( CSphQuery * pQuery, const CSphSchema * pSchema, const char * s
 			return false;
 		}
 
-		CSphFilter tFilter;
+		CSphFilterSettings tFilter;
 		tFilter.m_sAttrName = pSchema->GetAttr(iAttr).m_sName;
 		tFilter.m_uMinValue = pQuery->m_iOldMinTS;
 		tFilter.m_uMaxValue = pQuery->m_iOldMaxTS;
@@ -2790,7 +2790,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 		tQuery.m_dFilters.Resize ( iAttrFilters );
 		ARRAY_FOREACH ( iFilter, tQuery.m_dFilters )
 		{
-			CSphFilter & tFilter = tQuery.m_dFilters[iFilter];
+			CSphFilterSettings & tFilter = tQuery.m_dFilters[iFilter];
 			tFilter.m_sAttrName = tReq.GetString ();
 			tFilter.m_sAttrName.ToLower ();
 
@@ -3522,7 +3522,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery )
 }
 
 
-void SetupKillListFilter ( CSphFilter & tFilter, const SphAttr_t * pKillList, int nEntries )
+void SetupKillListFilter ( CSphFilterSettings & tFilter, const SphAttr_t * pKillList, int nEntries )
 {
 	assert ( nEntries && pKillList );
 
@@ -3849,7 +3849,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 							const ServedIndex_t & tServed = g_hIndexes [ dLocal[i] ];
 							if ( tServed.m_pIndex->GetKillListSize () )
 							{
-								CSphFilter tKillListFilter;
+								CSphFilterSettings tKillListFilter;
 								SetupKillListFilter ( tKillListFilter, tServed.m_pIndex->GetKillList (), tServed.m_pIndex->GetKillListSize () );
 								pQuery->m_dFilters.Add ( tKillListFilter );
 							}
@@ -3922,7 +3922,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 							const ServedIndex_t & tServed = g_hIndexes [ dLocal[i] ];
 							if ( tServed.m_pIndex->GetKillListSize () )
 							{
-								CSphFilter tKillListFilter;
+								CSphFilterSettings tKillListFilter;
 								SetupKillListFilter ( tKillListFilter, tServed.m_pIndex->GetKillList (), tServed.m_pIndex->GetKillListSize () );
 								tQuery.m_dFilters.Add ( tKillListFilter );
 							}

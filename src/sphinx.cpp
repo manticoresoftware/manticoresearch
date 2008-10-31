@@ -16,6 +16,7 @@
 #include "sphinxquery.h"
 #include "sphinxutils.h"
 #include "sphinxexpr.h"
+#include "sphinxfilter.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -1390,7 +1391,8 @@ struct CSphMergeData
 	SphDocID_t			m_iLastDocID;
 	SphDocID_t			m_iMinDocID;
 
-	CSphVector<CSphFilter>	m_dFilters;
+	ISphFilter *		m_pFilter;
+	
 	CSphSourceStats			m_tStats;
 	CSphRowitem *			m_pMinRowitems;
 	ESphDocinfo				m_eDocinfo;
@@ -1409,6 +1411,8 @@ struct CSphMergeData
 		, m_iLastDocID ( 0 )
 		, m_iMinDocID ( 0 )
 
+		, m_pFilter ( NULL )
+
 		, m_pMinRowitems ( NULL )
 		, m_eDocinfo ( SPH_DOCINFO_NONE )
 	{}
@@ -1416,6 +1420,7 @@ struct CSphMergeData
 	virtual ~CSphMergeData ()
 	{
 		SafeDeleteArray ( m_pMinRowitems );
+		SafeDelete ( m_pFilter );
 	}
 };
 
@@ -1674,7 +1679,7 @@ struct CSphIndex_VLN : CSphIndex
 
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats );
 
-	virtual bool				Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilters, bool bMergeKillLists );
+	virtual bool				Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> & dFilters, bool bMergeKillLists );
 	void						MergeWordData ( CSphWordRecord & tDstWord, CSphWordRecord & tSrcWord );
 
 	virtual int					UpdateAttributes ( const CSphAttrUpdate & tUpd );
@@ -1780,7 +1785,9 @@ private:
 
 	bool						m_bEarlyLookup;			///< whether early attr value lookup is needed
 	bool						m_bLateLookup;			///< whether late attr value lookup is needed
-	bool						m_bLateReject;			///< whether to check filters after rank calculation
+
+	ISphFilter *				m_pEarlyFilter;
+	ISphFilter *				m_pLateFilter;
 
 	struct CalcItem_t
 	{
@@ -1804,6 +1811,8 @@ private:
 	void						WriteSchemaColumn ( CSphWriter & fdInfo, const CSphColumnInfo & tCol );
 	void						ReadSchemaColumn ( CSphReader_VLN & rdInfo, CSphColumnInfo & tCol );
 
+	void						CreateFilters ( CSphQuery * pQuery, const CSphSchema & tSchema );
+	
 	bool						MatchExtended ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphTermSetup & tTermSetup );
 	bool						MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, const CSphTermSetup & tTermSetup );
 
@@ -1834,6 +1843,8 @@ private:
 	bool						SortOrdinals ( const char * szToFile, int iFromFD, int iArenaSize, int iOrdinalsInPool, CSphVector< CSphVector<SphOffset_t> > & dOrdBlockSize, bool bWarnOfMem );
 	bool						SortOrdinalIds ( const char * szToFile, int iFromFD, int iArenaSize, CSphVector < CSphVector < SphOffset_t > > & dOrdBlockSize, bool bWarnOfMem );
 
+	const DWORD *				GetMVAPool () const { return m_pMva.GetNumEntries() ? &m_pMva[0] : NULL; }
+	
 public:
 	// FIXME! this needs to be protected, and refactored as well
 	bool						SetupQueryWord ( CSphQueryWord & tWord, const CSphTermSetup & tTermSetup, bool bSetupReaders = true ) const;
@@ -4585,80 +4596,34 @@ void CSphTokenizer_Filter::SetBufferPtr ( const char * sNewPtr )
 // FILTER
 /////////////////////////////////////////////////////////////////////////////
 
-CSphFilter::CSphFilter ()
+CSphFilterSettings::CSphFilterSettings ()
 	: m_sAttrName	( "" )
 	, m_bExclude	( false )
 	, m_uMinValue	( 0 )
 	, m_uMaxValue	( UINT_MAX )
-	, m_bMva		( false )
-	, m_iAttrType	( SPH_FILTERATTR_ATTR )
 	, m_pValues		( NULL )
 	, m_nValues		( 0 )
 {}
 
 
-CSphFilter::CSphFilter ( const CSphFilter & rhs )
+CSphFilterSettings::CSphFilterSettings ( const CSphFilterSettings & rhs )
 {
 	assert ( 0 );
 	(*this) = rhs;
 }
 
 
-bool CSphFilter::Setup ( CSphSchema * pSchema )
-{
-	if ( !m_pValues )
-		m_dValues.Sort ();
-
-	bool bLateReject = false;
-
-	m_iAttrType = SPH_FILTERATTR_ATTR;
-	m_bMva = false;
-
-	if ( m_sAttrName.Begins ( "@" ) )
-	{
-		if ( m_sAttrName == "@id" )
-			m_iAttrType = SPH_FILTERATTR_ID;
-		else if ( m_sAttrName == "@weight" )
-		{
-			m_iAttrType = SPH_FILTERATTR_WEIGHT;
-			bLateReject = true;
-		}
-	}
-
-	if ( m_iAttrType == SPH_FILTERATTR_ATTR )
-	{
-		assert ( pSchema );
-
-		int iAttr = pSchema->GetAttrIndex ( m_sAttrName.cstr() );
-		if ( iAttr>=0 )
-		{
-			const CSphColumnInfo & tAttr = pSchema->GetAttr(iAttr);
-			m_tLocator = tAttr.m_tLocator;
-			m_bMva = ( tAttr.m_eAttrType & SPH_ATTR_MULTI )!=0;
-		}
-	}
-
-	return bLateReject;
-}
-
-
-bool CSphFilter::IsValid () const
-{
-	return m_tLocator.m_iBitOffset >= 0 || m_iAttrType != SPH_FILTERATTR_ATTR;
-}
-
-
-void CSphFilter::SetExternalValues ( const SphAttr_t * pValues, int nValues )
+void CSphFilterSettings::SetExternalValues ( const SphAttr_t * pValues, int nValues )
 {
 	m_pValues = pValues;
 	m_nValues = nValues;
 }
 
 
-bool CSphFilter::operator == ( const CSphFilter & rhs ) const
+bool CSphFilterSettings::operator == ( const CSphFilterSettings & rhs ) const
 {
 	// check name, mode, type
-	if ( m_sAttrName!=rhs.m_sAttrName || m_bExclude!=rhs.m_bExclude || m_eType!=rhs.m_eType || m_iAttrType!=rhs.m_iAttrType )
+	if ( m_sAttrName!=rhs.m_sAttrName || m_bExclude!=rhs.m_bExclude || m_eType!=rhs.m_eType )
 		return false;
 
 	switch ( m_eType )
@@ -4680,104 +4645,6 @@ bool CSphFilter::operator == ( const CSphFilter & rhs ) const
 			assert ( 0 && "internal error: unhandled filter type in comparison" );
 			return false;
 	}
-}
-
-
-bool CSphFilter::CheckBoundsReject ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo, int iSchemaSize ) const
-{
-	// fixup the type
-	int iAttrType = ( m_eType==SPH_FILTER_FLOATRANGE ) ? SPH_FILTERATTR_ATTR : GetAttrType();
-	if ( iAttrType==SPH_FILTERATTR_ATTR )
-	{
-		if ( m_tLocator.m_iBitOffset<0  )
-			return false; // no early reject for disabled filters
-
-		if ( m_tLocator.m_iBitOffset>=iSchemaSize*ROWITEM_BITS ) // index schema only contains non-computed attrs
-			return false; // no early reject for computed attrs
-	}
-
-	// sanity quick-checks
-	if (!( m_eType==SPH_FILTER_VALUES || m_eType==SPH_FILTER_RANGE || m_eType==SPH_FILTER_FLOATRANGE ))
-	{
-		assert ( 0 && "internal error, unhandled filter type in CheckBoundsReject()" );
-		return false;
-	}
-
-	if ( m_eType==SPH_FILTER_VALUES && m_bExclude )
-		return false; // no early reject for this case yet
-
-	// get the range
-	SphAttr_t uBlockMin = 0;
-	SphAttr_t uBlockMax = 0;
-
-	switch ( iAttrType )
-	{
-		case SPH_FILTERATTR_ATTR:
-			uBlockMin = sphGetRowAttr ( DOCINFO2ATTRS(pMinDocinfo), m_tLocator );
-			uBlockMax = sphGetRowAttr ( DOCINFO2ATTRS(pMaxDocinfo), m_tLocator );
-			break;
-
-		case SPH_FILTERATTR_ID:
-			uBlockMin = DOCINFO2ID(pMinDocinfo);
-			uBlockMax = DOCINFO2ID(pMaxDocinfo);
-			break;
-
-		case SPH_FILTERATTR_WEIGHT:
-			return false;
-
-		default:
-			assert ( 0 && "internal error: unhandled filter attribute type" );
-			break;
-	}
-
-	if ( m_eType==SPH_FILTER_VALUES )
-	{
-		// check all acceptable values against the range
-		bool bBlockMatches = false;
-		for ( int i=0; i<GetNumValues(); i++ )
-			if ( GetValue(i)>=uBlockMin && GetValue(i)<=uBlockMax )
-		{
-			bBlockMatches = true;
-			break;
-		}
-
-		// if all acceptable values are out of block range, we can safely reject it
-		if ( !bBlockMatches )
-			return true;
-
-	} else if ( m_eType==SPH_FILTER_RANGE )
-	{
-		if ( !m_bExclude )
-		{
-			// include-filter, non-overlapping block-range and include-range
-			if ( uBlockMin>m_uMaxValue || uBlockMax<m_uMinValue )
-				return true;
-		} else 
-		{
-			// exclude-filter, block range fully inside exclude-range
-			if ( uBlockMin>=m_uMinValue && uBlockMax<=m_uMaxValue )
-				return true;
-		}
-	} else
-	{
-		assert ( m_eType==SPH_FILTER_FLOATRANGE );
-		float fBlockMin = sphDW2F ( (DWORD)uBlockMin );
-		float fBlockMax = sphDW2F ( (DWORD)uBlockMax );
-		if ( !m_bExclude )
-		{
-			// include-filter, non-overlapping block-range and include-range
-			if ( fBlockMin>m_fMaxValue || fBlockMax<m_fMinValue )
-				return true;
-		} else
-		{
-			// exclude-filter, block range fully inside exclude-range
-			if ( fBlockMin>=m_fMinValue && fBlockMax<=m_fMaxValue )
-				return true;
-		}
-	}
-
-	// no known early reject tricks
-	return false;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -6676,8 +6543,10 @@ CSphIndex * sphCreateIndexPhrase ( const char * sFilename )
 
 
 CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename )
-	: CSphIndex		( sFilename )
-	, m_iLockFD		( -1 )
+	: CSphIndex			( sFilename )
+	, m_iLockFD			( -1 )
+	, m_pEarlyFilter	( NULL )
+	, m_pLateFilter		( NULL )
 {
 	m_sFilename = sFilename;
 
@@ -6707,8 +6576,6 @@ CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename )
 	m_iMergeCheckpoint = 0;
 
 	m_iKillListSize = 0;
-
-	m_bLateReject = false;
 
 	m_iIndexTag = -1;
 }
@@ -9541,7 +9408,7 @@ static bool CopyFile( const char * sSrc, const char * sDst, CSphString & sErrStr
 	return true;
 }
 
-bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilters, bool bMergeKillLists )
+bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> & dFilters, bool bMergeKillLists )
 {
 	assert( pSource );
 
@@ -9811,26 +9678,16 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilte
 		}
 	}
 
-	// fixup filters
-	ARRAY_FOREACH ( i, dFilters )
-	{
-		int iAttr = m_tSchema.GetAttrIndex ( dFilters[i].m_sAttrName.cstr() );
-		if ( iAttr<0 )
-			continue;
+	// create filter
+	tMerge.m_pFilter = sphCreateFilters ( dFilters, m_tSchema, GetMVAPool() );
 
-		const CSphColumnInfo & tCol = m_tSchema.GetAttr(iAttr);
-		dFilters[i].m_tLocator = tCol.m_tLocator;
-
-		tMerge.m_dFilters.Add ( dFilters[i] );
-	}
-
-	// add killlist filters (if any)
+	// create killlist filter
 	if ( !bMergeKillLists )
 	{
 		DWORD nKillListSize = pSrcIndex->GetKillListSize ();
 		if ( nKillListSize )
 		{
-			CSphFilter tKillListFilter;
+			CSphFilterSettings tKillListFilter;
 			SphAttr_t * pKillList = pSrcIndex->GetKillList ();
 
 			tKillListFilter.m_bExclude = true;
@@ -9839,8 +9696,9 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilter> & dFilte
 			tKillListFilter.m_uMaxValue = pKillList [nKillListSize -1];
 			tKillListFilter.m_sAttrName = "@id";
 			tKillListFilter.SetExternalValues ( pKillList, nKillListSize );
-			tKillListFilter.Setup ( NULL );
-			tMerge.m_dFilters.Add ( tKillListFilter );
+
+			ISphFilter * pKillListFilter = sphCreateFilter ( tKillListFilter, m_tSchema, GetMVAPool() );
+			tMerge.m_pFilter = sphJoinFilters ( tMerge.m_pFilter, pKillListFilter );
 		}
 	}
 
@@ -10437,159 +10295,23 @@ CSphQueryResult * CSphIndex_VLN::Query ( CSphQuery * pQuery )
 
 bool CSphIndex_VLN::EarlyReject ( CSphMatch & tMatch, const CSphQuery * pQuery ) const
 {
-	if ( tMatch.m_iDocID < pQuery->m_iMinID || tMatch.m_iDocID > pQuery->m_iMaxID )
-		return true;
-
-	if ( !pQuery->m_dFilters.GetLength() )
+	if ( !m_pEarlyFilter )
 		return false;
 
 	if ( m_bEarlyLookup )
 		CopyDocinfo ( tMatch, FindDocinfo ( tMatch.m_iDocID ) );
 	EarlyCalc ( tMatch );
 
-	ARRAY_FOREACH ( i, pQuery->m_dFilters )
-	{
-		const CSphFilter & tFilter = pQuery->m_dFilters[i];
-		if ( !tFilter.IsValid () )
-			continue;
-
-		if ( tFilter.m_bMva )
-		{
-			// multiple values
-			const DWORD * pMva = tMatch.GetAttrMVA ( tFilter.m_tLocator, &m_pMva[0] );
-			const DWORD * pMvaMax = NULL;
-			if ( pMva )
-			{
-				pMvaMax = pMva + (*pMva) + 1;
-				pMva++;
-			}
-
-			// filter matches if any of multiple values match (ie. are in the set, or in the range)
-			bool bOK = false;
-			if ( pMva )
-				switch ( tFilter.m_eType )
-			{
-				case SPH_FILTER_VALUES:
-				{
-					// walk both attr values and filter values lists, and ok match if there's any intersection
-					const SphAttr_t * pFilter = tFilter.GetValueArray ();
-					const SphAttr_t * pFilterMax = pFilter + tFilter.GetNumValues  ();
-
-					while ( pMva<pMvaMax && pFilter<pFilterMax && pMva[0]!=pFilter[0] )
-					{
-						while ( pMva<pMvaMax && pMva[0]<pFilter[0] ) pMva++;
-						if ( pMva>=pMvaMax ) break;
-
-						while ( pFilter<pFilterMax && pFilter[0]<pMva[0] ) pFilter++;
-						if ( pFilter>=pFilterMax ) break;
-
-					}
-
-					bOK = ( pMva<pMvaMax && pFilter<pFilterMax );
-					assert ( bOK==false || pMva[0]==pFilter[0] );
-
-					// FIXME! should we report matched-value somehow?
-					// if ( bOK ) tMatch.SetAttr ( tFilter.m_iBitOffset, tFilter.m_iBitCount, pFilter[0] );
-					break;
-				}
-
-				case SPH_FILTER_RANGE:
-					// walk attr list, and ok match if any of values is within range
-					while ( pMva<pMvaMax )
-					{
-						if ( pMva[0]>=tFilter.m_uMinValue && pMva[0]<=tFilter.m_uMaxValue )
-						{
-							bOK = true;
-							// FIXME! should we report matched-value somehow?
-							// tMatch.SetAttr ( tFilter.m_iBitOffset, tFilter.m_iBitCount, pMva[0] );
-							break;
-						}
-						pMva++;
-					}
-					break;
-
-				default:
-					assert ( 0 && "internal error: unhandled MVA filter type" );
-					break;
-			}
-
-			if ( !( tFilter.m_bExclude ^ bOK ) )
-				return true;
-
-		} else
-		{
-			// single value
-			SphAttr_t uValue = 0;
-			if ( tFilter.m_eType == SPH_FILTER_VALUES || tFilter.m_eType == SPH_FILTER_RANGE )
-			{
-				switch ( tFilter.GetAttrType () )
-				{
-				case SPH_FILTERATTR_ATTR:	uValue = tMatch.GetAttr ( tFilter.m_tLocator ); break;
-				case SPH_FILTERATTR_ID:		uValue = tMatch.m_iDocID; break;
-				case SPH_FILTERATTR_WEIGHT:	return false;
-				default: assert ( 0 && "internal error: unhandled filter attribute type" ); break;
-				}
-			}
-
-			float fValue;
-			switch ( tFilter.m_eType )
-			{
-				case SPH_FILTER_VALUES:	
-					if ( !( tFilter.m_bExclude ^ sphGroupMatch ( uValue, tFilter.GetValueArray (), tFilter.GetNumValues () ) ) )
-						return true;
-					break;
-
-				case SPH_FILTER_RANGE:
-					if ( tFilter.m_bExclude ^ ( uValue<tFilter.m_uMinValue || uValue>tFilter.m_uMaxValue ) )
-						return true;
-					break;
-
-				case SPH_FILTER_FLOATRANGE:
-					fValue = tMatch.GetAttrFloat ( tFilter.m_tLocator );
-					if ( tFilter.m_bExclude ^ ( fValue<tFilter.m_fMinValue || fValue>tFilter.m_fMaxValue ) )
-						return true;
-					break;
-
-				default:
-					assert ( 0 && "internal error: unhandled filter type" );
-					break;
-			}
-		}
-	}
-
-	return false;
+	return !m_pEarlyFilter->Eval ( tMatch );
 }
 
 
 bool CSphIndex_VLN::LateReject ( CSphMatch & tMatch, const CSphQuery * pQuery ) const
 {
-	if ( !pQuery->m_dFilters.GetLength() )
+	if ( !m_pLateFilter )
 		return false;
 
-	ARRAY_FOREACH ( i, pQuery->m_dFilters )
-	{
-		const CSphFilter & tFilter = pQuery->m_dFilters[i];
-
-		if (!( tFilter.GetAttrType()==SPH_FILTERATTR_WEIGHT
-			&& ( tFilter.m_eType==SPH_FILTER_VALUES || tFilter.m_eType==SPH_FILTER_RANGE ) ))
-		{
-			continue;
-		}
-
-		SphAttr_t uValue = tMatch.m_iWeight;
-		if ( tFilter.m_eType==SPH_FILTER_VALUES )
-		{
-			if ( !( tFilter.m_bExclude ^ sphGroupMatch ( uValue, tFilter.GetValueArray (), tFilter.GetNumValues () ) ) )
-				return true;
-		} else
-		{
-			assert ( tFilter.m_eType==SPH_FILTER_RANGE );
-			if ( tFilter.m_bExclude ^ ( uValue<tFilter.m_uMinValue || uValue>tFilter.m_uMaxValue ) )
-				return true;
-		}
-	}
-
-	return false;
+	return !m_pLateFilter->Eval ( tMatch );
 }
 
 
@@ -10836,7 +10558,7 @@ void CSphIndex_VLN::LateCalc ( CSphMatch & tMatch ) const
 	if ( bRandomize ) \
 		(_match).m_iWeight = rand(); \
 	\
-	if ( !m_bLateReject || !LateReject ( _match, pQuery ) ) \
+	if ( !m_pLateFilter || !LateReject ( _match, pQuery ) ) \
 	{ \
 		bool bNewMatch = false; \
 		for ( int iSorter=0; iSorter<iSorters; iSorter++ ) \
@@ -13465,18 +13187,6 @@ bool CSphIndex_VLN::MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISph
 
 	m_bEarlyLookup = false; // we'll do it manually
 
-	// no late reject on weight
-	if ( m_bLateReject )
-	{
-		bool bOnlyWeight = true;
-		for ( int iFilter=0; iFilter<pQuery->m_dFilters.GetLength() && bOnlyWeight; iFilter++ )
-			if ( pQuery->m_dFilters[iFilter].GetAttrType () != SPH_FILTERATTR_WEIGHT )
-				bOnlyWeight = false;
-
-		if ( bOnlyWeight )
-			m_bLateReject = false;
-	}
-
 	DWORD uStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 	for ( DWORD uIndexEntry=0; uIndexEntry<m_uDocinfoIndex; uIndexEntry++ )
 	{
@@ -13496,10 +13206,7 @@ bool CSphIndex_VLN::MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISph
 			break;
 
 		// check applicable filters
-		bool bReject = false;
-		for ( int iFilter=0; iFilter<pQuery->m_dFilters.GetLength() && !bReject; iFilter++ )
-			bReject = pQuery->m_dFilters[iFilter].CheckBoundsReject ( pMin, pMax, m_tSchema.GetRowSize() );
-		if ( bReject )
+		if ( m_pEarlyFilter && !m_pEarlyFilter->EvalBlock ( pMin, pMax,m_tSchema.GetRowSize() ) )
 			continue;
 
 		///////////////////////
@@ -14922,6 +14629,48 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 	Swap ( pQuery->m_sQuery, sDest );
 }
 
+template < typename T >
+class PtrNullifier_t
+{
+	T ** m_pPtr;
+public:
+	explicit PtrNullifier_t ( T ** pPtr ) : m_pPtr ( pPtr )	{ assert ( pPtr ); }
+	~PtrNullifier_t () { *m_pPtr = NULL; }
+};
+
+void CSphIndex_VLN::CreateFilters ( CSphQuery * pQuery, const CSphSchema & tSchema )
+{
+	assert ( !m_pLateFilter );
+	assert ( !m_pEarlyFilter );
+
+	bool bFullscan = pQuery->m_eMode == SPH_MATCH_FULLSCAN;
+	
+	ARRAY_FOREACH ( i, pQuery->m_dFilters )
+	{
+		CSphFilterSettings & tFilter = pQuery->m_dFilters[i];
+		if ( bFullscan && tFilter.m_sAttrName == "@weight" )
+			continue; // @weight is not avaiable in fullscan mode
+			
+		ISphFilter * pFilter = sphCreateFilter ( tFilter, tSchema, GetMVAPool() );
+		if ( !pFilter )
+			continue;
+
+		ISphFilter ** pGroup = tFilter.m_sAttrName == "@weight" ? &m_pLateFilter : &m_pEarlyFilter;
+		*pGroup = sphJoinFilters ( *pGroup, pFilter );
+	}
+
+	// convert ID bounds to a separate filter
+	if ( pQuery->m_iMinID != 0 || pQuery->m_iMaxID != DOCID_MAX )
+	{
+		CSphFilterSettings tFilter;
+		tFilter.m_sAttrName = "@id";
+		tFilter.m_eType = SPH_FILTER_RANGE;
+		tFilter.m_uMinValue = pQuery->m_iMinID;
+		tFilter.m_uMaxValue = pQuery->m_iMaxID;
+		m_pEarlyFilter = sphJoinFilters ( m_pEarlyFilter, sphCreateFilter ( tFilter, tSchema, 0 ) );
+	}
+}
+
 
 bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters )
 {
@@ -14944,27 +14693,30 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 	if ( !SetupCalc ( pResult, ppSorters[0]->m_tIncomingSchema ) )
 		return false;
 
-	// setup filters, and check if we can early reject the whole
-	m_bLateReject = false;
-	ARRAY_FOREACH ( i, pQuery->m_dFilters )
+	// fixup "empty query" at low level
+	if ( pQuery->m_sQuery.IsEmpty() )
+		pQuery->m_eMode = SPH_MATCH_FULLSCAN;
+
+	// setup filters
+	CreateFilters ( pQuery, pResult->m_tSchema );
+
+	CSphScopedPtr<ISphFilter> tCleanEarly ( m_pEarlyFilter );
+	PtrNullifier_t<ISphFilter> tNullEarly ( &m_pEarlyFilter );
+
+	CSphScopedPtr<ISphFilter> tCleanLate ( m_pLateFilter );
+	PtrNullifier_t<ISphFilter> tNullLate ( &m_pLateFilter );
+	
+	// check if we can early reject the whole
+	if ( m_pEarlyFilter && m_pDocinfoIndex.GetLength() )
 	{
-		CSphFilter & tFilter = pQuery->m_dFilters[i];
-		tFilter.m_tLocator.m_iBitOffset = -1; // filters with negative bit-offset will be ignored
-
-		// lookup it
-		if ( tFilter.Setup ( &pResult->m_tSchema ) )
-			m_bLateReject = true;
-
-		// check index-level early-reject
-		if ( m_pDocinfoIndex.GetLength() )
-		{
-			DWORD uStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
-			DWORD * pMinEntry = const_cast<DWORD*> ( &m_pDocinfoIndex [ 2*m_uDocinfoIndex*uStride ] );
-			DWORD * pMaxEntry = pMinEntry + uStride;
-
-			if ( tFilter.CheckBoundsReject ( pMinEntry, pMaxEntry, m_tSchema.GetRowSize() ) )
-				return true;
-		}
+		int iRowSize = m_tSchema.GetRowSize();
+		DWORD uStride = DOCINFO_IDSIZE + iRowSize;
+		DWORD * pMinEntry = const_cast<DWORD*> ( &m_pDocinfoIndex [ 2*m_uDocinfoIndex*uStride ] );
+		DWORD * pMaxEntry = pMinEntry + uStride;
+		
+		//if ( m_pFilter && !m_pFilter->EvalBlock ( pMinEntry, pMaxEntry, iRowSize ) )
+		if ( !m_pEarlyFilter->EvalBlock ( pMinEntry, pMaxEntry, iRowSize ) )
+			return true;
 	}
 
 	///////////////////
@@ -15018,10 +14770,6 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 	tTermSetup.m_pQuery = pQuery; // for extended2 filtering only
 
 	PROFILE_END ( query_init );
-
-	// fixup "empty query" at low level
-	if ( pQuery->m_sQuery.IsEmpty() )
-		pQuery->m_eMode = SPH_MATCH_FULLSCAN;
 
 	// fixup old matching modes at low level
 	PrepareQueryEmulation ( pQuery );
@@ -20694,47 +20442,21 @@ void CSphWordDataRecord::Read( CSphMergeSource * pSource, CSphMergeData * pMerge
 		tDoc.Read ( pSource );
 
 		bool bOK = true;
-		if ( m_bFilter )
-			for ( int i = 0; i < pMergeData->m_dFilters.GetLength () && bOK; i++ )
-			{
-				const CSphFilter & tFilter = pMergeData->m_dFilters[i];
-				SphAttr_t uValue = 0;
+		if ( m_bFilter && pMergeData->m_pFilter )
+		{
+			// FIXME: this (probably) should be fixed.. somehow, someday
+			CSphMatch tMatch;
 
-				switch ( tFilter.GetAttrType () )
-				{
-				case SPH_FILTERATTR_ATTR:
-					if ( tDoc.m_pRowitems )
-						uValue = sphGetRowAttr ( tDoc.m_pRowitems, tFilter.m_tLocator );
-					else
-					{
-						const DWORD * pDocinfo = pSource->m_pIndex->FindDocinfo ( tDoc.m_iDocID );
-						uValue = sphGetRowAttr ( DOCINFO2ATTRS(pDocinfo), tFilter.m_tLocator );
-					}
-					break;
-				case SPH_FILTERATTR_ID:	
-					uValue = tDoc.m_iDocID;
-					break;
-				}
-
-				switch ( tFilter.m_eType )
-				{
-				case SPH_FILTER_RANGE:
-					if ( tFilter.m_bExclude ^ ( uValue<tFilter.m_uMinValue || uValue>tFilter.m_uMaxValue ) )
-						bOK = false;
-					break;
-
-				case SPH_FILTER_VALUES:
-					if ( !( tFilter.m_bExclude ^ sphGroupMatch ( uValue, tFilter.GetValueArray (), tFilter.GetNumValues () ) ) )
-						bOK = false;
-					break;
-
-				default:
-					break;
-				}
-			}
+			tMatch.m_iDocID = tDoc.m_iDocID;
+			tMatch.m_iRowitems = tDoc.m_iRowitems;
+			tMatch.m_pRowitems = tDoc.m_pRowitems;
+			if ( !tDoc.m_iRowitems )
+				tMatch.m_pRowitems = (CSphRowitem *)DOCINFO2ATTRS( pSource->m_pIndex->FindDocinfo ( tDoc.m_iDocID ) );
+			bOK = pMergeData->m_pFilter->Eval ( tMatch );
+			tMatch.m_pRowitems = NULL;
+		}
 
 		m_dFilteredDocs.Add ( bOK );
-
 		if ( bOK )
 		{
 			m_dDoclist.Add( tDoc );

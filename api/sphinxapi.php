@@ -146,8 +146,13 @@ function sphPackI64 ( $v )
 
 	if ( $v<0 )
 	{
-		$h = 4294967295.0 - $h;
-		$l = 4294967296.0 - $l;
+		if ( $l==0 )
+			$h = 4294967296.0 - $h;
+		else
+		{
+			$h = 4294967295.0 - $h;
+			$l = 4294967296.0 - $l;
+		}
 	}
 	return pack ( "NN", $h, $l );
 }
@@ -301,16 +306,18 @@ function sphUnpackI64 ( $v )
 	// x32, int
 	elseif ( $hi==-1 )
 	{
-		if ( $lo>0 )
-			return sprintf ( "%.0f", $lo - 4294967296.0 );
-		return $lo;
+		if ( $lo<0 )
+			return $lo;
+		return sprintf ( "%.0f", $lo - 4294967296.0 );
 	}
 	
 	$neg = "";
+	$c = 0;
 	if ( $hi<0 )
 	{
 		$hi = ~$hi;
-		$lo = ~($lo - 1);
+		$lo = ~$lo;
+		$c = 1;
 		$neg = "-";
 	}	
 
@@ -319,7 +326,7 @@ function sphUnpackI64 ( $v )
 
 	// x32, bcmath
 	if ( function_exists("bcmul") )
-		return $neg . bcadd ( $lo, bcmul ( $hi, "4294967296" ) );
+		return $neg . bcadd ( bcadd ( $lo, bcmul ( $hi, "4294967296" ) ), $c );
 
 	// x32, no-bcmath
 	$hi = (float)$hi;
@@ -329,7 +336,7 @@ function sphUnpackI64 ( $v )
 	$r = $hi - $q*10000000.0;
 	$m = $lo + $r*4967296.0;
 	$mq = floor($m/10000000.0);
-	$l = $m - $mq*10000000.0;
+	$l = $m - $mq*10000000.0 + $c;
 	$h = $q*4294967296.0 + $r*429.0 + $mq;
 
 	$h = sprintf ( "%.0f", $h );

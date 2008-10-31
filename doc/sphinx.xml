@@ -2,7 +2,7 @@
 
 
 <articleinfo>
-<title>Sphinx 0.9.8 reference manual</title>
+<title>Sphinx 0.9.8.1 reference manual</title>
 <subtitle>Free open-source SQL full-text search engine</subtitle>
 <copyright>
 <year>2001-2008</year>
@@ -2532,7 +2532,12 @@ Keywords can contain wildcards, that work similarly to
 </varlistentry>
 <varlistentry>
 	<term>"single_passage":</term>
-	<listitem>whether to extract single best passage only. Boolean, default is false.</listitem>
+	<listitem>Whether to extract single best passage only. Boolean, default is false.</listitem>
+</varlistentry>
+<varlistentry>
+	<term>"weight_order":</term>
+	<listitem>Whether to sort the extracted passages in order of relevance (decreasing weight),
+	or in order of appearance in the document (increasing position). Boolean, default is false.</listitem>
 </varlistentry>
 </variablelist>
 </para>
@@ -5347,6 +5352,30 @@ still occur at normal shut-down.
 -->
 
 <appendix id="changelog"><title>Sphinx revision history</title>
+
+<sect2 id="rel0981"><title>Version 0.9.8.1, 30 oct 2008</title>
+<itemizedlist>
+<listitem>added configure script to libsphinxclient</listitem>
+<listitem>changed proximity/quorum operator syntax to require whitespace after length</listitem>
+<listitem>fixed potential head process crash on SIGPIPE during "maxed out" message</listitem>
+<listitem>fixed handling of incomplete remote replies (caused over-degraded distributed results, in rare cases)</listitem>
+<listitem>fixed sending of big remote requests (caused distributed requests to fail, in rare cases)</listitem>
+<listitem>fixed FD_SET() overflow (caused searchd to crash on startup, in rare cases)</listitem>
+<listitem>fixed MVA vs distributed indexes (caused loss of 1st MVA value in result set)</listitem>
+<listitem>fixed tokenizing of exceptions terminated by specials (eg. "GPS AT&amp;T" in extended mode)</listitem>
+<listitem>fixed buffer overrun in stemmer on overlong tokens occasionally emitted by proximity/quorum operator parser (caused crashes on certain proximity/quorum queries)</listitem>
+<listitem>fixed wordcount ranker (could be dropping hits)</listitem>
+<listitem>fixed --merge feature (numerous different fixes, caused broken indexes)</listitem>
+<listitem>fixed --merge-dst-range performance</listitem>
+<listitem>fixed prefix/infix generation for stopwords</listitem>
+<listitem>fixed ignore_chars vs specials</listitem>
+<listitem>fixed misplaced F_SETLKW check (caused certain build types, eg. RPM build on FC8, to fail)</listitem>
+<listitem>fixed dictionary-defined charsets support in spelldump, added \x-style wordchars support</listitem>
+<listitem>fixed Java API to properly send long strings (over 64K; eg. long document bodies for excerpts)</listitem>
+<listitem>fixed Python API to accept offset/limit of 'long' type</listitem>
+<listitem>fixed default ID range (that filtered out all 64-bit values) in Java and Python APIs</listitem>
+</itemizedlist>
+</sect2>
 
 <sect2 id="rel098"><title>Version 0.9.8, 14 jul 2008</title>
 <bridgehead>Indexing</bridgehead>

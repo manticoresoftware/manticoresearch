@@ -10110,9 +10110,9 @@ void CSphIndex_VLN::MergeWordData ( CSphWordRecord & tDstWord, CSphWordRecord & 
 
 				if ( uCompleted != 0x03 )
 				{
-					if ( iDstPos <= iSrcPos )
+					if ( iDstPos && ( iDstPos <= iSrcPos || !iSrcPos ) )
 						dWordPos.Add ( iDstPos );
-					else if ( iDstPos > iSrcPos )
+					else if ( iSrcPos && ( iSrcPos <= iDstPos || !iDstPos ) )
 						dWordPos.Add ( iSrcPos );
 
 					iTotalHits++;
@@ -15693,13 +15693,10 @@ SphWordID_t	CSphDictCRC::GetWordIDWithMarkers ( BYTE * pWord )
 {
 	ApplyStemmers ( pWord + 1 );
 	SphWordID_t uWordId = sphCRCWord<SphWordID_t> ( pWord + 1 );
-	if ( !FilterStopword ( uWordId ) )
-		return 0;
-
 	int iLength = strlen ( (const char *)(pWord + 1) );
 	pWord [iLength + 1] = MAGIC_WORD_TAIL;
 	pWord [iLength + 2] = '\0';
-	return sphCRCWord<SphWordID_t> ( pWord );
+	return FilterStopword ( uWordId ) ? sphCRCWord<SphWordID_t> ( pWord ) : 0;
 }
 
 
@@ -17212,6 +17209,8 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 					tHit.m_iWordID = iWord;
 					tHit.m_iWordPos = iPos;
 				}
+				else
+					continue;
 
 				// restore stemmed word
 				int iStemmedLen = strlen ( ( const char *)sBuf );

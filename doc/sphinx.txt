@@ -1,5 +1,5 @@
-Sphinx 0.9.8 reference manual
-=============================
+Sphinx 0.9.8.1 reference manual
+===============================
 
 Free open-source SQL full-text search engine
 --------------------------------------------
@@ -2790,7 +2790,12 @@ parameters:
    individual keywords. Boolean, default is false.
 
 "single_passage":
-   whether to extract single best passage only. Boolean, default is false.
+   Whether to extract single best passage only. Boolean, default is false.
+
+"weight_order":
+   Whether to sort the extracted passages in order of relevance (decreasing
+   weight), or in order of appearance in the document (increasing
+   position). Boolean, default is false.
 
 Returns false on failure. Returns a plain array of strings with excerpts
 (snippets) on success.
@@ -5043,7 +5048,44 @@ still occur at normal shut-down.
 A. Sphinx revision history
 ==========================
 
-A.1. Version 0.9.8, 14 jul 2008
+A.1. Version 0.9.8.1, 30 oct 2008
+---------------------------------
+
+   * added configure script to libsphinxclient
+   * changed proximity/quorum operator syntax to require whitespace after
+     length
+   * fixed potential head process crash on SIGPIPE during "maxed out"
+     message
+   * fixed handling of incomplete remote replies (caused over-degraded
+     distributed results, in rare cases)
+   * fixed sending of big remote requests (caused distributed requests to
+     fail, in rare cases)
+   * fixed FD_SET() overflow (caused searchd to crash on startup, in rare
+     cases)
+   * fixed MVA vs distributed indexes (caused loss of 1st MVA value in
+     result set)
+   * fixed tokenizing of exceptions terminated by specials (eg. "GPS AT&T"
+     in extended mode)
+   * fixed buffer overrun in stemmer on overlong tokens occasionally
+     emitted by proximity/quorum operator parser (caused crashes on certain
+     proximity/quorum queries)
+   * fixed wordcount ranker (could be dropping hits)
+   * fixed --merge feature (numerous different fixes, caused broken
+     indexes)
+   * fixed --merge-dst-range performance
+   * fixed prefix/infix generation for stopwords
+   * fixed ignore_chars vs specials
+   * fixed misplaced F_SETLKW check (caused certain build types, eg. RPM
+     build on FC8, to fail)
+   * fixed dictionary-defined charsets support in spelldump, added \x-style
+     wordchars support
+   * fixed Java API to properly send long strings (over 64K; eg. long
+     document bodies for excerpts)
+   * fixed Python API to accept offset/limit of 'long' type
+   * fixed default ID range (that filtered out all 64-bit values) in Java
+     and Python APIs
+
+A.2. Version 0.9.8, 14 jul 2008
 -------------------------------
 
 Indexing
@@ -5223,7 +5265,7 @@ Changes and fixes since 0.9.8-RC2
      reusable sorter issue
    * fixed sorting of negative floats in SPH_SORT_EXTENDED mode
 
-A.2. Version 0.9.7, 02 apr 2007
+A.3. Version 0.9.7, 02 apr 2007
 -------------------------------
 
    * added support for sql_str2ordinal_column
@@ -5273,7 +5315,7 @@ A.2. Version 0.9.7, 02 apr 2007
    * fixed wrong assertion in SBCS encoder
    * fixed crashes with no-attribute indexes after rotate
 
-A.3. Version 0.9.7-RC2, 15 dec 2006
+A.4. Version 0.9.7-RC2, 15 dec 2006
 -----------------------------------
 
    * added support for extended matching mode (query language)
@@ -5295,7 +5337,7 @@ A.3. Version 0.9.7-RC2, 15 dec 2006
      paths)
    * fixes for 64-bit platforms
 
-A.4. Version 0.9.7-RC1, 26 oct 2006
+A.5. Version 0.9.7-RC1, 26 oct 2006
 -----------------------------------
 
    * added alpha index merging code
@@ -5324,7 +5366,7 @@ A.4. Version 0.9.7-RC1, 26 oct 2006
    * fixed line numbering in config parser
    * fixed some issues with index rotation
 
-A.5. Version 0.9.6, 24 jul 2006
+A.6. Version 0.9.6, 24 jul 2006
 -------------------------------
 
    * added support for empty indexes
@@ -5333,7 +5375,7 @@ A.5. Version 0.9.6, 24 jul 2006
    * fixed configure issues with --without-mysql and --with-pgsql options
    * fixed building on Solaris 9
 
-A.6. Version 0.9.6-RC1, 26 jun 2006
+A.7. Version 0.9.6-RC1, 26 jun 2006
 -----------------------------------
 
    * added boolean queries support (experimental, beta version)

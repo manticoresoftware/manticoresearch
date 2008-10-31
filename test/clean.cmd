@@ -10,4 +10,7 @@ if exist "ubertest.php" (
 
 	del /q "data\*.sp*" 2>nul
 	del /q "*.log" 2>nul
+
+	del /q "error*.txt" 2>nul
+	del /q "config*.conf" 2>nul
 )

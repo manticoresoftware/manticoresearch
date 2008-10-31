@@ -70,18 +70,27 @@ $results = array ();
 
 $res = $client->Query ( "", "dist" );
 if ( !$res )
+{
+	$results[] = $client->GetLastError();
 	return;
+}
 unset ( $res["time"] );
 $results[] = $res;
 
 $res = $client->UpdateAttributes ( "dist", array("group_id"), array(11=>array(123)) );
 if ( $res===false )
+{
+	$results[] = $client->GetLastError();
 	return;
+}
 $results[] = $res;
 
 $res = $client->Query ( "", "dist" );
 if ( !$res )
+{
+	$results[] = $client->GetLastError();
 	return;
+}
 unset ( $res["time"] );
 $results[] = $res;
 ]]>

@@ -74,6 +74,12 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error )
 	for ( $i=0; $i<$action_retries && !file_exists($pidfile); $i++ )
 		usleep ( $action_wait_timeout );
 
+	if ( !file_exists($pidfile) )
+	{
+		$error = "PID file ($pidfile) was not created";
+		return 1;
+	}
+
 	if ( $retval == 0 )
 	{
 		$error = "";
@@ -1068,8 +1074,18 @@ function RunTest ( $test_dir )
 	$error = "";
 	$log = ""; // subtest failures log
 	$nsubtests = $config->SubtestCount();
+
+	// config to pid hash, instances to stop
+	// static is only to workaround PHP braindamage, otherwise $stop gets reset (at least on 5.2.2 under win32)
+	static $stop = array();
 	do
 	{
+		// stop them all
+		foreach ( $stop as $conf=>$pid )
+			StopSearchd ( $conf, $pid );
+		$stop = array();
+
+		// do the dew
 		$subtest = $config->SubtestNo()+1;
 		print ( "$prefix $subtest/$nsubtests\r" );
 		$config->WriteReportHeader ( $report );
@@ -1114,6 +1130,7 @@ function RunTest ( $test_dir )
 		if ( $config->NumAgents () == 1 )
 		{
 			$searchd_ret = StartSearchd ( "config.conf", "error.txt", $sd_pid_file, $error );
+			$stop["config.conf"] = $sd_pid_file;
 
 			if ( $searchd_ret == 1 )
 			{
@@ -1130,14 +1147,18 @@ function RunTest ( $test_dir )
 		else
 			for ( $i = $config->NumAgents () - 1; $i >= 0  && !$searchd_error; $i-- )
 			{
-				$config_file = "config_$i.conf";
-				$pid_file = "searchd$i.pid";
+				static $agent_id = 0;
+				$agent_id++;
+
+				$config_file = "config_".$agent_id.".conf";
+				$pid_file = "searchd_".$agent_id.".pid";
+				$stop[$config_file] = $pid_file;
 
 				$config->SetAgent ( $agents [$i] );
 				$config->SetPIDFile ( $pid_file );
 				$config->WriteConfig ( $config_file, $i );
 
-				$searchd_ret = StartSearchd ( $config_file, "error_$i.txt", $pid_file, $error );
+				$searchd_ret = StartSearchd ( $config_file, "error_".$agent_id.".txt", $pid_file, $error );
 
 				if ( $searchd_ret == 1 )
 				{
@@ -1164,8 +1185,6 @@ function RunTest ( $test_dir )
 			{
 				if ( !HandleFailure ( $config, $report, "$error\n", $nfailed ) )
 					$log .= "\tsubtest $subtest: query error: $error\n";
-
-				StopSearchd ( "config.conf", $sd_pid_file );
 				continue;
 			}
 		}
@@ -1175,8 +1194,6 @@ function RunTest ( $test_dir )
 			{
 				if ( !HandleFailure ( $config, $report, "$error\n", $nfailed ) )
 					$log .= "\tsubtest $subtest: query error: $error\n";
-
-				StopSearchd ( "config.conf", $sd_pid_file );
 				continue;
 			}
 		}
@@ -1197,14 +1214,11 @@ function RunTest ( $test_dir )
 		}
 
 		$config->SubtestFinished ();
-
-		if ( $config->NumAgents () == 1 )
-			StopSearchd ( "config.conf", $sd_pid_file );
-		else
-			for ( $i = 0; $i < $config->NumAgents (); $i++ )
-				StopSearchd ( "config_$i.conf", "searchd$i.pid" );
 	}
 	while ( $config->CreateNextConfig () );
+
+	foreach ( $stop as $conf=>$pid )
+		StopSearchd ( $conf, $pid );
 
 	fclose ( $report );
 	mysql_close ();

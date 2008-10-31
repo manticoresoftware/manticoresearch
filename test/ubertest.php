@@ -79,7 +79,7 @@ if ( array_key_exists ( "DBPASS", $_ENV ) && $_ENV["DBPASS"] )
 	$db_pwd = $_ENV["DBPASS"];
 
 $run = false;
-$test_dir = "";
+$test_dirs = array();
 for ( $i=0; $i<count($args); $i++ )
 {
 	$arg = $args[$i];
@@ -91,7 +91,8 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="-p" || $arg=="--password" )	$db_pwd = $args[++$i];
 	else if ( $arg=="-i" || $arg=="--indexer" )		$indexer_path = $args[++$i];
 	else if ( $arg=="-s" || $arg=="--searchd" )		$searchd_path = $args[++$i];
-	else if ( is_dir($arg) )						$test_dir = $arg;
+	else if ( is_dir($arg) )						$test_dirs[] = $arg;
+	else if ( is_dir("test_$arg") )					$test_dirs[] = "test_$arg";
 	else
 	{
 		print ( "ERROR: unknown option '$arg'; run with no arguments for help screen.\n" );
@@ -132,8 +133,10 @@ $tests = array ();
 $dh = opendir ( "." );
 while ( $entry=readdir($dh) )
 {
-	if ( substr ( $entry,0,4 )!="test" )			continue;
-	if ( !empty($test_dir) && $entry!=$test_dir )	continue;
+	if ( substr ( $entry,0,4 )!="test" )
+		continue;
+	if ( !empty($test_dirs) && !in_array ( $entry, $test_dirs ) )
+		continue;
 	$tests[] = $entry;
 }
 sort ( $tests );
@@ -145,6 +148,16 @@ $total_subtests = 0;
 $total_subtests_failed = 0;
 foreach ( $tests as $test )
 {
+	if ( $windows )
+	{
+		// avoid an issue with daemons stuck in exit(0) for some seconds
+		$sd_port += 10;
+		$agent_port += 10;
+		$agents	= array (
+			array ( "address" => $sd_address, "port" => $sd_port ),
+			array ( "address" => $agent_address, "port" => $agent_port ) );
+	}
+
 	if ( file_exists ( $test."/test.xml" ) )
 	{
 		$res = RunTest ( $test );

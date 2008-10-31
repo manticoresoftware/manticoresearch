@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>@custom sorting</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query_pre = SET time_zone='+0:00'
+	sql_query = SELECT id, group_id, UNIX_TIMESTAMP(date_added) as date_added, text FROM test_table
+
+	sql_attr_uint		= group_id
+	sql_attr_timestamp	= date_added
+}
+
+index test
+{
+	source	= test
+	path	= <data_path/>/test
+	docinfo	= extern
+}
+</config>
+
+<db_create>
+create table test_table
+(
+	id int not null key auto_increment,
+	group_id int not null,
+	date_added date not null,
+	text varchar(255) not null default 'text'
+);
+</db_create>
+
+<db_drop>
+drop table if exists test_table;
+</db_drop>
+
+<!-- @weight + group_id*0.3 - log ( NOW() - date_added ) -->
+<db_insert>
+insert into test_table (group_id, date_added) values
+( 10, '2008-10-01' ),
+( 20, '2008-10-01' ),
+( 30, '2008-10-01' ),
+(  1, '2007-10-01' ),
+(  1, '2007-10-02' ),
+(  1, '2007-10-03' );
+</db_insert>
+
+<query_attributes>
+	<attr>group_id</attr>
+	<attr>date_added</attr>
+</query_attributes>
+
+<queries>
+	<query sortmode="extended" sortby="@custom DESC">text</query>
+	<query sortmode="extended" sortby="@custom ASC">text</query>
+</queries>
+
+</test>

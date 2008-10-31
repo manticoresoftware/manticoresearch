@@ -78,8 +78,8 @@ index delta
 <query index="main">delta2</query>
 <query index="main">delta3</query>
 <query index="main">gamma0</query>
-<query index="main" filter="mva" filtervalue="1"></query>
-<query index="main" filter="mva" filtervalue="100"></query>
+<query index="main" filter="mva" filter_value="1"></query>
+<query index="main" filter="mva" filter_value="100"></query>
 </queries>
 
 <db_create>

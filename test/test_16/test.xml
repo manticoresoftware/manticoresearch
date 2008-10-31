@@ -35,7 +35,7 @@ index test
 </query_attributes>
 
 <queries>
-<query mode="any" filter="group_id" filtervalue="1" sortmode="expr" sortby="@weight">test it</query>
+<query mode="any" filter="group_id" filter_value="1" sortmode="expr" sortby="@weight">test it</query>
 <query mode="any" sortmode="expr" sortby="-@weight">test it</query>
 </queries>
 

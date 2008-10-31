@@ -1,0 +1,100 @@
+<test>
+<name>bigint attrs</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = SELECT id, a, n, text FROM test_table;
+
+	sql_attr_uint	= a
+	sql_attr_bigint	= n
+}
+
+index test
+{
+	source	= test
+	path	= <data_path/>/test
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INT NOT NULL,
+	a INT UNSIGNED NOT NULL,
+	n BIGINT NOT NULL,
+	text VARCHAR(255) NOT NULL DEFAULT 'text'
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table;
+</db_drop>
+
+<db_insert>
+INSERT INTO test_table (id, a, n) VALUES
+(   1,  10, -70000000000 ),
+(   2,  20, -60000000000 ),
+(   3,  30, -50000000000 ),
+(   4,  40,  50000000000 ),
+(   5,  50,  60000000000 ),
+(   6,  60,  70000000000 ),
+(   7,  70, -4611686018427387903 ),
+(   8,  80, -9223372036854775807 ),
+(   9,  90,  4611686018427387903 ),
+(  10, 100,  9223372036854775807 ),
+(  11, 110,  250000000000000000 ),
+( 101,   0, -1 ),
+( 102,   0, -2 );
+</db_insert>
+
+<query_attributes>
+	<attr>a</attr>
+	<attr>n</attr>
+	<attr>sel</attr>
+	<attr>@groupby</attr>
+	<attr>@count</attr>
+</query_attributes>
+
+<queries>
+	<query />
+	<query sortmode="expr" sortby="-n"/>
+
+	<query select="a, n, n + a as sel"/> <!-- doc_id=10 will warp-around -->
+
+	<query groupfunc="attr" groupattr="n"/>
+	<query select="abs(n) as sel, *" groupfunc="attr" groupattr="sel"/>
+
+	<query select="idiv(abs(n), 10000000000) as sel, *"
+		groupfunc="attr" groupattr="sel"
+		id_range="1 6"/>
+
+	<query select="idiv(70000000000, 10000000000) as sel, *"
+		groupfunc="attr" groupattr="sel"
+		id_range="1 6"/>
+
+	<query select="min(a, n) as sel, *"/>
+
+	<query filter="n" filter_value="-1" />
+	<query filter="n" filter_value="-4611686018427387903" />
+	<query filter="n" filter_value="4611686018427387903" />
+
+	<query filter="n" filter_range="-100000000000 0"/>
+	<query filter="n" filter_range="0 100000000000"/>
+	<query filter="n" filter_range="-4611686018427387903 -4611686018427387900" />
+</queries>
+
+</test>

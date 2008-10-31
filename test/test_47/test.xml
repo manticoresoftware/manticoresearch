@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>id64</name>
+<id64>yar!</id64>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = SELECT id, n, text FROM test_table;
+	sql_attr_uint = n
+}
+
+index test
+{
+	source	= test
+	path	= <data_path/>/test
+	docinfo	= extern
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id BIGINT UNSIGNED NOT NULL,
+	n INT NOT NULL DEFAULT 42,
+	text VARCHAR(255) NOT NULL
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table;
+</db_drop>
+
+<db_insert>
+INSERT INTO test_table (id, text) VALUES
+	( 50000000000, 'five' ),
+	( 50000000000, 'dup' ),
+	( 50000000001, 'five+1' ),
+	( 60000000000, 'six' ),
+	( 60000000001, 'six+1' ),
+	( 9223372036854775806, 'mid -1' ),
+	( 9223372036854775807, 'mid' ),
+	( 9223372036854775808, 'mid +1' ),
+	( 18446744073709551613, 'last' ),
+	( 18446744073709551614, 'last' ),
+	( 18446744073709551615, 'max (wont make it)' );
+</db_insert>
+
+<query_attributes>
+	<attr>sel</attr>
+    <attr>@groupby</attr>
+    <attr>@count</attr>
+</query_attributes>
+
+<queries>
+	<query>five</query>
+	<query>last</query>
+	<query>max</query>
+	<query>mid</query>
+
+	<query id_range="50000000000 60000000000"/>
+	<query id_range="70000000000 18446744073709551615"/>
+
+	<query select="@id as sel, *" groupfunc="attr" groupattr="sel" />
+</queries>
+
+</test>
+
+

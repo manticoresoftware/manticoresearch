@@ -4,6 +4,9 @@
 // $Id$
 //
 
+ini_set ( "display_errors", 1 );
+ini_set ( "error_reporting", E_ALL | E_STRICT );
+
 require_once ( "../api/sphinxapi.php" );
 
 $windows = isset($_SERVER["WINDIR"]) || isset($_SERVER["windir"]) || isset($_SERVER["HOMEDRIVE"]);
@@ -170,6 +173,7 @@ class SphinxConfig
 	private $_subtestcount;
 	private $_results;
 	private $_results_model;
+	private $_id64;
 	private $_config;				///< config DOM node
 
 
@@ -204,6 +208,7 @@ class SphinxConfig
 	function DB_Create ()			{ return $this->_db_create; }
 	function DB_Insert ()			{ return $this->_db_insert; }
 	function NumAgents ()			{ return $this->_num_agents; }
+	function WantsID64 ()			{ return $this->_id64; }
 	function IsQueryTest ()			{ return strlen ( $this->_custom_test ) == 0;	}
 
 
@@ -311,6 +316,34 @@ class SphinxConfig
 	}
 
 
+	function ParseRange ( $range )
+	{
+		if ( !$range )
+			return false;
+
+		$values = explode ( ' ', $range );
+		if ( count($values) != 2 )
+		{
+			printf ( "ERROR: malformed range attribute: '%s'\n", $range );
+			return false;
+		}
+
+		return array ( 'min' => $values[0], 'max' => $values[1] );
+	}
+
+	function ParseIndexWeights ( $weights )
+	{
+		if ( !$weights )
+			return false;
+
+		$result = array();
+		preg_match_all ( '/([^\s]+):(\d+)/', $weights, $matches, PREG_SET_ORDER  );
+		foreach ( $matches as $match )
+			$result [ $match[1] ] = (int)$match[2];
+
+		return $result;
+	}
+
 	function Load ( $config_file )
 	{
 		// load the file
@@ -384,7 +417,8 @@ class SphinxConfig
 
 				// parse filter
 				$res["filter"] = $q->getAttribute("filter");
-				$res["filtervalue"] = $q->getAttribute("filtervalue" );
+				$res["filter_value"] = $q->getAttribute("filter_value" );
+				$res["filter_range"] = $this->ParseRange ( $q->getAttribute("filter_range" ) );
 
 				// parse sort mode and get clause
 				$sortmode = 0;
@@ -431,6 +465,9 @@ class SphinxConfig
 
 				$res["resarray"] = $q->getAttribute("resarray");
 				$res["index"] = $q->getAttribute("index");
+				$res["select"] = $q->getAttribute("select");
+				$res["id_range"] = $this->ParseRange ( $q->getAttribute("id_range") );
+				$res["index_weights"] = $this->ParseIndexWeights ( $q->getAttribute("index_weights") );
 
 				// add query
 				$this->_queries[] = $res;
@@ -462,6 +499,7 @@ class SphinxConfig
 		$this->_name			= GetFirstChildValue ( $xml, "name" );
 		$this->_query_settings	= GetFirstChildValue ( $xml, "query_settings" );
 		$this->_num_agents		= GetFirstChildValue ( $xml, "num_agents", 1 );
+		$this->_id64			= GetFirstChildValue ( $xml, "id64", false );
 
 		// precalc subtests count
 		$this->_subtestcount = 1;
@@ -511,11 +549,24 @@ class SphinxConfig
 					if ( @$qinfo["mode"] )		$cl->SetMatchMode ( $qinfo["mode"] );
 					if ( @$qinfo["ranker"] )	$cl->SetRankingMode ( $qinfo["ranker"] );
 					if ( @$qinfo["sortmode"] )	$cl->SetSortMode ( $qinfo["sortmode"], $qinfo["sortby"] );
-					if ( @$qinfo["filter"] )	$cl->SetFilter ( $qinfo["filter"], array ( $qinfo["filtervalue"] ) );
 					if ( @$qinfo["groupattr"] )	$cl->SetGroupBy ( $qinfo["groupattr"], $qinfo["groupfunc"], $qinfo["groupsort"] );
 					if ( @$qinfo["groupdistinct"] )	$cl->SetGroupDistinct ( $qinfo["groupdistinct"] );
 					if ( @$qinfo["resarray"] )	$cl->SetArrayResult ( true );
+					if ( @$qinfo["select"] )	$cl->SetSelect ( $qinfo["select"] );
+					if ( @$qinfo["id_range"] )	$cl->SetIDRange ( $qinfo["id_range"]["min"], $qinfo["id_range"]["max"] );
 					if ( @$qinfo["index"] )		$my_index = $qinfo["index"];
+					if ( @$qinfo["index_weights"] ) $cl->SetIndexWeights ( $qinfo["index_weights"] );
+					if ( @$qinfo["filter"] )
+					{
+						$name = $qinfo["filter"];
+						if ( @$qinfo["filter_value"] )
+							$cl->SetFilter ( $name, array ( $qinfo["filter_value"] ) );
+						elseif ( @$qinfo["filter_range"] )
+						{
+							$range = $qinfo["filter_range"];
+							$cl->SetFilterRange ( $name, $range['min'], $range['max'] );
+						}
+					}
 
 	            	$results = $cl->Query ( $query, $my_index );
 					if ( @$qinfo["resarray"] )
@@ -593,6 +644,24 @@ class SphinxConfig
 	}
 
 
+	function FixKeys ( $v )
+	{
+		if ( is_array($v) )
+		{
+			$result = array();
+			foreach ( $v as $key=>$value )
+			{
+				if ( $key==PHP_INT_MAX || $key==-PHP_INT_MAX-1 )
+					$key = (int)$key;
+				$result[$key] = $this->FixKeys ( $value );
+			}
+			return $result;
+		}
+		else
+			return $v;
+	}
+
+
 	function LoadModel ( $filename )
 	{
 		if ( ! IsModelGenMode () )
@@ -604,7 +673,7 @@ class SphinxConfig
 			if ( ! $contents )
 				return FALSE;
 
-			$this->_results_model = unserialize ( $contents );
+			$this->_results_model = $this->FixKeys ( unserialize ( $contents ) );
 		}
 
 		return TRUE;
@@ -613,7 +682,7 @@ class SphinxConfig
 
 	function CompareToModel ()
 	{
-		return $this->CompareResults ( $this->_results, $this->_results_model [$this->SubtestNo ()] );
+		return $this->CompareResults ( $this->FixKeys ( $this->_results ), $this->_results_model [$this->SubtestNo ()] );
 	}
 
 
@@ -752,7 +821,7 @@ class SphinxConfig
 							$attrtmp = $docinfo ["attrs"][$attribute];
 							if ( is_array ( $attrtmp ) )
 							{
-                   				$str .= " $attribute=";
+								$str .= " $attribute=";
 								foreach ( $attrtmp as $valuetmp )
 									$str .= " $valuetmp";
 							}
@@ -960,7 +1029,7 @@ function EraseDirContents ( $path )
 
 function RunTest ( $test_dir )
 {
-	global $indexer_data_path, $agents, $sd_pid_file;
+	global $indexer_data_path, $agents, $sd_pid_file, $g_id64;
 
 	$model_file = $test_dir."/model.bin";
 	$conf_dir 	= $test_dir."/Conf";
@@ -970,6 +1039,12 @@ function RunTest ( $test_dir )
 		return;
 
 	$prefix = sprintf ( "testing %s, %s...", $test_dir, $config->Name () );
+
+	if ( $config->WantsID64() && !$g_id64 )
+	{
+		printf ( "skipping: %s, %s - enable id64 to run this test\n", $test_dir, $config->Name () );
+		return;
+	}
 
 	if ( !CreateDB ( $config->DB_Drop(), $config->DB_Create(), $config->DB_Insert() ) )
 	{

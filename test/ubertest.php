@@ -28,6 +28,7 @@ $agents 			= array ( array ( "address" => $sd_address, "port" => $sd_port ),
 $index_data_path	= "data";
 
 $g_model			= false;
+$g_id64				= false;
 
 require_once ( "helpers.inc" );
 
@@ -102,6 +103,17 @@ if ( !$run )
 	print ( "ERROR: no run mode defined; run with no arguments for help screen.\n" );
 	exit ( 1 );
 }
+
+// guess the size of document IDs
+
+exec ( $indexer_path, $output, $result );
+if ( count($output) == 0 )
+{
+	print "ERROR: failed to run the indexer\n";
+	exit ( 1 );
+}
+else
+	$g_id64 = strstr ( $output[0], 'id64' ) !== false;
 
 /////////////
 // run tests

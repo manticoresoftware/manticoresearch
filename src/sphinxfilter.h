@@ -33,7 +33,7 @@ struct ISphFilter
 
 	/// evaluate filter for a given block
 	/// returns false if no document in block can possibly pass through the filter
-	virtual bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo, int iSchemaSize ) const
+	virtual bool EvalBlock ( const DWORD *, const DWORD *, int ) const
 	{
 		// if filter does not implement block-level evaluation we assume the block will pass
 		return true;

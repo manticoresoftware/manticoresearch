@@ -176,6 +176,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\src\sphinxfilter.cpp"
+				>
+			</File>
+			<File
 				RelativePath="..\src\sphinxmetaphone.cpp"
 				>
 			</File>
@@ -245,6 +249,10 @@
 			</File>
 			<File
 				RelativePath="..\src\sphinxexpr.h"
+				>
+			</File>
+			<File
+				RelativePath="..\src\sphinxfilter.h"
 				>
 			</File>
 			<File

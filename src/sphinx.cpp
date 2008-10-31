@@ -1685,8 +1685,8 @@ struct CSphIndex_VLN : CSphIndex
 	virtual int					UpdateAttributes ( const CSphAttrUpdate & tUpd );
 	virtual bool				SaveAttributes ();
 
-	bool						EarlyReject ( CSphMatch & tMatch, const CSphQuery * pQuery ) const;
-	bool						LateReject ( CSphMatch & tMatch, const CSphQuery * pQuery ) const;
+	bool						EarlyReject ( CSphMatch & tMatch ) const;
+	bool						LateReject ( CSphMatch & tMatch ) const;
 
 	virtual SphAttr_t *			GetKillList () const;
 	virtual int					GetKillListSize ()const { return m_iKillListSize; }
@@ -10293,7 +10293,7 @@ CSphQueryResult * CSphIndex_VLN::Query ( CSphQuery * pQuery )
 }
 
 
-bool CSphIndex_VLN::EarlyReject ( CSphMatch & tMatch, const CSphQuery * pQuery ) const
+bool CSphIndex_VLN::EarlyReject ( CSphMatch & tMatch ) const
 {
 	if ( !m_pEarlyFilter )
 		return false;
@@ -10306,7 +10306,7 @@ bool CSphIndex_VLN::EarlyReject ( CSphMatch & tMatch, const CSphQuery * pQuery )
 }
 
 
-bool CSphIndex_VLN::LateReject ( CSphMatch & tMatch, const CSphQuery * pQuery ) const
+bool CSphIndex_VLN::LateReject ( CSphMatch & tMatch ) const
 {
 	if ( !m_pLateFilter )
 		return false;
@@ -10558,7 +10558,7 @@ void CSphIndex_VLN::LateCalc ( CSphMatch & tMatch ) const
 	if ( bRandomize ) \
 		(_match).m_iWeight = rand(); \
 	\
-	if ( !m_pLateFilter || !LateReject ( _match, pQuery ) ) \
+	if ( !m_pLateFilter || !LateReject ( _match ) ) \
 	{ \
 		bool bNewMatch = false; \
 		for ( int iSorter=0; iSorter<iSorters; iSorter++ ) \
@@ -12554,7 +12554,7 @@ const ExtDoc_t * ExtRanker_c::GetFilteredDocs ()
 			if ( pCand->m_pDocinfo )
 				memcpy ( m_tTestMatch.m_pRowitems, pCand->m_pDocinfo, m_iInlineRowitems*sizeof(CSphRowitem) );
 
-			if ( m_pIndex->EarlyReject ( m_tTestMatch, m_pQuery ) )
+			if ( m_pIndex->EarlyReject ( m_tTestMatch ) )
 			{
 				pCand++;
 				continue;
@@ -13222,7 +13222,7 @@ bool CSphIndex_VLN::MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISph
 			CopyDocinfo ( tMatch, pDocinfo );
 			EarlyCalc ( tMatch );
 
-			if ( EarlyReject ( tMatch, pQuery ) )
+			if ( EarlyReject ( tMatch ) )
 				continue;
 
 			SPH_SUBMIT_MATCH ( tMatch );

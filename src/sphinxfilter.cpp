@@ -13,6 +13,10 @@
 
 #include "sphinxfilter.h"
 
+#if USE_WINDOWS
+#pragma warning(disable:4250) // inheritance via dominance is our intent
+#endif
+
 /// attribute-based
 struct IFilter_Attr: virtual ISphFilter
 {

@@ -495,8 +495,8 @@ class SphinxClient:
 		req.append(pack('>L', len(index)))
 		req.append(index)
 		req.append(pack('>L',1)) # id64 range marker
-		req.append(pack('>q', self._min_id))
-		req.append(pack('>q', self._max_id))
+		req.append(pack('>Q', self._min_id))
+		req.append(pack('>Q', self._max_id))
 		
 		# filters
 		req.append ( pack ( '>L', len(self._filters) ) )
@@ -556,7 +556,7 @@ class SphinxClient:
 			req.extend ( ( pack('>L', len(v['name'])), v['name'] ) )
 			req.append ( pack('>LL', v['type'], len(v['values'])) )
 			for id, value in v['values'].iteritems():
-				req.append ( pack('>q', id) )
+				req.append ( pack('>Q', id) )
 				if v['type'] == SPH_ATTR_FLOAT:
 					req.append ( pack('>f', value) )
 				elif v['type'] == SPH_ATTR_BIGINT:
@@ -665,7 +665,7 @@ class SphinxClient:
 			while count>0 and p<max_:
 				count -= 1
 				if id64:
-					doc, weight = unpack('>qL', response[p:p+12])
+					doc, weight = unpack('>QL', response[p:p+12])
 					p += 12
 				else:
 					doc, weight = unpack('>2L', response[p:p+8])
@@ -839,7 +839,7 @@ class SphinxClient:
 
 		req.append ( pack('>L',len(values)) )
 		for docid, entry in values.items():
-			req.append ( pack('>q',docid) )
+			req.append ( pack('>Q',docid) )
 			for val in entry:
 				req.append ( pack('>L',val) )
 

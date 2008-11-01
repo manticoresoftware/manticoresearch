@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 
-<name>fullscan early-reject blocks vs cutoff/updates</name>
+<name>fullscan early-reject blocks vs cutoff/updates/ranges</name>
 
 <config>
 indexer
@@ -35,22 +35,40 @@ index idx
 <custom_test><![CDATA[
 $results = array ();
 
+// find that match
+// checks reject vs cutoff regression
 $client->SetFilter ( "tag", array(150) );
 $results[] = $client->Query ( "" );
-if ( $results[0] )
-{
-	$results[] = $client->UpdateAttributes ( "idx", array("tag"), array(137=>array(1137)) );
 
-	$client->ResetFilters ();
-	$client->SetFilter ( "tag", array(1137) );
-	$results[] = $client->Query ( "" );
-
-	if ( is_array($results) && is_array($results[0]) ) unset ( $results[0]["time"] );
-	if ( is_array($results) && is_array($results[2]) ) unset ( $results[2]["time"] );
-} else
+if ( !$results[0] )
 {
-	$results = false;
+	$results = false; // maybe its temporary; lets retry
+	return;
 }
+
+// update that block
+$results[] = $client->UpdateAttributes ( "idx", array("tag"), array(137=>array(1137)) );
+
+// find the updated match
+// checks that it works after the update
+$client->ResetFilters ();
+$client->SetFilter ( "tag", array(1137) );
+$results[] = $client->Query ( "" );
+
+// find the matches by range
+// checks that range queries vs fullscan block work
+$client->ResetFilters ();
+$client->SetFilterRange ( "tag", 198, 1100 );
+$results[] = $client->Query ( "" );
+
+$client->ResetFilters ();
+$client->SetFilterRange ( "tag", 127, 128 );
+$results[] = $client->Query ( "" );
+
+// final fixup; we don't want to compare times
+for ( $i=0; $i<count($results); $i++ )
+	if ( is_array($results[$i]) )
+		unset ( $results[$i]["time"] );
 ]]></custom_test>
 
 <db_create>

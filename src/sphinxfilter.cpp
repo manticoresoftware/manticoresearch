@@ -180,7 +180,8 @@ struct Filter_Range: public IFilter_Attr, IFilter_Range
 			return true; // ignore computed attributes
 		
 		SphAttr_t uBlockMin = sphGetRowAttr ( DOCINFO2ATTRS(pMinDocinfo), m_tLocator );
-		return m_uMinValue <= uBlockMin && m_uMaxValue >= uBlockMin;
+		SphAttr_t uBlockMax = sphGetRowAttr ( DOCINFO2ATTRS(pMaxDocinfo), m_tLocator );
+		return (!( m_uMaxValue<uBlockMin || m_uMinValue>uBlockMax )); // not-reject
 	}
 };
 
@@ -208,9 +209,9 @@ struct Filter_FloatRange: public IFilter_Attr
 		if ( m_tLocator.m_iBitOffset >= iSchemaSize )
 			return true; // ignore computed attributes
 
-		SphAttr_t uBlockMin = sphGetRowAttr ( DOCINFO2ATTRS(pMinDocinfo), m_tLocator );
-		float fBlockMin = sphDW2F ( (DWORD)uBlockMin );
-		return m_fMinValue <= fBlockMin && m_fMaxValue >= fBlockMin;
+		float fBlockMin = sphDW2F ( (DWORD)sphGetRowAttr ( DOCINFO2ATTRS(pMinDocinfo), m_tLocator ) );
+		float fBlockMax = sphDW2F ( (DWORD)sphGetRowAttr ( DOCINFO2ATTRS(pMaxDocinfo), m_tLocator ) );
+		return (!( m_fMaxValue<fBlockMin || m_fMinValue>fBlockMax )); // not-reject
 	}
 };
 

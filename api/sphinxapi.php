@@ -379,6 +379,7 @@ class SphinxClient
 
 	var $_error;		///< last error message
 	var $_warning;		///< last warning message
+	var $_connerror;		///< connection error vs remote error flag
 
 	var $_reqs;			///< requests array for multi-query
 	var $_mbenc;		///< stored mbstring encoding
@@ -426,6 +427,8 @@ class SphinxClient
 
 		$this->_error		= ""; // per-reply fields (for single-query case)
 		$this->_warning		= "";
+		$this->_connerror	= false;
+
 		$this->_reqs		= array ();	// requests storage (for multi-query case)
 		$this->_mbenc		= "";
 		$this->_arrayresult	= false;
@@ -448,6 +451,12 @@ class SphinxClient
 	function GetLastWarning ()
 	{
 		return $this->_warning;
+	}
+
+	/// get last error flag (to tell network connection errors from searchd errors or broken responses)
+	function IsConnectError()
+	{
+		return $this->_connerror;
 	}
 
 	/// set searchd host name (string) and port (integer)
@@ -485,6 +494,7 @@ class SphinxClient
 		if ( feof($handle) || fwrite ( $handle, $data, $length ) !== $length )
 		{
 			$this->_error = 'connection unexpectedly closed (timed out?)';
+			$this->_connerror = true;
 			return false;
 		}
 		return true;
@@ -515,9 +525,10 @@ class SphinxClient
 	{
 		if ( $this->_socket !== false )
 			return $this->_socket;
-		
+
 		$errno = 0;
 		$errstr = "";
+		$this->_connerror = false;
 
 		if ( $this->_path )
 		{
@@ -544,6 +555,7 @@ class SphinxClient
 			
 			$errstr = trim ( $errstr );
 			$this->_error = "connection to $location failed (errno=$errno, msg=$errstr)";
+			$this->_connerror = true;
 			return false;
 		}
 

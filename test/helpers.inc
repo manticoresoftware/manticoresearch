@@ -594,9 +594,13 @@ class SphinxConfig
 					$bOk = TRUE;
 					$results ["query"] = $query;
         			array_push ( $query_results, $results );
-            	}
-				else
+            	} else
+				{
+					if ( !$cl->IsConnectError() )
+						break;
+
 					usleep ( $action_wait_timeout );
+				}
 			}
 
 			if ( !$bOk )

@@ -346,6 +346,14 @@ bind ( T CLASS::* ptr )
 	return SphMemberFunctor_T < T, CLASS > ( ptr );
 }
 
+
+/// identity functor
+template < typename T >
+struct SphIdentityFunctor_T
+{
+	const T &			operator () ( const T & arg ) const			{ return arg; }
+};
+
 //////////////////////////////////////////////////////////////////////////
 
 /// generic binary search
@@ -378,6 +386,14 @@ T * sphBinarySearch ( T * pStart, T * pEnd, const PRED & tPred, U tRef )
 			pStart = pMid;
 	}
 	return NULL;
+}
+
+
+/// generic binary search
+template < typename T >
+T * sphBinarySearch ( T * pStart, T * pEnd, T & tRef )
+{
+	return sphBinarySearch ( pStart, pEnd, SphIdentityFunctor_T<T>(), tRef );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -632,6 +648,13 @@ public:
 	const T * BinarySearch ( const PRED & tPred, U tRef ) const
 	{
 		return sphBinarySearch ( m_pData, m_pData+m_iLength-1, tPred, tRef );
+	}
+
+	/// generic binary search
+	/// assumes that the array is sorted in ascending order
+	const T * BinarySearch ( T tRef ) const
+	{
+		return sphBinarySearch ( m_pData, m_pData+m_iLength-1, tRef );
 	}
 
 	/// fill with given value

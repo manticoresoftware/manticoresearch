@@ -301,7 +301,8 @@ enum Func_e
 	FUNC_MADD,
 	FUNC_MUL3,
 
-	FUNC_INTERVAL
+	FUNC_INTERVAL,
+	FUNC_IN
 };
 
 
@@ -338,7 +339,8 @@ static FuncDesc_t g_dFuncs[] =
 	{ "madd",	3,	FUNC_MADD },
 	{ "mul3",	3,	FUNC_MUL3 },
 
-	{ "interval",	-2,	FUNC_INTERVAL }
+	{ "interval",	-2,	FUNC_INTERVAL },
+	{ "in",			-2, FUNC_IN }
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -399,11 +401,16 @@ private:
 
 private:
 	int						GetToken ( YYSTYPE * lvalp );
+
+	void					GatherArgTypes ( int iNode, CSphVector<int> & dTypes );
+	bool					CheckForConstSet ( int iArgsNode );
+
 	DWORD					DeduceType ( int iNode );
 	void					Optimize ( int iNode, DWORD uAttrType );
+
 	ISphExpr *				CreateTree ( int iNode, DWORD uAttrType );
-	void					GatherArgTypes ( int iNode, CSphVector<int> & dTypes );
 	ISphExpr *				CreateIntervalNode ( int iArgsNode, CSphVector<ISphExpr *> & dArgs, DWORD uAttrType );
+	ISphExpr *				CreateInNode ( int iArgsNode, CSphVector<ISphExpr *> & dArgs, DWORD uAttrType );
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -777,6 +784,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode, DWORD uAttrType )
 					case FUNC_MUL3:		return new Expr_Mul3_c ( dArgs[0], dArgs[1], dArgs[2] );
 
 					case FUNC_INTERVAL:	return CreateIntervalNode ( tNode.m_iLeft, dArgs, uAttrType );
+					case FUNC_IN:		return CreateInNode ( tNode.m_iLeft, dArgs, uAttrType );
 				}
 				assert ( 0 && "unhandled function id" );
 				break;
@@ -793,17 +801,18 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode, DWORD uAttrType )
 
 //////////////////////////////////////////////////////////////////////////
 
-/// INTERVAL() evaluator traits
+/// arg-vs-set function (currently, IN or INTERVAL) evaluator traits
 template < typename T >
-class Expr_IntervalTraits_c : public ISphExpr
+class Expr_ArgVsSet_c : public ISphExpr
 {
 protected:
 	ISphExpr *			m_pArg;
 
 public:
-	Expr_IntervalTraits_c ( ISphExpr * pArg ) : m_pArg ( pArg ) {}
-	~Expr_IntervalTraits_c () { SafeRelease ( m_pArg ); }
+	Expr_ArgVsSet_c ( ISphExpr * pArg ) : m_pArg ( pArg ) {}
+	~Expr_ArgVsSet_c () { SafeRelease ( m_pArg ); }
 
+	virtual int IntEval ( const CSphMatch & tMatch ) const = 0;
 	virtual float Eval ( const CSphMatch & tMatch ) const { return (float) IntEval ( tMatch ); }
 	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return IntEval ( tMatch ); }
 
@@ -811,54 +820,67 @@ protected:
 	T ExprEval ( ISphExpr * pArg, const CSphMatch & tMatch ) const;
 };
 
-template<> int Expr_IntervalTraits_c<int>::ExprEval ( ISphExpr * pArg, const CSphMatch & tMatch ) const			{ return pArg->IntEval ( tMatch ); }
-template<> float Expr_IntervalTraits_c<float>::ExprEval ( ISphExpr * pArg, const CSphMatch & tMatch ) const		{ return pArg->Eval ( tMatch ); }
-template<> int64_t Expr_IntervalTraits_c<int64_t>::ExprEval ( ISphExpr * pArg, const CSphMatch & tMatch ) const	{ return pArg->Int64Eval ( tMatch ); }
+template<> int Expr_ArgVsSet_c<int>::ExprEval ( ISphExpr * pArg, const CSphMatch & tMatch ) const			{ return pArg->IntEval ( tMatch ); }
+template<> float Expr_ArgVsSet_c<float>::ExprEval ( ISphExpr * pArg, const CSphMatch & tMatch ) const		{ return pArg->Eval ( tMatch ); }
+template<> int64_t Expr_ArgVsSet_c<int64_t>::ExprEval ( ISphExpr * pArg, const CSphMatch & tMatch ) const	{ return pArg->Int64Eval ( tMatch ); }
 
 
-/// INTERVAL() evaluator for constant turn point values case
+/// arg-vs-constant-set
 template < typename T >
-class Expr_IntervalConst_c : public Expr_IntervalTraits_c<T>
+class Expr_ArgVsConstSet_c : public Expr_ArgVsSet_c<T>
 {
 protected:
-	CSphVector<T> m_dTurnPoints;
+	CSphVector<T> m_dValues;
 
 public:
 	/// take ownership of arg, pre-evaluate and dismiss turn points
-	Expr_IntervalConst_c ( CSphVector<ISphExpr *> dArgs )
-		: Expr_IntervalTraits_c<T> ( dArgs[0] )
+	Expr_ArgVsConstSet_c ( CSphVector<ISphExpr *> & dArgs )
+		: Expr_ArgVsSet_c<T> ( dArgs[0] )
 	{
 		CSphMatch tDummy;
 		for ( int i=1; i<dArgs.GetLength(); i++ )
 		{
-			m_dTurnPoints.Add ( Expr_IntervalTraits_c<T>::ExprEval ( dArgs[i], tDummy ) );
+			m_dValues.Add ( Expr_ArgVsSet_c<T>::ExprEval ( dArgs[i], tDummy ) );
 			SafeRelease ( dArgs[i] );
 		}
 	}
+};
+
+//////////////////////////////////////////////////////////////////////////
+
+/// INTERVAL() evaluator for constant turn point values case
+template < typename T >
+class Expr_IntervalConst_c : public Expr_ArgVsConstSet_c<T>
+{
+public:
+	/// take ownership of arg, pre-evaluate and dismiss turn points
+	Expr_IntervalConst_c ( CSphVector<ISphExpr *> & dArgs )
+		: Expr_ArgVsConstSet_c<T> ( dArgs )
+	{}
 
 	/// evaluate arg, return interval id
 	virtual int IntEval ( const CSphMatch & tMatch ) const
 	{
 		T val = ExprEval ( this->m_pArg, tMatch ); // 'this' fixes gcc braindamage
-		ARRAY_FOREACH ( i, m_dTurnPoints ) // FIXME! OPTIMIZE! perform binary search here
-			if ( val<m_dTurnPoints[i] )
+		ARRAY_FOREACH ( i, m_dValues ) // FIXME! OPTIMIZE! perform binary search here
+			if ( val<m_dValues[i] )
 				return i;
-		return m_dTurnPoints.GetLength();
+		return m_dValues.GetLength();
 	}
 };
 
 
 /// INTERVAL() evaluator for generic case
 template < typename T >
-class Expr_Interval_c : public Expr_IntervalTraits_c<T>
+class Expr_Interval_c : public Expr_ArgVsSet_c<T>
 {
 protected:
 	CSphVector<ISphExpr *> m_dTurnPoints;
 
 public:
 	/// take ownership of arg and turn points
-	Expr_Interval_c ( const CSphVector<ISphExpr *> dArgs )
-		: Expr_IntervalTraits_c<T> ( dArgs[0] )
+	Expr_Interval_c ( const CSphVector<ISphExpr *> & dArgs )
+		: Expr_ArgVsSet_c<T> ( dArgs[0] )
 	{
 		for ( int i=1; i<dArgs.GetLength(); i++ )
 			m_dTurnPoints.Add ( dArgs[i] );
@@ -869,9 +891,31 @@ public:
 	{
 		T val = ExprEval ( this->m_pArg, tMatch ); // 'this' fixes gcc braindamage
 		ARRAY_FOREACH ( i, m_dTurnPoints )
-			if ( val < Expr_IntervalTraits_c<T>::ExprEval ( m_dTurnPoints[i], tMatch ) )
+			if ( val < Expr_ArgVsSet_c<T>::ExprEval ( m_dTurnPoints[i], tMatch ) )
 				return i;
 		return m_dTurnPoints.GetLength();
+	}
+};
+
+//////////////////////////////////////////////////////////////////////////
+
+/// IN() evaluator for constant values set
+template < typename T >
+class Expr_In_c : public Expr_ArgVsConstSet_c<T>
+{
+public:
+	/// pre-sort values for binary search
+	Expr_In_c ( CSphVector<ISphExpr *> & dArgs ) :
+		Expr_ArgVsConstSet_c<T> ( dArgs )
+	{
+		m_dValues.Sort();
+	}
+
+	/// evaluate arg, return interval id
+	virtual int IntEval ( const CSphMatch & tMatch ) const
+	{
+		T val = ExprEval ( this->m_pArg, tMatch ); // 'this' fixes gcc braindamage
+		return m_dValues.BinarySearch ( val )!=NULL;
 	}
 };
 
@@ -894,19 +938,25 @@ void ExprParser_t::GatherArgTypes ( int iNode, CSphVector<int> & dTypes )
 }
 
 
-ISphExpr * ExprParser_t::CreateIntervalNode ( int iArgsNode, CSphVector<ISphExpr *> & dArgs, DWORD uAttrType )
+bool ExprParser_t::CheckForConstSet ( int iArgsNode )
 {
 	assert ( m_dNodes[iArgsNode].m_iToken==',' );
-	assert ( dArgs.GetLength()>=2 );
 
 	CSphVector<int> dTypes;
 	GatherArgTypes ( iArgsNode, dTypes );
 
-	bool bConst = true;
-	for ( int i=1; i<dTypes.GetLength() && bConst; i++ )
+	for ( int i=1; i<dTypes.GetLength(); i++ )
 		if ( dTypes[i]!=TOK_CONST_INT && dTypes[i]!=TOK_CONST_FLOAT )
-			bConst = false;
+			return false;
+	return true;
+}
 
+
+ISphExpr * ExprParser_t::CreateIntervalNode ( int iArgsNode, CSphVector<ISphExpr *> & dArgs, DWORD uAttrType )
+{
+	assert ( dArgs.GetLength()>=2 );
+
+	bool bConst = CheckForConstSet ( iArgsNode );
 	if ( bConst )
 	{
 		switch ( uAttrType )
@@ -923,6 +973,21 @@ ISphExpr * ExprParser_t::CreateIntervalNode ( int iArgsNode, CSphVector<ISphExpr
 			case SPH_ATTR_BIGINT:	return new Expr_Interval_c<int64_t> ( dArgs ); break;
 			default:				return new Expr_Interval_c<float> ( dArgs ); break;
 		}
+	}
+}
+
+
+ISphExpr * ExprParser_t::CreateInNode ( int iArgsNode, CSphVector<ISphExpr *> & dArgs, DWORD uAttrType )
+{
+	assert ( dArgs.GetLength()>=2 );
+	assert ( CheckForConstSet(iArgsNode) );
+
+	// spawn that evaluator
+	switch ( uAttrType )
+	{
+		case SPH_ATTR_INTEGER:	return new Expr_In_c<int> ( dArgs ); break;
+		case SPH_ATTR_BIGINT:	return new Expr_In_c<int64_t> ( dArgs ); break;
+		default:				return new Expr_In_c<float> ( dArgs ); break;
 	}
 }
 
@@ -1020,6 +1085,13 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArgsNode )
 		return -1;
 	}
 
+	// check for set of constants, if needed
+	if ( iFunc==FUNC_IN && !CheckForConstSet ( iArgsNode ) )
+	{
+		m_sParserError.SetSprintf ( "%s() requires constant 2nd and further args", g_dFuncs[iFunc].m_sName );
+		return -1;
+	}
+
 	// do add
 	ExprNode_t & tNode = m_dNodes.Add ();
 	tNode.m_iToken = TOK_FUNC;
@@ -1110,6 +1182,7 @@ DWORD ExprParser_t::DeduceType ( int iNode )
 					case FUNC_IDIV:
 					case FUNC_ABS:
 					case FUNC_INTERVAL:
+					case FUNC_IN:
 						return DeduceType ( tNode.m_iLeft );
 
 					case FUNC_BIGINT:

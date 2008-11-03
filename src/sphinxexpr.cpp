@@ -862,10 +862,10 @@ public:
 	virtual int IntEval ( const CSphMatch & tMatch ) const
 	{
 		T val = ExprEval ( this->m_pArg, tMatch ); // 'this' fixes gcc braindamage
-		ARRAY_FOREACH ( i, m_dValues ) // FIXME! OPTIMIZE! perform binary search here
-			if ( val<m_dValues[i] )
+		ARRAY_FOREACH ( i, this->m_dValues ) // FIXME! OPTIMIZE! perform binary search here
+			if ( val<this->m_dValues[i] )
 				return i;
-		return m_dValues.GetLength();
+		return this->m_dValues.GetLength();
 	}
 };
 
@@ -908,14 +908,14 @@ public:
 	Expr_In_c ( CSphVector<ISphExpr *> & dArgs ) :
 		Expr_ArgVsConstSet_c<T> ( dArgs )
 	{
-		m_dValues.Sort();
+		this->m_dValues.Sort();
 	}
 
 	/// evaluate arg, return interval id
 	virtual int IntEval ( const CSphMatch & tMatch ) const
 	{
 		T val = ExprEval ( this->m_pArg, tMatch ); // 'this' fixes gcc braindamage
-		return m_dValues.BinarySearch ( val )!=NULL;
+		return this->m_dValues.BinarySearch ( val )!=NULL;
 	}
 };
 

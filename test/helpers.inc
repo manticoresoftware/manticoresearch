@@ -179,7 +179,7 @@ class SphinxConfig
 	private $_subtestcount;
 	private $_results;
 	private $_results_model;
-	private $_id64;
+	private $_prereqs;
 	private $_config;				///< config DOM node
 
 
@@ -214,7 +214,7 @@ class SphinxConfig
 	function DB_Create ()			{ return $this->_db_create; }
 	function DB_Insert ()			{ return $this->_db_insert; }
 	function NumAgents ()			{ return $this->_num_agents; }
-	function WantsID64 ()			{ return $this->_id64; }
+	function Requires ( $name )		{ return isset($this->_prereqs[$name]); }
 	function IsQueryTest ()			{ return strlen ( $this->_custom_test ) == 0;	}
 
 
@@ -505,7 +505,12 @@ class SphinxConfig
 		$this->_name			= GetFirstChildValue ( $xml, "name" );
 		$this->_query_settings	= GetFirstChildValue ( $xml, "query_settings" );
 		$this->_num_agents		= GetFirstChildValue ( $xml, "num_agents", 1 );
-		$this->_id64			= GetFirstChildValue ( $xml, "id64", false );
+
+		$this->_prereqs = array();
+		$prereqs = GetFirstChild ( $xml, "requires", false );
+		if ( $prereqs )
+			foreach ( ChildrenArray ( $prereqs ) as $node )
+				$this->_prereqs [ $node->nodeName ] = 1;
 
 		// precalc subtests count
 		$this->_subtestcount = 1;
@@ -1035,7 +1040,7 @@ function EraseDirContents ( $path )
 
 function RunTest ( $test_dir )
 {
-	global $indexer_data_path, $agents, $sd_pid_file, $g_id64;
+	global $indexer_data_path, $agents, $sd_pid_file, $g_id64, $windows;
 
 	$model_file = $test_dir."/model.bin";
 	$conf_dir 	= $test_dir."/Conf";
@@ -1046,9 +1051,15 @@ function RunTest ( $test_dir )
 
 	$prefix = sprintf ( "testing %s, %s...", $test_dir, $config->Name () );
 
-	if ( $config->WantsID64() && !$g_id64 )
+	if ( $config->Requires("id64") && !$g_id64 )
 	{
-		printf ( "skipping: %s, %s - enable id64 to run this test\n", $test_dir, $config->Name () );
+		printf ( "SKIPPING %s, %s - enable id64 to run this test\n", $test_dir, $config->Name () );
+		return;
+	}
+
+	if ( $config->Requires("non-windows") && $windows )
+	{
+		printf ( "SKIPPING %s, %s - use non-Windows system to run this test\n", $test_dir, $config->Name () );
 		return;
 	}
 

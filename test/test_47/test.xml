@@ -2,7 +2,10 @@
 
 <test>
 <name>id64</name>
-<id64>yar!</id64>
+
+<requires>
+<id64/>
+</requires>
 
 <config>
 indexer

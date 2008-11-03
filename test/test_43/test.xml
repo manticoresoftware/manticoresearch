@@ -3,6 +3,10 @@
 <test>
 <name>unpack</name>
 
+<requires>
+<non-windows/>
+</requires>
+
 <config>
 indexer
 {

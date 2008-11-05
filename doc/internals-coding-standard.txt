@@ -79,47 +79,73 @@ iVar = !( iCode & BOOLEAN_EXPRESSION );
 if ( i==1 || ( j==2 && k==3 ) ) { ... }
 if ( i )  {... }
 
-2.4. The most common class declaration pattern
-----------------------------------------------
+2.4. Class declaration layout
+------------------------------
 
-Public members/fields first, then protected, and finally private. 
-This is not the rule, however the most of the code use this convention of declaring a class.
+- Usually, variables go first, then functions.
+- Usually, public members go first, then protected, then private.
+- Repeat access specifier to highlight big blocks of members.
+- All the rules above are not mandatory, but generally suggested.
 
-3. Naming convention
----------------------
+class SampleClass
+{
+public:
+			SampleClass ();
+			~SampleClass ();
 
-- Use capitalization instead of underscore:
-	Name From Many Words -> NameFromManyWords, not name_from_many_words.
+	void	DoThings ();
 
-- Use "m_" prefix for naming the fields of a class:
-	class MyClass
-	{
-		int	m_OneField;
-		long	m_AnotherField;
-		...
-	};
+protected:
+	int		m_iLocalState;
+	bool	m_bSomeFlag;
 
-- a letter in lowercase could be used to hint the type of the field/variable
-  (might be in addition to "m_" prefix):
+protected:
+	int		m_iAnotherLogicalBlock;
+	int		m_iOfMemberVariables;
 
-	CISpellAffixRule::CISpellAffixRule ( RuleType_e eRule, char cFlag, bool bCrossProduct, char * szCondition, char * szStrip, char * szAppend )	
-	char	m_cField;
-	bool	m_bField;
-	CSphString	m_sField;
-	int	m_iField;
+protected:
+	void	Helper1();
+	void	Helper2();
+};
 
-  (to guess the full list just look at the code).
+3. Naming conventions
+----------------------
 
-- This is no difference in naming public/protected/private members:
-	class MyClass
-	{
-	public:
-		int ThisIsPublicMember();
-	protected:
-		int ThisIsProtectedMember();
-	private:
-		int ThisIsPrivateMember();
-	};
+- Camel case, and reasonable subset of Hungarian notation.
+- Identifiers are "MultiWordName", not "multi_word_name" (this is CamelCase).
+- "m_" prefix on data members is mandatory (this is Hungarian).
+- Single-char typeid prefix on variables is mandatory (this is Hungarian).
+	- "i" means int
+	- "u" means unsigned
+	- "b" means boolean
+	- "c" means char
+	- "f" means float
+	- "p" means pointer
+	- "pp" means pointer to pointer
+	- "s" means string (both CSphString and char *)
+	- "e" means enum
+	- "d" means array (no idea why "d", maybe "data"?)
+	- "t" means any other (complex) type
 
+- No special rules for public/protected/private member names.
+
+- Special rules for entities exposed in sphinx.h to libsphinx callers:
+	- Enum names MUST start with "ESph"
+	- Interface names MUST start with "ISph"
+	- Class/struct names MUST start with "CSph"
+	- Function names MUST start with "sph"
+- Internal entities can either use or omit these prefixes.
+
+class SampleInternalClass
+{
+	int		m_iSomething;	// right, got both "m_" prefix and "i" typeid
+	char	iAnotherthing;	// WRONG, bad typeid char, bad capitalization
+	long	m_AnotherField;	// WRONG, missing typeid char
+	char *	m_lpszWtf;		// WRONG, typeid must be single char (or "pp")
+	...
+
+	/// right
+	void SampleCall ( RuleType_e eRule, char cKey, bool bFlag, char * sArg );
+};
 
 --eof--

@@ -29,6 +29,7 @@ $index_data_path	= "data";
 
 $g_model			= false;
 $g_id64				= false;
+$g_strict			= false;
 
 require_once ( "helpers.inc" );
 
@@ -61,6 +62,7 @@ if ( !is_array($args) || empty($args) )
 	print ( "-p, --password <PASS>\tuse 'PASS' as MySQL password\n" );
 	print ( "-i, --indexer <PATH>\tpath to indexer\n" );
 	print ( "-s, --searchd <PATH>\tpath to searchd\n" );
+	print ( "--strict\t\tterminate on the first failure (for automatic runs)\n" );
 	print ( "\nEnvironment vriables are:\n" );
 	print ( "DBUSER\tuse 'USER' as MySQL user\n" );
 	print ( "DBPASS\tuse 'PASS' as MySQL password\n" );
@@ -93,6 +95,7 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="-s" || $arg=="--searchd" )		$searchd_path = $args[++$i];
 	else if ( is_dir($arg) )						$test_dirs[] = $arg;
 	else if ( is_dir("test_$arg") )					$test_dirs[] = "test_$arg";
+	else if ( $arg=="--strict" )					$g_strict = true;
 	else
 	{
 		print ( "ERROR: unknown option '$arg'; run with no arguments for help screen.\n" );
@@ -171,6 +174,8 @@ foreach ( $tests as $test )
 		{
 			$total_tests_failed++;
 			$total_subtests_failed += $res["tests_failed"];
+			if ( $g_strict )
+				break;
 		}
 	}
 	elseif ( file_exists ( $test."/test.inc" ) )
@@ -192,14 +197,14 @@ foreach ( $tests as $test )
 @unlink ( "config.conf" );
 @unlink ( "error.txt" );
 
-$nfile = 0;
+$nfile = 1;
 while ( file_exists ( "config_$nfile.conf" ) )
 {
 	@unlink ( "config_$nfile.conf" );
 	$nfile++;
 }
 
-$nfile = 0;
+$nfile = 1;
 while ( file_exists ( "error_$nfile.txt" ) )
 {
 	@unlink ( "error_$nfile.txt" );
@@ -213,11 +218,13 @@ if ( $total_tests_failed )
 		$total_tests_failed, $total_tests,
 		$total_subtests_failed, $total_subtests,
 		MyMicrotime()-$t );
+	exit ( 1 );
 } else
 {
 	printf ( "\n%d tests and %d subtests succesful, %.2f sec elapsed\nALL OK\n",
 		$total_tests, $total_subtests,
 		MyMicrotime()-$t );
+	exit ( 0 );
 }
 
 //

@@ -79,4 +79,47 @@ iVar = !( iCode & BOOLEAN_EXPRESSION );
 if ( i==1 || ( j==2 && k==3 ) ) { ... }
 if ( i )  {... }
 
+2.4. The most common class declaration pattern
+----------------------------------------------
+
+Public members/fields first, then protected, and finally private. 
+This is not the rule, however the most of the code use this convention of declaring a class.
+
+3. Naming convention
+---------------------
+
+- Use capitalization instead of underscore:
+	Name From Many Words -> NameFromManyWords, not name_from_many_words.
+
+- Use "m_" prefix for naming the fields of a class:
+	class MyClass
+	{
+		int	m_OneField;
+		long	m_AnotherField;
+		...
+	};
+
+- a letter in lowercase could be used to hint the type of the field/variable
+  (might be in addition to "m_" prefix):
+
+	CISpellAffixRule::CISpellAffixRule ( RuleType_e eRule, char cFlag, bool bCrossProduct, char * szCondition, char * szStrip, char * szAppend )	
+	char	m_cField;
+	bool	m_bField;
+	CSphString	m_sField;
+	int	m_iField;
+
+  (to guess the full list just look at the code).
+
+- This is no difference in naming public/protected/private members:
+	class MyClass
+	{
+	public:
+		int ThisIsPublicMember();
+	protected:
+		int ThisIsProtectedMember();
+	private:
+		int ThisIsPrivateMember();
+	};
+
+
 --eof--

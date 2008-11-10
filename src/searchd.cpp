@@ -1068,9 +1068,6 @@ int sphCreateUnixSocket ( const char * sPath )
 	if ( bind ( iSock, (struct sockaddr *)&uaddr, sizeof(uaddr) ) != 0 )
 		sphFatal ( "bind() on UNIX socket failed: %s", sphSockError() );
 
-	if ( listen ( iSock, SEARCHD_BACKLOG ) == -1 )
-		sphFatal ( "listen() on UNIX socket failed: %s", sphSockError() );
-
 	return iSock;
 }
 #endif // !USE_WINDOWS
@@ -1113,9 +1110,6 @@ int sphCreateInetSocket ( DWORD uAddr, int iPort )
 	} while ( --iTries>0 );
 	if ( iRes )
 		sphFatal ( "bind() failed on %s: %s", sAddress, sphSockError() );
-
-	if ( listen ( iSock, SEARCHD_BACKLOG ) == -1 )
-		sphFatal ( "listen() failed: %s", sphSockError() );
 
 	return iSock;
 }
@@ -6876,6 +6870,11 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			g_sQueryLogFile = hSearchd["query_log"].cstr();
 		}
 	}
+
+	// almost ready, time to start listening
+	ARRAY_FOREACH ( i, g_dSockets )
+		if ( listen ( g_dSockets[i], SEARCHD_BACKLOG )==-1 )
+			sphFatal ( "listen() failed: %s", sphSockError() );
 
 	// prepare to detach
 	if ( !g_bOptNoDetach )

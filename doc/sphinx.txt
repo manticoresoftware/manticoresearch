@@ -128,24 +128,31 @@ Table of Contents
       9.1.10. sql_query
       9.1.11. sql_query_range
       9.1.12. sql_range_step
-      9.1.13. sql_attr_uint
-      9.1.14. sql_attr_bool
-      9.1.15. sql_attr_timestamp
-      9.1.16. sql_attr_str2ordinal
-      9.1.17. sql_attr_float
-      9.1.18. sql_attr_multi
-      9.1.19. sql_query_post
-      9.1.20. sql_query_post_index
-      9.1.21. sql_ranged_throttle
-      9.1.22. sql_query_info
-      9.1.23. xmlpipe_command
-      9.1.24. xmlpipe_field
-      9.1.25. xmlpipe_attr_uint
-      9.1.26. xmlpipe_attr_bool
-      9.1.27. xmlpipe_attr_timestamp
-      9.1.28. xmlpipe_attr_str2ordinal
-      9.1.29. xmlpipe_attr_float
-      9.1.30. xmlpipe_attr_multi
+      9.1.13. sql_query_killlist
+      9.1.14. sql_attr_uint
+      9.1.15. sql_attr_bool
+      9.1.16. sql_attr_bigint
+      9.1.17. sql_attr_timestamp
+      9.1.18. sql_attr_str2ordinal
+      9.1.19. sql_attr_float
+      9.1.20. sql_attr_multi
+      9.1.21. sql_query_post
+      9.1.22. sql_query_post_index
+      9.1.23. sql_ranged_throttle
+      9.1.24. sql_query_info
+      9.1.25. xmlpipe_command
+      9.1.26. xmlpipe_field
+      9.1.27. xmlpipe_attr_uint
+      9.1.28. xmlpipe_attr_bool
+      9.1.29. xmlpipe_attr_timestamp
+      9.1.30. xmlpipe_attr_str2ordinal
+      9.1.31. xmlpipe_attr_float
+      9.1.32. xmlpipe_attr_multi
+      9.1.33. mssql_winauth
+      9.1.34. mssql_unicode
+      9.1.35. unpack_zlib
+      9.1.36. unpack_mysqlcompress
+      9.1.37. unpack_mysqlcompress_maxsize
 
    9.2. Index configuration options
       9.2.1. type
@@ -793,13 +800,13 @@ With all the SQL drivers, indexing generally works as follows.
      encoding with MySQL;
    * main query (see Section 9.1.10, <<sql_query>>) is executed and the
      rows it returns are indexed;
-   * post-query (see Section 9.1.19, <<sql_query_post>>) is executed to
+   * post-query (see Section 9.1.21, <<sql_query_post>>) is executed to
      perform any necessary cleanup;
    * connection to the database is closed;
    * indexer does the sorting phase (to be pedantic, index-type specific
      post-processing);
    * connection to the database is established again;
-   * post-index query (see Section 9.1.20, <<sql_query_post_index>>) is
+   * post-index query (see Section 9.1.22, <<sql_query_post_index>>) is
      executed to perform any necessary final cleanup;
    * connection to the database is closed again.
 
@@ -3309,12 +3316,14 @@ system) but I might need to ask you a few additional questions about it.
 -----------
 
 Data source type. Mandatory, no default value. Known types are mysql,
-pgsql, xmlpipe and xmlpipe2.
+pgsql, mssql, xmlpipe and xmlpipe2.
 
 All other per-source options depend on source type selected by this option.
-Names of the options used for SQL sources (ie. MySQL and PostgreSQL) start
-with "sql_"; names of the ones used for xmlpipe and xmlpipe2 start with
-"xmlpipe_".
+Names of the options used for SQL sources (ie. MySQL, PostgreSQL, MS SQL)
+start with "sql_"; names of the ones used for xmlpipe and xmlpipe2 start
+with "xmlpipe_". All source types except xmlpipe are conditional; they
+might or might not be supported depending on your build settings, installed
+client libraries, etc. mssql type is currently only available on Windows.
 
 Example:
 
@@ -3324,7 +3333,7 @@ Example:
 ---------------
 
 SQL server host to connect to. Mandatory, no default value. Applies to SQL
-source types (mysql and pgsql) only.
+source types (mysql, pgsql, mssql) only.
 
 In the simplest case when Sphinx resides on the same host with your MySQL
 or PostgreSQL installation, you would simply specify "localhost". Note that
@@ -3342,9 +3351,9 @@ Example:
 ---------------
 
 SQL server IP port to connect to. Optional, default is 3306 for mysql
-source type and 5432 for pgsql type. Applies to SQL source types (mysql and
-pgsql) only. Note that it depends on sql_host setting whether this value
-will actually be used.
+source type and 5432 for pgsql type. Applies to SQL source types (mysql,
+pgsql, mssql) only. Note that it depends on sql_host setting whether this
+value will actually be used.
 
 Example:
 
@@ -3354,7 +3363,7 @@ Example:
 ---------------
 
 SQL user to use when connecting to sql_host. Mandatory, no default value.
-Applies to SQL source types (mysql and pgsql) only.
+Applies to SQL source types (mysql, pgsql, mssql) only.
 
 Example:
 
@@ -3364,7 +3373,7 @@ Example:
 ---------------
 
 SQL user password to use when connecting to sql_host. Mandatory, no default
-value. Applies to SQL source types (mysql and pgsql) only.
+value. Applies to SQL source types (mysql, pgsql, mssql) only.
 
 Example:
 
@@ -3375,7 +3384,7 @@ Example:
 
 SQL database (in MySQL terms) to use after the connection and perform
 further queries within. Mandatory, no default value. Applies to SQL source
-types (mysql and pgsql) only.
+types (mysql, pgsql, mssql) only.
 
 Example:
 
@@ -3386,7 +3395,7 @@ Example:
 
 UNIX socket name to connect to for local SQL servers. Optional, default
 value is empty (use client library default settings). Applies to SQL source
-types (mysql and pgsql) only.
+types (mysql, pgsql, mssql) only.
 
 On Linux, it would typically be /var/lib/mysql/mysql.sock. On FreeBSD, it
 would typically be /tmp/mysql.sock. Note that it depends on sql_host
@@ -3429,7 +3438,7 @@ Example:
 --------------------
 
 Pre-fetch query, or pre-query. Multi-value, optional, default is empty list
-of queries. Applies to SQL source types (mysql and pgsql) only.
+of queries. Applies to SQL source types (mysql, pgsql, mssql) only.
 
 Multi-value means that you can specify several pre-queries. They are
 executed before the main fetch query, and they will be exectued exactly in
@@ -3464,7 +3473,7 @@ Example:
 -----------------
 
 Main document fetch query. Mandatory, no default value. Applies to SQL
-source types (mysql and pgsql) only.
+source types (mysql, pgsql, mssql) only.
 
 There can be only one main query. This is the query which is used to
 retrieve documents from SQL server. You can specify up to 32 full-text
@@ -3489,7 +3498,7 @@ Example:
 -----------------------
 
 Range query setup. Optional, default is empty. Applies to SQL source types
-(mysql and pgsql) only.
+(mysql, pgsql, mssql) only.
 
 Setting this option enables ranged document fetch queries (see Section 3.7,
 <<Ranged queries>>). Ranged queries are useful to avoid notorious MyISAM
@@ -3518,7 +3527,7 @@ Example:
 ----------------------
 
 Range query step. Optional, default is 1024. Applies to SQL source types
-(mysql and pgsql) only.
+(mysql, pgsql, mssql) only.
 
 Only used when ranged queries are enabled. The full document IDs interval
 fetched by sql_query_range will be walked in this big steps. For example,
@@ -3535,12 +3544,54 @@ Example:
 
    | sql_range_step = 1000
 
-9.1.13. sql_attr_uint
+9.1.13. sql_query_killlist
+--------------------------
+
+Kill-list query. Optional, default is empty (no query). Applies to SQL
+source types (mysql, pgsql, mssql) only.
+
+This query is expected to return a number of 1-column rows, each containing
+just the document ID. The returned document IDs are stored within an index.
+Kill-list for a given index suppresses results from other indexes,
+depending on index order in the query. The intended use is to help
+implement deletions and updates on existing indexes without rebuilding
+(actually even touching them), and especially to fight phantom results
+problem.
+
+Let us dissect an example. Assume we have two indexes, 'main' and 'delta'.
+Assume that documents 2, 3, and 5 were deleted since last reindex of
+'main', and documents 7 and 11 were updated (ie. their text contents were
+changed). Assume that a keyword 'test' occurred in all these mentioned
+documents when we were indexing 'main'; still occurs in document 7 as we
+index 'delta'; but does not occur in document 11 any more. We now reindex
+delta and then search through both these indexes in proper (least to most
+recent) order:
+
+   | $res = $cl->Query ( "test", "main delta" );
+
+First, we need to properly handle deletions. The result set should not
+contain documents 2, 3, or 5. Second, we also need to avoid phantom
+results. Unless we do something about it, document 11 will appear in search
+results! It will be found in 'main' (but not 'delta'). And it will make it
+to the final result set unless something stops it.
+
+Kill-list, or K-list for short, is that something. Kill-list attached to
+'delta' will suppress the specified rows from all the preceding indexes, in
+this case just 'main'. So to get the expected results, we should put all
+the updated and deleted document IDs into it.
+
+Example:
+
+   | sql_query_killlist = \
+   | 	SELECT id FROM documents WHERE updated_ts>=@last_reindex UNION \
+   | 	SELECT id FROM documents_deleted WHERE deleted_ts>=@last_reindex
+
+9.1.14. sql_attr_uint
 ---------------------
 
 Unsigned integer attribute declaration. Multi-value (there might be
-multiple attributes declared), optional. Applies to SQL source types (mysql
-and pgsql) only.
+multiple attributes declared), optional. Applies to SQL source types
+(mysql, pgsql, mssql) only.
 
 The column value should fit into 32-bit unsigned integer range. Values
 outside this range will be accepted but wrapped around. For instance, -1
@@ -3558,23 +3609,35 @@ Example:
    | sql_attr_uint = group_id
    | sql_attr_uint = forum_id:9 # 9 bits for forum_id
 
-9.1.14. sql_attr_bool
+9.1.15. sql_attr_bool
 ---------------------
 
 Boolean attribute declaration. Multi-value (there might be multiple
-attributes declared), optional. Applies to SQL source types (mysql and
-pgsql) only. Equivalent to sql_attr_uint declaration with a bit count of 1.
+attributes declared), optional. Applies to SQL source types (mysql, pgsql,
+mssql) only. Equivalent to sql_attr_uint declaration with a bit count of 1.
 
 Example:
 
    | sql_attr_bool = is_deleted # will be packed to 1 bit
 
-9.1.15. sql_attr_timestamp
+9.1.16. sql_attr_bigint
+-----------------------
+
+64-bit signed integer attribute declaration. Multi-value (there might be
+multiple attributes declared), optional. Applies to SQL source types
+(mysql, pgsql, mssql) only. Note that unlike sql_attr_uint, these values
+are signed.
+
+Example:
+
+   | sql_attr_bigint = my_bigint_id
+
+9.1.17. sql_attr_timestamp
 --------------------------
 
 UNIX timestamp attribute declaration. Multi-value (there might be multiple
-attributes declared), optional. Applies to SQL source types (mysql and
-pgsql) only.
+attributes declared), optional. Applies to SQL source types (mysql, pgsql,
+mssql) only.
 
 The column value should be a timestamp in UNIX format, ie. 32-bit unsigned
 integer number of seconds elapsed since midnight, January 01, 1970, GMT.
@@ -3590,12 +3653,12 @@ Example:
 
    | sql_attr_timestamp = UNIX_TIMESTAMP(added_datetime) AS added_ts
 
-9.1.16. sql_attr_str2ordinal
+9.1.18. sql_attr_str2ordinal
 ----------------------------
 
 Ordinal string number attribute declaration. Multi-value (there might be
-multiple attributes declared), optional. Applies to SQL source types (mysql
-and pgsql) only.
+multiple attributes declared), optional. Applies to SQL source types
+(mysql, pgsql, mssql) only.
 
 This attribute type (so-called ordinal, for brevity) is intended to allow
 sorting by string values, but without storing the strings themselves. When
@@ -3634,12 +3697,12 @@ Example:
 
    | sql_attr_str2ordinal = author_name
 
-9.1.17. sql_attr_float
+9.1.19. sql_attr_float
 ----------------------
 
 Floating point attribute declaration. Multi-value (there might be multiple
-attributes declared), optional. Applies to SQL source types (mysql and
-pgsql) only.
+attributes declared), optional. Applies to SQL source types (mysql, pgsql,
+mssql) only.
 
 The values will be stored in single precision, 32-bit IEEE 754 format.
 Represented range is approximately from 1e-38 to 1e+38. The amount of
@@ -3653,12 +3716,12 @@ Example:
    | sql_attr_float = lat_radians
    | sql_attr_float = long_radians
 
-9.1.18. sql_attr_multi
+9.1.20. sql_attr_multi
 ----------------------
 
 Multi-valued attribute (MVA) declaration. Multi-value (ie. there may be
 more than one such attribute declared), optional. Applies to SQL source
-types (mysql and pgsql) only.
+types (mysql, pgsql, mssql) only.
 
 Plain attributes only allow to attach 1 value per each document. However,
 there are cases (such as tags or categories) when it is desired to attach
@@ -3687,11 +3750,11 @@ Example:
    | 	SELECT id, tag FROM tags WHERE id>=$start AND id<=$end; \
    | 	SELECT MIN(id), MAX(id) FROM tags
 
-9.1.19. sql_query_post
+9.1.21. sql_query_post
 ----------------------
 
 Post-fetch query. Optional, default value is empty. Applies to SQL source
-types (mysql and pgsql) only.
+types (mysql, pgsql, mssql) only.
 
 This query is executed immediately after sql_query completes successfully.
 When post-fetch query produces errors, they are reported as warnings, but
@@ -3706,11 +3769,11 @@ Example:
 
    | sql_query_post = DROP TABLE my_tmp_table
 
-9.1.20. sql_query_post_index
+9.1.22. sql_query_post_index
 ----------------------------
 
 Post-index query. Optional, default value is empty. Applies to SQL source
-types (mysql and pgsql) only.
+types (mysql, pgsql, mssql) only.
 
 This query is executed when indexing is fully and succesfully completed. If
 this query produces errors, they are reported as warnings, but indexing is
@@ -3723,11 +3786,11 @@ Example:
    | sql_query_post_index = REPLACE INTO counters ( id, val ) \
    |     VALUES ( 'max_indexed_id', $maxid )
 
-9.1.21. sql_ranged_throttle
+9.1.23. sql_ranged_throttle
 ---------------------------
 
 Ranged query throttling period, in milliseconds. Optional, default is 0 (no
-throttling). Applies to SQL source types (mysql and pgsql) only.
+throttling). Applies to SQL source types (mysql, pgsql, mssql) only.
 
 Throttling can be useful when indexer imposes too much load on the database
 server. It causes the indexer to sleep for given amount of milliseconds
@@ -3738,7 +3801,7 @@ Example:
 
    | sql_ranged_throttle = 1000 # sleep for 1 sec before each query step
 
-9.1.22. sql_query_info
+9.1.24. sql_query_info
 ----------------------
 
 Document info query. Optional, default is empty. Applies to mysql source
@@ -3754,7 +3817,7 @@ Example:
 
    | sql_query_info = SELECT * FROM documents WHERE id=$id
 
-9.1.23. xmlpipe_command
+9.1.25. xmlpipe_command
 -----------------------
 
 Shell command that invokes xmlpipe stream producer. Mandatory. Applies to
@@ -3768,7 +3831,7 @@ Example:
 
    | xmlpipe_command = cat /home/sphinx/test.xml
 
-9.1.24. xmlpipe_field
+9.1.26. xmlpipe_field
 ---------------------
 
 xmlpipe field declaration. Multi-value, optional. Applies to xmlpipe2
@@ -3779,7 +3842,7 @@ Example:
    | xmlpipe_field = subject
    | xmlpipe_field = content
 
-9.1.25. xmlpipe_attr_uint
+9.1.27. xmlpipe_attr_uint
 -------------------------
 
 xmlpipe integer attribute declaration. Multi-value, optional. Applies to
@@ -3789,7 +3852,7 @@ Example:
 
    | xmlpipe_attr_uint = author
 
-9.1.26. xmlpipe_attr_bool
+9.1.28. xmlpipe_attr_bool
 -------------------------
 
 xmlpipe boolean attribute declaration. Multi-value, optional. Applies to
@@ -3799,7 +3862,7 @@ Example:
 
    | xmlpipe_attr_bool = is_deleted # will be packed to 1 bit
 
-9.1.27. xmlpipe_attr_timestamp
+9.1.29. xmlpipe_attr_timestamp
 ------------------------------
 
 xmlpipe UNIX timestamp attribute declaration. Multi-value, optional.
@@ -3810,7 +3873,7 @@ Example:
 
    | xmlpipe_attr_timestamp = published
 
-9.1.28. xmlpipe_attr_str2ordinal
+9.1.30. xmlpipe_attr_str2ordinal
 --------------------------------
 
 xmlpipe string ordinal attribute declaration. Multi-value, optional.
@@ -3821,7 +3884,7 @@ Example:
 
    | xmlpipe_attr_str2ordinal = author_sort
 
-9.1.29. xmlpipe_attr_float
+9.1.31. xmlpipe_attr_float
 --------------------------
 
 xmlpipe floating point attribute declaration. Multi-value, optional.
@@ -3833,7 +3896,7 @@ Example:
    | xmlpipe_attr_float = lat_radians
    | xmlpipe_attr_float = long_radians
 
-9.1.30. xmlpipe_attr_multi
+9.1.32. xmlpipe_attr_multi
 --------------------------
 
 xmlpipe MVA attribute declaration. Multi-value, optional. Applies to
@@ -3847,6 +3910,90 @@ SQL column contents when 'field' MVA source type is specified.
 Example:
 
    | xmlpipe_attr_multi = taglist
+
+9.1.33. mssql_winauth
+---------------------
+
+MS SQL Windows authentication flag. Boolean, optional, default value is
+0 (false). Applies to mssql source type only.
+
+Whether to use currently logged in Windows account credentials for
+authentication when connecting to MS SQL Server. Note that when running
+searchd as a service, account user can differ from the account you used to
+install the service.
+
+Example:
+
+   | mssql_winauth = 1
+
+9.1.34. mssql_unicode
+---------------------
+
+MS SQL encoding type flag. Boolean, optional, default value is 0 (false).
+Applies to mssql source type only.
+
+Whether to ask for Unicode or single-byte data when querying MS SQL Server.
+This flag must be in sync with charset_type directive; that is, to index
+Unicode data, you must set both charset_type in the index (to 'utf-8') and
+mssql_unicode in the source (to 1). For reference, MS SQL will actually
+return data in UCS-2 encoding instead of UTF-8, but Sphinx will
+automatically handle that.
+
+Example:
+
+   | mssql_unicode = 1
+
+9.1.35. unpack_zlib
+-------------------
+
+Columns to unpack using zlib (aka deflate, aka gunzip). Multi-value,
+optional, default value is empty list of columns. Applies to SQL source
+types (mysql, pgsql, mssql) only.
+
+Columns specified using this directive will be unpacked by indexer using
+standard zlib algorithm (called deflate and also implemented by gunzip).
+When indexing on a different box than the database, this lets you offload
+the database, and save on network traffic. The feature is only available if
+zlib and zlib-devel were both available during build time.
+
+Example:
+
+   | unpack_zlib = col1
+   | unpack_zlib = col2
+
+9.1.36. unpack_mysqlcompress
+----------------------------
+
+Columns to unpack using MySQL UNCOMPRESS() algorithm. Multi-value,
+optional, default value is empty list of columns. Applies to SQL source
+types (mysql, pgsql, mssql) only.
+
+Columns specified using this directive will be unpacked by indexer using
+modified zlib algorithm used by MySQL COMPRESS() and UNCOMPRESS()
+functions. When indexing on a different box than the database, this lets
+you offload the database, and save on network traffic. The feature is only
+available if zlib and zlib-devel were both available during build time.
+
+Example:
+
+   | unpack_mysqlcompress = body_compressed
+   | unpack_mysqlcompress = description_compressed
+
+9.1.37. unpack_mysqlcompress_maxsize
+------------------------------------
+
+Buffer size for UNCOMPRESS()ed data. Optional, default value is 16M.
+
+When using unpack_mysqlcompress, due to implementation intrincacies it is
+not possible to deduce the required buffer size from the compressed data.
+So the buffer must be preallocated in advance, and unpacked data can not go
+over the buffer size. This option lets you control the buffer size, both to
+limit indexer memory use, and to enable unpacking of really long data
+fields if necessary.
+
+Example:
+
+   | unpack_mysqlcompress_maxsize = 1M
 
 9.2. Index configuration options
 --------------------------------

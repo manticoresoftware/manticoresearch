@@ -13,7 +13,7 @@
 source src1
 {
 	# data source type. mandatory, no default value
-	# known types are 'mysql', 'pgsql', 'xmlpipe', 'xmlpipe2'
+	# known types are 'mysql', 'pgsql', 'mssql', 'xmlpipe', 'xmlpipe2'
 	type					= mysql
 
 	#####################################################################
@@ -39,6 +39,19 @@ source src1
 	# optional, default is 0
 	#
 	# mysql_connect_flags	= 32 # enable compression
+
+
+	# MS SQL specific Windows authentication mode flag
+	# MUST be in sync with charset_type index-level setting
+	# optional, default is 0
+	#
+	# mssql_winauth			= 1 # use currently logged on user credentials
+
+
+	# MS SQL specific Unicode indexing flag
+	# optional, default is 0 (request SBCS data)
+	#
+	# mssql_unicode			= 1 # request Unicode data from server
 
 
 	# pre-query, executed before the main fetch query
@@ -88,7 +101,14 @@ source src1
 	#
 	# sql_attr_bool			= is_deleted
 
-	
+
+	# bigint attribute declaration
+	# multi-value (an arbitrary number of attributes is allowed), optional
+	# declares a signed (unlike uint!) 64-bit attribute
+	#
+	# sql_attr_bigint			= my_bigint_id
+
+
 	# UNIX timestamp attribute declaration
 	# multi-value (an arbitrary number of attributes is allowed), optional
 	# similar to integer, but can also be used in date functions
@@ -148,17 +168,28 @@ source src1
 	# enforces given delay before each query step
 	sql_ranged_throttle	= 0
 
-	
 	# document info query, ONLY for CLI search (ie. testing and debugging)
 	# optional, default is empty
 	# must contain $id macro and must fetch the document by that id
 	sql_query_info		= SELECT * FROM documents WHERE id=$id
 
-	# optional list of columns to unpack when indexing
-	
-	# unpack_zlib = zlib
+	# kill-list query, fetches the document IDs for kill-list
+	# k-list will suppress matches from preceding indexes in the same query
+	# optional, default is empty
+	#
+	# sql_query_killlist	= SELECT id FROM documents WHERE edited>=@last_reindex
+
+
+	# columns to unpack on indexer side when indexing
+	# multi-value, optional, default is empty list
+	#
+	# unpack_zlib = zlib_column
 	# unpack_mysqlcompress = compressed_column
 	# unpack_mysqlcompress = compressed_column_2
+
+
+	# maximum unpacked length allowed in MySQL COMPRESS() unpacker
+	# optional, default is 16M
 	#
 	# unpack_mysqlcompress_maxsize = 16M
 

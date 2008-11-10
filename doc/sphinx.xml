@@ -3172,12 +3172,15 @@ you a few additional questions about it.
 <para>
 Data source type.
 Mandatory, no default value.
-Known types are <option>mysql</option>, <option>pgsql</option>, <option>xmlpipe</option> and <option>xmlpipe2</option>.
+Known types are <option>mysql</option>, <option>pgsql</option>, <option>mssql</option>, <option>xmlpipe</option> and <option>xmlpipe2</option>.
 </para>
 <para>
 All other per-source options depend on source type selected by this option.
-Names of the options used for SQL sources (ie. MySQL and PostgreSQL) start with "sql_";
+Names of the options used for SQL sources (ie. MySQL, PostgreSQL, MS SQL) start with "sql_";
 names of the ones used for xmlpipe and xmlpipe2 start with "xmlpipe_".
+All source types except <option>xmlpipe</option> are conditional; they might or might
+not be supported depending on your build settings, installed client libraries, etc.
+<option>mssql</option> type is currently only available on Windows.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
@@ -3190,7 +3193,7 @@ type = mysql
 <para>
 SQL server host to connect to.
 Mandatory, no default value.
-Applies to SQL source types (<option>mysql</option> and <option>pgsql</option>) only.
+Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
 </para>
 <para>
 In the simplest case when Sphinx resides on the same host with your MySQL
@@ -3213,7 +3216,7 @@ sql_host = localhost
 <para>
 SQL server IP port to connect to.
 Optional, default is 3306 for <option>mysql</option> source type and 5432 for <option>pgsql</option> type.
-Applies to SQL source types (<option>mysql</option> and <option>pgsql</option>) only.
+Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
 Note that it depends on <link linkend="conf-sql-host">sql_host</link> setting whether this value will actually be used.
 </para>
 <bridgehead>Example:</bridgehead>
@@ -3227,7 +3230,7 @@ sql_port = 3306
 <para>
 SQL user to use when connecting to <link linkend="conf-sql-host">sql_host</link>.
 Mandatory, no default value.
-Applies to SQL source types (<option>mysql</option> and <option>pgsql</option>) only.
+Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
@@ -3240,7 +3243,7 @@ sql_user = test
 <para>
 SQL user password to use when connecting to <link linkend="conf-sql-host">sql_host</link>.
 Mandatory, no default value.
-Applies to SQL source types (<option>mysql</option> and <option>pgsql</option>) only.
+Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
@@ -3253,7 +3256,7 @@ sql_pass = mysecretpassword
 <para>
 SQL database (in MySQL terms) to use after the connection and perform further queries within.
 Mandatory, no default value.
-Applies to SQL source types (<option>mysql</option> and <option>pgsql</option>) only.
+Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
@@ -3266,7 +3269,7 @@ sql_db = test
 <para>
 UNIX socket name to connect to for local SQL servers.
 Optional, default value is empty (use client library default settings).
-Applies to SQL source types (<option>mysql</option> and <option>pgsql</option>) only.
+Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
 </para>
 <para>
 On Linux, it would typically be <filename>/var/lib/mysql/mysql.sock</filename>.
@@ -3316,7 +3319,7 @@ mysql_connect_flags = 32 # enable compression
 <para>
 Pre-fetch query, or pre-query.
 Multi-value, optional, default is empty list of queries.
-Applies to SQL source types (<option>mysql</option> and <option>pgsql</option>) only.
+Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
 </para>
 <para>
 Multi-value means that you can specify several pre-queries.
@@ -3359,7 +3362,7 @@ sql_query_pre = SET SESSION query_cache_type=OFF
 <para>
 Main document fetch query.
 Mandatory, no default value.
-Applies to SQL source types (<option>mysql</option> and <option>pgsql</option>) only.
+Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
 </para>
 <para>
 There can be only one main query.
@@ -3389,7 +3392,7 @@ sql_query = \
 <para>
 Range query setup.
 Optional, default is empty.
-Applies to SQL source types (<option>mysql</option> and <option>pgsql</option>) only.
+Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
 </para>
 <para>
 Setting this option enables ranged document fetch queries (see <xref linkend="ranged-queries"/>).
@@ -3424,7 +3427,7 @@ sql_query_range = SELECT MIN(id),MAX(id) FROM documents
 <para>
 Range query step.
 Optional, default is 1024.
-Applies to SQL source types (<option>mysql</option> and <option>pgsql</option>) only.
+Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
 </para>
 <para>
 Only used when <link linkend="ranged-queries">ranged queries</link> are enabled.
@@ -3447,11 +3450,61 @@ sql_range_step = 1000
 </sect3>
 
 
+<sect3 id=""><title>sql_query_killlist</title>
+<para>
+Kill-list query.
+Optional, default is empty (no query).
+Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
+</para>
+<para>
+This query is expected to return a number of 1-column rows, each containing
+just the document ID. The returned document IDs are stored within an index.
+Kill-list for a given index suppresses results from <emphasis>other</emphasis>
+indexes, depending on index order in the query. The intended use is to help
+implement deletions and updates on existing indexes without rebuilding
+(actually even touching them), and especially to fight phantom results
+problem.
+</para>
+<para>
+Let us dissect an example. Assume we have two indexes, 'main' and 'delta'.
+Assume that documents 2, 3, and 5 were deleted since last reindex of 'main',
+and documents 7 and 11 were updated (ie. their text contents were changed).
+Assume that a keyword 'test' occurred in all these mentioned documents
+when we were indexing 'main'; still occurs in document 7 as we index 'delta';
+but does not occur in document 11 any more. We now reindex delta and then
+search through both these indexes in proper (least to most recent) order:
+<programlisting>
+$res = $cl->Query ( "test", "main delta" );
+</programlisting>
+</para>
+<para>
+First, we need to properly handle deletions. The result set should not
+contain documents 2, 3, or 5. Second, we also need to avoid phantom results.
+Unless we do something about it, document 11 <emphasis>will</emphasis>
+appear in search results! It will be found in 'main' (but not 'delta').
+And it will make it to the final result set unless something stops it.
+</para>
+<para>
+Kill-list, or K-list for short, is that something. Kill-list attached
+to 'delta' will suppress the specified rows from <b>all</b> the preceding
+indexes, in this case just 'main'. So to get the expected results,
+we should put all the updated <emphasis>and</emphasis> deleted
+document IDs into it.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+sql_query_killlist = \
+	SELECT id FROM documents WHERE updated_ts>=@last_reindex UNION \
+	SELECT id FROM documents_deleted WHERE deleted_ts>=@last_reindex
+</programlisting>
+</sect3>
+
+
 <sect3 id="conf-sql-attr-uint"><title>sql_attr_uint</title>
 <para>
 Unsigned integer <link linkend="attributes">attribute</link> declaration.
 Multi-value (there might be multiple attributes declared), optional.
-Applies to SQL source types (<option>mysql</option> and <option>pgsql</option>) only.
+Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
 </para>
 <para>
 The column value should fit into 32-bit unsigned integer range.
@@ -3479,7 +3532,7 @@ sql_attr_uint = forum_id:9 # 9 bits for forum_id
 <para>
 Boolean <link linkend="attributes">attribute</link> declaration.
 Multi-value (there might be multiple attributes declared), optional.
-Applies to SQL source types (<option>mysql</option> and <option>pgsql</option>) only.
+Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
 Equivalent to <link linkend="conf-sql-attr-uint">sql_attr_uint</link> declaration with a bit count of 1.
 </para>
 <bridgehead>Example:</bridgehead>
@@ -3489,11 +3542,26 @@ sql_attr_bool = is_deleted # will be packed to 1 bit
 </sect3>
 
 
+<sect3 id="conf-sql-attr-bigint"><title>sql_attr_bigint</title>
+<para>
+64-bit signed integer <link linkend="attributes">attribute</link> declaration.
+Multi-value (there might be multiple attributes declared), optional.
+Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
+Note that unlike <link linkend="conf-sql-attr-uint">sql_attr_uint</link>,
+these values are <b>signed</b>.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+sql_attr_bigint = my_bigint_id
+</programlisting>
+</sect3>
+
+
 <sect3 id="conf-sql-attr-timestamp"><title>sql_attr_timestamp</title>
 <para>
 UNIX timestamp <link linkend="attributes">attribute</link> declaration.
 Multi-value (there might be multiple attributes declared), optional.
-Applies to SQL source types (<option>mysql</option> and <option>pgsql</option>) only.
+Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
 </para>
 <para>
 The column value should be a timestamp in UNIX format, ie. 32-bit unsigned
@@ -3517,7 +3585,7 @@ sql_attr_timestamp = UNIX_TIMESTAMP(added_datetime) AS added_ts
 <para>
 Ordinal string number <link linkend="attributes">attribute</link> declaration.
 Multi-value (there might be multiple attributes declared), optional.
-Applies to SQL source types (<option>mysql</option> and <option>pgsql</option>) only.
+Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
 </para>
 <para>
 This attribute type (so-called ordinal, for brevity) is intended
@@ -3571,7 +3639,7 @@ sql_attr_str2ordinal = author_name
 <para>
 Floating point <link linkend="attributes">attribute</link> declaration.
 Multi-value (there might be multiple attributes declared), optional.
-Applies to SQL source types (<option>mysql</option> and <option>pgsql</option>) only.
+Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
 </para>
 <para>
 The values will be stored in single precision, 32-bit IEEE 754 format.
@@ -3593,7 +3661,7 @@ sql_attr_float = long_radians
 <para>
 <link linkend="mva">Multi-valued attribute</link> (MVA) declaration.
 Multi-value (ie. there may be more than one such attribute declared), optional.
-Applies to SQL source types (<option>mysql</option> and <option>pgsql</option>) only.
+Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
 </para>
 <para>
 Plain attributes only allow to attach 1 value per each document.
@@ -3631,7 +3699,7 @@ sql_attr_multi = uint tag from ranged-query; \
 <para>
 Post-fetch query.
 Optional, default value is empty.
-Applies to SQL source types (<option>mysql</option> and <option>pgsql</option>) only.
+Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
 </para>
 <para>
 This query is executed immediately after <link linkend="conf-sql-query">sql_query</link>
@@ -3655,7 +3723,7 @@ sql_query_post = DROP TABLE my_tmp_table
 <para>
 Post-index query.
 Optional, default value is empty.
-Applies to SQL source types (<option>mysql</option> and <option>pgsql</option>) only.
+Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
 </para>
 <para>
 This query is executed when indexing is fully and succesfully completed.
@@ -3677,7 +3745,7 @@ sql_query_post_index = REPLACE INTO counters ( id, val ) \
 <para>
 Ranged query throttling period, in milliseconds.
 Optional, default is 0 (no throttling).
-Applies to SQL source types (<option>mysql</option> and <option>pgsql</option>) only.
+Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
 </para>
 <para>
 Throttling can be useful when indexer imposes too much load on the
@@ -3840,6 +3908,108 @@ SQL column contents when 'field' MVA source type is specified.
 xmlpipe_attr_multi = taglist
 </programlisting>
 </sect3>
+
+
+<sect3 id="conf-mssql-winauth"><title>mssql_winauth</title>
+<para>
+MS SQL Windows authentication flag.
+Boolean, optional, default value is 0 (false).
+Applies to <option>mssql</option> source type only.
+</para>
+<para>
+Whether to use currently logged in Windows account credentials for
+authentication when connecting to MS SQL Server. Note that when running
+<filename>searchd</filename> as a service, account user can differ
+from the account you used to install the service.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+mssql_winauth = 1
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-mssql-unicode"><title>mssql_unicode</title>
+<para>
+MS SQL encoding type flag.
+Boolean, optional, default value is 0 (false).
+Applies to <option>mssql</option> source type only.
+</para>
+<para>
+Whether to ask for Unicode or single-byte data when querying MS SQL Server.
+This flag <b>must</b> be in sync with <link linkend="conf-charset-type">charset_type</link> directive;
+that is, to index Unicode data, you must set both <option>charset_type</option> in the index
+(to 'utf-8') and <option>mssql_unicode</option> in the source (to 1).
+For reference, MS SQL will actually return data in UCS-2 encoding instead of UTF-8,
+but Sphinx will automatically handle that.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+mssql_unicode = 1
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-unpack-zlib"><title>unpack_zlib</title>
+<para>
+Columns to unpack using zlib (aka deflate, aka gunzip).
+Multi-value, optional, default value is empty list of columns.
+Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
+</para>
+<para>
+Columns specified using this directive will be unpacked by <filename>indexer</filename>
+using standard zlib algorithm (called deflate and also implemented by <filename>gunzip</filename>).
+When indexing on a different box than the database, this lets you offload the database, and save on network traffic.
+The feature is only available if zlib and zlib-devel were both available during build time.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+unpack_zlib = col1
+unpack_zlib = col2
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-unpack-mysqlcompress"><title>unpack_mysqlcompress</title>
+<para>
+Columns to unpack using MySQL UNCOMPRESS() algorithm.
+Multi-value, optional, default value is empty list of columns.
+Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
+</para>
+<para>
+Columns specified using this directive will be unpacked by <filename>indexer</filename>
+using modified zlib algorithm used by MySQL COMPRESS() and UNCOMPRESS() functions.
+When indexing on a different box than the database, this lets you offload the database, and save on network traffic.
+The feature is only available if zlib and zlib-devel were both available during build time.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+unpack_mysqlcompress = body_compressed
+unpack_mysqlcompress = description_compressed
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-unpack-mysqlcompress-maxsize"><title>unpack_mysqlcompress_maxsize</title>
+<para>
+Buffer size for UNCOMPRESS()ed data.
+Optional, default value is 16M.
+</para>
+<para>
+When using <link linkend="conf-unpack-mysqlcompress">unpack_mysqlcompress</link>,
+due to implementation intrincacies it is not possible to deduce the required buffer size
+from the compressed data. So the buffer must be preallocated in advance, and unpacked
+data can not go over the buffer size. This option lets you control the buffer size,
+both to limit <filename>indexer</filename> memory use, and to enable unpacking
+of really long data fields if necessary.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+unpack_mysqlcompress_maxsize = 1M
+</programlisting>
+</sect3>
+
+
 
 
 </sect2>

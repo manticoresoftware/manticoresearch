@@ -14757,6 +14757,12 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 		tTermSetup.m_uMaxStamp = sphTimerMsec() + pQuery->m_uMaxQueryMsec; // max_query_time
 	tTermSetup.m_pQuery = pQuery; // for extended2 filtering only
 
+	// fixup old matching modes at low level
+	PrepareQueryEmulation ( pQuery );
+
+	// bind weights
+	BindWeights ( pQuery );
+
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
 	if ( !SetupMatchExtended ( pQuery, pResult, tTermSetup ) )
@@ -14782,12 +14788,6 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 		if ( !m_pEarlyFilter->EvalBlock ( pMinEntry, pMaxEntry, iRowSize ) )
 			return true;
 	}
-
-	// fixup old matching modes at low level
-	PrepareQueryEmulation ( pQuery );
-
-	// bind weights
-	BindWeights ( pQuery );
 
 	// setup lookup
 	m_bEarlyLookup = ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN ) && pQuery->m_dFilters.GetLength();

@@ -4031,15 +4031,23 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 						for ( int i=0; i<tRemoteResult.m_iNumWords; i++ )
 							tRes.m_tWordStats[i] = tRemoteResult.m_tWordStats[i];
 
+					} else if ( tRes.m_iNumWords!=tRemoteResult.m_iNumWords )
+					{
+						// word count mismatch
+						m_dFailuresSet[iRes].Submit ( "query words mismatch (%d local, %d remote)",
+							tRes.m_iNumWords, tRemoteResult.m_iNumWords );
+
 					} else
 					{
-						// check for word count and contents mismatch
-						bool bMismatch = ( tRes.m_iNumWords!=tRemoteResult.m_iNumWords );
-						for ( int i=0; i<tRemoteResult.m_iNumWords && !bMismatch; i++ )
-							if ( tRes.m_tWordStats[i].m_sWord!=tRemoteResult.m_tWordStats[i].m_sWord )
-								bMismatch = true;
+						// check for word contents mismatch
+						assert ( tRes.m_iNumWords>0 && tRes.m_iNumWords==tRemoteResult.m_iNumWords );
 
-						if ( !bMismatch )
+						int iMismatch = -1;
+						for ( int i=0; i<tRemoteResult.m_iNumWords && iMismatch<0; i++ )
+							if ( tRes.m_tWordStats[i].m_sWord!=tRemoteResult.m_tWordStats[i].m_sWord )
+								iMismatch = i;
+
+						if ( iMismatch<0 )
 						{
 							// everything matches, update stats
 							for ( int i=0; i<tRemoteResult.m_iNumWords; i++ )
@@ -4050,7 +4058,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 						} else
 						{
 							// there are mismatches, warn
-							m_dFailuresSet[iRes].Submit ( "query words mismatch" );
+							m_dFailuresSet[iRes].Submit ( "query words mismatch (word %d, '%s' local vs '%s' remote)",
+								iMismatch, tRes.m_tWordStats[iMismatch].m_sWord.cstr(), tRemoteResult.m_tWordStats[iMismatch].m_sWord.cstr() );
 						}
 					}
 				}

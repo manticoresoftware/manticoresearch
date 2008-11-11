@@ -30,6 +30,7 @@ if ( !is_array($_SERVER["argv"]) || empty($_SERVER["argv"]) )
 	print ( "-e, --extended\t\tuse 'extended query' matching mode\n" );
 	print ( "-ph,--phrase\t\tuse 'exact phrase' matching mode\n" );
 	print ( "-f, --filter <ATTR>\tfilter by attribute 'ATTR' (default is 'group_id')\n" );
+	print ( "-fr,--filterrange <ATTR> <MIN> <MAX>\n\t\t\tadd specified range filter\n" );
 	print ( "-v, --value <VAL>\tadd VAL to allowed 'group_id' values list\n" );
 	print ( "-g, --groupby <EXPR>\tgroup matches by 'EXPR'\n" );
 	print ( "-gs,--groupsort <EXPR>\tsort groups by 'EXPR'\n" );
@@ -42,6 +43,8 @@ if ( !is_array($_SERVER["argv"]) || empty($_SERVER["argv"]) )
 $args = array();
 foreach ( $_SERVER["argv"] as $arg )
 	$args[] = $arg;
+
+$cl = new SphinxClient ();
 
 $q = "";
 $mode = SPH_MATCH_ALL;
@@ -78,6 +81,7 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="-d" || $arg=="--distinct" )	$distinct = $args[++$i];
 	else if ( $arg=="-l" || $arg=="--limit" )		$limit = (int)$args[++$i];
 	else if ( $arg=="--select" )					$select = $args[++$i];
+	else if ( $arg=="-fr"|| $arg=="--filterrange" )	$cl->SetFilterRange ( $args[++$i], $args[++$i], $args[++$i] );
 	else if ( $arg=="-r" )
 	{
 		$arg = strtolower($args[++$i]);
@@ -93,7 +97,6 @@ for ( $i=0; $i<count($args); $i++ )
 // do query
 ////////////
 
-$cl = new SphinxClient ();
 $cl->SetServer ( $host, $port );
 $cl->SetConnectTimeout ( 1 );
 $cl->SetWeights ( array ( 100, 1 ) );

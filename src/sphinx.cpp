@@ -1699,7 +1699,7 @@ private:
 	static const int			WRITE_BUFFER_SIZE		= 262144;	///< my write buffer size
 
 	static const DWORD			INDEX_MAGIC_HEADER		= 0x58485053;	///< my magic 'SPHX' header
-	static const DWORD			INDEX_FORMAT_VERSION	= 12;			///< my format version
+	static const DWORD			INDEX_FORMAT_VERSION	= 13;			///< my format version
 
 private:
 	// common stuff
@@ -3057,7 +3057,7 @@ static void SaveTokenizerSettings ( CSphWriter & tWriter, ISphTokenizer * pToken
 
 void LoadDictionarySettings ( CSphReader_VLN & tReader, CSphDictSettings & tSettings, DWORD uVersion, CSphString & sWarning )
 {
-	if ( uVersion < 9 )
+	if ( uVersion<9 )
 		return;
 
 	tSettings.m_sMorphology	= tReader.GetString ();
@@ -3073,6 +3073,9 @@ void LoadDictionarySettings ( CSphReader_VLN & tReader, CSphDictSettings & tSett
 
 	tSettings.m_sWordforms	= tReader.GetString ();
 	ReadFileInfo ( tReader, tSettings.m_sWordforms.cstr (), sWarning );
+
+	if ( uVersion>=13 )
+		tSettings.m_iMinStemmingLen = tReader.GetDword ();
 }
 
 
@@ -3094,6 +3097,8 @@ void SaveDictionarySettings ( CSphWriter & tWriter, CSphDict * pDict )
 
 	tWriter.PutString ( tSettings.m_sWordforms.cstr () );
 	WriteFileInfo ( tWriter, tWFFileInfo );
+
+	tWriter.PutDword ( tSettings.m_iMinStemmingLen );
 }
 
 
@@ -13662,6 +13667,7 @@ void CSphIndex_VLN::DumpHeader ( FILE * fp, const char * sHeaderName )
 		fprintf ( fp, "dictionary-morphology: %s\n", tSettings.m_sMorphology.cstr () );
 		fprintf ( fp, "dictionary-stopwords: %s\n", tSettings.m_sStopwords.cstr () );
 		fprintf ( fp, "dictionary-wordforms: %s\n", tSettings.m_sWordforms.cstr () );
+		fprintf ( fp, "min-stemming-len: %d\n", tSettings.m_iMinStemmingLen );
 	}
 
 	fprintf ( fp, "killlist-size: %d\n", m_iKillListSize );
@@ -15428,12 +15434,19 @@ template<> DWORD sphCRCWord ( const BYTE * pWord, int iLen ) { return sphCRC32 (
 
 void CSphDictCRC::ApplyStemmers ( BYTE * pWord )
 {
-	if ( ! ToNormalForm ( pWord ) )
-	{
-		for ( int i = 0; i < m_dMorph.GetLength (); ++i )
-			if ( StemById ( pWord, m_dMorph [i] ) )
-				break;
-	}
+	// try wordforms
+	if ( ToNormalForm ( pWord ) )
+		return;
+
+	// check length
+	if ( m_tSettings.m_iMinStemmingLen>1 )
+		if ( sphUTF8Len ( (const char*)pWord )<m_tSettings.m_iMinStemmingLen )
+			return;
+
+	// try stemmers
+	ARRAY_FOREACH ( i, m_dMorph )
+		if ( StemById ( pWord, m_dMorph [i] ) )
+			break;
 }
 
 

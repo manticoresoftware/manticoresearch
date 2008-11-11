@@ -4247,6 +4247,30 @@ morphology = stem_en, libstemmer_sv
 </programlisting>
 </sect3>
 
+
+<sect3 id="conf-min-stemming-len"><title>min_stemming_len</title>
+<para>
+Minimum word length at which to enable stemming.
+Optional, default is 1 (stem everything).
+</para>
+<para>
+Stemmers are not perfect, and might sometimes produce undesired results.
+For instance, running "gps" keyword through Porter stemmer for English
+results in "gp", which is not really the intent. <option>min_stemming_len</option>
+feature lets you suppress stemming based on the source word length,
+ie. to avoid stemming too short words. Keywords that are shorter than
+the given threshold will not be stemmed. Note that keywords that are
+exactly as long as specified <b>will</b> be stemmed. So in order to avoid
+stemming 3-character keywords, you should specify 4 for the value.
+For more finely grained control, refer to <link linkend="conf-wordforms">wordforms</link> feature.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+min_stemming_len = 4
+</programlisting>
+</sect3>
+
+
 <sect3 id="conf-stopwords"><title>stopwords</title>
 <para>
 Stopword files list (space separated).

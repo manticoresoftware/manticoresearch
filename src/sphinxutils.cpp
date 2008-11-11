@@ -198,6 +198,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "inplace_reloc_factor",	0, NULL },
 	{ "inplace_write_factor",	0, NULL },
 	{ "index_exact_words",		0, NULL },
+	{ "min_stemming_len",		0, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -768,6 +769,7 @@ void sphConfDictionary ( const CSphConfigSection & hIndex, CSphDictSettings & tS
 	tSettings.m_sMorphology = hIndex.GetStr ( "morphology" );
 	tSettings.m_sStopwords	= hIndex.GetStr ( "stopwords" );
 	tSettings.m_sWordforms	= hIndex.GetStr ( "wordforms" );
+	tSettings.m_iMinStemmingLen	= hIndex.GetInt ( "min_stemming_len", 1 );
 }
 
 

@@ -520,13 +520,19 @@ ISphTokenizer *			sphCreateUTF8NgramTokenizer ();
 /////////////////////////////////////////////////////////////////////////////
 // DICTIONARIES
 /////////////////////////////////////////////////////////////////////////////
+
 struct CSphDictSettings
 {
 	CSphString		m_sMorphology;
 	CSphString		m_sStopwords;
 	CSphString		m_sWordforms;
+	int				m_iMinStemmingLen;
 
-	bool			HasMorphology () const
+	CSphDictSettings ()
+		: m_iMinStemmingLen ( 1 )
+	{}
+
+	bool HasMorphology () const
 	{
 		const char * szMorph = m_sMorphology.cstr ();
 		return szMorph && *szMorph && strcmp ( szMorph, "none" );
@@ -541,7 +547,7 @@ struct CSphDict
 	virtual				~CSphDict () {}
 
 	/// get word ID by word, "text" version
-	/// may apply stemming and modify word inplac
+	/// may apply stemming and modify word inplace
 	/// returns 0 for stopwords
 	virtual SphWordID_t	GetWordID ( BYTE * pWord ) = 0;
 

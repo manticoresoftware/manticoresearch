@@ -282,6 +282,12 @@ index test1
 	# morphology	= libstemmer_sv
 	morphology		= none
 
+	# minimum word length at which to enable stemming
+	# optional, default is 1 (stem everything)
+	#
+	# min_stemming_len	= 1
+
+
 	# stopword files list (space separated)
 	# optional, default is empty
 	# contents are plain text, charset_table and stemming are both applied

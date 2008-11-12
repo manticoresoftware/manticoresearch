@@ -6811,7 +6811,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 					{
 						sphWarning ( "index '%s': %s - NOT SERVING", sIndexName, sError.cstr() );
 						tIndex.m_bEnabled = false;
-						continue;
 					}
 				}
 				else
@@ -6832,8 +6831,10 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			{
 				sphWarning ( "index '%s': %s - NOT SERVING", sIndexName, sError.cstr() );
 				tIndex.m_bEnabled = false;
-				continue;
 			}
+
+			if ( !tIndex.m_bEnabled )
+				continue;
 		}
 
 		iValidIndexes++;

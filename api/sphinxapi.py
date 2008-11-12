@@ -742,8 +742,14 @@ class SphinxClient:
 		# build request
 		# v.1.0 req
 
-		# mode=0, flags=1 (remove spaces)
-		req = [pack('>2L', 0, 1)]
+		flags = 1 # (remove spaces)
+		if opts.get('exact_phrase'):	flags |= 2
+		if opts.get('single_passage'):	flags |= 4
+		if opts.get('use_boundaries'):	flags |= 8
+		if opts.get('weight_order'):	flags |= 16
+		
+		# mode=0, flags
+		req = [pack('>2L', 0, flags)]
 
 		# req index
 		req.append(pack('>L', len(index)))

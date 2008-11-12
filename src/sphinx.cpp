@@ -13782,6 +13782,25 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 	assert ( m_iCheckpointsPos>0 );
 	bool bAllocCheckpoints = false;
 
+	// make sure checkpoints are loadable
+	struct_stat tStat;
+	if ( stat ( GetIndexFileName("spi"), &tStat ) < 0 )
+	{
+		m_sLastError.SetSprintf ( "failed to stat %s: %s", GetIndexFileName("spi"), strerror(errno) );
+		return NULL;
+	}
+
+	// pre-11 indices use different offset type (this is fixed up later during the loading)
+	const int64_t iCheckpointSize = m_uVersion<11 ?
+		sizeof(CSphWordlistCheckpoint_v10) :
+		sizeof(CSphWordlistCheckpoint);
+	if ( (int64_t)tStat.st_size - (int64_t)m_iCheckpointsPos != (int64_t)m_iWordlistCheckpoints * iCheckpointSize )
+	{
+		m_sLastError = "checkpoint segment size mismatch (rebuild the index)";
+		return NULL;
+	}
+
+	// prealloc
 	if ( m_bPreloadWordlist )
 	{
 		assert ( m_iCheckpointsPos<UINT_MAX );

@@ -1,5 +1,5 @@
-Sphinx 0.9.8.1 reference manual
-===============================
+Sphinx 0.9.9 reference manual
+=============================
 
 Free open-source SQL full-text search engine
 --------------------------------------------
@@ -161,30 +161,39 @@ Table of Contents
       9.2.4. docinfo
       9.2.5. mlock
       9.2.6. morphology
-      9.2.7. stopwords
-      9.2.8. wordforms
-      9.2.9. exceptions
-      9.2.10. min_word_len
-      9.2.11. charset_type
-      9.2.12. charset_table
-      9.2.13. ignore_chars
-      9.2.14. min_prefix_len
-      9.2.15. min_infix_len
-      9.2.16. prefix_fields
-      9.2.17. infix_fields
-      9.2.18. enable_star
-      9.2.19. ngram_len
-      9.2.20. ngram_chars
-      9.2.21. phrase_boundary
-      9.2.22. phrase_boundary_step
-      9.2.23. html_strip
-      9.2.24. html_index_attrs
-      9.2.25. html_remove_elements
-      9.2.26. local
-      9.2.27. agent
-      9.2.28. agent_connect_timeout
-      9.2.29. agent_query_timeout
-      9.2.30. preopen
+      9.2.7. min_stemming_len
+      9.2.8. stopwords
+      9.2.9. wordforms
+      9.2.10. exceptions
+      9.2.11. min_word_len
+      9.2.12. charset_type
+      9.2.13. charset_table
+      9.2.14. ignore_chars
+      9.2.15. min_prefix_len
+      9.2.16. min_infix_len
+      9.2.17. prefix_fields
+      9.2.18. infix_fields
+      9.2.19. enable_star
+      9.2.20. ngram_len
+      9.2.21. ngram_chars
+      9.2.22. phrase_boundary
+      9.2.23. phrase_boundary_step
+      9.2.24. html_strip
+      9.2.25. html_index_attrs
+      9.2.26. html_remove_elements
+      9.2.27. local
+      9.2.28. agent
+      9.2.29. agent_blackhole
+      9.2.30. agent_connect_timeout
+      9.2.31. agent_query_timeout
+      9.2.32. preopen
+      9.2.33. ondisk_dict
+      9.2.34. inplace_enable
+      9.2.35. inplace_hit_gap
+      9.2.36. inplace_docinfo_gap
+      9.2.37. inplace_reloc_factor
+      9.2.38. inplace_write_factor
+      9.2.39. index_exact_words
 
    9.3. indexer program configuration options
       9.3.1. mem_limit
@@ -206,6 +215,12 @@ Table of Contents
       9.4.12. preopen_indexes
       9.4.13. unlink_old
       9.4.14. attr_flush_period
+      9.4.15. ondisk_dict_default
+      9.4.16. max_packet_size
+      9.4.17. mva_updates_pool
+      9.4.18. crash_log_path
+      9.4.19. max_filters
+      9.4.20. max_filter_values
 
 A. Sphinx revision history
 
@@ -1241,6 +1256,10 @@ matching mode:
 
       | "the world is a wonderful place"/3
 
+   * exact form operator:
+
+      | raining =cats and =dogs
+
 Here's an example query which uses most of these operators:
 
 Example 6. Extended matching mode: query example
@@ -1280,16 +1299,25 @@ match those documents that pass a given threshold of given words. The
 example above ("the world is a wonderful place"/3) will match all documents
 that have at least 3 of the 6 specified words.
 
-Nested brackets, as in queries like
+Exact form operator will match the document only if the keyword occurred in
+exactly the specified form. The default behaviour is to match the document
+if the stemmed keyword matches. For instance, "runs" query will match both
+the document that contains "runs" and the document that contains "running",
+because both forms stem to just "run" - while "=runs" query will only match
+the first document. Exact form operator requires index_exact_words option
+to be enabled. The operator affects the keywords, and thus can be used
+within phrase, proximity, or quorum operators.
 
-   | aaa | ( bbb ccc | ( ddd eee ) )
+Starting with 0.9.9, arbitrarily nested brackets and negations are allowed.
+However, the query must be possible to compute without involving an
+implicit list of all documents:
 
-are not allowed yet, but this will be fixed.
-
-Negation (ie. operator NOT) is only allowed on top level and not within
-brackets (ie. groups). This isn't going to change, because supporting
-nested negations would make phrase ranking implementation way too
-complicated.
+   | // correct query
+   | aaa -(bbb -(ccc ddd))
+   | 
+   | // queries that are non-computable
+   | -aaa
+   | aaa | -bbb
 
 4.4. Weighting
 --------------
@@ -2828,7 +2856,8 @@ names. Updates on distributed indexes will be pushed to all agents.
 The updates only work with docinfo=extern storage strategy. They are very
 fast because they're working fully in RAM, but they can also be made
 persistent: updates are saved on disk on clean searchd shutdown initiated
-by SIGTERM signal.
+by SIGTERM signal. With additional restrictions, updates are also possible
+on MVA attributes; refer to mva_updates_pool directive for details.
 
 Usage example:
 
@@ -4185,7 +4214,27 @@ Example:
 
    | morphology = stem_en, libstemmer_sv
 
-9.2.7. stopwords
+9.2.7. min_stemming_len
+-----------------------
+
+Minimum word length at which to enable stemming. Optional, default is
+1 (stem everything).
+
+Stemmers are not perfect, and might sometimes produce undesired results.
+For instance, running "gps" keyword through Porter stemmer for English
+results in "gp", which is not really the intent. min_stemming_len feature
+lets you suppress stemming based on the source word length, ie. to avoid
+stemming too short words. Keywords that are shorter than the given
+threshold will not be stemmed. Note that keywords that are exactly as long
+as specified will be stemmed. So in order to avoid stemming 3-character
+keywords, you should specify 4 for the value. For more finely grained
+control, refer to wordforms feature.
+
+Example:
+
+   | min_stemming_len = 4
+
+9.2.8. stopwords
 ----------------
 
 Stopword files list (space separated). Optional, default is empty.
@@ -4213,7 +4262,7 @@ Example:
    | stopwords = /usr/local/sphinx/data/stopwords.txt
    | stopwords = stopwords-ru.txt stopwords-en.txt
 
-9.2.8. wordforms
+9.2.9. wordforms
 ----------------
 
 Word forms dictionary. Optional, default is empty.
@@ -4257,8 +4306,8 @@ Example:
 
    | wordforms = /usr/local/sphinx/data/wordforms.txt
 
-9.2.9. exceptions
------------------
+9.2.10. exceptions
+------------------
 
 Tokenizing exceptions file. Optional, default is empty.
 
@@ -4335,7 +4384,7 @@ Example:
 
    | exceptions = /usr/local/sphinx/data/exceptions.txt
 
-9.2.10. min_word_len
+9.2.11. min_word_len
 --------------------
 
 Minimum indexed word length. Optional, default is 1 (index everything).
@@ -4348,7 +4397,7 @@ Example:
 
    | min_word_len = 4
 
-9.2.11. charset_type
+9.2.12. charset_type
 --------------------
 
 Character set encoding type. Optional, default is 'sbcs'. Known values are
@@ -4373,7 +4422,7 @@ Example:
 
    | charset_type = utf-8
 
-9.2.12. charset_table
+9.2.13. charset_table
 ---------------------
 
 Accepted characters table, with case folding rules. Optional, default value
@@ -4445,7 +4494,7 @@ Example:
    | charset_table = 0..9, A..Z->a..z, _, a..z, \
    | 	U+410..U+42F->U+430..U+44F, U+430..U+44F
 
-9.2.13. ignore_chars
+9.2.14. ignore_chars
 --------------------
 
 Ignored characters list. Optional, default is empty.
@@ -4465,7 +4514,7 @@ Example:
 
    | ignore_chars = U+AD
 
-9.2.14. min_prefix_len
+9.2.15. min_prefix_len
 ----------------------
 
 Minimum word prefix length to index. Optional, default is 0 (do not index
@@ -4502,7 +4551,7 @@ Example:
 
    | min_prefix_len = 3
 
-9.2.15. min_infix_len
+9.2.16. min_infix_len
 ---------------------
 
 Minimum infix prefix length to index. Optional, default is 0 (do not index
@@ -4528,7 +4577,7 @@ Example:
 
    | min_infix_len = 3
 
-9.2.16. prefix_fields
+9.2.17. prefix_fields
 ---------------------
 
 The list of full-text fields to limit prefix indexing to. Optional, default
@@ -4545,7 +4594,7 @@ Example:
 
    | prefix_fields = url, domain
 
-9.2.17. infix_fields
+9.2.18. infix_fields
 --------------------
 
 The list of full-text fields to limit infix indexing to. Optional, default
@@ -4558,7 +4607,7 @@ Example:
 
    | infix_fields = url, domain
 
-9.2.18. enable_star
+9.2.19. enable_star
 -------------------
 
 Enables star-syntax (or wildcard syntax) when searching through
@@ -4595,7 +4644,7 @@ Example:
 
    | enable_star = 1
 
-9.2.19. ngram_len
+9.2.20. ngram_len
 -----------------
 
 N-gram lengths for N-gram indexing. Optional, default is 0 (disable n-gram
@@ -4635,7 +4684,7 @@ Example:
 
    | ngram_len = 1
 
-9.2.20. ngram_chars
+9.2.21. ngram_chars
 -------------------
 
 N-gram characters list. Optional, default is empty.
@@ -4649,7 +4698,7 @@ Example:
 
    | ngram_chars = U+3000..U+2FA1F
 
-9.2.21. phrase_boundary
+9.2.22. phrase_boundary
 -----------------------
 
 Phrase boundary characters list. Optional, default is empty.
@@ -4675,7 +4724,7 @@ Example:
 
    | phrase_boundary = ., ?, !, U+2026 # horizontal ellipsis
 
-9.2.22. phrase_boundary_step
+9.2.23. phrase_boundary_step
 ----------------------------
 
 Phrase boundary word position increment. Optional, default is 0.
@@ -4687,7 +4736,7 @@ Example:
 
    | phrase_boundary_step = 100
 
-9.2.23. html_strip
+9.2.24. html_strip
 ------------------
 
 Whether to strip HTML markup from incoming full-text data. Optional,
@@ -4709,7 +4758,7 @@ Example:
 
    | html_strip = 1
 
-9.2.24. html_index_attrs
+9.2.25. html_index_attrs
 ------------------------
 
 A list of markup attributes to index when stripping HTML. Optional, default
@@ -4723,7 +4772,7 @@ Example:
 
    | html_index_attrs = img=alt,title; a=title;
 
-9.2.25. html_remove_elements
+9.2.26. html_remove_elements
 ----------------------------
 
 A list of HTML elements for which to strip contents along with the elements
@@ -4742,7 +4791,7 @@ Example:
 
    | html_remove_elements = style, script
 
-9.2.26. local
+9.2.27. local
 -------------
 
 Local index declaration in the distributed index. Multi-value, optional,
@@ -4751,7 +4800,7 @@ default is empty.
 This setting is used to declare local indexes that will be searched when
 given distributed index is searched. All local indexes will be searched
 sequentially, utilizing only 1 CPU or core; to parallelize processing, you
-can configure searchd to query itself (refer to Section 9.2.27, <<agent>>
+can configure searchd to query itself (refer to Section 9.2.28, <<agent>>
 for the details). There might be several local indexes declared per each
 distributed index. Any local index can be mentioned several times in other
 distributed indexes.
@@ -4761,11 +4810,11 @@ Example:
    | local = chunk1
    | local = chunk2
 
-9.2.27. agent
+9.2.28. agent
 -------------
 
-Remote agents and indexes declaration in the distributed index.
-Multi-value, optional, default is empty.
+Remote agent declaration in the distributed index. Multi-value, optional,
+default is empty.
 
 This setting is used to declare remote agents that will be searched when
 given distributed index is searched. The agents can be thought of as
@@ -4820,7 +4869,27 @@ Example:
    | agent = /var/run/searchd.s:chunk2
    | agent = searchbox2:3312:chunk3,chunk4 # search remote indexes
 
-9.2.28. agent_connect_timeout
+9.2.29. agent_blackhole
+-----------------------
+
+Remote blackhole agent declaration in the distributed index. Multi-value,
+optional, default is empty.
+
+agent_blackhole lets you fire-and-forget queries to remote agents. That is
+useful for debugging (or just testing) production clusters: you can setup
+a separate debugging/testing searchd instance, and forward the requests to
+this instance from your production master (aggregator) instance without
+interfering with production work. Master searchd will attempt to connect
+and query blackhole agent normally, but it will neither wait nor process
+any responses. Also, all network errors on blackhole agents will be
+ignored. The value format is completely identical to regular agent
+directive.
+
+Example:
+
+   | agent_blackhole = testbox:3312:testindex1,testindex2
+
+9.2.30. agent_connect_timeout
 -----------------------------
 
 Remote agent connection timeout, in milliseconds. Optional, default is 1000
@@ -4835,7 +4904,7 @@ Example:
 
    | agent_connect_timeout = 300
 
-9.2.29. agent_query_timeout
+9.2.31. agent_query_timeout
 ---------------------------
 
 Remote agent query timeout, in milliseconds. Optional, default is 3000 (ie.
@@ -4852,7 +4921,7 @@ Example:
 
    | agent_query_timeout = 10000 # our query can be long, allow up to 10 sec
 
-9.2.30. preopen
+9.2.32. preopen
 ---------------
 
 Whether to pre-open all index files, or open them per each query. Optional,
@@ -4868,9 +4937,123 @@ rotation under high load. On the other hand, when serving many indexes
 (100s to 1000s), it still might be desired to open the on per-query basis
 in order to save file descriptors.
 
+This directive does not affect indexer in any way, it only affects searchd.
+
 Example:
 
    | preopen = 1
+
+9.2.33. ondisk_dict
+-------------------
+
+Whether to keep the dictionary file (.spi) for this index on disk, or
+precache it in RAM. Optional, default is 0 (precache in RAM).
+
+The dictionary (.spi) can be either kept on RAM or on disk. The default is
+to fully cache it in RAM. That improves performance, but might cause too
+much RAM pressure, especially if prefixes or infixes were used. Enabling
+ondisk_dict results in 1 additional disk IO per keyword per query, but
+reduces memory footprint.
+
+This directive does not affect indexer in any way, it only affects searchd.
+
+Example:
+
+   | ondisk_dict = 1
+
+9.2.34. inplace_enable
+----------------------
+
+Whether to enable in-place index inversion. Optional, default is 0 (use
+separate temporary files).
+
+inplace_enable greatly reduces indexing disk footprint, at a cost of
+slightly slower indexing (it uses around 2x less disk, but yields around
+90-95% the original performance).
+
+Indexing involves two major phases. The first phase collects, processes,
+and partially sorts documents by keyword, and writes the intermediate
+result to temporary files (.tmp*). The second phase fully sorts the
+documents, and creates the final index files. Thus, rebuilding a production
+index on the fly involves around 3x peak disk footprint: 1st copy for the
+intermediate temporary files, 2nd copy for newly constructed copy, and 3rd
+copy for the old index that will be serving production queries in the
+meantime. (Intermediate data is comparable in size to the final index.)
+That might be too much disk footprint for big data collections, and
+inplace_enable allows to reduce it. When enabled, it reuses the temporary
+files, outputs the final data back to them, and renames them on completion.
+However, this might require additional temporary data chunk relocation,
+which is where the performance impact comes from.
+
+This directive does not affect searchd in any way, it only affects indexer.
+
+Example:
+
+   | inplace_enable = 1
+
+9.2.35. inplace_hit_gap
+-----------------------
+
+In-place inversion fine-tuning option. Controls preallocated hitlist gap
+size. Optional, default is 0.
+
+This directive does not affect searchd in any way, it only affects indexer.
+
+Example:
+
+   | inplace_hit_gap = 1M
+
+9.2.36. inplace_docinfo_gap
+---------------------------
+
+In-place inversion fine-tuning option. Controls preallocated docinfo gap
+size. Optional, default is 0.
+
+This directive does not affect searchd in any way, it only affects indexer.
+
+Example:
+
+   | inplace_docinfo_gap = 1M
+
+9.2.37. inplace_reloc_factor
+----------------------------
+
+In-place inversion fine-tuning option. Controls relocation buffer size
+within indexing memory arena. Optional, default is 0.1.
+
+This directive does not affect searchd in any way, it only affects indexer.
+
+Example:
+
+   | inplace_reloc_factor = 0.1
+
+9.2.38. inplace_write_factor
+----------------------------
+
+In-place inversion fine-tuning option. Controls in-place write buffer size
+within indexing memory arena. Optional, default is 0.1.
+
+This directive does not affect searchd in any way, it only affects indexer.
+
+Example:
+
+   | inplace_write_factor = 0.1
+
+9.2.39. index_exact_words
+-------------------------
+
+Whether to index the original keywords along with the stemmed/remapped
+versions. Optional, default is 0 (do not index).
+
+When enabled, index_exact_words forces indexer to put the raw keywords in
+the index along with the stemmed versions. That, in turn, enables exact
+form operator in the query language to work. This impacts the index size
+and the indexing time. However, searching performance is not impacted at
+all.
+
+Example:
+
+   | index_exact_words = 1
 
 9.3. indexer program configuration options
 ------------------------------------------
@@ -5191,6 +5374,95 @@ those intervals is set with attr_flush_period, in seconds.
 
 It defaults to 0, which disables the periodic flushing, but flushing will
 still occur at normal shut-down.
+
+Example:
+
+   | attr_flush_period = 900 # persist updates to disk every 15 minutes
+
+9.4.15. ondisk_dict_default
+---------------------------
+
+Instance-wide defaults for ondisk_dict directive. Optional, default it
+0 (precache dictionaries in RAM).
+
+This directive lets you specify the default value of ondisk_dict for all
+the indexes served by this copy of searchd. Per-index directive take
+precedence, and will overwrite this instance-wide default value, allowing
+for fine-grain control.
+
+Example:
+
+   | ondisk_dict_default = 1 # keep all dictionaries on disk
+
+9.4.16. max_packet_size
+-----------------------
+
+Maximum allowed network packet size. Limits both query packets from
+clients, and response packets from remote agents in distributed
+environment. Only used for internal sanity checks, does not directly affect
+RAM use or performance. Optional, default is 8M.
+
+Example:
+
+   | max_packet_size = 32M
+
+9.4.17. mva_updates_pool
+------------------------
+
+Shared pool size for in-memory MVA updates storage. Optional, default size
+is 1M.
+
+This setting controls the size of the shared storage pool for updated MVA
+values. Specifying 0 for the size disable MVA updates at all. Once the pool
+size limit is hit, MVA update attempts will result in an error. However,
+updates on regular (scalar) attributes will still work. Due to internal
+technical difficulties, currently it is not possible to store (flush) any
+updates on indexes where MVA were updated; though this might be implemented
+in the future. In the meantime, MVA updates are intended to be used as
+a measure to quickly catchup with latest changes in the database until the
+next index rebuild; not as a persistent storage mechanism.
+
+Example:
+
+   | mva_updates_pool = 16M
+
+9.4.18. crash_log_path
+----------------------
+
+Path (formally prefix) for the crash log files. Optional, default is empty
+(do not create crash logs).
+
+This is a debugging setting, to help catch rare offending queries causing
+crashes without otherwise affecting production instances. When enabled,
+searchd will intercept crash signals such as SIGSEGV, and dump offending
+query packets to files named "crash_log_path.PID", where PID is crashed
+process ID.
+
+Example:
+
+   | crash_log_path = /home/sphinx/log/crashlog
+
+9.4.19. max_filters
+-------------------
+
+Maximum allowed per-query filter count. Only used for internal sanity
+checks, does not directly affect RAM use or performance. Optional, default
+is 256.
+
+Example:
+
+   | max_filters = 1024
+
+9.4.20. max_filter_values
+-------------------------
+
+Maximum allowed per-filter values count. Only used for internal sanity
+checks, does not directly affect RAM use or performance. Optional, default
+is 4096.
+
+Example:
+
+   | max_filter_values = 16384
 
 A. Sphinx revision history
 ==========================

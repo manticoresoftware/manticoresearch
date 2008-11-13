@@ -2,7 +2,7 @@
 
 
 <articleinfo>
-<title>Sphinx 0.9.8.1 reference manual</title>
+<title>Sphinx 0.9.9 reference manual</title>
 <subtitle>Free open-source SQL full-text search engine</subtitle>
 <copyright>
 <year>2001-2008</year>
@@ -1124,6 +1124,7 @@ hello !world
 <listitem>phrase search operator: <programlisting>"hello world"</programlisting></listitem>
 <listitem>proximity search operator: <programlisting>"hello world"~10</programlisting></listitem>
 <listitem>quorum matching operator: <programlisting>"the world is a wonderful place"/3</programlisting></listitem>
+<listitem>exact form operator: <programlisting>raining =cats and =dogs</programlisting></listitem>
 </itemizedlist>
 
 Here's an example query which uses most of these operators:
@@ -1164,16 +1165,28 @@ The example above ("the world is a wonderful place"/3) will match all documents
 that have at least 3 of the 6 specified words.
 </para>
 <para>
-Nested brackets, as in queries like
-<programlisting>
-aaa | ( bbb ccc | ( ddd eee ) )
-</programlisting>
-are not allowed yet, but this will be fixed.
+Exact form operator will match the document only if the keyword occurred
+in exactly the specified form. The default behaviour is to match the document
+if the stemmed keyword matches. For instance, "runs" query will match both
+the document that contains "runs" <emphasis>and</emphasis> the document that
+contains "running", because both forms stem to just "run" - while "=runs"
+query will only match the first document. Exact form operator requires
+<link linkend="conf-index-exact-words">index_exact_words</link> option to be enabled.
+The operator affects the keywords, and thus can be used within phrase,
+proximity, or quorum operators.
 </para>
 <para>
-Negation (ie. operator NOT) is only allowed on top level and not within
-brackets (ie. groups). This isn't going to change, because supporting nested
-negations would make phrase ranking implementation way too complicated.
+Starting with 0.9.9, arbitrarily nested brackets and negations are allowed.
+However, the query must be possible to compute without involving an implicit
+list of all documents:
+<programlisting>
+// correct query
+aaa -(bbb -(ccc ddd))
+
+// queries that are non-computable
+-aaa
+aaa | -bbb
+</programlisting>
 </para>
 </sect2>
 
@@ -2568,7 +2581,9 @@ to all agents.
 The updates only work with <code>docinfo=extern</code> storage strategy.
 They are very fast because they're working fully in RAM, but they can also
 be made persistent: updates are saved on disk on clean <filename>searchd</filename>
-shutdown initiated by SIGTERM signal.
+shutdown initiated by SIGTERM signal. With additional restrictions, updates
+are also possible on MVA attributes; refer to <link linkend="conf-mva-updates-pool">mva_updates_pool</link>
+directive for details.
 </para>
 <para>
 Usage example:
@@ -3450,7 +3465,7 @@ sql_range_step = 1000
 </sect3>
 
 
-<sect3 id=""><title>sql_query_killlist</title>
+<sect3 id="conf-sql-query-killlist"><title>sql_query_killlist</title>
 <para>
 Kill-list query.
 Optional, default is empty (no query).
@@ -3779,13 +3794,6 @@ sql_query_info = SELECT * FROM documents WHERE id=$id
 </programlisting>
 </sect3>
 
-<!-- TODO: 
-unpack_zlib = zlib
-unpack_mysqlcompress = compressed_column
-unpack_mysqlcompress = compressed_column_2
-
-unpack_mysqlcompress_maxsize = 16M
--->
 
 <sect3 id="conf-xmlpipe-command"><title>xmlpipe_command</title>
 <para>
@@ -4982,7 +4990,7 @@ local = chunk2
 
 <sect3 id="conf-agent"><title>agent</title>
 <para>
-Remote agents and indexes declaration in the <link linkend="distributed">distributed index</link>.
+Remote agent declaration in the <link linkend="distributed">distributed index</link>.
 Multi-value, optional, default is empty.
 </para>
 <para>
@@ -5049,6 +5057,30 @@ agent = searchbox2:3312:chunk3,chunk4 # search remote indexes
 </sect3>
 
 
+<sect3 id="conf-agent-blackhole"><title>agent_blackhole</title>
+<para>
+Remote blackhole agent declaration in the <link linkend="distributed">distributed index</link>.
+Multi-value, optional, default is empty.
+</para>
+<para>
+<option>agent_blackhole</option> lets you fire-and-forget queries
+to remote agents. That is useful for debugging (or just testing)
+production clusters: you can setup a separate debugging/testing searchd
+instance, and forward the requests to this instance from your production
+master (aggregator) instance without interfering with production work.
+Master searchd will attempt to connect and query blackhole agent
+normally, but it will neither wait nor process any responses.
+Also, all network errors on blackhole agents will be ignored.
+The value format is completely identical to regular
+<link linkend="conf-agent">agent</link> directive.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+agent_blackhole = testbox:3312:testindex1,testindex2
+</programlisting>
+</sect3>
+
+
 <sect3 id="conf-agent-connect-timeout"><title>agent_connect_timeout</title>
 <para>
 Remote agent connection timeout, in milliseconds.
@@ -5104,9 +5136,161 @@ index rotation under high load. On the other hand, when serving many indexes
 (100s to 1000s), it still might be desired to open the on per-query basis
 in order to save file descriptors.
 </para>
+<para>
+This directive does not affect <filename>indexer</filename> in any way,
+it only affects <filename>searchd</filename>.
+</para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
 preopen = 1
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-ondisk-dict"><title>ondisk_dict</title>
+<para>
+Whether to keep the dictionary file (.spi) for this index on disk, or precache it in RAM.
+Optional, default is 0 (precache in RAM).
+</para>
+<para>
+The dictionary (.spi) can be either kept on RAM or on disk. The default
+is to fully cache it in RAM. That improves performance, but might cause
+too much RAM pressure, especially if prefixes or infixes were used.
+Enabling <option>ondisk_dict</option> results in 1 additional disk IO
+per keyword per query, but reduces memory footprint.
+</para>
+<para>
+This directive does not affect <filename>indexer</filename> in any way,
+it only affects <filename>searchd</filename>.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+ondisk_dict = 1
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-inplace-enable"><title>inplace_enable</title>
+<para>
+Whether to enable in-place index inversion.
+Optional, default is 0 (use separate temporary files).
+</para>
+<para>
+<option>inplace_enable</option> greatly reduces indexing disk footprint,
+at a cost of slightly slower indexing (it uses around 2x less disk,
+but yields around 90-95% the original performance).
+</para>
+<para>
+Indexing involves two major phases. The first phase collects,
+processes, and partially sorts documents by keyword, and writes
+the intermediate result to temporary files (.tmp*). The second
+phase fully sorts the documents, and creates the final index
+files. Thus, rebuilding a production index on the fly involves
+around 3x peak disk footprint: 1st copy for the intermediate
+temporary files, 2nd copy for newly constructed copy, and 3rd copy
+for the old index that will be serving production queries in the meantime.
+(Intermediate data is comparable in size to the final index.)
+That might be too much disk footprint for big data collections,
+and <option>inplace_enable</option> allows to reduce it.
+When enabled, it reuses the temporary files, outputs the
+final data back to them, and renames them on completion.
+However, this might require additional temporary data chunk
+relocation, which is where the performance impact comes from.
+</para>
+<para>
+This directive does not affect <filename>searchd</filename> in any way,
+it only affects <filename>indexer</filename>.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+inplace_enable = 1
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-inplace-hit-gap"><title>inplace_hit_gap</title>
+<para>
+<link linkend="conf-inplace-enable">In-place inversion</link> fine-tuning option.
+Controls preallocated hitlist gap size.
+Optional, default is 0.
+</para>
+<para>
+This directive does not affect <filename>searchd</filename> in any way,
+it only affects <filename>indexer</filename>.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+inplace_hit_gap = 1M
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-inplace-docinfo-gap"><title>inplace_docinfo_gap</title>
+<para>
+<link linkend="conf-inplace-enable">In-place inversion</link> fine-tuning option.
+Controls preallocated docinfo gap size.
+Optional, default is 0.
+</para>
+<para>
+This directive does not affect <filename>searchd</filename> in any way,
+it only affects <filename>indexer</filename>.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+inplace_docinfo_gap = 1M
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-inplace-reloc-factor"><title>inplace_reloc_factor</title>
+<para>
+<link linkend="conf-inplace-reloc-factor">In-place inversion</link> fine-tuning option.
+Controls relocation buffer size within indexing memory arena.
+Optional, default is 0.1.
+</para>
+<para>
+This directive does not affect <filename>searchd</filename> in any way,
+it only affects <filename>indexer</filename>.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+inplace_reloc_factor = 0.1
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-inplace-write-factor"><title>inplace_write_factor</title>
+<para>
+<link linkend="conf-inplace-write-factor">In-place inversion</link> fine-tuning option.
+Controls in-place write buffer size within indexing memory arena.
+Optional, default is 0.1.
+</para>
+<para>
+This directive does not affect <filename>searchd</filename> in any way,
+it only affects <filename>indexer</filename>.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+inplace_write_factor = 0.1
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-index-exact-words"><title>index_exact_words</title>
+<para>
+Whether to index the original keywords along with the stemmed/remapped versions.
+Optional, default is 0 (do not index).
+</para>
+<para>
+When enabled, <option>index_exact_words</option> forces <filename>indexer</filename>
+to put the raw keywords in the index along with the stemmed versions. That, in turn,
+enables <link linkend="extended-syntax">exact form operator</link> in the query language to work.
+This impacts the index size and the indexing time. However, searching performance
+is not impacted at all.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+index_exact_words = 1
 </programlisting>
 </sect3>
 
@@ -5486,7 +5670,6 @@ unlink_old = 0
 When calling <code>UpdateAttributes()</code> to update document attributes in
 real-time, changes are first written to the in-memory copy of attributes
 (<option>docinfo</option> must be set to <option>extern</option>).
-
 Then, once <filename>searchd</filename> shuts down normally (via <code>SIGTERM</code>
 being sent), the changes are written to disk.
 </para>
@@ -5497,30 +5680,113 @@ between those intervals is set with <option>attr_flush_period</option>, in secon
 <para>It defaults to 0, which disables the periodic flushing, but flushing will
 still occur at normal shut-down.
 </para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+attr_flush_period = 900 # persist updates to disk every 15 minutes
+</programlisting>
 </sect3>
 
-<!-- TODO add the following directives:
-	mva_updates_pool	= 1M
 
-	# max allowed network packet size
-	# limits both query packets from clients, and responses from agents
-	# optional, default size is 8M
-	max_packet_size		= 8M
+<sect3 id="conf-ondisk-dict-default"><title>ondisk_dict_default</title>
+<para>
+Instance-wide defaults for <link linkend="conf-ondisk-dict">ondisk_dict</link> directive.
+Optional, default it 0 (precache dictionaries in RAM).
+</para>
+<para>
+This directive lets you specify the default value of
+<link linkend="conf-ondisk-dict">ondisk_dict</link> for all the indexes
+served by this copy of <filename>searchd</filename>. Per-index directive
+take precedence, and will overwrite this instance-wide default value,
+allowing for fine-grain control.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+ondisk_dict_default = 1 # keep all dictionaries on disk
+</programlisting>
+</sect3>
 
-	# crash log path
-	# searchd will (try to) log crashed query to 'crash_log_path.PID' file
-	# optional, default is empty (do not create crash logs)
-	#
-	# crash_log_path		= @CONFDIR@/log/crash
 
-	# max allowed per-query filter count
-	# optional, default is 256
-	max_filters			= 256
+<sect3 id="conf-max-packet-size"><title>max_packet_size</title>
+<para>
+Maximum allowed network packet size.
+Limits both query packets from clients, and response packets from remote agents in distributed environment.
+Only used for internal sanity checks, does not directly affect RAM use or performance.
+Optional, default is 8M.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+max_packet_size = 32M
+</programlisting>
+</sect3>
 
-	# max allowed per-filter values count
-	# optional, default is 4096
-	max_filter_values	= 4096
--->
+
+<sect3 id="conf-mva-updates-pool"><title>mva_updates_pool</title>
+<para>
+Shared pool size for in-memory MVA updates storage.
+Optional, default size is 1M.
+</para>
+<para>
+This setting controls the size of the shared storage pool for updated MVA values.
+Specifying 0 for the size disable MVA updates at all. Once the pool size limit
+is hit, MVA update attempts will result in an error. However, updates on regular
+(scalar) attributes will still work. Due to internal technical difficulties,
+currently it is <b>not</b> possible to store (flush) <b>any</b> updates on indexes
+where MVA were updated; though this might be implemented in the future.
+In the meantime, MVA updates are intended to be used as a measure to quickly
+catchup with latest changes in the database until the next index rebuild;
+not as a persistent storage mechanism.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+mva_updates_pool = 16M
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-crash-log-path"><title>crash_log_path</title>
+<para>
+Path (formally prefix) for the crash log files.
+Optional, default is empty (do not create crash logs).
+</para>
+<para>
+This is a debugging setting, to help catch rare offending queries
+causing crashes without otherwise affecting production instances.
+When enabled, <filename>searchd</filename> will intercept crash signals
+such as SIGSEGV, and dump offending query packets to files named
+"crash_log_path.PID", where PID is crashed process ID.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+crash_log_path = /home/sphinx/log/crashlog
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-max-filters"><title>max_filters</title>
+<para>
+Maximum allowed per-query filter count.
+Only used for internal sanity checks, does not directly affect RAM use or performance.
+Optional, default is 256.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+max_filters = 1024
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-max-filter-values"><title>max_filter_values</title>
+<para>
+Maximum allowed per-filter values count.
+Only used for internal sanity checks, does not directly affect RAM use or performance.
+Optional, default is 4096.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+max_filter_values = 16384
+</programlisting>
+</sect3>
+
 
 </sect2>
 

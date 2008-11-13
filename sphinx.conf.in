@@ -408,9 +408,37 @@ index test1
 
 
 	# whether to preopen index data files on startup
-	# optional, default is 0 (do not preopen)
+	# optional, default is 0 (do not preopen), searchd-only
 	#
-	# preopen				= 1
+	# preopen					= 1
+
+
+	# whether to keep dictionary (.spi) on disk, or cache it in RAM
+	# optional, default is 0 (cache in RAM), searchd-only
+	#
+	# ondisk_dict				= 1
+
+
+	# whether to enable in-place inversion (2x less disk, 90-95% speed)
+	# optional, default is 0 (use separate temporary files), indexer-only
+	#
+	# inplace_enable			= 1
+
+
+	# in-place fine-tuning options
+	# optional, defaults are listed below
+	#
+	# inplace_hit_gap			= 0		# preallocated hitlist gap size
+	# inplace_docinfo_gap		= 0		# preallocated docinfo gap size
+	# inplace_reloc_factor	= 0.1	# relocation buffer size within arena
+	# inplace_write_factor	= 0.1	# write buffer size within arena
+
+
+	# whether to index original keywords along with stemmed versions
+	# enables "=exactform" operator to work
+	# optional, default is 0
+	#
+	# index_exact_words		= 1
 }
 
 
@@ -446,6 +474,12 @@ index dist1
 	agent				= localhost:3313:remote1
 	agent				= localhost:3314:remote2,remote3
 	# agent				= /var/run/searchd.sock:remote4
+
+	# blackhole remote agent, for debugging/testing
+	# network errors and search results will be ignored
+	#
+	# agent_blackhole		= testbox:3312:testindex1,testindex2
+
 
 	# remote agent connection timeout, milliseconds
 	# optional, default is 1000 ms, ie. 1 sec
@@ -484,14 +518,16 @@ indexer
 
 searchd
 {
-	# hostname, port or path to listen on
-	# optional, default is 0.0.0.0:3312 (ie. listen on all interfaces)
-
+	# hostname, port, or hostname:port, or /unix/socket/path to listen on
+	# multi-value, multiple listen points are allowed
+	# optional, default is 0.0.0.0:3312 (listen on all interfaces, port 3312)
+	#
 	# listen				= 127.0.0.1
 	# listen				= 192.168.0.1:3312
 	# listen				= 3312
 	# listen				= /var/run/searchd.sock
-	
+
+
 	# log file, searchd run info is logged here
 	# optional, default is 'searchd.log'
 	log					= @CONFDIR@/log/searchd.log
@@ -539,8 +575,15 @@ searchd
 	#
 	# attr_flush_period	= 900
 
+
+	# instance-wide ondisk_dict defaults (per-index value take precedence)
+	# optional, default is 0 (precache all dictionaries in RAM)
+	#
+	# ondisk_dict_default	= 1
+
+
 	# MVA updates pool size
-	# shared between all instances of searchd
+	# shared between all instances of searchd, disables attr flushes!
 	# optional, default size is 1M
 	mva_updates_pool	= 1M
 
@@ -554,6 +597,7 @@ searchd
 	# optional, default is empty (do not create crash logs)
 	#
 	# crash_log_path		= @CONFDIR@/log/crash
+
 
 	# max allowed per-query filter count
 	# optional, default is 256

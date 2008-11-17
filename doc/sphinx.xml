@@ -1119,12 +1119,13 @@ hello !world
 </programlisting>
 </listitem>
 <listitem>field search operator: <programlisting>@title hello @body world</programlisting></listitem>
+<listitem>field position limit modifier (introduced in version 0.9.9): <programlisting>@body[50] hello</programlisting></listitem>
 <listitem>multiple-field search operator: <programlisting>@(title, body) hello world</programlisting></listitem>
 <listitem>all-field search operator: <programlisting>@* hello</programlisting></listitem>
 <listitem>phrase search operator: <programlisting>"hello world"</programlisting></listitem>
 <listitem>proximity search operator: <programlisting>"hello world"~10</programlisting></listitem>
 <listitem>quorum matching operator: <programlisting>"the world is a wonderful place"/3</programlisting></listitem>
-<listitem>exact form operator: <programlisting>raining =cats and =dogs</programlisting></listitem>
+<listitem>exact form operator (introduced in version 0.9.9): <programlisting>raining =cats and =dogs</programlisting></listitem>
 </itemizedlist>
 
 Here's an example query which uses most of these operators:
@@ -1152,6 +1153,12 @@ means "looking for ( cat | dog | mouse )" and <emphasis>not</emphasis>
 "(looking for cat) | dog | mouse".
 </para>
 <para>
+Field position limit, introduced in version 0.9.9, additionaly restricts the searching
+to first N position within given field (or fields). For example, "@body[50] hello" will
+<b>not</b> match the documents where the keyword 'hello' occurs at position 51 and below
+in the body.
+</para>
+<para>
 Proximity distance is specified in words, adjusted for word count, and
 applies to all words within quotes. For instance, "cat dog mouse"~5 query
 means that there must be less than 8-word span which contains all 3 words,
@@ -1165,7 +1172,7 @@ The example above ("the world is a wonderful place"/3) will match all documents
 that have at least 3 of the 6 specified words.
 </para>
 <para>
-Exact form operator will match the document only if the keyword occurred
+Exact form operator, introduced in version 0.9.9, will match the document only if the keyword occurred
 in exactly the specified form. The default behaviour is to match the document
 if the stemmed keyword matches. For instance, "runs" query will match both
 the document that contains "runs" <emphasis>and</emphasis> the document that
@@ -1348,13 +1355,29 @@ The following operators and functions are supported. They are mimiced after MySQ
 The functions take a number of arguments depending on the specific function.
 <itemizedlist>
 <listitem>Operators: +, -, *, /, &lt;, &gt; &lt;=, &gt;=, =, &lt;&gt;.</listitem>
-<listitem>Unary (1-argument) functions: abs(), ceil(), floor(), sin(), cos(), ln(), log2(), log10(), exp(), sqrt().</listitem>
-<listitem>Binary (2-argument) functions: min(), max(), pow().</listitem>
-<listitem>Ternary (3-argument) functions: if().</listitem>
+<listitem>0-argument functions: NOW().</listitem>
+<listitem>Unary (1-argument) functions: ABS(), CEIL(), FLOOR(), SIN(), COS(), LN(), LOG2(), LOG10(), EXP(), SQRT(), BIGINT().</listitem>
+<listitem>Binary (2-argument) functions: MIN(), MAX(), POW(), IDIV().</listitem>
+<listitem>Ternary (3-argument) functions: IF().</listitem>
+<listitem>Variable argument count functions: INTERVAL(), IN().</listitem>
 </itemizedlist>
 </para>
 <para>
-All calculations are performed in single-precision, 32-bit IEEE 754 floating point format.
+Calculations can be performed in three different modes: (a) using single-precision,
+32-bit IEEE 754 floating point values (the default), (b) using signed 32-bit integers,
+(c) using 64-bit signed integers. The expression parser will automatically switch
+to integer mode if there are no operations the result in a floating point value.
+Otherwise, it will use the default floating point mode. For instance, "a+b"
+will be computed using 32-bit integers if both arguments are 32-bit integers;
+or using 64-bit integers if both arguments are integers but one of them is
+64-bit; or in floats otherwise. However, "a/b" or "sqrt(a)" will always be
+computed in floats, because these operations return non-integer result.
+To avoid the first, you can use IDIV(). Also, "a*b" will not be automatically
+promoted to 64-bit when the arguments are 32-bit. To enforce 64-bit results,
+you can use BIGINT(). (But note that if there are non-integer operations,
+BIGINT() will simply be ignored.)
+</para>
+<para>
 Comparison operators (eg. = or &lt;=) return 1.0 when the condition is true and 0.0 otherwise.
 For instance, <code>(a=b)+3</code> will evaluate to 4 when attribute 'a' is equal to attribute 'b', and to 3 when 'a' is not.
 Unlike MySQL, the equality comparisons (ie. = and &lt;&gt; operators) introduce a small equality threshold (1e-6 by default).
@@ -1378,6 +1401,35 @@ with zero <emphasis>without</emphasis> threshold by the <code>IF()</code> functi
 But its value will be slightly different from zero because of limited floating point
 calculations precision. Because of that, the comparison with 0.0 done by <code>IF()</code>
 will not pass, and the second variant will return 'a' as a result.
+</para>
+<para>
+BIGINT() function, introduced in version 0.9.9, forcibly promotes the integer argument to 64-bit type,
+and does nothing on floating point argument. It's intended to help enforce evaluation
+of certain expressions (such as "a*b") in 64-bit mode even though all the arguments
+are 32-bit.
+</para>
+<para>
+IDIV() functions performs an integer division on its 2 arguments. The result
+is integer as well, unlike "a/b" result.
+</para>
+<para>
+IN(expr,val1,val2,...), introduced in version 0.9.9, takes 2 or more arguments, and returns 1 if 1st argument
+(expr) is equal to any of the other arguments (val1..valN), or 0 otherwise.
+Currently, all the checked values (but not the expression itself!) are required
+to be constant. (Its technically possible to implement arbitrary expressions too,
+and that might be implemented in the future.) Constants are pre-sorted and then
+binary search is used, so IN() even against a big arbitrary list of constants
+will be very quick.
+</para>
+<para>
+INTERVAL(expr,point1,point2,point3,...), introduced in version 0.9.9, takes 2 or more arguments, and returns
+the index of the argument that is less than the first argument: it returns
+0 if expr&lt;point1, 1 if point1&lt;=expr&lt;point2, and so on.
+It is required that point1&lt;point2&lt;...&lt;pointN for this function
+to work correctly.
+</para>
+<para>
+NOW(), introduced in version 0.9.9, is a helper function that returns current timestamp as a 32-bit integer.
 </para>
 </sect2>
 
@@ -1920,6 +1972,17 @@ will only keep one entry per document ID.
 </sect3>
 
 
+<sect3 id="api-func-isconnecterror"><title>IsConnectError</title>
+<para><b>Prototype:</b> function IsConnectError ()</para>
+<para>
+Checks whether the last error was a network error on API side, or a remote error
+reported by searchd. Returns true if the last connection attempt to searchd failed on API side,
+false otherwise (if the error was remote, or there were no connection attempts at all).
+Introduced in version 0.9.9.
+</para>
+</sect3>
+
+
 </sect2>
 <sect2 id="api-funcgroup-general-query-settings"><title>General query settings</title>
 
@@ -1981,6 +2044,61 @@ separately.
 </para>
 </sect3>
 
+<sect3 id="api-func-setoverride"><title>SetOverride</title>
+<para><b>Prototype:</b> function SetOverride ( $attrname, $attrtype, $values )</para>
+<para>
+Sets temporary (per-query) per-document attribute value overrides.
+Only supports scalar attributes. $values must be a hash that maps document
+IDs to overridden attribute values. Introduced in version 0.9.9.
+</para>
+<para>
+Override feature lets you "temporary" update attribute values for some documents
+within a single query, leaving all other queries unaffected. This might be useful
+for personalized data. For example, assume you're implementing a personalized
+search function that wants to boost the posts that the user's friends recommend.
+Such data is not just dynamic, but also personal; so you can't simply put it
+in the index because you don't want everyone's searches affected. Overrides,
+on the other hand, are local to a single query and invisible to everyone else.
+So you can, say, setup a "friends_weight" value for every document, defaulting to 0,
+then temporary override it with 1 for documents 123, 456 and 789 (recommended by
+exactly the friends of current user), and use that value when ranking.
+</para>
+</sect3>
+
+
+<sect3 id="api-func-setselect"><title>SetSelect</title>
+<para><b>Prototype:</b> function SetSelect ( $clause )</para>
+<para>
+Sets the select clause, listing specific attributes to fetch, and <link linkend="sort-expr">expressions</link>
+to compute and fetch. Clause syntax mimics SQL. Introduced in version 0.9.9.</para>
+<para>
+SetSelect() is very similar to the part of a typical SQL query between SELECT and FROM.
+It lets you choose what attributes (columns) to fetch, and also what expressions
+over the columns to compute and fetch. A certain difference from SQL is that expressions
+<b>must</b> always be aliased to a correct identifier (consisting of letters and digits)
+using 'AS' keyword. SQL also lets you do that but does not require to. Sphinx enforces
+aliases so that the computation results can always be returned under a "normal" name
+in the result set, used in other clauses, etc. 
+</para>
+<para>
+Everything else is basically identical to SQL. Star ('*') is supported.
+Functions are supported. Arbitrary amount of expressions is supported.
+Computed expressions can be used for sorting, filtering, and grouping,
+just as the regular attributes.
+</para>
+<para>
+Expression sorting (<xref linkend="sort-expr"/>) and geodistance functions
+(<xref linkend="api-func-setgeoanchor"/>) are now internally implemented using
+this computed expressions mechanism, using magic names '@expr' and '@geodist'
+respectively.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+$cl->SetSelect ( "*, @weight+(user_karma+ln(pageviews))*0.1 AS myweight" );
+$cl->SetSelect ( "exp_years, salary_gbp*{$gbp_usd_rate} AS salary_usd, IF(age>40,1,0) AS over40" );
+</programlisting>
+</sect3>
+
 
 </sect2>
 <sect2 id="api-funcgroup-fulltext-query-settings"><title>Full-text search query settings</title>
@@ -2026,14 +2144,32 @@ accomplished by setting the appropriate ranking mode.
 <para>
 Currently implemented modes are:
 <itemizedlist>
-<listitem>SPH_RANK_PROXIMITY_BM25, default ranking mode which uses and combines
-	both phrase proximity and BM25 ranking.</listitem>
-<listitem>SPH_RANK_BM25, statistical ranking mode which uses BM25 ranking only (similar to
-	most other full-text engines). This mode is faster but may result in worse quality
-	on queries which contain more than 1 keyword.</listitem>
-<listitem>SPH_RANK_NONE, disabled ranking mode. This mode is the fastest.
-	It is essentially equivalent to boolean searching. A weight of 1 is assigned
-	to all matches.</listitem>
+<listitem>
+SPH_RANK_PROXIMITY_BM25, default ranking mode which uses and combines
+both phrase proximity and BM25 ranking.
+</listitem>
+<listitem>
+SPH_RANK_BM25, statistical ranking mode which uses BM25 ranking only (similar to
+most other full-text engines). This mode is faster but may result in worse quality
+on queries which contain more than 1 keyword.
+</listitem>
+<listitem>
+SPH_RANK_NONE, disabled ranking mode. This mode is the fastest.
+It is essentially equivalent to boolean searching. A weight of 1 is assigned
+to all matches.
+</listitem>
+<listitem>SPH_RANK_WORDCOUNT, ranking by keyword occurrences count. This ranker
+computes the amount of per-field keyword occurrences, then multiplies the
+amounts by field weights, then sums the resulting values for the final result.
+</listitem>
+<listitem>
+SPH_RANK_PROXIMITY, added in version 0.9.9, returns raw phrase proximity
+value as a result. This mode is internally used to emulate SPH_MATCH_ALL queries.
+</listitem>
+<listitem>
+SPH_RANK_MATCHANY, added in version 0.9.9, returns rank as it was computed
+in SPH_MATCH_ANY mode ealier, and is internally used to emulate SPH_MATCH_ANY queries.
+</listitem>
 </itemizedlist>
 </para>
 </sect3>
@@ -2515,7 +2651,7 @@ morphology, wordforms) from given index will be used.
 <code>$words</code> is a string that contains the keywords to highlight. They will
 be processed with respect to index settings. For instance, if English stemming
 is enabled in the index, "shoes" will be highlighted even if keyword is "shoe".
-Keywords can contain wildcards, that work similarly to
+Starting with version 0.9.9, keywords can contain wildcards, that work similarly to
 <link linkend="conf-enable-star">star-syntax</link> available in queries.
 <code>$opts</code> is a hash which contains additional optional highlighting parameters:
 <variablelist>
@@ -2959,7 +3095,7 @@ Second, less data would need to be packed by searchd, transferred
 and unpacked by SphinxSE.
 </para>
 <para>
-Additional query info besides result set could be
+Starting with version 0.9.9, additional query info besides result set could be
 retrieved with <code>SHOW ENGINE SPHINX STATUS</code> statement:
 <programlisting>
 mysql> SHOW ENGINE SPHINX STATUS;
@@ -3470,6 +3606,7 @@ sql_range_step = 1000
 Kill-list query.
 Optional, default is empty (no query).
 Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
+Introduced in version 0.9.9.
 </para>
 <para>
 This query is expected to return a number of 1-column rows, each containing
@@ -3564,6 +3701,7 @@ Multi-value (there might be multiple attributes declared), optional.
 Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
 Note that unlike <link linkend="conf-sql-attr-uint">sql_attr_uint</link>,
 these values are <b>signed</b>.
+Introduced in version 0.9.9.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
@@ -3923,6 +4061,7 @@ xmlpipe_attr_multi = taglist
 MS SQL Windows authentication flag.
 Boolean, optional, default value is 0 (false).
 Applies to <option>mssql</option> source type only.
+Introduced in version 0.9.9.
 </para>
 <para>
 Whether to use currently logged in Windows account credentials for
@@ -3942,6 +4081,7 @@ mssql_winauth = 1
 MS SQL encoding type flag.
 Boolean, optional, default value is 0 (false).
 Applies to <option>mssql</option> source type only.
+Introduced in version 0.9.9.
 </para>
 <para>
 Whether to ask for Unicode or single-byte data when querying MS SQL Server.
@@ -3963,6 +4103,7 @@ mssql_unicode = 1
 Columns to unpack using zlib (aka deflate, aka gunzip).
 Multi-value, optional, default value is empty list of columns.
 Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
+Introduced in version 0.9.9.
 </para>
 <para>
 Columns specified using this directive will be unpacked by <filename>indexer</filename>
@@ -3983,6 +4124,7 @@ unpack_zlib = col2
 Columns to unpack using MySQL UNCOMPRESS() algorithm.
 Multi-value, optional, default value is empty list of columns.
 Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
+Introduced in version 0.9.9.
 </para>
 <para>
 Columns specified using this directive will be unpacked by <filename>indexer</filename>
@@ -4002,6 +4144,7 @@ unpack_mysqlcompress = description_compressed
 <para>
 Buffer size for UNCOMPRESS()ed data.
 Optional, default value is 16M.
+Introduced in version 0.9.9.
 </para>
 <para>
 When using <link linkend="conf-unpack-mysqlcompress">unpack_mysqlcompress</link>,
@@ -4260,6 +4403,7 @@ morphology = stem_en, libstemmer_sv
 <para>
 Minimum word length at which to enable stemming.
 Optional, default is 1 (stem everything).
+Introduced in version 0.9.9.
 </para>
 <para>
 Stemmers are not perfect, and might sometimes produce undesired results.
@@ -4362,6 +4506,16 @@ There is bundled <filename>spelldump</filename> utility that
 helps you create a dictionary file in the format Sphinx can read
 from source <filename>.dict</filename> and <filename>.aff</filename>
 dictionary files in <filename>ispell</filename> format.
+</para>
+<para>
+Starting with version 0.9.9, you can map several source words
+to a single destination word. Because the work happens on tokens,
+not the source text, differences in whitespace and markup are ignored.
+<programlisting>
+core 2 duo &gt; c2d
+e6600 &gt; c2d
+core 2duo &gt; c2d
+</programlisting>
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
@@ -5061,6 +5215,7 @@ agent = searchbox2:3312:chunk3,chunk4 # search remote indexes
 <para>
 Remote blackhole agent declaration in the <link linkend="distributed">distributed index</link>.
 Multi-value, optional, default is empty.
+Introduced in version 0.9.9.
 </para>
 <para>
 <option>agent_blackhole</option> lets you fire-and-forget queries
@@ -5151,6 +5306,7 @@ preopen = 1
 <para>
 Whether to keep the dictionary file (.spi) for this index on disk, or precache it in RAM.
 Optional, default is 0 (precache in RAM).
+Introduced in version 0.9.9.
 </para>
 <para>
 The dictionary (.spi) can be either kept on RAM or on disk. The default
@@ -5174,6 +5330,7 @@ ondisk_dict = 1
 <para>
 Whether to enable in-place index inversion.
 Optional, default is 0 (use separate temporary files).
+Introduced in version 0.9.9.
 </para>
 <para>
 <option>inplace_enable</option> greatly reduces indexing disk footprint,
@@ -5213,6 +5370,7 @@ inplace_enable = 1
 <link linkend="conf-inplace-enable">In-place inversion</link> fine-tuning option.
 Controls preallocated hitlist gap size.
 Optional, default is 0.
+Introduced in version 0.9.9.
 </para>
 <para>
 This directive does not affect <filename>searchd</filename> in any way,
@@ -5230,6 +5388,7 @@ inplace_hit_gap = 1M
 <link linkend="conf-inplace-enable">In-place inversion</link> fine-tuning option.
 Controls preallocated docinfo gap size.
 Optional, default is 0.
+Introduced in version 0.9.9.
 </para>
 <para>
 This directive does not affect <filename>searchd</filename> in any way,
@@ -5247,6 +5406,7 @@ inplace_docinfo_gap = 1M
 <link linkend="conf-inplace-reloc-factor">In-place inversion</link> fine-tuning option.
 Controls relocation buffer size within indexing memory arena.
 Optional, default is 0.1.
+Introduced in version 0.9.9.
 </para>
 <para>
 This directive does not affect <filename>searchd</filename> in any way,
@@ -5264,6 +5424,7 @@ inplace_reloc_factor = 0.1
 <link linkend="conf-inplace-write-factor">In-place inversion</link> fine-tuning option.
 Controls in-place write buffer size within indexing memory arena.
 Optional, default is 0.1.
+Introduced in version 0.9.9.
 </para>
 <para>
 This directive does not affect <filename>searchd</filename> in any way,
@@ -5280,6 +5441,7 @@ inplace_write_factor = 0.1
 <para>
 Whether to index the original keywords along with the stemmed/remapped versions.
 Optional, default is 0 (do not index).
+Introduced in version 0.9.9.
 </para>
 <para>
 When enabled, <option>index_exact_words</option> forces <filename>indexer</filename>
@@ -5391,6 +5553,7 @@ max_iosize = 1048576
 <para>
 This setting lets you specify IP address and port, or Unix-domain
 socket path, that <code>searchd</code> will listen on.
+Introduced in version 0.9.9.
 </para>
 <para>
 The informal grammar for <code>listen</code> setting is:
@@ -5672,6 +5835,7 @@ real-time, changes are first written to the in-memory copy of attributes
 (<option>docinfo</option> must be set to <option>extern</option>).
 Then, once <filename>searchd</filename> shuts down normally (via <code>SIGTERM</code>
 being sent), the changes are written to disk.
+Introduced in version 0.9.9.
 </para>
 <para>Starting with 0.9.9, it is possible to tell <filename>searchd</filename>
 to periodically write these changes back to disk, to avoid them being lost. The time
@@ -5691,6 +5855,7 @@ attr_flush_period = 900 # persist updates to disk every 15 minutes
 <para>
 Instance-wide defaults for <link linkend="conf-ondisk-dict">ondisk_dict</link> directive.
 Optional, default it 0 (precache dictionaries in RAM).
+Introduced in version 0.9.9.
 </para>
 <para>
 This directive lets you specify the default value of
@@ -5712,6 +5877,7 @@ Maximum allowed network packet size.
 Limits both query packets from clients, and response packets from remote agents in distributed environment.
 Only used for internal sanity checks, does not directly affect RAM use or performance.
 Optional, default is 8M.
+Introduced in version 0.9.9.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
@@ -5724,6 +5890,7 @@ max_packet_size = 32M
 <para>
 Shared pool size for in-memory MVA updates storage.
 Optional, default size is 1M.
+Introduced in version 0.9.9.
 </para>
 <para>
 This setting controls the size of the shared storage pool for updated MVA values.
@@ -5747,6 +5914,7 @@ mva_updates_pool = 16M
 <para>
 Path (formally prefix) for the crash log files.
 Optional, default is empty (do not create crash logs).
+Introduced in version 0.9.9.
 </para>
 <para>
 This is a debugging setting, to help catch rare offending queries
@@ -5767,6 +5935,7 @@ crash_log_path = /home/sphinx/log/crashlog
 Maximum allowed per-query filter count.
 Only used for internal sanity checks, does not directly affect RAM use or performance.
 Optional, default is 256.
+Introduced in version 0.9.9.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
@@ -5780,6 +5949,7 @@ max_filters = 1024
 Maximum allowed per-filter values count.
 Only used for internal sanity checks, does not directly affect RAM use or performance.
 Optional, default is 4096.
+Introduced in version 0.9.9.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
@@ -5812,6 +5982,52 @@ max_filter_values = 16384
 -->
 
 <appendix id="changelog"><title>Sphinx revision history</title>
+
+<sect2 id="rel099rc1"><title>Version 0.9.9-rc1, 17 nov 2008</title>
+<itemizedlist>
+<listitem>added <link linkend="conf-min-stemming-len">min_stemming_len</link> directive</listitem>
+<listitem>added <link linkend="api-func-isconnecterror">IsConnectError()</link> API call (helps distingusih API vs remote errors)</listitem>
+<listitem>added duplicate log messages filter to searchd</listitem>
+<listitem>added --nodetach debugging switch to searchd</listitem>
+<listitem>added blackhole agents support for debugging/testing (<link linkend="conf-agent-blackhole">agent_blackhole</link> directive)</listitem>
+<listitem>added <link linkend="conf-max-filters">max_filters</link>, <link linkend="conf-max-filter-values">max_filter_values</link> directives (were hardcoded before)</listitem>
+<listitem>added int64 expression evaluation path, automatic inference, and BIGINT() enforcer function</listitem>
+<listitem>added crash handler for debugging (<link linkend="conf-crash-log-path">crash_log_path</link> directive)</listitem>
+<listitem>added MS SQL (aka SQL Server) source support (Windows only, <link linkend="conf-mssql-winauth">mssql_winauth</link> and <link linkend="conf-mssql-unicode">mssql_unicode</link> directives)</listitem>
+<listitem>added indexer-side column unpacking feature (<link linkend="conf-unpack-zlib">unpack_zlib</link>, <link linkend="conf-unpack-mysqlcompress">unpack_mysqlcompress</link> directives)</listitem>
+<listitem>added nested brackers and NOTs support to <link linkend="extended-syntax">query language</link>, rewritten query parser</listitem>
+<listitem>added persistent connections support (<link linkend="api-func-open">Open()</link> and <link linkend="api-func-close">Close()</link> API calls)</listitem>
+<listitem>added <link linkend="conf-index-exact-words">index_exact_words</link> feature, and exact form operator to query language ("hello =world")</listitem>
+<listitem>added status variables support to SphinxSE (SHOW STATUS LIKE 'sphinx_%')</listitem>
+<listitem>added <link linkend="conf-max-packet-size">max_packet_size</link> directive (was hardcoded at 8M before)</listitem>
+<listitem>added UNIX socket support, and multi-interface support (<link linkend="conf-listen">listen</link> directive)</listitem>
+<listitem>added star-syntax support to <link linkend="api-func-buildexcerpts">BuildExcerpts()</link> API call</listitem>
+<listitem>added inplace inversion of .spa and .spp (<link linkend="conf-inplace-enable">inplace_enable</link> directive, 1.5-2x less disk space for indexing)</listitem>
+<listitem>added builtin Czech stemmer (morphology=stem_cz)</listitem>
+<listitem>added <link linkend="sort-expr">IDIV(), NOW(), INTERVAL(), IN() functions</link> to expressions</listitem>
+<listitem>added index-level early-reject based on filters</listitem>
+<listitem>added MVA updates feature (<link linkend="conf-mva-updates-pool">mva_updates_pool</link> directive)</listitem>
+<listitem>added select-list feature with computed expressions support (see <link linkend="api-func-setselect">SetSelect()</link> API call, test.php --select switch), protocol 1.22</listitem>
+<listitem>added integer expressions support (2x faster than float)</listitem>
+<listitem>added multiforms support (multiple source words in wordforms file)</listitem>
+<listitem>added <link linkend="api-func-setrankingmode">legacy rankers</link> (MATCH_ALL/MATCH_ANY/etc), removed legacy matching code (everything runs on V2 engine now)</listitem>
+<listitem>added <link linkend="extended-syntax">field position limit</link> modifier to field operator (syntax: @title[50] hello world)</listitem>
+<listitem>added killlist support (<link linkend="conf-sql-query-killlist">sql_query_killlist</link> directive, --merge-killlists switch)</listitem>
+<listitem>added on-disk SPI support (<link linkend="conf-ondisk-dict">ondisk_dict</link> directive)</listitem>
+<listitem>added indexer IO stats</listitem>
+<listitem>added periodic .spa flush (<link linkend="conf-attr-flush-period">attr_flush_period</link> directive)</listitem>
+<listitem>added config reload on SIGHUP</listitem>
+<listitem>added per-query attribute overrides feature (see <link linkend="api-func-setoverride">SetOverride()</link> API call); protocol 1.21</listitem>
+<listitem>added signed 64bit attrs support (<link linkend="conf-sql-attr-bigint">sql_attr_bigint</link> directive)</listitem>
+<listitem>improved HTML stripper to also skip PIs (&lt;? ... ?&gt;, such as &lt;?php ... ?&gt;)</listitem>
+<listitem>improved excerpts speed (upto 50x faster on big documents)</listitem>
+<listitem>fixed a short window of searchd inaccessibility on startup (started listen()ing too early before)</listitem>
+<listitem>fixed .spa loading on systems where read() is 2GB capped</listitem>
+<listitem>fixed infixes vs morphology issues</listitem>
+<listitem>fixed backslash escaping, added backslash to EscapeString()</listitem>
+<listitem>fixed handling of over-2GB dictionary files (.spi)</listitem>
+</itemizedlist>
+</sect2>
 
 <sect2 id="rel0981"><title>Version 0.9.8.1, 30 oct 2008</title>
 <itemizedlist>

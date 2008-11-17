@@ -63,10 +63,13 @@ Table of Contents
       6.1.4. SetRetries
       6.1.5. SetConnectTimeout
       6.1.6. SetArrayResult
+      6.1.7. IsConnectError
 
    6.2. General query settings
       6.2.1. SetLimits
       6.2.2. SetMaxQueryTime
+      6.2.3. SetOverride
+      6.2.4. SetSelect
 
    6.3. Full-text search query settings
       6.3.1. SetMatchMode
@@ -1236,6 +1239,10 @@ matching mode:
 
       | @title hello @body world
 
+   * field position limit modifier (introduced in version 0.9.9):
+
+      | @body[50] hello
+
    * multiple-field search operator:
 
       | @(title, body) hello world
@@ -1256,7 +1263,7 @@ matching mode:
 
       | "the world is a wonderful place"/3
 
-   * exact form operator:
+   * exact form operator (introduced in version 0.9.9):
 
       | raining =cats and =dogs
 
@@ -1288,6 +1295,11 @@ OR operator precedence is higher than AND, so "looking for cat | dog |
 mouse" means "looking for ( cat | dog | mouse )" and not "(looking for cat)
 | dog | mouse".
 
+Field position limit, introduced in version 0.9.9, additionaly restricts
+the searching to first N position within given field (or fields). For
+example, "@body[50] hello" will not match the documents where the keyword
+'hello' occurs at position 51 and below in the body.
+
 Proximity distance is specified in words, adjusted for word count, and
 applies to all words within quotes. For instance, "cat dog mouse"~5 query
 means that there must be less than 8-word span which contains all 3 words,
@@ -1299,14 +1311,15 @@ match those documents that pass a given threshold of given words. The
 example above ("the world is a wonderful place"/3) will match all documents
 that have at least 3 of the 6 specified words.
 
-Exact form operator will match the document only if the keyword occurred in
-exactly the specified form. The default behaviour is to match the document
-if the stemmed keyword matches. For instance, "runs" query will match both
-the document that contains "runs" and the document that contains "running",
-because both forms stem to just "run" - while "=runs" query will only match
-the first document. Exact form operator requires index_exact_words option
-to be enabled. The operator affects the keywords, and thus can be used
-within phrase, proximity, or quorum operators.
+Exact form operator, introduced in version 0.9.9, will match the document
+only if the keyword occurred in exactly the specified form. The default
+behaviour is to match the document if the stemmed keyword matches. For
+instance, "runs" query will match both the document that contains "runs"
+and the document that contains "running", because both forms stem to just
+"run" - while "=runs" query will only match the first document. Exact form
+operator requires index_exact_words option to be enabled. The operator
+affects the keywords, and thus can be used within phrase, proximity, or
+quorum operators.
 
 Starting with 0.9.9, arbitrarily nested brackets and negations are allowed.
 However, the query must be possible to compute without involving an
@@ -1463,19 +1476,34 @@ MySQL. The functions take a number of arguments depending on the specific
 function.
 
    * Operators: +, -, *, /, <, > <=, >=, =, <>.
-   * Unary (1-argument) functions: abs(), ceil(), floor(), sin(), cos(),
-     ln(), log2(), log10(), exp(), sqrt().
-   * Binary (2-argument) functions: min(), max(), pow().
-   * Ternary (3-argument) functions: if().
+   * 0-argument functions: NOW().
+   * Unary (1-argument) functions: ABS(), CEIL(), FLOOR(), SIN(), COS(),
+     LN(), LOG2(), LOG10(), EXP(), SQRT(), BIGINT().
+   * Binary (2-argument) functions: MIN(), MAX(), POW(), IDIV().
+   * Ternary (3-argument) functions: IF().
+   * Variable argument count functions: INTERVAL(), IN().
 
-All calculations are performed in single-precision, 32-bit IEEE 754
-floating point format. Comparison operators (eg. = or <=) return 1.0 when
-the condition is true and 0.0 otherwise. For instance, (a=b)+3 will
-evaluate to 4 when attribute 'a' is equal to attribute 'b', and to 3 when
-'a' is not. Unlike MySQL, the equality comparisons (ie. = and <> operators)
-introduce a small equality threshold (1e-6 by default). If the difference
-between compared values is within the threshold, they will be considered
-equal.
+Calculations can be performed in three different modes: (a) using
+single-precision, 32-bit IEEE 754 floating point values (the default), (b)
+using signed 32-bit integers, (c) using 64-bit signed integers. The
+expression parser will automatically switch to integer mode if there are no
+operations the result in a floating point value. Otherwise, it will use the
+default floating point mode. For instance, "a+b" will be computed using
+32-bit integers if both arguments are 32-bit integers; or using 64-bit
+integers if both arguments are integers but one of them is 64-bit; or in
+floats otherwise. However, "a/b" or "sqrt(a)" will always be computed in
+floats, because these operations return non-integer result. To avoid the
+first, you can use IDIV(). Also, "a*b" will not be automatically promoted
+to 64-bit when the arguments are 32-bit. To enforce 64-bit results, you can
+use BIGINT(). (But note that if there are non-integer operations, BIGINT()
+will simply be ignored.)
+
+Comparison operators (eg. = or <=) return 1.0 when the condition is true
+and 0.0 otherwise. For instance, (a=b)+3 will evaluate to 4 when attribute
+'a' is equal to attribute 'b', and to 3 when 'a' is not. Unlike MySQL, the
+equality comparisons (ie. = and <> operators) introduce a small equality
+threshold (1e-6 by default). If the difference between compared values is
+within the threshold, they will be considered equal.
 
 All unary and binary functions are straightforward, they behave just like
 their mathematical counterparts. But IF() behavior needs to be explained in
@@ -1497,6 +1525,32 @@ zero without threshold by the IF() function itself. But its value will be
 slightly different from zero because of limited floating point calculations
 precision. Because of that, the comparison with 0.0 done by IF() will not
 pass, and the second variant will return 'a' as a result.
+
+BIGINT() function, introduced in version 0.9.9, forcibly promotes the
+integer argument to 64-bit type, and does nothing on floating point
+argument. It's intended to help enforce evaluation of certain expressions
+(such as "a*b") in 64-bit mode even though all the arguments are 32-bit.
+
+IDIV() functions performs an integer division on its 2 arguments. The
+result is integer as well, unlike "a/b" result.
+
+IN(expr,val1,val2,...), introduced in version 0.9.9, takes 2 or more
+arguments, and returns 1 if 1st argument (expr) is equal to any of the
+other arguments (val1..valN), or 0 otherwise. Currently, all the checked
+values (but not the expression itself!) are required to be constant. (Its
+technically possible to implement arbitrary expressions too, and that might
+be implemented in the future.) Constants are pre-sorted and then binary
+search is used, so IN() even against a big arbitrary list of constants will
+be very quick.
+
+INTERVAL(expr,point1,point2,point3,...), introduced in version 0.9.9, takes
+2 or more arguments, and returns the index of the argument that is less
+than the first argument: it returns 0 if expr<point1, 1 if
+point1<=expr<point2, and so on. It is required that
+point1<point2<...<pointN for this function to work correctly.
+
+NOW(), introduced in version 0.9.9, is a helper function that returns
+current timestamp as a 32-bit integer.
 
 4.6. Grouping (clustering) search results
 -----------------------------------------
@@ -2256,6 +2310,16 @@ result sets may contain duplicate document IDs. Thus they need to be
 returned as plain arrays, because hashes will only keep one entry per
 document ID.
 
+6.1.7. IsConnectError
+---------------------
+
+Prototype: function IsConnectError ()
+
+Checks whether the last error was a network error on API side, or a remote
+error reported by searchd. Returns true if the last connection attempt to
+searchd failed on API side, false otherwise (if the error was remote, or
+there were no connection attempts at all). Introduced in version 0.9.9.
+
 6.2. General query settings
 ---------------------------
 
@@ -2312,6 +2376,60 @@ once that much time has elapsed. Note that if you're performing a search
 which queries several local indexes, this limit applies to each index
 separately.
 
+6.2.3. SetOverride
+------------------
+
+Prototype: function SetOverride ( $attrname, $attrtype, $values )
+
+Sets temporary (per-query) per-document attribute value overrides. Only
+supports scalar attributes. $values must be a hash that maps document IDs
+to overridden attribute values. Introduced in version 0.9.9.
+
+Override feature lets you "temporary" update attribute values for some
+documents within a single query, leaving all other queries unaffected. This
+might be useful for personalized data. For example, assume you're
+implementing a personalized search function that wants to boost the posts
+that the user's friends recommend. Such data is not just dynamic, but also
+personal; so you can't simply put it in the index because you don't want
+everyone's searches affected. Overrides, on the other hand, are local to
+a single query and invisible to everyone else. So you can, say, setup
+a "friends_weight" value for every document, defaulting to 0, then
+temporary override it with 1 for documents 123, 456 and 789 (recommended by
+exactly the friends of current user), and use that value when ranking.
+
+6.2.4. SetSelect
+----------------
+
+Prototype: function SetSelect ( $clause )
+
+Sets the select clause, listing specific attributes to fetch, and
+expressions to compute and fetch. Clause syntax mimics SQL. Introduced in
+version 0.9.9.
+
+SetSelect() is very similar to the part of a typical SQL query between
+SELECT and FROM. It lets you choose what attributes (columns) to fetch, and
+also what expressions over the columns to compute and fetch. A certain
+difference from SQL is that expressions must always be aliased to a correct
+identifier (consisting of letters and digits) using 'AS' keyword. SQL also
+lets you do that but does not require to. Sphinx enforces aliases so that
+the computation results can always be returned under a "normal" name in the
+result set, used in other clauses, etc.
+
+Everything else is basically identical to SQL. Star ('*') is supported.
+Functions are supported. Arbitrary amount of expressions is supported.
+Computed expressions can be used for sorting, filtering, and grouping, just
+as the regular attributes.
+
+Expression sorting (Section 4.5, <<SPH_SORT_EXPR mode>>) and geodistance
+functions (Section 6.4.5, <<SetGeoAnchor>>) are now internally implemented
+using this computed expressions mechanism, using magic names '@expr' and
+'@geodist' respectively.
+
+Example:
+
+   | $cl->SetSelect ( "*, @weight+(user_karma+ln(pageviews))*0.1 AS myweight" );
+   | $cl->SetSelect ( "exp_years, salary_gbp*{$gbp_usd_rate} AS salary_usd, IF(age>40,1,0) AS over40" );
+
 6.3. Full-text search query settings
 ------------------------------------
 
@@ -2360,6 +2478,16 @@ Currently implemented modes are:
    * SPH_RANK_NONE, disabled ranking mode. This mode is the fastest. It is
      essentially equivalent to boolean searching. A weight of 1 is assigned
      to all matches.
+   * SPH_RANK_WORDCOUNT, ranking by keyword occurrences count. This ranker
+     computes the amount of per-field keyword occurrences, then multiplies
+     the amounts by field weights, then sums the resulting values for the
+     final result.
+   * SPH_RANK_PROXIMITY, added in version 0.9.9, returns raw phrase
+     proximity value as a result. This mode is internally used to emulate
+     SPH_MATCH_ALL queries.
+   * SPH_RANK_MATCHANY, added in version 0.9.9, returns rank as it was
+     computed in SPH_MATCH_ANY mode ealier, and is internally used to
+     emulate SPH_MATCH_ANY queries.
 
 6.3.3. SetSortMode
 ------------------
@@ -2798,10 +2926,10 @@ $index is an index name string. Different settings (such as charset,
 morphology, wordforms) from given index will be used. $words is a string
 that contains the keywords to highlight. They will be processed with
 respect to index settings. For instance, if English stemming is enabled in
-the index, "shoes" will be highlighted even if keyword is "shoe". Keywords
-can contain wildcards, that work similarly to star-syntax available in
-queries. $opts is a hash which contains additional optional highlighting
-parameters:
+the index, "shoes" will be highlighted even if keyword is "shoe". Starting
+with version 0.9.9, keywords can contain wildcards, that work similarly to
+star-syntax available in queries. $opts is a hash which contains additional
+optional highlighting parameters:
 
 "before_match":
    A string to insert before a keyword match. Default is "<b>".
@@ -3166,8 +3294,8 @@ is for two reasons. First, Sphinx does a number of optimizations and
 performs better than MySQL on these tasks. Second, less data would need to
 be packed by searchd, transferred and unpacked by SphinxSE.
 
-Additional query info besides result set could be retrieved with SHOW
-ENGINE SPHINX STATUS statement:
+Starting with version 0.9.9, additional query info besides result set could
+be retrieved with SHOW ENGINE SPHINX STATUS statement:
 
    | mysql> SHOW ENGINE SPHINX STATUS;
    | +--------+-------+-------------------------------------------------+
@@ -3577,7 +3705,7 @@ Example:
 --------------------------
 
 Kill-list query. Optional, default is empty (no query). Applies to SQL
-source types (mysql, pgsql, mssql) only.
+source types (mysql, pgsql, mssql) only. Introduced in version 0.9.9.
 
 This query is expected to return a number of 1-column rows, each containing
 just the document ID. The returned document IDs are stored within an index.
@@ -3655,7 +3783,7 @@ Example:
 64-bit signed integer attribute declaration. Multi-value (there might be
 multiple attributes declared), optional. Applies to SQL source types
 (mysql, pgsql, mssql) only. Note that unlike sql_attr_uint, these values
-are signed.
+are signed. Introduced in version 0.9.9.
 
 Example:
 
@@ -3944,7 +4072,7 @@ Example:
 ---------------------
 
 MS SQL Windows authentication flag. Boolean, optional, default value is
-0 (false). Applies to mssql source type only.
+0 (false). Applies to mssql source type only. Introduced in version 0.9.9.
 
 Whether to use currently logged in Windows account credentials for
 authentication when connecting to MS SQL Server. Note that when running
@@ -3959,7 +4087,7 @@ Example:
 ---------------------
 
 MS SQL encoding type flag. Boolean, optional, default value is 0 (false).
-Applies to mssql source type only.
+Applies to mssql source type only. Introduced in version 0.9.9.
 
 Whether to ask for Unicode or single-byte data when querying MS SQL Server.
 This flag must be in sync with charset_type directive; that is, to index
@@ -3977,7 +4105,7 @@ Example:
 
 Columns to unpack using zlib (aka deflate, aka gunzip). Multi-value,
 optional, default value is empty list of columns. Applies to SQL source
-types (mysql, pgsql, mssql) only.
+types (mysql, pgsql, mssql) only. Introduced in version 0.9.9.
 
 Columns specified using this directive will be unpacked by indexer using
 standard zlib algorithm (called deflate and also implemented by gunzip).
@@ -3995,7 +4123,7 @@ Example:
 
 Columns to unpack using MySQL UNCOMPRESS() algorithm. Multi-value,
 optional, default value is empty list of columns. Applies to SQL source
-types (mysql, pgsql, mssql) only.
+types (mysql, pgsql, mssql) only. Introduced in version 0.9.9.
 
 Columns specified using this directive will be unpacked by indexer using
 modified zlib algorithm used by MySQL COMPRESS() and UNCOMPRESS()
@@ -4012,6 +4140,7 @@ Example:
 ------------------------------------
 
 Buffer size for UNCOMPRESS()ed data. Optional, default value is 16M.
+Introduced in version 0.9.9.
 
 When using unpack_mysqlcompress, due to implementation intrincacies it is
 not possible to deduce the required buffer size from the compressed data.
@@ -4218,7 +4347,7 @@ Example:
 -----------------------
 
 Minimum word length at which to enable stemming. Optional, default is
-1 (stem everything).
+1 (stem everything). Introduced in version 0.9.9.
 
 Stemmers are not perfect, and might sometimes produce undesired results.
 For instance, running "gps" keyword through Porter stemmer for English
@@ -4301,6 +4430,14 @@ insensitive. Here's the file contents sample:
 There is bundled spelldump utility that helps you create a dictionary file
 in the format Sphinx can read from source .dict and .aff dictionary files
 in ispell format.
+
+Starting with version 0.9.9, you can map several source words to a single
+destination word. Because the work happens on tokens, not the source text,
+differences in whitespace and markup are ignored.
+
+   | core 2 duo > c2d
+   | e6600 > c2d
+   | core 2duo > c2d
 
 Example:
 
@@ -4873,7 +5010,7 @@ Example:
 -----------------------
 
 Remote blackhole agent declaration in the distributed index. Multi-value,
-optional, default is empty.
+optional, default is empty. Introduced in version 0.9.9.
 
 agent_blackhole lets you fire-and-forget queries to remote agents. That is
 useful for debugging (or just testing) production clusters: you can setup
@@ -4947,7 +5084,8 @@ Example:
 -------------------
 
 Whether to keep the dictionary file (.spi) for this index on disk, or
-precache it in RAM. Optional, default is 0 (precache in RAM).
+precache it in RAM. Optional, default is 0 (precache in RAM). Introduced in
+version 0.9.9.
 
 The dictionary (.spi) can be either kept on RAM or on disk. The default is
 to fully cache it in RAM. That improves performance, but might cause too
@@ -4965,7 +5103,7 @@ Example:
 ----------------------
 
 Whether to enable in-place index inversion. Optional, default is 0 (use
-separate temporary files).
+separate temporary files). Introduced in version 0.9.9.
 
 inplace_enable greatly reduces indexing disk footprint, at a cost of
 slightly slower indexing (it uses around 2x less disk, but yields around
@@ -4995,7 +5133,7 @@ Example:
 -----------------------
 
 In-place inversion fine-tuning option. Controls preallocated hitlist gap
-size. Optional, default is 0.
+size. Optional, default is 0. Introduced in version 0.9.9.
 
 This directive does not affect searchd in any way, it only affects indexer.
 
@@ -5007,7 +5145,7 @@ Example:
 ---------------------------
 
 In-place inversion fine-tuning option. Controls preallocated docinfo gap
-size. Optional, default is 0.
+size. Optional, default is 0. Introduced in version 0.9.9.
 
 This directive does not affect searchd in any way, it only affects indexer.
 
@@ -5019,7 +5157,8 @@ Example:
 ----------------------------
 
 In-place inversion fine-tuning option. Controls relocation buffer size
-within indexing memory arena. Optional, default is 0.1.
+within indexing memory arena. Optional, default is 0.1. Introduced in
+version 0.9.9.
 
 This directive does not affect searchd in any way, it only affects indexer.
 
@@ -5031,7 +5170,8 @@ Example:
 ----------------------------
 
 In-place inversion fine-tuning option. Controls in-place write buffer size
-within indexing memory arena. Optional, default is 0.1.
+within indexing memory arena. Optional, default is 0.1. Introduced in
+version 0.9.9.
 
 This directive does not affect searchd in any way, it only affects indexer.
 
@@ -5043,7 +5183,8 @@ Example:
 -------------------------
 
 Whether to index the original keywords along with the stemmed/remapped
-versions. Optional, default is 0 (do not index).
+versions. Optional, default is 0 (do not index). Introduced in version
+0.9.9.
 
 When enabled, index_exact_words forces indexer to put the raw keywords in
 the index along with the stemmed versions. That, in turn, enables exact
@@ -5132,7 +5273,7 @@ Example:
 -------------
 
 This setting lets you specify IP address and port, or Unix-domain socket
-path, that searchd will listen on.
+path, that searchd will listen on. Introduced in version 0.9.9.
 
 The informal grammar for listen setting is:
 
@@ -5366,7 +5507,7 @@ Example:
 When calling UpdateAttributes() to update document attributes in real-time,
 changes are first written to the in-memory copy of attributes (docinfo must
 be set to extern). Then, once searchd shuts down normally (via SIGTERM
-being sent), the changes are written to disk.
+being sent), the changes are written to disk. Introduced in version 0.9.9.
 
 Starting with 0.9.9, it is possible to tell searchd to periodically write
 these changes back to disk, to avoid them being lost. The time between
@@ -5383,7 +5524,7 @@ Example:
 ---------------------------
 
 Instance-wide defaults for ondisk_dict directive. Optional, default it
-0 (precache dictionaries in RAM).
+0 (precache dictionaries in RAM). Introduced in version 0.9.9.
 
 This directive lets you specify the default value of ondisk_dict for all
 the indexes served by this copy of searchd. Per-index directive take
@@ -5400,7 +5541,8 @@ Example:
 Maximum allowed network packet size. Limits both query packets from
 clients, and response packets from remote agents in distributed
 environment. Only used for internal sanity checks, does not directly affect
-RAM use or performance. Optional, default is 8M.
+RAM use or performance. Optional, default is 8M. Introduced in version
+0.9.9.
 
 Example:
 
@@ -5410,7 +5552,7 @@ Example:
 ------------------------
 
 Shared pool size for in-memory MVA updates storage. Optional, default size
-is 1M.
+is 1M. Introduced in version 0.9.9.
 
 This setting controls the size of the shared storage pool for updated MVA
 values. Specifying 0 for the size disable MVA updates at all. Once the pool
@@ -5430,7 +5572,7 @@ Example:
 ----------------------
 
 Path (formally prefix) for the crash log files. Optional, default is empty
-(do not create crash logs).
+(do not create crash logs). Introduced in version 0.9.9.
 
 This is a debugging setting, to help catch rare offending queries causing
 crashes without otherwise affecting production instances. When enabled,
@@ -5447,7 +5589,7 @@ Example:
 
 Maximum allowed per-query filter count. Only used for internal sanity
 checks, does not directly affect RAM use or performance. Optional, default
-is 256.
+is 256. Introduced in version 0.9.9.
 
 Example:
 
@@ -5458,7 +5600,7 @@ Example:
 
 Maximum allowed per-filter values count. Only used for internal sanity
 checks, does not directly affect RAM use or performance. Optional, default
-is 4096.
+is 4096. Introduced in version 0.9.9.
 
 Example:
 
@@ -5467,7 +5609,70 @@ Example:
 A. Sphinx revision history
 ==========================
 
-A.1. Version 0.9.8.1, 30 oct 2008
+A.1. Version 0.9.9-rc1, 17 nov 2008
+-----------------------------------
+
+   * added min_stemming_len directive
+   * added IsConnectError() API call (helps distingusih API vs remote
+     errors)
+   * added duplicate log messages filter to searchd
+   * added --nodetach debugging switch to searchd
+   * added blackhole agents support for debugging/testing (agent_blackhole
+     directive)
+   * added max_filters, max_filter_values directives (were hardcoded
+     before)
+   * added int64 expression evaluation path, automatic inference, and
+     BIGINT() enforcer function
+   * added crash handler for debugging (crash_log_path directive)
+   * added MS SQL (aka SQL Server) source support (Windows only,
+     mssql_winauth and mssql_unicode directives)
+   * added indexer-side column unpacking feature (unpack_zlib,
+     unpack_mysqlcompress directives)
+   * added nested brackers and NOTs support to query language, rewritten
+     query parser
+   * added persistent connections support (Open() and Close() API calls)
+   * added index_exact_words feature, and exact form operator to query
+     language ("hello =world")
+   * added status variables support to SphinxSE (SHOW STATUS LIKE
+     'sphinx_%')
+   * added max_packet_size directive (was hardcoded at 8M before)
+   * added UNIX socket support, and multi-interface support (listen
+     directive)
+   * added star-syntax support to BuildExcerpts() API call
+   * added inplace inversion of .spa and .spp (inplace_enable directive,
+     1.5-2x less disk space for indexing)
+   * added builtin Czech stemmer (morphology=stem_cz)
+   * added IDIV(), NOW(), INTERVAL(), IN() functions to expressions
+   * added index-level early-reject based on filters
+   * added MVA updates feature (mva_updates_pool directive)
+   * added select-list feature with computed expressions support (see
+     SetSelect() API call, test.php --select switch), protocol 1.22
+   * added integer expressions support (2x faster than float)
+   * added multiforms support (multiple source words in wordforms file)
+   * added legacy rankers (MATCH_ALL/MATCH_ANY/etc), removed legacy
+     matching code (everything runs on V2 engine now)
+   * added field position limit modifier to field operator (syntax:
+     @title[50] hello world)
+   * added killlist support (sql_query_killlist directive,
+     --merge-killlists switch)
+   * added on-disk SPI support (ondisk_dict directive)
+   * added indexer IO stats
+   * added periodic .spa flush (attr_flush_period directive)
+   * added config reload on SIGHUP
+   * added per-query attribute overrides feature (see SetOverride() API
+     call); protocol 1.21
+   * added signed 64bit attrs support (sql_attr_bigint directive)
+   * improved HTML stripper to also skip PIs (<? ... ?>, such as <?php ...
+     ?>)
+   * improved excerpts speed (upto 50x faster on big documents)
+   * fixed a short window of searchd inaccessibility on startup (started
+     listen()ing too early before)
+   * fixed .spa loading on systems where read() is 2GB capped
+   * fixed infixes vs morphology issues
+   * fixed backslash escaping, added backslash to EscapeString()
+   * fixed handling of over-2GB dictionary files (.spi)
+
+A.2. Version 0.9.8.1, 30 oct 2008
 ---------------------------------
 
    * added configure script to libsphinxclient
@@ -5504,7 +5709,7 @@ A.1. Version 0.9.8.1, 30 oct 2008
    * fixed default ID range (that filtered out all 64-bit values) in Java
      and Python APIs
 
-A.2. Version 0.9.8, 14 jul 2008
+A.3. Version 0.9.8, 14 jul 2008
 -------------------------------
 
 Indexing
@@ -5684,7 +5889,7 @@ Changes and fixes since 0.9.8-RC2
      reusable sorter issue
    * fixed sorting of negative floats in SPH_SORT_EXTENDED mode
 
-A.3. Version 0.9.7, 02 apr 2007
+A.4. Version 0.9.7, 02 apr 2007
 -------------------------------
 
    * added support for sql_str2ordinal_column
@@ -5734,7 +5939,7 @@ A.3. Version 0.9.7, 02 apr 2007
    * fixed wrong assertion in SBCS encoder
    * fixed crashes with no-attribute indexes after rotate
 
-A.4. Version 0.9.7-RC2, 15 dec 2006
+A.5. Version 0.9.7-RC2, 15 dec 2006
 -----------------------------------
 
    * added support for extended matching mode (query language)
@@ -5756,7 +5961,7 @@ A.4. Version 0.9.7-RC2, 15 dec 2006
      paths)
    * fixes for 64-bit platforms
 
-A.5. Version 0.9.7-RC1, 26 oct 2006
+A.6. Version 0.9.7-RC1, 26 oct 2006
 -----------------------------------
 
    * added alpha index merging code
@@ -5785,7 +5990,7 @@ A.5. Version 0.9.7-RC1, 26 oct 2006
    * fixed line numbering in config parser
    * fixed some issues with index rotation
 
-A.6. Version 0.9.6, 24 jul 2006
+A.7. Version 0.9.6, 24 jul 2006
 -------------------------------
 
    * added support for empty indexes
@@ -5794,7 +5999,7 @@ A.6. Version 0.9.6, 24 jul 2006
    * fixed configure issues with --without-mysql and --with-pgsql options
    * fixed building on Solaris 9
 
-A.7. Version 0.9.6-RC1, 26 jun 2006
+A.8. Version 0.9.6-RC1, 26 jun 2006
 -----------------------------------
 
    * added boolean queries support (experimental, beta version)

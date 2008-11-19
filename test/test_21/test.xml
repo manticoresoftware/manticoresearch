@@ -44,7 +44,7 @@ index test
 <query mode="extended2" sortmode="expr" sortby="min(tag1,tag2)*2">test*</query>
 <query mode="extended2" sortmode="expr" sortby="ceil(tag4)">test*</query>
 <query mode="extended2" sortmode="expr" sortby="floor(tag4)">test*</query>
-<query mode="extended2" sortmode="expr" sortby="sin(tag4)+cos(tag4)">test*</query>
+<query mode="extended2" sortmode="expr" sortby="sin(tag4)+cos(tag4)" roundoff="6">test*</query>
 <query mode="extended2" sortmode="expr" sortby="ln(tag1)+log2(tag1)+log10(tag1)">test*</query>
 <query mode="extended2" sortmode="expr" sortby="exp(tag1)+sqrt(tag2)">test*</query>
 <query mode="extended2" sortmode="expr" sortby="if (tag1=tag2, 1, 0)">test*</query>

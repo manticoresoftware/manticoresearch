@@ -474,6 +474,7 @@ class SphinxConfig
 				$res["select"] = $q->getAttribute("select");
 				$res["id_range"] = $this->ParseRange ( $q->getAttribute("id_range") );
 				$res["index_weights"] = $this->ParseIndexWeights ( $q->getAttribute("index_weights") );
+				$res["roundoff"] = $q->getAttribute("roundoff");
 
 				// add query
 				$this->_queries[] = $res;
@@ -580,8 +581,11 @@ class SphinxConfig
 					}
 
 	            	$results = $cl->Query ( $query, $my_index );
-					if ( @$qinfo["resarray"] )
-						$results ["resarray"] = 1;
+					if ( is_array($results) )
+					{
+						$results["resarray"] = (int)@$qinfo["resarray"];
+						$results["roundoff"] = (int)@$qinfo["roundoff"];
+					}
                 }
 				else
 				{
@@ -701,21 +705,33 @@ class SphinxConfig
 	}
 
 
-	function CompareResultSetFixup ( &$set )
+	function CompareResultSetFixup ( &$set, $roundoff )
 	{
 		if ( !is_array($set) )
 			return;
 
-		unset ( $set["time"] );
-		unset ( $set["warning"] );
-		unset ( $set["status"] );
-		unset ( $set["fields"] );
+		if ( $roundoff && !@$set["resarray"] ) // FIXME! support resarray too
+			foreach ( $set["attrs"] as $name=>$type )
+				if ( $type==SPH_ATTR_FLOAT )
+		{
+			foreach ( $set["matches"] as $id=>$match )
+				$set["matches"][$id]["attrs"][$name] = sprintf ( "%.{$roundoff}f",
+					$set["matches"][$id]["attrs"][$name] );
+		}
+
+		foreach ( preg_split ( "/\\W+/", "time warning status fields resarray roundoff" ) as $key )
+			unset ( $set[$key] );
 	}
 
 	function CompareResultSets ( $set1, $set2 )
 	{
-		$this->CompareResultSetFixup ( $set1 );
-		$this->CompareResultSetFixup ( $set2 );
+		$roundoff = 0;
+		if ( isset($set1["roundoff"]) ) $roundoff = $set1["roundoff"];
+		if ( isset($set2["roundoff"]) ) $roundoff = $set2["roundoff"];
+
+		$this->CompareResultSetFixup ( $set1, $roundoff );
+		$this->CompareResultSetFixup ( $set2, $roundoff );
+
 		return $set1==$set2;
 	}
 

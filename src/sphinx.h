@@ -999,7 +999,7 @@ public:
 	void								SetEmitExactWords ( bool bEmit );
 
 	/// set boundary step
-	void								SetBoundaryStep ( int iBoundaryStep ) { m_iBoundaryStep = Max ( iBoundaryStep, 0 ); }
+	void								SetBoundaryStep ( int iBoundaryStep ) { m_iBoundaryStep = Max ( iBoundaryStep, -1 ); }
 
 public:
 	/// connect to the source (eg. to the database)

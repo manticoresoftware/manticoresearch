@@ -757,7 +757,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		fprintf ( stdout, "WARNING: min_infix_len = 0. infix_fields are ignored\n" );
 
 	// boundary
-	int iBoundaryStep	= hIndex("phrase_boundary_step") ? Max ( hIndex["phrase_boundary_step"].intval(), 0 ) : 0;
+	int iBoundaryStep	= hIndex("phrase_boundary_step") ? Max ( hIndex["phrase_boundary_step"].intval(), -1 ) : 0;
 	bool bInplaceEnable	= hIndex.GetInt ( "inplace_enable", 0 ) != 0;
 	int iHitGap			= hIndex.GetSize ( "inplace_hit_gap", 0 );
 	int iDocinfoGap		= hIndex.GetSize ( "inplace_docinfo_gap", 0 );

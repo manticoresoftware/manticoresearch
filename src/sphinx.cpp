@@ -6491,7 +6491,7 @@ CSphIndex::~CSphIndex ()
 
 void CSphIndex::SetBoundaryStep ( int iBoundaryStep )
 {
-	m_iBoundaryStep = Max ( iBoundaryStep, 0 );
+	m_iBoundaryStep = Max ( iBoundaryStep, -1 );
 }
 
 
@@ -16964,9 +16964,9 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 			// index all infixes
 			while ( ( sWord = m_pTokenizer->GetToken() )!=NULL )
 			{
-				if ( m_pTokenizer->GetBoundary() )
-					iPos += m_iBoundaryStep;
 				iPos += 1+m_pTokenizer->GetOvershortCount();
+				if ( m_pTokenizer->GetBoundary() )
+					iPos = Max ( iPos+m_iBoundaryStep, 1 );
 
 				int iLen = m_pTokenizer->GetLastTokenLen ();
 
@@ -17103,9 +17103,9 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 			// index words only
 			while ( ( sWord = m_pTokenizer->GetToken() )!=NULL )
 			{
-				if ( m_pTokenizer->GetBoundary() )
-					iPos += m_iBoundaryStep;
 				iPos += 1+m_pTokenizer->GetOvershortCount();
+				if ( m_pTokenizer->GetBoundary() )
+					iPos = Max ( iPos+m_iBoundaryStep, 1 );
 
 				if ( bGlobalPartialMatch )
 				{

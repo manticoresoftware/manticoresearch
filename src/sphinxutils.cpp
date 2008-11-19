@@ -757,9 +757,9 @@ bool sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSettings 
 	tSettings.m_sIgnoreChars	= hIndex.GetStr ( "ignore_chars" );
 
 	// phrase boundaries
-	int iBoundaryStep = Max ( hIndex.GetInt ( "phrase_boundary_step" ), 0 );
-	if ( iBoundaryStep>0 )
-		tSettings.m_sBoundary	= hIndex.GetStr ( "phrase_boundary" );
+	int iBoundaryStep = Max ( hIndex.GetInt ( "phrase_boundary_step" ), -1 );
+	if ( iBoundaryStep!=0 )
+		tSettings.m_sBoundary = hIndex.GetStr ( "phrase_boundary" );
 
 	return true;
 }

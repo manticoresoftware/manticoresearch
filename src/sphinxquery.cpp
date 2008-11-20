@@ -783,10 +783,8 @@ bool sphParseExtendedQuery ( CSphExtendedQuery & tParsed, const char * sQuery, c
 #if XQDEBUG
 	if ( bRes )
 	{
-		printf ( "--- accept ---\n" );
-		xqDump ( tParsed.m_pAccept, *pSchema, 0 );
-		printf ( "--- reject ---\n" );
-		xqDump ( tParsed.m_pReject, *pSchema, 0 );
+		printf ( "--- query ---\n" );
+		xqDump ( tParsed.m_pRoot, *pSchema, 0 );
 		printf ( "---\n" );
 	}
 #endif

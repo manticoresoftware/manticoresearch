@@ -30,8 +30,8 @@
 %type <pNode>			phrasetoken
 %type <pNode>			phrase
 %type <pNode>			atom
-%type <pNode>			atom2
 %type <pNode>			orlist
+%type <pNode>			orlist2
 %type <pNode>			expr
 
 %%
@@ -69,21 +69,21 @@ atom:
 	| '(' expr ')'						{ $$ = $2; $2->m_bFieldSpec = false; }
 	;
 
-atom2:
+orlist:
 	atom								{ $$ = $1; }
-	| TOK_FIELDLIMIT atom				{ $$ = $2; $2->SetFieldSpec ( $1.uMask, $1.iMaxPos ); }
+	| orlist '|' atom					{ $$ = pParser->AddOp ( SPH_QUERY_OR, $1, $3 ); }
 	;
 
-orlist:
-	atom2								{ $$ = $1; }
-	| orlist '|' atom2					{ $$ = pParser->AddOp ( SPH_QUERY_OR, $1, $3 ); }
+orlist2:
+	orlist								{ $$ = $1; }
+	| '-' orlist						{ $$ = pParser->AddOp ( SPH_QUERY_NOT, $2, NULL ); }
+	| TOK_FIELDLIMIT orlist				{ $$ = $2;											$$->SetFieldSpec ( $1.uMask, $1.iMaxPos ); }
+	| TOK_FIELDLIMIT '-' orlist			{ $$ = pParser->AddOp ( SPH_QUERY_NOT, $3, NULL );	$$->SetFieldSpec ( $1.uMask, $1.iMaxPos ); }
 	;
 
 expr:
-	orlist								{ $$ = $1; }
-	| '-' orlist						{ $$ = pParser->AddOp ( SPH_QUERY_NOT, $2, NULL ); }
-	| expr orlist               		{ $$ = pParser->AddOp ( SPH_QUERY_AND, $1, $2 ); }
-	| expr '-' orlist               	{ $$ = pParser->AddOp ( SPH_QUERY_AND, $1, pParser->AddOp ( SPH_QUERY_NOT, $3, NULL ) ); }
+	orlist2								{ $$ = $1; }
+	| expr orlist2               		{ $$ = pParser->AddOp ( SPH_QUERY_AND, $1, $2 ); }
 	;
 
 %%

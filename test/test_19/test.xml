@@ -49,6 +49,8 @@ index test
 <query mode="extended2">"test program" | basic</query>
 <query mode="extended2">"test that"~3 | basic</query>
 <query mode="extended2">"test that"~3|basic</query>
+<query mode="extended2">@title sample @body -basic</query>
+<query mode="extended2">-basic|perl sample</query>
 </queries>
 
 <db_create>
@@ -69,7 +71,9 @@ INSERT INTO `test_table` VALUES
 ( 111, '', 'basic query' ),
 ( 222, '', 'phrase query on steroids' ),
 ( 333, 'sample program', 'this is a test program that prints out "hello world" to the console' ),
-( 444, '', 'china 吐我' )
+( 444, '', 'china 吐我' ),
+( 555, 'sample program two', 'something written in basic' ),
+( 666, 'sample program three', 'something written in perl' )
 </db_insert>
 
 </test>

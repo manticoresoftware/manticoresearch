@@ -211,9 +211,9 @@ union yyalloc
 #endif
 
 /* YYFINAL -- State number of the termination state. */
-#define YYFINAL  25
+#define YYFINAL  26
 /* YYLAST -- Last index in YYTABLE.  */
-#define YYLAST   62
+#define YYLAST   59
 
 /* YYNTOKENS -- Number of terminals. */
 #define YYNTOKENS  13
@@ -270,7 +270,7 @@ static const unsigned char yyprhs[] =
 {
        0,     0,     3,     5,     7,     9,    11,    13,    15,    17,
       19,    21,    23,    25,    28,    30,    34,    40,    46,    50,
-      52,    55,    57,    61,    63,    66,    69
+      52,    56,    58,    61,    64,    68,    70
 };
 
 /* YYRHS -- A `-1'-separated list of the rules' RHS. */
@@ -281,9 +281,9 @@ static const yysigned_char yyrhs[] =
       -1,    11,    -1,    16,    -1,    17,    16,    -1,    15,    -1,
       12,    17,    12,    -1,    12,    17,    12,    10,     4,    -1,
       12,    17,    12,    11,     4,    -1,     6,    21,     7,    -1,
-      18,    -1,     5,    18,    -1,    19,    -1,    20,     9,    19,
-      -1,    20,    -1,     8,    20,    -1,    21,    20,    -1,    21,
-       8,    20,    -1
+      18,    -1,    19,     9,    18,    -1,    19,    -1,     8,    19,
+      -1,     5,    19,    -1,     5,     8,    19,    -1,    20,    -1,
+      21,    20,    -1
 };
 
 /* YYRLINE[YYN] -- source line where rule number YYN was defined.  */
@@ -291,7 +291,7 @@ static const unsigned char yyrline[] =
 {
        0,    40,    40,    44,    45,    49,    50,    51,    52,    53,
       54,    55,    59,    60,    65,    66,    67,    68,    69,    73,
-      74,    78,    79,    83,    84,    85,    86
+      74,    78,    79,    80,    81,    85,    86
 };
 #endif
 
@@ -302,7 +302,7 @@ static const char *const yytname[] =
 {
   "$end", "error", "$undefined", "TOK_KEYWORD", "TOK_INT", "TOK_FIELDLIMIT", 
   "'('", "')'", "'-'", "'|'", "'~'", "'/'", "'\"'", "$accept", "query", 
-  "keyword", "phrasetoken", "phrase", "atom", "atom2", "orlist", "expr", 0
+  "keyword", "phrasetoken", "phrase", "atom", "orlist", "orlist2", "expr", 0
 };
 #endif
 
@@ -321,7 +321,7 @@ static const unsigned char yyr1[] =
 {
        0,    13,    14,    15,    15,    16,    16,    16,    16,    16,
       16,    16,    17,    17,    18,    18,    18,    18,    18,    19,
-      19,    20,    20,    21,    21,    21,    21
+      19,    20,    20,    20,    20,    21,    21
 };
 
 /* YYR2[YYN] -- Number of symbols composing right hand side of rule YYN.  */
@@ -329,7 +329,7 @@ static const unsigned char yyr2[] =
 {
        0,     2,     1,     1,     1,     1,     1,     1,     1,     1,
        1,     1,     1,     2,     1,     3,     5,     5,     3,     1,
-       2,     1,     3,     1,     2,     2,     3
+       3,     1,     2,     2,     3,     1,     2
 };
 
 /* YYDEFACT[STATE-NAME] -- Default rule to reduce with in state
@@ -338,32 +338,32 @@ static const unsigned char yyr2[] =
 static const unsigned char yydefact[] =
 {
        0,     3,     4,     0,     0,     0,     0,     0,    14,    19,
-      21,    23,     2,    20,     0,    24,     6,     7,     8,     9,
-      10,    11,     5,    12,     0,     1,     0,     0,    25,    18,
-      15,    13,    22,    26,     0,     0,    16,    17
+      21,    25,     2,     0,    23,     0,    22,     6,     7,     8,
+       9,    10,    11,     5,    12,     0,     1,     0,    26,    24,
+      18,    15,    13,    20,     0,     0,    16,    17
 };
 
 /* YYDEFGOTO[NTERM-NUM]. */
 static const yysigned_char yydefgoto[] =
 {
-      -1,     7,     8,    23,    24,     9,    10,    11,    12
+      -1,     7,     8,    24,    25,     9,    10,    11,    12
 };
 
 /* YYPACT[STATE-NUM] -- Index in YYTABLE of the portion describing
    STATE-NUM.  */
-#define YYPACT_NINF -6
+#define YYPACT_NINF -11
 static const yysigned_char yypact[] =
 {
-       0,    -6,    -6,    44,     0,    40,    51,     1,    -6,    -6,
-      -6,    12,    30,    -6,    20,    12,    -6,    -6,    -6,    -6,
-      -6,    -6,    -6,    -6,     7,    -6,    40,    40,    12,    -6,
-      19,    -6,    -6,    12,    27,    33,    -6,    -6
+      27,   -11,   -11,    34,    27,    41,    48,     4,   -11,   -11,
+      -1,   -11,    27,    41,    -1,    17,    -1,   -11,   -11,   -11,
+     -11,   -11,   -11,   -11,   -11,     6,   -11,    41,   -11,    -1,
+     -11,    -4,   -11,   -11,    22,    23,   -11,   -11
 };
 
 /* YYPGOTO[NTERM-NUM].  */
 static const yysigned_char yypgoto[] =
 {
-      -6,    -6,    -4,    15,    -6,    37,    23,    -5,    47
+     -11,   -11,    -6,     3,   -11,     7,    -2,   -10,    32
 };
 
 /* YYTABLE[YYPACT[STATE-NUM]].  What to do in state STATE-NUM.  If
@@ -373,24 +373,22 @@ static const yysigned_char yypgoto[] =
 #define YYTABLE_NINF -1
 static const unsigned char yytable[] =
 {
-      15,    25,    22,     1,     2,     3,     4,    28,     5,    28,
-       1,     2,     6,    16,    17,    18,    19,    20,    21,    30,
-      22,    26,    33,     1,     2,     3,     4,    29,    27,    34,
-      35,    36,     6,     1,     2,     3,     4,    37,    27,    31,
-      13,     0,     6,     1,     2,     3,     4,     1,     2,    32,
-       4,    14,     6,     0,     1,     2,     6,    16,    17,    18,
-      19,    20,    21
+      23,    14,    28,    16,    26,    28,    34,    35,    27,     1,
+       2,    29,    17,    18,    19,    20,    21,    22,    31,    23,
+       1,     2,     3,     4,    30,     5,    36,    37,    32,     6,
+       1,     2,     3,     4,    33,     5,    15,     1,     2,     6,
+       4,     0,    13,     0,     1,     2,     6,     4,     0,     0,
+       0,     1,     2,     6,    17,    18,    19,    20,    21,    22
 };
 
 static const yysigned_char yycheck[] =
 {
-       5,     0,     6,     3,     4,     5,     6,    12,     8,    14,
-       3,     4,    12,     6,     7,     8,     9,    10,    11,    12,
-      24,     9,    27,     3,     4,     5,     6,     7,     8,    10,
-      11,     4,    12,     3,     4,     5,     6,     4,     8,    24,
-       3,    -1,    12,     3,     4,     5,     6,     3,     4,    26,
-       6,     4,    12,    -1,     3,     4,    12,     6,     7,     8,
-       9,    10,    11
+       6,     3,    12,     5,     0,    15,    10,    11,     9,     3,
+       4,    13,     6,     7,     8,     9,    10,    11,    12,    25,
+       3,     4,     5,     6,     7,     8,     4,     4,    25,    12,
+       3,     4,     5,     6,    27,     8,     4,     3,     4,    12,
+       6,    -1,     8,    -1,     3,     4,    12,     6,    -1,    -1,
+      -1,     3,     4,    12,     6,     7,     8,     9,    10,    11
 };
 
 /* YYSTOS[STATE-NUM] -- The (internal number of the) accessing
@@ -398,9 +396,9 @@ static const yysigned_char yycheck[] =
 static const unsigned char yystos[] =
 {
        0,     3,     4,     5,     6,     8,    12,    14,    15,    18,
-      19,    20,    21,    18,    21,    20,     6,     7,     8,     9,
-      10,    11,    15,    16,    17,     0,     9,     8,    20,     7,
-      12,    16,    19,    20,    10,    11,     4,     4
+      19,    20,    21,     8,    19,    21,    19,     6,     7,     8,
+       9,    10,    11,    15,    16,    17,     0,     9,    20,    19,
+       7,    12,    16,    18,    10,    11,     4,     4
 };
 
 #if ! defined (YYSIZE_T) && defined (__SIZE_TYPE__)
@@ -1101,7 +1099,7 @@ yyreduce:
 
   case 20:
 
-    { yyval.pNode = yyvsp[0].pNode; yyvsp[0].pNode->SetFieldSpec ( yyvsp[-1].tFieldLimit.uMask, yyvsp[-1].tFieldLimit.iMaxPos ); ;}
+    { yyval.pNode = pParser->AddOp ( SPH_QUERY_OR, yyvsp[-2].pNode, yyvsp[0].pNode ); ;}
     break;
 
   case 21:
@@ -1111,27 +1109,27 @@ yyreduce:
 
   case 22:
 
-    { yyval.pNode = pParser->AddOp ( SPH_QUERY_OR, yyvsp[-2].pNode, yyvsp[0].pNode ); ;}
+    { yyval.pNode = pParser->AddOp ( SPH_QUERY_NOT, yyvsp[0].pNode, NULL ); ;}
     break;
 
   case 23:
 
-    { yyval.pNode = yyvsp[0].pNode; ;}
+    { yyval.pNode = yyvsp[0].pNode;											yyval.pNode->SetFieldSpec ( yyvsp[-1].tFieldLimit.uMask, yyvsp[-1].tFieldLimit.iMaxPos ); ;}
     break;
 
   case 24:
 
-    { yyval.pNode = pParser->AddOp ( SPH_QUERY_NOT, yyvsp[0].pNode, NULL ); ;}
+    { yyval.pNode = pParser->AddOp ( SPH_QUERY_NOT, yyvsp[0].pNode, NULL );	yyval.pNode->SetFieldSpec ( yyvsp[-2].tFieldLimit.uMask, yyvsp[-2].tFieldLimit.iMaxPos ); ;}
     break;
 
   case 25:
 
-    { yyval.pNode = pParser->AddOp ( SPH_QUERY_AND, yyvsp[-1].pNode, yyvsp[0].pNode ); ;}
+    { yyval.pNode = yyvsp[0].pNode; ;}
     break;
 
   case 26:
 
-    { yyval.pNode = pParser->AddOp ( SPH_QUERY_AND, yyvsp[-2].pNode, pParser->AddOp ( SPH_QUERY_NOT, yyvsp[0].pNode, NULL ) ); ;}
+    { yyval.pNode = pParser->AddOp ( SPH_QUERY_AND, yyvsp[-1].pNode, yyvsp[0].pNode ); ;}
     break;
 
 

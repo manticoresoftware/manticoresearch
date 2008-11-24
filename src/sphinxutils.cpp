@@ -787,11 +787,13 @@ void sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 	}
 
 	tSettings.m_eDocinfo = SPH_DOCINFO_EXTERN;
-
 	if ( hIndex ("docinfo") )
 	{
-		if ( hIndex["docinfo"]=="none" )	tSettings.m_eDocinfo = SPH_DOCINFO_NONE;
-		if ( hIndex["docinfo"]=="inline" )	tSettings.m_eDocinfo = SPH_DOCINFO_INLINE;
+		if ( hIndex["docinfo"]=="none" )		tSettings.m_eDocinfo = SPH_DOCINFO_NONE;
+		else if ( hIndex["docinfo"]=="inline" )	tSettings.m_eDocinfo = SPH_DOCINFO_INLINE;
+		else if ( hIndex["docinfo"]=="extern" )	tSettings.m_eDocinfo = SPH_DOCINFO_EXTERN;
+		else
+			fprintf ( stdout, "WARNING: unknown docinfo=%s, defaulting to extern\n", hIndex["docinfo"].cstr() );
 	}
 }
 

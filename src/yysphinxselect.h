@@ -35,7 +35,10 @@
      TOK_LTE = 261,
      TOK_GTE = 262,
      TOK_EQ = 263,
-     TOK_NE = 264
+     TOK_NE = 264,
+     TOK_OR = 265,
+     TOK_AND = 266,
+     TOK_NOT = 267
    };
 #endif
 #define SEL_TOKEN 258
@@ -45,6 +48,9 @@
 #define TOK_GTE 262
 #define TOK_EQ 263
 #define TOK_NE 264
+#define TOK_OR 265
+#define TOK_AND 266
+#define TOK_NOT 267
 
 
 

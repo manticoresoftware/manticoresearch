@@ -4767,9 +4767,17 @@ int SelectParser_t::GetToken ( YYSTYPE * lvalp )
 		while ( sphIsAttr(*m_pCur) ) m_pCur++;
 		lvalp->m_iEnd = m_pCur-m_pStart;
 
-		return ( lvalp->m_iEnd==2+lvalp->m_iStart && strncasecmp ( m_pStart+lvalp->m_iStart, "AS", 2 )==0 )
-			? SEL_AS
-			: SEL_TOKEN;
+		#define  LOC_CHECK(_str,_len,_ret) \
+			if ( lvalp->m_iEnd==_len+lvalp->m_iStart && strncasecmp ( m_pStart+lvalp->m_iStart, _str, _len )==0 ) return _ret;
+
+		LOC_CHECK ( "AS", 2, SEL_AS );
+		LOC_CHECK ( "OR", 2, TOK_OR );
+		LOC_CHECK ( "AND", 3, TOK_AND );
+		LOC_CHECK ( "NOT", 3, TOK_NOT );
+
+		#undef LOC_CHECK
+
+		return SEL_TOKEN;
 	}
 
 	// check for equality checks

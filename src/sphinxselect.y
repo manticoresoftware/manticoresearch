@@ -19,11 +19,13 @@
 %token TOK_EQ
 %token TOK_NE
 
+%left TOK_AND TOK_OR
 %left TOK_EQ TOK_NE
 %left '<' '>' TOK_LTE TOK_GTE
 %left '+' '-'
 %left '*' '/'
 %nonassoc TOK_NEG
+%nonassoc TOK_NOT
 
 %%
 
@@ -41,6 +43,7 @@ select_item:
 expr:
 	SEL_TOKEN
 	| '-' expr %prec TOK_NEG	{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
+	| TOK_NOT expr				{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
 	| expr '+' expr				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| expr '-' expr				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| expr '*' expr				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
@@ -51,6 +54,8 @@ expr:
 	| expr TOK_GTE expr			{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| expr TOK_EQ expr			{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| expr TOK_NE expr			{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
+	| expr TOK_AND expr			{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
+	| expr TOK_OR expr			{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| '(' expr ')'				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| function
 	;

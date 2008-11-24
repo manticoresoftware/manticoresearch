@@ -36,11 +36,14 @@
      TOK_ATTR_FLOAT = 262,
      TOK_FUNC = 263,
      TOK_DOCINFO = 264,
-     TOK_NE = 265,
-     TOK_EQ = 266,
-     TOK_GTE = 267,
-     TOK_LTE = 268,
-     TOK_NEG = 269
+     TOK_OR = 265,
+     TOK_AND = 266,
+     TOK_NOT = 267,
+     TOK_NE = 268,
+     TOK_EQ = 269,
+     TOK_GTE = 270,
+     TOK_LTE = 271,
+     TOK_NEG = 272
    };
 #endif
 #define TOK_CONST_INT 258
@@ -50,11 +53,14 @@
 #define TOK_ATTR_FLOAT 262
 #define TOK_FUNC 263
 #define TOK_DOCINFO 264
-#define TOK_NE 265
-#define TOK_EQ 266
-#define TOK_GTE 267
-#define TOK_LTE 268
-#define TOK_NEG 269
+#define TOK_OR 265
+#define TOK_AND 266
+#define TOK_NOT 267
+#define TOK_NE 268
+#define TOK_EQ 269
+#define TOK_GTE 270
+#define TOK_LTE 271
+#define TOK_NEG 272
 
 
 

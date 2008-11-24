@@ -23,12 +23,13 @@
 %type <iNode>			arglist
 %type <iNode>			expr
 
+%left TOK_AND TOK_OR
+%nonassoc TOK_NOT
 %left TOK_EQ TOK_NE
 %left '<' '>' TOK_LTE TOK_GTE
 %left '+' '-'
 %left '*' '/'
 %nonassoc TOK_NEG
-
 
 %%
 
@@ -44,6 +45,7 @@ expr:
 	| TOK_ATTR_FLOAT				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_FLOAT, $1 ); }
 	| TOK_DOCINFO					{ $$ = pParser->AddNodeDocinfo ( $1 ); }
 	| '-' expr %prec TOK_NEG		{ $$ = pParser->AddNodeOp ( TOK_NEG, $2, -1 ); }
+	| TOK_NOT expr					{ $$ = pParser->AddNodeOp ( TOK_NOT, $2, -1 ); if ( $$<0 ) YYERROR; }
 	| expr '+' expr					{ $$ = pParser->AddNodeOp ( '+', $1, $3 ); }
 	| expr '-' expr					{ $$ = pParser->AddNodeOp ( '-', $1, $3 ); }
 	| expr '*' expr					{ $$ = pParser->AddNodeOp ( '*', $1, $3 ); }
@@ -54,6 +56,8 @@ expr:
 	| expr TOK_GTE expr				{ $$ = pParser->AddNodeOp ( TOK_GTE, $1, $3 ); }
 	| expr TOK_EQ expr				{ $$ = pParser->AddNodeOp ( TOK_EQ, $1, $3 ); }
 	| expr TOK_NE expr				{ $$ = pParser->AddNodeOp ( TOK_NE, $1, $3 ); }
+	| expr TOK_AND expr				{ $$ = pParser->AddNodeOp ( TOK_AND, $1, $3 ); if ( $$<0 ) YYERROR; }
+	| expr TOK_OR expr				{ $$ = pParser->AddNodeOp ( TOK_OR, $1, $3 ); if ( $$<0 ) YYERROR; }
 	| '(' expr ')'					{ $$ = $2; }
 	| function						{ $$ = $1; }
 	;

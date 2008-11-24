@@ -10913,7 +10913,8 @@ static inline void CopyExtDocinfo ( ExtDoc_t & tDst, const ExtDoc_t & tSrc, CSph
 		memcpy ( *ppRow, tSrc.m_pDocinfo, iStride*sizeof(CSphRowitem) );
 		tDst.m_pDocinfo = *ppRow;
 		*ppRow += iStride;
-	}
+	} else
+		tDst.m_pDocinfo = NULL;
 }
 
 static inline void CopyExtDoc ( ExtDoc_t & tDst, const ExtDoc_t & tSrc, CSphRowitem ** ppRow, int iStride )

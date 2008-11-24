@@ -271,7 +271,7 @@ enum Docinfo_e
 	DI_WEIGHT
 };
 
-#include "sphinxexpryy.hpp"
+#include "yysphinxexpr.h"
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -1007,7 +1007,7 @@ void yyerror ( ExprParser_t * pParser, const char * sMessage )
 #pragma warning(push,1)
 #endif
 
-#include "sphinxexpryy.cpp"
+#include "yysphinxexpr.c"
 
 #if USE_WINDOWS
 #pragma warning(pop)

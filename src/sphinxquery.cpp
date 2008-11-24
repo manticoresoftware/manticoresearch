@@ -12,7 +12,7 @@
 //////////////////////////////////////////////////////////////////////////
 
 typedef CSphExtendedQueryNode XQNode_t;
-#include "sphinxqueryyy.hpp"
+#include "yysphinxquery.h"
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -82,7 +82,7 @@ void yyerror ( XQParser_t * pParser, const char * sMessage )
 	pParser->m_pParsed->m_sParseError.SetSprintf ( "%s near '%s'", sMessage, pParser->m_pLastTokenStart );
 }
 
-#include "sphinxqueryyy.cpp"
+#include "yysphinxquery.c"
 
 //////////////////////////////////////////////////////////////////////////
 

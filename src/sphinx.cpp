@@ -4716,7 +4716,7 @@ struct SelectBounds_t
 	int		m_iEnd;
 };
 #define YYSTYPE SelectBounds_t
-#include "sphinxselectyy.hpp"
+#include "yysphinxselect.h"
 
 
 class SelectParser_t
@@ -4737,7 +4737,7 @@ public:
 
 int yylex ( YYSTYPE * lvalp, SelectParser_t * pParser )				{ return pParser->GetToken ( lvalp );}
 void yyerror ( SelectParser_t * pParser, const char * sMessage )	{ pParser->m_sParserError.SetSprintf ( "%s near '%s'", sMessage, pParser->m_pLastTokenStart ); }
-#include "sphinxselectyy.cpp"
+#include "yysphinxselect.c"
 
 
 int SelectParser_t::GetToken ( YYSTYPE * lvalp )

@@ -718,7 +718,11 @@ void TestQueryParser ()
 		{ "\"phrase (query)/3 ~on steroids\"",					"\"phrase query on steroids\"" },
 		{ "hello a world",										"( hello AND world )" },
 		{ "-one",												"" },
-		{ "-one -two",											"" }
+		{ "-one -two",											"" },
+		{ "\"\"",												"" },
+		{ "\"()\"",												"" },
+		{ "\"]\"",												"" },
+		{ "@title hello @body -world",							"( ( @title: hello ) AND NOT ( @body: world ) )" }
 	};
 
 

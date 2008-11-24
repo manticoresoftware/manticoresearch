@@ -1278,6 +1278,7 @@ public:
 				m_tDoc.m_iDocID = m_iMinID;
 			m_tDoc.m_iDocID += iDeltaDoc;
 
+			assert ( pDocinfo || !m_iInlineAttrs );
 			for ( int i=0; i<m_iInlineAttrs; i++ )
 				pDocinfo[i] = m_rdDoclist.UnzipInt () + m_pInlineFixup[i];
 
@@ -10641,7 +10642,7 @@ class ExtNode_i
 {
 public:
 								ExtNode_i ();
-	virtual						~ExtNode_i () {}
+	virtual						~ExtNode_i () { SafeDeleteArray ( m_pDocinfo ); }
 
 	static ExtNode_i *			Create ( const CSphExtendedQueryNode * pNode, const CSphTermSetup & tSetup, CSphString * pWarning );
 	static ExtNode_i *			Create ( const CSphString & sTerm, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup, DWORD uQuerypos, CSphString * pWarning );
@@ -10660,6 +10661,18 @@ protected:
 	ExtDoc_t					m_dDocs[MAX_DOCS];
 	ExtHit_t					m_dHits[MAX_HITS];
 	SphDocID_t					m_uMaxID;
+
+	int							m_iStride;		///< docinfo stride (for inline mode only)
+	CSphRowitem *				m_pDocinfo;		///< docinfo storage (for inline mode only)
+
+	void AllocDocinfo ( const CSphTermSetup & tSetup )
+	{
+		if ( tSetup.m_eDocinfo==SPH_DOCINFO_INLINE )
+		{
+			m_iStride = tSetup.m_tMin.m_iRowitems;
+			m_pDocinfo = new CSphRowitem [ MAX_DOCS*m_iStride ];
+		}
+	}
 
 protected:
 	inline const ExtDoc_t *		ReturnDocsChunk ( int iCount, SphDocID_t * pMaxID )
@@ -10680,7 +10693,6 @@ class ExtTerm_c : public ExtNode_i
 {
 public:
 								ExtTerm_c ( const CSphString & sTerm, DWORD uFields, const CSphTermSetup & tSetup, DWORD uQuerypos, CSphString * pWarning );
-								~ExtTerm_c ();
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
 	virtual void				GetQwords ( ExtQwordsHash_t & hQwords );
@@ -10695,8 +10707,6 @@ protected:
 	float						m_fIDF;			///< IDF for this term (might be 0.0f for non-1st occurences in query)
 	DWORD						m_uMaxStamp;	///< work until this timestamp 
 	CSphString *				m_pWarning;
-	int							m_iStride;		///< docinfo stride (for inline mode only)
-	CSphRowitem *				m_pDocinfo;		///< docinfo storage (for inline mode only)
 };
 
 
@@ -10725,7 +10735,7 @@ protected:
 class ExtTwofer_c : public ExtNode_i
 {
 public:
-								ExtTwofer_c ( ExtNode_i * pFirst, ExtNode_i * pSecond );
+								ExtTwofer_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const CSphTermSetup & tSetup );
 								~ExtTwofer_c ();
 	virtual void				GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
@@ -10742,7 +10752,7 @@ protected:
 class ExtAnd_c : public ExtTwofer_c
 {
 public:
-								ExtAnd_c ( ExtNode_i * pFirst, ExtNode_i * pSecond ) : ExtTwofer_c ( pFirst, pSecond ) {}
+								ExtAnd_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const CSphTermSetup & tSetup ) : ExtTwofer_c ( pFirst, pSecond, tSetup ) {}
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
 };
@@ -10752,7 +10762,7 @@ public:
 class ExtOr_c : public ExtTwofer_c
 {
 public:
-								ExtOr_c ( ExtNode_i * pFirst, ExtNode_i * pSecond ) : ExtTwofer_c ( pFirst, pSecond ) {}
+								ExtOr_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const CSphTermSetup & tSetup ) : ExtTwofer_c ( pFirst, pSecond, tSetup ) {}
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
 };
@@ -10762,7 +10772,7 @@ public:
 class ExtAndNot_c : public ExtTwofer_c
 {
 public:
-								ExtAndNot_c ( ExtNode_i * pFirst, ExtNode_i * pSecond );
+								ExtAndNot_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const CSphTermSetup & tSetup );
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
 
@@ -10894,7 +10904,27 @@ DECLARE_RANKER ( ExtRanker_MatchAny_c )
 
 //////////////////////////////////////////////////////////////////////////
 
+static inline void CopyExtDocinfo ( ExtDoc_t & tDst, const ExtDoc_t & tSrc, CSphRowitem ** ppRow, int iStride )
+{
+	if ( tSrc.m_pDocinfo )
+	{
+		assert ( ppRow && *ppRow );
+		assert ( *ppRow >= tDst.m_pDocinfo && ( *ppRow + iStride*sizeof(CSphRowitem) ) <= ( tDst.m_pDocinfo + (ExtNode_i::MAX_DOCS*iStride) ) );
+		memcpy ( *ppRow, tSrc.m_pDocinfo, iStride*sizeof(CSphRowitem) );
+		tDst.m_pDocinfo = *ppRow;
+		*ppRow += iStride;
+	}
+}
+
+static inline void CopyExtDoc ( ExtDoc_t & tDst, const ExtDoc_t & tSrc, CSphRowitem ** ppRow, int iStride )
+{
+	tDst = tSrc;
+	CopyExtDocinfo ( tDst, tSrc, ppRow, iStride );
+}
+
 ExtNode_i::ExtNode_i ()
+	: m_iStride(0)
+	, m_pDocinfo(NULL)
 {
 	m_dDocs[0].m_uDocid = DOCID_MAX;
 	m_dHits[0].m_uDocid = DOCID_MAX;
@@ -10943,7 +10973,7 @@ ExtNode_i * ExtNode_i::Create ( const CSphExtendedQueryNode * pNode, const CSphT
 				const CSphVector<CSphExtendedQueryAtomWord> & dWords = pNode->m_tAtom.m_dWords;
 				ExtNode_i * pCur = Create ( dWords[0].m_sWord, uFields, tAtom.m_iMaxFieldPos, tSetup, dWords[0].m_iAtomPos, pWarning );
 				for ( int i=1; i<dWords.GetLength(); i++ )
-					pCur = new ExtAnd_c ( pCur, Create ( dWords[i].m_sWord, uFields, tAtom.m_iMaxFieldPos, tSetup, dWords[i].m_iAtomPos, pWarning ) );
+					pCur = new ExtAnd_c ( pCur, Create ( dWords[i].m_sWord, uFields, tAtom.m_iMaxFieldPos, tSetup, dWords[i].m_iAtomPos, pWarning ), tSetup );
 				return pCur;
 
 			} else
@@ -10964,9 +10994,9 @@ ExtNode_i * ExtNode_i::Create ( const CSphExtendedQueryNode * pNode, const CSphT
 		for ( int i=1; i<iChildren; i++ )
 			switch ( pNode->m_eOp )
 		{
-			case SPH_QUERY_OR:		pCur = new ExtOr_c ( pCur, ExtNode_i::Create ( pNode->m_dChildren[i], tSetup, pWarning ) ); break;
-			case SPH_QUERY_AND:		pCur = new ExtAnd_c ( pCur, ExtNode_i::Create ( pNode->m_dChildren[i], tSetup, pWarning ) ); break;
-			case SPH_QUERY_ANDNOT:	pCur = new ExtAndNot_c ( pCur, ExtNode_i::Create ( pNode->m_dChildren[i], tSetup, pWarning ) ); break;
+			case SPH_QUERY_OR:		pCur = new ExtOr_c ( pCur, ExtNode_i::Create ( pNode->m_dChildren[i], tSetup, pWarning ), tSetup ); break;
+			case SPH_QUERY_AND:		pCur = new ExtAnd_c ( pCur, ExtNode_i::Create ( pNode->m_dChildren[i], tSetup, pWarning ), tSetup ); break;
+			case SPH_QUERY_ANDNOT:	pCur = new ExtAndNot_c ( pCur, ExtNode_i::Create ( pNode->m_dChildren[i], tSetup, pWarning ), tSetup ); break;
 			default:				assert ( 0 && "internal error: unhandled op in ExtNode_i::Create()" ); break;
 		}
 		
@@ -10991,19 +11021,7 @@ ExtTerm_c::ExtTerm_c ( const CSphString & sTerm, DWORD uFields, const CSphTermSe
 	m_uFields = uFields;
 	m_uMaxStamp = tSetup.m_uMaxStamp;
 
-	m_iStride = 0;
-	m_pDocinfo = NULL;
-	if ( tSetup.m_eDocinfo==SPH_DOCINFO_INLINE )
-	{
-		m_iStride = tSetup.m_tMin.m_iRowitems;
-		m_pDocinfo = new CSphRowitem [ MAX_DOCS*m_iStride ];
-	}
-}
-
-
-ExtTerm_c::~ExtTerm_c ()
-{
-	SafeDeleteArray ( m_pDocinfo );
+	AllocDocinfo ( tSetup );
 }
 
 
@@ -11188,6 +11206,7 @@ ExtTermPos_c::ExtTermPos_c ( const CSphString & sTerm, DWORD uFields, int iMaxFi
 	, m_uLastID			( 0 )
 	, m_pMyHit			( 0 )
 {
+	AllocDocinfo ( tSetup );
 }
 
 
@@ -11205,6 +11224,7 @@ const ExtDoc_t * ExtTermPos_c::GetDocsChunk ( SphDocID_t * pMaxID )
 	const ExtHit_t * pHits = m_pRawHits;
 	m_uLastID = 0;
 
+	CSphRowitem * pDocinfo = m_pDocinfo;
 	while ( iMyHit<MAX_HITS-1 )
 	{
 		// fetch more hits if needed
@@ -11221,7 +11241,7 @@ const ExtDoc_t * ExtTermPos_c::GetDocsChunk ( SphDocID_t * pMaxID )
 		assert ( pDocs->m_uDocid==pHits->m_uDocid );
 
 		SphDocID_t uLastID = pDocs->m_uDocid;
-		m_dMyDocs[iMyDoc++] = *pDocs++;
+		CopyExtDoc ( m_dMyDocs[iMyDoc++], *pDocs, &pDocinfo, m_iStride );
 
 		// copy acceptable hits for this document
 		while ( iMyHit<MAX_HITS-1 && pHits->m_uDocid==uLastID )
@@ -11314,7 +11334,7 @@ const ExtHit_t * ExtTermPos_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtTwofer_c::ExtTwofer_c ( ExtNode_i * pFirst, ExtNode_i * pSecond )
+ExtTwofer_c::ExtTwofer_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const CSphTermSetup & tSetup )
 {
 	m_pChildren[0] = pFirst;
 	m_pChildren[1] = pSecond;
@@ -11323,6 +11343,8 @@ ExtTwofer_c::ExtTwofer_c ( ExtNode_i * pFirst, ExtNode_i * pSecond )
 	m_pCurDoc[0] = NULL;
 	m_pCurDoc[1] = NULL;
 	m_uMatchedDocid = 0;
+
+	AllocDocinfo ( tSetup );
 }
 
 ExtTwofer_c::~ExtTwofer_c ()
@@ -11352,6 +11374,7 @@ const ExtDoc_t * ExtAnd_c::GetDocsChunk ( SphDocID_t * pMaxID )
 	const ExtDoc_t * pCur1 = m_pCurDoc[1];
 
 	int iDoc = 0;
+	CSphRowitem * pDocinfo = m_pDocinfo;
 	for ( ;; )
 	{
 		// if any of the pointers is empty, *and* there is no data yet, process next child chunk
@@ -11387,10 +11410,10 @@ const ExtDoc_t * ExtAnd_c::GetDocsChunk ( SphDocID_t * pMaxID )
 			// emit it
 			ExtDoc_t & tDoc = m_dDocs[iDoc++];	
 			tDoc.m_uDocid = pCur0->m_uDocid;
-			tDoc.m_pDocinfo = pCur0->m_pDocinfo;
 			tDoc.m_uFields = pCur0->m_uFields | pCur1->m_uFields;
 			tDoc.m_uHitlistOffset = -1;
 			tDoc.m_fTFIDF = pCur0->m_fTFIDF + pCur1->m_fTFIDF;
+			CopyExtDocinfo ( tDoc, *pCur0, &pDocinfo, m_iStride );
 
 			// skip it
 			pCur0++; if ( pCur0->m_uDocid==DOCID_MAX ) pCur0 = NULL;
@@ -11495,6 +11518,7 @@ const ExtDoc_t * ExtOr_c::GetDocsChunk ( SphDocID_t * pMaxID )
 
 	DWORD uTouched = 0;
 	int iDoc = 0;
+	CSphRowitem * pDocinfo = m_pDocinfo;
 	while ( iDoc<MAX_DOCS-1 )
 	{
 		// if any of the pointers is empty, and not touched yet, advance
@@ -11521,7 +11545,7 @@ const ExtDoc_t * ExtOr_c::GetDocsChunk ( SphDocID_t * pMaxID )
 				// copy min docids from 1st child
 				while ( pCur0->m_uDocid < pCur1->m_uDocid && iDoc<MAX_DOCS-1 )
 				{
-					m_dDocs[iDoc++] = *pCur0++;
+					CopyExtDoc ( m_dDocs[iDoc++], *pCur0++, &pDocinfo, m_iStride );
 					uTouched |= 1;
 				}
 				if ( pCur0->m_uDocid==DOCID_MAX ) { pCur0 = NULL; break; }
@@ -11529,7 +11553,7 @@ const ExtDoc_t * ExtOr_c::GetDocsChunk ( SphDocID_t * pMaxID )
 				// copy min docids from 2nd child
 				while ( pCur1->m_uDocid < pCur0->m_uDocid && iDoc<MAX_DOCS-1 )
 				{
-					m_dDocs[iDoc++] = *pCur1++;
+					CopyExtDoc ( m_dDocs[iDoc++], *pCur1++, &pDocinfo, m_iStride );
 					uTouched |= 2;
 				}
 				if ( pCur1->m_uDocid==DOCID_MAX ) { pCur1 = NULL; break; }
@@ -11543,6 +11567,7 @@ const ExtDoc_t * ExtOr_c::GetDocsChunk ( SphDocID_t * pMaxID )
 					m_dDocs[iDoc] = *pCur0;
 					m_dDocs[iDoc].m_uFields = pCur0->m_uFields | pCur1->m_uFields;
 					m_dDocs[iDoc].m_fTFIDF = pCur0->m_fTFIDF + pCur1->m_fTFIDF;
+					CopyExtDocinfo ( m_dDocs[iDoc], *pCur0, &pDocinfo, m_iStride );
 					iDoc++;
 					pCur0++;
 					pCur1++;
@@ -11558,7 +11583,7 @@ const ExtDoc_t * ExtOr_c::GetDocsChunk ( SphDocID_t * pMaxID )
 			if ( pList->m_uDocid!=DOCID_MAX && iDoc<MAX_DOCS-1 )
 			{
 				while ( pList->m_uDocid!=DOCID_MAX && iDoc<MAX_DOCS-1 )
-					m_dDocs[iDoc++] = *pList++;
+					CopyExtDoc ( m_dDocs[iDoc++], *pList++, &pDocinfo, m_iStride );
 				uTouched |= pCur0 ? 1 : 2;
 			}
 
@@ -11640,8 +11665,8 @@ const ExtHit_t * ExtOr_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMax
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtAndNot_c::ExtAndNot_c ( ExtNode_i * pFirst, ExtNode_i * pSecond )
-	: ExtTwofer_c ( pFirst, pSecond )
+ExtAndNot_c::ExtAndNot_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const CSphTermSetup & tSetup )
+	: ExtTwofer_c ( pFirst, pSecond, tSetup )
 	, m_bPassthrough ( false )
 {
 }
@@ -11658,6 +11683,7 @@ const ExtDoc_t * ExtAndNot_c::GetDocsChunk ( SphDocID_t * pMaxID )
 	const ExtDoc_t * pCur1 = m_pCurDoc[1];
 
 	int iDoc = 0;
+	CSphRowitem * pDocinfo = m_pDocinfo;
 	while ( iDoc<MAX_DOCS-1 )
 	{
 		// pull more docs from accept, if needed
@@ -11682,7 +11708,7 @@ const ExtDoc_t * ExtAndNot_c::GetDocsChunk ( SphDocID_t * pMaxID )
 		{
 			assert ( pCur0 );
 			while ( pCur0->m_uDocid!=DOCID_MAX && iDoc<MAX_DOCS-1 )
-				m_dDocs[iDoc++] = *pCur0++;
+				CopyExtDoc ( m_dDocs[iDoc++], *pCur0++, &pDocinfo, m_iStride );
 
 			if ( pCur0->m_uDocid==DOCID_MAX )
 				m_bPassthrough = true;
@@ -11700,7 +11726,8 @@ const ExtDoc_t * ExtAndNot_c::GetDocsChunk ( SphDocID_t * pMaxID )
 			assert ( pCur1->m_uDocid!=DOCID_MAX );
 
 			// copy accepted until min rejected id
-			while ( pCur0->m_uDocid < pCur1->m_uDocid && iDoc<MAX_DOCS-1 ) m_dDocs[iDoc++] = *pCur0++;
+			while ( pCur0->m_uDocid < pCur1->m_uDocid && iDoc<MAX_DOCS-1 )
+				CopyExtDoc ( m_dDocs[iDoc++], *pCur0++, &pDocinfo, m_iStride );
 			if ( pCur0->m_uDocid==DOCID_MAX || iDoc==MAX_DOCS-1 ) break;
 
 			// skip rejected until min accepted id
@@ -11766,10 +11793,12 @@ ExtPhrase_c::ExtPhrase_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, c
 	ExtNode_i * pCur = Create ( dWords[0].m_sWord, uFields, pNode->m_tAtom.m_iMaxFieldPos, tSetup, dWords[0].m_iAtomPos, pWarning );
 	for ( int i=1; i<(int)m_uWords; i++ )
 	{
-		pCur = new ExtAnd_c ( pCur, Create ( dWords[i].m_sWord, uFields, pNode->m_tAtom.m_iMaxFieldPos, tSetup, dWords[i].m_iAtomPos, pWarning ) );
+		pCur = new ExtAnd_c ( pCur, Create ( dWords[i].m_sWord, uFields, pNode->m_tAtom.m_iMaxFieldPos, tSetup, dWords[i].m_iAtomPos, pWarning ), tSetup );
 		m_dQposDelta [ dWords[i-1].m_iAtomPos - dWords[0].m_iAtomPos ] = dWords[i].m_iAtomPos - dWords[i-1].m_iAtomPos;
 	}
 	m_pNode = pCur;
+
+	AllocDocinfo ( tSetup );
 }
 
 ExtPhrase_c::~ExtPhrase_c ()
@@ -11796,6 +11825,7 @@ const ExtDoc_t * ExtPhrase_c::GetDocsChunk ( SphDocID_t * pMaxID )
 	// search for phrase matches
 	int iDoc = 0;
 	int iMyHit = 0;
+	CSphRowitem * pDocinfo = m_pDocinfo;
 	while ( iMyHit<MAX_HITS-1 )
 	{
 		// out of hits?
@@ -11866,10 +11896,10 @@ const ExtDoc_t * ExtPhrase_c::GetDocsChunk ( SphDocID_t * pMaxID )
 					assert ( pDoc->m_uDocid==pHit->m_uDocid );
 
 					m_dDocs[iDoc].m_uDocid = pHit->m_uDocid;
-					m_dDocs[iDoc].m_pDocinfo = pDoc->m_pDocinfo;
 					m_dDocs[iDoc].m_uFields = ( 1UL<<(pHit->m_uHitpos>>24) );
 					m_dDocs[iDoc].m_uHitlistOffset = -1;
 					m_dDocs[iDoc].m_fTFIDF = pDoc->m_fTFIDF;
+					CopyExtDocinfo ( m_dDocs[iDoc], *pDoc, &pDocinfo, m_iStride );
 					iDoc++;
 					m_uLastDocID = pHit->m_uDocid;
 				}
@@ -12176,6 +12206,7 @@ const ExtDoc_t * ExtProximity_c::GetDocsChunk ( SphDocID_t * pMaxID )
 
 	int iDoc = 0;
 	int iHit = 0;
+	CSphRowitem * pDocinfo = m_pDocinfo;
 	while ( iHit<MAX_HITS-1 )
 	{
 		// update hitlist
@@ -12267,10 +12298,10 @@ const ExtDoc_t * ExtProximity_c::GetDocsChunk ( SphDocID_t * pMaxID )
 				assert ( pDoc->m_uDocid==pHit->m_uDocid );
 
 				m_dDocs[iDoc].m_uDocid = pHit->m_uDocid;
-				m_dDocs[iDoc].m_pDocinfo = pDoc->m_pDocinfo;
 				m_dDocs[iDoc].m_uFields = ( 1UL<<(pHit->m_uHitpos>>24) );
 				m_dDocs[iDoc].m_uHitlistOffset = -1;
 				m_dDocs[iDoc].m_fTFIDF = pDoc->m_fTFIDF;
+				CopyExtDocinfo ( m_dDocs[iDoc], *pDoc, &pDocinfo, m_iStride );
 				iDoc++;
 				m_uLastDocID = pHit->m_uDocid;
 			}
@@ -12400,6 +12431,7 @@ const ExtDoc_t * ExtQuorum_c::GetDocsChunk ( SphDocID_t * pMaxID )
 	DWORD uTouched = 0; // bitmask of children that actually produced matches this time
 	int iDoc = 0;
 	bool bDone = false;
+	CSphRowitem * pDocinfo = m_pDocinfo;
 	while ( iDoc<MAX_DOCS-1 && !bDone )
 	{
 		// find min document ID, count occurences
@@ -12430,7 +12462,7 @@ const ExtDoc_t * ExtQuorum_c::GetDocsChunk ( SphDocID_t * pMaxID )
 
 		// submit match
 		if ( iCandMatches>=m_iThresh )
-			m_dDocs[iDoc++] = tCand;
+			CopyExtDoc ( m_dDocs[iDoc++], tCand, &pDocinfo, m_iStride );
 
 		// advance children
 		ARRAY_FOREACH ( i, m_pCurDoc )

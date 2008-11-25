@@ -916,7 +916,7 @@ public:
 	/// set MVA pool
 	virtual void SetMVAPool ( const DWORD * pMvaPool )
 	{
-		m_pArg->SetMVAPool ( pMvaPool );
+		this->m_pArg->SetMVAPool ( pMvaPool );
 	}
 };
 
@@ -950,7 +950,7 @@ public:
 	/// set MVA pool
 	virtual void SetMVAPool ( const DWORD * pMvaPool )
 	{
-		m_pArg->SetMVAPool ( pMvaPool );
+		this->m_pArg->SetMVAPool ( pMvaPool );
 		ARRAY_FOREACH ( i, m_dTurnPoints )
 			m_dTurnPoints[i]->SetMVAPool ( pMvaPool );
 	}
@@ -980,7 +980,7 @@ public:
 	/// set MVA pool
 	virtual void SetMVAPool ( const DWORD * pMvaPool )
 	{
-		m_pArg->SetMVAPool ( pMvaPool );
+		this->m_pArg->SetMVAPool ( pMvaPool );
 	}
 };
 

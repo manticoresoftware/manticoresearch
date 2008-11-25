@@ -14506,6 +14506,7 @@ bool CSphIndex_VLN::SetupCalc ( CSphQueryResult * pResult, const CSphSchema & tI
 		tCalc.m_uType = tCol.m_eAttrType;
 		tCalc.m_tLoc = tCol.m_tLocator;
 		tCalc.m_pExpr = tCol.m_pExpr.Ptr();
+		tCalc.m_pExpr->SetMVAPool ( m_pMva.GetWritePtr() );
 
 		if ( tCol.m_bLateCalc )
 			m_dLateCalc.Add ( tCalc );

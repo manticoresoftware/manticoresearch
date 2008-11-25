@@ -17,11 +17,14 @@
 %token <iAttrLocator>	TOK_ATTR_INT
 %token <iAttrLocator>	TOK_ATTR_BITS
 %token <iAttrLocator>	TOK_ATTR_FLOAT
+%token <iAttrLocator>	TOK_ATTR_MVA
 %token <iFunc>			TOK_FUNC
+%token <iFunc>			TOK_FUNC_IN
 %token <eDocinfo>		TOK_DOCINFO
-%type <iNode>			function
-%type <iNode>			arglist
+%type <iNode>			attr
 %type <iNode>			expr
+%type <iNode>			arglist
+%type <iNode>			function
 
 %left TOK_AND TOK_OR
 %nonassoc TOK_NOT
@@ -37,12 +40,17 @@ exprline:
 	expr							{ pParser->m_iParsed = $1; }
 	;
 
-expr:
-	TOK_CONST_INT					{ $$ = pParser->AddNodeInt ( $1 ); }
-	| TOK_CONST_FLOAT				{ $$ = pParser->AddNodeFloat ( $1 ); }
-	| TOK_ATTR_INT					{ $$ = pParser->AddNodeAttr ( TOK_ATTR_INT, $1 ); }
+attr:
+	TOK_ATTR_INT					{ $$ = pParser->AddNodeAttr ( TOK_ATTR_INT, $1 ); }
 	| TOK_ATTR_BITS					{ $$ = pParser->AddNodeAttr ( TOK_ATTR_BITS, $1 ); }
 	| TOK_ATTR_FLOAT				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_FLOAT, $1 ); }
+	;
+
+expr:
+	attr
+	| function
+	| TOK_CONST_INT					{ $$ = pParser->AddNodeInt ( $1 ); }
+	| TOK_CONST_FLOAT				{ $$ = pParser->AddNodeFloat ( $1 ); }
 	| TOK_DOCINFO					{ $$ = pParser->AddNodeDocinfo ( $1 ); }
 	| '-' expr %prec TOK_NEG		{ $$ = pParser->AddNodeOp ( TOK_NEG, $2, -1 ); }
 	| TOK_NOT expr					{ $$ = pParser->AddNodeOp ( TOK_NOT, $2, -1 ); if ( $$<0 ) YYERROR; }
@@ -59,7 +67,6 @@ expr:
 	| expr TOK_AND expr				{ $$ = pParser->AddNodeOp ( TOK_AND, $1, $3 ); if ( $$<0 ) YYERROR; }
 	| expr TOK_OR expr				{ $$ = pParser->AddNodeOp ( TOK_OR, $1, $3 ); if ( $$<0 ) YYERROR; }
 	| '(' expr ')'					{ $$ = $2; }
-	| function						{ $$ = $1; }
 	;
 
 arglist:
@@ -70,6 +77,15 @@ arglist:
 function:
 	TOK_FUNC '(' arglist ')'		{ $$ = pParser->AddNodeFunc ( $1, $3 ); if ( $$<0 ) YYERROR; }
 	| TOK_FUNC '(' ')'				{ $$ = pParser->AddNodeFunc ( $1, -1 ); if ( $$<0 ) YYERROR; }
+	| TOK_FUNC_IN '(' attr ',' arglist ')'
+		{
+			$$ = pParser->AddNodeFunc ( $1, $3, $5 );
+		}
+	| TOK_FUNC_IN '(' TOK_ATTR_MVA ',' arglist ')'
+		{
+			$$ = pParser->AddNodeAttr ( TOK_ATTR_MVA, $3 );
+			$$ = pParser->AddNodeFunc ( $1, $$, $5 );
+		}
 	;
 
 %%

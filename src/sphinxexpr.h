@@ -38,6 +38,9 @@ public:
 
 	/// check for arglist subtype
 	virtual bool IsArglist () const { return false; }
+
+	/// setup MVA pool
+	virtual void SetMVAPool ( const DWORD * ) {}
 };
 
 /// parses given expression, builds evaluator

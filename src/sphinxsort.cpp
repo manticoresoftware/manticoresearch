@@ -1488,6 +1488,7 @@ public:
 						ExprGeodist_t () {}
 	bool				Setup ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError );
 	virtual float		Eval ( const CSphMatch & tMatch ) const;
+	virtual void		SetMVAPool ( const DWORD * ) {}
 
 protected:
 	CSphAttrLocator		m_tGeoLatLoc;

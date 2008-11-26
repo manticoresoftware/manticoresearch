@@ -190,19 +190,19 @@ STATIC_SIZE_ASSERT ( SphOffset_t, 8 );
 //////////////////////////////////////////////////////////////////////////
 
 /// pack hit
-#define HIT_PACK(_field,_pos)	( (((_field)&0x7fUL)<<24) | ((_pos)&0xffffffUL) )
+#define HIT_PACK(_field,_pos)	( ((_field)<<24) | ((_pos)&0x7fffffUL) )
 
 /// extract in-field position from packed hit 
-#define HIT2POS(_hit)			((_hit)&0xffffffUL)
+#define HIT2POS(_hit)			((_hit)&0x7fffffUL)
 
 /// extract field number from packed hit
-#define HIT2FIELD(_hit)			(((_hit)>>24)&0x7fUL)
+#define HIT2FIELD(_hit)			((_hit)>>24)
 
 /// prepare hit for LCS counting
-#define HIT2LCS(_hit)			((_hit)&0x7fffffffUL)
+#define HIT2LCS(_hit)			(_hit&0xff7fffffUL)
 
 /// field end flag
-#define HIT_FIELD_END			0x80000000UL
+#define HIT_FIELD_END			0x800000UL
 
 /////////////////////////////////////////////////////////////////////////////
 // INTERNAL PROFILER
@@ -11906,20 +11906,20 @@ const ExtDoc_t * ExtPhrase_c::GetDocsChunk ( SphDocID_t * pMaxID )
 		}
 
 		// unexpected too-low position? must be duplicate keywords for the previous one ("aaa bbb aaa ccc" case); just skip them
-		if ( pHit->m_uDocid==m_uExpID && pHit->m_uHitpos<m_uExpPos )
+		if ( pHit->m_uDocid==m_uExpID && HIT2LCS(pHit->m_uHitpos)<m_uExpPos )
 		{
 			pHit++;
 			continue;
 		}
 
 		// unexpected position? reset and continue
-		if ( pHit->m_uDocid!=m_uExpID || pHit->m_uHitpos!=m_uExpPos )
+		if ( pHit->m_uDocid!=m_uExpID || HIT2LCS(pHit->m_uHitpos)!=m_uExpPos )
 		{
 			// stream position out of sequence; reset expected positions
 			if ( pHit->m_uQuerypos==m_uMinQpos )
 			{
 				m_uExpID = pHit->m_uDocid;
-				m_uExpPos = pHit->m_uHitpos + m_dQposDelta[0];
+				m_uExpPos = HIT2LCS(pHit->m_uHitpos) + m_dQposDelta[0];
 				m_uExpQpos = pHit->m_uQuerypos + m_dQposDelta[0];
 			} else
 			{
@@ -11932,7 +11932,7 @@ const ExtDoc_t * ExtPhrase_c::GetDocsChunk ( SphDocID_t * pMaxID )
 		// scan all hits with matching stream position
 		// duplicate stream positions occur when there are duplicate query words
 		const ExtHit_t * pStart = NULL;
-		for ( ; pHit->m_uDocid==m_uExpID && pHit->m_uHitpos==m_uExpPos; pHit++ )
+		for ( ; pHit->m_uDocid==m_uExpID && HIT2LCS(pHit->m_uHitpos)==m_uExpPos; pHit++ )
 		{
 			// stream position is as expected; let's check query position
 			if ( pHit->m_uQuerypos!=m_uExpQpos )
@@ -11966,7 +11966,7 @@ const ExtDoc_t * ExtPhrase_c::GetDocsChunk ( SphDocID_t * pMaxID )
 
 				DWORD uSpanlen = m_uMaxQpos - m_uMinQpos;
 				m_dMyHits[iMyHit].m_uDocid = pHit->m_uDocid;
-				m_dMyHits[iMyHit].m_uHitpos = pHit->m_uHitpos - uSpanlen;
+				m_dMyHits[iMyHit].m_uHitpos = HIT2LCS(pHit->m_uHitpos) - uSpanlen;
 				m_dMyHits[iMyHit].m_uQuerypos = m_uMinQpos;
 				m_dMyHits[iMyHit].m_uSpanlen = uSpanlen + 1;
 				m_dMyHits[iMyHit].m_uWeight = m_uWords;
@@ -12127,13 +12127,13 @@ const ExtHit_t * ExtPhrase_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t 
 				}
 
 				// unexpected position? reset and continue
-				if ( pHit->m_uHitpos!=m_uExpPos )
+				if ( HIT2LCS(pHit->m_uHitpos)!=m_uExpPos )
 				{
 					// stream position out of sequence; reset expected positions
 					if ( pHit->m_uQuerypos==m_uMinQpos )
 					{
 						m_uExpID = pHit->m_uDocid;
-						m_uExpPos = pHit->m_uHitpos + m_dQposDelta[0];
+						m_uExpPos = HIT2LCS(pHit->m_uHitpos) + m_dQposDelta[0];
 						m_uExpQpos = pHit->m_uQuerypos + m_dQposDelta[0];
 					} else
 					{
@@ -12146,7 +12146,7 @@ const ExtHit_t * ExtPhrase_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t 
 				// scan all hits with matching stream position
 				// duplicate stream positions occur when there are duplicate query words
 				const ExtHit_t * pStart = NULL;
-				for ( ; pHit->m_uDocid==m_uExpID && pHit->m_uHitpos==m_uExpPos; pHit++ )
+				for ( ; pHit->m_uDocid==m_uExpID && HIT2LCS(pHit->m_uHitpos)==m_uExpPos; pHit++ )
 				{
 					// stream position is as expected; let's check query position
 					if ( pHit->m_uQuerypos!=m_uExpQpos )
@@ -12165,7 +12165,7 @@ const ExtHit_t * ExtPhrase_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t 
 
 						DWORD uSpanlen = m_uMaxQpos - m_uMinQpos;
 						m_dMyHits[iMyHit].m_uDocid = pHit->m_uDocid;
-						m_dMyHits[iMyHit].m_uHitpos = pHit->m_uHitpos - uSpanlen;
+						m_dMyHits[iMyHit].m_uHitpos = HIT2LCS(pHit->m_uHitpos) - uSpanlen;
 						m_dMyHits[iMyHit].m_uQuerypos = m_uMinQpos;
 						m_dMyHits[iMyHit].m_uSpanlen = uSpanlen + 1;
 						m_dMyHits[iMyHit].m_uWeight = m_uWords;
@@ -12296,7 +12296,7 @@ const ExtDoc_t * ExtProximity_c::GetDocsChunk ( SphDocID_t * pMaxID )
 
 		// check if the incoming hit is out of bounds, or affects min pos
 		if (
-			!( pHit->m_uDocid==m_uExpID && pHit->m_uHitpos<m_uExpPos ) // out of expected bounds
+			!( pHit->m_uDocid==m_uExpID && HIT2LCS(pHit->m_uHitpos)<m_uExpPos ) // out of expected bounds
 			|| iEntry==iProxMinEntry ) // or simply affects min pos
 		{
 			if ( pHit->m_uDocid!=m_uExpID )
@@ -12304,7 +12304,7 @@ const ExtDoc_t * ExtProximity_c::GetDocsChunk ( SphDocID_t * pMaxID )
 				ARRAY_FOREACH ( i, dProx ) dProx[i] = UINT_MAX;
 				m_uExpID = pHit->m_uDocid;
 
-				dProx[iEntry] = pHit->m_uHitpos;
+				dProx[iEntry] = HIT2LCS(pHit->m_uHitpos);
 				iProxMinEntry = iEntry;
 				iProxWords = 1;
 
@@ -12313,11 +12313,11 @@ const ExtDoc_t * ExtProximity_c::GetDocsChunk ( SphDocID_t * pMaxID )
 				// update and recompute for old document
 				if ( dProx[iEntry]==UINT_MAX )
 					iProxWords++;
-				dProx[iEntry] = pHit->m_uHitpos;
+				dProx[iEntry] = HIT2LCS(pHit->m_uHitpos);
 				iProxMinEntry = iEntry;
 
-				int iMinPos = pHit->m_uHitpos - ( m_uMaxQpos-m_uMinQpos ) - m_iMaxDistance;
-				DWORD uMin = pHit->m_uHitpos;
+				int iMinPos = HIT2LCS(pHit->m_uHitpos) - ( m_uMaxQpos-m_uMinQpos ) - m_iMaxDistance;
+				DWORD uMin = HIT2LCS(pHit->m_uHitpos);
 				ARRAY_FOREACH ( i, dProx )
 					if ( dProx[i]!=UINT_MAX )
 				{
@@ -12344,7 +12344,7 @@ const ExtDoc_t * ExtProximity_c::GetDocsChunk ( SphDocID_t * pMaxID )
 				iProxWords++;
 
 			// update the context
-			dProx[iEntry] = pHit->m_uHitpos;
+			dProx[iEntry] = HIT2LCS(pHit->m_uHitpos);
 		}
 
 		// all words were found within given distance?

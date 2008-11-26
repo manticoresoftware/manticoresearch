@@ -185,6 +185,25 @@ static SphErrorCallback_fn	g_pInternalErrorCallback	= NULL;
 
 STATIC_SIZE_ASSERT ( SphOffset_t, 8 );
 
+//////////////////////////////////////////////////////////////////////////
+// PACKED HIT MACROS
+//////////////////////////////////////////////////////////////////////////
+
+/// pack hit
+#define HIT_PACK(_field,_pos)	( (((_field)&0x7fUL)<<24) | ((_pos)&0xffffffUL) )
+
+/// extract in-field position from packed hit 
+#define HIT2POS(_hit)			((_hit)&0xffffffUL)
+
+/// extract field number from packed hit
+#define HIT2FIELD(_hit)			(((_hit)>>24)&0x7fUL)
+
+/// prepare hit for LCS counting
+#define HIT2LCS(_hit)			((_hit)&0x7fffffffUL)
+
+/// field end flag
+#define HIT_FIELD_END			0x80000000UL
+
 /////////////////////////////////////////////////////////////////////////////
 // INTERNAL PROFILER
 /////////////////////////////////////////////////////////////////////////////
@@ -7116,7 +7135,7 @@ void CSphIndex_VLN::cidxHit ( CSphWordHit * hit, CSphRowitem * pAttrs )
 	m_iLastWordHits++;	
 
 	// update matched fields mask
-	m_uLastDocFields |= ( 1UL << (hit->m_iWordPos>>24) );
+	m_uLastDocFields |= ( 1UL<<HIT2FIELD(hit->m_iWordPos) );
 	m_uLastDocHits++;
 }
 
@@ -10653,7 +10672,7 @@ public:
 	virtual						~ExtNode_i () { SafeDeleteArray ( m_pDocinfo ); }
 
 	static ExtNode_i *			Create ( const CSphExtendedQueryNode * pNode, const CSphTermSetup & tSetup, CSphString * pWarning );
-	static ExtNode_i *			Create ( const CSphString & sTerm, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup, DWORD uQuerypos, CSphString * pWarning );
+	static ExtNode_i *			Create ( const CSphExtendedQueryAtomWord & tWord, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup, CSphString * pWarning );
 
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID ) = 0;
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID ) = 0;
@@ -10718,13 +10737,24 @@ protected:
 };
 
 
-/// single keyword streamer, with position filtering
+enum TermPosFilter_e
+{
+	TERM_POS_FIELD_LIMIT,
+	TERM_POS_FIELD_START,
+	TERM_POS_FIELD_END
+};
+
+/// single keyword streamer, with term position filtering
+template < TermPosFilter_e T >
 class ExtTermPos_c : public ExtTerm_c
 {
 public:
 								ExtTermPos_c ( const CSphString & sTerm, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup, DWORD uQuerypos, CSphString * pWarning );
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
+
+protected:
+	inline bool					IsAcceptableHit ( DWORD uPos ) const;
 
 protected:
 	int							m_iMaxFieldPos;
@@ -10940,12 +10970,12 @@ ExtNode_i::ExtNode_i ()
 }
 
 
-ExtNode_i * ExtNode_i::Create ( const CSphString & sTerm, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup, DWORD uQuerypos, CSphString * pWarning )
+ExtNode_i * ExtNode_i::Create ( const CSphExtendedQueryAtomWord & tWord, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup, CSphString * pWarning )
 {
-	if ( iMaxFieldPos>0 )
-		return new ExtTermPos_c ( sTerm, uFields, iMaxFieldPos, tSetup, uQuerypos, pWarning );
-	else
-		return new ExtTerm_c ( sTerm, uFields, tSetup, uQuerypos, pWarning );
+	if ( tWord.m_bFieldStart )		return new ExtTermPos_c<TERM_POS_FIELD_START> ( tWord.m_sWord, uFields, 0, tSetup, tWord.m_iAtomPos, pWarning );
+	else if ( tWord.m_bFieldEnd )	return new ExtTermPos_c<TERM_POS_FIELD_END> ( tWord.m_sWord, uFields, 0, tSetup, tWord.m_iAtomPos, pWarning );
+	if ( iMaxFieldPos>0 )			return new ExtTermPos_c<TERM_POS_FIELD_LIMIT> ( tWord.m_sWord, uFields, iMaxFieldPos, tSetup, tWord.m_iAtomPos, pWarning );
+	else							return new ExtTerm_c ( tWord.m_sWord, uFields, tSetup, tWord.m_iAtomPos, pWarning );
 }
 
 
@@ -10962,7 +10992,7 @@ ExtNode_i * ExtNode_i::Create ( const CSphExtendedQueryNode * pNode, const CSphT
 		DWORD uFields = tAtom.m_uFields;
 
 		if ( iWords==1 )
-			return Create ( tAtom.m_dWords[0].m_sWord, uFields, tAtom.m_iMaxFieldPos, tSetup, tAtom.m_dWords[0].m_iAtomPos, pWarning );
+			return Create ( tAtom.m_dWords[0], uFields, tAtom.m_iMaxFieldPos, tSetup, pWarning );
 
 		assert ( tAtom.m_iMaxDistance>=0 );
 		if ( tAtom.m_iMaxDistance==0 )
@@ -10980,9 +11010,9 @@ ExtNode_i * ExtNode_i::Create ( const CSphExtendedQueryNode * pNode, const CSphT
 
 				// create AND node
 				const CSphVector<CSphExtendedQueryAtomWord> & dWords = pNode->m_tAtom.m_dWords;
-				ExtNode_i * pCur = Create ( dWords[0].m_sWord, uFields, tAtom.m_iMaxFieldPos, tSetup, dWords[0].m_iAtomPos, pWarning );
+				ExtNode_i * pCur = Create ( dWords[0], uFields, tAtom.m_iMaxFieldPos, tSetup, pWarning );
 				for ( int i=1; i<dWords.GetLength(); i++ )
-					pCur = new ExtAnd_c ( pCur, Create ( dWords[i].m_sWord, uFields, tAtom.m_iMaxFieldPos, tSetup, dWords[i].m_iAtomPos, pWarning ), tSetup );
+					pCur = new ExtAnd_c ( pCur, Create ( dWords[i], uFields, tAtom.m_iMaxFieldPos, tSetup, pWarning ), tSetup );
 				return pCur;
 
 			} else
@@ -11158,7 +11188,7 @@ const ExtHit_t * ExtTerm_c::GetHitsChunk ( const ExtDoc_t * pMatched, SphDocID_t
 			continue;
 		}
 
-		if (!( m_uFields & ( 1UL<<(m_tQword.m_iHitPos>>24) ) ))
+		if (!( m_uFields & ( 1UL<<HIT2FIELD(m_tQword.m_iHitPos) ) ))
 			continue;
 
 		ExtHit_t & tHit = m_dHits[iHit++];
@@ -11203,10 +11233,8 @@ void ExtTerm_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 
 //////////////////////////////////////////////////////////////////////////
 
-const DWORD MAGIC_POS_MASK = 0xffffffUL;
-
-
-ExtTermPos_c::ExtTermPos_c ( const CSphString & sTerm, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup, DWORD uQuerypos, CSphString * pWarning )
+template < TermPosFilter_e T >
+ExtTermPos_c<T>::ExtTermPos_c ( const CSphString & sTerm, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup, DWORD uQuerypos, CSphString * pWarning )
 	: ExtTerm_c			( sTerm, uFields, tSetup, uQuerypos, pWarning )
 	, m_iMaxFieldPos	( iMaxFieldPos )
 	, m_uTermMaxID		( 0 )
@@ -11219,7 +11247,29 @@ ExtTermPos_c::ExtTermPos_c ( const CSphString & sTerm, DWORD uFields, int iMaxFi
 }
 
 
-const ExtDoc_t * ExtTermPos_c::GetDocsChunk ( SphDocID_t * pMaxID )
+template<>
+inline bool ExtTermPos_c<TERM_POS_FIELD_LIMIT>::IsAcceptableHit ( DWORD uPos ) const
+{
+	return (int)HIT2POS(uPos)<=m_iMaxFieldPos;
+}
+
+
+template<>
+inline bool ExtTermPos_c<TERM_POS_FIELD_START>::IsAcceptableHit ( DWORD uPos ) const
+{
+	return (int)HIT2POS(uPos)==1;
+}
+
+
+template<>
+inline bool ExtTermPos_c<TERM_POS_FIELD_END>::IsAcceptableHit ( DWORD uPos ) const
+{
+	return ( uPos & HIT_FIELD_END )!=0;
+}
+
+
+template < TermPosFilter_e T >
+const ExtDoc_t * ExtTermPos_c<T>::GetDocsChunk ( SphDocID_t * pMaxID )
 {
 	// fetch more docs if needed
 	if ( !m_pRawDocs ) m_pRawDocs = ExtTerm_c::GetDocsChunk ( &m_uTermMaxID );
@@ -11242,7 +11292,7 @@ const ExtDoc_t * ExtTermPos_c::GetDocsChunk ( SphDocID_t * pMaxID )
 
 		// scan until next acceptable hit
 		while ( pHits->m_uDocid < pDocs->m_uDocid ) pHits++; // skip leftovers
-		while ( pHits->m_uDocid!=DOCID_MAX && (int)( pHits->m_uHitpos & MAGIC_POS_MASK )>m_iMaxFieldPos ) pHits++;
+		while ( pHits->m_uDocid!=DOCID_MAX && !IsAcceptableHit ( pHits->m_uHitpos ) ) pHits++;
 		if ( pHits->m_uDocid==DOCID_MAX ) continue;
 
 		// find and emit new document
@@ -11255,7 +11305,7 @@ const ExtDoc_t * ExtTermPos_c::GetDocsChunk ( SphDocID_t * pMaxID )
 		// copy acceptable hits for this document
 		while ( iMyHit<MAX_HITS-1 && pHits->m_uDocid==uLastID )
 		{
-			if ( (int)( pHits->m_uHitpos & MAGIC_POS_MASK )<=m_iMaxFieldPos )
+			if ( IsAcceptableHit ( pHits->m_uHitpos ) )
 				m_dMyHits[iMyHit++] = *pHits;
 			pHits++;
 		}
@@ -11284,7 +11334,8 @@ const ExtDoc_t * ExtTermPos_c::GetDocsChunk ( SphDocID_t * pMaxID )
 }
 
 
-const ExtHit_t * ExtTermPos_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t ) // OPTIMIZE: could possibly use uMaxID
+template < TermPosFilter_e T >
+const ExtHit_t * ExtTermPos_c<T>::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t ) // OPTIMIZE: could possibly use uMaxID
 {
 	const ExtHit_t * pMyHit = m_pMyHit;
 	if ( !pMyHit )
@@ -11310,7 +11361,7 @@ const ExtHit_t * ExtTermPos_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t
 
 			while ( pRaw->m_uDocid==m_uLastID && iFilteredHits<MAX_HITS-1 ) 
 			{
-				if ( (int)( pRaw->m_uHitpos & MAGIC_POS_MASK )<=m_iMaxFieldPos )
+				if ( IsAcceptableHit ( pRaw->m_uHitpos ) )
 					m_dFilteredHits[iFilteredHits++] = *pRaw;
 				pRaw++;
 			}
@@ -11799,10 +11850,10 @@ ExtPhrase_c::ExtPhrase_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, c
 	ARRAY_FOREACH ( i, m_dQposDelta )
 		m_dQposDelta[i] = -INT_MAX;
 
-	ExtNode_i * pCur = Create ( dWords[0].m_sWord, uFields, pNode->m_tAtom.m_iMaxFieldPos, tSetup, dWords[0].m_iAtomPos, pWarning );
+	ExtNode_i * pCur = Create ( dWords[0], uFields, pNode->m_tAtom.m_iMaxFieldPos, tSetup, pWarning );
 	for ( int i=1; i<(int)m_uWords; i++ )
 	{
-		pCur = new ExtAnd_c ( pCur, Create ( dWords[i].m_sWord, uFields, pNode->m_tAtom.m_iMaxFieldPos, tSetup, dWords[i].m_iAtomPos, pWarning ), tSetup );
+		pCur = new ExtAnd_c ( pCur, Create ( dWords[i], uFields, pNode->m_tAtom.m_iMaxFieldPos, tSetup, pWarning ), tSetup );
 		m_dQposDelta [ dWords[i-1].m_iAtomPos - dWords[0].m_iAtomPos ] = dWords[i].m_iAtomPos - dWords[i-1].m_iAtomPos;
 	}
 	m_pNode = pCur;
@@ -11905,7 +11956,7 @@ const ExtDoc_t * ExtPhrase_c::GetDocsChunk ( SphDocID_t * pMaxID )
 					assert ( pDoc->m_uDocid==pHit->m_uDocid );
 
 					m_dDocs[iDoc].m_uDocid = pHit->m_uDocid;
-					m_dDocs[iDoc].m_uFields = ( 1UL<<(pHit->m_uHitpos>>24) );
+					m_dDocs[iDoc].m_uFields = ( 1UL<<HIT2FIELD(pHit->m_uHitpos) );
 					m_dDocs[iDoc].m_uHitlistOffset = -1;
 					m_dDocs[iDoc].m_fTFIDF = pDoc->m_fTFIDF;
 					CopyExtDocinfo ( m_dDocs[iDoc], *pDoc, &pDocinfo, m_iStride );
@@ -12307,7 +12358,7 @@ const ExtDoc_t * ExtProximity_c::GetDocsChunk ( SphDocID_t * pMaxID )
 				assert ( pDoc->m_uDocid==pHit->m_uDocid );
 
 				m_dDocs[iDoc].m_uDocid = pHit->m_uDocid;
-				m_dDocs[iDoc].m_uFields = ( 1UL<<(pHit->m_uHitpos>>24) );
+				m_dDocs[iDoc].m_uFields = ( 1UL<<HIT2FIELD(pHit->m_uHitpos) );
 				m_dDocs[iDoc].m_uHitlistOffset = -1;
 				m_dDocs[iDoc].m_fTFIDF = pDoc->m_fTFIDF;
 				CopyExtDocinfo ( m_dDocs[iDoc], *pDoc, &pDocinfo, m_iStride );
@@ -12727,13 +12778,13 @@ int ExtRanker_ProximityBM25_c::GetMatches ( int iFields, const int * pWeights )
 		}
 
 		// upd LCS
-		int iDelta = pHlist->m_uHitpos - pHlist->m_uQuerypos;
+		int iDelta = HIT2LCS(pHlist->m_uHitpos) - pHlist->m_uQuerypos;
 		if ( iDelta==iExpDelta )
 			uCurLCS = uCurLCS + BYTE(pHlist->m_uWeight);
 		else
 			uCurLCS = BYTE(pHlist->m_uWeight);
 
-		DWORD uField = pHlist->m_uHitpos >> 24;
+		DWORD uField = HIT2FIELD(pHlist->m_uHitpos);
 		if ( uCurLCS>uLCS[uField] )
 			uLCS[uField] = uCurLCS;
 
@@ -12877,7 +12928,7 @@ int ExtRanker_Wordcount_c::GetMatches ( int, const int * pWeights )
 		}
 
 		// upd rank
-		uRank += pWeights [ pHlist->m_uHitpos>>24 ]; // FIXME! boundary check
+		uRank += pWeights [ HIT2FIELD(pHlist->m_uHitpos) ]; // FIXME! boundary check
 		pHlist++;
 	}
 
@@ -12977,13 +13028,13 @@ int ExtRanker_Proximity_c::GetMatches ( int iFields, const int * pWeights )
 
 		// upd LCS
 		DWORD uQueryPos = pHlist->m_uQuerypos;
-		int iDelta = pHlist->m_uHitpos - uQueryPos;
+		int iDelta = HIT2LCS(pHlist->m_uHitpos) - uQueryPos;
 		if ( iDelta==iExpDelta )
 			uCurLCS = uCurLCS + BYTE(pHlist->m_uWeight);
 		else
 			uCurLCS = BYTE(pHlist->m_uWeight);
 
-		DWORD uField = pHlist->m_uHitpos >> 24;
+		DWORD uField = HIT2FIELD(pHlist->m_uHitpos);
 		if ( uCurLCS>uLCS[uField] )
 			uLCS[uField] = uCurLCS;
 
@@ -13095,13 +13146,13 @@ int ExtRanker_MatchAny_c::GetMatches ( int iFields, const int * pWeights )
 
 		// upd LCS
 		DWORD uQueryPos = pHlist->m_uQuerypos;
-		int iDelta = pHlist->m_uHitpos - uQueryPos;
+		int iDelta = HIT2LCS(pHlist->m_uHitpos) - uQueryPos;
 		if ( iDelta==iExpDelta )
 			uCurLCS = uCurLCS + BYTE(pHlist->m_uWeight);
 		else
 			uCurLCS = BYTE(pHlist->m_uWeight);
 
-		DWORD uField = pHlist->m_uHitpos >> 24;
+		DWORD uField = HIT2FIELD(pHlist->m_uHitpos);
 		if ( uCurLCS>uLCS[uField] )
 			uLCS[uField] = uCurLCS;
 
@@ -16977,9 +17028,9 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 
 	bool bGlobalPartialMatch = m_iMinPrefixLen > 0 || m_iMinInfixLen > 0;
 
-	for ( int j=0; j<m_tSchema.m_dFields.GetLength(); j++ )
+	ARRAY_FOREACH ( iField, m_tSchema.m_dFields )
 	{
-		BYTE * sField = dFields[j];
+		BYTE * sField = dFields[iField];
 		if ( !sField )
 			continue;
 
@@ -16992,20 +17043,22 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 		m_pTokenizer->SetBuffer ( sField, iFieldBytes );
 
 		BYTE * sWord;
-		int iPos = ( j<<24 );
+		int iPos = HIT_PACK(iField,0);
 
-		bool bPrefixField = m_tSchema.m_dFields [j].m_eWordpart == SPH_WORDPART_PREFIX;
+		bool bPrefixField = m_tSchema.m_dFields[iField].m_eWordpart == SPH_WORDPART_PREFIX;
 		bool bInfixMode = m_iMinInfixLen > 0;
 
 		BYTE sBuf [ 16+3*SPH_MAX_WORD_LEN ];
+		int iLastStart = 0;
 
-		if ( m_tSchema.m_dFields [j].m_eWordpart != SPH_WORDPART_WHOLE )
+		if ( m_tSchema.m_dFields[iField].m_eWordpart!=SPH_WORDPART_WHOLE )
 		{
 			int iMinInfixLen = bPrefixField ? m_iMinPrefixLen : m_iMinInfixLen;
 
 			// index all infixes
 			while ( ( sWord = m_pTokenizer->GetToken() )!=NULL )
 			{
+				iLastStart = m_dHits.GetLength();
 				iPos += 1+m_pTokenizer->GetOvershortCount();
 				if ( m_pTokenizer->GetBoundary() )
 					iPos = Max ( iPos+m_iBoundaryStep, 1 );
@@ -17145,6 +17198,7 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 			// index words only
 			while ( ( sWord = m_pTokenizer->GetToken() )!=NULL )
 			{
+				iLastStart = m_dHits.GetLength();
 				iPos += 1+m_pTokenizer->GetOvershortCount();
 				if ( m_pTokenizer->GetBoundary() )
 					iPos = Max ( iPos+m_iBoundaryStep, 1 );
@@ -17193,6 +17247,10 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 				}
 			}
 		}
+
+		// field processing is over, mark trailing positions
+		for ( int i=iLastStart; i<m_dHits.GetLength(); i++ )
+			m_dHits[i].m_iWordPos |= HIT_FIELD_END;
 	}
 
 	return true;
@@ -18661,7 +18719,7 @@ bool CSphSource_XMLPipe::IterateHitsNext ( CSphString & sError )
 			CSphWordHit & tHit = m_dHits.Add ();
 			tHit.m_iDocID = m_tDocInfo.m_iDocID;
 			tHit.m_iWordID = iWID;
-			tHit.m_iWordPos = (1<<24) | m_iWordPos; // field_id | iPos
+			tHit.m_iWordPos = HIT_PACK(1,m_iWordPos); // field_id, word_pos
 		}
 	}
 

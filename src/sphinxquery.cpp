@@ -684,7 +684,7 @@ static void DeleteNodesWOFields ( CSphExtendedQueryNode * pNode )
 bool XQParser_t::Parse ( CSphExtendedQuery & tParsed, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict )
 {
 	CSphScopedPtr<ISphTokenizer> pMyTokenizer ( pTokenizer->Clone ( true ) );
-	pMyTokenizer->AddSpecials ( "()|-!@~\"/" );
+	pMyTokenizer->AddSpecials ( "()|-!@~\"/^$" );
 	pMyTokenizer->EnableQueryParserMode ( true );
 
 	m_pParsed = &tParsed;
@@ -764,11 +764,18 @@ static void xqDump ( CSphExtendedQueryNode * pNode, const CSphSchema & tSch, int
 	{
 		const CSphExtendedQueryAtom & tAtom = pNode->m_tAtom;
 		xqIndent ( iIndent );
-		printf ( "MATCH(%d,%d):",
-			tAtom.m_uFields,
-			tAtom.m_iMaxDistance );
+		printf ( "MATCH(%d,%d):", tAtom.m_uFields, tAtom.m_iMaxDistance );
+
 		ARRAY_FOREACH ( i, tAtom.m_dWords )
-			printf ( " %s (pos %d)", tAtom.m_dWords[i].m_sWord.cstr(), tAtom.m_dWords[i].m_iAtomPos );
+		{
+			const CSphExtendedQueryAtomWord & tWord = tAtom.m_dWords[i];
+
+			const char * sLocTag = "";
+			if ( tWord.m_bFieldStart ) sLocTag = ", start";
+			if ( tWord.m_bFieldEnd ) sLocTag = ", end";
+
+			printf ( " %s (qpos %d%s)", tWord.m_sWord.cstr(), tWord.m_iAtomPos, sLocTag );
+		}
 		printf ( "\n" );
 	}
 }

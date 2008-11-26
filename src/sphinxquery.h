@@ -23,9 +23,12 @@ struct CSphExtendedQueryAtomWord
 {
 	CSphString	m_sWord;
 	int			m_iAtomPos;
+	int			m_iFieldPos;	///< specific position within field, INT_MAX means no limit
+	bool		m_bFieldStart;	///< must occur at very start
+	bool		m_bFieldEnd;	///< must occur at very end
 
-	CSphExtendedQueryAtomWord () : m_iAtomPos ( -1 ) {}
-	CSphExtendedQueryAtomWord ( const char * sWord, int iPos ) : m_sWord ( sWord ), m_iAtomPos ( iPos ) {}
+	CSphExtendedQueryAtomWord () : m_iAtomPos ( -1 ), m_bFieldStart ( false ), m_bFieldEnd ( false ) {}
+	CSphExtendedQueryAtomWord ( const char * sWord, int iPos ) : m_sWord ( sWord ), m_iAtomPos ( iPos ), m_bFieldStart ( false ), m_bFieldEnd ( false ) {}
 };
 
 
@@ -89,7 +92,6 @@ struct CSphExtendedQueryNode : public ISphNoncopyable
 	bool									m_bFieldSpec;	///< whether field spec was already explicitly set
 	DWORD									m_uFieldMask;	///< fields mask (spec part)
 	int										m_iFieldMaxPos;	///< max position within field (spec part)
-
 
 public:
 	/// ctor

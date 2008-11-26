@@ -26,6 +26,7 @@
 %token <pNode>			TOK_KEYWORD
 %token <tInt>			TOK_INT
 %token <tFieldLimit>	TOK_FIELDLIMIT
+%type <pNode>			rawkeyword
 %type <pNode>			keyword
 %type <pNode>			phrasetoken
 %type <pNode>			phrase
@@ -41,9 +42,15 @@ query:
 	expr								{ pParser->AddQuery ( $1 ); }
 	;
 
-keyword:
+rawkeyword:
 	TOK_KEYWORD							{ $$ = $1; }
 	| TOK_INT							{ $$ = pParser->AddKeywordFromInt ( $1.iValue, $1.bKeyword ); }
+	;
+
+keyword:
+	rawkeyword
+	| '^' rawkeyword					{ $$ = $2; assert ( $$->IsPlain() && $$->m_tAtom.m_dWords.GetLength()==1 ); $$->m_tAtom.m_dWords[0].m_bFieldStart = true; }
+	| rawkeyword '$'					{ $$ = $1; assert ( $$->IsPlain() && $$->m_tAtom.m_dWords.GetLength()==1 ); $$->m_tAtom.m_dWords[0].m_bFieldEnd = true; }
 	;
 
 phrasetoken:

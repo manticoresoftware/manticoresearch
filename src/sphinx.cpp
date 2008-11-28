@@ -17413,6 +17413,8 @@ bool CSphSource_SQL::Setup ( const CSphSourceParams_SQL & tParams )
 
 bool CSphSource_SQL::RunQueryStep ( const char * sQuery, CSphString & sError )
 {
+	sError = "";
+
 	if ( m_tParams.m_iRangeStep<=0 )
 		return false;
 	if ( m_uCurrentID>m_uMaxID )
@@ -17795,8 +17797,19 @@ BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 			}
 
 			// maybe we can do next step yet?
-			if ( RunQueryStep ( m_tParams.m_sQuery.cstr(), sError ) )
+			if ( !RunQueryStep ( m_tParams.m_sQuery.cstr(), sError ) )
 			{
+				// if there's a message, there's an error
+				// otherwise, we're just over
+				if ( !sError.IsEmpty() )
+				{
+					m_tDocInfo.m_iDocID = 1; // 0 means legal eof
+					return NULL;
+				}
+
+			} else
+			{
+				// step went fine; try to fetch
 				bGotRow = SqlFetchRow ();
 				continue;
 			}

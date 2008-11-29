@@ -10596,7 +10596,7 @@ void CSphIndex_VLN::LateCalc ( CSphMatch & tMatch ) const
 	LateCalc ( _match ); \
 	\
 	if ( bRandomize ) \
-		(_match).m_iWeight = rand(); \
+		(_match).m_iWeight = ( sphRand() & 0xffff ); \
 	\
 	if ( !m_pLateFilter || !LateReject ( _match ) ) \
 	{ \

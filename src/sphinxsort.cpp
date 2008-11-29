@@ -1887,6 +1887,10 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 	pTop->m_bRandomize = bRandomize;
 	pTop->m_tIncomingSchema = tInSchema;
 	pTop->m_tOutgoingSchema = tOutSchema;
+
+	if ( bRandomize )
+		sphAutoSrand ();
+
 	return pTop;
 }
 

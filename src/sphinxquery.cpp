@@ -397,7 +397,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			// return special token
 			if ( sToken[0]!='@' )
 			{
-				m_iPendingType = sToken[0];
+				m_iPendingType = sToken[0]=='!' ? '-' : sToken[0];
 				break;
 			}
 

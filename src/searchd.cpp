@@ -6014,6 +6014,7 @@ void CheckReopen ()
 			sphWarning ( "failed to reopen log file '%s': %s", g_sLogFile.cstr(), strerror(errno) );
 		} else
 		{
+			::close ( g_iLogFile );
 			g_iLogFile = iFD;
 			g_bLogTty = ( isatty(g_iLogFile)!=0 );
 			sphInfo ( "log reopened" );
@@ -6029,6 +6030,7 @@ void CheckReopen ()
 			sphWarning ( "failed to reopen query log file '%s': %s", g_sQueryLogFile.cstr(), strerror(errno) );
 		} else
 		{
+			::close ( g_iQueryLogFile );
 			g_iQueryLogFile = iFD;
 			sphInfo ( "query log reopened" );
 		}

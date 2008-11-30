@@ -37,15 +37,16 @@
      TOK_ATTR_MVA = 263,
      TOK_FUNC = 264,
      TOK_FUNC_IN = 265,
-     TOK_DOCINFO = 266,
-     TOK_OR = 267,
-     TOK_AND = 268,
-     TOK_NOT = 269,
-     TOK_NE = 270,
-     TOK_EQ = 271,
-     TOK_GTE = 272,
-     TOK_LTE = 273,
-     TOK_NEG = 274
+     TOK_ID = 266,
+     TOK_WEIGHT = 267,
+     TOK_OR = 268,
+     TOK_AND = 269,
+     TOK_NOT = 270,
+     TOK_NE = 271,
+     TOK_EQ = 272,
+     TOK_GTE = 273,
+     TOK_LTE = 274,
+     TOK_NEG = 275
    };
 #endif
 #define TOK_CONST_INT 258
@@ -56,15 +57,16 @@
 #define TOK_ATTR_MVA 263
 #define TOK_FUNC 264
 #define TOK_FUNC_IN 265
-#define TOK_DOCINFO 266
-#define TOK_OR 267
-#define TOK_AND 268
-#define TOK_NOT 269
-#define TOK_NE 270
-#define TOK_EQ 271
-#define TOK_GTE 272
-#define TOK_LTE 273
-#define TOK_NEG 274
+#define TOK_ID 266
+#define TOK_WEIGHT 267
+#define TOK_OR 268
+#define TOK_AND 269
+#define TOK_NOT 270
+#define TOK_NE 271
+#define TOK_EQ 272
+#define TOK_GTE 273
+#define TOK_LTE 274
+#define TOK_NEG 275
 
 
 
@@ -76,7 +78,6 @@ typedef union YYSTYPE {
 	float			fConst;			// constant value
 	int				iAttrLocator;	// attribute locator (rowitem for int/float; offset+size for bits)
 	int				iFunc;			// function id
-	Docinfo_e		eDocinfo;		// docinfo entry id
 	int				iNode;			// node index
 } YYSTYPE;
 /* Line 1248 of yacc.c.  */

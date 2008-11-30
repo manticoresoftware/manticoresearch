@@ -279,16 +279,7 @@ DECLARE_TERNARY ( Expr_Mul3_c,	FIRST*SECOND*THIRD,					INTFIRST*INTSECOND*INTTHI
 // PARSER INTERNALS
 //////////////////////////////////////////////////////////////////////////
 
-/// known docinfo entries list
-enum Docinfo_e
-{
-	DI_ID,
-	DI_WEIGHT
-};
-
 #include "yysphinxexpr.h"
-
-//////////////////////////////////////////////////////////////////////////
 
 /// known functions
 enum Func_e
@@ -372,7 +363,6 @@ struct ExprNode_t
 		int64_t		m_iConst;		///< constant value, for TOK_CONST_INT type
 		float		m_fConst;		///< constant value, for TOK_CONST_FLOAT type
 		int			m_iFunc;		///< built-in function id, for TOK_FUNC type
-		Docinfo_e	m_eDocinfo;		///< docinfo field id, for TOK_DOCINFO type
 		int			m_iArgs;		///< args count, for arglist (token==',') type
 	};
 	int				m_iLeft;
@@ -404,7 +394,8 @@ protected:
 	int						AddNodeInt ( int64_t iValue );
 	int						AddNodeFloat ( float fValue );
 	int						AddNodeAttr ( int iTokenType, int iAttrLocator );
-	int						AddNodeDocinfo ( Docinfo_e eDocinfo );
+	int						AddNodeID ();
+	int						AddNodeWeight ();
 	int						AddNodeOp ( int iOp, int iLeft, int iRight );
 	int						AddNodeFunc ( int iFunc, int iLeft, int iRight=-1 );
 
@@ -503,8 +494,8 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 		sTok.ToLower ();
 
 		// check for magic name
-		if ( sTok=="@id" )		{ lvalp->eDocinfo = DI_ID; return TOK_DOCINFO; }
-		if ( sTok=="@weight" )	{ lvalp->eDocinfo = DI_WEIGHT; return TOK_DOCINFO; }
+		if ( sTok=="@id" )		{ return TOK_ID; }
+		if ( sTok=="@weight" )	{ return TOK_WEIGHT; }
 
 		// check for keyword
 		if ( sTok=="and" )		{ return TOK_AND; }
@@ -757,14 +748,9 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 			else
 				return new Expr_GetConst_c ( float(tNode.m_iConst) );
 			break;
-		case TOK_DOCINFO:
-			switch ( tNode.m_eDocinfo )
-			{
-				case DI_ID:		return new Expr_GetId_c ();
-				case DI_WEIGHT:	return new Expr_GetWeight_c ();
-				default:		assert ( 0 && "unhandled docinfo element id" ); break;
-			}
-			break;
+
+		case TOK_ID:			return new Expr_GetId_c ();
+		case TOK_WEIGHT:		return new Expr_GetWeight_c ();
 
 		case '+':				return new Expr_Add_c ( pLeft, pRight ); break;
 		case '-':				return new Expr_Sub_c ( pLeft, pRight ); break;
@@ -1187,12 +1173,19 @@ int ExprParser_t::AddNodeAttr ( int iTokenType, int iAttrLocator )
 	return m_dNodes.GetLength()-1;
 }
 
-int ExprParser_t::AddNodeDocinfo ( Docinfo_e eDocinfo )
+int ExprParser_t::AddNodeID ()
 {
 	ExprNode_t & tNode = m_dNodes.Add ();
-	tNode.m_iToken = TOK_DOCINFO;
-	tNode.m_uRetType = ( USE_64BIT && eDocinfo==DI_ID ) ? SPH_ATTR_BIGINT : SPH_ATTR_INTEGER;
-	tNode.m_eDocinfo = eDocinfo;
+	tNode.m_iToken = TOK_ID;
+	tNode.m_uRetType = USE_64BIT ? SPH_ATTR_BIGINT : SPH_ATTR_INTEGER;
+	return m_dNodes.GetLength()-1;
+}
+
+int ExprParser_t::AddNodeWeight ()
+{
+	ExprNode_t & tNode = m_dNodes.Add ();
+	tNode.m_iToken = TOK_WEIGHT;
+	tNode.m_uRetType = SPH_ATTR_INTEGER;
 	return m_dNodes.GetLength()-1;
 }
 

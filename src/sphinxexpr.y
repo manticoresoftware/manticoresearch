@@ -8,7 +8,6 @@
 	float			fConst;			// constant value
 	int				iAttrLocator;	// attribute locator (rowitem for int/float; offset+size for bits)
 	int				iFunc;			// function id
-	Docinfo_e		eDocinfo;		// docinfo entry id
 	int				iNode;			// node index
 };
 
@@ -20,7 +19,10 @@
 %token <iAttrLocator>	TOK_ATTR_MVA
 %token <iFunc>			TOK_FUNC
 %token <iFunc>			TOK_FUNC_IN
-%token <eDocinfo>		TOK_DOCINFO
+
+%token	TOK_ID
+%token	TOK_WEIGHT
+
 %type <iNode>			attr
 %type <iNode>			expr
 %type <iNode>			arglist
@@ -51,7 +53,8 @@ expr:
 	| function
 	| TOK_CONST_INT					{ $$ = pParser->AddNodeInt ( $1 ); }
 	| TOK_CONST_FLOAT				{ $$ = pParser->AddNodeFloat ( $1 ); }
-	| TOK_DOCINFO					{ $$ = pParser->AddNodeDocinfo ( $1 ); }
+	| TOK_ID						{ $$ = pParser->AddNodeID(); }
+	| TOK_WEIGHT					{ $$ = pParser->AddNodeWeight(); }
 	| '-' expr %prec TOK_NEG		{ $$ = pParser->AddNodeOp ( TOK_NEG, $2, -1 ); }
 	| TOK_NOT expr					{ $$ = pParser->AddNodeOp ( TOK_NOT, $2, -1 ); if ( $$<0 ) YYERROR; }
 	| expr '+' expr					{ $$ = pParser->AddNodeOp ( '+', $1, $3 ); }

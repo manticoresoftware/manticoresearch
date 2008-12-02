@@ -441,16 +441,10 @@ protected:
 
 #if USE_WINDOWS
 
+#pragma intrinsic(__rdtsc)
 INT64 sphClocks ()
 {
-	DWORD tLo, tHi;
-	_asm
-	{
-		rdtsc
-			mov		tLo, eax
-			mov		tHi, edx
-	}
-	return ( INT64(tHi)<<32 ) | INT64(tLo);
+	return __rdtsc();
 }
 
 
@@ -20255,7 +20249,7 @@ bool CSphSource_MSSQL::SqlQuery ( const char * sQuery )
 	{
 		QueryColumn_t & tCol = m_dColumns[i];
 
-		SQLUINTEGER uColSize = 0;
+		SQLULEN uColSize = 0;
 		SQLSMALLINT iNameLen = 0;
 		SQLSMALLINT iDataType = 0;
 		if ( SQLDescribeCol ( m_hStmt, SQLUSMALLINT(i+1), (SQLCHAR*)szColumnName, MAX_NAME_LEN, &iNameLen, &iDataType, &uColSize, NULL, NULL ) == SQL_ERROR )

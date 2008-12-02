@@ -1177,6 +1177,7 @@ struct CSphTermSetup : ISphNoncopyable
 	const CSphAutofile &	m_tWordlist;
 	DWORD					m_uMaxStamp;
 	const CSphQuery *		m_pQuery;		///< for extended2 filtering only
+	CSphString *			m_pWarning;
 
 	CSphTermSetup ( const CSphAutofile & tDoclist, const CSphAutofile & tHitlist, const CSphAutofile & tWordlist )
 		: m_pDict ( NULL )
@@ -1188,6 +1189,7 @@ struct CSphTermSetup : ISphNoncopyable
 		, m_tWordlist ( tWordlist )
 		, m_uMaxStamp ( 0 )
 		, m_pQuery ( NULL )
+		, m_pWarning ( NULL )
 	{}
 };
 
@@ -10671,8 +10673,8 @@ public:
 								ExtNode_i ();
 	virtual						~ExtNode_i () { SafeDeleteArray ( m_pDocinfo ); }
 
-	static ExtNode_i *			Create ( const CSphExtendedQueryNode * pNode, const CSphTermSetup & tSetup, CSphString * pWarning );
-	static ExtNode_i *			Create ( const CSphExtendedQueryAtomWord & tWord, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup, CSphString * pWarning );
+	static ExtNode_i *			Create ( const CSphExtendedQueryNode * pNode, const CSphTermSetup & tSetup );
+	static ExtNode_i *			Create ( const CSphExtendedQueryAtomWord & tWord, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup );
 
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID ) = 0;
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID ) = 0;
@@ -10719,7 +10721,7 @@ protected:
 class ExtTerm_c : public ExtNode_i
 {
 public:
-								ExtTerm_c ( const CSphString & sTerm, DWORD uFields, const CSphTermSetup & tSetup, DWORD uQuerypos, CSphString * pWarning );
+								ExtTerm_c ( const CSphString & sTerm, DWORD uFields, const CSphTermSetup & tSetup, DWORD uQuerypos );
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
 	virtual void				GetQwords ( ExtQwordsHash_t & hQwords );
@@ -10749,7 +10751,7 @@ template < TermPosFilter_e T >
 class ExtTermPos_c : public ExtTerm_c
 {
 public:
-								ExtTermPos_c ( const CSphString & sTerm, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup, DWORD uQuerypos, CSphString * pWarning );
+								ExtTermPos_c ( const CSphString & sTerm, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup, DWORD uQuerypos );
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
 
@@ -10823,7 +10825,7 @@ protected:
 class ExtPhrase_c : public ExtNode_i
 {
 public:
-								ExtPhrase_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, const CSphTermSetup & tSetup, CSphString * pWarning );
+								ExtPhrase_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, const CSphTermSetup & tSetup );
 								~ExtPhrase_c ();
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
@@ -10858,7 +10860,7 @@ protected:
 class ExtProximity_c : public ExtPhrase_c
 {
 public:
-								ExtProximity_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, const CSphTermSetup & tSetup, CSphString * pWarning );
+								ExtProximity_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, const CSphTermSetup & tSetup );
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 
 protected:
@@ -10871,7 +10873,7 @@ protected:
 class ExtQuorum_c : public ExtNode_i
 {
 public:
-								ExtQuorum_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, const CSphTermSetup & tSetup, CSphString * pWarning );
+								ExtQuorum_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, const CSphTermSetup & tSetup );
 	virtual						~ExtQuorum_c ();
 
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
@@ -10895,7 +10897,7 @@ protected:
 class ExtRanker_c
 {
 public:
-								ExtRanker_c ( const CSphExtendedQueryNode * pRoot, const CSphTermSetup & tSetup, CSphString * pWarning );
+								ExtRanker_c ( const CSphExtendedQueryNode * pRoot, const CSphTermSetup & tSetup );
 	virtual						~ExtRanker_c () { SafeDelete ( m_pRoot ); }
 
 	virtual const ExtDoc_t *	GetFilteredDocs ();
@@ -10926,8 +10928,8 @@ protected:
 	class _classname : public ExtRanker_c \
 	{ \
 	public: \
-		_classname ( const CSphExtendedQueryNode * pRoot, const CSphTermSetup & tSetup, CSphString * pWarning ) \
-			: ExtRanker_c ( pRoot, tSetup, pWarning ) \
+		_classname ( const CSphExtendedQueryNode * pRoot, const CSphTermSetup & tSetup ) \
+			: ExtRanker_c ( pRoot, tSetup ) \
 		{} \
 	\
 		virtual int GetMatches ( int iFields, const int * pWeights ); \
@@ -10970,16 +10972,16 @@ ExtNode_i::ExtNode_i ()
 }
 
 
-ExtNode_i * ExtNode_i::Create ( const CSphExtendedQueryAtomWord & tWord, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup, CSphString * pWarning )
+ExtNode_i * ExtNode_i::Create ( const CSphExtendedQueryAtomWord & tWord, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup )
 {
-	if ( tWord.m_bFieldStart )		return new ExtTermPos_c<TERM_POS_FIELD_START> ( tWord.m_sWord, uFields, 0, tSetup, tWord.m_iAtomPos, pWarning );
-	else if ( tWord.m_bFieldEnd )	return new ExtTermPos_c<TERM_POS_FIELD_END> ( tWord.m_sWord, uFields, 0, tSetup, tWord.m_iAtomPos, pWarning );
-	if ( iMaxFieldPos>0 )			return new ExtTermPos_c<TERM_POS_FIELD_LIMIT> ( tWord.m_sWord, uFields, iMaxFieldPos, tSetup, tWord.m_iAtomPos, pWarning );
-	else							return new ExtTerm_c ( tWord.m_sWord, uFields, tSetup, tWord.m_iAtomPos, pWarning );
+	if ( tWord.m_bFieldStart )		return new ExtTermPos_c<TERM_POS_FIELD_START> ( tWord.m_sWord, uFields, 0, tSetup, tWord.m_iAtomPos );
+	else if ( tWord.m_bFieldEnd )	return new ExtTermPos_c<TERM_POS_FIELD_END> ( tWord.m_sWord, uFields, 0, tSetup, tWord.m_iAtomPos );
+	if ( iMaxFieldPos>0 )			return new ExtTermPos_c<TERM_POS_FIELD_LIMIT> ( tWord.m_sWord, uFields, iMaxFieldPos, tSetup, tWord.m_iAtomPos );
+	else							return new ExtTerm_c ( tWord.m_sWord, uFields, tSetup, tWord.m_iAtomPos );
 }
 
 
-ExtNode_i * ExtNode_i::Create ( const CSphExtendedQueryNode * pNode, const CSphTermSetup & tSetup, CSphString * pWarning )
+ExtNode_i * ExtNode_i::Create ( const CSphExtendedQueryNode * pNode, const CSphTermSetup & tSetup )
 {
 	if ( pNode->IsPlain() )
 	{
@@ -10992,11 +10994,11 @@ ExtNode_i * ExtNode_i::Create ( const CSphExtendedQueryNode * pNode, const CSphT
 		DWORD uFields = tAtom.m_uFields;
 
 		if ( iWords==1 )
-			return Create ( tAtom.m_dWords[0], uFields, tAtom.m_iMaxFieldPos, tSetup, pWarning );
+			return Create ( tAtom.m_dWords[0], uFields, tAtom.m_iMaxFieldPos, tSetup );
 
 		assert ( tAtom.m_iMaxDistance>=0 );
 		if ( tAtom.m_iMaxDistance==0 )
-			return new ExtPhrase_c ( pNode, uFields, tSetup, pWarning );
+			return new ExtPhrase_c ( pNode, uFields, tSetup );
 
 		else if ( tAtom.m_bQuorum )
 		{
@@ -11004,38 +11006,38 @@ ExtNode_i * ExtNode_i::Create ( const CSphExtendedQueryNode * pNode, const CSphT
 			{
 				// threshold is too high
 				// report a warning, and fallback to "and"
-				if ( pWarning && tAtom.m_iMaxDistance>tAtom.m_dWords.GetLength() )
-					pWarning->SetSprintf ( "quorum threshold too high (words=%d, thresh=%d); replacing quorum operator with AND operator",
+				if ( tSetup.m_pWarning && tAtom.m_iMaxDistance>tAtom.m_dWords.GetLength() )
+					tSetup.m_pWarning->SetSprintf ( "quorum threshold too high (words=%d, thresh=%d); replacing quorum operator with AND operator",
 						tAtom.m_dWords.GetLength(), tAtom.m_iMaxDistance );
 
 				// create AND node
 				const CSphVector<CSphExtendedQueryAtomWord> & dWords = pNode->m_tAtom.m_dWords;
-				ExtNode_i * pCur = Create ( dWords[0], uFields, tAtom.m_iMaxFieldPos, tSetup, pWarning );
+				ExtNode_i * pCur = Create ( dWords[0], uFields, tAtom.m_iMaxFieldPos, tSetup );
 				for ( int i=1; i<dWords.GetLength(); i++ )
-					pCur = new ExtAnd_c ( pCur, Create ( dWords[i], uFields, tAtom.m_iMaxFieldPos, tSetup, pWarning ), tSetup );
+					pCur = new ExtAnd_c ( pCur, Create ( dWords[i], uFields, tAtom.m_iMaxFieldPos, tSetup ), tSetup );
 				return pCur;
 
 			} else
 			{
 				// threshold is ok; create quorum node
-				return new ExtQuorum_c ( pNode, uFields, tSetup, pWarning );
+				return new ExtQuorum_c ( pNode, uFields, tSetup );
 			}
 
 		} else
-			return new ExtProximity_c ( pNode, uFields, tSetup, pWarning );
+			return new ExtProximity_c ( pNode, uFields, tSetup );
 
 	} else
 	{
 		int iChildren = pNode->m_dChildren.GetLength ();
 		assert ( iChildren>0 );
 
-		ExtNode_i * pCur = ExtNode_i::Create ( pNode->m_dChildren[0], tSetup, pWarning );
+		ExtNode_i * pCur = ExtNode_i::Create ( pNode->m_dChildren[0], tSetup );
 		for ( int i=1; i<iChildren; i++ )
 			switch ( pNode->m_eOp )
 		{
-			case SPH_QUERY_OR:		pCur = new ExtOr_c ( pCur, ExtNode_i::Create ( pNode->m_dChildren[i], tSetup, pWarning ), tSetup ); break;
-			case SPH_QUERY_AND:		pCur = new ExtAnd_c ( pCur, ExtNode_i::Create ( pNode->m_dChildren[i], tSetup, pWarning ), tSetup ); break;
-			case SPH_QUERY_ANDNOT:	pCur = new ExtAndNot_c ( pCur, ExtNode_i::Create ( pNode->m_dChildren[i], tSetup, pWarning ), tSetup ); break;
+			case SPH_QUERY_OR:		pCur = new ExtOr_c ( pCur, ExtNode_i::Create ( pNode->m_dChildren[i], tSetup ), tSetup ); break;
+			case SPH_QUERY_AND:		pCur = new ExtAnd_c ( pCur, ExtNode_i::Create ( pNode->m_dChildren[i], tSetup ), tSetup ); break;
+			case SPH_QUERY_ANDNOT:	pCur = new ExtAndNot_c ( pCur, ExtNode_i::Create ( pNode->m_dChildren[i], tSetup ), tSetup ); break;
 			default:				assert ( 0 && "internal error: unhandled op in ExtNode_i::Create()" ); break;
 		}
 		
@@ -11045,8 +11047,8 @@ ExtNode_i * ExtNode_i::Create ( const CSphExtendedQueryNode * pNode, const CSphT
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtTerm_c::ExtTerm_c ( const CSphString & sTerm, DWORD uFields, const CSphTermSetup & tSetup, DWORD uQuerypos, CSphString * pWarning )
-	: m_pWarning ( pWarning )
+ExtTerm_c::ExtTerm_c ( const CSphString & sTerm, DWORD uFields, const CSphTermSetup & tSetup, DWORD uQuerypos )
+	: m_pWarning ( tSetup.m_pWarning )
 {
 	m_tQword.m_sWord = sTerm;
 	m_tQword.m_sDictWord = sTerm;
@@ -11234,8 +11236,8 @@ void ExtTerm_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 //////////////////////////////////////////////////////////////////////////
 
 template < TermPosFilter_e T >
-ExtTermPos_c<T>::ExtTermPos_c ( const CSphString & sTerm, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup, DWORD uQuerypos, CSphString * pWarning )
-	: ExtTerm_c			( sTerm, uFields, tSetup, uQuerypos, pWarning )
+ExtTermPos_c<T>::ExtTermPos_c ( const CSphString & sTerm, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup, DWORD uQuerypos )
+	: ExtTerm_c			( sTerm, uFields, tSetup, uQuerypos )
 	, m_iMaxFieldPos	( iMaxFieldPos )
 	, m_uTermMaxID		( 0 )
 	, m_pRawDocs		( NULL )
@@ -11817,7 +11819,7 @@ const ExtHit_t * ExtAndNot_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t 
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtPhrase_c::ExtPhrase_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, const CSphTermSetup & tSetup, CSphString * pWarning )
+ExtPhrase_c::ExtPhrase_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, const CSphTermSetup & tSetup )
 	: m_pDocs ( NULL )
 	, m_pHits ( NULL )
 	, m_pDoc ( NULL )
@@ -11850,10 +11852,10 @@ ExtPhrase_c::ExtPhrase_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, c
 	ARRAY_FOREACH ( i, m_dQposDelta )
 		m_dQposDelta[i] = -INT_MAX;
 
-	ExtNode_i * pCur = Create ( dWords[0], uFields, pNode->m_tAtom.m_iMaxFieldPos, tSetup, pWarning );
+	ExtNode_i * pCur = Create ( dWords[0], uFields, pNode->m_tAtom.m_iMaxFieldPos, tSetup );
 	for ( int i=1; i<(int)m_uWords; i++ )
 	{
-		pCur = new ExtAnd_c ( pCur, Create ( dWords[i], uFields, pNode->m_tAtom.m_iMaxFieldPos, tSetup, pWarning ), tSetup );
+		pCur = new ExtAnd_c ( pCur, Create ( dWords[i], uFields, pNode->m_tAtom.m_iMaxFieldPos, tSetup ), tSetup );
 		m_dQposDelta [ dWords[i-1].m_iAtomPos - dWords[0].m_iAtomPos ] = dWords[i].m_iAtomPos - dWords[i-1].m_iAtomPos;
 	}
 	m_pNode = pCur;
@@ -12231,8 +12233,8 @@ void ExtPhrase_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtProximity_c::ExtProximity_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, const CSphTermSetup & tSetup, CSphString * pWarning )
-	: ExtPhrase_c ( pNode, uFields, tSetup, pWarning )
+ExtProximity_c::ExtProximity_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, const CSphTermSetup & tSetup )
+	: ExtPhrase_c ( pNode, uFields, tSetup )
 	, m_iMaxDistance ( pNode->m_tAtom.m_iMaxDistance )
 	, m_iNumWords ( pNode->m_tAtom.m_dWords.GetLength() )
 {
@@ -12420,7 +12422,7 @@ const ExtDoc_t * ExtProximity_c::GetDocsChunk ( SphDocID_t * pMaxID )
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtQuorum_c::ExtQuorum_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, const CSphTermSetup & tSetup, CSphString * pWarning )
+ExtQuorum_c::ExtQuorum_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, const CSphTermSetup & tSetup )
 {
 	assert ( pNode );
 	assert ( pNode->IsPlain() );
@@ -12437,7 +12439,7 @@ ExtQuorum_c::ExtQuorum_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, c
 
 	ARRAY_FOREACH ( i, dWords )
 	{
-		m_dChildren.Add ( new ExtTerm_c ( dWords[i].m_sWord, uFields, tSetup, dWords[i].m_iAtomPos, pWarning ) );
+		m_dChildren.Add ( new ExtTerm_c ( dWords[i].m_sWord, uFields, tSetup, dWords[i].m_iAtomPos ) );
 		m_pCurDoc.Add ( NULL );
 		m_pCurHit.Add ( NULL );
 	}
@@ -12618,7 +12620,7 @@ const ExtHit_t * ExtQuorum_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t 
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtRanker_c::ExtRanker_c ( const CSphExtendedQueryNode * pRoot, const CSphTermSetup & tSetup, CSphString * pWarning )
+ExtRanker_c::ExtRanker_c ( const CSphExtendedQueryNode * pRoot, const CSphTermSetup & tSetup )
 {
 	m_iInlineRowitems = ( tSetup.m_eDocinfo==SPH_DOCINFO_INLINE ) ? tSetup.m_tMin.m_iRowitems : 0;
 	for ( int i=0; i<ExtNode_i::MAX_DOCS; i++ )
@@ -12629,7 +12631,7 @@ ExtRanker_c::ExtRanker_c ( const CSphExtendedQueryNode * pRoot, const CSphTermSe
 	m_tTestMatch.Reset ( tSetup.m_tMin.m_iRowitems + tSetup.m_iToCalc );
 
 	assert ( pRoot );
-	m_pRoot = ExtNode_i::Create ( pRoot, tSetup, pWarning );
+	m_pRoot = ExtNode_i::Create ( pRoot, tSetup );
 
 	m_pDoclist = NULL;
 	m_pHitlist = NULL;
@@ -13197,15 +13199,15 @@ bool CSphIndex_VLN::SetupMatchExtended ( const CSphQuery * pQuery, CSphQueryResu
 	SafeDelete ( m_pXQRanker );
 	switch ( pQuery->m_eRanker )
 	{
-		case SPH_RANK_PROXIMITY_BM25:	m_pXQRanker = new ExtRanker_ProximityBM25_c ( tParsed.m_pRoot, tTermSetup, &(pResult->m_sWarning) ); break;
-		case SPH_RANK_BM25:				m_pXQRanker = new ExtRanker_BM25_c ( tParsed.m_pRoot, tTermSetup, &(pResult->m_sWarning) ); break;
-		case SPH_RANK_NONE:				m_pXQRanker = new ExtRanker_None_c ( tParsed.m_pRoot, tTermSetup, &(pResult->m_sWarning) ); break;
-		case SPH_RANK_WORDCOUNT:		m_pXQRanker = new ExtRanker_Wordcount_c ( tParsed.m_pRoot, tTermSetup, &(pResult->m_sWarning) ); break;
-		case SPH_RANK_PROXIMITY:		m_pXQRanker = new ExtRanker_Proximity_c ( tParsed.m_pRoot, tTermSetup, &(pResult->m_sWarning) ); break;
-		case SPH_RANK_MATCHANY:			m_pXQRanker = new ExtRanker_MatchAny_c ( tParsed.m_pRoot, tTermSetup, &(pResult->m_sWarning) ); break;
+		case SPH_RANK_PROXIMITY_BM25:	m_pXQRanker = new ExtRanker_ProximityBM25_c ( tParsed.m_pRoot, tTermSetup ); break;
+		case SPH_RANK_BM25:				m_pXQRanker = new ExtRanker_BM25_c ( tParsed.m_pRoot, tTermSetup ); break;
+		case SPH_RANK_NONE:				m_pXQRanker = new ExtRanker_None_c ( tParsed.m_pRoot, tTermSetup ); break;
+		case SPH_RANK_WORDCOUNT:		m_pXQRanker = new ExtRanker_Wordcount_c ( tParsed.m_pRoot, tTermSetup ); break;
+		case SPH_RANK_PROXIMITY:		m_pXQRanker = new ExtRanker_Proximity_c ( tParsed.m_pRoot, tTermSetup ); break;
+		case SPH_RANK_MATCHANY:			m_pXQRanker = new ExtRanker_MatchAny_c ( tParsed.m_pRoot, tTermSetup ); break;
 		default:
 			pResult->m_sWarning.SetSprintf ( "unknown ranking mode %d; using default", (int)pQuery->m_eRanker );
-			m_pXQRanker = new ExtRanker_ProximityBM25_c ( tParsed.m_pRoot, tTermSetup, &(pResult->m_sWarning) );
+			m_pXQRanker = new ExtRanker_ProximityBM25_c ( tParsed.m_pRoot, tTermSetup );
 			break;
 	}
 	assert ( m_pXQRanker );
@@ -14874,6 +14876,7 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 	if ( pQuery->m_uMaxQueryMsec>0 )
 		tTermSetup.m_uMaxStamp = sphTimerMsec() + pQuery->m_uMaxQueryMsec; // max_query_time
 	tTermSetup.m_pQuery = pQuery; // for extended2 filtering only
+	tTermSetup.m_pWarning = &pResult->m_sWarning;
 
 	// fixup old matching modes at low level
 	PrepareQueryEmulation ( pQuery );

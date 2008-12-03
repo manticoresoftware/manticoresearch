@@ -9371,7 +9371,10 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		cidxHit ( &tFlush, NULL );
 
 		if ( m_bInplaceSettings )
+		{
+			m_wrHitlist.CloseFile ();
 			sphTruncate ( fdHits.GetFD () );
+		}
 	}
 
 	if ( bWarnAboutDupes )

@@ -61,6 +61,7 @@
 
 #if USE_WINDOWS
 	#include <io.h> // for open()
+	#include <intrin.h> // for intrinsic __rdtsc()
 
 	#if USE_MSSQL
 	#include <sql.h>

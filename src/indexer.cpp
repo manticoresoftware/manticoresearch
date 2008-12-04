@@ -1239,51 +1239,12 @@ int main ( int argc, char ** argv )
 	// load config
 	///////////////
 
-	// fallback to defaults if there was no explicit config specified
-	while ( !sOptConfig )
-	{
-#ifdef SYSCONFDIR
-		sOptConfig = SYSCONFDIR "/sphinx.conf";
-		if ( sphIsReadable(sOptConfig) )
-			break;
-#endif
-
-		sOptConfig = "./sphinx.conf";
-		if ( sphIsReadable(sOptConfig) )
-			break;
-
-		sOptConfig = NULL;
-		break;
-	}
-
-	if ( !sOptConfig )
-		sphDie ( "no readable config file (looked in "
-#ifdef SYSCONFDIR
-			SYSCONFDIR "/sphinx.conf, "
-#endif
-			"./sphinx.conf)" );
-
-	if ( !g_bQuiet )
-		fprintf ( stdout, "using config file '%s'...\n", sOptConfig );
-
 	CSphConfigParser cp;
-	if ( !cp.Parse ( sOptConfig ) )
-	{
-		fprintf ( stdout, "FATAL: failed to parse config file '%s'.\n", sOptConfig );
-		return 1;
-	}
-	const CSphConfig & hConf = cp.m_tConf;
+	CSphConfig & hConf = cp.m_tConf;
+	sOptConfig = sphLoadConfig ( sOptConfig, g_bQuiet, cp );
 
-	if ( !hConf.Exists ( "source" ) )
-	{
-		fprintf ( stdout, "FATAL: no sources found in config file.\n" );
-		return 1;
-	}
-	if ( !hConf.Exists ( "index" ) )
-	{
-		fprintf ( stdout, "FATAL: no indexes found in config file.\n" );
-		return 1;
-	}
+	if ( !hConf ( "source" ) )
+		sphDie ( "no indexes found in config file '%s'", sOptConfig );
 
 	// configure memlimit
 	g_iMemLimit = 0;

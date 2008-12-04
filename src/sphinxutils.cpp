@@ -851,6 +851,48 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 	return true;
 }
 
+//////////////////////////////////////////////////////////////////////////
+
+const char * sphLoadConfig ( const char * sOptConfig, bool bQuiet, CSphConfigParser & cp )
+{
+	// fallback to defaults if there was no explicit config specified
+	while ( !sOptConfig )
+	{
+#ifdef SYSCONFDIR
+		sOptConfig = SYSCONFDIR "/sphinx.conf";
+		if ( sphIsReadable(sOptConfig) )
+			break;
+#endif
+
+		sOptConfig = "./sphinx.conf";
+		if ( sphIsReadable(sOptConfig) )
+			break;
+
+		sOptConfig = NULL;
+		break;
+	}
+
+	if ( !sOptConfig )
+		sphDie ( "no readable config file (looked in "
+#ifdef SYSCONFDIR
+		SYSCONFDIR "/sphinx.conf, "
+#endif
+		"./sphinx.conf)" );
+
+	if ( !bQuiet )
+		fprintf ( stdout, "using config file '%s'...\n", sOptConfig );
+
+	// load config
+	if ( !cp.Parse ( sOptConfig ) )
+		sphDie ( "failed to parse config file '%s'", sOptConfig );
+
+	CSphConfig & hConf = cp.m_tConf;
+	if ( !hConf ( "index" ) )
+		sphDie ( "no indexes found in config file '%s'", sOptConfig );
+
+	return sOptConfig;
+}
+
 //
 // $Id$
 //

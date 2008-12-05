@@ -1675,7 +1675,9 @@ struct CSphIndex_VLN : CSphIndex
 
 	virtual bool				LoadHeader ( const char * sHeaderName, CSphString & sWarning );
 	virtual bool				WriteHeader ( CSphWriter & fdInfo, SphOffset_t iCheckpointsPos );
-	virtual void				DumpHeader ( FILE * fp, const char * sHeaderName );
+
+	virtual void				DebugDumpHeader ( FILE * fp, const char * sHeaderName );
+	virtual void				DebugDumpDocids ( FILE * fp );
 
 	virtual const CSphSchema *	Prealloc ( bool bMlock, CSphString & sWarning );
 	virtual bool				Mlock ();
@@ -13681,9 +13683,8 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, CSphString & sWarning
 }
 
 
-void CSphIndex_VLN::DumpHeader ( FILE * fp, const char * sHeaderName )
+void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName )
 {
-	fprintf ( fp, "--- dumping header %s\n", sHeaderName );
 	CSphString sWarning;
 	if ( !LoadHeader ( sHeaderName, sWarning ) )
 	{
@@ -13763,6 +13764,30 @@ void CSphIndex_VLN::DumpHeader ( FILE * fp, const char * sHeaderName )
 	}
 
 	fprintf ( fp, "killlist-size: %d\n", m_iKillListSize );
+}
+
+
+void CSphIndex_VLN::DebugDumpDocids ( FILE * fp )
+{
+	if ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_EXTERN )
+	{
+		fprintf ( fp, "FATAL: docids dump only supported for docinfo=extern\n" );
+		return;
+	}
+
+	int iRowStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
+	DWORD uNumRows = m_pDocinfo.GetNumEntries() / iRowStride; // all 32bit, as we don't expect 2 billion documents per single physical index
+
+	fprintf ( fp, "docinfo-bytes: %"PRIu64"\n", (uint64_t)m_pDocinfo.GetLength() );
+	fprintf ( fp, "docinfo-stride: %d\n", iRowStride*sizeof(DWORD) );
+	fprintf ( fp, "docinfo-rows: %d\n", uNumRows );
+
+	if ( !m_pDocinfo.GetNumEntries() )
+		return;
+
+	DWORD * pDocinfo = m_pDocinfo.GetWritePtr();
+	for ( DWORD uRow=0; uRow<uNumRows; uRow++, pDocinfo+=iRowStride )
+		printf ( "%u. id=" DOCID_FMT "\n", uRow+1, DOCINFO2ID(pDocinfo) );
 }
 
 

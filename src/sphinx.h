@@ -1970,9 +1970,6 @@ public:
 	virtual bool				Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> & dFilters, bool bMergeKillLists ) = 0;
 
 public:
-	/// dump human-readable header info to given file
-	virtual void				DumpHeader ( FILE * fp, const char * sHeaderName ) = 0;
-
 	/// check all data files, preload schema, and preallocate enough shared RAM to load memory-cached data
 	virtual const CSphSchema *	Prealloc ( bool bMlock, CSphString & sWarning ) = 0;
 
@@ -2013,6 +2010,13 @@ public:
 	/// saves memory-cached attributes, if there were any updates to them
 	/// on failure, false is returned and GetLastError() contains error message
 	virtual bool				SaveAttributes () = 0;
+
+public:
+	/// internal debugging hook, DO NOT USE
+	virtual void				DebugDumpHeader ( FILE * fp, const char * sHeaderName ) = 0;
+
+	/// internal debugging hook, DO NOT USE
+	virtual void				DebugDumpDocids ( FILE * ) = 0;
 
 public:
 	DWORD						m_uAttrsStatus;			///< whether in-memory attrs are updated (compared to disk state)

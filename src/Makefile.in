@@ -15,7 +15,7 @@
 @SET_MAKE@
 
 
-SOURCES = $(libsphinx_a_SOURCES) $(indexer_SOURCES) $(search_SOURCES) $(searchd_SOURCES) $(spelldump_SOURCES) $(tests_SOURCES)
+SOURCES = $(libsphinx_a_SOURCES) $(indexer_SOURCES) $(indextool_SOURCES) $(search_SOURCES) $(searchd_SOURCES) $(spelldump_SOURCES) $(tests_SOURCES)
 
 srcdir = @srcdir@
 top_srcdir = @top_srcdir@
@@ -38,7 +38,7 @@ NORMAL_UNINSTALL = :
 PRE_UNINSTALL = :
 POST_UNINSTALL = :
 bin_PROGRAMS = indexer$(EXEEXT) searchd$(EXEEXT) search$(EXEEXT) \
-	spelldump$(EXEEXT)
+	spelldump$(EXEEXT) indextool$(EXEEXT)
 noinst_PROGRAMS = tests$(EXEEXT)
 subdir = src
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in
@@ -76,6 +76,10 @@ am__DEPENDENCIES_2 =
 am__DEPENDENCIES_3 = libsphinx.a $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_2) $(am__DEPENDENCIES_2)
 indexer_DEPENDENCIES = $(am__DEPENDENCIES_3)
+am_indextool_OBJECTS = indextool.$(OBJEXT)
+indextool_OBJECTS = $(am_indextool_OBJECTS)
+indextool_LDADD = $(LDADD)
+indextool_DEPENDENCIES = $(am__DEPENDENCIES_3)
 am_search_OBJECTS = search.$(OBJEXT)
 search_OBJECTS = $(am_search_OBJECTS)
 search_LDADD = $(LDADD)
@@ -100,11 +104,12 @@ CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
 CXXLD = $(CXX)
 CXXLINK = $(CXXLD) $(AM_CXXFLAGS) $(CXXFLAGS) $(AM_LDFLAGS) $(LDFLAGS) \
 	-o $@
-SOURCES = $(libsphinx_a_SOURCES) $(indexer_SOURCES) $(search_SOURCES) \
-	$(searchd_SOURCES) $(spelldump_SOURCES) $(tests_SOURCES)
+SOURCES = $(libsphinx_a_SOURCES) $(indexer_SOURCES) \
+	$(indextool_SOURCES) $(search_SOURCES) $(searchd_SOURCES) \
+	$(spelldump_SOURCES) $(tests_SOURCES)
 DIST_SOURCES = $(libsphinx_a_SOURCES) $(indexer_SOURCES) \
-	$(search_SOURCES) $(searchd_SOURCES) $(spelldump_SOURCES) \
-	$(tests_SOURCES)
+	$(indextool_SOURCES) $(search_SOURCES) $(searchd_SOURCES) \
+	$(spelldump_SOURCES) $(tests_SOURCES)
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
@@ -212,6 +217,7 @@ indexer_SOURCES = indexer.cpp
 searchd_SOURCES = searchd.cpp
 search_SOURCES = search.cpp
 spelldump_SOURCES = spelldump.cpp
+indextool_SOURCES = indextool.cpp
 tests_SOURCES = tests.cpp
 BUILT_SOURCES = extract-version
 @USE_LIBSTEMMER_FALSE@LIBSTEMMER_LIBS = 
@@ -220,7 +226,6 @@ BUILT_SOURCES = extract-version
 @USE_LIBSTEMMER_TRUE@AM_CPPFLAGS = -I$(top_srcdir)/libstemmer_c/include -DSYSCONFDIR="\"$(sysconfdir)\""
 COMMON_LIBS = libsphinx.a $(LIBSTEMMER_LIBS) $(MYSQL_LIBS) $(PGSQL_LIBS)
 LDADD = $(COMMON_LIBS)
-EXTRA_DIST = indexer.vcproj libsphinx.vcproj searchd.vcproj search.vcproj
 all: $(BUILT_SOURCES)
 	$(MAKE) $(AM_MAKEFLAGS) all-am
 
@@ -291,6 +296,9 @@ clean-noinstPROGRAMS:
 indexer$(EXEEXT): $(indexer_OBJECTS) $(indexer_DEPENDENCIES) 
 	@rm -f indexer$(EXEEXT)
 	$(CXXLINK) $(indexer_LDFLAGS) $(indexer_OBJECTS) $(indexer_LDADD) $(LIBS)
+indextool$(EXEEXT): $(indextool_OBJECTS) $(indextool_DEPENDENCIES) 
+	@rm -f indextool$(EXEEXT)
+	$(CXXLINK) $(indextool_LDFLAGS) $(indextool_OBJECTS) $(indextool_LDADD) $(LIBS)
 search$(EXEEXT): $(search_OBJECTS) $(search_DEPENDENCIES) 
 	@rm -f search$(EXEEXT)
 	$(CXXLINK) $(search_LDFLAGS) $(search_OBJECTS) $(search_LDADD) $(LIBS)
@@ -311,6 +319,7 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/indexer.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/indextool.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/md5.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/search.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/searchd.Po@am__quote@

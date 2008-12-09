@@ -27,6 +27,11 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "spelldump", "win\spelldump0
 		{6A1685DE-0265-4243-965F-96CB53EBBCA6} = {6A1685DE-0265-4243-965F-96CB53EBBCA6}
 	EndProjectSection
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "indextool", "win\indextool08.vcproj", "{6A78A67D-A743-4594-858A-A4F1C536A8C1}"
+	ProjectSection(ProjectDependencies) = postProject
+		{6A1685DE-0265-4243-965F-96CB53EBBCA6} = {6A1685DE-0265-4243-965F-96CB53EBBCA6}
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SubversionScc) = preSolution
 		Svn-Managed = True
@@ -87,6 +92,12 @@ Global
 		{AE5236EB-62AC-4AD9-81A3-F4BDC85D3876}.Release|Win32.Build.0 = Release|Win32
 		{AE5236EB-62AC-4AD9-81A3-F4BDC85D3876}.Release|x64.ActiveCfg = Release|x64
 		{AE5236EB-62AC-4AD9-81A3-F4BDC85D3876}.Release|x64.Build.0 = Release|x64
+		{6A78A67D-A743-4594-858A-A4F1C536A8C1}.Debug|Win32.ActiveCfg = Debug|Win32
+		{6A78A67D-A743-4594-858A-A4F1C536A8C1}.Debug|Win32.Build.0 = Debug|Win32
+		{6A78A67D-A743-4594-858A-A4F1C536A8C1}.Debug|x64.ActiveCfg = Debug|Win32
+		{6A78A67D-A743-4594-858A-A4F1C536A8C1}.Release|Win32.ActiveCfg = Release|Win32
+		{6A78A67D-A743-4594-858A-A4F1C536A8C1}.Release|Win32.Build.0 = Release|Win32
+		{6A78A67D-A743-4594-858A-A4F1C536A8C1}.Release|x64.ActiveCfg = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

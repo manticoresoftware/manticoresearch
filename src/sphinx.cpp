@@ -61,7 +61,6 @@
 
 #if USE_WINDOWS
 	#include <io.h> // for open()
-	#include <intrin.h> // for intrinsic __rdtsc()
 
 	#if USE_MSSQL
 	#include <sql.h>
@@ -442,7 +441,6 @@ protected:
 
 #if USE_WINDOWS
 
-#pragma intrinsic(__rdtsc)
 INT64 sphClocks ()
 {
 	return __rdtsc();

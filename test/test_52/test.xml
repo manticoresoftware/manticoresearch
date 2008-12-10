@@ -1,0 +1,66 @@
+<test>
+<name>before operator</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT * FROM test_table
+}
+
+index test
+{
+	source	= test
+	path	= <data_path/>/test
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	document_id INT NOT NULL,
+	title VARCHAR(255) NOT NULL,
+	text VARCHAR(255) NOT NULL
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table;
+</db_drop>
+
+<db_insert>
+INSERT INTO test_table ( document_id, title, text ) VALUES
+( 1, 'aaa bbb', 'ccc ddd' ),
+( 2, 'xxx', 'ccc ddd eee fff ggg' ),
+( 3, 'yyy', 'one one one two three' ),
+( 4, 'zzz', 'one two three one three one two four one two three four' );
+</db_insert>
+
+<queries>
+	<query mode="extended2"><![CDATA[ aaa << ccc ]]></query>
+	<query mode="extended2"><![CDATA[ aaa << bbb << ccc ]]></query>
+	<query mode="extended2"><![CDATA[ aaa << ccc << ddd ]]></query>
+	<query mode="extended2"><![CDATA[ ccc << ddd ]]></query>
+	<query mode="extended2"><![CDATA[ ccc << eee << fff ]]></query>
+	<query mode="extended2"><![CDATA[ ccc << ddd << ggg ]]></query>
+	<query mode="extended2"><![CDATA[ ccc << ddd << xxx ]]></query>	
+	<query mode="extended2"><![CDATA[ eee << ddd << ggg ]]></query>
+
+	<query mode="extended2"><![CDATA[ one << two << three ]]></query>
+	<query mode="extended2"><![CDATA[ one << three ]]></query>
+	<query mode="extended2"><![CDATA[ one << one << three ]]></query>
+	<query mode="extended2"><![CDATA[ one << two << three << four ]]></query>
+</queries>
+
+</test>

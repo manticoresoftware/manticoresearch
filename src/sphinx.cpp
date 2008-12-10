@@ -12745,8 +12745,8 @@ int ExtOrder_c::GetMatchingHits ( SphDocID_t uDocid, ExtHit_t * pHitbuf, int iLi
 		const ExtHit_t * pHit = m_pHits[iChild];
 		assert ( pHit->m_uDocid==uDocid );
 
-		// most recent subseq must always be either shorter, or empty
-		assert ( dAccRecent.GetLength()<dAccLongest.GetLength() || dAccRecent.GetLength()==0 );
+		// most recent subseq must never be longer
+		assert ( dAccRecent.GetLength()<=dAccLongest.GetLength() );
 
 		// handle that hit!
 		int iHitField = HIT2FIELD(pHit->m_uHitpos);
@@ -12778,7 +12778,6 @@ int ExtOrder_c::GetMatchingHits ( SphDocID_t uDocid, ExtHit_t * pHitbuf, int iLi
 				// flush longest tracker into buffer, and keep it terminated
 				ARRAY_FOREACH ( i, dAccLongest )
 					pHitbuf[iMyHit++] = dAccLongest[i];
-				pHitbuf [ iMyHit++ ].m_uDocid = DOCID_MAX;
 
 				// reset both trackers
 				dAccLongest.Resize ( 0 );
@@ -12786,6 +12785,12 @@ int ExtOrder_c::GetMatchingHits ( SphDocID_t uDocid, ExtHit_t * pHitbuf, int iLi
 				iPosRecent = iPosLongest;
 			}
 
+		} else if ( iChild==0 )
+		{
+			// it restarts  most-recent tracker
+			dAccRecent.Resize ( 0 );
+			dAccRecent.Add ( *pHit );
+			iPosRecent = iHitPos + pHit->m_uSpanlen;
 		} else if ( iChild==dAccRecent.GetLength() && iHitPos>=iPosRecent )
 		{
 			// it fits most-recent tracker
@@ -12799,19 +12804,14 @@ int ExtOrder_c::GetMatchingHits ( SphDocID_t uDocid, ExtHit_t * pHitbuf, int iLi
 				dAccRecent.Resize ( 0 );
 				iPosLongest = iPosRecent;
 			}
-
-		} else if ( iChild==0 )
-		{
-			// it restarts  most-recent tracker
-			dAccRecent.Resize ( 0 );
-			dAccRecent.Add ( *pHit );
-			iPosRecent = iHitPos + pHit->m_uSpanlen;
-		}
+		} 
 
 		// advance hit stream
 		m_pHits[iChild]++;
 	}
 
+	assert ( iMyHit>=0 && iMyHit<iLimit );
+	pHitbuf[iMyHit].m_uDocid = DOCID_MAX;
 	return iMyHit;
 }
 

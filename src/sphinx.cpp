@@ -13108,7 +13108,8 @@ int ExtRanker_MatchAny_c::GetMatches ( int iFields, const int * pWeights )
 				DWORD uRank = 0;
 				for ( int i=0; i<iFields; i++ )
 				{
-					uRank += ( sphBitCount(uMatchMask[i]) + (uLCS[i]-1)*iPhraseK )*pWeights[i];
+					if ( uMatchMask[i] )
+						uRank += ( sphBitCount(uMatchMask[i]) + (uLCS[i]-1)*iPhraseK )*pWeights[i];
 					uMatchMask[i] = 0;
 					uLCS[i] = 0;
 				}

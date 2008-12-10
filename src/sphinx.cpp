@@ -10890,6 +10890,34 @@ protected:
 };
 
 
+class ExtOrder_c : public ExtNode_i
+{
+public:
+								ExtOrder_c ( const CSphVector<ExtNode_i *> & dChildren, const CSphTermSetup & tSetup );
+								~ExtOrder_c ();
+
+	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
+	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
+	virtual void				GetQwords ( ExtQwordsHash_t & hQwords );
+	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
+
+protected:
+	CSphVector<ExtNode_i *>		m_dChildren;
+	CSphVector<const ExtDoc_t*>	m_pDocsChunk;	///< last document chunk (for hit fetching)
+	CSphVector<const ExtDoc_t*>	m_pDocs;		///< current position in document chunk
+	CSphVector<const ExtHit_t*>	m_pHits;		///< current position in hits chunk
+	CSphVector<SphDocID_t>		m_dMaxID;		///< max DOCID from the last chunk
+	ExtHit_t					m_dMyHits[MAX_HITS];	///< buffer for all my phrase hits; inherited m_dHits will receive filtered results
+	bool						m_bDone;
+	SphDocID_t					m_uHitsOverFor;
+	SphDocID_t					m_uLastMatchID;
+
+protected:
+	int							GetNextHit ( SphDocID_t uDocid );										///< get next hit within given document, and return its child-id
+	int							GetMatchingHits ( SphDocID_t uDocid, ExtHit_t * pHitbuf, int iLimit );	///< process candidate hits and stores actual matches while we can
+};
+
+
 /// ranker interface
 /// ranker folds incoming hitstream into simple match chunks, and computes relevance rank
 class ExtRanker_c
@@ -11028,6 +11056,14 @@ ExtNode_i * ExtNode_i::Create ( const CSphExtendedQueryNode * pNode, const CSphT
 	{
 		int iChildren = pNode->m_dChildren.GetLength ();
 		assert ( iChildren>0 );
+
+		if ( pNode->m_eOp == SPH_QUERY_BEFORE )
+		{
+			CSphVector<ExtNode_i *> dChildren;
+			ARRAY_FOREACH ( i, pNode->m_dChildren )
+				dChildren.Add ( ExtNode_i::Create ( pNode->m_dChildren[i], tSetup ) );
+			return new ExtOrder_c ( dChildren, tSetup );
+		}
 
 		ExtNode_i * pCur = ExtNode_i::Create ( pNode->m_dChildren[0], tSetup );
 		for ( int i=1; i<iChildren; i++ )
@@ -12614,6 +12650,348 @@ const ExtHit_t * ExtQuorum_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t 
 	assert ( iHit>=0 && iHit<MAX_HITS );
 	m_dHits[iHit].m_uDocid = DOCID_MAX;
 	return ( iHit!=0 ) ? m_dHits : NULL;
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+ExtOrder_c::ExtOrder_c ( const CSphVector<ExtNode_i *> & dChildren, const CSphTermSetup & tSetup )
+	: m_dChildren ( dChildren )
+	, m_bDone ( false )
+	, m_uHitsOverFor ( 0 )
+{
+	int iChildren = dChildren.GetLength();
+
+	m_pDocs.Resize ( iChildren );
+	m_pHits.Resize ( iChildren );
+	m_pDocsChunk.Resize ( iChildren );
+	m_dMaxID.Resize ( iChildren );
+
+	ARRAY_FOREACH ( i, dChildren )
+	{
+		m_pDocs[i] = NULL;
+		m_pHits[i] = NULL;
+	}
+
+	AllocDocinfo ( tSetup );
+}
+
+
+ExtOrder_c::~ExtOrder_c ()
+{
+	ARRAY_FOREACH ( i, m_dChildren )
+		SafeDelete ( m_dChildren[i] );
+}
+
+
+int ExtOrder_c::GetNextHit ( SphDocID_t uDocid )
+{
+	// OPTIMIZE! implement PQ instead of full-scan
+	DWORD uMinPos = UINT_MAX;
+	int iChild = -1;
+	ARRAY_FOREACH ( i, m_dChildren )
+	{
+		// is this child over?
+		if ( !m_pHits[i] )
+			continue;
+
+		// skip until proper hit
+		while ( m_pHits[i]->m_uDocid < uDocid )
+			m_pHits[i]++;
+
+		// hit-chunk over? request next one, and rescan
+		if ( m_pHits[i]->m_uDocid==DOCID_MAX )
+		{
+			m_pHits[i] = m_dChildren[i]->GetHitsChunk ( m_pDocsChunk[i], m_dMaxID[i] );
+			i--;
+			continue;
+		}
+
+		// is this our man at all?
+		if ( m_pHits[i]->m_uDocid==uDocid )
+		{
+			// is he the best we can get?
+			if ( m_pHits[i]->m_uHitpos < uMinPos )
+			{
+				uMinPos = m_pHits[i]->m_uHitpos;
+				iChild = i;
+			}
+		}
+	}
+	return iChild;
+}
+
+
+int ExtOrder_c::GetMatchingHits ( SphDocID_t uDocid, ExtHit_t * pHitbuf, int iLimit )
+{
+	// my trackers
+	CSphVector<ExtHit_t> dAccLongest;
+	CSphVector<ExtHit_t> dAccRecent;
+	int iPosLongest = 0; // needed to handle cases such as "a b c" << a
+	int iPosRecent = 0;
+	int iField = -1;
+
+	dAccLongest.Reserve ( m_dChildren.GetLength() );
+	dAccRecent.Reserve ( m_dChildren.GetLength() );
+
+	// while there's enough space in the buffer
+	int iMyHit = 0;
+	while ( iMyHit+m_dChildren.GetLength()<iLimit )
+	{
+		// get next hit (in hitpos ascending order)
+		int iChild = GetNextHit ( uDocid );
+		if ( iChild<0 )
+			break; // OPTIMIZE? no trailing hits on this route
+
+		const ExtHit_t * pHit = m_pHits[iChild];
+		assert ( pHit->m_uDocid==uDocid );
+
+		// most recent subseq must always be either shorter, or empty
+		assert ( dAccRecent.GetLength()<dAccLongest.GetLength() || dAccRecent.GetLength()==0 );
+
+		// handle that hit!
+		int iHitField = HIT2FIELD(pHit->m_uHitpos);
+		int iHitPos = HIT2POS(pHit->m_uHitpos);
+
+		if ( iHitField!=iField )
+		{
+			// new field; reset both trackers
+			dAccLongest.Resize ( 0 );
+			dAccRecent.Resize ( 0 );
+
+			// initial seeding, if needed
+			if ( iChild==0 )
+			{
+				dAccLongest.Add ( *pHit );
+				iPosLongest = iHitPos + pHit->m_uSpanlen;
+				iField = iHitField;
+			}
+
+		} else if ( iChild==dAccLongest.GetLength() && iHitPos>=iPosLongest )
+		{
+			// it fits longest tracker
+			dAccLongest.Add ( *pHit );
+			iPosLongest = iHitPos + pHit->m_uSpanlen;
+
+			// fully matched subsequence
+			if ( dAccLongest.GetLength()==m_dChildren.GetLength() )
+			{
+				// flush longest tracker into buffer, and keep it terminated
+				ARRAY_FOREACH ( i, dAccLongest )
+					pHitbuf[iMyHit++] = dAccLongest[i];
+				pHitbuf [ iMyHit++ ].m_uDocid = DOCID_MAX;
+
+				// reset both trackers
+				dAccLongest.Resize ( 0 );
+				dAccRecent.Resize ( 0 );
+				iPosRecent = iPosLongest;
+			}
+
+		} else if ( iChild==dAccRecent.GetLength() && iHitPos>=iPosRecent )
+		{
+			// it fits most-recent tracker
+			dAccRecent.Add ( *pHit );
+			iPosRecent = iHitPos + pHit->m_uSpanlen;
+
+			// maybe most-recent just became longest too?
+			if ( dAccRecent.GetLength()==dAccLongest.GetLength() )
+			{
+				dAccLongest.SwapData ( dAccRecent );
+				dAccRecent.Resize ( 0 );
+				iPosLongest = iPosRecent;
+			}
+
+		} else if ( iChild==0 )
+		{
+			// it restarts  most-recent tracker
+			dAccRecent.Resize ( 0 );
+			dAccRecent.Add ( *pHit );
+			iPosRecent = iHitPos + pHit->m_uSpanlen;
+		}
+
+		// advance hit stream
+		m_pHits[iChild]++;
+	}
+
+	return iMyHit;
+}
+
+	
+const ExtDoc_t * ExtOrder_c::GetDocsChunk ( SphDocID_t * pMaxID )
+{
+	if ( m_bDone )
+		return NULL;
+
+	// warm up
+	ARRAY_FOREACH ( i, m_dChildren )
+	{
+		if ( !m_pDocs[i] ) m_pDocs[i] = m_pDocsChunk[i] = m_dChildren[i]->GetDocsChunk ( &m_dMaxID[i] );
+		if ( !m_pDocs[i] )
+		{
+			m_bDone = true;
+			return NULL;
+		}
+	}
+
+	// match, while there's enough space in buffers
+	CSphRowitem * pDocinfo = m_pDocinfo;
+	int iDoc = 0;
+	int iMyHit = 0;
+	while ( iDoc<MAX_DOCS-1 && iMyHit+m_dChildren.GetLength()<MAX_HITS-1 )
+	{
+		// find next candidate document (that has all the words)
+		SphDocID_t uDocid = m_pDocs[0]->m_uDocid;
+		assert ( uDocid!=DOCID_MAX );
+
+		for ( int i=1; i<m_dChildren.GetLength(); )
+		{
+			// skip docs with too small ids
+			while ( m_pDocs[i]->m_uDocid < uDocid )
+				m_pDocs[i]++;
+
+			// block end marker? pull next block and keep scanning
+			if ( m_pDocs[i]->m_uDocid==DOCID_MAX )
+			{
+				m_pDocs[i] = m_pDocsChunk[i] = m_dChildren[i]->GetDocsChunk ( &m_dMaxID[i] );
+				if ( !m_pDocs[i] )
+				{
+					m_bDone = true;
+					return ReturnDocsChunk ( iDoc, pMaxID );
+				}
+				continue;
+			}
+
+			// too big id? its out next candidate
+			if ( m_pDocs[i]->m_uDocid > uDocid )
+			{
+				uDocid = m_pDocs[i]->m_uDocid;
+				i = 0;
+				continue;
+			}
+
+			assert ( m_pDocs[i]->m_uDocid==uDocid );
+			i++;
+		}
+
+		#ifndef NDEBUG
+		assert ( uDocid!=DOCID_MAX );
+		ARRAY_FOREACH ( i, m_dChildren )
+		{
+			assert ( m_pDocs[i] );
+			assert ( m_pDocs[i]->m_uDocid==uDocid );
+		}
+		#endif
+
+		// prefetch hits
+		ARRAY_FOREACH ( i, m_dChildren )
+		{
+			if ( !m_pHits[i] )
+				m_pHits[i] = m_dChildren[i]->GetHitsChunk ( m_pDocsChunk[i], m_dMaxID[i] );
+
+			// every document comes with at least one hit
+			// and we did not yet process current candidate's hits
+			// so we MUST have hits at this point no matter what
+			assert ( m_pHits[i] );
+		}
+
+		// match and save hits
+		int iGotHits = GetMatchingHits ( uDocid, m_dMyHits+iMyHit, MAX_HITS-1-iMyHit );
+		if ( iGotHits )
+		{
+			m_uLastMatchID = uDocid;
+			CopyExtDoc ( m_dDocs[iDoc++], *m_pDocs[0], &pDocinfo, m_iStride );
+			iMyHit += iGotHits;
+		}
+
+		// advance doc stream
+		m_pDocs[0]++;
+		if ( m_pDocs[0]->m_uDocid==DOCID_MAX )
+		{
+			m_pDocs[0] = m_pDocsChunk[0] = m_dChildren[0]->GetDocsChunk ( &m_dMaxID[0] );
+			if ( !m_pDocs[0] )
+			{
+				m_bDone = true;
+				break;
+			}
+		}
+	}
+
+	return ReturnDocsChunk ( iDoc, pMaxID );
+}
+
+
+const ExtHit_t * ExtOrder_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t )
+{
+	if ( pDocs->m_uDocid==m_uHitsOverFor )
+		return NULL;
+
+	// copy accumulated hits while we can
+	SphDocID_t uFirstMatch = pDocs->m_uDocid;
+
+	const ExtHit_t * pMyHits = &m_dMyHits[0];
+	int iHit = 0;
+
+	for ( ;; )
+	{
+		while ( pDocs->m_uDocid!=pMyHits->m_uDocid )
+		{
+			while ( pDocs->m_uDocid < pMyHits->m_uDocid ) pDocs++;
+			if ( pDocs->m_uDocid==DOCID_MAX ) break;
+
+			while ( pMyHits->m_uDocid < pDocs->m_uDocid ) pMyHits++;
+			if ( pMyHits->m_uDocid==DOCID_MAX ) break;
+		} 
+		if ( pDocs->m_uDocid==DOCID_MAX || pMyHits->m_uDocid==DOCID_MAX )
+			break;
+
+		assert ( pDocs->m_uDocid==pMyHits->m_uDocid );
+		while( pDocs->m_uDocid==pMyHits->m_uDocid )
+			m_dHits[iHit++] = *pMyHits++;
+		assert ( iHit<MAX_HITS-1 ); // we're copying at most our internal buffer; can't go above limit
+	}
+
+	// handling trailing hits border case
+	if ( iHit )
+	{
+		// we've been able to copy some accumulated hits...
+		if ( pMyHits->m_uDocid==DOCID_MAX )
+		{
+			// ...all of them! setup the next run to check for trailing hits
+			m_dMyHits[0].m_uDocid = DOCID_MAX;
+		} else
+		{
+			// ...but not all of them! we ran out of docs earlier; hence, trailing hits are of no interest
+			m_uHitsOverFor = uFirstMatch;
+		}
+	} else
+	{
+		// we did not copy any hits; check for trailing ones as the last resort
+		iHit = GetMatchingHits ( m_uLastMatchID, m_dHits, MAX_HITS-1 );
+		if ( !iHit )
+		{
+			// actually, not *only* in this case, also in partial buffer case
+			// but for simplicity, lets just run one extra GetHitsChunk() iteration
+			m_uHitsOverFor = uFirstMatch;
+		}
+	}
+
+	// all done
+	assert ( iHit<MAX_HITS );
+	m_dHits[iHit].m_uDocid = DOCID_MAX;
+	return iHit ? m_dHits : NULL;
+}
+
+
+void ExtOrder_c::GetQwords ( ExtQwordsHash_t & hQwords )
+{
+	ARRAY_FOREACH ( i, m_dChildren )
+		m_dChildren[i]->GetQwords ( hQwords );
+}
+
+
+void ExtOrder_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
+{
+	ARRAY_FOREACH ( i, m_dChildren )
+		m_dChildren[i]->SetQwordsIDF ( hQwords );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -14767,7 +15145,7 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 	while ( ( c = *szQuery++ ) != 0 )
 	{
 		// must be in sync with EscapeString (php api)
-		if ( c=='(' || c==')' || c=='|' || c=='-' || c=='!' || c=='@' || c=='~' || c=='\"' || c=='&' || c=='/' )
+		if ( c=='(' || c==')' || c=='|' || c=='-' || c=='!' || c=='@' || c=='~' || c=='\"' || c=='&' || c=='/' || c=='<' )
 			*szRes++ = '\\';
 
 		*szRes++ = c;

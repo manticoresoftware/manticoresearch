@@ -394,22 +394,38 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			// specials must not affect pos
 			m_iAtomPos--;
 
-			// return special token
-			if ( sToken[0]!='@' )
+			// some specials are especially special
+			if ( sToken[0]=='@' )
 			{
+				// parse fields operator
+				if ( !ParseFields ( m_tPendingToken.tFieldLimit.uMask, m_tPendingToken.tFieldLimit.iMaxPos ) )
+					return -1;
+
+				if ( m_pSchema->m_dFields.GetLength()!=32 )
+					m_tPendingToken.tFieldLimit.uMask &= ( 1UL<<m_pSchema->m_dFields.GetLength() )-1;
+
+				m_iPendingType = TOK_FIELDLIMIT;
+				break;
+
+			} else if ( sToken[0]=='<' )
+			{
+				if ( *m_pTokenizer->GetBufferPtr()=='<' )
+				{
+					// got "<<", aka operator BEFORE
+					m_iPendingType = TOK_BEFORE;
+					break;
+				} else
+				{
+					// got stray '<', ignore
+					continue;
+				}
+
+			} else
+			{
+				// all the other specials are passed to parser verbtaim
 				m_iPendingType = sToken[0]=='!' ? '-' : sToken[0];
 				break;
 			}
-
-			// parse fields operator
-			if ( !ParseFields ( m_tPendingToken.tFieldLimit.uMask, m_tPendingToken.tFieldLimit.iMaxPos ) )
-				return -1;
-
-			if ( m_pSchema->m_dFields.GetLength()!=32 )
-				m_tPendingToken.tFieldLimit.uMask &= ( 1UL<<m_pSchema->m_dFields.GetLength() )-1;
-
-			m_iPendingType = TOK_FIELDLIMIT;
-			break;
 		}
 
 		// check for stopword, and create that node
@@ -684,7 +700,7 @@ static void DeleteNodesWOFields ( CSphExtendedQueryNode * pNode )
 bool XQParser_t::Parse ( CSphExtendedQuery & tParsed, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict )
 {
 	CSphScopedPtr<ISphTokenizer> pMyTokenizer ( pTokenizer->Clone ( true ) );
-	pMyTokenizer->AddSpecials ( "()|-!@~\"/^$" );
+	pMyTokenizer->AddSpecials ( "()|-!@~\"/^$<" );
 	pMyTokenizer->EnableQueryParserMode ( true );
 
 	m_pParsed = &tParsed;
@@ -757,6 +773,8 @@ static void xqDump ( CSphExtendedQueryNode * pNode, const CSphSchema & tSch, int
 			case SPH_QUERY_OR: printf ( "OR:\n" ); break;
 			case SPH_QUERY_NOT: printf ( "NOT:\n" ); break;
 			case SPH_QUERY_ANDNOT: printf ( "ANDNOT:\n" ); break;
+			case SPH_QUERY_BEFORE: printf ( "BEFORE:\n" ); break;
+			default: printf ( "unknown-op-%d:\n", pNode->m_eOp ); break;
 		}
 		ARRAY_FOREACH ( i, pNode->m_dChildren )
 			xqDump ( pNode->m_dChildren[i], tSch, iIndent+1 );

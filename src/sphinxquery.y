@@ -26,6 +26,7 @@
 %token <pNode>			TOK_KEYWORD
 %token <tInt>			TOK_INT
 %token <tFieldLimit>	TOK_FIELDLIMIT
+%token					TOK_BEFORE
 %type <pNode>			rawkeyword
 %type <pNode>			keyword
 %type <pNode>			phrasetoken
@@ -34,6 +35,7 @@
 %type <pNode>			atomf
 %type <pNode>			orlist
 %type <pNode>			orlistf
+%type <pNode>			beforelist
 %type <pNode>			expr
 
 %%
@@ -91,13 +93,17 @@ orlist:
 orlistf:
 	orlist								{ $$ = $1; }
 	| '-' orlist						{ $$ = pParser->AddOp ( SPH_QUERY_NOT, $2, NULL ); }
-	| TOK_FIELDLIMIT '-' orlist			{ $$ = pParser->AddOp ( SPH_QUERY_NOT, $3, NULL );	$$->SetFieldSpec ( $1.uMask, $1.iMaxPos ); }
+	| TOK_FIELDLIMIT '-' orlist			{ $$ = pParser->AddOp ( SPH_QUERY_NOT, $3, NULL ); $$->SetFieldSpec ( $1.uMask, $1.iMaxPos ); }
 	;
 
+beforelist:
+	orlistf
+	| beforelist TOK_BEFORE orlistf		{ $$ = pParser->AddOp ( SPH_QUERY_BEFORE, $1, $3 ); }
+	;
 
 expr:
-	orlistf								{ $$ = $1; }
-	| expr orlistf               		{ $$ = pParser->AddOp ( SPH_QUERY_AND, $1, $2 ); }
+	beforelist							{ $$ = $1; }
+	| expr beforelist					{ $$ = pParser->AddOp ( SPH_QUERY_AND, $1, $2 ); }
 	;
 
 %%

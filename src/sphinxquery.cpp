@@ -646,6 +646,13 @@ bool XQParser_t::FixupNots ( XQNode_t * pNode )
 		return false;
 	}
 
+	// NOT used in before operator
+	if ( pNode->m_eOp==SPH_QUERY_BEFORE )
+	{
+		m_pParsed->m_sParseError.SetSprintf ( "query is non-computable (NOT cannot be used as before operand)" );
+		return false;
+	}
+
 	// must be some NOTs within AND at this point, convert this node to ANDNOT
 	assert ( pNode->m_eOp==SPH_QUERY_AND && pNode->m_dChildren.GetLength() && dNots.GetLength() );
 

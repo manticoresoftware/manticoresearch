@@ -11059,6 +11059,13 @@ ExtNode_i * ExtNode_i::Create ( const CSphExtendedQueryNode * pNode, const CSphT
 
 		if ( pNode->m_eOp == SPH_QUERY_BEFORE )
 		{
+			if ( iChildren<2 )
+			{
+				if ( tSetup.m_pWarning )
+					tSetup.m_pWarning->SetSprintf ( "order node requires at least two children" );
+				return NULL;
+			}
+
 			CSphVector<ExtNode_i *> dChildren;
 			ARRAY_FOREACH ( i, pNode->m_dChildren )
 				dChildren.Add ( ExtNode_i::Create ( pNode->m_dChildren[i], tSetup ) );
@@ -12660,6 +12667,7 @@ ExtOrder_c::ExtOrder_c ( const CSphVector<ExtNode_i *> & dChildren, const CSphTe
 	, m_uHitsOverFor ( 0 )
 {
 	int iChildren = dChildren.GetLength();
+	assert ( iChildren >= 2 );
 
 	m_pDocs.Resize ( iChildren );
 	m_pHits.Resize ( iChildren );
@@ -12668,6 +12676,7 @@ ExtOrder_c::ExtOrder_c ( const CSphVector<ExtNode_i *> & dChildren, const CSphTe
 
 	ARRAY_FOREACH ( i, dChildren )
 	{
+		assert ( m_dChildren[i] );
 		m_pDocs[i] = NULL;
 		m_pHits[i] = NULL;
 	}

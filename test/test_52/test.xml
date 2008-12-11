@@ -23,6 +23,7 @@ index test
 {
 	source	= test
 	path	= <data_path/>/test
+	min_word_len = 1
 }
 </config>
 
@@ -44,7 +45,8 @@ INSERT INTO test_table ( document_id, title, text ) VALUES
 ( 1, 'aaa bbb', 'ccc ddd' ),
 ( 2, 'xxx', 'ccc ddd eee fff ggg' ),
 ( 3, 'yyy', 'one one one two three' ),
-( 4, 'zzz', 'one two three one three one two four one two three four' );
+( 4, 'zzz', 'one two three one three one two four one two three four' ),
+( 5, '', 'a b c d e f g' );
 </db_insert>
 
 <queries>
@@ -60,7 +62,23 @@ INSERT INTO test_table ( document_id, title, text ) VALUES
 	<query mode="extended2"><![CDATA[ one << two << three ]]></query>
 	<query mode="extended2"><![CDATA[ one << three ]]></query>
 	<query mode="extended2"><![CDATA[ one << one << three ]]></query>
+	<query mode="extended2"><![CDATA[ one << one << one << three ]]></query>
+	<query mode="extended2"><![CDATA[ one << one << one << one << three ]]></query>
 	<query mode="extended2"><![CDATA[ one << two << three << four ]]></query>
+
+	<query mode="extended2"><![CDATA[ "a b c" << b << c << d ]]></query>
+	<query mode="extended2"><![CDATA[ "a b c" << c << d << e ]]></query>
+	<query mode="extended2"><![CDATA[ "a b c" << e << f << g ]]></query>
+	<query mode="extended2"><![CDATA[ a << "b c d" << e ]]></query>
+	<query mode="extended2"><![CDATA[ "a b c d" << "d e f" ]]></query>
+	<query mode="extended2"><![CDATA[ "a b c d" << "e f g" ]]></query>
+
+	<query mode="extended2"><![CDATA[ (ccc | "ddd eee") << (ddd | ggg) ]]></query>
+	<query mode="extended2"><![CDATA[ ccc << ddd$ ]]></query>
+	<query mode="extended2"><![CDATA[ ^one << two << three$ ]]></query>
+	<query mode="extended2"><![CDATA[ ^one << "one one" << two << three$ ]]></query>
+	<query mode="extended2"><![CDATA[ "zzz aaa"/1 << bbb ]]></query>
+	<query mode="extended2"><![CDATA[ "zzz aaa"/1 << ddd ]]></query>
 </queries>
 
 </test>

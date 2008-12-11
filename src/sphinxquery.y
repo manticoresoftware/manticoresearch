@@ -51,8 +51,9 @@ rawkeyword:
 
 keyword:
 	rawkeyword
-	| '^' rawkeyword					{ $$ = $2; assert ( $$->IsPlain() && $$->m_tAtom.m_dWords.GetLength()==1 ); $$->m_tAtom.m_dWords[0].m_bFieldStart = true; }
 	| rawkeyword '$'					{ $$ = $1; assert ( $$->IsPlain() && $$->m_tAtom.m_dWords.GetLength()==1 ); $$->m_tAtom.m_dWords[0].m_bFieldEnd = true; }
+	| '^' rawkeyword					{ $$ = $2; assert ( $$->IsPlain() && $$->m_tAtom.m_dWords.GetLength()==1 ); $$->m_tAtom.m_dWords[0].m_bFieldStart = true; }
+	| '^' rawkeyword '$'				{ $$ = $2; assert ( $$->IsPlain() && $$->m_tAtom.m_dWords.GetLength()==1 ); $$->m_tAtom.m_dWords[0].m_bFieldStart = true; $$->m_tAtom.m_dWords[0].m_bFieldEnd = true; }
 	;
 
 phrasetoken:

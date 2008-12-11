@@ -10729,7 +10729,8 @@ enum TermPosFilter_e
 {
 	TERM_POS_FIELD_LIMIT,
 	TERM_POS_FIELD_START,
-	TERM_POS_FIELD_END
+	TERM_POS_FIELD_END,
+	TERM_POS_FIELD_STARTEND
 };
 
 /// single keyword streamer, with term position filtering
@@ -10988,9 +10989,10 @@ ExtNode_i::ExtNode_i ()
 
 ExtNode_i * ExtNode_i::Create ( const CSphExtendedQueryAtomWord & tWord, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup )
 {
-	if ( tWord.m_bFieldStart )		return new ExtTermPos_c<TERM_POS_FIELD_START> ( tWord.m_sWord, uFields, 0, tSetup, tWord.m_iAtomPos );
+	if ( tWord.m_bFieldStart && tWord.m_bFieldEnd )	return new ExtTermPos_c<TERM_POS_FIELD_STARTEND> ( tWord.m_sWord, uFields, 0, tSetup, tWord.m_iAtomPos );
+	else if ( tWord.m_bFieldStart )	return new ExtTermPos_c<TERM_POS_FIELD_START> ( tWord.m_sWord, uFields, 0, tSetup, tWord.m_iAtomPos );
 	else if ( tWord.m_bFieldEnd )	return new ExtTermPos_c<TERM_POS_FIELD_END> ( tWord.m_sWord, uFields, 0, tSetup, tWord.m_iAtomPos );
-	if ( iMaxFieldPos>0 )			return new ExtTermPos_c<TERM_POS_FIELD_LIMIT> ( tWord.m_sWord, uFields, iMaxFieldPos, tSetup, tWord.m_iAtomPos );
+	else if ( iMaxFieldPos>0 )		return new ExtTermPos_c<TERM_POS_FIELD_LIMIT> ( tWord.m_sWord, uFields, iMaxFieldPos, tSetup, tWord.m_iAtomPos );
 	else							return new ExtTerm_c ( tWord.m_sWord, uFields, tSetup, tWord.m_iAtomPos );
 }
 
@@ -11296,6 +11298,13 @@ template<>
 inline bool ExtTermPos_c<TERM_POS_FIELD_END>::IsAcceptableHit ( DWORD uPos ) const
 {
 	return ( uPos & HIT_FIELD_END )!=0;
+}
+
+
+template<>
+inline bool ExtTermPos_c<TERM_POS_FIELD_STARTEND>::IsAcceptableHit ( DWORD uPos ) const
+{
+	return (int)HIT2POS(uPos)==1 && ( uPos & HIT_FIELD_END )!=0;
 }
 
 

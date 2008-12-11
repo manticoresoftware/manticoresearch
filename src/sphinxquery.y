@@ -75,6 +75,8 @@ phrase:
 atom:
 	keyword								{ $$ = $1; }
 	| '"' '"'							{ $$ = NULL; }
+	| '"' '"' '~' TOK_INT				{ $$ = NULL; }
+	| '"' '"' '/' TOK_INT				{ $$ = NULL; }
 	| '"' phrase '"'					{ $$ = $2; if ( $$ ) { assert ( $$->IsPlain() ); $$->m_tAtom.m_iMaxDistance = 0; } }
 	| '"' phrase '"' '~' TOK_INT		{ $$ = $2; if ( $$ ) { assert ( !$$ || $$->IsPlain() ); $$->m_tAtom.m_iMaxDistance = $5.iValue; $$->m_tAtom.m_bQuorum = false; } }
 	| '"' phrase '"' '/' TOK_INT		{ $$ = $2; if ( $$ ) { assert ( !$$ || $$->IsPlain() ); $$->m_tAtom.m_iMaxDistance = $5.iValue; $$->m_tAtom.m_bQuorum = true; } }

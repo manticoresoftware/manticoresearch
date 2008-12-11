@@ -952,8 +952,22 @@ protected:
 };
 
 
+/// indexing-related source settings
+struct CSphSourceSettings
+{
+	int		m_iMinPrefixLen;	///< min indexable prefix (0 means don't index prefixes)
+	int		m_iMinInfixLen;		///< min indexable infix length (0 means don't index infixes)
+	int		m_iBoundaryStep;	///< additional boundary word position increment
+	bool	m_bIndexExactWords;	///< exact (non-stemmed) word indexing flag
+	int		m_iOvershortStep;	///< position step on overshort token (default is 1)
+	int		m_iStopwordStep;	///< position step on stopword token (default is 1)
+
+			CSphSourceSettings ();
+};
+
+
 /// generic data source
-class CSphSource
+class CSphSource : public CSphSourceSettings
 {
 public:
 	CSphVector<CSphWordHit>				m_dHits;	///< current document split into words
@@ -991,15 +1005,8 @@ public:
 	/// must be called after IterateHitsStart(); will always fail otherwise
 	virtual bool						UpdateSchema ( CSphSchema * pInfo, CSphString & sError );
 
-	/// configure source to emit prefixes or infixes
-	/// passing zero to both iMinPrefixLen and iMinInfixLen means to emit the words themselves
-	void								SetEmitInfixes ( int iMinPrefixLen, int iMinInfixLen );
-
-	/// configure source to emit non-stemmed words
-	void								SetEmitExactWords ( bool bEmit );
-
-	/// set boundary step
-	void								SetBoundaryStep ( int iBoundaryStep ) { m_iBoundaryStep = Max ( iBoundaryStep, -1 ); }
+	/// setup misc indexing settings (prefix/infix/exact-word indexing, position steps)
+	void								Setup ( const CSphSourceSettings & tSettings );
 
 public:
 	/// connect to the source (eg. to the database)
@@ -1063,11 +1070,6 @@ protected:
 
 	bool								m_bStripHTML;	///< whether to strip HTML
 	CSphHTMLStripper *					m_pStripper;	///< my HTML stripper
-
-	int									m_iMinPrefixLen;///< min indexable prefix (0 means don't index prefixes)
-	int									m_iMinInfixLen;	///< min indexable infix length (0 means don't index infixes)
-	int									m_iBoundaryStep;///< additional boundary word position increment
-	bool								m_bIndexExactWords;///< exact (non-stemmed) word indexing flag
 
 	bool		m_bWarnedNull;
 	bool		m_bWarnedMax;
@@ -1910,12 +1912,9 @@ enum ESphDocinfo
 };
 
 
-struct CSphIndexSettings
+struct CSphIndexSettings : public CSphSourceSettings
 {
 	ESphDocinfo		m_eDocinfo;
-	int				m_iMinPrefixLen;
-	int				m_iMinInfixLen;
-	bool			m_bIndexExactWords;
 	bool			m_bHtmlStrip;
 	CSphString		m_sHtmlIndexAttrs;
 	CSphString		m_sHtmlRemoveElements;
@@ -1944,7 +1943,6 @@ public:
 	virtual const CSphSchema *	GetSchema () const { return &m_tSchema; }
 
 	virtual	void				SetProgressCallback ( ProgressCallback_t * pfnProgress ) { m_pProgress = pfnProgress; }
-	virtual void				SetBoundaryStep ( int iBoundaryStep );
 	virtual void				SetInplaceSettings ( int iHitGap, int iDocinfoGap, float fRelocFactor, float fWriteFactor );
 	virtual void				SetStar ( bool bValue ) { m_bEnableStar = bValue; }
 	virtual bool				GetStar () const { return m_bEnableStar; }
@@ -2025,8 +2023,6 @@ protected:
 	ProgressCallback_t *		m_pProgress;
 	CSphSchema					m_tSchema;
 	CSphString					m_sLastError;
-
-	int							m_iBoundaryStep;		///< on-boundary additional word position step (0 means index all words continuously)
 
 	bool						m_bInplaceSettings;
 	int							m_iHitGap;

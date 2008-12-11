@@ -439,6 +439,18 @@ index test1
 	# optional, default is 0
 	#
 	# index_exact_words		= 1
+
+
+	# position increment on overshort (less that min_word_len) words
+	# optional, allowed values are 0 and 1, default is 1
+	#
+	# overshort_step			= 1
+
+
+	# position increment on stopword
+	# optional, allowed values are 0 and 1, default is 1
+	#
+	# stopword_step			= 1
 }
 
 

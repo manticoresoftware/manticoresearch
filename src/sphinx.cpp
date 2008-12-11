@@ -5809,9 +5809,6 @@ ESphBinRead CSphBin::Precache ()
 
 CSphIndexSettings::CSphIndexSettings ()
 	: m_eDocinfo		( SPH_DOCINFO_NONE )
-	, m_iMinPrefixLen	( 0 )
-	, m_iMinInfixLen	( 0 )
-	, m_bIndexExactWords( false )
 	, m_bHtmlStrip		( false )
 {
 }
@@ -6491,7 +6488,6 @@ CSphIndex::CSphIndex ( const char * sName )
 	, m_pProgress ( NULL )
 	, m_tSchema ( sName )
 	, m_sLastError ( "(no error message)" )
-	, m_iBoundaryStep ( 0 )
 	, m_bInplaceSettings ( false )
 	, m_iHitGap ( 0 )
 	, m_iDocinfoGap ( 0 )
@@ -6511,12 +6507,6 @@ CSphIndex::~CSphIndex ()
 {
 	SafeDelete ( m_pTokenizer );
 	SafeDelete ( m_pDict );
-}
-
-
-void CSphIndex::SetBoundaryStep ( int iBoundaryStep )
-{
-	m_iBoundaryStep = Max ( iBoundaryStep, -1 );
 }
 
 
@@ -8305,9 +8295,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		assert ( pSource );
 
 		pSource->SetDict ( m_pDict );
-		pSource->SetEmitInfixes ( m_tSettings.m_iMinPrefixLen, m_tSettings.m_iMinInfixLen );
-		pSource->SetEmitExactWords ( m_tSettings.m_bIndexExactWords );
-		pSource->SetBoundaryStep ( m_iBoundaryStep );
+		pSource->Setup ( m_tSettings );
 	}
 
 	// connect 1st source and fetch its schema
@@ -17312,15 +17300,22 @@ void CSphHTMLStripper::Strip ( BYTE * sData )
 // GENERIC SOURCE
 /////////////////////////////////////////////////////////////////////////////
 
+CSphSourceSettings::CSphSourceSettings ()
+	: m_iMinPrefixLen ( 0 )
+	, m_iMinInfixLen ( 0 )
+	, m_iBoundaryStep ( 0 )
+	, m_bIndexExactWords ( false )
+	, m_iOvershortStep ( 1 )
+	, m_iStopwordStep ( 1 )
+{}
+
+//////////////////////////////////////////////////////////////////////////
+
 CSphSource::CSphSource ( const char * sName )
 	: m_pTokenizer ( NULL )
 	, m_pDict ( NULL )
 	, m_tSchema ( sName )
 	, m_bStripHTML ( false )
-	, m_iMinPrefixLen ( 0 )
-	, m_iMinInfixLen ( 0 )
-	, m_iBoundaryStep ( 0 )
-	, m_bIndexExactWords ( false )
 	, m_bWarnedNull ( false )
 	, m_bWarnedMax ( false )
 {
@@ -17381,16 +17376,14 @@ bool CSphSource::UpdateSchema ( CSphSchema * pInfo, CSphString & sError )
 }
 
 
-void CSphSource::SetEmitInfixes ( int iMinPrefixLen, int iMinInfixLen )
+void CSphSource::Setup ( const CSphSourceSettings & tSettings )
 {
-	m_iMinPrefixLen = Max ( iMinPrefixLen, 0 );
-	m_iMinInfixLen = Max ( iMinInfixLen, 0 );
-}
-
-
-void CSphSource::SetEmitExactWords ( bool bEmit )
-{
-	m_bIndexExactWords = bEmit;
+	m_iMinPrefixLen = Max ( tSettings.m_iMinPrefixLen, 0 );
+	m_iMinInfixLen = Max ( tSettings.m_iMinInfixLen, 0 );
+	m_iBoundaryStep = Max ( tSettings.m_iBoundaryStep, -1 );
+	m_bIndexExactWords = tSettings.m_bIndexExactWords;
+	m_iOvershortStep = Min ( Max ( tSettings.m_iOvershortStep, 0 ), 1 );
+	m_iStopwordStep = Min ( Max ( tSettings.m_iStopwordStep, 0 ), 1 );
 }
 
 
@@ -17456,6 +17449,7 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 
 		BYTE * sWord;
 		int iPos = HIT_PACK(iField,0);
+		int iLastStep = 1;
 
 		bool bPrefixField = m_tSchema.m_dFields[iField].m_eWordpart == SPH_WORDPART_PREFIX;
 		bool bInfixMode = m_iMinInfixLen > 0;
@@ -17471,9 +17465,11 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 			while ( ( sWord = m_pTokenizer->GetToken() )!=NULL )
 			{
 				iLastStart = m_dHits.GetLength();
-				iPos += 1+m_pTokenizer->GetOvershortCount();
+
+				iPos += iLastStep + m_pTokenizer->GetOvershortCount()*m_iOvershortStep;
 				if ( m_pTokenizer->GetBoundary() )
 					iPos = Max ( iPos+m_iBoundaryStep, 1 );
+				iLastStep = 1;
 
 				int iLen = m_pTokenizer->GetLastTokenLen ();
 
@@ -17509,9 +17505,11 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 					tHit.m_iDocID = m_tDocInfo.m_iDocID;
 					tHit.m_iWordID = iWord;
 					tHit.m_iWordPos = iPos;
-				}
-				else
+				} else
+				{
+					iLastStep = m_iStopwordStep;
 					continue;
+				}
 
 				// restore stemmed word
 				int iStemmedLen = strlen ( ( const char *)sBuf );
@@ -17611,9 +17609,11 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 			while ( ( sWord = m_pTokenizer->GetToken() )!=NULL )
 			{
 				iLastStart = m_dHits.GetLength();
-				iPos += 1+m_pTokenizer->GetOvershortCount();
+
+				iPos += iLastStep + m_pTokenizer->GetOvershortCount()*m_iOvershortStep;
 				if ( m_pTokenizer->GetBoundary() )
 					iPos = Max ( iPos+m_iBoundaryStep, 1 );
+				iLastStep = 1;
 
 				if ( bGlobalPartialMatch )
 				{
@@ -17656,6 +17656,9 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 					tHit.m_iDocID = m_tDocInfo.m_iDocID;
 					tHit.m_iWordID = iWord;
 					tHit.m_iWordPos = iPos;
+				} else
+				{
+					iLastStep = m_iStopwordStep;
 				}
 			}
 		}

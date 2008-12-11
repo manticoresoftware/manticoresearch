@@ -5457,6 +5457,40 @@ index_exact_words = 1
 </sect3>
 
 
+<sect3 id="conf-overshort-step"><title>overshort_step</title>
+<para>
+Position increment on overshort (less that <link linkend="conf-min-word-len">min_word_len</link>) keywords.
+Optional, allowed values are 0 and 1, default is 1.
+Introduced in version 0.9.9.
+</para>
+<para>
+This directive does not affect <filename>searchd</filename> in any way,
+it only affects <filename>indexer</filename>.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+overshort_step = 1
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-stopword-step"><title>stopword_step</title>
+<para>
+Position increment on <link linkend="conf-stopwords">stopwords</link>.
+Optional, allowed values are 0 and 1, default is 1.
+Introduced in version 0.9.9.
+</para>
+<para>
+This directive does not affect <filename>searchd</filename> in any way,
+it only affects <filename>indexer</filename>.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+overshort_step = 1
+</programlisting>
+</sect3>
+
+
 </sect2>
 <sect2 id="confgroup-indexer"><title><filename>indexer</filename> program configuration options</title>
 

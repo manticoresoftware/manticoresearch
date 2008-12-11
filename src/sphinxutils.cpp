@@ -199,6 +199,8 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "inplace_write_factor",	0, NULL },
 	{ "index_exact_words",		0, NULL },
 	{ "min_stemming_len",		0, NULL },
+	{ "overshort_step",			0, NULL },
+	{ "stopword_step",			0, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -777,7 +779,10 @@ void sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 {
 	tSettings.m_iMinPrefixLen = Max ( hIndex.GetInt ( "min_prefix_len" ), 0 );
 	tSettings.m_iMinInfixLen  = Max ( hIndex.GetInt ( "min_infix_len" ), 0 );
+	tSettings.m_iBoundaryStep = Max ( hIndex.GetInt ( "phrase_boundary_step" ), -1 );
 	tSettings.m_bIndexExactWords = hIndex.GetInt ( "index_exact_words" )!=0;
+	tSettings.m_iOvershortStep = Min ( Max ( hIndex.GetInt ( "overshort_step", 1 ), 0 ), 1 );
+	tSettings.m_iStopwordStep = Min ( Max ( hIndex.GetInt ( "stopword_step", 1 ), 0 ), 1 );
 
 	if ( hIndex ( "html_strip" ) )
 	{

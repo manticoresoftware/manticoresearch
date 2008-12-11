@@ -197,6 +197,8 @@ Table of Contents
       9.2.37. inplace_reloc_factor
       9.2.38. inplace_write_factor
       9.2.39. index_exact_words
+      9.2.40. overshort_step
+      9.2.41. stopword_step
 
    9.3. indexer program configuration options
       9.3.1. mem_limit
@@ -5195,6 +5197,31 @@ all.
 Example:
 
    | index_exact_words = 1
+
+9.2.40. overshort_step
+----------------------
+
+Position increment on overshort (less that min_word_len) keywords.
+Optional, allowed values are 0 and 1, default is 1. Introduced in version
+0.9.9.
+
+This directive does not affect searchd in any way, it only affects indexer.
+
+Example:
+
+   | overshort_step = 1
+
+9.2.41. stopword_step
+---------------------
+
+Position increment on stopwords. Optional, allowed values are 0 and 1,
+default is 1. Introduced in version 0.9.9.
+
+This directive does not affect searchd in any way, it only affects indexer.
+
+Example:
+
+   | overshort_step = 1
 
 9.3. indexer program configuration options
 ------------------------------------------

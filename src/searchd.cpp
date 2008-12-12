@@ -2020,10 +2020,34 @@ int QueryRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, const IRequ
 				// read reply
 				int iRemoteVer;
 				int iRes = sphSockRecv ( tAgent.m_iSock, (char*)&iRemoteVer, sizeof(iRemoteVer) );
-				iRemoteVer = ntohl ( iRemoteVer );
-				if ( iRes!=sizeof(iRemoteVer) || iRemoteVer<=0 )
+				if ( iRes!=sizeof(iRemoteVer) )
 				{
-					tAgent.m_sFailure.SetSprintf ( "expected protocol v.%d, got v.%d", SPHINX_SEARCHD_PROTO, iRemoteVer );
+					tAgent.Close ();
+					if ( iRes<0 )
+					{
+						// network error
+						int iErr = sphSockGetErrno();
+						tAgent.m_sFailure.SetSprintf ( "handshake failure (errno=%d, msg=%s)", iErr, sphSockError(iErr) );
+
+					} else if ( iRes>0 )
+					{
+						// incomplete reply
+						tAgent.m_sFailure.SetSprintf ( "handshake failure (exp=%d, recv=%d)", sizeof(iRemoteVer), iRes );
+
+					} else
+					{
+						// agent closed the connection
+						// this might happen in out-of-sync connect-accept case; so let's retry
+						tAgent.m_sFailure.SetSprintf ( "handshake failure (connection was closed)", iRes );
+						tAgent.m_eState = AGENT_RETRY;
+					}
+					continue;
+				}
+
+				iRemoteVer = ntohl ( iRemoteVer );
+				if (!( iRemoteVer==SPHINX_SEARCHD_PROTO || iRemoteVer==0x01000000UL ) ) // workaround for all the revisions that sent it in host order...
+				{
+					tAgent.m_sFailure.SetSprintf ( "handshake failure (unexpected protocol version=%d)", iRemoteVer );
 					tAgent.Close ();
 					continue;
 				}
@@ -2043,7 +2067,7 @@ int QueryRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, const IRequ
 	{
 		// check if connection timed out
 		Agent_t & tAgent = dAgents[i];
-		if ( tAgent.m_eState!=AGENT_QUERY && tAgent.m_eState!=AGENT_UNUSED )
+		if ( tAgent.m_eState!=AGENT_QUERY && tAgent.m_eState!=AGENT_UNUSED && tAgent.m_eState!=AGENT_RETRY )
 		{
 			tAgent.Close ();
 			tAgent.m_sFailure.SetSprintf ( "%s() timed out", tAgent.m_eState==AGENT_HELLO ? "read" : "connect" );
@@ -4718,7 +4742,7 @@ void HandleClient ( int iSock, const char * sClientIP, int iPipeFD )
 	NetInputBuffer_c tBuf ( iSock );
 
 	// send my version
-	DWORD uServer = SPHINX_SEARCHD_PROTO;
+	DWORD uServer = htonl ( SPHINX_SEARCHD_PROTO );
 	if ( sphSockSend ( iSock, (char*)&uServer, sizeof(DWORD) )!=sizeof(DWORD) )
 	{
 		sphWarning ( "failed to send server version (client=%s)", sClientIP );

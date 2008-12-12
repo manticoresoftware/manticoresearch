@@ -214,6 +214,7 @@ enum SearchdCommand_e
 	SEARCHD_COMMAND_UPDATE		= 2,
 	SEARCHD_COMMAND_KEYWORDS	= 3,
 	SEARCHD_COMMAND_PERSIST		= 4,
+	SEARCHD_COMMAND_STATUS		= 5,
 	
 	SEARCHD_COMMAND_TOTAL
 };
@@ -225,7 +226,8 @@ enum
 	VER_COMMAND_SEARCH		= 0x116,
 	VER_COMMAND_EXCERPT		= 0x100,
 	VER_COMMAND_UPDATE		= 0x102,
-	VER_COMMAND_KEYWORDS	= 0x100
+	VER_COMMAND_KEYWORDS	= 0x100,
+	VER_COMMAND_STATUS		= 0x100
 };
 
 
@@ -240,6 +242,24 @@ enum SearchdStatus_e
 
 const int	MAX_RETRY_COUNT		= 8;
 const int	MAX_RETRY_DELAY		= 1000;
+
+//////////////////////////////////////////////////////////////////////////
+// PERF COUNTERS
+//////////////////////////////////////////////////////////////////////////
+
+struct SearchdStats_t
+{
+	DWORD		m_uStarted;
+	int64_t		m_iConnections;
+	int64_t		m_iMaxedOut;
+	int64_t		m_iCommandCount[SEARCHD_COMMAND_TOTAL];
+	int64_t		m_iAgentConnect;
+	int64_t		m_iAgentRetry;
+};
+
+static SearchdStats_t *			g_pStats		= NULL;
+static CSphSharedBuffer<BYTE>	g_tStatsBuffer;
+static CSphProcessSharedMutex	g_tStatsMutex;
 
 /////////////////////////////////////////////////////////////////////////////
 // MACHINE-DEPENDENT STUFF
@@ -1884,7 +1904,7 @@ void ConnectToRemoteAgents ( CSphVector<Agent_t> & dAgents, bool bRetryOnly )
 	ARRAY_FOREACH ( iAgent, dAgents )
 	{
 		Agent_t & tAgent = dAgents[iAgent];
-		if ( bRetryOnly && tAgent.m_eState!=AGENT_RETRY )
+		if ( bRetryOnly && ( tAgent.m_eState!=AGENT_RETRY ) )
 			continue;
 
 		tAgent.m_eState = AGENT_UNUSED;
@@ -1922,6 +1942,16 @@ void ConnectToRemoteAgents ( CSphVector<Agent_t> & dAgents, bool bRetryOnly )
 		{
 			tAgent.m_sFailure.SetSprintf ( "sphSetSockNB() failed: %s", sphSockError() );
 			return;
+		}
+
+		// count connects
+		if ( g_pStats )
+		{
+			g_tStatsMutex.Lock();
+			g_pStats->m_iAgentConnect++;
+			if ( bRetryOnly )
+				g_pStats->m_iAgentRetry++;
+			g_tStatsMutex.Unlock();
 		}
 
 		if ( connect ( tAgent.m_iSock, (struct sockaddr*)&ss, len )<0 )
@@ -4393,6 +4423,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 /////////////////////////////////////////////////////////////////////////////
 // KEYWORDS HANDLER
 /////////////////////////////////////////////////////////////////////////////
+
 void HandleCommandKeywords ( int iSock, int iVer, InputBuffer_c & tReq )
 {
 	if ( !CheckCommandVersion ( iVer, VER_COMMAND_KEYWORDS, tReq ) )
@@ -4446,7 +4477,6 @@ void HandleCommandKeywords ( int iSock, int iVer, InputBuffer_c & tReq )
 	tOut.Flush ();
 	assert ( tOut.GetError()==true || tOut.GetSentCount()==iRespLen+8 );
 }
-
 
 /////////////////////////////////////////////////////////////////////////////
 // UPDATES HANDLER
@@ -4723,6 +4753,57 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 	tOut.Flush ();
 }
 
+//////////////////////////////////////////////////////////////////////////
+// STATUS HANDLER
+//////////////////////////////////////////////////////////////////////////
+
+void HandleCommandStatus ( int iSock, int iVer, InputBuffer_c & tReq )
+{
+	if ( !CheckCommandVersion ( iVer, VER_COMMAND_STATUS, tReq ) )
+		return;
+
+	if ( !g_pStats )
+	{
+		tReq.SendErrorReply ( "performance counters disabled" );
+		return;
+	}
+
+	CSphString sRes;
+	sRes.SetSprintf (
+		"uptime: %u\n"
+		"connections: %"PRIu64"\n"
+		"maxed-out: %"PRIu64"\n"
+		"command-search: %"PRIu64"\n"
+		"command-excerpt: %"PRIu64"\n"
+		"command-update: %"PRIu64"\n"
+		"command-keywords: %"PRIu64"\n"
+		"command-persist: %"PRIu64"\n"
+		"command-status: %"PRIu64"\n"
+		"agent-connect: %"PRIu64"\n"
+		"agent-retry: %"PRIu64"\n",
+
+		(DWORD)time(NULL)-g_pStats->m_uStarted,
+		g_pStats->m_iConnections,
+		g_pStats->m_iMaxedOut,
+		g_pStats->m_iCommandCount[SEARCHD_COMMAND_SEARCH],
+		g_pStats->m_iCommandCount[SEARCHD_COMMAND_EXCERPT],
+		g_pStats->m_iCommandCount[SEARCHD_COMMAND_UPDATE],
+		g_pStats->m_iCommandCount[SEARCHD_COMMAND_KEYWORDS],
+		g_pStats->m_iCommandCount[SEARCHD_COMMAND_PERSIST],
+		g_pStats->m_iCommandCount[SEARCHD_COMMAND_STATUS],
+		g_pStats->m_iAgentConnect,
+		g_pStats->m_iAgentRetry );
+
+	NetOutputBuffer_c tOut ( iSock );
+	tOut.SendWord ( SEARCHD_OK );
+	tOut.SendWord ( VER_COMMAND_KEYWORDS );
+	tOut.SendInt ( 4+strlen(sRes.cstr()) );
+	tOut.SendString ( sRes.cstr() );
+
+	tOut.Flush ();
+	assert ( tOut.GetError()==true || tOut.GetSentCount()==12+(int)strlen(sRes.cstr()) );
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // GENERAL HANDLER
 /////////////////////////////////////////////////////////////////////////////
@@ -4771,7 +4852,7 @@ void HandleClient ( int iSock, const char * sClientIP, int iPipeFD )
 
 		if ( g_bCrashLog_Enabled )
 			memcpy ( g_dCrashLog_LastHello + 4, tBuf.GetBufferPtr(), sizeof(g_dCrashLog_LastHello) - 4 );
-		
+
 		// check request
 		if ( iCommand<0 || iCommand>=SEARCHD_COMMAND_TOTAL
 			 || iLength<=0 || iLength>g_iMaxPacketSize )
@@ -4786,7 +4867,15 @@ void HandleClient ( int iSock, const char * sClientIP, int iPipeFD )
 				return;
 			}
 		}
-		
+
+		// count commands
+		if ( g_pStats && iCommand>=0 && iCommand<SEARCHD_COMMAND_TOTAL )
+		{
+			g_tStatsMutex.Lock();
+			g_pStats->m_iCommandCount[iCommand]++;
+			g_tStatsMutex.Unlock();
+		}
+
 		// get request body
 		assert ( iLength>0 && iLength<=g_iMaxPacketSize );
 		if ( !tBuf.ReadFrom ( iLength ) )
@@ -4809,10 +4898,8 @@ void HandleClient ( int iSock, const char * sClientIP, int iPipeFD )
 			case SEARCHD_COMMAND_EXCERPT:	HandleCommandExcerpt ( iSock, iCommandVer, tBuf ); break;
 			case SEARCHD_COMMAND_KEYWORDS:	HandleCommandKeywords ( iSock, iCommandVer, tBuf ); break;
 			case SEARCHD_COMMAND_UPDATE:	HandleCommandUpdate ( iSock, iCommandVer, tBuf, iPipeFD ); break;
-			case SEARCHD_COMMAND_PERSIST:
-				bPersist = tBuf.GetInt() != 0;
-				iTimeout = g_iClientTimeout;
-				break;
+			case SEARCHD_COMMAND_PERSIST:	bPersist = ( tBuf.GetInt()!=0 ); iTimeout = g_iClientTimeout; break;
+			case SEARCHD_COMMAND_STATUS:	HandleCommandStatus ( iSock, iCommandVer, tBuf ); break;
 			default:						assert ( 0 && "INTERNAL ERROR: unhandled command" ); break;
 		}
 	} while ( bPersist );
@@ -6769,6 +6856,22 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		}
 	}
 
+	/////////////////////////
+	// perf counters startup
+	/////////////////////////
+
+	CSphString sError, sWarning;
+	if ( !g_tStatsBuffer.Alloc ( sizeof(SearchdStats_t), sError, sWarning ) )
+	{
+		sphWarning ( "performance counters disabled (alloc error: %s)", sError.cstr() );
+		g_pStats = NULL;
+	} else
+	{
+		g_pStats = (SearchdStats_t*) g_tStatsBuffer.GetWritePtr(); // FIXME? should be ok even on strange platforms but..
+		memset ( g_pStats, 0, sizeof(SearchdStats_t) ); // reset
+		g_pStats->m_uStarted = (DWORD)time(NULL);
+	}
+
 	////////////////////
 	// network startup
 	////////////////////
@@ -7092,6 +7195,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 				sphFatal ( "accept() failed: %s", sphSockError(iErrno) );
 			}
+			if ( g_pStats )
+				g_pStats->m_iConnections++;
 			
 			if ( ( g_iMaxChildren && g_iChildren>=g_iMaxChildren )
 				 || ( g_bDoRotate && !g_bSeamlessRotate ) )
@@ -7109,6 +7214,9 @@ int WINAPI ServiceMain ( int argc, char **argv )
 				
 				sphWarning ( "maxed out, dismissing client" );
 				sphSockClose ( iClientSock );
+
+				if ( g_pStats )
+					g_pStats->m_iMaxedOut++;
 				break;
 			}
 

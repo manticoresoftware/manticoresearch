@@ -23,12 +23,14 @@ define ( "SEARCHD_COMMAND_EXCERPT",	1 );
 define ( "SEARCHD_COMMAND_UPDATE",	2 );
 define ( "SEARCHD_COMMAND_KEYWORDS",3 );
 define ( "SEARCHD_COMMAND_PERSIST",	4 );
+define ( "SEARCHD_COMMAND_STATUS",	5 );
 
 /// current client-side command implementation versions
 define ( "VER_COMMAND_SEARCH",		0x116 );
 define ( "VER_COMMAND_EXCERPT",		0x100 );
 define ( "VER_COMMAND_UPDATE",		0x102 );
 define ( "VER_COMMAND_KEYWORDS",	0x100 );
+define ( "VER_COMMAND_STATUS",		0x100 );
 
 /// known searchd status codes
 define ( "SEARCHD_OK",				0 );
@@ -1547,6 +1549,32 @@ class SphinxClient
 		$this->_socket = false;
 		
 		return true;
+	}
+
+	//////////////////////////////////////////////////////////////////////////
+	// status
+	//////////////////////////////////////////////////////////////////////////
+
+	function Status ()
+	{
+		$this->_MBPush ();
+		if (!( $fp = $this->_Connect() ))
+		{
+			$this->_MBPop();
+			return false;
+		}
+
+		$req = pack ( "nnNN", SEARCHD_COMMAND_STATUS, VER_COMMAND_STATUS, 4, 1 ); // len=4, body=1
+		if ( !( $this->_Send ( $fp, $req, 12 ) ) ||
+			 !( $response = $this->_GetResponse ( $fp, VER_COMMAND_KEYWORDS ) ) )
+		{
+			$this->_MBPop ();
+			return false;
+		}
+
+		$res = substr ( $response, 4 ); // just ignore length, error handling, etc
+		$this->_MBPop ();
+		return $res;
 	}
 }
 

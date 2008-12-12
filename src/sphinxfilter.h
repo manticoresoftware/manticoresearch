@@ -14,7 +14,6 @@
 #ifndef _sphinxfilter_
 #define _sphinxfilter_
 
-#include "sphinxstd.h"
 #include "sphinx.h"
 
 struct ISphFilter

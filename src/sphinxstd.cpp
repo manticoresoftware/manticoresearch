@@ -384,6 +384,49 @@ DWORD sphRand ()
 	return g_dRngState[0];
 }
 
+//////////////////////////////////////////////////////////////////////////
+
+CSphProcessSharedMutex::CSphProcessSharedMutex ()
+{
+#if !USE_WINDOWS
+	m_pMutex = NULL;
+
+	pthread_mutexattr_t tAttr;
+	if ( pthread_mutexattr_init ( &tAttr ) || pthread_mutexattr_setpshared ( &tAttr, PTHREAD_PROCESS_SHARED ) )
+		return;
+
+	CSphString sError, sWarning;
+	if ( !m_pStorage.Alloc ( sizeof(pthread_mutex_t), sError, sWarning ) )
+		return;
+
+	m_pMutex = (pthread_mutex_t*) m_pStorage.GetWritePtr ();
+	if ( pthread_mutex_init ( m_pMutex, &tAttr ) )
+	{
+		m_pMutex = NULL;
+		m_pStorage.Reset ();
+		return;
+	}
+#endif
+}
+
+
+void CSphProcessSharedMutex::Lock ()
+{
+#if !USE_WINDOWS
+	if ( m_pMutex )
+		pthread_mutex_lock ( m_pMutex );
+#endif
+}
+
+
+void CSphProcessSharedMutex::Unlock ()
+{
+#if !USE_WINDOWS
+	if ( m_pMutex )
+		pthread_mutex_unlock ( m_pMutex );
+#endif
+}
+
 //
 // $Id$
 //

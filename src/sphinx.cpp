@@ -85,8 +85,6 @@
 	#include <unistd.h>
 	#include <sys/time.h>
 	#include <sys/mman.h>
-	#include <sys/types.h>
-	#include <pthread.h>
 
 	#define sphSeek		lseek
 	#define sphTruncate(file) ftruncate(file,lseek(file,0,SEEK_CUR))
@@ -698,161 +696,6 @@ public:
 };
 
 /////////////////////////////////////////////////////////////////////////////
-
-/// in-memory buffer shared between processes
-template < typename T > class CSphSharedBuffer
-{
-public:
-	/// ctor
-	CSphSharedBuffer ()
-		: m_pData ( NULL )
-		, m_iLength ( 0 )
-		, m_iEntries ( 0 )
-		, m_bMlock ( false )
-	{}
-
-	/// dtor
-	~CSphSharedBuffer ()
-	{
-		Reset ();
-	}
-
-	/// set locking mode for subsequent Alloc()s
-	void SetMlock ( bool bMlock )
-	{
-		m_bMlock = bMlock;
-	}
-
-public:
-	/// allocate storage
-#if USE_WINDOWS
-	bool Alloc ( DWORD iEntries, CSphString & sError, CSphString & )
-#else
-	bool Alloc ( DWORD iEntries, CSphString & sError, CSphString & sWarning )
-#endif
-	{
-		assert ( !m_pData );
-
-		SphOffset_t uCheck = sizeof(T);
-		uCheck *= (SphOffset_t)iEntries;
-
-		m_iLength = (size_t)uCheck;
-		if ( uCheck!=(SphOffset_t)m_iLength )
-		{
-			sError.SetSprintf ( "impossible to mmap() over 4 GB on 32-bit system" );
-			m_iLength = 0;
-			return false;
-		}
-
-#if USE_WINDOWS
-		m_pData = new T [ iEntries ];
-#else
-		m_pData = (T *) mmap ( NULL, m_iLength, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0 );
-		if ( m_pData==MAP_FAILED )
-		{
-			if ( m_iLength>0x7fffffffUL )
-				sError.SetSprintf ( "mmap() failed: %s (length=%"PRIi64" is over 2GB, impossible on some 32-bit systems)", strerror(errno), (int64_t)m_iLength );
-			else
-				sError.SetSprintf ( "mmap() failed: %s (length=%"PRIi64")", strerror(errno), (int64_t)m_iLength );
-			m_iLength = 0;
-			return false;
-		}
-
-		if ( m_bMlock )
-			if ( -1==mlock ( m_pData, m_iLength ) )
-				sWarning.SetSprintf ( "mlock() failed: %s", strerror(errno) );
-#endif // USE_WINDOWS
-
-		assert ( m_pData );
-		m_iEntries = iEntries;
-		return true;
-	}
-
-
-	/// relock again (for daemonization only)
-#if USE_WINDOWS
-	bool Mlock ( const char *, CSphString & )
-	{
-		return true;
-	}
-#else
-	bool Mlock ( const char * sPrefix, CSphString & sError )
-	{
-		if ( !m_bMlock )
-			return true;
-
-		if ( mlock ( m_pData, m_iLength )!=-1 )
-			return true;
-
-		if ( sError.IsEmpty() )
-			sError.SetSprintf ( "%s mlock() failed: bytes=%"PRIu64", error=%s", sPrefix, (uint64_t)m_iLength, strerror(errno) );
-		else
-			sError.SetSprintf ( "%s; %s mlock() failed: bytes=%"PRIu64", error=%s", sError.cstr(), sPrefix, (uint64_t)m_iLength, strerror(errno) );
-		return false;
-	}
-#endif
-
-
-	/// deallocate storage
-	void Reset ()
-	{
-		if ( !m_pData )
-			return;
-
-#if USE_WINDOWS
-		delete [] m_pData;
-#else
-		if ( g_bHeadProcess )
-		{
-			int iRes = munmap ( m_pData, m_iLength );
-			if ( iRes )
-				sphWarn ( "munmap() failed: %s", strerror(errno) );
-		}
-#endif // USE_WINDOWS
-
-		m_pData = NULL;
-		m_iLength = 0;
-		m_iEntries = 0;
-	}
-
-public:
-	/// accessor
-	inline const T & operator [] ( DWORD iIndex ) const
-	{
-		assert ( iIndex>=0 && iIndex<m_iEntries );
-		return m_pData[iIndex];
-	}
-
-	/// get write address
-	T * GetWritePtr () const
-	{
-		return m_pData;
-	}
-
-	/// check if i'm empty
-	bool IsEmpty () const
-	{
-		return m_pData==NULL;
-	}
-
-	/// get length in bytes
-	size_t GetLength () const
-	{
-		return m_iLength;
-	}
-
-	/// get length in entries
-	DWORD GetNumEntries () const
-	{
-		return m_iEntries;
-	}
-
-protected:
-	T *					m_pData;	///< data storage
-	size_t				m_iLength;	///< data length, bytes
-	DWORD				m_iEntries;	///< data length, entries
-	bool				m_bMlock;	///< whether to lock data in RAM
-};
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -5817,22 +5660,6 @@ CSphIndexSettings::CSphIndexSettings ()
 // PROCESS-SHARED MUTEX
 //////////////////////////////////////////////////////////////////////////
 
-/// process-shared mutex that survives fork
-class CSphProcessSharedMutex
-{
-public:
-			CSphProcessSharedMutex ();
-	void	Lock ();
-	void	Unlock ();
-
-protected:
-#if !USE_WINDOWS
-	CSphSharedBuffer<BYTE>		m_pStorage;
-	pthread_mutex_t *			m_pMutex;
-#endif
-};
-
-
 /// scoped mutex lock
 class CSphScopedMutexLock : ISphNoncopyable
 {
@@ -5853,49 +5680,6 @@ public:
 protected:
 	CSphProcessSharedMutex &	m_tMutexRef;
 };
-
-//////////////////////////////////////////////////////////////////////////
-
-CSphProcessSharedMutex::CSphProcessSharedMutex ()
-{
-#if !USE_WINDOWS
-	m_pMutex = NULL;
-
-	pthread_mutexattr_t tAttr;
-	if ( pthread_mutexattr_init ( &tAttr ) || pthread_mutexattr_setpshared ( &tAttr, PTHREAD_PROCESS_SHARED ) )
-		return;
-
-	CSphString sError, sWarning;
-	if ( !m_pStorage.Alloc ( sizeof(pthread_mutex_t), sError, sWarning ) )
-		return;
-
-	m_pMutex = (pthread_mutex_t*) m_pStorage.GetWritePtr ();
-	if ( pthread_mutex_init ( m_pMutex, &tAttr ) )
-	{
-		m_pMutex = NULL;
-		m_pStorage.Reset ();
-		return;
-	}
-#endif
-}
-
-
-void CSphProcessSharedMutex::Lock ()
-{
-#if !USE_WINDOWS
-	if ( m_pMutex )
-		pthread_mutex_lock ( m_pMutex );
-#endif
-}
-
-
-void CSphProcessSharedMutex::Unlock ()
-{
-#if !USE_WINDOWS
-	if ( m_pMutex )
-		pthread_mutex_unlock ( m_pMutex );
-#endif
-}
 
 //////////////////////////////////////////////////////////////////////////
 // GLOBAL MVA STORAGE ARENA

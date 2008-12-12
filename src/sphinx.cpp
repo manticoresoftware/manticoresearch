@@ -19,7 +19,6 @@
 #include "sphinxfilter.h"
 
 #include <ctype.h>
-#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -84,7 +83,6 @@
 #else
 	#include <unistd.h>
 	#include <sys/time.h>
-	#include <sys/mman.h>
 
 	#define sphSeek		lseek
 	#define sphTruncate(file) ftruncate(file,lseek(file,0,SEEK_CUR))
@@ -488,7 +486,7 @@ protected:
 
 #else
 
-static bool g_bHeadProcess = true;
+bool g_bHeadProcess = true;
 
 void sphSetProcessInfo ( bool bHead )
 {

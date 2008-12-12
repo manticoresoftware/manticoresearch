@@ -48,6 +48,8 @@ typedef int __declspec("SAL_nokernel") __declspec("SAL_nodriver") __prefast_flag
 // must be included here, otherwise it breaks our assert macro
 #include <intrin.h>
 #else
+#include <sys/mman.h>
+#include <errno.h>
 #include <pthread.h>
 #endif
 
@@ -1271,6 +1273,9 @@ protected:
 
 //////////////////////////////////////////////////////////////////////////
 
+extern bool g_bHeadProcess;
+void sphWarn ( const char *, ... );
+
 /// in-memory buffer shared between processes
 template < typename T > class CSphSharedBuffer
 {
@@ -1305,11 +1310,11 @@ public:
 	{
 		assert ( !m_pData );
 
-		SphOffset_t uCheck = sizeof(T);
-		uCheck *= (SphOffset_t)iEntries;
+		int64_t uCheck = sizeof(T);
+		uCheck *= (int64_t)iEntries;
 
 		m_iLength = (size_t)uCheck;
-		if ( uCheck!=(SphOffset_t)m_iLength )
+		if ( uCheck!=(int64_t)m_iLength )
 		{
 			sError.SetSprintf ( "impossible to mmap() over 4 GB on 32-bit system" );
 			m_iLength = 0;

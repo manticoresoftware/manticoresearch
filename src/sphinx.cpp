@@ -1047,6 +1047,7 @@ public:
 	DWORD			m_iHitPos;		///< current hit postition, from hitlist
 
 	SphOffset_t		m_iHitlistPos;	///< current position in hitlist, from doclist
+	bool			m_bHasHitlist;
 
 	CSphReader_VLN	m_rdDoclist;	///< my doclist reader
 	CSphReader_VLN	m_rdHitlist;	///< my hitlist reader
@@ -1055,6 +1056,9 @@ public:
 	int				m_iInlineAttrs;	///< inline attributes count
 	CSphRowitem *	m_pInlineFixup;	///< inline attributes fixup (POINTER TO EXTERNAL DATA, NOT MANAGED BY THIS CLASS!)
 
+	int				m_iTermPos;
+	int				m_iAtomPos;
+	
 #ifndef NDEBUG
 	bool			m_bHitlistOver;
 #endif
@@ -1070,6 +1074,7 @@ public:
 		, m_uMatchHits ( 0 )
 		, m_iHitPos ( 0 )
 		, m_iHitlistPos ( 0 )
+		, m_bHasHitlist ( true )
 		, m_iMinID ( 0 )
 		, m_iInlineAttrs ( 0 )
 		, m_pInlineFixup ( NULL )
@@ -10443,12 +10448,27 @@ public:
 
 	static ExtNode_i *			Create ( const CSphExtendedQueryNode * pNode, const CSphTermSetup & tSetup );
 	static ExtNode_i *			Create ( const CSphExtendedQueryAtomWord & tWord, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup );
+	static ExtNode_i *			Create ( CSphQueryWord * pQword, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup );
 
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID ) = 0;
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID ) = 0;
 
 	virtual void				GetQwords ( ExtQwordsHash_t & hQwords ) = 0;
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords ) = 0;
+
+	virtual bool				GotHitless () = 0;
+
+	void DebugIndent ( int iLevel )
+	{
+		while ( iLevel-- )
+			printf ( "    " );
+	}
+	
+	virtual void DebugDump ( int iLevel )
+	{
+		DebugIndent ( iLevel );
+		printf ( "ExtNode\n" );
+	}
 
 public:
 	static const int			MAX_DOCS = 512;
@@ -10489,14 +10509,26 @@ protected:
 class ExtTerm_c : public ExtNode_i
 {
 public:
-								ExtTerm_c ( const CSphString & sTerm, DWORD uFields, const CSphTermSetup & tSetup, DWORD uQuerypos );
+								ExtTerm_c ( CSphQueryWord * pQword, DWORD uFields, const CSphTermSetup & tSetup );
+								~ExtTerm_c ()
+								{
+									SafeDelete ( m_pQword );
+								}
+		
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
 	virtual void				GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
+	virtual bool				GotHitless () { return false; }
+	
+	virtual void DebugDump ( int iLevel )
+	{
+		DebugIndent ( iLevel );
+		printf ( "ExtTerm: %s\n", m_pQword->m_sWord.cstr() );
+	}
 
 protected:
-	CSphQueryWord				m_tQword;
+	CSphQueryWord *				m_pQword;
 	DWORD						m_uQuerypos;
 	ExtDoc_t *					m_pHitDoc;		///< points to entry in m_dDocs which GetHitsChunk() currently emits hits for
 	SphDocID_t					m_uHitsOverFor;	///< there are no more hits for matches block starting with this ID
@@ -10506,10 +10538,27 @@ protected:
 	CSphString *				m_pWarning;
 };
 
+/// single keyword streamer with artificial hitlist
+class ExtTermHitless_c: public ExtTerm_c
+{
+public:
+								ExtTermHitless_c ( CSphQueryWord * pQword, DWORD uFields, const CSphTermSetup & tSetup )
+									: ExtTerm_c ( pQword, uFields, tSetup )
+									, m_uFieldMask ( 0 )
+									, m_uFieldPos ( 0 )
+								{}
+	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
+	virtual bool				GotHitless () { return true; }
+	
+protected:
+	DWORD	m_uFieldMask;
+	DWORD	m_uFieldPos;
+};
+
 
 enum TermPosFilter_e
 {
-	TERM_POS_FIELD_LIMIT,
+	TERM_POS_FIELD_LIMIT = 1,
 	TERM_POS_FIELD_START,
 	TERM_POS_FIELD_END,
 	TERM_POS_FIELD_STARTEND
@@ -10520,9 +10569,10 @@ template < TermPosFilter_e T >
 class ExtTermPos_c : public ExtTerm_c
 {
 public:
-								ExtTermPos_c ( const CSphString & sTerm, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup, DWORD uQuerypos );
+								ExtTermPos_c ( CSphQueryWord * pQword, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup );
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
+	virtual bool				GotHitless () { return false; }
 
 protected:
 	inline bool					IsAcceptableHit ( DWORD uPos ) const;
@@ -10549,6 +10599,16 @@ public:
 	virtual void				GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
 
+	virtual bool				GotHitless () { return m_pChildren[0]->GotHitless() || m_pChildren[1]->GotHitless(); }
+
+	void DebugDumpT ( const char * sName, int iLevel )
+	{
+		DebugIndent ( iLevel );
+		printf ( "%s", sName );
+		m_pChildren[0]->DebugDump ( iLevel+1 );
+		m_pChildren[1]->DebugDump ( iLevel+1 );
+	}
+
 protected:
 	ExtNode_i *					m_pChildren[2];
 	const ExtDoc_t *			m_pCurDoc[2];
@@ -10564,6 +10624,8 @@ public:
 								ExtAnd_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const CSphTermSetup & tSetup ) : ExtTwofer_c ( pFirst, pSecond, tSetup ) {}
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
+
+	void DebugDump ( int iLevel ) { DebugDumpT ( "ExtAnd", iLevel ); }
 };
 
 
@@ -10574,6 +10636,8 @@ public:
 								ExtOr_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const CSphTermSetup & tSetup ) : ExtTwofer_c ( pFirst, pSecond, tSetup ) {}
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
+
+	void DebugDump ( int iLevel ) { DebugDumpT ( "ExtOr", iLevel ); }
 };
 
 
@@ -10585,6 +10649,8 @@ public:
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
 
+	void DebugDump ( int iLevel ) { DebugDumpT ( "ExtAndNot", iLevel ); }
+
 protected:
 	bool						m_bPassthrough;
 };
@@ -10594,12 +10660,21 @@ protected:
 class ExtPhrase_c : public ExtNode_i
 {
 public:
-								ExtPhrase_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, const CSphTermSetup & tSetup );
+								ExtPhrase_c ( CSphVector<CSphQueryWord *> & dQwords, const CSphExtendedQueryAtom & tAtom, const CSphTermSetup & tSetup );
 								~ExtPhrase_c ();
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
 	virtual void				GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
+
+	virtual bool				GotHitless () { return false; }
+	
+	virtual void DebugDump ( int iLevel )
+	{
+		DebugIndent ( iLevel );
+		printf ( "ExtPhrase\n");
+		m_pNode->DebugDump ( iLevel+1 );
+	}
 
 protected:
 	ExtNode_i *					m_pNode;				///< my and-node for all the terms
@@ -10629,7 +10704,7 @@ protected:
 class ExtProximity_c : public ExtPhrase_c
 {
 public:
-								ExtProximity_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, const CSphTermSetup & tSetup );
+								ExtProximity_c ( CSphVector<CSphQueryWord *> & dQwords, const CSphExtendedQueryAtom & tAtom, const CSphTermSetup & tSetup );
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 
 protected:
@@ -10642,7 +10717,7 @@ protected:
 class ExtQuorum_c : public ExtNode_i
 {
 public:
-								ExtQuorum_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, const CSphTermSetup & tSetup );
+								ExtQuorum_c ( CSphVector<CSphQueryWord *> & dQwords, const CSphExtendedQueryAtom & tAtom, const CSphTermSetup & tSetup );
 	virtual						~ExtQuorum_c ();
 
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
@@ -10650,6 +10725,8 @@ public:
 
 	virtual void				GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
+
+	virtual bool				GotHitless () { return false; }
 
 protected:
 	int							m_iThresh;		///< keyword count threshold 
@@ -10671,6 +10748,7 @@ public:
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
 	virtual void				GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
+	virtual bool				GotHitless () { return false; }
 
 protected:
 	CSphVector<ExtNode_i *>		m_dChildren;
@@ -10769,15 +10847,123 @@ ExtNode_i::ExtNode_i ()
 }
 
 
-ExtNode_i * ExtNode_i::Create ( const CSphExtendedQueryAtomWord & tWord, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup )
+static CSphQueryWord * CreateQueryWord ( const CSphExtendedQueryAtomWord & tWord, const CSphTermSetup & tSetup )
 {
-	if ( tWord.m_bFieldStart && tWord.m_bFieldEnd )	return new ExtTermPos_c<TERM_POS_FIELD_STARTEND> ( tWord.m_sWord, uFields, 0, tSetup, tWord.m_iAtomPos );
-	else if ( tWord.m_bFieldStart )	return new ExtTermPos_c<TERM_POS_FIELD_START> ( tWord.m_sWord, uFields, 0, tSetup, tWord.m_iAtomPos );
-	else if ( tWord.m_bFieldEnd )	return new ExtTermPos_c<TERM_POS_FIELD_END> ( tWord.m_sWord, uFields, 0, tSetup, tWord.m_iAtomPos );
-	else if ( iMaxFieldPos>0 )		return new ExtTermPos_c<TERM_POS_FIELD_LIMIT> ( tWord.m_sWord, uFields, iMaxFieldPos, tSetup, tWord.m_iAtomPos );
-	else							return new ExtTerm_c ( tWord.m_sWord, uFields, tSetup, tWord.m_iAtomPos );
+	CSphQueryWord * pWord = new CSphQueryWord;
+	pWord->m_sWord = tWord.m_sWord;
+	pWord->m_sDictWord = tWord.m_sWord;
+	pWord->m_iWordID = tSetup.m_pDict->GetWordID ( (BYTE*)pWord->m_sDictWord.cstr() );
+	pWord->SetupAttrs ( tSetup );
+	tSetup.m_pIndex->SetupQueryWord ( *pWord, tSetup );
+
+	if ( tWord.m_bFieldStart && tWord.m_bFieldEnd )	pWord->m_iTermPos = TERM_POS_FIELD_STARTEND;
+	else if ( tWord.m_bFieldStart )					pWord->m_iTermPos = TERM_POS_FIELD_START;
+	else if ( tWord.m_bFieldEnd )					pWord->m_iTermPos = TERM_POS_FIELD_END;
+	else											pWord->m_iTermPos = 0;
+	pWord->m_iAtomPos = tWord.m_iAtomPos;
+	
+	return pWord;
 }
 
+template < typename T >
+static ExtNode_i * CreatePhraseNode ( const CSphExtendedQueryNode * pQueryNode, const CSphTermSetup & tSetup )
+{
+	ExtNode_i * pResult = NULL;
+	CSphVector<CSphQueryWord *> dQwordsHit, dQwords;
+
+	// partition phrase words
+	const CSphVector<CSphExtendedQueryAtomWord> & dWords = pQueryNode->m_tAtom.m_dWords;
+	ARRAY_FOREACH ( i, dWords )
+	{
+		CSphQueryWord * pWord = CreateQueryWord ( dWords[i], tSetup );
+		( pWord->m_bHasHitlist ? dQwordsHit : dQwords ).Add ( pWord );
+	}
+	
+	// see if we can create the node
+	if ( dQwordsHit.GetLength() < 2 )
+	{
+		ARRAY_FOREACH ( i, dQwords ) SafeDelete ( dQwords[i] );
+		ARRAY_FOREACH ( i, dQwordsHit ) SafeDelete ( dQwordsHit[i] );
+		if ( tSetup.m_pWarning )
+			tSetup.m_pWarning->SetSprintf ( "can't create phrase node, hitlist unavailable" );
+		return NULL;
+	}
+	else
+	{
+		// at least two words have hitlists, creating phrase node
+		assert ( pQueryNode );
+		assert ( pQueryNode->IsPlain() );
+		assert ( pQueryNode->m_tAtom.m_iMaxDistance>=0 );
+		
+		pResult = new T ( dQwordsHit, pQueryNode->m_tAtom, tSetup );
+	}
+	
+	// AND result with the words that had no hitlist
+	if ( dQwords.GetLength() )
+	{
+		int iMaxPos = pQueryNode->m_tAtom.m_iMaxFieldPos;
+		DWORD uFields = pQueryNode->m_tAtom.m_uFields;
+		ExtNode_i * pNode = ExtNode_i::Create ( dQwords[0], uFields, iMaxPos, tSetup );
+		for ( int i=1; i<dQwords.GetLength(); i++ )
+			pNode = new ExtAnd_c ( pNode, ExtNode_i::Create ( dQwords[i], uFields, iMaxPos, tSetup ), tSetup );
+		return new ExtAnd_c ( pResult, pNode, tSetup );
+	}
+	return pResult;
+}
+
+static ExtNode_i * CreateOrderNode ( const CSphExtendedQueryNode * pNode, const CSphTermSetup & tSetup )
+{
+	if ( pNode->m_dChildren.GetLength()<2 )
+	{
+		if ( tSetup.m_pWarning )
+			tSetup.m_pWarning->SetSprintf ( "order node requires at least two children" );
+		return NULL;
+	}
+
+	CSphVector<ExtNode_i *> dChildren;
+	ARRAY_FOREACH ( i, pNode->m_dChildren )
+	{
+		ExtNode_i * pChild = ExtNode_i::Create ( pNode->m_dChildren[i], tSetup );
+		if ( pChild->GotHitless() )
+		{
+			if ( tSetup.m_pWarning )
+				tSetup.m_pWarning->SetSprintf ( "failed to create order node, hitlist unavailable" );
+			ARRAY_FOREACH ( j, dChildren )
+				SafeDelete ( dChildren[j] );
+			return NULL;
+		}
+		dChildren.Add ( pChild );
+	}
+	return new ExtOrder_c ( dChildren, tSetup );
+}
+
+ExtNode_i * ExtNode_i::Create ( const CSphExtendedQueryAtomWord & tWord, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup )
+{
+	return Create ( CreateQueryWord ( tWord, tSetup ), uFields, iMaxFieldPos, tSetup );
+};
+
+ExtNode_i * ExtNode_i::Create ( CSphQueryWord * pQword, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup )
+{
+	assert ( pQword );
+
+	if ( iMaxFieldPos )
+		pQword->m_iTermPos = TERM_POS_FIELD_LIMIT;
+	
+	if ( !pQword->m_bHasHitlist )
+	{
+		if ( tSetup.m_pWarning && pQword->m_iTermPos )
+			tSetup.m_pWarning->SetSprintf ( "hitlist unavailable, position limit ignored" );
+		return new ExtTermHitless_c ( pQword, uFields, tSetup );
+	}
+	switch ( pQword->m_iTermPos )
+	{
+		case TERM_POS_FIELD_STARTEND:	return new ExtTermPos_c<TERM_POS_FIELD_STARTEND> ( pQword, uFields, 0, tSetup );
+		case TERM_POS_FIELD_START:		return new ExtTermPos_c<TERM_POS_FIELD_START> ( pQword, uFields, 0, tSetup );
+		case TERM_POS_FIELD_END:		return new ExtTermPos_c<TERM_POS_FIELD_END> ( pQword, uFields, 0, tSetup );
+		case TERM_POS_FIELD_LIMIT:		return new ExtTermPos_c<TERM_POS_FIELD_LIMIT> ( pQword, uFields, iMaxFieldPos, tSetup );
+		default:						return new ExtTerm_c ( pQword, uFields, tSetup );
+	}
+}
 
 ExtNode_i * ExtNode_i::Create ( const CSphExtendedQueryNode * pNode, const CSphTermSetup & tSetup )
 {
@@ -10789,19 +10975,18 @@ ExtNode_i * ExtNode_i::Create ( const CSphExtendedQueryNode * pNode, const CSphT
 		if ( iWords<=0 )
 			return NULL; // empty reject node
 
-		DWORD uFields = tAtom.m_uFields;
-
 		if ( iWords==1 )
-			return Create ( tAtom.m_dWords[0], uFields, tAtom.m_iMaxFieldPos, tSetup );
+			return Create ( tAtom.m_dWords[0], tAtom.m_uFields, tAtom.m_iMaxFieldPos, tSetup );
 
 		assert ( tAtom.m_iMaxDistance>=0 );
 		if ( tAtom.m_iMaxDistance==0 )
-			return new ExtPhrase_c ( pNode, uFields, tSetup );
-
+			return CreatePhraseNode<ExtPhrase_c> ( pNode, tSetup );
 		else if ( tAtom.m_bQuorum )
 		{
 			if ( tAtom.m_iMaxDistance>=tAtom.m_dWords.GetLength() )
 			{
+				DWORD uFields = tAtom.m_uFields;
+
 				// threshold is too high
 				// report a warning, and fallback to "and"
 				if ( tSetup.m_pWarning && tAtom.m_iMaxDistance>tAtom.m_dWords.GetLength() )
@@ -10818,58 +11003,49 @@ ExtNode_i * ExtNode_i::Create ( const CSphExtendedQueryNode * pNode, const CSphT
 			} else
 			{
 				// threshold is ok; create quorum node
-				return new ExtQuorum_c ( pNode, uFields, tSetup );
+				return CreatePhraseNode<ExtQuorum_c> ( pNode, tSetup );
 			}
 
 		} else
-			return new ExtProximity_c ( pNode, uFields, tSetup );
-
-	} else
+			return CreatePhraseNode<ExtProximity_c> ( pNode, tSetup );
+	}
+	else
 	{
 		int iChildren = pNode->m_dChildren.GetLength ();
 		assert ( iChildren>0 );
 
 		if ( pNode->m_eOp == SPH_QUERY_BEFORE )
-		{
-			if ( iChildren<2 )
-			{
-				if ( tSetup.m_pWarning )
-					tSetup.m_pWarning->SetSprintf ( "order node requires at least two children" );
-				return NULL;
-			}
-
-			CSphVector<ExtNode_i *> dChildren;
-			ARRAY_FOREACH ( i, pNode->m_dChildren )
-				dChildren.Add ( ExtNode_i::Create ( pNode->m_dChildren[i], tSetup ) );
-			return new ExtOrder_c ( dChildren, tSetup );
-		}
-
-		ExtNode_i * pCur = ExtNode_i::Create ( pNode->m_dChildren[0], tSetup );
-		for ( int i=1; i<iChildren; i++ )
-			switch ( pNode->m_eOp )
-		{
-			case SPH_QUERY_OR:		pCur = new ExtOr_c ( pCur, ExtNode_i::Create ( pNode->m_dChildren[i], tSetup ), tSetup ); break;
-			case SPH_QUERY_AND:		pCur = new ExtAnd_c ( pCur, ExtNode_i::Create ( pNode->m_dChildren[i], tSetup ), tSetup ); break;
-			case SPH_QUERY_ANDNOT:	pCur = new ExtAndNot_c ( pCur, ExtNode_i::Create ( pNode->m_dChildren[i], tSetup ), tSetup ); break;
-			default:				assert ( 0 && "internal error: unhandled op in ExtNode_i::Create()" ); break;
-		}
+			return CreateOrderNode ( pNode, tSetup );
 		
+		ExtNode_i * pCur = NULL;
+		for ( int i=0; i<iChildren; i++ )
+		{
+			ExtNode_i * pNext = ExtNode_i::Create ( pNode->m_dChildren[i], tSetup );
+			if ( !pNext ) continue;
+			if ( !pCur )
+			{
+				pCur = pNext;
+				continue;
+			}
+ 			switch ( pNode->m_eOp )
+			{
+				case SPH_QUERY_OR:		pCur = new ExtOr_c ( pCur, pNext, tSetup ); break;
+				case SPH_QUERY_AND:		pCur = new ExtAnd_c ( pCur, pNext, tSetup ); break;
+				case SPH_QUERY_ANDNOT:	pCur = new ExtAndNot_c ( pCur, pNext, tSetup ); break;
+				default:				assert ( 0 && "internal error: unhandled op in ExtNode_i::Create()" ); break;
+			}
+		}
 		return pCur;
 	}
 }
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtTerm_c::ExtTerm_c ( const CSphString & sTerm, DWORD uFields, const CSphTermSetup & tSetup, DWORD uQuerypos )
-	: m_pWarning ( tSetup.m_pWarning )
+ExtTerm_c::ExtTerm_c ( CSphQueryWord * pQword, DWORD uFields, const CSphTermSetup & tSetup )
+	: m_pQword ( pQword )
+	, m_pWarning ( tSetup.m_pWarning )
 {
-	m_tQword.m_sWord = sTerm;
-	m_tQword.m_sDictWord = sTerm;
-	m_tQword.m_iWordID = tSetup.m_pDict->GetWordID ( (BYTE*)m_tQword.m_sDictWord.cstr() );
-	m_tQword.SetupAttrs ( tSetup );
-	tSetup.m_pIndex->SetupQueryWord ( m_tQword, tSetup );
-
-	m_uQuerypos = uQuerypos;
+	m_uQuerypos = pQword->m_iAtomPos;
 	m_pHitDoc = NULL;
 	m_uHitsOverFor = 0;
 	m_uFields = uFields;
@@ -10881,7 +11057,7 @@ ExtTerm_c::ExtTerm_c ( const CSphString & sTerm, DWORD uFields, const CSphTermSe
 
 const ExtDoc_t * ExtTerm_c::GetDocsChunk ( SphDocID_t * pMaxID )
 {
-	if ( !m_tQword.m_iDocs )
+	if ( !m_pQword->m_iDocs )
 		return NULL;
 
 	m_uMaxID = 0;
@@ -10898,21 +11074,21 @@ const ExtDoc_t * ExtTerm_c::GetDocsChunk ( SphDocID_t * pMaxID )
 	CSphRowitem * pDocinfo = m_pDocinfo;
 	while ( iDoc<MAX_DOCS-1 )
 	{
-		m_tQword.GetDoclistEntryOnly ( pDocinfo );
-		if ( !m_tQword.m_tDoc.m_iDocID )
+		m_pQword->GetDoclistEntryOnly ( pDocinfo );
+		if ( !m_pQword->m_tDoc.m_iDocID )
 		{
-			m_tQword.m_iDocs = 0;
+			m_pQword->m_iDocs = 0;
 			break;
 		}
-		if (!( m_tQword.m_uFields & m_uFields ))
+		if (!( m_pQword->m_uFields & m_uFields ))
 			continue;
 
 		ExtDoc_t & tDoc = m_dDocs[iDoc++];
-		tDoc.m_uDocid = m_tQword.m_tDoc.m_iDocID;
+		tDoc.m_uDocid = m_pQword->m_tDoc.m_iDocID;
 		tDoc.m_pDocinfo = pDocinfo;
-		tDoc.m_uHitlistOffset = m_tQword.m_iHitlistPos;
-		tDoc.m_uFields = m_tQword.m_uFields; // OPTIMIZE: only needed for phrase node
-		tDoc.m_fTFIDF = float(m_tQword.m_uMatchHits) / float(m_tQword.m_uMatchHits+SPH_BM25_K1) * m_fIDF;
+		tDoc.m_uHitlistOffset = m_pQword->m_iHitlistPos;
+		tDoc.m_uFields = m_pQword->m_uFields; // OPTIMIZE: only needed for phrase node
+		tDoc.m_fTFIDF = float(m_pQword->m_uMatchHits) / float(m_pQword->m_uMatchHits+SPH_BM25_K1) * m_fIDF;
 		pDocinfo += m_iStride;
 	}
 
@@ -10962,10 +11138,10 @@ const ExtHit_t * ExtTerm_c::GetHitsChunk ( const ExtDoc_t * pMatched, SphDocID_t
 		} while ( pDoc->m_uDocid!=pMatched->m_uDocid );
 
 		// setup hitlist reader
-		m_tQword.m_rdHitlist.SeekTo ( pDoc->m_uHitlistOffset, READ_NO_SIZE_HINT );
-		m_tQword.m_iHitPos = 0;
+		m_pQword->m_rdHitlist.SeekTo ( pDoc->m_uHitlistOffset, READ_NO_SIZE_HINT );
+		m_pQword->m_iHitPos = 0;
 		#ifndef NDEBUG
-		m_tQword.m_bHitlistOver = false;
+		m_pQword->m_bHitlistOver = false;
 		#endif
 	}
 
@@ -10974,8 +11150,8 @@ const ExtHit_t * ExtTerm_c::GetHitsChunk ( const ExtDoc_t * pMatched, SphDocID_t
 	while ( iHit<MAX_HITS-1 )
 	{
 		// get next hit
-		m_tQword.GetHitlistEntry ();
-		if ( !m_tQword.m_iHitPos )
+		m_pQword->GetHitlistEntry ();
+		if ( !m_pQword->m_iHitPos )
 		{
 			// no more hits; get next acceptable document
 			pDoc++;
@@ -10994,21 +11170,21 @@ const ExtHit_t * ExtTerm_c::GetHitsChunk ( const ExtDoc_t * pMatched, SphDocID_t
 			assert ( pDoc->m_uDocid==pMatched->m_uDocid );
 
 			// setup hitlist reader
-			m_tQword.m_rdHitlist.SeekTo ( pDoc->m_uHitlistOffset, READ_NO_SIZE_HINT );
-			m_tQword.m_iHitPos = 0;
+			m_pQword->m_rdHitlist.SeekTo ( pDoc->m_uHitlistOffset, READ_NO_SIZE_HINT );
+			m_pQword->m_iHitPos = 0;
 			#ifndef NDEBUG
-			m_tQword.m_bHitlistOver = false;
+			m_pQword->m_bHitlistOver = false;
 			#endif
 
 			continue;
 		}
 
-		if (!( m_uFields & ( 1UL<<HIT2FIELD(m_tQword.m_iHitPos) ) ))
+		if (!( m_uFields & ( 1UL<<HIT2FIELD(m_pQword->m_iHitPos) ) ))
 			continue;
 
 		ExtHit_t & tHit = m_dHits[iHit++];
 		tHit.m_uDocid = pDoc->m_uDocid;
-		tHit.m_uHitpos = m_tQword.m_iHitPos;
+		tHit.m_uHitpos = m_pQword->m_iHitPos;
 		tHit.m_uQuerypos = m_uQuerypos;
 		tHit.m_uSpanlen = tHit.m_uWeight = 1;
 	}
@@ -11025,32 +11201,132 @@ const ExtHit_t * ExtTerm_c::GetHitsChunk ( const ExtDoc_t * pMatched, SphDocID_t
 void ExtTerm_c::GetQwords ( ExtQwordsHash_t & hQwords )
 {
 	m_fIDF = 0.0f;
-	if ( hQwords.Exists ( m_tQword.m_sWord ) )
+	if ( hQwords.Exists ( m_pQword->m_sWord ) )
 		return;
 
 	m_fIDF = -1.0f;
 	ExtQword_t tInfo;
-	tInfo.m_sWord = m_tQword.m_sWord;
-	tInfo.m_sDictWord = m_tQword.m_sDictWord;
-	tInfo.m_iDocs = m_tQword.m_iDocs;
-	tInfo.m_iHits = m_tQword.m_iHits;
-	hQwords.Add (  tInfo, m_tQword.m_sWord );
+	tInfo.m_sWord = m_pQword->m_sWord;
+	tInfo.m_sDictWord = m_pQword->m_sDictWord;
+	tInfo.m_iDocs = m_pQword->m_iDocs;
+	tInfo.m_iHits = m_pQword->m_iHits;
+	hQwords.Add (  tInfo, m_pQword->m_sWord );
 }
 
 void ExtTerm_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 {
 	if ( m_fIDF<0.0f )
 	{
-		assert ( hQwords(m_tQword.m_sWord) );
-		m_fIDF = hQwords(m_tQword.m_sWord)->m_fIDF;
+		assert ( hQwords(m_pQword->m_sWord) );
+		m_fIDF = hQwords(m_pQword->m_sWord)->m_fIDF;
 	}
 }
 
 //////////////////////////////////////////////////////////////////////////
 
+const ExtHit_t * ExtTermHitless_c::GetHitsChunk ( const ExtDoc_t * pMatched, SphDocID_t uMaxID )
+{
+	if ( !pMatched )
+		return NULL;
+	SphDocID_t uFirstMatch = pMatched->m_uDocid;
+
+	// aim to the right document
+	ExtDoc_t * pDoc = m_pHitDoc;
+	m_pHitDoc = NULL;
+
+	if ( !pDoc )
+	{
+		// if we already emitted hits for this matches block, do not do that again
+		if ( uFirstMatch==m_uHitsOverFor )
+			return NULL;
+
+		// early reject whole block
+		if ( pMatched->m_uDocid > m_uMaxID ) return NULL;
+		if ( m_uMaxID && m_dDocs[0].m_uDocid > uMaxID ) return NULL;
+
+		// find match
+		pDoc = m_dDocs;
+		do
+		{
+			while ( pDoc->m_uDocid < pMatched->m_uDocid ) pDoc++;
+			if ( pDoc->m_uDocid==DOCID_MAX )
+			{
+				m_uHitsOverFor = uFirstMatch;
+				return NULL; // matched docs block is over for me, gimme another one
+			}
+
+			while ( pMatched->m_uDocid < pDoc->m_uDocid ) pMatched++;
+			if ( pMatched->m_uDocid==DOCID_MAX )
+			{
+				m_uHitsOverFor = uFirstMatch;
+				return NULL; // matched doc block did not yet begin for me, gimme another one
+			}
+
+		} while ( pDoc->m_uDocid!=pMatched->m_uDocid );
+
+		m_uFieldMask = pDoc->m_uFields;
+		m_uFieldPos = 0;
+	}
+
+	// hit emission
+	int iHit = 0;
+	for(;;)
+	{
+		if ( m_uFieldMask & 1 )
+		{
+			if ( m_uFields & ( 1UL<<m_uFieldPos ) )
+			{
+				// emit hit
+				ExtHit_t & tHit = m_dHits[iHit++];
+				tHit.m_uDocid = pDoc->m_uDocid;
+				tHit.m_uHitpos = HIT_PACK ( m_uFieldPos, -1 );
+				tHit.m_uQuerypos = m_uQuerypos;
+				tHit.m_uSpanlen = tHit.m_uWeight = 1;
+				
+				if ( iHit==MAX_HITS-1 )
+					break;
+			}
+		}
+		
+		if ( m_uFieldMask >>= 1 )
+		{
+			m_uFieldPos++;
+			continue;
+		}
+		
+		// field mask is empty, get next document
+		pDoc++;
+		do
+		{
+			while ( pDoc->m_uDocid < pMatched->m_uDocid ) pDoc++;
+			if ( pDoc->m_uDocid==DOCID_MAX ) { pDoc = NULL; break; } // matched docs block is over for me, gimme another one
+			
+			while ( pMatched->m_uDocid < pDoc->m_uDocid ) pMatched++;
+			if ( pMatched->m_uDocid==DOCID_MAX ) { pDoc = NULL; break; } // matched doc block did not yet begin for me, gimme another one
+			
+		} while ( pDoc->m_uDocid!=pMatched->m_uDocid );
+		
+		if ( !pDoc )
+			break;
+
+		m_uFieldMask = pDoc->m_uFields;
+		m_uFieldPos = 0;
+	}
+
+	m_pHitDoc = pDoc;
+	if ( iHit==0 || iHit<MAX_HITS-1 )
+		m_uHitsOverFor = uFirstMatch;
+
+	assert ( iHit>=0 && iHit<MAX_HITS );
+	m_dHits[iHit].m_uDocid = DOCID_MAX;
+	return ( iHit!=0 ) ? m_dHits : NULL;
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 template < TermPosFilter_e T >
-ExtTermPos_c<T>::ExtTermPos_c ( const CSphString & sTerm, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup, DWORD uQuerypos )
-	: ExtTerm_c			( sTerm, uFields, tSetup, uQuerypos )
+ExtTermPos_c<T>::ExtTermPos_c ( CSphQueryWord * pQword, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup )
+	: ExtTerm_c			( pQword, uFields, tSetup )
 	, m_iMaxFieldPos	( iMaxFieldPos )
 	, m_uTermMaxID		( 0 )
 	, m_pRawDocs		( NULL )
@@ -11639,14 +11915,14 @@ const ExtHit_t * ExtAndNot_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t 
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtPhrase_c::ExtPhrase_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, const CSphTermSetup & tSetup )
+ExtPhrase_c::ExtPhrase_c ( CSphVector<CSphQueryWord *> & dQwords, const CSphExtendedQueryAtom & tAtom, const CSphTermSetup & tSetup )
 	: m_pDocs ( NULL )
 	, m_pHits ( NULL )
 	, m_pDoc ( NULL )
 	, m_pHit ( NULL )
 	, m_pMyDoc ( NULL )
 	, m_pMyHit ( NULL )
-	, m_uFields ( uFields )
+	, m_uFields ( tAtom.m_uFields )
 	, m_uLastDocID ( 0 )
 	, m_uExpID ( 0 )
 	, m_uExpPos ( 0 )
@@ -11655,28 +11931,21 @@ ExtPhrase_c::ExtPhrase_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, c
 	, m_uHitsOverFor ( 0 )
 	, m_uWords ( 0 )
 {
-	assert ( pNode );
-	assert ( pNode->IsPlain() );
-	assert ( pNode->m_tAtom.m_iMaxDistance>=0 );
-
-	m_uFields = uFields;
-
-	const CSphVector<CSphExtendedQueryAtomWord> & dWords = pNode->m_tAtom.m_dWords;
-	m_uWords = dWords.GetLength();
+	m_uWords = dQwords.GetLength();
 	assert ( m_uWords>1 );
 
-	m_uMinQpos = dWords[0].m_iAtomPos;
-	m_uMaxQpos = dWords.Last().m_iAtomPos;
+	m_uMinQpos = dQwords[0]->m_iAtomPos;
+	m_uMaxQpos = dQwords.Last()->m_iAtomPos;
 
 	m_dQposDelta.Resize ( m_uMaxQpos-m_uMinQpos+1 );
 	ARRAY_FOREACH ( i, m_dQposDelta )
 		m_dQposDelta[i] = -INT_MAX;
 
-	ExtNode_i * pCur = Create ( dWords[0], uFields, pNode->m_tAtom.m_iMaxFieldPos, tSetup );
+	ExtNode_i * pCur = Create ( dQwords[0], m_uFields, tAtom.m_iMaxFieldPos, tSetup );
 	for ( int i=1; i<(int)m_uWords; i++ )
 	{
-		pCur = new ExtAnd_c ( pCur, Create ( dWords[i], uFields, pNode->m_tAtom.m_iMaxFieldPos, tSetup ), tSetup );
-		m_dQposDelta [ dWords[i-1].m_iAtomPos - dWords[0].m_iAtomPos ] = dWords[i].m_iAtomPos - dWords[i-1].m_iAtomPos;
+		pCur = new ExtAnd_c ( pCur, Create ( dQwords[i], m_uFields, tAtom.m_iMaxFieldPos, tSetup ), tSetup );
+		m_dQposDelta [ dQwords[i-1]->m_iAtomPos - dQwords[0]->m_iAtomPos ] = dQwords[i]->m_iAtomPos - dQwords[i-1]->m_iAtomPos;
 	}
 	m_pNode = pCur;
 
@@ -12053,12 +12322,11 @@ void ExtPhrase_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtProximity_c::ExtProximity_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, const CSphTermSetup & tSetup )
-	: ExtPhrase_c ( pNode, uFields, tSetup )
-	, m_iMaxDistance ( pNode->m_tAtom.m_iMaxDistance )
-	, m_iNumWords ( pNode->m_tAtom.m_dWords.GetLength() )
+ExtProximity_c::ExtProximity_c ( CSphVector<CSphQueryWord *> & dQwords, const CSphExtendedQueryAtom & tAtom, const CSphTermSetup & tSetup )
+	: ExtPhrase_c ( dQwords, tAtom, tSetup )
+	, m_iMaxDistance ( tAtom.m_iMaxDistance )
+	, m_iNumWords ( dQwords.GetLength() )
 {
-	assert ( pNode->IsPlain() );
 	assert ( m_iMaxDistance>0 );
 }
 
@@ -12242,24 +12510,21 @@ const ExtDoc_t * ExtProximity_c::GetDocsChunk ( SphDocID_t * pMaxID )
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtQuorum_c::ExtQuorum_c ( const CSphExtendedQueryNode * pNode, DWORD uFields, const CSphTermSetup & tSetup )
+ExtQuorum_c::ExtQuorum_c ( CSphVector<CSphQueryWord *> & dQwords, const CSphExtendedQueryAtom & tAtom, const CSphTermSetup & tSetup )
 {
-	assert ( pNode );
-	assert ( pNode->IsPlain() );
-	assert ( pNode->m_tAtom.m_bQuorum );
+	assert ( tAtom.m_bQuorum );
 
-	m_iThresh = pNode->m_tAtom.m_iMaxDistance;
+	m_iThresh = tAtom.m_iMaxDistance;
 	m_bDone = false;
 
-	const CSphVector<CSphExtendedQueryAtomWord> & dWords = pNode->m_tAtom.m_dWords;
-	assert ( dWords.GetLength()>1 ); // use TERM instead
-	assert ( dWords.GetLength()<=32 ); // internal masks are 32 bits
+	assert ( dQwords.GetLength()>1 ); // use TERM instead
+	assert ( dQwords.GetLength()<=32 ); // internal masks are 32 bits
 	assert ( m_iThresh>=1 ); // 1 is also OK; it's a bit different from just OR
-	assert ( m_iThresh<dWords.GetLength() ); // use AND instead
+	assert ( m_iThresh<dQwords.GetLength() ); // use AND instead
 
-	ARRAY_FOREACH ( i, dWords )
+	ARRAY_FOREACH ( i, dQwords )
 	{
-		m_dChildren.Add ( new ExtTerm_c ( dWords[i].m_sWord, uFields, tSetup, dWords[i].m_iAtomPos ) );
+		m_dChildren.Add ( new ExtTerm_c ( dQwords[i], tAtom.m_uFields, tSetup ) );
 		m_pCurDoc.Add ( NULL );
 		m_pCurHit.Add ( NULL );
 	}

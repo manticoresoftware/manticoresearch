@@ -18734,6 +18734,10 @@ const char * CSphSource_MySQL::SqlError ()
 bool CSphSource_MySQL::SqlConnect ()
 {
 	mysql_init ( &m_tMysqlDriver );
+
+	if ( !m_sSslKey.IsEmpty() || !m_sSslCert.IsEmpty() || !m_sSslCA.IsEmpty() )
+		mysql_ssl_set ( &m_tMysqlDriver, m_sSslKey.cstr(), m_sSslCert.cstr(), m_sSslCA.cstr(), NULL, NULL );
+
 	return NULL!=mysql_real_connect ( &m_tMysqlDriver,
 		m_tParams.m_sHost.cstr(), m_tParams.m_sUser.cstr(), m_tParams.m_sPass.cstr(),
 		m_tParams.m_sDB.cstr(), m_tParams.m_iPort, m_sMysqlUsock.cstr(), m_iMysqlConnectFlags );
@@ -18805,6 +18809,9 @@ bool CSphSource_MySQL::Setup ( const CSphSourceParams_MySQL & tParams )
 
 	m_sMysqlUsock = tParams.m_sUsock;
 	m_iMysqlConnectFlags = tParams.m_iFlags;
+	m_sSslKey = tParams.m_sSslKey;
+	m_sSslCert = tParams.m_sSslCert;
+	m_sSslCA = tParams.m_sSslCA;
 
 	// build and store DSN for error reporting
 	char sBuf [ 1024 ];

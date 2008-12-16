@@ -549,6 +549,9 @@ CSphSource * SpawnSourceMySQL ( const CSphConfigSection & hSource, const char * 
 
 	LOC_GETS ( tParams.m_sUsock,			"sql_sock" );
 	LOC_GETI ( tParams.m_iFlags,			"mysql_connect_flags" );
+	LOC_GETS ( tParams.m_sSslKey,			"mysql_ssl_key" );
+	LOC_GETS ( tParams.m_sSslCert,			"mysql_ssl_cert" );
+	LOC_GETS ( tParams.m_sSslCA,			"mysql_ssl_ca" );
 
 	CSphSource_MySQL * pSrcMySQL = new CSphSource_MySQL ( sSourceName );
 	if ( !pSrcMySQL->Setup ( tParams ) )

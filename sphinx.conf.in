@@ -40,6 +40,12 @@ source src1
 	#
 	# mysql_connect_flags	= 32 # enable compression
 
+	# MySQL specific SSL certificate settings
+	# optional, defaults are empty
+	#
+	# mysql_ssl_cert		= /etc/ssl/client-cert.pem
+	# mysql_ssl_key		= /etc/ssl/client-key.pem
+	# mysql_ssl_ca		= /etc/ssl/cacert.pem
 
 	# MS SQL specific Windows authentication mode flag
 	# MUST be in sync with charset_type index-level setting

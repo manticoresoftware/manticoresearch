@@ -1228,6 +1228,9 @@ struct CSphSourceParams_MySQL : CSphSourceParams_SQL
 {
 	CSphString	m_sUsock;					///< UNIX socket
 	int			m_iFlags;					///< connection flags
+	CSphString	m_sSslKey;
+	CSphString	m_sSslCert;
+	CSphString	m_sSslCA;
 
 				CSphSourceParams_MySQL ();	///< ctor. sets defaults
 };
@@ -1249,6 +1252,9 @@ protected:
 
 	CSphString				m_sMysqlUsock;
 	int						m_iMysqlConnectFlags;
+	CSphString				m_sSslKey;
+	CSphString				m_sSslCert;
+	CSphString				m_sSslCA;
 
 protected:
 	virtual void			SqlDismissResult ();

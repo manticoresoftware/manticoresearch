@@ -1048,17 +1048,17 @@ yyreduce:
 
   case 6:
 
-    { yyval.pNode = yyvsp[-1].pNode; assert ( yyval.pNode->IsPlain() && yyval.pNode->m_tAtom.m_dWords.GetLength()==1 ); yyval.pNode->m_tAtom.m_dWords[0].m_bFieldEnd = true; ;}
+    { yyval.pNode = yyvsp[-1].pNode; assert ( yyval.pNode->IsPlain() && yyval.pNode->m_dWords.GetLength()==1 ); yyval.pNode->m_dWords[0].m_bFieldEnd = true; ;}
     break;
 
   case 7:
 
-    { yyval.pNode = yyvsp[0].pNode; assert ( yyval.pNode->IsPlain() && yyval.pNode->m_tAtom.m_dWords.GetLength()==1 ); yyval.pNode->m_tAtom.m_dWords[0].m_bFieldStart = true; ;}
+    { yyval.pNode = yyvsp[0].pNode; assert ( yyval.pNode->IsPlain() && yyval.pNode->m_dWords.GetLength()==1 ); yyval.pNode->m_dWords[0].m_bFieldStart = true; ;}
     break;
 
   case 8:
 
-    { yyval.pNode = yyvsp[-1].pNode; assert ( yyval.pNode->IsPlain() && yyval.pNode->m_tAtom.m_dWords.GetLength()==1 ); yyval.pNode->m_tAtom.m_dWords[0].m_bFieldStart = true; yyval.pNode->m_tAtom.m_dWords[0].m_bFieldEnd = true; ;}
+    { yyval.pNode = yyvsp[-1].pNode; assert ( yyval.pNode->IsPlain() && yyval.pNode->m_dWords.GetLength()==1 ); yyval.pNode->m_dWords[0].m_bFieldStart = true; yyval.pNode->m_dWords[0].m_bFieldEnd = true; ;}
     break;
 
   case 9:
@@ -1128,17 +1128,17 @@ yyreduce:
 
   case 22:
 
-    { yyval.pNode = yyvsp[-1].pNode; if ( yyval.pNode ) { assert ( yyval.pNode->IsPlain() ); yyval.pNode->m_tAtom.m_iMaxDistance = 0; } ;}
+    { yyval.pNode = yyvsp[-1].pNode; if ( yyval.pNode ) { assert ( yyval.pNode->IsPlain() ); yyval.pNode->m_iMaxDistance = 0; } ;}
     break;
 
   case 23:
 
-    { yyval.pNode = yyvsp[-3].pNode; if ( yyval.pNode ) { assert ( !yyval.pNode || yyval.pNode->IsPlain() ); yyval.pNode->m_tAtom.m_iMaxDistance = yyvsp[0].tInt.iValue; yyval.pNode->m_tAtom.m_bQuorum = false; } ;}
+    { yyval.pNode = yyvsp[-3].pNode; if ( yyval.pNode ) { assert ( !yyval.pNode || yyval.pNode->IsPlain() ); yyval.pNode->m_iMaxDistance = yyvsp[0].tInt.iValue; yyval.pNode->m_bQuorum = false; } ;}
     break;
 
   case 24:
 
-    { yyval.pNode = yyvsp[-3].pNode; if ( yyval.pNode ) { assert ( !yyval.pNode || yyval.pNode->IsPlain() ); yyval.pNode->m_tAtom.m_iMaxDistance = yyvsp[0].tInt.iValue; yyval.pNode->m_tAtom.m_bQuorum = true; } ;}
+    { yyval.pNode = yyvsp[-3].pNode; if ( yyval.pNode ) { assert ( !yyval.pNode || yyval.pNode->IsPlain() ); yyval.pNode->m_iMaxDistance = yyvsp[0].tInt.iValue; yyval.pNode->m_bQuorum = true; } ;}
     break;
 
   case 25:

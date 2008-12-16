@@ -1693,7 +1693,7 @@ private:
 	bool						BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAutoArray<CSphWordHit> & dHits, int iArenaSize, int iFieldFD, int nFieldMVAs, int iFieldMVAInPool );
 
 	void						CheckQueryWord ( const char * szWord, CSphQueryResult * pResult ) const;
-	void						CheckExtendedQuery ( const CSphExtendedQueryNode * pNode, CSphQueryResult * pResult ) const;
+	void						CheckExtendedQuery ( const XQNode_t * pNode, CSphQueryResult * pResult ) const;
 
 	CSphDict *					SetupStarDict ( CSphScopedPtr<CSphDict> & tContainer ) const;
 	CSphDict *					SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict ) const;
@@ -10446,8 +10446,8 @@ public:
 								ExtNode_i ();
 	virtual						~ExtNode_i () { SafeDeleteArray ( m_pDocinfo ); }
 
-	static ExtNode_i *			Create ( const CSphExtendedQueryNode * pNode, const CSphTermSetup & tSetup );
-	static ExtNode_i *			Create ( const CSphExtendedQueryAtomWord & tWord, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup );
+	static ExtNode_i *			Create ( const XQNode_t * pNode, const CSphTermSetup & tSetup );
+	static ExtNode_i *			Create ( const XQKeyword_t & tWord, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup );
 	static ExtNode_i *			Create ( CSphQueryWord * pQword, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup );
 
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID ) = 0;
@@ -10660,7 +10660,7 @@ protected:
 class ExtPhrase_c : public ExtNode_i
 {
 public:
-								ExtPhrase_c ( CSphVector<CSphQueryWord *> & dQwords, const CSphExtendedQueryAtom & tAtom, const CSphTermSetup & tSetup );
+								ExtPhrase_c ( CSphVector<CSphQueryWord *> & dQwords, const XQNode_t & tNode, const CSphTermSetup & tSetup );
 								~ExtPhrase_c ();
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
@@ -10704,7 +10704,7 @@ protected:
 class ExtProximity_c : public ExtPhrase_c
 {
 public:
-								ExtProximity_c ( CSphVector<CSphQueryWord *> & dQwords, const CSphExtendedQueryAtom & tAtom, const CSphTermSetup & tSetup );
+								ExtProximity_c ( CSphVector<CSphQueryWord *> & dQwords, const XQNode_t & tNode, const CSphTermSetup & tSetup );
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 
 protected:
@@ -10717,7 +10717,7 @@ protected:
 class ExtQuorum_c : public ExtNode_i
 {
 public:
-								ExtQuorum_c ( CSphVector<CSphQueryWord *> & dQwords, const CSphExtendedQueryAtom & tAtom, const CSphTermSetup & tSetup );
+								ExtQuorum_c ( CSphVector<CSphQueryWord *> & dQwords, const XQNode_t & tNode, const CSphTermSetup & tSetup );
 	virtual						~ExtQuorum_c ();
 
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
@@ -10772,7 +10772,7 @@ protected:
 class ExtRanker_c
 {
 public:
-								ExtRanker_c ( const CSphExtendedQueryNode * pRoot, const CSphTermSetup & tSetup );
+								ExtRanker_c ( const XQNode_t * pRoot, const CSphTermSetup & tSetup );
 	virtual						~ExtRanker_c () { SafeDelete ( m_pRoot ); }
 
 	virtual const ExtDoc_t *	GetFilteredDocs ();
@@ -10803,7 +10803,7 @@ protected:
 	class _classname : public ExtRanker_c \
 	{ \
 	public: \
-		_classname ( const CSphExtendedQueryNode * pRoot, const CSphTermSetup & tSetup ) \
+		_classname ( const XQNode_t * pRoot, const CSphTermSetup & tSetup ) \
 			: ExtRanker_c ( pRoot, tSetup ) \
 		{} \
 	\
@@ -10847,7 +10847,7 @@ ExtNode_i::ExtNode_i ()
 }
 
 
-static CSphQueryWord * CreateQueryWord ( const CSphExtendedQueryAtomWord & tWord, const CSphTermSetup & tSetup )
+static CSphQueryWord * CreateQueryWord ( const XQKeyword_t & tWord, const CSphTermSetup & tSetup )
 {
 	CSphQueryWord * pWord = new CSphQueryWord;
 	pWord->m_sWord = tWord.m_sWord;
@@ -10866,13 +10866,13 @@ static CSphQueryWord * CreateQueryWord ( const CSphExtendedQueryAtomWord & tWord
 }
 
 template < typename T >
-static ExtNode_i * CreatePhraseNode ( const CSphExtendedQueryNode * pQueryNode, const CSphTermSetup & tSetup )
+static ExtNode_i * CreatePhraseNode ( const XQNode_t * pQueryNode, const CSphTermSetup & tSetup )
 {
 	ExtNode_i * pResult = NULL;
 	CSphVector<CSphQueryWord *> dQwordsHit, dQwords;
 
 	// partition phrase words
-	const CSphVector<CSphExtendedQueryAtomWord> & dWords = pQueryNode->m_tAtom.m_dWords;
+	const CSphVector<XQKeyword_t> & dWords = pQueryNode->m_dWords;
 	ARRAY_FOREACH ( i, dWords )
 	{
 		CSphQueryWord * pWord = CreateQueryWord ( dWords[i], tSetup );
@@ -10893,16 +10893,16 @@ static ExtNode_i * CreatePhraseNode ( const CSphExtendedQueryNode * pQueryNode, 
 		// at least two words have hitlists, creating phrase node
 		assert ( pQueryNode );
 		assert ( pQueryNode->IsPlain() );
-		assert ( pQueryNode->m_tAtom.m_iMaxDistance>=0 );
+		assert ( pQueryNode->m_iMaxDistance>=0 );
 		
-		pResult = new T ( dQwordsHit, pQueryNode->m_tAtom, tSetup );
+		pResult = new T ( dQwordsHit, *pQueryNode, tSetup );
 	}
 	
 	// AND result with the words that had no hitlist
 	if ( dQwords.GetLength() )
 	{
-		int iMaxPos = pQueryNode->m_tAtom.m_iMaxFieldPos;
-		DWORD uFields = pQueryNode->m_tAtom.m_uFields;
+		int iMaxPos = pQueryNode->m_iFieldMaxPos;
+		DWORD uFields = pQueryNode->m_uFieldMask;
 		ExtNode_i * pNode = ExtNode_i::Create ( dQwords[0], uFields, iMaxPos, tSetup );
 		for ( int i=1; i<dQwords.GetLength(); i++ )
 			pNode = new ExtAnd_c ( pNode, ExtNode_i::Create ( dQwords[i], uFields, iMaxPos, tSetup ), tSetup );
@@ -10911,7 +10911,7 @@ static ExtNode_i * CreatePhraseNode ( const CSphExtendedQueryNode * pQueryNode, 
 	return pResult;
 }
 
-static ExtNode_i * CreateOrderNode ( const CSphExtendedQueryNode * pNode, const CSphTermSetup & tSetup )
+static ExtNode_i * CreateOrderNode ( const XQNode_t * pNode, const CSphTermSetup & tSetup )
 {
 	if ( pNode->m_dChildren.GetLength()<2 )
 	{
@@ -10937,7 +10937,7 @@ static ExtNode_i * CreateOrderNode ( const CSphExtendedQueryNode * pNode, const 
 	return new ExtOrder_c ( dChildren, tSetup );
 }
 
-ExtNode_i * ExtNode_i::Create ( const CSphExtendedQueryAtomWord & tWord, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup )
+ExtNode_i * ExtNode_i::Create ( const XQKeyword_t & tWord, DWORD uFields, int iMaxFieldPos, const CSphTermSetup & tSetup )
 {
 	return Create ( CreateQueryWord ( tWord, tSetup ), uFields, iMaxFieldPos, tSetup );
 };
@@ -10965,39 +10965,36 @@ ExtNode_i * ExtNode_i::Create ( CSphQueryWord * pQword, DWORD uFields, int iMaxF
 	}
 }
 
-ExtNode_i * ExtNode_i::Create ( const CSphExtendedQueryNode * pNode, const CSphTermSetup & tSetup )
+ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const CSphTermSetup & tSetup )
 {
 	if ( pNode->IsPlain() )
 	{
-		const CSphExtendedQueryAtom & tAtom = pNode->m_tAtom;
-		const int iWords = tAtom.m_dWords.GetLength();
+		const int iWords = pNode->m_dWords.GetLength();
 		
 		if ( iWords<=0 )
 			return NULL; // empty reject node
 
 		if ( iWords==1 )
-			return Create ( tAtom.m_dWords[0], tAtom.m_uFields, tAtom.m_iMaxFieldPos, tSetup );
+			return Create ( pNode->m_dWords[0], pNode->m_uFieldMask, pNode->m_iFieldMaxPos, tSetup );
 
-		assert ( tAtom.m_iMaxDistance>=0 );
-		if ( tAtom.m_iMaxDistance==0 )
+		assert ( pNode->m_iMaxDistance>=0 );
+		if ( pNode->m_iMaxDistance==0 )
 			return CreatePhraseNode<ExtPhrase_c> ( pNode, tSetup );
-		else if ( tAtom.m_bQuorum )
+		else if ( pNode->m_bQuorum )
 		{
-			if ( tAtom.m_iMaxDistance>=tAtom.m_dWords.GetLength() )
+			if ( pNode->m_iMaxDistance>=pNode->m_dWords.GetLength() )
 			{
-				DWORD uFields = tAtom.m_uFields;
-
 				// threshold is too high
 				// report a warning, and fallback to "and"
-				if ( tSetup.m_pWarning && tAtom.m_iMaxDistance>tAtom.m_dWords.GetLength() )
+				if ( tSetup.m_pWarning && pNode->m_iMaxDistance>pNode->m_dWords.GetLength() )
 					tSetup.m_pWarning->SetSprintf ( "quorum threshold too high (words=%d, thresh=%d); replacing quorum operator with AND operator",
-						tAtom.m_dWords.GetLength(), tAtom.m_iMaxDistance );
+						pNode->m_dWords.GetLength(), pNode->m_iMaxDistance );
 
 				// create AND node
-				const CSphVector<CSphExtendedQueryAtomWord> & dWords = pNode->m_tAtom.m_dWords;
-				ExtNode_i * pCur = Create ( dWords[0], uFields, tAtom.m_iMaxFieldPos, tSetup );
+				const CSphVector<XQKeyword_t> & dWords = pNode->m_dWords;
+				ExtNode_i * pCur = Create ( dWords[0], pNode->m_uFieldMask, pNode->m_iFieldMaxPos, tSetup );
 				for ( int i=1; i<dWords.GetLength(); i++ )
-					pCur = new ExtAnd_c ( pCur, Create ( dWords[i], uFields, tAtom.m_iMaxFieldPos, tSetup ), tSetup );
+					pCur = new ExtAnd_c ( pCur, Create ( dWords[i], pNode->m_uFieldMask, pNode->m_iFieldMaxPos, tSetup ), tSetup );
 				return pCur;
 
 			} else
@@ -11915,14 +11912,14 @@ const ExtHit_t * ExtAndNot_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t 
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtPhrase_c::ExtPhrase_c ( CSphVector<CSphQueryWord *> & dQwords, const CSphExtendedQueryAtom & tAtom, const CSphTermSetup & tSetup )
+ExtPhrase_c::ExtPhrase_c ( CSphVector<CSphQueryWord *> & dQwords, const XQNode_t & tNode, const CSphTermSetup & tSetup )
 	: m_pDocs ( NULL )
 	, m_pHits ( NULL )
 	, m_pDoc ( NULL )
 	, m_pHit ( NULL )
 	, m_pMyDoc ( NULL )
 	, m_pMyHit ( NULL )
-	, m_uFields ( tAtom.m_uFields )
+	, m_uFields ( tNode.m_uFieldMask )
 	, m_uLastDocID ( 0 )
 	, m_uExpID ( 0 )
 	, m_uExpPos ( 0 )
@@ -11941,10 +11938,10 @@ ExtPhrase_c::ExtPhrase_c ( CSphVector<CSphQueryWord *> & dQwords, const CSphExte
 	ARRAY_FOREACH ( i, m_dQposDelta )
 		m_dQposDelta[i] = -INT_MAX;
 
-	ExtNode_i * pCur = Create ( dQwords[0], m_uFields, tAtom.m_iMaxFieldPos, tSetup );
+	ExtNode_i * pCur = Create ( dQwords[0], m_uFields, tNode.m_iFieldMaxPos, tSetup );
 	for ( int i=1; i<(int)m_uWords; i++ )
 	{
-		pCur = new ExtAnd_c ( pCur, Create ( dQwords[i], m_uFields, tAtom.m_iMaxFieldPos, tSetup ), tSetup );
+		pCur = new ExtAnd_c ( pCur, Create ( dQwords[i], m_uFields, tNode.m_iFieldMaxPos, tSetup ), tSetup );
 		m_dQposDelta [ dQwords[i-1]->m_iAtomPos - dQwords[0]->m_iAtomPos ] = dQwords[i]->m_iAtomPos - dQwords[i-1]->m_iAtomPos;
 	}
 	m_pNode = pCur;
@@ -12322,9 +12319,9 @@ void ExtPhrase_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtProximity_c::ExtProximity_c ( CSphVector<CSphQueryWord *> & dQwords, const CSphExtendedQueryAtom & tAtom, const CSphTermSetup & tSetup )
-	: ExtPhrase_c ( dQwords, tAtom, tSetup )
-	, m_iMaxDistance ( tAtom.m_iMaxDistance )
+ExtProximity_c::ExtProximity_c ( CSphVector<CSphQueryWord *> & dQwords, const XQNode_t & tNode, const CSphTermSetup & tSetup )
+	: ExtPhrase_c ( dQwords, tNode, tSetup )
+	, m_iMaxDistance ( tNode.m_iMaxDistance )
 	, m_iNumWords ( dQwords.GetLength() )
 {
 	assert ( m_iMaxDistance>0 );
@@ -12510,11 +12507,11 @@ const ExtDoc_t * ExtProximity_c::GetDocsChunk ( SphDocID_t * pMaxID )
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtQuorum_c::ExtQuorum_c ( CSphVector<CSphQueryWord *> & dQwords, const CSphExtendedQueryAtom & tAtom, const CSphTermSetup & tSetup )
+ExtQuorum_c::ExtQuorum_c ( CSphVector<CSphQueryWord *> & dQwords, const XQNode_t & tNode, const CSphTermSetup & tSetup )
 {
-	assert ( tAtom.m_bQuorum );
+	assert ( tNode.m_bQuorum );
 
-	m_iThresh = tAtom.m_iMaxDistance;
+	m_iThresh = tNode.m_iMaxDistance;
 	m_bDone = false;
 
 	assert ( dQwords.GetLength()>1 ); // use TERM instead
@@ -12524,7 +12521,7 @@ ExtQuorum_c::ExtQuorum_c ( CSphVector<CSphQueryWord *> & dQwords, const CSphExte
 
 	ARRAY_FOREACH ( i, dQwords )
 	{
-		m_dChildren.Add ( new ExtTerm_c ( dQwords[i], tAtom.m_uFields, tSetup ) );
+		m_dChildren.Add ( new ExtTerm_c ( dQwords[i], tNode.m_uFieldMask, tSetup ) );
 		m_pCurDoc.Add ( NULL );
 		m_pCurHit.Add ( NULL );
 	}
@@ -13049,7 +13046,7 @@ void ExtOrder_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtRanker_c::ExtRanker_c ( const CSphExtendedQueryNode * pRoot, const CSphTermSetup & tSetup )
+ExtRanker_c::ExtRanker_c ( const XQNode_t * pRoot, const CSphTermSetup & tSetup )
 {
 	m_iInlineRowitems = ( tSetup.m_eDocinfo==SPH_DOCINFO_INLINE ) ? tSetup.m_tMin.m_iRowitems : 0;
 	for ( int i=0; i<ExtNode_i::MAX_DOCS; i++ )
@@ -13601,10 +13598,10 @@ int ExtRanker_MatchAny_c::GetMatches ( int iFields, const int * pWeights )
 
 //////////////////////////////////////////////////////////////////////////
 
-void CSphIndex_VLN::CheckExtendedQuery ( const CSphExtendedQueryNode * pNode, CSphQueryResult * pResult ) const
+void CSphIndex_VLN::CheckExtendedQuery ( const XQNode_t * pNode, CSphQueryResult * pResult ) const
 {
-	ARRAY_FOREACH ( i, pNode->m_tAtom.m_dWords )
-		CheckQueryWord ( pNode->m_tAtom.m_dWords [i].m_sWord.cstr (), pResult );
+	ARRAY_FOREACH ( i, pNode->m_dWords )
+		CheckQueryWord ( pNode->m_dWords [i].m_sWord.cstr(), pResult );
 
 	ARRAY_FOREACH ( i, pNode->m_dChildren )
 		CheckExtendedQuery ( pNode->m_dChildren [i], pResult );
@@ -13614,7 +13611,7 @@ void CSphIndex_VLN::CheckExtendedQuery ( const CSphExtendedQueryNode * pNode, CS
 bool CSphIndex_VLN::SetupMatchExtended ( const CSphQuery * pQuery, CSphQueryResult * pResult, const CSphTermSetup & tTermSetup )
 {
 	// parse query
-	CSphExtendedQuery tParsed;
+	XQQuery_t tParsed;
 	if ( !sphParseExtendedQuery ( tParsed, pQuery->m_sQuery.cstr(), tTermSetup.m_pIndex->GetTokenizer (),
 		&m_tSchema, tTermSetup.m_pDict ) )
 	{

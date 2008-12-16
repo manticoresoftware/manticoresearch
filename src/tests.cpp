@@ -601,41 +601,40 @@ void BenchExpr ()
 
 //////////////////////////////////////////////////////////////////////////
 
-CSphString ReconstructNode ( const CSphExtendedQueryNode * pNode, const CSphSchema & tSchema )
+CSphString ReconstructNode ( const XQNode_t * pNode, const CSphSchema & tSchema )
 {
 	CSphString sRes ( "" );
 
 	if ( pNode->IsPlain() )
 	{
 		// say just words to me
-		const CSphExtendedQueryAtom & tAtom = pNode->m_tAtom;
-		const CSphVector<CSphExtendedQueryAtomWord> & dWords = tAtom.m_dWords;
+		const CSphVector<XQKeyword_t> & dWords = pNode->m_dWords;
 		ARRAY_FOREACH ( i, dWords )
 			sRes.SetSprintf ( "%s %s", sRes.cstr(), dWords[i].m_sWord.cstr() );
 		sRes.Chop ();
 
-		if ( tAtom.m_bQuorum || tAtom.m_iMaxDistance>0 )
+		if ( pNode->m_bQuorum || pNode->m_iMaxDistance>0 )
 		{
-			sRes.SetSprintf ( "\"%s\"%c%d", sRes.cstr(), tAtom.m_bQuorum ? '/' : '~', tAtom.m_iMaxDistance ); // quorum or proximity
+			sRes.SetSprintf ( "\"%s\"%c%d", sRes.cstr(), pNode->m_bQuorum ? '/' : '~', pNode->m_iMaxDistance ); // quorum or proximity
 		} else if ( dWords.GetLength()>1 )
 		{
-			if ( tAtom.m_iMaxDistance==0 )
+			if ( pNode->m_iMaxDistance==0 )
 				sRes.SetSprintf ( "\"%s\"", sRes.cstr() ); // phrase
 			else
 				sRes.SetSprintf ( "%s", sRes.cstr() ); // just bag of words
 		}
 
-		if ( tAtom.m_uFields!=0xFFFFFFFFUL )
+		if ( pNode->m_uFieldMask!=0xFFFFFFFFUL )
 		{
 			CSphString sFields ( "" );
 			for ( int i=0; i<32; i++ )
-				if ( tAtom.m_uFields & (1<<i) )
+				if ( pNode->m_uFieldMask & (1<<i) )
 					sFields.SetSprintf ( "%s,%s", sFields.cstr(), tSchema.m_dFields[i].m_sName.cstr() );
 
 			sRes.SetSprintf ( "( @%s: %s )", sFields.cstr()+1, sRes.cstr() );
 		} else
 		{
-			if ( !tAtom.m_bQuorum && tAtom.m_iMaxDistance<0 && dWords.GetLength()>1 )
+			if ( !pNode->m_bQuorum && pNode->m_iMaxDistance<0 && dWords.GetLength()>1 )
 				sRes.SetSprintf ( "( %s )", sRes.cstr() ); // wrap bag of words
 		}
 
@@ -731,7 +730,7 @@ void TestQueryParser ()
 	{
 		printf ( "testing query parser, test %d/%d... ", i+1, nTests );
 
-		CSphExtendedQuery tQuery;
+		XQQuery_t tQuery;
 		sphParseExtendedQuery ( tQuery, dTest[i].m_sQuery, pTokenizer.Ptr(), &tSchema, pDict.Ptr() );
 
 		CSphString sReconst = ReconstructNode ( tQuery.m_pRoot, tSchema );

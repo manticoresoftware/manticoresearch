@@ -11,7 +11,6 @@
 // EXTENEDED PARSER RELOADED
 //////////////////////////////////////////////////////////////////////////
 
-typedef CSphExtendedQueryNode XQNode_t;
 #include "yysphinxquery.h"
 
 //////////////////////////////////////////////////////////////////////////
@@ -23,7 +22,7 @@ public:
 					~XQParser_t () {}
 
 public:
-	bool			Parse ( CSphExtendedQuery & tQuery, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict );
+	bool			Parse ( XQQuery_t & tQuery, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict );
 
 	bool			Error ( const char * sTemplate, ... );
 	void			Warning ( const char * sTemplate, ... );
@@ -38,14 +37,14 @@ public:
 	XQNode_t *		AddKeyword ( const char * sKeyword );
 	XQNode_t *		AddKeywordFromInt ( int iValue, bool bKeyword );
 	XQNode_t *		AddKeyword ( XQNode_t * pLeft, XQNode_t * pRight );
-	XQNode_t *		AddOp ( ESphExtendedQueryOperator eOp, XQNode_t * pLeft, XQNode_t * pRight );
+	XQNode_t *		AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pRight );
 
 	void			Cleanup ();
 	XQNode_t *		SweepNulls ( XQNode_t * pNode );
 	bool			FixupNots ( XQNode_t * pNode );
 
 public:
-	CSphExtendedQuery *		m_pParsed;
+	XQQuery_t *				m_pParsed;
 
 	BYTE *					m_sQuery;
 	int						m_iQueryLen;
@@ -86,7 +85,7 @@ void yyerror ( XQParser_t * pParser, const char * sMessage )
 
 //////////////////////////////////////////////////////////////////////////
 
-void CSphExtendedQueryNode::SetFieldSpec ( DWORD uMask, int iMaxPos )
+void XQNode_t::SetFieldSpec ( DWORD uMask, int iMaxPos )
 {
 	// set it, if we do not yet have one
 	if ( !m_bFieldSpec )
@@ -94,12 +93,6 @@ void CSphExtendedQueryNode::SetFieldSpec ( DWORD uMask, int iMaxPos )
 		m_bFieldSpec = true;
 		m_uFieldMask = uMask;
 		m_iFieldMaxPos = iMaxPos;
-
-		if ( IsPlain() )
-		{
-			m_tAtom.m_uFields = uMask;
-			m_tAtom.m_iMaxFieldPos = iMaxPos;
-		}
 	}
 
 	// some of the children might not yet have a spec, even if the node itself has
@@ -465,10 +458,10 @@ void XQParser_t::AddQuery ( XQNode_t * pNode )
 
 XQNode_t * XQParser_t::AddKeyword ( const char * sKeyword )
 {
-	CSphExtendedQueryAtomWord tAW ( sKeyword, m_iAtomPos );
+	XQKeyword_t tAW ( sKeyword, m_iAtomPos );
 
 	XQNode_t * pNode = new XQNode_t();
-	pNode->m_tAtom.m_dWords.Add ( tAW );
+	pNode->m_dWords.Add ( tAW );
 
 	m_dSpawned.Add ( pNode );
 	return pNode;
@@ -492,16 +485,16 @@ XQNode_t * XQParser_t::AddKeyword ( XQNode_t * pLeft, XQNode_t * pRight )
 
 	assert ( pLeft->IsPlain() );
 	assert ( pRight->IsPlain() );
-	assert ( pRight->m_tAtom.m_dWords.GetLength()==1 );
+	assert ( pRight->m_dWords.GetLength()==1 );
 
-	pLeft->m_tAtom.m_dWords.Add ( pRight->m_tAtom.m_dWords[0] );
+	pLeft->m_dWords.Add ( pRight->m_dWords[0] );
 	m_dSpawned.RemoveValue ( pRight );
 	SafeDelete ( pRight );
 	return pLeft;
 }
 
 
-XQNode_t * XQParser_t::AddOp ( ESphExtendedQueryOperator eOp, XQNode_t * pLeft, XQNode_t * pRight )
+XQNode_t * XQParser_t::AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pRight )
 {
 	/////////
 	// unary
@@ -563,11 +556,11 @@ XQNode_t * XQParser_t::SweepNulls ( XQNode_t * pNode )
 	// sweep plain node
 	if ( pNode->IsPlain() )
 	{
-		ARRAY_FOREACH ( i, pNode->m_tAtom.m_dWords )
-			if ( pNode->m_tAtom.m_dWords[i].m_sWord.cstr()==NULL )
-				pNode->m_tAtom.m_dWords.Remove ( i-- );
+		ARRAY_FOREACH ( i, pNode->m_dWords )
+			if ( pNode->m_dWords[i].m_sWord.cstr()==NULL )
+				pNode->m_dWords.Remove ( i-- );
 
-		if ( pNode->m_tAtom.m_dWords.GetLength()==0 )
+		if ( pNode->m_dWords.GetLength()==0 )
 		{
 			m_dSpawned.RemoveValue ( pNode ); // OPTIMIZE!
 			SafeDelete ( pNode );
@@ -681,14 +674,14 @@ bool XQParser_t::FixupNots ( XQNode_t * pNode )
 }
 
 
-static void DeleteNodesWOFields ( CSphExtendedQueryNode * pNode )
+static void DeleteNodesWOFields ( XQNode_t * pNode )
 {
 	if ( !pNode )
 		return;
 
 	for ( int i = 0; i < pNode->m_dChildren.GetLength (); )
 	{
-		if ( pNode->m_dChildren [i]->m_tAtom.m_uFields == 0 )
+		if ( pNode->m_dChildren [i]->m_uFieldMask==0 )
 		{
 			// this should be a leaf node
 			assert ( pNode->m_dChildren [i]->m_dChildren.GetLength () == 0 );
@@ -704,7 +697,7 @@ static void DeleteNodesWOFields ( CSphExtendedQueryNode * pNode )
 }
 
 
-bool XQParser_t::Parse ( CSphExtendedQuery & tParsed, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict )
+bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict )
 {
 	CSphScopedPtr<ISphTokenizer> pMyTokenizer ( pTokenizer->Clone ( true ) );
 	pMyTokenizer->AddSpecials ( "()|-!@~\"/^$<" );
@@ -807,7 +800,7 @@ static void xqDump ( CSphExtendedQueryNode * pNode, const CSphSchema & tSch, int
 #endif
 
 
-bool sphParseExtendedQuery ( CSphExtendedQuery & tParsed, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict )
+bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict )
 {
 	XQParser_t qp;
 	bool bRes = qp.Parse ( tParsed, sQuery, pTokenizer, pSchema, pDict );

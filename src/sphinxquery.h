@@ -19,58 +19,20 @@
 //////////////////////////////////////////////////////////////////////////////
 
 /// extended query word with attached position within atom
-struct CSphExtendedQueryAtomWord
+struct XQKeyword_t
 {
 	CSphString	m_sWord;
 	int			m_iAtomPos;
-	int			m_iFieldPos;	///< specific position within field, INT_MAX means no limit
 	bool		m_bFieldStart;	///< must occur at very start
 	bool		m_bFieldEnd;	///< must occur at very end
 
-	CSphExtendedQueryAtomWord () : m_iAtomPos ( -1 ), m_bFieldStart ( false ), m_bFieldEnd ( false ) {}
-	CSphExtendedQueryAtomWord ( const char * sWord, int iPos ) : m_sWord ( sWord ), m_iAtomPos ( iPos ), m_bFieldStart ( false ), m_bFieldEnd ( false ) {}
-};
-
-
-/// extended query atom
-/// atom is a list of required query words with field and proximity constraints
-struct CSphExtendedQueryAtom
-{
-	CSphVector<CSphExtendedQueryAtomWord>	m_dWords;
-	DWORD		m_uFields;
-	int			m_iMaxFieldPos;		/// max acceptable position within field; 0 means no limit
-	int			m_iMaxDistance;
-	bool		m_bQuorum;
-
-	/// default ctor
-	CSphExtendedQueryAtom ()
-		: m_uFields		( 0xFFFFFFFF )
-		, m_iMaxFieldPos( 0 )
-		, m_iMaxDistance( -1 )
-		, m_bQuorum		( false )
-	{}
-
-	/// default dtor
-	virtual ~CSphExtendedQueryAtom () {}
-
-	/// clears but does NOT free everything
-	/// NOTE: preserves field ID!
-	virtual void Reset ()
-	{
-		m_dWords.Reset ();
-		m_iMaxDistance = -1;
-	}
-
-	/// check if we're empty
-	bool IsEmpty () const
-	{
-		return m_dWords.GetLength()==0;
-	}
+	XQKeyword_t () : m_iAtomPos ( -1 ), m_bFieldStart ( false ), m_bFieldEnd ( false ) {}
+	XQKeyword_t ( const char * sWord, int iPos ) : m_sWord ( sWord ), m_iAtomPos ( iPos ), m_bFieldStart ( false ), m_bFieldEnd ( false ) {}
 };
 
 
 /// extended query operator
-enum ESphExtendedQueryOperator
+enum XQOperator_e
 {
 	SPH_QUERY_AND,
 	SPH_QUERY_OR,
@@ -83,27 +45,34 @@ enum ESphExtendedQueryOperator
 /// extended query node
 /// plain nodes are just an atom
 /// non-plain nodes are a logical function over children nodes
-struct CSphExtendedQueryNode : public ISphNoncopyable
+struct XQNode_t : public ISphNoncopyable
 {
-	CSphExtendedQueryNode *					m_pParent;		///< my parent node (NULL for root ones)
-	CSphExtendedQueryAtom					m_tAtom;		///< plain node atom
-	ESphExtendedQueryOperator				m_eOp;			///< operation over childen
-	CSphVector<CSphExtendedQueryNode*>		m_dChildren;	///< non-plain node children
+	XQNode_t *				m_pParent;		///< my parent node (NULL for root ones)
+	XQOperator_e			m_eOp;			///< operation over childen
+	CSphVector<XQNode_t*>	m_dChildren;	///< non-plain node children
 
-	bool									m_bFieldSpec;	///< whether field spec was already explicitly set
-	DWORD									m_uFieldMask;	///< fields mask (spec part)
-	int										m_iFieldMaxPos;	///< max position within field (spec part)
+	bool					m_bFieldSpec;	///< whether field spec was already explicitly set
+	DWORD					m_uFieldMask;	///< fields mask (spec part)
+	int						m_iFieldMaxPos;	///< max position within field (spec part)
+
+	CSphVector<XQKeyword_t>	m_dWords;		///< query words (plain node)
+	int						m_iMaxDistance;	///< proximity distance or quorum length; 0 or less if not proximity/quorum node
+	bool					m_bQuorum;		///< quorum node flag
 
 public:
 	/// ctor
-	CSphExtendedQueryNode ()
+	XQNode_t ()
 		: m_pParent ( NULL )
 		, m_eOp ( SPH_QUERY_AND )
 		, m_bFieldSpec ( false )
+		, m_uFieldMask ( 0xFFFFFFFFUL )
+		, m_iFieldMaxPos ( 0 )
+		, m_iMaxDistance ( -1 )
+		, m_bQuorum ( false )
 	{}
 
 	/// dtor
-	~CSphExtendedQueryNode ()
+	~XQNode_t ()
 	{
 		ARRAY_FOREACH ( i, m_dChildren )
 			SafeDelete ( m_dChildren[i] );
@@ -112,13 +81,14 @@ public:
 	/// check if i'm empty
 	bool IsEmpty () const
 	{
-		assert ( m_tAtom.IsEmpty() || m_dChildren.GetLength()==0 );
-		return m_tAtom.IsEmpty() && ( m_dChildren.GetLength()==0 );
+		assert ( m_dWords.GetLength()==0 || m_dChildren.GetLength()==0 );
+		return m_dWords.GetLength()==0 && m_dChildren.GetLength()==0;
 	}
 
 	/// check if i'm plain
 	bool IsPlain () const
 	{
+		assert ( m_dWords.GetLength()==0 || m_dChildren.GetLength()==0 );
 		return m_dChildren.GetLength()==0;
 	}
 
@@ -128,20 +98,20 @@ public:
 
 
 /// extended query
-struct CSphExtendedQuery : public ISphNoncopyable
+struct XQQuery_t : public ISphNoncopyable
 {
-	CSphString					m_sParseError;
-	CSphString					m_sParseWarning;
-	CSphExtendedQueryNode *		m_pRoot;
+	CSphString	m_sParseError;
+	CSphString	m_sParseWarning;
+	XQNode_t *	m_pRoot;
 
 	/// ctor
-	CSphExtendedQuery ()
+	XQQuery_t ()
 	{
-		m_pRoot = new CSphExtendedQueryNode ();
+		m_pRoot = new XQNode_t ();
 	}
 
 	/// dtor
-	~CSphExtendedQuery ()
+	~XQQuery_t ()
 	{
 		SafeDelete ( m_pRoot );
 	}
@@ -152,7 +122,7 @@ struct CSphExtendedQuery : public ISphNoncopyable
 /// parses the query and returns the resulting tree
 /// return false and fills tQuery.m_sParseError on error
 /// WARNING, parsed tree might be NULL (eg. if query was empty)
-bool	sphParseExtendedQuery ( CSphExtendedQuery & tQuery, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict );
+bool	sphParseExtendedQuery ( XQQuery_t & tQuery, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict );
 
 #endif // _sphinxquery_
 

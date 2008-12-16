@@ -51,9 +51,9 @@ rawkeyword:
 
 keyword:
 	rawkeyword
-	| rawkeyword '$'					{ $$ = $1; assert ( $$->IsPlain() && $$->m_tAtom.m_dWords.GetLength()==1 ); $$->m_tAtom.m_dWords[0].m_bFieldEnd = true; }
-	| '^' rawkeyword					{ $$ = $2; assert ( $$->IsPlain() && $$->m_tAtom.m_dWords.GetLength()==1 ); $$->m_tAtom.m_dWords[0].m_bFieldStart = true; }
-	| '^' rawkeyword '$'				{ $$ = $2; assert ( $$->IsPlain() && $$->m_tAtom.m_dWords.GetLength()==1 ); $$->m_tAtom.m_dWords[0].m_bFieldStart = true; $$->m_tAtom.m_dWords[0].m_bFieldEnd = true; }
+	| rawkeyword '$'					{ $$ = $1; assert ( $$->IsPlain() && $$->m_dWords.GetLength()==1 ); $$->m_dWords[0].m_bFieldEnd = true; }
+	| '^' rawkeyword					{ $$ = $2; assert ( $$->IsPlain() && $$->m_dWords.GetLength()==1 ); $$->m_dWords[0].m_bFieldStart = true; }
+	| '^' rawkeyword '$'				{ $$ = $2; assert ( $$->IsPlain() && $$->m_dWords.GetLength()==1 ); $$->m_dWords[0].m_bFieldStart = true; $$->m_dWords[0].m_bFieldEnd = true; }
 	;
 
 phrasetoken:
@@ -77,9 +77,9 @@ atom:
 	| '"' '"'							{ $$ = NULL; }
 	| '"' '"' '~' TOK_INT				{ $$ = NULL; }
 	| '"' '"' '/' TOK_INT				{ $$ = NULL; }
-	| '"' phrase '"'					{ $$ = $2; if ( $$ ) { assert ( $$->IsPlain() ); $$->m_tAtom.m_iMaxDistance = 0; } }
-	| '"' phrase '"' '~' TOK_INT		{ $$ = $2; if ( $$ ) { assert ( !$$ || $$->IsPlain() ); $$->m_tAtom.m_iMaxDistance = $5.iValue; $$->m_tAtom.m_bQuorum = false; } }
-	| '"' phrase '"' '/' TOK_INT		{ $$ = $2; if ( $$ ) { assert ( !$$ || $$->IsPlain() ); $$->m_tAtom.m_iMaxDistance = $5.iValue; $$->m_tAtom.m_bQuorum = true; } }
+	| '"' phrase '"'					{ $$ = $2; if ( $$ ) { assert ( $$->IsPlain() ); $$->m_iMaxDistance = 0; } }
+	| '"' phrase '"' '~' TOK_INT		{ $$ = $2; if ( $$ ) { assert ( !$$ || $$->IsPlain() ); $$->m_iMaxDistance = $5.iValue; $$->m_bQuorum = false; } }
+	| '"' phrase '"' '/' TOK_INT		{ $$ = $2; if ( $$ ) { assert ( !$$ || $$->IsPlain() ); $$->m_iMaxDistance = $5.iValue; $$->m_bQuorum = true; } }
 	| '(' expr ')'						{ $$ = $2; $2->m_bFieldSpec = false; }
 	;
 

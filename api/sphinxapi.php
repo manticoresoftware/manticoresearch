@@ -1566,7 +1566,7 @@ class SphinxClient
 
 		$req = pack ( "nnNN", SEARCHD_COMMAND_STATUS, VER_COMMAND_STATUS, 4, 1 ); // len=4, body=1
 		if ( !( $this->_Send ( $fp, $req, 12 ) ) ||
-			 !( $response = $this->_GetResponse ( $fp, VER_COMMAND_KEYWORDS ) ) )
+			 !( $response = $this->_GetResponse ( $fp, VER_COMMAND_STATUS ) ) )
 		{
 			$this->_MBPop ();
 			return false;

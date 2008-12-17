@@ -3587,11 +3587,10 @@ void SetupKillListFilter ( CSphFilterSettings & tFilter, const SphAttr_t * pKill
 class SearchHandler_c
 {
 public:
-									SearchHandler_c ( int iQueries, int iClientVer );
+									SearchHandler_c ( int iQueries );
 	void							RunQueries ();					///< run all queries, get all results
 
 public:
-	int								m_iClientVer;					///< client version
 	CSphVector<CSphQuery>			m_dQueries;						///< queries which i need to search
 	CSphVector<AggrResult_t>		m_dResults;						///< results which i obtained
 	SearchFailuresLogset_c			m_dFailuresSet;					///< failure logs for each query
@@ -3601,9 +3600,8 @@ protected:
 };
 
 
-SearchHandler_c::SearchHandler_c ( int iQueries, int iClientVer )
+SearchHandler_c::SearchHandler_c ( int iQueries )
 {
-	m_iClientVer = iClientVer;
 	m_dQueries.Resize ( iQueries );
 	m_dResults.Resize ( iQueries );
 	m_dFailuresSet.SetSize ( iQueries );
@@ -4247,7 +4245,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	}
 
 	// create handler
-	SearchHandler_c tHandler ( iQueries, iVer );
+	SearchHandler_c tHandler ( iQueries );
 
 	// parse all queries to handler
 	ARRAY_FOREACH ( i, tHandler.m_dQueries )

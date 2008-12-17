@@ -215,7 +215,8 @@ enum SearchdCommand_e
 	SEARCHD_COMMAND_KEYWORDS	= 3,
 	SEARCHD_COMMAND_PERSIST		= 4,
 	SEARCHD_COMMAND_STATUS		= 5,
-	
+	SEARCHD_COMMAND_QUERY		= 6,
+
 	SEARCHD_COMMAND_TOTAL
 };
 
@@ -227,7 +228,8 @@ enum
 	VER_COMMAND_EXCERPT		= 0x100,
 	VER_COMMAND_UPDATE		= 0x102,
 	VER_COMMAND_KEYWORDS	= 0x100,
-	VER_COMMAND_STATUS		= 0x100
+	VER_COMMAND_STATUS		= 0x100,
+	VER_COMMAND_QUERY		= 0x100
 };
 
 
@@ -4224,44 +4226,9 @@ bool CheckCommandVersion ( int iVer, int iDaemonVersion, InputBuffer_c & tReq )
 }
 
 
-void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
+void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int iSock, int iVer )
 {
-	if ( !CheckCommandVersion ( iVer, VER_COMMAND_SEARCH, tReq ) )
-		return;
-
-	/////////////////
-	// parse request
-	/////////////////
-
-	int iQueries = 1;
-	if ( iVer>=0x10D )
-		iQueries = tReq.GetDword ();
-
-	const int MAX_QUERIES = 32;
-	if ( iQueries<=0 || iQueries>MAX_QUERIES )
-	{
-		tReq.SendErrorReply ( "bad multi-query count %d (must be in 1..%d range)", iQueries, MAX_QUERIES );
-		return;
-	}
-
-	// create handler
-	SearchHandler_c tHandler ( iQueries );
-
-	// parse all queries to handler
-	ARRAY_FOREACH ( i, tHandler.m_dQueries )
-		if ( !ParseSearchQuery ( tReq, tHandler.m_dQueries[i], iVer ) )
-			return;		
-
-	///////////////////
-	// run all queries
-	///////////////////
-
-	tHandler.RunQueries ();
-
-	//////////////////////
 	// serve the response
-	//////////////////////
-
 	NetOutputBuffer_c tOut ( iSock );
 	int iReplyLen = 0;
 
@@ -4304,12 +4271,166 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	tOut.Flush ();
 	assert ( tOut.GetError()==true || tOut.GetSentCount()==iReplyLen+8 );
 
-	////////////
 	// clean up
-	////////////
-
 	ARRAY_FOREACH ( i, tHandler.m_dQueries )
 		SafeDeleteArray ( tHandler.m_dQueries[i].m_pWeights );
+}
+
+
+void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
+{
+	if ( !CheckCommandVersion ( iVer, VER_COMMAND_SEARCH, tReq ) )
+		return;
+
+	// parse request
+	int iQueries = 1;
+	if ( iVer>=0x10D )
+		iQueries = tReq.GetDword ();
+
+	const int MAX_QUERIES = 32;
+	if ( iQueries<=0 || iQueries>MAX_QUERIES )
+	{
+		tReq.SendErrorReply ( "bad multi-query count %d (must be in 1..%d range)", iQueries, MAX_QUERIES );
+		return;
+	}
+
+	SearchHandler_c tHandler ( iQueries );
+	ARRAY_FOREACH ( i, tHandler.m_dQueries )
+		if ( !ParseSearchQuery ( tReq, tHandler.m_dQueries[i], iVer ) )
+			return;
+
+	// run queries, send response
+	tHandler.RunQueries ();
+	SendSearchResponse ( tHandler, tReq, iSock, iVer );
+}
+
+//////////////////////////////////////////////////////////////////////////
+// SQL PARSER
+//////////////////////////////////////////////////////////////////////////
+
+struct SqlNode_t
+{
+	int						m_iStart;
+	int						m_iEnd;
+	CSphString				m_sValue;
+	int64_t					m_iValue;
+	CSphVector<SphAttr_t>	m_dValues;
+};
+#define YYSTYPE SqlNode_t
+
+
+struct SqlParser_t
+{
+	const char *	m_pBuf;
+	const char *	m_pLastTokenStart;
+	CSphString *	m_pParseError;
+	CSphQuery *		m_pQuery;
+};
+
+
+void SqlUnescape ( CSphString & sRes, const char * sEscaped, int iLen )
+{
+	assert ( iLen>=2 );
+	assert ( sEscaped[0]=='\'' );
+	assert ( sEscaped[iLen-1]=='\'' );
+
+	// skip heading and trailing quotes
+	const char * s = sEscaped+1; 
+	const char * sMax = s+iLen-2;
+
+	sRes.Reserve ( iLen );
+	char * d = (char*) sRes.cstr();
+
+	while ( s<sMax )
+	{
+		if ( s[0]=='\\' && s[1]=='\'' )
+		{
+			*d++ = '\'';
+			s += 2;
+		} else
+		{
+			*d++ = *s++;
+		}
+	}
+
+	*d++ = '\0';
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+// unused parameter, simply to avoid type clash between all my yylex() functions
+#define YY_DECL int yylex ( YYSTYPE * lvalp, SqlParser_t * pParser )
+#include "llsphinxql.c"
+
+void yyerror ( SqlParser_t * pParser, const char * sMessage )
+{
+	if ( pParser->m_pParseError )
+		pParser->m_pParseError->SetSprintf ( "%s near '%s'", sMessage, pParser->m_pLastTokenStart ? pParser->m_pLastTokenStart : "(null)" );
+}
+
+#include "yysphinxql.c"
+
+bool ParseSqlQuery ( const CSphString & sQuery, CSphQuery & tQuery, CSphString & sError )
+{
+	SqlParser_t tParser;
+	tParser.m_pBuf = sQuery.cstr();
+	tParser.m_pLastTokenStart = NULL;
+	tParser.m_pParseError = &sError;
+	tParser.m_pQuery = &tQuery;
+
+	tQuery.m_eMode = SPH_MATCH_EXTENDED2; // only new and shiny matching and sorting
+	tQuery.m_eSort = SPH_SORT_EXTENDED;
+	tQuery.m_sSortBy = "@weight desc"; // default order
+	tQuery.m_sOrderBy = "@weight desc";
+
+	YY_BUFFER_STATE tLexerBuffer = yy_scan_string ( sQuery.cstr() );
+	int iRes = yyparse ( &tParser );
+	yy_delete_buffer ( tLexerBuffer );
+
+	// result-set order affects (legacy)
+	if ( tQuery.m_sGroupBy.IsEmpty() )
+		tQuery.m_sSortBy = tQuery.m_sOrderBy;
+	else
+		tQuery.m_sGroupSortBy = tQuery.m_sOrderBy;
+
+	return iRes==0;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+void HandleCommandQuery ( int iSock, int iVer, InputBuffer_c & tReq )
+{
+	if ( !CheckCommandVersion ( iVer, VER_COMMAND_QUERY, tReq ) )
+		return;
+
+	// parse request packet
+	DWORD uResponseVer = tReq.GetDword(); // how shall we pack the response packet?
+	CSphString sQuery = tReq.GetString(); // what is our query?
+
+	// check for errors
+	if ( uResponseVer<0x100 || uResponseVer>VER_COMMAND_SEARCH )
+	{
+		tReq.SendErrorReply ( "unsupported search response format v.%d.%d requested", uResponseVer>>8, uResponseVer&0xff );
+		return;
+	}
+	if ( tReq.GetError() )
+	{
+		tReq.SendErrorReply ( "invalid or truncated request" );
+		return;
+	}
+
+	// parse SQL query
+	SearchHandler_c tHandler ( 1 );
+	CSphString sError;
+	if ( !ParseSqlQuery ( sQuery, tHandler.m_dQueries[0], sError ) )
+	{
+		tReq.SendErrorReply ( "%s", sError.cstr() );
+		return;
+	}
+
+	// do the dew
+	tHandler.RunQueries ();
+	SendSearchResponse ( tHandler, tReq, iSock, uResponseVer );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -4878,7 +4999,7 @@ void HandleClient ( int iSock, const char * sClientIP, int iPipeFD )
 		assert ( iLength>0 && iLength<=g_iMaxPacketSize );
 		if ( !tBuf.ReadFrom ( iLength ) )
 		{
-			sphWarning ( "failed to receive client request body (client=%s)", sClientIP );
+			sphWarning ( "failed to receive client request body (client=%s, exp=%d)", sClientIP, iLength );
 			return;
 		}
 
@@ -4898,6 +5019,7 @@ void HandleClient ( int iSock, const char * sClientIP, int iPipeFD )
 			case SEARCHD_COMMAND_UPDATE:	HandleCommandUpdate ( iSock, iCommandVer, tBuf, iPipeFD ); break;
 			case SEARCHD_COMMAND_PERSIST:	bPersist = ( tBuf.GetInt()!=0 ); iTimeout = g_iClientTimeout; break;
 			case SEARCHD_COMMAND_STATUS:	HandleCommandStatus ( iSock, iCommandVer, tBuf ); break;
+			case SEARCHD_COMMAND_QUERY:		HandleCommandQuery ( iSock, iCommandVer, tBuf ); break;
 			default:						assert ( 0 && "INTERNAL ERROR: unhandled command" ); break;
 		}
 	} while ( bPersist );

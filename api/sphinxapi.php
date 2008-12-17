@@ -24,6 +24,7 @@ define ( "SEARCHD_COMMAND_UPDATE",	2 );
 define ( "SEARCHD_COMMAND_KEYWORDS",3 );
 define ( "SEARCHD_COMMAND_PERSIST",	4 );
 define ( "SEARCHD_COMMAND_STATUS",	5 );
+define ( "SEARCHD_COMMAND_QUERY",	6 );
 
 /// current client-side command implementation versions
 define ( "VER_COMMAND_SEARCH",		0x116 );
@@ -31,6 +32,7 @@ define ( "VER_COMMAND_EXCERPT",		0x100 );
 define ( "VER_COMMAND_UPDATE",		0x102 );
 define ( "VER_COMMAND_KEYWORDS",	0x100 );
 define ( "VER_COMMAND_STATUS",		0x100 );
+define ( "VER_COMMAND_QUERY",		0x100 );
 
 /// known searchd status codes
 define ( "SEARCHD_OK",				0 );
@@ -1063,10 +1065,7 @@ class SphinxClient
 			return false;
 		}
 
-		////////////////////////////
 		// send query, get response
-		////////////////////////////
-
 		$nreqs = count($this->_reqs);
 		$req = join ( "", $this->_reqs );
 		$len = 4+strlen($req);
@@ -1079,12 +1078,16 @@ class SphinxClient
 			return false;
 		}
 
+		// query sent ok; we can reset reqs now
 		$this->_reqs = array ();
 
-		//////////////////
-		// parse response
-		//////////////////
+		// parse and return response
+		return $this->_ParseSearchResponse ( $response, $nreqs );
+	}
 
+	/// parse and return search query (or queries) response
+	function _ParseSearchResponse ( $response, $nreqs )
+	{
 		$p = 0; // current position
 		$max = strlen($response); // max position for checks, to protect against broken responses
 
@@ -1575,6 +1578,33 @@ class SphinxClient
 		$res = substr ( $response, 4 ); // just ignore length, error handling, etc
 		$this->_MBPop ();
 		return $res;
+	}
+
+	//////////////////////////////////////////////////////////////////////////
+	// sphinxql query
+	//////////////////////////////////////////////////////////////////////////
+
+	function SqlQuery ( $query )
+	{
+		$this->_MBPush ();
+		if (!( $fp = $this->_Connect() ))
+		{
+			$this->_MBPop();
+			return false;
+		}
+
+		$len = strlen($query);
+		$req = pack ( "nnNNN", SEARCHD_COMMAND_QUERY, VER_COMMAND_QUERY, 8+$len, VER_COMMAND_SEARCH, $len ) . $query;
+		if ( !( $this->_Send ( $fp, $req, 16+$len ) ) ||
+			 !( $response = $this->_GetResponse ( $fp, VER_COMMAND_QUERY ) ) )
+		{
+			$this->_MBPop ();
+			return false;
+		}
+
+		// parse and return response
+		$results = $this->_ParseSearchResponse ( $response, 1 );
+		return $results[0];
 	}
 }
 

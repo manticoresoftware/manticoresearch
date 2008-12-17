@@ -1711,6 +1711,7 @@ public:
 	CSphVector<CSphAttrOverride>	m_dOverrides;	///< per-query attribute value overrides
 
 	CSphString		m_sSelect;			///< select-list (attributes and/or expressions)
+	CSphString		m_sOrderBy;			///< order-by clause
 
 public:
 	int				m_iOldVersion;		///< version, to fixup old queries

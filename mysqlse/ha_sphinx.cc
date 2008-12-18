@@ -27,6 +27,7 @@
 	// UNIX-specific
 	#include <my_net.h>
 	#include <netdb.h>
+	#include <sys/un.h>
 
 	#define	RECV_FLAGS	MSG_WAITALL
 #else
@@ -123,7 +124,7 @@ enum
 {
 	SPHINX_SEARCHD_PROTO	= 1,
 	SEARCHD_COMMAND_SEARCH	= 0,
-	VER_COMMAND_SEARCH		= 0x113,
+	VER_COMMAND_SEARCH		= 0x116,
 };
 
 /// search query sorting orders
@@ -184,6 +185,7 @@ enum
 	SPH_ATTR_ORDINAL	= 3,			///< this attr is an ordinal string number (integer at search time, specially handled at indexing time)
 	SPH_ATTR_BOOL		= 4,			///< this attr is a boolean bit field
 	SPH_ATTR_FLOAT		= 5,
+	SPH_ATTR_BIGINT		= 6,
 
 	SPH_ATTR_MULTI		= 0x40000000UL	///< this attr has multiple values (0 or more)
 };
@@ -494,6 +496,21 @@ private:
 
 	char *			m_sComment;
 
+	struct Override_t
+	{
+		union Value_t
+		{
+			uint32		m_uValue;
+			longlong	m_iValue64;
+			float		m_fValue;
+		};
+		char *						m_sName; ///< points to query buffer
+		int							m_iType;
+		Dynamic_array<ulonglong>	m_dIds;
+		Dynamic_array<Value_t>		m_dValues;
+	};
+	Dynamic_array<Override_t *> m_dOverrides;
+
 public:
 	char			m_sParseError[256];
 
@@ -517,6 +534,7 @@ protected:
 	void			SendWord ( short int v )		{ v = ntohs(v); SendBytes ( &v, sizeof(short int) ); }
 	void			SendInt ( int v )				{ v = ntohl(v); SendBytes ( &v, sizeof(int) ); }
 	void			SendDword ( uint v )			{ v = ntohl(v) ;SendBytes ( &v, sizeof(uint) ); }
+	void			SendUint64 ( ulonglong v )		{ SendDword ( v>>32 ); SendDword ( v&0xFFFFFFFF ); }
 	void			SendString ( const char * v )	{ int iLen = strlen(v); SendDword(iLen); SendBytes ( v, iLen ); }
 	void			SendFloat ( float v )			{ SendDword ( sphF2DW(v) ); }
 };
@@ -900,6 +918,8 @@ static void sphLogError ( const char * sFmt, ... )
 //
 // sphinx://host/index
 // sphinx://host:port/index
+// unix://unix/domain/socket:index
+// unix://unix/domain/socket
 static bool ParseUrl ( CSphSEShare * share, TABLE * table, bool bCreate )
 {
 	SPH_ENTER_FUNC();
@@ -951,11 +971,28 @@ static bool ParseUrl ( CSphSEShare * share, TABLE * table, bool bCreate )
 		if ( !sHost )
 			break;
 		sHost[0] = '\0';
-		sHost += 3;
+		sHost += 2;
 
-		if ( strcmp ( sScheme, "sphinx" )!=0 )
+		if ( !strcmp ( sScheme, "unix" ) )
+		{
+			// unix-domain socket
+			iPort = 0;
+			if (!( sIndex = strrchr ( sHost, ':' ) ))
+				sIndex = SPHINXSE_DEFAULT_INDEX;
+			else
+			{
+				*sIndex++ = '\0';
+				if ( !*sIndex )
+					sIndex = SPHINXSE_DEFAULT_INDEX;
+			}
+			bOk = true;
+			break;
+		}
+		if( strcmp ( sScheme, "sphinx" )!=0 && strcmp ( sScheme, "inet" )!=0 )
 			break;
 
+		// tcp
+		sHost++;
 		char * sPort = strchr ( sHost, ':' );
 		if ( sPort )
 		{
@@ -1149,6 +1186,8 @@ CSphSEQuery::~CSphSEQuery ()
 	SafeDeleteArray ( m_sQueryBuffer );
 	SafeDeleteArray ( m_pWeights );
 	SafeDeleteArray ( m_pBuf );
+	for ( int i=0; i<m_dOverrides.elements(); i++ )
+		SafeDelete ( m_dOverrides.at(i) );
 	SPH_VOID_RET();
 }
 
@@ -1522,8 +1561,95 @@ bool CSphSEQuery::ParseField ( char * sField )
 			snprintf ( m_sParseError, sizeof(m_sParseError), "geoanchor: parse error, not enough comma-separated arguments" );
 			SPH_RET(false);
 		}
+	}
+	else if ( !strcmp ( sName, "override" ) ) // name,type,id:value,id:value,...
+	{
+		char * sName = NULL;
+		int iType = 0;
+		CSphSEQuery::Override_t * pOverride = NULL;
 
-	} else
+		// get name and type
+		char * sRest = sValue;
+		do
+		{
+			sName = sRest;
+			if ( !*sName )
+				break;
+			
+			if (!( sRest = strchr ( sRest, ',' ) )) break; *sRest++ = '\0';
+			char * sType = sRest;
+			if (!( sRest = strchr ( sRest, ',' ) )) break;
+			
+			static const struct
+			{
+				const char *	m_sName;
+				int				m_iType;
+			}
+			dAttrTypes[] =
+			{
+				{ "int",		SPH_ATTR_INTEGER },
+				{ "timestamp",	SPH_ATTR_TIMESTAMP },
+				{ "bool",		SPH_ATTR_BOOL },
+				{ "float",		SPH_ATTR_FLOAT },
+				{ "bigint",		SPH_ATTR_BIGINT }
+			};
+			for ( int i=0; i<sizeof(dAttrTypes)/sizeof(*dAttrTypes); i++ )
+				if ( !strncmp( sType, dAttrTypes[i].m_sName, sRest - sType ) )
+				{
+					iType = dAttrTypes[i].m_iType;
+					break;
+				}
+		} while(0);
+
+		// fail
+		if ( !sName || !*sName  || !iType )
+		{
+			snprintf ( m_sParseError, sizeof(m_sParseError), "override: malformed query" );
+			SPH_RET(false);
+		}
+
+		// grab id:value pairs
+		sRest++;
+		while ( sRest )
+		{
+			char * sId = sRest;
+			if (!( sRest = strchr ( sRest, ':' ) )) break; *sRest++ = '\0';
+			if (!( sRest - sId )) break;
+
+			char * sValue = sRest;
+			if (( sRest = strchr ( sRest, ',' ) )) *sRest++ = '\0';
+			if ( !*sValue )
+				break;
+
+			if ( !pOverride )
+			{
+				pOverride = new CSphSEQuery::Override_t;
+				pOverride->m_sName = chop(sName);
+				pOverride->m_iType = iType;
+				m_dOverrides.append(pOverride);
+			}
+
+			ulonglong uId = strtoull ( sId, NULL, 10 );
+			CSphSEQuery::Override_t::Value_t tValue;
+			if ( iType == SPH_ATTR_FLOAT )
+				tValue.m_fValue = (float)atof(sValue);
+			else if ( iType == SPH_ATTR_BIGINT )
+				tValue.m_iValue64 = strtoll ( sValue, NULL, 10 );
+			else
+				tValue.m_uValue = (uint32)strtoul ( sValue, NULL, 10 );
+			
+			pOverride->m_dIds.append ( uId );
+			pOverride->m_dValues.append ( tValue );
+		}
+
+		if ( !pOverride )
+		{
+			snprintf ( m_sParseError, sizeof(m_sParseError), "override: id:value mapping expected" );
+			SPH_RET(false);
+		}
+		SPH_RET(true);
+	}
+	else
 	{
 		snprintf ( m_sParseError, sizeof(m_sParseError), "unknown parameter '%s'", sName );
 		SPH_RET(false);
@@ -1606,7 +1732,17 @@ int CSphSEQuery::BuildRequest ( char ** ppBuffer )
 		iReqSize += 8 + strlen(m_sIndexWeight[i] );
 	for ( int i=0; i<m_iFieldWeights; i++ ) // 1.18+
 		iReqSize += 8 + strlen(m_sFieldWeight[i] );
-
+	// overrides
+	iReqSize += 4;
+	for ( int i=0; i<m_dOverrides.elements(); i++ )
+	{
+		CSphSEQuery::Override_t * pOverride = m_dOverrides.at(i);
+		const uint32 uSize = pOverride->m_iType == SPH_ATTR_BIGINT ? 16 : 12; // id64 + value
+		iReqSize += strlen ( pOverride->m_sName ) + 12 + uSize*pOverride->m_dIds.elements();
+	}
+	// select
+	iReqSize += 4;
+		
 	m_iBufLeft = 0;
 	SafeDeleteArray ( m_pBuf );
 
@@ -1700,6 +1836,29 @@ int CSphSEQuery::BuildRequest ( char ** ppBuffer )
 	}
 	SendString ( m_sComment );
 
+	// overrides
+	SendInt ( m_dOverrides.elements() );
+	for ( int i=0; i<m_dOverrides.elements(); i++ )
+	{
+		CSphSEQuery::Override_t * pOverride = m_dOverrides.at(i);
+		SendString ( pOverride->m_sName );
+		SendDword ( pOverride->m_iType );
+		SendInt ( pOverride->m_dIds.elements() );
+		for ( int j=0; j<pOverride->m_dIds.elements(); j++ )
+		{
+			SendUint64 ( pOverride->m_dIds.at(j) );
+			if ( pOverride->m_iType == SPH_ATTR_FLOAT )
+				SendFloat ( pOverride->m_dValues.at(j).m_fValue );
+			else if ( pOverride->m_iType == SPH_ATTR_BIGINT )
+				SendUint64 ( pOverride->m_dValues.at(j).m_iValue64 );
+			else
+				SendDword ( pOverride->m_dValues.at(j).m_uValue );
+		}
+	}
+
+	// select
+	SendString ( "" );
+
 	// detect buffer overruns and underruns, and report internal error
 	if ( m_bBufOverrun || m_iBufLeft!=0 || m_pCur-m_pBuf!=iReqSize )
 		SPH_RET(-1);
@@ -1784,7 +1943,7 @@ int ha_sphinx::ConnectToSearchd ( const char * sQueryHost, int iQueryPort )
 {
 	SPH_ENTER_METHOD();
 
-	struct sockaddr_in sa;
+	struct sockaddr_storage ss;
 	in_addr_t ip_addr;
 	int version;
 	uint uClientVersion = htonl ( SPHINX_SEARCHD_PROTO );
@@ -1792,41 +1951,50 @@ int ha_sphinx::ConnectToSearchd ( const char * sQueryHost, int iQueryPort )
 	const char * sHost = ( sQueryHost && *sQueryHost ) ? sQueryHost : m_pShare->m_sHost;
 	ushort iPort = iQueryPort ? (ushort)iQueryPort : m_pShare->m_iPort;
 
-	memset ( &sa, 0, sizeof(sa) );
-	sa.sin_family = AF_INET;
-
-	// prepare host address
-	if ( (int)( ip_addr=inet_addr(sHost) ) != (int)INADDR_NONE )
-	{ 
-		memcpy ( &sa.sin_addr, &ip_addr, sizeof(ip_addr) );
-	} else
+	memset ( &ss, 0, sizeof(ss) );
+	if ( iPort )
 	{
-		int tmp_errno;
-		struct hostent tmp_hostent, *hp;
-		char buff2 [ GETHOSTBYNAME_BUFF_SIZE ];
-
-		hp = my_gethostbyname_r ( sHost, &tmp_hostent,
-			buff2, sizeof(buff2), &tmp_errno );
-		if ( !hp )
+		struct sockaddr_in * sin = (struct sockaddr_in *)&ss;
+		sin->sin_family = AF_INET;
+		sin->sin_port = htons(iPort);
+		
+		// prepare host address
+		if ( (int)( ip_addr=inet_addr(sHost) ) != (int)INADDR_NONE )
 		{ 
+			memcpy ( &sin->sin_addr, &ip_addr, sizeof(ip_addr) );
+		} else
+		{
+			int tmp_errno;
+			struct hostent tmp_hostent, *hp;
+			char buff2 [ GETHOSTBYNAME_BUFF_SIZE ];
+			
+			hp = my_gethostbyname_r ( sHost, &tmp_hostent,
+				buff2, sizeof(buff2), &tmp_errno );
+			if ( !hp )
+			{ 
+				my_gethostbyname_r_free();
+				
+				char sError[256];
+				my_snprintf ( sError, sizeof(sError), "failed to resolve searchd host (name=%s)", sHost );
+				
+				my_error ( ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), sError );
+				SPH_RET(-1);
+			}
+			
+			memcpy ( &sin->sin_addr, hp->h_addr,
+				Min ( sizeof(sin->sin_addr), (size_t)hp->h_length ) );
 			my_gethostbyname_r_free();
-
-			char sError[256];
-			my_snprintf ( sError, sizeof(sError), "failed to resolve searchd host (name=%s)", sHost );
-
-			my_error ( ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), sError );
-			SPH_RET(-1);
 		}
-
-		memcpy ( &sa.sin_addr, hp->h_addr,
-			Min ( sizeof(sa.sin_addr), (size_t)hp->h_length ) );
-		my_gethostbyname_r_free();
+	}
+	else
+	{
+		struct sockaddr_un * sun = (struct sockaddr_un *)&ss;
+		sun->sun_family = AF_UNIX;
+		strncpy ( sun->sun_path, sHost, sizeof(sun->sun_path)-1 );
 	}
 
-	sa.sin_port = htons(iPort);
-
-	char sError[256];
-	int iSocket = socket ( AF_INET, SOCK_STREAM, 0 );
+	char sError[512];
+	int iSocket = socket ( ss.ss_family, SOCK_STREAM, 0 );
 
 	if ( iSocket<0 )
 	{
@@ -1834,10 +2002,11 @@ int ha_sphinx::ConnectToSearchd ( const char * sQueryHost, int iQueryPort )
 		SPH_RET(-1);
 	}
 
-	if ( connect ( iSocket, (struct sockaddr *) &sa, sizeof(sa) )<0 )
+	if ( connect ( iSocket, (struct sockaddr *) &ss, sizeof(struct sockaddr_un) )<0 )
 	{
-		my_snprintf ( sError, sizeof(sError), "failed to connect to searchd (host=%s, port=%d)",
-			sHost, iPort );
+		::closesocket ( iSocket );
+		my_snprintf ( sError, sizeof(sError), "failed to connect to searchd (host=%s, errno=%d, port=%d)",
+			sHost, errno, iPort );
 		my_error ( ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), sError );
 		SPH_RET(-1);
 	}
@@ -2049,7 +2218,13 @@ bool ha_sphinx::UnpackSchema ()
 	}
 
 	m_iMatchesTotal = UnpackDword ();
+
 	m_bId64 = UnpackDword ();
+	if ( m_bId64 && m_pShare->m_eTableFieldType[0] != MYSQL_TYPE_LONGLONG )
+	{
+		my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), "INTERNAL ERROR: 1st column must be bigint to accept 64-bit DOCIDs" );
+		SPH_RET(false);
+	}
 
 	// network packet unpacked; build unbound fields map
 	SafeDeleteArray ( m_dUnboundFields );
@@ -2093,11 +2268,9 @@ bool ha_sphinx::UnpackStats ( CSphSEStats * pStats )
 				// skip MVA list
 				uint32 uCount = UnpackDword ();
 				m_pCur += uCount*4;
-			} else
-			{
-				// skip normal value
-				m_pCur += 4;
 			}
+			else // skip normal value 
+				m_pCur += m_dAttrs[i].m_uType == SPH_ATTR_BIGINT ? 8 : 4;
 		}
 	}
 	
@@ -2399,7 +2572,10 @@ int ha_sphinx::get_rec ( byte * buf, const byte *, uint )
 
 	for ( uint32 i=0; i<m_iAttrs; i++ )
 	{
+		longlong iValue64;
 		uint32 uValue = UnpackDword ();
+		if ( m_dAttrs[i].m_uType == SPH_ATTR_BIGINT )
+			iValue64 = ( (longlong)uValue<<32 ) | UnpackDword();
 		if ( m_dAttrs[i].m_iField<0 )
 		{
 			// skip MVA
@@ -2427,6 +2603,10 @@ int ha_sphinx::get_rec ( byte * buf, const byte *, uint )
 					longstore ( af->ptr, uValue ); // because store() does not accept timestamps
 				else
 					af->store ( uValue, 1 );
+				break;
+
+			case SPH_ATTR_BIGINT:
+				af->store ( iValue64, 1 );
 				break;
 
 			case ( SPH_ATTR_MULTI | SPH_ATTR_INTEGER ):
@@ -2701,9 +2881,9 @@ int ha_sphinx::create ( const char * name, TABLE * table, HA_CREATE_INFO * )
 			break;
 		}
 
-		if ( !IsIntegerFieldType ( table->field[0]->type() ) )
+		if ( !IsIntegerFieldType ( table->field[0]->type() ) || !((Field_num *)table->field[0])->unsigned_flag )
 		{
-			my_snprintf ( sError, sizeof(sError), "%s: 1st column (docid) MUST be integer or bigint", name );
+			my_snprintf ( sError, sizeof(sError), "%s: 1st column (docid) MUST be unsigned integer or bigint", name );
 			break;
 		}
 

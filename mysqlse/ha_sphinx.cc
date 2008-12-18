@@ -534,7 +534,7 @@ protected:
 	void			SendWord ( short int v )		{ v = ntohs(v); SendBytes ( &v, sizeof(short int) ); }
 	void			SendInt ( int v )				{ v = ntohl(v); SendBytes ( &v, sizeof(int) ); }
 	void			SendDword ( uint v )			{ v = ntohl(v) ;SendBytes ( &v, sizeof(uint) ); }
-	void			SendUint64 ( ulonglong v )		{ SendDword ( v>>32 ); SendDword ( v&0xFFFFFFFF ); }
+	void			SendUint64 ( ulonglong v )		{ SendDword ( uint(v>>32) ); SendDword ( uint(v&0xFFFFFFFFUL) ); }
 	void			SendString ( const char * v )	{ int iLen = strlen(v); SendDword(iLen); SendBytes ( v, iLen ); }
 	void			SendFloat ( float v )			{ SendDword ( sphF2DW(v) ); }
 };
@@ -1570,7 +1570,7 @@ bool CSphSEQuery::ParseField ( char * sField )
 
 		// get name and type
 		char * sRest = sValue;
-		do
+		for ( ;; )
 		{
 			sName = sRest;
 			if ( !*sName )
@@ -1595,11 +1595,12 @@ bool CSphSEQuery::ParseField ( char * sField )
 			};
 			for ( int i=0; i<sizeof(dAttrTypes)/sizeof(*dAttrTypes); i++ )
 				if ( !strncmp( sType, dAttrTypes[i].m_sName, sRest - sType ) )
-				{
-					iType = dAttrTypes[i].m_iType;
-					break;
-				}
-		} while(0);
+			{
+				iType = dAttrTypes[i].m_iType;
+				break;
+			}
+			break;
+		}
 
 		// fail
 		if ( !sName || !*sName  || !iType )
@@ -1943,7 +1944,15 @@ int ha_sphinx::ConnectToSearchd ( const char * sQueryHost, int iQueryPort )
 {
 	SPH_ENTER_METHOD();
 
-	struct sockaddr_storage ss;
+	struct sockaddr_in sin;
+#ifndef __WIN__
+	struct sockaddr_un sun;
+#endif
+
+	int iDomain = 0;
+	int iSockaddrSize = 0;
+	struct sockaddr * pSockaddr = NULL;
+
 	in_addr_t ip_addr;
 	int version;
 	uint uClientVersion = htonl ( SPHINX_SEARCHD_PROTO );
@@ -1951,17 +1960,20 @@ int ha_sphinx::ConnectToSearchd ( const char * sQueryHost, int iQueryPort )
 	const char * sHost = ( sQueryHost && *sQueryHost ) ? sQueryHost : m_pShare->m_sHost;
 	ushort iPort = iQueryPort ? (ushort)iQueryPort : m_pShare->m_iPort;
 
-	memset ( &ss, 0, sizeof(ss) );
 	if ( iPort )
 	{
-		struct sockaddr_in * sin = (struct sockaddr_in *)&ss;
-		sin->sin_family = AF_INET;
-		sin->sin_port = htons(iPort);
+		iDomain = AF_INET;
+		iSockaddrSize = sizeof(sin);
+		pSockaddr = (struct sockaddr *) &sin;
+
+		memset ( &sin, 0, sizeof(sin) );
+		sin.sin_family = AF_INET;
+		sin.sin_port = htons(iPort);
 		
 		// prepare host address
 		if ( (int)( ip_addr=inet_addr(sHost) ) != (int)INADDR_NONE )
 		{ 
-			memcpy ( &sin->sin_addr, &ip_addr, sizeof(ip_addr) );
+			memcpy ( &sin.sin_addr, &ip_addr, sizeof(ip_addr) );
 		} else
 		{
 			int tmp_errno;
@@ -1981,20 +1993,28 @@ int ha_sphinx::ConnectToSearchd ( const char * sQueryHost, int iQueryPort )
 				SPH_RET(-1);
 			}
 			
-			memcpy ( &sin->sin_addr, hp->h_addr,
-				Min ( sizeof(sin->sin_addr), (size_t)hp->h_length ) );
+			memcpy ( &sin.sin_addr, hp->h_addr,
+				Min ( sizeof(sin.sin_addr), (size_t)hp->h_length ) );
 			my_gethostbyname_r_free();
 		}
-	}
-	else
+	} else
 	{
-		struct sockaddr_un * sun = (struct sockaddr_un *)&ss;
-		sun->sun_family = AF_UNIX;
-		strncpy ( sun->sun_path, sHost, sizeof(sun->sun_path)-1 );
+#ifndef __WIN__
+		iDomain = AF_UNIX;
+		iSockaddrSize = sizeof(sun);
+		pSockaddr = (struct sockaddr *) &sun;
+
+		memset ( &sun, 0, sizeof(sun) );
+		sun.sun_family = AF_UNIX;
+		strncpy ( sun.sun_path, sHost, sizeof(sun.sun_path)-1 );
+#else
+		my_error ( ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), "UNIX sockets are not supported on Windows" );
+		SPH_RET(-1);
+#endif
 	}
 
 	char sError[512];
-	int iSocket = socket ( ss.ss_family, SOCK_STREAM, 0 );
+	int iSocket = socket ( iDomain, SOCK_STREAM, 0 );
 
 	if ( iSocket<0 )
 	{
@@ -2002,7 +2022,7 @@ int ha_sphinx::ConnectToSearchd ( const char * sQueryHost, int iQueryPort )
 		SPH_RET(-1);
 	}
 
-	if ( connect ( iSocket, (struct sockaddr *) &ss, sizeof(struct sockaddr_un) )<0 )
+	if ( connect ( iSocket, pSockaddr, iSockaddrSize )<0 )
 	{
 		::closesocket ( iSocket );
 		my_snprintf ( sError, sizeof(sError), "failed to connect to searchd (host=%s, errno=%d, port=%d)",
@@ -2968,7 +2988,7 @@ CSphSEStats * sphinx_get_stats ( THD * thd, SHOW_VAR * out )
 	return 0;
 }
 
-int sphinx_showfunc_total ( THD * thd, SHOW_VAR * out, char * buf )
+int sphinx_showfunc_total ( THD * thd, SHOW_VAR * out, char * )
 {
 	CSphSEStats * pStats = sphinx_get_stats ( thd, out );
 	if ( pStats )
@@ -2979,7 +2999,7 @@ int sphinx_showfunc_total ( THD * thd, SHOW_VAR * out, char * buf )
 	return 0;
 }
 
-int sphinx_showfunc_total_found ( THD * thd, SHOW_VAR * out, char * buf )
+int sphinx_showfunc_total_found ( THD * thd, SHOW_VAR * out, char * )
 {
 	CSphSEStats * pStats = sphinx_get_stats ( thd, out );
 	if ( pStats )
@@ -2990,7 +3010,7 @@ int sphinx_showfunc_total_found ( THD * thd, SHOW_VAR * out, char * buf )
 	return 0;
 }
 
-int sphinx_showfunc_time ( THD * thd, SHOW_VAR * out, char * buf )
+int sphinx_showfunc_time ( THD * thd, SHOW_VAR * out, char * )
 {
 	CSphSEStats * pStats = sphinx_get_stats ( thd, out );
 	if ( pStats )
@@ -3001,7 +3021,7 @@ int sphinx_showfunc_time ( THD * thd, SHOW_VAR * out, char * buf )
 	return 0;
 }
 
-int sphinx_showfunc_word_count ( THD * thd, SHOW_VAR * out, char * buf )
+int sphinx_showfunc_word_count ( THD * thd, SHOW_VAR * out, char * )
 {
 	CSphSEStats * pStats = sphinx_get_stats ( thd, out );
 	if ( pStats )

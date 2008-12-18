@@ -91,6 +91,7 @@ for ( $i=0; $i<count($args); $i++ )
 		if ( $arg=="bm25" )		$ranker = SPH_RANK_BM25;
 		if ( $arg=="none" )		$ranker = SPH_RANK_NONE;
 		if ( $arg=="wordcount" )$ranker = SPH_RANK_WORDCOUNT;
+		if ( $arg=="fieldmask" )$ranker = SPH_RANK_FIELDMASK;
 	}
 	else
 		$q .= $args[$i] . " ";

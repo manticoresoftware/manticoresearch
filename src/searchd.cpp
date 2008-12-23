@@ -2884,6 +2884,59 @@ void ParseIndexList ( const CSphString & sIndexes, CSphVector<CSphString> & dOut
 }
 
 
+void CheckQuery ( const CSphQuery & tQuery, CSphString & sError )
+{
+	sError = NULL;
+	if ( tQuery.m_iMinID>tQuery.m_iMaxID )
+	{
+		sError.SetSprintf ( "invalid ID range (min greater than max)" );
+		return;
+	}
+	if ( tQuery.m_eMode<0 || tQuery.m_eMode>SPH_MATCH_TOTAL )
+	{
+		sError.SetSprintf ( "invalid match mode %d", tQuery.m_eMode );
+		return;
+	}
+	if ( tQuery.m_eRanker<0 || tQuery.m_eRanker>SPH_RANK_TOTAL )
+	{
+		sError.SetSprintf ( "invalid ranking mode %d", tQuery.m_eRanker );
+		return;
+	}
+	if ( tQuery.m_iMaxMatches<1 || tQuery.m_iMaxMatches>g_iMaxMatches )
+	{
+		sError.SetSprintf ( "per-query max_matches=%d out of bounds (per-server max_matches=%d)",
+			tQuery.m_iMaxMatches, g_iMaxMatches );
+		return;
+	}
+	if ( tQuery.m_iOffset<0 || tQuery.m_iOffset>=tQuery.m_iMaxMatches )
+	{
+		sError.SetSprintf ( "offset out of bounds (offset=%d, max_matches=%d)",
+			tQuery.m_iOffset, tQuery.m_iMaxMatches );
+		return;
+	}
+	if ( tQuery.m_iLimit<0 )
+	{
+		sError.SetSprintf ( "limit out of bounds (limit=%d)", tQuery.m_iLimit );
+		return;
+	}
+	if ( tQuery.m_iCutoff<0 )
+	{
+		sError.SetSprintf ( "cutoff out of bounds (cutoff=%d)", tQuery.m_iCutoff );
+		return;
+	}
+	if ( tQuery.m_iRetryCount<0 || tQuery.m_iRetryCount>MAX_RETRY_COUNT )
+	{
+		sError.SetSprintf ( "retry count out of bounds (count=%d)", tQuery.m_iRetryCount );
+		return;
+	}
+	if ( tQuery.m_iRetryDelay<0 || tQuery.m_iRetryDelay>MAX_RETRY_DELAY )
+	{
+		sError.SetSprintf ( "retry delay out of bounds (delay=%d)", tQuery.m_iRetryDelay );
+		return;
+	}
+}
+
+
 bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 {
 	tQuery.m_iOldVersion = iVer;
@@ -3161,51 +3214,12 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 		tReq.SendErrorReply ( "invalid or truncated request" );
 		return false;
 	}
-	if ( tQuery.m_iMinID>tQuery.m_iMaxID )
+
+	CSphString sError;
+	CheckQuery ( tQuery, sError );
+	if ( !sError.IsEmpty() )
 	{
-		tReq.SendErrorReply ( "invalid ID range (min greater than max)" );
-		return false;
-	}
-	if ( tQuery.m_eMode<0 || tQuery.m_eMode>SPH_MATCH_TOTAL )
-	{
-		tReq.SendErrorReply ( "invalid match mode %d", tQuery.m_eMode );
-		return false;
-	}
-	if ( tQuery.m_eRanker<0 || tQuery.m_eRanker>SPH_RANK_TOTAL )
-	{
-		tReq.SendErrorReply ( "invalid ranking mode %d", tQuery.m_eRanker );
-		return false;
-	}
-	if ( tQuery.m_iMaxMatches<1 || tQuery.m_iMaxMatches>g_iMaxMatches )
-	{
-		tReq.SendErrorReply ( "per-query max_matches=%d out of bounds (per-server max_matches=%d)",
-			tQuery.m_iMaxMatches, g_iMaxMatches );
-		return false;
-	}
-	if ( tQuery.m_iOffset<0 || tQuery.m_iOffset>=tQuery.m_iMaxMatches )
-	{
-		tReq.SendErrorReply ( "offset out of bounds (offset=%d, max_matches=%d)",
-			tQuery.m_iOffset, tQuery.m_iMaxMatches );
-		return false;
-	}
-	if ( tQuery.m_iLimit<0 )
-	{
-		tReq.SendErrorReply ( "limit out of bounds (limit=%d)", tQuery.m_iLimit );
-		return false;
-	}
-	if ( tQuery.m_iCutoff<0 )
-	{
-		tReq.SendErrorReply ( "cutoff out of bounds (cutoff=%d)", tQuery.m_iCutoff );
-		return false;
-	}
-	if ( tQuery.m_iRetryCount<0 || tQuery.m_iRetryCount>MAX_RETRY_COUNT )
-	{
-		tReq.SendErrorReply ( "retry count out of bounds (count=%d)", tQuery.m_iRetryCount );
-		return false;
-	}
-	if ( tQuery.m_iRetryDelay<0 || tQuery.m_iRetryDelay>MAX_RETRY_DELAY )
-	{
-		tReq.SendErrorReply ( "retry delay out of bounds (delay=%d)", tQuery.m_iRetryDelay );
+		tReq.SendErrorReply ( "%s", sError.cstr() );
 		return false;
 	}
 
@@ -5339,6 +5353,13 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 
 		} else if ( eStmt==STMT_SELECT )
 		{
+			CheckQuery ( tHandler.m_dQueries[0], sError );
+			if ( !sError.IsEmpty() )
+			{
+				SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+				continue;
+			}
+
 			// actual searching
 			tHandler.RunQueries ();
 			AggrResult_t * pRes = &tHandler.m_dResults[0];
@@ -5378,9 +5399,9 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 			char sRowBuffer[4096];
 			const char * sRowMax = sRowBuffer + sizeof(sRowBuffer);
 
-			ARRAY_FOREACH ( iMatch, pRes->m_dMatches )
+			for ( int iMatch = pRes->m_iOffset; iMatch < pRes->m_iOffset + pRes->m_iCount; iMatch++ )
 			{
-				const CSphMatch & tMatch = pRes->m_dMatches[iMatch];
+				const CSphMatch & tMatch = pRes->m_dMatches [ iMatch ];
 				char * p = sRowBuffer;
 
 				int iLen;

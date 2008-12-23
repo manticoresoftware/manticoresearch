@@ -20,6 +20,7 @@
 %token	TOK_DESC
 %token	TOK_FROM
 %token	TOK_GROUP
+%token	TOK_LIMIT
 %token	TOK_IN
 %token	TOK_ID
 %token	TOK_MATCH
@@ -55,6 +56,7 @@ select_from:
 	opt_group_clause
 	opt_group_order_clause
 	opt_order_clause
+	opt_limit_clause
 		{
 			pParser->m_eStmt = STMT_SELECT;
 			pParser->m_pQuery->m_sIndexes.SetBinary ( pParser->m_pBuf+$4.m_iStart, $4.m_iEnd-$4.m_iStart );
@@ -174,6 +176,19 @@ order_item:
 	TOK_IDENT
 	| TOK_IDENT TOK_ASC					{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
 	| TOK_IDENT TOK_DESC				{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
+	;
+
+opt_limit_clause:
+	// empty
+	| limit_clause
+	;
+
+limit_clause:
+	TOK_LIMIT TOK_CONST ',' TOK_CONST
+		{
+			pParser->m_pQuery->m_iOffset = $2.m_iValue;
+			pParser->m_pQuery->m_iLimit = $4.m_iValue;
+		}
 	;
 
 expr:

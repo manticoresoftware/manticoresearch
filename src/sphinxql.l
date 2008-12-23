@@ -31,6 +31,7 @@ SPACE				[ \t\n]
 "DESC"				{ YYSTOREBOUNDS; return TOK_DESC; }
 "FROM"				{ YYSTOREBOUNDS; return TOK_FROM; }
 "GROUP"				{ YYSTOREBOUNDS; return TOK_GROUP; }
+"LIMIT"				{ YYSTOREBOUNDS; return TOK_LIMIT; }
 "IN"				{ YYSTOREBOUNDS; return TOK_IN; }
 "ID"				{ YYSTOREBOUNDS; return TOK_ID; }
 "MATCH"				{ YYSTOREBOUNDS; return TOK_MATCH; }

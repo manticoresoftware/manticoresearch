@@ -108,6 +108,13 @@ enum ESphLogLevel
 	LOG_INFO	= 2
 };
 
+enum ProtocolType_e
+{
+	PROTO_SPHINX,
+	PROTO_MYSQL41
+};
+
+
 static bool				g_bService		= false;
 #if USE_WINDOWS
 static bool				g_bServiceStop	= false;
@@ -139,7 +146,14 @@ static int				g_iMaxChildren	= 0;
 static bool				g_bPreopenIndexes = false;
 static bool				g_bOnDiskDicts	= false;
 static bool				g_bUnlinkOld	= true;
-static CSphVector<int>	g_dSockets;
+
+struct Listener_t
+{
+	int					m_iSock;
+	ProtocolType_e		m_eProto;
+};
+static CSphVector<Listener_t>	g_dListeners;
+
 static int				g_iQueryLogFile	= -1;
 static CSphString		g_sQueryLogFile;
 static const char *		g_sPidFile		= NULL;
@@ -848,9 +862,9 @@ void Shutdown ()
 		}
 	}
 
-	ARRAY_FOREACH ( i, g_dSockets )
-		if ( g_dSockets[i]>=0 )
-			sphSockClose ( g_dSockets[i] );
+	ARRAY_FOREACH ( i, g_dListeners )
+		if ( g_dListeners[i].m_iSock>=0 )
+			sphSockClose ( g_dListeners[i].m_iSock );
 
 #if USE_WINDOWS
 	CloseHandle ( g_hPipe );
@@ -1150,57 +1164,105 @@ void CheckPort ( int iPort )
 }
 
 
-int sphParseAndBind ( const CSphString & sListen )
+ProtocolType_e ProtoByName ( const CSphString & sProto )
 {
+	if ( sProto=="sphinx" )			return PROTO_SPHINX;
+	else if ( sProto=="mysql41" )	return PROTO_MYSQL41;
+	
+	sphFatal ( "unknown listen protocol type '%s'", sProto.cstr() ? sProto.cstr() : "(NULL)" );
+	return PROTO_SPHINX; // fix MSVC warning
+}
+
+
+void AddListener ( const CSphString & sListen )
+{
+	Listener_t tRes;
+	tRes.m_eProto = PROTO_SPHINX;
+
 	const char * sSpec = sListen.cstr();
-		
-	if ( sSpec[0]=='/' )
+
+	// split by colon
+	int iParts = 0;
+	CSphString sParts[3];
+
+	const char * sPart = sSpec;
+	for ( const char * p = sSpec; ; p++ )
+		if ( *p=='\0' || *p==':' )
 	{
+		if ( iParts==3 )
+			sphFatal ( "invalid listen format (too many fields)" );
+
+		sParts[iParts++].SetBinary ( sPart, p-sPart );
+		if ( !*p )
+			break; // bail out on zero
+
+		sPart = p+1;
+	}
+	assert ( iParts>=1 && iParts<=3 );
+
+	// handle UNIX socket case
+	// might be either name on itself (1 part), or name+protocol (2 parts)
+	sPart = sParts[0].cstr();
+	if ( sPart[0]=='/' )
+	{
+		if ( iParts>2 )
+			sphFatal ( "invalid listen format (too many fields)" );
+
+		if ( iParts==2 )
+			tRes.m_eProto = ProtoByName ( sParts[1] );
+
 #if USE_WINDOWS
 		sphFatal ( "UNIX sockets are not supported on Windows" );
 #else
-		return sphCreateUnixSocket ( sListen.cstr() );
+		tRes.m_iSock = sphCreateUnixSocket ( sPart );
+		g_dListeners.Add ( tRes );
+		return;
 #endif
 	}
 
-	int iLen = strlen ( sSpec );
-	int iColon = -1;
-	bool bAllDigits = true;
-	
-	for ( int i = 0; i < iLen; i++ )
+	// handle TCP port case
+	// one part. might be either port name, or host name, or UNIX socket name
+	if ( iParts==1 )
 	{
-		if ( sSpec[i] == ':' )
+		sPart = sParts[0].cstr();
+		int iLen = strlen(sPart);
+
+		bool bAllDigits = true;
+		for ( int i=0; i<iLen && bAllDigits; i++ )
+			if ( !isdigit ( sPart[i] ) )
+				bAllDigits = false;
+
+		if ( bAllDigits && iLen<=5 )
 		{
-			iColon = i;
-			bAllDigits = false;
+			// port name on itself
+			int iPort = atol(sSpec);
+			CheckPort ( iPort );
+
+			tRes.m_iSock = sphCreateInetSocket ( htonl(INADDR_ANY), iPort );
+			g_dListeners.Add ( tRes );
+
+		} else
+		{
+			// host name on itself
+			tRes.m_iSock = sphCreateInetSocket ( sphGetAddress ( sSpec, GETADDR_STRICT ), SEARCHD_DEFAULT_PORT );
+			g_dListeners.Add ( tRes );
 		}
-		else if ( bAllDigits && !isdigit(sSpec[i]) )
-			bAllDigits = false;
-	}
-	
-	if ( bAllDigits && iLen <= 5 )
-	{
-		int iPort = atol(sSpec);
-		if ( IsPortInRange(iPort) )
-			return sphCreateInetSocket ( htonl(INADDR_ANY), iPort );
+		return;
 	}
 
-	int iPort, iAddress;
-	if ( iColon == -1 )
-	{
-		iPort = SEARCHD_DEFAULT_PORT;
-		iAddress = sphGetAddress ( sSpec, GETADDR_STRICT );
-	}
-	else
-	{
-		iPort = atol ( sSpec + iColon + 1 );
-		CheckPort ( iPort );
-		iAddress = iColon == 0
-			? htonl(INADDR_ANY)
-			: sphGetAddress ( sListen.SubString ( 0, iColon ).cstr(), GETADDR_STRICT );
-	}
-	
-	return sphCreateInetSocket ( iAddress, iPort );
+	// two or three parts. host name, port name, and optional protocol type
+	if ( iParts==3 )
+		tRes.m_eProto = ProtoByName ( sParts[2] );
+
+	int iPort = atol ( sParts[1].cstr() );
+	CheckPort ( iPort );
+
+	int iAddress = sParts[0].IsEmpty()
+		? htonl(INADDR_ANY)
+		: sphGetAddress ( sParts[0].cstr(), GETADDR_STRICT );
+
+	tRes.m_iSock = sphCreateInetSocket ( iAddress, iPort );
+	g_dListeners.Add ( tRes );
 }
 
 
@@ -1314,9 +1376,11 @@ public:
 
 	bool		SendInt ( int iValue )			{ return SendT<int> ( htonl ( iValue ) ); }
 	bool		SendDword ( DWORD iValue )		{ return SendT<DWORD> ( htonl ( iValue ) ); }
+	bool		SendLSBDword ( DWORD v )		{ SendByte ( BYTE(v&0xff) ); SendByte ( BYTE((v>>8)&0xff) ); SendByte ( BYTE((v>>16)&0xff) ); return SendByte ( BYTE((v>>24)&0xff) ); }
 	bool		SendWord ( WORD iValue )		{ return SendT<WORD> ( htons ( iValue ) ); }
 	bool		SendUint64 ( uint64_t iValue )	{ SendT<DWORD> ( htonl ( (DWORD)(iValue>>32) ) ); return SendT<DWORD> ( htonl ( (DWORD)(iValue&0xffffffffUL) ) ); }
 	bool		SendFloat ( float fValue )		{ return SendT<DWORD> ( htonl ( sphF2DW ( fValue ) ) ); }
+	bool		SendByte ( BYTE uValue )		{ return SendT<BYTE> ( uValue ); }
 
 #if USE_64BIT
 	bool		SendDocid ( SphDocID_t iValue )	{ return SendUint64 ( iValue ); }
@@ -1325,6 +1389,9 @@ public:
 #endif
 
 	bool		SendString ( const char * sStr );
+
+	int			GetMysqlPacklen ( const char * sStr ) const;
+	bool		SendMysqlString ( const char * sStr );
 
 	bool		Flush ();
 	bool		GetError () { return m_bError; }
@@ -1341,8 +1408,9 @@ protected:
 	bool		SetError ( bool bValue );	///< set error flag
 	bool		FlushIf ( int iToAdd );		///< flush if there's not enough free space to add iToAdd bytes
 
-	bool							SendBytes ( const void * pBuf, int iLen );	///< protected to avoid network-vs-host order bugs
-	template < typename T > bool	SendT ( T tValue );							///< protected to avoid network-vs-host order bugs
+public:
+	bool							SendBytes ( const void * pBuf, int iLen );	///< (was) protected to avoid network-vs-host order bugs
+	template < typename T > bool	SendT ( T tValue );							///< (was) protected to avoid network-vs-host order bugs
 };
 
 
@@ -1356,10 +1424,12 @@ public:
 	int				GetInt () { return ntohl ( GetT<int> () ); }
 	WORD			GetWord () { return ntohs ( GetT<WORD> () ); }
 	DWORD			GetDword () { return ntohl ( GetT<DWORD> () ); }
+	DWORD			GetLSBDword () { return GetByte() + ( GetByte()<<8 ) + ( GetByte()<<16 ) + ( GetByte()<<24 ); }
 	uint64_t		GetUint64() { uint64_t uRes = GetDword(); return (uRes<<32)+GetDword(); };
 	BYTE			GetByte () { return GetT<BYTE> (); }
 	float			GetFloat () { return sphDW2F ( ntohl ( GetT<DWORD> () ) ); }
 	CSphString		GetString ();
+	CSphString		GetRawString ( int iLen );
 	int				GetDwords ( DWORD ** pBuffer, int iMax, const char * sErrorTemplate );
 	bool			GetError () { return m_bError; }
 
@@ -1449,6 +1519,35 @@ bool NetOutputBuffer_c::SendString ( const char * sStr )
 
 	int iLen = strlen(sStr);
 	SendInt ( iLen );
+	return SendBytes ( sStr, iLen );
+}
+
+
+int NetOutputBuffer_c::GetMysqlPacklen ( const char * sStr ) const
+{
+	int iLen = strlen(sStr);
+	if ( iLen<251 )		return 1+iLen;
+	if ( iLen<=0xffff )	return 3+iLen;
+	return 5+iLen;
+}
+
+
+bool NetOutputBuffer_c::SendMysqlString ( const char * sStr )
+{
+	if ( m_bError )
+		return false;
+
+	int iLen = strlen(sStr);
+	if ( iLen<251 )
+	{
+		SendByte ( BYTE(iLen) );
+	} else
+	{
+		assert ( iLen<=0xffff );
+		SendByte ( 252 );
+		SendByte ( BYTE(iLen&0xff) );
+		SendByte ( BYTE(iLen>>8) );
+	}
 	return SendBytes ( sStr, iLen );
 }
 
@@ -1604,6 +1703,22 @@ CSphString InputBuffer_c::GetString ()
 	CSphString sRes;
 
 	int iLen = GetInt ();
+	if ( m_bError || iLen<0 || iLen>g_iMaxPacketSize || ( m_pCur+iLen > m_pBuf+m_iLen ) )
+	{
+		SetError ( true );
+		return sRes;
+	}
+
+	sRes.SetBinary ( (char*)m_pCur, iLen );
+	m_pCur += iLen;
+	return sRes;
+}
+
+
+CSphString InputBuffer_c::GetRawString ( int iLen )
+{
+	CSphString sRes;
+
 	if ( m_bError || iLen<0 || iLen>g_iMaxPacketSize || ( m_pCur+iLen > m_pBuf+m_iLen ) )
 	{
 		SetError ( true );
@@ -4308,6 +4423,14 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 // SQL PARSER
 //////////////////////////////////////////////////////////////////////////
 
+enum SqlStmt_e
+{
+	STMT_PARSE_ERROR,
+	STMT_SELECT,
+	STMT_SHOW_WARNINGS
+};
+
+
 struct SqlNode_t
 {
 	int						m_iStart;
@@ -4325,6 +4448,7 @@ struct SqlParser_t
 	const char *	m_pLastTokenStart;
 	CSphString *	m_pParseError;
 	CSphQuery *		m_pQuery;
+	SqlStmt_e		m_eStmt;
 };
 
 
@@ -4370,7 +4494,7 @@ void yyerror ( SqlParser_t * pParser, const char * sMessage )
 
 #include "yysphinxql.c"
 
-bool ParseSqlQuery ( const CSphString & sQuery, CSphQuery & tQuery, CSphString & sError )
+SqlStmt_e ParseSqlQuery ( const CSphString & sQuery, CSphQuery & tQuery, CSphString & sError )
 {
 	SqlParser_t tParser;
 	tParser.m_pBuf = sQuery.cstr();
@@ -4387,13 +4511,16 @@ bool ParseSqlQuery ( const CSphString & sQuery, CSphQuery & tQuery, CSphString &
 	int iRes = yyparse ( &tParser );
 	yy_delete_buffer ( tLexerBuffer );
 
-	// result-set order affects (legacy)
+	// set proper result-set order
 	if ( tQuery.m_sGroupBy.IsEmpty() )
 		tQuery.m_sSortBy = tQuery.m_sOrderBy;
 	else
 		tQuery.m_sGroupSortBy = tQuery.m_sOrderBy;
 
-	return iRes==0;
+	if ( iRes!=0 )
+		return STMT_PARSE_ERROR;
+	else
+		return tParser.m_eStmt;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -4422,9 +4549,16 @@ void HandleCommandQuery ( int iSock, int iVer, InputBuffer_c & tReq )
 	// parse SQL query
 	SearchHandler_c tHandler ( 1 );
 	CSphString sError;
-	if ( !ParseSqlQuery ( sQuery, tHandler.m_dQueries[0], sError ) )
+
+	SqlStmt_e eStmt = ParseSqlQuery ( sQuery, tHandler.m_dQueries[0], sError );
+	if ( eStmt==STMT_PARSE_ERROR )
 	{
 		tReq.SendErrorReply ( "%s", sError.cstr() );
+		return;
+	}
+	if ( eStmt!=STMT_SELECT )
+	{
+		tReq.SendErrorReply ( "this protocol currently supports SELECT only" );
 		return;
 	}
 
@@ -4935,7 +5069,7 @@ void SafeClose ( int & iFD )
 }
 
 
-void HandleClient ( int iSock, const char * sClientIP, int iPipeFD )
+void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD )
 {
 	bool bPersist = false;
 	int iTimeout = g_iReadTimeout;
@@ -5024,6 +5158,351 @@ void HandleClient ( int iSock, const char * sClientIP, int iPipeFD )
 		}
 	} while ( bPersist );
 	SafeClose ( iPipeFD ); 
+}
+
+//////////////////////////////////////////////////////////////////////////
+// MYSQLD PRETENDER
+//////////////////////////////////////////////////////////////////////////
+
+/// our copy of enum_field_types
+/// we can't rely on mysql_com.h because it might be unavailable
+///
+/// MYSQL_TYPE_DECIMAL = 0
+/// MYSQL_TYPE_TINY = 1
+/// MYSQL_TYPE_SHORT = 2
+/// MYSQL_TYPE_LONG = 3
+/// MYSQL_TYPE_FLOAT = 4
+/// MYSQL_TYPE_DOUBLE = 5
+/// MYSQL_TYPE_NULL = 6
+/// MYSQL_TYPE_TIMESTAMP = 7
+/// MYSQL_TYPE_LONGLONG = 8
+/// MYSQL_TYPE_INT24 = 9
+/// MYSQL_TYPE_DATE = 10
+/// MYSQL_TYPE_TIME = 11
+/// MYSQL_TYPE_DATETIME = 12
+/// MYSQL_TYPE_YEAR = 13
+/// MYSQL_TYPE_NEWDATE = 14
+/// MYSQL_TYPE_VARCHAR = 15
+/// MYSQL_TYPE_BIT = 16
+/// MYSQL_TYPE_NEWDECIMAL = 246
+/// MYSQL_TYPE_ENUM = 247
+/// MYSQL_TYPE_SET = 248
+/// MYSQL_TYPE_TINY_BLOB = 249
+/// MYSQL_TYPE_MEDIUM_BLOB = 250
+/// MYSQL_TYPE_LONG_BLOB = 251
+/// MYSQL_TYPE_BLOB = 252
+/// MYSQL_TYPE_VAR_STRING = 253
+/// MYSQL_TYPE_STRING = 254
+/// MYSQL_TYPE_GEOMETRY = 255
+enum MysqlColumnType_e
+{
+	MYSQL_COL_DECIMAL	= 0,
+	MYSQL_COL_STRING	= 254
+};
+
+void SendMysqlFieldPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, const char * sCol, MysqlColumnType_e eType )
+{
+	const char * sDB = "";
+	const char * sTable = "";
+
+	int iLen = 14 + tOut.GetMysqlPacklen(sDB) + 2*( tOut.GetMysqlPacklen(sTable) + tOut.GetMysqlPacklen(sCol) );
+
+	int iColLen = 0;
+	switch ( eType )
+	{
+		case MYSQL_COL_DECIMAL:	iColLen = 20; break;
+		case MYSQL_COL_STRING:	iColLen = 255; break;
+	}
+
+	tOut.SendLSBDword ( (uPacketID<<24) + iLen );
+	tOut.SendMysqlString ( "def" ); // catalog
+	tOut.SendMysqlString ( sDB ); // db
+	tOut.SendMysqlString ( sTable ); // table
+	tOut.SendMysqlString ( sTable ); // org_table
+	tOut.SendMysqlString ( sCol ); // name
+	tOut.SendMysqlString ( sCol ); // org_name
+
+	tOut.SendByte ( 0 ); // filler
+	tOut.SendWord ( 0 ); // charset_nr
+	tOut.SendByte ( BYTE(iColLen) ); // length
+	tOut.SendByte ( BYTE(eType) ); // type (0=decimal)
+	tOut.SendWord ( 0 ); // flags
+	tOut.SendByte ( 0 ); // decimals
+	tOut.SendWord ( 0 ); // filler
+}
+
+
+void SendMysqlErrorPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, const char * sError )
+{
+	if ( sError==NULL )
+		sError = "(null)";
+
+	int iErrorLen = strlen(sError)+1; // including the trailing zero
+	int iLen = 9 + iErrorLen;
+	int iError = 1064; // pretend to be mysql syntax error for now
+
+	tOut.SendLSBDword ( (uPacketID<<24) + iLen );
+	tOut.SendByte ( 0xff ); // field count, always 0xff for error packet
+	tOut.SendByte ( BYTE(iError&0xff) );
+	tOut.SendByte ( BYTE(iError>>8) );
+	tOut.SendBytes ( "#42000", 6 ); // sqlstate marker (1 byte), sqlstate (5 bytes)
+	tOut.SendBytes ( sError, iErrorLen );
+}
+
+
+void SendMysqlEofPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, int iWarns )
+{
+	if ( iWarns<0 ) iWarns = 0;
+	if ( iWarns>65535 ) iWarns = 65535;
+
+	tOut.SendLSBDword ( (uPacketID<<24) + 5 );
+	tOut.SendByte ( 0xfe );
+	tOut.SendLSBDword ( iWarns ); // N warnings, 0 status
+}
+
+
+void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
+{
+	// handshake
+	char sHandshake[] =
+		"\x00\x00\x00" // packet length
+		"\x00" // packet id
+		"\x0A" // protocol version; v.10
+		SPHINX_VERSION "\x00" // server version
+		"\x01\x00\x00\x00" // thread id
+		"\x01\x02\x03\x04\x05\x06\x07\x08" // scramble buffer (for auth)
+		"\x00" // filler
+		"\x08\x02" // server capabilities; CLIENT_PROTOCOL_41 | CLIENT_CONNECT_WITH_DB
+		"\x00" // server language
+		"\x02\x00" // server status
+		"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" // filler
+		"\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d" // scramble buffer2 (for auth, 4.1+)
+		;
+
+	const int INTERACTIVE_TIMEOUT = 900;
+	NetInputBuffer_c tIn ( iSock );
+	NetOutputBuffer_c tOut ( iSock );
+
+	sHandshake[0] = sizeof(sHandshake)-5;
+	if ( sphSockSend ( iSock, sHandshake, sizeof(sHandshake)-1 )!=sizeof(sHandshake)-1 )
+	{
+		sphWarning ( "failed to send server version (client=%s)", sClientIP );
+		return;
+	}
+
+	bool bAuthed = false;
+	BYTE uPacketID = 1;
+	CSphString sLastWarning;
+
+	for ( ;; )
+	{
+		// send the packet formed on the previous cycle
+		if ( !tOut.Flush() )
+			break;
+
+		// get next packet
+		if ( !tIn.ReadFrom ( 4, INTERACTIVE_TIMEOUT ) )
+			break;
+
+		DWORD uPacketHeader = tIn.GetLSBDword ();
+		int iPacketLen = ( uPacketHeader & 0xffffffUL );
+		if ( !tIn.ReadFrom ( iPacketLen, INTERACTIVE_TIMEOUT ) )
+			break;
+
+		// handle it!
+		uPacketID = 1 + BYTE(uPacketHeader>>24); // client will expect this id
+
+		char sOK[] = "\x07\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00";
+		sOK[3] = uPacketID;
+
+		// handle auth packet
+		if ( !bAuthed )
+		{
+			bAuthed = true;
+			tOut.SendBytes ( sOK, sizeof(sOK)-1 );
+			continue;
+		}
+
+		// handle query packet
+		tIn.GetByte (); // skip command
+		CSphString sQuery = tIn.GetRawString ( iPacketLen-1 );
+
+		// parse SQL query
+		CSphString sError;
+		SearchHandler_c tHandler ( 1 );
+		SqlStmt_e eStmt = ParseSqlQuery ( sQuery, tHandler.m_dQueries[0], sError );
+
+		// handle SQL query
+		if ( eStmt==STMT_PARSE_ERROR )
+		{
+			SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+
+		} else if ( eStmt==STMT_SELECT )
+		{
+			// actual searching
+			tHandler.RunQueries ();
+			AggrResult_t * pRes = &tHandler.m_dResults[0];
+			if ( !pRes->m_iSuccesses )
+			{
+				SendMysqlErrorPacket ( tOut, uPacketID, pRes->m_sError.cstr() );
+				continue;
+			}
+
+			// result set header packet
+			tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
+			tOut.SendByte ( BYTE ( 2+pRes->m_tSchema.GetAttrsCount() ) ); // field count (id+weight+attrs)
+			tOut.SendByte ( 0 ); // extra
+
+			// field packets
+			SendMysqlFieldPacket ( tOut, uPacketID++, "id", MYSQL_COL_DECIMAL );
+			SendMysqlFieldPacket ( tOut, uPacketID++, "weight", MYSQL_COL_DECIMAL );
+			for ( int i=0; i<pRes->m_tSchema.GetAttrsCount(); i++ )
+			{
+				const CSphColumnInfo & tCol = pRes->m_tSchema.GetAttr(i);
+				MysqlColumnType_e eType = ( tCol.m_eAttrType==SPH_ATTR_INTEGER || tCol.m_eAttrType==SPH_ATTR_TIMESTAMP || tCol.m_eAttrType==SPH_ATTR_BOOL || tCol.m_eAttrType==SPH_ATTR_BIGINT )
+					? MYSQL_COL_DECIMAL
+					: MYSQL_COL_STRING;
+				SendMysqlFieldPacket ( tOut, uPacketID++, tCol.m_sName.cstr(), eType );
+			}
+
+			// eof packet
+			BYTE iWarns = 0;
+			if ( !pRes->m_sWarning.IsEmpty() )
+			{
+				iWarns = 1;
+				sLastWarning = pRes->m_sWarning;
+			}
+			SendMysqlEofPacket ( tOut, uPacketID++, iWarns );
+
+			// rows
+			char sRowBuffer[4096];
+			const char * sRowMax = sRowBuffer + sizeof(sRowBuffer);
+
+			ARRAY_FOREACH ( iMatch, pRes->m_dMatches )
+			{
+				const CSphMatch & tMatch = pRes->m_dMatches[iMatch];
+				char * p = sRowBuffer;
+
+				int iLen;
+				iLen = snprintf ( p+1, sRowMax-p, DOCID_FMT, tMatch.m_iDocID ); p[0] = BYTE(iLen); p += 1+iLen;
+				iLen = snprintf ( p+1, sRowMax-p, "%u", tMatch.m_iWeight ); p[0] = BYTE(iLen); p += 1+iLen;
+
+				const CSphSchema & tSchema = pRes->m_tSchema;
+				for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
+				{
+					CSphAttrLocator tLoc = tSchema.GetAttr(i).m_tLocator;
+					DWORD eAttrType = tSchema.GetAttr(i).m_eAttrType;
+					switch ( eAttrType )
+					{
+						case SPH_ATTR_INTEGER:
+						case SPH_ATTR_TIMESTAMP:
+						case SPH_ATTR_BOOL:
+						case SPH_ATTR_BIGINT:
+							iLen = snprintf ( p+1, sRowMax-p, ( eAttrType==SPH_ATTR_BIGINT ) ? "%"PRIi64 : "%u", tMatch.GetAttr(tLoc) );
+							p[0] = BYTE(iLen);
+							p += 1+iLen;
+							break;
+
+						case SPH_ATTR_FLOAT:
+							iLen = snprintf ( p+1, sRowMax-p, "%f", tMatch.GetAttrFloat(tLoc) );
+							p[0] = BYTE(iLen);
+							p += 1+iLen;
+							break;
+
+						case SPH_ATTR_INTEGER | SPH_ATTR_MULTI:
+						{
+							BYTE * pLen = (BYTE*) p;
+							p += 4; // marker + 3-byte len
+
+							const DWORD * pValues = tMatch.GetAttrMVA ( tLoc, pRes->m_pMva );
+							DWORD nValues = *pValues++;
+
+							while ( nValues )
+							{
+								p += snprintf ( p, sRowMax-p, "%u", *pValues++ );
+								if ( --nValues )
+									*p++ = ',';
+							}
+
+							iLen = (BYTE*)p - pLen - 4;
+							pLen[0] = 253; // 3-byte
+							pLen[1] = BYTE(iLen&0xff);
+							pLen[2] = BYTE((iLen>>8)&0xff);
+							pLen[3] = BYTE((iLen>>16)&0xff);
+							break;
+						}
+
+						default:
+							p[0] = 1;
+							p[1] = '-';
+							p += 2; break;
+					}
+				}
+
+				tOut.SendLSBDword ( ((uPacketID++)<<24) + ( p-sRowBuffer ) );
+				tOut.SendBytes ( sRowBuffer, p-sRowBuffer );
+			}
+
+			// eof packet
+			SendMysqlEofPacket ( tOut, uPacketID++, iWarns );
+
+		} else if ( eStmt==STMT_SHOW_WARNINGS )
+		{
+			if ( sLastWarning.IsEmpty() )
+			{
+				tOut.SendBytes ( sOK, sizeof(sOK)-1 );
+				continue;
+			}
+
+			// result set header packet
+			tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
+			tOut.SendByte ( 3 ); // field count (level+code+message)
+			tOut.SendByte ( 0 ); // extra
+
+			// field packets
+			SendMysqlFieldPacket ( tOut, uPacketID++, "Level", MYSQL_COL_STRING );
+			SendMysqlFieldPacket ( tOut, uPacketID++, "Code", MYSQL_COL_DECIMAL );
+			SendMysqlFieldPacket ( tOut, uPacketID++, "Message", MYSQL_COL_STRING );
+			SendMysqlEofPacket ( tOut, uPacketID++, 0 );
+
+			// row
+			char sRowBuffer[4096];
+			const char * sRowMax = sRowBuffer + sizeof(sRowBuffer);
+
+			int iLen;
+			char * p = sRowBuffer;
+			iLen = snprintf ( p+1, sRowMax-p, "warning" ); p[0] = BYTE(iLen); p += 1+iLen;
+			iLen = snprintf ( p+1, sRowMax-p, "%d", 1000 ); p[0] = BYTE(iLen); p += 1+iLen; // FIXME! proper code?
+			iLen = snprintf ( p+1, sRowMax-p, "%s", sLastWarning.cstr() ); p[0] = BYTE(iLen); p += 1+iLen;
+
+			tOut.SendLSBDword ( ((uPacketID++)<<24) + ( p-sRowBuffer ) );
+			tOut.SendBytes ( sRowBuffer, p-sRowBuffer );
+
+			// cleanup
+			SendMysqlEofPacket ( tOut, uPacketID++, 0 );
+			sLastWarning = "";
+
+		} else
+		{
+			sError.SetSprintf ( "internal error: unhandled statement type (value=%d)", eStmt );
+			SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		}
+	}
+
+	SafeClose ( iPipeFD );
+}
+
+//////////////////////////////////////////////////////////////////////////
+// HANDLE-BY-LISTENER
+//////////////////////////////////////////////////////////////////////////
+
+void HandleClient ( ProtocolType_e eProto, int iSock, const char * sClientIP, int iPipeFD )
+{
+	switch ( eProto )
+	{
+		case PROTO_SPHINX:		HandleClientSphinx ( iSock, sClientIP, iPipeFD ); break;
+		case PROTO_MYSQL41:		HandleClientMySQL ( iSock, sClientIP, iPipeFD ); break;
+	}
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -6996,16 +7475,24 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	// network startup
 	////////////////////
 
+	Listener_t tListener;
+	tListener.m_eProto = PROTO_SPHINX;
+
 	// command line arguments override config (but only in --console)
 	if ( bOptListen )
-		g_dSockets.Add ( sphParseAndBind ( sOptListen ) );
-	else if ( bOptPort )
-		g_dSockets.Add ( sphCreateInetSocket ( htonl(INADDR_ANY), iOptPort ) );
-	else 
+	{
+		AddListener ( sOptListen );
+
+	} else if ( bOptPort )
+	{
+		tListener.m_iSock = sphCreateInetSocket ( htonl(INADDR_ANY), iOptPort );
+		g_dListeners.Add ( tListener );
+
+	} else 
 	{
 		// listen directives in configuration file
-		for ( CSphVariant *v = hSearchd("listen"); v; v = v->m_pNext )
-			g_dSockets.Add ( sphParseAndBind(*v) );
+		for ( CSphVariant * v = hSearchd("listen"); v; v = v->m_pNext )
+			AddListener ( *v );
 		
 		// handle deprecated directives
 		if ( hSearchd("port") )
@@ -7015,13 +7502,17 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 			int iPort = hSearchd["port"].intval();
 			CheckPort(iPort);
-			
-			g_dSockets.Add ( sphCreateInetSocket ( uAddr, iPort ) );
+
+			tListener.m_iSock = sphCreateInetSocket ( uAddr, iPort );
+			g_dListeners.Add ( tListener);
 		}
 		
 		// still nothing? listen on INADDR_ANY, default port
-		if ( g_dSockets.GetLength() == 0 )
-			g_dSockets.Add ( sphCreateInetSocket ( htonl(INADDR_ANY), SEARCHD_DEFAULT_PORT ) );
+		if ( !g_dListeners.GetLength() )
+		{
+			tListener.m_iSock = sphCreateInetSocket ( htonl(INADDR_ANY), SEARCHD_DEFAULT_PORT );
+			g_dListeners.Add ( tListener );
+		}
 	}
 
 #if !USE_WINDOWS
@@ -7131,8 +7622,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	}
 
 	// almost ready, time to start listening
-	ARRAY_FOREACH ( i, g_dSockets )
-		if ( listen ( g_dSockets[i], SEARCHD_BACKLOG )==-1 )
+	ARRAY_FOREACH ( i, g_dListeners )
+		if ( listen ( g_dListeners[i].m_iSock, SEARCHD_BACKLOG )==-1 )
 			sphFatal ( "listen() failed: %s", sphSockError() );
 
 	// prepare to detach
@@ -7260,8 +7751,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	FD_ZERO ( &fdsAccept );
 
 	int iNfds = 0;
-	ARRAY_FOREACH ( i, g_dSockets )
-		iNfds = Max ( iNfds, g_dSockets[i] );
+	ARRAY_FOREACH ( i, g_dListeners )
+		iNfds = Max ( iNfds, g_dListeners[i].m_iSock );
 	iNfds++;
 
 	for ( ;; )
@@ -7275,8 +7766,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		CheckFlush ();
 		sphLog ( LOG_INFO, NULL, NULL ); // flush dupes
 
-		ARRAY_FOREACH ( i, g_dSockets )
-			sphFDSet ( g_dSockets[i], &fdsAccept );
+		ARRAY_FOREACH ( i, g_dListeners )
+			sphFDSet ( g_dListeners[i].m_iSock, &fdsAccept );
 
 		struct timeval tvTimeout;
 		tvTimeout.tv_sec = USE_WINDOWS ? 0 : 1;
@@ -7298,14 +7789,14 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			continue;
 		}
 
-		ARRAY_FOREACH ( i, g_dSockets )
+		ARRAY_FOREACH ( i, g_dListeners )
 		{
-			if ( !FD_ISSET ( g_dSockets[i], &fdsAccept ) )
+			if ( !FD_ISSET ( g_dListeners[i].m_iSock, &fdsAccept ) )
 				continue;
 
 			struct sockaddr_storage saStorage;
 			socklen_t uLength = sizeof(saStorage);
-			int iClientSock = accept ( g_dSockets[i], (struct sockaddr *)&saStorage, &uLength );
+			int iClientSock = accept ( g_dListeners[i].m_iSock, (struct sockaddr *)&saStorage, &uLength );
 
 			if ( iClientSock == -1 )
 			{
@@ -7363,7 +7854,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 				if ( SPH_FDSET_OVERFLOW(iClientSock) )
 					iClientSock = dup2 ( iClientSock, iClientFD );
 				#endif
-				HandleClient ( iClientSock, sClientName, -1 );
+
+				HandleClient ( g_dListeners[i].m_eProto, iClientSock, sClientName, -1 );
 				sphSockClose ( iClientSock );
 				continue;
 			}
@@ -7375,7 +7867,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 				// child process, handle client
 				if ( SPH_FDSET_OVERFLOW(iClientSock) )
 					iClientSock = dup2 ( iClientSock, iClientFD );
-				HandleClient ( iClientSock, sClientName, iChildPipe );
+				HandleClient ( g_dListeners[i].m_eProto, iClientSock, sClientName, iChildPipe );
 				sphSockClose ( iClientSock );
 				exit ( 0 );
 			} else

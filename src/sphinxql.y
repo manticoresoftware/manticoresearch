@@ -25,6 +25,8 @@
 %token	TOK_MATCH
 %token	TOK_ORDER
 %token	TOK_SELECT
+%token	TOK_SHOW
+%token	TOK_WARNINGS
 %token	TOK_WEIGHT
 %token	TOK_WITHIN
 %token	TOK_WHERE
@@ -41,7 +43,10 @@
 
 statement:
 	select_from
+	| show_warnings
 	;
+
+//////////////////////////////////////////////////////////////////////////
 
 select_from:
 	TOK_SELECT select_items_list
@@ -51,6 +56,7 @@ select_from:
 	opt_group_order_clause
 	opt_order_clause
 		{
+			pParser->m_eStmt = STMT_SELECT;
 			pParser->m_pQuery->m_sIndexes.SetBinary ( pParser->m_pBuf+$4.m_iStart, $4.m_iEnd-$4.m_iStart );
 		}
 	;
@@ -199,6 +205,12 @@ function:
 arglist:
 	expr
 	| arglist ',' expr
+	;
+
+//////////////////////////////////////////////////////////////////////////
+
+show_warnings:
+	TOK_SHOW TOK_WARNINGS		{ pParser->m_eStmt = STMT_SHOW_WARNINGS; }
 	;
 
 %%

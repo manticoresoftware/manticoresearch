@@ -44,16 +44,18 @@
      TOK_MATCH = 270,
      TOK_ORDER = 271,
      TOK_SELECT = 272,
-     TOK_WEIGHT = 273,
-     TOK_WITHIN = 274,
-     TOK_WHERE = 275,
-     TOK_OR = 276,
-     TOK_AND = 277,
-     TOK_NOT = 278,
-     TOK_NE = 279,
-     TOK_GTE = 280,
-     TOK_LTE = 281,
-     TOK_NEG = 282
+     TOK_SHOW = 273,
+     TOK_WARNINGS = 274,
+     TOK_WEIGHT = 275,
+     TOK_WITHIN = 276,
+     TOK_WHERE = 277,
+     TOK_OR = 278,
+     TOK_AND = 279,
+     TOK_NOT = 280,
+     TOK_NE = 281,
+     TOK_GTE = 282,
+     TOK_LTE = 283,
+     TOK_NEG = 284
    };
 #endif
 #define TOK_IDENT 258
@@ -71,16 +73,18 @@
 #define TOK_MATCH 270
 #define TOK_ORDER 271
 #define TOK_SELECT 272
-#define TOK_WEIGHT 273
-#define TOK_WITHIN 274
-#define TOK_WHERE 275
-#define TOK_OR 276
-#define TOK_AND 277
-#define TOK_NOT 278
-#define TOK_NE 279
-#define TOK_GTE 280
-#define TOK_LTE 281
-#define TOK_NEG 282
+#define TOK_SHOW 273
+#define TOK_WARNINGS 274
+#define TOK_WEIGHT 275
+#define TOK_WITHIN 276
+#define TOK_WHERE 277
+#define TOK_OR 278
+#define TOK_AND 279
+#define TOK_NOT 280
+#define TOK_NE 281
+#define TOK_GTE 282
+#define TOK_LTE 283
+#define TOK_NEG 284
 
 
 

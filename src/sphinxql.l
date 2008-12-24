@@ -1,8 +1,10 @@
 %{
 #include "yysphinxql.h"
 
+#if USE_WINDOWS
 #pragma warning(disable:4127) // conditional expression is constant
 #pragma warning(disable:4244) // conversion from int to short
+#endif
 
 // warning, lexer generator dependent!
 // this macros relies on that in flex yytext points to the actual location in the buffer
@@ -66,5 +68,7 @@ SPACE				[ \t\n]
 
 %%
 
+#if USE_WINDOWS
 #pragma warning(default:4127) // conditional expression is constant
 #pragma warning(default:4244) // conversion from int to short
+#endif

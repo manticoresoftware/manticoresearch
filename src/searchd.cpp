@@ -4286,16 +4286,6 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	// merge all results
 	/////////////////////
 
-	// warn about id64 server vs old clients
-#if USE_64BIT
-	if ( m_iClientVer<0x108 )
-	{
-		m_dFailuresSet.SetIndex ( "*" );
-		m_dFailuresSet.SetPrefix ( "" );
-		m_dFailuresSet.Submit ( "searchd is id64; resulting docids might be wrapped" );
-	}
-#endif
-
 	for ( int iRes=iStart; iRes<=iEnd; iRes++ )
 	{
 		AggrResult_t & tRes = m_dResults[iRes];
@@ -5419,7 +5409,10 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 						case SPH_ATTR_TIMESTAMP:
 						case SPH_ATTR_BOOL:
 						case SPH_ATTR_BIGINT:
-							iLen = snprintf ( p+1, sRowMax-p, ( eAttrType==SPH_ATTR_BIGINT ) ? "%"PRIi64 : "%u", tMatch.GetAttr(tLoc) );
+							if ( eAttrType==SPH_ATTR_BIGINT )
+								iLen = snprintf ( p+1, sRowMax-p, "%"PRIu64, tMatch.GetAttr(tLoc) );
+							else
+								iLen = snprintf ( p+1, sRowMax-p, "%u", (DWORD)tMatch.GetAttr(tLoc) );
 							p[0] = BYTE(iLen);
 							p += 1+iLen;
 							break;

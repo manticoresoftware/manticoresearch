@@ -653,6 +653,7 @@ CSphString ReconstructNode ( const XQNode_t * pNode, const CSphSchema & tSchema 
 					case SPH_QUERY_OR:		sOp = "OR"; break;
 					case SPH_QUERY_NOT:		sOp = "NOT"; break;
 					case SPH_QUERY_ANDNOT:	sOp = "AND NOT"; break;
+					case SPH_QUERY_BEFORE:	sOp = "BEFORE"; break;
 				}
 				sRes.SetSprintf ( "%s %s %s", sRes.cstr(), sOp, ReconstructNode ( pNode->m_dChildren[i], tSchema ).cstr() );
 			}

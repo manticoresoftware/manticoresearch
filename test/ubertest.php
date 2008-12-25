@@ -163,12 +163,16 @@ foreach ( $tests as $test )
 
 	if ( file_exists ( $test."/test.xml" ) )
 	{
+		$total_tests++;
 		$res = RunTest ( $test );
 
 		if ( !is_array($res) )
-			continue; // failed to run that test at all
+		{
+			// failed to run that test at all
+			$total_tests_failed++;
+			continue;
+		}
 
-		$total_tests++;
 		$total_subtests += $res["tests_total"];
 		if ( $res["tests_failed"] )
 		{

@@ -1071,16 +1071,18 @@ function RunTest ( $test_dir )
 
 	$prefix = sprintf ( "testing %s, %s...", $test_dir, $config->Name () );
 
+	$res_skipped = array ( "tests_total"=>0, "tests_failed"=>0 );
+
 	if ( $config->Requires("id64") && !$g_id64 )
 	{
 		printf ( "SKIPPING %s, %s - enable id64 to run this test\n", $test_dir, $config->Name () );
-		return;
+		return $res_skipped;
 	}
 
 	if ( $config->Requires("non-windows") && $windows )
 	{
 		printf ( "SKIPPING %s, %s - use non-Windows system to run this test\n", $test_dir, $config->Name () );
-		return;
+		return $res_skipped;
 	}
 
 	if ( !CreateDB ( $config->DB_Drop(), $config->DB_Create(), $config->DB_Insert() ) )

@@ -3,7 +3,7 @@
 for CONFARGS in "--with-debug" "--with-debug --enable-id64";
 do
 	BANNER="testing $CONFARGS build"
-	./configure $i 1>/dev/null 2>&1 || { echo "$BANNER: configure failed"; exit 1; }
+	./configure $CONFARGS 1>/dev/null 2>&1 || { echo "$BANNER: configure failed"; exit 1; }
 	make clean 1>/dev/null 2>&1 || { echo "$BANNER: make clean failed"; exit 1; }
 	make 1>/dev/null 2>&1 || { echo "$BANNER: make failed"; exit 1; }
 
@@ -18,4 +18,5 @@ done
 
 make clean 1>/dev/null 2>&1
 
+echo "all ok"
 exit 0

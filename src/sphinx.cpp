@@ -19559,7 +19559,7 @@ bool CSphSource_XMLPipe::ScanStr ( const char * sTag, char * pRes, int iMaxLengt
 class CSphSource_XMLPipe2 : public CSphSource_Document
 {
 public:
-					CSphSource_XMLPipe2 ( BYTE * dInitialBuf, int iBufLen, const char * sName );
+					CSphSource_XMLPipe2 ( BYTE * dInitialBuf, int iBufLen, const char * sName, int iFieldBufferMax );
 					~CSphSource_XMLPipe2 ();					
 
 	bool			Setup ( FILE * pPipe, const CSphConfigSection & hSource );			///< memorize the command
@@ -19647,7 +19647,7 @@ private:
 
 	int				m_iInitialBufSize;
 
-	static const int MAX_FIELD_LENGTH = 2097152;
+	int				m_iFieldBufferMax;
 	BYTE * 			m_pFieldBuffer;
 	int				m_iFieldBufferLen;
 
@@ -19747,7 +19747,7 @@ void xmlErrorHandler ( void * arg, const char * msg, xmlParserSeverities severit
 #endif
 
 
-CSphSource_XMLPipe2::CSphSource_XMLPipe2 ( BYTE * dInitialBuf, int iBufLen, const char * sName )
+CSphSource_XMLPipe2::CSphSource_XMLPipe2 ( BYTE * dInitialBuf, int iBufLen, const char * sName, int iFieldBufferMax )
 	: CSphSource_Document ( sName )
 	, m_pCurDocument	( NULL )
 	, m_pPipe			( NULL )
@@ -19777,7 +19777,8 @@ CSphSource_XMLPipe2::CSphSource_XMLPipe2 ( BYTE * dInitialBuf, int iBufLen, cons
 	assert ( m_iBufferSize > iBufLen );
 
 	m_pBuffer = new BYTE [m_iBufferSize];
-	m_pFieldBuffer = new BYTE [MAX_FIELD_LENGTH];
+	m_iFieldBufferMax = Max ( iFieldBufferMax, 65536 );
+	m_pFieldBuffer = new BYTE [ m_iFieldBufferMax ];
 
 	if ( iBufLen )
 		memcpy ( m_pBuffer, dInitialBuf, iBufLen );
@@ -20532,7 +20533,7 @@ void CSphSource_XMLPipe2::EndElement ( const char * szName )
 		{
 			if ( m_bInId )
 			{
-				m_pFieldBuffer [Min ( m_iFieldBufferLen, MAX_FIELD_LENGTH-1) ] = '\0';
+				m_pFieldBuffer [Min ( m_iFieldBufferLen, m_iFieldBufferMax-1) ] = '\0';
 				m_dKillList.Add ( sphToDocid ( (const char *)m_pFieldBuffer ) );
 				m_iFieldBufferLen = 0;
 				m_bInId = false;
@@ -20620,7 +20621,7 @@ void CSphSource_XMLPipe2::Characters ( const char * pCharacters, int iLen )
 		return;
 	}
 
-	if ( iLen + m_iFieldBufferLen < MAX_FIELD_LENGTH )
+	if ( iLen + m_iFieldBufferLen < m_iFieldBufferMax )
 	{
 		memcpy ( m_pFieldBuffer + m_iFieldBufferLen, pCharacters, iLen );
 		m_iFieldBufferLen += iLen;
@@ -20724,9 +20725,9 @@ void CSphSource_XMLPipe2::ProcessNode ( xmlTextReaderPtr pReader )
 }
 #endif
 
-CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, FILE * pPipe, BYTE * dInitialBuf, int iBufLen, const char * szSourceName )
+CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, FILE * pPipe, BYTE * dInitialBuf, int iBufLen, const char * szSourceName, int iMaxFieldLen )
 {
-	CSphSource_XMLPipe2 * pXMLPipe = new CSphSource_XMLPipe2 ( dInitialBuf, iBufLen, szSourceName );
+	CSphSource_XMLPipe2 * pXMLPipe = new CSphSource_XMLPipe2 ( dInitialBuf, iBufLen, szSourceName, iMaxFieldLen );
 	if ( !pXMLPipe->Setup ( pPipe, *pSource ) )
 		SafeDelete ( pXMLPipe );
 

@@ -38,7 +38,8 @@ int				g_iTopStops		= 100;
 bool			g_bRotate		= false;
 bool			g_bBuildFreqs	= false;
 
-int				g_iMemLimit		= 0;
+int				g_iMemLimit				= 0;
+int				g_iMaxXmlpipe2Field		= 0;
 
 const int		EXT_COUNT = 7;
 const char *	g_dExt[EXT_COUNT] = { "sph", "spa", "spi", "spd", "spp", "spm", "spk" };
@@ -605,7 +606,7 @@ CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char 
 	if ( bUsePipe2 )
 	{
 #if USE_LIBEXPAT || USE_LIBXML
-		pSrcXML = sphCreateSourceXmlpipe2 ( &hSource, pPipe, dBuffer, iBufSize, sSourceName );
+		pSrcXML = sphCreateSourceXmlpipe2 ( &hSource, pPipe, dBuffer, iBufSize, sSourceName, g_iMaxXmlpipe2Field );
 
 		if ( !bUTF8 )
 		{
@@ -1247,16 +1248,14 @@ int main ( int argc, char ** argv )
 	if ( !hConf ( "source" ) )
 		sphDie ( "no indexes found in config file '%s'", sOptConfig );
 
-	// configure memlimit
 	g_iMemLimit = 0;
 	if ( hConf("indexer") && hConf["indexer"]("indexer") )
 	{
 		CSphConfigSection & hIndexer = hConf["indexer"]["indexer"];
 
 		g_iMemLimit = hIndexer.GetSize ( "mem_limit", 0 );
-		sphSetThrottling (
-			hIndexer.GetInt ( "max_iops", 0 ),
-			hIndexer.GetSize ( "max_iosize", 0 ));
+		g_iMaxXmlpipe2Field = hIndexer.GetSize ( "max_xmlpipe2_field", 2*1024*1024 );
+		sphSetThrottling ( hIndexer.GetInt ( "max_iops", 0 ), hIndexer.GetSize ( "max_iosize", 0 ) );
 	}
 
 	/////////////////////

@@ -528,6 +528,12 @@ indexer
 	# optional, default is 0 (unlimited)
 	#
 	# max_iosize		= 1048576
+
+
+	# maximum xmlpipe2 field length, bytes
+	# optional, default is 2M
+	#
+	# max_xmlpipe2_field	= 4M
 }
 
 #############################################################################

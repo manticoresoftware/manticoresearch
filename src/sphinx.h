@@ -1462,7 +1462,7 @@ private:
 #if USE_LIBEXPAT || USE_LIBXML
 
 class CSphConfigSection;
-CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, FILE * pPipe, BYTE * dInitialBuf, int iBufLen, const char * szSourceName );
+CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, FILE * pPipe, BYTE * dInitialBuf, int iBufLen, const char * szSourceName, int iMaxFieldLen );
 
 #endif
 

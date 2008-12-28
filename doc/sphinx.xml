@@ -1120,7 +1120,7 @@ hello !world
 </listitem>
 <listitem>field search operator: <programlisting>@title hello @body world</programlisting></listitem>
 <listitem>field position limit modifier (introduced in version 0.9.9): <programlisting>@body[50] hello</programlisting></listitem>
-<listitem>multiple-field search operator: <programlisting>@(title, body) hello world</programlisting></listitem>
+<listitem>multiple-field search operator: <programlisting>@(title,body) hello world</programlisting></listitem>
 <listitem>all-field search operator: <programlisting>@* hello</programlisting></listitem>
 <listitem>phrase search operator: <programlisting>"hello world"</programlisting></listitem>
 <listitem>proximity search operator: <programlisting>"hello world"~10</programlisting></listitem>
@@ -2992,9 +2992,9 @@ If there's no such attribute name in Sphinx search results, column will have
 <para>
 Special "virtual" attributes names can also be bound to SphinxSE columns.
 <code>_sph_</code> needs to be used instead of <code>@</code> for that.
-For instance, to obtain <code>@group</code> and <code>@count</code>
-virtual attributes, use <code>_sph_group</code> and <code>_sph_count</code>
-column names.
+For instance, to obtain the values of <code>@groupby</code>, <code>@count</code>,
+or <code>@distinct</code> virtual attributes, use <code>_sph_groupby</code>,
+<code>_sph_count</code> or <code>_sph_distinct</code> column names, respectively.
 </para>
 <para>
 <code>CONNECTION</code> string parameter can be used to specify default

@@ -1295,6 +1295,15 @@ bool CSphSEQuery::ParseField ( char * sField )
 			{
 				m_sQuery = sField;
 				m_bQuery = true;
+
+				// unescape
+				char *s = sField, *d = sField;
+				while ( *s )
+				{
+					if ( *s!='\\' ) *d++ = *s;
+					s++;
+				}
+				*d = '\0';
 			}
 		}
 		SPH_RET(true);

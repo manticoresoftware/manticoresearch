@@ -240,6 +240,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "crash_log_path",			0, NULL },
 	{ "max_filters",			0, NULL },
 	{ "max_filter_values",		0, NULL },
+	{ "listen_backlog",			0, NULL },
 	{ NULL,						0, NULL }
 };
 

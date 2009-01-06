@@ -7636,8 +7636,9 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	}
 
 	// almost ready, time to start listening
+	int iBacklog = hSearchd.GetInt ( "listen_backlog", SEARCHD_BACKLOG );
 	ARRAY_FOREACH ( i, g_dListeners )
-		if ( listen ( g_dListeners[i].m_iSock, SEARCHD_BACKLOG )==-1 )
+		if ( listen ( g_dListeners[i].m_iSock, iBacklog )==-1 )
 			sphFatal ( "listen() failed: %s", sphSockError() );
 
 	// prepare to detach

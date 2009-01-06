@@ -630,6 +630,12 @@ searchd
 	# max allowed per-filter values count
 	# optional, default is 4096
 	max_filter_values	= 4096
+
+
+	# socket listen queue length
+	# optional, default is 5
+	#
+	# listen_backlog		= 5
 }
 
 # --eof--

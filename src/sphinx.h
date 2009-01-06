@@ -18,6 +18,7 @@
 
 #ifdef _WIN32
 	#define USE_MYSQL		1	/// whether to compile MySQL support
+	#define USE_PGSQL		0	/// whether to compile PgSQL support
 	#define USE_MSSQL		1	/// whether to compile MSSQL support
 	#define USE_LIBEXPAT	1	/// whether to compile libexpat support
 	#define USE_LIBICONV	1	/// whether to compile iconv support

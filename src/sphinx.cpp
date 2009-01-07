@@ -232,7 +232,7 @@ static const char * const g_dTimerNames [ TIMERS_TOTAL ] =
 
 struct CSphTimer
 {
-	float			m_fStamp;
+	int64_t			m_iMicroSec;
 	ESphTimer		m_eTimer;
 	int				m_iParent;
 	int				m_iChild;
@@ -252,19 +252,19 @@ struct CSphTimer
 		m_iNext = -1;
 		m_iPrev = -1;
 		m_eTimer = eTimer;
-		m_fStamp = 0;
+		m_iMicroSec = 0;
 		m_iCalls = 0;
 	}
 
 	void Start ()
 	{
-		m_fStamp -= sphLongTimer ();
+		m_iMicroSec -= sphMicroTimer ();
 		m_iCalls++;
 	}
 
 	void Stop ()
 	{
-		m_fStamp += sphLongTimer ();
+		m_iMicroSec += sphMicroTimer ();
 	}
 };
 
@@ -361,12 +361,12 @@ void sphProfilerShow ( int iTimer=0, int iLevel=0 )
 
 	// calc me
 	int iChildren = 0;
-	float fSelf = tTimer.m_fStamp;
+	int64_t tmSelf = tTimer.m_iMicroSec;
 	for ( iChild=tTimer.m_iChild; iChild>0; iChild=g_dTimers[iChild].m_iNext, iChildren++ )
-		fSelf -= g_dTimers[iChild].m_fStamp;
+		tmSelf -= g_dTimers[iChild].m_iMicroSec;
 
 	// dump me
-	if ( tTimer.m_fStamp<0.00005f )
+	if ( tTimer.m_iMicroSec<50 )
 		return;
 
 	char sName[32];
@@ -375,8 +375,11 @@ void sphProfilerShow ( int iTimer=0, int iLevel=0 )
 	sName[2*iLevel] = '\0';
 	strncat ( sName, g_dTimerNames [ tTimer.m_eTimer ], sizeof(sName) );
 
-	fprintf ( stdout, "%-32s | %7.2f ms | %7.2f ms self | %d calls\n",
-		sName, 1000.0f*tTimer.m_fStamp, 1000.0f*fSelf, tTimer.m_iCalls );
+	fprintf ( stdout, "%-32s | %6d.%02d ms | %6d.%02d ms self | %d calls\n",
+		sName,
+		int(tTimer.m_iMicroSec/1000), int(tTimer.m_iMicroSec%1000)/10,
+		int(tmSelf/1000), int(tmSelf%1000)/10,
+		tTimer.m_iCalls );
 
 	// dump my children
 	iChild = tTimer.m_iChild;

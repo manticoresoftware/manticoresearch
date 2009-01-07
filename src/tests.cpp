@@ -333,18 +333,18 @@ void BenchTokenizer ( bool bUTF8 )
 		const int iPasses = 10;
 		int iTokens = 0;
 
-		float fTime = -sphLongTimer ();
+		int64_t tmTime = -sphMicroTimer();
 		for ( int iPass=0; iPass<iPasses; iPass++ )
 		{
 			pTokenizer->SetBuffer ( (BYTE*)sData, iData );
 			while ( pTokenizer->GetToken() ) iTokens++;
 		}
-		fTime += sphLongTimer ();
+		tmTime += sphMicroTimer();
 
 		iTokens /= iPasses;
-		fTime /= iPasses;
+		tmTime /= iPasses;
 
-		printf ( "run %d: %d bytes, %d tokens, %.3f ms, %.3f MB/sec\n", iRun, iData, iTokens, 1000.0f*fTime, iData/fTime/1000000.0f );
+		printf ( "run %d: %d bytes, %d tokens, %d.%03d ms, %.3f MB/sec\n", iRun, iData, iTokens, int(tmTime/1000), int(tmTime%1000), float(iData)/tmTime );
 		SafeDeleteArray ( sData );
 	}
 }
@@ -416,15 +416,16 @@ void BenchStripper ()
 			tStripper.SetRemovedElements ( "style, script", sError );
 
 		const int iPasses = 50;
-		float fTime = -sphLongTimer ();
+		int64_t tmTime = -sphMicroTimer();
 		for ( int iPass=0; iPass<iPasses; iPass++ )
 		{
 			tStripper.Strip ( (BYTE*)sBuf );
 			strcpy ( sBuf, sRef );
 		}
-		fTime += sphLongTimer ();
+		tmTime += sphMicroTimer();
 
-		printf ( "run %d: %d bytes, %.3f ms, %.3f MB/sec\n", iRun, iLen, 1000.0f*fTime/float(iPasses), iLen*float(iPasses)/fTime/1000000.0f );
+		tmTime /= iPasses;
+		printf ( "run %d: %d bytes, %d.%03d ms, %.3f MB/sec\n", iRun, iLen, int(tmTime/1000), int(tmTime%1000), float(iLen)/tmTime );
 	}
 
 	SafeDeleteArray ( sBuf );
@@ -574,28 +575,28 @@ void BenchExpr ()
 		const int NRUNS = 1000000;
 
 		volatile float fValue = 0.0f;
-		float fTime = sphLongTimer ();
+		int64_t tmTime = sphMicroTimer();
 		for ( int i=0; i<NRUNS; i++ ) fValue += pExpr->Eval(tMatch);
-		fTime = sphLongTimer() - fTime;
+		tmTime = sphMicroTimer() - tmTime;
 
-		float fTimeInt = sphLongTimer ();
+		int64_t tmTimeInt = sphMicroTimer();
 		if ( uType==SPH_ATTR_INTEGER )
 		{
 			int uValue = 0;
 			for ( int i=0; i<NRUNS; i++ ) uValue += pExpr->IntEval(tMatch);
 		}
-		fTimeInt = sphLongTimer() - fTimeInt;
+		tmTimeInt = sphMicroTimer() - tmTimeInt;
 
-		float fTimeNative = sphLongTimer ();
+		int64_t tmTimeNative = sphMicroTimer();
 		for ( int i=0; i<NRUNS; i++ ) fValue += dBench[iRun].m_pFunc ( tMatch );
-		fTimeNative = sphLongTimer() - fTimeNative;
+		tmTimeNative = sphMicroTimer() - tmTimeNative;
 
 		if ( uType==SPH_ATTR_INTEGER )
-			printf ( "int-eval %.1fM/sec, ", float(NRUNS)/float(1000000.0f)/fTimeInt );
+			printf ( "int-eval %.1fM/sec, ", float(NRUNS)/tmTimeInt );
 
 		printf ( "flt-eval %.1fM/sec, native %.1fM/sec\n",
-			float(NRUNS)/float(1000000.0f)/fTime,
-			float(NRUNS)/float(1000000.0f)/fTimeNative );
+			float(NRUNS)/tmTime,
+			float(NRUNS)/tmTimeNative );
 	}
 }
 

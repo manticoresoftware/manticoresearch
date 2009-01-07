@@ -515,15 +515,15 @@ const CSphIOStats & sphStopIOStats ()
 
 size_t sphRead ( int iFD, void * pBuf, size_t iCount )
 {
-	float fTimer = 0.0f;
+	int64_t tmStart = 0;
 	if ( g_bIOStats )
-		fTimer = sphLongTimer ();
+		tmStart = sphMicroTimer();
 
 	size_t uRead = (size_t) ::read ( iFD, pBuf, iCount );
 
 	if ( g_bIOStats )
 	{
-		g_IOStats.m_fReadTime += sphLongTimer () - fTimer;
+		g_IOStats.m_iReadTime += sphMicroTimer() - tmStart;
 		g_IOStats.m_iReadOps++;
 		g_IOStats.m_fReadKBytes += float ( iCount ) / 1024.0f;
 	}
@@ -1009,7 +1009,7 @@ struct CSphTermSetup : ISphNoncopyable
 	const CSphAutofile &	m_tDoclist;
 	const CSphAutofile &	m_tHitlist;
 	const CSphAutofile &	m_tWordlist;
-	DWORD					m_uMaxStamp;
+	int64_t					m_iMaxTimer;
 	const CSphQuery *		m_pQuery;		///< for extended2 filtering only
 	CSphString *			m_pWarning;
 
@@ -1021,7 +1021,7 @@ struct CSphTermSetup : ISphNoncopyable
 		, m_tDoclist ( tDoclist )
 		, m_tHitlist ( tHitlist )
 		, m_tWordlist ( tWordlist )
-		, m_uMaxStamp ( 0 )
+		, m_iMaxTimer ( 0 )
 		, m_pQuery ( NULL )
 		, m_pWarning ( NULL )
 	{}
@@ -1725,6 +1725,7 @@ int CSphIndex_VLN::m_iIndexTagSeq = 0;
 // UTILITY FUNCTIONS
 /////////////////////////////////////////////////////////////////////////////
 
+/// indexer warning
 void sphWarn ( const char * sTemplate, ... )
 {
 	va_list ap;
@@ -1735,30 +1736,28 @@ void sphWarn ( const char * sTemplate, ... )
 	va_end ( ap );
 }
 
+//////////////////////////////////////////////////////////////////////////
 
-/// time since start, in seconds
-float sphLongTimer ()
+/// timer initializer
+static int64_t g_tmInitTimer = sphMicroTimer();
+
+/// time since startup, in microseconds
+int64_t sphMicroTimer()
 {
 #if USE_WINDOWS
 	// Windows time query
-	static float fFreq;
-	static INT64 iStart;
-	static bool bFirst = true;
+	static int64_t iStart = 0;
+	static int64_t iFreq = 0;
 
 	LARGE_INTEGER iLarge;
-	if ( bFirst )
+	if ( !iFreq )
 	{
-		QueryPerformanceFrequency ( &iLarge );
-		fFreq = 1.0f/iLarge.QuadPart;
-
-		QueryPerformanceCounter ( &iLarge );
-		iStart = iLarge.QuadPart;
-
-		bFirst = false;
+		QueryPerformanceFrequency ( &iLarge ); iFreq = iLarge.QuadPart;
+		QueryPerformanceCounter ( &iLarge ); iStart = iLarge.QuadPart;
 	}
 
 	QueryPerformanceCounter ( &iLarge);
-	return ( iLarge.QuadPart-iStart )*fFreq;
+	return ( iLarge.QuadPart-iStart )*1000000/iFreq;
 
 #else
 	// UNIX time query
@@ -1771,17 +1770,10 @@ float sphLongTimer ()
 		s_sec = tv.tv_sec;
 		s_usec = tv.tv_usec;
 	}
+
 	gettimeofday ( &tv, NULL );
-	return float(tv.tv_sec-s_sec) + float(tv.tv_usec-s_usec)/1000000.0f;
-
+	return int64_t(tv.tv_sec-s_sec)*int64_t(1000000) + int64_t(tv.tv_usec-s_usec);
 #endif // USE_WINDOWS
-}
-
-
-/// time since start, in milliseconds
-DWORD sphTimerMsec ()
-{
-	return (DWORD)( sphLongTimer()*1000.0f );
 }
 
 
@@ -1790,15 +1782,15 @@ bool sphWrite ( int iFD, const void * pBuf, size_t iCount, const char * sName, C
 	if ( iCount<=0 )
 		return true;
 
-	float fTimer = 0.0f;
+	int64_t tmTimer = 0;
 	if ( g_bIOStats )
-		fTimer = sphLongTimer ();
+		tmTimer = sphMicroTimer();
 
 	int iWritten = ::write ( iFD, pBuf, iCount );
 
 	if ( g_bIOStats && iCount > 0 )
 	{
-		g_IOStats.m_fWriteTime += sphLongTimer () - fTimer;
+		g_IOStats.m_iWriteTime += sphMicroTimer() - tmTimer;
 		g_IOStats.m_iWriteOps++;
 		g_IOStats.m_fWriteKBytes += float ( iCount ) / 1024.0f;
 	}
@@ -1816,12 +1808,24 @@ bool sphWrite ( int iFD, const void * pBuf, size_t iCount, const char * sName, C
 
 static int		g_iMaxIOps		= 0;
 static int		g_iMaxIOSize	= 0;
-static float	g_fLastIOTime	= 0.0f;
+static int64_t	g_tmLastIOTime	= 0;
 
 void sphSetThrottling ( int iMaxIOps, int iMaxIOSize )
 {
 	g_iMaxIOps	 = iMaxIOps;
 	g_iMaxIOSize = iMaxIOSize;
+}
+
+
+static inline void sphThrottleSleep ()
+{
+	if ( g_iMaxIOps>0 )
+	{
+		int64_t tmTimer = sphMicroTimer();
+		int64_t tmSleep = Max ( 0, g_tmLastIOTime + 1000000/g_iMaxIOps - tmTimer );
+		sphSleepMsec ( int(tmSleep/1000) );
+		g_tmLastIOTime = tmTimer + tmSleep;
+	}
 }
 
 
@@ -1845,14 +1849,7 @@ bool sphWriteThrottled ( int iFD, const void * pBuf, size_t iCount, const char *
 		return true;
 	}
 
-	if ( g_iMaxIOps > 0 )
-	{
-		float fTime = sphLongTimer ();
-		float fSleep = Max ( 0.0f, g_fLastIOTime + 1.0f / g_iMaxIOps - fTime );
-		sphUsleep ( int ( fSleep * 1000.0f ) );
-		g_fLastIOTime = fTime + fSleep;
-	}
-
+	sphThrottleSleep ();
 	return sphWrite ( iFD, pBuf, iCount, sName, sError );
 }
 
@@ -1886,14 +1883,7 @@ size_t sphReadThrottled ( int iFD, void * pBuf, size_t iCount )
 		return nBytesRead;
 	}
 
-	if ( g_iMaxIOps > 0 )
-	{
-		float fTime = sphLongTimer ();
-		float fSleep = Max ( 0.0f, g_fLastIOTime + 1.0f / g_iMaxIOps - fTime );
-		sphUsleep ( int ( fSleep * 1000.0f ) );
-		g_fLastIOTime = fTime + fSleep;
-	}
-
+	sphThrottleSleep ();
 	return sphRead ( iFD, pBuf, iCount );
 }
 
@@ -2042,7 +2032,7 @@ void sphLockUn ( int iFile )
 #endif
 
 
-void sphUsleep ( int iMsec )
+void sphSleepMsec ( int iMsec )
 {
 	if ( iMsec<=0 )
 		return;
@@ -10538,7 +10528,7 @@ protected:
 	SphDocID_t					m_uHitsOverFor;	///< there are no more hits for matches block starting with this ID
 	DWORD						m_uFields;		///< accepted fields mask
 	float						m_fIDF;			///< IDF for this term (might be 0.0f for non-1st occurences in query)
-	DWORD						m_uMaxStamp;	///< work until this timestamp 
+	int64_t						m_iMaxTimer;	///< work until this timestamp 
 	CSphString *				m_pWarning;
 };
 
@@ -11051,7 +11041,7 @@ ExtTerm_c::ExtTerm_c ( CSphQueryWord * pQword, DWORD uFields, const CSphTermSetu
 	m_pHitDoc = NULL;
 	m_uHitsOverFor = 0;
 	m_uFields = uFields;
-	m_uMaxStamp = tSetup.m_uMaxStamp;
+	m_iMaxTimer = tSetup.m_iMaxTimer;
 
 	AllocDocinfo ( tSetup );
 }
@@ -11065,7 +11055,7 @@ const ExtDoc_t * ExtTerm_c::GetDocsChunk ( SphDocID_t * pMaxID )
 	m_uMaxID = 0;
 
 	// max_query_time
-	if ( m_uMaxStamp>0 && sphTimerMsec()>=m_uMaxStamp )
+	if ( m_iMaxTimer>0 && sphMicroTimer()>=m_iMaxTimer )
 	{
 		if ( m_pWarning )
 			*m_pWarning = "query time exceeded max_query_time";
@@ -15354,7 +15344,7 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 
 	// start counting
 	pResult->m_iQueryTime = 0;
-	float tmQueryStart = sphLongTimer ();
+	int64_t tmQueryStart = sphMicroTimer();
 
 	///////////////////
 	// setup searching
@@ -15415,7 +15405,7 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 	tTermSetup.m_tMin = m_tMin;
 	tTermSetup.m_iToCalc = pResult->m_tSchema.GetRowSize() - m_tSchema.GetRowSize();
 	if ( pQuery->m_uMaxQueryMsec>0 )
-		tTermSetup.m_uMaxStamp = sphTimerMsec() + pQuery->m_uMaxQueryMsec; // max_query_time
+		tTermSetup.m_iMaxTimer = sphMicroTimer() + pQuery->m_uMaxQueryMsec*1000; // max_query_time
 	tTermSetup.m_pQuery = pQuery; // for extended2 filtering only
 	tTermSetup.m_pWarning = &pResult->m_sWarning;
 
@@ -15553,7 +15543,7 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 	PROFILE_SHOW ();
 
 	// query timer
-	pResult->m_iQueryTime += int ( 1000.0f*( sphLongTimer() - tmQueryStart ) );
+	pResult->m_iQueryTime = int( ( sphMicroTimer()-tmQueryStart )/1000 );
 	return true;
 }
 
@@ -17982,7 +17972,7 @@ bool CSphSource_SQL::RunQueryStep ( const char * sQuery, CSphString & sError )
 	static const int iBufSize = 32;
 	char * sRes = NULL;
 
-	sphUsleep ( m_tParams.m_iRangedThrottle );
+	sphSleepMsec ( m_tParams.m_iRangedThrottle );
 
 	//////////////////////////////////////////////
 	// range query with $start/$end interpolation

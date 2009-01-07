@@ -442,12 +442,12 @@ void sphLogEntry ( ESphLogLevel eLevel, char * sBuf )
 void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 {
 	// dupe catcher state
-	static const float	FLUSH_THRESH_TIME	= 1.0f;
+	static const int	FLUSH_THRESH_TIME	= 1000000; // in microseconds
 	static const int	FLUSH_THRESH_COUNT	= 100;
 
 	static ESphLogLevel eLastLevel = LOG_INFO;
 	static DWORD uLastEntry = 0;
-	static float fLastStamp = -1.0f-FLUSH_THRESH_TIME;
+	static int64_t tmLastStamp = -1000000-FLUSH_THRESH_TIME;
 	static int iLastRepeats = 0;
 
 	// only if we can
@@ -476,18 +476,18 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 
 	// catch dupes
 	DWORD uEntry = sFmt ? sphCRC32 ( (const BYTE*)( sBuf+iLen ) ) : 0;
-	float fNow = sphLongTimer ();
+	int64_t tmNow = sphMicroTimer();
 
 	// accumulate while possible
-	if ( sFmt && eLevel==eLastLevel && uEntry==uLastEntry && iLastRepeats<FLUSH_THRESH_COUNT && fNow<fLastStamp+FLUSH_THRESH_TIME )
+	if ( sFmt && eLevel==eLastLevel && uEntry==uLastEntry && iLastRepeats<FLUSH_THRESH_COUNT && tmNow<tmLastStamp+FLUSH_THRESH_TIME )
 	{
-		fLastStamp = fNow;
+		tmLastStamp = tmNow;
 		iLastRepeats++;
 		return;
 	}
 
 	// flush if needed
-	if ( iLastRepeats!=0 && ( sFmt || fNow>=fLastStamp+FLUSH_THRESH_TIME ) )
+	if ( iLastRepeats!=0 && ( sFmt || tmNow>=tmLastStamp+FLUSH_THRESH_TIME ) )
 	{
 		// flush if we actually have something to flush, and
 		// case 1: got a message we can't accumulate
@@ -497,7 +497,7 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 		snprintf ( sLast+iLen, sizeof(sLast)-iLen, "last message repeated %d times", iLastRepeats );
 		sphLogEntry ( eLastLevel, sLast );
 
-		fLastStamp = fNow;
+		tmLastStamp = tmNow;
 		iLastRepeats = 0;
 		eLastLevel = LOG_INFO;
 		uLastEntry = 0;
@@ -507,7 +507,7 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	if ( !sFmt )
 		return;
 
-	fLastStamp = fNow;
+	tmLastStamp = tmNow;
 	iLastRepeats = 0;
 	eLastLevel = eLevel;
 	uLastEntry = uEntry;
@@ -1142,7 +1142,7 @@ int sphCreateInetSocket ( DWORD uAddr, int iPort )
 			break;
 
 		sphInfo ( "bind() failed on %s, retrying...", sAddress );
-		sphUsleep ( 3000 );
+		sphSleepMsec ( 3000 );
 	} while ( --iTries>0 );
 	if ( iRes )
 		sphFatal ( "bind() failed on %s: %s", sAddress, sphSockError() );
@@ -1281,15 +1281,18 @@ int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout )
 {
 	assert ( iLen>0 );
 
-	int iTimeout = 1000*Max ( 1, iReadTimeout ); // ms to wait total
-	int iLeftMs = iTimeout; // ms to wait left
+	int64_t tmMaxTimer = sphMicroTimer() + 1000000*Max ( 1, iReadTimeout ); // in microseconds
 	int iLeftBytes = iLen; // bytes to read left
-	float tmStart = sphLongTimer ();
-	char * pBuf = (char*) buf;
 
+	char * pBuf = (char*) buf;
 	int iRes = -1, iErr = 0;
-	while ( iLeftBytes>0 && iLeftMs>0 )
+
+	while ( iLeftBytes>0 )
 	{
+		const int64_t tmMicroLeft = tmMaxTimer - sphMicroTimer();
+		if ( tmMicroLeft<=0 )
+			break; // timed out
+
 		fd_set fdRead;
 		FD_ZERO ( &fdRead );
 		sphFDSet ( iSock, &fdRead );
@@ -1299,8 +1302,8 @@ int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout )
 		sphFDSet ( iSock, &fdExcept );
 
 		struct timeval tv;
-		tv.tv_sec = iLeftMs / 1000;
-		tv.tv_usec = iLeftMs % 1000;
+		tv.tv_sec = (int)( tmMicroLeft / 1000000 );
+		tv.tv_usec = (int)( tmMicroLeft % 1000000 );
 
 		iRes = ::select ( iSock+1, &fdRead, NULL, &fdExcept, &tv );
 
@@ -1309,10 +1312,8 @@ int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout )
 		{
 			iErr = sphSockGetErrno();
 			if ( iErr==EINTR )
-			{
-				iLeftMs = iTimeout - (int)( 1000.0f*( sphLongTimer() - tmStart ) );
 				continue;
-			}
+
 			sphSockSetErrno ( iErr );
 			return -1;
 		}
@@ -1339,10 +1340,8 @@ int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout )
 		{
 			iErr = sphSockGetErrno();
 			if ( iErr==EINTR )
-			{
-				iLeftMs -= (int)( 1000.0f*( sphLongTimer() - tmStart ) );
 				continue;
-			}
+
 			sphSockSetErrno ( iErr );
 			return -1;
 		}
@@ -1350,7 +1349,6 @@ int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout )
 		// update
 		pBuf += iRes;
 		iLeftBytes -= iRes;
-		iLeftMs = iTimeout - (int)( 1000.0f*( sphLongTimer() - tmStart ) );
 	}
 
 	// if there was a timeout, report it as an error
@@ -1587,11 +1585,10 @@ bool NetOutputBuffer_c::Flush ()
 
 	assert ( iLen>0 );
 	assert ( iLen<=(int)sizeof(m_dBuffer) );
-
 	char * pBuffer = (char *)&m_dBuffer[0];
-	int iTimeout = g_iWriteTimeout * 1000;
-	int iStart = (int)(sphLongTimer() * 1000);
-	for(;;)
+
+	const int64_t tmMaxTimer = sphMicroTimer() + g_iWriteTimeout*1000000; // in microseconds
+	while ( !m_bError )
 	{
 		int iRes = sphSockSend ( m_iSock, pBuffer, iLen );
 		if ( iRes < 0 )
@@ -1613,16 +1610,17 @@ bool NetOutputBuffer_c::Flush ()
 				break;
 		}
 
-		if ( iTimeout > 0 )
+		int64_t tmMicroLeft = tmMaxTimer - sphMicroTimer();
+		if ( tmMicroLeft>0 )
 		{
 			fd_set fdWrite;
 			FD_ZERO ( &fdWrite );
 			sphFDSet ( m_iSock, &fdWrite );
 
 			struct timeval tvTimeout;
-			tvTimeout.tv_sec = iTimeout / 1000;
-			tvTimeout.tv_usec = iTimeout % 1000;
-			
+			tvTimeout.tv_sec = (int)( tmMicroLeft / 1000000 );
+			tvTimeout.tv_usec = (int)( tmMicroLeft % 1000000 );
+
 			iRes = select ( m_iSock+1, NULL, &fdWrite, NULL, &tvTimeout );
 		}
 		else
@@ -1649,15 +1647,6 @@ bool NetOutputBuffer_c::Flush ()
 				m_bError = true;
 				break;
 			}
-		}
-
-		if ( m_bError )
-			break;
-		else
-		{
-			int iNow = (int)(sphLongTimer() * 1000);
-			iTimeout -= iStart - iNow;
-			iStart = iNow;
 		}
 	}
 
@@ -2100,10 +2089,13 @@ int QueryRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, const IRequ
 	int iAgents = 0;
 	assert ( iTimeout>=0 );
 
-	int iPassed = 0;
-	float tmStart = sphLongTimer ();
-	while ( iPassed<=iTimeout )
+	int64_t tmMaxTimer = sphMicroTimer() + iTimeout*1000; // in microseconds
+	for ( ;; )
 	{
+		int64_t tmMicroLeft = tmMaxTimer - sphMicroTimer();
+		if ( tmMicroLeft<=0 )
+			break; // FIXME? what about iTimeout==0 case?
+
 		fd_set fdsRead, fdsWrite;
 		FD_ZERO ( &fdsRead );
 		FD_ZERO ( &fdsWrite );
@@ -2126,12 +2118,9 @@ int QueryRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, const IRequ
 		if ( bDone )
 			break;
 
-		iPassed = int ( 1000.0f*( sphLongTimer() - tmStart ) );
-		int iToWait = Max ( iTimeout-iPassed, 0 );
-
 		struct timeval tvTimeout;
-		tvTimeout.tv_sec = iToWait / 1000; // full seconds
-		tvTimeout.tv_usec = ( iToWait % 1000 ) * 1000; // remainder is msec, so *1000 for usec
+		tvTimeout.tv_sec = (int)( tmMicroLeft/ 1000000 ); // full seconds
+		tvTimeout.tv_usec = (int)( tmMicroLeft % 1000000 ); // microseconds
 
 		// FIXME! check exceptfds for connect() failure as well, so that actively refused
 		// connections would not stall for a full timeout
@@ -2231,10 +2220,13 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, IReplyPar
 	assert ( iTimeout>=0 );
 
 	int iAgents = 0;
-	int iPassed = 0;
-	float tmStart = sphLongTimer ();
-	while ( iPassed<=iTimeout )
+	int64_t tmMaxTimer = sphMicroTimer() + iTimeout*1000; // in microseconds
+	for ( ;; )
 	{
+		int64_t tmMicroLeft = tmMaxTimer - sphMicroTimer();
+		if ( tmMicroLeft<=0 ) // FIXME? what about iTimeout==0 case?
+			break;
+
 		fd_set fdsRead;
 		FD_ZERO ( &fdsRead );
 
@@ -2259,12 +2251,9 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, IReplyPar
 		if ( bDone )
 			break;
 
-		iPassed = int ( 1000.0f*( sphLongTimer() - tmStart ) );
-		int iToWait = Max ( iTimeout-iPassed, 0 );
-
 		struct timeval tvTimeout;
-		tvTimeout.tv_sec = iToWait / 1000; // full seconds
-		tvTimeout.tv_usec = ( iToWait % 1000 ) * 1000; // remainder is msec, so *1000 for usec
+		tvTimeout.tv_sec = (int)( tmMicroLeft / 1000000 ); // full seconds
+		tvTimeout.tv_usec = (int)( tmMicroLeft % 1000000 ); // microseconds
 
 		if ( select ( 1+iMax, &fdsRead, NULL, NULL, &tvTimeout )<=0 )
 			continue;
@@ -3247,8 +3236,8 @@ void LogQuery ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 	if ( g_bIOStats )
 	{
 		const CSphIOStats & IOStats = sphStopIOStats ();
-		snprintf ( sPerfBuf, sizeof(sPerfBuf), " [ios=%d kb=%.1f ms=%.1f]", 
-			IOStats.m_iReadOps, IOStats.m_fReadKBytes, IOStats.m_fReadTime*1000.0f );
+		snprintf ( sPerfBuf, sizeof(sPerfBuf), " [ios=%d kb=%.1f ms=%d.%d]", 
+			IOStats.m_iReadOps, IOStats.m_fReadKBytes, int(IOStats.m_iReadTime/1000), int(IOStats.m_iReadTime%1000)/100 );
 	}
 	else
 		sPerfBuf[0] = '\0';
@@ -3805,7 +3794,7 @@ void SearchHandler_c::RunQueries ()
 void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 {
 	// prepare for descent
-	float tmStart = sphLongTimer ();
+	int64_t tmStart = sphMicroTimer();
 
 	CSphQuery & tFirst = m_dQueries[iStart];
 
@@ -3948,7 +3937,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 		// delay between retries
 		if ( iRetry>0 )
-			sphUsleep ( tFirst.m_iRetryDelay );
+			sphSleepMsec ( tFirst.m_iRetryDelay );
 
 		// connect to remote agents and query them, if required
 		int iRemote = 0;
@@ -3967,7 +3956,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 		// while the remote queries are running, do local searches
 		// FIXME! what if the remote agents finish early, could they timeout?
-		float tmQuery = 0.0f;
+		int64_t tmQuery = 0;
 		if ( iRetry==0 )
 		{
 			if ( pDist && !iRemote && !dLocal.GetLength() )
@@ -3977,8 +3966,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				return;
 			}
 
-			tmQuery = -sphLongTimer ();
-
+			tmQuery = -sphMicroTimer();
 			ARRAY_FOREACH ( iLocal, dLocal )
 			{
 				const ServedIndex_t & tServed = g_hIndexes [ dLocal[iLocal] ];
@@ -4150,7 +4138,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 					}
 				}
 			}
-			tmQuery += sphLongTimer ();
+			tmQuery += sphMicroTimer();
 		}
 
 		///////////////////////
@@ -4163,7 +4151,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			m_dFailuresSet.SetIndex ( tFirst.m_sIndexes.cstr() );
 
 			SearchReplyParser_t tParser ( iStart, iEnd );
-			int iMsecLeft = pDist->m_iAgentQueryTimeout - int(tmQuery*1000.0f);
+			int iMsecLeft = pDist->m_iAgentQueryTimeout - int(tmQuery/1000);
 			int iReplys = WaitForRemoteAgents ( pDist->m_dAgents, Max(iMsecLeft,0), tParser );
 
 			// check if there were valid (though might be 0-matches) replys, and merge them
@@ -4322,7 +4310,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 		tRes.m_iOffset = tQuery.m_iOffset;
 		tRes.m_iCount = Max ( Min ( tQuery.m_iLimit, tRes.m_dMatches.GetLength()-tQuery.m_iOffset ), 0 );
-		tRes.m_iQueryTime = int ( 1000.0f*( sphLongTimer() - tmStart ) );/* !COMMIT thats batch run time, not query */
+		tRes.m_iQueryTime = int ( ( sphMicroTimer()-tmStart )/1000 );/* !COMMIT thats batch run time, not query */
 	}
 }
 
@@ -6769,13 +6757,13 @@ void CheckFlush ()
 	if ( g_iAttrFlushPeriod<=0 || g_bFlushing )
 		return;
 
-	static float fLastCheck = -0.001f;
-	float fNow = sphLongTimer ();
+	int64_t tmLastCheck = -1000;
+	int64_t tmNow = sphMicroTimer();
 
-	if ( fLastCheck+float(g_iAttrFlushPeriod)>=fNow )
+	if ( tmLastCheck + g_iAttrFlushPeriod*1000000 >= tmNow )
 		return;
 
-	fLastCheck = fNow;
+	tmLastCheck = tmNow;
 
 	// check if there are dirty indexes
 	bool bDirty = false;

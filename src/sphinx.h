@@ -143,8 +143,8 @@ inline const DWORD *	DOCINFO2ATTRS ( const DWORD * pDocinfo ){ return pDocinfo+D
 
 /////////////////////////////////////////////////////////////////////////////
 
-/// time, in seconds
-float			sphLongTimer ();
+/// time since startup, in microseconds
+int64_t			sphMicroTimer ();
 
 /// Sphinx CRC32 implementation
 DWORD			sphCRC32 ( const BYTE * pString );
@@ -163,7 +163,7 @@ bool			sphLockEx ( int iFile, bool bWait );
 void			sphLockUn ( int iFile );
 
 /// millisecond-precision sleep
-void			sphUsleep ( int iMsec );
+void			sphSleepMsec ( int iMsec );
 
 /// check if file exists and is a readable file
 bool			sphIsReadable ( const char * sFilename, CSphString * pError=NULL );
@@ -178,10 +178,10 @@ void			sphSetProcessInfo ( bool bHead );
 
 struct CSphIOStats
 {
-	float		m_fReadTime;
+	int64_t		m_iReadTime;
 	DWORD		m_iReadOps;
 	float		m_fReadKBytes;
-	float		m_fWriteTime;
+	int64_t		m_iWriteTime;
 	DWORD		m_iWriteOps;
 	float		m_fWriteKBytes;
 };
@@ -763,11 +763,8 @@ public:
 /// source statistics
 struct CSphSourceStats
 {
-	/// how much documents
-	int				m_iTotalDocuments;
-
-	/// how much bytes
-	SphOffset_t		m_iTotalBytes;
+	int				m_iTotalDocuments;	///< how much documents
+	int64_t			m_iTotalBytes;		///< how much bytes
 
 	/// ctor
 	CSphSourceStats ()

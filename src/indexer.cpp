@@ -878,7 +878,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 	// do work
 	///////////
 
-	float fTime = sphLongTimer ();
+	int64_t tmTime = sphMicroTimer();
 	bool bOK = false;
 
 	if ( g_sBuildStops )
@@ -966,24 +966,26 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 	}
 
 	// trip report
-	fTime = sphLongTimer () - fTime;
+	tmTime = sphMicroTimer() - tmTime;
 	if ( !g_bQuiet )
 	{
-		fTime = Max ( fTime, 0.01f );
-
-		CSphSourceStats tTotal;
+		tmTime = Max ( tmTime, 1 );
+		int64_t iTotalDocs = 0;
+		int64_t iTotalBytes = 0;
+		
 		ARRAY_FOREACH ( i, dSources )
 		{
 			const CSphSourceStats & tSource = dSources[i]->GetStats();
-			tTotal.m_iTotalDocuments += tSource.m_iTotalDocuments;
-			tTotal.m_iTotalBytes += tSource.m_iTotalBytes;
+			iTotalDocs += tSource.m_iTotalDocuments;
+			iTotalBytes += tSource.m_iTotalBytes;
 		}
 
-		fprintf ( stdout, "total %d docs, %"PRIi64" bytes\n",
-			tTotal.m_iTotalDocuments, tTotal.m_iTotalBytes );
+		fprintf ( stdout, "total %d docs, %"PRIi64" bytes\n", (int)iTotalDocs, iTotalBytes );
 
-		fprintf ( stdout, "total %.3f sec, %.2f bytes/sec, %.2f docs/sec\n",
-			fTime, tTotal.m_iTotalBytes/fTime, tTotal.m_iTotalDocuments/fTime );
+		fprintf ( stdout, "total %d.%03d sec, %d bytes/sec, %d.%02d docs/sec\n",
+			int(tmTime/1000000), int(tmTime%1000000)/1000, // sec
+			int(iTotalBytes*1000000/tmTime), // bytes/sec
+			int(iTotalDocs*1000000/tmTime), int(iTotalDocs*1000000*100/tmTime)%100 ); // docs/sec
 	}
 
 	// cleanup and go on
@@ -1048,12 +1050,12 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 
 	pDst->SetProgressCallback ( ShowProgress );
 
-	float tmMerge = -sphLongTimer ();
+	int64_t tmMergeTime = sphMicroTimer();
 	if ( !pDst->Merge ( pSrc, tPurge, bMergeKillLists ) )
 		sphDie ( "failed to merge index '%s' into index '%s': %s", sSrc, sDst, pDst->GetLastError().cstr() );
-	tmMerge += sphLongTimer ();
+	tmMergeTime = sphMicroTimer() - tmMergeTime;
 	if ( !g_bQuiet )
-		printf ( "merged in %.1f sec\n", tmMerge );
+		printf ( "merged in %d.%03d sec\n", int(tmMergeTime/1000000), int(tmMergeTime%1000000)/1000 );
 
 	// pick up merge result
 	const char * sPath = hDst["path"].cstr();
@@ -1108,6 +1110,24 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 //////////////////////////////////////////////////////////////////////////
 // ENTRY
 //////////////////////////////////////////////////////////////////////////
+
+void ReportIOStats ( const char * sType, int iReads, int64_t iReadTime, float fReadKB )
+{
+	if ( iReads==0 )
+	{
+		fprintf ( stdout, "total %d %s, %d.%03d sec, 0.0 kb/call avg, 0.0 msec/call avg\n",
+			iReads, sType,
+			int(iReadTime/1000000), int(iReadTime%1000000)/1000 );
+	} else
+	{
+		fprintf ( stdout, "total %d %s, %d.%03d sec, %.1f kb/call avg, %d.%d msec/call avg\n",
+			iReads, sType,
+			int(iReadTime/1000000), int(iReadTime%1000000)/1000,
+			fReadKB/iReads,
+			int(iReadTime/iReads/1000), int(iReadTime/iReads/100)%10 );
+	}
+}
+
 
 int main ( int argc, char ** argv )
 {
@@ -1301,14 +1321,8 @@ int main ( int argc, char ** argv )
 
 	if ( !g_bQuiet )
 	{
-		fprintf ( stdout, "total %d reads, %.1f sec, %.1f kb/read avg, %.1f msec/read avg\n",
-			tStats.m_iReadOps, tStats.m_fReadTime,
-			tStats.m_iReadOps ? tStats.m_fReadKBytes / tStats.m_iReadOps : 0.0f,
-			tStats.m_iReadOps ? tStats.m_fReadTime / tStats.m_iReadOps * 1000.0f : 0.0f );
-		fprintf ( stdout, "total %d writes, %.1f sec, %.1f kb/write avg, %.1f msec/write avg\n",
-			tStats.m_iWriteOps, tStats.m_fWriteTime,
-			tStats.m_iWriteOps ? tStats.m_fWriteKBytes / tStats.m_iWriteOps : 0.0f,
-			tStats.m_iWriteOps ? tStats.m_fWriteTime / tStats.m_iWriteOps * 1000.0f : 0.0f );
+		ReportIOStats ( "reads", tStats.m_iReadOps, tStats.m_iReadTime, tStats.m_fReadKBytes );
+		ReportIOStats ( "writes", tStats.m_iWriteOps, tStats.m_iWriteTime, tStats.m_fWriteKBytes );
 	}
 
 	////////////////////////////

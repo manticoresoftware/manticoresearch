@@ -382,7 +382,7 @@ public:
 							ExprParser_t () {}
 							~ExprParser_t () {}
 
-	ISphExpr *				Parse ( const char * sExpr, const CSphSchema & tSchema, DWORD & uAttrType, CSphString & sError );
+	ISphExpr *				Parse ( const char * sExpr, const CSphSchema & tSchema, DWORD * pAttrType, bool * pUsesWeight, CSphString & sError );
 
 protected:
 	int						m_iParsed;	///< filled by yyparse() at the very end
@@ -413,6 +413,9 @@ private:
 
 	void					GatherArgTypes ( int iNode, CSphVector<int> & dTypes );
 	bool					CheckForConstSet ( int iArgsNode, int iSkip );
+
+	template < typename T >
+	void					WalkTree ( int iRoot, T & FUNCTOR );
 
 	void					Optimize ( int iNode );
 
@@ -1060,6 +1063,19 @@ bool ExprParser_t::CheckForConstSet ( int iArgsNode, int iSkip )
 }
 
 
+template < typename T >
+void ExprParser_t::WalkTree ( int iRoot, T & FUNCTOR )
+{
+	if ( iRoot>=0 )
+	{
+		const ExprNode_t & tNode = m_dNodes[iRoot];
+		FUNCTOR.Process ( tNode );
+		WalkTree ( tNode.m_iLeft, FUNCTOR );
+		WalkTree ( tNode.m_iRight, FUNCTOR );
+	}
+}
+
+
 ISphExpr * ExprParser_t::CreateIntervalNode ( int iArgsNode, CSphVector<ISphExpr *> & dArgs )
 {
 	assert ( dArgs.GetLength()>=2 );
@@ -1312,7 +1328,26 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 }
 
 
-ISphExpr * ExprParser_t::Parse ( const char * sExpr, const CSphSchema & tSchema, DWORD & uAttrType, CSphString & sError )
+struct WeightCheck_fn
+{
+	bool * m_pRes;
+
+	WeightCheck_fn ( bool * pRes )
+		: m_pRes ( pRes )
+	{
+		assert ( m_pRes );
+		*m_pRes = false;
+	}
+
+	void Process ( const ExprNode_t & tNode )
+	{
+		if ( tNode.m_iToken==TOK_WEIGHT )
+			*m_pRes = true;
+	}
+};
+
+
+ISphExpr * ExprParser_t::Parse ( const char * sExpr, const CSphSchema & tSchema, DWORD * pAttrType, bool * pUsesWeight, CSphString & sError )
 {
 	m_sLexerError = "";
 	m_sParserError = "";
@@ -1339,7 +1374,7 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const CSphSchema & tSchema,
 	}
 
 	// deduce return type
-	uAttrType = m_dNodes[m_iParsed].m_uRetType;
+	DWORD uAttrType = m_dNodes[m_iParsed].m_uRetType;
 	assert ( uAttrType==SPH_ATTR_INTEGER || uAttrType==SPH_ATTR_BIGINT || uAttrType==SPH_ATTR_FLOAT );
 
 	// perform optimizations
@@ -1355,6 +1390,16 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const CSphSchema & tSchema,
 	{
 		sError.SetSprintf ( "empty expression" );
 	}
+
+	if ( pAttrType )
+		*pAttrType = uAttrType;
+
+	if ( pUsesWeight )
+	{
+		WeightCheck_fn tFunctor ( pUsesWeight );
+		WalkTree ( m_iParsed, tFunctor );
+	}
+
 	return pRes;
 }
 
@@ -1363,12 +1408,11 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const CSphSchema & tSchema,
 //////////////////////////////////////////////////////////////////////////
 
 /// parser entry point
-ISphExpr * sphExprParse ( const char * sExpr, const CSphSchema & tSchema, DWORD * pAttrType, CSphString & sError )
+ISphExpr * sphExprParse ( const char * sExpr, const CSphSchema & tSchema, DWORD * pAttrType, bool * pUsesWeight, CSphString & sError )
 {
 	// parse into opcodes
-	DWORD uTmp;
 	ExprParser_t tParser;
-	return tParser.Parse ( sExpr, tSchema, pAttrType ? (*pAttrType) : uTmp, sError );
+	return tParser.Parse ( sExpr, tSchema, pAttrType, pUsesWeight, sError );
 }
 
 //

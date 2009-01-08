@@ -1637,7 +1637,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 	if ( pQuery->m_eSort==SPH_SORT_EXPR && tInSchema.GetAttrIndex ( "@expr" )<0 )
 	{
 		CSphColumnInfo tCol ( "@expr", SPH_ATTR_FLOAT ); // enforce float type for backwards compatibility (ie. too lazy to fix those tests right now)
-		tCol.m_pExpr = sphExprParse ( pQuery->m_sSortBy.cstr(), tSchema, NULL, sError );
+		tCol.m_pExpr = sphExprParse ( pQuery->m_sSortBy.cstr(), tSchema, NULL, NULL, sError );
 		if ( !tCol.m_pExpr )
 			return NULL;
 		tCol.m_bLateCalc = true;
@@ -1696,7 +1696,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 
 		// a new and shiny expression, lets parse
 		CSphColumnInfo tExprCol ( tItem.m_sAlias.cstr(), SPH_ATTR_NONE );
-		tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), tSchema, &tExprCol.m_eAttrType, sError );
+		tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), tSchema, &tExprCol.m_eAttrType, &tExprCol.m_bLateCalc, sError );
 		if ( !tExprCol.m_pExpr )
 		{
 			sError.SetSprintf ( "parse error: %s", sError.cstr() );

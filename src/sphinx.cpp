@@ -10107,14 +10107,12 @@ CSphQueryResult * CSphIndex_VLN::Query ( CSphQuery * pQuery )
 
 bool CSphIndex_VLN::EarlyReject ( CSphMatch & tMatch ) const
 {
-	if ( !m_pEarlyFilter )
-		return false;
-
+	// early calc might be needed even when we do not have a filter
 	if ( m_bEarlyLookup )
 		CopyDocinfo ( tMatch, FindDocinfo ( tMatch.m_iDocID ) );
 	EarlyCalc ( tMatch );
 
-	return !m_pEarlyFilter->Eval ( tMatch );
+	return m_pEarlyFilter ? !m_pEarlyFilter->Eval ( tMatch ) : false;
 }
 
 
@@ -15446,6 +15444,9 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 
 	// setup lookup
 	m_bEarlyLookup = ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN ) && pQuery->m_dFilters.GetLength();
+	if ( m_dEarlyCalc.GetLength() )
+		m_bEarlyLookup = true;
+
 	m_bLateLookup = false;
 	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && !m_bEarlyLookup )
 		for ( int iSorter=0; iSorter<iSorters && !m_bLateLookup; iSorter++ )

@@ -1577,6 +1577,17 @@ class SphinxClient
 		}
 
 		$res = substr ( $response, 4 ); // just ignore length, error handling, etc
+		$p = 0;
+		list ( $rows, $cols ) = array_values ( unpack ( "N*N*", substr ( $response, $p, 8 ) ) ); $p += 8;
+
+		$res = array();
+		for ( $i=0; $i<$rows; $i++ )
+			for ( $j=0; $j<$cols; $j++ )
+		{
+			list(,$len) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
+			$res[$i][] = substr ( $response, $p, $len ); $p += $len;
+		}
+
 		$this->_MBPop ();
 		return $res;
 	}

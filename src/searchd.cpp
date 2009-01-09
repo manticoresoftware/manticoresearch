@@ -4419,7 +4419,8 @@ enum SqlStmt_e
 {
 	STMT_PARSE_ERROR,
 	STMT_SELECT,
-	STMT_SHOW_WARNINGS
+	STMT_SHOW_WARNINGS,
+	STMT_SHOW_STATUS
 };
 
 
@@ -5002,6 +5003,25 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 // STATUS HANDLER
 //////////////////////////////////////////////////////////////////////////
 
+void BuildStatus ( CSphVector<CSphString> & dStatus )
+{
+	assert ( g_pStats );
+	const char * FMT64 = "%"PRIu64;
+
+	dStatus.Add ( "uptime" );			dStatus.Add().SetSprintf ( "%u", (DWORD)time(NULL)-g_pStats->m_uStarted );
+	dStatus.Add ( "connections" );		dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iConnections );
+	dStatus.Add ( "maxed-out" );		dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iMaxedOut );
+	dStatus.Add ( "command-search" );	dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_SEARCH] );
+	dStatus.Add ( "command-excerpt" );	dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_EXCERPT] );
+	dStatus.Add ( "command-update" ); 	dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_UPDATE] );
+	dStatus.Add ( "command-keywords" );	dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_KEYWORDS] );
+	dStatus.Add ( "command-persist" );	dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_PERSIST] );
+	dStatus.Add ( "command-status" );	dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_STATUS] );
+	dStatus.Add ( "agent-connect" );	dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iAgentConnect );
+	dStatus.Add ( "agent-retry" );		dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iAgentRetry );
+}
+
+
 void HandleCommandStatus ( int iSock, int iVer, InputBuffer_c & tReq )
 {
 	if ( !CheckCommandVersion ( iVer, VER_COMMAND_STATUS, tReq ) )
@@ -5013,40 +5033,25 @@ void HandleCommandStatus ( int iSock, int iVer, InputBuffer_c & tReq )
 		return;
 	}
 
-	CSphString sRes;
-	sRes.SetSprintf (
-		"uptime: %u\n"
-		"connections: %"PRIu64"\n"
-		"maxed-out: %"PRIu64"\n"
-		"command-search: %"PRIu64"\n"
-		"command-excerpt: %"PRIu64"\n"
-		"command-update: %"PRIu64"\n"
-		"command-keywords: %"PRIu64"\n"
-		"command-persist: %"PRIu64"\n"
-		"command-status: %"PRIu64"\n"
-		"agent-connect: %"PRIu64"\n"
-		"agent-retry: %"PRIu64"\n",
+	CSphVector<CSphString> dStatus;
+	BuildStatus ( dStatus );
 
-		(DWORD)time(NULL)-g_pStats->m_uStarted,
-		g_pStats->m_iConnections,
-		g_pStats->m_iMaxedOut,
-		g_pStats->m_iCommandCount[SEARCHD_COMMAND_SEARCH],
-		g_pStats->m_iCommandCount[SEARCHD_COMMAND_EXCERPT],
-		g_pStats->m_iCommandCount[SEARCHD_COMMAND_UPDATE],
-		g_pStats->m_iCommandCount[SEARCHD_COMMAND_KEYWORDS],
-		g_pStats->m_iCommandCount[SEARCHD_COMMAND_PERSIST],
-		g_pStats->m_iCommandCount[SEARCHD_COMMAND_STATUS],
-		g_pStats->m_iAgentConnect,
-		g_pStats->m_iAgentRetry );
+	int iRespLen = 8; // int rows, int cols
+	ARRAY_FOREACH ( i, dStatus )
+		iRespLen += 4+strlen(dStatus[i].cstr());
 
 	NetOutputBuffer_c tOut ( iSock );
 	tOut.SendWord ( SEARCHD_OK );
-	tOut.SendWord ( VER_COMMAND_KEYWORDS );
-	tOut.SendInt ( 4+strlen(sRes.cstr()) );
-	tOut.SendString ( sRes.cstr() );
+	tOut.SendWord ( VER_COMMAND_STATUS );
+	tOut.SendInt ( iRespLen );
+
+	tOut.SendInt ( dStatus.GetLength()/2 ); // rows
+	tOut.SendInt ( 2 ); // cols
+	ARRAY_FOREACH ( i, dStatus )
+		tOut.SendString ( dStatus[i].cstr() );
 
 	tOut.Flush ();
-	assert ( tOut.GetError()==true || tOut.GetSentCount()==12+(int)strlen(sRes.cstr()) );
+	assert ( tOut.GetError()==true || tOut.GetSentCount()==8+iRespLen );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -5192,12 +5197,13 @@ enum MysqlColumnType_e
 	MYSQL_COL_STRING	= 254
 };
 
+
 void SendMysqlFieldPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, const char * sCol, MysqlColumnType_e eType )
 {
 	const char * sDB = "";
 	const char * sTable = "";
 
-	int iLen = 14 + tOut.GetMysqlPacklen(sDB) + 2*( tOut.GetMysqlPacklen(sTable) + tOut.GetMysqlPacklen(sCol) );
+	int iLen = 17 + tOut.GetMysqlPacklen(sDB) + 2*( tOut.GetMysqlPacklen(sTable) + tOut.GetMysqlPacklen(sCol) );
 
 	int iColLen = 0;
 	switch ( eType )
@@ -5214,9 +5220,10 @@ void SendMysqlFieldPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, const char
 	tOut.SendMysqlString ( sCol ); // name
 	tOut.SendMysqlString ( sCol ); // org_name
 
-	tOut.SendByte ( 0 ); // filler
-	tOut.SendWord ( 0 ); // charset_nr
-	tOut.SendByte ( BYTE(iColLen) ); // length
+	tOut.SendByte ( 12 ); // filler, must be 12 (following pseudo-string length)
+	tOut.SendByte ( 8 ); // charset_nr, 8 is latin1
+	tOut.SendByte ( 0 ); // charset_nr
+	tOut.SendLSBDword ( iColLen ); // length
 	tOut.SendByte ( BYTE(eType) ); // type (0=decimal)
 	tOut.SendWord ( 0 ); // flags
 	tOut.SendByte ( 0 ); // decimals
@@ -5479,6 +5486,40 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 
 			tOut.SendLSBDword ( ((uPacketID++)<<24) + ( p-sRowBuffer ) );
 			tOut.SendBytes ( sRowBuffer, p-sRowBuffer );
+
+			// cleanup
+			SendMysqlEofPacket ( tOut, uPacketID++, 0 );
+			sLastWarning = "";
+
+		} else if ( eStmt==STMT_SHOW_STATUS )
+		{
+			CSphVector<CSphString> dStatus;
+			BuildStatus ( dStatus );
+
+			// result set header packet
+			tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
+			tOut.SendByte ( 2 ); // field count (level+code+message)
+			tOut.SendByte ( 0 ); // extra
+
+			// field packets
+			SendMysqlFieldPacket ( tOut, uPacketID++, "Variable_name", MYSQL_COL_STRING );
+			SendMysqlFieldPacket ( tOut, uPacketID++, "Value", MYSQL_COL_STRING );
+			SendMysqlEofPacket ( tOut, uPacketID++, 0 );
+
+			// send rows
+			char sRowBuffer[4096];
+			const char * sRowMax = sRowBuffer + sizeof(sRowBuffer);
+
+			for ( int iRow=0; iRow<dStatus.GetLength(); iRow+=2 )
+			{
+				int iLen;
+				char * p = sRowBuffer;
+				iLen = strlen ( dStatus[iRow+0].cstr() ); strncpy ( p+1, dStatus[iRow+0].cstr(), sRowMax-p-1 ); p[0] = BYTE(iLen); p += 1+iLen;
+				iLen = strlen ( dStatus[iRow+1].cstr() ); strncpy ( p+1, dStatus[iRow+1].cstr(), sRowMax-p-1 ); p[0] = BYTE(iLen); p += 1+iLen;
+
+				tOut.SendLSBDword ( ((uPacketID++)<<24) + ( p-sRowBuffer ) );
+				tOut.SendBytes ( sRowBuffer, p-sRowBuffer );
+			}
 
 			// cleanup
 			SendMysqlEofPacket ( tOut, uPacketID++, 0 );

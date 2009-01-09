@@ -27,6 +27,7 @@
 %token	TOK_ORDER
 %token	TOK_SELECT
 %token	TOK_SHOW
+%token	TOK_STATUS
 %token	TOK_WARNINGS
 %token	TOK_WEIGHT
 %token	TOK_WITHIN
@@ -45,6 +46,7 @@
 statement:
 	select_from
 	| show_warnings
+	| show_status
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -226,6 +228,10 @@ arglist:
 
 show_warnings:
 	TOK_SHOW TOK_WARNINGS		{ pParser->m_eStmt = STMT_SHOW_WARNINGS; }
+	;
+
+show_status:
+	TOK_SHOW TOK_STATUS			{ pParser->m_eStmt = STMT_SHOW_STATUS; }
 	;
 
 %%

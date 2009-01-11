@@ -5083,7 +5083,7 @@ html_strip = 1
 <sect3 id="conf-html-index-attrs"><title>html_index_attrs</title>
 <para>
 A list of markup attributes to index when stripping HTML.
-Optional, default is emptu (do not index markup attributes).
+Optional, default is empty (do not index markup attributes).
 </para>
 <para>
 Specifies HTML markup attributes whose contents should be retained and indexed

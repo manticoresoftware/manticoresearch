@@ -3513,7 +3513,9 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 			}
 
 			// handle specials
-			bool bJustSpecial = ( iFolded & FLAG_CODEPOINT_SPECIAL ) && !( iFolded & FLAG_CODEPOINT_DUAL ); // OPTIMIZE?
+			bool bJustSpecial = ( iFolded & FLAG_CODEPOINT_SPECIAL )
+				&& !( iFolded & FLAG_CODEPOINT_DUAL ) // OPTIMIZE?
+				&& !( iFolded & FLAG_CODEPOINT_SYNONYM ); // OPTIMIZE?
 
 			// if candidate starts with something special, and turns out to be not a synonym,
 			// we will need to rescan from current position later

@@ -685,7 +685,12 @@ void TestQueryParser ()
 
 	CSphTokenizerSettings tTokenizerSetup;
 	tTokenizerSetup.m_iMinWordLen = 2;
+	tTokenizerSetup.m_sSynonymsFile = g_sTmpfile;
 	pTokenizer->Setup ( tTokenizerSetup );
+
+	CSphString sError;
+	assert ( CreateSynonymsFile ( NULL ) );
+	assert ( pTokenizer->LoadSynonyms ( g_sTmpfile, sError ) );
 
 	struct QueryTest_t
 	{
@@ -723,7 +728,8 @@ void TestQueryParser ()
 		{ "\"\"",												"" },
 		{ "\"()\"",												"" },
 		{ "\"]\"",												"" },
-		{ "@title hello @body -world",							"( ( @title: hello ) AND NOT ( @body: world ) )" }
+		{ "@title hello @body -world",							"( ( @title: hello ) AND NOT ( @body: world ) )" },
+		{ "Ms-Dos",							"MS-DOS" }
 	};
 
 

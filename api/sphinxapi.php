@@ -565,6 +565,17 @@ class SphinxClient
 			return false;
 		}
 
+		// send my version
+		// this is a subtle part. we must do it before (!) reading back from searchd.
+		// because otherwise under some conditions (reported on FreeBSD for instance)
+		// TCP stack could throttle write-write-read pattern because of Nagle.
+		if ( !$this->_Send ( $fp, pack ( "N", 1 ), 4 ) )
+		{
+			fclose ( $fp );
+			$this->_error = "failed to send client protocol version";
+			return false;
+		}
+
 		// check version
 		list(,$v) = unpack ( "N*", fread ( $fp, 4 ) );
 		$v = (int)$v;
@@ -575,9 +586,6 @@ class SphinxClient
 			return false;
 		}
 
-		// all ok, send my version
-		if ( !$this->_Send ( $fp, pack ( "N", 1 ), 4 ) )
-			return false;
 		return $fp;
 	}
 

@@ -180,6 +180,7 @@ static bool				g_bSeamlessRotate	= true;
 #endif
 
 static bool				g_bIOStats		= false;
+static bool				g_bCpuStats		= false;
 static bool				g_bOptConsole	= false;
 static bool				g_bOptNoDetach	= false;
 
@@ -271,6 +272,19 @@ struct SearchdStats_t
 	int64_t		m_iCommandCount[SEARCHD_COMMAND_TOTAL];
 	int64_t		m_iAgentConnect;
 	int64_t		m_iAgentRetry;
+
+	int64_t		m_iQueries;			///< search queries count (differs from search commands count because of multi-queries)
+	int64_t		m_iQueryTime;		///< wall time spent (including network wait time)
+	int64_t		m_iQueryCpuTime;	///< CPU time spent
+
+	int64_t		m_iDistQueries;		///< distributed queries count
+	int64_t		m_iDistWallTime;	///< wall time spent on distributed queries
+	int64_t		m_iDistLocalTime;	///< wall time spent searching local indexes in distributed queries
+	int64_t		m_iDistWaitTime;	///< time spent waiting for remote agents in distributed queries
+
+	int64_t		m_iDiskReads;		///< total read IO calls (fired by search queries)
+	int64_t		m_iDiskReadBytes;	///< total read IO traffic
+	int64_t		m_iDiskReadTime;	///< total read IO time
 };
 
 static SearchdStats_t *			g_pStats		= NULL;
@@ -307,7 +321,6 @@ const int EXT_COUNT = 7;
 const char * g_dNewExts[EXT_COUNT] = { ".new.sph", ".new.spa", ".new.spi", ".new.spd", ".new.spp", ".new.spm", ".new.spk" };
 const char * g_dOldExts[EXT_COUNT] = { ".old.sph", ".old.spa", ".old.spi", ".old.spd", ".old.spp", ".old.spm", ".old.spk" };
 const char * g_dCurExts[EXT_COUNT] = { ".sph", ".spa", ".spi", ".spd", ".spp", ".spm", ".spk" };
-
 
 /////////////////////////////////////////////////////////////////////////////
 // MISC
@@ -2084,7 +2097,7 @@ void ConnectToRemoteAgents ( CSphVector<Agent_t> & dAgents, bool bRetryOnly )
 }
 
 
-int QueryRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, const IRequestBuilder_t & tBuilder )
+int QueryRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, const IRequestBuilder_t & tBuilder, int64_t * pWaited )
 {
 	int iAgents = 0;
 	assert ( iTimeout>=0 );
@@ -2092,10 +2105,6 @@ int QueryRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, const IRequ
 	int64_t tmMaxTimer = sphMicroTimer() + iTimeout*1000; // in microseconds
 	for ( ;; )
 	{
-		int64_t tmMicroLeft = tmMaxTimer - sphMicroTimer();
-		if ( tmMicroLeft<=0 )
-			break; // FIXME? what about iTimeout==0 case?
-
 		fd_set fdsRead, fdsWrite;
 		FD_ZERO ( &fdsRead );
 		FD_ZERO ( &fdsWrite );
@@ -2118,13 +2127,23 @@ int QueryRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, const IRequ
 		if ( bDone )
 			break;
 
+		int64_t tmSelect = sphMicroTimer();
+		int64_t tmMicroLeft = tmMaxTimer - tmSelect;
+		if ( tmMicroLeft<=0 )
+			break; // FIXME? what about iTimeout==0 case?
+
 		struct timeval tvTimeout;
 		tvTimeout.tv_sec = (int)( tmMicroLeft/ 1000000 ); // full seconds
 		tvTimeout.tv_usec = (int)( tmMicroLeft % 1000000 ); // microseconds
 
 		// FIXME! check exceptfds for connect() failure as well, so that actively refused
 		// connections would not stall for a full timeout
-		if ( select ( 1+iMax, &fdsRead, &fdsWrite, NULL, &tvTimeout )<=0 )
+		int iSelected = select ( 1+iMax, &fdsRead, &fdsWrite, NULL, &tvTimeout );
+
+		if ( pWaited )
+			*pWaited += sphMicroTimer() - tmSelect;
+
+		if ( iSelected<=0 )
 			continue;
 
 		ARRAY_FOREACH ( i, dAgents )
@@ -2215,7 +2234,7 @@ int QueryRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, const IRequ
 }
 
 
-int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, IReplyParser_t & tParser )
+int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, IReplyParser_t & tParser, int64_t * pWaited )
 {
 	assert ( iTimeout>=0 );
 
@@ -2223,10 +2242,6 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, IReplyPar
 	int64_t tmMaxTimer = sphMicroTimer() + iTimeout*1000; // in microseconds
 	for ( ;; )
 	{
-		int64_t tmMicroLeft = tmMaxTimer - sphMicroTimer();
-		if ( tmMicroLeft<=0 ) // FIXME? what about iTimeout==0 case?
-			break;
-
 		fd_set fdsRead;
 		FD_ZERO ( &fdsRead );
 
@@ -2251,11 +2266,21 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, IReplyPar
 		if ( bDone )
 			break;
 
+		int64_t tmSelect = sphMicroTimer();
+		int64_t tmMicroLeft = tmMaxTimer - tmSelect;
+		if ( tmMicroLeft<=0 ) // FIXME? what about iTimeout==0 case?
+			break;
+
 		struct timeval tvTimeout;
 		tvTimeout.tv_sec = (int)( tmMicroLeft / 1000000 ); // full seconds
 		tvTimeout.tv_usec = (int)( tmMicroLeft % 1000000 ); // microseconds
 
-		if ( select ( 1+iMax, &fdsRead, NULL, NULL, &tvTimeout )<=0 )
+		int iSelected = select ( 1+iMax, &fdsRead, NULL, NULL, &tvTimeout );
+
+		if ( pWaited )
+			*pWaited += sphMicroTimer() - tmSelect;
+
+		if ( iSelected<=0 )
 			continue;
 
 		ARRAY_FOREACH ( iAgent, dAgents )
@@ -3233,11 +3258,29 @@ void LogQuery ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 	static const char * sModes [ SPH_MATCH_TOTAL ] = { "all", "any", "phr", "bool", "ext", "scan", "ext2" };
 	static const char * sSort [ SPH_SORT_TOTAL ] = { "rel", "attr-", "attr+", "tsegs", "ext", "expr" };
 
-	if ( g_bIOStats )
+	if ( g_bIOStats || g_bCpuStats )
 	{
 		const CSphIOStats & IOStats = sphStopIOStats ();
-		snprintf ( sPerfBuf, sizeof(sPerfBuf), " [ios=%d kb=%.1f ms=%d.%d]", 
-			IOStats.m_iReadOps, IOStats.m_fReadKBytes, int(IOStats.m_iReadTime/1000), int(IOStats.m_iReadTime%1000)/100 );
+
+		char * p = sPerfBuf;
+		char * pMax = sPerfBuf+sizeof(sPerfBuf);
+		*p++ = ' ';
+
+		if ( g_bIOStats )
+			p += snprintf ( p, pMax-p, " ios=%d kb=%d.%d ioms=%d.%d",
+				IOStats.m_iReadOps, int(IOStats.m_iReadBytes/1024), int(IOStats.m_iReadBytes%1024)*10/1024,
+				int(IOStats.m_iReadTime/1000), int(IOStats.m_iReadTime%1000)/100 );
+
+		if ( g_bCpuStats )
+			p += snprintf ( p, pMax-p, " cpums=%d.%d", int(tRes.m_iCpuTime/1000), int(tRes.m_iCpuTime%1000)/100 );
+
+		if ( p<=pMax-2 )
+		{
+			*p++ = ']';
+			*p++ = '\0';
+		}
+		sPerfBuf[1] = '[';
+		pMax[-1] = '\0';
 	}
 	else
 		sPerfBuf[0] = '\0';
@@ -3742,9 +3785,6 @@ void SearchHandler_c::RunQueries ()
 	// choose path and run queries
 	///////////////////////////////
 
-	if ( g_bIOStats )
-		sphStartIOStats ();
-
 	g_dMvaStorage.Reserve ( 1024 );
 	g_dMvaStorage.Resize ( 0 );
 	g_dMvaStorage.Add ( 0 );	// dummy value
@@ -3791,11 +3831,36 @@ void SearchHandler_c::RunQueries ()
 }
 
 
+/// return cpu time, in microseconds
+int64_t sphCpuTimer ()
+{
+#ifdef HAVE_CLOCK_GETTIME
+	if ( !g_bCpuStats )
+		return 0;
+
+	struct timespec tp;
+	if ( clock_gettime ( CLOCK_PROCESS_CPUTIME_ID, &tp ) )
+		return 0;
+
+	return tp.tv_sec*1000000 + tp.tv_nsec/1000;
+#else
+	return 0;
+#endif
+}
+
+
 void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 {
-	// prepare for descent
-	int64_t tmStart = sphMicroTimer();
+	// all my stats
+	int64_t tmSubset = sphMicroTimer();
+	int64_t tmLocal = 0;
+	int64_t tmWait = 0;
+	int64_t tmCpu = sphCpuTimer ();
 
+	if ( g_bIOStats )
+		sphStartIOStats ();
+
+	// prepare for descent
 	CSphQuery & tFirst = m_dQueries[iStart];
 
 	m_dFailuresSet.SetSubset ( iStart, iEnd );
@@ -3947,7 +4012,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			ConnectToRemoteAgents ( pDist->m_dAgents, iRetry!=0  );
 
 			SearchRequestBuilder_t tReqBuilder ( m_dQueries, iStart, iEnd );
-			iRemote = QueryRemoteAgents ( pDist->m_dAgents, pDist->m_iAgentConnectTimeout, tReqBuilder );
+			iRemote = QueryRemoteAgents ( pDist->m_dAgents, pDist->m_iAgentConnectTimeout, tReqBuilder, &tmWait );
 		}
 
 		/////////////////////
@@ -3956,7 +4021,6 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 		// while the remote queries are running, do local searches
 		// FIXME! what if the remote agents finish early, could they timeout?
-		int64_t tmQuery = 0;
 		if ( iRetry==0 )
 		{
 			if ( pDist && !iRemote && !dLocal.GetLength() )
@@ -3966,7 +4030,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				return;
 			}
 
-			tmQuery = -sphMicroTimer();
+			tmLocal = -sphMicroTimer();
 			ARRAY_FOREACH ( iLocal, dLocal )
 			{
 				const ServedIndex_t & tServed = g_hIndexes [ dLocal[iLocal] ];
@@ -4138,7 +4202,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 					}
 				}
 			}
-			tmQuery += sphMicroTimer();
+			tmLocal += sphMicroTimer();
 		}
 
 		///////////////////////
@@ -4151,8 +4215,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			m_dFailuresSet.SetIndex ( tFirst.m_sIndexes.cstr() );
 
 			SearchReplyParser_t tParser ( iStart, iEnd );
-			int iMsecLeft = pDist->m_iAgentQueryTimeout - int(tmQuery/1000);
-			int iReplys = WaitForRemoteAgents ( pDist->m_dAgents, Max(iMsecLeft,0), tParser );
+			int iMsecLeft = pDist->m_iAgentQueryTimeout - int(tmLocal/1000);
+			int iReplys = WaitForRemoteAgents ( pDist->m_dAgents, Max(iMsecLeft,0), tParser, &tmWait );
 
 			// check if there were valid (though might be 0-matches) replys, and merge them
 			if ( iReplys )
@@ -4310,7 +4374,39 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 		tRes.m_iOffset = tQuery.m_iOffset;
 		tRes.m_iCount = Max ( Min ( tQuery.m_iLimit, tRes.m_dMatches.GetLength()-tQuery.m_iOffset ), 0 );
-		tRes.m_iQueryTime = int ( ( sphMicroTimer()-tmStart )/1000 );/* !COMMIT thats batch run time, not query */
+	}
+
+	// stats
+	tmSubset = sphMicroTimer() - tmSubset;
+	tmCpu = sphCpuTimer() - tmCpu;
+
+	const int iQueries = iEnd-iStart+1;
+	for ( int iRes=iStart; iRes<=iEnd; iRes++ )
+	{
+		m_dResults[iRes].m_iQueryTime = int(tmSubset/1000/iQueries);
+		m_dResults[iRes].m_iCpuTime = tmCpu/iQueries;
+	}
+
+	const CSphIOStats & tIO = sphStopIOStats ();
+
+	if ( g_pStats )
+	{
+		g_tStatsMutex.Lock();
+		g_pStats->m_iQueries += iQueries;
+		g_pStats->m_iQueryTime += tmSubset;
+		g_pStats->m_iQueryCpuTime += tmCpu;
+		if ( pDist && pDist->m_dAgents.GetLength() )
+		{
+			// do *not* count queries to dist indexes w/o actual remote agents
+			g_pStats->m_iDistQueries++;
+			g_pStats->m_iDistWallTime += tmSubset;
+			g_pStats->m_iDistLocalTime += tmLocal;
+			g_pStats->m_iDistWaitTime += tmWait;
+		}
+		g_pStats->m_iDiskReads += tIO.m_iReadOps;
+		g_pStats->m_iDiskReadTime += tIO.m_iReadTime;
+		g_pStats->m_iDiskReadBytes += tIO.m_iReadBytes;
+		g_tStatsMutex.Unlock();
 	}
 }
 
@@ -4943,12 +5039,12 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 			ConnectToRemoteAgents ( tDist.m_dAgents, false );
 
 			UpdateRequestBuilder_t tReqBuilder ( tUpd );
-			int iRemote = QueryRemoteAgents ( tDist.m_dAgents, tDist.m_iAgentConnectTimeout, tReqBuilder );
+			int iRemote = QueryRemoteAgents ( tDist.m_dAgents, tDist.m_iAgentConnectTimeout, tReqBuilder, NULL ); // FIXME? profile update time too?
 
 			if ( iRemote )
 			{
 				UpdateReplyParser_t tParser ( &iUpdated );
-				iSuccesses += WaitForRemoteAgents ( tDist.m_dAgents, tDist.m_iAgentQueryTimeout, tParser );
+				iSuccesses += WaitForRemoteAgents ( tDist.m_dAgents, tDist.m_iAgentQueryTimeout, tParser, NULL ); // FIXME? profile update time too?
 			}
 		}
 	}
@@ -5003,22 +5099,80 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 // STATUS HANDLER
 //////////////////////////////////////////////////////////////////////////
 
+static inline void FormatMsec ( CSphString & sOut, int64_t tmTime )
+{
+	sOut.SetSprintf ( "%d.%03d", int(tmTime/1000000), int((tmTime%1000000)/1000) );
+}
+
+
 void BuildStatus ( CSphVector<CSphString> & dStatus )
 {
 	assert ( g_pStats );
 	const char * FMT64 = "%"PRIu64;
+	const char * OFF = "OFF";
 
-	dStatus.Add ( "uptime" );			dStatus.Add().SetSprintf ( "%u", (DWORD)time(NULL)-g_pStats->m_uStarted );
-	dStatus.Add ( "connections" );		dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iConnections );
-	dStatus.Add ( "maxed-out" );		dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iMaxedOut );
-	dStatus.Add ( "command-search" );	dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_SEARCH] );
-	dStatus.Add ( "command-excerpt" );	dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_EXCERPT] );
-	dStatus.Add ( "command-update" ); 	dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_UPDATE] );
-	dStatus.Add ( "command-keywords" );	dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_KEYWORDS] );
-	dStatus.Add ( "command-persist" );	dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_PERSIST] );
-	dStatus.Add ( "command-status" );	dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_STATUS] );
-	dStatus.Add ( "agent-connect" );	dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iAgentConnect );
-	dStatus.Add ( "agent-retry" );		dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iAgentRetry );
+	const int64_t iQueriesDiv = Max ( g_pStats->m_iQueries, 1 );
+	const int64_t iDistQueriesDiv = Max ( g_pStats->m_iDistQueries, 1 );
+
+	// FIXME? non-transactional!!!
+	dStatus.Add ( "uptime" );					dStatus.Add().SetSprintf ( "%u", (DWORD)time(NULL)-g_pStats->m_uStarted );
+	dStatus.Add ( "connections" );				dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iConnections );
+	dStatus.Add ( "maxed_out" );				dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iMaxedOut );
+	dStatus.Add ( "command_search" );			dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_SEARCH] );
+	dStatus.Add ( "command_excerpt" );			dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_EXCERPT] );
+	dStatus.Add ( "command_update" ); 			dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_UPDATE] );
+	dStatus.Add ( "command_keywords" );			dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_KEYWORDS] );
+	dStatus.Add ( "command_persist" );			dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_PERSIST] );
+	dStatus.Add ( "command_status" );			dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_STATUS] );
+	dStatus.Add ( "agent_connect" );			dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iAgentConnect );
+	dStatus.Add ( "agent_retry" );				dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iAgentRetry );
+	dStatus.Add ( "queries" );					dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iQueries );
+	dStatus.Add ( "dist_queries" );				dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iDistQueries );
+
+	dStatus.Add ( "query_wall" );				FormatMsec ( dStatus.Add(), g_pStats->m_iQueryTime );
+
+	dStatus.Add ( "query_cpu" );
+	if ( g_bCpuStats )
+		FormatMsec ( dStatus.Add(), g_pStats->m_iQueryCpuTime  );
+	else
+		dStatus.Add() = OFF;
+
+	dStatus.Add ( "dist_wall" );				FormatMsec ( dStatus.Add(), g_pStats->m_iDistWallTime );
+	dStatus.Add ( "dist_local" );				FormatMsec ( dStatus.Add(), g_pStats->m_iDistLocalTime );
+	dStatus.Add ( "dist_wait" );				FormatMsec ( dStatus.Add(), g_pStats->m_iDistWaitTime );
+
+	if ( g_bIOStats )
+	{
+		dStatus.Add ( "query_reads" );			dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iDiskReads );
+		dStatus.Add ( "query_readkb" );			dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iDiskReadBytes/1024 );
+		dStatus.Add ( "query_readtime" );		FormatMsec ( dStatus.Add(), g_pStats->m_iDiskReadTime );
+	} else
+	{
+		dStatus.Add ( "query_reads" );			dStatus.Add() = OFF;
+		dStatus.Add ( "query_readkb" );			dStatus.Add() = OFF;
+		dStatus.Add ( "query_readtime" );		dStatus.Add() = OFF;
+	}
+
+	dStatus.Add ( "avg_query_wall" );			FormatMsec ( dStatus.Add(), g_pStats->m_iQueryTime / iQueriesDiv );
+	dStatus.Add ( "avg_query_cpu" );
+	if ( g_bCpuStats )
+		FormatMsec ( dStatus.Add(), g_pStats->m_iQueryCpuTime / iQueriesDiv );
+	else
+		dStatus.Add ( OFF );
+	dStatus.Add ( "avg_dist_wall" );			FormatMsec ( dStatus.Add(), g_pStats->m_iDistWallTime / iDistQueriesDiv );
+	dStatus.Add ( "avg_dist_local" );			FormatMsec ( dStatus.Add(), g_pStats->m_iDistLocalTime / iDistQueriesDiv );
+	dStatus.Add ( "avg_dist_wait" );			FormatMsec ( dStatus.Add(), g_pStats->m_iDistWaitTime / iDistQueriesDiv );
+	if ( g_bIOStats )
+	{
+		dStatus.Add ( "avg_query_reads" );		dStatus.Add().SetSprintf ( "%.1f", float(g_pStats->m_iDiskReads*10/iQueriesDiv)/10.0f );
+		dStatus.Add ( "avg_query_readkb" );		dStatus.Add().SetSprintf ( "%.1f", float(g_pStats->m_iDiskReadBytes/iQueriesDiv)/1024.0f );
+		dStatus.Add ( "avg_query_readtime" );	FormatMsec ( dStatus.Add(), g_pStats->m_iDiskReadTime/iQueriesDiv );
+	} else
+	{
+		dStatus.Add ( "avg_query_reads" );		dStatus.Add() = OFF;
+		dStatus.Add ( "avg_query_readkb" );		dStatus.Add() = OFF;
+		dStatus.Add ( "avg_query_readtime" );	dStatus.Add() = OFF;
+	}
 }
 
 
@@ -7050,6 +7204,9 @@ void ShowHelp ()
 		"--stop\t\t\tsend SIGTERM to currently running searchd\n"
 		"\t\t\t(PID is taken from pid_file specified in config file)\n"
 		"--iostats\t\tlog per-query io stats\n"
+#ifdef HAVE_CLOCK_GETTIME
+		"--cpustats\t\tlog per-query cpu stats\n"
+#endif
 #if USE_WINDOWS
 		"--install\t\tinstall as Windows service\n"
 		"--delete\t\tdelete Windows service\n"
@@ -7218,6 +7375,9 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		OPT1 ( "--stop" )			bOptStop = true;
 		OPT1 ( "--pidfile" )		bOptPIDFile = true;
 		OPT1 ( "--iostats" )		g_bIOStats = true;
+#if !USE_WINDOWS
+		OPT1 ( "--cpustats" )		g_bCpuStats = true;
+#endif
 #if USE_WINDOWS
 		OPT1 ( "--install" )		{ if ( !g_bService ) { ServiceInstall ( argc, argv ); return 0; } }
 		OPT1 ( "--delete" )			{ if ( !g_bService ) { ServiceDelete (); return 0; } }

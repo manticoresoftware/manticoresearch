@@ -528,7 +528,7 @@ size_t sphRead ( int iFD, void * pBuf, size_t iCount )
 	{
 		g_IOStats.m_iReadTime += sphMicroTimer() - tmStart;
 		g_IOStats.m_iReadOps++;
-		g_IOStats.m_fReadKBytes += float ( iCount ) / 1024.0f;
+		g_IOStats.m_iReadBytes += iCount;
 	}
 
 	return uRead;
@@ -1795,7 +1795,7 @@ bool sphWrite ( int iFD, const void * pBuf, size_t iCount, const char * sName, C
 	{
 		g_IOStats.m_iWriteTime += sphMicroTimer() - tmTimer;
 		g_IOStats.m_iWriteOps++;
-		g_IOStats.m_fWriteKBytes += float ( iCount ) / 1024.0f;
+		g_IOStats.m_iWriteBytes += iCount;
 	}
 
 	if ( iWritten==(int)iCount )

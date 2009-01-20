@@ -1111,7 +1111,7 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 // ENTRY
 //////////////////////////////////////////////////////////////////////////
 
-void ReportIOStats ( const char * sType, int iReads, int64_t iReadTime, float fReadKB )
+void ReportIOStats ( const char * sType, int iReads, int64_t iReadTime, int64_t iReadBytes )
 {
 	if ( iReads==0 )
 	{
@@ -1120,10 +1120,11 @@ void ReportIOStats ( const char * sType, int iReads, int64_t iReadTime, float fR
 			int(iReadTime/1000000), int(iReadTime%1000000)/1000 );
 	} else
 	{
-		fprintf ( stdout, "total %d %s, %d.%03d sec, %.1f kb/call avg, %d.%d msec/call avg\n",
+		iReadBytes /= iReads;
+		fprintf ( stdout, "total %d %s, %d.%03d sec, %d.%d kb/call avg, %d.%d msec/call avg\n",
 			iReads, sType,
 			int(iReadTime/1000000), int(iReadTime%1000000)/1000,
-			fReadKB/iReads,
+			int(iReadBytes/1024), int(iReadBytes%1024)*10/1024,
 			int(iReadTime/iReads/1000), int(iReadTime/iReads/100)%10 );
 	}
 }
@@ -1321,8 +1322,8 @@ int main ( int argc, char ** argv )
 
 	if ( !g_bQuiet )
 	{
-		ReportIOStats ( "reads", tStats.m_iReadOps, tStats.m_iReadTime, tStats.m_fReadKBytes );
-		ReportIOStats ( "writes", tStats.m_iWriteOps, tStats.m_iWriteTime, tStats.m_fWriteKBytes );
+		ReportIOStats ( "reads", tStats.m_iReadOps, tStats.m_iReadTime, tStats.m_iReadBytes );
+		ReportIOStats ( "writes", tStats.m_iWriteOps, tStats.m_iWriteTime, tStats.m_iWriteBytes );
 	}
 
 	////////////////////////////

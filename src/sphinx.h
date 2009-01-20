@@ -180,10 +180,10 @@ struct CSphIOStats
 {
 	int64_t		m_iReadTime;
 	DWORD		m_iReadOps;
-	float		m_fReadKBytes;
+	int64_t		m_iReadBytes;
 	int64_t		m_iWriteTime;
 	DWORD		m_iWriteOps;
-	float		m_fWriteKBytes;
+	int64_t		m_iWriteBytes;
 };
 
 /// clear stats, starts collecting
@@ -1744,6 +1744,10 @@ public:
 class CSphQueryResult
 {
 public:
+	int						m_iQueryTime;		///< query time, ms
+	int64_t					m_iCpuTime;			///< user time, microseconds
+
+	int						m_iNumWords;		///< query word count
 	struct WordStat_t
 	{
 		CSphString			m_sWord;	///< i-th search term (normalized word form)
@@ -1751,8 +1755,6 @@ public:
 		int					m_iHits;	///< hit count for this term
 	}						m_tWordStats [ SPH_MAX_QUERY_WORDS ];
 
-	int						m_iNumWords;		///< query word count
-	int						m_iQueryTime;		///< query time, ms
 	CSphVector<CSphMatch>	m_dMatches;			///< top matching documents, no more than MAX_MATCHES
 	int						m_iTotalMatches;	///< total matches count
 

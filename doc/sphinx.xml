@@ -1549,7 +1549,12 @@ it does the following:
 </para>
 <para>
 From the application's point of view, there are no differences
-between usual and distributed index at all.
+between searching through a regular index, or a distributed index at all.
+That is, distributed indexes are fully transparent to the application,
+and actually there's no way to tell whether the index you queried
+was distributed or local. (Even though as of 0.9.9 Sphinx does not
+allow to combine searching through distributed indexes with anything else,
+this constraint will be lifted in the future.)
 </para>
 <para>
 Any <filename>searchd</filename> instance could serve both as a master

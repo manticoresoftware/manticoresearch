@@ -10571,10 +10571,16 @@ protected:
 protected:
 	int							m_iMaxFieldPos;
 	SphDocID_t					m_uTermMaxID;
-	const ExtDoc_t *			m_pRawDocs;
-	const ExtHit_t *			m_pRawHits;
+	const ExtDoc_t *			m_pRawDocs;					///< chunk start as returned by raw GetDocsChunk() (need to store it for raw GetHitsChunk() calls)
+	const ExtDoc_t *			m_pRawDoc;					///< current position in raw docs chunk
+	const ExtHit_t *			m_pRawHit;					///< current position in raw hits chunk
 	SphDocID_t					m_uLastID;
-	const ExtHit_t *			m_pMyHit;					///< current hit for hits getter
+	enum
+	{
+		COPY_FILTERED,
+		COPY_TRAILING,
+		COPY_DONE
+	}							m_eState;					///< internal GetHitsChunk() state (are we copying from my hits, or passing trailing raw hits, or done)
 	ExtDoc_t					m_dMyDocs[MAX_DOCS];		///< all documents within the required pos range
 	ExtHit_t					m_dMyHits[MAX_HITS];		///< all hits within the required pos range
 	ExtHit_t					m_dFilteredHits[MAX_HITS];	///< hits from requested subset of the documents (for GetHitsChunk())
@@ -11319,9 +11325,9 @@ ExtTermPos_c<T>::ExtTermPos_c ( CSphQueryWord * pQword, DWORD uFields, int iMaxF
 	, m_iMaxFieldPos	( iMaxFieldPos )
 	, m_uTermMaxID		( 0 )
 	, m_pRawDocs		( NULL )
-	, m_pRawHits		( NULL )
+	, m_pRawDoc		( NULL )
+	, m_pRawHit		( NULL )
 	, m_uLastID			( 0 )
-	, m_pMyHit			( 0 )
 {
 	AllocDocinfo ( tSetup );
 }
@@ -11359,42 +11365,67 @@ template < TermPosFilter_e T >
 const ExtDoc_t * ExtTermPos_c<T>::GetDocsChunk ( SphDocID_t * pMaxID )
 {
 	// fetch more docs if needed
-	if ( !m_pRawDocs ) m_pRawDocs = ExtTerm_c::GetDocsChunk ( &m_uTermMaxID );
-	if ( !m_pRawDocs ) return NULL;
+	if ( !m_pRawDocs )
+	{
+		m_pRawDocs = ExtTerm_c::GetDocsChunk ( &m_uTermMaxID );
+		if ( !m_pRawDocs )
+			return NULL;
+
+		m_pRawDoc = m_pRawDocs;
+		m_pRawHit = NULL;
+	}
 
 	// filter the hits, and build the documents list
 	int iMyDoc = 0;
 	int iMyHit = 0;
 
-	const ExtDoc_t * pDocs = m_pRawDocs;
-	const ExtHit_t * pHits = m_pRawHits;
+	const ExtDoc_t * pDoc = m_pRawDoc; // just a shortcut
+	const ExtHit_t * pHit = m_pRawHit;
 	m_uLastID = 0;
 
 	CSphRowitem * pDocinfo = m_pDocinfo;
-	while ( iMyHit<MAX_HITS-1 )
+	for ( ;; )
 	{
-		// fetch more hits if needed
-		if ( !pHits || pHits->m_uDocid==DOCID_MAX ) pHits = ExtTerm_c::GetHitsChunk ( m_pRawDocs, m_uTermMaxID );
-		if ( !pHits ) break;
+		// try to fetch more hits for current raw docs block if we're out
+		if ( !pHit || pHit->m_uDocid==DOCID_MAX )
+			pHit = ExtTerm_c::GetHitsChunk ( m_pRawDocs, m_uTermMaxID );
+
+		// did we touch all the hits we had? if so, we're fully done with
+		// current raw docs block, and should start a new one
+		if ( !pHit )
+		{
+			m_pRawDocs = ExtTerm_c::GetDocsChunk ( &m_uTermMaxID );
+			if ( !m_pRawDocs ) // no more incoming documents? bail
+				break;
+
+			pDoc = m_pRawDocs;
+			pHit = NULL;
+			continue;
+		}
 
 		// scan until next acceptable hit
-		while ( pHits->m_uDocid < pDocs->m_uDocid ) pHits++; // skip leftovers
-		while ( pHits->m_uDocid!=DOCID_MAX && !IsAcceptableHit ( pHits->m_uHitpos ) ) pHits++;
-		if ( pHits->m_uDocid==DOCID_MAX ) continue;
+		while ( pHit->m_uDocid < pDoc->m_uDocid ) // skip leftovers
+			pHit++;
+
+		while ( pHit->m_uDocid!=DOCID_MAX && !IsAcceptableHit ( pHit->m_uHitpos ) ) // skip unneeded hits
+			pHit++;
+
+		if ( pHit->m_uDocid==DOCID_MAX ) // check for eof
+			continue;
 
 		// find and emit new document
-		while ( pDocs->m_uDocid<pHits->m_uDocid ) pDocs++; // FIXME? unsafe in broken cases
-		assert ( pDocs->m_uDocid==pHits->m_uDocid );
+		while ( pDoc->m_uDocid<pHit->m_uDocid ) pDoc++; // FIXME? unsafe in broken cases
+		assert ( pDoc->m_uDocid==pHit->m_uDocid );
 
-		SphDocID_t uLastID = pDocs->m_uDocid;
-		CopyExtDoc ( m_dMyDocs[iMyDoc++], *pDocs, &pDocinfo, m_iStride );
+		SphDocID_t uLastID = pDoc->m_uDocid;
+		CopyExtDoc ( m_dMyDocs[iMyDoc++], *pDoc, &pDocinfo, m_iStride );
 
 		// copy acceptable hits for this document
-		while ( iMyHit<MAX_HITS-1 && pHits->m_uDocid==uLastID )
+		while ( iMyHit<MAX_HITS-1 && pHit->m_uDocid==uLastID )
 		{
-			if ( IsAcceptableHit ( pHits->m_uHitpos ) )
-				m_dMyHits[iMyHit++] = *pHits;
-			pHits++;
+			if ( IsAcceptableHit ( pHit->m_uHitpos ) )
+				m_dMyHits[iMyHit++] = *pHit;
+			pHit++;
 		}
 
 		if ( iMyHit==MAX_HITS-1 )
@@ -11402,17 +11433,19 @@ const ExtDoc_t * ExtTermPos_c<T>::GetDocsChunk ( SphDocID_t * pMaxID )
 			// there is no more space for acceptable hits; but further calls to GetHits() *might* produce some
 			// we need to memorize the trailing document id
 			m_uLastID = uLastID;
+			break;
 		}
 	}
 
-	m_pRawHits = pHits;
+	m_pRawDoc = pDoc;
+	m_pRawHit = pHit;
 
 	assert ( iMyDoc>=0 && iMyDoc<MAX_DOCS );
 	assert ( iMyHit>=0 && iMyHit<MAX_DOCS );
 
 	m_dMyDocs[iMyDoc].m_uDocid = DOCID_MAX;
 	m_dMyHits[iMyHit].m_uDocid = DOCID_MAX;
-	m_pMyHit = iMyHit ? m_dMyHits : NULL;
+	m_eState = COPY_FILTERED;
 
 	m_uMaxID = iMyDoc ? m_dDocs[iMyDoc-1].m_uDocid : 0;
 	if ( pMaxID ) *pMaxID = m_uMaxID;
@@ -11424,56 +11457,77 @@ const ExtDoc_t * ExtTermPos_c<T>::GetDocsChunk ( SphDocID_t * pMaxID )
 template < TermPosFilter_e T >
 const ExtHit_t * ExtTermPos_c<T>::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t ) // OPTIMIZE: could possibly use uMaxID
 {
-	const ExtHit_t * pMyHit = m_pMyHit;
-	if ( !pMyHit )
+	if ( m_eState==COPY_DONE )
 		return NULL;
 
+	// regular case
+	// copy hits for requested docs from my hits to filtered hits, and return those
 	int iFilteredHits = 0;
-	while ( iFilteredHits<MAX_HITS-1 )
+
+	if ( m_eState==COPY_FILTERED )
 	{
-		// skip hits that the caller is not interested in
-		while ( pMyHit->m_uDocid < pDocs->m_uDocid ) pMyHit++; // OPTIMIZE: save both current positions between calls
-		if ( pMyHit->m_uDocid==DOCID_MAX )
+		const ExtHit_t * pMyHit = m_dMyHits;
+		for ( ;; )
 		{
-			if ( !m_uLastID )
+			// skip hits that the caller is not interested in
+			while ( pMyHit->m_uDocid < pDocs->m_uDocid )
+				pMyHit++;
+
+			// out of acceptable hits?
+			if ( pMyHit->m_uDocid==DOCID_MAX )
 			{
-				pMyHit = NULL;
+				// do we have a trailing document? if yes, we should also copy trailing hits
+				m_eState = m_uLastID ? COPY_TRAILING : COPY_DONE;
 				break;
 			}
 
-			// handle trailing hits for the last emitted document
-			const ExtHit_t * pRaw = m_pRawHits;
-			if ( !pRaw || pRaw->m_uDocid==DOCID_MAX ) pRaw = m_pRawHits = ExtTerm_c::GetHitsChunk ( m_pRawDocs, m_uTermMaxID );
-			if ( !pRaw ) break;
+			// skip docs that i do not have
+			while ( pDocs->m_uDocid < pMyHit->m_uDocid )
+				pDocs++;
 
-			while ( pRaw->m_uDocid==m_uLastID && iFilteredHits<MAX_HITS-1 ) 
-			{
-				if ( IsAcceptableHit ( pRaw->m_uHitpos ) )
-					m_dFilteredHits[iFilteredHits++] = *pRaw;
-				pRaw++;
-			}
+			// out of requested docs? over and out
+			if ( pDocs->m_uDocid==DOCID_MAX )
+				break;
 
-			if ( pRaw->m_uDocid!=m_uLastID && pRaw->m_uDocid!=DOCID_MAX )
-			{
-				m_uLastID = 0;
-				pMyHit = NULL;
-			}
+			// copy matching hits
+			while ( iFilteredHits<MAX_HITS-1 && pDocs->m_uDocid==pMyHit->m_uDocid )
+				m_dFilteredHits[iFilteredHits++] = *pMyHit++;
 
-			m_pRawHits = pRaw;
+			// paranoid check that we're not out of bounds
+			assert ( iFilteredHits<=MAX_HITS-1 && pDocs->m_uDocid!=pMyHit->m_uDocid );
+		}
+	}
+
+	// trailing hits case
+	// my hits did not have enough space, so we should pass raw hits for the last doc
+	while ( m_eState==COPY_TRAILING && m_uLastID && iFilteredHits<MAX_HITS-1 )
+	{
+		// where do we stand?
+		if ( !m_pRawHit || m_pRawHit->m_uDocid==DOCID_MAX )
+			m_pRawHit = ExtTerm_c::GetHitsChunk ( m_pRawDocs, m_uTermMaxID );
+
+		// no more hits for current chunk
+		if ( !m_pRawHit )
+		{
+			m_eState = COPY_DONE;
 			break;
 		}
 
-		// skip docs that i do not have
-		while ( pDocs->m_uDocid < pMyHit->m_uDocid ) pDocs++;
-		if ( pDocs->m_uDocid==DOCID_MAX )
-			break;
+		// copy while we can
+		while ( m_pRawHit->m_uDocid==m_uLastID && iFilteredHits<MAX_HITS-1 ) 
+		{
+			if ( IsAcceptableHit ( m_pRawHit->m_uHitpos ) )
+				m_dFilteredHits[iFilteredHits++] = *m_pRawHit;
+			m_pRawHit++;
+		}
 
-		// copy matching hits
-		while ( iFilteredHits<MAX_HITS-1 && pDocs->m_uDocid==pMyHit->m_uDocid )
-			m_dFilteredHits[iFilteredHits++] = *pMyHit++;
+		// raise the flag for future calls if trailing hits are over
+		if ( m_pRawHit->m_uDocid!=m_uLastID && m_pRawHit->m_uDocid!=DOCID_MAX )
+			m_eState = COPY_DONE;
+
+		// in any case, this chunk is over
+		break;
 	}
-
-	m_pMyHit = pMyHit;
 
 	m_dFilteredHits[iFilteredHits].m_uDocid = DOCID_MAX;
 	return iFilteredHits ? m_dFilteredHits : NULL;
@@ -17649,7 +17703,6 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 		bool bInfixMode = m_iMinInfixLen > 0;
 
 		BYTE sBuf [ 16+3*SPH_MAX_WORD_LEN ];
-		int iLastStart = 0;
 
 		if ( m_tSchema.m_dFields[iField].m_eWordpart!=SPH_WORDPART_WHOLE )
 		{
@@ -17658,8 +17711,6 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 			// index all infixes
 			while ( ( sWord = m_pTokenizer->GetToken() )!=NULL )
 			{
-				iLastStart = m_dHits.GetLength();
-
 				iPos += iLastStep + m_pTokenizer->GetOvershortCount()*m_iOvershortStep;
 				if ( m_pTokenizer->GetBoundary() )
 					iPos = Max ( iPos+m_iBoundaryStep, 1 );
@@ -17797,13 +17848,20 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 					sInfix += m_pTokenizer->GetCodepointLength ( *sInfix );
 				}
 			}
+
+			// mark trailing hits
+			if ( m_dHits.GetLength() )
+			{
+				DWORD uRefPos = m_dHits.Last().m_iWordPos;
+				for	( int i=m_dHits.GetLength()-1; i>=0 && m_dHits[i].m_iWordPos==uRefPos; i-- )
+					m_dHits[i].m_iWordPos |= HIT_FIELD_END;
+			}
+
 		} else
 		{
 			// index words only
 			while ( ( sWord = m_pTokenizer->GetToken() )!=NULL )
 			{
-				iLastStart = m_dHits.GetLength();
-
 				iPos += iLastStep + m_pTokenizer->GetOvershortCount()*m_iOvershortStep;
 				if ( m_pTokenizer->GetBoundary() )
 					iPos = Max ( iPos+m_iBoundaryStep, 1 );
@@ -17857,9 +17915,9 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 			}
 		}
 
-		// field processing is over, mark trailing positions
-		for ( int i=iLastStart; i<m_dHits.GetLength(); i++ )
-			m_dHits[i].m_iWordPos |= HIT_FIELD_END;
+		// mark trailing hit
+		if ( m_dHits.GetLength() )
+			m_dHits.Last().m_iWordPos |= HIT_FIELD_END;
 	}
 
 	return true;

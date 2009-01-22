@@ -1684,7 +1684,7 @@ private:
 
 	void						CreateFilters ( CSphQuery * pQuery, const CSphSchema & tSchema );
 	
-	bool						SetupMatchExtended ( const CSphQuery * pQuery, CSphQueryResult * pResult, const CSphTermSetup & tTermSetup );
+	bool						SetupMatchExtended ( const CSphQuery * pQuery, const char * sQuery, CSphQueryResult * pResult, const CSphTermSetup & tTermSetup );
 	bool						MatchExtended ( const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters );
 	bool						MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, const CSphTermSetup & tTermSetup );
 
@@ -13691,11 +13691,11 @@ void CSphIndex_VLN::CheckExtendedQuery ( const XQNode_t * pNode, CSphQueryResult
 }
 
 
-bool CSphIndex_VLN::SetupMatchExtended ( const CSphQuery * pQuery, CSphQueryResult * pResult, const CSphTermSetup & tTermSetup )
+bool CSphIndex_VLN::SetupMatchExtended ( const CSphQuery * pQuery, const char * sQuery, CSphQueryResult * pResult, const CSphTermSetup & tTermSetup )
 {
 	// parse query
 	XQQuery_t tParsed;
-	if ( !sphParseExtendedQuery ( tParsed, pQuery->m_sQuery.cstr(), tTermSetup.m_pIndex->GetTokenizer (),
+	if ( !sphParseExtendedQuery ( tParsed, sQuery, tTermSetup.m_pIndex->GetTokenizer (),
 		&m_tSchema, tTermSetup.m_pDict ) )
 	{
 		m_sLastError = tParsed.m_sParseError;
@@ -15258,7 +15258,7 @@ bool CSphIndex_VLN::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, cons
 }
 
 
-void PrepareQueryEmulation ( CSphQuery * pQuery )
+static void PrepareQueryEmulation ( CSphQuery * pQuery, CSphString & sQueryFixup )
 {
 	if ( pQuery->m_eMode==SPH_MATCH_BOOLEAN )
 		pQuery->m_eRanker = SPH_RANK_NONE;
@@ -15268,9 +15268,9 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 
 	const char * szQuery = pQuery->m_sQuery.cstr ();
 	int iQueryLen = szQuery ? strlen(szQuery) : 0;
-	CSphString sDest;
-	sDest.Reserve ( iQueryLen*2+4 );
-	char * szRes = (char*)sDest.cstr ();
+
+	sQueryFixup.Reserve ( iQueryLen*2+4 );
+	char * szRes = (char*) sQueryFixup.cstr ();
 	char c;
 
 	if ( pQuery->m_eMode == SPH_MATCH_ANY || pQuery->m_eMode == SPH_MATCH_PHRASE )
@@ -15292,9 +15292,8 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 		case SPH_MATCH_PHRASE:	pQuery->m_eRanker = SPH_RANK_PROXIMITY; *szRes++ = '\"'; *szRes='\0'; break;
 		default:				return;
 	}
-
-	Swap ( pQuery->m_sQuery, sDest );
 }
+
 
 template < typename T >
 class PtrNullifier_t
@@ -15304,6 +15303,7 @@ public:
 	explicit PtrNullifier_t ( T ** pPtr ) : m_pPtr ( pPtr )	{ assert ( pPtr ); }
 	~PtrNullifier_t () { *m_pPtr = NULL; }
 };
+
 
 void CSphIndex_VLN::CreateFilters ( CSphQuery * pQuery, const CSphSchema & tSchema )
 {
@@ -15413,14 +15413,19 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 	tTermSetup.m_pWarning = &pResult->m_sWarning;
 
 	// fixup old matching modes at low level
-	PrepareQueryEmulation ( pQuery );
+	CSphString sQueryFixup;
+	PrepareQueryEmulation ( pQuery, sQueryFixup );
+
+	const char * sQuery = sQueryFixup.IsEmpty()
+		? pQuery->m_sQuery.cstr()
+		: sQueryFixup.cstr();
 
 	// bind weights
 	BindWeights ( pQuery );
 
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
-	if ( !SetupMatchExtended ( pQuery, pResult, tTermSetup ) )
+	if ( !SetupMatchExtended ( pQuery, sQuery, pResult, tTermSetup ) )
 		return false;
 
 	// setup filters

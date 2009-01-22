@@ -14330,6 +14330,7 @@ void CSphIndex_VLN::DebugDumpHitlist ( FILE * fp, const char * sKeyword )
 	tTermSetup.m_tMin = m_tMin;
 
 	CSphQueryWord tKeyword;
+	tKeyword.m_tDoc.m_iDocID = m_tMin.m_iDocID;
 	tKeyword.m_iWordID = uWordID;
 	if ( !SetupQueryWord ( tKeyword, tTermSetup, true ) )
 		sphDie ( "failed to setup keyword" );

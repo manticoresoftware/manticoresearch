@@ -5352,13 +5352,6 @@ CSphString CSphReader_VLN::GetString ()
 CSphQueryResult::CSphQueryResult ()
 	: m_tSchema ( "query_result" )
 {
-	for ( int i=0; i<SPH_MAX_QUERY_WORDS; i++ )
-	{
-		m_tWordStats[i].m_iDocs = 0;
-		m_tWordStats[i].m_iHits = 0;
-	}
-
-	m_iNumWords = 0;
 	m_iQueryTime = 0;
 	m_iTotalMatches = 0;
 	m_pMva = NULL;
@@ -13727,9 +13720,10 @@ bool CSphIndex_VLN::SetupMatchExtended ( const CSphQuery * pQuery, const char * 
 	ExtQwordsHash_t hQwords;
 	m_pXQRanker->GetQwords ( hQwords );
 
-	pResult->m_iNumWords = 0;
 	const int iQwords = hQwords.GetLength ();
+	pResult->m_dWordStats.Resize ( Max ( pResult->m_dWordStats.GetLength(), iQwords ) );
 
+	int iQword = 0;
 	hQwords.IterateStart ();
 	while ( hQwords.IterateNext() )
 	{
@@ -13746,20 +13740,17 @@ bool CSphIndex_VLN::SetupMatchExtended ( const CSphQuery * pQuery, const char * 
 		tWord.m_fIDF = fIDF;
 
 		// update word stats
-		if ( pResult->m_iNumWords<SPH_MAX_QUERY_WORDS )
+		CSphQueryResult::WordStat_t & tStats = pResult->m_dWordStats[iQword++];
+		if ( tStats.m_sWord.cstr() )
 		{
-			CSphQueryResult::WordStat_t & tStats = pResult->m_tWordStats [ pResult->m_iNumWords++ ];
-			if ( tStats.m_sWord.cstr() )
-			{
-				assert ( tStats.m_sWord==tWord.m_sDictWord );
-				tStats.m_iDocs += tWord.m_iDocs;
-				tStats.m_iHits += tWord.m_iHits;
-			} else
-			{
-				tStats.m_sWord = tWord.m_sDictWord;
-				tStats.m_iDocs = tWord.m_iDocs;
-				tStats.m_iHits = tWord.m_iHits;
-			}
+			assert ( tStats.m_sWord==tWord.m_sDictWord );
+			tStats.m_iDocs += tWord.m_iDocs;
+			tStats.m_iHits += tWord.m_iHits;
+		} else
+		{
+			tStats.m_sWord = tWord.m_sDictWord;
+			tStats.m_iDocs = tWord.m_iDocs;
+			tStats.m_iHits = tWord.m_iHits;
 		}
 	}
 
@@ -15229,7 +15220,7 @@ bool CSphIndex_VLN::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, cons
 	CSphString sQbuf ( szQuery );
 	m_pTokenizer->SetBuffer ( (BYTE*)sQbuf.cstr(), strlen(szQuery) );
 
-	while ( ( sWord = m_pTokenizer->GetToken() )!=NULL && nWords<SPH_MAX_QUERY_WORDS )
+	while ( ( sWord = m_pTokenizer->GetToken() )!=NULL )
 	{
 		sTokenized = (const char*)sWord;
 

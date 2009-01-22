@@ -134,7 +134,6 @@ inline const DWORD *	DOCINFO2ATTRS ( const DWORD * pDocinfo ){ return pDocinfo+D
 #define SPHINX_BANNER			"Sphinx " SPHINX_VERSION "\nCopyright (c) 2001-2008, Andrew Aksyonoff\n\n"
 #define SPHINX_SEARCHD_PROTO	1
 
-#define SPH_MAX_QUERY_WORDS		10
 #define SPH_MAX_WORD_LEN		64
 #define SPH_MAX_FILENAME_LEN	512
 #define SPH_MAX_FIELDS			32
@@ -1747,13 +1746,13 @@ public:
 	int						m_iQueryTime;		///< query time, ms
 	int64_t					m_iCpuTime;			///< user time, microseconds
 
-	int						m_iNumWords;		///< query word count
 	struct WordStat_t
 	{
 		CSphString			m_sWord;	///< i-th search term (normalized word form)
 		int					m_iDocs;	///< document count for this term
 		int					m_iHits;	///< hit count for this term
-	}						m_tWordStats [ SPH_MAX_QUERY_WORDS ];
+	};
+	CSphVector<WordStat_t>	m_dWordStats;
 
 	CSphVector<CSphMatch>	m_dMatches;			///< top matching documents, no more than MAX_MATCHES
 	int						m_iTotalMatches;	///< total matches count

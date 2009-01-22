@@ -402,13 +402,13 @@ int main ( int argc, char ** argv )
 		}
 
 		fprintf ( stdout, "\nwords:\n" );
-		for ( int i=0; i<pResult->m_iNumWords; i++ )
+		ARRAY_FOREACH ( i, pResult->m_dWordStats )
 		{
 			fprintf ( stdout, "%d. '%s': %d documents, %d hits\n",
 				1+i,
-				pResult->m_tWordStats[i].m_sWord.cstr(),
-				pResult->m_tWordStats[i].m_iDocs,
-				pResult->m_tWordStats[i].m_iHits );
+				pResult->m_dWordStats[i].m_sWord.cstr(),
+				pResult->m_dWordStats[i].m_iDocs,
+				pResult->m_dWordStats[i].m_iHits );
 		}
 		fprintf ( stdout, "\n" );
 

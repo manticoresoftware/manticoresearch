@@ -1525,6 +1525,7 @@ struct CSphIndex_VLN : CSphIndex
 
 	virtual void				DebugDumpHeader ( FILE * fp, const char * sHeaderName );
 	virtual void				DebugDumpDocids ( FILE * fp );
+	virtual void				DebugDumpHitlist ( FILE * fp, const char * sKeyword );
 
 	virtual const CSphSchema *	Prealloc ( bool bMlock, CSphString & sWarning );
 	virtual bool				Mlock ();
@@ -14290,6 +14291,62 @@ void CSphIndex_VLN::DebugDumpDocids ( FILE * fp )
 	DWORD * pDocinfo = m_pDocinfo.GetWritePtr();
 	for ( DWORD uRow=0; uRow<uNumRows; uRow++, pDocinfo+=iRowStride )
 		printf ( "%u. id=" DOCID_FMT "\n", uRow+1, DOCINFO2ID(pDocinfo) );
+}
+
+
+void CSphIndex_VLN::DebugDumpHitlist ( FILE * fp, const char * sKeyword )
+{
+	// get keyword id
+	CSphString sBuf ( sKeyword );
+
+	m_pTokenizer->SetBuffer ( (BYTE*)sBuf.cstr(), strlen(sBuf.cstr()) );
+	BYTE * sTok = m_pTokenizer->GetToken();
+
+	if ( !sTok )
+		sphDie ( "keyword=%s, no token (too short?)", sKeyword );
+
+	SphWordID_t uWordID = m_pDict->GetWordID ( sTok );
+	if ( !uWordID )
+		sphDie ( "keyword=%s, tok=%s, no wordid (stopped?)", sKeyword, sTok );
+
+	fprintf ( fp, "keyword=%s, tok=%s, wordid=%"PRIu64"\n", sKeyword, sTok, uint64_t(uWordID) );
+
+	// open files
+	CSphAutofile tDoclist, tHitlist, tWordlist;
+	if ( tDoclist.Open ( GetIndexFileName("spd"), SPH_O_READ, m_sLastError ) < 0 )
+		sphDie ( "failed to open doclist: %s", m_sLastError.cstr() );
+
+	if ( tHitlist.Open ( GetIndexFileName ( m_uVersion>=3 ? "spp" : "spd" ), SPH_O_READ, m_sLastError ) < 0 )
+		sphDie ( "failed to open hitlist: %s", m_sLastError.cstr() );
+
+	if ( tWordlist.Open ( GetIndexFileName ( "spi" ), SPH_O_READ, m_sLastError ) < 0 )
+		sphDie ( "failed to open wordlist: %s", m_sLastError.cstr() );
+
+	// aim
+	CSphTermSetup tTermSetup ( tDoclist, tHitlist, tWordlist );
+	tTermSetup.m_pDict = m_pDict;
+	tTermSetup.m_pIndex = this;
+	tTermSetup.m_eDocinfo = m_tSettings.m_eDocinfo;
+	tTermSetup.m_tMin = m_tMin;
+
+	CSphQueryWord tKeyword;
+	tKeyword.m_iWordID = uWordID;
+	if ( !SetupQueryWord ( tKeyword, tTermSetup, true ) )
+		sphDie ( "failed to setup keyword" );
+
+	// press play on tape
+	for ( ;; )
+	{
+		tKeyword.GetDoclistEntry ();
+		if ( !tKeyword.m_tDoc.m_iDocID )
+			break;
+
+		do
+		{
+			tKeyword.GetHitlistEntry ();
+			fprintf ( fp, "doc="DOCID_FMT", hit=0x%08x\n", tKeyword.m_tDoc.m_iDocID, tKeyword.m_iHitPos );
+		} while ( tKeyword.m_iHitPos );
+	}
 }
 
 

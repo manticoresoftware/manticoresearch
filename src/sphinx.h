@@ -2025,7 +2025,10 @@ public:
 	virtual void				DebugDumpHeader ( FILE * fp, const char * sHeaderName ) = 0;
 
 	/// internal debugging hook, DO NOT USE
-	virtual void				DebugDumpDocids ( FILE * ) = 0;
+	virtual void				DebugDumpDocids ( FILE * fp ) = 0;
+
+	/// internal debugging hook, DO NOT USE
+	virtual void				DebugDumpHitlist ( FILE * fp, const char * sKeyword ) = 0;
 
 public:
 	DWORD						m_uAttrsStatus;			///< whether in-memory attrs are updated (compared to disk state)

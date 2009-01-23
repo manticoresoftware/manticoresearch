@@ -875,9 +875,11 @@ public:
 				CSphWriter ();
 				~CSphWriter ();
 
+	void		SetBufferSize ( int iBufferSize );	///< tune write cache size; must be called before OpenFile() or SetFile()
+
 	bool		OpenFile ( const char * sName, CSphString & sErrorBuffer );
-	void		SetFile ( int iFD, SphOffset_t * pSharedOffset = NULL, int iWriteCacheSize = SPH_CACHE_WRITE );
-	void		CloseFile (); ///< note: calls Flush(), ie. IsError() might get true after this call
+	void		SetFile ( int iFD, SphOffset_t * pSharedOffset );
+	void		CloseFile ();						///< note: calls Flush(), ie. IsError() might get true after this call
 
 	void		PutByte ( int uValue );
 	void		PutBytes ( const void * pData, int iSize );
@@ -1518,7 +1520,7 @@ struct CSphIndex_VLN : CSphIndex
 								CSphIndex_VLN ( const char * sFilename );
 								~CSphIndex_VLN ();
 
-	virtual int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit );
+	virtual int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer );
 
 	virtual bool				LoadHeader ( const char * sHeaderName, CSphString & sWarning );
 	virtual bool				WriteHeader ( CSphWriter & fdInfo, SphOffset_t iCheckpointsPos );
@@ -1563,7 +1565,9 @@ struct CSphIndex_VLN : CSphIndex
 
 private:
 	static const int			WORDLIST_CHECKPOINT		= 1024;		///< wordlist checkpoints frequency
-	static const int			WRITE_BUFFER_SIZE		= 262144;	///< my write buffer size
+
+	static const int			MIN_WRITE_BUFFER		= 262144;	///< min write buffer size
+	static const int			DEFAULT_WRITE_BUFFER	= 1048576;	///< deafult write buffer size
 
 	static const DWORD			INDEX_MAGIC_HEADER		= 0x58485053;	///< my magic 'SPHX' header
 	static const DWORD			INDEX_FORMAT_VERSION	= 13;			///< my format version
@@ -1578,7 +1582,8 @@ private:
 
 private:
 	// indexing-only
-	BYTE *						m_pWriteBuffer;		///< my write buffer
+	BYTE *						m_pWriteBuffer;		///< my write buffer (for temp files)
+	int							m_iWriteBuffer;		///< my write buffer size
 
 	CSphWordHit					m_tLastHit;			///< hitlist entry
 
@@ -4855,11 +4860,22 @@ CSphWriter::CSphWriter ()
 	, m_pPool ( NULL )
 	, m_bOwnFile ( false )
 	, m_pSharedOffset ( NULL )
-	, m_iBufferSize	( SPH_CACHE_WRITE )
+	, m_iBufferSize	( 262144 )
 
 	, m_bError ( false )
 	, m_pError ( NULL )
 {
+}
+
+
+void CSphWriter::SetBufferSize ( int iBufferSize )
+{
+	if ( iBufferSize!=m_iBufferSize )
+	{
+		m_iBufferSize = Max ( iBufferSize, 262144 );
+		if ( m_pBuffer )
+			SafeDeleteArray ( m_pBuffer );
+	}
 }
 
 
@@ -4889,11 +4905,10 @@ bool CSphWriter::OpenFile ( const char * sName, CSphString & sErrorBuffer )
 }
 
 
-void CSphWriter::SetFile ( int iFD, SphOffset_t * pSharedOffset, int iWriteCacheSize )
+void CSphWriter::SetFile ( int iFD, SphOffset_t * pSharedOffset )
 {
 	assert ( m_iFD<0 && "already open" );
 	m_bOwnFile = false;
-	m_iBufferSize = iWriteCacheSize;
 
 	if ( !m_pBuffer )
 		m_pBuffer = new BYTE [ m_iBufferSize ];
@@ -7117,7 +7132,7 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWOR
 	DWORD d3, l3=0;
 
 	pBuf = m_pWriteBuffer;
-	maxP = m_pWriteBuffer + WRITE_BUFFER_SIZE - 128;
+	maxP = m_pWriteBuffer + m_iWriteBuffer - 128;
 
 	SphDocID_t iAttrID = 0; // current doc id
 	DWORD * pAttrs = NULL; // current doc attrs
@@ -8055,14 +8070,18 @@ bool CSphIndex_VLN::RelocateBlock ( int iFile, BYTE * pBuffer, int iRelocationSi
 }
 
 
-int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit )
+int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer )
 {
 	PROFILER_INIT ();
 
 	assert ( dSources.GetLength() );
 
+	m_iWriteBuffer = ( iWriteBuffer>0 )
+		? Max ( iWriteBuffer, MIN_WRITE_BUFFER )
+		: DEFAULT_WRITE_BUFFER;
+
 	if ( !m_pWriteBuffer )
-		m_pWriteBuffer = new BYTE [ WRITE_BUFFER_SIZE ];
+		m_pWriteBuffer = new BYTE [ m_iWriteBuffer ];
 
 	// vars shared between phases
 	CSphVector<CSphBin*> dBins;
@@ -8963,7 +8982,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 	float fReadFactor = 1.0f;
 	int iRelocationSize = 0;
-	int iWriteBuffer = 0;
+	int iWriteBuffer = m_iWriteBuffer;
 
 	if ( m_bInplaceSettings )
 	{
@@ -8999,6 +9018,11 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	m_wrWordlist.CloseFile ();
 	m_wrDoclist.CloseFile ();
 	m_wrHitlist.CloseFile ();
+
+	m_wrWordlist.SetBufferSize ( m_iWriteBuffer );
+	m_wrDoclist.SetBufferSize ( m_iWriteBuffer );
+	m_wrHitlist.SetBufferSize ( m_bInplaceSettings ? iWriteBuffer : m_iWriteBuffer );
+
 	if (
 		!m_wrWordlist.OpenFile ( GetIndexFileName("spi"), m_sLastError ) ||
 		!m_wrDoclist.OpenFile ( GetIndexFileName("spd"), m_sLastError ) )
@@ -9009,7 +9033,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	if ( m_bInplaceSettings )
 	{
 		sphSeek ( fdHits.GetFD(), 0, SEEK_SET );
-		m_wrHitlist.SetFile ( fdHits.GetFD(), &iSharedOffset, iWriteBuffer );
+		m_wrHitlist.SetFile ( fdHits.GetFD(), &iSharedOffset );
 	}
 	else
 		if ( !m_wrHitlist.OpenFile ( GetIndexFileName("spp"), m_sLastError ) )

@@ -40,6 +40,7 @@ bool			g_bBuildFreqs	= false;
 
 int				g_iMemLimit				= 0;
 int				g_iMaxXmlpipe2Field		= 0;
+int				g_iWriteBuffer			= 0;
 
 const int		EXT_COUNT = 7;
 const char *	g_dExt[EXT_COUNT] = { "sph", "spa", "spi", "spd", "spp", "spm", "spk" };
@@ -950,7 +951,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		pIndex->SetDictionary ( pDict );
 		pIndex->Setup ( tSettings );
 
-		bOK = pIndex->Build ( dSources, g_iMemLimit )!=0;
+		bOK = pIndex->Build ( dSources, g_iMemLimit, g_iWriteBuffer )!=0;
 		if ( bOK && g_bRotate )
 		{
 			sIndexPath.SetSprintf ( "%s.new", hIndex["path"].cstr() );
@@ -1276,6 +1277,8 @@ int main ( int argc, char ** argv )
 
 		g_iMemLimit = hIndexer.GetSize ( "mem_limit", 0 );
 		g_iMaxXmlpipe2Field = hIndexer.GetSize ( "max_xmlpipe2_field", 2*1024*1024 );
+		g_iWriteBuffer = hIndexer.GetSize ( "write_buffer", 1024*1024 );
+
 		sphSetThrottling ( hIndexer.GetInt ( "max_iops", 0 ), hIndexer.GetSize ( "max_iosize", 0 ) );
 	}
 

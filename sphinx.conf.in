@@ -534,6 +534,14 @@ indexer
 	# optional, default is 2M
 	#
 	# max_xmlpipe2_field	= 4M
+
+
+	# write buffer size, bytes
+	# several (currently up to 4) buffers will be allocated
+	# write buffers are allocated in addition to mem_limit
+	# optional, default is 1M
+	#
+	# write_buffer		= 1M
 }
 
 #############################################################################

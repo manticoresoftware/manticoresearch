@@ -215,6 +215,7 @@ static KeyDesc_t g_dKeysIndexer[] =
 	{ "max_iops",				0, NULL },
 	{ "max_iosize",				0, NULL },
 	{ "max_xmlpipe2_field",		0, NULL },
+	{ "write_buffer",			0, NULL },
 	{ NULL,						0, NULL }
 };
 

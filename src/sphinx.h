@@ -138,8 +138,6 @@ inline const DWORD *	DOCINFO2ATTRS ( const DWORD * pDocinfo ){ return pDocinfo+D
 #define SPH_MAX_FILENAME_LEN	512
 #define SPH_MAX_FIELDS			32
 
-#define SPH_CACHE_WRITE			1048576
-
 /////////////////////////////////////////////////////////////////////////////
 
 /// time since startup, in microseconds
@@ -1973,7 +1971,7 @@ public:
 
 public:
 	/// build index by indexing given sources
-	virtual int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit ) = 0;
+	virtual int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer ) = 0;
 
 	/// build index by mering current index with given index
 	virtual bool				Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> & dFilters, bool bMergeKillLists ) = 0;

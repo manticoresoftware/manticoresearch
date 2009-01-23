@@ -19667,7 +19667,7 @@ bool CSphSource_XMLPipe::ScanStr ( const char * sTag, char * pRes, int iMaxLengt
 class CSphSource_XMLPipe2 : public CSphSource_Document
 {
 public:
-					CSphSource_XMLPipe2 ( BYTE * dInitialBuf, int iBufLen, const char * sName, int iFieldBufferMax );
+					CSphSource_XMLPipe2 ( BYTE * dInitialBuf, int iBufLen, const char * sName, int iFieldBufferMax, bool bFixupUTF8 );
 					~CSphSource_XMLPipe2 ();					
 
 	bool			Setup ( FILE * pPipe, const CSphConfigSection & hSource );			///< memorize the command
@@ -19758,6 +19758,10 @@ private:
 	int				m_iFieldBufferMax;
 	BYTE * 			m_pFieldBuffer;
 	int				m_iFieldBufferLen;
+
+	bool			m_bFixupUTF8;		///< whether to replace invalid utf-8 codepoints with spaces
+	int				m_iReparseStart;	///< utf-8 fixerupper might need to postpone a few bytes, starting at this offset
+	int				m_iReparseLen;		///< and this much bytes (under 4)
 
 	const char *	DecorateMessage ( const char * sTemplate, ... );
 	const char *	DecorateMessageVA ( const char * sTemplate, va_list ap );
@@ -19855,7 +19859,7 @@ void xmlErrorHandler ( void * arg, const char * msg, xmlParserSeverities severit
 #endif
 
 
-CSphSource_XMLPipe2::CSphSource_XMLPipe2 ( BYTE * dInitialBuf, int iBufLen, const char * sName, int iFieldBufferMax )
+CSphSource_XMLPipe2::CSphSource_XMLPipe2 ( BYTE * dInitialBuf, int iBufLen, const char * sName, int iFieldBufferMax, bool bFixupUTF8 )
 	: CSphSource_Document ( sName )
 	, m_pCurDocument	( NULL )
 	, m_pPipe			( NULL )
@@ -19881,6 +19885,9 @@ CSphSource_XMLPipe2::CSphSource_XMLPipe2 ( BYTE * dInitialBuf, int iBufLen, cons
 #endif
 	, m_iInitialBufSize	( iBufLen )
 	, m_iFieldBufferLen	( 0 )
+	, m_bFixupUTF8		( bFixupUTF8 )
+	, m_iReparseStart	( 0 )
+	, m_iReparseLen		( 0 )
 {
 	assert ( m_iBufferSize > iBufLen );
 
@@ -20249,7 +20256,62 @@ bool CSphSource_XMLPipe2::ParseNextChunk ( int iBufferLen, CSphString & sError )
 	if ( !iBufferLen )
 		return true;
 
-	if ( XML_Parse ( m_pParser, (const char*) m_pBuffer, iBufferLen, iBufferLen != m_iBufferSize ) != XML_STATUS_OK )
+	m_iReparseLen = 0;
+	if ( m_bFixupUTF8 )
+	{
+		BYTE * p = m_pBuffer;
+		BYTE * pMax = m_pBuffer + iBufferLen;
+
+		while ( p<pMax )
+		{
+			BYTE v = *p;
+
+			// accept ascii7 codes
+			if ( v<128 )
+			{
+				p++;
+				continue;
+			}
+
+			// get and check byte count
+			int iBytes = 0;
+			while ( v & 0x80 )
+			{
+				iBytes++;
+				v <<= 1;
+			}
+			if ( iBytes<2 || iBytes>4 )
+			{
+				*p++ = ' ';
+				continue;
+			}
+
+			// if we're on a boundary, save these few bytes for the future
+			if ( p+iBytes>pMax )
+			{
+				m_iReparseStart = int(p-m_pBuffer);
+				m_iReparseLen = int(pMax-p);
+				iBufferLen -= m_iReparseLen;
+				break;
+			}
+
+			// otherwise (not a boundary), check them all
+			int i = 1;
+			for ( ; i<iBytes; i++ )
+				if ( ( p[i] & 0xC0 )!=0x80 )
+					break;
+
+			if ( i!=iBytes )
+				for ( i=0; i<iBytes; i++ )
+					p[i] = ' ';
+
+			// only move forward by the amount of succesfully processed bytes!
+			p += i;
+		}
+	}
+
+	bool bLast = ( iBufferLen!=m_iBufferSize );
+	if ( XML_Parse ( m_pParser, (const char*) m_pBuffer, iBufferLen, bLast ) != XML_STATUS_OK )
 	{
 		SphDocID_t uFailedID = 0;
 		if ( m_dParsedDocuments.GetLength() )
@@ -20287,9 +20349,21 @@ BYTE **	CSphSource_XMLPipe2::NextDocument ( CSphString & sError )
 	int iReadResult = 0;
 
 #if USE_LIBEXPAT
-	while ( m_dParsedDocuments.GetLength () == 0 && ( iReadResult = fread ( m_pBuffer, 1, m_iBufferSize, m_pPipe ) ) != 0 )
-		if ( !ParseNextChunk ( iReadResult, sError ) )
+	while ( m_dParsedDocuments.GetLength()==0 )
+	{
+		// saved bytes to the front!
+		if ( m_iReparseLen )
+			memmove ( m_pBuffer, m_pBuffer+m_iReparseStart, m_iReparseLen );
+
+		// read more data
+		iReadResult = fread ( m_pBuffer+m_iReparseLen, 1, m_iBufferSize-m_iReparseLen, m_pPipe );
+		if ( iReadResult==0 )
+			break;
+
+		// and parse it
+		if ( !ParseNextChunk ( iReadResult+m_iReparseLen, sError ) )
 			return NULL;
+	}
 #endif
 
 #if USE_LIBXML
@@ -20835,7 +20909,7 @@ void CSphSource_XMLPipe2::ProcessNode ( xmlTextReaderPtr pReader )
 
 CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, FILE * pPipe, BYTE * dInitialBuf, int iBufLen, const char * szSourceName, int iMaxFieldLen )
 {
-	CSphSource_XMLPipe2 * pXMLPipe = new CSphSource_XMLPipe2 ( dInitialBuf, iBufLen, szSourceName, iMaxFieldLen );
+	CSphSource_XMLPipe2 * pXMLPipe = new CSphSource_XMLPipe2 ( dInitialBuf, iBufLen, szSourceName, iMaxFieldLen, pSource->GetInt ( "xmlpipe_fixup_utf8", 0 )!=0 );
 	if ( !pXMLPipe->Setup ( pPipe, *pSource ) )
 		SafeDelete ( pXMLPipe );
 

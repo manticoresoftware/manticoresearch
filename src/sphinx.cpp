@@ -8982,7 +8982,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 	float fReadFactor = 1.0f;
 	int iRelocationSize = 0;
-	int iWriteBuffer = m_iWriteBuffer;
+	iWriteBuffer = m_iWriteBuffer;
 
 	if ( m_bInplaceSettings )
 	{

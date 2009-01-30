@@ -391,6 +391,8 @@ protected:
 	CSphString				m_sCreateError;
 
 protected:
+	DWORD					GetWidestRet ( int iLeft, int iRight );
+
 	int						AddNodeInt ( int64_t iValue );
 	int						AddNodeFloat ( float fValue );
 	int						AddNodeAttr ( int iTokenType, int iAttrLocator );
@@ -1156,6 +1158,23 @@ void yyerror ( ExprParser_t * pParser, const char * sMessage )
 
 //////////////////////////////////////////////////////////////////////////
 
+DWORD ExprParser_t::GetWidestRet ( int iLeft, int iRight )
+{
+	DWORD uLeftType = ( iLeft<0 ) ? SPH_ATTR_INTEGER : m_dNodes[iLeft].m_uRetType;
+	DWORD uRightType = ( iRight<0 ) ? SPH_ATTR_INTEGER : m_dNodes[iRight].m_uRetType;
+
+	DWORD uRes = SPH_ATTR_FLOAT; // default is float
+	if ( ( uLeftType==SPH_ATTR_INTEGER || uLeftType==SPH_ATTR_BIGINT ) &&
+		( uRightType==SPH_ATTR_INTEGER || uRightType==SPH_ATTR_BIGINT ) )
+	{
+		// both types are integer (int32 or int64), compute in integers
+		uRes = ( uLeftType==SPH_ATTR_INTEGER && uRightType==SPH_ATTR_INTEGER )
+			? SPH_ATTR_INTEGER
+			: SPH_ATTR_BIGINT;
+	}
+	return uRes;
+}
+
 int ExprParser_t::AddNodeInt ( int64_t iValue )
 {
 	ExprNode_t & tNode = m_dNodes.Add ();
@@ -1233,19 +1252,8 @@ int ExprParser_t::AddNodeOp ( int iOp, int iLeft, int iRight )
 		|| iOp=='<' || iOp=='>' || iOp==TOK_AND || iOp==TOK_OR
 		|| iOp=='+' || iOp=='-' || iOp=='*' || iOp==',' )
 	{
-		DWORD uLeftType = ( iLeft<0 ) ? SPH_ATTR_INTEGER : m_dNodes[iLeft].m_uRetType;
-		DWORD uRightType = ( iRight<0 ) ? SPH_ATTR_INTEGER : m_dNodes[iRight].m_uRetType;
-
-		tNode.m_uArgType = SPH_ATTR_FLOAT; // default is float
-		if ( ( uLeftType==SPH_ATTR_INTEGER || uLeftType==SPH_ATTR_BIGINT ) &&
-			( uRightType==SPH_ATTR_INTEGER || uRightType==SPH_ATTR_BIGINT ) )
-		{
-			// both types are integer (int32 or int64), compute in integers
-			tNode.m_uArgType = ( uLeftType==SPH_ATTR_INTEGER && uRightType==SPH_ATTR_INTEGER )
-				? SPH_ATTR_INTEGER
-				: SPH_ATTR_BIGINT;
-		}
-
+		tNode.m_uArgType = GetWidestRet ( iLeft, iRight );
+		
 		// arithmetical operations return arg type, logical return int
 		tNode.m_uRetType = ( iOp=='+' || iOp=='-' || iOp=='*' || iOp==',' )
 			? tNode.m_uArgType
@@ -1312,7 +1320,7 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 	tNode.m_uRetType = SPH_ATTR_FLOAT; // by default, functions return floats
 
 	Func_e eFunc = g_dFuncs[iFunc].m_eFunc;
-	if ( eFunc==FUNC_NOW || eFunc==FUNC_IF || eFunc==FUNC_INTERVAL || eFunc==FUNC_IN )
+	if ( eFunc==FUNC_NOW || eFunc==FUNC_INTERVAL || eFunc==FUNC_IN )
 	{
 		tNode.m_uRetType = SPH_ATTR_INTEGER;
 
@@ -1322,6 +1330,10 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 
 		if ( eFunc==FUNC_BIGINT && tNode.m_uRetType!=SPH_ATTR_FLOAT )
 			tNode.m_uRetType = SPH_ATTR_BIGINT; // enforce if we can; FIXME! silently ignores BIGINT() on floats; should warn or raise an error
+
+	} else if ( eFunc==FUNC_IF )
+	{
+		tNode.m_uRetType = GetWidestRet ( iLeft, iRight );
 	}
 
 	return m_dNodes.GetLength()-1;

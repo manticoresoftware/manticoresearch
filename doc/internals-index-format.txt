@@ -134,6 +134,11 @@ The entry format is as follows:
 		fields-mask : int32
 		hits-count : int32
 
+delta-encoding of document-ids starts from minimal DocumentID of the index,
+which is written in the header file (.sph). I.e. if the MinDocID is, for example,
+5, and delta-encodev value of document-id contains 1 (it can't be 0, since it is 
+special marker) - then, the first actual document-id will be 5+1=6.
+
 inline-attrs component is optional, its presence depends on docinfo setting.
 For indexes built with docinfo=extern (the default value), there's no such
 component. When docinfo=inline, it carries all the attribute values:
@@ -189,9 +194,16 @@ The entry format is as follows:
 		word-position : int32, delta-encoded
 
 word-position integer is actually a union with bit fields:
+	
+	struct word-position
+	{
+		BYTE field_id			: 8;
+		bool is_last  			: 1;
+		DWORD word_position_in_field	: 23;
+	}
 
-	word-position = ( field-id<<24 ) + word-position-in-field
-
+is_last indicates thet the hit is the very last (!) hit in this field, 
+and used in "at the end" searches.
 Positions are counted in words, *not* bytes. Positions start from 1.
 Full-text field IDs start from 0. So, for example, when you index
 the following 2-field document:

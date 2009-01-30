@@ -148,4 +148,7 @@ class SampleInternalClass
 	void SampleCall ( RuleType_e eRule, char cKey, bool bFlag, char * sArg );
 };
 
+- constants (used instead of old-style #define something=something) named in capital, like:
+const bool FAIL_ON_NULL_SOURCE = false;
+
 --eof--

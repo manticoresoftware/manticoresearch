@@ -320,20 +320,6 @@ protected:
 
 /////////////////////////////////////////////////////////////////////////////
 
-/// synonym list entry
-struct CSphSynonym
-{
-	CSphString	m_sFrom;	///< specially packed list of map-from tokens
-	CSphString	m_sTo;		///< map-to string
-	int			m_iFromLen;	///< cached m_sFrom length 
-	int			m_iToLen;	///< cached m_sTo length 
-
-	inline bool operator < ( const CSphSynonym & rhs ) const
-	{
-		return strcmp ( m_sFrom.cstr(), rhs.m_sFrom.cstr() ) < 0;
-	}
-};
-
 struct CSphSavedFile
 {
 	CSphString			m_sFilename;
@@ -394,7 +380,7 @@ public:
 	virtual void					SetNgramLen ( int ) {}
 
 	/// load synonyms list
-	virtual bool					LoadSynonyms ( const char * sFilename, CSphString & sError );
+	virtual bool					LoadSynonyms ( const char * sFilename, CSphString & sError ) = 0;
 
 	/// set phrase boundary chars
 	virtual bool					SetBoundary ( const char * sConfig, CSphString & sError );
@@ -443,9 +429,6 @@ public:
 	/// spawn a clone of my own
 	virtual ISphTokenizer *			Clone ( bool bEscaped ) const = 0;
 
-	/// clone base stuff
-	virtual void					CloneBase ( const ISphTokenizer * pFrom, bool bEscaped );
-
 	/// SBCS or UTF-8?
 	virtual bool					IsUtf8 () const = 0;
 
@@ -478,10 +461,6 @@ protected:
 
 	CSphTokenizerSettings			m_tSettings;				///< tokenizer settings
 	CSphSavedFile					m_tSynFileInfo;				///< synonyms file info
-
-	CSphVector<CSphSynonym>			m_dSynonyms;				///< active synonyms
-	CSphVector<int>					m_dSynStart;				///< map 1st byte to candidate range start
-	CSphVector<int>					m_dSynEnd;					///< map 1st byte to candidate range end
 };
 
 /// parse charset table

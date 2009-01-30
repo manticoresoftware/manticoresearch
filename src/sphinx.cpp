@@ -2131,12 +2131,31 @@ inline int sphUTF8Decode ( BYTE * & pBuf ); // forward ref for GCC
 inline int sphUTF8Encode ( BYTE * pBuf, int iCode ); // forward ref for GCC
 
 
+/// synonym list entry
+struct CSphSynonym
+{
+	CSphString	m_sFrom;	///< specially packed list of map-from tokens
+	CSphString	m_sTo;		///< map-to string
+	int			m_iFromLen;	///< cached m_sFrom length 
+	int			m_iToLen;	///< cached m_sTo length 
+
+	inline bool operator < ( const CSphSynonym & rhs ) const
+	{
+		return strcmp ( m_sFrom.cstr(), rhs.m_sFrom.cstr() ) < 0;
+	}
+};
+
+
 /// tokenizer implementation traits
 template < bool IS_UTF8 > 
 class CSphTokenizerTraits : public ISphTokenizer
 {
 public:
 	CSphTokenizerTraits ();
+
+	virtual bool			SetCaseFolding ( const char * sConfig, CSphString & sError );
+	virtual bool			LoadSynonyms ( const char * sFilename, CSphString & sError );
+	virtual void			CloneBase ( const CSphTokenizerTraits<IS_UTF8> * pFrom, bool bEscaped );
 
 	virtual const char *	GetTokenStart () const		{ return (const char *) m_pTokenStart; }
 	virtual const char *	GetTokenEnd () const		{ return (const char *) m_pTokenEnd; }
@@ -2197,6 +2216,10 @@ protected:
 	BYTE				m_sAccum [ 3*SPH_MAX_WORD_LEN+3 ];	///< folded token accumulator
 	BYTE *				m_pAccum;							///< current accumulator position
 	int					m_iAccum;							///< boundary token size
+
+	CSphVector<CSphSynonym>			m_dSynonyms;				///< active synonyms
+	CSphVector<int>					m_dSynStart;				///< map 1st byte to candidate range start
+	CSphVector<int>					m_dSynEnd;					///< map 1st byte to candidate range end
 };
 
 
@@ -3007,12 +3030,6 @@ ISphTokenizer::ISphTokenizer ()
 
 bool ISphTokenizer::SetCaseFolding ( const char * sConfig, CSphString & sError )
 {
-	if ( m_dSynonyms.GetLength() )
-	{
-		sError = "SetCaseFolding() must not be called after LoadSynonyms()";
-		return false;
-	}
-
 	CSphVector<CSphRemapRange> dRemaps;
 	CSphCharsetDefinitionParser tParser;
 	if ( !tParser.Parse ( sConfig, dRemaps ) )
@@ -3120,7 +3137,103 @@ struct IdentityHash_fn
 };
 
 
-bool ISphTokenizer::LoadSynonyms ( const char * sFilename, CSphString & sError )
+void ISphTokenizer::Setup ( const CSphTokenizerSettings & tSettings )
+{
+	m_tSettings = tSettings;
+	m_tSettings.m_iMinWordLen = Max ( tSettings.m_iMinWordLen, 1 );
+	// TODO: move all initialization to this func
+}
+
+
+ISphTokenizer * ISphTokenizer::Create ( const CSphTokenizerSettings & tSettings, CSphString & sError )
+{
+	CSphScopedPtr <ISphTokenizer> pTokenizer (NULL);
+
+	switch ( tSettings.m_iType )
+	{
+		case TOKENIZER_SBCS:	pTokenizer = sphCreateSBCSTokenizer ();		 break;
+		case TOKENIZER_UTF8:	pTokenizer = sphCreateUTF8Tokenizer ();		 break;
+		case TOKENIZER_NGRAM:	pTokenizer = sphCreateUTF8NgramTokenizer (); break;
+		default:
+			sError.SetSprintf ( "failed to create tokenizer (unknown charset type '%d')", tSettings.m_iType );
+			return NULL;
+	}
+
+	pTokenizer->Setup ( tSettings );
+
+	if ( !tSettings.m_sCaseFolding.IsEmpty () && !pTokenizer->SetCaseFolding ( tSettings.m_sCaseFolding.cstr (), sError ) )
+	{
+		sError.SetSprintf ( "'charset_table': %s", sError.cstr() );
+		return NULL;
+	}
+
+	if ( !tSettings.m_sSynonymsFile.IsEmpty () && !pTokenizer->LoadSynonyms ( tSettings.m_sSynonymsFile.cstr (), sError ) )
+	{
+		sError.SetSprintf ( "'synonyms': %s", sError.cstr() );
+		return NULL;
+	}
+
+	if ( !tSettings.m_sBoundary.IsEmpty () && !pTokenizer->SetBoundary ( tSettings.m_sBoundary.cstr (), sError ) )
+	{
+		sError.SetSprintf ( "'phrase_boundary': %s", sError.cstr() );
+		return NULL;
+	}
+
+	if ( !tSettings.m_sIgnoreChars.IsEmpty () && !pTokenizer->SetIgnoreChars ( tSettings.m_sIgnoreChars.cstr (), sError ) )
+	{
+		sError.SetSprintf ( "'ignore_chars': %s", sError.cstr() );
+		return NULL;
+	}
+
+	pTokenizer->SetNgramLen ( tSettings.m_iNgramLen );
+
+	if ( !tSettings.m_sNgramChars.IsEmpty () && !pTokenizer->SetNgramChars ( tSettings.m_sNgramChars.cstr (), sError ) )
+	{
+		sError.SetSprintf ( "'ngram_chars': %s", sError.cstr() );
+		return NULL;
+	}
+
+	return pTokenizer.LeakPtr ();
+}
+
+
+ISphTokenizer * ISphTokenizer::CreateTokenFilter ( ISphTokenizer * pTokenizer, const CSphMultiformContainer * pContainer )
+{
+	if ( !pContainer )
+		return NULL;
+
+	return new CSphTokenizer_Filter ( pTokenizer, pContainer );
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+template < bool IS_UTF8 >
+CSphTokenizerTraits<IS_UTF8>::CSphTokenizerTraits ()
+	: m_pBuffer		( NULL )
+	, m_pBufferMax	( NULL )
+	, m_pCur		( NULL )
+	, m_pTokenStart ( NULL )
+	, m_pTokenEnd	( NULL )
+	, m_iAccum		( 0 )
+{
+	m_pAccum = m_sAccum;
+}
+
+
+template < bool IS_UTF8 >
+bool CSphTokenizerTraits<IS_UTF8>::SetCaseFolding ( const char * sConfig, CSphString & sError )
+{
+	if ( m_dSynonyms.GetLength() )
+	{
+		sError = "SetCaseFolding() must not be called after LoadSynonyms()";
+		return false;
+	}
+	return ISphTokenizer::SetCaseFolding ( sConfig, sError );
+}
+
+
+template < bool IS_UTF8 >
+bool CSphTokenizerTraits<IS_UTF8>::LoadSynonyms ( const char * sFilename, CSphString & sError )
 {
 	m_dSynonyms.Reset ();
 
@@ -3282,86 +3395,24 @@ bool ISphTokenizer::LoadSynonyms ( const char * sFilename, CSphString & sError )
 }
 
 
-void ISphTokenizer::Setup ( const CSphTokenizerSettings & tSettings )
-{
-	m_tSettings = tSettings;
-	m_tSettings.m_iMinWordLen = Max ( tSettings.m_iMinWordLen, 1 );
-	// TODO: move all initialization to this func
-}
-
-
-ISphTokenizer * ISphTokenizer::Create ( const CSphTokenizerSettings & tSettings, CSphString & sError )
-{
-	CSphScopedPtr <ISphTokenizer> pTokenizer (NULL);
-
-	switch ( tSettings.m_iType )
-	{
-		case TOKENIZER_SBCS:	pTokenizer = sphCreateSBCSTokenizer ();		 break;
-		case TOKENIZER_UTF8:	pTokenizer = sphCreateUTF8Tokenizer ();		 break;
-		case TOKENIZER_NGRAM:	pTokenizer = sphCreateUTF8NgramTokenizer (); break;
-		default:
-			sError.SetSprintf ( "failed to create tokenizer (unknown charset type '%d')", tSettings.m_iType );
-			return NULL;
-	}
-
-	pTokenizer->Setup ( tSettings );
-
-	if ( !tSettings.m_sCaseFolding.IsEmpty () && !pTokenizer->SetCaseFolding ( tSettings.m_sCaseFolding.cstr (), sError ) )
-	{
-		sError.SetSprintf ( "'charset_table': %s", sError.cstr() );
-		return NULL;
-	}
-
-	if ( !tSettings.m_sSynonymsFile.IsEmpty () && !pTokenizer->LoadSynonyms ( tSettings.m_sSynonymsFile.cstr (), sError ) )
-	{
-		sError.SetSprintf ( "'synonyms': %s", sError.cstr() );
-		return NULL;
-	}
-
-	if ( !tSettings.m_sBoundary.IsEmpty () && !pTokenizer->SetBoundary ( tSettings.m_sBoundary.cstr (), sError ) )
-	{
-		sError.SetSprintf ( "'phrase_boundary': %s", sError.cstr() );
-		return NULL;
-	}
-
-	if ( !tSettings.m_sIgnoreChars.IsEmpty () && !pTokenizer->SetIgnoreChars ( tSettings.m_sIgnoreChars.cstr (), sError ) )
-	{
-		sError.SetSprintf ( "'ignore_chars': %s", sError.cstr() );
-		return NULL;
-	}
-
-	pTokenizer->SetNgramLen ( tSettings.m_iNgramLen );
-
-	if ( !tSettings.m_sNgramChars.IsEmpty () && !pTokenizer->SetNgramChars ( tSettings.m_sNgramChars.cstr (), sError ) )
-	{
-		sError.SetSprintf ( "'ngram_chars': %s", sError.cstr() );
-		return NULL;
-	}
-
-	return pTokenizer.LeakPtr ();
-}
-
-
-ISphTokenizer * ISphTokenizer::CreateTokenFilter ( ISphTokenizer * pTokenizer, const CSphMultiformContainer * pContainer )
-{
-	if ( !pContainer )
-		return NULL;
-
-	return new CSphTokenizer_Filter ( pTokenizer, pContainer );
-}
-
-//////////////////////////////////////////////////////////////////////////
-
 template < bool IS_UTF8 >
-CSphTokenizerTraits<IS_UTF8>::CSphTokenizerTraits ()
-	: m_pBuffer		( NULL )
-	, m_pBufferMax	( NULL )
-	, m_pCur		( NULL )
-	, m_pTokenStart ( NULL )
-	, m_pTokenEnd	( NULL )
-	, m_iAccum		( 0 )
+void CSphTokenizerTraits<IS_UTF8>::CloneBase ( const CSphTokenizerTraits<IS_UTF8> * pFrom, bool bEscaped )
 {
-	m_pAccum = m_sAccum;
+	m_tLC = pFrom->m_tLC;
+	m_dSynonyms = pFrom->m_dSynonyms;
+	m_dSynStart = pFrom->m_dSynStart;
+	m_dSynEnd = pFrom->m_dSynEnd;
+	m_tSettings = pFrom->m_tSettings;
+	m_bEscaped = bEscaped;
+
+	if ( bEscaped )
+	{
+		CSphVector<CSphRemapRange> dRemaps;
+		CSphRemapRange Range;
+		Range.m_iStart = Range.m_iEnd = Range.m_iRemapStart = '\\';
+		dRemaps.Add ( Range );
+		m_tLC.AddRemaps ( dRemaps, FLAG_CODEPOINT_SPECIAL, FLAG_CODEPOINT_SPECIAL | FLAG_CODEPOINT_DUAL );
+	}
 }
 
 
@@ -3882,26 +3933,6 @@ bool ISphTokenizer::SetIgnoreChars ( const char * sConfig, CSphString & sError )
 	// add mapping
 	m_tLC.AddRemaps ( dRemaps, FLAG_CODEPOINT_IGNORE, 0 );
 	return true;
-}
-
-
-void ISphTokenizer::CloneBase ( const ISphTokenizer * pFrom, bool bEscaped )
-{
-	m_tLC = pFrom->m_tLC;
-	m_dSynonyms = pFrom->m_dSynonyms;
-	m_dSynStart = pFrom->m_dSynStart;
-	m_dSynEnd = pFrom->m_dSynEnd;
-	m_tSettings = pFrom->m_tSettings;
-	m_bEscaped = bEscaped;
-
-	if ( bEscaped )
-	{
-		CSphVector<CSphRemapRange> dRemaps;
-		CSphRemapRange Range;
-		Range.m_iStart = Range.m_iEnd = Range.m_iRemapStart = '\\';
-		dRemaps.Add ( Range );
-		m_tLC.AddRemaps ( dRemaps, FLAG_CODEPOINT_SPECIAL, FLAG_CODEPOINT_SPECIAL | FLAG_CODEPOINT_DUAL );
-	}
 }
 
 /////////////////////////////////////////////////////////////////////////////

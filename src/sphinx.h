@@ -319,29 +319,6 @@ protected:
 };
 
 /////////////////////////////////////////////////////////////////////////////
-/// parser to build lowercaser from textual config
-class CSphCharsetDefinitionParser
-{
-public:
-						CSphCharsetDefinitionParser ();
-	bool				Parse ( const char * sConfig, CSphVector<CSphRemapRange> & dRanges );
-	const char *		GetLastError ();
-
-protected:
-	bool				m_bError;
-	char				m_sError [ 1024 ];
-	const char *		m_pCurrent;
-
-	bool				Error ( const char * sMessage );
-	void				SkipSpaces ();
-	bool				IsEof ();
-	bool				CheckEof ();
-	int					HexDigit ( int c );
-	int					ParseCharsetCode ();
-};
-
-
-/////////////////////////////////////////////////////////////////////////////
 
 /// synonym list entry
 struct CSphSynonym
@@ -463,9 +440,6 @@ public:
 	virtual int						GetOvershortCount () { return m_iOvershortCount; }
 
 public:
-	/// get lowercaser
-	virtual const CSphLowercaser *	GetLowercaser () const { return &m_tLC; }
-
 	/// spawn a clone of my own
 	virtual ISphTokenizer *			Clone ( bool bEscaped ) const = 0;
 
@@ -509,6 +483,9 @@ protected:
 	CSphVector<int>					m_dSynStart;				///< map 1st byte to candidate range start
 	CSphVector<int>					m_dSynEnd;					///< map 1st byte to candidate range end
 };
+
+/// parse charset table
+bool					sphParseCharset ( const char * sCharset, CSphVector<CSphRemapRange> & dRemaps );
 
 /// create SBCS tokenizer
 ISphTokenizer *			sphCreateSBCSTokenizer ();

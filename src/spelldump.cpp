@@ -758,7 +758,6 @@ void CISpellAffix::LoadLocale ()
 		if ( !m_sCharsetFile.IsEmpty () )
 		{
 			FILE * pFile = fopen ( m_sCharsetFile.cstr (), "rt" );
-			bool bError = pFile == NULL;
 			if ( pFile )
 			{
 				printf ( "Using charater set from '%s'\n", m_sCharsetFile.cstr () );
@@ -769,22 +768,26 @@ void CISpellAffix::LoadLocale ()
 				char * szResult = fgets ( szBuffer, MAX_CHARSET_LENGTH, pFile );
 				if ( szResult )
 				{
-					CSphCharsetDefinitionParser tParser;
 					CSphVector<CSphRemapRange> dRemaps;
-					if ( tParser.Parse ( szBuffer, dRemaps ) )
+					if ( sphParseCharset ( szBuffer, dRemaps ) )
 					{
 						m_bUseLowerCaser = true;
 						m_LowerCaser.AddRemaps ( dRemaps, 0, 0 );
+					} else
+					{
+						printf ( "Failed to parse charset from '%s'\n", m_sCharsetFile.cstr() );
 					}
-					else
-						bError = true;
+				} else
+				{
+					printf ( "Failed to read charset from '%s'\n", m_sCharsetFile.cstr() );
 				}
-				else
-					bError = true;
-			}
 
-			if ( bError )
-				printf ( "Error loading character set\n" );
+				fclose ( pFile );
+
+			} else
+			{
+				printf ( "Failed to open '%s'\n", m_sCharsetFile.cstr() );
+			}
 		}
 		else
 			if ( !m_sLocale.IsEmpty () )

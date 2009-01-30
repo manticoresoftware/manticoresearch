@@ -2304,7 +2304,6 @@ public:
 	virtual int						GetOvershortCount ()						{ return m_pLastToken->m_iOvershortCount; }
 
 public:
-	virtual const CSphLowercaser *	GetLowercaser () const		{ return m_pTokenizer->GetLowercaser (); }
 	virtual ISphTokenizer *			Clone ( bool bEscaped ) const;
 	virtual bool					IsUtf8 () const				{ return m_pTokenizer->IsUtf8 (); }
 	virtual const char *			GetTokenStart () const		{ return m_pLastToken->m_szTokenStart; }
@@ -2518,10 +2517,26 @@ const CSphLowercaser & CSphLowercaser::operator = ( const CSphLowercaser & rhs )
 
 /////////////////////////////////////////////////////////////////////////////
 
-CSphCharsetDefinitionParser::CSphCharsetDefinitionParser ()
-	: m_bError ( false )
+/// parser to build lowercaser from textual config
+class CSphCharsetDefinitionParser
 {
-}
+public:
+						CSphCharsetDefinitionParser () : m_bError ( false ) {}
+	bool				Parse ( const char * sConfig, CSphVector<CSphRemapRange> & dRanges );
+	const char *		GetLastError ();
+
+protected:
+	bool				m_bError;
+	char				m_sError [ 1024 ];
+	const char *		m_pCurrent;
+
+	bool				Error ( const char * sMessage );
+	void				SkipSpaces ();
+	bool				IsEof ();
+	bool				CheckEof ();
+	int					HexDigit ( int c );
+	int					ParseCharsetCode ();
+};
 
 
 const char * CSphCharsetDefinitionParser::GetLastError ()
@@ -2775,6 +2790,14 @@ bool CSphCharsetDefinitionParser::Parse ( const char * sConfig, CSphVector<CSphR
 	}
 
 	return true;
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+bool sphParseCharset ( const char * sCharset, CSphVector<CSphRemapRange> & dRemaps )
+{
+	CSphCharsetDefinitionParser tParser;
+	return tParser.Parse ( sCharset, dRemaps );
 }
 
 /////////////////////////////////////////////////////////////////////////////

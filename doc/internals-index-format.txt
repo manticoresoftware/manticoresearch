@@ -134,10 +134,13 @@ The entry format is as follows:
 		fields-mask : int32
 		hits-count : int32
 
-delta-encoding of document-ids starts from minimal DocumentID of the index,
-which is written in the header file (.sph). I.e. if the MinDocID is, for example,
-5, and delta-encodev value of document-id contains 1 (it can't be 0, since it is 
-special marker) - then, the first actual document-id will be 5+1=6.
+Note that delta encoding of document IDs starts not from 0 but from
+infinum (decremented minimum) document ID stored in the header file.
+For instance, if indexed documents IDs were 3, 5, 11 then minimum ID
+will be 3, infinum ID stored in the header will be 2, and doclist
+decoder will be initialized with that value. Thus, for instance,
+if the very first delta value is 3, decoded doclist will start
+with document ID of 2+3=5, not 0+3=3.
 
 inline-attrs component is optional, its presence depends on docinfo setting.
 For indexes built with docinfo=extern (the default value), there's no such
@@ -193,17 +196,18 @@ The entry format is as follows:
 	hitlist-entry =
 		word-position : int32, delta-encoded
 
-word-position integer is actually a union with bit fields:
-	
+word-position integer has the following bit fields:
+
 	struct word-position
 	{
-		BYTE field_id			: 8;
-		bool is_last  			: 1;
-		DWORD word_position_in_field	: 23;
-	}
+		int field_id : 8; // bits 25-21
+		int is_last : 1; // bit 24
+		int word_position_in_field : 23; // bits 0-23
+	};
 
-is_last indicates thet the hit is the very last (!) hit in this field, 
-and used in "at the end" searches.
+is_last indicates that this hit was the very last (!) hit in this field.
+This flag is required for "keyword$" searches (ie. with field end marker).
+
 Positions are counted in words, *not* bytes. Positions start from 1.
 Full-text field IDs start from 0. So, for example, when you index
 the following 2-field document:

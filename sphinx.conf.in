@@ -232,6 +232,13 @@ source src1
 	#
 	# xmlpipe_attr_timestamp	= published
 	# xmlpipe_attr_uint			= author_id
+
+
+	# perform UTF-8 validation, and filter out incorrect codes
+	# avoids XML parser choking on non-UTF-8 documents
+	# optional, default is 0
+	#
+	# xmlpipe_fixup_utf8		= 1
 }
 
 

@@ -20375,11 +20375,16 @@ bool CSphSource_XMLPipe2::ParseNextChunk ( int iBufferLen, CSphString & sError )
 
 			// otherwise (not a boundary), check them all
 			int i = 1;
+			int iVal = ( v>>iBytes );
 			for ( ; i<iBytes; i++ )
+			{
 				if ( ( p[i] & 0xC0 )!=0x80 )
 					break;
+				iVal = ( iVal<<6 ) + ( p[i] & 0x3f );
+			}
 
-			if ( i!=iBytes )
+			// remove invalid sequences and utf-16 surrogate pairs 
+			if ( i!=iBytes || ( iVal>=0xd800 && iVal<=0xdfff ) )
 				for ( i=0; i<iBytes; i++ )
 					p[i] = ' ';
 

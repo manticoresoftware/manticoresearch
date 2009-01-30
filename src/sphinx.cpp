@@ -10927,8 +10927,16 @@ static CSphQueryWord * CreateQueryWord ( const XQKeyword_t & tWord, const CSphTe
 {
 	CSphQueryWord * pWord = new CSphQueryWord;
 	pWord->m_sWord = tWord.m_sWord;
-	pWord->m_sDictWord = tWord.m_sWord;
-	pWord->m_iWordID = tSetup.m_pDict->GetWordID ( (BYTE*)pWord->m_sDictWord.cstr() );
+
+	const int MAX_BYTES = 3*SPH_MAX_WORD_LEN + 16;
+	BYTE sTmp [ MAX_BYTES ];
+
+	strncpy ( (char*)sTmp, tWord.m_sWord.cstr(), MAX_BYTES );
+	sTmp[MAX_BYTES-1] = '\0';
+	
+	pWord->m_iWordID = tSetup.m_pDict->GetWordID ( sTmp );
+	pWord->m_sDictWord = (char*)sTmp;
+
 	pWord->SetupAttrs ( tSetup );
 	tSetup.m_pIndex->SetupQueryWord ( *pWord, tSetup );
 

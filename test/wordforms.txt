@@ -1,1 +1,2 @@
 folded > wrapped
+shortform > SomeWhatMoreLongFormThatWouldOverflowShortFormBuffer

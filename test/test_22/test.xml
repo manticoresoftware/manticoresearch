@@ -34,6 +34,8 @@ index test
 <queries>
 <query>FOLDED</query>
 <query>folded</query>
+<query>shortform</query>
+<query>sOMEwHATmORElONGfORMtHATwOULDoVERFLOWsHORTfORMbUFFER</query>
 </queries>
 
 <db_create>
@@ -51,7 +53,9 @@ DROP TABLE IF EXISTS `test_table`
 <db_insert>
 INSERT INTO `test_table` VALUES
 ( 1, 'test FoLdEd' ),
-( 2, 'folded' )
+( 2, 'folded' ),
+( 3, 'shortform' ),
+( 4, 'SomeWhatMoreLongFormThatWouldOverflowShortFormBuffer' )
 </db_insert>
 
 </test>

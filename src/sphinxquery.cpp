@@ -422,8 +422,16 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		}
 
 		// check for stopword, and create that node
-		CSphString sTmp ( sToken );
-		if ( !m_pDict->GetWordID ( (BYTE*)sTmp.cstr() ) ) sToken = NULL;
+		// temp buffer is required, because GetWordID() might expand (!) the keyword in-place
+		const int MAX_BYTES = 3*SPH_MAX_WORD_LEN + 16;
+		BYTE sTmp [ MAX_BYTES ];
+
+		strncpy ( (char*)sTmp, sToken, MAX_BYTES );
+		sTmp[MAX_BYTES-1] = '\0';
+
+		if ( !m_pDict->GetWordID ( sTmp ) )
+			sToken = NULL;
+
 		m_tPendingToken.pNode = AddKeyword ( sToken );
 		m_iPendingType = TOK_KEYWORD;
 		break;

@@ -1,0 +1,57 @@
+<test>
+<name>quorum</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT * FROM test_table
+}
+
+index test
+{
+	source	= test
+	path	= <data_path/>/test
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	document_id INT NOT NULL,
+	text VARCHAR(255) NOT NULL
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table;
+</db_drop>
+
+<db_insert>
+INSERT INTO test_table ( document_id, text ) VALUES
+( 1, 'hello world' ),
+( 2, 'one two three four five' );
+</db_insert>
+
+<queries>
+	<query mode="extended2">"hello heaven"/1</query>
+	<query mode="extended2">"hello from above"/2</query>
+	<query mode="extended2">"one two foo bar"/3</query>
+	<query mode="extended2">"one two two bar"/3</query>
+	<query mode="extended2">"one two two bar"/2</query>
+	<query mode="extended2">"two two one three"/3</query>
+	<query mode="extended2">"two two one foo"/3</query>
+</queries>
+
+</test>

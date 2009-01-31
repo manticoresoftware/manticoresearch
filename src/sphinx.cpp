@@ -10828,6 +10828,8 @@ protected:
 	CSphVector<ExtNode_i*>		m_dChildren;	///< my children nodes (simply ExtTerm_c for now)
 	CSphVector<const ExtDoc_t*>	m_pCurDoc;		///< current positions into children doclists
 	CSphVector<const ExtHit_t*>	m_pCurHit;		///< current positions into children doclists
+	DWORD						m_uMask;		///< mask of nodes that count toward threshold
+	DWORD						m_uMaskEnd;		///< index of the last bit in mask
 	bool						m_bDone;		///< am i done
 	SphDocID_t					m_uMatchedDocid;///< current docid for hitlist emission
 };
@@ -12677,6 +12679,20 @@ ExtQuorum_c::ExtQuorum_c ( CSphVector<CSphQueryWord *> & dQwords, const XQNode_t
 		m_pCurDoc.Add ( NULL );
 		m_pCurHit.Add ( NULL );
 	}
+
+	m_uMask = 0;
+	m_uMaskEnd = dQwords.GetLength() - 1;
+	ARRAY_FOREACH ( i, dQwords )
+	{
+		int iValue = 1;
+		for ( int j = i + 1; j < dQwords.GetLength(); j++ )
+			if ( dQwords[i]->m_iWordID == dQwords[j]->m_iWordID )
+			{
+				iValue = 0;
+				break;
+			}
+		m_uMask |= iValue << i;
+	}
 }
 
 ExtQuorum_c::~ExtQuorum_c ()
@@ -12713,6 +12729,11 @@ const ExtDoc_t * ExtQuorum_c::GetDocsChunk ( SphDocID_t * pMaxID )
 			break;
 		}
 
+		// replace i-th bit with the last one
+		m_uMask &= ~( 1UL<<i ); // clear i-th bit
+		m_uMask |= ( ( m_uMask>>m_uMaskEnd ) & 1 )<<i; // set i-th bit to end bit
+		m_uMaskEnd--;
+
 		m_dChildren.RemoveFast ( i );
 		m_pCurDoc.RemoveFast ( i );
 		m_pCurHit.RemoveFast ( i );
@@ -12746,13 +12767,13 @@ const ExtDoc_t * ExtQuorum_c::GetDocsChunk ( SphDocID_t * pMaxID )
 			if ( m_pCurDoc[i]->m_uDocid < tCand.m_uDocid )
 			{
 				tCand = *m_pCurDoc[i];
-				iCandMatches = 1;
+				iCandMatches = (m_uMask >> i) & 1;
 
 			} else if ( m_pCurDoc[i]->m_uDocid==tCand.m_uDocid )
 			{
 				tCand.m_uFields |= m_pCurDoc[i]->m_uFields;
 				tCand.m_fTFIDF += m_pCurDoc[i]->m_fTFIDF;
-				iCandMatches++;
+				iCandMatches += (m_uMask >> i) & 1;
 			}
 		}
 
@@ -12786,6 +12807,11 @@ const ExtDoc_t * ExtQuorum_c::GetDocsChunk ( SphDocID_t * pMaxID )
 				bDone = m_bDone = true;
 				break;
 			}
+
+			// replace i-th bit with the last one
+			m_uMask &= ~( 1UL<<i ); // clear i-th bit
+			m_uMask |= ( ( m_uMask>>m_uMaskEnd ) & 1 )<<i; // set i-th bit to end bit
+			m_uMaskEnd--;
 
 			m_dChildren.RemoveFast ( i );
 			m_pCurDoc.RemoveFast ( i );

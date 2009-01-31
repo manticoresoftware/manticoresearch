@@ -5265,18 +5265,38 @@ int CSphReader_VLN::GetByte ()
 
 void CSphReader_VLN::GetRawBytes ( void * pData, int iSize )
 {
+	BYTE * pOut = (BYTE*) pData;
+
+	while ( iSize>m_iBufSize )
+	{
+		int iLen = m_iBuffUsed - m_iBuffPos;
+		assert ( iLen<=m_iBufSize );
+
+		memcpy ( pOut, m_pBuff+m_iBuffPos, iLen );
+		m_iBuffPos += iLen;
+		pOut += iLen;
+		iSize -= iLen;
+
+		if ( iSize>0 )
+		{
+			UpdateCache ();
+			if ( !m_iBuffUsed )
+				return; // unexpected io failure
+		}
+	}
+
 	if ( m_iBuffPos+iSize>m_iBuffUsed )
 	{
 		UpdateCache ();
 		if ( m_iBuffPos+iSize>m_iBuffUsed )
 		{
-			memset ( pData, 0, iSize ); // unexpected io failure
+			memset ( pOut, 0, iSize ); // unexpected io failure
 			return;
 		}
 	}
 
 	assert ( (m_iBuffPos+iSize)<=m_iBuffUsed );
-	memcpy ( pData, m_pBuff+m_iBuffPos, iSize );
+	memcpy ( pOut, m_pBuff+m_iBuffPos, iSize );
 	m_iBuffPos += iSize;
 }
 

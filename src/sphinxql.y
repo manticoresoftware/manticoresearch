@@ -24,6 +24,7 @@
 %token	TOK_IN
 %token	TOK_ID
 %token	TOK_MATCH
+%token	TOK_OPTION
 %token	TOK_ORDER
 %token	TOK_SELECT
 %token	TOK_SHOW
@@ -59,6 +60,7 @@ select_from:
 	opt_group_order_clause
 	opt_order_clause
 	opt_limit_clause
+	opt_option_clause
 		{
 			pParser->m_eStmt = STMT_SELECT;
 			pParser->m_pQuery->m_sIndexes.SetBinary ( pParser->m_pBuf+$4.m_iStart, $4.m_iEnd-$4.m_iStart );
@@ -192,6 +194,27 @@ limit_clause:
 			pParser->m_pQuery->m_iLimit = $4.m_iValue;
 		}
 	;
+
+opt_option_clause:
+	// empty
+	| option_clause
+	;
+
+option_clause:
+	TOK_OPTION option_list
+	;
+
+option_list:
+	option_item
+	| option_list ',' option_item
+	;
+
+option_item:
+	TOK_IDENT '=' TOK_IDENT		{ if ( !SqlAddOption ( pParser, $1, $3 ) ) YYERROR; }
+	| TOK_IDENT '=' TOK_CONST	{ if ( !SqlAddOption ( pParser, $1, $3 ) ) YYERROR; }
+	;
+
+//////////////////////////////////////////////////////////////////////////
 
 expr:
 	TOK_IDENT

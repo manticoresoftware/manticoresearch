@@ -37,6 +37,7 @@ SPACE				[ \t\n]
 "IN"				{ YYSTOREBOUNDS; return TOK_IN; }
 "ID"				{ YYSTOREBOUNDS; return TOK_ID; }
 "MATCH"				{ YYSTOREBOUNDS; return TOK_MATCH; }
+"OPTION"			{ YYSTOREBOUNDS; return TOK_OPTION; }
 "ORDER"				{ YYSTOREBOUNDS; return TOK_ORDER; }
 "SELECT"			{ YYSTOREBOUNDS; return TOK_SELECT; }
 "SHOW"				{ YYSTOREBOUNDS; return TOK_SHOW; }
@@ -57,7 +58,7 @@ SPACE				[ \t\n]
 
 '([^']|\\')*'		{ YYSTOREBOUNDS; SqlUnescape ( lvalp->m_sValue, yytext, yyleng ); return TOK_QUOTED_STRING; }
 
-{DIGIT}+			{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; lvalp->m_iValue = strtoll ( yytext, NULL, 10 ); return TOK_CONST; }
+-*{DIGIT}+			{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; lvalp->m_iValue = strtoll ( yytext, NULL, 10 ); return TOK_CONST; }
 
 "@id"				{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; return TOK_IDENT; }
 "@weight"			{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; return TOK_IDENT; }

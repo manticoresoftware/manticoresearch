@@ -4518,6 +4518,8 @@ struct SqlNode_t
 	CSphString				m_sValue;
 	int64_t					m_iValue;
 	CSphVector<SphAttr_t>	m_dValues;
+
+	SqlNode_t() : m_iValue ( 0 ) {}
 };
 #define YYSTYPE SqlNode_t
 
@@ -4568,8 +4570,60 @@ void SqlUnescape ( CSphString & sRes, const char * sEscaped, int iLen )
 
 void yyerror ( SqlParser_t * pParser, const char * sMessage )
 {
-	if ( pParser->m_pParseError )
-		pParser->m_pParseError->SetSprintf ( "%s near '%s'", sMessage, pParser->m_pLastTokenStart ? pParser->m_pLastTokenStart : "(null)" );
+	pParser->m_pParseError->SetSprintf ( "%s near '%s'", sMessage, pParser->m_pLastTokenStart ? pParser->m_pLastTokenStart : "(null)" );
+}
+
+bool SqlAddOption ( SqlParser_t * pParser, SqlNode_t tIdent, SqlNode_t tValue )
+{
+	CSphQuery * pQuery = pParser->m_pQuery; // shortcuts
+	CSphString & sOpt = tIdent.m_sValue;
+	CSphString & sVal = tValue.m_sValue;
+	sOpt.ToLower ();
+	sVal.ToLower ();
+
+
+	if ( sOpt=="ranker" )
+	{
+		if ( sVal=="proximity_bm25" )	pQuery->m_eRanker = SPH_RANK_PROXIMITY_BM25;
+		else if ( sVal=="bm25" )		pQuery->m_eRanker = SPH_RANK_BM25;
+		else if ( sVal=="none" )		pQuery->m_eRanker = SPH_RANK_NONE;
+		else if ( sVal=="wordcount" )	pQuery->m_eRanker = SPH_RANK_WORDCOUNT;
+		else if ( sVal=="proximity" )	pQuery->m_eRanker = SPH_RANK_PROXIMITY;
+		else if ( sVal=="matchany" )	pQuery->m_eRanker = SPH_RANK_MATCHANY;
+		else if ( sVal=="fieldmask" )	pQuery->m_eRanker = SPH_RANK_FIELDMASK;
+		else
+		{
+			pParser->m_pParseError->SetSprintf ( "unknown ranker '%s'", sVal.cstr() );
+			return false;
+		}
+
+	} else if ( sOpt=="max_matches" )
+	{
+		pQuery->m_iMaxMatches = (int)tValue.m_iValue;
+
+	} else if ( sOpt=="cutoff" )
+	{
+		pQuery->m_iCutoff = (int)tValue.m_iValue;
+
+	} else if ( sOpt=="max_query_time" )
+	{
+		pQuery->m_uMaxQueryMsec = (int)tValue.m_iValue;
+
+	} else if ( sOpt=="retry_count" )
+	{
+		pQuery->m_iRetryCount = (int)tValue.m_iValue;
+
+	} else if ( sOpt=="retry_delay" )
+	{
+		pQuery->m_iRetryDelay = (int)tValue.m_iValue;
+
+	} else
+	{
+		pParser->m_pParseError->SetSprintf ( "unknown option '%s'", tIdent.m_sValue.cstr() );
+		return false;
+	}
+
+	return true;
 }
 
 #include "yysphinxql.c"

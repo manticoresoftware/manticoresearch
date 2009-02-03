@@ -18,12 +18,21 @@
 #include <sys/un.h>
 #include <netdb.h>
 
-#include "include/my_global.h"
-#include "include/mysql.h"
-#include "include/my_net.h"
-#include "include/mysqld_error.h"
-#include "include/my_sys.h"
-#include "sql/mysql_priv.h"
+#include <mysql_version.h>
+
+#if MYSQL_VERSION_ID>50100
+#include "mysql_priv.h"
+#include <mysql/plugin.h>
+#else
+#include "../mysql_priv.h"
+#endif
+
+#include <mysys_err.h>
+#include <my_sys.h>
+
+#if MYSQL_VERSION_ID>=50120
+typedef uchar byte;
+#endif
 
 /// partially copy-pasted stuff that should be moved elsewhere
 

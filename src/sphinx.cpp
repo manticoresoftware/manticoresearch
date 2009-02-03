@@ -20398,6 +20398,13 @@ bool CSphSource_XMLPipe2::ParseNextChunk ( int iBufferLen, CSphString & sError )
 		{
 			BYTE v = *p;
 
+			// fix zeroes
+			if ( v==0 )
+			{
+				*p++ = ' ';
+				continue;
+			}
+
 			// accept ascii7 codes
 			if ( v<128 )
 			{

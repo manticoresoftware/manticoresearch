@@ -20398,8 +20398,8 @@ bool CSphSource_XMLPipe2::ParseNextChunk ( int iBufferLen, CSphString & sError )
 		{
 			BYTE v = *p;
 
-			// fix zeroes
-			if ( v==0 )
+			// fix control codes
+			if ( v<0x20 && v!=0x0D && v!=0x0A )
 			{
 				*p++ = ' ';
 				continue;

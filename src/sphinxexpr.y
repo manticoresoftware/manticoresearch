@@ -84,6 +84,10 @@ function:
 		{
 			$$ = pParser->AddNodeFunc ( $1, $3, $5 );
 		}
+	| TOK_FUNC_IN '(' TOK_ID ',' arglist ')'
+		{
+			$$ = pParser->AddNodeFunc ( $1, pParser->AddNodeID(), $5 );
+		}
 	| TOK_FUNC_IN '(' TOK_ATTR_MVA ',' arglist ')'
 		{
 			$$ = pParser->AddNodeAttr ( TOK_ATTR_MVA, $3 );

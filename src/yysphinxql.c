@@ -1159,6 +1159,21 @@ yyreduce:
 		;}
     break;
 
+  case 8:
+
+    { SqlAddItem ( pParser, &yyvsp[0], NULL ); ;}
+    break;
+
+  case 9:
+
+    { SqlAddItem ( pParser, &yyvsp[-2], &yyvsp[0] ); ;}
+    break;
+
+  case 10:
+
+    { SqlAddItem ( pParser, &yyvsp[0], NULL ); ;}
+    break;
+
   case 12:
 
     { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}

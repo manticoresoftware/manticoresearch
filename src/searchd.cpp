@@ -4626,6 +4626,16 @@ bool SqlAddOption ( SqlParser_t * pParser, SqlNode_t tIdent, SqlNode_t tValue )
 	return true;
 }
 
+void SqlAddItem ( SqlParser_t * pParser, YYSTYPE * pExpr, YYSTYPE * pAlias )
+{
+	CSphQueryItem tItem;
+	tItem.m_sExpr.SetBinary ( pParser->m_pBuf + pExpr->m_iStart, pExpr->m_iEnd - pExpr->m_iStart );
+	if ( pAlias )
+		tItem.m_sAlias.SetBinary ( pParser->m_pBuf + pAlias->m_iStart, pAlias->m_iEnd - pAlias->m_iStart );
+
+	pParser->m_pQuery->m_dItems.Add ( tItem );
+}
+
 #include "yysphinxql.c"
 
 SqlStmt_e ParseSqlQuery ( const CSphString & sQuery, CSphQuery & tQuery, CSphString & sError )

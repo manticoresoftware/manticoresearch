@@ -73,9 +73,9 @@ select_items_list:
 	;
 
 select_item:
-	TOK_IDENT
-	| expr TOK_AS TOK_IDENT
-	| '*'
+	TOK_IDENT									{ SqlAddItem ( pParser, &$1, NULL ); }
+	| expr TOK_AS TOK_IDENT						{ SqlAddItem ( pParser, &$1, &$3 ); }
+	| '*'										{ SqlAddItem ( pParser, &$1, NULL ); }
 	;
 
 ident_list:

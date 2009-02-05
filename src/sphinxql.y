@@ -15,6 +15,7 @@
 
 %token	TOK_AS
 %token	TOK_ASC
+%token	TOK_AVG
 %token	TOK_BETWEEN
 %token	TOK_BY
 %token	TOK_DESC
@@ -24,11 +25,14 @@
 %token	TOK_IN
 %token	TOK_ID
 %token	TOK_MATCH
+%token	TOK_MAX
+%token	TOK_MIN
 %token	TOK_OPTION
 %token	TOK_ORDER
 %token	TOK_SELECT
 %token	TOK_SHOW
 %token	TOK_STATUS
+%token	TOK_SUM
 %token	TOK_WARNINGS
 %token	TOK_WEIGHT
 %token	TOK_WITHIN
@@ -75,6 +79,10 @@ select_items_list:
 select_item:
 	TOK_IDENT									{ pParser->AddItem ( &$1, NULL ); }
 	| expr TOK_AS TOK_IDENT						{ pParser->AddItem ( &$1, &$3 ); }
+	| TOK_AVG '(' expr ')' TOK_AS TOK_IDENT		{ pParser->AddItem ( &$3, &$6, SPH_AGGR_AVG ); }
+	| TOK_MAX '(' expr ')' TOK_AS TOK_IDENT		{ pParser->AddItem ( &$3, &$6, SPH_AGGR_MAX ); }
+	| TOK_MIN '(' expr ')' TOK_AS TOK_IDENT		{ pParser->AddItem ( &$3, &$6, SPH_AGGR_MIN ); }
+	| TOK_SUM '(' expr ')' TOK_AS TOK_IDENT		{ pParser->AddItem ( &$3, &$6, SPH_AGGR_SUM ); }
 	| '*'										{ pParser->AddItem ( &$1, NULL ); }
 	;
 
@@ -240,6 +248,8 @@ expr:
 function:
 	TOK_IDENT '(' arglist ')'	{ $$ = $1; $$.m_iEnd = $4.m_iEnd; }
 	| TOK_IDENT '(' ')'			{ $$ = $1; $$.m_iEnd = $3.m_iEnd }
+	| TOK_MIN '(' expr ',' expr ')'		{ $$ = $1; $$.m_iEnd = $6.m_iEnd }	// handle clash with aggregate functions
+	| TOK_MAX '(' expr ',' expr ')'		{ $$ = $1; $$.m_iEnd = $6.m_iEnd }
 	;
 
 arglist:

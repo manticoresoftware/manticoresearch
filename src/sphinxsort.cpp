@@ -585,12 +585,140 @@ struct CSphGroupSorterSettings
 #endif
 
 
+/// aggregate function interface
+class IAggrFunc
+{
+public:
+	virtual void	Update ( CSphMatch * pDst, const CSphMatch * pSrc ) = 0;
+	virtual void	Finalize ( CSphMatch * ) {}
+};
+
+
+/// aggregate traits for different attribute types
+template < typename T >
+class IAggrFuncTraits : public IAggrFunc
+{
+public:
+					IAggrFuncTraits ( const CSphAttrLocator & tLocator ) : m_tLocator ( tLocator ) {}
+	inline T		GetValue ( const CSphMatch * pRow );
+	inline void		SetValue ( CSphMatch * pRow, T val );
+
+protected:
+	CSphAttrLocator	m_tLocator;	
+};
+
+template<>
+DWORD IAggrFuncTraits<DWORD>::GetValue ( const CSphMatch * pRow )
+{
+	return (DWORD)pRow->GetAttr ( m_tLocator );
+}
+
+template<>
+void IAggrFuncTraits<DWORD>::SetValue ( CSphMatch * pRow, DWORD val )
+{
+	pRow->SetAttr ( m_tLocator, val );
+}
+
+template<>
+int64_t IAggrFuncTraits<int64_t>::GetValue ( const CSphMatch * pRow )
+{
+	return pRow->GetAttr ( m_tLocator );
+}
+
+template<>
+void IAggrFuncTraits<int64_t>::SetValue ( CSphMatch * pRow, int64_t val )
+{
+	pRow->SetAttr ( m_tLocator, val );
+}
+
+template<>
+float IAggrFuncTraits<float>::GetValue ( const CSphMatch * pRow )
+{
+	return pRow->GetAttrFloat ( m_tLocator );
+}
+
+template<>
+void IAggrFuncTraits<float>::SetValue ( CSphMatch * pRow, float val )
+{
+	pRow->SetAttrFloat ( m_tLocator, val );
+}
+
+
+
+/// SUM() implementation
+template < typename T >
+class AggrSum_t : public IAggrFuncTraits<T>
+{
+public:
+	AggrSum_t ( const CSphAttrLocator & tLoc ) : IAggrFuncTraits<T> ( tLoc )
+	{}
+
+	virtual void Update ( CSphMatch * pDst, const CSphMatch * pSrc )
+	{
+		this->SetValue ( pDst, this->GetValue(pDst)+this->GetValue(pSrc) );
+	}
+};
+
+
+/// AVG() implementation
+template < typename T >
+class AggrAvg_t : public IAggrFuncTraits<T>
+{
+protected:
+	CSphAttrLocator m_tCountLoc;
+public:
+	AggrAvg_t ( const CSphAttrLocator & tLoc, const CSphAttrLocator & tCountLoc ) : IAggrFuncTraits<T> ( tLoc ), m_tCountLoc ( tCountLoc )
+	{}
+
+	virtual void Update ( CSphMatch * pDst, const CSphMatch * pSrc )
+	{
+		this->SetValue ( pDst, this->GetValue(pDst)+this->GetValue(pSrc) );
+	}
+
+	virtual void Finalize ( CSphMatch * pDst )
+	{
+		this->SetValue ( pDst, T(this->GetValue(pDst)/pDst->GetAttr(m_tCountLoc)) );
+	}
+};
+
+
+/// MAX() implementation
+template < typename T >
+class AggrMax_t : public IAggrFuncTraits<T>
+{
+public:
+	AggrMax_t ( const CSphAttrLocator & tLoc ) : IAggrFuncTraits<T> ( tLoc )
+	{}
+
+	virtual void Update ( CSphMatch * pDst, const CSphMatch * pSrc )
+	{
+		this->SetValue ( pDst, Max ( this->GetValue(pDst), this->GetValue(pSrc) ) );
+	}
+};
+
+
+/// MIN() implementation
+template < typename T >
+class AggrMin_t : public IAggrFuncTraits<T>
+{
+public:
+	AggrMin_t ( const CSphAttrLocator & tLoc ) : IAggrFuncTraits<T> ( tLoc )
+	{}
+
+	virtual void Update ( CSphMatch * pDst, const CSphMatch * pSrc )
+	{
+		this->SetValue ( pDst, Min ( this->GetValue(pDst), this->GetValue(pSrc) ) );
+	}
+};
+
+
 /// match sorter with k-buffering and group-by
 template < typename COMPGROUP, bool DISTINCT >
 class CSphKBufferGroupSorter : public CSphMatchQueueTraits
 {
 protected:
 	const int		m_iRowitems;		///< normal match rowitems count (to distinguish already grouped matches)
+	int				m_iUpdateRowitems;	///< how much items to update from relevant matches (should *not* update aggregates and groupby magic)
 
 	ESphGroupBy		m_eGroupBy;			///< group-by function
 	CSphGrouper *	m_pGrouper;
@@ -608,6 +736,8 @@ protected:
 
 	CSphGroupSorterSettings		m_tSettings;
 
+	CSphVector<IAggrFunc *>		m_dAggregates;
+
 	static const int			GROUPBY_FACTOR = 4;	///< allocate this times more storage when doing group-by (k, as in k-buffer)
 
 public:
@@ -615,6 +745,7 @@ public:
 	CSphKBufferGroupSorter ( const ISphMatchComparator * pComp, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings ) // FIXME! make k configurable
 		: CSphMatchQueueTraits ( pQuery->m_iMaxMatches*GROUPBY_FACTOR, true )
 		, m_iRowitems		( tSettings.m_iPresortRowitems )
+		, m_iUpdateRowitems	( tSettings.m_iPresortRowitems )
 		, m_eGroupBy		( pQuery->m_eGroupFunc )
 		, m_pGrouper		( tSettings.m_pGrouper )
 		, m_hGroup2Match	( pQuery->m_iMaxMatches*GROUPBY_FACTOR )
@@ -625,6 +756,82 @@ public:
 	{
 		assert ( GROUPBY_FACTOR>1 );
 		assert ( DISTINCT==false || tSettings.m_tDistinctLoc.m_iBitOffset>=0 );
+	}
+
+	/// schema setup
+	virtual void SetSchemas ( const CSphSchema & tIn, const CSphSchema & tOut )
+	{
+		m_tIncomingSchema = tIn;
+		m_tOutgoingSchema = tOut; 
+		m_iUpdateRowitems = m_iRowitems;
+
+		bool bAggrStarted = false;
+		for ( int i=0; i<m_tIncomingSchema.GetAttrsCount(); i++ )
+		{
+			const CSphColumnInfo & tAttr = m_tIncomingSchema.GetAttr(i);
+			if ( tAttr.m_eAggrFunc==SPH_AGGR_NONE )
+			{
+				if ( !bAggrStarted )
+					continue;
+
+				// !COMMIT
+				assert ( 0 && "internal error: aggregates must not be followed by non-aggregates" );
+			}
+
+			if ( !bAggrStarted )
+			{
+				m_iUpdateRowitems = tAttr.m_tLocator.CalcRowitem();
+				assert ( m_iUpdateRowitems>=0 );
+			}			
+
+			bAggrStarted = true;
+			switch ( tAttr.m_eAggrFunc )
+			{
+				case SPH_AGGR_SUM:
+					switch ( tAttr.m_eAttrType )
+					{
+						case SPH_ATTR_INTEGER:	m_dAggregates.Add ( new AggrSum_t<DWORD> ( tAttr.m_tLocator ) ); break;
+						case SPH_ATTR_BIGINT:	m_dAggregates.Add ( new AggrSum_t<int64_t> ( tAttr.m_tLocator ) ); break;
+						case SPH_ATTR_FLOAT:	m_dAggregates.Add ( new AggrSum_t<float> ( tAttr.m_tLocator ) ); break;
+						default:				assert ( 0 && "internal error: unhandled aggregate type" ); break;
+					}
+					break;
+
+				case SPH_AGGR_AVG:
+					switch ( tAttr.m_eAttrType )
+					{
+						case SPH_ATTR_INTEGER:	m_dAggregates.Add ( new AggrAvg_t<DWORD> ( tAttr.m_tLocator, m_tSettings.m_tLocCount ) ); break;
+						case SPH_ATTR_BIGINT:	m_dAggregates.Add ( new AggrAvg_t<int64_t> ( tAttr.m_tLocator, m_tSettings.m_tLocCount ) ); break;
+						case SPH_ATTR_FLOAT:	m_dAggregates.Add ( new AggrAvg_t<float> ( tAttr.m_tLocator, m_tSettings.m_tLocCount ) ); break;
+						default:				assert ( 0 && "internal error: unhandled aggregate type" ); break;
+					}
+					break;
+
+				case SPH_AGGR_MIN:
+					switch ( tAttr.m_eAttrType )
+					{
+						case SPH_ATTR_INTEGER:	m_dAggregates.Add ( new AggrMin_t<DWORD> ( tAttr.m_tLocator ) ); break;
+						case SPH_ATTR_BIGINT:	m_dAggregates.Add ( new AggrMin_t<int64_t> ( tAttr.m_tLocator ) ); break;
+						case SPH_ATTR_FLOAT:	m_dAggregates.Add ( new AggrMin_t<float> ( tAttr.m_tLocator ) ); break;
+						default:				assert ( 0 && "internal error: unhandled aggregate type" ); break;
+					}
+					break;
+
+				case SPH_AGGR_MAX:
+					switch ( tAttr.m_eAttrType )
+					{
+						case SPH_ATTR_INTEGER:	m_dAggregates.Add ( new AggrMax_t<DWORD> ( tAttr.m_tLocator ) ); break;
+						case SPH_ATTR_BIGINT:	m_dAggregates.Add ( new AggrMax_t<int64_t> ( tAttr.m_tLocator ) ); break;
+						case SPH_ATTR_FLOAT:	m_dAggregates.Add ( new AggrMax_t<float> ( tAttr.m_tLocator ) ); break;
+						default:				assert ( 0 && "internal error: unhandled aggregate type" ); break;
+					}
+					break;
+
+				default:
+					assert ( 0 && "internal error: unhandled aggregate function" );
+					break;
+			}
+		}
 	}
 
 	/// dtor
@@ -671,7 +878,6 @@ public:
 				pMatch->SetAttr ( m_tSettings.m_tLocCount, pMatch->GetAttr(m_tSettings.m_tLocCount) + tEntry.GetAttr(m_tSettings.m_tLocCount) ); // OPTIMIZE! AddAttr()?
 				if ( DISTINCT )
 					pMatch->SetAttr ( m_tSettings.m_tLocDistinct, pMatch->GetAttr(m_tSettings.m_tLocDistinct) + tEntry.GetAttr(m_tSettings.m_tLocDistinct) );
-
 			} else
 			{
 				// it's a simple match
@@ -680,6 +886,10 @@ public:
 				pMatch->SetAttr ( m_tSettings.m_tLocCount, 1+pMatch->GetAttr(m_tSettings.m_tLocCount) ); // OPTIMIZE! IncAttr()?
 			}
 
+			// update aggregates
+			ARRAY_FOREACH ( i, m_dAggregates )
+				m_dAggregates[i]->Update ( pMatch, &tEntry );
+
 			// if new entry is more relevant, update from it
 			if ( m_pComp->VirtualIsLess ( *pMatch, tEntry, m_tState ) )
 			{
@@ -687,7 +897,7 @@ public:
 				pMatch->m_iWeight = tEntry.m_iWeight;
 				pMatch->m_iTag = tEntry.m_iTag;
 
-				for ( int i=0; i<pMatch->m_iRowitems-m_tSettings.m_iAddRowitems; i++ )
+				for ( int i=0; i<m_iUpdateRowitems; i++ )
 					pMatch->m_pRowitems[i] = tEntry.m_pRowitems[i];
 			}
 		}
@@ -742,6 +952,9 @@ public:
 		int iLen = GetLength ();
 		for ( int i=0; i<iLen; i++, pTo++ )
 		{
+			ARRAY_FOREACH ( j, m_dAggregates )
+				m_dAggregates[j]->Finalize ( &m_pData[i] );
+
 			pTo[0] = m_pData[i];
 			if ( iTag>=0 )
 				pTo->m_iTag = iTag;
@@ -1645,6 +1858,8 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 	}
 
 	// expressions from select items
+	CSphVector<CSphColumnInfo> dAggregates;
+
 	if ( bComputeItems )
 		ARRAY_FOREACH ( i, pQuery->m_dItems )
 	{
@@ -1652,7 +1867,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		const CSphString & sExpr = tItem.m_sExpr;
 
 		// for now, just always pass "plain" attrs from index to sorter; they will be filtered on searchd level
-		if ( sExpr=="*" || tSchema.GetAttrIndex(sExpr.cstr())>=0 )
+		if ( sExpr=="*" || ( tSchema.GetAttrIndex(sExpr.cstr())>=0 && tItem.m_eAggrFunc==SPH_AGGR_NONE ) )
 			continue;
 
 		// not an attribute? must be an expression, and must be aliased
@@ -1697,15 +1912,23 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		// a new and shiny expression, lets parse
 		CSphColumnInfo tExprCol ( tItem.m_sAlias.cstr(), SPH_ATTR_NONE );
 		tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), tSchema, &tExprCol.m_eAttrType, &tExprCol.m_bLateCalc, sError );
+		tExprCol.m_eAggrFunc = tItem.m_eAggrFunc;
 		if ( !tExprCol.m_pExpr )
 		{
 			sError.SetSprintf ( "parse error: %s", sError.cstr() );
 			return NULL;
 		}
 
-		// do add
-		tInSchema.AddAttr ( tExprCol );
+		// postpone aggregates, add non-aggregates
+		if ( tExprCol.m_eAggrFunc==SPH_AGGR_NONE )
+			tInSchema.AddAttr ( tExprCol );
+		else
+			dAggregates.Add ( tExprCol );
 	}
+
+	// expressions wrapped in aggregates must be at the very end of pre-groupby match
+	ARRAY_FOREACH ( i, dAggregates )
+		tInSchema.AddAttr ( dAggregates[i] );
 
 	////////////////////////////////////////////
 	// setup groupby settings, create shortcuts
@@ -1884,9 +2107,8 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 	assert ( pTop );
 	pTop->SetState ( tStateMatch );
 	pTop->SetGroupState ( tStateGroup );
+	pTop->SetSchemas ( tInSchema, tOutSchema );
 	pTop->m_bRandomize = bRandomize;
-	pTop->m_tIncomingSchema = tInSchema;
-	pTop->m_tOutgoingSchema = tOutSchema;
 
 	if ( bRandomize )
 		sphAutoSrand ();

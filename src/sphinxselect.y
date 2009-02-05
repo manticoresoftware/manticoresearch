@@ -12,6 +12,10 @@
 
 %token SEL_TOKEN
 %token SEL_AS
+%token SEL_AVG
+%token SEL_MAX
+%token SEL_MIN
+%token SEL_SUM
 
 %token TOK_NEG
 %token TOK_LTE
@@ -38,6 +42,10 @@ select_item:
 	expr						{ pParser->AddItem ( &$1, NULL ); }
 	| expr SEL_AS SEL_TOKEN		{ pParser->AddItem ( &$1, &$3 ); }
 	| '*'						{ pParser->AddItem ( &$1, NULL ); }
+	| SEL_AVG '(' expr ')' SEL_AS SEL_TOKEN		{ pParser->AddItem ( &$3, &$6, SPH_AGGR_AVG ); }
+	| SEL_MAX '(' expr ')' SEL_AS SEL_TOKEN		{ pParser->AddItem ( &$3, &$6, SPH_AGGR_MAX ); }
+	| SEL_MIN '(' expr ')' SEL_AS SEL_TOKEN		{ pParser->AddItem ( &$3, &$6, SPH_AGGR_MIN ); }
+	| SEL_SUM '(' expr ')' SEL_AS SEL_TOKEN		{ pParser->AddItem ( &$3, &$6, SPH_AGGR_SUM ); }
 	;
 
 expr:
@@ -63,6 +71,8 @@ expr:
 function:
 	SEL_TOKEN '(' arglist ')'	{ $$ = $1; $$.m_iEnd = $4.m_iEnd; }
 	| SEL_TOKEN '(' ')'			{ $$ = $1; $$.m_iEnd = $3.m_iEnd }
+	| SEL_MIN '(' expr ',' expr ')'		{ $$ = $1; $$.m_iEnd = $6.m_iEnd }	// handle clash with aggregate functions
+	| SEL_MAX '(' expr ',' expr ')'		{ $$ = $1; $$.m_iEnd = $6.m_iEnd }
 	;
 
 arglist:

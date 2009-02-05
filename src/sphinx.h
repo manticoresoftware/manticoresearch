@@ -776,6 +776,17 @@ enum ESphUnpackFormat
 };
 
 
+/// aggregate function to apply
+enum ESphAggrFunc
+{
+	SPH_AGGR_NONE,
+	SPH_AGGR_AVG,
+	SPH_AGGR_MIN,
+	SPH_AGGR_MAX,
+	SPH_AGGR_SUM
+};
+
+
 /// source column info
 struct CSphColumnInfo
 {
@@ -791,6 +802,7 @@ struct CSphColumnInfo
 	CSphString		m_sQueryRange;	///< query to retrieve range (for multi-valued attrs only)
 
 	CSphRefcountedPtr<ISphExpr>		m_pExpr;		///< evaluator for expression items
+	ESphAggrFunc					m_eAggrFunc;	///< aggregate function on top of expression (for GROUP BY)
 	bool							m_bLateCalc;	///< early calc or late calc
 
 	/// handy ctor
@@ -801,6 +813,7 @@ struct CSphColumnInfo
 		, m_iIndex ( -1 )
 		, m_eSrc ( SPH_ATTRSRC_NONE )
 		, m_pExpr ( NULL )
+		, m_eAggrFunc ( SPH_AGGR_NONE )
 		, m_bLateCalc ( false )
 	{
 		m_sName.ToLower ();
@@ -1617,6 +1630,9 @@ struct CSphQueryItem
 {
 	CSphString		m_sExpr;		///< expression to compute
 	CSphString		m_sAlias;		///< alias to return
+	ESphAggrFunc	m_eAggrFunc;
+
+	CSphQueryItem() : m_eAggrFunc ( SPH_AGGR_NONE ) {}
 };
 
 
@@ -1819,6 +1835,8 @@ class ISphMatchSorter
 public:
 	bool				m_bRandomize;
 	int					m_iTotal;
+
+protected:
 	CSphSchema			m_tIncomingSchema;		///< incoming schema (adds computed attributes on top of index schema)
 	CSphSchema			m_tOutgoingSchema;		///< outgoing schema (adds @groupby etc if needed on top of incoming)
 
@@ -1843,6 +1861,15 @@ public:
 
 	/// set MVA pool pointer (for MVA+groupby sorters)
 	virtual void		SetMVAPool ( const DWORD * ) {}
+
+	/// set schemas
+	virtual void				SetSchemas ( const CSphSchema & tIn, const CSphSchema & tOut ) { m_tIncomingSchema = tIn; m_tOutgoingSchema = tOut; }
+
+	/// get incoming schema
+	virtual const CSphSchema &	GetIncomingSchema () const { return m_tIncomingSchema; }
+
+	/// get outgoing schema 
+	virtual const CSphSchema &	GetOutgoingSchema () const { return m_tOutgoingSchema; }
 
 	/// base push
 	/// returns false if the entry was rejected as duplicate

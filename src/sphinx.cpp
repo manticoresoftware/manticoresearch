@@ -4644,7 +4644,7 @@ class SelectParser_t
 {
 public:
 	int				GetToken ( YYSTYPE * lvalp );
-	void			AddItem ( YYSTYPE * pExpr, YYSTYPE * pAlias );
+	void			AddItem ( YYSTYPE * pExpr, YYSTYPE * pAlias, ESphAggrFunc eAggrFunc=SPH_AGGR_NONE );
 
 public:
 	CSphString		m_sParserError;
@@ -4695,6 +4695,10 @@ int SelectParser_t::GetToken ( YYSTYPE * lvalp )
 		LOC_CHECK ( "OR", 2, TOK_OR );
 		LOC_CHECK ( "AND", 3, TOK_AND );
 		LOC_CHECK ( "NOT", 3, TOK_NOT );
+		LOC_CHECK ( "AVG", 3, SEL_AVG );
+		LOC_CHECK ( "MIN", 3, SEL_MIN );
+		LOC_CHECK ( "MAX", 3, SEL_MAX );
+		LOC_CHECK ( "SUM", 3, SEL_SUM );
 
 		#undef LOC_CHECK
 
@@ -4727,12 +4731,13 @@ int SelectParser_t::GetToken ( YYSTYPE * lvalp )
 }
 
 
-void SelectParser_t::AddItem ( YYSTYPE * pExpr, YYSTYPE * pAlias )
+void SelectParser_t::AddItem ( YYSTYPE * pExpr, YYSTYPE * pAlias, ESphAggrFunc eAggrFunc )
 {
 	CSphQueryItem tItem;
 	tItem.m_sExpr.SetBinary ( m_pStart + pExpr->m_iStart, pExpr->m_iEnd - pExpr->m_iStart );
 	if ( pAlias )
 		tItem.m_sAlias.SetBinary ( m_pStart + pAlias->m_iStart, pAlias->m_iEnd - pAlias->m_iStart );
+	tItem.m_eAggrFunc = eAggrFunc;
 
 	m_pQuery->m_dItems.Add ( tItem );
 }
@@ -15256,7 +15261,7 @@ bool CSphIndex_VLN::QueryEx ( CSphQuery * pQuery, CSphQueryResult * pResult, ISp
 {
 	bool bRes = MultiQuery ( pQuery, pResult, 1, &pTop );
 	pResult->m_iTotalMatches += bRes ? pTop->GetTotalCount () : 0;
-	pResult->m_tSchema = pTop->m_tOutgoingSchema;
+	pResult->m_tSchema = pTop->GetOutgoingSchema();
 	return bRes;
 }
 
@@ -15604,7 +15609,7 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 	assert ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_EXTERN || !m_pDocinfo.IsEmpty() ); // check that docinfo is preloaded
 
 	// setup calculations and result schema
-	if ( !SetupCalc ( pResult, ppSorters[0]->m_tIncomingSchema ) )
+	if ( !SetupCalc ( pResult, ppSorters[0]->GetIncomingSchema() ) )
 		return false;
 
 	// fixup "empty query" at low level
@@ -15760,25 +15765,14 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 
 		// final lookup
 		bool bNeedLookup = !m_bEarlyLookup && !m_bLateLookup;
-
-		// tricky
-		// EarlyCalc() only gets called when there are filters
-		// however, even when there are none, we still might need to compute certain values (geodist, or generally select expressions)
-		bool bNeedEarlyCalc = !pQuery->m_dFilters.GetLength() && ( pQuery->m_bGeoAnchor || !pQuery->m_sSelect.IsEmpty() );
-		if ( pTop->GetLength() && ( bNeedLookup || bNeedEarlyCalc )  )
+		if ( pTop->GetLength() && bNeedLookup )
 		{
 			const int iCount = pTop->GetLength ();
 			CSphMatch * const pHead = pTop->First();
 			CSphMatch * const pTail = pHead + iCount;
 
 			for ( CSphMatch * pCur=pHead; pCur<pTail; pCur++ )
-			{
-				if ( bNeedLookup )
-					CopyDocinfo ( *pCur, FindDocinfo ( pCur->m_iDocID ) );
-
-				if ( bNeedEarlyCalc )
-					EarlyCalc ( *pCur );
-			}
+				CopyDocinfo ( *pCur, FindDocinfo ( pCur->m_iDocID ) );
 		}
 
 		// mva ptr

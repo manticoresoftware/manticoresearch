@@ -4105,7 +4105,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 								tRes.m_iQueryTime += ( iQuery==iStart ) ? tStats.m_iQueryTime : 0;
 								tRes.m_pMva = tStats.m_pMva;
 								tRes.m_dWordStats = tStats.m_dWordStats;
-								tRes.m_tSchema = pSorter->m_tOutgoingSchema;
+								tRes.m_tSchema = pSorter->GetOutgoingSchema();
 
 								// extract matches from sorter
 								assert ( pSorter );
@@ -4533,7 +4533,7 @@ struct SqlParser_t
 	SqlStmt_e		m_eStmt;
 
 	bool			AddOption ( SqlNode_t tIdent, SqlNode_t tValue );
-	void			AddItem ( YYSTYPE * pExpr, YYSTYPE * pAlias );
+	void			AddItem ( YYSTYPE * pExpr, YYSTYPE * pAlias, ESphAggrFunc eFunc=SPH_AGGR_NONE );
 };
 
 
@@ -4633,12 +4633,13 @@ bool SqlParser_t::AddOption ( SqlNode_t tIdent, SqlNode_t tValue )
 }
 
 
-void SqlParser_t::AddItem ( YYSTYPE * pExpr, YYSTYPE * pAlias )
+void SqlParser_t::AddItem ( YYSTYPE * pExpr, YYSTYPE * pAlias, ESphAggrFunc eFunc )
 {
 	CSphQueryItem tItem;
 	tItem.m_sExpr.SetBinary ( m_pBuf + pExpr->m_iStart, pExpr->m_iEnd - pExpr->m_iStart );
 	if ( pAlias )
 		tItem.m_sAlias.SetBinary ( m_pBuf + pAlias->m_iStart, pAlias->m_iEnd - pAlias->m_iStart );
+	tItem.m_eAggrFunc = eFunc;
 
 	m_pQuery->m_dItems.Add ( tItem );
 }
@@ -4658,7 +4659,18 @@ SqlStmt_e ParseSqlQuery ( const CSphString & sQuery, CSphQuery & tQuery, CSphStr
 	tQuery.m_sSortBy = "@weight desc"; // default order
 	tQuery.m_sOrderBy = "@weight desc";
 
-	YY_BUFFER_STATE tLexerBuffer = yy_scan_string ( sQuery.cstr() );
+	int iLen = strlen ( sQuery.cstr() );
+	char * sEnd = (char*)sQuery.cstr() + iLen;
+	sEnd[0] = 0; // prepare for yy_scan_buffer
+	sEnd[1] = 0; // this is ok because string allocates a small gap
+
+	YY_BUFFER_STATE tLexerBuffer = yy_scan_buffer ( (char*)sQuery.cstr(), iLen+2 );
+	if ( !tLexerBuffer )
+	{
+		sError = "internal error: yy_scan_buffer() failed";
+		return STMT_PARSE_ERROR;
+	}
+
 	int iRes = yyparse ( &tParser );
 	yy_delete_buffer ( tLexerBuffer );
 

@@ -1161,17 +1161,17 @@ yyreduce:
 
   case 8:
 
-    { SqlAddItem ( pParser, &yyvsp[0], NULL ); ;}
+    { pParser->AddItem ( &yyvsp[0], NULL ); ;}
     break;
 
   case 9:
 
-    { SqlAddItem ( pParser, &yyvsp[-2], &yyvsp[0] ); ;}
+    { pParser->AddItem ( &yyvsp[-2], &yyvsp[0] ); ;}
     break;
 
   case 10:
 
-    { SqlAddItem ( pParser, &yyvsp[0], NULL ); ;}
+    { pParser->AddItem ( &yyvsp[0], NULL ); ;}
     break;
 
   case 12:
@@ -1277,12 +1277,12 @@ yyreduce:
 
   case 46:
 
-    { if ( !SqlAddOption ( pParser, yyvsp[-2], yyvsp[0] ) ) YYERROR; ;}
+    { if ( !pParser->AddOption ( yyvsp[-2], yyvsp[0] ) ) YYERROR; ;}
     break;
 
   case 47:
 
-    { if ( !SqlAddOption ( pParser, yyvsp[-2], yyvsp[0] ) ) YYERROR; ;}
+    { if ( !pParser->AddOption ( yyvsp[-2], yyvsp[0] ) ) YYERROR; ;}
     break;
 
   case 50:

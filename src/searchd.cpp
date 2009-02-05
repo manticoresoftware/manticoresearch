@@ -4531,6 +4531,9 @@ struct SqlParser_t
 	CSphString *	m_pParseError;
 	CSphQuery *		m_pQuery;
 	SqlStmt_e		m_eStmt;
+
+	bool			AddOption ( SqlNode_t tIdent, SqlNode_t tValue );
+	void			AddItem ( YYSTYPE * pExpr, YYSTYPE * pAlias );
 };
 
 
@@ -4573,9 +4576,12 @@ void yyerror ( SqlParser_t * pParser, const char * sMessage )
 	pParser->m_pParseError->SetSprintf ( "%s near '%s'", sMessage, pParser->m_pLastTokenStart ? pParser->m_pLastTokenStart : "(null)" );
 }
 
-bool SqlAddOption ( SqlParser_t * pParser, SqlNode_t tIdent, SqlNode_t tValue )
+#include "yysphinxql.c"
+
+//////////////////////////////////////////////////////////////////////////
+
+bool SqlParser_t::AddOption ( SqlNode_t tIdent, SqlNode_t tValue )
 {
-	CSphQuery * pQuery = pParser->m_pQuery; // shortcuts
 	CSphString & sOpt = tIdent.m_sValue;
 	CSphString & sVal = tValue.m_sValue;
 	sOpt.ToLower ();
@@ -4584,59 +4590,60 @@ bool SqlAddOption ( SqlParser_t * pParser, SqlNode_t tIdent, SqlNode_t tValue )
 
 	if ( sOpt=="ranker" )
 	{
-		if ( sVal=="proximity_bm25" )	pQuery->m_eRanker = SPH_RANK_PROXIMITY_BM25;
-		else if ( sVal=="bm25" )		pQuery->m_eRanker = SPH_RANK_BM25;
-		else if ( sVal=="none" )		pQuery->m_eRanker = SPH_RANK_NONE;
-		else if ( sVal=="wordcount" )	pQuery->m_eRanker = SPH_RANK_WORDCOUNT;
-		else if ( sVal=="proximity" )	pQuery->m_eRanker = SPH_RANK_PROXIMITY;
-		else if ( sVal=="matchany" )	pQuery->m_eRanker = SPH_RANK_MATCHANY;
-		else if ( sVal=="fieldmask" )	pQuery->m_eRanker = SPH_RANK_FIELDMASK;
+		if ( sVal=="proximity_bm25" )	m_pQuery->m_eRanker = SPH_RANK_PROXIMITY_BM25;
+		else if ( sVal=="bm25" )		m_pQuery->m_eRanker = SPH_RANK_BM25;
+		else if ( sVal=="none" )		m_pQuery->m_eRanker = SPH_RANK_NONE;
+		else if ( sVal=="wordcount" )	m_pQuery->m_eRanker = SPH_RANK_WORDCOUNT;
+		else if ( sVal=="proximity" )	m_pQuery->m_eRanker = SPH_RANK_PROXIMITY;
+		else if ( sVal=="matchany" )	m_pQuery->m_eRanker = SPH_RANK_MATCHANY;
+		else if ( sVal=="fieldmask" )	m_pQuery->m_eRanker = SPH_RANK_FIELDMASK;
 		else
 		{
-			pParser->m_pParseError->SetSprintf ( "unknown ranker '%s'", sVal.cstr() );
+			m_pParseError->SetSprintf ( "unknown ranker '%s'", sVal.cstr() );
 			return false;
 		}
 
 	} else if ( sOpt=="max_matches" )
 	{
-		pQuery->m_iMaxMatches = (int)tValue.m_iValue;
+		m_pQuery->m_iMaxMatches = (int)tValue.m_iValue;
 
 	} else if ( sOpt=="cutoff" )
 	{
-		pQuery->m_iCutoff = (int)tValue.m_iValue;
+		m_pQuery->m_iCutoff = (int)tValue.m_iValue;
 
 	} else if ( sOpt=="max_query_time" )
 	{
-		pQuery->m_uMaxQueryMsec = (int)tValue.m_iValue;
+		m_pQuery->m_uMaxQueryMsec = (int)tValue.m_iValue;
 
 	} else if ( sOpt=="retry_count" )
 	{
-		pQuery->m_iRetryCount = (int)tValue.m_iValue;
+		m_pQuery->m_iRetryCount = (int)tValue.m_iValue;
 
 	} else if ( sOpt=="retry_delay" )
 	{
-		pQuery->m_iRetryDelay = (int)tValue.m_iValue;
+		m_pQuery->m_iRetryDelay = (int)tValue.m_iValue;
 
 	} else
 	{
-		pParser->m_pParseError->SetSprintf ( "unknown option '%s'", tIdent.m_sValue.cstr() );
+		m_pParseError->SetSprintf ( "unknown option '%s'", tIdent.m_sValue.cstr() );
 		return false;
 	}
 
 	return true;
 }
 
-void SqlAddItem ( SqlParser_t * pParser, YYSTYPE * pExpr, YYSTYPE * pAlias )
+
+void SqlParser_t::AddItem ( YYSTYPE * pExpr, YYSTYPE * pAlias )
 {
 	CSphQueryItem tItem;
-	tItem.m_sExpr.SetBinary ( pParser->m_pBuf + pExpr->m_iStart, pExpr->m_iEnd - pExpr->m_iStart );
+	tItem.m_sExpr.SetBinary ( m_pBuf + pExpr->m_iStart, pExpr->m_iEnd - pExpr->m_iStart );
 	if ( pAlias )
-		tItem.m_sAlias.SetBinary ( pParser->m_pBuf + pAlias->m_iStart, pAlias->m_iEnd - pAlias->m_iStart );
+		tItem.m_sAlias.SetBinary ( m_pBuf + pAlias->m_iStart, pAlias->m_iEnd - pAlias->m_iStart );
 
-	pParser->m_pQuery->m_dItems.Add ( tItem );
+	m_pQuery->m_dItems.Add ( tItem );
 }
 
-#include "yysphinxql.c"
+
 
 SqlStmt_e ParseSqlQuery ( const CSphString & sQuery, CSphQuery & tQuery, CSphString & sError )
 {

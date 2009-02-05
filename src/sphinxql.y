@@ -73,9 +73,9 @@ select_items_list:
 	;
 
 select_item:
-	TOK_IDENT									{ SqlAddItem ( pParser, &$1, NULL ); }
-	| expr TOK_AS TOK_IDENT						{ SqlAddItem ( pParser, &$1, &$3 ); }
-	| '*'										{ SqlAddItem ( pParser, &$1, NULL ); }
+	TOK_IDENT									{ pParser->AddItem ( &$1, NULL ); }
+	| expr TOK_AS TOK_IDENT						{ pParser->AddItem ( &$1, &$3 ); }
+	| '*'										{ pParser->AddItem ( &$1, NULL ); }
 	;
 
 ident_list:
@@ -210,8 +210,8 @@ option_list:
 	;
 
 option_item:
-	TOK_IDENT '=' TOK_IDENT		{ if ( !SqlAddOption ( pParser, $1, $3 ) ) YYERROR; }
-	| TOK_IDENT '=' TOK_CONST	{ if ( !SqlAddOption ( pParser, $1, $3 ) ) YYERROR; }
+	TOK_IDENT '=' TOK_IDENT		{ if ( !pParser->AddOption ( $1, $3 ) ) YYERROR; }
+	| TOK_IDENT '=' TOK_CONST	{ if ( !pParser->AddOption ( $1, $3 ) ) YYERROR; }
 	;
 
 //////////////////////////////////////////////////////////////////////////

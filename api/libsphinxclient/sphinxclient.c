@@ -78,9 +78,9 @@ struct st_filter
 	const char *			attr;
 	int						filter_type;
 	int						num_values;
-	const sphinx_uint64_t *	values;
-	sphinx_uint64_t			umin;
-	sphinx_uint64_t			umax;
+	const sphinx_int64_t *	values;
+	sphinx_int64_t			umin;
+	sphinx_int64_t			umax;
 	float					fmin;
 	float					fmax;
 	int						exclude;
@@ -89,9 +89,18 @@ struct st_filter
 
 union un_attr_value
 {
-	sphinx_uint64_t			int_value;
+	sphinx_int64_t			int_value;
 	float					float_value;
 	unsigned int *			mva_value;
+};
+
+
+struct st_override
+{
+	const char *			attr;
+	const sphinx_uint64_t *	docids;
+	int						num_values;
+	const unsigned int *	uint_values;
 };
 
 
@@ -140,6 +149,10 @@ struct st_sphinx_client
 	int						num_field_weights;
 	const char **			field_weights_names;
 	const int *				field_weights_values;
+	int						num_overrides;
+	int						max_overrides;
+	struct st_override *	overrides;
+	const char *			select_list;
 
 	int						num_reqs;
 	int						req_lens [ MAX_REQS ];
@@ -171,7 +184,7 @@ sphinx_client * sphinx_create ( sphinx_bool copy_args )
 		return NULL;
 
 	// initialize defaults and return
-	client->ver_search				= 0x113; // 0.9.8 compatibility mode
+	client->ver_search				= 0x116; // 0x113 for 0.9.8, 0x116 for 0.9.9rc2
 	client->copy_args				= copy_args;
 	client->head_alloc				= NULL;
 
@@ -214,6 +227,10 @@ sphinx_client * sphinx_create ( sphinx_bool copy_args )
 	client->num_field_weights		= 0;
 	client->field_weights_names		= NULL;
 	client->field_weights_values	= NULL;
+	client->num_overrides			= 0;
+	client->max_overrides			= 0;
+	client->overrides				= NULL;
+	client->select_list				= NULL;
 
 	client->num_reqs				= 0;
 	client->response_len			= 0;
@@ -289,6 +306,7 @@ static void set_error ( sphinx_client * client, const char * template, ... )
 
 	client->error = client->local_error_buf;
 }
+
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -583,7 +601,7 @@ static struct st_filter * sphinx_add_filter_entry ( sphinx_client * client )
 }
 
 
-sphinx_bool sphinx_add_filter ( sphinx_client * client, const char * attr, int num_values, const sphinx_uint64_t * values, sphinx_bool exclude )
+sphinx_bool sphinx_add_filter ( sphinx_client * client, const char * attr, int num_values, const sphinx_int64_t * values, sphinx_bool exclude )
 {
 	struct st_filter * filter;
 
@@ -603,13 +621,13 @@ sphinx_bool sphinx_add_filter ( sphinx_client * client, const char * attr, int n
 	filter->attr = strchain ( client, attr );
 	filter->filter_type = SPH_FILTER_VALUES;
 	filter->num_values = num_values;
-	filter->values = chain ( client, values, num_values*sizeof(sphinx_uint64_t) );
+	filter->values = chain ( client, values, num_values*sizeof(sphinx_int64_t) );
 	filter->exclude = exclude;
 	return SPH_TRUE;
 }
 
 
-sphinx_bool sphinx_add_filter_range ( sphinx_client * client, const char * attr, sphinx_uint64_t umin, sphinx_uint64_t umax, sphinx_bool exclude )
+sphinx_bool sphinx_add_filter_range ( sphinx_client * client, const char * attr, sphinx_int64_t umin, sphinx_int64_t umax, sphinx_bool exclude )
 {
 	struct st_filter * filter;
 
@@ -738,6 +756,53 @@ sphinx_bool sphinx_set_retries ( sphinx_client * client, int count, int delay )
 }
 
 
+sphinx_bool sphinx_add_override ( sphinx_client * client, const char * attr, const sphinx_uint64_t * docids, int num_values, const unsigned int * values )
+{
+	struct st_override * p;
+
+	if ( !client )
+		return SPH_FALSE;
+
+	if ( client->ver_search<0x115 )
+	{
+		set_error ( client, "sphinx_add_override not supported by chosen protocol version" );
+		return SPH_FALSE;
+	}
+
+	if ( client->num_overrides>=client->max_overrides )
+	{
+		client->max_overrides = ( client->max_overrides<=0 ) ? 8 : 2*client->max_overrides;
+		client->overrides = realloc ( client->overrides, client->max_overrides *sizeof(struct st_override) );
+	}
+
+	p = client->overrides + client->num_overrides;
+	client->num_overrides++;
+
+	p->attr = strchain ( client, attr );
+	p->docids = chain ( client, docids, sizeof(sphinx_uint64_t)*num_values );
+	p->num_values = num_values;
+	p->uint_values = chain ( client, values, sizeof(unsigned int)*num_values );
+	return SPH_TRUE;
+}
+
+
+sphinx_bool sphinx_set_select ( sphinx_client * client, const char * select_list )
+{
+	if ( !client )
+		return SPH_FALSE;
+
+	if ( client->ver_search<0x116 )
+	{
+		set_error ( client, "sphinx_set_select not supported by chosen protocol version" );
+		return SPH_FALSE;
+	}
+
+	unchain ( client, client->select_list );
+	client->select_list = strchain ( client, select_list );
+	return SPH_TRUE;
+}
+
+
 void sphinx_reset_filters ( sphinx_client * client )
 {
 	int i;
@@ -811,7 +876,7 @@ static size_t safestrlen ( const char * s )
 
 static int calc_req_len ( sphinx_client * client, const char * query, const char * index_list, const char * comment )
 {
-	int i;
+	int i, filter_val_size;
 	size_t res;
 
 	res = 96 + 2*(int)sizeof(sphinx_uint64_t) + 4*client->num_weights
@@ -822,6 +887,8 @@ static int calc_req_len ( sphinx_client * client, const char * query, const char
 		+ safestrlen ( client->group_sort )
 		+ safestrlen ( client->group_distinct )
 		+ safestrlen ( comment );
+
+	filter_val_size = ( client->ver_search>=0x114 ) ? 8 : 4;
 	for ( i=0; i<client->num_filters; i++ )
 	{
 		const struct st_filter * filter = &client->filters[i];
@@ -829,9 +896,9 @@ static int calc_req_len ( sphinx_client * client, const char * query, const char
 
 		switch ( filter->filter_type )
 		{
-			case SPH_FILTER_VALUES:		res += 4 + 4*filter->num_values; break; // int values-count; uint32[] values
-			case SPH_FILTER_RANGE:		res += 8; break; // uint32 min-val, max-val
-			case SPH_FILTER_FLOATRANGE:	res += 8; break; // int/float min-val,max-val
+			case SPH_FILTER_VALUES:		res += 4 + filter_val_size*filter->num_values; break; // int values-count; uint32/int64[] values
+			case SPH_FILTER_RANGE:		res += 2*filter_val_size; break; // uint32/int64 min-val, max-val
+			case SPH_FILTER_FLOATRANGE:	res += 8; break; // float min-val,max-val
 		}
 	}
 
@@ -843,6 +910,19 @@ static int calc_req_len ( sphinx_client * client, const char * query, const char
 
 	for ( i=0; i<client->num_field_weights; i++ )
 		res += 8 + safestrlen ( client->field_weights_names[i] ); // string field-name; int field-weight
+
+	if ( client->ver_search>=0x115 )
+	{
+		res += 4; // int overrides-count
+		for ( i=0; i<client->num_overrides; i++ )
+		{
+			res += 8 + safestrlen ( client->overrides[i].attr ); // string attr, int attr-type
+			res += 4 + 12*client->overrides[i].num_values; // int values-count, { uint64 docid, uint32 value }[] override
+		}
+	}
+
+	if ( client->ver_search>=0x116 )
+		res += 4 + safestrlen ( client->select_list ); // string select_list
 
 	return (int)res;
 }
@@ -964,13 +1044,27 @@ int sphinx_add_query ( sphinx_client * client, const char * query, const char * 
 		{
 			case SPH_FILTER_VALUES:
 				send_int ( &req, client->filters[i].num_values );
-				for ( j=0; j<client->filters[i].num_values; j++ )
-					send_int ( &req, (unsigned int)client->filters[i].values[j] );
+				if ( client->ver_search>=0x114 )
+				{
+					for ( j=0; j<client->filters[i].num_values; j++ )
+						send_qword ( &req, client->filters[i].values[j] );
+				} else
+				{
+					for ( j=0; j<client->filters[i].num_values; j++ )
+						send_int ( &req, (unsigned int)client->filters[i].values[j] );
+				}
 				break;
 
 			case SPH_FILTER_RANGE:
-				send_int ( &req, (unsigned int)client->filters[i].umin );
-				send_int ( &req, (unsigned int)client->filters[i].umax );
+				if ( client->ver_search>=0x114 )
+				{
+					send_qword ( &req, client->filters[i].umin );
+					send_qword ( &req, client->filters[i].umax );
+				} else
+				{
+					send_int ( &req, (unsigned int)client->filters[i].umin );
+					send_int ( &req, (unsigned int)client->filters[i].umax );
+				}
 				break;
 
 			case SPH_FILTER_FLOATRANGE:
@@ -1014,6 +1108,25 @@ int sphinx_add_query ( sphinx_client * client, const char * query, const char * 
 		send_int ( &req, client->field_weights_values[i] );
 	}
 	send_str ( &req, comment );
+
+	if ( client->ver_search>=0x115 )
+	{
+		send_int ( &req, client->num_overrides );
+		for ( i=0; i<client->num_overrides; i++ )
+		{
+			send_str ( &req, client->overrides[i].attr );
+			send_int ( &req, SPH_ATTR_INTEGER );
+			send_int ( &req, client->overrides[i].num_values );
+			for ( j=0; j<client->overrides[i].num_values; j++ )
+			{
+				send_qword ( &req, client->overrides[i].docids[j] );
+				send_int ( &req, client->overrides[i].uint_values[j] );
+			}
+		}
+	}
+
+	if ( client->ver_search>=0x116 )
+		send_str ( &req, client->select_list );
 
 	if ( !req )
 	{
@@ -1563,7 +1676,7 @@ int sphinx_get_weight ( sphinx_result * result, int match )
 }
 
 
-sphinx_uint64_t sphinx_get_int ( sphinx_result * result, int match, int attr )
+sphinx_int64_t sphinx_get_int ( sphinx_result * result, int match, int attr )
 {
 	// FIXME! add safety and type checks
 	union un_attr_value * pval;
@@ -1760,7 +1873,7 @@ char ** sphinx_build_excerpts ( sphinx_client * client, int num_docs, const char
 
 //////////////////////////////////////////////////////////////////////////
 
-int sphinx_update_attributes ( sphinx_client * client, const char * index, int num_attrs, const char ** attrs, int num_docs, const sphinx_uint64_t * docids, const sphinx_uint64_t * values )
+int sphinx_update_attributes ( sphinx_client * client, const char * index, int num_attrs, const char ** attrs, int num_docs, const sphinx_uint64_t * docids, const sphinx_int64_t * values )
 {
 	int i, j, req_len;
 	char *buf, *req, *p;

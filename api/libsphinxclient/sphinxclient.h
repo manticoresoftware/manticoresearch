@@ -172,6 +172,7 @@ const char *				sphinx_warning	( sphinx_client * client );
 
 sphinx_bool					sphinx_set_server				( sphinx_client * client, const char * host, int port );
 sphinx_bool					sphinx_set_connect_timeout		( sphinx_client * client, float seconds );
+
 sphinx_bool					sphinx_set_limits				( sphinx_client * client, int offset, int limit, int max_matches, int cutoff );
 sphinx_bool					sphinx_set_max_query_time		( sphinx_client * client, int max_query_time );
 sphinx_bool					sphinx_set_match_mode			( sphinx_client * client, int mode );
@@ -181,13 +182,15 @@ sphinx_bool					sphinx_set_field_weights		( sphinx_client * client, int num_weig
 sphinx_bool					sphinx_set_index_weights		( sphinx_client * client, int num_weights, const char ** index_names, const int * index_weights );
 
 sphinx_bool					sphinx_set_id_range				( sphinx_client * client, sphinx_uint64_t minid, sphinx_uint64_t maxid );
-sphinx_bool					sphinx_add_filter				( sphinx_client * client, const char * attr, int num_values, const sphinx_uint64_t * values, sphinx_bool exclude );
-sphinx_bool					sphinx_add_filter_range			( sphinx_client * client, const char * attr, sphinx_uint64_t umin, sphinx_uint64_t umax, sphinx_bool exclude );
+sphinx_bool					sphinx_add_filter				( sphinx_client * client, const char * attr, int num_values, const sphinx_int64_t * values, sphinx_bool exclude );
+sphinx_bool					sphinx_add_filter_range			( sphinx_client * client, const char * attr, sphinx_int64_t umin, sphinx_int64_t umax, sphinx_bool exclude );
 sphinx_bool					sphinx_add_filter_float_range	( sphinx_client * client, const char * attr, float fmin, float fmax, sphinx_bool exclude );
 sphinx_bool					sphinx_set_geoanchor			( sphinx_client * client, const char * attr_latitude, const char * attr_longitude, float latitude, float longitude );
 sphinx_bool					sphinx_set_groupby				( sphinx_client * client, const char * attr, int groupby_func, const char * group_sort );
 sphinx_bool					sphinx_set_groupby_distinct		( sphinx_client * client, const char * attr );
 sphinx_bool					sphinx_set_retries				( sphinx_client * client, int count, int delay );
+sphinx_bool					sphinx_add_override				( sphinx_client * client, const char * attr, const sphinx_uint64_t * docids, int num_values, const unsigned int * values );
+sphinx_bool					sphinx_set_select				( sphinx_client * client, const char * select_list );
 
 void						sphinx_reset_filters			( sphinx_client * client );
 void						sphinx_reset_groupby			( sphinx_client * client );
@@ -199,13 +202,13 @@ sphinx_result *				sphinx_run_queries				( sphinx_client * client );
 int							sphinx_get_num_results			( sphinx_client * client );
 sphinx_uint64_t				sphinx_get_id					( sphinx_result * result, int match );
 int							sphinx_get_weight				( sphinx_result * result, int match );
-sphinx_uint64_t				sphinx_get_int					( sphinx_result * result, int match, int attr );
+sphinx_int64_t				sphinx_get_int					( sphinx_result * result, int match, int attr );
 float						sphinx_get_float				( sphinx_result * result, int match, int attr );
 unsigned int *				sphinx_get_mva					( sphinx_result * result, int match, int attr );
 
 void						sphinx_init_excerpt_options		( sphinx_excerpt_options * opts );
 char **						sphinx_build_excerpts			( sphinx_client * client, int num_docs, const char ** docs, const char * index, const char * words, sphinx_excerpt_options * opts );
-int							sphinx_update_attributes		( sphinx_client * client, const char * index, int num_attrs, const char ** attrs, int num_docs, const sphinx_uint64_t * docids, const sphinx_uint64_t * values );
+int							sphinx_update_attributes		( sphinx_client * client, const char * index, int num_attrs, const char ** attrs, int num_docs, const sphinx_uint64_t * docids, const sphinx_int64_t * values );
 sphinx_keyword_info *		sphinx_build_keywords			( sphinx_client * client, const char * query, const char * index, sphinx_bool hits, int * out_num_keywords );
 
 /////////////////////////////////////////////////////////////////////////////

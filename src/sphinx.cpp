@@ -20388,6 +20388,8 @@ bool CSphSource_XMLPipe2::ParseNextChunk ( int iBufferLen, CSphString & sError )
 	if ( !iBufferLen )
 		return true;
 
+	bool bLast = ( iBufferLen!=m_iBufferSize );
+
 	m_iReparseLen = 0;
 	if ( m_bFixupUTF8 )
 	{
@@ -20454,7 +20456,6 @@ bool CSphSource_XMLPipe2::ParseNextChunk ( int iBufferLen, CSphString & sError )
 		}
 	}
 
-	bool bLast = ( iBufferLen!=m_iBufferSize );
 	if ( XML_Parse ( m_pParser, (const char*) m_pBuffer, iBufferLen, bLast ) != XML_STATUS_OK )
 	{
 		SphDocID_t uFailedID = 0;

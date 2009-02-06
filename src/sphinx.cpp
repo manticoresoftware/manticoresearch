@@ -20447,10 +20447,14 @@ bool CSphSource_XMLPipe2::ParseNextChunk ( int iBufferLen, CSphString & sError )
 				iVal = ( iVal<<6 ) + ( p[i] & 0x3f );
 			}
 
-			// remove invalid sequences, and utf-16 surrogate pairs, and overlong 3-byte codes
-			if ( i!=iBytes || ( iVal>=0xd800 && iVal<=0xdfff ) || ( iBytes==3 && iVal<0x800 ) )
+			if ( i!=iBytes // remove invalid sequences
+				|| ( iVal>=0xd800 && iVal<=0xdfff ) // and utf-16 surrogate pairs
+				|| ( iBytes==3 && iVal<0x800 ) // and overlong 3-byte codes
+				|| ( iVal>=0xfff0 && iVal<=0xffff ) ) // and kinda-valid specials expat chokes on anyway
+			{
 				for ( i=0; i<iBytes; i++ )
 					p[i] = ' ';
+			}
 
 			// only move forward by the amount of succesfully processed bytes!
 			p += i;

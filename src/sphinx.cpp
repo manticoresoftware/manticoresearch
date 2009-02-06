@@ -20408,6 +20408,13 @@ bool CSphSource_XMLPipe2::ParseNextChunk ( int iBufferLen, CSphString & sError )
 				continue;
 			}
 
+			// remove invalid start bytes
+			if ( v<0xC2 )
+			{
+				*p++ = ' ';
+				continue;
+			}
+
 			// get and check byte count
 			int iBytes = 0;
 			while ( v & 0x80 )
@@ -20415,7 +20422,7 @@ bool CSphSource_XMLPipe2::ParseNextChunk ( int iBufferLen, CSphString & sError )
 				iBytes++;
 				v <<= 1;
 			}
-			if ( iBytes<2 || iBytes>4 )
+			if ( iBytes<2 || iBytes>3 )
 			{
 				*p++ = ' ';
 				continue;
@@ -20440,8 +20447,8 @@ bool CSphSource_XMLPipe2::ParseNextChunk ( int iBufferLen, CSphString & sError )
 				iVal = ( iVal<<6 ) + ( p[i] & 0x3f );
 			}
 
-			// remove invalid sequences and utf-16 surrogate pairs 
-			if ( i!=iBytes || ( iVal>=0xd800 && iVal<=0xdfff ) )
+			// remove invalid sequences, and utf-16 surrogate pairs, and overlong 3-byte codes
+			if ( i!=iBytes || ( iVal>=0xd800 && iVal<=0xdfff ) || ( iBytes==3 && iVal<0x800 ) )
 				for ( i=0; i<iBytes; i++ )
 					p[i] = ' ';
 

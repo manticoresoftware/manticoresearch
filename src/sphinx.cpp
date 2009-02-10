@@ -11600,7 +11600,10 @@ const ExtHit_t * ExtTermPos_c<T>::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocI
 
 			// out of requested docs? over and out
 			if ( pDocs->m_uDocid==DOCID_MAX )
+			{
+				m_eState = COPY_DONE;
 				break;
+			}
 
 			// copy matching hits
 			while ( iFilteredHits<MAX_HITS-1 && pDocs->m_uDocid==pMyHit->m_uDocid )

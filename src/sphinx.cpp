@@ -8519,7 +8519,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			if ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_NONE )
 			{
 				// store next entry
-				DOCINFO2ID(pDocinfo) = pSource->m_tDocInfo.m_iDocID;
+				DOCINFOSETID ( pDocinfo, pSource->m_tDocInfo.m_iDocID );
 				memcpy ( DOCINFO2ATTRS(pDocinfo), pSource->m_tDocInfo.m_pRowitems, sizeof(CSphRowitem)*m_tSchema.GetRowSize() );
 				pDocinfo += iDocinfoStride;
 
@@ -8591,7 +8591,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 					// we'll need to know it's info next flush
 					if ( iDocHits )
 					{
-						DOCINFO2ID(pDocinfo) = pSource->m_tDocInfo.m_iDocID;
+						DOCINFOSETID ( pDocinfo, pSource->m_tDocInfo.m_iDocID );
 						memcpy ( DOCINFO2ATTRS(pDocinfo), pSource->m_tDocInfo.m_pRowitems, sizeof(CSphRowitem)*m_tSchema.GetRowSize() );
 						pDocinfo += iDocinfoStride;
 					}
@@ -15084,8 +15084,8 @@ bool CSphIndex_VLN::Preread ()
 			DWORD * pMaxEntry = pMinEntry + uStride;
 			DWORD * pMaxAttrs = pMinAttrs + uStride;
 
-			DOCINFO2ID(pMinEntry) = DOCINFO2ID(pDocinfoStart);
-			DOCINFO2ID(pMaxEntry) = DOCINFO2ID(pDocinfoMax-uStride);
+			DOCINFOSETID ( pMinEntry, DOCINFO2ID(pDocinfoStart) );
+			DOCINFOSETID ( pMaxEntry, DOCINFO2ID(pDocinfoMax-uStride) );
 
 			ARRAY_FOREACH ( i, dIntAttrs )
 			{
@@ -15110,8 +15110,8 @@ bool CSphIndex_VLN::Preread ()
 		CSphRowitem * pMinAttrs = DOCINFO2ATTRS(pMinEntry);
 		CSphRowitem * pMaxAttrs = DOCINFO2ATTRS(pMaxEntry);
 
-		DOCINFO2ID(pMinEntry) = DOCINFO2ID(&m_pDocinfo[0]);
-		DOCINFO2ID(pMaxEntry) = DOCINFO2ID(&m_pDocinfo[(m_uDocinfo-1)*uStride]);
+		DOCINFOSETID ( pMinEntry, DOCINFO2ID(&m_pDocinfo[0]) );
+		DOCINFOSETID ( pMaxEntry, DOCINFO2ID(&m_pDocinfo[(m_uDocinfo-1)*uStride]) );
 
 		ARRAY_FOREACH ( i, dIntAttrs )
 		{

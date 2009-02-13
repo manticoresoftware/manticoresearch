@@ -1570,7 +1570,7 @@ private:
 	static const int			DEFAULT_WRITE_BUFFER	= 1048576;	///< deafult write buffer size
 
 	static const DWORD			INDEX_MAGIC_HEADER		= 0x58485053;	///< my magic 'SPHX' header
-	static const DWORD			INDEX_FORMAT_VERSION	= 13;			///< my format version
+	static const DWORD			INDEX_FORMAT_VERSION	= 14;			///< my format version
 
 private:
 	// common stuff
@@ -1579,6 +1579,8 @@ private:
 
 	CSphDocInfo					m_tMin;				///< min attribute values tracker
 	CSphSourceStats				m_tStats;			///< my stats
+
+	CSphVector<CSphWordlistCheckpoint>	m_dWordlistCheckpoints;	///< wordlist checkpoint offsets
 
 private:
 	// indexing-only
@@ -1595,8 +1597,7 @@ private:
 	int							m_iLastWordDocs;	///< wordlist entry
 	int							m_iLastWordHits;	///< wordlist entry
 
-	int									m_iWordlistEntries;		///< wordlist entries written since last checkpoint
-	CSphVector<CSphWordlistCheckpoint>	m_dWordlistCheckpoints;	///< wordlist checkpoint offsets
+	int							m_iWordlistEntries;		///< wordlist entries written since last checkpoint
 
 	CSphWriter					m_wrWordlist;	///< wordlist writer
 	CSphWriter					m_wrDoclist;	///< wordlist writer
@@ -1631,9 +1632,6 @@ private:
 
 	SphOffset_t					m_iCheckpointsPos;		///< wordlist checkpoints offset
 	CSphSharedBuffer<BYTE>		m_pWordlist;			///< my wordlist cache
-	CSphWordlistCheckpoint *	m_pWordlistCheckpoints;	///< my wordlist cache checkpoints
-	int							m_iWordlistCheckpoints;	///< my wordlist cache checkpoints count
-	CSphSharedBuffer<BYTE>		m_pWordlistCheckpointCache; ///< preallocated checkpoints
 
 	CSphSharedBuffer<SphAttr_t>	m_pKillList;			///< killlist
 	DWORD						m_iKillListSize;		///< killlist size (in elements)
@@ -6471,7 +6469,6 @@ CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename )
 	m_uVersion = INDEX_FORMAT_VERSION;
 
 	m_pOverrides = NULL;
-	m_pWordlistCheckpoints = NULL;
 	m_pWordlistChunkBuf = NULL;
 	m_pMergeWordlist = NULL;
 	m_iMergeCheckpoint = 0;
@@ -7091,8 +7088,11 @@ bool CSphIndex_VLN::cidxDone ()
 {
 	// flush wordlist checkpoints
 	SphOffset_t iCheckpointsPos = m_wrWordlist.GetPos();
-	if ( m_dWordlistCheckpoints.GetLength() )
-		m_wrWordlist.PutBytes ( &m_dWordlistCheckpoints[0], m_dWordlistCheckpoints.GetLength()*sizeof(CSphWordlistCheckpoint) );
+	ARRAY_FOREACH ( i, m_dWordlistCheckpoints )
+	{
+		m_wrWordlist.PutOffset ( m_dWordlistCheckpoints[i].m_iWordID );
+		m_wrWordlist.PutOffset ( m_dWordlistCheckpoints[i].m_iWordlistOffset );
+	}
 
 	/////////////////
 	// create header
@@ -9642,6 +9642,7 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 
 	tMerge.m_iWordlistOffset = wrDstIndex.GetPos();
 	
+	CSphVector<CSphWordlistCheckpoint> dMergedCheckpoints;
 	while ( uProgress ) 
 	{
 		if ( iWordListEntries == WORDLIST_CHECKPOINT )
@@ -9707,7 +9708,7 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 			tCheckpoint.m_iWordID = tMerge.m_iLastWordID;
 			tCheckpoint.m_iWordlistOffset = tMerge.m_iWordlistOffset;
 
-			m_dWordlistCheckpoints.Add ( tCheckpoint );
+			dMergedCheckpoints.Add ( tCheckpoint );
 		}
 
 		if ( m_pProgress && !(m_tProgress.m_iWords % 500) )
@@ -9722,8 +9723,11 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 	tSrcSource.m_pIndex->IterateWordlistStop ();
 	tDstSource.m_pIndex->IterateWordlistStop ();
 
-	if ( m_dWordlistCheckpoints.GetLength() )
-		wrDstIndex.PutBytes ( &m_dWordlistCheckpoints[0], m_dWordlistCheckpoints.GetLength() * sizeof ( CSphWordlistCheckpoint ) );
+	ARRAY_FOREACH ( i, dMergedCheckpoints )
+	{
+		wrDstIndex.PutOffset ( dMergedCheckpoints[i].m_iWordID );
+		wrDstIndex.PutOffset ( dMergedCheckpoints[i].m_iWordlistOffset );
+	}
 
 	CSphAutofile fdKillList ( GetIndexFileName("spk.tmp"), SPH_O_NEW, m_sLastError );
 	if ( fdKillList.GetFD () < 0 )
@@ -10253,24 +10257,20 @@ bool CSphIndex_VLN::UpdateMergeWordlist ()
 	if ( m_tMergeWordlistFile.GetFD () < 0 )
 		return false;
 
-	if ( !m_iMergeCheckpoint && !m_iWordlistCheckpoints )
+	if ( !m_iMergeCheckpoint && !m_dWordlistCheckpoints.GetLength() )
 		return true;
 
-	if ( m_iMergeCheckpoint >= m_iWordlistCheckpoints )
+	if ( m_iMergeCheckpoint>=m_dWordlistCheckpoints.GetLength() )
 		return false;
 
-	CSphWordlistCheckpoint * pCheck = m_pWordlistCheckpoints+m_iMergeCheckpoint;
-	SphOffset_t uWordlistOffset = sphUnalignedRead ( pCheck->m_iWordlistOffset );
+	const CSphWordlistCheckpoint * pCheck = &m_dWordlistCheckpoints [ m_iMergeCheckpoint ];
+	SphOffset_t uWordlistOffset = pCheck->m_iWordlistOffset;
 
 	size_t iChunkLength = 0;
-
-	if ( m_iMergeCheckpoint == m_iWordlistCheckpoints - 1 )
-	{
-		CSphWordlistCheckpoint * pLast = m_pWordlistCheckpoints+m_iWordlistCheckpoints-1;
-		iChunkLength = DWORD (m_iWordlistSize - sphUnalignedRead ( pLast->m_iWordlistOffset ));
-	}
+	if ( m_iMergeCheckpoint==m_dWordlistCheckpoints.GetLength()-1 )
+		iChunkLength = DWORD ( m_iWordlistSize - m_dWordlistCheckpoints.Last().m_iWordlistOffset );
 	else
-		iChunkLength = DWORD ( sphUnalignedRead ( (pCheck + 1)->m_iWordlistOffset ) - uWordlistOffset );
+		iChunkLength = DWORD ( pCheck[1].m_iWordlistOffset - pCheck[0].m_iWordlistOffset );
 	
 	if ( sphSeek ( m_tMergeWordlistFile.GetFD (), uWordlistOffset, SEEK_SET ) < 0 )
 		return false;
@@ -10300,7 +10300,7 @@ bool CSphIndex_VLN::IterateWordlistNext ( CSphWordIndexRecord & tWord )
 				return false;
 		}
 		else
-			if ( m_pMergeWordlist == (BYTE *)m_pWordlistCheckpoints )
+			if ( m_pMergeWordlist==(BYTE*)&m_dWordlistCheckpoints[0] )
 				return false;
 	}
 
@@ -14074,34 +14074,34 @@ bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, const CSphTermSetup 
 	assert ( !m_bPreloadWordlist || !m_pWordlist.IsEmpty() );
 
 	// empty index?
-	if ( !m_iWordlistCheckpoints )
+	if ( !m_dWordlistCheckpoints.GetLength() )
 		return false;
 
 	SphOffset_t uWordlistOffset = 0;
-	CSphWordlistCheckpoint * pStart = m_pWordlistCheckpoints;
-	CSphWordlistCheckpoint * pEnd = m_pWordlistCheckpoints + m_iWordlistCheckpoints - 1;
+	const CSphWordlistCheckpoint * pStart = &m_dWordlistCheckpoints[0];
+	const CSphWordlistCheckpoint * pEnd = &m_dWordlistCheckpoints.Last();
 
-	if ( tWord.m_iWordID < sphUnalignedRead ( pStart->m_iWordID ) )
+	if ( tWord.m_iWordID<pStart->m_iWordID )
 		return false;
 
 	bool bLastChunk = false;
-	if ( tWord.m_iWordID >= sphUnalignedRead ( pEnd->m_iWordID ) )
+	if ( tWord.m_iWordID>=pEnd->m_iWordID )
 	{
 		bLastChunk = true;
-		uWordlistOffset = sphUnalignedRead ( pEnd->m_iWordlistOffset );
+		uWordlistOffset = pEnd->m_iWordlistOffset;
 	}
 	else
 	{
 		while ( pEnd-pStart>1 )
 		{
-			CSphWordlistCheckpoint * pMid = pStart + (pEnd-pStart)/2;
+			const CSphWordlistCheckpoint * pMid = pStart + (pEnd-pStart)/2;
 
-			if ( tWord.m_iWordID == sphUnalignedRead ( pMid->m_iWordID ) )
+			if ( tWord.m_iWordID==pMid->m_iWordID )
 			{
 				pStart = pEnd = pMid;
 				break;
 
-			} else if ( tWord.m_iWordID < sphUnalignedRead ( pMid->m_iWordID ) )
+			} else if ( tWord.m_iWordID<pMid->m_iWordID )
 			{
 				pEnd = pMid;
 
@@ -14111,10 +14111,10 @@ bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, const CSphTermSetup 
 			}
 		}
 
-		assert ( pStart >= m_pWordlistCheckpoints );
-		assert ( pStart <= m_pWordlistCheckpoints+m_iWordlistCheckpoints-1 );
-		assert ( tWord.m_iWordID >= sphUnalignedRead(pStart->m_iWordID) && tWord.m_iWordID < sphUnalignedRead((pStart+1)->m_iWordID) );
-		uWordlistOffset = sphUnalignedRead ( pStart->m_iWordlistOffset );
+		assert ( pStart >= &m_dWordlistCheckpoints[0] );
+		assert ( pStart < &m_dWordlistCheckpoints.Last() );
+		assert ( tWord.m_iWordID >= pStart->m_iWordID && tWord.m_iWordID < pStart[1].m_iWordID );
+		uWordlistOffset = pStart->m_iWordlistOffset;
 	}
 
 	// decode wordlist chunk
@@ -14131,8 +14131,8 @@ bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, const CSphTermSetup 
 		SphOffset_t iChunkLength = 0;
 
 		// not the end?
-		if ( !bLastChunk && pStart < m_pWordlistCheckpoints+m_iWordlistCheckpoints-1 )
-			iChunkLength = sphUnalignedRead ( ( pStart + 1)->m_iWordlistOffset ) - uWordlistOffset;
+		if ( !bLastChunk && pStart < &m_dWordlistCheckpoints.Last() )
+			iChunkLength = pStart[1].m_iWordlistOffset - uWordlistOffset;
 		else
 			iChunkLength = m_iWordlistSize - uWordlistOffset;
 
@@ -14263,7 +14263,7 @@ void CSphIndex_VLN::Dealloc ()
 	m_pMva.Reset ();
 	m_pDocinfoIndex.Reset ();
 	m_pKillList.Reset ();
-	m_pWordlistCheckpointCache.Reset ();
+	m_dWordlistCheckpoints.Reset ();
 
 	m_uDocinfo = 0;
 	m_tSettings.m_eDocinfo = SPH_DOCINFO_NONE;
@@ -14340,7 +14340,7 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, CSphString & sWarning
 
 	// wordlist checkpoints
 	rdInfo.GetRawBytes ( &m_iCheckpointsPos, sizeof(SphOffset_t) );
-	m_iWordlistCheckpoints = rdInfo.GetDword ();
+	m_dWordlistCheckpoints.Resize ( rdInfo.GetDword() );
 
 	// index stats
 	m_tStats.m_iTotalDocuments = rdInfo.GetDword ();
@@ -14650,68 +14650,33 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 	// prealloc wordlist
 	/////////////////////
 
-	assert ( m_iCheckpointsPos>0 );
-	bool bAllocCheckpoints = false;
+	// try to open wordlist file in all cases
+	CSphAutofile tWordlist ( GetIndexFileName("spi"), SPH_O_READ, m_sLastError );
+	if ( tWordlist.GetFD()<0 )
+		return NULL;
+
+	m_iWordlistSize = tWordlist.GetSize ( 1, true, m_sLastError );
+	if ( m_iWordlistSize<0 )
+		return NULL;
 
 	// make sure checkpoints are loadable
-	struct_stat tStat;
-	if ( stat ( GetIndexFileName("spi"), &tStat ) < 0 )
-	{
-		m_sLastError.SetSprintf ( "failed to stat %s: %s", GetIndexFileName("spi"), strerror(errno) );
-		return NULL;
-	}
-
 	// pre-11 indices use different offset type (this is fixed up later during the loading)
+	assert ( m_iCheckpointsPos>0 );
 	const int64_t iCheckpointSize = m_uVersion<11 ?
 		sizeof(CSphWordlistCheckpoint_v10) :
 		sizeof(CSphWordlistCheckpoint);
-	if ( (int64_t)tStat.st_size - (int64_t)m_iCheckpointsPos != (int64_t)m_iWordlistCheckpoints * iCheckpointSize )
+	if ( (int64_t)m_iWordlistSize - (int64_t)m_iCheckpointsPos != (int64_t)m_dWordlistCheckpoints.GetLength() * iCheckpointSize )
 	{
 		m_sLastError = "checkpoint segment size mismatch (rebuild the index)";
 		return NULL;
 	}
 
-	// prealloc
+	// prealloc wordlist
 	if ( m_bPreloadWordlist )
-	{
-		assert ( m_iCheckpointsPos<UINT_MAX );
-
-		CSphAutofile tWordlist ( GetIndexFileName("spi"), SPH_O_READ, m_sLastError );
-		if ( tWordlist.GetFD()<0 )
-			return NULL;
-
-		m_iWordlistSize = tWordlist.GetSize ( 1, true, m_sLastError );
-		if ( m_iWordlistSize<0 )
-			return NULL;
-
 		if ( !m_pWordlist.Alloc ( DWORD(m_iWordlistSize), m_sLastError, sWarning ) )
 			return NULL;
 
-		if ( m_uVersion >= 11 )
-		{
-			m_pWordlistCheckpoints = ( m_iCheckpointsPos>=m_iWordlistSize )
-				? NULL
-				: (CSphWordlistCheckpoint *)( &m_pWordlist[DWORD(m_iCheckpointsPos)] );
-		}
-		else
-		{
-			if ( m_iCheckpointsPos>=m_iWordlistSize )
-				m_pWordlistCheckpoints = NULL;
-			else
-				bAllocCheckpoints = true;
-		}
-	}
-	else
-		bAllocCheckpoints = true;
-	
-	if ( bAllocCheckpoints )
-	{
-		if ( !m_pWordlistCheckpointCache.Alloc ( m_iWordlistCheckpoints*sizeof (CSphWordlistCheckpoint), m_sLastError, sWarning ) )
-			return NULL;
-
-		m_pWordlistCheckpoints = (CSphWordlistCheckpoint *)&(m_pWordlistCheckpointCache[0]);
-	}
-
+	// preopen 
 	if ( m_bKeepFilesOpen )
 	{
 		if ( m_tDoclistFile.Open ( GetIndexFileName("spd"), SPH_O_READ, m_sLastError ) < 0 )
@@ -14800,98 +14765,67 @@ bool CSphIndex_VLN::Preread ()
 		assert ( m_pKillList [i-1] < m_pKillList [i] );
 #endif
 
+	// preload wordlist
+	// FIXME! OPTIMIZE! can skip checkpoints
 	if ( m_bPreloadWordlist )
-	{
 		if ( !PrereadSharedBuffer ( m_pWordlist, "spi" ) )
 			return false;
 
-		assert ( m_iCheckpointsPos>0 && m_iCheckpointsPos<UINT_MAX );
+	// preload checkpoints
+	assert ( m_iCheckpointsPos>0 );
 
-		if ( m_uVersion<11 && m_iWordlistCheckpoints )
-		{
-			CSphWordlistCheckpoint_v10 * pOldCheckpoints = (CSphWordlistCheckpoint_v10 *)( &m_pWordlist[DWORD(m_iCheckpointsPos)] );
-			for ( int i=0; i<m_iWordlistCheckpoints; i++ )
-			{
-				m_pWordlistCheckpoints [i].m_iWordID = sphUnalignedRead ( pOldCheckpoints [i].m_iWordID );
-				m_pWordlistCheckpoints [i].m_iWordlistOffset = sphUnalignedRead ( pOldCheckpoints [i].m_iWordlistOffset );
-			}
-		}
-	}
-	else
+	CSphAutofile tWordlist;
+	if ( tWordlist.Open ( GetIndexFileName("spi"), SPH_O_READ, m_sLastError )<0 )
+		return false;
+
+	CSphReader_VLN tCheckpointReader;
+	tCheckpointReader.SetFile ( tWordlist );
+	tCheckpointReader.SeekTo ( m_iCheckpointsPos, READ_NO_SIZE_HINT );
+
+	if ( m_uVersion>=14 )
 	{
-		int iFD = -1;
-		CSphAutofile tWordlist;
-
-		if ( m_bKeepFilesOpen )
-			iFD = m_tWordlistFile.GetFD ();
-		else
+		// read v.14 checkpoints
+		ARRAY_FOREACH ( i, m_dWordlistCheckpoints )
 		{
-			tWordlist.Open ( GetIndexFileName("spi"), SPH_O_READ, m_sLastError );
-			iFD = tWordlist.GetFD ();
+			m_dWordlistCheckpoints[i].m_iWordID = (SphWordID_t) tCheckpointReader.GetOffset();
+			m_dWordlistCheckpoints[i].m_iWordlistOffset = tCheckpointReader.GetOffset();
 		}
-
-		if ( iFD < 0 )
-			return false;
-
-		struct_stat st;
-		if ( stat ( GetIndexFileName("spi"), &st ) < 0 )
+	} else if ( m_uVersion>=11 )
+	{
+		// convert v.11 checkpoints
+		CSphWordlistCheckpoint tCheckpoint;
+		ARRAY_FOREACH ( i, m_dWordlistCheckpoints )
 		{
-			m_sLastError.SetSprintf ( "failed to stat %s: %s", GetIndexFileName("spi"), strerror(errno) );
-			return false;
+			tCheckpointReader.GetBytes ( &tCheckpoint, sizeof ( tCheckpoint ) );
+			m_dWordlistCheckpoints[i] = tCheckpoint;
 		}
-
-		m_iWordlistSize = st.st_size;
-
-		assert ( m_iCheckpointsPos>0 );
-
-		if ( m_uVersion >= 11 )
+	} else
+	{
+		// convert v.10 checkpoints
+		CSphWordlistCheckpoint_v10 tCheckpoint;
+		ARRAY_FOREACH ( i, m_dWordlistCheckpoints )
 		{
-			if ( sphSeek ( iFD, m_iCheckpointsPos, READ_NO_SIZE_HINT ) < 0 )
-			{
-				m_sLastError.SetSprintf ( "failed to seek %s: %s", GetIndexFileName("spi"), strerror(errno) );
-				return false;
-			}
-
-			size_t iToRead = sizeof ( CSphWordlistCheckpoint ) * m_iWordlistCheckpoints;
-			if ( sphReadThrottled ( iFD, m_pWordlistCheckpoints, iToRead ) != iToRead )
-			{
-				m_sLastError.SetSprintf ( "failed to read %s: %s", GetIndexFileName("spi"), strerror(errno) );
-				return false;
-			}
+			tCheckpointReader.GetBytes ( &tCheckpoint, sizeof ( tCheckpoint ) );
+			m_dWordlistCheckpoints[i].m_iWordID = tCheckpoint.m_iWordID;
+			m_dWordlistCheckpoints[i].m_iWordlistOffset = tCheckpoint.m_iWordlistOffset;
 		}
-		else
-		{
-			// convert DWORD offsets to SphOffset_t
-			CSphWordlistCheckpoint_v10 tCheckpoint;
-			CSphReader_VLN tCheckpointReader;
-			tCheckpointReader.SetFile ( iFD, GetIndexFileName("spi") );
-			tCheckpointReader.SeekTo ( m_iCheckpointsPos, READ_NO_SIZE_HINT );
-
-			for ( int i = 0; i < m_iWordlistCheckpoints; i++ )
-			{
-				tCheckpointReader.GetBytes ( &tCheckpoint, sizeof ( tCheckpoint ) );
-				m_pWordlistCheckpoints [i].m_iWordID = tCheckpoint.m_iWordID;
-				m_pWordlistCheckpoints [i].m_iWordlistOffset = tCheckpoint.m_iWordlistOffset;
-			}
-
-			if ( tCheckpointReader.GetErrorFlag () )
-			{
-				m_sLastError.SetSprintf ( "failed to read %s: %s", GetIndexFileName("spi"), tCheckpointReader.GetErrorMessage ().cstr () );
-				return false;
-			}
-		}
-
-		SphOffset_t uMaxChunk = 0;
-		CSphWordlistCheckpoint * pCur = m_pWordlistCheckpoints;
-		for ( int i=0; i<m_iWordlistCheckpoints-1; i++, pCur++ )
-			uMaxChunk = Max ( uMaxChunk, pCur[1].m_iWordlistOffset - pCur[0].m_iWordlistOffset );
-
-		CSphWordlistCheckpoint * pLast = m_pWordlistCheckpoints + m_iWordlistCheckpoints - 1;
-		if ( m_iWordlistCheckpoints>0 )
-			uMaxChunk = Max ( uMaxChunk, m_iWordlistSize - pLast->m_iWordlistOffset );
-
-		m_pWordlistChunkBuf = new BYTE [ (size_t)uMaxChunk ];
 	}
+
+	if ( tCheckpointReader.GetErrorFlag() )
+	{
+		m_sLastError.SetSprintf ( "failed to read %s: %s", GetIndexFileName("spi"), tCheckpointReader.GetErrorMessage().cstr () );
+		return false;
+	}
+
+	SphOffset_t uMaxChunk = 0;
+	ARRAY_FOREACH ( i, m_dWordlistCheckpoints )
+	{
+		SphOffset_t uNextOffset = ( i+1 )==m_dWordlistCheckpoints.GetLength()
+			? m_iWordlistSize
+			: m_dWordlistCheckpoints[i+1].m_iWordlistOffset;
+		uMaxChunk = Max ( uMaxChunk, uNextOffset - m_dWordlistCheckpoints[i].m_iWordlistOffset );
+	}
+	m_pWordlistChunkBuf = new BYTE [ (size_t)uMaxChunk ];
 
 	//////////////////////
 	// precalc everything

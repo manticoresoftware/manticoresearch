@@ -20,6 +20,7 @@ MYSQLDATAdir =          $(localstatedir)
 MYSQLSHAREdir =         $(pkgdatadir)
 MYSQLBASEdir=           $(prefix)
 MYSQLLIBdir=            $(pkglibdir)
+pkgplugindir =          $(pkglibdir)/plugin
 INCLUDES =              -I$(top_srcdir)/include -I$(top_builddir)/include \
 			-I$(top_srcdir)/regex \
 			-I$(top_srcdir)/sql \
@@ -35,16 +36,17 @@ DEFS= @DEFS@ \
 noinst_HEADERS =	ha_sphinx.h
 
 EXTRA_LTLIBRARIES =	ha_sphinx.la
-pkglib_LTLIBRARIES =	@plugin_sphinx_shared_target@
+pkgplugin_LTLIBRARIES = @plugin_sphinx_shared_target@ sphinx.la
+
 ha_sphinx_la_LDFLAGS =	-module -rpath $(MYSQLLIBdir)
 ha_sphinx_la_CXXFLAGS=	$(AM_CFLAGS) -DMYSQL_DYNAMIC_PLUGIN
 ha_sphinx_la_CFLAGS =	$(AM_CFLAGS) -DMYSQL_DYNAMIC_PLUGIN
 ha_sphinx_la_SOURCES =	ha_sphinx.cc
 
-lib_LTLIBRARIES = libsnippets_udf.la
-libsnippets_udf_la_CXXFLAGS = $(AM_CFLAGS) -DMYSQL_DYNAMIC_PLUGIN
-libsnippets_udf_la_CFLAGS = $(AM_CFLAGS) -DMYSQL_DYNAMIC_PLUGIN
-libsnippets_udf_la_SOURCES = snippets_udf.cc
+sphinx_la_LDFLAGS = -module
+sphinx_la_CXXFLAGS = $(AM_CFLAGS) -DMYSQL_DYNAMIC_PLUGIN
+sphinx_la_CFLAGS = $(AM_CFLAGS) -DMYSQL_DYNAMIC_PLUGIN
+sphinx_la_SOURCES = snippets_udf.cc
 
 EXTRA_LIBRARIES =	libsphinx.a
 noinst_LIBRARIES =	@plugin_sphinx_static_target@

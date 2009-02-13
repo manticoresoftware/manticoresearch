@@ -14662,9 +14662,13 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 	// make sure checkpoints are loadable
 	// pre-11 indices use different offset type (this is fixed up later during the loading)
 	assert ( m_iCheckpointsPos>0 );
-	const int64_t iCheckpointSize = m_uVersion<11 ?
-		sizeof(CSphWordlistCheckpoint_v10) :
-		sizeof(CSphWordlistCheckpoint);
+
+	int64_t iCheckpointSize = 2*sizeof(int64_t);
+	if ( m_uVersion<14 )
+		iCheckpointSize = sizeof(CSphWordlistCheckpoint);
+	if ( m_uVersion<11 )
+		iCheckpointSize = sizeof(CSphWordlistCheckpoint_v10);
+
 	if ( (int64_t)m_iWordlistSize - (int64_t)m_iCheckpointsPos != (int64_t)m_dWordlistCheckpoints.GetLength() * iCheckpointSize )
 	{
 		m_sLastError = "checkpoint segment size mismatch (rebuild the index)";

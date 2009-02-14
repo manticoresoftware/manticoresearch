@@ -1,5 +1,5 @@
 --- mysql-5.0.67/config/ac-macros/ha_sphinx.m4	1970-01-01 10:00:00.000000000 +1000
-+++ mysql-5.0.67-sphinx/config/ac-macros/ha_sphinx.m4	2008-09-02 17:43:05.000000000 +1100
++++ mysql-5.0.67-sphinx/config/ac-macros/ha_sphinx.m4	2009-02-14 09:15:48.000000000 +1000
 @@ -0,0 +1,30 @@
 +dnl ---------------------------------------------------------------------------
 +dnl Macro: MYSQL_CHECK_EXAMPLEDB
@@ -32,7 +32,7 @@
 +dnl ---------------------------------------------------------------------------
 +
 --- mysql-5.0.67/configure.in	2008-08-04 23:19:07.000000000 +1100
-+++ mysql-5.0.67-sphinx/configure.in	2008-09-02 17:43:05.000000000 +1100
++++ mysql-5.0.67-sphinx/configure.in	2009-02-14 09:15:48.000000000 +1000
 @@ -58,6 +58,7 @@
  sinclude(config/ac-macros/ha_berkeley.m4)
  sinclude(config/ac-macros/ha_blackhole.m4)
@@ -50,7 +50,7 @@
  MYSQL_CHECK_CSVDB
  MYSQL_CHECK_BLACKHOLEDB
 --- mysql-5.0.67/libmysqld/Makefile.am	2008-08-04 23:19:18.000000000 +1100
-+++ mysql-5.0.67-sphinx/libmysqld/Makefile.am	2008-09-02 17:43:05.000000000 +1100
++++ mysql-5.0.67-sphinx/libmysqld/Makefile.am	2009-02-14 09:15:48.000000000 +1000
 @@ -29,6 +29,7 @@
  			-I$(top_builddir)/include -I$(top_srcdir)/include \
  			-I$(top_builddir)/sql -I$(top_srcdir)/sql \
@@ -95,7 +95,7 @@
  	rm -f client_settings.h
  
 --- mysql-5.0.67/sql/handler.cc	2008-08-04 23:20:04.000000000 +1100
-+++ mysql-5.0.67-sphinx/sql/handler.cc	2008-09-02 17:43:05.000000000 +1100
++++ mysql-5.0.67-sphinx/sql/handler.cc	2009-02-14 09:15:48.000000000 +1000
 @@ -77,6 +77,15 @@
    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
    HTON_NO_FLAGS };
@@ -134,7 +134,7 @@
    case DB_TYPE_NDBCLUSTER:
      if (have_ndbcluster == SHOW_OPTION_YES)
 --- mysql-5.0.67/sql/handler.h	2008-08-04 23:20:04.000000000 +1100
-+++ mysql-5.0.67-sphinx/sql/handler.h	2008-09-02 17:43:05.000000000 +1100
++++ mysql-5.0.67-sphinx/sql/handler.h	2009-02-14 09:15:48.000000000 +1000
 @@ -186,8 +186,9 @@
    DB_TYPE_BERKELEY_DB, DB_TYPE_INNODB,
    DB_TYPE_GEMINI, DB_TYPE_NDBCLUSTER,
@@ -147,7 +147,7 @@
  };
  
 --- mysql-5.0.67/sql/Makefile.am	2008-08-04 23:20:02.000000000 +1100
-+++ mysql-5.0.67-sphinx/sql/Makefile.am	2008-09-02 17:43:05.000000000 +1100
++++ mysql-5.0.67-sphinx/sql/Makefile.am	2009-02-14 09:23:28.000000000 +1000
 @@ -68,6 +68,7 @@
  			sql_array.h sql_cursor.h \
  			examples/ha_example.h ha_archive.h \
@@ -164,8 +164,19 @@
  			ha_federated.cc
  
  gen_lex_hash_SOURCES =	gen_lex_hash.cc
+@@ -174,6 +176,10 @@
+ udf_example_la_SOURCES= udf_example.c
+ udf_example_la_LDFLAGS= -module -rpath $(pkglibdir)
+ 
++pkglib_LTLIBRARIES = sphinx/sphinx.la
++sphinx_sphinx_la_SOURCES = sphinx/snippets_udf.cc
++sphinx_sphinx_la_LDFLAGS = -module
++
+ 
+ # Don't update the files from bitkeeper
+ %::SCCS/s.%
 --- mysql-5.0.67/sql/mysqld.cc	2008-08-04 23:20:07.000000000 +1100
-+++ mysql-5.0.67-sphinx/sql/mysqld.cc	2008-09-02 21:58:14.000000000 +1100
++++ mysql-5.0.67-sphinx/sql/mysqld.cc	2009-02-14 09:15:48.000000000 +1000
 @@ -36,6 +36,10 @@
  #include <sys/prctl.h>
  #endif
@@ -220,7 +231,7 @@
  SHOW_COMP_OPTION have_partition_db= SHOW_OPTION_NO;
  SHOW_COMP_OPTION have_blackhole_db= SHOW_OPTION_NO;
 --- mysql-5.0.67/sql/mysql_priv.h	2008-08-04 23:20:07.000000000 +1100
-+++ mysql-5.0.67-sphinx/sql/mysql_priv.h	2008-09-02 17:43:05.000000000 +1100
++++ mysql-5.0.67-sphinx/sql/mysql_priv.h	2009-02-14 09:15:48.000000000 +1000
 @@ -1439,6 +1439,12 @@
  #else
  extern SHOW_COMP_OPTION have_csv_db;
@@ -235,7 +246,7 @@
  extern handlerton federated_hton;
  #define have_federated_db federated_hton.state
 --- mysql-5.0.67/sql/set_var.cc	2008-08-04 23:20:08.000000000 +1100
-+++ mysql-5.0.67-sphinx/sql/set_var.cc	2008-09-02 17:43:05.000000000 +1100
++++ mysql-5.0.67-sphinx/sql/set_var.cc	2009-02-14 09:15:48.000000000 +1000
 @@ -888,6 +888,7 @@
    {"have_compress",	      (char*) &have_compress,		    SHOW_HAVE},
    {"have_crypt",	      (char*) &have_crypt,		    SHOW_HAVE},
@@ -245,7 +256,7 @@
    {"have_example_engine",     (char*) &have_example_db,	            SHOW_HAVE},
    {"have_federated_engine",   (char*) &have_federated_db,           SHOW_HAVE},
 --- mysql-5.0.67/sql/sql_lex.h	2008-08-04 23:20:10.000000000 +1100
-+++ mysql-5.0.67-sphinx/sql/sql_lex.h	2008-09-02 17:43:05.000000000 +1100
++++ mysql-5.0.67-sphinx/sql/sql_lex.h	2009-02-14 09:15:48.000000000 +1000
 @@ -57,6 +57,7 @@
    SQLCOM_SHOW_DATABASES, SQLCOM_SHOW_TABLES, SQLCOM_SHOW_FIELDS,
    SQLCOM_SHOW_KEYS, SQLCOM_SHOW_VARIABLES, SQLCOM_SHOW_LOGS, SQLCOM_SHOW_STATUS,
@@ -255,7 +266,7 @@
    SQLCOM_SHOW_GRANTS, SQLCOM_SHOW_CREATE, SQLCOM_SHOW_CHARSETS,
    SQLCOM_SHOW_COLLATIONS, SQLCOM_SHOW_CREATE_DB, SQLCOM_SHOW_TABLE_STATUS,
 --- mysql-5.0.67/sql/sql_parse.cc	2008-08-04 23:20:10.000000000 +1100
-+++ mysql-5.0.67-sphinx/sql/sql_parse.cc	2008-09-02 17:43:05.000000000 +1100
++++ mysql-5.0.67-sphinx/sql/sql_parse.cc	2009-02-14 09:15:48.000000000 +1000
 @@ -24,6 +24,9 @@
  #ifdef HAVE_INNOBASE_DB
  #include "ha_innodb.h"
@@ -283,7 +294,7 @@
    case SQLCOM_LOAD_MASTER_TABLE:
    {
 --- mysql-5.0.67/sql/sql_yacc.yy	2008-08-04 23:20:12.000000000 +1100
-+++ mysql-5.0.67-sphinx/sql/sql_yacc.yy	2008-09-02 17:43:05.000000000 +1100
++++ mysql-5.0.67-sphinx/sql/sql_yacc.yy	2009-02-14 09:15:48.000000000 +1000
 @@ -7393,6 +7393,9 @@
  	    case DB_TYPE_INNODB:
  	      Lex->sql_command = SQLCOM_SHOW_INNODB_STATUS;
@@ -295,7 +306,7 @@
  	      my_error(ER_NOT_SUPPORTED_YET, MYF(0), "STATUS");
  	      MYSQL_YYABORT;
 --- mysql-5.0.67/sql/structs.h	2008-08-04 23:20:12.000000000 +1100
-+++ mysql-5.0.67-sphinx/sql/structs.h	2008-09-02 21:58:14.000000000 +1100
++++ mysql-5.0.67-sphinx/sql/structs.h	2009-02-14 09:15:48.000000000 +1000
 @@ -188,6 +188,9 @@
    SHOW_SSL_CTX_SESS_TIMEOUTS, SHOW_SSL_CTX_SESS_CACHE_FULL,
    SHOW_SSL_GET_CIPHER_LIST,
@@ -307,7 +318,7 @@
    SHOW_RPL_STATUS, SHOW_SLAVE_RUNNING, SHOW_SLAVE_RETRIED_TRANS,
    SHOW_KEY_CACHE_LONG, SHOW_KEY_CACHE_CONST_LONG, SHOW_KEY_CACHE_LONGLONG,
 --- mysql-5.0.67/sql/sql_show.cc	2008-08-04 23:20:11.000000000 +1100
-+++ mysql-5.0.67-sphinx/sql/sql_show.cc	2008-09-02 21:58:14.000000000 +1100
++++ mysql-5.0.67-sphinx/sql/sql_show.cc	2009-02-14 09:15:48.000000000 +1000
 @@ -1473,6 +1473,16 @@
            value=     (char*) ((sys_var*) value)->value_ptr(thd, value_type,
                                                             &null_lex_str);

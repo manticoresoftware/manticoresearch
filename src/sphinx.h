@@ -19,7 +19,7 @@
 #ifdef _WIN32
 	#define USE_MYSQL		1	/// whether to compile MySQL support
 	#define USE_PGSQL		0	/// whether to compile PgSQL support
-	#define USE_MSSQL		1	/// whether to compile MSSQL support
+	#define USE_ODBC		1	/// whether to compile ODBC support
 	#define USE_LIBEXPAT	1	/// whether to compile libexpat support
 	#define USE_LIBICONV	1	/// whether to compile iconv support
 	#define USE_LIBXML		0	/// whether to compile libxml support
@@ -64,7 +64,7 @@ typedef __int64				SphOffset_t;
 typedef off_t				SphOffset_t;
 #endif
 
-#if ( USE_WINDOWS && USE_MSSQL )
+#if USE_ODBC
 #include <sqlext.h>
 #endif
 
@@ -1289,20 +1289,21 @@ protected:
 };
 #endif // USE_PGSQL
 
-#if USE_WINDOWS && USE_MSSQL
-struct CSphSourceParams_MSSQL : CSphSourceParams_SQL
+#if USE_ODBC
+struct CSphSourceParams_ODBC: CSphSourceParams_SQL
 {
-	bool		m_bWinAuth;			///< auth type
-	bool		m_bUnicode;			///< whether to ask for Unicode or SBCS (C char) data
+	CSphString	m_sOdbcDSN;;				///< ODBC DSN
+	bool		m_bWinAuth;			///< auth type (MS SQL only)
+	bool		m_bUnicode;			///< whether to ask for Unicode or SBCS (C char) data (MS SQL only)
 
-				CSphSourceParams_MSSQL ();
+				CSphSourceParams_ODBC ();
 };
 
-// ms sql server source implementation
-struct CSphSource_MSSQL : CSphSource_SQL
+/// ODBC source implementation
+struct CSphSource_ODBC : CSphSource_SQL
 {
-							CSphSource_MSSQL ( const char * sName );
-	bool					Setup ( const CSphSourceParams_MSSQL & tParams );
+							CSphSource_ODBC ( const char * sName );
+	bool					Setup ( const CSphSourceParams_ODBC & tParams );
 
 protected:
 	virtual void			SqlDismissResult ();
@@ -1317,13 +1318,17 @@ protected:
 	virtual const char *	SqlFieldName ( int iIndex );
 	virtual DWORD			SqlColumnLength ( int iIndex );
 
-private:
+	virtual void			OdbcPostConnect () {}
+
+protected:
+	CSphString				m_sOdbcDSN;
+	bool					m_bWinAuth;
+	bool					m_bUnicode;
+
 	SQLHENV					m_hEnv;
 	SQLHDBC					m_hDBC;
 	SQLHANDLE				m_hStmt;
 	int						m_nResultCols;
-	bool					m_bWinAuth;
-	bool					m_bUnicode;
 	CSphString				m_sError;
 
 	struct QueryColumn_t
@@ -1343,7 +1348,15 @@ private:
 
 	void					GetSqlError ( SQLSMALLINT iHandleType, SQLHANDLE hHandle );
 };
-#endif
+
+
+/// MS SQL source implemenation
+struct CSphSource_MSSQL : public CSphSource_ODBC
+{
+							CSphSource_MSSQL ( const char * sName ) : CSphSource_ODBC ( sName ) {}
+	virtual void			OdbcPostConnect ();
+};
+#endif // USE_ODBC
 
 
 /// XML pipe source implementation

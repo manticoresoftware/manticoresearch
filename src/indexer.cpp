@@ -563,25 +563,45 @@ CSphSource * SpawnSourceMySQL ( const CSphConfigSection & hSource, const char * 
 }
 #endif // USE_MYSQL
 
-#if ( USE_WINDOWS && USE_MSSQL )
+
+#if USE_ODBC
+CSphSource * SpawnSourceODBC ( const CSphConfigSection & hSource, const char * sSourceName )
+{
+	assert ( hSource["type"]=="odbc" );
+
+	CSphSourceParams_ODBC tParams;
+	if ( !SqlParamsConfigure ( tParams, hSource, sSourceName ) )
+		return NULL;
+
+	LOC_GETS ( tParams.m_sOdbcDSN, "odbc_dsn" );
+
+	CSphSource_ODBC * pSrc = new CSphSource_ODBC ( sSourceName );
+	if ( !pSrc->Setup ( tParams ) )
+		SafeDelete ( pSrc );
+
+	return pSrc;
+}
+
+
 CSphSource * SpawnSourceMSSQL ( const CSphConfigSection & hSource, const char * sSourceName )
 {
 	assert ( hSource["type"]=="mssql" );
 
-	CSphSourceParams_MSSQL tParams;
+	CSphSourceParams_ODBC tParams;
 	if ( !SqlParamsConfigure ( tParams, hSource, sSourceName ) )
 		return NULL;
 
 	LOC_GETB ( tParams.m_bWinAuth, "mssql_winauth" );
 	LOC_GETB ( tParams.m_bUnicode, "mssql_unicode" );
 
-	CSphSource_MSSQL * pSrcMSSQL = new CSphSource_MSSQL ( sSourceName );
-	if ( !pSrcMSSQL->Setup ( tParams ) )
-		SafeDelete ( pSrcMSSQL );
+	CSphSource_MSSQL * pSrc = new CSphSource_MSSQL ( sSourceName );
+	if ( !pSrc->Setup ( tParams ) )
+		SafeDelete ( pSrc );
 
-	return pSrcMSSQL;
+	return pSrc;
 }
-#endif // USE_MSSQL
+#endif // USE_ODBC
+
 
 CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char * sSourceName, bool bUTF8 )
 {
@@ -649,7 +669,10 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 		return SpawnSourceMySQL ( hSource, sSourceName );
 	#endif
 
-	#if USE_MSSQL
+	#if USE_ODBC
+	if ( hSource["type"]=="odbc")
+		return SpawnSourceODBC ( hSource, sSourceName );
+
 	if ( hSource["type"]=="mssql")
 		return SpawnSourceMSSQL ( hSource, sSourceName );
 	#endif

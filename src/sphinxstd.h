@@ -82,7 +82,18 @@ typedef int __declspec("SAL_nokernel") __declspec("SAL_nodriver") __prefast_flag
 
 #else
 
+#if USE_ODBC
+// UnixODBC compatible DWORD
+#if defined(__alpha) || defined(__sparcv9) || defined(__LP64__) || (defined(__HOS_AIX__) && defined(_LP64))
 typedef unsigned int		DWORD;
+#else
+typedef unsigned long		DWORD;
+#endif
+#else
+// default DWORD
+typedef unsigned int		DWORD;
+#endif // USE_ODBC
+
 typedef unsigned short		WORD;
 typedef unsigned char		BYTE;
 

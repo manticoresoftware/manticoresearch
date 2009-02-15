@@ -58,12 +58,12 @@
 #include <zlib.h>
 #endif
 
+#if USE_ODBC
+#include <sql.h>
+#endif
+
 #if USE_WINDOWS
 	#include <io.h> // for open()
-
-	#if USE_MSSQL
-	#include <sql.h>
-	#endif
 
 	// workaround Windows quirks
 	#define popen		_popen
@@ -21037,28 +21037,28 @@ FILE * sphDetectXMLPipe ( const char * szCommand, BYTE * dBuf, int & iBufSize, i
 }
 
 
-#if ( USE_WINDOWS && USE_MSSQL )
+#if USE_ODBC
 
-CSphSourceParams_MSSQL::CSphSourceParams_MSSQL ()
+CSphSourceParams_ODBC::CSphSourceParams_ODBC ()
 	: m_bWinAuth	( false )
 	, m_bUnicode	( false )
 {
 }
 
 
-CSphSource_MSSQL::CSphSource_MSSQL ( const char * sName )
+CSphSource_ODBC::CSphSource_ODBC ( const char * sName )
 	: CSphSource_SQL	( sName )
+	, m_bWinAuth		( false )
+	, m_bUnicode		( false )
 	, m_hEnv			( NULL )
 	, m_hDBC			( NULL )
 	, m_hStmt			( NULL )
 	, m_nResultCols		( 0 )
-	, m_bWinAuth		( false )
-	, m_bUnicode		( false )
 {
 }
 
 
-void CSphSource_MSSQL::SqlDismissResult ()
+void CSphSource_ODBC::SqlDismissResult ()
 {
 	if ( m_hStmt )
 	{
@@ -21069,7 +21069,7 @@ void CSphSource_MSSQL::SqlDismissResult ()
 }
 
 
-bool CSphSource_MSSQL::SqlQuery ( const char * sQuery )
+bool CSphSource_ODBC::SqlQuery ( const char * sQuery )
 {
 	if ( SQLAllocHandle ( SQL_HANDLE_STMT, m_hDBC, &m_hStmt ) == SQL_ERROR )
 		return false;
@@ -21120,19 +21120,19 @@ bool CSphSource_MSSQL::SqlQuery ( const char * sQuery )
 }
 
 
-bool CSphSource_MSSQL::SqlIsError ()
+bool CSphSource_ODBC::SqlIsError ()
 {
 	return !m_sError.IsEmpty ();
 }
 
 
-const char * CSphSource_MSSQL::SqlError ()
+const char * CSphSource_ODBC::SqlError ()
 {
 	return m_sError.cstr();
 }
 
 
-bool CSphSource_MSSQL::SqlConnect ()
+bool CSphSource_ODBC::SqlConnect ()
 {
 	if ( SQLAllocHandle ( SQL_HANDLE_ENV, NULL, &m_hEnv ) == SQL_ERROR )
 		return false;
@@ -21142,49 +21142,11 @@ bool CSphSource_MSSQL::SqlConnect ()
 	if ( SQLAllocHandle ( SQL_HANDLE_DBC, m_hEnv, &m_hDBC ) == SQL_ERROR )
 		return false;
 
-	const int MAX_LEN = 1024;
-	char szDriver[MAX_LEN];
-	char szDriverAttrs[MAX_LEN];
-	SQLSMALLINT iDescLen = 0;
-	SQLSMALLINT iAttrLen = 0;		
-	SQLSMALLINT iDir = SQL_FETCH_FIRST;
-	CSphString sDriver;
-
-	for ( ;; )
-	{
-		SQLRETURN iRet = SQLDrivers ( m_hEnv, iDir, (SQLCHAR*)szDriver, MAX_LEN, &iDescLen, (SQLCHAR*)szDriverAttrs, MAX_LEN, &iAttrLen );
-		if ( iRet == SQL_NO_DATA )
-			break;
-
-		iDir = SQL_FETCH_NEXT;
-		if ( !strcmp ( szDriver, "SQL Native Client" )
-			|| !strncmp ( szDriver, "SQL Server Native Client", strlen("SQL Server Native Client") ) )
-		{
-			sDriver = szDriver;
-			break;
-		}
-	}
-
-	char szBuf [1024];
-	if ( sDriver.IsEmpty() )
-		sDriver = "SQL Server";
-
-	if ( m_bWinAuth )
-	{
-		if ( m_tParams.m_sUser.IsEmpty () )
-			snprintf ( szBuf, sizeof(szBuf), "DRIVER={%s};SERVER={%s};Database={%s};Trusted_Connection=yes",
-				sDriver.cstr (), m_tParams.m_sHost.cstr (), m_tParams.m_sDB.cstr () );
-		else
-			snprintf ( szBuf, sizeof(szBuf), "DRIVER={%s};SERVER={%s};UID={%s};PWD={%s};Database={%s};Trusted_Connection=yes",
-				sDriver.cstr (), m_tParams.m_sHost.cstr (), m_tParams.m_sUser.cstr (), m_tParams.m_sPass.cstr (), m_tParams.m_sDB.cstr () );
-	}
-	else
-		snprintf ( szBuf, sizeof(szBuf), "DRIVER={%s};SERVER={%s};UID={%s};PWD={%s};Database={%s}",
-			sDriver.cstr (), m_tParams.m_sHost.cstr (), m_tParams.m_sUser.cstr (), m_tParams.m_sPass.cstr (), m_tParams.m_sDB.cstr () );
+	OdbcPostConnect ();
 
 	char szOutConn [2048];
 	SQLSMALLINT iOutConn = 0;
-	if ( SQLDriverConnect ( m_hDBC, NULL, (SQLTCHAR*) szBuf, SQL_NTS, (SQLCHAR*)szOutConn, sizeof(szOutConn), &iOutConn, SQL_DRIVER_NOPROMPT ) == SQL_ERROR )
+	if ( SQLDriverConnect ( m_hDBC, NULL, (SQLTCHAR*) m_sOdbcDSN.cstr(), SQL_NTS, (SQLCHAR*)szOutConn, sizeof(szOutConn), &iOutConn, SQL_DRIVER_NOPROMPT ) == SQL_ERROR )
 	{
 		GetSqlError ( SQL_HANDLE_DBC, m_hDBC );
 		return false;
@@ -21194,7 +21156,7 @@ bool CSphSource_MSSQL::SqlConnect ()
 }
 
 
-void CSphSource_MSSQL::SqlDisconnect ()
+void CSphSource_ODBC::SqlDisconnect ()
 {
 	if ( m_hStmt != NULL)
 		SQLFreeHandle ( SQL_HANDLE_STMT, m_hStmt );
@@ -21210,7 +21172,7 @@ void CSphSource_MSSQL::SqlDisconnect ()
 }
 
 
-int CSphSource_MSSQL::SqlNumFields ()
+int CSphSource_ODBC::SqlNumFields ()
 {
 	if ( !m_hStmt )
 		return -1;
@@ -21219,7 +21181,7 @@ int CSphSource_MSSQL::SqlNumFields ()
 }
 
 
-bool CSphSource_MSSQL::SqlFetchRow ()
+bool CSphSource_ODBC::SqlFetchRow ()
 {
 	SQLRETURN iRet = SQLFetch ( m_hStmt );
 	if ( iRet==SQL_ERROR )
@@ -21240,6 +21202,7 @@ bool CSphSource_MSSQL::SqlFetchRow ()
 				break;
 
 			default:
+#if USE_WINDOWS // FIXME! support UCS-2 columns on Unix too
 				if ( tCol.m_bUnicode )
 				{
 					int iConv = WideCharToMultiByte ( CP_UTF8, 0, LPCWSTR(&tCol.m_dRaw[0]), tCol.m_iInd/sizeof(WCHAR),
@@ -21252,6 +21215,7 @@ bool CSphSource_MSSQL::SqlFetchRow ()
 					tCol.m_dContents[iConv] = '\0';
 
 				} else
+#endif
 				{
 					tCol.m_dContents[tCol.m_iInd] = '\0';
 				}
@@ -21263,7 +21227,7 @@ bool CSphSource_MSSQL::SqlFetchRow ()
 }
 
 
-const char * CSphSource_MSSQL::SqlColumn ( int iIndex )
+const char * CSphSource_ODBC::SqlColumn ( int iIndex )
 {
 	if ( !m_hStmt )
 		return NULL;
@@ -21272,36 +21236,37 @@ const char * CSphSource_MSSQL::SqlColumn ( int iIndex )
 }
 
 
-const char * CSphSource_MSSQL::SqlFieldName ( int iIndex )
+const char * CSphSource_ODBC::SqlFieldName ( int iIndex )
 {
 	return m_dColumns[iIndex].m_sName.cstr();
 }
 
 
-DWORD CSphSource_MSSQL::SqlColumnLength ( int )
+DWORD CSphSource_ODBC::SqlColumnLength ( int )
 {
 	return 0;
 }
 
 
-bool CSphSource_MSSQL::Setup ( const CSphSourceParams_MSSQL & tParams )
+bool CSphSource_ODBC::Setup ( const CSphSourceParams_ODBC & tParams )
 {
 	if ( !CSphSource_SQL::Setup ( tParams ) )
 		return false;
 
+	m_sOdbcDSN = tParams.m_sOdbcDSN;
 	m_bWinAuth = tParams.m_bWinAuth;
 	m_bUnicode = tParams.m_bUnicode;
 
 	// build and store DSN for error reporting
 	char sBuf [ 1024 ];
-	snprintf ( sBuf, sizeof(sBuf), "mssql%s", m_sSqlDSN.cstr()+3 );
+	snprintf ( sBuf, sizeof(sBuf), "odbc%s", m_sSqlDSN.cstr()+3 );
 	m_sSqlDSN = sBuf;
 
 	return true;
 }
 
 
-void CSphSource_MSSQL::GetSqlError ( SQLSMALLINT iHandleType, SQLHANDLE hHandle )
+void CSphSource_ODBC::GetSqlError ( SQLSMALLINT iHandleType, SQLHANDLE hHandle )
 {
 	char szState [16];
 	char szMessageText [1024];
@@ -21311,6 +21276,51 @@ void CSphSource_MSSQL::GetSqlError ( SQLSMALLINT iHandleType, SQLHANDLE hHandle 
 	m_sError = szMessageText;
 }
 
+//////////////////////////////////////////////////////////////////////////
+
+void CSphSource_MSSQL::OdbcPostConnect ()
+{
+	const int MAX_LEN = 1024;
+	char szDriver[MAX_LEN];
+	char szDriverAttrs[MAX_LEN];
+	SQLSMALLINT iDescLen = 0;
+	SQLSMALLINT iAttrLen = 0;		
+	SQLSMALLINT iDir = SQL_FETCH_FIRST;
+
+	CSphString sDriver;
+	for ( ;; )
+	{
+		SQLRETURN iRet = SQLDrivers ( m_hEnv, iDir, (SQLCHAR*)szDriver, MAX_LEN, &iDescLen, (SQLCHAR*)szDriverAttrs, MAX_LEN, &iAttrLen );
+		if ( iRet == SQL_NO_DATA )
+			break;
+
+		iDir = SQL_FETCH_NEXT;
+		if ( !strcmp ( szDriver, "SQL Native Client" )
+			|| !strncmp ( szDriver, "SQL Server Native Client", strlen("SQL Server Native Client") ) )
+		{
+			sDriver = szDriver;
+			break;
+		}
+	}
+
+	if ( sDriver.IsEmpty() )
+		sDriver = "SQL Server";
+
+	if ( m_bWinAuth && m_tParams.m_sUser.IsEmpty () )
+	{
+		m_sOdbcDSN.SetSprintf ( "DRIVER={%s};SERVER={%s};Database={%s};Trusted_Connection=yes",
+			sDriver.cstr (), m_tParams.m_sHost.cstr (), m_tParams.m_sDB.cstr () );
+
+	} else if ( m_bWinAuth )
+	{
+		m_sOdbcDSN.SetSprintf ( "DRIVER={%s};SERVER={%s};UID={%s};PWD={%s};Database={%s};Trusted_Connection=yes",
+			sDriver.cstr (), m_tParams.m_sHost.cstr (), m_tParams.m_sUser.cstr (), m_tParams.m_sPass.cstr (), m_tParams.m_sDB.cstr () );
+	} else
+	{
+		m_sOdbcDSN.SetSprintf ( "DRIVER={%s};SERVER={%s};UID={%s};PWD={%s};Database={%s}",
+			sDriver.cstr (), m_tParams.m_sHost.cstr (), m_tParams.m_sUser.cstr (), m_tParams.m_sPass.cstr (), m_tParams.m_sDB.cstr () );
+	}
+}
 
 #endif
 

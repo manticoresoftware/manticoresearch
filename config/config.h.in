@@ -211,6 +211,9 @@
 /* Define to 1 if you want to compile with MySQL support */
 #undef USE_MYSQL
 
+/* define to use ODBC library */
+#undef USE_ODBC
+
 /* Define to 1 if you want to compile with PostgreSQL support */
 #undef USE_PGSQL
 

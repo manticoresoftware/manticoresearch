@@ -1,5 +1,5 @@
 //
-// $Id: spelldump.cpp 853 2007-10-05 13:58:25Z shodan $
+// $Id$
 //
 
 #include "sphinx.h"
@@ -943,5 +943,5 @@ int main ( int argc, char ** argv )
 }
 
 //
-// $Id: spelldump.cpp 853 2007-10-05 13:58:25Z shodan $
+// $Id$
 //

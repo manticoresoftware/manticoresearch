@@ -3,9 +3,9 @@
 //
 
 #include "sphinx.h"
+#include "sphinxutils.h"
 
 #include <locale.h>
-
 
 const int MAX_STR_LENGTH = 512;
 
@@ -109,22 +109,6 @@ public:
 		CSphString	m_sFlags;
 	};
 
-	// string comparator
-	struct DictWordLess
-	{
-		inline bool operator () ( const CISpellDictWord & a, const CISpellDictWord & b )
-		{
-			if ( a.m_sWord.IsEmpty () )
-				return b.m_sWord.IsEmpty () ? false : true;
-
-			if ( b.m_sWord.IsEmpty () )
-				return false;
-
-			return strcmp ( a.m_sWord.cstr (), b.m_sWord.cstr () ) < 0;
-		}
-	};
-
-
 	bool			Load ( const char * szFilename );
 	void			IterateStart ();
 	const			CISpellDictWord * IterateNext ();
@@ -188,8 +172,6 @@ bool CISpellDict::Load ( const char * szFilename )
 	}
 
 	fclose ( pFile );
-
-	m_dEntries.Sort ( DictWordLess () );
 
 	return true;
 }
@@ -395,7 +377,7 @@ bool CISpellAffixRule::CheckPrefix ( const CSphString & sWord ) const
 
 bool CISpellAffixRule::StripAppendPrefix ( CSphString & sWord ) const
 {
-	static char szTmp [ MAX_STR_LENGTH];
+	static char szTmp [MAX_STR_LENGTH];
 
 	if ( !m_sStrip.IsEmpty () )
 	{
@@ -433,15 +415,28 @@ bool CISpellAffixRule::IsPrefix () const
 
 //////////////////////////////////////////////////////////////////////////
 
+enum AffixFormat_e
+{
+	AFFIX_FORMAT_ISPELL		= 0,
+	AFFIX_FORMAT_MYSPELL	= 1,
+	AFFIX_FORMAT_UNKNOWN
+};
+
+const char * AffixFormatName[] =
+{
+	"ISpell",
+	"MySpell"
+};
+
 class CISpellAffix
 {
 public:
-				CISpellAffix ( const char * szLocale, const char * szCharsetFile  );
+						CISpellAffix ( const char * szLocale, const char * szCharsetFile  );
 
-	bool		Load ( const char * szFilename );
-	CISpellAffixRule * GetRule ( int iRule );
-	int			GetNumRules () const;
-	bool		CheckCrosses () const;
+	bool				Load ( const char * szFilename );
+	CISpellAffixRule *	GetRule ( int iRule );
+	int					GetNumRules () const;
+	bool				CheckCrosses () const;
 
 private:
 	CSphVector < CISpellAffixRule > m_dRules;
@@ -460,6 +455,10 @@ private:
 	void		Strip ( char * szText );
 	char		ToLowerCase ( char cChar );
 	void		LoadLocale ();
+	
+	AffixFormat_e		DetectFormat ( FILE * );
+	bool				LoadISpell ( FILE * );
+	bool				LoadMySpell ( FILE * );
 };
 
 
@@ -474,7 +473,30 @@ CISpellAffix::CISpellAffix ( const char * szLocale, const char * szCharsetFile )
 }
 
 
-bool CISpellAffix::Load (  const char * szFilename )
+AffixFormat_e CISpellAffix::DetectFormat ( FILE * pFile )
+{
+	char sBuffer [MAX_STR_LENGTH];
+
+	while ( !feof ( pFile ) )
+	{
+		char * sLine = fgets ( sBuffer, MAX_STR_LENGTH, pFile );
+		if ( !sLine )
+			break;
+
+		if ( !strncmp ( sLine, "SFX", 3 ) ) return AFFIX_FORMAT_MYSPELL;
+		if ( !strncmp ( sLine, "PFX", 3 ) ) return AFFIX_FORMAT_MYSPELL;
+		if ( !strncmp ( sLine, "REP", 3 ) ) return AFFIX_FORMAT_MYSPELL;
+
+		if ( !strncasecmp ( sLine, "prefixes", 8 ) )	return AFFIX_FORMAT_ISPELL;
+		if ( !strncasecmp ( sLine, "suffixes", 8 ) )	return AFFIX_FORMAT_ISPELL;
+		if ( !strncasecmp ( sLine, "flag", 4 ) )		return AFFIX_FORMAT_ISPELL;
+	}
+
+	return AFFIX_FORMAT_UNKNOWN;
+}
+
+
+bool CISpellAffix::Load ( const char * szFilename )
 {
 	if ( !szFilename )
 		return false;
@@ -490,6 +512,41 @@ bool CISpellAffix::Load (  const char * szFilename )
 	if ( !pFile )
 		return false;
 
+	bool bResult = false;
+	AffixFormat_e eFormat = DetectFormat ( pFile );
+	if ( eFormat == AFFIX_FORMAT_UNKNOWN )
+		printf ( "Failed to detect affix file format\n" );
+	else
+	{
+		fseek ( pFile, SEEK_SET, 0 );
+		printf ( "Using %s affix file format\n", AffixFormatName[eFormat] );
+		switch ( eFormat )
+		{
+			case AFFIX_FORMAT_MYSPELL:	bResult = LoadMySpell ( pFile ); break;
+			case AFFIX_FORMAT_ISPELL:	bResult = LoadISpell ( pFile ); break;
+			case AFFIX_FORMAT_UNKNOWN:	break;
+		}
+	}
+	fclose ( pFile );
+
+	bool bHaveCrossPrefix = false;
+	for ( int i = 0; i < m_dRules.GetLength () && !bHaveCrossPrefix; i++ )
+		if ( m_dRules[i].IsPrefix() && m_dRules[i].IsCrossProduct() )
+			bHaveCrossPrefix = true;
+
+	bool bHaveCrossSuffix = false;
+	for ( int i = 0; i < m_dRules.GetLength () && !bHaveCrossSuffix; i++ )
+		if ( !m_dRules[i].IsPrefix() && m_dRules[i].IsCrossProduct() )
+			bHaveCrossSuffix = true;
+
+	m_bCheckCrosses = bHaveCrossPrefix && bHaveCrossSuffix;
+
+	return bResult;
+}
+
+
+bool CISpellAffix::LoadISpell ( FILE * pFile )
+{
 	char szBuffer	 [MAX_STR_LENGTH];
 	char szCondition [MAX_STR_LENGTH];
 	char szStrip	 [MAX_STR_LENGTH];
@@ -498,6 +555,7 @@ bool CISpellAffix::Load (  const char * szFilename )
 	RuleType_e eRule = RULE_NONE;
 	char cFlag = '\0';
 	bool bCrossProduct = false;
+	int iLine = 0;
 
 	// TODO: parse all .aff character replacement commands
 	while ( !feof ( pFile ) )
@@ -505,6 +563,7 @@ bool CISpellAffix::Load (  const char * szFilename )
 		char * szResult = fgets ( szBuffer, MAX_STR_LENGTH, pFile );
 		if ( !szResult )
 			break;
+		iLine++;
 
 		if ( !strncasecmp ( szBuffer, "prefixes", 8 ) )
 		{
@@ -530,7 +589,7 @@ bool CISpellAffix::Load (  const char * szFilename )
 
 			if ( !*szStart )
 			{
-				printf ( "WARNING: invalid 'wordchars' statement\n" );
+				printf ( "WARNING: Line %d: invalid 'wordchars' statement\n", iLine );
 				continue;
 			}
 
@@ -548,7 +607,7 @@ bool CISpellAffix::Load (  const char * szFilename )
 			*szStart = '\0';
 
 			if ( !AddToCharset ( szRangeL, szRangeU ) )
-				printf ( "WARNING: cannot add to charset: '%s' '%s'\n", szRangeL, szRangeU );
+				printf ( "WARNING: Line %d: cannot add to charset: '%s' '%s'\n", iLine, szRangeL, szRangeU );
 
 			continue;
 		}
@@ -557,7 +616,7 @@ bool CISpellAffix::Load (  const char * szFilename )
 		{
 			if ( eRule == RULE_NONE )
 			{
-				printf ( "WARNING: 'flag' appears before preffixes or suffixes\n" );
+				printf ( "WARNING: Line %d: 'flag' appears before preffixes or suffixes\n", iLine );
 				continue;
 			}
 			
@@ -607,20 +666,81 @@ bool CISpellAffix::Load (  const char * szFilename )
 		m_dRules.Add ( Rule );
 	}
 
-	fclose ( pFile );
+	return true;
+}
 
-	bool bHaveCrossPrefix = false;
-	for ( int i = 0; i < m_dRules.GetLength () && !bHaveCrossPrefix; ++i )
-		if ( m_dRules [i].IsPrefix () && m_dRules [i].IsCrossProduct () )
-			bHaveCrossPrefix = true;
 
-	bool bHaveCrossSuffix = false;
-	for ( int i = 0; i < m_dRules.GetLength () && !bHaveCrossSuffix; ++i )
-		if ( !m_dRules [i].IsPrefix () && m_dRules [i].IsCrossProduct () )
-			bHaveCrossSuffix = true;
+bool CISpellAffix::LoadMySpell ( FILE * pFile )
+{
+	char sBuffer	[MAX_STR_LENGTH];
+	char sCondition	[MAX_STR_LENGTH];
+	char sRemove	[MAX_STR_LENGTH];
+	char sAppend	[MAX_STR_LENGTH];
 
-	m_bCheckCrosses = bHaveCrossPrefix && bHaveCrossSuffix;
+	RuleType_e eRule = RULE_NONE;
+	BYTE cFlag = 0;
+	BYTE cCombine = 0;
+	int iCount = 0, iLine = 0;
+	const char * sMode = 0;
 
+	while ( !feof ( pFile ) )
+	{
+		char * sLine = fgets ( sBuffer, MAX_STR_LENGTH, pFile );
+		if ( !sLine )
+			break;
+		++iLine;
+
+		// prefix and suffix rules
+		RuleType_e eNewRule = RULE_NONE;
+		if ( !strncmp ( sLine, "PFX", 3 ) )
+		{
+			eNewRule = RULE_PREFIXES;
+			sMode = "prefix";
+		}
+		else if ( !strncmp ( sLine, "SFX", 3 ) )
+		{
+			eNewRule = RULE_SUFFIXES;
+			sMode = "suffix";
+		}
+		if ( eNewRule != RULE_NONE )
+		{
+			sLine += 3;
+			while ( *sLine && isspace ( (unsigned char) *sLine ) )
+				++sLine;
+			
+			if ( eNewRule != eRule ) // new rule header
+			{
+				if ( iCount )
+					printf ( "WARNING: Line %d: Premature end of entries.\n", iLine );
+
+				if ( sscanf ( sLine, "%c %c %d", &cFlag, &cCombine, &iCount ) != 3 )
+					printf ( "WARNING; Line %d: Malformed %s header\n", iLine, sMode );
+
+				eRule = eNewRule;
+			}
+			else // current rule continued
+			{
+				*sRemove = *sAppend = 0;
+				char cNewFlag;
+				if ( sscanf ( sLine, "%c %s %s %s", &cNewFlag, sRemove, sAppend, sCondition ) == 4 )
+				{
+					if ( cNewFlag != cFlag )
+						printf ( "WARNING: Line %d: Flag character mismatch\n", iLine );
+
+					if ( *sRemove == '0' && *(sRemove + 1) == 0 ) *sRemove = 0;
+					if ( *sAppend == '0' && *(sAppend + 1) == 0 ) *sAppend = 0;
+					
+					CISpellAffixRule Rule ( eRule, cFlag, cCombine == 'Y', sCondition, sRemove, sAppend );
+					m_dRules.Add ( Rule );
+				}
+				else
+					printf ( "WARNING: Line %d: Malformed %s rule\n", iLine, sMode );
+				
+				if ( !--iCount ) eRule = RULE_NONE;
+			}
+			continue;
+		}
+	}
 	return true;
 }
 
@@ -818,50 +938,116 @@ void CISpellAffix::LoadLocale ()
 
 //////////////////////////////////////////////////////////////////////////
 
-int main ( int argc, char ** argv )
+enum OutputMode_e
 {
+	M_DEBUG,
+	M_DUPLICATES,
+	M_LAST,
+	M_EXACT_OR_LONGEST,
+	M_DEFAULT = M_EXACT_OR_LONGEST
+};
+
+const char * dModeName[] =
+{
+	"debug",
+	"duplicates",
+	"last"
+};
+
+struct MapInfo_t
+{
+	CSphString	m_sWord;
+	char		m_sRules[3];
+};
+
+struct WordLess
+{
+	bool operator () ( const char * a, const char * b )
+	{
+		return strcoll ( a, b ) < 0;
+	}
+	
+};
+
+typedef CSphOrderedHash < CSphVector<MapInfo_t>, CSphString, CSphStrHashFunc, 100000, 13 > WordMap_t;
+
+static void EmitResult ( WordMap_t & tMap , const CSphString & sFrom, const CSphString & sTo, char cRuleA = 0, char cRuleB = 0 )
+{
+ 	if ( !tMap.Exists(sFrom) )
+		tMap.Add ( CSphVector<MapInfo_t>(), sFrom );
+
+	MapInfo_t tInfo;
+	tInfo.m_sWord = sTo;
+	tInfo.m_sRules[0] = cRuleA;
+	tInfo.m_sRules[1] = cRuleB;	
+	tInfo.m_sRules[2] = 0;
+ 	tMap[sFrom].Add ( tInfo );
+}
+
+int main ( int iArgs, char ** dArgs )
+{
+	OutputMode_e eMode = M_DEFAULT;
 	bool bUseCustomCharset = false;
 	CSphString sDict, sAffix, sLocale, sCharsetFile, sResult = "result.txt";
 
 	printf ( "spelldump, an ispell dictionary dumper\n\n" );
 
-	int nArgsStart = 1;
-
-	if ( argc >= 3 )
+	int i = 1;
+	for ( ; i < iArgs; i++ )
 	{
-		if ( ! strcmp ( argv [1], "-c" ) )
+		if ( !strcmp ( dArgs[i], "-c" ) )
 		{
+			if ( ++i == iArgs ) break;
 			bUseCustomCharset = true;
-			sCharsetFile = argv [2];
-			nArgsStart += 2;
+			sCharsetFile = dArgs[i];
 		}
+		else if ( !strcmp ( dArgs[i], "-m" ) )
+		{
+			if ( ++i == iArgs ) break;
+			char * sMode = dArgs[i];
+				
+			if ( !strcmp ( sMode, "debug" ) )		{ eMode = M_DEBUG; continue; }
+			if ( !strcmp ( sMode, "duplicates" ) )	{ eMode = M_DUPLICATES; continue; }
+			if ( !strcmp ( sMode, "last" ) )		{ eMode = M_LAST; continue; }
+			if ( !strcmp ( sMode, "default" ) )		{ eMode = M_DEFAULT; continue; }
+			
+			printf ( "Unrecognized mode: %s\n", sMode );
+			return 1;
+		}
+		else
+			break;
 	}
 
-	switch ( argc - nArgsStart )
+	switch ( iArgs - i )
 	{
 		case 4:
-			sLocale = argv [nArgsStart + 3];
+			sLocale = dArgs[i + 3];
 		case 3:
-			sResult = argv [nArgsStart + 2];
+			sResult = dArgs[i + 2];
 		case 2:
-			sAffix = argv [nArgsStart + 1];
-			sDict = argv [nArgsStart];
+			sAffix = dArgs[i + 1];
+			sDict = dArgs[i];
 			break;
 		default:
 			printf ( "Usage: spelldump [options] <dictionary> <affix> [result] [locale-name]\n\n"
-					 "options:\n"
-					 "-c <file> : use case convertion defined in <file>\n" );
+					 "Options:\n"
+					 "-c <file>\tuse case convertion defined in <file>\n"
+					 "-m <mode>\toutput (conflict resolution) mode:\n"
+					 "\t\tdefault - try to guess the best way to resolve a conflict\n"
+					 "\t\tlast - choose last entry\n"
+					 "\t\tdebug - dump all mappings (with rules)\n"
+					 "\t\tduplicates - dump duplicate mappings only (with rules)\n"
+				);
 
-			if ( argc==1 )
+			if ( iArgs>1 )
 			{
 				printf ( "\n"
 					"Examples:\n"
 					"spelldump en.dict en.aff\n"
 					"spelldump ru.dict ru.aff ru.txt ru_RU.CP1251\n"
 					"spelldump ru.dict ru.aff ru.txt .1251\n" );
-				exit ( 0 );
 			}
-			break;
+			return 1;
 	}
 
 	printf ( "Loading dictionary...\n" );
@@ -877,67 +1063,122 @@ int main ( int argc, char ** argv )
 	if ( sResult.IsEmpty () )
 		sphDie ( "No result file specified\n" );
 
-	FILE * pResultFile = fopen ( sResult.cstr (), "wt" );
-	if ( !pResultFile )
+	FILE * pFile = fopen ( sResult.cstr (), "wt" );
+	if ( !pFile )
 		sphDie ( "Unable to open '%s' for writing\n", sResult.cstr () );
 
+	if ( eMode != M_DEFAULT )
+		printf ( "Output mode: %s\n", dModeName[eMode] );
+
 	Dict.IterateStart ();
+	WordMap_t tWordMap;
 	const CISpellDict::CISpellDictWord * pWord = NULL;
 	int nDone = 0;
 	while ( ( pWord = Dict.IterateNext () ) != NULL )
 	{
-		fprintf ( pResultFile, "%s > %s\n", pWord->m_sWord.cstr (), pWord->m_sWord.cstr () );
+		EmitResult ( tWordMap, pWord->m_sWord, pWord->m_sWord );
 
-		CSphString sWord, sWordForCross;
-
-		if ( ! pWord->m_sFlags.IsEmpty () )
+		if ( ++nDone % 10 == 0 )
 		{
-			int iFlagLen = strlen ( pWord->m_sFlags.cstr () );
-
-			for ( int iFlag1 = 0; iFlag1 < iFlagLen; ++iFlag1 )
-				for ( int iRule1 = 0; iRule1 < Affix.GetNumRules (); ++iRule1 )
-				{
-					CISpellAffixRule * pRule1 = Affix.GetRule ( iRule1 );
-					if ( pRule1->Flag () != pWord->m_sFlags.cstr () [iFlag1] )
-						continue;
-
-					sWord = pWord->m_sWord;
-
-					if ( ! pRule1->Apply ( sWord ) )
-						continue;
-
-					fprintf ( pResultFile, "%s > %s\n", sWord.cstr (), pWord->m_sWord.cstr () );
-
-					// apply other rules
-					if ( ! Affix.CheckCrosses () )
-						continue;
-
-					if ( ! pRule1->IsCrossProduct () )
-						continue;
-
-					for ( int iFlag2 = iFlag1 + 1; iFlag2 < iFlagLen; ++iFlag2 )
-						for ( int iRule2 = 0; iRule2 < Affix.GetNumRules (); ++iRule2 )
-						{
-							CISpellAffixRule * pRule2 = Affix.GetRule ( iRule2 );
-							if ( ! pRule2->IsCrossProduct () || pRule2->Flag () != pWord->m_sFlags.cstr () [iFlag2] || pRule2->IsPrefix () == pRule1->IsPrefix () )
-								continue;
-
-							sWordForCross = sWord;
-							if ( pRule2->Apply ( sWordForCross ) )
-								fprintf ( pResultFile, "%s > %s\n", sWordForCross.cstr (), pWord->m_sWord.cstr () );
-						}
-				}
+			printf ( "\rDictionary words processed: %d", nDone );
+			fflush ( stdout );
 		}
 
-		if ( nDone % 5 == 0 )
-			printf ( "\rDictionary words processed: %d", nDone );
+		if ( pWord->m_sFlags.IsEmpty() )
+			continue;
 
-		++nDone;
+		CSphString sWord, sWordForCross;
+		int iFlagLen = strlen ( pWord->m_sFlags.cstr () );
+		for ( int iFlag1 = 0; iFlag1 < iFlagLen; ++iFlag1 )
+			for ( int iRule1 = 0; iRule1 < Affix.GetNumRules (); ++iRule1 )
+			{
+				CISpellAffixRule * pRule1 = Affix.GetRule ( iRule1 );
+				if ( pRule1->Flag () != pWord->m_sFlags.cstr () [iFlag1] )
+					continue;
+				
+				sWord = pWord->m_sWord;
+				
+				if ( ! pRule1->Apply ( sWord ) )
+					continue;
+				
+				EmitResult ( tWordMap, sWord, pWord->m_sWord, pRule1->Flag() );
+				
+				// apply other rules
+				if ( !Affix.CheckCrosses() )
+					continue;
+				
+				if ( !pRule1->IsCrossProduct() )
+					continue;
+				
+				for ( int iFlag2 = iFlag1 + 1; iFlag2 < iFlagLen; ++iFlag2 )
+					for ( int iRule2 = 0; iRule2 < Affix.GetNumRules (); ++iRule2 )
+					{
+						CISpellAffixRule * pRule2 = Affix.GetRule ( iRule2 );
+						if ( !pRule2->IsCrossProduct () || pRule2->Flag() != pWord->m_sFlags.cstr()[iFlag2] ||
+							pRule2->IsPrefix () == pRule1->IsPrefix () )
+							continue;
+
+						sWordForCross = sWord;
+						if ( pRule2->Apply ( sWordForCross ) )
+							EmitResult ( tWordMap, sWordForCross, pWord->m_sWord, pRule1->Flag(), pRule2->Flag() );
+					}
+			}
 	}
+	printf ( "\rDictionary words processed: %d\n", nDone );
 
-	printf ( "\n" );
+	// output
+	
+	CSphVector<const char *> dKeys;
+	tWordMap.IterateStart();
+	while ( tWordMap.IterateNext() )
+		dKeys.Add ( tWordMap.IterateGetKey().cstr() );
+	dKeys.Sort ( WordLess() );
+	
+	ARRAY_FOREACH ( iKey, dKeys )
+ 	{
+ 		const CSphVector<MapInfo_t> & dWords = tWordMap[dKeys[iKey]];
+		const char * sKey = dKeys[iKey];
+		
+		switch ( eMode )
+		{
+			case M_LAST:
+				fprintf ( pFile, "%s > %s\n", sKey, dWords.Last().m_sWord.cstr() );
+				break;
 
-	fclose ( pResultFile );
+			case M_EXACT_OR_LONGEST:
+			{
+				DWORD iMatch, iLength = 0;
+				ARRAY_FOREACH ( i, dWords )
+					if ( dWords[i].m_sWord == sKey )
+					{
+						iMatch = i;
+						break;
+					}
+					else
+					{
+						DWORD iWordLength = strlen ( dWords[i].m_sWord.cstr() );
+						if ( iWordLength > iLength )
+						{
+							iLength = iWordLength;
+							iMatch = i;
+						}
+					}
+				
+				fprintf ( pFile, "%s > %s\n", sKey, dWords[iMatch].m_sWord.cstr() );
+				break;
+			}
+							
+			case M_DUPLICATES:
+				if ( dWords.GetLength() == 1 ) break;
+			case M_DEBUG:
+				ARRAY_FOREACH ( i, dWords )
+					fprintf ( pFile, "%s > %s %s/%d\n", sKey, dWords[i].m_sWord.cstr(),
+						dWords[i].m_sRules, dWords.GetLength() );
+				break;
+		}
+ 	}
+	
+	fclose ( pFile );
 
 	return 0;
 }

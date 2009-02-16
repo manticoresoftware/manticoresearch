@@ -3008,7 +3008,7 @@ int sphinx_showfunc_total ( THD * thd, SHOW_VAR * out, char * )
 	CSphSEStats * pStats = sphinx_get_stats ( thd, out );
 	if ( pStats )
 	{
-		out->type = SHOW_LONG;
+		out->type = SHOW_INT;
 		out->value = (char *) &pStats->m_iMatchesTotal;
 	}
 	return 0;
@@ -3019,7 +3019,7 @@ int sphinx_showfunc_total_found ( THD * thd, SHOW_VAR * out, char * )
 	CSphSEStats * pStats = sphinx_get_stats ( thd, out );
 	if ( pStats )
 	{
-		out->type = SHOW_LONG;
+		out->type = SHOW_INT;
 		out->value = (char *) &pStats->m_iMatchesFound;
 	}
 	return 0;
@@ -3030,7 +3030,7 @@ int sphinx_showfunc_time ( THD * thd, SHOW_VAR * out, char * )
 	CSphSEStats * pStats = sphinx_get_stats ( thd, out );
 	if ( pStats )
 	{
-		out->type = SHOW_LONG;
+		out->type = SHOW_INT;
 		out->value = (char *) &pStats->m_iQueryMsec;
 	}
 	return 0;
@@ -3041,7 +3041,7 @@ int sphinx_showfunc_word_count ( THD * thd, SHOW_VAR * out, char * )
 	CSphSEStats * pStats = sphinx_get_stats ( thd, out );
 	if ( pStats )
 	{
-		out->type = SHOW_LONG;
+		out->type = SHOW_INT;
 		out->value = (char *) &pStats->m_iWords;
 	}
 	return 0;

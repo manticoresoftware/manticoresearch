@@ -26,6 +26,7 @@
 %token	TOK_ID
 %token	TOK_MATCH
 %token	TOK_MAX
+%token	TOK_META
 %token	TOK_MIN
 %token	TOK_OPTION
 %token	TOK_ORDER
@@ -52,6 +53,7 @@ statement:
 	select_from
 	| show_warnings
 	| show_status
+	| show_meta
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -266,6 +268,10 @@ show_warnings:
 
 show_status:
 	TOK_SHOW TOK_STATUS			{ pParser->m_eStmt = STMT_SHOW_STATUS; }
+	;
+
+show_meta:
+	TOK_SHOW TOK_META			{ pParser->m_eStmt = STMT_SHOW_META; }
 	;
 
 %%

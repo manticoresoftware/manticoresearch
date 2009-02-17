@@ -39,6 +39,7 @@ SPACE				[ \t\n]
 "ID"				{ YYSTOREBOUNDS; return TOK_ID; }
 "MATCH"				{ YYSTOREBOUNDS; return TOK_MATCH; }
 "MAX"				{ YYSTOREBOUNDS; return TOK_MAX; }
+"META"				{ YYSTOREBOUNDS; return TOK_META; }
 "MIN"				{ YYSTOREBOUNDS; return TOK_MIN; }
 "OPTION"			{ YYSTOREBOUNDS; return TOK_OPTION; }
 "ORDER"				{ YYSTOREBOUNDS; return TOK_ORDER; }

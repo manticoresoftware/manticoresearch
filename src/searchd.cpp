@@ -4507,7 +4507,8 @@ enum SqlStmt_e
 	STMT_PARSE_ERROR,
 	STMT_SELECT,
 	STMT_SHOW_WARNINGS,
-	STMT_SHOW_STATUS
+	STMT_SHOW_STATUS,
+	STMT_SHOW_META
 };
 
 
@@ -5248,6 +5249,43 @@ void BuildStatus ( CSphVector<CSphString> & dStatus )
 }
 
 
+void BuildMeta ( CSphVector<CSphString> & dStatus, const CSphQueryResultMeta & tMeta )
+{
+	if ( !tMeta.m_sError.IsEmpty() )
+	{
+		dStatus.Add ( "error" );
+		dStatus.Add ( tMeta.m_sError );
+	}
+
+	if ( !tMeta.m_sWarning.IsEmpty() )
+	{
+		dStatus.Add ( "warning" );
+		dStatus.Add ( tMeta.m_sWarning );
+	}
+
+	dStatus.Add ( "total" );
+	dStatus.Add().SetSprintf ( "%d", tMeta.m_iMatches );
+
+	dStatus.Add ( "total_found" );
+	dStatus.Add().SetSprintf ( "%d", tMeta.m_iTotalMatches );
+
+	dStatus.Add ( "time" );
+	dStatus.Add().SetSprintf ( "%d.%03d", tMeta.m_iQueryTime/1000, tMeta.m_iQueryTime%1000 );
+
+	ARRAY_FOREACH ( i, tMeta.m_dWordStats )
+	{
+		dStatus.Add().SetSprintf ( "keyword[%d]", i );
+		dStatus.Add ( tMeta.m_dWordStats[i].m_sWord );
+
+		dStatus.Add().SetSprintf ( "docs[%d]", i );
+		dStatus.Add().SetSprintf ( "%d", tMeta.m_dWordStats[i].m_iDocs );
+
+		dStatus.Add().SetSprintf ( "hits[%d]", i );
+		dStatus.Add().SetSprintf ( "%d", tMeta.m_dWordStats[i].m_iHits );
+	}
+}
+
+
 void HandleCommandStatus ( int iSock, int iVer, InputBuffer_c & tReq )
 {
 	if ( !CheckCommandVersion ( iVer, VER_COMMAND_STATUS, tReq ) )
@@ -5517,7 +5555,12 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 
 	bool bAuthed = false;
 	BYTE uPacketID = 1;
-	CSphString sLastWarning;
+
+	CSphQueryResultMeta tLastMeta;
+	tLastMeta.m_iQueryTime = 0;
+	tLastMeta.m_iCpuTime = 0;
+	tLastMeta.m_iMatches = 0;
+	tLastMeta.m_iTotalMatches = 0;
 
 	for ( ;; )
 	{
@@ -5580,6 +5623,10 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 				continue;
 			}
 
+			// save meta for SHOW META
+			tLastMeta = *pRes;
+			tLastMeta.m_iMatches = pRes->m_dMatches.GetLength();
+
 			// result set header packet
 			tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
 			tOut.SendByte ( BYTE ( 2+pRes->m_tSchema.GetAttrsCount() ) ); // field count (id+weight+attrs)
@@ -5598,12 +5645,7 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 			}
 
 			// eof packet
-			BYTE iWarns = 0;
-			if ( !pRes->m_sWarning.IsEmpty() )
-			{
-				iWarns = 1;
-				sLastWarning = pRes->m_sWarning;
-			}
+			BYTE iWarns = ( !pRes->m_sWarning.IsEmpty() ) ? 1 : 0;
 			SendMysqlEofPacket ( tOut, uPacketID++, iWarns );
 
 			// rows
@@ -5683,7 +5725,7 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 
 		} else if ( eStmt==STMT_SHOW_WARNINGS )
 		{
-			if ( sLastWarning.IsEmpty() )
+			if ( tLastMeta.m_sWarning.IsEmpty() )
 			{
 				tOut.SendBytes ( sOK, sizeof(sOK)-1 );
 				continue;
@@ -5708,19 +5750,22 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 			char * p = sRowBuffer;
 			iLen = snprintf ( p+1, sRowMax-p, "warning" ); p[0] = BYTE(iLen); p += 1+iLen;
 			iLen = snprintf ( p+1, sRowMax-p, "%d", 1000 ); p[0] = BYTE(iLen); p += 1+iLen; // FIXME! proper code?
-			iLen = snprintf ( p+1, sRowMax-p, "%s", sLastWarning.cstr() ); p[0] = BYTE(iLen); p += 1+iLen;
+			iLen = snprintf ( p+1, sRowMax-p, "%s", tLastMeta.m_sWarning.cstr() ); p[0] = BYTE(iLen); p += 1+iLen;
 
 			tOut.SendLSBDword ( ((uPacketID++)<<24) + ( p-sRowBuffer ) );
 			tOut.SendBytes ( sRowBuffer, p-sRowBuffer );
 
 			// cleanup
 			SendMysqlEofPacket ( tOut, uPacketID++, 0 );
-			sLastWarning = "";
 
-		} else if ( eStmt==STMT_SHOW_STATUS )
+		} else if ( eStmt==STMT_SHOW_STATUS || eStmt==STMT_SHOW_META )
 		{
 			CSphVector<CSphString> dStatus;
-			BuildStatus ( dStatus );
+
+			if ( eStmt==STMT_SHOW_STATUS )
+				BuildStatus ( dStatus );
+			else
+				BuildMeta ( dStatus, tLastMeta );
 
 			// result set header packet
 			tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
@@ -5749,7 +5794,6 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 
 			// cleanup
 			SendMysqlEofPacket ( tOut, uPacketID++, 0 );
-			sLastWarning = "";
 
 		} else
 		{

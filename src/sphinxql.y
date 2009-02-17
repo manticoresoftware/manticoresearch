@@ -120,12 +120,30 @@ where_item:
 			tFilter.m_dValues.Add ( $3.m_iValue );
 			pParser->m_pQuery->m_dFilters.Add ( tFilter );
 		}
+	| TOK_IDENT TOK_NE TOK_CONST
+		{
+			CSphFilterSettings tFilter;
+			tFilter.m_sAttrName = $1.m_sValue;
+			tFilter.m_eType = SPH_FILTER_VALUES;
+			tFilter.m_dValues.Add ( $3.m_iValue );
+			tFilter.m_bExclude = true;
+			pParser->m_pQuery->m_dFilters.Add ( tFilter );
+		}
 	| TOK_IDENT TOK_IN '(' const_list ')'
 		{
 			CSphFilterSettings tFilter;
 			tFilter.m_sAttrName = $1.m_sValue;
 			tFilter.m_eType = SPH_FILTER_VALUES;
 			tFilter.m_dValues = $4.m_dValues;
+			pParser->m_pQuery->m_dFilters.Add ( tFilter );
+		}
+	| TOK_IDENT TOK_NOT TOK_IN '(' const_list ')'
+		{
+			CSphFilterSettings tFilter;
+			tFilter.m_sAttrName = $1.m_sValue;
+			tFilter.m_eType = SPH_FILTER_VALUES;
+			tFilter.m_dValues = $4.m_dValues;
+			tFilter.m_bExclude = true;
 			pParser->m_pQuery->m_dFilters.Add ( tFilter );
 		}
 	| TOK_IDENT TOK_BETWEEN TOK_CONST TOK_AND TOK_CONST
@@ -135,6 +153,42 @@ where_item:
 			tFilter.m_eType = SPH_FILTER_RANGE;
 			tFilter.m_uMinValue = $3.m_iValue;
 			tFilter.m_uMaxValue = $5.m_iValue;
+			pParser->m_pQuery->m_dFilters.Add ( tFilter );
+		}
+	| TOK_IDENT '>' TOK_CONST
+		{
+			CSphFilterSettings tFilter;
+			tFilter.m_sAttrName = $1.m_sValue;
+			tFilter.m_eType = SPH_FILTER_RANGE;
+			tFilter.m_uMinValue = $3.m_iValue + 1;
+			tFilter.m_uMaxValue = UINT_MAX;
+			pParser->m_pQuery->m_dFilters.Add ( tFilter );
+		}
+	| TOK_IDENT '<' TOK_CONST
+		{
+			CSphFilterSettings tFilter;
+			tFilter.m_sAttrName = $1.m_sValue;
+			tFilter.m_eType = SPH_FILTER_RANGE;
+			tFilter.m_uMinValue = 0;
+			tFilter.m_uMaxValue = $3.m_iValue - 1;
+			pParser->m_pQuery->m_dFilters.Add ( tFilter );
+		}
+	| TOK_IDENT TOK_GTE TOK_CONST
+		{
+			CSphFilterSettings tFilter;
+			tFilter.m_sAttrName = $1.m_sValue;
+			tFilter.m_eType = SPH_FILTER_RANGE;
+			tFilter.m_uMinValue = $3.m_iValue;
+			tFilter.m_uMaxValue = UINT_MAX;
+			pParser->m_pQuery->m_dFilters.Add ( tFilter );
+		}
+	| TOK_IDENT TOK_LTE TOK_CONST
+		{
+			CSphFilterSettings tFilter;
+			tFilter.m_sAttrName = $1.m_sValue;
+			tFilter.m_eType = SPH_FILTER_RANGE;
+			tFilter.m_uMinValue = 0;
+			tFilter.m_uMaxValue = $3.m_iValue;
 			pParser->m_pQuery->m_dFilters.Add ( tFilter );
 		}
 	;

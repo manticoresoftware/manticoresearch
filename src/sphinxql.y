@@ -18,7 +18,9 @@
 %token	TOK_AVG
 %token	TOK_BETWEEN
 %token	TOK_BY
+%token	TOK_COUNT
 %token	TOK_DESC
+%token	TOK_DISTINCT
 %token	TOK_FROM
 %token	TOK_GROUP
 %token	TOK_LIMIT
@@ -86,6 +88,18 @@ select_item:
 	| TOK_MIN '(' expr ')' TOK_AS TOK_IDENT		{ pParser->AddItem ( &$3, &$6, SPH_AGGR_MIN ); }
 	| TOK_SUM '(' expr ')' TOK_AS TOK_IDENT		{ pParser->AddItem ( &$3, &$6, SPH_AGGR_SUM ); }
 	| '*'										{ pParser->AddItem ( &$1, NULL ); }
+	| TOK_COUNT '(' TOK_DISTINCT TOK_IDENT ')'
+		{
+			if ( !pParser->m_pQuery->m_sGroupDistinct.IsEmpty() )
+			{
+				yyerror ( pParser, "too many COUNT(DISTINCT) clauses" );
+				YYERROR;
+
+			} else
+			{
+				pParser->m_pQuery->m_sGroupDistinct = $4.m_sValue;
+			}
+		}
 	;
 
 ident_list:
@@ -110,7 +124,16 @@ where_expr:
 where_item:
 	TOK_MATCH '(' TOK_QUOTED_STRING ')'
 		{
-			pParser->m_pQuery->m_sQuery = $3.m_sValue;
+			if ( pParser->m_bGotQuery )
+			{
+				yyerror ( pParser, "too many MATCH() clauses" );
+				YYERROR;
+
+			} else
+			{
+				pParser->m_pQuery->m_sQuery = $3.m_sValue;
+				pParser->m_bGotQuery = true;
+			}
 		}
 	| TOK_IDENT '=' TOK_CONST
 		{

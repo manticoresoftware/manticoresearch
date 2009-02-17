@@ -4532,6 +4532,7 @@ struct SqlParser_t
 	CSphString *	m_pParseError;
 	CSphQuery *		m_pQuery;
 	SqlStmt_e		m_eStmt;
+	bool			m_bGotQuery;
 
 	bool			AddOption ( SqlNode_t tIdent, SqlNode_t tValue );
 	void			AddItem ( YYSTYPE * pExpr, YYSTYPE * pAlias, ESphAggrFunc eFunc=SPH_AGGR_NONE );
@@ -4646,7 +4647,6 @@ void SqlParser_t::AddItem ( YYSTYPE * pExpr, YYSTYPE * pAlias, ESphAggrFunc eFun
 }
 
 
-
 SqlStmt_e ParseSqlQuery ( const CSphString & sQuery, CSphQuery & tQuery, CSphString & sError )
 {
 	SqlParser_t tParser;
@@ -4654,6 +4654,7 @@ SqlStmt_e ParseSqlQuery ( const CSphString & sQuery, CSphQuery & tQuery, CSphStr
 	tParser.m_pLastTokenStart = NULL;
 	tParser.m_pParseError = &sError;
 	tParser.m_pQuery = &tQuery;
+	tParser.m_bGotQuery = false;
 
 	tQuery.m_eMode = SPH_MATCH_EXTENDED2; // only new and shiny matching and sorting
 	tQuery.m_eSort = SPH_SORT_EXTENDED;

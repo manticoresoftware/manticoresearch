@@ -14715,6 +14715,57 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 			return NULL;
 	}
 
+	// preload checkpoints (must be done here as they are not shared)
+	assert ( m_iCheckpointsPos>0 );
+	CSphReader_VLN tCheckpointReader;
+	tCheckpointReader.SetFile ( tWordlist );
+	tCheckpointReader.SeekTo ( m_iCheckpointsPos, READ_NO_SIZE_HINT );
+
+	if ( m_uVersion>=14 )
+	{
+		// read v.14 checkpoints
+		ARRAY_FOREACH ( i, m_dWordlistCheckpoints )
+		{
+			m_dWordlistCheckpoints[i].m_iWordID = (SphWordID_t) tCheckpointReader.GetOffset();
+			m_dWordlistCheckpoints[i].m_iWordlistOffset = tCheckpointReader.GetOffset();
+		}
+	} else if ( m_uVersion>=11 )
+	{
+		// convert v.11 checkpoints
+		CSphWordlistCheckpoint tCheckpoint;
+		ARRAY_FOREACH ( i, m_dWordlistCheckpoints )
+		{
+			tCheckpointReader.GetBytes ( &tCheckpoint, sizeof ( tCheckpoint ) );
+			m_dWordlistCheckpoints[i] = tCheckpoint;
+		}
+	} else
+	{
+		// convert v.10 checkpoints
+		CSphWordlistCheckpoint_v10 tCheckpoint;
+		ARRAY_FOREACH ( i, m_dWordlistCheckpoints )
+		{
+			tCheckpointReader.GetBytes ( &tCheckpoint, sizeof ( tCheckpoint ) );
+			m_dWordlistCheckpoints[i].m_iWordID = tCheckpoint.m_iWordID;
+			m_dWordlistCheckpoints[i].m_iWordlistOffset = tCheckpoint.m_iWordlistOffset;
+		}
+	}
+
+	if ( tCheckpointReader.GetErrorFlag() )
+	{
+		m_sLastError.SetSprintf ( "failed to read %s: %s", GetIndexFileName("spi"), tCheckpointReader.GetErrorMessage().cstr () );
+		return NULL;
+	}
+
+	SphOffset_t uMaxChunk = 0;
+	ARRAY_FOREACH ( i, m_dWordlistCheckpoints )
+	{
+		SphOffset_t uNextOffset = ( i+1 )==m_dWordlistCheckpoints.GetLength()
+			? m_iWordlistSize
+			: m_dWordlistCheckpoints[i+1].m_iWordlistOffset;
+		uMaxChunk = Max ( uMaxChunk, uNextOffset - m_dWordlistCheckpoints[i].m_iWordlistOffset );
+	}
+	m_pWordlistChunkBuf = new BYTE [ (size_t)uMaxChunk ];
+
 	// all done
 	m_bPreallocated = true;
 	m_iIndexTag = ++m_iIndexTagSeq;
@@ -14774,62 +14825,6 @@ bool CSphIndex_VLN::Preread ()
 	if ( m_bPreloadWordlist )
 		if ( !PrereadSharedBuffer ( m_pWordlist, "spi" ) )
 			return false;
-
-	// preload checkpoints
-	assert ( m_iCheckpointsPos>0 );
-
-	CSphAutofile tWordlist;
-	if ( tWordlist.Open ( GetIndexFileName("spi"), SPH_O_READ, m_sLastError )<0 )
-		return false;
-
-	CSphReader_VLN tCheckpointReader;
-	tCheckpointReader.SetFile ( tWordlist );
-	tCheckpointReader.SeekTo ( m_iCheckpointsPos, READ_NO_SIZE_HINT );
-
-	if ( m_uVersion>=14 )
-	{
-		// read v.14 checkpoints
-		ARRAY_FOREACH ( i, m_dWordlistCheckpoints )
-		{
-			m_dWordlistCheckpoints[i].m_iWordID = (SphWordID_t) tCheckpointReader.GetOffset();
-			m_dWordlistCheckpoints[i].m_iWordlistOffset = tCheckpointReader.GetOffset();
-		}
-	} else if ( m_uVersion>=11 )
-	{
-		// convert v.11 checkpoints
-		CSphWordlistCheckpoint tCheckpoint;
-		ARRAY_FOREACH ( i, m_dWordlistCheckpoints )
-		{
-			tCheckpointReader.GetBytes ( &tCheckpoint, sizeof ( tCheckpoint ) );
-			m_dWordlistCheckpoints[i] = tCheckpoint;
-		}
-	} else
-	{
-		// convert v.10 checkpoints
-		CSphWordlistCheckpoint_v10 tCheckpoint;
-		ARRAY_FOREACH ( i, m_dWordlistCheckpoints )
-		{
-			tCheckpointReader.GetBytes ( &tCheckpoint, sizeof ( tCheckpoint ) );
-			m_dWordlistCheckpoints[i].m_iWordID = tCheckpoint.m_iWordID;
-			m_dWordlistCheckpoints[i].m_iWordlistOffset = tCheckpoint.m_iWordlistOffset;
-		}
-	}
-
-	if ( tCheckpointReader.GetErrorFlag() )
-	{
-		m_sLastError.SetSprintf ( "failed to read %s: %s", GetIndexFileName("spi"), tCheckpointReader.GetErrorMessage().cstr () );
-		return false;
-	}
-
-	SphOffset_t uMaxChunk = 0;
-	ARRAY_FOREACH ( i, m_dWordlistCheckpoints )
-	{
-		SphOffset_t uNextOffset = ( i+1 )==m_dWordlistCheckpoints.GetLength()
-			? m_iWordlistSize
-			: m_dWordlistCheckpoints[i+1].m_iWordlistOffset;
-		uMaxChunk = Max ( uMaxChunk, uNextOffset - m_dWordlistCheckpoints[i].m_iWordlistOffset );
-	}
-	m_pWordlistChunkBuf = new BYTE [ (size_t)uMaxChunk ];
 
 	//////////////////////
 	// precalc everything

@@ -72,12 +72,14 @@ $results[] = query ( $client, 'one' );
 
 mysql_query ( 'update test_table set mode = 3 where id = 1000' );
 RunIndexer ( $errors, '--all --rotate' );
+sleep(2);
 
 $results[] = query ( $client, 'first' );
 $results[] = query ( $client, 'one' );
 
 mysql_query ( 'update test_table set mode = 2 where id = 1000' );
 RunIndexer ( $errors, '--all --rotate' );
+sleep(2);
 
 $results[] = query ( $client, 'first' );
 $results[] = query ( $client, 'one' );

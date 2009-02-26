@@ -10687,6 +10687,7 @@ protected:
 	ExtDoc_t					m_dMyDocs[MAX_DOCS];		///< all documents within the required pos range
 	ExtHit_t					m_dMyHits[MAX_HITS];		///< all hits within the required pos range
 	ExtHit_t					m_dFilteredHits[MAX_HITS];	///< hits from requested subset of the documents (for GetHitsChunk())
+	SphDocID_t					m_uDoneFor;
 };
 
 
@@ -11560,7 +11561,7 @@ const ExtDoc_t * ExtTermPos_c<T>::GetDocsChunk ( SphDocID_t * pMaxID )
 	m_dMyHits[iMyHit].m_uDocid = DOCID_MAX;
 	m_eState = COPY_FILTERED;
 
-	m_uMaxID = iMyDoc ? m_dDocs[iMyDoc-1].m_uDocid : 0;
+	m_uMaxID = iMyDoc ? m_dMyDocs[iMyDoc-1].m_uDocid : 0;
 	if ( pMaxID ) *pMaxID = m_uMaxID;
 
 	return iMyDoc ? m_dMyDocs : NULL;
@@ -11571,7 +11572,16 @@ template < TermPosFilter_e T >
 const ExtHit_t * ExtTermPos_c<T>::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t ) // OPTIMIZE: could possibly use uMaxID
 {
 	if ( m_eState==COPY_DONE )
-		return NULL;
+	{
+		// this request completed in full
+		if ( m_uDoneFor==pDocs->m_uDocid )
+			return NULL;
+
+		// old request completed in full, but we have a new hits subchunk request now
+		// even though there were no new docs requests in the meantime!
+		m_uDoneFor = pDocs->m_uDocid;
+		m_eState = COPY_FILTERED;
+	}
 
 	// regular case
 	// copy hits for requested docs from my hits to filtered hits, and return those

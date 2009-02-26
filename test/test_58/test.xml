@@ -24,7 +24,7 @@ index index
 }
 </config>
 
-<db_drop>drop table test_table</db_drop>
+<db_drop>drop table if exists test_table</db_drop>
 
 <db_create>
 create table test_table

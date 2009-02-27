@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6" />
+	<Project>
+		<Option title="libsphinx" />
+		<Option pch_mode="2" />
+		<Option compiler="gcc" />
+		<Build>
+			<Target title="Debug">
+				<Option output="./bin/Debug/libsphinx" prefix_auto="1" extension_auto="1" />
+				<Option working_dir="" />
+				<Option object_output="./junk/Debug" />
+				<Option type="2" />
+				<Option compiler="gcc" />
+				<Option createDefFile="1" />
+				<Compiler>
+					<Add option="-Wall" />
+					<Add option="-g" />
+					<Add option="-O0" />
+					<Add option="-D_DEBUG" />
+					<Add option="-D_LIB" />
+					<Add option="-DHAVE_LOGF" />
+					<Add directory="./libstemmer_c/include" />
+					<Add directory="./libexpat/lib" />
+				</Compiler>
+				<ResourceCompiler>
+					<Add directory="./libstemmer_c/include" />
+					<Add directory="./libexpat/lib" />
+				</ResourceCompiler>
+			</Target>
+			<Target title="Release">
+				<Option output="./bin/Release/libsphinx" prefix_auto="1" extension_auto="1" />
+				<Option working_dir="" />
+				<Option object_output="./junk/Release" />
+				<Option type="2" />
+				<Option compiler="gcc" />
+				<Option createDefFile="1" />
+				<Compiler>
+					<Add option="-Wall" />
+					<Add option="-DNDEBUG" />
+					<Add option="-D_LIB" />
+					<Add option="-DHAVE_LOGF" />
+					<Add directory="./libstemmer_c/include" />
+					<Add directory="./libexpat/lib" />
+				</Compiler>
+				<ResourceCompiler>
+					<Add directory="./libstemmer_c/include" />
+					<Add directory="./libexpat/lib" />
+				</ResourceCompiler>
+				<Linker>
+					<Add option="-s" />
+				</Linker>
+			</Target>
+		</Build>
+		<Compiler>
+			<Add option="-D_FILE_OFFSET_BITS=64" />
+		</Compiler>
+		<ExtraCommands>
+			<Add before="../src/svnxrev.sh .." />
+		</ExtraCommands>
+		<Unit filename="../src/sphinx.cpp" />
+		<Unit filename="../src/sphinx.h" />
+		<Unit filename="../src/sphinxexcerpt.cpp" />
+		<Unit filename="../src/sphinxexcerpt.h" />
+		<Unit filename="../src/sphinxexpr.cpp" />
+		<Unit filename="../src/sphinxexpr.h" />
+		<Unit filename="../src/sphinxfilter.cpp" />
+		<Unit filename="../src/sphinxmetaphone.cpp" />
+		<Unit filename="../src/sphinxquery.cpp" />
+		<Unit filename="../src/sphinxquery.h" />
+		<Unit filename="../src/sphinxsort.cpp" />
+		<Unit filename="../src/sphinxsoundex.cpp" />
+		<Unit filename="../src/sphinxstd.cpp" />
+		<Unit filename="../src/sphinxstd.h" />
+		<Unit filename="../src/sphinxstem.h" />
+		<Unit filename="../src/sphinxstemcz.cpp" />
+		<Unit filename="../src/sphinxstemen.cpp" />
+		<Unit filename="../src/sphinxstemru.cpp" />
+		<Unit filename="../src/sphinxtimers.h" />
+		<Unit filename="../src/sphinxutils.cpp" />
+		<Unit filename="../src/sphinxutils.h" />
+		<Extensions>
+			<AutoVersioning>
+				<Scheme minor_max="10" build_max="0" rev_max="0" rev_rand_max="10" build_times_to_increment_minor="100" />
+				<Settings autoincrement="1" date_declarations="1" do_auto_increment="0" ask_to_increment="0" language="C++" svn="0" svn_directory="" header_path="version.h" />
+				<Changes_Log show_changes_editor="0" app_title="released version %M.%m.%b of %p" changeslog_path="ChangesLog.txt" />
+			</AutoVersioning>
+			<envvars />
+			<code_completion />
+			<debugger />
+			<lib_finder disable_auto="1" />
+		</Extensions>
+	</Project>
+</CodeBlocks_project_file>

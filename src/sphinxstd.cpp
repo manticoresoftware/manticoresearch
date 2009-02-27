@@ -362,7 +362,7 @@ void sphAutoSrand ()
 #endif
 
 	// twist and shout
-	sphSrand ( sphRand() ^ DWORD(tv.tv_sec) ^ DWORD(tv.tv_usec) + DWORD(getpid()) );
+	sphSrand ( sphRand() ^ DWORD(tv.tv_sec) ^ (DWORD(tv.tv_usec) + DWORD(getpid())) );
 }
 
 

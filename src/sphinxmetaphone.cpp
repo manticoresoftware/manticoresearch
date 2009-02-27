@@ -327,7 +327,7 @@ static int ProcessCode ( int iCode, int iCur, CurrentWord_t & Word, BYTE * sPrim
 			}
 
 			// Parker's rule (with some further refinements) - e.g., 'hugh'
-			if ( ( iCur > 1 && StrAt ( Word, iCur - 2, 1, "B", "H", "D" ) )	
+			if ( ( iCur > 1 && StrAt ( Word, iCur - 2, 1, "B", "H", "D" ) )
 				|| ( iCur > 2 && StrAt ( Word, iCur - 3, 1, "B", "H", "D" ) ) // e.g., 'bough'
 				|| ( iCur > 3 && StrAt ( Word, iCur - 4, 1, "B", "H" ) ) ) // e.g., 'broughton'
 				return 2;
@@ -400,14 +400,14 @@ static int ProcessCode ( int iCode, int iCur, CurrentWord_t & Word, BYTE * sPrim
 	case 'J':
 		// obvious spanish, 'jose', 'san jacinto'
 		if ( StrAt ( Word, iCur, 4, "JOSE" ) || StrAt ( Word, 0, 4, "SAN " ) )
-		{	
+		{
 			if ( ( iCur == 0 && pWord [iCur + 4] == ' ' ) || StrAt ( Word, 0, 4, "SAN " ) )
 				ADD_RET ( "H", "H", 1 )
 			else
 				ADD_RET ( "J", "H", 1 )
 		}
 
-		if ( iCur == 0 && !StrAt ( Word, iCur, 4, "JOSE" ) ) 
+		if ( iCur == 0 && !StrAt ( Word, iCur, 4, "JOSE" ) )
 			ADD ( "J", "A" );	// Yankelovich/Jankelowicz
 		else
 		{
@@ -419,7 +419,7 @@ static int ProcessCode ( int iCode, int iCur, CurrentWord_t & Word, BYTE * sPrim
 				if ( iCur == iLast )
 					ADD ( "J", "" );
 				else
-					if ( !StrAt ( Word, iCur + 1, 1, "L", "T", "K", "S" ) && ! StrAt ( Word, iCur + 1, 1, "N", "M", "B", "Z" ) && !StrAt ( Word, iCur - 1, 1, "S", "K", "L" ) ) 
+					if ( !StrAt ( Word, iCur + 1, 1, "L", "T", "K", "S" ) && ! StrAt ( Word, iCur + 1, 1, "N", "M", "B", "Z" ) && !StrAt ( Word, iCur - 1, 1, "S", "K", "L" ) )
 						ADD ( "J", "J" );
 			}
 		}
@@ -508,7 +508,7 @@ static int ProcessCode ( int iCode, int iCur, CurrentWord_t & Word, BYTE * sPrim
 				ADD_RET ( "S", "S", 3 )
 		}
 
-		// german & anglicisations, e.g. 'smith' match 'schmidt', 'snider' match 'schneider' 
+		// german & anglicisations, e.g. 'smith' match 'schmidt', 'snider' match 'schneider'
 		// also, -sz- in slavic language altho in hungarian it is pronounced 's'
 		if ( ( iCur == 0 && StrAt ( Word, iCur + 1, 1, "M", "N", "L", "W" ) ) || StrAt ( Word, iCur + 1, 1, "Z" ) )
 			ADD_RET ( "S", "X", StrAt ( Word, iCur + 1, 1, "Z" ) ? 2 : 1 )
@@ -517,6 +517,7 @@ static int ProcessCode ( int iCode, int iCur, CurrentWord_t & Word, BYTE * sPrim
 		{
 			// Schlesinger's rule
 			if ( pWord [iCur + 2] == 'H' )
+			{
 				if ( StrAt ( Word, iCur + 3, 2, "OO", "ER", "EN", "UY" )
 					|| StrAt ( Word, iCur + 3, 2, "ED", "EM" ) ) // dutch origin, e.g. 'school', 'schooner'
 				{
@@ -533,12 +534,13 @@ static int ProcessCode ( int iCode, int iCur, CurrentWord_t & Word, BYTE * sPrim
 					else
 						ADD_RET ( "X", "X", 3 )
 				}
+			}
 
-				if ( StrAt ( Word, iCur + 2, 1, "I", "E", "Y" ) )
-					ADD_RET ( "S", "S", 3 )
+			if ( StrAt ( Word, iCur + 2, 1, "I", "E", "Y" ) )
+				ADD_RET ( "S", "S", 3 )
 
-				// else
-				ADD_RET ( "SK", "SK", 3 )
+			// else
+			ADD_RET ( "SK", "SK", 3 )
 		}
 
 		// french e.g. 'resnais', 'artois'

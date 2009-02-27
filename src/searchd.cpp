@@ -897,7 +897,7 @@ void HandleCrash ( int )
 
 	if ( !g_pCrashLog_LastQuery )
 		return;
-	
+
 	snprintf ( sBuffer, sizeof(sBuffer), "%s.%d", g_sCrashLog_Path, getpid() );
 	if ( ( iFd = open ( sBuffer, O_WRONLY | O_CREAT | O_TRUNC, 0644 ) ) != -1 )
 	{
@@ -1099,11 +1099,11 @@ int sphCreateUnixSocket ( const char * sPath )
 		sphFatal ( "UNIX socket path is too long (len=%d)", len );
 
 	sphInfo ( "listening on UNIX socket %s", sPath );
-	
+
 	memset ( &uaddr, 0, sizeof(uaddr) );
 	uaddr.sun_family = AF_UNIX;
 	memcpy ( uaddr.sun_path, sPath, len + 1 );
-	
+
 	int iSock = socket ( AF_UNIX, SOCK_STREAM, 0 );
 	if ( iSock == -1 )
 		sphFatal ( "failed to create UNIX socket: %s", sphSockError() );
@@ -1113,7 +1113,7 @@ int sphCreateUnixSocket ( const char * sPath )
 		if ( errno != ENOENT )
 			sphFatal ( "unlink() on UNIX socket file failed: %s", sphSockError() );
 	}
-	
+
 	if ( bind ( iSock, (struct sockaddr *)&uaddr, sizeof(uaddr) ) != 0 )
 		sphFatal ( "bind() on UNIX socket failed: %s", sphSockError() );
 
@@ -1126,12 +1126,12 @@ int sphCreateInetSocket ( DWORD uAddr, int iPort )
 {
 	char sAddress[SPH_ADDRESS_SIZE];
 	sphFormatIP( sAddress, SPH_ADDRESS_SIZE, uAddr );
-		
+
 	if ( uAddr == htonl(INADDR_ANY) )
 		sphInfo ( "listening on all interfaces, port=%d", iPort );
 	else
 		sphInfo ( "listening on %s:%d", sAddress, iPort );
-	
+
 	static struct sockaddr_in iaddr;
 	memset ( &iaddr, 0, sizeof(iaddr) );
 	iaddr.sin_family = AF_INET;
@@ -1181,7 +1181,7 @@ ProtocolType_e ProtoByName ( const CSphString & sProto )
 {
 	if ( sProto=="sphinx" )			return PROTO_SPHINX;
 	else if ( sProto=="mysql41" )	return PROTO_MYSQL41;
-	
+
 	sphFatal ( "unknown listen protocol type '%s'", sProto.cstr() ? sProto.cstr() : "(NULL)" );
 	return PROTO_SPHINX; // fix MSVC warning
 }
@@ -2045,11 +2045,11 @@ void ConnectToRemoteAgents ( CSphVector<Agent_t> & dAgents, bool bRetryOnly )
 		else if ( ss.ss_family == AF_UNIX )
 		{
 			struct sockaddr_un *un = (struct sockaddr_un *)&ss;
-			snprintf ( un->sun_path, sizeof(un->sun_path), tAgent.m_sPath.cstr() );
+			snprintf ( un->sun_path, sizeof(un->sun_path), "%s", tAgent.m_sPath.cstr() );
 			len = sizeof(*un);
 		}
 		#endif
-			
+
 		tAgent.m_iSock = socket ( tAgent.m_iFamily, SOCK_STREAM, 0 );
 		if ( tAgent.m_iSock<0 )
 		{
@@ -2402,7 +2402,7 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, IReplyPar
 					// all is well
 					iAgents++;
 					tAgent.Close ();
-				
+
 					tAgent.m_bSuccess = true;
 				}
 
@@ -2822,7 +2822,7 @@ bool FixupQuery ( CSphQuery * pQuery, const CSphSchema * pSchema, const char * s
 	if ( pQuery->m_iOldGroups>0 || pQuery->m_iOldMinGID!=0 || pQuery->m_iOldMaxGID!=UINT_MAX )
 	{
 		int iAttr = -1;
-		for ( int i=0; i<pSchema->GetAttrsCount(); i++ ) 
+		for ( int i=0; i<pSchema->GetAttrsCount(); i++ )
 			if ( pSchema->GetAttr(i).m_eAttrType==SPH_ATTR_INTEGER )
 		{
 			iAttr = i;
@@ -2848,7 +2848,7 @@ bool FixupQuery ( CSphQuery * pQuery, const CSphSchema * pSchema, const char * s
 	if ( pQuery->m_iOldMinTS!=0 || pQuery->m_iOldMaxTS!=UINT_MAX )
 	{
 		int iAttr = -1;
-		for ( int i=0; i<pSchema->GetAttrsCount(); i++ ) 
+		for ( int i=0; i<pSchema->GetAttrsCount(); i++ )
 			if ( pSchema->GetAttr(i).m_eAttrType==SPH_ATTR_TIMESTAMP )
 		{
 			iAttr = i;
@@ -3111,7 +3111,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 				tQuery.m_sGroupSortBy = sBuf;
 				break;
 
-			case SPH_SORT_EXTENDED:	
+			case SPH_SORT_EXTENDED:
 				tQuery.m_sGroupSortBy = tQuery.m_sSortBy;
 				break;
 
@@ -3316,7 +3316,7 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 
 		if ( !pRes->m_sError.IsEmpty() )
 			return iRespLen + 4 +strlen ( pRes->m_sError.cstr() );
-			
+
 		if ( !pRes->m_sWarning.IsEmpty() )
 			iRespLen += 4+strlen ( pRes->m_sWarning.cstr() );
 
@@ -3331,7 +3331,7 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 	iRespLen += 20;
 
 	// schema
-	if ( iVer>=0x102 ) 
+	if ( iVer>=0x102 )
 	{
 		iRespLen += 8; // 4 for field count, 4 for attr count
 		ARRAY_FOREACH ( i, pRes->m_tSchema.m_dFields )
@@ -3613,7 +3613,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery )
 
 		ARRAY_FOREACH ( iSchema, tRes.m_dSchemas )
 		{
-			for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); i++ ) 
+			for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); i++ )
 			{
 				dMapFrom[i] = tRes.m_dSchemas[iSchema].GetAttrIndex ( tRes.m_tSchema.GetAttr(i).m_sName.cstr() );
 				assert ( dMapFrom[i]>=0 );
@@ -3626,7 +3626,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery )
 				if ( tRow.m_iRowitems )
 				{
 					// remap attrs
-					for ( int j=0; j<tRes.m_tSchema.GetAttrsCount(); j++ ) 
+					for ( int j=0; j<tRes.m_tSchema.GetAttrsCount(); j++ )
 					{
 						const CSphColumnInfo & tDst = tRes.m_tSchema.GetAttr(j);
 						const CSphColumnInfo & tSrc = tRes.m_dSchemas[iSchema].GetAttr ( dMapFrom[j] );
@@ -4546,7 +4546,7 @@ void SqlUnescape ( CSphString & sRes, const char * sEscaped, int iLen )
 	assert ( sEscaped[iLen-1]=='\'' );
 
 	// skip heading and trailing quotes
-	const char * s = sEscaped+1; 
+	const char * s = sEscaped+1;
 	const char * sMax = s+iLen-2;
 
 	sRes.Reserve ( iLen );
@@ -5351,7 +5351,7 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD )
 	do
 	{
 		g_pCrashLog_LastQuery = NULL;
-		
+
 		tBuf.ReadFrom ( 8, iTimeout );
 		int iCommand = tBuf.GetWord ();
 		int iCommandVer = tBuf.GetWord ();
@@ -5419,7 +5419,7 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD )
 			default:						assert ( 0 && "INTERNAL ERROR: unhandled command" ); break;
 		}
 	} while ( bPersist );
-	SafeClose ( iPipeFD ); 
+	SafeClose ( iPipeFD );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -5976,7 +5976,7 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 			else
 				SafeDelete ( pDictionary );
 		}
-	
+
 		return bPreread;
 	}
 	else
@@ -6150,7 +6150,7 @@ void SeamlessTryToForkPrereader ()
 		g_pPrereading = sphCreateIndexPhrase ( NULL ); // FIXME! check if it's ok
 
 	g_pPrereading->SetStar ( tServed.m_bStar );
-	g_pPrereading->SetPreopen ( tServed.m_bPreopen || g_bPreopenIndexes ); 
+	g_pPrereading->SetPreopen ( tServed.m_bPreopen || g_bPreopenIndexes );
 	g_pPrereading->SetWordlistPreload ( !tServed.m_bOnDiskDict && !g_bOnDiskDicts );
 
 	// rebase buffer index
@@ -6288,7 +6288,7 @@ protected:
 	{
 		if ( m_bError )
 			return false;
-		
+
 		if ( m_iFD<0 )
 		{
 			m_bError = true;
@@ -6828,7 +6828,7 @@ void ReloadIndexSettings ( CSphConfigParser * pCP )
 	g_hDistIndexes.IterateStart ();
 	while ( g_hDistIndexes.IterateNext () )
 		g_hDistIndexes.IterateGet ().m_bToDelete = true;
-	
+
 	if ( !pCP->Parse ( g_sConfigFile.cstr () ) )
 		sphWarning ( "failed to parse config file '%s'", g_sConfigFile.cstr () );
 
@@ -6973,7 +6973,7 @@ void CheckRotate ()
 						sphWarning ( "index '%s': %s - NOT SERVING", sIndex, sError.cstr() );
 						tIndex.m_bEnabled = false;
 					}
-				}		
+				}
 			}
 		}
 
@@ -7198,7 +7198,7 @@ SC_HANDLE ServiceOpenManager ()
 {
 	SC_HANDLE hSCM = OpenSCManager (
 		NULL,					// local computer
-		NULL,					// ServicesActive database 
+		NULL,					// ServicesActive database
 		SC_MANAGER_ALL_ACCESS );// full access rights
 
 	if ( hSCM==NULL )
@@ -7240,28 +7240,28 @@ void ServiceInstall ( int argc, char ** argv )
 
 	SC_HANDLE hSCM = ServiceOpenManager ();
 	SC_HANDLE hService = CreateService (
-		hSCM,							// SCM database 
-		g_sServiceName,					// name of service 
-		g_sServiceName,					// service name to display 
-		SERVICE_ALL_ACCESS,				// desired access 
-		SERVICE_WIN32_OWN_PROCESS,		// service type 
-		SERVICE_AUTO_START,				// start type 
-		SERVICE_ERROR_NORMAL,			// error control type 
-		szPath,							// path to service's binary 
-		NULL,							// no load ordering group 
-		NULL,							// no tag identifier 
-		NULL,							// no dependencies 
-		NULL,							// LocalSystem account 
-		NULL );							// no password 
+		hSCM,							// SCM database
+		g_sServiceName,					// name of service
+		g_sServiceName,					// service name to display
+		SERVICE_ALL_ACCESS,				// desired access
+		SERVICE_WIN32_OWN_PROCESS,		// service type
+		SERVICE_AUTO_START,				// start type
+		SERVICE_ERROR_NORMAL,			// error control type
+		szPath,							// path to service's binary
+		NULL,							// no load ordering group
+		NULL,							// no tag identifier
+		NULL,							// no dependencies
+		NULL,							// LocalSystem account
+		NULL );							// no password
 
-	if ( !hService ) 
+	if ( !hService )
 	{
 		CloseServiceHandle ( hSCM );
 		sphFatal ( "CreateService() failed: %s", WinErrorInfo() );
 
 	} else
 	{
-		sphInfo ( "Service '%s' installed succesfully.", g_sServiceName ); 
+		sphInfo ( "Service '%s' installed succesfully.", g_sServiceName );
 	}
 
 	CSphString sDesc;
@@ -7272,7 +7272,7 @@ void ServiceInstall ( int argc, char ** argv )
 	if ( !ChangeServiceConfig2 ( hService, SERVICE_CONFIG_DESCRIPTION, &tDesc ) )
 		sphWarning ( "failed to set service description" );
 
-	CloseServiceHandle ( hService ); 
+	CloseServiceHandle ( hService );
 	CloseServiceHandle ( hSCM );
 }
 
@@ -7290,7 +7290,7 @@ void ServiceDelete ()
 	// open service
 	SC_HANDLE hService = OpenService ( hSCM, g_sServiceName, DELETE );
 	if ( !hService )
-	{ 
+	{
 		CloseServiceHandle ( hSCM );
 		sphFatal ( "OpenService() failed: %s", WinErrorInfo() );
 	}
@@ -7300,10 +7300,10 @@ void ServiceDelete ()
 	CloseServiceHandle ( hService );
 	CloseServiceHandle ( hSCM );
 
-	if ( !bRes ) 
+	if ( !bRes )
 		sphFatal ( "DeleteService() failed: %s", WinErrorInfo() );
 	else
-		sphInfo ( "Service '%s' deleted succesfully.", g_sServiceName ); 
+		sphInfo ( "Service '%s' deleted succesfully.", g_sServiceName );
 
 }
 #endif // USE_WINDOWS
@@ -7421,7 +7421,7 @@ void CheckSignals ()
 		}
 
 		DisconnectNamedPipe ( g_hPipe );
-		ConnectNamedPipe ( g_hPipe, NULL ); 
+		ConnectNamedPipe ( g_hPipe, NULL );
 	}
 #endif
 }
@@ -7456,7 +7456,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	char szPipeName [64];
 	sprintf ( szPipeName, "\\\\.\\pipe\\searchd_%d", getpid() );
 	g_hPipe = CreateNamedPipe ( szPipeName, PIPE_ACCESS_INBOUND, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_NOWAIT, PIPE_UNLIMITED_INSTANCES, 0, WIN32_PIPE_BUFSIZE, NMPWAIT_NOWAIT, NULL );
-	ConnectNamedPipe ( g_hPipe, NULL ); 
+	ConnectNamedPipe ( g_hPipe, NULL );
 #endif
 
 	if ( !g_bService )
@@ -7470,10 +7470,10 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	bool			bOptStop		= false;
 	bool			bOptPIDFile		= false;
 	const char *	sOptIndex		= NULL;
-	
+
 	int				iOptPort		= 0;
 	bool			bOptPort		= false;
-	
+
 	CSphString		sOptListen;
 	bool			bOptListen		= false;
 
@@ -7627,28 +7627,28 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 		HANDLE hPipe = INVALID_HANDLE_VALUE;
 
-		while ( hPipe == INVALID_HANDLE_VALUE ) 
-		{ 
+		while ( hPipe == INVALID_HANDLE_VALUE )
+		{
 			hPipe = CreateFile ( szPipeName, GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL );
 
-			if ( hPipe == INVALID_HANDLE_VALUE ) 
+			if ( hPipe == INVALID_HANDLE_VALUE )
 			{
-				if ( GetLastError () != ERROR_PIPE_BUSY ) 
+				if ( GetLastError () != ERROR_PIPE_BUSY )
 				{
 					fprintf ( stdout, "WARNING: could not open pipe (GetLastError()=%d)\n", GetLastError () );
 					break;
 				}
 
-				if ( !WaitNamedPipe ( szPipeName, 1000 ) ) 
-				{ 
+				if ( !WaitNamedPipe ( szPipeName, 1000 ) )
+				{
 					fprintf ( stdout, "WARNING: could not open pipe (GetLastError()=%d)\n", GetLastError () );
 					break;
-				} 
+				}
 			}
-		} 
+		}
 
 		if ( hPipe != INVALID_HANDLE_VALUE )
-		{	
+		{
 			DWORD uWritten = 0;
 			BYTE uWrite = 1;
 			BOOL bResult = WriteFile ( hPipe, &uWrite, 1, &uWritten, NULL );
@@ -7664,7 +7664,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		{
 			sphInfo ( "stop: succesfully terminated pid %d", iPid );
 			exit ( 0 );
-		}			
+		}
 		else
 			sphFatal ( "stop: error terminating pid %d", iPid );
 #else
@@ -7808,12 +7808,12 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		tListener.m_iSock = sphCreateInetSocket ( htonl(INADDR_ANY), iOptPort );
 		g_dListeners.Add ( tListener );
 
-	} else 
+	} else
 	{
 		// listen directives in configuration file
 		for ( CSphVariant * v = hSearchd("listen"); v; v = v->m_pNext )
 			AddListener ( *v );
-		
+
 		// handle deprecated directives
 		if ( hSearchd("port") )
 		{
@@ -7826,7 +7826,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			tListener.m_iSock = sphCreateInetSocket ( uAddr, iPort );
 			g_dListeners.Add ( tListener);
 		}
-		
+
 		// still nothing? listen on INADDR_ANY, default port
 		if ( !g_dListeners.GetLength() )
 		{
@@ -8102,7 +8102,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			int iErrno = sphSockGetErrno();
 			if ( iErrno == EINTR || iErrno == EAGAIN || iErrno == EWOULDBLOCK )
 				continue;
-			
+
 			static int iLastErrno = -1;
 			if ( iLastErrno != iErrno )
 				sphWarning ( "select() failed: %s", sphSockError(iErrno) );
@@ -8129,13 +8129,13 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			}
 			if ( g_pStats )
 				g_pStats->m_iConnections++;
-			
+
 			if ( ( g_iMaxChildren && g_iChildren>=g_iMaxChildren )
 				 || ( g_bDoRotate && !g_bSeamlessRotate ) )
 			{
 				const char * sMessage = "server maxed out, retry in a second";
 				int iRespLen = 4 + strlen(sMessage);
-				
+
 				NetOutputBuffer_c tOut ( iClientSock );
 				tOut.SendInt ( SPHINX_SEARCHD_PROTO );
 				tOut.SendWord ( SEARCHD_RETRY );
@@ -8143,7 +8143,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 				tOut.SendInt ( iRespLen );
 				tOut.SendString ( sMessage );
 				tOut.Flush ();
-				
+
 				sphWarning ( "maxed out, dismissing client" );
 				sphSockClose ( iClientSock );
 

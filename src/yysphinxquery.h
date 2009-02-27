@@ -50,7 +50,7 @@ typedef union YYSTYPE {
 	struct
 	{
 		int			iValue;
-		bool		bKeyword;
+		int			iStrIndex;
 	} tInt;
 	struct							// field spec
 	{

@@ -95,7 +95,7 @@ typedef union YYSTYPE {
 	struct
 	{
 		int			iValue;
-		bool		bKeyword;
+		int			iStrIndex;
 	} tInt;
 	struct							// field spec
 	{
@@ -1043,7 +1043,7 @@ yyreduce:
 
   case 4:
 
-    { yyval.pNode = pParser->AddKeywordFromInt ( yyvsp[0].tInt.iValue, yyvsp[0].tInt.bKeyword ); ;}
+    { yyval.pNode = pParser->AddKeyword ( ( yyvsp[0].tInt.iStrIndex>=0 ) ? pParser->m_dIntTokens[yyvsp[0].tInt.iStrIndex].cstr() : NULL ); ;}
     break;
 
   case 6:

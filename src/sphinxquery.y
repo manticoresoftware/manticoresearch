@@ -14,7 +14,7 @@
 	struct
 	{
 		int			iValue;
-		bool		bKeyword;
+		int			iStrIndex;
 	} tInt;
 	struct							// field spec
 	{
@@ -46,7 +46,7 @@ query:
 
 rawkeyword:
 	TOK_KEYWORD							{ $$ = $1; }
-	| TOK_INT							{ $$ = pParser->AddKeywordFromInt ( $1.iValue, $1.bKeyword ); }
+	| TOK_INT							{ $$ = pParser->AddKeyword ( ( $1.iStrIndex>=0 ) ? pParser->m_dIntTokens[$1.iStrIndex].cstr() : NULL ); }
 	;
 
 keyword:

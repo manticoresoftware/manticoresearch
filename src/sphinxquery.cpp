@@ -35,7 +35,6 @@ public:
 
 	void			AddQuery ( XQNode_t * pNode );
 	XQNode_t *		AddKeyword ( const char * sKeyword );
-	XQNode_t *		AddKeywordFromInt ( int iValue, bool bKeyword );
 	XQNode_t *		AddKeyword ( XQNode_t * pLeft, XQNode_t * pRight );
 	XQNode_t *		AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pRight );
 
@@ -67,6 +66,8 @@ public:
 	YYSTYPE					m_tPendingToken;
 
 	int						m_iGotTokens;
+
+	CSphVector<CSphString>	m_dIntTokens;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -365,9 +366,16 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			m_pTokenizer->SetBuffer ( m_sQuery, m_iQueryLen );
 			m_pTokenizer->SetBufferPtr ( p );
 
-			m_tPendingToken.tInt.bKeyword = ( sToken && m_pDict->GetWordID((BYTE*)sToken) );
+			m_tPendingToken.tInt.iStrIndex = -1;
 			if ( sToken )
+			{
+				m_dIntTokens.Add ( sToken );
+				if ( m_pDict->GetWordID((BYTE*)sToken) )
+					m_tPendingToken.tInt.iStrIndex = m_dIntTokens.GetLength()-1;
+				else
+					m_dIntTokens.Pop();
 				m_iAtomPos++;
+			}
 
 			m_iPendingNulls = 0;
 			m_iPendingType = TOK_INT;
@@ -475,16 +483,6 @@ XQNode_t * XQParser_t::AddKeyword ( const char * sKeyword )
 	return pNode;
 }
 
-
-XQNode_t * XQParser_t::AddKeywordFromInt ( int iValue, bool bKeyword )
-{
-	if ( !bKeyword )
-		return AddKeyword ( NULL );
-
-	char sBuf[16];
-	snprintf ( sBuf, sizeof(sBuf), "%d", iValue );
-	return AddKeyword ( sBuf );
-}
 
 XQNode_t * XQParser_t::AddKeyword ( XQNode_t * pLeft, XQNode_t * pRight )
 {

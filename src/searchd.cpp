@@ -7069,7 +7069,7 @@ void CheckFlush ()
 	if ( g_iAttrFlushPeriod<=0 || g_bFlushing )
 		return;
 
-	int64_t tmLastCheck = -1000;
+	static int64_t tmLastCheck = -1000;
 	int64_t tmNow = sphMicroTimer();
 
 	if ( tmLastCheck + g_iAttrFlushPeriod*1000000 >= tmNow )

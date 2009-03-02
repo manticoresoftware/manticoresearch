@@ -1187,12 +1187,22 @@ ProtocolType_e ProtoByName ( const CSphString & sProto )
 }
 
 
-void AddListener ( const CSphString & sListen )
+struct ListenerDesc_t
 {
-	Listener_t tRes;
-	tRes.m_eProto = PROTO_SPHINX;
+	ProtocolType_e	m_eProto;
+	CSphString		m_sUnix;
+	DWORD			m_uIP;
+	int				m_iPort;
+};
 
-	const char * sSpec = sListen.cstr();
+
+ListenerDesc_t ParseListener ( const char * sSpec )
+{
+	ListenerDesc_t tRes;
+	tRes.m_eProto = PROTO_SPHINX;
+	tRes.m_sUnix = "";
+	tRes.m_uIP = htonl(INADDR_ANY);
+	tRes.m_iPort = SEARCHD_DEFAULT_PORT;
 
 	// split by colon
 	int iParts = 0;
@@ -1227,8 +1237,7 @@ void AddListener ( const CSphString & sListen )
 #if USE_WINDOWS
 		sphFatal ( "UNIX sockets are not supported on Windows" );
 #else
-		tRes.m_iSock = sphCreateUnixSocket ( sPart );
-		g_dListeners.Add ( tRes );
+		tRes.m_sUnix = sPart;
 		return;
 #endif
 	}
@@ -1248,34 +1257,48 @@ void AddListener ( const CSphString & sListen )
 		if ( bAllDigits && iLen<=5 )
 		{
 			// port name on itself
-			int iPort = atol(sSpec);
-			CheckPort ( iPort );
-
-			tRes.m_iSock = sphCreateInetSocket ( htonl(INADDR_ANY), iPort );
-			g_dListeners.Add ( tRes );
-
+			tRes.m_uIP = htonl(INADDR_ANY);
+			tRes.m_iPort = atol(sSpec);
+			CheckPort ( tRes.m_iPort );
 		} else
 		{
 			// host name on itself
-			tRes.m_iSock = sphCreateInetSocket ( sphGetAddress ( sSpec, GETADDR_STRICT ), SEARCHD_DEFAULT_PORT );
-			g_dListeners.Add ( tRes );
+			tRes.m_uIP = sphGetAddress ( sSpec, GETADDR_STRICT );
+			tRes.m_iPort = SEARCHD_DEFAULT_PORT;
 		}
-		return;
+		return tRes;
 	}
 
 	// two or three parts. host name, port name, and optional protocol type
 	if ( iParts==3 )
 		tRes.m_eProto = ProtoByName ( sParts[2] );
 
-	int iPort = atol ( sParts[1].cstr() );
-	CheckPort ( iPort );
+	tRes.m_iPort = atol ( sParts[1].cstr() );
+	CheckPort ( tRes.m_iPort );
 
-	int iAddress = sParts[0].IsEmpty()
+	tRes.m_uIP = sParts[0].IsEmpty()
 		? htonl(INADDR_ANY)
 		: sphGetAddress ( sParts[0].cstr(), GETADDR_STRICT );
 
-	tRes.m_iSock = sphCreateInetSocket ( iAddress, iPort );
-	g_dListeners.Add ( tRes );
+	return tRes;
+}
+
+
+void AddListener ( const CSphString & sListen )
+{
+	ListenerDesc_t tDesc = ParseListener ( sListen.cstr() );
+
+	Listener_t tListener;
+	tListener.m_eProto = tDesc.m_eProto;
+
+#if !USE_WINDOWS
+	if ( !tDesc.m_sUnix.IsEmpty() )
+		tListener.m_iSock = sphCreateUnixSocket ( tDesc.m_sUnix.cstr() );
+	else
+#endif
+		tListener.m_iSock = sphCreateInetSocket ( tDesc.m_uIP, tDesc.m_iPort );
+
+	g_dListeners.Add ( tListener );
 }
 
 
@@ -7323,6 +7346,7 @@ void ShowHelp ()
 		"-c, -config <file>\tread configuration from specified file\n"
 		"\t\t\t(default is sphinx.conf)\n"
 		"--stop\t\t\tsend SIGTERM to currently running searchd\n"
+		"--status\t\tget ant print status variables\n"
 		"\t\t\t(PID is taken from pid_file specified in config file)\n"
 		"--iostats\t\tlog per-query io stats\n"
 #ifdef HAVE_CLOCK_GETTIME
@@ -7431,6 +7455,112 @@ void CheckSignals ()
 }
 
 
+void QueryStatus ( CSphVariant * v )
+{
+	char sBuf [ SPH_ADDRESS_SIZE ];
+
+	for ( ; v; v = v->m_pNext )
+	{
+		ListenerDesc_t tDesc = ParseListener ( v->cstr() );
+		if ( tDesc.m_eProto!=PROTO_SPHINX )
+			continue;
+
+		int iSock = -1;
+#if !USE_WINDOWS
+		if ( !tDesc.m_sUnix.IsEmpty() )
+		{
+			// UNIX connection
+			struct sockaddr_un sun;
+
+			size_t len = strlen ( tDesc.m_sUnix.cstr() );
+			if ( len+1 > sizeof(sun.sun_path ) )
+				sphFatal ( "UNIX socket path is too long (len=%d)", len );
+
+			memset ( &sun, 0, sizeof(sun) );
+			sun.sun_family = AF_UNIX;
+			memcpy ( sun.sun_path, tDesc.m_sUnix.cstr(), len+1 );
+
+			int iSock = socket ( AF_UNIX, SOCK_STREAM, 0 );
+			if ( iSock<0 )
+				sphFatal ( "failed to create UNIX socket: %s", sphSockError() );
+
+			if ( connect ( iSock, (struct sockaddr*)&, sizeof(sun) )<0 )
+			{
+				sphWarning ( "failed to connect to unix://%s: %s\n", tDesc.m_sUnix.cstr(), sphSockError() );
+				continue;
+			}
+
+		} else
+#endif
+		{
+			// TCP connection
+			struct sockaddr_in sin;
+			memset ( &sin, 0, sizeof(sin) );
+			sin.sin_family = AF_INET;
+			sin.sin_addr.s_addr = ( tDesc.m_uIP==htonl(INADDR_ANY) )
+				? htonl(INADDR_LOOPBACK)
+				: tDesc.m_uIP;
+			sin.sin_port = htons ( (short)tDesc.m_iPort );
+
+			iSock = socket ( AF_INET, SOCK_STREAM, 0 );
+			if ( iSock<0 )
+				sphFatal ( "failed to create TCP socket: %s", sphSockError() );
+
+			if ( connect ( iSock, (struct sockaddr*)&sin, sizeof(sin) )<0 )
+			{
+				sphWarning ( "failed to connect to %s:%d: %s\n", sphFormatIP ( sBuf, sizeof(sBuf), tDesc.m_uIP ), tDesc.m_iPort, sphSockError() );
+				continue;
+			}
+		}
+
+		// send request
+		NetOutputBuffer_c tOut ( iSock );
+		tOut.SendDword ( SPHINX_SEARCHD_PROTO );
+		tOut.SendWord ( SEARCHD_COMMAND_STATUS );
+		tOut.SendWord ( VER_COMMAND_STATUS );
+		tOut.SendInt ( 4 ); // request body length
+		tOut.SendInt ( 1 ); // dummy body
+		tOut.Flush ();
+
+		// get reply
+		NetInputBuffer_c tIn ( iSock );
+		if ( !tIn.ReadFrom ( 12, 5 ) ) // magic_header_size=12, magic_timeout=5
+			sphFatal ( "handshake failure (no response)" );
+
+		DWORD uVer = tIn.GetDword();
+		if ( uVer!=SPHINX_SEARCHD_PROTO && uVer!=0x01000000UL ) // workaround for all the revisions that sent it in host order...
+			sphFatal ( "handshake failure (unexpected protocol version=%d)", uVer );
+
+		if ( tIn.GetWord()!=SEARCHD_OK )
+			sphFatal ( "status command failed" );
+
+		if ( tIn.GetWord()!=VER_COMMAND_STATUS )
+			sphFatal ( "status command version mismatch" );
+
+		if ( !tIn.ReadFrom ( tIn.GetDword(), 5 ) ) // magic_timeout=5
+			sphFatal ( "failed to read status reply" );
+
+		fprintf ( stdout, "\nsearchd status\n--------------\n" );
+
+		int iRows = tIn.GetDword();
+		int iCols = tIn.GetDword();
+		for ( int i=0; i<iRows && !tIn.GetError(); i++ )
+		{
+			for ( int j=0; j<iCols && !tIn.GetError(); j++ )
+			{
+				fprintf ( stdout, "%s", tIn.GetString().cstr() );
+				fprintf ( stdout, ( j==0 ) ? ": " : " " );
+			}
+			fprintf ( stdout, "\n" );
+		}
+
+		// all done
+		sphSockClose ( iSock );
+		return;
+	}
+}
+
+
 int WINAPI ServiceMain ( int argc, char **argv )
 {
 	g_bLogTty = isatty ( g_iLogFile )!=0;
@@ -7472,6 +7602,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	CSphConfig		conf;
 	bool			bOptStop		= false;
+	bool			bOptStatus		= false;
 	bool			bOptPIDFile		= false;
 	const char *	sOptIndex		= NULL;
 
@@ -7492,8 +7623,10 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 		// handle no-arg options
 		OPT ( "-h", "--help" )		{ ShowHelp(); return 0; }
+		OPT ( "-?", "--?" )			{ ShowHelp(); return 0; }
 		OPT1 ( "--console" )		{ g_bOptConsole = true; g_bOptNoDetach = true; }
 		OPT1 ( "--stop" )			bOptStop = true;
+		OPT1 ( "--status" )			bOptStatus = true;
 		OPT1 ( "--pidfile" )		bOptPIDFile = true;
 		OPT1 ( "--iostats" )		g_bIOStats = true;
 #if !USE_WINDOWS
@@ -7680,6 +7813,16 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			exit ( 0 );
 		}
 #endif
+	}
+
+	////////////////////////////////
+	// query running searchd status
+	////////////////////////////////
+
+	if ( bOptStatus )
+	{
+		QueryStatus ( hSearchd("listen") );
+		exit ( 0 );
 	}
 
 	/////////////////////

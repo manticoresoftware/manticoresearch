@@ -1238,7 +1238,7 @@ ListenerDesc_t ParseListener ( const char * sSpec )
 		sphFatal ( "UNIX sockets are not supported on Windows" );
 #else
 		tRes.m_sUnix = sPart;
-		return;
+		return tRes;
 #endif
 	}
 
@@ -7484,7 +7484,7 @@ void QueryStatus ( CSphVariant * v )
 			if ( iSock<0 )
 				sphFatal ( "failed to create UNIX socket: %s", sphSockError() );
 
-			if ( connect ( iSock, (struct sockaddr*)&, sizeof(sun) )<0 )
+			if ( connect ( iSock, (struct sockaddr*)&sun, sizeof(sun) )<0 )
 			{
 				sphWarning ( "failed to connect to unix://%s: %s\n", tDesc.m_sUnix.cstr(), sphSockError() );
 				continue;

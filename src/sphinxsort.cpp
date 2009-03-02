@@ -604,7 +604,7 @@ public:
 	inline void		SetValue ( CSphMatch * pRow, T val );
 
 protected:
-	CSphAttrLocator	m_tLocator;	
+	CSphAttrLocator	m_tLocator;
 };
 
 template<>
@@ -762,7 +762,7 @@ public:
 	virtual void SetSchemas ( const CSphSchema & tIn, const CSphSchema & tOut )
 	{
 		m_tIncomingSchema = tIn;
-		m_tOutgoingSchema = tOut; 
+		m_tOutgoingSchema = tOut;
 		m_iUpdateRowitems = m_iRowitems;
 
 		bool bAggrStarted = false;
@@ -782,7 +782,7 @@ public:
 			{
 				m_iUpdateRowitems = tAttr.m_tLocator.CalcRowitem();
 				assert ( m_iUpdateRowitems>=0 );
-			}			
+			}
 
 			bAggrStarted = true;
 			switch ( tAttr.m_eAggrFunc )
@@ -1150,7 +1150,7 @@ public:
 #endif
 
 //////////////////////////////////////////////////////////////////////////
-// PLAIN SORTING FUNCTORS 
+// PLAIN SORTING FUNCTORS
 //////////////////////////////////////////////////////////////////////////
 
 /// match sorter

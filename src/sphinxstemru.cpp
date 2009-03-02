@@ -57,7 +57,7 @@ struct RussianAlphabetWin1251_t
 		YA	= 0xFF
 	};
 };
-	
+
 #define LOC_CHAR_TYPE		unsigned char
 #define LOC_PREFIX(_a)		_a##_cp1251
 #define RUS					RussianAlphabetWin1251_t

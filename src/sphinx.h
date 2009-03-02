@@ -81,7 +81,7 @@ typedef off_t				SphOffset_t;
 typedef uint64_t		SphWordID_t;
 typedef uint64_t		SphDocID_t;
 
-#define DOCID_MAX		U64C(0xffffffffffffffff) 
+#define DOCID_MAX		U64C(0xffffffffffffffff)
 #define DOCID_FMT		"%" PRIu64
 #define DOCINFO_IDSIZE	2
 
@@ -93,7 +93,7 @@ STATIC_SIZE_ASSERT ( SphDocID_t, 8 );
 // use 32-bit unsigned integers to store document and word IDs
 #define SPHINX_BITS_TAG	""
 typedef DWORD			SphWordID_t;
-typedef DWORD			SphDocID_t;			
+typedef DWORD			SphDocID_t;
 
 #define DOCID_MAX		0xffffffffUL
 #define DOCID_FMT		"%u"
@@ -541,7 +541,7 @@ struct CSphDict
 	/// load stopwords from given files
 	virtual void		LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenizer ) = 0;
 
-	/// load wordforms from a given file 
+	/// load wordforms from a given file
 	virtual bool		LoadWordforms ( const char * sFile, ISphTokenizer * pTokenizer ) = 0;
 
 	/// set morphology
@@ -910,7 +910,7 @@ protected:
 
 		inline bool operator < ( const StripperTag_t & rhs ) const
 		{
-			return strcmp ( m_sTag.cstr(), rhs.m_sTag.cstr() )<0; 
+			return strcmp ( m_sTag.cstr(), rhs.m_sTag.cstr() )<0;
 		}
 	};
 
@@ -1039,7 +1039,7 @@ public:
 protected:
 	ISphTokenizer *						m_pTokenizer;	///< my tokenizer
 	CSphDict *							m_pDict;		///< my dict
-	
+
 	CSphSourceStats						m_tStats;		///< my stats
 	CSphSchema							m_tSchema;		///< my schema
 
@@ -1402,12 +1402,12 @@ private:
 	bool			m_bEOF;				///< EOF encountered
 	bool			m_bWarned;			///< warned of buffer size already
 	int				m_iInitialBufLen;	///< initial buffer len
-	
+
 	FILE *			m_pPipe;			///< incoming stream
 	BYTE *			m_sBuffer;			///< buffer
 	BYTE *			m_pBuffer;			///< current buffer pos
 	BYTE *			m_pBufferEnd;		///< buffered end pos
-	
+
 	int				m_iWordPos;			///< current word position
 
 private:
@@ -1583,11 +1583,11 @@ public:
 							if ( !m_pValues )
 								m_dValues.Sort();
 						}
-	
+
 	bool				operator == ( const CSphFilterSettings & rhs ) const;
 	bool				operator != ( const CSphFilterSettings & rhs ) const { return !( (*this)==rhs ); }
 
-	
+
 
 protected:
 	const SphAttr_t *	m_pValues;		///< external value array
@@ -1831,7 +1831,7 @@ struct CSphMatchComparatorState
 	static const int	MAX_ATTRS = 5;
 
 	int					m_iAttr[MAX_ATTRS];			///< sort-by attr index
-	CSphAttrLocator		m_tLocator[MAX_ATTRS];		///< sort-by attr locator 
+	CSphAttrLocator		m_tLocator[MAX_ATTRS];		///< sort-by attr locator
 
 	DWORD				m_uAttrDesc;				///< sort order mask (if i-th bit is set, i-th attr order is DESC)
 	DWORD				m_iNow;						///< timestamp (for timesegments sorting mode)
@@ -1896,7 +1896,7 @@ public:
 	/// get incoming schema
 	virtual const CSphSchema &	GetIncomingSchema () const { return m_tIncomingSchema; }
 
-	/// get outgoing schema 
+	/// get outgoing schema
 	virtual const CSphSchema &	GetOutgoingSchema () const { return m_tOutgoingSchema; }
 
 	/// base push
@@ -1938,7 +1938,7 @@ struct CSphIndexSettings : public CSphSourceSettings
 	bool			m_bHtmlStrip;
 	CSphString		m_sHtmlIndexAttrs;
 	CSphString		m_sHtmlRemoveElements;
-					
+
 					CSphIndexSettings ();
 };
 

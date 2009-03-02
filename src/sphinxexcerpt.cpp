@@ -149,7 +149,7 @@ ExcerptGen_c::ExcerptGen_c ()
 void ExcerptGen_c::AddJunk ( int iStart, int iLength )
 {
 	int iChunkStart = iStart;
-	
+
 	for ( int i = iStart; i < iStart+iLength; i++ )
 		if ( sphIsSpace ( m_sBuffer.cstr () [i] ) != sphIsSpace ( m_sBuffer.cstr () [iChunkStart] ) )
 		{
@@ -226,7 +226,7 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict, 
 
 	// tokenize document
 	pTokenizer->SetBuffer ( (BYTE*)q.m_sSource.cstr (), strlen ( q.m_sSource.cstr () ) );
-	
+
 	const char * pStartPtr = pTokenizer->GetBufferPtr ();
 	const char * pLastTokenEnd = pStartPtr;
 
@@ -270,14 +270,14 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict, 
 			{
 				const char * keyword = &dKwBuffer [ dKeywords[nWord].m_iWord ];
 				const Token_t & token = m_dWords[nWord];
-				
+
 				switch ( dKeywords[nWord].m_uStar )
 				{
 				case STAR_NONE:
 					bMatch = iWord == token.m_iWordID;
 					break;
 
-				case STAR_FRONT:					
+				case STAR_FRONT:
 					iOffset = tLast.m_iLengthBytes - token.m_iLengthBytes;
 					bMatch = (iOffset >= 0) &&
 						( memcmp( keyword, sWord + iOffset, token.m_iLengthBytes ) == 0 );
@@ -364,10 +364,10 @@ void ExcerptGen_c::HighlightPhrase ( const ExcerptQuery_t & q, int iTok, int iEn
 	{
 		while ( iTok<=iEnd && !m_dTokens[iTok].m_uWords )
 			ResultEmit ( m_dTokens[iTok++] );
-		
+
 		if ( iTok>iEnd )
 			break;
-		
+
 		bool bMatch = true;
 		int iWord = 0;
 		int iStart = iTok;
@@ -381,14 +381,14 @@ void ExcerptGen_c::HighlightPhrase ( const ExcerptQuery_t & q, int iTok, int iEn
 			}
 			iTok++;
 		}
-		
+
 		if ( !bMatch )
 		{
 			ResultEmit ( m_dTokens[iStart] );
 			iTok = iStart + 1;
 			continue;
 		}
-		
+
 		ResultEmit ( q.m_sBeforeMatch.cstr() );
 		while ( iStart<iTok )
 			ResultEmit ( m_dTokens [ iStart++ ] );

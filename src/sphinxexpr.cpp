@@ -238,7 +238,7 @@ DECLARE_UNARY_INT ( Expr_NotInt64_c,	float(INT64FIRST?0:1),	INT64FIRST?0:1,	INT6
 DECLARE_BINARY_INT ( Expr_Add_c,	FIRST + SECOND,						INTFIRST + INTSECOND,				INT64FIRST + INT64SECOND )
 DECLARE_BINARY_INT ( Expr_Sub_c,	FIRST - SECOND,						INTFIRST - INTSECOND,				INT64FIRST - INT64SECOND )
 DECLARE_BINARY_INT ( Expr_Mul_c,	FIRST * SECOND,						INTFIRST * INTSECOND,				INT64FIRST * INT64SECOND )
-DECLARE_BINARY_FLT ( Expr_Div_c,	FIRST / SECOND )														
+DECLARE_BINARY_FLT ( Expr_Div_c,	FIRST / SECOND )
 DECLARE_BINARY_INT ( Expr_Idiv_c,	(float)(int(FIRST)/int(SECOND)),	INTFIRST / INTSECOND,				INT64FIRST / INT64SECOND )
 
 DECLARE_BINARY_POLY ( Expr_Lt,		IFFLT ( FIRST < SECOND ),			IFINT ( INTFIRST < INTSECOND ),		IFINT ( INT64FIRST < INT64SECOND ) )
@@ -378,7 +378,7 @@ class ExprParser_t
 	friend int				yyparse ( ExprParser_t * pParser );
 	friend void				yyerror ( ExprParser_t * pParser, const char * sMessage );
 
-public:	
+public:
 							ExprParser_t () {}
 							~ExprParser_t () {}
 
@@ -487,7 +487,7 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 		return ParseNumeric ( lvalp, &m_pCur );
 
 	// check for field, function, or magic name
-	if ( sphIsAttr(m_pCur[0]) 
+	if ( sphIsAttr(m_pCur[0])
 		|| ( m_pCur[0]=='@' && sphIsAttr(m_pCur[1]) && !isdigit(m_pCur[1]) ) )
 	{
 		// get token
@@ -641,7 +641,7 @@ void ExprParser_t::Optimize ( int iNode )
 					case '*':	pRoot->m_iConst = tLeft.m_iConst * tRight.m_iConst; break;
 					default:	assert ( 0 && "internal error: unhandled arithmetic token during const-int optimization" );
 				}
-				pRoot->m_iToken = TOK_CONST_INT; 
+				pRoot->m_iToken = TOK_CONST_INT;
 
 			} else
 			{
@@ -655,7 +655,7 @@ void ExprParser_t::Optimize ( int iNode )
 					case '/':	pRoot->m_fConst = fLeft / fRight; break;
 					default:	assert ( 0 && "internal error: unhandled arithmetic token during const-float optimization" );
 				}
-				pRoot->m_iToken = TOK_CONST_FLOAT; 
+				pRoot->m_iToken = TOK_CONST_FLOAT;
 			}
 			return;
 		}
@@ -1253,11 +1253,11 @@ int ExprParser_t::AddNodeOp ( int iOp, int iLeft, int iRight )
 		|| iOp=='+' || iOp=='-' || iOp=='*' || iOp==',' )
 	{
 		tNode.m_uArgType = GetWidestRet ( iLeft, iRight );
-		
+
 		// arithmetical operations return arg type, logical return int
 		tNode.m_uRetType = ( iOp=='+' || iOp=='-' || iOp=='*' || iOp==',' )
 			? tNode.m_uArgType
-			: SPH_ATTR_INTEGER;			
+			: SPH_ATTR_INTEGER;
 
 		// AND/OR can only be over ints
 		if ( ( iOp==TOK_AND || iOp==TOK_OR ) && !( tNode.m_uArgType==SPH_ATTR_INTEGER || tNode.m_uArgType==SPH_ATTR_BIGINT ))

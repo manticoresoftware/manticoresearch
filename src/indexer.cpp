@@ -606,7 +606,7 @@ CSphSource * SpawnSourceMSSQL ( const CSphConfigSection & hSource, const char * 
 CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char * sSourceName, bool bUTF8 )
 {
 	assert ( hSource["type"]=="xmlpipe" || hSource["type"]=="xmlpipe2" );
-	
+
 	LOC_CHECK ( hSource, "xmlpipe_command", "in source '%s'.", sSourceName );
 
 	CSphSource * pSrcXML = NULL;
@@ -622,7 +622,7 @@ CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char 
 	{
 		fprintf ( stdout, "ERROR: xmlpipe: failed to popen '%s'", sCommand.cstr() );
 		return NULL;
-	}	
+	}
 
 	if ( bUsePipe2 )
 	{
@@ -721,7 +721,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		return false;
 	}
 
-	if ( ( hIndex.GetInt ( "min_prefix_len", 0 ) > 0 || hIndex.GetInt ( "min_infix_len", 0 ) > 0 ) 
+	if ( ( hIndex.GetInt ( "min_prefix_len", 0 ) > 0 || hIndex.GetInt ( "min_infix_len", 0 ) > 0 )
 		&& hIndex.GetInt ( "enable_star" ) == 0 )
 	{
 		const char * szMorph = hIndex.GetStr ( "morphology", "" );
@@ -772,10 +772,10 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 
 	CSphString sPrefixFields, sInfixFields;
 
-	if ( hIndex.Exists ( "prefix_fields" ) ) 
+	if ( hIndex.Exists ( "prefix_fields" ) )
 		sPrefixFields = hIndex ["prefix_fields"].cstr ();
 
-	if ( hIndex.Exists ( "infix_fields" ) ) 
+	if ( hIndex.Exists ( "infix_fields" ) )
 		sInfixFields = hIndex ["infix_fields"].cstr ();
 
 	if ( iPrefix == 0 && !sPrefixFields.IsEmpty () )
@@ -996,7 +996,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		tmTime = Max ( tmTime, 1 );
 		int64_t iTotalDocs = 0;
 		int64_t iTotalBytes = 0;
-		
+
 		ARRAY_FOREACH ( i, dSources )
 		{
 			const CSphSourceStats & tSource = dSources[i]->GetStats();
@@ -1085,7 +1085,7 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 	const char * sPath = hDst["path"].cstr();
 	char sFrom [ SPH_MAX_FILENAME_LEN ];
 	char sTo [ SPH_MAX_FILENAME_LEN ];
-	struct stat tFileInfo; 
+	struct stat tFileInfo;
 
 	int iExt;
 	for ( iExt=0; iExt<EXT_COUNT; iExt++ )
@@ -1101,12 +1101,12 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 		sTo [ sizeof(sTo)-1 ] = '\0';
 
 		if ( !stat( sTo, &tFileInfo ) )
-		{		
+		{
 			if ( remove ( sTo ) )
 			{
 				fprintf ( stdout, "ERROR: index '%s': failed to delete '%s': %s",
 					sDst, sTo, strerror(errno) );
-				break;			
+				break;
 			}
 		}
 
@@ -1157,7 +1157,7 @@ void ReportIOStats ( const char * sType, int iReads, int64_t iReadTime, int64_t 
 int main ( int argc, char ** argv )
 {
 	const char * sOptConfig = NULL;
-	bool bMerge = false;	
+	bool bMerge = false;
 	CSphVector<CSphFilterSettings> dMergeDstFilters;
 
 	CSphVector<const char *> dIndexes;
@@ -1243,7 +1243,7 @@ int main ( int argc, char ** argv )
 		if ( argc>1 )
 		{
 			fprintf ( stdout, "ERROR: malformed or unknown option near '%s'.\n", argv[i] );
-		
+
 		} else
 		{
 			fprintf ( stdout,
@@ -1396,28 +1396,28 @@ int main ( int argc, char ** argv )
 
 			HANDLE hPipe = INVALID_HANDLE_VALUE;
 
-			while ( hPipe == INVALID_HANDLE_VALUE ) 
-			{ 
+			while ( hPipe == INVALID_HANDLE_VALUE )
+			{
 				hPipe = CreateFile ( szPipeName, GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL );
 
-				if ( hPipe == INVALID_HANDLE_VALUE ) 
+				if ( hPipe == INVALID_HANDLE_VALUE )
 				{
-					if ( GetLastError () != ERROR_PIPE_BUSY ) 
+					if ( GetLastError () != ERROR_PIPE_BUSY )
 					{
 						fprintf ( stdout, "WARNING: could not open pipe (GetLastError()=%d)\n", GetLastError () );
 						break;
 					}
 
-					if ( !WaitNamedPipe ( szPipeName, 1000 ) ) 
-					{ 
+					if ( !WaitNamedPipe ( szPipeName, 1000 ) )
+					{
 						fprintf ( stdout, "WARNING: could not open pipe (GetLastError()=%d)\n", GetLastError () );
 						break;
-					} 
+					}
 				}
-			} 
+			}
 
 			if ( hPipe != INVALID_HANDLE_VALUE )
-			{	
+			{
 				DWORD uWritten = 0;
 				BYTE uWrite = 0;
 				BOOL bResult = WriteFile ( hPipe, &uWrite, 1, &uWritten, NULL );

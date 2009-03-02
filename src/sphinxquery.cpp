@@ -457,7 +457,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		return TOK_KEYWORD;
 	}
 
-	// pending the offending 
+	// pending the offending
 	int iRes = m_iPendingType;
 	m_iPendingType = 0;
 
@@ -519,7 +519,7 @@ XQNode_t * XQParser_t::AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pR
 	//////////
 
 	if ( !pLeft || !pRight )
-		return pLeft ? pLeft : pRight;	
+		return pLeft ? pLeft : pRight;
 
 	// left spec always tries to infect the nodes to the right, only brackets can stop it
 	// eg. '@title hello' vs 'world'
@@ -578,7 +578,7 @@ XQNode_t * XQParser_t::SweepNulls ( XQNode_t * pNode )
 
 	// sweep op node
 	ARRAY_FOREACH ( i, pNode->m_dChildren )
-	{	
+	{
 		pNode->m_dChildren[i] = SweepNulls ( pNode->m_dChildren[i] );
 		if ( pNode->m_dChildren[i]==NULL )
 			pNode->m_dChildren.Remove ( i-- );

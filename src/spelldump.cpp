@@ -211,7 +211,7 @@ public:
 	char		Flag () const;
 	bool		IsCrossProduct () const;
 	bool		IsPrefix () const;
-	
+
 private:
 	RuleType_e	m_eRule;
 	char		m_cFlag;
@@ -258,7 +258,7 @@ bool CISpellAffixRule::Apply ( CSphString & sWord )
 	m_iWordLen = strlen ( sWord.cstr () );
 
 	bool bDotCond = m_sCondition == ".";
-	
+
 	if ( m_eRule == RULE_SUFFIXES )
 	{
 		if ( ! bDotCond && ! CheckSuffix ( sWord ) )
@@ -455,7 +455,7 @@ private:
 	void		Strip ( char * szText );
 	char		ToLowerCase ( char cChar );
 	void		LoadLocale ();
-	
+
 	AffixFormat_e		DetectFormat ( FILE * );
 	bool				LoadISpell ( FILE * );
 	bool				LoadMySpell ( FILE * );
@@ -611,7 +611,7 @@ bool CISpellAffix::LoadISpell ( FILE * pFile )
 
 			continue;
 		}
-		
+
 		if ( !strncasecmp ( szBuffer, "flag", 4 ) )
 		{
 			if ( eRule == RULE_NONE )
@@ -619,7 +619,7 @@ bool CISpellAffix::LoadISpell ( FILE * pFile )
 				printf ( "WARNING: Line %d: 'flag' appears before preffixes or suffixes\n", iLine );
 				continue;
 			}
-			
+
 			char * szStart = szBuffer + 4;
 			while ( *szStart && isspace ( (unsigned char) *szStart ) )
 				++szStart;
@@ -636,7 +636,7 @@ bool CISpellAffix::LoadISpell ( FILE * pFile )
 		char * szComment = strchr ( szBuffer,'#' );
 		if ( szComment )
 			*szComment = '\0';
-	
+
 		if ( !* szBuffer )
 			continue;
 
@@ -707,7 +707,7 @@ bool CISpellAffix::LoadMySpell ( FILE * pFile )
 			sLine += 3;
 			while ( *sLine && isspace ( (unsigned char) *sLine ) )
 				++sLine;
-			
+
 			if ( eNewRule != eRule ) // new rule header
 			{
 				if ( iCount )
@@ -729,13 +729,13 @@ bool CISpellAffix::LoadMySpell ( FILE * pFile )
 
 					if ( *sRemove == '0' && *(sRemove + 1) == 0 ) *sRemove = 0;
 					if ( *sAppend == '0' && *(sAppend + 1) == 0 ) *sAppend = 0;
-					
+
 					CISpellAffixRule Rule ( eRule, cFlag, cCombine == 'Y', sCondition, sRemove, sAppend );
 					m_dRules.Add ( Rule );
 				}
 				else
 					printf ( "WARNING: Line %d: Malformed %s rule\n", iLine, sMode );
-				
+
 				if ( !--iCount ) eRule = RULE_NONE;
 			}
 			continue;
@@ -881,7 +881,7 @@ void CISpellAffix::LoadLocale ()
 			if ( pFile )
 			{
 				printf ( "Using charater set from '%s'\n", m_sCharsetFile.cstr () );
-				
+
 				const int MAX_CHARSET_LENGTH = 4096;
 				char szBuffer [MAX_CHARSET_LENGTH];
 
@@ -966,7 +966,7 @@ struct WordLess
 	{
 		return strcoll ( a, b ) < 0;
 	}
-	
+
 };
 
 typedef CSphOrderedHash < CSphVector<MapInfo_t>, CSphString, CSphStrHashFunc, 100000, 13 > WordMap_t;
@@ -979,7 +979,7 @@ static void EmitResult ( WordMap_t & tMap , const CSphString & sFrom, const CSph
 	MapInfo_t tInfo;
 	tInfo.m_sWord = sTo;
 	tInfo.m_sRules[0] = cRuleA;
-	tInfo.m_sRules[1] = cRuleB;	
+	tInfo.m_sRules[1] = cRuleB;
 	tInfo.m_sRules[2] = 0;
  	tMap[sFrom].Add ( tInfo );
 }
@@ -1005,12 +1005,12 @@ int main ( int iArgs, char ** dArgs )
 		{
 			if ( ++i == iArgs ) break;
 			char * sMode = dArgs[i];
-				
+
 			if ( !strcmp ( sMode, "debug" ) )		{ eMode = M_DEBUG; continue; }
 			if ( !strcmp ( sMode, "duplicates" ) )	{ eMode = M_DUPLICATES; continue; }
 			if ( !strcmp ( sMode, "last" ) )		{ eMode = M_LAST; continue; }
 			if ( !strcmp ( sMode, "default" ) )		{ eMode = M_DEFAULT; continue; }
-			
+
 			printf ( "Unrecognized mode: %s\n", sMode );
 			return 1;
 		}
@@ -1095,21 +1095,21 @@ int main ( int iArgs, char ** dArgs )
 				CISpellAffixRule * pRule1 = Affix.GetRule ( iRule1 );
 				if ( pRule1->Flag () != pWord->m_sFlags.cstr () [iFlag1] )
 					continue;
-				
+
 				sWord = pWord->m_sWord;
-				
+
 				if ( ! pRule1->Apply ( sWord ) )
 					continue;
-				
+
 				EmitResult ( tWordMap, sWord, pWord->m_sWord, pRule1->Flag() );
-				
+
 				// apply other rules
 				if ( !Affix.CheckCrosses() )
 					continue;
-				
+
 				if ( !pRule1->IsCrossProduct() )
 					continue;
-				
+
 				for ( int iFlag2 = iFlag1 + 1; iFlag2 < iFlagLen; ++iFlag2 )
 					for ( int iRule2 = 0; iRule2 < Affix.GetNumRules (); ++iRule2 )
 					{
@@ -1127,18 +1127,18 @@ int main ( int iArgs, char ** dArgs )
 	printf ( "\rDictionary words processed: %d\n", nDone );
 
 	// output
-	
+
 	CSphVector<const char *> dKeys;
 	tWordMap.IterateStart();
 	while ( tWordMap.IterateNext() )
 		dKeys.Add ( tWordMap.IterateGetKey().cstr() );
 	dKeys.Sort ( WordLess() );
-	
+
 	ARRAY_FOREACH ( iKey, dKeys )
  	{
  		const CSphVector<MapInfo_t> & dWords = tWordMap[dKeys[iKey]];
 		const char * sKey = dKeys[iKey];
-		
+
 		switch ( eMode )
 		{
 			case M_LAST:
@@ -1163,11 +1163,11 @@ int main ( int iArgs, char ** dArgs )
 							iMatch = i;
 						}
 					}
-				
+
 				fprintf ( pFile, "%s > %s\n", sKey, dWords[iMatch].m_sWord.cstr() );
 				break;
 			}
-							
+
 			case M_DUPLICATES:
 				if ( dWords.GetLength() == 1 ) break;
 			case M_DEBUG:
@@ -1177,7 +1177,7 @@ int main ( int iArgs, char ** dArgs )
 				break;
 		}
  	}
-	
+
 	fclose ( pFile );
 
 	return 0;

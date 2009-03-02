@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
 <CodeBlocks_workspace_file>
 	<Workspace title="Sphinx">
-		<Project filename="codeblocks/libsphinx.cbp" active="1" />
-		<Project filename="codeblocks/indexer.cbp">
+		<Project filename="codeblocks/libsphinx.cbp" />
+		<Project filename="codeblocks/indexer.cbp" active="1">
 			<Depends filename="codeblocks/libsphinx.cbp" />
 		</Project>
 		<Project filename="codeblocks/search.cbp" />

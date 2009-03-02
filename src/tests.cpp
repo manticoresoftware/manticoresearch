@@ -34,7 +34,7 @@ bool CreateSynonymsFile ( const char * sMagic )
 		"   AT & T => AT & T  \n"
 		"standarten fuehrer => Standartenfuehrer\n"
 		"standarten fuhrer  => Standartenfuehrer\n"
-		"OS/2 => OS/2\n" 
+		"OS/2 => OS/2\n"
 		"Ms-Dos => MS-DOS\n"
 		"MS DOS => MS-DOS\n"
 		"feat. => featuring\n"
@@ -65,7 +65,7 @@ ISphTokenizer * CreateTestTokenizer ( bool bUTF8, bool bSynonyms, bool bEscaped 
 		assert ( pTokenizer->LoadSynonyms ( g_sTmpfile, sError ) );
 
 	if ( bEscaped )
-	{	
+	{
 		ISphTokenizer * pOldTokenizer = pTokenizer;
 		pTokenizer = pTokenizer->Clone ( true );
 		SafeDelete ( pOldTokenizer );
@@ -77,7 +77,7 @@ ISphTokenizer * CreateTestTokenizer ( bool bUTF8, bool bSynonyms, bool bEscaped 
 
 void TestTokenizer ( bool bUTF8 )
 {
-	const char * sPrefix = bUTF8 
+	const char * sPrefix = bUTF8
 		? "testing UTF8 tokenizer"
 		: "testing SBCS tokenizer";
 
@@ -133,7 +133,7 @@ void TestTokenizer ( bool bUTF8 )
 			"3", "\\thephone",					"thephone",  NULL,
 			"3", "the\\!phone",					"the", "phone", NULL,
 			"3", "\\!phone",					"phone", NULL,
-			"3", "\\\\phone",					"phone", NULL,						// the correct behavior if '\' is not in charset 
+			"3", "\\\\phone",					"phone", NULL,						// the correct behavior if '\' is not in charset
 			"3", "pho\\\\ne",					"pho", "ne", NULL,
 			"3", "phon\\\\e",					"phon", NULL,
 			NULL
@@ -194,7 +194,7 @@ void TestTokenizer ( bool bUTF8 )
 		printf ( "%s for uberlong token handling\n", sPrefix );
 
 		const int UBERLONG = 4096;
-		char * sLine4 = new char [ UBERLONG+1 ]; 
+		char * sLine4 = new char [ UBERLONG+1 ];
 		memset ( sLine4, 'a', UBERLONG );
 		sLine4[UBERLONG] = '\0';
 
@@ -273,7 +273,7 @@ void TestTokenizer ( bool bUTF8 )
 
 		SafeDelete ( sLine4 );
 
-		// test boundaries 
+		// test boundaries
 		printf ( "%s for boundaries handling, run=%d\n", sPrefix, iRun );
 
 		CSphString sError;
@@ -453,7 +453,7 @@ void TestExpr ()
 		tMatch.m_pRowitems[i] = 1+i;
 
 	struct ExprTest_t
-	{ 
+	{
 		const char *	m_sExpr;
 		float			m_fValue;
 	};

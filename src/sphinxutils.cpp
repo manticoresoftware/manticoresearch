@@ -410,7 +410,7 @@ bool CSphConfigParser::TryToExec ( char * pBuffer, char * pEnd, const char * szF
 
 			pPtr++;
 		}
-		
+
 		if ( pArgs )
 			execl ( pBuffer, pBuffer, pArgs, szFilename, NULL );
 		else
@@ -429,7 +429,7 @@ bool CSphConfigParser::TryToExec ( char * pBuffer, char * pEnd, const char * szF
 
 	int iBytesRead, iTotalRead = 0;
 	const int BUFFER_SIZE = 65536;
-	
+
 	dResult.Reset ();
 
 	do
@@ -632,11 +632,11 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 		if ( eState==S_KEY )
 		{
 			// validate the key
-			if ( !ValidateKey ( sToken ) ) 
+			if ( !ValidateKey ( sToken ) )
 				break;
 
 			// an assignment operator and a value must follow
-			LOC_POP (); LOC_PUSH ( S_VALUE ); LOC_PUSH ( S_CHR ); iCh = '='; 
+			LOC_POP (); LOC_PUSH ( S_VALUE ); LOC_PUSH ( S_CHR ); iCh = '=';
 			LOC_BACK(); // because we did not work the char at all
 			continue;
 		}
@@ -646,7 +646,7 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 		{
 			if ( *p=='\n' )					{ AddKey ( sToken, sValue ); iValue = 0; LOC_POP (); continue; }
 			if ( *p=='#' )					{ AddKey ( sToken, sValue ); iValue = 0; LOC_POP (); LOC_PUSH ( S_SKIP2NL ); continue; }
-			if ( *p=='\\' )					
+			if ( *p=='\\' )
 			{
 				// backslash at the line end: continuation operator; let the newline be unhanlded
 				if ( p[1]=='\r' || p[1]=='\n' ) { LOC_PUSH ( S_SKIP2NL ); continue; }
@@ -683,7 +683,7 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 			assert ( m_tConf.Exists ( m_sSectionType ) );
 
 			if ( !m_tConf [ m_sSectionType ].Exists ( sToken ) )
-				LOC_ERROR4 ( "inherited section '%s': parent doesn't exist (parent name='%s', type='%s')", 
+				LOC_ERROR4 ( "inherited section '%s': parent doesn't exist (parent name='%s', type='%s')",
 					m_sSectionName.cstr(), sToken, m_sSectionType.cstr() );
 
 			CSphConfigSection & tDest = m_tConf [ m_sSectionType ][ m_sSectionName ];

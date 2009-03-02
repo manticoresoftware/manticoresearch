@@ -11,6 +11,7 @@
 				<Option object_output="./junk/Debug" />
 				<Option type="1" />
 				<Option compiler="gcc" />
+				<Option parameters="--config /media/bigstore/work/sphinx/test/test_36/Conf/config_0.conf --merge main delta --merge-dst-range tag2 0 0" />
 				<Compiler>
 					<Add option="-Wall" />
 					<Add option="-g" />

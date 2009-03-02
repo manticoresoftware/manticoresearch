@@ -157,6 +157,7 @@ static KeyDesc_t g_dKeysSource[] =
 	{ "unpack_zlib",			KEY_LIST, NULL },
 	{ "unpack_mysqlcompress",	KEY_LIST, NULL },
 	{ "unpack_mysqlcompress_maxsize", 0, NULL },
+	{ "odbc_dsn",				0, NULL },
 	{ NULL,						0, NULL }
 };
 

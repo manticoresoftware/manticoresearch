@@ -6819,6 +6819,12 @@ void ReloadIndexSettings ( CSphConfigParser * pCP )
 {
 	assert ( pCP );
 
+	if ( !pCP->Parse ( g_sConfigFile.cstr () ) )
+	{
+		sphWarning ( "failed to parse config file '%s'; using previous settings", g_sConfigFile.cstr () );
+		return;
+	}
+
 	g_bDoDelete = false;
 
 	g_hIndexes.IterateStart ();
@@ -6829,8 +6835,6 @@ void ReloadIndexSettings ( CSphConfigParser * pCP )
 	while ( g_hDistIndexes.IterateNext () )
 		g_hDistIndexes.IterateGet ().m_bToDelete = true;
 
-	if ( !pCP->Parse ( g_sConfigFile.cstr () ) )
-		sphWarning ( "failed to parse config file '%s'", g_sConfigFile.cstr () );
 
 	SetSignalHandlers ();
 

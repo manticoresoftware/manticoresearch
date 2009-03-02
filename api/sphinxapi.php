@@ -1599,33 +1599,6 @@ class SphinxClient
 		$this->_MBPop ();
 		return $res;
 	}
-
-	//////////////////////////////////////////////////////////////////////////
-	// sphinxql query
-	//////////////////////////////////////////////////////////////////////////
-
-	function SqlQuery ( $query )
-	{
-		$this->_MBPush ();
-		if (!( $fp = $this->_Connect() ))
-		{
-			$this->_MBPop();
-			return false;
-		}
-
-		$len = strlen($query);
-		$req = pack ( "nnNNN", SEARCHD_COMMAND_QUERY, VER_COMMAND_QUERY, 8+$len, VER_COMMAND_SEARCH, $len ) . $query;
-		if ( !( $this->_Send ( $fp, $req, 16+$len ) ) ||
-			 !( $response = $this->_GetResponse ( $fp, VER_COMMAND_QUERY ) ) )
-		{
-			$this->_MBPop ();
-			return false;
-		}
-
-		// parse and return response
-		$results = $this->_ParseSearchResponse ( $response, 1 );
-		return $results[0];
-	}
 }
 
 //

@@ -10325,21 +10325,17 @@ bool CSphIndex_VLN::IterateWordlistNext ( CSphWordIndexRecord & tWord )
 	}
 
 	SphWordID_t iWordID = sphUnzipWordid( m_pMergeWordlist );
-
+	tWord.m_iDoclistPos = sphUnzipOffset( m_pMergeWordlist );
 	if ( !iWordID )
 	{
-		tWord.m_iDoclistPos = sphUnzipOffset( m_pMergeWordlist );
 		tWord.m_iWordID = 0;
-
 		return false;
 	}
 	else
 	{
 		tWord.m_iWordID += iWordID;
-		tWord.m_iDoclistPos = sphUnzipOffset( m_pMergeWordlist );
 		tWord.m_iDocNum = sphUnzipInt( m_pMergeWordlist );
 		assert ( tWord.m_iDocNum );
-
 		tWord.m_iHitNum = sphUnzipInt ( m_pMergeWordlist );
 		assert ( tWord.m_iHitNum );
 	}

@@ -32,6 +32,8 @@
 
 bool			g_bQuiet		= false;
 bool			g_bProgress		= true;
+int64_t			g_iTimeProgress	= 0;
+int64_t			g_tmTime		= 0;
 
 const char *	g_sBuildStops	= NULL;
 int				g_iTopStops		= 100;
@@ -266,6 +268,20 @@ void ShowProgress ( const CSphIndexProgress * pProgress, bool bPhaseEnd )
 	// if in no-progress mode, only show phase ends
 	if ( g_bQuiet || ( !g_bProgress && !bPhaseEnd ) )
 		return;
+
+	if ( g_iTimeProgress > 0 )
+	{
+		if ( !g_tmTime )
+			g_tmTime = sphMicroTimer();
+		else
+		{
+			int64_t iNow = sphMicroTimer();
+			if ( iNow - g_tmTime > g_iTimeProgress )
+				g_tmTime = iNow;
+			else
+				return;
+		}
+	}
 
 	switch ( pProgress->m_ePhase )
 	{
@@ -1222,7 +1238,11 @@ int main ( int argc, char ** argv )
 		{
 			bMergeKillLists = true;
 
-		} else if ( sphIsAlpha(argv[i][0]) )
+		} else if ( strcasecmp ( argv[i], "--progress-timer" )==0 )
+		{
+			g_iTimeProgress = 1000000 * strtoull ( argv[++i], NULL, 10 );
+		}
+		else if ( sphIsAlpha(argv[i][0]) )
 		{
 			dIndexes.Add ( argv[i] );
 
@@ -1256,6 +1276,8 @@ int main ( int argc, char ** argv )
 				"--quiet\t\t\tbe quiet, only print errors\n"
 				"--noprogress\t\tdo not display progress\n"
 				"\t\t\t(automatically on if output is not to a tty)\n"
+				"--progress-timer <sec>\trefresh progres no more\n"
+				"\t\t\tthan once in <sec> seconds\n"
 #if !USE_WINDOWS
 				"--rotate\t\tsend SIGHUP to searchd when indexing is over\n"
 				"\t\t\tto rotate updated indexes automatically\n"

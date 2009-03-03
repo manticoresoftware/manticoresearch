@@ -1352,26 +1352,45 @@ struct CSphWordIndexRecord
 	}
 };
 
+
+class CSphBitmap
+{
+protected:
+	CSphVector<BYTE> m_dData;
+
+public:
+	/// reset, ie. resize and clear
+	void Reset ( int iSize)
+	{
+		m_dData.Resize ( (iSize+7)>>3 );
+		if ( m_dData.GetLength() )
+			memset ( &m_dData[0], 0, m_dData.GetLength() );
+	}
+
+	/// get bit
+	inline bool GetBit ( int iIndex )
+	{
+		return ( m_dData[iIndex>>3] & ( 1<<(iIndex&7) ) )!=0;
+	}
+
+	/// set bit
+	inline void SetBit ( int iIndex )
+	{
+		m_dData[iIndex>>3] |= ( 1<<(iIndex&7) );
+	}
+};
+
+
 struct CSphWordDataRecord
 {
 private:
-	static const int MAXBITS = 5;
-	static const DWORD MAXMASK = ( 1 << MAXBITS ) - 1;
-
-	int									m_iCurDoc;
+	int									m_iCurDoc;			///< current position in filtered (!) documents sequence
 	int									m_iDataHitNum;
 	CSphReader_VLN *					m_pHitlistReader;
 	CSphMergeData *						m_pMergeData;
-	CSphVector<BYTE>					m_dFilteredBits;
-	int									m_iCurrentDoc;
-	DWORD								m_iCurrentBits;
 
-	bool CheckMoveNext()
-	{
-		if ( !( m_iCurrentDoc & MAXMASK ) )
-			m_iCurrentBits = m_dFilteredBits [ m_iCurrentDoc>>MAXBITS ];
-		return m_iCurrentBits & ( 1<<( ( m_iCurrentDoc++ ) & MAXMASK ) );
-	}
+	CSphBitmap							m_bmRejected;		///< bitmap of all documents, 1 if rejected by filter, 0 if accepted
+	int									m_iRejected;		///< current index into rejected bitmap
 
 public:
 	SphWordID_t							m_iWordID;
@@ -1391,6 +1410,7 @@ public:
 		: m_iCurDoc ( 0 )
 		, m_pHitlistReader ( 0 )
 		, m_pMergeData ( 0 )
+		, m_iRejected ( -1 )
 		, m_iWordID ( 0 )
 		, m_iRowitems ( 0 )
 		, m_iLeadingZero ( 0 )
@@ -21455,11 +21475,11 @@ int CSphWordDataRecord::CopyHits()
 	{
 		BYTE uValue = 0;
 		bool bLastByte = true;
-		if ( CheckMoveNext() )
+		if ( !m_bmRejected.GetBit ( m_iRejected++ ) )
 		{
 			for ( ;; ) // copy zipped zero-terminated chain without zip/unzip int.
 			{
-				uValue = m_pHitlistReader->GetByte();
+				uValue = (BYTE) m_pHitlistReader->GetByte();
 				m_pMergeData->m_pHitlistWriter->PutByte ( uValue );
 				if ( bLastByte && !uValue )
 					break;
@@ -21478,7 +21498,7 @@ int CSphWordDataRecord::CopyHits()
 		{
 			for ( ;; ) // skip zipped zero-terminated chain without zip/unzip int.
 			{
-				uValue = m_pHitlistReader->GetByte();
+				uValue = (BYTE) m_pHitlistReader->GetByte();
 				if ( bLastByte && !uValue )
 					break;
 				bLastByte = !( uValue & 0x80 );
@@ -21498,13 +21518,15 @@ void CSphWordDataRecord::CopyAllHits()
 
 DWORD CSphWordDataRecord::GetCurrentHit()
 {
-	while ( !CheckMoveNext() )
+	// skip hit chains for filtered out documents
+	while ( m_bmRejected.GetBit ( m_iRejected++ ) )
 		while ( m_pHitlistReader->UnzipInt () );
 
 	DWORD iWordPos = m_pHitlistReader->UnzipInt ();
 	if ( !iWordPos )
 	{
-		CheckMoveNext();
+		// unexpected hit chain eof, must not happen, but let's protect ourselves
+		m_iRejected++;
 		m_iCurDoc++;
 	}
 	return iWordPos;
@@ -21534,15 +21556,13 @@ void CSphWordDataRecord::Read( CSphMergeSource * pSource, CSphMergeData * pMerge
 	assert ( pReader && m_pHitlistReader );
 	m_dDoclist.Reserve ( 1024 );
 	m_dDoclist.Resize ( 0 );
-	m_dFilteredBits.Reserve ( 1 + ( iDocNum>>MAXBITS ) );
-	m_dFilteredBits.Resize ( 0 );
-	m_iCurrentDoc = 0;
+	m_bmRejected.Reset ( iDocNum );
 
 	CSphDoclistRecord tDoc;
 
 	tDoc.Inititalize ( m_iRowitems);
 
-	for( int i = 0; i < iDocNum; i++ )
+	for ( int i=0; i<iDocNum; i++ )
 	{
 		tDoc.Read ( pSource );
 
@@ -21561,20 +21581,14 @@ void CSphWordDataRecord::Read( CSphMergeSource * pSource, CSphMergeData * pMerge
 			tMatch.m_pRowitems = NULL;
 		}
 
-		if ( m_iCurrentDoc && !( m_iCurrentDoc & MAXMASK ) )
-			m_dFilteredBits.Add ( m_iCurrentBits );
-		m_iCurrentBits |= ( bOK ? 1 : 0 ) << ( ( m_iCurrentDoc++ ) & MAXMASK );
-
 		if ( bOK )
-		{
-			m_dDoclist.Add( tDoc );
-			continue;
-		}
+			m_dDoclist.Add ( tDoc );
+		else
+			m_bmRejected.SetBit ( i );
 	}
 
-	// flush the latest bits
-	m_dFilteredBits.Add ( m_iCurrentBits );
-	m_iCurrentDoc = 0; // rewind to zero - it will be reused now for reading.
+	// start iterating rejected bitmap
+	m_iRejected = 0;
 
 	m_pMergeData->m_iLastHitlistPos = m_pMergeData->m_pHitlistWriter->GetPos();
 	if ( m_dDoclist.GetLength() )

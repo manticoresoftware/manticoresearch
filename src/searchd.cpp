@@ -898,7 +898,7 @@ void HandleCrash ( int )
 	if ( !g_pCrashLog_LastQuery )
 		return;
 
-	snprintf ( sBuffer, sizeof(sBuffer), "%s.%d", g_sCrashLog_Path, getpid() );
+	snprintf ( sBuffer, sizeof(sBuffer), "%s.%d", g_sCrashLog_Path, (int)getpid() );
 	if ( ( iFd = open ( sBuffer, O_WRONLY | O_CREAT | O_TRUNC, 0644 ) ) != -1 )
 	{
 		const int iSize = Min( g_iCrashLog_LastQuerySize, g_iMaxPacketSize );
@@ -7470,21 +7470,21 @@ void QueryStatus ( CSphVariant * v )
 		if ( !tDesc.m_sUnix.IsEmpty() )
 		{
 			// UNIX connection
-			struct sockaddr_un sun;
+			struct sockaddr_un uaddr;
 
 			size_t len = strlen ( tDesc.m_sUnix.cstr() );
-			if ( len+1 > sizeof(sun.sun_path ) )
+			if ( len+1 > sizeof(uaddr.sun_path ) )
 				sphFatal ( "UNIX socket path is too long (len=%d)", len );
 
-			memset ( &sun, 0, sizeof(sun) );
-			sun.sun_family = AF_UNIX;
-			memcpy ( sun.sun_path, tDesc.m_sUnix.cstr(), len+1 );
+			memset ( &uaddr, 0, sizeof(uaddr) );
+			uaddr.sun_family = AF_UNIX;
+			memcpy ( uaddr.sun_path, tDesc.m_sUnix.cstr(), len+1 );
 
 			int iSock = socket ( AF_UNIX, SOCK_STREAM, 0 );
 			if ( iSock<0 )
 				sphFatal ( "failed to create UNIX socket: %s", sphSockError() );
 
-			if ( connect ( iSock, (struct sockaddr*)&sun, sizeof(sun) )<0 )
+			if ( connect ( iSock, (struct sockaddr*)&uaddr, sizeof(uaddr) )<0 )
 			{
 				sphWarning ( "failed to connect to unix://%s: %s\n", tDesc.m_sUnix.cstr(), sphSockError() );
 				continue;

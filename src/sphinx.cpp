@@ -7352,7 +7352,7 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWOR
 		// encode attrs
 		if ( d2 && pAttrs )
 		{
-			for ( int i=0; i<iStride-1; i++ )
+			for ( int i=0; i<iStride-DOCINFO_IDSIZE; i++ )
 				pBuf += encodeVLB ( pBuf, pAttrs[i] );
 		}
 
@@ -10964,7 +10964,6 @@ static inline void CopyExtDocinfo ( ExtDoc_t & tDst, const ExtDoc_t & tSrc, CSph
 	if ( tSrc.m_pDocinfo )
 	{
 		assert ( ppRow && *ppRow );
-		assert ( *ppRow >= tDst.m_pDocinfo && ( *ppRow + iStride*sizeof(CSphRowitem) ) <= ( tDst.m_pDocinfo + (ExtNode_i::MAX_DOCS*iStride) ) );
 		memcpy ( *ppRow, tSrc.m_pDocinfo, iStride*sizeof(CSphRowitem) );
 		tDst.m_pDocinfo = *ppRow;
 		*ppRow += iStride;

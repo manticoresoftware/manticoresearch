@@ -308,7 +308,9 @@ enum Func_e
 	FUNC_MUL3,
 
 	FUNC_INTERVAL,
-	FUNC_IN
+	FUNC_IN,
+
+	FUNC_GEODIST
 };
 
 
@@ -346,7 +348,9 @@ static FuncDesc_t g_dFuncs[] =
 	{ "mul3",	3,	FUNC_MUL3 },
 
 	{ "interval",	-2,	FUNC_INTERVAL },
-	{ "in",			-1, FUNC_IN }
+	{ "in",			-1, FUNC_IN },
+
+	{ "geodist",	4,	FUNC_GEODIST }
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -414,6 +418,8 @@ private:
 	int						GetToken ( YYSTYPE * lvalp );
 
 	void					GatherArgTypes ( int iNode, CSphVector<int> & dTypes );
+	void					GatherArgNodes ( int iNode, CSphVector<int> & dNodes );
+
 	bool					CheckForConstSet ( int iArgsNode, int iSkip );
 
 	template < typename T >
@@ -424,6 +430,7 @@ private:
 	ISphExpr *				CreateTree ( int iNode );
 	ISphExpr *				CreateIntervalNode ( int iArgsNode, CSphVector<ISphExpr *> & dArgs );
 	ISphExpr *				CreateInNode ( int iNode, CSphVector<ISphExpr *> & dArgs );
+	ISphExpr *				CreateGeodistNode ( int iArgs );
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -729,8 +736,9 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 
 	const ExprNode_t & tNode = m_dNodes[iNode];
 
-	ISphExpr * pLeft = ( tNode.m_iToken==TOK_FUNC && g_dFuncs[tNode.m_iFunc].m_eFunc==FUNC_IN )
-		? NULL // to avoid spawning MVA node in some cases
+	bool bSkipArglist = tNode.m_iToken==TOK_FUNC && g_dFuncs[tNode.m_iFunc].m_eFunc==FUNC_GEODIST;
+	ISphExpr * pLeft = ( bSkipArglist || ( tNode.m_iToken==TOK_FUNC && g_dFuncs[tNode.m_iFunc].m_eFunc==FUNC_IN ) )
+		? NULL // to avoid spawning argument node in some cases
 		: CreateTree ( tNode.m_iLeft );
 	ISphExpr * pRight = CreateTree ( tNode.m_iRight );
 
@@ -782,12 +790,13 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 				CSphVector<ISphExpr *> dArgs;
 				if ( eFunc==FUNC_IN )
 					FoldArglist ( pRight, dArgs );
-				else
+				else if ( !bSkipArglist )
 					FoldArglist ( pLeft, dArgs );
 
 				// spawn proper function
 				assert ( tNode.m_iFunc>=0 && tNode.m_iFunc<int(sizeof(g_dFuncs)/sizeof(g_dFuncs[0])) );
 				assert (
+					( bSkipArglist ) || // function will handle its arglist,
 					( g_dFuncs[tNode.m_iFunc].m_iArgs>=0 && g_dFuncs[tNode.m_iFunc].m_iArgs==dArgs.GetLength() ) || // arg count matches,
 					( g_dFuncs[tNode.m_iFunc].m_iArgs<0 && -g_dFuncs[tNode.m_iFunc].m_iArgs<=dArgs.GetLength() ) ); // or min vararg count reached
 
@@ -818,6 +827,8 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 
 					case FUNC_INTERVAL:	return CreateIntervalNode ( tNode.m_iLeft, dArgs );
 					case FUNC_IN:		return CreateInNode ( iNode, dArgs );
+
+					case FUNC_GEODIST:	return CreateGeodistNode ( tNode.m_iLeft );
 				}
 				assert ( 0 && "unhandled function id" );
 				break;
@@ -1036,6 +1047,106 @@ protected:
 
 //////////////////////////////////////////////////////////////////////////
 
+static inline double sphSqr ( double v ) { return v * v; }
+
+static inline float CalcGeodist ( float fPointLat, float fPointLon, float fAnchorLat, float fAnchorLon )
+{
+	const double R = 6384000;
+	double dlat = fPointLat - fAnchorLat;
+	double dlon = fPointLon - fAnchorLon;
+	double a = sphSqr(sin(dlat/2)) + cos(fPointLat)*cos(fAnchorLat)*sphSqr(sin(dlon/2));
+	double c = 2*asin ( Min ( 1, sqrt(a) ) );
+	return float(R*c);
+}
+
+/// geodist() - attr point, constant anchor
+class Expr_GeodistAttrConst_c: public ISphExpr
+{
+public:
+	Expr_GeodistAttrConst_c ( CSphAttrLocator tLat, CSphAttrLocator tLon, float fAnchorLat, float fAnchorLon )
+		: m_tLat ( tLat )
+		, m_tLon ( tLon )
+		, m_fAnchorLat ( fAnchorLat )
+		, m_fAnchorLon ( fAnchorLon )
+	{}
+
+	virtual float Eval ( const CSphMatch & tMatch ) const
+	{
+		return CalcGeodist ( tMatch.GetAttrFloat ( m_tLat ), tMatch.GetAttrFloat ( m_tLon ), m_fAnchorLat, m_fAnchorLon );
+	}
+
+private:
+	CSphAttrLocator	m_tLat;
+	CSphAttrLocator	m_tLon;
+	
+	float		m_fAnchorLat;
+	float		m_fAnchorLon;
+};
+
+/// geodist() - expr point, constant anchor
+class Expr_GeodistConst_c: public ISphExpr
+{
+public:
+	Expr_GeodistConst_c ( ISphExpr * pLat, ISphExpr * pLon, float fAnchorLat, float fAnchorLon )
+		: m_pLat ( pLat )
+		, m_pLon ( pLon )
+		, m_fAnchorLat ( fAnchorLat )
+		, m_fAnchorLon ( fAnchorLon )
+	{}
+
+	~Expr_GeodistConst_c ()
+	{
+		SafeRelease ( m_pLon );
+		SafeRelease ( m_pLat );
+	}
+
+	virtual float Eval ( const CSphMatch & tMatch ) const
+	{
+		return CalcGeodist ( m_pLat->Eval(tMatch), m_pLon->Eval(tMatch), m_fAnchorLat, m_fAnchorLon );
+	}
+
+private:
+	ISphExpr *	m_pLat;
+	ISphExpr *	m_pLon;
+	
+	float		m_fAnchorLat;
+	float		m_fAnchorLon;
+};
+
+/// geodist() - expr point, expr anchor
+class Expr_Geodist_c: public ISphExpr
+{
+public:
+	Expr_Geodist_c ( ISphExpr * pLat, ISphExpr * pLon, ISphExpr * pAnchorLat, ISphExpr * pAnchorLon )
+		: m_pLat ( pLat )
+		, m_pLon ( pLon )
+		, m_pAnchorLat ( pAnchorLat )
+		, m_pAnchorLon ( pAnchorLon )
+	{}
+
+	~Expr_Geodist_c ()
+	{
+		SafeRelease ( m_pAnchorLon );
+		SafeRelease ( m_pAnchorLat );
+		SafeRelease ( m_pLon );
+		SafeRelease ( m_pLat );
+	}
+
+	virtual float Eval ( const CSphMatch & tMatch ) const
+	{
+		return CalcGeodist ( m_pLat->Eval(tMatch), m_pLon->Eval(tMatch), m_pAnchorLat->Eval(tMatch), m_pAnchorLon->Eval(tMatch) );
+	}
+
+private:
+	ISphExpr *	m_pLat;
+	ISphExpr *	m_pLon;
+
+	ISphExpr *	m_pAnchorLat;
+	ISphExpr *	m_pAnchorLon;
+};
+
+//////////////////////////////////////////////////////////////////////////
+
 void ExprParser_t::GatherArgTypes ( int iNode, CSphVector<int> & dTypes )
 {
 	if ( iNode<0 )
@@ -1052,6 +1163,20 @@ void ExprParser_t::GatherArgTypes ( int iNode, CSphVector<int> & dTypes )
 	}
 }
 
+void ExprParser_t::GatherArgNodes ( int iNode, CSphVector<int> & dNodes )
+{
+	if ( iNode<0 )
+		return;
+
+	const ExprNode_t & tNode = m_dNodes[iNode];
+	if ( tNode.m_iToken==',' )
+	{
+		GatherArgNodes ( tNode.m_iLeft, dNodes );
+		GatherArgNodes ( tNode.m_iRight, dNodes );
+	}
+	else
+		dNodes.Add ( iNode );
+}
 
 bool ExprParser_t::CheckForConstSet ( int iArgsNode, int iSkip )
 {
@@ -1132,6 +1257,46 @@ ISphExpr * ExprParser_t::CreateInNode ( int iNode, CSphVector<ISphExpr *> & dArg
 			default:				return new Expr_In_c<float> ( pArg, dArgs ); break;
 		}
 	}
+}
+
+ISphExpr * ExprParser_t::CreateGeodistNode ( int iArgs )
+{
+	CSphVector<int> dArgs;
+	GatherArgNodes ( iArgs, dArgs );
+	assert ( dArgs.GetLength() == 4 );
+
+	const ExprNode_t & tAnchorLat = m_dNodes [ dArgs[2] ];
+	const ExprNode_t & tAnchorLon = m_dNodes [ dArgs[3] ];
+	if ( IsConst ( tAnchorLat.m_iToken ) && IsConst ( tAnchorLon.m_iToken ) )
+	{
+		float fAnchorLat = tAnchorLat.m_iToken == TOK_CONST_INT ? tAnchorLat.m_iConst : tAnchorLat.m_fConst;
+		float fAnchorLon = tAnchorLon.m_iToken == TOK_CONST_INT ? tAnchorLon.m_iConst : tAnchorLon.m_fConst;
+
+		// constant anchor
+		if ( m_dNodes [ dArgs[0] ].m_iToken == TOK_ATTR_FLOAT &&
+			 m_dNodes [ dArgs[1] ].m_iToken == TOK_ATTR_FLOAT )
+		{
+			// attr point
+			return new Expr_GeodistAttrConst_c (
+				m_dNodes [ dArgs[0] ].m_tLocator,
+				m_dNodes [ dArgs[1] ].m_tLocator,
+				fAnchorLat,
+				fAnchorLon );
+		}
+		else // expr point
+			return new Expr_GeodistConst_c (
+				CreateTree ( dArgs[0] ),
+				CreateTree ( dArgs[1] ),
+				fAnchorLat,
+				fAnchorLon );
+	}
+
+	// four expressions
+	CSphVector<ISphExpr *> dExpr;
+	FoldArglist ( CreateTree ( iArgs ), dExpr );
+	assert ( dExpr.GetLength() == 4 );
+	return new Expr_Geodist_c ( dExpr[0], dExpr[1], dExpr[2], dExpr[3] );
+		
 }
 
 //////////////////////////////////////////////////////////////////////////

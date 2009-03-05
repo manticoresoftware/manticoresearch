@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="windows-1251"?>
+
+<test>
+<name>snippets - boundaries, windows-1251</name>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1, 'text';
+}
+
+index index_sbcs
+{
+	source			= test
+	path			= <data_path/>/index_sbcs
+
+	morphology		= stem_enru	
+    min_word_len	= 3
+    min_prefix_len	= 0
+    min_infix_len	= 0
+	
+	phrase_boundary = .
+	phrase_boundary_step = 100
+	
+	charset_type = sbcs
+}
+</config>
+
+<db_insert>select 1;</db_insert>
+
+<custom_test><![CDATA[
+
+$results = array();
+
+////// windows-1251 //////
+
+// 1
+
+$docs = array();
+$docs[0] = 'С другом в саду я сидел. Мокрый склонился бамбук. Я шел по склону Фудзи. Старую женщину я.';
+$docs[1] = 'Я шел по склону Фудзи. Старую женщину я.';
+
+$opts = array();
+$opts['use_boundaries']    = true;
+$opts['single_passage']    = false;
+$opts['chunk_separator']   = '###';
+$opts['weight_order']      = false;
+$opts['exact_phrase']      = false;         
+$opts['limit']             = 20;
+
+$results[] = $client->BuildExcerpts($docs, 'index_sbcs', 'шел', $opts);
+
+// 2
+
+$docs = array();
+$docs[0] = 'С другом в саду я сидел. Мокрый склонился бамбук. Я шел по склону Фудзи. Старую женщину я.  Шел не зная куда. ';
+
+$opts = array();
+$opts['use_boundaries']    = true;
+$opts['single_passage']    = false;
+$opts['chunk_separator']   = '###';
+$opts['weight_order']      = false;
+$opts['exact_phrase']      = true;         
+$opts['limit']             = 20;
+
+$results[] = $client->BuildExcerpts($docs, 'index_sbcs', 'шел по склону', $opts);
+
+// 3
+
+$opts = array();
+$opts['use_boundaries']    = true;
+$opts['single_passage']    = false;
+$opts['chunk_separator']   = '###';
+$opts['weight_order']      = true;
+$opts['exact_phrase']      = true;         
+$opts['limit']             = 20;
+
+$results[] = $client->BuildExcerpts($docs, 'index_sbcs', 'шел по склону', $opts);
+
+// 4
+
+$opts = array();
+$opts['use_boundaries']    = true;
+$opts['single_passage']    = false;
+$opts['chunk_separator']   = '###';
+$opts['weight_order']      = true;
+$opts['exact_phrase']      = false;         
+$opts['limit']             = 20;
+
+$results[] = $client->BuildExcerpts($docs, 'index_sbcs', 'шел по склону', $opts);
+
+]]></custom_test>
+
+</test>

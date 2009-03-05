@@ -353,21 +353,25 @@ class SphinxConfig
 	function Load ( $config_file )
 	{
 		// load the file
-		$xml = new DOMDocument ( "1.0", "utf-8" );
-		if ( !$xml->load ( $config_file ) )
+		$doc = new DOMDocument ( "1.0", "utf-8" );
+		if ( !$doc->load ( $config_file ) )
 			return false;
 
 		// check for proper root node
-		if ( !$xml->hasChildNodes() )
+		if ( !$doc->hasChildNodes() )
 			return false;
 
-		$xml = $xml->childNodes->item(0);
+		$xml = $doc->childNodes->item(0);
 		if ( strtolower($xml->nodeName)!="test" )
 			return false;
 
 		$custom = GetFirstChild ( $xml, "custom_test" );
 		if ( $custom )
+		{
 			$this->_custom_test = $custom->nodeValue;
+			if ( $doc->encoding != 'utf-8' )
+				$this->_custom_test = iconv ( 'utf-8', $doc->encoding, $this->_custom_test );
+		}
 
 		// extract indexer run params
 		$indexer_run = GetFirstChild ( $xml, "indexer" );

@@ -426,6 +426,9 @@ public:
 	/// get last token boundary flag (true if there was a boundary before the token)
 	virtual bool					GetBoundary () { return m_bTokenBoundary; }
 
+	/// get byte offset of the last boundary character
+	virtual int						GetBoundaryOffset () { return m_iBoundaryOffset; }
+
 	/// was last token a special one?
 	virtual bool					WasTokenSpecial () { return m_bWasSpecial; }
 
@@ -461,6 +464,7 @@ protected:
 	int								m_iLastTokenLen;			///< last token length, in codepoints
 	bool							m_bTokenBoundary;			///< last token boundary flag (true after boundary codepoint followed by separator)
 	bool							m_bBoundary;				///< boundary flag (true immediately after boundary codepoint)
+	int								m_iBoundaryOffset;			///< boundary character offset (in bytes)
 	bool							m_bWasSpecial;				///< special token flag
 	bool							m_bEscaped;					///< backslash handling flag
 	int								m_iOvershortCount;			///< skipped overshort tokens count

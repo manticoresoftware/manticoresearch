@@ -4073,7 +4073,11 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 		}
 
 		// handle whitespace and boundary
-		if ( m_bBoundary && ( iCode==0 ) ) m_bTokenBoundary = true;
+		if ( m_bBoundary && ( iCode==0 ) )
+		{
+			m_bTokenBoundary = true;
+			m_iBoundaryOffset = pCur - m_pBuffer - 1;
+		}
 		m_bBoundary = ( iCode & FLAG_CODEPOINT_BOUNDARY )!=0;
 		if ( iCode==0 || m_bBoundary )
 		{
@@ -4266,7 +4270,11 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 		}
 
 		// handle whitespace and boundary
-		if ( m_bBoundary && ( iCode==0 ) ) m_bTokenBoundary = true;
+		if ( m_bBoundary && ( iCode==0 ) )
+		{
+			m_bTokenBoundary = true;
+			m_iBoundaryOffset = pCur - m_pBuffer - 1;
+		}
 		m_bBoundary = ( iCode & FLAG_CODEPOINT_BOUNDARY )!=0;
 		if ( iCode==0 || m_bBoundary )
 		{

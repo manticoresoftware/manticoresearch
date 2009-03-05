@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>phrase boundaries</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT * FROM test_table
+}
+
+index test
+{
+	source			= srctest
+	path			= <data_path/>/test
+
+    phrase_boundary = .
+    phrase_boundary_step = 10
+}
+</config>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`text` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 'first.' ),
+( 2, ' second' ),
+( 3, 'one. two three' ),
+( 4, 'one two three' );
+</db_insert>
+
+<queries>
+<query mode="extended2">^second</query>
+<query mode="extended2">"one two"</query>
+<query mode="extended2">"one two"~10</query>
+<query mode="extended2">"one two"~11</query>
+</queries>
+
+</test>

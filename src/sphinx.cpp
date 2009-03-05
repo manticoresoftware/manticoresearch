@@ -4006,6 +4006,7 @@ void CSphTokenizer_SBCS::SetBuffer ( BYTE * sBuffer, int iLength )
 	m_pCur = sBuffer;
 
 	m_iOvershortCount = 0;
+	m_bBoundary = m_bTokenBoundary = false;
 }
 
 
@@ -4041,7 +4042,6 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 
 				if ( !bShortToken )
 				{
-					m_bBoundary = m_bTokenBoundary = false;
 					m_iAccum = 0;
 					m_iLastTokenLen = 0;
 					return NULL;
@@ -4208,6 +4208,7 @@ void CSphTokenizer_UTF8::SetBuffer ( BYTE * sBuffer, int iLength )
 			*p = ' ';
 
 	m_iOvershortCount = 0;
+	m_bBoundary = m_bTokenBoundary = false;
 }
 
 
@@ -4232,8 +4233,6 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 		// handle eof
 		if ( iCode<0 )
 		{
-			m_bBoundary = m_bTokenBoundary = false;
-
 			// skip trailing short word
 			FlushAccum ();
 			if ( m_iLastTokenLen<m_tSettings.m_iMinWordLen )

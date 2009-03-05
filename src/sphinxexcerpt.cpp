@@ -314,8 +314,11 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict, 
 
 	// last space if any
 	if ( pLastTokenEnd != pTokenizer->GetBufferEnd () )
-		AddJunk ( pLastTokenEnd - pStartPtr, pTokenizer->GetBufferEnd () - pLastTokenEnd, -1 );
-
+	{
+		int iOffset = pTokenizer->GetBoundary() ? pTokenizer->GetBoundaryOffset() : -1;
+		AddJunk ( pLastTokenEnd - pStartPtr, pTokenizer->GetBufferEnd () - pLastTokenEnd, iOffset );
+	}
+	
 	m_dTokens.Resize ( m_dTokens.GetLength () + 1 );
 	Token_t & tLast = m_dTokens.Last ();
 	tLast.m_eType   = TOK_NONE;

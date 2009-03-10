@@ -14083,7 +14083,7 @@ bool CSphIndex_VLN::MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISph
 			CopyDocinfo ( tMatch, pDocinfo );
 			EarlyCalc ( tMatch );
 
-			if ( EarlyReject ( tMatch ) )
+			if ( m_pEarlyFilter && !m_pEarlyFilter->Eval ( tMatch ) )
 				continue;
 
 			SPH_SUBMIT_MATCH ( tMatch );

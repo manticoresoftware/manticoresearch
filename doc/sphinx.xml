@@ -5491,7 +5491,7 @@ it only affects <filename>indexer</filename>.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
-overshort_step = 1
+stopword_step = 1
 </programlisting>
 </sect3>
 

@@ -31,6 +31,7 @@ index test
 <queries>
 <query mode="extended2">^one two</query>
 <query mode="extended2">^other three</query>
+<query mode="extended2">three$</query>
 </queries>
 
 <db_create>

@@ -11475,6 +11475,7 @@ ExtTermPos_c<T>::ExtTermPos_c ( CSphQueryWord * pQword, DWORD uFields, int iMaxF
 	, m_pRawDoc		( NULL )
 	, m_pRawHit		( NULL )
 	, m_uLastID			( 0 )
+	, m_uDoneFor	( 0 )
 {
 	AllocDocinfo ( tSetup );
 }
@@ -11612,9 +11613,9 @@ const ExtHit_t * ExtTermPos_c<T>::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocI
 
 		// old request completed in full, but we have a new hits subchunk request now
 		// even though there were no new docs requests in the meantime!
-		m_uDoneFor = pDocs->m_uDocid;
 		m_eState = COPY_FILTERED;
 	}
+	m_uDoneFor = pDocs->m_uDocid;
 
 	// regular case
 	// copy hits for requested docs from my hits to filtered hits, and return those

@@ -1119,13 +1119,13 @@ hello !world
 </programlisting>
 </listitem>
 <listitem>field search operator: <programlisting>@title hello @body world</programlisting></listitem>
-<listitem>field position limit modifier (introduced in version 0.9.9): <programlisting>@body[50] hello</programlisting></listitem>
+<listitem>field position limit modifier (introduced in version 0.9.9-rc1): <programlisting>@body[50] hello</programlisting></listitem>
 <listitem>multiple-field search operator: <programlisting>@(title,body) hello world</programlisting></listitem>
 <listitem>all-field search operator: <programlisting>@* hello</programlisting></listitem>
 <listitem>phrase search operator: <programlisting>"hello world"</programlisting></listitem>
 <listitem>proximity search operator: <programlisting>"hello world"~10</programlisting></listitem>
 <listitem>quorum matching operator: <programlisting>"the world is a wonderful place"/3</programlisting></listitem>
-<listitem>exact form operator (introduced in version 0.9.9): <programlisting>raining =cats and =dogs</programlisting></listitem>
+<listitem>exact form operator (introduced in version 0.9.9-rc1): <programlisting>raining =cats and =dogs</programlisting></listitem>
 </itemizedlist>
 
 Here's an example query which uses most of these operators:
@@ -1153,7 +1153,7 @@ means "looking for ( cat | dog | mouse )" and <emphasis>not</emphasis>
 "(looking for cat) | dog | mouse".
 </para>
 <para>
-Field position limit, introduced in version 0.9.9, additionaly restricts the searching
+Field position limit, introduced in version 0.9.9-rc1, additionaly restricts the searching
 to first N position within given field (or fields). For example, "@body[50] hello" will
 <b>not</b> match the documents where the keyword 'hello' occurs at position 51 and below
 in the body.
@@ -1172,7 +1172,7 @@ The example above ("the world is a wonderful place"/3) will match all documents
 that have at least 3 of the 6 specified words.
 </para>
 <para>
-Exact form operator, introduced in version 0.9.9, will match the document only if the keyword occurred
+Exact form operator, introduced in version 0.9.9-rc1, will match the document only if the keyword occurred
 in exactly the specified form. The default behaviour is to match the document
 if the stemmed keyword matches. For instance, "runs" query will match both
 the document that contains "runs" <emphasis>and</emphasis> the document that
@@ -1403,7 +1403,7 @@ calculations precision. Because of that, the comparison with 0.0 done by <code>I
 will not pass, and the second variant will return 'a' as a result.
 </para>
 <para>
-BIGINT() function, introduced in version 0.9.9, forcibly promotes the integer argument to 64-bit type,
+BIGINT() function, introduced in version 0.9.9-rc1, forcibly promotes the integer argument to 64-bit type,
 and does nothing on floating point argument. It's intended to help enforce evaluation
 of certain expressions (such as "a*b") in 64-bit mode even though all the arguments
 are 32-bit.
@@ -1413,7 +1413,7 @@ IDIV() functions performs an integer division on its 2 arguments. The result
 is integer as well, unlike "a/b" result.
 </para>
 <para>
-IN(expr,val1,val2,...), introduced in version 0.9.9, takes 2 or more arguments, and returns 1 if 1st argument
+IN(expr,val1,val2,...), introduced in version 0.9.9-rc1, takes 2 or more arguments, and returns 1 if 1st argument
 (expr) is equal to any of the other arguments (val1..valN), or 0 otherwise.
 Currently, all the checked values (but not the expression itself!) are required
 to be constant. (Its technically possible to implement arbitrary expressions too,
@@ -1422,14 +1422,14 @@ binary search is used, so IN() even against a big arbitrary list of constants
 will be very quick.
 </para>
 <para>
-INTERVAL(expr,point1,point2,point3,...), introduced in version 0.9.9, takes 2 or more arguments, and returns
+INTERVAL(expr,point1,point2,point3,...), introduced in version 0.9.9-rc1, takes 2 or more arguments, and returns
 the index of the argument that is less than the first argument: it returns
 0 if expr&lt;point1, 1 if point1&lt;=expr&lt;point2, and so on.
 It is required that point1&lt;point2&lt;...&lt;pointN for this function
 to work correctly.
 </para>
 <para>
-NOW(), introduced in version 0.9.9, is a helper function that returns current timestamp as a 32-bit integer.
+NOW(), introduced in version 0.9.9-rc1, is a helper function that returns current timestamp as a 32-bit integer.
 </para>
 </sect2>
 
@@ -1983,7 +1983,7 @@ will only keep one entry per document ID.
 Checks whether the last error was a network error on API side, or a remote error
 reported by searchd. Returns true if the last connection attempt to searchd failed on API side,
 false otherwise (if the error was remote, or there were no connection attempts at all).
-Introduced in version 0.9.9.
+Introduced in version 0.9.9-rc1.
 </para>
 </sect3>
 
@@ -2054,7 +2054,7 @@ separately.
 <para>
 Sets temporary (per-query) per-document attribute value overrides.
 Only supports scalar attributes. $values must be a hash that maps document
-IDs to overridden attribute values. Introduced in version 0.9.9.
+IDs to overridden attribute values. Introduced in version 0.9.9-rc1.
 </para>
 <para>
 Override feature lets you "temporary" update attribute values for some documents
@@ -2075,7 +2075,7 @@ exactly the friends of current user), and use that value when ranking.
 <para><b>Prototype:</b> function SetSelect ( $clause )</para>
 <para>
 Sets the select clause, listing specific attributes to fetch, and <link linkend="sort-expr">expressions</link>
-to compute and fetch. Clause syntax mimics SQL. Introduced in version 0.9.9.</para>
+to compute and fetch. Clause syntax mimics SQL. Introduced in version 0.9.9-rc1.</para>
 <para>
 SetSelect() is very similar to the part of a typical SQL query between SELECT and FROM.
 It lets you choose what attributes (columns) to fetch, and also what expressions
@@ -3611,7 +3611,7 @@ sql_range_step = 1000
 Kill-list query.
 Optional, default is empty (no query).
 Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
-Introduced in version 0.9.9.
+Introduced in version 0.9.9-rc1.
 </para>
 <para>
 This query is expected to return a number of 1-column rows, each containing
@@ -3706,7 +3706,7 @@ Multi-value (there might be multiple attributes declared), optional.
 Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
 Note that unlike <link linkend="conf-sql-attr-uint">sql_attr_uint</link>,
 these values are <b>signed</b>.
-Introduced in version 0.9.9.
+Introduced in version 0.9.9-rc1.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
@@ -4066,7 +4066,7 @@ xmlpipe_attr_multi = taglist
 MS SQL Windows authentication flag.
 Boolean, optional, default value is 0 (false).
 Applies to <option>mssql</option> source type only.
-Introduced in version 0.9.9.
+Introduced in version 0.9.9-rc1.
 </para>
 <para>
 Whether to use currently logged in Windows account credentials for
@@ -4086,7 +4086,7 @@ mssql_winauth = 1
 MS SQL encoding type flag.
 Boolean, optional, default value is 0 (false).
 Applies to <option>mssql</option> source type only.
-Introduced in version 0.9.9.
+Introduced in version 0.9.9-rc1.
 </para>
 <para>
 Whether to ask for Unicode or single-byte data when querying MS SQL Server.
@@ -4108,7 +4108,7 @@ mssql_unicode = 1
 Columns to unpack using zlib (aka deflate, aka gunzip).
 Multi-value, optional, default value is empty list of columns.
 Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
-Introduced in version 0.9.9.
+Introduced in version 0.9.9-rc1.
 </para>
 <para>
 Columns specified using this directive will be unpacked by <filename>indexer</filename>
@@ -4129,7 +4129,7 @@ unpack_zlib = col2
 Columns to unpack using MySQL UNCOMPRESS() algorithm.
 Multi-value, optional, default value is empty list of columns.
 Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
-Introduced in version 0.9.9.
+Introduced in version 0.9.9-rc1.
 </para>
 <para>
 Columns specified using this directive will be unpacked by <filename>indexer</filename>
@@ -4149,7 +4149,7 @@ unpack_mysqlcompress = description_compressed
 <para>
 Buffer size for UNCOMPRESS()ed data.
 Optional, default value is 16M.
-Introduced in version 0.9.9.
+Introduced in version 0.9.9-rc1.
 </para>
 <para>
 When using <link linkend="conf-unpack-mysqlcompress">unpack_mysqlcompress</link>,
@@ -4408,7 +4408,7 @@ morphology = stem_en, libstemmer_sv
 <para>
 Minimum word length at which to enable stemming.
 Optional, default is 1 (stem everything).
-Introduced in version 0.9.9.
+Introduced in version 0.9.9-rc1.
 </para>
 <para>
 Stemmers are not perfect, and might sometimes produce undesired results.
@@ -5220,7 +5220,7 @@ agent = searchbox2:3312:chunk3,chunk4 # search remote indexes
 <para>
 Remote blackhole agent declaration in the <link linkend="distributed">distributed index</link>.
 Multi-value, optional, default is empty.
-Introduced in version 0.9.9.
+Introduced in version 0.9.9-rc1.
 </para>
 <para>
 <option>agent_blackhole</option> lets you fire-and-forget queries
@@ -5311,7 +5311,7 @@ preopen = 1
 <para>
 Whether to keep the dictionary file (.spi) for this index on disk, or precache it in RAM.
 Optional, default is 0 (precache in RAM).
-Introduced in version 0.9.9.
+Introduced in version 0.9.9-rc1.
 </para>
 <para>
 The dictionary (.spi) can be either kept on RAM or on disk. The default
@@ -5335,7 +5335,7 @@ ondisk_dict = 1
 <para>
 Whether to enable in-place index inversion.
 Optional, default is 0 (use separate temporary files).
-Introduced in version 0.9.9.
+Introduced in version 0.9.9-rc1.
 </para>
 <para>
 <option>inplace_enable</option> greatly reduces indexing disk footprint,
@@ -5375,7 +5375,7 @@ inplace_enable = 1
 <link linkend="conf-inplace-enable">In-place inversion</link> fine-tuning option.
 Controls preallocated hitlist gap size.
 Optional, default is 0.
-Introduced in version 0.9.9.
+Introduced in version 0.9.9-rc1.
 </para>
 <para>
 This directive does not affect <filename>searchd</filename> in any way,
@@ -5393,7 +5393,7 @@ inplace_hit_gap = 1M
 <link linkend="conf-inplace-enable">In-place inversion</link> fine-tuning option.
 Controls preallocated docinfo gap size.
 Optional, default is 0.
-Introduced in version 0.9.9.
+Introduced in version 0.9.9-rc1.
 </para>
 <para>
 This directive does not affect <filename>searchd</filename> in any way,
@@ -5411,7 +5411,7 @@ inplace_docinfo_gap = 1M
 <link linkend="conf-inplace-reloc-factor">In-place inversion</link> fine-tuning option.
 Controls relocation buffer size within indexing memory arena.
 Optional, default is 0.1.
-Introduced in version 0.9.9.
+Introduced in version 0.9.9-rc1.
 </para>
 <para>
 This directive does not affect <filename>searchd</filename> in any way,
@@ -5429,7 +5429,7 @@ inplace_reloc_factor = 0.1
 <link linkend="conf-inplace-write-factor">In-place inversion</link> fine-tuning option.
 Controls in-place write buffer size within indexing memory arena.
 Optional, default is 0.1.
-Introduced in version 0.9.9.
+Introduced in version 0.9.9-rc1.
 </para>
 <para>
 This directive does not affect <filename>searchd</filename> in any way,
@@ -5446,7 +5446,7 @@ inplace_write_factor = 0.1
 <para>
 Whether to index the original keywords along with the stemmed/remapped versions.
 Optional, default is 0 (do not index).
-Introduced in version 0.9.9.
+Introduced in version 0.9.9-rc1.
 </para>
 <para>
 When enabled, <option>index_exact_words</option> forces <filename>indexer</filename>
@@ -5466,7 +5466,7 @@ index_exact_words = 1
 <para>
 Position increment on overshort (less that <link linkend="conf-min-word-len">min_word_len</link>) keywords.
 Optional, allowed values are 0 and 1, default is 1.
-Introduced in version 0.9.9.
+Introduced in version 0.9.9-rc1.
 </para>
 <para>
 This directive does not affect <filename>searchd</filename> in any way,
@@ -5483,7 +5483,7 @@ overshort_step = 1
 <para>
 Position increment on <link linkend="conf-stopwords">stopwords</link>.
 Optional, allowed values are 0 and 1, default is 1.
-Introduced in version 0.9.9.
+Introduced in version 0.9.9-rc1.
 </para>
 <para>
 This directive does not affect <filename>searchd</filename> in any way,
@@ -5592,7 +5592,7 @@ max_iosize = 1048576
 <para>
 This setting lets you specify IP address and port, or Unix-domain
 socket path, that <code>searchd</code> will listen on.
-Introduced in version 0.9.9.
+Introduced in version 0.9.9-rc1.
 </para>
 <para>
 The informal grammar for <code>listen</code> setting is:
@@ -5874,7 +5874,7 @@ real-time, changes are first written to the in-memory copy of attributes
 (<option>docinfo</option> must be set to <option>extern</option>).
 Then, once <filename>searchd</filename> shuts down normally (via <code>SIGTERM</code>
 being sent), the changes are written to disk.
-Introduced in version 0.9.9.
+Introduced in version 0.9.9-rc1.
 </para>
 <para>Starting with 0.9.9, it is possible to tell <filename>searchd</filename>
 to periodically write these changes back to disk, to avoid them being lost. The time
@@ -5894,7 +5894,7 @@ attr_flush_period = 900 # persist updates to disk every 15 minutes
 <para>
 Instance-wide defaults for <link linkend="conf-ondisk-dict">ondisk_dict</link> directive.
 Optional, default it 0 (precache dictionaries in RAM).
-Introduced in version 0.9.9.
+Introduced in version 0.9.9-rc1.
 </para>
 <para>
 This directive lets you specify the default value of
@@ -5916,7 +5916,7 @@ Maximum allowed network packet size.
 Limits both query packets from clients, and response packets from remote agents in distributed environment.
 Only used for internal sanity checks, does not directly affect RAM use or performance.
 Optional, default is 8M.
-Introduced in version 0.9.9.
+Introduced in version 0.9.9-rc1.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
@@ -5929,7 +5929,7 @@ max_packet_size = 32M
 <para>
 Shared pool size for in-memory MVA updates storage.
 Optional, default size is 1M.
-Introduced in version 0.9.9.
+Introduced in version 0.9.9-rc1.
 </para>
 <para>
 This setting controls the size of the shared storage pool for updated MVA values.
@@ -5953,7 +5953,7 @@ mva_updates_pool = 16M
 <para>
 Path (formally prefix) for the crash log files.
 Optional, default is empty (do not create crash logs).
-Introduced in version 0.9.9.
+Introduced in version 0.9.9-rc1.
 </para>
 <para>
 This is a debugging setting, to help catch rare offending queries
@@ -5974,7 +5974,7 @@ crash_log_path = /home/sphinx/log/crashlog
 Maximum allowed per-query filter count.
 Only used for internal sanity checks, does not directly affect RAM use or performance.
 Optional, default is 256.
-Introduced in version 0.9.9.
+Introduced in version 0.9.9-rc1.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
@@ -5988,7 +5988,7 @@ max_filters = 1024
 Maximum allowed per-filter values count.
 Only used for internal sanity checks, does not directly affect RAM use or performance.
 Optional, default is 4096.
-Introduced in version 0.9.9.
+Introduced in version 0.9.9-rc1.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>

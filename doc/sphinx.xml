@@ -1183,7 +1183,7 @@ The operator affects the keywords, and thus can be used within phrase,
 proximity, or quorum operators.
 </para>
 <para>
-Starting with 0.9.9, arbitrarily nested brackets and negations are allowed.
+Starting with 0.9.9-rc1, arbitrarily nested brackets and negations are allowed.
 However, the query must be possible to compute without involving an implicit
 list of all documents:
 <programlisting>
@@ -2168,11 +2168,11 @@ computes the amount of per-field keyword occurrences, then multiplies the
 amounts by field weights, then sums the resulting values for the final result.
 </listitem>
 <listitem>
-SPH_RANK_PROXIMITY, added in version 0.9.9, returns raw phrase proximity
+SPH_RANK_PROXIMITY, added in version 0.9.9-rc1, returns raw phrase proximity
 value as a result. This mode is internally used to emulate SPH_MATCH_ALL queries.
 </listitem>
 <listitem>
-SPH_RANK_MATCHANY, added in version 0.9.9, returns rank as it was computed
+SPH_RANK_MATCHANY, added in version 0.9.9-rc1, returns rank as it was computed
 in SPH_MATCH_ANY mode ealier, and is internally used to emulate SPH_MATCH_ANY queries.
 </listitem>
 </itemizedlist>
@@ -2656,7 +2656,7 @@ morphology, wordforms) from given index will be used.
 <code>$words</code> is a string that contains the keywords to highlight. They will
 be processed with respect to index settings. For instance, if English stemming
 is enabled in the index, "shoes" will be highlighted even if keyword is "shoe".
-Starting with version 0.9.9, keywords can contain wildcards, that work similarly to
+Starting with version 0.9.9-rc1, keywords can contain wildcards, that work similarly to
 <link linkend="conf-enable-star">star-syntax</link> available in queries.
 <code>$opts</code> is a hash which contains additional optional highlighting parameters:
 <variablelist>
@@ -3100,7 +3100,7 @@ Second, less data would need to be packed by searchd, transferred
 and unpacked by SphinxSE.
 </para>
 <para>
-Starting with version 0.9.9, additional query info besides result set could be
+Starting with version 0.9.9-rc1, additional query info besides result set could be
 retrieved with <code>SHOW ENGINE SPHINX STATUS</code> statement:
 <programlisting>
 mysql> SHOW ENGINE SPHINX STATUS;
@@ -4513,7 +4513,7 @@ from source <filename>.dict</filename> and <filename>.aff</filename>
 dictionary files in <filename>ispell</filename> format.
 </para>
 <para>
-Starting with version 0.9.9, you can map several source words
+Starting with version 0.9.9-rc1, you can map several source words
 to a single destination word. Because the work happens on tokens,
 not the source text, differences in whitespace and markup are ignored.
 <programlisting>
@@ -5876,7 +5876,7 @@ Then, once <filename>searchd</filename> shuts down normally (via <code>SIGTERM</
 being sent), the changes are written to disk.
 Introduced in version 0.9.9-rc1.
 </para>
-<para>Starting with 0.9.9, it is possible to tell <filename>searchd</filename>
+<para>Starting with 0.9.9-rc1, it is possible to tell <filename>searchd</filename>
 to periodically write these changes back to disk, to avoid them being lost. The time
 between those intervals is set with <option>attr_flush_period</option>, in seconds.
 </para>

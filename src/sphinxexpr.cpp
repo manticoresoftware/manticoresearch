@@ -373,6 +373,12 @@ struct ExprNode_t
 	int				m_iRight;
 
 	ExprNode_t () : m_iToken ( 0 ), m_uRetType ( SPH_ATTR_NONE ), m_uArgType ( SPH_ATTR_NONE ), m_iLeft ( -1 ), m_iRight ( -1 ) {}
+
+	float FloatVal()
+	{
+		assert ( m_iToken==TOK_CONST_INT || m_iToken==TOK_CONST_FLOAT );
+		return  ( m_iToken==TOK_CONST_INT ) ? (float)m_iConst : m_fConst;
+	}
 };
 
 /// expression parser
@@ -1265,30 +1271,39 @@ ISphExpr * ExprParser_t::CreateGeodistNode ( int iArgs )
 	GatherArgNodes ( iArgs, dArgs );
 	assert ( dArgs.GetLength() == 4 );
 
-	const ExprNode_t & tAnchorLat = m_dNodes [ dArgs[2] ];
-	const ExprNode_t & tAnchorLon = m_dNodes [ dArgs[3] ];
-	if ( IsConst ( tAnchorLat.m_iToken ) && IsConst ( tAnchorLon.m_iToken ) )
-	{
-		float fAnchorLat = tAnchorLat.m_iToken == TOK_CONST_INT ? tAnchorLat.m_iConst : tAnchorLat.m_fConst;
-		float fAnchorLon = tAnchorLon.m_iToken == TOK_CONST_INT ? tAnchorLon.m_iConst : tAnchorLon.m_fConst;
+	bool bConst1 = ( IsConst ( m_dNodes[dArgs[0]].m_iToken ) && IsConst ( m_dNodes[dArgs[1]].m_iToken ) );
+	bool bConst2 = ( IsConst ( m_dNodes[dArgs[2]].m_iToken ) && IsConst ( m_dNodes[dArgs[3]].m_iToken ) );
 
+	if ( bConst1 && bConst2 )
+	{
+		return new Expr_GetConst_c ( CalcGeodist (
+			m_dNodes[dArgs[0]].FloatVal(), m_dNodes[dArgs[1]].FloatVal(),
+			m_dNodes[dArgs[2]].FloatVal(), m_dNodes[dArgs[3]].FloatVal() ) );
+	}
+
+	if ( bConst1 )
+	{
+		Swap ( dArgs[0], dArgs[2] );
+		Swap ( dArgs[1], dArgs[3] );
+		Swap ( bConst1, bConst2 );
+	}
+
+	if ( bConst2 )
+	{
 		// constant anchor
-		if ( m_dNodes [ dArgs[0] ].m_iToken == TOK_ATTR_FLOAT &&
-			 m_dNodes [ dArgs[1] ].m_iToken == TOK_ATTR_FLOAT )
+		if ( m_dNodes[dArgs[0]].m_iToken==TOK_ATTR_FLOAT && m_dNodes[dArgs[1]].m_iToken==TOK_ATTR_FLOAT )
 		{
 			// attr point
 			return new Expr_GeodistAttrConst_c (
-				m_dNodes [ dArgs[0] ].m_tLocator,
-				m_dNodes [ dArgs[1] ].m_tLocator,
-				fAnchorLat,
-				fAnchorLon );
-		}
-		else // expr point
+				m_dNodes[dArgs[0]].m_tLocator, m_dNodes[dArgs[1]].m_tLocator,
+				m_dNodes[dArgs[2]].FloatVal(), m_dNodes[dArgs[3]].FloatVal() );
+		} else
+		{
+			// expr point
 			return new Expr_GeodistConst_c (
-				CreateTree ( dArgs[0] ),
-				CreateTree ( dArgs[1] ),
-				fAnchorLat,
-				fAnchorLon );
+				CreateTree ( dArgs[0] ), CreateTree ( dArgs[1] ),
+				m_dNodes[dArgs[2]].FloatVal(), m_dNodes[dArgs[3]].FloatVal() );
+		}
 	}
 
 	// four expressions
@@ -1296,7 +1311,6 @@ ISphExpr * ExprParser_t::CreateGeodistNode ( int iArgs )
 	FoldArglist ( CreateTree ( iArgs ), dExpr );
 	assert ( dExpr.GetLength() == 4 );
 	return new Expr_Geodist_c ( dExpr[0], dExpr[1], dExpr[2], dExpr[3] );
-		
 }
 
 //////////////////////////////////////////////////////////////////////////

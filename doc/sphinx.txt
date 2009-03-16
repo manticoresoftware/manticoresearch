@@ -118,6 +118,7 @@ Table of Contents
       7.2.3. Checking SphinxSE installation
 
    7.3. Using SphinxSE
+   7.4. Building snippets (excerpts) via MySQL
 
 8. Reporting bugs
 9. sphinx.conf options reference
@@ -3698,6 +3699,44 @@ engines. Here's an example with "documents" from example.sql:
    | +--------+-------+---------------------------------------------+
    | 2 rows in set (0.00 sec)
 
+7.4. Building snippets (excerpts) via MySQL
+-------------------------------------------
+
+Starting with version 0.9.9-rc2, SphinxSE also includes a UDF function that
+lets you create snippets through MySQL. The functionality is fully similar
+to BuildExcerprts API call but accesible through MySQL+SphinxSE.
+
+The binary that provides the UDF is named sphinx.so and should be
+automatically built and installed to proper location along with SphinxSE
+itself. If it does not get installed automatically for some reason, look
+for sphinx.so in the build directory and copy it to the plugins directory
+of your MySQL instance. After that, register the UDF using the following
+statement:
+
+   | CREATE FUNCTION sphinx_snippets RETURNS STRING SONAME 'sphinx.so';
+
+Function name must be sphinx_snippets, you can not use an arbitrary name.
+Function arguments are as follows:
+
+Prototype: function sphinx_snippets ( document, index, words, [options] );
+
+Document and words arguments can be either strings or table columns.
+Options must be specified like this: 'value' AS option_name. For a list of
+supported options, refer to BuildExcerprts() API call. The only
+UDF-specific additional option is named 'sphinx' and lets you specify
+searchd location (host and port).
+
+Usage examples:
+
+   | SELECT sphinx_snippets('hello world doc', 'main', 'world',
+   |     'sphinx://192.168.1.1/' AS sphinx, true AS exact_phrase,
+   |     '[b]' AS before_match, '[/b]' AS after_match)
+   | FROM documents;
+   | 
+   | SELECT title, sphinx_snippets(text, 'index', 'mysql php') AS text
+   |     FROM sphinx, documents
+   |     WHERE query='mysql php' AND sphinx.id=documents.id;
+
 8. Reporting bugs
 =================
 
@@ -6101,7 +6140,7 @@ A.1. Version 0.9.9-rc2, ??? mar 2009
    * added support for @id in IN() (bug #292)
    * added support for aggregate functions in GROUP BY (namely AVG, MAX,
      MIN, SUM)
-   * added MySQL UDF that builds snippets (aka excerpts) using searchd
+   * added MySQL UDF that builds snippets using searchd
    * added write_buffer directive (defaults to 1M)
    * added xmlpipe_fixup_utf8 directive
    * added suggestions sample

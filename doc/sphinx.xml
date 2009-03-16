@@ -3543,6 +3543,55 @@ mysql> SHOW ENGINE SPHINX STATUS;
 </sect2>
 
 
+<sect2 id="sphinxse-snippets"><title>Building snippets (excerpts) via MySQL</title>
+<para>
+Starting with version 0.9.9-rc2, SphinxSE also includes a UDF function
+that lets you create snippets through MySQL. The functionality is fully
+similar to <link linkend="api-func-buildexcerpts">BuildExcerprts</link>
+API call but accesible through MySQL+SphinxSE.
+</para>
+<para>
+The binary that provides the UDF is named <filename>sphinx.so</filename>
+and should be automatically built and installed to proper location
+along with SphinxSE itself. If it does not get installed automatically
+for some reason, look for <filename>sphinx.so</filename> in the build
+directory and copy it to the plugins directory of your MySQL instance.
+After that, register the UDF using the following statement:
+<programlisting>
+CREATE FUNCTION sphinx_snippets RETURNS STRING SONAME 'sphinx.so';
+</programlisting>
+</para>
+<para>
+Function name <emphasis>must</emphasis> be sphinx_snippets,
+you can not use an arbitrary name. Function arguments are as follows:
+</para>
+<para>
+<b>Prototype:</b> function sphinx_snippets ( document, index, words, [options] );
+</para>
+<para>
+Document and words arguments can be either strings or table columns.
+Options must be specified like this: <code>'value' AS option_name</code>.
+For a list of supported options, refer to
+<link linkend="api-func-buildexcerpts">BuildExcerprts()</link> API call.
+The only UDF-specific additional option is named <code>'sphinx'</code>
+and lets you specify searchd location (host and port).
+</para>
+<para>
+Usage examples:
+<programlisting>
+SELECT sphinx_snippets('hello world doc', 'main', 'world',
+    'sphinx://192.168.1.1/' AS sphinx, true AS exact_phrase,
+    '[b]' AS before_match, '[/b]' AS after_match)
+FROM documents;
+
+SELECT title, sphinx_snippets(text, 'index', 'mysql php') AS text
+    FROM sphinx, documents
+    WHERE query='mysql php' AND sphinx.id=documents.id;
+</programlisting>
+</para>
+</sect2>
+
+
 </sect1>
 <sect1 id="reporting-bugs"><title>Reporting bugs</title>
 
@@ -6543,7 +6592,7 @@ listen_backlog = 20
 <listitem>added <link linkend="conf-odbc-dsn">ODBC support</link> (both Windows and UnixODBC)</listitem>
 <listitem>added support for @id in IN() (bug #292)</listitem>
 <listitem>added support for <link linkend="api-func-setselect">aggregate functions</link> in GROUP BY (namely AVG, MAX, MIN, SUM)</listitem>
-<listitem>added MySQL UDF that builds snippets (aka excerpts) using searchd</listitem>
+<listitem>added <link linkend="sphinxse-snippets">MySQL UDF that builds snippets</link> using searchd</listitem>
 <listitem>added <link linkend="conf-write-buffer">write_buffer</link> directive (defaults to 1M)</listitem>
 <listitem>added <link linkend="conf-xmlpipe-fixup-utf8">xmlpipe_fixup_utf8</link> directive</listitem>
 <listitem>added suggestions sample</listitem>

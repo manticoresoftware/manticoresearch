@@ -5716,13 +5716,15 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 							p += 4; // marker + 3-byte len
 
 							const DWORD * pValues = tMatch.GetAttrMVA ( tLoc, pRes->m_pMva );
-							DWORD nValues = *pValues++;
-
-							while ( nValues )
+							if ( pValues )
 							{
-								p += snprintf ( p, sRowMax-p, "%u", *pValues++ );
-								if ( --nValues )
-									*p++ = ',';
+								DWORD nValues = *pValues++;
+								while ( nValues )
+								{
+									p += snprintf ( p, sRowMax-p, "%u", *pValues++ );
+									if ( --nValues )
+										*p++ = ',';
+								}
 							}
 
 							iLen = (BYTE*)p - pLen - 4;

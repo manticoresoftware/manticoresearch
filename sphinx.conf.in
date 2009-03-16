@@ -13,7 +13,7 @@
 source src1
 {
 	# data source type. mandatory, no default value
-	# known types are 'mysql', 'pgsql', 'mssql', 'xmlpipe', 'xmlpipe2'
+	# known types are mysql, pgsql, mssql, xmlpipe, xmlpipe2, odbc
 	type					= mysql
 
 	#####################################################################
@@ -58,6 +58,13 @@ source src1
 	# optional, default is 0 (request SBCS data)
 	#
 	# mssql_unicode			= 1 # request Unicode data from server
+
+
+	# ODBC specific DSN (data source name)
+	# mandatory for odbc source type, no default value
+	#
+	# odbc_dsn				= DBQ=C:\data;DefaultDir=C:\data;Driver={Microsoft Text Driver (*.txt; *.csv)};
+	# sql_query				= SELECT id, data FROM documents.csv
 
 
 	# pre-query, executed before the main fetch query

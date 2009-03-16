@@ -5,6 +5,7 @@ for /F "usebackq" %%i in (1.tmp) do set PWD=%%i
 type sphinx.xml ^
 	| perl -pe "s/<b>/<emphasis role=\"bold\">/g" ^
 	| perl -pe "s/<\/b>/<\/emphasis>/g" ^
+	| perl -pe "s/bug #(\d+)/<ulink url=\"http:\/\/sphinxsearch.com\/bugs\/view.php\?id=\1\">bug #\1<\/ulink>/" ^
 	> 1.tmp
 xsltproc ^
 	--stringparam section.autolabel 1 ^

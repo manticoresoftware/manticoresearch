@@ -514,6 +514,18 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 		// check for magic name
 		if ( sTok=="@id" )		{ return TOK_ID; }
 		if ( sTok=="@weight" )	{ return TOK_WEIGHT; }
+		if ( sTok=="@geodist" )
+		{
+			int iGeodist = m_pSchema->GetAttrIndex("@geodist");
+			if ( iGeodist==-1 )
+			{
+				m_sLexerError = "geoanchor is not set, @geodist expression unavailable";
+				return -1;
+			}
+			const CSphAttrLocator & tLoc = m_pSchema->GetAttr(iGeodist).m_tLocator;
+			lvalp->iAttrLocator = ( tLoc.m_iBitOffset << 16 ) + tLoc.m_iBitCount;
+			return TOK_ATTR_FLOAT;
+		}
 
 		// check for keyword
 		if ( sTok=="and" )		{ return TOK_AND; }

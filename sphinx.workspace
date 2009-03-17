@@ -5,6 +5,9 @@
 		<Project filename="codeblocks/indexer.cbp" active="1">
 			<Depends filename="codeblocks/libsphinx.cbp" />
 		</Project>
+		<Project filename="codeblocks/indextool.cbp">
+			<Depends filename="codeblocks/libsphinx.cbp" />
+		</Project>
 		<Project filename="codeblocks/search.cbp" />
 		<Project filename="codeblocks/searchd.cbp">
 			<Depends filename="codeblocks/libsphinx.cbp" />

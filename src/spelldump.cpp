@@ -1147,22 +1147,24 @@ int main ( int iArgs, char ** dArgs )
 
 			case M_EXACT_OR_LONGEST:
 			{
-				DWORD iMatch, iLength = 0;
+				int iMatch = 0;
+				int iLength = 0;
+
 				ARRAY_FOREACH ( i, dWords )
-					if ( dWords[i].m_sWord == sKey )
+				{
+					if ( dWords[i].m_sWord==sKey )
 					{
 						iMatch = i;
 						break;
 					}
-					else
+
+					int iWordLength = strlen ( dWords[i].m_sWord.cstr() );
+					if ( iWordLength>iLength )
 					{
-						DWORD iWordLength = strlen ( dWords[i].m_sWord.cstr() );
-						if ( iWordLength > iLength )
-						{
-							iLength = iWordLength;
-							iMatch = i;
-						}
+						iLength = iWordLength;
+						iMatch = i;
 					}
+				}
 
 				fprintf ( pFile, "%s > %s\n", sKey, dWords[iMatch].m_sWord.cstr() );
 				break;

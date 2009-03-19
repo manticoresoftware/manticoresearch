@@ -39,14 +39,15 @@
      TOK_FUNC_IN = 265,
      TOK_ID = 266,
      TOK_WEIGHT = 267,
-     TOK_OR = 268,
-     TOK_AND = 269,
-     TOK_NOT = 270,
-     TOK_NE = 271,
-     TOK_EQ = 272,
-     TOK_GTE = 273,
-     TOK_LTE = 274,
-     TOK_NEG = 275
+     TOK_CONST_LIST = 268,
+     TOK_OR = 269,
+     TOK_AND = 270,
+     TOK_NOT = 271,
+     TOK_NE = 272,
+     TOK_EQ = 273,
+     TOK_GTE = 274,
+     TOK_LTE = 275,
+     TOK_NEG = 276
    };
 #endif
 #define TOK_CONST_INT 258
@@ -59,14 +60,15 @@
 #define TOK_FUNC_IN 265
 #define TOK_ID 266
 #define TOK_WEIGHT 267
-#define TOK_OR 268
-#define TOK_AND 269
-#define TOK_NOT 270
-#define TOK_NE 271
-#define TOK_EQ 272
-#define TOK_GTE 273
-#define TOK_LTE 274
-#define TOK_NEG 275
+#define TOK_CONST_LIST 268
+#define TOK_OR 269
+#define TOK_AND 270
+#define TOK_NOT 271
+#define TOK_NE 272
+#define TOK_EQ 273
+#define TOK_GTE 274
+#define TOK_LTE 275
+#define TOK_NEG 276
 
 
 

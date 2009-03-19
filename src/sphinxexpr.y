@@ -23,9 +23,12 @@
 %token	TOK_ID
 %token	TOK_WEIGHT
 
+%token	TOK_CONST_LIST
+
 %type <iNode>			attr
 %type <iNode>			expr
 %type <iNode>			arglist
+%type <iNode>			constlist
 %type <iNode>			function
 
 %left TOK_AND TOK_OR
@@ -77,18 +80,25 @@ arglist:
 	| arglist ',' expr				{ $$ = pParser->AddNodeOp ( ',', $1, $3 ); }
 	;
 
+constlist:
+	TOK_CONST_INT					{ $$ = pParser->AddNodeConstlist ( $1 ); }
+	| TOK_CONST_FLOAT				{ $$ = pParser->AddNodeConstlist ( $1 ); }
+	| constlist',' TOK_CONST_INT	{ pParser->AppendToConstlist ( $$, $3 ); }
+	| constlist',' TOK_CONST_FLOAT	{ pParser->AppendToConstlist ( $$, $3 ); }
+	;
+
 function:
 	TOK_FUNC '(' arglist ')'		{ $$ = pParser->AddNodeFunc ( $1, $3 ); if ( $$<0 ) YYERROR; }
 	| TOK_FUNC '(' ')'				{ $$ = pParser->AddNodeFunc ( $1, -1 ); if ( $$<0 ) YYERROR; }
-	| TOK_FUNC_IN '(' attr ',' arglist ')'
+	| TOK_FUNC_IN '(' attr ',' constlist ')'
 		{
 			$$ = pParser->AddNodeFunc ( $1, $3, $5 );
 		}
-	| TOK_FUNC_IN '(' TOK_ID ',' arglist ')'
+	| TOK_FUNC_IN '(' TOK_ID ',' constlist ')'
 		{
 			$$ = pParser->AddNodeFunc ( $1, pParser->AddNodeID(), $5 );
 		}
-	| TOK_FUNC_IN '(' TOK_ATTR_MVA ',' arglist ')'
+	| TOK_FUNC_IN '(' TOK_ATTR_MVA ',' constlist ')'
 		{
 			$$ = pParser->AddNodeAttr ( TOK_ATTR_MVA, $3 );
 			$$ = pParser->AddNodeFunc ( $1, $$, $5 );

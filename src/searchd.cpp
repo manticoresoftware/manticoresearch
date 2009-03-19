@@ -357,7 +357,7 @@ void Shutdown (); // forward ref for sphFatal()
 
 
 /// format current timestamp for logging
-void sphFormatCurrentTime ( char * sTimeBuf )
+int sphFormatCurrentTime ( char * sTimeBuf, int iBufLen )
 {
 #if !USE_WINDOWS
 	struct timeval tv;
@@ -388,7 +388,7 @@ void sphFormatCurrentTime ( char * sTimeBuf )
 	static const char * sWeekday[7] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
 	static const char * sMonth[12] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
 
-	sprintf ( sTimeBuf, "%.3s %.3s%3d %.2d:%.2d:%.2d.%.3d %d",
+	return snprintf ( sTimeBuf, iBufLen, "%.3s %.3s%3d %.2d:%.2d:%.2d.%.3d %d",
 		sWeekday [ tmp.tm_wday ],
 		sMonth [ tmp.tm_mon ],
 		tmp.tm_mday, tmp.tm_hour,
@@ -469,7 +469,7 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 
 	// format the banner
 	char sTimeBuf[128];
-	sphFormatCurrentTime ( sTimeBuf );
+	sphFormatCurrentTime ( sTimeBuf, sizeof(sTimeBuf) );
 
 	const char * sBanner = "";
 	if ( sFmt==NULL ) eLevel = eLastLevel;
@@ -3267,24 +3267,44 @@ void LogQuery ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 	if ( g_iQueryLogFile<0 || !tRes.m_sError.IsEmpty() )
 		return;
 
-	char sTimeBuf[128], sGroupBuf[128], sPerfBuf[128], sTagBuf[128], sBuf[2048];
+	char sBuf[2048];
+	char * p = sBuf;
+	char * pMax = sBuf+sizeof(sBuf)-4;
 
-	sphFormatCurrentTime ( sTimeBuf );
+	// [time]
+	*p++ = '[';
+	p += sphFormatCurrentTime ( p, pMax-p );
+	*p++ = ']';
 
-	sGroupBuf[0] = '\0';
-	if ( !tQuery.m_sGroupBy.IsEmpty() )
-		snprintf ( sGroupBuf, sizeof(sGroupBuf), " @%s", tQuery.m_sGroupBy.cstr() );
+	// querytime sec
+	int iQueryTime = Max ( tRes.m_iQueryTime, 0 );
+	p += snprintf ( p, pMax-p, " %d.%03d sec", iQueryTime/1000, iQueryTime%1000 );
 
+	// optional multi-query multiplier
+	if ( tRes.m_iMultiplier>1 )
+		p += snprintf ( p, pMax-p, " x%d", tRes.m_iMultiplier );
+
+	// [matchmode/numfilters/sortmode matches (offset,limit)
 	static const char * sModes [ SPH_MATCH_TOTAL ] = { "all", "any", "phr", "bool", "ext", "scan", "ext2" };
 	static const char * sSort [ SPH_SORT_TOTAL ] = { "rel", "attr-", "attr+", "tsegs", "ext", "expr" };
+	p += snprintf ( p, pMax-p, " [%s/%d/%s %d (%d,%d)",
+		sModes [ tQuery.m_eMode ], tQuery.m_dFilters.GetLength(), sSort [ tQuery.m_eSort ],
+		tRes.m_iTotalMatches, tQuery.m_iOffset, tQuery.m_iLimit );
 
+	// optional groupby info
+	if ( !tQuery.m_sGroupBy.IsEmpty() )
+		p += snprintf ( p, pMax-p, " @%s", tQuery.m_sGroupBy.cstr() );
+
+	// ] [indexes]
+	p += snprintf ( p, pMax-p, "] [%s]", tQuery.m_sIndexes.cstr() );
+
+	// optional performance counters
 	if ( g_bIOStats || g_bCpuStats )
 	{
 		const CSphIOStats & IOStats = sphStopIOStats ();
 
-		char * p = sPerfBuf;
-		char * pMax = sPerfBuf+sizeof(sPerfBuf);
 		*p++ = ' ';
+		char * pBracket = p; // can't fill yet, will be overwritten by sprintfs
 
 		if ( g_bIOStats )
 			p += snprintf ( p, pMax-p, " ios=%d kb=%d.%d ioms=%d.%d",
@@ -3294,31 +3314,32 @@ void LogQuery ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 		if ( g_bCpuStats )
 			p += snprintf ( p, pMax-p, " cpums=%d.%d", int(tRes.m_iCpuTime/1000), int(tRes.m_iCpuTime%1000)/100 );
 
+		*pBracket = '[';
 		if ( p<=pMax-2 )
 		{
 			*p++ = ']';
 			*p++ = '\0';
 		}
-		sPerfBuf[1] = '[';
-		pMax[-1] = '\0';
 	}
-	else
-		sPerfBuf[0] = '\0';
 
-	if ( tQuery.m_sComment.IsEmpty() )
-		sTagBuf[0] = '\0';
-	else
-		snprintf ( sTagBuf, sizeof(sTagBuf), " [%s]", tQuery.m_sComment.cstr() );
+	// optional query comment
+	if ( !tQuery.m_sComment.IsEmpty() )
+		p += snprintf ( p, pMax-p, " [%s]", tQuery.m_sComment.cstr() );
 
+	// query
+	if ( !tQuery.m_sQuery.IsEmpty() )
+	{
+		*p++ = ' ';
+		for ( const char * q = tQuery.m_sQuery.cstr(); p<pMax && *q; p++, q++ )
+			*p = ( *q=='\n' ) ? ' ' : *q;
+	}
 
-	int iQueryTime = Max ( tRes.m_iQueryTime, 0 );
-	snprintf ( sBuf, sizeof(sBuf), "[%s] %d.%03d sec [%s/%d/%s %d (%d,%d)%s] [%s]%s%s %s\n",
-		sTimeBuf, iQueryTime/1000, iQueryTime%1000,
-		sModes [ tQuery.m_eMode ], tQuery.m_dFilters.GetLength(), sSort [ tQuery.m_eSort ],
-		tRes.m_iTotalMatches, tQuery.m_iOffset, tQuery.m_iLimit, sGroupBuf,
-		tQuery.m_sIndexes.cstr(), sPerfBuf, sTagBuf, tQuery.m_sQuery.cstr() );
-
-	// snprintf does not emit zero at some runtimes (eg. VS2005)
+	// line feed
+	if ( p<pMax-1 )
+	{
+		*p++ = '\n';
+		*p++ = '\0';
+	}
 	sBuf[sizeof(sBuf)-2] = '\n';
 	sBuf[sizeof(sBuf)-1] = '\0';
 
@@ -4399,6 +4420,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	{
 		m_dResults[iRes].m_iQueryTime = int(tmSubset/1000/iQueries);
 		m_dResults[iRes].m_iCpuTime = tmCpu/iQueries;
+		m_dResults[iRes].m_iMultiplier = iQueries;
 	}
 
 	const CSphIOStats & tIO = sphStopIOStats ();

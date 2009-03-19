@@ -5503,6 +5503,7 @@ CSphQueryResult::CSphQueryResult ()
 	: m_tSchema ( "query_result" )
 {
 	m_iQueryTime = 0;
+	m_iMultiplier = 0;
 	m_iTotalMatches = 0;
 	m_pMva = NULL;
 	m_iOffset = 0;

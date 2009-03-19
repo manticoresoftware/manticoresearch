@@ -43,7 +43,12 @@ $client->SetSelect ( "*, IN(@id,1," . $idlist . "3) AS q" );
 $client->SetFilter ( "q", array(1) );
 
 $r = $client->Query ( "" );
-$results[] = $r ? $r : $client->GetLastError();
+if ( $r )
+{
+	unset ( $r["time"] );
+	$results[] = $r;
+} else
+	$results[] = $client->GetLastError();
 ]]></custom_test>
 
 <db_create>

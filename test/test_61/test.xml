@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>no double-delta decoding</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srcmain
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT * FROM test_table WHERE document_id in (2147483632,2147483652)
+}
+
+source srcdelta
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT * FROM test_table WHERE document_id in (2147483632,2147483672)
+}
+
+index main
+{
+	source			= srcmain
+	path			= <data_path/>/main
+    charset_type 	= utf-8
+}
+
+index delta
+{
+	source			= srcdelta
+	path			= <data_path/>/delta
+    charset_type 	= utf-8
+}
+</config>
+
+<indexer>
+<run>--merge main delta</run>
+</indexer>
+
+<queries>
+<query index="main">main</query>
+</queries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) UNSIGNED NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 2147483632, 'main' ),
+( 2147483652, 'main' ),
+( 2147483672, 'main' )
+</db_insert>
+
+</test>

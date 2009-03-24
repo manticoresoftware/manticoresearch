@@ -66,7 +66,10 @@ do
 done
 if test [ -n "$mysqlconfig" ]
 then
+	mysqlconfig_used=
 	AC_MSG_RESULT([not found])
+else
+	mysqlconfig_used=yes
 fi
 
 
@@ -126,6 +129,40 @@ then
 	MYSQL_LIBS="-L$ac_cv_mysql_libs -lmysqlclient -lz"
 fi
 
+# if we got options from mysqlconfig try to actually use them
+if test [ -n "$mysqlconfig_used" -a -n "$MYSQL_CFLAGS" -a -n "$MYSQL_LIBS" ]
+then
+	_CFLAGS=$CFLAGS
+	_LIBS=$LIBS
+	
+	CFLAGS="$CFLAGS $MYSQL_CFLAGS"
+	LIBS="$LIBS $MYSQL_LIBS"
+	
+	AC_CHECK_FUNC(mysql_real_connect,[],
+	[
+		# if mysql binary was built using a different compiler and we
+		# got options from mysql_config some of them might not work
+		# with compiler we will be using
+		
+		# throw away everything that isn't one of -D -L -I -l and retry
+		MYSQL_CFLAGS=`echo $MYSQL_CFLAGS | sed -e 's/-[[^DLIl]][[^ ]]*//g'`
+		MYSQL_LIBS=`echo $MYSQL_LIBS | sed -e 's/-[[^DLIl]][[^ ]]*//g'`
+
+		CFLAGS="$_CFLAGS $MYSQL_CFLAGS"
+		LIBS="$_LIBS $MYSQL_LIBS"
+
+		unset ac_cv_func_mysql_real_connect
+		AC_CHECK_FUNC(mysql_real_connect,[],
+		[
+			# ... that didn't help
+			# clear flags, the code below will complain
+			MYSQL_CFLAGS=
+			MYSQL_LIBS=
+		])
+	])
+	CFLAGS=$_CFLAGS
+	LIBS=$_LIBS
+fi
 
 # now that we did all we could, perform final checks
 AC_MSG_CHECKING([MySQL include files])

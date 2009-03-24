@@ -8925,8 +8925,11 @@ echo "${ECHO_T}$mysqlconfig" >&6; }
 done
 if test  -n "$mysqlconfig"
 then
+	mysqlconfig_used=
 	{ echo "$as_me:$LINENO: result: not found" >&5
 echo "${ECHO_T}not found" >&6; }
+else
+	mysqlconfig_used=yes
 fi
 
 
@@ -8992,6 +8995,210 @@ then
 	MYSQL_LIBS="-L$ac_cv_mysql_libs -lmysqlclient -lz"
 fi
 
+# if we got options from mysqlconfig try to actually use them
+if test  -n "$mysqlconfig_used" -a -n "$MYSQL_CFLAGS" -a -n "$MYSQL_LIBS"
+then
+	_CFLAGS=$CFLAGS
+	_LIBS=$LIBS
+
+	CFLAGS="$CFLAGS $MYSQL_CFLAGS"
+	LIBS="$LIBS $MYSQL_LIBS"
+
+	{ echo "$as_me:$LINENO: checking for mysql_real_connect" >&5
+echo $ECHO_N "checking for mysql_real_connect... $ECHO_C" >&6; }
+if test "${ac_cv_func_mysql_real_connect+set}" = set; then
+  echo $ECHO_N "(cached) $ECHO_C" >&6
+else
+  cat >conftest.$ac_ext <<_ACEOF
+/* confdefs.h.  */
+_ACEOF
+cat confdefs.h >>conftest.$ac_ext
+cat >>conftest.$ac_ext <<_ACEOF
+/* end confdefs.h.  */
+/* Define mysql_real_connect to an innocuous variant, in case <limits.h> declares mysql_real_connect.
+   For example, HP-UX 11i <limits.h> declares gettimeofday.  */
+#define mysql_real_connect innocuous_mysql_real_connect
+
+/* System header to define __stub macros and hopefully few prototypes,
+    which can conflict with char mysql_real_connect (); below.
+    Prefer <limits.h> to <assert.h> if __STDC__ is defined, since
+    <limits.h> exists even on freestanding compilers.  */
+
+#ifdef __STDC__
+# include <limits.h>
+#else
+# include <assert.h>
+#endif
+
+#undef mysql_real_connect
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+char mysql_real_connect ();
+/* The GNU C library defines this for functions which it implements
+    to always fail with ENOSYS.  Some functions are actually named
+    something starting with __ and the normal name is an alias.  */
+#if defined __stub_mysql_real_connect || defined __stub___mysql_real_connect
+choke me
+#endif
+
+int
+main ()
+{
+return mysql_real_connect ();
+  ;
+  return 0;
+}
+_ACEOF
+rm -f conftest.$ac_objext conftest$ac_exeext
+if { (ac_try="$ac_link"
+case "(($ac_try" in
+  *\"* | *\`* | *\\*) ac_try_echo=\$ac_try;;
+  *) ac_try_echo=$ac_try;;
+esac
+eval "echo \"\$as_me:$LINENO: $ac_try_echo\"") >&5
+  (eval "$ac_link") 2>conftest.er1
+  ac_status=$?
+  grep -v '^ *+' conftest.er1 >conftest.err
+  rm -f conftest.er1
+  cat conftest.err >&5
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); } && {
+	 test -z "$ac_c_werror_flag" ||
+	 test ! -s conftest.err
+       } && test -s conftest$ac_exeext &&
+       $as_test_x conftest$ac_exeext; then
+  ac_cv_func_mysql_real_connect=yes
+else
+  echo "$as_me: failed program was:" >&5
+sed 's/^/| /' conftest.$ac_ext >&5
+
+	ac_cv_func_mysql_real_connect=no
+fi
+
+rm -f core conftest.err conftest.$ac_objext conftest_ipa8_conftest.oo \
+      conftest$ac_exeext conftest.$ac_ext
+fi
+{ echo "$as_me:$LINENO: result: $ac_cv_func_mysql_real_connect" >&5
+echo "${ECHO_T}$ac_cv_func_mysql_real_connect" >&6; }
+if test $ac_cv_func_mysql_real_connect = yes; then
+  :
+else
+
+		# if mysql binary was built using a different compiler and we
+		# got options from mysql_config some of them might not work
+		# with compiler we will be using
+
+		# throw away everything that isn't one of -D -L -I -l and retry
+		MYSQL_CFLAGS=`echo $MYSQL_CFLAGS | sed -e 's/-[^DLIl][^ ]*//g'`
+		MYSQL_LIBS=`echo $MYSQL_LIBS | sed -e 's/-[^DLIl][^ ]*//g'`
+
+		CFLAGS="$_CFLAGS $MYSQL_CFLAGS"
+		LIBS="$_LIBS $MYSQL_LIBS"
+
+		unset ac_cv_func_mysql_real_connect
+		{ echo "$as_me:$LINENO: checking for mysql_real_connect" >&5
+echo $ECHO_N "checking for mysql_real_connect... $ECHO_C" >&6; }
+if test "${ac_cv_func_mysql_real_connect+set}" = set; then
+  echo $ECHO_N "(cached) $ECHO_C" >&6
+else
+  cat >conftest.$ac_ext <<_ACEOF
+/* confdefs.h.  */
+_ACEOF
+cat confdefs.h >>conftest.$ac_ext
+cat >>conftest.$ac_ext <<_ACEOF
+/* end confdefs.h.  */
+/* Define mysql_real_connect to an innocuous variant, in case <limits.h> declares mysql_real_connect.
+   For example, HP-UX 11i <limits.h> declares gettimeofday.  */
+#define mysql_real_connect innocuous_mysql_real_connect
+
+/* System header to define __stub macros and hopefully few prototypes,
+    which can conflict with char mysql_real_connect (); below.
+    Prefer <limits.h> to <assert.h> if __STDC__ is defined, since
+    <limits.h> exists even on freestanding compilers.  */
+
+#ifdef __STDC__
+# include <limits.h>
+#else
+# include <assert.h>
+#endif
+
+#undef mysql_real_connect
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+char mysql_real_connect ();
+/* The GNU C library defines this for functions which it implements
+    to always fail with ENOSYS.  Some functions are actually named
+    something starting with __ and the normal name is an alias.  */
+#if defined __stub_mysql_real_connect || defined __stub___mysql_real_connect
+choke me
+#endif
+
+int
+main ()
+{
+return mysql_real_connect ();
+  ;
+  return 0;
+}
+_ACEOF
+rm -f conftest.$ac_objext conftest$ac_exeext
+if { (ac_try="$ac_link"
+case "(($ac_try" in
+  *\"* | *\`* | *\\*) ac_try_echo=\$ac_try;;
+  *) ac_try_echo=$ac_try;;
+esac
+eval "echo \"\$as_me:$LINENO: $ac_try_echo\"") >&5
+  (eval "$ac_link") 2>conftest.er1
+  ac_status=$?
+  grep -v '^ *+' conftest.er1 >conftest.err
+  rm -f conftest.er1
+  cat conftest.err >&5
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); } && {
+	 test -z "$ac_c_werror_flag" ||
+	 test ! -s conftest.err
+       } && test -s conftest$ac_exeext &&
+       $as_test_x conftest$ac_exeext; then
+  ac_cv_func_mysql_real_connect=yes
+else
+  echo "$as_me: failed program was:" >&5
+sed 's/^/| /' conftest.$ac_ext >&5
+
+	ac_cv_func_mysql_real_connect=no
+fi
+
+rm -f core conftest.err conftest.$ac_objext conftest_ipa8_conftest.oo \
+      conftest$ac_exeext conftest.$ac_ext
+fi
+{ echo "$as_me:$LINENO: result: $ac_cv_func_mysql_real_connect" >&5
+echo "${ECHO_T}$ac_cv_func_mysql_real_connect" >&6; }
+if test $ac_cv_func_mysql_real_connect = yes; then
+  :
+else
+
+			# ... that didn't help
+			# clear flags, the code below will complain
+			MYSQL_CFLAGS=
+			MYSQL_LIBS=
+
+fi
+
+
+fi
+
+	CFLAGS=$_CFLAGS
+	LIBS=$_LIBS
+fi
 
 # now that we did all we could, perform final checks
 { echo "$as_me:$LINENO: checking MySQL include files" >&5

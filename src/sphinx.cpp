@@ -19801,6 +19801,16 @@ private:
 #if USE_LIBXML
 	int				ParseNextChunk ( CSphString & sError );
 #endif
+
+	void DocumentError ( const char * sWhere )
+	{
+		Error ( "malformed source, <sphinx:document> found inside %s", sWhere );
+
+		// Ideally I'd like to display a notice on the next line that
+		// would say where exactly it's allowed. E.g.:
+		//
+		// <sphinx:document> must be contained in <sphinx:docset>
+	}
 };
 
 
@@ -20471,6 +20481,12 @@ BYTE **	CSphSource_XMLPipe2::NextDocument ( CSphString & sError )
 		m_bRemoveParsed = true;
 
 		int nFields = m_tSchema.m_dFields.GetLength ();
+		if ( !nFields )
+		{
+			m_tDocInfo.m_iDocID = 0;
+			return NULL;
+		}
+		
 		m_dFieldPtrs.Resize ( nFields );
 		for ( int i = 0; i < nFields; ++i )
 			m_dFieldPtrs [i] = (BYTE*) ( pDocument->m_dFields [i].cstr () );
@@ -20639,16 +20655,13 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 	if ( !strcmp ( szName, "sphinx:document" ) )
 	{
 		if ( !m_bInDocset || m_bInSchema )
-		{
-			Error ( "<sphinx:document> is not allowed inside <sphinx:schema>" );
-			return;
-		}
+			return DocumentError ( "<sphinx:schema>" );
 
 		if ( m_bInKillList )
-		{
-			Error ( "<sphinx:document> is not allowed inside <sphinx:killlist>" );
-			return;
-		}
+			return DocumentError ( "<sphinx:killlist>" );
+
+		if ( m_bInDocument )
+			return DocumentError ( "<sphinx:document>" );
 
 		if ( m_tSchema.m_dFields.GetLength () == 0 && m_tSchema.GetAttrsCount () == 0 )
 		{

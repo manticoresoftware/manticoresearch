@@ -2084,6 +2084,9 @@ ISphMatchSorter *	sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 /// convert queue to sorted array, and add its entries to result's matches array
 void				sphFlattenQueue ( ISphMatchSorter * pQueue, CSphQueryResult * pResult, int iTag );
 
+/// setup per-keyword read buffer sizes
+void				sphSetReadBuffers ( int iReadBuffer, int iReadUnhinted );
+
 /////////////////////////////////////////////////////////////////////////////
 
 /// callback type

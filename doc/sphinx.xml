@@ -6559,6 +6559,46 @@ listen_backlog = 20
 </sect3>
 
 
+<sect3 id="conf-read-buffer"><title>read_buffer</title>
+<para>
+Per-keyword read buffer size.
+Optional, default is 256K.
+</para>
+<para>
+For every keyword occurrence in every search query, there are
+two associated read buffers (one for document list and one for
+hit list). This setting lets you control their sizes, increasing
+per-query RAM use, but possibly decreasing IO time.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+read_buffer = 1M
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-read-unhinted"><title>read_unhinted</title>
+<para>
+Unhinted read size.
+Optional, default is 32K.
+</para>
+<para>
+When querying, some reads know in advance exactly how much data
+is there to be read, but some currently do not. Most prominently,
+hit list size in not currently known in advance. This setting
+lest you control how much data to read in such cases. It will
+impact hit list IO time, reducing it for lists larger than
+unhinted read size, but raising it for smaller lists. It will
+<b>not</b> affect RAM use because read buffer will be already
+allocated. So it should be not greater than read_buffer.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+read_unhinted = 32K
+</programlisting>
+</sect3>
+
+
 </sect2>
 
 
@@ -6586,6 +6626,10 @@ listen_backlog = 20
 
 <sect2 id="rel099rc2"><title>Version 0.9.9-rc2, ??? mar 2009</title>
 <itemizedlist>
+<listitem>added <link linkend="conf-read-buffer">read_buffer</link>, <link linkend="conf-read-unhinted">read_unhinted</link> directives</listitem>
+<listitem>added checks for build option returned by mysql_config</listitem>
+<listitem>added fixed-RAM index merge (bug #168)</listitem>
+<listitem>added logging chained queries count in case of (optimized) multi-queries</listitem>
 <listitem>added <link linkend="sort-expr">GEODIST()</link> function</listitem>
 <listitem>added <link linkend="ref-searchd">--status switch to searchd</link></listitem>
 <listitem>added MySpell (OpenOffice) affix file support (bug #281)</listitem>

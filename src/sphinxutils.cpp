@@ -244,6 +244,8 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "max_filters",			0, NULL },
 	{ "max_filter_values",		0, NULL },
 	{ "listen_backlog",			0, NULL },
+	{ "read_buffer",			0, NULL },
+	{ "read_unhinted",			0, NULL },
 	{ NULL,						0, NULL }
 };
 

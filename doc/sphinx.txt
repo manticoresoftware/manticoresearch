@@ -236,6 +236,8 @@ Table of Contents
       9.4.19. max_filters
       9.4.20. max_filter_values
       9.4.21. listen_backlog
+      9.4.22. read_buffer
+      9.4.23. read_unhinted
 
 A. Sphinx revision history
 
@@ -6127,12 +6129,48 @@ Example:
 
    | listen_backlog = 20
 
+9.4.22. read_buffer
+-------------------
+
+Per-keyword read buffer size. Optional, default is 256K.
+
+For every keyword occurrence in every search query, there are two
+associated read buffers (one for document list and one for hit list). This
+setting lets you control their sizes, increasing per-query RAM use, but
+possibly decreasing IO time.
+
+Example:
+
+   | read_buffer = 1M
+
+9.4.23. read_unhinted
+---------------------
+
+Unhinted read size. Optional, default is 32K.
+
+When querying, some reads know in advance exactly how much data is there to
+be read, but some currently do not. Most prominently, hit list size in not
+currently known in advance. This setting lest you control how much data to
+read in such cases. It will impact hit list IO time, reducing it for lists
+larger than unhinted read size, but raising it for smaller lists. It will
+not affect RAM use because read buffer will be already allocated. So it
+should be not greater than read_buffer.
+
+Example:
+
+   | read_unhinted = 32K
+
 A. Sphinx revision history
 ==========================
 
 A.1. Version 0.9.9-rc2, ??? mar 2009
 ------------------------------------
 
+   * added read_buffer, read_unhinted directives
+   * added checks for build option returned by mysql_config
+   * added fixed-RAM index merge (bug #168)
+   * added logging chained queries count in case of (optimized)
+     multi-queries
    * added GEODIST() function
    * added --status switch to searchd
    * added MySpell (OpenOffice) affix file support (bug #281)

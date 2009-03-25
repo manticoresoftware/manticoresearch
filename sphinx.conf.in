@@ -658,6 +658,18 @@ searchd
 	# optional, default is 5
 	#
 	# listen_backlog		= 5
+
+
+	# per-keyword read buffer size
+	# optional, default is 256K
+	#
+	# read_buffer			= 256K
+
+
+	# unhinted read size (currently used when reading hits)
+	# optional, default is 32K
+	#
+	# read_unhinted		= 32K
 }
 
 # --eof--

@@ -170,10 +170,17 @@ const char		MAGIC_WORD_TAIL				= 1;
 const char		MAGIC_WORD_HEAD_NONSTEMMED	= 2;
 const char		MAGIC_SYNONYM_WHITESPACE	= 1;
 
-/////////////////////////////////////////////////////////////////////////////
+static const int	DEFAULT_READ_BUFFER		= 262144;
+static const int	DEFAULT_READ_UNHINTED	= 32768;
+static const int	MIN_READ_BUFFER			= 8192;
+static const int	MIN_READ_UNHINTED		= 1024;
+
 
 static bool					g_bSphQuiet					= false;
 static SphErrorCallback_fn	g_pInternalErrorCallback	= NULL;
+
+static int					g_iReadBuffer				= DEFAULT_READ_BUFFER;
+static int					g_iReadUnhinted				= DEFAULT_READ_UNHINTED;
 
 /////////////////////////////////////////////////////////////////////////////
 // COMPILE-TIME CHECKS
@@ -929,6 +936,7 @@ public:
 				CSphReader_VLN ( BYTE * pBuf=NULL, int iSize=0 );
 	virtual		~CSphReader_VLN ();
 
+	void		SetBuffers ( int iReadBuffer, int iReadUnhinted );
 	void		SetFile ( int iFD, const char * sFilename );
 	void		SetFile ( const CSphAutofile & tFile );
 	void		Reset ();
@@ -977,13 +985,11 @@ private:
 
 	int			m_iBufSize;
 	bool		m_bBufOwned;
+	int			m_iReadUnhinted;
 
 	bool		m_bError;
 	CSphString	m_sError;
 	CSphString	m_sFilename;
-
-	static const int	READ_BUFFER_SIZE		= 262144;
-	static const int	READ_DEFAULT_BLOCK		= 32768;
 
 private:
 	void		UpdateCache ();
@@ -2072,6 +2078,13 @@ void sphInternalError ( const char * sTemplate, ... )
 void sphSetInternalErrorCallback ( void (*fnCallback) ( const char * ) )
 {
 	g_pInternalErrorCallback = fnCallback;
+}
+
+
+void sphSetReadBuffers ( int iReadBuffer, int iReadUnhinted )
+{
+	g_iReadBuffer = Max ( iReadBuffer, MIN_READ_BUFFER );
+	g_iReadUnhinted = Max ( iReadUnhinted, MIN_READ_UNHINTED );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -5131,6 +5144,7 @@ CSphReader_VLN::CSphReader_VLN ( BYTE * pBuf, int iSize )
 	, m_iSizeHint ( 0 )
 	, m_iBufSize ( iSize )
 	, m_bBufOwned ( false )
+	, m_iReadUnhinted ( DEFAULT_READ_UNHINTED )
 	, m_bError ( false )
 {
 	assert ( pBuf==NULL || iSize>0 );
@@ -5141,6 +5155,14 @@ CSphReader_VLN::~CSphReader_VLN ()
 {
 	if ( m_bBufOwned )
 		SafeDeleteArray ( m_pBuff );
+}
+
+
+void CSphReader_VLN::SetBuffers ( int iReadBuffer, int iReadUnhinted )
+{
+	if ( !m_pBuff )
+		m_iBufSize = iReadBuffer;
+	m_iReadUnhinted = iReadUnhinted;
 }
 
 
@@ -5198,8 +5220,10 @@ void CSphReader_VLN::UpdateCache ()
 	// alloc buf on first actual read
 	if ( !m_pBuff )
 	{
+		if ( m_iBufSize<=0 )
+			m_iBufSize = DEFAULT_READ_BUFFER;
+
 		m_bBufOwned = true;
-		m_iBufSize = READ_BUFFER_SIZE;
 		m_pBuff = new BYTE [ m_iBufSize ];
 	}
 
@@ -5219,7 +5243,7 @@ void CSphReader_VLN::UpdateCache ()
 	}
 
 	if ( m_iSizeHint<=0 )
-		m_iSizeHint = READ_DEFAULT_BLOCK;
+		m_iSizeHint = ( m_iReadUnhinted>0 ) ? m_iReadUnhinted : DEFAULT_READ_UNHINTED;
 
 	int iReadLen = Min ( m_iSizeHint, m_iBufSize );
 	m_iBuffPos = 0;
@@ -14146,15 +14170,16 @@ bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, const CSphTermSetup 
 				sphUnzipWordid ( pBuf ); // might be 0 at checkpoint
 				SphOffset_t iDoclistLen = sphUnzipOffset ( pBuf );
 
+				tWord.m_rdDoclist.SetBuffers ( g_iReadBuffer, g_iReadUnhinted );
 				tWord.m_rdDoclist.SetFile ( tTermSetup.m_tDoclist );
 				tWord.m_rdDoclist.SeekTo ( iDoclistOffset, (int)iDoclistLen );
+
+				tWord.m_rdDoclist.SetBuffers ( g_iReadBuffer, g_iReadUnhinted );
 				tWord.m_rdHitlist.SetFile ( tTermSetup.m_tHitlist );
 			}
-
 			return true;
 		}
 	}
-
 	return false;
 }
 

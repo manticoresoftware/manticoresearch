@@ -14179,7 +14179,7 @@ bool CSphIndex_VLN::SetupQueryWord ( CSphQueryWord & tWord, const CSphTermSetup 
 				tWord.m_rdDoclist.SetFile ( tTermSetup.m_tDoclist );
 				tWord.m_rdDoclist.SeekTo ( iDoclistOffset, (int)iDoclistLen );
 
-				tWord.m_rdDoclist.SetBuffers ( g_iReadBuffer, g_iReadUnhinted );
+				tWord.m_rdHitlist.SetBuffers ( g_iReadBuffer, g_iReadUnhinted );
 				tWord.m_rdHitlist.SetFile ( tTermSetup.m_tHitlist );
 			}
 			return true;

@@ -3315,11 +3315,8 @@ void LogQuery ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 			p += snprintf ( p, pMax-p, " cpums=%d.%d", int(tRes.m_iCpuTime/1000), int(tRes.m_iCpuTime%1000)/100 );
 
 		*pBracket = '[';
-		if ( p<=pMax-2 )
-		{
+		if ( p<pMax )
 			*p++ = ']';
-			*p++ = '\0';
-		}
 	}
 
 	// optional query comment

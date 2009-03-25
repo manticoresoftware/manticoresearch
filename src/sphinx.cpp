@@ -2083,7 +2083,12 @@ void sphSetInternalErrorCallback ( void (*fnCallback) ( const char * ) )
 
 void sphSetReadBuffers ( int iReadBuffer, int iReadUnhinted )
 {
+	if ( iReadBuffer<=0 )
+		iReadBuffer = DEFAULT_READ_BUFFER;
 	g_iReadBuffer = Max ( iReadBuffer, MIN_READ_BUFFER );
+
+	if ( iReadUnhinted<=0 )
+		iReadUnhinted = DEFAULT_READ_UNHINTED;
 	g_iReadUnhinted = Max ( iReadUnhinted, MIN_READ_UNHINTED );
 }
 

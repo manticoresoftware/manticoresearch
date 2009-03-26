@@ -137,7 +137,7 @@ inline const DWORD *	DOCINFO2ATTRS ( const DWORD * pDocinfo ){ return pDocinfo+D
 #define SPHINX_TAG "-dev"
 #endif
 
-#define SPHINX_VERSION			"0.9.9" SPHINX_BITS_TAG SPHINX_TAG " (" SPH_SVN_TAGREV ")"
+#define SPHINX_VERSION			"0.9.10" SPHINX_BITS_TAG SPHINX_TAG " (" SPH_SVN_TAGREV ")"
 #define SPHINX_BANNER			"Sphinx " SPHINX_VERSION "\nCopyright (c) 2001-2009, Andrew Aksyonoff\n\n"
 #define SPHINX_SEARCHD_PROTO	1
 

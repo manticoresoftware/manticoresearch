@@ -3,7 +3,7 @@
 //
 
 //
-// Copyright (c) 2001-2008, Andrew Aksyonoff. All rights reserved.
+// Copyright (c) 2001-2009, Andrew Aksyonoff. All rights reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License. You should have
@@ -1948,6 +1948,11 @@ struct CSphIndexSettings : public CSphSourceSettings
 };
 
 
+/// forward refs to internal searcher classes
+class ISphQword;
+class ISphQwordSetup;
+
+
 /// generic fulltext index interface
 class CSphIndex
 {
@@ -2019,6 +2024,11 @@ public:
 	virtual bool				Mlock () = 0;
 
 public:
+	virtual ISphQword *					QwordSpawn () const = 0;
+	virtual bool						QwordSetup ( ISphQword * pQword, const ISphQwordSetup * pSetup ) const = 0;
+	virtual bool						EarlyReject ( CSphMatch & tMatch ) const = 0;
+	virtual const CSphSourceStats &		GetStats () const = 0;
+
 	virtual CSphQueryResult *	Query ( CSphQuery * pQuery ) = 0;
 	virtual bool				QueryEx ( CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchSorter * pTop ) = 0;
 	virtual bool				MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters ) = 0;

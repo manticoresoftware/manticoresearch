@@ -180,6 +180,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\src\sphinxsearch.cpp"
+				>
+			</File>
+			<File
 				RelativePath="..\src\sphinxsort.cpp"
 				>
 			</File>
@@ -249,6 +253,10 @@
 			</File>
 			<File
 				RelativePath="..\src\sphinxquery.h"
+				>
+			</File>
+			<File
+				RelativePath="..\src\sphinxsearch.h"
 				>
 			</File>
 			<File

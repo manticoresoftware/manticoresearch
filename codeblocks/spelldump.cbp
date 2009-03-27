@@ -15,8 +15,6 @@
 					<Add option="-Wall" />
 					<Add option="-g" />
 					<Add option="-O0" />
-					<Add option="-D_DEBUG" />
-					<Add option="-D_CONSOLE" />
 				</Compiler>
 				<Linker>
 					<Add library="bin/Debug/libsphinx.a" />
@@ -29,9 +27,9 @@
 				<Option type="1" />
 				<Option compiler="gcc" />
 				<Compiler>
+					<Add option="-O3" />
 					<Add option="-Wall" />
 					<Add option="-DNDEBUG" />
-					<Add option="-D_CONSOLE" />
 				</Compiler>
 				<Linker>
 					<Add option="-s" />

@@ -17,9 +17,6 @@
 					<Add option="-Wall" />
 					<Add option="-g" />
 					<Add option="-O0" />
-					<Add option="-D_DEBUG" />
-					<Add option="-D_LIB" />
-					<Add option="-DHAVE_LOGF" />
 					<Add directory="./libstemmer_c/include" />
 					<Add directory="./libexpat/lib" />
 				</Compiler>
@@ -36,10 +33,9 @@
 				<Option compiler="gcc" />
 				<Option createDefFile="1" />
 				<Compiler>
+					<Add option="-O3" />
 					<Add option="-Wall" />
 					<Add option="-DNDEBUG" />
-					<Add option="-D_LIB" />
-					<Add option="-DHAVE_LOGF" />
 					<Add directory="./libstemmer_c/include" />
 					<Add directory="./libexpat/lib" />
 				</Compiler>
@@ -54,6 +50,7 @@
 		</Build>
 		<Compiler>
 			<Add option="-D_FILE_OFFSET_BITS=64" />
+			<Add option="-DHAVE_LOGF" />
 		</Compiler>
 		<ExtraCommands>
 			<Add before="../src/svnxrev.sh .." />
@@ -68,6 +65,8 @@
 		<Unit filename="../src/sphinxmetaphone.cpp" />
 		<Unit filename="../src/sphinxquery.cpp" />
 		<Unit filename="../src/sphinxquery.h" />
+		<Unit filename="../src/sphinxsearch.cpp" />
+		<Unit filename="../src/sphinxsearch.h" />
 		<Unit filename="../src/sphinxsort.cpp" />
 		<Unit filename="../src/sphinxsoundex.cpp" />
 		<Unit filename="../src/sphinxstd.cpp" />

@@ -16972,7 +16972,7 @@ BYTE **	CSphSource_XMLPipe2::NextDocument ( CSphString & sError )
 			m_tDocInfo.m_iDocID = 0;
 			return NULL;
 		}
-		
+
 		m_dFieldPtrs.Resize ( nFields );
 		for ( int i = 0; i < nFields; ++i )
 			m_dFieldPtrs [i] = (BYTE*) ( pDocument->m_dFields [i].cstr () );
@@ -17902,8 +17902,13 @@ bool CSphWordRecord::GetNextFilteredDoc()
 	}
 	if ( !m_iUnfilteredDocNum )
 	{
+	// stop silly gcc's warning about unused iLeadingZero in release build
+#ifdef NDEBUG
+	m_pMergeSource->m_pDoclistReader->UnzipInt ();
+#else
 		DWORD iLeadingZero = m_pMergeSource->m_pDoclistReader->UnzipInt ();
 		assert( iLeadingZero == 0 );
+#endif
 	}
 	if (bResult)
 	{

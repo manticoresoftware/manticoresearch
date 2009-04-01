@@ -825,6 +825,11 @@ stream data:
 
 &lt;!-- ... more documents here ... --&gt;
 
+&lt;sphinx:killlist&gt;
+&lt;id&gt;1234&lt;/id&gt;
+&lt;id&gt;4567/id&gt;
+&lt;/sphinx:killlist&gt;
+
 &lt;/sphinx:docset&gt;
 </programlisting>
 </example>
@@ -902,6 +907,13 @@ XML elements (tags) recognized by xmlpipe2 (and their attributes where applicabl
 		to be indexed, as declared either using sphinx:field and sphinx:attr
 		elements or in the configuration file. The only known attribute
 		is "id" that must contain the unique integer document ID.
+	</listitem>
+</varlistentry>
+<varlistentry>
+	<term>sphinx:killlist</term>
+	<listitem>Optional element, child of sphinx:docset.
+		Contains a number of "id" elements whose contents are document IDs
+		to be put into a <link linkend="conf-sql-query-killlist">kill-list</link> for this index.
 	</listitem>
 </varlistentry>
 </variablelist>

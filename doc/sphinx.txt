@@ -974,6 +974,11 @@ Example 3. xmlpipe2 document stream
    | 
    | <!-- ... more documents here ... -->
    | 
+   | <sphinx:killlist>
+   | <id>1234</id>
+   | <id>4567/id>
+   | </sphinx:killlist>
+   | 
    | </sphinx:docset>
 
 Arbitrary fields and attributes are allowed. They also can occur in the
@@ -1040,6 +1045,11 @@ sphinx:document
    declared either using sphinx:field and sphinx:attr elements or in the
    configuration file. The only known attribute is "id" that must contain
    the unique integer document ID.
+
+sphinx:killlist
+   Optional element, child of sphinx:docset. Contains a number of "id"
+   elements whose contents are document IDs to be put into a kill-list for
+   this index.
 
 3.10. Live index updates
 ------------------------

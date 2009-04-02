@@ -10721,6 +10721,10 @@ void CSphIndex_VLN::Dealloc ()
 	if ( m_iIndexTag>=0 && g_pMvaArena )
 		g_MvaArena.TaggedFreeTag ( m_iIndexTag );
 	m_iIndexTag = -1;
+
+#ifndef NDEBUG
+	m_bPreread.Reset ();
+#endif
 }
 
 

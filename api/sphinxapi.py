@@ -16,6 +16,7 @@
 import sys
 import select
 import socket
+import re
 from struct import *
 
 
@@ -953,6 +954,9 @@ class SphinxClient:
 		self._socket.close()
 		self._socket = None
 	
+	def EscapeString(self, string):
+		return re.sub(r"([=\(\)|\-!@~\"&/\\\^\$\=])", r"\\\1", string)
+
 #
 # $Id$
 #

@@ -479,6 +479,7 @@ class SphinxConfig
 				$res["id_range"] = $this->ParseRange ( $q->getAttribute("id_range") );
 				$res["index_weights"] = $this->ParseIndexWeights ( $q->getAttribute("index_weights") );
 				$res["roundoff"] = $q->getAttribute("roundoff");
+				$res["expect_error"] = $q->getAttribute("expect_error");
 
 				// add query
 				$this->_queries[] = $res;
@@ -602,6 +603,18 @@ class SphinxConfig
 					$bOk = TRUE;
 					$results ["query"] = $query;
         			array_push ( $query_results, $results );
+
+            	} else if ( @$qinfo["expect_error"] && !$cl->IsConnectError() )
+            	{
+            		$bOk = true;
+            		array_push ( $query_results, array (
+            			"query" => $query,
+            			"error" => $cl->GetLastError(),
+            			"warning" => "",
+            			"total" => 0,
+            			"total_found" => 0,
+            			"time" => 0 ) );
+
             	} else
 				{
 					if ( !$cl->IsConnectError() )
@@ -782,6 +795,8 @@ class SphinxConfig
 			$str .= "Sort: expr: ".$qinfo["sortby"]."\n";
 
 		$str .= "Query '$result[query]': retrieved $result[total_found] of $result[total] matches in $result[time] sec.\n";
+		if ( $result["error"] )
+			$str .= "Error: $result[error]\n";
 		if ( $result["warning"] )
 			$str .= "Warning: $result[warning]\n";
 

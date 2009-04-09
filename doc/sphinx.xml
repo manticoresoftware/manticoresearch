@@ -1168,6 +1168,17 @@ means "looking for ( cat | dog | mouse )" and <emphasis>not</emphasis>
 "(looking for cat) | dog | mouse".
 </para>
 <para>
+Field limit operator limits subsequent searching to a given field.
+Normally, query will fail with an error message if given field name does not exist
+in the searched index. However, that can be suppressed by specifying "@@relaxed"
+option at the very beginning of the query:
+<programlisting>
+@@relaxed @nosuchfield my query
+</programlisting>
+This can be helpful when searching through heterogeneous indexes with
+different schemas.
+</para>
+<para>
 Field position limit, introduced in version 0.9.9-rc1, additionaly restricts the searching
 to first N position within given field (or fields). For example, "@body[50] hello" will
 <b>not</b> match the documents where the keyword 'hello' occurs at position 51 and below
@@ -6636,11 +6647,12 @@ read_unhinted = 32K
 
 <appendix id="changelog"><title>Sphinx revision history</title>
 
-<sect2 id="rel099rc2"><title>Version 0.9.9-rc2, ??? mar 2009</title>
+<sect2 id="rel099rc2"><title>Version 0.9.9-rc2, 08 apr 2009</title>
 <itemizedlist>
+<listitem>added IsConnectError(), Open(), Close() calls to Java API (bug #240)</listitem>
 <listitem>added <link linkend="conf-read-buffer">read_buffer</link>, <link linkend="conf-read-unhinted">read_unhinted</link> directives</listitem>
-<listitem>added checks for build option returned by mysql_config</listitem>
-<listitem>added fixed-RAM index merge (bug #168)</listitem>
+<listitem>added checks for build options returned by mysql_config (builds on Solaris now)</listitem>
+<listitem>added fixed-RAM index merge (bug #169)</listitem>
 <listitem>added logging chained queries count in case of (optimized) multi-queries</listitem>
 <listitem>added <link linkend="sort-expr">GEODIST()</link> function</listitem>
 <listitem>added <link linkend="ref-searchd">--status switch to searchd</link></listitem>
@@ -6668,11 +6680,21 @@ read_unhinted = 32K
 <listitem>added <link linkend="extended-syntax">field-start and field-end modifiers support</link> (syntax is "^hello world$"; field-end requires reindex)</listitem>
 <listitem>added MVA attribute support to IN() function</listitem>
 <listitem>added <link linkend="sort-expr">AND, OR, and NOT support</link> to expressions</listitem>
-<listitem>improved index merge (limited RAM usage for hitlist, partial fix for bug #169)</listitem>
+<listitem>improved logging of (optimized) multi-queries (now logging chained query count)</listitem>
 <listitem>improved handshake error handling, fixed protocol version byte order (omg)</listitem>
 <listitem>updated SphinxSE to protocol 1.22</listitem>
 <listitem>allowed phrase_boundary_step=-1 (trick to emulate keyword expansion)</listitem>
 <listitem>removed SPH_MAX_QUERY_WORDS limit</listitem>
+<listitem>fixed CLI search vs documents missing from DB (bug #257)</listitem>
+<listitem>fixed libsphinxclient results leak on subsequent sphinx_run_queries call (bug #256)</listitem>
+<listitem>fixed libsphinxclient handling of zero max_matches and cutoff (bug #208)</listitem>
+<listitem>fixed Java API over-64K string reads (eg. big snippets) in Java API (bug #181)</listitem>
+<listitem>fixed Java API 2nd Query() after network error in 1st Query() call (bug #308)</listitem>
+<listitem>fixed typo-class bugs in SetFilterFloatRange (bug #259), SetSortMode (bug #248)</listitem>
+<listitem>fixed missing @@relaxed support (bug #276), fixed missing error on @nosuchfield queries, documented @@relaxed</listitem>
+<listitem>fixed UNIX socket permissions to 0777 (bug #288)</listitem>
+<listitem>fixed xmlpipe2 crash on schemas with no fields, added better document structure checks</listitem>
+<listitem>fixed (and optimized) expr parser vs IN() with huge (10K+) args count</listitem>
 <listitem>fixed double EarlyCalc() in fullscan mode (minor performance impact)</listitem>
 <listitem>fixed phrase boundary handling in some cases (on buffer end, on trailing whitespace)</listitem>
 <listitem>fixes in snippets (aka excerpts) generation</listitem>

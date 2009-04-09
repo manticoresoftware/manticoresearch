@@ -381,7 +381,10 @@ int main ( int argc, char ** argv )
 
 						MYSQL_ROW tRow = mysql_fetch_row ( pSqlResult );
 						if ( !tRow )
-							LOC_MYSQL_ERROR ( "mysql_fetch_row" );
+						{
+							fprintf ( stdout, "\t(document not found in db)\n" );
+							break;
+						}
 
 						for ( int iField=0; iField<(int)pSqlResult->field_count; iField++ )
 							fprintf ( stdout, "\t%s=%s\n",

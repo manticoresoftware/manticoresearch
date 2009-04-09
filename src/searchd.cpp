@@ -1114,8 +1114,10 @@ int sphCreateUnixSocket ( const char * sPath )
 			sphFatal ( "unlink() on UNIX socket file failed: %s", sphSockError() );
 	}
 
+	int iMask = umask ( 0 );
 	if ( bind ( iSock, (struct sockaddr *)&uaddr, sizeof(uaddr) ) != 0 )
 		sphFatal ( "bind() on UNIX socket failed: %s", sphSockError() );
+	umask ( iMask );
 
 	return iSock;
 }

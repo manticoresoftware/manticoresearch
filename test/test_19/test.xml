@@ -54,6 +54,10 @@ index test
 <query mode="extended2">-basic|perl sample</query>
 <query mode="extended2">77</query>
 <query mode="extended2">0077</query>
+<query mode="extended2">@title test</query>
+<query mode="extended2" expect_error="1">@ttitle test</query>
+<query mode="extended2" expect_error="1">@@title test</query>
+<query mode="extended2">@@relaxed @ttitle test</query>
 </queries>
 
 <db_create>

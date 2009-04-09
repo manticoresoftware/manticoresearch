@@ -1329,6 +1329,16 @@ OR operator precedence is higher than AND, so "looking for cat | dog |
 mouse" means "looking for ( cat | dog | mouse )" and not "(looking for cat)
 | dog | mouse".
 
+Field limit operator limits subsequent searching to a given field.
+Normally, query will fail with an error message if given field name does
+not exist in the searched index. However, that can be suppressed by
+specifying "@@relaxed" option at the very beginning of the query:
+
+   | @@relaxed @nosuchfield my query
+
+This can be helpful when searching through heterogeneous indexes with
+different schemas.
+
 Field position limit, introduced in version 0.9.9-rc1, additionaly
 restricts the searching to first N position within given field (or fields).
 For example, "@body[50] hello" will not match the documents where the
@@ -6173,12 +6183,14 @@ Example:
 A. Sphinx revision history
 ==========================
 
-A.1. Version 0.9.9-rc2, ??? mar 2009
-------------------------------------
+A.1. Version 0.9.9-rc2, 08 apr 2009
+-----------------------------------
 
+   * added IsConnectError(), Open(), Close() calls to Java API (bug #240)
    * added read_buffer, read_unhinted directives
-   * added checks for build option returned by mysql_config
-   * added fixed-RAM index merge (bug #168)
+   * added checks for build options returned by mysql_config (builds on
+     Solaris now)
+   * added fixed-RAM index merge (bug #169)
    * added logging chained queries count in case of (optimized)
      multi-queries
    * added GEODIST() function
@@ -6213,13 +6225,30 @@ A.1. Version 0.9.9-rc2, ??? mar 2009
      world$"; field-end requires reindex)
    * added MVA attribute support to IN() function
    * added AND, OR, and NOT support to expressions
-   * improved index merge (limited RAM usage for hitlist, partial fix for
-     bug #169)
+   * improved logging of (optimized) multi-queries (now logging chained
+     query count)
    * improved handshake error handling, fixed protocol version byte order
      (omg)
    * updated SphinxSE to protocol 1.22
    * allowed phrase_boundary_step=-1 (trick to emulate keyword expansion)
    * removed SPH_MAX_QUERY_WORDS limit
+   * fixed CLI search vs documents missing from DB (bug #257)
+   * fixed libsphinxclient results leak on subsequent sphinx_run_queries
+     call (bug #256)
+   * fixed libsphinxclient handling of zero max_matches and cutoff (bug
+     #208)
+   * fixed Java API over-64K string reads (eg. big snippets) in Java API
+     (bug #181)
+   * fixed Java API 2nd Query() after network error in 1st Query() call
+     (bug #308)
+   * fixed typo-class bugs in SetFilterFloatRange (bug #259), SetSortMode
+     (bug #248)
+   * fixed missing @@relaxed support (bug #276), fixed missing error on
+     @nosuchfield queries, documented @@relaxed
+   * fixed UNIX socket permissions to 0777 (bug #288)
+   * fixed xmlpipe2 crash on schemas with no fields, added better document
+     structure checks
+   * fixed (and optimized) expr parser vs IN() with huge (10K+) args count
    * fixed double EarlyCalc() in fullscan mode (minor performance impact)
    * fixed phrase boundary handling in some cases (on buffer end, on
      trailing whitespace)

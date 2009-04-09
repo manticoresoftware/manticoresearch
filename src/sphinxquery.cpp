@@ -8,7 +8,7 @@
 #include <stdarg.h>
 
 //////////////////////////////////////////////////////////////////////////
-// EXTENEDED PARSER RELOADED
+// EXTENDED PARSER RELOADED
 //////////////////////////////////////////////////////////////////////////
 
 #include "yysphinxquery.h"
@@ -65,7 +65,7 @@ public:
 	int						m_iPendingType;
 	YYSTYPE					m_tPendingToken;
 
-	int						m_iGotTokens;
+	bool					m_bEmpty;
 
 	CSphVector<CSphString>	m_dIntTokens;
 };
@@ -79,7 +79,8 @@ int yylex ( YYSTYPE * lvalp, XQParser_t * pParser )
 
 void yyerror ( XQParser_t * pParser, const char * sMessage )
 {
-	pParser->m_pParsed->m_sParseError.SetSprintf ( "%s near '%s'", sMessage, pParser->m_pLastTokenStart );
+	if ( pParser->m_pParsed->m_sParseError.IsEmpty() )
+		pParser->m_pParsed->m_sParseError.SetSprintf ( "%s near '%s'", sMessage, pParser->m_pLastTokenStart );
 }
 
 #include "yysphinxquery.c"
@@ -386,6 +387,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		sToken = (const char *) m_pTokenizer->GetToken ();
 		if ( !sToken )
 			return 0;
+		m_bEmpty = false;
 
 		m_iPendingNulls = m_pTokenizer->GetOvershortCount ();
 		m_iAtomPos += 1+m_iPendingNulls;
@@ -447,7 +449,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 
 	// someone must be pending now!
 	assert ( m_iPendingType );
-	m_iGotTokens++;
+	m_bEmpty = false;
 
 	// ladies first, though
 	if ( m_iPendingNulls>0 )
@@ -709,6 +711,18 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const ISphTok
 	pMyTokenizer->AddSpecials ( "()|-!@~\"/^$<" );
 	pMyTokenizer->EnableQueryParserMode ( true );
 
+	// check for relaxed syntax
+	const char * OPTION_RELAXED = "@@relaxed";
+	const int OPTION_RELAXED_LEN = strlen ( OPTION_RELAXED );
+
+	m_bStopOnInvalid = true;
+	if ( strncmp ( sQuery, OPTION_RELAXED, OPTION_RELAXED_LEN )==0 && !sphIsAlpha ( sQuery[OPTION_RELAXED_LEN]) )
+	{
+		sQuery += OPTION_RELAXED_LEN;
+		m_bStopOnInvalid = false;
+	}
+
+	// setup parser
 	m_pParsed = &tParsed;
 	m_sQuery = (BYTE*) sQuery;
 	m_iQueryLen = strlen(sQuery);
@@ -720,12 +734,12 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const ISphTok
 	m_iPendingNulls = 0;
 	m_iPendingType = 0;
 	m_pRoot = NULL;
-	m_iGotTokens = 0;
+	m_bEmpty = true;
 
 	m_pTokenizer->SetBuffer ( m_sQuery, m_iQueryLen );
 	int iRes = yyparse ( this );
 
-	if ( iRes && m_iGotTokens )
+	if ( iRes && !m_bEmpty )
 	{
 		Cleanup ();
 		return false;

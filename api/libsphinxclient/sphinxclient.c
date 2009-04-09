@@ -250,6 +250,27 @@ sphinx_client * sphinx_create ( sphinx_bool copy_args )
 }
 
 
+static void sphinx_free_results ( sphinx_client * client )
+{
+	int i;
+	for ( i=0; i<client->num_results; i++ )
+	{
+		free ( client->results[i].values_pool );
+		free ( client->results[i].words );
+		free ( client->results[i].fields );
+		free ( client->results[i].attr_names );
+		free ( client->results[i].attr_types );
+
+		client->results[i].values_pool = NULL;
+		client->results[i].words = NULL;
+		client->results[i].fields = NULL;
+		client->results[i].attr_names = NULL;
+		client->results[i].attr_types = NULL;
+	}
+	client->num_results = 0;
+}
+
+
 void sphinx_destroy ( sphinx_client * client )
 {
 	int i;
@@ -260,14 +281,7 @@ void sphinx_destroy ( sphinx_client * client )
 	for ( i=0; i<client->num_reqs; i++ )
 		free ( client->reqs[i] );
 
-	for ( i=0; i<client->num_results; i++ )
-	{
-		free ( client->results[i].values_pool );
-		free ( client->results[i].words );
-		free ( client->results[i].fields );
-		free ( client->results[i].attr_names );
-		free ( client->results[i].attr_types );
-	}
+	sphinx_free_results ( client );
 
 	unchain_all ( client );
 
@@ -429,8 +443,10 @@ sphinx_bool sphinx_set_limits ( sphinx_client * client, int offset, int limit, i
 
 	client->offset = offset;
 	client->limit = limit;
-	client->max_matches = max_matches;
-	client->cutoff = cutoff;
+	if ( max_matches>0 )
+		client->max_matches = max_matches;
+	if ( cutoff>0 )
+		client->cutoff = cutoff;
 	return SPH_TRUE;
 }
 
@@ -1500,6 +1516,9 @@ sphinx_result * sphinx_run_queries ( sphinx_client * client )
 	fd = net_connect ( client );
 	if ( fd<0 )
 		return NULL;
+
+	// free previous results
+	sphinx_free_results ( client );
 
 	// send query, get response
 	len = 4;

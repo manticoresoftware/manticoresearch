@@ -8354,6 +8354,10 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			}
 		}
 
+		// joined filter
+		bool bGotJoined = ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_INLINE ) && pSource->HasJoinedFields();
+		CSphVector<SphDocID_t> dAllIds; // FIXME! unlimited RAM use..
+
 		// fetch documents
 		for ( ;; )
 		{
@@ -8371,6 +8375,9 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			// check for eof
 			if ( !pSource->m_tDocInfo.m_iDocID )
 				break;
+
+			if ( bGotJoined )
+				dAllIds.Add ( pSource->m_tDocInfo.m_iDocID );
 
 			// show progress bar
 			if ( m_pProgress
@@ -8586,6 +8593,68 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			SphDocID_t tDocId;
 			while ( pSource->IterateKillListNext ( tDocId ) )
 				dKillList.Add ( tDocId );
+		}
+
+		// fetch joined fields
+		if ( bGotJoined )
+		{
+			dAllIds.Uniq();
+
+			SphDocID_t uLastID = 0;
+			bool bLastFound = 0;
+
+			for ( ;; )
+			{
+				// get next doc, and handle errors
+				if ( !pSource->IterateJoinedHits ( m_sLastError ) )
+					return 0;
+
+				// ensure docid is sane
+				if ( pSource->m_tDocInfo.m_iDocID==DOCID_MAX )
+				{
+					m_sLastError.SetSprintf ( "joined_docid==DOCID_MAX (source broken?)" );
+					return 0;
+				}
+
+				// check for eof
+				if ( !pSource->m_tDocInfo.m_iDocID )
+					break;
+
+				// filter and store hits
+				ARRAY_FOREACH ( i, pSource->m_dHits )
+				{
+					// flush if needed
+					if ( pHits>=pHitsMax )
+					{
+						// sort hits
+						int iHits = pHits - dHits;
+						{
+							PROFILE ( sort_hits );
+							sphSort ( &dHits[0], iHits, CmpHit_fn() );
+						}
+						pHits = dHits;
+
+						// we're not inlining, so only flush hits, docs are flushed independently
+						dHitBlocks.Add ( cidxWriteRawVLB ( fdHits.GetFD(), dHits, iHits,
+							NULL, 0, 0 ) );
+
+						if ( dHitBlocks.Last()<0 )
+							return 0;
+					}
+
+					// filter
+					SphDocID_t uHitID = pSource->m_dHits[i].m_iDocID;
+					if ( uHitID!=uLastID )
+					{
+						uLastID = uHitID;
+						bLastFound = ( dAllIds.BinarySearch ( uHitID )!=NULL );
+					}
+
+					// copy next hit
+					if ( bLastFound )
+						*pHits++ = pSource->m_dHits[i];
+				}
+			}
 		}
 
 		// this source is over, disconnect and update stats
@@ -14172,6 +14241,13 @@ SphDocID_t CSphSource::VerifyID ( SphDocID_t uID )
 	return uID;
 }
 
+
+bool CSphSource::IterateJoinedHits ( CSphString & )
+{
+	m_tDocInfo.m_iDocID = 0; // pretend that's an eof
+	return true;
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // DOCUMENT SOURCE
 /////////////////////////////////////////////////////////////////////////////
@@ -14191,11 +14267,26 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 	m_dHits.Reserve ( 1024 );
 	m_dHits.Resize ( 0 );
 
+	BuildHits ( dFields, -1, 0 );
+	return true;
+}
+
+
+void CSphSource_Document::BuildHits ( BYTE ** dFields, int iFieldIndex, int iStartPos )
+{
 	bool bGlobalPartialMatch = m_iMinPrefixLen > 0 || m_iMinInfixLen > 0;
 
-	ARRAY_FOREACH ( iField, m_tSchema.m_dFields )
+	int iStartField = 0;
+	int iEndField = m_tSchema.m_iBaseFields;
+	if ( iFieldIndex>=0 )
 	{
-		BYTE * sField = dFields[iField];
+		iStartField = iFieldIndex;
+		iEndField = iFieldIndex+1;
+	}
+
+	for ( int iField=iStartField; iField<iEndField; iField++ )
+	{
+		BYTE * sField = dFields[iField-iStartField];
 		if ( !sField )
 			continue;
 
@@ -14208,7 +14299,7 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 		m_pTokenizer->SetBuffer ( sField, iFieldBytes );
 
 		BYTE * sWord;
-		int iPos = HIT_PACK(iField,0);
+		int iPos = HIT_PACK(iField,iStartPos);
 		int iLastStep = 1;
 
 		bool bPrefixField = m_tSchema.m_dFields[iField].m_eWordpart == SPH_WORDPART_PREFIX;
@@ -14431,8 +14522,6 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 		if ( m_dHits.GetLength() )
 			m_dHits.Last().m_iWordPos |= HIT_FIELD_END;
 	}
-
-	return true;
 }
 
 
@@ -14551,6 +14640,9 @@ CSphSource_SQL::CSphSource_SQL ( const char * sName )
 	, m_bCanUnpack			( false )
 	, m_bUnpackFailed		( false )
 	, m_bUnpackOverflow		( false )
+	, m_iJoinedHitField		( -1 )
+	, m_iJoinedHitID		( 0 )
+	, m_iJoinedHitPos		( 0 )
 {
 }
 
@@ -14928,6 +15020,18 @@ bool CSphSource_SQL::IterateHitsStart ( CSphString & sError )
 	ARRAY_FOREACH ( i, m_dFieldMVAs )
 		m_dFieldMVAs [i].Reserve ( 16 );
 
+	// joined fields
+	m_tSchema.m_iBaseFields = m_tSchema.m_dFields.GetLength();
+
+	CSphColumnInfo tCol;
+	tCol.m_iIndex = -1;
+	ARRAY_FOREACH ( i, m_tParams.m_dJoinedFields )
+	{
+		tCol.m_sName = m_tParams.m_dJoinedFields[i].m_sName;
+		tCol.m_sQuery = m_tParams.m_dJoinedFields[i].m_sQuery;
+		m_tSchema.m_dFields.Add ( tCol );
+	}
+
 	// alloc storage
 	m_tDocInfo.Reset ( m_tSchema.GetRowSize() );
 	m_dStrAttrs.Resize ( m_tSchema.GetAttrsCount() );
@@ -15022,8 +15126,9 @@ BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 		m_tDocInfo.m_pRowitems[i] = 0;
 
 	// split columns into fields and attrs
-	ARRAY_FOREACH ( i, m_tSchema.m_dFields )
+	for ( int i=0; i<m_tSchema.m_iBaseFields; i++ )
 	{
+		// get that field
 		#if USE_ZLIB
 		if ( m_dUnpack[i] != SPH_UNPACK_NONE )
 		{
@@ -15382,6 +15487,100 @@ const char * CSphSource_SQL::SqlUnpackColumn ( int iFieldIndex, ESphUnpackFormat
 	return NULL;
 }
 #endif // USE_ZLIB
+
+
+bool CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
+{
+	// eof check
+	if ( m_iJoinedHitField>=m_tSchema.m_dFields.GetLength() )
+	{
+		m_tDocInfo.m_iDocID = 0;
+		return true;
+	}
+
+	// my buffer
+	const int HITS_THRESH = 1048576/sizeof(CSphWordHit);
+	m_dHits.Reserve ( 1024 );
+	m_dHits.Resize ( 0 );
+
+	// my fetch loop
+	while ( m_dHits.GetLength()<HITS_THRESH )
+	{
+		if ( SqlFetchRow() )
+		{
+			// next row
+			m_tDocInfo.m_iDocID = sphToDocid ( SqlColumn(0) ); // FIXME! handle conversion errors and zero/max values?
+
+			// field start? restart ids
+			if ( !m_iJoinedHitID )
+				m_iJoinedHitID = m_tDocInfo.m_iDocID;
+
+			// docid asc requirement violated? report an error
+			if ( m_iJoinedHitID>m_tDocInfo.m_iDocID )
+			{
+				sError.SetSprintf ( "joined field '%s': query MUST return document IDs in ASC order",
+					m_tSchema.m_dFields[m_iJoinedHitField].m_sName.cstr() );
+				return false;
+			}
+
+			// next document? update tracker, reset position
+			if ( m_iJoinedHitID<m_tDocInfo.m_iDocID )
+			{
+				m_iJoinedHitID = m_tDocInfo.m_iDocID;
+				m_iJoinedHitPos = 0;
+			}
+
+			// build those hits
+			BYTE * pText = (BYTE*) SqlColumn(1);
+			BuildHits ( &pText, m_iJoinedHitField, m_iJoinedHitPos );
+
+			// update current position
+			if ( m_dHits.GetLength() )
+				m_iJoinedHitPos = HIT2POS ( m_dHits.Last().m_iWordPos );
+
+		} else if ( SqlIsError() )
+		{
+			// error while fetching row
+			sError = SqlError();
+			return false;
+
+		} else
+		{
+			// current field is over, continue to next field
+			if ( m_iJoinedHitField<0 )
+				m_iJoinedHitField = m_tSchema.m_iBaseFields;
+			else
+				m_iJoinedHitField++;
+
+			// eof check
+			if ( m_iJoinedHitField>=m_tSchema.m_dFields.GetLength() )
+			{
+				m_tDocInfo.m_iDocID = ( m_dHits.GetLength() ? 1 : 0 ); // to eof or not to eof
+				return true;
+			}
+
+			// start fetching next field
+			SqlDismissResult ();
+
+			if ( !SqlQuery ( m_tSchema.m_dFields[m_iJoinedHitField].m_sQuery.cstr() ) )
+			{
+				sError = SqlError();
+				return false;
+			}
+
+			if ( SqlNumFields()!=2 )
+			{
+				sError.SetSprintf ( "joined field '%s': query MUST return exactly 2 columns, got %d", SqlNumFields() );
+				return false;
+			}
+
+			m_iJoinedHitID = 0;
+			m_iJoinedHitPos = 0;
+		}
+	}
+
+	return false;
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // MYSQL SOURCE

@@ -457,6 +457,73 @@ bool ConfigureUnpack ( CSphVariant * pHead, ESphUnpackFormat, CSphSourceParams_S
 #endif // USE_ZLIB
 
 
+bool ParseJoinedField ( const char * sBuf, CSphJoinedField * pField, const char * sSourceName )
+{
+	// sanity checks
+	assert ( pField );
+	if ( !sBuf || !sBuf[0] )
+	{
+		fprintf ( stdout, "ERROR: source '%s': sql_joined_field must not be empty.\n", sSourceName );
+		return false;
+	}
+
+#define LOC_ERR(_exp) \
+	{ \
+		fprintf ( stdout, "ERROR: source '%s': expected " _exp " in sql_joined_field, got '%s'.\n", sSourceName, sBuf ); \
+		return false; \
+	}
+
+	// parse field name
+	while ( isspace(*sBuf) )
+		sBuf++;
+
+	const char * sName = sBuf;
+	while ( sphIsAlpha(*sBuf) )
+		sBuf++;
+	if ( sBuf==sName )
+		LOC_ERR ( "field name" );
+	pField->m_sName.SetBinary ( sName, sBuf-sName );
+
+	if ( !isspace(*sBuf) )
+		LOC_ERR ( "space" );
+	while ( isspace(*sBuf) )
+		sBuf++;
+
+	// parse 'from'
+	if ( strncasecmp ( sBuf, "from", 4 ) )
+		LOC_ERR ( "'from'" );
+	sBuf += 4;
+
+	if ( !isspace(*sBuf) )
+		LOC_ERR ( "space" );
+	while ( isspace(*sBuf) )
+		sBuf++;
+
+	// parse 'query'
+	if ( strncasecmp ( sBuf, "query", 5 ) )
+		LOC_ERR ( "'query'" );
+	sBuf += 5;
+
+	// parse ';'
+	while ( isspace(*sBuf) && *sBuf!=';' )
+		sBuf++;
+
+	if ( *sBuf!=';')
+		LOC_ERR ( "';'" );
+	sBuf++;
+
+	// the rest is query
+	while ( isspace(*sBuf) )
+		sBuf++;
+
+	pField->m_sQuery = sBuf;
+
+#undef LOC_ERR
+
+	return true;
+}
+
+
 bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSection & hSource, const char * sSourceName )
 {
 	LOC_CHECK ( hSource, "sql_host", "in source '%s'", sSourceName );
@@ -509,6 +576,11 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 			return false;
 		tParams.m_dAttrs.Add ( tAttr );
 	}
+
+	// parse joined fields
+	for ( CSphVariant * pVal = hSource("sql_joined_field"); pVal; pVal = pVal->m_pNext )
+		if ( !ParseJoinedField ( pVal->cstr(), &tParams.m_dJoinedFields.Add(), sSourceName ) )
+			return false;
 
 	// additional checks
 	if ( tParams.m_iRangedThrottle<0 )
@@ -836,6 +908,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 	// parse all sources
 	CSphVector<CSphSource*> dSources;
 	bool bGotAttrs = false;
+	bool bGotJoinedFields = false;
 	bool bSpawnFailed = false;
 
 	for ( CSphVariant * pSourceName = hIndex("source"); pSourceName; pSourceName = pSourceName->m_pNext )
@@ -856,6 +929,9 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 
 		if ( pSource->HasAttrsConfigured() )
 			bGotAttrs = true;
+
+		if ( pSource->HasJoinedFields() )
+			bGotJoinedFields = true;
 
 		pSource->SetupFieldMatch ( sPrefixFields.cstr (), sInfixFields.cstr () );
 
@@ -964,6 +1040,12 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		if ( bGotAttrs && tSettings.m_eDocinfo==SPH_DOCINFO_NONE )
 		{
 			fprintf ( stdout, "FATAL: index '%s': got attributes, but docinfo is 'none' (fix your config file).\n", sIndexName );
+			exit ( 1 );
+		}
+
+		if ( bGotJoinedFields && tSettings.m_eDocinfo==SPH_DOCINFO_INLINE )
+		{
+			fprintf ( stdout, "FATAL: index '%s': got joined fields, but docinfo is 'inline' (fix your config file).\n", sIndexName );
 			exit ( 1 );
 		}
 

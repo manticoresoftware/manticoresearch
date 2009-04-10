@@ -805,7 +805,7 @@ struct CSphColumnInfo
 	DWORD			m_eAttrType;	///< attribute type
 	ESphWordpart	m_eWordpart;	///< wordpart processing type
 
-	int				m_iIndex;		///< index into source result set
+	int				m_iIndex;		///< index into source result set (-1 for joined fields)
 	CSphAttrLocator	m_tLocator;		///< attribute locator in the row
 
 	ESphAttrSrc		m_eSrc;			///< attr source (for multi-valued attrs only)
@@ -844,6 +844,7 @@ struct CSphSchema
 {
 	CSphString						m_sName;		///< my human-readable name
 	CSphVector<CSphColumnInfo>		m_dFields;		///< my fulltext-searchable fields
+	int								m_iBaseFields;	///< how much fields are base, how much are additional (only affects indexer)
 
 public:
 
@@ -1001,6 +1002,9 @@ public:
 	/// ones do not match those actually returned by the source
 	virtual bool						HasAttrsConfigured () = 0;
 
+	/// check if there are any joined fields
+	virtual bool						HasJoinedFields () { return false; }
+
 	/// begin iterating document hits
 	/// to be implemented by descendants
 	virtual bool						IterateHitsStart ( CSphString & sError ) = 0;
@@ -1011,6 +1015,12 @@ public:
 	/// on end of documents, returns true and m_tDocInfo.m_uDocID is 0
 	/// on error, returns false and fills sError
 	virtual bool						IterateHitsNext ( CSphString & sError ) = 0;
+
+	/// get joined hits from joined fields (w/o attached docinfos)
+	/// returns false and fills out-string with error message on failure
+	/// returns true and sets m_tDocInfo.m_uDocID to 0 on eof
+	/// returns true and sets m_tDocInfo.m_uDocID to non-0 on success
+	virtual bool						IterateJoinedHits ( CSphString & sError );
 
 	/// begin iterating values of out-of-document multi-valued attribute iAttr
 	/// will fail if iAttr is out of range, or is not multi-valued
@@ -1067,6 +1077,7 @@ public:
 
 	/// my generic tokenizer
 	virtual bool			IterateHitsNext ( CSphString & sError );
+	void					BuildHits ( BYTE ** dFields, int iFieldIndex, int iStartPos );
 
 	/// field data getter
 	/// to be implemented by descendants
@@ -1093,6 +1104,12 @@ struct CSphUnpackInfo
 	CSphString			m_sName;
 };
 
+struct CSphJoinedField
+{
+	CSphString			m_sName;
+	CSphString			m_sQuery;
+};
+
 /// generic SQL source params
 struct CSphSourceParams_SQL
 {
@@ -1111,6 +1128,8 @@ struct CSphSourceParams_SQL
 
 	CSphVector<CSphUnpackInfo>		m_dUnpack;
 	DWORD							m_uUnpackMemoryLimit;
+
+	CSphVector<CSphJoinedField>		m_dJoinedFields;
 
 	// connection params
 	CSphString						m_sHost;
@@ -1139,6 +1158,9 @@ struct CSphSource_SQL : CSphSource_Document
 	virtual void		PostIndex ();
 
 	virtual bool		HasAttrsConfigured () { return m_tParams.m_dAttrs.GetLength()!=0; }
+	virtual bool		HasJoinedFields () { return m_tSchema.m_iBaseFields!=m_tSchema.m_dFields.GetLength(); }
+
+	virtual bool		IterateJoinedHits ( CSphString & sError );
 
 	virtual bool		IterateMultivaluedStart ( int iAttr, CSphString & sError );
 	virtual bool		IterateMultivaluedNext ();
@@ -1175,6 +1197,10 @@ protected:
 	bool				m_bUnpackFailed;
 	bool				m_bUnpackOverflow;
 	CSphVector<char>	m_dUnpackBuffers [ SPH_MAX_FIELDS ];
+
+	int					m_iJoinedHitField;	///< currently pulling joined hits from this field (index into schema; -1 if not pulling)
+	SphDocID_t			m_iJoinedHitID;		///< last document id
+	int					m_iJoinedHitPos;	///< last hit position
 
 	static const int			MACRO_COUNT = 2;
 	static const char * const	MACRO_VALUES [ MACRO_COUNT ];

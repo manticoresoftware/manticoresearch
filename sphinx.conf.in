@@ -80,6 +80,17 @@ source src1
 		SELECT id, group_id, UNIX_TIMESTAMP(date_added) AS date_added, title, content \
 		FROM documents
 
+
+	# joined field fetch query
+	# lets you avoid (slow) JOIN and GROUP_CONCAT
+	# syntax is FIELD-NAME 'from' 'query'; QUERY
+	#
+	# REQUIRES that query results are in ascending document ID order!
+	# multi-value, optional, default is empty list of queries
+	#
+	# sql_joined_field			= tagstext from query; SELECT docid, CONCAT('tag',tagid) FROM tags ORDER BY docid ASC
+
+
 	# range query setup, query that must return min and max ID values
 	# optional, default is empty
 	#

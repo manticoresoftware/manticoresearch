@@ -1,7 +1,7 @@
 @echo off
 
 
-set URL=svn://sphx.org/sphinx/trunk
+set URL=svn://sphx.org/sphinx/branches/rel099
 set REL=0.9.9
 
 
@@ -38,6 +38,7 @@ if %ERRORLEVEL% NEQ 0 (
 
 call checkout\src\svnxrev.cmd checkout
 echo #define SPHINX_TAG "%TAG%" >> checkout\src\sphinxversion.h
+perl -i.bak -p -e "s/(_TAGREV \").*(r\d+\")/\1\2/g;" checkout\src\sphinxversion.h
 rmdir /s /q checkout\.svn
 
 
@@ -90,7 +91,7 @@ for %%i in (indexer.exe search.exe searchd.exe spelldump.exe) do (
 	copy checkout\bin\release\%%i %BASE%\bin
 )
 
-for %%i in (comerr32.dll gssapi32.dll iconv.dll k5sprt32.dll krb5_32.dll libeay32.dll libexpat.dll libiconv2.dll libintl3.dll libpq.dll ssleay32.dll) do (
+for %%i in (comerr32.dll gssapi32.dll iconv.dll k5sprt32.dll krb5_32.dll libeay32.dll libiconv2.dll libintl3.dll libpq.dll ssleay32.dll) do (
 	copy "%PGSQLROOT%\bin\%%i" %BASE%\bin
 )
 

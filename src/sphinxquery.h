@@ -18,16 +18,37 @@
 
 //////////////////////////////////////////////////////////////////////////////
 
+enum XQStarPosition
+{
+	STAR_NONE	= 0,
+	STAR_FRONT	= 1,
+	STAR_BACK	= 2,
+	STAR_BOTH	= 3
+};
+
 /// extended query word with attached position within atom
 struct XQKeyword_t
 {
-	CSphString	m_sWord;
-	int			m_iAtomPos;
-	bool		m_bFieldStart;	///< must occur at very start
-	bool		m_bFieldEnd;	///< must occur at very end
+	CSphString			m_sWord;
+	int					m_iAtomPos;
+	bool				m_bFieldStart;	///< must occur at very start
+	bool				m_bFieldEnd;	///< must occur at very end
+	DWORD				m_uStarPosition;
 
-	XQKeyword_t () : m_iAtomPos ( -1 ), m_bFieldStart ( false ), m_bFieldEnd ( false ) {}
-	XQKeyword_t ( const char * sWord, int iPos ) : m_sWord ( sWord ), m_iAtomPos ( iPos ), m_bFieldStart ( false ), m_bFieldEnd ( false ) {}
+	XQKeyword_t ()
+		: m_iAtomPos ( -1 )
+		, m_bFieldStart ( false )
+		, m_bFieldEnd ( false )
+		, m_uStarPosition ( STAR_NONE )
+	{}
+	
+	XQKeyword_t ( const char * sWord, int iPos )
+		: m_sWord ( sWord )
+		, m_iAtomPos ( iPos )
+		, m_bFieldStart ( false )
+		, m_bFieldEnd ( false )
+		, m_uStarPosition ( STAR_NONE )
+	{}
 };
 
 

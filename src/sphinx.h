@@ -2050,8 +2050,6 @@ public:
 	virtual bool				Mlock () = 0;
 
 public:
-	virtual ISphQword *					QwordSpawn () const = 0;
-	virtual bool						QwordSetup ( ISphQword * pQword, const ISphQwordSetup * pSetup ) const = 0;
 	virtual bool						EarlyReject ( CSphMatch & tMatch ) const = 0;
 	virtual const CSphSourceStats &		GetStats () const = 0;
 

@@ -34,7 +34,7 @@ public:
 	int				GetToken ( YYSTYPE * lvalp );
 
 	void			AddQuery ( XQNode_t * pNode );
-	XQNode_t *		AddKeyword ( const char * sKeyword );
+	XQNode_t *		AddKeyword ( const char * sKeyword, DWORD uStar = STAR_NONE );
 	XQNode_t *		AddKeyword ( XQNode_t * pLeft, XQNode_t * pRight );
 	XQNode_t *		AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pRight );
 
@@ -442,7 +442,13 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		if ( !m_pDict->GetWordID ( sTmp ) )
 			sToken = NULL;
 
-		m_tPendingToken.pNode = AddKeyword ( sToken );
+		// information about stars is lost after this point, so was have to save it now
+		DWORD uStarPosition = STAR_NONE;
+		uStarPosition |= *m_pTokenizer->GetTokenEnd() == '*' ? STAR_BACK : 0;
+		uStarPosition |= ( m_pTokenizer->GetTokenStart() != m_pTokenizer->GetBufferPtr() ) &&
+			m_pTokenizer->GetTokenStart()[-1] == '*' ? STAR_FRONT : 0;
+
+		m_tPendingToken.pNode = AddKeyword ( sToken, uStarPosition );
 		m_iPendingType = TOK_KEYWORD;
 		break;
 	}
@@ -474,9 +480,10 @@ void XQParser_t::AddQuery ( XQNode_t * pNode )
 }
 
 
-XQNode_t * XQParser_t::AddKeyword ( const char * sKeyword )
+XQNode_t * XQParser_t::AddKeyword ( const char * sKeyword, DWORD uStarPosition )
 {
 	XQKeyword_t tAW ( sKeyword, m_iAtomPos );
+	tAW.m_uStarPosition = uStarPosition;
 
 	XQNode_t * pNode = new XQNode_t();
 	pNode->m_dWords.Add ( tAW );

@@ -15,6 +15,7 @@
 #define _sphinxsearch_
 
 #include "sphinx.h"
+#include "sphinxquery.h"
 
 //////////////////////////////////////////////////////////////////////////
 // PACKED HIT MACROS
@@ -111,6 +112,9 @@ public:
 	{}
 
 	virtual ~ISphQwordSetup () {}
+
+	virtual ISphQword *					QwordSpawn ( const XQKeyword_t & ) const = 0;
+	virtual bool						QwordSetup ( ISphQword * pQword ) const = 0;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -121,6 +125,26 @@ class ISphRanker
 public:
 	virtual CSphMatch *			GetMatchesBuffer() = 0;
 	virtual int					GetMatches ( int iFields, const int * pWeights ) = 0;
+};
+
+/// hit marker, used for snippets generation
+
+struct SphHitMark_t
+{
+	DWORD	m_uPosition;
+	DWORD	m_uSpan;
+};
+
+typedef CSphVector<SphHitMark_t> SphHitVector_t;
+
+struct ExtNode_i;
+
+struct CSphHitMarker
+{
+	ExtNode_i * m_pRoot;
+	void Mark ( SphHitVector_t & );
+
+	static CSphHitMarker * Create ( const XQNode_t * pRoot, const ISphQwordSetup & tSetup );
 };
 
 /// factory

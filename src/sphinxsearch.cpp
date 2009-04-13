@@ -485,11 +485,11 @@ static ISphQword * CreateQueryWord ( const XQKeyword_t & tWord, const ISphQwordS
 	strncpy ( (char*)sTmp, tWord.m_sWord.cstr(), sizeof(sTmp) );
 	sTmp[sizeof(sTmp)-1] = '\0';
 
-	ISphQword * pWord = tSetup.m_pIndex->QwordSpawn();
+	ISphQword * pWord = tSetup.QwordSpawn ( tWord );
 	pWord->m_sWord = tWord.m_sWord;
 	pWord->m_iWordID = tSetup.m_pDict->GetWordID ( sTmp );
 	pWord->m_sDictWord = (char*)sTmp;
-	tSetup.m_pIndex->QwordSetup ( pWord, &tSetup );
+	tSetup.QwordSetup ( pWord );
 
 	if ( tWord.m_bFieldStart && tWord.m_bFieldEnd )	pWord->m_iTermPos = TERM_POS_FIELD_STARTEND;
 	else if ( tWord.m_bFieldStart )					pWord->m_iTermPos = TERM_POS_FIELD_START;
@@ -3512,6 +3512,49 @@ ISphRanker * sphCreateRanker ( const CSphQuery * pQuery, const char * sQuery, CS
 
 	pRanker->SetQwordsIDF ( hQwords );
 	return pRanker;
+}
+
+/// hit marker
+
+void CSphHitMarker::Mark ( SphHitVector_t & dMarked )
+{
+	const ExtHit_t * pHits = NULL;
+	const ExtDoc_t * pDocs = NULL;
+
+	SphDocID_t uMaxID = 0;
+	pDocs = m_pRoot->GetDocsChunk ( &uMaxID );
+	if ( !pDocs )
+		return;
+
+	for ( ;; )
+	{
+		pHits = m_pRoot->GetHitsChunk ( pDocs, uMaxID );
+		if ( !pHits )
+			break;
+
+		for ( ; pHits->m_uDocid != DOCID_MAX; pHits++ )
+		{
+			SphHitMark_t tMark;
+			tMark.m_uPosition = HIT2POS ( pHits->m_uHitpos );
+			tMark.m_uSpan = pHits->m_uSpanlen;
+
+			dMarked.Add ( tMark );
+		}
+	}
+		
+
+}
+
+CSphHitMarker * CSphHitMarker::Create ( const XQNode_t * pRoot, const ISphQwordSetup & tSetup )
+{
+	ExtNode_i * pNode = ExtNode_i::Create ( pRoot, tSetup );
+	if ( pNode )
+	{
+		CSphHitMarker * pMarker = new CSphHitMarker;
+		pMarker->m_pRoot = pNode;
+		return pMarker;
+	}
+	return NULL;
 }
 
 //

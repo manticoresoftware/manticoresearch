@@ -1290,6 +1290,7 @@ class SphinxClient
 		if ( !isset($opts["single_passage"]) )		$opts["single_passage"] = false;
 		if ( !isset($opts["use_boundaries"]) )		$opts["use_boundaries"] = false;
 		if ( !isset($opts["weight_order"]) )		$opts["weight_order"] = false;
+		if ( !isset($opts["query_mode"]) )			$opts["query_mode"] = false;
 
 		/////////////////
 		// build request
@@ -1301,6 +1302,7 @@ class SphinxClient
 		if ( $opts["single_passage"] )	$flags |= 4;
 		if ( $opts["use_boundaries"] )	$flags |= 8;
 		if ( $opts["weight_order"] )	$flags |= 16;
+		if ( $opts["query_mode"] )		$flags |= 32;
 		$req = pack ( "NN", 0, $flags ); // mode=0, flags=$flags
 		$req .= pack ( "N", strlen($index) ) . $index; // req index
 		$req .= pack ( "N", strlen($words) ) . $words; // req words

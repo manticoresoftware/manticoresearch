@@ -1007,6 +1007,10 @@ public:
 		, m_tWordlist ( tWordlist )
 		, m_bSetupReaders ( false )
 	{}
+
+	virtual ISphQword *					QwordSpawn ( const XQKeyword_t & ) const;
+	virtual bool						QwordSetup ( ISphQword * ) const;
+	
 };
 
 
@@ -1454,6 +1458,8 @@ class ExtRanker_c;
 /// this is my actual VLN-compressed phrase index implementation
 struct CSphIndex_VLN : CSphIndex
 {
+	friend struct DiskIndexQwordSetup_c;
+	
 	friend struct CSphDoclistRecord;
 	friend struct CSphWordDataRecord;
 	friend struct CSphWordRecord;
@@ -1504,8 +1510,6 @@ struct CSphIndex_VLN : CSphIndex
 	virtual SphAttr_t *			GetKillList () const;
 	virtual int					GetKillListSize ()const { return m_iKillListSize; }
 
-	virtual ISphQword *					QwordSpawn () const;
-	virtual bool						QwordSetup ( ISphQword * pWord, const ISphQwordSetup * pSetup ) const;
 	virtual const CSphSourceStats &		GetStats () const { return m_tStats; }
 
 private:
@@ -10544,33 +10548,28 @@ bool CSphIndex_VLN::MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISph
 
 //////////////////////////////////////////////////////////////////////////////
 
-ISphQword * CSphIndex_VLN::QwordSpawn () const
+ISphQword * DiskIndexQwordSetup_c::QwordSpawn ( const XQKeyword_t & ) const
 {
 	return new DiskIndexQword_c ();
 }
 
 
-bool CSphIndex_VLN::QwordSetup ( ISphQword * pWord, const ISphQwordSetup * pSetup ) const
+bool DiskIndexQwordSetup_c::QwordSetup ( ISphQword * pWord ) const
 {
 	DiskIndexQword_c * pMyWord = dynamic_cast<DiskIndexQword_c*> ( pWord );
 	if ( !pMyWord )
 		return false;
 
-	const DiskIndexQwordSetup_c * pMySetup = dynamic_cast<const DiskIndexQwordSetup_c*> ( pSetup );
-	if ( !pMySetup )
-		return false;
-
 	DiskIndexQword_c & tWord = *pMyWord;
-	const DiskIndexQwordSetup_c & tTermSetup = *pMySetup;
 
 	// setup attrs
-	tWord.m_tDoc.Reset ( tTermSetup.m_tMin.m_iRowitems + tTermSetup.m_iToCalc );
-	tWord.m_iMinID = tTermSetup.m_tMin.m_iDocID;
+	tWord.m_tDoc.Reset ( m_tMin.m_iRowitems + m_iToCalc );
+	tWord.m_iMinID = m_tMin.m_iDocID;
 
-	if ( tTermSetup.m_eDocinfo==SPH_DOCINFO_INLINE )
+	if ( m_eDocinfo==SPH_DOCINFO_INLINE )
 	{
-		tWord.m_iInlineAttrs = tTermSetup.m_tMin.m_iRowitems;
-		tWord.m_pInlineFixup = tTermSetup.m_tMin.m_pRowitems;
+		tWord.m_iInlineAttrs = m_tMin.m_iRowitems;
+		tWord.m_pInlineFixup = m_tMin.m_pRowitems;
 	} else
 	{
 		tWord.m_iInlineAttrs = 0;
@@ -10581,17 +10580,19 @@ bool CSphIndex_VLN::QwordSetup ( ISphQword * pWord, const ISphQwordSetup * pSetu
 	tWord.m_iDocs = 0;
 	tWord.m_iHits = 0;
 
+	CSphIndex_VLN * pIndex = (CSphIndex_VLN *)m_pIndex;
+
 	// binary search through checkpoints for a one whose range matches word ID
-	assert ( m_bPreread[0] );
-	assert ( !m_bPreloadWordlist || !m_pWordlist.IsEmpty() );
+	assert ( pIndex->m_bPreread[0] );
+	assert ( !pIndex->m_bPreloadWordlist || !pIndex->m_pWordlist.IsEmpty() );
 
 	// empty index?
-	if ( !m_dWordlistCheckpoints.GetLength() )
+	if ( !pIndex->m_dWordlistCheckpoints.GetLength() )
 		return false;
 
 	SphOffset_t uWordlistOffset = 0;
-	const CSphWordlistCheckpoint * pStart = &m_dWordlistCheckpoints[0];
-	const CSphWordlistCheckpoint * pEnd = &m_dWordlistCheckpoints.Last();
+	const CSphWordlistCheckpoint * pStart = &pIndex->m_dWordlistCheckpoints[0];
+	const CSphWordlistCheckpoint * pEnd = &pIndex->m_dWordlistCheckpoints.Last();
 
 	if ( tWord.m_iWordID<pStart->m_iWordID )
 		return false;
@@ -10623,8 +10624,8 @@ bool CSphIndex_VLN::QwordSetup ( ISphQword * pWord, const ISphQwordSetup * pSetu
 			}
 		}
 
-		assert ( pStart >= &m_dWordlistCheckpoints[0] );
-		assert ( pStart < &m_dWordlistCheckpoints.Last() );
+		assert ( pStart >= &pIndex->m_dWordlistCheckpoints[0] );
+		assert ( pStart < &pIndex->m_dWordlistCheckpoints.Last() );
 		assert ( tWord.m_iWordID >= pStart->m_iWordID && tWord.m_iWordID < pStart[1].m_iWordID );
 		uWordlistOffset = pStart->m_iWordlistOffset;
 	}
@@ -10632,29 +10633,29 @@ bool CSphIndex_VLN::QwordSetup ( ISphQword * pWord, const ISphQwordSetup * pSetu
 	// decode wordlist chunk
 	const BYTE * pBuf = NULL;
 
-	if ( m_bPreloadWordlist )
+	if ( pIndex->m_bPreloadWordlist )
 	{
 		assert ( uWordlistOffset>0 && uWordlistOffset<=(SphOffset_t)UINT_MAX );
-		pBuf = &m_pWordlist[(DWORD)uWordlistOffset];
+		pBuf = &pIndex->m_pWordlist[(DWORD)uWordlistOffset];
 	}
 	else
 	{
-		assert ( m_pWordlistChunkBuf );
+		assert ( pIndex->m_pWordlistChunkBuf );
 		SphOffset_t iChunkLength = 0;
 
 		// not the end?
-		if ( !bLastChunk && pStart < &m_dWordlistCheckpoints.Last() )
+		if ( !bLastChunk && pStart < &pIndex->m_dWordlistCheckpoints.Last() )
 			iChunkLength = pStart[1].m_iWordlistOffset - uWordlistOffset;
 		else
-			iChunkLength = m_iWordlistSize - uWordlistOffset;
+			iChunkLength = pIndex->m_iWordlistSize - uWordlistOffset;
 
-		if ( sphSeek ( tTermSetup.m_tWordlist.GetFD (), uWordlistOffset, SEEK_SET ) < 0 )
+		if ( sphSeek ( m_tWordlist.GetFD (), uWordlistOffset, SEEK_SET ) < 0 )
 			return false;
 
-		if ( sphReadThrottled ( tTermSetup.m_tWordlist.GetFD (), m_pWordlistChunkBuf, (size_t)iChunkLength ) != (size_t)iChunkLength )
+		if ( sphReadThrottled ( m_tWordlist.GetFD (), pIndex->m_pWordlistChunkBuf, (size_t)iChunkLength ) != (size_t)iChunkLength )
 			return false;
 
-		pBuf = m_pWordlistChunkBuf;
+		pBuf = pIndex->m_pWordlistChunkBuf;
 	}
 
 	assert ( pBuf );
@@ -10692,18 +10693,18 @@ bool CSphIndex_VLN::QwordSetup ( ISphQword * pWord, const ISphQwordSetup * pSetu
 			tWord.m_iDocs = iDocs;
 			tWord.m_iHits = iHits;
 
-			if ( tTermSetup.m_bSetupReaders )
+			if ( m_bSetupReaders )
 			{
 				// unpack next word ID and offset delta (ie. hitlist length)
 				sphUnzipWordid ( pBuf ); // might be 0 at checkpoint
 				SphOffset_t iDoclistLen = sphUnzipOffset ( pBuf );
 
 				tWord.m_rdDoclist.SetBuffers ( g_iReadBuffer, g_iReadUnhinted );
-				tWord.m_rdDoclist.SetFile ( tTermSetup.m_tDoclist );
+				tWord.m_rdDoclist.SetFile ( m_tDoclist );
 				tWord.m_rdDoclist.SeekTo ( iDoclistOffset, (int)iDoclistLen );
 
 				tWord.m_rdHitlist.SetBuffers ( g_iReadBuffer, g_iReadUnhinted );
-				tWord.m_rdHitlist.SetFile ( tTermSetup.m_tHitlist );
+				tWord.m_rdHitlist.SetFile ( m_tHitlist );
 			}
 			return true;
 		}
@@ -11044,7 +11045,7 @@ void CSphIndex_VLN::DebugDumpHitlist ( FILE * fp, const char * sKeyword )
 	DiskIndexQword_c tKeyword;
 	tKeyword.m_tDoc.m_iDocID = m_tMin.m_iDocID;
 	tKeyword.m_iWordID = uWordID;
-	if ( !QwordSetup ( &tKeyword, &tTermSetup ) )
+	if ( !tTermSetup.QwordSetup ( &tKeyword ) )
 		sphDie ( "failed to setup keyword" );
 
 	// press play on tape
@@ -11935,7 +11936,7 @@ bool CSphIndex_VLN::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, cons
 				QueryWord.Reset ();
 				QueryWord.m_sWord = (const char*)sWord;
 				QueryWord.m_iWordID = iWord;
-				QwordSetup ( &QueryWord, &tTermSetup );
+				tTermSetup.QwordSetup ( &QueryWord );
 			}
 
 			dKeywords.Resize ( dKeywords.GetLength () + 1 );

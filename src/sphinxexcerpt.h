@@ -32,6 +32,7 @@ struct ExcerptQuery_t
 	bool			m_bSinglePassage;	///< whether to return single best passage only
 	bool			m_bUseBoundaries;	///< whether to extract passages by phrase boundaries setup in tokenizer
 	bool			m_bWeightOrder;		///< whether to order best passages in document (default) or weight order
+	bool			m_bHighlightQuery;
 
 public:
 	ExcerptQuery_t ()
@@ -45,13 +46,15 @@ public:
 		, m_bSinglePassage ( false )
 		, m_bUseBoundaries ( false )
 		, m_bWeightOrder ( false )
+		, m_bHighlightQuery ( false )
 	{
 	}
 };
 
 /// an excerpt generator
-/// returns a newly allocated string in encoding specified by tokenizer
-char *				sphBuildExcerpt ( const ExcerptQuery_t & q, CSphDict * pDict, ISphTokenizer * pTokenizer );
+/// returns a newly allocated string in encoding specified by tokenizer on success
+/// returns NULL on failure
+char * sphBuildExcerpt ( ExcerptQuery_t &, CSphDict *, ISphTokenizer *, const CSphSchema *, CSphIndex *, CSphString & sError );
 
 #endif // _sphinxexcerpt_
 

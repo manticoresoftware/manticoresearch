@@ -14279,6 +14279,7 @@ void CSphSource_Document::BuildHits ( BYTE ** dFields, int iFieldIndex, int iSta
 
 	int iStartField = 0;
 	int iEndField = m_tSchema.m_iBaseFields;
+	if ( !iEndField ) iEndField = m_tSchema.m_dFields.GetLength();
 	if ( iFieldIndex>=0 )
 	{
 		iStartField = iFieldIndex;

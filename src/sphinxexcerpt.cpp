@@ -363,6 +363,7 @@ void ExcerptGen_c::AddBoundary()
 	tLast.m_iLengthBytes = 0;
 	tLast.m_iWordID = 0;
 	tLast.m_uWords = 0;
+	tLast.m_uPosition = 0;
 }
 
 void ExcerptGen_c::AddJunk ( int iStart, int iLength, int iBoundary )
@@ -380,6 +381,7 @@ void ExcerptGen_c::AddJunk ( int iStart, int iLength, int iBoundary )
 			tLast.m_iLengthBytes = i - iChunkStart;
 			tLast.m_iWordID = 0;
 			tLast.m_uWords = 0;
+			tLast.m_uPosition = 0;
 
 			iChunkStart = i;
 			iSaved += tLast.m_iLengthBytes;
@@ -398,6 +400,7 @@ void ExcerptGen_c::AddJunk ( int iStart, int iLength, int iBoundary )
 	tLast.m_iLengthBytes = iStart + iLength - iChunkStart;
 	tLast.m_iWordID = 0;
 	tLast.m_uWords = 0;
+	tLast.m_uPosition = 0;
 
 	if ( iBoundary != -1 ) AddBoundary();
 }

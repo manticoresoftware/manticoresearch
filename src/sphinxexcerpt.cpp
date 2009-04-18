@@ -201,12 +201,19 @@ public:
 	
 	virtual const CSphMatch & GetNextDoc ( DWORD * )
 	{
-		m_uFields = 1;
-		switch ( m_iChunk++ )
+		m_uFields = 0xFFFFFFFFUL;
+		if ( m_iChunk++ == 0 )
 		{
-			case 0:		m_tMatch.m_iDocID = 1; break;
-			default:	m_tMatch.m_iDocID = 0; break;
+			if ( GetNextHit() )
+			{
+				m_tMatch.m_iDocID = 1;
+				m_iToken--;
+			}
+			else
+				m_tMatch.m_iDocID = 0;
 		}
+		else
+			m_tMatch.m_iDocID = 0;
 		return m_tMatch;
 	}
 };
@@ -273,10 +280,14 @@ struct SnippetsQword_StarBoth_c: public SnippetsQword_c<SnippetsQword_StarBoth_c
 
 class SnippetsQwordSetup: public ISphQwordSetup
 {
-	ExcerptGen_c * m_pGenerator;
+	ExcerptGen_c *	m_pGenerator;
+	bool			m_bUtf8;
 
 public:
-	SnippetsQwordSetup ( ExcerptGen_c * pGenerator ): m_pGenerator ( pGenerator ) {}
+	SnippetsQwordSetup ( ExcerptGen_c * pGenerator, bool bUtf8 )
+		: m_pGenerator ( pGenerator )
+		, m_bUtf8 ( bUtf8 )
+	{}
 
 	virtual ISphQword *		QwordSpawn ( const XQKeyword_t & tWord ) const;
 	virtual bool			QwordSetup ( ISphQword * pQword ) const;
@@ -302,7 +313,7 @@ bool SnippetsQwordSetup::QwordSetup ( ISphQword * pQword ) const
 		assert ( "query word setup failed" && 0 );
 
 	pWord->m_iLastIndex = m_pGenerator->m_iLastWord;
-	pWord->m_uWordMask = 1 << (++m_pGenerator->m_iWordCount);
+	pWord->m_uWordMask = 1 << (m_pGenerator->m_iWordCount++);
 	pWord->m_iWordLength = strlen ( pWord->m_sDictWord.cstr() );
 	pWord->m_dTokens = &(m_pGenerator->m_dTokens);
 	pWord->m_sBuffer = &(m_pGenerator->m_sBuffer);
@@ -310,6 +321,11 @@ bool SnippetsQwordSetup::QwordSetup ( ISphQword * pQword ) const
 	pWord->m_iDocs = 1;
 	pWord->m_iHits = 1;
 	pWord->m_bHasHitlist = true;
+
+	// add dummy word, used for passage weighting
+	const char * sWord = pWord->m_sDictWord.cstr();
+	const int iLength = m_bUtf8 ? sphUTF8Len ( sWord ) : strlen ( sWord );
+	m_pGenerator->m_dWords.Add().m_iLengthCP = iLength;
 
 	return true;
 }
@@ -333,6 +349,7 @@ inline bool operator < ( const ExcerptGen_c::Passage_t & a, const ExcerptGen_c::
 
 ExcerptGen_c::ExcerptGen_c ()
 {
+	m_iWordCount = 0;
 	m_bExactPhrase = false;
 	m_pMarker = NULL;
 }
@@ -459,6 +476,9 @@ void ExcerptGen_c::TokenizeDocument ( const ExcerptQuery_t & tQuery, CSphDict * 
 
 		pLastTokenEnd = pTokenizer->GetTokenEnd ();
 
+		if ( pTokenizer->GetBoundary() )
+			uPosition += 100; // FIXME: this should be taken from index settings
+
 		m_dTokens.Resize ( m_dTokens.GetLength () + 1 );
 		Token_t & tLast = m_dTokens.Last ();
 		tLast.m_eType	= iWord ? TOK_WORD : TOK_SPACE;
@@ -535,30 +555,34 @@ void ExcerptGen_c::MarkHits ()
 	m_pMarker->Mark ( dMarked );
 	
 	// fix-up word masks
-	int k = 0;
-	ARRAY_FOREACH ( i, m_dTokens )
+	int iMarked = dMarked.GetLength();
+	int iTokens = m_dTokens.GetLength();
+	int i = 0, k = 0;
+	while ( i < iTokens )
 	{
-		if ( k == dMarked.GetLength() ) // no more marked hits, clear tail
+		// sync
+		while ( k < iMarked && m_dTokens[i].m_uPosition > dMarked[k].m_uPosition )
+			k++;
+
+		if ( k == iMarked ) // no more marked hits, clear tail
 		{
-			for ( ; i < m_dTokens.GetLength(); i++ )
+			for ( ; i < iTokens; i++ )
 				m_dTokens[i].m_uWords = 0;
 			break;
 		}
-		
+
 		// clear false matches
 		while ( dMarked[k].m_uPosition > m_dTokens[i].m_uPosition )
 			m_dTokens[i++].m_uWords = 0;
-		assert ( dMarked[k].m_uPosition == m_dTokens[i].m_uPosition );
 		
 		// skip tokens covered by hit's span
+		assert ( dMarked[k].m_uPosition == m_dTokens[i].m_uPosition );
 		assert ( dMarked[k].m_uSpan >= 1 );
-		while ( --dMarked[k].m_uSpan )
+		while ( dMarked[k].m_uSpan-- )
 		{
-				i++;
-				while ( !m_dTokens[i].m_uPosition ) i++;
+			i++; 
+			while ( i < iTokens && !m_dTokens[i].m_uPosition ) i++;
 		}
-		
-		k++;
 	}
 }
 
@@ -1140,12 +1164,14 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & q )
 
 /////////////////////////////////////////////////////////////////////////////
 
-
-
 char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphIndex *pIndex, CSphString & sError )
 {
-	if ( !tOptions.m_bHighlightQuery ) // legacy highlighting
+	if ( !tOptions.m_sWords.cstr()[0] )
+		tOptions.m_bHighlightQuery = false;
+		
+	if ( !tOptions.m_bHighlightQuery )
 	{
+		 // legacy highlighting
 		ExcerptGen_c tGenerator;
 		tGenerator.TokenizeQuery ( tOptions, pDict, pTokenizer );
 		tGenerator.TokenizeDocument ( tOptions, pDict, pTokenizer, true );
@@ -1158,9 +1184,10 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 		sError = tQuery.m_sParseError;
 		return NULL;
 	}
+	tQuery.m_pRoot->ClearFieldMask();
 	
 	ExcerptGen_c tGenerator;
-	SnippetsQwordSetup tSetup ( &tGenerator );
+	SnippetsQwordSetup tSetup ( &tGenerator, pTokenizer->IsUtf8() );
 	CSphString sWarning;
 
 	tGenerator.TokenizeDocument ( tOptions, pDict, pTokenizer, false );
@@ -1173,14 +1200,14 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 	tSetup.m_iMaxTimer = 0;
 	tSetup.m_pWarning = &sWarning;
 	
-	CSphHitMarker * pMarker = CSphHitMarker::Create ( tQuery.m_pRoot, tSetup );
-	if ( !pMarker )
+	CSphScopedPtr<CSphHitMarker> pMarker ( CSphHitMarker::Create ( tQuery.m_pRoot, tSetup ) );
+	if ( !pMarker.Ptr() )
 	{
 		sError = sWarning;
 		return NULL;
 	}
 
-	tGenerator.SetMarker ( pMarker );
+	tGenerator.SetMarker ( pMarker.Ptr() );
 	return tGenerator.BuildExcerpt ( tOptions, pDict, pTokenizer );
 }
 

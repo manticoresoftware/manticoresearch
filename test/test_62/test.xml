@@ -19,7 +19,7 @@ source test
 {
 	type = mysql
 	<sql_settings/>
-	sql_query = SELECT 1, 'text';
+	sql_query = SELECT 1, 'title' as title, 'text' as text;
 }
 
 index test
@@ -27,6 +27,9 @@ index test
 	source = test
 	path = <data_path/>/test
 	charset_type = utf-8
+
+	phrase_boundary = U+002C
+	phrase_boundary_step = 100
 }
 </config>
 
@@ -63,7 +66,16 @@ $queries = array
 	'"sphinx scale"~3',
 	'"sphinx billions"~3',
 	'"silly documents"/1',
-	'"clusters scale to billions"'
+	'"clusters scale to billions"',
+	'"queries per month" | month | "per month"',
+	'"of d*" | "of data"',
+	'"of data" -"of hedgedogs"',
+	'"documents terabytes"', // crosses boundary
+	'@title sphinx',
+	'@text sphinx',
+	'@text[3] sphinx',
+	'@text[3] documents',
+	'@text[7] documents',
 );
 
 $results = array();

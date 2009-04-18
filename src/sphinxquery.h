@@ -113,8 +113,9 @@ public:
 		return m_dChildren.GetLength()==0;
 	}
 
-	/// setup field limits
-	void SetFieldSpec ( DWORD uMask, int iMaxPos );
+	void SetFieldSpec ( DWORD uMask, int iMaxPos ); ///< setup field limits
+	void ClearFieldMask (); ///< unconditionally clear field mask
+
 };
 
 

@@ -144,6 +144,9 @@ struct CSphHitMarker
 	ExtNode_i * m_pRoot;
 	void Mark ( SphHitVector_t & );
 
+	CSphHitMarker() : m_pRoot ( NULL ) {}
+	~CSphHitMarker();
+
 	static CSphHitMarker * Create ( const XQNode_t * pRoot, const ISphQwordSetup & tSetup );
 };
 

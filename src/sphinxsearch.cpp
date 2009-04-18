@@ -3545,6 +3545,11 @@ void CSphHitMarker::Mark ( SphHitVector_t & dMarked )
 
 }
 
+CSphHitMarker::~CSphHitMarker ()
+{
+	SafeDelete ( m_pRoot );
+}
+
 CSphHitMarker * CSphHitMarker::Create ( const XQNode_t * pRoot, const ISphQwordSetup & tSetup )
 {
 	ExtNode_i * pNode = ExtNode_i::Create ( pRoot, tSetup );

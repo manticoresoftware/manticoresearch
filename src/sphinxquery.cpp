@@ -103,6 +103,14 @@ void XQNode_t::SetFieldSpec ( DWORD uMask, int iMaxPos )
 		m_dChildren[i]->SetFieldSpec ( uMask, iMaxPos );
 }
 
+void XQNode_t::ClearFieldMask ()
+{
+	m_uFieldMask = 0xFFFFFFFFUL;
+
+	ARRAY_FOREACH ( i, m_dChildren )
+		m_dChildren[i]->ClearFieldMask();
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 XQParser_t::XQParser_t ()

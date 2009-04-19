@@ -4598,9 +4598,9 @@ void SqlUnescape ( CSphString & sRes, const char * sEscaped, int iLen )
 
 	while ( s<sMax )
 	{
-		if ( s[0]=='\\' && s[1]=='\'' )
+		if ( s[0]=='\\' )
 		{
-			*d++ = '\'';
+			*d++ = s[1];
 			s += 2;
 		} else
 		{

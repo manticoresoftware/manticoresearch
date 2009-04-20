@@ -56,9 +56,8 @@ public:
 	CSphString		m_sWord;		///< my copy of word
 	CSphString		m_sDictWord;	///< word after being processed by dict (eg. stemmed)
 	SphWordID_t		m_iWordID;		///< word ID, from dictionary
-	int				m_iQueryPos;	///< word position, from query
 	int				m_iTermPos;
-	int				m_iAtomPos;
+	int				m_iAtomPos;		///< word position, from query
 
 	// setup by QwordSetup()
 	int				m_iDocs;		///< document count, from wordlist
@@ -73,7 +72,6 @@ public:
 public:
 	ISphQword ()
 		: m_iWordID ( 0 )
-		, m_iQueryPos ( -1 )
 		, m_iTermPos ( 0 )
 		, m_iAtomPos ( 0 )
 		, m_iDocs ( 0 )

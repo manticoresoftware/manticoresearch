@@ -582,6 +582,18 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 		if ( !ParseJoinedField ( pVal->cstr(), &tParams.m_dJoinedFields.Add(), sSourceName ) )
 			return false;
 
+	// make sure attr names are unique
+	ARRAY_FOREACH ( i, tParams.m_dAttrs )
+		for ( int j = i + 1; j < tParams.m_dAttrs.GetLength(); j++ )
+		{
+			const CSphString & sName = tParams.m_dAttrs[i].m_sName;
+			if ( sName == tParams.m_dAttrs[j].m_sName )
+			{
+				fprintf ( stdout, "ERROR: duplicate attribute name: %s\n", sName.cstr() );
+				return false;
+			}
+		}
+
 	// additional checks
 	if ( tParams.m_iRangedThrottle<0 )
 	{

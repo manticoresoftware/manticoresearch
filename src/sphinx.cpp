@@ -10845,6 +10845,11 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, CSphString & sWarning
 		CSphColumnInfo tCol;
 		ReadSchemaColumn ( rdInfo, tCol );
 		m_tSchema.AddAttr ( tCol );
+
+		// warn on dups
+		for ( int k = 0; k < m_tSchema.GetAttrsCount() - 1; k++ )
+			if ( m_tSchema.GetAttr(k).m_sName == tCol.m_sName )
+				sWarning.SetSprintf ( "duplicate attribute name: %s", tCol.m_sName.cstr() );
 	}
 
 	// min doc

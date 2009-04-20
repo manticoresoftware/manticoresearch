@@ -706,7 +706,9 @@ class SphinxClient
 			|| $ranker==SPH_RANK_BM25
 			|| $ranker==SPH_RANK_NONE
 			|| $ranker==SPH_RANK_WORDCOUNT
-			|| $ranker==SPH_RANK_PROXIMITY );
+			|| $ranker==SPH_RANK_PROXIMITY
+			|| $ranker==SPH_RANK_MATCHANY
+			|| $ranker==SPH_RANK_FIELDMASK );
 		$this->_ranker = $ranker;
 	}
 

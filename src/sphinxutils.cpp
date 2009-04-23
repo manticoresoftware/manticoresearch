@@ -370,10 +370,6 @@ bool CSphConfigParser::ValidateKey ( const char * sKey )
 }
 
 #if !USE_WINDOWS
-static void sigchld ( int )
-{
-}
-
 
 bool CSphConfigParser::TryToExec ( char * pBuffer, char * pEnd, const char * szFilename, CSphVector<char> & dResult )
 {
@@ -389,8 +385,6 @@ bool CSphConfigParser::TryToExec ( char * pBuffer, char * pEnd, const char * szF
 
 	int iRead  = dPipe [0];
 	int iWrite = dPipe [1];
-
-	signal ( SIGCHLD, sigchld );
 
 	int iChild = fork();
 
@@ -424,7 +418,7 @@ bool CSphConfigParser::TryToExec ( char * pBuffer, char * pEnd, const char * szF
 	else
 		if ( iChild == -1 )
 		{
-			snprintf ( m_sError, sizeof ( m_sError ), "fork failed (error=%s)", strerror(errno) );
+			snprintf ( m_sError, sizeof ( m_sError ), "fork failed: [%d] %s", errno, strerror(errno) );
 			return false;
 		}
 
@@ -438,24 +432,46 @@ bool CSphConfigParser::TryToExec ( char * pBuffer, char * pEnd, const char * szF
 	do
 	{
 		dResult.Resize ( iTotalRead + BUFFER_SIZE );
-		iBytesRead = read ( iRead, (void*)&(dResult [iTotalRead]), BUFFER_SIZE );
+		for ( ;; )
+		{
+			iBytesRead = read ( iRead, (void*)&(dResult [iTotalRead]), BUFFER_SIZE );
+			if ( iBytesRead == -1 && errno == EINTR ) // we can get SIGCHLD just before eof
+				continue;
+			break;
+		}
 		iTotalRead += iBytesRead;
 	}
 	while ( iBytesRead > 0 );
 
-	int iStatus;
-	wait ( &iStatus );
-	iStatus = (signed char) WEXITSTATUS (iStatus);
-
-	if ( iStatus )
+	int iStatus, iResult;
+	do
 	{
-		snprintf ( m_sError, sizeof ( m_sError ), "error executing '%s'", pBuffer );
+		// can be interrupted by pretty much anything (e.g. SIGCHLD from other searchd children)
+		iResult = waitpid ( iChild, &iStatus, 0 );
+		if ( iResult == -1 && errno != EINTR )
+		{
+			snprintf ( m_sError, sizeof ( m_sError ), "waitpid() failed: [%d] %s", errno, strerror(errno) );
+			return false;
+		}
+	}
+	while ( iResult != iChild );
+
+	if ( WIFEXITED ( iStatus ) && WEXITSTATUS ( iStatus ) )
+	{
+		// FIXME? read stderr and log that too
+		snprintf ( m_sError, sizeof ( m_sError ), "error executing '%s' status = %d", pBuffer, WEXITSTATUS ( iStatus ) );
+		return false;
+	}
+
+	if ( WIFSIGNALED ( iStatus ) )
+	{
+		snprintf ( m_sError, sizeof ( m_sError ), "error executing '%s', killed by signal %d", pBuffer, WTERMSIG ( iStatus ) );
 		return false;
 	}
 
 	if ( iBytesRead < 0  )
 	{
-		snprintf ( m_sError, sizeof ( m_sError ), "pipe read error (error=%s)", strerror(errno) );
+		snprintf ( m_sError, sizeof ( m_sError ), "pipe read error: [%d] %s", errno, strerror(errno) );
 		return false;
 	}
 
@@ -908,6 +924,33 @@ const char * sphLoadConfig ( const char * sOptConfig, bool bQuiet, CSphConfigPar
 
 	return sOptConfig;
 }
+
+//////////////////////////////////////////////////////////////////////////
+
+#if USE_WINDOWS
+
+void sphSetupSignals ()
+{
+}
+
+#else
+
+static void DummyHandler ( int )
+{
+}
+
+void sphSetupSignals ()
+{
+	struct sigaction tAction;
+	
+	sigfillset ( &tAction.sa_mask );
+	tAction.sa_flags = SA_NOCLDSTOP;
+	tAction.sa_handler = DummyHandler;
+	if ( sigaction ( SIGCHLD, &tAction, NULL ) == -1 )
+		sphDie ( "sigaction() failed: [%d] %s", errno, strerror(errno) );
+}
+
+#endif
 
 //
 // $Id$

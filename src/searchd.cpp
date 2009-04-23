@@ -6890,9 +6890,6 @@ void ReloadIndexSettings ( CSphConfigParser * pCP )
 	while ( g_hDistIndexes.IterateNext () )
 		g_hDistIndexes.IterateGet ().m_bToDelete = true;
 
-
-	SetSignalHandlers ();
-
 	int nTotalIndexes = g_hIndexes.GetLength () + g_hDistIndexes.GetLength ();
 	int nChecked = 0;
 

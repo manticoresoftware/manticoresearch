@@ -235,7 +235,7 @@ public:
 	void DebugDumpT ( const char * sName, int iLevel )
 	{
 		DebugIndent ( iLevel );
-		printf ( "%s", sName );
+		printf ( "%s:\n", sName );
 		m_pChildren[0]->DebugDump ( iLevel+1 );
 		m_pChildren[1]->DebugDump ( iLevel+1 );
 	}

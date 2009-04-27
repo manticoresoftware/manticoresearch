@@ -458,6 +458,9 @@ public:
 	virtual void					SetBufferPtr ( const char * sNewPtr ) = 0;
 
 protected:
+	virtual bool					RemapCharacters ( const char * sConfig, DWORD uFlags, const char * sSource, CSphString & sError );
+
+protected:
 	static const int				MAX_SYNONYM_LEN		= 1024;	///< max synonyms map-from length, bytes
 
 	CSphLowercaser					m_tLC;						///< my lowercaser

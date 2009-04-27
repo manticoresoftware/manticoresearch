@@ -3812,8 +3812,7 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 	}
 }
 
-
-bool ISphTokenizer::SetBoundary ( const char * sConfig, CSphString & sError )
+bool ISphTokenizer::RemapCharacters ( const char * sConfig, DWORD uFlags, const char * sSource, CSphString & sError )
 {
 	// parse
 	CSphVector<CSphRemapRange> dRemaps;
@@ -3829,59 +3828,32 @@ bool ISphTokenizer::SetBoundary ( const char * sConfig, CSphString & sError )
 	{
 		if ( dRemaps[i].m_iStart!=dRemaps[i].m_iRemapStart )
 		{
-			sError.SetSprintf ( "phrase boundary characters must not be remapped (map-from=U+%x, map-to=U+%x)",
-				dRemaps[i].m_iStart, dRemaps[i].m_iRemapStart );
+			sError.SetSprintf ( "%s characters must not be remapped (map-from=U+%x, map-to=U+%x)",
+				sSource, dRemaps[i].m_iStart, dRemaps[i].m_iRemapStart );
 			return false;
 		}
 
 		for ( int j=dRemaps[i].m_iStart; j<=dRemaps[i].m_iEnd; j++ )
 			if ( m_tLC.ToLower(j) )
 		{
-			sError.SetSprintf ( "phrase boundary characters must not be referenced anywhere else (code=U+%x)", j );
+			sError.SetSprintf ( "%s characters must not be referenced anywhere else (code=U+%x)", sSource, j );
 			return false;
 		}
 	}
 
 	// add mapping
-	m_tLC.AddRemaps ( dRemaps, FLAG_CODEPOINT_BOUNDARY, 0 );
-
+	m_tLC.AddRemaps ( dRemaps, uFlags, 0 );
 	return true;
 }
 
+bool ISphTokenizer::SetBoundary ( const char * sConfig, CSphString & sError )
+{
+	return RemapCharacters ( sConfig, FLAG_CODEPOINT_BOUNDARY, "phrase boundary", sError );
+}
 
-// FIXME! refactor and merge with SetBoundary()
 bool ISphTokenizer::SetIgnoreChars ( const char * sConfig, CSphString & sError )
 {
-	// parse
-	CSphVector<CSphRemapRange> dRemaps;
-	CSphCharsetDefinitionParser tParser;
-	if ( !tParser.Parse ( sConfig, dRemaps ) )
-	{
-		sError = tParser.GetLastError();
-		return false;
-	}
-
-	// check
-	ARRAY_FOREACH ( i, dRemaps )
-	{
-		if ( dRemaps[i].m_iStart!=dRemaps[i].m_iRemapStart )
-		{
-			sError.SetSprintf ( "ignored characters must not be remapped (map-from=U+%x, map-to=U+%x)",
-				dRemaps[i].m_iStart, dRemaps[i].m_iRemapStart );
-			return false;
-		}
-
-		for ( int j=dRemaps[i].m_iStart; j<=dRemaps[i].m_iEnd; j++ )
-			if ( m_tLC.ToLower(j) )
-		{
-			sError.SetSprintf ( "ignored characters must not be referenced anywhere else (code=U+%x)", j );
-			return false;
-		}
-	}
-
-	// add mapping
-	m_tLC.AddRemaps ( dRemaps, FLAG_CODEPOINT_IGNORE, 0 );
-	return true;
+	return RemapCharacters ( sConfig, FLAG_CODEPOINT_IGNORE, "ignored", sError );
 }
 
 /////////////////////////////////////////////////////////////////////////////

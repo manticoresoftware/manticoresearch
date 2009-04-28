@@ -15358,7 +15358,7 @@ void CSphSource_SQL::ReportUnpackError ( int iIndex, int iError )
 	if ( !m_bUnpackFailed )
 	{
 		m_bUnpackFailed = true;
-		sphWarn ( "failed to unpack column '%s', error=%d", SqlFieldName ( iIndex ), iError );
+		sphWarn ( "failed to unpack column '%s', error=%d, docid=" DOCID_FMT, SqlFieldName(iIndex), iError, m_tDocInfo.m_iDocID );
 	}
 }
 
@@ -15558,7 +15558,7 @@ bool CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 		}
 	}
 
-	return false;
+	return true;
 }
 
 /////////////////////////////////////////////////////////////////////////////

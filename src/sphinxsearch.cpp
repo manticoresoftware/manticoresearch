@@ -156,7 +156,7 @@ public:
 	virtual void DebugDump ( int iLevel )
 	{
 		DebugIndent ( iLevel );
-		printf ( "ExtTerm: %s\n", m_pQword->m_sWord.cstr() );
+		printf ( "ExtTerm: %s @ %d\n", m_pQword->m_sWord.cstr(), m_pQword->m_iAtomPos );
 	}
 
 protected:

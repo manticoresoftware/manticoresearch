@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>blend characters</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT * FROM sph_test
+}
+
+index test
+{
+	source	= test
+	path	= <data_path/>/test
+
+	<dynamic>
+      <variant>charset_type = utf-8</variant>
+      <variant>charset_type = sbcs</variant>
+    </dynamic>
+	
+	blend_chars = U+002A,U+002C,U+002E
+}
+</config>
+
+<db_create>
+CREATE TABLE sph_test
+(
+	document_id INT NOT NULL,
+	text VARCHAR(255) NOT NULL
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS sph_test
+</db_drop>
+
+<db_insert>
+INSERT INTO sph_test VALUES
+( 1, 'aaa bbb*ccc ddd eee fff*ggg*hhh iii' ),
+( 2, 'ggg*hhh' ),
+( 3, 'aaa ddd ggg hhh' ),
+( 4, 'aaa bbb ccc ddd' ),
+( 5, 'hello, world. how is this gonna work if we need to handle U.S.A' );
+</db_insert>
+
+<queries>
+  <query mode="extended2"> aaa*ccc</query>
+  <query mode="extended2">~aaa*ccc</query>
+  
+  <query mode="extended2"> bbb*ccc</query>
+  <query mode="extended2">~bbb*ccc</query>
+  <query mode="extended2"> bbb ccc</query>
+  <query mode="extended2">"bbb ccc"</query>
+
+  <query mode="extended2"> fff*ggg</query>
+  <query mode="extended2">~fff*ggg</query>
+  <query mode="extended2">~fff*ggg*hhh</query>
+
+  <query mode="extended2">"~bbb*ccc ddd"</query>
+  <query mode="extended2">"~bbb*ccc ccc ddd"</query>
+  <query mode="extended2">~bbb*ccc &lt;&lt; ddd</query>
+
+  <query mode="extended2">hello</query>
+  <query mode="extended2">~hello</query>
+  <query mode="extended2">"hello world"</query>
+  <query mode="extended2">~U.S.A</query>
+</queries>
+
+</test>

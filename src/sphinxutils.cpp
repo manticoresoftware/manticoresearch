@@ -207,6 +207,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "min_stemming_len",		0, NULL },
 	{ "overshort_step",			0, NULL },
 	{ "stopword_step",			0, NULL },
+	{ "blend_chars",			0, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -784,6 +785,7 @@ bool sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSettings 
 	if ( tSettings.m_sSynonymsFile.IsEmpty() )
 		tSettings.m_sSynonymsFile = hIndex.GetStr ( "synonyms" ); // deprecated option name
 	tSettings.m_sIgnoreChars	= hIndex.GetStr ( "ignore_chars" );
+	tSettings.m_sBlendChars		= hIndex.GetStr ( "blend_chars" );
 
 	// phrase boundaries
 	int iBoundaryStep = Max ( hIndex.GetInt ( "phrase_boundary_step" ), -1 );

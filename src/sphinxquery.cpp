@@ -42,6 +42,20 @@ public:
 	XQNode_t *		SweepNulls ( XQNode_t * pNode );
 	bool			FixupNots ( XQNode_t * pNode );
 
+	bool TokenIsBlended()
+	{
+		return m_pTokenizer->TokenIsBlended();
+	}
+	
+	void SkipBlended ()
+	{
+		if ( m_pTokenizer->TokenIsBlended() )
+		{
+			m_pTokenizer->SkipBlended();
+			m_iAtomPos++;
+		}
+	}
+
 public:
 	XQQuery_t *				m_pParsed;
 
@@ -66,6 +80,9 @@ public:
 	YYSTYPE					m_tPendingToken;
 
 	bool					m_bEmpty;
+	
+	bool					m_bNotQuoted;
+	int						m_iQuotes;
 
 	CSphVector<CSphString>	m_dIntTokens;
 };
@@ -118,6 +135,8 @@ XQParser_t::XQParser_t ()
 	, m_pLastTokenStart ( NULL )
 	, m_pRoot ( NULL )
 	, m_bStopOnInvalid ( true )
+	, m_bNotQuoted ( true )
+	, m_iQuotes ( 0 )
 {
 }
 
@@ -430,11 +449,17 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 					// got stray '<', ignore
 					continue;
 				}
-
-			} else
+			}
+			else
 			{
-				// all the other specials are passed to parser verbtaim
-				m_iPendingType = sToken[0]=='!' ? '-' : sToken[0];
+				if ( sToken[0] == '~' && m_bNotQuoted )
+					m_iPendingType = TOK_BLEND;
+				else
+				{
+					// all the other specials are passed to parser verbatim
+					m_bNotQuoted = sToken[0] != '"' || ++m_iQuotes % 2;
+					m_iPendingType = sToken[0]=='!' ? '-' : sToken[0];
+				}
 				break;
 			}
 		}
@@ -458,6 +483,9 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 
 		m_tPendingToken.pNode = AddKeyword ( sToken, uStarPosition );
 		m_iPendingType = TOK_KEYWORD;
+		
+		if ( m_pTokenizer->TokenIsBlended() )
+			m_iAtomPos--;
 		break;
 	}
 

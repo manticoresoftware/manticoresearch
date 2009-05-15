@@ -349,6 +349,7 @@ struct CSphTokenizerSettings
 	CSphString			m_sIgnoreChars;
 	int					m_iNgramLen;
 	CSphString			m_sNgramChars;
+	CSphString			m_sBlendChars;
 
 						CSphTokenizerSettings ();
 };
@@ -391,6 +392,9 @@ public:
 
 	/// set phrase boundary chars
 	virtual bool					SetBoundary ( const char * sConfig, CSphString & sError );
+
+	/// set blended characters
+	virtual bool					SetBlendChars ( const char * sConfig, CSphString & sError );
 
 	/// setup tokenizer using given settings
 	virtual void					Setup ( const CSphTokenizerSettings & tSettings );
@@ -435,6 +439,9 @@ public:
 	/// get amount of overshort keywords skipped before this token
 	virtual int						GetOvershortCount () { return m_iOvershortCount; }
 
+	virtual bool					TokenIsBlended () { return m_bBlended; }
+	virtual void					SkipBlended () {}
+
 public:
 	/// spawn a clone of my own
 	virtual ISphTokenizer *			Clone ( bool bEscaped ) const = 0;
@@ -471,6 +478,7 @@ protected:
 	bool							m_bWasSpecial;				///< special token flag
 	bool							m_bEscaped;					///< backslash handling flag
 	int								m_iOvershortCount;			///< skipped overshort tokens count
+	int								m_bBlended;
 	bool							m_bShortTokenFilter;		///< short token filter flag
 
 	CSphTokenizerSettings			m_tSettings;				///< tokenizer settings

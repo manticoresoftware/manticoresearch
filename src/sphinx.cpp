@@ -2111,9 +2111,11 @@ public:
 	virtual const char *	GetBufferPtr () const		{ return (const char *) m_pCur; }
 	virtual const char *	GetBufferEnd () const		{ return (const char *) m_pBufferMax; }
 	virtual void			SetBufferPtr ( const char * sNewPtr );
-
+	virtual void			SkipBlended ();
+	
 protected:
-	BYTE * GetTokenSyn ();
+	BYTE *	GetTokenSyn ();
+	void	BlendAdjust ( BYTE * pPosition );
 
 protected:
 	/// get codepoint
@@ -2169,6 +2171,9 @@ protected:
 	CSphVector<CSphSynonym>			m_dSynonyms;				///< active synonyms
 	CSphVector<int>					m_dSynStart;				///< map 1st byte to candidate range start
 	CSphVector<int>					m_dSynEnd;					///< map 1st byte to candidate range end
+
+	BYTE *	m_pBlendStart;
+	BYTE *	m_pBlendEnd;
 };
 
 
@@ -2342,7 +2347,8 @@ enum
 	FLAG_CODEPOINT_NGRAM	= 0x04000000UL,	// this codepoint is n-gram indexed
 	FLAG_CODEPOINT_SYNONYM	= 0x08000000UL,	// this codepoint is used in synonym tokens only
 	FLAG_CODEPOINT_BOUNDARY	= 0x10000000UL,	// this codepoint is phrase boundary
-	FLAG_CODEPOINT_IGNORE	= 0x20000000UL	// this codepoint is ignored
+	FLAG_CODEPOINT_IGNORE	= 0x20000000UL,	// this codepoint is ignored
+	FLAG_CODEPOINT_BLEND	= 0x40000000UL	// this codepoint is "blended" (indexed both as a character, and as a separator)
 };
 
 
@@ -2892,6 +2898,7 @@ static void LoadTokenizerSettings ( CSphReader_VLN & tReader, CSphTokenizerSetti
 	tSettings.m_sIgnoreChars	= tReader.GetString ();
 	tSettings.m_iNgramLen		= tReader.GetDword ();
 	tSettings.m_sNgramChars		= tReader.GetString ();
+	tSettings.m_sBlendChars		= tReader.GetString ();
 }
 
 
@@ -2909,6 +2916,7 @@ static void SaveTokenizerSettings ( CSphWriter & tWriter, ISphTokenizer * pToken
 	tWriter.PutString ( tSettings.m_sIgnoreChars.cstr () );
 	tWriter.PutDword ( tSettings.m_iNgramLen );
 	tWriter.PutString ( tSettings.m_sNgramChars.cstr () );
+	tWriter.PutString ( tSettings.m_sBlendChars.cstr () );
 }
 
 
@@ -3134,6 +3142,12 @@ ISphTokenizer * ISphTokenizer::Create ( const CSphTokenizerSettings & tSettings,
 		return NULL;
 	}
 
+	if ( !tSettings.m_sBlendChars.IsEmpty () && !pTokenizer->SetBlendChars ( tSettings.m_sBlendChars.cstr (), sError ) )
+	{
+		sError.SetSprintf ( "'blend_chars': %s", sError.cstr() );
+		return NULL;
+	}
+
 	pTokenizer->SetNgramLen ( tSettings.m_iNgramLen );
 
 	if ( !tSettings.m_sNgramChars.IsEmpty () && !pTokenizer->SetNgramChars ( tSettings.m_sNgramChars.cstr (), sError ) )
@@ -3164,6 +3178,8 @@ CSphTokenizerTraits<IS_UTF8>::CSphTokenizerTraits ()
 	, m_pTokenStart ( NULL )
 	, m_pTokenEnd	( NULL )
 	, m_iAccum		( 0 )
+	, m_pBlendStart		( NULL )
+	, m_pBlendEnd		( NULL )
 {
 	m_pAccum = m_sAccum;
 }
@@ -3372,6 +3388,33 @@ void CSphTokenizerTraits<IS_UTF8>::SetBufferPtr ( const char * sNewPtr )
 	m_pCur = Min ( m_pBufferMax, Max ( m_pBuffer, (BYTE*)sNewPtr ) );
 	m_iAccum = 0;
 	m_pAccum = m_sAccum;
+}
+
+template < bool IS_UTF8 >
+void CSphTokenizerTraits<IS_UTF8>::SkipBlended()
+{
+	if ( m_pBlendEnd )
+	{
+		m_pCur = m_pBlendEnd;
+		m_pBlendEnd = NULL;
+		m_pBlendStart = NULL;
+	}
+}
+
+template < bool IS_UTF8 >
+void CSphTokenizerTraits<IS_UTF8>::BlendAdjust ( BYTE * pCur )
+{
+	if ( m_pBlendStart )
+	{
+		m_pCur = m_pBlendStart;
+		m_pBlendEnd = pCur;
+		m_pBlendStart = NULL;
+	}
+	else if ( pCur >= m_pBlendEnd )
+	{
+		m_pBlendEnd = NULL;
+		m_pBlendStart = NULL;
+	}
 }
 
 enum SynCheck_e
@@ -3856,6 +3899,11 @@ bool ISphTokenizer::SetIgnoreChars ( const char * sConfig, CSphString & sError )
 	return RemapCharacters ( sConfig, FLAG_CODEPOINT_IGNORE, "ignored", sError );
 }
 
+bool ISphTokenizer::SetBlendChars ( const char * sConfig, CSphString & sError )
+{
+	return RemapCharacters ( sConfig, FLAG_CODEPOINT_BLEND, "blend", sError );
+}
+
 /////////////////////////////////////////////////////////////////////////////
 
 CSphTokenizer_SBCS::CSphTokenizer_SBCS ()
@@ -3883,6 +3931,7 @@ void CSphTokenizer_SBCS::SetBuffer ( BYTE * sBuffer, int iLength )
 BYTE * CSphTokenizer_SBCS::GetToken ()
 {
 	m_bWasSpecial = false;
+	m_bBlended = false;
 	m_iOvershortCount = 0;
 
 	if ( m_dSynonyms.GetLength() )
@@ -3927,6 +3976,17 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 		// handle ignored chars
 		if ( iCode & FLAG_CODEPOINT_IGNORE )
 			continue;
+
+		if ( iCode & FLAG_CODEPOINT_BLEND )
+		{
+			if ( m_pBlendEnd )
+				iCode = 0;
+			else
+			{
+				m_bBlended = true;
+				m_pBlendStart = m_iAccum ? m_pTokenStart : pCur;
+			}
+		}
 
 		if ( bEscaped )
 		{
@@ -3975,6 +4035,7 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 			m_sAccum[m_iAccum] = '\0';
 			m_iAccum = 0;
 			m_pTokenEnd = pCur >= m_pBufferMax ? m_pCur : pCur;
+			BlendAdjust ( pCur );
 			return m_sAccum;
 		}
 
@@ -4081,9 +4142,9 @@ void CSphTokenizer_UTF8::SetBuffer ( BYTE * sBuffer, int iLength )
 	m_bBoundary = m_bTokenBoundary = false;
 }
 
-
 BYTE * CSphTokenizer_UTF8::GetToken ()
 {
+	m_bBlended = false;
 	m_bWasSpecial = false;
 	m_iOvershortCount = 0;
 
@@ -4116,6 +4177,7 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 			}
 
 			// return trailing word
+			BlendAdjust ( pCur );
 			m_pTokenEnd = m_pCur;
 			return m_sAccum;
 		}
@@ -4123,6 +4185,17 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 		// handle ignored chars
 		if ( iCode & FLAG_CODEPOINT_IGNORE )
 			continue;
+
+		if ( iCode & FLAG_CODEPOINT_BLEND )
+		{
+			if ( m_pBlendEnd )
+				iCode = 0;
+			else
+			{
+				m_bBlended = true;
+				m_pBlendStart = m_iAccum ? m_pTokenStart : pCur;
+			}
+		}
 
 		if ( bEscaped )
 		{
@@ -4165,6 +4238,7 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 			}
 			else
 			{
+				BlendAdjust ( pCur );
 				m_pTokenEnd = pCur;
 				return m_sAccum;
 			}
@@ -14447,7 +14521,6 @@ void CSphSource_Document::BuildHits ( BYTE ** dFields, int iFieldIndex, int iSta
 				iPos += iLastStep + m_pTokenizer->GetOvershortCount()*m_iOvershortStep;
 				if ( m_pTokenizer->GetBoundary() )
 					iPos = Max ( iPos+m_iBoundaryStep, 1 );
-				iLastStep = 1;
 
 				if ( bGlobalPartialMatch )
 				{
@@ -14490,10 +14563,11 @@ void CSphSource_Document::BuildHits ( BYTE ** dFields, int iFieldIndex, int iSta
 					tHit.m_iDocID = m_tDocInfo.m_iDocID;
 					tHit.m_iWordID = iWord;
 					tHit.m_iWordPos = iPos;
-				} else
-				{
-					iLastStep = m_iStopwordStep;
+
+					iLastStep = m_pTokenizer->TokenIsBlended() ? 0 : 1;
 				}
+				else
+					iLastStep = m_iStopwordStep;
 			}
 		}
 

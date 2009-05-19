@@ -1458,7 +1458,7 @@ class ExtRanker_c;
 /// this is my actual VLN-compressed phrase index implementation
 struct CSphIndex_VLN : CSphIndex
 {
-	friend struct DiskIndexQwordSetup_c;
+	friend class DiskIndexQwordSetup_c;
 	
 	friend struct CSphDoclistRecord;
 	friend struct CSphWordDataRecord;

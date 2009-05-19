@@ -301,8 +301,7 @@ ISphQword * SnippetsQwordSetup::QwordSpawn ( const XQKeyword_t & tWord ) const
 		case STAR_FRONT:	return new SnippetsQword_StarFront_c;
 		case STAR_BACK:		return new SnippetsQword_StarBack_c;
 		case STAR_BOTH:		return new SnippetsQword_StarBoth_c;
-		default:
-			assert ( "impossible star position" && 0 );
+		default:			assert ( "impossible star position" && 0 ); return NULL;
 	}
 }
 
@@ -589,7 +588,7 @@ void ExcerptGen_c::MarkHits ()
 	}
 }
 
-char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & tQuery, CSphDict * pDict, ISphTokenizer * pTokenizer )
+char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & tQuery, CSphDict *, ISphTokenizer * pTokenizer )
 {
 	if ( tQuery.m_bHighlightQuery )
 		MarkHits();

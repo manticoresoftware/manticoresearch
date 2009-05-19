@@ -478,7 +478,7 @@ protected:
 	bool							m_bWasSpecial;				///< special token flag
 	bool							m_bEscaped;					///< backslash handling flag
 	int								m_iOvershortCount;			///< skipped overshort tokens count
-	int								m_bBlended;
+	bool							m_bBlended;
 	bool							m_bShortTokenFilter;		///< short token filter flag
 
 	CSphTokenizerSettings			m_tSettings;				///< tokenizer settings

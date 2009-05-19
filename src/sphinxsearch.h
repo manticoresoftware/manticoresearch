@@ -135,7 +135,7 @@ struct SphHitMark_t
 
 typedef CSphVector<SphHitMark_t> SphHitVector_t;
 
-struct ExtNode_i;
+class ExtNode_i;
 
 struct CSphHitMarker
 {

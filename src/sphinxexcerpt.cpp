@@ -552,7 +552,7 @@ void ExcerptGen_c::MarkHits ()
 	assert ( m_pMarker );
 
 	// mark
-	SphHitVector_t dMarked;
+	CSphVector<SphHitMark_t> dMarked;
 	dMarked.Reserve ( m_dTokens.GetLength() );
 	m_pMarker->Mark ( dMarked );
 	

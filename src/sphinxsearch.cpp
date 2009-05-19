@@ -3514,9 +3514,11 @@ ISphRanker * sphCreateRanker ( const CSphQuery * pQuery, const char * sQuery, CS
 	return pRanker;
 }
 
-/// hit marker
+//////////////////////////////////////////////////////////////////////////
+/// HIT MARKER
+//////////////////////////////////////////////////////////////////////////
 
-void CSphHitMarker::Mark ( SphHitVector_t & dMarked )
+void CSphHitMarker::Mark ( CSphVector<SphHitMark_t> & dMarked )
 {
 	const ExtHit_t * pHits = NULL;
 	const ExtDoc_t * pDocs = NULL;
@@ -3541,14 +3543,14 @@ void CSphHitMarker::Mark ( SphHitVector_t & dMarked )
 			dMarked.Add ( tMark );
 		}
 	}
-		
-
 }
+
 
 CSphHitMarker::~CSphHitMarker ()
 {
 	SafeDelete ( m_pRoot );
 }
+
 
 CSphHitMarker * CSphHitMarker::Create ( const XQNode_t * pRoot, const ISphQwordSetup & tSetup )
 {

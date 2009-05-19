@@ -125,33 +125,34 @@ public:
 	virtual int					GetMatches ( int iFields, const int * pWeights ) = 0;
 };
 
-/// hit marker, used for snippets generation
+/// factory
+ISphRanker * sphCreateRanker ( const CSphQuery * pQuery, const char * sQuery, CSphQueryResult * pResult, const ISphQwordSetup & tTermSetup, CSphString & sError );
 
+//////////////////////////////////////////////////////////////////////////
+
+/// hit mark, used for snippets generation
 struct SphHitMark_t
 {
 	DWORD	m_uPosition;
 	DWORD	m_uSpan;
 };
 
-typedef CSphVector<SphHitMark_t> SphHitVector_t;
-
-class ExtNode_i;
-
-struct CSphHitMarker
+/// hit marker, used for snippets generation
+class CSphHitMarker
 {
-	ExtNode_i * m_pRoot;
-	void Mark ( SphHitVector_t & );
+public:
+	class ExtNode_i *		m_pRoot;
 
-	CSphHitMarker() : m_pRoot ( NULL ) {}
-	~CSphHitMarker();
+public:
+							CSphHitMarker() : m_pRoot ( NULL ) {}
+							~CSphHitMarker();
 
-	static CSphHitMarker * Create ( const XQNode_t * pRoot, const ISphQwordSetup & tSetup );
+	void					Mark ( CSphVector<SphHitMark_t> & );
+	static CSphHitMarker *	Create ( const XQNode_t * pRoot, const ISphQwordSetup & tSetup );
 };
 
-/// factory
-ISphRanker * sphCreateRanker ( const CSphQuery * pQuery, const char * sQuery, CSphQueryResult * pResult, const ISphQwordSetup & tTermSetup, CSphString & sError );
-
 #endif // _sphinxsearch_
+
 //
 // $Id$
 //

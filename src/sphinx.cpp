@@ -15623,7 +15623,8 @@ bool CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 
 			if ( SqlNumFields()!=2 )
 			{
-				sError.SetSprintf ( "joined field '%s': query MUST return exactly 2 columns, got %d", SqlNumFields() );
+				const char * sName = m_tSchema.m_dFields[m_iJoinedHitField].m_sName.cstr();
+				sError.SetSprintf ( "joined field '%s': query MUST return exactly 2 columns, got %d", sName, SqlNumFields() );
 				return false;
 			}
 

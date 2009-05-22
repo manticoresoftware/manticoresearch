@@ -1519,7 +1519,7 @@ private:
 	static const int			DEFAULT_WRITE_BUFFER	= 1048576;	///< deafult write buffer size
 
 	static const DWORD			INDEX_MAGIC_HEADER		= 0x58485053;	///< my magic 'SPHX' header
-	static const DWORD			INDEX_FORMAT_VERSION	= 14;			///< my format version
+	static const DWORD			INDEX_FORMAT_VERSION	= 15;			///< my format version
 
 private:
 	// common stuff
@@ -7022,6 +7022,8 @@ void CSphIndex_VLN::WriteSchemaColumn ( CSphWriter & fdInfo, const CSphColumnInf
 	fdInfo.PutDword ( tCol.m_tLocator.CalcRowitem() ); // for backwards compatibility
 	fdInfo.PutDword ( tCol.m_tLocator.m_iBitOffset );
 	fdInfo.PutDword ( tCol.m_tLocator.m_iBitCount );
+
+	fdInfo.PutByte ( tCol.m_bPayload );
 }
 
 
@@ -7044,6 +7046,9 @@ void CSphIndex_VLN::ReadSchemaColumn ( CSphReader_VLN & rdInfo, CSphColumnInfo &
 		tCol.m_tLocator.m_iBitOffset = -1;
 		tCol.m_tLocator.m_iBitCount = -1;
 	}
+
+	if ( m_uVersion >= 15 )
+		tCol.m_bPayload = rdInfo.GetByte();
 }
 
 
@@ -14367,10 +14372,13 @@ void CSphSource_Document::BuildHits ( BYTE ** dFields, int iFieldIndex, int iSta
 			// index all infixes
 			while ( ( sWord = m_pTokenizer->GetToken() )!=NULL )
 			{
-				iPos += iLastStep + m_pTokenizer->GetOvershortCount()*m_iOvershortStep;
-				if ( m_pTokenizer->GetBoundary() )
-					iPos = Max ( iPos+m_iBoundaryStep, 1 );
-				iLastStep = 1;
+				if ( !m_tSchema.m_dFields[iField].m_bPayload )
+				{
+					iPos += iLastStep + m_pTokenizer->GetOvershortCount()*m_iOvershortStep;
+					if ( m_pTokenizer->GetBoundary() )
+						iPos = Max ( iPos+m_iBoundaryStep, 1 );
+					iLastStep = 1;
+				}
 
 				int iLen = m_pTokenizer->GetLastTokenLen ();
 
@@ -14518,9 +14526,12 @@ void CSphSource_Document::BuildHits ( BYTE ** dFields, int iFieldIndex, int iSta
 			// index words only
 			while ( ( sWord = m_pTokenizer->GetToken() )!=NULL )
 			{
-				iPos += iLastStep + m_pTokenizer->GetOvershortCount()*m_iOvershortStep;
-				if ( m_pTokenizer->GetBoundary() )
-					iPos = Max ( iPos+m_iBoundaryStep, 1 );
+				if ( !m_tSchema.m_dFields[iField].m_bPayload )
+				{
+					iPos += iLastStep + m_pTokenizer->GetOvershortCount()*m_iOvershortStep;
+					if ( m_pTokenizer->GetBoundary() )
+						iPos = Max ( iPos+m_iBoundaryStep, 1 );
+				}
 
 				if ( bGlobalPartialMatch )
 				{
@@ -15082,6 +15093,7 @@ bool CSphSource_SQL::IterateHitsStart ( CSphString & sError )
 	{
 		tCol.m_sName = m_tParams.m_dJoinedFields[i].m_sName;
 		tCol.m_sQuery = m_tParams.m_dJoinedFields[i].m_sQuery;
+		tCol.m_bPayload = m_tParams.m_dJoinedFields[i].m_bPayload;
 		m_tSchema.m_dFields.Add ( tCol );
 	}
 
@@ -15584,13 +15596,20 @@ bool CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 			}
 
 			// build those hits
-			BYTE * pText = (BYTE*) SqlColumn(1);
-			BuildHits ( &pText, m_iJoinedHitField, m_iJoinedHitPos );
+			BYTE * pText = (BYTE *) SqlColumn(1);
+			if ( m_tSchema.m_dFields[m_iJoinedHitField].m_bPayload )
+			{
+				DWORD uPosition = sphToDword ( SqlColumn(2) );
+				BuildHits ( &pText, m_iJoinedHitField, uPosition );
+			}
+			else
+			{
+				BuildHits ( &pText, m_iJoinedHitField, m_iJoinedHitPos );
 
-			// update current position
-			if ( m_dHits.GetLength() )
-				m_iJoinedHitPos = HIT2POS ( m_dHits.Last().m_iWordPos );
-
+				// update current position
+				if ( m_dHits.GetLength() )
+					m_iJoinedHitPos = HIT2POS ( m_dHits.Last().m_iWordPos );
+			}
 		} else if ( SqlIsError() )
 		{
 			// error while fetching row
@@ -15621,10 +15640,11 @@ bool CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 				return false;
 			}
 
-			if ( SqlNumFields()!=2 )
+			const int iExpected = m_tSchema.m_dFields[m_iJoinedHitField].m_bPayload ? 3 : 2;
+			if ( SqlNumFields()!=iExpected )
 			{
 				const char * sName = m_tSchema.m_dFields[m_iJoinedHitField].m_sName.cstr();
-				sError.SetSprintf ( "joined field '%s': query MUST return exactly 2 columns, got %d", sName, SqlNumFields() );
+				sError.SetSprintf ( "joined field '%s': query MUST return exactly %d columns, got %d", sName, iExpected, SqlNumFields() );
 				return false;
 			}
 

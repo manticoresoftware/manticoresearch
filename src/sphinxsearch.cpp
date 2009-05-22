@@ -416,6 +416,7 @@ public:
 
 public:
 	CSphMatch					m_dMatches[ExtNode_i::MAX_DOCS];
+	DWORD						m_uPayloadMask;
 
 protected:
 	int							m_iInlineRowitems;
@@ -430,6 +431,7 @@ protected:
 	const CSphIndex *			m_pIndex;							///< this is he who'll do my filtering!
 };
 
+STATIC_ASSERT ( sizeof(DWORD)*8 >= SPH_MAX_FIELDS, PAYLOAD_MASK_OVERFLOW );
 
 #define DECLARE_RANKER(_classname) \
 	class _classname : public ExtRanker_c \
@@ -443,6 +445,7 @@ protected:
 	};
 
 DECLARE_RANKER ( ExtRanker_ProximityBM25_c )
+DECLARE_RANKER ( ExtRanker_ProximityBM25Payload_c )
 DECLARE_RANKER ( ExtRanker_BM25_c )
 DECLARE_RANKER ( ExtRanker_None_c )
 DECLARE_RANKER ( ExtRanker_Wordcount_c )
@@ -2937,6 +2940,131 @@ int ExtRanker_ProximityBM25_c::GetMatches ( int iFields, const int * pWeights )
 
 //////////////////////////////////////////////////////////////////////////
 
+int ExtRanker_ProximityBM25Payload_c::GetMatches ( int iFields, const int * pWeights )
+{
+	if ( !m_pRoot )
+		return 0;
+
+	BYTE uLCS[SPH_MAX_FIELDS];
+	memset ( uLCS, 0, sizeof(uLCS) );
+
+	DWORD uPayload[SPH_MAX_FIELDS];
+	memset ( uPayload, 0, sizeof(uPayload) );
+	
+	BYTE uCurLCS = 0;
+	int iExpDelta = -INT_MAX;
+
+	int iMatches = 0;
+	const ExtHit_t * pHlist = m_pHitlist;
+	const ExtDoc_t * pDocs = m_pDoclist;
+
+	// warmup if necessary
+	if ( !pHlist )
+	{
+		if ( !pDocs ) pDocs = GetFilteredDocs ();
+		if ( !pDocs ) return iMatches;
+
+		pHlist = m_pRoot->GetHitsChunk ( pDocs, m_uMaxID );
+		if ( !pHlist ) return iMatches;
+	}
+
+	// main matching loop
+	const ExtDoc_t * pDoc = pDocs;
+	for ( SphDocID_t uCurDocid=0; iMatches<ExtNode_i::MAX_DOCS; )
+	{
+		assert ( pHlist );
+
+		// next match (or block end)? compute final weight, and flush prev one
+		if ( pHlist->m_uDocid!=uCurDocid )
+		{
+			// if hits block is over, get next block, but do *not* flush current doc
+			if ( pHlist->m_uDocid==DOCID_MAX )
+			{
+				assert ( pDocs );
+				pHlist = m_pRoot->GetHitsChunk ( pDocs, m_uMaxID );
+				if ( pHlist )
+					continue;
+			}
+
+			// otherwise (new match or no next hits block), flush current doc
+			if ( uCurDocid )
+			{
+				uCurLCS = 0;
+				iExpDelta = -1;
+
+				DWORD uRank = 0;
+				for ( int i=0; i<iFields; i++ )
+				{
+					if ( ( 1<<i ) & m_uPayloadMask )
+					{
+						uRank += uPayload[i]*pWeights[i];
+						uPayload[i] = 0;
+					}
+					else
+					{
+						uRank += uLCS[i]*pWeights[i];
+						uLCS[i] = 0;
+					}
+				}
+
+				assert ( uCurDocid==pDoc->m_uDocid );
+				Swap ( m_dMatches[iMatches], m_dMyMatches[pDoc-m_dMyDocs] );
+				m_dMatches[iMatches].m_iWeight += uRank*SPH_BM25_SCALE;
+				iMatches++;
+			}
+
+			// boundary checks
+			if ( !pHlist )
+			{
+				// there are no more hits for current docs block; do we have a next one?
+				assert ( pDocs );
+				pDoc = pDocs = GetFilteredDocs ();
+
+				// we don't, so bail out
+				if ( !pDocs )
+					break;
+
+				// we do, get some hits
+				pHlist = m_pRoot->GetHitsChunk ( pDocs, m_uMaxID );
+				assert ( pHlist ); // fresh docs block, must have hits
+			}
+
+			// carry on
+			assert ( pDoc->m_uDocid<=pHlist->m_uDocid );
+			while ( pDoc->m_uDocid<pHlist->m_uDocid ) pDoc++;
+			assert ( pDoc->m_uDocid==pHlist->m_uDocid );
+
+			uCurDocid = pHlist->m_uDocid;
+			continue; // we might had flushed the match; need to check the limit
+		}
+
+		// upd LCS
+		DWORD uField = HIT2FIELD(pHlist->m_uHitpos);
+		if ( ( 1<<uField ) & m_uPayloadMask )
+			uPayload[uField] += HIT2POS(pHlist->m_uHitpos);
+		else
+		{
+			int iDelta = HIT2LCS(pHlist->m_uHitpos) - pHlist->m_uQuerypos;
+			if ( iDelta==iExpDelta )
+				uCurLCS = uCurLCS + BYTE(pHlist->m_uWeight);
+			else
+				uCurLCS = BYTE(pHlist->m_uWeight);
+			
+			if ( uCurLCS>uLCS[uField] )
+				uLCS[uField] = uCurLCS;
+			
+			iExpDelta = iDelta + pHlist->m_uSpanlen - 1;
+		}
+		pHlist++;
+	}
+
+	m_pDoclist = pDocs;
+	m_pHitlist = pHlist;
+	return iMatches;
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 int ExtRanker_BM25_c::GetMatches ( int iFields, const int * pWeights )
 {
 	if ( !m_pRoot )
@@ -3451,11 +3579,18 @@ ISphRanker * sphCreateRanker ( const CSphQuery * pQuery, const char * sQuery, CS
 	// check the keywords
 	CheckExtendedQuery ( tParsed.m_pRoot, pResult, pIndex->GetSettings(), pIndex->GetStar() );
 
+	// fill payload mask
+	DWORD uPayloadMask = 0;
+	ARRAY_FOREACH ( i, pIndex->GetSchema()->m_dFields )
+		uPayloadMask |= pIndex->GetSchema()->m_dFields[i].m_bPayload << i;
+
 	// setup eval-tree
 	ExtRanker_c * pRanker = NULL;
 	switch ( pQuery->m_eRanker )
 	{
-		case SPH_RANK_PROXIMITY_BM25:	pRanker = new ExtRanker_ProximityBM25_c ( tParsed.m_pRoot, tTermSetup ); break;
+		case SPH_RANK_PROXIMITY_BM25:	if ( uPayloadMask )
+										pRanker = new ExtRanker_ProximityBM25Payload_c ( tParsed.m_pRoot, tTermSetup ); else
+										pRanker = new ExtRanker_ProximityBM25_c ( tParsed.m_pRoot, tTermSetup ); break;
 		case SPH_RANK_BM25:				pRanker = new ExtRanker_BM25_c ( tParsed.m_pRoot, tTermSetup ); break;
 		case SPH_RANK_NONE:				pRanker = new ExtRanker_None_c ( tParsed.m_pRoot, tTermSetup ); break;
 		case SPH_RANK_WORDCOUNT:		pRanker = new ExtRanker_Wordcount_c ( tParsed.m_pRoot, tTermSetup ); break;
@@ -3468,6 +3603,7 @@ ISphRanker * sphCreateRanker ( const CSphQuery * pQuery, const char * sQuery, CS
 			break;
 	}
 	assert ( pRanker );
+	pRanker->m_uPayloadMask = uPayloadMask;
 
 	// setup word stats and IDFs
 	ExtQwordsHash_t hQwords;

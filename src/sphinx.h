@@ -826,6 +826,7 @@ struct CSphColumnInfo
 	CSphRefcountedPtr<ISphExpr>		m_pExpr;		///< evaluator for expression items
 	ESphAggrFunc					m_eAggrFunc;	///< aggregate function on top of expression (for GROUP BY)
 	bool							m_bLateCalc;	///< early calc or late calc
+	bool							m_bPayload;
 
 	/// handy ctor
 	CSphColumnInfo ( const char * sName=NULL, DWORD eType=SPH_ATTR_NONE )
@@ -837,6 +838,7 @@ struct CSphColumnInfo
 		, m_pExpr ( NULL )
 		, m_eAggrFunc ( SPH_AGGR_NONE )
 		, m_bLateCalc ( false )
+		, m_bPayload ( false )
 	{
 		m_sName.ToLower ();
 	}
@@ -1119,6 +1121,7 @@ struct CSphJoinedField
 {
 	CSphString			m_sName;
 	CSphString			m_sQuery;
+	bool				m_bPayload;
 };
 
 /// generic SQL source params

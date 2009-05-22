@@ -500,9 +500,18 @@ bool ParseJoinedField ( const char * sBuf, CSphJoinedField * pField, const char 
 		sBuf++;
 
 	// parse 'query'
-	if ( strncasecmp ( sBuf, "query", 5 ) )
+	if ( strncasecmp ( sBuf, "payload-query", 13 ) == 0 )
+	{
+		pField->m_bPayload = true;
+		sBuf += 13;
+	}
+	else if ( strncasecmp ( sBuf, "query", 5 ) == 0 )
+	{
+		pField->m_bPayload = false;
+		sBuf += 5;
+	}
+	else
 		LOC_ERR ( "'query'" );
-	sBuf += 5;
 
 	// parse ';'
 	while ( isspace(*sBuf) && *sBuf!=';' )

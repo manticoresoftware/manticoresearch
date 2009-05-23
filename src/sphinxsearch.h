@@ -81,6 +81,7 @@ public:
 		, m_uMatchHits ( 0 )
 		, m_iHitlistPos ( 0 )
 	{}
+	virtual ~ISphQword () {}
 
 	virtual const CSphMatch &	GetNextDoc ( DWORD * pInlineDocinfo ) = 0;
 	virtual void				SeekHitlist ( SphOffset_t uOff ) = 0;
@@ -108,7 +109,6 @@ public:
 		, m_iMaxTimer ( 0 )
 		, m_pWarning ( NULL )
 	{}
-
 	virtual ~ISphQwordSetup () {}
 
 	virtual ISphQword *					QwordSpawn ( const XQKeyword_t & ) const = 0;
@@ -121,6 +121,7 @@ public:
 class ISphRanker
 {
 public:
+	virtual						~ISphRanker () {}
 	virtual CSphMatch *			GetMatchesBuffer() = 0;
 	virtual int					GetMatches ( int iFields, const int * pWeights ) = 0;
 };

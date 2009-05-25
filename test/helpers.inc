@@ -82,10 +82,7 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error )
 		return 1;
 	}
 
-	if ( $retval!=0 )
-		return $retval;
-
-	// launch attempt kinda worked; but lets check the log
+	// we've got a pid file; but lets check the log file for startup errors
 	for ( $i=0; $i<$action_retries && !file_exists($error_file); $i++ )
 		usleep ( $action_wait_timeout );
 
@@ -1106,6 +1103,12 @@ function RunTest ( $test_dir )
 	if ( $config->Requires("id64") && !$g_id64 )
 	{
 		printf ( "SKIPPING %s, %s - enable id64 to run this test\n", $test_dir, $config->Name () );
+		return $res_skipped;
+	}
+
+	if ( $config->Requires("id32") && $g_id64 )
+	{
+		printf ( "SKIPPING %s, %s - disable id64 to run this test\n", $test_dir, $config->Name () );
 		return $res_skipped;
 	}
 

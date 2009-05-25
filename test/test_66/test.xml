@@ -3,6 +3,11 @@
 
 <name>index format backwards compatibility</name>
 
+<requires>
+<id32/>
+</requires>
+<skip_indexer/>
+
 <config>
 indexer
 {
@@ -27,8 +32,6 @@ index v14
 	path	= test_66/refdata/v14
 }
 </config>
-
-<skip_indexer/>
 
 <queries>
 <query mode="extended2" index="v14">test</query>

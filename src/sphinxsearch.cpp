@@ -431,27 +431,33 @@ protected:
 	const CSphIndex *			m_pIndex;							///< this is he who'll do my filtering!
 };
 
+
 STATIC_ASSERT ( sizeof(DWORD)*8 >= SPH_MAX_FIELDS, PAYLOAD_MASK_OVERFLOW );
 
-#define DECLARE_RANKER(_classname) \
-	class _classname : public ExtRanker_c \
-	{ \
-	public: \
-		_classname ( const XQNode_t * pRoot, const ISphQwordSetup & tSetup ) \
-			: ExtRanker_c ( pRoot, tSetup ) \
-		{} \
-	\
-		virtual int GetMatches ( int iFields, const int * pWeights ); \
-	};
 
-DECLARE_RANKER ( ExtRanker_ProximityBM25_c )
-DECLARE_RANKER ( ExtRanker_ProximityBM25Payload_c )
-DECLARE_RANKER ( ExtRanker_BM25_c )
-DECLARE_RANKER ( ExtRanker_None_c )
-DECLARE_RANKER ( ExtRanker_Wordcount_c )
-DECLARE_RANKER ( ExtRanker_Proximity_c )
-DECLARE_RANKER ( ExtRanker_MatchAny_c )
-DECLARE_RANKER ( ExtRanker_FieldMask_c )
+class ExtRanker_BM25_c : public ExtRanker_c
+{
+public:
+					ExtRanker_BM25_c ( const XQNode_t * pRoot, const ISphQwordSetup & tSetup ) : ExtRanker_c ( pRoot, tSetup ) {}
+	virtual int		GetMatches ( int iFields, const int * pWeights );
+};
+
+
+class ExtRanker_None_c : public ExtRanker_c
+{
+public:
+					ExtRanker_None_c ( const XQNode_t * pRoot, const ISphQwordSetup & tSetup ) : ExtRanker_c ( pRoot, tSetup ) {}
+	virtual int		GetMatches ( int iFields, const int * pWeights );
+};
+
+
+template < typename STATE >
+class ExtRanker_T : public ExtRanker_c
+{
+public:
+					ExtRanker_T<STATE> ( const XQNode_t * pRoot, const ISphQwordSetup & tSetup ) : ExtRanker_c ( pRoot, tSetup ) {}
+	virtual int		GetMatches ( int iFields, const int * pWeights );
+};
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -2831,240 +2837,6 @@ void ExtRanker_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 
 //////////////////////////////////////////////////////////////////////////
 
-int ExtRanker_ProximityBM25_c::GetMatches ( int iFields, const int * pWeights )
-{
-	if ( !m_pRoot )
-		return 0;
-
-	BYTE uLCS[SPH_MAX_FIELDS];
-	memset ( uLCS, 0, sizeof(uLCS) );
-
-	BYTE uCurLCS = 0;
-	int iExpDelta = -INT_MAX;
-
-	int iMatches = 0;
-	const ExtHit_t * pHlist = m_pHitlist;
-	const ExtDoc_t * pDocs = m_pDoclist;
-
-	// warmup if necessary
-	if ( !pHlist )
-	{
-		if ( !pDocs ) pDocs = GetFilteredDocs ();
-		if ( !pDocs ) return iMatches;
-
-		pHlist = m_pRoot->GetHitsChunk ( pDocs, m_uMaxID );
-		if ( !pHlist ) return iMatches;
-	}
-
-	// main matching loop
-	const ExtDoc_t * pDoc = pDocs;
-	for ( SphDocID_t uCurDocid=0; iMatches<ExtNode_i::MAX_DOCS; )
-	{
-		assert ( pHlist );
-
-		// next match (or block end)? compute final weight, and flush prev one
-		if ( pHlist->m_uDocid!=uCurDocid )
-		{
-			// if hits block is over, get next block, but do *not* flush current doc
-			if ( pHlist->m_uDocid==DOCID_MAX )
-			{
-				assert ( pDocs );
-				pHlist = m_pRoot->GetHitsChunk ( pDocs, m_uMaxID );
-				if ( pHlist )
-					continue;
-			}
-
-			// otherwise (new match or no next hits block), flush current doc
-			if ( uCurDocid )
-			{
-				uCurLCS = 0;
-				iExpDelta = -1;
-
-				DWORD uRank = 0;
-				for ( int i=0; i<iFields; i++ )
-				{
-					uRank += uLCS[i]*pWeights[i];
-					uLCS[i] = 0;
-				}
-
-				assert ( uCurDocid==pDoc->m_uDocid );
-				Swap ( m_dMatches[iMatches], m_dMyMatches[pDoc-m_dMyDocs] );
-				m_dMatches[iMatches].m_iWeight += uRank*SPH_BM25_SCALE;
-				iMatches++;
-			}
-
-			// boundary checks
-			if ( !pHlist )
-			{
-				// there are no more hits for current docs block; do we have a next one?
-				assert ( pDocs );
-				pDoc = pDocs = GetFilteredDocs ();
-
-				// we don't, so bail out
-				if ( !pDocs )
-					break;
-
-				// we do, get some hits
-				pHlist = m_pRoot->GetHitsChunk ( pDocs, m_uMaxID );
-				assert ( pHlist ); // fresh docs block, must have hits
-			}
-
-			// carry on
-			assert ( pDoc->m_uDocid<=pHlist->m_uDocid );
-			while ( pDoc->m_uDocid<pHlist->m_uDocid ) pDoc++;
-			assert ( pDoc->m_uDocid==pHlist->m_uDocid );
-
-			uCurDocid = pHlist->m_uDocid;
-			continue; // we might had flushed the match; need to check the limit
-		}
-
-		// upd LCS
-		int iDelta = HIT2LCS(pHlist->m_uHitpos) - pHlist->m_uQuerypos;
-		if ( iDelta==iExpDelta )
-			uCurLCS = uCurLCS + BYTE(pHlist->m_uWeight);
-		else
-			uCurLCS = BYTE(pHlist->m_uWeight);
-
-		DWORD uField = HIT2FIELD(pHlist->m_uHitpos);
-		if ( uCurLCS>uLCS[uField] )
-			uLCS[uField] = uCurLCS;
-
-		iExpDelta = iDelta + pHlist->m_uSpanlen - 1;
-		pHlist++;
-	}
-
-	m_pDoclist = pDocs;
-	m_pHitlist = pHlist;
-	return iMatches;
-}
-
-//////////////////////////////////////////////////////////////////////////
-
-int ExtRanker_ProximityBM25Payload_c::GetMatches ( int iFields, const int * pWeights )
-{
-	if ( !m_pRoot )
-		return 0;
-
-	BYTE uLCS[SPH_MAX_FIELDS];
-	memset ( uLCS, 0, sizeof(uLCS) );
-
-	DWORD uPayload[SPH_MAX_FIELDS];
-	memset ( uPayload, 0, sizeof(uPayload) );
-	
-	BYTE uCurLCS = 0;
-	int iExpDelta = -INT_MAX;
-
-	int iMatches = 0;
-	const ExtHit_t * pHlist = m_pHitlist;
-	const ExtDoc_t * pDocs = m_pDoclist;
-
-	// warmup if necessary
-	if ( !pHlist )
-	{
-		if ( !pDocs ) pDocs = GetFilteredDocs ();
-		if ( !pDocs ) return iMatches;
-
-		pHlist = m_pRoot->GetHitsChunk ( pDocs, m_uMaxID );
-		if ( !pHlist ) return iMatches;
-	}
-
-	// main matching loop
-	const ExtDoc_t * pDoc = pDocs;
-	for ( SphDocID_t uCurDocid=0; iMatches<ExtNode_i::MAX_DOCS; )
-	{
-		assert ( pHlist );
-
-		// next match (or block end)? compute final weight, and flush prev one
-		if ( pHlist->m_uDocid!=uCurDocid )
-		{
-			// if hits block is over, get next block, but do *not* flush current doc
-			if ( pHlist->m_uDocid==DOCID_MAX )
-			{
-				assert ( pDocs );
-				pHlist = m_pRoot->GetHitsChunk ( pDocs, m_uMaxID );
-				if ( pHlist )
-					continue;
-			}
-
-			// otherwise (new match or no next hits block), flush current doc
-			if ( uCurDocid )
-			{
-				uCurLCS = 0;
-				iExpDelta = -1;
-
-				DWORD uRank = 0;
-				for ( int i=0; i<iFields; i++ )
-				{
-					if ( ( 1<<i ) & m_uPayloadMask )
-					{
-						uRank += uPayload[i]*pWeights[i];
-						uPayload[i] = 0;
-					}
-					else
-					{
-						uRank += uLCS[i]*pWeights[i];
-						uLCS[i] = 0;
-					}
-				}
-
-				assert ( uCurDocid==pDoc->m_uDocid );
-				Swap ( m_dMatches[iMatches], m_dMyMatches[pDoc-m_dMyDocs] );
-				m_dMatches[iMatches].m_iWeight += uRank*SPH_BM25_SCALE;
-				iMatches++;
-			}
-
-			// boundary checks
-			if ( !pHlist )
-			{
-				// there are no more hits for current docs block; do we have a next one?
-				assert ( pDocs );
-				pDoc = pDocs = GetFilteredDocs ();
-
-				// we don't, so bail out
-				if ( !pDocs )
-					break;
-
-				// we do, get some hits
-				pHlist = m_pRoot->GetHitsChunk ( pDocs, m_uMaxID );
-				assert ( pHlist ); // fresh docs block, must have hits
-			}
-
-			// carry on
-			assert ( pDoc->m_uDocid<=pHlist->m_uDocid );
-			while ( pDoc->m_uDocid<pHlist->m_uDocid ) pDoc++;
-			assert ( pDoc->m_uDocid==pHlist->m_uDocid );
-
-			uCurDocid = pHlist->m_uDocid;
-			continue; // we might had flushed the match; need to check the limit
-		}
-
-		// upd LCS
-		DWORD uField = HIT2FIELD(pHlist->m_uHitpos);
-		if ( ( 1<<uField ) & m_uPayloadMask )
-			uPayload[uField] += HIT2POS(pHlist->m_uHitpos);
-		else
-		{
-			int iDelta = HIT2LCS(pHlist->m_uHitpos) - pHlist->m_uQuerypos;
-			if ( iDelta==iExpDelta )
-				uCurLCS = uCurLCS + BYTE(pHlist->m_uWeight);
-			else
-				uCurLCS = BYTE(pHlist->m_uWeight);
-			
-			if ( uCurLCS>uLCS[uField] )
-				uLCS[uField] = uCurLCS;
-			
-			iExpDelta = iDelta + pHlist->m_uSpanlen - 1;
-		}
-		pHlist++;
-	}
-
-	m_pDoclist = pDocs;
-	m_pHitlist = pHlist;
-	return iMatches;
-}
-
-//////////////////////////////////////////////////////////////////////////
-
 int ExtRanker_BM25_c::GetMatches ( int iFields, const int * pWeights )
 {
 	if ( !m_pRoot )
@@ -3120,8 +2892,11 @@ int ExtRanker_None_c::GetMatches ( int, const int * )
 
 //////////////////////////////////////////////////////////////////////////
 
-int ExtRanker_Wordcount_c::GetMatches ( int, const int * pWeights )
+template < typename STATE >
+int ExtRanker_T<STATE>::GetMatches ( int iFields, const int * pWeights )
 {
+	STATE tState ( iFields, pWeights, m_uQWords, m_uPayloadMask );
+
 	if ( !m_pRoot )
 		return 0;
 
@@ -3141,61 +2916,52 @@ int ExtRanker_Wordcount_c::GetMatches ( int, const int * pWeights )
 
 	// main matching loop
 	const ExtDoc_t * pDoc = pDocs;
-	DWORD uRank = 0;
 	for ( SphDocID_t uCurDocid=0; iMatches<ExtNode_i::MAX_DOCS; )
 	{
-		assert ( pHlist );
+		// keep ranking
+		while ( pHlist->m_uDocid==uCurDocid )
+			tState.Update ( pHlist++ );
 
-		// next match (or block end)? compute final weight, and flush prev one
-		if ( pHlist->m_uDocid!=uCurDocid )
+		// if hits block is over, get next block, but do *not* flush current doc
+		if ( pHlist->m_uDocid==DOCID_MAX )
 		{
-			// if hits block is over, get next block, but do *not* flush current doc
-			if ( pHlist->m_uDocid==DOCID_MAX )
-			{
-				assert ( pDocs );
-				pHlist = m_pRoot->GetHitsChunk ( pDocs, m_uMaxID );
-				if ( pHlist )
-					continue;
-			}
-
-			// otherwise (new match or no next hits block), flush current doc
-			if ( uCurDocid )
-			{
-				assert ( pDoc->m_uDocid==uCurDocid );
-				Swap ( m_dMatches[iMatches], m_dMyMatches[pDoc-m_dMyDocs] );
-				m_dMatches[iMatches].m_iWeight = uRank;
-				iMatches++;
-				uRank = 0;
-			}
-
-			// boundary checks
-			if ( !pHlist )
-			{
-				// there are no more hits for current docs block; do we have a next one?
-				assert ( pDocs );
-				pDoc = pDocs = GetFilteredDocs ();
-
-				// we don't, so bail out
-				if ( !pDocs )
-					break;
-
-				// we do, get some hits
-				pHlist = m_pRoot->GetHitsChunk ( pDocs, m_uMaxID );
-				assert ( pHlist ); // fresh docs block, must have hits
-			}
-
-			// carry on
-			assert ( pDoc->m_uDocid<=pHlist->m_uDocid );
-			while ( pDoc->m_uDocid<pHlist->m_uDocid ) pDoc++;
-			assert ( pDoc->m_uDocid==pHlist->m_uDocid );
-
-			uCurDocid = pHlist->m_uDocid;
-			continue; // we might had flushed the match; need to check the limit
+			assert ( pDocs );
+			pHlist = m_pRoot->GetHitsChunk ( pDocs, m_uMaxID );
+			if ( pHlist )
+				continue;
 		}
 
-		// upd rank
-		uRank += pWeights [ HIT2FIELD(pHlist->m_uHitpos) ]; // FIXME! boundary check
-		pHlist++;
+		// otherwise (new match or no next hits block), flush current doc
+		if ( uCurDocid )
+		{
+			assert ( uCurDocid==pDoc->m_uDocid );
+			Swap ( m_dMatches[iMatches], m_dMyMatches[pDoc-m_dMyDocs] );
+			m_dMatches[iMatches].m_iWeight = tState.Finalize ( m_dMatches[iMatches].m_iWeight );
+			iMatches++;
+		}
+
+		// boundary checks
+		if ( !pHlist )
+		{
+			// there are no more hits for current docs block; do we have a next one?
+			assert ( pDocs );
+			pDoc = pDocs = GetFilteredDocs ();
+
+			// we don't, so bail out
+			if ( !pDocs )
+				break;
+
+			// we do, get some hits
+			pHlist = m_pRoot->GetHitsChunk ( pDocs, m_uMaxID );
+			assert ( pHlist ); // fresh docs block, must have hits
+		}
+
+		// skip until next good doc/hit pair
+		assert ( pDoc->m_uDocid<=pHlist->m_uDocid );
+		while ( pDoc->m_uDocid<pHlist->m_uDocid ) pDoc++;
+		assert ( pDoc->m_uDocid==pHlist->m_uDocid );
+
+		uCurDocid = pHlist->m_uDocid;
 	}
 
 	m_pDoclist = pDocs;
@@ -3205,113 +2971,96 @@ int ExtRanker_Wordcount_c::GetMatches ( int, const int * pWeights )
 
 //////////////////////////////////////////////////////////////////////////
 
-int ExtRanker_Proximity_c::GetMatches ( int iFields, const int * pWeights )
+template < bool USE_BM25 >
+struct RankerState_Proximity_fn
 {
-	if ( !m_pRoot )
-		return 0;
+	BYTE m_uLCS[SPH_MAX_FIELDS];
+	BYTE m_uCurLCS;
+	int m_iExpDelta;
+	int m_iFields;
+	const int * m_pWeights;
 
-	BYTE uLCS[SPH_MAX_FIELDS];
-	memset ( uLCS, 0, sizeof(uLCS) );
-
-	BYTE uCurLCS = 0;
-	int iExpDelta = -INT_MAX;
-
-	int iMatches = 0;
-	const ExtHit_t * pHlist = m_pHitlist;
-	const ExtDoc_t * pDocs = m_pDoclist;
-
-	// warmup if necessary
-	if ( !pHlist )
+	RankerState_Proximity_fn ( int iFields, const int * pWeights, int, DWORD )
 	{
-		if ( !pDocs ) pDocs = GetFilteredDocs ();
-		if ( !pDocs ) return iMatches;
-
-		pHlist = m_pRoot->GetHitsChunk ( pDocs, m_uMaxID );
-		if ( !pHlist ) return iMatches;
+		memset ( m_uLCS, 0, sizeof(m_uLCS) );
+		m_uCurLCS = 0;
+		m_iExpDelta = -INT_MAX;
+		m_iFields = iFields;
+		m_pWeights = pWeights;
 	}
 
-	// main matching loop
-	const ExtDoc_t * pDoc = pDocs;
-	for ( SphDocID_t uCurDocid=0; iMatches<ExtNode_i::MAX_DOCS; )
+	void Update ( const ExtHit_t * pHlist )
 	{
-		assert ( pHlist );
-
-		// next match (or block end)? compute final weight, and flush prev one
-		if ( pHlist->m_uDocid!=uCurDocid )
-		{
-			// if hits block is over, get next block, but do *not* flush current doc
-			if ( pHlist->m_uDocid==DOCID_MAX )
-			{
-				assert ( pDocs );
-				pHlist = m_pRoot->GetHitsChunk ( pDocs, m_uMaxID );
-				if ( pHlist )
-					continue;
-			}
-
-			// otherwise (new match or no next hits block), flush current doc
-			if ( uCurDocid )
-			{
-				uCurLCS = 0;
-				iExpDelta = -1;
-
-				DWORD uRank = 0;
-				for ( int i=0; i<iFields; i++ )
-				{
-					uRank += uLCS[i]*pWeights[i];
-					uLCS[i] = 0;
-				}
-
-				assert ( uCurDocid==pDoc->m_uDocid );
-				Swap ( m_dMatches[iMatches], m_dMyMatches[pDoc-m_dMyDocs] );
-				m_dMatches[iMatches].m_iWeight = uRank;
-				iMatches++;
-			}
-
-			// boundary checks
-			if ( !pHlist )
-			{
-				// there are no more hits for current docs block; do we have a next one?
-				assert ( pDocs );
-				pDoc = pDocs = GetFilteredDocs ();
-
-				// we don't, so bail out
-				if ( !pDocs )
-					break;
-
-				// we do, get some hits
-				pHlist = m_pRoot->GetHitsChunk ( pDocs, m_uMaxID );
-				assert ( pHlist ); // fresh docs block, must have hits
-			}
-
-			// carry on
-			assert ( pDoc->m_uDocid<=pHlist->m_uDocid );
-			while ( pDoc->m_uDocid<pHlist->m_uDocid ) pDoc++;
-			assert ( pDoc->m_uDocid==pHlist->m_uDocid );
-
-			uCurDocid = pHlist->m_uDocid;
-			continue; // we might had flushed the match; need to check the limit
-		}
-
-		// upd LCS
-		DWORD uQueryPos = pHlist->m_uQuerypos;
-		int iDelta = HIT2LCS(pHlist->m_uHitpos) - uQueryPos;
-		if ( iDelta==iExpDelta )
-			uCurLCS = uCurLCS + BYTE(pHlist->m_uWeight);
+		int iDelta = HIT2LCS(pHlist->m_uHitpos) - pHlist->m_uQuerypos;
+		if ( iDelta==m_iExpDelta )
+			m_uCurLCS = m_uCurLCS + BYTE(pHlist->m_uWeight);
 		else
-			uCurLCS = BYTE(pHlist->m_uWeight);
+			m_uCurLCS = BYTE(pHlist->m_uWeight);
 
 		DWORD uField = HIT2FIELD(pHlist->m_uHitpos);
-		if ( uCurLCS>uLCS[uField] )
-			uLCS[uField] = uCurLCS;
+		if ( m_uCurLCS>m_uLCS[uField] )
+			m_uLCS[uField] = m_uCurLCS;
 
-		iExpDelta = iDelta + pHlist->m_uSpanlen - 1;
-		pHlist++;
+		m_iExpDelta = iDelta + pHlist->m_uSpanlen - 1;
 	}
 
-	m_pDoclist = pDocs;
-	m_pHitlist = pHlist;
-	return iMatches;
-}
+	DWORD Finalize ( DWORD uWeight )
+	{
+		m_uCurLCS = 0;
+		m_iExpDelta = -1;
+
+		DWORD uRank = 0;
+		for ( int i=0; i<m_iFields; i++ )
+		{
+			uRank += m_uLCS[i]*m_pWeights[i];
+			m_uLCS[i] = 0;
+		}
+
+		return USE_BM25 ? uWeight + uRank*SPH_BM25_SCALE : uRank;
+	}
+};
+
+
+template < bool USE_BM25 >
+struct RankerState_ProximityPayload_fn : public RankerState_Proximity_fn<USE_BM25>
+{
+	DWORD m_uPayloadRank;
+	DWORD m_uPayloadMask;
+
+	RankerState_ProximityPayload_fn<USE_BM25> ( int iFields, const int * pWeights, int iQwords, DWORD uPayloadMask )
+		: RankerState_Proximity_fn<USE_BM25> ( iFields, pWeights, iQwords, uPayloadMask )
+	{
+		m_uPayloadRank = 0;
+		m_uPayloadMask = uPayloadMask;
+	}
+
+	void Update ( const ExtHit_t * pHlist )
+	{
+		DWORD uField = HIT2FIELD(pHlist->m_uHitpos);
+		if ( ( 1<<uField ) & m_uPayloadMask )
+			this->m_uPayloadRank += HIT2POS(pHlist->m_uHitpos) * this->m_pWeights[uField];
+		else
+			RankerState_Proximity_fn<USE_BM25>::Update ( pHlist );
+	}
+
+	DWORD Finalize ( DWORD uWeight )
+	{
+		// as usual, redundant 'this' is just because gcc is stupid
+		this->m_uCurLCS = 0;
+		this->m_iExpDelta = -1;
+
+		DWORD uRank = m_uPayloadRank;
+		for ( int i=0; i<this->m_iFields; i++ )
+		{
+			// no special care for payload fields as their LCS will be 0 anyway
+			uRank += this->m_uLCS[i]*this->m_pWeights[i];
+			this->m_uLCS[i] = 0;
+		}
+
+		m_uPayloadRank = 0;
+		return USE_BM25 ? uWeight + uRank*SPH_BM25_SCALE : uRank;
+	}
+};
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -3326,209 +3075,90 @@ static inline int sphBitCount ( DWORD n )
 }
 
 
-int ExtRanker_MatchAny_c::GetMatches ( int iFields, const int * pWeights )
+struct RankerState_MatchAny_fn : public RankerState_Proximity_fn<false>
 {
-	if ( !m_pRoot )
-		return 0;
+	int m_iPhraseK;
+	BYTE m_uMatchMask[SPH_MAX_FIELDS];
 
-	BYTE uLCS[SPH_MAX_FIELDS];
-	memset ( uLCS, 0, sizeof(uLCS) );
-
-	BYTE uMatchMask[SPH_MAX_FIELDS];
-	memset ( uMatchMask, 0, sizeof(uMatchMask) );
-
-	BYTE uCurLCS = 0;
-	int iExpDelta = -INT_MAX;
-
-	int iMatches = 0;
-	const ExtHit_t * pHlist = m_pHitlist;
-	const ExtDoc_t * pDocs = m_pDoclist;
-
-	// warmup if necessary
-	if ( !pHlist )
+	RankerState_MatchAny_fn ( int iFields, const int * pWeights, int iQwords, DWORD uPayloadMask )
+		: RankerState_Proximity_fn<false> ( iFields, pWeights, iQwords, uPayloadMask )
 	{
-		if ( !pDocs ) pDocs = GetFilteredDocs ();
-		if ( !pDocs ) return iMatches;
+		m_iPhraseK = 0;
+		for ( int i=0; i<iFields; i++ )
+			m_iPhraseK += pWeights[i] * iQwords;
 
-		pHlist = m_pRoot->GetHitsChunk ( pDocs, m_uMaxID );
-		if ( !pHlist ) return iMatches;
+		memset ( m_uMatchMask, 0, sizeof(m_uMatchMask) );
 	}
 
-	int iPhraseK = 0;
-	for ( int i=0; i<iFields; i++ )
-		iPhraseK += pWeights[i] * m_uQWords;
-
-	// main matching loop
-	const ExtDoc_t * pDoc = pDocs;
-	for ( SphDocID_t uCurDocid=0; iMatches<ExtNode_i::MAX_DOCS; )
+	void Update ( const ExtHit_t * pHlist )
 	{
-		assert ( pHlist );
+		RankerState_Proximity_fn<false>::Update ( pHlist );
+		m_uMatchMask[HIT2FIELD(pHlist->m_uHitpos)] |= ( 1<<(pHlist->m_uQuerypos-1) );
+	}
 
-		// next match (or block end)? compute final weight, and flush prev one
-		if ( pHlist->m_uDocid!=uCurDocid )
+	DWORD Finalize ( DWORD )
+	{
+		m_uCurLCS = 0;
+		m_iExpDelta = -1;
+
+		DWORD uRank = 0;
+		for ( int i=0; i<m_iFields; i++ )
 		{
-			// if hits block is over, get next block, but do *not* flush current doc
-			if ( pHlist->m_uDocid==DOCID_MAX )
-			{
-				assert ( pDocs );
-				pHlist = m_pRoot->GetHitsChunk ( pDocs, m_uMaxID );
-				if ( pHlist )
-					continue;
-			}
-
-			// otherwise (new match or no next hits block), flush current doc
-			if ( uCurDocid )
-			{
-				uCurLCS = 0;
-				iExpDelta = -1;
-
-				DWORD uRank = 0;
-				for ( int i=0; i<iFields; i++ )
-				{
-					if ( uMatchMask[i] )
-						uRank += ( sphBitCount(uMatchMask[i]) + (uLCS[i]-1)*iPhraseK )*pWeights[i];
-					uMatchMask[i] = 0;
-					uLCS[i] = 0;
-				}
-
-				assert ( uCurDocid==pDoc->m_uDocid );
-				Swap ( m_dMatches[iMatches], m_dMyMatches[pDoc-m_dMyDocs] );
-				m_dMatches[iMatches].m_iWeight = uRank;
-				iMatches++;
-			}
-
-			// boundary checks
-			if ( !pHlist )
-			{
-				// there are no more hits for current docs block; do we have a next one?
-				assert ( pDocs );
-				pDoc = pDocs = GetFilteredDocs ();
-
-				// we don't, so bail out
-				if ( !pDocs )
-					break;
-
-				// we do, get some hits
-				pHlist = m_pRoot->GetHitsChunk ( pDocs, m_uMaxID );
-				assert ( pHlist ); // fresh docs block, must have hits
-			}
-
-			// carry on
-			assert ( pDoc->m_uDocid<=pHlist->m_uDocid );
-			while ( pDoc->m_uDocid<pHlist->m_uDocid ) pDoc++;
-			assert ( pDoc->m_uDocid==pHlist->m_uDocid );
-
-			uCurDocid = pHlist->m_uDocid;
-			continue; // we might had flushed the match; need to check the limit
+			if ( m_uMatchMask[i] )
+				uRank += ( sphBitCount(m_uMatchMask[i]) + (m_uLCS[i]-1)*m_iPhraseK )*m_pWeights[i];
+			m_uMatchMask[i] = 0;
+			m_uLCS[i] = 0;
 		}
 
-		// upd LCS
-		DWORD uQueryPos = pHlist->m_uQuerypos;
-		int iDelta = HIT2LCS(pHlist->m_uHitpos) - uQueryPos;
-		if ( iDelta==iExpDelta )
-			uCurLCS = uCurLCS + BYTE(pHlist->m_uWeight);
-		else
-			uCurLCS = BYTE(pHlist->m_uWeight);
-
-		DWORD uField = HIT2FIELD(pHlist->m_uHitpos);
-		if ( uCurLCS>uLCS[uField] )
-			uLCS[uField] = uCurLCS;
-
-		uMatchMask[uField] |= ( 1<<(uQueryPos-1) );
-
-		iExpDelta = iDelta + pHlist->m_uSpanlen - 1;
-		pHlist++;
+		return uRank;
 	}
-
-	m_pDoclist = pDocs;
-	m_pHitlist = pHlist;
-	return iMatches;
-}
+};
 
 //////////////////////////////////////////////////////////////////////////
 
-int ExtRanker_FieldMask_c::GetMatches ( int, const int * )
+struct RankerState_Wordcount_fn
 {
-	if ( !m_pRoot )
-		return 0;
+	DWORD m_uRank;
+	int m_iFields;
+	const int * m_pWeights;
 
-	int iMatches = 0;
-	const ExtHit_t * pHlist = m_pHitlist;
-	const ExtDoc_t * pDocs = m_pDoclist;
+	RankerState_Wordcount_fn ( int iFields, const int * pWeights, int, DWORD )
+		: m_uRank ( 0 )
+		, m_iFields ( iFields )
+		, m_pWeights ( pWeights )
+	{}
 
-	// warmup if necessary
-	if ( !pHlist )
+	void Update ( const ExtHit_t * pHlist )
 	{
-		if ( !pDocs ) pDocs = GetFilteredDocs ();
-		if ( !pDocs ) return iMatches;
-
-		pHlist = m_pRoot->GetHitsChunk ( pDocs, m_uMaxID );
-		if ( !pHlist ) return iMatches;
+		m_uRank += m_pWeights [ HIT2FIELD(pHlist->m_uHitpos) ];
 	}
 
-	// main matching loop
-	const ExtDoc_t * pDoc = pDocs;
-	DWORD uRank = 0;
-	for ( SphDocID_t uCurDocid=0; iMatches<ExtNode_i::MAX_DOCS; )
+	DWORD Finalize ( DWORD )
 	{
-		assert ( pHlist );
+		return m_uRank;
+	}
+};
 
-		// next match (or block end)? compute final weight, and flush prev one
-		if ( pHlist->m_uDocid!=uCurDocid )
-		{
-			// if hits block is over, get next block, but do *not* flush current doc
-			if ( pHlist->m_uDocid==DOCID_MAX )
-			{
-				assert ( pDocs );
-				pHlist = m_pRoot->GetHitsChunk ( pDocs, m_uMaxID );
-				if ( pHlist )
-					continue;
-			}
+//////////////////////////////////////////////////////////////////////////
 
-			// otherwise (new match or no next hits block), flush current doc
-			if ( uCurDocid )
-			{
-				assert ( pDoc->m_uDocid==uCurDocid );
-				Swap ( m_dMatches[iMatches], m_dMyMatches[pDoc-m_dMyDocs] );
-				m_dMatches[iMatches].m_iWeight = uRank;
-				iMatches++;
-				uRank = 0;
-			}
+struct RankerState_Fieldmask_fn
+{
+	DWORD m_uRank;
 
-			// boundary checks
-			if ( !pHlist )
-			{
-				// there are no more hits for current docs block; do we have a next one?
-				assert ( pDocs );
-				pDoc = pDocs = GetFilteredDocs ();
+	RankerState_Fieldmask_fn ( int, const int *, int, DWORD )
+		: m_uRank ( 0 )
+	{}
 
-				// we don't, so bail out
-				if ( !pDocs )
-					break;
-
-				// we do, get some hits
-				pHlist = m_pRoot->GetHitsChunk ( pDocs, m_uMaxID );
-				assert ( pHlist ); // fresh docs block, must have hits
-			}
-
-			// carry on
-			assert ( pDoc->m_uDocid<=pHlist->m_uDocid );
-			while ( pDoc->m_uDocid<pHlist->m_uDocid ) pDoc++;
-			assert ( pDoc->m_uDocid==pHlist->m_uDocid );
-
-			uCurDocid = pHlist->m_uDocid;
-			continue; // we might had flushed the match; need to check the limit
-		}
-
-		// upd rank
-		uRank |= 1UL<<HIT2FIELD(pHlist->m_uHitpos);
-		pHlist++;
+	void Update ( const ExtHit_t * pHlist )
+	{
+		m_uRank |= 1UL << HIT2FIELD(pHlist->m_uHitpos);
 	}
 
-	m_pDoclist = pDocs;
-	m_pHitlist = pHlist;
-	return iMatches;
-}
+	DWORD Finalize ( DWORD )
+	{
+		return m_uRank;
+	}
+};
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -3588,18 +3218,21 @@ ISphRanker * sphCreateRanker ( const CSphQuery * pQuery, const char * sQuery, CS
 	ExtRanker_c * pRanker = NULL;
 	switch ( pQuery->m_eRanker )
 	{
-		case SPH_RANK_PROXIMITY_BM25:	if ( uPayloadMask )
-										pRanker = new ExtRanker_ProximityBM25Payload_c ( tParsed.m_pRoot, tTermSetup ); else
-										pRanker = new ExtRanker_ProximityBM25_c ( tParsed.m_pRoot, tTermSetup ); break;
+		case SPH_RANK_PROXIMITY_BM25:
+			if ( uPayloadMask )
+				pRanker = new ExtRanker_T < RankerState_ProximityPayload_fn<true> > ( tParsed.m_pRoot, tTermSetup );
+			else
+				pRanker = new ExtRanker_T < RankerState_Proximity_fn<true> > ( tParsed.m_pRoot, tTermSetup );
+			break;
 		case SPH_RANK_BM25:				pRanker = new ExtRanker_BM25_c ( tParsed.m_pRoot, tTermSetup ); break;
 		case SPH_RANK_NONE:				pRanker = new ExtRanker_None_c ( tParsed.m_pRoot, tTermSetup ); break;
-		case SPH_RANK_WORDCOUNT:		pRanker = new ExtRanker_Wordcount_c ( tParsed.m_pRoot, tTermSetup ); break;
-		case SPH_RANK_PROXIMITY:		pRanker = new ExtRanker_Proximity_c ( tParsed.m_pRoot, tTermSetup ); break;
-		case SPH_RANK_MATCHANY:			pRanker = new ExtRanker_MatchAny_c ( tParsed.m_pRoot, tTermSetup ); break;
-		case SPH_RANK_FIELDMASK:		pRanker = new ExtRanker_FieldMask_c ( tParsed.m_pRoot, tTermSetup ); break;
+		case SPH_RANK_WORDCOUNT:		pRanker = new ExtRanker_T < RankerState_Wordcount_fn > ( tParsed.m_pRoot, tTermSetup ); break;
+		case SPH_RANK_PROXIMITY:		pRanker = new ExtRanker_T < RankerState_Proximity_fn<false> > ( tParsed.m_pRoot, tTermSetup ); break;
+		case SPH_RANK_MATCHANY:			pRanker = new ExtRanker_T < RankerState_MatchAny_fn > ( tParsed.m_pRoot, tTermSetup ); break;
+		case SPH_RANK_FIELDMASK:		pRanker = new ExtRanker_T < RankerState_Fieldmask_fn > ( tParsed.m_pRoot, tTermSetup ); break;
 		default:
 			pResult->m_sWarning.SetSprintf ( "unknown ranking mode %d; using default", (int)pQuery->m_eRanker );
-			pRanker = new ExtRanker_ProximityBM25_c ( tParsed.m_pRoot, tTermSetup );
+			pRanker = new ExtRanker_T < RankerState_Proximity_fn<true> > ( tParsed.m_pRoot, tTermSetup );
 			break;
 	}
 	assert ( pRanker );

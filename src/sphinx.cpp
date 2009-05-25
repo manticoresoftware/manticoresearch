@@ -1519,7 +1519,7 @@ private:
 	static const int			DEFAULT_WRITE_BUFFER	= 1048576;	///< deafult write buffer size
 
 	static const DWORD			INDEX_MAGIC_HEADER		= 0x58485053;	///< my magic 'SPHX' header
-	static const DWORD			INDEX_FORMAT_VERSION	= 15;			///< my format version
+	static const DWORD			INDEX_FORMAT_VERSION	= 16;			///< my format version
 
 private:
 	// common stuff
@@ -2886,7 +2886,7 @@ CSphTokenizerSettings::CSphTokenizerSettings ()
 
 static void LoadTokenizerSettings ( CSphReader_VLN & tReader, CSphTokenizerSettings & tSettings, DWORD uVersion, CSphString & sWarning )
 {
-	if ( uVersion < 9 )
+	if ( uVersion<9 )
 		return;
 
 	tSettings.m_iType			= tReader.GetByte ();
@@ -2898,7 +2898,8 @@ static void LoadTokenizerSettings ( CSphReader_VLN & tReader, CSphTokenizerSetti
 	tSettings.m_sIgnoreChars	= tReader.GetString ();
 	tSettings.m_iNgramLen		= tReader.GetDword ();
 	tSettings.m_sNgramChars		= tReader.GetString ();
-	tSettings.m_sBlendChars		= tReader.GetString ();
+	if ( uVersion>=15 )
+		tSettings.m_sBlendChars = tReader.GetString ();
 }
 
 
@@ -7047,8 +7048,8 @@ void CSphIndex_VLN::ReadSchemaColumn ( CSphReader_VLN & rdInfo, CSphColumnInfo &
 		tCol.m_tLocator.m_iBitCount = -1;
 	}
 
-	if ( m_uVersion >= 15 )
-		tCol.m_bPayload = rdInfo.GetByte();
+	if ( m_uVersion>=16 )
+		tCol.m_bPayload = ( rdInfo.GetByte()!=0 );
 }
 
 

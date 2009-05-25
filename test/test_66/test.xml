@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>index format backwards compatibility</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = select 1, 'dummy'
+}
+
+index v14
+{
+	source	= test
+	path	= test_66/refdata/v14
+}
+</config>
+
+<queries>
+<query mode="extended2" index="v14">test</query>
+</queries>
+
+</test>

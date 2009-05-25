@@ -10,7 +10,7 @@ ini_set ( "error_reporting", E_ALL | E_STRICT );
 require_once ( "../api/sphinxapi.php" );
 
 $windows = isset($_SERVER["WINDIR"]) || isset($_SERVER["windir"]) || isset($_SERVER["HOMEDRIVE"]);
-$action_retries			= 200;
+$action_retries			= 20;
 $action_wait_timeout	= 50000;
 
 
@@ -65,7 +65,9 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error )
 
 	if ( $windows )
 	{
-		$process = popen ("start /min $searchd_path --config $config_file --pidfile > $error_file", "r" );
+		// using start /min to fire it "in background"
+		// using cmd /c for redirection to work
+		$process = popen ("start /min cmd /c \"$searchd_path --config $config_file --pidfile > $error_file\"", "r" );
 		pclose ( $process );
 	}
 	else
@@ -80,26 +82,32 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error )
 		return 1;
 	}
 
-	if ( $retval == 0 )
+	if ( $retval!=0 )
+		return $retval;
+
+	// launch attempt kinda worked; but lets check the log
+	for ( $i=0; $i<$action_retries && !file_exists($error_file); $i++ )
+		usleep ( $action_wait_timeout );
+
+	$rawlog = file ( $error_file );
+	$error = "";
+
+	foreach ( $rawlog as $line )
 	{
-		$error = "";
-		$log_raw = explode ( '\n', file_get_contents ( $error_file ) );
-		foreach ( $log_raw as $msg )
+		foreach ( array ( "WARNING", "ERROR", "FATAL" ) as $tag )
 		{
-			$warn = stristr ( $msg, 'WARNING' );
-			if ( $warn )
-				$error .= $warn;
-
-			$warn = stristr ( $warn, 'ERROR' );
-			if ( $warn )
-				$error .= $warn;
+			$t = stristr ( $line, $tag );
+			if ( $t )
+			{
+				$error .= $t;
+				if ( $tag!="WARNING" )
+					$retval = 1;
+			}
 		}
-
-		if ( empty ( $error ) )
-			return 0;
-		else
-			return 2;
 	}
+
+	if ( $retval==0 && !empty($error) )
+		$retval = 2; // no errors, but there were warnings
 
 	return $retval;
 }
@@ -196,7 +204,7 @@ class SphinxConfig
 		$this->_indexer_runs	= array ();
 		$this->_db_create		= array ();
 		$this->_db_drop			= array ();
-		$this->_db_create		= array ();
+		$this->_db_insert		= array ();
 		$this->_num_agents		= 1;
 		$this->_subtest 		= 0;
 		$this->_subtestcount	= 0;
@@ -204,6 +212,7 @@ class SphinxConfig
 		$this->_sd_port			= $sd_port;
 		$this->_sd_pid_file		= $sd_pid_file;
 		$this->_custom_test		= "";
+		$this->_skip_indexer	= false;
 	}
 
 	
@@ -216,6 +225,7 @@ class SphinxConfig
 	function NumAgents ()			{ return $this->_num_agents; }
 	function Requires ( $name )		{ return isset($this->_prereqs[$name]); }
 	function IsQueryTest ()			{ return strlen ( $this->_custom_test ) == 0;	}
+	function IsSkipIndexer ()		{ return $this->_skip_indexer; }
 
 
 
@@ -511,6 +521,7 @@ class SphinxConfig
 		$this->_name			= GetFirstChildValue ( $xml, "name" );
 		$this->_query_settings	= GetFirstChildValue ( $xml, "query_settings" );
 		$this->_num_agents		= GetFirstChildValue ( $xml, "num_agents", 1 );
+		$this->_skip_indexer	= GetFirstChildValue ( $xml, "skip_indexer", 0 );
 
 		$this->_prereqs = array();
 		$prereqs = GetFirstChild ( $xml, "requires", false );
@@ -1148,40 +1159,40 @@ function RunTest ( $test_dir )
 
 		EraseDirContents ( $indexer_data_path );
 
-		$indexer_ret = RunIndexer ( $error, "--all" );
-
-		if ( $indexer_ret==1 )
+		if ( $config->IsSkipIndexer()===false )
 		{
-			if ( !HandleFailure ( $config, $report, $error, $nfailed ) )
-				$log .= "\tsubtest $subtest: error running indexer; see $report_file\n";
+			// standard run
+			$indexer_ret = RunIndexer ( $error, "--all" );
+			if ( $indexer_ret==1 )
+			{
+				if ( !HandleFailure ( $config, $report, $error, $nfailed ) )
+					$log .= "\tsubtest $subtest: error running indexer; see $report_file\n";
+				continue;
 
-			continue;
+			} else if ( $indexer_ret==2 )
+			{
+				fwrite ( $report, "$error\n" );
+			}
 
-		}
-		else if ( $indexer_ret==2 )
-		{
-			fwrite ( $report, "$error\n" );
-		}
+			// additional optional runs (eg for merge tests)
+			$indexer_ret = $config->RunIndexerEx ( $error );
+			if ( $indexer_ret==1 )
+			{
+				if ( !HandleFailure ( $config, $report, $error, $nfailed ) )
+					$log .= "\tsubtest $subtest: error running indexer; see $report_file\n";
+				continue;
 
-		$indexer_ret = $config->RunIndexerEx ( $error );
-		if ( $indexer_ret==1 )
-		{
-			if ( !HandleFailure ( $config, $report, $error, $nfailed ) )
-				$log .= "\tsubtest $subtest: error running indexer; see $report_file\n";
-
-			continue;
-
-		}
-		else if ( $indexer_ret==2 )
-		{
-			fwrite ( $report, "$error\n" );
+			} else if ( $indexer_ret==2 )
+			{
+				fwrite ( $report, "$error\n" );
+			}
 		}
 
 		$searchd_error = FALSE;
 
 		if ( $config->NumAgents () == 1 )
 		{
-			$searchd_ret = StartSearchd ( "config.conf", "error.txt", $sd_pid_file, $error );
+			$searchd_ret = StartSearchd ( "config.conf", "error.txt", $sd_pid_file, &$error );
 			$stop["config.conf"] = $sd_pid_file;
 
 			if ( $searchd_ret == 1 )

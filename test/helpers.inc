@@ -521,7 +521,7 @@ class SphinxConfig
 		$this->_name			= GetFirstChildValue ( $xml, "name" );
 		$this->_query_settings	= GetFirstChildValue ( $xml, "query_settings" );
 		$this->_num_agents		= GetFirstChildValue ( $xml, "num_agents", 1 );
-		$this->_skip_indexer	= GetFirstChildValue ( $xml, "skip_indexer", 0 );
+		$this->_skip_indexer	= GetFirstChildValue ( $xml, "skip_indexer", false );
 
 		$this->_prereqs = array();
 		$prereqs = GetFirstChild ( $xml, "requires", false );

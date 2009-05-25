@@ -28,6 +28,8 @@ index v14
 }
 </config>
 
+<skip_indexer/>
+
 <queries>
 <query mode="extended2" index="v14">test</query>
 </queries>

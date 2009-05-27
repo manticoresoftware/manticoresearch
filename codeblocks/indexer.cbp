@@ -11,6 +11,7 @@
 				<Option object_output="./junk/Debug" />
 				<Option type="1" />
 				<Option compiler="gcc" />
+				<Option parameters="--nodetach -c /media/bigstore/work/sphinx/test/test_07/Conf/config_0.conf" />
 				<Compiler>
 					<Add option="-Wall" />
 					<Add option="-g" />
@@ -18,8 +19,6 @@
 				</Compiler>
 				<Linker>
 					<Add library="bin/Debug/libsphinx.a" />
-					<Add directory="./libstemmer_c/lib/Debug" />
-					<Add directory="./libexpat/lib/Debug" />
 				</Linker>
 			</Target>
 			<Target title="Release">
@@ -35,17 +34,19 @@
 				<Linker>
 					<Add option="-s" />
 					<Add library="bin/Release/libsphinx.a" />
-					<Add directory="./libstemmer_c/lib/Release" />
-					<Add directory="./libexpat/lib/Release" />
 				</Linker>
 			</Target>
 		</Build>
 		<Compiler>
 			<Add option="-D_FILE_OFFSET_BITS=64" />
-			<Add option="-DHAVE_LOGF" />
+			<Add option="-DHAVE_CONFIG_H" />
+			<Add directory="../config/" />
 		</Compiler>
 		<Linker>
 			<Add library="pthread" />
+			<Add library="rt" />
+			<Add library="expat" />
+			<Add library="mysqlclient" />
 		</Linker>
 		<Unit filename="../src/indexer.cpp" />
 		<Extensions>
@@ -57,9 +58,6 @@
 			<envvars />
 			<code_completion />
 			<debugger />
-			<lib_finder>
-				<lib name="pthread-stubs" />
-			</lib_finder>
 		</Extensions>
 	</Project>
 </CodeBlocks_project_file>

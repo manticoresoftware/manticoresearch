@@ -12,7 +12,7 @@ $sd_read_timeout	= 5;
 $sd_max_children	= 30;
 $sd_pid_file		= "searchd.pid";
 $sd_max_matches		=  100000;
-
+$sd_managed_searchd	= false;
 $db_host			= "localhost";
 $db_user			= "root";
 $db_pwd				= "";
@@ -63,6 +63,7 @@ if ( !is_array($args) || empty($args) )
 	print ( "-i, --indexer <PATH>\tpath to indexer\n" );
 	print ( "-s, --searchd <PATH>\tpath to searchd\n" );
 	print ( "--strict\t\tterminate on the first failure (for automatic runs)\n" );
+	print ( "--managed\t\tdon't run searchd during test (for debugging)\n" );
 	print ( "\nEnvironment vriables are:\n" );
 	print ( "DBUSER\tuse 'USER' as MySQL user\n" );
 	print ( "DBPASS\tuse 'PASS' as MySQL password\n" );
@@ -90,6 +91,7 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="g" || $arg=="gen" )			{ $g_model = true; $run = true; }
 	else if ( $arg=="t" || $arg=="test" )			{ $g_model = false; $run = true; }
 	else if ( $arg=="-u" || $arg=="--user" )		$db_user = $args[++$i];
+	else if ( $arg=="--managed" )					$sd_managed_searchd = true;
 	else if ( $arg=="-p" || $arg=="--password" )	$db_pwd = $args[++$i];
 	else if ( $arg=="-i" || $arg=="--indexer" )		$indexer_path = $args[++$i];
 	else if ( $arg=="-s" || $arg=="--searchd" )		$searchd_path = $args[++$i];
@@ -151,7 +153,7 @@ $total_subtests = 0;
 $total_subtests_failed = 0;
 foreach ( $tests as $test )
 {
-	if ( $windows )
+	if ( $windows && !$sd_managed_searchd )
 	{
 		// avoid an issue with daemons stuck in exit(0) for some seconds
 		$sd_port += 10;

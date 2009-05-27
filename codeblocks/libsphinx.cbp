@@ -17,13 +17,7 @@
 					<Add option="-Wall" />
 					<Add option="-g" />
 					<Add option="-O0" />
-					<Add directory="./libstemmer_c/include" />
-					<Add directory="./libexpat/lib" />
 				</Compiler>
-				<ResourceCompiler>
-					<Add directory="./libstemmer_c/include" />
-					<Add directory="./libexpat/lib" />
-				</ResourceCompiler>
 			</Target>
 			<Target title="Release">
 				<Option output="./bin/Release/libsphinx" prefix_auto="1" extension_auto="1" />
@@ -36,13 +30,7 @@
 					<Add option="-O3" />
 					<Add option="-Wall" />
 					<Add option="-DNDEBUG" />
-					<Add directory="./libstemmer_c/include" />
-					<Add directory="./libexpat/lib" />
 				</Compiler>
-				<ResourceCompiler>
-					<Add directory="./libstemmer_c/include" />
-					<Add directory="./libexpat/lib" />
-				</ResourceCompiler>
 				<Linker>
 					<Add option="-s" />
 				</Linker>
@@ -50,7 +38,8 @@
 		</Build>
 		<Compiler>
 			<Add option="-D_FILE_OFFSET_BITS=64" />
-			<Add option="-DHAVE_LOGF" />
+			<Add option="-DHAVE_CONFIG_H" />
+			<Add directory="../config/" />
 		</Compiler>
 		<ExtraCommands>
 			<Add before="../src/svnxrev.sh .." />
@@ -87,7 +76,6 @@
 			<envvars />
 			<code_completion />
 			<debugger />
-			<lib_finder disable_auto="1" />
 		</Extensions>
 	</Project>
 </CodeBlocks_project_file>

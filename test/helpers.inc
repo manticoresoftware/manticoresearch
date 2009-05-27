@@ -1087,7 +1087,7 @@ function EraseDirContents ( $path )
 
 function RunTest ( $test_dir )
 {
-	global $indexer_data_path, $agents, $sd_pid_file, $g_id64, $windows;
+	global $indexer_data_path, $agents, $sd_pid_file, $sd_managed_searchd, $g_id64, $windows;
 
 	$model_file = $test_dir."/model.bin";
 	$conf_dir 	= $test_dir."/Conf";
@@ -1195,7 +1195,11 @@ function RunTest ( $test_dir )
 
 		if ( $config->NumAgents () == 1 )
 		{
-			$searchd_ret = StartSearchd ( "config.conf", "error.txt", $sd_pid_file, &$error );
+			if ( $sd_managed_searchd )
+				$searchd_ret = 0;
+			else
+				$searchd_ret = StartSearchd ( "config.conf", "error.txt", $sd_pid_file, $error );
+			
 			$stop["config.conf"] = $sd_pid_file;
 
 			if ( $searchd_ret == 1 )
@@ -1224,6 +1228,9 @@ function RunTest ( $test_dir )
 				$config->SetPIDFile ( $pid_file );
 				$config->WriteConfig ( $config_file, $i );
 
+			if ( $sd_managed_searchd )
+				$searchd_ret = 0;
+			else
 				$searchd_ret = StartSearchd ( $config_file, "error_".$agent_id.".txt", $pid_file, $error );
 
 				if ( $searchd_ret == 1 )

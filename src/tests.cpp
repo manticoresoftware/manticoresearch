@@ -367,7 +367,12 @@ void TestStripper ()
 		{ "testing comm<!--comm-->ents", "", "", "testing comments" },
 		{ "&lt; &gt; &thetasym; &somethingverylong; &the", "", "", "< > \xCF\x91 &somethingverylong; &the" },
 		{ "testing <img src=\"g/smth.jpg\" alt=\"nice picture\" rel=anotherattr junk=throwaway>inline tags vs attr indexing", "img=alt,rel", "", "testing nice picture anotherattr inline tags vs attr indexing" },
-		{ "this <?php $code = \"must be stripped\"; ?> away", "", "", "this  away" }
+		{ "this <?php $code = \"must be stripped\"; ?> away", "", "", "this  away" },
+		{ "<a href=\"http://www.com\">content1</a>", "a=title", "", "content1" },
+		{ "<a href=\"http://www.com\" title=\"my test title\">content2</a>", "a=title", "", "my test title content2" },
+		{ "testing <img src=\"g/smth.jpg\" alt=\"nice picture\" rel=anotherattr junk=\"throwaway\">inline tags vs attr indexing", "img=alt,rel", "",  "testing nice picture anotherattr inline tags vs attr indexing" },
+		{ "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\"><html>test</html>", "", "", " test " },
+		{ "<!smth \"that>can<break\"><html>test</html>", "", "", " test " }
 	};
 
 	int nTests = (int)(sizeof(sTests)/sizeof(sTests[0]));

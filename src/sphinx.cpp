@@ -13973,25 +13973,46 @@ void CSphHTMLStripper::Strip ( BYTE * sData )
 
 			} else if ( s[1]=='!' )
 			{
-				// check if it's valid comment
-				if (!( s[2]=='-' && s[3]=='-' ))
+				if ( s[2]=='-' && s[3]=='-' )
 				{
+					// it's valid comment; scan until comment end
+					s += 4; // skip opening '<!--'
+					while ( *s )
+					{
+						if ( s[0]=='-' && s[1]=='-' && s[2]=='>' )
+							break;
+						s++;
+					}
+					if ( !*s )
+						break;
+					s += 3; // skip closing '-->'
+					continue;
+
+				} else if ( isalpha(s[2]) )
+				{
+					// it's <!doctype> style PI; scan until PI end
+					s += 2;
+					while ( *s && *s!='>' )
+					{
+						if ( *s=='\'' || *s=='"' )
+						{
+							s = SkipQuoted ( s );
+							while ( isspace(*s) ) s++;
+						} else
+						{
+							s++;
+						}
+					}
+					if ( *s=='>' )
+						s++;
+					continue;
+
+				} else
+				{
+					// it's something malformed; just ignore
 					*d++ = *s++;
 					continue;
-				};
-
-				// scan until comment end
-				s += 4; // skip opening '<!--'
-				while ( *s )
-				{
-					if ( s[0]=='-' && s[1]=='-' && s[2]=='>' )
-						break;
-					s++;
 				}
-				if ( !*s )
-					break;
-				s += 3; // skip closing '-->'
-				continue;
 
 			} else if ( s[1]=='?' )
 			{
@@ -14089,11 +14110,13 @@ void CSphHTMLStripper::Strip ( BYTE * sData )
 				}
 				if ( sphIsTag(*s) )
 					break;
-				s++;
+				if ( *s!='>' )
+					s++;
 			}
 			if ( !sphIsTag(*s) )
 			{
-				if ( *s ) s++;
+				if ( *s && *s!='>' )
+					s++;
 				break;
 			}
 

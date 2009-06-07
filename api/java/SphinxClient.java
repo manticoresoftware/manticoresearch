@@ -36,6 +36,11 @@ public class SphinxClient
 	public final static int SPH_RANK_BM25			= 1;
 	public final static int SPH_RANK_NONE			= 2;
 	public final static int SPH_RANK_WORDCOUNT		= 3;
+	public final static int SPH_RANK_PROXIMITY		= 4;
+	public final static int SPH_RANK_MATCHANY		= 5;
+	public final static int SPH_RANK_FIELDMASK		= 6;
+	public final static int SPH_RANK_SPH04			= 7;
+	public final static int SPH_RANK_TOTAL			= 8;
 
 	/* sorting modes */
 	public final static int SPH_SORT_RELEVANCE		= 0;
@@ -486,10 +491,7 @@ public class SphinxClient
 	/** Set ranking mode. */
 	public void SetRankingMode ( int ranker ) throws SphinxException
 	{
-		myAssert ( ranker==SPH_RANK_PROXIMITY_BM25
-			|| ranker==SPH_RANK_BM25
-			|| ranker==SPH_RANK_NONE
-			|| ranker==SPH_RANK_WORDCOUNT, "unknown ranker value; use one of the SPH_RANK_xxx constants" );
+		myAssert ( ranker>=0 && ranker<SPH_RANK_TOTAL, "unknown ranker value; use one of the SPH_RANK_xxx constants" );
 		_ranker = ranker;
 	}
 

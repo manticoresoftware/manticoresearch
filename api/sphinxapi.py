@@ -56,6 +56,8 @@ SPH_RANK_WORDCOUNT		= 3 # simple word-count weighting, rank is a weighted sum of
 SPH_RANK_PROXIMITY		= 4
 SPH_RANK_MATCHANY		= 5
 SPH_RANK_FIELDMASK		= 6
+SPH_RANK_SPH04			= 7
+SPH_RANK_TOTAL			= 8
 
 # known sort modes
 SPH_SORT_RELEVANCE		= 0
@@ -295,7 +297,7 @@ class SphinxClient:
 		"""
 		Set ranking mode.
 		"""
-		assert(ranker in [SPH_RANK_PROXIMITY_BM25, SPH_RANK_BM25, SPH_RANK_NONE, SPH_RANK_WORDCOUNT, SPH_RANK_PROXIMITY, SPH_RANK_MATCHANY, SPH_RANK_FIELDMASK])
+		assert(ranker>=0 and ranker<SPH_RANK_TOTAL)
 		self._ranker = ranker
 
 

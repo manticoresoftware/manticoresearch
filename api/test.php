@@ -90,6 +90,7 @@ for ( $i=0; $i<count($args); $i++ )
 		if ( $arg=="none" )		$ranker = SPH_RANK_NONE;
 		if ( $arg=="wordcount" )$ranker = SPH_RANK_WORDCOUNT;
 		if ( $arg=="fieldmask" )$ranker = SPH_RANK_FIELDMASK;
+		if ( $arg=="sph04" )	$ranker = SPH_RANK_SPH04;
 	}
 	else
 		$q .= $args[$i] . " ";

@@ -1559,13 +1559,14 @@ enum ESphMatchMode
 /// search query relevance ranking mode
 enum ESphRankMode
 {
-	SPH_RANK_PROXIMITY_BM25		= 0,	///< default mode, phrase proximity major factor and BM25 minor one
+	SPH_RANK_PROXIMITY_BM25		= 0,	///< default mode, phrase proximity major factor and BM25 minor one (aka SPH03)
 	SPH_RANK_BM25				= 1,	///< statistical mode, BM25 ranking only (faster but worse quality)
 	SPH_RANK_NONE				= 2,	///< no ranking, all matches get a weight of 1
 	SPH_RANK_WORDCOUNT			= 3,	///< simple word-count weighting, rank is a weighted sum of per-field keyword occurence counts
-	SPH_RANK_PROXIMITY			= 4,	///< phrase proximity
-	SPH_RANK_MATCHANY			= 5,	///< emulate old match-any weighting
+	SPH_RANK_PROXIMITY			= 4,	///< phrase proximity (aka SPH01)
+	SPH_RANK_MATCHANY			= 5,	///< emulate old match-any weighting (aka SPH02)
 	SPH_RANK_FIELDMASK			= 6,	///< sets bits where there were matches
+	SPH_RANK_SPH04				= 7,	///< codename SPH04, phrase proximity + bm25 + head/exact boost
 
 	SPH_RANK_TOTAL,
 	SPH_RANK_DEFAULT			= SPH_RANK_PROXIMITY_BM25
@@ -2014,8 +2015,6 @@ public:
 
 	virtual	void				SetProgressCallback ( ProgressCallback_t * pfnProgress ) { m_pProgress = pfnProgress; }
 	virtual void				SetInplaceSettings ( int iHitGap, int iDocinfoGap, float fRelocFactor, float fWriteFactor );
-	virtual void				SetStar ( bool bValue ) { m_bEnableStar = bValue; }
-	virtual bool				GetStar () const { return m_bEnableStar; }
 	virtual void				SetPreopen ( bool bValue ) { m_bKeepFilesOpen = bValue; }
 	virtual void				SetWordlistPreload ( bool bValue ) { m_bPreloadWordlist = bValue; }
 	void						SetTokenizer ( ISphTokenizer * pTokenizer );
@@ -2095,6 +2094,9 @@ public:
 public:
 	DWORD						m_uAttrsStatus;			///< whether in-memory attrs are updated (compared to disk state)
 
+	bool						m_bEnableStar;			///< enable star-syntax
+	bool						m_bExpandKeywords;		///< enable automatic query-time keyword expansion (to "( word | =word | *word* )")
+
 protected:
 	ProgressCallback_t *		m_pProgress;
 	CSphSchema					m_tSchema;
@@ -2106,7 +2108,6 @@ protected:
 	float						m_fRelocFactor;
 	float						m_fWriteFactor;
 
-	bool						m_bEnableStar;			///< enable star-syntax
 	bool						m_bKeepFilesOpen;		///< keep files open to avoid race on seamless rotation
 	bool						m_bPreloadWordlist;		///< preload wordlists or keep them on disk
 

@@ -6373,6 +6373,8 @@ DWORD * sphArenaInit ( int iMaxBytes )
 
 CSphIndex::CSphIndex ( const char * sName )
 	: m_uAttrsStatus ( 0 )
+	, m_bEnableStar ( false )
+	, m_bExpandKeywords ( false )
 	, m_pProgress ( NULL )
 	, m_tSchema ( sName )
 	, m_sLastError ( "(no error message)" )
@@ -6381,7 +6383,6 @@ CSphIndex::CSphIndex ( const char * sName )
 	, m_iDocinfoGap ( 0 )
 	, m_fRelocFactor ( 0.0f )
 	, m_fWriteFactor ( 0.0f )
-	, m_bEnableStar ( false )
 	, m_bKeepFilesOpen ( false )
 	, m_bPreloadWordlist ( true )
 	, m_bStripperInited ( true )
@@ -12091,6 +12092,97 @@ void CSphIndex_VLN::CreateFilters ( CSphQuery * pQuery, const CSphSchema & tSche
 }
 
 
+static XQNode_t * CloneKeyword ( const XQNode_t * pNode )
+{
+	assert ( pNode );
+	assert ( pNode->IsPlain() );
+	assert ( pNode->m_dWords.GetLength()==1 );
+
+	XQNode_t * pRes = new XQNode_t;
+	pRes->m_bFieldSpec = pNode->m_bFieldSpec;
+	pRes->m_uFieldMask = pNode->m_uFieldMask;
+	pRes->m_iFieldMaxPos = pNode->m_iFieldMaxPos;
+	pRes->m_dWords = pNode->m_dWords;
+	return pRes;
+}
+
+
+static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tSettings )
+{
+	XQNode_t * pExpand = new XQNode_t;
+	pExpand->m_eOp = SPH_QUERY_OR;
+	pExpand->m_dChildren.Add ( pNode );
+
+	if ( tSettings.m_iMinInfixLen>0 )
+	{
+		XQNode_t * pInfix = CloneKeyword ( pNode );
+		pInfix->m_dWords[0].m_sWord.SetSprintf ( "*%s*", pNode->m_dWords[0].m_sWord.cstr() );
+		pInfix->m_dWords[0].m_uStarPosition = STAR_BOTH;
+		pExpand->m_dChildren.Add ( pInfix );
+	}
+
+	if ( tSettings.m_bIndexExactWords )
+	{
+		XQNode_t * pExact = CloneKeyword ( pNode );
+		pExact->m_dWords[0].m_sWord.SetSprintf ( "=%s", pNode->m_dWords[0].m_sWord.cstr() );
+		pExpand->m_dChildren.Add ( pExact );
+	}
+
+	return pExpand;
+}
+
+
+static XQNode_t * ExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & tSettings )
+{
+	// only if expansion makes sense at all
+	if ( tSettings.m_iMinInfixLen<=0 && !tSettings.m_bIndexExactWords )
+		return pNode;
+
+	// process children for composite nodes
+	if ( !pNode->IsPlain() )
+	{
+		ARRAY_FOREACH ( i, pNode->m_dChildren )
+			pNode->m_dChildren[i] = ExpandKeywords ( pNode->m_dChildren[i], tSettings );
+		return pNode;
+	}
+
+	// if that's a phrase/proximity node, create a very special, magic phrase/proximity node
+	if ( pNode->m_dWords.GetLength()>1 && pNode->m_iMaxDistance>=0 )
+	{
+		ARRAY_FOREACH ( i, pNode->m_dWords )
+		{
+			XQNode_t * pWord = new XQNode_t;
+			pWord->m_dWords.Add ( pNode->m_dWords[i] );
+			pNode->m_dChildren.Add ( ExpandKeyword ( pWord, tSettings ) );
+			pNode->m_dChildren.Last()->m_iAtomPos = pNode->m_dWords[i].m_iAtomPos;
+		}
+		pNode->m_dWords.Reset();
+		pNode->m_bVirtuallyPlain = true;
+		return pNode;
+	}
+
+	// skip empty plain nodes
+	if ( pNode->m_dWords.GetLength()<=0 )
+		return pNode;
+
+	// process keywords for plain nodes
+	assert ( pNode->IsPlain() );
+	assert ( pNode->m_dWords.GetLength()==1 );
+
+	XQKeyword_t & tKeyword = pNode->m_dWords[0];
+	if ( tKeyword.m_uStarPosition!=STAR_NONE
+		|| tKeyword.m_sWord.Begins("=")
+		|| tKeyword.m_sWord.Begins("*")
+		|| tKeyword.m_sWord.Ends("*") )
+	{
+		return pNode;
+	}
+
+	// do the expansion
+	return ExpandKeyword ( pNode, tSettings );
+}
+
+
 bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters )
 {
 	assert ( pQuery );
@@ -12175,9 +12267,22 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 	// bind weights
 	BindWeights ( pQuery );
 
+	// parse query
+	XQQuery_t tParsed;
+	if ( !sphParseExtendedQuery ( tParsed, sQuery, GetTokenizer(), GetSchema(), pDict ) )
+	{
+		m_sLastError = tParsed.m_sParseError;
+		return false;
+	}
+
+	// transform query if needed
+	// for now, just do keyword expansion based on settings
+	if ( m_bExpandKeywords )
+		tParsed.m_pRoot = ExpandKeywords ( tParsed.m_pRoot, m_tSettings );
+
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
-	CSphScopedPtr<ISphRanker> pRanker ( sphCreateRanker ( pQuery, sQuery, pResult, tTermSetup, m_sLastError ) );
+	CSphScopedPtr<ISphRanker> pRanker ( sphCreateRanker ( tParsed.m_pRoot, pQuery->m_eRanker, pResult, tTermSetup ) );
 	if ( !pRanker.Ptr() )
  		return false;
 

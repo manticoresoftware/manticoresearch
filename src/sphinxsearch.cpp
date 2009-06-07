@@ -64,6 +64,7 @@ struct ExtQword_t
 	int			m_iDocs;	///< matching documents
 	int			m_iHits;	///< matching hits
 	float		m_fIDF;		///< IDF value
+	int			m_iQueryPos;///< position in the query
 };
 
 
@@ -105,6 +106,8 @@ public:
 public:
 	static const int			MAX_DOCS = 512;
 	static const int			MAX_HITS = 512;
+
+	int							m_iAtomPos;		///< we now need it on this level for tricks like expanded keywords within phrases
 
 protected:
 	ExtDoc_t					m_dDocs[MAX_DOCS];
@@ -291,7 +294,7 @@ protected:
 class ExtPhrase_c : public ExtNode_i
 {
 public:
-								ExtPhrase_c ( CSphVector<ISphQword *> & dQwords, const XQNode_t & tNode, const ISphQwordSetup & tSetup );
+								ExtPhrase_c ( CSphVector<ExtNode_i *> & dQwords, DWORD uDupeMask, const XQNode_t & tNode, const ISphQwordSetup & tSetup );
 								~ExtPhrase_c ();
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
@@ -335,7 +338,7 @@ protected:
 class ExtProximity_c : public ExtPhrase_c
 {
 public:
-								ExtProximity_c ( CSphVector<ISphQword *> & dQwords, const XQNode_t & tNode, const ISphQwordSetup & tSetup );
+								ExtProximity_c ( CSphVector<ExtNode_i *> & dQwords, DWORD uDupeMask, const XQNode_t & tNode, const ISphQwordSetup & tSetup );
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 
 protected:
@@ -348,7 +351,7 @@ protected:
 class ExtQuorum_c : public ExtNode_i
 {
 public:
-								ExtQuorum_c ( CSphVector<ISphQword *> & dQwords, const XQNode_t & tNode, const ISphQwordSetup & tSetup );
+								ExtQuorum_c ( CSphVector<ExtNode_i*> & dQwords, DWORD uDupeMask, const XQNode_t & tNode, const ISphQwordSetup & tSetup );
 	virtual						~ExtQuorum_c ();
 
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
@@ -418,6 +421,7 @@ public:
 	CSphMatch					m_dMatches[ExtNode_i::MAX_DOCS];	///< exposed for caller
 	DWORD						m_uPayloadMask;						///< exposed for ranker state functors
 	int							m_iQwords;							///< exposed for ranker state functors
+	int							m_iMaxQuerypos;						///< exposed for ranker state functors
 
 protected:
 	int							m_iInlineRowitems;
@@ -480,7 +484,8 @@ static inline void CopyExtDoc ( ExtDoc_t & tDst, const ExtDoc_t & tSrc, CSphRowi
 }
 
 ExtNode_i::ExtNode_i ()
-	: m_iStride(0)
+	: m_iAtomPos(0)
+	, m_iStride(0)
 	, m_pDocinfo(NULL)
 {
 	m_dDocs[0].m_uDocid = DOCID_MAX;
@@ -504,14 +509,69 @@ static ISphQword * CreateQueryWord ( const XQKeyword_t & tWord, const ISphQwordS
 	else if ( tWord.m_bFieldStart )					pWord->m_iTermPos = TERM_POS_FIELD_START;
 	else if ( tWord.m_bFieldEnd )					pWord->m_iTermPos = TERM_POS_FIELD_END;
 	else											pWord->m_iTermPos = 0;
-	pWord->m_iAtomPos = tWord.m_iAtomPos;
 
+	pWord->m_iAtomPos = tWord.m_iAtomPos;
 	return pWord;
 }
+
+
+static bool KeywordsEqual ( const XQNode_t * pA, const XQNode_t * pB )
+{
+	// we expected a keyword here but got composite node; lets drill down until first real keyword
+	while ( pA->m_dChildren.GetLength() )
+		pA = pA->m_dChildren[0];
+
+	while ( pB->m_dChildren.GetLength() )
+		pB = pB->m_dChildren[0];
+
+	// actually check keywords
+	assert ( pA->m_dWords.GetLength() );
+	assert ( pB->m_dWords.GetLength() );
+	return pA->m_dWords[0].m_sWord==pB->m_dWords[0].m_sWord;
+}
+
 
 template < typename T >
 static ExtNode_i * CreatePhraseNode ( const XQNode_t * pQueryNode, const ISphQwordSetup & tSetup )
 {
+	///////////////////////////////////
+	// virtually plain (expanded) node
+	///////////////////////////////////
+
+	if ( pQueryNode->m_dChildren.GetLength() )
+	{
+		CSphVector<ExtNode_i *> dNodes;
+		CSphVector<DWORD> dWordids;
+		ARRAY_FOREACH ( i, pQueryNode->m_dChildren )
+		{
+			dNodes.Add ( ExtNode_i::Create ( pQueryNode->m_dChildren[i], tSetup ) );
+			dNodes.Last()->m_iAtomPos = pQueryNode->m_dChildren[i]->m_iAtomPos;
+			assert ( dNodes.Last()->m_iAtomPos>=0 );
+		}
+
+		// compute dupe mask (needed for quorum only)
+		// FIXME! this check will fail with wordforms and stuff; sorry, no wordforms vs expand vs quorum support for now!
+		DWORD uDupeMask = 0;
+		ARRAY_FOREACH ( i, pQueryNode->m_dChildren )
+		{
+			int iValue = 1;
+			for ( int j = i+1; j<pQueryNode->m_dChildren.GetLength(); j++ )
+				if ( KeywordsEqual ( pQueryNode->m_dChildren[i], pQueryNode->m_dChildren[j] ) )
+				{
+					iValue = 0;
+					break;
+				}
+				uDupeMask |= iValue << i;
+		}
+
+		ExtNode_i * pResult = new T ( dNodes, uDupeMask, *pQueryNode, tSetup );
+		return pResult; // FIXME! sorry, no hitless vs expand vs phrase support for now!
+	}
+
+	//////////////////////
+	// regular plain node
+	//////////////////////
+
 	ExtNode_i * pResult = NULL;
 	CSphVector<ISphQword *> dQwordsHit, dQwords;
 
@@ -520,26 +580,54 @@ static ExtNode_i * CreatePhraseNode ( const XQNode_t * pQueryNode, const ISphQwo
 	ARRAY_FOREACH ( i, dWords )
 	{
 		ISphQword * pWord = CreateQueryWord ( dWords[i], tSetup );
-		( pWord->m_bHasHitlist ? dQwordsHit : dQwords ).Add ( pWord );
+		if ( pWord->m_bHasHitlist )
+			dQwordsHit.Add ( pWord );
+		else
+			dQwordsHit.Add ( pWord );
 	}
 
 	// see if we can create the node
-	if ( dQwordsHit.GetLength() < 2 )
+	if ( dQwordsHit.GetLength()<2 )
 	{
-		ARRAY_FOREACH ( i, dQwords ) SafeDelete ( dQwords[i] );
-		ARRAY_FOREACH ( i, dQwordsHit ) SafeDelete ( dQwordsHit[i] );
+		ARRAY_FOREACH ( i, dQwords )
+			SafeDelete ( dQwords[i] );
+		ARRAY_FOREACH ( i, dQwordsHit )
+			SafeDelete ( dQwordsHit[i] );
 		if ( tSetup.m_pWarning )
-			tSetup.m_pWarning->SetSprintf ( "can't create phrase node, hitlist unavailable" );
+			tSetup.m_pWarning->SetSprintf ( "can't create phrase node, hitlists unavailable (hitlists=%d, nodes=%d)",
+				dQwordsHit.GetLength(), dWords.GetLength() );
 		return NULL;
-	}
-	else
+
+	} else
 	{
 		// at least two words have hitlists, creating phrase node
 		assert ( pQueryNode );
 		assert ( pQueryNode->IsPlain() );
 		assert ( pQueryNode->m_iMaxDistance>=0 );
 
-		pResult = new T ( dQwordsHit, *pQueryNode, tSetup );
+		// create nodes
+		CSphVector<ExtNode_i *> dNodes;
+		ARRAY_FOREACH ( i, dQwordsHit )
+		{
+			dNodes.Add ( ExtNode_i::Create ( dQwordsHit[i], pQueryNode->m_uFieldMask, pQueryNode->m_iFieldMaxPos, tSetup ) );
+			dNodes.Last()->m_iAtomPos = dQwordsHit[i]->m_iAtomPos;
+		}
+
+		// compute dupe mask (needed for quorum only)
+		DWORD uDupeMask = 0;
+		ARRAY_FOREACH ( i, dQwordsHit )
+		{
+			int iValue = 1;
+			for ( int j = i + 1; j < dQwordsHit.GetLength(); j++ )
+				if ( dQwordsHit[i]->m_iWordID == dQwordsHit[j]->m_iWordID )
+			{
+				iValue = 0;
+				break;
+			}
+			uDupeMask |= iValue << i;
+		}
+
+		pResult = new T ( dNodes, uDupeMask, *pQueryNode, tSetup );
 	}
 
 	// AND result with the words that had no hitlist
@@ -611,20 +699,29 @@ ExtNode_i * ExtNode_i::Create ( ISphQword * pQword, DWORD uFields, int iMaxField
 
 ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & tSetup )
 {
+	// empty node?
+	if ( pNode->IsEmpty() )
+		return NULL;
+
 	if ( pNode->IsPlain() )
 	{
-		const int iWords = pNode->m_dWords.GetLength();
-
-		if ( iWords<=0 )
-			return NULL; // empty reject node
+		const int iWords = pNode->m_bVirtuallyPlain
+			? pNode->m_dChildren.GetLength()
+			: pNode->m_dWords.GetLength();
 
 		if ( iWords==1 )
-			return Create ( pNode->m_dWords[0], pNode->m_uFieldMask, pNode->m_iFieldMaxPos, tSetup );
+		{
+			if ( pNode->m_bVirtuallyPlain )
+				return Create ( pNode->m_dChildren[0], tSetup );
+			else
+				return Create ( pNode->m_dWords[0], pNode->m_uFieldMask, pNode->m_iFieldMaxPos, tSetup );
+		}
 
 		assert ( pNode->m_iMaxDistance>=0 );
 		if ( pNode->m_iMaxDistance==0 )
 			return CreatePhraseNode<ExtPhrase_c> ( pNode, tSetup );
-		else if ( pNode->m_bQuorum )
+
+		if ( pNode->m_bQuorum )
 		{
 			if ( pNode->m_iMaxDistance>=pNode->m_dWords.GetLength() )
 			{
@@ -842,6 +939,7 @@ void ExtTerm_c::GetQwords ( ExtQwordsHash_t & hQwords )
 	tInfo.m_sDictWord = m_pQword->m_sDictWord;
 	tInfo.m_iDocs = m_pQword->m_iDocs;
 	tInfo.m_iHits = m_pQword->m_iHits;
+	tInfo.m_iQueryPos = m_pQword->m_iAtomPos;
 	hQwords.Add (  tInfo, m_pQword->m_sWord );
 }
 
@@ -1608,7 +1706,7 @@ const ExtHit_t * ExtAndNot_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t 
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtPhrase_c::ExtPhrase_c ( CSphVector<ISphQword *> & dQwords, const XQNode_t & tNode, const ISphQwordSetup & tSetup )
+ExtPhrase_c::ExtPhrase_c ( CSphVector<ExtNode_i *> & dQwords, DWORD, const XQNode_t & tNode, const ISphQwordSetup & tSetup )
 	: m_pDocs ( NULL )
 	, m_pHits ( NULL )
 	, m_pDoc ( NULL )
@@ -1634,10 +1732,10 @@ ExtPhrase_c::ExtPhrase_c ( CSphVector<ISphQword *> & dQwords, const XQNode_t & t
 	ARRAY_FOREACH ( i, m_dQposDelta )
 		m_dQposDelta[i] = -INT_MAX;
 
-	ExtNode_i * pCur = Create ( dQwords[0], m_uFields, tNode.m_iFieldMaxPos, tSetup );
+	ExtNode_i * pCur = dQwords[0];
 	for ( int i=1; i<(int)m_uWords; i++ )
 	{
-		pCur = new ExtAnd_c ( pCur, Create ( dQwords[i], m_uFields, tNode.m_iFieldMaxPos, tSetup ), tSetup );
+		pCur = new ExtAnd_c ( pCur, dQwords[i], tSetup );
 		m_dQposDelta [ dQwords[i-1]->m_iAtomPos - dQwords[0]->m_iAtomPos ] = dQwords[i]->m_iAtomPos - dQwords[i-1]->m_iAtomPos;
 	}
 	m_pNode = pCur;
@@ -2015,8 +2113,8 @@ void ExtPhrase_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtProximity_c::ExtProximity_c ( CSphVector<ISphQword *> & dQwords, const XQNode_t & tNode, const ISphQwordSetup & tSetup )
-	: ExtPhrase_c ( dQwords, tNode, tSetup )
+ExtProximity_c::ExtProximity_c ( CSphVector<ExtNode_i *> & dQwords, DWORD uDupeMask, const XQNode_t & tNode, const ISphQwordSetup & tSetup )
+	: ExtPhrase_c ( dQwords, uDupeMask, tNode, tSetup )
 	, m_iMaxDistance ( tNode.m_iMaxDistance )
 	, m_iNumWords ( dQwords.GetLength() )
 {
@@ -2203,7 +2301,7 @@ const ExtDoc_t * ExtProximity_c::GetDocsChunk ( SphDocID_t * pMaxID )
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtQuorum_c::ExtQuorum_c ( CSphVector<ISphQword *> & dQwords, const XQNode_t & tNode, const ISphQwordSetup & tSetup )
+ExtQuorum_c::ExtQuorum_c ( CSphVector<ExtNode_i*> & dQwords, DWORD uDupeMask, const XQNode_t & tNode, const ISphQwordSetup & )
 {
 	assert ( tNode.m_bQuorum );
 
@@ -2217,24 +2315,13 @@ ExtQuorum_c::ExtQuorum_c ( CSphVector<ISphQword *> & dQwords, const XQNode_t & t
 
 	ARRAY_FOREACH ( i, dQwords )
 	{
-		m_dChildren.Add ( new ExtTerm_c ( dQwords[i], tNode.m_uFieldMask, tSetup ) );
+		m_dChildren.Add ( dQwords[i] );
 		m_pCurDoc.Add ( NULL );
 		m_pCurHit.Add ( NULL );
 	}
 
-	m_uMask = 0;
+	m_uMask = uDupeMask;
 	m_uMaskEnd = dQwords.GetLength() - 1;
-	ARRAY_FOREACH ( i, dQwords )
-	{
-		int iValue = 1;
-		for ( int j = i + 1; j < dQwords.GetLength(); j++ )
-			if ( dQwords[i]->m_iWordID == dQwords[j]->m_iWordID )
-			{
-				iValue = 0;
-				break;
-			}
-		m_uMask |= iValue << i;
-	}
 }
 
 ExtQuorum_c::~ExtQuorum_c ()
@@ -2832,6 +2919,11 @@ void ExtRanker_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 {
 	m_iQwords = hQwords.GetLength ();
 
+	m_iMaxQuerypos = 0;
+	hQwords.IterateStart();
+	while ( hQwords.IterateNext() )
+		m_iMaxQuerypos = Max ( m_iMaxQuerypos, hQwords.IterateGet().m_iQueryPos );
+
 	if ( m_pRoot )
 		m_pRoot->SetQwordsIDF ( hQwords );
 }
@@ -3021,6 +3113,80 @@ struct RankerState_Proximity_fn
 	}
 };
 
+//////////////////////////////////////////////////////////////////////////
+
+// sph04, proximity + exact boost
+struct RankerState_ProximityBM25Exact_fn
+{
+	BYTE m_uLCS[SPH_MAX_FIELDS];
+	BYTE m_uCurLCS;
+	int m_iExpDelta;
+	DWORD m_uMinExpPos;
+	int m_iFields;
+	const int * m_pWeights;
+	DWORD m_uHeadHit;
+	DWORD m_uExactHit;
+	int m_iMaxQuerypos;
+
+	RankerState_ProximityBM25Exact_fn ( int iFields, const int * pWeights, ExtRanker_c * pRanker )
+	{
+		memset ( m_uLCS, 0, sizeof(m_uLCS) );
+		m_uCurLCS = 0;
+		m_iExpDelta = -INT_MAX;
+		m_uMinExpPos = 0;
+		m_iFields = iFields;
+		m_pWeights = pWeights;
+		m_uHeadHit = 0;
+		m_uExactHit = 0;
+		m_iMaxQuerypos = pRanker->m_iMaxQuerypos;
+	}
+
+	void Update ( const ExtHit_t * pHlist )
+	{
+		// upd LCS
+		DWORD uField = HIT2FIELD(pHlist->m_uHitpos);
+		int iDelta = HIT2LCS(pHlist->m_uHitpos) - pHlist->m_uQuerypos;
+		if ( iDelta==m_iExpDelta && pHlist->m_uHitpos > m_uMinExpPos )
+		{
+			m_uCurLCS = m_uCurLCS + BYTE(pHlist->m_uWeight);
+			if ( ( pHlist->m_uHitpos & HIT_FIELD_END ) && (int)pHlist->m_uQuerypos==m_iMaxQuerypos )
+				m_uExactHit |= ( 1UL<<HIT2FIELD(pHlist->m_uHitpos) );
+		} else
+		{
+			m_uCurLCS = BYTE(pHlist->m_uWeight);
+			if ( HIT2POS(pHlist->m_uHitpos)==1 )
+			{
+				m_uHeadHit |= ( 1UL<<HIT2FIELD(pHlist->m_uHitpos) );
+				if ( ( pHlist->m_uHitpos & HIT_FIELD_END ) && m_iMaxQuerypos==1 )
+					m_uExactHit |= ( 1UL<<HIT2FIELD(pHlist->m_uHitpos) );
+			}
+		}
+
+		if ( m_uCurLCS>m_uLCS[uField] )
+			m_uLCS[uField] = m_uCurLCS;
+
+		m_iExpDelta = iDelta + pHlist->m_uSpanlen - 1;
+		m_uMinExpPos = pHlist->m_uHitpos + 1;
+	}
+
+	DWORD Finalize ( DWORD uWeight )
+	{
+		m_uCurLCS = 0;
+		m_iExpDelta = -1;
+
+		DWORD uRank = 0;
+		for ( int i=0; i<m_iFields; i++ )
+		{
+			uRank += ( 4*m_uLCS[i] + 2*((m_uHeadHit>>i)&1) + ((m_uExactHit>>i)&1) )*m_pWeights[i];
+			m_uLCS[i] = 0;
+		}
+		m_uHeadHit = 0;
+		m_uExactHit = 0;
+
+		return uWeight + uRank*SPH_BM25_SCALE;
+	}
+};
+
 
 template < bool USE_BM25 >
 struct RankerState_ProximityPayload_fn : public RankerState_Proximity_fn<USE_BM25>
@@ -3193,22 +3359,13 @@ static void CheckExtendedQuery ( const XQNode_t * pNode, CSphQueryResult * pResu
 }
 
 
-ISphRanker * sphCreateRanker ( const CSphQuery * pQuery, const char * sQuery, CSphQueryResult * pResult, const ISphQwordSetup & tTermSetup, CSphString & sError )
+ISphRanker * sphCreateRanker ( const XQNode_t * pRoot, ESphRankMode eRankMode, CSphQueryResult * pResult, const ISphQwordSetup & tTermSetup )
 {
 	// shortcut
 	const CSphIndex * pIndex = tTermSetup.m_pIndex;
 
-	// parse query
-	XQQuery_t tParsed;
-	if ( !sphParseExtendedQuery ( tParsed, sQuery, pIndex->GetTokenizer(),
-		pIndex->GetSchema(), tTermSetup.m_pDict ) )
-	{
-		sError = tParsed.m_sParseError;
-		return false;
-	}
-
 	// check the keywords
-	CheckExtendedQuery ( tParsed.m_pRoot, pResult, pIndex->GetSettings(), pIndex->GetStar() );
+	CheckExtendedQuery ( pRoot, pResult, pIndex->GetSettings(), pIndex->m_bEnableStar );
 
 	// fill payload mask
 	DWORD uPayloadMask = 0;
@@ -3217,23 +3374,24 @@ ISphRanker * sphCreateRanker ( const CSphQuery * pQuery, const char * sQuery, CS
 
 	// setup eval-tree
 	ExtRanker_c * pRanker = NULL;
-	switch ( pQuery->m_eRanker )
+	switch ( eRankMode )
 	{
 		case SPH_RANK_PROXIMITY_BM25:
 			if ( uPayloadMask )
-				pRanker = new ExtRanker_T < RankerState_ProximityPayload_fn<true> > ( tParsed.m_pRoot, tTermSetup );
+				pRanker = new ExtRanker_T < RankerState_ProximityPayload_fn<true> > ( pRoot, tTermSetup );
 			else
-				pRanker = new ExtRanker_T < RankerState_Proximity_fn<true> > ( tParsed.m_pRoot, tTermSetup );
+				pRanker = new ExtRanker_T < RankerState_Proximity_fn<true> > ( pRoot, tTermSetup );
 			break;
-		case SPH_RANK_BM25:				pRanker = new ExtRanker_BM25_c ( tParsed.m_pRoot, tTermSetup ); break;
-		case SPH_RANK_NONE:				pRanker = new ExtRanker_None_c ( tParsed.m_pRoot, tTermSetup ); break;
-		case SPH_RANK_WORDCOUNT:		pRanker = new ExtRanker_T < RankerState_Wordcount_fn > ( tParsed.m_pRoot, tTermSetup ); break;
-		case SPH_RANK_PROXIMITY:		pRanker = new ExtRanker_T < RankerState_Proximity_fn<false> > ( tParsed.m_pRoot, tTermSetup ); break;
-		case SPH_RANK_MATCHANY:			pRanker = new ExtRanker_T < RankerState_MatchAny_fn > ( tParsed.m_pRoot, tTermSetup ); break;
-		case SPH_RANK_FIELDMASK:		pRanker = new ExtRanker_T < RankerState_Fieldmask_fn > ( tParsed.m_pRoot, tTermSetup ); break;
+		case SPH_RANK_BM25:				pRanker = new ExtRanker_BM25_c ( pRoot, tTermSetup ); break;
+		case SPH_RANK_NONE:				pRanker = new ExtRanker_None_c ( pRoot, tTermSetup ); break;
+		case SPH_RANK_WORDCOUNT:		pRanker = new ExtRanker_T < RankerState_Wordcount_fn > ( pRoot, tTermSetup ); break;
+		case SPH_RANK_PROXIMITY:		pRanker = new ExtRanker_T < RankerState_Proximity_fn<false> > ( pRoot, tTermSetup ); break;
+		case SPH_RANK_MATCHANY:			pRanker = new ExtRanker_T < RankerState_MatchAny_fn > ( pRoot, tTermSetup ); break;
+		case SPH_RANK_FIELDMASK:		pRanker = new ExtRanker_T < RankerState_Fieldmask_fn > ( pRoot, tTermSetup ); break;
+		case SPH_RANK_SPH04:			pRanker = new ExtRanker_T < RankerState_ProximityBM25Exact_fn > ( pRoot, tTermSetup ); break;
 		default:
-			pResult->m_sWarning.SetSprintf ( "unknown ranking mode %d; using default", (int)pQuery->m_eRanker );
-			pRanker = new ExtRanker_T < RankerState_Proximity_fn<true> > ( tParsed.m_pRoot, tTermSetup );
+			pResult->m_sWarning.SetSprintf ( "unknown ranking mode %d; using default", (int)eRankMode );
+			pRanker = new ExtRanker_T < RankerState_Proximity_fn<true> > ( pRoot, tTermSetup );
 			break;
 	}
 	assert ( pRanker );

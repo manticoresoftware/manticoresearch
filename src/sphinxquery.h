@@ -79,6 +79,8 @@ struct XQNode_t : public ISphNoncopyable
 	CSphVector<XQKeyword_t>	m_dWords;		///< query words (plain node)
 	int						m_iMaxDistance;	///< proximity distance or quorum length; 0 or less if not proximity/quorum node
 	bool					m_bQuorum;		///< quorum node flag
+	int						m_iAtomPos;		///< atom position override (currently only used within expanded nodes)
+	bool					m_bVirtuallyPlain;	///< "virtually plain" flag (currently only used by expanded nodes)
 
 public:
 	/// ctor
@@ -90,6 +92,8 @@ public:
 		, m_iFieldMaxPos ( 0 )
 		, m_iMaxDistance ( -1 )
 		, m_bQuorum ( false )
+		, m_iAtomPos ( -1 )
+		, m_bVirtuallyPlain ( false )
 	{}
 
 	/// dtor
@@ -109,8 +113,10 @@ public:
 	/// check if i'm plain
 	bool IsPlain () const
 	{
-		assert ( m_dWords.GetLength()==0 || m_dChildren.GetLength()==0 );
-		return m_dChildren.GetLength()==0;
+		// case 1: got words, no children (regular plain node, emitted by parser)
+		// case 2: got children, no words (regular non-plain node, emitted by parser)
+		// case 3: got flag
+		return ( m_dWords.GetLength() || m_bVirtuallyPlain );
 	}
 
 	void SetFieldSpec ( DWORD uMask, int iMaxPos ); ///< setup field limits

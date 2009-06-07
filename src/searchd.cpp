@@ -81,6 +81,7 @@ struct ServedIndex_t
 	bool				m_bPreopen;
 	bool				m_bOnDiskDict;
 	bool				m_bStar;
+	bool				m_bExpand;
 	bool				m_bToDelete;
 	bool				m_bOnlyNew;
 	int					m_iUpdateTag;
@@ -339,6 +340,7 @@ void ServedIndex_t::Reset ()
 	m_bPreopen	= false;
 	m_bOnDiskDict = false;
 	m_bStar		= false;
+	m_bExpand	= false;
 	m_bToDelete	= false;
 	m_bOnlyNew	= false;
 	m_iUpdateTag= 0;
@@ -4643,6 +4645,7 @@ bool SqlParser_t::AddOption ( SqlNode_t tIdent, SqlNode_t tValue )
 		else if ( sVal=="proximity" )	m_pQuery->m_eRanker = SPH_RANK_PROXIMITY;
 		else if ( sVal=="matchany" )	m_pQuery->m_eRanker = SPH_RANK_MATCHANY;
 		else if ( sVal=="fieldmask" )	m_pQuery->m_eRanker = SPH_RANK_FIELDMASK;
+		else if ( sVal=="sph04" )		m_pQuery->m_eRanker = SPH_RANK_SPH04;
 		else
 		{
 			m_pParseError->SetSprintf ( "unknown ranker '%s'", sVal.cstr() );
@@ -6174,7 +6177,7 @@ bool CheckIndex ( const CSphIndex * pIndex, CSphString & sError )
 {
 	const CSphIndexSettings & tSettings = pIndex->GetSettings ();
 
-	if ( ( tSettings.m_iMinPrefixLen>0 || tSettings.m_iMinInfixLen>0 ) && !pIndex->GetStar () )
+	if ( ( tSettings.m_iMinPrefixLen>0 || tSettings.m_iMinInfixLen>0 ) && !pIndex->m_bEnableStar )
 	{
 		CSphDict * pDict = pIndex->GetDictionary ();
 		assert ( pDict );
@@ -6204,7 +6207,8 @@ void SeamlessTryToForkPrereader ()
 	if ( !g_pPrereading )
 		g_pPrereading = sphCreateIndexPhrase ( NULL ); // FIXME! check if it's ok
 
-	g_pPrereading->SetStar ( tServed.m_bStar );
+	g_pPrereading->m_bEnableStar = tServed.m_bStar;
+	g_pPrereading->m_bExpandKeywords = tServed.m_bExpand;
 	g_pPrereading->SetPreopen ( tServed.m_bPreopen || g_bPreopenIndexes );
 	g_pPrereading->SetWordlistPreload ( !tServed.m_bOnDiskDict && !g_bOnDiskDicts );
 
@@ -6590,10 +6594,11 @@ void CheckPipes ()
 
 void ConfigureIndex ( ServedIndex_t & tIdx, const CSphConfigSection & hIndex )
 {
-	tIdx.m_bMlock =			( hIndex.GetInt ( "mlock", 0 )!=0 ) && !g_bOptConsole;
-	tIdx.m_bStar =			hIndex.GetInt ( "enable_star", 0 )	!= 0;
-	tIdx.m_bPreopen =		hIndex.GetInt ( "preopen", 0 )		!= 0;
-	tIdx.m_bOnDiskDict =	hIndex.GetInt ( "ondisk_dict", 0 )	!= 0;
+	tIdx.m_bMlock = ( hIndex.GetInt ( "mlock", 0 )!=0 ) && !g_bOptConsole;
+	tIdx.m_bStar = ( hIndex.GetInt ( "enable_star", 0 )!=0 );
+	tIdx.m_bExpand = ( hIndex.GetInt ( "expand_keywords", 0 )!=0 );
+	tIdx.m_bPreopen = ( hIndex.GetInt ( "preopen", 0 )!=0 );
+	tIdx.m_bOnDiskDict = ( hIndex.GetInt ( "ondisk_dict", 0 )!=0 );
 }
 
 
@@ -6830,7 +6835,8 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		// try to create index
 		CSphString sWarning;
 		tIdx.m_pIndex = sphCreateIndexPhrase ( hIndex["path"].cstr() );
-		tIdx.m_pIndex->SetStar ( tIdx.m_bStar );
+		tIdx.m_pIndex->m_bEnableStar = tIdx.m_bStar;
+		tIdx.m_pIndex->m_bExpandKeywords = tIdx.m_bExpand;
 		tIdx.m_pIndex->SetPreopen ( tIdx.m_bPreopen || g_bPreopenIndexes );
 		tIdx.m_pIndex->SetWordlistPreload ( !tIdx.m_bOnDiskDict && !g_bOnDiskDicts );
 		tIdx.m_bEnabled = false;

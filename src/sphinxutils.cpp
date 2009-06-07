@@ -208,6 +208,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "overshort_step",			0, NULL },
 	{ "stopword_step",			0, NULL },
 	{ "blend_chars",			0, NULL },
+	{ "expand_keywords",		0, NULL },
 	{ NULL,						0, NULL }
 };
 

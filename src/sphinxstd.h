@@ -1129,6 +1129,18 @@ public:
 		return strncmp ( m_sValue, sPrefix, strlen(sPrefix) )==0;
 	}
 
+	bool Ends ( const char * sPrefix ) const
+	{
+		if ( !m_sValue || !sPrefix )
+			return false;
+
+		int iVal = strlen ( m_sValue );
+		int iPrefix = strlen ( sPrefix );
+		if ( iVal<iPrefix )
+			return false;
+		return strncmp ( m_sValue+iVal-iPrefix, sPrefix, iPrefix )==0;
+	}
+
 	void Chop ()
 	{
 		if ( m_sValue )

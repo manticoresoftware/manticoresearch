@@ -415,8 +415,9 @@ public:
 	void						SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
 
 public:
-	CSphMatch					m_dMatches[ExtNode_i::MAX_DOCS];
-	DWORD						m_uPayloadMask;
+	CSphMatch					m_dMatches[ExtNode_i::MAX_DOCS];	///< exposed for caller
+	DWORD						m_uPayloadMask;						///< exposed for ranker state functors
+	int							m_iQwords;							///< exposed for ranker state functors
 
 protected:
 	int							m_iInlineRowitems;
@@ -424,7 +425,6 @@ protected:
 	const ExtDoc_t *			m_pDoclist;
 	const ExtHit_t *			m_pHitlist;
 	SphDocID_t					m_uMaxID;
-	DWORD						m_uQWords;
 	ExtDoc_t					m_dMyDocs[ExtNode_i::MAX_DOCS];		///< my local documents pool; for filtering
 	CSphMatch					m_dMyMatches[ExtNode_i::MAX_DOCS];	///< my local matches pool; for filtering
 	CSphMatch					m_tTestMatch;
@@ -2782,7 +2782,8 @@ ExtRanker_c::ExtRanker_c ( const XQNode_t * pRoot, const ISphQwordSetup & tSetup
 	m_pDoclist = NULL;
 	m_pHitlist = NULL;
 	m_uMaxID = 0;
-	m_uQWords = 0;
+	m_uPayloadMask = 0;
+	m_iQwords = 0;
 	m_pIndex = tSetup.m_pIndex;
 }
 
@@ -2829,7 +2830,7 @@ const ExtDoc_t * ExtRanker_c::GetFilteredDocs ()
 
 void ExtRanker_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 {
-	m_uQWords = hQwords.GetLength ();
+	m_iQwords = hQwords.GetLength ();
 
 	if ( m_pRoot )
 		m_pRoot->SetQwordsIDF ( hQwords );
@@ -2895,7 +2896,7 @@ int ExtRanker_None_c::GetMatches ( int, const int * )
 template < typename STATE >
 int ExtRanker_T<STATE>::GetMatches ( int iFields, const int * pWeights )
 {
-	STATE tState ( iFields, pWeights, m_uQWords, m_uPayloadMask );
+	STATE tState ( iFields, pWeights, this );
 
 	if ( !m_pRoot )
 		return 0;
@@ -2980,7 +2981,7 @@ struct RankerState_Proximity_fn
 	int m_iFields;
 	const int * m_pWeights;
 
-	RankerState_Proximity_fn ( int iFields, const int * pWeights, int, DWORD )
+	RankerState_Proximity_fn ( int iFields, const int * pWeights, ExtRanker_c * )
 	{
 		memset ( m_uLCS, 0, sizeof(m_uLCS) );
 		m_uCurLCS = 0;
@@ -3027,11 +3028,11 @@ struct RankerState_ProximityPayload_fn : public RankerState_Proximity_fn<USE_BM2
 	DWORD m_uPayloadRank;
 	DWORD m_uPayloadMask;
 
-	RankerState_ProximityPayload_fn<USE_BM25> ( int iFields, const int * pWeights, int iQwords, DWORD uPayloadMask )
-		: RankerState_Proximity_fn<USE_BM25> ( iFields, pWeights, iQwords, uPayloadMask )
+	RankerState_ProximityPayload_fn<USE_BM25> ( int iFields, const int * pWeights, ExtRanker_c * pRanker )
+		: RankerState_Proximity_fn<USE_BM25> ( iFields, pWeights, pRanker )
 	{
 		m_uPayloadRank = 0;
-		m_uPayloadMask = uPayloadMask;
+		m_uPayloadMask = pRanker->m_uPayloadMask;
 	}
 
 	void Update ( const ExtHit_t * pHlist )
@@ -3080,12 +3081,12 @@ struct RankerState_MatchAny_fn : public RankerState_Proximity_fn<false>
 	int m_iPhraseK;
 	BYTE m_uMatchMask[SPH_MAX_FIELDS];
 
-	RankerState_MatchAny_fn ( int iFields, const int * pWeights, int iQwords, DWORD uPayloadMask )
-		: RankerState_Proximity_fn<false> ( iFields, pWeights, iQwords, uPayloadMask )
+	RankerState_MatchAny_fn ( int iFields, const int * pWeights, ExtRanker_c * pRanker )
+		: RankerState_Proximity_fn<false> ( iFields, pWeights, pRanker )
 	{
 		m_iPhraseK = 0;
 		for ( int i=0; i<iFields; i++ )
-			m_iPhraseK += pWeights[i] * iQwords;
+			m_iPhraseK += pWeights[i] * pRanker->m_iQwords;
 
 		memset ( m_uMatchMask, 0, sizeof(m_uMatchMask) );
 	}
@@ -3122,7 +3123,7 @@ struct RankerState_Wordcount_fn
 	int m_iFields;
 	const int * m_pWeights;
 
-	RankerState_Wordcount_fn ( int iFields, const int * pWeights, int, DWORD )
+	RankerState_Wordcount_fn ( int iFields, const int * pWeights, ExtRanker_c * )
 		: m_uRank ( 0 )
 		, m_iFields ( iFields )
 		, m_pWeights ( pWeights )
@@ -3145,7 +3146,7 @@ struct RankerState_Fieldmask_fn
 {
 	DWORD m_uRank;
 
-	RankerState_Fieldmask_fn ( int, const int *, int, DWORD )
+	RankerState_Fieldmask_fn ( int, const int *, ExtRanker_c * )
 		: m_uRank ( 0 )
 	{}
 

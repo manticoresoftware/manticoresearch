@@ -144,7 +144,7 @@ protected:
 };
 
 // find string sFind in first iLimit characters of sBuffer
-static const char * FindString ( const char * sBuffer, const char * sFind, int iLimit )
+static BYTE * FindString ( BYTE * sBuffer, BYTE * sFind, int iLimit )
 {
 	assert ( iLimit > 0 );
 	assert ( sBuffer );
@@ -157,8 +157,8 @@ static const char * FindString ( const char * sBuffer, const char * sFind, int i
 			if ( !*++sBuffer || !--iLimit ) return NULL;
 
 		int iSubLimit = iLimit;
-		const char * sSubFind = sFind;
-		const char * sSubBuffer = sBuffer;
+		BYTE * sSubFind = sFind;
+		BYTE * sSubBuffer = sBuffer;
 		while ( *sSubFind && *sSubBuffer && *sSubFind == *sSubBuffer++ )
 		{
 			sSubFind++;
@@ -179,8 +179,9 @@ class ISnippetsQword: public ISphQword
 public:
 	CSphString *							m_sBuffer;
 	CSphVector<ExcerptGen_c::Token_t> *		m_dTokens;
-
-	// word information, filled by setup
+	ISphTokenizer *							m_pTokenizer;
+	
+	// word information, filled during query word setup
 	int			m_iWordLength;
 	int			m_iLastIndex;
 	DWORD		m_uWordMask;
@@ -218,6 +219,30 @@ public:
 	}
 };
 
+/// exact match
+
+struct SnippetsQword_Exact_c: public ISnippetsQword
+{
+	virtual DWORD GetNextHit ()
+	{
+		while ( m_iToken < m_dTokens->GetLength() )
+		{
+			Token_t & tToken = (*m_dTokens)[m_iToken++];
+			if ( tToken.m_eType != ExcerptGen_c::TOK_WORD )
+				continue;
+
+			if ( tToken.m_iWordID == m_iWordID )
+			{
+				tToken.m_uWords  |= m_uWordMask;
+				return HIT_PACK(0, tToken.m_uPosition) | ( m_iToken - 1 == m_iLastIndex ? HIT_FIELD_END : 0 );
+			}
+		}
+		return 0;
+	}
+};
+
+/// partial matches
+
 template < typename COMPARE > struct SnippetsQword_c: public ISnippetsQword
 {
 	virtual DWORD GetNextHit ()
@@ -228,7 +253,8 @@ template < typename COMPARE > struct SnippetsQword_c: public ISnippetsQword
 			if ( tToken.m_eType != ExcerptGen_c::TOK_WORD )
 				continue;
 
-			const char * sToken =  &m_sBuffer->cstr() [ tToken.m_iStart ];
+			m_pTokenizer->SetBuffer ( (BYTE *) &m_sBuffer->cstr() [ tToken.m_iStart ], tToken.m_iLengthBytes );
+			BYTE * sToken = m_pTokenizer->GetToken(); // OPTIMIZE? token can be memoized and shared between qwords
 			if ( (*(COMPARE *)this).Match ( tToken, sToken ) )
 			{
 				tToken.m_uWords  |= m_uWordMask;
@@ -239,19 +265,9 @@ template < typename COMPARE > struct SnippetsQword_c: public ISnippetsQword
 	}
 };
 
-///
-
-struct SnippetsQword_Exact_c: public SnippetsQword_c<SnippetsQword_Exact_c>
-{
-	inline bool Match ( const Token_t & tToken, const char * )
-	{
-		return tToken.m_iWordID == m_iWordID;
-	}
-};
-
 struct SnippetsQword_StarFront_c: public SnippetsQword_c<SnippetsQword_StarFront_c>
 {
-	inline bool Match ( const Token_t & tToken, const char * sToken )
+	inline bool Match ( const Token_t & tToken, BYTE * sToken )
 	{
 		int iOffset = tToken.m_iLengthBytes - m_iWordLength;
 		return iOffset >= 0 &&
@@ -261,7 +277,7 @@ struct SnippetsQword_StarFront_c: public SnippetsQword_c<SnippetsQword_StarFront
 
 struct SnippetsQword_StarBack_c: public SnippetsQword_c<SnippetsQword_StarBack_c>
 {
-	inline bool Match ( const Token_t & tToken, const char * sToken )
+	inline bool Match ( const Token_t & tToken, BYTE * sToken )
 	{
 		return ( tToken.m_iLengthBytes >= m_iWordLength ) &&
 			memcmp( m_sDictWord.cstr(), sToken, m_iWordLength ) == 0;
@@ -270,9 +286,9 @@ struct SnippetsQword_StarBack_c: public SnippetsQword_c<SnippetsQword_StarBack_c
 
 struct SnippetsQword_StarBoth_c: public SnippetsQword_c<SnippetsQword_StarBoth_c>
 {
-	inline bool Match ( const Token_t & tToken, const char * sToken )
+	inline bool Match ( const Token_t & tToken, BYTE * sToken )
 	{
-		return FindString ( sToken, m_sDictWord.cstr(), tToken.m_iLengthBytes ) != NULL;
+		return FindString ( sToken, (BYTE *)m_sDictWord.cstr(), tToken.m_iLengthBytes ) != NULL;
 	}
 };
 
@@ -280,13 +296,13 @@ struct SnippetsQword_StarBoth_c: public SnippetsQword_c<SnippetsQword_StarBoth_c
 
 class SnippetsQwordSetup: public ISphQwordSetup
 {
-	ExcerptGen_c *	m_pGenerator;
-	bool			m_bUtf8;
+	ExcerptGen_c *		m_pGenerator;
+	ISphTokenizer *		m_pTokenizer;
 
 public:
-	SnippetsQwordSetup ( ExcerptGen_c * pGenerator, bool bUtf8 )
+	SnippetsQwordSetup ( ExcerptGen_c * pGenerator, ISphTokenizer * pTokenizer )
 		: m_pGenerator ( pGenerator )
-		, m_bUtf8 ( bUtf8 )
+		, m_pTokenizer ( pTokenizer )
 	{}
 
 	virtual ISphQword *		QwordSpawn ( const XQKeyword_t & tWord ) const;
@@ -316,6 +332,7 @@ bool SnippetsQwordSetup::QwordSetup ( ISphQword * pQword ) const
 	pWord->m_iWordLength = strlen ( pWord->m_sDictWord.cstr() );
 	pWord->m_dTokens = &(m_pGenerator->m_dTokens);
 	pWord->m_sBuffer = &(m_pGenerator->m_sBuffer);
+	pWord->m_pTokenizer = m_pTokenizer;
 	
 	pWord->m_iDocs = 1;
 	pWord->m_iHits = 1;
@@ -323,7 +340,7 @@ bool SnippetsQwordSetup::QwordSetup ( ISphQword * pQword ) const
 
 	// add dummy word, used for passage weighting
 	const char * sWord = pWord->m_sDictWord.cstr();
-	const int iLength = m_bUtf8 ? sphUTF8Len ( sWord ) : strlen ( sWord );
+	const int iLength = m_pTokenizer->IsUtf8() ? sphUTF8Len ( sWord ) : strlen ( sWord );
 	m_pGenerator->m_dWords.Add().m_iLengthCP = iLength;
 
 	return true;
@@ -1189,7 +1206,7 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 	tQuery.m_pRoot->ClearFieldMask();
 	
 	ExcerptGen_c tGenerator;
-	SnippetsQwordSetup tSetup ( &tGenerator, pTokenizer->IsUtf8() );
+	SnippetsQwordSetup tSetup ( &tGenerator, pTokenizer );
 	CSphString sWarning;
 
 	tGenerator.TokenizeDocument ( tOptions, pDict, pTokenizer, false );

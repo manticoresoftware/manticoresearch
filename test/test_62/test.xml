@@ -76,6 +76,12 @@ $queries = array
 	'@text[3] sphinx',
 	'@text[3] documents',
 	'@text[7] documents',
+
+	// case shouldn't matter
+	'SPHINX',
+	'SPH*',
+	'*PHI*',
+	'*INX',
 );
 
 $results = array();

@@ -27,7 +27,7 @@ define ( "SEARCHD_COMMAND_STATUS",	5 );
 define ( "SEARCHD_COMMAND_QUERY",	6 );
 
 /// current client-side command implementation versions
-define ( "VER_COMMAND_SEARCH",		0x116 );
+define ( "VER_COMMAND_SEARCH",		0x117 );
 define ( "VER_COMMAND_EXCERPT",		0x100 );
 define ( "VER_COMMAND_UPDATE",		0x102 );
 define ( "VER_COMMAND_KEYWORDS",	0x100 );
@@ -80,6 +80,7 @@ define ( "SPH_ATTR_ORDINAL",		3 );
 define ( "SPH_ATTR_BOOL",			4 );
 define ( "SPH_ATTR_FLOAT",			5 );
 define ( "SPH_ATTR_BIGINT",			6 );
+define ( "SPH_ATTR_STRING",			7 );
 define ( "SPH_ATTR_MULTI",			0x40000000 );
 
 /// known grouping functions
@@ -1219,6 +1220,10 @@ class SphinxClient
 							list(,$val) = unpack ( "N*", substr ( $response, $p, 4 ) ); $p += 4;
 							$attrvals[$attr][] = sprintf ( "%u", $val );
 						}
+					} else if ( $type==SPH_ATTR_STRING )
+					{
+						$attrvals[$attr] = substr ( $response, $p, $val );
+						$p += $val;						
 					} else
 					{
 						$attrvals[$attr] = sprintf ( "%u", $val );

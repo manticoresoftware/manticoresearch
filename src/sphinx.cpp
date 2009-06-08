@@ -1519,7 +1519,7 @@ private:
 	static const int			DEFAULT_WRITE_BUFFER	= 1048576;	///< deafult write buffer size
 
 	static const DWORD			INDEX_MAGIC_HEADER		= 0x58485053;	///< my magic 'SPHX' header
-	static const DWORD			INDEX_FORMAT_VERSION	= 16;			///< my format version
+	static const DWORD			INDEX_FORMAT_VERSION	= 17;			///< my format version
 
 private:
 	// common stuff
@@ -1578,6 +1578,7 @@ private:
 	CSphSharedBuffer<DWORD>		m_pDocinfoIndex;		///< docinfo "index", to accelerate filtering during full-scan (2x rows for each block, and 2x rows for the whole index, 1+m_uDocinfoIndex entries)
 
 	CSphSharedBuffer<DWORD>		m_pMva;					///< my multi-valued attrs cache
+	CSphSharedBuffer<BYTE>		m_pStrings;				///< my in-RAM strings cache
 
 	SphOffset_t					m_iCheckpointsPos;		///< wordlist checkpoints offset
 	CSphSharedBuffer<BYTE>		m_pWordlist;			///< my wordlist cache
@@ -5464,6 +5465,7 @@ CSphQueryResult::CSphQueryResult ()
 	m_iQueryTime = 0;
 	m_iTotalMatches = 0;
 	m_pMva = NULL;
+	m_pStrings = NULL;
 	m_iOffset = 0;
 	m_iCount = 0;
 	m_iSuccesses = 0;
@@ -8245,13 +8247,22 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	// killlist storage
 	CSphVector <SphAttr_t> dKillList;
 
-	// ordinals storage
+	// ordinals and strings storage
 	CSphVector<int> dOrdinalAttrs;
-	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN )
-		for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
-			if ( m_tSchema.GetAttr(i).m_eAttrType==SPH_ATTR_ORDINAL )
+	CSphVector<int> dStringAttrs;
+
+	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
+	{
+		DWORD eAttrType = m_tSchema.GetAttr(i).m_eAttrType;
+
+		if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN )
+			if ( eAttrType==SPH_ATTR_ORDINAL )
 				dOrdinalAttrs.Add ( i );
 
+		if ( eAttrType==SPH_ATTR_STRING )
+			dStringAttrs.Add ( i );
+	}
+	
 	// adjust memory requirements
 	// ensure there's enough memory to hold 1M hits and 64K docinfos
 	// alloc 1/16 of memory (but not less than 64K entries) for docinfos
@@ -8324,10 +8335,15 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	CSphAutofile fdDocinfos ( GetIndexFileName ( m_bInplaceSettings ? "spa" : "tmp2" ), SPH_O_NEW, m_sLastError, !m_bInplaceSettings );
 	CSphAutofile fdTmpFieldMVAs ( GetIndexFileName("tmp7"), SPH_O_NEW, m_sLastError, true );
 	CSphWriter tOrdWriter;
+	CSphWriter tStrWriter;
 
 	CSphString sRawOrdinalsFile = GetIndexFileName("tmp4");
 	if ( bHaveOrdinals && !tOrdWriter.OpenFile ( sRawOrdinalsFile.cstr (), m_sLastError ) )
 		return 0;
+
+	if ( !tStrWriter.OpenFile ( GetIndexFileName("sps"), m_sLastError ) )
+		return 0;
+	tStrWriter.PutByte ( 0 ); // dummy byte, to reserve magic zero offset
 
 	if ( fdLock.GetFD()<0 || fdHits.GetFD()<0 || fdDocinfos.GetFD()<0 || fdTmpFieldMVAs.GetFD ()<0 )
 		return 0;
@@ -8533,6 +8549,38 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 						dOrdBlockSize [i].Add ( uSize );
 						dCol.Resize ( 0 );
 					}
+				}
+			}
+
+			// store strings
+			ARRAY_FOREACH ( i, dStringAttrs )
+			{
+				// FIXME! optimize locators etc?
+				// FIXME! support binary strings w/embedded zeroes?
+				// get data, calc length
+				const char * sData = pSource->m_dStrAttrs[dStringAttrs[i]].cstr();
+				int iLen = sData ? strlen ( sData ) : 0;
+
+				if ( iLen )
+				{
+					// calc offset, do sanity checks
+					SphOffset_t uOff = tStrWriter.GetPos();
+					if ( uint64_t(uOff)>>32 )
+					{
+						m_sLastError.SetSprintf ( "too many string attributes (current index format allows up to 4 GB)" );
+						return 0;
+					}
+					pSource->m_tDocInfo.SetAttr ( m_tSchema.GetAttr(dStringAttrs[i]).m_tLocator, DWORD(uOff) );
+
+					// pack length, emit it, emit data
+					BYTE dPackedLen[4];
+					int iLenLen = sphPackStrlen ( dPackedLen, iLen );
+					tStrWriter.PutBytes ( &dPackedLen, iLenLen );
+					tStrWriter.PutBytes ( sData, iLen );
+				} else
+				{
+					// no data
+					pSource->m_tDocInfo.SetAttr ( m_tSchema.GetAttr(dStringAttrs[i]).m_tLocator, 0 );
 				}
 			}
 
@@ -9436,6 +9484,13 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 	{
 		m_sLastError.SetSprintf ( "docinfo storage on non-empty indexes  must be the same (dst docinfo %d, docs %d, src docinfo %d, docs %d",
 			m_tSettings.m_eDocinfo, m_tStats.m_iTotalDocuments, pSrcIndex->m_tSettings.m_eDocinfo, pSrcIndex->m_tStats.m_iTotalDocuments );
+		return false;
+	}
+
+	for ( int i=0; i<pSrcSchema->GetAttrsCount(); i++ )
+		if ( pSrcSchema->GetAttr(i).m_eAttrType==SPH_ATTR_STRING )
+	{
+		m_sLastError.SetSprintf ( "merging of string attributes not (yet) supported (attr=%s)", pSrcSchema->GetAttr(i).m_sName.cstr() );
 		return false;
 	}
 
@@ -10812,6 +10867,7 @@ bool CSphIndex_VLN::Mlock ()
 		bRes &= m_pWordlist.Mlock ( "wordlist", m_sLastError );
 
 	bRes &= m_pMva.Mlock ( "mva", m_sLastError );
+	bRes &= m_pStrings.Mlock ( "strings", m_sLastError );
 	return bRes;
 }
 
@@ -10828,6 +10884,7 @@ void CSphIndex_VLN::Dealloc ()
 	m_pDocinfoHash.Reset ();
 	m_pWordlist.Reset ();
 	m_pMva.Reset ();
+	m_pStrings.Reset ();
 	m_pDocinfoIndex.Reset ();
 	m_pKillList.Reset ();
 	m_dWordlistCheckpoints.Reset ();
@@ -11139,6 +11196,7 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 	m_pDocinfo.SetMlock ( bMlock );
 	m_pWordlist.SetMlock ( bMlock );
 	m_pMva.SetMlock ( bMlock );
+	m_pStrings.SetMlock ( bMlock );
 	m_pKillList.SetMlock ( bMlock );
 
 	// preload schema
@@ -11219,6 +11277,26 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 			// prealloc
 			if ( iMvaSize>0 )
 				if ( !m_pMva.Alloc ( DWORD(iMvaSize/sizeof(DWORD)), m_sLastError, sWarning ) )
+					return NULL;
+		}
+
+		///////////////
+		// string data
+		///////////////
+
+		if ( m_uVersion>=17 )
+		{
+			CSphAutofile fdStrings ( GetIndexFileName("sps"), SPH_O_READ, m_sLastError );
+			if ( fdStrings.GetFD()<0 )
+				return NULL;
+
+			SphOffset_t iStringsSize = fdStrings.GetSize ( 0, true, m_sLastError );
+			if ( iStringsSize<0 )
+				return NULL;
+
+			// prealloc
+			if ( iStringsSize>0 )
+				if ( !m_pStrings.Alloc ( DWORD(iStringsSize), m_sLastError, sWarning ) )
 					return NULL;
 		}
 	}
@@ -11387,6 +11465,9 @@ bool CSphIndex_VLN::Preread ()
 		return false;
 
 	if ( !PrereadSharedBuffer ( m_pMva, "spm" ) )
+		return false;
+
+	if ( !PrereadSharedBuffer ( m_pStrings, "sps" ) )
 		return false;
 
 	if ( !PrereadSharedBuffer ( m_pKillList, "spk" ) )
@@ -12393,8 +12474,9 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 				CopyDocinfo ( *pCur, FindDocinfo ( pCur->m_iDocID ) );
 		}
 
-		// mva ptr
+		// mva and string pools ptrs
 		pResult->m_pMva = m_pMva.GetWritePtr();
+		pResult->m_pStrings = m_pStrings.GetWritePtr();
 	}
 
 	PROFILER_DONE ();
@@ -15350,6 +15432,7 @@ BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 		switch ( tAttr.m_eAttrType )
 		{
 			case SPH_ATTR_ORDINAL:
+			case SPH_ATTR_STRING:
 				// memorize string, fixup NULLs
 				m_dStrAttrs[i] = SqlColumn ( tAttr.m_iIndex );
 				if ( !m_dStrAttrs[i].cstr() )

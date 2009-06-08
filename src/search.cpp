@@ -358,6 +358,13 @@ int main ( int argc, char ** argv )
 						case SPH_ATTR_TIMESTAMP:	fprintf ( stdout, "%s", myctime ( (DWORD)tMatch.GetAttr ( tAttr.m_tLocator ) ) ); break;
 						case SPH_ATTR_FLOAT:		fprintf ( stdout, "%f", tMatch.GetAttrFloat ( tAttr.m_tLocator ) ); break;
 						case SPH_ATTR_BIGINT:		fprintf ( stdout, "%"PRIu64, tMatch.GetAttr ( tAttr.m_tLocator ) ); break;
+						case SPH_ATTR_STRING:
+							{
+								const BYTE * pStr;
+								int iLen = sphUnpackStr ( pResult->m_pStrings + tMatch.GetAttr ( tAttr.m_tLocator ), &pStr );
+								fwrite ( pStr, 1, iLen, stdout );
+								break;
+							}
 						default:					fprintf ( stdout, "(unknown-type-%d)", tAttr.m_eAttrType );
 					}
 				}

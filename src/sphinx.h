@@ -660,6 +660,52 @@ inline void sphSetRowAttr ( CSphRowitem * pRow, const CSphAttrLocator & tLoc, Sp
 }
 
 
+/// pack length into row storage (22 bits max)
+/// returns number of bytes used
+inline int sphPackStrlen ( BYTE * pRow, int iLen )
+{
+	assert ( iLen>=0 && iLen<0x400000 );
+	if ( iLen<0x80 )
+	{
+		pRow[0] = BYTE(iLen);
+		return 1;
+	} else if ( iLen<0x4000 )
+	{
+		pRow[0] = BYTE( ( iLen>>8 ) | 0x80 );
+		pRow[1] = BYTE( iLen );
+		return 2;
+	} else
+	{
+		pRow[0] = BYTE( ( iLen>>16 ) | 0xc0 );
+		pRow[1] = BYTE( iLen>>8 );
+		pRow[2] = BYTE( iLen );
+		return 3;
+	}
+}
+
+
+/// unpack string attr from row storage (22 bits length max)
+/// returns unpacked length; stores pointer to string data if required
+inline int sphUnpackStr ( const BYTE * pRow, const BYTE ** ppStr )
+{
+	int v = *pRow++;
+	if ( v & 0x80 )
+	{
+		if ( v & 0x40 )
+		{
+			v = ( int( v & 0x3f )<<16 ) + ( int( *pRow++ )<<8 );
+			v += ( *pRow++ ); // MUST be separate statement; cf. sequence point
+		} else
+		{
+			v = ( int( v & 0x3f )<<8 ) + ( *pRow++ );
+		}
+	}
+	if ( ppStr )
+		*ppStr = pRow;
+	return v;
+}
+
+
 /// document info
 struct CSphDocInfo
 {
@@ -766,6 +812,7 @@ enum
 	SPH_ATTR_BOOL		= 4,			///< this attr is a boolean bit field
 	SPH_ATTR_FLOAT		= 5,			///< floating point number (IEEE 32-bit)
 	SPH_ATTR_BIGINT		= 6,			///< signed 64-bit integer
+	SPH_ATTR_STRING		= 7,			///< string (binary; in-memory)
 
 	SPH_ATTR_MULTI		= 0x40000000UL	///< this attr has multiple values (0 or more)
 };
@@ -1806,6 +1853,7 @@ public:
 
 	CSphSchema				m_tSchema;			///< result schema
 	const DWORD *			m_pMva;				///< pointer to MVA storage
+	const BYTE *			m_pStrings;			///< pointer to strings storage
 
 	int						m_iOffset;			///< requested offset into matches array
 	int						m_iCount;			///< count which will be actually served (computed from total, offset and limit)

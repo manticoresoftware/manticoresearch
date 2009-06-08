@@ -1574,7 +1574,14 @@ static ESortClauseParseResult sphParseSortClause ( const char * sClause, const C
 				return SORT_CLAUSE_ERROR;
 			}
 
-			tState.m_iAttr[iField] = ( tSchema.GetAttr(iAttr).m_eAttrType==SPH_ATTR_FLOAT ) ? SPH_VATTR_FLOAT : iAttr;
+			DWORD eType = tSchema.GetAttr(iAttr).m_eAttrType;
+			if ( eType==SPH_ATTR_STRING )
+			{
+				sError.SetSprintf ( "sort-by on string attribute '%s' not (yet) supported", pTok );
+				return SORT_CLAUSE_ERROR;
+			}
+
+			tState.m_iAttr[iField] = ( eType==SPH_ATTR_FLOAT ) ? SPH_VATTR_FLOAT : iAttr;
 			tState.m_tLocator[iField] = tSchema.GetAttr(iAttr).m_tLocator;
 		}
 	}
@@ -1784,6 +1791,14 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const CSphSchema & 
 		return false;
 	}
 
+	// check type
+	DWORD eType = tSchema.GetAttr(iGroupBy).m_eAttrType;
+	if ( eType==SPH_ATTR_STRING )
+	{
+		sError.SetSprintf ( "group-by on string attribute '%s' not (yet) supported", pQuery->m_sGroupBy.cstr() );
+		return false;
+	}
+
 	CSphAttrLocator tLoc = tSchema.GetAttr(iGroupBy).m_tLocator;
 	switch ( pQuery->m_eGroupFunc )
 	{
@@ -1797,7 +1812,7 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const CSphSchema & 
 			return false;
 	}
 
-	tSettings.m_bMVA = ( tSchema.GetAttr(iGroupBy).m_eAttrType & SPH_ATTR_MULTI )!=0;
+	tSettings.m_bMVA = ( eType & SPH_ATTR_MULTI )!=0;
 
 	// setup distinct attr
 	if ( !pQuery->m_sGroupDistinct.IsEmpty() )

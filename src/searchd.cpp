@@ -218,7 +218,19 @@ struct  PipeInfo_t
 
 static CSphVector<PipeInfo_t>	g_dPipes;		///< currently open read-pipes to children processes
 
-static CSphVector<DWORD>		g_dMvaStorage;	///< per-query (!) pool to store MVAs received from remote agents
+static CSphVector<DWORD>		g_dMvaStorage;		///< per-query (!) pool to store MVAs received from remote agents
+static CSphVector<BYTE>			g_dStringsStorage;	///< per-query (!) pool to store strings received from remote agents
+
+struct PoolPtrs_t
+{
+	const DWORD *	m_pMva;
+	const BYTE *	m_pStrings;
+
+	PoolPtrs_t ()
+		: m_pMva ( NULL )
+		, m_pStrings ( NULL )
+	{}
+};
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -240,7 +252,7 @@ enum SearchdCommand_e
 /// known command versions
 enum
 {
-	VER_COMMAND_SEARCH		= 0x116,
+	VER_COMMAND_SEARCH		= 0x117,
 	VER_COMMAND_EXCERPT		= 0x100,
 	VER_COMMAND_UPDATE		= 0x102,
 	VER_COMMAND_KEYWORDS	= 0x100,
@@ -2744,6 +2756,19 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, Agent_t & tAgent
 					{
 						tMatch.SetAttr ( tAttr.m_tLocator, tReq.GetUint64() );
 					}
+					else if ( tAttr.m_eAttrType == SPH_ATTR_STRING )
+					{
+						CSphString sValue = tReq.GetString();
+						int iLen = strlen ( sValue.cstr() );
+
+						int iOff = g_dStringsStorage.GetLength(); 
+						tMatch.SetAttr ( tAttr.m_tLocator, iOff );
+
+						g_dStringsStorage.Resize ( iOff+3+iLen );
+						BYTE * pBuf = &g_dStringsStorage[iOff];
+						pBuf += sphPackStrlen ( pBuf, iLen );
+						memcpy ( pBuf, sValue.cstr(), iLen );
+					}
 					else
 					{
 						tMatch.SetAttr ( tAttr.m_tLocator, tReq.GetDword() );
@@ -3349,7 +3374,7 @@ void LogQuery ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 }
 
 
-int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<const DWORD *> & dTag2MVA )
+int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<PoolPtrs_t> & dTag2Pools )
 {
 	int iRespLen = 0;
 
@@ -3406,13 +3431,16 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 	ARRAY_FOREACH ( i, pRes->m_dWordStats ) // per-word stats
 		iRespLen += 12 + strlen ( pRes->m_dWordStats[i].m_sWord.cstr() ); // wordlen, word, docs, hits
 
-	// MVA values
+	// MVA and string values
 	CSphVector<CSphAttrLocator> dMvaItems;
+	CSphVector<CSphAttrLocator> dStringItems;
 	for ( int i=0; i<pRes->m_tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tCol = pRes->m_tSchema.GetAttr(i);
 		if ( tCol.m_eAttrType & SPH_ATTR_MULTI )
 			dMvaItems.Add ( tCol.m_tLocator );
+		if ( tCol.m_eAttrType==SPH_ATTR_STRING )
+			dStringItems.Add ( tCol.m_tLocator );
 	}
 
 	if ( iVer>=0x10C && dMvaItems.GetLength() )
@@ -3420,7 +3448,7 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 		for ( int i=0; i<pRes->m_iCount; i++ )
 		{
 			const CSphMatch & tMatch = pRes->m_dMatches [ pRes->m_iOffset+i ];
-			const DWORD * pMvaPool = dTag2MVA [ tMatch.m_iTag ];
+			const DWORD * pMvaPool = dTag2Pools [ tMatch.m_iTag ].m_pMva;
 			ARRAY_FOREACH ( j, dMvaItems )
 			{
 				const DWORD * pMva = tMatch.GetAttrMVA ( dMvaItems[j], pMvaPool );
@@ -3430,11 +3458,26 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 		}
 	}
 
+	if ( iVer>=0x117 && dStringItems.GetLength() )
+	{
+		for ( int i=0; i<pRes->m_iCount; i++ )
+		{
+			const CSphMatch & tMatch = pRes->m_dMatches [ pRes->m_iOffset+i ];
+			const BYTE * pStrings = dTag2Pools [ tMatch.m_iTag ].m_pStrings;
+			ARRAY_FOREACH ( j, dStringItems )
+			{
+				DWORD uOffset = (DWORD) tMatch.GetAttr ( dStringItems[j] );
+				if ( uOffset ) // magic zero
+					iRespLen += sphUnpackStr ( pStrings+uOffset, NULL );
+			}
+		}
+	}
+
 	return iRespLen;
 }
 
 
-void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pRes, const CSphVector<const DWORD *> & dTag2MVA )
+void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pRes, const CSphVector<PoolPtrs_t> & dTag2Pools )
 {
 	// status
 	if ( iVer>=0x10D )
@@ -3520,7 +3563,8 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 		{
 			tOut.SendInt ( tMatch.m_iWeight );
 
-			const DWORD * pMvaPool = dTag2MVA [ tMatch.m_iTag ];
+			const DWORD * pMvaPool = dTag2Pools [ tMatch.m_iTag ].m_pMva;
+			const BYTE * pStrings = dTag2Pools [ tMatch.m_iTag ].m_pStrings;
 
 			assert ( tMatch.m_iRowitems==pRes->m_tSchema.GetRowSize() );
 			for ( int j=0; j<pRes->m_tSchema.GetAttrsCount(); j++ )
@@ -3542,6 +3586,30 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 						while ( iValues-- )
 							tOut.SendDword ( *pValues++ );
 					}
+
+				} else if ( tAttr.m_eAttrType==SPH_ATTR_STRING )
+				{
+					// send string attr
+					if ( iVer<0x117 )
+					{
+						// for older clients, just send int value of 0
+						tOut.SendDword ( 0 );
+					} else
+					{
+						// for newer clients, send binary string
+						DWORD uOffset = (DWORD) tMatch.GetAttr ( tAttr.m_tLocator );
+						if ( !uOffset ) // magic zero
+						{
+							tOut.SendDword ( 0 ); // null string
+						} else
+						{
+							const BYTE * pStr;
+							int iLen = sphUnpackStr ( pStrings+uOffset, &pStr );
+							tOut.SendDword ( iLen );
+							tOut.SendBytes ( pStr, iLen );
+						}
+					}
+
 				} else
 				{
 					// send plain attr
@@ -3576,7 +3644,7 @@ struct AggrResult_t : CSphQueryResult
 	CSphVector<CSphSchema>		m_dSchemas;		///< aggregated resultsets schemas (for schema minimization)
 	CSphVector<int>				m_dMatchCounts;	///< aggregated resultsets lengths (for schema minimization)
 	CSphVector<int>				m_dIndexWeights;///< aggregated resultsets per-index weights (optional)
-	CSphVector<const DWORD *>	m_dTag2MVA;		///< tag to mva-storage-ptr mapping
+	CSphVector<PoolPtrs_t>		m_dTag2Pools;	///< tag to MVA and strings storage pools mapping
 };
 
 
@@ -3816,7 +3884,7 @@ SearchHandler_c::SearchHandler_c ( int iQueries )
 		assert ( m_dResults[i].m_dIndexWeights.GetLength()==0 );
 		m_dResults[i].m_iTag = 1; // first avail tag for local storage ptrs
 		m_dResults[i].m_dIndexWeights.Add ( 1 ); // reserved index 0 with weight 1 for remote matches
-		m_dResults[i].m_dTag2MVA.Add ( NULL ); // reserved index 0 for remote mva storage ptr; we'll fix this up later
+		m_dResults[i].m_dTag2Pools.Add (); // reserved index 0 for remote mva storage ptr; we'll fix this up later
 	}
 }
 
@@ -3830,6 +3898,9 @@ void SearchHandler_c::RunQueries ()
 	g_dMvaStorage.Reserve ( 1024 );
 	g_dMvaStorage.Resize ( 0 );
 	g_dMvaStorage.Add ( 0 );	// dummy value
+	g_dStringsStorage.Reserve ( 1024 );
+	g_dStringsStorage.Resize ( 0 );
+	g_dStringsStorage.Add ( 0 );
 
 	// check if all queries are to the same index
 	bool bSameIndex = false;
@@ -3869,7 +3940,10 @@ void SearchHandler_c::RunQueries ()
 
 	// final fixup
 	ARRAY_FOREACH ( i, m_dResults )
-		m_dResults[i].m_dTag2MVA[0] = g_dMvaStorage.GetLength() ? &g_dMvaStorage[0] : NULL;
+	{
+		m_dResults[i].m_dTag2Pools[0].m_pMva = g_dMvaStorage.GetLength() ? &g_dMvaStorage[0] : NULL;
+		m_dResults[i].m_dTag2Pools[0].m_pStrings = g_dStringsStorage.GetLength() ? &g_dStringsStorage[0] : NULL;
+	}
 }
 
 
@@ -4160,7 +4234,9 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 									tRes.m_dMatchCounts.Add ( pSorter->GetLength() );
 									tRes.m_dSchemas.Add ( tRes.m_tSchema );
 									tRes.m_dIndexWeights.Add ( m_dQueries[iQuery].GetIndexWeight ( dLocal[iLocal].cstr() ) );
-									tRes.m_dTag2MVA.Add ( tRes.m_pMva );
+									PoolPtrs_t & tPoolPtrs = tRes.m_dTag2Pools.Add ();
+									tPoolPtrs.m_pMva = tRes.m_pMva;
+									tPoolPtrs.m_pStrings = tRes.m_pStrings;
 									sphFlattenQueue ( pSorter, &tRes, tRes.m_iTag++ );
 								}
 							}
@@ -4228,7 +4304,9 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 							tRes.m_dMatchCounts.Add ( pSorter->GetLength() );
 							tRes.m_dSchemas.Add ( tRes.m_tSchema );
 							tRes.m_dIndexWeights.Add ( tQuery.GetIndexWeight ( dLocal[iLocal].cstr() ) );
-							tRes.m_dTag2MVA.Add ( tRes.m_pMva );
+							PoolPtrs_t & tPoolPtrs = tRes.m_dTag2Pools.Add ();
+							tPoolPtrs.m_pMva = tRes.m_pMva;
+							tPoolPtrs.m_pStrings = tRes.m_pStrings;
 							sphFlattenQueue ( pSorter, &tRes, tRes.m_iTag++ );
 						}
 
@@ -4365,7 +4443,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	}
 
 	ARRAY_FOREACH ( i, m_dResults )
-		assert ( m_dResults[i].m_iTag==m_dResults[i].m_dTag2MVA.GetLength() );
+		assert ( m_dResults[i].m_iTag==m_dResults[i].m_dTag2Pools.GetLength() );
 
 	// cleanup
 	SafeDelete ( pLocalSorter );
@@ -4484,7 +4562,7 @@ void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int 
 			return;
 		}
 
-		iReplyLen = CalcResultLength ( iVer, &tRes, tRes.m_dTag2MVA );
+		iReplyLen = CalcResultLength ( iVer, &tRes, tRes.m_dTag2Pools );
 		bool bWarning = ( iVer>=0x106 && !tRes.m_sWarning.IsEmpty() );
 
 		// send it
@@ -4492,12 +4570,12 @@ void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int 
 		tOut.SendWord ( VER_COMMAND_SEARCH );
 		tOut.SendInt ( iReplyLen );
 
-		SendResult ( iVer, tOut, &tRes, tRes.m_dTag2MVA );
+		SendResult ( iVer, tOut, &tRes, tRes.m_dTag2Pools );
 
 	} else
 	{
 		ARRAY_FOREACH ( i, tHandler.m_dQueries )
-			iReplyLen += CalcResultLength ( iVer, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2MVA );
+			iReplyLen += CalcResultLength ( iVer, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2Pools );
 
 		// send it
 		tOut.SendWord ( (WORD)SEARCHD_OK );
@@ -4505,7 +4583,7 @@ void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int 
 		tOut.SendInt ( iReplyLen );
 
 		ARRAY_FOREACH ( i, tHandler.m_dQueries )
-			SendResult ( iVer, tOut, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2MVA );
+			SendResult ( iVer, tOut, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2Pools );
 	}
 
 	tOut.Flush ();

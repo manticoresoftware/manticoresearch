@@ -755,6 +755,29 @@ void TestQueryParser ()
 
 //////////////////////////////////////////////////////////////////////////
 
+void TestMisc ()
+{
+	BYTE dBuffer [ 128 ];
+	int dValues[] = { 16383, 0, 1, 127, 128, 129, 256, 4095, 4096, 4097, 8192, 16383, 16384, 16385, 123456, 4194303, -1 };
+
+	printf ( "testing string attr length packer/unpacker... " );
+
+	BYTE * pRow = dBuffer;
+	for ( int i=0; dValues[i]>=0; i++ )
+		pRow += sphPackStrlen ( pRow, dValues[i] );
+
+	const BYTE * pUnp = dBuffer;
+	for ( int i=0; dValues[i]>=0; i++ )
+	{
+		int iUnp = sphUnpackStr ( pUnp, &pUnp );
+		assert ( iUnp==dValues[i] );
+	}
+
+	printf ( "ok\n" );
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 int main ()
 {
 	printf ( "RUNNING INTERNAL LIBSPHINX TESTS\n\n" );
@@ -770,6 +793,7 @@ int main ()
 	TestTokenizer ( false );
 	TestTokenizer ( true );
 	TestExpr ();
+	TestMisc ();
 #endif
 
 	unlink ( g_sTmpfile );

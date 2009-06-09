@@ -438,11 +438,13 @@ protected:
 
 STATIC_ASSERT ( sizeof(DWORD)*8 >= SPH_MAX_FIELDS, PAYLOAD_MASK_OVERFLOW );
 
+static const bool WITH_BM25 = true;
 
-class ExtRanker_BM25_c : public ExtRanker_c
+template < bool USE_BM25 = false >
+class ExtRanker_WeightSum_c : public ExtRanker_c
 {
 public:
-					ExtRanker_BM25_c ( const XQNode_t * pRoot, const ISphQwordSetup & tSetup ) : ExtRanker_c ( pRoot, tSetup ) {}
+					ExtRanker_WeightSum_c ( const XQNode_t * pRoot, const ISphQwordSetup & tSetup ) : ExtRanker_c ( pRoot, tSetup ) {}
 	virtual int		GetMatches ( int iFields, const int * pWeights );
 };
 
@@ -2930,7 +2932,8 @@ void ExtRanker_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 
 //////////////////////////////////////////////////////////////////////////
 
-int ExtRanker_BM25_c::GetMatches ( int iFields, const int * pWeights )
+template < bool USE_BM25 >
+int ExtRanker_WeightSum_c<USE_BM25>::GetMatches ( int iFields, const int * pWeights )
 {
 	if ( !m_pRoot )
 		return 0;
@@ -2948,9 +2951,12 @@ int ExtRanker_BM25_c::GetMatches ( int iFields, const int * pWeights )
 			uRank += ( (pDoc->m_uFields>>i)&1 )*pWeights[i];
 
 		Swap ( m_dMatches[iMatches], m_dMyMatches[pDoc-m_dMyDocs] ); // OPTIMIZE? can avoid this swap and simply return m_dMyMatches (though in lesser chunks)
-		m_dMatches[iMatches].m_iWeight += uRank*SPH_BM25_SCALE;
-		iMatches++;
+		if ( USE_BM25 )
+			m_dMatches[iMatches].m_iWeight += uRank*SPH_BM25_SCALE;
+		else
+			m_dMatches[iMatches].m_iWeight = uRank;
 
+		iMatches++;
 		pDoc++;
 	}
 
@@ -3372,6 +3378,8 @@ ISphRanker * sphCreateRanker ( const XQNode_t * pRoot, ESphRankMode eRankMode, C
 	ARRAY_FOREACH ( i, pIndex->GetSchema()->m_dFields )
 		uPayloadMask |= pIndex->GetSchema()->m_dFields[i].m_bPayload << i;
 
+	bool bSingleWord = pRoot->m_dChildren.GetLength()==0 && pRoot->m_dWords.GetLength()==1;
+
 	// setup eval-tree
 	ExtRanker_c * pRanker = NULL;
 	switch ( eRankMode )
@@ -3379,13 +3387,20 @@ ISphRanker * sphCreateRanker ( const XQNode_t * pRoot, ESphRankMode eRankMode, C
 		case SPH_RANK_PROXIMITY_BM25:
 			if ( uPayloadMask )
 				pRanker = new ExtRanker_T < RankerState_ProximityPayload_fn<true> > ( pRoot, tTermSetup );
+			else if ( bSingleWord )
+				pRanker = new ExtRanker_WeightSum_c<WITH_BM25> ( pRoot, tTermSetup );
 			else
 				pRanker = new ExtRanker_T < RankerState_Proximity_fn<true> > ( pRoot, tTermSetup );
 			break;
-		case SPH_RANK_BM25:				pRanker = new ExtRanker_BM25_c ( pRoot, tTermSetup ); break;
+		case SPH_RANK_BM25:				pRanker = new ExtRanker_WeightSum_c<WITH_BM25> ( pRoot, tTermSetup ); break;
 		case SPH_RANK_NONE:				pRanker = new ExtRanker_None_c ( pRoot, tTermSetup ); break;
 		case SPH_RANK_WORDCOUNT:		pRanker = new ExtRanker_T < RankerState_Wordcount_fn > ( pRoot, tTermSetup ); break;
-		case SPH_RANK_PROXIMITY:		pRanker = new ExtRanker_T < RankerState_Proximity_fn<false> > ( pRoot, tTermSetup ); break;
+		case SPH_RANK_PROXIMITY:
+			if ( bSingleWord )
+				pRanker = new ExtRanker_WeightSum_c<> ( pRoot, tTermSetup );
+			else
+				pRanker = new ExtRanker_T < RankerState_Proximity_fn<false> > ( pRoot, tTermSetup );
+			break;
 		case SPH_RANK_MATCHANY:			pRanker = new ExtRanker_T < RankerState_MatchAny_fn > ( pRoot, tTermSetup ); break;
 		case SPH_RANK_FIELDMASK:		pRanker = new ExtRanker_T < RankerState_Fieldmask_fn > ( pRoot, tTermSetup ); break;
 		case SPH_RANK_SPH04:			pRanker = new ExtRanker_T < RankerState_ProximityBM25Exact_fn > ( pRoot, tTermSetup ); break;

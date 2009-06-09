@@ -7,12 +7,7 @@
 ini_set ( "display_errors", 1 );
 ini_set ( "error_reporting", E_ALL | E_STRICT );
 
-require_once ( "../api/sphinxapi.php" );
-
-$windows = isset($_SERVER["WINDIR"]) || isset($_SERVER["windir"]) || isset($_SERVER["HOMEDRIVE"]);
-$action_retries			= 20;
-$action_wait_timeout	= 50000;
-
+require_once ( $g_locals['api'] );
 
 function MyMicrotime ()
 {
@@ -20,6 +15,21 @@ function MyMicrotime ()
 	return (float)($q["usec"] / 1000000) + $q["sec"];
 }
 
+function sphFormatTime ( $time )
+{
+	if ( $time < 60 )
+		return sprintf ( '%.0fs', $time );
+
+	$time = (int)$time;
+	if ( $time < 3600 )
+		$u = array ( 'm', 's' );
+	else
+	{
+		$time = $time / 60;
+		$u = array ( 'h', 'm' );
+	}
+	return sprintf ( '%d%s:%d%s', $time / 60, $u[0], $time % 60, $u[1] );
+}
 
 function CreateDB ( $db_drop, $db_create, $db_insert )
 {
@@ -47,10 +57,17 @@ function CreateDB ( $db_drop, $db_create, $db_insert )
 
 function RunIndexer ( &$error, $params )
 {
-	global $indexer_path;
+	global $g_locals;
+
+	$path = $g_locals['indexer'];
+	if ( !is_executable($path) )
+	{
+		$error = "$path: indexer not found";
+		return 1;
+	}
 
 	$retval = 0;
-	exec ( "$indexer_path --quiet --config config.conf $params", $error, $retval );
+	exec ( "$path --quiet --config config.conf $params", $error, $retval );
 
 	$error = join ( "\n", $error );
 	return ( $retval==0 && !empty($error) ) ? 2 : $retval;
@@ -59,19 +76,31 @@ function RunIndexer ( &$error, $params )
 
 function StartSearchd ( $config_file, $error_file, $pidfile, &$error )
 {
-	global $windows, $searchd_path, $action_retries, $action_wait_timeout;
+	global $g_locals, $windows, $action_retries, $action_wait_timeout;
+
+	$path = $g_locals['searchd'];
+	if ( !is_executable($path) )
+	{
+		$error = "$path: searchd not found";
+		return 1;
+	}
+
+	if ( !@touch($error_file) )
+	{
+		$error = "$error_file: unable to create error file";
+		return 1;
+	}
 
 	$retval = 0;
-
 	if ( $windows )
 	{
 		// using start /min to fire it "in background"
 		// using cmd /c for redirection to work
-		$process = popen ("start /min cmd /c \"$searchd_path --config $config_file --pidfile > $error_file\"", "r" );
+		$process = popen ("start /min cmd /c \"$path --config $config_file --pidfile > $error_file\"", "r" );
 		pclose ( $process );
 	}
 	else
-		system ( "$searchd_path --config $config_file > $error_file", $retval );
+		system ( "$path --config $config_file > $error_file", $retval );
 
 	for ( $i=0; $i<$action_retries && !file_exists($pidfile); $i++ )
 		usleep ( $action_wait_timeout );
@@ -112,11 +141,12 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error )
 
 function StopSearchd ( $config, $pidfile )
 {
-	global $searchd_path, $action_retries, $action_wait_timeout;
+	global $g_locals, $action_retries, $action_wait_timeout;
 
 	if ( file_exists($pidfile) )
 	{
-		exec ( "$searchd_path --config $config --stop" );
+		$path = $g_locals['searchd'];
+		exec ( "$path --config $config --stop" );
 
 		$i = 0;
 		while ( file_exists ( $pidfile ) && $i < $action_retries )
@@ -209,10 +239,11 @@ class SphinxConfig
 		$this->_sd_port			= $sd_port;
 		$this->_sd_pid_file		= $sd_pid_file;
 		$this->_custom_test		= "";
+		$this->_compat098		= false;
 		$this->_skip_indexer	= false;
 	}
 
-	
+	function EnableCompat098 ()		{ $this->_compat098 = true; }	
 	function SubtestNo ()			{ return $this->_subtest; }
 	function SubtestCount ()		{ return $this->_subtestcount; }
 	function Name ()				{ return $this->_name; }
@@ -222,9 +253,20 @@ class SphinxConfig
 	function NumAgents ()			{ return $this->_num_agents; }
 	function Requires ( $name )		{ return isset($this->_prereqs[$name]); }
 	function IsQueryTest ()			{ return strlen ( $this->_custom_test ) == 0;	}
+	function Results ()				{ return $this->_results; }
+	function GetQuery ( $i )		{ return $this->_queries[$i]; }
 	function IsSkipIndexer ()		{ return $this->_skip_indexer; }
 
-
+	function GetLocal ( $key )
+	{
+		global $g_locals;
+		if ( !array_key_exists ( $key, $g_locals ) )
+		{
+			printf ( "Unbound local variable: %s\n", $key );
+			exit ( 1 );
+		}
+		return $g_locals[$key];
+	}
 
 	function CreateNextConfig ()
 	{
@@ -395,7 +437,7 @@ class SphinxConfig
 			// new and cool
 			foreach ( ChildrenArray ( $qs, "query" ) as $q )
 			{
-				$res = array ( "query"=>$q->nodeValue );
+				$res = array ( "query" => array ( $q->nodeValue ) );
 
 				// parse query mode
 				$mode = 0;
@@ -487,8 +529,23 @@ class SphinxConfig
 				$res["index_weights"] = $this->ParseIndexWeights ( $q->getAttribute("index_weights") );
 				$res["roundoff"] = $q->getAttribute("roundoff");
 				$res["expect_error"] = $q->getAttribute("expect_error");
+				$res["tag"] = $q->getAttribute("tag");
 
 				// add query
+				if ( $q->getAttribute("source") )
+				{
+					$source = $q->getAttribute("source");
+					if ( substr ( $source, 0, 6 ) == "local:" )
+						$source = $this->GetLocal ( substr ( $source, 6 ) );
+					if ( !is_readable($source) )
+					{
+						printf ( "%s: source not found.\n", $source );
+						exit ( 1 );
+					}
+					$queries = file ( $source, FILE_IGNORE_NEW_LINES );
+					$limit = $this->GetLocal('qlimit');
+					$res["query"] = $limit ? array_slice( $queries, 0, $limit ) : $queries;
+				}
 				$this->_queries[] = $res;
 			}
 		}
@@ -498,7 +555,13 @@ class SphinxConfig
 			$qs = array ();
 			$this->GatherEntities ( GetFirstChild ( $xml, "query" ), $qs );
 			foreach ( $qs as $q )
-				$this->_queries[] = array ( "query"=>$q, "mode"=>0, "mode_s"=>"(default)", "ranker"=>0, "ranker_s"=>"(default)" );
+			{
+				$this->_queries[] = array ( "query"		=> array ( $q ),
+											"mode"		=> 0,
+											"mode_s"	=> "(default)",
+											"ranker"	=> 0,
+											"ranker_s"	=> "(default)" );
+			}
 		}
 
 		// extract my settings
@@ -551,91 +614,128 @@ class SphinxConfig
 	}
 
 
-	function RunQuery ( $index, &$error )
+	function RunQuery ( $index, &$error, $benchmark = null )
 	{
 		global $sd_address, $sd_port, $action_retries, $action_wait_timeout;
-
-		$query_results = array ();
-
-		foreach ( $this->_queries as $qinfo )
+		
+		$query_results = array ();		
+		$total = $done = 0;
+		if ( $benchmark )
 		{
-			$query = $qinfo["query"];
-			$bOk = FALSE;
-
-			for ( $i = 0; $i < $action_retries && !$bOk; $i++ )
+			foreach ( $this->_queries as $qinfo )
+				$total += count($qinfo['query']);
+			$prefix = $benchmark;
+			$compact = true;
+			$tm = 0;
+			$start = MyMicrotime();
+		}
+		else
+			$compact = false;
+		
+		for ( $n=0; $n<count($this->_queries); $n++ )
+		{
+			$qinfo = $this->_queries[$n];
+			foreach ( $qinfo['query'] as $query )
 			{
-				$cl = new SphinxClient ();
-				$cl->SetServer ( $sd_address, $sd_port );
-
-				$results = 0;
-				if ( empty($this->_query_settings) )
+				if ( $benchmark && MyMicrotime() > $tm )
 				{
-					$my_index = $index;
-					if ( @$qinfo["mode"] )		$cl->SetMatchMode ( $qinfo["mode"] );
-					if ( @$qinfo["ranker"] )	$cl->SetRankingMode ( $qinfo["ranker"] );
-					if ( @$qinfo["sortmode"] )	$cl->SetSortMode ( $qinfo["sortmode"], $qinfo["sortby"] );
-					if ( @$qinfo["groupattr"] )	$cl->SetGroupBy ( $qinfo["groupattr"], $qinfo["groupfunc"], $qinfo["groupsort"] );
-					if ( @$qinfo["groupdistinct"] )	$cl->SetGroupDistinct ( $qinfo["groupdistinct"] );
-					if ( @$qinfo["resarray"] )	$cl->SetArrayResult ( true );
-					if ( @$qinfo["select"] )	$cl->SetSelect ( $qinfo["select"] );
-					if ( @$qinfo["id_range"] )	$cl->SetIDRange ( $qinfo["id_range"]["min"], $qinfo["id_range"]["max"] );
-					if ( @$qinfo["index"] )		$my_index = $qinfo["index"];
-					if ( @$qinfo["index_weights"] ) $cl->SetIndexWeights ( $qinfo["index_weights"] );
-					if ( @$qinfo["filter"] )
+					$tm = MyMicrotime();
+					$est = $done ? ( ( $tm - $start ) / $done ) * ( $total - $done ) : 0 ;
+					$qps = $done / ( $tm - $start );
+					printf ( "\r$prefix %d/%d (est. %s, qps %.1f)", $done, $total, sphFormatTime($est), $qps );
+					$tm += 1;
+				}
+				$bOk = FALSE;
+				for ( $i = 0; $i < $action_retries && !$bOk; $i++ )
+				{
+					$cl = new SphinxClient ();
+					$cl->SetServer ( $sd_address, $sd_port );
+
+					$results = 0;
+					if ( empty($this->_query_settings) )
 					{
-						$name = $qinfo["filter"];
-						if ( @$qinfo["filter_value"] )
-							$cl->SetFilter ( $name, array ( $qinfo["filter_value"] ) );
-						elseif ( @$qinfo["filter_range"] )
+						$my_index = $index;
+						if ( @$qinfo["mode"] )		$cl->SetMatchMode ( $qinfo["mode"] );
+						if ( @$qinfo["ranker"] )	$cl->SetRankingMode ( $qinfo["ranker"] );
+						if ( @$qinfo["sortmode"] )	$cl->SetSortMode ( $qinfo["sortmode"], $qinfo["sortby"] );
+						if ( @$qinfo["groupattr"] )	$cl->SetGroupBy ( $qinfo["groupattr"], $qinfo["groupfunc"], $qinfo["groupsort"] );
+						if ( @$qinfo["groupdistinct"] )	$cl->SetGroupDistinct ( $qinfo["groupdistinct"] );
+						if ( @$qinfo["resarray"] )	$cl->SetArrayResult ( true );
+						if ( @$qinfo["select"] )	$cl->SetSelect ( $qinfo["select"] );
+						if ( @$qinfo["id_range"] )	$cl->SetIDRange ( $qinfo["id_range"]["min"], $qinfo["id_range"]["max"] );
+						if ( @$qinfo["index"] )		$my_index = $qinfo["index"];
+						if ( @$qinfo["index_weights"] ) $cl->SetIndexWeights ( $qinfo["index_weights"] );
+						if ( @$qinfo["filter"] )
 						{
-							$range = $qinfo["filter_range"];
-							$cl->SetFilterRange ( $name, $range['min'], $range['max'] );
+							$name = $qinfo["filter"];
+							if ( @$qinfo["filter_value"] )
+								$cl->SetFilter ( $name, array ( $qinfo["filter_value"] ) );
+							elseif ( @$qinfo["filter_range"] )
+							{
+								$range = $qinfo["filter_range"];
+								$cl->SetFilterRange ( $name, $range['min'], $range['max'] );
+							}
+						}
+						
+						$results = $cl->Query ( $query, $my_index );
+						if ( is_array($results) )
+						{
+							$results["resarray"] = (int)@$qinfo["resarray"];
+							$results["roundoff"] = (int)@$qinfo["roundoff"];
 						}
 					}
-
-	            	$results = $cl->Query ( $query, $my_index );
-					if ( is_array($results) )
+					else
 					{
-						$results["resarray"] = (int)@$qinfo["resarray"];
-						$results["roundoff"] = (int)@$qinfo["roundoff"];
+						$run_func = create_function( '$client, $query, $index, &$results', $this->_query_settings );
+						$run_func ( $cl, $query, $index, $results ); 
 					}
-                }
-				else
-				{
-					$run_func = create_function( '$client, $query, $index, &$results', $this->_query_settings );
-					$run_func ( $cl, $query, $index, $results ); 
+					
+					if ( $results )
+					{
+						$bOk = TRUE;
+						if ( $compact )
+						{
+							$results = array ( $n,
+											   $results['total'],
+											   $results['total_found'],
+											   $results['time'] );
+						}
+						else
+							$results ["query"] = $query;
+
+						array_push ( $query_results, $results );
+					}
+					else if ( @$qinfo["expect_error"] && !$cl->IsConnectError() )
+					{
+						$bOk = true;
+						array_push ( $query_results, array (
+            				"query" => $query,
+            				"error" => $cl->GetLastError(),
+            				"warning" => "",
+            				"total" => 0,
+            				"total_found" => 0,
+            				"time" => 0 ) );
+					}
+					else
+					{
+						if ( method_exists ( $cl, 'IsConnectError' ) && $cl->IsConnectError() )
+							usleep ( $action_wait_timeout );
+						else if ( $benchmark && $done )
+						{
+							array_push ( $query_results, array ( $n, -1, -1, 0 ) );
+							$bOk = true;
+						}
+						else
+							break;
+					}
 				}
+				$done++;
 
-				if ( $results )
+				if ( !$bOk )
 				{
-					$bOk = TRUE;
-					$results ["query"] = $query;
-        			array_push ( $query_results, $results );
-
-            	} else if ( @$qinfo["expect_error"] && !$cl->IsConnectError() )
-            	{
-            		$bOk = true;
-            		array_push ( $query_results, array (
-            			"query" => $query,
-            			"error" => $cl->GetLastError(),
-            			"warning" => "",
-            			"total" => 0,
-            			"total_found" => 0,
-            			"time" => 0 ) );
-
-            	} else
-				{
-					if ( !$cl->IsConnectError() )
-						break;
-
-					usleep ( $action_wait_timeout );
+					$error = $cl->GetLastError ();
+					return FALSE;
 				}
-			}
-
-			if ( !$bOk )
-			{
-				$error = $cl->GetLastError ();
-				return FALSE;
 			}
 		}
 
@@ -643,6 +743,9 @@ class SphinxConfig
 
 		if ( IsModelGenMode () )
 			array_push ( $this->_results_model, $query_results );
+
+		if ( $benchmark )
+			printf ( " - done in %s\n", sphFormatTime ( MyMicrotime() - $start ) );
 
 		return TRUE;
 	}
@@ -988,7 +1091,13 @@ class SphinxConfig
 	{
 		global $sd_log, $sd_query_log, $sd_read_timeout, $sd_max_children, $sd_pid_file, $sd_max_matches;
 
-		fwrite ( $fp, "\tlisten			= {$this->_sd_address}:{$this->_sd_port}\n" );
+		if ( $this->_compat098 )
+		{
+			fwrite ( $fp, "\taddress	= {$this->_sd_address}\n" );
+			fwrite ( $fp, "\tport		= {$this->_sd_port}\n" );
+		}
+		else
+			fwrite ( $fp, "\tlisten		= {$this->_sd_address}:{$this->_sd_port}\n" );
 		fwrite ( $fp, "\tlog			= $sd_log\n" );
 		fwrite ( $fp, "\tquery_log		= $sd_query_log\n" );
 		fwrite ( $fp, "\tread_timeout	= $sd_read_timeout\n" );
@@ -997,17 +1106,18 @@ class SphinxConfig
 		fwrite ( $fp, "\tmax_matches	= $sd_max_matches\n" );
 	}
 
-	function WriteSqlSettings ( $fp )
+	function WriteSqlSettings ( $fp, $attributes )
 	{
 		global $db_host, $db_user, $db_pwd, $db_name, $db_port;
 
 		fwrite ( $fp, "\tsql_host		= $db_host\n" );
 		fwrite ( $fp, "\tsql_user		= $db_user\n" );
 		fwrite ( $fp, "\tsql_pass		= $db_pwd\n" );
-		fwrite ( $fp, "\tsql_db			= $db_name\n" );
 		fwrite ( $fp, "\tsql_port		= $db_port\n" );
-	}
 
+		$node = $attributes->getNamedItem('sql_db');
+		fprintf ( $fp, "\tsql_db		= %s\n", $node ? $node->nodeValue : $db_name );
+	}
 
 	function Dump ( $node, $fp, $dynamic_only, $agentid )
 	{
@@ -1019,9 +1129,10 @@ class SphinxConfig
 			case "#text":				fwrite ( $fp, $node->nodeValue ); return;
 			case "static":				fwrite ( $fp, $node->nodeValue ); return;
 			case "searchd_settings":	$this->WriteSearchdSettings ( $fp ); return;
-			case "sql_settings":		$this->WriteSqlSettings ( $fp ); return;
+			case "sql_settings":		$this->WriteSqlSettings ( $fp, $node->attributes ); return;
 			case "agent_address":		fwrite ( $fp, $agent_address.":".$agent_port ); return;
 			case "data_path":			fwrite ( $fp, $index_data_path ); return;
+			case "local":				fwrite ( $fp, $this->GetLocal ( $node->nodeValue ) ); return;
 		}
 
 		$nodename = strtolower ( $node->nodeName );
@@ -1085,6 +1196,32 @@ function EraseDirContents ( $path )
 }
 
 
+function CheckConfig ( $config, $path )
+{
+	global $g_id64, $windows;
+	
+	if ( $config->Requires("id64") && !$g_id64 )
+	{
+		printf ( "SKIPPING %s, %s - enable id64 to run this test\n", $path, $config->Name () );
+		return false;
+	}
+
+	if ( $config->Requires("id32") && $g_id64 )
+	{
+		printf ( "SKIPPING %s, %s - disable id64 to run this test\n", $test_dir, $config->Name () );
+		return $res_skipped;
+	}
+
+	if ( $config->Requires("non-windows") && $windows )
+	{
+		printf ( "SKIPPING %s, %s - use non-Windows system to run this test\n", $path, $config->Name () );
+		return false;
+	}
+
+	return true;
+}
+
+
 function RunTest ( $test_dir )
 {
 	global $indexer_data_path, $agents, $sd_pid_file, $sd_managed_searchd, $g_id64, $windows;
@@ -1098,25 +1235,8 @@ function RunTest ( $test_dir )
 
 	$prefix = sprintf ( "testing %s, %s...", $test_dir, $config->Name () );
 
-	$res_skipped = array ( "tests_total"=>0, "tests_failed"=>0 );
-
-	if ( $config->Requires("id64") && !$g_id64 )
-	{
-		printf ( "SKIPPING %s, %s - enable id64 to run this test\n", $test_dir, $config->Name () );
-		return $res_skipped;
-	}
-
-	if ( $config->Requires("id32") && $g_id64 )
-	{
-		printf ( "SKIPPING %s, %s - disable id64 to run this test\n", $test_dir, $config->Name () );
-		return $res_skipped;
-	}
-
-	if ( $config->Requires("non-windows") && $windows )
-	{
-		printf ( "SKIPPING %s, %s - use non-Windows system to run this test\n", $test_dir, $config->Name () );
-		return $res_skipped;
-	}
+	if ( !CheckConfig ( $config, $test_dir ) )
+		return array ( "tests_total"=>0, "tests_failed"=>0 );
 
 	if ( !CreateDB ( $config->DB_Drop(), $config->DB_Create(), $config->DB_Insert() ) )
 	{

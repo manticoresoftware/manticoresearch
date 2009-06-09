@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>fullscan</name>
+
+<config>
+indexer
+{
+	mem_limit = 128M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source fullscan
+{
+	type = mysql
+	<sql_settings sql_db="fullscan" />
+
+	docinfo = extern
+
+	sql_query = select id, text from fullscan;
+	sql_attr_uint = value
+}
+
+index fullscan
+{
+	source	= fullscan
+	path	= <local>data</local>/fullscan
+}
+</config>
+
+<queries>
+	<query tag="10" filter_value="10" filter="value" index="fullscan" ranker="none">dummy</query>
+	<query tag="30" filter_value="30" filter="value" index="fullscan" ranker="none">dummy</query>
+</queries>
+
+</test>

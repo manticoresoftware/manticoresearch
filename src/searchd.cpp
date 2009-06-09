@@ -4892,7 +4892,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 		return;
 	}
 	CSphDict * pDict = pIndex->m_pIndex->GetDictionary ();
-	ISphTokenizer * pTokenizer = pIndex->m_pIndex->GetTokenizer ();
+	ISphTokenizer * pTokenizer = pIndex->m_pIndex->GetCleanTokenizer ();
 
 	q.m_sWords = tReq.GetString ();
 	q.m_sBeforeMatch = tReq.GetString ();

@@ -6389,6 +6389,7 @@ CSphIndex::CSphIndex ( const char * sName )
 	, m_bPreloadWordlist ( true )
 	, m_bStripperInited ( true )
 	, m_pTokenizer ( NULL )
+	, m_pCleanTokenizer ( NULL )
 	, m_pDict ( NULL )
 {
 }
@@ -6397,6 +6398,7 @@ CSphIndex::CSphIndex ( const char * sName )
 CSphIndex::~CSphIndex ()
 {
 	SafeDelete ( m_pTokenizer );
+	SafeDelete ( m_pCleanTokenizer );
 	SafeDelete ( m_pDict );
 }
 
@@ -6416,6 +6418,10 @@ void CSphIndex::SetTokenizer ( ISphTokenizer * pTokenizer )
 	if ( m_pTokenizer != pTokenizer )
 		SafeDelete ( m_pTokenizer );
 
+	// save pristine copy of my tokenizer
+	SafeDelete ( m_pCleanTokenizer );
+	m_pCleanTokenizer = pTokenizer->Clone ( true );
+	
 	m_pTokenizer = pTokenizer;
 }
 

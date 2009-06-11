@@ -2951,10 +2951,9 @@ int ExtRanker_WeightSum_c<USE_BM25>::GetMatches ( int iFields, const int * pWeig
 			uRank += ( (pDoc->m_uFields>>i)&1 )*pWeights[i];
 
 		Swap ( m_dMatches[iMatches], m_dMyMatches[pDoc-m_dMyDocs] ); // OPTIMIZE? can avoid this swap and simply return m_dMyMatches (though in lesser chunks)
-		if ( USE_BM25 )
-			m_dMatches[iMatches].m_iWeight += uRank*SPH_BM25_SCALE;
-		else
-			m_dMatches[iMatches].m_iWeight = uRank;
+		m_dMatches[iMatches].m_iWeight = USE_BM25
+			? ( m_dMatches[iMatches].m_iWeight + uRank*SPH_BM25_SCALE )
+			: uRank;
 
 		iMatches++;
 		pDoc++;
@@ -3308,7 +3307,9 @@ struct RankerState_Wordcount_fn
 
 	DWORD Finalize ( DWORD )
 	{
-		return m_uRank;
+		DWORD uRes = m_uRank;
+		m_uRank = 0;
+		return uRes;
 	}
 };
 
@@ -3329,7 +3330,9 @@ struct RankerState_Fieldmask_fn
 
 	DWORD Finalize ( DWORD )
 	{
-		return m_uRank;
+		DWORD uRes = m_uRank;
+		m_uRank = 0;
+		return uRes;
 	}
 };
 

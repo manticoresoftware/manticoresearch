@@ -105,10 +105,11 @@ function PublishLocals ( $locals, $benchmark )
 			$locals['bin'] = '../src/';
 	}
 
+	$ext = $windows ? ".exe" : "";
 	foreach ( array ( 'searchd', 'indexer' ) as $key )
 	{
 		if ( !array_key_exists ( $key, $locals ) )
-			$locals[$key] = $locals['bin'] . $key;
+			$locals[$key] = $locals['bin'] . $key . $ext;
 	}
 
 	$g_locals = $locals;

@@ -500,7 +500,7 @@ class SphinxConfig
 				$groupfunc_s = $q->getAttribute("groupfunc");
 				switch ( $groupfunc_s )
 				{
-					case "":			$groupfunc_s = "(default)"; break;
+					case "":			$groupfunc = SPH_GROUPBY_ATTR; $groupfunc_s = "attr"; break;
 					case "day":			$groupfunc = SPH_GROUPBY_DAY; break;
 					case "week":		$groupfunc = SPH_GROUPBY_WEEK; break;
 					case "month":		$groupfunc = SPH_GROUPBY_MONTH; break;

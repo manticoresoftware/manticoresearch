@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>aggregate functions</name>
+
+<num_agents>2</num_agents>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT * FROM test_table
+	sql_attr_uint	= gid
+	sql_attr_float	= price
+	sql_attr_uint	= views
+}
+
+source srctest2 : srctest
+{
+	sql_query		= SELECT document_id+10, body, gid, price, views FROM test_table
+}
+
+index test
+{
+	source			= srctest
+	path			= <data_path/>/test
+	docinfo			= extern
+}
+
+index test2 : test
+{
+	source			= srctest
+	path			= <data_path/>/test2
+	docinfo			= extern
+}
+ 
+index dist
+{
+	type			= distributed
+	local			= test
+	agent			= <agent_address/>:test2
+}
+</config>
+
+<queries>
+<query index="test" select="avg(price) as avgprice,gid*10 as xgid" groupattr="gid"/>
+<query index="test" select="*,avg(price) as avgprice" groupattr="gid"/>
+<query index="test" select="*,sum(views) as sumviews, avg(price) as avgprice" groupattr="gid"/>
+<query index="dist" select="*,avg(price) as avgprice" groupattr="gid"/>
+<query index="dist" select="*,sum(views) as sumviews, avg(price) as avgprice" groupattr="gid"/>
+</queries>
+
+<db_create>
+CREATE TABLE test_table
+(
+	document_id		INTEGER NOT NULL PRIMARY KEY,
+	body			VARCHAR(255) NOT NULL,
+	gid				INTEGER NOT NULL,
+	price			FLOAT NOT NULL,
+	views			INTEGER NOT NULL
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table
+</db_drop>
+
+<db_insert>
+INSERT INTO test_table VALUES
+( 1, 'dummy', 1, 20.00, 3 ),
+( 2, 'dummy', 1, 15.00, 15 ),
+( 3, 'dummy', 1, 10.00, 7 ),
+( 4, 'dummy', 1, 10.00, 40 )
+</db_insert>
+
+</test>

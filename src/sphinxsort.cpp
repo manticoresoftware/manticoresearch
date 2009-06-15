@@ -589,7 +589,8 @@ struct CSphGroupSorterSettings
 class IAggrFunc
 {
 public:
-	virtual void	Update ( CSphMatch * pDst, const CSphMatch * pSrc ) = 0;
+	virtual void	Ungroup ( CSphMatch * ) {}
+	virtual void	Update ( CSphMatch * pDst, const CSphMatch * pSrc, bool bGrouped ) = 0;
 	virtual void	Finalize ( CSphMatch * ) {}
 };
 
@@ -653,7 +654,7 @@ public:
 	AggrSum_t ( const CSphAttrLocator & tLoc ) : IAggrFuncTraits<T> ( tLoc )
 	{}
 
-	virtual void Update ( CSphMatch * pDst, const CSphMatch * pSrc )
+	virtual void Update ( CSphMatch * pDst, const CSphMatch * pSrc, bool )
 	{
 		this->SetValue ( pDst, this->GetValue(pDst)+this->GetValue(pSrc) );
 	}
@@ -670,9 +671,17 @@ public:
 	AggrAvg_t ( const CSphAttrLocator & tLoc, const CSphAttrLocator & tCountLoc ) : IAggrFuncTraits<T> ( tLoc ), m_tCountLoc ( tCountLoc )
 	{}
 
-	virtual void Update ( CSphMatch * pDst, const CSphMatch * pSrc )
+	virtual void Ungroup ( CSphMatch * pDst )
 	{
-		this->SetValue ( pDst, this->GetValue(pDst)+this->GetValue(pSrc) );
+		this->SetValue ( pDst, T(this->GetValue(pDst)*pDst->GetAttr(m_tCountLoc)) );
+	}
+
+	virtual void Update ( CSphMatch * pDst, const CSphMatch * pSrc, bool bGrouped )
+	{
+		if ( bGrouped )
+			this->SetValue ( pDst, T(this->GetValue(pDst) + this->GetValue(pSrc)*pSrc->GetAttr(m_tCountLoc)) );
+		else
+			this->SetValue ( pDst, this->GetValue(pDst) + this->GetValue(pSrc) );
 	}
 
 	virtual void Finalize ( CSphMatch * pDst )
@@ -690,7 +699,7 @@ public:
 	AggrMax_t ( const CSphAttrLocator & tLoc ) : IAggrFuncTraits<T> ( tLoc )
 	{}
 
-	virtual void Update ( CSphMatch * pDst, const CSphMatch * pSrc )
+	virtual void Update ( CSphMatch * pDst, const CSphMatch * pSrc, bool )
 	{
 		this->SetValue ( pDst, Max ( this->GetValue(pDst), this->GetValue(pSrc) ) );
 	}
@@ -705,7 +714,7 @@ public:
 	AggrMin_t ( const CSphAttrLocator & tLoc ) : IAggrFuncTraits<T> ( tLoc )
 	{}
 
-	virtual void Update ( CSphMatch * pDst, const CSphMatch * pSrc )
+	virtual void Update ( CSphMatch * pDst, const CSphMatch * pSrc, bool )
 	{
 		this->SetValue ( pDst, Min ( this->GetValue(pDst), this->GetValue(pSrc) ) );
 	}
@@ -769,7 +778,9 @@ public:
 		for ( int i=0; i<m_tIncomingSchema.GetAttrsCount(); i++ )
 		{
 			const CSphColumnInfo & tAttr = m_tIncomingSchema.GetAttr(i);
-			if ( tAttr.m_eAggrFunc==SPH_AGGR_NONE )
+			bool bMagicAggr = ( tAttr.m_sName=="@groupby" || tAttr.m_sName=="@count" ); // magic legacy aggregates
+
+			if ( tAttr.m_eAggrFunc==SPH_AGGR_NONE && !bMagicAggr )
 			{
 				if ( !bAggrStarted )
 					continue;
@@ -785,6 +796,9 @@ public:
 			}
 
 			bAggrStarted = true;
+			if ( bMagicAggr )
+				continue;
+
 			switch ( tAttr.m_eAggrFunc )
 			{
 				case SPH_AGGR_SUM:
@@ -888,7 +902,7 @@ public:
 
 			// update aggregates
 			ARRAY_FOREACH ( i, m_dAggregates )
-				m_dAggregates[i]->Update ( pMatch, &tEntry );
+				m_dAggregates[i]->Update ( pMatch, &tEntry, bGrouped );
 
 			// if new entry is more relevant, update from it
 			if ( m_pComp->VirtualIsLess ( *pMatch, tEntry, m_tState ) )
@@ -936,6 +950,10 @@ public:
 			tNew.SetAttr ( m_tSettings.m_tLocCount, 1 );
 			if ( DISTINCT )
 				tNew.SetAttr ( m_tSettings.m_tLocDistinct, 0 );
+		} else
+		{
+			ARRAY_FOREACH ( i, m_dAggregates )
+				m_dAggregates[i]->Ungroup ( &tNew );
 		}
 
 		m_hGroup2Match.Add ( &tNew, uGroupKey );

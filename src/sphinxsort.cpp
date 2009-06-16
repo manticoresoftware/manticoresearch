@@ -778,7 +778,7 @@ public:
 		for ( int i=0; i<m_tIncomingSchema.GetAttrsCount(); i++ )
 		{
 			const CSphColumnInfo & tAttr = m_tIncomingSchema.GetAttr(i);
-			bool bMagicAggr = ( tAttr.m_sName=="@groupby" || tAttr.m_sName=="@count" ); // magic legacy aggregates
+			bool bMagicAggr = ( tAttr.m_sName=="@groupby" || tAttr.m_sName=="@count" || tAttr.m_sName=="@distinct" ); // magic legacy aggregates
 
 			if ( tAttr.m_eAggrFunc==SPH_AGGR_NONE && !bMagicAggr )
 			{

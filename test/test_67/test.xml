@@ -31,6 +31,7 @@ source srctest2 : srctest
 	sql_query		= SELECT document_id+10, body, gid, price, views FROM test_table
 }
 
+<agent0>
 index test
 {
 	source			= srctest
@@ -38,19 +39,21 @@ index test
 	docinfo			= extern
 }
 
-index test2 : test
-{
-	source			= srctest
-	path			= <data_path/>/test2
-	docinfo			= extern
-}
- 
 index dist
 {
 	type			= distributed
 	local			= test
 	agent			= <agent_address/>:test2
 }
+</agent0>
+<agent1>
+index test2
+{
+	source			= srctest
+	path			= <data_path/>/test2
+	docinfo			= extern
+}
+</agent1>
 </config>
 
 <queries>

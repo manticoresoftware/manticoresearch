@@ -725,6 +725,7 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 
 		if ( pNode->m_bQuorum )
 		{
+			bool bFail = false;
 			if ( pNode->m_iMaxDistance>=pNode->m_dWords.GetLength() )
 			{
 				// threshold is too high
@@ -732,21 +733,29 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 				if ( tSetup.m_pWarning && pNode->m_iMaxDistance>pNode->m_dWords.GetLength() )
 					tSetup.m_pWarning->SetSprintf ( "quorum threshold too high (words=%d, thresh=%d); replacing quorum operator with AND operator",
 						pNode->m_dWords.GetLength(), pNode->m_iMaxDistance );
-
+				bFail = true;
+			}
+			else if ( pNode->m_dWords.GetLength()>32 )
+			{
+				// right now quorum can only handle 32 words
+				if ( tSetup.m_pWarning )
+					tSetup.m_pWarning->SetSprintf ( "too many words (%d) for quorum; replacing with AND", pNode->m_dWords.GetLength() );
+				bFail = true;
+			}
+			
+			if ( bFail )
+			{
 				// create AND node
 				const CSphVector<XQKeyword_t> & dWords = pNode->m_dWords;
 				ExtNode_i * pCur = Create ( dWords[0], pNode->m_uFieldMask, pNode->m_iFieldMaxPos, tSetup );
 				for ( int i=1; i<dWords.GetLength(); i++ )
 					pCur = new ExtAnd_c ( pCur, Create ( dWords[i], pNode->m_uFieldMask, pNode->m_iFieldMaxPos, tSetup ), tSetup );
 				return pCur;
-
-			} else
-			{
-				// threshold is ok; create quorum node
-				return CreatePhraseNode<ExtQuorum_c> ( pNode, tSetup );
 			}
-
-		} else
+			else // everything is ok; create quorum node
+				return CreatePhraseNode<ExtQuorum_c> ( pNode, tSetup );
+		}
+		else
 			return CreatePhraseNode<ExtProximity_c> ( pNode, tSetup );
 	}
 	else

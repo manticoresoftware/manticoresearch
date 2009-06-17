@@ -7027,7 +7027,11 @@ void CSphIndex_VLN::WriteSchemaColumn ( CSphWriter & fdInfo, const CSphColumnInf
 	int iLen = strlen ( tCol.m_sName.cstr() );
 	fdInfo.PutDword ( iLen );
 	fdInfo.PutBytes ( tCol.m_sName.cstr(), iLen );
-	fdInfo.PutDword ( tCol.m_eAttrType );
+
+	DWORD eAttrType = tCol.m_eAttrType;
+	if ( eAttrType==SPH_ATTR_WORDCOUNT )
+		eAttrType = SPH_ATTR_INTEGER;
+	fdInfo.PutDword ( eAttrType );
 
 	fdInfo.PutDword ( tCol.m_tLocator.CalcRowitem() ); // for backwards compatibility
 	fdInfo.PutDword ( tCol.m_tLocator.m_iBitOffset );
@@ -8178,6 +8182,20 @@ bool CSphIndex_VLN::RelocateBlock ( int iFile, BYTE * pBuffer, int iRelocationSi
 }
 
 
+static int CountWords ( const CSphString & sData, ISphTokenizer * pTokenizer )
+{
+	BYTE * sField = (BYTE*) sData.cstr();
+	if ( !sField )
+		return 0;
+
+	int iCount = 0;
+	pTokenizer->SetBuffer ( sField, (int)strlen( (char*)sField ) );
+	while ( pTokenizer->GetToken() )
+		iCount++;
+	return iCount;
+}
+
+
 int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer )
 {
 	PROFILER_INIT ();
@@ -8256,6 +8274,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	// ordinals and strings storage
 	CSphVector<int> dOrdinalAttrs;
 	CSphVector<int> dStringAttrs;
+	CSphVector<int> dWordcountAttrs;
 
 	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
 	{
@@ -8267,6 +8286,9 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 		if ( eAttrType==SPH_ATTR_STRING )
 			dStringAttrs.Add ( i );
+
+		if ( eAttrType==SPH_ATTR_WORDCOUNT )
+			dWordcountAttrs.Add ( i );
 	}
 	
 	// adjust memory requirements
@@ -8588,6 +8610,14 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 					// no data
 					pSource->m_tDocInfo.SetAttr ( m_tSchema.GetAttr(dStringAttrs[i]).m_tLocator, 0 );
 				}
+			}
+
+			// count words
+			ARRAY_FOREACH ( i, dWordcountAttrs )
+			{
+				int iAttr = dWordcountAttrs[i];
+				int iNumWords = CountWords ( pSource->m_dStrAttrs[iAttr], m_pTokenizer );
+				pSource->m_tDocInfo.SetAttr ( m_tSchema.GetAttr(iAttr).m_tLocator, iNumWords );
 			}
 
 			// update min docinfo
@@ -15441,6 +15471,7 @@ BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 		{
 			case SPH_ATTR_ORDINAL:
 			case SPH_ATTR_STRING:
+			case SPH_ATTR_WORDCOUNT:
 				// memorize string, fixup NULLs
 				m_dStrAttrs[i] = SqlColumn ( tAttr.m_iIndex );
 				if ( !m_dStrAttrs[i].cstr() )

@@ -160,6 +160,7 @@ static KeyDesc_t g_dKeysSource[] =
 	{ "odbc_dsn",				0, NULL },
 	{ "sql_joined_field",		KEY_LIST, NULL },
 	{ "sql_attr_string",		KEY_LIST, NULL },
+	{ "sql_attr_str2wordcount",	KEY_LIST, NULL },
 	{ NULL,						0, NULL }
 };
 

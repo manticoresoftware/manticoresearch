@@ -173,6 +173,20 @@ source src1
 	#	SELECT MIN(id), MAX(id) FROM tags
 
 
+	# string attribute declaration
+	# multi-value (an arbitrary number of these is allowed), optional
+	# lets you store and retrieve strings
+	#
+	# sql_attr_string			= stitle
+
+
+	# wordcount attribute declaration
+	# multi-value (an arbitrary number of these is allowed), optional
+	# lets you count the words at indexing time
+	#
+	# sql_attr_str2wordcount	= stitle
+
+
 	# post-query, executed on sql_query completion
 	# optional, default is empty
 	#

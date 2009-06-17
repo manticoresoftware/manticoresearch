@@ -813,6 +813,7 @@ enum
 	SPH_ATTR_FLOAT		= 5,			///< floating point number (IEEE 32-bit)
 	SPH_ATTR_BIGINT		= 6,			///< signed 64-bit integer
 	SPH_ATTR_STRING		= 7,			///< string (binary; in-memory)
+	SPH_ATTR_WORDCOUNT	= 8,			///< string word count (integer at search time,tokenized and counted at indexing time)
 
 	SPH_ATTR_MULTI		= 0x40000000UL	///< this attr has multiple values (0 or more)
 };

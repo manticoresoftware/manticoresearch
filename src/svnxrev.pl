@@ -8,8 +8,8 @@
 #
 # usage: svn info --xml WORKING-COPY-ROOT | perl svnxrev.pl [OUTPUT-HEADER-NAME]
 
-$UTILITY = "svnxrev";				# that's my name
-$PROJECT = "sphinx";				# that's expected project name
+$UTILITY = "svnxrev";						# that's my name
+@PROJECTS = ( "sphinx", "sphinxsearh" );	# that's expected project name(s)
 $PREFIX = "SPH";					# that's the prefix for defines
 $OUTPUT = "sphinxversion.h";		# that's where i will write the result
 
@@ -24,8 +24,17 @@ $url = $1;
 die ( "$UTILITY: failed to extract commit revision" ) if (!( $info =~ /<commit\s+.*?revision=\"(\d+)\"/ ));
 $rev = $1;
 
-exit ( 0 ) if (!( $url =~ s/svn:\/\/.*?\/$PROJECT\/// )); # for cases when we're imported to 3rd party SVN repo
-die ( "$UTILITY: unexpected project directory layout (url=$url)" ) if (!( $url =~ /^(?:trunk|tags\/(.*)|branches\/(.*))$/ ));
+
+# for cases when we're imported to 3rd party SVN repo
+$sphinxrepo = false;
+foreach $project ( @PROJECTS )
+{
+	$sphinxrepo = true if ( $url =~ s/svn:\/\/.*?\/$project\/// );
+}
+exit ( 0 ) if ( !$sphinxrepo );
+
+
+die ( "$UTILITY: unexpected project directory layout (url=$url)" ) if (!( $url =~ /(?:trunk|tags\/(.*)|branches\/(.*))$/ ));
 $tag = $1.$2;
 
 $tagrev = length($tag)

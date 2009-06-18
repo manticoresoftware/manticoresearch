@@ -4,3 +4,11 @@ glob:*.user
 glob:junk/
 glob:*.suo
 glob:*.ncb
+glob:Makefile
+glob:config.status
+glob:config.log
+glob:sphinx-min.conf.dist
+glob:sphinx.conf.dist
+glob:config/*
+glob:*.Po
+glob:test/*/report.txt

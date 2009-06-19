@@ -19,7 +19,8 @@ source srcmain
 	type			= mysql
 	<sql_settings/>
 
-	sql_query		= SELECT * FROM test_table WHERE document_id in (1,2,11,12,13)
+	sql_query		= SELECT document_id, body, body sbody FROM test_table WHERE document_id in (1,2,11,12,13)
+	sql_attr_string	= sbody
 }
 
 source srcdelta
@@ -27,7 +28,8 @@ source srcdelta
 	type			= mysql
 	<sql_settings/>
 
-	sql_query		= SELECT * FROM test_table WHERE document_id in (3,4,14,15,16)
+	sql_query		= SELECT document_id, body, body sbody FROM test_table WHERE document_id in (3,4,14,15,16)
+	sql_attr_string	= sbody
 }
 
 index main

@@ -74,6 +74,7 @@
 	#define sphTruncate(file) (SetEndOfFile((HANDLE) _get_osfhandle(file)))
 
 	#define stat		_stat64
+	#define fstat		_fstat64
 	#if _MSC_VER<1400
 	#define struct_stat	__stat64
 	#else
@@ -928,8 +929,8 @@ public:
 	void		SkipBytes ( int iCount );
 	SphOffset_t	GetPos () const { return m_iPos+m_iBuffPos; }
 
-	void		GetRawBytes ( void * pData, int iSize );
-	void		GetBytes ( void * data, int size );
+	void		GetBytes ( void * pData, int iSize );
+	int			GetBytesZerocopy ( const BYTE ** ppData, int iMax ); ///< zerocopy method; returns actual length present in buffer (upto iMax)
 
 	int			GetByte ();
 	DWORD		GetDword ();
@@ -955,7 +956,7 @@ public:
 
 	const CSphReader_VLN &	operator = ( const CSphReader_VLN & rhs );
 
-private:
+protected:
 
 	int			m_iFD;
 	SphOffset_t	m_iPos;
@@ -975,6 +976,17 @@ private:
 
 private:
 	void		UpdateCache ();
+};
+
+
+class CSphAutoreader : public CSphReader_VLN
+{
+public:
+				CSphAutoreader ( BYTE * pBuf=NULL, int iSize=0 ) : CSphReader_VLN ( pBuf, iSize ) {}
+				~CSphAutoreader ();
+
+	bool		Open ( const char * sFilename, CSphString & sError );
+	SphOffset_t	GetFilesize ();
 };
 
 #define READ_NO_SIZE_HINT 0
@@ -5283,7 +5295,7 @@ int CSphReader_VLN::GetByte ()
 }
 
 
-void CSphReader_VLN::GetRawBytes ( void * pData, int iSize )
+void CSphReader_VLN::GetBytes ( void * pData, int iSize )
 {
 	BYTE * pOut = (BYTE*) pData;
 
@@ -5321,12 +5333,19 @@ void CSphReader_VLN::GetRawBytes ( void * pData, int iSize )
 }
 
 
-void CSphReader_VLN::GetBytes ( void *data, int size )
+int CSphReader_VLN::GetBytesZerocopy ( const BYTE ** ppData, int iMax )
 {
-	BYTE * b = (BYTE*) data;
+	if ( m_iBuffPos>=m_iBuffUsed )
+	{
+		UpdateCache ();
+		if ( m_iBuffPos>=m_iBuffUsed )
+			return 0; // unexpected io failure
+	}
 
-	while ( size-->0 )
-		*b++ = (BYTE) GetByte ();
+	int iChunk = Min ( m_iBuffUsed-m_iBuffPos, iMax );
+	*ppData = m_pBuff + m_iBuffPos;
+	m_iBuffPos += iChunk;
+	return iChunk;
 }
 
 
@@ -5426,7 +5445,7 @@ const CSphReader_VLN & CSphReader_VLN::operator = ( const CSphReader_VLN & rhs )
 DWORD CSphReader_VLN::GetDword ()
 {
 	DWORD uRes;
-	GetRawBytes ( &uRes, sizeof(DWORD) );
+	GetBytes ( &uRes, sizeof(DWORD) );
 	return uRes;
 }
 
@@ -5434,7 +5453,7 @@ DWORD CSphReader_VLN::GetDword ()
 SphOffset_t CSphReader_VLN::GetOffset ()
 {
 	SphOffset_t uRes;
-	GetRawBytes ( &uRes, sizeof(SphOffset_t) );
+	GetBytes ( &uRes, sizeof(SphOffset_t) );
 	return uRes;
 }
 
@@ -5447,12 +5466,49 @@ CSphString CSphReader_VLN::GetString ()
 	if ( iLen )
 	{
 		char * sBuf = new char [ iLen ];
-		GetRawBytes ( sBuf, iLen );
+		GetBytes ( sBuf, iLen );
 		sRes.SetBinary ( sBuf, iLen );
 		SafeDeleteArray ( sBuf );
 	}
 
 	return sRes;
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+CSphAutoreader::~CSphAutoreader ()
+{
+	if ( m_iFD>=0 )
+		::close ( m_iFD	);
+}
+
+
+bool CSphAutoreader::Open ( const char * sFilename, CSphString & sError )
+{
+	assert ( m_iFD<0 );
+	assert ( sFilename );
+
+	m_iFD = ::open ( sFilename, SPH_O_READ, 0644 );
+	m_iPos = 0;
+	m_iBuffPos = 0;
+	m_iBuffUsed = 0;
+	m_sFilename = sFilename;
+
+	if ( m_iFD<0 )
+		sError.SetSprintf ( "failed to open %s: %s", sFilename, strerror(errno) );
+	return ( m_iFD>=0 );
+}
+
+
+SphOffset_t CSphAutoreader::GetFilesize ()
+{
+	assert ( m_iFD>=0 );
+
+	struct_stat st;
+	if ( m_iFD<0 || fstat ( m_iFD, &st )<0 )
+		return -1;
+
+	return st.st_size;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -8960,12 +9016,9 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	}
 
 	// initialize MVA reader
-	CSphAutofile fdMva ( GetIndexFileName("spm"), SPH_O_BINARY, m_sLastError );
-	if ( fdMva.GetFD()<0 )
+	CSphAutoreader rdMva;
+	if ( !rdMva.Open ( GetIndexFileName("spm"), m_sLastError ) )
 		return false;
-
-	CSphReader_VLN rdMva;
-	rdMva.SetFile ( fdMva );
 
 	SphDocID_t uMvaID = rdMva.GetDocid();
 
@@ -9493,6 +9546,53 @@ static bool CopyFile( const char * sSrc, const char * sDst, CSphString & sErrStr
 	return true;
 }
 
+
+SphAttr_t CopyStringAttr ( CSphWriter & wrTo, CSphReader_VLN & rdFrom, SphAttr_t uOffset )
+{
+	// magic offset? do nothing
+	if ( !uOffset ) 
+		return 0;
+
+	// aim
+	rdFrom.SeekTo ( uOffset, 0 );
+
+	// read and decode length
+	// MUST be in sync with sphUnpackStr
+	int iLen = rdFrom.GetByte ();
+	if ( iLen & 0x80 )
+	{
+		if ( iLen & 0x40 )
+		{
+			iLen = ( int( iLen & 0x3f )<<16 ) + ( rdFrom.GetByte()<<8 );
+			iLen += rdFrom.GetByte(); // MUST be separate statement; cf. sequence point
+		} else
+		{
+			iLen = ( int( iLen & 0x3f )<<8 ) + rdFrom.GetByte();
+		}
+	}
+
+	// no data? do nothing
+	if ( !iLen )
+		return 0;
+
+	// copy bytes
+	uOffset = (SphAttr_t) wrTo.GetPos(); // FIXME! check bounds?
+
+	BYTE dLen[4];
+	wrTo.PutBytes ( dLen, sphPackStrlen ( dLen, iLen ) );
+
+	while ( iLen>0 )
+	{
+		const BYTE * pBuf = NULL;
+		int iChunk = rdFrom.GetBytesZerocopy ( &pBuf, iLen );
+		wrTo.PutBytes ( pBuf, iChunk );
+		iLen -= iChunk;
+	}
+
+	return uOffset;
+}
+
+
 bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> & dFilters, bool bMergeKillLists )
 {
 	assert( pSource );
@@ -9523,44 +9623,39 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 		return false;
 	}
 
-	for ( int i=0; i<pSrcSchema->GetAttrsCount(); i++ )
-		if ( pSrcSchema->GetAttr(i).m_eAttrType==SPH_ATTR_STRING )
+	int iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
+
+	/////////////////////////////////////////
+	// merging attributes (.spa, .spm, .sps)
+	/////////////////////////////////////////
+
+	CSphAutoreader tDstSPM, tSrcSPM, tDstSPS, tSrcSPS;
+	if ( !tDstSPM.Open ( GetIndexFileName("spm"), m_sLastError )
+		|| !tSrcSPM.Open ( pSrcIndex->GetIndexFileName("spm"), m_sLastError )
+		|| !tDstSPS.Open ( GetIndexFileName("sps"), m_sLastError )
+		|| !tSrcSPS.Open ( pSrcIndex->GetIndexFileName("sps"), m_sLastError ) )
 	{
-		m_sLastError.SetSprintf ( "merging of string attributes not (yet) supported (attr=%s)", pSrcSchema->GetAttr(i).m_sName.cstr() );
 		return false;
 	}
 
-	int iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
-
-	/////////////////
-	/// merging .spa, .spm
-	/////////////////
-
-	CSphReader_VLN	tDstSPM, tSrcSPM;
-	CSphWriter		tSPMWriter;
-
-	/// preparing files
-	CSphAutofile tDstSPMFile ( GetIndexFileName("spm"), SPH_O_READ, m_sLastError );
-	if ( tDstSPMFile.GetFD()<0 )
+	CSphWriter tSPMWriter, tSPSWriter;
+	if ( !tSPMWriter.OpenFile ( GetIndexFileName("spm.tmp"), m_sLastError )
+		|| !tSPSWriter.OpenFile ( GetIndexFileName("sps.tmp"), m_sLastError ) )
+	{
 		return false;
-
-	CSphAutofile tSrcSPMFile ( pSrcIndex->GetIndexFileName("spm"), SPH_O_READ, m_sLastError );
-	if ( tSrcSPMFile.GetFD()<0 )
-		return false;
-
-	tDstSPM.SetFile ( tDstSPMFile.GetFD(), tDstSPMFile.GetFilename() );
-	tSrcSPM.SetFile ( tSrcSPMFile.GetFD(), tSrcSPMFile.GetFilename() );
-
-	if ( !tSPMWriter.OpenFile ( GetIndexFileName("spm.tmp"), m_sLastError ) )
-		return false;
+	}
+	tSPSWriter.PutByte ( 0 ); // dummy byte, to reserve magic zero offset
 
 	/// merging
 	CSphVector<CSphAttrLocator> dMvaLocators;
+	CSphVector<CSphAttrLocator> dStringLocators;
 	for ( int i=0; i<pDstSchema->GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tInfo = pDstSchema->GetAttr( i );
 		if ( tInfo.m_eAttrType & SPH_ATTR_MULTI )
 			dMvaLocators.Add ( tInfo.m_tLocator );
+		if ( tInfo.m_eAttrType==SPH_ATTR_STRING )
+			dStringLocators.Add ( tInfo.m_tLocator );
 	}
 
 	CSphDocMVA	tDstMVA ( dMvaLocators.GetLength() ), tSrcMVA ( dMvaLocators.GetLength() );
@@ -9607,6 +9702,10 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 						sphSetRowAttr ( DOCINFO2ATTRS(pDstRow), dMvaLocators[i], tDstMVA.m_dOffsets[i] );
 				}
 
+				ARRAY_FOREACH ( i, dStringLocators )
+					sphSetRowAttr ( DOCINFO2ATTRS(pDstRow), dStringLocators[i],
+						CopyStringAttr ( tSPSWriter, tDstSPS, sphGetRowAttr ( DOCINFO2ATTRS(pDstRow), dStringLocators[i] ) ) );
+
 				sphWriteThrottled ( fdSpa.GetFD(), pDstRow, sizeof(DWORD)*iStride, "doc_attr", m_sLastError );
 				pDstRow += iStride;
 				iDstCount++;
@@ -9623,6 +9722,10 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 					ARRAY_FOREACH ( i, tSrcMVA.m_dMVA )
 						sphSetRowAttr ( DOCINFO2ATTRS(pSrcRow), dMvaLocators[i], tSrcMVA.m_dOffsets[i] );
 				}
+
+				ARRAY_FOREACH ( i, dStringLocators )
+					sphSetRowAttr ( DOCINFO2ATTRS(pSrcRow), dStringLocators[i],
+						CopyStringAttr ( tSPSWriter, tSrcSPS, sphGetRowAttr ( DOCINFO2ATTRS(pSrcRow), dStringLocators[i] ) ) );
 
 				sphWriteThrottled( fdSpa.GetFD(), pSrcRow, sizeof( DWORD ) * iStride, "doc_attr", m_sLastError );
 				pSrcRow += iStride;
@@ -9657,51 +9760,26 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 	/// merging .spd
 	/////////////////
 
-	CSphAutofile tDstData ( GetIndexFileName("spd"), SPH_O_READ, m_sLastError );
-	if ( tDstData.GetFD()<0 )
+	CSphAutoreader rdDstData, rdDstHitlist, rdSrcData, rdSrcHitlist;
+	if ( !rdDstData.Open ( GetIndexFileName("spd"), m_sLastError )
+		|| !rdDstHitlist.Open ( GetIndexFileName ( m_uVersion>=3 ? "spp" : "spd" ), m_sLastError )
+		|| !rdSrcData.Open ( pSrcIndex->GetIndexFileName("spd"), m_sLastError )
+		|| !rdSrcHitlist.Open ( pSrcIndex->GetIndexFileName ( m_uVersion>=3 ? "spp" : "spd" ), m_sLastError ) )
+	{
 		return false;
+	}
 
-	CSphAutofile tDstHitlist ( GetIndexFileName ( m_uVersion>=3 ? "spp" : "spd" ), SPH_O_READ, m_sLastError );
-	if ( tDstHitlist.GetFD()<0 )
-		return false;
+	rdDstData.SeekTo ( 1, 0 );
+	rdDstHitlist.SeekTo ( 1, 0 );
+	rdSrcData.SeekTo ( 1, 0 );
+	rdSrcHitlist.SeekTo ( 1, 0 );
 
-	CSphAutofile tSrcData ( pSrcIndex->GetIndexFileName("spd"), SPH_O_READ, m_sLastError );
-	if ( tSrcData.GetFD()<0 )
-		return false;
+	bool bDstEmpty = ( rdDstData.Tell()>=rdDstData.GetFilesize() || rdDstHitlist.Tell()>=rdDstHitlist.GetFilesize() );
+	bool bSrcEmpty = ( rdSrcData.Tell()>=rdSrcData.GetFilesize() || rdSrcHitlist.Tell()>=rdSrcHitlist.GetFilesize() );
 
-	CSphAutofile tSrcHitlist ( pSrcIndex->GetIndexFileName ( m_uVersion>=3 ? "spp" : "spd" ), SPH_O_READ, m_sLastError );
-	if ( tSrcHitlist.GetFD()<0 )
-		return false;
-
-	CSphReader_VLN rdDstData;
-	CSphReader_VLN rdDstHitlist;
-	CSphReader_VLN rdSrcData;
-	CSphReader_VLN rdSrcHitlist;
 	CSphWriter wrDstData;
 	CSphWriter wrDstIndex;
 	CSphWriter wrDstHitlist;
-
-	bool bSrcEmpty = false;
-	bool bDstEmpty = false;
-
-	rdDstData.SetFile ( tDstData.GetFD(), tDstData.GetFilename() );
-	rdDstHitlist.SetFile ( tDstHitlist.GetFD(), tDstHitlist.GetFilename() );
-
-	rdSrcData.SetFile ( tSrcData.GetFD(), tSrcData.GetFilename() );
-	rdSrcHitlist.SetFile ( tSrcHitlist.GetFD(), tSrcHitlist.GetFilename() );
-
-	rdDstData.SeekTo( 1, 0 );
-	rdDstHitlist.SeekTo( 1, 0 );
-
-	if ( rdDstData.Tell() >= tDstData.GetSize() || rdDstHitlist.Tell() >= tDstHitlist.GetSize() )
-		bDstEmpty = true;
-
-	rdSrcData.SeekTo( 1, 0 );
-	rdSrcHitlist.SeekTo( 1, 0 );
-
-	if ( rdSrcData.Tell() >= tSrcData.GetSize() || rdSrcHitlist.Tell() >= tSrcHitlist.GetSize() )
-		bSrcEmpty = true;
-
 	if ( !wrDstData.OpenFile ( GetIndexFileName("spd.tmp"), m_sLastError ) )
 		return false;
 	if ( !wrDstHitlist.OpenFile ( GetIndexFileName("spp.tmp"), m_sLastError ) )
@@ -9992,6 +10070,7 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 
 	return true;
 }
+
 
 void CSphIndex_VLN::MergeWordData ( CSphWordRecord & tDstWord, CSphWordRecord & tSrcWord )
 {
@@ -10946,14 +11025,12 @@ void CSphIndex_VLN::Dealloc ()
 
 bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, CSphString & sWarning )
 {
-	CSphAutofile tIndexInfo ( sHeaderName, SPH_O_READ, m_sLastError );
-	if ( tIndexInfo.GetFD()<0 )
-		return false;
-
 	const int MAX_HEADER_SIZE = 32768;
-	CSphAutoArray <BYTE> dCacheInfo ( MAX_HEADER_SIZE );
-	CSphReader_VLN rdInfo ( dCacheInfo, MAX_HEADER_SIZE ); // to avoid mallocs
-	rdInfo.SetFile ( tIndexInfo );
+	CSphAutoArray<BYTE> dCacheInfo ( MAX_HEADER_SIZE );
+
+	CSphAutoreader rdInfo ( dCacheInfo, MAX_HEADER_SIZE ); // to avoid mallocs
+	if ( !rdInfo.Open ( sHeaderName, m_sLastError ) )
+		return false;
 
 	// version
 	DWORD uHeader = rdInfo.GetDword ();
@@ -11005,10 +11082,10 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, CSphString & sWarning
 	else
 		m_tMin.m_iDocID = rdInfo.GetDword(); // v1
 	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_INLINE )
-		rdInfo.GetRawBytes ( m_tMin.m_pRowitems, sizeof(CSphRowitem)*m_tSchema.GetRowSize() );
+		rdInfo.GetBytes ( m_tMin.m_pRowitems, sizeof(CSphRowitem)*m_tSchema.GetRowSize() );
 
 	// wordlist checkpoints
-	rdInfo.GetRawBytes ( &m_iCheckpointsPos, sizeof(SphOffset_t) );
+	rdInfo.GetBytes ( &m_iCheckpointsPos, sizeof(SphOffset_t) );
 	m_dWordlistCheckpoints.Resize ( rdInfo.GetDword() );
 
 	// index stats
@@ -11426,7 +11503,7 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 		CSphWordlistCheckpoint tCheckpoint;
 		ARRAY_FOREACH ( i, m_dWordlistCheckpoints )
 		{
-			tCheckpointReader.GetBytes ( &tCheckpoint, sizeof ( tCheckpoint ) );
+			tCheckpointReader.GetBytes ( &tCheckpoint, sizeof(tCheckpoint) );
 			m_dWordlistCheckpoints[i] = tCheckpoint;
 		}
 	} else
@@ -11435,7 +11512,7 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 		CSphWordlistCheckpoint_v10 tCheckpoint;
 		ARRAY_FOREACH ( i, m_dWordlistCheckpoints )
 		{
-			tCheckpointReader.GetBytes ( &tCheckpoint, sizeof ( tCheckpoint ) );
+			tCheckpointReader.GetBytes ( &tCheckpoint, sizeof(tCheckpoint) );
 			m_dWordlistCheckpoints[i].m_iWordID = tCheckpoint.m_iWordID;
 			m_dWordlistCheckpoints[i].m_iWordlistOffset = tCheckpoint.m_iWordlistOffset;
 		}
@@ -13250,12 +13327,9 @@ CSphDictCRC::WordformContainer * CSphDictCRC::LoadWordformContainer ( const char
 
 	// open it
 	CSphString sError;
-	CSphAutofile fdWordforms ( szFile, SPH_O_READ, sError );
-	if ( fdWordforms.GetFD()<0 )
+	CSphAutoreader rdWordforms;
+	if ( !rdWordforms.Open ( szFile, sError ) )
 		return NULL;
-
-	CSphReader_VLN rdWordforms;
-	rdWordforms.SetFile ( fdWordforms );
 
 	// my tokenizer
 	CSphScopedPtr<ISphTokenizer> pMyTokenizer ( pTokenizer->Clone ( false ) );
@@ -18552,7 +18626,7 @@ void CSphDocMVA::Read( CSphReader_VLN & tReader )
 			DWORD iValues = tReader.GetDword();
 			m_dMVA[i].Resize( iValues );
 			if ( iValues )
-				tReader.GetBytes( &m_dMVA[i][0], iValues * sizeof(DWORD) );
+				tReader.GetBytes ( &m_dMVA[i][0], iValues*sizeof(DWORD) );
 		}
 	}
 }

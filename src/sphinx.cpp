@@ -9760,6 +9760,12 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 	if ( !pDstSchema->CompareTo ( *pSrcSchema, m_sLastError ) )
 		return false;
 
+	if ( m_tSettings.m_eHitless || pSrcIndex->m_tSettings.m_eHitless )
+	{
+		m_sLastError = "merging of hitless indices is not supported (yet)";
+		return false;
+	}
+
 	// FIXME!
 	if ( m_tSettings.m_eDocinfo!=pSrcIndex->m_tSettings.m_eDocinfo && !( !m_tStats.m_iTotalDocuments || !pSrcIndex->m_tStats.m_iTotalDocuments ) )
 	{

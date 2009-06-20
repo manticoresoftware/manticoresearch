@@ -1208,8 +1208,8 @@ function CheckConfig ( $config, $path )
 
 	if ( $config->Requires("id32") && $g_id64 )
 	{
-		printf ( "SKIPPING %s, %s - disable id64 to run this test\n", $test_dir, $config->Name () );
-		return $res_skipped;
+		printf ( "SKIPPING %s, %s - disable id64 to run this test\n", $path, $config->Name () );
+		return false;
 	}
 
 	if ( $config->Requires("non-windows") && $windows )

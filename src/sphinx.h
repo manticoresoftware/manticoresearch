@@ -2027,12 +2027,24 @@ enum ESphDocinfo
 };
 
 
+enum ESphHitless
+{
+	SPH_HITLESS_NONE		= 0,	///< all hits are present
+	SPH_HITLESS_SOME		= 1,	///< some of the hits might be omitted (check the flag bit)
+	SPH_HITLESS_ALL			= 2,	///< no hits in this index
+};
+
+
 struct CSphIndexSettings : public CSphSourceSettings
 {
 	ESphDocinfo		m_eDocinfo;
 	bool			m_bHtmlStrip;
 	CSphString		m_sHtmlIndexAttrs;
 	CSphString		m_sHtmlRemoveElements;
+
+	ESphHitless		m_eHitless;
+	float			m_fHitlessThreshold;
+	CSphString		m_sHitlessFile;
 
 					CSphIndexSettings ();
 };

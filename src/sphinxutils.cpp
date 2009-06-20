@@ -211,6 +211,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "stopword_step",			0, NULL },
 	{ "blend_chars",			0, NULL },
 	{ "expand_keywords",		0, NULL },
+	{ "hitless_words",			KEY_LIST, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -831,6 +832,30 @@ void sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 		else if ( hIndex["docinfo"]=="extern" )	tSettings.m_eDocinfo = SPH_DOCINFO_EXTERN;
 		else
 			fprintf ( stdout, "WARNING: unknown docinfo=%s, defaulting to extern\n", hIndex["docinfo"].cstr() );
+	}
+
+	// hit-less indices
+	if ( hIndex("hitless_words") )
+	{
+		for ( const CSphVariant * pVariant = &hIndex["hitless_words"]; pVariant; pVariant = pVariant->m_pNext )
+		{
+			const CSphString & sValue = *pVariant;
+			if ( sValue.Ends("%") )
+			{
+				tSettings.m_eHitless = SPH_HITLESS_SOME;
+				tSettings.m_fHitlessThreshold = float(pVariant->intval()) / 100.0f;
+			}
+			else if ( sValue=="all" )
+			{
+				tSettings.m_eHitless = SPH_HITLESS_ALL;
+			}
+			else
+			{
+				tSettings.m_eHitless = SPH_HITLESS_SOME;
+				tSettings.m_sHitlessFile = sValue;
+			}
+		}
+					
 	}
 }
 

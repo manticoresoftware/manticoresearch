@@ -1414,7 +1414,7 @@ const ExtHit_t * ExtAnd_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMa
 				}
 			}
 
-			// copy tail, while possible
+			// copy tail, while possible, unless the other child is at the end of a hit block
 			if ( pCur0 && pCur0->m_uDocid==m_uMatchedDocid && !( pCur1 && pCur1->m_uDocid==DOCID_MAX ) )
 			{
 				while ( pCur0->m_uDocid==m_uMatchedDocid && iHit<MAX_HITS-1 )
@@ -1428,19 +1428,27 @@ const ExtHit_t * ExtAnd_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMa
 		}
 
 		// move on
-		if ( ( pCur0 && pCur0->m_uDocid!=m_uMatchedDocid && pCur0->m_uDocid!=DOCID_MAX ) && ( pCur1 && pCur1->m_uDocid!=m_uMatchedDocid && pCur1->m_uDocid!=DOCID_MAX ) )
+		if ( ( pCur0 && pCur0->m_uDocid!=m_uMatchedDocid && pCur0->m_uDocid!=DOCID_MAX ) &&
+			 ( pCur1 && pCur1->m_uDocid!=m_uMatchedDocid && pCur1->m_uDocid!=DOCID_MAX ) )
 			m_uMatchedDocid = 0;
 
 		// warmup if needed
 		if ( !pCur0 || pCur0->m_uDocid==DOCID_MAX ) pCur0 = m_pChildren[0]->GetHitsChunk ( pDocs, uMaxID );
-		if ( !pCur0 ) break;
-
 		if ( !pCur1 || pCur1->m_uDocid==DOCID_MAX ) pCur1 = m_pChildren[1]->GetHitsChunk ( pDocs, uMaxID );
-		if ( !pCur1 ) break;
 
-		assert ( pCur0 && pCur1 );
+		// one of the hitlists is over
+		if ( !pCur0 || !pCur1 )
+		{
+			if ( !pCur0 && !pCur1 ) break; // both are over, we're done
+
+			// one is over, but we still need to copy the other one
+			m_uMatchedDocid = pCur0 ? pCur0->m_uDocid : pCur1->m_uDocid;
+			assert ( m_uMatchedDocid!=DOCID_MAX );
+			continue;
+		}
 
 		// find matching doc
+		assert ( pCur1 && pCur0 );
 		while ( !m_uMatchedDocid )
 		{
 			while ( pCur0->m_uDocid < pCur1->m_uDocid ) pCur0++;

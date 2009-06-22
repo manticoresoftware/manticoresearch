@@ -57,7 +57,7 @@ module Sphinx
     # Current client-side command implementation versions
     
     # search command version
-    VER_COMMAND_SEARCH   = 0x116
+    VER_COMMAND_SEARCH   = 0x117
     # excerpt command version
     VER_COMMAND_EXCERPT  = 0x100
     # update command version
@@ -147,6 +147,8 @@ module Sphinx
     SPH_ATTR_FLOAT     = 5
     # signed 64-bit integer
     SPH_ATTR_BIGINT    = 6
+    # string
+    SPH_ATTR_STRING    = 7
     # this attr has multiple values (0 or more)
     SPH_ATTR_MULTI     = 0x40000000
     
@@ -758,6 +760,8 @@ module Sphinx
                 when SPH_ATTR_FLOAT
                   # handle floats
                   r['attrs'][a] = response.get_float
+                when SPH_ATTR_STRING
+                  r['attrs'][a] = response.get_string
                 else
                   # handle everything else as unsigned ints
                   val = response.get_int

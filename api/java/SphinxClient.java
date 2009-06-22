@@ -71,6 +71,7 @@ public class SphinxClient
 	public final static int SPH_ATTR_BOOL			= 4;
 	public final static int SPH_ATTR_FLOAT			= 5;
 	public final static int SPH_ATTR_BIGINT			= 6;
+	public final static int SPH_ATTR_STRING			= 7;
 	public final static int SPH_ATTR_MULTI			= 0x40000000;
 
 	/* searchd commands */
@@ -82,7 +83,7 @@ public class SphinxClient
 
 	/* searchd command versions */
 	private final static int VER_MAJOR_PROTO		= 0x1;
-	private final static int VER_COMMAND_SEARCH		= 0x116;
+	private final static int VER_COMMAND_SEARCH		= 0x117;
 	private final static int VER_COMMAND_EXCERPT	= 0x100;
 	private final static int VER_COMMAND_UPDATE		= 0x101;
 	private final static int VER_COMMAND_KEYWORDS	= 0x100;
@@ -1023,6 +1024,14 @@ public class SphinxClient
 						if ( type==SPH_ATTR_FLOAT )
 						{
 							docInfo.attrValues.add ( attrNumber, new Float ( in.readFloat() ) );
+							continue;
+						}
+
+						/* handle strings */
+						if ( type==SPH_ATTR_STRING )
+						{
+							String s = readNetUTF8(in);
+							docInfo.attrValues.add ( attrNumber, s );
 							continue;
 						}
 

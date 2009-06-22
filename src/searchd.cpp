@@ -5846,6 +5846,41 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 							break;
 						}
 
+						case SPH_ATTR_STRING:
+						{
+							const BYTE * pStrings = pRes->m_dTag2Pools [ tMatch.m_iTag ].m_pStrings;
+
+							// get that string
+							const BYTE * pStr;
+							int iLen = 0;
+
+							DWORD uOffset = (DWORD) tMatch.GetAttr ( tLoc );
+							if ( uOffset )
+								iLen = sphUnpackStr ( pStrings+uOffset, &pStr );
+
+							// send length
+							BYTE * pLen = (BYTE*)p;
+							iLen = Min ( iLen, sRowMax-p-3 ); // clamp it, buffer size is limited
+							if ( iLen<251 )
+							{
+								pLen[0] = BYTE(iLen);
+								p++;
+							} else
+							{
+								assert ( iLen<=0xffff );
+								pLen[0] = 252;
+								pLen[1] = BYTE(iLen&0xff);
+								pLen[2] = BYTE(iLen>>8);
+								p += 3;
+							}
+
+							// send string data
+							if ( iLen )
+								memcpy ( p, pStr, iLen );
+							p += iLen;
+							break;
+						}
+
 						default:
 							p[0] = 1;
 							p[1] = '-';

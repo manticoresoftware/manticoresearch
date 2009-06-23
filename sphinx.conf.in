@@ -187,6 +187,13 @@ source src1
 	# sql_attr_str2wordcount	= stitle
 
 
+	# combined field plus attribute declaration (from a single column)
+	# stores column as an attribute, but also indexes it as a full-text field
+	#
+	# sql_field_string			= author
+	# sql_field_str2wordcount	= title
+
+	
 	# post-query, executed on sql_query completion
 	# optional, default is empty
 	#

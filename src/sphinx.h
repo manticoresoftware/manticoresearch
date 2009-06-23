@@ -863,6 +863,7 @@ struct CSphColumnInfo
 	CSphString		m_sName;		///< column name
 	DWORD			m_eAttrType;	///< attribute type
 	ESphWordpart	m_eWordpart;	///< wordpart processing type
+	bool			m_bIndexed;		///< whether to index this column as fulltext field too
 
 	int				m_iIndex;		///< index into source result set (-1 for joined fields)
 	CSphAttrLocator	m_tLocator;		///< attribute locator in the row
@@ -881,6 +882,7 @@ struct CSphColumnInfo
 		: m_sName ( sName )
 		, m_eAttrType ( eType )
 		, m_eWordpart ( SPH_WORDPART_WHOLE )
+		, m_bIndexed ( false )
 		, m_iIndex ( -1 )
 		, m_eSrc ( SPH_ATTRSRC_NONE )
 		, m_pExpr ( NULL )

@@ -15505,7 +15505,7 @@ bool CSphSource_SQL::IterateHitsStart ( CSphString & sError )
 		if ( bInfix )
 			tCol.m_eWordpart = SPH_WORDPART_INFIX;
 
-		if ( tCol.m_eAttrType==SPH_ATTR_NONE )
+		if ( tCol.m_eAttrType==SPH_ATTR_NONE || tCol.m_bIndexed )
 		{
 			m_tSchema.m_dFields.Add ( tCol );
 			ARRAY_FOREACH ( k, m_tParams.m_dUnpack )
@@ -15528,7 +15528,8 @@ bool CSphSource_SQL::IterateHitsStart ( CSphString & sError )
 				}
 			}
 		}
-		else
+
+		if ( tCol.m_eAttrType!=SPH_ATTR_NONE )
 			m_tSchema.AddAttr ( tCol );
 	}
 

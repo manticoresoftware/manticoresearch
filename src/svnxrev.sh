@@ -1,10 +1,11 @@
-#!/bin/bash
+#!/bin/sh
 ## As standalone run from this directory as "./svnxrev.sh .."
 
 if [ -e $1/.svn ] ; then 
     svn info --xml $1 | perl $1/src/svnxrev.pl $1/src/sphinxversion.h
 elif [ -e $1/.hg ] ; then
-    pushd $1 > /dev/null
+    ddr=$(pwd)
+    cd $1
 	target="src/sphinxversion.h"
 	startrev=$(hg id -n)
 	rev="$startrev"
@@ -22,7 +23,7 @@ elif [ -e $1/.hg ] ; then
 	printf "#define SPH_SVN_REV %s\n" $svnrev >> $target
 	printf "#define SPH_SVN_REVSTR \"%s\"\n" $svnrev >> $target
 	printf "#define SPH_SVN_TAGREV \"%s\"\n" $rsvnrev >> $target
-    popd > /dev/null
+    cd "$ddr"
 fi
 if [ ! -f ./sphinxversion.h ] ; then
     cat *.cpp *.h | perl srcxrev.pl > sphinxversion.h

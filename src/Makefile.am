@@ -19,8 +19,7 @@ tests_SOURCES = tests.cpp
 BUILT_SOURCES = extract-version
 .PHONY: extract-version
 extract-version:
-	if test -d ../.svn; then svn info .. --xml | perl svnxrev.pl; fi;
-	if test ! -f ./sphinxversion.h; then cat *.cpp *.h | perl srcxrev.pl > sphinxversion.h; fi;
+	bash svnxrev.sh ..
 
 if USE_LIBSTEMMER
 LIBSTEMMER_LIBS = $(top_srcdir)/libstemmer_c/libstemmer.a

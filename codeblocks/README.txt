@@ -1,0 +1,1 @@
+You need to run ../configure script in order to use Code::Blocks projects

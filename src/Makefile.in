@@ -534,8 +534,7 @@ uninstall-am: uninstall-binPROGRAMS
 
 .PHONY: extract-version
 extract-version:
-	if test -d ../.svn; then svn info .. --xml | perl svnxrev.pl; fi;
-	if test ! -f ./sphinxversion.h; then cat *.cpp *.h | perl srcxrev.pl > sphinxversion.h; fi;
+	bash svnxrev.sh ..
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.
 .NOEXPORT:

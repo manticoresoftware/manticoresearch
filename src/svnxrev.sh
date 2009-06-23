@@ -6,7 +6,7 @@ if [ -e $1/.svn ] ; then
 elif [ -e $1/.hg ] ; then
     pushd $1 > /dev/null
 	target="src/sphinxversion.h"
-	startrev="tip"
+	startrev=$(hg id -n)
 	rev="$startrev"
 	svnrev=$(hg log -r$rev --template "{desc}" | grep ^\\[svn | sed 's/\[svn r//; s/\].*//')
 	while [ "z" = "z$svnrev" ] ; do

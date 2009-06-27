@@ -8376,7 +8376,7 @@ bool CSphIndex_VLN::LoadHitlessWords ()
 	if ( tFile.GetFD()==-1 )
 		return false;
 
-	CSphVector<BYTE> dBuffer ( tFile.GetSize() );
+	CSphVector<BYTE> dBuffer ( (int)tFile.GetSize() );
 	if ( !tFile.Read ( &dBuffer[0], dBuffer.GetLength(), m_sLastError ) )
 		return false;
 
@@ -9503,7 +9503,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	//////////////
 
 	if ( m_tSettings.m_eHitless==SPH_HITLESS_SOME && m_tSettings.m_fHitlessThreshold!=1.0f )
-		m_iHitlessThreshold = ceil ( double(m_tSettings.m_fHitlessThreshold) * double(m_tStats.m_iTotalDocuments) );
+		m_iHitlessThreshold = (int)ceil ( double(m_tSettings.m_fHitlessThreshold) * double(m_tStats.m_iTotalDocuments) );
 	else
 		m_iHitlessThreshold = m_tStats.m_iTotalDocuments;
 

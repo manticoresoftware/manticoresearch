@@ -58,6 +58,8 @@ index test
 <query mode="extended2" expect_error="1">@ttitle test</query>
 <query mode="extended2" expect_error="1">@@title test</query>
 <query mode="extended2">@@relaxed @ttitle test</query>
+<query mode="extended2">""</query>
+<query mode="extended2">@title ""</query>
 </queries>
 
 <db_create>

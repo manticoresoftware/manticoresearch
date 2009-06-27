@@ -1667,7 +1667,7 @@ private:
 	void						WriteSchemaColumn ( CSphWriter & fdInfo, const CSphColumnInfo & tCol );
 	void						ReadSchemaColumn ( CSphReader_VLN & rdInfo, CSphColumnInfo & tCol );
 
-	void						CreateFilters ( CSphQuery * pQuery, const CSphSchema & tSchema );
+	bool						CreateFilters ( CSphQuery * pQuery, const CSphSchema & tSchema );
 
 	bool						MatchExtended ( const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, ISphRanker * pRanker );
 	bool						MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, const DiskIndexQwordSetup_c & tTermSetup );
@@ -9738,6 +9738,20 @@ SphAttr_t CopyStringAttr ( CSphWriter & wrTo, CSphReader_VLN & rdFrom, SphAttr_t
 }
 
 
+static ISphFilter * CreateMergeFilters ( CSphVector<CSphFilterSettings> & dSettings, const CSphSchema & tSchema, const DWORD * pMvaPool )
+{
+	CSphString sError;
+	ISphFilter * pResult = NULL;
+	ARRAY_FOREACH ( i, dSettings )
+	{
+		ISphFilter * pFilter = sphCreateFilter ( dSettings[i], tSchema, pMvaPool, sError );
+		if ( pFilter )
+			pResult = sphJoinFilters ( pResult, pFilter );
+	}
+	return pResult;
+}
+
+
 bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> & dFilters, bool bMergeKillLists )
 {
 	assert( pSource );
@@ -9999,7 +10013,7 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 	}
 
 	// create filter
-	tMerge.m_pFilter = sphCreateFilters ( dFilters, m_tSchema, GetMVAPool() );
+	tMerge.m_pFilter = CreateMergeFilters ( dFilters, m_tSchema, GetMVAPool() );
 
 	// create killlist filter
 	if ( !bMergeKillLists )
@@ -10017,7 +10031,7 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 			tKillListFilter.m_sAttrName = "@id";
 			tKillListFilter.SetExternalValues ( pKillList, nKillListSize );
 
-			ISphFilter * pKillListFilter = sphCreateFilter ( tKillListFilter, m_tSchema, GetMVAPool() );
+			ISphFilter * pKillListFilter = sphCreateFilter ( tKillListFilter, m_tSchema, GetMVAPool(), m_sLastError );
 			tMerge.m_pFilter = sphJoinFilters ( tMerge.m_pFilter, pKillListFilter );
 		}
 	}
@@ -12387,7 +12401,7 @@ static void PrepareQueryEmulation ( CSphQuery * pQuery, CSphString & sQueryFixup
 	while ( ( c = *szQuery++ ) != 0 )
 	{
 		// must be in sync with EscapeString (php api)
-		if ( c=='(' || c==')' || c=='|' || c=='-' || c=='!' || c=='@' || c=='~' || c=='\"' || c=='&' || c=='/' || c=='<' )
+		if ( c=='(' || c==')' || c=='|' || c=='-' || c=='!' || c=='@' || c=='~' || c=='\"' || c=='&' || c=='/' || c=='<' || c=='\\' )
 			*szRes++ = '\\';
 
 		*szRes++ = c;
@@ -12413,7 +12427,7 @@ public:
 };
 
 
-void CSphIndex_VLN::CreateFilters ( CSphQuery * pQuery, const CSphSchema & tSchema )
+bool CSphIndex_VLN::CreateFilters ( CSphQuery * pQuery, const CSphSchema & tSchema )
 {
 	assert ( !m_pLateFilter );
 	assert ( !m_pEarlyFilter );
@@ -12426,9 +12440,9 @@ void CSphIndex_VLN::CreateFilters ( CSphQuery * pQuery, const CSphSchema & tSche
 		if ( bFullscan && tFilter.m_sAttrName == "@weight" )
 			continue; // @weight is not avaiable in fullscan mode
 
-		ISphFilter * pFilter = sphCreateFilter ( tFilter, tSchema, GetMVAPool() );
+		ISphFilter * pFilter = sphCreateFilter ( tFilter, tSchema, GetMVAPool(), m_sLastError );
 		if ( !pFilter )
-			continue;
+			return false;
 
 		ISphFilter ** pGroup = tFilter.m_sAttrName == "@weight" ? &m_pLateFilter : &m_pEarlyFilter;
 		*pGroup = sphJoinFilters ( *pGroup, pFilter );
@@ -12442,8 +12456,10 @@ void CSphIndex_VLN::CreateFilters ( CSphQuery * pQuery, const CSphSchema & tSche
 		tFilter.m_eType = SPH_FILTER_RANGE;
 		tFilter.m_uMinValue = pQuery->m_iMinID;
 		tFilter.m_uMaxValue = pQuery->m_iMaxID;
-		m_pEarlyFilter = sphJoinFilters ( m_pEarlyFilter, sphCreateFilter ( tFilter, tSchema, 0 ) );
+		m_pEarlyFilter = sphJoinFilters ( m_pEarlyFilter, sphCreateFilter ( tFilter, tSchema, NULL, m_sLastError ) );
 	}
+
+	return true;
 }
 
 
@@ -12562,11 +12578,6 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 		return false;
 	}
 
-	// empty index, empty response!
-	if ( !m_tStats.m_iTotalDocuments )
-		return true;
-	assert ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_EXTERN || !m_pDocinfo.IsEmpty() ); // check that docinfo is preloaded
-
 	// setup calculations and result schema
 	if ( !SetupCalc ( pResult, ppSorters[0]->GetIncomingSchema() ) )
 		return false;
@@ -12641,8 +12652,14 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 	if ( !pRanker.Ptr() )
  		return false;
 
+	// empty index, empty response
+	// must happen after setup though, for keyword stats too
+	if ( !m_tStats.m_iTotalDocuments )
+		return true;
+
 	// setup filters
-	CreateFilters ( pQuery, pResult->m_tSchema );
+	if ( !CreateFilters ( pQuery, pResult->m_tSchema ) )
+		return false;
 
 	CSphScopedPtr<ISphFilter> tCleanEarly ( m_pEarlyFilter );
 	PtrNullifier_t<ISphFilter> tNullEarly ( &m_pEarlyFilter );
@@ -14817,7 +14834,9 @@ void CSphSource_Document::BuildHits ( BYTE ** dFields, int iFieldIndex, int iSta
 
 	int iStartField = 0;
 	int iEndField = m_tSchema.m_iBaseFields;
-	if ( !iEndField ) iEndField = m_tSchema.m_dFields.GetLength();
+	if ( !iEndField )
+		iEndField = m_tSchema.m_dFields.GetLength();
+
 	if ( iFieldIndex>=0 )
 	{
 		iStartField = iFieldIndex;
@@ -18098,13 +18117,13 @@ void CSphSource_XMLPipe2::Characters ( const char * pCharacters, int iLen )
 		return;
 	}
 
-	if ( !m_bInSchema && !m_bInDocument )
+	if ( !m_bInSchema && !m_bInDocument && !m_bInKillList )
 	{
 		UnexpectedCharaters ( pCharacters, iLen, "outside of <sphinx:schema> and <sphinx:document>" );
 		return;
 	}
 
-	if ( m_iCurAttr == -1 && m_iCurField == -1 )
+	if ( m_iCurAttr == -1 && m_iCurField == -1 && !m_bInKillList )
 	{
 		UnexpectedCharaters ( pCharacters, iLen, m_bInDocument ? "inside <sphinx:document>" : ( m_bInSchema ? "inside <sphinx:schema>" : "" ) );
 		return;

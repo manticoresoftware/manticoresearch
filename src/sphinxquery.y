@@ -92,7 +92,7 @@ atom:
 
 atomf:
 	atom								{ $$ = $1; }
-	| TOK_FIELDLIMIT atom				{ $$ = $2; $$->SetFieldSpec ( $1.uMask, $1.iMaxPos ); }
+	| TOK_FIELDLIMIT atom				{ $$ = $2; if ( $$ ) $$->SetFieldSpec ( $1.uMask, $1.iMaxPos ); }
 	;
 
 orlist:

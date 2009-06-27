@@ -2016,6 +2016,7 @@ Any documents marked as deleted (value 1) would be removed from the newly-merged
 </para>
 </sect2>
 
+
 <sect2 id="ref-searchd"><title><filename>searchd</filename> command reference</title>
 <para><filename>searchd</filename> is the second of the two principle tools as part of Sphinx. <filename>searchd</filename> is the part of the system which actually handles searches; it functions as a server and is responsible for receiving queries, processing them and returning a dataset back to the different APIs for client applications.</para>
 <para>Unlike <filename>indexer</filename>, <filename>searchd</filename> is not designed to be run either from a regular script or command-line calling, but instead either as a daemon to be called from init.d (on Unix/Linux type systems) or to be called as a service (on Windows-type systems), so not all of the command line options will always apply, and so will be build-dependent.</para>
@@ -2103,6 +2104,28 @@ C:\WINDOWS\system32&gt; C:\Sphinx\bin\searchd.exe --install --config C:\Sphinx\s
 </listitem>
 <listitem><option>--ntservice</option> is the option that is passed by the Management Console to <filename>searchd</filename> to invoke it as a service on Windows platforms. It would not normally be necessary to call this directly; this would normally be called by Windows when the service would be started, although if you wanted to call this as a regular service from the command-line (as the complement to <option>--console</option>) you could do so in theory.</listitem>
 </itemizedlist>
+<para>
+Last but not least, as every other daemon, <filename>searchd</filename> supports a number of signals.
+<variablelist>
+<varlistentry>
+	<term>SIGTERM</term>
+	<listitem>Initiates a clean shutdown. New queries will not be handled; but queries
+	that are already started will not be forcibly interrupted.</listitem>
+</varlistentry>
+<varlistentry>
+	<term>SIGHUP</term>
+	<listitem>Initiates index rotation. Depending on the value of
+	<link linkend="conf-seamless-rotate">seamless_rotate</link> setting,
+	new queries might be shortly stalled; clients will receive temporary
+	errors.</listitem>
+</varlistentry>
+<varlistentry>
+	<term>SIGUSR1</term>
+	<listitem>Forces reopen of searchd log and query log files, letting
+	you implement log file rotation.</listitem>
+</varlistentry>
+</variablelist>
+</para>
 </sect2>
 
 

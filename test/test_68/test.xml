@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>xmlpipe2 indexing</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source src1
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <test_root/>/test_68/data1.xml
+}
+
+source src2
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <test_root/>/test_68/data2.xml
+}
+
+index idx1
+{
+	source = src1
+	path = <data_path/>/idx1
+	charset_type = utf-8
+}
+
+index idx2
+{
+	source = src2
+	path = <data_path/>/idx2
+	charset_type = utf-8
+}
+</config>
+
+<queries>
+<query index="idx1">test</query>
+<query index="idx2">test</query>
+<query index="idx1,idx2">test</query>
+</queries>
+
+</test>

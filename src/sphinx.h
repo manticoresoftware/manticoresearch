@@ -912,7 +912,7 @@ struct CSphSchema
 public:
 
 	/// ctor
-							CSphSchema ( const char * sName="(nameless)" ) : m_sName ( sName ) {}
+							CSphSchema ( const char * sName="(nameless)" ) : m_sName ( sName ), m_iBaseFields ( 0 ) {}
 
 	/// get field index by name
 	/// returns -1 if not found

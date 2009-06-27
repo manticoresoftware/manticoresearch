@@ -1133,6 +1133,7 @@ class SphinxConfig
 			case "agent_address":		fwrite ( $fp, $agent_address.":".$agent_port ); return;
 			case "data_path":			fwrite ( $fp, $index_data_path ); return;
 			case "local":				fwrite ( $fp, $this->GetLocal ( $node->nodeValue ) ); return;
+			case "test_root":			fwrite ( $fp, dirname(__FILE__) ); return;
 		}
 
 		$nodename = strtolower ( $node->nodeName );

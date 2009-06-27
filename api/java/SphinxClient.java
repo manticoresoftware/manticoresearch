@@ -126,6 +126,7 @@ public class SphinxClient
 	private String		_error;
 	private String		_warning;
 	private boolean		_connerror;
+	private int			_timeout;
 
 	private ArrayList	_reqs;
 	private Map			_indexWeights;
@@ -135,8 +136,6 @@ public class SphinxClient
 	private Map			_overrideTypes;
 	private Map			_overrideValues;
 	private String		_select;
-
-	private static final int SPH_CLIENT_TIMEOUT_MILLISEC	= 30000;
 
 	/** Creates a new SphinxClient instance. */
 	public SphinxClient()
@@ -182,6 +181,7 @@ public class SphinxClient
 		_error			= "";
 		_warning		= "";
 		_connerror		= false;
+		_timeout		= 1000;
 
 		_reqs			= new ArrayList();
 		_weights		= null;
@@ -219,6 +219,12 @@ public class SphinxClient
 		myAssert ( port>0 && port<65536, "port must be in 1..65535 range" );
 		_host = host;
 		_port = port;
+	}
+
+	/** Set server connection timeout (0 to remove), in milliseconds. */
+	public void SetConnectTimeout ( int timeout )
+	{
+		_timeout = Math.max ( timeout, 0 );
 	}
 
 	/** Internal method. Sanity check. */
@@ -276,7 +282,7 @@ public class SphinxClient
 		try
 		{
 			sock = new Socket ( _host, _port );
-			sock.setSoTimeout ( SPH_CLIENT_TIMEOUT_MILLISEC );
+			sock.setSoTimeout ( _timeout );
 
 			DataInputStream sIn = new DataInputStream ( sock.getInputStream() );
 			int version = sIn.readInt();
@@ -485,6 +491,7 @@ public class SphinxClient
 			mode==SPH_MATCH_PHRASE ||
 			mode==SPH_MATCH_BOOLEAN ||
 			mode==SPH_MATCH_EXTENDED ||
+			mode==SPH_MATCH_FULLSCAN ||
 			mode==SPH_MATCH_EXTENDED2, "unknown mode value; use one of the SPH_MATCH_xxx constants" );
 		_mode = mode;
 	}

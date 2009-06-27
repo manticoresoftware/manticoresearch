@@ -825,9 +825,9 @@ static void xqIndent ( int iIndent )
 }
 
 
-static void xqDump ( CSphExtendedQueryNode * pNode, const CSphSchema & tSch, int iIndent )
+static void xqDump ( XQNode_t * pNode, const CSphSchema & tSch, int iIndent )
 {
-	if ( pNode->m_tAtom.IsEmpty() )
+	if ( !pNode->IsPlain() )
 	{
 		xqIndent ( iIndent );
 		switch ( pNode->m_eOp )
@@ -843,13 +843,12 @@ static void xqDump ( CSphExtendedQueryNode * pNode, const CSphSchema & tSch, int
 			xqDump ( pNode->m_dChildren[i], tSch, iIndent+1 );
 	} else
 	{
-		const CSphExtendedQueryAtom & tAtom = pNode->m_tAtom;
 		xqIndent ( iIndent );
-		printf ( "MATCH(%d,%d):", tAtom.m_uFields, tAtom.m_iMaxDistance );
+		printf ( "MATCH(%d,%d):", pNode->m_uFieldMask, pNode->m_iMaxDistance );
 
-		ARRAY_FOREACH ( i, tAtom.m_dWords )
+		ARRAY_FOREACH ( i, pNode->m_dWords )
 		{
-			const CSphExtendedQueryAtomWord & tWord = tAtom.m_dWords[i];
+			const XQKeyword_t & tWord = pNode->m_dWords[i];
 
 			const char * sLocTag = "";
 			if ( tWord.m_bFieldStart ) sLocTag = ", start";

@@ -1169,7 +1169,7 @@ yyreduce:
 
   case 29:
 
-    { yyval.pNode = yyvsp[0].pNode; yyval.pNode->SetFieldSpec ( yyvsp[-1].tFieldLimit.uMask, yyvsp[-1].tFieldLimit.iMaxPos ); ;}
+    { yyval.pNode = yyvsp[0].pNode; if ( yyval.pNode ) yyval.pNode->SetFieldSpec ( yyvsp[-1].tFieldLimit.uMask, yyvsp[-1].tFieldLimit.iMaxPos ); ;}
     break;
 
   case 30:

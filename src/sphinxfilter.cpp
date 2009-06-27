@@ -437,7 +437,24 @@ static ISphFilter * CreateSpecialFilter ( const CSphString & sName, ESphFilter e
 	return NULL;
 }
 
-static ISphFilter * CreateFilter ( DWORD eAttrType, ESphFilter eFilterType )
+
+static inline ISphFilter * ReportError ( CSphString & sError, const char * sMessage, ESphFilter eFilterType )
+{
+	CSphString sFilterName;
+	switch ( eFilterType )
+	{
+		case SPH_FILTER_VALUES:			sFilterName = "intvalues"; break;
+		case SPH_FILTER_RANGE:			sFilterName = "intrange"; break;
+		case SPH_FILTER_FLOATRANGE:		sFilterName = "floatrange"; break;
+		default:						sFilterName.SetSprintf ( "(filter-type-%d)", eFilterType ); break;
+	}
+
+	sError.SetSprintf ( sMessage, sFilterName.cstr() );
+	return NULL;
+}
+
+
+static ISphFilter * CreateFilter ( DWORD eAttrType, ESphFilter eFilterType, CSphString & sError )
 {
 	// MVA
 	if ( eAttrType & SPH_ATTR_MULTI )
@@ -446,35 +463,29 @@ static ISphFilter * CreateFilter ( DWORD eAttrType, ESphFilter eFilterType )
 		{
 			case SPH_FILTER_VALUES:	return new Filter_MVAValues;
 			case SPH_FILTER_RANGE:	return new Filter_MVARange;
-			default:
-				assert ( 0 && "invalid MVA filter" );
-				return NULL;
+			default:				return ReportError ( sError, "unsupported filter type '%s' on MVA column", eFilterType );
 		}
 	}
 
-	// non-MVA
-	if ( eAttrType == SPH_ATTR_FLOAT )
+	// float
+	if ( eAttrType==SPH_ATTR_FLOAT )
 	{
-		if ( eFilterType == SPH_FILTER_FLOATRANGE )
+		if ( eFilterType==SPH_FILTER_FLOATRANGE )
 			return new Filter_FloatRange;
-		else
-			assert ( 0 && "invalid float filter" );
-	}
-	else
-	{
-		switch ( eFilterType )
-		{
-			case SPH_FILTER_VALUES:	return new Filter_Values;
-			case SPH_FILTER_RANGE:	return new Filter_Range;
-			default:
-				assert ( 0 && "invalid attribute filter" );
-		}
+
+		return ReportError ( sError, "unsupported filter type '%s' on float column", eFilterType );
 	}
 
-	return NULL;
+	// non-float, non-MVA
+	switch ( eFilterType )
+	{
+		case SPH_FILTER_VALUES:	return new Filter_Values;
+		case SPH_FILTER_RANGE:	return new Filter_Range;
+		default:				return ReportError ( sError, "unsupported filter type '%s' on int column", eFilterType );
+	}
 }
 
-ISphFilter * sphCreateFilter ( CSphFilterSettings & tSettings, const CSphSchema & tSchema, const DWORD * pMvaPool )
+ISphFilter * sphCreateFilter ( CSphFilterSettings & tSettings, const CSphSchema & tSchema, const DWORD * pMvaPool, CSphString & sError )
 {
 	ISphFilter * pFilter = 0;
 
@@ -486,17 +497,20 @@ ISphFilter * sphCreateFilter ( CSphFilterSettings & tSettings, const CSphSchema 
 	// fetch column info
 	const CSphColumnInfo * pAttr = NULL;
 	const int iAttr = tSchema.GetAttrIndex ( sAttrName.cstr() );
-	if ( iAttr < 0 )
+	if ( iAttr<0 )
 	{
-		if ( !pFilter )
+		if ( !pFilter ) // might be special
+		{
+			sError.SetSprintf ( "no such filter attribute '%s'", sAttrName.cstr() );
 			return NULL; // no such attribute
+		}
 	}
 	else
 	{
 		assert ( !pFilter );
 
 		pAttr = &tSchema.GetAttr(iAttr);
-		pFilter = CreateFilter ( pAttr->m_eAttrType, tSettings.m_eType );
+		pFilter = CreateFilter ( pAttr->m_eAttrType, tSettings.m_eType, sError );
 	}
 
 	// fill filter's properties
@@ -522,21 +536,6 @@ ISphFilter * sphCreateFilter ( CSphFilterSettings & tSettings, const CSphSchema 
 	return pFilter;
 }
 
-ISphFilter * sphCreateFilters ( CSphVector<CSphFilterSettings> & dSettings, const CSphSchema & tSchema, const DWORD * pMvaPool )
-{
-	ISphFilter *pResult = NULL;
-
-	ARRAY_FOREACH ( i, dSettings )
-	{
-		ISphFilter * pFilter = sphCreateFilter ( dSettings[i], tSchema, pMvaPool );
-		if ( !pFilter )
-			continue;
-
-		pResult = sphJoinFilters ( pResult, pFilter );
-	}
-
-	return pResult;
-}
 
 ISphFilter * sphJoinFilters ( ISphFilter * pA, ISphFilter * pB )
 {

@@ -829,7 +829,7 @@ const ExtDoc_t * ExtTerm_c::GetDocsChunk ( SphDocID_t * pMaxID )
 		tDoc.m_uDocid = tMatch.m_iDocID;
 		tDoc.m_pDocinfo = pDocinfo;
 		tDoc.m_uHitlistOffset = m_pQword->m_iHitlistPos;
-		tDoc.m_uFields = m_pQword->m_uFields; // OPTIMIZE: only needed for phrase node
+		tDoc.m_uFields = m_pQword->m_uFields & m_uFields; // OPTIMIZE: only needed for phrase node
 		tDoc.m_fTFIDF = float(m_pQword->m_uMatchHits) / float(m_pQword->m_uMatchHits+SPH_BM25_K1) * m_fIDF;
 		pDocinfo += m_iStride;
 	}

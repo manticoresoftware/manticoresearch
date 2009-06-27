@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 
-<name>wordcount</name>
+<name>rankers</name>
 
 <config>
 indexer
@@ -27,8 +27,8 @@ index test
 	source			= srctest
 	path			= <data_path/>/test
     charset_type 	= utf-8
-	morphology = stem_ru, stem_en
-	charset_table = 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F
+	morphology		= stem_ru, stem_en
+	charset_table	= 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F
 }
 </config>
 
@@ -37,12 +37,14 @@ index test
 <query mode="extended2" ranker="bm25">"зимние шины"</query>
 <query mode="extended2" ranker="none">"зимние шины"</query>
 <query mode="extended2" ranker="wordcount">"зимние шины"</query>
+<query mode="extended2" ranker="bm25">@title test</query>
 </queries>
 
 <db_create>
 CREATE TABLE `test_table`
 (
 	`document_id` int(11) NOT NULL default '0',
+	`title` varchar(255) NOT NULL default '',
 	`body` varchar(255) NOT NULL default ''
 )
 </db_create>
@@ -53,7 +55,16 @@ DROP TABLE IF EXISTS `test_table`
 
 <db_insert>
 INSERT INTO `test_table` VALUES
-( 2,  'зимние шины диски чего то тут зимние шины' )
+( 1,  'зимние шины диски чего то тут зимние шины', '' ),
+( 2, 'test doc two', 'second stupid test document with random content' ),
+( 3, 'filler', 'filler' ),
+( 4, 'filler', 'filler' ),
+( 5, 'filler', 'filler' ),
+( 6, 'filler', 'filler' ),
+( 7, 'filler', 'filler' ),
+( 8, 'filler', 'filler' ),
+( 9, 'filler', 'filler' ),
+( 10, 'filler', 'filler' )
 </db_insert>
 
 </test>

@@ -411,6 +411,14 @@ int sphFormatCurrentTime ( char * sTimeBuf, int iBufLen )
 }
 
 
+/// simple write wrapper
+/// simplifies partial write checks, and also supresses "fortified" glibc warnings
+static bool sphWrite ( int iFD, const void * pBuf, size_t iSize )
+{
+	return ( iSize==(size_t)::write ( iFD, pBuf, iSize) );
+}
+
+
 /// physically emit log entry
 /// buffer must have 1 extra byte for linefeed
 void sphLogEntry ( ESphLogLevel eLevel, char * sBuf )
@@ -454,11 +462,11 @@ void sphLogEntry ( ESphLogLevel eLevel, char * sBuf )
 		strcat ( sBuf, "\n" );
 
 		lseek ( g_iLogFile, 0, SEEK_END );
-		write ( g_iLogFile, sBuf, strlen(sBuf) );
+		sphWrite ( g_iLogFile, sBuf, strlen(sBuf) );
 
 		if ( g_bLogStdout && g_iLogFile!=STDOUT_FILENO )
 		{
-			write ( STDOUT_FILENO, sBuf, strlen(sBuf) );
+			sphWrite ( STDOUT_FILENO, sBuf, strlen(sBuf) );
 		}
 	}
 }
@@ -906,21 +914,23 @@ void Shutdown ()
 
 void HandleCrash ( int )
 {
-	static char sBuffer[1024];
-	int iFd;
-
 	if ( !g_pCrashLog_LastQuery )
 		return;
 
+	static char sBuffer[1024];
 	snprintf ( sBuffer, sizeof(sBuffer), "%s.%d", g_sCrashLog_Path, (int)getpid() );
-	if ( ( iFd = open ( sBuffer, O_WRONLY | O_CREAT | O_TRUNC, 0644 ) ) != -1 )
+
+	bool bOK = false;
+	int iFD = ::open ( sBuffer, O_WRONLY | O_CREAT | O_TRUNC, 0644 );
+	if ( iFD>=0 )
 	{
-		const int iSize = Min( g_iCrashLog_LastQuerySize, g_iMaxPacketSize );
-		write ( iFd, g_dCrashLog_LastHello, sizeof(g_dCrashLog_LastHello) );
-		write ( iFd, g_pCrashLog_LastQuery, iSize );
-		close ( iFd );
+		const int iSize = Min ( g_iCrashLog_LastQuerySize, g_iMaxPacketSize );
+		bOK = sphWrite ( iFD, g_dCrashLog_LastHello, sizeof(g_dCrashLog_LastHello) );
+		bOK &= sphWrite ( iFD, g_pCrashLog_LastQuery, iSize );
+		::close ( iFD );
 	}
-	else
+
+	if ( !bOK )
 		sphWarning ( "crash log creation failed, errno=%d\n", errno );
 }
 
@@ -3387,7 +3397,7 @@ void LogQuery ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 	sBuf[sizeof(sBuf)-1] = '\0';
 
 	lseek ( g_iQueryLogFile, 0, SEEK_END );
-	write ( g_iQueryLogFile, sBuf, strlen(sBuf) );
+	sphWrite ( g_iQueryLogFile, sBuf, strlen(sBuf) );
 }
 
 
@@ -5302,18 +5312,18 @@ void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeF
 	if ( iPipeFD>=0 )
 	{
 		DWORD uTmp = SPH_PIPE_UPDATED_ATTRS;
-		::write ( iPipeFD, &uTmp, sizeof(DWORD) );
+		sphWrite ( iPipeFD, &uTmp, sizeof(DWORD) ); // FIXME? add buffering/checks?
 
 		uTmp = dUpdated.GetLength();
-		::write ( iPipeFD, &uTmp, sizeof(DWORD) );
+		sphWrite ( iPipeFD, &uTmp, sizeof(DWORD) );
 
 		ARRAY_FOREACH ( i, dUpdated )
 		{
 			uTmp = strlen ( dUpdated[i].m_tFirst.cstr() );
-			::write ( iPipeFD, &uTmp, sizeof(DWORD) );
-			::write ( iPipeFD, dUpdated[i].m_tFirst.cstr(), uTmp );
+			sphWrite ( iPipeFD, &uTmp, sizeof(DWORD) );
+			sphWrite ( iPipeFD, dUpdated[i].m_tFirst.cstr(), uTmp );
 			uTmp = dUpdated[i].m_tSecond;
-			::write ( iPipeFD, &uTmp, sizeof(DWORD) );
+			sphWrite ( iPipeFD, &uTmp, sizeof(DWORD) );
 		}
 	}
 
@@ -5892,7 +5902,7 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 							const BYTE * pStrings = pRes->m_dTag2Pools [ tMatch.m_iTag ].m_pStrings;
 
 							// get that string
-							const BYTE * pStr;
+							const BYTE * pStr = NULL;
 							int iLen = 0;
 
 							DWORD uOffset = (DWORD) tMatch.GetAttr ( tLoc );
@@ -6413,10 +6423,10 @@ void SeamlessTryToForkPrereader ()
 
 	// report and exit
 	DWORD uTmp = SPH_PIPE_PREREAD;
-	::write ( iPipeFD, &uTmp, sizeof(DWORD) );
+	sphWrite ( iPipeFD, &uTmp, sizeof(DWORD) ); // FIXME? add buffering/checks?
 
 	uTmp = bRes;
-	::write ( iPipeFD, &uTmp, sizeof(DWORD) );
+	sphWrite ( iPipeFD, &uTmp, sizeof(DWORD) );
 
 	::close ( iPipeFD );
 	exit ( 0 );
@@ -7331,16 +7341,16 @@ void CheckFlush ()
 
 	// report and exit
 	DWORD uTmp = SPH_PIPE_SAVED_ATTRS;
-	::write ( iPipeFD, &uTmp, sizeof(DWORD) );
+	sphWrite ( iPipeFD, &uTmp, sizeof(DWORD) ); // FIXME? add buffering/checks?
 
 	uTmp = dSaved.GetLength();
-	::write ( iPipeFD, &uTmp, sizeof(DWORD) );
+	sphWrite ( iPipeFD, &uTmp, sizeof(DWORD) );
 
 	ARRAY_FOREACH ( i, dSaved )
 	{
 		uTmp = strlen ( dSaved[i].cstr() );
-		::write ( iPipeFD, &uTmp, sizeof(DWORD) );
-		::write ( iPipeFD, dSaved[i].cstr(), uTmp );
+		sphWrite ( iPipeFD, &uTmp, sizeof(DWORD) );
+		sphWrite ( iPipeFD, dSaved[i].cstr(), uTmp );
 	}
 
 	::close ( iPipeFD );
@@ -8349,8 +8359,12 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		int iPidLen = strlen(sPid);
 
 		if ( ::write ( g_iPidFD, sPid, iPidLen )!=iPidLen )
-			sphFatal ( "failed to write to pid file '%s': %s", g_sPidFile, strerror(errno) );
-		ftruncate ( g_iPidFD, iPidLen );
+			sphFatal ( "failed to write to pid file '%s' (errno=%d, msg=%s)", g_sPidFile,
+				errno, strerror(errno) );
+
+		if ( ::ftruncate ( g_iPidFD, iPidLen ) )
+			sphFatal ( "failed to truncate pid file '%s' (errno=%d, msg=%s)", g_sPidFile,
+				errno, strerror(errno) );
 	}
 
 #if USE_WINDOWS

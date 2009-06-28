@@ -71,7 +71,6 @@
 	#define pclose		_pclose
 	#define snprintf	_snprintf
 	#define sphSeek		_lseeki64
-	#define sphTruncate(file) (SetEndOfFile((HANDLE) _get_osfhandle(file)))
 
 	#define stat		_stat64
 	#define fstat		_fstat64
@@ -87,7 +86,6 @@
 	#include <sys/time.h>
 
 	#define sphSeek		lseek
-	#define sphTruncate(file) ftruncate(file,lseek(file,0,SEEK_CUR))
 
 	#define struct_stat		struct stat
 #endif
@@ -506,7 +504,7 @@ const CSphIOStats & sphStopIOStats ()
 }
 
 
-size_t sphRead ( int iFD, void * pBuf, size_t iCount )
+static size_t sphRead ( int iFD, void * pBuf, size_t iCount )
 {
 	int64_t tmStart = 0;
 	if ( g_bIOStats )
@@ -1757,7 +1755,7 @@ int64_t sphMicroTimer()
 }
 
 
-bool sphWrite ( int iFD, const void * pBuf, size_t iCount, const char * sName, CSphString & sError )
+static bool sphWrite ( int iFD, const void * pBuf, size_t iCount, const char * sName, CSphString & sError )
 {
 	if ( iCount<=0 )
 		return true;
@@ -1809,7 +1807,7 @@ static inline void sphThrottleSleep ()
 }
 
 
-bool sphWriteThrottled ( int iFD, const void * pBuf, size_t iCount, const char * sName, CSphString & sError )
+static bool sphWriteThrottled ( int iFD, const void * pBuf, size_t iCount, const char * sName, CSphString & sError )
 {
 	if ( g_iMaxIOSize && int (iCount) > g_iMaxIOSize )
 	{
@@ -8389,6 +8387,16 @@ bool CSphIndex_VLN::LoadHitlessWords ()
 }
 
 
+static bool sphTruncate ( int iFD )
+{
+#if USE_WINDOWS
+	return SetEndOfFile ( (HANDLE) _get_osfhandle(iFD) )!=0;
+#else
+	return ::ftruncate ( iFD, ::lseek ( iFD, 0, SEEK_CUR ) )==0;
+#endif
+}
+
+
 int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer )
 {
 	PROFILER_INIT ();
@@ -8643,8 +8651,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 			if ( m_tSchema.GetAttr ( iAttr ).m_eSrc == SPH_ATTRSRC_FIELD )
 			{
-				dFieldMvaIndexes.Resize ( dFieldMvaIndexes.GetLength() + 1 );
-				FieldMVARedirect_t & tRedirect = dFieldMvaIndexes.Last ();
+				FieldMVARedirect_t & tRedirect = dFieldMvaIndexes.Add();
 				tRedirect.m_iAttr = iAttr;
 				tRedirect.m_iMVAAttr = i;
 				tRedirect.m_tLocator = m_tSchema.GetAttr ( iAttr ).m_tLocator;
@@ -8703,8 +8710,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 					if ( pSource->IterateFieldMVAStart ( iAttr, m_sLastError ) )
 						while ( pSource->IterateFieldMVANext () )
 						{
-							dFieldMVAs.Resize ( dFieldMVAs.GetLength() + 1 );
-
+							dFieldMVAs.Add();
 							dFieldMVAs.Last ().m_uDocID = pSource->m_tDocInfo.m_iDocID;
 							dFieldMVAs.Last ().m_iAttr = iMVA;
 							dFieldMVAs.Last ().m_uValue = MVA_DOWNSIZE ( pSource->m_tDocInfo.GetAttr ( tLoc ) );
@@ -8730,7 +8736,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			ARRAY_FOREACH ( i, dOrdinalAttrs )
 			{
 				CSphVector<Ordinal_t> & dCol = dOrdinals[i];
-				dCol.Resize ( 1+dCol.GetLength() );
+				dCol.Add();
 
 				Ordinal_t & tLastOrd = dCol.Last();
 				tLastOrd.m_uDocID = pSource->m_tDocInfo.m_iDocID;
@@ -9374,7 +9380,8 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				return 0;
 
 			if ( m_bInplaceSettings )
-				sphTruncate ( iDocinfoFD );
+				if ( !sphTruncate ( iDocinfoFD ) )
+					sphWarn ( "failed to truncate %s", fdDocinfos.GetFilename() );
 		}
 
 		// clean up readers
@@ -9617,7 +9624,8 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		if ( m_bInplaceSettings )
 		{
 			m_wrHitlist.CloseFile ();
-			sphTruncate ( fdHits.GetFD () );
+			if ( !sphTruncate ( fdHits.GetFD () ) )
+				sphWarn ( "failed to truncate %s", fdHits.GetFilename() );
 		}
 	}
 
@@ -12366,8 +12374,7 @@ bool CSphIndex_VLN::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, cons
 				tTermSetup.QwordSetup ( &QueryWord );
 			}
 
-			dKeywords.Resize ( dKeywords.GetLength () + 1 );
-			CSphKeywordInfo & tInfo = dKeywords.Last ();
+			CSphKeywordInfo & tInfo = dKeywords.Add();
 			Swap ( tInfo.m_sTokenized, sTokenized );
 			tInfo.m_sNormalized = (const char*)sWord;
 			tInfo.m_iDocs = bGetStats ? QueryWord.m_iDocs : 0;
@@ -13831,7 +13838,7 @@ bool CSphHTMLStripper::SetIndexedAttrs ( const char * sConfig, CSphString & sErr
 		}
 		if ( iIndexTag<0 )
 		{
-			m_dTags.Resize ( m_dTags.GetLength()+1 );
+			m_dTags.Add();
 			m_dTags.Last().m_sTag = sTag;
 			m_dTags.Last().m_iTagLen = strlen ( sTag );
 			iIndexTag = m_dTags.GetLength()-1;
@@ -13914,7 +13921,7 @@ bool CSphHTMLStripper::SetRemovedElements ( const char * sConfig, CSphString & )
 
 		if ( iTag==m_dTags.GetLength() )
 		{
-			m_dTags.Resize ( m_dTags.GetLength()+1 );
+			m_dTags.Add();
 			m_dTags.Last().m_sTag = sTag;
 			m_dTags.Last().m_iTagLen = strlen ( sTag.cstr() );
 			m_dTags.Last().m_bRemove = true;

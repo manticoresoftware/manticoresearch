@@ -681,7 +681,7 @@ void ExprParser_t::Optimize ( int iNode )
 			Swap ( pRoot->m_iLeft, pRoot->m_iRight );
 		assert ( m_dNodes[pRoot->m_iLeft].m_iToken=='*' );
 
-		m_dNodes.Resize ( m_dNodes.GetLength()+1 );
+		m_dNodes.Add();
 		pRoot = &m_dNodes[iNode];
 
 		m_dNodes[pRoot->m_iLeft].m_iToken = ',';

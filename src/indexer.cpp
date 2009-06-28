@@ -1292,7 +1292,7 @@ int main ( int argc, char ** argv )
 		}
 		else if ( bMerge && strcasecmp ( argv[i], "--merge-dst-range" )==0 && (i+3)<argc )
 		{
-			dMergeDstFilters.Resize ( dMergeDstFilters.GetLength()+1 );
+			dMergeDstFilters.Add();
 			dMergeDstFilters.Last().m_eType = SPH_FILTER_RANGE;
 			dMergeDstFilters.Last().m_sAttrName = argv[i+1];
 			dMergeDstFilters.Last().m_uMinValue = (SphAttr_t) strtoull ( argv[i+2], NULL, 10 );

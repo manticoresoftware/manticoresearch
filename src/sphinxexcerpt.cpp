@@ -372,8 +372,7 @@ ExcerptGen_c::ExcerptGen_c ()
 
 void ExcerptGen_c::AddBoundary()
 {
-	m_dTokens.Resize ( m_dTokens.GetLength () + 1 );
-	Token_t & tLast = m_dTokens.Last ();
+	Token_t & tLast = m_dTokens.Add();
 	tLast.m_eType = TOK_BREAK;
 	tLast.m_iStart = 0;
 	tLast.m_iLengthBytes = 0;
@@ -390,8 +389,7 @@ void ExcerptGen_c::AddJunk ( int iStart, int iLength, int iBoundary )
 	for ( int i = iStart; i < iStart+iLength; i++ )
 		if ( sphIsSpace ( m_sBuffer.cstr () [i] ) != sphIsSpace ( m_sBuffer.cstr () [iChunkStart] ) )
 		{
-			m_dTokens.Resize ( m_dTokens.GetLength () + 1 );
-			Token_t & tLast = m_dTokens.Last ();
+			Token_t & tLast = m_dTokens.Add();
 			tLast.m_eType   = TOK_SPACE;
 			tLast.m_iStart	= iChunkStart;
 			tLast.m_iLengthBytes = i - iChunkStart;
@@ -409,8 +407,7 @@ void ExcerptGen_c::AddJunk ( int iStart, int iLength, int iBoundary )
 			}
 		}
 
-	m_dTokens.Resize ( m_dTokens.GetLength () + 1 );
-	Token_t & tLast = m_dTokens.Last ();
+	Token_t & tLast = m_dTokens.Add();
 	tLast.m_eType   = TOK_SPACE;
 	tLast.m_iStart	= iChunkStart;
 	tLast.m_iLengthBytes = iStart + iLength - iChunkStart;
@@ -440,16 +437,14 @@ void ExcerptGen_c::TokenizeQuery ( const ExcerptQuery_t & tQuery, CSphDict * pDi
 		SphWordID_t iWord = pDict->GetWordID ( sWord );
 		if ( iWord )
 		{
-			m_dWords.Resize ( m_dWords.GetLength () + 1 );
-			Token_t & tLast = m_dWords.Last ();
+			Token_t & tLast = m_dWords.Add();
 			tLast.m_eType = TOK_WORD;
 			tLast.m_iWordID = iWord;
 			tLast.m_iLengthBytes = strlen ( (const char *)sWord );
 			tLast.m_iLengthCP = bUtf8 ? sphUTF8Len ( (const char *)sWord ) : tLast.m_iLengthBytes;
 
 			// store keyword
-			m_dKeywords.Resize( m_dKeywords.GetLength() + 1 );
-			Keyword_t & kwLast = m_dKeywords.Last();
+			Keyword_t & kwLast = m_dKeywords.Add();
 
 			// find stars
 			bool bStarBack = *pTokenizer->GetTokenEnd() == '*';
@@ -498,8 +493,7 @@ void ExcerptGen_c::TokenizeDocument ( const ExcerptQuery_t & tQuery, CSphDict * 
 		if ( pTokenizer->GetBoundary() )
 			uPosition += 100; // FIXME: this should be taken from index settings
 
-		m_dTokens.Resize ( m_dTokens.GetLength () + 1 );
-		Token_t & tLast = m_dTokens.Last ();
+		Token_t & tLast = m_dTokens.Add();
 		tLast.m_eType	= iWord ? TOK_WORD : TOK_SPACE;
 		tLast.m_uPosition = iWord ? ++uPosition : 0 ;
 		tLast.m_iStart  = pTokenStart - pStartPtr;
@@ -555,8 +549,7 @@ void ExcerptGen_c::TokenizeDocument ( const ExcerptQuery_t & tQuery, CSphDict * 
 		AddJunk ( pLastTokenEnd - pStartPtr, pTokenizer->GetBufferEnd () - pLastTokenEnd, iOffset );
 	}
 
-	m_dTokens.Resize ( m_dTokens.GetLength () + 1 );
-	Token_t & tLast = m_dTokens.Last ();
+	Token_t & tLast = m_dTokens.Add();
 	tLast.m_eType   = TOK_NONE;
 	tLast.m_iStart  = 0;
 	tLast.m_iLengthBytes = 0;

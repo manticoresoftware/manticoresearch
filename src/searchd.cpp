@@ -4343,10 +4343,15 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 						// do query
 						AggrResult_t & tRes = m_dResults[iQuery];
-						if ( !tServed.m_pIndex->QueryEx ( &tQuery, &tRes, pSorter ) )
+						if ( !tServed.m_pIndex->MultiQuery ( &tQuery, &tRes, 1, &pSorter ) )
+						{
 							m_dFailuresSet[iQuery].SubmitEx ( dLocal[iLocal].cstr(), "%s", tServed.m_pIndex->GetLastError().cstr() );
-						else
+						} else
+						{
 							tRes.m_iSuccesses++;
+							tRes.m_iTotalMatches += pSorter->GetTotalCount();
+							tRes.m_tSchema = pSorter->GetOutgoingSchema();
+						}
 
 						// extract my results and store schema
 						if ( pSorter->GetLength() )

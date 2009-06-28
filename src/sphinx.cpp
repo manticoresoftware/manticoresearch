@@ -1518,10 +1518,7 @@ struct CSphIndex_VLN : CSphIndex
 	void						BindWeights ( const CSphQuery * pQuery );
 	bool						SetupCalc ( CSphQueryResult * pResult, const CSphSchema & tInSchema );
 
-	virtual CSphQueryResult *	Query ( CSphQuery * pQuery );
-	virtual bool				QueryEx ( CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchSorter * pTop );
 	virtual bool				MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters );
-
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats );
 
 	virtual bool				Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> & dFilters, bool bMergeKillLists );
@@ -10557,36 +10554,6 @@ inline bool sphGroupMatch ( SphAttr_t iGroup, const SphAttr_t * pGroups, int iGr
 }
 
 
-CSphQueryResult * CSphIndex_VLN::Query ( CSphQuery * pQuery )
-{
-	// create sorter
-	CSphString sError;
-	ISphMatchSorter * pTop = sphCreateQueue ( pQuery, m_tSchema, sError );
-	if ( !pTop )
-	{
-		m_sLastError.SetSprintf ( "failed to create sorting queue: %s", sError.cstr() );
-		return NULL;
-	}
-
-	// create result
-	CSphQueryResult * pResult = new CSphQueryResult();
-
-	// run query
-	if ( QueryEx ( pQuery, pResult, pTop ) )
-	{
-		// convert results and return
-		pResult->m_dMatches.Reset ();
-		sphFlattenQueue ( pTop, pResult, 0 );
-	} else
-	{
-		SafeDelete ( pResult );
-	}
-
-	SafeDelete ( pTop );
-	return pResult;
-}
-
-
 bool CSphIndex_VLN::EarlyReject ( CSphMatch & tMatch ) const
 {
 	// early calc might be needed even when we do not have a filter
@@ -12140,15 +12107,6 @@ bool CSphIndex_VLN::Rename ( const char * sNewBase )
 		}
 	}
 	return false;
-}
-
-
-bool CSphIndex_VLN::QueryEx ( CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchSorter * pTop )
-{
-	bool bRes = MultiQuery ( pQuery, pResult, 1, &pTop );
-	pResult->m_iTotalMatches += bRes ? pTop->GetTotalCount () : 0;
-	pResult->m_tSchema = pTop->GetOutgoingSchema();
-	return bRes;
 }
 
 

@@ -297,11 +297,30 @@ int main ( int argc, char ** argv )
 				}
 			}
 
-			pResult = pIndex->Query ( &tQuery );
+			// do querying
+			ISphMatchSorter * pTop = sphCreateQueue ( &tQuery, *pIndex->GetSchema(), sError );
+			if ( !pTop )
+			{
+				sError.SetSprintf ( "failed to create sorting queue: %s", sError.cstr() );
+				break;
+			}
 
-			if ( !pResult )
-				sError = pIndex->GetLastError ();
+			CSphQueryResult * pResult = new CSphQueryResult();
+			if ( !pIndex->MultiQuery ( &tQuery, pResult, 1, &pTop ) )
+			{
+				// failure; pull that error message
+				sError = pIndex->GetLastError();
+				SafeDelete ( pResult );
+			} else
+			{
+				// success; fold them matches
+				pResult->m_dMatches.Reset ();
+				pResult->m_iTotalMatches += pTop->GetTotalCount();
+				pResult->m_tSchema = pTop->GetOutgoingSchema();
+				sphFlattenQueue ( pTop, pResult, 0 );
+			}
 
+			SafeDelete ( pTop );
 			break;
 		}
 

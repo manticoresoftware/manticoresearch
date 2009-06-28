@@ -2130,8 +2130,6 @@ public:
 	virtual bool						EarlyReject ( CSphMatch & tMatch ) const = 0;
 	virtual const CSphSourceStats &		GetStats () const = 0;
 
-	virtual CSphQueryResult *	Query ( CSphQuery * pQuery ) = 0;
-	virtual bool				QueryEx ( CSphQuery * pQuery, CSphQueryResult * pResult, ISphMatchSorter * pTop ) = 0;
 	virtual bool				MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters ) = 0;
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats ) = 0;
 

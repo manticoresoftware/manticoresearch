@@ -3745,7 +3745,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery )
 		int iCur = 0;
 		int * dMapFrom = NULL;
 
-		CSphDocInfo tRow;
+		CSphMatch tRow;
 		tRow.Reset ( tRes.m_tSchema.GetRowSize() );
 
 		if ( tRow.m_iRowitems )

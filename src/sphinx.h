@@ -706,23 +706,29 @@ inline int sphUnpackStr ( const BYTE * pRow, const BYTE ** ppStr )
 }
 
 
-/// document info
-struct CSphDocInfo
+/// search query match (document info plus weight/tag)
+class CSphMatch
 {
+public:
 	SphDocID_t		m_iDocID;		///< document ID
 	int				m_iRowitems;	///< row items count
 	CSphRowitem *	m_pRowitems;	///< row data
+	int				m_iWeight;		///< my computed weight
+	int				m_iTag;			///< my index tag
 
+public:
 	/// ctor. clears everything
-	CSphDocInfo ()
+	CSphMatch ()
 		: m_iDocID ( 0 )
 		, m_iRowitems ( 0 )
 		, m_pRowitems ( NULL )
+		, m_iWeight ( 0 )
+		, m_iTag ( 0 )
 	{
 	}
 
 	/// copy ctor. just in case
-	CSphDocInfo ( const CSphDocInfo & rhs )
+	CSphMatch ( const CSphMatch & rhs )
 		: m_iRowitems ( 0 )
 		, m_pRowitems ( NULL )
 	{
@@ -730,7 +736,7 @@ struct CSphDocInfo
 	}
 
 	/// dtor. frees everything
-	~CSphDocInfo ()
+	~CSphMatch ()
 	{
 		SafeDeleteArray ( m_pRowitems );
 	}
@@ -749,9 +755,11 @@ struct CSphDocInfo
 	}
 
 	/// assignment
-	const CSphDocInfo & operator = ( const CSphDocInfo & rhs )
+	const CSphMatch & operator = ( const CSphMatch & rhs )
 	{
 		m_iDocID = rhs.m_iDocID;
+		m_iWeight = rhs.m_iWeight;
+		m_iTag = rhs.m_iTag;
 
 		if ( m_iRowitems!=rhs.m_iRowitems )
 		{
@@ -779,6 +787,17 @@ public:
 
 	const DWORD *	GetAttrMVA ( const CSphAttrLocator & tLoc, const DWORD * pPool ) const;
 };
+
+
+/// specialized swapper
+inline void Swap ( CSphMatch & a, CSphMatch & b )
+{
+	Swap ( a.m_iDocID, b.m_iDocID );
+	Swap ( a.m_iRowitems, b.m_iRowitems );
+	Swap ( a.m_pRowitems, b.m_pRowitems );
+	Swap ( a.m_iWeight, b.m_iWeight );
+	Swap ( a.m_iTag, b.m_iTag );
+}
 
 
 /// source statistics
@@ -1014,7 +1033,7 @@ class CSphSource : public CSphSourceSettings
 {
 public:
 	CSphVector<CSphWordHit>				m_dHits;	///< current document split into words
-	CSphDocInfo							m_tDocInfo;	///< current document info
+	CSphMatch							m_tDocInfo;	///< current document info
 	CSphVector<CSphString>				m_dStrAttrs;///< current document string attrs
 
 public:
@@ -1554,28 +1573,6 @@ FILE * sphDetectXMLPipe ( const char * szCommand, BYTE * dBuf, int & iBufSize, i
 /////////////////////////////////////////////////////////////////////////////
 // SEARCH QUERIES
 /////////////////////////////////////////////////////////////////////////////
-
-/// search query match
-struct CSphMatch : public CSphDocInfo
-{
-	int		m_iWeight;	///< my computed weight
-	int		m_iTag;		///< my index tag
-
-	CSphMatch () : m_iWeight ( 0 ), m_iTag ( 0 ) {}
-	bool operator == ( const CSphMatch & rhs ) const { return ( m_iDocID==rhs.m_iDocID ); }
-};
-
-
-/// specialized swapper
-inline void Swap ( CSphMatch & a, CSphMatch & b )
-{
-	Swap ( a.m_iDocID, b.m_iDocID );
-	Swap ( a.m_iRowitems, b.m_iRowitems );
-	Swap ( a.m_pRowitems, b.m_pRowitems );
-	Swap ( a.m_iWeight, b.m_iWeight );
-	Swap ( a.m_iTag, b.m_iTag );
-}
-
 
 /// search query sorting orders
 enum ESphSortOrder

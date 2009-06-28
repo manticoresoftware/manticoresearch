@@ -96,7 +96,7 @@ public:
 	CSphDict *				m_pDict;
 	const CSphIndex *		m_pIndex;
 	ESphDocinfo				m_eDocinfo;
-	CSphDocInfo				m_tMin;
+	CSphMatch				m_tMin;
 	int						m_iToCalc;
 	int64_t					m_iMaxTimer;
 	CSphString *			m_pWarning;

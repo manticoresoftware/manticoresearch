@@ -17,7 +17,7 @@
 #include "sphinxstd.h"
 
 /// forward decls
-struct CSphMatch;
+class CSphMatch;
 struct CSphSchema;
 struct CSphString;
 

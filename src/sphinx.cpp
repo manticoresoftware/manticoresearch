@@ -1549,7 +1549,7 @@ private:
 	CSphString					m_sFilename;
 	int							m_iLockFD;
 
-	CSphDocInfo					m_tMin;				///< min attribute values tracker
+	CSphMatch					m_tMin;				///< min attribute values tracker
 	CSphSourceStats				m_tStats;			///< my stats
 
 	CSphVector<CSphWordlistCheckpoint>	m_dWordlistCheckpoints;	///< wordlist checkpoint offsets
@@ -2086,7 +2086,7 @@ static DWORD *				g_pMvaArena = NULL;		///< initialized by sphArenaInit()
 
 
 // OPTIMIZE! try to inline or otherwise simplify maybe
-const DWORD * CSphDocInfo::GetAttrMVA ( const CSphAttrLocator & tLoc, const DWORD * pPool ) const
+const DWORD * CSphMatch::GetAttrMVA ( const CSphAttrLocator & tLoc, const DWORD * pPool ) const
 {
 	DWORD uIndex = MVA_DOWNSIZE ( GetAttr ( tLoc ) );
 	if ( !uIndex )

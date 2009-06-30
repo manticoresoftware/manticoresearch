@@ -37,15 +37,16 @@ if ( !is_array($args) || empty($args) )
 	exit ( 0 );
 }
 
+$locals = array();
+
 if ( array_key_exists ( "DBUSER", $_ENV ) && $_ENV["DBUSER"] )
-	$db_user = $_ENV["DBUSER"];
+	$locals['db-user'] = $_ENV["DBUSER"];
 
 if ( array_key_exists ( "DBPASS", $_ENV ) && $_ENV["DBPASS"] ) 
-	$db_pwd = $_ENV["DBPASS"];
+	$locals['db-password'] = $_ENV["DBPASS"];
 
 $run = false;
 $test_dirs = array();
-$locals = array();
 for ( $i=0; $i<count($args); $i++ )
 {
 	$arg = $args[$i];
@@ -53,9 +54,9 @@ for ( $i=0; $i<count($args); $i++ )
 	if ( false );
 	else if ( $arg=="g" || $arg=="gen" )			{ $g_model = true; $run = true; }
 	else if ( $arg=="t" || $arg=="test" )			{ $g_model = false; $run = true; }
-	else if ( $arg=="-u" || $arg=="--user" )		$db_user = $args[++$i];
 	else if ( $arg=="--managed" )					$sd_managed_searchd = true;
-	else if ( $arg=="-p" || $arg=="--password" )	$db_pwd = $args[++$i];
+	else if ( $arg=="-u" || $arg=="--user" )		$locals['db-user'] = $args[++$i];
+	else if ( $arg=="-p" || $arg=="--password" )	$locals['db-password'] = $args[++$i];
 	else if ( $arg=="-i" || $arg=="--indexer" )		$locals['indexer'] = $args[++$i];
 	else if ( $arg=="-s" || $arg=="--searchd" )		$locals['searchd'] = $args[++$i];
 	else if ( is_dir($arg) )						$test_dirs[] = $arg;

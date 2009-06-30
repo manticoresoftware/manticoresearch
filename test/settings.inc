@@ -9,12 +9,6 @@ $sd_max_children	= 30;
 $sd_pid_file		= "searchd.pid";
 $sd_max_matches		=  100000;
 
-$db_host			= "localhost";
-$db_user			= "root";
-$db_pwd				= "";
-$db_name			= "test";
-$db_port			= 3306;
-
 $agent_address		= "localhost";
 $agent_port			= 6713;
 
@@ -40,6 +34,12 @@ $g_site_defaults = array
 	'mode'			=> 'aggregate',
 	'skip-searchd'	=> false,
 	'force-reindex'	=> false,
+
+	'db-host'		=> 'localhost',
+	'db-user'		=> 'root',
+	'db-password'	=> '',
+	'db-name'		=> 'test',
+	'db-port'		=> 3306
 );
 
 function GetBanner ()

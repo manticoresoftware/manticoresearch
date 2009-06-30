@@ -33,10 +33,11 @@ function sphFormatTime ( $time )
 
 function CreateDB ( $db_drop, $db_create, $db_insert )
 {
-	global $db_host, $db_user, $db_pwd, $db_name, $db_port;
-	if ( !@mysql_connect ( $db_host.":".$db_port, $db_user, $db_pwd ) ||
-		!@mysql_query ( "CREATE DATABASE IF NOT EXISTS $db_name" ) ||
-		!@mysql_select_db ( $db_name ) )
+	global $g_locals;
+	if ( !@mysql_connect ( $g_locals['db-host'].":".$g_locals['db-port'],
+			$g_locals['db-user'], $g_locals['db-password'] ) ||
+		!@mysql_query ( "CREATE DATABASE IF NOT EXISTS " . $g_locals['db-name'] ) ||
+		!@mysql_select_db ( $g_locals['db-name'] ) )
 		return false;
 
 	foreach ( $db_drop as $q )
@@ -1108,15 +1109,15 @@ class SphinxConfig
 
 	function WriteSqlSettings ( $fp, $attributes )
 	{
-		global $db_host, $db_user, $db_pwd, $db_name, $db_port;
+		global $g_locals;
 
-		fwrite ( $fp, "\tsql_host		= $db_host\n" );
-		fwrite ( $fp, "\tsql_user		= $db_user\n" );
-		fwrite ( $fp, "\tsql_pass		= $db_pwd\n" );
-		fwrite ( $fp, "\tsql_port		= $db_port\n" );
+		fwrite ( $fp, "\tsql_host		= " . $g_locals['db-host'] . "\n" );
+		fwrite ( $fp, "\tsql_user		= " . $g_locals['db-user'] . "\n" );
+		fwrite ( $fp, "\tsql_pass		= " . $g_locals['db-password'] . "\n" );
+		fwrite ( $fp, "\tsql_port		= " . $g_locals['db-port'] . "\n" );
 
 		$node = $attributes->getNamedItem('sql_db');
-		fprintf ( $fp, "\tsql_db		= %s\n", $node ? $node->nodeValue : $db_name );
+		fprintf ( $fp, "\tsql_db		= %s\n", $node ? $node->nodeValue : $g_locals['db-name'] );
 	}
 
 	function Dump ( $node, $fp, $dynamic_only, $agentid )

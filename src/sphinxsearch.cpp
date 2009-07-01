@@ -2375,6 +2375,7 @@ const ExtDoc_t * ExtQuorum_c::GetDocsChunk ( SphDocID_t * pMaxID )
 		m_uMask |= ( ( m_uMask>>m_uMaskEnd ) & 1 )<<i; // set i-th bit to end bit
 		m_uMaskEnd--;
 
+		SafeDelete ( m_dChildren[i] );
 		m_dChildren.RemoveFast ( i );
 		m_pCurDoc.RemoveFast ( i );
 		m_pCurHit.RemoveFast ( i );

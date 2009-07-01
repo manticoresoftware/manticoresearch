@@ -289,7 +289,7 @@ function sphBenchmark ( $name, $locals, $force_reindex )
 	StopSearchd ( 'config.conf', 'searchd.pid' );
 
 	// all good
-	return "$output.bin";
+	return $output;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -299,7 +299,10 @@ function sphFindBenchmarkResults ( $files )
 	$results = array();
 	foreach ( $files as $file )
 	{
+		// check full names first
 		$found = null;
+		$ifound = -1;
+
 		$variants = array (
 			"$file",
 			"$file.bin",
@@ -312,6 +315,27 @@ function sphFindBenchmarkResults ( $files )
 				$found = $variant;
 				break;
 			}
+
+		// traverse results dir for name.X next
+		$dh = opendir ( "bench-results" );
+		if ( $dh )
+		{
+			while ( $entry = readdir ( $dh ) )
+			{
+				if ( substr ( $entry, 0, 1+strlen($file) )!==$file."." )
+					continue;
+
+				$ientry = (int)substr ( $entry, 1+strlen($file) );
+				if ( $ientry>$ifound )
+				{
+					$found = "bench-results/$entry";
+					$ifound = $ientry;
+				}
+			}
+			closedir ( $dh );
+		}
+
+		// still not found? too bad
 		if ( !$found )
 		{
 			printf ( "%s: file not found\n", $file );
@@ -324,9 +348,26 @@ function sphFindBenchmarkResults ( $files )
 
 function BenchPrintHelp ( $path )
 {
-	print
-		"Usage: php $path [locals] benchmark <name>\n" .
-		"       php $path compare <files>\n";
+	print <<<EOT
+Usage: php $path <COMMAND> [OPTIONS] <BENCHMARK>
+
+Commands are:
+  b, benchmark		benchmark (and store run results)
+  bv			benchmark, view results
+  bb			(forcibly) build index, benchmark
+  bbv			(forcibly) build index, benchmark, view results
+  c, compare		compare two given run results
+  t, try		benchmark, view, but do not store results
+  v, view		view given run result
+
+Examples:
+  bench.php b mytest	run 'mytest' benchmark
+  bench.php v mytest	view latest 'mytest' run result
+  bench.php v mytest.4	view 4th 'mytest' run result
+  bench.php c mytest.3 mytest.7
+  			compare runs 3 and 7 of 'mytest' benchmark
+
+EOT;
 }
 
 function AvailableBenchmarks ()
@@ -359,6 +400,7 @@ function Main ( $argv )
 	// parse arguments
 	$force_reindex = false;
 	$view_results = false;
+	$unlink_run = false;
 
 	for ( $i=1; $i<count($argv); $i++ )
 	{
@@ -407,6 +449,18 @@ function Main ( $argv )
 					$mode = 'compare';
 					break;
 
+				case 't':
+				case 'try':
+					$mode = 'benchmark';
+					$view_results = true;
+					$unlink_run = true;
+					break;
+
+				case 'v':
+				case 'view':
+					$mode = 'view';
+					break;
+
 				default:
 					printf ( "FATAL: unknown mode '$opt'\n\n" );
 					BenchPrintHelp ( $argv[0] );
@@ -428,18 +482,18 @@ function Main ( $argv )
 			if ( $avail )
 				$avail = " ($avail)";
 
-			printf ( "benchmark mode requires a test case name$avail.\n" );
+			printf ( "FATAL: benchmark command requires a test case name$avail.\n" );
 			return 1;
 		}
 		if ( count($files)!=1 )
 		{
-			printf ( "benchmark mode requires just one test case name\n" );
+			printf ( "FATAL: benchmark command requires exactly one name.\n" );
 			return 1;
 		}
 		$path = "bench/$files[0].xml";
 		if ( !is_readable($path) )
 		{
-			printf ( "%s: is not readable\n", $path );
+			printf ( "FATAL: benchmark '%s' is not readable\n", $path );
 			return 1;
 		}
 
@@ -448,7 +502,14 @@ function Main ( $argv )
 			return 1;
 
 		if ( $view_results )
-			sphTextReport ( sphCompare ( array ( $res, $res ) ) );
+			sphTextReport ( sphCompare ( array ( "$res.bin", "$res.bin" ) ) );
+
+		if ( $unlink_run )
+		{
+			printf ( "\nunlinked %s\n", $res );
+			unlink ( "$res.bin" );
+			unlink ( "$res.searchd.txt" );
+		}
 
 		return 0;
 	}
@@ -456,7 +517,7 @@ function Main ( $argv )
 	{
 		if ( count($files)!=2 )
 		{
-			printf ( "compare mode requires two files\n" );
+			printf ( "FATAL: compare command requires exactly two filenames.\n" );
 			return 1;
 		}
 		$results = sphFindBenchmarkResults ( $files );
@@ -467,7 +528,7 @@ function Main ( $argv )
 	{
 		if ( count($files)!=1 )
 		{
-			printf ( "view mode requires a single results file\n" );
+			printf ( "FATAL: view command requires exactly one filename.\n" );
 			return 1;
 		}
 		$results = sphFindBenchmarkResults ( $files );

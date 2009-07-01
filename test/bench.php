@@ -185,12 +185,13 @@ function sphTextReport ( $report )
 
 ////////////////////////////////////////////////////////////////////////////////
 
-function sphBenchmark ( $name, $locals )
+/// returns results file name on success; false on failure
+function sphBenchmark ( $name, $locals, $force_reindex )
 {
 	// load config
 	$config = new SphinxConfig ( $locals );
 	if ( !( $config->Load ( "bench/$name.xml" ) && CheckConfig ( $config, $name ) ) )
-		return 1;
+		return false;
 
 	// temporary limitations
 	assert ( $config->SubtestCount()==1 );
@@ -217,7 +218,7 @@ function sphBenchmark ( $name, $locals )
 	foreach ( $indexes as $name => $path )
 	{
 		printf ( "index: %s - ", $name );
-		if ( !is_readable ( "$path.spa" ) || !is_readable ( "$path.spi" ) )
+		if ( !is_readable ( "$path.spa" ) || !is_readable ( "$path.spi" ) || $force_reindex )
 		{
 			printf ( "indexing... " );
 			$tm = MyMicrotime();
@@ -226,7 +227,7 @@ function sphBenchmark ( $name, $locals )
 			if ( $result==1 )
 			{
 				printf ( "\nerror running the indexer:\n%s\n", $error );
-				return 1;
+				return false;
 			}
 			else if ( $result==2 )
 				printf ( "done in %s, there were warnings:\n%s\n", sphFormatTime($tm), $error );
@@ -245,7 +246,7 @@ function sphBenchmark ( $name, $locals )
 		if ( $result==1 )
 		{
 			printf ( "error starting searchd:\n%s\n", $error );
-			return 1;
+			return false;
 		}
 		else if ( $result==2 )
 			printf ( "searchd warning: %s\n", $error );
@@ -286,7 +287,9 @@ function sphBenchmark ( $name, $locals )
 
 	// shutdown
 	StopSearchd ( 'config.conf', 'searchd.pid' );
-	
+
+	// all good
+	return "$output.bin";
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -326,6 +329,21 @@ function BenchPrintHelp ( $path )
 		"       php $path compare <files>\n";
 }
 
+function AvailableBenchmarks ()
+{
+	$dh = opendir ( "bench" );
+	if ( !$dh )
+		return;
+
+	$avail = array ();
+	while ( $entry = readdir ( $dh ) )
+		if ( substr ( $entry, -4 )===".xml" )
+			$avail[] = substr ( $entry, 0, -4 );
+
+	closedir ( $dh );
+	return join ( ", or ", $avail );
+}
+
 function Main ( $argv )
 {
 	if ( count($argv)==1 )
@@ -339,6 +357,9 @@ function Main ( $argv )
 	$locals = array();
 
 	// parse arguments
+	$force_reindex = false;
+	$view_results = false;
+
 	for ( $i=1; $i<count($argv); $i++ )
 	{
 		$opt = $argv[$i];
@@ -352,12 +373,45 @@ function Main ( $argv )
 		{
 			$locals [ substr ( $opt, 1 ) ] = $argv[++$i];
 		}
-		else if ( $mode ) $files[] = $opt;
+		else if ( $mode )
+		{
+			$files[] = $opt;
+		}
 		else
 		{
-			foreach ( array ( 'benchmark', 'compare', 'view' ) as $name )
-				if ( substr ( $name, 0, strlen($opt) ) == $opt )
-					$mode = $name;
+			switch ( $opt )
+			{
+				case 'b':
+				case 'benchmark':
+					$mode = 'benchmark';
+					break;
+
+				case 'bb':
+					$mode = 'benchmark';
+					$force_reindex = true;
+					break;
+
+				case 'bv':
+					$mode = 'benchmark';
+					$view_results = true;
+					break;
+
+				case 'bbv':
+					$mode = 'benchmark';
+					$force_reindex = true;
+					$view_results = true;
+					break;
+
+				case 'c':
+				case 'compare':
+					$mode = 'compare';
+					break;
+
+				default:
+					printf ( "FATAL: unknown mode '$opt'\n\n" );
+					BenchPrintHelp ( $argv[0] );
+					return 1;
+			}
 		}
 	}
 
@@ -368,6 +422,15 @@ function Main ( $argv )
 	// run the command
 	if ( $mode=='benchmark' )
 	{
+		if ( count($files)==0 )
+		{
+			$avail = AvailableBenchmarks ();
+			if ( $avail )
+				$avail = " ($avail)";
+
+			printf ( "benchmark mode requires a test case name$avail.\n" );
+			return 1;
+		}
 		if ( count($files)!=1 )
 		{
 			printf ( "benchmark mode requires just one test case name\n" );
@@ -380,7 +443,14 @@ function Main ( $argv )
 			return 1;
 		}
 
-		return sphBenchmark ( $files[0], $g_locals );
+		$res = sphBenchmark ( $files[0], $g_locals, $force_reindex );
+		if ( !$res )
+			return 1;
+
+		if ( $view_results )
+			sphTextReport ( sphCompare ( array ( $res, $res ) ) );
+
+		return 0;
 	}
 	else if ( $mode=='compare' )
 	{

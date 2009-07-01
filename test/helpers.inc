@@ -263,7 +263,7 @@ class SphinxConfig
 		global $g_locals;
 		if ( !array_key_exists ( $key, $g_locals ) )
 		{
-			printf ( "Unbound local variable: %s\n", $key );
+			printf ( "FATAL: unbound local variable '%s' (go add it at ~/.sphinx).\n", $key );
 			exit ( 1 );
 		}
 		return $g_locals[$key];

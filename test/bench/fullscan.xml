@@ -17,11 +17,9 @@ searchd
 source fullscan
 {
 	type = mysql
-	<sql_settings sql_db="fullscan" />
+	<sql_settings/>
 
-	docinfo = extern
-
-	sql_query = select id, text from fullscan;
+	sql_query = select id, value, text from fullscan
 	sql_attr_uint = value
 }
 
@@ -29,12 +27,17 @@ index fullscan
 {
 	source	= fullscan
 	path	= <local>data</local>/fullscan
+	docinfo	= extern
 }
 </config>
 
 <queries>
-	<query tag="10" filter_value="10" filter="value" index="fullscan" ranker="none">dummy</query>
-	<query tag="30" filter_value="30" filter="value" index="fullscan" ranker="none">dummy</query>
+	<query tag="term10" filter_value="10" filter="value" index="fullscan" ranker="none">dummy</query>
+	<query tag="term20" filter_value="20" filter="value" index="fullscan" ranker="none">dummy</query>
+	<query tag="term30" filter_value="30" filter="value" index="fullscan" ranker="none">dummy</query>
+	<query tag="scan10" filter_value="10" filter="value" index="fullscan" ranker="none"></query>
+	<query tag="scan20" filter_value="20" filter="value" index="fullscan" ranker="none"></query>
+	<query tag="scan30" filter_value="30" filter="value" index="fullscan" ranker="none"></query>
 </queries>
 
 </test>

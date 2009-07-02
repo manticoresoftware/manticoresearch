@@ -1153,6 +1153,11 @@ public:
 			m_sValue [ sEnd-sStart+1 ] = '\0';
 		}
 	}
+
+	int Length () const
+	{
+		return m_sValue ? (int)strlen(m_sValue) : 0;
+	}
 };
 
 /// string swapper

@@ -1594,7 +1594,7 @@ bool NetOutputBuffer_c::SendString ( const char * sStr )
 
 	FlushIf ( sizeof(DWORD) );
 
-	int iLen = strlen(sStr);
+	int iLen = sStr ? strlen(sStr) : 0;
 	SendInt ( iLen );
 	return SendBytes ( sStr, iLen );
 }
@@ -2547,18 +2547,18 @@ protected:
 int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuery & q ) const
 {
 	int iReqSize = 104 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
-		+ strlen ( q.m_sSortBy.cstr() )
-		+ strlen ( q.m_sQuery.cstr() )
+		+ q.m_sSortBy.Length()
+		+ q.m_sQuery.Length()
 		+ strlen ( sIndexes )
-		+ strlen ( q.m_sGroupBy.cstr() )
-		+ strlen ( q.m_sGroupSortBy.cstr() )
-		+ strlen ( q.m_sGroupDistinct.cstr() )
-		+ strlen ( q.m_sComment.cstr() )
-		+ strlen ( q.m_sSelect.cstr() );
+		+ q.m_sGroupBy.Length()
+		+ q.m_sGroupSortBy.Length()
+		+ q.m_sGroupDistinct.Length()
+		+ q.m_sComment.Length()
+		+ q.m_sSelect.Length();
 	ARRAY_FOREACH ( j, q.m_dFilters )
 	{
 		const CSphFilterSettings & tFilter = q.m_dFilters[j];
-		iReqSize += 12 + strlen ( tFilter.m_sAttrName.cstr() ); // string attr-name; int type; int exclude-flag
+		iReqSize += 12 + tFilter.m_sAttrName.Length(); // string attr-name; int type; int exclude-flag
 		switch ( tFilter.m_eType )
 		{
 			case SPH_FILTER_VALUES:		iReqSize += 4 + 8*tFilter.GetNumValues (); break; // int values-count; uint64[] values
@@ -2567,13 +2567,13 @@ int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuer
 		}
 	}
 	if ( q.m_bGeoAnchor )
-		iReqSize += 16 + strlen ( q.m_sGeoLatAttr.cstr() ) + strlen ( q.m_sGeoLongAttr.cstr() ); // string lat-attr, long-attr; float lat, long
+		iReqSize += 16 + q.m_sGeoLatAttr.Length() + q.m_sGeoLongAttr.Length(); // string lat-attr, long-attr; float lat, long
 	ARRAY_FOREACH ( i, q.m_dIndexWeights )
-		iReqSize += 8 + strlen ( q.m_dIndexWeights[i].m_sName.cstr() ); // string index-name; int index-weight
+		iReqSize += 8 + q.m_dIndexWeights[i].m_sName.Length(); // string index-name; int index-weight
 	ARRAY_FOREACH ( i, q.m_dFieldWeights )
-		iReqSize += 8 + strlen ( q.m_dFieldWeights[i].m_sName.cstr() ); // string field-name; int field-weight
+		iReqSize += 8 + q.m_dFieldWeights[i].m_sName.Length(); // string field-name; int field-weight
 	ARRAY_FOREACH ( i, q.m_dOverrides )
-		iReqSize += 12 + strlen ( q.m_dOverrides[i].m_sAttr.cstr() ) + // string attr-name; int type; int values-count
+		iReqSize += 12 + q.m_dOverrides[i].m_sAttr.Length() + // string attr-name; int type; int values-count
 			( q.m_dOverrides[i].m_uAttrType==SPH_ATTR_BIGINT ? 16 : 12 )*q.m_dOverrides[i].m_dValues.GetLength(); // ( bigint id; int/float/bigint value )[] values
 	return iReqSize;
 }
@@ -2786,7 +2786,7 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, Agent_t & tAgent
 					else if ( tAttr.m_eAttrType == SPH_ATTR_STRING )
 					{
 						CSphString sValue = tReq.GetString();
-						int iLen = strlen ( sValue.cstr() );
+						int iLen = sValue.Length();
 
 						int iOff = g_dStringsStorage.GetLength(); 
 						tMatch.SetAttr ( tAttr.m_tLocator, iOff );

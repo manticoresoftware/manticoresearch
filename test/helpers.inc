@@ -666,6 +666,10 @@ class SphinxConfig
 					{
 						$cl = new SphinxClient ();
 						$cl->SetServer ( $sd_address, $sd_port );
+					} else
+					{
+						$cl->ResetFilters ();
+						$cl->ResetGroupBy ();
 					}
 
 					$results = 0;

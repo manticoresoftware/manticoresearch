@@ -10,6 +10,12 @@ require_once ( "settings.inc" );
 
 ////////////////////////////////////////////////////////////////////////////////
 
+function Fatal ( $message )
+{
+	print "FATAL: $message.\n";
+	exit ( 1 );
+}
+
 function sphCompareTime ( $a, $b )
 {
 	if ( abs ( $a - $b ) < 0.01 )
@@ -61,10 +67,7 @@ function sphCompare ( $sources )
 	);
 
 	if ( count($data[0]['results']) != count($data[1]['results']) )
-	{
-		printf ( "unable to produce the report, result set sizes mismatch\n" );
-		exit ( 1 );
-	}
+		Fatal ( "unable to produce the report, result set sizes mismatch" );
 
 	$combined = array();
 	$skip = array();
@@ -102,10 +105,7 @@ function sphCompare ( $sources )
 	}
 
 	if ( array_keys($combined[0]) != array_keys($combined[1]) )
-	{
-		printf ( "unable to produce the report, tag sets mismatch\n" );
-		exit ( 1 );
-	}
+		Fatal ( "unable to produce the report, tag sets mismatch" );
 
 	$report['aggregate'] = sphCompareSets ( array ( array_values ( $combined[0] ),
 													array_values ( $combined[1] ) ) );
@@ -294,81 +294,90 @@ function sphBenchmark ( $name, $locals, $force_reindex )
 
 ////////////////////////////////////////////////////////////////////////////////
  
-function sphFindBenchmarkResults ( $files )
+/// pick $count freshest run files for $bench benchmark
+function PickFreshest ( $bench, $count )
 {
-	$results = array();
-	foreach ( $files as $file )
+	// traverse results dir for $bench.RUNID.bin
+	$found = array();
+	$dh = opendir ( "bench-results" );
+	if ( $dh )
 	{
-		// check full names first
-		$found = null;
-		$ifound = -1;
-
-		$variants = array (
-			"$file",
-			"$file.bin",
-			"bench-results/$file",
-			"bench-results/$file.bin"
-		);
-		foreach ( $variants as $variant )
-			if ( is_readable($variant) )
-			{
-				$found = $variant;
-				break;
-			}
-
-		// traverse results dir for name.X next
-		$dh = opendir ( "bench-results" );
-		if ( $dh )
+		while ( $entry = readdir ( $dh ) )
 		{
-			while ( $entry = readdir ( $dh ) )
-			{
-				if ( substr ( $entry, 0, 1+strlen($file) )!==$file."." )
-					continue;
+			if ( substr ( $entry, 0, 1+strlen($bench) )!==$bench."." )
+				continue;
+			if ( substr ( $entry, -4 )!==".bin" )
+				continue;
 
-				$ientry = (int)substr ( $entry, 1+strlen($file) );
-				if ( $ientry>$ifound )
-				{
-					$found = "bench-results/$entry";
-					$ifound = $ientry;
-				}
-			}
-			closedir ( $dh );
+			$index = (int)substr ( $entry, 1+strlen($bench) );
+			$found[$index] = "bench-results/$entry";
 		}
-
-		// still not found? too bad
-		if ( !$found )
-		{
-			printf ( "%s: file not found\n", $file );
-			return null;
-		}
-		$results[] = $found;
+		closedir ( $dh );
 	}
-	return $results;
+
+	if ( !$found )
+		return null;
+
+	ksort ( $found );
+	return array_slice ( array_values ( $found ), -$count );
 }
+
+
+/// lookup run file by name, doing some common guesses
+function LookupRun ( $name )
+{
+	// try full BENCH.RUNID guesses first
+	$found = null;
+
+	foreach ( array ( $name, "$name.bin", "bench-results/$name", "bench-results/$name.bin" ) as $guess )
+	{
+		if ( is_readable($guess) )
+		{
+			$found = $guess;
+			break;
+		}
+	}
+
+	// try pick the freshest one by bench name next
+	if ( !$found )
+		list($found) = PickFreshest ( $name, 1 );
+
+	// still not found? too bad
+	if ( !$found )
+		Fatal ( "no run files for '$name' found" );
+
+	return $found;
+}
+
 
 function BenchPrintHelp ( $path )
 {
 	print <<<EOT
-Usage: php $path <COMMAND> [OPTIONS] <BENCHMARK>
+Usage: php $path <COMMAND> [OPTIONS]
 
 Commands are:
-  b, benchmark		benchmark (and store run results)
-  bv			benchmark, view results
-  bb			(forcibly) build index, benchmark
-  bbv			(forcibly) build index, benchmark, view results
-  c, compare		compare two given run results
-  t, try		benchmark, view, but do not store results
-  v, view		view given run result
+  b, benchmark BENCH	benchmark (and store run result)
+  bv BENCH		benchmark, view run result
+  bb BENCH		(forcibly) build index, benchmark
+  bbv BENCH		(forcibly) build index, benchmark, view run result
+  c, compare BENCH	compare two latest run results of given benchmark
+  c, compare BENCH RUNID1 RUNID2
+  c, compare BENCH.RUNID1 BENCH.RUNID2
+  			compare two given run results
+  t, try BENCH		benchmark, view, but do not store run result
+  v, view BENCH.RUNID	view given run result
 
 Examples:
   bench.php b mytest	run 'mytest' benchmark
   bench.php v mytest	view latest 'mytest' run result
   bench.php v mytest.4	view 4th 'mytest' run result
+  bench.php c mytest 3 7
   bench.php c mytest.3 mytest.7
   			compare runs 3 and 7 of 'mytest' benchmark
 
 EOT;
 }
+
 
 function AvailableBenchmarks ()
 {
@@ -384,6 +393,7 @@ function AvailableBenchmarks ()
 	closedir ( $dh );
 	return join ( ", or ", $avail );
 }
+
 
 function Main ( $argv )
 {
@@ -462,9 +472,7 @@ function Main ( $argv )
 					break;
 
 				default:
-					printf ( "FATAL: unknown mode '$opt'\n\n" );
-					BenchPrintHelp ( $argv[0] );
-					return 1;
+					Fatal ( "unknown mode '$opt' (run bench.php without arguments for help)" );
 			}
 		}
 	}
@@ -482,20 +490,15 @@ function Main ( $argv )
 			if ( $avail )
 				$avail = " ($avail)";
 
-			printf ( "FATAL: benchmark command requires a test case name$avail.\n" );
-			return 1;
+			Fatal ( "benchmark command requires a benchmark name$avail" );
 		}
+
 		if ( count($files)!=1 )
-		{
-			printf ( "FATAL: benchmark command requires exactly one name.\n" );
-			return 1;
-		}
+			Fatal ( "benchmark command requires exactly one name" );
+
 		$path = "bench/$files[0].xml";
 		if ( !is_readable($path) )
-		{
-			printf ( "FATAL: benchmark '%s' is not readable\n", $path );
-			return 1;
-		}
+			Fatal ( "benchmark scenario '$path' is not readable" );
 
 		$res = sphBenchmark ( $files[0], $g_locals, $force_reindex );
 		if ( !$res )
@@ -510,38 +513,50 @@ function Main ( $argv )
 			unlink ( "$res.bin" );
 			unlink ( "$res.searchd.txt" );
 		}
-
-		return 0;
 	}
 	else if ( $mode=='compare' )
 	{
-		if ( count($files)!=2 )
+		switch ( count($files) )
 		{
-			printf ( "FATAL: compare command requires exactly two filenames.\n" );
-			return 1;
+			case 1:
+				// pick two freshest by name
+				$runs = PickFreshest ( $files[0], 2 );
+				if ( count($runs)!=2 )
+					Fatal ( "not enough run files for '$files[0]' (needed 2, got ".count($runs).")" );
+				break; 
+
+			case 2:
+				// explicit run names given
+				$runs = array ( LookupRun ( $files[0] ), LookupRun ( $files[1] ) );
+				break;
+
+			case 3:
+				// explicit run names, shortcut syntax
+				$runs = array (
+					LookupRun ( "$files[0].$files[1]" ),
+					LookupRun ( "$files[0].$files[2]" ) );
+				break;
+
+			default:
+				Fatal ( "invalid compare syntax (expected 1 to 3 args, got ".count($files).")" );
 		}
-		$results = sphFindBenchmarkResults ( $files );
-		if ( !$results ) return 1;
-		sphTextReport ( sphCompare ( array ( $results[0], $results[1] ) ) );
+		sphTextReport ( sphCompare ( $runs ) );
 	}
 	else if ( $mode=='view' )
 	{
 		if ( count($files)!=1 )
 		{
-			printf ( "FATAL: view command requires exactly one filename.\n" );
-			return 1;
+			Fatal ( "view command requires exactly one argument" );
 		}
-		$results = sphFindBenchmarkResults ( $files );
-		if ( !$results ) return 1;
-		sphTextReport ( sphCompare ( array ( $results[0], $results[0] ) ) );
+
+		$run = LookupRun ( $files[0] );
+		sphTextReport ( sphCompare ( array ( $run, $run ) ) );
 	}
 	else
 	{
 		BenchPrintHelp ( $argv[0] );
-		return 0;
 	}
 }
 
-exit ( Main($argv) );
-
-?>
+Main ( $argv );
+exit ( 0 );

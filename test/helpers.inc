@@ -540,7 +540,7 @@ class SphinxConfig
 						$source = $this->GetLocal ( substr ( $source, 6 ) );
 					if ( !is_readable($source) )
 					{
-						printf ( "%s: source not found.\n", $source );
+						printf ( "FATAL: query source file '%s' not found.\n", $source );
 						exit ( 1 );
 					}
 					$queries = file ( $source, FILE_IGNORE_NEW_LINES );
@@ -632,7 +632,20 @@ class SphinxConfig
 		}
 		else
 			$compact = false;
-		
+
+		$cl = new SphinxClient;
+		$pconn = $benchmark && method_exists ( $cl, 'Open' );
+		if ( $pconn )
+		{
+			$cl = new SphinxClient ();
+			$cl->SetServer ( $sd_address, $sd_port );
+			$cl->Open ();
+		}
+
+		$retries = 1;
+		if ( !$benchmark )
+			$retries = $action_retries;
+
 		for ( $n=0; $n<count($this->_queries); $n++ )
 		{
 			$qinfo = $this->_queries[$n];
@@ -647,10 +660,13 @@ class SphinxConfig
 					$tm += 1;
 				}
 				$bOk = FALSE;
-				for ( $i = 0; $i < $action_retries && !$bOk; $i++ )
+				for ( $i=0; $i<$retries && !$bOk; $i++ )
 				{
-					$cl = new SphinxClient ();
-					$cl->SetServer ( $sd_address, $sd_port );
+					if ( !$pconn )
+					{
+						$cl = new SphinxClient ();
+						$cl->SetServer ( $sd_address, $sd_port );
+					}
 
 					$results = 0;
 					if ( empty($this->_query_settings) )
@@ -747,6 +763,9 @@ class SphinxConfig
 
 		if ( $benchmark )
 			printf ( " - done in %s\n", sphFormatTime ( MyMicrotime() - $start ) );
+
+		if ( $pconn )
+			$cl->Close ();
 
 		return TRUE;
 	}

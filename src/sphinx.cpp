@@ -891,7 +891,7 @@ public:
 	void		PutOffset ( SphOffset_t uValue ) { PutBytes ( &uValue, sizeof(SphOffset_t) ); }
 	void		PutString ( const char * szString );
 
-	void		SeekTo ( SphOffset_t pos );
+	void		SeekTo ( SphOffset_t pos ); ///< seeking inside the buffer will truncate it
 
 #if USE_64BIT
 	void		PutDocid ( SphDocID_t uValue ) { PutOffset ( uValue ); }
@@ -5159,10 +5159,10 @@ void CSphWriter::SeekTo ( SphOffset_t iPos )
 {
 	assert ( iPos>=0 );
 
-	if ( iPos > m_iWritten )
+	if ( iPos>=m_iWritten && iPos < m_iWritten+m_iPoolUsed )
 	{
 		// seeking inside the buffer
-		m_iPoolUsed = iPos - m_iWritten;
+		m_iPoolUsed = (int)( iPos - m_iWritten );
 		m_pPool = m_pBuffer + m_iPoolUsed;
 	}
 	else

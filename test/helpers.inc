@@ -912,11 +912,12 @@ class SphinxConfig
 	}
 
 
-	function FormatResultSet ( $nquery, $result )
+	function FormatResultSet ( $nquery, $result, $opts=array() )
 	{
 		if ( !$this->IsQueryTest () )
 			return var_export ( $result, true )."\n";
 
+		// format header
 		$qinfo = $this->_queries[$nquery-1];
 		if ( array_key_exists ( "index", $qinfo ) && $qinfo ["index"] != '*' )
 			$str = "--- Query $nquery (mode=$qinfo[mode_s],ranker=$qinfo[ranker_s],index=$qinfo[index]) ---\n";
@@ -937,6 +938,7 @@ class SphinxConfig
 
 		$array_result = @$result["resarray"];
 
+		// format keywords
 		if ( isset($result["words"]) && is_array($result["words"]) )
 		{
 			$str .= "Word stats:\n";
@@ -948,6 +950,34 @@ class SphinxConfig
 			}
 		}
 
+		// format attribute types
+		if ( @$opts["format_attrs"] )
+		{
+			$typenames = array (
+				SPH_ATTR_INTEGER => "int",
+				SPH_ATTR_TIMESTAMP=> "timestamp",
+				SPH_ATTR_ORDINAL => "ordinal",
+				SPH_ATTR_BOOL => "bool",
+				SPH_ATTR_FLOAT => "float",
+				SPH_ATTR_BIGINT => "bigint",
+				SPH_ATTR_STRING => "string",
+				SPH_ATTR_MULTI | SPH_ATTR_INTEGER => "mva" );
+
+			$n = 1;
+			$str .= "Result set attributes:\n";
+			foreach ( $result["attrs"] as $name=>$type )
+			{
+
+				$typename = "type-$type";
+				if ( $typenames[$type] )
+					$typename = $typenames[$type];
+
+				$str .= "\tattr $n: $typename $name\n";
+				$n++;
+			}
+		}
+
+		// format matches
 		$str .= "\n";
 		if ( isset($result["matches"]) && is_array($result["matches"]) )
 		{
@@ -1059,14 +1089,19 @@ class SphinxConfig
 
 		foreach ( $this->_results_model [ $this->SubtestNo() ] as $ref )
 		{
-			if ( $this->CompareResultSets ( $ref, $this->_results[$nquery] ) )
+			$cur = $this->_results[$nquery];
+			if ( $this->CompareResultSets ( $ref, $cur ) )
 			{
 				$nquery++;
 				continue;
 			}
 
-			$result_f_cur = $this->FormatResultSet ( $nquery + 1, $this->_results[$nquery] );
-			$result_f_ref = $this->FormatResultSet ( $nquery + 1, $ref );
+			$opts = array();
+			if ( $cur["attrs"]!=$ref["attrs"] )
+				$opts["format_attrs"] = 1;
+
+			$result_f_cur = $this->FormatResultSet ( $nquery+1, $this->_results[$nquery], $opts );
+			$result_f_ref = $this->FormatResultSet ( $nquery+1, $ref, $opts );
 			file_put_contents ( "current", $result_f_cur );
 			file_put_contents ( "reference", $result_f_ref );
 			system ( "diff --unified=3 reference current > diffed.txt" );

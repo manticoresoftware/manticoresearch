@@ -5159,8 +5159,17 @@ void CSphWriter::SeekTo ( SphOffset_t iPos )
 {
 	assert ( iPos>=0 );
 
-	Flush ();
-	sphSeek ( m_iFD, iPos, SEEK_SET );
+	if ( iPos > m_iWritten )
+	{
+		// seeking inside the buffer
+		m_iPoolUsed = iPos - m_iWritten;
+		m_pPool = m_pBuffer + m_iPoolUsed;
+	}
+	else
+	{
+		Flush ();
+		sphSeek ( m_iFD, iPos, SEEK_SET );
+	}
 	m_iPos = iPos;
 }
 

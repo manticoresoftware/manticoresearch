@@ -1097,8 +1097,9 @@ class SphinxConfig
 			}
 
 			$opts = array();
-			if ( $cur["attrs"]!=$ref["attrs"] )
-				$opts["format_attrs"] = 1;
+			if ( isset($cur["attrs"]) || isset($ref["attrs"]) )
+				if ( @$cur["attrs"]!=@$ref["attrs"] )
+					$opts["format_attrs"] = 1;
 
 			$result_f_cur = $this->FormatResultSet ( $nquery+1, $this->_results[$nquery], $opts );
 			$result_f_ref = $this->FormatResultSet ( $nquery+1, $ref, $opts );

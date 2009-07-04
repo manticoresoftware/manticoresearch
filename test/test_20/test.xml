@@ -88,6 +88,9 @@ index mini2 : test
 <query mode="extended2" index="test,test2" groupattr="time" groupfunc="year" groupdistinct="tag"></query>
 
 <query mode="extended2" index="mini1,mini2" groupattr="time" groupfunc="year" groupdistinct="tag"></query>
+
+<query mode="extended2" index="test" groupattr="tag" groupsort="@group asc" sortmode="extended" sortby="time asc">test*</query>
+<query mode="extended2" index="test" groupattr="tag" groupsort="@group asc" sortmode="extended" sortby="@id desc" select="*,@id*10 as q" filter="q" filter_range="0 1000">test*</query>
 </queries>
 
 <db_create>

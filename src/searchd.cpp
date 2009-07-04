@@ -1268,24 +1268,31 @@ ListenerDesc_t ParseListener ( const char * sSpec )
 #endif
 	}
 
+	// check if it all starts with a valid port number
+	sPart = sParts[0].cstr();
+	int iLen = strlen(sPart);
+
+	bool bAllDigits = true;
+	for ( int i=0; i<iLen && bAllDigits; i++ )
+		if ( !isdigit ( sPart[i] ) )
+			bAllDigits = false;
+
+	int iPort = 0;
+	if ( bAllDigits && iLen<=5 )
+	{
+		iPort = atol(sPart);
+		CheckPort ( iPort ); // lets forbid ambiguous magic like 0:sphinx or 99999:mysql41
+	}
+
 	// handle TCP port case
 	// one part. might be either port name, or host name, or UNIX socket name
 	if ( iParts==1 )
 	{
-		sPart = sParts[0].cstr();
-		int iLen = strlen(sPart);
-
-		bool bAllDigits = true;
-		for ( int i=0; i<iLen && bAllDigits; i++ )
-			if ( !isdigit ( sPart[i] ) )
-				bAllDigits = false;
-
-		if ( bAllDigits && iLen<=5 )
+		if ( iPort )
 		{
 			// port name on itself
 			tRes.m_uIP = htonl(INADDR_ANY);
-			tRes.m_iPort = atol(sSpec);
-			CheckPort ( tRes.m_iPort );
+			tRes.m_iPort = iPort;
 		} else
 		{
 			// host name on itself
@@ -1296,18 +1303,14 @@ ListenerDesc_t ParseListener ( const char * sSpec )
 	}
 
 	// two or three parts
-	int iPart0 = 0;
-	if ( !sParts[0].IsEmpty() )
-		iPart0 = atol ( sParts[0].cstr() );
-
-	if ( IsPortInRange(iPart0) )
+	if ( iPort )
 	{
 		// 1st part is a valid port number; must be port:proto
 		if ( iParts!=2 )
-			sphFatal ( "invalid listen format (expected port:proto, got extra trailing part)" );
+			sphFatal ( "invalid listen format (expected port:proto, got extra trailing part in listen=%s)", sSpec );
 
 		tRes.m_uIP = htonl ( INADDR_ANY );
-		tRes.m_iPort = iPart0;
+		tRes.m_iPort = iPort;
 		tRes.m_eProto = ProtoByName ( sParts[1] );
 
 	} else

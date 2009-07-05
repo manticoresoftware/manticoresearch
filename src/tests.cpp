@@ -445,17 +445,18 @@ void TestExpr ()
 	tCol.m_eAttrType = SPH_ATTR_INTEGER;
 
 	CSphSchema tSchema;
-	tCol.m_sName = "aaa"; tSchema.AddAttr ( tCol );
-	tCol.m_sName = "bbb"; tSchema.AddAttr ( tCol );
-	tCol.m_sName = "ccc"; tSchema.AddAttr ( tCol );
+	tCol.m_sName = "aaa"; tSchema.AddAttr ( tCol, false );
+	tCol.m_sName = "bbb"; tSchema.AddAttr ( tCol, false );
+	tCol.m_sName = "ccc"; tSchema.AddAttr ( tCol, false );
+
+	CSphRowitem * pRow = new CSphRowitem [ tSchema.GetRowSize() ];
+	for ( int i=0; i<tSchema.GetRowSize(); i++ )
+		pRow[i] = 1+i;
 
 	CSphMatch tMatch;
 	tMatch.m_iDocID = 123;
 	tMatch.m_iWeight = 456;
-	tMatch.m_iRowitems = tSchema.GetRowSize();
-	tMatch.m_pRowitems = new CSphRowitem [ tMatch.m_iRowitems ];
-	for ( int i=0; i<tMatch.m_iRowitems; i++ )
-		tMatch.m_pRowitems[i] = 1+i;
+	tMatch.m_pStatic = pRow;
 
 	struct ExprTest_t
 	{
@@ -514,6 +515,8 @@ void TestExpr ()
 
 		printf ( "ok\n" );
 	}
+
+	SafeDeleteArray ( pRow );
 }
 
 
@@ -523,9 +526,9 @@ void TestExpr ()
 #define NOINLINE
 #endif
 
-#define AAA float(tMatch.m_pRowitems[0])
-#define BBB float(tMatch.m_pRowitems[1])
-#define CCC float(tMatch.m_pRowitems[2])
+#define AAA float(tMatch.m_pStatic[0])
+#define BBB float(tMatch.m_pStatic[1])
+#define CCC float(tMatch.m_pStatic[2])
 
 NOINLINE float ExprNative1 ( const CSphMatch & tMatch )	{ return AAA+BBB*CCC-1.0f;}
 NOINLINE float ExprNative2 ( const CSphMatch & tMatch )	{ return AAA+BBB*CCC*2.0f-3.0f/4.0f*5.0f/6.0f*BBB; }
@@ -540,17 +543,18 @@ void BenchExpr ()
 	tCol.m_eAttrType = SPH_ATTR_INTEGER;
 
 	CSphSchema tSchema;
-	tCol.m_sName = "aaa"; tSchema.AddAttr ( tCol );
-	tCol.m_sName = "bbb"; tSchema.AddAttr ( tCol );
-	tCol.m_sName = "ccc"; tSchema.AddAttr ( tCol );
+	tCol.m_sName = "aaa"; tSchema.AddAttr ( tCol, false );
+	tCol.m_sName = "bbb"; tSchema.AddAttr ( tCol, false );
+	tCol.m_sName = "ccc"; tSchema.AddAttr ( tCol, false );
+
+	CSphRowitem * pRow = new CSphRowitem [ tSchema.GetRowSize() ];
+	for ( int i=0; i<tSchema.GetRowSize(); i++ )
+		pRow[i] = 1+i;
 
 	CSphMatch tMatch;
 	tMatch.m_iDocID = 123;
 	tMatch.m_iWeight = 456;
-	tMatch.m_iRowitems = tSchema.GetRowSize();
-	tMatch.m_pRowitems = new CSphRowitem [ tMatch.m_iRowitems ];
-	for ( int i=0; i<tMatch.m_iRowitems; i++ )
-		tMatch.m_pRowitems[i] = 1+i;
+	tMatch.m_pStatic = pRow;
 
 	struct ExprBench_t
 	{
@@ -603,6 +607,8 @@ void BenchExpr ()
 			float(NRUNS)/tmTime,
 			float(NRUNS)/tmTimeNative );
 	}
+
+	SafeDeleteArray ( pRow );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -780,6 +786,45 @@ void TestMisc ()
 
 //////////////////////////////////////////////////////////////////////////
 
+void BenchLocators ()
+{
+	const int MAX_ITEMS = 10;
+	const int NUM_MATCHES = 1000;
+	const int NUM_RUNS = 100000;
+
+	CSphRowitem dStatic[MAX_ITEMS];
+	CSphRowitem dDynamic[MAX_ITEMS];
+	CSphAttrLocator tLoc[NUM_MATCHES];
+	CSphMatch tMatch[NUM_MATCHES];
+
+	for ( int i=0; i<MAX_ITEMS; i++ )
+		dStatic[i] = dDynamic[i] = i;
+
+	srand ( 0 );
+	for ( int i=0; i<NUM_MATCHES; i++)
+	{
+		tLoc[i].m_iBitCount = 32;
+		tLoc[i].m_iBitOffset = 32*( rand() % MAX_ITEMS );
+		tLoc[i].m_bDynamic = ( rand() % 2 )==1;
+		tMatch[i].m_pStatic = dStatic;
+		tMatch[i].m_pDynamic = dDynamic;
+	}
+
+	printf ( "benchmarking locators\n" );
+	for ( int iRun=1; iRun<=3; iRun++ )
+	{
+		uint64_t tmLoc = sphMicroTimer();
+		int iSum = 0;
+		for ( int i=0; i<NUM_RUNS; i++ )
+			for ( int j=0; j<NUM_MATCHES; j++ )
+				iSum += (int)tMatch[j].GetAttr ( tLoc[j] );
+		tmLoc = sphMicroTimer() - tmLoc;
+		printf ( "run %d: sum=%d time=%d.%d msec\n", iRun, iSum, (int)(tmLoc/1000), (int)((tmLoc%1000)/100) );
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 int main ()
 {
 	printf ( "RUNNING INTERNAL LIBSPHINX TESTS\n\n" );
@@ -789,6 +834,7 @@ int main ()
 	BenchTokenizer ( false );
 	BenchTokenizer ( true );
 	BenchExpr ();
+	BenchLocators ();
 #else
 	TestQueryParser ();
 	TestStripper ();

@@ -31,8 +31,9 @@ struct ISphFilter
 	virtual bool Eval ( const CSphMatch & tMatch ) const = 0;
 
 	/// evaluate filter for a given block
+	/// args are pMinDocinfo and pMaxDocinfo
 	/// returns false if no document in block can possibly pass through the filter
-	virtual bool EvalBlock ( const DWORD *, const DWORD *, int ) const
+	virtual bool EvalBlock ( const DWORD *, const DWORD * ) const
 	{
 		// if filter does not implement block-level evaluation we assume the block will pass
 		return true;

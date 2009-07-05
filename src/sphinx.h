@@ -600,12 +600,15 @@ struct CSphWordHit
 /// attribute locator within the row
 struct CSphAttrLocator
 {
+	// OPTIMIZE? try packing these
 	int				m_iBitOffset;
 	int				m_iBitCount;
+	bool			m_bDynamic;
 
 	CSphAttrLocator ()
 		: m_iBitOffset ( -1 )
 		, m_iBitCount ( -1 )
+		, m_bDynamic ( false )
 	{}
 
 	inline bool IsBitfield () const
@@ -615,8 +618,16 @@ struct CSphAttrLocator
 
 	int CalcRowitem () const
 	{
-		return IsBitfield() ? - 1 : ( m_iBitOffset / ROWITEM_BITS );
+		return IsBitfield() ? -1 : ( m_iBitOffset / ROWITEM_BITS );
 	}
+
+#ifndef NDEBUG
+	/// get last item touched by this attr (for debugging checks only)
+	int GetMaxRowitem () const
+	{
+		return ( m_iBitOffset + m_iBitCount - 1 ) / ROWITEM_BITS;
+	}
+#endif
 };
 
 
@@ -710,18 +721,18 @@ inline int sphUnpackStr ( const BYTE * pRow, const BYTE ** ppStr )
 class CSphMatch
 {
 public:
-	SphDocID_t		m_iDocID;		///< document ID
-	int				m_iRowitems;	///< row items count
-	CSphRowitem *	m_pRowitems;	///< row data
-	int				m_iWeight;		///< my computed weight
-	int				m_iTag;			///< my index tag
+	SphDocID_t				m_iDocID;		///< document ID
+	const CSphRowitem *		m_pStatic;		///< static part (stored in and owned by the index)
+	CSphRowitem *			m_pDynamic;		///< dynamic part (computed per query; owned by the match)
+	int						m_iWeight;		///< my computed weight
+	int						m_iTag;			///< my index tag
 
 public:
 	/// ctor. clears everything
 	CSphMatch ()
 		: m_iDocID ( 0 )
-		, m_iRowitems ( 0 )
-		, m_pRowitems ( NULL )
+		, m_pStatic ( NULL )
+		, m_pDynamic ( NULL )
 		, m_iWeight ( 0 )
 		, m_iTag ( 0 )
 	{
@@ -729,8 +740,8 @@ public:
 
 	/// copy ctor. just in case
 	CSphMatch ( const CSphMatch & rhs )
-		: m_iRowitems ( 0 )
-		, m_pRowitems ( NULL )
+		: m_pStatic ( 0 )
+		, m_pDynamic ( NULL )
 	{
 		*this = rhs;
 	}
@@ -738,54 +749,104 @@ public:
 	/// dtor. frees everything
 	~CSphMatch ()
 	{
-		SafeDeleteArray ( m_pRowitems );
+#ifndef NDEBUG
+		if ( m_pDynamic )
+			m_pDynamic--;
+#endif
+		SafeDeleteArray ( m_pDynamic );
 	}
 
 	/// reset
-	void Reset ( int iNewRowitems )
+	void Reset ( int iDynamic )
 	{
+		// check that we're either initializing a new one, or NOT changing the current size
+		assert ( iDynamic>=0 );
+		assert ( !m_pDynamic || iDynamic==(int)m_pDynamic[-1] );
+
 		m_iDocID = 0;
-		if ( iNewRowitems!=m_iRowitems )
+		if ( !m_pDynamic && iDynamic )
 		{
-			m_iRowitems = iNewRowitems;
-			SafeDeleteArray ( m_pRowitems );
-			if ( m_iRowitems )
-				m_pRowitems = new CSphRowitem [ m_iRowitems ];
+#ifndef NDEBUG
+			m_pDynamic = new CSphRowitem [ iDynamic+1 ];
+			*m_pDynamic++ = iDynamic;
+#else
+			m_pDynamic = new CSphRowitem [ iDynamic ];
+#endif
 		}
-	}
-
-	/// assignment
-	const CSphMatch & operator = ( const CSphMatch & rhs )
-	{
-		m_iDocID = rhs.m_iDocID;
-		m_iWeight = rhs.m_iWeight;
-		m_iTag = rhs.m_iTag;
-
-		if ( m_iRowitems!=rhs.m_iRowitems )
-		{
-			SafeDeleteArray ( m_pRowitems );
-			m_iRowitems = rhs.m_iRowitems;
-			if ( m_iRowitems )
-				m_pRowitems = new CSphRowitem [ m_iRowitems ]; // OPTIMIZE! pool these allocs
-		}
-
-		if ( m_iRowitems )
-		{
-			assert ( m_iRowitems==rhs.m_iRowitems );
-			memcpy ( m_pRowitems, rhs.m_pRowitems, sizeof(CSphRowitem)*m_iRowitems );
-		}
-
-		return *this;
 	}
 
 public:
-	SphAttr_t	GetAttr ( const CSphAttrLocator & tLoc ) const				{ return sphGetRowAttr ( m_pRowitems, tLoc ); }
-	float		GetAttrFloat ( const CSphAttrLocator & tLoc ) const			{ return sphDW2F ( (DWORD)sphGetRowAttr ( m_pRowitems, tLoc ) ); };
+	/// assignment
+	void Clone ( const CSphMatch & rhs, int iDynamic )
+	{
+		// check that we're either initializing a new one, or NOT changing the current size
+		assert ( iDynamic>=0 );
+		assert ( !m_pDynamic || iDynamic==(int)m_pDynamic[-1] );
 
-	void		SetAttr ( const CSphAttrLocator & tLoc, SphAttr_t uValue )	{ sphSetRowAttr ( m_pRowitems, tLoc, uValue ); }
-	void		SetAttrFloat ( const CSphAttrLocator & tLoc, float fValue )	{ sphSetRowAttr ( m_pRowitems, tLoc, sphF2DW ( fValue ) ); }
+		m_iDocID = rhs.m_iDocID;
+		m_iWeight = rhs.m_iWeight;
+		m_pStatic = rhs.m_pStatic;
+		m_iTag = rhs.m_iTag;
 
-	const DWORD *	GetAttrMVA ( const CSphAttrLocator & tLoc, const DWORD * pPool ) const;
+		if ( iDynamic )
+		{
+			if ( !m_pDynamic )
+			{
+#ifndef NDEBUG
+				m_pDynamic = new CSphRowitem [ iDynamic+1 ];
+				*m_pDynamic++ = iDynamic;
+#else
+				m_pDynamic = new CSphRowitem [ iDynamic ];
+#endif
+			}
+
+			assert ( rhs.m_pDynamic );
+			assert ( m_pDynamic[-1]==rhs.m_pDynamic[-1] ); // ensure we're not changing X to Y
+			memcpy ( m_pDynamic, rhs.m_pDynamic, iDynamic*sizeof(CSphRowitem) );
+		}
+	}
+
+public:
+	/// integer getter
+	SphAttr_t GetAttr ( const CSphAttrLocator & tLoc ) const
+	{
+		// m_pRowpart[tLoc.m_bDynamic] is 30% faster on MSVC 2005
+		// same time on gcc 4.x though, ~1 msec per 1M calls, so lets avoid the hassle for now
+		return sphGetRowAttr ( tLoc.m_bDynamic ? m_pDynamic : m_pStatic, tLoc );
+	}
+
+	/// float getter
+	float GetAttrFloat ( const CSphAttrLocator & tLoc ) const
+	{
+		return sphDW2F ( (DWORD)sphGetRowAttr ( tLoc.m_bDynamic ? m_pDynamic : m_pStatic, tLoc ) );
+	};
+
+	/// integer setter
+	void SetAttr ( const CSphAttrLocator & tLoc, SphAttr_t uValue )
+	{
+		assert ( tLoc.m_bDynamic );
+		assert ( tLoc.GetMaxRowitem() < (int)m_pDynamic[-1] );
+		sphSetRowAttr ( m_pDynamic, tLoc, uValue );
+	}
+
+	/// float setter
+	void SetAttrFloat ( const CSphAttrLocator & tLoc, float fValue )
+	{
+		assert ( tLoc.m_bDynamic );
+		assert ( tLoc.GetMaxRowitem() < (int)m_pDynamic[-1] );
+		sphSetRowAttr ( m_pDynamic, tLoc, sphF2DW ( fValue ) );
+	}
+
+	/// MVA getter
+	const DWORD * GetAttrMVA ( const CSphAttrLocator & tLoc, const DWORD * pPool ) const;
+
+private:
+	/// "manually" prevent copying
+	const CSphMatch & operator = ( const CSphMatch & )
+	{
+		assert ( 0 && "internal error (CSphMatch::operator= called)" );
+		return *this;
+	}
 };
 
 
@@ -793,8 +854,8 @@ public:
 inline void Swap ( CSphMatch & a, CSphMatch & b )
 {
 	Swap ( a.m_iDocID, b.m_iDocID );
-	Swap ( a.m_iRowitems, b.m_iRowitems );
-	Swap ( a.m_pRowitems, b.m_pRowitems );
+	Swap ( a.m_pStatic, b.m_pStatic );
+	Swap ( a.m_pDynamic, b.m_pDynamic );
 	Swap ( a.m_iWeight, b.m_iWeight );
 	Swap ( a.m_iTag, b.m_iTag );
 }
@@ -876,6 +937,17 @@ enum ESphAggrFunc
 };
 
 
+/// column evaluation stage
+enum ESphEvalStage
+{
+	SPH_EVAL_STATIC = 0,		///< static data, no real evaluation needed
+	SPH_EVAL_OVERRIDE,			///< static but possibly overridden
+	SPH_EVAL_PREFILTER,			///< expression needed for full-text candidate matches filtering
+	SPH_EVAL_PRESORT,			///< expression needed for final matches sorting
+	SPH_EVAL_SORTER				///< expression evaluated by sorter object
+};
+
+
 /// source column info
 struct CSphColumnInfo
 {
@@ -893,7 +965,7 @@ struct CSphColumnInfo
 
 	CSphRefcountedPtr<ISphExpr>		m_pExpr;		///< evaluator for expression items
 	ESphAggrFunc					m_eAggrFunc;	///< aggregate function on top of expression (for GROUP BY)
-	bool							m_bLateCalc;	///< early calc or late calc
+	ESphEvalStage					m_eStage;		///< column evaluation stage (who and how computes this column)
 	bool							m_bPayload;
 
 	/// handy ctor
@@ -906,7 +978,7 @@ struct CSphColumnInfo
 		, m_eSrc ( SPH_ATTRSRC_NONE )
 		, m_pExpr ( NULL )
 		, m_eAggrFunc ( SPH_AGGR_NONE )
-		, m_bLateCalc ( false )
+		, m_eStage ( SPH_EVAL_STATIC )
 		, m_bPayload ( false )
 	{
 		m_sName.ToLower ();
@@ -915,13 +987,16 @@ struct CSphColumnInfo
 	/// equality comparison checks name, type, and locator
 	bool operator == ( const CSphColumnInfo & rhs ) const
 	{
-		return m_sName==rhs.m_sName && m_eAttrType==rhs.m_eAttrType && m_tLocator.m_iBitCount==rhs.m_tLocator.m_iBitCount && m_tLocator.m_iBitOffset==rhs.m_tLocator.m_iBitOffset;
+		return m_sName==rhs.m_sName
+			&& m_eAttrType==rhs.m_eAttrType
+			&& m_tLocator.m_iBitCount==rhs.m_tLocator.m_iBitCount
+			&& m_tLocator.m_iBitOffset==rhs.m_tLocator.m_iBitOffset
+			&& m_tLocator.m_bDynamic==rhs.m_tLocator.m_bDynamic;
 	}
 };
 
 
 /// source schema
-class CSphQuery;
 struct CSphSchema
 {
 	CSphString						m_sName;		///< my human-readable name
@@ -951,21 +1026,34 @@ public:
 	/// reset attrs only
 	void					ResetAttrs ();
 
-	/// get row size
-	int						GetRowSize () const				{ return m_dRowUsed.GetLength(); }
+	/// get row size (static+dynamic combined)
+	int						GetRowSize () const				{ return m_dStaticUsed.GetLength() + m_dDynamicUsed.GetLength(); }
+
+	/// get static row part size
+	int						GetStaticSize () const			{ return m_dStaticUsed.GetLength(); }
+
+	/// get dynamic row part size
+	int						GetDynamicSize () const			{ return m_dDynamicUsed.GetLength(); }
 
 	/// get attrs count
 	int						GetAttrsCount () const			{ return m_dAttrs.GetLength(); }
 
-	/// get attr
+	/// get attr by index
 	const CSphColumnInfo &	GetAttr ( int iIndex ) const	{ return m_dAttrs[iIndex]; }
 
+	/// get attr by name
+	const CSphColumnInfo *	GetAttr ( const char * sName ) const;
+
 	/// add attr
-	void					AddAttr ( const CSphColumnInfo & tAttr );
+	void					AddAttr ( const CSphColumnInfo & tAttr, bool bDynamic );
+
+	/// remove static attr (but do NOT recompute locations; for overrides)
+	void					RemoveAttr ( int iIndex );
 
 protected:
-	CSphVector<CSphColumnInfo>		m_dAttrs;		///< all my attributes
-	CSphVector<int>					m_dRowUsed;		///< row map (amount of used bits in each rowitem)
+	CSphVector<CSphColumnInfo>		m_dAttrs;			///< all my attributes
+	CSphVector<int>					m_dStaticUsed;		///< static row part map (amount of used bits in each rowitem)
+	CSphVector<int>					m_dDynamicUsed;		///< dynamic row part map
 };
 
 
@@ -1732,7 +1820,8 @@ public:
 public:
 	CSphString					m_sAttr;		///< attribute name
 	DWORD						m_uAttrType;	///< attribute type
-	CSphAttrLocator				m_tLocator;		///< attribute locator
+	CSphAttrLocator				m_tInLocator;	///< incoming locator in index schema
+	CSphAttrLocator				m_tOutLocator;	///< outgoing locator in result schema
 	CSphVector<IdValuePair_t>	m_dValues;		///< id-value overrides
 };
 
@@ -1849,7 +1938,7 @@ public:
 class CSphQueryResult : public CSphQueryResultMeta
 {
 public:
-	CSphVector<CSphMatch>	m_dMatches;			///< top matching documents, no more than MAX_MATCHES
+	CSphVector<CSphMatch,true>	m_dMatches;			///< top matching documents, no more than MAX_MATCHES
 
 	CSphSchema				m_tSchema;			///< result schema
 	const DWORD *			m_pMva;				///< pointer to MVA storage
@@ -1959,8 +2048,7 @@ public:
 	int					m_iTotal;
 
 protected:
-	CSphSchema			m_tIncomingSchema;		///< incoming schema (adds computed attributes on top of index schema)
-	CSphSchema			m_tOutgoingSchema;		///< outgoing schema (adds @groupby etc if needed on top of incoming)
+	CSphSchema			m_tSchema;		///< sorter schema (adds dynamic attributes on top of index schema)
 
 public:
 	/// ctor
@@ -1985,18 +2073,18 @@ public:
 	virtual void		SetMVAPool ( const DWORD * ) {}
 
 	/// set schemas
-	virtual void				SetSchemas ( const CSphSchema & tIn, const CSphSchema & tOut ) { m_tIncomingSchema = tIn; m_tOutgoingSchema = tOut; }
+	virtual void				SetSchema ( const CSphSchema & tSchema ) { m_tSchema = tSchema; }
 
 	/// get incoming schema
-	virtual const CSphSchema &	GetIncomingSchema () const { return m_tIncomingSchema; }
-
-	/// get outgoing schema
-	virtual const CSphSchema &	GetOutgoingSchema () const { return m_tOutgoingSchema; }
+	virtual const CSphSchema &	GetSchema () const { return m_tSchema; }
 
 	/// base push
 	/// returns false if the entry was rejected as duplicate
 	/// returns true otherwise (even if it was not actually inserted)
 	virtual bool		Push ( const CSphMatch & tEntry ) = 0;
+
+	/// submit pre-grouped match
+	virtual bool		PushGrouped ( const CSphMatch & tEntry ) = 0;
 
 	/// get entries count
 	virtual int			GetLength () const = 0;

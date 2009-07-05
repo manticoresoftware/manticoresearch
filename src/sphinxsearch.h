@@ -97,7 +97,8 @@ public:
 	const CSphIndex *		m_pIndex;
 	ESphDocinfo				m_eDocinfo;
 	CSphMatch				m_tMin;
-	int						m_iToCalc;
+	int						m_iInlineRowitems;		///< inline rowitems count
+	int						m_iDynamicRowitems;		///< dynamic rowitems counts (including (!) inline)
 	int64_t					m_iMaxTimer;
 	CSphString *			m_pWarning;
 
@@ -105,7 +106,8 @@ public:
 		: m_pDict ( NULL )
 		, m_pIndex ( NULL )
 		, m_eDocinfo ( SPH_DOCINFO_NONE )
-		, m_iToCalc ( 0 )
+		, m_iInlineRowitems ( 0 )
+		, m_iDynamicRowitems ( 0 )
 		, m_iMaxTimer ( 0 )
 		, m_pWarning ( NULL )
 	{}

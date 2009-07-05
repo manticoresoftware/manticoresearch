@@ -119,9 +119,9 @@ protected:
 
 	void AllocDocinfo ( const ISphQwordSetup & tSetup )
 	{
-		if ( tSetup.m_eDocinfo==SPH_DOCINFO_INLINE )
+		if ( tSetup.m_iInlineRowitems )
 		{
-			m_iStride = tSetup.m_tMin.m_iRowitems;
+			m_iStride = tSetup.m_iInlineRowitems;
 			m_pDocinfo = new CSphRowitem [ MAX_DOCS*m_iStride ];
 		}
 	}
@@ -2868,13 +2868,13 @@ void ExtOrder_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 
 ExtRanker_c::ExtRanker_c ( const XQNode_t * pRoot, const ISphQwordSetup & tSetup )
 {
-	m_iInlineRowitems = ( tSetup.m_eDocinfo==SPH_DOCINFO_INLINE ) ? tSetup.m_tMin.m_iRowitems : 0;
+	m_iInlineRowitems = tSetup.m_iInlineRowitems;
 	for ( int i=0; i<ExtNode_i::MAX_DOCS; i++ )
 	{
-		m_dMatches[i].Reset ( tSetup.m_tMin.m_iRowitems + tSetup.m_iToCalc );
-		m_dMyMatches[i].Reset ( tSetup.m_tMin.m_iRowitems + tSetup.m_iToCalc );
+		m_dMatches[i].Reset ( tSetup.m_iDynamicRowitems );
+		m_dMyMatches[i].Reset ( tSetup.m_iDynamicRowitems );
 	}
-	m_tTestMatch.Reset ( tSetup.m_tMin.m_iRowitems + tSetup.m_iToCalc );
+	m_tTestMatch.Reset ( tSetup.m_iDynamicRowitems );
 
 	assert ( pRoot );
 	m_pRoot = ExtNode_i::Create ( pRoot, tSetup );
@@ -2904,7 +2904,7 @@ const ExtDoc_t * ExtRanker_c::GetFilteredDocs ()
 		{
 			m_tTestMatch.m_iDocID = pCand->m_uDocid;
 			if ( pCand->m_pDocinfo )
-				memcpy ( m_tTestMatch.m_pRowitems, pCand->m_pDocinfo, m_iInlineRowitems*sizeof(CSphRowitem) );
+				memcpy ( m_tTestMatch.m_pDynamic, pCand->m_pDocinfo, m_iInlineRowitems*sizeof(CSphRowitem) );
 
 			if ( m_pIndex->EarlyReject ( m_tTestMatch ) )
 			{

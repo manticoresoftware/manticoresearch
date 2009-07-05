@@ -1207,9 +1207,6 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 	tSetup.m_pDict = pDict;
 	tSetup.m_pIndex = pIndex;
 	tSetup.m_eDocinfo = SPH_DOCINFO_EXTERN;
-	tSetup.m_tMin.m_iRowitems = 0;
-	tSetup.m_iToCalc = 0;
-	tSetup.m_iMaxTimer = 0;
 	tSetup.m_pWarning = &sWarning;
 	
 	CSphScopedPtr<CSphHitMarker> pMarker ( CSphHitMarker::Create ( tQuery.m_pRoot, tSetup ) );

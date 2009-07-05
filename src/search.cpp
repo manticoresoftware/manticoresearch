@@ -316,7 +316,7 @@ int main ( int argc, char ** argv )
 				// success; fold them matches
 				pResult->m_dMatches.Reset ();
 				pResult->m_iTotalMatches += pTop->GetTotalCount();
-				pResult->m_tSchema = pTop->GetOutgoingSchema();
+				pResult->m_tSchema = pTop->GetSchema();
 				sphFlattenQueue ( pTop, pResult, 0 );
 			}
 

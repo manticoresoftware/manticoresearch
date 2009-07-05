@@ -434,7 +434,7 @@ T * sphBinarySearch ( T * pStart, T * pEnd, T & tRef )
 
 /// generic vector
 /// (don't even ask why it's not std::vector)
-template < typename T > class CSphVector
+template < typename T, bool SWAP=false > class CSphVector
 {
 protected:
 	static const int MAGIC_INITIAL_LIMIT = 8;
@@ -549,6 +549,26 @@ public:
 		return m_pData[--m_iLength];
 	}
 
+private:
+	template < typename U, bool V > struct CopyImpl
+	{
+		static inline void DoCopy ( U * pNew, U * pData, int iLength )
+		{
+			for ( int i=0; i<iLength; i++ )
+				pNew[i] = pData[i];
+		}
+	};
+
+	template < typename U > struct CopyImpl<U,true>
+	{
+		static inline void DoCopy ( U * pNew, U * pData, int iLength )
+		{
+			for ( int i=0; i<iLength; i++ )
+				Swap ( pNew[i], pData[i] );
+		}
+	};
+
+public:
 	/// grow enough to hold that much entries, if needed, but do *not* change the length
 	void Reserve ( int iNewLimit )
 	{
@@ -567,9 +587,10 @@ public:
 		// FIXME! optimize for POD case
 		T * pNew = new T [ m_iLimit ];
 		__analysis_assume ( m_iLength<=m_iLimit );
-		for ( int i=0; i<m_iLength; i++ )
-			pNew[i] = m_pData[i];
+
+		CopyImpl<T,SWAP>::DoCopy ( pNew, m_pData, m_iLength );
 		delete [] m_pData;
+
 		m_pData = pNew;
 	}
 

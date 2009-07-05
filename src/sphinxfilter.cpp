@@ -155,9 +155,9 @@ struct Filter_Values: public IFilter_Attr, IFilter_Values
 		return EvalValues ( tMatch.GetAttr ( m_tLocator ) );
 	}
 
-	virtual bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo, int iSchemaSize ) const
+	virtual bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo ) const
 	{
-		if ( m_tLocator.m_iBitOffset >= iSchemaSize )
+		if ( m_tLocator.m_bDynamic )
 			return true; // ignore computed attributes
 
 		SphAttr_t uBlockMin = sphGetRowAttr ( DOCINFO2ATTRS(pMinDocinfo), m_tLocator );
@@ -174,9 +174,9 @@ struct Filter_Range: public IFilter_Attr, IFilter_Range
  		return EvalRange ( tMatch.GetAttr ( m_tLocator ) );
 	}
 
-	virtual bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo, int iSchemaSize ) const
+	virtual bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo ) const
 	{
-		if ( m_tLocator.m_iBitOffset >= iSchemaSize )
+		if ( m_tLocator.m_bDynamic )
 			return true; // ignore computed attributes
 
 		SphAttr_t uBlockMin = sphGetRowAttr ( DOCINFO2ATTRS(pMinDocinfo), m_tLocator );
@@ -204,9 +204,9 @@ struct Filter_FloatRange: public IFilter_Attr
  		return fValue >= m_fMinValue && fValue <= m_fMaxValue;
 	}
 
-	virtual bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo, int iSchemaSize ) const
+	virtual bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo ) const
 	{
-		if ( m_tLocator.m_iBitOffset >= iSchemaSize )
+		if ( m_tLocator.m_bDynamic )
 			return true; // ignore computed attributes
 
 		float fBlockMin = sphDW2F ( (DWORD)sphGetRowAttr ( DOCINFO2ATTRS(pMinDocinfo), m_tLocator ) );
@@ -224,7 +224,7 @@ struct Filter_IdValues: public IFilter_Values
 		return EvalValues ( tMatch.m_iDocID );
 	}
 
-	virtual bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo, int ) const
+	virtual bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo ) const
 	{
 		const SphAttr_t uBlockMin = DOCINFO2ID(pMinDocinfo);
 		const SphAttr_t uBlockMax = DOCINFO2ID(pMaxDocinfo);
@@ -350,10 +350,10 @@ struct Filter_And: public ISphFilter
 		return true;
 	}
 
-	virtual bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo, int iSchemaSize ) const
+	virtual bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo ) const
 	{
 		ARRAY_FOREACH ( i, m_dFilters )
-			if ( !m_dFilters[i]->EvalBlock ( pMinDocinfo, pMaxDocinfo, iSchemaSize ) )
+			if ( !m_dFilters[i]->EvalBlock ( pMinDocinfo, pMaxDocinfo ) )
 				return false;
 		return true;
 	}
@@ -387,7 +387,7 @@ struct Filter_Not: public ISphFilter
 		return !m_pFilter->Eval ( tMatch );
 	}
 
-	virtual bool EvalBlock ( const DWORD *, const DWORD *, int ) const
+	virtual bool EvalBlock ( const DWORD *, const DWORD * ) const
 	{
 		// if block passes through the filter we can't just negate the
 		// result since it's imprecise at this point

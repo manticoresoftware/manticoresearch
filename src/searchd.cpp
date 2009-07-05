@@ -2509,16 +2509,6 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, IReplyPar
 // SEARCH HANDLER
 /////////////////////////////////////////////////////////////////////////////
 
-inline bool operator < ( const CSphMatch & a, const CSphMatch & b )
-{
-	if ( a.m_iDocID==b.m_iDocID )
-		return a.m_iTag > b.m_iTag;
-	else
-		return a.m_iDocID < b.m_iDocID;
-};
-
-/////////////////////////////////////////////////////////////////////////////
-
 struct SearchRequestBuilder_t : public IRequestBuilder_t
 {
 						SearchRequestBuilder_t ( const CSphVector<CSphQuery> & dQueries, int iStart, int iEnd ) : m_dQueries ( dQueries ), m_iStart ( iStart ), m_iEnd ( iEnd ) {}
@@ -2737,7 +2727,7 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, Agent_t & tAgent
 			CSphColumnInfo tCol;
 			tCol.m_sName = tReq.GetString ();
 			tCol.m_eAttrType = tReq.GetDword (); // FIXME! add a sanity check
-			tSchema.AddAttr ( tCol );
+			tSchema.AddAttr ( tCol, true ); // all attributes received from agents are dynamic
 		}
 
 		// get matches
@@ -2876,6 +2866,13 @@ bool MinimizeSchema ( CSphSchema & tDst, const CSphSchema & tSrc )
 				// different bit sizes? choose the max one
 				dDst[i].m_tLocator.m_iBitCount = Max ( dDst[i].m_tLocator.m_iBitCount, tSrcAttr.m_tLocator.m_iBitCount );
 				bEqual = false;
+
+			}
+
+			if ( tSrcAttr.m_tLocator.m_bDynamic!=dDst[i].m_tLocator.m_bDynamic )
+			{
+				// different location? have to force target dynamic then
+				bEqual = false;
 			}
 		}
 
@@ -2889,7 +2886,7 @@ bool MinimizeSchema ( CSphSchema & tDst, const CSphSchema & tSrc )
 
 	tDst.ResetAttrs ();
 	ARRAY_FOREACH ( i, dDst )
-		tDst.AddAttr ( dDst[i] );
+		tDst.AddAttr ( dDst[i], dDst[i].m_tLocator.m_bDynamic | !bEqual ); // force dynamic attrs on inequality
 
 	return bEqual;
 }
@@ -3596,7 +3593,10 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 			const DWORD * pMvaPool = dTag2Pools [ tMatch.m_iTag ].m_pMva;
 			const BYTE * pStrings = dTag2Pools [ tMatch.m_iTag ].m_pStrings;
 
-			assert ( tMatch.m_iRowitems==pRes->m_tSchema.GetRowSize() );
+			assert ( tMatch.m_pStatic || !pRes->m_tSchema.GetStaticSize() );
+			assert ( tMatch.m_pDynamic || !pRes->m_tSchema.GetDynamicSize() );
+			assert ( !tMatch.m_pDynamic || (int)tMatch.m_pDynamic[-1]==pRes->m_tSchema.GetDynamicSize() );
+
 			for ( int j=0; j<pRes->m_tSchema.GetAttrsCount(); j++ )
 			{
 				const CSphColumnInfo & tAttr = pRes->m_tSchema.GetAttr(j);
@@ -3678,6 +3678,49 @@ struct AggrResult_t : CSphQueryResult
 };
 
 
+static void SortMatches ( CSphMatch * pData, int iCount )
+{
+	int st0[32], st1[32], a, b, k, i, j;
+
+	k = 1;
+	st0[0] = 0;
+	st1[0] = iCount-1;
+	while ( k )
+	{
+		k--;
+		i = a = st0[k];
+		j = b = st1[k];
+
+		const CSphMatch & tPivot = pData [ (a+b)/2 ]; // FIXME! add better median at least
+		SphDocID_t uPivotID = tPivot.m_iDocID;
+		int iPivotTag = tPivot.m_iTag;
+
+		while ( a<b )
+		{
+			while ( i<=j )
+			{
+				while ( pData[i].m_iDocID < uPivotID || ( pData[i].m_iDocID==uPivotID && pData[i].m_iTag > iPivotTag ) )
+					i++;
+				while ( uPivotID < pData[j].m_iDocID || ( uPivotID==pData[j].m_iDocID && iPivotTag > pData[j].m_iTag ) )
+					j--;
+				if ( i<=j )
+					Swap ( pData[i++], pData[j--] );
+			}
+
+			if ( j-a>=b-i )
+			{
+				if ( a<j ) { st0[k] = a; st1[k] = j; k++; }
+				a = i;
+			} else
+			{
+				if ( i<b ) { st0[k] = i; st1[k] = b; k++; }
+				b = j;
+			}
+		}
+	}
+}
+
+
 bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery )
 {
 	// sanity check
@@ -3732,7 +3775,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery )
 				if ( !bAdd )
 					continue;
 			}
-			tItems.AddAttr ( tCol );
+			tItems.AddAttr ( tCol, true );
 		}
 
 		if ( tRes.m_tSchema.GetAttrsCount()!=tItems.GetAttrsCount() )
@@ -3748,10 +3791,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery )
 		int iCur = 0;
 		int * dMapFrom = NULL;
 
-		CSphMatch tRow;
-		tRow.Reset ( tRes.m_tSchema.GetRowSize() );
-
-		if ( tRow.m_iRowitems )
+		if ( tRes.m_tSchema.GetRowSize() )
 			dMapFrom = new int [ tRes.m_tSchema.GetAttrsCount() ];
 
 		ARRAY_FOREACH ( iSchema, tRes.m_dSchemas )
@@ -3766,29 +3806,23 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery )
 			{
 				CSphMatch & tMatch = tRes.m_dMatches[i];
 
-				if ( tRow.m_iRowitems )
+				// create new and shiny (and properly sized and fully dynamic) match
+				CSphMatch tRow;
+				tRow.Reset ( tRes.m_tSchema.GetRowSize() );
+				tRow.m_iDocID = tMatch.m_iDocID;
+				tRow.m_iWeight = tMatch.m_iWeight;
+				tRow.m_iTag = tMatch.m_iTag;
+
+				// remap attrs
+				for ( int j=0; j<tRes.m_tSchema.GetAttrsCount(); j++ )
 				{
-					// remap attrs
-					for ( int j=0; j<tRes.m_tSchema.GetAttrsCount(); j++ )
-					{
-						const CSphColumnInfo & tDst = tRes.m_tSchema.GetAttr(j);
-						const CSphColumnInfo & tSrc = tRes.m_dSchemas[iSchema].GetAttr ( dMapFrom[j] );
-						tRow.SetAttr ( tDst.m_tLocator, tMatch.GetAttr(tSrc.m_tLocator) );
-					}
-
-					// remapped row might need *more* space because of unpacked attributes; allocate if so
-					if ( tMatch.m_iRowitems<tRow.m_iRowitems )
-					{
-						SafeDeleteArray ( tMatch.m_pRowitems );
-						tMatch.m_iRowitems = tRow.m_iRowitems;
-						tMatch.m_pRowitems = new CSphRowitem [ tRow.m_iRowitems ];
-					}
-
-					// copy remapped row
-					for ( int j=0; j<tRow.m_iRowitems; j++ )
-						tMatch.m_pRowitems[j] = tRow.m_pRowitems[j];
+					const CSphColumnInfo & tDst = tRes.m_tSchema.GetAttr(j);
+					const CSphColumnInfo & tSrc = tRes.m_dSchemas[iSchema].GetAttr ( dMapFrom[j] );
+					tRow.SetAttr ( tDst.m_tLocator, tMatch.GetAttr(tSrc.m_tLocator) );
 				}
-				tMatch.m_iRowitems = tRow.m_iRowitems;
+
+				// swap out old (most likely wrong sized) match
+				Swap ( tMatch, tRow );
 			}
 
 			iCur += tRes.m_dMatchCounts[iSchema];
@@ -3815,13 +3849,13 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery )
 		// groupby sorter does that automagically
 		pSorter->SetMVAPool ( NULL ); // because we must be able to group on @groupby anyway
 		ARRAY_FOREACH ( i, tRes.m_dMatches )
-			if ( !pSorter->Push ( tRes.m_dMatches[i] ) )
+			if ( !pSorter->PushGrouped ( tRes.m_dMatches[i] ) )
 				iDupes++;
 	} else
 	{
 		// normal sorter needs massasging
 		// sort by docid and then by tag to guarantee the replacement order
-		tRes.m_dMatches.Sort ();
+		SortMatches ( &tRes.m_dMatches[0], tRes.m_dMatches.GetLength() );
 
 		// fold them matches
 		if ( tQuery.m_dIndexWeights.GetLength() )
@@ -4277,7 +4311,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 								tRes.m_iQueryTime += ( iQuery==iStart ) ? tStats.m_iQueryTime : 0;
 								tRes.m_pMva = tStats.m_pMva;
 								tRes.m_dWordStats = tStats.m_dWordStats;
-								tRes.m_tSchema = pSorter->GetOutgoingSchema();
+								tRes.m_tSchema = pSorter->GetSchema();
 
 								// extract matches from sorter
 								assert ( pSorter );
@@ -4353,7 +4387,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 						{
 							tRes.m_iSuccesses++;
 							tRes.m_iTotalMatches += pSorter->GetTotalCount();
-							tRes.m_tSchema = pSorter->GetOutgoingSchema();
+							tRes.m_tSchema = pSorter->GetSchema();
 						}
 
 						// extract my results and store schema
@@ -4420,7 +4454,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 					ARRAY_FOREACH ( i, tRemoteResult.m_dMatches )
 					{
-						tRes.m_dMatches.Add ( tRemoteResult.m_dMatches[i] );
+						tRes.m_dMatches.Add();
+						tRes.m_dMatches.Last().Clone ( tRemoteResult.m_dMatches[i], tRemoteResult.m_tSchema.GetRowSize() );
 						tRes.m_dMatches.Last().m_iTag = 0; // all remote MVA values go to special pool which is at index 0
 					}
 

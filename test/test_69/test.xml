@@ -49,11 +49,14 @@ INSERT INTO `test_table` VALUES
 </db_insert>
 
 <custom_test>
-$results = false;
 $client->SetOverride ( "gid", SPH_ATTR_INTEGER, array ( 1=>123, 3=>15 ) );
 $client->SetSortMode ( SPH_SORT_ATTR_DESC, "gid" );
 $res = $client->Query ( "test", "test1" );
 if ( $res )
+{
+	unset ( $res["time"] );
 	$results = array ( $res );
+} else
+	$results = array ( $client->GetLastError() );
 </custom_test>
 </test>

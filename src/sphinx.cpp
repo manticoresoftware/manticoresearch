@@ -1527,7 +1527,6 @@ struct CSphIndex_VLN : CSphIndex
 	virtual bool				SaveAttributes ();
 
 	bool						EarlyReject ( CSphMatch & tMatch ) const;
-	bool						LateReject ( CSphMatch & tMatch ) const;
 
 	virtual SphAttr_t *			GetKillList () const;
 	virtual int					GetKillListSize ()const { return m_iKillListSize; }
@@ -1636,8 +1635,8 @@ private:
 	bool						m_bEarlyLookup;			///< whether early attr value lookup is needed
 	bool						m_bLateLookup;			///< whether late attr value lookup is needed
 
-	ISphFilter *				m_pEarlyFilter;
-	ISphFilter *				m_pLateFilter;
+	ISphFilter *				m_pFilter;
+	ISphFilter *				m_pWeightFilter;
 
 	struct CalcItem_t
 	{
@@ -6573,10 +6572,10 @@ CSphIndex * sphCreateIndexPhrase ( const char * sFilename )
 
 
 CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename )
-	: CSphIndex			( sFilename )
-	, m_iLockFD			( -1 )
-	, m_pEarlyFilter	( NULL )
-	, m_pLateFilter		( NULL )
+	: CSphIndex ( sFilename )
+	, m_iLockFD ( -1 )
+	, m_pFilter ( NULL )
+	, m_pWeightFilter ( NULL )
 {
 	m_sFilename = sFilename;
 
@@ -10589,16 +10588,7 @@ bool CSphIndex_VLN::EarlyReject ( CSphMatch & tMatch ) const
 		CopyDocinfo ( tMatch, FindDocinfo ( tMatch.m_iDocID ) );
 	EarlyCalc ( tMatch );
 
-	return m_pEarlyFilter ? !m_pEarlyFilter->Eval ( tMatch ) : false;
-}
-
-
-bool CSphIndex_VLN::LateReject ( CSphMatch & tMatch ) const
-{
-	if ( !m_pLateFilter )
-		return false;
-
-	return !m_pLateFilter->Eval ( tMatch );
+	return m_pFilter ? !m_pFilter->Eval ( tMatch ) : false;
 }
 
 
@@ -10829,25 +10819,6 @@ void CSphIndex_VLN::LateCalc ( CSphMatch & tMatch ) const
 }
 
 
-#define SPH_SUBMIT_MATCH(_match) \
-	if ( m_bLateLookup ) \
-		CopyDocinfo ( _match, FindDocinfo ( (_match).m_iDocID ) ); \
-	LateCalc ( _match ); \
-	\
-	if ( bRandomize ) \
-		(_match).m_iWeight = ( sphRand() & 0xffff ); \
-	\
-	if ( !m_pLateFilter || !LateReject ( _match ) ) \
-	{ \
-		bool bNewMatch = false; \
-		for ( int iSorter=0; iSorter<iSorters; iSorter++ ) \
-			bNewMatch |= ppSorters[iSorter]->Push ( _match ); \
-		\
-		if ( bNewMatch ) \
-			if ( --iCutoff==0 ) \
-				break; \
-	}
-
 bool CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, ISphRanker * pRanker )
 {
 	bool bRandomize = ppSorters[0]->m_bRandomize;
@@ -10863,7 +10834,23 @@ bool CSphIndex_VLN::MatchExtended ( const CSphQuery * pQuery, int iSorters, ISph
 
 		for ( int i=0; i<iMatches; i++ )
 		{
-			SPH_SUBMIT_MATCH ( pMatch[i] );
+			if ( m_bLateLookup )
+				CopyDocinfo ( pMatch[i], FindDocinfo ( pMatch[i].m_iDocID ) );
+			LateCalc ( pMatch[i] );
+
+			if ( bRandomize )
+				pMatch[i].m_iWeight = ( sphRand() & 0xffff );
+
+			if ( m_pWeightFilter && !m_pWeightFilter->Eval ( pMatch[i] ) )
+				continue;
+
+			bool bNewMatch = false;
+			for ( int iSorter=0; iSorter<iSorters; iSorter++ )
+				bNewMatch |= ppSorters[iSorter]->Push ( pMatch[i] );
+
+			if ( bNewMatch )
+				if ( --iCutoff==0 )
+					break;
 		}
 	}
 	return true;
@@ -10907,7 +10894,7 @@ bool CSphIndex_VLN::MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISph
 			break;
 
 		// check applicable filters
-		if ( m_pEarlyFilter && !m_pEarlyFilter->EvalBlock ( pMin, pMax ) )
+		if ( m_pFilter && !m_pFilter->EvalBlock ( pMin, pMax ) )
 			continue;
 
 		///////////////////////
@@ -10921,12 +10908,28 @@ bool CSphIndex_VLN::MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISph
 		{
 			tMatch.m_iDocID = DOCINFO2ID(pDocinfo);
 			CopyDocinfo ( tMatch, pDocinfo );
-			EarlyCalc ( tMatch );
 
-			if ( m_pEarlyFilter && !m_pEarlyFilter->Eval ( tMatch ) )
+			// early filter only (no late filters in full-scan because of no @weight)
+			EarlyCalc ( tMatch );
+			if ( m_pFilter && !m_pFilter->Eval ( tMatch ) )
 				continue;
 
-			SPH_SUBMIT_MATCH ( tMatch );
+			// submit match to sorters
+			LateCalc ( tMatch );
+			if ( bRandomize )
+				tMatch.m_iWeight = ( sphRand() & 0xffff );
+
+			bool bNewMatch = false;
+			for ( int iSorter=0; iSorter<iSorters; iSorter++ )
+				bNewMatch |= ppSorters[iSorter]->Push ( tMatch );
+
+			// handle cutoff
+			if ( bNewMatch )
+				if ( --iCutoff==0 )
+			{
+				uIndexEntry = m_uDocinfoIndex; // outer break
+				break;
+			}
 		}
 	}
 
@@ -12465,8 +12468,8 @@ public:
 
 bool CSphIndex_VLN::CreateFilters ( CSphQuery * pQuery, const CSphSchema & tSchema )
 {
-	assert ( !m_pLateFilter );
-	assert ( !m_pEarlyFilter );
+	assert ( !m_pWeightFilter );
+	assert ( !m_pFilter );
 
 	bool bFullscan = pQuery->m_eMode == SPH_MATCH_FULLSCAN;
 
@@ -12480,7 +12483,7 @@ bool CSphIndex_VLN::CreateFilters ( CSphQuery * pQuery, const CSphSchema & tSche
 		if ( !pFilter )
 			return false;
 
-		ISphFilter ** pGroup = tFilter.m_sAttrName == "@weight" ? &m_pLateFilter : &m_pEarlyFilter;
+		ISphFilter ** pGroup = tFilter.m_sAttrName == "@weight" ? &m_pWeightFilter : &m_pFilter;
 		*pGroup = sphJoinFilters ( *pGroup, pFilter );
 	}
 
@@ -12492,7 +12495,7 @@ bool CSphIndex_VLN::CreateFilters ( CSphQuery * pQuery, const CSphSchema & tSche
 		tFilter.m_eType = SPH_FILTER_RANGE;
 		tFilter.m_uMinValue = pQuery->m_iMinID;
 		tFilter.m_uMaxValue = pQuery->m_iMaxID;
-		m_pEarlyFilter = sphJoinFilters ( m_pEarlyFilter, sphCreateFilter ( tFilter, tSchema, NULL, m_sLastError ) );
+		m_pFilter = sphJoinFilters ( m_pFilter, sphCreateFilter ( tFilter, tSchema, NULL, m_sLastError ) );
 	}
 
 	return true;
@@ -12703,20 +12706,20 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 	if ( !CreateFilters ( pQuery, pResult->m_tSchema ) )
 		return false;
 
-	CSphScopedPtr<ISphFilter> tCleanEarly ( m_pEarlyFilter );
-	PtrNullifier_t<ISphFilter> tNullEarly ( &m_pEarlyFilter );
+	CSphScopedPtr<ISphFilter> tClean1 ( m_pFilter );
+	PtrNullifier_t<ISphFilter> tNull1 ( &m_pFilter );
 
-	CSphScopedPtr<ISphFilter> tCleanLate ( m_pLateFilter );
-	PtrNullifier_t<ISphFilter> tNullLate ( &m_pLateFilter );
+	CSphScopedPtr<ISphFilter> tClean2 ( m_pWeightFilter );
+	PtrNullifier_t<ISphFilter> tNull2 ( &m_pWeightFilter );
 
 	// check if we can early reject the whole index
-	if ( m_pEarlyFilter && m_pDocinfoIndex.GetLength() )
+	if ( m_pFilter && m_pDocinfoIndex.GetLength() )
 	{
 		DWORD uStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 		DWORD * pMinEntry = const_cast<DWORD*> ( &m_pDocinfoIndex [ 2*m_uDocinfoIndex*uStride ] );
 		DWORD * pMaxEntry = pMinEntry + uStride;
 
-		if ( !m_pEarlyFilter->EvalBlock ( pMinEntry, pMaxEntry ) )
+		if ( !m_pFilter->EvalBlock ( pMinEntry, pMaxEntry ) )
 			return true;
 	}
 

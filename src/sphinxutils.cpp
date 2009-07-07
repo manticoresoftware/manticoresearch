@@ -254,6 +254,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "listen_backlog",			0, NULL },
 	{ "read_buffer",			0, NULL },
 	{ "read_unhinted",			0, NULL },
+	{ "max_batch_queries",		0, NULL },
 	{ NULL,						0, NULL }
 };
 

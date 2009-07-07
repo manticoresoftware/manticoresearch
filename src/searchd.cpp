@@ -165,6 +165,7 @@ static int				g_iAttrFlushPeriod	= 0;			// in seconds; 0 means "do not flush"
 static int				g_iMaxPacketSize	= 8*1024*1024;	// in bytes; for both query packets from clients and response packets from agents
 static int				g_iMaxFilters		= 256;
 static int				g_iMaxFilterValues	= 4096;
+static int				g_iMaxBatchQueries	= 32;
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -4698,10 +4699,9 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	if ( iVer>=0x10D )
 		iQueries = tReq.GetDword ();
 
-	const int MAX_QUERIES = 32;
-	if ( iQueries<=0 || iQueries>MAX_QUERIES )
+	if ( iQueries<=0 || iQueries>g_iMaxBatchQueries )
 	{
-		tReq.SendErrorReply ( "bad multi-query count %d (must be in 1..%d range)", iQueries, MAX_QUERIES );
+		tReq.SendErrorReply ( "bad multi-query count %d (must be in 1..%d range)", iQueries, g_iMaxBatchQueries );
 		return;
 	}
 
@@ -8124,6 +8124,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	g_iMaxPacketSize = hSearchd.GetSize ( "max_packet_size", g_iMaxPacketSize );
 	g_iMaxFilters = hSearchd.GetInt ( "max_filters", g_iMaxFilters );
 	g_iMaxFilterValues = hSearchd.GetInt ( "max_filter_values", g_iMaxFilterValues );
+	g_iMaxBatchQueries = hSearchd.GetInt ( "max_batch_queries", g_iMaxBatchQueries );
 
 	if ( g_iMaxPacketSize<128*1024 || g_iMaxPacketSize>128*1024*1024 )
 		sphFatal ( "max_packet_size out of bounds (128K..128M)" );

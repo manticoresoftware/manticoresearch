@@ -709,6 +709,11 @@ searchd
 	# optional, default is 32K
 	#
 	# read_unhinted		= 32K
+
+
+	# max allowed per-batch query count (aka multi-query count)
+	# optional, default is 32
+	max_batch_queries	= 32
 }
 
 # --eof--

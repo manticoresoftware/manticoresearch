@@ -97,12 +97,15 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error )
 	{
 		// using start /min to fire it "in background"
 		// using cmd /c for redirection to work
+		if ( file_exists ( $pidfile ) )
+			unlink ( $pidfile );
 		$process = popen ("start /min cmd /c \"$path --config $config_file --pidfile > $error_file\"", "r" );
 		pclose ( $process );
 	}
 	else
 		system ( "$path --config $config_file > $error_file", $retval );
 
+	// wait until pid appears
 	for ( $i=0; $i<$action_retries && !file_exists($pidfile); $i++ )
 		usleep ( $action_wait_timeout );
 
@@ -110,6 +113,24 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error )
 	{
 		$error = "PID file ($pidfile) was not created";
 		return 1;
+	}
+
+	// on windows, searchd starts *fully* async
+	// so lets also wait until pidfile gets real data
+	// (meaning that index precaching is actually done)
+	if ( $windows )
+	{
+		$STARTUP_TRIES = 1000;
+		$STARTUP_TICK = 50000; // msec
+
+		// FIXME! add a better check that searchd is still alive than just file_exists
+		for ( $i=0; $i<$STARTUP_TRIES && file_exists($pidfile); $i++ )
+		{
+			$pid = file($pidfile);
+			if ( count($pid) )
+				break;
+			usleep ( $STARTUP_TICK );
+		}
 	}
 
 	// we've got a pid file; but lets check the log file for startup errors

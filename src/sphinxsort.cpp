@@ -213,6 +213,12 @@ public:
 // SORTING+GROUPING QUEUE
 //////////////////////////////////////////////////////////////////////////
 
+static bool IsGroupbyMagic ( const CSphString & s )
+{
+	return s=="@groupby" || s=="@count" || s=="@distinct";
+}
+
+
 /// groupers
 #define GROUPER_BEGIN(_name) \
 	class _name : public CSphGrouper \
@@ -777,7 +783,7 @@ public:
 		for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
 		{
 			const CSphColumnInfo & tAttr = m_tSchema.GetAttr(i);
-			bool bMagicAggr = ( tAttr.m_sName=="@groupby" || tAttr.m_sName=="@count" || tAttr.m_sName=="@distinct" ); // magic legacy aggregates
+			bool bMagicAggr = IsGroupbyMagic ( tAttr.m_sName ); // magic legacy aggregates
 
 			if ( tAttr.m_eAggrFunc==SPH_AGGR_NONE && !bMagicAggr )
 			{
@@ -1917,8 +1923,12 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		const CSphString & sExpr = tItem.m_sExpr;
 
 		// for now, just always pass "plain" attrs from index to sorter; they will be filtered on searchd level
-		if ( sExpr=="*" || ( tSchema.GetAttrIndex(sExpr.cstr())>=0 && tItem.m_eAggrFunc==SPH_AGGR_NONE ) )
+		if ( sExpr=="*"
+			|| ( tSchema.GetAttrIndex(sExpr.cstr())>=0 && tItem.m_eAggrFunc==SPH_AGGR_NONE )
+			|| IsGroupbyMagic(sExpr) )
+		{
 			continue;
+		}
 
 		// not an attribute? must be an expression, and must be aliased
 		if ( tItem.m_sAlias.IsEmpty() )

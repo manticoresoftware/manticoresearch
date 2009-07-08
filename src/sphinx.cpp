@@ -32,6 +32,7 @@
 #include <float.h>
 
 #define SPH_UNPACK_BUFFER_SIZE	4096
+#define SPH_READ_PROGRESS_CHUNK (8192*1024)
 
 #if USE_LIBSTEMMER
 #include "libstemmer.h"
@@ -547,16 +548,23 @@ protected:
 	CSphString	m_sFilename;	///< my file name
 	bool		m_bTemporary;	///< whether to unlink this file on Close()
 
+	CSphIndex::ProgressCallback_t *		m_pProgress; ///< for displaying progress
+	CSphIndexProgress *					m_pStat;
+
 public:
 	CSphAutofile ()
 		: m_iFD ( -1 )
 		, m_bTemporary ( false )
+		, m_pProgress ( NULL )
+		, m_pStat ( NULL )
 	{
 	}
 
 	CSphAutofile ( const char * sName, int iMode, CSphString & sError, bool bTemp=false )
 		: m_iFD ( -1 )
 		, m_bTemporary ( false )
+		, m_pProgress ( NULL )
+		, m_pStat ( NULL )
 	{
 		Open ( sName, iMode, sError, bTemp );
 	}
@@ -648,12 +656,19 @@ public:
 		BYTE * pCur = (BYTE *)pBuf;
 		while ( iToRead>0 )
 		{
-			int64_t iGot = (int64_t) sphRead ( GetFD(), pCur, (size_t)iToRead );
+			int64_t iToReadOnce = ( m_pProgress && m_pStat ) ? Min ( SPH_READ_PROGRESS_CHUNK, iToRead ) : iToRead;
+			int64_t iGot = (int64_t) sphRead ( GetFD(), pCur, (size_t)iToReadOnce );
 			if ( iGot<=0 )
 				break;
 
 			iToRead -= iGot;
 			pCur += iGot;
+
+			if ( m_pProgress && m_pStat )
+			{
+				m_pStat->m_iBytes += iGot;
+				m_pProgress ( m_pStat, false );
+			}
 		}
 
 		if ( iToRead!=0 )
@@ -663,6 +678,12 @@ public:
 			return false;
 		}
 		return true;
+	}
+
+	void SetProgressCallback ( CSphIndex::ProgressCallback_t * pfnProgress, CSphIndexProgress * pStat )
+	{
+		m_pProgress = pfnProgress;
+		m_pStat = pStat;
 	}
 };
 
@@ -11726,10 +11747,8 @@ template < typename T > bool CSphIndex_VLN::PrereadSharedBuffer ( CSphSharedBuff
 	if ( fdBuf.GetFD()<0 )
 		return false;
 
-	if ( !fdBuf.Read ( pBuffer.GetWritePtr(), size_t(pBuffer.GetLength()), m_sLastError ) )
-		return false;
-
-	return true;
+	fdBuf.SetProgressCallback ( m_pProgress, &m_tProgress );
+	return fdBuf.Read ( pBuffer.GetWritePtr(), size_t(pBuffer.GetLength()), m_sLastError );
 }
 
 
@@ -11749,6 +11768,12 @@ bool CSphIndex_VLN::Preread ()
 	///////////////////
 	// read everything
 	///////////////////
+
+	m_tProgress.m_ePhase = CSphIndexProgress::PHASE_PREREAD;
+	m_tProgress.m_iBytes = 0;
+	m_tProgress.m_iBytesTotal = m_pDocinfo.GetLength() + m_pMva.GetLength() + m_pStrings.GetLength() + m_pKillList.GetLength();
+	if ( m_bPreloadWordlist )
+		m_tProgress.m_iBytesTotal += m_pWordlist.GetLength();
 
 	if ( !PrereadSharedBuffer ( m_pDocinfo, "spa" ) )
 		return false;
@@ -11772,6 +11797,9 @@ bool CSphIndex_VLN::Preread ()
 	if ( m_bPreloadWordlist )
 		if ( !PrereadSharedBuffer ( m_pWordlist, "spi" ) )
 			return false;
+
+	if ( m_pProgress )
+		m_pProgress ( &m_tProgress, true );
 
 	//////////////////////
 	// precalc everything
@@ -11867,6 +11895,10 @@ bool CSphIndex_VLN::Preread ()
 		// scan everyone
 		DWORD uStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 		assert ( m_pDocinfoIndex.GetLength()==2*(1+size_t(m_uDocinfoIndex))*uStride*sizeof(DWORD) );
+
+		DWORD uProgressEntry = 0;
+		m_tProgress.m_ePhase = CSphIndexProgress::PHASE_PRECOMPUTE;
+		m_tProgress.m_iDone = 0;
 
 		for ( DWORD uIndexEntry=0; uIndexEntry<m_uDocinfoIndex; uIndexEntry++ )
 		{
@@ -11981,6 +12013,17 @@ bool CSphIndex_VLN::Preread ()
 			{
 				sphSetRowAttr ( pMinAttrs, dMvaAttrs[i], dMvaMin[i] );
 				sphSetRowAttr ( pMaxAttrs, dMvaAttrs[i], dMvaMax[i] );
+			}
+
+			// show progress
+			if ( uIndexEntry==uProgressEntry )
+			{
+				uProgressEntry = Min ( uIndexEntry+1000, m_uDocinfoIndex-1 );
+				if ( m_pProgress )
+				{
+					m_tProgress.m_iDone = (uIndexEntry+1)*1000/m_uDocinfoIndex;
+					m_pProgress ( &m_tProgress, m_tProgress.m_iDone==1000 );
+				}
 			}
 		}
 
@@ -18881,6 +18924,65 @@ void CSphDocMVA::Write( CSphWriter & tWriter )
 void sphSetQuiet ( bool bQuiet )
 {
 	g_bSphQuiet = bQuiet;
+}
+
+
+static inline float GetPercent ( int64_t a, int64_t b )
+{
+	if ( b==0 )
+		return 100.0f;
+
+	int64_t r = a*100000/b;
+	return float(r)/1000;
+}
+
+
+const char * CSphIndexProgress::BuildMessage() const
+{
+	static char sBuf[256];
+	switch ( m_ePhase )
+	{
+		case PHASE_COLLECT:
+			snprintf ( sBuf, sizeof(sBuf), "collected %d docs, %.1f MB", m_iDocuments,
+				float(m_iBytes)/1000000.0f );
+			break;
+
+		case PHASE_SORT:
+			snprintf ( sBuf, sizeof(sBuf), "sorted %.1f Mhits, %.1f%% done", float(m_iHits)/1000000,
+				GetPercent ( m_iHits, m_iHitsTotal ) );
+			break;
+
+		case PHASE_COLLECT_MVA:
+			snprintf ( sBuf, sizeof(sBuf), "collected %"PRIu64" attr values", m_iAttrs );
+			break;
+
+		case PHASE_SORT_MVA:
+			snprintf ( sBuf, sizeof(sBuf), "sorted %.1f Mvalues, %.1f%% done", float(m_iAttrs)/1000000,
+				GetPercent ( m_iAttrs, m_iAttrsTotal ) );
+			break;
+
+		case PHASE_MERGE:
+			snprintf ( sBuf, sizeof(sBuf), "merged %.1f Kwords", float(m_iWords)/1000 );
+			break;
+
+		case PHASE_PREREAD:
+			snprintf ( sBuf, sizeof(sBuf), "read %.1f of %.1f MB, %.1f%% done",
+				float(m_iBytes)/1000000.0f, float(m_iBytesTotal)/1000000.0f,
+				GetPercent ( m_iBytes, m_iBytesTotal ) );
+			break;
+
+		case PHASE_PRECOMPUTE:
+			snprintf ( sBuf, sizeof(sBuf), "indexing attributes, %d.%d%% done", m_iDone/10, m_iDone%10 );
+			break;
+
+		default:
+			assert ( 0 && "internal error: unhandled progress phase" );
+			snprintf ( sBuf, sizeof(sBuf), "(progress-phase-%d)", m_ePhase );
+			break;
+	}
+
+	sBuf[sizeof(sBuf)-1] = '\0';
+	return sBuf;
 }
 
 //

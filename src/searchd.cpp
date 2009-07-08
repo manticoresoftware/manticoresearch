@@ -7025,7 +7025,7 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		// check path
 		if ( !hIndex.Exists ( "path" ) )
 		{
-			sphWarning ( "index '%s': key 'path' not found' - NOT SERVING", szIndexName );
+			sphWarning ( "index '%s': key 'path' not found - NOT SERVING", szIndexName );
 			return ADD_ERROR;
 		}
 
@@ -7803,6 +7803,20 @@ void QueryStatus ( CSphVariant * v )
 }
 
 
+void ShowProgress ( const CSphIndexProgress * pProgress, bool bPhaseEnd )
+{
+	assert ( pProgress );
+	if ( bPhaseEnd )
+	{
+		fprintf ( stdout, "\r                                                            \r" );
+	} else
+	{
+		fprintf ( stdout, "%s\r", pProgress->BuildMessage() );
+	}
+ 	fflush ( stdout );
+}
+
+
 int WINAPI ServiceMain ( int argc, char **argv )
 {
 	g_bLogTty = isatty ( g_iLogFile )!=0;
@@ -8237,6 +8251,9 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	// configure and preload
 	int iValidIndexes = 0;
+	int iTotalIndexes=hConf["index"].GetLength();
+	int iCounter = 1;
+	int64_t tmLoad = -sphMicroTimer();
 	hConf["index"].IterateStart ();
 	while ( hConf["index"].IterateNext() )
 	{
@@ -8250,6 +8267,10 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		if ( g_hIndexes.Exists ( sIndexName ) )
 		{
 			ServedIndex_t & tIndex = g_hIndexes [sIndexName];
+
+			fprintf ( stdout, "precaching index '%s'\n", sIndexName, iCounter++, iTotalIndexes);
+			fflush ( stdout );
+			tIndex.m_pIndex->SetProgressCallback ( ShowProgress );
 
 			if ( HasFiles ( tIndex, g_dNewExts ) )
 			{
@@ -8289,8 +8310,12 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 		iValidIndexes++;
 	}
+
+	tmLoad += sphMicroTimer();
 	if ( !iValidIndexes )
 		sphFatal ( "no valid indexes to serve" );
+	else
+		fprintf ( stdout, "precached %d indexes in %0.3f sec\n",iCounter-1, float(tmLoad)/1000000 );
 
 	///////////
 	// startup

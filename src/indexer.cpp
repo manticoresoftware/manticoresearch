@@ -266,34 +266,9 @@ void ShowProgress ( const CSphIndexProgress * pProgress, bool bPhaseEnd )
 	// if in no-progress mode, only show phase ends
 	if ( g_bQuiet || ( !g_bProgress && !bPhaseEnd ) )
 		return;
-
-	switch ( pProgress->m_ePhase )
-	{
-		case CSphIndexProgress::PHASE_COLLECT:
-			fprintf ( stdout, "collected %d docs, %.1f MB", pProgress->m_iDocuments, float(pProgress->m_iBytes)/1000000.0f );
-			break;
-
-		case CSphIndexProgress::PHASE_SORT:
-			fprintf ( stdout, "sorted %.1f Mhits, %.1f%% done", float(pProgress->m_iHits)/1000000,
-				100.0f*float(pProgress->m_iHits) / float(pProgress->m_iHitsTotal) );
-			break;
-
-		case CSphIndexProgress::PHASE_COLLECT_MVA:
-			fprintf ( stdout, "collected %"PRIu64" attr values", pProgress->m_iAttrs );
-			break;
-
-		case CSphIndexProgress::PHASE_SORT_MVA:
-			fprintf ( stdout, "sorted %.1f Mvalues, %.1f%% done", float(pProgress->m_iAttrs)/1000000,
-				100.0f*float(pProgress->m_iAttrs) / float(pProgress->m_iAttrsTotal) );
-			break;
-
-		case CSphIndexProgress::PHASE_MERGE:
-			fprintf ( stdout, "merged %.1f Kwords", float(pProgress->m_iWords)/1000 );
-			break;
-	}
-
-	fprintf ( stdout, bPhaseEnd ? "\n" : "\r" );
-	fflush ( stdout );
+	
+	fprintf ( stdout, "%s%c", pProgress->BuildMessage(), bPhaseEnd ? '\n' : '\r' );
+ 	fflush ( stdout );
 }
 
 /////////////////////////////////////////////////////////////////////////////

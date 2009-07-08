@@ -305,7 +305,7 @@ int main ( int argc, char ** argv )
 				break;
 			}
 
-			CSphQueryResult * pResult = new CSphQueryResult();
+			pResult = new CSphQueryResult();
 			if ( !pIndex->MultiQuery ( &tQuery, pResult, 1, &pTop ) )
 			{
 				// failure; pull that error message

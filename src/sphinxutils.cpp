@@ -255,6 +255,8 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "read_buffer",			0, NULL },
 	{ "read_unhinted",			0, NULL },
 	{ "max_batch_queries",		0, NULL },
+	{ "subtree_docs_cache",		0, NULL },
+	{ "subtree_hits_cache",		0, NULL },
 	{ NULL,						0, NULL }
 };
 

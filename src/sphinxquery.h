@@ -69,7 +69,16 @@ enum XQOperator_e
 struct XQNode_t : public ISphNoncopyable
 {
 	XQNode_t *				m_pParent;		///< my parent node (NULL for root ones)
+
+private:
 	XQOperator_e			m_eOp;			///< operation over childen
+	int						m_iOrder;
+	int						m_iCounter;
+
+private:
+	mutable uint64_t		m_iMagicHash;
+
+public:
 	CSphVector<XQNode_t*>	m_dChildren;	///< non-plain node children
 
 	bool					m_bFieldSpec;	///< whether field spec was already explicitly set
@@ -87,6 +96,9 @@ public:
 	XQNode_t ()
 		: m_pParent ( NULL )
 		, m_eOp ( SPH_QUERY_AND )
+		, m_iOrder ( 0 )
+		, m_iCounter ( 0 )
+		, m_iMagicHash ( 0 )
 		, m_bFieldSpec ( false )
 		, m_uFieldMask ( 0xFFFFFFFFUL )
 		, m_iFieldMaxPos ( 0 )
@@ -119,9 +131,53 @@ public:
 		return ( m_dWords.GetLength() || m_bVirtuallyPlain );
 	}
 
-	void SetFieldSpec ( DWORD uMask, int iMaxPos ); ///< setup field limits
-	void ClearFieldMask (); ///< unconditionally clear field mask
+	/// setup field limits
+	void SetFieldSpec ( DWORD uMask, int iMaxPos );
 
+	/// unconditionally clear field mask
+	void ClearFieldMask ();
+
+public:
+	/// get my operator
+	XQOperator_e GetOp () const
+	{
+		return m_eOp;
+	}
+
+	/// get my cache order
+	DWORD GetOrder () const
+	{
+		return m_iOrder;
+	}
+
+	/// get my cache counter
+	int GetCount () const
+	{
+		return m_iCounter;
+	}
+
+	/// setup common nodes for caching
+	void TagAsCommon ( int iOrder, int iCounter )
+	{
+		m_iCounter = iCounter;
+		m_iOrder = iOrder;
+	}
+
+	/// precise comparison
+	bool IsEqualTo ( const XQNode_t * pNode );
+
+	/// hash me
+	uint64_t GetHash () const;
+
+	/// setup new operator and args
+	void SetOp ( XQOperator_e eOp, XQNode_t * pArg1, XQNode_t * pArg2=NULL );
+
+	/// setup new operator and args
+	void SetOp ( XQOperator_e eOp, const CSphVector<XQNode_t*> & dArgs )
+	{
+		m_eOp = eOp;
+		m_dChildren = dArgs;
+	}
 };
 
 
@@ -151,6 +207,9 @@ struct XQQuery_t : public ISphNoncopyable
 /// return false and fills tQuery.m_sParseError on error
 /// WARNING, parsed tree might be NULL (eg. if query was empty)
 bool	sphParseExtendedQuery ( XQQuery_t & tQuery, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict );
+
+/// analyse vector of trees and tag common parts of them (to cache them later)
+int		sphMarkCommonSubtrees ( const CSphVector<XQNode_t*> & dTrees );
 
 #endif // _sphinxquery_
 

@@ -1539,6 +1539,7 @@ struct CSphIndex_VLN : CSphIndex
 	bool						SetupCalc ( CSphQueryResult * pResult, const CSphSchema & tInSchema );
 
 	virtual bool				MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters );
+	virtual bool				MultiQueryEx ( int iQueries, CSphQuery * pQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters );
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats );
 
 	virtual bool				Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> & dFilters, bool bMergeKillLists );
@@ -1683,6 +1684,7 @@ private:
 
 	bool						CreateFilters ( CSphQuery * pQuery, const CSphSchema & tSchema );
 
+	bool						ParsedMultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQNode_t * pRoot, CSphDict * pDict );
 	bool						MatchExtended ( const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, ISphRanker * pRanker );
 	bool						MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, const DiskIndexQwordSetup_c & tTermSetup );
 
@@ -6518,6 +6520,8 @@ CSphIndex::CSphIndex ( const char * sName )
 	, m_pTokenizer ( NULL )
 	, m_pCleanTokenizer ( NULL )
 	, m_pDict ( NULL )
+	, m_iMaxCachedDocs ( 0 )
+	, m_iMaxCachedHits ( 0 )
 {
 }
 
@@ -6582,6 +6586,12 @@ void CSphIndex::Setup ( const CSphIndexSettings & tSettings )
 {
 	m_bStripperInited = true;
 	m_tSettings = tSettings;
+}
+
+void CSphIndex::SetCacheSize ( int iMaxCachedDocs, int iMaxCachedHits )
+{
+	m_iMaxCachedDocs = iMaxCachedDocs;
+	m_iMaxCachedHits = iMaxCachedHits;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -11419,7 +11429,7 @@ void CSphIndex_VLN::DebugDumpDocids ( FILE * fp )
 	DWORD uNumRows = m_pDocinfo.GetNumEntries() / iRowStride; // all 32bit, as we don't expect 2 billion documents per single physical index
 
 	fprintf ( fp, "docinfo-bytes: %"PRIu64"\n", (uint64_t)m_pDocinfo.GetLength() );
-	fprintf ( fp, "docinfo-stride: %d\n", iRowStride*sizeof(DWORD) );
+	fprintf ( fp, "docinfo-stride: %d\n", (int)(iRowStride*sizeof(DWORD)) );
 	fprintf ( fp, "docinfo-rows: %d\n", uNumRows );
 
 	if ( !m_pDocinfo.GetNumEntries() )
@@ -12563,8 +12573,7 @@ static XQNode_t * CloneKeyword ( const XQNode_t * pNode )
 static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tSettings )
 {
 	XQNode_t * pExpand = new XQNode_t;
-	pExpand->m_eOp = SPH_QUERY_OR;
-	pExpand->m_dChildren.Add ( pNode );
+	pExpand->SetOp ( SPH_QUERY_OR, pNode );
 
 	if ( tSettings.m_iMinInfixLen>0 )
 	{
@@ -12636,7 +12645,122 @@ static XQNode_t * ExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & t
 }
 
 
+class XQCacheHolder : ISphNoncopyable
+{
+public:
+	XQCacheHolder ( int iCells, int MaxCachedDocs, int MaxCachedHits )
+	{
+		sphXQCacheInit ( iCells, MaxCachedDocs, MaxCachedHits );
+	}
+
+	~XQCacheHolder ()
+	{
+		sphXQCacheDone();
+	}
+};
+
+
+/// one regular query vs many sorters
 bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters )
+{
+	assert ( pQuery );
+
+	// fixup old matching modes at low level
+	CSphString sQueryFixup;
+	PrepareQueryEmulation ( pQuery, sQueryFixup );
+
+	const char * sQuery = sQueryFixup.IsEmpty()
+		? pQuery->m_sQuery.cstr()
+		: sQueryFixup.cstr();
+
+	CSphScopedPtr<CSphDict> tDict ( NULL );
+	CSphDict * pDict = SetupStarDict ( tDict );
+
+	CSphScopedPtr<CSphDict> tDict2 ( NULL );
+	pDict = SetupExactDict ( tDict2, pDict );
+
+	// parse query
+	XQQuery_t tParsed;
+	if ( !sphParseExtendedQuery ( tParsed, sQuery, GetTokenizer(), GetSchema(), pDict ) )
+	{
+		m_sLastError = tParsed.m_sParseError;
+		return false;
+	}
+	// transform query if needed
+	// for now, just do keyword expansion based on settings
+	if ( m_bExpandKeywords )
+		tParsed.m_pRoot = ExpandKeywords ( tParsed.m_pRoot, m_tSettings );
+
+	CSphVector<XQNode_t*> dTrees;
+	dTrees.Add ( tParsed.m_pRoot );
+	int iCommonSubtrees = sphMarkCommonSubtrees ( dTrees );
+
+	XQCacheHolder dHolder ( iCommonSubtrees, m_iMaxCachedDocs, m_iMaxCachedHits );
+	return ParsedMultiQuery ( pQuery, pResult, iSorters, ppSorters, tParsed.m_pRoot, pDict );
+}
+
+
+/// many regular queries with one sorter attached to each query
+bool CSphIndex_VLN::MultiQueryEx ( int iQueries, CSphQuery * pQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters)
+{
+	assert ( pQueries );
+	assert ( ppResults );
+	assert ( ppSorters );
+
+	CSphScopedPtr<CSphDict> tDict ( NULL );
+	CSphDict * pDict = SetupStarDict ( tDict );
+
+	CSphScopedPtr<CSphDict> tDict2 ( NULL );
+	pDict = SetupExactDict ( tDict2, pDict );
+
+	CSphVector<XQNode_t*> dTrees;
+	dTrees.Reserve ( iQueries );
+
+	bool bResult = true;
+	for ( int i=0; i<iQueries; i++ )
+	{
+		// fixup old matching modes at low level
+		CSphString sQueryFixup;
+		PrepareQueryEmulation ( &pQueries[i], sQueryFixup );
+
+		const char * sQuery = sQueryFixup.IsEmpty()
+			? pQueries[i].m_sQuery.cstr()
+			: sQueryFixup.cstr();
+
+		// parse query
+		XQQuery_t tParsed;
+		if ( !sphParseExtendedQuery ( tParsed, sQuery, GetTokenizer(), GetSchema(), pDict ) )
+		{
+			m_sLastError = tParsed.m_sParseError;
+			bResult = false;
+			break; // we can't simply return false at this stage because we need to handle other queries
+		}
+
+		// transform query if needed
+		// for now, just do keyword expansion based on settings
+		if ( m_bExpandKeywords )
+			tParsed.m_pRoot = ExpandKeywords ( tParsed.m_pRoot, m_tSettings );
+
+		dTrees.Add ( tParsed.m_pRoot );
+		tParsed.m_pRoot = NULL;
+	}
+
+	int iCommonSubtrees = sphMarkCommonSubtrees ( dTrees );
+
+	XQCacheHolder tHolder ( iCommonSubtrees, m_iMaxCachedDocs, m_iMaxCachedHits );
+	ARRAY_FOREACH ( j, dTrees )
+	{
+		bool bQuery = ParsedMultiQuery ( &pQueries[j], ppResults[j], 1, &ppSorters[j], dTrees[j], pDict );
+		bResult &= bQuery;
+	}
+
+	ARRAY_FOREACH ( k, dTrees )
+		SafeDelete ( dTrees[k] );
+
+	return bResult;
+}
+
+bool CSphIndex_VLN::ParsedMultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQNode_t * pRoot, CSphDict * pDict )
 {
 	assert ( pQuery );
 	assert ( pResult );
@@ -12682,13 +12806,6 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 			return false;
 	}
 
-	// setup dict
-	CSphScopedPtr<CSphDict> tDict ( NULL );
-	CSphDict * pDict = SetupStarDict ( tDict );
-
-	CSphScopedPtr<CSphDict> tDict2 ( NULL );
-	pDict = SetupExactDict ( tDict2, pDict );
-
 	// setup search terms
 	DiskIndexQwordSetup_c tTermSetup ( m_bKeepFilesOpen ? m_tDoclistFile : tDoclist,
 		m_bKeepFilesOpen ? m_tHitlistFile : tHitlist,
@@ -12710,40 +12827,19 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 	tTermSetup.m_pWarning = &pResult->m_sWarning;
 	tTermSetup.m_bSetupReaders = true;
 
-	// fixup old matching modes at low level
-	CSphString sQueryFixup;
-	PrepareQueryEmulation ( pQuery, sQueryFixup );
-
-	const char * sQuery = sQueryFixup.IsEmpty()
-		? pQuery->m_sQuery.cstr()
-		: sQueryFixup.cstr();
-
 	// bind weights
 	BindWeights ( pQuery );
 
-	// parse query
-	XQQuery_t tParsed;
-	if ( !sphParseExtendedQuery ( tParsed, sQuery, GetTokenizer(), GetSchema(), pDict ) )
-	{
-		m_sLastError = tParsed.m_sParseError;
-		return false;
-	}
-
-	// transform query if needed
-	// for now, just do keyword expansion based on settings
-	if ( m_bExpandKeywords )
-		tParsed.m_pRoot = ExpandKeywords ( tParsed.m_pRoot, m_tSettings );
-
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
-	CSphScopedPtr<ISphRanker> pRanker ( sphCreateRanker ( tParsed.m_pRoot, pQuery->m_eRanker, pResult, tTermSetup ) );
+	CSphScopedPtr<ISphRanker> pRanker ( sphCreateRanker ( pRoot, pQuery->m_eRanker, pResult, tTermSetup ) );
 	if ( !pRanker.Ptr() )
- 		return false;
+		return false;
 
-	// empty index, empty response
-	// must happen after setup though, for keyword stats too
+	// empty index, empty response!
 	if ( !m_tStats.m_iTotalDocuments )
 		return true;
+	assert ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_EXTERN || !m_pDocinfo.IsEmpty() ); // check that docinfo is preloaded
 
 	// setup filters
 	if ( !CreateFilters ( pQuery, pResult->m_tSchema ) )

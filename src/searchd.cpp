@@ -161,6 +161,9 @@ static const char *		g_sPidFile		= NULL;
 static int				g_iPidFD		= -1;
 static int				g_iMaxMatches	= 1000;
 
+static int				g_iMaxCachedDocs	= 512*1024;		// in bytes
+static int				g_iMaxCachedHits	= 1024*1024;	// in bytes
+
 static int				g_iAttrFlushPeriod	= 0;			// in seconds; 0 means "do not flush"
 static int				g_iMaxPacketSize	= 8*1024*1024;	// in bytes; for both query packets from clients and response packets from agents
 static int				g_iMaxFilters		= 256;
@@ -4200,6 +4203,9 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		break;
 	}
 
+	// these are mutual exclusive
+	assert ( !( bMultiQueue && pLocalSorter ) );
+
 	///////////////////////////////////////////////////////////
 	// main query loop (with multiple retries for distributed)
 	///////////////////////////////////////////////////////////
@@ -4251,174 +4257,129 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				assert ( tServed.m_pIndex );
 				assert ( tServed.m_bEnabled );
 
-				if ( bMultiQueue )
+				////////////////////////////////
+				// run single multi-queue query
+				// or cached subqueries
+				////////////////////////////////
+
+				CSphVector<int> dSorterIndexes;
+				dSorterIndexes.Resize ( iEnd+1 );
+				ARRAY_FOREACH ( j, dSorterIndexes )
+					dSorterIndexes[j] = -1;
+
+				CSphVector<ISphMatchSorter*> dSorters;
+
+				for ( int iQuery=iStart; iQuery<=iEnd; iQuery++ )
 				{
-					////////////////////////////////
-					// run single multi-queue query
-					////////////////////////////////
-
-					CSphVector<int> dSorterIndexes;
-					dSorterIndexes.Resize ( iEnd+1 );
-					ARRAY_FOREACH ( j, dSorterIndexes )
-						dSorterIndexes[j] = -1;
-
-					CSphVector<ISphMatchSorter*> dSorters;
-
-					for ( int iQuery=iStart; iQuery<=iEnd; iQuery++ )
+					CSphString sError;
+					CSphQuery & tQuery = m_dQueries[iQuery];
+					
+					// create sorter, if needed
+					ISphMatchSorter * pSorter = pLocalSorter;
+					if ( !pLocalSorter )
 					{
-						CSphString sError;
-						CSphQuery & tQuery = m_dQueries[iQuery];
-						ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, *tServed.m_pSchema, sError );
-						if ( !pSorter )
+						// fixup old queries
+						if ( !FixupQuery ( &tQuery, tServed.m_pSchema, dLocal[iLocal].cstr(), sError ) )
 						{
 							m_dFailuresSet[iQuery].SubmitEx ( dLocal[iLocal].cstr(), "%s", sError.cstr() );
 							continue;
 						}
 
-						dSorterIndexes[iQuery] = dSorters.GetLength();
-						dSorters.Add ( pSorter );
+						// create queue
+						pSorter = sphCreateQueue ( &tQuery, *tServed.m_pSchema, sError );
+						if ( !pSorter )
+						{
+							m_dFailuresSet[iQuery].SubmitEx ( dLocal[iLocal].cstr(), "%s", sError.cstr() );
+							continue;
+						}
 					}
 
-					if ( dSorters.GetLength() )
+					dSorterIndexes[iQuery] = dSorters.GetLength();
+					dSorters.Add ( pSorter );
+				}
+
+				if ( dSorters.GetLength() )
+				{
+					AggrResult_t tStats;
+
+					// set killlist
+					CSphQuery * pQuery = &m_dQueries[iStart];
+
+					int iNumFilters = pQuery->m_dFilters.GetLength ();
+					for ( int i=iLocal+1; i<dLocal.GetLength (); i++ )
 					{
-						AggrResult_t tStats;
-
-						// set killlist
-						CSphQuery * pQuery = &m_dQueries[iStart];
-
-						int iNumFilters = pQuery->m_dFilters.GetLength ();
-						for ( int i = iLocal + 1; i < dLocal.GetLength (); i++ )
+						const ServedIndex_t & tServed = g_hIndexes [ dLocal[i] ];
+						if ( tServed.m_pIndex->GetKillListSize () )
 						{
-							const ServedIndex_t & tServed = g_hIndexes [ dLocal[i] ];
-							if ( tServed.m_pIndex->GetKillListSize () )
-							{
-								CSphFilterSettings tKillListFilter;
-								SetupKillListFilter ( tKillListFilter, tServed.m_pIndex->GetKillList (), tServed.m_pIndex->GetKillListSize () );
-								pQuery->m_dFilters.Add ( tKillListFilter );
-							}
+							CSphFilterSettings tKillListFilter;
+							SetupKillListFilter ( tKillListFilter, tServed.m_pIndex->GetKillList (), tServed.m_pIndex->GetKillListSize () );
+							pQuery->m_dFilters.Add ( tKillListFilter );
 						}
+					}
+					bool iResult = false;
+					tServed.m_pIndex->SetCacheSize(g_iMaxCachedDocs, g_iMaxCachedHits);
+					if ( bMultiQueue )
+						iResult = tServed.m_pIndex->MultiQuery ( &m_dQueries[iStart], &tStats,
+						dSorters.GetLength(), &dSorters[0] );
+					else
+					{
+						CSphVector<CSphQueryResult*> dResults ( m_dResults.GetLength() );
+						ARRAY_FOREACH ( i, m_dResults )
+							dResults[i] = &m_dResults[i];
+						
+						iResult = tServed.m_pIndex->MultiQueryEx ( dSorters.GetLength(), 
+						&m_dQueries[iStart], &dResults[iStart], &dSorters[0]);
+					}
 
-						if ( !tServed.m_pIndex->MultiQuery ( &m_dQueries[iStart], &tStats,
-							dSorters.GetLength(), &dSorters[0] ) )
+					if ( !iResult )
+					{
+						// failed
+						for ( int iQuery=iStart; iQuery<=iEnd; iQuery++ )
+							m_dFailuresSet[iQuery].SubmitEx ( dLocal[iLocal].cstr(), "%s", tServed.m_pIndex->GetLastError().cstr() );
+					} else
+					{
+						// multi-query succeeded
+						for ( int iQuery=iStart; iQuery<=iEnd; iQuery++ )
 						{
-							// failed
-							for ( int iQuery=iStart; iQuery<=iEnd; iQuery++ )
-								m_dFailuresSet[iQuery].SubmitEx ( dLocal[iLocal].cstr(), "%s", tServed.m_pIndex->GetLastError().cstr() );
-						} else
-						{
-							// multi-query succeeded
-							for ( int iQuery=iStart; iQuery<=iEnd; iQuery++ )
+							// but some of the sorters could had failed at "create sorter" stage
+							if ( dSorterIndexes[iQuery]<0 )
+								continue;
+
+							// this one seems OK
+							ISphMatchSorter * pSorter = dSorters [ dSorterIndexes[iQuery] ];
+							AggrResult_t & tRes = m_dResults[iQuery];
+							tRes.m_iSuccesses++;
+							tRes.m_tSchema = pSorter->GetSchema();
+							tRes.m_iTotalMatches += pSorter->GetTotalCount();
+							
+							if ( bMultiQueue )
 							{
-								// but some of the sorters could had failed at "create sorter" stage
-								if ( dSorterIndexes[iQuery]<0 )
-									continue;
-
-								// this one seems OK
-								ISphMatchSorter * pSorter = dSorters [ dSorterIndexes[iQuery] ];
-								AggrResult_t & tRes = m_dResults[iQuery];
-								tRes.m_iSuccesses++;
-
-								tRes.m_iTotalMatches += pSorter->GetTotalCount();
 								tRes.m_iQueryTime += ( iQuery==iStart ) ? tStats.m_iQueryTime : 0;
 								tRes.m_pMva = tStats.m_pMva;
 								tRes.m_dWordStats = tStats.m_dWordStats;
-								tRes.m_tSchema = pSorter->GetSchema();
+							}
 
-								// extract matches from sorter
-								assert ( pSorter );
+							// extract matches from sorter
+							assert ( pSorter );
 
-								if ( pSorter->GetLength() )
-								{
-									tRes.m_dMatchCounts.Add ( pSorter->GetLength() );
-									tRes.m_dSchemas.Add ( tRes.m_tSchema );
-									tRes.m_dIndexWeights.Add ( m_dQueries[iQuery].GetIndexWeight ( dLocal[iLocal].cstr() ) );
-									PoolPtrs_t & tPoolPtrs = tRes.m_dTag2Pools.Add ();
-									tPoolPtrs.m_pMva = tRes.m_pMva;
-									tPoolPtrs.m_pStrings = tRes.m_pStrings;
-									sphFlattenQueue ( pSorter, &tRes, tRes.m_iTag++ );
-								}
+							if ( pSorter->GetLength() )
+							{
+								tRes.m_dMatchCounts.Add ( pSorter->GetLength() );
+								tRes.m_dSchemas.Add ( tRes.m_tSchema );
+								tRes.m_dIndexWeights.Add ( m_dQueries[iQuery].GetIndexWeight ( dLocal[iLocal].cstr() ) );
+								PoolPtrs_t & tPoolPtrs = tRes.m_dTag2Pools.Add ();
+								tPoolPtrs.m_pMva = tRes.m_pMva;
+								tPoolPtrs.m_pStrings = tRes.m_pStrings;
+								sphFlattenQueue ( pSorter, &tRes, tRes.m_iTag++ );
 							}
 						}
+					}
 
-						pQuery->m_dFilters.Resize ( iNumFilters );
+					pQuery->m_dFilters.Resize ( iNumFilters );
 
+					if ( !pLocalSorter )
 						ARRAY_FOREACH ( i, dSorters )
 							SafeDelete ( dSorters[i] );
-					}
-
-				} else
-				{
-					////////////////////////////////
-					// run local queries one by one
-					////////////////////////////////
-
-					for ( int iQuery=iStart; iQuery<=iEnd; iQuery++ )
-					{
-						CSphQuery & tQuery = m_dQueries[iQuery];
-						CSphString sError;
-
-						int iNumFilters = tQuery.m_dFilters.GetLength ();
-						for ( int i = iLocal + 1; i < dLocal.GetLength (); i++ )
-						{
-							const ServedIndex_t & tServed = g_hIndexes [ dLocal[i] ];
-							if ( tServed.m_pIndex->GetKillListSize () )
-							{
-								CSphFilterSettings tKillListFilter;
-								SetupKillListFilter ( tKillListFilter, tServed.m_pIndex->GetKillList (), tServed.m_pIndex->GetKillListSize () );
-								tQuery.m_dFilters.Add ( tKillListFilter );
-							}
-						}
-
-						// create sorter, if needed
-						ISphMatchSorter * pSorter = pLocalSorter;
-						if ( !pLocalSorter )
-						{
-							// fixup old queries
-							if ( !FixupQuery ( &tQuery, tServed.m_pSchema, dLocal[iLocal].cstr(), sError ) )
-							{
-								m_dFailuresSet[iQuery].SubmitEx ( dLocal[iLocal].cstr(), "%s", sError.cstr() );
-								continue;
-							}
-
-							// create queue
-							pSorter = sphCreateQueue ( &tQuery, *tServed.m_pSchema, sError );
-							if ( !pSorter )
-							{
-								m_dFailuresSet[iQuery].SubmitEx ( dLocal[iLocal].cstr(), "%s", sError.cstr() );
-								continue;
-							}
-						}
-
-						// do query
-						AggrResult_t & tRes = m_dResults[iQuery];
-						if ( !tServed.m_pIndex->MultiQuery ( &tQuery, &tRes, 1, &pSorter ) )
-						{
-							m_dFailuresSet[iQuery].SubmitEx ( dLocal[iLocal].cstr(), "%s", tServed.m_pIndex->GetLastError().cstr() );
-						} else
-						{
-							tRes.m_iSuccesses++;
-							tRes.m_iTotalMatches += pSorter->GetTotalCount();
-							tRes.m_tSchema = pSorter->GetSchema();
-						}
-
-						// extract my results and store schema
-						if ( pSorter->GetLength() )
-						{
-							tRes.m_dMatchCounts.Add ( pSorter->GetLength() );
-							tRes.m_dSchemas.Add ( tRes.m_tSchema );
-							tRes.m_dIndexWeights.Add ( tQuery.GetIndexWeight ( dLocal[iLocal].cstr() ) );
-							PoolPtrs_t & tPoolPtrs = tRes.m_dTag2Pools.Add ();
-							tPoolPtrs.m_pMva = tRes.m_pMva;
-							tPoolPtrs.m_pStrings = tRes.m_pStrings;
-							sphFlattenQueue ( pSorter, &tRes, tRes.m_iTag++ );
-						}
-
-						// throw away the sorter
-						if ( !pLocalSorter )
-							SafeDelete ( pSorter );
-
-						tQuery.m_dFilters.Resize ( iNumFilters );
-					}
 				}
 			}
 			tmLocal += sphMicroTimer();
@@ -8129,6 +8090,12 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			g_iMaxMatches = iMax;
 		}
 	}
+
+	if ( hSearchd("subtree_docs_cache") )
+		g_iMaxCachedDocs = hSearchd.GetSize ( "subtree_docs_cache", g_iMaxCachedDocs );
+
+	if ( hSearchd("subtree_hits_cache") )
+		g_iMaxCachedHits = hSearchd.GetSize ( "subtree_hits_cache", g_iMaxCachedHits );
 
 	if ( hSearchd("seamless_rotate") )
 		g_bSeamlessRotate = ( hSearchd["seamless_rotate"].intval()!=0 );

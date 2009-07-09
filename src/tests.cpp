@@ -659,7 +659,7 @@ CSphString ReconstructNode ( const XQNode_t * pNode, const CSphSchema & tSchema 
 			else
 			{
 				const char * sOp = "(unknown-op)";
-				switch ( pNode->m_eOp )
+				switch ( pNode->GetOp() )
 				{
 					case SPH_QUERY_AND:		sOp = "AND"; break;
 					case SPH_QUERY_OR:		sOp = "OR"; break;

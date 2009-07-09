@@ -83,6 +83,7 @@ public:
 	static ExtNode_i *			Create ( const XQKeyword_t & tWord, DWORD uFields, int iMaxFieldPos, const ISphQwordSetup & tSetup );
 	static ExtNode_i *			Create ( ISphQword * pQword, DWORD uFields, int iMaxFieldPos, const ISphQwordSetup & tSetup );
 
+	virtual void				Reset ( const ISphQwordSetup & tSetup ) = 0;
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID ) = 0;
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID ) = 0;
 
@@ -112,9 +113,12 @@ public:
 protected:
 	ExtDoc_t					m_dDocs[MAX_DOCS];
 	ExtHit_t					m_dHits[MAX_HITS];
-	SphDocID_t					m_uMaxID;
 
+public:
+	SphDocID_t					m_uMaxID;
 	int							m_iStride;		///< docinfo stride (for inline mode only)
+
+protected:
 	CSphRowitem *				m_pDocinfo;		///< docinfo storage (for inline mode only)
 
 	void AllocDocinfo ( const ISphQwordSetup & tSetup )
@@ -140,6 +144,10 @@ protected:
 };
 
 
+/// forward decl, generic cached node factory
+static ExtNode_i * sphXQCacheCreateProxy ( ExtNode_i * pChild, const XQNode_t * pRawChild, const ISphQwordSetup & tSetup );
+
+
 /// single keyword streamer
 class ExtTerm_c : public ExtNode_i
 {
@@ -150,6 +158,7 @@ public:
 									SafeDelete ( m_pQword );
 								}
 
+	virtual void				Reset ( const ISphQwordSetup & tSetup );
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
 	virtual void				GetQwords ( ExtQwordsHash_t & hQwords );
@@ -230,6 +239,8 @@ class ExtTwofer_c : public ExtNode_i
 public:
 								ExtTwofer_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const ISphQwordSetup & tSetup );
 								~ExtTwofer_c ();
+	
+	virtual void				Reset ( const ISphQwordSetup & tSetup );
 	virtual void				GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
 
@@ -296,6 +307,7 @@ class ExtPhrase_c : public ExtNode_i
 public:
 								ExtPhrase_c ( CSphVector<ExtNode_i *> & dQwords, DWORD uDupeMask, const XQNode_t & tNode, const ISphQwordSetup & tSetup );
 								~ExtPhrase_c ();
+	virtual void				Reset ( const ISphQwordSetup & tSetup );
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
 	virtual void				GetQwords ( ExtQwordsHash_t & hQwords );
@@ -354,6 +366,7 @@ public:
 								ExtQuorum_c ( CSphVector<ExtNode_i*> & dQwords, DWORD uDupeMask, const XQNode_t & tNode, const ISphQwordSetup & tSetup );
 	virtual						~ExtQuorum_c ();
 
+	virtual void				Reset ( const ISphQwordSetup & tSetup );
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
 
@@ -371,6 +384,9 @@ protected:
 	DWORD						m_uMaskEnd;		///< index of the last bit in mask
 	bool						m_bDone;		///< am i done
 	SphDocID_t					m_uMatchedDocid;///< current docid for hitlist emission
+
+private:
+	DWORD						m_uInitialMask;	///< backup mask for Reset()
 };
 
 
@@ -380,6 +396,7 @@ public:
 								ExtOrder_c ( const CSphVector<ExtNode_i *> & dChildren, const ISphQwordSetup & tSetup );
 								~ExtOrder_c ();
 
+	virtual void				Reset ( const ISphQwordSetup & tSetup );
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
 	virtual void				GetQwords ( ExtQwordsHash_t & hQwords );
@@ -410,6 +427,7 @@ class ExtRanker_c : public ISphRanker
 public:
 								ExtRanker_c ( const XQNode_t * pRoot, const ISphQwordSetup & tSetup );
 	virtual						~ExtRanker_c () { SafeDelete ( m_pRoot ); }
+	virtual void				Reset ( const ISphQwordSetup & tSetup );
 
 	virtual CSphMatch *			GetMatchesBuffer () { return m_dMatches; }
 	virtual const ExtDoc_t *	GetFilteredDocs ();
@@ -567,6 +585,8 @@ static ExtNode_i * CreatePhraseNode ( const XQNode_t * pQueryNode, const ISphQwo
 		}
 
 		ExtNode_i * pResult = new T ( dNodes, uDupeMask, *pQueryNode, tSetup );
+		if ( pQueryNode->GetCount() )
+			return sphXQCacheCreateProxy ( pResult, pQueryNode, tSetup );
 		return pResult; // FIXME! sorry, no hitless vs expand vs phrase support for now!
 	}
 
@@ -640,8 +660,12 @@ static ExtNode_i * CreatePhraseNode ( const XQNode_t * pQueryNode, const ISphQwo
 		ExtNode_i * pNode = ExtNode_i::Create ( dQwords[0], uFields, iMaxPos, tSetup );
 		for ( int i=1; i<dQwords.GetLength(); i++ )
 			pNode = new ExtAnd_c ( pNode, ExtNode_i::Create ( dQwords[i], uFields, iMaxPos, tSetup ), tSetup );
-		return new ExtAnd_c ( pResult, pNode, tSetup );
+		pResult = new ExtAnd_c ( pResult, pNode, tSetup );
 	}
+
+	if ( pQueryNode->GetCount() )
+		return sphXQCacheCreateProxy ( pResult, pQueryNode, tSetup );
+
 	return pResult;
 }
 
@@ -668,7 +692,12 @@ static ExtNode_i * CreateOrderNode ( const XQNode_t * pNode, const ISphQwordSetu
 		}
 		dChildren.Add ( pChild );
 	}
-	return new ExtOrder_c ( dChildren, tSetup );
+	ExtNode_i * pResult = new ExtOrder_c ( dChildren, tSetup );
+	
+	if ( pNode->GetCount() )
+		return sphXQCacheCreateProxy ( pResult, pNode, tSetup );
+
+	return pResult;
 }
 
 ExtNode_i * ExtNode_i::Create ( const XQKeyword_t & tWord, DWORD uFields, int iMaxFieldPos, const ISphQwordSetup & tSetup )
@@ -746,6 +775,8 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 			ExtNode_i * pCur = Create ( dWords[0], pNode->m_uFieldMask, pNode->m_iFieldMaxPos, tSetup );
 			for ( int i=1; i<dWords.GetLength(); i++ )
 				pCur = new ExtAnd_c ( pCur, Create ( dWords[i], pNode->m_uFieldMask, pNode->m_iFieldMaxPos, tSetup ), tSetup );
+			if ( pNode->GetCount() )
+				return sphXQCacheCreateProxy ( pCur, pNode, tSetup );
 			return pCur;
 		}
 		else
@@ -756,7 +787,7 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 		int iChildren = pNode->m_dChildren.GetLength ();
 		assert ( iChildren>0 );
 
-		if ( pNode->m_eOp == SPH_QUERY_BEFORE )
+		if ( pNode->GetOp() == SPH_QUERY_BEFORE )
 			return CreateOrderNode ( pNode, tSetup );
 
 		ExtNode_i * pCur = NULL;
@@ -769,7 +800,7 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 				pCur = pNext;
 				continue;
 			}
- 			switch ( pNode->m_eOp )
+ 			switch ( pNode->GetOp() )
 			{
 				case SPH_QUERY_OR:		pCur = new ExtOr_c ( pCur, pNext, tSetup ); break;
 				case SPH_QUERY_AND:		pCur = new ExtAnd_c ( pCur, pNext, tSetup ); break;
@@ -777,6 +808,8 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 				default:				assert ( 0 && "internal error: unhandled op in ExtNode_i::Create()" ); break;
 			}
 		}
+		if ( pNode->GetCount() )
+			return sphXQCacheCreateProxy ( pCur, pNode, tSetup );
 		return pCur;
 	}
 }
@@ -796,6 +829,13 @@ ExtTerm_c::ExtTerm_c ( ISphQword * pQword, DWORD uFields, const ISphQwordSetup &
 	AllocDocinfo ( tSetup );
 }
 
+void ExtTerm_c::Reset ( const ISphQwordSetup & tSetup )
+{
+	m_pHitDoc = NULL;
+	m_uHitsOverFor = 0;
+	m_iMaxTimer = tSetup.m_iMaxTimer;
+	tSetup.QwordSetup ( m_pQword );
+}
 
 const ExtDoc_t * ExtTerm_c::GetDocsChunk ( SphDocID_t * pMaxID )
 {
@@ -1306,6 +1346,12 @@ ExtTwofer_c::~ExtTwofer_c ()
 	SafeDelete ( m_pChildren[1] );
 }
 
+void ExtTwofer_c::Reset ( const ISphQwordSetup & tSetup )
+{
+	m_pChildren[0]->Reset ( tSetup );
+	m_pChildren[1]->Reset ( tSetup );
+}
+
 void ExtTwofer_c::GetQwords ( ExtQwordsHash_t & hQwords )
 {
 	m_pChildren[0]->GetQwords ( hQwords );
@@ -1758,6 +1804,13 @@ ExtPhrase_c::ExtPhrase_c ( CSphVector<ExtNode_i *> & dQwords, DWORD, const XQNod
 ExtPhrase_c::~ExtPhrase_c ()
 {
 	SafeDelete ( m_pNode );
+}
+
+void ExtPhrase_c::Reset ( const ISphQwordSetup & tSetup )
+{
+	ARRAY_FOREACH ( i, m_dQposDelta )
+		m_dQposDelta[i] = -INT_MAX;
+	m_pNode->Reset ( tSetup );
 }
 
 const ExtDoc_t * ExtPhrase_c::GetDocsChunk ( SphDocID_t * pMaxID )
@@ -2332,7 +2385,7 @@ ExtQuorum_c::ExtQuorum_c ( CSphVector<ExtNode_i*> & dQwords, DWORD uDupeMask, co
 		m_pCurHit.Add ( NULL );
 	}
 
-	m_uMask = uDupeMask;
+	m_uMask = m_uInitialMask = uDupeMask;
 	m_uMaskEnd = dQwords.GetLength() - 1;
 }
 
@@ -2340,6 +2393,22 @@ ExtQuorum_c::~ExtQuorum_c ()
 {
 	ARRAY_FOREACH ( i, m_dChildren )
 		SafeDelete ( m_dChildren[i] );
+}
+
+void ExtQuorum_c::Reset ( const ISphQwordSetup & tSetup )
+{
+	m_bDone = false;
+	ARRAY_FOREACH ( i, m_dChildren )
+	{
+		m_pCurDoc[i] = NULL;
+		m_pCurHit[i] = NULL;
+	}
+
+	m_uMask = m_uInitialMask;
+
+	m_uMaskEnd = m_dChildren.GetLength() - 1; 
+	ARRAY_FOREACH ( i, m_dChildren )
+		m_dChildren[i]->Reset ( tSetup );
 }
 
 void ExtQuorum_c::GetQwords ( ExtQwordsHash_t & hQwords )
@@ -2543,6 +2612,17 @@ ExtOrder_c::ExtOrder_c ( const CSphVector<ExtNode_i *> & dChildren, const ISphQw
 	}
 
 	AllocDocinfo ( tSetup );
+}
+
+void ExtOrder_c::Reset ( const ISphQwordSetup & tSetup )
+{
+	ARRAY_FOREACH ( i, m_dChildren )
+	{
+		assert ( m_dChildren[i] );
+		m_dChildren[i]->Reset ( tSetup );
+		m_pDocs[i] = NULL;
+		m_pHits[i] = NULL;
+	}
 }
 
 
@@ -2887,6 +2967,11 @@ ExtRanker_c::ExtRanker_c ( const XQNode_t * pRoot, const ISphQwordSetup & tSetup
 	m_pIndex = tSetup.m_pIndex;
 }
 
+void ExtRanker_c::Reset ( const ISphQwordSetup & tSetup )
+{
+	if ( m_pRoot )
+		m_pRoot->Reset ( tSetup );
+}
 
 const ExtDoc_t * ExtRanker_c::GetFilteredDocs ()
 {
@@ -3519,6 +3604,420 @@ CSphHitMarker * CSphHitMarker::Create ( const XQNode_t * pRoot, const ISphQwordS
 		return pMarker;
 	}
 	return NULL;
+}
+
+//////////////////////////////////////////////////////////////////////////
+// INTRA-BATCH CACHING
+//////////////////////////////////////////////////////////////////////////
+
+/// container that does intra-batch query-sub-tree caching
+/// actually carries the cached data, NOT to be recreated frequently (see thin wrapper below)
+class NodeCacheContainer_t
+{
+private:
+	friend class ExtNodeCached_t;
+
+private:
+	int								m_iRefCount;
+	bool							m_StateOk;
+
+	CSphVector<ExtDoc_t>			m_Docs;
+	CSphVector<ExtHit_t>			m_Hits;
+	CSphVector<CSphRowitem>			m_InlineAttrs;
+
+	static NodeCacheContainer_t *	m_pPool;
+	static int						m_iMaxCachedDocs;
+	static int						m_iMaxCachedHits;
+
+public:
+	NodeCacheContainer_t ()
+		: m_iRefCount ( 1 )
+		, m_StateOk ( true )
+	{}
+
+public:
+	static void						CacheInit ( int iCells, int MaxCachedDocs, int MaxCachedHit );
+	static void						CacheDone ();
+
+public:
+	static ExtNode_i * GetProxyNode ( ExtNode_i * pChild, const XQNode_t * pRawChild, const ISphQwordSetup & tSetup )
+	{
+		if ( m_iMaxCachedDocs<=0 || m_iMaxCachedHits<=0 )
+			return pChild;
+
+		assert ( pRawChild );
+		assert ( pRawChild->GetOrder()>=0 );
+		return m_pPool [ pRawChild->GetOrder() ].CreateCachedWrapper ( pChild, pRawChild, tSetup );
+	}
+
+	void Release()
+	{
+		if ( --m_iRefCount <= 0 )
+			Invalidate();
+	}
+
+private:
+
+	bool							WarmupCache ( ExtNode_i * pChild, int iRefCount, const ISphQwordSetup & tSetup );
+	ExtNode_i *						CreateCachedWrapper ( ExtNode_i* pChild, const XQNode_t * pRawChild, const ISphQwordSetup & tSetup );
+	void							Invalidate();
+};
+
+NodeCacheContainer_t * NodeCacheContainer_t::m_pPool = NULL;
+int NodeCacheContainer_t::m_iMaxCachedDocs = 0;
+int NodeCacheContainer_t::m_iMaxCachedHits = 0;
+
+
+/// cached node wrapper to be injected into actual search trees
+/// (special container actually carries all the data and does the work, see blow)
+class ExtNodeCached_t : public ExtNode_i
+{
+	NodeCacheContainer_t *		m_pNode;
+	ExtDoc_t *					m_pHitDoc;			///< points to entry in m_dDocs which GetHitsChunk() currently emits hits for
+	SphDocID_t					m_uHitsOverFor;		///< there are no more hits for matches block starting with this ID
+	CSphString *				m_pWarning;
+	int64_t						m_iMaxTimer;		///< work until this timestamp
+	int							m_iHitIndex;		///< store the current position in m_Hits for GetHitsChunk()
+	int							m_iDocIndex;		///< store the current position in m_Docs for GetDocsChunk()
+	ExtNode_i *					m_pChild;			///< pointer to donor for the sake of AtomPos procession
+
+	void StepForwardToHitsFor ( SphDocID_t uDocId );
+
+public:
+	explicit ExtNodeCached_t ( NodeCacheContainer_t * pNode, ExtNode_i * pChild )
+		: m_pNode ( pNode )
+		, m_pHitDoc ( NULL )
+		, m_uHitsOverFor ( 0 )
+		, m_pWarning ( NULL )
+		, m_iMaxTimer ( 0 )
+		, m_iHitIndex ( 0 )
+		, m_iDocIndex ( 0 )
+		, m_pChild ( pChild )
+	{}
+
+	virtual ~ExtNodeCached_t ()
+	{
+		SafeDelete ( m_pChild );
+		SafeRelease ( m_pNode );
+	}
+
+	virtual void Reset ( const ISphQwordSetup & tSetup )
+	{
+		if ( m_pChild )
+			m_pChild->Reset ( tSetup );
+
+		m_iHitIndex = 0;
+		m_iDocIndex = 0;
+		m_uHitsOverFor = 0;
+		m_pHitDoc = NULL;
+		m_iMaxTimer = 0;
+		m_iMaxTimer = tSetup.m_iMaxTimer;
+		m_pWarning = tSetup.m_pWarning;
+
+	}
+
+	virtual const ExtDoc_t * GetDocsChunk ( SphDocID_t * pMaxID );
+
+	virtual const ExtHit_t * GetHitsChunk ( const ExtDoc_t * pMatched, SphDocID_t uMaxID );
+
+	virtual void GetQwords ( ExtQwordsHash_t & hQwords )
+	{
+		if ( m_pChild )
+			m_pChild->GetQwords ( hQwords );
+	}
+
+	virtual void SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
+	{
+		if ( m_pChild )
+			m_pChild->SetQwordsIDF ( hQwords );
+	}
+
+	virtual bool GotHitless ()
+	{
+		return ( m_pChild )
+			? m_pChild->GotHitless()
+			: false;
+	}
+};
+
+//////////////////////////////////////////////////////////////////////////
+
+ExtNode_i * NodeCacheContainer_t::CreateCachedWrapper ( ExtNode_i * pChild, const XQNode_t * pRawChild, const ISphQwordSetup & tSetup )
+{
+	if ( !m_StateOk )
+		return pChild;
+
+	// wow! we have a virgin!
+	if ( !m_Docs.GetLength() )
+	{
+		return ( WarmupCache ( pChild, pRawChild->GetCount(), tSetup ) )
+			? new ExtNodeCached_t ( this, pChild )
+			: pChild;
+	}
+	return new ExtNodeCached_t ( this, pChild );
+}
+
+
+bool NodeCacheContainer_t::WarmupCache ( ExtNode_i * pChild, int iRefCount, const ISphQwordSetup & tSetup )
+{
+	m_iRefCount = iRefCount;
+	SphDocID_t pMaxID = 0;
+	const ExtDoc_t * pChunk = pChild->GetDocsChunk ( &pMaxID );
+	int iStride = 0;
+
+	if ( pChunk && pChunk->m_pDocinfo )
+		iStride = pChild->m_iStride;
+
+	bool iHasDocs = false;
+	while ( pChunk )
+	{
+		for ( ; pChunk->m_uDocid!=DOCID_MAX; pChunk++ )
+		{
+			m_Docs.Add ( *pChunk );
+			m_iMaxCachedDocs--;
+			if ( iStride>0 )
+			{
+				// since vector will relocate the data on resize, do NOT fill new m_pDocinfo right now
+				int iLen = m_InlineAttrs.GetLength();
+				m_InlineAttrs.Resize ( iLen+iStride );
+				memcpy ( &m_InlineAttrs[iLen], pChunk->m_pDocinfo, iStride*sizeof(CSphRowitem) );
+			}
+			iHasDocs = true;
+		}
+
+		// too many values, stop caching
+		if ( m_iMaxCachedDocs<0 )
+		{
+			Invalidate ();
+			pChild->Reset(tSetup);
+			return false;
+		}
+
+		pChunk = pChild->GetDocsChunk ( &pMaxID );
+	}
+
+	m_Docs.Add().m_uDocid = DOCID_MAX;
+	const ExtDoc_t * pChunkHits = &m_Docs[0];
+	const ExtHit_t * pHits = NULL;
+	if ( iHasDocs )
+		while (	( pHits=pChild->GetHitsChunk ( pChunkHits, pChild->m_uMaxID ) )!=NULL )
+	{
+		for ( ; pHits->m_uDocid != DOCID_MAX; pHits++)
+		{
+			m_Hits.Add (*pHits);
+			m_iMaxCachedHits--;
+		}
+
+		// too many values, stop caching
+		if ( m_iMaxCachedHits<0 )
+		{
+			Invalidate ();
+			pChild->Reset(tSetup);
+			return false;
+		}
+	}
+
+	if ( iStride )
+		ARRAY_FOREACH ( i, m_Docs )
+		m_Docs[i].m_pDocinfo = &m_InlineAttrs[i*iStride];
+
+	m_Docs.Add().m_uDocid = DOCID_MAX;
+	m_Hits.Add().m_uDocid = DOCID_MAX;
+	pChild->Reset(tSetup);
+	return true;
+}
+
+
+void NodeCacheContainer_t::Invalidate()
+{
+	m_iMaxCachedDocs += m_Docs.GetLength();
+	m_iMaxCachedHits += m_Docs.GetLength();
+	m_Docs.Reset();
+	m_InlineAttrs.Reset();
+	m_Hits.Reset();
+	m_StateOk = false;
+}
+
+
+void NodeCacheContainer_t::CacheInit ( int iCells, int iMaxCachedDocs, int iMaxCachedHits )
+{
+	SafeDeleteArray ( m_pPool );
+	if ( iCells>=0 && iMaxCachedHits>0 && iMaxCachedDocs>0 )
+		m_pPool = new NodeCacheContainer_t [ iCells ];
+
+	m_iMaxCachedDocs = iMaxCachedDocs / sizeof(ExtDoc_t);
+	m_iMaxCachedHits = iMaxCachedHits / sizeof(ExtHit_t);
+}
+
+
+void NodeCacheContainer_t::CacheDone ()
+{
+	SafeDeleteArray ( m_pPool );
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+void ExtNodeCached_t::StepForwardToHitsFor ( SphDocID_t uDocId )
+{
+	assert ( m_pNode );
+	assert ( m_pNode->m_StateOk );
+
+	CSphVector<ExtHit_t> & dHits = m_pNode->m_Hits;
+
+	int iEnd = dHits.GetLength()-1;
+	if ( m_iHitIndex>=iEnd )
+		return;
+	if ( dHits[m_iHitIndex].m_uDocid==uDocId )
+		return;
+
+	// binary search for lower (most left) bound of the subset of values
+	while ( iEnd-m_iHitIndex>1 )
+	{
+		if ( uDocId<dHits[m_iHitIndex].m_uDocid || uDocId>dHits[iEnd].m_uDocid )
+		{
+			m_iHitIndex = -1;
+			return;
+		}
+		int iMid = m_iHitIndex + (iEnd-m_iHitIndex)/2;
+		if ( dHits[iMid].m_uDocid >= uDocId )
+			iEnd = iMid;
+		else
+			m_iHitIndex = iMid;
+	}	
+	m_iHitIndex = iEnd;
+}
+
+const ExtDoc_t * ExtNodeCached_t::GetDocsChunk( SphDocID_t * pMaxID )
+{
+	if ( !m_pNode || !m_pChild )
+		return NULL;
+
+	if ( !m_pNode->m_StateOk )
+		return m_pChild->GetDocsChunk ( pMaxID );
+
+	if ( m_iMaxTimer>0 && sphMicroTimer()>=m_iMaxTimer )
+	{
+		if ( m_pWarning )
+			*m_pWarning = "query time exceeded max_query_time";
+		return NULL;
+	}
+
+	m_uMaxID = 0;
+
+	int iDoc = Min ( m_iDocIndex+MAX_DOCS-1, m_pNode->m_Docs.GetLength()-1 ) - m_iDocIndex;
+	memcpy ( &m_dDocs[0], &m_pNode->m_Docs[m_iDocIndex], sizeof (ExtDoc_t) * iDoc );
+	m_iDocIndex += iDoc;
+
+	return ReturnDocsChunk ( iDoc, pMaxID );
+}
+
+const ExtHit_t * ExtNodeCached_t::GetHitsChunk( const ExtDoc_t * pMatched, SphDocID_t uMaxID )
+{
+	if ( !m_pNode || !m_pChild )
+		return NULL;
+
+	if ( !m_pNode->m_StateOk )
+		return m_pChild->GetHitsChunk ( pMatched, uMaxID );
+
+	if ( !pMatched )
+		return NULL;
+
+	SphDocID_t uFirstMatch = pMatched->m_uDocid;
+
+	// aim to the right document
+	ExtDoc_t * pDoc = m_pHitDoc;
+	m_pHitDoc = NULL;
+
+	if ( !pDoc )
+	{
+		// if we already emitted hits for this matches block, do not do that again
+		if ( uFirstMatch==m_uHitsOverFor )
+			return NULL;
+
+		// early reject whole block
+		if ( pMatched->m_uDocid > m_uMaxID ) return NULL;
+		if ( m_uMaxID && m_dDocs[0].m_uDocid > uMaxID ) return NULL;
+
+		// find match
+		pDoc = m_dDocs;
+		do
+		{
+			while ( pDoc->m_uDocid < pMatched->m_uDocid ) pDoc++;
+			if ( pDoc->m_uDocid==DOCID_MAX )
+			{
+				m_uHitsOverFor = uFirstMatch;
+				return NULL; // matched docs block is over for me, gimme another one
+			}
+
+			while ( pMatched->m_uDocid < pDoc->m_uDocid ) pMatched++;
+			if ( pMatched->m_uDocid==DOCID_MAX )
+			{
+				m_uHitsOverFor = uFirstMatch;
+				return NULL; // matched doc block did not yet begin for me, gimme another one
+			}
+
+		} while ( pDoc->m_uDocid!=pMatched->m_uDocid );
+
+		// setup hitlist reader
+		StepForwardToHitsFor (pDoc->m_uDocid);
+	}
+
+	// hit emission
+	int iHit = 0;
+	while ( iHit<ExtNode_i::MAX_HITS-1 )
+	{
+		// get next hit
+		ExtHit_t & tCachedHit = m_pNode->m_Hits[m_iHitIndex++];
+		if (tCachedHit.m_uDocid != pDoc->m_uDocid)
+		{
+			// no more hits; get next acceptable document
+			pDoc++;
+			do
+			{
+				while ( pDoc->m_uDocid < pMatched->m_uDocid ) pDoc++;
+				if ( pDoc->m_uDocid==DOCID_MAX ) { pDoc = NULL; break; } // matched docs block is over for me, gimme another one
+
+				while ( pMatched->m_uDocid < pDoc->m_uDocid ) pMatched++;
+				if ( pMatched->m_uDocid==DOCID_MAX ) { pDoc = NULL; break; } // matched doc block did not yet begin for me, gimme another one
+
+			} while ( pDoc->m_uDocid!=pMatched->m_uDocid );
+
+			if ( !pDoc )
+				break;
+			assert ( pDoc->m_uDocid==pMatched->m_uDocid );
+
+			// setup hitlist reader
+			StepForwardToHitsFor (pDoc->m_uDocid);
+			continue;
+		}
+
+		m_dHits[iHit++] = tCachedHit;
+	}
+
+	m_pHitDoc = pDoc;
+	if ( iHit==0 || iHit<MAX_HITS-1 )
+		m_uHitsOverFor = uFirstMatch;
+
+	assert ( iHit>=0 && iHit<MAX_HITS );
+	m_dHits[iHit].m_uDocid = DOCID_MAX;
+	return ( iHit!=0 ) ? m_dHits : NULL;
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+void sphXQCacheInit ( int iCells, int MaxCachedDocs, int MaxCachedHits )
+{
+	NodeCacheContainer_t::CacheInit ( iCells, MaxCachedDocs, MaxCachedHits );
+}
+
+void sphXQCacheDone ()
+{
+	NodeCacheContainer_t::CacheDone ();
+}
+
+static ExtNode_i * sphXQCacheCreateProxy ( ExtNode_i * pChild, const XQNode_t * pRawChild, const ISphQwordSetup & tSetup )
+{
+	return NodeCacheContainer_t::GetProxyNode ( pChild, pRawChild, tSetup );
 }
 
 //

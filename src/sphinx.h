@@ -153,6 +153,9 @@ int64_t			sphMicroTimer ();
 /// Sphinx CRC32 implementation
 DWORD			sphCRC32 ( const BYTE * pString );
 
+/// Sphinx FNV64 implementation
+uint64_t		sphFNV64 ( const BYTE * pString );
+
 /// calculate file crc32
 bool			sphCalcFileCRC32 ( const char * szFilename, DWORD & uCRC32 );
 
@@ -2226,8 +2229,9 @@ public:
 public:
 	virtual bool						EarlyReject ( CSphMatch & tMatch ) const = 0;
 	virtual const CSphSourceStats &		GetStats () const = 0;
-
-	virtual bool				MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters ) = 0;
+	void						SetCacheSize ( int iMaxCachedDocs, int iMaxCachedHits );
+	virtual bool				MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters) = 0;
+	virtual bool				MultiQueryEx ( int iQueries, CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters) = 0;
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats ) = 0;
 
 public:
@@ -2276,6 +2280,9 @@ protected:
 	ISphTokenizer *				m_pTokenizer;
 	ISphTokenizer *				m_pCleanTokenizer;
 	CSphDict *					m_pDict;
+
+	int							m_iMaxCachedDocs;
+	int							m_iMaxCachedHits;
 };
 
 /////////////////////////////////////////////////////////////////////////////

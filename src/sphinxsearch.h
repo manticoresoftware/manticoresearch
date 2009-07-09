@@ -154,6 +154,19 @@ public:
 	static CSphHitMarker *	Create ( const XQNode_t * pRoot, const ISphQwordSetup & tSetup );
 };
 
+/// factory for regular query objects
+
+/// factory for parsed query trees
+ISphRanker * sphCreateRanker ( const XQNode_t * pRoot, ESphRankMode eRankMode, CSphQueryResult * pResult, const ISphQwordSetup & tTermSetup );
+
+/// initialize intra-batch node cache
+/// FIXME! should be moved to per-query TLS when we add MT support
+void sphXQCacheInit ( int iCells, int MaxCachedDocs, int MaxCachedHits );
+
+/// shutdown intra-batch node cache
+/// FIXME! should be moved to per-query TLS when we add MT support
+void sphXQCacheDone ();
+
 #endif // _sphinxsearch_
 
 //

@@ -1980,6 +1980,13 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 			return NULL;
 		}
 
+		// force AVG() to be computed in floats
+		if ( tExprCol.m_eAggrFunc==SPH_AGGR_AVG )
+		{
+			tExprCol.m_eAttrType = SPH_ATTR_FLOAT;
+			tExprCol.m_tLocator.m_iBitCount = 32;
+		}
+
 		// postpone aggregates, add non-aggregates
 		if ( tExprCol.m_eAggrFunc==SPH_AGGR_NONE )
 		{

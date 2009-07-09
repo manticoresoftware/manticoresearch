@@ -31,11 +31,23 @@ source srctest2 : srctest
 	sql_query		= SELECT document_id+10, body, gid, price, views FROM test_table
 }
 
+source srctest3 : srctest
+{
+	sql_query		= SELECT document_id+20, body, gid, price*2 price, views FROM test_table
+}
+
 <agent0>
 index test
 {
 	source			= srctest
 	path			= <data_path/>/test
+	docinfo			= extern
+}
+
+index test3
+{
+	source			= srctest3
+	path			= <data_path/>/test3
 	docinfo			= extern
 }
 
@@ -49,7 +61,7 @@ index dist
 <agent1>
 index test2
 {
-	source			= srctest
+	source			= srctest2
 	path			= <data_path/>/test2
 	docinfo			= extern
 }
@@ -62,6 +74,9 @@ index test2
 <query index="test" select="*,sum(views) as sumviews, avg(price) as avgprice" groupattr="gid"/>
 <query index="dist" select="*,avg(price) as avgprice" groupattr="gid"/>
 <query index="dist" select="*,sum(views) as sumviews, avg(price) as avgprice" groupattr="gid"/>
+<query index="test" select="gid, sum(views) as sumviews, avg(price) as avgprice" groupattr="gid"/>
+<query index="test3" select="gid, sum(views) as sumviews, avg(price) as avgprice" groupattr="gid"/>
+<query index="test,test3" select="gid, sum(views) as sumviews, avg(price) as avgprice" groupattr="gid"/>
 </queries>
 
 <db_create>

@@ -3786,6 +3786,22 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery )
 		}
 	}
 
+	// if there's more than one result set, we need to re-sort the matches
+	// so we need to bring matches to the schema that the *sorter* wants
+	// so we need to create the sorter before conversion
+	ISphMatchSorter * pSorter = NULL;
+	if ( tRes.m_iSuccesses!=1 )
+	{
+		// create queue
+		// at this point, we do not need to compute anything; it all must be here
+		pSorter = sphCreateQueue ( &tQuery, tRes.m_tSchema, tRes.m_sError, false );
+		if ( !pSorter )
+			return false;
+
+		// sorter expects this
+		tRes.m_tSchema = pSorter->GetSchema();
+	}
+
 	// convert all matches to minimal schema
 	if ( !bAllEqual )
 	{
@@ -3836,12 +3852,6 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery )
 	// we do not need to re-sort if there's exactly one result set
 	if ( tRes.m_iSuccesses==1 )
 		return true;
-
-	// create queue
-	// at this point, we do not need to compute anything; it all must be here
-	ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, tRes.m_tSchema, tRes.m_sError, false );
-	if ( !pSorter )
-		return false;
 
 	// kill all dupes
 	int iDupes = 0;

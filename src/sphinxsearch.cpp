@@ -3871,18 +3871,19 @@ void ExtNodeCached_t::StepForwardToHitsFor ( SphDocID_t uDocId )
 		return;
 
 	// binary search for lower (most left) bound of the subset of values
-	while ( iEnd-m_iHitIndex>1 )
+	int iHitIndex = m_iHitIndex; // http://blog.gamedeff.com/?p=12
+	while ( iEnd-iHitIndex>1 )
 	{
-		if ( uDocId<dHits[m_iHitIndex].m_uDocid || uDocId>dHits[iEnd].m_uDocid )
+		if ( uDocId<dHits[iHitIndex].m_uDocid || uDocId>dHits[iEnd].m_uDocid )
 		{
 			m_iHitIndex = -1;
 			return;
 		}
-		int iMid = m_iHitIndex + (iEnd-m_iHitIndex)/2;
+		int iMid = iHitIndex + (iEnd-iHitIndex)/2;
 		if ( dHits[iMid].m_uDocid >= uDocId )
 			iEnd = iMid;
 		else
-			m_iHitIndex = iMid;
+			iHitIndex = iMid;
 	}	
 	m_iHitIndex = iEnd;
 }

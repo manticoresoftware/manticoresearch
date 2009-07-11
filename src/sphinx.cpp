@@ -1772,39 +1772,12 @@ int64_t sphMicroTimer()
 #endif // USE_WINDOWS
 }
 
-
-static bool sphWrite ( int iFD, const void * pBuf, size_t iCount, const char * sName, CSphString & sError )
-{
-	if ( iCount<=0 )
-		return true;
-
-	int64_t tmTimer = 0;
-	if ( g_bIOStats )
-		tmTimer = sphMicroTimer();
-
-	int iWritten = ::write ( iFD, pBuf, iCount );
-
-	if ( g_bIOStats && iCount > 0 )
-	{
-		g_IOStats.m_iWriteTime += sphMicroTimer() - tmTimer;
-		g_IOStats.m_iWriteOps++;
-		g_IOStats.m_iWriteBytes += iCount;
-	}
-
-	if ( iWritten==(int)iCount )
-		return true;
-
-	if ( iWritten<0 )
-		sError.SetSprintf ( "%s: write error: %s", sName, strerror(errno) );
-	else
-		sError.SetSprintf ( "%s: write error: %d of %d bytes written", sName, iWritten, int(iCount) );
-	return false;
-}
-
+//////////////////////////////////////////////////////////////////////////
 
 static int		g_iMaxIOps		= 0;
 static int		g_iMaxIOSize	= 0;
 static int64_t	g_tmLastIOTime	= 0;
+
 
 void sphSetThrottling ( int iMaxIOps, int iMaxIOSize )
 {
@@ -1825,28 +1798,59 @@ static inline void sphThrottleSleep ()
 }
 
 
-static bool sphWriteThrottled ( int iFD, const void * pBuf, size_t iCount, const char * sName, CSphString & sError )
+static bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const char * sName, CSphString & sError )
 {
-	if ( g_iMaxIOSize && int (iCount) > g_iMaxIOSize )
-	{
-		int nChunks		= iCount / g_iMaxIOSize;
-		int nBytesLeft	= iCount % g_iMaxIOSize;
+	if ( iCount<=0 )
+		return true;
 
-		for ( int i = 0; i < nChunks; ++i )
+	// by default, slice ios by at most 1 GB
+	int iChunkSize = ( 1UL<<30 );
+
+	// when there's a sane max_iosize (4K to 1GB), use it
+	if ( g_iMaxIOSize>=4096 )
+		iChunkSize = Min ( iChunkSize, g_iMaxIOSize );
+
+	// while there's data, write it chunk by chunk
+	const BYTE * p = (const BYTE*) pBuf;
+	while ( iCount>0 )
+	{
+		// wait for a timely occasion
+		sphThrottleSleep ();
+
+		// write (and maybe time)
+		int64_t tmTimer = 0;
+		if ( g_bIOStats )
+			tmTimer = sphMicroTimer();
+
+		int iToWrite = iChunkSize;
+		if ( iCount<iChunkSize )
+			iToWrite = (int)iCount;
+
+		int iWritten = ::write ( iFD, p, iToWrite );
+
+		if ( g_bIOStats )
 		{
-			if ( !sphWriteThrottled ( iFD, (const char *)pBuf + i*g_iMaxIOSize, g_iMaxIOSize, sName, sError ) )
-				return false;
+			g_IOStats.m_iWriteTime += sphMicroTimer() - tmTimer;
+			g_IOStats.m_iWriteOps++;
+			g_IOStats.m_iWriteBytes += iToWrite;
 		}
 
-		if ( nBytesLeft > 0 )
-			if ( !sphWriteThrottled ( iFD, (const char *)pBuf + nChunks*g_iMaxIOSize, nBytesLeft, sName, sError ) )
-				return false;
+		// success? rinse, repeat
+		if ( iWritten==iToWrite )
+		{
+			iCount -= iToWrite;
+			p += iToWrite;
+			continue;
+		}
 
-		return true;
+		// failure? report, bailout
+		if ( iWritten<0 )
+			sError.SetSprintf ( "%s: write error: %s", sName, strerror(errno) );
+		else
+			sError.SetSprintf ( "%s: write error: %d of %d bytes written", sName, iWritten, iToWrite );
+		return false;
 	}
-
-	sphThrottleSleep ();
-	return sphWrite ( iFD, pBuf, iCount, sName, sError );
+	return true;
 }
 
 
@@ -1883,6 +1887,7 @@ size_t sphReadThrottled ( int iFD, void * pBuf, size_t iCount )
 	return sphRead ( iFD, pBuf, iCount );
 }
 
+//////////////////////////////////////////////////////////////////////////
 
 #if !USE_WINDOWS
 char * strlwr ( char * s )

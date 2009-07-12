@@ -908,14 +908,14 @@ static void xqDump ( XQNode_t * pNode, const CSphSchema & tSch, int iIndent )
 	if ( !pNode->IsPlain() )
 	{
 		xqIndent ( iIndent );
-		switch ( pNode->m_eOp )
+		switch ( pNode->GetOp() )
 		{
 			case SPH_QUERY_AND: printf ( "AND:\n" ); break;
 			case SPH_QUERY_OR: printf ( "OR:\n" ); break;
 			case SPH_QUERY_NOT: printf ( "NOT:\n" ); break;
 			case SPH_QUERY_ANDNOT: printf ( "ANDNOT:\n" ); break;
 			case SPH_QUERY_BEFORE: printf ( "BEFORE:\n" ); break;
-			default: printf ( "unknown-op-%d:\n", pNode->m_eOp ); break;
+			default: printf ( "unknown-op-%d:\n", pNode->GetOp() ); break;
 		}
 		ARRAY_FOREACH ( i, pNode->m_dChildren )
 			xqDump ( pNode->m_dChildren[i], tSch, iIndent+1 );

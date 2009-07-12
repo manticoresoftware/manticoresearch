@@ -4355,6 +4355,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 							tRes.m_iQueryTime += ( iQuery==iStart ) ? tStats.m_iQueryTime : 0;
 							tRes.m_pMva = tStats.m_pMva;
 							tRes.m_dWordStats = tStats.m_dWordStats;
+							tRes.m_iMultiplier = iEnd-iStart+1;
 						}
 
 						// extract matches from sorter
@@ -4558,12 +4559,34 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	tmSubset = sphMicroTimer() - tmSubset;
 	tmCpu = sphCpuTimer() - tmCpu;
 
+	// in multi-queue case (1 actual call per N queries), just divide overall query time evenly
+	// otherwise (N calls per N queries), divide common query time overheads evenly
 	const int iQueries = iEnd-iStart+1;
-	for ( int iRes=iStart; iRes<=iEnd; iRes++ )
+	if ( bMultiQueue )
 	{
-		m_dResults[iRes].m_iQueryTime = int(tmSubset/1000/iQueries);
-		m_dResults[iRes].m_iCpuTime = tmCpu/iQueries;
-		m_dResults[iRes].m_iMultiplier = iQueries;
+		for ( int iRes=iStart; iRes<=iEnd; iRes++ )
+		{
+			m_dResults[iRes].m_iQueryTime = int(tmSubset/1000/iQueries);
+			m_dResults[iRes].m_iCpuTime = tmCpu/iQueries;
+		}
+	} else
+	{
+		int64_t tmAccountedWall = 0;
+		int64_t tmAccountedCpu = 0;
+		for ( int iRes=iStart; iRes<=iEnd; iRes++ )
+		{
+			tmAccountedWall += m_dResults[iRes].m_iQueryTime*1000;
+			tmAccountedCpu += m_dResults[iRes].m_iCpuTime;
+		}
+
+		int64_t tmDeltaWall = ( tmSubset - tmAccountedWall ) / iQueries;
+		int64_t tmDeltaCpu = ( tmCpu - tmAccountedCpu ) / iQueries;
+
+		for ( int iRes=iStart; iRes<=iEnd; iRes++ )
+		{
+			tmAccountedWall += tmDeltaWall/1000;
+			tmAccountedCpu += tmDeltaCpu;
+		}
 	}
 
 	const CSphIOStats & tIO = sphStopIOStats ();

@@ -1917,9 +1917,9 @@ public:
 class CSphQueryResultMeta
 {
 public:
-	int						m_iQueryTime;		///< query time, ms
-	int						m_iMultiplier;		///< multi-query multiplier
+	int						m_iQueryTime;		///< query time, milliseconds
 	int64_t					m_iCpuTime;			///< user time, microseconds
+	int						m_iMultiplier;		///< multi-query multiplier
 
 	struct WordStat_t
 	{

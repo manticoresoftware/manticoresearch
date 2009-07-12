@@ -5590,6 +5590,8 @@ CSphQueryResult::CSphQueryResult ()
 	: m_tSchema ( "query_result" )
 {
 	m_iQueryTime = 0;
+	m_iCpuTime = 0;
+	m_iMultiplier = 1;
 	m_iTotalMatches = 0;
 	m_pMva = NULL;
 	m_pStrings = NULL;
@@ -12755,8 +12757,8 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, CSphQuery * pQueries, CSphQuery
 	XQCacheHolder tHolder ( iCommonSubtrees, m_iMaxCachedDocs, m_iMaxCachedHits );
 	ARRAY_FOREACH ( j, dTrees )
 	{
-		bool bQuery = ParsedMultiQuery ( &pQueries[j], ppResults[j], 1, &ppSorters[j], dTrees[j], pDict );
-		bResult &= bQuery;
+		bResult &= ParsedMultiQuery ( &pQueries[j], ppResults[j], 1, &ppSorters[j], dTrees[j], pDict );
+		ppResults[j]->m_iMultiplier = iCommonSubtrees ? iQueries : 1;
 	}
 
 	ARRAY_FOREACH ( k, dTrees )

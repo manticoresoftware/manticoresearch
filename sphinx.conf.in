@@ -714,6 +714,18 @@ searchd
 	# max allowed per-batch query count (aka multi-query count)
 	# optional, default is 32
 	max_batch_queries	= 32
+
+
+	# max common subtree document cache size, per-query
+	# optional, default is 512K, 0 means disable subtree optimization
+	#
+	# subtree_docs_cache	= 4M
+
+
+	# max common subtree hit cache size, per-query
+	# optional, default is 1M, 0 means disable subtree optimization
+	#
+	# subtree_hits_cache	= 8M
 }
 
 # --eof--

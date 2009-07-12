@@ -1,5 +1,5 @@
-Sphinx 0.9.9-rc2 reference manual
-=================================
+Sphinx 0.9.10 reference manual
+==============================
 
 Free open-source SQL full-text search engine
 --------------------------------------------
@@ -49,6 +49,7 @@ Table of Contents
    4.7. Distributed searching
    4.8. searchd query log format
    4.9. MySQL protocol support and SphinxQL
+   4.10. Multi-queries
 
 5. Command line tools reference
    5.1. indexer command reference
@@ -238,6 +239,9 @@ Table of Contents
       9.4.21. listen_backlog
       9.4.22. read_buffer
       9.4.23. read_unhinted
+      9.4.24. max_batch_queries
+      9.4.25. subtree_docs_cache
+      9.4.26. subtree_hits_cache
 
 A. Sphinx revision history
 
@@ -2019,6 +2023,116 @@ query time and keyword statistics:
    | +---------------+-------+
    | 12 rows in set (0.00 sec)
 
+4.10. Multi-queries
+-------------------
+
+Multi-queries, or query batches, let you send multiple queries to Sphinx in
+one go (more formally, one network request).
+
+Two API methods that implement multi-query mechanism are AddQuery() and
+RunQueries(). (In fact, regular Query() call is internally implemented as
+a single AddQuery() call immediately followed by RunQueries() call.)
+AddQuery() captures the current state of all the query settings set by
+previous API calls, and memorizes the query. RunQueries() actually sends
+all the memorized queries, and returns multiple result sets. There are no
+restrictions on the queries at all, except just a sanity check on a number
+of queries in a single batch (see Section 9.4.24, <<max_batch_queries>>).
+
+Why use multi-queries? Generally, it all boils down to performance. First,
+by sending requests to searchd in a batch instead of one by one, you always
+save a bit by doing less network roundtrips. Second, and somewhat more
+important, sending queries in a batch enables searchd to perform certain
+internal optimizations. As new types of optimizations are being added over
+time, it generally makes sense to pack all the queries into batches where
+possible, so that simply upgrading Sphinx to a new version would
+automatically enable new optimizations. In the case when there aren't any
+possible batch optimizations to apply, queries will be processed one by one
+internally.
+
+Why (or rather when) not use multi-queries? Multi-queries requires all the
+queries in a batch to be independent, and sometimes they aren't. That is,
+sometimes query B is based on query A results, and so can only be set up
+after executing query A. For instance, you might want to display results
+from a secondary index if and only if there were no results found in
+a primary index. Or maybe just specify offset into 2nd result set based on
+the amount of matches in the 1st result set. In that case, you will have to
+use separate queries (or separate batches).
+
+As of 0.9.10, there are two major optimizations to be aware of: common
+query optimization (available since 0.9.8); and common subtree optimization
+(available since 0.9.10).
+
+Common query optimization means that searchd will identify all those
+queries in a batch where only the sorting and group-by settings differ, and
+only perform searching once. For instance, if a batch consists of
+3 queries, all of them are for "ipod nano", but 1st query requests top-10
+results sorted by price, 2nd query groups by vendor ID and requests top-5
+vendors sorted by rating, and 3rd query requests max price, full-text
+search for "ipod nano" will only be performed once, and its results will be
+reused to build 3 different result sets.
+
+So-called faceted searching is a particularly important case that benefits
+from this optimization. Indeed, faceted searching can be implemented by
+running a number of queries, one to retrieve search results themselves, and
+a few other ones with same full-text query but different group-by settings
+to retrieve all the required groups of results (top-3 authors, top-5
+vendors, etc). And as long as full-text query and filtering settings stay
+the same, common query optimization will trigger, and greatly improve
+performance.
+
+Common subtree optimization is even more interesting. It lets searchd
+exploit similarities between batched full-text queries. It identifies
+common full-text query parts (subtress) in all queries, and caches them
+between queries. For instance, look at the following query batch:
+
+   | barack obama president
+   | barack obama john mccain
+   | barack obama speech
+
+There's a common two-word part ("barack obama") that can be computed only
+once, then cached and shared across the queries. And common subtree
+optimization does just that. Per-query cache size is strictly controlled by
+subtree_docs_cache and subtree_hits_cache directives (so that caching all
+sxiteen gazillions of documents that match "i am" does not exhaust the RAM
+and instantly kill your server).
+
+Here's a code sample (in PHP) that fire the same query in 3 different
+sorting modes:
+
+   | require ( "sphinxapi.php" );
+   | $cl = new SphinxClient ();
+   | $cl->SetMatchMode ( SPH_MATCH_EXTENDED2 );
+   | 
+   | $cl->SetSortMode ( SPH_SORT_RELEVANCE );
+   | $cl->AddQuery ( "the", "lj" );
+   | $cl->SetSortMode ( SPH_SORT_EXTENDED, "published desc" );
+   | $cl->AddQuery ( "the", "lj" );
+   | $cl->SetSortMode ( SPH_SORT_EXTENDED, "published asc" );
+   | $cl->AddQuery ( "the", "lj" );
+   | $res = $cl->RunQueries();
+
+How to tell whether the queries in the batch were actually optimized? If
+they were, respective query log will have a "multiplier" field that
+specifies how many queries were processed together:
+
+   | [Sun Jul 12 15:18:17.000 2009] 0.040 sec x3 [ext2/0/rel 747541 (0,20)] [lj] the
+   | [Sun Jul 12 15:18:17.000 2009] 0.040 sec x3 [ext2/0/ext 747541 (0,20)] [lj] the
+   | [Sun Jul 12 15:18:17.000 2009] 0.040 sec x3 [ext2/0/ext 747541 (0,20)] [lj] the
+
+Note the "x3" field. It means that this query was optimized and processed
+in a sub-batch of 3 queries. For reference, this is how the regular log
+would look like if the queries were not batched:
+
+   | [Sun Jul 12 15:18:17.062 2009] 0.059 sec [ext2/0/rel 747541 (0,20)] [lj] the
+   | [Sun Jul 12 15:18:17.156 2009] 0.091 sec [ext2/0/ext 747541 (0,20)] [lj] the
+   | [Sun Jul 12 15:18:17.250 2009] 0.092 sec [ext2/0/ext 747541 (0,20)] [lj] the
+
+Note how per-query time in multi-query case was improved by a factor of
+1.5x to 2.3x, depending on a particular sorting mode. In fact, for both
+common query and common subtree optimizations, there were reports of 3x and
+even more improvements, and that's from production instances, not just
+synthetic tests.
+
 5. Command line tools reference
 ===============================
 
@@ -2333,6 +2447,22 @@ install it as a service.
      called by Windows when the service would be started, although if you
      wanted to call this as a regular service from the command-line (as the
      complement to --console) you could do so in theory.
+
+Last but not least, as every other daemon, searchd supports a number of
+signals.
+
+SIGTERM
+   Initiates a clean shutdown. New queries will not be handled; but queries
+   that are already started will not be forcibly interrupted.
+
+SIGHUP
+   Initiates index rotation. Depending on the value of seamless_rotate
+   setting, new queries might be shortly stalled; clients will receive
+   temporary errors.
+
+SIGUSR1
+   Forces reopen of searchd log and query log files, letting you implement
+   log file rotation.
 
 5.3. search command reference
 -----------------------------
@@ -6179,6 +6309,46 @@ should be not greater than read_buffer.
 Example:
 
    | read_unhinted = 32K
+
+9.4.24. max_batch_queries
+-------------------------
+
+Limits the amount of queries per batch. Optional, default is 32.
+
+Makes searchd perform a sanity check of the amount of the queries submitted
+in a single batch when using multi-queries. Set it to 0 to skip the check.
+
+Example:
+
+   | max_batch_queries = 256
+
+9.4.25. subtree_docs_cache
+--------------------------
+
+Max common subtree document cache size, per-query. Optional, default is
+512K.
+
+Limits RAM usage of a common subtree optimizer (see Section 4.10,
+<<Multi-queries>>). At most this much RAM will be spent to cache document
+entries per each query. Setting the limit to 0 disables the optimizer.
+
+Example:
+
+   | subtree_docs_cache = 8M
+
+9.4.26. subtree_hits_cache
+--------------------------
+
+Max common subtree hit cache size, per-query. Optional, default is 1M.
+
+Limits RAM usage of a common subtree optimizer (see Section 4.10,
+<<Multi-queries>>). At most this much RAM will be spent to cache keyword
+occurrences (hits) per each query. Setting the limit to 0 disables the
+optimizer.
+
+Example:
+
+   | subtree_hits_cache = 16M
 
 A. Sphinx revision history
 ==========================

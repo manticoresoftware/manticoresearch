@@ -4692,7 +4692,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 	if ( iVer>=0x10D )
 		iQueries = tReq.GetDword ();
 
-	if ( iQueries<=0 || iQueries>g_iMaxBatchQueries )
+	if ( g_iMaxBatchQueries>0 && ( iQueries<=0 || iQueries>g_iMaxBatchQueries ) )
 	{
 		tReq.SendErrorReply ( "bad multi-query count %d (must be in 1..%d range)", iQueries, g_iMaxBatchQueries );
 		return;

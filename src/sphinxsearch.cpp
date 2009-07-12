@@ -3842,7 +3842,7 @@ void NodeCacheContainer_t::Invalidate()
 void NodeCacheContainer_t::CacheInit ( int iCells, int iMaxCachedDocs, int iMaxCachedHits )
 {
 	SafeDeleteArray ( m_pPool );
-	if ( iCells>=0 && iMaxCachedHits>0 && iMaxCachedDocs>0 )
+	if ( iCells>0 && iMaxCachedHits>0 && iMaxCachedDocs>0 )
 		m_pPool = new NodeCacheContainer_t [ iCells ];
 
 	m_iMaxCachedDocs = iMaxCachedDocs / sizeof(ExtDoc_t);

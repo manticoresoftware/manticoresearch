@@ -214,6 +214,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "blend_chars",			0, NULL },
 	{ "expand_keywords",		0, NULL },
 	{ "hitless_words",			KEY_LIST, NULL },
+	{ "hit_format",				0, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -839,6 +840,15 @@ void sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 			fprintf ( stdout, "WARNING: unknown docinfo=%s, defaulting to extern\n", hIndex["docinfo"].cstr() );
 	}
 
+	tSettings.m_eHitFormat = SPH_HIT_FORMAT_INLINE;
+	if ( hIndex("hit_format") )
+	{
+		if ( hIndex["hit_format"]=="plain" )		tSettings.m_eHitFormat = SPH_HIT_FORMAT_PLAIN;
+		else if ( hIndex["hit_format"]=="inline" )	tSettings.m_eHitFormat = SPH_HIT_FORMAT_INLINE;
+		else
+			fprintf ( stdout, "WARNING: unknown hit_format=%s, defaulting to inline\n", hIndex["hit_format"].cstr() );
+	}
+
 	// hit-less indices
 	if ( hIndex("hitless_words") )
 	{
@@ -860,7 +870,6 @@ void sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 				tSettings.m_sHitlessFile = sValue;
 			}
 		}
-					
 	}
 }
 

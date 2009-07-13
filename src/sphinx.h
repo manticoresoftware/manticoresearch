@@ -2137,9 +2137,17 @@ enum ESphHitless
 };
 
 
+enum ESphHitFormat
+{
+	SPH_HIT_FORMAT_PLAIN	= 0,	///< all hits are stored in hitlist
+	SPH_HIT_FORMAT_INLINE	= 1,	///< hits can be split and inlined into doclist (aka 9-23)
+};
+
+
 struct CSphIndexSettings : public CSphSourceSettings
 {
 	ESphDocinfo		m_eDocinfo;
+	ESphHitFormat	m_eHitFormat;
 	bool			m_bHtmlStrip;
 	CSphString		m_sHtmlIndexAttrs;
 	CSphString		m_sHtmlRemoveElements;

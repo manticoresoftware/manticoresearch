@@ -834,6 +834,7 @@ void ExtTerm_c::Reset ( const ISphQwordSetup & tSetup )
 	m_pHitDoc = NULL;
 	m_uHitsOverFor = 0;
 	m_iMaxTimer = tSetup.m_iMaxTimer;
+	m_pQword->Reset ();
 	tSetup.QwordSetup ( m_pQword );
 }
 
@@ -3768,9 +3769,10 @@ bool NodeCacheContainer_t::WarmupCache ( ExtNode_i * pChild, int iRefCount, cons
 	if ( pChunk && pChunk->m_pDocinfo )
 		iStride = pChild->m_iStride;
 
-	bool iHasDocs = false;
 	while ( pChunk )
 	{
+		const ExtDoc_t * pChunkHits = pChunk;
+		bool iHasDocs = false;
 		for ( ; pChunk->m_uDocid!=DOCID_MAX; pChunk++ )
 		{
 			m_Docs.Add ( *pChunk );
@@ -3785,36 +3787,26 @@ bool NodeCacheContainer_t::WarmupCache ( ExtNode_i * pChild, int iRefCount, cons
 			iHasDocs = true;
 		}
 
+		
+		const ExtHit_t * pHits = NULL;
+		if ( iHasDocs )
+			while (	( pHits=pChild->GetHitsChunk ( pChunkHits, pChild->m_uMaxID ) )!=NULL )
+			{
+				for ( ; pHits->m_uDocid != DOCID_MAX; pHits++)
+				{
+					m_Hits.Add (*pHits);
+					m_iMaxCachedHits--;
+				}
+			}
+
 		// too many values, stop caching
-		if ( m_iMaxCachedDocs<0 )
+		if ( m_iMaxCachedDocs<0 || m_iMaxCachedDocs<0 )
 		{
 			Invalidate ();
 			pChild->Reset(tSetup);
 			return false;
 		}
-
 		pChunk = pChild->GetDocsChunk ( &pMaxID );
-	}
-
-	m_Docs.Add().m_uDocid = DOCID_MAX;
-	const ExtDoc_t * pChunkHits = &m_Docs[0];
-	const ExtHit_t * pHits = NULL;
-	if ( iHasDocs )
-		while (	( pHits=pChild->GetHitsChunk ( pChunkHits, pChild->m_uMaxID ) )!=NULL )
-	{
-		for ( ; pHits->m_uDocid != DOCID_MAX; pHits++)
-		{
-			m_Hits.Add (*pHits);
-			m_iMaxCachedHits--;
-		}
-
-		// too many values, stop caching
-		if ( m_iMaxCachedHits<0 )
-		{
-			Invalidate ();
-			pChild->Reset(tSetup);
-			return false;
-		}
 	}
 
 	if ( iStride )
@@ -3968,7 +3960,9 @@ const ExtHit_t * ExtNodeCached_t::GetHitsChunk( const ExtDoc_t * pMatched, SphDo
 	while ( iHit<ExtNode_i::MAX_HITS-1 )
 	{
 		// get next hit
-		ExtHit_t & tCachedHit = m_pNode->m_Hits[m_iHitIndex++];
+		ExtHit_t & tCachedHit = m_pNode->m_Hits[m_iHitIndex];
+		if ( tCachedHit.m_uDocid==DOCID_MAX )
+			break;
 		if (tCachedHit.m_uDocid != pDoc->m_uDocid)
 		{
 			// no more hits; get next acceptable document
@@ -3991,7 +3985,7 @@ const ExtHit_t * ExtNodeCached_t::GetHitsChunk( const ExtDoc_t * pMatched, SphDo
 			StepForwardToHitsFor (pDoc->m_uDocid);
 			continue;
 		}
-
+		m_iHitIndex++;
 		m_dHits[iHit++] = tCachedHit;
 	}
 

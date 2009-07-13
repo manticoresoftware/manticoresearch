@@ -1110,13 +1110,10 @@ public:
 		m_uHitState = 0;
 		m_rdDoclist.Reset ();
 		m_rdHitlist.Reset ();
-		m_iDocs = 0;
-		m_iHits = 0;
+		ISphQword::Reset();
 		m_iHitPos = 0;
-		m_iHitlistPos = 0;
 		m_iInlineAttrs = 0;
-		m_uFields = 0;
-		m_uMatchHits = 0;
+
 	}
 
 	void GetHitlistEntry ()

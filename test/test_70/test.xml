@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Test>
+  <Name>subtree caching (part 1)</Name>
+
+<Config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+<dynamic>
+<variant>	subtree_docs_cache 	= 0</variant>
+<variant>	subtree_docs_cache 	= 3</variant>
+<variant>	subtree_docs_cache 	= 100</variant>
+</dynamic>
+<dynamic>
+<variant>	subtree_hits_cache 	= 0</variant>
+<variant>	subtree_hits_cache 	= 3</variant>
+<variant>	subtree_hits_cache 	= 100</variant>
+</dynamic>
+<Searchd_Settings/>
+}
+
+source srctest
+{
+	type			= mysql
+<Sql_Settings/>
+
+	sql_query = SELECT * FROM test_table
+}
+
+index test_idx
+{
+	source			= srctest
+	path			= <Data_Path/>/test
+    charset_type	= utf-8
+}
+</Config>
+<DB_Create>
+CREATE TABLE `test_table` (
+  `id` int(11) NOT NULL default '0',
+  `body` varchar(255) NOT NULL default ''
+)
+</DB_Create>
+<DB_Drop>
+DROP TABLE IF EXISTS `test_table`
+</DB_Drop>
+<DB_Insert>
+INSERT INTO `test_table` VALUES
+( 1, 'one two three one' ),
+( 2, 'one two three one two' ),
+( 3, 'one two three one two three' ),
+( 4, 'one two three four six' ),
+( 5, 'one two three four five seven' )
+</DB_Insert>
+
+<Custom_test><![CDATA[
+$client->AddQuery ('(one and two) and three');
+$client->AddQuery ('one and (two and three)');
+$results = $client->RunQueries ();
+for ( $i=0; $i<=1; $i++ )
+	if ( is_array($results) && is_array($results[$i]) )
+		unset ( $results[$i]["time"] );
+]]></Custom_test>
+
+</Test>

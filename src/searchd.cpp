@@ -170,6 +170,12 @@ static int				g_iMaxFilters		= 256;
 static int				g_iMaxFilterValues	= 4096;
 static int				g_iMaxBatchQueries	= 32;
 
+static bool				g_bPrefork			= false;
+static int				g_iPreforkChildren	= 10;		// how much workers to keep
+static CSphVector<int>	g_dPreforked;
+static volatile bool	g_bAcceptUnlocked	= true;		// whether this preforked child is guaranteed to be *not* holding a lock around accept
+static int				g_iClientFD			= -1;
+
 //////////////////////////////////////////////////////////////////////////
 
 static CSphString		g_sConfigFile;
@@ -948,10 +954,10 @@ void sighup ( int )
 void sigterm ( int )
 {
 	// in child, bail out immediately
-	if ( !g_bHeadDaemon )
+	if ( !g_bHeadDaemon && g_bAcceptUnlocked )
 		exit ( 0 );
 
-	// in head, perform a clean shutdown
+	// in head or (possibly) locked preforked child, perform clean shutdown
 	g_bGotSigterm = true;
 }
 
@@ -7195,10 +7201,10 @@ void CheckRotate ()
 	// RAM-greedy rotate
 	/////////////////////
 
-	if ( !g_bSeamlessRotate )
+	if ( !g_bSeamlessRotate || g_bPrefork )
 	{
 		// wait until there's no running queries
-		if ( g_iChildren )
+		if ( g_iChildren && !g_bPrefork )
 			return;
 
 		CSphConfigParser * pCP = NULL;
@@ -7240,6 +7246,12 @@ void CheckRotate ()
 		}
 
 		SafeDelete ( pCP );
+
+#if !USE_WINDOWS
+		if ( g_bPrefork )
+			ARRAY_FOREACH ( i, g_dPreforked )
+				kill ( g_dPreforked[i], SIGTERM );
+#endif
 
 		g_bDoRotate = false;
 		sphInfo ( "rotating finished" );
@@ -7622,6 +7634,30 @@ BOOL WINAPI CtrlHandler ( DWORD )
 #endif
 
 
+#if !USE_WINDOWS
+int PreforkChild ()
+{
+	// next one
+	int iRes = fork();
+	if ( iRes==-1 )
+		sphFatal ( "fork() failed during prefork (error=%s)", strerror(errno) );
+
+	// child process
+	if ( iRes==0 )
+	{
+		g_bHeadDaemon = false;
+		sphSetProcessInfo ( false );
+		return iRes;
+	}
+
+	// parent process
+	g_iChildren++;
+	g_dPreforked.Add ( iRes );
+	return iRes;
+}
+#endif // !USE_WINDOWS
+
+
 /// check for incoming signals, and react on them
 void CheckSignals ()
 {
@@ -7645,6 +7681,12 @@ void CheckSignals ()
 		assert ( g_bHeadDaemon );
 		sphInfo ( "caught SIGTERM, shutting down" );
 
+#if !USE_WINDOWS
+		// in preforked mode, explicitly kill all children
+		ARRAY_FOREACH ( i, g_dPreforked )
+			kill ( g_dPreforked[i], SIGTERM );
+#endif
+
 		Shutdown ();
 		exit ( 0 );
 	}
@@ -7652,10 +7694,23 @@ void CheckSignals ()
 #if !USE_WINDOWS
 	if ( g_bGotSigchld )
 	{
-		while ( waitpid ( -1, NULL, WNOHANG ) > 0 )
-			g_iChildren--;
+		// handle gone children
+		for ( ;; )
+		{
+			int iChildPid = waitpid ( -1, NULL, WNOHANG );
+			if ( iChildPid<=0 )
+				break;
 
+			g_iChildren--;
+			g_dPreforked.RemoveValue ( iChildPid ); // FIXME! OPTIMIZE! can be slow
+		}
 		g_bGotSigchld = false;
+
+		// prefork more children, if needed
+		if ( g_bPrefork )
+			while ( g_dPreforked.GetLength() < g_iPreforkChildren )
+				if ( PreforkChild()==0 ) // child process? break from here, go work
+					return;
 	}
 #endif
 
@@ -7807,6 +7862,190 @@ void ShowProgress ( const CSphIndexProgress * pProgress, bool bPhaseEnd )
 		fprintf ( stdout, "%s\r", pProgress->BuildMessage() );
 	}
  	fflush ( stdout );
+}
+
+
+Listener_t * DoAccept ( int * pClientSock, char * sClientName )
+{
+	int iMaxFD = 0;
+	fd_set fdsAccept;
+	FD_ZERO ( &fdsAccept );
+
+	ARRAY_FOREACH ( i, g_dListeners )
+	{
+		sphFDSet ( g_dListeners[i].m_iSock, &fdsAccept );
+		iMaxFD = Max ( iMaxFD, g_dListeners[i].m_iSock );
+	}
+	iMaxFD++;
+
+	struct timeval tvTimeout;
+	tvTimeout.tv_sec = USE_WINDOWS ? 0 : 1;
+	tvTimeout.tv_usec = USE_WINDOWS ? 50000 : 0;
+
+	int iRes = select ( iMaxFD, &fdsAccept, NULL, NULL, &tvTimeout );
+	if ( iRes==0 )
+		return NULL;
+
+	if ( iRes<0 )
+	{
+		int iErrno = sphSockGetErrno();
+		if ( iErrno==EINTR || iErrno==EAGAIN || iErrno==EWOULDBLOCK )
+			return NULL;
+
+		static int iLastErrno = -1;
+		if ( iLastErrno != iErrno )
+			sphWarning ( "select() failed: %s", sphSockError(iErrno) );
+		iLastErrno = iErrno;
+		return NULL;
+	}
+
+	ARRAY_FOREACH ( i, g_dListeners )
+	{
+		if ( !FD_ISSET ( g_dListeners[i].m_iSock, &fdsAccept ) )
+			continue;
+
+		// accept
+		struct sockaddr_storage saStorage;
+		socklen_t uLength = sizeof(saStorage);
+		int iClientSock = accept ( g_dListeners[i].m_iSock, (struct sockaddr *)&saStorage, &uLength );
+
+		// handle failures
+		if ( iClientSock<0 )
+		{
+			const int iErrno = sphSockGetErrno();
+			if ( iErrno==EINTR || iErrno==ECONNABORTED || iErrno==EAGAIN || iErrno==EWOULDBLOCK )
+				return NULL;
+
+			sphFatal ( "accept() failed: %s", sphSockError(iErrno) );
+		}
+
+		if ( g_pStats )
+		{
+			g_tStatsMutex.Lock();
+			g_pStats->m_iConnections++;
+			g_tStatsMutex.Unlock();
+		}
+
+		// format client address
+		if ( sClientName )
+		{
+			sClientName[0] = '\0';
+			if ( saStorage.ss_family==AF_INET )
+				sphFormatIP ( sClientName, SPH_ADDRESS_SIZE, ((struct sockaddr_in *)&saStorage)->sin_addr.s_addr );
+			if ( saStorage.ss_family==AF_UNIX )
+				strncpy ( sClientName, "(local)", SPH_ADDRESS_SIZE );
+		}
+
+		// accepted!
+#if !USE_WINDOWS
+		if ( SPH_FDSET_OVERFLOW(iClientSock) )
+			iClientSock = dup2 ( iClientSock, g_iClientFD );
+#endif
+
+		*pClientSock = iClientSock;
+		return &g_dListeners[i];
+	}
+
+	return NULL;
+}
+
+
+void TickPreforked ( CSphProcessSharedMutex * pAcceptMutex )
+{
+	assert ( !g_bHeadDaemon );
+	assert ( pAcceptMutex );
+
+	g_bAcceptUnlocked = false;
+	pAcceptMutex->Lock ();
+
+	int iClientSock;
+	char sClientIP[SPH_ADDRESS_SIZE];
+	Listener_t * pListener = NULL;
+	if ( !g_bGotSigterm )
+		pListener = DoAccept ( &iClientSock, sClientIP );
+
+	pAcceptMutex->Unlock ();
+	g_bAcceptUnlocked = true;
+
+	if ( g_bGotSigterm )
+		exit ( 0 ); // clean shutdown (after mutex unlock)
+
+	if ( pListener )
+	{
+		HandleClient ( pListener->m_eProto, iClientSock, sClientIP, -1 );
+		sphSockClose ( iClientSock );
+	}
+}
+
+
+void TickHead ( CSphProcessSharedMutex * pAcceptMutex )
+{
+	CheckSignals ();
+	CheckLeaks ();
+	CheckPipes ();
+	CheckDelete ();
+	CheckRotate ();
+	CheckReopen ();
+	CheckFlush ();
+	sphLog ( LOG_INFO, NULL, NULL ); // flush dupes
+
+	if ( pAcceptMutex )
+	{
+		// FIXME! what if all children are busy; we might want to accept here and temp fork more
+		sphSleepMsec ( 1000 );
+		return;
+	}
+
+	int iClientSock;
+	char sClientName[SPH_ADDRESS_SIZE];
+	Listener_t * pListener = DoAccept ( &iClientSock, sClientName );
+	if ( !pListener )
+		return;
+
+	if ( ( g_iMaxChildren && g_iChildren>=g_iMaxChildren )
+		|| ( g_bDoRotate && !g_bSeamlessRotate ) )
+	{
+		const char * sMessage = "server maxed out, retry in a second";
+		int iRespLen = 4 + strlen(sMessage);
+
+		NetOutputBuffer_c tOut ( iClientSock );
+		tOut.SendInt ( SPHINX_SEARCHD_PROTO );
+		tOut.SendWord ( SEARCHD_RETRY );
+		tOut.SendWord ( 0 ); // version doesn't matter
+		tOut.SendInt ( iRespLen );
+		tOut.SendString ( sMessage );
+		tOut.Flush ();
+
+		sphWarning ( "maxed out, dismissing client" );
+		sphSockClose ( iClientSock );
+
+		if ( g_pStats )
+			g_pStats->m_iMaxedOut++;
+		return;
+	}
+
+	// handle the client
+	if ( g_bOptConsole || g_bService )
+	{
+		HandleClient ( pListener->m_eProto, iClientSock, sClientName, -1 );
+		sphSockClose ( iClientSock );
+		return;
+	}
+
+#if !USE_WINDOWS
+	int iChildPipe = PipeAndFork ( false, -1 );
+	if ( !g_bHeadDaemon )
+	{
+		// child process, handle client
+		HandleClient ( pListener->m_eProto, iClientSock, sClientName, iChildPipe );
+		sphSockClose ( iClientSock );
+		exit ( 0 );
+	} else
+	{
+		// parent process, continue accept()ing
+		sphSockClose ( iClientSock );
+	}
+#endif // !USE_WINDOWS
 }
 
 
@@ -8139,6 +8378,21 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	g_iMaxFilterValues = hSearchd.GetInt ( "max_filter_values", g_iMaxFilterValues );
 	g_iMaxBatchQueries = hSearchd.GetInt ( "max_batch_queries", g_iMaxBatchQueries );
 
+	if ( hSearchd("workers") )
+	{
+		if ( hSearchd["workers"]=="fork" )
+		{
+			g_bPrefork = false;
+		} else if ( hSearchd["workers"]=="prefork" )
+		{
+			g_bPrefork = true;
+			g_iPreforkChildren = hSearchd.GetInt ( "prefork", g_iPreforkChildren );
+		} else
+		{
+			sphFatal ( "unknown workers=%s value (must be fork or prefork)", hSearchd["workers"].cstr() );
+		}
+	}
+
 	if ( g_iMaxPacketSize<128*1024 || g_iMaxPacketSize>128*1024*1024 )
 		sphFatal ( "max_packet_size out of bounds (128K..128M)" );
 
@@ -8241,7 +8495,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 #if !USE_WINDOWS
 	// reserve an fd for clients
 	int iDevNull = open ( "/dev/null", O_RDWR );
-	int iClientFD = dup(iDevNull);
+	g_iClientFD = dup(iDevNull);
 #endif
 
 	//////////////////////
@@ -8487,136 +8741,26 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	sphSetInternalErrorCallback ( LogInternalError );
 	sphSetReadBuffers ( hSearchd.GetSize ( "read_buffer", 0 ), hSearchd.GetSize ( "read_unhinted", 0 ) );
 
-	fd_set fdsAccept;
-	FD_ZERO ( &fdsAccept );
+	CSphProcessSharedMutex * pAcceptMutex = NULL;
+#if !USE_WINDOWS
+	if ( g_bPrefork )
+	{
+		pAcceptMutex = new CSphProcessSharedMutex();
+		if ( !pAcceptMutex )
+			sphFatal ( "failed to create process-shared mutex" );
 
-	int iNfds = 0;
-	ARRAY_FOREACH ( i, g_dListeners )
-		iNfds = Max ( iNfds, g_dListeners[i].m_iSock );
-	iNfds++;
+		while ( g_dPreforked.GetLength() < g_iPreforkChildren )
+			if ( PreforkChild()==0 ) // child process? break from here, go work
+				break;
+	}
+#endif
 
 	for ( ;; )
 	{
-		CheckSignals ();
-		CheckLeaks ();
-		CheckPipes ();
-		CheckDelete ();
-		CheckRotate ();
-		CheckReopen ();
-		CheckFlush ();
-		sphLog ( LOG_INFO, NULL, NULL ); // flush dupes
-
-		ARRAY_FOREACH ( i, g_dListeners )
-			sphFDSet ( g_dListeners[i].m_iSock, &fdsAccept );
-
-		struct timeval tvTimeout;
-		tvTimeout.tv_sec = USE_WINDOWS ? 0 : 1;
-		tvTimeout.tv_usec = USE_WINDOWS ? 50000 : 0;
-
-		int iRes = select ( iNfds, &fdsAccept, NULL, NULL, &tvTimeout );
-		if ( iRes == 0 )
-			continue;
-		if ( iRes == -1 )
-		{
-			int iErrno = sphSockGetErrno();
-			if ( iErrno == EINTR || iErrno == EAGAIN || iErrno == EWOULDBLOCK )
-				continue;
-
-			static int iLastErrno = -1;
-			if ( iLastErrno != iErrno )
-				sphWarning ( "select() failed: %s", sphSockError(iErrno) );
-			iLastErrno = iErrno;
-			continue;
-		}
-
-		ARRAY_FOREACH ( i, g_dListeners )
-		{
-			if ( !FD_ISSET ( g_dListeners[i].m_iSock, &fdsAccept ) )
-				continue;
-
-			struct sockaddr_storage saStorage;
-			socklen_t uLength = sizeof(saStorage);
-			int iClientSock = accept ( g_dListeners[i].m_iSock, (struct sockaddr *)&saStorage, &uLength );
-
-			if ( iClientSock == -1 )
-			{
-				const int iErrno = sphSockGetErrno();
-				if ( iErrno==EINTR || iErrno==ECONNABORTED || iErrno==EAGAIN || iErrno==EWOULDBLOCK )
-					continue;
-
-				sphFatal ( "accept() failed: %s", sphSockError(iErrno) );
-			}
-			if ( g_pStats )
-				g_pStats->m_iConnections++;
-
-			if ( ( g_iMaxChildren && g_iChildren>=g_iMaxChildren )
-				 || ( g_bDoRotate && !g_bSeamlessRotate ) )
-			{
-				const char * sMessage = "server maxed out, retry in a second";
-				int iRespLen = 4 + strlen(sMessage);
-
-				NetOutputBuffer_c tOut ( iClientSock );
-				tOut.SendInt ( SPHINX_SEARCHD_PROTO );
-				tOut.SendWord ( SEARCHD_RETRY );
-				tOut.SendWord ( 0 ); // version doesn't matter
-				tOut.SendInt ( iRespLen );
-				tOut.SendString ( sMessage );
-				tOut.Flush ();
-
-				sphWarning ( "maxed out, dismissing client" );
-				sphSockClose ( iClientSock );
-
-				if ( g_pStats )
-					g_pStats->m_iMaxedOut++;
-				break;
-			}
-
-			char sClientName[SPH_ADDRESS_SIZE];
-			switch ( saStorage.ss_family )
-			{
-			case AF_INET:
-				sphFormatIP ( sClientName, sizeof(sClientName), ((struct sockaddr_in *)&saStorage)->sin_addr.s_addr );
-				break;
-
-			case AF_UNIX:
-				strncpy ( sClientName, "(local)", sizeof(sClientName) );
-				break;
-
-			default:
-				sClientName[0] = '\0';
-				break;
-			}
-
-			// handle the client
-			if ( g_bOptConsole || g_bService )
-			{
-				#if !USE_WINDOWS
-				if ( SPH_FDSET_OVERFLOW(iClientSock) )
-					iClientSock = dup2 ( iClientSock, iClientFD );
-				#endif
-
-				HandleClient ( g_dListeners[i].m_eProto, iClientSock, sClientName, -1 );
-				sphSockClose ( iClientSock );
-				continue;
-			}
-
-			#if !USE_WINDOWS
-			int iChildPipe = PipeAndFork ( false, -1 );
-			if ( !g_bHeadDaemon )
-			{
-				// child process, handle client
-				if ( SPH_FDSET_OVERFLOW(iClientSock) )
-					iClientSock = dup2 ( iClientSock, iClientFD );
-				HandleClient ( g_dListeners[i].m_eProto, iClientSock, sClientName, iChildPipe );
-				sphSockClose ( iClientSock );
-				exit ( 0 );
-			} else
-			{
-				// parent process, continue accept()ing
-				sphSockClose ( iClientSock );
-			}
-			#endif // !USE_WINDOWS
-		}
+		if ( !g_bHeadDaemon && pAcceptMutex )
+			TickPreforked ( pAcceptMutex );
+		else
+			TickHead ( pAcceptMutex );
 	}
 }
 

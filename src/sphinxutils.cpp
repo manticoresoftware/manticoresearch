@@ -258,6 +258,8 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "max_batch_queries",		0, NULL },
 	{ "subtree_docs_cache",		0, NULL },
 	{ "subtree_hits_cache",		0, NULL },
+	{ "workers",				0, NULL },
+	{ "prefork",				0, NULL },
 	{ NULL,						0, NULL }
 };
 

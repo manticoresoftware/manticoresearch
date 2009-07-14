@@ -55,6 +55,16 @@ struct Expr_GetBits_c : public ISphExpr
 };
 
 
+struct Expr_GetSint_c : public ISphExpr
+{
+	CSphAttrLocator m_tLocator;
+	Expr_GetSint_c ( const CSphAttrLocator & tLocator ) : m_tLocator ( tLocator ) {}
+	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)(int)tMatch.GetAttr ( m_tLocator ); }
+	virtual int IntEval ( const CSphMatch & tMatch ) const { return (int)tMatch.GetAttr ( m_tLocator ); }
+	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return (int)tMatch.GetAttr ( m_tLocator ); }
+};
+
+
 struct Expr_GetFloat_c : public ISphExpr
 {
 	CSphAttrLocator m_tLocator;
@@ -204,6 +214,7 @@ DECLARE_UNARY_FLT ( Expr_Sqrt_c,	float(sqrt(FIRST)) )
 
 DECLARE_UNARY_INT ( Expr_NotInt_c,		float(INTFIRST?0:1),	INTFIRST?0:1,	INTFIRST?0:1 );
 DECLARE_UNARY_INT ( Expr_NotInt64_c,	float(INT64FIRST?0:1),	INT64FIRST?0:1,	INT64FIRST?0:1 );
+DECLARE_UNARY_INT ( Expr_Sint_c,		float(INTFIRST),		INTFIRST,		INTFIRST )
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -297,6 +308,7 @@ enum Func_e
 	FUNC_EXP,
 	FUNC_SQRT,
 	FUNC_BIGINT,
+	FUNC_SINT,
 
 	FUNC_MIN,
 	FUNC_MAX,
@@ -337,6 +349,7 @@ static FuncDesc_t g_dFuncs[] =
 	{ "exp",	1,	FUNC_EXP },
 	{ "sqrt",	1,	FUNC_SQRT },
 	{ "bigint",	1,	FUNC_BIGINT },	// type-enforcer special as-if-function
+	{ "sint",	1,	FUNC_SINT },	// type-enforcer special as-if-function
 
 	{ "min",	2,	FUNC_MIN },
 	{ "max",	2,	FUNC_MAX },
@@ -776,6 +789,17 @@ void ExprParser_t::Optimize ( int iNode )
 		pRoot->m_iConst = m_iConstNow;
 		return;
 	}
+
+	// SINT(int-attr)
+	if ( pRoot->m_iToken==TOK_FUNC && pRoot->m_iFunc==FUNC_SINT )
+	{
+		int iArgTok = m_dNodes[pRoot->m_iLeft].m_iToken;
+		if ( iArgTok==TOK_ATTR_INT || iArgTok==TOK_ATTR_BITS )
+		{
+			pRoot->m_iToken = TOK_ATTR_SINT;
+			pRoot->m_tLocator = m_dNodes[pRoot->m_iLeft].m_tLocator;
+		}
+	}
 }
 
 
@@ -829,6 +853,8 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case TOK_ATTR_INT:		return new Expr_GetInt_c ( tNode.m_tLocator );
 		case TOK_ATTR_BITS:		return new Expr_GetBits_c ( tNode.m_tLocator );
 		case TOK_ATTR_FLOAT:	return new Expr_GetFloat_c ( tNode.m_tLocator );
+		case TOK_ATTR_SINT:		return new Expr_GetSint_c ( tNode.m_tLocator );
+
 		case TOK_CONST_FLOAT:	return new Expr_GetConst_c ( tNode.m_fConst );
 		case TOK_CONST_INT:
 			if ( tNode.m_uRetType==SPH_ATTR_INTEGER )
@@ -890,6 +916,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 					case FUNC_EXP:		return new Expr_Exp_c ( dArgs[0] );
 					case FUNC_SQRT:		return new Expr_Sqrt_c ( dArgs[0] );
 					case FUNC_BIGINT:	return dArgs[0];
+					case FUNC_SINT:		return new Expr_Sint_c ( dArgs[0] );
 
 					case FUNC_MIN:		return new Expr_Min_c ( dArgs[0], dArgs[1] );
 					case FUNC_MAX:		return new Expr_Max_c ( dArgs[0], dArgs[1] );
@@ -1607,6 +1634,15 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 	} else if ( eFunc==FUNC_IF )
 	{
 		tNode.m_uRetType = GetWidestRet ( iLeft, iRight );
+
+	} else if ( eFunc==FUNC_SINT )
+	{
+		if ( tNode.m_uArgType!=SPH_ATTR_INTEGER )
+		{
+			m_sParserError.SetSprintf ( "SINT() argument must be integer" );
+			return -1;
+		}
+		tNode.m_uRetType = SPH_ATTR_BIGINT;
 	}
 
 	return m_dNodes.GetLength()-1;

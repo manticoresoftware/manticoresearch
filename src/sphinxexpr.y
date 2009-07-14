@@ -22,8 +22,8 @@
 
 %token	TOK_ID
 %token	TOK_WEIGHT
-
 %token	TOK_CONST_LIST
+%token	TOK_ATTR_SINT
 
 %type <iNode>			attr
 %type <iNode>			expr

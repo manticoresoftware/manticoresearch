@@ -1064,6 +1064,10 @@ protected:
 };
 
 
+#if USE_WINDOWS
+#pragma warning(disable:4127) // conditional expr is const for MSVC
+#endif
+
 /// query word from the searcher's point of view
 template < bool INLINE_HITS, bool INLINE_DOCINFO >
 class DiskIndexQword_c : public ISphQword
@@ -1221,10 +1225,14 @@ public:
 				m_uHitState = 0;
 				return 0;
 		}
-		assert ( 0 && "INTERNAL ERROR: impossible hit emitter state" );
-		abort ();
+		sphDie ( "INTERNAL ERROR: impossible hit emitter state" );
+		return 0;
 	}
 };
+
+#if USE_WINDOWS
+#pragma warning(default:4127) // conditional expr is const for MSVC
+#endif
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -11058,8 +11066,7 @@ bool CSphIndex_VLN::MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISph
 		case 2: { typedef DiskIndexQword_c < true,  false > Qword; ACTION; break; }	\
 		case 3: { typedef DiskIndexQword_c < true,  true  > Qword; ACTION; break; }	\
 		default:																	\
-			assert ( 0 && "INTERNAL ERROR: impossible qword settings" );			\
-			abort();																\
+			sphDie ( "INTERNAL ERROR: impossible qword settings" );					\
 	}																				\
 }
 
@@ -11067,13 +11074,15 @@ bool CSphIndex_VLN::MatchFullScan ( const CSphQuery * pQuery, int iSorters, ISph
 
 ISphQword * DiskIndexQwordSetup_c::QwordSpawn ( const XQKeyword_t & ) const
 {
-	WITH_QWORD ( m_pIndex, return new Qword(); );
+	WITH_QWORD ( m_pIndex, return new Qword() );
+	return NULL;
 }
 
 
 bool DiskIndexQwordSetup_c::QwordSetup ( ISphQword * pWord ) const
 {
 	WITH_QWORD ( m_pIndex, return Setup<Qword> ( pWord ) );
+	return false;
 }
 
 
@@ -12527,6 +12536,7 @@ void CSphIndex_VLN::SaveSettings ( CSphWriter & tWriter )
 bool CSphIndex_VLN::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats )
 {
 	WITH_QWORD ( this, return DoGetKeywords<Qword> ( dKeywords, szQuery, bGetStats ) );
+	return false;
 }
 
 

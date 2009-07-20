@@ -1003,80 +1003,50 @@ class SphinxConfig
 		if ( isset($result["matches"]) && is_array($result["matches"]) )
 		{
 			$n = 1;
-			$str .= "Matches:\n";
+			$str .= "Matches:";
 			foreach ( $result ["matches"] as $doc => $docinfo )
 			{
-				if ( $array_result )
-					$doc_id = $docinfo ["id"];
-				else
-					$doc_id = $doc;
+				$doc_id = $array_result ? $docinfo["id"] : $doc;
+				$weight = $docinfo["weight"];
 
-				$weight = $docinfo ["weight"];
-
-				$str .= "$n. doc_id=$doc_id, weight=$weight";
-
-				if ( empty ( $this->_query_attributes ) )
-				{
-					$query_res = mysql_query ( "select * from test_table where document_id = $doc_id" );
-
-					if ( $query_res === FALSE )
-						$str .= "\n";
-					else
-					{
-						while ( $row = mysql_fetch_array ( $query_res, MYSQL_ASSOC ) )
-						{
-							foreach ( $row as $col_name => $col_content )
-							{
-								if ( array_search ( $col_name, $result ["fields"] ) !== FALSE )
-								   	$str .= " $col_name=\"$col_content\"";
-							}
-				    	}
-
-						foreach ( $docinfo ["attrs"] as $attr => $value )
-						{
-							if ( is_array ( $value ) )
-							{
-								$str .= " $attr=\"";
-								foreach ( $value as $v )
-									$str .= $v." ";
-
-								$str .= "\"";
-							}
-							else
-						   		$str .= " $attr=\"$value\"";
-						}
-
-						$str .= "\n";
-					}
-				}
-				else
-				{
-					foreach ( $this->_query_attributes as $attribute )
-						if ( isset($docinfo ["attrs"][$attribute]) )
-						{
-							$attrtmp = $docinfo ["attrs"][$attribute];
-							if ( is_array ( $attrtmp ) )
-							{
-								$str .= " $attribute=";
-								foreach ( $attrtmp as $valuetmp )
-									$str .= " $valuetmp";
-							}
-							else
-								$str .= " $attribute=$attrtmp";
-						}
-
-					$str .= "\n";
-				}
-
+				$str .= "\n$n. doc_id=$doc_id, weight=$weight";
 				$n++;
+
+				// only format specified attrs if requested
+				if ( !empty ( $this->_query_attributes ) )
+				{
+					foreach ( $this->_query_attributes as $attr )
+						if ( isset($docinfo ["attrs"][$attr]) )
+					{
+						$val = $docinfo["attrs"][$attr];
+						if ( is_array ( $val ) )
+							$val = join ( " ", $val );
+						$str .= " $attr=$val";
+					}
+					continue;
+				}
+
+				// fetch and format fields from db by default
+				$query_res = mysql_query ( "select * from test_table where document_id = $doc_id" );
+				if ( !$query_res )
+					continue;
+
+				$row = mysql_fetch_assoc ( $query_res );
+				if ( $row )
+					foreach ( $row as $col_name => $col_content )
+						if ( array_search ( $col_name, $result["fields"] )!==false )
+						   	$str .= " $col_name=\"$col_content\"";
+
+				foreach ( $docinfo["attrs"] as $attr=>$val )
+				{
+					if ( is_array($val) )
+						$val = join ( " ", $val );
+			   		$str .= " $attr=\"$val\"";
+				}
 			}
-
-			$str .= "\n";
+			$str .= "\n\n";
 		}
-
-		$str .= "\n";
-	
-		return $str;
+		return $str . "\n";
 	}
 
 	/// format and write a single result set into log file
@@ -1513,5 +1483,3 @@ function RunTest ( $test_dir )
 //
 // $Id$
 //
-
-?>

@@ -965,7 +965,7 @@ bool ExcerptGen_c::ExtractPhrases ( const ExcerptQuery_t & )
 
 struct PassageOrder_fn
 {
-	inline bool operator () ( const ExcerptGen_c::Passage_t & a, const ExcerptGen_c::Passage_t & b ) const
+	inline bool IsLess ( const ExcerptGen_c::Passage_t & a, const ExcerptGen_c::Passage_t & b ) const
 	{
 		return a.m_iStart < b.m_iStart;
 	}

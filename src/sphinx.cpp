@@ -7000,7 +7000,7 @@ bool CSphIndex_VLN::SaveAttributes ()
 
 struct CmpHit_fn
 {
-	inline int operator () ( const CSphWordHit & a, const CSphWordHit & b )
+	inline bool IsLess ( const CSphWordHit & a, const CSphWordHit & b ) const
 	{
 		return SPH_CMPHIT_LESS ( a, b );
 	}
@@ -7008,48 +7008,48 @@ struct CmpHit_fn
 
 
 /// sort baked docinfos by document ID
+struct DocinfoSort_fn
+{
+	typedef SphDocID_t MEDIAN_TYPE;
+
+	int m_iStride;
+
+	explicit DocinfoSort_fn ( int iStride )
+		: m_iStride ( iStride )
+	{}
+
+	DWORD * Get ( DWORD * pBase, int iIndex ) const
+	{
+		return pBase + iIndex*m_iStride;
+	}
+
+	void GetMedian ( SphDocID_t & tMedian, const DWORD * pData ) const
+	{
+		tMedian = DOCINFO2ID(pData);
+	}
+
+	bool IsLess ( const DWORD * a, SphDocID_t b ) const
+	{
+		return DOCINFO2ID(a) < b;
+	}
+
+	bool IsLess ( SphDocID_t a, const DWORD * b ) const
+	{
+		return a < DOCINFO2ID(b);
+	}
+
+	void Swap ( DWORD * a, DWORD * b ) const
+	{
+		for ( int i=0; i<m_iStride; i++ )
+			::Swap ( a[i], b[i] );
+	}
+};
+
+
 void sphSortDocinfos ( DWORD * pBuf, int iCount, int iStride )
 {
-	int st0[32], st1[32];
-	int a, b, k, i, j;
-
-	k = 1;
-	st0[0] = 0;
-	st1[0] = iCount-1;
-	DWORD * pTmp = new DWORD [ iStride ];
-	while ( k!=0 )
-	{
-		k--;
-		i = a = st0[k];
-		j = b = st1[k];
-		SphDocID_t iMedian = DOCINFO2ID ( pBuf + ((a+b)/2)*iStride );
-		while ( a<b )
-		{
-			while ( i<=j )
-			{
-				while ( DOCINFO2ID ( pBuf + i*iStride ) < iMedian ) i++;
-				while ( iMedian < DOCINFO2ID ( pBuf + j*iStride ) ) j--;
-				if ( i<=j )
-				{
-					memcpy ( pTmp, pBuf+i*iStride, iStride*sizeof(DWORD) );
-					memcpy ( pBuf+i*iStride, pBuf+j*iStride, iStride*sizeof(DWORD) );
-					memcpy ( pBuf+j*iStride, pTmp, iStride*sizeof(DWORD) );
-					i++;
-					j--;
-				}
-			}
-			if ( j-a>=b-i )
-			{
-				if ( a<j ) { st0[k] = a; st1[k] = j; k++; }
-				a = i;
-			} else
-			{
-				if ( i<b ) { st0[k] = i; st1[k] = b; k++; }
-				b = j;
-			}
-		}
-	}
-	SafeDeleteArray ( pTmp );
+	DocinfoSort_fn fnSort ( iStride );
+	sphSort ( pBuf, iCount, fnSort, fnSort );
 }
 
 
@@ -8100,7 +8100,7 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAut
 
 struct CmpOrdinalsValue_fn
 {
-	inline int operator () ( const Ordinal_t & a, const Ordinal_t & b )
+	inline bool IsLess ( const Ordinal_t & a, const Ordinal_t & b ) const
 	{
 		return strcmp ( a.m_sValue.cstr(), b.m_sValue.cstr() )<0;
 	}
@@ -8116,7 +8116,7 @@ struct CmpOrdinalsEntry_fn
 
 struct CmpOrdinalsDocid_fn
 {
-	inline int operator () ( const OrdinalId_t & a, const OrdinalId_t & b )
+	inline bool IsLess ( const OrdinalId_t & a, const OrdinalId_t & b ) const
 	{
 		return a.m_uDocID < b.m_uDocID;
 	}
@@ -8125,7 +8125,7 @@ struct CmpOrdinalsDocid_fn
 
 struct CmpMvaEntries_fn
 {
-	inline int operator () ( const MvaEntry_t & a, const MvaEntry_t & b )
+	inline bool IsLess ( const MvaEntry_t & a, const MvaEntry_t & b ) const
 	{
 		return a<b;
 	}

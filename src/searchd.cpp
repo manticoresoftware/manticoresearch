@@ -3688,47 +3688,44 @@ struct AggrResult_t : CSphQueryResult
 };
 
 
-static void SortMatches ( CSphMatch * pData, int iCount )
+template < typename T, typename U >
+struct CSphPair
 {
-	int st0[32], st1[32], a, b, k, i, j;
+	T m_tFirst;
+	U m_tSecond;
+};
 
-	k = 1;
-	st0[0] = 0;
-	st1[0] = iCount-1;
-	while ( k )
+
+struct TaggedMatchSorter_fn
+{
+	typedef CSphPair < SphDocID_t, int > MEDIAN_TYPE;
+
+	CSphMatch & Get ( CSphMatch * pBase, int iIndex ) const
 	{
-		k--;
-		i = a = st0[k];
-		j = b = st1[k];
-
-		const CSphMatch & tPivot = pData [ (a+b)/2 ]; // FIXME! add better median at least
-		SphDocID_t uPivotID = tPivot.m_iDocID;
-		int iPivotTag = tPivot.m_iTag;
-
-		while ( a<b )
-		{
-			while ( i<=j )
-			{
-				while ( pData[i].m_iDocID < uPivotID || ( pData[i].m_iDocID==uPivotID && pData[i].m_iTag > iPivotTag ) )
-					i++;
-				while ( uPivotID < pData[j].m_iDocID || ( uPivotID==pData[j].m_iDocID && iPivotTag > pData[j].m_iTag ) )
-					j--;
-				if ( i<=j )
-					Swap ( pData[i++], pData[j--] );
-			}
-
-			if ( j-a>=b-i )
-			{
-				if ( a<j ) { st0[k] = a; st1[k] = j; k++; }
-				a = i;
-			} else
-			{
-				if ( i<b ) { st0[k] = i; st1[k] = b; k++; }
-				b = j;
-			}
-		}
+		return pBase[iIndex];
 	}
-}
+
+	void GetMedian ( MEDIAN_TYPE & tMedian, const CSphMatch & tValue ) const
+	{
+		tMedian.m_tFirst = tValue.m_iDocID;
+		tMedian.m_tSecond = tValue.m_iTag;
+	}
+
+	void Swap ( CSphMatch & a, CSphMatch & b ) const
+	{
+		::Swap ( a, b );
+	}
+
+	bool IsLess ( const CSphMatch & a, MEDIAN_TYPE & b ) const
+	{
+		return ( a.m_iDocID < b.m_tFirst ) || ( a.m_iDocID==b.m_tFirst && a.m_iTag > b.m_tSecond );
+	}
+
+	bool IsLess ( MEDIAN_TYPE & a, const CSphMatch & b ) const
+	{
+		return ( a.m_tFirst < b.m_iDocID ) || ( a.m_tFirst==b.m_iDocID && a.m_tSecond > b.m_iTag );
+	}
+};
 
 
 bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery )
@@ -3875,7 +3872,8 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery )
 	{
 		// normal sorter needs massasging
 		// sort by docid and then by tag to guarantee the replacement order
-		SortMatches ( &tRes.m_dMatches[0], tRes.m_dMatches.GetLength() );
+		TaggedMatchSorter_fn fnSort;
+		sphSort ( &tRes.m_dMatches[0], tRes.m_dMatches.GetLength(), fnSort, fnSort );
 
 		// fold them matches
 		if ( tQuery.m_dIndexWeights.GetLength() )
@@ -5186,14 +5184,6 @@ void UpdateRequestBuilder_t::BuildRequest ( const char * sIndexes, NetOutputBuff
 			tOut.SendDword ( m_tUpd.m_dPool[j] );
 	}
 }
-
-
-template < typename T, typename U >
-struct CSphPair
-{
-	T m_tFirst;
-	U m_tSecond;
-};
 
 
 void HandleCommandUpdate ( int iSock, int iVer, InputBuffer_c & tReq, int iPipeFD )

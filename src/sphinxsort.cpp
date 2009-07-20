@@ -732,6 +732,41 @@ public:
 };
 
 
+/// group sorting functor
+template < typename COMPGROUP >
+struct GroupSorter_fn : public CSphMatchComparatorState
+{
+	typedef CSphMatch MEDIAN_TYPE;
+
+	int m_iDynamic;
+
+	GroupSorter_fn ()
+	{
+		m_iDynamic = 0;
+	}
+
+	CSphMatch & Get ( CSphMatch * pBase, int iIndex ) const
+	{
+		return pBase[iIndex];
+	}
+
+	void GetMedian ( CSphMatch & tMedian, const CSphMatch & tValue ) const
+	{
+		tMedian.Clone ( tValue, m_iDynamic );
+	}
+
+	void Swap ( CSphMatch & a, CSphMatch & b ) const
+	{
+		::Swap ( a, b );
+	}
+
+	bool IsLess ( const CSphMatch & a, const CSphMatch & b ) const
+	{
+		return COMPGROUP::IsLess ( b, a, *this );
+	}
+};
+
+
 /// match sorter with k-buffering and group-by
 template < typename COMPGROUP, bool DISTINCT >
 class CSphKBufferGroupSorter : public CSphMatchQueueTraits
@@ -748,7 +783,7 @@ protected:
 	CSphUniqounter	m_tUniq;
 	bool			m_bSortByDistinct;
 
-	CSphMatchComparatorState	m_tStateGroup;
+	GroupSorter_fn<COMPGROUP>	m_tGroupSorter;
 	const ISphMatchComparator *	m_pComp;
 
 	CSphGroupSorterSettings		m_tSettings;
@@ -778,6 +813,7 @@ public:
 	virtual void SetSchema ( const CSphSchema & tSchema )
 	{
 		m_tSchema = tSchema;
+		m_tGroupSorter.m_iDynamic = m_tSchema.GetDynamicSize();
 
 		bool bAggrStarted = false;
 		for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
@@ -998,11 +1034,19 @@ public:
 	/// set group comparator state
 	void SetGroupState ( const CSphMatchComparatorState & tState )
 	{
-		m_tStateGroup = tState;
+		// FIXME! manual bitwise copying.. yuck
+		for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
+		{
+			m_tGroupSorter.m_iAttr[i] = tState.m_iAttr[i];
+			m_tGroupSorter.m_tLocator[i] = tState.m_tLocator[i];
+		}
+		m_tGroupSorter.m_uAttrDesc = tState.m_uAttrDesc;
+		m_tGroupSorter.m_iNow = tState.m_iNow;
 
+		// check whether we sort by distinct
 		if ( DISTINCT && m_tSettings.m_tDistinctLoc.m_iBitOffset>=0 )
 			for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
-				if ( m_tStateGroup.m_tLocator[i].m_iBitOffset==m_tSettings.m_tDistinctLoc.m_iBitOffset )
+				if ( m_tGroupSorter.m_tLocator[i].m_iBitOffset==m_tSettings.m_tDistinctLoc.m_iBitOffset )
 			{
 				m_bSortByDistinct = true;
 				break;
@@ -1062,42 +1106,7 @@ protected:
 	/// sort groups buffer
 	void SortGroups ()
 	{
-		CSphMatch * pData = m_pData;
-		int iCount = m_iUsed;
-
-		int st0[32], st1[32], a, b, k, i, j;
-		CSphMatch x;
-
-		k = 1;
-		st0[0] = 0;
-		st1[0] = iCount-1;
-		while ( k )
-		{
-			k--;
-			i = a = st0[k];
-			j = b = st1[k];
-			x.Clone ( pData [ (a+b)/2 ], m_tSchema.GetDynamicSize() ); // FIXME! add better median at least
-			while ( a<b )
-			{
-				while ( i<=j )
-				{
-
-					while ( COMPGROUP::IsLess ( x, pData[i], m_tStateGroup ) ) i++;
-					while ( COMPGROUP::IsLess ( pData[j], x, m_tStateGroup ) ) j--;
-					if (i <= j) { Swap ( pData[i], pData[j] ); i++; j--; }
-				}
-
-				if ( j-a>=b-i )
-				{
-					if ( a<j ) { st0[k] = a; st1[k] = j; k++; }
-					a = i;
-				} else
-				{
-					if ( i<b ) { st0[k] = i; st1[k] = b; k++; }
-					b = j;
-				}
-			}
-		}
+		sphSort ( m_pData, m_iUsed, m_tGroupSorter, m_tGroupSorter );
 	}
 };
 

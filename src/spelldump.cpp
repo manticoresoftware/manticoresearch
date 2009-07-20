@@ -962,7 +962,7 @@ struct MapInfo_t
 
 struct WordLess
 {
-	bool operator () ( const char * a, const char * b )
+	inline bool IsLess ( const char * a, const char * b ) const
 	{
 		return strcoll ( a, b ) < 0;
 	}

@@ -280,7 +280,7 @@ private:
 template < typename T >
 struct SphLess_T
 {
-	inline bool operator () ( const T & a, const T & b )
+	inline bool IsLess ( const T & a, const T & b ) const
 	{
 		return a < b;
 	}
@@ -291,7 +291,7 @@ struct SphLess_T
 template < typename T >
 struct SphGreater_T
 {
-	inline bool operator () ( const T & a, const T & b )
+	inline bool IsLess ( const T & a, const T & b ) const
 	{
 		return b < a;
 	}
@@ -302,10 +302,16 @@ struct SphGreater_T
 template < typename T, typename C >
 struct SphMemberLess_T
 {
-	const T C::*			m_pMember;
+	const T C::* m_pMember;
 
-	explicit				SphMemberLess_T ( T C::* pMember )		: m_pMember ( pMember ){}
-	inline bool operator ()	( const C & a, const C & b ) const		{ return ((&a)->*m_pMember) < ((&b)->*m_pMember); }
+	explicit SphMemberLess_T ( T C::* pMember )
+		: m_pMember ( pMember )
+	{}
+
+	inline bool IsLess ( const C & a, const C & b ) const
+	{
+		return ((&a)->*m_pMember) < ((&b)->*m_pMember);
+	}
 };
 
 template < typename T, typename C >
@@ -316,11 +322,35 @@ sphMemberLess ( T C::* pMember)
 }
 
 
+/// generic accessor
+template < typename T >
+struct SphAccessor_T
+{
+	typedef T MEDIAN_TYPE;
+
+	T & Get ( T * pBase, int iIndex ) const
+	{
+		return pBase[iIndex];
+	}
+
+	void GetMedian ( MEDIAN_TYPE & tMedian, const T & tValue ) const
+	{
+		tMedian = tValue;
+	}
+
+	void Swap ( T & a, T & b ) const
+	{
+		::Swap ( a, b );
+	}
+};
+
+
 /// generic sort
-template < typename T, typename F > void sphSort ( T * pData, int iCount, F COMP )
+template < typename T, typename U, typename V >
+void sphSort ( T * pData, int iCount, U COMP, V ACC )
 {
 	int st0[32], st1[32], a, b, k, i, j;
-	T x;
+	typename V::MEDIAN_TYPE x;
 
 	k = 1;
 	st0[0] = 0;
@@ -330,14 +360,14 @@ template < typename T, typename F > void sphSort ( T * pData, int iCount, F COMP
 		k--;
 		i = a = st0[k];
 		j = b = st1[k];
-		x = pData [ (a+b)/2 ]; // FIXME! add better median at least
+		ACC.GetMedian ( x, ACC.Get ( pData, (a+b)/2 ) ); // FIXME! add better median at least
 		while ( a<b )
 		{
 			while ( i<=j )
 			{
-				while ( COMP ( pData[i], x ) ) i++;
-				while ( COMP ( x, pData[j] ) ) j--;
-				if (i <= j) { Swap ( pData[i], pData[j] ); i++; j--; }
+				while ( COMP.IsLess ( ACC.Get ( pData, i ), x ) ) i++;
+				while ( COMP.IsLess ( x, ACC.Get ( pData, j ) ) ) j--;
+				if (i <= j) { ACC.Swap ( ACC.Get ( pData, i ), ACC.Get ( pData, j ) ); i++; j--; }
 			}
 
 			if ( j-a>=b-i )
@@ -354,7 +384,15 @@ template < typename T, typename F > void sphSort ( T * pData, int iCount, F COMP
 }
 
 
-template < typename T > void sphSort ( T * pData, int iCount )
+template < typename T, typename U >
+void sphSort ( T * pData, int iCount, U COMP )
+{
+	sphSort ( pData, iCount, COMP, SphAccessor_T<T>() );
+}
+
+
+template < typename T >
+void sphSort ( T * pData, int iCount )
 {
 	sphSort ( pData, iCount, SphLess_T<T>() );
 }

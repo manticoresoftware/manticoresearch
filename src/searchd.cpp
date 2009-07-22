@@ -4337,7 +4337,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				{
 					// failed
 					for ( int iQuery=iStart; iQuery<=iEnd; iQuery++ )
-						m_dFailuresSet[iQuery].SubmitEx ( dLocal[iLocal].cstr(), "%s", tServed.m_pIndex->GetLastError().cstr() );
+						m_dFailuresSet[iQuery].SubmitEx ( dLocal[iLocal].cstr(), "%s",
+							m_dResults [ bMultiQueue ? iStart : iQuery ].m_sError.cstr() );
 				} else
 				{
 					// multi-query succeeded

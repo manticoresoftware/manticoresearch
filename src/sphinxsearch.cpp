@@ -451,6 +451,7 @@ protected:
 	CSphMatch					m_dMyMatches[ExtNode_i::MAX_DOCS];	///< my local matches pool; for filtering
 	CSphMatch					m_tTestMatch;
 	const CSphIndex *			m_pIndex;							///< this is he who'll do my filtering!
+	CSphQueryContext *			m_pCtx;
 };
 
 
@@ -2949,6 +2950,8 @@ void ExtOrder_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 
 ExtRanker_c::ExtRanker_c ( const XQNode_t * pRoot, const ISphQwordSetup & tSetup )
 {
+	assert ( tSetup.m_pCtx );
+
 	m_iInlineRowitems = tSetup.m_iInlineRowitems;
 	for ( int i=0; i<ExtNode_i::MAX_DOCS; i++ )
 	{
@@ -2966,6 +2969,7 @@ ExtRanker_c::ExtRanker_c ( const XQNode_t * pRoot, const ISphQwordSetup & tSetup
 	m_uPayloadMask = 0;
 	m_iQwords = 0;
 	m_pIndex = tSetup.m_pIndex;
+	m_pCtx = tSetup.m_pCtx;
 }
 
 void ExtRanker_c::Reset ( const ISphQwordSetup & tSetup )
@@ -2992,7 +2996,7 @@ const ExtDoc_t * ExtRanker_c::GetFilteredDocs ()
 			if ( pCand->m_pDocinfo )
 				memcpy ( m_tTestMatch.m_pDynamic, pCand->m_pDocinfo, m_iInlineRowitems*sizeof(CSphRowitem) );
 
-			if ( m_pIndex->EarlyReject ( m_tTestMatch ) )
+			if ( m_pIndex->EarlyReject ( m_pCtx, m_tTestMatch ) )
 			{
 				pCand++;
 				continue;

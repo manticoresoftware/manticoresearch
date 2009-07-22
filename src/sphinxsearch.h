@@ -110,6 +110,7 @@ public:
 	int						m_iDynamicRowitems;		///< dynamic rowitems counts (including (!) inline)
 	int64_t					m_iMaxTimer;
 	CSphString *			m_pWarning;
+	CSphQueryContext *		m_pCtx;
 
 	ISphQwordSetup ()
 		: m_pDict ( NULL )
@@ -119,6 +120,7 @@ public:
 		, m_iDynamicRowitems ( 0 )
 		, m_iMaxTimer ( 0 )
 		, m_pWarning ( NULL )
+		, m_pCtx ( NULL )
 	{}
 	virtual ~ISphQwordSetup () {}
 

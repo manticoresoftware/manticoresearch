@@ -2163,6 +2163,7 @@ struct CSphIndexSettings : public CSphSourceSettings
 /// forward refs to internal searcher classes
 class ISphQword;
 class ISphQwordSetup;
+class CSphQueryContext;
 
 
 /// generic fulltext index interface
@@ -2235,11 +2236,11 @@ public:
 	virtual bool				Mlock () = 0;
 
 public:
-	virtual bool						EarlyReject ( CSphMatch & tMatch ) const = 0;
+	virtual bool						EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const = 0;
 	virtual const CSphSourceStats &		GetStats () const = 0;
 	void						SetCacheSize ( int iMaxCachedDocs, int iMaxCachedHits );
-	virtual bool				MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters) = 0;
-	virtual bool				MultiQueryEx ( int iQueries, CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters) = 0;
+	virtual bool				MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters ) const = 0;
+	virtual bool				MultiQueryEx ( int iQueries, CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters ) const = 0;
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats ) = 0;
 
 public:

@@ -427,6 +427,197 @@ void CSphProcessSharedMutex::Unlock ()
 #endif
 }
 
+//////////////////////////////////////////////////////////////////////////
+// THREADING FUNCTIONS
+//////////////////////////////////////////////////////////////////////////
+
+#if USE_WINDOWS
+
+// Windows threading functions
+
+bool sphThreadCreate ( SphThread_t * pThread, SphThreadRet_t ( SPH_THREAD_CONV * fnThread )(void*), void * pArg )
+{
+	HANDLE hThread = CreateThread ( NULL, 0, fnThread, pArg, 0, NULL );
+	if ( !hThread )
+		return false;
+
+	if ( pThread )
+		*pThread = hThread;
+	else
+		CloseHandle ( hThread );
+	return true;
+}
+
+bool sphThreadJoin ( SphThread_t * pThread )
+{
+	DWORD uWait = WaitForSingleObject ( *pThread, INFINITE );
+	CloseHandle ( *pThread );
+	*pThread = NULL;
+	return ( uWait==WAIT_OBJECT_0 || uWait==WAIT_ABANDONED );
+}
+
+#else
+
+// UNIX threading functions
+
+bool sphThreadCreate ( SphThread_t * pThread, SphThreadRet_t ( SPH_THREAD_CONV * fnThread )(void*), void * pArg )
+{
+	return pthread_create ( pThread, NULL, fnThread, pArg )==0;
+}
+
+bool sphThreadJoin ( SphThread_t * pThread )
+{
+	return pthread_join ( *pThread, NULL )==0;
+}
+
+#endif
+
+//////////////////////////////////////////////////////////////////////////
+// RWLOCK
+//////////////////////////////////////////////////////////////////////////
+
+#if USE_WINDOWS
+
+// Windows rwlock implementation
+
+CSphRwlock::CSphRwlock ()
+	: m_hWriteMutex ( NULL )
+	, m_hReadEvent ( NULL )
+	, m_iReaders ( 0 )
+{}
+
+
+bool CSphRwlock::Init ()
+{
+	assert ( !m_hWriteMutex && !m_hReadEvent && !m_iReaders );
+
+	m_hReadEvent = CreateEvent ( NULL, TRUE, FALSE, NULL );
+	if ( !m_hReadEvent )
+		return false;
+
+	m_hWriteMutex = CreateMutex ( NULL, FALSE, NULL );
+	if ( !m_hWriteMutex )
+	{
+		CloseHandle ( m_hReadEvent );
+		return false;
+	}
+	return true;
+}
+
+
+bool CSphRwlock::Done ()
+{
+	if ( !CloseHandle ( m_hReadEvent ) )
+		return false;
+	m_hReadEvent = NULL;
+	
+	if ( !CloseHandle ( m_hWriteMutex ) )
+		return false;
+	m_hWriteMutex = NULL;
+
+	m_iReaders = 0;
+	return true;
+}
+
+
+bool CSphRwlock::ReadLock ()
+{
+	DWORD uWait = WaitForSingleObject ( m_hWriteMutex, INFINITE );
+	if ( uWait==WAIT_FAILED || uWait==WAIT_TIMEOUT)
+		return false;
+
+	// got the writer mutex, can't be locked for write
+	// so it's OK to add the reader lock, then free the writer mutex
+	// writer mutex also protects readers counter
+	InterlockedIncrement ( &m_iReaders );
+
+	// reset writer lock event, we just got ourselves a reader
+	if ( !ResetEvent ( m_hReadEvent ) )
+		return false;
+
+	// release writer lock
+	return ReleaseMutex ( m_hWriteMutex )==TRUE;
+}
+
+
+bool CSphRwlock::WriteLock ()
+{
+	// try to acquire writer mutex
+	DWORD uWait = WaitForSingleObject ( m_hWriteMutex, INFINITE );
+	if ( uWait==WAIT_FAILED || uWait==WAIT_TIMEOUT )
+		return false;
+
+	// got the writer mutex, no pending readers, rock'n'roll
+	if ( !m_iReaders )
+		return true;
+
+	// got the writer mutex, but still have to wait for all readers to complete
+	uWait = WaitForSingleObject ( m_hReadEvent, INFINITE );
+	if ( uWait==WAIT_FAILED || uWait==WAIT_TIMEOUT )
+	{
+		// wait failed, well then, release writer mutex
+		ReleaseMutex ( m_hWriteMutex );
+		return false;
+	}
+	return true;
+}
+
+
+bool CSphRwlock::Unlock ()
+{
+	// are we unlocking a writer?
+	if ( ReleaseMutex ( m_hWriteMutex ) )
+		return true; // yes we are
+
+	if ( GetLastError()!=ERROR_NOT_OWNER )
+		return false; // some unexpected error
+
+	// writer mutex wasn't mine; we must have a read lock
+	if ( !m_iReaders )
+		return true; // could this ever happen?
+
+	// atomically decrement reader counter
+	if ( InterlockedDecrement ( &m_iReaders ) )
+		return true; // there still are pending readers
+
+	// no pending readers, fire the event for write lock
+	return SetEvent ( m_hReadEvent )==TRUE;
+}
+
+#else
+
+// UNIX rwlock implementation (pthreads wrapper)
+
+CSphRwlock::CSphRwlock ()
+{}
+
+bool CSphRwlock::Init ()
+{
+	return pthread_rwlock_init ( &m_tLock, NULL )==0;
+}
+
+bool CSphRwlock::Done ()
+{
+	return pthread_rwlock_destroy ( &m_tLock )==0;
+}
+
+bool CSphRwlock::ReadLock ()
+{
+	return pthread_rwlock_rdlock ( &m_tLock )==0;
+}
+
+bool CSphRwlock::WriteLock ()
+{
+	return pthread_rwlock_wrlock ( &m_tLock )==0;
+}
+
+bool CSphRwlock::Unlock ()
+{
+	return pthread_rwlock_unlock ( &m_tLock )==0;
+}
+
+#endif
+
 //
 // $Id$
 //

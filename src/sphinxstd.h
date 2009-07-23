@@ -1535,6 +1535,55 @@ protected:
 #endif
 };
 
+//////////////////////////////////////////////////////////////////////////
+
+/// my thread handle and thread func magic
+#if USE_WINDOWS
+typedef HANDLE SphThread_t;
+typedef DWORD SphThreadRet_t;
+#define SPH_THREAD_CONV __stdcall
+#else
+typedef pthread_t SphThread_t;
+typedef void * SphThreadRet_t;
+#define SPH_THREAD_CONV
+#endif
+
+/// thread func declaration helper
+#define SphThreadFunc_t SphThreadRet_t SPH_THREAD_CONV
+
+/// my create thread wrapper
+/// pThread can be NULL; fire-and-forget (detached) thread will be created
+bool sphThreadCreate ( SphThread_t * pThread, SphThreadRet_t ( SPH_THREAD_CONV * fnThread )(void*), void * pArg );
+
+/// my join thread wrapper
+bool sphThreadJoin ( SphThread_t * pThread );
+
+//////////////////////////////////////////////////////////////////////////
+
+/// rwlock implementation
+class CSphRwlock
+{
+public:
+	CSphRwlock ();
+	~CSphRwlock () {}
+
+	bool Init ();
+	bool Done ();
+
+	bool ReadLock ();
+	bool WriteLock ();
+	bool Unlock ();
+
+#if USE_WINDOWS
+private:
+	HANDLE				m_hWriteMutex;
+	HANDLE				m_hReadEvent;
+	LONG				m_iReaders;
+#else
+	pthread_rwlock_t	m_tLock;
+#endif
+};
+
 #endif // _sphinxstd_
 
 //

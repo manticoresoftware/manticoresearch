@@ -825,6 +825,68 @@ void BenchLocators ()
 
 //////////////////////////////////////////////////////////////////////////
 
+int g_iRwlock;
+CSphRwlock g_tRwlock;
+
+SphThreadFunc_t RwlockReader ( void * pArg )
+{
+	assert ( g_tRwlock.ReadLock() );
+	sphSleepMsec ( 10 );
+	*(int*)pArg = g_iRwlock;
+	assert ( g_tRwlock.Unlock() );
+	return 0;
+}
+
+SphThreadFunc_t RwlockWriter ( void * pArg )
+{
+	assert ( g_tRwlock.WriteLock() );
+	g_iRwlock += int(pArg);
+	sphSleepMsec ( 3 );
+	assert ( g_tRwlock.Unlock() );
+	return 0;
+}
+
+void TestRwlock ()
+{
+	printf ( "testing rwlock... " );
+	assert ( g_tRwlock.Init() );
+
+	const int NPAIRS = 10;
+	SphThread_t dReaders[NPAIRS];
+	SphThread_t dWriters[NPAIRS];
+	int iRead[NPAIRS];
+
+	g_iRwlock = 0;
+	for ( int i=0; i<NPAIRS; i++ )
+	{
+		assert ( sphThreadCreate ( &dReaders[i], RwlockReader, (void*)&iRead[i] ) );
+		assert ( sphThreadCreate ( &dWriters[i], RwlockWriter, (void*)(1+i) ) );
+	}
+
+	for ( int i=0; i<NPAIRS; i++ )
+	{
+		assert ( sphThreadJoin ( &dReaders[i] ) );
+		assert ( sphThreadJoin ( &dWriters[i] ) );
+	}
+
+	assert ( g_iRwlock==NPAIRS*(1+NPAIRS)/2 );
+	assert ( g_tRwlock.Done() );
+
+	int iReadSum = 0;
+	for ( int i=0; i<NPAIRS; i++ )
+		iReadSum += iRead[i];
+
+	printf ( "ok (read_sum=%d)\n", iReadSum );
+}
+
+void BenchRwlock ()
+{
+	printf ( "benchmarking rwlock\n" );
+	printf ( "run 1: %d tps\n" );
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 int main ()
 {
 	printf ( "RUNNING INTERNAL LIBSPHINX TESTS\n\n" );
@@ -842,6 +904,7 @@ int main ()
 	TestTokenizer ( true );
 	TestExpr ();
 	TestMisc ();
+	TestRwlock ();
 #endif
 
 	unlink ( g_sTmpfile );

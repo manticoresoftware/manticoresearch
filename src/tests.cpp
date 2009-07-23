@@ -840,7 +840,7 @@ SphThreadFunc_t RwlockReader ( void * pArg )
 SphThreadFunc_t RwlockWriter ( void * pArg )
 {
 	assert ( g_tRwlock.WriteLock() );
-	g_iRwlock += int(pArg);
+	g_iRwlock += size_t(pArg);
 	sphSleepMsec ( 3 );
 	assert ( g_tRwlock.Unlock() );
 	return 0;

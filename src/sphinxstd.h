@@ -1540,25 +1540,43 @@ protected:
 /// my thread handle and thread func magic
 #if USE_WINDOWS
 typedef HANDLE SphThread_t;
-typedef DWORD SphThreadRet_t;
-#define SPH_THREAD_CONV __stdcall
+#define __thread __declspec(thread)
 #else
 typedef pthread_t SphThread_t;
-typedef void * SphThreadRet_t;
-#define SPH_THREAD_CONV
 #endif
 
-/// thread func declaration helper
-#define SphThreadFunc_t SphThreadRet_t SPH_THREAD_CONV
-
 /// my create thread wrapper
-/// pThread can be NULL; fire-and-forget (detached) thread will be created
-bool sphThreadCreate ( SphThread_t * pThread, SphThreadRet_t ( SPH_THREAD_CONV * fnThread )(void*), void * pArg );
+bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pArg );
 
 /// my join thread wrapper
 bool sphThreadJoin ( SphThread_t * pThread );
 
+/// add (cleanup) callback to run on thread exit
+void sphThreadOnExit ( void (*fnCleanup)(void*), void * pArg );
+
 //////////////////////////////////////////////////////////////////////////
+
+/// mutex implementation
+class CSphMutex
+{
+public:
+	CSphMutex () : m_bInitialized ( false ) {}
+	~CSphMutex () { assert ( !m_bInitialized ); }
+
+	bool Init ();
+	bool Done ();
+	bool Lock ();
+	bool Unlock ();
+
+protected:
+	bool m_bInitialized;
+#if USE_WINDOWS
+	HANDLE m_hMutex;
+#else
+	pthread_mutex_t m_tMutex;
+#endif
+};
+
 
 /// rwlock implementation
 class CSphRwlock

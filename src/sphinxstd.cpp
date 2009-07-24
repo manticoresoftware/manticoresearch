@@ -431,43 +431,149 @@ void CSphProcessSharedMutex::Unlock ()
 // THREADING FUNCTIONS
 //////////////////////////////////////////////////////////////////////////
 
-#if USE_WINDOWS
-
-// Windows threading functions
-
-bool sphThreadCreate ( SphThread_t * pThread, SphThreadRet_t ( SPH_THREAD_CONV * fnThread )(void*), void * pArg )
+struct ThreadCall_t
 {
-	HANDLE hThread = CreateThread ( NULL, 0, fnThread, pArg, 0, NULL );
-	if ( !hThread )
-		return false;
+	void			(*m_pCall)(void*);
+	void *			m_pArg;
+	ThreadCall_t *	m_pNext;
+};
+static __thread ThreadCall_t * g_pThreadCleanup = NULL;
 
-	if ( pThread )
-		*pThread = hThread;
-	else
-		CloseHandle ( hThread );
-	return true;
+
+#if USE_WINDOWS
+#define SPH_THDFUNC DWORD __stdcall
+#else
+#define SPH_THDFUNC void *
+#endif
+
+SPH_THDFUNC sphThreadProcWrapper ( void * pArg )
+{
+	assert ( g_pThreadCleanup==NULL );
+
+	ThreadCall_t * pCall = (ThreadCall_t*) pArg;
+	pCall->m_pCall ( pCall->m_pArg );
+	SafeDelete ( pCall );
+
+	while ( g_pThreadCleanup )
+	{
+		pCall = g_pThreadCleanup;
+		pCall->m_pCall ( pCall->m_pArg );
+		g_pThreadCleanup = pCall->m_pNext;
+		SafeDelete ( pCall );
+	}
+
+	return 0;
 }
+
+
+bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pArg )
+{
+	// we can not merely put this on current stack
+	// as it might get destroyed before wrapper sees it
+	ThreadCall_t * pCall = new ThreadCall_t();
+	pCall->m_pCall = fnThread;
+	pCall->m_pArg = pArg;
+	pCall->m_pNext = NULL;
+
+	// create thread
+#if USE_WINDOWS
+	*pThread = CreateThread ( NULL, 0, sphThreadProcWrapper, pCall, 0, NULL );
+	if ( *pThread )
+		return true;
+#else
+	if ( !pthread_create ( pThread, NULL, sphThreadProcWrapper, pCall ) )
+		return true;
+#endif
+
+	SafeDelete ( pCall );
+	return false;
+}
+
 
 bool sphThreadJoin ( SphThread_t * pThread )
 {
+#if USE_WINDOWS
 	DWORD uWait = WaitForSingleObject ( *pThread, INFINITE );
 	CloseHandle ( *pThread );
 	*pThread = NULL;
 	return ( uWait==WAIT_OBJECT_0 || uWait==WAIT_ABANDONED );
+#else
+	return pthread_join ( *pThread, NULL )==0;
+#endif
+}
+
+
+void sphThreadOnExit ( void (*fnCleanup)(void*), void * pArg )
+{
+	ThreadCall_t * pCleanup = new ThreadCall_t ();
+	pCleanup->m_pCall = fnCleanup;
+	pCleanup->m_pArg = pArg;
+	pCleanup->m_pNext = g_pThreadCleanup;
+	g_pThreadCleanup = pCleanup;
+}
+
+//////////////////////////////////////////////////////////////////////////
+// MUTEX
+//////////////////////////////////////////////////////////////////////////
+
+#if USE_WINDOWS
+
+// Windows mutex implementation
+
+bool CSphMutex::Init ()
+{
+	m_hMutex = CreateMutex ( NULL, FALSE, NULL );
+	m_bInitialized = ( m_hMutex!=NULL );
+	return m_bInitialized;
+}
+
+bool CSphMutex::Done ()
+{
+	if ( !m_bInitialized )
+		return true;
+
+	m_bInitialized = false;
+	return CloseHandle ( m_hMutex )==TRUE;
+}
+
+bool CSphMutex::Lock ()
+{
+	DWORD uWait = WaitForSingleObject ( m_hMutex, INFINITE );
+	return ( uWait!=WAIT_FAILED && uWait!=WAIT_TIMEOUT );
+}
+
+bool CSphMutex::Unlock ()
+{
+	return ReleaseMutex ( m_hMutex )==TRUE;
 }
 
 #else
 
-// UNIX threading functions
+// UNIX mutex implementation
 
-bool sphThreadCreate ( SphThread_t * pThread, SphThreadRet_t ( SPH_THREAD_CONV * fnThread )(void*), void * pArg )
+bool CSphMutex::Init ()
 {
-	return pthread_create ( pThread, NULL, fnThread, pArg )==0;
+	m_bInitialized = ( pthread_mutex_init ( &m_tMutex, NULL )==0 );
+	return m_bInitialized;
 }
 
-bool sphThreadJoin ( SphThread_t * pThread )
+bool CSphMutex::Done ()
 {
-	return pthread_join ( *pThread, NULL )==0;
+	if ( !m_bInitialized )
+		return true;
+
+	m_bInitialized = false;
+	return pthread_mutex_destroy ( &m_tMutex )==0;
+}
+
+bool CSphMutex::Lock ()
+{
+	return ( pthread_mutex_lock ( &m_tMutex )==0 );
+}
+
+bool CSphMutex::Unlock ()
+{
+	return ( pthread_mutex_unlock ( &m_tMutex )==0 );
 }
 
 #endif

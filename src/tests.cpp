@@ -833,22 +833,20 @@ void BenchLocators ()
 int g_iRwlock;
 CSphRwlock g_tRwlock;
 
-SphThreadFunc_t RwlockReader ( void * pArg )
+void RwlockReader ( void * pArg )
 {
 	assert ( g_tRwlock.ReadLock() );
 	sphSleepMsec ( 10 );
 	*(int*)pArg = g_iRwlock;
 	assert ( g_tRwlock.Unlock() );
-	return 0;
 }
 
-SphThreadFunc_t RwlockWriter ( void * pArg )
+void RwlockWriter ( void * pArg )
 {
 	assert ( g_tRwlock.WriteLock() );
 	g_iRwlock += size_t(pArg);
 	sphSleepMsec ( 3 );
 	assert ( g_tRwlock.Unlock() );
-	return 0;
 }
 
 void TestRwlock ()
@@ -887,6 +885,105 @@ void TestRwlock ()
 
 //////////////////////////////////////////////////////////////////////////
 
+#ifndef NDEBUG
+void CleanupCallback ( void * pArg )
+{
+	*(bool*)pArg = true;
+}
+
+void CleanupThread ( void * pArg )
+{
+	sphThreadOnExit ( CleanupCallback, pArg );	
+}
+
+void TestCleanup ()
+{
+	printf ( "testing thread cleanup... " );
+
+	const int CLEANUP_COUNT = 10;
+
+	bool bCleanup[CLEANUP_COUNT];
+	for ( int i=0; i<CLEANUP_COUNT; i++ )
+		bCleanup[i] = false;
+
+	SphThread_t thd[CLEANUP_COUNT];
+	for ( int i=0; i<CLEANUP_COUNT; i++ )
+		assert ( sphThreadCreate ( &thd[i], CleanupThread, &bCleanup[i] ) );
+
+	for ( int i=0; i<CLEANUP_COUNT; i++ )
+		assert ( sphThreadJoin ( &thd[i] ) );
+
+	for ( int i=0; i<CLEANUP_COUNT; i++ )
+		assert ( bCleanup[i]==true );
+
+	printf ( "ok\n" );
+}
+#endif // NDEBUG
+
+//////////////////////////////////////////////////////////////////////////
+
+volatile int g_iMutexBench = 0;
+
+void DummyThread ( void * )
+{}
+
+void MutexBenchThread ( void * pArg )
+{
+	CSphMutex * pMutex = (CSphMutex *) pArg;
+	pMutex->Lock();
+	for ( int i=0; i<100; i++ )
+		g_iMutexBench++;
+	g_iMutexBench -= 99;
+	pMutex->Unlock();
+}
+
+void BenchThreads ()
+{
+	printf ( "benchmarking threads\n" );
+
+	const int BATCHES = 100;
+	const int BATCH_THREADS = 100;
+	const int TOTAL_THREADS = BATCHES*BATCH_THREADS;
+
+	SphThread_t * pThd = new SphThread_t [ BATCH_THREADS ];
+
+	CSphMutex tMutex;
+	if ( !tMutex.Init() )
+		sphDie ( "failed to init mutex" );
+
+	for ( int iRun=1; iRun<=2; iRun++ )
+	{
+		int64_t tmThd = sphMicroTimer();
+		for ( int iBatch=0; iBatch<BATCHES; iBatch++ )
+		{
+			for ( int i=0; i<BATCH_THREADS; i++ )
+				if ( !sphThreadCreate ( pThd+i, ( iRun==1 ) ? DummyThread : MutexBenchThread, &tMutex) )
+					sphDie ( "failed to create thread (batch %d thd %d)", iBatch, i );
+
+			for ( int i=0; i<BATCH_THREADS; i++ )
+				if ( !sphThreadJoin ( pThd+i ) )
+					sphDie ( "failed to join to thread (batch %d thd %d)", iBatch, i );
+		}
+		tmThd = sphMicroTimer()-tmThd;
+
+		if ( iRun==2 && g_iMutexBench!=TOTAL_THREADS )
+			sphDie ( "failed mutex benchmark (expected=%d, got=%d)", TOTAL_THREADS, g_iMutexBench );
+
+		int iThdSec10 = (int)( int64_t(TOTAL_THREADS)*1000000*10/tmThd );
+		const char * sDesc = ( iRun==1 ) ? "dummy" : "mutex";
+
+		printf ( "run %d: %d %s threads in %d.%d msec; %d.%d thd/sec\n",
+			iRun, TOTAL_THREADS, sDesc,
+			int(tmThd/1000), int((tmThd%1000)/100),
+			iThdSec10/10, iThdSec10%10 );
+	}
+
+	tMutex.Done ();
+	SafeDeleteArray ( pThd );
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 int main ()
 {
 	printf ( "RUNNING INTERNAL LIBSPHINX TESTS\n\n" );
@@ -897,6 +994,7 @@ int main ()
 	BenchTokenizer ( true );
 	BenchExpr ();
 	BenchLocators ();
+	BenchThreads ();
 #else
 	TestQueryParser ();
 	TestStripper ();
@@ -905,6 +1003,7 @@ int main ()
 	TestExpr ();
 	TestMisc ();
 	TestRwlock ();
+	TestCleanup ();
 #endif
 
 	unlink ( g_sTmpfile );

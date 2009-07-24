@@ -8495,7 +8495,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	// configure and preload
 	int iValidIndexes = 0;
-	int iTotalIndexes=hConf["index"].GetLength();
 	int iCounter = 1;
 	int64_t tmLoad = -sphMicroTimer();
 	hConf["index"].IterateStart ();
@@ -8510,9 +8509,10 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		AddIndex ( sIndexName, hIndex );
 		if ( g_hIndexes.Exists ( sIndexName ) )
 		{
-			ServedIndex_t & tIndex = g_hIndexes [sIndexName];
+			ServedIndex_t & tIndex = g_hIndexes[sIndexName];
+			iCounter++;
 
-			fprintf ( stdout, "precaching index '%s'\n", sIndexName, iCounter++, iTotalIndexes);
+			fprintf ( stdout, "precaching index '%s'\n", sIndexName);
 			fflush ( stdout );
 			tIndex.m_pIndex->SetProgressCallback ( ShowProgress );
 

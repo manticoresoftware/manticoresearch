@@ -821,10 +821,15 @@ void BenchLocators ()
 		tmLoc = sphMicroTimer() - tmLoc;
 		printf ( "run %d: sum=%d time=%d.%d msec\n", iRun, iSum, (int)(tmLoc/1000), (int)((tmLoc%1000)/100) );
 	}
+
+	// manually cleanup to avoid automatic delete
+	for ( int i=0; i<NUM_MATCHES; i++)
+		tMatch[i].m_pDynamic = NULL;
 }
 
 //////////////////////////////////////////////////////////////////////////
 
+#ifndef NDEBUG
 int g_iRwlock;
 CSphRwlock g_tRwlock;
 
@@ -878,12 +883,7 @@ void TestRwlock ()
 
 	printf ( "ok (read_sum=%d)\n", iReadSum );
 }
-
-void BenchRwlock ()
-{
-	printf ( "benchmarking rwlock\n" );
-	printf ( "run 1: %d tps\n" );
-}
+#endif // NDEBUG
 
 //////////////////////////////////////////////////////////////////////////
 

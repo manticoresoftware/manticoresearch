@@ -986,7 +986,8 @@ void ExtTerm_c::GetQwords ( ExtQwordsHash_t & hQwords )
 	tInfo.m_iDocs = m_pQword->m_iDocs;
 	tInfo.m_iHits = m_pQword->m_iHits;
 	tInfo.m_iQueryPos = m_pQword->m_iAtomPos;
-	hQwords.Add (  tInfo, m_pQword->m_sWord );
+	tInfo.m_fIDF = -1.0f; // suppress gcc 4.2.3 warning
+	hQwords.Add ( tInfo, m_pQword->m_sWord );
 }
 
 void ExtTerm_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )

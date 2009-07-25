@@ -4901,7 +4901,7 @@ bool CSphWriter::OpenFile ( const CSphString & sName, CSphString & sErrorBuffer 
 	m_bError = ( m_iFD<0 );
 
 	if ( m_bError )
-		m_pError->SetSprintf ( "failed to create %s: %s" , sName, strerror(errno) );
+		m_pError->SetSprintf ( "failed to create %s: %s" , sName.cstr(), strerror(errno) );
 
 	return !m_bError;
 }
@@ -5441,7 +5441,7 @@ bool CSphAutoreader::Open ( const CSphString & sFilename, CSphString & sError )
 	m_sFilename = sFilename;
 
 	if ( m_iFD<0 )
-		sError.SetSprintf ( "failed to open %s: %s", sFilename, strerror(errno) );
+		sError.SetSprintf ( "failed to open %s: %s", sFilename.cstr(), strerror(errno) );
 	return ( m_iFD>=0 );
 }
 
@@ -10999,14 +10999,14 @@ bool CSphIndex_VLN::Lock ()
 		m_iLockFD = ::open ( sName.cstr(), SPH_O_NEW, 0644 );
 		if ( m_iLockFD<0 )
 		{
-			m_sLastError.SetSprintf ( "failed to open %s: %s", sName, strerror(errno) );
+			m_sLastError.SetSprintf ( "failed to open %s: %s", sName.cstr(), strerror(errno) );
 			return false;
 		}
 	}
 
 	if ( !sphLockEx ( m_iLockFD, false ) )
 	{
-		m_sLastError.SetSprintf ( "failed to lock %s: %s", sName, strerror(errno) );
+		m_sLastError.SetSprintf ( "failed to lock %s: %s", sName.cstr(), strerror(errno) );
 		::close ( m_iLockFD );
 		return false;
 	}
@@ -11384,7 +11384,8 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 	if ( m_bUse64!=USE_64BIT )
 	{
 		m_sLastError.SetSprintf ( "'%s' is id%d, and this binary is id%d",
-			GetIndexFileName ( "sph" ), m_bUse64 ? 64 : 32, USE_64BIT ? 64 : 32 );
+			GetIndexFileName("sph").cstr(),
+			m_bUse64 ? 64 : 32, USE_64BIT ? 64 : 32 );
 		return NULL;
 	}
 
@@ -11585,7 +11586,7 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 
 	if ( tCheckpointReader.GetErrorFlag() )
 	{
-		m_sLastError.SetSprintf ( "failed to read %s: %s", GetIndexFileName("spi"), tCheckpointReader.GetErrorMessage().cstr () );
+		m_sLastError.SetSprintf ( "failed to read %s: %s", GetIndexFileName("spi").cstr(), tCheckpointReader.GetErrorMessage().cstr () );
 		return NULL;
 	}
 

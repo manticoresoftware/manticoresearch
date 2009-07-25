@@ -561,7 +561,7 @@ public:
 	{
 	}
 
-	CSphAutofile ( const char * sName, int iMode, CSphString & sError, bool bTemp=false )
+	CSphAutofile ( const CSphString & sName, int iMode, CSphString & sError, bool bTemp=false )
 		: m_iFD ( -1 )
 		, m_bTemporary ( false )
 		, m_pProgress ( NULL )
@@ -575,16 +575,16 @@ public:
 		Close ();
 	}
 
-	int Open ( const char * szName, int iMode, CSphString & sError, bool bTemp=false )
+	int Open ( const CSphString & sName, int iMode, CSphString & sError, bool bTemp=false )
 	{
 		assert ( m_iFD == -1 && m_sFilename.IsEmpty () );
-		assert ( szName );
+		assert ( !sName.IsEmpty() );
 
-		m_iFD = ::open ( szName, iMode, 0644 );
-		m_sFilename = szName; // not exactly sure why is this uncoditional. for error reporting later, i suppose
+		m_iFD = ::open ( sName.cstr(), iMode, 0644 );
+		m_sFilename = sName; // not exactly sure why is this uncoditional. for error reporting later, i suppose
 
 		if ( m_iFD<0 )
-			sError.SetSprintf ( "failed to open %s: %s", szName, strerror(errno) );
+			sError.SetSprintf ( "failed to open %s: %s", sName.cstr(), strerror(errno) );
 		else
 			m_bTemporary = bTemp; // only if we managed to actually open it
 
@@ -903,7 +903,7 @@ public:
 
 	void		SetBufferSize ( int iBufferSize );	///< tune write cache size; must be called before OpenFile() or SetFile()
 
-	bool		OpenFile ( const char * sName, CSphString & sErrorBuffer );
+	bool		OpenFile ( const CSphString & sName, CSphString & sErrorBuffer );
 	void		SetFile ( int iFD, SphOffset_t * pSharedOffset );
 	void		CloseFile ( bool bTruncate = false );	///< note: calls Flush(), ie. IsError() might get true after this call
 
@@ -1023,7 +1023,7 @@ public:
 				CSphAutoreader ( BYTE * pBuf=NULL, int iSize=0 ) : CSphReader_VLN ( pBuf, iSize ) {}
 				~CSphAutoreader ();
 
-	bool		Open ( const char * sFilename, CSphString & sError );
+	bool		Open ( const CSphString & sFilename, CSphString & sError );
 	SphOffset_t	GetFilesize ();
 };
 
@@ -1540,7 +1540,8 @@ private:
 	static int					m_iIndexTagSeq;			///< static ids sequence
 
 private:
-	const char *				GetIndexFileName ( const char * sExt ) const;	///< WARNING, non-reenterable, static buffer!
+	CSphString					GetIndexFileName ( const char * sExt ) const;
+
 	int							AdjustMemoryLimit ( int iMemoryLimit );
 
 	int							cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWORD * pDocinfo, int Docinfos, int iStride );
@@ -4880,9 +4881,9 @@ void CSphWriter::SetBufferSize ( int iBufferSize )
 }
 
 
-bool CSphWriter::OpenFile ( const char * sName, CSphString & sErrorBuffer )
+bool CSphWriter::OpenFile ( const CSphString & sName, CSphString & sErrorBuffer )
 {
-	assert ( sName );
+	assert ( !sName.IsEmpty() );
 	assert ( m_iFD<0 && "already open" );
 
 	m_bOwnFile = true;
@@ -5428,12 +5429,12 @@ CSphAutoreader::~CSphAutoreader ()
 }
 
 
-bool CSphAutoreader::Open ( const char * sFilename, CSphString & sError )
+bool CSphAutoreader::Open ( const CSphString & sFilename, CSphString & sError )
 {
 	assert ( m_iFD<0 );
-	assert ( sFilename );
+	assert ( !sFilename.IsEmpty() );
 
-	m_iFD = ::open ( sFilename, SPH_O_READ, 0644 );
+	m_iFD = ::open ( sFilename.cstr(), SPH_O_READ, 0644 );
 	m_iPos = 0;
 	m_iBuffPos = 0;
 	m_iBuffUsed = 0;
@@ -6879,11 +6880,11 @@ void sphSortDocinfos ( DWORD * pBuf, int iCount, int iStride )
 }
 
 
-const char * CSphIndex_VLN::GetIndexFileName ( const char * sExt ) const
+CSphString CSphIndex_VLN::GetIndexFileName ( const char * sExt ) const
 {
-	static char sBuf [ SPH_MAX_FILENAME_LEN ];
-	snprintf ( sBuf, sizeof(sBuf), "%s.%s", m_sFilename.cstr(), sExt );
-	return sBuf;
+	CSphString sRes;
+	sRes.SetSprintf ( "%s.%s", m_sFilename.cstr(), sExt );
+	return sRes;
 }
 
 
@@ -9746,7 +9747,7 @@ public:
 		, m_iEntries ( 0 )
 	{}
 
-	void Setup ( const char * sFilename, CSphString & sError )
+	void Setup ( const CSphString & sFilename, CSphString & sError )
 	{
 		m_tFile.Open ( sFilename, SPH_O_READ, sError );
 		m_tReader.SetFile ( m_tFile );
@@ -10991,11 +10992,11 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 
 bool CSphIndex_VLN::Lock ()
 {
-	const char * sName = GetIndexFileName ( "spl" );
+	CSphString sName = GetIndexFileName("spl");
 
 	if ( m_iLockFD<0 )
 	{
-		m_iLockFD = ::open ( sName, SPH_O_NEW, 0644 );
+		m_iLockFD = ::open ( sName.cstr(), SPH_O_NEW, 0644 );
 		if ( m_iLockFD<0 )
 		{
 			m_sLastError.SetSprintf ( "failed to open %s: %s", sName, strerror(errno) );
@@ -11019,7 +11020,7 @@ void CSphIndex_VLN::Unlock()
 	if ( m_iLockFD>=0 )
 	{
 		::close ( m_iLockFD );
-		::unlink ( GetIndexFileName ( "spl" ) );
+		::unlink ( GetIndexFileName("spl").cstr() );
 		m_iLockFD = -1;
 	}
 }
@@ -11377,7 +11378,7 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 	m_pKillList.SetMlock ( bMlock );
 
 	// preload schema
-	if ( !LoadHeader ( GetIndexFileName("sph"), sWarning ) )
+	if ( !LoadHeader ( GetIndexFileName("sph").cstr(), sWarning ) )
 		return NULL;
 
 	if ( m_bUse64!=USE_64BIT )
@@ -11388,10 +11389,10 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 	}
 
 	// verify that data files are readable
-	if ( !sphIsReadable ( GetIndexFileName("spd"), &m_sLastError ) )
+	if ( !sphIsReadable ( GetIndexFileName("spd").cstr(), &m_sLastError ) )
 		return NULL;
 
-	if ( m_uVersion>=3 && !sphIsReadable ( GetIndexFileName("spp"), &m_sLastError ) )
+	if ( m_uVersion>=3 && !sphIsReadable ( GetIndexFileName("spp").cstr(), &m_sLastError ) )
 		return NULL;
 
 	/////////////////////
@@ -12005,7 +12006,7 @@ bool CSphIndex_VLN::Rename ( const char * sNewBase )
 			if ( m_iLockFD >= 0 )
 			{
 				::close ( m_iLockFD );
-				::unlink ( GetIndexFileName ( "spl" ) );
+				::unlink ( GetIndexFileName("spl").cstr() );
 				m_iLockFD = -1;
 			}
 			continue;

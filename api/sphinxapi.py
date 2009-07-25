@@ -941,17 +941,18 @@ class SphinxClient:
 	def Open(self):
 		if self._socket:
 			self._error = 'already connected'
-			return
+			return None
 		
 		server = self._Connect()
 		if not server:
-			return
+			return None
 
 		# command, command version = 0, body length = 4, body = 1
 		request = pack ( '>hhII', SEARCHD_COMMAND_PERSIST, 0, 4, 1 )
 		server.send ( request )
 		
 		self._socket = server
+		return True
 
 	def Close(self):
 		if not self._socket:

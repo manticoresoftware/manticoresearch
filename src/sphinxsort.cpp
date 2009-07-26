@@ -1522,27 +1522,68 @@ enum ESortClauseParseResult
 };
 
 
+class SortClauseTokenizer_t
+{
+protected:
+	char * m_pCur;
+	char * m_pMax;
+	char * m_pBuf;
+
+protected:
+	char ToLower ( char c )
+	{
+		// 0..9, A..Z->a..z, _, a..z, @
+		if ( ( c>='0' && c<='9' ) || ( c>='a' && c<='z' ) || c=='_' || c=='@' )
+			return c;
+		if ( c>='A' && c<='Z' )
+			return c-'A'+'a';
+		return 0;
+	}
+
+public:
+	SortClauseTokenizer_t ( const char * sBuffer )
+	{
+		int iLen = strlen(sBuffer);
+		m_pBuf = new char [ iLen+1 ];
+		m_pMax = m_pBuf+iLen;
+		m_pCur = m_pBuf;
+
+		for ( int i=0; i<=iLen; i++ )
+			m_pBuf[i] = ToLower ( sBuffer[i] );
+	}
+
+	~SortClauseTokenizer_t ()
+	{
+		SafeDeleteArray ( m_pBuf );
+	}
+
+	const char * GetToken ()
+	{
+		// skip spaces
+		while ( m_pCur<m_pMax && !*m_pCur )
+			m_pCur++;
+		if ( m_pCur>=m_pMax )
+			return NULL;
+
+		// memorize token start, and move pointer forward
+		const char * sRes = m_pCur;
+		while ( *m_pCur )
+			m_pCur++;
+		return sRes;
+	}
+};
+
+
 static ESortClauseParseResult sphParseSortClause ( const char * sClause, const CSphSchema & tSchema,
 	ESphSortFunc & eFunc, CSphMatchComparatorState & tState, CSphString & sError )
 {
 	// mini parser
-	CSphScopedPtr<ISphTokenizer> pTokenizer ( sphCreateSBCSTokenizer () );
-	if ( !pTokenizer.Ptr() )
-	{
-		sError.SetSprintf ( "INTERNAL ERROR: failed to create tokenizer when parsing sort clause" );
-		return SORT_CLAUSE_ERROR;
-	}
-
-	CSphString sTmp;
-	pTokenizer->SetCaseFolding ( "0..9, A..Z->a..z, _, a..z, @", sTmp );
-
-	CSphString sSortClause ( sClause );
-	pTokenizer->SetBuffer ( (BYTE*)sSortClause.cstr(), strlen(sSortClause.cstr())  );
+	SortClauseTokenizer_t tTok ( sClause );
 
 	bool bField = false; // whether i'm expecting field name or sort order
 	int iField = 0;
 
-	for ( const char * pTok=(char*)pTokenizer->GetToken(); pTok; pTok=(char*)pTokenizer->GetToken() )
+	for ( const char * pTok=tTok.GetToken(); pTok; pTok=tTok.GetToken() )
 	{
 		bField = !bField;
 

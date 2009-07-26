@@ -5705,6 +5705,8 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD )
 enum MysqlColumnType_e
 {
 	MYSQL_COL_DECIMAL	= 0,
+	MYSQL_COL_LONG		= 3,
+	MYSQL_COL_LONGLONG	= 8,
 	MYSQL_COL_STRING	= 254
 };
 
@@ -5719,8 +5721,10 @@ void SendMysqlFieldPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, const char
 	int iColLen = 0;
 	switch ( eType )
 	{
-		case MYSQL_COL_DECIMAL:	iColLen = 20; break;
-		case MYSQL_COL_STRING:	iColLen = 255; break;
+		case MYSQL_COL_DECIMAL:		iColLen = 20; break;
+		case MYSQL_COL_LONG:		iColLen = 11; break;
+		case MYSQL_COL_LONGLONG:	iColLen = 20; break;
+		case MYSQL_COL_STRING:		iColLen = 255; break;
 	}
 
 	tOut.SendLSBDword ( (uPacketID<<24) + iLen );
@@ -5880,14 +5884,16 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 			tOut.SendByte ( 0 ); // extra
 
 			// field packets
-			SendMysqlFieldPacket ( tOut, uPacketID++, "id", MYSQL_COL_DECIMAL );
-			SendMysqlFieldPacket ( tOut, uPacketID++, "weight", MYSQL_COL_DECIMAL );
+			SendMysqlFieldPacket ( tOut, uPacketID++, "id", USE_64BIT ? MYSQL_COL_LONGLONG : MYSQL_COL_LONG );
+			SendMysqlFieldPacket ( tOut, uPacketID++, "weight", MYSQL_COL_LONG );
 			for ( int i=0; i<pRes->m_tSchema.GetAttrsCount(); i++ )
 			{
 				const CSphColumnInfo & tCol = pRes->m_tSchema.GetAttr(i);
-				MysqlColumnType_e eType = ( tCol.m_eAttrType==SPH_ATTR_INTEGER || tCol.m_eAttrType==SPH_ATTR_TIMESTAMP || tCol.m_eAttrType==SPH_ATTR_BOOL || tCol.m_eAttrType==SPH_ATTR_BIGINT )
-					? MYSQL_COL_DECIMAL
-					: MYSQL_COL_STRING;
+				MysqlColumnType_e eType = MYSQL_COL_STRING;
+				if ( tCol.m_eAttrType==SPH_ATTR_INTEGER || tCol.m_eAttrType==SPH_ATTR_TIMESTAMP || tCol.m_eAttrType==SPH_ATTR_BOOL )
+					eType = MYSQL_COL_LONG;
+				if ( tCol.m_eAttrType==SPH_ATTR_BIGINT )
+					eType = MYSQL_COL_LONGLONG;
 				SendMysqlFieldPacket ( tOut, uPacketID++, tCol.m_sName.cstr(), eType );
 			}
 

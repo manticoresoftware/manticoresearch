@@ -8822,7 +8822,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	}
 
 	// if we're running in console mode, dump queries to tty as well
-	if ( g_bOptNoLock )
+	if ( g_bOptNoLock && hSearchd ( "query_log" ) )
 		g_iQueryLogFile = g_iLogFile;
 
 	/////////////////

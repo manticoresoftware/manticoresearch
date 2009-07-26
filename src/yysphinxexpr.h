@@ -84,7 +84,7 @@ typedef union YYSTYPE {
 	int				iFunc;			// function id
 	int				iNode;			// node index
 } YYSTYPE;
-/* Line 1248 of yacc.c.  */
+/* Line 1204 of yacc.c.  */
 
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1

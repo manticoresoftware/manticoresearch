@@ -1399,6 +1399,7 @@ public:
 	void						BindWeights ( const CSphQuery * pQuery, const CSphSchema & tSchema );
 	bool						SetupCalc ( CSphQueryResult * pResult, const CSphSchema & tInSchema, const CSphSchema & tSchema, const DWORD * pMvaPool );
 	bool						CreateFilters ( CSphQuery * pQuery, const CSphSchema & tSchema, const DWORD * pMvaPool, CSphString & sError );
+	bool						SetupOverrides ( CSphQuery * pQuery, CSphQueryResult * pResult, const CSphSchema & tIndexSchema );
 
 	void						EarlyCalc ( CSphMatch & tMatch ) const;
 	void						LateCalc ( CSphMatch & tMatch ) const;
@@ -1552,8 +1553,8 @@ private:
 	void						ReadSchemaColumn ( CSphReader_VLN & rdInfo, CSphColumnInfo & tCol );
 
 	bool						ParsedMultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQNode_t * pRoot, CSphDict * pDict ) const;
+	bool						MultiScan ( CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters ) const;
 	bool						MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, ISphRanker * pRanker ) const;
-	void						MatchFullScan ( CSphQueryContext * pCtx, const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, const DiskIndexQwordSetup_c & tTermSetup ) const;
 
 	const DWORD *				FindDocinfo ( SphDocID_t uDocID ) const;
 	void						CopyDocinfo ( CSphQueryContext * pCtx, CSphMatch & tMatch, const DWORD * pFound ) const;
@@ -10737,16 +10738,74 @@ bool CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 
 //////////////////////////////////////////////////////////////////////////
 
-void CSphIndex_VLN::MatchFullScan ( CSphQueryContext * pCtx, const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, const DiskIndexQwordSetup_c & tSetup ) const
+bool CSphIndex_VLN::MultiScan ( CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters ) const
 {
+	assert ( pQuery->m_eMode==SPH_MATCH_FULLSCAN || pQuery->m_sQuery.IsEmpty() );
+
+	// check if index is ready
+	if ( m_bPreread.IsEmpty() || !m_bPreread[0] )
+	{
+		pResult->m_sError = "index not preread";
+		return false;
+	}
+
+	// check if index supports scans
+	if ( m_uDocinfo<=0 || m_tSettings.m_eDocinfo!=SPH_DOCINFO_EXTERN || m_pDocinfo.IsEmpty() || !m_tSchema.GetAttrsCount() )
+	{
+		pResult->m_sError = "fullscan requires extern docinfo";
+		return false;
+	}
+
+	// check if index has data
+	if ( !m_tStats.m_iTotalDocuments )
+		return true;
+
+	// start counting
+	pResult->m_iQueryTime = 0;
+	int64_t tmQueryStart = sphMicroTimer();
+
+	// setup calculations and result schema
+	CSphQueryContext tCtx;
+	if ( !tCtx.SetupCalc ( pResult, ppSorters[0]->GetSchema(), m_tSchema, GetMVAPool() ) )
+		return false;
+
+	// setup filters
+	if ( !tCtx.CreateFilters ( pQuery, pResult->m_tSchema, GetMVAPool(), pResult->m_sError ) )
+		return false;
+
+	// check if we can early reject the whole index
+	if ( tCtx.m_pFilter && m_pDocinfoIndex.GetLength() )
+	{
+		DWORD uStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
+		DWORD * pMinEntry = const_cast<DWORD*> ( &m_pDocinfoIndex [ 2*m_uDocinfoIndex*uStride ] );
+		DWORD * pMaxEntry = pMinEntry + uStride;
+
+		if ( !tCtx.m_pFilter->EvalBlock ( pMinEntry, pMaxEntry ) )
+		{
+			pResult->m_iQueryTime = int( ( sphMicroTimer()-tmQueryStart )/1000 );
+			return true;
+		}
+	}
+
+	// setup lookup
+	tCtx.m_bEarlyLookup = false;
+	tCtx.m_bLateLookup = true;
+
+	// setup sorters vs. MVA
+	for ( int i=0; i<iSorters; i++ )
+		(ppSorters[i])->SetMVAPool ( m_pMva.GetWritePtr() );
+
+	// setup overrides
+	if ( !tCtx.SetupOverrides ( pQuery, pResult, m_tSchema ) )
+		return false;
+
+	// do scan
 	bool bRandomize = ppSorters[0]->m_bRandomize;
 	int iCutoff = pQuery->m_iCutoff;
 
 	CSphMatch tMatch;
-	tMatch.Reset ( tSetup.m_iDynamicRowitems );
+	tMatch.Reset ( pResult->m_tSchema.GetDynamicSize() );
 	tMatch.m_iWeight = 1;
-
-	pCtx->m_bEarlyLookup = false; // we'll do it manually
 
 	DWORD uStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 	for ( DWORD uIndexEntry=0; uIndexEntry<m_uDocinfoIndex; uIndexEntry++ )
@@ -10767,7 +10826,7 @@ void CSphIndex_VLN::MatchFullScan ( CSphQueryContext * pCtx, const CSphQuery * p
 			break;
 
 		// check applicable filters
-		if ( pCtx->m_pFilter && !pCtx->m_pFilter->EvalBlock ( pMin, pMax ) )
+		if ( tCtx.m_pFilter && !tCtx.m_pFilter->EvalBlock ( pMin, pMax ) )
 			continue;
 
 		///////////////////////
@@ -10780,15 +10839,15 @@ void CSphIndex_VLN::MatchFullScan ( CSphQueryContext * pCtx, const CSphQuery * p
 		for ( const DWORD * pDocinfo=pBlockStart; pDocinfo<=pBlockEnd; pDocinfo+=uStride )
 		{
 			tMatch.m_iDocID = DOCINFO2ID(pDocinfo);
-			CopyDocinfo ( pCtx, tMatch, pDocinfo );
+			CopyDocinfo ( &tCtx, tMatch, pDocinfo );
 
 			// early filter only (no late filters in full-scan because of no @weight)
-			pCtx->EarlyCalc ( tMatch );
-			if ( pCtx->m_pFilter && !pCtx->m_pFilter->Eval ( tMatch ) )
+			tCtx.EarlyCalc ( tMatch );
+			if ( tCtx.m_pFilter && !tCtx.m_pFilter->Eval ( tMatch ) )
 				continue;
 
 			// submit match to sorters
-			pCtx->LateCalc ( tMatch );
+			tCtx.LateCalc ( tMatch );
 			if ( bRandomize )
 				tMatch.m_iWeight = ( sphRand() & 0xffff );
 
@@ -10799,12 +10858,18 @@ void CSphIndex_VLN::MatchFullScan ( CSphQueryContext * pCtx, const CSphQuery * p
 			// handle cutoff
 			if ( bNewMatch )
 				if ( --iCutoff==0 )
-			{
-				uIndexEntry = m_uDocinfoIndex; // outer break
-				break;
-			}
+				{
+					uIndexEntry = m_uDocinfoIndex; // outer break
+					break;
+				}
 		}
 	}
+
+	// done
+	pResult->m_pMva = m_pMva.GetWritePtr();
+	pResult->m_pStrings = m_pStrings.GetWritePtr();
+	pResult->m_iQueryTime = int( ( sphMicroTimer()-tmQueryStart )/1000 );
+	return true;
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -12434,6 +12499,43 @@ bool CSphQueryContext::CreateFilters ( CSphQuery * pQuery, const CSphSchema & tS
 }
 
 
+bool CSphQueryContext::SetupOverrides ( CSphQuery * pQuery, CSphQueryResult * pResult, const CSphSchema & tIndexSchema )
+{
+	m_pOverrides = NULL;
+	ARRAY_FOREACH ( i, pQuery->m_dOverrides )
+	{
+		const char * sAttr = pQuery->m_dOverrides[i].m_sAttr.cstr(); // shortcut
+		const CSphColumnInfo * pCol = tIndexSchema.GetAttr ( sAttr );
+		if ( !pCol )
+		{
+			pResult->m_sError.SetSprintf ( "attribute override: unknown attribute name '%s'", sAttr );
+			return false;
+		}
+
+		if ( pCol->m_eAttrType!=pQuery->m_dOverrides[i].m_uAttrType )
+		{
+			pResult->m_sError.SetSprintf ( "attribute override: attribute '%s' type mismatch (index=%d, query=%d)",
+				sAttr, pCol->m_eAttrType, pQuery->m_dOverrides[i].m_uAttrType );
+			return false;
+		}
+
+		const CSphColumnInfo * pOutCol = pResult->m_tSchema.GetAttr ( pQuery->m_dOverrides[i].m_sAttr.cstr() );
+		if ( !pOutCol )
+		{
+			pResult->m_sError.SetSprintf ( "attribute override: unknown attribute name '%s' in outgoing schema", sAttr );
+			return false;
+		}
+
+		pQuery->m_dOverrides[i].m_tInLocator = pCol->m_tLocator;
+		pQuery->m_dOverrides[i].m_tOutLocator = pOutCol->m_tLocator;
+		pQuery->m_dOverrides[i].m_dValues.Sort ();
+	}
+	if ( pQuery->m_dOverrides.GetLength() )
+		m_pOverrides = &pQuery->m_dOverrides;
+	return true;
+}
+
+
 static XQNode_t * CloneKeyword ( const XQNode_t * pNode )
 {
 	assert ( pNode );
@@ -12544,6 +12646,10 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 {
 	assert ( pQuery );
 
+	// fast path for scans
+	if ( pQuery->m_eMode==SPH_MATCH_FULLSCAN || pQuery->m_sQuery.IsEmpty() )
+		return MultiScan ( pQuery, pResult, iSorters, ppSorters );
+
 	// fixup old matching modes at low level
 	CSphString sQueryFixup;
 	PrepareQueryEmulation ( pQuery, sQueryFixup );
@@ -12582,6 +12688,10 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 /// many regular queries with one sorter attached to each query
 bool CSphIndex_VLN::MultiQueryEx ( int iQueries, CSphQuery * pQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters ) const
 {
+	// ensure we have multiple queries
+	if ( iQueries==1 )
+		return MultiQuery ( pQueries, ppResults[0], 1, ppSorters );
+
 	assert ( pQueries );
 	assert ( ppResults );
 	assert ( ppSorters );
@@ -12644,6 +12754,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( CSphQuery * pQuery, CSphQueryResult * pRe
 	assert ( pQuery );
 	assert ( pResult );
 	assert ( ppSorters );
+	assert ( !pQuery->m_sQuery.IsEmpty() && pQuery->m_eMode!=SPH_MATCH_FULLSCAN ); // scans must go through MultiScan()
 
 	// start counting
 	pResult->m_iQueryTime = 0;
@@ -12667,10 +12778,6 @@ bool CSphIndex_VLN::ParsedMultiQuery ( CSphQuery * pQuery, CSphQueryResult * pRe
 	CSphQueryContext tCtx;
 	if ( !tCtx.SetupCalc ( pResult, ppSorters[0]->GetSchema(), m_tSchema, GetMVAPool() ) )
 		return false;
-
-	// fixup "empty query" at low level
-	if ( pQuery->m_sQuery.IsEmpty() )
-		pQuery->m_eMode = SPH_MATCH_FULLSCAN;
 
 	// open files
 	CSphAutofile tDoclist, tHitlist, tWordlist, tDummy;
@@ -12753,37 +12860,8 @@ bool CSphIndex_VLN::ParsedMultiQuery ( CSphQuery * pQuery, CSphQueryResult * pRe
 		(ppSorters[i])->SetMVAPool ( m_pMva.GetWritePtr() );
 
 	// setup overrides
-	tCtx.m_pOverrides = NULL;
-	ARRAY_FOREACH ( i, pQuery->m_dOverrides )
-	{
-		const char * sAttr = pQuery->m_dOverrides[i].m_sAttr.cstr(); // shortcut
-		const CSphColumnInfo * pCol = m_tSchema.GetAttr ( sAttr );
-		if ( !pCol )
-		{
-			pResult->m_sError.SetSprintf ( "attribute override: unknown attribute name '%s'", sAttr );
-			return false;
-		}
-
-		if ( pCol->m_eAttrType!=pQuery->m_dOverrides[i].m_uAttrType )
-		{
-			pResult->m_sError.SetSprintf ( "attribute override: attribute '%s' type mismatch (index=%d, query=%d)",
-				sAttr, pCol->m_eAttrType, pQuery->m_dOverrides[i].m_uAttrType );
-			return false;
-		}
-
-		const CSphColumnInfo * pOutCol = pResult->m_tSchema.GetAttr ( pQuery->m_dOverrides[i].m_sAttr.cstr() );
-		if ( !pOutCol )
-		{
-			pResult->m_sError.SetSprintf ( "attribute override: unknown attribute name '%s' in outgoing schema", sAttr );
-			return false;
-		}
-
-		pQuery->m_dOverrides[i].m_tInLocator = pCol->m_tLocator;
-		pQuery->m_dOverrides[i].m_tOutLocator = pOutCol->m_tLocator;
-		pQuery->m_dOverrides[i].m_dValues.Sort ();
-	}
-	if ( pQuery->m_dOverrides.GetLength() )
-		tCtx.m_pOverrides = &pQuery->m_dOverrides;
+	if ( !tCtx.SetupOverrides ( pQuery, pResult, m_tSchema ) )
+		return false;
 
 	PROFILE_END ( query_init );
 
@@ -12802,15 +12880,6 @@ bool CSphIndex_VLN::ParsedMultiQuery ( CSphQuery * pQuery, CSphQueryResult * pRe
 		case SPH_MATCH_BOOLEAN:
 			if ( !MatchExtended ( &tCtx, pQuery, iSorters, ppSorters, pRanker.Ptr() ) )
 				return false;
-			break;
-
-		case SPH_MATCH_FULLSCAN:
-			if ( m_uDocinfo<=0 || m_tSettings.m_eDocinfo!=SPH_DOCINFO_EXTERN || m_pDocinfo.IsEmpty() || !m_tSchema.GetAttrsCount() )
-			{
-				pResult->m_sError = "fullscan requires extern docinfo";
-				return false;
-			}
-			MatchFullScan ( &tCtx, pQuery, iSorters, ppSorters, tTermSetup );
 			break;
 
 		default:

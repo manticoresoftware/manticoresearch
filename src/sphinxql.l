@@ -23,6 +23,7 @@ SPACE				[ \t\n\r]
 
 %option noyywrap
 %option nounput
+%option reentrant
 
 %%
 

@@ -4771,6 +4771,7 @@ struct SqlNode_t
 
 struct SqlParser_t
 {
+	void *			m_pScanner;
 	const char *	m_pBuf;
 	const char *	m_pLastTokenStart;
 	CSphString *	m_pParseError;
@@ -4814,7 +4815,8 @@ void SqlUnescape ( CSphString & sRes, const char * sEscaped, int iLen )
 //////////////////////////////////////////////////////////////////////////
 
 // unused parameter, simply to avoid type clash between all my yylex() functions
-#define YY_DECL int yylex ( YYSTYPE * lvalp, SqlParser_t * pParser )
+#define YYLEX_PARAM pParser->m_pScanner, pParser
+#define YY_DECL int yylex ( YYSTYPE * lvalp, void * yyscanner, SqlParser_t * pParser )
 #include "llsphinxql.c"
 
 void yyerror ( SqlParser_t * pParser, const char * sMessage )
@@ -4911,7 +4913,8 @@ SqlStmt_e ParseSqlQuery ( const CSphString & sQuery, CSphQuery & tQuery, CSphStr
 	sEnd[0] = 0; // prepare for yy_scan_buffer
 	sEnd[1] = 0; // this is ok because string allocates a small gap
 
-	YY_BUFFER_STATE tLexerBuffer = yy_scan_buffer ( (char*)sQuery.cstr(), iLen+2 );
+	yylex_init ( &tParser.m_pScanner );
+	YY_BUFFER_STATE tLexerBuffer = yy_scan_buffer ( (char*)sQuery.cstr(), iLen+2, tParser.m_pScanner );
 	if ( !tLexerBuffer )
 	{
 		sError = "internal error: yy_scan_buffer() failed";
@@ -4919,7 +4922,8 @@ SqlStmt_e ParseSqlQuery ( const CSphString & sQuery, CSphQuery & tQuery, CSphStr
 	}
 
 	int iRes = yyparse ( &tParser );
-	yy_delete_buffer ( tLexerBuffer );
+	yy_delete_buffer ( tLexerBuffer, tParser.m_pScanner );
+	yylex_destroy ( tParser.m_pScanner );
 
 	// set proper result-set order
 	if ( tQuery.m_sGroupBy.IsEmpty() )

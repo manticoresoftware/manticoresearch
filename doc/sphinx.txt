@@ -488,16 +488,27 @@ pre-compiled binary files from the Downloads area on the website.
       location for the folders or configuration file, please change it
       accordingly.
 
-   2. Install the searchd system as a Windows service:
+   2. Edit the contents of sphinx.conf.in - specifically entries relating
+      to @CONFDIR@ - to paths suitable for your system.
 
-      C:\Sphinx> C:\Sphinx\searchd --install --config C:\Sphinx\sphinx.conf
-      --servicename SphinxSearch
+   3. Install the searchd system as a Windows service:
 
-   3. The searchd service will now be listed in the Services panel within
+      C:\Sphinx\bin> C:\Sphinx\bin\searchd --install --config
+      C:\Sphinx\sphinx.conf.in --servicename SphinxSearch
+
+   4. The searchd service will now be listed in the Services panel within
       the Management Console, available from Administrative Tools. It will
       not have been started, as you will need to configure it and build
       your indexes with indexer before starting the service. A guide to do
       this can be found under Quick tour.
+
+      During the next steps of the install (which involve running indexer
+      pretty much as you would on Linux) you may find that you get an error
+      relating to libmysql.dll not being found. If you have MySQL
+      installed, you should find a copy of this library in your Windows
+      directory, or sometimes in Windows\System32, or failing that in the
+      MySQL core directories. If you do receive an error please copy
+      libmysql.dll into the bin directory.
 
 2.5. Known installation issues
 ------------------------------
@@ -561,7 +572,7 @@ To use Sphinx, you will need to:
    2. Run the indexer to create full-text index from your data:
 
       | $ cd /usr/local/sphinx/etc
-      | $ /usr/local/sphinx/bin/indexer
+      | $ /usr/local/sphinx/bin/indexer --all
 
    3. Query your newly created index!
 

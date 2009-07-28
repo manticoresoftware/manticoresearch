@@ -266,11 +266,15 @@ $ cd sphinx
 	<para>For the remainder of this guide, we will assume that the folders are unzipped into <filename>C:\Sphinx</filename>, such that <filename>searchd.exe</filename> can be found in <filename>C:\Sphinx\bin\searchd.exe</filename>. If you decide to use any different location for the folders or configuration file, please change it accordingly.</para>
 </listitem>
 <listitem>
+	<para>Edit the contents of sphinx.conf.in - specifically entries relating to @CONFDIR@ - to paths suitable for your system.</para>
+</listitem>
+<listitem>
 	<para>Install the <filename>searchd</filename> system as a Windows service:</para>
-	<para><userinput>C:\Sphinx&gt; C:\Sphinx\searchd --install --config C:\Sphinx\sphinx.conf --servicename SphinxSearch</userinput></para>
+	<para><userinput>C:\Sphinx\bin&gt; C:\Sphinx\bin\searchd --install --config C:\Sphinx\sphinx.conf.in --servicename SphinxSearch</userinput></para>
 </listitem>
 <listitem>
 	<para>The <filename>searchd</filename> service will now be listed in the Services panel within the Management Console, available from Administrative Tools. It will not have been started, as you will need to configure it and build your indexes with <filename>indexer</filename> before starting the service. A guide to do this can be found under <link linkend="quick-tour">Quick tour</link>.</para>
+	<para>During the next steps of the install (which involve running indexer pretty much as you would on Linux) you may find that you get an error relating to libmysql.dll not being found. If you have MySQL installed, you should find a copy of this library in your Windows directory, or sometimes in Windows\System32, or failing that in the MySQL core directories. If you do receive an error please copy libmysql.dll into the bin directory.</para>
 </listitem>
 </orderedlist>
 </sect2>
@@ -345,7 +349,7 @@ $ vi sphinx.conf</literallayout></userinput></para>
 <listitem>
 	<para>Run the indexer to create full-text index from your data:</para>
 <para><userinput><literallayout>$ cd /usr/local/sphinx/etc
-$ /usr/local/sphinx/bin/indexer</literallayout></userinput></para>
+$ /usr/local/sphinx/bin/indexer --all</literallayout></userinput></para>
 </listitem>
 <listitem>
 	<para>Query your newly created index!</para>

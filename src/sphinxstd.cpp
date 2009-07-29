@@ -469,12 +469,27 @@ SPH_THDFUNC sphThreadProcWrapper ( void * pArg )
 
 bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pArg )
 {
+	const int THREAD_STACK_SIZE = 65536;
+
 	static bool bInit = false;
+#if !USE_WINDOWS
+	static pthread_attr_t tAttr;
+#endif
+
 	if ( !bInit )
 	{
 		// we're single-threaded yet, right?!
 		if ( !sphThreadKeyCreate ( &g_tThreadCleanupKey ) )
-			sphDie ( "FATAL: failed to created cleanup key" );
+			sphDie ( "FATAL: sphThreadKeyCreate() failed" );
+
+#if !USE_WINDOWS
+		if ( pthread_attr_init ( &tAttr ) )
+			sphDie ( "FATAL: pthread_attr_init() failed" );
+
+		if ( pthread_attr_setstacksize ( &tAttr, PTHREAD_STACK_MIN + THREAD_STACK_SIZE  ) )
+			sphDie ( "FATAL: pthread_attr_setstacksize() failed" );
+#endif
+
 		bInit = true;
 	}
 
@@ -487,11 +502,12 @@ bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pA
 
 	// create thread
 #if USE_WINDOWS
-	*pThread = CreateThread ( NULL, 0, sphThreadProcWrapper, pCall, 0, NULL );
+	*pThread = CreateThread ( NULL, THREAD_STACK_SIZE, sphThreadProcWrapper, pCall, 0, NULL );
 	if ( *pThread )
 		return true;
 #else
-	if ( !pthread_create ( pThread, NULL, sphThreadProcWrapper, pCall ) )
+	errno = pthread_create ( pThread, &tAttr, sphThreadProcWrapper, pCall );
+	if ( !errno )
 		return true;
 #endif
 

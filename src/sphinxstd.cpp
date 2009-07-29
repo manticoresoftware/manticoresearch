@@ -437,7 +437,7 @@ struct ThreadCall_t
 	void *			m_pArg;
 	ThreadCall_t *	m_pNext;
 };
-static __thread ThreadCall_t * g_pThreadCleanup = NULL;
+SphThreadKey_t g_tThreadCleanupKey;
 
 
 #if USE_WINDOWS
@@ -448,17 +448,18 @@ static __thread ThreadCall_t * g_pThreadCleanup = NULL;
 
 SPH_THDFUNC sphThreadProcWrapper ( void * pArg )
 {
-	assert ( g_pThreadCleanup==NULL );
+	assert ( sphThreadGet ( g_tThreadCleanupKey )==NULL );
 
 	ThreadCall_t * pCall = (ThreadCall_t*) pArg;
 	pCall->m_pCall ( pCall->m_pArg );
 	SafeDelete ( pCall );
 
-	while ( g_pThreadCleanup )
+	ThreadCall_t * pCleanup = (ThreadCall_t*) sphThreadGet ( g_tThreadCleanupKey );
+	while ( pCleanup )
 	{
-		pCall = g_pThreadCleanup;
+		pCall = pCleanup;
 		pCall->m_pCall ( pCall->m_pArg );
-		g_pThreadCleanup = pCall->m_pNext;
+		pCleanup = pCall->m_pNext;
 		SafeDelete ( pCall );
 	}
 
@@ -468,6 +469,15 @@ SPH_THDFUNC sphThreadProcWrapper ( void * pArg )
 
 bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pArg )
 {
+	static bool bInit = false;
+	if ( !bInit )
+	{
+		// we're single-threaded yet, right?!
+		if ( !sphThreadKeyCreate ( &g_tThreadCleanupKey ) )
+			sphDie ( "FATAL: failed to created cleanup key" );
+		bInit = true;
+	}
+
 	// we can not merely put this on current stack
 	// as it might get destroyed before wrapper sees it
 	ThreadCall_t * pCall = new ThreadCall_t();
@@ -508,8 +518,49 @@ void sphThreadOnExit ( void (*fnCleanup)(void*), void * pArg )
 	ThreadCall_t * pCleanup = new ThreadCall_t ();
 	pCleanup->m_pCall = fnCleanup;
 	pCleanup->m_pArg = pArg;
-	pCleanup->m_pNext = g_pThreadCleanup;
-	g_pThreadCleanup = pCleanup;
+	pCleanup->m_pNext = (ThreadCall_t*) sphThreadGet ( g_tThreadCleanupKey );
+	sphThreadSet ( g_tThreadCleanupKey, pCleanup );
+}
+
+
+bool sphThreadKeyCreate ( SphThreadKey_t * pKey )
+{
+#if USE_WINDOWS
+	*pKey = TlsAlloc();
+	return *pKey!=TLS_OUT_OF_INDEXES;
+#else
+	return pthread_key_create ( pKey, NULL )==0;
+#endif
+}
+
+
+void sphThreadKeyDelete ( SphThreadKey_t tKey )
+{
+#if USE_WINDOWS
+	TlsFree ( tKey );
+#else
+	pthread_key_delete ( tKey );
+#endif
+}
+
+
+void * sphThreadGet ( SphThreadKey_t tKey )
+{
+#if USE_WINDOWS
+	return TlsGetValue ( tKey );
+#else
+	return pthread_getspecific ( tKey );
+#endif
+}
+
+
+bool sphThreadSet ( SphThreadKey_t tKey, void * pValue )
+{
+#if USE_WINDOWS
+	return TlsSetValue ( tKey, pValue )!=FALSE;
+#else
+	return pthread_setspecific ( tKey, pValue )==0;
+#endif
 }
 
 //////////////////////////////////////////////////////////////////////////

@@ -1540,9 +1540,10 @@ protected:
 /// my thread handle and thread func magic
 #if USE_WINDOWS
 typedef HANDLE SphThread_t;
-#define __thread __declspec(thread)
+typedef DWORD SphThreadKey_t;
 #else
 typedef pthread_t SphThread_t;
+typedef pthread_key_t SphThreadKey_t;
 #endif
 
 /// my create thread wrapper
@@ -1553,6 +1554,18 @@ bool sphThreadJoin ( SphThread_t * pThread );
 
 /// add (cleanup) callback to run on thread exit
 void sphThreadOnExit ( void (*fnCleanup)(void*), void * pArg );
+
+/// alloc thread-local key
+bool sphThreadKeyCreate ( SphThreadKey_t * pKey );
+
+/// free thread-local key
+void sphThreadKeyDelete ( SphThreadKey_t tKey );
+
+/// get thread-local key value
+void * sphThreadGet ( SphThreadKey_t tKey );
+
+/// set thread-local key value
+bool sphThreadSet ( SphThreadKey_t tKey, void * pValue );
 
 //////////////////////////////////////////////////////////////////////////
 

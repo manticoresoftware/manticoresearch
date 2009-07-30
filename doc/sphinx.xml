@@ -821,9 +821,11 @@ stream data:
 &lt;/sphinx:schema&gt;
 
 &lt;sphinx:document id="1234"&gt;
-&lt;content&gt;this is the main content &lt;![CDATA[[and this &lt;cdata&gt; entry must be handled properly by xml parser lib]]&gt;&lt;/content&gt;
+&lt;content&gt;this is the main content &lt;![CDATA[[and this &lt;cdata&gt; entry
+must be handled properly by xml parser lib]]&gt;&lt;/content&gt;
 &lt;published&gt;1012325463&lt;/published&gt;
-&lt;subject&gt;note how field/attr tags can be in &lt;b class="red"&gt;randomized&lt;/b&gt; order&lt;/subject&gt;
+&lt;subject&gt;note how field/attr tags can be
+in &lt;b class="red"&gt;randomized&lt;/b&gt; order&lt;/subject&gt;
 &lt;misc&gt;some undeclared element&lt;/misc&gt;
 &lt;/sphinx:document&gt;
 

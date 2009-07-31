@@ -5083,6 +5083,12 @@ void CSphWriter::SeekTo ( SphOffset_t iPos )
 	{
 		assert ( iPos<m_iWritten ); // seeking forward in a writer, we don't support it
 		sphSeek ( m_iFD, iPos, SEEK_SET );
+
+		// seeking outside the buffer; so the buffer must be discarded
+		// also, current write position must be adjusted
+		m_pPool = m_pBuffer;
+		m_iPoolUsed = 0;
+		m_iWritten = iPos;
 	}
 	m_iPos = iPos;
 }

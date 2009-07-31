@@ -11414,9 +11414,18 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword )
 			break;
 		tKeyword.SeekHitlist ( tKeyword.m_iHitlistPos );
 
+		int iHits = 0;
 		while ( DWORD uHit = tKeyword.GetNextHit() )
 		{
 			fprintf ( fp, "doc="DOCID_FMT", hit=0x%08x\n", tKeyword.m_tDoc.m_iDocID, uHit );
+			iHits++;
+		}
+
+		if ( !iHits )
+		{
+			uint64_t uOff = tKeyword.m_iHitlistPos;
+			fprintf ( fp, "doc="DOCID_FMT", NO HITS, inline=%d, off=%"PRIi64"\n",
+				tKeyword.m_tDoc.m_iDocID, (int)(uOff>>63), (uOff<<1)>>1 );
 		}
 	}
 }

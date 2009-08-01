@@ -69,8 +69,19 @@ public:
 		DWORD				m_uWords;		///< matching query words mask
 		int					m_iWordsWeight;	///< passage weight factor
 		int					m_iWordCount;	///< passage weight factor
-		int					m_iMaxLCS;		///< passage weight factor
-		int					m_iMinGap;		///< passage weight factor
+		union
+		{
+			struct
+			{
+				int			m_iMaxLCS;		///< passage weight factor
+				int			m_iMinGap;		///< passage weight factor
+			};
+			struct
+			{
+				int			m_iStartLimit;
+				int			m_iEndLimit;
+			};
+		};
 
 		void Reset ()
 		{
@@ -102,6 +113,7 @@ public:
 	{
 		int		m_uStar;
 		int		m_iWord;
+		int		m_iLength;
 	};
 
 protected:
@@ -117,6 +129,7 @@ protected:
 
 	bool					m_bExactPhrase;
 
+	DWORD					m_uFoundWords;	///< found words mask
 	int						m_iWordCount; 
 	int						m_iLastWord;
 	CSphHitMarker *			m_pMarker;
@@ -359,8 +372,8 @@ inline bool operator < ( const ExcerptGen_c::Token_t & a, const ExcerptGen_c::To
 inline bool operator < ( const ExcerptGen_c::Passage_t & a, const ExcerptGen_c::Passage_t & b )
 {
 	if ( a.GetWeight()==b.GetWeight() )
-		return a.m_iCodes > b.m_iCodes;
-	return a.GetWeight() > b.GetWeight();
+		return a.m_iCodes < b.m_iCodes;
+	return a.GetWeight() < b.GetWeight();
 }
 
 ExcerptGen_c::ExcerptGen_c ()
@@ -368,6 +381,7 @@ ExcerptGen_c::ExcerptGen_c ()
 	m_iWordCount = 0;
 	m_bExactPhrase = false;
 	m_pMarker = NULL;
+	m_uFoundWords = 0;
 }
 
 void ExcerptGen_c::AddBoundary()
@@ -445,6 +459,7 @@ void ExcerptGen_c::TokenizeQuery ( const ExcerptQuery_t & tQuery, CSphDict * pDi
 
 			// store keyword
 			Keyword_t & kwLast = m_dKeywords.Add();
+			kwLast.m_iLength = tLast.m_iLengthCP;
 
 			// find stars
 			bool bStarBack = *pTokenizer->GetTokenEnd() == '*';
@@ -537,7 +552,10 @@ void ExcerptGen_c::TokenizeDocument ( const ExcerptQuery_t & tQuery, CSphDict * 
 				}
 
 				if ( bMatch )
-					tLast.m_uWords |= (1UL << nWord);
+				{
+					tLast.m_uWords |= 1UL<<nWord;
+					m_uFoundWords |= 1UL<<nWord;
+				}
 			}
 		}
 	}
@@ -972,192 +990,210 @@ struct PassageOrder_fn
 };
 
 
-bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & q )
+bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 {
-	///////////////////////////
-	// select the ones to show
-	///////////////////////////
+	assert ( m_dPassages.GetLength() );
+
+	/// select best passages
+
+	int iKeywordsLength = 0;
+	ARRAY_FOREACH ( i, m_dKeywords )
+		iKeywordsLength += m_dKeywords[i].m_iLength;
 
 	CSphVector<Passage_t> dShow;
-	int iLeft = q.m_iLimit;
+	DWORD uWords = 0;
+	int iTotalCodes = 0;
 
-	if ( ( q.m_bUseBoundaries || iLeft>0 ) && m_dPassages.GetLength() )
+	CSphVector<int> dWeights ( m_dPassages.GetLength() );
+	ARRAY_FOREACH ( i, m_dPassages )
+		dWeights[i] = m_dPassages[i].m_iWordsWeight;
+
+	bool bAll = false;
+	int iCount = tQuery.m_bSinglePassage ? 1 : m_dPassages.GetLength();
+	for ( int iPassage = 0; iPassage<iCount; iPassage++ )
 	{
-		// initial heapify
-		for ( int i=1; i<m_dPassages.GetLength(); i++ )
+		// get next best passage
+		int iBest = -1;
+		ARRAY_FOREACH ( i, m_dPassages )
 		{
-			// everything upto i-th is heapified; sift up i-th element
-			for ( int j=i; j!=0 && ( m_dPassages[j] < m_dPassages[j>>1] ); j=j>>1 )
-				Swap ( m_dPassages[j>>1], m_dPassages[j] );
+			if ( m_dPassages[i].m_iCodes && ( iBest==-1 || m_dPassages[iBest] < m_dPassages[i] ) )
+				iBest = i;
+		}
+		assert ( iBest!=-1 );
+		Passage_t & tBest = m_dPassages[iBest];
+
+		// all words will be shown and we're outta limit
+		if ( uWords==m_uFoundWords && iTotalCodes + tBest.m_iCodes > tQuery.m_iLimit )
+		{
+			// there might be just enough space to partially display this passage
+			if ( iTotalCodes + iKeywordsLength <= tQuery.m_iLimit )
+				dShow.Add ( tBest );
+			break;
 		}
 
-		// best passage extraction loop
-		DWORD uNotShown = 1UL << ( m_dWords.GetLength()-1 );
-		while ( m_dPassages.GetLength() )
+		// save it
+		dShow.Add ( tBest );
+		uWords |= tBest.m_uWords;
+		iTotalCodes += tBest.m_iCodes;
+		tBest.m_iCodes = 0; // no longer needed here, abusing to mark displayed passages
+
+		if ( !bAll && uWords==m_uFoundWords )
 		{
-			// this is our hero
-			Passage_t & tPass = m_dPassages[0];
+			bAll = true;
+			ARRAY_FOREACH ( i, m_dPassages )
+				m_dPassages[i].m_iWordsWeight = dWeights[i];
+		}
+		if ( bAll ) continue;
 
-			// emit this passage, if we can
-			DWORD uShownWords = 0;
-			if ( tPass.m_iCodes<=iLeft || q.m_bUseBoundaries )
+		// re-weight passages, as we will show some of the query words, displaying other
+		// passages containing them is less significant
+		ARRAY_FOREACH ( i, m_dPassages )
+		{
+			if ( !m_dPassages[i].m_iCodes )
+				continue;
+			DWORD uMask = tBest.m_uWords;
+			for ( int iWord=0; uMask; iWord++, uMask>>=1 )
+				if ( ( uMask & 1 ) && ( m_dPassages[i].m_uWords & ( 1UL<<iWord ) ) )
+					m_dPassages[i].m_iWordsWeight -= m_dWords[iWord].m_iWeight;
+			m_dPassages[i].m_uWords &= ~uWords;
+		}
+	}
+
+	// if all passages won't fit into the limit, try to trim them a bit
+	//
+	// this step is skipped when use_boundaries is enabled, because
+	// each passage must be a separate sentence (delimited by
+	// boundaries) and we don't want to split them
+	if ( iTotalCodes > tQuery.m_iLimit && !tQuery.m_bUseBoundaries )
+	{
+		const int iKeepAround = ( tQuery.m_iAround + 1 ) / 2;
+		// find limits for trimming.
+		//
+		// we want to have at least iKeepAround words before the first and
+		// after the last query word in passage.
+		ARRAY_FOREACH ( i, dShow )
+		{
+			// find first and last matching words in passage
+			int iFirst = -1, iLast = -1;
+			const int iStart = dShow[i].m_iStart;
+			const int iEnd = dShow[i].m_iStart + dShow[i].m_iTokens;
+			int iQueryWords = 0;
+			for ( int j = iStart; j!=iEnd; j++ )
 			{
-				// add it to the show
-				dShow.Add ( tPass );
-				iLeft -= tPass.m_iCodes;
-				uShownWords = tPass.m_uWords;
-
-				// sometimes we need only one best one
-				if ( q.m_bSinglePassage )
-					break;
-			}
-
-			// promote tail, retire head
-			m_dPassages.RemoveFast ( 0 );
-
-			// sift down former tail
-			int iEntry = 0;
-			for ( ;; )
-			{
-				// select child
-				int iChild = (iEntry<<1) + 1;
-				if ( iChild>=m_dPassages.GetLength() )
-					break;
-
-				// select smallest child
-				if ( iChild+1<m_dPassages.GetLength() )
-					if ( m_dPassages[iChild+1] < m_dPassages[iChild] )
-						iChild++;
-
-				// if smallest child is less than entry, exchange and continue
-				if (!( m_dPassages[iChild]<m_dPassages[iEntry] ))
-					break;
-				Swap ( m_dPassages[iChild], m_dPassages[iEntry] );
-				iEntry = iChild;
-			}
-
-			// we now show some of the query words,
-			// so displaying other passages containing those is less significant,
-			// so let's update all the other weights (and word masks, to avoid updating twice)
-			// and sift up
-			if ( uNotShown )
-				for ( int i=0; i<m_dPassages.GetLength(); i++ )
-			{
-				if ( m_dPassages[i].m_uWords & uShownWords )
+				if ( m_dTokens[i].m_uWords )
 				{
-					// update this passage
-					DWORD uWords = uShownWords;
-					for ( int iWord=0; uWords; iWord++, uWords>>=1 )
-						if ( ( uWords & 1 ) && ( m_dPassages[i].m_uWords & ( 1UL<<iWord ) ) )
-							m_dPassages[i].m_iWordsWeight -= m_dWords[iWord].m_iWeight;
-
-					m_dPassages[i].m_uWords &= ~uShownWords;
-					assert ( m_dPassages[i].m_iWordsWeight>=0 );
+					( iFirst==-1 ? iFirst : iLast ) = j;
+					iQueryWords++;
 				}
-
-				// every entry above this is both already updated and properly heapified
-				// we only need to sift up, but we need to sift up *every* entry
-				// because its parent might had been updated this time, breaking heap property
-				for ( int j=i; j!=0 && ( m_dPassages[j] < m_dPassages[j>>1] ); j=j>>1 )
-					Swap ( m_dPassages[j>>1], m_dPassages[j] );
 			}
-			uNotShown &= ~uShownWords;
+			dShow[i].m_iStartLimit = iFirst;
+			dShow[i].m_iEndLimit = iLast;
+			// sometimes there's enough context inside the passage so we can trim a bit more
+			int iAround = iKeepAround;
+			if ( iQueryWords>=3 )
+			{
+				int iPassageWords = 0;
+				for ( int j = iFirst+1; j<iLast; j++ )
+					if ( m_dTokens[i].m_eType==TOK_WORD && !m_dTokens[i].m_uWords )
+						iPassageWords++;
+				if ( iPassageWords>=iQueryWords )
+					iAround = 1;
+			}
+			// find start limit
+			int iCount = 0;
+			for ( int j = iFirst; j!=iStart; j-- )
+				if ( m_dTokens[j-1].m_eType==TOK_WORD && ++iCount>=iAround )
+				{
+					dShow[i].m_iStartLimit = j-1;
+					break;
+				}
+			// find end limit
+			iCount = 0;
+			for ( int j = iLast+1; j!=iEnd; j++ )
+				if ( m_dTokens[j].m_eType==TOK_WORD && ++iCount>=iAround )
+				{
+					dShow[i].m_iEndLimit = j;
+					break;
+				}
 		}
+
+		// trim passages
+		bool bFirst = true;
+		bool bDone = false;
+		int iCodes = iTotalCodes;
+		while ( !bDone )
+		{
+			// drop one token from each passage starting from the least relevant
+			for ( int i=dShow.GetLength(); i > 0; i-- )
+			{
+				Passage_t & tPassage = dShow[i-1];
+				int iFirst = tPassage.m_iStart;
+				int iLast = tPassage.m_iStart + tPassage.m_iTokens - 1;
+				if ( iFirst!=tPassage.m_iStartLimit && ( bFirst || iLast==tPassage.m_iEndLimit ) )
+				{
+					// drop first
+					tPassage.m_iStart++;
+					tPassage.m_iTokens--;
+					tPassage.m_iCodes -= m_dTokens[iFirst].m_iLengthCP;
+					iTotalCodes -= m_dTokens[iFirst].m_iLengthCP;
+				}
+				else if ( iLast!=tPassage.m_iEndLimit )
+				{
+					// drop last
+					tPassage.m_iTokens--;
+					tPassage.m_iCodes -= m_dTokens[iLast].m_iLengthCP;
+					iTotalCodes -= m_dTokens[iLast].m_iLengthCP;
+				}
+				if ( iTotalCodes<=tQuery.m_iLimit )
+				{
+					bDone = true;
+					break;
+				}
+			}
+			if ( iTotalCodes==iCodes )
+				break; // couldn't reduce anything
+			iCodes = iTotalCodes;
+			bFirst = !bFirst;
+		}
+	}
+
+	// if passages still don't fit start dropping least significant ones, limit is sacred.
+	while ( iTotalCodes > tQuery.m_iLimit )
+	{
+		iTotalCodes -= dShow.Last().m_iCodes;
+		dShow.RemoveFast ( dShow.GetLength()-1 );
 	}
 
 	if ( !dShow.GetLength() )
 		return false;
 
-	///////////
-	// do show
-	///////////
-
-	// sort the passaged in the document order
-	if ( !q.m_bWeightOrder )
+	// sort passages in the document order
+	if ( !tQuery.m_bWeightOrder )
 		dShow.Sort ( PassageOrder_fn() );
 
-	// estimate length, and grow it up to the limit
+	/// show
 	int iLast = -1;
-	int iLength = 0;
-	ARRAY_FOREACH ( i, dShow )
-	{
-		int iEnd = dShow[i].m_iStart + dShow[i].m_iTokens - 1;
-		for ( int iTok = dShow[i].m_iStart; iTok<=iEnd; iTok++ )
-			if ( iTok>iLast )
-				iLength += m_dTokens[iTok].m_iLengthCP;
-		iLast = iEnd;
-	}
-	if ( iLength<q.m_iLimit && !q.m_bUseBoundaries )
-	{
-		// word id is no longer needed; we'll use it to store index into dShow
-		ARRAY_FOREACH ( i, m_dTokens )
-			m_dTokens[i].m_iWordID = 0;
-
-		ARRAY_FOREACH ( i, dShow )
-			for ( int iTok = dShow[i].m_iStart; iTok < dShow[i].m_iStart+dShow[i].m_iTokens; iTok++ )
-				if ( m_dTokens[iTok].m_iWordID==0 )
-					m_dTokens[iTok].m_iWordID = i;
-
-		int iLeft = q.m_iLimit - iLength;
-		int iLastLeft = 0;
-		while ( iLeft>0 && iLeft!=iLastLeft )
-		{
-			iLastLeft = iLeft;
-			for ( int iShow=0; iShow<dShow.GetLength() && iLeft>0; iShow++ )
-			{
-				Passage_t & tPass = dShow [ iShow ];
-
-				// the first one
-				int iTok = tPass.m_iStart - 1;
-				if ( iTok>=0
-					&& m_dTokens[iTok].m_iWordID==0
-					&& iLeft>=m_dTokens[iTok].m_iLengthCP )
-				{
-					iLeft -= m_dTokens [ iTok ].m_iLengthCP;
-					m_dTokens [ iTok ].m_iWordID = iShow;
-					tPass.m_iStart--;
-					tPass.m_iTokens++;
-				}
-
-				// the last one
-				iTok = tPass.m_iStart + tPass.m_iTokens;
-				if ( iTok<m_dTokens.GetLength()
-					&& m_dTokens[iTok].m_iWordID==0
-					&& iLeft>=m_dTokens[iTok].m_iLengthCP )
-				{
-					iLeft -= m_dTokens [ iTok ].m_iLengthCP;
-					m_dTokens [ iTok ].m_iWordID = iShow;
-					tPass.m_iTokens++;
-				}
-			}
-		}
-	}
-
-	// show everything
-	iLast = -1;
 	ARRAY_FOREACH ( i, dShow )
 	{
 		int iTok = dShow[i].m_iStart;
 		int iEnd = iTok + dShow[i].m_iTokens - 1;
 
-		if ( iTok>1+iLast || q.m_bWeightOrder )
-			ResultEmit ( q.m_sChunkSeparator.cstr() );
+		if ( iTok>1+iLast || tQuery.m_bWeightOrder )
+			ResultEmit ( tQuery.m_sChunkSeparator.cstr() );
 
 		if ( m_bExactPhrase )
-		{
-			HighlightPhrase ( q, iTok, iEnd );
-		}
-		else // !m_bExactPhrase
+			HighlightPhrase ( tQuery, iTok, iEnd );
+		else
 		{
 			while ( iTok<=iEnd )
 			{
-				if ( iTok>iLast || q.m_bWeightOrder )
+				if ( iTok>iLast || tQuery.m_bWeightOrder )
 				{
 					if ( m_dTokens[iTok].m_uWords )
 					{
-						ResultEmit ( q.m_sBeforeMatch.cstr() );
+						ResultEmit ( tQuery.m_sBeforeMatch.cstr() );
 						ResultEmit ( m_dTokens[iTok] );
-						ResultEmit ( q.m_sAfterMatch.cstr() );
+						ResultEmit ( tQuery.m_sAfterMatch.cstr() );
 					}
 					else
 						ResultEmit ( m_dTokens[iTok] );
@@ -1168,8 +1204,8 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & q )
 
 		iLast = iEnd;
 	}
-	if ( iLast != m_dTokens.GetLength()-1 )
-		ResultEmit ( q.m_sChunkSeparator.cstr() );
+	if ( m_dTokens[iLast].m_eType!=TOK_NONE && m_dTokens[iLast+1].m_eType!=TOK_NONE )
+		ResultEmit ( tQuery.m_sChunkSeparator.cstr() );
 
 	return true;
 }

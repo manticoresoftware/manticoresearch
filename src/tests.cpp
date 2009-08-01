@@ -863,7 +863,7 @@ void TestRwlock ()
 	for ( int i=0; i<NPAIRS; i++ )
 	{
 		assert ( sphThreadCreate ( &dReaders[i], RwlockReader, (void*)&iRead[i] ) );
-		assert ( sphThreadCreate ( &dWriters[i], RwlockWriter, (void*)(1+i) ) );
+		assert ( sphThreadCreate ( &dWriters[i], RwlockWriter, reinterpret_cast<void*>(1+i) ) );
 	}
 
 	for ( int i=0; i<NPAIRS; i++ )

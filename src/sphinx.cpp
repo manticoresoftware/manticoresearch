@@ -5699,14 +5699,14 @@ int CSphBin::ReadHit ( CSphAggregateHit * pOut, int iRowitems, CSphRowitem * pRo
 				case BIN_POS:
 					if ( m_eMode==SPH_HITLESS_ALL )
 					{
-						tHit.m_uFieldMask = ReadVLB();
+						tHit.m_uFieldMask = (DWORD)ReadVLB();
 						m_eState = BIN_DOC;
 					}
 					else if ( m_eMode==SPH_HITLESS_SOME )
 					{
 						if ( uDelta & 1 )
 						{
-							tHit.m_uFieldMask = ReadVLB();
+							tHit.m_uFieldMask = (DWORD)ReadVLB();
 							m_eState = BIN_DOC;
 						}
 						uDelta >>= 1;
@@ -15848,7 +15848,7 @@ BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 
 	// cleanup attrs
 	for ( int i=0; i<m_tSchema.GetRowSize(); i++ )
-		m_tDocInfo.m_pDynamic[i] = NULL;
+		m_tDocInfo.m_pDynamic[i] = 0;
 
 	// split columns into fields and attrs
 	for ( int i=0; i<m_tSchema.m_iBaseFields; i++ )
@@ -18492,7 +18492,7 @@ bool CSphSource_ODBC::SqlQuery ( const char * sQuery )
 			return false;
 
 		int iBuffLen = DEFAULT_COL_SIZE;
-		if ( uColSize && uColSize<MAX_COL_SIZE )
+		if ( uColSize && (int)uColSize<MAX_COL_SIZE )
 			iBuffLen = uColSize+1;
 
 		tCol.m_dContents.Resize ( iBuffLen );

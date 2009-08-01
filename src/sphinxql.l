@@ -2,8 +2,7 @@
 #include "yysphinxql.h"
 
 #if USE_WINDOWS
-#pragma warning(disable:4127) // conditional expression is constant
-#pragma warning(disable:4244) // conversion from int to short
+#pragma warning(push,1)
 #endif
 
 // warning, lexer generator dependent!
@@ -66,8 +65,8 @@ SPACE				[ \t\n\r]
 
 '([^']|\\')*'		{ YYSTOREBOUNDS; SqlUnescape ( lvalp->m_sValue, yytext, yyleng ); return TOK_QUOTED_STRING; }
 
--*{DIGIT}+\.{DIGIT}*	{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; lvalp->m_fValue = strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
--*\.{DIGIT}+			{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; lvalp->m_fValue = strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
+-*{DIGIT}+\.{DIGIT}*	{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
+-*\.{DIGIT}+			{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
 -*{DIGIT}+				{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; lvalp->m_iValue = strtoll ( yytext, NULL, 10 ); return TOK_CONST_INT; }
 
 "@id"				{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; return TOK_IDENT; }
@@ -81,6 +80,5 @@ SPACE				[ \t\n\r]
 %%
 
 #if USE_WINDOWS
-#pragma warning(default:4127) // conditional expression is constant
-#pragma warning(default:4244) // conversion from int to short
+#pragma warning(pop)
 #endif

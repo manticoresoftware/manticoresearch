@@ -2261,7 +2261,7 @@ public:
 	virtual void				DebugDumpDocids ( FILE * fp ) = 0;
 
 	/// internal debugging hook, DO NOT USE
-	virtual void				DebugDumpHitlist ( FILE * fp, const char * sKeyword ) = 0;
+	virtual void				DebugDumpHitlist ( FILE * fp, const char * sKeyword, bool bID ) = 0;
 
 public:
 	DWORD						m_uAttrsStatus;			///< whether in-memory attrs are updated (compared to disk state)

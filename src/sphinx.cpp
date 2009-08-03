@@ -1423,8 +1423,8 @@ struct CSphIndex_VLN : CSphIndex
 
 	virtual void				DebugDumpHeader ( FILE * fp, const char * sHeaderName );
 	virtual void				DebugDumpDocids ( FILE * fp );
-	virtual void				DebugDumpHitlist ( FILE * fp, const char * sKeyword );
-	template <class Qword> void	DumpHitlist ( FILE * fp, const char * sKeyword );
+	virtual void				DebugDumpHitlist ( FILE * fp, const char * sKeyword, bool bID );
+	template <class Qword> void	DumpHitlist ( FILE * fp, const char * sKeyword, bool bID );
 
 	virtual const CSphSchema *	Prealloc ( bool bMlock, CSphString & sWarning );
 	virtual bool				Mlock ();
@@ -11360,29 +11360,41 @@ void CSphIndex_VLN::DebugDumpDocids ( FILE * fp )
 }
 
 
-void CSphIndex_VLN::DebugDumpHitlist ( FILE * fp, const char * sKeyword )
+void CSphIndex_VLN::DebugDumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 {
-	WITH_QWORD ( this, false, Qword, DumpHitlist<Qword> ( fp, sKeyword ) );
+	WITH_QWORD ( this, false, Qword, DumpHitlist<Qword> ( fp, sKeyword, bID ) );
 }
 
 
 template < class Qword >
-void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword )
+void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 {
 	// get keyword id
-	CSphString sBuf ( sKeyword );
+	SphWordID_t uWordID = 0;
+	if ( !bID )
+	{
+		CSphString sBuf ( sKeyword );
 
-	m_pTokenizer->SetBuffer ( (BYTE*)sBuf.cstr(), strlen(sBuf.cstr()) );
-	BYTE * sTok = m_pTokenizer->GetToken();
+		m_pTokenizer->SetBuffer ( (BYTE*)sBuf.cstr(), strlen(sBuf.cstr()) );
+		BYTE * sTok = m_pTokenizer->GetToken();
 
-	if ( !sTok )
-		sphDie ( "keyword=%s, no token (too short?)", sKeyword );
+		if ( !sTok )
+			sphDie ( "keyword=%s, no token (too short?)", sKeyword );
 
-	SphWordID_t uWordID = m_pDict->GetWordID ( sTok );
-	if ( !uWordID )
-		sphDie ( "keyword=%s, tok=%s, no wordid (stopped?)", sKeyword, sTok );
+		uWordID = m_pDict->GetWordID ( sTok );
+		if ( !uWordID )
+			sphDie ( "keyword=%s, tok=%s, no wordid (stopped?)", sKeyword, sTok );
 
-	fprintf ( fp, "keyword=%s, tok=%s, wordid=%"PRIu64"\n", sKeyword, sTok, uint64_t(uWordID) );
+		fprintf ( fp, "keyword=%s, tok=%s, wordid=%"PRIu64"\n", sKeyword, sTok, uint64_t(uWordID) );
+
+	} else
+	{
+		uWordID = (SphWordID_t) strtoull ( sKeyword, NULL, 10 );
+		if ( !uWordID )
+			sphDie ( "failed to convert keyword=%d to id (must be integer)", sKeyword );
+
+		fprintf ( fp, "wordid=%"PRIu64"\n", uint64_t(uWordID) );
+	}
 
 	// open files
 	CSphAutofile tDoclist, tHitlist, tWordlist;

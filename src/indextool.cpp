@@ -28,7 +28,10 @@ int main ( int argc, char ** argv )
 			"--dumpheader <FILENAME.sph>\tdump index header by file name\n"
 			"--dumpheader <INDEXNAME>\tdump index header by index name\n"
 			"--dumpdocids <INDEXNAME>\tdump docids by index name\n"
-			"--dumphitlist <INDEXNAME> <KEYWORD>\tdump hits\n"
+			"--dumphitlist <INDEXNAME> <KEYWORD>\n"
+			"\t\t\t\tdump hits for given keyword\n"
+			"--dumphitlist <INDEXNAME> --wordid <ID>\n"
+			"\t\t\t\tdump hits for given keyword id\n"
 			"\n"
 			"Options are:\n"
 			"-c, --config <file>\t\tuse given config file instead of defaults\n"
@@ -45,6 +48,7 @@ int main ( int argc, char ** argv )
 
 	const char * sOptConfig = NULL;
 	CSphString sDumpHeader, sIndex, sKeyword;
+	bool bWordid = false;
 
 	enum
 	{
@@ -66,10 +70,32 @@ int main ( int argc, char ** argv )
 		OPT1 ( "--dumpheader" )		{ eCommand = CMD_DUMPHEADER; sDumpHeader = argv[++i]; }
 		OPT1 ( "--dumpdocids" )		{ eCommand = CMD_DUMPDOCIDS; sIndex = argv[++i]; }
 
-		else if ( (i+2)>=argc )		break;
-		OPT1("--dumphitlist")		{ eCommand = CMD_DUMPHITLIST; sIndex = argv[++i]; sKeyword = argv[++i]; }
+		// options with 2 args
+		else if ( (i+2)>=argc )
+		{
+			// not enough args
+			break;
 
-		else break; // unknown option
+		} else if ( !strcmp ( argv[i], "--dumphitlist" ) )
+		{
+			eCommand = CMD_DUMPHITLIST;
+			sIndex = argv[++i];
+
+			if ( !strcmp ( argv[i+1], "--wordid" ) )
+			{
+				if ( (i+3)<argc )
+					break; // not enough args
+				bWordid = true;
+				i++;
+			}
+
+			sKeyword = argv[++i];
+
+		} else
+		{
+			// unknown option
+			break;
+		}
 	}
 	if ( i!=argc )
 	{
@@ -144,7 +170,7 @@ int main ( int argc, char ** argv )
 
 		case CMD_DUMPHITLIST:
 			fprintf ( stdout, "dumping hitlist for index '%s' keyword '%s'...\n", sIndex.cstr(), sKeyword.cstr() );
-			pIndex->DebugDumpHitlist ( stdout, sKeyword.cstr() );
+			pIndex->DebugDumpHitlist ( stdout, sKeyword.cstr(), bWordid );
 			break;
 
 		default:

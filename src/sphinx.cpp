@@ -12996,6 +12996,8 @@ void CSphIndex_VLN::DebugCheck ( FILE * fp )
 	if ( m_bPreread.IsEmpty() || !m_bPreread[0] )
 		LOC_FAIL(( fp, "index not preread" ));
 
+	bool bProgress = isatty ( fileno ( fp ) );
+
 	//////////////
 	// open files
 	//////////////
@@ -13275,8 +13277,11 @@ void CSphIndex_VLN::DebugCheck ( FILE * fp )
 		SafeDelete ( pQword );
 	
 		// progress bar
-		if ( (++iWordsChecked)%1000==0 )
+		if ( (++iWordsChecked)%1000==0 && bProgress )
+		{
 			fprintf ( fp, "%d/%d\r", iWordsChecked, iWordsTotal );
+			fflush ( fp );
+		}
 	}
 
 	// well, no known kinds of failures, maybe some unknown ones

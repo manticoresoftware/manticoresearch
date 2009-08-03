@@ -5438,7 +5438,7 @@ static inline void FormatMsec ( CSphString & sOut, int64_t tmTime )
 void BuildStatus ( CSphVector<CSphString> & dStatus )
 {
 	assert ( g_pStats );
-	const char * FMT64 = "%"PRIu64;
+	const char * FMT64 = INT64_FMT;
 	const char * OFF = "OFF";
 
 	const int64_t iQueriesDiv = Max ( g_pStats->m_iQueries, 1 );
@@ -5936,7 +5936,7 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 						case SPH_ATTR_BOOL:
 						case SPH_ATTR_BIGINT:
 							if ( eAttrType==SPH_ATTR_BIGINT )
-								iLen = snprintf ( p+1, sRowMax-p, "%"PRIu64, tMatch.GetAttr(tLoc) );
+								iLen = snprintf ( p+1, sRowMax-p, INT64_FMT, tMatch.GetAttr(tLoc) );
 							else
 								iLen = snprintf ( p+1, sRowMax-p, "%u", (DWORD)tMatch.GetAttr(tLoc) );
 							p[0] = BYTE(iLen);

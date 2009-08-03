@@ -627,7 +627,7 @@ public:
 		}
 		if ( st.st_size<iMinSize )
 		{
-			sError.SetSprintf ( "failed to load %s: bad size %"PRIi64" (at least %"PRIi64" bytes expected)",
+			sError.SetSprintf ( "failed to load %s: bad size "INT64_FMT" (at least "INT64_FMT" bytes expected)",
 				GetFilename(), (int64_t)st.st_size, (int64_t)iMinSize );
 			return -1;
 		}
@@ -636,7 +636,7 @@ public:
 			size_t sCheck = (size_t)st.st_size;
 			if ( st.st_size!=SphOffset_t(sCheck) )
 			{
-				sError.SetSprintf ( "failed to load %s: bad size %"PRIi64" (out of size_t; 4 GB limit on 32-bit machine hit?)",
+				sError.SetSprintf ( "failed to load %s: bad size "INT64_FMT" (out of size_t; 4 GB limit on 32-bit machine hit?)",
 					GetFilename(), (int64_t)st.st_size );
 				return -1;
 			}
@@ -674,7 +674,7 @@ public:
 
 		if ( iToRead!=0 )
 		{
-			sError.SetSprintf ( "read error in %s; %"PRIi64" of %"PRIi64" bytes read",
+			sError.SetSprintf ( "read error in %s; "INT64_FMT" of "INT64_FMT" bytes read",
 				GetFilename(), iCount-iToRead, iCount );
 			return false;
 		}
@@ -5207,7 +5207,7 @@ void CSphReader_VLN::UpdateCache ()
 		m_iBuffUsed = 0;
 
 		m_bError = true;
-		m_sError.SetSprintf ( "seek error in %s: pos=%"PRIi64", code=%d, msg=%s",
+		m_sError.SetSprintf ( "seek error in %s: pos="INT64_FMT", code=%d, msg=%s",
 			m_sFilename.cstr(), (int64_t)iNewPos, errno, strerror(errno) );
 		return;
 	}
@@ -5228,7 +5228,7 @@ void CSphReader_VLN::UpdateCache ()
 	{
 		// unexpected io failure
 		m_bError = true;
-		m_sError.SetSprintf ( "read error in %s: pos=%"PRIi64", len=%d, code=%d, msg=%s",
+		m_sError.SetSprintf ( "read error in %s: pos="INT64_FMT", len=%d, code=%d, msg=%s",
 			m_sFilename.cstr(), (int64_t)m_iPos, iReadLen, errno, strerror(errno) );
 	}
 }
@@ -11301,7 +11301,7 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName )
 
 	// skipped min doc, wordlist checkpoints
 	fprintf ( fp, "total-documents: %d\n", m_tStats.m_iTotalDocuments );
-	fprintf ( fp, "total-bytes: %"PRIu64"\n", uint64_t(m_tStats.m_iTotalBytes) );
+	fprintf ( fp, "total-bytes: "INT64_FMT"\n", int64_t(m_tStats.m_iTotalBytes) );
 
 	fprintf ( fp, "min-prefix-len: %d\n", m_tSettings.m_iMinPrefixLen );
 	fprintf ( fp, "min-infix-len: %d\n", m_tSettings.m_iMinInfixLen );
@@ -11348,7 +11348,7 @@ void CSphIndex_VLN::DebugDumpDocids ( FILE * fp )
 	int iRowStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 	DWORD uNumRows = m_pDocinfo.GetNumEntries() / iRowStride; // all 32bit, as we don't expect 2 billion documents per single physical index
 
-	fprintf ( fp, "docinfo-bytes: %"PRIu64"\n", (uint64_t)m_pDocinfo.GetLength() );
+	fprintf ( fp, "docinfo-bytes: "UINT64_FMT"\n", (uint64_t)m_pDocinfo.GetLength() );
 	fprintf ( fp, "docinfo-stride: %d\n", (int)(iRowStride*sizeof(DWORD)) );
 	fprintf ( fp, "docinfo-rows: %d\n", uNumRows );
 
@@ -11386,7 +11386,7 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 		if ( !uWordID )
 			sphDie ( "keyword=%s, tok=%s, no wordid (stopped?)", sKeyword, sTok );
 
-		fprintf ( fp, "keyword=%s, tok=%s, wordid=%"PRIu64"\n", sKeyword, sTok, uint64_t(uWordID) );
+		fprintf ( fp, "keyword=%s, tok=%s, wordid="UINT64_FMT"\n", sKeyword, sTok, uint64_t(uWordID) );
 
 	} else
 	{
@@ -11394,7 +11394,7 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 		if ( !uWordID )
 			sphDie ( "failed to convert keyword=%d to id (must be integer)", sKeyword );
 
-		fprintf ( fp, "wordid=%"PRIu64"\n", uint64_t(uWordID) );
+		fprintf ( fp, "wordid="UINT64_FMT"\n", uint64_t(uWordID) );
 	}
 
 	// open files
@@ -11443,7 +11443,7 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 		if ( !iHits )
 		{
 			uint64_t uOff = tKeyword.m_iHitlistPos;
-			fprintf ( fp, "doc="DOCID_FMT", NO HITS, inline=%d, off=%"PRIi64"\n",
+			fprintf ( fp, "doc="DOCID_FMT", NO HITS, inline=%d, off="UINT64_FMT"\n",
 				tKeyword.m_tDoc.m_iDocID, (int)(uOff>>63), (uOff<<1)>>1 );
 		}
 	}
@@ -18797,7 +18797,7 @@ const char * CSphIndexProgress::BuildMessage() const
 			break;
 
 		case PHASE_COLLECT_MVA:
-			snprintf ( sBuf, sizeof(sBuf), "collected %"PRIu64" attr values", m_iAttrs );
+			snprintf ( sBuf, sizeof(sBuf), "collected "INT64_FMT" attr values", m_iAttrs );
 			break;
 
 		case PHASE_SORT_MVA:

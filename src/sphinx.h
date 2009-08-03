@@ -82,7 +82,7 @@ typedef uint64_t		SphWordID_t;
 typedef uint64_t		SphDocID_t;
 
 #define DOCID_MAX		U64C(0xffffffffffffffff)
-#define DOCID_FMT		"%" PRIu64
+#define DOCID_FMT		UINT64_FMT
 #define DOCINFO_IDSIZE	2
 
 STATIC_SIZE_ASSERT ( SphWordID_t, 8 );

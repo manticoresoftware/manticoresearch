@@ -140,6 +140,9 @@ typedef unsigned long long uint64_t;
 #define PRIi64 "lld"
 #endif
 
+#define UINT64_FMT "%" PRIu64
+#define INT64_FMT "%" PRIi64
+
 STATIC_SIZE_ASSERT ( uint64_t, 8 );
 STATIC_SIZE_ASSERT ( int64_t, 8 );
 
@@ -1415,9 +1418,9 @@ public:
 		if ( m_pData==MAP_FAILED )
 		{
 			if ( m_iLength>0x7fffffffUL )
-				sError.SetSprintf ( "mmap() failed: %s (length=%"PRIi64" is over 2GB, impossible on some 32-bit systems)", strerror(errno), (int64_t)m_iLength );
+				sError.SetSprintf ( "mmap() failed: %s (length="INT64_FMT" is over 2GB, impossible on some 32-bit systems)", strerror(errno), (int64_t)m_iLength );
 			else
-				sError.SetSprintf ( "mmap() failed: %s (length=%"PRIi64")", strerror(errno), (int64_t)m_iLength );
+				sError.SetSprintf ( "mmap() failed: %s (length="INT64_FMT")", strerror(errno), (int64_t)m_iLength );
 			m_iLength = 0;
 			return false;
 		}
@@ -1449,9 +1452,9 @@ public:
 			return true;
 
 		if ( sError.IsEmpty() )
-			sError.SetSprintf ( "%s mlock() failed: bytes=%"PRIu64", error=%s", sPrefix, (uint64_t)m_iLength, strerror(errno) );
+			sError.SetSprintf ( "%s mlock() failed: bytes="INT64_FMT", error=%s", sPrefix, (int64_t)m_iLength, strerror(errno) );
 		else
-			sError.SetSprintf ( "%s; %s mlock() failed: bytes=%"PRIu64", error=%s", sError.cstr(), sPrefix, (uint64_t)m_iLength, strerror(errno) );
+			sError.SetSprintf ( "%s; %s mlock() failed: bytes="INT64_FMT", error=%s", sError.cstr(), sPrefix, (int64_t)m_iLength, strerror(errno) );
 		return false;
 	}
 #endif

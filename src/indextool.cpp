@@ -55,7 +55,8 @@ int main ( int argc, char ** argv )
 		CMD_NOTHING,
 		CMD_DUMPHEADER,
 		CMD_DUMPDOCIDS,
-		CMD_DUMPHITLIST
+		CMD_DUMPHITLIST,
+		CMD_CHECK
 	} eCommand = CMD_NOTHING;
 
 	int i;
@@ -69,6 +70,7 @@ int main ( int argc, char ** argv )
 		OPT ( "-c", "--config" )	sOptConfig = argv[++i];
 		OPT1 ( "--dumpheader" )		{ eCommand = CMD_DUMPHEADER; sDumpHeader = argv[++i]; }
 		OPT1 ( "--dumpdocids" )		{ eCommand = CMD_DUMPDOCIDS; sIndex = argv[++i]; }
+		OPT1 ( "--check" )			{ eCommand = CMD_CHECK; sIndex = argv[++i]; }
 
 		// options with 2 args
 		else if ( (i+2)>=argc )
@@ -171,6 +173,11 @@ int main ( int argc, char ** argv )
 		case CMD_DUMPHITLIST:
 			fprintf ( stdout, "dumping hitlist for index '%s' keyword '%s'...\n", sIndex.cstr(), sKeyword.cstr() );
 			pIndex->DebugDumpHitlist ( stdout, sKeyword.cstr(), bWordid );
+			break;
+
+		case CMD_CHECK:
+			fprintf ( stdout, "checking index '%s'...\n", sIndex.cstr() );
+			pIndex->DebugCheck ( stdout );
 			break;
 
 		default:

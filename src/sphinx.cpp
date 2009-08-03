@@ -1039,7 +1039,7 @@ enum ESphFilterAttr
 	SPH_FILTERATTR_WEIGHT	= 2
 };
 
-struct CSphIndex_VLN;
+class CSphIndex_VLN;
 
 /// everything required to setup search term
 class DiskIndexQwordSetup_c : public ISphQwordSetup
@@ -1407,12 +1407,12 @@ public:
 
 	
 /// this is my actual VLN-compressed phrase index implementation
-struct CSphIndex_VLN : CSphIndex
+class CSphIndex_VLN : public CSphIndex
 {
 	friend class DiskIndexQwordSetup_c;
 	friend class CSphMerger;
-	friend class CSphDictReader;
 
+public:
 								CSphIndex_VLN ( const char * sFilename );
 								~CSphIndex_VLN ();
 
@@ -1424,6 +1424,7 @@ struct CSphIndex_VLN : CSphIndex
 	virtual void				DebugDumpHeader ( FILE * fp, const char * sHeaderName );
 	virtual void				DebugDumpDocids ( FILE * fp );
 	virtual void				DebugDumpHitlist ( FILE * fp, const char * sKeyword, bool bID );
+	virtual void				DebugCheck ( FILE * fp );
 	template <class Qword> void	DumpHitlist ( FILE * fp, const char * sKeyword, bool bID );
 
 	virtual const CSphSchema *	Prealloc ( bool bMlock, CSphString & sWarning );
@@ -9746,16 +9747,19 @@ private:
 
 	CSphReader_VLN	m_tReader;
 	CSphAutofile	m_tFile;
+	SphOffset_t		m_iMaxPos;
 
 public:
 	CSphDictReader()
 		: m_iWordID ( 0 )
 		, m_iDoclistOffset ( 0 )
 		, m_iEntries ( 0 )
+		, m_iMaxPos ( 0 )
 	{}
 
-	void Setup ( const CSphString & sFilename, CSphString & sError )
+	void Setup ( const CSphString & sFilename, SphOffset_t iMaxPos, CSphString & sError )
 	{
+		m_iMaxPos = iMaxPos;
 		m_tFile.Open ( sFilename, SPH_O_READ, sError );
 		m_tReader.SetFile ( m_tFile );
 		m_tReader.SeekTo ( 1, READ_NO_SIZE_HINT );
@@ -9763,17 +9767,22 @@ public:
 
 	bool Read()
 	{
-		if ( m_iEntries==CSphIndex_VLN::WORDLIST_CHECKPOINT )
+		if ( m_tReader.GetPos()>=m_iMaxPos )
+			return false;
+
+		SphWordID_t iDelta = m_tReader.UnzipWordid();
+		if ( !iDelta )
 		{
-			m_tReader.UnzipInt();
 			m_tReader.UnzipOffset();
 
 			m_iEntries = 0;
 			m_iWordID = 0;
 			m_iDoclistOffset = 0;
+
+			if ( m_tReader.GetPos()>=m_iMaxPos )
+				return false;
 		}
 
-		SphWordID_t iDelta = m_tReader.UnzipWordid();
 		if ( iDelta )
 		{
 			m_iWordID += iDelta;
@@ -9913,8 +9922,8 @@ bool CSphIndex_VLN::MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter
 	CSphDictReader tDstReader;
 	CSphDictReader tSrcReader;
 
-	tDstReader.Setup ( GetIndexFileName("spi"), m_sLastError );
-	tSrcReader.Setup ( pSrcIndex->GetIndexFileName("spi"), m_sLastError );
+	tDstReader.Setup ( GetIndexFileName("spi"), m_iCheckpointsPos, m_sLastError );
+	tSrcReader.Setup ( pSrcIndex->GetIndexFileName("spi"), pSrcIndex->m_iCheckpointsPos, m_sLastError );
 
 	if ( !m_sLastError.IsEmpty() )
 		return false;
@@ -12949,6 +12958,103 @@ bool CSphIndex_VLN::ParsedMultiQuery ( CSphQuery * pQuery, CSphQueryResult * pRe
 	return true;
 }
 
+//////////////////////////////////////////////////////////////////////////
+// INDEX CHECKING
+//////////////////////////////////////////////////////////////////////////
+
+#define LOC_FAIL(_args) \
+{ \
+	fprintf ( fp, "FAILED, " ); \
+	fprintf _args; \
+	fprintf ( fp, "\n" ); \
+}
+
+void CSphIndex_VLN::DebugCheck ( FILE * fp )
+{
+	// check if index is ready
+	if ( m_bPreread.IsEmpty() || !m_bPreread[0] )
+		LOC_FAIL(( fp, "index not preread" ));
+
+	////////////////////
+	// check dictionary
+	////////////////////
+
+	fprintf ( fp, "checking dictionary...\n" );
+
+	CSphString sError;
+	CSphAutoreader rdDict;
+	if ( !rdDict.Open ( GetIndexFileName("spi"), sError ) )
+		LOC_FAIL(( fp, "unable to open dictionary: %s", sError.cstr() ));
+
+	SphWordID_t uWordid = 0;
+	SphOffset_t iDoclistOffset = 0;
+
+	int iWordsTotal = 0;
+	int iWordsSinceCheckpoint = 0;
+	CSphVector<CSphWordlistCheckpoint> dCheckpoints;
+
+	rdDict.SeekTo ( 1, READ_NO_SIZE_HINT );
+	for ( ;; )
+	{
+		// sanity checks
+		if ( rdDict.GetPos()>=m_iCheckpointsPos )
+			LOC_FAIL(( fp, "reading past checkpoints" ));
+
+		// store current entry pos (for checkpointing later), read next delta
+		SphOffset_t iDictPos = rdDict.GetPos();
+		SphWordID_t iDelta = rdDict.UnzipWordid();
+
+		// checkpoint encountered, handle it
+		if ( !iDelta )
+		{
+			rdDict.UnzipOffset();
+
+			if ( rdDict.GetPos()==m_iCheckpointsPos )
+				break; // this is the end, my beautiful friend
+
+			if ( iWordsSinceCheckpoint!=WORDLIST_CHECKPOINT )
+				LOC_FAIL(( fp, "unexpected checkpoint (pos="INT64_FMT", words=%d)",
+					int64_t(iDictPos), iWordsSinceCheckpoint ));
+
+			uWordid = 0;
+			iDoclistOffset = 0;
+			iWordsSinceCheckpoint = 0;
+			continue;
+		}
+
+		// finish reading the entire entry
+		SphWordID_t uNewWordid = uWordid + iDelta;
+		SphOffset_t iNewDoclistOffset = iDoclistOffset + rdDict.UnzipOffset();
+		int iDocs = rdDict.UnzipInt();
+		int iHits = rdDict.UnzipInt();
+
+		// update stats, add checkpoint
+		if ( iWordsSinceCheckpoint==0 )
+		{
+			dCheckpoints.Add();
+			dCheckpoints.Last().m_iWordID = uWordid;
+		}
+		iWordsTotal++;
+		iWordsSinceCheckpoint++;
+
+		// do the checks
+		if ( uNewWordid<=uWordid )
+			LOC_FAIL(( fp, "wordid decreased (pos="INT64_FMT", wordid="UINT64_FMT", previd="UINT64_FMT")",
+				(int64_t)iDictPos, (uint64_t)uNewWordid, (uint64_t)uWordid ));
+
+		if ( iNewDoclistOffset<=iDoclistOffset )
+			LOC_FAIL(( fp, "doclist offset decreased (pos="INT64_FMT", wordid="UINT64_FMT")\n",
+				(int64_t)iDictPos, (uint64_t)uNewWordid ));
+
+		if ( iDocs<=0 || iHits<=0 || iHits<iDocs )
+			LOC_FAIL(( fp, "invalid docs/hits (pos="INT64_FMT", wordid="UINT64_FMT", docs=%d, hits=%d)\n",
+				(int64_t)iDictPos, (uint64_t)uNewWordid, iDocs, iHits ));
+	}
+
+	fprintf ( fp, "all checks were ok\n" );
+}
+
+//////////////////////////////////////////////////////////////////////////
 
 /// morphology
 enum

@@ -1024,7 +1024,12 @@ public:
 				~CSphAutoreader ();
 
 	bool		Open ( const CSphString & sFilename, CSphString & sError );
+	void		Close ();
 	SphOffset_t	GetFilesize ();
+
+public:
+	// added for DebugCheck()
+	int			GetFD () { return m_iFD; }
 };
 
 #define READ_NO_SIZE_HINT 0
@@ -1070,9 +1075,9 @@ protected:
 #pragma warning(disable:4127) // conditional expr is const for MSVC
 #endif
 
+
 /// query word from the searcher's point of view
-template < bool INLINE_HITS, bool INLINE_DOCINFO, bool DISABLE_HITLIST_SEEK >
-class DiskIndexQword_c : public ISphQword
+class DiskIndexQwordTraits_c : public ISphQword
 {
 public:
  	SphOffset_t		m_uHitPosition;
@@ -1096,7 +1101,7 @@ public:
 #endif
 
 public:
-	DiskIndexQword_c()
+	DiskIndexQwordTraits_c ()
 		: m_uHitPosition ( 0 )
 		, m_uHitState ( 0 )
 		, m_bDupe ( false )
@@ -1107,9 +1112,15 @@ public:
 #ifndef NDEBUG
 		, m_bHitlistOver ( true )
 #endif
-	{
-	}
+	{}
+};
 
+
+/// query word from the searcher's point of view
+template < bool INLINE_HITS, bool INLINE_DOCINFO, bool DISABLE_HITLIST_SEEK >
+class DiskIndexQword_c : public DiskIndexQwordTraits_c
+{
+public:
 	void Reset ()
 	{
 		m_uHitPosition = 0;
@@ -1124,10 +1135,7 @@ public:
 
 	void GetHitlistEntry ()
 	{
-#ifndef NDEBUG
 		assert ( !m_bHitlistOver );
-#endif
-
 		DWORD iDelta = m_rdHitlist.UnzipInt ();
 		if ( iDelta )
 		{
@@ -1141,7 +1149,6 @@ public:
 		}
 	}
 
-public:
 	virtual const CSphMatch & GetNextDoc ( DWORD * pDocinfo )
  	{
 		SphDocID_t iDelta = m_rdDoclist.UnzipDocid();
@@ -5432,8 +5439,7 @@ CSphString CSphReader_VLN::GetString ()
 
 CSphAutoreader::~CSphAutoreader ()
 {
-	if ( m_iFD>=0 )
-		::close ( m_iFD	);
+	Close ();
 }
 
 
@@ -5451,6 +5457,14 @@ bool CSphAutoreader::Open ( const CSphString & sFilename, CSphString & sError )
 	if ( m_iFD<0 )
 		sError.SetSprintf ( "failed to open %s: %s", sFilename.cstr(), strerror(errno) );
 	return ( m_iFD>=0 );
+}
+
+
+void CSphAutoreader::Close ()
+{
+	if ( m_iFD>=0 )
+		::close ( m_iFD	);
+	m_iFD = -1;
 }
 
 
@@ -12973,23 +12987,36 @@ bool CSphIndex_VLN::ParsedMultiQuery ( CSphQuery * pQuery, CSphQueryResult * pRe
 	fprintf ( fp, "\n" ); \
 }
 
+
 void CSphIndex_VLN::DebugCheck ( FILE * fp )
 {
+	int64_t tmCheck = sphMicroTimer();
+
 	// check if index is ready
 	if ( m_bPreread.IsEmpty() || !m_bPreread[0] )
 		LOC_FAIL(( fp, "index not preread" ));
+
+	//////////////
+	// open files
+	//////////////
+
+	CSphString sError;
+	CSphAutoreader rdDict, rdDocs, rdHits;
+
+	if ( !rdDict.Open ( GetIndexFileName("spi"), sError ) )
+		LOC_FAIL(( fp, "unable to open dictionary: %s", sError.cstr() ));
+
+	if ( !rdDocs.Open ( GetIndexFileName("spd"), sError ) )
+		LOC_FAIL(( fp, "unable to open doclist: %s", sError.cstr() ));
+	if ( !rdHits.Open ( GetIndexFileName("spp"), sError ) )
+
+		LOC_FAIL(( fp, "unable to open hitlist: %s", sError.cstr() ));
 
 	////////////////////
 	// check dictionary
 	////////////////////
 
 	fprintf ( fp, "checking dictionary...\n" );
-
-	CSphString sError;
-	CSphAutoreader rdDict;
-	if ( !rdDict.Open ( GetIndexFileName("spi"), sError ) )
-		LOC_FAIL(( fp, "unable to open dictionary: %s", sError.cstr() ));
-
 	SphWordID_t uWordid = 0;
 	SphOffset_t iDoclistOffset = 0;
 
@@ -13002,7 +13029,10 @@ void CSphIndex_VLN::DebugCheck ( FILE * fp )
 	{
 		// sanity checks
 		if ( rdDict.GetPos()>=m_iCheckpointsPos )
+		{
 			LOC_FAIL(( fp, "reading past checkpoints" ));
+			break;
+		}
 
 		// store current entry pos (for checkpointing later), read next delta
 		SphOffset_t iDictPos = rdDict.GetPos();
@@ -13036,7 +13066,8 @@ void CSphIndex_VLN::DebugCheck ( FILE * fp )
 		if ( iWordsSinceCheckpoint==0 )
 		{
 			dCheckpoints.Add();
-			dCheckpoints.Last().m_iWordID = uWordid;
+			dCheckpoints.Last().m_iWordID = uNewWordid;
+			dCheckpoints.Last().m_iWordlistOffset = iDictPos;
 		}
 		iWordsTotal++;
 		iWordsSinceCheckpoint++;
@@ -13053,9 +13084,204 @@ void CSphIndex_VLN::DebugCheck ( FILE * fp )
 		if ( iDocs<=0 || iHits<=0 || iHits<iDocs )
 			LOC_FAIL(( fp, "invalid docs/hits (pos="INT64_FMT", wordid="UINT64_FMT", docs=%d, hits=%d)\n",
 				(int64_t)iDictPos, (uint64_t)uNewWordid, iDocs, iHits ));
+
+		uWordid = uNewWordid;
+		iDoclistOffset = iNewDoclistOffset;
 	}
 
-	fprintf ( fp, "all checks were ok\n" );
+	// check the checkpoints
+	if ( dCheckpoints.GetLength()!=m_dWordlistCheckpoints.GetLength() )
+		LOC_FAIL(( fp, "checkpoint count mismatch (read=%d, calc=%d)",
+			m_dWordlistCheckpoints.GetLength(), dCheckpoints.GetLength() ));
+
+	for ( int i=0; i < Min ( dCheckpoints.GetLength(), m_dWordlistCheckpoints.GetLength() ); i++ )
+		if ( dCheckpoints[i].m_iWordID!=m_dWordlistCheckpoints[i].m_iWordID
+			|| dCheckpoints[i].m_iWordlistOffset!=m_dWordlistCheckpoints[i].m_iWordlistOffset )
+	{
+		LOC_FAIL(( fp, "checkpoint %d differs (readid="UINT64_FMT", readpos="INT64_FMT", calcid="UINT64_FMT", calcpos="INT64_FMT")",
+			i,
+			(uint64_t)m_dWordlistCheckpoints[i].m_iWordID,
+			(int64_t)m_dWordlistCheckpoints[i].m_iWordlistOffset,
+			(uint64_t)dCheckpoints[i].m_iWordID,
+			(int64_t)dCheckpoints[i].m_iWordlistOffset ));
+	}
+
+	dCheckpoints.Reset ();
+
+	///////////////////////
+	// check docs and hits
+	///////////////////////
+
+	fprintf ( fp, "checking data...\n" );
+
+	rdDict.SeekTo ( 1, READ_NO_SIZE_HINT );
+	rdDocs.SeekTo ( 1, READ_NO_SIZE_HINT );
+	rdHits.SeekTo ( 1, READ_NO_SIZE_HINT );
+
+	uWordid = 0;
+	iDoclistOffset = 0;
+
+	int iWordsChecked = 0;
+	for ( ;; )
+	{
+
+		SphWordID_t iDelta = rdDict.UnzipWordid();
+		if ( !iDelta )
+		{
+			rdDict.UnzipOffset();
+			if ( rdDict.GetPos()==m_iCheckpointsPos )
+				break; // this is the end, my beautiful friend
+
+			uWordid = 0;
+			iDoclistOffset = 0;
+			continue;
+		}
+
+		// finish reading the entire entry
+		uWordid += iDelta;
+		iDoclistOffset += rdDict.UnzipOffset();
+		int iDictDocs = rdDict.UnzipInt();
+		int iDictHits = rdDict.UnzipInt();
+
+		// check whether the offset is as expected
+		if ( iDoclistOffset!=rdDocs.GetPos() )
+		{
+			LOC_FAIL(( fp, "unexpected doclist offset (wordid="UINT64_FMT", dictpos="INT64_FMT", doclistpos="INT64_FMT")",
+				(uint64_t)uWordid, (int64_t)iDoclistOffset, (int64_t)rdDocs.GetPos() ));
+			rdDocs.SeekTo ( iDoclistOffset, READ_NO_SIZE_HINT );
+		}
+
+		// create and manually setup doclist reader
+		DiskIndexQwordTraits_c * pQword = NULL;
+		WITH_QWORD ( this, false, T, pQword = new T() );
+
+		pQword->m_tDoc.Reset ( m_tSchema.GetDynamicSize() );
+		pQword->m_iMinID = m_tMin.m_iDocID;
+		pQword->m_tDoc.m_iDocID = m_tMin.m_iDocID;
+		if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_INLINE )
+		{
+			pQword->m_iInlineAttrs = m_tSchema.GetDynamicSize();
+			pQword->m_pInlineFixup = m_tMin.m_pDynamic;
+		} else
+		{
+			pQword->m_iInlineAttrs = 0;
+			pQword->m_pInlineFixup = NULL;
+		}
+		pQword->m_iDocs = 0;
+		pQword->m_iHits = 0;
+		pQword->m_rdDoclist.SetFile ( rdDocs.GetFD(), rdDocs.GetFilename().cstr() );
+		pQword->m_rdDoclist.SeekTo ( rdDocs.GetPos(), READ_NO_SIZE_HINT );
+		pQword->m_rdHitlist.SetFile ( rdHits.GetFD(), rdHits.GetFilename().cstr() );
+		pQword->m_rdHitlist.SeekTo ( rdHits.GetPos(), READ_NO_SIZE_HINT );
+
+		CSphRowitem * pInlineStorage = NULL;
+		if ( pQword->m_iInlineAttrs )
+			pInlineStorage = new CSphRowitem [ pQword->m_iInlineAttrs ];
+
+		// loop the doclist
+		SphDocID_t uLastDocid = 0;
+		int iDoclistDocs = 0;
+		int iDoclistHits = 0;
+		int iHitlistHits = 0;
+
+		for ( ;; )
+		{
+			const CSphMatch & tDoc = pQword->GetNextDoc ( pInlineStorage );
+			if ( !tDoc.m_iDocID )
+				break;
+
+			// checks!
+			if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN )
+			{
+				const CSphRowitem * pFound = FindDocinfo ( tDoc.m_iDocID );
+				if ( !pFound )
+					LOC_FAIL(( fp, "row not found (wordid="UINT64_FMT", docid="DOCID_FMT")",
+						uint64_t(uWordid), tDoc.m_iDocID ));
+
+				if ( pFound )
+					if ( tDoc.m_iDocID!=DOCINFO2ID(pFound) )
+						LOC_FAIL(( fp, "row found but id mismatches (wordid="UINT64_FMT", docid="DOCID_FMT", found="DOCID_FMT")",
+							uint64_t(uWordid), tDoc.m_iDocID, DOCINFO2ID(pFound) ));
+			}
+
+			if ( tDoc.m_iDocID<=uLastDocid )
+				LOC_FAIL(( fp, "docid decreased (wordid="UINT64_FMT", docid="DOCID_FMT", lastid="DOCID_FMT")",
+					uint64_t(uWordid), tDoc.m_iDocID, uLastDocid ));
+
+			iDoclistDocs++;
+			iDoclistHits += pQword->m_uMatchHits;
+
+			// check position in case of regular (not-inline) hit
+			if (!( pQword->m_iHitlistPos>>63 ))
+			{
+				if ( pQword->m_iHitlistPos!=pQword->m_rdHitlist.GetPos() )
+					LOC_FAIL(( fp, "unexpected hitlist offset (wordid="UINT64_FMT", docid="DOCID_FMT", expected="INT64_FMT", actual="INT64_FMT")",
+						(uint64_t)uWordid, pQword->m_tDoc.m_iDocID,
+						(int64_t)pQword->m_iHitlistPos, (int64_t)pQword->m_rdHitlist.GetPos() ));
+			}
+
+			// aim
+			pQword->SeekHitlist ( pQword->m_iHitlistPos );
+
+			// loop the hitlist
+			int iDocHits = 0;
+			DWORD uFieldMask = 0;
+			DWORD uLastHit = 0;
+
+			for ( ;; )
+			{
+				DWORD uHit = pQword->GetNextHit();
+				if ( !uHit )
+					break;
+
+				if ( uHit<=uLastHit )
+					LOC_FAIL(( fp, "hit decreased (wordid="UINT64_FMT", docid="DOCID_FMT", hit=%u, last=%u)",
+						(uint64_t)uWordid, pQword->m_tDoc.m_iDocID, uHit, uLastHit ));
+				uLastHit = uHit;
+
+				uFieldMask |= ( 1UL<<HIT2FIELD(uHit) );
+				iDocHits++; // to check doclist entry
+				iHitlistHits++; // to check dictionary entry
+			}
+
+			// check hit count
+			if ( iDocHits!=(int)pQword->m_uMatchHits )
+				LOC_FAIL(( fp, "doc hit count mismatch (wordid="UINT64_FMT", docid="DOCID_FMT", doclist=%d, hitlist=%d)",
+					(uint64_t)uWordid, pQword->m_tDoc.m_iDocID, pQword->m_uMatchHits, iDocHits ));
+
+			// check the mask
+			if ( uFieldMask!=pQword->m_uFields )
+				LOC_FAIL(( fp, "field mask mismatch (wordid="UINT64_FMT", docid="DOCID_FMT", doclist=0x%x, hitlist=0x%x)",
+					(uint64_t)uWordid, pQword->m_tDoc.m_iDocID, pQword->m_uFields, uFieldMask ));
+
+			// update my hitlist reader
+			rdHits.SeekTo ( pQword->m_rdHitlist.GetPos(), READ_NO_SIZE_HINT );
+		}
+
+		// do checks
+		if ( iDictDocs!=iDoclistDocs )
+			LOC_FAIL(( fp, "doc count mismatch (wordid="UINT64_FMT", dict=%d, doclist=%d)",
+				uint64_t(uWordid), iDictDocs, iDoclistDocs ));
+
+		if ( iDictHits!=iDoclistHits || iDictHits!=iHitlistHits )
+			LOC_FAIL(( fp, "hit count mismatch (wordid="UINT64_FMT", dict=%d, doclist=%d, hitlist=%d)",
+				uint64_t(uWordid), iDictHits, iDoclistHits, iHitlistHits ));
+
+		// move my reader instance forward too
+		rdDocs.SeekTo ( pQword->m_rdDoclist.GetPos(), READ_NO_SIZE_HINT );
+
+		// cleanup
+		SafeDelete ( pInlineStorage );
+		SafeDelete ( pQword );
+	
+		// progress bar
+		if ( (++iWordsChecked)%1000==0 )
+			fprintf ( fp, "%d/%d\r", iWordsChecked, iWordsTotal );
+	}
+
+	// well, no known kinds of failures, maybe some unknown ones
+	tmCheck = sphMicroTimer() - tmCheck;
+	fprintf ( fp, "checks passed, %d.%d sec elapsed\n", (int)(tmCheck/1000000), (int)((tmCheck/100000)%10) );
 }
 
 //////////////////////////////////////////////////////////////////////////

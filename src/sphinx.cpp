@@ -10023,15 +10023,16 @@ bool CSphIndex_VLN::MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter
 					// transfer hits from destination
 					tMerge.TransferHits ( tDstQword, dDstInline, tHit );
 					bDstDocs = CSphMerger::NextDocument ( tDstQword, this, dDstInline, pFilter );
-				}
-				else if ( !bDstDocs || ( bSrcDocs && tDstQword.m_tDoc.m_iDocID > tSrcQword.m_tDoc.m_iDocID ) )
+
+				} else if ( !bDstDocs || ( bSrcDocs && tDstQword.m_tDoc.m_iDocID > tSrcQword.m_tDoc.m_iDocID ) )
 				{
 					// transfer hits from source
 					tMerge.TransferHits ( tSrcQword, dSrcInline, tHit );
 					bSrcDocs = CSphMerger::NextDocument ( tSrcQword, pSrcIndex, dSrcInline, NULL );
-				}
-				else // merge hits inside the document
+
+				} else
 				{
+					// merge hits inside the document
 					assert ( bDstDocs );
 					assert ( bSrcDocs );
 					assert ( tDstQword.m_tDoc.m_iDocID==tSrcQword.m_tDoc.m_iDocID );
@@ -10044,13 +10045,13 @@ bool CSphIndex_VLN::MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter
 
 					while ( uDstHit || uSrcHit )
 					{
-						if ( !uSrcHit || uDstHit < uSrcHit )
+						if ( !uSrcHit || ( uDstHit && uDstHit<uSrcHit ) )
 						{
 							tHit.m_iWordPos = uDstHit;
 							cidxHit ( &tHit, dSrcInline );
 							uDstHit = tDstQword.GetNextHit();
 						}
-						else if ( !uDstHit || uDstHit > uSrcHit )
+						else if ( !uDstHit || ( uSrcHit && uSrcHit<uDstHit ) )
 						{
 							tHit.m_iWordPos = uSrcHit;
 							cidxHit ( &tHit, dSrcInline );
@@ -10062,12 +10063,12 @@ bool CSphIndex_VLN::MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter
 							
 							tHit.m_iWordPos = uDstHit;
 							cidxHit ( &tHit, dSrcInline );
-							cidxHit ( &tHit, dSrcInline );
 
 							uDstHit = tDstQword.GetNextHit();
 							uSrcHit = tSrcQword.GetNextHit();
 						}
 					}
+
 					// next document
 					bDstDocs = CSphMerger::NextDocument ( tDstQword, this, dDstInline, pFilter );
 					bSrcDocs = CSphMerger::NextDocument ( tSrcQword, pSrcIndex, dSrcInline, NULL );

@@ -12981,22 +12981,30 @@ bool CSphIndex_VLN::ParsedMultiQuery ( CSphQuery * pQuery, CSphQueryResult * pRe
 //////////////////////////////////////////////////////////////////////////
 
 #define LOC_FAIL(_args) \
-{ \
-	fprintf ( fp, "FAILED, " ); \
-	fprintf _args; \
-	fprintf ( fp, "\n" ); \
-}
+	if ( ++iFails<=FAILS_THRESH ) \
+	{ \
+		fprintf ( fp, "FAILED, " ); \
+		fprintf _args; \
+		fprintf ( fp, "\n" ); \
+		iFailsPrinted++; \
+		\
+		if ( iFails==FAILS_THRESH ) \
+			fprintf ( fp, "(threshold reached; suppressing further output)\n" ); \
+	}
 
 
 void CSphIndex_VLN::DebugCheck ( FILE * fp )
 {
 	int64_t tmCheck = sphMicroTimer();
+	int iFails = 0;
+	int iFailsPrinted = 0;
+	const int FAILS_THRESH = 100;
 
 	// check if index is ready
 	if ( m_bPreread.IsEmpty() || !m_bPreread[0] )
 		LOC_FAIL(( fp, "index not preread" ));
 
-	bool bProgress = isatty ( fileno ( fp ) );
+	bool bProgress = isatty ( fileno ( fp ) )!=0;
 
 	//////////////
 	// open files
@@ -13286,7 +13294,13 @@ void CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 	// well, no known kinds of failures, maybe some unknown ones
 	tmCheck = sphMicroTimer() - tmCheck;
-	fprintf ( fp, "checks passed, %d.%d sec elapsed\n", (int)(tmCheck/1000000), (int)((tmCheck/100000)%10) );
+	if ( !iFails )
+		fprintf ( fp, "check passed" ); 
+	else if ( iFails!=iFailsPrinted )
+		fprintf ( fp, "check FAILED, %d of %d failures reported", iFailsPrinted, iFails );
+	else
+		fprintf ( fp, "check FAILED, %d failures reported", iFailsPrinted, iFails );
+	fprintf ( fp, ", %d.%d sec elapsed\n", (int)(tmCheck/1000000), (int)((tmCheck/100000)%10) );
 }
 
 //////////////////////////////////////////////////////////////////////////

@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>dictionary out-of-bounds reads during merge</name>
+
+<config>
+indexer
+{
+	mem_limit               = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source delta
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = select id, text from sph_test;
+}
+
+index delta
+{
+	source = delta
+	path = <data_path/>/delta
+	charset_table = W,0..9
+}
+
+source main
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = select 2, 'W0000' as text;
+}
+
+index main
+{
+	source = main
+	path = <data_path/>/main
+	charset_table = W,0..9
+}
+</config>
+
+<indexer>
+	<run>--merge main delta</run>
+</indexer>
+
+<db_create>
+create table sph_test
+(
+	id int not null,
+	text varchar(262144) not null
+);
+</db_create>
+
+<db_drop>
+drop table if exists sph_test;
+</db_drop>
+
+<custom_insert><![CDATA[
+
+	$text = '';
+	for ( $i=0; $i < 1500; $i++ )
+		$text .= sprintf ( 'W%04d ', $i );
+	mysql_query ( "insert into sph_test values ( 1, '$text' )" );
+
+]]></custom_insert>
+
+<queries>
+	<query index="main">W0000</query>
+	<query index="main">W1023</query>
+	<query index="main">W1024</query>
+	<query index="main">W1025</query>
+	<query index="main">W1188</query>
+	<query index="main">W1498</query>
+	<query index="main">W1499</query>
+</queries>
+
+</test>

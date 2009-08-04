@@ -31,7 +31,7 @@ function sphFormatTime ( $time )
 	return sprintf ( '%d%s:%d%s', $time / 60, $u[0], $time % 60, $u[1] );
 }
 
-function CreateDB ( $db_drop, $db_create, $db_insert )
+function CreateDB ( $db_drop, $db_create, $db_insert, $custom_insert )
 {
 	global $g_locals;
 	if ( !@mysql_connect ( $g_locals['db-host'].":".$g_locals['db-port'],
@@ -51,6 +51,12 @@ function CreateDB ( $db_drop, $db_create, $db_insert )
 	foreach ( $db_insert as $q )
 		if ( !@mysql_query ( $q ) )
 			return false;
+
+	foreach ( $custom_insert as $code )
+	{
+		$function = create_function( '', $code );
+		$function();
+	}
 
 	return true;
 }
@@ -221,6 +227,7 @@ class SphinxConfig
 	private $_db_create;
 	private $_db_drop;
 	private $_db_insert;
+	private $_custom_insert;
 	private $_counters;
 	private $_dynamic_entries;
 	private $_queries;
@@ -254,6 +261,7 @@ class SphinxConfig
 		$this->_db_create		= array ();
 		$this->_db_drop			= array ();
 		$this->_db_insert		= array ();
+		$this->_custom_insert	= array ();
 		$this->_num_agents		= 1;
 		$this->_subtest 		= 0;
 		$this->_subtestcount	= 0;
@@ -272,6 +280,7 @@ class SphinxConfig
 	function DB_Drop ()				{ return $this->_db_drop; }
 	function DB_Create ()			{ return $this->_db_create; }
 	function DB_Insert ()			{ return $this->_db_insert; }
+	function DB_CustomInsert ()		{ return $this->_custom_insert; }
 	function NumAgents ()			{ return $this->_num_agents; }
 	function Requires ( $name )		{ return isset($this->_prereqs[$name]); }
 	function IsQueryTest ()			{ return strlen ( $this->_custom_test ) == 0;	}
@@ -599,6 +608,9 @@ class SphinxConfig
 
 		foreach ( ChildrenArray ( $xml, "db_insert" ) as $node )
 			$this->_db_insert []=$node->nodeValue;
+
+		foreach ( ChildrenArray ( $xml, "custom_insert" ) as $node )
+			$this->_custom_insert []=$node->nodeValue;
 
 		$this->_name			= GetFirstChildValue ( $xml, "name" );
 		$this->_query_settings	= GetFirstChildValue ( $xml, "query_settings" );
@@ -1290,7 +1302,7 @@ function RunTest ( $test_dir )
 	if ( !CheckConfig ( $config, $test_dir ) )
 		return array ( "tests_total"=>0, "tests_failed"=>0 );
 
-	if ( !CreateDB ( $config->DB_Drop(), $config->DB_Create(), $config->DB_Insert() ) )
+	if ( !CreateDB ( $config->DB_Drop(), $config->DB_Create(), $config->DB_Insert(), $config->DB_CustomInsert() ) )
 	{
 		printf ( "$prefix FAILED, error creating test DB: %s\n", mysql_error() );
 		return;

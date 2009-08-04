@@ -9785,7 +9785,7 @@ public:
 			return false;
 
 		SphWordID_t iDelta = m_tReader.UnzipWordid();
-		if ( !iDelta )
+		if ( !iDelta ) // checkpoint
 		{
 			m_tReader.UnzipOffset();
 
@@ -9795,6 +9795,8 @@ public:
 
 			if ( m_tReader.GetPos()>=m_iMaxPos )
 				return false;
+			
+			iDelta = m_tReader.UnzipWordid(); // get next word delta
 		}
 
 		if ( iDelta )

@@ -12482,6 +12482,10 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 	return true;
 }
 
+// fix MSVC 2005 fuckup, template DoGetKeywords() just above somehow resets forScope
+#if USE_WINDOWS
+#pragma conform(forScope,on)
+#endif
 
 static void PrepareQueryEmulation ( CSphQuery * pQuery, CSphString & sQueryFixup )
 {
@@ -13020,8 +13024,8 @@ void CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 	if ( !rdDocs.Open ( GetIndexFileName("spd"), sError ) )
 		LOC_FAIL(( fp, "unable to open doclist: %s", sError.cstr() ));
-	if ( !rdHits.Open ( GetIndexFileName("spp"), sError ) )
 
+	if ( !rdHits.Open ( GetIndexFileName("spp"), sError ) )
 		LOC_FAIL(( fp, "unable to open hitlist: %s", sError.cstr() ));
 
 	////////////////////
@@ -13251,7 +13255,19 @@ void CSphIndex_VLN::DebugCheck ( FILE * fp )
 						(uint64_t)uWordid, pQword->m_tDoc.m_iDocID, uHit, uLastHit ));
 				uLastHit = uHit;
 
-				uFieldMask |= ( 1UL<<HIT2FIELD(uHit) );
+				int iField = HIT2FIELD(uHit);
+				if ( iField<0 || iField>=SPH_MAX_FIELDS )
+				{
+					LOC_FAIL(( fp, "hit field out of bounds (wordid="UINT64_FMT", docid="DOCID_FMT", field=%d)",
+						(uint64_t)uWordid, pQword->m_tDoc.m_iDocID, iField ));
+
+				} else if ( iField>=m_tSchema.m_dFields.GetLength() )
+				{
+					LOC_FAIL(( fp, "hit field out of schema (wordid="UINT64_FMT", docid="DOCID_FMT", field=%d)",
+						(uint64_t)uWordid, pQword->m_tDoc.m_iDocID, iField ));
+				}
+
+				uFieldMask |= ( 1UL<<iField );
 				iDocHits++; // to check doclist entry
 				iHitlistHits++; // to check dictionary entry
 			}
@@ -13294,6 +13310,124 @@ void CSphIndex_VLN::DebugCheck ( FILE * fp )
 		}
 	}
 
+	///////////////////////////
+	// check rows (attributes)
+	///////////////////////////
+
+	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && !m_pDocinfo.IsEmpty() )
+	{
+		fprintf ( fp, "checking rows...\n" );
+
+		// sizes and counts
+		DWORD uRowsTotal = m_uDocinfo;
+		DWORD uStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
+
+		if ( uRowsTotal*uStride!=m_pDocinfo.GetNumEntries() )
+		{
+			LOC_FAIL(( fp, "rows size mismatch (expected=%u, loaded=%u)",
+				uRowsTotal*uStride, m_pDocinfo.GetNumEntries() ));
+			uRowsTotal = m_pDocinfo.GetNumEntries() / uStride;
+		}
+
+		// extract rowitem indexes for MVAs etc
+		// (ie. attr types that we can and will run additional checks on)
+		CSphVector<int> dMvaItems;
+		for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
+		{
+			const CSphColumnInfo & tAttr = m_tSchema.GetAttr(i);
+			if ( tAttr.m_eAttrType & SPH_ATTR_MULTI )
+			{
+				if ( tAttr.m_eAttrType!=( SPH_ATTR_MULTI | SPH_ATTR_INTEGER ))
+				{
+					LOC_FAIL(( fp, "unknown MVA type (attr=%d, type=0x%x)", i, tAttr.m_eAttrType ));
+					continue;
+				}
+				if ( tAttr.m_tLocator.m_iBitCount!=ROWITEM_BITS )
+				{
+					LOC_FAIL(( fp, "unexpected MVA bitcount (attr=%d, expected=%d, got=%d)",
+						i, ROWITEM_BITS, tAttr.m_tLocator.m_iBitCount ));
+					continue;
+				}
+				if ( ( tAttr.m_tLocator.m_iBitOffset % ROWITEM_BITS )!=0 )
+				{
+					LOC_FAIL(( fp, "unaligned MVA bitoffset (attr=%d, bitoffset=%d)",
+						i, tAttr.m_tLocator.m_iBitOffset ));
+					continue;
+				}
+				dMvaItems.Add ( tAttr.m_tLocator.m_iBitOffset/ROWITEM_BITS );
+			}
+		}
+
+		// loop the rows
+		const CSphRowitem * pRow = m_pDocinfo.GetWritePtr();
+		const DWORD * pMvaBase = m_pMva.GetWritePtr();
+		const DWORD * pMvaMax = pMvaBase + m_pMva.GetNumEntries();
+		const DWORD * pMva = pMvaBase;
+
+		SphDocID_t uLastID = 0;
+		for ( DWORD uRow=0; uRow<uRowsTotal; uRow++, pRow+=uStride )
+		{
+			// check that ids are ascending
+			if ( DOCINFO2ID(pRow)<=uLastID )
+				LOC_FAIL(( fp, "docid decreased (row=%u, id="DOCID_FMT", lastid="DOCID_FMT")",
+					uRow, DOCINFO2ID(pRow), uLastID ));
+			uLastID = DOCINFO2ID(pRow);
+
+			// check MVAs
+			if ( dMvaItems.GetLength() )
+			{
+				// check id
+				if ( DOCINFO2ID(pMva)!=uLastID )
+					LOC_FAIL(( fp, "MVA id mismatch (row=%u, docid="DOCID_FMT", mvaid="DOCID_FMT")",
+						uRow, uLastID, DOCINFO2ID(pMva) ));
+				pMva += sizeof(SphDocID_t) / sizeof(DWORD); // can't imagine a case when it's not a multiple
+
+				// loop MVAs
+				const CSphRowitem * pAttrs = DOCINFO2ATTRS(pRow);
+				ARRAY_FOREACH ( iItem, dMvaItems )
+				{
+					// check offset (index)
+					if ( pMva!=pMvaBase+pAttrs[dMvaItems[iItem]] )
+					{
+						LOC_FAIL(( fp, "unexpected MVA index (row=%u, mvaattr=%d, docid="DOCID_FMT", expected=%u, got=%u)",
+							uRow, iItem, uLastID, (DWORD)(pMva-pMvaBase), pAttrs[dMvaItems[iItem]] ));
+
+						// it's unexpected but it's our best guess
+						pMva = pMvaBase+pAttrs[dMvaItems[iItem]];
+					}
+					if ( pMva>=pMvaMax )
+					{
+						LOC_FAIL(( fp, "MVA index out of bounds (row=%u, mvaattr=%d, docid="DOCID_FMT", index=%u)", 
+							uRow, iItem, uLastID, (DWORD)(pMva-pMvaBase) ));
+						continue;
+					}
+
+					// check values
+					DWORD uValues = *pMva++;
+					if ( pMva+uValues-1>=pMvaMax )
+					{
+						LOC_FAIL(( fp, "MVA count out of bounds (row=%u, mvaattr=%d, docid="DOCID_FMT", count=%u)", 
+							uRow, iItem, uLastID, uValues ));
+						pMva += uValues;
+						continue;
+					}
+					for ( DWORD uVal=1; uVal<uValues; uVal++ )
+						if ( pMva[uVal]<=pMva[uVal-1] )
+							LOC_FAIL(( fp, "unsorted MVA values (row=%u, mvaattr=%d, docid="DOCID_FMT", val[%u]=%u, val[%d]=%u)", 
+								uRow, iItem, uLastID, uVal-1, pMva[uVal-1], uVal, pMva[uVal] ));
+					pMva += uValues;
+				}
+			}
+
+			// progress bar
+			if ( uRow%1000==0 && bProgress )
+			{
+				fprintf ( fp, "%u/%u\r", uRow, uRowsTotal );
+				fflush ( fp );
+			}
+		}
+	}
+
 	// well, no known kinds of failures, maybe some unknown ones
 	tmCheck = sphMicroTimer() - tmCheck;
 	if ( !iFails )
@@ -13301,7 +13435,7 @@ void CSphIndex_VLN::DebugCheck ( FILE * fp )
 	else if ( iFails!=iFailsPrinted )
 		fprintf ( fp, "check FAILED, %d of %d failures reported", iFailsPrinted, iFails );
 	else
-		fprintf ( fp, "check FAILED, %d failures reported", iFailsPrinted, iFails );
+		fprintf ( fp, "check FAILED, %d failures reported", iFails );
 	fprintf ( fp, ", %d.%d sec elapsed\n", (int)(tmCheck/1000000), (int)((tmCheck/100000)%10) );
 }
 

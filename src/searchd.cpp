@@ -4807,12 +4807,19 @@ void SqlUnescape ( CSphString & sRes, const char * sEscaped, int iLen )
 	{
 		if ( s[0]=='\\' )
 		{
-			*d++ = s[1];
+			switch ( s[1] )
+			{
+				case 'b': *d++ = '\b'; break;
+				case 'n': *d++ = '\n'; break;
+				case 'r': *d++ = '\r'; break;
+				case 't': *d++ = '\t'; break;
+				default:
+					*d++ = s[1];
+			}
 			s += 2;
-		} else
-		{
-			*d++ = *s++;
 		}
+		else
+			*d++ = *s++;
 	}
 
 	*d++ = '\0';

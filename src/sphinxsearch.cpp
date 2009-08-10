@@ -21,6 +21,8 @@
 // EXTENDED MATCHING V2
 //////////////////////////////////////////////////////////////////////////
 
+#define SPH_TREE_DUMP			1
+
 #define SPH_BM25_K1				1.2f
 #define SPH_BM25_SCALE			1000
 
@@ -168,7 +170,28 @@ public:
 	virtual void DebugDump ( int iLevel )
 	{
 		DebugIndent ( iLevel );
-		printf ( "ExtTerm: %s @ %d\n", m_pQword->m_sWord.cstr(), m_pQword->m_iAtomPos );
+		printf ( "ExtTerm: %s at: %d ", m_pQword->m_sWord.cstr(), m_pQword->m_iAtomPos );
+		DWORD uFields = m_uFields;
+		if ( uFields==0xFFFFFFFFUL )
+		{
+			printf ( "(all)\n" );
+		}
+		else
+		{
+			bool bFirst = true;
+			printf ( "in: " );
+			for ( int iField = 1; uFields; uFields >>= 1, iField++ )
+			{
+				if ( uFields & 1 )
+				{
+					if ( !bFirst )
+						printf ( ", " );
+					printf ( "%d", iField );
+					bFirst = false;
+				}
+			}
+			printf ( "\n" );
+		}
 	}
 
 protected:
@@ -2963,6 +2986,10 @@ ExtRanker_c::ExtRanker_c ( const XQNode_t * pRoot, const ISphQwordSetup & tSetup
 
 	assert ( pRoot );
 	m_pRoot = ExtNode_i::Create ( pRoot, tSetup );
+#if SPH_TREE_DUMP
+	if ( m_pRoot )
+		m_pRoot->DebugDump(0);
+#endif
 
 	m_pDoclist = NULL;
 	m_pHitlist = NULL;

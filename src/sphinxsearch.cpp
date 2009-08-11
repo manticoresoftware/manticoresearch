@@ -21,7 +21,7 @@
 // EXTENDED MATCHING V2
 //////////////////////////////////////////////////////////////////////////
 
-#define SPH_TREE_DUMP			1
+#define SPH_TREE_DUMP			0
 
 #define SPH_BM25_K1				1.2f
 #define SPH_BM25_SCALE			1000

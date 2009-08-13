@@ -5081,7 +5081,7 @@ void CSphWriter::SeekTo ( SphOffset_t iPos )
 {
 	assert ( iPos>=0 );
 
-	if ( iPos>=m_iWritten && iPos < m_iWritten+m_iPoolUsed )
+	if ( iPos>=m_iWritten && iPos <= m_iWritten+m_iPoolUsed )
 	{
 		// seeking inside the buffer
 		m_iPoolUsed = (int)( iPos - m_iWritten );

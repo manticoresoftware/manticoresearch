@@ -16,6 +16,33 @@
 #include <time.h>
 
 
+void StripStdin ( const char * sIndexAttrs, const char * sRemoveElements )
+{
+	CSphString sError;
+	CSphHTMLStripper tStripper;
+	if ( !tStripper.SetIndexedAttrs ( sIndexAttrs, sError )
+		|| !tStripper.SetRemovedElements ( sRemoveElements, sError ) )
+			sphDie ( "failed to configure stripper: %s", sError.cstr() );
+
+	CSphVector<BYTE> dBuffer;
+	while ( !feof(stdin) )
+	{
+		char sBuffer[1024];
+		int iLen = fread ( sBuffer, 1, sizeof(sBuffer), stdin );
+		if ( !iLen )
+			break;
+
+		int iPos = dBuffer.GetLength();
+		dBuffer.Resize ( iPos+iLen );
+		memcpy ( &dBuffer[iPos], sBuffer, iLen );
+	}
+	dBuffer.Add ( 0 );
+
+	tStripper.Strip ( &dBuffer[0] );
+	fprintf ( stdout, "dumping stripped results...\n%s\n", &dBuffer[0] );
+}
+
+
 int main ( int argc, char ** argv )
 {
 	fprintf ( stdout, SPHINX_BANNER );
@@ -32,6 +59,8 @@ int main ( int argc, char ** argv )
 			"--dumphitlist <INDEXNAME> --wordid <ID>\n"
 			"\t\t\t\tdump hits for given keyword\n"
 			"--check <INDEXNAME>\t\tperform index consistency check\n"
+			"--htmlstrip <INDEXNAME>\t\tfilter stdin usng HTML stripper settings\n"
+			"\t\t\t\tfor a given index (taken from sphinx.conf)\n"
 			"\n"
 			"Options are:\n"
 			"-c, --config <file>\t\tuse given config file instead of defaults\n"
@@ -56,7 +85,8 @@ int main ( int argc, char ** argv )
 		CMD_DUMPHEADER,
 		CMD_DUMPDOCIDS,
 		CMD_DUMPHITLIST,
-		CMD_CHECK
+		CMD_CHECK,
+		CMD_STRIP
 	} eCommand = CMD_NOTHING;
 
 	int i;
@@ -71,6 +101,7 @@ int main ( int argc, char ** argv )
 		OPT1 ( "--dumpheader" )		{ eCommand = CMD_DUMPHEADER; sDumpHeader = argv[++i]; }
 		OPT1 ( "--dumpdocids" )		{ eCommand = CMD_DUMPDOCIDS; sIndex = argv[++i]; }
 		OPT1 ( "--check" )			{ eCommand = CMD_CHECK; sIndex = argv[++i]; }
+		OPT1 ( "--htmlstrip" )		{ eCommand = CMD_STRIP; sIndex = argv[++i]; }
 
 		// options with 2 args
 		else if ( (i+2)>=argc )
@@ -119,11 +150,14 @@ int main ( int argc, char ** argv )
 
 	// common part for several commands, check and preload index
 	CSphIndex * pIndex = NULL;
-	if ( !sIndex.IsEmpty() )
+	while ( !sIndex.IsEmpty() )
 	{
 		// check config
 		if ( !hConf["index"](sIndex) )
 			sphDie ( "index '%s': no such index in config\n", sIndex.cstr() );
+
+		if ( eCommand==CMD_STRIP )
+			break;
 
 		if ( !hConf["index"][sIndex]("path") )
 			sphDie ( "index '%s': missing 'path' in config'\n", sIndex.cstr() );
@@ -139,6 +173,8 @@ int main ( int argc, char ** argv )
 
 		if ( !pIndex->Preread() )
 			sphDie ( "index '%s': preread failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
+
+		break;
 	}
 
 	// do the dew
@@ -178,6 +214,15 @@ int main ( int argc, char ** argv )
 		case CMD_CHECK:
 			fprintf ( stdout, "checking index '%s'...\n", sIndex.cstr() );
 			pIndex->DebugCheck ( stdout );
+			break;
+
+		case CMD_STRIP:
+			{
+				const CSphConfigSection & hIndex = hConf["index"][sIndex];
+				if ( hIndex.GetInt ( "html_strip" )==0 )
+					sphDie ( "HTML stripping is not enabled in index '%s'", sIndex.cstr() );
+				StripStdin ( hIndex.GetStr ( "html_index_attrs" ), hIndex.GetStr ( "html_remove_elements" ) );
+			}
 			break;
 
 		default:

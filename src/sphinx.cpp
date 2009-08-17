@@ -13094,11 +13094,11 @@ void CSphIndex_VLN::DebugCheck ( FILE * fp )
 				(int64_t)iDictPos, (uint64_t)uNewWordid, (uint64_t)uWordid ));
 
 		if ( iNewDoclistOffset<=iDoclistOffset )
-			LOC_FAIL(( fp, "doclist offset decreased (pos="INT64_FMT", wordid="UINT64_FMT")\n",
+			LOC_FAIL(( fp, "doclist offset decreased (pos="INT64_FMT", wordid="UINT64_FMT")",
 				(int64_t)iDictPos, (uint64_t)uNewWordid ));
 
 		if ( iDocs<=0 || iHits<=0 || iHits<iDocs )
-			LOC_FAIL(( fp, "invalid docs/hits (pos="INT64_FMT", wordid="UINT64_FMT", docs=%d, hits=%d)\n",
+			LOC_FAIL(( fp, "invalid docs/hits (pos="INT64_FMT", wordid="UINT64_FMT", docs=%d, hits=%d)",
 				(int64_t)iDictPos, (uint64_t)uNewWordid, iDocs, iHits ));
 
 		uWordid = uNewWordid;

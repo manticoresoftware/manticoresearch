@@ -46,7 +46,7 @@ public:
 	{
 		return m_pTokenizer->TokenIsBlended();
 	}
-	
+
 	void SkipBlended ()
 	{
 		if ( m_pTokenizer->TokenIsBlended() )
@@ -80,7 +80,7 @@ public:
 	YYSTYPE					m_tPendingToken;
 
 	bool					m_bEmpty;
-	
+
 	bool					m_bNotQuoted;
 	int						m_iQuotes;
 
@@ -162,7 +162,7 @@ bool XQNode_t::IsEqualTo ( const XQNode_t * pNode )
 
 		return true;
 	}
-	
+
 	// two non-plain nodes. let's compare the children
 	if ( pNode->m_dChildren.GetLength() != m_dChildren.GetLength() )
 		return false;
@@ -569,7 +569,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 
 		m_tPendingToken.pNode = AddKeyword ( sToken, uStarPosition );
 		m_iPendingType = TOK_KEYWORD;
-		
+
 		if ( m_pTokenizer->TokenIsBlended() )
 			m_iAtomPos--;
 		break;

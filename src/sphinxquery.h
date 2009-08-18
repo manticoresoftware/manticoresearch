@@ -41,7 +41,7 @@ struct XQKeyword_t
 		, m_bFieldEnd ( false )
 		, m_uStarPosition ( STAR_NONE )
 	{}
-	
+
 	XQKeyword_t ( const char * sWord, int iPos )
 		: m_sWord ( sWord )
 		, m_iAtomPos ( iPos )

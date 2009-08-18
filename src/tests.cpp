@@ -893,7 +893,7 @@ void CleanupCallback ( void * pArg )
 
 void CleanupThread ( void * pArg )
 {
-	sphThreadOnExit ( CleanupCallback, pArg );	
+	sphThreadOnExit ( CleanupCallback, pArg );
 }
 
 void TestCleanup ()

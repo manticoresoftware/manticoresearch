@@ -683,7 +683,7 @@ bool CSphRwlock::Done ()
 	if ( !CloseHandle ( m_hReadEvent ) )
 		return false;
 	m_hReadEvent = NULL;
-	
+
 	if ( !CloseHandle ( m_hWriteMutex ) )
 		return false;
 	m_hWriteMutex = NULL;

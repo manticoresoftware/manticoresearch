@@ -1161,7 +1161,7 @@ public:
 				for ( int i=0; i<m_iInlineAttrs; i++ )
 					pDocinfo[i] = m_rdDoclist.UnzipInt() + m_pInlineFixup[i];
 			}
-		
+
 			if ( INLINE_HITS )
 			{
 				m_uMatchHits = m_rdDoclist.UnzipInt();
@@ -1183,9 +1183,9 @@ public:
 			{
 				SphOffset_t iDeltaPos = m_rdDoclist.UnzipOffset();
 				assert ( iDeltaPos>=0 );
-			
+
 				m_iHitlistPos += iDeltaPos;
-				
+
 				m_uFields = m_rdDoclist.UnzipInt();
 				m_uMatchHits = m_rdDoclist.UnzipInt();
 			}
@@ -1412,7 +1412,7 @@ public:
 	void						LateCalc ( CSphMatch & tMatch ) const;
 };
 
-	
+
 /// this is my actual VLN-compressed phrase index implementation
 class CSphIndex_VLN : public CSphIndex
 {
@@ -1510,7 +1510,7 @@ private:
 
 	CSphVector<SphWordID_t>		m_dHitlessWords;
 	int							m_iHitlessThreshold;
-	
+
 	bool						LoadHitlessWords ();
 
 private:
@@ -2041,7 +2041,7 @@ public:
 	virtual const char *	GetBufferEnd () const		{ return (const char *) m_pBufferMax; }
 	virtual void			SetBufferPtr ( const char * sNewPtr );
 	virtual void			SkipBlended ();
-	
+
 protected:
 	BYTE *	GetTokenSyn ();
 	void	BlendAdjust ( BYTE * pPosition );
@@ -6457,7 +6457,7 @@ void CSphIndex::SetTokenizer ( ISphTokenizer * pTokenizer )
 	// save pristine copy of my tokenizer
 	SafeDelete ( m_pCleanTokenizer );
 	m_pCleanTokenizer = pTokenizer->Clone ( true );
-	
+
 	m_pTokenizer = pTokenizer;
 }
 
@@ -6949,7 +6949,7 @@ void CSphIndex_VLN::cidxHit ( CSphAggregateHit * hit, CSphRowitem * pAttrs )
 			m_wrWordlist.ZipInt ( m_iLastWordDocs );
 			m_wrWordlist.ZipInt ( m_iLastWordHits );
 
-			
+
 			if ( m_tSettings.m_eHitFormat==SPH_HIT_FORMAT_INLINE )
 			{
 				// inline hit into doclist & finish doclist entry
@@ -7516,13 +7516,13 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWOR
 	{
 		assert ( m_tSettings.m_eHitless!=SPH_HITLESS_NONE );
 		assert ( m_tSettings.m_eHitless==SPH_HITLESS_ALL || !( uHitCount & 0x80000000UL ) );
-		
+
 		if ( m_tSettings.m_eHitless!=SPH_HITLESS_ALL )
 			uHitCount = ( uHitCount << 1 ) | 1;
 		pBuf += encodeVLB ( pBuf, uHitCount );
 		pBuf += encodeVLB ( pBuf, uHitFieldMask );
 	}
-	
+
 	pBuf += encodeVLB ( pBuf, 0 );
 	pBuf += encodeVLB ( pBuf, 0 );
 	pBuf += encodeVLB ( pBuf, 0 );
@@ -8370,7 +8370,7 @@ bool CSphIndex_VLN::LoadHitlessWords ()
 
 	if ( m_tSettings.m_sHitlessFile.IsEmpty() )
 		return true;
-	
+
 	CSphAutofile tFile ( m_tSettings.m_sHitlessFile.cstr(), SPH_O_READ, m_sLastError );
 	if ( tFile.GetFD()==-1 )
 		return false;
@@ -8495,7 +8495,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		if ( eAttrType==SPH_ATTR_WORDCOUNT )
 			dWordcountAttrs.Add ( i );
 	}
-	
+
 	// adjust memory requirements
 	// ensure there's enough memory to hold 1M hits and 64K docinfos
 	// alloc 1/16 of memory (but not less than 64K entries) for docinfos
@@ -9704,7 +9704,7 @@ static bool CopyFile( const char * sSrc, const char * sDst, CSphString & sErrStr
 SphAttr_t CopyStringAttr ( CSphWriter & wrTo, CSphReader_VLN & rdFrom, SphAttr_t uOffset )
 {
 	// magic offset? do nothing
-	if ( !uOffset ) 
+	if ( !uOffset )
 		return 0;
 
 	// aim
@@ -9795,7 +9795,7 @@ public:
 
 			if ( m_tReader.GetPos()>=m_iMaxPos )
 				return false;
-			
+
 			iDelta = m_tReader.UnzipWordid(); // get next word delta
 		}
 
@@ -9805,7 +9805,7 @@ public:
 			m_iDoclistOffset += m_tReader.UnzipOffset();
 			m_iDocs = m_tReader.UnzipInt();
 			m_iHits = m_tReader.UnzipInt();
-			
+
 			m_iEntries++;
 		}
 		return iDelta!=0;
@@ -9882,7 +9882,7 @@ public:
 		CSphAggregateHit tHit;
 		tHit.m_iWordID = iWordID;
 		tHit.m_uFieldMask = 0;
-		
+
 		while ( CSphMerger::NextDocument ( tQword, pSourceIndex, pInline, pFilter ) )
 		{
 			tHit.m_iDocID = tQword.m_tDoc.m_iDocID - m_pOutputIndex->m_tMin.m_iDocID;
@@ -9905,11 +9905,11 @@ public:
 	static inline void ConfigureQword ( QWORD & tQword, CSphAutofile & tHits, CSphAutofile & tDocs, CSphIndex_VLN * pIndex )
 	{
 		bool bInline = pIndex->m_tSettings.m_eDocinfo==SPH_DOCINFO_INLINE;
-		
+
 		tQword.m_iInlineAttrs = bInline ? pIndex->m_tSchema.GetAttrsCount() : 0;
 		tQword.m_pInlineFixup = bInline ? pIndex->m_tMin.m_pDynamic : NULL;
 		tQword.m_bHasHitlist = true; // FIXME
-		
+
 		tQword.m_rdHitlist.SetFile ( tHits );
 		tQword.m_rdHitlist.GetByte();
 
@@ -9962,7 +9962,7 @@ bool CSphIndex_VLN::MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter
 	const int iSrcDynamic = pSrcIndex->m_tSchema.GetDynamicSize();
 
 	/// setup qwords
-	
+
 	QWORDDST tDstQword;
 	QWORDSRC tSrcQword;
 
@@ -9982,7 +9982,7 @@ bool CSphIndex_VLN::MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter
 
 	int iDstInlineSize = m_tSettings.m_eDocinfo==SPH_DOCINFO_INLINE ? m_tSchema.GetRowSize() : 0;
 	int iSrcInlineSize = pSrcIndex->m_tSettings.m_eDocinfo==SPH_DOCINFO_INLINE ? pSrcIndex->m_tSchema.GetRowSize() : 0;
-	
+
 	CSphAutoArray<CSphRowitem> dDstInline ( iDstInlineSize );
 	CSphAutoArray<CSphRowitem> dSrcInline ( iSrcInlineSize );
 
@@ -10030,14 +10030,14 @@ bool CSphIndex_VLN::MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter
 		{
 			CSphMerger::PrepareQword<QWORDDST> ( tDstQword, tDstReader, iDstDynamic, iDstMinID );
 			CSphMerger::PrepareQword<QWORDSRC> ( tSrcQword, tSrcReader, iSrcDynamic, iSrcMinID );
-			
+
 			CSphAggregateHit tHit;
 			tHit.m_iWordID = tDstReader.m_iWordID;
 			tHit.m_uFieldMask = 0;
 
 			bool bDstDocs = CSphMerger::NextDocument ( tDstQword, this, dDstInline, pFilter );
 			bool bSrcDocs = true;
-			
+
 			tSrcQword.GetNextDoc ( dSrcInline );
 			tSrcQword.SeekHitlist ( tSrcQword.m_iHitlistPos );
 
@@ -10085,7 +10085,7 @@ bool CSphIndex_VLN::MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter
 						else
 						{
 							assert ( uDstHit==uSrcHit );
-							
+
 							tHit.m_iWordPos = uDstHit;
 							cidxHit ( &tHit, dSrcInline );
 
@@ -10310,9 +10310,9 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 		}
 	}
 	CSphScopedPtr<ISphFilter> pScopedFilter ( pFilter );
-	
+
 	// merge dictionaries, doclists and hitlists
-	
+
 	WITH_QWORD ( this, true, QwordDst,
 		WITH_QWORD ( pSrcIndex, true, QwordSrc,
 		{
@@ -10321,7 +10321,7 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 		} ) );
 
 	// merge kill-lists
-	
+
 	CSphAutofile fdKillList ( GetIndexFileName("spk.tmp"), SPH_O_NEW, m_sLastError );
 	if ( fdKillList.GetFD () < 0 )
 		return false;
@@ -10928,7 +10928,7 @@ template < class Qword >
 bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 {
 	Qword * pMyWord = dynamic_cast<Qword*> ( pWord );
-	
+
 	if ( !pMyWord )
 		return false;
 
@@ -13301,7 +13301,7 @@ void CSphIndex_VLN::DebugCheck ( FILE * fp )
 		// cleanup
 		SafeDelete ( pInlineStorage );
 		SafeDelete ( pQword );
-	
+
 		// progress bar
 		if ( (++iWordsChecked)%1000==0 && bProgress )
 		{
@@ -13397,7 +13397,7 @@ void CSphIndex_VLN::DebugCheck ( FILE * fp )
 					}
 					if ( pMva>=pMvaMax )
 					{
-						LOC_FAIL(( fp, "MVA index out of bounds (row=%u, mvaattr=%d, docid="DOCID_FMT", index=%u)", 
+						LOC_FAIL(( fp, "MVA index out of bounds (row=%u, mvaattr=%d, docid="DOCID_FMT", index=%u)",
 							uRow, iItem, uLastID, (DWORD)(pMva-pMvaBase) ));
 						continue;
 					}
@@ -13406,14 +13406,14 @@ void CSphIndex_VLN::DebugCheck ( FILE * fp )
 					DWORD uValues = *pMva++;
 					if ( pMva+uValues-1>=pMvaMax )
 					{
-						LOC_FAIL(( fp, "MVA count out of bounds (row=%u, mvaattr=%d, docid="DOCID_FMT", count=%u)", 
+						LOC_FAIL(( fp, "MVA count out of bounds (row=%u, mvaattr=%d, docid="DOCID_FMT", count=%u)",
 							uRow, iItem, uLastID, uValues ));
 						pMva += uValues;
 						continue;
 					}
 					for ( DWORD uVal=1; uVal<uValues; uVal++ )
 						if ( pMva[uVal]<=pMva[uVal-1] )
-							LOC_FAIL(( fp, "unsorted MVA values (row=%u, mvaattr=%d, docid="DOCID_FMT", val[%u]=%u, val[%d]=%u)", 
+							LOC_FAIL(( fp, "unsorted MVA values (row=%u, mvaattr=%d, docid="DOCID_FMT", val[%u]=%u, val[%d]=%u)",
 								uRow, iItem, uLastID, uVal-1, pMva[uVal-1], uVal, pMva[uVal] ));
 					pMva += uValues;
 				}
@@ -13431,7 +13431,7 @@ void CSphIndex_VLN::DebugCheck ( FILE * fp )
 	// well, no known kinds of failures, maybe some unknown ones
 	tmCheck = sphMicroTimer() - tmCheck;
 	if ( !iFails )
-		fprintf ( fp, "check passed" ); 
+		fprintf ( fp, "check passed" );
 	else if ( iFails!=iFailsPrinted )
 		fprintf ( fp, "check FAILED, %d of %d failures reported", iFailsPrinted, iFails );
 	else

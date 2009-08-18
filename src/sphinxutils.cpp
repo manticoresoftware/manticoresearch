@@ -988,7 +988,7 @@ static void DummyHandler ( int )
 void sphSetupSignals ()
 {
 	struct sigaction tAction;
-	
+
 	sigfillset ( &tAction.sa_mask );
 	tAction.sa_flags = SA_NOCLDSTOP;
 	tAction.sa_handler = DummyHandler;

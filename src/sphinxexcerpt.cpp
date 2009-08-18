@@ -28,18 +28,18 @@ static const int MAX_HIGHLIGHT_WORDS = 256;
 class ExcerptGen_c
 {
 	friend class SnippetsQwordSetup;
-	
+
 public:
 							ExcerptGen_c ();
 							~ExcerptGen_c () {}
 
 	char *	BuildExcerpt ( const ExcerptQuery_t &, CSphDict * pDict, ISphTokenizer * pTokenizer );
-	
+
 	void	TokenizeQuery ( const ExcerptQuery_t &, CSphDict * pDict, ISphTokenizer * pTokenizer );
 	void	TokenizeDocument ( const ExcerptQuery_t &, CSphDict * pDict, ISphTokenizer * pTokenizer, bool bFillMasks );
-	
+
 	void	SetMarker ( CSphHitMarker * pMarker ) { m_pMarker = pMarker; }
-	
+
 public:
 	enum Token_e
 	{
@@ -130,7 +130,7 @@ protected:
 	bool					m_bExactPhrase;
 
 	DWORD					m_uFoundWords;	///< found words mask
-	int						m_iWordCount; 
+	int						m_iWordCount;
 	int						m_iLastWord;
 	CSphHitMarker *			m_pMarker;
 
@@ -162,7 +162,7 @@ static BYTE * FindString ( BYTE * sBuffer, BYTE * sFind, int iLimit )
 	assert ( iLimit > 0 );
 	assert ( sBuffer );
 	assert ( sFind );
-	
+
 	iLimit++;
 	do
 	{
@@ -181,7 +181,7 @@ static BYTE * FindString ( BYTE * sBuffer, BYTE * sFind, int iLimit )
 			return sBuffer;
 	}
 	while ( *++sBuffer );
-	
+
 	return NULL;
 }
 
@@ -193,7 +193,7 @@ public:
 	CSphString *							m_sBuffer;
 	CSphVector<ExcerptGen_c::Token_t> *		m_dTokens;
 	ISphTokenizer *							m_pTokenizer;
-	
+
 	// word information, filled during query word setup
 	int			m_iWordLength;
 	int			m_iLastIndex;
@@ -212,7 +212,7 @@ public:
 	{}
 
 	virtual void SeekHitlist ( SphOffset_t ) {}
-	
+
 	virtual const CSphMatch & GetNextDoc ( DWORD * )
 	{
 		m_uFields = 0xFFFFFFFFUL;
@@ -346,7 +346,7 @@ bool SnippetsQwordSetup::QwordSetup ( ISphQword * pQword ) const
 	pWord->m_dTokens = &(m_pGenerator->m_dTokens);
 	pWord->m_sBuffer = &(m_pGenerator->m_sBuffer);
 	pWord->m_pTokenizer = m_pTokenizer;
-	
+
 	pWord->m_iDocs = 1;
 	pWord->m_iHits = 1;
 	pWord->m_bHasHitlist = true;
@@ -583,7 +583,7 @@ void ExcerptGen_c::MarkHits ()
 	CSphVector<SphHitMark_t> dMarked;
 	dMarked.Reserve ( m_dTokens.GetLength() );
 	m_pMarker->Mark ( dMarked );
-	
+
 	// fix-up word masks
 	int iMarked = dMarked.GetLength();
 	int iTokens = m_dTokens.GetLength();
@@ -604,13 +604,13 @@ void ExcerptGen_c::MarkHits ()
 		// clear false matches
 		while ( dMarked[k].m_uPosition > m_dTokens[i].m_uPosition )
 			m_dTokens[i++].m_uWords = 0;
-		
+
 		// skip tokens covered by hit's span
 		assert ( dMarked[k].m_uPosition == m_dTokens[i].m_uPosition );
 		assert ( dMarked[k].m_uSpan >= 1 );
 		while ( dMarked[k].m_uSpan-- )
 		{
-			i++; 
+			i++;
 			while ( i < iTokens && !m_dTokens[i].m_uPosition ) i++;
 		}
 	}
@@ -1216,7 +1216,7 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 {
 	if ( !tOptions.m_sWords.cstr()[0] )
 		tOptions.m_bHighlightQuery = false;
-		
+
 	if ( !tOptions.m_bHighlightQuery )
 	{
 		 // legacy highlighting
@@ -1233,18 +1233,18 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 		return NULL;
 	}
 	tQuery.m_pRoot->ClearFieldMask();
-	
+
 	ExcerptGen_c tGenerator;
 	SnippetsQwordSetup tSetup ( &tGenerator, pTokenizer );
 	CSphString sWarning;
 
 	tGenerator.TokenizeDocument ( tOptions, pDict, pTokenizer, false );
-	
+
 	tSetup.m_pDict = pDict;
 	tSetup.m_pIndex = pIndex;
 	tSetup.m_eDocinfo = SPH_DOCINFO_EXTERN;
 	tSetup.m_pWarning = &sWarning;
-	
+
 	CSphScopedPtr<CSphHitMarker> pMarker ( CSphHitMarker::Create ( tQuery.m_pRoot, tSetup ) );
 	if ( !pMarker.Ptr() )
 	{

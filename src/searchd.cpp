@@ -2562,11 +2562,11 @@ struct SearchReplyParser_t : public IReplyParser_t, public ISphNoncopyable
 {
 	SearchReplyParser_t ( int iStart, int iEnd, CSphVector<DWORD> & dMvaStorage, CSphVector<BYTE> & dStringsStorage )
 		: m_iStart ( iStart )
-		, m_iEnd ( iEnd ) 
+		, m_iEnd ( iEnd )
 		, m_dMvaStorage ( dMvaStorage )
 		, m_dStringsStorage ( dStringsStorage )
 	{}
-	
+
 	virtual bool ParseReply ( MemInputBuffer_c & tReq, Agent_t & tAgent ) const;
 
 protected:
@@ -2822,7 +2822,7 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, Agent_t & tAgent
 						CSphString sValue = tReq.GetString();
 						int iLen = sValue.Length();
 
-						int iOff = m_dStringsStorage.GetLength(); 
+						int iOff = m_dStringsStorage.GetLength();
 						tMatch.SetAttr ( tAttr.m_tLocator, iOff );
 
 						m_dStringsStorage.Resize ( iOff+3+iLen );
@@ -4305,7 +4305,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				{
 					CSphString sError;
 					CSphQuery & tQuery = m_dQueries[iQuery];
-					
+
 					// create sorter, if needed
 					ISphMatchSorter * pSorter = pLocalSorter;
 					if ( !pLocalSorter )
@@ -4388,7 +4388,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 						tRes.m_iSuccesses++;
 						tRes.m_tSchema = pSorter->GetSchema();
 						tRes.m_iTotalMatches += pSorter->GetTotalCount();
-						
+
 						if ( bMultiQueue )
 						{
 							tRes.m_iQueryTime += ( iQuery==iStart ) ? tStats.m_iQueryTime : 0;

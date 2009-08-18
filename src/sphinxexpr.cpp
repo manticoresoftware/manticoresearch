@@ -827,7 +827,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		return NULL;
 
 	const ExprNode_t & tNode = m_dNodes[iNode];
-	
+
 	// avoid spawning argument node in some cases
 	bool bSkipLeft = false;
 	bool bSkipRight = false;
@@ -1197,7 +1197,7 @@ public:
 private:
 	CSphAttrLocator	m_tLat;
 	CSphAttrLocator	m_tLon;
-	
+
 	float		m_fAnchorLat;
 	float		m_fAnchorLon;
 };
@@ -1227,7 +1227,7 @@ public:
 private:
 	ISphExpr *	m_pLat;
 	ISphExpr *	m_pLon;
-	
+
 	float		m_fAnchorLat;
 	float		m_fAnchorLon;
 };

@@ -266,7 +266,7 @@ void ShowProgress ( const CSphIndexProgress * pProgress, bool bPhaseEnd )
 	// if in no-progress mode, only show phase ends
 	if ( g_bQuiet || ( !g_bProgress && !bPhaseEnd ) )
 		return;
-	
+
 	fprintf ( stdout, "%s%c", pProgress->BuildMessage(), bPhaseEnd ? '\n' : '\r' );
  	fflush ( stdout );
 }

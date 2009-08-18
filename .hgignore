@@ -12,3 +12,6 @@ glob:sphinx.conf.dist
 glob:config/*
 glob:*.Po
 glob:test/*/report.txt
+glob:codeblocks/*.depend
+glob:codeblocks/*.layout
+glob:*/sphinxversion.h

@@ -262,7 +262,7 @@ class ExtTwofer_c : public ExtNode_i
 public:
 								ExtTwofer_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const ISphQwordSetup & tSetup );
 								~ExtTwofer_c ();
-	
+
 	virtual void				Reset ( const ISphQwordSetup & tSetup );
 	virtual void				GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
@@ -717,7 +717,7 @@ static ExtNode_i * CreateOrderNode ( const XQNode_t * pNode, const ISphQwordSetu
 		dChildren.Add ( pChild );
 	}
 	ExtNode_i * pResult = new ExtOrder_c ( dChildren, tSetup );
-	
+
 	if ( pNode->GetCount() )
 		return sphXQCacheCreateProxy ( pResult, pNode, tSetup );
 
@@ -2432,7 +2432,7 @@ void ExtQuorum_c::Reset ( const ISphQwordSetup & tSetup )
 
 	m_uMask = m_uInitialMask;
 
-	m_uMaskEnd = m_dChildren.GetLength() - 1; 
+	m_uMaskEnd = m_dChildren.GetLength() - 1;
 	ARRAY_FOREACH ( i, m_dChildren )
 		m_dChildren[i]->Reset ( tSetup );
 }
@@ -3563,7 +3563,7 @@ ISphRanker * sphCreateRanker ( const XQNode_t * pRoot, ESphRankMode eRankMode, C
 		float fIDF = 0.0f;
 		if ( tWord.m_iDocs )
 		{
-			
+
 			float fLogTotal = logf ( float(1+tStats.m_iTotalDocuments) );
 			fIDF = logf ( float(tStats.m_iTotalDocuments-tWord.m_iDocs+1)/float(tWord.m_iDocs) )
 				/ ( 2*iQwords*fLogTotal );
@@ -3821,7 +3821,7 @@ bool NodeCacheContainer_t::WarmupCache ( ExtNode_i * pChild )
 			}
 			iHasDocs = true;
 		}
-		
+
 		const ExtHit_t * pHits = NULL;
 		if ( iHasDocs )
 			while (	( pHits=pChild->GetHitsChunk ( pChunkHits, pChild->m_uMaxID ) )!=NULL )
@@ -3912,7 +3912,7 @@ void ExtNodeCached_t::StepForwardToHitsFor ( SphDocID_t uDocId )
 			iEnd = iMid;
 		else
 			iHitIndex = iMid;
-	}	
+	}
 	m_iHitIndex = iEnd;
 }
 

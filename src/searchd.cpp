@@ -184,6 +184,7 @@ static int				g_iPreforkChildren	= 10;		// how much workers to keep
 static CSphVector<int>	g_dPreforked;
 static volatile bool	g_bAcceptUnlocked	= true;		// whether this preforked child is guaranteed to be *not* holding a lock around accept
 static int				g_iClientFD			= -1;
+static int				g_iDistThreads		= 4;
 
 struct ThdDesc_t
 {
@@ -4030,6 +4031,8 @@ void SetupKillListFilter ( CSphFilterSettings & tFilter, const SphAttr_t * pKill
 
 class SearchHandler_c
 {
+	friend void LocalSearchThreadFunc ( void * pArg );
+
 public:
 									SearchHandler_c ( int iQueries );
 	void							RunQueries ();					///< run all queries, get all results
@@ -4041,9 +4044,17 @@ public:
 
 protected:
 	void							RunSubset ( int iStart, int iEnd );	///< run queries against index(es) from first query in the subset
+	void							RunLocalSearches ( ISphMatchSorter * pLocalSorter );
+	void							RunLocalSearchesMT ();
+	bool							RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters, CSphQueryResult ** pResults ) const;
 
 	CSphVector<DWORD>				m_dMvaStorage;
 	CSphVector<BYTE>				m_dStringsStorage;
+
+	int								m_iStart;		///< subset start
+	int								m_iEnd;			///< subset end
+	bool							m_bMultiQueue;	///< whether current subset is subject to multi-queue optimization
+	CSphVector<CSphString>			m_dLocal;		///< local indexes for the current subset
 };
 
 
@@ -4150,8 +4161,325 @@ int64_t sphCpuTimer ()
 }
 
 
+struct LocalSearch_t
+{
+	SphThread_t			m_tThd;
+	SearchHandler_c *	m_pHandler;
+	int					m_iLocal;
+	ISphMatchSorter **	m_ppSorters;
+	CSphQueryResult **	m_ppResults;
+	bool				m_bResult;
+};
+
+
+void LocalSearchThreadFunc ( void * pArg )
+{
+	LocalSearch_t * pCall = (LocalSearch_t*) pArg;
+	pCall->m_bResult = pCall->m_pHandler->RunLocalSearch ( pCall->m_iLocal, pCall->m_ppSorters, pCall->m_ppResults );
+}
+
+
+void SearchHandler_c::RunLocalSearchesMT ()
+{
+	int64_t tmLocal = sphMicroTimer();
+
+	// FIXME! create a better index:thread mapping than just 1:1; and do take dist_threads into account
+	const int iQueries = m_iEnd-m_iStart+1;
+	CSphVector<LocalSearch_t> dThreads ( m_dLocal.GetLength() );
+	CSphVector<CSphQueryResult> dResults ( m_dLocal.GetLength()*iQueries );
+	CSphVector<ISphMatchSorter*> pSorters ( m_dLocal.GetLength()*iQueries );
+	CSphVector<CSphQueryResult*> pResults ( m_dLocal.GetLength()*iQueries );
+
+	ARRAY_FOREACH ( i, pResults )
+		pResults[i] = &dResults[i];
+
+	// fire searcher threads
+	ARRAY_FOREACH ( i, m_dLocal )
+	{
+		dThreads[i].m_pHandler = this;
+		dThreads[i].m_iLocal = i;
+		dThreads[i].m_ppSorters = &pSorters [ i*iQueries ];
+		dThreads[i].m_ppResults = &pResults [ i*iQueries ];
+		sphThreadCreate ( &dThreads[i].m_tThd, LocalSearchThreadFunc, (void*)&dThreads[i] ); // FIXME! check result
+	}
+
+	// wait for them to complete
+	ARRAY_FOREACH ( i, m_dLocal )
+		sphThreadJoin ( &dThreads[i].m_tThd );
+
+	// now merge the results
+	ARRAY_FOREACH ( iThread, dThreads )
+	{
+		bool bResult = dThreads[iThread].m_bResult;
+		const char * sLocal = m_dLocal[iThread].cstr();
+
+		if ( !bResult )
+		{
+			// failed
+			for ( int iQuery=m_iStart; iQuery<=m_iEnd; iQuery++ )
+			{
+				int iResultIndex = iThread*iQueries;
+				if ( !m_bMultiQueue )
+					iResultIndex += iQuery - m_iStart;
+				m_dFailuresSet[iQuery].SubmitEx ( sLocal, "%s", dResults[iResultIndex].m_sError.cstr() );
+			}
+			continue;
+		}
+
+		// multi-query succeeded
+		for ( int iQuery=m_iStart; iQuery<=m_iEnd; iQuery++ )
+		{
+			// but some of the sorters could had failed at "create sorter" stage
+			int iResultIndex = iThread*iQueries;
+			int iSorterIndex = iResultIndex + iQuery - m_iStart;
+			if ( m_bMultiQueue )
+				iResultIndex = iSorterIndex;
+
+			ISphMatchSorter * pSorter = pSorters[iSorterIndex];
+			if ( !pSorter )
+				continue;
+
+			// this one seems OK
+			AggrResult_t & tRes = m_dResults[iQuery];
+			CSphQueryResult & tRaw = dResults[iResultIndex];
+
+			tRes.m_iSuccesses++;
+			tRes.m_tSchema = pSorter->GetSchema();
+			tRes.m_iTotalMatches += pSorter->GetTotalCount();
+
+			tRes.m_pMva = tRaw.m_pMva;
+			tRes.m_pStrings = tRaw.m_pStrings;
+			tRes.m_dWordStats = tRaw.m_dWordStats;
+
+			tRes.m_iMultiplier = m_bMultiQueue ? iQueries : 1;
+			tRes.m_iCpuTime += tRaw.m_iCpuTime / tRes.m_iMultiplier;
+
+			// extract matches from sorter
+			assert ( pSorter );
+
+			if ( pSorter->GetLength() )
+			{
+				tRes.m_dMatchCounts.Add ( pSorter->GetLength() );
+				tRes.m_dSchemas.Add ( tRes.m_tSchema );
+				tRes.m_dIndexWeights.Add ( m_dQueries[iQuery].GetIndexWeight ( sLocal ) );
+				PoolPtrs_t & tPoolPtrs = tRes.m_dTag2Pools.Add ();
+				tPoolPtrs.m_pMva = tRes.m_pMva;
+				tPoolPtrs.m_pStrings = tRes.m_pStrings;
+				sphFlattenQueue ( pSorter, &tRes, tRes.m_iTag++ );
+			}
+		}
+	}
+
+	// update our wall time for every result set
+	tmLocal = sphMicroTimer() - tmLocal;
+	for ( int iQuery=m_iStart; iQuery<=m_iEnd; iQuery++ )
+		m_dResults[iQuery].m_iQueryTime += (int)( tmLocal/1000 );
+}
+
+
+bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters, CSphQueryResult ** ppResults ) const
+{
+	const int iQueries = m_iEnd-m_iStart+1;
+	const char * sLocal = m_dLocal[iLocal].cstr();
+	const ServedIndex_t & tServed = g_hIndexes [ sLocal ];
+	assert ( tServed.m_pIndex );
+	assert ( tServed.m_bEnabled );
+
+	// create sorters
+	int iValidSorters = 0;
+	for ( int i=0; i<iQueries; i++ )
+	{
+		CSphString sError;
+		const CSphQuery & tQuery = m_dQueries[i+m_iStart];
+
+		assert ( !tQuery.m_iOldVersion );
+		ppSorters[i] = sphCreateQueue ( &tQuery, *tServed.m_pSchema, sError );
+		if ( !ppSorters[i] )
+		{
+			// FIXME! submit a failure?
+			// m_dFailuresSet[iQuery].SubmitEx ( sLocal, "%s", sError.cstr() );
+			continue;
+		}
+		iValidSorters++;
+	}
+	if ( !iValidSorters )
+		return false;
+
+	// setup kill-lists
+	CSphVector<CSphFilterSettings> dKlists;
+	for ( int i=iLocal+1; i<m_dLocal.GetLength (); i++ )
+	{
+		const CSphIndex * pIndex = g_hIndexes [ m_dLocal[i] ].m_pIndex;
+		if ( pIndex->GetKillListSize() )
+			SetupKillListFilter ( dKlists.Add(), pIndex->GetKillList(), pIndex->GetKillListSize() );
+	}
+
+	// do the query
+	bool bResult = false;
+	tServed.m_pIndex->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
+	if ( m_bMultiQueue )
+	{
+		bResult = tServed.m_pIndex->MultiQuery ( &m_dQueries[m_iStart], ppResults[0], iQueries, ppSorters, &dKlists );
+	} else
+	{
+		bResult = tServed.m_pIndex->MultiQueryEx ( iQueries, &m_dQueries[m_iStart], ppResults, ppSorters, &dKlists );
+	}
+	return bResult;
+}
+
+
+void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter )
+{
+	if ( g_iDistThreads>1 && m_dLocal.GetLength()>1 )
+	{
+		RunLocalSearchesMT();
+		return;
+	}
+
+	ARRAY_FOREACH ( iLocal, m_dLocal )
+	{
+		const char * sLocal = m_dLocal[iLocal].cstr();
+		const ServedIndex_t & tServed = g_hIndexes [ sLocal ];
+		assert ( tServed.m_pIndex );
+		assert ( tServed.m_bEnabled );
+
+		// create sorters
+		CSphVector<ISphMatchSorter*> dSorters ( m_iEnd-m_iStart+1 );
+		ARRAY_FOREACH ( i, dSorters )
+			dSorters[i] = NULL;
+
+		int iValidSorters = 0;
+		for ( int iQuery=m_iStart; iQuery<=m_iEnd; iQuery++ )
+		{
+			CSphString sError;
+			CSphQuery & tQuery = m_dQueries[iQuery];
+
+			// create sorter, if needed
+			ISphMatchSorter * pSorter = pLocalSorter;
+			if ( !pLocalSorter )
+			{
+				// fixup old queries
+				if ( !FixupQuery ( &tQuery, tServed.m_pSchema, sLocal, sError ) )
+				{
+					m_dFailuresSet[iQuery].SubmitEx ( sLocal, "%s", sError.cstr() );
+					continue;
+				}
+
+				// create queue
+				pSorter = sphCreateQueue ( &tQuery, *tServed.m_pSchema, sError );
+				if ( !pSorter )
+				{
+					m_dFailuresSet[iQuery].SubmitEx ( sLocal, "%s", sError.cstr() );
+					continue;
+				}
+			}
+
+			dSorters[iQuery-m_iStart] = pSorter;
+			iValidSorters++;
+		}
+		if ( !iValidSorters )
+			continue;
+
+		// me shortcuts
+		AggrResult_t tStats;
+		CSphQuery * pQuery = &m_dQueries[m_iStart];
+
+		// set kill-list
+		int iNumFilters = pQuery->m_dFilters.GetLength ();
+		for ( int i=iLocal+1; i<m_dLocal.GetLength (); i++ )
+		{
+			const ServedIndex_t & tServed = g_hIndexes [ m_dLocal[i] ];
+			if ( tServed.m_pIndex->GetKillListSize () )
+			{
+				CSphFilterSettings tKillListFilter;
+				SetupKillListFilter ( tKillListFilter, tServed.m_pIndex->GetKillList (), tServed.m_pIndex->GetKillListSize () );
+				pQuery->m_dFilters.Add ( tKillListFilter );
+			}
+		}
+
+		// do the query
+		bool bResult = false;
+		tServed.m_pIndex->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
+		if ( m_bMultiQueue )
+		{
+			bResult = tServed.m_pIndex->MultiQuery ( &m_dQueries[m_iStart], &tStats,
+				dSorters.GetLength(), &dSorters[0] );
+		} else
+		{
+			CSphVector<CSphQueryResult*> dResults ( m_dResults.GetLength() );
+			ARRAY_FOREACH ( i, m_dResults )
+				dResults[i] = &m_dResults[i];
+
+			bResult = tServed.m_pIndex->MultiQueryEx ( dSorters.GetLength(),
+				&m_dQueries[m_iStart], &dResults[m_iStart], &dSorters[0]);
+		}
+
+		// handle results
+		if ( !bResult )
+		{
+			// failed
+			for ( int iQuery=m_iStart; iQuery<=m_iEnd; iQuery++ )
+				m_dFailuresSet[iQuery].SubmitEx ( sLocal, "%s",
+					m_dResults [ m_bMultiQueue ? m_iStart : iQuery ].m_sError.cstr() );
+		} else
+		{
+			// multi-query succeeded
+			for ( int iQuery=m_iStart; iQuery<=m_iEnd; iQuery++ )
+			{
+				// but some of the sorters could had failed at "create sorter" stage
+				ISphMatchSorter * pSorter = dSorters [ iQuery-m_iStart ];
+				if ( !pSorter )
+					continue;
+
+				// this one seems OK
+				AggrResult_t & tRes = m_dResults[iQuery];
+				tRes.m_iSuccesses++;
+				tRes.m_tSchema = pSorter->GetSchema();
+				tRes.m_iTotalMatches += pSorter->GetTotalCount();
+
+				// multi-queue only returned one result set meta, so we need to replicate it
+				if ( m_bMultiQueue )
+				{
+					// these times will be overriden below, but let's be clean
+					tRes.m_iQueryTime += tStats.m_iQueryTime / ( m_iEnd-m_iStart+1 );
+					tRes.m_iCpuTime += tStats.m_iCpuTime / ( m_iEnd-m_iStart+1 );
+					tRes.m_pMva = tStats.m_pMva;
+					tRes.m_dWordStats = tStats.m_dWordStats;
+					tRes.m_iMultiplier = m_iEnd-m_iStart+1;
+				}
+
+				// extract matches from sorter
+				assert ( pSorter );
+
+				if ( pSorter->GetLength() )
+				{
+					tRes.m_dMatchCounts.Add ( pSorter->GetLength() );
+					tRes.m_dSchemas.Add ( tRes.m_tSchema );
+					tRes.m_dIndexWeights.Add ( m_dQueries[iQuery].GetIndexWeight ( sLocal ) );
+					PoolPtrs_t & tPoolPtrs = tRes.m_dTag2Pools.Add ();
+					tPoolPtrs.m_pMva = tRes.m_pMva;
+					tPoolPtrs.m_pStrings = tRes.m_pStrings;
+					sphFlattenQueue ( pSorter, &tRes, tRes.m_iTag++ );
+				}
+			}
+		}
+
+		// cleanup kill-list
+		pQuery->m_dFilters.Resize ( iNumFilters );
+
+		// cleanup sorters
+		if ( !pLocalSorter )
+			ARRAY_FOREACH ( i, dSorters )
+			SafeDelete ( dSorters[i] );
+	}
+}
+
+
 void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 {
+	m_iStart = iStart;
+	m_iEnd = iEnd;
+
 	// all my stats
 	int64_t tmSubset = sphMicroTimer();
 	int64_t tmLocal = 0;
@@ -4172,7 +4500,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	// check for single-query, multi-queue optimization possibility
 	////////////////////////////////////////////////////////////////
 
-	bool bMultiQueue = ( iStart<iEnd );
+	m_bMultiQueue = ( iStart<iEnd );
 	for ( int iCheck=iStart+1; iCheck<=iEnd; iCheck++ )
 	{
 		const CSphQuery & qFirst = m_dQueries[iStart];
@@ -4192,7 +4520,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			( qCheck.m_bGeoAnchor!=qFirst.m_bGeoAnchor ) || // geodist expression
 			( qCheck.m_bGeoAnchor && qFirst.m_bGeoAnchor && ( qCheck.m_fGeoLatitude!=qFirst.m_fGeoLatitude || qCheck.m_fGeoLongitude!=qFirst.m_fGeoLongitude ) ) )  // some geodist cases
 		{
-			bMultiQueue = false;
+			m_bMultiQueue = false;
 			break;
 		}
 
@@ -4202,7 +4530,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			if ( qCheck.m_dItems[i].m_sExpr!=qFirst.m_dItems[i].m_sExpr ||
 				 qCheck.m_dItems[i].m_eAggrFunc!=qFirst.m_dItems[i].m_eAggrFunc )
 			{
-				bMultiQueue = false;
+				m_bMultiQueue = false;
 				break;
 			}
 		}
@@ -4212,10 +4540,10 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		ARRAY_FOREACH ( i, qCheck.m_dFilters )
 			if ( qCheck.m_dFilters[i]!=qFirst.m_dFilters[i] )
 		{
-			bMultiQueue = false;
+			m_bMultiQueue = false;
 			break;
 		}
-		if ( !bMultiQueue )
+		if ( !m_bMultiQueue )
 			break;
 	}
 
@@ -4223,9 +4551,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	// build local indexes list
 	////////////////////////////
 
-	CSphVector<CSphString> dLocal;
 	DistributedIndex_t * pDist = g_hDistIndexes ( tFirst.m_sIndexes );
-
 	if ( !pDist )
 	{
 		// they're all local, build the list
@@ -4235,29 +4561,29 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			g_hIndexes.IterateStart ();
 			while ( g_hIndexes.IterateNext () )
 				if ( g_hIndexes.IterateGet ().m_bEnabled )
-					dLocal.Add ( g_hIndexes.IterateGetKey() );
+					m_dLocal.Add ( g_hIndexes.IterateGetKey() );
 		} else
 		{
 			// search through specified local indexes
-			ParseIndexList ( tFirst.m_sIndexes, dLocal );
-			ARRAY_FOREACH ( i, dLocal )
+			ParseIndexList ( tFirst.m_sIndexes, m_dLocal );
+			ARRAY_FOREACH ( i, m_dLocal )
 			{
 				// check that it exists
-				if ( !g_hIndexes(dLocal[i]) )
+				if ( !g_hIndexes(m_dLocal[i]) )
 				{
 					for ( int iRes=iStart; iRes<=iEnd; iRes++ )
-						m_dResults[iRes].m_sError.SetSprintf ( "unknown local index '%s' in search request", dLocal[i].cstr() );
+						m_dResults[iRes].m_sError.SetSprintf ( "unknown local index '%s' in search request", m_dLocal[i].cstr() );
 					return;
 				}
 
 				// if it exists but is not enabled, remove it from the list and force recheck
-				if ( !g_hIndexes[dLocal[i]].m_bEnabled )
-					dLocal.RemoveFast ( i-- );
+				if ( !g_hIndexes[m_dLocal[i]].m_bEnabled )
+					m_dLocal.RemoveFast ( i-- );
 			}
 		}
 
 		// sanity check
-		if ( !dLocal.GetLength() )
+		if ( !m_dLocal.GetLength() )
 		{
 			for ( int iRes=iStart; iRes<=iEnd; iRes++ )
 				m_dResults[iRes].m_sError.SetSprintf ( "no enabled local indexes to search" );
@@ -4269,7 +4595,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		// copy local indexes list from distributed definition, but filter out disabled ones
 		ARRAY_FOREACH ( i, pDist->m_dLocal )
 			if ( g_hIndexes[pDist->m_dLocal[i]].m_bEnabled )
-				dLocal.Add ( pDist->m_dLocal[i] );
+				m_dLocal.Add ( pDist->m_dLocal[i] );
 	}
 
 	/////////////////////////////////////////////////////
@@ -4277,16 +4603,16 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	/////////////////////////////////////////////////////
 
 	ISphMatchSorter * pLocalSorter = NULL;
-	while ( iStart==iEnd && dLocal.GetLength()>1 )
+	while ( iStart==iEnd && m_dLocal.GetLength()>1 )
 	{
 		CSphString sError;
 
 		// check if all schemas are equal
 		bool bAllEqual = true;
-		const CSphSchema * pFirstSchema = g_hIndexes [ dLocal[0] ].m_pSchema;
-		for ( int i=1; i<dLocal.GetLength() && bAllEqual; i++ )
+		const CSphSchema * pFirstSchema = g_hIndexes [ m_dLocal[0] ].m_pSchema;
+		for ( int i=1; i<m_dLocal.GetLength() && bAllEqual; i++ )
 		{
-			if ( !pFirstSchema->CompareTo ( *g_hIndexes [ dLocal[i] ].m_pSchema, sError ) )
+			if ( !pFirstSchema->CompareTo ( *g_hIndexes [ m_dLocal[i] ].m_pSchema, sError ) )
 				bAllEqual = false;
 		}
 
@@ -4298,7 +4624,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	}
 
 	// these are mutual exclusive
-	assert ( !( bMultiQueue && pLocalSorter ) );
+	assert ( !( m_bMultiQueue && pLocalSorter ) );
 
 	///////////////////////////////////////////////////////////
 	// main query loop (with multiple retries for distributed)
@@ -4337,7 +4663,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		// FIXME! what if the remote agents finish early, could they timeout?
 		if ( iRetry==0 )
 		{
-			if ( pDist && !iRemote && !dLocal.GetLength() )
+			if ( pDist && !iRemote && !m_dLocal.GetLength() )
 			{
 				for ( int iRes=iStart; iRes<=iEnd; iRes++ )
 					m_dResults[iRes].m_sError = "all remote agents unreachable and no available local indexes found";
@@ -4345,141 +4671,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			}
 
 			tmLocal = -sphMicroTimer();
-			ARRAY_FOREACH ( iLocal, dLocal )
-			{
-				const ServedIndex_t & tServed = g_hIndexes [ dLocal[iLocal] ];
-				assert ( tServed.m_pIndex );
-				assert ( tServed.m_bEnabled );
-
-				// create sorters
-				CSphVector<ISphMatchSorter*> dSorters ( iEnd-iStart+1 );
-				ARRAY_FOREACH ( i, dSorters )
-					dSorters[i] = NULL;
-
-				int iValidSorters = 0;
-				for ( int iQuery=iStart; iQuery<=iEnd; iQuery++ )
-				{
-					CSphString sError;
-					CSphQuery & tQuery = m_dQueries[iQuery];
-
-					// create sorter, if needed
-					ISphMatchSorter * pSorter = pLocalSorter;
-					if ( !pLocalSorter )
-					{
-						// fixup old queries
-						if ( !FixupQuery ( &tQuery, tServed.m_pSchema, dLocal[iLocal].cstr(), sError ) )
-						{
-							m_dFailuresSet[iQuery].SubmitEx ( dLocal[iLocal].cstr(), "%s", sError.cstr() );
-							continue;
-						}
-
-						// create queue
-						pSorter = sphCreateQueue ( &tQuery, *tServed.m_pSchema, sError );
-						if ( !pSorter )
-						{
-							m_dFailuresSet[iQuery].SubmitEx ( dLocal[iLocal].cstr(), "%s", sError.cstr() );
-							continue;
-						}
-					}
-
-					dSorters[iQuery-iStart] = pSorter;
-					iValidSorters++;
-				}
-				if ( !iValidSorters )
-					continue;
-
-				// me shortcuts
-				AggrResult_t tStats;
-				CSphQuery * pQuery = &m_dQueries[iStart];
-
-				// set kill-list
-				int iNumFilters = pQuery->m_dFilters.GetLength ();
-				for ( int i=iLocal+1; i<dLocal.GetLength (); i++ )
-				{
-					const ServedIndex_t & tServed = g_hIndexes [ dLocal[i] ];
-					if ( tServed.m_pIndex->GetKillListSize () )
-					{
-						CSphFilterSettings tKillListFilter;
-						SetupKillListFilter ( tKillListFilter, tServed.m_pIndex->GetKillList (), tServed.m_pIndex->GetKillListSize () );
-						pQuery->m_dFilters.Add ( tKillListFilter );
-					}
-				}
-
-				// do the query
-				bool bResult = false;
-				tServed.m_pIndex->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
-				if ( bMultiQueue )
-				{
-					bResult = tServed.m_pIndex->MultiQuery ( &m_dQueries[iStart], &tStats,
-						dSorters.GetLength(), &dSorters[0] );
-				} else
-				{
-					CSphVector<CSphQueryResult*> dResults ( m_dResults.GetLength() );
-					ARRAY_FOREACH ( i, m_dResults )
-						dResults[i] = &m_dResults[i];
-
-					bResult = tServed.m_pIndex->MultiQueryEx ( dSorters.GetLength(),
-						&m_dQueries[iStart], &dResults[iStart], &dSorters[0]);
-				}
-
-				// handle results
-				if ( !bResult )
-				{
-					// failed
-					for ( int iQuery=iStart; iQuery<=iEnd; iQuery++ )
-						m_dFailuresSet[iQuery].SubmitEx ( dLocal[iLocal].cstr(), "%s",
-							m_dResults [ bMultiQueue ? iStart : iQuery ].m_sError.cstr() );
-				} else
-				{
-					// multi-query succeeded
-					for ( int iQuery=iStart; iQuery<=iEnd; iQuery++ )
-					{
-						// but some of the sorters could had failed at "create sorter" stage
-						ISphMatchSorter * pSorter = dSorters [ iQuery-iStart ];
-						if ( !pSorter )
-							continue;
-
-						// this one seems OK
-						AggrResult_t & tRes = m_dResults[iQuery];
-						tRes.m_iSuccesses++;
-						tRes.m_tSchema = pSorter->GetSchema();
-						tRes.m_iTotalMatches += pSorter->GetTotalCount();
-
-						// multi-queue only returned one result set meta, so we need to replicate it
-						if ( bMultiQueue )
-						{
-							// these times will be overriden below, but let's be clean
-							tRes.m_iQueryTime += tStats.m_iQueryTime / ( iEnd-iStart+1 );
-							tRes.m_iCpuTime += tStats.m_iCpuTime / ( iEnd-iStart+1 );
-							tRes.m_pMva = tStats.m_pMva;
-							tRes.m_dWordStats = tStats.m_dWordStats;
-							tRes.m_iMultiplier = iEnd-iStart+1;
-						}
-
-						// extract matches from sorter
-						assert ( pSorter );
-
-						if ( pSorter->GetLength() )
-						{
-							tRes.m_dMatchCounts.Add ( pSorter->GetLength() );
-							tRes.m_dSchemas.Add ( tRes.m_tSchema );
-							tRes.m_dIndexWeights.Add ( m_dQueries[iQuery].GetIndexWeight ( dLocal[iLocal].cstr() ) );
-							PoolPtrs_t & tPoolPtrs = tRes.m_dTag2Pools.Add ();
-							tPoolPtrs.m_pMva = tRes.m_pMva;
-							tPoolPtrs.m_pStrings = tRes.m_pStrings;
-							sphFlattenQueue ( pSorter, &tRes, tRes.m_iTag++ );
-						}
-					}
-				}
-
-				// cleanup kill-list
-				pQuery->m_dFilters.Resize ( iNumFilters );
-
-				// cleanup sorters
-				if ( !pLocalSorter )
-					ARRAY_FOREACH ( i, dSorters )
-						SafeDelete ( dSorters[i] );
-			}
+			RunLocalSearches ( pLocalSorter );
 			tmLocal += sphMicroTimer();
 		}
 
@@ -4660,7 +4852,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	// in multi-queue case (1 actual call per N queries), just divide overall query time evenly
 	// otherwise (N calls per N queries), divide common query time overheads evenly
 	const int iQueries = iEnd-iStart+1;
-	if ( bMultiQueue )
+	if ( m_bMultiQueue )
 	{
 		for ( int iRes=iStart; iRes<=iEnd; iRes++ )
 		{
@@ -8540,6 +8732,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	g_iMaxFilters = hSearchd.GetInt ( "max_filters", g_iMaxFilters );
 	g_iMaxFilterValues = hSearchd.GetInt ( "max_filter_values", g_iMaxFilterValues );
 	g_iMaxBatchQueries = hSearchd.GetInt ( "max_batch_queries", g_iMaxBatchQueries );
+	g_iDistThreads = hSearchd.GetInt ( "dist_threads", g_iDistThreads );
 
 	if ( hSearchd("workers") )
 	{

@@ -260,6 +260,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "subtree_hits_cache",		0, NULL },
 	{ "workers",				0, NULL },
 	{ "prefork",				0, NULL },
+	{ "dist_threads",			0, NULL },
 	{ NULL,						0, NULL }
 };
 

@@ -32,15 +32,13 @@
      TOK_KEYWORD = 258,
      TOK_INT = 259,
      TOK_FIELDLIMIT = 260,
-     TOK_BEFORE = 261,
-     TOK_BLEND = 262
+     TOK_BEFORE = 261
    };
 #endif
 #define TOK_KEYWORD 258
 #define TOK_INT 259
 #define TOK_FIELDLIMIT 260
 #define TOK_BEFORE 261
-#define TOK_BLEND 262
 
 
 
@@ -60,7 +58,7 @@ typedef union YYSTYPE {
 		int			iMaxPos;		// max allowed position within field
 	} tFieldLimit;
 } YYSTYPE;
-/* Line 1204 of yacc.c.  */
+/* Line 1248 of yacc.c.  */
 
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1

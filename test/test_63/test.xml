@@ -3,6 +3,11 @@
 
 <name>blend characters</name>
 
+<requires>
+	<variant_match />
+</requires>
+
+
 <config>
 indexer
 {
@@ -26,12 +31,12 @@ index test
 	source	= test
 	path	= <data_path/>/test
 
+	blend_chars = @,|,+,.,*
+
 	<dynamic>
-      <variant>charset_type = utf-8</variant>
-      <variant>charset_type = sbcs</variant>
-    </dynamic>
-	
-	blend_chars = U+002A,U+002C,U+002E
+		<variant>charset_type = utf-8</variant>
+		<variant>charset_type = sbcs</variant>
+	</dynamic>
 }
 </config>
 
@@ -49,34 +54,69 @@ DROP TABLE IF EXISTS sph_test
 
 <db_insert>
 INSERT INTO sph_test VALUES
-( 1, 'aaa bbb*ccc ddd eee fff*ggg*hhh iii' ),
-( 2, 'ggg*hhh' ),
-( 3, 'aaa ddd ggg hhh' ),
-( 4, 'aaa bbb ccc ddd' ),
-( 5, 'hello, world. how is this gonna work if we need to handle U.S.A' );
+(  1, 'aaa bbb@ccc ddd @eee fff@ggg@hhh iii@ kkk' ),
+(  2, 'ggg@hhh' ),
+(  3, 'xxx @ yyy' ),
+(  4, 'aaa@bbb+ccc@ddd' ),
+(  5, 'aaa|eee|ccc' ),
+(  6, 'a+b+c+d e+f|g' ),
+(  7, 'aaa bbb*ccc ddd eee fff*ggg*hhh iii' ),
+(  8, 'ggg*hhh' ),
+(  9, 'aaa ddd ggg hhh' ),
+( 10, 'aaa bbb ccc ddd' ),
+( 11, 'hello, world. how is this gonna work if we need to handle U.S.A' );
 </db_insert>
 
 <queries>
-  <query mode="extended2"> aaa*ccc</query>
-  <query mode="extended2">~aaa*ccc</query>
+	<query mode="extended2">bbb|ccc</query>
+	<query mode="extended2">bbb@ccc</query>
+
+	<query mode="extended2">bbb\|ccc</query>
+	<query mode="extended2">bbb\@ccc</query>
+
+	<query mode="extended2">bbb ccc</query>
+	<query mode="extended2">"bbb ccc"</query>
+
+	<query mode="extended2">aaa|eee|ccc</query>
+	<query mode="extended2">aaa\|eee\|ccc</query>
+	<query mode="extended2">"aaa|eee|ccc"</query>
+	<query mode="extended2">"aaa\|eee\|ccc"</query>
+
+	<query mode="extended2">a+b+c+d</query>
+	<query mode="extended2">a+b+c+d e</query>
+	<query mode="extended2">"a+b+c+d e f"</query>
+	<query mode="extended2">"a+b+c+d e+f|g"</query>
+
+	<query mode="extended2">"bbb@ccc ddd @eee"</query>
+	<query mode="extended2">"ddd @eee fff@ggg@hhh"</query>
+	<query mode="extended2">"fff@ggg@hhh iii@ kkk"</query>
+
+	<query mode="extended2" expect_error="1">@</query>
+	<query mode="extended2">\@</query>
+
+	<query mode="extended2" expect_error="1">@eee kkk</query>
+	<query mode="extended2">\@eee kkk</query>
+
+	<query mode="extended2">aaa\*ccc</query>
+	<query mode="extended2">aaa*ccc</query>
   
-  <query mode="extended2"> bbb*ccc</query>
-  <query mode="extended2">~bbb*ccc</query>
-  <query mode="extended2"> bbb ccc</query>
-  <query mode="extended2">"bbb ccc"</query>
+	<query mode="extended2">bbb\*ccc</query>
+	<query mode="extended2">bbb*ccc</query>
 
-  <query mode="extended2"> fff*ggg</query>
-  <query mode="extended2">~fff*ggg</query>
-  <query mode="extended2">~fff*ggg*hhh</query>
+	<query mode="extended2"> bbb ccc</query>
+	<query mode="extended2">"bbb ccc"</query>
 
-  <query mode="extended2">"~bbb*ccc ddd"</query>
-  <query mode="extended2">"~bbb*ccc ccc ddd"</query>
-  <query mode="extended2">~bbb*ccc &lt;&lt; ddd</query>
+	<query mode="extended2">fff\*ggg</query>
+	<query mode="extended2">fff*ggg</query>
+	<query mode="extended2">fff*ggg*hhh</query>
 
-  <query mode="extended2">hello</query>
-  <query mode="extended2">~hello</query>
-  <query mode="extended2">"hello world"</query>
-  <query mode="extended2">~U.S.A</query>
+	<query mode="extended2">"bbb*ccc ddd"</query>
+	<query mode="extended2">"bbb*ccc ccc ddd"</query>
+	<query mode="extended2">bbb*ccc &lt;&lt; ddd</query>
+
+	<query mode="extended2">hello</query>
+	<query mode="extended2">"hello world"</query>
+	<query mode="extended2">hello U.S.A</query>
 </queries>
 
 </test>

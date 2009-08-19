@@ -42,20 +42,6 @@ public:
 	XQNode_t *		SweepNulls ( XQNode_t * pNode );
 	bool			FixupNots ( XQNode_t * pNode );
 
-	bool TokenIsBlended()
-	{
-		return m_pTokenizer->TokenIsBlended();
-	}
-
-	void SkipBlended ()
-	{
-		if ( m_pTokenizer->TokenIsBlended() )
-		{
-			m_pTokenizer->SkipBlended();
-			m_iAtomPos++;
-		}
-	}
-
 public:
 	XQQuery_t *				m_pParsed;
 
@@ -78,11 +64,11 @@ public:
 	int						m_iPendingNulls;
 	int						m_iPendingType;
 	YYSTYPE					m_tPendingToken;
+	bool					m_bWasBlended;
 
 	bool					m_bEmpty;
 
-	bool					m_bNotQuoted;
-	int						m_iQuotes;
+	bool					m_bQuoted;
 
 	CSphVector<CSphString>	m_dIntTokens;
 };
@@ -221,8 +207,8 @@ XQParser_t::XQParser_t ()
 	, m_pLastTokenStart ( NULL )
 	, m_pRoot ( NULL )
 	, m_bStopOnInvalid ( true )
-	, m_bNotQuoted ( true )
-	, m_iQuotes ( 0 )
+	, m_bWasBlended ( false )
+	, m_bQuoted ( false )
 {
 }
 
@@ -451,6 +437,9 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 	{
 		assert ( m_iPendingNulls==0 );
 
+		if ( m_bWasBlended )
+ 			m_iAtomPos += m_pTokenizer->SkipBlended();
+
 		// tricky stuff
 		// we need to manually check for numbers in certain states (currently, just after proximity or quorum operator)
 		// required because if 0-9 are not in charset_table, or min_word_len is too high,
@@ -500,6 +489,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		sToken = (const char *) m_pTokenizer->GetToken ();
 		if ( !sToken )
 			return 0;
+		m_bWasBlended = m_pTokenizer->TokenIsBlended();
 		m_bEmpty = false;
 
 		m_iPendingNulls = m_pTokenizer->GetOvershortCount ();
@@ -538,14 +528,11 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			}
 			else
 			{
-				if ( sToken[0] == '~' && m_bNotQuoted )
-					m_iPendingType = TOK_BLEND;
-				else
-				{
-					// all the other specials are passed to parser verbatim
-					m_bNotQuoted = sToken[0] != '"' || ++m_iQuotes % 2;
-					m_iPendingType = sToken[0]=='!' ? '-' : sToken[0];
-				}
+				// all the other specials are passed to parser verbatim
+				if ( sToken[0]=='"' )
+					m_bQuoted = !m_bQuoted;
+				m_iPendingType = sToken[0]=='!' ? '-' : sToken[0];
+				m_pTokenizer->m_bPhrase = m_bQuoted;
 				break;
 			}
 		}

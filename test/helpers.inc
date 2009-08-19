@@ -933,6 +933,54 @@ class SphinxConfig
 	}
 
 
+	function CheckVariants ( $output_path )
+	{
+		if ( !$this->Requires("variant_match") )
+			return true;
+		
+		$total = count ( $this->_results_model );
+		if ( $total==1 )
+		{
+			printf ( "Variant match is required, but there are no variants.\n" );
+			return false;
+		}
+		else if ( !$this->IsQueryTest() )
+		{
+			printf ( "Variant match is not supported for non-query tests.\n" );
+			return false;
+		}
+
+		$failed = false;
+		$output = '';
+		for ( $i=1; $i<$total; $i++ )
+		{
+			$nqueries = count ( $this->_results_model[0] );
+			for ( $k=0; $k<$nqueries; $k++ )
+			if ( !$this->CompareResultSets ( $this->_results_model[0][$k], $this->_results_model[$i][$k] ) )
+			{
+				$first = $this->FormatResultSet ( $k+1, $this->_results_model[0][$k] );
+				$current = $this->FormatResultSet ( $k+1, $this->_results_model[$i][$k] );
+
+				file_put_contents ( "first", $first );
+				file_put_contents ( "current", $current );
+				system ( "diff --unified=3 first current > diff.txt" );
+						
+				$diff = file_get_contents ( "diff.txt" );
+				unlink ( "current" );
+				unlink ( "first" );
+				unlink ( "diff.txt" );
+
+				$output .= $diff . "\n";
+				$failed = true;
+			}
+		}
+
+		if ( $failed )
+			file_put_contents ( $output_path, $output );
+		return !$failed;
+	}
+
+
 	function WriteReportHeader ( $fp )
 	{
 		fprintf ( $fp, "==== Run %d ====\n", $this->SubtestNo () + 1 );
@@ -1316,8 +1364,9 @@ function RunTest ( $test_dir )
 
 	if ( !file_exists ( $conf_dir ) )
 		mkdir ( $conf_dir );
-
-	$report_file = $test_dir."/report.txt";
+	
+	$report_path = "$test_dir/report";
+	$report_file = "$report_path.txt";
 	$report = fopen ( $report_file, "w" );
 
 	$nfailed = 0;
@@ -1477,19 +1526,29 @@ function RunTest ( $test_dir )
 	foreach ( $stop as $conf=>$pid )
 		StopSearchd ( $conf, $pid );
 
-	fclose ( $report );
-	mysql_close ();
-
+	$total = $config->SubtestNo()+1;
 	if ( IsModelGenMode () )
-		printf ( "$prefix done; %d/%d subtests run\n", $config->SubtestNo(), $nsubtests );
+	{
+		if ( $config->CheckVariants ( $report_path."_variant.txt" ) )
+		{
+			$config->WriteModel ( $model_file );
+			printf ( "$prefix done; %d/%d subtests run\n", $config->SubtestNo(), $nsubtests );
+		}
+		else
+		{
+			printf ( "$prefix done; %d/%d subtests: VARIANT CHECK FAILED\n", $config->SubtestNo(), $nsubtests );
+			$nfailed = $total;
+		}
+	}
 	else if ( $nfailed==0 )
 		printf ( "$prefix done; %d/%d subtests OK\n", $config->SubtestNo(), $nsubtests );
 	else
 		printf ( "$prefix done; %d/%d subtests FAILED:\n%s", $nfailed, $nsubtests, $log );
 
-	$config->WriteModel ( $model_file );
+	fclose ( $report );
+	mysql_close ();
 
-	return array ( "tests_total"=>$config->SubtestNo()+1, "tests_failed"=>$nfailed );
+	return array ( "tests_total"=>$total, "tests_failed"=>$nfailed );
 }
 
 //

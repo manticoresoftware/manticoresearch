@@ -425,7 +425,11 @@ public:
 	virtual int						GetCodepointLength ( int iCode ) const = 0;
 
 	/// handle tokens less than min_word_len if they match filter
-	virtual void					EnableQueryParserMode ( bool bEnable ) { m_bShortTokenFilter = bEnable; }
+	virtual void					EnableQueryParserMode ( bool bEnable )
+									{
+										m_bQueryMode = bEnable;
+										m_bShortTokenFilter = bEnable;
+									}
 
 	/// get last token length, in codepoints
 	virtual int						GetLastTokenLen () const { return m_iLastTokenLen; }
@@ -443,7 +447,7 @@ public:
 	virtual int						GetOvershortCount () { return m_iOvershortCount; }
 
 	virtual bool					TokenIsBlended () { return m_bBlended; }
-	virtual void					SkipBlended () {}
+	virtual int						SkipBlended () { return 0; }
 
 public:
 	/// spawn a clone of my own
@@ -482,10 +486,15 @@ protected:
 	bool							m_bEscaped;					///< backslash handling flag
 	int								m_iOvershortCount;			///< skipped overshort tokens count
 	bool							m_bBlended;
+	bool							m_bNonBlended;
 	bool							m_bShortTokenFilter;		///< short token filter flag
+	bool							m_bQueryMode;
 
 	CSphTokenizerSettings			m_tSettings;				///< tokenizer settings
 	CSphSavedFile					m_tSynFileInfo;				///< synonyms file info
+
+public:
+	bool m_bPhrase;
 };
 
 /// parse charset table

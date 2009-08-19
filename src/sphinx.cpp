@@ -2042,11 +2042,12 @@ public:
 	virtual const char *	GetBufferPtr () const		{ return (const char *) m_pCur; }
 	virtual const char *	GetBufferEnd () const		{ return (const char *) m_pBufferMax; }
 	virtual void			SetBufferPtr ( const char * sNewPtr );
-	virtual void			SkipBlended ();
+	virtual int				SkipBlended ();
 
 protected:
 	BYTE *	GetTokenSyn ();
 	void	BlendAdjust ( BYTE * pPosition );
+	int		CodepointArbitration ( int iCodepoint, int iLastCodepoint );
 
 protected:
 	/// get codepoint
@@ -2914,6 +2915,7 @@ ISphTokenizer::ISphTokenizer ()
 	, m_bEscaped ( false )
 	, m_iOvershortCount ( 0 )
 	, m_bShortTokenFilter ( false )
+	, m_bQueryMode ( false )
 {}
 
 
@@ -3323,20 +3325,30 @@ void CSphTokenizerTraits<IS_UTF8>::SetBufferPtr ( const char * sNewPtr )
 }
 
 template < bool IS_UTF8 >
-void CSphTokenizerTraits<IS_UTF8>::SkipBlended()
+int CSphTokenizerTraits<IS_UTF8>::SkipBlended()
 {
 	if ( m_pBlendEnd )
 	{
-		m_pCur = m_pBlendEnd;
-		m_pBlendEnd = NULL;
-		m_pBlendStart = NULL;
+		int iBlended = 0;
+		bool bQueryMode = m_bQueryMode;
+		m_bQueryMode = false;
+		while ( m_pCur < m_pBlendEnd && GetToken() )
+			iBlended++;
+		m_bQueryMode = bQueryMode;
+		return iBlended;
 	}
+	return 0;
 }
 
 template < bool IS_UTF8 >
 void CSphTokenizerTraits<IS_UTF8>::BlendAdjust ( BYTE * pCur )
 {
-	if ( m_pBlendStart )
+	// if all we got is a bunch of blended characters, let's pretend they
+	// weren't really blended to make things easier for the caller
+	m_bBlended = m_bBlended && m_bNonBlended;
+
+	// adjust buffer pointers
+	if ( m_bBlended && m_pBlendStart )
 	{
 		m_pCur = m_pBlendStart;
 		m_pBlendEnd = pCur;
@@ -3347,7 +3359,38 @@ void CSphTokenizerTraits<IS_UTF8>::BlendAdjust ( BYTE * pCur )
 		m_pBlendEnd = NULL;
 		m_pBlendStart = NULL;
 	}
+
+	m_bNonBlended = false;
 }
+
+
+static bool IsModifier ( int iSymbol )
+{
+	return iSymbol=='^' || iSymbol=='$' || iSymbol=='=' || iSymbol=='*';
+}
+
+template < bool IS_UTF8 >
+int CSphTokenizerTraits<IS_UTF8>::CodepointArbitration ( int iCode, int iLastCodepoint )
+{
+	if ( !m_bQueryMode )
+		return iCode;
+
+	// codepoints can't be blended and special at the same time
+	if ( ( iCode & FLAG_CODEPOINT_BLEND ) && ( iCode & FLAG_CODEPOINT_SPECIAL ) )
+	{
+		int iSymbol = iCode & MASK_CODEPOINT;
+		bool bBlend =
+			( iLastCodepoint=='\\' ) || // escaped characters should always act as blended
+			( m_bPhrase && !IsModifier(iSymbol) ) || // non-modifier special inside phrase
+			( m_iAccum && ( iSymbol=='@' || iSymbol=='/' || iSymbol=='-' ) ); // some specials in the middle of a token
+
+		// clear special or blend flags
+		iCode &= bBlend ? ~FLAG_CODEPOINT_SPECIAL : ~( FLAG_CODEPOINT_BLEND | FLAG_CODEPOINT_DUAL );
+	}
+
+	return iCode;
+}
+
 
 enum SynCheck_e
 {
@@ -3905,10 +3948,13 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 			iCode = m_tLC.ToLower ( iCodepoint );
 		}
 
+		iCode = CodepointArbitration ( iCode, iLastCodepoint );
+
 		// handle ignored chars
 		if ( iCode & FLAG_CODEPOINT_IGNORE )
 			continue;
 
+		// handle blended characters
 		if ( iCode & FLAG_CODEPOINT_BLEND )
 		{
 			if ( m_pBlendEnd )
@@ -3959,6 +4005,7 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 						m_iOvershortCount++;
 
 					m_iAccum = 0;
+					BlendAdjust ( pCur );
 					continue;
 				}
 			}
@@ -4023,6 +4070,7 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 			}
 
 			m_iAccum = 0;
+			BlendAdjust ( pCur );
 			return m_sAccum;
 		}
 
@@ -4033,6 +4081,7 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 			if ( m_iAccum == 0 )
 				m_pTokenStart = pCur;
 
+			m_bNonBlended = m_bNonBlended || !( iCode & FLAG_CODEPOINT_BLEND );	
 			m_sAccum[m_iAccum++] = (BYTE)iCode;
 		}
 	}
@@ -4114,10 +4163,13 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 			return m_sAccum;
 		}
 
+		iCode = CodepointArbitration ( iCode, iLastCodepoint );
+
 		// handle ignored chars
 		if ( iCode & FLAG_CODEPOINT_IGNORE )
 			continue;
 
+		// handle blended characters
 		if ( iCode & FLAG_CODEPOINT_BLEND )
 		{
 			if ( m_pBlendEnd )
@@ -4157,6 +4209,7 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 			{
 				if ( m_bShortTokenFilter && ShortTokenFilter ( m_sAccum, m_iLastTokenLen ) )
 				{
+					BlendAdjust ( pCur );
 					m_pTokenEnd = pCur;
 					return m_sAccum;
 				}
@@ -4165,6 +4218,7 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 					if ( m_iLastTokenLen )
 						m_iOvershortCount++;
 
+					BlendAdjust ( pCur );
 					continue;
 				}
 			}
@@ -4203,6 +4257,7 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 				m_bWasSpecial = !( iCode & FLAG_CODEPOINT_NGRAM );
 				m_pTokenStart = pCur;
 				m_pTokenEnd = m_pCur;
+				m_bNonBlended = m_bNonBlended || !( iCode & FLAG_CODEPOINT_BLEND );
 				AccumCodepoint ( iCode & MASK_CODEPOINT ); // handle special as a standalone token
 			} else
 			{
@@ -4211,6 +4266,7 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 			}
 
 			FlushAccum ();
+			BlendAdjust ( pCur );
 			return m_sAccum;
 		}
 
@@ -4218,6 +4274,7 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 			m_pTokenStart = pCur;
 
 		// just accumulate
+		m_bNonBlended = m_bNonBlended || !( iCode & FLAG_CODEPOINT_BLEND );
 		AccumCodepoint ( iCode & MASK_CODEPOINT );
 	}
 }

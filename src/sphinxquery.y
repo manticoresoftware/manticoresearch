@@ -27,9 +27,7 @@
 %token <tInt>			TOK_INT
 %token <tFieldLimit>	TOK_FIELDLIMIT
 %token					TOK_BEFORE
-%token					TOK_BLEND
 %type <pNode>			rawkeyword
-%type <pNode>			mkeyword
 %type <pNode>			keyword
 %type <pNode>			phrasetoken
 %type <pNode>			phrase
@@ -51,16 +49,11 @@ rawkeyword:
 	| TOK_INT							{ $$ = pParser->AddKeyword ( ( $1.iStrIndex>=0 ) ? pParser->m_dIntTokens[$1.iStrIndex].cstr() : NULL ); }
 	;
 
-mkeyword:
-	rawkeyword					{ if ( pParser->TokenIsBlended() ) $$ = NULL; else $$ = $1; }
-	| TOK_BLEND rawkeyword		{ $$ = $2; pParser->SkipBlended(); }
-	;
-
 keyword:
-	mkeyword
-	| mkeyword '$'				{ $$ = $1; assert ( $$->IsPlain() && $$->m_dWords.GetLength()==1 ); $$->m_dWords[0].m_bFieldEnd = true; }
-	| '^' mkeyword				{ $$ = $2; assert ( $$->IsPlain() && $$->m_dWords.GetLength()==1 ); $$->m_dWords[0].m_bFieldStart = true; }
-	| '^' mkeyword '$'			{ $$ = $2; assert ( $$->IsPlain() && $$->m_dWords.GetLength()==1 ); $$->m_dWords[0].m_bFieldStart = true; $$->m_dWords[0].m_bFieldEnd = true; }
+	rawkeyword
+	| rawkeyword '$'			{ $$ = $1; assert ( $$->IsPlain() && $$->m_dWords.GetLength()==1 ); $$->m_dWords[0].m_bFieldEnd = true; }
+	| '^' rawkeyword			{ $$ = $2; assert ( $$->IsPlain() && $$->m_dWords.GetLength()==1 ); $$->m_dWords[0].m_bFieldStart = true; }
+	| '^' rawkeyword '$'		{ $$ = $2; assert ( $$->IsPlain() && $$->m_dWords.GetLength()==1 ); $$->m_dWords[0].m_bFieldStart = true; $$->m_dWords[0].m_bFieldEnd = true; }
 	;
 
 phrasetoken:

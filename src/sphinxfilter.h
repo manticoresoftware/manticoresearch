@@ -42,7 +42,7 @@ struct ISphFilter
 	virtual ISphFilter * Join ( ISphFilter * pFilter );
 };
 
-ISphFilter * sphCreateFilter ( CSphFilterSettings &, const CSphSchema &, const DWORD * pMva, CSphString & sError );
+ISphFilter * sphCreateFilter ( const CSphFilterSettings &, const CSphSchema &, const DWORD * pMva, CSphString & sError );
 ISphFilter * sphJoinFilters ( ISphFilter *, ISphFilter * );
 
 #endif // _sphinxfilter_

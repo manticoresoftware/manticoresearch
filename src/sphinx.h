@@ -1761,12 +1761,6 @@ public:
 	const SphAttr_t *	GetValueArray () const		{ return m_pValues ? m_pValues : &(m_dValues [0]); }
 	int					GetNumValues () const		{ return m_pValues ? m_nValues : m_dValues.GetLength (); }
 
-	void				SortValues ()
-						{
-							if ( !m_pValues )
-								m_dValues.Sort();
-						}
-
 	bool				operator == ( const CSphFilterSettings & rhs ) const;
 	bool				operator != ( const CSphFilterSettings & rhs ) const { return !( (*this)==rhs ); }
 
@@ -1823,8 +1817,6 @@ public:
 public:
 	CSphString					m_sAttr;		///< attribute name
 	DWORD						m_uAttrType;	///< attribute type
-	CSphAttrLocator				m_tInLocator;	///< incoming locator in index schema
-	CSphAttrLocator				m_tOutLocator;	///< outgoing locator in result schema
 	CSphVector<IdValuePair_t>	m_dValues;		///< id-value overrides
 };
 
@@ -1845,7 +1837,8 @@ class CSphQuery
 {
 public:
 	CSphString		m_sIndexes;		///< indexes to search
-	CSphString		m_sQuery;		///< query string
+	CSphString		m_sQuery;		///< cooked query string for the engine (possibly transformed during legacy matching modes fixup)
+	CSphString		m_sRawQuery;	///< raw query string from the client for searchd log, agents, etc
 
 	int				m_iOffset;		///< offset into result set (as X in MySQL LIMIT X,Y clause)
 	int				m_iLimit;		///< limit into result set (as Y in MySQL LIMIT X,Y clause)
@@ -2239,8 +2232,8 @@ public:
 	virtual bool						EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const = 0;
 	virtual const CSphSourceStats &		GetStats () const = 0;
 	void						SetCacheSize ( int iMaxCachedDocs, int iMaxCachedHits );
-	virtual bool				MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters ) const = 0;
-	virtual bool				MultiQueryEx ( int iQueries, CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters ) const = 0;
+	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters ) const = 0;
+	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters ) const = 0;
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats ) = 0;
 
 public:

@@ -485,7 +485,7 @@ static ISphFilter * CreateFilter ( DWORD eAttrType, ESphFilter eFilterType, CSph
 	}
 }
 
-ISphFilter * sphCreateFilter ( CSphFilterSettings & tSettings, const CSphSchema & tSchema, const DWORD * pMvaPool, CSphString & sError )
+ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const CSphSchema & tSchema, const DWORD * pMvaPool, CSphString & sError )
 {
 	ISphFilter * pFilter = 0;
 
@@ -525,8 +525,16 @@ ISphFilter * sphCreateFilter ( CSphFilterSettings & tSettings, const CSphSchema 
 
 		if ( tSettings.GetNumValues() > 0 )
 		{
-			tSettings.SortValues();
 			pFilter->SetValues ( tSettings.GetValueArray(), tSettings.GetNumValues() );
+
+#ifndef NDEBUG
+			// check that the values are actually sorted
+			const SphAttr_t * pValues = tSettings.GetValueArray();
+			int iValues = tSettings.GetNumValues ();
+
+			for ( int i=1; i<iValues; i++ )
+				assert ( pValues[i] >= pValues[i-1] );
+#endif
 		}
 
 		if ( tSettings.m_bExclude )

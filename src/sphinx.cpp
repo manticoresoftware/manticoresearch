@@ -1397,7 +1397,9 @@ public:
 	CSphVector<CalcItem_t>		m_dEarlyCalc;			///< early-calc evaluators
 	CSphVector<CalcItem_t>		m_dLateCalc;			///< late-calc evaluators
 
-	CSphVector<CSphAttrOverride> *	m_pOverrides;		///< overridden attribute values
+	const CSphVector<CSphAttrOverride> *	m_pOverrides;		///< overridden attribute values
+	CSphVector<CSphAttrLocator>				m_dOverrideIn;
+	CSphVector<CSphAttrLocator>				m_dOverrideOut;
 
 public:
 								CSphQueryContext ();
@@ -1405,8 +1407,8 @@ public:
 
 	void						BindWeights ( const CSphQuery * pQuery, const CSphSchema & tSchema );
 	bool						SetupCalc ( CSphQueryResult * pResult, const CSphSchema & tInSchema, const CSphSchema & tSchema, const DWORD * pMvaPool );
-	bool						CreateFilters ( CSphQuery * pQuery, const CSphSchema & tSchema, const DWORD * pMvaPool, CSphString & sError );
-	bool						SetupOverrides ( CSphQuery * pQuery, CSphQueryResult * pResult, const CSphSchema & tIndexSchema );
+	bool						CreateFilters ( const CSphQuery * pQuery, const CSphSchema & tSchema, const DWORD * pMvaPool, CSphString & sError );
+	bool						SetupOverrides ( const CSphQuery * pQuery, CSphQueryResult * pResult, const CSphSchema & tIndexSchema );
 
 	void						EarlyCalc ( CSphMatch & tMatch ) const;
 	void						LateCalc ( CSphMatch & tMatch ) const;
@@ -1447,8 +1449,8 @@ public:
 	virtual bool				Lock ();
 	virtual void				Unlock ();
 
-	virtual bool				MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters ) const;
-	virtual bool				MultiQueryEx ( int iQueries, CSphQuery * pQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters ) const;
+	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters ) const;
+	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters ) const;
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats );
 	template <class Qword> bool	DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats );
 
@@ -1560,8 +1562,8 @@ private:
 	void						WriteSchemaColumn ( CSphWriter & fdInfo, const CSphColumnInfo & tCol );
 	void						ReadSchemaColumn ( CSphReader_VLN & rdInfo, CSphColumnInfo & tCol );
 
-	bool						ParsedMultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQNode_t * pRoot, CSphDict * pDict ) const;
-	bool						MultiScan ( CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters ) const;
+	bool						ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQNode_t * pRoot, CSphDict * pDict ) const;
+	bool						MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters ) const;
 	bool						MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, ISphRanker * pRanker ) const;
 
 	const DWORD *				FindDocinfo ( SphDocID_t uDocID ) const;
@@ -4515,6 +4517,7 @@ bool CSphFilterSettings::operator == ( const CSphFilterSettings & rhs ) const
 CSphQuery::CSphQuery ()
 	: m_sIndexes	( "*" )
 	, m_sQuery		( "" )
+	, m_sRawQuery	( "" )
 	, m_iOffset		( 0 )
 	, m_iLimit		( 20 )
 	, m_pWeights	( NULL )
@@ -10700,9 +10703,9 @@ void CSphIndex_VLN::CopyDocinfo ( CSphQueryContext * pCtx, CSphMatch & tMatch, c
 	{
 		const CSphAttrOverride & tOverride = (*pCtx->m_pOverrides)[i]; // shortcut
 		const CSphAttrOverride::IdValuePair_t * pEntry = tOverride.m_dValues.BinarySearch ( bind(&CSphAttrOverride::IdValuePair_t::m_uDocID), tMatch.m_iDocID );
-		tMatch.SetAttr ( tOverride.m_tOutLocator, pEntry
+		tMatch.SetAttr ( pCtx->m_dOverrideOut[i], pEntry
 			? pEntry->m_uValue
-			: sphGetRowAttr ( tMatch.m_pStatic, tOverride.m_tInLocator ) );
+			: sphGetRowAttr ( tMatch.m_pStatic, pCtx->m_dOverrideIn[i] ) );
 	}
 }
 
@@ -10774,9 +10777,9 @@ bool CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 
 //////////////////////////////////////////////////////////////////////////
 
-bool CSphIndex_VLN::MultiScan ( CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters ) const
+bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters ) const
 {
-	assert ( pQuery->m_eMode==SPH_MATCH_FULLSCAN || pQuery->m_sQuery.IsEmpty() );
+	assert ( pQuery->m_sQuery.IsEmpty() );
 
 	// check if index is ready
 	if ( m_bPreread.IsEmpty() || !m_bPreread[0] )
@@ -12487,53 +12490,17 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 #pragma conform(forScope,on)
 #endif
 
-static void PrepareQueryEmulation ( CSphQuery * pQuery, CSphString & sQueryFixup )
-{
-	if ( pQuery->m_eMode==SPH_MATCH_BOOLEAN )
-		pQuery->m_eRanker = SPH_RANK_NONE;
 
-	if ( pQuery->m_eMode!=SPH_MATCH_ALL && pQuery->m_eMode!=SPH_MATCH_ANY && pQuery->m_eMode!=SPH_MATCH_PHRASE )
-		return;
-
-	const char * szQuery = pQuery->m_sQuery.cstr ();
-	int iQueryLen = szQuery ? strlen(szQuery) : 0;
-
-	sQueryFixup.Reserve ( iQueryLen*2+4 );
-	char * szRes = (char*) sQueryFixup.cstr ();
-	char c;
-
-	if ( pQuery->m_eMode == SPH_MATCH_ANY || pQuery->m_eMode == SPH_MATCH_PHRASE )
-		*szRes++ = '\"';
-
-	while ( ( c = *szQuery++ ) != 0 )
-	{
-		// must be in sync with EscapeString (php api)
-		if ( c=='(' || c==')' || c=='|' || c=='-' || c=='!' || c=='@' || c=='~' || c=='\"' || c=='&' || c=='/' || c=='<' || c=='\\' )
-			*szRes++ = '\\';
-
-		*szRes++ = c;
-	}
-
-	switch ( pQuery->m_eMode )
-	{
-		case SPH_MATCH_ALL:		pQuery->m_eRanker = SPH_RANK_PROXIMITY; *szRes='\0'; break;
-		case SPH_MATCH_ANY:		pQuery->m_eRanker = SPH_RANK_MATCHANY; strcpy ( szRes, "\"/1" ); break;
-		case SPH_MATCH_PHRASE:	pQuery->m_eRanker = SPH_RANK_PROXIMITY; *szRes++ = '\"'; *szRes='\0'; break;
-		default:				return;
-	}
-}
-
-
-bool CSphQueryContext::CreateFilters ( CSphQuery * pQuery, const CSphSchema & tSchema, const DWORD * pMvaPool, CSphString & sError )
+bool CSphQueryContext::CreateFilters ( const CSphQuery * pQuery, const CSphSchema & tSchema, const DWORD * pMvaPool, CSphString & sError )
 {
 	assert ( !m_pWeightFilter );
 	assert ( !m_pFilter );
 
-	bool bFullscan = pQuery->m_eMode == SPH_MATCH_FULLSCAN;
+	bool bFullscan = pQuery->m_sQuery.IsEmpty();
 
 	ARRAY_FOREACH ( i, pQuery->m_dFilters )
 	{
-		CSphFilterSettings & tFilter = pQuery->m_dFilters[i];
+		const CSphFilterSettings & tFilter = pQuery->m_dFilters[i];
 		if ( bFullscan && tFilter.m_sAttrName == "@weight" )
 			continue; // @weight is not avaiable in fullscan mode
 
@@ -12560,9 +12527,12 @@ bool CSphQueryContext::CreateFilters ( CSphQuery * pQuery, const CSphSchema & tS
 }
 
 
-bool CSphQueryContext::SetupOverrides ( CSphQuery * pQuery, CSphQueryResult * pResult, const CSphSchema & tIndexSchema )
+bool CSphQueryContext::SetupOverrides ( const CSphQuery * pQuery, CSphQueryResult * pResult, const CSphSchema & tIndexSchema )
 {
 	m_pOverrides = NULL;
+	m_dOverrideIn.Resize ( pQuery->m_dOverrides.GetLength() );
+	m_dOverrideOut.Resize ( pQuery->m_dOverrides.GetLength() );
+
 	ARRAY_FOREACH ( i, pQuery->m_dOverrides )
 	{
 		const char * sAttr = pQuery->m_dOverrides[i].m_sAttr.cstr(); // shortcut
@@ -12587,10 +12557,17 @@ bool CSphQueryContext::SetupOverrides ( CSphQuery * pQuery, CSphQueryResult * pR
 			return false;
 		}
 
-		pQuery->m_dOverrides[i].m_tInLocator = pCol->m_tLocator;
-		pQuery->m_dOverrides[i].m_tOutLocator = pOutCol->m_tLocator;
-		pQuery->m_dOverrides[i].m_dValues.Sort ();
+		m_dOverrideIn[i] = pCol->m_tLocator;
+		m_dOverrideOut[i] = pOutCol->m_tLocator;
+
+#ifndef NDEBUG
+		// check that the values are actually sorted
+		const CSphVector<CSphAttrOverride::IdValuePair_t> & dValues = pQuery->m_dOverrides[i].m_dValues;
+		for ( int j=1; j<dValues.GetLength(); j++ )
+			assert ( dValues[j-1] < dValues[j] );
+#endif
 	}
+
 	if ( pQuery->m_dOverrides.GetLength() )
 		m_pOverrides = &pQuery->m_dOverrides;
 	return true;
@@ -12703,21 +12680,13 @@ public:
 
 
 /// one regular query vs many sorters
-bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters ) const
+bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters ) const
 {
 	assert ( pQuery );
 
 	// fast path for scans
-	if ( pQuery->m_eMode==SPH_MATCH_FULLSCAN || pQuery->m_sQuery.IsEmpty() )
+	if ( pQuery->m_sQuery.IsEmpty() )
 		return MultiScan ( pQuery, pResult, iSorters, ppSorters );
-
-	// fixup old matching modes at low level
-	CSphString sQueryFixup;
-	PrepareQueryEmulation ( pQuery, sQueryFixup );
-
-	const char * sQuery = sQueryFixup.IsEmpty()
-		? pQuery->m_sQuery.cstr()
-		: sQueryFixup.cstr();
 
 	CSphScopedPtr<CSphDict> tDict ( NULL );
 	CSphDict * pDict = SetupStarDict ( tDict );
@@ -12727,7 +12696,7 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 
 	// parse query
 	XQQuery_t tParsed;
-	if ( !sphParseExtendedQuery ( tParsed, sQuery, GetTokenizer(), GetSchema(), pDict ) )
+	if ( !sphParseExtendedQuery ( tParsed, pQuery->m_sQuery.cstr(), GetTokenizer(), GetSchema(), pDict ) )
 	{
 		pResult->m_sError = tParsed.m_sParseError;
 		return false;
@@ -12747,7 +12716,7 @@ bool CSphIndex_VLN::MultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, 
 
 
 /// many regular queries with one sorter attached to each query
-bool CSphIndex_VLN::MultiQueryEx ( int iQueries, CSphQuery * pQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters ) const
+bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters ) const
 {
 	// ensure we have multiple queries
 	if ( iQueries==1 )
@@ -12769,17 +12738,9 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, CSphQuery * pQueries, CSphQuery
 	bool bResult = true;
 	for ( int i=0; i<iQueries; i++ )
 	{
-		// fixup old matching modes at low level
-		CSphString sQueryFixup;
-		PrepareQueryEmulation ( &pQueries[i], sQueryFixup );
-
-		const char * sQuery = sQueryFixup.IsEmpty()
-			? pQueries[i].m_sQuery.cstr()
-			: sQueryFixup.cstr();
-
 		// parse query
 		XQQuery_t tParsed;
-		if ( !sphParseExtendedQuery ( tParsed, sQuery, GetTokenizer(), GetSchema(), pDict ) )
+		if ( !sphParseExtendedQuery ( tParsed, pQueries[i].m_sQuery.cstr(), GetTokenizer(), GetSchema(), pDict ) )
 		{
 			ppResults[i]->m_sError = tParsed.m_sParseError;
 			bResult = false;
@@ -12810,7 +12771,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, CSphQuery * pQueries, CSphQuery
 	return bResult;
 }
 
-bool CSphIndex_VLN::ParsedMultiQuery ( CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQNode_t * pRoot, CSphDict * pDict ) const
+bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQNode_t * pRoot, CSphDict * pDict ) const
 {
 	assert ( pQuery );
 	assert ( pResult );

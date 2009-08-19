@@ -2582,7 +2582,7 @@ int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuer
 {
 	int iReqSize = 104 + 2*sizeof(SphDocID_t) + 4*q.m_iWeights
 		+ q.m_sSortBy.Length()
-		+ q.m_sQuery.Length()
+		+ q.m_sRawQuery.Length()
 		+ strlen ( sIndexes )
 		+ q.m_sGroupBy.Length()
 		+ q.m_sGroupSortBy.Length()
@@ -2621,7 +2621,7 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 	tOut.SendInt ( (DWORD)q.m_eRanker ); // ranking mode
 	tOut.SendInt ( q.m_eSort ); // sort mode
 	tOut.SendString ( q.m_sSortBy.cstr() ); // sort attr
-	tOut.SendString ( q.m_sQuery.cstr() ); // query
+	tOut.SendString ( q.m_sRawQuery.cstr() ); // query
 	tOut.SendInt ( q.m_iWeights );
 	for ( int j=0; j<q.m_iWeights; j++ )
 		tOut.SendInt ( q.m_pWeights[j] ); // weights
@@ -3068,17 +3068,65 @@ void CheckQuery ( const CSphQuery & tQuery, CSphString & sError )
 }
 
 
+void PrepareQueryEmulation ( CSphQuery * pQuery )
+{
+	// sort filters
+	ARRAY_FOREACH ( i, pQuery->m_dFilters )
+		pQuery->m_dFilters[i].m_dValues.Sort();
+
+	// sort overrides
+	ARRAY_FOREACH ( i, pQuery->m_dOverrides )
+		pQuery->m_dOverrides[i].m_dValues.Sort ();
+
+	// fixup query
+	pQuery->m_sQuery = pQuery->m_sRawQuery;
+
+	if ( pQuery->m_eMode==SPH_MATCH_BOOLEAN )
+		pQuery->m_eRanker = SPH_RANK_NONE;
+
+	if ( pQuery->m_eMode!=SPH_MATCH_ALL && pQuery->m_eMode!=SPH_MATCH_ANY && pQuery->m_eMode!=SPH_MATCH_PHRASE )
+		return;
+
+	const char * szQuery = pQuery->m_sRawQuery.cstr ();
+	int iQueryLen = szQuery ? strlen(szQuery) : 0;
+
+	pQuery->m_sQuery.Reserve ( iQueryLen*2+4 );
+	char * szRes = (char*) pQuery->m_sQuery.cstr ();
+	char c;
+
+	if ( pQuery->m_eMode==SPH_MATCH_ANY || pQuery->m_eMode==SPH_MATCH_PHRASE )
+		*szRes++ = '\"';
+
+	while ( ( c = *szQuery++ ) != 0 )
+	{
+		// must be in sync with EscapeString (php api)
+		if ( c=='(' || c==')' || c=='|' || c=='-' || c=='!' || c=='@' || c=='~' || c=='\"' || c=='&' || c=='/' || c=='<' || c=='\\' )
+			*szRes++ = '\\';
+
+		*szRes++ = c;
+	}
+
+	switch ( pQuery->m_eMode )
+	{
+	case SPH_MATCH_ALL:		pQuery->m_eRanker = SPH_RANK_PROXIMITY; *szRes='\0'; break;
+	case SPH_MATCH_ANY:		pQuery->m_eRanker = SPH_RANK_MATCHANY; strcpy ( szRes, "\"/1" ); break;
+	case SPH_MATCH_PHRASE:	pQuery->m_eRanker = SPH_RANK_PROXIMITY; *szRes++ = '\"'; *szRes='\0'; break;
+	default:				return;
+	}
+}
+
+
 bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 {
 	tQuery.m_iOldVersion = iVer;
 
 	// v.1.0. mode, limits, weights, ID/TS ranges
-	tQuery.m_iOffset	= tReq.GetInt ();
-	tQuery.m_iLimit		= tReq.GetInt ();
-	tQuery.m_eMode		= (ESphMatchMode) tReq.GetInt ();
+	tQuery.m_iOffset = tReq.GetInt ();
+	tQuery.m_iLimit = tReq.GetInt ();
+	tQuery.m_eMode = (ESphMatchMode) tReq.GetInt ();
 	if ( iVer>=0x110 )
-		tQuery.m_eRanker= (ESphRankMode) tReq.GetInt ();
-	tQuery.m_eSort		= (ESphSortOrder) tReq.GetInt ();
+		tQuery.m_eRanker = (ESphRankMode) tReq.GetInt ();
+	tQuery.m_eSort = (ESphSortOrder) tReq.GetInt ();
 	if ( iVer<=0x101 )
 		tQuery.m_iOldGroups = tReq.GetDwords ( &tQuery.m_pOldGroups, g_iMaxFilterValues, "invalid group count %d (should be in 0..%d range)" );
 	if ( iVer>=0x102 )
@@ -3086,9 +3134,9 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 		tQuery.m_sSortBy = tReq.GetString ();
 		tQuery.m_sSortBy.ToLower ();
 	}
-	tQuery.m_sQuery		= tReq.GetString ();
-	tQuery.m_iWeights	= tReq.GetDwords ( (DWORD**)&tQuery.m_pWeights, SPH_MAX_FIELDS, "invalid weight count %d (should be in 0..%d range)" );
-	tQuery.m_sIndexes	= tReq.GetString ();
+	tQuery.m_sRawQuery = tReq.GetString ();
+	tQuery.m_iWeights = tReq.GetDwords ( (DWORD**)&tQuery.m_pWeights, SPH_MAX_FIELDS, "invalid weight count %d (should be in 0..%d range)" );
+	tQuery.m_sIndexes = tReq.GetString ();
 
 	bool bIdrange64 = false;
 	if ( iVer>=0x108 )
@@ -3354,6 +3402,9 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 		return false;
 	}
 
+	// now prepare it for the engine
+	PrepareQueryEmulation ( &tQuery );
+
 	// all ok
 	return true;
 }
@@ -3421,10 +3472,10 @@ void LogQuery ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 		p += snprintf ( p, pMax-p, " [%s]", tQuery.m_sComment.cstr() );
 
 	// query
-	if ( !tQuery.m_sQuery.IsEmpty() )
+	if ( !tQuery.m_sRawQuery.IsEmpty() )
 	{
 		*p++ = ' ';
-		for ( const char * q = tQuery.m_sQuery.cstr(); p<pMax && *q; p++, q++ )
+		for ( const char * q = tQuery.m_sRawQuery.cstr(); p<pMax && *q; p++, q++ )
 			*p = ( *q=='\n' ) ? ' ' : *q;
 	}
 
@@ -4122,7 +4173,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 		// these parameters must be the same
 		if (
-			( qCheck.m_sQuery!=qFirst.m_sQuery ) || // query string
+			( qCheck.m_sRawQuery!=qFirst.m_sRawQuery ) || // query string
 			( qCheck.m_iWeights!=qFirst.m_iWeights ) || // weights count
 			( qCheck.m_pWeights && memcmp ( qCheck.m_pWeights, qFirst.m_pWeights, sizeof(int)*qCheck.m_iWeights ) ) || // weights
 			( qCheck.m_eMode!=qFirst.m_eMode ) || // search mode

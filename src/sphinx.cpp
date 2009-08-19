@@ -1407,7 +1407,7 @@ public:
 
 	void						BindWeights ( const CSphQuery * pQuery, const CSphSchema & tSchema );
 	bool						SetupCalc ( CSphQueryResult * pResult, const CSphSchema & tInSchema, const CSphSchema & tSchema, const DWORD * pMvaPool );
-	bool						CreateFilters ( const CSphQuery * pQuery, const CSphSchema & tSchema, const DWORD * pMvaPool, CSphString & sError );
+	bool						CreateFilters ( bool bFullscan, const CSphVector<CSphFilterSettings> * pdFilters, const CSphSchema & tSchema, const DWORD * pMvaPool, CSphString & sError );
 	bool						SetupOverrides ( const CSphQuery * pQuery, CSphQueryResult * pResult, const CSphSchema & tIndexSchema );
 
 	void						EarlyCalc ( CSphMatch & tMatch ) const;
@@ -4583,8 +4583,6 @@ CSphQuery::CSphQuery ()
 	, m_eRanker		( SPH_RANK_DEFAULT )
 	, m_eSort		( SPH_SORT_RELEVANCE )
 	, m_iMaxMatches	( 1000 )
-	, m_iMinID		( 0 )
-	, m_iMaxID		( DOCID_MAX )
 	, m_eGroupFunc		( SPH_GROUPBY_ATTR )
 	, m_sGroupSortBy	( "@groupby desc" )
 	, m_sGroupDistinct	( "" )
@@ -10866,7 +10864,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 		return false;
 
 	// setup filters
-	if ( !tCtx.CreateFilters ( pQuery, pResult->m_tSchema, GetMVAPool(), pResult->m_sError ) )
+	if ( !tCtx.CreateFilters ( pQuery->m_sQuery.IsEmpty(), &pQuery->m_dFilters, pResult->m_tSchema, GetMVAPool(), pResult->m_sError ) )
 		return false;
 
 	// check if we can early reject the whole index
@@ -10912,14 +10910,6 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 
 		const DWORD * pMin = &m_pDocinfoIndex[2*uIndexEntry*uStride];
 		const DWORD * pMax = pMin + uStride;
-
-		// check id ranges
-		if ( DOCINFO2ID(pMax)<pQuery->m_iMinID )
-			continue;
-
-		// if we are already over max-id, we are done
-		if ( DOCINFO2ID(pMin)>pQuery->m_iMaxID )
-			break;
 
 		// check applicable filters
 		if ( tCtx.m_pFilter && !tCtx.m_pFilter->EvalBlock ( pMin, pMax ) )
@@ -12548,16 +12538,11 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 #endif
 
 
-bool CSphQueryContext::CreateFilters ( const CSphQuery * pQuery, const CSphSchema & tSchema, const DWORD * pMvaPool, CSphString & sError )
+bool CSphQueryContext::CreateFilters ( bool bFullscan, const CSphVector<CSphFilterSettings> * pdFilters, const CSphSchema & tSchema, const DWORD * pMvaPool, CSphString & sError )
 {
-	assert ( !m_pWeightFilter );
-	assert ( !m_pFilter );
-
-	bool bFullscan = pQuery->m_sQuery.IsEmpty();
-
-	ARRAY_FOREACH ( i, pQuery->m_dFilters )
+	ARRAY_FOREACH ( i, (*pdFilters) )
 	{
-		const CSphFilterSettings & tFilter = pQuery->m_dFilters[i];
+		const CSphFilterSettings & tFilter = (*pdFilters)[i];
 		if ( bFullscan && tFilter.m_sAttrName == "@weight" )
 			continue; // @weight is not avaiable in fullscan mode
 
@@ -12568,18 +12553,6 @@ bool CSphQueryContext::CreateFilters ( const CSphQuery * pQuery, const CSphSchem
 		ISphFilter ** pGroup = tFilter.m_sAttrName == "@weight" ? &m_pWeightFilter : &m_pFilter;
 		*pGroup = sphJoinFilters ( *pGroup, pFilter );
 	}
-
-	// convert ID bounds to a separate filter
-	if ( pQuery->m_iMinID != 0 || pQuery->m_iMaxID != DOCID_MAX )
-	{
-		CSphFilterSettings tFilter;
-		tFilter.m_sAttrName = "@id";
-		tFilter.m_eType = SPH_FILTER_RANGE;
-		tFilter.m_uMinValue = pQuery->m_iMinID;
-		tFilter.m_uMaxValue = pQuery->m_iMaxID;
-		m_pFilter = sphJoinFilters ( m_pFilter, sphCreateFilter ( tFilter, tSchema, NULL, sError ) );
-	}
-
 	return true;
 }
 
@@ -12909,7 +12882,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	assert ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_EXTERN || !m_pDocinfo.IsEmpty() ); // check that docinfo is preloaded
 
 	// setup filters
-	if ( !tCtx.CreateFilters ( pQuery, pResult->m_tSchema, GetMVAPool(), pResult->m_sError ) )
+	if ( !tCtx.CreateFilters ( pQuery->m_sQuery.IsEmpty(), &pQuery->m_dFilters, pResult->m_tSchema, GetMVAPool(), pResult->m_sError ) )
 		return false;
 
 	// check if we can early reject the whole index

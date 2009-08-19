@@ -1859,9 +1859,6 @@ public:
 	CSphString		m_sSortBy;		///< attribute to sort by
 	int				m_iMaxMatches;	///< max matches to retrieve, default is 1000. more matches use more memory and CPU time to hold and sort them
 
-	SphDocID_t		m_iMinID;		///< min ID to match, 0 by default
-	SphDocID_t		m_iMaxID;		///< max ID to match, UINT_MAX by default
-
 	CSphVector<CSphFilterSettings>	m_dFilters;	///< filters
 
 	CSphString		m_sGroupBy;		///< group-by attribute name

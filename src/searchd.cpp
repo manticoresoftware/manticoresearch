@@ -2627,8 +2627,8 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 		tOut.SendInt ( q.m_pWeights[j] ); // weights
 	tOut.SendString ( sIndexes ); // indexes
 	tOut.SendInt ( USE_64BIT ); // id range bits
-	tOut.SendDocid ( q.m_iMinID ); // id/ts ranges
-	tOut.SendDocid ( q.m_iMaxID );
+	tOut.SendDocid ( 0 ); // default full id range (any client range must be in filters at this stage)
+	tOut.SendDocid ( DOCID_MAX );
 	tOut.SendInt ( q.m_dFilters.GetLength() );
 	ARRAY_FOREACH ( j, q.m_dFilters )
 	{
@@ -3018,11 +3018,6 @@ void ParseIndexList ( const CSphString & sIndexes, CSphVector<CSphString> & dOut
 void CheckQuery ( const CSphQuery & tQuery, CSphString & sError )
 {
 	sError = NULL;
-	if ( tQuery.m_iMinID>tQuery.m_iMaxID )
-	{
-		sError.SetSprintf ( "invalid ID range (min greater than max)" );
-		return;
-	}
 	if ( tQuery.m_eMode<0 || tQuery.m_eMode>SPH_MATCH_TOTAL )
 	{
 		sError.SetSprintf ( "invalid match mode %d", tQuery.m_eMode );
@@ -3142,23 +3137,25 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 	if ( iVer>=0x108 )
 		bIdrange64 = ( tReq.GetInt()!=0 );
 
+	SphDocID_t uMinID = 0;
+	SphDocID_t uMaxID = DOCID_MAX;
 	if ( bIdrange64 )
 	{
-		tQuery.m_iMinID		= (SphDocID_t)tReq.GetUint64 ();
-		tQuery.m_iMaxID		= (SphDocID_t)tReq.GetUint64 ();
+		uMinID = (SphDocID_t)tReq.GetUint64 ();
+		uMaxID = (SphDocID_t)tReq.GetUint64 ();
 		// FIXME? could report clamp here if I'm id32 and client passed id64 range,
 		// but frequently this won't affect anything at all
 	} else
 	{
-		tQuery.m_iMinID		= tReq.GetDword ();
-		tQuery.m_iMaxID		= tReq.GetDword ();
+		uMinID = tReq.GetDword ();
+		uMaxID = tReq.GetDword ();
 	}
 
-	if ( iVer<0x108 && tQuery.m_iMaxID==0xffffffffUL )
-		tQuery.m_iMaxID = 0; // fixup older clients which send 32-bit UINT_MAX by default
+	if ( iVer<0x108 && uMaxID==0xffffffffUL )
+		uMaxID = 0; // fixup older clients which send 32-bit UINT_MAX by default
 
-	if ( tQuery.m_iMaxID==0 )
-		tQuery.m_iMaxID = DOCID_MAX;
+	if ( uMaxID==0 )
+		uMaxID = DOCID_MAX;
 
 	// v.1.0, v.1.1
 	if ( iVer<=0x101 )
@@ -3241,6 +3238,16 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer )
 			if ( iVer>=0x106 )
 				tFilter.m_bExclude = !!tReq.GetDword ();
 		}
+	}
+
+	// now add id range filter
+	if ( uMinID!=0 || uMaxID!=DOCID_MAX )
+	{
+		CSphFilterSettings & tFilter = tQuery.m_dFilters.Add();
+		tFilter.m_sAttrName = "@id";
+		tFilter.m_eType = SPH_FILTER_RANGE;
+		tFilter.m_uMinValue = uMinID;
+		tFilter.m_uMaxValue = uMaxID;
 	}
 
 	// v.1.3
@@ -4178,8 +4185,6 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			( qCheck.m_pWeights && memcmp ( qCheck.m_pWeights, qFirst.m_pWeights, sizeof(int)*qCheck.m_iWeights ) ) || // weights
 			( qCheck.m_eMode!=qFirst.m_eMode ) || // search mode
 			( qCheck.m_eRanker!=qFirst.m_eRanker ) || // ranking mode
-			( qCheck.m_iMinID!=qFirst.m_iMinID ) || // min-id filter
-			( qCheck.m_iMaxID!=qFirst.m_iMaxID ) || // max-id filter
 			( qCheck.m_dFilters.GetLength()!=qFirst.m_dFilters.GetLength() ) || // attr filters count
 			( qCheck.m_dItems.GetLength()!=qFirst.m_dItems.GetLength() ) || // select list item count
 			( qCheck.m_iCutoff!=qFirst.m_iCutoff ) || // cutoff

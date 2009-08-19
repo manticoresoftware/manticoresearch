@@ -10855,7 +10855,6 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 		return true;
 
 	// start counting
-	pResult->m_iQueryTime = 0;
 	int64_t tmQueryStart = sphMicroTimer();
 
 	// setup calculations and result schema
@@ -10876,7 +10875,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 
 		if ( !tCtx.m_pFilter->EvalBlock ( pMinEntry, pMaxEntry ) )
 		{
-			pResult->m_iQueryTime = int( ( sphMicroTimer()-tmQueryStart )/1000 );
+			pResult->m_iQueryTime += int( ( sphMicroTimer()-tmQueryStart )/1000 );
 			return true;
 		}
 	}
@@ -10954,7 +10953,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	// done
 	pResult->m_pMva = m_pMva.GetWritePtr();
 	pResult->m_pStrings = m_pStrings.GetWritePtr();
-	pResult->m_iQueryTime = int( ( sphMicroTimer()-tmQueryStart )/1000 );
+	pResult->m_iQueryTime += int( ( sphMicroTimer()-tmQueryStart )/1000 );
 	return true;
 }
 
@@ -12809,7 +12808,6 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	assert ( !pQuery->m_sQuery.IsEmpty() && pQuery->m_eMode!=SPH_MATCH_FULLSCAN ); // scans must go through MultiScan()
 
 	// start counting
-	pResult->m_iQueryTime = 0;
 	int64_t tmQueryStart = sphMicroTimer();
 
 	///////////////////
@@ -12969,7 +12967,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	PROFILE_SHOW ();
 
 	// query timer
-	pResult->m_iQueryTime = int( ( sphMicroTimer()-tmQueryStart )/1000 );
+	pResult->m_iQueryTime += int( ( sphMicroTimer()-tmQueryStart )/1000 );
 	return true;
 }
 

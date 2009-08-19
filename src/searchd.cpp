@@ -4445,9 +4445,12 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 						tRes.m_tSchema = pSorter->GetSchema();
 						tRes.m_iTotalMatches += pSorter->GetTotalCount();
 
+						// multi-queue only returned one result set meta, so we need to replicate it
 						if ( bMultiQueue )
 						{
-							tRes.m_iQueryTime += ( iQuery==iStart ) ? tStats.m_iQueryTime : 0;
+							// these times will be overriden below, but let's be clean
+							tRes.m_iQueryTime += tStats.m_iQueryTime / ( iEnd-iStart+1 );
+							tRes.m_iCpuTime += tStats.m_iCpuTime / ( iEnd-iStart+1 );
 							tRes.m_pMva = tStats.m_pMva;
 							tRes.m_dWordStats = tStats.m_dWordStats;
 							tRes.m_iMultiplier = iEnd-iStart+1;
@@ -4679,8 +4682,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 		for ( int iRes=iStart; iRes<=iEnd; iRes++ )
 		{
-			tmAccountedWall += tmDeltaWall/1000;
-			tmAccountedCpu += tmDeltaCpu;
+			m_dResults[iRes].m_iQueryTime += (int)(tmDeltaWall/1000);
+			m_dResults[iRes].m_iCpuTime += tmDeltaCpu;
 		}
 	}
 

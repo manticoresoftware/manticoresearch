@@ -87,7 +87,7 @@ public:
 	virtual void				SeekHitlist ( SphOffset_t uOff ) = 0;
 	virtual DWORD				GetNextHit () = 0;
 
-	void Reset ()
+	virtual void Reset ()
 	{
 		m_iDocs = 0;
 		m_iHits = 0;

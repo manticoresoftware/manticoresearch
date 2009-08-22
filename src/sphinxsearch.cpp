@@ -210,6 +210,11 @@ public:
 									, m_uFieldMask ( 0 )
 									, m_uFieldPos ( 0 )
 								{}
+	virtual void				Reset ( const ISphQwordSetup & )
+	{
+		m_uFieldMask = 0;
+		m_uFieldPos = 0;
+	}
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
 	virtual bool				GotHitless () { return true; }
 
@@ -225,6 +230,7 @@ class ExtTermPos_c : public ExtTerm_c
 {
 public:
 								ExtTermPos_c ( ISphQword * pQword, DWORD uFields, int iMaxFieldPos, const ISphQwordSetup & tSetup );
+	virtual void				Reset ( const ISphQwordSetup & tSetup );
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
 	virtual bool				GotHitless () { return false; }
@@ -1135,6 +1141,17 @@ ExtTermPos_c<T>::ExtTermPos_c ( ISphQword * pQword, DWORD uFields, int iMaxField
 	AllocDocinfo ( tSetup );
 }
 
+template < TermPosFilter_e T >
+void ExtTermPos_c<T>::Reset ( const ISphQwordSetup & tSetup )
+{
+	ExtTerm_c::Reset(tSetup);
+	m_uTermMaxID = 0;
+	m_pRawDocs = NULL;
+	m_pRawDoc = NULL;
+	m_pRawHit = NULL;
+	m_uLastID = 0;
+	m_uDoneFor = 0;
+}
 
 template<>
 inline bool ExtTermPos_c<TERM_POS_FIELD_LIMIT>::IsAcceptableHit ( DWORD uPos ) const
@@ -1373,6 +1390,11 @@ void ExtTwofer_c::Reset ( const ISphQwordSetup & tSetup )
 {
 	m_pChildren[0]->Reset ( tSetup );
 	m_pChildren[1]->Reset ( tSetup );
+	m_pCurHit[0] = NULL;
+	m_pCurHit[1] = NULL;
+	m_pCurDoc[0] = NULL;
+	m_pCurDoc[1] = NULL;
+	m_uMatchedDocid = 0;
 }
 
 void ExtTwofer_c::GetQwords ( ExtQwordsHash_t & hQwords )
@@ -1831,9 +1853,20 @@ ExtPhrase_c::~ExtPhrase_c ()
 
 void ExtPhrase_c::Reset ( const ISphQwordSetup & tSetup )
 {
-	ARRAY_FOREACH ( i, m_dQposDelta )
-		m_dQposDelta[i] = -INT_MAX;
 	m_pNode->Reset ( tSetup );
+	m_pDocs = NULL;
+	m_pHits = NULL;
+	m_pDoc = NULL;
+	m_pHit = NULL;
+	m_pMyDoc = NULL;
+	m_pMyHit = NULL;
+	m_uLastDocID = 0;
+	m_uExpID = 0;
+	m_uExpPos = 0;
+	m_uExpQpos = 0;
+	m_uMatchedDocid = 0;
+	m_uHitsOverFor = 0;
+	m_uWords = 0;
 }
 
 const ExtDoc_t * ExtPhrase_c::GetDocsChunk ( SphDocID_t * pMaxID )
@@ -2410,6 +2443,7 @@ ExtQuorum_c::ExtQuorum_c ( CSphVector<ExtNode_i*> & dQwords, DWORD uDupeMask, co
 
 	m_uMask = m_uInitialMask = uDupeMask;
 	m_uMaskEnd = dQwords.GetLength() - 1;
+	m_uMatchedDocid = 0;
 }
 
 ExtQuorum_c::~ExtQuorum_c ()
@@ -2428,8 +2462,8 @@ void ExtQuorum_c::Reset ( const ISphQwordSetup & tSetup )
 	}
 
 	m_uMask = m_uInitialMask;
-
 	m_uMaskEnd = m_dChildren.GetLength() - 1;
+	m_uMatchedDocid = 0;
 	ARRAY_FOREACH ( i, m_dChildren )
 		m_dChildren[i]->Reset ( tSetup );
 }
@@ -3814,7 +3848,7 @@ bool NodeCacheContainer_t::WarmupCache ( ExtNode_i * pChild )
 			}
 
 		// too many values, stop caching
-		if ( m_pNodeCache->m_iMaxCachedDocs<0 || m_pNodeCache->m_iMaxCachedDocs<0 )
+		if ( m_pNodeCache->m_iMaxCachedDocs<0 || m_pNodeCache->m_iMaxCachedHits<0 )
 		{
 			Invalidate ();
 			pChild->Reset(*m_pSetup);

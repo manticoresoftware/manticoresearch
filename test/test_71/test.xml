@@ -12,13 +12,13 @@ searchd
 {
 <dynamic>
 <variant>	subtree_docs_cache 	= 0</variant>
-<variant>	subtree_docs_cache 	= 3</variant>
-<variant>	subtree_docs_cache 	= 100</variant>
+<variant>	subtree_docs_cache 	= 40</variant>
+<variant>	subtree_docs_cache 	= 10M</variant>
 </dynamic>
 <dynamic>
 <variant>	subtree_hits_cache 	= 0</variant>
-<variant>	subtree_hits_cache 	= 3</variant>
-<variant>	subtree_hits_cache 	= 100</variant>
+<variant>	subtree_hits_cache 	= 40</variant>
+<variant>	subtree_hits_cache 	= 10M</variant>
 </dynamic>
 <Searchd_Settings/>
 }
@@ -57,6 +57,7 @@ INSERT INTO `test_table` VALUES
 </DB_Insert>
 
 <Custom_test><![CDATA[
+$client->SetMatchMode (SPH_MATCH_EXTENDED2);
 $client->AddQuery ('(one and two) and three');
 $client->AddQuery ('one and (two and four)');
 $results = $client->RunQueries ();

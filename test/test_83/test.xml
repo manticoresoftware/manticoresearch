@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Test>
-  <Name>subtree caching (part 3)</Name>
+  <Name>Reset for "AND" nodes</Name>
 
 <Config>
 indexer
@@ -49,21 +49,19 @@ DROP TABLE IF EXISTS `test_table`
 </DB_Drop>
 <DB_Insert>
 INSERT INTO `test_table` VALUES
-( 1, 'one' ),
-( 2, 'one two' ),
-( 3, 'one two three' ),
-( 4, 'one two three four' ),
-( 5, 'one two three four five' )
+( 1, 'one two three one' ),
+( 2, 'one two three one two' ),
+( 3, 'one two three one two three' ),
+( 4, 'one two three four six' ),
+( 5, 'one two three four five seven' )
 </DB_Insert>
 
 <Custom_test><![CDATA[
-$client->AddQuery ('one');
-$client->AddQuery ('one two');
-$client->AddQuery ('one two three');
-$client->AddQuery ('two three four');
-$client->AddQuery ('four five');
+$client->SetMatchMode (SPH_MATCH_EXTENDED2);
+$client->AddQuery ("(one two three) |one");
+$client->AddQuery ("(one two three) |six");
 $results = $client->RunQueries ();
-for ( $i=0; $i<=4; $i++ )
+for ( $i=0; $i<=1; $i++ )
 	if ( is_array($results) && is_array($results[$i]) )
 		unset ( $results[$i]["time"] );
 ]]></Custom_test>

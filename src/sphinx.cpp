@@ -1121,7 +1121,7 @@ template < bool INLINE_HITS, bool INLINE_DOCINFO, bool DISABLE_HITLIST_SEEK >
 class DiskIndexQword_c : public DiskIndexQwordTraits_c
 {
 public:
-	void Reset ()
+	virtual void Reset ()
 	{
 		m_uHitPosition = 0;
 		m_uHitState = 0;
@@ -1130,7 +1130,6 @@ public:
 		ISphQword::Reset();
 		m_iHitPos = 0;
 		m_iInlineAttrs = 0;
-
 	}
 
 	void GetHitlistEntry ()

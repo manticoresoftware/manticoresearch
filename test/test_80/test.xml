@@ -46,8 +46,8 @@ index delta
 create table sph_test
 (
 	id int not null,
-	first varchar(1048576) not null,
-	second varchar(1048576) not null
+	first text(1048576) not null,
+	second text(1048576) not null
 );
 </db_create>
 

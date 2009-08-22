@@ -51,7 +51,7 @@ index main
 create table sph_test
 (
 	id int not null,
-	text varchar(262144) not null
+	text text(262144) not null
 );
 </db_create>
 

@@ -4179,6 +4179,46 @@ void LocalSearchThreadFunc ( void * pArg )
 }
 
 
+void MergeWordStats ( CSphVector<CSphQueryResultMeta::WordStat_t> & dDst, const CSphVector<CSphQueryResultMeta::WordStat_t> & dSrc, SearchFailuresLog_c & tLog )
+{
+	if ( !dDst.GetLength() )
+	{
+		// nothing has been set yet; just copy
+		dDst = dSrc;
+		return;
+	}
+
+	if ( dDst.GetLength()!=dSrc.GetLength() )
+	{
+		// word count mismatch
+		tLog.Submit ( "query words mismatch (%d local, %d remote)", dDst.GetLength(), dSrc.GetLength() );
+		return;
+	}
+
+	// check for word contents mismatch
+	assert ( dDst.GetLength()>0 && dDst.GetLength()==dSrc.GetLength() );
+
+	int iMismatch = -1;
+	for ( int i=0; i<dSrc.GetLength() && iMismatch<0; i++ )
+		if ( dDst[i].m_sWord!=dSrc[i].m_sWord )
+			iMismatch = i;
+
+	if ( iMismatch<0 )
+	{
+		// everything matches, update stats
+		ARRAY_FOREACH ( i, dSrc )
+		{
+			dDst[i].m_iDocs += dSrc[i].m_iDocs;
+			dDst[i].m_iHits += dSrc[i].m_iHits;
+		}
+	} else
+	{
+		// there are mismatches, warn
+		tLog.Submit ( "query words mismatch (word %d, '%s' local vs '%s' remote)",
+			iMismatch, dDst[iMismatch].m_sWord.cstr(), dSrc[iMismatch].m_sWord.cstr() );
+	}
+}
+
 void SearchHandler_c::RunLocalSearchesMT ()
 {
 	int64_t tmLocal = sphMicroTimer();
@@ -4249,7 +4289,7 @@ void SearchHandler_c::RunLocalSearchesMT ()
 
 			tRes.m_pMva = tRaw.m_pMva;
 			tRes.m_pStrings = tRaw.m_pStrings;
-			tRes.m_dWordStats = tRaw.m_dWordStats;
+			MergeWordStats ( tRes.m_dWordStats, tRaw.m_dWordStats, m_dFailuresSet[iQuery] );
 
 			tRes.m_iMultiplier = m_bMultiQueue ? iQueries : 1;
 			tRes.m_iCpuTime += tRaw.m_iCpuTime / tRes.m_iMultiplier;
@@ -4292,7 +4332,7 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 		CSphString sError;
 		const CSphQuery & tQuery = m_dQueries[i+m_iStart];
 
-		assert ( !tQuery.m_iOldVersion );
+		assert ( !tQuery.m_iOldVersion || tQuery.m_iOldVersion>=0x102 );
 		ppSorters[i] = sphCreateQueue ( &tQuery, *tServed.m_pSchema, sError );
 		if ( !ppSorters[i] )
 		{
@@ -4403,7 +4443,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter )
 		if ( m_bMultiQueue )
 		{
 			bResult = tServed.m_pIndex->MultiQuery ( &m_dQueries[m_iStart], &tStats,
-				dSorters.GetLength(), &dSorters[0] );
+				dSorters.GetLength(), &dSorters[0], NULL );
 		} else
 		{
 			CSphVector<CSphQueryResult*> dResults ( m_dResults.GetLength() );
@@ -4411,7 +4451,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter )
 				dResults[i] = &m_dResults[i];
 
 			bResult = tServed.m_pIndex->MultiQueryEx ( dSorters.GetLength(),
-				&m_dQueries[m_iStart], &dResults[m_iStart], &dSorters[0]);
+				&m_dQueries[m_iStart], &dResults[m_iStart], &dSorters[0], NULL );
 		}
 
 		// handle results
@@ -4470,7 +4510,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter )
 		// cleanup sorters
 		if ( !pLocalSorter )
 			ARRAY_FOREACH ( i, dSorters )
-			SafeDelete ( dSorters[i] );
+				SafeDelete ( dSorters[i] );
 	}
 }
 
@@ -4479,6 +4519,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 {
 	m_iStart = iStart;
 	m_iEnd = iEnd;
+	m_dLocal.Reset ();
 
 	// all my stats
 	int64_t tmSubset = sphMicroTimer();
@@ -4730,42 +4771,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 					tRes.m_iQueryTime += tRemoteResult.m_iQueryTime;
 
 					// merge this agent's words
-					if ( !tRes.m_dWordStats.GetLength() )
-					{
-						// nothing has been set yet; just copy
-						tRes.m_dWordStats = tRemoteResult.m_dWordStats;
-
-					} else if ( tRes.m_dWordStats.GetLength()!=tRemoteResult.m_dWordStats.GetLength() )
-					{
-						// word count mismatch
-						m_dFailuresSet[iRes].Submit ( "query words mismatch (%d local, %d remote)",
-							tRes.m_dWordStats.GetLength(), tRemoteResult.m_dWordStats.GetLength() );
-
-					} else
-					{
-						// check for word contents mismatch
-						assert ( tRes.m_dWordStats.GetLength()>0 && tRes.m_dWordStats.GetLength()==tRemoteResult.m_dWordStats.GetLength() );
-
-						int iMismatch = -1;
-						for ( int i=0; i<tRemoteResult.m_dWordStats.GetLength() && iMismatch<0; i++ )
-							if ( tRes.m_dWordStats[i].m_sWord!=tRemoteResult.m_dWordStats[i].m_sWord )
-								iMismatch = i;
-
-						if ( iMismatch<0 )
-						{
-							// everything matches, update stats
-							ARRAY_FOREACH ( i, tRemoteResult.m_dWordStats )
-							{
-								tRes.m_dWordStats[i].m_iDocs += tRemoteResult.m_dWordStats[i].m_iDocs;
-								tRes.m_dWordStats[i].m_iHits += tRemoteResult.m_dWordStats[i].m_iHits;
-							}
-						} else
-						{
-							// there are mismatches, warn
-							m_dFailuresSet[iRes].Submit ( "query words mismatch (word %d, '%s' local vs '%s' remote)",
-								iMismatch, tRes.m_dWordStats[iMismatch].m_sWord.cstr(), tRemoteResult.m_dWordStats[iMismatch].m_sWord.cstr() );
-						}
-					}
+					MergeWordStats ( tRes.m_dWordStats, tRemoteResult.m_dWordStats, m_dFailuresSet[iRes] );
 				}
 
 				// dismissed

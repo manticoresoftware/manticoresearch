@@ -1562,7 +1562,7 @@ private:
 	void						WriteSchemaColumn ( CSphWriter & fdInfo, const CSphColumnInfo & tCol );
 	void						ReadSchemaColumn ( CSphReader_VLN & rdInfo, CSphColumnInfo & tCol );
 
-	bool						ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQNode_t * pRoot, CSphDict * pDict, const CSphVector<CSphFilterSettings> * pExtraFilters ) const;
+	bool						ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQNode_t * pRoot, CSphDict * pDict, const CSphVector<CSphFilterSettings> * pExtraFilters, CSphQueryNodeCache * pNodeCache ) const;
 	bool						MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters ) const;
 	bool						MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, ISphRanker * pRanker ) const;
 
@@ -12698,21 +12698,6 @@ static XQNode_t * ExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & t
 }
 
 
-class XQCacheHolder : ISphNoncopyable
-{
-public:
-	XQCacheHolder ( int iCells, int MaxCachedDocs, int MaxCachedHits )
-	{
-		sphXQCacheInit ( iCells, MaxCachedDocs, MaxCachedHits );
-	}
-
-	~XQCacheHolder ()
-	{
-		sphXQCacheDone();
-	}
-};
-
-
 /// one regular query vs many sorters
 bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters ) const
 {
@@ -12744,8 +12729,9 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	dTrees.Add ( tParsed.m_pRoot );
 	int iCommonSubtrees = sphMarkCommonSubtrees ( dTrees );
 
-	XQCacheHolder dHolder ( iCommonSubtrees, m_iMaxCachedDocs, m_iMaxCachedHits );
-	return ParsedMultiQuery ( pQuery, pResult, iSorters, ppSorters, tParsed.m_pRoot, pDict, pExtraFilters );
+	CSphQueryNodeCache tNodeCache ( iCommonSubtrees, m_iMaxCachedDocs, m_iMaxCachedHits );
+	bool bResult = ParsedMultiQuery ( pQuery, pResult, iSorters, ppSorters, tParsed.m_pRoot, pDict, pExtraFilters, &tNodeCache );
+	return bResult;
 }
 
 
@@ -12792,10 +12778,10 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 
 	int iCommonSubtrees = sphMarkCommonSubtrees ( dTrees );
 
-	XQCacheHolder tHolder ( iCommonSubtrees, m_iMaxCachedDocs, m_iMaxCachedHits );
+	CSphQueryNodeCache tNodeCache ( iCommonSubtrees, m_iMaxCachedDocs, m_iMaxCachedHits );
 	ARRAY_FOREACH ( j, dTrees )
 	{
-		bResult &= ParsedMultiQuery ( &pQueries[j], ppResults[j], 1, &ppSorters[j], dTrees[j], pDict, pExtraFilters );
+		bResult &= ParsedMultiQuery ( &pQueries[j], ppResults[j], 1, &ppSorters[j], dTrees[j], pDict, pExtraFilters, &tNodeCache );
 		ppResults[j]->m_iMultiplier = iCommonSubtrees ? iQueries : 1;
 	}
 
@@ -12805,7 +12791,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 	return bResult;
 }
 
-bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQNode_t * pRoot, CSphDict * pDict, const CSphVector<CSphFilterSettings> * pExtraFilters ) const
+bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQNode_t * pRoot, CSphDict * pDict, const CSphVector<CSphFilterSettings> * pExtraFilters, CSphQueryNodeCache * pNodeCache ) const
 {
 	assert ( pQuery );
 	assert ( pResult );
@@ -12869,6 +12855,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	tTermSetup.m_pWarning = &pResult->m_sWarning;
 	tTermSetup.m_bSetupReaders = true;
 	tTermSetup.m_pCtx = &tCtx;
+	tTermSetup.m_pNodeCache = pNodeCache;
 
 	// bind weights
 	tCtx.BindWeights ( pQuery, m_tSchema );

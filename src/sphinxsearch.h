@@ -99,6 +99,7 @@ public:
 
 
 /// term setup, searcher view
+class CSphQueryNodeCache;
 class ISphQwordSetup : ISphNoncopyable
 {
 public:
@@ -111,6 +112,7 @@ public:
 	int64_t					m_iMaxTimer;
 	CSphString *			m_pWarning;
 	CSphQueryContext *		m_pCtx;
+	CSphQueryNodeCache *	m_pNodeCache;
 
 	ISphQwordSetup ()
 		: m_pDict ( NULL )
@@ -165,18 +167,27 @@ public:
 	static CSphHitMarker *	Create ( const XQNode_t * pRoot, const ISphQwordSetup & tSetup );
 };
 
-/// factory for regular query objects
-
 /// factory for parsed query trees
 ISphRanker * sphCreateRanker ( const XQNode_t * pRoot, ESphRankMode eRankMode, CSphQueryResult * pResult, const ISphQwordSetup & tTermSetup );
 
-/// initialize intra-batch node cache
-/// FIXME! should be moved to per-query TLS when we add MT support
-void sphXQCacheInit ( int iCells, int MaxCachedDocs, int MaxCachedHits );
+//////////////////////////////////////////////////////////////////////////
 
-/// shutdown intra-batch node cache
-/// FIXME! should be moved to per-query TLS when we add MT support
-void sphXQCacheDone ();
+/// intra-batch node cache
+class CSphQueryNodeCache
+{
+	friend class NodeCacheContainer_t;
+
+protected:
+	class NodeCacheContainer_t *	m_pPool;
+	int								m_iMaxCachedDocs;
+	int								m_iMaxCachedHits;
+
+public:
+									CSphQueryNodeCache ( int iCells, int MaxCachedDocs, int MaxCachedHits );
+									~CSphQueryNodeCache ();
+
+	ExtNode_i *						CreateProxy ( ExtNode_i * pChild, const XQNode_t * pRawChild, const ISphQwordSetup & tSetup );
+};
 
 #endif // _sphinxsearch_
 

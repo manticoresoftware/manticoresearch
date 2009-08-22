@@ -146,10 +146,6 @@ protected:
 };
 
 
-/// forward decl, generic cached node factory
-static ExtNode_i * sphXQCacheCreateProxy ( ExtNode_i * pChild, const XQNode_t * pRawChild, const ISphQwordSetup & tSetup );
-
-
 /// single keyword streamer
 class ExtTerm_c : public ExtNode_i
 {
@@ -610,7 +606,7 @@ static ExtNode_i * CreatePhraseNode ( const XQNode_t * pQueryNode, const ISphQwo
 
 		ExtNode_i * pResult = new T ( dNodes, uDupeMask, *pQueryNode, tSetup );
 		if ( pQueryNode->GetCount() )
-			return sphXQCacheCreateProxy ( pResult, pQueryNode, tSetup );
+			return tSetup.m_pNodeCache->CreateProxy ( pResult, pQueryNode, tSetup );
 		return pResult; // FIXME! sorry, no hitless vs expand vs phrase support for now!
 	}
 
@@ -688,7 +684,7 @@ static ExtNode_i * CreatePhraseNode ( const XQNode_t * pQueryNode, const ISphQwo
 	}
 
 	if ( pQueryNode->GetCount() )
-		return sphXQCacheCreateProxy ( pResult, pQueryNode, tSetup );
+		return tSetup.m_pNodeCache->CreateProxy ( pResult, pQueryNode, tSetup );
 
 	return pResult;
 }
@@ -719,7 +715,7 @@ static ExtNode_i * CreateOrderNode ( const XQNode_t * pNode, const ISphQwordSetu
 	ExtNode_i * pResult = new ExtOrder_c ( dChildren, tSetup );
 
 	if ( pNode->GetCount() )
-		return sphXQCacheCreateProxy ( pResult, pNode, tSetup );
+		return tSetup.m_pNodeCache->CreateProxy ( pResult, pNode, tSetup );
 
 	return pResult;
 }
@@ -800,7 +796,7 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 			for ( int i=1; i<dWords.GetLength(); i++ )
 				pCur = new ExtAnd_c ( pCur, Create ( dWords[i], pNode->m_uFieldMask, pNode->m_iFieldMaxPos, tSetup ), tSetup );
 			if ( pNode->GetCount() )
-				return sphXQCacheCreateProxy ( pCur, pNode, tSetup );
+				return tSetup.m_pNodeCache->CreateProxy ( pCur, pNode, tSetup );
 			return pCur;
 		}
 		else
@@ -833,7 +829,7 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 			}
 		}
 		if ( pNode->GetCount() )
-			return sphXQCacheCreateProxy ( pCur, pNode, tSetup );
+			return tSetup.m_pNodeCache->CreateProxy ( pCur, pNode, tSetup );
 		return pCur;
 	}
 }
@@ -3643,12 +3639,14 @@ CSphHitMarker * CSphHitMarker::Create ( const XQNode_t * pRoot, const ISphQwordS
 // INTRA-BATCH CACHING
 //////////////////////////////////////////////////////////////////////////
 
+
 /// container that does intra-batch query-sub-tree caching
 /// actually carries the cached data, NOT to be recreated frequently (see thin wrapper below)
 class NodeCacheContainer_t
 {
 private:
 	friend class ExtNodeCached_t;
+	friend class CSphQueryNodeCache;
 
 private:
 	int								m_iRefCount;
@@ -3659,48 +3657,29 @@ private:
 	CSphVector<ExtHit_t>			m_Hits;
 	CSphVector<CSphRowitem>			m_InlineAttrs;
 
-	static NodeCacheContainer_t *	m_pPool;
-	static int						m_iMaxCachedDocs;
-	static int						m_iMaxCachedHits;
+	CSphQueryNodeCache *			m_pNodeCache;
 
 public:
 	NodeCacheContainer_t ()
 		: m_iRefCount ( 1 )
 		, m_StateOk ( true )
 		, m_pSetup ( NULL )
+		, m_pNodeCache ( NULL )
 	{}
 
 public:
-	static void						CacheInit ( int iCells, int MaxCachedDocs, int MaxCachedHit );
-	static void						CacheDone ();
-
-public:
-	static ExtNode_i * GetProxyNode ( ExtNode_i * pChild, const XQNode_t * pRawChild, const ISphQwordSetup & tSetup )
-	{
-		if ( m_iMaxCachedDocs<=0 || m_iMaxCachedHits<=0 )
-			return pChild;
-
-		assert ( pRawChild );
-		assert ( pRawChild->GetOrder()>=0 );
-		return m_pPool [ pRawChild->GetOrder() ].CreateCachedWrapper ( pChild, pRawChild, tSetup );
-	}
-
 	void Release()
 	{
 		if ( --m_iRefCount <= 0 )
 			Invalidate();
 	}
 
-private:
-
-	bool							WarmupCache ( ExtNode_i * pChild );
 	ExtNode_i *						CreateCachedWrapper ( ExtNode_i* pChild, const XQNode_t * pRawChild, const ISphQwordSetup & tSetup );
+
+private:
+	bool							WarmupCache ( ExtNode_i * pChild );
 	void							Invalidate();
 };
-
-NodeCacheContainer_t * NodeCacheContainer_t::m_pPool = NULL;
-int NodeCacheContainer_t::m_iMaxCachedDocs = 0;
-int NodeCacheContainer_t::m_iMaxCachedHits = 0;
 
 
 /// cached node wrapper to be injected into actual search trees
@@ -3811,7 +3790,7 @@ bool NodeCacheContainer_t::WarmupCache ( ExtNode_i * pChild )
 		for ( ; pChunk->m_uDocid!=DOCID_MAX; pChunk++ )
 		{
 			m_Docs.Add ( *pChunk );
-			m_iMaxCachedDocs--;
+			m_pNodeCache->m_iMaxCachedDocs--;
 			if ( iStride>0 )
 			{
 				// since vector will relocate the data on resize, do NOT fill new m_pDocinfo right now
@@ -3829,12 +3808,12 @@ bool NodeCacheContainer_t::WarmupCache ( ExtNode_i * pChild )
 				for ( ; pHits->m_uDocid != DOCID_MAX; pHits++)
 				{
 					m_Hits.Add (*pHits);
-					m_iMaxCachedHits--;
+					m_pNodeCache->m_iMaxCachedHits--;
 				}
 			}
 
 		// too many values, stop caching
-		if ( m_iMaxCachedDocs<0 || m_iMaxCachedDocs<0 )
+		if ( m_pNodeCache->m_iMaxCachedDocs<0 || m_pNodeCache->m_iMaxCachedDocs<0 )
 		{
 			Invalidate ();
 			pChild->Reset(*m_pSetup);
@@ -3858,29 +3837,12 @@ bool NodeCacheContainer_t::WarmupCache ( ExtNode_i * pChild )
 
 void NodeCacheContainer_t::Invalidate()
 {
-	m_iMaxCachedDocs += m_Docs.GetLength();
-	m_iMaxCachedHits += m_Docs.GetLength();
+	m_pNodeCache->m_iMaxCachedDocs += m_Docs.GetLength();
+	m_pNodeCache->m_iMaxCachedHits += m_Docs.GetLength();
 	m_Docs.Reset();
 	m_InlineAttrs.Reset();
 	m_Hits.Reset();
 	m_StateOk = false;
-}
-
-
-void NodeCacheContainer_t::CacheInit ( int iCells, int iMaxCachedDocs, int iMaxCachedHits )
-{
-	SafeDeleteArray ( m_pPool );
-	if ( iCells>0 && iMaxCachedHits>0 && iMaxCachedDocs>0 )
-		m_pPool = new NodeCacheContainer_t [ iCells ];
-
-	m_iMaxCachedDocs = iMaxCachedDocs / sizeof(ExtDoc_t);
-	m_iMaxCachedHits = iMaxCachedHits / sizeof(ExtHit_t);
-}
-
-
-void NodeCacheContainer_t::CacheDone ()
-{
-	SafeDeleteArray ( m_pPool );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -4036,19 +3998,32 @@ const ExtHit_t * ExtNodeCached_t::GetHitsChunk( const ExtDoc_t * pMatched, SphDo
 
 //////////////////////////////////////////////////////////////////////////
 
-void sphXQCacheInit ( int iCells, int MaxCachedDocs, int MaxCachedHits )
+CSphQueryNodeCache::CSphQueryNodeCache ( int iCells, int iMaxCachedDocs, int iMaxCachedHits )
 {
-	NodeCacheContainer_t::CacheInit ( iCells, MaxCachedDocs, MaxCachedHits );
+	m_pPool = NULL;
+	if ( iCells>0 && iMaxCachedHits>0 && iMaxCachedDocs>0 )
+	{
+		m_pPool = new NodeCacheContainer_t [ iCells ];
+		for ( int i=0; i<iCells; i++ )
+			m_pPool[i].m_pNodeCache = this;
+	}
+	m_iMaxCachedDocs = iMaxCachedDocs / sizeof(ExtDoc_t);
+	m_iMaxCachedHits = iMaxCachedHits / sizeof(ExtHit_t);
 }
 
-void sphXQCacheDone ()
+CSphQueryNodeCache::~CSphQueryNodeCache ()
 {
-	NodeCacheContainer_t::CacheDone ();
+	SafeDeleteArray ( m_pPool );
 }
 
-static ExtNode_i * sphXQCacheCreateProxy ( ExtNode_i * pChild, const XQNode_t * pRawChild, const ISphQwordSetup & tSetup )
+ExtNode_i * CSphQueryNodeCache::CreateProxy ( ExtNode_i * pChild, const XQNode_t * pRawChild, const ISphQwordSetup & tSetup )
 {
-	return NodeCacheContainer_t::GetProxyNode ( pChild, pRawChild, tSetup );
+	if ( m_iMaxCachedDocs<=0 || m_iMaxCachedHits<=0 )
+		return pChild;
+
+	assert ( pRawChild );
+	assert ( pRawChild->GetOrder()>=0 );
+	return m_pPool [ pRawChild->GetOrder() ].CreateCachedWrapper ( pChild, pRawChild, tSetup );
 }
 
 //

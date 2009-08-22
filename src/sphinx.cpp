@@ -1220,6 +1220,7 @@ public:
 
 	virtual DWORD GetNextHit ()
 	{
+		assert ( m_bHasHitlist );
 		switch ( m_uHitState )
 		{
 			case 0: // read hit from hitlist
@@ -1511,7 +1512,6 @@ private:
 	CSphIndexProgress			m_tProgress;
 
 	CSphVector<SphWordID_t>		m_dHitlessWords;
-	int							m_iHitlessThreshold;
 
 	bool						LoadHitlessWords ();
 
@@ -5851,7 +5851,6 @@ CSphIndexSettings::CSphIndexSettings ()
 	, m_eHitFormat			( SPH_HIT_FORMAT_PLAIN )
 	, m_bHtmlStrip			( false )
 	, m_eHitless			( SPH_HITLESS_NONE )
-	, m_fHitlessThreshold	( 1.0f )
 {
 }
 
@@ -6992,28 +6991,22 @@ void CSphIndex_VLN::cidxHit ( CSphAggregateHit * hit, CSphRowitem * pAttrs )
 		// flush prev doclist, if any
 		if ( m_tLastHit.m_iDocID )
 		{
-			// exclude hits for this word, if the number of affected documents surpasses the threshold
-			if ( m_iLastWordDocs > m_iHitlessThreshold )
-			{
-				assert ( m_tSettings.m_eHitless==SPH_HITLESS_SOME );
-				assert ( !( m_iLastWordDocs >> 31 ) || m_dHitlessWords.BinarySearch ( m_tLastHit.m_iWordID ) );
-				m_wrHitlist.SeekTo ( m_iLastHitlistPos );
-				m_iLastWordDocs |= 0x80000000;
-				m_tLastHit.m_iWordPos = 0;
-			}
-
 			// finish wordlist entry
 			assert ( m_iLastWordDocs );
 			assert ( m_iLastWordHits );
 			m_wrWordlist.ZipInt ( m_iLastWordDocs );
 			m_wrWordlist.ZipInt ( m_iLastWordHits );
 
-
 			if ( m_tSettings.m_eHitFormat==SPH_HIT_FORMAT_INLINE )
 			{
-				// inline hit into doclist & finish doclist entry
+				bool bIgnoreHits =
+					( m_tSettings.m_eHitless==SPH_HITLESS_ALL ) ||
+					( m_tSettings.m_eHitless==SPH_HITLESS_SOME && ( m_iLastWordDocs & 0x80000000 ) );
+			
+				// inline the only hit into doclist (unless it is completely discarded)
+				// and finish doclist entry
 				m_wrDoclist.ZipInt ( m_uLastDocHits );
-				if ( m_uLastDocHits==1 )
+				if ( m_uLastDocHits==1 && !bIgnoreHits )
 				{
 					m_wrHitlist.SeekTo ( m_iLastHitlistPos );
 					m_wrDoclist.ZipInt ( uLastPos & 0x7FFFFF );
@@ -7111,9 +7104,14 @@ void CSphIndex_VLN::cidxHit ( CSphAggregateHit * hit, CSphRowitem * pAttrs )
 		{
 			if ( m_tSettings.m_eHitFormat==SPH_HIT_FORMAT_INLINE )
 			{
-				// inline hit into doclist & finish last hit
+				bool bIgnoreHits =
+					( m_tSettings.m_eHitless==SPH_HITLESS_ALL ) ||
+					( m_tSettings.m_eHitless==SPH_HITLESS_SOME && ( m_iLastWordDocs & 0x80000000 ) );
+
+				// inline the only hit into doclist (unless it is completely discarded)
+				// and finish doclist entry
 				m_wrDoclist.ZipInt ( m_uLastDocHits );
-				if ( m_uLastDocHits==1 )
+				if ( m_uLastDocHits==1 && !bIgnoreHits )
 				{
 					m_wrHitlist.SeekTo ( m_iLastHitlistPos );
 					m_wrDoclist.ZipInt ( uLastPos & 0x7FFFFF );
@@ -9569,11 +9567,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	// final sort
 	//////////////
 
-	if ( m_tSettings.m_eHitless==SPH_HITLESS_SOME && m_tSettings.m_fHitlessThreshold!=1.0f )
-		m_iHitlessThreshold = (int)ceil ( double(m_tSettings.m_fHitlessThreshold) * double(m_tStats.m_iTotalDocuments) );
-	else
-		m_iHitlessThreshold = m_tStats.m_iTotalDocuments;
-
 	if ( iRawBlocks )
 	{
 		int iLastBin = dBins.GetLength () - 1;
@@ -9814,10 +9807,12 @@ public:
 	SphOffset_t		m_iDoclistOffset;
 	int				m_iDocs;
 	int				m_iHits;
+	bool			m_bHasHitlist;
 
 private:
 	int				m_iEntries;
 
+	ESphHitless		m_eHitless;
 	CSphReader_VLN	m_tReader;
 	CSphAutofile	m_tFile;
 	SphOffset_t		m_iMaxPos;
@@ -9830,12 +9825,13 @@ public:
 		, m_iMaxPos ( 0 )
 	{}
 
-	void Setup ( const CSphString & sFilename, SphOffset_t iMaxPos, CSphString & sError )
+	void Setup ( const CSphString & sFilename, SphOffset_t iMaxPos, ESphHitless eHitless, CSphString & sError )
 	{
 		m_iMaxPos = iMaxPos;
 		m_tFile.Open ( sFilename, SPH_O_READ, sError );
 		m_tReader.SetFile ( m_tFile );
 		m_tReader.SeekTo ( 1, READ_NO_SIZE_HINT );
+		m_eHitless = eHitless;
 	}
 
 	bool Read()
@@ -9862,9 +9858,14 @@ public:
 		{
 			m_iWordID += iDelta;
 			m_iDoclistOffset += m_tReader.UnzipOffset();
+
 			m_iDocs = m_tReader.UnzipInt();
 			m_iHits = m_tReader.UnzipInt();
 
+			m_bHasHitlist =
+				( m_eHitless==SPH_HITLESS_NONE ) ||
+				( m_eHitless==SPH_HITLESS_SOME && !( m_iDocs & 0x80000000 ) );
+			m_iDocs = m_eHitless==SPH_HITLESS_SOME ? ( m_iDocs & 0x7FFFFFFF ) : m_iDocs;
 			m_iEntries++;
 		}
 		return iDelta!=0;
@@ -9898,6 +9899,7 @@ public:
 
 		tQword.m_iDocs = tReader.m_iDocs;
 		tQword.m_iHits = tReader.m_iHits;
+		tQword.m_bHasHitlist = tReader.m_bHasHitlist;
 
 		tQword.m_uHitPosition = 0;
 		tQword.m_iHitlistPos = 0;
@@ -9924,7 +9926,7 @@ public:
 					tMatch.m_pDynamic = NULL;
 					if ( !bResult )
 					{
-						while ( tQword.GetNextHit() );
+						while ( tQword.m_bHasHitlist && tQword.GetNextHit() );
 						continue;
 					}
 				}
@@ -9944,14 +9946,23 @@ public:
 
 		while ( CSphMerger::NextDocument ( tQword, pSourceIndex, pInline, pFilter ) )
 		{
-			tHit.m_iDocID = tQword.m_tDoc.m_iDocID - m_pOutputIndex->m_tMin.m_iDocID;
-			TransferHits ( tQword, pInline, tHit );
+			if ( tQword.m_bHasHitlist )
+				TransferHits ( tQword, pInline, tHit );
+			else
+			{
+				// convert to aggregate if there is no hit-list
+				tHit.m_iDocID = tQword.m_tDoc.m_iDocID - m_pOutputIndex->m_tMin.m_iDocID;
+				tHit.m_uFieldMask = tQword.m_uFields;
+				tHit.m_uHitCount = tQword.m_uMatchHits;
+				m_pOutputIndex->cidxHit ( &tHit, pInline );
+			}
 		}
 	}
 
 	template < typename QWORD >
 	inline void TransferHits ( QWORD & tQword, CSphRowitem * pInline, CSphAggregateHit & tHit )
 	{
+		assert ( tQword.m_bHasHitlist );
 		tHit.m_iDocID = tQword.m_tDoc.m_iDocID - m_pOutputIndex->m_tMin.m_iDocID;
 		while ( DWORD uHit = tQword.GetNextHit() )
 		{
@@ -9967,7 +9978,6 @@ public:
 
 		tQword.m_iInlineAttrs = bInline ? pIndex->m_tSchema.GetAttrsCount() : 0;
 		tQword.m_pInlineFixup = bInline ? pIndex->m_tMin.m_pDynamic : NULL;
-		tQword.m_bHasHitlist = true; // FIXME
 
 		tQword.m_rdHitlist.SetFile ( tHits );
 		tQword.m_rdHitlist.GetByte();
@@ -9976,6 +9986,7 @@ public:
 		tQword.m_rdDoclist.GetByte();
 	}
 };
+
 
 template < typename QWORDDST, typename QWORDSRC >
 bool CSphIndex_VLN::MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter )
@@ -9997,8 +10008,10 @@ bool CSphIndex_VLN::MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter
 	CSphDictReader tDstReader;
 	CSphDictReader tSrcReader;
 
-	tDstReader.Setup ( GetIndexFileName("spi"), m_iCheckpointsPos, m_sLastError );
-	tSrcReader.Setup ( pSrcIndex->GetIndexFileName("spi"), pSrcIndex->m_iCheckpointsPos, m_sLastError );
+	tDstReader.Setup ( GetIndexFileName("spi"), m_iCheckpointsPos,
+		m_tSettings.m_eHitless, m_sLastError );
+	tSrcReader.Setup ( pSrcIndex->GetIndexFileName("spi"), pSrcIndex->m_iCheckpointsPos,
+		pSrcIndex->m_tSettings.m_eHitless, m_sLastError );
 
 	if ( !m_sLastError.IsEmpty() )
 		return false;
@@ -10012,7 +10025,6 @@ bool CSphIndex_VLN::MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter
 	const SphDocID_t iDstMinID = m_tMin.m_iDocID;
 	const SphDocID_t iSrcMinID = pSrcIndex->m_tMin.m_iDocID;
 
-	m_iHitlessThreshold = 0x7FFFFFFF; // FIXME
 	m_tMin.m_iDocID = Min ( iDstMinID, iSrcMinID );
 
 	m_dWordlistCheckpoints.Reset();
@@ -10060,6 +10072,7 @@ bool CSphIndex_VLN::MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter
 	}
 
 	int iDocsDelta = 0, iWords = 0;
+	int iHitlistsDiscarded = 0;
 	while ( bDstWord || bSrcWord )
 	{
 		if ( iWords==1000 )
@@ -10087,6 +10100,15 @@ bool CSphIndex_VLN::MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter
 		}
 		else // merge documents and hits inside the word
 		{
+			assert ( tDstReader.m_iWordID==tSrcReader.m_iWordID );
+
+			bool bHitless = !tDstReader.m_bHasHitlist;
+			if ( tDstReader.m_bHasHitlist!=tSrcReader.m_bHasHitlist )
+			{
+				iHitlistsDiscarded++;
+				bHitless = true;
+			}
+
 			CSphMerger::PrepareQword<QWORDDST> ( tDstQword, tDstReader, iDstDynamic, iDstMinID );
 			CSphMerger::PrepareQword<QWORDSRC> ( tSrcQword, tSrcReader, iSrcDynamic, iSrcMinID );
 
@@ -10105,13 +10127,33 @@ bool CSphIndex_VLN::MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter
 				if ( !bSrcDocs || ( bDstDocs && tDstQword.m_tDoc.m_iDocID < tSrcQword.m_tDoc.m_iDocID ) )
 				{
 					// transfer hits from destination
-					tMerge.TransferHits ( tDstQword, dDstInline, tHit );
+					if ( bHitless )
+					{
+						while ( tDstQword.m_bHasHitlist && tDstQword.GetNextHit() );
+
+						tHit.m_iDocID = tDstQword.m_tDoc.m_iDocID - m_tMin.m_iDocID;
+						tHit.m_uFieldMask = tDstQword.m_uFields;
+						tHit.m_uHitCount = tDstQword.m_uMatchHits;
+						cidxHit ( &tHit, dSrcInline );
+					}
+					else
+						tMerge.TransferHits ( tDstQword, dDstInline, tHit );
 					bDstDocs = CSphMerger::NextDocument ( tDstQword, this, dDstInline, pFilter );
 
 				} else if ( !bDstDocs || ( bSrcDocs && tDstQword.m_tDoc.m_iDocID > tSrcQword.m_tDoc.m_iDocID ) )
 				{
 					// transfer hits from source
-					tMerge.TransferHits ( tSrcQword, dSrcInline, tHit );
+					if ( bHitless )
+					{
+						while ( tSrcQword.m_bHasHitlist && tSrcQword.GetNextHit() );
+
+						tHit.m_iDocID = tSrcQword.m_tDoc.m_iDocID - m_tMin.m_iDocID;
+						tHit.m_uFieldMask = tSrcQword.m_uFields;
+						tHit.m_uHitCount = tSrcQword.m_uMatchHits;
+						cidxHit ( &tHit, dSrcInline );
+					}
+					else
+						tMerge.TransferHits ( tSrcQword, dSrcInline, tHit );
 					bSrcDocs = CSphMerger::NextDocument ( tSrcQword, pSrcIndex, dSrcInline, NULL );
 
 				} else
@@ -10124,32 +10166,44 @@ bool CSphIndex_VLN::MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter
 					iDocsDelta++;
 					tHit.m_iDocID = tDstQword.m_tDoc.m_iDocID - m_tMin.m_iDocID;
 
-					DWORD uDstHit = tDstQword.GetNextHit();
-					DWORD uSrcHit = tSrcQword.GetNextHit();
-
-					while ( uDstHit || uSrcHit )
+					if ( bHitless )
 					{
-						if ( !uSrcHit || ( uDstHit && uDstHit<uSrcHit ) )
-						{
-							tHit.m_iWordPos = uDstHit;
-							cidxHit ( &tHit, dSrcInline );
-							uDstHit = tDstQword.GetNextHit();
-						}
-						else if ( !uDstHit || ( uSrcHit && uSrcHit<uDstHit ) )
-						{
-							tHit.m_iWordPos = uSrcHit;
-							cidxHit ( &tHit, dSrcInline );
-							uSrcHit = tSrcQword.GetNextHit();
-						}
-						else
-						{
-							assert ( uDstHit==uSrcHit );
+						while ( tDstQword.m_bHasHitlist && tDstQword.GetNextHit() );
+						while ( tSrcQword.m_bHasHitlist && tSrcQword.GetNextHit() );
 
-							tHit.m_iWordPos = uDstHit;
-							cidxHit ( &tHit, dSrcInline );
+						tHit.m_uFieldMask = tDstQword.m_uFields | tSrcQword.m_uFields;
+						tHit.m_uHitCount = tDstQword.m_uMatchHits + tSrcQword.m_uMatchHits;
+						cidxHit ( &tHit, dSrcInline );
+					}
+					else
+					{
+						DWORD uDstHit = tDstQword.GetNextHit();
+						DWORD uSrcHit = tSrcQword.GetNextHit();
+						
+						while ( uDstHit || uSrcHit )
+						{
+							if ( !uSrcHit || ( uDstHit && uDstHit<uSrcHit ) )
+							{
+								tHit.m_iWordPos = uDstHit;
+								cidxHit ( &tHit, dSrcInline );
+								uDstHit = tDstQword.GetNextHit();
+							}
+							else if ( !uDstHit || ( uSrcHit && uSrcHit<uDstHit ) )
+							{
+								tHit.m_iWordPos = uSrcHit;
+								cidxHit ( &tHit, dSrcInline );
+								uSrcHit = tSrcQword.GetNextHit();
+							}
+							else
+							{
+								assert ( uDstHit==uSrcHit );
+								
+								tHit.m_iWordPos = uDstHit;
+								cidxHit ( &tHit, dSrcInline );
 
-							uDstHit = tDstQword.GetNextHit();
-							uSrcHit = tSrcQword.GetNextHit();
+								uDstHit = tDstQword.GetNextHit();
+								uSrcHit = tSrcQword.GetNextHit();
+							}
 						}
 					}
 
@@ -10170,6 +10224,9 @@ bool CSphIndex_VLN::MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter
 
 	m_tProgress.m_iWords += iWords;
 	m_pProgress ( &m_tProgress, false );
+
+	if ( iHitlistsDiscarded )
+		m_sLastWarning.SetSprintf ( "discarded hitlists for %u words", iHitlistsDiscarded );
 
 	return true;
 }
@@ -10196,9 +10253,9 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 	if ( !pDstSchema->CompareTo ( *pSrcSchema, m_sLastError ) )
 		return false;
 
-	if ( m_tSettings.m_eHitless || pSrcIndex->m_tSettings.m_eHitless )
+	if ( m_tSettings.m_eHitless!=pSrcIndex->m_tSettings.m_eHitless )
 	{
-		m_sLastError = "merging of hitless indices is not supported (yet)";
+		m_sLastError = "hitless settings must be the same on merged indices";
 		return false;
 	}
 
@@ -11515,11 +11572,12 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 		tKeyword.SeekHitlist ( tKeyword.m_iHitlistPos );
 
 		int iHits = 0;
-		while ( DWORD uHit = tKeyword.GetNextHit() )
-		{
-			fprintf ( fp, "doc="DOCID_FMT", hit=0x%08x\n", tKeyword.m_tDoc.m_iDocID, uHit );
-			iHits++;
-		}
+		if ( tKeyword.m_bHasHitlist )
+			while ( DWORD uHit = tKeyword.GetNextHit() )
+			{
+				fprintf ( fp, "doc="DOCID_FMT", hit=0x%08x\n", tKeyword.m_tDoc.m_iDocID, uHit );
+				iHits++;
+			}
 
 		if ( !iHits )
 		{

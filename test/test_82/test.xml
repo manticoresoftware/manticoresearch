@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>hitless merge</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source main
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = select * from sph_test where id in ( 1, 2 );
+}
+
+source delta
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = select * from sph_test where id in ( 3 );
+}
+
+index main
+{
+	source = main
+	path = <data_path/>/main
+
+	hitless_words = <test_root/>/test_82/words_main.txt
+}
+
+index delta
+{
+	source = delta
+	path = <data_path/>/delta
+
+	hitless_words = <test_root/>/test_82/words_delta.txt
+}
+</config>
+
+<indexer>
+	<run>--merge main delta</run>
+</indexer>
+
+<db_create>
+create table sph_test
+(
+	id int not null,
+	text varchar(255) not null
+);
+</db_create>
+
+<db_drop>
+drop table if exists sph_test;
+</db_drop>
+
+<db_insert>
+insert into sph_test values
+( 1, 'The Tin Woodman gave a sigh of satisfaction and lowered his axe, which he leaned against the tree.' ),
+( 2, 'The Tin Woodman appeared to think deeply for a moment.' ),
+( 3, 'The Tin Woodman had asked Dorothy to put the oil-can in her basket.' );
+</db_insert>
+
+<queries>
+	<query mode="extended2" index="main">tin woodman</query>
+	<query mode="extended2" index="main">lowered</query>
+	<query mode="extended2" index="main">"tin woodman"</query>
+	<query mode="extended2" index="main">"and lowered"</query>
+	<query mode="extended2" index="main">"tin woodman"~2</query>
+	<query mode="extended2" index="main">"lowered his axe"</query>
+	<query mode="extended2" index="main">"and lowered his axe"</query>
+	<query mode="extended2" index="main">"tin woodman"/1</query>
+	<query mode="extended2" index="main">^the</query>
+	<query mode="extended2" index="main">^tin</query>
+	<query mode="extended2" index="main">basket</query>
+	<query mode="extended2" index="main">basket$</query>
+</queries>
+
+</test>

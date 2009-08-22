@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>hitless indexes</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = select * from sph_test;
+}
+
+index none
+{
+	source = test
+	path = <data_path/>/none
+}
+
+index some
+{
+	source = test
+	path = <data_path/>/some
+
+	hitless_words = <test_root/>/test_81/words.txt
+}
+
+index all
+{
+	source = test
+	path = <data_path/>/all
+
+	hitless_words = all
+}
+</config>
+
+<db_create>
+create table sph_test
+(
+	id int not null,
+	text varchar(255) not null
+);
+</db_create>
+
+<db_drop>
+drop table if exists sph_test;
+</db_drop>
+
+<db_insert>
+insert into sph_test values
+( 1, 'The Tin Woodman gave a sigh of satisfaction and lowered his axe, which he leaned against the tree.' ),
+( 2, 'The Tin Woodman appeared to think deeply for a moment.' ),
+( 3, 'The Tin Woodman had asked Dorothy to put the oil-can in her basket.' );
+</db_insert>
+
+<queries>
+	<!-- these should work, weights will differ due to lcs ranking -->
+	<query mode="extended2" index="none">tin woodman</query>
+	<query mode="extended2" index="some">tin woodman</query>
+	<query mode="extended2" index="all ">tin woodman</query>
+
+	<!-- these should give identical results -->
+	<query ranker="wordcount" mode="extended2" index="none">tin woodman</query>
+	<query ranker="wordcount" mode="extended2" index="some">tin woodman</query>
+	<query ranker="wordcount" mode="extended2" index="all ">tin woodman</query>
+
+	<query mode="extended2" index="none">lowered</query>
+	<query mode="extended2" index="some">lowered</query>
+	<query mode="extended2" index="all ">lowered</query>
+
+	<!-- some will fail -->
+	<query mode="extended2" index="none">"tin woodman"</query>
+	<query mode="extended2" index="some">"tin woodman"</query>
+	<query mode="extended2" index="all ">"tin woodman"</query>
+
+	<query mode="extended2" index="none">"and lowered"</query>
+	<query mode="extended2" index="some">"and lowered"</query>
+	<query mode="extended2" index="all ">"and lowered"</query>
+
+	<query mode="extended2" index="none">"tin woodman"~2</query>
+	<query mode="extended2" index="some">"tin woodman"~2</query>
+	<query mode="extended2" index="all ">"tin woodman"~2</query>
+
+	<!-- these will work on 'some', but not 'all' (conversion to AND) -->
+	<query mode="extended2" index="none">"lowered his axe"</query>
+	<query mode="extended2" index="some">"lowered his axe"</query>
+	<query mode="extended2" index="all ">"lowered his axe"</query>
+
+	<query mode="extended2" index="none">"and lowered his axe"</query>
+	<query mode="extended2" index="some">"and lowered his axe"</query>
+	<query mode="extended2" index="all ">"and lowered his axe"</query>
+
+	<!-- doesn't matter to quorum, weight will differ though -->
+	<query mode="extended2" index="none">"tin woodman"/1</query>
+	<query mode="extended2" index="some">"tin woodman"/1</query>
+	<query mode="extended2" index="all ">"tin woodman"/1</query>
+
+	<!-- these will work, but should give a warning sometimes. weights should match -->
+	<query mode="extended2" index="none">^the</query>
+	<query mode="extended2" index="some">^the</query>
+	<query mode="extended2" index="all ">^the</query>
+
+	<query mode="extended2" index="none">^tin</query>
+	<query mode="extended2" index="some">^tin</query>
+	<query mode="extended2" index="all ">^tin</query>
+
+	<query mode="extended2" index="none">basket</query>
+	<query mode="extended2" index="some">basket</query>
+	<query mode="extended2" index="all ">basket</query>
+
+	<query mode="extended2" index="none">basket$</query>
+	<query mode="extended2" index="some">basket$</query>
+	<query mode="extended2" index="all ">basket$</query>
+</queries>
+
+</test>

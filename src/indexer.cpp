@@ -1166,6 +1166,8 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 	int64_t tmMergeTime = sphMicroTimer();
 	if ( !pDst->Merge ( pSrc, tPurge, bMergeKillLists ) )
 		sphDie ( "failed to merge index '%s' into index '%s': %s", sSrc, sDst, pDst->GetLastError().cstr() );
+	if ( !pDst->GetLastWarning().IsEmpty() )
+		fprintf ( stdout, "WARNING: index '%s': %s\n", sDst, pDst->GetLastWarning().cstr() );
 	tmMergeTime = sphMicroTimer() - tmMergeTime;
 	if ( !g_bQuiet )
 		printf ( "merged in %d.%03d sec\n", int(tmMergeTime/1000000), int(tmMergeTime%1000000)/1000 );

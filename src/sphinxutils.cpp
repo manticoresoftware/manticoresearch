@@ -858,12 +858,7 @@ void sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 		for ( const CSphVariant * pVariant = &hIndex["hitless_words"]; pVariant; pVariant = pVariant->m_pNext )
 		{
 			const CSphString & sValue = *pVariant;
-			if ( sValue.Ends("%") )
-			{
-				tSettings.m_eHitless = SPH_HITLESS_SOME;
-				tSettings.m_fHitlessThreshold = float(pVariant->intval()) / 100.0f;
-			}
-			else if ( sValue=="all" )
+			if ( sValue=="all" )
 			{
 				tSettings.m_eHitless = SPH_HITLESS_ALL;
 			}

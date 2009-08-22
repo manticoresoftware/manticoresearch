@@ -2152,7 +2152,6 @@ struct CSphIndexSettings : public CSphSourceSettings
 	CSphString		m_sHtmlRemoveElements;
 
 	ESphHitless		m_eHitless;
-	float			m_fHitlessThreshold;
 	CSphString		m_sHitlessFile;
 
 					CSphIndexSettings ();
@@ -2182,6 +2181,7 @@ public:
 	virtual						~CSphIndex ();
 
 	virtual const CSphString &	GetLastError () const { return m_sLastError; }
+	virtual const CSphString &	GetLastWarning () const { return m_sLastWarning; }
 	virtual const CSphSchema *	GetSchema () const { return &m_tSchema; }
 
 	virtual	void				SetProgressCallback ( ProgressCallback_t * pfnProgress ) { m_pProgress = pfnProgress; }
@@ -2275,6 +2275,7 @@ protected:
 	ProgressCallback_t *		m_pProgress;
 	CSphSchema					m_tSchema;
 	CSphString					m_sLastError;
+	CSphString					m_sLastWarning;
 
 	bool						m_bInplaceSettings;
 	int							m_iHitGap;

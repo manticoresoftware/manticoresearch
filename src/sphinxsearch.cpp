@@ -572,7 +572,7 @@ static bool KeywordsEqual ( const XQNode_t * pA, const XQNode_t * pB )
 
 
 template < typename T >
-static ExtNode_i * CreatePhraseNode ( const XQNode_t * pQueryNode, const ISphQwordSetup & tSetup )
+static ExtNode_i * CreatePhraseNode ( const XQNode_t * pQueryNode, const ISphQwordSetup & tSetup, bool bNeedsHitlist )
 {
 	///////////////////////////////////
 	// virtually plain (expanded) node
@@ -615,17 +615,18 @@ static ExtNode_i * CreatePhraseNode ( const XQNode_t * pQueryNode, const ISphQwo
 	//////////////////////
 
 	ExtNode_i * pResult = NULL;
-	CSphVector<ISphQword *> dQwordsHit, dQwords;
+	CSphVector<ISphQword *> dQwordsHit;	// have hits
+	CSphVector<ISphQword *> dQwords;	// don't have hits
 
 	// partition phrase words
 	const CSphVector<XQKeyword_t> & dWords = pQueryNode->m_dWords;
 	ARRAY_FOREACH ( i, dWords )
 	{
 		ISphQword * pWord = CreateQueryWord ( dWords[i], tSetup );
-		if ( pWord->m_bHasHitlist )
+		if ( pWord->m_bHasHitlist || !bNeedsHitlist )
 			dQwordsHit.Add ( pWord );
 		else
-			dQwordsHit.Add ( pWord );
+			dQwords.Add ( pWord );
 	}
 
 	// see if we can create the node
@@ -770,7 +771,7 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 
 		assert ( pNode->m_iMaxDistance>=0 );
 		if ( pNode->m_iMaxDistance==0 )
-			return CreatePhraseNode<ExtPhrase_c> ( pNode, tSetup );
+			return CreatePhraseNode<ExtPhrase_c> ( pNode, tSetup, true );
 
 		if ( pNode->m_bQuorum )
 		{
@@ -788,7 +789,7 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 					tSetup.m_pWarning->SetSprintf ( "too many words (%d) for quorum; replacing with an AND", pNode->m_dWords.GetLength() );
 			}
 			else // everything is ok; create quorum node
-				return CreatePhraseNode<ExtQuorum_c> ( pNode, tSetup );
+				return CreatePhraseNode<ExtQuorum_c> ( pNode, tSetup, false );
 
 			// couldn't create quorum, make an AND node instead
 			const CSphVector<XQKeyword_t> & dWords = pNode->m_dWords;
@@ -800,7 +801,7 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 			return pCur;
 		}
 		else
-			return CreatePhraseNode<ExtProximity_c> ( pNode, tSetup );
+			return CreatePhraseNode<ExtProximity_c> ( pNode, tSetup, true );
 	}
 	else
 	{

@@ -77,6 +77,15 @@ if ( !$run )
 PublishLocals ( $locals, false );
 GuessIdSize();
 
+if ( $g_locals["malloc-scribble"] )
+{
+	print ( "Malloc scribbling enabled.\n" );
+	putenv ( "MallocLogFile=/dev/null" );	
+	putenv ( "MallocScribble=1" );
+	putenv ( "MallocPreScribble=1" );
+	putenv ( "MallocGuardEdges=1" );
+}
+
 require_once ( "helpers.inc" );
 
 /////////////

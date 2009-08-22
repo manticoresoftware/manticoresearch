@@ -31,18 +31,19 @@ $action_wait_timeout	= 50000;
 $g_locals = null;
 $g_site_defaults = array
 (
-	'queries'		=> 'queries.txt',
-	'qlimit'		=> null,
-	'api'			=> '../api/sphinxapi.php',
-	'mode'			=> 'aggregate',
-	'skip-searchd'	=> false,
-	'force-reindex'	=> false,
+	'queries'			=> 'queries.txt',
+	'qlimit'			=> null,
+	'api'				=> '../api/sphinxapi.php',
+	'mode'				=> 'aggregate',
+	'skip-searchd'		=> false,
+	'force-reindex'		=> false,
+	'malloc-scribble'	=> false,
 
-	'db-host'		=> 'localhost',
-	'db-user'		=> 'root',
-	'db-password'	=> '',
-	'db-name'		=> 'test',
-	'db-port'		=> 3306
+	'db-host'			=> 'localhost',
+	'db-user'			=> 'root',
+	'db-password'		=> '',
+	'db-name'			=> 'test',
+	'db-port'			=> 3306
 );
 
 function GetBanner ()

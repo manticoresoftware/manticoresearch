@@ -2916,6 +2916,7 @@ ISphTokenizer::ISphTokenizer ()
 	, m_iOvershortCount ( 0 )
 	, m_bShortTokenFilter ( false )
 	, m_bQueryMode ( false )
+	, m_bPhrase ( false )
 {}
 
 

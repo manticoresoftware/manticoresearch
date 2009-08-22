@@ -494,7 +494,7 @@ protected:
 	CSphSavedFile					m_tSynFileInfo;				///< synonyms file info
 
 public:
-	bool m_bPhrase;
+	bool							m_bPhrase;
 };
 
 /// parse charset table

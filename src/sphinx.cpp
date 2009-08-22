@@ -2322,7 +2322,7 @@ void CSphLowercaser::SetRemap ( const CSphLowercaser * pLC )
 }
 
 
-void CSphLowercaser::AddRemaps ( const CSphVector<CSphRemapRange> & dRemaps, DWORD uFlags, DWORD uFlagsIfExists )
+void CSphLowercaser::AddRemaps ( const CSphVector<CSphRemapRange> & dRemaps, DWORD uFlags )
 {
 	if ( !dRemaps.GetLength() )
 		return;
@@ -2396,8 +2396,8 @@ void CSphLowercaser::AddRemaps ( const CSphVector<CSphRemapRange> & dRemaps, DWO
 			assert ( m_pChunk [ j>>CHUNK_BITS ] );
 			int & iCodepoint = m_pChunk [ j>>CHUNK_BITS ] [ j & CHUNK_MASK ];
 			bool bWordPart = ( iCodepoint & MASK_CODEPOINT ) && !( iCodepoint & FLAG_CODEPOINT_SYNONYM );
-			iCodepoint = ( iCodepoint & FLAG_CODEPOINT_IGNORE ) ? ( iRemapped | uFlags ) :
-				( ( bWordPart ? uFlagsIfExists : uFlags ) | ( iCodepoint & MASK_FLAGS ) | iRemapped );
+			int iNew = iRemapped | uFlags | ( iCodepoint & MASK_FLAGS );
+			iCodepoint = bWordPart ? ( iNew | FLAG_CODEPOINT_DUAL ) : iNew;
 		}
 	}
 }
@@ -2413,9 +2413,7 @@ void CSphLowercaser::AddSpecials ( const char * sSpecials )
 	ARRAY_FOREACH ( i, dRemaps )
 		dRemaps[i].m_iStart = dRemaps[i].m_iEnd = dRemaps[i].m_iRemapStart = sSpecials[i];
 
-	AddRemaps ( dRemaps,
-		FLAG_CODEPOINT_SPECIAL,
-		FLAG_CODEPOINT_SPECIAL | FLAG_CODEPOINT_DUAL );
+	AddRemaps ( dRemaps, FLAG_CODEPOINT_SPECIAL );
 }
 
 const CSphLowercaser & CSphLowercaser::operator = ( const CSphLowercaser & rhs )
@@ -2930,7 +2928,7 @@ bool ISphTokenizer::SetCaseFolding ( const char * sConfig, CSphString & sError )
 	}
 
 	m_tLC.Reset ();
-	m_tLC.AddRemaps ( dRemaps, 0, 0 );
+	m_tLC.AddRemaps ( dRemaps, 0 );
 	return true;
 }
 
@@ -2939,7 +2937,7 @@ void ISphTokenizer::AddCaseFolding ( CSphRemapRange & tRange )
 {
 	CSphVector<CSphRemapRange> dTmp;
 	dTmp.Add ( tRange );
-	m_tLC.AddRemaps ( dTmp, 0, 0 );
+	m_tLC.AddRemaps ( dTmp, 0 );
 }
 
 
@@ -3289,7 +3287,7 @@ bool CSphTokenizerTraits<IS_UTF8>::LoadSynonyms ( const char * sFilename, CSphSt
 		tRange.m_iStart = tRange.m_iEnd = tRange.m_iRemapStart = hSynonymOnly.IterateGetKey();
 	}
 
-	m_tLC.AddRemaps ( dRemaps, FLAG_CODEPOINT_SYNONYM, 0 );
+	m_tLC.AddRemaps ( dRemaps, FLAG_CODEPOINT_SYNONYM );
 	return true;
 }
 
@@ -3310,7 +3308,7 @@ void CSphTokenizerTraits<IS_UTF8>::CloneBase ( const CSphTokenizerTraits<IS_UTF8
 		CSphRemapRange Range;
 		Range.m_iStart = Range.m_iEnd = Range.m_iRemapStart = '\\';
 		dRemaps.Add ( Range );
-		m_tLC.AddRemaps ( dRemaps, FLAG_CODEPOINT_SPECIAL, FLAG_CODEPOINT_SPECIAL | FLAG_CODEPOINT_DUAL );
+		m_tLC.AddRemaps ( dRemaps, FLAG_CODEPOINT_SPECIAL );
 	}
 }
 
@@ -3369,25 +3367,49 @@ static bool IsModifier ( int iSymbol )
 	return iSymbol=='^' || iSymbol=='$' || iSymbol=='=' || iSymbol=='*';
 }
 
+
 template < bool IS_UTF8 >
 int CSphTokenizerTraits<IS_UTF8>::CodepointArbitration ( int iCode, int iLastCodepoint )
 {
 	if ( !m_bQueryMode )
 		return iCode;
 
+	if ( iCode & FLAG_CODEPOINT_NGRAM )
+		return iCode; // ngrams are handled elsewhere
+
+	int iSymbol = iCode & MASK_CODEPOINT;
+
 	// codepoints can't be blended and special at the same time
 	if ( ( iCode & FLAG_CODEPOINT_BLEND ) && ( iCode & FLAG_CODEPOINT_SPECIAL ) )
 	{
-		int iSymbol = iCode & MASK_CODEPOINT;
 		bool bBlend =
 			( iLastCodepoint=='\\' ) || // escaped characters should always act as blended
 			( m_bPhrase && !IsModifier(iSymbol) ) || // non-modifier special inside phrase
 			( m_iAccum && ( iSymbol=='@' || iSymbol=='/' || iSymbol=='-' ) ); // some specials in the middle of a token
 
 		// clear special or blend flags
-		iCode &= bBlend ? ~FLAG_CODEPOINT_SPECIAL : ~( FLAG_CODEPOINT_BLEND | FLAG_CODEPOINT_DUAL );
+		iCode &= bBlend
+			? ~( FLAG_CODEPOINT_DUAL | FLAG_CODEPOINT_SPECIAL )
+			: ~( FLAG_CODEPOINT_DUAL | FLAG_CODEPOINT_BLEND );
 	}
 
+	// dash inside the word is not a special
+ 	if ( iSymbol=='-' && ( iCode & FLAG_CODEPOINT_SPECIAL ) && m_iAccum )
+	{
+		if ( iCode & FLAG_CODEPOINT_DUAL ) 
+			iCode &= ~( FLAG_CODEPOINT_SPECIAL | FLAG_CODEPOINT_DUAL );
+		else
+			iCode = 0;
+	}
+
+	// if we didn't remove special by now, it must win
+	if ( iCode & FLAG_CODEPOINT_DUAL  )
+	{
+		assert ( iCode & FLAG_CODEPOINT_SPECIAL );
+		iCode = iSymbol | FLAG_CODEPOINT_SPECIAL;
+	}
+
+	assert ( sphBitCount ( iCode & MASK_FLAGS ) <= 1 ); // all conflicts must be resolved here
 	return iCode;
 }
 
@@ -3860,7 +3882,7 @@ bool ISphTokenizer::RemapCharacters ( const char * sConfig, DWORD uFlags, const 
 	}
 
 	// add mapping
-	m_tLC.AddRemaps ( dRemaps, uFlags, 0 );
+	m_tLC.AddRemaps ( dRemaps, uFlags );
 	return true;
 }
 
@@ -4019,12 +4041,8 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 		}
 
 		// handle specials
-		// duals in the middle of the word are handled as if they were just plain codepoints
-		bool bSpecial =
-			( iCode & FLAG_CODEPOINT_SPECIAL ) &&
-			!( ( iCode & FLAG_CODEPOINT_DUAL ) && m_iAccum );
+		bool bSpecial = iCode & FLAG_CODEPOINT_SPECIAL;
 		iCode &= MASK_CODEPOINT;
-
 		if ( bSpecial )
 		{
 			// skip short words
@@ -4231,12 +4249,7 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 		}
 
 		// handle specials
-		// duals in the middle of the word are handled as if they were just plain codepoints
-		bool bSpecial =
-			( iCode & FLAG_CODEPOINT_SPECIAL ) &&
-			!( ( iCode & FLAG_CODEPOINT_DUAL ) && m_iAccum );
-
-		if ( bSpecial )
+		if ( iCode & FLAG_CODEPOINT_SPECIAL )
 		{
 			// skip short words preceding specials
 			if ( m_iAccum<m_tSettings.m_iMinWordLen )
@@ -4327,10 +4340,7 @@ bool CSphTokenizer_UTF8Ngram::SetNgramChars ( const char * sConfig, CSphString &
 		return false;
 	}
 
-	m_tLC.AddRemaps ( dRemaps,
-		FLAG_CODEPOINT_NGRAM | FLAG_CODEPOINT_SPECIAL,
-		FLAG_CODEPOINT_NGRAM | FLAG_CODEPOINT_SPECIAL ); // !COMMIT support other n-gram lengths than 1
-
+	m_tLC.AddRemaps ( dRemaps, FLAG_CODEPOINT_NGRAM | FLAG_CODEPOINT_SPECIAL ); // !COMMIT support other n-gram lengths than 1
 	m_sNgramCharsStr = sConfig;
 	return true;
 }

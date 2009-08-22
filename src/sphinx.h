@@ -298,7 +298,7 @@ public:
 
 	void		Reset ();
 	void		SetRemap ( const CSphLowercaser * pLC );
-	void		AddRemaps ( const CSphVector<CSphRemapRange> & dRemaps, DWORD uFlags, DWORD uFlagsIfExists );
+	void		AddRemaps ( const CSphVector<CSphRemapRange> & dRemaps, DWORD uFlags );
 	void		AddSpecials ( const char * sSpecials );
 
 public:

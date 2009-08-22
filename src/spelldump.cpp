@@ -892,7 +892,7 @@ void CISpellAffix::LoadLocale ()
 					if ( sphParseCharset ( szBuffer, dRemaps ) )
 					{
 						m_bUseLowerCaser = true;
-						m_LowerCaser.AddRemaps ( dRemaps, 0, 0 );
+						m_LowerCaser.AddRemaps ( dRemaps, 0 );
 					} else
 					{
 						printf ( "Failed to parse charset from '%s'\n", m_sCharsetFile.cstr() );

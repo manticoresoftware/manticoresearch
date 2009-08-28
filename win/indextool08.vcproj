@@ -205,6 +205,7 @@
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
+				Optimization="2"
 				PreprocessorDefinitions="WIN32;NDEBUG;_CONSOLE"
 				ExceptionHandling="0"
 				RuntimeLibrary="0"
@@ -284,6 +285,7 @@
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
+				Optimization="2"
 				PreprocessorDefinitions="WIN32;NDEBUG;_CONSOLE"
 				ExceptionHandling="0"
 				RuntimeLibrary="0"

@@ -5,10 +5,6 @@
 	Name="search"
 	ProjectGUID="{571DC41A-2665-476C-ABED-3899324E19AB}"
 	RootNamespace="search"
-	SccProjectName="Svn"
-	SccAuxPath="Svn"
-	SccLocalPath="Svn"
-	SccProvider="SubversionScc"
 	Keyword="Win32Proj"
 	TargetFrameworkVersion="131072"
 	>
@@ -79,85 +75,6 @@
 				GenerateDebugInformation="true"
 				ProgramDatabaseFile="$(OutDir)/search.pdb"
 				SubSystem="1"
-				RandomizedBaseAddress="1"
-				DataExecutionPrevention="0"
-				TargetMachine="1"
-			/>
-			<Tool
-				Name="VCALinkTool"
-			/>
-			<Tool
-				Name="VCManifestTool"
-			/>
-			<Tool
-				Name="VCXDCMakeTool"
-			/>
-			<Tool
-				Name="VCBscMakeTool"
-			/>
-			<Tool
-				Name="VCFxCopTool"
-			/>
-			<Tool
-				Name="VCAppVerifierTool"
-			/>
-			<Tool
-				Name="VCPostBuildEventTool"
-			/>
-		</Configuration>
-		<Configuration
-			Name="Release|Win32"
-			OutputDirectory="$(SolutionDir)/bin/$(PlatformName)/$(ConfigurationName)"
-			IntermediateDirectory="$(SolutionDir)/junk/$(PlatformName)/$(ConfigurationName)"
-			ConfigurationType="1"
-			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC71.vsprops"
-			CharacterSet="2"
-			ExcludeBuckets="5;6;8;9;13;14;15"
-			>
-			<Tool
-				Name="VCPreBuildEventTool"
-			/>
-			<Tool
-				Name="VCCustomBuildTool"
-			/>
-			<Tool
-				Name="VCXMLDataGeneratorTool"
-			/>
-			<Tool
-				Name="VCWebServiceProxyGeneratorTool"
-			/>
-			<Tool
-				Name="VCMIDLTool"
-			/>
-			<Tool
-				Name="VCCLCompilerTool"
-				PreprocessorDefinitions="WIN32;NDEBUG;_CONSOLE"
-				ExceptionHandling="0"
-				RuntimeLibrary="0"
-				UsePrecompiledHeader="0"
-				ProgramDataBaseFileName="$(IntDir)/$(ProjectName).pdb"
-				WarningLevel="4"
-				Detect64BitPortabilityProblems="false"
-				DebugInformationFormat="3"
-			/>
-			<Tool
-				Name="VCManagedResourceCompilerTool"
-			/>
-			<Tool
-				Name="VCResourceCompilerTool"
-			/>
-			<Tool
-				Name="VCPreLinkEventTool"
-			/>
-			<Tool
-				Name="VCLinkerTool"
-				OutputFile="$(OutDir)/search.exe"
-				LinkIncremental="1"
-				AdditionalLibraryDirectories="$(SolutionDir)/libstemmer_c/lib/$(ConfigurationName); $(SolutionDir)/libexpat/lib/$(ConfigurationName)"
-				GenerateDebugInformation="true"
-				SubSystem="1"
-				OptimizeReferences="2"
-				EnableCOMDATFolding="2"
 				RandomizedBaseAddress="1"
 				DataExecutionPrevention="0"
 				TargetMachine="1"
@@ -268,6 +185,86 @@
 			/>
 		</Configuration>
 		<Configuration
+			Name="Release|Win32"
+			OutputDirectory="$(SolutionDir)/bin/$(PlatformName)/$(ConfigurationName)"
+			IntermediateDirectory="$(SolutionDir)/junk/$(PlatformName)/$(ConfigurationName)"
+			ConfigurationType="1"
+			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC71.vsprops"
+			CharacterSet="2"
+			ExcludeBuckets="5;6;8;9;13;14;15"
+			>
+			<Tool
+				Name="VCPreBuildEventTool"
+			/>
+			<Tool
+				Name="VCCustomBuildTool"
+			/>
+			<Tool
+				Name="VCXMLDataGeneratorTool"
+			/>
+			<Tool
+				Name="VCWebServiceProxyGeneratorTool"
+			/>
+			<Tool
+				Name="VCMIDLTool"
+			/>
+			<Tool
+				Name="VCCLCompilerTool"
+				Optimization="2"
+				PreprocessorDefinitions="WIN32;NDEBUG;_CONSOLE"
+				ExceptionHandling="0"
+				RuntimeLibrary="0"
+				UsePrecompiledHeader="0"
+				ProgramDataBaseFileName="$(IntDir)/$(ProjectName).pdb"
+				WarningLevel="4"
+				Detect64BitPortabilityProblems="false"
+				DebugInformationFormat="3"
+			/>
+			<Tool
+				Name="VCManagedResourceCompilerTool"
+			/>
+			<Tool
+				Name="VCResourceCompilerTool"
+			/>
+			<Tool
+				Name="VCPreLinkEventTool"
+			/>
+			<Tool
+				Name="VCLinkerTool"
+				OutputFile="$(OutDir)/search.exe"
+				LinkIncremental="1"
+				AdditionalLibraryDirectories="$(SolutionDir)/libstemmer_c/lib/$(ConfigurationName); $(SolutionDir)/libexpat/lib/$(ConfigurationName)"
+				GenerateDebugInformation="true"
+				SubSystem="1"
+				OptimizeReferences="2"
+				EnableCOMDATFolding="2"
+				RandomizedBaseAddress="1"
+				DataExecutionPrevention="0"
+				TargetMachine="1"
+			/>
+			<Tool
+				Name="VCALinkTool"
+			/>
+			<Tool
+				Name="VCManifestTool"
+			/>
+			<Tool
+				Name="VCXDCMakeTool"
+			/>
+			<Tool
+				Name="VCBscMakeTool"
+			/>
+			<Tool
+				Name="VCFxCopTool"
+			/>
+			<Tool
+				Name="VCAppVerifierTool"
+			/>
+			<Tool
+				Name="VCPostBuildEventTool"
+			/>
+		</Configuration>
+		<Configuration
 			Name="Release|x64"
 			OutputDirectory="$(SolutionDir)/bin/$(PlatformName)/$(ConfigurationName)"
 			IntermediateDirectory="$(SolutionDir)/junk/$(PlatformName)/$(ConfigurationName)"
@@ -294,6 +291,7 @@
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
+				Optimization="2"
 				PreprocessorDefinitions="WIN32;NDEBUG;_CONSOLE"
 				ExceptionHandling="0"
 				RuntimeLibrary="0"

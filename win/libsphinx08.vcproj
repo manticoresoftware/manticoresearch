@@ -5,10 +5,6 @@
 	Name="libsphinx"
 	ProjectGUID="{6A1685DE-0265-4243-965F-96CB53EBBCA6}"
 	RootNamespace="libsphinx"
-	SccProjectName="Svn"
-	SccAuxPath="Svn"
-	SccLocalPath="Svn"
-	SccProvider="SubversionScc"
 	Keyword="Win32Proj"
 	TargetFrameworkVersion="131072"
 	>
@@ -188,6 +184,7 @@
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
+				Optimization="2"
 				AdditionalIncludeDirectories="$(SolutionDir)/libstemmer_c/include; $(SolutionDir)/libexpat/lib"
 				PreprocessorDefinitions="WIN32;NDEBUG;_LIB"
 				ExceptionHandling="0"
@@ -254,6 +251,7 @@
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
+				Optimization="2"
 				AdditionalIncludeDirectories="$(SolutionDir)/libstemmer_c/include; $(SolutionDir)/libexpat/lib"
 				PreprocessorDefinitions="WIN32;NDEBUG;_LIB"
 				ExceptionHandling="0"

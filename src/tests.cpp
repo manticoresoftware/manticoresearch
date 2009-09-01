@@ -61,6 +61,7 @@ ISphTokenizer * CreateTestTokenizer ( bool bUTF8, bool bSynonyms, bool bEscaped 
 	ISphTokenizer * pTokenizer = ISphTokenizer::Create ( tSettings, sError );
 	assert ( pTokenizer->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z, U+80..U+FF", sError ) );
 	pTokenizer->AddSpecials ( "!-" );
+	pTokenizer->EnableQueryParserMode ( true );
 	if ( bSynonyms )
 		assert ( pTokenizer->LoadSynonyms ( g_sTmpfile, sError ) );
 

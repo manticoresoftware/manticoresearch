@@ -213,8 +213,7 @@ int main ( int argc, char ** argv )
 
 		case CMD_CHECK:
 			fprintf ( stdout, "checking index '%s'...\n", sIndex.cstr() );
-			pIndex->DebugCheck ( stdout );
-			break;
+			return pIndex->DebugCheck ( stdout );
 
 		case CMD_STRIP:
 			{
@@ -228,6 +227,8 @@ int main ( int argc, char ** argv )
 		default:
 			sphDie ( "INTERNAL ERROR: unhandled command (id=%d)", (int)eCommand );
 	}
+
+	return 0;
 }
 
 //

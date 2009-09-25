@@ -1433,7 +1433,7 @@ public:
 	virtual void				DebugDumpHeader ( FILE * fp, const char * sHeaderName );
 	virtual void				DebugDumpDocids ( FILE * fp );
 	virtual void				DebugDumpHitlist ( FILE * fp, const char * sKeyword, bool bID );
-	virtual void				DebugCheck ( FILE * fp );
+	virtual int					DebugCheck ( FILE * fp );
 	template <class Qword> void	DumpHitlist ( FILE * fp, const char * sKeyword, bool bID );
 
 	virtual const CSphSchema *	Prealloc ( bool bMlock, CSphString & sWarning );
@@ -13049,7 +13049,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	}
 
 
-void CSphIndex_VLN::DebugCheck ( FILE * fp )
+int CSphIndex_VLN::DebugCheck ( FILE * fp )
 {
 	int64_t tmCheck = sphMicroTimer();
 	int iFails = 0;
@@ -13487,6 +13487,8 @@ void CSphIndex_VLN::DebugCheck ( FILE * fp )
 	else
 		fprintf ( fp, "check FAILED, %d failures reported", iFails );
 	fprintf ( fp, ", %d.%d sec elapsed\n", (int)(tmCheck/1000000), (int)((tmCheck/100000)%10) );
+
+	return Min ( iFails, 255 ); // this is the exitcode; so cap it
 }
 
 //////////////////////////////////////////////////////////////////////////

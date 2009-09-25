@@ -2263,7 +2263,7 @@ public:
 	virtual void				DebugDumpHitlist ( FILE * fp, const char * sKeyword, bool bID ) = 0;
 
 	/// internal debugging hook, DO NOT USE
-	virtual void				DebugCheck ( FILE * fp ) = 0;
+	virtual int					DebugCheck ( FILE * fp ) = 0;
 
 public:
 	DWORD						m_uAttrsStatus;			///< whether in-memory attrs are updated (compared to disk state)

@@ -4041,7 +4041,7 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 		}
 
 		// handle specials
-		bool bSpecial = iCode & FLAG_CODEPOINT_SPECIAL;
+		bool bSpecial = ( iCode & FLAG_CODEPOINT_SPECIAL )!=0;
 		iCode &= MASK_CODEPOINT;
 		if ( bSpecial )
 		{

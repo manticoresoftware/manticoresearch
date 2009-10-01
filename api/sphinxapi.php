@@ -18,13 +18,14 @@
 /////////////////////////////////////////////////////////////////////////////
 
 /// known searchd commands
-define ( "SEARCHD_COMMAND_SEARCH",	0 );
-define ( "SEARCHD_COMMAND_EXCERPT",	1 );
-define ( "SEARCHD_COMMAND_UPDATE",	2 );
-define ( "SEARCHD_COMMAND_KEYWORDS",3 );
-define ( "SEARCHD_COMMAND_PERSIST",	4 );
-define ( "SEARCHD_COMMAND_STATUS",	5 );
-define ( "SEARCHD_COMMAND_QUERY",	6 );
+define ( "SEARCHD_COMMAND_SEARCH",		0 );
+define ( "SEARCHD_COMMAND_EXCERPT",		1 );
+define ( "SEARCHD_COMMAND_UPDATE",		2 );
+define ( "SEARCHD_COMMAND_KEYWORDS",	3 );
+define ( "SEARCHD_COMMAND_PERSIST",		4 );
+define ( "SEARCHD_COMMAND_STATUS",		5 );
+define ( "SEARCHD_COMMAND_QUERY",		6 );
+define ( "SEARCHD_COMMAND_FLUSHATRS",	7 );
 
 /// current client-side command implementation versions
 define ( "VER_COMMAND_SEARCH",		0x117 );
@@ -33,6 +34,7 @@ define ( "VER_COMMAND_UPDATE",		0x102 );
 define ( "VER_COMMAND_KEYWORDS",	0x100 );
 define ( "VER_COMMAND_STATUS",		0x100 );
 define ( "VER_COMMAND_QUERY",		0x100 );
+define ( "VER_COMMAND_FLUSHATTRS",	0x100 );
 
 /// known searchd status codes
 define ( "SEARCHD_OK",				0 );
@@ -1604,6 +1606,36 @@ class SphinxClient
 		$this->_MBPop ();
 		return $res;
 	}
+
+	//////////////////////////////////////////////////////////////////////////
+	// flush
+	//////////////////////////////////////////////////////////////////////////
+
+	function FlushAttrs ()
+	{
+		$this->_MBPush ();
+		if (!( $fp = $this->_Connect() ))
+		{
+			$this->_MBPop();
+			return false;
+		}
+
+		$req = pack ( "nnN", SEARCHD_COMMAND_FLUSHATTRS, VER_COMMAND_FLUSHATTRS, 0 ); // len=0
+		if ( !( $this->_Send ( $fp, $req, 8 ) ) ||
+			 !( $response = $this->_GetResponse ( $fp, VER_COMMAND_FLUSHATTRS ) ) )
+		{
+			$this->_MBPop ();
+			return false;
+		}
+
+		$tag = -1;
+		if ( strlen($response)==4 )
+			list(,$tag) = unpack ( "N*", $response );
+
+		$this->_MBPop ();
+		return $tag;
+	}
+
 }
 
 //

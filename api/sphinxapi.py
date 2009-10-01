@@ -21,17 +21,19 @@ from struct import *
 
 
 # known searchd commands
-SEARCHD_COMMAND_SEARCH	= 0
-SEARCHD_COMMAND_EXCERPT	= 1
-SEARCHD_COMMAND_UPDATE	= 2
-SEARCHD_COMMAND_KEYWORDS= 3
-SEARCHD_COMMAND_PERSIST	= 4
+SEARCHD_COMMAND_SEARCH		= 0
+SEARCHD_COMMAND_EXCERPT		= 1
+SEARCHD_COMMAND_UPDATE		= 2
+SEARCHD_COMMAND_KEYWORDS	= 3
+SEARCHD_COMMAND_PERSIST		= 4
+SEARCHD_COMMAND_FLUSHATTRS	= 7
 
 # current client-side command implementation versions
 VER_COMMAND_SEARCH		= 0x116
 VER_COMMAND_EXCERPT		= 0x100
 VER_COMMAND_UPDATE		= 0x101
 VER_COMMAND_KEYWORDS	= 0x100
+VER_COMMAND_FLUSHATTRS	= 0x100
 
 # known searchd status codes
 SEARCHD_OK				= 0
@@ -963,6 +965,22 @@ class SphinxClient:
 	
 	def EscapeString(self, string):
 		return re.sub(r"([=\(\)|\-!@~\"&/\\\^\$\=])", r"\\\1", string)
+
+
+	def FlushAttrs(self):
+		sock = self._Connect()
+		if not sock:
+			return None
+
+		request = pack ( '>hhI', SEARCHD_COMMAND_FLUSHATTRS, VER_COMMAND_FLUSHATTRS, 0 ) # cmd, ver, bodylen
+		sock.send ( request )
+
+		response = self._GetResponse ( sock, VER_COMMAND_FLUSHATTRS )
+		if not response or len(response)!=4:
+			return -1
+
+		tag = unpack ( '>L', response[0:4] )[0]
+		return tag
 
 #
 # $Id$

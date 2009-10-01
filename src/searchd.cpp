@@ -106,7 +106,8 @@ enum ESphLogLevel
 {
 	LOG_FATAL	= 0,
 	LOG_WARNING	= 1,
-	LOG_INFO	= 2
+	LOG_INFO	= 2,
+	LOG_DEBUG	= 3
 };
 
 enum ProtocolType_e
@@ -228,10 +229,6 @@ static CSphVector<const char *>				g_dRotating;			// names of indexes to be rota
 static const char *							g_sPrereading	= NULL;	// name of index currently being preread
 static CSphIndex *							g_pPrereading	= NULL;	// rotation "buffer"
 
-static int				g_iUpdateTag		= 0;		// ever-growing update tag
-static bool				g_bFlushing			= false;	// update flushing in progress
-static int				g_iFlushTag			= 0;		// last flushed tag
-
 enum
 {
 	SPH_PIPE_UPDATED_ATTRS,
@@ -272,6 +269,7 @@ enum SearchdCommand_e
 	SEARCHD_COMMAND_PERSIST		= 4,
 	SEARCHD_COMMAND_STATUS		= 5,
 	SEARCHD_COMMAND_QUERY		= 6,
+	SEARCHD_COMMAND_FLUSHATTRS	= 7,
 
 	SEARCHD_COMMAND_TOTAL
 };
@@ -285,7 +283,8 @@ enum
 	VER_COMMAND_UPDATE		= 0x102,
 	VER_COMMAND_KEYWORDS	= 0x100,
 	VER_COMMAND_STATUS		= 0x100,
-	VER_COMMAND_QUERY		= 0x100
+	VER_COMMAND_QUERY		= 0x100,
+	VER_COMMAND_FLUSHATTRS	= 0x100
 };
 
 
@@ -301,8 +300,6 @@ enum SearchdStatus_e
 const int	MAX_RETRY_COUNT		= 8;
 const int	MAX_RETRY_DELAY		= 1000;
 
-//////////////////////////////////////////////////////////////////////////
-// PERF COUNTERS
 //////////////////////////////////////////////////////////////////////////
 
 struct SearchdStats_t
@@ -331,6 +328,18 @@ struct SearchdStats_t
 static SearchdStats_t *			g_pStats		= NULL;
 static CSphSharedBuffer<BYTE>	g_tStatsBuffer;
 static CSphProcessSharedMutex	g_tStatsMutex;
+
+
+struct FlushState_t 
+{
+	int		m_iUpdateTag;		///< ever-growing update tag
+	int		m_bFlushing;		///< update flushing in progress
+	int		m_iFlushTag;		///< last flushed tag
+	bool	m_bForceCheck;		///< forced check/flush flag
+};
+
+static volatile FlushState_t *	g_pFlush		= NULL;
+static CSphSharedBuffer<BYTE>	g_tFlushBuffer;
 
 /////////////////////////////////////////////////////////////////////////////
 // MACHINE-DEPENDENT STUFF
@@ -525,6 +534,7 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	if ( sFmt==NULL ) eLevel = eLastLevel;
 	if ( eLevel==LOG_FATAL ) sBanner = "FATAL: ";
 	if ( eLevel==LOG_WARNING ) sBanner = "WARNING: ";
+	if ( eLevel==LOG_DEBUG ) sBanner = "DEBUG: ";
 
 	char sBuf [ 1024 ];
 	if ( !g_bLogTty )
@@ -613,6 +623,14 @@ void sphLogFatal ( const char * sFmt, ... )
 	va_list ap;
 	va_start ( ap, sFmt );
 	sphLog ( LOG_FATAL, sFmt, ap );
+	va_end ( ap );
+}
+
+void sphLogDebug ( const char * sFmt, ... )
+{
+	va_list ap;
+	va_start ( ap, sFmt );
+	sphLog ( LOG_DEBUG, sFmt, ap );
 	va_end ( ap );
 }
 
@@ -5718,6 +5736,7 @@ void BuildStatus ( CSphVector<CSphString> & dStatus )
 	dStatus.Add ( "command_keywords" );			dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_KEYWORDS] );
 	dStatus.Add ( "command_persist" );			dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_PERSIST] );
 	dStatus.Add ( "command_status" );			dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_STATUS] );
+	dStatus.Add ( "command_flushattrs" );		dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iCommandCount[SEARCHD_COMMAND_FLUSHATTRS] );
 	dStatus.Add ( "agent_connect" );			dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iAgentConnect );
 	dStatus.Add ( "agent_retry" );				dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iAgentRetry );
 	dStatus.Add ( "queries" );					dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iQueries );
@@ -5839,6 +5858,51 @@ void HandleCommandStatus ( int iSock, int iVer, InputBuffer_c & tReq )
 	assert ( tOut.GetError()==true || tOut.GetSentCount()==8+iRespLen );
 }
 
+//////////////////////////////////////////////////////////////////////////
+// FLUSH HANDLER
+//////////////////////////////////////////////////////////////////////////
+
+void HandleCommandFlush ( int iSock, int iVer, InputBuffer_c & tReq )
+{
+	if ( !CheckCommandVersion ( iVer, VER_COMMAND_FLUSHATTRS, tReq ) )
+		return;
+
+	// only if flushes are enabled
+	if ( g_iAttrFlushPeriod<=0 )
+	{
+		// flushes are disabled
+		sphLogDebug ( "attrflush: attr_flush_period<=0, command ignored" );
+
+	} else if ( g_eWorkers==MPM_NONE )
+	{
+		// --console mode, no async thread/process to handle the check
+		sphLogDebug ( "attrflush: --console mode, command ignored" );
+
+	} else
+	{
+		// force a check in head process, and wait it until completes
+		// FIXME! semi active wait..
+		sphLogDebug ( "attrflush: forcing check, tag=%d", g_pFlush->m_iFlushTag );
+		g_pFlush->m_bForceCheck = true;
+		while ( g_pFlush->m_bForceCheck )
+			sphSleepMsec ( 1 );
+
+		// if we are flushing now, wait until flush completes
+		while ( g_pFlush->m_bFlushing )
+			sphSleepMsec ( 10 );
+		sphLogDebug ( "attrflush: check finished, tag=%d", g_pFlush->m_iFlushTag );
+	}
+
+	// return last flush tag, just for the fun of it
+	NetOutputBuffer_c tOut ( iSock );
+	tOut.SendWord ( SEARCHD_OK );
+	tOut.SendWord ( VER_COMMAND_FLUSHATTRS );
+	tOut.SendInt ( 4 ); // resplen, 1 dword
+	tOut.SendInt ( g_pFlush->m_iFlushTag );
+	tOut.Flush ();
+	assert ( tOut.GetError()==true || tOut.GetSentCount()==12 ); // 8+resplen
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // GENERAL HANDLER
 /////////////////////////////////////////////////////////////////////////////
@@ -5890,13 +5954,13 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD )
 
 		// check request
 		if ( iCommand<0 || iCommand>=SEARCHD_COMMAND_TOTAL
-			 || iLength<=0 || iLength>g_iMaxPacketSize )
+			 || iLength<0 || iLength>g_iMaxPacketSize )
 		{
 			// unknown command, default response header
 			tBuf.SendErrorReply ( "unknown command (code=%d)", iCommand );
 
 			// if request length is insane, low level comm is broken, so we bail out
-			if ( iLength<=0 || iLength>g_iMaxPacketSize )
+			if ( iLength<0 || iLength>g_iMaxPacketSize )
 			{
 				sphWarning ( "ill-formed client request (length=%d out of bounds)", iLength );
 				return;
@@ -5912,8 +5976,8 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD )
 		}
 
 		// get request body
-		assert ( iLength>0 && iLength<=g_iMaxPacketSize );
-		if ( !tBuf.ReadFrom ( iLength ) )
+		assert ( iLength>=0 && iLength<=g_iMaxPacketSize );
+		if ( iLength && !tBuf.ReadFrom ( iLength ) )
 		{
 			sphWarning ( "failed to receive client request body (client=%s, exp=%d)", sClientIP, iLength );
 			return;
@@ -5936,6 +6000,7 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD )
 			case SEARCHD_COMMAND_PERSIST:	bPersist = ( tBuf.GetInt()!=0 ); iTimeout = g_iClientTimeout; break;
 			case SEARCHD_COMMAND_STATUS:	HandleCommandStatus ( iSock, iCommandVer, tBuf ); break;
 			case SEARCHD_COMMAND_QUERY:		HandleCommandQuery ( iSock, iCommandVer, tBuf ); break;
+			case SEARCHD_COMMAND_FLUSHATTRS:HandleCommandFlush ( iSock,iCommandVer, tBuf ); break;
 			default:						assert ( 0 && "INTERNAL ERROR: unhandled command" ); break;
 		}
 	} while ( bPersist );
@@ -6890,7 +6955,7 @@ void HandlePipeUpdate ( PipeReader_t & tPipe, bool bFailure )
 	if ( bFailure )
 		return; // silently ignore errors
 
-	++g_iUpdateTag;
+	++g_pFlush->m_iUpdateTag;
 
 	int iUpdIndexes = tPipe.GetInt ();
 	for ( int i=0; i<iUpdIndexes; i++ )
@@ -6904,7 +6969,7 @@ void HandlePipeUpdate ( PipeReader_t & tPipe, bool bFailure )
 		ServedIndex_t * pServed = g_hIndexes(sIndex);
 		if ( pServed )
 		{
-			pServed->m_iUpdateTag = g_iUpdateTag;
+			pServed->m_iUpdateTag = g_pFlush->m_iUpdateTag;
 			pServed->m_pIndex->m_uAttrsStatus |= uStatus;
 		} else
 			sphWarning ( "INTERNAL ERROR: unknown index '%s' in HandlePipeUpdate()", sIndex.cstr() );
@@ -7015,7 +7080,7 @@ void HandlePipePreread ( PipeReader_t & tPipe, bool bFailure )
 void HandlePipeSave ( PipeReader_t & tPipe, bool bFailure )
 {
 	// in any case, we're no more flushing
-	g_bFlushing = false;
+	g_pFlush->m_bFlushing = false;
 
 	// silently ignore errors
 	if ( bFailure )
@@ -7033,7 +7098,7 @@ void HandlePipeSave ( PipeReader_t & tPipe, bool bFailure )
 		ServedIndex_t * pServed = g_hIndexes(sIndex);
 		if ( pServed )
 		{
-			if ( pServed->m_iUpdateTag<=g_iFlushTag )
+			if ( pServed->m_iUpdateTag<=g_pFlush->m_iFlushTag )
 				pServed->m_pIndex->m_uAttrsStatus = 0;
 		} else
 		{
@@ -7639,16 +7704,24 @@ void CheckReopen ()
 
 void CheckFlush ()
 {
-	if ( g_iAttrFlushPeriod<=0 || g_bFlushing )
+	if ( g_iAttrFlushPeriod<=0 || g_pFlush->m_bFlushing )
 		return;
 
-	static int64_t tmLastCheck = -1000;
-	int64_t tmNow = sphMicroTimer();
+	// do a periodic check, unless we have a forced check
+	if ( !g_pFlush->m_bForceCheck )
+	{
+		static int64_t tmLastCheck = -1000;
+		int64_t tmNow = sphMicroTimer();
 
-	if ( tmLastCheck + int64_t(g_iAttrFlushPeriod)*I64C(1000000) >= tmNow )
-		return;
+		if ( tmLastCheck + int64_t(g_iAttrFlushPeriod)*I64C(1000000) >= tmNow )
+			return;
 
-	tmLastCheck = tmNow;
+		tmLastCheck = tmNow;
+		sphLogDebug ( "attrflush: doing periodic check" );
+	} else
+	{
+		sphLogDebug ( "attrflush: doing forced check" );
+	}
 
 	// check if there are dirty indexes
 	bool bDirty = false;
@@ -7656,21 +7729,35 @@ void CheckFlush ()
 	while ( g_hIndexes.IterateNext () )
 	{
 		const ServedIndex_t & tServed = g_hIndexes.IterateGet ();
-		if ( tServed.m_bEnabled && tServed.m_iUpdateTag>g_iFlushTag )
+		if ( tServed.m_bEnabled && tServed.m_iUpdateTag>g_pFlush->m_iFlushTag )
 		{
 			bDirty = true;
 			break;
 		}
 	}
+
+	// need to set this before clearing check flag
+	if ( bDirty )
+		g_pFlush->m_bFlushing = true;
+
+	// if there was a forced check in progress, it no longer is
+	if ( g_pFlush->m_bForceCheck )
+		g_pFlush->m_bForceCheck = false;
+
+	// nothing to do, no indexes were updated
 	if ( !bDirty )
+	{
+		sphLogDebug ( "attrflush: no dirty indexes found" );
 		return;
+	}
 
 	// launch the flush!
-	g_bFlushing = true;
+	sphLogDebug ( "attrflush: forking writer" );
+	int iUpdateTag = g_pFlush->m_iUpdateTag; // avoid a race between forking writer and updating flush tag
 	int iPipeFD = PipeAndFork ( false, SPH_PIPE_SAVED_ATTRS ); // FIXME! gracefully handle fork() failures, Windows, etc
 	if ( g_bHeadDaemon )
 	{
-		g_iFlushTag = g_iUpdateTag;
+		g_pFlush->m_iFlushTag = iUpdateTag;
 		return;
 	}
 
@@ -7681,7 +7768,7 @@ void CheckFlush ()
 	while ( g_hIndexes.IterateNext () )
 	{
 		const ServedIndex_t & tServed = g_hIndexes.IterateGet ();
-		if ( tServed.m_bEnabled && tServed.m_iUpdateTag>g_iFlushTag )
+		if ( tServed.m_bEnabled && tServed.m_iUpdateTag > g_pFlush->m_iFlushTag )
 			if ( tServed.m_pIndex->SaveAttributes () ) // FIXME? report errors somehow?
 				dSaved.Add ( g_hIndexes.IterateGetKey() );
 	}
@@ -7910,6 +7997,7 @@ void ShowHelp ()
 		"-l, --listen <spec>\tlisten on given address, port or path (overrides\n"
 		"\t\t\tconfig settings)\n"
 		"-i, --index <index>\tonly serve one given index\n"
+		"--logdebug\t\tenable additional debug information logging\n"
 #if !USE_WINDOWS
 		"--nodetach\t\tdo not detach into background\n"
 #endif
@@ -8409,6 +8497,17 @@ void TickHead ( CSphProcessSharedMutex * pAcceptMutex )
 }
 
 
+void InitSharedBuffer ( CSphSharedBuffer<BYTE> & tBuffer, void ** ppBuffer, int iLen )
+{
+	CSphString sError, sWarning;
+	if ( !tBuffer.Alloc ( iLen, sError, sWarning ) )
+		sphDie ( "failed to allocate shared buffer (msg=%s)", sError.cstr() );
+
+	*ppBuffer = tBuffer.GetWritePtr(); // FIXME? should be ok even on strange platforms but..
+	memset ( *ppBuffer, 0, iLen ); // reset
+}
+
+
 int WINAPI ServiceMain ( int argc, char **argv )
 {
 	g_bLogTty = isatty ( g_iLogFile )!=0;
@@ -8487,6 +8586,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 #else
 		OPT1 ( "--nodetach" )		g_bOptNoDetach = true;
 #endif
+		OPT1 ( "--logdebug" )		g_eLogLevel = LOG_DEBUG;
 
 		// handle 1-arg options
 		else if ( (i+1)>=argc )		break;
@@ -8806,21 +8906,13 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		}
 	}
 
-	/////////////////////////
-	// perf counters startup
-	/////////////////////////
+	//////////////////////////////////////////////////
+	// shared stuff (perf counters, flushing) startup
+	//////////////////////////////////////////////////
 
-	CSphString sError, sWarning;
-	if ( !g_tStatsBuffer.Alloc ( sizeof(SearchdStats_t), sError, sWarning ) )
-	{
-		sphWarning ( "performance counters disabled (alloc error: %s)", sError.cstr() );
-		g_pStats = NULL;
-	} else
-	{
-		g_pStats = (SearchdStats_t*) g_tStatsBuffer.GetWritePtr(); // FIXME? should be ok even on strange platforms but..
-		memset ( g_pStats, 0, sizeof(SearchdStats_t) ); // reset
-		g_pStats->m_uStarted = (DWORD)time(NULL);
-	}
+	InitSharedBuffer ( g_tStatsBuffer, (void**)&g_pStats, sizeof(SearchdStats_t) );
+	InitSharedBuffer ( g_tFlushBuffer, (void**)&g_pFlush, sizeof(FlushState_t) );
+	g_pStats->m_uStarted = (DWORD)time(NULL);
 
 	////////////////////
 	// network startup

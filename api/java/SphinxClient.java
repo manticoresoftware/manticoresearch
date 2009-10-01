@@ -80,6 +80,7 @@ public class SphinxClient
 	private final static int SEARCHD_COMMAND_UPDATE		= 2;
 	private final static int SEARCHD_COMMAND_KEYWORDS	= 3;
 	private final static int SEARCHD_COMMAND_PERSIST	= 4;
+	private final static int SEARCHD_COMMAND_FLUSHATTRS	= 7;
 
 	/* searchd command versions */
 	private final static int VER_MAJOR_PROTO		= 0x1;
@@ -87,6 +88,7 @@ public class SphinxClient
 	private final static int VER_COMMAND_EXCERPT	= 0x100;
 	private final static int VER_COMMAND_UPDATE		= 0x101;
 	private final static int VER_COMMAND_KEYWORDS	= 0x100;
+	private final static int VER_COMMAND_FLUSHATTRS	= 0x100;
 
 	/* filter types */
 	private final static int SPH_FILTER_VALUES		= 0;
@@ -1288,6 +1290,37 @@ public class SphinxClient
 			return null;
 		}
 	}
+
+
+
+	/**
+     * Force attribute flush, and block until it completes.
+     * Returns current internal flush tag on success, -1 on failure.
+     */
+	public int FlushAttrs() throws SphinxException
+	{
+		/* build request */
+		ByteArrayOutputStream reqBuf = new ByteArrayOutputStream();
+
+		/* run request */
+		DataInputStream in = _DoRequest ( SEARCHD_COMMAND_FLUSHATTRS, VER_COMMAND_FLUSHATTRS, reqBuf );
+		if ( in==null )
+			return -1;
+
+		/* parse reply */
+		try
+		{
+			int iFlushTag = in.readInt ();
+			return iFlushTag;
+
+		} catch ( Exception e )
+		{
+			_error = "incomplete reply";
+			return -1;
+		}
+	}
+
+
 
 	/** Escape the characters with special meaning in query syntax. */
 	static public String EscapeString ( String s )

@@ -726,6 +726,12 @@ searchd
 	# optional, default is 1M, 0 means disable subtree optimization
 	#
 	# subtree_hits_cache	= 8M
+
+
+	# max threads to create for searching local parts of a distributed index
+	# optional, default is 0, which means disable multi-threaded searching
+	#
+	# dist_threads		= 4
 }
 
 # --eof--

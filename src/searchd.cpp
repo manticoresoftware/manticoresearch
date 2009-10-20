@@ -185,7 +185,7 @@ static int				g_iPreforkChildren	= 10;		// how much workers to keep
 static CSphVector<int>	g_dPreforked;
 static volatile bool	g_bAcceptUnlocked	= true;		// whether this preforked child is guaranteed to be *not* holding a lock around accept
 static int				g_iClientFD			= -1;
-static int				g_iDistThreads		= 4;
+static int				g_iDistThreads		= 0;
 
 struct ThdDesc_t
 {
@@ -4181,8 +4181,6 @@ int64_t sphCpuTimer ()
 
 struct LocalSearch_t
 {
-	SphThread_t			m_tThd;
-	SearchHandler_c *	m_pHandler;
 	int					m_iLocal;
 	ISphMatchSorter **	m_ppSorters;
 	CSphQueryResult **	m_ppResults;
@@ -4190,10 +4188,22 @@ struct LocalSearch_t
 };
 
 
+struct LocalSearchThreadContext_t
+{
+	SphThread_t					m_tThd;
+	SearchHandler_c *			m_pHandler;
+	CSphVector<LocalSearch_t*>	m_pSearches;
+};
+
+
 void LocalSearchThreadFunc ( void * pArg )
 {
-	LocalSearch_t * pCall = (LocalSearch_t*) pArg;
-	pCall->m_bResult = pCall->m_pHandler->RunLocalSearch ( pCall->m_iLocal, pCall->m_ppSorters, pCall->m_ppResults );
+	LocalSearchThreadContext_t * pContext = (LocalSearchThreadContext_t*) pArg;
+	ARRAY_FOREACH ( i, pContext->m_pSearches )
+	{
+		LocalSearch_t * pCall = pContext->m_pSearches[i];
+		pCall->m_bResult = pContext->m_pHandler->RunLocalSearch ( pCall->m_iLocal, pCall->m_ppSorters, pCall->m_ppResults );
+	}
 }
 
 
@@ -4241,9 +4251,9 @@ void SearchHandler_c::RunLocalSearchesMT ()
 {
 	int64_t tmLocal = sphMicroTimer();
 
-	// FIXME! create a better index:thread mapping than just 1:1; and do take dist_threads into account
+	// setup local searches
 	const int iQueries = m_iEnd-m_iStart+1;
-	CSphVector<LocalSearch_t> dThreads ( m_dLocal.GetLength() );
+	CSphVector<LocalSearch_t> dLocals ( m_dLocal.GetLength() );
 	CSphVector<CSphQueryResult> dResults ( m_dLocal.GetLength()*iQueries );
 	CSphVector<ISphMatchSorter*> pSorters ( m_dLocal.GetLength()*iQueries );
 	CSphVector<CSphQueryResult*> pResults ( m_dLocal.GetLength()*iQueries );
@@ -4251,13 +4261,29 @@ void SearchHandler_c::RunLocalSearchesMT ()
 	ARRAY_FOREACH ( i, pResults )
 		pResults[i] = &dResults[i];
 
-	// fire searcher threads
 	ARRAY_FOREACH ( i, m_dLocal )
 	{
+		dLocals[i].m_iLocal = i;
+		dLocals[i].m_ppSorters = &pSorters [ i*iQueries ];
+		dLocals[i].m_ppResults = &pResults [ i*iQueries ];
+	}
+
+	// setup threads
+	// FIXME! implement better than naive index:thread mapping
+	// FIXME! maybe implement a thread-shared jobs queue
+	CSphVector<LocalSearchThreadContext_t> dThreads ( Min ( g_iDistThreads, dLocals.GetLength() ) );
+	int iCurThread = 0;
+
+	ARRAY_FOREACH ( i, dLocals )
+	{
+		dThreads[iCurThread].m_pSearches.Add ( &dLocals[i] );
+		iCurThread = ( iCurThread+1 ) % g_iDistThreads;
+	}
+
+	// fire searcher threads
+	ARRAY_FOREACH ( i, dThreads )
+	{
 		dThreads[i].m_pHandler = this;
-		dThreads[i].m_iLocal = i;
-		dThreads[i].m_ppSorters = &pSorters [ i*iQueries ];
-		dThreads[i].m_ppResults = &pResults [ i*iQueries ];
 		sphThreadCreate ( &dThreads[i].m_tThd, LocalSearchThreadFunc, (void*)&dThreads[i] ); // FIXME! check result
 	}
 
@@ -4266,17 +4292,17 @@ void SearchHandler_c::RunLocalSearchesMT ()
 		sphThreadJoin ( &dThreads[i].m_tThd );
 
 	// now merge the results
-	ARRAY_FOREACH ( iThread, dThreads )
+	ARRAY_FOREACH ( iLocal, dLocals )
 	{
-		bool bResult = dThreads[iThread].m_bResult;
-		const char * sLocal = m_dLocal[iThread].cstr();
+		bool bResult = dLocals[iLocal].m_bResult;
+		const char * sLocal = m_dLocal[iLocal].cstr();
 
 		if ( !bResult )
 		{
 			// failed
 			for ( int iQuery=m_iStart; iQuery<=m_iEnd; iQuery++ )
 			{
-				int iResultIndex = iThread*iQueries;
+				int iResultIndex = iLocal*iQueries;
 				if ( !m_bMultiQueue )
 					iResultIndex += iQuery - m_iStart;
 				m_dFailuresSet[iQuery].SubmitEx ( sLocal, "%s", dResults[iResultIndex].m_sError.cstr() );
@@ -4288,7 +4314,7 @@ void SearchHandler_c::RunLocalSearchesMT ()
 		for ( int iQuery=m_iStart; iQuery<=m_iEnd; iQuery++ )
 		{
 			// but some of the sorters could had failed at "create sorter" stage
-			int iResultIndex = iThread*iQueries;
+			int iResultIndex = iLocal*iQueries;
 			int iSorterIndex = iResultIndex + iQuery - m_iStart;
 			if ( m_bMultiQueue )
 				iResultIndex = iSorterIndex;

@@ -25,7 +25,7 @@ define ( "SEARCHD_COMMAND_KEYWORDS",	3 );
 define ( "SEARCHD_COMMAND_PERSIST",		4 );
 define ( "SEARCHD_COMMAND_STATUS",		5 );
 define ( "SEARCHD_COMMAND_QUERY",		6 );
-define ( "SEARCHD_COMMAND_FLUSHATRS",	7 );
+define ( "SEARCHD_COMMAND_FLUSHATTRS",	7 );
 
 /// current client-side command implementation versions
 define ( "VER_COMMAND_SEARCH",		0x117 );

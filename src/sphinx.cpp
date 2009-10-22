@@ -10911,14 +10911,14 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	}
 
 	// check if index supports scans
-	if ( m_uDocinfo<=0 || m_tSettings.m_eDocinfo!=SPH_DOCINFO_EXTERN || m_pDocinfo.IsEmpty() || !m_tSchema.GetAttrsCount() )
+	if ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_EXTERN || !m_tSchema.GetAttrsCount() )
 	{
 		pResult->m_sError = "fullscan requires extern docinfo";
 		return false;
 	}
 
 	// check if index has data
-	if ( !m_tStats.m_iTotalDocuments )
+	if ( !m_tStats.m_iTotalDocuments || m_uDocinfo<=0 || m_pDocinfo.IsEmpty() )
 		return true;
 
 	// start counting

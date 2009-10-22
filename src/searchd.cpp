@@ -4354,6 +4354,9 @@ void SearchHandler_c::RunLocalSearchesMT ()
 		}
 	}
 
+	ARRAY_FOREACH ( i, pSorters )
+		SafeDelete ( pSorters[i] );
+
 	// update our wall time for every result set
 	tmLocal = sphMicroTimer() - tmLocal;
 	for ( int iQuery=m_iStart; iQuery<=m_iEnd; iQuery++ )

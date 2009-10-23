@@ -1446,7 +1446,12 @@ int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout )
 		{
 			iErr = sphSockGetErrno();
 			if ( iErr==EINTR )
-				continue;
+			{
+				if ( g_bGotSigterm )
+					return -1;
+				else
+					continue;
+			}
 
 			sphSockSetErrno ( iErr );
 			return -1;
@@ -1974,6 +1979,8 @@ bool NetInputBuffer_c::ReadFrom ( int iLen, int iTimeout )
 
 	m_pCur = m_pBuf = pBuf;
 	int iGot = sphSockRead ( m_iSock, pBuf, iLen, iTimeout );
+	if ( g_bGotSigterm )
+		return false;
 
 	m_bError = ( iGot!=iLen );
 	m_iLen = m_bError ? 0 : iLen;
@@ -6727,7 +6734,8 @@ int CreatePipe ( bool bFatal, int iHandler )
 int PipeAndFork ( bool bFatal, int iHandler )
 {
 	int iChildPipe = CreatePipe ( bFatal, iHandler );
-	switch ( fork() )
+	int iRes = fork();
+	switch ( iRes )
 	{
 		// fork() failed
 		case -1:
@@ -6745,6 +6753,7 @@ int PipeAndFork ( bool bFatal, int iHandler )
 		default:
 			g_iChildren++;
 			SafeClose ( iChildPipe );
+			g_dPreforked.Add ( iRes );
 			break;
 	}
 	return iChildPipe;
@@ -8100,7 +8109,10 @@ void CheckSignals ()
 #if !USE_WINDOWS
 		// in preforked mode, explicitly kill all children
 		ARRAY_FOREACH ( i, g_dPreforked )
+		{
+			sphInfo ( "sending SIGTERM to fork %d", g_dPreforked[i] );
 			kill ( g_dPreforked[i], SIGTERM );
+		}
 #endif
 
 		Shutdown ();

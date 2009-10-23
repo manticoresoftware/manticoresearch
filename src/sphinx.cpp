@@ -1483,6 +1483,7 @@ private:
 
 	CSphMatch					m_tMin;				///< min attribute values tracker
 	CSphSourceStats				m_tStats;			///< my stats
+	SphDocID_t					m_iMergeInfinum;	///< minimal docid-1 for merging
 
 	CSphVector<CSphWordlistCheckpoint>	m_dWordlistCheckpoints;	///< wordlist checkpoint offsets
 
@@ -6604,6 +6605,7 @@ CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename )
 	m_iKillListSize = 0;
 
 	m_iIndexTag = -1;
+	m_iMergeInfinum = 0;
 }
 
 
@@ -9896,11 +9898,15 @@ static ISphFilter * CreateMergeFilters ( CSphVector<CSphFilterSettings> & dSetti
 
 class CSphMerger
 {
-public:
- 	CSphIndex_VLN * m_pOutputIndex;
+private:
+	CSphIndex_VLN * m_pOutputIndex;
 
+public:
+	explicit CSphMerger ( CSphIndex_VLN * pOutputIndex )
+		: m_pOutputIndex ( pOutputIndex )
+	{}
 	template < typename QWORD > static inline
-	void PrepareQword ( QWORD & tQword, const CSphDictReader & tReader, int iDynamic, SphDocID_t iMinID )
+	void PrepareQword ( QWORD & tQword, const CSphDictReader & tReader, int iDynamic, SphDocID_t iMinID ) //NOLINT
 	{
 		tQword.m_tDoc.Reset ( iDynamic );
 		tQword.m_iMinID = iMinID;
@@ -10034,7 +10040,11 @@ bool CSphIndex_VLN::MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter
 	const SphDocID_t iDstMinID = m_tMin.m_iDocID;
 	const SphDocID_t iSrcMinID = pSrcIndex->m_tMin.m_iDocID;
 
-	m_tMin.m_iDocID = Min ( iDstMinID, iSrcMinID );
+	// correct infinum might be already set during spa merging.
+	if ( !m_iMergeInfinum )
+		m_tMin.m_iDocID = Min ( iDstMinID, iSrcMinID );
+	else
+		m_tMin.m_iDocID = m_iMergeInfinum;
 
 	m_dWordlistCheckpoints.Reset();
 
@@ -10068,8 +10078,7 @@ bool CSphIndex_VLN::MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter
 
 	/// merge
 
-	CSphMerger tMerge;
-	tMerge.m_pOutputIndex = this;
+	CSphMerger tMerge(this);
 
 	bool bDstWord = tDstReader.Read();
 	bool bSrcWord = tSrcReader.Read();
@@ -10278,6 +10287,29 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 
 	int iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 
+	// create filters
+	ISphFilter * pFilter = CreateMergeFilters ( dFilters, m_tSchema, GetMVAPool() );
+	if ( !bMergeKillLists )
+	{
+		DWORD nKillListSize = pSrcIndex->GetKillListSize ();
+		if ( nKillListSize )
+		{
+			CSphFilterSettings tKillListFilter;
+			SphAttr_t * pKillList = pSrcIndex->GetKillList ();
+
+			tKillListFilter.m_bExclude = true;
+			tKillListFilter.m_eType = SPH_FILTER_VALUES;
+			tKillListFilter.m_uMinValue = pKillList [0];
+			tKillListFilter.m_uMaxValue = pKillList [nKillListSize -1];
+			tKillListFilter.m_sAttrName = "@id";
+			tKillListFilter.SetExternalValues ( pKillList, nKillListSize );
+
+			ISphFilter * pKillListFilter =
+				sphCreateFilter ( tKillListFilter, m_tSchema, GetMVAPool(), m_sLastError );
+			pFilter = sphJoinFilters ( pFilter, pKillListFilter );
+		}
+	}
+
 	/////////////////////////////////////////
 	// merging attributes (.spa, .spm, .sps)
 	/////////////////////////////////////////
@@ -10312,8 +10344,12 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 	}
 
 	CSphDocMVA	tDstMVA ( dMvaLocators.GetLength() ), tSrcMVA ( dMvaLocators.GetLength() );
+	CSphVector<SphAttr_t> dPhantomKiller;
 
-	int iDeltaTotalDocs = 0;
+	int iTotalDocuments = 0;
+	bool bNeedInfinum = true;
+	m_iMergeInfinum = 0;
+
 	if ( m_tSettings.m_eDocinfo == SPH_DOCINFO_EXTERN && pSrcIndex->m_tSettings.m_eDocinfo == SPH_DOCINFO_EXTERN )
 	{
 		CSphWriter wrRows;
@@ -10329,13 +10365,27 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 		tDstMVA.Read( tDstSPM );
 		tSrcMVA.Read( tSrcSPM );
 
+		CSphMatch tMatch;
 		while( iSrcCount < pSrcIndex->m_uDocinfo || iDstCount < m_uDocinfo )
 		{
 			SphDocID_t iDstDocID, iSrcDocID;
 
 			if ( iDstCount < m_uDocinfo )
+			{
 				iDstDocID = DOCINFO2ID(pDstRow);
-			else
+				if ( pFilter )
+				{
+					tMatch.m_iDocID = iDstDocID;
+					tMatch.m_pStatic = reinterpret_cast<CSphRowitem *> ( DOCINFO2ATTRS ( pDstRow ) );
+					tMatch.m_pDynamic = NULL;
+					if ( !pFilter->Eval ( tMatch ) )
+					{
+						pDstRow += iStride;
+						iDstCount++;
+						continue;
+					}
+				}
+			} else
 				iDstDocID = 0;
 
 			if ( iSrcCount < pSrcIndex->m_uDocinfo )
@@ -10362,6 +10412,12 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 				wrRows.PutBytes ( pDstRow, sizeof(DWORD)*iStride );
 				pDstRow += iStride;
 				iDstCount++;
+				iTotalDocuments++;
+				if ( bNeedInfinum )
+				{
+					bNeedInfinum = false;
+					m_iMergeInfinum = iDstDocID - 1;
+				}
 
 			} else if ( iSrcDocID )
 			{
@@ -10383,10 +10439,16 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 				wrRows.PutBytes ( pSrcRow, sizeof(DWORD)*iStride );
 				pSrcRow += iStride;
 				iSrcCount++;
+				iTotalDocuments++;
+				dPhantomKiller.Add(iSrcDocID);
+				if ( bNeedInfinum )
+				{
+					bNeedInfinum = false;
+					m_iMergeInfinum = iSrcDocID - 1;
+				}
 
 				if ( iDstDocID==iSrcDocID )
 				{
-					iDeltaTotalDocs++;
 					pDstRow += iStride;
 					iDstCount++;
 				}
@@ -10413,26 +10475,18 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 		fdSpa.Close();
 	}
 
-	// create filters
-	ISphFilter * pFilter = CreateMergeFilters ( dFilters, m_tSchema, GetMVAPool() );
-	if ( !bMergeKillLists )
+	// create phantom killlist filter
+	if ( dPhantomKiller.GetLength() )
 	{
-		DWORD nKillListSize = pSrcIndex->GetKillListSize ();
-		if ( nKillListSize )
-		{
-			CSphFilterSettings tKillListFilter;
-			SphAttr_t * pKillList = pSrcIndex->GetKillList ();
-
-			tKillListFilter.m_bExclude = true;
-			tKillListFilter.m_eType = SPH_FILTER_VALUES;
-			tKillListFilter.m_uMinValue = pKillList [0];
-			tKillListFilter.m_uMaxValue = pKillList [nKillListSize -1];
-			tKillListFilter.m_sAttrName = "@id";
-			tKillListFilter.SetExternalValues ( pKillList, nKillListSize );
-
-			ISphFilter * pKillListFilter = sphCreateFilter ( tKillListFilter, m_tSchema, GetMVAPool(), m_sLastError );
-			pFilter = sphJoinFilters ( pFilter, pKillListFilter );
-		}
+		CSphFilterSettings tKLF;
+		tKLF.m_bExclude = true;
+		tKLF.m_eType = SPH_FILTER_VALUES;
+		tKLF.m_uMinValue = dPhantomKiller[0];
+		tKLF.m_uMaxValue = dPhantomKiller.Last();
+		tKLF.m_sAttrName = "@id";
+		tKLF.SetExternalValues ( &dPhantomKiller[0], dPhantomKiller.GetLength() );
+		ISphFilter * pSpaFilter = sphCreateFilter ( tKLF, m_tSchema, GetMVAPool(), m_sLastError );
+		pFilter = sphJoinFilters ( pFilter, pSpaFilter );
 	}
 	CSphScopedPtr<ISphFilter> pScopedFilter ( pFilter );
 
@@ -10445,8 +10499,9 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 				return false;
 		} ) );
 
+	if ( iTotalDocuments )
+		m_tStats.m_iTotalDocuments = iTotalDocuments;
 	// merge kill-lists
-
 	CSphAutofile fdKillList ( GetIndexFileName("spk.tmp"), SPH_O_NEW, m_sLastError );
 	if ( fdKillList.GetFD () < 0 )
 		return false;

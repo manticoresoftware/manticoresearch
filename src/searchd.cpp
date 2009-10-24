@@ -195,7 +195,7 @@ struct ThdDesc_t
 	CSphString		m_sClientName;
 };
 
-static CSphMutex				g_tThdMutex;
+static CSphStaticMutex				g_tThdMutex;
 static CSphVector<ThdDesc_t*>	g_dThd;			///< existing threads tables
 
 //////////////////////////////////////////////////////////////////////////

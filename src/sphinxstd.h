@@ -1604,6 +1604,26 @@ protected:
 };
 
 
+/// static mutex (for globals) - merged from r1985
+class CSphStaticMutex : public CSphMutex
+{
+public:
+	CSphStaticMutex()
+	{
+#ifndef NDEBUG
+		assert ( Init() );
+#else
+		Init();
+#endif
+	}
+
+	~CSphStaticMutex()
+	{
+		Done();
+	}
+};
+
+
 /// rwlock implementation
 class CSphRwlock
 {

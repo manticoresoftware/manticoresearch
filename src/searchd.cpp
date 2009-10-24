@@ -182,7 +182,7 @@ enum Mpm_e
 static Mpm_e			g_eWorkers			= USE_WINDOWS ? MPM_NONE : MPM_FORK;
 
 static int				g_iPreforkChildren	= 10;		// how much workers to keep
-static CSphVector<int>	g_dPreforked;
+static CSphVector<int>	g_dChildren;
 static volatile bool	g_bAcceptUnlocked	= true;		// whether this preforked child is guaranteed to be *not* holding a lock around accept
 static int				g_iClientFD			= -1;
 static int				g_iDistThreads		= 0;
@@ -1445,13 +1445,8 @@ int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout )
 		if ( iRes==-1 )
 		{
 			iErr = sphSockGetErrno();
-			if ( iErr==EINTR )
-			{
-				if ( g_bGotSigterm )
-					return -1;
-				else
-					continue;
-			}
+			if ( iErr==EINTR && !g_bGotSigterm )
+				continue;
 
 			sphSockSetErrno ( iErr );
 			return -1;
@@ -6753,7 +6748,7 @@ int PipeAndFork ( bool bFatal, int iHandler )
 		default:
 			g_iChildren++;
 			SafeClose ( iChildPipe );
-			g_dPreforked.Add ( iRes );
+			g_dChildren.Add ( iRes );
 			break;
 	}
 	return iChildPipe;
@@ -7651,8 +7646,8 @@ void CheckRotate ()
 
 #if !USE_WINDOWS
 		if ( g_eWorkers==MPM_PREFORK )
-			ARRAY_FOREACH ( i, g_dPreforked )
-				kill ( g_dPreforked[i], SIGTERM );
+			ARRAY_FOREACH ( i, g_dChildren )
+				kill ( g_dChildren[i], SIGTERM );
 #endif
 
 		g_bDoRotate = false;
@@ -8077,7 +8072,7 @@ int PreforkChild ()
 
 	// parent process
 	g_iChildren++;
-	g_dPreforked.Add ( iRes );
+	g_dChildren.Add ( iRes );
 	return iRes;
 }
 #endif // !USE_WINDOWS
@@ -8108,10 +8103,10 @@ void CheckSignals ()
 
 #if !USE_WINDOWS
 		// in preforked mode, explicitly kill all children
-		ARRAY_FOREACH ( i, g_dPreforked )
+		ARRAY_FOREACH ( i, g_dChildren )
 		{
-			sphInfo ( "sending SIGTERM to fork %d", g_dPreforked[i] );
-			kill ( g_dPreforked[i], SIGTERM );
+			sphLogDebug ( "killing child %d", g_dChildren[i] );
+			kill ( g_dChildren[i], SIGTERM );
 		}
 #endif
 
@@ -8130,13 +8125,13 @@ void CheckSignals ()
 				break;
 
 			g_iChildren--;
-			g_dPreforked.RemoveValue ( iChildPid ); // FIXME! OPTIMIZE! can be slow
+			g_dChildren.RemoveValue ( iChildPid ); // FIXME! OPTIMIZE! can be slow
 		}
 		g_bGotSigchld = false;
 
 		// prefork more children, if needed
 		if ( g_eWorkers==MPM_PREFORK )
-			while ( g_dPreforked.GetLength() < g_iPreforkChildren )
+			while ( g_dChildren.GetLength() < g_iPreforkChildren )
 				if ( PreforkChild()==0 ) // child process? break from here, go work
 					return;
 	}
@@ -9256,7 +9251,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		if ( !pAcceptMutex )
 			sphFatal ( "failed to create process-shared mutex" );
 
-		while ( g_dPreforked.GetLength() < g_iPreforkChildren )
+		while ( g_dChildren.GetLength() < g_iPreforkChildren )
 			if ( PreforkChild()==0 ) // child process? break from here, go work
 				break;
 	}

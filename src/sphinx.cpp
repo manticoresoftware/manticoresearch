@@ -10089,7 +10089,7 @@ bool CSphIndex_VLN::MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter
 		m_pProgress ( &m_tProgress, false );
 	}
 
-	int iDocsDelta = 0, iWords = 0;
+	int iWords = 0;
 	int iHitlistsDiscarded = 0;
 	while ( bDstWord || bSrcWord )
 	{
@@ -10181,7 +10181,6 @@ bool CSphIndex_VLN::MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter
 					assert ( bSrcDocs );
 					assert ( tDstQword.m_tDoc.m_iDocID==tSrcQword.m_tDoc.m_iDocID );
 
-					iDocsDelta++;
 					tHit.m_iDocID = tDstQword.m_tDoc.m_iDocID - m_tMin.m_iDocID;
 
 					if ( bHitless )
@@ -10237,7 +10236,7 @@ bool CSphIndex_VLN::MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter
 		}
 	}
 
-	m_tStats.m_iTotalDocuments += pSrcIndex->m_tStats.m_iTotalDocuments - iDocsDelta;
+	m_tStats.m_iTotalDocuments += pSrcIndex->m_tStats.m_iTotalDocuments;
 	m_tStats.m_iTotalBytes += pSrcIndex->m_tStats.m_iTotalBytes;
 
 	m_tProgress.m_iWords += iWords;

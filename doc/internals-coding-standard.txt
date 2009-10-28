@@ -120,6 +120,7 @@ protected:
 	- "b" means boolean
 	- "c" means char
 	- "f" means float
+	- "h" means hash, i.e. associative array (like std::map)
 	- "p" means pointer
 	- "pp" means pointer to pointer
 	- "s" means string (both CSphString and char *)

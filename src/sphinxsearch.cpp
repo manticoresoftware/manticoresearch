@@ -192,7 +192,6 @@ public:
 
 protected:
 	ISphQword *					m_pQword;
-	DWORD						m_uQuerypos;
 	ExtDoc_t *					m_pHitDoc;		///< points to entry in m_dDocs which GetHitsChunk() currently emits hits for
 	SphDocID_t					m_uHitsOverFor;	///< there are no more hits for matches block starting with this ID
 	DWORD						m_uFields;		///< accepted fields mask
@@ -847,7 +846,7 @@ ExtTerm_c::ExtTerm_c ( ISphQword * pQword, DWORD uFields, const ISphQwordSetup &
 	: m_pQword ( pQword )
 	, m_pWarning ( tSetup.m_pWarning )
 {
-	m_uQuerypos = pQword->m_iAtomPos;
+	m_iAtomPos = pQword->m_iAtomPos;
 	m_pHitDoc = NULL;
 	m_uHitsOverFor = 0;
 	m_uFields = uFields;
@@ -986,7 +985,7 @@ const ExtHit_t * ExtTerm_c::GetHitsChunk ( const ExtDoc_t * pMatched, SphDocID_t
 		ExtHit_t & tHit = m_dHits[iHit++];
 		tHit.m_uDocid = pDoc->m_uDocid;
 		tHit.m_uHitpos = uHit;
-		tHit.m_uQuerypos = m_uQuerypos;
+		tHit.m_uQuerypos = m_iAtomPos;
 		tHit.m_uSpanlen = tHit.m_uWeight = 1;
 	}
 
@@ -1083,7 +1082,7 @@ const ExtHit_t * ExtTermHitless_c::GetHitsChunk ( const ExtDoc_t * pMatched, Sph
 				ExtHit_t & tHit = m_dHits[iHit++];
 				tHit.m_uDocid = pDoc->m_uDocid;
 				tHit.m_uHitpos = HIT_PACK ( m_uFieldPos, -1 );
-				tHit.m_uQuerypos = m_uQuerypos;
+				tHit.m_uQuerypos = m_iAtomPos;
 				tHit.m_uSpanlen = tHit.m_uWeight = 1;
 
 				if ( iHit==MAX_HITS-1 )
@@ -1376,7 +1375,9 @@ ExtTwofer_c::ExtTwofer_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const ISphQw
 	m_pCurDoc[0] = NULL;
 	m_pCurDoc[1] = NULL;
 	m_uMatchedDocid = 0;
-
+	m_iAtomPos = ( pFirst && pFirst->m_iAtomPos ) ? pFirst->m_iAtomPos : 0;
+	if ( pSecond && pSecond->m_iAtomPos && pSecond->m_iAtomPos<m_iAtomPos && m_iAtomPos!=0 )
+		m_iAtomPos = pSecond->m_iAtomPos;
 	AllocDocinfo ( tSetup );
 }
 
@@ -1830,6 +1831,7 @@ ExtPhrase_c::ExtPhrase_c ( CSphVector<ExtNode_i *> & dQwords, DWORD, const XQNod
 
 	m_uMinQpos = dQwords[0]->m_iAtomPos;
 	m_uMaxQpos = dQwords.Last()->m_iAtomPos;
+	m_iAtomPos = m_uMinQpos;
 
 	m_dQposDelta.Resize ( m_uMaxQpos-m_uMinQpos+1 );
 	ARRAY_FOREACH ( i, m_dQposDelta )
@@ -2434,6 +2436,9 @@ ExtQuorum_c::ExtQuorum_c ( CSphVector<ExtNode_i*> & dQwords, DWORD uDupeMask, co
 	assert ( m_iThresh>=1 ); // 1 is also OK; it's a bit different from just OR
 	assert ( m_iThresh<dQwords.GetLength() ); // use AND instead
 
+	if ( dQwords.GetLength()>0 )
+		m_iAtomPos = dQwords[0]->m_iAtomPos;
+
 	ARRAY_FOREACH ( i, dQwords )
 	{
 		m_dChildren.Add ( dQwords[i] );
@@ -2660,6 +2665,9 @@ ExtOrder_c::ExtOrder_c ( const CSphVector<ExtNode_i *> & dChildren, const ISphQw
 	m_pHits.Resize ( iChildren );
 	m_pDocsChunk.Resize ( iChildren );
 	m_dMaxID.Resize ( iChildren );
+
+	if ( dChildren.GetLength()>0 )
+		m_iAtomPos = dChildren[0]->m_iAtomPos;
 
 	ARRAY_FOREACH ( i, dChildren )
 	{
@@ -3680,6 +3688,7 @@ private:
 	CSphVector<ExtDoc_t>			m_Docs;
 	CSphVector<ExtHit_t>			m_Hits;
 	CSphVector<CSphRowitem>			m_InlineAttrs;
+	int								m_iAtomPos; // minimal position from original donor, used for shifting
 
 	CSphQueryNodeCache *			m_pNodeCache;
 
@@ -3688,6 +3697,7 @@ public:
 		: m_iRefCount ( 1 )
 		, m_StateOk ( true )
 		, m_pSetup ( NULL )
+		, m_iAtomPos ( 0 )
 		, m_pNodeCache ( NULL )
 	{}
 
@@ -3710,6 +3720,7 @@ private:
 /// (special container actually carries all the data and does the work, see blow)
 class ExtNodeCached_t : public ExtNode_i
 {
+	friend class NodeCacheContainer_t;
 	NodeCacheContainer_t *		m_pNode;
 	ExtDoc_t *					m_pHitDoc;			///< points to entry in m_dDocs which GetHitsChunk() currently emits hits for
 	SphDocID_t					m_uHitsOverFor;		///< there are no more hits for matches block starting with this ID
@@ -3721,7 +3732,7 @@ class ExtNodeCached_t : public ExtNode_i
 
 	void StepForwardToHitsFor ( SphDocID_t uDocId );
 
-public:
+	// creation possible ONLY via NodeCacheContainer_t
 	explicit ExtNodeCached_t ( NodeCacheContainer_t * pNode, ExtNode_i * pChild )
 		: m_pNode ( pNode )
 		, m_pHitDoc ( NULL )
@@ -3731,8 +3742,11 @@ public:
 		, m_iHitIndex ( 0 )
 		, m_iDocIndex ( 0 )
 		, m_pChild ( pChild )
-	{}
+	{
+		m_iAtomPos = pChild->m_iAtomPos;
+	}
 
+public:
 	virtual ~ExtNodeCached_t ()
 	{
 		SafeDelete ( m_pChild );
@@ -3800,6 +3814,7 @@ ExtNode_i * NodeCacheContainer_t::CreateCachedWrapper ( ExtNode_i * pChild, cons
 bool NodeCacheContainer_t::WarmupCache ( ExtNode_i * pChild )
 {
 	SphDocID_t pMaxID = 0;
+	m_iAtomPos = pChild->m_iAtomPos;
 	const ExtDoc_t * pChunk = pChild->GetDocsChunk ( &pMaxID );
 	int iStride = 0;
 	assert ( m_pSetup );
@@ -4008,7 +4023,8 @@ const ExtHit_t * ExtNodeCached_t::GetHitsChunk( const ExtDoc_t * pMatched, SphDo
 			continue;
 		}
 		m_iHitIndex++;
-		m_dHits[iHit++] = tCachedHit;
+		m_dHits[iHit] = tCachedHit;
+		m_dHits[iHit++].m_uQuerypos += m_iAtomPos - m_pNode->m_iAtomPos;
 	}
 
 	m_pHitDoc = pDoc;

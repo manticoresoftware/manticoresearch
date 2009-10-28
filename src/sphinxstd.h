@@ -1021,6 +1021,33 @@ public:
 		return m_pIterator->m_tKey;
 	}
 
+	// go to next existing entry in terms of external independed iterator
+	bool IterateNext ( void ** ppCookie ) const
+	{
+		HashEntry_t ** ppIterator = reinterpret_cast < HashEntry_t** > ( ppCookie );
+		*ppIterator = ( *ppIterator ) ? ( *ppIterator )->m_pNextByOrder : m_pFirstByOrder;
+		return ( *ppIterator )!=NULL;
+	}
+
+	/// get entry value in terms of external independed iterator
+	static T & IterateGet ( void ** ppCookie )
+	{
+		assert ( ppCookie );
+		HashEntry_t ** ppIterator = reinterpret_cast < HashEntry_t** > ( ppCookie );
+		assert ( *ppIterator );
+		return ( *ppIterator )->m_tValue;
+	}
+
+	/// get entry key in terms of external independed iterator
+	static const KEY & IterateGetKey ( void ** ppCookie )
+	{
+		assert ( ppCookie );
+		HashEntry_t ** ppIterator = reinterpret_cast < HashEntry_t** > ( ppCookie );
+		assert ( *ppIterator );
+		return ( *ppIterator )->m_tKey;
+	}
+
+
 private:
 	/// current iterator
 	mutable HashEntry_t *	m_pIterator;

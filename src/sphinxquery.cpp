@@ -950,7 +950,7 @@ bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const ISp
 
 /// Decides if given pTree is appropriate for caching or not. Currently we don't cache
 /// the end values (leafs).
-static bool IsAppropriate ( XQNode_t * pTree )
+static bool IsNotLeaf ( XQNode_t * pTree )
 {
 	if ( !pTree ) return false;
 
@@ -1111,7 +1111,7 @@ private:
 	// where a list of parents associated with every "leaf" nodes (i.e. with children)
 	bool BuildAssociations ( XQNode_t * pTree )
 	{
-		if ( IsAppropriate ( pTree ) )
+		if ( IsNotLeaf ( pTree ) )
 		{
 			ARRAY_FOREACH ( i, pTree->m_dChildren )
 			if ( ( !BuildAssociations ( pTree->m_dChildren[i] ) )
@@ -1144,7 +1144,7 @@ private:
 	// of common nodes it has as children
 	void BuildBitmasks ( XQNode_t * pTree )
 	{
-		if ( !IsAppropriate ( pTree ) )
+		if ( !IsNotLeaf ( pTree ) )
 			return;
 
 		if ( m_eOp==pTree->GetOp() )
@@ -1245,7 +1245,7 @@ private:
 	// and (recursively) from it's children
 	void Reorganize ( XQNode_t * pTree )
 	{
-		if ( !IsAppropriate ( pTree ) )
+		if ( !IsNotLeaf ( pTree ) )
 			return;
 
 		if ( m_eOp==pTree->GetOp() )
@@ -1412,7 +1412,7 @@ typedef CSphOrderedHash < MarkedNode_t, uint64_t, IdentityHash_fn, 128, 117 > CS
 static void FlagCommonSubtrees ( XQNode_t * pTree,
 	CSubtreeHash & hSubTrees, bool bFlag=true, bool bMarkIt=true )
 {
-	if ( !IsAppropriate ( pTree ) )
+	if ( !IsNotLeaf ( pTree ) )
 		return;
 
 	// we do not yet have any collisions stats,

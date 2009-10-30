@@ -156,16 +156,9 @@ bool XQNode_t::IsEqualTo ( const XQNode_t * pNode )
 	if ( !m_dChildren.GetLength() )
 		return true;
 
-	CSphOrderedHash < XQNode_t *, uint64_t, IdentityHash_fn, 128, 117 > hChildrenSubset;
-	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		hChildrenSubset.Add ( pNode->m_dChildren[i], pNode->m_dChildren[i]->GetHash() );
-
 	ARRAY_FOREACH ( i, m_dChildren )
-	{
-		XQNode_t ** ppLookup = hChildrenSubset ( m_dChildren[i]->GetHash() );
-		if ( !ppLookup || !(*ppLookup)->IsEqualTo(m_dChildren[i]) )
+		if ( !pNode->m_dChildren[i]->IsEqualTo ( m_dChildren[i] ) )
 			return false;
-	}
 	return true;
 }
 
@@ -950,7 +943,7 @@ bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const ISp
 
 /// Decides if given pTree is appropriate for caching or not. Currently we don't cache
 /// the end values (leafs).
-static bool IsNotLeaf ( XQNode_t * pTree )
+static bool IsAppropriate ( XQNode_t * pTree )
 {
 	if ( !pTree ) return false;
 
@@ -1111,7 +1104,7 @@ private:
 	// where a list of parents associated with every "leaf" nodes (i.e. with children)
 	bool BuildAssociations ( XQNode_t * pTree )
 	{
-		if ( IsNotLeaf ( pTree ) )
+		if ( IsAppropriate ( pTree ) )
 		{
 			ARRAY_FOREACH ( i, pTree->m_dChildren )
 			if ( ( !BuildAssociations ( pTree->m_dChildren[i] ) )
@@ -1144,7 +1137,7 @@ private:
 	// of common nodes it has as children
 	void BuildBitmasks ( XQNode_t * pTree )
 	{
-		if ( !IsNotLeaf ( pTree ) )
+		if ( !IsAppropriate ( pTree ) )
 			return;
 
 		if ( m_eOp==pTree->GetOp() )
@@ -1245,7 +1238,7 @@ private:
 	// and (recursively) from it's children
 	void Reorganize ( XQNode_t * pTree )
 	{
-		if ( !IsNotLeaf ( pTree ) )
+		if ( !IsAppropriate ( pTree ) )
 			return;
 
 		if ( m_eOp==pTree->GetOp() )
@@ -1412,7 +1405,7 @@ typedef CSphOrderedHash < MarkedNode_t, uint64_t, IdentityHash_fn, 128, 117 > CS
 static void FlagCommonSubtrees ( XQNode_t * pTree,
 	CSubtreeHash & hSubTrees, bool bFlag=true, bool bMarkIt=true )
 {
-	if ( !IsNotLeaf ( pTree ) )
+	if ( !IsAppropriate ( pTree ) )
 		return;
 
 	// we do not yet have any collisions stats,

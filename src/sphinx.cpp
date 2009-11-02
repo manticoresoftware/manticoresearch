@@ -7286,6 +7286,7 @@ struct CmpHit_fn
 struct DocinfoSort_fn
 {
 	typedef SphDocID_t MEDIAN_TYPE;
+	typedef DWORD * PTR_TYPE;
 
 	int m_iStride;
 
@@ -7293,30 +7294,35 @@ struct DocinfoSort_fn
 		: m_iStride ( iStride )
 	{}
 
-	DWORD * Get ( DWORD * pBase, int iIndex ) const
+	SphDocID_t Key ( DWORD * pData ) const
 	{
-		return pBase + iIndex*m_iStride;
+		return DOCINFO2ID(pData);
 	}
 
-	void GetMedian ( SphDocID_t & tMedian, const DWORD * pData ) const
+	void CopyKey ( SphDocID_t * pMed, DWORD * pVal ) const
 	{
-		tMedian = DOCINFO2ID(pData);
+		*pMed = Key(pVal);
 	}
 
-	bool IsLess ( const DWORD * a, SphDocID_t b ) const
+	bool IsLess ( SphDocID_t a, SphDocID_t b ) const
 	{
-		return DOCINFO2ID(a) < b;
-	}
-
-	bool IsLess ( SphDocID_t a, const DWORD * b ) const
-	{
-		return a < DOCINFO2ID(b);
+		return a < b;
 	}
 
 	void Swap ( DWORD * a, DWORD * b ) const
 	{
 		for ( int i=0; i<m_iStride; i++ )
 			::Swap ( a[i], b[i] );
+	}
+
+	DWORD * Add ( DWORD * p, int i ) const
+	{
+		return p+i*m_iStride;
+	}
+
+	int Sub ( DWORD * b, DWORD * a ) const
+	{
+		return (int)((b-a)/m_iStride);
 	}
 };
 

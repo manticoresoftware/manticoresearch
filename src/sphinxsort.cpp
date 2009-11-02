@@ -734,7 +734,7 @@ public:
 
 /// group sorting functor
 template < typename COMPGROUP >
-struct GroupSorter_fn : public CSphMatchComparatorState
+struct GroupSorter_fn : public CSphMatchComparatorState, public SphAccessor_T<CSphMatch>
 {
 	typedef CSphMatch MEDIAN_TYPE;
 
@@ -745,24 +745,20 @@ struct GroupSorter_fn : public CSphMatchComparatorState
 		m_iDynamic = 0;
 	}
 
-	CSphMatch & Get ( CSphMatch * pBase, int iIndex ) const
+	void CopyKey ( MEDIAN_TYPE * pMed, CSphMatch * pVal ) const
 	{
-		return pBase[iIndex];
-	}
-
-	void GetMedian ( CSphMatch & tMedian, const CSphMatch & tValue ) const
-	{
-		tMedian.Clone ( tValue, m_iDynamic );
-	}
-
-	void Swap ( CSphMatch & a, CSphMatch & b ) const
-	{
-		::Swap ( a, b );
+		pMed->Clone ( *pVal, m_iDynamic );
 	}
 
 	bool IsLess ( const CSphMatch & a, const CSphMatch & b ) const
 	{
 		return COMPGROUP::IsLess ( b, a, *this );
+	}
+
+	// inherited swap does not work on gcc
+	void Swap ( CSphMatch * a, CSphMatch * b ) const
+	{
+		::Swap ( *a, *b );
 	}
 };
 

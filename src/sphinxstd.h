@@ -341,49 +341,143 @@ struct SphAccessor_T
 {
 	typedef T MEDIAN_TYPE;
 
-	T & Get ( T * pBase, int iIndex ) const
+	MEDIAN_TYPE & Key ( T * a ) const
 	{
-		return pBase[iIndex];
+		return *a;
 	}
 
-	void GetMedian ( MEDIAN_TYPE & tMedian, const T & tValue ) const
+	void CopyKey ( MEDIAN_TYPE * pMed, T * pVal ) const
 	{
-		tMedian = tValue;
+		*pMed = Key(pVal);
 	}
 
-	void Swap ( T & a, T & b ) const
+	void Swap ( T * a, T * b ) const
 	{
-		::Swap ( a, b );
+		::Swap ( *a, *b );
+	}
+
+	T * Add ( T * p, int i ) const
+	{
+		return p+i;
+	}
+
+	int Sub ( T * b, T * a ) const
+	{
+		return (int)(b-a);
 	}
 };
+
+
+/// heap sort helper
+template < typename T, typename U, typename V >
+void sphSiftDown ( T * pData, int iStart, int iEnd, U COMP, V ACC )
+{
+	for ( ;; )
+	{
+		int iChild = iStart*2+1;
+		if ( iChild>iEnd )
+			break;
+
+		int iChild1 = iChild+1;
+		if ( iChild1<=iEnd && COMP.IsLess ( ACC.Key ( ACC.Add ( pData, iChild ) ), ACC.Key ( ACC.Add ( pData, iChild1 ) ) ) )
+			iChild = iChild1;
+
+		if ( COMP.IsLess ( ACC.Key ( ACC.Add ( pData, iChild ) ), ACC.Key ( ACC.Add ( pData, iStart ) ) ) )
+			return;
+		ACC.Swap ( ACC.Add ( pData, iChild ), ACC.Add ( pData, iStart ) );
+		iStart = iChild;
+	}
+}
+
+
+/// heap sort
+template < typename T, typename U, typename V >
+void sphHeapSort ( T * pData, int iCount, U COMP, V ACC )
+{
+	if ( !pData || iCount<=1 )
+		return;
+
+	// build a max-heap, so that the largest element is root
+	for ( int iStart=( iCount-2 )>>1; iStart>=0; iStart-- )
+		sphSiftDown ( pData, iStart, iCount-1, COMP, ACC );
+
+	// now keep popping root into the end of array
+	for ( int iEnd=iCount-1; iEnd>0; )
+	{
+		ACC.Swap ( pData, ACC.Add ( pData, iEnd ) );
+		sphSiftDown ( pData, 0, --iEnd, COMP, ACC );
+	}
+}
 
 
 /// generic sort
 template < typename T, typename U, typename V >
 void sphSort ( T * pData, int iCount, U COMP, V ACC )
 {
-	int st0[32], st1[32], a, b, k, i, j;
+	typedef T * P;
+	P st0[32], st1[32], a, b, i, j;
 	typename V::MEDIAN_TYPE x;
+	int k;
+
+	const int SMALL_THRESH = 32;
+	int iDepthLimit = sphLog2 ( iCount );
+	iDepthLimit = ( ( iDepthLimit<<2 ) + iDepthLimit ) >> 1; // x2.5
 
 	k = 1;
-	st0[0] = 0;
-	st1[0] = iCount-1;
+	st0[0] = pData;
+	st1[0] = ACC.Add ( pData, iCount-1 );
 	while ( k )
 	{
 		k--;
 		i = a = st0[k];
 		j = b = st1[k];
-		ACC.GetMedian ( x, ACC.Get ( pData, (a+b)/2 ) ); // FIXME! add better median at least
+
+		// if quicksort fails on this data; switch to heapsort
+		if ( !k )
+		{
+			if ( !--iDepthLimit )
+			{
+				sphHeapSort ( a, ACC.Sub(b,a)+1, COMP, ACC );
+				return;
+			}
+		}
+
+		// for tiny arrays, switch to insertion sort
+		int iLen = ACC.Sub(b,a);
+		if ( iLen<=SMALL_THRESH )
+		{
+			for ( i=ACC.Add(a,1); i<=b; i=ACC.Add(i,1) )
+			{
+				for ( j=i; j>a; )
+				{
+					P j1 = ACC.Add ( j, -1 );
+					if ( COMP.IsLess ( ACC.Key(j1), ACC.Key(j) ) )
+						break;
+					ACC.Swap ( j, j1 );
+					j = j1;
+				}
+			}
+			continue;
+		}
+
+		ACC.CopyKey ( &x, ACC.Add ( a, iLen/2 ) );
 		while ( a<b )
 		{
 			while ( i<=j )
 			{
-				while ( COMP.IsLess ( ACC.Get ( pData, i ), x ) ) i++;
-				while ( COMP.IsLess ( x, ACC.Get ( pData, j ) ) ) j--;
-				if (i <= j) { ACC.Swap ( ACC.Get ( pData, i ), ACC.Get ( pData, j ) ); i++; j--; }
+				while ( COMP.IsLess ( ACC.Key(i), x ) )
+					i = ACC.Add ( i, 1 );
+				while ( COMP.IsLess ( x, ACC.Key(j) ) )
+					j = ACC.Add ( j, -1 );
+				if ( i<=j )
+				{
+					ACC.Swap ( i, j );
+					i = ACC.Add ( i, 1 );
+					j = ACC.Add ( j, -1 );
+				}
 			}
 
-			if ( j-a>=b-i )
+			if ( ACC.Sub(j,a)>=ACC.Sub(b,i) )
 			{
 				if ( a<j ) { st0[k] = a; st1[k] = j; k++; }
 				a = i;

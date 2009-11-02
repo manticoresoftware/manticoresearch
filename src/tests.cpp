@@ -985,9 +985,306 @@ void BenchThreads ()
 
 //////////////////////////////////////////////////////////////////////////
 
+void SortDataRepeat1245 ( DWORD * pData, int iCount )
+{
+	const int dFill[4] = { 1, 2, 4, 5 };
+	for ( int i=0; i<iCount; i++ )
+		pData[i] = dFill[i%4];
+}
+
+void SortDataEnd0 ( DWORD * pData, int iCount )
+{
+	for ( int i=0; i<iCount; i++ )
+		pData[i] = i+1;
+	pData[iCount-1] = 0;
+}
+
+void SortDataIdentical ( DWORD * pData, int iCount )
+{
+	for ( int i=0; i<iCount; i++ )
+		pData[i] = 123;
+}
+
+void SortDataMed3Killer ( DWORD * pData, int iCount )
+{
+	for ( int i=0; i<iCount/2; i++ )
+		pData[i] = 1+i+(i&1)*(iCount/2-1);
+	for ( int i=iCount/2; i<iCount; i++ )
+		pData[i] = 2*(i-iCount/2+1);
+}
+
+void SortDataMidKiller ( DWORD * pData, int iCount )
+{
+	for ( int i=0; i<2; i++ )
+		for ( int j=0; j<iCount/2; j++ )
+			*pData++ = j*2+i;
+}
+
+void SortDataRandDupes ( DWORD * pData, int iCount )
+{
+	for ( int i=0; i<iCount; i++ )
+		pData[i] = sphRand() % ( iCount/10 );
+}
+
+void SortDataRandUniq ( DWORD * pData, int iCount )
+{
+	for ( int i=0; i<iCount; i++ )
+		pData[i] = i;
+	for ( int i=0; i<iCount; i++ )
+		Swap ( pData[i], pData[sphRand()%iCount] );
+}
+
+void SortDataRandSteps ( DWORD * pData, int iCount )
+{
+	for ( int i=0; i<iCount; i+=100 )
+	{
+		int a = i;
+		int b = Min ( i+100, iCount );
+		for ( int j=a; j<b; j++ )
+			pData[j] = j;
+		for ( int j=a; j<b; j++ )
+			Swap ( pData[j], pData [ a + sphRand()%(b-a) ] );
+	}
+}
+
+void SortDataRevEnds ( DWORD * pData, int iCount )
+{
+	for ( int i=0; i<iCount; i++ )
+		pData[i] = i;
+	Swap ( pData[0], pData[iCount-1] );
+}
+
+void SortDataRevPartial ( DWORD * pData, int iCount )
+{
+	for ( int i=0; i<iCount; i++ )
+		pData[i] = iCount-i;
+	for ( int i=0; i<iCount/10; i++ )
+		Swap ( pData[sphRand()%iCount], pData[sphRand()%iCount] );
+}
+
+void SortDataRevSaw ( DWORD * pData, int iCount )
+{
+	for ( int i=0; i<iCount; i+=100 )
+	{
+		int a = i;
+		int b = Min ( i+100, iCount );
+		for ( int j=a; j<b; j++ )
+			pData[j] = b-j;
+	}
+}
+
+void SortDataReverse ( DWORD * pData, int iCount )
+{
+	for ( int i=0; i<iCount; i++ )
+		pData[i] = iCount-i;	
+}
+
+void SortDataStart1000 ( DWORD * pData, int iCount )
+{
+	for ( int i=0; i<iCount; i++ )
+		pData[i] = 1+i;
+	pData[0] = 1000;
+}
+
+void SortDataSeqPartial ( DWORD * pData, int iCount )
+{
+	for ( int i=0; i<iCount; i++ )
+		pData[i] = 1+i;
+	for ( int i=0; i<iCount/10; i++ )
+		Swap ( pData[sphRand()%iCount], pData[sphRand()%iCount] );
+}
+
+void SortDataSeqSaw ( DWORD * pData, int iCount )
+{
+	for ( int i=0; i<iCount; i+=100 )
+	{
+		int a = i;
+		int b = Min ( i+100, iCount );
+		for ( int j=a; j<b; j++ )
+			pData[j] = j-a+1;
+	}
+}
+
+void SortDataSeq ( DWORD * pData, int iCount )
+{
+	for ( int i=0; i<iCount; i++ )
+		pData[i] = 1+i;
+}
+
+void SortDataAscDesc ( DWORD * pData, int iCount )
+{
+	for ( int i=0; i<iCount/2; i++ )
+		pData[i] = 1+i;
+	for ( int i=iCount/2; i<iCount; i++ )
+		pData[i] = iCount-i;
+}
+
+void SortDataDescAsc ( DWORD * pData, int iCount )
+{
+	for ( int i=0; i<iCount/2; i++ )
+		pData[i] = iCount/2-i;
+	for ( int i=iCount/2; i<iCount; i++ )
+		pData[i] = i-iCount/2+1;
+}
+
+void SortDataRand01 ( DWORD * pData, int iCount )
+{
+	for ( int i=0; i<iCount; i++ )
+		pData[i] = ( sphRand()>>3 ) & 1;
+}
+
+typedef void (*SortDataGen_fn)( DWORD *, int );
+
+struct SortDataGenDesc_t
+{
+	SortDataGen_fn		m_fnGen;
+	const char *		m_sName;
+};
+
+SortDataGenDesc_t g_dSortDataGens[] =
+{
+	{ SortDataRepeat1245,	"repeat1245" },
+	{ SortDataEnd0,			"end0" },
+	{ SortDataIdentical,	"identical" },
+	{ SortDataMed3Killer,	"med3killer" },
+	{ SortDataMidKiller,	"midkiller" },
+	{ SortDataRandDupes,	"randdupes" },
+	{ SortDataRandUniq,		"randuniq" },
+	{ SortDataRandSteps,	"randsteps" },
+	{ SortDataRevEnds,		"revends" },
+	{ SortDataRevPartial,	"revpartial" },
+	{ SortDataRevSaw,		"revsaw" },
+	{ SortDataReverse,		"reverse" },
+	{ SortDataStart1000,	"start1000" },
+	{ SortDataSeqPartial,	"seqpartial" },
+	{ SortDataSeqSaw,		"seqsaw" },
+	{ SortDataSeq,			"sequential" },
+	{ SortDataAscDesc,		"ascdesc" },
+	{ SortDataDescAsc,		"descasc" },
+	{ SortDataRand01,		"rand01" },
+};
+
+struct SortPayload_t
+{
+	DWORD m_uKey;
+	DWORD m_uPayload[3];
+
+	bool operator < ( const SortPayload_t & rhs ) const
+	{
+		return m_uKey < rhs.m_uKey;
+	}
+};
+
+inline bool operator < ( const CSphWordHit & a, const CSphWordHit & b )
+{
+	return
+		(a.m_iWordID < b.m_iWordID || \
+		(a.m_iWordID == b.m_iWordID && a.m_iDocID < b.m_iDocID) || \
+		(a.m_iWordID == b.m_iWordID && a.m_iDocID == b.m_iDocID && a.m_iWordPos < b.m_iWordPos));
+}
+
+template < typename T >
+int64_t BenchSort ( T * pData, int iCount, bool bCheck )
+{
+	int64_t tmSort = sphMicroTimer();
+	sphSort ( pData, iCount );
+	tmSort = sphMicroTimer() - tmSort;
+
+	if ( bCheck )
+	{
+		for ( int i=0; i<iCount-1 && bCheck; i++ )
+			if ( pData[i+1] < pData[i] )
+				bCheck = false;
+		if ( !bCheck )
+			sphDie ( "sorting results check failed!" );
+	}
+
+	return tmSort;
+}
+
+void BenchSort ()
+{
+	const int MINSIZE = 100;
+	const int MAXSIZE = 100000;
+	const int RUNS = 100;
+
+	FILE * fpRes = fopen ( "benchsort/res.csv", "w+" );
+	if ( !fpRes )
+		sphDie ( "failed to create benchsort/res.csv" );
+	fprintf ( fpRes, "test-name;runs-by-size;total-time\n" );
+
+	// bench synthetic payloads
+	DWORD * pKeys = new DWORD [ MAXSIZE ];
+	SortPayload_t * pValues = new SortPayload_t [ MAXSIZE ];
+
+	for ( int iGen=0; iGen<sizeof(g_dSortDataGens)/sizeof(g_dSortDataGens[0]); iGen++ )
+		for ( int iLen=MINSIZE; iLen<=MAXSIZE; iLen*=10 )
+	{
+		int64_t tmSort = 0;
+		for ( int iRun=0; iRun<RUNS; iRun++ )
+		{
+			g_dSortDataGens[iGen].m_fnGen ( pKeys, iLen );
+			for ( int i=0; i<iLen; i++ )
+				pValues[i].m_uKey = pKeys[i];
+			tmSort += BenchSort ( pValues, iLen, iRun==0 );
+		}
+
+		printf ( "%-12s 100x%-8d %d.%03d msec\n", g_dSortDataGens[iGen].m_sName, iLen, int(tmSort/1000), int(tmSort%1000) );
+		fprintf ( fpRes, "%s;100x%d;%d,%03d\n", g_dSortDataGens[iGen].m_sName, iLen, int(tmSort/1000), int(tmSort%1000) );
+
+		CSphString sFile;
+		sFile.SetSprintf ( "benchsort/%s.%d.txt", g_dSortDataGens[iGen].m_sName, iLen );
+
+#if 0
+		FILE * fp = fopen ( sFile.cstr(), "w+" );
+		if ( fp )
+		{
+			g_dSortDataGens[iGen].m_fnGen ( pKeys, iLen );
+			for ( int i=0; i<iLen; i++ )
+				fprintf ( fp, "%d\n", pKeys[i] );
+			fclose ( fp );
+		}
+#endif
+	}
+
+	SafeDeleteArray ( pKeys );
+	SafeDeleteArray ( pValues );
+
+	// bench real hits
+	const int MAXHITS = 10000000;
+	const char * sHits = "benchsort/hits.bin";
+
+	CSphWordHit * pHits = new CSphWordHit [ MAXHITS ];
+	int HITS = MAXHITS;
+
+	FILE * fp = fopen ( sHits, "rb+" );
+	if ( !fp )
+		sphDie ( "failed to open %s", sHits );
+	if ( (int)fread ( pHits, sizeof(CSphWordHit), HITS, fp )!=HITS )
+		sphDie ( "failed to read %s", sHits );
+	fclose ( fp );
+
+	int64_t tmSort = BenchSort ( pHits, HITS, true );
+
+	printf ( "%-12s 100x%-8d %d.%03d msec\n", "hits", HITS, int(tmSort/1000), int(tmSort%1000) );
+	fprintf ( fpRes, "%s;100x%d;%d,%03d\n", "hits", HITS, int(tmSort/1000), int(tmSort%1000) );
+
+	SafeDeleteArray ( pHits );
+
+	// owl down
+	fclose ( fpRes );
+	exit ( 0 );
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 int main ()
 {
 	printf ( "RUNNING INTERNAL LIBSPHINX TESTS\n\n" );
+
+#if 0
+	BenchSort ();
+#endif
 
 #ifdef NDEBUG
 	BenchStripper ();

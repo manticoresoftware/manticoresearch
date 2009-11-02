@@ -3806,34 +3806,23 @@ struct CSphPair
 };
 
 
-struct TaggedMatchSorter_fn
+struct TaggedMatchSorter_fn : public SphAccessor_T<CSphMatch>
 {
-	typedef CSphPair < SphDocID_t, int > MEDIAN_TYPE;
-
-	CSphMatch & Get ( CSphMatch * pBase, int iIndex ) const
+	void CopyKey ( CSphMatch * pMed, CSphMatch * pVal ) const
 	{
-		return pBase[iIndex];
+		pMed->m_iDocID = pVal->m_iDocID;
+		pMed->m_iTag = pVal->m_iTag;
 	}
 
-	void GetMedian ( MEDIAN_TYPE & tMedian, const CSphMatch & tValue ) const
+	bool IsLess ( const CSphMatch & a, const CSphMatch & b ) const
 	{
-		tMedian.m_tFirst = tValue.m_iDocID;
-		tMedian.m_tSecond = tValue.m_iTag;
+		return ( a.m_iDocID < b.m_iDocID ) || ( a.m_iDocID==b.m_iDocID && a.m_iTag > b.m_iTag );
 	}
 
-	void Swap ( CSphMatch & a, CSphMatch & b ) const
+	// inherited swap does not work on gcc
+	void Swap ( CSphMatch * a, CSphMatch * b ) const
 	{
-		::Swap ( a, b );
-	}
-
-	bool IsLess ( const CSphMatch & a, MEDIAN_TYPE & b ) const
-	{
-		return ( a.m_iDocID < b.m_tFirst ) || ( a.m_iDocID==b.m_tFirst && a.m_iTag > b.m_tSecond );
-	}
-
-	bool IsLess ( MEDIAN_TYPE & a, const CSphMatch & b ) const
-	{
-		return ( a.m_tFirst < b.m_iDocID ) || ( a.m_tFirst==b.m_iDocID && a.m_tSecond > b.m_iTag );
+		::Swap ( *a, *b );
 	}
 };
 

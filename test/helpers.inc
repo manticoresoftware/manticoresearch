@@ -34,6 +34,13 @@ function sphFormatTime ( $time )
 function CreateDB ( $db_drop, $db_create, $db_insert, $custom_insert )
 {
 	global $g_locals;
+
+	if ( !function_exists ( "mysql_connect" ) )
+	{
+		print ( "ERROR: missing required mysql_connect(); add php_mysql.so (.dll on Windows) to your php.ini!\n" );
+		exit ( 1 );
+	}
+
 	if ( !@mysql_connect ( $g_locals['db-host'].":".$g_locals['db-port'],
 			$g_locals['db-user'], $g_locals['db-password'] ) ||
 		!@mysql_query ( "CREATE DATABASE IF NOT EXISTS " . $g_locals['db-name'] ) ||
@@ -731,7 +738,7 @@ class SphinxConfig
 							}
 						}
 						
-						$results = $cl->Query ( $query, $my_index );
+						$results = $cl->Query ( $query, $my_index, "run".(1+$this->SubtestNo()) );
 						if ( is_array($results) )
 						{
 							$results["resarray"] = (int)@$qinfo["resarray"];

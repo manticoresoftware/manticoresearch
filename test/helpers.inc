@@ -1065,6 +1065,22 @@ class SphinxConfig
 			}
 		}
 
+		// check our table for well-known id column names
+		$idcol = "";
+		$r = mysql_query ( "DESC test_table" );
+		if ( $r )
+		{
+			while ( $row = mysql_fetch_assoc($r) )
+			{
+				$idcand = strtolower ( $row["Field"] );
+				if ( array_search ( $idcand, array ( "id", "document_id" ) ) )
+				{
+					$idcol = $idcand;
+					break;
+				}
+			}
+		}
+
 		// format matches
 		$str .= "\n";
 		if ( isset($result["matches"]) && is_array($result["matches"]) )
@@ -1093,21 +1109,25 @@ class SphinxConfig
 					continue;
 				}
 
-				// fetch and format fields from db by default
-				$query_res = mysql_query ( "select * from test_table where document_id = $doc_id" );
-				if ( !$query_res )
-					continue;
+				// fetch and format fields from db
+				if ( $idcol )
+				{
+					$query_res = mysql_query ( "select * from test_table where document_id = $doc_id" );
+					if ( $query_res )
+					{
+						$row = mysql_fetch_assoc ( $query_res );
+						if ( $row )
+							foreach ( $row as $col_name => $col_content )
+								if ( array_search ( $col_name, $result["fields"] )!==false )
+								   	$str .= " $col_name=\"$col_content\"";
+					}
+				}
 
-				$row = mysql_fetch_assoc ( $query_res );
-				if ( $row )
-					foreach ( $row as $col_name => $col_content )
-						if ( array_search ( $col_name, $result["fields"] )!==false )
-						   	$str .= " $col_name=\"$col_content\"";
-
+				// format attrs
 				foreach ( $docinfo["attrs"] as $attr=>$val )
 				{
 					if ( is_array($val) )
-						$val = join ( " ", $val );
+						$val = join ( ",", $val );
 			   		$str .= " $attr=\"$val\"";
 				}
 			}

@@ -1575,8 +1575,8 @@ private:
 
 	bool						BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAutoArray<CSphWordHit> & dHits, int iArenaSize, int iFieldFD, int nFieldMVAs, int iFieldMVAInPool, AttrIndexBuilder_c * pMinMax );
 
-	CSphDict *					SetupStarDict ( CSphScopedPtr<CSphDict> & tContainer ) const;
-	CSphDict *					SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict ) const;
+	CSphDict *					SetupStarDict ( CSphScopedPtr<CSphDict> & tContainer, ISphTokenizer & tTokenizer ) const;
+	CSphDict *					SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict, ISphTokenizer & tTokenizer ) const;
 
 	void						LoadSettings ( CSphReader_VLN & tReader );
 	void						SaveSettings ( CSphWriter & tWriter );
@@ -12700,7 +12700,7 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const CSphSchema &
 }
 
 
-CSphDict * CSphIndex_VLN::SetupStarDict  ( CSphScopedPtr<CSphDict> & tContainer ) const
+CSphDict * CSphIndex_VLN::SetupStarDict ( CSphScopedPtr<CSphDict> & tContainer, ISphTokenizer & tTokenizer ) const
 {
 	// setup proper dict
 	bool bUseStarDict = false;
@@ -12723,13 +12723,13 @@ CSphDict * CSphIndex_VLN::SetupStarDict  ( CSphScopedPtr<CSphDict> & tContainer 
 		tContainer = new CSphDictStar ( m_pDict );
 
 	CSphRemapRange tStar ( '*', '*', '*' ); // FIXME? check and warn if star was already there
-	m_pTokenizer->AddCaseFolding ( tStar );
+	tTokenizer.AddCaseFolding ( tStar );
 
 	return tContainer.Ptr();
 }
 
 
-CSphDict * CSphIndex_VLN::SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict ) const
+CSphDict * CSphIndex_VLN::SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict, ISphTokenizer & tTokenizer ) const
 {
 	if ( m_uVersion<12 || !m_tSettings.m_bIndexExactWords )
 		return pPrevDict;
@@ -12737,7 +12737,7 @@ CSphDict * CSphIndex_VLN::SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer,
 	tContainer = new CSphDictExact ( pPrevDict );
 
 	CSphRemapRange tStar ( '=', '=', '=' ); // FIXME? check and warn if star was already there
-	m_pTokenizer->AddCaseFolding ( tStar );
+	tTokenizer.AddCaseFolding ( tStar );
 
 	return tContainer.Ptr();
 }
@@ -12814,10 +12814,10 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 	CSphScopedPtr <CSphAutofile> pHitlist ( NULL );
 
 	CSphScopedPtr<CSphDict> tDict ( NULL );
-	CSphDict * pDict = SetupStarDict ( tDict );
+	CSphDict * pDict = SetupStarDict ( tDict, *m_pTokenizer );
 
 	CSphScopedPtr<CSphDict> tDict2 ( NULL );
-	pDict = SetupExactDict ( tDict2, pDict );
+	pDict = SetupExactDict ( tDict2, pDict, *m_pTokenizer );
 
 	// prepare for setup
 	CSphAutofile tDummy1, tDummy2, tDummy3, tWordlist;
@@ -13040,17 +13040,20 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	if ( pQuery->m_sQuery.IsEmpty() )
 		return MultiScan ( pQuery, pResult, iSorters, ppSorters, pExtraFilters );
 
+	ISphTokenizer * pTokenizer = m_pTokenizer->Clone ( false );
+
 	CSphScopedPtr<CSphDict> tDict ( NULL );
-	CSphDict * pDict = SetupStarDict ( tDict );
+	CSphDict * pDict = SetupStarDict ( tDict, *pTokenizer );
 
 	CSphScopedPtr<CSphDict> tDict2 ( NULL );
-	pDict = SetupExactDict ( tDict2, pDict );
+	pDict = SetupExactDict ( tDict2, pDict, *pTokenizer );
 
 	// parse query
 	XQQuery_t tParsed;
-	if ( !sphParseExtendedQuery ( tParsed, pQuery->m_sQuery.cstr(), GetTokenizer(), GetSchema(), pDict ) )
+	if ( !sphParseExtendedQuery ( tParsed, pQuery->m_sQuery.cstr(), pTokenizer, GetSchema(), pDict ) )
 	{
 		pResult->m_sError = tParsed.m_sParseError;
+		SafeDelete ( pTokenizer );
 		return false;
 	}
 	// transform query if needed
@@ -13064,6 +13067,9 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 
 	CSphQueryNodeCache tNodeCache ( iCommonSubtrees, m_iMaxCachedDocs, m_iMaxCachedHits );
 	bool bResult = ParsedMultiQuery ( pQuery, pResult, iSorters, ppSorters, tParsed.m_pRoot, pDict, pExtraFilters, &tNodeCache );
+
+	SafeDelete ( pTokenizer );
+
 	return bResult;
 }
 
@@ -13079,11 +13085,13 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 	assert ( ppResults );
 	assert ( ppSorters );
 
+	ISphTokenizer * pTokenizer = m_pTokenizer->Clone ( false );
+
 	CSphScopedPtr<CSphDict> tDict ( NULL );
-	CSphDict * pDict = SetupStarDict ( tDict );
+	CSphDict * pDict = SetupStarDict ( tDict, *pTokenizer );
 
 	CSphScopedPtr<CSphDict> tDict2 ( NULL );
-	pDict = SetupExactDict ( tDict2, pDict );
+	pDict = SetupExactDict ( tDict2, pDict, *pTokenizer );
 
 	CSphVector<XQNode_t*> dTrees;
 	dTrees.Reserve ( iQueries );
@@ -13093,7 +13101,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 	{
 		// parse query
 		XQQuery_t tParsed;
-		if ( !sphParseExtendedQuery ( tParsed, pQueries[i].m_sQuery.cstr(), GetTokenizer(), GetSchema(), pDict ) )
+		if ( !sphParseExtendedQuery ( tParsed, pQueries[i].m_sQuery.cstr(), pTokenizer, GetSchema(), pDict ) )
 		{
 			ppResults[i]->m_sError = tParsed.m_sParseError;
 			bResult = false;
@@ -13120,6 +13128,8 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 
 	ARRAY_FOREACH ( k, dTrees )
 		SafeDelete ( dTrees[k] );
+
+	SafeDelete ( pTokenizer );
 
 	return bResult;
 }

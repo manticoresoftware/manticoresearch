@@ -11678,6 +11678,7 @@ bool CSphIndex_VLN::Lock ()
 	{
 		m_sLastError.SetSprintf ( "failed to lock %s: %s", sName.cstr(), strerror(errno) );
 		::close ( m_iLockFD );
+		m_iLockFD = -1;
 		return false;
 	}
 

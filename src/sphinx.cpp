@@ -13649,11 +13649,10 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		DWORD uStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 
 		DWORD uAllRowsTotal = uRowsTotal;
-		if ( m_uVersion>=20 )
-			 uAllRowsTotal += 2*(1+m_uDocinfoIndex);
+		uAllRowsTotal += 2*(1+m_uDocinfoIndex); // should had been fixed up to v.20 by the loader
 
 		if ( uAllRowsTotal*uStride!=m_pDocinfo.GetNumEntries() )
-			LOC_FAIL(( fp, "rows size mismatch (expected=%u, loaded=%u)",
+			LOC_FAIL(( fp, "rowitems count mismatch (expected=%u, loaded=%u)",
 				uAllRowsTotal*uStride, m_pDocinfo.GetNumEntries() ));
 
 		// extract rowitem indexes for MVAs etc

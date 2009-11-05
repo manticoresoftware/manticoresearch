@@ -31,10 +31,24 @@ index v14
 	source	= test
 	path	= test_66/refdata/v14
 }
+
+index v19
+{
+	source	= test
+	path	= test_66/refdata/v19
+}
+
+index v20
+{
+	source	= test
+	path	= test_66/refdata/v20
+}
 </config>
 
 <queries>
 <query mode="extended2" index="v14">test</query>
+<query mode="extended2" index="v19">test</query>
+<query mode="extended2" index="v20">test</query>
 </queries>
 
 </test>

@@ -1278,6 +1278,176 @@ void BenchSort ()
 
 //////////////////////////////////////////////////////////////////////////
 
+extern DWORD sphCRC32 ( const BYTE * pString, int iLen );
+
+struct TestAccCmp_fn
+{
+	typedef DWORD MEDIAN_TYPE;
+	typedef DWORD * PTR_TYPE;
+
+	int m_iStride;
+
+	explicit TestAccCmp_fn ( int iStride )
+		: m_iStride ( iStride )
+	{}
+
+	DWORD Key ( DWORD * pData ) const
+	{
+		return *pData;
+	}
+
+	void CopyKey ( DWORD * pMed, DWORD * pVal ) const
+	{
+		*pMed = Key ( pVal );
+	}
+
+	bool IsLess ( DWORD a, DWORD b ) const
+	{
+		return a < b;
+	}
+
+	void Swap ( DWORD * a, DWORD * b ) const
+	{
+		for ( int i=0; i<m_iStride; i++ )
+			::Swap ( a[i], b[i] );
+	}
+
+	DWORD * Add ( DWORD * p, int i ) const
+	{
+		return p+i*m_iStride;
+	}
+
+	int Sub ( DWORD * b, DWORD * a ) const
+	{
+		return (int)((b-a)/m_iStride);
+	}
+
+	bool IsKeyDataSynced ( const DWORD * pData ) const
+	{
+		DWORD uKey = *pData;
+		DWORD uHash = GenerateKey ( pData );
+		return uKey==uHash;
+	}
+
+	DWORD GenerateKey ( const DWORD * pData ) const
+	{
+		return m_iStride > 1 ? sphCRC32 ( ( ( const BYTE * ) ( pData + 1 ) ), ( m_iStride - 1 ) * 4 ) : ( *pData );
+	}
+};
+
+static bool IsSorted ( DWORD * pData, int iCount, const TestAccCmp_fn & fn )
+{
+	const DWORD * pPrev = pData;
+	if ( !fn.IsKeyDataSynced ( pPrev ) )
+		return false;
+
+	for ( int i = 1; i < iCount; ++i )
+	{
+		const DWORD * pCurr = fn.Add ( pData, i );
+
+		if ( fn.IsLess ( *pCurr , *pPrev ) || !fn.IsKeyDataSynced ( pCurr ) )
+			return false;
+
+		pPrev = pCurr;
+	}
+
+	return true;
+}
+
+void RandomFill ( DWORD * pData, int iCount, const TestAccCmp_fn & fn, bool bChainsaw )
+{
+	for ( int i = 0; i < iCount; ++i )
+	{
+		DWORD * pCurr = fn.Add ( pData, i );
+		const DWORD * pNext = fn.Add ( pData, i + 1 );
+
+		DWORD * pElem = pCurr;
+		DWORD * pChainHill = bChainsaw && ( i % 2 ) ? fn.Add ( pData, i -1 ) : NULL;
+		do
+		{
+			*pElem = pChainHill ? *pChainHill / 2 : sphRand();
+			++pElem;
+			pChainHill = pChainHill ? pChainHill + 1 : pChainHill;
+		} while ( pElem!=pNext );
+
+		*pCurr = fn.GenerateKey ( pCurr );
+	}
+}
+
+void TestStridedSortPass ( int iStride, int iCount )
+{
+	printf ( "testing sort stride=%d count=%d ...\t", iStride, iCount );
+
+	assert ( iStride && iCount );
+
+	DWORD * pData = new DWORD [ iCount * iStride ];
+	assert ( pData );
+
+	// checked elements are random
+	memset ( pData, 0, sizeof ( DWORD ) * iCount * iStride );
+	TestAccCmp_fn fnSort ( iStride );
+	RandomFill ( pData, iCount, fnSort, false );
+
+	// random sort
+	sphSort ( pData, iCount, fnSort, fnSort );
+	assert ( IsSorted ( pData, iCount, fnSort ) );
+	printf ( "ok\n" );
+
+	// already sorted sort
+	printf ( "\t\talready sorted testing...\t" );
+	sphSort ( pData, iCount, fnSort, fnSort );
+	assert ( IsSorted ( pData, iCount, fnSort ) );
+	printf ( "ok\n" );
+
+	// reverse order sort
+	printf ( "\t\treverse sorted testing...\t" );
+	for ( int i = 0; i < iCount; ++i )
+	{
+		::Swap ( pData[i], pData [ iCount - i - 1 ] );
+	}
+	sphSort ( pData, iCount, fnSort, fnSort );
+	assert ( IsSorted ( pData, iCount, fnSort ) );
+	printf ( "ok\n" );
+
+	// random chainsaw sort
+	printf ( "\t\tchainsaw sort testing...\t" );
+	RandomFill ( pData, iCount, fnSort, true );
+	sphSort ( pData, iCount, fnSort, fnSort );
+	assert ( IsSorted ( pData, iCount, fnSort ) );
+	printf ( "ok\n" );
+
+	SafeDeleteArray ( pData );
+}
+
+void TestStridedSort ()
+{
+	TestStridedSortPass ( 1, 2 );
+	TestStridedSortPass ( 3, 2 );
+	TestStridedSortPass ( 37, 2 );
+
+	// SMALL_THRESH case
+	TestStridedSortPass ( 1, 30 );
+	TestStridedSortPass ( 7, 13 );
+	TestStridedSortPass ( 113, 5 );
+
+	TestStridedSortPass ( 1, 1000 );
+	TestStridedSortPass ( 5, 1000 );
+	TestStridedSortPass ( 17, 50 );
+	TestStridedSortPass ( 31, 1367 );
+
+	// rand cases
+	printf ( "\nrandom values sort testing...\n" );
+	for ( int i = 0; i < 10; ++i )
+	{
+		const int iRndStride = sphRand() % 64;
+		const int iNrmStride = Max ( iRndStride, 1 );
+		const int iRndCount = sphRand() % 1000;
+		const int iNrmCount = Max ( iRndCount, 1 );
+		TestStridedSortPass ( iNrmStride, iNrmCount );
+	}
+}
+//////////////////////////////////////////////////////////////////////////
+
 int main ()
 {
 	printf ( "RUNNING INTERNAL LIBSPHINX TESTS\n\n" );
@@ -1302,6 +1472,7 @@ int main ()
 	TestMisc ();
 	TestRwlock ();
 	TestCleanup ();
+	TestStridedSort ();
 #endif
 
 	unlink ( g_sTmpfile );

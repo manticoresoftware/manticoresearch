@@ -258,6 +258,13 @@ void sphAssert ( const char * sExpr, const char * sFile, int iLine );
 #endif // !NDEBUG
 #endif // USE_WINDOWS
 
+
+#ifndef NDEBUG
+#define Verify(_expr) assert(_expr)
+#else
+#define Verify(_expr) _expr
+#endif
+
 /////////////////////////////////////////////////////////////////////////////
 // GENERICS
 /////////////////////////////////////////////////////////////////////////////

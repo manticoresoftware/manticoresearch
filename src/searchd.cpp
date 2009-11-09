@@ -820,6 +820,10 @@ void LogInternalError ( const char * sError )
 	sphWarning( "INTERNAL ERROR: %s", sError );
 }
 
+static void MakeStopPipeName ( char * sName, int iPid )
+{
+	sprintf ( sName, "/tmp/searchd_%d", iPid );
+}
 /////////////////////////////////////////////////////////////////////////////
 
 struct StrBuf_t
@@ -1090,6 +1094,7 @@ public:
 
 void Shutdown ()
 {
+	bool bAttrsSaveOk = true; 
 	// some head-only shutdown procedures
 	if ( g_bHeadDaemon )
 	{
@@ -1120,8 +1125,10 @@ void Shutdown ()
 				continue;
 
 			if ( !tServed.m_pIndex->SaveAttributes() )
-				sphWarning ( "index %s: attrs save failed: %s",
-				it.GetKey().cstr(), tServed.m_pIndex->GetLastError().cstr() );
+			{
+				sphWarning ( "index %s: attrs save failed: %s", it.GetKey().cstr(), tServed.m_pIndex->GetLastError().cstr() );
+				bAttrsSaveOk = false;
+			}
 		}
 
 		// unlock indexes and release locks if needed
@@ -1148,6 +1155,21 @@ void Shutdown ()
 
 #if USE_WINDOWS
 	CloseHandle ( g_hPipe );
+#else
+	if ( g_bHeadDaemon )
+	{
+		sphSleepMsec ( 3000 ); 		/*!COMMIT*/
+
+		char szPipeName [64];
+		MakeStopPipeName ( szPipeName, getpid() );
+		const int hFile = ::open ( szPipeName, O_WRONLY | O_NONBLOCK );
+		if ( hFile != -1 )
+		{
+			DWORD uStatus = bAttrsSaveOk;
+			::write ( hFile, &uStatus, sizeof(DWORD) );
+			::close ( hFile );
+		}
+	}
 #endif
 
 	if ( g_bHeadDaemon )
@@ -9103,6 +9125,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	CSphConfig		conf;
 	bool			bOptStop		= false;
+	bool			bOptStopWait	= false;
 	bool			bOptStatus		= false;
 	bool			bOptPIDFile		= false;
 	const char *	sOptIndex		= NULL;
@@ -9127,6 +9150,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		OPT ( "-?", "--?" )			{ ShowHelp(); return 0; }
 		OPT1 ( "--console" )		{ g_eWorkers = MPM_NONE; g_bOptNoLock = true; g_bOptNoDetach = true; }
 		OPT1 ( "--stop" )			bOptStop = true;
+		OPT1 ( "--stopwait" )		{ bOptStop = true; bOptStopWait = true; }
 		OPT1 ( "--status" )			bOptStatus = true;
 		OPT1 ( "--pidfile" )		bOptPIDFile = true;
 		OPT1 ( "--iostats" )		g_bIOStats = true;
@@ -9301,13 +9325,44 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		else
 			sphFatal ( "stop: error terminating pid %d", iPid );
 #else
+		int hFile = -1;
+		if ( bOptStopWait )
+		{
+			char szPipeName [64];
+			MakeStopPipeName ( szPipeName, iPid );
+			const int iPipeCreated = mkfifo(szPipeName, 0666);
+			if ( iPipeCreated == -1 )
+				sphInfo ( "stop: pipe %s creation failed %s. \'--stopwait\' key disabled.", szPipeName, strerror(errno) );
+			else
+				hFile = ::open ( szPipeName, O_RDONLY | O_NONBLOCK );
+		}
+
 		if ( kill ( iPid, SIGTERM ) )
 			sphFatal ( "stop: kill() on pid %d failed: %s", iPid, strerror(errno) );
 		else
+			sphInfo ( "stop: successfully sent SIGTERM to pid %d", iPid );
+
+		const int64_t iWaitStart = sphMicroTimer(); 		/*!COMMIT*/
+		const int64_t iMaxWaitTime = sphMicroTimer() + 5000000; // will wait answer for 5 second 
+		while ( bOptStopWait && hFile != -1 && sphMicroTimer() < iMaxWaitTime )
 		{
-			sphInfo ( "stop: succesfully sent SIGTERM to pid %d", iPid );
-			exit ( 0 );
+			DWORD uStatus = 0;
+			int iRes = ::read ( hFile, &uStatus, sizeof(DWORD) );
+			// no data yet? or invalid answer
+			if ( ( iRes==-1 && errno==EAGAIN ) || iRes == 0)
+				sphSleepMsec ( 5 );
+			else
+			{
+				sphInfo ( "stop: attrs save %s", uStatus == 1 ? "succeed" : "failed" );
+				break;
+			}
 		}
+		if ( hFile != -1 )
+			::close ( hFile );
+
+		sphInfo ( "stop: waited %dmS", ( sphMicroTimer() - iWaitStart ) / 1000 ); /*!COMMIT*/	
+
+		exit ( 0 );
 #endif
 	}
 

@@ -6602,6 +6602,7 @@ CSphIndex_VLN::CSphIndex_VLN ( const char * sFilename )
 
 	m_uDocinfo = 0;
 	m_uDocinfoIndex = 0;
+	m_pDocinfoIndex = NULL;
 
 	m_bPreallocated = false;
 	m_uVersion = INDEX_FORMAT_VERSION;
@@ -7172,11 +7173,16 @@ public:
 	}
 };
 
+
 bool CSphIndex_VLN::PrecomputeMinMax()
 {
-	DWORD uStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
+	if ( !m_uDocinfo )
+		return true;
+
 	AttrIndexBuilder_c tBuilder ( m_tSchema );
 	tBuilder.Prepare ( m_pDocinfoIndex );
+
+	DWORD uStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 	DWORD uProgressEntry = 0;
 	m_tProgress.m_ePhase = CSphIndexProgress::PHASE_PRECOMPUTE;
 	m_tProgress.m_iDone = 0;
@@ -7198,9 +7204,11 @@ bool CSphIndex_VLN::PrecomputeMinMax()
 			}
 		}
 	}
+
 	tBuilder.FinishCollect();
 	return true;
 }
+
 
 bool CSphIndex_VLN::SaveAttributes ()
 {

@@ -4479,7 +4479,7 @@ void SearchHandler_c::RunLocalSearchesMT ()
 	}
 
 	// wait for them to complete
-	ARRAY_FOREACH ( i, m_dLocal )
+	ARRAY_FOREACH ( i, dThreads )
 		sphThreadJoin ( &dThreads[i].m_tThd );
 
 	// now merge the results

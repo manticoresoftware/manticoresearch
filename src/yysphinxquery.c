@@ -1143,7 +1143,7 @@ yyreduce:
 
   case 25:
 
-    { yyval.pNode = yyvsp[-1].pNode; yyvsp[-1].pNode->m_bFieldSpec = false; ;}
+    { yyval.pNode = yyvsp[-1].pNode; if ( yyval.pNode ) yyval.pNode->m_bFieldSpec = false; ;}
     break;
 
   case 26:

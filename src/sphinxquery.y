@@ -80,7 +80,7 @@ atom:
 	| '"' phrase '"'					{ $$ = $2; if ( $$ ) { assert ( $$->IsPlain() ); $$->m_iMaxDistance = 0; } }
 	| '"' phrase '"' '~' TOK_INT		{ $$ = $2; if ( $$ ) { assert ( !$$ || $$->IsPlain() ); $$->m_iMaxDistance = $5.iValue; $$->m_bQuorum = false; } }
 	| '"' phrase '"' '/' TOK_INT		{ $$ = $2; if ( $$ ) { assert ( !$$ || $$->IsPlain() ); $$->m_iMaxDistance = $5.iValue; $$->m_bQuorum = true; } }
-	| '(' expr ')'						{ $$ = $2; $2->m_bFieldSpec = false; }
+	| '(' expr ')'						{ $$ = $2; if ( $$ ) $$->m_bFieldSpec = false; }
 	;
 
 atomf:

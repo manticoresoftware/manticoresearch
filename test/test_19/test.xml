@@ -60,6 +60,7 @@ index test
 <query mode="extended2">@@relaxed @ttitle test</query>
 <query mode="extended2">""</query>
 <query mode="extended2">@title ""</query>
+<query mode="extended2">("")</query>
 </queries>
 
 <db_create>

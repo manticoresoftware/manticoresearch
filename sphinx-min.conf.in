@@ -40,7 +40,7 @@ indexer
 
 searchd
 {
-	port					= 3312
+	port					= 9312
 	log						= @CONFDIR@/log/searchd.log
 	query_log				= @CONFDIR@/log/query.log
 	read_timeout			= 5

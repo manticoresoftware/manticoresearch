@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>proximity queries</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT * FROM test_table
+}
+
+index test
+{
+	source			= srctest
+	path			= <data_path/>/test
+    charset_type 	= utf-8
+}
+</config>
+
+<queries>
+<!-- hit chunks 2+ got lost in proximity operator -->
+<query mode="extended2">"one two"~10</query>
+</queries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`body` TEXT NOT NULL
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table`
+SELECT 1, REPEAT('one two ',257) UNION
+SELECT 2, 'two one'
+</db_insert>
+
+</test>

@@ -172,6 +172,8 @@ const char *				sphinx_warning	( sphinx_client * client );
 
 sphinx_bool					sphinx_set_server				( sphinx_client * client, const char * host, int port );
 sphinx_bool					sphinx_set_connect_timeout		( sphinx_client * client, float seconds );
+sphinx_bool					sphinx_open						( sphinx_client * client );
+sphinx_bool					sphinx_close					( sphinx_client * client );
 
 sphinx_bool					sphinx_set_limits				( sphinx_client * client, int offset, int limit, int max_matches, int cutoff );
 sphinx_bool					sphinx_set_max_query_time		( sphinx_client * client, int max_query_time );
@@ -210,6 +212,8 @@ void						sphinx_init_excerpt_options		( sphinx_excerpt_options * opts );
 char **						sphinx_build_excerpts			( sphinx_client * client, int num_docs, const char ** docs, const char * index, const char * words, sphinx_excerpt_options * opts );
 int							sphinx_update_attributes		( sphinx_client * client, const char * index, int num_attrs, const char ** attrs, int num_docs, const sphinx_uint64_t * docids, const sphinx_int64_t * values );
 sphinx_keyword_info *		sphinx_build_keywords			( sphinx_client * client, const char * query, const char * index, sphinx_bool hits, int * out_num_keywords );
+char **						sphinx_status					( sphinx_client * client, int * num_rows, int * num_cols );
+void						sphinx_status_destroy			( char ** status, int num_rows, int num_cols );
 
 /////////////////////////////////////////////////////////////////////////////
 

@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>merge vs different min docids</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srcmain
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT * FROM test_table WHERE document_id in (101,102,103,104)
+}
+
+source srcdelta : srcmain
+{
+	sql_query		= SELECT * FROM test_table WHERE document_id in (1001,1002,1003,1004)
+}
+
+index main
+{
+	source			= srcmain
+	path			= <data_path/>/main
+    charset_type 	= utf-8
+}
+
+index delta
+{
+	source			= srcdelta
+	path			= <data_path/>/delta
+    charset_type 	= utf-8
+}
+</config>
+
+<indexer>
+<run>--merge main delta</run>
+</indexer>
+
+<queries>
+<query index="main">one</query>
+<query index="main">two</query>
+<query index="main">three</query>
+<query index="main">four</query>
+<query index="main">five</query>
+</queries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 101, 'one' ),
+( 102, 'two' ),
+( 103, 'three crazy mice live happly' ),
+( 104, 'four' ),
+( 1001, 'seven' ),
+( 1002, 'six two' ),
+( 1003, 'five but now two' ),
+( 1004, 'four' )
+</db_insert>
+
+</test>

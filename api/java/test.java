@@ -41,7 +41,7 @@ public class test
 
 		StringBuffer q = new StringBuffer();
 		String host = "localhost";
-		int port = 3312;
+		int port = 9312;
 		int mode = SphinxClient.SPH_MATCH_ALL;
 		String index = "*";
 		int offset = 0;

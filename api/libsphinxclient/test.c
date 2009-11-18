@@ -189,6 +189,31 @@ void test_keywords ( sphinx_client * client )
 }
 
 
+void test_status ( sphinx_client * client )
+{
+	int num_rows, num_cols, i, j, k;
+	char ** status;
+
+	status = sphinx_status ( client, &num_rows, &num_cols );
+	if ( !status )
+	{
+		printf ( "status failed: %s\n\n", sphinx_error(client) );
+		return;
+	}
+
+	k = 0;
+	for ( i=0; i<num_rows; i++ )
+	{
+		for ( j=0; j<num_cols; j++, k++ )
+			printf ( ( j==0 ) ? "%s:" : " %s", status[k] );
+		printf ( "\n" );
+	}
+	printf ( "\n" );
+
+	sphinx_status_destroy ( status, num_rows, num_cols );
+}
+
+
 int main ()
 {
 	sphinx_client * client;
@@ -205,6 +230,13 @@ int main ()
 	test_query ( client, SPH_FALSE );
 	test_keywords ( client );
 	test_query ( client, SPH_TRUE );
+
+	sphinx_open ( client );
+	test_update ( client );
+	test_update ( client );
+	sphinx_close ( client );
+
+	test_status ( client );
 
 	sphinx_destroy ( client );
 	return 0;

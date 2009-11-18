@@ -1697,7 +1697,8 @@ Sort mode can take one of the following values:
 <para>Additionally, if <filename>searchd</filename> was started with <option>--iostats</option>, there will be a block of data after where the index(es) searched are listed.</para>
 <para>A query log entry might take the form of:</para>
 <programlisting>
-[Fri Jun 29 21:17:58 2007] 0.004 sec [all/0/rel 35254 (0,20)] [lj] [ios=6 kb=111.1 ms=0.5] test
+[Fri Jun 29 21:17:58 2007] 0.004 sec [all/0/rel 35254 (0,20)] [lj]
+   [ios=6 kb=111.1 ms=0.5] test
 </programlisting>
 
 <para>This additional block is information regarding I/O operations in performing the search: the number of file I/O operations carried out, the amount of data in kilobytes read from the index files and time spent on I/O operations (although there is a background processing component, the bulk of this time is the I/O operation time)</para>
@@ -1711,7 +1712,7 @@ network protocol and can be accessed with regular MySQL API. For instance,
 'mysql' CLI client program works well. Here's an example of querying
 Sphinx using MySQL client:
 <programlisting>
-$ mysql -P 3307
+$ mysql -P 9306
 Welcome to the MySQL monitor.  Commands end with ; or \g.
 Your MySQL connection id is 1
 Server version: 0.9.9-dev (r1734)
@@ -1743,7 +1744,7 @@ configured. This is a matter of 1-line config change, adding a new
 <link linkend="conf-listen">listener</link> with mysql41 specified
 as a protocol:
 <programlisting>
-listen = localhost:3307:mysql41
+listen = localhost:9306:mysql41
 </programlisting>
 </para>
 <para>
@@ -1851,7 +1852,8 @@ produced by the latest query. The error message will be returned along with
 the query itself:
 <programlisting>
 mysql&gt; SELECT * FROM test1 WHERE MATCH('@@title hello') \G
-ERROR 1064 (42000): index test1: syntax error, unexpected TOK_FIELDLIMIT near '@title hello'
+ERROR 1064 (42000): index test1: syntax error, unexpected TOK_FIELDLIMIT
+near '@title hello'
 
 mysql&gt; SELECT * FROM test1 WHERE MATCH('@title -hello') \G
 ERROR 1064 (42000): index test1: query is non-computable (single NOT operator)
@@ -1868,7 +1870,8 @@ mysql> SHOW WARNINGS \G
 *************************** 1. row ***************************
   Level: warning
    Code: 1000
-Message: quorum threshold too high (words=2, thresh=3); replacing quorum operator with AND operator
+Message: quorum threshold too high (words=2, thresh=3); replacing quorum operator
+         with AND operator
 1 row in set (0.00 sec)
 </programlisting>
 </para>
@@ -2204,9 +2207,9 @@ call and might therefore be unavailable on certain systems. You might start
 $ searchd --config /home/myuser/sphinx.conf --cpustats
 </programlisting>
 </listitem>
-<listitem><option>--port portnumber</option> (<option>-p</option> for short) is used to specify the post that <filename>searchd</filename> should listen on, usually for debugging purposes. This will usually default to 3312, but sometimes you need to run it on a different port. Specifying it on the command line will override anything specified in the configuration file. The valid range is 0 to 65535, but ports numbered 1024 and below usually require a privileged account in order to run. An example of usage:
+<listitem><option>--port portnumber</option> (<option>-p</option> for short) is used to specify the post that <filename>searchd</filename> should listen on, usually for debugging purposes. This will usually default to 9312, but sometimes you need to run it on a different port. Specifying it on the command line will override anything specified in the configuration file. The valid range is 0 to 65535, but ports numbered 1024 and below usually require a privileged account in order to run. An example of usage:
 <programlisting>
-$ searchd --port 3313
+$ searchd --port 9313
 </programlisting>
 </listitem>
 <listitem><option>--index &lt;index&gt;</option> forces this instance of <filename>searchd</filename> only to serve the specified index. Like <option>--port</option>, above, this is usually for debugging purposes; more long-term changes would generally be applied to the configuration file itself. Example usage:
@@ -2220,11 +2223,13 @@ $ searchd --index myindex
 <itemizedlist>
 <listitem><option>--install</option> installs <filename>searchd</filename> as a service into the Microsoft Management Console (Control Panel / Administrative Tools / Services). Any other parameters specified on the command line, where <option>--install</option> is specified will also become part of the command line on future starts of the service. For example, as part of calling <filename>searchd</filename>, you will likely also need to specify the configuration file with <option>--config</option>, and you would do that as well as specifying <option>--install</option>. Once called, the usual start/stop facilities will become available via the management console, so any methods you could use for starting, stopping and restarting services would also apply to <filename>searchd</filename>. Example:
 <programlisting>
-C:\WINDOWS\system32&gt; C:\Sphinx\bin\searchd.exe --install --config C:\Sphinx\sphinx.conf
+C:\WINDOWS\system32&gt; C:\Sphinx\bin\searchd.exe --install
+   --config C:\Sphinx\sphinx.conf
 </programlisting>
 If you wanted to have the I/O stats every time you started <filename>searchd</filename>, you would specify its option on the same line as the <option>--install</option> command thus:
 <programlisting>
-C:\WINDOWS\system32&gt; C:\Sphinx\bin\searchd.exe --install --config C:\Sphinx\sphinx.conf --iostats
+C:\WINDOWS\system32&gt; C:\Sphinx\bin\searchd.exe --install
+   --config C:\Sphinx\sphinx.conf --iostats
 </programlisting>
 </listitem>
 <listitem><option>--delete</option> removes the service from the Microsoft Management Console and other places where services are registered, after previously installed with <option>--install</option>. Note, this does not uninstall the software or delete the indexes. It means the service will not be called from the services systems, and will not be started on the machine's next start. If currently running as a service, the current instance will not be terminated (until the next reboot, or <filename>searchd</filename> is called with <option>--stop</option>). If the service was installed with a custom name (with <option>--servicename</option>), the same name will need to be specified with <option>--servicename</option> when calling to uninstall. Example:
@@ -2234,7 +2239,8 @@ C:\WINDOWS\system32&gt; C:\Sphinx\bin\searchd.exe --delete
 </listitem>
 <listitem><option>--servicename &lt;name&gt;</option> applies the given name to <filename>searchd</filename> when installing or deleting the service, as would appear in the Management Console; this will default to searchd, but if being deployed on servers where multiple administrators may log into the system, or a system with multiple <filename>searchd</filename> instances, a more descriptive name may be applicable. Note that unless combined with <option>--install</option> or <option>--delete</option>, this option does not do anything. Example:
 <programlisting>
-C:\WINDOWS\system32&gt; C:\Sphinx\bin\searchd.exe --install --config C:\Sphinx\sphinx.conf --servicename SphinxSearch
+C:\WINDOWS\system32&gt; C:\Sphinx\bin\searchd.exe --install
+   --config C:\Sphinx\sphinx.conf --servicename SphinxSearch
 </programlisting>
 </listitem>
 <listitem><option>--ntservice</option> is the option that is passed by the Management Console to <filename>searchd</filename> to invoke it as a service on Windows platforms. It would not normally be necessary to call this directly; this would normally be called by Windows when the service would be started, although if you wanted to call this as a regular service from the command-line (as the complement to <option>--console</option>) you could do so in theory.</listitem>
@@ -2452,7 +2458,7 @@ call it several times if needed.
 <para>
 Sets <filename>searchd</filename> host name and TCP port.
 All subsequent requests will use the new host and port settings.
-Default host and port are 'localhost' and 3312, respectively.
+Default host and port are 'localhost' and 9312, respectively.
 </para>
 </sect3>
 
@@ -2640,7 +2646,8 @@ respectively.
 <bridgehead>Example:</bridgehead>
 <programlisting>
 $cl->SetSelect ( "*, @weight+(user_karma+ln(pageviews))*0.1 AS myweight" );
-$cl->SetSelect ( "exp_years, salary_gbp*{$gbp_usd_rate} AS salary_usd, IF(age>40,1,0) AS over40" );
+$cl->SetSelect ( "exp_years, salary_gbp*{$gbp_usd_rate} AS salary_usd,
+   IF(age>40,1,0) AS over40" );
 $cl->SetSelect ( "*, AVG(price) AS avgprice" );
 </programlisting>
 </sect3>
@@ -3512,17 +3519,17 @@ issue <code>SHOW ENGINES</code> query. You should see a list
 of all available engines. Sphinx should be present and "Support"
 column should contain "YES":
 
-<programlisting>     
+<programlisting>
 mysql> show engines;
-+------------+----------+----------------------------------------------------------------+
-| Engine     | Support  | Comment                                                        |
-+------------+----------+----------------------------------------------------------------+
-| MyISAM     | DEFAULT  | Default engine as of MySQL 3.23 with great performance         |
++------------+----------+-------------------------------------------------------------+
+| Engine     | Support  | Comment                                                     |
++------------+----------+-------------------------------------------------------------+
+| MyISAM     | DEFAULT  | Default engine as of MySQL 3.23 with great performance      |
   ...
-| SPHINX     | YES      | Sphinx storage engine                                          |
+| SPHINX     | YES      | Sphinx storage engine                                       |
   ...
-+------------+----------+----------------------------------------------------------------+
-13 rows in set (0.00 sec)    
++------------+----------+-------------------------------------------------------------+
+13 rows in set (0.00 sec)
 </programlisting>     
 </sect3>
 </sect2>
@@ -3538,25 +3545,29 @@ Let's begin with an example create statement and search query:
 <programlisting>
 CREATE TABLE t1
 (
-    id          INTEGER NOT NULL,
+    id          INTEGER UNSIGNED NOT NULL,
     weight      INTEGER NOT NULL,
     query       VARCHAR(3072) NOT NULL,
     group_id    INTEGER,
     INDEX(query)
-) ENGINE=SPHINX CONNECTION="sphinx://localhost:3312/test";
+) ENGINE=SPHINX CONNECTION="sphinx://localhost:9312/test";
 
 SELECT * FROM t1 WHERE query='test it;mode=any';
 </programlisting>
 </para>
 <para>
-First 3 columns of search table <emphasis>must</emphasis> be <code>INTEGER</code>,
-<code>INTEGER</code> and <code>VARCHAR</code> which will be mapped to document ID,
-match weight and search query accordingly. Query column must be indexed;
+First 3 columns of search table <emphasis>must</emphasis> have a types of
+<code>INTEGER UNSINGED</code> or <code>BIGINT</code> for the 1st column (document id),
+<code>INTEGER</code> or <code>BIGINT</code> for the 2nd column (match weight), and
+<code>VARCHAR</code> or <code>TEXT</code> for the 3rd column (your query), respectively.
+This mapping is fixed; you can not omit any of these three required columns,
+or move them around, or change types. Also, query column must be indexed;
 all the others must be kept unindexed. Columns' names are ignored so you
 can use arbitrary ones.
 </para>
 <para>
-Additional columns must be either <code>INTEGER</code> or <code>TIMESTAMP</code>.
+Additional columns must be either <code>INTEGER</code>, <code>TIMESTAMP</code>,
+<code>BIGINT</code>, <code>VARCHAR</code>, or <code>FLOAT</code>.
 They will be bound to attributes provided in Sphinx result set by name, so their
 names must match attribute names specified in <filename>sphinx.conf</filename>.
 If there's no such attribute name in Sphinx search results, column will have
@@ -3573,7 +3584,7 @@ or <code>@distinct</code> virtual attributes, use <code>_sph_groupby</code>,
 <code>CONNECTION</code> string parameter can be used to specify default
 searchd host, port and indexes for queries issued using this table.
 If no connection string is specified in <code>CREATE TABLE</code>,
-index name "*" (ie. search all indexes) and localhost:3312 are assumed.
+index name "*" (ie. search all indexes) and localhost:9312 are assumed.
 Connection string syntax is as follows:
 <programlisting>
 CONNECTION="sphinx://HOST:PORT/INDEXNAME"
@@ -5881,9 +5892,9 @@ index dist
 {
 	type = distributed
 	local = chunk1
-	agent = localhost:3312:chunk2
-	agent = localhost:3312:chunk3
-	agent = localhost:3312:chunk4
+	agent = localhost:9312:chunk2
+	agent = localhost:9312:chunk3
+	agent = localhost:9312:chunk4
 }
 </programlisting>
 Note how one of the chunks is searched locally and the same instance
@@ -5892,9 +5903,9 @@ in parallel.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
-agent = localhost:3312:chunk2 # contact itself
+agent = localhost:9312:chunk2 # contact itself
 agent = /var/run/searchd.s:chunk2
-agent = searchbox2:3312:chunk3,chunk4 # search remote indexes
+agent = searchbox2:9312:chunk3,chunk4 # search remote indexes
 </programlisting>
 </sect3>
 
@@ -5919,7 +5930,7 @@ The value format is completely identical to regular
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
-agent_blackhole = testbox:3312:testindex1,testindex2
+agent_blackhole = testbox:9312:testindex1,testindex2
 </programlisting>
 </sect3>
 
@@ -6333,14 +6344,14 @@ listen = localhost
 listen = localhost:5000
 listen = 192.168.0.1:5000
 listen = /var/run/sphinx.s
-listen = 3312
-listen = localhost:3307:mysql41
+listen = 9312
+listen = localhost:9306:mysql41
 </programlisting>
 <para>
 There can be multiple listen directives, <code>searchd</code> will
 listen for client connections on all specified ports and sockets.  If
 no <code>listen</code> directive is found then the server will listen
-on all available interfaces using the default port (which is 3312).
+on all available interfaces using the default port (which is 9312).
 </para>
 <para>
 Unix-domain sockets are not supported on Windows.
@@ -6370,11 +6381,11 @@ address = 192.168.0.1
 <para>
 <filename>searchd</filename> TCP port number.
 <b>DEPRECATED</b>, use <link linkend="conf-listen">listen</link> instead.
-Used to be mandatory. Default port number is 3312.
+Used to be mandatory. Default port number is 9312.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
-port = 3312
+port = 9312
 </programlisting>
 </sect3>
 

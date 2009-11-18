@@ -58,7 +58,7 @@ typedef union YYSTYPE {
 		int			iMaxPos;		// max allowed position within field
 	} tFieldLimit;
 } YYSTYPE;
-/* Line 1248 of yacc.c.  */
+/* Line 1204 of yacc.c.  */
 
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1

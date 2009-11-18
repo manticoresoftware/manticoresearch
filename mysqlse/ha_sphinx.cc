@@ -30,6 +30,8 @@
 	#include <sys/un.h>
 
 	#define	RECV_FLAGS	MSG_WAITALL
+
+	#define sphSockClose(_sock)	::close(_sock)
 #else
 	// Windows-specific
 	#include <io.h>
@@ -37,6 +39,8 @@
 	#define snprintf	_snprintf
 
 	#define	RECV_FLAGS	0
+
+	#define sphSockClose(_sock)	::closesocket(_sock)
 #endif
 
 #include <ctype.h>
@@ -109,7 +113,7 @@ void sphUnalignedWrite ( void * pPtr, const T & tVal )
 #define SPHINXSE_MAX_FILTERS		32
 
 #define SPHINXSE_DEFAULT_HOST		"127.0.0.1"
-#define SPHINXSE_DEFAULT_PORT		3312
+#define SPHINXSE_DEFAULT_PORT		9312
 #define SPHINXSE_DEFAULT_INDEX		"*"
 
 #define SPHINXSE_SYSTEM_COLUMNS		3
@@ -411,12 +415,12 @@ struct CSphSEFilter
 public:
 	ESphFilter		m_eType;
 	char *			m_sAttrName;
-	uint32			m_uMinValue;
-	uint32			m_uMaxValue;
+	longlong		m_uMinValue;
+	longlong		m_uMaxValue;
 	float			m_fMinValue;
 	float			m_fMaxValue;
 	int				m_iValues;
-	uint32 *		m_pValues;
+	longlong *		m_pValues;
 	int				m_bExclude;
 
 public:
@@ -530,7 +534,7 @@ protected:
 	int				m_iBufLeft;
 	bool			m_bBufOverrun;
 
-	int				ParseArray ( uint32 ** ppValues, const char * sValue );
+	template < typename T > int ParseArray ( T ** ppValues, const char * sValue );
 	bool			ParseField ( char * sField );
 
 	void			SendBytes ( const void * pBytes, int iBytes );
@@ -541,6 +545,9 @@ protected:
 	void			SendString ( const char * v )	{ int iLen = strlen(v); SendDword(iLen); SendBytes ( v, iLen ); }
 	void			SendFloat ( float v )			{ SendDword ( sphF2DW(v) ); }
 };
+
+template int CSphSEQuery::ParseArray<uint32> ( uint32 **, const char * );
+template int CSphSEQuery::ParseArray<longlong> ( longlong **, const char * );
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -1195,21 +1202,22 @@ CSphSEQuery::~CSphSEQuery ()
 }
 
 
-int CSphSEQuery::ParseArray ( uint32 ** ppValues, const char * sValue )
+template < typename T >
+int CSphSEQuery::ParseArray ( T ** ppValues, const char * sValue )
 {
 	SPH_ENTER_METHOD();
 
-//	assert ( ppValues );
-//	assert ( !(*ppValues) );
+	assert ( ppValues );
+	assert ( !(*ppValues) );
 
-	const char * p;
+	const char * pValue;
 	bool bPrevDigit = false;
 	int iValues = 0;
 
 	// count the values
-	for ( p=sValue; *p; p++ )
+	for ( pValue=sValue; *pValue; pValue++ )
 	{
-		bool bDigit = ( (*p)>='0' && (*p)<='9' );
+		bool bDigit = (*pValue)>='0' && (*pValue)<='9';
 		if ( bDigit && !bPrevDigit )
 			iValues++;
 		bPrevDigit = bDigit;
@@ -1218,33 +1226,34 @@ int CSphSEQuery::ParseArray ( uint32 ** ppValues, const char * sValue )
 		SPH_RET(0);
 
 	// extract the values
-	uint32 * pValues = new uint32 [ iValues ];
+	T * pValues = new T [ iValues ];
 	*ppValues = pValues;
 
-	int iIndex = 0;
-	uint32 uValue = 0;
+	int iIndex = 0, iSign = 1;
+	T uValue = 0;
 
 	bPrevDigit = false;
-	for ( p=sValue; ; p++ )
+	for ( pValue=sValue ;; pValue++ )
 	{
-		bool bDigit = ( (*p)>='0' && (*p)<='9' );
+		bool bDigit = (*pValue)>='0' && (*pValue)<='9';
 
 		if ( bDigit )
 		{
 			if ( !bPrevDigit )
 				uValue = 0;
-			uValue = uValue*10 + ( (*p)-'0' );
+			uValue = uValue*10 + ( (*pValue)-'0' );
 		}
-
-		if ( !bDigit && bPrevDigit )
+		else if ( bPrevDigit )
 		{
 			assert ( iIndex<iValues );
-			pValues [ iIndex++ ] = uValue;
+			pValues [ iIndex++ ] = uValue * iSign;
+			iSign = 1;
 		}
-
+		else if ( *pValue=='-' )
+			iSign = -1;
 		bPrevDigit = bDigit;
 
-		if ( !(*p) )
+		if ( !*pValue )
 			break;
 	}
 
@@ -1323,7 +1332,7 @@ bool CSphSEQuery::ParseField ( char * sField )
 	else if ( !strcmp ( sName, "index" ) )		m_sIndex = sValue;
 	else if ( !strcmp ( sName, "offset" ) )		m_iOffset = iValue;
 	else if ( !strcmp ( sName, "limit" ) )		m_iLimit = iValue;
-	else if ( !strcmp ( sName, "weights" ) )	m_iWeights = ParseArray ( &m_pWeights, sValue );
+	else if ( !strcmp ( sName, "weights" ) )	m_iWeights = ParseArray<uint32> ( &m_pWeights, sValue );
 	else if ( !strcmp ( sName, "minid" ) )		m_iMinID = iValue;
 	else if ( !strcmp ( sName, "maxid" ) )		m_iMaxID = iValue;
 	else if ( !strcmp ( sName, "maxmatches" ) )	m_iMaxMatches = iValue;
@@ -1345,6 +1354,7 @@ bool CSphSEQuery::ParseField ( char * sField )
 		else if ( !strcmp ( sValue, "ext2") )		m_eMode = SPH_MATCH_EXTENDED2;
 		else if ( !strcmp ( sValue, "extended2") )	m_eMode = SPH_MATCH_EXTENDED2;
 		else if ( !strcmp ( sValue, "all") )		m_eMode = SPH_MATCH_ALL;
+		else if ( !strcmp ( sValue, "fullscan") )	m_eMode = SPH_MATCH_FULLSCAN;
 		else
 		{
 			snprintf ( m_sParseError, sizeof(m_sParseError), "unknown matching mode '%s'", sValue );
@@ -1450,8 +1460,8 @@ bool CSphSEQuery::ParseField ( char * sField )
 
 			if ( tFilter.m_eType==SPH_FILTER_RANGE )
 			{
-				tFilter.m_uMinValue = atoi(sValue);
-				tFilter.m_uMaxValue = atoi(p);
+				tFilter.m_uMinValue = strtoll ( sValue, NULL, 0 );
+				tFilter.m_uMaxValue = strtoll ( p, NULL, 0 );
 			} else
 			{
 				tFilter.m_fMinValue = (float)atof(sValue);
@@ -1486,7 +1496,7 @@ bool CSphSEQuery::ParseField ( char * sField )
 			*sValue++ = '\0';
 
 			// get the values
-			tFilter.m_iValues = ParseArray ( &tFilter.m_pValues, sValue );
+			tFilter.m_iValues = ParseArray<longlong> ( &tFilter.m_pValues, sValue );
 			if ( !tFilter.m_iValues )
 			{
 				assert ( !tFilter.m_pValues );
@@ -1728,7 +1738,7 @@ int CSphSEQuery::BuildRequest ( char ** ppBuffer )
 	SPH_ENTER_METHOD();
 
 	// calc request length
-	int iReqSize = 116 + 4*m_iWeights
+	int iReqSize = 124 + 4*m_iWeights
 		+ strlen ( m_sSortBy )
 		+ strlen ( m_sQuery )
 		+ strlen ( m_sIndex )
@@ -1739,8 +1749,13 @@ int CSphSEQuery::BuildRequest ( char ** ppBuffer )
 	for ( int i=0; i<m_iFilters; i++ )
 	{
 		const CSphSEFilter & tFilter = m_dFilters[i];
-		iReqSize += 12 + strlen ( tFilter.m_sAttrName ) // string attr-name; int type; int exclude-flag
-			+ ( ( tFilter.m_eType==SPH_FILTER_VALUES ) ? 4+4*tFilter.m_iValues : 8 );
+		iReqSize += 12 + strlen ( tFilter.m_sAttrName ); // string attr-name; int type; int exclude-flag
+		switch ( tFilter.m_eType )
+		{
+			case SPH_FILTER_VALUES:		iReqSize += 4 + 8*tFilter.m_iValues; break;
+			case SPH_FILTER_RANGE:		iReqSize += 16; break;
+			case SPH_FILTER_FLOATRANGE:	iReqSize += 8; break;
+		}
 	}
 	if ( m_bGeoAnchor ) // 1.14+
 		iReqSize += 16 + strlen ( m_sGeoLatAttr ) + strlen  ( m_sGeoLongAttr );
@@ -1788,9 +1803,9 @@ int CSphSEQuery::BuildRequest ( char ** ppBuffer )
 	for ( int j=0; j<m_iWeights; j++ )
 		SendInt ( m_pWeights[j] ); // weights
 	SendString ( m_sIndex ); // indexes
-	SendInt ( 0 ); // id32 range follows
-	SendInt ( m_iMinID ); // id/ts ranges
-	SendInt ( m_iMaxID );
+	SendInt ( 1 ); // id64 range follows
+	SendUint64 ( m_iMinID ); // id/ts ranges
+	SendUint64 ( m_iMaxID );
 
 	SendInt ( m_iFilters );
 	for ( int j=0; j<m_iFilters; j++ )
@@ -1804,12 +1819,12 @@ int CSphSEQuery::BuildRequest ( char ** ppBuffer )
 			case SPH_FILTER_VALUES:
 				SendInt ( tFilter.m_iValues );
 				for ( int k=0; k<tFilter.m_iValues; k++ )
-					SendInt ( tFilter.m_pValues[k] );
+					SendUint64 ( tFilter.m_pValues[k] );
 				break;
 
 			case SPH_FILTER_RANGE:
-				SendDword ( tFilter.m_uMinValue );
-				SendDword ( tFilter.m_uMaxValue );
+				SendUint64 ( tFilter.m_uMinValue );
+				SendUint64 ( tFilter.m_uMaxValue );
 				break;
 
 			case SPH_FILTER_FLOATRANGE:
@@ -1961,7 +1976,7 @@ int ha_sphinx::ConnectToSearchd ( const char * sQueryHost, int iQueryPort )
 
 	struct sockaddr_in sin;
 #ifndef __WIN__
-	struct sockaddr_un sun;
+	struct sockaddr_un saun;
 #endif
 
 	int iDomain = 0;
@@ -2016,12 +2031,12 @@ int ha_sphinx::ConnectToSearchd ( const char * sQueryHost, int iQueryPort )
 	{
 #ifndef __WIN__
 		iDomain = AF_UNIX;
-		iSockaddrSize = sizeof(sun);
-		pSockaddr = (struct sockaddr *) &sun;
+		iSockaddrSize = sizeof(saun);
+		pSockaddr = (struct sockaddr *) &saun;
 
-		memset ( &sun, 0, sizeof(sun) );
-		sun.sun_family = AF_UNIX;
-		strncpy ( sun.sun_path, sHost, sizeof(sun.sun_path)-1 );
+		memset ( &saun, 0, sizeof(saun) );
+		saun.sun_family = AF_UNIX;
+		strncpy ( saun.sun_path, sHost, sizeof(saun.sun_path)-1 );
 #else
 		my_error ( ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), "UNIX sockets are not supported on Windows" );
 		SPH_RET(-1);
@@ -2039,7 +2054,7 @@ int ha_sphinx::ConnectToSearchd ( const char * sQueryHost, int iQueryPort )
 
 	if ( connect ( iSocket, pSockaddr, iSockaddrSize )<0 )
 	{
-		::closesocket ( iSocket );
+		sphSockClose ( iSocket );
 		my_snprintf ( sError, sizeof(sError), "failed to connect to searchd (host=%s, errno=%d, port=%d)",
 			sHost, errno, iPort );
 		my_error ( ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), sError );
@@ -2048,7 +2063,7 @@ int ha_sphinx::ConnectToSearchd ( const char * sQueryHost, int iQueryPort )
 
 	if ( ::recv ( iSocket, (char *)&version, sizeof(version), 0 )!=sizeof(version) )
 	{
-		::closesocket ( iSocket );
+		sphSockClose ( iSocket );
 		my_snprintf ( sError, sizeof(sError), "failed to receive searchd version (host=%s, port=%d)",
 			sHost, iPort );
 		my_error ( ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), sError );
@@ -2057,7 +2072,7 @@ int ha_sphinx::ConnectToSearchd ( const char * sQueryHost, int iQueryPort )
 
 	if ( ::send ( iSocket, (char*)&uClientVersion, sizeof(uClientVersion), 0 )!=sizeof(uClientVersion) )
 	{
-		::closesocket ( iSocket );
+		sphSockClose ( iSocket );
 		my_snprintf ( sError, sizeof(sError), "failed to send client version (host=%s, port=%d)",
 			sHost, iPort );
 		my_error ( ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), sError );
@@ -2641,7 +2656,7 @@ int ha_sphinx::get_rec ( byte * buf, const byte *, uint )
 				break;
 
 			case SPH_ATTR_BIGINT:
-				af->store ( iValue64, 1 );
+				af->store ( iValue64, 0 );
 				break;
 
 			case ( SPH_ATTR_MULTI | SPH_ATTR_INTEGER ):
@@ -3104,6 +3119,17 @@ int sphinx_showfunc_words ( THD * thd, SHOW_VAR * out, char * sBuffer )
 	return 0;
 }
 
+int sphinx_showfunc_error ( THD * thd, SHOW_VAR * out, char * )
+{
+	CSphSEStats * pStats = sphinx_get_stats ( thd, out );
+	if ( pStats && pStats->m_bLastError )
+	{
+		out->type = SHOW_CHAR;
+		out->value = pStats->m_sLastMessage;
+	}
+	return 0;
+}
+	
 #if MYSQL_VERSION_ID>50100
 struct st_mysql_storage_engine sphinx_storage_engine =
 {
@@ -3117,6 +3143,7 @@ struct st_mysql_show_var sphinx_status_vars[] =
 	{"sphinx_time",			(char *)sphinx_showfunc_time,			SHOW_FUNC},
 	{"sphinx_word_count",	(char *)sphinx_showfunc_word_count,		SHOW_FUNC},
 	{"sphinx_words",		(char *)sphinx_showfunc_words,			SHOW_FUNC},
+	{"sphinx_error",		(char *)sphinx_showfunc_error,			SHOW_FUNC},
 	{0, 0, (enum_mysql_show_type)0}
 };
 

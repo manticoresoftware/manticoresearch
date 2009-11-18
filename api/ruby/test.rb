@@ -1,14 +1,27 @@
-require File.dirname(__FILE__) + "/lib/sphinx"
+#
+# $Id$
+#
 
-sphinx = Sphinx::Client.new
-result = sphinx.Query("test", "test1")
+require 'init.rb'
 
-print "Found ", result["total_found"], " matches.\n\n"
+q = ARGV.join(' ')
+@sphinx = Sphinx::Client.new
+# @sphinx.SetSortMode(Sphinx::Client::SPH_SORT_ATTR_ASC, 'created_at')
+results = @sphinx.Query(q)
+
+puts "Query '#{q}' retrieved #{results['total']} of #{results['total_found']} matches in #{results['time']} sec.";
+puts "Query stats:";
+results['words'].each do |word, info|
+	puts "    '#{word}' found #{info['hits']} times in #{info['docs']} documents\n"
+end
+puts
 
 n = 1
-result['matches'].each do |m|
-	print "#{n}. id=#{m['id']}, weight=#{m['weight']}"
-	m['attrs'].each { |a| print ", #{a[0]}=#{a[1]}" }
-	print "\n"
+results['matches'].each do |doc|
+	print "#{n}. doc_id=#{doc['id']}, weight=#{doc['weight']}"
+	doc['attrs'].each do |attr, value|
+		print ", #{attr}=#{value}"
+	end
+	puts
 	n = n+1
 end

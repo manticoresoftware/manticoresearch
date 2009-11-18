@@ -9739,7 +9739,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 					}
 
 					assert ( Id.m_uDocID == DOCINFO2ID(pEntry) );
-					DOCINFO2ATTRS(pEntry) [ dOrdinalAttrs[i] ] = Id.m_uId;
+					sphSetRowAttr ( DOCINFO2ATTRS(pEntry), m_tSchema.GetAttr(dOrdinalAttrs[i]).m_tLocator, Id.m_uId );
 				}
 				iOrd++;
 				m_uMinMaxIndex += iDocinfoStride;
@@ -16604,7 +16604,7 @@ bool CSphSource_SQL::IterateHitsStart ( CSphString & sError )
 
 	// check it
 	if ( m_tSchema.m_dFields.GetLength()>SPH_MAX_FIELDS )
-		LOC_ERROR2 ( "too many fields (fields=%d, max=%d); raise SPH_MAX_FIELDS in sphinx.h and rebuild",
+		LOC_ERROR2 ( "too many fields (fields=%d, max=%d)",
 			m_tSchema.m_dFields.GetLength(), SPH_MAX_FIELDS );
 
 	return true;

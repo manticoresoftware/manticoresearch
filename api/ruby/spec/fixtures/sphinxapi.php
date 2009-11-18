@@ -177,7 +177,7 @@ function sphUnpack64 ( $v )
 class SphinxClient
 {
 	var $_host;			///< searchd host (default is "localhost")
-	var $_port;			///< searchd port (default is 3312)
+	var $_port;			///< searchd port (default is 9312)
 	var $_offset;		///< how many records to seek from result-set start (default is 0)
 	var $_limit;		///< how many records to return from result-set starting at offset (default is 20)
 	var $_mode;			///< query matching mode (default is SPH_MATCH_ALL)
@@ -219,7 +219,7 @@ class SphinxClient
 	{
 		// per-client-object settings
 		$this->_host		= "localhost";
-		$this->_port		= 3312;
+		$this->_port		= 9312;
 
 		// per-query settings
 		$this->_offset		= 0;

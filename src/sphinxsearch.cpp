@@ -2247,18 +2247,21 @@ ExtProximity_c::ExtProximity_c ( CSphVector<ExtNode_i *> & dQwords, DWORD uDupeM
 const ExtDoc_t * ExtProximity_c::GetDocsChunk ( SphDocID_t * pMaxID )
 {
 	m_uMaxID = 0;
-	const ExtDoc_t * pDocs = NULL;
-	const ExtHit_t * pHits = NULL;
-
 	SphDocID_t uMaxID = 0;
-	if ( !pDocs ) pDocs = m_pNode->GetDocsChunk ( &uMaxID  );
-	if ( !pDocs ) return NULL;
 
-	if ( !pHits ) pHits = m_pNode->GetHitsChunk ( pDocs, uMaxID );
-	assert ( pHits );
+	// shortcuts
+	const ExtDoc_t * pDoc = m_pDoc;
+	const ExtHit_t * pHit = m_pHit;
 
-	const ExtHit_t * pHit = pHits;
-	const ExtDoc_t * pDoc = pDocs;
+	// warmup
+	if ( !pDoc )
+	{
+		if ( !m_pDocs ) pDoc = m_pDocs = m_pNode->GetDocsChunk ( &uMaxID  );
+		if ( !pDoc ) return NULL;
+
+		pHit = m_pHits = m_pNode->GetHitsChunk ( m_pDocs, uMaxID );
+		assert ( pHit );
+	}
 
 	CSphVector<DWORD> dProx; // proximity hit position for i-th word
 	int iProxWords = 0;
@@ -2276,21 +2279,18 @@ const ExtDoc_t * ExtProximity_c::GetDocsChunk ( SphDocID_t * pMaxID )
 		// update hitlist
 		if ( pHit->m_uDocid==DOCID_MAX )
 		{
-			pHits = m_pNode->GetHitsChunk ( pDocs, uMaxID );
-			if ( pHits )
-			{
-				pHit = pHits;
+			pHit = m_pHits = m_pNode->GetHitsChunk ( m_pDocs, uMaxID );
+			if ( pHit )
 				continue;
-			}
 
 			// no more hits for current document? *now* we can reset
 			m_uExpID = m_uExpPos = m_uExpQpos = 0;
 
-			pDoc = pDocs = m_pNode->GetDocsChunk ( &uMaxID );
-			if ( !pDocs )
+			pDoc = m_pDocs = m_pNode->GetDocsChunk ( &uMaxID );
+			if ( !pDoc )
 				break;
 
-			pHit = pHits = m_pNode->GetHitsChunk ( pDocs, uMaxID );
+			pHit = m_pHits = m_pNode->GetHitsChunk ( m_pDocs, uMaxID );
 			assert ( pHit );
 			continue;
 		}
@@ -2415,6 +2415,10 @@ const ExtDoc_t * ExtProximity_c::GetDocsChunk ( SphDocID_t * pMaxID )
 	// reset current positions for hits chunk getter
 	m_pMyDoc = m_dDocs;
 	m_pMyHit = m_dMyHits;
+
+	// save shortcuts
+	m_pDoc = pDoc;
+	m_pHit = pHit;
 
 	assert ( iHit>=0 && iHit<MAX_HITS );
 	m_dMyHits[iHit].m_uDocid = DOCID_MAX; // end marker

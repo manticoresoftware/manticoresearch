@@ -63,7 +63,7 @@ SPACE				[ \t\n\r]
 "<="				{ YYSTOREBOUNDS; return TOK_LTE; }
 ">="				{ YYSTOREBOUNDS; return TOK_GTE; }
 
-'([^']|\\')*'		{ YYSTOREBOUNDS; SqlUnescape ( lvalp->m_sValue, yytext, yyleng ); return TOK_QUOTED_STRING; }
+'([^'\\]|\\.|\\\\)*'	{ YYSTOREBOUNDS; SqlUnescape ( lvalp->m_sValue, yytext, yyleng ); return TOK_QUOTED_STRING; }
 
 -*{DIGIT}+\.{DIGIT}*	{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
 -*\.{DIGIT}+			{ YYSTOREBOUNDS; lvalp->m_sValue = yytext; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }

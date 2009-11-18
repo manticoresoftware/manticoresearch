@@ -27,7 +27,7 @@
 #include <limits.h>
 
 #define SEARCHD_BACKLOG			5
-#define SEARCHD_DEFAULT_PORT	3312
+#define SEARCHD_DEFAULT_PORT	9312
 
 #define SPH_ADDRESS_SIZE		sizeof("000.000.000.000")
 
@@ -1317,6 +1317,14 @@ void sphSockSetErrno ( int iErr )
 }
 
 
+int sphSockPeekErrno ()
+{
+	int iRes = sphSockGetErrno();
+	sphSockSetErrno ( iRes );
+	return iRes;
+}
+
+
 /// formats IP address given in network byte order into sBuffer
 /// returns the buffer
 char * sphFormatIP ( char * sBuffer, int iBufferSize, DWORD uAddress )
@@ -1610,11 +1618,11 @@ int sphSetSockNB ( int iSock )
 }
 
 
-int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout )
+int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr )
 {
 	assert ( iLen>0 );
 
-	int64_t tmMaxTimer = sphMicroTimer() + 1000000*Max ( 1, iReadTimeout ); // in microseconds
+	int64_t tmMaxTimer = sphMicroTimer() + I64C(1000000)*Max ( 1, iReadTimeout ); // in microseconds
 	int iLeftBytes = iLen; // bytes to read left
 
 	char * pBuf = (char*) buf;
@@ -1644,7 +1652,7 @@ int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout )
 		if ( iRes==-1 )
 		{
 			iErr = sphSockGetErrno();
-			if ( iErr==EINTR && !g_bGotSigterm )
+			if ( iErr==EINTR && !g_bGotSigterm && !bIntr )
 				continue;
 
 			sphSockSetErrno ( iErr );
@@ -1672,7 +1680,7 @@ int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout )
 		if ( iRes==-1 )
 		{
 			iErr = sphSockGetErrno();
-			if ( iErr==EINTR )
+			if ( iErr==EINTR && !bIntr )
 				continue;
 
 			sphSockSetErrno ( iErr );
@@ -1682,6 +1690,9 @@ int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout )
 		// update
 		pBuf += iRes;
 		iLeftBytes -= iRes;
+
+		// avoid partial buffer loss in case of signal during the 2nd (!) read
+		bIntr = false;
 	}
 
 	// if there was a timeout, report it as an error
@@ -1798,17 +1809,19 @@ public:
 					NetInputBuffer_c ( int iSock );
 	virtual			~NetInputBuffer_c ();
 
-	bool			ReadFrom ( int iLen, int iTimeout );
+	bool			ReadFrom ( int iLen, int iTimeout, bool bIntr=false );
 	bool			ReadFrom ( int iLen ) { return ReadFrom ( iLen, g_iReadTimeout ); };
 
 	virtual void	SendErrorReply ( const char *, ... );
 
 	const BYTE *	GetBufferPtr () const { return m_pBuf; }
+	bool			IsIntr () const { return m_bIntr; }
 
 protected:
 	static const int	NET_MINIBUFFER_SIZE = 4096;
 
 	int					m_iSock;
+	bool				m_bIntr;
 
 	BYTE				m_dMinibufer[NET_MINIBUFFER_SIZE];
 	int					m_iMaxibuffer;
@@ -2143,6 +2156,7 @@ template < typename T > bool InputBuffer_c::GetQwords ( CSphVector<T> & dBuffer,
 NetInputBuffer_c::NetInputBuffer_c ( int iSock )
 	: InputBuffer_c ( m_dMinibufer, sizeof(m_dMinibufer) )
 	, m_iSock ( iSock )
+	, m_bIntr ( false )
 	, m_iMaxibuffer ( 0 )
 	, m_pMaxibuffer ( NULL )
 {}
@@ -2154,8 +2168,9 @@ NetInputBuffer_c::~NetInputBuffer_c ()
 }
 
 
-bool NetInputBuffer_c::ReadFrom ( int iLen, int iTimeout )
+bool NetInputBuffer_c::ReadFrom ( int iLen, int iTimeout, bool bIntr )
 {
+	m_bIntr = false;
 	if ( iLen<=0 || iLen>g_iMaxPacketSize || m_iSock<0 )
 		return false;
 
@@ -2172,11 +2187,12 @@ bool NetInputBuffer_c::ReadFrom ( int iLen, int iTimeout )
 	}
 
 	m_pCur = m_pBuf = pBuf;
-	int iGot = sphSockRead ( m_iSock, pBuf, iLen, iTimeout );
+	int iGot = sphSockRead ( m_iSock, pBuf, iLen, iTimeout, bIntr );
 	if ( g_bGotSigterm )
 		return false;
 
 	m_bError = ( iGot!=iLen );
+	m_bIntr = m_bError && ( sphSockPeekErrno()==EINTR );
 	m_iLen = m_bError ? 0 : iLen;
 	return !m_bError;
 }
@@ -6276,7 +6292,19 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD )
 	{
 		g_pCrashLog_LastQuery = NULL;
 
-		tBuf.ReadFrom ( 8, iTimeout );
+		// in "persistent connection" mode, we want interruptable waits
+		// so that the worker child could be forcibly restarted
+		tBuf.ReadFrom ( 8, iTimeout, bPersist );
+		if ( bPersist && tBuf.IsIntr() )
+		{
+			// SIGHUP means restart
+			if ( g_bGotSighup )
+				break;
+
+			// otherwise, keep waiting
+			continue;
+		}
+
 		int iCommand = tBuf.GetWord ();
 		int iCommandVer = tBuf.GetWord ();
 		int iLength = tBuf.GetInt ();
@@ -7038,8 +7066,8 @@ int CreatePipe ( bool bFatal, int iHandler )
 int PipeAndFork ( bool bFatal, int iHandler )
 {
 	int iChildPipe = CreatePipe ( bFatal, iHandler );
-	int iRes = fork();
-	switch ( iRes )
+	int iFork = fork();
+	switch ( iFork )
 	{
 		// fork() failed
 		case -1:
@@ -7056,6 +7084,7 @@ int PipeAndFork ( bool bFatal, int iHandler )
 		// parent process, continue accept()ing
 		default:
 			g_iChildren++;
+			g_dChildren.Add ( iFork );
 			SafeClose ( iChildPipe );
 			g_dChildren.Add ( iRes );
 			break;
@@ -7294,6 +7323,21 @@ void RotationThreadFunc ( void * )
 }
 
 
+void IndexRotationDone ()
+{
+#if !USE_WINDOWS
+	// forcibly restart children serving persistent connections and/or preforked ones
+	// FIXME! check how both signals are handled in both cases
+	int iSignal = ( g_eWorks==MPM_PREFORK ) ? SIGTERM : SIGHUP;
+	ARRAY_FOREACH ( i, g_dChildren )
+		kill ( g_dChildren[i], iSignal );
+#endif
+
+	g_bDoRotate = false;
+	sphInfo ( "rotating finished" );
+}
+
+
 void SeamlessTryToForkPrereader ()
 {
 	// next in line
@@ -7391,10 +7435,7 @@ void SeamlessForkPrereader ()
 
 	// if there's no more candidates, and nothing in the works, we're done
 	if ( !g_sPrereading && !g_dRotating.GetLength() )
-	{
-		g_bDoRotate = false;
-		sphInfo ( "rotating finished" );
-	}
+		IndexRotationDone ();
 }
 
 
@@ -8150,15 +8191,7 @@ void CheckRotate ()
 		}
 
 		SafeDelete ( pCP );
-
-#if !USE_WINDOWS
-		if ( g_eWorkers==MPM_PREFORK )
-			ARRAY_FOREACH ( i, g_dChildren )
-				kill ( g_dChildren[i], SIGTERM );
-#endif
-
-		g_bDoRotate = false;
-		sphInfo ( "rotating finished" );
+		IndexRotationDone ();
 		return;
 	}
 

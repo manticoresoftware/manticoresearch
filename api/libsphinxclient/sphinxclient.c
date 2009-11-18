@@ -61,14 +61,17 @@ enum
 	SEARCHD_COMMAND_SEARCH		= 0,
 	SEARCHD_COMMAND_EXCERPT		= 1,
 	SEARCHD_COMMAND_UPDATE		= 2,
-	SEARCHD_COMMAND_KEYWORDS	= 3
+	SEARCHD_COMMAND_KEYWORDS	= 3,
+	SEARCHD_COMMAND_PERSIST		= 4,
+	SEARCHD_COMMAND_STATUS		= 5
 };
 
 enum
 {
 	VER_COMMAND_EXCERPT			= 0x100,
 	VER_COMMAND_UPDATE			= 0x101,
-	VER_COMMAND_KEYWORDS		= 0x100
+	VER_COMMAND_KEYWORDS		= 0x100,
+	VER_COMMAND_STATUS			= 0x100
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -164,6 +167,8 @@ struct st_sphinx_client
 
 	int						num_results;
 	sphinx_result			results [ MAX_REQS ];
+
+	int						sock;			///< open socket for pconns; -1 if none
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -193,7 +198,7 @@ sphinx_client * sphinx_create ( sphinx_bool copy_args )
 	client->local_error_buf[0]		= '\0';
 
 	client->host					= strchain ( client, "localhost" );
-	client->port					= 3312;
+	client->port					= 9312;
 	client->timeout					= 0.0f;
 	client->offset					= 0;
 	client->limit					= 20;
@@ -246,6 +251,7 @@ sphinx_client * sphinx_create ( sphinx_bool copy_args )
 		client->results[i].attr_types = NULL;
 	}
 
+	client->sock = -1;
 	return client;
 }
 
@@ -271,6 +277,8 @@ static void sphinx_free_results ( sphinx_client * client )
 }
 
 
+void sock_close ( int sock );
+
 void sphinx_destroy ( sphinx_client * client )
 {
 	int i;
@@ -290,6 +298,9 @@ void sphinx_destroy ( sphinx_client * client )
 
 	if ( client->response_buf )
 		free ( client->response_buf );
+
+	if ( client->sock>=0 )
+		sock_close ( client->sock );
 
 	free ( client );
 }
@@ -1224,13 +1235,68 @@ void SPH_FD_SET ( int fd, fd_set * fdset ) { FD_SET ( fd, fdset ); }
 #endif
 
 
+static sphinx_bool net_write ( int fd, const char * bytes, int len, sphinx_client * client )
+{
+	int res;
+	res = send ( fd, bytes, len, 0 );
+
+	if ( res<0 )
+	{
+		set_error ( client, "send() error: %s", sock_error() );
+		return SPH_FALSE;
+	}
+
+	if ( res!=len )
+	{
+		set_error ( client, "send() error: incomplete write (len=%d, sent=%d)", len, res );
+		return SPH_FALSE;
+	}
+
+	return SPH_TRUE;
+}
+
+
+static sphinx_bool net_read ( int fd, char * buf, int len, sphinx_client * client )
+{
+	int res, err;
+	for ( ;; )
+	{
+		res = recv ( fd, buf, len, 0 );
+
+		if ( res<0 )
+		{
+			err = sock_errno();
+			if ( err==EINTR || err==EWOULDBLOCK ) // FIXME! remove non-blocking mode here; add timeout
+				continue;
+			set_error ( client, "recv(): read error (error=%s)", sock_error() );
+			return SPH_FALSE;
+		}
+
+		len -= res;
+		buf += res;
+
+		if ( len==0 )
+			return SPH_TRUE;
+
+		if ( res==0 )
+		{
+			set_error ( client, "recv(): incomplete read (len=%d, recv=%d)", len, res );
+			return SPH_FALSE;
+		}
+	}
+}
+
+
 static int net_connect ( sphinx_client * client )
 {
 	struct hostent * hp;
 	struct sockaddr_in sa;
 	struct timeval timeout;
 	fd_set fds_write;
-	int sock, to_wait, res, err;
+	int sock, to_wait, res, err, my_proto;
+
+	if ( client->sock>=0 )
+		return client->sock;
 
 	hp = gethostbyname ( client->host );
 	if ( !hp )
@@ -1287,6 +1353,31 @@ static int net_connect ( sphinx_client * client )
 		if ( res>=0 && FD_ISSET ( sock, &fds_write ) )
 		{
 			sock_set_blocking ( sock );
+
+			// now send major client protocol version
+			my_proto = htonl ( 1 ); 
+			if ( !net_write ( sock, (char*)&my_proto, sizeof(my_proto), client ) )
+			{
+				sock_close ( sock );
+				set_error ( client, "failed to send client protocol version" );
+				return -1;
+			}
+
+			// check daemon version
+			if ( !net_read ( sock, (char*)&my_proto, sizeof(my_proto), client ) )
+			{
+				sock_close ( sock );
+				return -1;
+			}
+
+			my_proto = ntohl ( my_proto );
+			if ( my_proto<1 )
+			{
+				sock_close ( sock );
+				set_error ( client, "expected searchd protocol version 1+, got version %d", my_proto );
+				return -1;
+			}
+
 			return sock;
 		}
 
@@ -1295,58 +1386,6 @@ static int net_connect ( sphinx_client * client )
 		sock_close ( sock );
 		set_error ( client, "connect() timed out" );
 		return -1;
-	}
-}
-
-
-static sphinx_bool net_write ( int fd, const char * bytes, int len, sphinx_client * client )
-{
-	int res;
-	res = send ( fd, bytes, len, 0 );
-
-	if ( res<0 )
-	{
-		set_error ( client, "send() error: %s", sock_error() );
-		return SPH_FALSE;
-	}
-
-	if ( res!=len )
-	{
-		set_error ( client, "send() error: incomplete write (len=%d, sent=%d)", len, res );
-		return SPH_FALSE;
-	}
-
-	return SPH_TRUE;
-}
-
-
-static sphinx_bool net_read ( int fd, char * buf, int len, sphinx_client * client )
-{
-	int res, err;
-	for ( ;; )
-	{
-		res = recv ( fd, buf, len, 0 );
-
-		if ( res<0 )
-		{
-			err = sock_errno();
-			if ( err==EINTR || err==EWOULDBLOCK ) // FIXME! remove non-blocking mode here; add timeout
-				continue;
-			set_error ( client, "recv(): read error (error=%s)", sock_error() );
-			return SPH_FALSE;
-		}
-
-		len -= res;
-		buf += res;
-
-		if ( len==0 )
-			return SPH_TRUE;
-
-		if ( res==0 )
-		{
-			set_error ( client, "recv(): incomplete read (len=%d, recv=%d)", len, res );
-			return SPH_FALSE;
-		}
 	}
 }
 
@@ -1405,7 +1444,7 @@ static float unpack_float ( char ** cur )
 
 static void net_get_response ( int fd, sphinx_client * client )
 {
-	int i, len;
+	int len;
 	char header_buf[32], *cur, *response;
 	unsigned short status, ver;
 
@@ -1418,11 +1457,15 @@ static void net_get_response ( int fd, sphinx_client * client )
 	}
 
 	// read and parse the header
-	if ( !net_read ( fd, header_buf, 12, client ) )
+	if ( !net_read ( fd, header_buf, 8, client ) )
+	{
+		sock_close ( fd );
+		if ( client->sock>0 )
+			client->sock = -1;
 		return;
+	}
 
 	cur = header_buf;
-	i = unpack_int ( &cur ); // major searchd version
 	status = unpack_short ( &cur );
 	ver = unpack_short ( &cur );
 	len = unpack_int ( &cur );
@@ -1445,6 +1488,8 @@ static void net_get_response ( int fd, sphinx_client * client )
 	if ( !net_read ( fd, response, len, client ) )
 	{
 		sock_close ( fd );
+		if ( client->sock>0 )
+			client->sock = -1;
 		free ( response );
 		return;
 	}
@@ -1474,8 +1519,52 @@ static void net_get_response ( int fd, sphinx_client * client )
 			break;
 	}
 
-	// close the socket
-	sock_close ( fd );
+	// close one-time socket on success
+	if ( client->sock<0 )
+		sock_close ( fd );
+}
+
+
+sphinx_bool sphinx_open ( sphinx_client * client )
+{
+	char buf[16], *pbuf;
+
+	if ( client->sock>=0 )
+	{
+		set_error ( client, "already connected" );
+		return SPH_FALSE;
+	}
+
+	client->sock = net_connect ( client );
+	if ( client->sock<0 )
+		return SPH_FALSE;
+
+	pbuf = buf;
+	send_word ( &pbuf, SEARCHD_COMMAND_PERSIST );
+	send_word ( &pbuf, 0 ); // dummy version
+	send_int ( &pbuf, 4 ); // dummy body len
+	send_int ( &pbuf, 1 ); // dummy body
+	if ( !net_write ( client->sock, buf, (int)(pbuf-buf), client ) )
+	{
+		sock_close ( client->sock );
+		client->sock = -1;
+		return SPH_FALSE;
+	}
+	return SPH_TRUE;
+}
+
+
+sphinx_bool sphinx_close ( sphinx_client * client )
+{
+	if ( client->sock<0 )
+	{
+		set_error ( client, "not connected" );
+		return SPH_FALSE;
+	}
+
+	sock_close ( client->sock );
+	client->sock = -1;
+	return SPH_TRUE;
 }
 
 
@@ -1526,7 +1615,6 @@ sphinx_result * sphinx_run_queries ( sphinx_client * client )
 		len += client->req_lens[i];
 
 	req = req_header;
-	send_int ( &req, 1 ); // major protocol version
 	send_word ( &req, SEARCHD_COMMAND_SEARCH );
 	send_word ( &req, client->ver_search );
 	send_int ( &req, len );
@@ -1734,7 +1822,7 @@ static sphinx_bool net_simple_query ( sphinx_client * client, char * buf, int re
 		return SPH_FALSE;
 	}
 
-	if ( !net_write ( fd, buf, 12+req_len, client ) )
+	if ( !net_write ( fd, buf, 8+req_len, client ) )
 	{
 		free ( buf );
 		return SPH_FALSE;
@@ -1822,7 +1910,6 @@ char ** sphinx_build_excerpts ( sphinx_client * client, int num_docs, const char
 	// build request
 	req = buf;
 
-	send_int ( &req, 1 ); // major protocol version
 	send_word ( &req, SEARCHD_COMMAND_EXCERPT );
 	send_word ( &req, VER_COMMAND_EXCERPT );
 	send_int ( &req, req_len );
@@ -1848,7 +1935,7 @@ char ** sphinx_build_excerpts ( sphinx_client * client, int num_docs, const char
 	for ( i=0; i<num_docs; i++ )
 		send_str ( &req, docs[i] );
 
-	if ( (int)(req-buf)!=12+req_len )
+	if ( (int)(req-buf)!=8+req_len )
 	{
 		set_error ( client, "internal error: failed to build request in sphinx_build_excerpts()" );
 		free ( buf );
@@ -1923,7 +2010,6 @@ int sphinx_update_attributes ( sphinx_client * client, const char * index, int n
 	// build request
 	req = buf;
 
-	send_int ( &req, 1 ); // major protocol version
 	send_word ( &req, SEARCHD_COMMAND_UPDATE );
 	send_word ( &req, VER_COMMAND_UPDATE );
 	send_int ( &req, req_len );
@@ -1986,7 +2072,6 @@ sphinx_keyword_info * sphinx_build_keywords ( sphinx_client * client, const char
 	// build request
 	req = buf;
 
-	send_int ( &req, 1 ); // major protocol version
 	send_word ( &req, SEARCHD_COMMAND_KEYWORDS );
 	send_word ( &req, VER_COMMAND_KEYWORDS );
 	send_int ( &req, req_len );
@@ -2028,6 +2113,68 @@ sphinx_keyword_info * sphinx_build_keywords ( sphinx_client * client, const char
 	// FIXME! add check for incomplete reply
 
 	return res;
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+char ** sphinx_status ( sphinx_client * client, int * num_rows, int * num_cols )
+{
+	int i, j, k, n;
+	char *p, *pmax, *req, *buf, **res;
+
+	// check args
+	if ( !client || !num_rows || !num_cols )
+	{
+		if ( !num_rows )		set_error ( client, "invalid arguments (num_rows must not be NULL)" );
+		else if ( !num_cols )	set_error ( client, "invalid arguments (num_cols must not be NULL)" );
+		return NULL;
+	}
+
+	// build request
+	buf = malloc ( 12 );
+	if ( !buf )
+	{
+		set_error ( client, "malloc() failed (bytes=12)" );
+		return NULL;
+	}
+
+	req = buf;
+	send_word ( &req, SEARCHD_COMMAND_STATUS );
+	send_word ( &req, VER_COMMAND_STATUS );
+	send_int ( &req, 4 );
+	send_int ( &req, 1 );
+
+	// send query, get response
+	if ( !net_simple_query ( client, buf, 12 ) )
+		return NULL;
+
+	// parse response
+	p = client->response_start;
+	pmax = client->response_start + client->response_len; // max position for checks, to protect against broken responses
+
+	*num_rows = unpack_int ( &p );
+	*num_cols = unpack_int ( &p );
+	n = (*num_rows)*(*num_cols);
+
+	res = (char**) malloc ( n*sizeof(char*) );
+	for ( i=0; i<n; i++ )
+		res[i] = NULL;
+
+	// FIXME! error checking?
+	k = 0;
+	for ( i=0; i<*num_rows; i++ )
+		for ( j=0; j<*num_cols; j++ )
+			res[k++] = strdup ( unpack_str ( &p ) );
+
+	return res;
+}
+
+void sphinx_status_destroy ( char ** status, int num_rows, int num_cols )
+{
+	int i;
+	for ( i=0; i<num_rows*num_cols; i++ )
+		free ( status[i] );
+	free ( status );
 }
 
 //

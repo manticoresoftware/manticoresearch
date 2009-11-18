@@ -1,0 +1,65 @@
+<test>
+<name>uint attrs</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = SELECT id, n, 'text' FROM test_table;
+	sql_attr_uint = n
+	sql_attr_multi = uint mva from query; select id, n mva from test_table
+}
+
+index test
+{
+	source	= test
+	path	= <data_path/>/test
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INT NOT NULL,
+	n INT UNSIGNED NOT NULL
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table;
+</db_drop>
+
+<db_insert>
+INSERT INTO test_table (id, n) VALUES
+( 1, 2582995467 ),
+( 2, 3650268775 ),
+( 3, 1452351953 ),
+( 4, 1022026391 ),
+( 5, 3802901620 ),
+( 6, 1329722356 );
+</db_insert>
+
+<query_attributes>
+	<attr>n</attr>
+	<attr>mva</attr>
+</query_attributes>
+
+<queries>
+	<query />
+	<query sortmode="expr" sortby="n"/>
+	<query sortmode="expr" sortby="-n"/>
+</queries>
+
+</test>

@@ -233,7 +233,7 @@ static KeyDesc_t g_dKeysIndexer[] =
 static KeyDesc_t g_dKeysSearchd[] =
 {
 	{ "address",				KEY_DEPRECATED, "listen" },
-	{ "port",					KEY_DEPRECATED, "listen" },
+	{ "port",					0, NULL },
 	{ "listen",					KEY_LIST, NULL },
 	{ "log",					0, NULL },
 	{ "query_log",				0, NULL },

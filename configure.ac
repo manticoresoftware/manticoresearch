@@ -240,6 +240,10 @@ else
 fi
 AM_CONDITIONAL(USE_PGSQL, test x$ac_cv_use_pgsql != xno)
 
+# add macports include directory
+if (echo $MYSQL_LIBS | grep -q -- -L/opt/local/lib); then
+   MYSQL_CFLAGS="$MYSQL_CFLAGS -I/opt/local/include"
+fi
 
 # we can now set preprocessor flags for both C and C++ compilers
 CPPFLAGS="$CPPFLAGS $MYSQL_CFLAGS $PGSQL_CFLAGS"

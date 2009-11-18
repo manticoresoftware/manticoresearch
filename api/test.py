@@ -25,7 +25,7 @@ if not sys.argv[1:]:
 q = ''
 mode = SPH_MATCH_ALL
 host = 'localhost'
-port = 3312
+port = 9312
 index = '*'
 filtercol = 'group_id'
 filtervals = []

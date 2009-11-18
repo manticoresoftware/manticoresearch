@@ -657,6 +657,16 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 			m_pCur++;
 			if ( *m_pCur=='=' ) m_pCur++;
 			return TOK_EQ;
+
+		// special case for float values without leading zero
+		case '.':
+			char * pEnd = NULL;
+			lvalp->fConst = (float) strtod ( m_pCur, &pEnd );
+			if ( pEnd )
+			{
+				m_pCur = pEnd;
+				return TOK_CONST_FLOAT;
+			}
 	}
 
 	m_sLexerError.SetSprintf ( "unknown operator '%c' near '%s'", *m_pCur, m_pCur );

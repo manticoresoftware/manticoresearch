@@ -142,7 +142,7 @@ public class SphinxClient
 	/** Creates a new SphinxClient instance. */
 	public SphinxClient()
 	{
-		this("localhost", 3312);
+		this("localhost", 9312);
 	}
 
 	/** Creates a new SphinxClient instance, with host:port specification. */
@@ -536,7 +536,7 @@ public class SphinxClient
 	 * Bind per-field weights by field name.
 	 * @param fieldWeights hash which maps String index names to Integer weights
 	 */
-	public void SetFieldeights ( Map fieldWeights ) throws SphinxException
+	public void SetFieldWeights ( Map fieldWeights ) throws SphinxException
 	{
 		/* FIXME! implement checks here */
 		_fieldWeights = ( fieldWeights==null ) ? new LinkedHashMap () : fieldWeights;

@@ -30,14 +30,14 @@ describe 'The Connect method of Sphinx::Client' do
   end
 
   it 'should establish TCP connection to the server and initialize session' do
-    TCPSocket.should_receive(:new).with('localhost', 3312).and_return(@sock)
+    TCPSocket.should_receive(:new).with('localhost', 9312).and_return(@sock)
     @sock.should_receive(:recv).with(4).and_return([1].pack('N'))
     @sock.should_receive(:send).with([1].pack('N'), 0)
     @sphinx.send(:Connect).should be(@sock)
   end
 
   it 'should raise exception when searchd protocol is not 1+' do
-    TCPSocket.should_receive(:new).with('localhost', 3312).and_return(@sock)
+    TCPSocket.should_receive(:new).with('localhost', 9312).and_return(@sock)
     @sock.should_receive(:recv).with(4).and_return([0].pack('N'))
     @sock.should_receive(:close)
     lambda { @sphinx.send(:Connect) }.should raise_error(Sphinx::SphinxConnectError)
@@ -45,9 +45,9 @@ describe 'The Connect method of Sphinx::Client' do
   end
 
   it 'should raise exception on connection error' do
-    TCPSocket.should_receive(:new).with('localhost', 3312).and_raise(Errno::EBADF)
+    TCPSocket.should_receive(:new).with('localhost', 9312).and_raise(Errno::EBADF)
     lambda { @sphinx.send(:Connect) }.should raise_error(Sphinx::SphinxConnectError)
-    @sphinx.GetLastError.should == 'connection to localhost:3312 failed'
+    @sphinx.GetLastError.should == 'connection to localhost:9312 failed'
   end
 
   it 'should use custom host and port' do

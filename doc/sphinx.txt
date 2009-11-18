@@ -981,9 +981,11 @@ Example 3. xmlpipe2 document stream
    | </sphinx:schema>
    | 
    | <sphinx:document id="1234">
-   | <content>this is the main content <![CDATA[[and this <cdata> entry must be handled properly by xml parser lib]]></content>
+   | <content>this is the main content <![CDATA[[and this <cdata> entry
+   | must be handled properly by xml parser lib]]></content>
    | <published>1012325463</published>
-   | <subject>note how field/attr tags can be in <b class="red">randomized</b> order</subject>
+   | <subject>note how field/attr tags can be
+   | in <b class="red">randomized</b> order</subject>
    | <misc>some undeclared element</misc>
    | </sphinx:document>
    | 
@@ -1804,7 +1806,8 @@ of data after where the index(es) searched are listed.
 
 A query log entry might take the form of:
 
-   | [Fri Jun 29 21:17:58 2007] 0.004 sec [all/0/rel 35254 (0,20)] [lj] [ios=6 kb=111.1 ms=0.5] test
+   | [Fri Jun 29 21:17:58 2007] 0.004 sec [all/0/rel 35254 (0,20)] [lj]
+   |    [ios=6 kb=111.1 ms=0.5] test
 
 This additional block is information regarding I/O operations in performing
 the search: the number of file I/O operations carried out, the amount of
@@ -1820,7 +1823,7 @@ binary network protocol and can be accessed with regular MySQL API. For
 instance, 'mysql' CLI client program works well. Here's an example of
 querying Sphinx using MySQL client:
 
-   | $ mysql -P 3307
+   | $ mysql -P 9306
    | Welcome to the MySQL monitor.  Commands end with ; or \g.
    | Your MySQL connection id is 1
    | Server version: 0.9.9-dev (r1734)
@@ -1848,7 +1851,7 @@ protocol support needs to be additionally configured. This is a matter of
 1-line config change, adding a new listener with mysql41 specified as
 a protocol:
 
-   | listen = localhost:3307:mysql41
+   | listen = localhost:9306:mysql41
 
 Just supporting the protocol and not the SQL syntax would be useless so
 Sphinx now also supports a tiny subset of SQL that we dubbed SphinxQL.
@@ -1942,7 +1945,8 @@ latest query. The error message will be returned along with the query
 itself:
 
    | mysql> SELECT * FROM test1 WHERE MATCH('@@title hello') \G
-   | ERROR 1064 (42000): index test1: syntax error, unexpected TOK_FIELDLIMIT near '@title hello'
+   | ERROR 1064 (42000): index test1: syntax error, unexpected TOK_FIELDLIMIT
+   | near '@title hello'
    | 
    | mysql> SELECT * FROM test1 WHERE MATCH('@title -hello') \G
    | ERROR 1064 (42000): index test1: query is non-computable (single NOT operator)
@@ -1959,7 +1963,8 @@ itself:
    | *************************** 1. row ***************************
    |   Level: warning
    |    Code: 1000
-   | Message: quorum threshold too high (words=2, thresh=3); replacing quorum operator with AND operator
+   | Message: quorum threshold too high (words=2, thresh=3); replacing quorum operator
+   |          with AND operator
    | 1 row in set (0.00 sec)
 
 SHOW STATUS shows a number of useful performance counters. IO and CPU
@@ -2388,13 +2393,13 @@ The options available to searchd on all builds are:
 
    * --port portnumber (-p for short) is used to specify the post that
      searchd should listen on, usually for debugging purposes. This will
-     usually default to 3312, but sometimes you need to run it on
+     usually default to 9312, but sometimes you need to run it on
      a different port. Specifying it on the command line will override
      anything specified in the configuration file. The valid range is 0 to
      65535, but ports numbered 1024 and below usually require a privileged
      account in order to run. An example of usage:
 
-      | $ searchd --port 3313
+      | $ searchd --port 9313
 
    * --index <index> forces this instance of searchd only to serve the
      specified index. Like --port, above, this is usually for debugging
@@ -2421,13 +2426,15 @@ install it as a service.
      console, so any methods you could use for starting, stopping and
      restarting services would also apply to searchd. Example:
 
-      | C:\WINDOWS\system32> C:\Sphinx\bin\searchd.exe --install --config C:\Sphinx\sphinx.conf
+      | C:\WINDOWS\system32> C:\Sphinx\bin\searchd.exe --install
+      |    --config C:\Sphinx\sphinx.conf
 
      If you wanted to have the I/O stats every time you started searchd,
      you would specify its option on the same line as the --install command
      thus:
 
-      | C:\WINDOWS\system32> C:\Sphinx\bin\searchd.exe --install --config C:\Sphinx\sphinx.conf --iostats
+      | C:\WINDOWS\system32> C:\Sphinx\bin\searchd.exe --install
+      |    --config C:\Sphinx\sphinx.conf --iostats
 
    * --delete removes the service from the Microsoft Management Console and
      other places where services are registered, after previously installed
@@ -2450,7 +2457,8 @@ install it as a service.
      Note that unless combined with --install or --delete, this option does
      not do anything. Example:
 
-      | C:\WINDOWS\system32> C:\Sphinx\bin\searchd.exe --install --config C:\Sphinx\sphinx.conf --servicename SphinxSearch
+      | C:\WINDOWS\system32> C:\Sphinx\bin\searchd.exe --install
+      |    --config C:\Sphinx\sphinx.conf --servicename SphinxSearch
 
    * --ntservice is the option that is passed by the Management Console to
      searchd to invoke it as a service on Windows platforms. It would not
@@ -2749,7 +2757,7 @@ several times if needed.
 Prototype: function SetServer ( $host, $port )
 
 Sets searchd host name and TCP port. All subsequent requests will use the
-new host and port settings. Default host and port are 'localhost' and 3312,
+new host and port settings. Default host and port are 'localhost' and 9312,
 respectively.
 
 6.1.4. SetRetries
@@ -2924,7 +2932,8 @@ using this computed expressions mechanism, using magic names '@expr' and
 Example:
 
    | $cl->SetSelect ( "*, @weight+(user_karma+ln(pageviews))*0.1 AS myweight" );
-   | $cl->SetSelect ( "exp_years, salary_gbp*{$gbp_usd_rate} AS salary_usd, IF(age>40,1,0) AS over40" );
+   | $cl->SetSelect ( "exp_years, salary_gbp*{$gbp_usd_rate} AS salary_usd,
+   |    IF(age>40,1,0) AS over40" );
    | $cl->SetSelect ( "*, AVG(price) AS avgprice" );
 
 6.3. Full-text search query settings
@@ -3679,17 +3688,16 @@ newly built servers, run mysql client and issue SHOW ENGINES query. You
 should see a list of all available engines. Sphinx should be present and
 "Support" column should contain "YES":
 
-   |      
    | mysql> show engines;
-   | +------------+----------+----------------------------------------------------------------+
-   | | Engine     | Support  | Comment                                                        |
-   | +------------+----------+----------------------------------------------------------------+
-   | | MyISAM     | DEFAULT  | Default engine as of MySQL 3.23 with great performance         |
+   | +------------+----------+-------------------------------------------------------------+
+   | | Engine     | Support  | Comment                                                     |
+   | +------------+----------+-------------------------------------------------------------+
+   | | MyISAM     | DEFAULT  | Default engine as of MySQL 3.23 with great performance      |
    |   ...
-   | | SPHINX     | YES      | Sphinx storage engine                                          |
+   | | SPHINX     | YES      | Sphinx storage engine                                       |
    |   ...
-   | +------------+----------+----------------------------------------------------------------+
-   | 13 rows in set (0.00 sec)    
+   | +------------+----------+-------------------------------------------------------------+
+   | 13 rows in set (0.00 sec)
 
 7.3. Using SphinxSE
 -------------------
@@ -3707,7 +3715,7 @@ Let's begin with an example create statement and search query:
    |     query       VARCHAR(3072) NOT NULL,
    |     group_id    INTEGER,
    |     INDEX(query)
-   | ) ENGINE=SPHINX CONNECTION="sphinx://localhost:3312/test";
+   | ) ENGINE=SPHINX CONNECTION="sphinx://localhost:9312/test";
    | 
    | SELECT * FROM t1 WHERE query='test it;mode=any';
 
@@ -3729,7 +3737,7 @@ _sph_groupby, _sph_count or _sph_distinct column names, respectively.
 CONNECTION string parameter can be used to specify default searchd host,
 port and indexes for queries issued using this table. If no connection
 string is specified in CREATE TABLE, index name "*" (ie. search all
-indexes) and localhost:3312 are assumed. Connection string syntax is as
+indexes) and localhost:9312 are assumed. Connection string syntax is as
 follows:
 
    | CONNECTION="sphinx://HOST:PORT/INDEXNAME"
@@ -5601,9 +5609,9 @@ process each query:
    | {
    | 	type = distributed
    | 	local = chunk1
-   | 	agent = localhost:3312:chunk2
-   | 	agent = localhost:3312:chunk3
-   | 	agent = localhost:3312:chunk4
+   | 	agent = localhost:9312:chunk2
+   | 	agent = localhost:9312:chunk3
+   | 	agent = localhost:9312:chunk4
    | }
 
 Note how one of the chunks is searched locally and the same instance of
@@ -5612,9 +5620,9 @@ parallel.
 
 Example:
 
-   | agent = localhost:3312:chunk2 # contact itself
+   | agent = localhost:9312:chunk2 # contact itself
    | agent = /var/run/searchd.s:chunk2
-   | agent = searchbox2:3312:chunk3,chunk4 # search remote indexes
+   | agent = searchbox2:9312:chunk3,chunk4 # search remote indexes
 
 9.2.29. agent_blackhole
 -----------------------
@@ -5634,7 +5642,7 @@ directive.
 
 Example:
 
-   | agent_blackhole = testbox:3312:testindex1,testindex2
+   | agent_blackhole = testbox:9312:testindex1,testindex2
 
 9.2.30. agent_connect_timeout
 -----------------------------
@@ -5957,13 +5965,13 @@ Examples:
    | listen = localhost:5000
    | listen = 192.168.0.1:5000
    | listen = /var/run/sphinx.s
-   | listen = 3312
-   | listen = localhost:3307:mysql41
+   | listen = 9312
+   | listen = localhost:9306:mysql41
 
 There can be multiple listen directives, searchd will listen for client
 connections on all specified ports and sockets. If no listen directive is
 found then the server will listen on all available interfaces using the
-default port (which is 3312).
+default port (which is 9312).
 
 Unix-domain sockets are not supported on Windows.
 
@@ -5986,11 +5994,11 @@ Example:
 -----------
 
 searchd TCP port number. DEPRECATED, use listen instead. Used to be
-mandatory. Default port number is 3312.
+mandatory. Default port number is 9312.
 
 Example:
 
-   | port = 3312
+   | port = 9312
 
 9.4.4. log
 ----------

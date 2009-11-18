@@ -542,14 +542,14 @@ index dist1
 	# multiple remote agents may be specified
 	# syntax for TCP connections is 'hostname:port:index1,[index2[,...]]'
 	# syntax for local UNIX connections is '/path/to/socket:index1,[index2[,...]]'
-	agent				= localhost:3313:remote1
-	agent				= localhost:3314:remote2,remote3
+	agent				= localhost:9313:remote1
+	agent				= localhost:9314:remote2,remote3
 	# agent				= /var/run/searchd.sock:remote4
 
 	# blackhole remote agent, for debugging/testing
 	# network errors and search results will be ignored
 	#
-	# agent_blackhole		= testbox:3312:testindex1,testindex2
+	# agent_blackhole		= testbox:9312:testindex1,testindex2
 
 
 	# remote agent connection timeout, milliseconds
@@ -605,11 +605,11 @@ searchd
 {
 	# hostname, port, or hostname:port, or /unix/socket/path to listen on
 	# multi-value, multiple listen points are allowed
-	# optional, default is 0.0.0.0:3312 (listen on all interfaces, port 3312)
+	# optional, default is 0.0.0.0:9312 (listen on all interfaces, port 9312)
 	#
 	# listen				= 127.0.0.1
-	# listen				= 192.168.0.1:3312
-	# listen				= 3312
+	# listen				= 192.168.0.1:9312
+	# listen				= 9312
 	# listen				= /var/run/searchd.sock
 
 

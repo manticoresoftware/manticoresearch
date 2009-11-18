@@ -54,7 +54,7 @@ INSERT INTO test_table VALUES
 </db_insert>
 
 <custom_test><![CDATA[
-global $indexer_path;
+global $g_locals;
 
 $client->Open ();
 $res1 = $client->Query ( "sonne", "test1" );
@@ -62,7 +62,7 @@ unset ( $res1["time"] );
 
 $rv = 0;
 $err = "";
-exec ( "$indexer_path --config config.conf --rotate --all", $err, $rv );
+exec ( $g_locals["indexer"]." --config config.conf --rotate --all", $err, $rv );
 
 usleep ( 1500000 );
 $res2 = $client->Query ( "sonne", "test1" );

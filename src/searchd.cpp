@@ -7086,7 +7086,6 @@ int PipeAndFork ( bool bFatal, int iHandler )
 			g_iChildren++;
 			g_dChildren.Add ( iFork );
 			SafeClose ( iChildPipe );
-			g_dChildren.Add ( iRes );
 			break;
 	}
 	return iChildPipe;
@@ -7328,7 +7327,7 @@ void IndexRotationDone ()
 #if !USE_WINDOWS
 	// forcibly restart children serving persistent connections and/or preforked ones
 	// FIXME! check how both signals are handled in both cases
-	int iSignal = ( g_eWorks==MPM_PREFORK ) ? SIGTERM : SIGHUP;
+	int iSignal = ( g_eWorkers==MPM_PREFORK ) ? SIGTERM : SIGHUP;
 	ARRAY_FOREACH ( i, g_dChildren )
 		kill ( g_dChildren[i], iSignal );
 #endif

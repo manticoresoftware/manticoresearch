@@ -7231,7 +7231,7 @@ bool CSphIndex_VLN::SaveAttributes ()
 	size_t uStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 	size_t uSize = uStride*size_t(m_uDocinfo)*sizeof(DWORD);
 	if ( m_uVersion>=20 )
-		uSize += 2*(1+m_uDocinfoIndex)*uStride;
+		uSize += 2*(1+m_uDocinfoIndex)*uStride*sizeof(CSphRowitem);
 
 	if ( !sphWriteThrottled ( fdTmpnew.GetFD(), m_pDocinfo.GetWritePtr(), uSize, "docinfo", m_sLastError ) )
 		return false;

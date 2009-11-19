@@ -820,6 +820,15 @@ void LogInternalError ( const char * sError )
 	sphWarning( "INTERNAL ERROR: %s", sError );
 }
 
+#if !USE_WINDOWS
+static CSphString GetNamedPipeName ( int iPid )
+{
+	CSphString sRes;
+	sRes.SetSprintf ( "/tmp/searchd_%d", iPid );
+	return sRes;
+}
+#endif
+
 /////////////////////////////////////////////////////////////////////////////
 
 struct StrBuf_t
@@ -1090,6 +1099,7 @@ public:
 
 void Shutdown ()
 {
+	bool bAttrsSaveOk = true;
 	// some head-only shutdown procedures
 	if ( g_bHeadDaemon )
 	{
@@ -1120,8 +1130,10 @@ void Shutdown ()
 				continue;
 
 			if ( !tServed.m_pIndex->SaveAttributes() )
-				sphWarning ( "index %s: attrs save failed: %s",
-				it.GetKey().cstr(), tServed.m_pIndex->GetLastError().cstr() );
+			{
+				sphWarning ( "index %s: attrs save failed: %s", it.GetKey().cstr(), tServed.m_pIndex->GetLastError().cstr() );
+				bAttrsSaveOk = false;
+			}
 		}
 
 		// unlock indexes and release locks if needed
@@ -1133,13 +1145,6 @@ void Shutdown ()
 		g_hIndexes.DoneLock();
 
 		sphShutdownWordforms ();
-
-		// remove pid
-		if ( g_sPidFile )
-		{
-			::close ( g_iPidFD );
-			::unlink ( g_sPidFile );
-		}
 	}
 
 	ARRAY_FOREACH ( i, g_dListeners )
@@ -1148,7 +1153,26 @@ void Shutdown ()
 
 #if USE_WINDOWS
 	CloseHandle ( g_hPipe );
+#else
+	if ( g_bHeadDaemon )
+	{
+		const CSphString sPipeName = GetNamedPipeName ( getpid() );
+		const int hFile = ::open ( sPipeName.cstr(), O_WRONLY | O_NONBLOCK );
+		if ( hFile!=-1 )
+		{
+			DWORD uStatus = bAttrsSaveOk;
+			::write ( hFile, &uStatus, sizeof(DWORD) );
+			::close ( hFile );
+		}
+	}
 #endif
+
+	// remove pid
+	if ( g_bHeadDaemon && g_sPidFile )
+	{
+		::close ( g_iPidFD );
+		::unlink ( g_sPidFile );
+	}
 
 	if ( g_bHeadDaemon )
 		sphInfo ( "shutdown complete" );
@@ -9135,6 +9159,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	CSphConfig		conf;
 	bool			bOptStop		= false;
+	bool			bOptStopWait	= false;
 	bool			bOptStatus		= false;
 	bool			bOptPIDFile		= false;
 	const char *	sOptIndex		= NULL;
@@ -9159,6 +9184,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		OPT ( "-?", "--?" )			{ ShowHelp(); return 0; }
 		OPT1 ( "--console" )		{ g_eWorkers = MPM_NONE; g_bOptNoLock = true; g_bOptNoDetach = true; }
 		OPT1 ( "--stop" )			bOptStop = true;
+		OPT1 ( "--stopwait" )		{ bOptStop = true; bOptStopWait = true; }
 		OPT1 ( "--status" )			bOptStatus = true;
 		OPT1 ( "--pidfile" )		bOptPIDFile = true;
 		OPT1 ( "--iostats" )		g_bIOStats = true;
@@ -9333,13 +9359,45 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		else
 			sphFatal ( "stop: error terminating pid %d", iPid );
 #else
+		CSphString sPipeName;
+		int iPipeCreated = -1;
+		int hPipe = -1;
+		if ( bOptStopWait )
+		{
+			sPipeName = GetNamedPipeName ( iPid );
+			iPipeCreated = mkfifo ( sPipeName.cstr(), 0666 );
+			if ( iPipeCreated!=-1 )
+				hPipe = ::open ( sPipeName.cstr(), O_RDONLY | O_NONBLOCK );
+
+			if ( iPipeCreated==-1 )
+				sphWarning ( "mkfifo failed (path=%s, err=%d, msg=%s); will NOT wait", sPipeName.cstr(), errno, strerror(errno) );
+			else if ( hPipe==-1 )
+				sphWarning ( "open failed (path=%s, err=%d, msg=%s); will NOT wait", sPipeName.cstr(), errno, strerror(errno) );
+		}
+
 		if ( kill ( iPid, SIGTERM ) )
 			sphFatal ( "stop: kill() on pid %d failed: %s", iPid, strerror(errno) );
 		else
+			sphInfo ( "stop: successfully sent SIGTERM to pid %d", iPid );
+
+		int iExitCode = ( bOptStopWait && ( iPipeCreated==-1 || hPipe==-1 ) ) ? 1 : 0;
+		if ( bOptStopWait && hPipe!=-1 )
 		{
-			sphInfo ( "stop: succesfully sent SIGTERM to pid %d", iPid );
-			exit ( 0 );
+			while ( sphIsReadable ( sPid, NULL ) )
+				sphSleepMsec ( 5 );
+
+			DWORD uStatus = 0;
+			if ( ::read ( hPipe, &uStatus, sizeof(DWORD) )!=sizeof(DWORD) )
+				iExitCode = 3; // stopped demon crashed during stop
+			else
+				iExitCode = uStatus==1 ? 0 : 2; // uStatus == 1 - AttributeSave - ok, other values - error
 		}
+		if ( hPipe!=-1 )
+			::close ( hPipe );
+		if ( iPipeCreated!=-1 )
+			::unlink ( sPipeName.cstr() );
+
+		exit ( iExitCode );
 #endif
 	}
 

@@ -1,22 +1,22 @@
 #!/bin/sh
 ## As standalone run from this directory as "./svnxrev.sh .."
 
-if [ -e $1/.svn ] ; then 
+if [ -d $1/.svn ] ; then 
     svn info --xml $1 | perl $1/src/svnxrev.pl $1/src/sphinxversion.h
-elif [ -e $1/.hg ] ; then
-    ddr=$(pwd)
+elif [ -d $1/.hg ] ; then
+    ddr=`pwd`
     cd $1
 	target="src/sphinxversion.h"
-	startrev=$(hg id -n)
+	startrev=`hg id -n`
 	rev="$startrev"
-	svnrev=$(hg log -r$rev --template "{desc}" | grep ^\\[svn | sed 's/\[svn r//; s/\].*//')
+	svnrev=`hg log -r$rev --template "{desc}" | grep ^\\[svn | sed 's/\[svn r//; s/\].*//'`
 	while [ "z" = "z$svnrev" ] ; do
-		rev=$(($(hg log -r$rev --template "{rev}")-1))
-		svnrev=$(hg log -r$rev --template "{desc}" | grep ^\\[svn | sed 's/\[svn r//; s/\].*//')
+		rev=`hg log -r$rev --template "{rev}"`-1
+		svnrev=`hg log -r$rev --template "{desc}" | grep ^\\[svn | sed 's/\[svn r//; s/\].*//'`
 	done
 	rsvnrev="r$svnrev"
-	node=$(hg log -r$startrev --template "{node}")
-	branch=$(hg log -r$startrev --template "{branches}")
+	node=`hg log -r$startrev --template "{node}"`
+	branch=`hg log -r$startrev --template "{branches}"`
 	[ "z$branch" = "ztrunk" ] && branch=""
 	[ ! "z$startrev" = "z$rev" ]  && rsvnrev=r"$svnrev/$node"
 	printf "#define SPH_SVN_TAG \"%s\"\n" $branch > $target
@@ -28,4 +28,3 @@ fi
 if [ ! -f ./sphinxversion.h ] ; then
     cat *.cpp *.h | perl srcxrev.pl > sphinxversion.h
 fi
-

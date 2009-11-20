@@ -62,7 +62,6 @@ for ( $i=0; $i<count($results); $i++ )
   <DB_Create>
 CREATE TABLE `test_table` (
   `id` int(11) NOT NULL auto_increment,
-  `time` datetime,
   `section` int(11) NOT NULL,
   `system_id` tinyint(4) NOT NULL,
   `adtext` text NOT NULL,
@@ -97,12 +96,12 @@ DROP TABLE IF EXISTS `test_table`
   </DB_Drop>
 
   <DB_Insert>
-INSERT INTO `test_table` (`id`, `time`, `section`, `system_id`, `adtext`, `heading`, `price`, `postcode`, `gre`, `grn`, `str_at1`, `str_at2`, `str_at3`, `str_at4`, `str_at5`, `int_at1`, `int_at2`, `int_at3`, `int_at4`, `int_at5`, `float_at1`, `float_at2`, `float_at3`, `lng`, `lat`, `make_id`, `transmission_id`) VALUES 
-(1, '2003-12-01 12:00:00', 1, 2, 'FORD', 'Ford KA', 2790, 'EN3 5BT', 535000, 197400,  'Ford', 'KA', 'Grey', 'Diesel', '', 18662, NULL, NULL, NULL, NULL, NULL, NULL, NULL, -0.0798578, 0.937717, 8, 1),
-(2, '2007-12-11 12:00:00', 1, 0, 'until', 'Vauxhall Corsa', 5800, 'BN42 4RN', 524000, 106100, 'Vauxhall', 'Corsa', 'Red', 'Petrol', '', 19296, NULL, NULL, NULL, NULL, NULL, NULL, NULL, -0.0799989, 0.891975, 5, 0),
-(3, '2007-12-10 12:00:00', 1, 0, 'until', 'Vauxhall Corsa', 5200, 'BN42 4RN', 524000, 106100, 'Vauxhall', 'Corsa', 'Red', 'Petrol', '', 19296, NULL, NULL, NULL, NULL, NULL, NULL, NULL, -0.0799989, 0.891975, 5, 0),
-(4, '2007-12-12 12:00:00', 1, 0, 'until', 'Vauxhall Corsa4', 3800, 'BN42 4N', 524000, 106100, 'Vauxhall', 'Corsa', 'Red', 'Petrol', '', 19296, NULL, NULL, NULL, NULL, NULL, NULL, NULL, -0.0799989, 0.891975, 5, 0),
-(211250, '2005-02-01 12:00:00', 0, 1, 'Quattro Roadster', 'Audi TT', 13995, 'E9 7DG', 535600, 184200, '', '', '', '', '', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, -0.0721455, 0.926761, 29, 1);
+INSERT INTO `test_table` (`id`, `section`, `system_id`, `adtext`, `heading`, `price`, `postcode`, `gre`, `grn`, `str_at1`, `str_at2`, `str_at3`, `str_at4`, `str_at5`, `int_at1`, `int_at2`, `int_at3`, `int_at4`, `int_at5`, `float_at1`, `float_at2`, `float_at3`, `lng`, `lat`, `make_id`, `transmission_id`) VALUES 
+(1, 1, 2, 'FORD', 'Ford KA', 2790, 'EN3 5BT', 535000, 197400,  'Ford', 'KA', 'Grey', 'Diesel', '', 18662, NULL, NULL, NULL, NULL, NULL, NULL, NULL, -0.1798578, 0.937717, 8, 1),
+(2, 1, 3, 'FORDE', 'Vauxhall Corsa1', 5800, 'BN42 4RN', 524000, 106100, 'Vauxhall', 'Corsa', 'Red', 'Petrol', '', 19296, NULL, NULL, NULL, NULL, NULL, NULL, NULL, -0.2799989, 0.891975, 7, 2),
+(3, 1, 4, 'FORDZ', 'Vauxhall Corsa2', 5200, 'BN42 4RN', 524000, 106100, 'Vauxhall', 'Corsa', 'Red', 'Petrol', '', 19296, NULL, NULL, NULL, NULL, NULL, NULL, NULL, -0.3799989, 0.791975, 6, 3),
+(4, 1, 5, 'FORDT', 'Vauxhall Corsa4', 3800, 'BN42 4N', 524000, 106100, 'Vauxhall', 'Corsa', 'Red', 'Petrol', '', 19296, NULL, NULL, NULL, NULL, NULL, NULL, NULL, -0.4799989, 0.691975, 5, 4),
+(211250, 0, 1, 'Quattro Roadster', 'Audi TT', 13995, 'E9 7DG', 535600, 184200, '', '', '', '', '', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, -0.5721455, 0.526761, 29, 5);
   </DB_Insert>
   
 </test>

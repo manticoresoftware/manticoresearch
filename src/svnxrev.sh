@@ -7,12 +7,13 @@ elif [ -d $1/.hg ] ; then
     ddr=`pwd`
     cd $1
 	target="src/sphinxversion.h"
-	startrev=`hg id -n`
+	startrev=`hg id -n | sed 's/\\+//'`
 	rev="$startrev"
-	svnrev=`hg log -r$rev --template "{desc}" | grep ^\\[svn | sed 's/\[svn r//; s/\].*//'`
+	svnrev=`hg log -r$rev --template "{desc}" | grep ^\\\\[svn | sed 's/\\[svn r//; s/\\].*//'`
 	while [ "z" = "z$svnrev" ] ; do
-		rev=`hg log -r$rev --template "{rev}"`-1
-		svnrev=`hg log -r$rev --template "{desc}" | grep ^\\[svn | sed 's/\[svn r//; s/\].*//'`
+		revplus=`hg log -r$rev --template "{rev}"`
+		rev=`expr $revplus - 1`
+		svnrev=`hg log -r$rev --template "{desc}" | grep ^\\\\[svn | sed 's/\\[svn r//; s/\\].*//'`
 	done
 	rsvnrev="r$svnrev"
 	node=`hg log -r$startrev --template "{node}"`

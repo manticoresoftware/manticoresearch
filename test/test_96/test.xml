@@ -18,12 +18,11 @@ source src
 {
 	type			= mysql
 	<sql_settings/>
-	sql_query = SELECT id, adtext, heading, postcode, lng, lat, section, make_id, transmission_id, UNIX_TIMESTAMP(time) as time FROM test_table
+	sql_query = SELECT id, adtext, heading, postcode, lng, lat, section, make_id, transmission_id FROM test_table
 
 	sql_attr_float	= lng
 	sql_attr_float	= lat
 	sql_attr_uint	= section
-	sql_attr_timestamp = time
 	sql_attr_uint	= make_id
 	sql_attr_uint	= transmission_id
 }
@@ -45,8 +44,8 @@ $results = array ();
 for ( $i = 0; $i < 4; $i++)
 {
 	$results[] = $client->UpdateAttributes ( "idx", array("section", "make_id"), array(1=>array(4, 15), 3=>array(221, 31)));
-	$results[] = StopSearchd ( 'config.conf', 'searchd.pid' );
-	$results[] = StartSearchd ( 'config.conf', 'error.txt', 'searchd.pid', $error );
+	StopSearchd ( 'config.conf', 'searchd.pid' );
+	StartSearchd ( 'config.conf', 'error.txt', 'searchd.pid', $error );
 }
 
 // find the updated match

@@ -13711,6 +13711,17 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			// check MVAs
 			if ( dMvaItems.GetLength() )
 			{
+				const CSphRowitem * pAttrs = DOCINFO2ATTRS(pRow);
+				bool bHasValues = false;
+				ARRAY_FOREACH ( iItem, dMvaItems )
+				{
+					bHasValues |= pAttrs[dMvaItems[iItem]]!=0;
+				}
+				
+				// no mva values at this row
+				if ( !bHasValues )
+					continue;
+
 				// check id
 				if ( DOCINFO2ID(pMva)!=uLastID )
 					LOC_FAIL(( fp, "MVA id mismatch (row=%u, docid="DOCID_FMT", mvaid="DOCID_FMT")",
@@ -13718,9 +13729,12 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 				pMva += sizeof(SphDocID_t) / sizeof(DWORD); // can't imagine a case when it's not a multiple
 
 				// loop MVAs
-				const CSphRowitem * pAttrs = DOCINFO2ATTRS(pRow);
 				ARRAY_FOREACH ( iItem, dMvaItems )
 				{
+					// mva value is absent at this location
+					if ( !pAttrs[dMvaItems[iItem]] )
+						continue;
+
 					// check offset (index)
 					if ( pMva!=pMvaBase+pAttrs[dMvaItems[iItem]] )
 					{

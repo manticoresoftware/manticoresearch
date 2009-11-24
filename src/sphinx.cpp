@@ -10971,6 +10971,8 @@ public:
 	virtual const CSphSavedFile & GetWordformsFileInfo () { return m_pDict->GetWordformsFileInfo (); }
 	virtual const CSphMultiformContainer * GetMultiWordforms () const { return m_pDict->GetMultiWordforms (); }
 
+	virtual bool IsStopWord ( const BYTE * pWord ) const { return m_pDict->IsStopWord ( pWord ); }
+
 protected:
 	CSphDict *			m_pDict;
 };
@@ -11059,7 +11061,11 @@ SphWordID_t	CSphDictStarV8::GetWordID ( BYTE * pWord )
 	bool bTailStar = ( pWord[iLen-1]=='*' );
 
 	if ( !bHeadStar && !bTailStar )
+	{
 		m_pDict->ApplyStemmers ( pWord );
+		if ( IsStopWord ( pWord ) )
+			return 0;
+	}
 
 	iLen = strlen ( (const char*)pWord );
 	assert ( iLen < 16+3*SPH_MAX_WORD_LEN - 2 );
@@ -13834,6 +13840,8 @@ struct CSphDictCRC : CSphDict
 
 	static void			SweepWordformContainers ( const char * szFile, DWORD uCRC32 );
 
+	virtual bool IsStopWord ( const BYTE * pWord ) const;
+
 protected:
 	CSphVector < int >	m_dMorph;
 #if USE_LIBSTEMMER
@@ -13846,7 +13854,7 @@ protected:
 protected:
 	bool				ToNormalForm ( BYTE * pWord );
 	bool				ParseMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sError );
-	SphWordID_t			FilterStopword ( SphWordID_t uID );	///< filter ID against stopwords list
+	SphWordID_t			FilterStopword ( SphWordID_t uID ) const;	///< filter ID against stopwords list
 
 private:
 	typedef CSphOrderedHash < int, CSphString, CSphStrHashFunc, 1048576, 117 > CWordHash;
@@ -14126,7 +14134,7 @@ CSphDictCRC::~CSphDictCRC ()
 }
 
 
-SphWordID_t CSphDictCRC::FilterStopword ( SphWordID_t uID )
+SphWordID_t CSphDictCRC::FilterStopword ( SphWordID_t uID ) const
 {
 	if ( !m_iStopwords )
 		return uID;
@@ -14484,6 +14492,10 @@ void CSphDictCRC::SweepWordformContainers ( const char * szFile, DWORD uCRC32 )
 	}
 }
 
+bool CSphDictCRC::IsStopWord ( const BYTE * pWord ) const
+{
+	return FilterStopword ( sphCRCWord<SphWordID_t> ( pWord ) )==0;
+}
 
 CSphDictCRC::WordformContainer * CSphDictCRC::GetWordformContainer ( const char * szFile, DWORD uCRC32, const ISphTokenizer * pTokenizer )
 {
@@ -14711,7 +14723,6 @@ bool CSphDictCRC::StemById ( BYTE * pWord, int iStemmer )
 
 	return strcmp ( (char *)pWord, szBuf ) != 0;
 }
-
 
 CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, ISphTokenizer * pTokenizer, CSphString & sError )
 {

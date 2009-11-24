@@ -190,6 +190,8 @@ public:
 	virtual const CSphSavedFile & GetWordformsFileInfo () { return m_tWFFileInfo; }
 	virtual const CSphMultiformContainer * GetMultiWordforms () const { return NULL; }
 
+	virtual bool IsStopWord ( const BYTE * ) const { return false; }
+
 protected:
 	struct HashFunc_t
 	{

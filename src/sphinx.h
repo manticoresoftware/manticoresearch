@@ -588,6 +588,9 @@ struct CSphDict
 
 	/// get multiwordforms
 	virtual const CSphMultiformContainer *  GetMultiWordforms () const = 0;
+
+	/// check what given word is stopword
+	virtual bool IsStopWord ( const BYTE * pWord ) const = 0;
 };
 
 

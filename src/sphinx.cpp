@@ -1573,7 +1573,7 @@ private:
 	const DWORD *				FindDocinfo ( SphDocID_t uDocID ) const;
 	void						CopyDocinfo ( CSphQueryContext * pCtx, CSphMatch & tMatch, const DWORD * pFound ) const;
 
-	bool						BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAutoArray<CSphWordHit> & dHits, int iArenaSize, int iFieldFD, int nFieldMVAs, int iFieldMVAInPool, AttrIndexBuilder_c * pMinMax );
+	bool						BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphAutoArray<CSphWordHit> & dHits, int iArenaSize, int iFieldFD, int nFieldMVAs, int iFieldMVAInPool );
 
 	CSphDict *					SetupStarDict ( CSphScopedPtr<CSphDict> & tContainer, ISphTokenizer & tTokenizer ) const;
 	CSphDict *					SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict, ISphTokenizer & tTokenizer ) const;
@@ -8147,7 +8147,7 @@ struct MvaEntryCmp_fn
 
 bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources,
 		CSphAutoArray<CSphWordHit> & dHits, int iArenaSize, int iFieldFD,
-		int nFieldMVAs, int iFieldMVAInPool, AttrIndexBuilder_c * pMinMax )
+		int nFieldMVAs, int iFieldMVAInPool )
 {
 	// initialize writer (data file must always exist)
 	CSphWriter wrMva;
@@ -8330,8 +8330,6 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources,
 		{
 			if ( uCurID )
 			{
-				if ( pMinMax )
-					pMinMax->CollectMVA ( uCurID, dCurInfo );
 				wrMva.PutDocid ( uCurID );
 				ARRAY_FOREACH ( i, dCurInfo )
 				{
@@ -8374,9 +8372,6 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources,
 			return false;
 		}
 	}
-
-	if ( pMinMax )
-		pMinMax->FinishCollect ( true );
 
 	// clean up readers
 	ARRAY_FOREACH ( i, dBins )
@@ -9544,17 +9539,12 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 	PROFILE_END ( collect_hits );
 
-	// prepare the collector for min/max of attributes
-	AttrIndexBuilder_c tMinMax ( m_tSchema );
-	CSphVector<DWORD> dMinMaxBuffer ( tMinMax.GetExpectedSize ( m_tStats.m_iTotalDocuments ) );
-	tMinMax.Prepare ( &dMinMaxBuffer[0] );
-
 	///////////////////////////////////////
 	// collect and sort multi-valued attrs
 	///////////////////////////////////////
 
 	if ( !BuildMVA ( dSources, dHits, iHitsMax*sizeof(CSphWordHit),
-		fdTmpFieldMVAs.GetFD (), nFieldMVAs, iMaxPoolFieldMVAs, &tMinMax ) )
+		fdTmpFieldMVAs.GetFD (), nFieldMVAs, iMaxPoolFieldMVAs ) )
 		return 0;
 
 	// reset hits pool
@@ -9718,6 +9708,14 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		pDocinfo = dDocinfos;
 		SphDocID_t uLastId = 0;
 		m_uMinMaxIndex = 0;
+
+		// prepare the collector for min/max of attributes
+		AttrIndexBuilder_c tMinMax ( m_tSchema );
+		CSphVector<DWORD> dMinMaxBuffer ( tMinMax.GetExpectedSize ( m_tStats.m_iTotalDocuments ) );
+		CSphVector < CSphVector<DWORD> > dCurInfo;
+		tMinMax.Prepare ( &dMinMaxBuffer[0] );
+		dCurInfo.Resize ( dMvaIndexes.GetLength() );
+
 		while ( qDocinfo.GetLength() )
 		{
 			// obtain bin index and next entry
@@ -9765,8 +9763,15 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 						ARRAY_FOREACH ( i, dMvaIndexes )
 						{
 							sphSetRowAttr ( DOCINFO2ATTRS(pEntry), dMvaLocators[i], SphAttr_t(rdMva.GetPos()/sizeof(DWORD)) ); // intentional clamp; we'll check for 32bit overflow later
-							rdMva.SkipBytes ( rdMva.GetDword()*sizeof(DWORD) );
+
+							DWORD iMvaCount = rdMva.GetDword();
+							dCurInfo[i].Resize ( 0 );
+							dCurInfo[i].Reserve ( iMvaCount );
+							while ( iMvaCount-- )
+								dCurInfo[i].Add( rdMva.GetDword() );
 						}
+
+						tMinMax.CollectMVA ( uMvaID, dCurInfo );
 
 						uMvaID = rdMva.GetDocid();
 						if ( !uMvaID )

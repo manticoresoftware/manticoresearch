@@ -6875,7 +6875,8 @@ private:
 	DWORD						m_uStride;		// size of attribute's chunk (in DWORDs)
 	DWORD						m_uElements;	// counts total number of collected min/max pairs
 	int							m_iLoop;		// loop inside one set
-	DWORD*						m_pOutBuffer;	// storage for collected min/max
+	DWORD *						m_pOutBuffer;	// storage for collected min/max
+	DWORD *						m_pOutMax;		// storage max for bound checking
 	SphDocID_t					m_uStart;		// first and last docids of current chunk
 	SphDocID_t					m_uLast;
 	SphDocID_t					m_uIndexStart;	// first and last docids of whole index
@@ -6910,6 +6911,10 @@ private:
 		DWORD * pMinAttrs = DOCINFO2ATTRS(pMinEntry);
 		DWORD * pMaxEntry = pMinEntry + m_uStride;
 		DWORD * pMaxAttrs = pMinAttrs + m_uStride;
+
+		assert ( pMaxEntry < m_pOutMax );
+		assert ( pMaxAttrs < m_pOutMax );
+
 		m_uIndexLast = m_uLast;
 
 		DOCINFOSETID ( pMinEntry, m_uStart );
@@ -6959,6 +6964,7 @@ public:
 		, m_uElements ( 0 )
 		, m_iLoop ( 0 )
 		, m_pOutBuffer ( NULL )
+		, m_pOutMax ( NULL )
 		, m_uStart ( 0 )
 		, m_uLast ( 0 )
 		, m_uIndexStart ( 0 )
@@ -7005,9 +7011,10 @@ public:
 		m_dMvaIndexMax.Resize ( m_dMvaAttrs.GetLength() );
 	}
 
-	void Prepare ( DWORD * pOutBuffer )
+	void Prepare ( DWORD * pOutBuffer, DWORD * pOutMax )
 	{
 		m_pOutBuffer = pOutBuffer;
+		m_pOutMax = pOutMax;
 		m_uElements = 0;
 		m_uIndexStart = m_uIndexLast = 0;
 		ARRAY_FOREACH ( i, m_dIntIndexMin )
@@ -7134,6 +7141,9 @@ public:
 		CSphRowitem * pMinAttrs = DOCINFO2ATTRS(pMinEntry);
 		CSphRowitem * pMaxAttrs = DOCINFO2ATTRS(pMaxEntry);
 
+		assert ( pMaxEntry < m_pOutMax );
+		assert ( pMaxAttrs < m_pOutMax );
+
 		DOCINFOSETID ( pMinEntry, m_uIndexStart );
 		DOCINFOSETID ( pMaxEntry, m_uIndexLast );
 
@@ -7180,7 +7190,7 @@ bool CSphIndex_VLN::PrecomputeMinMax()
 		return true;
 
 	AttrIndexBuilder_c tBuilder ( m_tSchema );
-	tBuilder.Prepare ( m_pDocinfoIndex );
+	tBuilder.Prepare ( m_pDocinfoIndex, m_pDocinfoIndex + 2*( 1+m_uDocinfoIndex )*( DOCINFO_IDSIZE + m_tSchema.GetRowSize() ) );
 
 	DWORD uStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 	DWORD uProgressEntry = 0;
@@ -9712,9 +9722,8 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		// prepare the collector for min/max of attributes
 		AttrIndexBuilder_c tMinMax ( m_tSchema );
 		CSphVector<DWORD> dMinMaxBuffer ( tMinMax.GetExpectedSize ( m_tStats.m_iTotalDocuments ) );
-		CSphVector < CSphVector<DWORD> > dCurInfo;
-		tMinMax.Prepare ( &dMinMaxBuffer[0] );
-		dCurInfo.Resize ( dMvaIndexes.GetLength() );
+		CSphDocMVA tCurInfo ( dMvaIndexes.GetLength() );
+		tMinMax.Prepare ( &dMinMaxBuffer[0], &dMinMaxBuffer[0] + dMinMaxBuffer.GetLength()  );
 
 		while ( qDocinfo.GetLength() )
 		{
@@ -9741,7 +9750,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				}
 				iOrd++;
 				m_uMinMaxIndex += iDocinfoStride;
-				tMinMax.CollectWithoutMvas ( pEntry, false );
 
 				// update MVA
 				if ( bGotMVA )
@@ -9765,19 +9773,21 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 							sphSetRowAttr ( DOCINFO2ATTRS(pEntry), dMvaLocators[i], SphAttr_t(rdMva.GetPos()/sizeof(DWORD)) ); // intentional clamp; we'll check for 32bit overflow later
 
 							DWORD iMvaCount = rdMva.GetDword();
-							dCurInfo[i].Resize ( 0 );
-							dCurInfo[i].Reserve ( iMvaCount );
+							tCurInfo.m_dMVA[i].Reserve ( iMvaCount );
 							while ( iMvaCount-- )
-								dCurInfo[i].Add( rdMva.GetDword() );
+								tCurInfo.m_dMVA[i].Add( rdMva.GetDword() );
 						}
-
-						tMinMax.CollectMVA ( uMvaID, dCurInfo );
 
 						uMvaID = rdMva.GetDocid();
 						if ( !uMvaID )
 							uMvaID = DOCID_MAX;
 					}
 				}
+
+				tMinMax.Collect ( pEntry, tCurInfo );
+
+				ARRAY_FOREACH ( i, tCurInfo.m_dMVA )
+					tCurInfo.m_dMVA[i].Resize( 0 );
 
 				// emit it
 				memcpy ( pDocinfo, pEntry, iDocinfoStride*sizeof(DWORD) );
@@ -10756,7 +10766,7 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 		AttrIndexBuilder_c tMinMax ( m_tSchema );
 		CSphVector<DWORD> dMinMaxBuffer ( tMinMax.GetExpectedSize (
 			m_tStats.m_iTotalDocuments + pSrcIndex->GetStats().m_iTotalDocuments ) );
-		tMinMax.Prepare ( &dMinMaxBuffer[0] );
+		tMinMax.Prepare ( &dMinMaxBuffer[0], &dMinMaxBuffer[0] + dMinMaxBuffer.GetLength() );
 		m_uMinMaxIndex = 0;
 
 		DWORD * pSrcRow = pSrcIndex->m_pDocinfo.GetWritePtr(); // they *can* be null if the respective index is empty

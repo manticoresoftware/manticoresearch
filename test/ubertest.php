@@ -113,11 +113,20 @@ while ( $entry=readdir($dh) )
 }
 sort ( $tests );
 
+// full name to short alias
+function ShortTestName ( $full )
+{
+	if ( substr ( $full,0,5 )=="test_" )
+		return substr ( $full, 5 );
+	return $full;
+}
+
 // run tests
 $total_tests = 0;
 $total_tests_failed = 0;
 $total_subtests = 0;
 $total_subtests_failed = 0;
+$failed_tests = array();
 foreach ( $tests as $test )
 {
 	if ( $windows && !$sd_managed_searchd )
@@ -139,6 +148,7 @@ foreach ( $tests as $test )
 		{
 			// failed to run that test at all
 			$total_tests_failed++;
+			$failed_tests[] = ShortTestName ( $test );
 			continue;
 		}
 
@@ -147,6 +157,7 @@ foreach ( $tests as $test )
 		{
 			$total_tests_failed++;
 			$total_subtests_failed += $res["tests_failed"];
+			$failed_tests[] = ShortTestName ( $test );
 			if ( $g_strict )
 				break;
 		}
@@ -162,6 +173,7 @@ foreach ( $tests as $test )
 		{
 			$total_tests_failed++;
 			$total_subtests_failed++;
+			$failed_tests[] = ShortTestName ( $test );
     	}
 	}
 }
@@ -187,6 +199,7 @@ while ( file_exists ( "error_$nfile.txt" ) )
 // summarize
 if ( $total_tests_failed )
 {
+	printf ( "\nTo re-run failed tests only:\nphp ubertest.php t %s\n", join ( " ", $failed_tests ) );
 	printf ( "\n%d of %d tests and %d of %d subtests failed, %.2f sec elapsed\nTHERE WERE FAILURES!\n",
 		$total_tests_failed, $total_tests,
 		$total_subtests_failed, $total_subtests,

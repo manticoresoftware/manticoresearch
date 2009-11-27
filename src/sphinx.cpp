@@ -33,6 +33,7 @@
 
 #define SPH_UNPACK_BUFFER_SIZE	4096
 #define SPH_READ_PROGRESS_CHUNK (8192*1024)
+#define SPH_READ_NOPROGRESS_CHUNK (32768*1024)
 
 #if USE_LIBSTEMMER
 #include "libstemmer.h"
@@ -657,7 +658,9 @@ public:
 		BYTE * pCur = (BYTE *)pBuf;
 		while ( iToRead>0 )
 		{
-			int64_t iToReadOnce = ( m_pProgress && m_pStat ) ? Min ( SPH_READ_PROGRESS_CHUNK, iToRead ) : iToRead;
+			int64_t iToReadOnce = ( m_pProgress && m_pStat )
+				? Min ( SPH_READ_PROGRESS_CHUNK, iToRead )
+				: Min ( SPH_READ_NOPROGRESS_CHUNK, iToRead );
 			int64_t iGot = (int64_t) sphRead ( GetFD(), pCur, (size_t)iToReadOnce );
 			if ( iGot<=0 )
 				break;
@@ -5277,6 +5280,53 @@ void CSphReader_VLN::SkipBytes ( int iCount )
 }
 
 
+#if !HAVE_PREAD
+#if USE_WINDOWS
+
+// my pread for Windows
+int pread ( int iFD, void * pBuf, int iBytes, SphOffset_t iOffset )
+{
+	if ( iBytes==0 )
+		return 0;
+
+	HANDLE hFile;
+	hFile = (HANDLE) _get_osfhandle ( iFD );
+	if ( hFile==INVALID_HANDLE_VALUE )
+		return -1;
+
+	STATIC_SIZE_ASSERT ( SphOffset_t, 8 );
+	OVERLAPPED tOverlapped = { 0 };
+	tOverlapped.Offset = (DWORD)( iOffset & I64C(0xffffffff) );
+	tOverlapped.OffsetHigh = (DWORD)( iOffset>>32 );
+
+	DWORD uRes;
+	if ( !ReadFile ( hFile, pBuf, iBytes, &uRes, &tOverlapped ) )
+	{
+		DWORD uErr = GetLastError();
+		if ( uErr==ERROR_HANDLE_EOF )
+			return 0;
+
+		errno = uErr; // FIXME! should remap from Win to POSIX
+		return -1;
+	}
+	return uRes;
+}
+
+#else
+
+// generic fallback; prone to races
+int pread ( int iFD, void * pBuf, int iBytes, SphOffset_t iOffset )
+{
+	if ( sphSeek ( iFD, iOffset, SEEK_SET )==-1 )
+		return -1;
+
+	return sphReadThrottled ( iFD, pBuf, iBytes );
+}
+
+#endif // USE_WINDOWS
+#endif // !HAVE_PREAD
+
+
 void CSphReader_VLN::UpdateCache ()
 {
 	PROFILE ( read_hits );
@@ -5295,37 +5345,26 @@ void CSphReader_VLN::UpdateCache ()
 	// stream position could be changed externally
 	// so let's just hope that the OS optimizes redundant seeks
 	SphOffset_t iNewPos = m_iPos + Min ( m_iBuffPos, m_iBuffUsed );
-	if ( sphSeek ( m_iFD, iNewPos, SEEK_SET )==-1 )
-	{
-		// unexpected io failure
-		m_iBuffPos = 0;
-		m_iBuffUsed = 0;
-
-		m_bError = true;
-		m_sError.SetSprintf ( "seek error in %s: pos="INT64_FMT", code=%d, msg=%s",
-			m_sFilename.cstr(), (int64_t)iNewPos, errno, strerror(errno) );
-		return;
-	}
 
 	if ( m_iSizeHint<=0 )
 		m_iSizeHint = ( m_iReadUnhinted>0 ) ? m_iReadUnhinted : DEFAULT_READ_UNHINTED;
-
 	int iReadLen = Min ( m_iSizeHint, m_iBufSize );
-	m_iBuffPos = 0;
-	m_iBuffUsed = sphReadThrottled ( m_iFD, m_pBuff, iReadLen );
-	m_iPos = iNewPos;
 
-	if ( m_iBuffUsed>0 )
+	m_iBuffPos = 0;
+	m_iBuffUsed = (int) pread ( m_iFD, m_pBuff, iReadLen, iNewPos ); // FIXME! what about throttling?
+
+	if ( m_iBuffUsed<0 )
 	{
-		// all fine, adjust hint
-		m_iSizeHint -= m_iBuffUsed;
-	} else
-	{
-		// unexpected io failure
+		m_iBuffUsed = m_iBuffPos = 0;
 		m_bError = true;
-		m_sError.SetSprintf ( "read error in %s: pos="INT64_FMT", len=%d, code=%d, msg=%s",
-			m_sFilename.cstr(), (int64_t)m_iPos, iReadLen, errno, strerror(errno) );
+		m_sError.SetSprintf ( "pread error in %s: pos="INT64_FMT", len=%d, code=%d, msg=%s",
+			m_sFilename.cstr(), (int64_t)iNewPos, iReadLen, errno, strerror(errno) );
+		return;
 	}
+
+	// all fine, adjust offset and hint
+	m_iSizeHint -= m_iBuffUsed;
+	m_iPos = iNewPos;
 }
 
 
@@ -8213,7 +8252,6 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources,
 	dBlockLens.Reserve ( 1024 );
 
 	m_tProgress.m_ePhase = CSphIndexProgress::PHASE_COLLECT_MVA;
-	m_tProgress.m_iAttrs = 0;
 
 	if ( !bOnlyFieldMVAs )
 	{
@@ -9092,6 +9130,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 	m_tStats.Reset ();
 	m_tProgress.m_ePhase = CSphIndexProgress::PHASE_COLLECT;
+	m_tProgress.m_iAttrs = 0;
 
 	CSphVector<int> dHitBlocks;
 	dHitBlocks.Reserve ( 1024 );
@@ -9182,6 +9221,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 							tMva.m_uDocID = pSource->m_tDocInfo.m_iDocID;
 							tMva.m_iAttr = iMVA;
 							tMva.m_uValue = MVA_DOWNSIZE ( pSource->m_tDocInfo.GetAttr ( tLoc ) );
+							m_tProgress.m_iAttrs++;
 
 							int iLength = dFieldMVAs.GetLength ();
 							if ( iLength == iMaxPoolFieldMVAs )
@@ -10951,6 +10991,8 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 
 		dKillList.Uniq ();
 
+		m_iKillListSize = dKillList.GetLength ();
+
 		if ( dKillList.GetLength () )
 		{
 			if ( !sphWriteThrottled ( fdKillList.GetFD (), &(dKillList [0]), dKillList.GetLength ()*sizeof (SphAttr_t), "kill_list", m_sLastError ) )
@@ -11357,6 +11399,8 @@ bool CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 {
 	bool bRandomize = ppSorters[0]->m_bRandomize;
 	int iCutoff = pQuery->m_iCutoff;
+	if ( iCutoff<=0 )
+		iCutoff = -1;
 
 	// do searching
 	CSphMatch * pMatch = pRanker->GetMatchesBuffer();
@@ -11386,6 +11430,9 @@ bool CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 				if ( --iCutoff==0 )
 					break;
 		}
+
+		if ( iCutoff==0 )
+			break;
 	}
 	return true;
 }
@@ -11457,6 +11504,8 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	// do scan
 	bool bRandomize = ppSorters[0]->m_bRandomize;
 	int iCutoff = pQuery->m_iCutoff;
+	if ( iCutoff<=0 )
+		iCutoff = -1;
 
 	CSphMatch tMatch;
 	tMatch.Reset ( pResult->m_tSchema.GetDynamicSize() );
@@ -11510,6 +11559,8 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 					break;
 				}
 		}
+		if ( iCutoff==0 )
+			break;
 	}
 
 	// done
@@ -11633,10 +11684,7 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 		else
 			iChunkLength = pIndex->m_iWordlistSize - uWordlistOffset;
 
-		if ( sphSeek ( m_tWordlist.GetFD (), uWordlistOffset, SEEK_SET ) < 0 )
-			return false;
-
-		if ( sphReadThrottled ( m_tWordlist.GetFD (), pIndex->m_pWordlistChunkBuf, (size_t)iChunkLength ) != (size_t)iChunkLength )
+		if ( (int)pread ( m_tWordlist.GetFD (), pIndex->m_pWordlistChunkBuf, (size_t)iChunkLength, uWordlistOffset ) != iChunkLength )
 			return false;
 
 		pBuf = pIndex->m_pWordlistChunkBuf;

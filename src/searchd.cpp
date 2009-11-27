@@ -8475,14 +8475,56 @@ SC_HANDLE ServiceOpenManager ()
 }
 
 
-void strappend ( char * sBuf, const int iBufLimit, char * sAppend )
+void AppendArg ( char * sBuf, int iBufLimit, const char * sArg )
 {
-	int iLen = strlen(sBuf);
-	int iAppend = strlen(sAppend);
+	char * sBufMax = sBuf + iBufLimit - 2; // reserve place for opening space and trailing zero
+	sBuf += strlen(sBuf);
 
-	int iToCopy = Min ( iBufLimit-iLen-1, iAppend );
-	memcpy ( sBuf+iLen, sAppend, iToCopy );
-	sBuf[iLen+iToCopy] = '\0';
+	if ( sBuf>=sBufMax )
+		return;
+
+	int iArgLen = strlen(sArg);
+	bool bQuote = false;
+	for ( int i=0; i<iArgLen && !bQuote; i++ )
+		if ( sArg[i]==' ' || sArg[i]=='"' )
+			bQuote = true;
+
+	*sBuf++ = ' ';
+	if ( !bQuote )
+	{
+		// just copy
+		int iToCopy = Min ( sBufMax-sBuf, iArgLen );
+		memcpy ( sBuf, sArg, iToCopy );
+		sBuf[iToCopy] = '\0';
+
+	} else
+	{
+		// quote
+		sBufMax -= 2; // reserve place for quotes
+		if ( sBuf>=sBufMax )
+			return;
+
+		*sBuf++ = '"';
+		while ( sBuf<sBufMax && *sArg )
+		{
+			if ( *sArg=='"' )
+			{
+				// quote
+				if ( sBuf<sBufMax-1)
+				{
+					*sBuf++ = '\\';
+					*sBuf++ = *sArg++;
+				}
+			} else
+			{
+				// copy
+				*sBuf++ = *sArg++;
+			}
+			
+		}
+		*sBuf++ = '"';
+		*sBuf++ = '\0';
+	}
 }
 
 
@@ -8493,17 +8535,18 @@ void ServiceInstall ( int argc, char ** argv )
 
 	sphInfo ( "Installing service..." );
 
-	char szPath[MAX_PATH];
-	if( !GetModuleFileName ( NULL, szPath, MAX_PATH ) )
+	char szBinary[MAX_PATH];
+	if( !GetModuleFileName ( NULL, szBinary, MAX_PATH ) )
 		sphFatal ( "GetModuleFileName() failed: %s", WinErrorInfo() );
 
-	strappend ( szPath, sizeof(szPath), " --ntservice" );
+	char szPath[MAX_PATH];
+	szPath[0] = '\0';
+
+	AppendArg ( szPath, sizeof(szPath), szBinary );
+	AppendArg ( szPath, sizeof(szPath), "--ntservice" );
 	for ( int i=1; i<argc; i++ )
 		if ( strcmp ( argv[i], "--install" ) )
-	{
-		strappend ( szPath, sizeof(szPath), " " );
-		strappend ( szPath, sizeof(szPath), argv[i] );
-	}
+			AppendArg ( szPath, sizeof(szPath), argv[i] );
 
 	SC_HANDLE hSCM = ServiceOpenManager ();
 	SC_HANDLE hService = CreateService (
@@ -8514,7 +8557,7 @@ void ServiceInstall ( int argc, char ** argv )
 		SERVICE_WIN32_OWN_PROCESS,		// service type
 		SERVICE_AUTO_START,				// start type
 		SERVICE_ERROR_NORMAL,			// error control type
-		szPath,							// path to service's binary
+		szPath+1,						// path to service's binary
 		NULL,							// no load ordering group
 		NULL,							// no tag identifier
 		NULL,							// no dependencies

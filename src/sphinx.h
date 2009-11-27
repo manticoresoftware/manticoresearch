@@ -1869,7 +1869,7 @@ public:
 	CSphString		m_sGroupSortBy;	///< sorting clause for groups in group-by mode
 	CSphString		m_sGroupDistinct;///< count distinct values for this attribute
 
-	int				m_iCutoff;		///< matches count threshold to stop searching at (defualt is 0; means to search until all matches are found)
+	int				m_iCutoff;		///< matches count threshold to stop searching at (default is 0; means to search until all matches are found)
 
 	int				m_iRetryCount;	///< retry count, for distributed queries
 	int				m_iRetryDelay;	///< retry delay, for distributed queries

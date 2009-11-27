@@ -101,7 +101,7 @@ AC_SEARCH_LIBS([iconv],[iconv],[have_libiconv=yes],[have_libiconv=no])
 AC_SEARCH_LIBS([inflate],[z],[have_lz=yes],[have_lz=no])
 AC_SEARCH_LIBS([logf],[m])
 AC_SEARCH_LIBS([SQLConnect],[odbc],[have_libodbc=yes],[have_libodbc=no])
-AC_CHECK_FUNCS([dup2 gethostbyname gettimeofday memmove memset select socket strcasecmp strchr strerror strncasecmp strstr strtol logf])
+AC_CHECK_FUNCS([dup2 gethostbyname gettimeofday memmove memset select socket strcasecmp strchr strerror strncasecmp strstr strtol logf pread])
 
 # most systems require the program be linked with librt library to use
 # the function clock_gettime 

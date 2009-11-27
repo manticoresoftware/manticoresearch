@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>specials vs charset_table vs match_mode</name>
+<config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source src
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT * FROM test_table
+}
+
+index main
+{
+	source			= src
+	path			= <data_path/>/main
+	charset_table	= 0..9, A..Z->a..z, _, a..z, (, ), $
+}
+</config>
+
+<queries>
+<query>google$com</query>
+<query>foo(bar)</query>
+<query>foo\(bar\)</query>
+<query mode="extended2">google$com</query>
+<query mode="extended2">foo(bar)</query>
+<query mode="extended2">foo\(bar\)</query>
+<query mode="extended2">"foo(bar)"</query>
+</queries>
+
+<db_create>
+CREATE TABLE test_table (
+	document_id INTEGER NOT NULL PRIMARY KEY,
+	title VARCHAR(255) NOT NULL )
+</db_create>
+<db_drop>
+DROP TABLE IF EXISTS test_table
+</db_drop>
+<db_insert>
+INSERT INTO test_table VALUES
+	( 1, 'google dot com' ),
+	( 2, 'foo beyond all bars' ),
+	( 3, 'mangled google$com link' ),
+	( 4, 'no idea why search for foo(bar), but they do' )
+</db_insert>
+
+</test>

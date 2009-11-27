@@ -3399,8 +3399,13 @@ int CSphTokenizerTraits<IS_UTF8>::CodepointArbitration ( int iCode, int iLastCod
 			: ~( FLAG_CODEPOINT_DUAL | FLAG_CODEPOINT_BLEND );
 	}
 
-	// dash inside the word is not a special
- 	if ( iSymbol=='-' && ( iCode & FLAG_CODEPOINT_SPECIAL ) && m_iAccum )
+	// escaped specials are not special
+	// dash and dollar inside the word are not special
+	// non-modifier specials within phrase are not special
+ 	if ( iCode & FLAG_CODEPOINT_SPECIAL )
+		if ( iLastCodepoint=='\\'
+			|| ( ( iSymbol=='-' || iSymbol=='$' ) && m_iAccum )
+			|| ( m_bPhrase && iSymbol!='"' && !IsModifier(iSymbol) ) )
 	{
 		if ( iCode & FLAG_CODEPOINT_DUAL ) 
 			iCode &= ~( FLAG_CODEPOINT_SPECIAL | FLAG_CODEPOINT_DUAL );

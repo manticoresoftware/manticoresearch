@@ -2052,7 +2052,7 @@ public:
 protected:
 	BYTE *	GetTokenSyn ();
 	void	BlendAdjust ( BYTE * pPosition );
-	int		CodepointArbitration ( int iCodepoint, int iLastCodepoint );
+	int		CodepointArbitration ( int iCodepoint, int iLastCodepoint, bool bSpaceAhead );
 
 protected:
 	/// get codepoint
@@ -3375,7 +3375,7 @@ static bool IsModifier ( int iSymbol )
 
 
 template < bool IS_UTF8 >
-int CSphTokenizerTraits<IS_UTF8>::CodepointArbitration ( int iCode, int iLastCodepoint )
+int CSphTokenizerTraits<IS_UTF8>::CodepointArbitration ( int iCode, int iLastCodepoint, bool bSpaceAhead )
 {
 	if ( !m_bQueryMode )
 		return iCode;
@@ -3404,7 +3404,8 @@ int CSphTokenizerTraits<IS_UTF8>::CodepointArbitration ( int iCode, int iLastCod
 	// non-modifier specials within phrase are not special
  	if ( iCode & FLAG_CODEPOINT_SPECIAL )
 		if ( iLastCodepoint=='\\'
-			|| ( ( iSymbol=='-' || iSymbol=='$' ) && m_iAccum )
+			|| ( m_iAccum && iSymbol=='-' )
+			|| ( m_iAccum && iSymbol=='$' && !bSpaceAhead )
 			|| ( m_bPhrase && iSymbol!='"' && !IsModifier(iSymbol) ) )
 	{
 		if ( iCode & FLAG_CODEPOINT_DUAL ) 
@@ -3912,6 +3913,13 @@ bool ISphTokenizer::SetBlendChars ( const char * sConfig, CSphString & sError )
 	return RemapCharacters ( sConfig, FLAG_CODEPOINT_BLEND, "blend", sError );
 }
 
+//////////////////////////////////////////////////////////////////////////
+
+static inline bool IsWhitespace ( BYTE c )
+{
+	return ( c=='\0' || c==' ' || c=='\t' || c=='\r' || c=='\n' );
+}
+
 /////////////////////////////////////////////////////////////////////////////
 
 CSphTokenizer_SBCS::CSphTokenizer_SBCS ()
@@ -3981,7 +3989,7 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 			iCode = m_tLC.ToLower ( iCodepoint );
 		}
 
-		iCode = CodepointArbitration ( iCode, iLastCodepoint );
+		iCode = CodepointArbitration ( iCode, iLastCodepoint, IsWhitespace(*m_pCur) );
 
 		// handle ignored chars
 		if ( iCode & FLAG_CODEPOINT_IGNORE )
@@ -4192,7 +4200,7 @@ BYTE * CSphTokenizer_UTF8::GetToken ()
 			return m_sAccum;
 		}
 
-		iCode = CodepointArbitration ( iCode, iLastCodepoint );
+		iCode = CodepointArbitration ( iCode, iLastCodepoint, IsWhitespace(*m_pCur) );
 
 		// handle ignored chars
 		if ( iCode & FLAG_CODEPOINT_IGNORE )

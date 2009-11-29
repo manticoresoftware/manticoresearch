@@ -190,7 +190,6 @@ static Mpm_e			g_eWorkers			= USE_WINDOWS ? MPM_NONE : MPM_FORK;
 
 static int				g_iPreforkChildren	= 10;		// how much workers to keep
 static CSphVector<int>	g_dChildren;
-static volatile bool	g_bAcceptUnlocked	= true;		// whether this preforked child is guaranteed to be *not* holding a lock around accept
 static int				g_iClientFD			= -1;
 static int				g_iDistThreads		= 0;
 
@@ -1212,11 +1211,10 @@ void sighup ( int )
 
 void sigterm ( int )
 {
-	// in child, bail out immediately
-	if ( !g_bHeadDaemon && g_bAcceptUnlocked )
-		exit ( 0 );
-
-	// in head or (possibly) locked preforked child, perform clean shutdown
+	// tricky bit
+	// we can't call exit() here because malloc()/free() are not re-entrant
+	// we could call _exit() but let's try to die gracefully on TERM
+	// and let signal sender wait and send KILL as needed
 	g_bGotSigterm = true;
 }
 
@@ -8995,7 +8993,9 @@ void TickPreforked ( CSphProcessSharedMutex * pAcceptMutex )
 	assert ( !g_bHeadDaemon );
 	assert ( pAcceptMutex );
 
-	g_bAcceptUnlocked = false;
+	if ( g_bGotSigterm )
+		exit ( 0 );
+
 	pAcceptMutex->Lock ();
 
 	int iClientSock = -1;
@@ -9005,7 +9005,6 @@ void TickPreforked ( CSphProcessSharedMutex * pAcceptMutex )
 		pListener = DoAccept ( &iClientSock, sClientIP );
 
 	pAcceptMutex->Unlock ();
-	g_bAcceptUnlocked = true;
 
 	if ( g_bGotSigterm )
 		exit ( 0 ); // clean shutdown (after mutex unlock)

@@ -2210,11 +2210,9 @@ bool NetInputBuffer_c::ReadFrom ( int iLen, int iTimeout, bool bIntr )
 
 	m_pCur = m_pBuf = pBuf;
 	int iGot = sphSockRead ( m_iSock, pBuf, iLen, iTimeout, bIntr );
-	if ( g_bGotSigterm )
-		return false;
 
-	m_bError = ( iGot!=iLen );
-	m_bIntr = m_bError && ( sphSockPeekErrno()==EINTR );
+	m_bError = g_bGotSigterm || ( iGot!=iLen );
+	m_bIntr = !g_bGotSigterm && m_bError && ( sphSockPeekErrno()==EINTR );
 	m_iLen = m_bError ? 0 : iLen;
 	return !m_bError;
 }

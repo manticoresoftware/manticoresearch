@@ -1018,7 +1018,7 @@ private:
 		if ( m_iBits==0 && m_uMask!=0 )
 		{
 			for ( uint64_t dMask = m_uMask; dMask; dMask >>=1 )
-				m_iBits += dMask & 1;
+				m_iBits += (int)( dMask & 1 );
 		}
 
 		// current working formula is num_nodes^2 * num_hits

@@ -1335,6 +1335,8 @@ struct TestAccCmp_fn
 	}
 };
 
+
+#ifndef NDEBUG
 static bool IsSorted ( DWORD * pData, int iCount, const TestAccCmp_fn & fn )
 {
 	const DWORD * pPrev = pData;
@@ -1353,6 +1355,8 @@ static bool IsSorted ( DWORD * pData, int iCount, const TestAccCmp_fn & fn )
 
 	return true;
 }
+#endif
+
 
 void RandomFill ( DWORD * pData, int iCount, const TestAccCmp_fn & fn, bool bChainsaw )
 {

@@ -6867,6 +6867,64 @@ subtree_hits_cache = 16M
 
 <appendix id="changelog"><title>Sphinx revision history</title>
 
+<sect2 id="rel099"><title>Version 0.9.9-release, 02 dec 2009</title>
+<itemizedlist>
+<listitem>added Open, Close, Status calls to libsphinxclient (C API)</listitem>
+<listitem>added automatic persistent connection reopening to PHP, Python APIs</listitem>
+<listitem>added 64-bit value/range filters, fullscan mode support to SphinxSE</listitem>
+<listitem>MAJOR CHANGE, our IANA assigned ports are 9312 and 9306 respectively (goodbye, trusty 3312)</listitem>
+<listitem>MAJOR CHANGE, erroneous filters now fail with an error (were silently ignored before)</listitem>
+<listitem>optimized unbuffered .spa writes on merge</listitem>
+<listitem>optimized 1-keyword queries ranking in extended2 mode</listitem>
+<listitem>fixed #441 (IO race in case of highly conccurent load on a preopened)</listitem>
+<listitem>fixed #434 (distrubuted indexes were not searchable via MySQL protocol)</listitem>
+<listitem>fixed #317 (indexer MVA progress counter)</listitem>
+<listitem>fixed #398 (stopwords not removed from search query)</listitem>
+<listitem>fixed #328 (broken cutoff)</listitem>
+<listitem>fixed #250 (now quoting paths w/spaces when installing Windows service)</listitem>
+<listitem>fixed #348 (K-list was not updated on merge)</listitem>
+<listitem>fixed #357 (destination index were not K-list-filtered on merge)</listitem>
+<listitem>fixed #369 (precaching .spi files over 2 GBs)</listitem>
+<listitem>fixed #438 (missing boundary proximity matches)</listitem>
+<listitem>fixed #371 (.spa flush in case of files over 2 GBs)</listitem>
+<listitem>fixed #373 (crashes on distributed queries via mysql proto)</listitem>
+<listitem>fixed critical bugs in hit merging code</listitem>
+<listitem>fixed #424 (ordinals could be misplaced during indexing in case of bitfields etc)</listitem>
+<listitem>fixed #426 (failing SE build on Solaris; thanks to Ben Beecher)</listitem>
+<listitem>fixed #423 (typo in SE caused crash on SHOW STATUS)</listitem>
+<listitem>fixed #363 (handling of read_timeout over 2147 seconds)</listitem>
+<listitem>fixed #376 (minor error message mismatch)</listitem>
+<listitem>fixed #413 (minus in SphinxQL)</listitem>
+<listitem>fixed #417 (floats w/o leading digit in SphinxQL)</listitem>
+<listitem>fixed #403 (typo in SetFieldWeights name in Java API)</listitem>
+<listitem>fixed index rotation vs persistent connections</listitem>
+<listitem>fixed backslash handling in SphinxQL parser</listitem>
+<listitem>fixed uint unpacking vs. PHP 5.2.9 (possibly other versions)</listitem>
+<listitem>fixed #325 (filter settings send from SphinxSE)</listitem>
+<listitem>fixed #352 (removed mysql wrapper around close() in SphinxSE)</listitem>
+<listitem>fixed #389 (display error messages through SphinxSE status variable)</listitem>
+<listitem>fixed linking with port-installed iconv on OS X</listitem>
+<listitem>fixed negative 64-bit unpacking in PHP API</listitem>
+<listitem>fixed #349 (escaping backslash in query emulation mode)</listitem>
+<listitem>fixed #320 (disabled multi-query route when select items differ)</listitem>
+<listitem>fixed #353 (better quorum counts check)</listitem>
+<listitem>fixed #341 (merging of trailing hits; maybe other ranking issues too)</listitem>
+<listitem>fixed #368 (partially; @field "" caused crashes; now resets field limit)</listitem>
+<listitem>fixed #365 (field mask was leaking on field-limited terms)</listitem>
+<listitem>fixed #339 (updated debug query dumper)</listitem>
+<listitem>fixed #361 (added SetConnectTimeout() to Java API)</listitem>
+<listitem>fixed #338 (added missing fullscan to mode check in Java API)</listitem>
+<listitem>fixed #323 (added floats support to SphinxQL)</listitem>
+<listitem>fixed #340 (support listen=port:proto syntax too)</listitem>
+<listitem>fixed #332 (\r is legal SphinxQL space now)</listitem>
+<listitem>fixed xmlpipe2 K-lists</listitem>
+<listitem>fixed #322 (safety gaps in mysql protocol row buffer)</listitem>
+<listitem>fixed #313 (return keyword stats for empty indexes too)</listitem>
+<listitem>fixed #344 (invalid checkpoints after merge)</listitem>
+<listitem>fixed #326 (missing CLOCK_xxx on FreeBSD)</listitem>
+</itemizedlist>
+</sect2>
+
 <sect2 id="rel099rc2"><title>Version 0.9.9-rc2, 08 apr 2009</title>
 <itemizedlist>
 <listitem>added IsConnectError(), Open(), Close() calls to Java API (bug #240)</listitem>

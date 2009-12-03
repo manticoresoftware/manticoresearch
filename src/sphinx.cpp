@@ -14843,7 +14843,8 @@ CSphHTMLStripper::CSphHTMLStripper ()
 		"a", "b", "i", "s", "u",
 		"basefont", "big", "em", "font", "img",
 		"label", "small", "span", "strike", "strong",
-		"sub", "sup", "tt"
+		"sub\0", "sup\0", // fix gcc 3.4.3 on solaris10 compiler bug
+		"tt"
 	};
 
 	m_dTags.Resize ( sizeof(dKnown)/sizeof(dKnown[0]) );

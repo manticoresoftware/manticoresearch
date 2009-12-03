@@ -9813,10 +9813,10 @@ int WINAPI ServiceMain ( int argc, char **argv )
 #endif
 
 		char sPid[16];
-		snprintf ( sPid, sizeof(sPid), "%d\n", getpid() );
+		snprintf ( sPid, sizeof(sPid), "%d\n", (int)getpid() );
 		int iPidLen = strlen(sPid);
 
-		if ( ::write ( g_iPidFD, sPid, iPidLen )!=iPidLen )
+		if ( !sphWrite ( g_iPidFD, sPid, iPidLen ) )
 			sphFatal ( "failed to write to pid file '%s' (errno=%d, msg=%s)", g_sPidFile,
 				errno, strerror(errno) );
 

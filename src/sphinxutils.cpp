@@ -423,9 +423,9 @@ bool CSphConfigParser::TryToExec ( char * pBuffer, char * pEnd, const char * szF
 		}
 
 		if ( pArgs )
-			execl ( pBuffer, pBuffer, pArgs, szFilename, NULL );
+			execl ( pBuffer, pBuffer, pArgs, szFilename, (char*)NULL );
 		else
-			execl ( pBuffer, pBuffer, szFilename, NULL );
+			execl ( pBuffer, pBuffer, szFilename, (char*)NULL );
 
 		exit ( 1 );
 	}

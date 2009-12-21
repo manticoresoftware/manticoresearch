@@ -32,7 +32,8 @@ struct ExcerptQuery_t
 	bool			m_bSinglePassage;	///< whether to return single best passage only
 	bool			m_bUseBoundaries;	///< whether to extract passages by phrase boundaries setup in tokenizer
 	bool			m_bWeightOrder;		///< whether to order best passages in document (default) or weight order
-	bool			m_bHighlightQuery;
+	bool			m_bHighlightQuery;  ///< whether try to highlight the whole query, or always word-by-word.
+	bool			m_bForceAllWords;	///< whether to ignore limit until all needed keywords are highlighted (#448)
 
 public:
 	ExcerptQuery_t ()

@@ -995,7 +995,6 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 	assert ( m_dPassages.GetLength() );
 
 	/// select best passages
-
 	int iKeywordsLength = 0;
 	ARRAY_FOREACH ( i, m_dKeywords )
 		iKeywordsLength += m_dKeywords[i].m_iLength;
@@ -1080,7 +1079,7 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 			int iQueryWords = 0;
 			for ( int j = iStart; j!=iEnd; j++ )
 			{
-				if ( m_dTokens[i].m_uWords )
+				if ( m_dTokens[j].m_uWords )
 				{
 					( iFirst==-1 ? iFirst : iLast ) = j;
 					iQueryWords++;
@@ -1094,7 +1093,7 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 			{
 				int iPassageWords = 0;
 				for ( int j = iFirst+1; j<iLast; j++ )
-					if ( m_dTokens[i].m_eType==TOK_WORD && !m_dTokens[i].m_uWords )
+					if ( m_dTokens[j].m_eType==TOK_WORD && !m_dTokens[j].m_uWords )
 						iPassageWords++;
 				if ( iPassageWords>=iQueryWords )
 					iAround = 1;
@@ -1132,7 +1131,9 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 				if ( iFirst!=tPassage.m_iStartLimit && ( bFirst || iLast==tPassage.m_iEndLimit ) )
 				{
 					// drop first
-					tPassage.m_iStart++;
+					if ( ( tQuery.m_bForceAllWords && m_dTokens[tPassage.m_iStart].m_uWords==0 )
+						|| !tQuery.m_bForceAllWords )
+						tPassage.m_iStart++;
 					tPassage.m_iTokens--;
 					tPassage.m_iCodes -= m_dTokens[iFirst].m_iLengthCP;
 					iTotalCodes -= m_dTokens[iFirst].m_iLengthCP;
@@ -1140,7 +1141,9 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 				else if ( iLast!=tPassage.m_iEndLimit )
 				{
 					// drop last
-					tPassage.m_iTokens--;
+					if ( ( tQuery.m_bForceAllWords && m_dTokens[tPassage.m_iStart+tPassage.m_iTokens-1].m_uWords==0 )
+						|| !tQuery.m_bForceAllWords )
+						tPassage.m_iTokens--;
 					tPassage.m_iCodes -= m_dTokens[iLast].m_iLengthCP;
 					iTotalCodes -= m_dTokens[iLast].m_iLengthCP;
 				}
@@ -1158,7 +1161,7 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 	}
 
 	// if passages still don't fit start dropping least significant ones, limit is sacred.
-	while ( iTotalCodes > tQuery.m_iLimit )
+	while ( iTotalCodes > tQuery.m_iLimit && !tQuery.m_bForceAllWords )
 	{
 		iTotalCodes -= dShow.Last().m_iCodes;
 		dShow.RemoveFast ( dShow.GetLength()-1 );

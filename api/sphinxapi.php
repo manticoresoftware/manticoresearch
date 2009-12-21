@@ -29,7 +29,7 @@ define ( "SEARCHD_COMMAND_FLUSHATTRS",	7 );
 
 /// current client-side command implementation versions
 define ( "VER_COMMAND_SEARCH",		0x117 );
-define ( "VER_COMMAND_EXCERPT",		0x100 );
+define ( "VER_COMMAND_EXCERPT",		0x101 );
 define ( "VER_COMMAND_UPDATE",		0x102 );
 define ( "VER_COMMAND_KEYWORDS",	0x100 );
 define ( "VER_COMMAND_STATUS",		0x100 );
@@ -1316,18 +1316,20 @@ class SphinxClient
 		if ( !isset($opts["use_boundaries"]) )		$opts["use_boundaries"] = false;
 		if ( !isset($opts["weight_order"]) )		$opts["weight_order"] = false;
 		if ( !isset($opts["query_mode"]) )			$opts["query_mode"] = false;
+		if ( !isset($opts["force_all_words"]) )		$opts["force_all_words"] = false;
 
 		/////////////////
 		// build request
 		/////////////////
 
-		// v.1.0 req
+		// v.1.01 req
 		$flags = 1; // remove spaces
 		if ( $opts["exact_phrase"] )	$flags |= 2;
 		if ( $opts["single_passage"] )	$flags |= 4;
 		if ( $opts["use_boundaries"] )	$flags |= 8;
 		if ( $opts["weight_order"] )	$flags |= 16;
 		if ( $opts["query_mode"] )		$flags |= 32;
+		if ( $opts["force_all_words"] )	$flags |= 64;
 		$req = pack ( "NN", 0, $flags ); // mode=0, flags=$flags
 		$req .= pack ( "N", strlen($index) ) . $index; // req index
 		$req .= pack ( "N", strlen($words) ) . $words; // req words

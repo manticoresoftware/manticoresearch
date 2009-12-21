@@ -334,7 +334,7 @@ enum SearchdCommand_e
 enum
 {
 	VER_COMMAND_SEARCH		= 0x117,
-	VER_COMMAND_EXCERPT		= 0x100,
+	VER_COMMAND_EXCERPT		= 0x101,
 	VER_COMMAND_UPDATE		= 0x102,
 	VER_COMMAND_KEYWORDS	= 0x100,
 	VER_COMMAND_STATUS		= 0x100,
@@ -5646,6 +5646,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	const int EXCERPT_FLAG_USEBOUNDARIES	= 8;
 	const int EXCERPT_FLAG_WEIGHTORDER		= 16;
 	const int EXCERPT_FLAG_QUERY			= 32;
+	const int EXCERPT_FLAG_FORCE_ALL_WORDS	= 64;
 
 	// v.1.0
 	ExcerptQuery_t q;
@@ -5676,6 +5677,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	q.m_bUseBoundaries = ( iFlags & EXCERPT_FLAG_USEBOUNDARIES )!=0;
 	q.m_bWeightOrder = ( iFlags & EXCERPT_FLAG_WEIGHTORDER )!=0;
 	q.m_bHighlightQuery = ( iFlags & EXCERPT_FLAG_QUERY )!=0;
+	q.m_bForceAllWords = ( iFlags & EXCERPT_FLAG_FORCE_ALL_WORDS )!=0;
 
 	int iCount = tReq.GetInt ();
 	if ( iCount<0 || iCount>EXCERPT_MAX_ENTRIES )

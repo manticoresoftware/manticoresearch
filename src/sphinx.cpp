@@ -13750,6 +13750,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		// (ie. attr types that we can and will run additional checks on)
 		CSphVector<int> dMvaItems;
 		CSphVector<CSphAttrLocator> dFloatItems;
+		CSphVector<CSphAttrLocator> dStrItems;
 		for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
 		{
 			const CSphColumnInfo & tAttr = m_tSchema.GetAttr(i);
@@ -13776,6 +13777,8 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			}
 			else if ( tAttr.m_eAttrType==SPH_ATTR_FLOAT )
 				dFloatItems.Add	( tAttr.m_tLocator );
+			else if ( tAttr.m_eAttrType==SPH_ATTR_STRING )
+				dStrItems.Add ( tAttr.m_tLocator );
 		}
 
 		// loop the rows
@@ -13783,6 +13786,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		const DWORD * pMvaBase = m_pMva.GetWritePtr();
 		const DWORD * pMvaMax = pMvaBase + m_pMva.GetNumEntries();
 		const DWORD * pMva = pMvaBase;
+		const BYTE * pStrLast = NULL;
 
 		SphDocID_t uLastID = 0;
 		for ( DWORD uRow=0; uRow<uRowsTotal; uRow++, pRow+=uStride )
@@ -13873,6 +13877,34 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 				if ( uExp==0xff && uMantissa==0 )
 					LOC_FAIL(( fp, "float attribute is infinity (row=%u, attr=%d, id="DOCID_FMT", raw=0x%x, value=%f)",
 						uRow, iItem, uLastID, uValue, sphDW2F ( uValue ) ));
+			}
+
+			///////////////////////////
+			// check strings
+			///////////////////////////
+
+			ARRAY_FOREACH ( iItem, dStrItems )
+			{
+				const CSphRowitem * pAttrs = DOCINFO2ATTRS(pRow);
+
+				const DWORD uOffset = (DWORD)sphGetRowAttr ( pAttrs, dStrItems[ iItem ] );
+				if ( uOffset>=m_pStrings.GetNumEntries() )
+					LOC_FAIL(( fp, "string offset out of bounds (row=%u, stringattr=%d, docid="DOCID_FMT", index=%u)",
+						uRow, iItem, uLastID, uOffset ));
+
+
+				const BYTE * pStr = NULL;
+				const int iLen = sphUnpackStr ( m_pStrings.GetWritePtr() + uOffset, &pStr );
+
+				if ( pStr+iLen-1>=m_pStrings.GetWritePtr()+m_pStrings.GetLength() )
+					LOC_FAIL(( fp, "string length out of bounds (row=%u, stringattr=%d, docid="DOCID_FMT", index=%u)",
+						uRow, iItem, uLastID, pStr-m_pStrings.GetWritePtr()+iLen-1 ));
+
+				if ( pStrLast>=pStr )
+					LOC_FAIL(( fp, "overlapping string values (row=%u, stringattr=%d, docid="DOCID_FMT", last_end=%u, cur_start=%u)",
+						uRow, iItem, uLastID, pStrLast-m_pStrings.GetWritePtr(), pStr-m_pStrings.GetWritePtr() ));
+
+				pStrLast = pStr + iLen;
 			}
 
 			// progress bar

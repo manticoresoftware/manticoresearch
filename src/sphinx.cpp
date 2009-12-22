@@ -13914,6 +13914,163 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 				fflush ( fp );
 			}
 		}
+
+		///////////////////////////
+		// check blocks index
+		///////////////////////////
+
+		fprintf ( fp, "checking attribute blocks index...\n" );
+
+		// check size
+		const DWORD uTempDocinfoIndex = ( m_uDocinfo+DOCINFO_INDEX_FREQ-1 ) / DOCINFO_INDEX_FREQ;
+		if ( uTempDocinfoIndex!=m_uDocinfoIndex )
+			LOC_FAIL(( fp, "block count differs (expected=%d, got=%d)",
+				uTempDocinfoIndex, m_uDocinfoIndex ));
+
+		const DWORD uMinMaxStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
+		const DWORD * pDocinfoIndexMax = m_pDocinfoIndex + 2*( 1+m_uDocinfoIndex )*uMinMaxStride;
+
+		for ( DWORD uIndexEntry=0; uIndexEntry<m_uDocinfo; uIndexEntry++ )
+		{
+			const DWORD uBlock = uIndexEntry / DOCINFO_INDEX_FREQ;
+
+			// we have to do some checks in border cases, for example: when move from 1st to 2nd block
+			const DWORD uPrevEntryBlock = ( uIndexEntry-1 )/DOCINFO_INDEX_FREQ;
+			const bool bIsBordersCheckTime = uPrevEntryBlock!=uBlock;
+
+			const DWORD * pAttr = m_pDocinfo.GetWritePtr() + uIndexEntry * uMinMaxStride;
+			const SphDocID_t uDocID = DOCINFO2ID(pAttr);
+
+			const DWORD * pMinEntry = m_pDocinfoIndex + 2 * uBlock * uMinMaxStride;
+			const DWORD * pMaxEntry = pMinEntry + uMinMaxStride;
+			const DWORD * pMinAttrs = DOCINFO2ATTRS ( pMinEntry );
+			const DWORD * pMaxAttrs = pMinAttrs + uMinMaxStride;
+
+			// check docid vs global range
+			if ( pMaxEntry+uMinMaxStride > pDocinfoIndexMax )
+				LOC_FAIL(( fp, "unexpected block index end (row=%u, docid="DOCID_FMT", block=%d, max=%u, cur=%u)",
+					uIndexEntry, uDocID, uBlock, pDocinfoIndexMax, pMaxEntry+uMinMaxStride ));
+
+			// check attribute location vs global range
+			if ( pMaxAttrs+uMinMaxStride > pDocinfoIndexMax )
+				LOC_FAIL(( fp, "attribute position out of blocks index (row=%u, docid="DOCID_FMT", block=%u, expected<%u, got=%u)",
+					uIndexEntry, uDocID, uBlock, pDocinfoIndexMax, pMaxAttrs+uMinMaxStride ));
+
+			const SphDocID_t uMinDocID = *pMinEntry;
+			const SphDocID_t uMaxDocID = *pMaxEntry;
+
+			// checks is docid min max range valid
+			if ( uMinDocID > uMaxDocID && bIsBordersCheckTime )
+				LOC_FAIL(( fp, "invalid docid range (row=%u, block=%d, min="DOCID_FMT", max="DOCID_FMT")",
+					uIndexEntry, uBlock, uMinDocID, uMaxDocID ));
+
+			// checks docid vs blocks range
+			if ( uDocID < uMinDocID || uDocID > uMaxDocID )
+				LOC_FAIL(( fp, "unexpected docid range (row=%u, docid="DOCID_FMT", block=%d, min="DOCID_FMT", max="DOCID_FMT")",
+					uIndexEntry, uDocID, uBlock, uMinDocID, uMaxDocID ));
+
+			bool bIsFirstMva = true;
+
+			// check values vs blocks range
+			const DWORD * pSpaRow = DOCINFO2ATTRS(pAttr);
+			for ( int iItem=0; iItem<m_tSchema.GetAttrsCount(); iItem++ )
+			{
+				const CSphColumnInfo & tCol = m_tSchema.GetAttr(iItem);
+
+				switch ( tCol.m_eAttrType )
+				{
+				case SPH_ATTR_INTEGER:
+				case SPH_ATTR_TIMESTAMP:
+				case SPH_ATTR_BOOL:
+				case SPH_ATTR_BIGINT:
+					{
+						const SphAttr_t uVal = sphGetRowAttr ( pSpaRow, tCol.m_tLocator );
+						const SphAttr_t uMin = sphGetRowAttr ( pMinAttrs, tCol.m_tLocator );
+						const SphAttr_t uMax = sphGetRowAttr ( pMaxAttrs, tCol.m_tLocator );
+
+						// checks is attribute min max range valid
+						if ( uMin > uMax && bIsBordersCheckTime )
+							LOC_FAIL(( fp, "invalid attribute range (row=%u, block=%d, min=%u, max=%u)",
+								uIndexEntry, uBlock, uMin, uMax ));
+
+						if ( uVal < uMin || uVal > uMax )
+							LOC_FAIL(( fp, "unexpected attribute value (row=%u, attr=%u, docid="DOCID_FMT", block=%d, value=0x%x, min=0x%x, max=0x%x)",
+								uIndexEntry, iItem, uDocID, uBlock, (DWORD)uVal, (DWORD)uMin, (DWORD)uMax ));
+					}
+					break;
+
+				case SPH_ATTR_FLOAT:
+					{
+						const float fVal = sphDW2F ( (DWORD)sphGetRowAttr ( pSpaRow, tCol.m_tLocator ) );
+						const float fMin = sphDW2F ( (DWORD)sphGetRowAttr ( pMinAttrs, tCol.m_tLocator ) );
+						const float fMax = sphDW2F ( (DWORD)sphGetRowAttr ( pMaxAttrs, tCol.m_tLocator ) );
+
+						// checks is attribute min max range valid
+						if ( fMin > fMax && bIsBordersCheckTime )
+							LOC_FAIL(( fp, "invalid attribute range (row=%u, block=%d, min=%f, max=%f)",
+								uIndexEntry, uBlock, fMin, fMax ));
+
+						if ( fVal < fMin || fVal > fMax )
+							LOC_FAIL(( fp, "unexpected attribute value (row=%u, attr=%u, docid="DOCID_FMT", block=%d, value=%f, min=%f, max=%f)",
+								uIndexEntry, iItem, uDocID, uBlock, fVal, fMin, fMax ));
+					}
+					break;
+
+				case SPH_ATTR_INTEGER | SPH_ATTR_MULTI:
+					{
+						const DWORD uMin = (DWORD)sphGetRowAttr ( pMinAttrs, tCol.m_tLocator );
+						const DWORD uMax = (DWORD)sphGetRowAttr ( pMaxAttrs, tCol.m_tLocator );
+
+						// checks is MVA attribute min max range valid
+						if ( uMin > uMax && bIsBordersCheckTime && uMin!=0xffffffff && uMax!=0 )
+							LOC_FAIL(( fp, "invalid MVA range (row=%u, block=%d, min=0x%x, max=0x%x)",
+							uIndexEntry, uBlock, uMin, uMax ));
+
+						SphAttr_t uOff = sphGetRowAttr ( pSpaRow, tCol.m_tLocator );
+						if ( !uOff )
+							break;
+
+						const DWORD * pMva = m_pMva.GetWritePtr() + uOff;
+						const DWORD * pMvaDocID = bIsFirstMva ? ( pMva - sizeof(SphDocID_t) / sizeof(DWORD) ) : NULL;
+						bIsFirstMva = false;
+
+						if ( uOff>=m_pMva.GetNumEntries() )
+							break;
+
+						if ( pMvaDocID && DOCINFO2ID ( pMvaDocID )!=uDocID )
+						{
+							LOC_FAIL(( fp, "unexpected MVA docid (row=%u, mvaattr=%d, expected="DOCID_FMT", got="DOCID_FMT", block=%d, index=%u)",
+								uIndexEntry, iItem, uDocID, DOCINFO2ID ( pMvaDocID ), uBlock, (DWORD)uOff ));
+							break;
+						}
+
+						// check values
+						const DWORD uValues = *pMva++;
+						if ( uOff+uValues>m_pMva.GetNumEntries() )
+							break;
+
+						for ( DWORD iVal=0; iVal<uValues; iVal++ )
+						{
+							const DWORD uVal = *pMva++;
+							if ( uVal < uMin || uVal > uMax )
+								LOC_FAIL(( fp, "unexpected MVA value (row=%u, attr=%u, docid="DOCID_FMT", block=%d, index=%u, value=0x%x, min=0x%x, max=0x%x)",
+								uIndexEntry, iItem, uDocID, uBlock, iVal, (DWORD)uVal, (DWORD)uMin, (DWORD)uMax ));
+						}
+					}
+					break;
+
+				default:
+					break;
+				}
+			}
+
+			// progress bar
+			if ( uIndexEntry%1000==0 && bProgress )
+			{
+				fprintf ( fp, "%d/%d\r", uIndexEntry, m_uDocinfo );
+				fflush ( fp );
+			}
+		}
 	}
 
 	///////////////////////////

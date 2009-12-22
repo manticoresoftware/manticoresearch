@@ -13788,73 +13788,125 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		const DWORD * pMva = pMvaBase;
 		const BYTE * pStrLast = NULL;
 
+		int iOrphan = 0;
 		SphDocID_t uLastID = 0;
+
 		for ( DWORD uRow=0; uRow<uRowsTotal; uRow++, pRow+=uStride )
 		{
 			// check that ids are ascending
-			if ( DOCINFO2ID(pRow)<=uLastID )
+			bool bIsSpaValid = uLastID < DOCINFO2ID(pRow);
+			if ( !bIsSpaValid )
 				LOC_FAIL(( fp, "docid decreased (row=%u, id="DOCID_FMT", lastid="DOCID_FMT")",
 					uRow, DOCINFO2ID(pRow), uLastID ));
+
 			uLastID = DOCINFO2ID(pRow);
 
+			///////////////////////////
 			// check MVAs
+			///////////////////////////
+
 			if ( dMvaItems.GetLength() )
 			{
+				const DWORD * pMvaSpaFixed = NULL;
 				const CSphRowitem * pAttrs = DOCINFO2ATTRS(pRow);
 				bool bHasValues = false;
 				ARRAY_FOREACH ( iItem, dMvaItems )
 				{
-					bHasValues |= pAttrs[dMvaItems[iItem]]!=0;
-				}
-				
-				// no mva values at this row
-				if ( !bHasValues )
-					continue;
+					const DWORD uOffset = pAttrs[dMvaItems[iItem]];
+					bHasValues |= uOffset!=0;
 
-				// check id
-				if ( DOCINFO2ID(pMva)!=uLastID )
-					LOC_FAIL(( fp, "MVA id mismatch (row=%u, docid="DOCID_FMT", mvaid="DOCID_FMT")",
-						uRow, uLastID, DOCINFO2ID(pMva) ));
-				pMva += sizeof(SphDocID_t) / sizeof(DWORD); // can't imagine a case when it's not a multiple
-
-				// loop MVAs
-				ARRAY_FOREACH ( iItem, dMvaItems )
-				{
-					// mva value is absent at this location
-					if ( !pAttrs[dMvaItems[iItem]] )
-						continue;
-
-					// check offset (index)
-					if ( pMva!=pMvaBase+pAttrs[dMvaItems[iItem]] )
+					if ( pMvaBase+uOffset>=pMvaMax )
 					{
-						LOC_FAIL(( fp, "unexpected MVA index (row=%u, mvaattr=%d, docid="DOCID_FMT", expected=%u, got=%u)",
-							uRow, iItem, uLastID, (DWORD)(pMva-pMvaBase), pAttrs[dMvaItems[iItem]] ));
-
-						// it's unexpected but it's our best guess
-						pMva = pMvaBase+pAttrs[dMvaItems[iItem]];
-					}
-					if ( pMva>=pMvaMax )
-					{
+						bIsSpaValid = false;
 						LOC_FAIL(( fp, "MVA index out of bounds (row=%u, mvaattr=%d, docid="DOCID_FMT", index=%u)",
-							uRow, iItem, uLastID, (DWORD)(pMva-pMvaBase) ));
-						continue;
+							uRow, iItem, uLastID, uOffset ));
 					}
 
-					// check values
-					DWORD uValues = *pMva++;
-					if ( pMva+uValues-1>=pMvaMax )
-					{
-						LOC_FAIL(( fp, "MVA count out of bounds (row=%u, mvaattr=%d, docid="DOCID_FMT", count=%u)",
-							uRow, iItem, uLastID, uValues ));
-						pMva += uValues;
-						continue;
-					}
-					for ( DWORD uVal=1; uVal<uValues; uVal++ )
-						if ( pMva[uVal]<=pMva[uVal-1] )
-							LOC_FAIL(( fp, "unsorted MVA values (row=%u, mvaattr=%d, docid="DOCID_FMT", val[%u]=%u, val[%d]=%u)",
-								uRow, iItem, uLastID, uVal-1, pMva[uVal-1], uVal, pMva[uVal] ));
-					pMva += uValues;
+					if ( uOffset && pMvaBase+uOffset<pMvaMax && !pMvaSpaFixed )
+						pMvaSpaFixed = pMvaBase + uOffset - sizeof(SphDocID_t) / sizeof(DWORD);
 				}
+
+				// MVAs ptr recovery from previous errors only if current spa record is valid
+				if ( pMva!=pMvaSpaFixed && bIsSpaValid && pMvaSpaFixed )
+					pMva = pMvaSpaFixed;
+
+				bool bLastIDChecked = false;
+
+				SphDocID_t uLastMvaID = 0;
+				while ( pMva<pMvaMax && DOCINFO2ID(pMva)<=uLastID )
+				{
+					const SphDocID_t uMvaID = DOCINFO2ID(pMva);
+					pMva = DOCINFO2ATTRS(pMva);
+
+					if ( bLastIDChecked && uLastID==uMvaID )
+						LOC_FAIL(( fp, "duplicate docid found (row=%u, docid expected="DOCID_FMT", got="DOCID_FMT", index=%u)",
+							uRow, uLastID, uMvaID, (DWORD)(pMva-pMvaBase) ));
+
+					if ( uMvaID<uLastMvaID )
+						LOC_FAIL(( fp, "MVA docid decreased (row=%u, spa docid="DOCID_FMT", last MVA docid="DOCID_FMT", MVA docid="DOCID_FMT", index=%u)",
+							uRow, uLastID, uLastMvaID, uMvaID, (DWORD)(pMva-pMvaBase) ));
+
+					bool bIsMvaCorrect = uLastMvaID<=uMvaID && uMvaID<=uLastID;
+					uLastMvaID = uMvaID;
+
+					// loop MVAs
+					ARRAY_FOREACH_COND ( iItem, dMvaItems, bIsMvaCorrect )
+					{
+						const DWORD uSpaOffset = pAttrs[dMvaItems[iItem]];
+
+						// check offset (index)
+						if ( uMvaID==uLastID && uSpaOffset && bIsSpaValid && pMva!=pMvaBase+uSpaOffset )
+						{
+							LOC_FAIL(( fp, "unexpected MVA docid (row=%u, mvaattr=%d, docid expected="DOCID_FMT", got="DOCID_FMT", expected=%u, got=%u)",
+								uRow, iItem, uLastID, uMvaID, (DWORD)(pMva-pMvaBase), uSpaOffset ));
+							// it's unexpected but it's our best guess
+							// but do fix up only once, to prevent infinite loop
+							if ( !bLastIDChecked )
+								pMva = pMvaBase+uSpaOffset;
+						}
+
+						if ( pMva>=pMvaMax )
+						{
+							LOC_FAIL(( fp, "MVA index out of bounds (row=%u, mvaattr=%d, docid expected="DOCID_FMT", got="DOCID_FMT", index=%u)",
+								uRow, iItem, uLastID, uMvaID, (DWORD)(pMva-pMvaBase) ));
+							bIsMvaCorrect = false;
+							continue;
+						}
+
+						// check values
+						const DWORD uValues = *pMva++;
+						if ( pMva+uValues-1>=pMvaMax )
+						{
+							LOC_FAIL(( fp, "MVA count out of bounds (row=%u, mvaattr=%d, docid expected="DOCID_FMT", got="DOCID_FMT", count=%u)",
+								uRow, iItem, uLastID, uMvaID, uValues ));
+							pMva += uValues;
+							bIsMvaCorrect = false;
+							continue;
+						}
+						// check that values are ascending
+						for ( DWORD uVal=1; uVal<uValues && bIsMvaCorrect; uVal++ )
+							if ( pMva[uVal]<=pMva[uVal-1] )
+							{
+								LOC_FAIL(( fp, "unsorted MVA values (row=%u, mvaattr=%d, docid expected="DOCID_FMT", got="DOCID_FMT", val[%u]=%u, val[%u]=%u)",
+									uRow, iItem, uLastID, uMvaID, uVal-1, pMva[uVal-1], uVal, pMva[uVal] ));
+								bIsMvaCorrect = false;
+							}
+						pMva += uValues;
+					}
+
+					if ( !bIsMvaCorrect )
+						break;
+
+					// orphan only ON no errors && ( not matched ids || ids matched multiply times )
+					if ( bIsMvaCorrect && ( uMvaID!=uLastID || ( uMvaID==uLastID && bLastIDChecked ) ) )
+						iOrphan++;
+
+					bLastIDChecked |= uLastID==uMvaID;
+				}
+
+				if ( !bLastIDChecked && bHasValues )
+					LOC_FAIL(( fp, "missed or damaged MVA (row=%u, docid expected="DOCID_FMT")",
+						uRow, uLastID ));
 			}
 
 			///////////////////////////
@@ -13910,10 +13962,13 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			// progress bar
 			if ( uRow%1000==0 && bProgress )
 			{
-				fprintf ( fp, "%u/%u\r", uRow, uRowsTotal );
+				fprintf ( fp, "%d/%d\r", uRow, uRowsTotal );
 				fflush ( fp );
 			}
 		}
+
+		if ( iOrphan )
+			fprintf ( fp, "WARNING: %d orphaned MVA entries were found\n", iOrphan );
 
 		///////////////////////////
 		// check blocks index

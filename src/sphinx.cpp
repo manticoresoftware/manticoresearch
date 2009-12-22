@@ -13859,6 +13859,27 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		}
 	}
 
+	///////////////////////////
+	// check kill-list
+	///////////////////////////
+
+	fprintf ( fp, "checking kill-list...\n" );
+
+	// check size
+	if ( m_pKillList.GetNumEntries()!=m_iKillListSize )
+		LOC_FAIL(( fp, "kill-list size differs (expected=%d, got=%d)",
+			m_iKillListSize, m_pKillList.GetNumEntries() ));
+
+	// check that ids are ascending
+	for ( DWORD uID=1; uID<m_pKillList.GetNumEntries(); uID++ )
+		if ( m_pKillList[uID]<=m_pKillList[uID-1] )
+			LOC_FAIL(( fp, "unsorted kill-list values (val[%d]=%d, val[%d]=%d)",
+				uID-1, (DWORD)m_pKillList[uID-1], uID, (DWORD)m_pKillList[uID] ));
+
+	///////////////////////////
+	// all finished
+	///////////////////////////
+
 	// well, no known kinds of failures, maybe some unknown ones
 	tmCheck = sphMicroTimer() - tmCheck;
 	if ( !iFails )

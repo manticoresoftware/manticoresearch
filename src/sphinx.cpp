@@ -13749,6 +13749,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		// extract rowitem indexes for MVAs etc
 		// (ie. attr types that we can and will run additional checks on)
 		CSphVector<int> dMvaItems;
+		CSphVector<CSphAttrLocator> dFloatItems;
 		for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
 		{
 			const CSphColumnInfo & tAttr = m_tSchema.GetAttr(i);
@@ -13773,6 +13774,8 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 				}
 				dMvaItems.Add ( tAttr.m_tLocator.m_iBitOffset/ROWITEM_BITS );
 			}
+			else if ( tAttr.m_eAttrType==SPH_ATTR_FLOAT )
+				dFloatItems.Add	( tAttr.m_tLocator );
 		}
 
 		// loop the rows
@@ -13848,6 +13851,28 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 								uRow, iItem, uLastID, uVal-1, pMva[uVal-1], uVal, pMva[uVal] ));
 					pMva += uValues;
 				}
+			}
+
+			///////////////////////////
+			// check floats
+			///////////////////////////
+
+			ARRAY_FOREACH ( iItem, dFloatItems )
+			{
+				const CSphRowitem * pAttrs = DOCINFO2ATTRS(pRow);
+				const DWORD uValue = (DWORD)sphGetRowAttr ( pAttrs, dFloatItems[ iItem ] );
+				const DWORD uExp = ( uValue >> 23 ) & 0xff;
+				const DWORD uMantissa = uValue & 0x003fffff;
+
+				// check normalized
+				if ( uExp==0 && uMantissa!=0 )
+					LOC_FAIL(( fp, "float attribute value is unnormalized (row=%u, attr=%d, id="DOCID_FMT", raw=0x%x, value=%f)",
+						uRow, iItem, uLastID, uValue, sphDW2F ( uValue ) ));
+
+				// check +-inf
+				if ( uExp==0xff && uMantissa==0 )
+					LOC_FAIL(( fp, "float attribute is infinity (row=%u, attr=%d, id="DOCID_FMT", raw=0x%x, value=%f)",
+						uRow, iItem, uLastID, uValue, sphDW2F ( uValue ) ));
 			}
 
 			// progress bar

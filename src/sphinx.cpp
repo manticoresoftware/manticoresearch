@@ -6964,8 +6964,8 @@ private:
 		DWORD * pMaxEntry = pMinEntry + m_uStride;
 		DWORD * pMaxAttrs = pMinAttrs + m_uStride;
 
-		assert ( pMaxEntry < m_pOutMax );
-		assert ( pMaxAttrs < m_pOutMax );
+		assert ( pMaxEntry+m_uStride-1 < m_pOutMax );
+		assert ( pMaxAttrs+m_uStride-1 < m_pOutMax );
 
 		m_uIndexLast = m_uLast;
 

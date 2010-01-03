@@ -132,30 +132,6 @@ static inline float logf ( float v )
 }
 #endif
 
-//////////////////////////////////////////////////////////////////////////
-
-#if USE_WINDOWS
-#ifndef NDEBUG
-
-void sphAssert ( const char * sExpr, const char * sFile, int iLine )
-{
-	char sBuffer [ 1024 ];
-	_snprintf ( sBuffer, sizeof(sBuffer), "%s(%d): assertion %s failed\n", sFile, iLine, sExpr );
-
-	if ( MessageBox ( NULL, sBuffer, "Assert failed! Cancel to debug.",
-		MB_OKCANCEL | MB_TOPMOST | MB_SYSTEMMODAL | MB_ICONEXCLAMATION ) != IDOK )
-	{
-		__debugbreak ();
-	} else
-	{
-		fprintf ( stdout, "%s", sBuffer );
-		exit ( 1 );
-	}
-}
-
-#endif // !NDEBUG
-#endif // USE_WINDOWS
-
 // forward decl
 void sphWarn ( const char * sTemplate, ... );
 size_t sphReadThrottled ( int iFD, void * pBuf, size_t iCount );

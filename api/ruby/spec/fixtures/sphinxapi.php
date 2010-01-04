@@ -5,7 +5,9 @@
 //
 
 //
-// Copyright (c) 2001-2008, Andrew Aksyonoff. All rights reserved.
+// Copyright (c) 2001-2010, Andrew Aksyonoff
+// Copyright (c) 2008-2010, Sphinx Technologies Inc
+// All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License. You should have

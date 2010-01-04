@@ -3,8 +3,9 @@
  *
  * Java version of Sphinx searchd client (Java API)
  *
- * Copyright (c) 2007-2008, Andrew Aksyonoff
  * Copyright (c) 2007, Vladimir Fedorkov
+ * Copyright (c) 2007-2010, Andrew Aksyonoff
+ * Copyright (c) 2008-2010, Sphinx Technologies Inc
  * All rights reserved
  *
  * This program is free software; you can redistribute it and/or modify

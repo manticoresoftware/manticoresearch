@@ -15,6 +15,7 @@
 #include "sphinxexpr.h"
 #include "sphinxutils.h"
 #include "sphinxquery.h"
+#include "sphinxrt.h"
 #include <math.h>
 
 //////////////////////////////////////////////////////////////////////////
@@ -1450,6 +1451,138 @@ void TestStridedSort ()
 		TestStridedSortPass ( iNrmStride, iNrmCount );
 	}
 }
+
+//////////////////////////////////////////////////////////////////////////
+
+const char * g_sFieldsData[] = { "33", "1033", "If I were a cat...", "We are the greatest cat" };
+
+class SphTestDoc_c : public CSphSource_Document
+{
+public:
+	explicit SphTestDoc_c ( const CSphSchema & tSchema ) : CSphSource_Document ( "test_doc" )
+	{
+		m_tSchema = tSchema;
+	}
+
+	virtual BYTE ** NextDocument ( CSphString & )
+	{
+		if ( m_tDocInfo.m_iDocID )
+			return NULL;
+
+		m_tDocInfo.m_iDocID++;
+		return (BYTE **) &g_sFieldsData[2];
+	}
+
+	bool Connect ( CSphString & ) { return true; }
+	void Disconnect () {}
+	bool HasAttrsConfigured () { return true; }
+	bool IterateHitsStart ( CSphString & ) { m_tDocInfo.Reset ( m_tSchema.GetRowSize() ); return true; }
+	bool IterateMultivaluedStart ( int, CSphString & ) { return false; }
+	bool IterateMultivaluedNext () { return false; }
+	bool IterateFieldMVAStart ( int, CSphString & ) { return false; }
+	bool IterateFieldMVANext () { return false; }
+	bool IterateKillListStart ( CSphString & ) { return false; }
+	bool IterateKillListNext ( SphDocID_t & ) { return false; }
+};
+
+static void CheckRT ( int iVal, int iRef, const char * sMsg )
+{
+#if 1
+	assert ( iRef==iVal && sMsg );
+#else
+	if ( iRef!=iVal )
+		printf ( "\t%s=%d ( %d )\n", sMsg, iVal, iRef );
+#endif
+}
+
+#ifndef NDEBUG
+void TestRT ()
+{
+	const int iMaxPasses = 5;
+	for ( int iPass = 0; iPass < iMaxPasses; ++iPass )
+	{
+		printf ( "testing rt indexing, test %d/%d... ", 1+iPass, iMaxPasses );
+
+		CSphConfigSection tRTConfig;
+		sphRTInit ( tRTConfig );
+		CSphVector< ISphRtIndex * > dTemp;
+		sphReplayBinlog ( dTemp );
+
+		CSphString sError;
+		CSphDictSettings tDictSettings;
+
+		ISphTokenizer * pTok = sphCreateUTF8Tokenizer();
+		CSphDict * pDict = sphCreateDictionaryCRC ( tDictSettings, pTok, sError );
+
+		CSphColumnInfo tCol;
+		CSphSchema tSrcSchema;
+
+		CSphSourceSettings tParams;
+		tSrcSchema.Reset();
+
+		tCol.m_sName = "channel_id";
+		tCol.m_eAttrType = SPH_ATTR_INTEGER;
+		tSrcSchema.AddAttr ( tCol, true );
+
+		tCol.m_sName = "title";
+		tSrcSchema.m_dFields.Add ( tCol );
+
+		tCol.m_sName = "content";
+		tSrcSchema.m_dFields.Add ( tCol );
+
+		SphTestDoc_c * pSrc = new SphTestDoc_c ( tSrcSchema );
+
+		pSrc->SetTokenizer ( pTok );
+		pSrc->SetDict ( pDict );
+
+		pSrc->Setup ( tParams );
+		assert ( pSrc->Connect ( sError ) );
+		assert ( pSrc->IterateHitsStart ( sError ) );
+
+		assert ( pSrc->UpdateSchema ( &tSrcSchema, sError ) );
+
+		CSphSchema tSchema; // source schema must be all dynamic attrs; but index ones must be static
+		tSchema.m_dFields = tSrcSchema.m_dFields;
+		for ( int i=0; i<tSrcSchema.GetAttrsCount(); i++ )
+			tSchema.AddAttr ( tSrcSchema.GetAttr(i), false );
+
+		ISphRtIndex * pIndex = sphCreateIndexRT ( tSchema, "testrt", 32*1024*1024, "test_temp" );
+
+		pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
+		pIndex->SetDictionary ( pDict );
+		assert ( pIndex->Prealloc ( false, sError ) );
+
+		while ( pSrc->IterateHitsNext ( sError ) && pSrc->m_tDocInfo.m_iDocID )
+		{
+			pIndex->AddDocument ( pSrc->m_dHits, pSrc->m_tDocInfo );
+			pIndex->Commit ();
+		}
+
+		pSrc->Disconnect();
+
+		CheckRT ( pSrc->GetStats().m_iTotalDocuments, 1, "docs committed" );
+
+		CSphQuery tQuery;
+		CSphQueryResult tResult;
+		tQuery.m_sQuery = "@title cat";
+
+		ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, *pIndex->GetSchema(), tResult.m_sError, false );
+		assert ( pSorter );
+		assert ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, NULL ) );
+		sphFlattenQueue ( pSorter, &tResult, 0 );
+		CheckRT ( tResult.m_dMatches.GetLength(), 1, "results found" );
+		CheckRT ( tResult.m_dMatches[0].m_iDocID, 1, "docID" );
+		CheckRT ( tResult.m_dMatches[0].m_iWeight, 1500, "weight" );
+		SafeDelete ( pSorter );
+		SafeDelete ( pIndex );
+
+		sphRTDone ();
+
+		printf ( "ok\n" );
+	}
+}
+#endif
+
 //////////////////////////////////////////////////////////////////////////
 
 int main ()
@@ -1477,6 +1610,7 @@ int main ()
 	TestRwlock ();
 	TestCleanup ();
 	TestStridedSort ();
+	TestRT ();
 #endif
 
 	unlink ( g_sTmpfile );

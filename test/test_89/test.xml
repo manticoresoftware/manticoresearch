@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Test>
+  <Name>sphinxql: float numbers without leading zero</Name>
+
+<skip_indexer/>
+<Config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+<Searchd_Settings/>
+}
+
+index test
+{
+	type	= rt
+	path	= data/test
+	rt_attr_float	= flt
+	rt_field	= title
+}
+</Config>
+
+<SPHQueries>
+	<SPHinxQL>insert into test (id,flt,title) values (1,0.3,'zero'),(2,.3,'no zero')</SPHinxQL>
+	<SPHinxQL>select .1 as zz, flt from test where match('zero')</SPHinxQL>
+	<SPHinxQL>select 0.1 as zz, flt from test where match('zero')</SPHinxQL>
+</SPHQueries>
+
+</Test>

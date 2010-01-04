@@ -415,13 +415,6 @@ public:
 };
 
 
-struct IdentityHash_fn
-{
-	static inline int64_t	Hash ( int64_t iValue )		{ return iValue; }
-	static inline DWORD		Hash ( DWORD iValue )		{ return iValue; }
-	static inline int		Hash ( int iValue )			{ return iValue; }
-};
-
 /////////////////////////////////////////////////////////////////////////////
 
 /// (group,attrvalue) pair

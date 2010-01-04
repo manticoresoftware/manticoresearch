@@ -151,8 +151,9 @@ STATIC_SIZE_ASSERT ( int64_t, 8 );
 /////////////////////////////////////////////////////////////////////////////
 
 #define SPH_DEBUG_LEAKS			0
+#define SPH_ALLOCS_PROFILER		0
 
-#if SPH_DEBUG_LEAKS
+#if SPH_DEBUG_LEAKS || SPH_ALLOCS_PROFILER
 
 /// debug new that tracks memory leaks
 void *			operator new ( size_t iSize, const char * sFile, int iLine );
@@ -181,7 +182,7 @@ void			sphAllocsCheck ();
 #undef new
 #define new		new(__FILE__,__LINE__)
 
-#endif // SPH_DEBUG_LEAKS
+#endif // SPH_DEBUG_LEAKS || SPH_ALLOCS_PROFILER
 
 /// delete for my new
 void			operator delete ( void * pPtr );
@@ -584,13 +585,35 @@ T * sphBinarySearch ( T * pStart, T * pEnd, T & tRef )
 
 //////////////////////////////////////////////////////////////////////////
 
-/// generic vector
-/// (don't even ask why it's not std::vector)
-template < typename T, bool SWAP=false > class CSphVector
+/// default vector policy
+/// grow 2x and copy using assignment operator on resize
+template < typename T >
+class CSphVectorPolicy
 {
 protected:
 	static const int MAGIC_INITIAL_LIMIT = 8;
 
+public:
+	static inline void Copy ( T * pNew, T * pData, int iLength )
+	{
+		for ( int i=0; i<iLength; i++ )
+			pNew[i] = pData[i];
+	}
+
+	static inline int Relimit ( int iLimit, int iNewLimit )
+	{
+		if ( !iLimit )
+			iLimit = MAGIC_INITIAL_LIMIT;
+		while ( iLimit<iNewLimit )
+			iLimit *= 2;
+		return iLimit;
+	}
+};
+
+/// generic vector
+/// (don't even ask why it's not std::vector)
+template < typename T, typename POLICY=CSphVectorPolicy<T> > class CSphVector
+{
 public:
 	/// ctor
 	CSphVector ()
@@ -650,6 +673,12 @@ public:
 			m_pData [ m_iLength++ ] = tValue;
 	}
 
+	/// get first entry ptr
+	T * Begin ()
+	{
+		return m_iLength ? m_pData : NULL;
+	}
+
 	/// get last entry
 	T & Last ()
 	{
@@ -701,25 +730,6 @@ public:
 		return m_pData[--m_iLength];
 	}
 
-private:
-	template < typename U, bool V > struct CopyImpl
-	{
-		static inline void DoCopy ( U * pNew, U * pData, int iLength )
-		{
-			for ( int i=0; i<iLength; i++ )
-				pNew[i] = pData[i];
-		}
-	};
-
-	template < typename U > struct CopyImpl<U,true>
-	{
-		static inline void DoCopy ( U * pNew, U * pData, int iLength )
-		{
-			for ( int i=0; i<iLength; i++ )
-				Swap ( pNew[i], pData[i] );
-		}
-	};
-
 public:
 	/// grow enough to hold that much entries, if needed, but do *not* change the length
 	void Reserve ( int iNewLimit )
@@ -730,17 +740,14 @@ public:
 			return;
 
 		// calc new limit
-		if ( !m_iLimit )
-			m_iLimit = MAGIC_INITIAL_LIMIT;
-		while ( m_iLimit<iNewLimit )
-			m_iLimit *= 2;
+		m_iLimit = POLICY::Relimit ( m_iLimit, iNewLimit );
 
 		// realloc
 		// FIXME! optimize for POD case
 		T * pNew = new T [ m_iLimit ];
 		__analysis_assume ( m_iLength<=m_iLimit );
 
-		CopyImpl<T,SWAP>::DoCopy ( pNew, m_pData, m_iLength );
+		POLICY::Copy ( pNew, m_pData, m_iLength );
 		delete [] m_pData;
 
 		m_pData = pNew;
@@ -766,6 +773,12 @@ public:
 	inline int GetLength () const
 	{
 		return m_iLength;
+	}
+
+	/// query current reserved size
+	inline int GetLimit () const
+	{
+		return m_iLimit;
 	}
 
 public:
@@ -864,6 +877,15 @@ public:
 		return sphBinarySearch ( m_pData, m_pData+m_iLength-1, tRef );
 	}
 
+	/// generic linear search
+	bool Contains ( T tRef ) const
+	{
+		for ( int i=0; i<m_iLength; i++ )
+			if ( m_pData[i]==tRef )
+				return true;
+		return false;
+	}
+
 	/// fill with given value
 	void Fill ( const T & rhs )
 	{
@@ -883,6 +905,52 @@ protected:
 
 #define ARRAY_FOREACH_COND(_index,_array,_cond) \
 	for ( int _index=0; _index<_array.GetLength() && (_cond); _index++ )
+
+//////////////////////////////////////////////////////////////////////////
+
+/// swap-vector policy (for non-copyable classes)
+/// use Swap() instead of assignment on resize
+template < typename T >
+class CSphSwapVectorPolicy : public CSphVectorPolicy<T>
+{
+public:
+	static inline void Copy ( T * pNew, T * pData, int iLength )
+	{
+		for ( int i=0; i<iLength; i++ )
+			Swap ( pNew[i], pData[i] );
+	}
+};
+
+/// tight-vector policy
+/// grow only 1.2x on resize (not 2x) starting from a certain threshold
+template < typename T >
+class CSphTightVectorPolicy : public CSphVectorPolicy<T>
+{
+protected:
+	static const int SLOW_GROW_TRESHOLD = 1024;
+
+public:
+	static inline int Relimit ( int iLimit, int iNewLimit )
+	{
+		if ( !iLimit )
+			iLimit = CSphVectorPolicy<T>::MAGIC_INITIAL_LIMIT;
+		while ( iLimit<iNewLimit && iLimit<SLOW_GROW_TRESHOLD )
+			iLimit *= 2;
+		while ( iLimit<iNewLimit )
+			iLimit = (int)( iLimit*1.2f );
+		return iLimit;
+	}
+};
+
+/// swap-vector
+template < typename T >
+class CSphSwapVector : public CSphVector < T, CSphSwapVectorPolicy<T> >
+{};
+
+/// tight-vector
+template < typename T >
+class CSphTightVector : public CSphVector < T, CSphTightVectorPolicy<T> >
+{};
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -985,7 +1053,7 @@ public:
 		assert ( !pEntry );
 		assert ( !*ppEntry );
 
-		pEntry = new HashEntry_t ();
+		pEntry = new HashEntry_t;
 		pEntry->m_tKey = tKey;
 		pEntry->m_tValue = tValue;
 		pEntry->m_pNextByHash = NULL;
@@ -1152,6 +1220,13 @@ public:
 private:
 	/// current iterator
 	mutable HashEntry_t *	m_pIterator;
+};
+
+/// very popular and so, moved here
+struct IdentityHash_fn
+{
+	template <typename INT>
+	static inline INT Hash ( INT iValue )	{ return iValue; }
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1687,6 +1762,9 @@ typedef pthread_t SphThread_t;
 typedef pthread_key_t SphThreadKey_t;
 #endif
 
+/// my threading initialize routine
+void * sphThreadInit();
+
 /// my create thread wrapper
 bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pArg );
 
@@ -1732,7 +1810,7 @@ protected:
 };
 
 
-/// static mutex (for globals) - merged from r1985
+/// static mutex (for globals)
 class CSphStaticMutex : public CSphMutex
 {
 public:

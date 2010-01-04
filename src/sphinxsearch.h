@@ -139,6 +139,7 @@ public:
 	virtual						~ISphRanker () {}
 	virtual CSphMatch *			GetMatchesBuffer() = 0;
 	virtual int					GetMatches ( int iFields, const int * pWeights ) = 0;
+	virtual void				Reset ( const ISphQwordSetup & tSetup ) = 0;
 };
 
 /// factory

@@ -2,7 +2,7 @@
 <CodeBlocks_workspace_file>
 	<Workspace title="Sphinx">
 		<Project filename="codeblocks/libsphinx.cbp" />
-		<Project filename="codeblocks/indexer.cbp" active="1">
+		<Project filename="codeblocks/indexer.cbp">
 			<Depends filename="codeblocks/libsphinx.cbp" />
 		</Project>
 		<Project filename="codeblocks/indextool.cbp">
@@ -20,5 +20,6 @@
 		<Project filename="codeblocks/tests.cbp">
 			<Depends filename="codeblocks/libsphinx.cbp" />
 		</Project>
+		<Project filename="codeblocks/testrt.cbp" active="1" />
 	</Workspace>
 </CodeBlocks_workspace_file>

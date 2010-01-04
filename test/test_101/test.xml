@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Test>
+  <Name>Sphinxql rt: basic transactions</Name>
+
+<skip_indexer/>
+<Config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+<Searchd_Settings/>
+}
+
+index test
+{
+	type	= rt
+	path	= data/test
+	rt_attr_int	= idd
+	rt_field	= content
+}
+
+index test1
+{
+	type	= rt
+	path	= data/test1
+	rt_attr_int	= idd
+	rt_field	= content
+}
+
+</Config>
+
+<SPHQueries>
+	<SPHinxQL>insert into test (id,content) values (1,'content')</SPHinxQL>
+	<SPHinxQL>insert into test1 (id,content) values (1,'content')</SPHinxQL>
+	<SPHinxQL>select * from test</SPHinxQL>
+	<SPHinxQL>select * from test1</SPHinxQL>
+	<SPHinxQL>set autocommit=0</SPHinxQL>
+	<SPHinxQL>insert into test (id,content) values (2,'content')</SPHinxQL>
+	<SPHinxQL>insert into test1 (id,content) values (2,'content')</SPHinxQL>
+	<SPHinxQL>delete from test1 where id=1</SPHinxQL>
+	<SPHinxQL>delete from test where id=1</SPHinxQL>
+	<SPHinxQL>set autocommit=1</SPHinxQL>
+	<SPHinxQL>select * from test</SPHinxQL>
+	<SPHinxQL>select * from test1</SPHinxQL>
+	<SPHinxQL>begin</SPHinxQL>
+	<SPHinxQL>insert into test1 (id,content) values (2,'content')</SPHinxQL>
+	<SPHinxQL>rollback</SPHinxQL>
+	<SPHinxQL>select * from test1</SPHinxQL>
+	<SPHinxQL>start transaction</SPHinxQL>
+	<SPHinxQL>insert into test1 (id,content) values (2,'content')</SPHinxQL>
+	<SPHinxQL>commit</SPHinxQL>
+	<SPHinxQL>select * from test1</SPHinxQL>
+	<SPHinxQL>set autocommit=0</SPHinxQL>
+	<SPHinxQL>insert into test (id,content) values (3,'content')</SPHinxQL>
+	<SPHinxQL>select * from test</SPHinxQL>
+	<SPHinxQL>set autocommit=1</SPHinxQL>
+	<SPHinxQL>select * from test</SPHinxQL>
+	<SPHinxQL>select * from test1</SPHinxQL>
+</SPHQueries>
+
+</Test>

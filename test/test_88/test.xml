@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Test>
+  <Name>SphinxQL: Inserting multiple values in one query</Name>
+
+<skip_indexer/>
+<Config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+<Searchd_Settings/>
+}
+
+index test
+{
+	type	= rt
+	path	= data/test
+	rt_field	= title
+	rt_field	= content
+}
+
+</Config>
+
+<SPHQueries>
+	<SPHinxQL>insert into test values (1,'title1','content1'),(2,'title2','content2'),(3,'title3','content3')</SPHinxQL>
+	<SPHinxQL>insert into test (id,title) values (4,'title1'),(5,'title5'),(6,'title6')</SPHinxQL>
+	<SPHinxQL>insert into test (id,content) values (7,'content7'),(8,'content8'),(9,'content9')</SPHinxQL>
+	<SPHinxQL>insert into test (title,content) values ('title','failure'),('title1','failure')</SPHinxQL>
+	<SPHinxQL>select * from test</SPHinxQL>
+</SPHQueries>
+
+</Test>

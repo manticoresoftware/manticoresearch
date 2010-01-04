@@ -26,6 +26,7 @@ if ( !is_array($args) || empty($args) )
 	print ( "-s, --searchd <PATH>\tpath to searchd\n" );
 	print ( "--strict\t\tterminate on the first failure (for automatic runs)\n" );
 	print ( "--managed\t\tdon't run searchd during test (for debugging)\n" );
+	print ( "--rt\t\t run rt round (all local indexes converted to rt)\n" );
 	print ( "\nEnvironment vriables are:\n" );
 	print ( "DBUSER\tuse 'USER' as MySQL user\n" );
 	print ( "DBPASS\tuse 'PASS' as MySQL password\n" );
@@ -38,6 +39,7 @@ if ( !is_array($args) || empty($args) )
 }
 
 $locals = array();
+$locals['rt_mode'] = false;
 
 if ( array_key_exists ( "DBUSER", $_ENV ) && $_ENV["DBUSER"] )
 	$locals['db-user'] = $_ENV["DBUSER"];
@@ -59,6 +61,7 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="-p" || $arg=="--password" )	$locals['db-password'] = $args[++$i];
 	else if ( $arg=="-i" || $arg=="--indexer" )		$locals['indexer'] = $args[++$i];
 	else if ( $arg=="-s" || $arg=="--searchd" )		$locals['searchd'] = $args[++$i];
+	else if ( $arg=="--rt" )						$locals['rt_mode'] = true;
 	else if ( is_dir($arg) )						$test_dirs[] = $arg;
 	else if ( is_dir("test_$arg") )					$test_dirs[] = "test_$arg";
 	else if ( $arg=="--strict" )					$g_strict = true;
@@ -126,6 +129,7 @@ $total_tests = 0;
 $total_tests_failed = 0;
 $total_subtests = 0;
 $total_subtests_failed = 0;
+$total_skipped = 0;
 $failed_tests = array();
 foreach ( $tests as $test )
 {
@@ -134,9 +138,12 @@ foreach ( $tests as $test )
 		// avoid an issue with daemons stuck in exit(0) for some seconds
 		$sd_port += 10;
 		$agent_port += 10;
+		$agent_port_sql += 10;
 		$agents	= array (
-			array ( "address" => $sd_address, "port" => $sd_port ),
-			array ( "address" => $agent_address, "port" => $agent_port ) );
+			array ( "address" => $sd_address, "port" => $sd_port, "sqlport" => $sd_sphinxql_port ),
+			array ( "address" => $agent_address, "port" => $agent_port, "sqlport" => $agent_port_sql ),
+
+		);
 	}
 
 	if ( file_exists ( $test."/test.xml" ) )
@@ -153,6 +160,7 @@ foreach ( $tests as $test )
 		}
 
 		$total_subtests += $res["tests_total"];
+		$total_skipped += $res["tests_skipped"];
 		if ( $res["tests_failed"] )
 		{
 			$total_tests_failed++;
@@ -200,15 +208,15 @@ while ( file_exists ( "error_$nfile.txt" ) )
 if ( $total_tests_failed )
 {
 	printf ( "\nTo re-run failed tests only:\nphp ubertest.php t %s\n", join ( " ", $failed_tests ) );
-	printf ( "\n%d of %d tests and %d of %d subtests failed, %.2f sec elapsed\nTHERE WERE FAILURES!\n",
+	printf ( "\n%d of %d tests and %d of %d subtests failed, %d tests skipped, %.2f sec elapsed\nTHERE WERE FAILURES!\n",
 		$total_tests_failed, $total_tests,
-		$total_subtests_failed, $total_subtests,
+		$total_subtests_failed, $total_subtests,$total_skipped,
 		MyMicrotime()-$t );
 	exit ( 1 );
 } else
 {
-	printf ( "\n%d tests and %d subtests succesful, %.2f sec elapsed\nALL OK\n",
-		$total_tests, $total_subtests,
+	printf ( "\n%d tests and %d subtests succesful, %d tests skipped, %.2f sec elapsed\nALL OK\n",
+		$total_tests, $total_subtests, $total_skipped,
 		MyMicrotime()-$t );
 	exit ( 0 );
 }

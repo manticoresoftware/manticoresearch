@@ -1,7 +1,7 @@
 SRC_SPHINX = sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp \
 	sphinxsoundex.cpp sphinxmetaphone.cpp sphinxstemen.cpp sphinxstemru.cpp sphinxstemcz.cpp \
 	sphinxutils.cpp md5.cpp sphinxstd.cpp sphinxsort.cpp sphinxexpr.cpp sphinxfilter.cpp \
-	sphinxsearch.cpp
+	sphinxsearch.cpp sphinxrt.cpp
 
 noinst_LIBRARIES = libsphinx.a
 libsphinx_a_SOURCES = $(SRC_SPHINX)

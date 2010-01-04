@@ -2,6 +2,7 @@
 
 $sd_address 		= "localhost";
 $sd_port 			= 6712;
+$sd_sphinxql_port               = 6706;
 $sd_log				= "searchd.log";
 $sd_query_log		= "query.log";
 $sd_read_timeout	= 5;
@@ -11,12 +12,13 @@ $sd_max_matches		=  100000;
 
 $agent_address		= "localhost";
 $agent_port			= 6713;
+$agent_port_sql			= 6707;
 
 if ( array_key_exists ( "SPHINXDAEMON", $_ENV ) && $_ENV["SPHINXDAEMON"] ) 
 	$sd_address = $_ENV["SPHINXDAEMON"];
 
-$agents 			= array ( array ( "address" => $sd_address, "port" => $sd_port ),
-							  array ( "address" => $agent_address, "port" => $agent_port ) );
+$agents 			= array ( array ( "address" => $sd_address, "port" => $sd_port, "sqlport" => $sd_sphinxql_port ),
+							  array ( "address" => $agent_address, "port" => $agent_port, "sqlport" => $agent_port_sql ) );
 
 $index_data_path	= "data";
 

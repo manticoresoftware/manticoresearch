@@ -102,43 +102,64 @@
 			Filter="cpp;c;cxx;def;odl;idl;hpj;bat;asm;asmx"
 			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}">
 			<File
-				RelativePath="..\src\sphinx.cpp">
+				RelativePath="..\src\sphinx.cpp"
+				>
 			</File>
 			<File
-				RelativePath="..\src\sphinxexcerpt.cpp">
+				RelativePath="..\src\sphinxexcerpt.cpp"
+				>
 			</File>
 			<File
-				RelativePath="..\src\sphinxexpr.cpp">
+				RelativePath="..\src\sphinxexpr.cpp"
+				>
 			</File>
 			<File
-				RelativePath="..\src\sphinxfilter.cpp">
+				RelativePath="..\src\sphinxfilter.cpp"
+				>
 			</File>
 			<File
-				RelativePath="..\src\sphinxmetaphone.cpp">
+				RelativePath="..\src\sphinxmetaphone.cpp"
+				>
 			</File>
 			<File
-				RelativePath="..\src\sphinxquery.cpp">
+				RelativePath="..\src\sphinxquery.cpp"
+				>
 			</File>
 			<File
-				RelativePath="..\src\sphinxsort.cpp">
+				RelativePath="..\src\sphinxrt.cpp"
+				>
 			</File>
 			<File
-				RelativePath="..\src\sphinxsoundex.cpp">
+				RelativePath="..\src\sphinxsearch.cpp"
+				>
 			</File>
 			<File
-				RelativePath="..\src\sphinxstd.cpp">
+				RelativePath="..\src\sphinxsort.cpp"
+				>
 			</File>
 			<File
-				RelativePath="..\src\sphinxstemcz.cpp">
+				RelativePath="..\src\sphinxsoundex.cpp"
+				>
 			</File>
 			<File
-				RelativePath="..\src\sphinxstemen.cpp">
+				RelativePath="..\src\sphinxstd.cpp"
+				>
 			</File>
 			<File
-				RelativePath="..\src\sphinxstemru.cpp">
+				RelativePath="..\src\sphinxstemcz.cpp"
+				>
 			</File>
 			<File
-				RelativePath="..\src\sphinxutils.cpp">
+				RelativePath="..\src\sphinxstemen.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\src\sphinxstemru.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\src\sphinxutils.cpp"
+				>
 			</File>
 		</Filter>
 		<Filter
@@ -165,28 +186,48 @@
 				</FileConfiguration>
 			</File>
 			<File
-				RelativePath="..\src\sphinxexcerpt.h">
+				RelativePath="..\src\sphinxexcerpt.h"
+				>
 			</File>
 			<File
-				RelativePath="..\src\sphinxexpr.h">
+				RelativePath="..\src\sphinxexpr.h"
+				>
 			</File>
 			<File
-				RelativePath="..\src\sphinxfilter.h">
+				RelativePath="..\src\sphinxfilter.h"
+				>
 			</File>
 			<File
-				RelativePath="..\src\sphinxquery.h">
+				RelativePath="..\src\sphinxint.h"
+				>
 			</File>
 			<File
-				RelativePath="..\src\sphinxstd.h">
+				RelativePath="..\src\sphinxquery.h"
+				>
 			</File>
 			<File
-				RelativePath="..\src\sphinxstem.h">
+				RelativePath="..\src\sphinxrt.h"
+				>
 			</File>
 			<File
-				RelativePath="..\src\sphinxtimers.h">
+				RelativePath="..\src\sphinxsearch.h"
+				>
 			</File>
 			<File
-				RelativePath="..\src\sphinxutils.h">
+				RelativePath="..\src\sphinxstd.h"
+				>
+			</File>
+			<File
+				RelativePath="..\src\sphinxstem.h"
+				>
+			</File>
+			<File
+				RelativePath="..\src\sphinxtimers.h"
+				>
+			</File>
+			<File
+				RelativePath="..\src\sphinxutils.h"
+				>
 			</File>
 		</Filter>
 		<Filter

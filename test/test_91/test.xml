@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Test>
+  <Name>Sphinxql rt: aggregate functions</Name>
+
+<skip_indexer/>
+<Config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+<Searchd_Settings/>
+}
+
+index test
+{
+
+	type	= rt
+	path	= data/test
+	rt_attr_int	= idd
+	rt_attr_int	= grp
+	rt_field	= content
+} 
+</Config>
+
+<SPHQueries>
+	<SPHinxQL>insert into test (id,idd,grp,content) values (1,5,4,'content'),(2,2,4,'you')</SPHinxQL>
+	<SPHinxQL>select * from test</SPHinxQL>
+	<SPHinxQL>select max(idd) as mx from test group by grp</SPHinxQL>
+</SPHQueries>
+
+</Test>

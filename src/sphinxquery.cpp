@@ -114,15 +114,6 @@ void XQNode_t::ClearFieldMask ()
 		m_dChildren[i]->ClearFieldMask();
 }
 
-/// hash of subtrees
-struct IdentityHash_fn
-{
-	static inline uint64_t Hash ( uint64_t iValue )
-	{
-		return iValue;
-	}
-};
-
 
 bool XQNode_t::IsEqualTo ( const XQNode_t * pNode )
 {
@@ -1397,9 +1388,7 @@ struct MarkedNode_t
 	}
 };
 
-
 typedef CSphOrderedHash < MarkedNode_t, uint64_t, IdentityHash_fn, 128, 117 > CSubtreeHash;
-
 
 /// check hashes, then check subtrees, then flag
 static void FlagCommonSubtrees ( XQNode_t * pTree,

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Test>
+  <Name>Sphinxql rt: reinsert previously deleted item</Name>
+
+<skip_indexer/>
+<Config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+<Searchd_Settings/>
+}
+
+index test
+{
+	type	= rt
+	path	= data/test
+	rt_attr_int	= idd
+	rt_field	= content
+}
+</Config>
+
+<SPHQueries>
+	<SPHinxQL>insert into test (id,content) values (1,'content'),(2,'you')</SPHinxQL>
+	<SPHinxQL>delete from test where id=1</SPHinxQL>
+	<SPHinxQL>select * from test</SPHinxQL>
+	<SPHinxQL>insert into test (id,content) values (1,'newcontent')</SPHinxQL>
+	<SPHinxQL>select * from test where match('you')</SPHinxQL>
+	<SPHinxQL>select * from test where match('content')</SPHinxQL>
+	<SPHinxQL>select * from test where match('newcontent')</SPHinxQL>
+</SPHQueries>
+
+</Test>

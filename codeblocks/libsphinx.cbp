@@ -51,9 +51,13 @@
 		<Unit filename="../src/sphinxexpr.cpp" />
 		<Unit filename="../src/sphinxexpr.h" />
 		<Unit filename="../src/sphinxfilter.cpp" />
+		<Unit filename="../src/sphinxfilter.h" />
+		<Unit filename="../src/sphinxint.h" />
 		<Unit filename="../src/sphinxmetaphone.cpp" />
 		<Unit filename="../src/sphinxquery.cpp" />
 		<Unit filename="../src/sphinxquery.h" />
+		<Unit filename="../src/sphinxrt.cpp" />
+		<Unit filename="../src/sphinxrt.h" />
 		<Unit filename="../src/sphinxsearch.cpp" />
 		<Unit filename="../src/sphinxsearch.h" />
 		<Unit filename="../src/sphinxsort.cpp" />

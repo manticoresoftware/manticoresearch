@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Test>
+  <Name>SphinxQL: minus sign padding</Name>
+
+<skip_indexer/>
+<Config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+<Searchd_Settings/>
+}
+
+index test
+{
+	type	= rt
+	path	= data/test
+	rt_attr_int	= intt
+	rt_field	= body
+}
+</Config>
+
+<SPHQueries>
+	<SPHinxQL>insert into test (id,body) values (1,'value')</SPHinxQL>
+	<SPHinxQL>select (3-1) as a from test</SPHinxQL>
+	<SPHinxQL>select (3 -1) as a from test</SPHinxQL>
+	<SPHinxQL>select (3- 1) as a from test</SPHinxQL>
+	<SPHinxQL>select (3-0.1) as a from test</SPHinxQL>
+	<SPHinxQL>select (3- 0.1) as a from test</SPHinxQL>
+	<SPHinxQL>select (3 -0.1) as a from test</SPHinxQL>
+        <SPHinxQL>select (3--1) as a from test</SPHinxQL>
+	<SPHinxQL>select (3 --1) as a from test</SPHinxQL>
+	<SPHinxQL>select (3-- 1) as a from test</SPHinxQL>
+	<SPHinxQL>select (3--0.1) as a from test</SPHinxQL>
+	<SPHinxQL>select (3-- 0.1) as a from test</SPHinxQL>
+	<SPHinxQL>select (3 --0.1) as a from test</SPHinxQL>
+        <SPHinxQL>select (3- -1) as a from test</SPHinxQL>
+	<SPHinxQL>select (3 - -1) as a from test</SPHinxQL>
+	<SPHinxQL>select (3- - 1) as a from test</SPHinxQL>
+	<SPHinxQL>select (3- -0.1) as a from test</SPHinxQL>
+	<SPHinxQL>select (3- - 0.1) as a from test</SPHinxQL>
+	<SPHinxQL>select (3 - -0.1) as a from test</SPHinxQL>
+</SPHQueries>
+
+</Test>

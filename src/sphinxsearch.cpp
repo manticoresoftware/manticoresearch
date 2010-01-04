@@ -91,7 +91,6 @@ public:
 
 	virtual void				GetQwords ( ExtQwordsHash_t & hQwords ) = 0;
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords ) = 0;
-
 	virtual bool				GotHitless () = 0;
 
 	void DebugIndent ( int iLevel )
@@ -159,6 +158,7 @@ public:
 	virtual void				Reset ( const ISphQwordSetup & tSetup );
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
+
 	virtual void				GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
 	virtual bool				GotHitless () { return false; }
@@ -198,7 +198,18 @@ protected:
 	float						m_fIDF;			///< IDF for this term (might be 0.0f for non-1st occurences in query)
 	int64_t						m_iMaxTimer;	///< work until this timestamp
 	CSphString *				m_pWarning;
+
+public:
+	static volatile bool		m_bInterruptNow; ///< may be set from outside to indicate the globally received sigterm
 };
+
+/// Immediately interrupt current operation
+void sphInterruptNow()
+{
+	ExtTerm_c::m_bInterruptNow = true;
+}
+
+volatile bool ExtTerm_c::m_bInterruptNow = false;
 
 /// single keyword streamer with artificial hitlist
 class ExtTermHitless_c: public ExtTerm_c
@@ -876,6 +887,14 @@ const ExtDoc_t * ExtTerm_c::GetDocsChunk ( SphDocID_t * pMaxID )
 	{
 		if ( m_pWarning )
 			*m_pWarning = "query time exceeded max_query_time";
+		return NULL;
+	}
+
+	// interrupt by sitgerm
+	if ( m_bInterruptNow )
+	{
+		if ( m_pWarning )
+			*m_pWarning = "Server shutdown in progress";
 		return NULL;
 	}
 
@@ -2694,7 +2713,6 @@ void ExtOrder_c::Reset ( const ISphQwordSetup & tSetup )
 	}
 }
 
-
 ExtOrder_c::~ExtOrder_c ()
 {
 	ARRAY_FOREACH ( i, m_dChildren )
@@ -3583,7 +3601,7 @@ ISphRanker * sphCreateRanker ( const XQNode_t * pRoot, ESphRankMode eRankMode, C
 	const int iQwords = hQwords.GetLength ();
 	pResult->m_dWordStats.Resize ( Max ( pResult->m_dWordStats.GetLength(), iQwords ) );
 
-	const CSphSourceStats & tStats = pIndex->GetStats();
+	const CSphSourceStats & tSourceStats = pIndex->GetStats();
 
 	int iQword = 0;
 	hQwords.IterateStart ();
@@ -3595,9 +3613,9 @@ ISphRanker * sphCreateRanker ( const XQNode_t * pRoot, ESphRankMode eRankMode, C
 		float fIDF = 0.0f;
 		if ( tWord.m_iDocs )
 		{
-
-			float fLogTotal = logf ( float(1+tStats.m_iTotalDocuments) );
-			fIDF = logf ( float(tStats.m_iTotalDocuments-tWord.m_iDocs+1)/float(tWord.m_iDocs) )
+			float fLogTotal = logf ( float ( 1+tSourceStats.m_iTotalDocuments ) );
+			fIDF = logf ( float ( tSourceStats.m_iTotalDocuments-tWord.m_iDocs+1 )
+				/ float ( tWord.m_iDocs ) )
 				/ ( 2*iQwords*fLogTotal );
 		}
 		tWord.m_fIDF = fIDF;

@@ -215,6 +215,11 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "expand_keywords",		0, NULL },
 	{ "hitless_words",			KEY_LIST, NULL },
 	{ "hit_format",				0, NULL },
+	{ "rt_field",				KEY_LIST, NULL },
+	{ "rt_attr_int",			KEY_LIST, NULL },
+	{ "rt_attr_bigint",			KEY_LIST, NULL },
+	{ "rt_attr_float",			KEY_LIST, NULL },
+	{ "rt_mem_limit",			0, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -261,6 +266,10 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "workers",				0, NULL },
 	{ "prefork",				0, NULL },
 	{ "dist_threads",			0, NULL },
+	{ "binlog_flush",			0, NULL },
+	{ "binlog_buffer_size",		0, NULL },
+	{ "binlog_path",			0, NULL },
+	{ "binlog_restart_limit",	0, NULL },
 	{ NULL,						0, NULL }
 };
 

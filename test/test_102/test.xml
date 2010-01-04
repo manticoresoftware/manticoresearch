@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Test>
+  <Name>Sphinxql rt: weights for words inserted by different ops</Name>
+
+<skip_indexer/>
+<Config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+<Searchd_Settings/>
+}
+
+index test
+{
+	type	= rt
+	path	= data/test
+	rt_attr_int	= idd
+	rt_field	= content
+}
+</Config>
+
+<SPHQueries>
+	<SPHinxQL>insert into test (id,content) values (1,'content'),(2,'newcontent')</SPHinxQL>
+	<SPHinxQL>delete from test where id=1</SPHinxQL>
+	<SPHinxQL>insert into test (id,content) values (1,'bla')</SPHinxQL>
+	<SPHinxQL>select * from test where match('bla')</SPHinxQL>
+	<SPHinxQL>select * from test where match('newcontent')</SPHinxQL>
+	<SPHinxQL>insert into test (id,content) values (3,'content2')</SPHinxQL>
+	<SPHinxQL>select * from test where match('bla')</SPHinxQL>
+	<SPHinxQL>select * from test where match('content2')</SPHinxQL>
+	<SPHinxQL>select * from test where match('newcontent')</SPHinxQL>
+</SPHQueries>
+
+</Test>

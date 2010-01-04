@@ -179,6 +179,9 @@ bool			sphIsReadable ( const char * sFilename, CSphString * pError=NULL );
 /// set throttling options
 void			sphSetThrottling ( int iMaxIOps, int iMaxIOSize );
 
+/// immediately interrupt current query
+void			sphInterruptNow();
+
 #if !USE_WINDOWS
 /// set process info
 void			sphSetProcessInfo ( bool bHead );
@@ -1250,6 +1253,7 @@ protected:
 	bool		m_bWarnedMax;
 
 	SphDocID_t	VerifyID ( SphDocID_t uID );
+	void		AddHitFor ( SphWordID_t iWordID, DWORD iWordPos );
 };
 
 
@@ -1944,7 +1948,7 @@ public:
 class CSphQueryResult : public CSphQueryResultMeta
 {
 public:
-	CSphVector<CSphMatch,true>	m_dMatches;			///< top matching documents, no more than MAX_MATCHES
+	CSphSwapVector<CSphMatch>	m_dMatches;			///< top matching documents, no more than MAX_MATCHES
 
 	CSphSchema				m_tSchema;			///< result schema
 	const DWORD *			m_pMva;				///< pointer to MVA storage
@@ -2204,6 +2208,7 @@ public:
 	bool						IsStripperInited () const { return m_bStripperInited; }
 	virtual SphAttr_t *			GetKillList () const = 0;
 	virtual int					GetKillListSize () const = 0;
+	virtual bool				HasDocid ( SphDocID_t uDocid ) const = 0;
 
 public:
 	/// build index by indexing given sources
@@ -2326,6 +2331,14 @@ typedef void		(*SphErrorCallback_fn) ( const char * );
 
 /// register application-level internal error callback
 void				sphSetInternalErrorCallback ( SphErrorCallback_fn fnCallback );
+
+/// callback type
+typedef void		( *SphWarningCallback_fn ) ( const char * );
+
+/// register application-level warning callback
+void				sphSetWarningCallback ( SphWarningCallback_fn fnCallback );
+
+void				sphCallWarningCallback ( const char * sFmt, ... );
 
 #endif // _sphinx_
 

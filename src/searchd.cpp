@@ -14,6 +14,8 @@
 #include "sphinx.h"
 #include "sphinxutils.h"
 #include "sphinxexcerpt.h"
+#include "sphinxrt.h"
+#include "sphinxint.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -85,6 +87,7 @@ struct ServedIndex_t
 	bool				m_bToDelete;
 	bool				m_bOnlyNew;
 	int					m_iUpdateTag;
+	bool				m_bRT;
 
 public:
 						ServedIndex_t ();
@@ -105,7 +108,8 @@ enum ESphAddIndex
 {
 	ADD_ERROR	= 0,
 	ADD_LOCAL	= 1,
-	ADD_DISTR	= 2
+	ADD_DISTR	= 2,
+	ADD_RT		= 3
 };
 
 
@@ -186,10 +190,11 @@ enum Mpm_e
 	MPM_THREADS		///< create a worker thread for each query
 };
 
-static Mpm_e			g_eWorkers			= USE_WINDOWS ? MPM_NONE : MPM_FORK;
+static Mpm_e			g_eWorkers			= USE_WINDOWS ? MPM_NONE : MPM_THREADS;
 
 static int				g_iPreforkChildren	= 10;		// how much workers to keep
 static CSphVector<int>	g_dChildren;
+static volatile bool	g_bAcceptUnlocked	= true;		// whether this preforked child is guaranteed to be *not* holding a lock around accept
 static int				g_iClientFD			= -1;
 static int				g_iDistThreads		= 0;
 
@@ -448,6 +453,7 @@ void ServedIndex_t::Reset ()
 	m_bToDelete	= false;
 	m_bOnlyNew	= false;
 	m_iUpdateTag= 0;
+	m_bRT		= false;
 
 	m_tLock = CSphRwlock();
 	if ( g_eWorkers==MPM_THREADS )
@@ -828,6 +834,11 @@ static CSphString GetNamedPipeName ( int iPid )
 }
 #endif
 
+void LogWarning ( const char * sWarning )
+{
+	sphWarning ( "%s", sWarning );
+}
+
 /////////////////////////////////////////////////////////////////////////////
 
 struct StrBuf_t
@@ -1166,6 +1177,11 @@ void Shutdown ()
 	}
 #endif
 
+	sphRTDone();
+
+	if ( g_eWorkers==MPM_THREADS )
+		g_tThdMutex.Done();
+
 	// remove pid
 	if ( g_bHeadDaemon && g_sPidFile )
 	{
@@ -1216,6 +1232,7 @@ void sigterm ( int )
 	// we could call _exit() but let's try to die gracefully on TERM
 	// and let signal sender wait and send KILL as needed
 	g_bGotSigterm = true;
+	sphInterruptNow();
 }
 
 
@@ -1754,7 +1771,7 @@ public:
 
 	bool		SendString ( const char * sStr );
 
-	int			GetMysqlPacklen ( const char * sStr ) const;
+	static int	GetMysqlPacklen ( const char * sStr );
 	bool		SendMysqlString ( const char * sStr );
 
 	bool		Flush ();
@@ -1889,7 +1906,7 @@ bool NetOutputBuffer_c::SendString ( const char * sStr )
 }
 
 
-int NetOutputBuffer_c::GetMysqlPacklen ( const char * sStr ) const
+int NetOutputBuffer_c::GetMysqlPacklen ( const char * sStr )
 {
 	int iLen = strlen(sStr);
 	if ( iLen<251 )		return 1+iLen;
@@ -2210,6 +2227,8 @@ bool NetInputBuffer_c::ReadFrom ( int iLen, int iTimeout, bool bIntr )
 
 	m_pCur = m_pBuf = pBuf;
 	int iGot = sphSockRead ( m_iSock, pBuf, iLen, iTimeout, bIntr );
+	if ( g_bGotSigterm )
+		return false;
 
 	m_bError = g_bGotSigterm || ( iGot!=iLen );
 	m_bIntr = !g_bGotSigterm && m_bError && ( sphSockPeekErrno()==EINTR );
@@ -5387,12 +5406,30 @@ enum SqlStmt_e
 {
 	STMT_PARSE_ERROR,
 	STMT_SELECT,
+	STMT_INSERT,
+	STMT_REPLACE,
+	STMT_DELETE,
 	STMT_SHOW_WARNINGS,
 	STMT_SHOW_STATUS,
-	STMT_SHOW_META
+	STMT_SHOW_META,
+	STMT_SET,
+	STMT_STARTTRANSACTION,
+	STMT_COMMIT,
+	STMT_ROLLBACK
 };
 
 
+/// insert value
+struct SqlInsert_t
+{
+	int						m_iType;
+	CSphString				m_sVal;		// OPTIMIZE? use char* and point to node?
+	int64_t					m_iVal;
+	float					m_fVal;
+};
+
+
+/// parser view on a generic node
 struct SqlNode_t
 {
 	int						m_iStart;
@@ -5401,10 +5438,61 @@ struct SqlNode_t
 	int64_t					m_iValue;
 	float					m_fValue;
 	CSphVector<SphAttr_t>	m_dValues;
+	SqlStmt_e				m_eStmt;
+	SqlInsert_t				m_tInsval;	// OPTIMIZE? generic node is way too fat
 
 	SqlNode_t() : m_iValue ( 0 ) {}
 };
 #define YYSTYPE SqlNode_t
+
+
+/// parsing result
+struct SqlStmt_t
+{
+	SqlStmt_e				m_eStmt;
+	int						m_iRowsAffected;
+
+	// SELECT specific
+	CSphQuery *				m_pQuery;
+
+	// INSERT specific
+	CSphString				m_sInsertIndex;
+	CSphVector<SqlInsert_t>	m_dInsertValues;
+	CSphVector<CSphString>	m_dInsertSchema;
+	int						m_iSchemaSz;
+
+	// DELETE specific
+	CSphString				m_sDeleteIndex;
+	SphDocID_t				m_iDeleteID;
+	
+	// SET specific
+	CSphString				m_sSetName;
+	int						m_iSetValue;
+
+
+	SqlStmt_t()
+		: m_iRowsAffected(0)
+		, m_iSchemaSz(0)
+		{};
+	bool AddSchemaItem ( const char* psName )
+	{
+		m_dInsertSchema.Add ( psName );
+		m_iSchemaSz = m_dInsertSchema.GetLength();
+		return true; //< stub. Check if the given field is really exists in the schema.
+	}
+
+	// check if the number of fields which would be inserted is in accordance to the given schema
+	bool CheckInsertIntegrity()
+	{
+		// cheat: if no schema assigned, assume the size of schema as the size of the first row.
+		// (if it is wrong, it will be revealed later)
+		if ( !m_iSchemaSz )
+			m_iSchemaSz = m_dInsertValues.GetLength();
+
+		m_iRowsAffected++;
+		return m_dInsertValues.GetLength() == m_iRowsAffected * m_iSchemaSz;
+	}
+};
 
 
 struct SqlParser_t
@@ -5414,11 +5502,13 @@ struct SqlParser_t
 	const char *	m_pLastTokenStart;
 	CSphString *	m_pParseError;
 	CSphQuery *		m_pQuery;
-	SqlStmt_e		m_eStmt;
 	bool			m_bGotQuery;
+	SqlStmt_t *		m_pStmt;
 
 	bool			AddOption ( SqlNode_t tIdent, SqlNode_t tValue );
 	void			AddItem ( YYSTYPE * pExpr, YYSTYPE * pAlias, ESphAggrFunc eFunc=SPH_AGGR_NONE );
+	bool			AddSchemaItem ( YYSTYPE * pNode );
+	void			SetValue ( const char * sName, YYSTYPE tValue );
 };
 
 
@@ -5461,7 +5551,11 @@ void SqlUnescape ( CSphString & sRes, const char * sEscaped, int iLen )
 
 // unused parameter, simply to avoid type clash between all my yylex() functions
 #define YYLEX_PARAM pParser->m_pScanner, pParser
+#ifdef NDEBUG
 #define YY_DECL int yylex ( YYSTYPE * lvalp, void * yyscanner, SqlParser_t * pParser )
+#else
+#define YY_DECL int yylexd ( YYSTYPE * lvalp, void * yyscanner, SqlParser_t * pParser )
+#endif
 #include "llsphinxql.c"
 
 void yyerror ( SqlParser_t * pParser, const char * sMessage )
@@ -5469,9 +5563,79 @@ void yyerror ( SqlParser_t * pParser, const char * sMessage )
 	pParser->m_pParseError->SetSprintf ( "%s near '%s'", sMessage, pParser->m_pLastTokenStart ? pParser->m_pLastTokenStart : "(null)" );
 }
 
+#ifndef NDEBUG
+// using a proxy to be possible to debug inside yylex
+int yylex ( YYSTYPE * lvalp, void * yyscanner, SqlParser_t * pParser )
+{
+	int res = yylexd ( lvalp, yyscanner, pParser );
+	return res;
+}
+#endif
+
 #include "yysphinxql.c"
 
 //////////////////////////////////////////////////////////////////////////
+
+class CSphMatchVariant : public CSphMatch
+{
+public:
+	inline static SphAttr_t ToInt ( const SqlInsert_t & tVal )
+	{
+		switch ( tVal.m_iType )
+		{
+		case TOK_QUOTED_STRING :	return strtoul ( tVal.m_sVal.cstr(), NULL, 10 ); // FIXME? report conversion error?
+		case TOK_CONST_INT:			return int(tVal.m_iVal);
+		case TOK_CONST_FLOAT:		return int(tVal.m_fVal); // FIXME? report conversion error
+		}
+		return 0;
+	}
+	inline static SphAttr_t ToBigInt ( const SqlInsert_t & tVal )
+	{
+		switch ( tVal.m_iType )
+		{
+		case TOK_QUOTED_STRING :	return strtoll ( tVal.m_sVal.cstr(), NULL, 10 ); // FIXME? report conversion error?
+		case TOK_CONST_INT:			return tVal.m_iVal;
+		case TOK_CONST_FLOAT:		return int(tVal.m_fVal); // FIXME? report conversion error?
+		}
+		return 0;
+	}
+#if USE_64BIT
+#define ToDocid ToBigInt
+#else
+#define ToDocid ToInt
+#endif // USE_64BIT
+
+	bool SetAttr ( const CSphAttrLocator & tLoc, const SqlInsert_t & tVal, int iTargetType )
+	{
+		switch ( iTargetType )
+		{
+		case SPH_ATTR_INTEGER:
+			CSphMatch::SetAttr ( tLoc, ToInt (tVal) );
+			break;
+		case SPH_ATTR_BIGINT:
+			CSphMatch::SetAttr ( tLoc, ToBigInt (tVal) );
+			break;
+		case SPH_ATTR_FLOAT:
+			if ( tVal.m_iType==TOK_QUOTED_STRING )
+				SetAttrFloat ( tLoc, (float)strtod ( tVal.m_sVal.cstr(), NULL ) );// FIXME? report conversion error?
+			else if ( tVal.m_iType==TOK_CONST_INT )
+				SetAttrFloat ( tLoc, float(tVal.m_iVal) ); // FIXME? report conversion error?
+			else if ( tVal.m_iType==TOK_CONST_FLOAT )
+				SetAttrFloat ( tLoc, tVal.m_fVal );
+			break;
+		default:
+			return false;
+		};
+		return true;
+	}
+	inline bool SetDefaultAttr ( const CSphAttrLocator & tLoc, int iTargetType )
+	{
+		SqlInsert_t tVal;
+		tVal.m_iType = TOK_CONST_INT;
+		tVal.m_iVal = 0;
+		return SetAttr ( tLoc, tVal, iTargetType );
+	}
+};
 
 bool SqlParser_t::AddOption ( SqlNode_t tIdent, SqlNode_t tValue )
 {
@@ -5526,7 +5690,6 @@ bool SqlParser_t::AddOption ( SqlNode_t tIdent, SqlNode_t tValue )
 	return true;
 }
 
-
 void SqlParser_t::AddItem ( YYSTYPE * pExpr, YYSTYPE * pAlias, ESphAggrFunc eFunc )
 {
 	CSphQueryItem tItem;
@@ -5538,16 +5701,29 @@ void SqlParser_t::AddItem ( YYSTYPE * pExpr, YYSTYPE * pAlias, ESphAggrFunc eFun
 	m_pQuery->m_dItems.Add ( tItem );
 }
 
-
-SqlStmt_e ParseSqlQuery ( const CSphString & sQuery, CSphQuery & tQuery, CSphString & sError )
+bool SqlParser_t::AddSchemaItem ( YYSTYPE * pNode )
 {
+	assert ( m_pStmt );
+	CSphString sItem;
+	sItem.SetBinary ( m_pBuf + pNode->m_iStart, pNode->m_iEnd - pNode->m_iStart );
+	sItem.ToLower ();
+	return m_pStmt->AddSchemaItem ( sItem.cstr() );
+}
+
+SqlStmt_e ParseSqlQuery ( const CSphString & sQuery, SqlStmt_t * pStmt, CSphString & sError )
+{
+	assert ( pStmt );
+	assert ( pStmt->m_pQuery );
+
 	SqlParser_t tParser;
 	tParser.m_pBuf = sQuery.cstr();
 	tParser.m_pLastTokenStart = NULL;
 	tParser.m_pParseError = &sError;
-	tParser.m_pQuery = &tQuery;
+	tParser.m_pQuery = pStmt->m_pQuery;
 	tParser.m_bGotQuery = false;
+	tParser.m_pStmt = pStmt;
 
+	CSphQuery & tQuery = *pStmt->m_pQuery;
 	tQuery.m_eMode = SPH_MATCH_EXTENDED2; // only new and shiny matching and sorting
 	tQuery.m_eSort = SPH_SORT_EXTENDED;
 	tQuery.m_sSortBy = "@weight desc"; // default order
@@ -5577,9 +5753,8 @@ SqlStmt_e ParseSqlQuery ( const CSphString & sQuery, CSphQuery & tQuery, CSphStr
 		tQuery.m_sGroupSortBy = tQuery.m_sOrderBy;
 
 	if ( iRes!=0 )
-		return STMT_PARSE_ERROR;
-	else
-		return tParser.m_eStmt;
+		pStmt->m_eStmt = STMT_PARSE_ERROR;
+	return pStmt->m_eStmt;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -5609,7 +5784,10 @@ void HandleCommandQuery ( int iSock, int iVer, InputBuffer_c & tReq )
 	SearchHandler_c tHandler ( 1 );
 	CSphString sError;
 
-	SqlStmt_e eStmt = ParseSqlQuery ( sQuery, tHandler.m_dQueries[0], sError );
+	SqlStmt_t tStmt;
+	tStmt.m_pQuery = &tHandler.m_dQueries[0];
+
+	SqlStmt_e eStmt = ParseSqlQuery ( sQuery, &tStmt, sError );
 	if ( eStmt==STMT_PARSE_ERROR )
 	{
 		tReq.SendErrorReply ( "%s", sError.cstr() );
@@ -6285,14 +6463,6 @@ void HandleCommandFlush ( int iSock, int iVer, InputBuffer_c & tReq )
 // GENERAL HANDLER
 /////////////////////////////////////////////////////////////////////////////
 
-void SafeClose ( int & iFD )
-{
-	if ( iFD>=0 )
-		::close ( iFD );
-	iFD = -1;
-}
-
-
 void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD )
 {
 	bool bPersist = false;
@@ -6474,21 +6644,34 @@ void SendMysqlFieldPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, const char
 	tOut.SendWord ( 0 ); // filler
 }
 
+enum MysqlErrors_e
+{
+	MYSQL_ERR_SYNTAX		= 1064,
+	MYSQL_ERR_SHUTDOWN		= 1053
+};
 
-void SendMysqlErrorPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, const char * sError )
+void SendMysqlErrorPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, const char * sError, MysqlErrors_e iErr = MYSQL_ERR_SYNTAX )
 {
 	if ( sError==NULL )
 		sError = "(null)";
 
 	int iErrorLen = strlen(sError)+1; // including the trailing zero
 	int iLen = 9 + iErrorLen;
-	int iError = 1064; // pretend to be mysql syntax error for now
+	int iError = iErr; // pretend to be mysql syntax error for now
 
 	tOut.SendLSBDword ( (uPacketID<<24) + iLen );
 	tOut.SendByte ( 0xff ); // field count, always 0xff for error packet
 	tOut.SendByte ( BYTE(iError&0xff) );
 	tOut.SendByte ( BYTE(iError>>8) );
-	tOut.SendBytes ( "#42000", 6 ); // sqlstate marker (1 byte), sqlstate (5 bytes)
+	switch ( iErr )
+	{
+	case MYSQL_ERR_SHUTDOWN:
+		tOut.SendBytes ( "#08S01", 6 ); // sqlstate marker (1 byte), sqlstate (5 bytes)
+		break;
+	case MYSQL_ERR_SYNTAX:
+	default:
+		tOut.SendBytes ( "#42000", 6 ); // sqlstate marker (1 byte), sqlstate (5 bytes)
+	}
 	tOut.SendBytes ( sError, iErrorLen );
 }
 
@@ -6501,6 +6684,71 @@ void SendMysqlEofPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, int iWarns )
 	tOut.SendLSBDword ( (uPacketID<<24) + 5 );
 	tOut.SendByte ( 0xfe );
 	tOut.SendLSBDword ( iWarns ); // N warnings, 0 status
+}
+
+// encodes Mysql Length-coded binary
+void * MysqlPack ( void * pBuffer, int iValue )
+{
+	char * pOutput = ( char * ) pBuffer;
+	if ( iValue<0 )
+		return ( void * ) pOutput;
+
+	if ( iValue<251 )
+	{
+		* pOutput++ = ( char ) iValue;
+		return ( void * ) pOutput;
+	}
+
+	if ( iValue < 0xFFFF )
+	{
+		* pOutput++ = '\xFC';
+		* pOutput++ = ( char ) iValue;
+		* pOutput++ = ( char ) ( iValue>>8 );
+		return ( void * ) pOutput;
+	}
+
+	if ( iValue < 0xFFFFFF )
+	{
+		* pOutput++ = '\xFD';
+		* pOutput++ = ( char ) iValue;
+		* pOutput++ = ( char ) ( iValue>>8 );
+		* pOutput++ = ( char ) ( iValue>>16 );
+		return ( void * ) pOutput;
+	}
+
+	* pOutput++ = '\xFE';
+	* pOutput++ = ( char ) iValue;
+	* pOutput++ = ( char ) ( iValue>>8 );
+	* pOutput++ = ( char ) ( iValue>>16 );
+	* pOutput++ = ( char ) ( iValue>>24 );
+	* pOutput++ = 0;
+	* pOutput++ = 0;
+	* pOutput++ = 0;
+	* pOutput++ = 0;
+	return ( void * ) pOutput;
+}
+
+void SendMysqlOkPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, int iAffectedRows=0, int iWarns=0, const char * sMessage=NULL )
+{
+	DWORD iInsert_id = 0;
+	char sVarLen[20] = {0}; // max 18 for packed number, +1 more just for fun
+	void * pBuf = sVarLen;
+	pBuf = MysqlPack ( pBuf, iAffectedRows );
+	pBuf = MysqlPack ( pBuf, iInsert_id );
+	int iLen = (char *) pBuf - sVarLen;
+
+	int iMsgLen = 0;
+	if ( sMessage )
+		iMsgLen = strlen(sMessage) + 1; // FIXME! does or doesn't the trailing zero necessary in Ok packet?
+
+	tOut.SendLSBDword ( (uPacketID<<24) + iLen + iMsgLen + 5);
+	tOut.SendByte ( 0 );				// ok packet
+	tOut.SendBytes ( sVarLen, iLen );	// packed affected rows & insert_id
+	if ( iWarns<0 ) iWarns = 0;
+	if ( iWarns>65535 ) iWarns = 65535;
+	tOut.SendLSBDword ( iWarns );		// N warnings, 0 status
+	if ( iMsgLen > 0 )
+		tOut.SendBytes ( sMessage, iMsgLen );
 }
 
 
@@ -6542,6 +6790,10 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 	tLastMeta.m_iMatches = 0;
 	tLastMeta.m_iTotalMatches = 0;
 
+	// set on client's level, not on query's
+	bool bAutoCommit = true;
+	bool bInTransaction = false; //ignores bAutoCommit inside transaction
+
 	for ( ;; )
 	{
 		// send the packet formed on the previous cycle
@@ -6560,14 +6812,11 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 		// handle it!
 		uPacketID = 1 + BYTE(uPacketHeader>>24); // client will expect this id
 
-		char sOK[] = "\x07\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00";
-		sOK[3] = uPacketID;
-
 		// handle auth packet
 		if ( !bAuthed )
 		{
 			bAuthed = true;
-			tOut.SendBytes ( sOK, sizeof(sOK)-1 );
+			SendMysqlOkPacket ( tOut, uPacketID );
 			continue;
 		}
 
@@ -6578,14 +6827,17 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 		// parse SQL query
 		CSphString sError;
 		SearchHandler_c tHandler ( 1 );
-		SqlStmt_e eStmt = ParseSqlQuery ( sQuery, tHandler.m_dQueries[0], sError );
+		SqlStmt_t tStmt;
+		tStmt.m_pQuery = &tHandler.m_dQueries[0];
+		SqlStmt_e eStmt = ParseSqlQuery ( sQuery, &tStmt, sError );
 
 		// handle SQL query
-		if ( eStmt==STMT_PARSE_ERROR )
+		switch ( eStmt )
 		{
+		case STMT_PARSE_ERROR:
 			SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
-
-		} else if ( eStmt==STMT_SELECT )
+			break;
+		case STMT_SELECT:
 		{
 			CheckQuery ( tHandler.m_dQueries[0], sError );
 			if ( !sError.IsEmpty() )
@@ -6596,6 +6848,13 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 
 			// actual searching
 			tHandler.RunQueries ();
+
+			if ( g_bGotSigterm )
+			{
+				SendMysqlErrorPacket ( tOut, uPacketID, "Server shutdown in progress", MYSQL_ERR_SHUTDOWN );
+				continue;
+			}
+
 			AggrResult_t * pRes = &tHandler.m_dResults[0];
 			if ( !pRes->m_iSuccesses )
 			{
@@ -6686,10 +6945,7 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 							}
 
 							iLen = (BYTE*)p - pLen - 4;
-							pLen[0] = 253; // 3-byte
-							pLen[1] = BYTE(iLen&0xff);
-							pLen[2] = BYTE((iLen>>8)&0xff);
-							pLen[3] = BYTE((iLen>>16)&0xff);
+							MysqlPack ( pLen, iLen );
 							break;
 						}
 
@@ -6706,20 +6962,8 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 								iLen = sphUnpackStr ( pStrings+uOffset, &pStr );
 
 							// send length
-							BYTE * pLen = (BYTE*)p;
 							iLen = Min ( iLen, sRowMax-p-3 ); // clamp it, buffer size is limited
-							if ( iLen<251 )
-							{
-								pLen[0] = BYTE(iLen);
-								p++;
-							} else
-							{
-								assert ( iLen<=0xffff );
-								pLen[0] = 252;
-								pLen[1] = BYTE(iLen&0xff);
-								pLen[2] = BYTE(iLen>>8);
-								p += 3;
-							}
+							p = ( char* ) MysqlPack ( p, iLen );
 
 							// send string data
 							if ( iLen )
@@ -6741,12 +6985,13 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 
 			// eof packet
 			SendMysqlEofPacket ( tOut, uPacketID++, iWarns );
-
-		} else if ( eStmt==STMT_SHOW_WARNINGS )
+			break;
+		}
+		case STMT_SHOW_WARNINGS:
 		{
 			if ( tLastMeta.m_sWarning.IsEmpty() )
 			{
-				tOut.SendBytes ( sOK, sizeof(sOK)-1 );
+				SendMysqlOkPacket ( tOut, uPacketID );
 				continue;
 			}
 
@@ -6776,8 +7021,10 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 
 			// cleanup
 			SendMysqlEofPacket ( tOut, uPacketID++, 0 );
-
-		} else if ( eStmt==STMT_SHOW_STATUS || eStmt==STMT_SHOW_META )
+			break;
+		}
+		case STMT_SHOW_STATUS:
+		case STMT_SHOW_META:
 		{
 			CSphVector<CSphString> dStatus;
 
@@ -6813,13 +7060,288 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 
 			// cleanup
 			SendMysqlEofPacket ( tOut, uPacketID++, 0 );
+			break;
+		}
+		case STMT_INSERT:
+		case STMT_REPLACE:
+		{
+			// get that index
+			if ( !g_hIndexes(tStmt.m_sInsertIndex) )
+			{
+				sError.SetSprintf ( "no such index '%s'", tStmt.m_sInsertIndex.cstr() );
+				SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+				continue;
+			}
 
-		} else
+			ServedIndex_t & tServed = g_hIndexes[tStmt.m_sInsertIndex];
+			ISphRtIndex * pIndex = dynamic_cast<ISphRtIndex*> ( tServed.m_pIndex );
+			if ( !pIndex)
+			{
+				sError.SetSprintf ( "index '%s' does not support INSERT", tStmt.m_sInsertIndex.cstr() );
+				SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+				continue;
+			}
+
+			// get schema, check values count
+			const CSphSchema * pSchema = pIndex->GetSchema();
+			int iSchemaSz = pSchema->GetAttrsCount() + pSchema->m_dFields.GetLength() + 1;
+			int iExp = tStmt.m_iSchemaSz;
+			int iGot = tStmt.m_dInsertValues.GetLength();
+			if ( !tStmt.m_dInsertSchema.GetLength() && ( iSchemaSz != tStmt.m_iSchemaSz ) )
+			{
+				sError.SetSprintf ( "column count does not match schema (expected %d, got %d)", iSchemaSz, iGot );
+				SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+				continue;
+			}
+
+			if ( iGot % iExp != 0)
+			{
+				sError.SetSprintf ( "column count does not match value count (expected x%d, got %d)", iExp, iGot );
+				SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+				continue;
+			}
+			CSphVector<int> dAttrSchema ( pSchema->GetAttrsCount() );
+			CSphVector<int> dFieldSchema ( pSchema->m_dFields.GetLength() );
+			int iIdIndex = 0;
+			if ( !tStmt.m_dInsertSchema.GetLength() ) ///< no schema at all, treated as default schema: id, fields, attributes
+			{
+				ARRAY_FOREACH ( i, dFieldSchema )
+					dFieldSchema[i] = i+1;
+				int iFields = dFieldSchema.GetLength();
+				ARRAY_FOREACH ( j, dAttrSchema )
+					dAttrSchema[j] = j+iFields+1;
+			} else
+			{
+				SmallStringHash_T<int> dInsertSchema;
+				ARRAY_FOREACH ( i, tStmt.m_dInsertSchema )
+					dInsertSchema.Add(i,tStmt.m_dInsertSchema[i]);
+
+				if ( !dInsertSchema.Exists("id") )
+				{
+					sError.SetSprintf ( "'id' identifier not found" );
+					SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+					continue;
+				}
+
+				iIdIndex = dInsertSchema["id"];
+
+				bool bIdDupe = false;
+				ARRAY_FOREACH ( i, dFieldSchema )
+					if ( dInsertSchema.Exists(pSchema->m_dFields[i].m_sName) )
+					{
+						int iField = dInsertSchema[pSchema->m_dFields[i].m_sName];
+						if ( iField == iIdIndex )
+						{
+							bIdDupe = true;
+							break;
+						}
+						dFieldSchema[i] = iField;
+					}
+					else
+						dFieldSchema[i] = -1;
+
+				if ( bIdDupe )
+				{
+					sError.SetSprintf ( "'id' prohibited as the name of a field. Change your config!" );
+					SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+					continue;
+				}
+
+				ARRAY_FOREACH ( j, dAttrSchema )
+					if ( dInsertSchema.Exists(pSchema->GetAttr(j).m_sName) )
+					{
+						int iField = dInsertSchema[pSchema->GetAttr(j).m_sName];
+						if ( iField == iIdIndex )
+						{
+							bIdDupe = true;
+							break;
+						}
+						dAttrSchema[j] = iField ;
+					}
+					else
+						dAttrSchema[j] = -1;
+
+				if ( bIdDupe )
+				{
+					sError.SetSprintf ( "'id' prohibited as the name of an attribute. Change your config!" );
+					SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+					continue;
+				}
+			}
+
+			for (int c = 0; c < tStmt.m_iRowsAffected; c++)
+			{
+				CSphMatchVariant tDoc;
+				// convert attrs
+				assert ( sError.IsEmpty() );
+				tDoc.Reset ( pSchema->GetRowSize() );
+				tDoc.m_iDocID = (SphDocID_t)CSphMatchVariant::ToDocid ( tStmt.m_dInsertValues[iIdIndex + c * iExp] );
+
+				for ( int i=0; i<pSchema->GetAttrsCount() && sError.IsEmpty(); i++ )
+				{
+					// shortcuts!
+					const CSphColumnInfo & tCol = pSchema->GetAttr(i);
+					CSphAttrLocator tLoc = tCol.m_tLocator;
+					tLoc.m_bDynamic = true;
+					int iQuerySchemaIdx = dAttrSchema[i];
+					bool bResult;
+					if ( iQuerySchemaIdx < 0 )
+						bResult = tDoc.SetDefaultAttr ( tLoc, tCol.m_eAttrType );
+					else
+					{
+
+						const SqlInsert_t & tVal = tStmt.m_dInsertValues[iQuerySchemaIdx + c * iExp];
+
+						// sanity checks
+						if ( tVal.m_iType!=TOK_QUOTED_STRING && tVal.m_iType!=TOK_CONST_INT && tVal.m_iType!=TOK_CONST_FLOAT )
+						{
+							sError.SetSprintf ( "raw %d, column %d: internal error: unknown insval type %d", 1+c, 1+iQuerySchemaIdx, tVal.m_iType ); // 1 for human base
+							break;
+						}
+
+						// FIXME? index schema is lawfully static, but our temp match obviously needs to be dynamic
+
+
+						bResult = tDoc.SetAttr ( tLoc, tVal, tCol.m_eAttrType );
+
+					}
+
+					if ( !bResult )
+					{
+						sError.SetSprintf ( "internal error: unknown attribute type in INSERT (typeid=%d)", tCol.m_eAttrType );
+						break;
+					}
+				}
+
+				// convert fields
+				CSphVector<const char*> dFields;
+				ARRAY_FOREACH ( i, pSchema->m_dFields )
+				{
+					int iQuerySchemaIdx = dFieldSchema[i];
+					if ( iQuerySchemaIdx < 0 )
+						dFields.Add ( "" ); //< default value
+					else
+					{
+						if ( tStmt.m_dInsertValues [ iQuerySchemaIdx + c * iExp ].m_iType!=TOK_QUOTED_STRING )
+						{
+							sError.SetSprintf ( "row %d, column %d: string expected", 1+c, 1+iQuerySchemaIdx ); // 1 for human base
+							break;
+						}
+						dFields.Add ( tStmt.m_dInsertValues[ iQuerySchemaIdx + c * iExp ].m_sVal.cstr() );
+					}
+				}
+
+
+
+				// do add
+				if ( !pIndex->AddDocument ( dFields.GetLength(), dFields.Begin(), tDoc, eStmt==STMT_REPLACE ) )
+					sError = pIndex->GetLastError();
+
+				// report error
+				if ( !sError.IsEmpty() )
+					break;
+			}
+			// report error
+			if ( !sError.IsEmpty() )
+			{
+				SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+				continue;
+			}
+			if ( bAutoCommit && !bInTransaction )
+				pIndex->Commit ();
+
+			// my OK packet
+			SendMysqlOkPacket ( tOut, uPacketID, tStmt.m_iRowsAffected );
+			continue;
+		}
+		case STMT_DELETE:
+		{
+			if ( !g_hIndexes(tStmt.m_sDeleteIndex) )
+			{
+				sError.SetSprintf ( "no such index '%s'", tStmt.m_sDeleteIndex.cstr() );
+				SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+				continue;
+			}
+
+			ServedIndex_t & tServed = g_hIndexes[tStmt.m_sDeleteIndex];
+			ISphRtIndex * pIndex = dynamic_cast<ISphRtIndex*> ( tServed.m_pIndex );
+			if ( !pIndex)
+			{
+				sError.SetSprintf ( "index '%s' does not support INSERT", tStmt.m_sDeleteIndex.cstr() );
+				SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+				continue;
+			}
+
+			if ( !pIndex->DeleteDocument ( tStmt.m_iDeleteID ) )
+			{
+				sError = pIndex->GetLastError();
+				SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+				continue;
+			}
+
+			if ( bAutoCommit && !bInTransaction )
+				pIndex->Commit ();
+
+			SendMysqlOkPacket ( tOut, uPacketID ); // FIXME? affected rows
+			continue;
+
+		}
+		case STMT_SET:
+			{
+				tStmt.m_sSetName.ToLower();
+				if ( tStmt.m_sSetName=="autocommit" )
+				{
+					bAutoCommit = (tStmt.m_iSetValue==0)?false:true;
+					bInTransaction = false;
+
+					// commit all pending changes
+					if ( bAutoCommit )
+					{
+						ISphRtIndex * pIndex = sphGetCurrentIndexRT();
+						if ( pIndex )
+							pIndex->Commit();
+					}
+
+					SendMysqlOkPacket ( tOut, uPacketID );
+					continue;
+				}
+
+				// unknown variable, return error
+				sError.SetSprintf ( "Unknown variable '%s' in SET statement", tStmt.m_sSetName.cstr() );
+				SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+				continue;
+			}
+		case STMT_STARTTRANSACTION:
+			{
+				bInTransaction = true;
+				ISphRtIndex * pIndex = sphGetCurrentIndexRT();
+				if ( pIndex )
+					pIndex->Commit();
+				SendMysqlOkPacket ( tOut, uPacketID );
+				continue;
+			}
+		case STMT_COMMIT:
+		case STMT_ROLLBACK:
+			{
+				bInTransaction = false;
+				ISphRtIndex * pIndex = sphGetCurrentIndexRT();
+				if ( pIndex )
+				{
+					if ( eStmt==STMT_COMMIT )
+						pIndex->Commit();
+					else
+						pIndex->RollBack();
+				}
+				SendMysqlOkPacket ( tOut, uPacketID );
+				continue;
+			}
+		default:
 		{
 			sError.SetSprintf ( "internal error: unhandled statement type (value=%d)", eStmt );
 			SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
 		}
-	}
+		} // switch
+	} // for ( ;; )
 
 	SafeClose ( iPipeFD );
 }
@@ -7974,8 +8496,76 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		}
 
 		return ADD_DISTR;
-	}
-	else
+
+	} else if ( hIndex("type") && hIndex["type"]=="rt" )
+	{
+		////////////////////////////
+		// configure realtime index
+		////////////////////////////
+
+		CSphSchema tSchema ( szIndexName );
+		CSphColumnInfo tCol;
+
+		// fields
+		for ( CSphVariant * v=hIndex("rt_field"); v; v=v->m_pNext )
+		{
+			tCol.m_sName = v->cstr();
+			tSchema.m_dFields.Add ( tCol );
+		}
+		if ( !tSchema.m_dFields.GetLength() )
+		{
+			sphWarning ( "index '%s': no fields configured (use rt_field directive)", szIndexName );
+			return ADD_ERROR;
+		}
+
+		// attrs
+		const int iNumTypes = 3;
+		const char * sTypes[iNumTypes] = { "rt_attr_int", "rt_attr_bigint", "rt_attr_float" };
+		const int iTypes[iNumTypes] = { SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, SPH_ATTR_FLOAT };
+
+		for ( int iType=0; iType<iNumTypes; iType++ )
+		{
+			for ( CSphVariant * v=hIndex(sTypes[iType]); v; v=v->m_pNext )
+			{
+				tCol.m_sName = v->cstr();
+				tCol.m_eAttrType = iTypes[iType];
+				tSchema.AddAttr ( tCol, false );
+			}
+		}
+
+		// path
+		if ( !hIndex("path") )
+		{
+			sphWarning ( "index '%s': path must be specified; NOT SERVING", szIndexName );
+			return ADD_ERROR;
+		}
+
+		// RAM chunk size
+		DWORD uRamSize = hIndex.GetSize ( "rt_mem_limit", 32*1024*1024 );
+		if  ( uRamSize<1024*1024 )
+		{
+			sphWarning ( "index '%s': rt_mem_limit below sanity limit, fixing up to 1M", szIndexName );
+			uRamSize = 1024*1024;
+		}
+
+		// index
+		ServedIndex_t tIdx;
+		tIdx.m_pIndex = sphCreateIndexRT ( tSchema, szIndexName, uRamSize, hIndex["path"].cstr() );
+		tIdx.m_pSchema = tIdx.m_pIndex->GetSchema();
+		tIdx.m_bEnabled = true;
+		tIdx.m_sIndexPath = hIndex["path"];
+		tIdx.m_bRT = true;
+
+		if ( !g_hIndexes.Add ( tIdx, szIndexName ) )
+		{
+			sphWarning ( "INTERNAL ERROR: index '%s': hash add failed - NOT SERVING", szIndexName );
+			return ADD_ERROR;
+		}
+
+		tIdx.Reset (); // so that the dtor wouln't delete everything
+		return ADD_RT;
+
+	} else
 	{
 		/////////////////////////
 		// configure local index
@@ -8663,7 +9253,10 @@ void ShowHelp ()
 BOOL WINAPI CtrlHandler ( DWORD )
 {
 	if ( !g_bService )
+	{
 		g_bGotSigterm = true;
+		sphInterruptNow();
+	}
 	return TRUE;
 }
 #endif
@@ -8769,6 +9362,7 @@ void CheckSignals ()
 
 			case 1:
 				g_bGotSigterm = true;
+				sphInterruptNow();
 				if ( g_bService )
 					g_bServiceStop = true;
 				break;
@@ -9521,14 +10115,15 @@ int WINAPI ServiceMain ( int argc, char **argv )
 #if USE_WINDOWS
 			sphDie ( "workers=fork is not supported on Windows" );
 #endif
-			g_eWorkers = MPM_FORK;
+			sphWarning ( "workers=fork is not supported on rt backend. Assume workers=threads" );
+			g_eWorkers = MPM_THREADS;
 		} else if ( hSearchd["workers"]=="prefork" )
 		{
 #if USE_WINDOWS
 			sphDie ( "workers=prefork is not supported on Windows" );
 #endif
-			g_eWorkers = MPM_PREFORK;
-			g_iPreforkChildren = hSearchd.GetInt ( "prefork", g_iPreforkChildren );
+			sphWarning ( "workers=prefork is not supported on rt backend. Assume workers=threads" );
+			g_eWorkers = MPM_THREADS;
 		} else if ( hSearchd["workers"]=="threads" )
 		{
 			g_eWorkers = MPM_THREADS;
@@ -9655,7 +10250,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		if ( g_bOptNoDetach && sOptIndex && strcasecmp ( sIndexName, sOptIndex )!=0 )
 			continue;
 
-		if ( AddIndex ( sIndexName, hIndex )==ADD_LOCAL )
+		ESphAddIndex eAdd = AddIndex ( sIndexName, hIndex );
+		if ( eAdd==ADD_LOCAL || eAdd==ADD_RT )
 		{
 			ServedIndex_t & tIndex = g_hIndexes[sIndexName];
 			iCounter++;
@@ -9712,6 +10308,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	///////////
 	// startup
 	///////////
+
+	sphRTInit ( hSearchd );
 
 	// handle my signals
 	SetSignalHandlers ();
@@ -9875,6 +10473,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 #endif
 
 	sphSetInternalErrorCallback ( LogInternalError );
+	sphSetWarningCallback ( LogWarning );
 	sphSetReadBuffers ( hSearchd.GetSize ( "read_buffer", 0 ), hSearchd.GetSize ( "read_unhinted", 0 ) );
 
 	CSphProcessSharedMutex * pAcceptMutex = NULL;
@@ -9900,6 +10499,20 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		if ( g_bSeamlessRotate && !sphThreadCreate ( &g_tRotateThread, RotationThreadFunc , 0 ) )
 			sphDie ( "failed to create rotation thread" );
 	}
+
+	// prepare data and replay last binlog
+	CSphVector< ISphRtIndex * > dRtIndices;
+	for ( IndexHashIterator_c it ( g_hIndexes ); it.Next(); )
+	{
+		const ServedIndex_t & tServed = it.Get ();
+		if ( tServed.m_bRT )
+		{
+			ISphRtIndex * pRt = dynamic_cast < ISphRtIndex * > ( tServed.m_pIndex );
+			assert ( pRt );
+			dRtIndices.Add ( pRt );
+		}
+	}
+	sphReplayBinlog ( dRtIndices );
 
 	for ( ;; )
 	{

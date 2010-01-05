@@ -755,7 +755,7 @@ struct IndexFlushPoint_t
 	int64_t		m_iTID;
 	CSphString	m_sName;
 
-	IndexFlushPoint_t ( const char * sIndexName, int64_t iTID ) : m_sName ( sIndexName ), m_iTID ( iTID ) {}
+	IndexFlushPoint_t ( const char * sIndexName, int64_t iTID ) : m_iTID ( iTID ), m_sName ( sIndexName ) {}
 	explicit IndexFlushPoint_t () : m_iTID ( g_iRangeMin ) {}
 };
 
@@ -3278,7 +3278,7 @@ RtBinlog_c::RtBinlog_c ()
 	m_uSize = DOCINFO_IDSIZE * sizeof(DWORD) * 1024;
 	Verify ( m_tWriteLock.Init() );
 
-	m_sLogPath = "";
+	m_sLogPath = ".";
 }
 
 RtBinlog_c::~RtBinlog_c ()

@@ -530,10 +530,12 @@ ServedIndex_t * IndexHash_c::operator () ( const CSphString & tKey, bool bWrite 
 
 	ServedIndex_t * pIndex = SmallStringHash_T<ServedIndex_t>::operator() ( tKey );
 	if ( pIndex )
+	{
 		if ( !bWrite )
 			pIndex->ReadLock();
 		else
 			pIndex->WriteLock();
+	}
 
 	Unlock();
 
@@ -5044,6 +5046,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				pLocalSorter = sphCreateQueue ( &m_dQueries[iStart], *pFirstSchema, sError );
 
 		if ( g_eWorkers==MPM_THREADS )
+		{
 			if ( pLocalSorter )
 				dLockedEqualIndexes.Add ( pFirstIndex );
 			else
@@ -5051,7 +5054,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				pFirstIndex->Unlock ();
 				DoUnlockClear ( dLockedEqualIndexes );
 			}
-
+		}
 		break;
 	}
 

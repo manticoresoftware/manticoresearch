@@ -13824,12 +13824,12 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			// check docid vs global range
 			if ( pMaxEntry+uMinMaxStride > pDocinfoIndexMax )
 				LOC_FAIL(( fp, "unexpected block index end (row=%u, docid="DOCID_FMT", block=%d, max=%u, cur=%u)",
-					uIndexEntry, uDocID, uBlock, pDocinfoIndexMax, pMaxEntry+uMinMaxStride ));
+					uIndexEntry, uDocID, uBlock, (DWORD)(pDocinfoIndexMax-m_pDocinfoIndex), (DWORD)(pMaxEntry+uMinMaxStride-m_pDocinfoIndex) ));
 
 			// check attribute location vs global range
 			if ( pMaxAttrs+uMinMaxStride > pDocinfoIndexMax )
 				LOC_FAIL(( fp, "attribute position out of blocks index (row=%u, docid="DOCID_FMT", block=%u, expected<%u, got=%u)",
-					uIndexEntry, uDocID, uBlock, pDocinfoIndexMax, pMaxAttrs+uMinMaxStride ));
+					uIndexEntry, uDocID, uBlock, (DWORD)(pDocinfoIndexMax-m_pDocinfoIndex), (DWORD)(pMaxAttrs+uMinMaxStride-m_pDocinfoIndex) ));
 
 			const SphDocID_t uMinDocID = *pMinEntry;
 			const SphDocID_t uMaxDocID = *pMaxEntry;
@@ -13865,7 +13865,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 						// checks is attribute min max range valid
 						if ( uMin > uMax && bIsBordersCheckTime )
-							LOC_FAIL(( fp, "invalid attribute range (row=%u, block=%d, min=%u, max=%u)",
+							LOC_FAIL(( fp, "invalid attribute range (row=%u, block=%d, min="INT64_FMT", max="INT64_FMT")",
 								uIndexEntry, uBlock, uMin, uMax ));
 
 						if ( uVal < uMin || uVal > uMax )

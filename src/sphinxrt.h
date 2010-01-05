@@ -50,6 +50,7 @@ public:
 };
 
 /// initialize subsystem
+class CSphConfigSection;
 void sphRTInit ( const CSphConfigSection & hSearchd );
 
 /// deinitialize subsystem

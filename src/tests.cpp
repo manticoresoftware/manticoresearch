@@ -1220,7 +1220,7 @@ void BenchSort ()
 	DWORD * pKeys = new DWORD [ MAXSIZE ];
 	SortPayload_t * pValues = new SortPayload_t [ MAXSIZE ];
 
-	for ( int iGen=0; iGen<sizeof(g_dSortDataGens)/sizeof(g_dSortDataGens[0]); iGen++ )
+	for ( int iGen=0; iGen<(int)(sizeof(g_dSortDataGens)/sizeof(g_dSortDataGens[0])); iGen++ )
 		for ( int iLen=MINSIZE; iLen<=MAXSIZE; iLen*=10 )
 	{
 		int64_t tmSort = 0;

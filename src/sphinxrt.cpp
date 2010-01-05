@@ -149,7 +149,7 @@ struct RtWordCheckpoint_t
 class RtDiskKlist_t : public ISphNoncopyable
 {
 private:
-	static const DWORD				MAX_SMALL_SIZE = 512;
+	static const int				MAX_SMALL_SIZE = 512;
 	CSphVector < SphAttr_t >		m_dLargeKlist;
 	CSphOrderedHash < bool, SphDocID_t, IdentityHash_fn, MAX_SMALL_SIZE, 11 >	m_hSmallKlist;
 	mutable CSphRwlock				m_tRwLargelock;

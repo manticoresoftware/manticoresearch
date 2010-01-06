@@ -38,7 +38,7 @@ class CSphWriter : ISphNoncopyable
 {
 public:
 					CSphWriter ();
-					~CSphWriter ();
+	virtual			~CSphWriter ();
 
 	void			SetBufferSize ( int iBufferSize );	///< tune write cache size; must be called before OpenFile() or SetFile()
 
@@ -67,7 +67,7 @@ public:
 	bool			IsError () const	{ return m_bError; }
 	SphOffset_t		GetPos () const		{ return m_iPos; }
 
-private:
+protected:
 	CSphString		m_sName;
 	SphOffset_t		m_iPos;
 	SphOffset_t		m_iWritten;
@@ -83,7 +83,7 @@ private:
 	bool			m_bError;
 	CSphString *	m_pError;
 
-	void			Flush ();
+	virtual void	Flush ();
 };
 
 /// forward ref

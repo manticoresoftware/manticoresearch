@@ -5218,6 +5218,16 @@ void CSphReader_VLN::GetBytes ( void * pData, int iSize )
 
 	if ( m_iBuffPos+iSize>m_iBuffUsed )
 	{
+		// move old buffer tail to buffer head to avoid losing the data
+		const int iLen = m_iBuffUsed - m_iBuffPos;
+		if ( iLen>0 )
+		{
+			memcpy ( pOut, m_pBuff+m_iBuffPos, iLen );
+			m_iBuffPos += iLen;
+			pOut += iLen;
+			iSize -= iLen;
+		}
+
 		m_iSizeHint = iSize - m_iBuffUsed + m_iBuffPos; // FIXME!
 		UpdateCache ();
 		if ( m_iBuffPos+iSize>m_iBuffUsed )

@@ -1526,13 +1526,13 @@ class SphinxConfig
 		}
 		else // for rt indexes we need to clean up all index files before the run.
 		{
-			$pattern = "/.*?index\s+\S*?(\s*\:\s*\S*?)?\s*\{(?<content>.*?)\}.*?/s";
+			$pattern = "/.*?index\s+\S*?(\s*\:\s*\S*?)?\s*\{(.*?)\}.*?/s";
 			preg_match_all ( $pattern, $config, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE );
 			// parse indexes
 			$indexes = array();
 			foreach ( $matches as $match )
 			{
-				$lines = explode("\n", $match['content'][0]);
+				$lines = explode("\n", $match[2][0]);
 				$path = "";
 				$isrt = false;
 				foreach ($lines as $line)

@@ -2,10 +2,10 @@
 
 
 <articleinfo>
-<title>Sphinx 0.9.10 reference manual</title>
+<title>Sphinx 1.10.1 reference manual</title>
 <subtitle>Free open-source SQL full-text search engine</subtitle>
 <copyright>
-<year>2001-2009</year>
+<year>2001-2010</year>
 <holder>Andrew Aksyonoff, <email>shodan(at)shodan.ru</email></holder>
 </copyright>
 </articleinfo>
@@ -929,6 +929,35 @@ XML elements (tags) recognized by xmlpipe2 (and their attributes where applicabl
 
 <sect2 id="live-updates"><title>Live index updates</title>
 <para>
+There are two major approaches to maintaining the full-text index
+contents up to date. Note, however, that both these approaches deal
+with the task of <emphasis>full-text data updates</emphasis>, and not
+attribute updates. Instant attribute updates are supported since 
+version 0.9.8. Refer to <link linkend="api-func-updateatttributes">UpdateAttributes()</link>
+API call description for details.
+</para>
+<para>
+First, you can use disk-based indexes, partition them manually,
+and only rebuild the smaller partitions (so-called "deltas") frequently.
+By minimizing the rebuild size, you can reduce the average indexing lag
+to something as low as 30-60 seconds. This approach was the the only one
+available in versions 0.9.x. On huge collections it actually might be
+the most efficient one. Refer to <xref linkend="delta-updates"/>
+for details.
+</para>
+<para>
+Second, versions 1.x (starting with 1.10.1) add support for so-called
+real-time indexes (RT indexes for short) that on-the-fly updates of the
+full-text data. Updates on a RT index can appear in the search results in 
+1-2 milliseconds, ie. 0.001-0.002 seconds. However, RT index are less 
+efficient for bulk indexing huge amounts of data. Refer to 
+<xref linkend="rt-indexes"/> for details.
+</para>
+</sect2>
+
+
+<sect2 id="delta-updates"><title>Delta index updates</title>
+<para>
 There's a frequent situation when the total dataset is too big
 to be reindexed from scratch often, but the amount of new records
 is rather small. Example: a forum with a 1,000,000 archived posts,
@@ -1005,6 +1034,130 @@ when we issue the directive in the inherited source for the first time, it remov
 <emphasis>all</emphasis> inherited values, so the encoding setup is also lost.
 So <code>sql_query_pre</code> in the delta can not just be empty; and we need
 to issue the encoding setup query explicitly once again.
+</para>
+</sect2>
+
+
+<sect2 id="rt-indexes"><title>Real-time indexes overview</title>
+<para>
+RT indexes should be declared in <filename>sphinx.conf</filename>,
+just as every other index type. Notable differences from the regular, 
+disk-based indexes are that a) data sources are not required and ignored,
+and b) you should explicitly enumerate all the text fields, not just
+attributes. Here's an example:
+</para>
+<example id="ex-rt-updates">
+<title>RT index declaration</title>
+<programlisting>
+index rt
+{
+	type = rt
+	path = /usr/local/sphinx/data/rt
+	rt_field = title
+	rt_field = content
+	rt_attr_int = gid
+}
+</programlisting>
+</example>
+<para>
+RT INDEXES ARE CURRENTLY (AS OF VERSION 1.10.1) A WORK IN PROGRESS.
+Therefore, they might lack certain features: for instance, prefix/infix
+indexing, MVA and string attributes, etc are not supported yet. There also
+might be performance and stability issues. However, regular indexing features
+and most of the searching features are already in place, and our (limited)
+internal testing passes.
+</para>
+<para>
+RT index can be accessed using MySQL protocol. INSERT, DELETE, and
+SELECT statements against RT index are supported. For instance, this
+is an example session with the sample index above:
+</para>
+<programlisting>
+$ mysql -h 127.0.0.1 -P 9306
+Welcome to the MySQL monitor.  Commands end with ; or \g.
+Your MySQL connection id is 1
+Server version: 1.10.1-dev (r2153)
+
+Type 'help;' or '\h' for help. Type '\c' to clear the buffer.
+
+mysql> INSERT INTO rt VALUES ( 1, 'first record', 'test one', 123 );
+Query OK, 1 row affected (0.05 sec)
+
+mysql> INSERT INTO rt VALUES ( 2, 'second record', 'test two', 234 );
+Query OK, 1 row affected (0.00 sec)
+
+mysql> SELECT * FROM rt;
++------+--------+------+
+| id   | weight | gid  |
++------+--------+------+
+|    1 |      1 |  123 |
+|    2 |      1 |  234 |
++------+--------+------+
+2 rows in set (0.02 sec)
+
+mysql> SELECT * FROM rt WHERE MATCH('test');
++------+--------+------+
+| id   | weight | gid  |
++------+--------+------+
+|    1 |   1643 |  123 |
+|    2 |   1643 |  234 |
++------+--------+------+
+2 rows in set (0.01 sec)
+
+mysql> SELECT * FROM rt WHERE MATCH('@title test');
+Empty set (0.00 sec)
+</programlisting>
+<para>
+Both partial and batch INSERT syntaxes are supported, ie. 
+you can specify a subset of columns, and insert several rows at a time. 
+Deletions are also possible using DELETE statement; the only currently
+supported syntax is DELETE FROM &lt;index&gt; WHERE id=&lt;id&gt;.
+REPLACE is also supported, enabling you to implement updates.
+</para>
+<programlisting>
+mysql> INSERT INTO rt ( id, title ) VALUES ( 3, 'third row' ), ( 4, 'fourth entry' );
+Query OK, 2 rows affected (0.01 sec)
+
+mysql> SELECT * FROM rt;
++------+--------+------+
+| id   | weight | gid  |
++------+--------+------+
+|    1 |      1 |  123 |
+|    2 |      1 |  234 |
+|    3 |      1 |    0 |
+|    4 |      1 |    0 |
++------+--------+------+
+4 rows in set (0.00 sec)
+
+mysql> DELETE FROM rt WHERE id=2;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> SELECT * FROM rt WHERE MATCH('test');
++------+--------+------+
+| id   | weight | gid  |
++------+--------+------+
+|    1 |   1500 |  123 |
++------+--------+------+
+1 row in set (0.00 sec)
+
+mysql> INSERT INTO rt VALUES ( 1, 'first record on steroids', 'test one', 123 );
+ERROR 1064 (42000): duplicate id '1'
+
+mysql> REPLACE INTO rt VALUES ( 1, 'first record on steroids', 'test one', 123 );
+Query OK, 1 row affected (0.01 sec)
+
+mysql> SELECT * FROM rt WHERE MATCH('steroids');
++------+--------+------+
+| id   | weight | gid  |
++------+--------+------+
+|    1 |   1500 |  123 |
++------+--------+------+
+1 row in set (0.01 sec)
+</programlisting>
+<para>
+Data stored in RT index should survive clean shutdown. When binary logging
+is enabled, it should also survive crash and/or dirty shutdown, and recover
+on subsequent startup.
 </para>
 </sect2>
 
@@ -1409,7 +1562,7 @@ The functions take a number of arguments depending on the specific function.
 <listitem>Operators: +, -, *, /, &lt;, &gt; &lt;=, &gt;=, =, &lt;&gt;.</listitem>
 <listitem>Boolean operators: AND, OR, NOT.</listitem>
 <listitem>0-argument functions: NOW().</listitem>
-<listitem>Unary (1-argument) functions: ABS(), CEIL(), FLOOR(), SIN(), COS(), LN(), LOG2(), LOG10(), EXP(), SQRT(), BIGINT().</listitem>
+<listitem>Unary (1-argument) functions: ABS(), CEIL(), FLOOR(), SIN(), COS(), LN(), LOG2(), LOG10(), EXP(), SQRT(), BIGINT(), SINT().</listitem>
 <listitem>Binary (2-argument) functions: MIN(), MAX(), POW(), IDIV().</listitem>
 <listitem>Other functions: IF(), INTERVAL(), IN(), GEODIST().</listitem>
 </itemizedlist>
@@ -1466,6 +1619,12 @@ BIGINT() function, introduced in version 0.9.9-rc1, forcibly promotes the intege
 and does nothing on floating point argument. It's intended to help enforce evaluation
 of certain expressions (such as "a*b") in 64-bit mode even though all the arguments
 are 32-bit.
+</para>
+<para>
+SINT() function, introduced in version 1.10.1, forcibly reinterprets its
+32-bit unsigned integer argument as signed, and also expands it to 64-bit type
+(because 32-bit type is unsigned). It's easily illustrated by the following
+example: 1-2 normally evaluates to 4294967295, but SINT(1-2) evaluates to -1.
 </para>
 <para>
 IDIV() functions performs an integer division on its 2 arguments. The result
@@ -2166,11 +2325,29 @@ $ searchd [OPTIONS]
 <itemizedlist>
 <listitem><option>--help</option> (<option>-h</option> for short) lists all of the parameters that can be called in your particular build of <filename>searchd</filename>.</listitem>
 <listitem><option>--config &lt;file&gt;</option> (<option>-c &lt;file&gt;</option> for short) tells <filename>searchd</filename> to use the given file as its configuration, just as with <filename>indexer</filename> above.</listitem>
-<listitem><option>--stop</option> is used to stop <filename>searchd</filename>, using the details of the PID file as specified in the <filename>sphinx.conf</filename> file, so you may also need to confirm to <filename>searchd</filename> which configuration file to use with the <option>--config</option> option. NB, calling <option>--stop</option> will also make sure any changes applied to the indexes with <link linkend="api-func-updateatttributes"><code>UpdateAttributes()</code></link> will be applied to the index files themselves. Example:
+<listitem><option>--stop</option> is used to asynchronously stop <filename>searchd</filename>, using the details of the PID file as specified in the <filename>sphinx.conf</filename> file, so you may also need to confirm to <filename>searchd</filename> which configuration file to use with the <option>--config</option> option. NB, calling <option>--stop</option> will also make sure any changes applied to the indexes with <link linkend="api-func-updateatttributes"><code>UpdateAttributes()</code></link> will be applied to the index files themselves. Example:
 <programlisting>
 $ searchd --config /home/myuser/sphinx.conf --stop
 </programlisting>
 </listitem>
+
+<listitem><option>--stopwait</option> is used to synchronously stop <filename>searchd</filename>.
+<option>--stop</option> essentially tells the running instance to exit (by sending it a SIGTERM)
+and then immediately returns. <option>--stopwait</option> will also attempt to wait until the
+running <filename>searchd</filename> instance actually finishes the shutdown (eg. saves all
+the pending attribute changes) and exits. Example:
+<programlisting>
+$ searchd --config /home/myuser/sphinx.conf --stopwait
+</programlisting>
+Possible exit codes are as follows:
+	<itemizedlist>
+	<listitem>0 on success;</listitem>
+	<listitem>1 if connection to running searchd daemon failed;</listitem>
+	<listitem>2 if daemon reported an error during shutdown;</listitem>
+	<listitem>3 if daemon crashed during shutdown.</listitem>
+	</itemizedlist>
+</listitem>
+
 <listitem><option>--status</option> command is used to query running
 <filename>searchd</filename> instance status, using the connection details
 from the (optionally) provided configuration file. It will try to connect

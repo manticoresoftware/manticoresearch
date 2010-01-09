@@ -796,7 +796,7 @@ private:
 	int						m_iLockFD;
 	CSphString				m_sWriterError;
 	BinlogWriter_c			m_tWriter;
-	CSphVector<BinlogDesc_t> m_dBinlogs; // known log descriptions
+	CSphVector<BinlogDesc_t>		m_dBinlogs; // known log descriptions
 	CSphVector<IndexFlushPoint_t>	m_dFlushed; // known log flushed transactions
 
 	CSphString				m_sLogPath;
@@ -3201,12 +3201,12 @@ RtBinlog_c::RtBinlog_c ()
 	: m_iFlushPeriod ( 0 )
 	, m_iFlushTimeLeft ( 0 )
 	, m_bFlushOnCommit ( true )
+	, m_iLockFD ( -1 )
 	, m_bReplayMode ( false )
+	, m_bDisabled ( true )
 	, m_iRestartSize ( 0 )
 	, m_iLastWriten ( 0 )
-	, m_iLockFD ( -1 )
 	, m_iMetaSaveTimeStamp ( 0 )
-	, m_bDisabled ( true )
 {
 	Verify ( m_tWriteLock.Init() );
 

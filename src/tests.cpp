@@ -1487,6 +1487,9 @@ public:
 	bool IterateKillListNext ( SphDocID_t & ) { return false; }
 };
 
+
+#ifndef NDEBUG
+
 static void CheckRT ( int iVal, int iRef, const char * sMsg )
 {
 #if 1
@@ -1497,7 +1500,7 @@ static void CheckRT ( int iVal, int iRef, const char * sMsg )
 #endif
 }
 
-#ifndef NDEBUG
+
 void TestRT ()
 {
 	const int iMaxPasses = 5;

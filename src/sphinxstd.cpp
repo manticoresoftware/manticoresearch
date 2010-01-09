@@ -546,6 +546,8 @@ void CSphProcessSharedMutex::Unlock ()
 // THREADING FUNCTIONS
 //////////////////////////////////////////////////////////////////////////
 
+#define THREAD_STACK_SIZE 65536
+
 struct ThreadCall_t
 {
 	void			(*m_pCall)(void*);
@@ -583,7 +585,6 @@ SPH_THDFUNC sphThreadProcWrapper ( void * pArg )
 
 void * sphThreadInit()
 {
-
 	static bool bInit = false;
 #if !USE_WINDOWS
 	static pthread_attr_t tAttr;
@@ -596,7 +597,6 @@ void * sphThreadInit()
 			sphDie ( "FATAL: sphThreadKeyCreate() failed" );
 
 #if !USE_WINDOWS
-		const int THREAD_STACK_SIZE = 65536;
 		if ( pthread_attr_init ( &tAttr ) )
 			sphDie ( "FATAL: pthread_attr_init() failed" );
 
@@ -614,7 +614,6 @@ void * sphThreadInit()
 
 bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pArg )
 {
-	void * pAttr = sphThreadInit();
 	// we can not merely put this on current stack
 	// as it might get destroyed before wrapper sees it
 	ThreadCall_t * pCall = new ThreadCall_t;
@@ -624,16 +623,18 @@ bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pA
 
 	// create thread
 #if USE_WINDOWS
-	const int THREAD_STACK_SIZE = 65536;
+	sphThreadInit();
 	*pThread = CreateThread ( NULL, THREAD_STACK_SIZE, sphThreadProcWrapper, pCall, 0, NULL );
 	if ( *pThread )
 		return true;
 #else
+	void * pAttr = sphThreadInit();
 	errno = pthread_create ( pThread, ( pthread_attr_t * ) pAttr, sphThreadProcWrapper, pCall );
 	if ( !errno )
 		return true;
 #endif
 
+	// thread creation failed so we need to cleanup ourselves
 	SafeDelete ( pCall );
 	return false;
 }

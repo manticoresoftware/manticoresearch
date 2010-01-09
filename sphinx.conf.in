@@ -302,6 +302,11 @@ source src1throttled : src1
 # are configured per local index
 index test1
 {
+	# index type
+	# optional, default is 'plain'
+	# known values are 'plain', 'distributed', and 'rt' (see samples below)
+	# type			= plain
+
 	# document source(s) to index
 	# multi-value, mandatory
 	# document IDs must be globally unique across all sources

@@ -776,17 +776,31 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 
 bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const CSphConfigType & hSources )
 {
-	if ( hIndex("type") && hIndex["type"]=="distributed" )
+	// check index type
+	bool bPlain = true;
+	if ( hIndex("type") )
+	{
+		const CSphString & sType = hIndex["type"];
+		bPlain = ( sType=="plain" );
+
+		if ( sType!="plain" && sType!="distributed" && sType!="rt" )
+		{
+			fprintf ( stdout, "ERROR: index '%s': unknown type '%s'; fix your config file.\n", sIndexName, sType.cstr() );
+			fflush ( stdout );
+			return false;
+		}
+	}
+	if ( !bPlain )
 	{
 		if ( !g_bQuiet )
 		{
-			fprintf ( stdout, "distributed index '%s' can not be directly indexed; skipping.\n", sIndexName );
+			fprintf ( stdout, "skipping non-plain index '%s'...\n", sIndexName );
 			fflush ( stdout );
 		}
 		return false;
 	}
 
-
+	// progress bar
 	if ( !g_bQuiet )
 	{
 		fprintf ( stdout, "indexing index '%s'...\n", sIndexName );

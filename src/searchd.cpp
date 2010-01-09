@@ -8495,7 +8495,7 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		{
 			if ( !g_hDistIndexes.Add ( tIdx, szIndexName ) )
 			{
-				sphWarning ( "index '%s': duplicate name in hash?! INTERNAL ERROR - NOT SERVING", szIndexName );
+				sphWarning ( "index '%s': duplicate name - NOT SERVING", szIndexName );
 				return ADD_ERROR;
 			}
 		}
@@ -8519,7 +8519,7 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		}
 		if ( !tSchema.m_dFields.GetLength() )
 		{
-			sphWarning ( "index '%s': no fields configured (use rt_field directive)", szIndexName );
+			sphWarning ( "index '%s': no fields configured (use rt_field directive) - NOT SERVING", szIndexName );
 			return ADD_ERROR;
 		}
 
@@ -8541,7 +8541,7 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		// path
 		if ( !hIndex("path") )
 		{
-			sphWarning ( "index '%s': path must be specified; NOT SERVING", szIndexName );
+			sphWarning ( "index '%s': path must be specified - NOT SERVING", szIndexName );
 			return ADD_ERROR;
 		}
 
@@ -8570,7 +8570,7 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		tIdx.Reset (); // so that the dtor wouln't delete everything
 		return ADD_RT;
 
-	} else
+	} else if ( !hIndex("type") || hIndex["type"]=="plain" )
 	{
 		/////////////////////////
 		// configure local index
@@ -8590,7 +8590,7 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		if ( pServedIndex )
 		{
 			pServedIndex->Unlock();
-			sphWarning ( "index '%s': duplicate name in hash?! INTERNAL ERROR - NOT SERVING", szIndexName );
+			sphWarning ( "index '%s': duplicate name - NOT SERVING", szIndexName );
 			return ADD_ERROR;
 		}
 
@@ -8623,6 +8623,12 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		tIdx.Reset (); // so that the dtor wouldn't delete everything
 
 		return ADD_LOCAL;
+
+	} else
+	{
+		// unknown type
+		sphWarning ( "index '%s': unknown type '%s' - NOT SERVING", szIndexName, hIndex["type"].cstr() );
+		return ADD_ERROR;
 	}
 }
 

@@ -1518,6 +1518,7 @@ class SphinxClient
 		}
 
 		// build request
+		$this->_MBPush ();
 		$req = pack ( "N", strlen($index) ) . $index;
 
 		$req .= pack ( "N", count($attrs) );
@@ -1542,18 +1543,28 @@ class SphinxClient
 
 		// connect, send query, get response
 		if (!( $fp = $this->_Connect() ))
+		{
+			$this->_MBPop ();
 			return -1;
+		}
 
 		$len = strlen($req);
 		$req = pack ( "nnN", SEARCHD_COMMAND_UPDATE, VER_COMMAND_UPDATE, $len ) . $req; // add header
 		if ( !$this->_Send ( $fp, $req, $len+8 ) )
+		{
+			$this->_MBPop ();
 			return -1;
+		}
 
 		if (!( $response = $this->_GetResponse ( $fp, VER_COMMAND_UPDATE ) ))
+		{
+			$this->_MBPop ();
 			return -1;
+		}
 
 		// parse response
 		list(,$updated) = unpack ( "N*", substr ( $response, 0, 4 ) );
+		$this->_MBPop ();
 		return $updated;
 	}
 

@@ -7819,6 +7819,9 @@ static void RotateIndexMT ( const CSphString & sIndex )
 			pServed->m_pSchema = pServed->m_pIndex->GetSchema();
 			pServed->m_bEnabled = true;
 
+			// unlock the file index (otherwise the .spl file will leak on every rotation)
+			tNewIndex.m_pIndex->Unlock();
+
 			// unlink .old
 			if ( g_bUnlinkOld && !pServed->m_bOnlyNew )
 			{

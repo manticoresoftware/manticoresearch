@@ -978,7 +978,7 @@ class SphinxClient:
 		return re.sub(r"([=\(\)|\-!@~\"&/\\\^\$\=])", r"\\\1", string)
 
 
-	def FlushAttrs(self):
+	def FlushAttributes(self):
 		sock = self._Connect()
 		if not sock:
 			return None

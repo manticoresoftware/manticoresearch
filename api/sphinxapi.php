@@ -1646,7 +1646,7 @@ class SphinxClient
 	// flush
 	//////////////////////////////////////////////////////////////////////////
 
-	function FlushAttrs ()
+	function FlushAttributes ()
 	{
 		$this->_MBPush ();
 		if (!( $fp = $this->_Connect() ))

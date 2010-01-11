@@ -1298,7 +1298,7 @@ public class SphinxClient
      * Force attribute flush, and block until it completes.
      * Returns current internal flush tag on success, -1 on failure.
      */
-	public int FlushAttrs() throws SphinxException
+	public int FlushAttributes() throws SphinxException
 	{
 		/* build request */
 		ByteArrayOutputStream reqBuf = new ByteArrayOutputStream();

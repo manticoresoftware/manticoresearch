@@ -6502,6 +6502,8 @@ CSphIndex_VLN::~CSphIndex_VLN ()
 	if ( m_iIndexTag>=0 && g_bHeadProcess && g_pMvaArena )
 #endif
 		g_MvaArena.TaggedFreeTag ( m_iIndexTag );
+
+	Unlock();
 }
 
 

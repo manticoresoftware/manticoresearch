@@ -1652,7 +1652,7 @@ class SphinxClient
 		if (!( $fp = $this->_Connect() ))
 		{
 			$this->_MBPop();
-			return false;
+			return -1;
 		}
 
 		$req = pack ( "nnN", SEARCHD_COMMAND_FLUSHATTRS, VER_COMMAND_FLUSHATTRS, 0 ); // len=0
@@ -1660,17 +1660,18 @@ class SphinxClient
 			 !( $response = $this->_GetResponse ( $fp, VER_COMMAND_FLUSHATTRS ) ) )
 		{
 			$this->_MBPop ();
-			return false;
+			return -1;
 		}
 
 		$tag = -1;
 		if ( strlen($response)==4 )
 			list(,$tag) = unpack ( "N*", $response );
+		else
+			$this->_error = "unexpected response length";
 
 		$this->_MBPop ();
 		return $tag;
 	}
-
 }
 
 //

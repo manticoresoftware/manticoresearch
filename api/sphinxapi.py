@@ -981,13 +981,14 @@ class SphinxClient:
 	def FlushAttributes(self):
 		sock = self._Connect()
 		if not sock:
-			return None
+			return -1
 
 		request = pack ( '>hhI', SEARCHD_COMMAND_FLUSHATTRS, VER_COMMAND_FLUSHATTRS, 0 ) # cmd, ver, bodylen
 		sock.send ( request )
 
 		response = self._GetResponse ( sock, VER_COMMAND_FLUSHATTRS )
 		if not response or len(response)!=4:
+			self._error = 'unexpected response length'
 			return -1
 
 		tag = unpack ( '>L', response[0:4] )[0]

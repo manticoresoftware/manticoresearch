@@ -810,7 +810,7 @@ private:
 	int64_t					m_iMetaSaveTimeStamp;
 
 	static void				UpdateCheckFlush ( void * pBinlog );
-	BYTE					GetWriteIndexID ( const char * sName );
+	int 					GetWriteIndexID ( const char * sName );
 	void					LoadMeta ();
 	void					SaveMeta ();
 	void					LockFile ( bool bLock );
@@ -3244,7 +3244,7 @@ void RtBinlog_c::NotifyAddDocument ( const char * sIndexName, const CSphVector<C
 
 	Verify ( m_tWriteLock.Lock() );
 
-	const BYTE uIndex = GetWriteIndexID ( sIndexName );
+	const int uIndex = GetWriteIndexID ( sIndexName );
 
 	m_tWriter.PutByte ( BINLOG_DOC_ADD );
 	m_tWriter.PutByte ( uIndex );
@@ -3279,7 +3279,7 @@ void RtBinlog_c::NotifyDeleteDocument ( const char * sIndexName, SphDocID_t tDoc
 
 	Verify ( m_tWriteLock.Lock() );
 
-	const BYTE uIndex = GetWriteIndexID ( sIndexName );
+	const int uIndex = GetWriteIndexID ( sIndexName );
 
 	m_tWriter.PutByte ( BINLOG_DOC_DELETE );
 	m_tWriter.PutByte ( uIndex );
@@ -3297,7 +3297,7 @@ void RtBinlog_c::NotifyCommit ( const char * sIndexName, int64_t iTID )
 
 	Verify ( m_tWriteLock.Lock() );
 
-	const BYTE uIndexesIndex = GetWriteIndexID ( sIndexName );
+	const int uIndexesIndex = GetWriteIndexID ( sIndexName );
 
 	// item: Operation(BYTE) + index order(BYTE)
 
@@ -3438,22 +3438,22 @@ void RtBinlog_c::NotifyBufferFlushed ( SphOffset_t iWritten )
 	SaveMeta();
 }
 
-BYTE RtBinlog_c::GetWriteIndexID ( const char * sName )
+int RtBinlog_c::GetWriteIndexID ( const char * sName )
 {
 	assert ( m_dBinlogs.GetLength() && m_dBinlogs.Last().m_dRanges.GetLength()<0xff );
 
 	const int iFoundIndex = GetIndexByName<IndexRange_t> ( m_dBinlogs.Last().m_dRanges, sName );
 	if ( iFoundIndex>=0 )
-		return (BYTE)iFoundIndex;
+		return iFoundIndex;
 
 	const int iIndex = AddNewIndex ( sName );
 
 	// item: Operation(BYTE) + index order(BYTE) + char count(VLE) + string(BYTE[])
 	m_tWriter.PutByte ( BINLOG_INDEX_ADD );
-	m_tWriter.PutByte ( (BYTE)iIndex );
+	m_tWriter.PutByte ( iIndex );
 	m_tWriter.PutString ( sName );
 
-	return (BYTE)iIndex;
+	return iIndex;
 }
 
 void RtBinlog_c::LoadMeta ()
@@ -3713,7 +3713,7 @@ void RtBinlog_c::ReplayBinlog ( const CSphVector < ISphRtIndex * > & dRtIndices,
 	struct Stat { int m_iPassed; int m_iTotal; Stat() : m_iPassed ( 0 ), m_iTotal ( 0 ) {} };
 	Stat dStat[4];
 
-	while ( iFileSize-tReader.GetPos()>=sizeof(BYTE) && !tReader.GetErrorFlag() )
+	while ( iFileSize-tReader.GetPos()>=(int)sizeof(BYTE) && !tReader.GetErrorFlag() )
 	{
 		const int uOp = tReader.GetByte();
 		if ( tReader.GetErrorFlag() )

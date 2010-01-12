@@ -733,8 +733,16 @@ searchd
 	# subtree_hits_cache	= 8M
 
 
+	# multi-processing mode (MPM)
+	# known values are none, fork, prefork, and threads
+	# optional, default is fork
+	#
+	# workers				= fork
+
+
 	# max threads to create for searching local parts of a distributed index
 	# optional, default is 0, which means disable multi-threaded searching
+	# should work with all MPMs (ie. does NOT require workers=threads)
 	#
 	# dist_threads		= 4
 }

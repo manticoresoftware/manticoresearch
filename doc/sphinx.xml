@@ -500,6 +500,7 @@ Currently supported attribute types are:
 <listitem>UNIX timestamps;</listitem>
 <listitem>floating point values (32-bit, IEEE 754 single precision);</listitem>
 <listitem>string ordinals (specially computed integers);</listitem>
+<listitem><link linkend="conf-sql-attr-string">strings</link> (since 1.10.1);</listitem>
 <listitem><link linkend="mva">MVA</link>, multi-value attributes (variable-length lists of 32-bit unsigned integers).</listitem>
 </itemizedlist>
 </para>
@@ -2360,16 +2361,24 @@ $ searchd --status
 $ searchd --config /home/myuser/sphinx.conf --status
 </programlisting>
 </listitem>
+
 <listitem><option>--pidfile</option> is used to explicitly state a PID file, where the process information is stored regarding <filename>searchd</filename>, used for inter-process communications (for example, <filename>indexer</filename> will need to know the PID to contact <filename>searchd</filename> for rotating indexes). Normally, <filename>searchd</filename> would use a PID if running in regular mode (i.e. not with <option>--console</option>), but it is possible that you will be running it in console mode whilst the index is being updated and rotated, for which a PID file will be needed.
 <programlisting>
 $ searchd --config /home/myuser/sphinx.conf --pidfile /home/myuser/sphinx.pid
 </programlisting>
 </listitem>
+
 <listitem><option>--console</option> is used to force <filename>searchd</filename> into console mode; typically it will be running as a conventional server application, and will aim to dump information into the log files (as specified in <filename>sphinx.conf</filename>). Sometimes though, when debugging issues in the configuration or the daemon itself, or trying to diagnose hard-to-track-down problems, it may be easier to force it to dump information directly to the console/command line from which it is being called. Running in console mode also means that the process will not be forked (so searches are done in sequence) and logs will not be written to. (It should be noted that console mode is not the intended method for running <filename>searchd</filename>) You can invoke it as such:
 <programlisting>
 $ searchd --config /home/myuser/sphinx.conf --console
 </programlisting>
 </listitem>
+
+<listitem><option>--logdebug</option> enables additional debug output
+in the daemon log. Should only be needed rarely, to assist with debugging
+issues that could not be easily reproduced on request.
+</listitem>
+
 <listitem><option>--iostats</option> is used in conjuction with the logging options (the <option>query_log</option> will need to have been activated in <filename>sphinx.conf</filename>) to provide more detailed information on a per-query basis as to the input/output operations carried out in the course of that query, with a slight performance hit and of course bigger logs. Further details are available under the <link linkend="query-log-format">query log format</link> section. You might start <filename>searchd</filename> thus:
 <programlisting>
 $ searchd --config /home/myuser/sphinx.conf --iostats
@@ -2560,7 +2569,21 @@ by index name. It takes the data from attribute (.spa) file and therefore
 requires docinfo=extern to work.
 </listitem>
 <listitem><option>--dumphitlist INDEXNAME KEYWORD</option> dumps all
-the hits (occurences) of a given keyword in a given index.
+the hits (occurences) of a given keyword in a given index, with keyword
+specified as text.
+</listitem>
+<listitem><option>--dumphitlist INDEXNAME --wordid ID</option> dumps all
+the hits (occurences) of a given keyword in a given index, with keyword
+specified as internal numeric ID.
+</listitem>
+<listitem><option>--htmlstrip INDEXNAME</option> filters stdin using
+HTML stripper settings for a given index, and prints the filtering 
+results to stdout. Note that the settings will be taken from sphinx.conf,
+and not the index header.
+</listitem>
+<listitem><option>--check INDEXNAME</option> checks the index data
+files for consistency errors that might be introduced either by bugs
+in <filename>indexer</filename> and/or hardware faults.
 </listitem>
 </itemizedlist>
 </sect2>
@@ -3532,6 +3555,43 @@ Usage example:
 $status = $cl->Status ();
 foreach ( $status as $row )
 	print join ( ": ", $row ) . "\n";
+</programlisting>
+</sect3>
+
+
+<sect3 id="api-func-flush-attributes"><title>FlushAttributes</title>
+<para><b>Prototype:</b> function FlushAttributes ()</para>
+<para>
+Forces <filename>searchd</filename> to flush pending attribute updates
+to disk, and blocks until completion. Returns a non-negative internal
+"flush tag" on success. Returns -1 and sets an error message on error.
+Introduced in version 1.10.1. 
+</para>
+<para>
+Attribute values updated using <link linkend="api-func-updateatttributes">UpdateAttributes()</link>
+API call are only kept in RAM until a so-called flush (which writes
+the current, possibly updated attribute values back to disk). FlushAttributes()
+call lets you enforce a flush.  The call will block until <filename>searchd</filename>
+finishes writing the data to disk, which might take seconds or even minutes
+depending on the total data size (.spa file size). All the currently updated
+indexes will be flushed.
+</para>
+<para>
+Flush tag should be treated as an ever growing magic number that does not
+mean anything. It's guaranteed to be non-negative. It is guaranteed to grow over
+time, though not necessarily in a sequential fashion; for instance, two calls that
+return 10 and then 1000 respectively are a valid situation. If two calls to
+FlushAttrs() return the same tag, it means that there were no actual attribute
+updates in between them, and therefore current flushed state remained the same
+(for all indexes).
+</para>
+<para>
+Usage example:
+</para>
+<programlisting>
+$status = $cl->FlushAttributes ();
+if ( $status&lt;0 )
+	print "ERROR: " . $cl->GetLastError(); 
 </programlisting>
 </sect3>
 
@@ -4696,6 +4756,92 @@ sql_attr_multi = uint tag from query; SELECT id, tag FROM tags
 sql_attr_multi = uint tag from ranged-query; \
 	SELECT id, tag FROM tags WHERE id&gt;=$start AND id&lt;=$end; \
 	SELECT MIN(id), MAX(id) FROM tags
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-sql-attr-string"><title>sql_attr_string</title>
+<para>
+String attribute declaration.
+Multi-value (ie. there may be more than one such attribute declared), optional.
+Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
+Introduced in version 1.10.1.
+</para>
+<para>
+String attributes can store arbitrary strings attached to every document.
+There's a fixed size limit of 4 MB per value. Also, <filename>searchd</filename>
+will currently cache all the values in RAM, which is an additional implicit limit.
+</para>
+<para>
+As of 1.10.1, strings can only be used for storage and retrieval.
+They can not participate in expressions, be used for filtering, sorting,
+or grouping (ie. in WHERE, ORDER or GROUP clauses). Note that attributes
+declared using <option>sql_attr_string</option> will <b>not</b> be full-text
+indexed; you can use <link linkend="conf-sql-field-string">sql_field_string</link>
+directive for that.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+sql_attr_string = title # will be stored but will not be indexed
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-sql-attr-str2wordcount"><title>sql_attr_str2wordcount</title>
+<para>
+Word-count attribute declaration.
+Multi-value (ie. there may be more than one such attribute declared), optional.
+Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
+Introduced in version 1.10.1.
+</para>
+<para>
+Word-count attribute takes a string column, tokenizes it according
+to index settings, and stores the resulting number of tokens in an attribute.
+This number of tokens ("word count") is a normal integer that can be later
+used, for instance, in custom ranking expressions (boost shorter titles,
+help identify exact field matches, etc).
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+sql_attr_str2wordcount = title_wc
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-sql-field-string"><title>sql_field_string</title>
+<para>
+Combined string attribute and full-text field declaration.
+Multi-value (ie. there may be more than one such attribute declared), optional.
+Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
+Introduced in version 1.10.1.
+</para>
+<para>
+<link linkend="conf-sql-attr-string">sql_attr_string</link> only stores the column
+value but does not full-text index it.  In some cases it might be desired to both full-text
+index the column and store it as attribute.  <option>sql_field_string</option> lets you do
+exactly that. Both the field and the attribute will be named the same.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+sql_field_string = title # will be both indexed and stored
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-sql-field-str2wordcount"><title>sql_field_str2wordcount</title>
+<para>
+Combined word-count attribute and full-text field declaration.
+Multi-value (ie. there may be more than one such attribute declared), optional.
+Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
+Introduced in version 1.10.1.
+</para>
+<link linkend="conf-sql-attr-str2wordcount">sql_attr_str2wordcount</link> only stores the column
+word count but does not full-text index it.  In some cases it might be desired to both full-text
+index the column and also have the count.  <option>sql_field_str2wordcount</option> lets you do
+exactly that. Both the field and the attribute will be named the same.
+<bridgehead>Example:</bridgehead>
+<programlisting>
+sql_field_str2wordcount = title # will be indexed, and counted/stored
 </programlisting>
 </sect3>
 
@@ -7015,6 +7161,113 @@ Setting the limit to 0 disables the optimizer.
 <bridgehead>Example:</bridgehead>
 <programlisting>
 subtree_hits_cache = 16M
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-workers"><title>workers</title>
+<para>
+Multi-processing mode (MPM).
+Optional; allowed values are none, fork, prefork, and threads; default is fork.
+Introduced in version 1.10.1.
+</para>
+<para>
+Lets you choose how <filename>searchd</filename> processes multiple
+concurrent requests. The possible values are:
+<variablelist>
+<varlistentry>
+	<term>none</term>
+	<listitem>All requests will be handled serially, one-by-one.
+		Prior to 1.x, this was the only mode available on Windows.
+	</listitem>
+</varlistentry>
+<varlistentry>
+	<term>fork</term>
+	<listitem>A new child process will be forked to handle every
+		incoming request. Historically, this is the default mode.
+	</listitem>
+</varlistentry>
+<varlistentry>
+	<term>prefork</term>
+	<listitem>On startup, <filename>searchd</filename> will pre-fork
+		a number of worker processes, and pass the incoming requests
+		to one of those children.
+	</listitem>
+</varlistentry>
+<varlistentry>
+	<term>threads</term>
+	<listitem>A new thread will be created to handle every
+		incoming request. This is the only mode compatible with
+		RT indexing backend.
+	</listitem>
+</varlistentry>
+</variablelist>
+</para>
+<para>
+Historically, <filename>searchd</filename> used fork-based model,
+which generally performs OK but spends a noticeable amount of CPU
+in fork() system call when there's a high amount of (tiny) requests
+per second. Prefork mode was implemented to alleviate that; with
+prefork, worker processes are basically only created on startup
+and re-created on index rotation, somewhat reducing fork() call
+pressure.
+</para>
+<para>
+Threads mode was implemented along with RT backend and is required
+to use RT indexes. (Regular disk-based indexes work in all the
+available modes.)
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+workers = threads
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-dist-threads"><title>dist_threads</title>
+<para>
+Max local search threads to use when searching a distributed index.
+Optional, default is 0, which means to disable multi-threaded distributed searching.
+Introduced in version 1.10.1.
+</para>
+<para>
+Distributed index can include several local indexes. <option>dist_threads</option>
+lets you easily utilize multiple CPUs/cores for that (previously existing
+alternative was to specify the indexes as remote agents, pointing searchd
+to itself and paying some network overheads).
+</para>
+<para>
+When set to a value N greater than 1, this directive will create up to
+N threads for every query, and schedule the specific searches within these
+threads. For example, if there are 7 local indexes to search and dist_threads
+is set to 2, then 2 parallel threads would be created: one that sequentially
+searches 4 indexes, and another one that searches the other 3 indexes.
+</para>
+<para>
+In case of CPU bound workload, setting <option>dist_threads</option>
+to 1x the number of cores is advised (creating more threads than cores
+will not improve query time). In case of mixed CPU/disk bound workload
+it might sometimes make sense to use more (so that all cores could be
+utilizes even when there are threads that wait for I/O completion).
+</para>
+<para>
+Note that <option>dist_threads</option> does <b>not</b> require
+threads MPM. You can perfectly use it with fork or prefork MPMs too.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+index dist_test
+{
+	type = distributed
+	local = chunk1
+	local = chunk2
+	local = chunk3
+	local = chunk4
+}
+
+# ...
+
+dist_threads = 4
 </programlisting>
 </sect3>
 

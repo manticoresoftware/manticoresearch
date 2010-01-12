@@ -8525,7 +8525,7 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 
 		// attrs
 		const int iNumTypes = 3;
-		const char * sTypes[iNumTypes] = { "rt_attr_int", "rt_attr_bigint", "rt_attr_float" };
+		const char * sTypes[iNumTypes] = { "rt_attr_uint", "rt_attr_bigint", "rt_attr_float" };
 		const int iTypes[iNumTypes] = { SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, SPH_ATTR_FLOAT };
 
 		for ( int iType=0; iType<iNumTypes; iType++ )

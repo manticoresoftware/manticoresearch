@@ -218,7 +218,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "hitless_words",			KEY_LIST, NULL },
 	{ "hit_format",				0, NULL },
 	{ "rt_field",				KEY_LIST, NULL },
-	{ "rt_attr_int",			KEY_LIST, NULL },
+	{ "rt_attr_uint",			KEY_LIST, NULL },
 	{ "rt_attr_bigint",			KEY_LIST, NULL },
 	{ "rt_attr_float",			KEY_LIST, NULL },
 	{ "rt_mem_limit",			0, NULL },

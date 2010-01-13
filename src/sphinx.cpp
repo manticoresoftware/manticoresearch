@@ -12453,7 +12453,9 @@ bool CSphIndex_VLN::Rename ( const char * sNewBase )
 		if ( ::rename ( sFrom, sTo ) )
 		{
 			m_sLastError.SetSprintf ( "rename %s to %s failed: %s", sFrom, sTo, strerror(errno) );
-			break;
+			// this is no reason to fail if spl is missing, since it is only lock and no data.
+			if ( strcmp ( sExt, "spl" ) )
+				break;
 		}
 		uMask |= (1UL<<iExt);
 	}

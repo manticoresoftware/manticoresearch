@@ -63,7 +63,7 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="-s" || $arg=="--searchd" )		$locals['searchd'] = $args[++$i];
 	else if ( $arg=="--rt" )						$locals['rt_mode'] = true;
 	else if ( is_dir($arg) )						$test_dirs[] = $arg;
-	else if ( is_dir("test_$arg") )					$test_dirs[] = "test_$arg";
+	else if ( is_dir(sprintf("test_%03d", $arg)))	$test_dirs[] = sprintf("test_%03d", $arg);
 	else if ( $arg=="--strict" )					$g_strict = true;
 	else
 	{

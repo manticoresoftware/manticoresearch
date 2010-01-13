@@ -2309,7 +2309,8 @@ int rename ( const char * sOld, const char * sNew )
 void RtIndex_t::SaveMeta ( int iDiskChunks )
 {
 	// sanity check
-	assert ( m_iLockFD>=0 );
+	if ( m_iLockFD<0 )
+		return;
 
 	// write new meta
 	CSphString sMeta, sMetaNew;

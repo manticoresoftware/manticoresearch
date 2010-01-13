@@ -192,7 +192,7 @@ enum Mpm_e
 	MPM_THREADS		///< create a worker thread for each query
 };
 
-static Mpm_e			g_eWorkers			= USE_WINDOWS ? MPM_NONE : MPM_THREADS;
+static Mpm_e			g_eWorkers			= USE_WINDOWS ? MPM_THREADS : MPM_FORK;
 
 static int				g_iPreforkChildren	= 10;		// how much workers to keep
 static CSphVector<int>	g_dChildren;
@@ -8508,6 +8508,12 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		// configure realtime index
 		////////////////////////////
 
+		if ( g_eWorkers!=MPM_THREADS )
+		{
+			sphWarning ( "index '%s': RT index requires workers=threads - NOT SERVING", szIndexName );
+			return ADD_ERROR;
+		}
+
 		CSphSchema tSchema ( szIndexName );
 		CSphColumnInfo tCol;
 
@@ -10120,30 +10126,20 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( hSearchd("workers") )
 	{
 		if ( hSearchd["workers"]=="none" )
-		{
 			g_eWorkers = MPM_NONE;
-		} else if ( hSearchd["workers"]=="fork" )
-		{
-#if USE_WINDOWS
-			sphDie ( "workers=fork is not supported on Windows" );
-#endif
-			sphWarning ( "workers=fork is not supported on rt backend. Assume workers=threads" );
+		else if ( hSearchd["workers"]=="fork" )
+			g_eWorkers = MPM_FORK;
+		else if ( hSearchd["workers"]=="prefork" )
+			g_eWorkers = MPM_PREFORK;
+		else if ( hSearchd["workers"]=="threads" )
 			g_eWorkers = MPM_THREADS;
-		} else if ( hSearchd["workers"]=="prefork" )
-		{
-#if USE_WINDOWS
-			sphDie ( "workers=prefork is not supported on Windows" );
-#endif
-			sphWarning ( "workers=prefork is not supported on rt backend. Assume workers=threads" );
-			g_eWorkers = MPM_THREADS;
-		} else if ( hSearchd["workers"]=="threads" )
-		{
-			g_eWorkers = MPM_THREADS;
-		} else
-		{
+		else
 			sphFatal ( "unknown workers=%s value", hSearchd["workers"].cstr() );
-		}
 	}
+#if USE_WINDOWS
+	if ( g_eWorkers==MPM_FORK || g_eWorkers==MPM_PREFORK )
+		sphFatal ( "workers=fork and workers=prefork are not supported on Windows" );
+#endif
 
 	if ( g_iMaxPacketSize<128*1024 || g_iMaxPacketSize>128*1024*1024 )
 		sphFatal ( "max_packet_size out of bounds (128K..128M)" );

@@ -925,8 +925,8 @@ public:
 	CSphMatch		m_tDoc;			///< current match (partial)
 	DWORD			m_iHitPos;		///< current hit postition, from hitlist
 
-	CSphReader_VLN	m_rdDoclist;	///< my doclist reader
-	CSphReader_VLN	m_rdHitlist;	///< my hitlist reader
+	CSphReader	m_rdDoclist;	///< my doclist reader
+	CSphReader	m_rdHitlist;	///< my hitlist reader
 
 	SphDocID_t		m_iMinID;		///< min ID to fixup
 	int				m_iInlineAttrs;	///< inline attributes count
@@ -1129,7 +1129,7 @@ struct CSphDocMVA
 		m_dOffsets.Resize ( iSize );
 	}
 
-	void	Read ( CSphReader_VLN & tReader );
+	void	Read ( CSphReader & tReader );
 	void	Write ( CSphWriter & tWriter );
 };
 
@@ -1175,7 +1175,7 @@ void Swap ( OrdinalEntry_t & a, OrdinalEntry_t & b )
 }
 
 //////////////////////////////////////////////////////////////////////////
-static void ReadFileInfo ( CSphReader_VLN & tReader, const char * szFilename, CSphString & sWarning )
+static void ReadFileInfo ( CSphReader & tReader, const char * szFilename, CSphString & sWarning )
 {
 	SphOffset_t uSize	= tReader.GetOffset ();
 	SphOffset_t uCTime	= tReader.GetOffset ();
@@ -1360,7 +1360,7 @@ private:
 	bool						cidxDone ( const char * sHeaderExtension );
 
 	void						WriteSchemaColumn ( CSphWriter & fdInfo, const CSphColumnInfo & tCol );
-	void						ReadSchemaColumn ( CSphReader_VLN & rdInfo, CSphColumnInfo & tCol );
+	void						ReadSchemaColumn ( CSphReader & rdInfo, CSphColumnInfo & tCol );
 
 	bool						ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQNode_t * pRoot, CSphDict * pDict, const CSphVector<CSphFilterSettings> * pExtraFilters, CSphQueryNodeCache * pNodeCache ) const;
 	bool						MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters ) const;
@@ -1374,7 +1374,7 @@ private:
 	CSphDict *					SetupStarDict ( CSphScopedPtr<CSphDict> & tContainer, ISphTokenizer & tTokenizer ) const;
 	CSphDict *					SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict, ISphTokenizer & tTokenizer ) const;
 
-	void						LoadSettings ( CSphReader_VLN & tReader );
+	void						LoadSettings ( CSphReader & tReader );
 	void						SaveSettings ( CSphWriter & tWriter );
 
 	bool						RelocateBlock ( int iFile, BYTE * pBuffer, int iRelocationSize, SphOffset_t * pFileSize, CSphBin * pMinBin, SphOffset_t * pSharedOffset );
@@ -2641,7 +2641,7 @@ CSphTokenizerSettings::CSphTokenizerSettings ()
 }
 
 
-static void LoadTokenizerSettings ( CSphReader_VLN & tReader, CSphTokenizerSettings & tSettings, DWORD uVersion, CSphString & sWarning )
+static void LoadTokenizerSettings ( CSphReader & tReader, CSphTokenizerSettings & tSettings, DWORD uVersion, CSphString & sWarning )
 {
 	if ( uVersion<9 )
 		return;
@@ -2678,7 +2678,7 @@ static void SaveTokenizerSettings ( CSphWriter & tWriter, ISphTokenizer * pToken
 }
 
 
-void LoadDictionarySettings ( CSphReader_VLN & tReader, CSphDictSettings & tSettings, DWORD uVersion, CSphString & sWarning )
+void LoadDictionarySettings ( CSphReader & tReader, CSphDictSettings & tSettings, DWORD uVersion, CSphString & sWarning )
 {
 	if ( uVersion<9 )
 		return;
@@ -5006,7 +5006,7 @@ void CSphWriter::SeekTo ( SphOffset_t iPos )
 // BIT-ENCODED FILE INPUT
 ///////////////////////////////////////////////////////////////////////////////
 
-CSphReader_VLN::CSphReader_VLN ( BYTE * pBuf, int iSize )
+CSphReader::CSphReader ( BYTE * pBuf, int iSize )
 	: m_iFD ( -1 )
 	, m_iPos ( 0 )
 	, m_iBuffPos ( 0 )
@@ -5022,14 +5022,14 @@ CSphReader_VLN::CSphReader_VLN ( BYTE * pBuf, int iSize )
 }
 
 
-CSphReader_VLN::~CSphReader_VLN ()
+CSphReader::~CSphReader ()
 {
 	if ( m_bBufOwned )
 		SafeDeleteArray ( m_pBuff );
 }
 
 
-void CSphReader_VLN::SetBuffers ( int iReadBuffer, int iReadUnhinted )
+void CSphReader::SetBuffers ( int iReadBuffer, int iReadUnhinted )
 {
 	if ( !m_pBuff )
 		m_iBufSize = iReadBuffer;
@@ -5037,7 +5037,7 @@ void CSphReader_VLN::SetBuffers ( int iReadBuffer, int iReadUnhinted )
 }
 
 
-void CSphReader_VLN::SetFile ( int iFD, const char * sFilename )
+void CSphReader::SetFile ( int iFD, const char * sFilename )
 {
 	m_iFD = iFD;
 	m_iPos = 0;
@@ -5047,19 +5047,19 @@ void CSphReader_VLN::SetFile ( int iFD, const char * sFilename )
 }
 
 
-void CSphReader_VLN::SetFile ( const CSphAutofile & tFile )
+void CSphReader::SetFile ( const CSphAutofile & tFile )
 {
 	SetFile ( tFile.GetFD(), tFile.GetFilename() );
 }
 
 
-void CSphReader_VLN::Reset ()
+void CSphReader::Reset ()
 {
 	SetFile ( -1, "" );
 }
 
 
-void CSphReader_VLN::SeekTo ( SphOffset_t iPos, int iSizeHint )
+void CSphReader::SeekTo ( SphOffset_t iPos, int iSizeHint )
 {
 	assert ( iPos>=0 );
 
@@ -5085,7 +5085,7 @@ void CSphReader_VLN::SeekTo ( SphOffset_t iPos, int iSizeHint )
 }
 
 
-void CSphReader_VLN::SkipBytes ( int iCount )
+void CSphReader::SkipBytes ( int iCount )
 {
 	SeekTo ( m_iPos+m_iBuffPos+iCount, m_iSizeHint-m_iBuffPos-iCount );
 }
@@ -5138,7 +5138,7 @@ int pread ( int iFD, void * pBuf, int iBytes, SphOffset_t iOffset )
 #endif // !HAVE_PREAD
 
 
-void CSphReader_VLN::UpdateCache ()
+void CSphReader::UpdateCache ()
 {
 	PROFILE ( read_hits );
 	assert ( m_iFD>=0 );
@@ -5179,7 +5179,7 @@ void CSphReader_VLN::UpdateCache ()
 }
 
 
-int CSphReader_VLN::GetByte ()
+int CSphReader::GetByte ()
 {
 	if ( m_iBuffPos>=m_iBuffUsed )
 	{
@@ -5193,7 +5193,7 @@ int CSphReader_VLN::GetByte ()
 }
 
 
-void CSphReader_VLN::GetBytes ( void * pData, int iSize )
+void CSphReader::GetBytes ( void * pData, int iSize )
 {
 	BYTE * pOut = (BYTE*) pData;
 
@@ -5243,7 +5243,7 @@ void CSphReader_VLN::GetBytes ( void * pData, int iSize )
 }
 
 
-int CSphReader_VLN::GetBytesZerocopy ( const BYTE ** ppData, int iMax )
+int CSphReader::GetBytesZerocopy ( const BYTE ** ppData, int iMax )
 {
 	if ( m_iBuffPos>=m_iBuffUsed )
 	{
@@ -5259,7 +5259,7 @@ int CSphReader_VLN::GetBytesZerocopy ( const BYTE ** ppData, int iMax )
 }
 
 
-int CSphReader_VLN::GetLine ( char * sBuffer, int iMaxLen )
+int CSphReader::GetLine ( char * sBuffer, int iMaxLen )
 {
 	int iOutPos = 0;
 	iMaxLen--; // reserve space for trailing '\0'
@@ -5332,8 +5332,8 @@ int CSphReader_VLN::GetLine ( char * sBuffer, int iMaxLen )
 DWORD sphUnzipInt ( const BYTE * & pBuf )			{ SPH_UNZIP_IMPL ( DWORD, *pBuf++ ); }
 SphOffset_t sphUnzipOffset ( const BYTE * & pBuf )	{ SPH_UNZIP_IMPL ( SphOffset_t, *pBuf++ ); }
 
-DWORD CSphReader_VLN::UnzipInt ()			{ SPH_UNZIP_IMPL ( DWORD, GetByte() ); }
-SphOffset_t CSphReader_VLN::UnzipOffset ()	{ SPH_UNZIP_IMPL ( SphOffset_t, GetByte() ); }
+DWORD CSphReader::UnzipInt ()			{ SPH_UNZIP_IMPL ( DWORD, GetByte() ); }
+SphOffset_t CSphReader::UnzipOffset ()	{ SPH_UNZIP_IMPL ( SphOffset_t, GetByte() ); }
 
 
 #if USE_64BIT
@@ -5344,7 +5344,7 @@ SphOffset_t CSphReader_VLN::UnzipOffset ()	{ SPH_UNZIP_IMPL ( SphOffset_t, GetBy
 
 /////////////////////////////////////////////////////////////////////////////
 
-const CSphReader_VLN & CSphReader_VLN::operator = ( const CSphReader_VLN & rhs )
+const CSphReader & CSphReader::operator = ( const CSphReader & rhs )
 {
 	SetFile ( rhs.m_iFD, rhs.m_sFilename.cstr() );
 	SeekTo ( rhs.m_iPos + rhs.m_iBuffPos, rhs.m_iSizeHint );
@@ -5352,7 +5352,7 @@ const CSphReader_VLN & CSphReader_VLN::operator = ( const CSphReader_VLN & rhs )
 }
 
 
-DWORD CSphReader_VLN::GetDword ()
+DWORD CSphReader::GetDword ()
 {
 	DWORD uRes;
 	GetBytes ( &uRes, sizeof(DWORD) );
@@ -5360,7 +5360,7 @@ DWORD CSphReader_VLN::GetDword ()
 }
 
 
-SphOffset_t CSphReader_VLN::GetOffset ()
+SphOffset_t CSphReader::GetOffset ()
 {
 	SphOffset_t uRes;
 	GetBytes ( &uRes, sizeof(SphOffset_t) );
@@ -5368,7 +5368,7 @@ SphOffset_t CSphReader_VLN::GetOffset ()
 }
 
 
-CSphString CSphReader_VLN::GetString ()
+CSphString CSphReader::GetString ()
 {
 	CSphString sRes;
 
@@ -7478,7 +7478,7 @@ void CSphIndex_VLN::WriteSchemaColumn ( CSphWriter & fdInfo, const CSphColumnInf
 }
 
 
-void CSphIndex_VLN::ReadSchemaColumn ( CSphReader_VLN & rdInfo, CSphColumnInfo & tCol )
+void CSphIndex_VLN::ReadSchemaColumn ( CSphReader & rdInfo, CSphColumnInfo & tCol )
 {
 	tCol.m_sName = rdInfo.GetString ();
 	if ( tCol.m_sName.IsEmpty () )
@@ -10050,7 +10050,7 @@ static bool CopyFile( const char * sSrc, const char * sDst, CSphString & sErrStr
 }
 
 
-SphAttr_t CopyStringAttr ( CSphWriter & wrTo, CSphReader_VLN & rdFrom, SphAttr_t uOffset )
+SphAttr_t CopyStringAttr ( CSphWriter & wrTo, CSphReader & rdFrom, SphAttr_t uOffset )
 {
 	// magic offset? do nothing
 	if ( !uOffset )
@@ -10110,7 +10110,7 @@ private:
 	int				m_iEntries;
 
 	ESphHitless		m_eHitless;
-	CSphReader_VLN	m_tReader;
+	CSphReader	m_tReader;
 	CSphAutofile	m_tFile;
 	SphOffset_t		m_iMaxPos;
 
@@ -12187,7 +12187,7 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 
 	// preload checkpoints (must be done here as they are not shared)
 	assert ( m_iCheckpointsPos>0 );
-	CSphReader_VLN tCheckpointReader;
+	CSphReader tCheckpointReader;
 	tCheckpointReader.SetFile ( tWordlist );
 	tCheckpointReader.SeekTo ( m_iCheckpointsPos, READ_NO_SIZE_HINT );
 
@@ -12666,7 +12666,7 @@ CSphDict * CSphIndex_VLN::SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer,
 }
 
 
-void CSphIndex_VLN::LoadSettings ( CSphReader_VLN & tReader )
+void CSphIndex_VLN::LoadSettings ( CSphReader & tReader )
 {
 	if ( m_uVersion>=8 )
 	{
@@ -19704,7 +19704,7 @@ void CSphSource_MSSQL::OdbcPostConnect ()
 // MERGER HELPERS
 /////////////////////////////////////////////////////////////////////////////
 
-void CSphDocMVA::Read( CSphReader_VLN & tReader )
+void CSphDocMVA::Read( CSphReader & tReader )
 {
 	m_iDocID = tReader.GetDocid();
 	if ( m_iDocID )

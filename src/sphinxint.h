@@ -90,11 +90,11 @@ protected:
 class CSphAutofile;
 
 /// file reader with read buffering and int decoder
-class CSphReader_VLN
+class CSphReader
 {
 public:
-	CSphReader_VLN ( BYTE * pBuf=NULL, int iSize=0 );
-	virtual		~CSphReader_VLN ();
+	CSphReader ( BYTE * pBuf=NULL, int iSize=0 );
+	virtual		~CSphReader ();
 
 	void		SetBuffers ( int iReadBuffer, int iReadUnhinted );
 	void		SetFile ( int iFD, const char * sFilename );
@@ -132,7 +132,7 @@ public:
 	SphWordID_t	UnzipWordid ()	{ return UnzipInt(); }
 #endif
 
-	const CSphReader_VLN &	operator = ( const CSphReader_VLN & rhs );
+	const CSphReader &	operator = ( const CSphReader & rhs );
 
 protected:
 
@@ -157,10 +157,10 @@ private:
 };
 
 /// scoped reader 
-class CSphAutoreader : public CSphReader_VLN
+class CSphAutoreader : public CSphReader
 {
 public:
-				CSphAutoreader ( BYTE * pBuf=NULL, int iSize=0 ) : CSphReader_VLN ( pBuf, iSize ) {}
+				CSphAutoreader ( BYTE * pBuf=NULL, int iSize=0 ) : CSphReader ( pBuf, iSize ) {}
 				~CSphAutoreader ();
 
 	bool		Open ( const CSphString & sFilename, CSphString & sError );

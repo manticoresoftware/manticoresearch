@@ -822,10 +822,10 @@ private:
 	void					OpenNewLog ();
 	void					Close ();
 	void					ReplayBinlog ( const CSphVector < ISphRtIndex * > & dRtIndices, int iBinlog ) const;
-	bool					ReplayAddDocument ( const CSphVector < ISphRtIndex * > & dRtIndices, CSphReader_VLN & tReader, int iBinlog, const CSphVector<int64_t> & dCommitedCP ) const;
-	bool					ReplayDeleteDocument ( const CSphVector < ISphRtIndex * > & dRtIndices, CSphReader_VLN & tReader, int iBinlog, const CSphVector<int64_t> & dCommitedCP ) const;
-	bool					ReplayCommit ( const CSphVector < ISphRtIndex * > & dRtIndices, CSphReader_VLN & tReader, int iBinlog, CSphVector<int64_t> & dCommitedCP ) const;
-	bool					ReplayIndexAdd ( const CSphVector < ISphRtIndex * > & dRtIndices, CSphReader_VLN & tReader, int iBinlog ) const;
+	bool					ReplayAddDocument ( const CSphVector < ISphRtIndex * > & dRtIndices, CSphReader & tReader, int iBinlog, const CSphVector<int64_t> & dCommitedCP ) const;
+	bool					ReplayDeleteDocument ( const CSphVector < ISphRtIndex * > & dRtIndices, CSphReader & tReader, int iBinlog, const CSphVector<int64_t> & dCommitedCP ) const;
+	bool					ReplayCommit ( const CSphVector < ISphRtIndex * > & dRtIndices, CSphReader & tReader, int iBinlog, CSphVector<int64_t> & dCommitedCP ) const;
+	bool					ReplayIndexAdd ( const CSphVector < ISphRtIndex * > & dRtIndices, CSphReader & tReader, int iBinlog ) const;
 };
 
 static RtBinlog_c * g_pBinlog = NULL;
@@ -3762,7 +3762,7 @@ void RtBinlog_c::ReplayBinlog ( const CSphVector < ISphRtIndex * > & dRtIndices,
 		, dStat[2].m_iPassed, dStat[2].m_iTotal );
 }
 
-bool RtBinlog_c::ReplayAddDocument ( const CSphVector < ISphRtIndex * > & dRtIndices, CSphReader_VLN & tReader, int iBinlog, const CSphVector<int64_t> & dCommitedCP ) const
+bool RtBinlog_c::ReplayAddDocument ( const CSphVector < ISphRtIndex * > & dRtIndices, CSphReader & tReader, int iBinlog, const CSphVector<int64_t> & dCommitedCP ) const
 {
 	// item: Operation(BYTE) + index order(BYTE) + doc_id(SphDocID) + iRowSize(VLE) + hit.count(VLE) + CSphMatch.m_pDynamic[...](DWORD[]) +
 	// + dHits[...] ()
@@ -3834,7 +3834,7 @@ bool RtBinlog_c::ReplayAddDocument ( const CSphVector < ISphRtIndex * > & dRtInd
 		return false;
 }
 
-bool RtBinlog_c::ReplayDeleteDocument ( const CSphVector < ISphRtIndex * > & dRtIndices, CSphReader_VLN & tReader, int iBinlog, const CSphVector<int64_t> & dCommitedCP ) const
+bool RtBinlog_c::ReplayDeleteDocument ( const CSphVector < ISphRtIndex * > & dRtIndices, CSphReader & tReader, int iBinlog, const CSphVector<int64_t> & dCommitedCP ) const
 {
 	// item: Operation(BYTE) + index order(BYTE) + doc_id(SphDocID)
 
@@ -3870,7 +3870,7 @@ bool RtBinlog_c::ReplayDeleteDocument ( const CSphVector < ISphRtIndex * > & dRt
 		return false;
 }
 
-bool RtBinlog_c::ReplayCommit ( const CSphVector < ISphRtIndex * > & dRtIndices, CSphReader_VLN & tReader, int iBinlog, CSphVector<int64_t> & dCommitedCP ) const
+bool RtBinlog_c::ReplayCommit ( const CSphVector < ISphRtIndex * > & dRtIndices, CSphReader & tReader, int iBinlog, CSphVector<int64_t> & dCommitedCP ) const
 {
 	// item: Operation(BYTE) + index order(BYTE)
 
@@ -3920,7 +3920,7 @@ bool RtBinlog_c::ReplayCommit ( const CSphVector < ISphRtIndex * > & dRtIndices,
 		return false;
 }
 
-bool RtBinlog_c::ReplayIndexAdd ( const CSphVector < ISphRtIndex * > & dRtIndices, CSphReader_VLN & tReader, int iBinlog ) const
+bool RtBinlog_c::ReplayIndexAdd ( const CSphVector < ISphRtIndex * > & dRtIndices, CSphReader & tReader, int iBinlog ) const
 {
 	// item: Operation(BYTE) + index order(BYTE) + char count(VLE) + string(BYTE[])
 

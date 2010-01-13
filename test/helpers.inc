@@ -1392,7 +1392,7 @@ class SphinxConfig
 								return FALSE;
 							}
 							break;
-						case "sql_attr_uint": $insert_types[$value] = "rt_attr_int"; break;
+						case "sql_attr_uint": $insert_types[$value] = "rt_attr_uint"; break;
 						case "sql_attr_bigint": $insert_types[$value] = "rt_attr_bigint"; break;
 						case "sql_attr_float":  $insert_types[$value] = "rt_attr_float"; break;
 						// case "sql_attr_timestamp": //< not yet
@@ -1654,7 +1654,9 @@ class SphinxConfig
 		fwrite ( $fp, "\tmax_children	= $sd_max_children\n" );
 		fwrite ( $fp, "\tpid_file		= ".$this->_sd_pid_file."\n" );
 		fwrite ( $fp, "\tmax_matches	= $sd_max_matches\n" );
-
+		if ( $this->IsRt() )
+			fwrite ( $fp, "\tworkers		= threads\n" );
+			
 	}
 
 	function WriteSqlSettings ( $fp, $attributes )

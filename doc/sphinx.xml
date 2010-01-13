@@ -1056,7 +1056,7 @@ index rt
 	path = /usr/local/sphinx/data/rt
 	rt_field = title
 	rt_field = content
-	rt_attr_int = gid
+	rt_attr_uint = gid
 }
 </programlisting>
 </example>

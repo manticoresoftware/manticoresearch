@@ -81,14 +81,19 @@ source src1
 		FROM documents
 
 
-	# joined field fetch query
-	# lets you avoid (slow) JOIN and GROUP_CONCAT
-	# syntax is FIELD-NAME 'from' 'query'; QUERY
+	# joined/payload field fetch query
+	# joined fields let you avoid (slow) JOIN and GROUP_CONCAT
+	# payload fields let you attach custom per-keyword values (eg. for ranking)
+	#
+	# syntax is FIELD-NAME 'from'  ( 'query' | 'payload-query' ); QUERY
+	# joined field QUERY should return 2 columns (docid, text)
+	# payload field QUERY should return 3 columns (docid, keyword, weight)
 	#
 	# REQUIRES that query results are in ascending document ID order!
 	# multi-value, optional, default is empty list of queries
 	#
-	# sql_joined_field			= tagstext from query; SELECT docid, CONCAT('tag',tagid) FROM tags ORDER BY docid ASC
+	# sql_joined_field			= tags from query; SELECT docid, CONCAT('tag',tagid) FROM tags ORDER BY docid ASC
+	# sql_joined_field			= wtags from payload-query; SELECT docid, tag, tagweight FROM tags ORDER BY docid ASC
 
 
 	# range query setup, query that must return min and max ID values
@@ -454,6 +459,14 @@ index test1
 	# phrase_boundary_step	= 100
 
 
+	# blended characters list
+	# blended chars are indexed both as separators and valid characters
+	# for instance, AT&T will results in 3 tokens ("at", "t", and "at&t")
+	# optional, default is empty
+	#
+	# blend_chars				= +, &, U+23
+
+
 	# whether to strip HTML tags from incoming documents
 	# known values are 0 (do not strip) and 1 (do strip)
 	# optional, default is 0
@@ -515,6 +528,14 @@ index test1
 	# optional, allowed values are 0 and 1, default is 1
 	#
 	# stopword_step			= 1
+
+
+	# hitless words list
+	# positions for these keywords will not be stored in the index
+	# optional, allowed values are 'all', or a list file name
+	#
+	# hitless_words			= all
+	# hitless_words			= hitless.txt
 }
 
 
@@ -564,6 +585,50 @@ index dist1
 	# remote agent query timeout, milliseconds
 	# optional, default is 3000 ms, ie. 3 sec
 	agent_query_timeout		= 3000
+}
+
+
+# realtime index example
+#
+# you can run INSERT, REPLACE, and DELETE on this index on the fly
+# using MySQL protocol (see 'listen' directive below)
+index rt
+{
+	# 'rt' index type must be specified to use RT index
+	type				= rt
+
+	# index files path and file name, without extension
+	# mandatory, path must be writable, extensions will be auto-appended
+	path				= @CONFDIR@/data/rt
+
+	# RAM chunk size limit
+	# RT index will keep at most this much data in RAM, then flush to disk
+	# optional, default is 32M
+	#
+	# rt_mem_limit		= 512M
+
+	# full-text field declaration
+	# multi-value, mandatory
+	rt_field			= title
+	rt_field			= content
+
+	# unsigned integer attribute declaration
+	# multi-value (an arbitrary number of attributes is allowed), optional
+	# declares an unsigned 32-bit attribute
+	rt_attr_uint			= gid
+
+	# bigint attribute declaration
+	# multi-value (an arbitrary number of attributes is allowed), optional
+	# declares a signed 64-bit attribute
+	#
+	# rt_attr_bigint		= guid
+
+
+	# floating point attribute declaration
+	# multi-value (an arbitrary number of attributes is allowed), optional
+	# declares a single precision, 32-bit IEEE 754 format float attribute
+	#
+	# rt_attr_float		= gpa
 }
 
 #############################################################################

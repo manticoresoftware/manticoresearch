@@ -2929,9 +2929,19 @@ N-th bit corresponding to N-th fulltext field, numbering from 0. The bit will
 only be set when the respective field has any keyword occurences satisfiying
 the query.
 </listitem>
+<listitem>
+SPH_RANK_SPH04, added in version 1.10.1, is generally based on the default
+SPH_RANK_PROXIMITY_BM25 ranker, but additionally boosts the matches when
+they occur in the very beginning or the very end of a text field. Thus,
+if a field equals the exact query, SPH04 should rank it higher than a field
+that contains the exact query but is not equal to it. (For instance, when
+the query is "Hyde Park", a document entitled "Hyde Park" should be ranked
+higher than a one entitled "Hyde Park, London" or "The Hyde Park Cafe".)
+</listitem>
 </itemizedlist>
 </para>
 </sect3>
+
 
 <sect3 id="api-func-setsortmode"><title>SetSortMode</title>
 <para><b>Prototype:</b> function SetSortMode ( $mode, $sortby="" )</para>
@@ -3451,6 +3461,23 @@ Starting with version 0.9.9-rc1, keywords can contain wildcards, that work simil
 	<term>"weight_order":</term>
 	<listitem>Whether to sort the extracted passages in order of relevance (decreasing weight),
 	or in order of appearance in the document (increasing position). Boolean, default is false.</listitem>
+</varlistentry>
+<varlistentry>
+	<term>"query_mode":</term>
+	<listitem>Added in version 1.10.1. Whether to handle $words as a query in
+	<link linkend="extended-syntax">extended syntax</link>, or as a bag of words
+	(default behavior). For instance, in query mode ("one two" | "three four") will
+	only highlight and include those occurrences "one two" or "three four" when 
+	the two words from each pair are adjacent to each other. In default mode,
+	any single occurrence of "one", "two", "three", or "four" would be
+	highlighted. Boolean, default is false.
+	</listitem>
+</varlistentry>
+<varlistentry>
+	<term>"force_all_words":</term>
+	<listitem>Added in version 1.10.1. Ignores the snippet length limit until it
+	includes all the keywords. Boolean, default is false.
+	</listitem>
 </varlistentry>
 </variablelist>
 </para>
@@ -4451,6 +4478,84 @@ sql_query = \
 </sect3>
 
 
+<sect3 id="conf-sql-joined-field"><title>sql_joined_field</title>
+<para>
+Joined/payload field fetch query.
+Multi-value, optional, default is empty list of queries.
+Applies to SQL source types (<option>mysql</option>, <option>pgsql</option>, <option>mssql</option>) only.
+</para>
+<para>
+<option>sql_joined_field</option> lets you use two different features:
+joined fields, and payloads (payload fields). It's syntax is as follows:
+<programlisting>
+sql_joined_field = FIELD-NAME 'from'  ( 'query' | 'payload-query' ); QUERY
+</programlisting>
+where
+<itemizedlist>
+<listitem>FIELD-NAME is a joined/payload field name;</listitem>
+<listitem>QUERY is an SQL query used to fetch values to index.</listitem>
+</itemizedlist>
+</para>
+<para>
+<b>Joined fields</b> let you avoid JOIN and/or GROUP_CONCAT statements in the main
+document fetch query (sql_query). This can be useful when SQL-side JOIN is slow,
+or needs to be offloaded on Sphinx side, or simply to emulate MySQL-specific
+GROUP_CONCAT funcionality in case your database server does not support it.
+</para>
+<para>
+The query must return exactly 2 columns: document ID, and text to append
+to a joined field. Document IDs can be duplicate, but they <b>must</b> be
+in ascending order. All the text rows fetched for a given ID will be
+concatented together, and the concatenation result will be indexed
+as the entire contents of a joined field. Rows will be concatenated
+in the order returned from the query, and separating whitespace
+will be inserted between them. For instance, if joined field query
+returns the following rows:
+<programlisting>
+( 1, 'red' )
+( 1, 'right' )
+( 1, 'hand' )
+( 2, 'mysql' )
+( 2, 'sphinx' )
+</programlisting>
+then the indexing results would be equivalent to that of adding
+a new text field with a value of 'red right hand' to document 1 and
+'mysql sphinx' to document 2.
+</para>
+<para>
+Joined fields are only indexed differently. There are no other differences
+between joined fields and regular text fields.
+</para>
+<para>
+<b>Payloads</b> let you create a special field in which, instead of
+keyword positions, so-called user payloads are stored. Payloads are
+custom integer values attached to every keyword. They can then be used
+in search time to affect the ranking.
+</para>
+<para>
+The payload query must return exactly 3 columns: document ID; keyword;
+and integer payload value. Document IDs can be duplicate, but they <b>must</b> be
+in ascending order. Payloads must be unsigned integers within 24-bit range,
+ie. from 0 to 16777215. For reference, payloads are currently internally
+stored as in-field keyword positions, but that is not guaranteed
+and might change in the future.
+</para>
+<para>
+Currently, the only method to account for payloads is to use
+SPH_RANK_PROXIMITY_BM25 ranker. On indexes with payload fields,
+it will automatically switch to a variant that matches keywords
+in those fields, computes a sum of matched payloads multiplied
+by field wieghts, and adds that sum to the final rank.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+sql_joined_field = \
+	tagstext from query; \
+	SELECT docid, CONCAT('tag',tagid) FROM tags ORDER BY docid ASC
+</programlisting>
+</sect3>
+
+
 <sect3 id="conf-sql-query-range"><title>sql_query_range</title>
 <para>
 Range query setup.
@@ -5182,8 +5287,6 @@ unpack_mysqlcompress_maxsize = 1M
 </sect3>
 
 
-
-
 </sect2>
 <sect2 id="confgroup-index"><title>Index configuration options</title>
 
@@ -5191,16 +5294,25 @@ unpack_mysqlcompress_maxsize = 1M
 <sect3 id="conf-index-type"><title>type</title>
 <para>
 Index type.
-Optional, default is empty (index is plain local index).
-Known values are empty string or 'distributed'.
+Known values are 'plain', 'distributed', and 'rt'.
+Optional, default is 'plain' (plain local index).
 </para>
 <para>
-Sphinx supports two different types of indexes: local, that are stored
-and processed on the local machine; and distributed, that involve not only
-local searching but querying remote <filename>searchd</filename> instances
-over the network as well. Index type settings lets you choose this type.
-By default, indexes are local. Specifying 'distributed' for type enables
-distributed searching, see <xref linkend="distributed"/>.
+Sphinx supports several different types of indexes.
+Versions 0.9.x supported two index types: plain local indexes
+that are stored and processed on the local machine; and distributed indexes,
+that involve not only local searching but querying remote <filename>searchd</filename>
+instances over the network as well (see <xref linkend="distributed"/>).
+Version 1.10.1 also adds support
+for so-called real-time indexes (or RT indexes for short) that
+are also stored and processed locally, but additionally allow
+for on-the-fly updates of the full-text index (see <xref linkend="rt-indexes"/>).
+Note that <emphasis>attributes</emphasis> can be updated on-the-fly using
+either plain local indexes or RT ones.
+</para>
+<para>
+Index type setting lets you choose the needed type.
+By default, plain local index type will be assumed.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
@@ -6509,6 +6621,216 @@ it only affects <filename>indexer</filename>.
 <bridgehead>Example:</bridgehead>
 <programlisting>
 stopword_step = 1
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-hitless-words"><title>hitless_words</title>
+<para>
+Hitless words list.
+Optional, allowed values are 'all', or a list file name.
+Introduced in version 1.10.1.
+</para>
+<para>
+By default, Sphinx full-text index stores not only a list of matching
+documents for every given keyword, but also a list of its in-document positions
+(aka hitlist). Hitlists enables phrase, proximity, strict order and other
+advanced types of searching, as well as phrase proximity ranking. However,
+hitlists for specific frequent keywords (that can not be stopped for
+some reason despite being frequent) can get huge and thus slow to process
+while querying. Also, in some cases we might only care about boolean
+keyword matching, and never need position-based searching operators
+(such as phrase matching) nor phrase ranking.
+</para>
+<para>
+<option>hitless_words</option> lets you create indexes that either
+do not have positional information (hitlists) at all, or skip it for
+specific keywords.
+</para>
+<para>
+Hitless index will generally use less space than the respective
+regular index (about 1.5x can be expected). Both indexing and searching
+should be faster, at a cost of missing positional query and ranking support.
+When searching, positional queries (eg. phrase queries) will be automatically
+converted to respective non-positional (document-level) or combined queries.
+For instance, if keywords "hello" and "world" are hitless, "hello world"
+phrase query will be converted to (hello &amp; world) bag-of-words query,
+matching all documents that mention either of the keywords but not necessarily
+the exact phrase. And if, in addition, keywords "simon" and "says" are not
+hitless, "simon says hello world" will be converted to ("simon says" &amp;
+hello &amp; world) query, matching all documents that contain "hello" and
+"world" anywhere in the document, and also "simon says" as an exact phrase.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+hitless_words = all
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-expand-keywords"><title>expand_keywords</title>
+<para>
+Expand keywords with exact forms and/or stars when possible.
+Optional, default is 0 (do not expand keywords).
+Introduced in version 1.10.1.
+</para>
+<para>
+Queries against indexes with <option>expand_keywords</option> feature
+enabled are internally expanded as follows. If the index was built with
+prefix or infix indexing enabled, every keyword gets internally replaced
+with a disjunction of keyword itself and a respective prefix or infix
+(keyword with stars). If the index was built with both stemming and
+<link linkend="conf-index-exact-words">index_exact_words</link> enabled,
+exact form is also added. Here's an example that shows how internal
+expansion works when all of the above (infixes, stemming, and exact
+words) are combined:
+<programlisting>
+running -> ( running | *running* | =running )
+</programlisting>
+</para>
+<para>
+Expanded queries take naturally longer to complete, but can possibly
+improve the search quality, as the documents with exact form matches
+should be ranked generally higher than documents with stemmed or infix matches.
+</para>
+<para>
+Note that the existing query syntax does not allowe to emulate this
+kind of expansion, because internal expansion works on keyword level and
+expands keywords within phrase or quorum operators too (which is not
+possible through the query syntax).
+</para>
+<para>
+This directive does not affect <filename>indexer</filename> in any way,
+it only affects <filename>searchd</filename>.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+expand_keywords = 1
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-blend-chars"><title>blend_chars</title>
+<para>
+Blended characters list.
+Optional, default is empty.
+Introduced in version 1.10.1.
+</para>
+<para>
+Blended characters are indexed both as separators and valid characters.
+For instance, assume that &amp; is configured as blended and AT&amp;T
+occurs in an indexed document. Three different keywords will get indexed,
+namely "at&amp;t", treating blended characters as valid, plus "at" and "t",
+treating them as separators. Note that all these three keywords will be
+assigned the very same position (in a sense blending with each other).
+Thus, querying for either AT&amp;T or just AT will match that document.
+However, querying for "AT T" phrase will not match it.
+</para>
+<para>
+Blended characters can overlap with special characters used in query
+syntax (think of T-Mobile or @twitter). Where possible, query parser will
+automatically handle blended character as blended. For instance, "hello @twitter"
+within quotes (a phrase operator) would handle @-sign as blended, because
+@-syntax for field operator is not allowed within phrases. Otherwise,
+the character would be handled as an operator. So you might want to
+escape the query terms.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+blend_chars = +, &amp;, U+23
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-rt-mem-limit"><title>rt_mem_limit</title>
+<para>
+RAM chunk size limit.
+Optional, default is empty.
+Introduced in version 1.10.1.
+</para>
+<para>
+RT index keeps some data in memory (so-called RAM chunk) and
+also maintains a number of on-disk indexes (so-called disk chunks).
+This directive lets you control the RAM chunk size. Once there's
+too much data to keep in RAM, RT index will flush it to disk,
+activate a newly created disk chunk, and reset the RAM chunk.
+</para>
+<para>
+The limit is pretty strict; RT index should never allocate more
+memory than it's limited to. The memory is not preallocated either,
+hence, specifying 512 MB limit and only inserting 3 MB of data
+should result in allocating 3 MB, not 512 MB.
+</para>
+<para>
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+rt_mem_limit = 512M
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-rt-field"><title>rt_field</title>
+<para>
+Full-text field declaration.
+Multi-value, mandatory
+Introduced in version 1.10.1.
+</para>
+<para>
+Full-text fields to be indexed are declared using <option>rt_field</option>
+directive. The names must be unique. The order is preserved; and so field values
+in INSERT statements without an explicit list of inserted columns will have to be
+in the same order as configured.
+</para>
+<para>
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+rt_field = author
+rt_field = title
+rt_field = content
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-rt-attr-uint"><title>rt_attr_uint</title>
+<para>
+Unsigned integer attribute declaration.
+Multi-value (an arbitrary number of attributes is allowed), optional.
+Declares an unsigned 32-bit attribute.
+Introduced in version 1.10.1.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+rt_attr_uint = gid
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-rt-attr-bigint"><title>rt_attr_bigint</title>
+<para>
+BIGINT attribute declaration.
+Multi-value (an arbitrary number of attributes is allowed), optional.
+Declares a signed 64-bit attribute.
+Introduced in version 1.10.1.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+rt_attr_bigint = guid
+</programlisting>
+</sect3>
+
+
+<sect3 id="conf-rt-attr-float"><title>rt_attr_float</title>
+<para>
+Floating point attribute declaration.
+Multi-value (an arbitrary number of attributes is allowed), optional.
+Declares a single precision, 32-bit IEEE 754 format float attribute.
+Introduced in version 1.10.1.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+rt_attr_float = gpa
 </programlisting>
 </sect3>
 

@@ -33,7 +33,7 @@ index main
 	source = main
 	path = <data_path/>/main
 
-	hitless_words = <test_root/>/test_082/words_main.txt
+	hitless_words = <this_test/>/words_main.txt
 }
 
 index delta
@@ -41,7 +41,7 @@ index delta
 	source = delta
 	path = <data_path/>/delta
 
-	hitless_words = <test_root/>/test_082/words_delta.txt
+	hitless_words = <this_test/>/words_delta.txt
 }
 </config>
 

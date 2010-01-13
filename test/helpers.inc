@@ -258,6 +258,7 @@ class SphinxConfig
 	private $_use_sphinxql;			///< true, if sphinxql queries exist
 	private $_indexdata;                    ///< data for use "insert into" instead of run indexer
 	private $_connection;			///< mysql connection (since we cound use mysql ans sqphinxql together)
+	private $_testdir;				///< the path to the directory with current test (namely for accessing data without knowing the test name)
 
 
 	function SetConnection($connection)
@@ -293,6 +294,7 @@ class SphinxConfig
 		$this->_use_sphinxql	= false;
 		$this->_indexdata       = array ();
 		$this->_connection		= false;
+		$this->_testdir			= "";
 	}
 
 	function EnableCompat098 ()		{ $this->_compat098 = true; }	
@@ -322,6 +324,8 @@ class SphinxConfig
 	function Results ()				{ return $this->_results; }
 	function GetQuery ( $i )		{ return $this->_queries[$i]; }
 	function IsSkipIndexer ()		{ return $this->_skip_indexer; }
+
+	function SetTestDir ( $dir )    { $this->_testdir = $dir; }
 
 	function GetLocal ( $key )
 	{
@@ -1689,6 +1693,7 @@ class SphinxConfig
 			case "data_path":			fwrite ( $fp, $index_data_path ); return;
 			case "local":				fwrite ( $fp, $this->GetLocal ( $node->nodeValue ) ); return;
 			case "test_root":			fwrite ( $fp, dirname(__FILE__) ); return;
+			case "this_test":			fwrite ( $fp, $this->_testdir ); return;
 		}
 		
 		if ( $nodename=="variant" )
@@ -1799,6 +1804,8 @@ function RunTest ( $test_dir )
 	$config = new SphinxConfig;
 	if ( !$config->Load ( $test_dir."/test.xml" ) )
 		return;
+
+	$config->SetTestDir ( $test_dir );
 
 	$prefix = sprintf ( "testing %s, %s...", $test_dir, $config->Name () );
 

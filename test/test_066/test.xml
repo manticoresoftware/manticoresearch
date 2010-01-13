@@ -29,25 +29,25 @@ source test
 index v14
 {
 	source	= test
-	path	= test_066/refdata/v14
+	path	= <this_test/>/refdata/v14
 }
 
 index v19
 {
 	source	= test
-	path	= test_066/refdata/v19
+	path	= <this_test/>/refdata/v19
 }
 
 index v19noattrs
 {
 	source	= test
-	path	= test_066/refdata/v19noattrs
+	path	= <this_test/>/refdata/v19noattrs
 }
 
 index v20
 {
 	source	= test
-	path	= test_066/refdata/v20
+	path	= <this_test/>/refdata/v20
 }
 </config>
 

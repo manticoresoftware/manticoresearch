@@ -952,6 +952,8 @@ public:
 
 	void						CopyDocinfo ( CSphMatch & tMatch, const DWORD * pFound ) const;
 	const CSphRowitem *			FindDocinfo ( const RtSegment_t * pSeg, SphDocID_t uDocID ) const;
+	bool						QwordSetup ( ISphQword * pQword, RtSegment_t * pSeg ) const;
+	static bool					QwordSetupSegment  ( ISphQword * pQword, RtSegment_t * pSeg, bool bSetup );
 
 protected:
 	CSphSourceStats				m_tStats;
@@ -2668,9 +2670,6 @@ struct RtQwordSetup_t : ISphQwordSetup
 
 	virtual ISphQword *	QwordSpawn ( const XQKeyword_t & ) const;
 	virtual bool		QwordSetup ( ISphQword * pQword ) const;
-
-private:
-	void				QwordPrepare ( RtQword_t * pMyWord, const RtWord_t * pFound ) const;
 };
 
 
@@ -2686,85 +2685,11 @@ bool RtQwordSetup_t::QwordSetup ( ISphQword * pQword ) const
 	if ( !pMyWord )
 		return false;
 
-	const SphWordID_t uID = pMyWord->m_iWordID;
-	RtWordReader_t tReader ( m_pSeg );
+	const RtIndex_t * pIndex = dynamic_cast< const RtIndex_t * > ( m_pIndex );
+	if ( !pIndex )
+		return false;
 
-#if COMPRESSED_WORDLIST
-
-	// position reader to the right checkpoint
-	const CSphVector<RtWordCheckpoint_t> & dCheckpoints = m_pSeg->m_dWordCheckpoints;
-	if ( dCheckpoints.GetLength() )
-	{
-		if ( dCheckpoints[0].m_uWordID > uID )
-		{
- 			tReader.m_pMax = tReader.m_pCur + dCheckpoints[0].m_iOffset;
-		}
-		else if ( dCheckpoints.Last().m_uWordID <= uID )
-		{
-			tReader.m_pCur += dCheckpoints.Last().m_iOffset;
-		}
-		else
-		{
-			int L = 0;
-			int R = dCheckpoints.GetLength()-1;
-			while ( L+1<R )
-			{
-				int M = L + (R-L)/2;
-				if ( uID < dCheckpoints[M].m_uWordID )
-					R = M;
-				else if ( uID > dCheckpoints[M].m_uWordID )
-					L = M;
-				else
-				{
-					L = M;
-					break;
-				}
-			}
-			assert ( dCheckpoints[L].m_uWordID <= uID );
- 			if ( L < dCheckpoints.GetLength()-1 )
-			{
-				assert ( dCheckpoints[L+1].m_uWordID > uID );
- 				tReader.m_pMax = tReader.m_pCur + dCheckpoints[L+1].m_iOffset;
-			}
-			tReader.m_pCur += dCheckpoints[L].m_iOffset;
-		}
-	}
-
-	// find the word between checkpoints
-	while ( const RtWord_t * pWord = tReader.UnzipWord() )
-	{
-		if ( pWord->m_uWordID==uID )
-		{
-			QwordPrepare ( pMyWord, pWord );
-			return true;
-		}
-		else if ( pWord->m_uWordID > uID )
-			return false;
-	}
-	return false;
-
-#else // !COMPRESSED_WORDLIST
-	const RtWord_t * pWord = m_pSeg->m_dWords.BinarySearch ( bind ( &RtWord_t::m_uWordID ), uID );
-	if ( pWord )
-		QwordPrepare ( pMyWord, pWord );
-	return pWord!=NULL;
-#endif
-}
-
-
-void RtQwordSetup_t::QwordPrepare ( RtQword_t * pMyWord, const RtWord_t * pFound ) const
-{
-	pMyWord->m_iDocs = pFound->m_uDocs;
-	pMyWord->m_iHits = pFound->m_uHits;
-
-	SafeDelete ( pMyWord->m_pDocReader );
-	pMyWord->m_pDocReader = new RtDocReader_t ( m_pSeg, *pFound );
-
-	pMyWord->m_tHitReader.m_pBase = NULL;
-	if ( m_pSeg->m_dHits.GetLength() )
-		pMyWord->m_tHitReader.m_pBase = &m_pSeg->m_dHits[0];
-
-	pMyWord->m_pSeg = m_pSeg;
+	return pIndex->QwordSetup ( pMyWord, m_pSeg );
 }
 
 
@@ -2842,6 +2767,119 @@ const CSphRowitem * RtIndex_t::FindDocinfo ( const RtSegment_t * pSeg, SphDocID_
 	return pFound;
 }
 
+bool RtIndex_t::QwordSetupSegment ( ISphQword * pQword, RtSegment_t * pCurSeg, bool bSetup )
+{
+	if ( !pCurSeg )
+		return false;
+
+	SphWordID_t uWordID = pQword->m_iWordID;
+	RtWordReader_t tReader ( pCurSeg );
+
+#if COMPRESSED_WORDLIST
+
+	// position reader to the right checkpoint
+	const CSphVector<RtWordCheckpoint_t> & dCheckpoints = pCurSeg->m_dWordCheckpoints;
+	if ( dCheckpoints.GetLength() )
+	{
+		if ( dCheckpoints[0].m_uWordID > uWordID )
+		{
+			tReader.m_pMax = tReader.m_pCur + dCheckpoints[0].m_iOffset;
+		}
+		else if ( dCheckpoints.Last().m_uWordID <= uWordID )
+		{
+			tReader.m_pCur += dCheckpoints.Last().m_iOffset;
+		}
+		else
+		{
+			int L = 0;
+			int R = dCheckpoints.GetLength()-1;
+			while ( L+1<R )
+			{
+				int M = L + (R-L)/2;
+				if ( uWordID < dCheckpoints[M].m_uWordID )
+					R = M;
+				else if ( uWordID > dCheckpoints[M].m_uWordID )
+					L = M;
+				else
+				{
+					L = M;
+					break;
+				}
+			}
+			assert ( dCheckpoints[L].m_uWordID <= uWordID );
+			if ( L < dCheckpoints.GetLength()-1 )
+			{
+				assert ( dCheckpoints[L+1].m_uWordID > uWordID );
+				tReader.m_pMax = tReader.m_pCur + dCheckpoints[L+1].m_iOffset;
+			}
+			tReader.m_pCur += dCheckpoints[L].m_iOffset;
+		}
+	}
+
+	// find the word between checkpoints
+	const RtWord_t * pWord = NULL;
+	while ( pWord = tReader.UnzipWord() )
+	{
+		if ( pWord->m_uWordID==uWordID )
+		{
+			pQword->m_iDocs += pWord->m_uDocs;
+			pQword->m_iHits += pWord->m_uHits;
+			if ( bSetup )
+			{
+				RtQword_t * pMyWord = dynamic_cast<RtQword_t*> ( pQword );
+				SafeDelete ( pMyWord->m_pDocReader );
+				pMyWord->m_pDocReader = new RtDocReader_t ( pCurSeg, *pWord );
+				pMyWord->m_tHitReader.m_pBase = NULL;
+				if ( pCurSeg->m_dHits.GetLength() )
+					pMyWord->m_tHitReader.m_pBase = &pCurSeg->m_dHits[0];
+
+				pMyWord->m_pSeg = pCurSeg;
+			}
+			return true;
+		}
+		else if ( pWord->m_uWordID > uWordID )
+			return false;
+	}
+	return false;
+#else // !COMPRESSED_WORDLIST
+	const RtWord_t * pWord = pCurSeg->m_dWords.BinarySearch ( bind ( &RtWord_t::m_uWordID ), uWordID );
+	if ( pWord )
+	{
+		pQword->m_iDocs += pWord->m_uDocs;
+		pQword->m_iHits += pWord->m_uHits;
+		if ( bSetup )
+		{
+			RtQword_t * pMyWord = dynamic_cast<RtQword_t*> ( pQword );
+			SafeDelete ( pMyWord->m_pDocReader );
+			pMyWord->m_pDocReader = new RtDocReader_t ( pCurSeg, *pWord );
+			pMyWord->m_tHitReader.m_pBase = NULL;
+			if ( pCurSeg->m_dHits.GetLength() )
+				pMyWord->m_tHitReader.m_pBase = &pCurSeg->m_dHits[0];
+
+			pMyWord->m_pSeg = pCurSeg;
+		}
+	}
+	return pWord!=0;
+
+#endif
+}
+
+bool RtIndex_t::QwordSetup ( ISphQword * pQword, RtSegment_t * pSeg ) const
+{
+	RtQword_t * pMyWord = dynamic_cast<RtQword_t*> ( pQword );
+	if ( !pMyWord )
+		return false;
+	
+	if ( pSeg )
+		return QwordSetupSegment ( pQword, pSeg, true );
+
+	// No segment specified; assuming QwordSetup on all ramchanks
+	bool bRes = false;
+	ARRAY_FOREACH ( i, m_pSegments )
+		bRes = bRes || QwordSetupSegment ( pQword, m_pSegments[i], false );
+	return bRes;
+}
+
 static void AddKillListFilter ( CSphVector<CSphFilterSettings> * pExtra, const SphAttr_t * pKillList, int nEntries )
 {
 	assert ( nEntries && pKillList && pExtra );
@@ -2906,7 +2944,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		if ( pQuery->m_uMaxQueryMsec>0 )
 			tTermSetup.m_iMaxTimer = sphMicroTimer() + pQuery->m_uMaxQueryMsec*1000; // max_query_time
 		tTermSetup.m_pWarning = &pResult->m_sWarning;
-		tTermSetup.m_pSeg = m_pSegments[0];
+		tTermSetup.m_pSeg = NULL;
 		tTermSetup.m_pCtx = &tCtx;
 
 		// bind weights
@@ -2992,11 +3030,8 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			// query matching
 			ARRAY_FOREACH ( iSeg, m_pSegments )
 			{
-				if ( iSeg!=0 )
-				{
-					tTermSetup.m_pSeg = m_pSegments[iSeg];
-					pRanker->Reset ( tTermSetup );
-				}
+				tTermSetup.m_pSeg = m_pSegments[iSeg];
+				pRanker->Reset ( tTermSetup );
 
 				// for lookups to work
 				tCtx.m_pIndexData = m_pSegments[iSeg];
@@ -3116,17 +3151,11 @@ bool RtIndex_t::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const cha
 
 			if ( !bGetStats ) continue;
 
-			ARRAY_FOREACH ( i, m_pSegments )
-			{
-				tQword.Reset();
-				tQword.m_iWordID = iWord;
+			tSetup.m_pSeg = NULL;
+			tSetup.QwordSetup ( &tQword );
 
-				tSetup.m_pSeg = m_pSegments[i];
-				tSetup.QwordSetup ( &tQword );
-
-				tInfo.m_iDocs += tQword.m_iDocs;
-				tInfo.m_iHits += tQword.m_iHits;
-			}
+			tInfo.m_iDocs = tQword.m_iDocs;
+			tInfo.m_iHits = tQword.m_iHits;
 		}
 	}
 

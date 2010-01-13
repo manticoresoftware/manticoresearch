@@ -12,6 +12,7 @@ indexer
 searchd
 {
 <Searchd_Settings/>
+	workers				= threads
 }
 
 index test

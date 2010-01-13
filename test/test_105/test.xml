@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Test>
+  <Name>Sphinxql rt: weights for words after reinsertion</Name>
+
+<skip_indexer/>
+<Config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+<Searchd_Settings/>
+	workers				= threads
+}
+
+index test
+{
+	type	= rt
+	path	= data/test
+	rt_attr_uint	= idd
+	rt_field	= content
+}
+</Config>
+
+<SPHQueries>
+	<SPHinxQL>insert into test (id,content) values (1,'content'),(2,'newcontent')</SPHinxQL>
+	<SPHinxQL>replace into test (id,content) values (1,'contend')</SPHinxQL>
+	<SPHinxQL>select * from test where match('contend|newcontent')</SPHinxQL>
+	<SPHinxQL>select * from test where match('content')</SPHinxQL>
+</SPHQueries>
+
+</Test>

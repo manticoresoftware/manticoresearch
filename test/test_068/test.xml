@@ -17,13 +17,13 @@ searchd
 source src1
 {
 	type = xmlpipe2
-	xmlpipe_command = cat <test_root/>/test_68/data1.xml
+	xmlpipe_command = cat <test_root/>/test_068/data1.xml
 }
 
 source src2
 {
 	type = xmlpipe2
-	xmlpipe_command = cat <test_root/>/test_68/data2.xml
+	xmlpipe_command = cat <test_root/>/test_068/data2.xml
 }
 
 index idx1

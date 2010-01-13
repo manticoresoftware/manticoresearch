@@ -32,7 +32,7 @@ index some
 	source = test
 	path = <data_path/>/some
 
-	hitless_words = <test_root/>/test_81/words.txt
+	hitless_words = <test_root/>/test_081/words.txt
 }
 
 index all

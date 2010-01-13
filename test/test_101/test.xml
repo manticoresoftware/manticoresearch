@@ -16,18 +16,18 @@ searchd
 
 index test
 {
-	type	= rt
-	path	= data/test
-	rt_attr_int	= idd
-	rt_field	= content
+	type			= rt
+	path			= data/test
+	rt_attr_uint	= idd
+	rt_field		= content
 }
 
 index test1
 {
-	type	= rt
-	path	= data/test1
-	rt_attr_int	= idd
-	rt_field	= content
+	type			= rt
+	path			= data/test1
+	rt_attr_uint	= idd
+	rt_field		= content
 }
 
 </Config>

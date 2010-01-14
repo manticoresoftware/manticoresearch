@@ -3029,6 +3029,11 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		} else
 		{
 			// query matching
+			bool bRandomize = ppSorters[0]->m_bRandomize;
+			int iCutoff = pQuery->m_iCutoff;
+			if ( iCutoff<=0 )
+				iCutoff = -1;
+
 			ARRAY_FOREACH ( iSeg, m_pSegments )
 			{
 				tTermSetup.m_pSeg = m_pSegments[iSeg];
@@ -3043,11 +3048,29 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 					int iMatches = pRanker->GetMatches ( tCtx.m_iWeights, tCtx.m_dWeights );
 					if ( iMatches<=0 )
 						break;
+
 					for ( int i=0; i<iMatches; i++ )
 					{
-						CopyDocinfo ( pMatch[i], FindDocinfo ( m_pSegments[iSeg], pMatch[i].m_iDocID ) );
+						if ( tCtx.m_bLateLookup )
+							CopyDocinfo ( pMatch[i], FindDocinfo ( m_pSegments[iSeg], pMatch[i].m_iDocID ) );
+						tCtx.LateCalc ( pMatch[i] );
+
+						if ( bRandomize )
+							pMatch[i].m_iWeight = ( sphRand() & 0xffff );
+
+						if ( tCtx.m_pWeightFilter && !tCtx.m_pWeightFilter->Eval ( pMatch[i] ) )
+							continue;
+
+						bool bNewMatch = false;
 						for ( int iSorter=0; iSorter<iSorters; iSorter++ )
-							ppSorters[iSorter]->Push ( pMatch[i] );
+							bNewMatch |= ppSorters[iSorter]->Push ( pMatch[i] );
+
+						if ( bNewMatch )
+							if ( --iCutoff==0 )
+						{
+							iSeg = m_pSegments.GetLength();
+							break;
+						}
 					}
 				}
 			}

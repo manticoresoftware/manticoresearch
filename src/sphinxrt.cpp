@@ -2818,7 +2818,7 @@ bool RtIndex_t::QwordSetupSegment ( ISphQword * pQword, RtSegment_t * pCurSeg, b
 
 	// find the word between checkpoints
 	const RtWord_t * pWord = NULL;
-	while ( pWord = tReader.UnzipWord() )
+	while ( ( pWord = tReader.UnzipWord() )!=NULL )
 	{
 		if ( pWord->m_uWordID==uWordID )
 		{
@@ -2841,7 +2841,9 @@ bool RtIndex_t::QwordSetupSegment ( ISphQword * pQword, RtSegment_t * pCurSeg, b
 			return false;
 	}
 	return false;
+
 #else // !COMPRESSED_WORDLIST
+
 	const RtWord_t * pWord = pCurSeg->m_dWords.BinarySearch ( bind ( &RtWord_t::m_uWordID ), uWordID );
 	if ( pWord )
 	{
@@ -2860,7 +2862,6 @@ bool RtIndex_t::QwordSetupSegment ( ISphQword * pQword, RtSegment_t * pCurSeg, b
 		}
 	}
 	return pWord!=0;
-
 #endif
 }
 

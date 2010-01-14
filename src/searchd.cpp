@@ -6840,8 +6840,10 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 		switch ( eStmt )
 		{
 		case STMT_PARSE_ERROR:
+		{
 			SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
 			break;
+		}
 		case STMT_SELECT:
 		{
 			CheckQuery ( tHandler.m_dQueries[0], sError );
@@ -7188,13 +7190,13 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 					const CSphColumnInfo & tCol = pSchema->GetAttr(i);
 					CSphAttrLocator tLoc = tCol.m_tLocator;
 					tLoc.m_bDynamic = true;
+
 					int iQuerySchemaIdx = dAttrSchema[i];
 					bool bResult;
 					if ( iQuerySchemaIdx < 0 )
 						bResult = tDoc.SetDefaultAttr ( tLoc, tCol.m_eAttrType );
 					else
 					{
-
 						const SqlInsert_t & tVal = tStmt.m_dInsertValues[iQuerySchemaIdx + c * iExp];
 
 						// sanity checks
@@ -7205,10 +7207,7 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 						}
 
 						// FIXME? index schema is lawfully static, but our temp match obviously needs to be dynamic
-
-
 						bResult = tDoc.SetAttr ( tLoc, tVal, tCol.m_eAttrType );
-
 					}
 
 					if ( !bResult )
@@ -7236,8 +7235,6 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 					}
 				}
 
-
-
 				// do add
 				if ( !pIndex->AddDocument ( dFields.GetLength(), dFields.Begin(), tDoc, eStmt==STMT_REPLACE ) )
 					sError = pIndex->GetLastError();
@@ -7246,6 +7243,7 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 				if ( !sError.IsEmpty() )
 					break;
 			}
+
 			// report error
 			if ( !sError.IsEmpty() )
 			{
@@ -7289,7 +7287,6 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 
 			SendMysqlOkPacket ( tOut, uPacketID ); // FIXME? affected rows
 			continue;
-
 		}
 		case STMT_SET:
 			{

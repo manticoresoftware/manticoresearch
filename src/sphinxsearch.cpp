@@ -1889,7 +1889,6 @@ void ExtPhrase_c::Reset ( const ISphQwordSetup & tSetup )
 	m_uExpQpos = 0;
 	m_uMatchedDocid = 0;
 	m_uHitsOverFor = 0;
-	m_uWords = 0;
 }
 
 const ExtDoc_t * ExtPhrase_c::GetDocsChunk ( SphDocID_t * pMaxID )

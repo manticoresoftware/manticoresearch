@@ -31,7 +31,8 @@ function sphFormatTime ( $time )
 	return sprintf ( '%d%s:%d%s', $time / 60, $u[0], $time % 60, $u[1] );
 }
 
-function CreateDB ( $db_drop, $db_create, $db_insert, $custom_insert )
+
+function ConnectDB ()
 {
 	global $g_locals;
 
@@ -41,23 +42,35 @@ function CreateDB ( $db_drop, $db_create, $db_insert, $custom_insert )
 		exit ( 1 );
 	}
 
-	$connection = @mysql_connect ( $g_locals['db-host'].":".$g_locals['db-port'],
-			$g_locals['db-user'], $g_locals['db-password'] );
-	if ( $connection === false ||
-		!@mysql_query ( "CREATE DATABASE IF NOT EXISTS " . $g_locals['db-name'], $connection ) ||
-		!@mysql_select_db ( $g_locals['db-name'], $connection ) )
-		return false;
+	$conn = @mysql_connect (
+		$g_locals["db-host"] . ":" . $g_locals["db-port"],
+		$g_locals["db-user"],
+		$g_locals["db-password"],
+		true );
+
+	if ( $conn === false ||
+		!@mysql_query ( "CREATE DATABASE IF NOT EXISTS " . $g_locals['db-name'], $conn ) ||
+		!@mysql_select_db ( $g_locals['db-name'], $conn ) )
+			return false;
+
+	return $conn;
+}
+
+
+function CreateDB ( $db_drop, $db_create, $db_insert, $custom_insert )
+{
+	$conn = ConnectDB ();
 
 	foreach ( $db_drop as $q )
-		if ( !@mysql_query ( $q, $connection ) )
+		if ( !@mysql_query ( $q, $conn ) )
 			return false;
 
 	foreach ( $db_create as $q )
-		if ( !@mysql_query ( $q, $connection ) )
+		if ( !@mysql_query ( $q, $conn ) )
 			return false;
 
 	foreach ( $db_insert as $q )
-		if ( !@mysql_query ( $q, $connection ) )
+		if ( !@mysql_query ( $q, $conn ) )
 			return false;
 
 	foreach ( $custom_insert as $code )
@@ -66,7 +79,7 @@ function CreateDB ( $db_drop, $db_create, $db_insert, $custom_insert )
 		$function();
 	}
 
-	return $connection;
+	return $conn;
 }
 
 
@@ -1403,39 +1416,43 @@ class SphinxConfig
 						// case "sql_attr_multi" //< not yet
 						// case "sql_attr_string" //< not yet
 						case "sql_query":
-							// extract query values (already in db)
-
 						{
-							if ( !@mysql_connect ( $g_locals['db-host'].":".$g_locals['db-port'],
-								$g_locals['db-user'], $g_locals['db-password'] ) ||
-								!@mysql_select_db ( $g_locals['db-name'] ) )
+							// extract query values from MySQL (should be already there)
+							$conn = ConnectDB();
+							if ( !$conn )
 							{
-								$msg = "Can't connect or select the database";
-								return FALSE;
+								$msg = "can't connect or select the database";
+								return false;
 							}
-							$res = @mysql_query($value);
-							if ($res)
-							{
-								$numrows = mysql_num_rows($res);
-								
-								$insert_values = array();
-								$fill_schema = true;
-								$schema_pos = 0;
-								while ($rows = mysql_fetch_array($res, MYSQL_ASSOC))
-								{
-									$row = array();
-									foreach ($rows as $key => $value)
-									{
-										if ( $fill_schema )
-												$insert_schema[$key] = $schema_pos++;
 
-										$row[] = $value;
-									}
-									$insert_values[] = $row;
-									$fill_schema = false;
-								}
-								mysql_free_result($res);
+							$res = @mysql_query ( $value, $conn );
+							if ( !$res )
+							{
+								mysql_close ( $conn );
+								$msg = "can't fetch test data: " . mysql_error ( $conn );
+								return false;
 							}
+
+							$insert_values = array();
+							while ( $row = mysql_fetch_array ( $res, MYSQL_ASSOC ) )
+							{
+								// on the very first row, keep the schema
+								if ( !$insert_values )
+								{
+									$pos = 0;
+									foreach ( $row as $key => $value )
+									{
+										if ( $pos==0 )
+											$key = "id";
+										$insert_schema[$key] = $pos++;
+									}
+								}
+
+								$insert_values[] = array_values ( $row );
+							}
+
+							mysql_free_result ( $res );
+							mysql_close ( $conn );
 						}
 					}
 				}
@@ -1582,7 +1599,9 @@ class SphinxConfig
 			return false;
 		foreach ( $this->_indexdata as $name => $data )
 		{
-			$prefix = "INSERT INTO $name VALUES ";
+			$cols = join ( ", ", array_keys ( $data["orders"] ) );
+			$prefix = "INSERT INTO $name ($cols) VALUES ";
+
 			$accum = "";
 		    foreach ($data['values'] as $row)
 		    {

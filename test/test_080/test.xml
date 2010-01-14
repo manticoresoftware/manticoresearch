@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 
-<name>write buffer corruption vs. merge</name>
+<name>merge vs write buffer corruption</name>
 
 <config>
 indexer

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 
-<name>phrase matching vs. stop words and short words</name>
+<name>phrase matching vs stop words and short words</name>
 
 <config>
 indexer

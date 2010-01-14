@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Test>
-  <Name>sphinxql: float numbers without leading zero</Name>
+  <Name>SphinxQL: floats without leading zero</Name>
 
 <skip_indexer/>
 <Config>

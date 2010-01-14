@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Test>
-  <Name>Multiqueries as is</Name>
+  <Name>multi-queries</Name>
 
 <Config>
 indexer

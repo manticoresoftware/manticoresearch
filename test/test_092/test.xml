@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Test>
-  <Name>Sphinxql rt: reinsert previously deleted item</Name>
+  <Name>RT: re-insert deleted row</Name>
 
 <skip_indexer/>
 <Config>

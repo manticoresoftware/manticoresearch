@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Test>
-  <Name>Sphinxql rt: weights for words after reinsertion</Name>
+  <Name>RT: keyword weights vs different insert scenarios (part 3)</Name>
 
 <skip_indexer/>
 <Config>

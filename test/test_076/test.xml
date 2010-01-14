@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Test>
-  <Name>reset of a term (due to not enough cache size)</Name>
+  <Name>subtree cache reset on size limit</Name>
 
 <Config>
 indexer

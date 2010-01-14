@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 
-<name>main/delta merge vs docinfo,range,mva</name>
+<name>merge vs docinfo, range, mva</name>
 
 <config>
 indexer

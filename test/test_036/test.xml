@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 
-<name>--merge-dst-range</name>
+<name>merge vs --merge-dst-range</name>
 
 <config>
 indexer

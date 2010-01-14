@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 
-<name>merging with empty index</name>
+<name>merge vs empty index</name>
 
 <config>
 indexer

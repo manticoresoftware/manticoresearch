@@ -1,5 +1,5 @@
 <test>
-<name>union</name>
+<name>multi-index queries vs index weights</name>
 
 <config>
 indexer

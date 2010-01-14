@@ -2,7 +2,7 @@
 
 <test>
 
-<name>snippets - query highlighting</name>
+<name>snippets vs query highlighting</name>
 
 <config>
 indexer

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 
-<name>no double-delta decoding</name>
+<name>merge vs delta decoding</name>
 
 <config>
 indexer

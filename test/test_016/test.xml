@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 
-<name>expr sorting vs. filters</name>
+<name>expr sorting vs filters</name>
 
 <config>
 indexer

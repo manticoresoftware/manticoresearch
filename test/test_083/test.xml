@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Test>
-  <Name>Reset for "AND" nodes</Name>
+  <Name>subtree cache vs AND node reset</Name>
 
 <Config>
 indexer

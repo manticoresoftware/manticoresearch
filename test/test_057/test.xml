@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="windows-1251"?>
 
 <test>
-<name>snippets - boundaries, windows-1251</name>
+<name>snippets vs boundaries, windows-1251</name>
 
 <config>
 searchd

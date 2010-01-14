@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 
-<name>dictionary out-of-bounds reads during merge</name>
+<name>merge vs out-of-bounds dictionary reads</name>
 
 <config>
 indexer

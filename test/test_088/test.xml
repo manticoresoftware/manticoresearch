@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Test>
-  <Name>SphinxQL: Inserting multiple values in one query</Name>
+  <Name>SphinxQL: batch INSERT</Name>
 
 <skip_indexer/>
 <Config>

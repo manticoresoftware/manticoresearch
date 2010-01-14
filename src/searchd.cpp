@@ -9653,6 +9653,7 @@ void HandlerThread ( void * pArg )
 	// handle that client
 	ThdDesc_t * pThd = (ThdDesc_t*) pArg;
 	HandleClient ( pThd->m_eProto, pThd->m_iClientSock, pThd->m_sClientName.cstr(), -1 );
+	sphSockClose ( pThd->m_iClientSock );
 
 	// done; remove myself from the table
 	g_tThdMutex.Lock ();

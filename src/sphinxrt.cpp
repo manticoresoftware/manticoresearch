@@ -2996,6 +2996,11 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		// FIXME! setup overrides
 
 		// do searching
+		bool bRandomize = ppSorters[0]->m_bRandomize;
+		int iCutoff = pQuery->m_iCutoff;
+		if ( iCutoff<=0 )
+			iCutoff = -1;
+
 		if ( bFullscan )
 		{
 			// full scan
@@ -3003,6 +3008,10 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			CSphMatch tMatch;
 			tMatch.Reset ( pResult->m_tSchema.GetDynamicSize() );
 			tMatch.m_iWeight = 1;
+
+			int iCutoff = pQuery->m_iCutoff;
+			if ( iCutoff<=0 )
+				iCutoff = -1;
 
 			ARRAY_FOREACH ( iSeg, m_pSegments )
 			{
@@ -3021,19 +3030,24 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 						continue;
 
 					tCtx.LateCalc ( tMatch );
+
+					bool bNewMatch = false;
 					for ( int iSorter=0; iSorter<iSorters; iSorter++ )
-						ppSorters[iSorter]->Push ( tMatch );
+						bNewMatch |= ppSorters[iSorter]->Push ( tMatch );
+
+					// handle cutoff
+					if ( bNewMatch )
+						if ( --iCutoff==0 )
+							break;
 				}
+
+				if ( iCutoff==0 )
+					break;
 			}
 
 		} else
 		{
 			// query matching
-			bool bRandomize = ppSorters[0]->m_bRandomize;
-			int iCutoff = pQuery->m_iCutoff;
-			if ( iCutoff<=0 )
-				iCutoff = -1;
-
 			ARRAY_FOREACH ( iSeg, m_pSegments )
 			{
 				tTermSetup.m_pSeg = m_pSegments[iSeg];
@@ -3067,10 +3081,13 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 						if ( bNewMatch )
 							if ( --iCutoff==0 )
-						{
-							iSeg = m_pSegments.GetLength();
-							break;
-						}
+								break;
+					}
+
+					if ( iCutoff==0 )
+					{
+						iSeg = m_pSegments.GetLength();
+						break;
 					}
 				}
 			}

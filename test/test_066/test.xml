@@ -5,6 +5,7 @@
 
 <requires>
 <id32/>
+<non-rt/>
 </requires>
 <skip_indexer/>
 

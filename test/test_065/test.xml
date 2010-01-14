@@ -3,6 +3,10 @@
 
 <name>payload indexing</name>
 
+<requires>
+<non-rt/>
+</requires>
+
 <config>
 indexer
 {

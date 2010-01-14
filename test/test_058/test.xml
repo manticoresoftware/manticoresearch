@@ -3,6 +3,10 @@
 <test>
 <name>rotation</name>
 
+<requires>
+<non-rt/>
+</requires>
+
 <config>
 searchd
 {

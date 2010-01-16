@@ -1254,7 +1254,7 @@ public:
 	virtual bool				Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> & dFilters, bool bMergeKillLists );
 	template <class QWORDDST, class QWORDSRC> bool MergeWords ( CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter );
 
-	virtual int					UpdateAttributes ( const CSphAttrUpdate & tUpd );
+	virtual int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphString & sError );
 	virtual bool				SaveAttributes ();
 
 	bool						EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const;
@@ -6509,12 +6509,12 @@ CSphIndex_VLN::~CSphIndex_VLN ()
 
 /////////////////////////////////////////////////////////////////////////////
 
-int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd )
+int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphString & sError )
 {
 	// check if we can
 	if ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_EXTERN )
 	{
-		m_sLastError.SetSprintf ( "docinfo=extern required for updates" );
+		sError.SetSprintf ( "docinfo=extern required for updates" );
 		return -1;
 	}
 
@@ -6530,7 +6530,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd )
 		int iIndex = m_tSchema.GetAttrIndex ( tUpd.m_dAttrs[i].m_sName.cstr() );
 		if ( iIndex<0 )
 		{
-			m_sLastError.SetSprintf ( "attribute '%s' not found", tUpd.m_dAttrs[i].m_sName.cstr() );
+			sError.SetSprintf ( "attribute '%s' not found", tUpd.m_dAttrs[i].m_sName.cstr() );
 			return -1;
 		}
 
@@ -6539,14 +6539,14 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd )
 		if (!( tCol.m_eAttrType==SPH_ATTR_BOOL || tCol.m_eAttrType==SPH_ATTR_INTEGER || tCol.m_eAttrType==SPH_ATTR_TIMESTAMP
 			|| tCol.m_eAttrType==( SPH_ATTR_INTEGER | SPH_ATTR_MULTI ) ))
 		{
-			m_sLastError.SetSprintf ( "attribute '%s' can not be updated (must be boolean, integer, timestamp, or MVA)", tUpd.m_dAttrs[i].m_sName.cstr() );
+			sError.SetSprintf ( "attribute '%s' can not be updated (must be boolean, integer, timestamp, or MVA)", tUpd.m_dAttrs[i].m_sName.cstr() );
 			return -1;
 		}
 
 		// forbid updates on MVA columns if there's no arena
 		if ( ( tCol.m_eAttrType & SPH_ATTR_MULTI ) && !g_pMvaArena )
 		{
-			m_sLastError.SetSprintf ( "MVA attribute '%s' can not be updated (MVA arena not initialized)" );
+			sError.SetSprintf ( "MVA attribute '%s' can not be updated (MVA arena not initialized)" );
 			return -1;
 		}
 
@@ -6558,6 +6558,8 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd )
 	// should implement a simplistic MVCC-style delayed-free to avoid that
 
 	// do the update
+	const int iFirst = ( iIndex<0 ) ? 0 : iIndex;
+	const int iLast = ( iIndex<0 ) ? tUpd.m_dDocids.GetLength() : iIndex+1;
 
 	// row update must leave it in cosistent state; so let's preallocate all the needed MVA
 	// storage upfront to avoid suddenly having to rollback if allocation fails later
@@ -6576,7 +6578,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd )
 
 	// preallocate
 	bool bFailed = false;
-	ARRAY_FOREACH_COND ( iUpd, tUpd.m_dDocids, !bFailed )
+	for ( int iUpd=iFirst; iUpd<iLast && !bFailed; iUpd++ )
 	{
 		dRowPtrs[iUpd] = const_cast < DWORD * > ( FindDocinfo ( tUpd.m_dDocids[iUpd] ) );
 		if ( !dRowPtrs[iUpd] )
@@ -6617,7 +6619,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd )
 			if ( dMvaPtrs[i]>=0 )
 				g_MvaArena.TaggedFreeIndex ( m_iIndexTag, dMvaPtrs[i] );
 
-		m_sLastError.SetSprintf ( "out of pool memory on MVA update" );
+		sError.SetSprintf ( "out of pool memory on MVA update" );
 		return -1;
 	}
 
@@ -6626,7 +6628,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd )
 	int iUpdated = 0;
 	DWORD uUpdateMask = 0;
 
-	ARRAY_FOREACH ( iUpd, tUpd.m_dDocids )
+	for ( int iUpd=iFirst; iUpd<iLast; iUpd++ )
 	{
 		DWORD * pEntry = dRowPtrs[iUpd];
 		if ( !pEntry )
@@ -6727,7 +6729,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd )
 		iUpdated++;
 	}
 
-	m_uAttrsStatus |= uUpdateMask;
+	m_uAttrsStatus |= uUpdateMask; // FIXME! add lock/atomic?
 	return iUpdated;
 }
 

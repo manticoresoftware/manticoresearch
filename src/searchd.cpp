@@ -6070,13 +6070,14 @@ static void DoCommandUpdate ( const char * sIndex, const CSphAttrUpdate & tUpd,
 		return;
 	}
 
+	CSphString sError;
 	DWORD uStatusDelta = pServed->m_pIndex->m_uAttrsStatus;
-	int iUpd = pServed->m_pIndex->UpdateAttributes ( tUpd );
+	int iUpd = pServed->m_pIndex->UpdateAttributes ( tUpd, -1, sError );
 	uStatusDelta = pServed->m_pIndex->m_uAttrsStatus & ~uStatusDelta;
 
 	if ( iUpd<0 )
 	{
-		dFailuresSet.Submit ( "%s", pServed->m_pIndex->GetLastError().cstr() );
+		dFailuresSet.Submit ( "%s", sError.cstr() );
 
 	} else
 	{

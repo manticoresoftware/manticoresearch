@@ -883,6 +883,7 @@ public:
 
 
 /// RAM based index
+struct RtQword_t;
 struct RtIndex_t : public ISphRtIndex, public ISphNoncopyable
 {
 private:
@@ -980,12 +981,13 @@ public:
 
 	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters ) const;
 	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters ) const;
-	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats );
+	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, CSphString & sError ) const;
 
 	void						CopyDocinfo ( CSphMatch & tMatch, const DWORD * pFound ) const;
 	const CSphRowitem *			FindDocinfo ( const RtSegment_t * pSeg, SphDocID_t uDocID ) const;
-	bool						QwordSetup ( ISphQword * pQword, RtSegment_t * pSeg ) const;
-	static bool					QwordSetupSegment  ( ISphQword * pQword, RtSegment_t * pSeg, bool bSetup );
+
+	bool						RtQwordSetup ( RtQword_t * pQword, RtSegment_t * pSeg ) const;
+	static bool					RtQwordSetupSegment ( RtQword_t * pQword, RtSegment_t * pSeg, bool bSetup );
 
 protected:
 	CSphSourceStats				m_tStats;
@@ -2721,7 +2723,7 @@ bool RtQwordSetup_t::QwordSetup ( ISphQword * pQword ) const
 	if ( !pIndex )
 		return false;
 
-	return pIndex->QwordSetup ( pMyWord, m_pSeg );
+	return pIndex->RtQwordSetup ( pMyWord, m_pSeg );
 }
 
 
@@ -2799,7 +2801,11 @@ const CSphRowitem * RtIndex_t::FindDocinfo ( const RtSegment_t * pSeg, SphDocID_
 	return pFound;
 }
 
-bool RtIndex_t::QwordSetupSegment ( ISphQword * pQword, RtSegment_t * pCurSeg, bool bSetup )
+// WARNING, setup is pretty tricky
+// for RT queries, we setup qwords several times
+// first pass (with NULL segment arg) should sum all stats over all segments
+// others passes (with non-NULL segments) should setup specific segment (including local stats)
+bool RtIndex_t::RtQwordSetupSegment ( RtQword_t * pQword, RtSegment_t * pCurSeg, bool bSetup )
 {
 	if ( !pCurSeg )
 		return false;
@@ -2858,14 +2864,12 @@ bool RtIndex_t::QwordSetupSegment ( ISphQword * pQword, RtSegment_t * pCurSeg, b
 			pQword->m_iHits += pWord->m_uHits;
 			if ( bSetup )
 			{
-				RtQword_t * pMyWord = dynamic_cast<RtQword_t*> ( pQword );
-				SafeDelete ( pMyWord->m_pDocReader );
-				pMyWord->m_pDocReader = new RtDocReader_t ( pCurSeg, *pWord );
-				pMyWord->m_tHitReader.m_pBase = NULL;
+				SafeDelete ( pQword->m_pDocReader );
+				pQword->m_pDocReader = new RtDocReader_t ( pCurSeg, *pWord );
+				pQword->m_tHitReader.m_pBase = NULL;
 				if ( pCurSeg->m_dHits.GetLength() )
-					pMyWord->m_tHitReader.m_pBase = &pCurSeg->m_dHits[0];
-
-				pMyWord->m_pSeg = pCurSeg;
+					pQword->m_tHitReader.m_pBase = &pCurSeg->m_dHits[0];
+				pQword->m_pSeg = pCurSeg;
 			}
 			return true;
 		}
@@ -2883,33 +2887,37 @@ bool RtIndex_t::QwordSetupSegment ( ISphQword * pQword, RtSegment_t * pCurSeg, b
 		pQword->m_iHits += pWord->m_uHits;
 		if ( bSetup )
 		{
-			RtQword_t * pMyWord = dynamic_cast<RtQword_t*> ( pQword );
-			SafeDelete ( pMyWord->m_pDocReader );
-			pMyWord->m_pDocReader = new RtDocReader_t ( pCurSeg, *pWord );
-			pMyWord->m_tHitReader.m_pBase = NULL;
+			pQword->m_pDocReader = new RtDocReader_t ( pCurSeg, *pWord );
+			pQword->m_tHitReader.m_pBase = NULL;
 			if ( pCurSeg->m_dHits.GetLength() )
-				pMyWord->m_tHitReader.m_pBase = &pCurSeg->m_dHits[0];
-
-			pMyWord->m_pSeg = pCurSeg;
+				pQword->m_tHitReader.m_pBase = &pCurSeg->m_dHits[0];
+			pQword->m_pSeg = pCurSeg;
 		}
 	}
 	return pWord!=0;
 #endif
 }
 
-bool RtIndex_t::QwordSetup ( ISphQword * pQword, RtSegment_t * pSeg ) const
+bool RtIndex_t::RtQwordSetup ( RtQword_t * pQword, RtSegment_t * pSeg ) const
 {
-	RtQword_t * pMyWord = dynamic_cast<RtQword_t*> ( pQword );
-	if ( !pMyWord )
-		return false;
-	
+	// segment-specific setup pass
 	if ( pSeg )
-		return QwordSetupSegment ( pQword, pSeg, true );
+		return RtQwordSetupSegment ( pQword, pSeg, true );
 
-	// No segment specified; assuming QwordSetup on all ramchanks
-	bool bRes = false;
+	// stat-only pass
+	// loop all segments, gather stats, do not setup anything
+	assert ( !pSeg );
+	pQword->m_iDocs = 0;
+	pQword->m_iHits = 0;
+
+	// we care about the results anyway though
+	// because if all (!) segments miss this word, we must notify the caller, right?
+	bool bRes = true;
 	ARRAY_FOREACH ( i, m_pSegments )
-		bRes = bRes || QwordSetupSegment ( pQword, m_pSegments[i], false );
+		bRes &= RtQwordSetupSegment ( pQword, m_pSegments[i], false );
+
+	// sanity check
+	assert ( !( bRes==true && pQword->m_iDocs==0 ) );
 	return bRes;
 }
 
@@ -3192,20 +3200,11 @@ bool RtIndex_t::MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQu
 	return bResult;
 }
 
-bool RtIndex_t::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const char * sQuery, bool bGetStats )
+bool RtIndex_t::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const char * sQuery, bool bGetStats, CSphString & sError ) const
 {
 	m_tRwlock.ReadLock(); // this is actually needed only if they want stats
 
-	if ( !m_pSegments.GetLength() )
-	{
-		m_tRwlock.Unlock();
-		return true;
-	}
-
 	RtQword_t tQword;
-	RtQwordSetup_t tSetup;
-	tSetup.m_pIndex = this;
-
 	CSphString sBuffer ( sQuery );
 	m_pTokenizer->SetBuffer ( (BYTE *)sBuffer.cstr(), sBuffer.Length() );
 
@@ -3222,13 +3221,59 @@ bool RtIndex_t::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const cha
 			tInfo.m_iDocs = 0;
 			tInfo.m_iHits = 0;
 
-			if ( !bGetStats ) continue;
+			if ( !bGetStats )
+				continue;
 
-			tSetup.m_pSeg = NULL;
-			tSetup.QwordSetup ( &tQword );
+			tQword.m_iWordID = iWord;
+			tQword.m_iDocs = 0;
+			tQword.m_iHits = 0;
+			ARRAY_FOREACH ( iSeg, m_pSegments )
+				RtQwordSetupSegment ( &tQword, m_pSegments[iSeg], false );
 
 			tInfo.m_iDocs = tQword.m_iDocs;
 			tInfo.m_iHits = tQword.m_iHits;
+		}
+	}
+
+	// get stats from disk chunks too
+	if ( bGetStats )
+		ARRAY_FOREACH ( iChunk, m_pDiskChunks )
+	{
+		CSphVector<CSphKeywordInfo> dKeywords2;
+		if ( !m_pDiskChunks[iChunk]->GetKeywords ( dKeywords2, sQuery, bGetStats, sError ) )
+		{
+			m_tRwlock.Unlock();
+			return false;
+		}
+
+		if ( dKeywords.GetLength()!=dKeywords2.GetLength() )
+		{
+			sError.SetSprintf ( "INTERNAL ERROR: keyword count mismatch (ram=%d, disk[%d]=%d)",
+				dKeywords.GetLength(), iChunk, dKeywords2.GetLength() );
+			m_tRwlock.Unlock ();
+			break;
+		}
+
+		ARRAY_FOREACH ( i, dKeywords )
+		{
+			if ( dKeywords[i].m_sTokenized!=dKeywords2[i].m_sTokenized )
+			{
+				sError.SetSprintf ( "INTERNAL ERROR: tokenized keyword mismatch (n=%d, ram=%s, disk[%d]=%s)",
+					i, dKeywords[i].m_sTokenized.cstr(), iChunk, dKeywords2[i].m_sTokenized.cstr() );
+				m_tRwlock.Unlock ();
+				break;
+			}
+
+			if ( dKeywords[i].m_sNormalized!=dKeywords2[i].m_sNormalized )
+			{
+				sError.SetSprintf ( "INTERNAL ERROR: normalized keyword mismatch (n=%d, ram=%s, disk[%d]=%s)",
+					i, dKeywords[i].m_sTokenized.cstr(), iChunk, dKeywords2[i].m_sTokenized.cstr() );
+				m_tRwlock.Unlock ();
+				break;
+			}
+
+			dKeywords[i].m_iDocs += dKeywords2[i].m_iDocs;
+			dKeywords[i].m_iHits += dKeywords2[i].m_iHits;
 		}
 	}
 

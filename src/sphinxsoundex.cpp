@@ -17,7 +17,7 @@
 
 void stem_soundex ( BYTE * pWord )
 {
-	static BYTE dLetter2Code [ 27 ] = "01230120022455012623010202";
+	static BYTE dLetter2Code[27] = "01230120022455012623010202";
 
 	// check if the word only contains lowercase English letters
 	BYTE * p = pWord;

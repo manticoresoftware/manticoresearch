@@ -26,11 +26,11 @@
 //////////////////////////////////////////////////////////////////////////
 
 #ifndef M_LOG2E
-#define M_LOG2E    1.44269504088896340736
+#define M_LOG2E		1.44269504088896340736
 #endif
 
 #ifndef M_LOG10E
-#define M_LOG10E   0.434294481903251827651
+#define M_LOG10E	0.434294481903251827651
 #endif
 
 //////////////////////////////////////////////////////////////////////////
@@ -40,7 +40,7 @@
 struct Expr_GetInt_c : public ISphExpr
 {
 	CSphAttrLocator m_tLocator;
-	Expr_GetInt_c ( const CSphAttrLocator & tLocator ) : m_tLocator ( tLocator ) {}
+	explicit Expr_GetInt_c ( const CSphAttrLocator & tLocator ) : m_tLocator ( tLocator ) {}
 	virtual float Eval ( const CSphMatch & tMatch ) const { return (float) tMatch.GetAttr ( m_tLocator ); } // FIXME! OPTIMIZE!!! we can go the short route here
 	virtual int IntEval ( const CSphMatch & tMatch ) const { return (int)tMatch.GetAttr ( m_tLocator ); }
 	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return (int64_t)tMatch.GetAttr ( m_tLocator ); }
@@ -50,7 +50,7 @@ struct Expr_GetInt_c : public ISphExpr
 struct Expr_GetBits_c : public ISphExpr
 {
 	CSphAttrLocator m_tLocator;
-	Expr_GetBits_c ( const CSphAttrLocator & tLocator ) : m_tLocator ( tLocator ) {}
+	explicit Expr_GetBits_c ( const CSphAttrLocator & tLocator ) : m_tLocator ( tLocator ) {}
 	virtual float Eval ( const CSphMatch & tMatch ) const { return (float) tMatch.GetAttr ( m_tLocator ); }
 	virtual int IntEval ( const CSphMatch & tMatch ) const { return (int)tMatch.GetAttr ( m_tLocator ); }
 	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return (int64_t)tMatch.GetAttr ( m_tLocator ); }
@@ -60,7 +60,7 @@ struct Expr_GetBits_c : public ISphExpr
 struct Expr_GetSint_c : public ISphExpr
 {
 	CSphAttrLocator m_tLocator;
-	Expr_GetSint_c ( const CSphAttrLocator & tLocator ) : m_tLocator ( tLocator ) {}
+	explicit Expr_GetSint_c ( const CSphAttrLocator & tLocator ) : m_tLocator ( tLocator ) {}
 	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)(int)tMatch.GetAttr ( m_tLocator ); }
 	virtual int IntEval ( const CSphMatch & tMatch ) const { return (int)tMatch.GetAttr ( m_tLocator ); }
 	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return (int)tMatch.GetAttr ( m_tLocator ); }
@@ -70,7 +70,7 @@ struct Expr_GetSint_c : public ISphExpr
 struct Expr_GetFloat_c : public ISphExpr
 {
 	CSphAttrLocator m_tLocator;
-	Expr_GetFloat_c ( const CSphAttrLocator & tLocator ) : m_tLocator ( tLocator ) {}
+	explicit Expr_GetFloat_c ( const CSphAttrLocator & tLocator ) : m_tLocator ( tLocator ) {}
 	virtual float Eval ( const CSphMatch & tMatch ) const { return tMatch.GetAttrFloat ( m_tLocator ); }
 };
 
@@ -78,7 +78,7 @@ struct Expr_GetFloat_c : public ISphExpr
 struct Expr_GetConst_c : public ISphExpr
 {
 	float m_fValue;
-	Expr_GetConst_c ( float fValue ) : m_fValue ( fValue ) {}
+	explicit Expr_GetConst_c ( float fValue ) : m_fValue ( fValue ) {}
 	virtual float Eval ( const CSphMatch & ) const { return m_fValue; }
 };
 
@@ -86,7 +86,7 @@ struct Expr_GetConst_c : public ISphExpr
 struct Expr_GetIntConst_c : public ISphExpr
 {
 	int m_iValue;
-	Expr_GetIntConst_c ( int iValue ) : m_iValue ( iValue ) {}
+	explicit Expr_GetIntConst_c ( int iValue ) : m_iValue ( iValue ) {}
 	virtual float Eval ( const CSphMatch & ) const { return (float) m_iValue; } // no assert() here cause generic float Eval() needs to work even on int-evaluator tree
 	virtual int IntEval ( const CSphMatch & ) const { return m_iValue; }
 	virtual int64_t Int64Eval ( const CSphMatch & ) const { return m_iValue; }
@@ -96,7 +96,7 @@ struct Expr_GetIntConst_c : public ISphExpr
 struct Expr_GetInt64Const_c : public ISphExpr
 {
 	int64_t m_iValue;
-	Expr_GetInt64Const_c ( int64_t iValue ) : m_iValue ( iValue ) {}
+	explicit Expr_GetInt64Const_c ( int64_t iValue ) : m_iValue ( iValue ) {}
 	virtual float Eval ( const CSphMatch & ) const { return (float) m_iValue; } // no assert() here cause generic float Eval() needs to work even on int-evaluator tree
 	virtual int IntEval ( const CSphMatch & ) const { assert ( 0 ); return (int)m_iValue; }
 	virtual int64_t Int64Eval ( const CSphMatch & ) const { return m_iValue; }
@@ -185,17 +185,17 @@ struct Expr_Arglist_c : public ISphExpr
 	struct _classname : public ISphExpr \
 	{ \
 		ISphExpr * m_pFirst; \
-		_classname ( ISphExpr * pFirst ) : m_pFirst ( pFirst ) {}; \
+		explicit _classname ( ISphExpr * pFirst ) : m_pFirst ( pFirst ) {}; \
 		~_classname () { SafeRelease ( m_pFirst ); } \
 		virtual void SetMVAPool ( const DWORD * pMvaPool ) { m_pFirst->SetMVAPool ( pMvaPool ); } \
 		virtual float Eval ( const CSphMatch & tMatch ) const { return _expr; } \
 
 #define DECLARE_UNARY_FLT(_classname,_expr) \
-		DECLARE_UNARY_TRAITS(_classname,_expr) \
+		DECLARE_UNARY_TRAITS ( _classname, _expr ) \
 	};
 
 #define DECLARE_UNARY_INT(_classname,_expr,_expr2,_expr3) \
-		DECLARE_UNARY_TRAITS(_classname,_expr) \
+		DECLARE_UNARY_TRAITS ( _classname, _expr ) \
 		virtual int IntEval ( const CSphMatch & tMatch ) const { return _expr2; } \
 		virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return _expr3; } \
 	};
@@ -214,9 +214,9 @@ DECLARE_UNARY_FLT ( Expr_Log10_c,	float(log(FIRST)*M_LOG10E) )
 DECLARE_UNARY_FLT ( Expr_Exp_c,		float(exp(FIRST)) )
 DECLARE_UNARY_FLT ( Expr_Sqrt_c,	float(sqrt(FIRST)) )
 
-DECLARE_UNARY_INT ( Expr_NotInt_c,		float(INTFIRST?0:1),	INTFIRST?0:1,	INTFIRST?0:1 );
-DECLARE_UNARY_INT ( Expr_NotInt64_c,	float(INT64FIRST?0:1),	INT64FIRST?0:1,	INT64FIRST?0:1 );
-DECLARE_UNARY_INT ( Expr_Sint_c,		float(INTFIRST),		INTFIRST,		INTFIRST )
+DECLARE_UNARY_INT ( Expr_NotInt_c,		(float)(INTFIRST?0:1),		INTFIRST?0:1,	INTFIRST?0:1 );
+DECLARE_UNARY_INT ( Expr_NotInt64_c,	(float)(INT64FIRST?0:1),	INT64FIRST?0:1,	INT64FIRST?0:1 );
+DECLARE_UNARY_INT ( Expr_Sint_c,		(float)(INTFIRST),			INTFIRST,		INTFIRST )
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -231,11 +231,11 @@ DECLARE_UNARY_INT ( Expr_Sint_c,		float(INTFIRST),		INTFIRST,		INTFIRST )
 		virtual float Eval ( const CSphMatch & tMatch ) const { return _expr; } \
 
 #define DECLARE_BINARY_FLT(_classname,_expr) \
-		DECLARE_BINARY_TRAITS(_classname,_expr) \
+		DECLARE_BINARY_TRAITS ( _classname, _expr ) \
 	};
 
 #define DECLARE_BINARY_INT(_classname,_expr,_expr2,_expr3) \
-		DECLARE_BINARY_TRAITS(_classname,_expr) \
+		DECLARE_BINARY_TRAITS ( _classname, _expr ) \
 		virtual int IntEval ( const CSphMatch & tMatch ) const { return _expr2; } \
 		virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return _expr3; } \
 	};
@@ -254,16 +254,16 @@ DECLARE_BINARY_INT ( Expr_Mul_c,	FIRST * SECOND,						INTFIRST * INTSECOND,				I
 DECLARE_BINARY_FLT ( Expr_Div_c,	FIRST / SECOND )
 DECLARE_BINARY_INT ( Expr_Idiv_c,	(float)(int(FIRST)/int(SECOND)),	INTFIRST / INTSECOND,				INT64FIRST / INT64SECOND )
 
-DECLARE_BINARY_POLY ( Expr_Lt,		IFFLT ( FIRST < SECOND ),			IFINT ( INTFIRST < INTSECOND ),		IFINT ( INT64FIRST < INT64SECOND ) )
-DECLARE_BINARY_POLY ( Expr_Gt,		IFFLT ( FIRST > SECOND ),			IFINT ( INTFIRST > INTSECOND ),		IFINT ( INT64FIRST > INT64SECOND ) )
-DECLARE_BINARY_POLY ( Expr_Lte,		IFFLT ( FIRST <= SECOND ),			IFINT ( INTFIRST <= INTSECOND ),	IFINT ( INT64FIRST <= INT64SECOND ) )
-DECLARE_BINARY_POLY ( Expr_Gte,		IFFLT ( FIRST >= SECOND ),			IFINT ( INTFIRST >= INTSECOND ),	IFINT ( INT64FIRST >= INT64SECOND ) )
-DECLARE_BINARY_POLY ( Expr_Eq,		IFFLT ( fabs(FIRST-SECOND)<=1e-6 ),	IFINT ( INTFIRST == INTSECOND ),	IFINT ( INT64FIRST == INT64SECOND ) )
-DECLARE_BINARY_POLY ( Expr_Ne,		IFFLT ( fabs(FIRST-SECOND)>1e-6 ),	IFINT ( INTFIRST != INTSECOND ),	IFINT ( INT64FIRST != INT64SECOND ) )
+DECLARE_BINARY_POLY ( Expr_Lt,		IFFLT ( FIRST<SECOND ),					IFINT ( INTFIRST<INTSECOND ),		IFINT ( INT64FIRST<INT64SECOND ) )
+DECLARE_BINARY_POLY ( Expr_Gt,		IFFLT ( FIRST>SECOND ),					IFINT ( INTFIRST>INTSECOND ),		IFINT ( INT64FIRST>INT64SECOND ) )
+DECLARE_BINARY_POLY ( Expr_Lte,		IFFLT ( FIRST<=SECOND ),				IFINT ( INTFIRST<=INTSECOND ),		IFINT ( INT64FIRST<=INT64SECOND ) )
+DECLARE_BINARY_POLY ( Expr_Gte,		IFFLT ( FIRST>=SECOND ),				IFINT ( INTFIRST>=INTSECOND ),		IFINT ( INT64FIRST>=INT64SECOND ) )
+DECLARE_BINARY_POLY ( Expr_Eq,		IFFLT ( fabs ( FIRST-SECOND )<=1e-6 ),	IFINT ( INTFIRST==INTSECOND ),		IFINT ( INT64FIRST==INT64SECOND ) )
+DECLARE_BINARY_POLY ( Expr_Ne,		IFFLT ( fabs ( FIRST-SECOND )>1e-6 ),	IFINT ( INTFIRST!=INTSECOND ),		IFINT ( INT64FIRST!=INT64SECOND ) )
 
-DECLARE_BINARY_INT ( Expr_Min_c,	Min(FIRST,SECOND),					Min(INTFIRST,INTSECOND),			Min(INT64FIRST,INT64SECOND) )
-DECLARE_BINARY_INT ( Expr_Max_c,	Max(FIRST,SECOND),					Max(INTFIRST,INTSECOND),			Max(INT64FIRST,INT64SECOND) )
-DECLARE_BINARY_FLT ( Expr_Pow_c,	float(pow(FIRST,SECOND)) )
+DECLARE_BINARY_INT ( Expr_Min_c,	Min ( FIRST, SECOND ),					Min ( INTFIRST, INTSECOND ),		Min ( INT64FIRST, INT64SECOND ) )
+DECLARE_BINARY_INT ( Expr_Max_c,	Max ( FIRST, SECOND ),					Max ( INTFIRST, INTSECOND ),		Max ( INT64FIRST, INT64SECOND ) )
+DECLARE_BINARY_FLT ( Expr_Pow_c,	float ( pow ( FIRST, SECOND ) ) )
 
 DECLARE_BINARY_POLY ( Expr_And,		FIRST!=0.0f && SECOND!=0.0f,		IFINT ( INTFIRST && INTSECOND ),	IFINT ( INT64FIRST && INT64SECOND ) )
 DECLARE_BINARY_POLY ( Expr_Or,		FIRST!=0.0f || SECOND!=0.0f,		IFINT ( INTFIRST || INTSECOND ),	IFINT ( INT64FIRST || INT64SECOND ) )
@@ -438,7 +438,7 @@ struct ExprNode_t
 	float FloatVal()
 	{
 		assert ( m_iToken==TOK_CONST_INT || m_iToken==TOK_CONST_FLOAT );
-		return  ( m_iToken==TOK_CONST_INT ) ? (float)m_iConst : m_fConst;
+		return ( m_iToken==TOK_CONST_INT ) ? (float)m_iConst : m_fConst;
 	}
 };
 
@@ -556,21 +556,21 @@ static bool IsNumericAttrType ( DWORD eType )
 int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 {
 	// skip whitespace, check eof
-	while ( isspace(*m_pCur) ) m_pCur++;
+	while ( isspace ( *m_pCur ) ) m_pCur++;
 	m_pLastTokenStart = m_pCur;
 	if ( !*m_pCur ) return 0;
 
 	// check for constant
-	if ( isdigit(*m_pCur) )
+	if ( isdigit ( *m_pCur ) )
 		return ParseNumeric ( lvalp, &m_pCur );
 
 	// check for field, function, or magic name
-	if ( sphIsAttr(m_pCur[0])
-		|| ( m_pCur[0]=='@' && sphIsAttr(m_pCur[1]) && !isdigit(m_pCur[1]) ) )
+	if ( sphIsAttr ( m_pCur[0] )
+		|| ( m_pCur[0]=='@' && sphIsAttr ( m_pCur[1] ) && !isdigit ( m_pCur[1] ) ) )
 	{
 		// get token
 		const char * pStart = m_pCur++;
-		while ( sphIsAttr(*m_pCur) ) m_pCur++;
+		while ( sphIsAttr ( *m_pCur ) ) m_pCur++;
 
 		CSphString sTok;
 		sTok.SetBinary ( pStart, m_pCur-pStart );
@@ -587,7 +587,7 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 				m_sLexerError = "geoanchor is not set, @geodist expression unavailable";
 				return -1;
 			}
-			const CSphAttrLocator & tLoc = m_pSchema->GetAttr(iGeodist).m_tLocator;
+			const CSphAttrLocator & tLoc = m_pSchema->GetAttr ( iGeodist ).m_tLocator;
 			lvalp->iAttrLocator = ( tLoc.m_iBitOffset << 16 ) + tLoc.m_iBitCount;
 			return TOK_ATTR_FLOAT;
 		}
@@ -603,7 +603,7 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 		{
 			// check attribute type and width
 			const CSphColumnInfo & tCol = m_pSchema->GetAttr ( iAttr );
-			if ( IsNumericAttrType(tCol.m_eAttrType) || ( tCol.m_eAttrType & SPH_ATTR_MULTI ) )
+			if ( IsNumericAttrType ( tCol.m_eAttrType ) || ( tCol.m_eAttrType & SPH_ATTR_MULTI ) )
 			{
 				lvalp->iAttrLocator = ( tCol.m_tLocator.m_iBitOffset<<16 ) + tCol.m_tLocator.m_iBitCount;
 
@@ -730,7 +730,7 @@ void ExprParser_t::Optimize ( int iNode )
 		const ExprNode_t & tLeft = m_dNodes[pRoot->m_iLeft];
 		const ExprNode_t & tRight = m_dNodes[pRoot->m_iRight];
 
-		if ( IsConst(tLeft.m_iToken) && IsConst(tRight.m_iToken) )
+		if ( IsConst ( tLeft.m_iToken ) && IsConst ( tRight.m_iToken ) )
 		{
 			if ( tLeft.m_iToken==TOK_CONST_INT && tRight.m_iToken==TOK_CONST_INT && pRoot->m_iToken!='/' )
 			{
@@ -893,7 +893,12 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case TOK_NE:			LOC_SPAWN_POLY ( Expr_Ne ); break;
 		case TOK_AND:			LOC_SPAWN_POLY ( Expr_And ); break;
 		case TOK_OR:			LOC_SPAWN_POLY ( Expr_Or ); break;
-		case TOK_NOT:			if ( tNode.m_uArgType==SPH_ATTR_BIGINT ) return new Expr_NotInt64_c ( pLeft ); else return new Expr_NotInt_c ( pLeft );  break;
+		case TOK_NOT:
+			if ( tNode.m_uArgType==SPH_ATTR_BIGINT )
+				return new Expr_NotInt64_c ( pLeft );
+			else
+				return new Expr_NotInt_c ( pLeft );
+			break;
 
 		case ',':				return new Expr_Arglist_c ( pLeft, pRight ); break;
 		case TOK_NEG:			assert ( pRight==NULL ); return new Expr_Neg_c ( pLeft ); break;
@@ -969,7 +974,7 @@ protected:
 	ISphExpr *			m_pArg;
 
 public:
-	Expr_ArgVsSet_c ( ISphExpr * pArg ) : m_pArg ( pArg ) {}
+	explicit Expr_ArgVsSet_c ( ISphExpr * pArg ) : m_pArg ( pArg ) {}
 	~Expr_ArgVsSet_c () { SafeRelease ( m_pArg ); }
 
 	virtual int IntEval ( const CSphMatch & tMatch ) const = 0;
@@ -1018,7 +1023,7 @@ public:
 		} else
 		{
 			m_dValues.Reserve ( pConsts->m_dInts.GetLength() );
-			ARRAY_FOREACH ( i, pConsts->m_dInts  )
+			ARRAY_FOREACH ( i, pConsts->m_dInts )
 				m_dValues.Add ( (T)pConsts->m_dInts[i] );
 		}
 	}
@@ -1032,7 +1037,7 @@ class Expr_IntervalConst_c : public Expr_ArgVsConstSet_c<T>
 {
 public:
 	/// take ownership of arg, pre-evaluate and dismiss turn points
-	Expr_IntervalConst_c ( CSphVector<ISphExpr *> & dArgs )
+	explicit Expr_IntervalConst_c ( CSphVector<ISphExpr *> & dArgs )
 		: Expr_ArgVsConstSet_c<T> ( dArgs[0], dArgs, 1 )
 	{}
 
@@ -1063,7 +1068,7 @@ protected:
 
 public:
 	/// take ownership of arg and turn points
-	Expr_Interval_c ( const CSphVector<ISphExpr *> & dArgs )
+	explicit Expr_Interval_c ( const CSphVector<ISphExpr *> & dArgs )
 		: Expr_ArgVsSet_c<T> ( dArgs[0] )
 	{
 		for ( int i=1; i<dArgs.GetLength(); i++ )
@@ -1150,7 +1155,7 @@ public:
 		const DWORD * R = pMvaMax - 1;
 		for ( ; pFilter < pFilterMax; pFilter++ )
 		{
-			while ( L <= R )
+			while ( L<=R )
 			{
 				const DWORD * m = L + (R - L) / 2;
 				if ( *pFilter > *m )
@@ -1185,9 +1190,9 @@ static inline float CalcGeodist ( float fPointLat, float fPointLon, float fAncho
 	const double R = 6384000;
 	double dlat = fPointLat - fAnchorLat;
 	double dlon = fPointLon - fAnchorLon;
-	double a = sphSqr(sin(dlat/2)) + cos(fPointLat)*cos(fAnchorLat)*sphSqr(sin(dlon/2));
+	double a = sphSqr ( sin ( dlat/2 ) ) + cos ( fPointLat ) * cos ( fAnchorLat ) * sphSqr ( sin ( dlon/2 ) );
 	double c = 2*asin ( Min ( 1, sqrt(a) ) );
-	return float(R*c);
+	return (float)(R*c);
 }
 
 /// geodist() - attr point, constant anchor
@@ -1304,8 +1309,7 @@ void ExprParser_t::GatherArgNodes ( int iNode, CSphVector<int> & dNodes )
 	{
 		GatherArgNodes ( tNode.m_iLeft, dNodes );
 		GatherArgNodes ( tNode.m_iRight, dNodes );
-	}
-	else
+	} else
 		dNodes.Add ( iNode );
 }
 
@@ -1394,7 +1398,7 @@ ISphExpr * ExprParser_t::CreateGeodistNode ( int iArgs )
 {
 	CSphVector<int> dArgs;
 	GatherArgNodes ( iArgs, dArgs );
-	assert ( dArgs.GetLength() == 4 );
+	assert ( dArgs.GetLength()==4 );
 
 	bool bConst1 = ( IsConst ( m_dNodes[dArgs[0]].m_iToken ) && IsConst ( m_dNodes[dArgs[1]].m_iToken ) );
 	bool bConst2 = ( IsConst ( m_dNodes[dArgs[2]].m_iToken ) && IsConst ( m_dNodes[dArgs[3]].m_iToken ) );
@@ -1434,7 +1438,7 @@ ISphExpr * ExprParser_t::CreateGeodistNode ( int iArgs )
 	// four expressions
 	CSphVector<ISphExpr *> dExpr;
 	FoldArglist ( CreateTree ( iArgs ), dExpr );
-	assert ( dExpr.GetLength() == 4 );
+	assert ( dExpr.GetLength()==4 );
 	return new Expr_Geodist_c ( dExpr[0], dExpr[1], dExpr[2], dExpr[3] );
 }
 
@@ -1693,7 +1697,7 @@ struct WeightCheck_fn
 {
 	bool * m_pRes;
 
-	WeightCheck_fn ( bool * pRes )
+	explicit WeightCheck_fn ( bool * pRes )
 		: m_pRes ( pRes )
 	{
 		assert ( m_pRes );

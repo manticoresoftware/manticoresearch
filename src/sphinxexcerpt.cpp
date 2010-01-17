@@ -168,13 +168,13 @@ static BYTE * FindString ( BYTE * sBuffer, BYTE * sFind, int iLimit )
 	iLimit++;
 	do
 	{
-		while ( *sBuffer != *sFind )
+		while ( *sBuffer!=*sFind )
 			if ( !*++sBuffer || !--iLimit ) return NULL;
 
 		int iSubLimit = iLimit;
 		BYTE * sSubFind = sFind;
 		BYTE * sSubBuffer = sBuffer;
-		while ( *sSubFind && *sSubBuffer && *sSubFind == *sSubBuffer++ )
+		while ( *sSubFind && *sSubBuffer && *sSubFind==*sSubBuffer++ )
 		{
 			sSubFind++;
 			if ( !--iSubLimit ) return NULL;
@@ -218,17 +218,15 @@ public:
 	virtual const CSphMatch & GetNextDoc ( DWORD * )
 	{
 		m_uFields = 0xFFFFFFFFUL;
-		if ( m_iChunk++ == 0 )
+		if ( ( m_iChunk++ )==0 )
 		{
 			if ( GetNextHit() )
 			{
 				m_tMatch.m_iDocID = 1;
 				m_iToken--;
-			}
-			else
+			} else
 				m_tMatch.m_iDocID = 0;
-		}
-		else
+		} else
 			m_tMatch.m_iDocID = 0;
 		return m_tMatch;
 	}
@@ -243,13 +241,13 @@ struct SnippetsQword_Exact_c: public ISnippetsQword
 		while ( m_iToken < m_dTokens->GetLength() )
 		{
 			Token_t & tToken = (*m_dTokens)[m_iToken++];
-			if ( tToken.m_eType != ExcerptGen_c::TOK_WORD )
+			if ( tToken.m_eType!=ExcerptGen_c::TOK_WORD )
 				continue;
 
-			if ( tToken.m_iWordID == m_iWordID )
+			if ( tToken.m_iWordID==m_iWordID )
 			{
-				tToken.m_uWords  |= m_uWordMask;
-				return HIT_PACK(0, tToken.m_uPosition) | ( m_iToken - 1 == m_iLastIndex ? HIT_FIELD_END : 0 );
+				tToken.m_uWords |= m_uWordMask;
+				return HIT_PACK ( 0, tToken.m_uPosition ) | ( ( m_iToken-1 )==m_iLastIndex ? HIT_FIELD_END : 0 );
 			}
 		}
 		return 0;
@@ -265,15 +263,15 @@ template < typename COMPARE > struct SnippetsQword_c: public ISnippetsQword
 		while ( m_iToken < m_dTokens->GetLength() )
 		{
 			Token_t & tToken = (*m_dTokens)[m_iToken++];
-			if ( tToken.m_eType != ExcerptGen_c::TOK_WORD )
+			if ( tToken.m_eType!=ExcerptGen_c::TOK_WORD )
 				continue;
 
 			m_pTokenizer->SetBuffer ( (BYTE *) &m_sBuffer->cstr() [ tToken.m_iStart ], tToken.m_iLengthBytes );
 			BYTE * sToken = m_pTokenizer->GetToken(); // OPTIMIZE? token can be memoized and shared between qwords
 			if ( (*(COMPARE *)this).Match ( tToken, sToken ) )
 			{
-				tToken.m_uWords  |= m_uWordMask;
-				return HIT_PACK(0, tToken.m_uPosition) | ( m_iToken - 1 == m_iLastIndex ? HIT_FIELD_END : 0 );
+				tToken.m_uWords |= m_uWordMask;
+				return HIT_PACK ( 0, tToken.m_uPosition ) | ( ( m_iToken-1 )==m_iLastIndex ? HIT_FIELD_END : 0 );
 			}
 		}
 		return 0;
@@ -285,8 +283,8 @@ struct SnippetsQword_StarFront_c: public SnippetsQword_c<SnippetsQword_StarFront
 	inline bool Match ( const Token_t & tToken, BYTE * sToken )
 	{
 		int iOffset = tToken.m_iLengthBytes - m_iWordLength;
-		return iOffset >= 0 &&
-			memcmp ( m_sDictWord.cstr(), sToken + iOffset, m_iWordLength ) == 0;
+		return iOffset>=0 &&
+			memcmp ( m_sDictWord.cstr(), sToken + iOffset, m_iWordLength )==0;
 	}
 };
 
@@ -294,8 +292,8 @@ struct SnippetsQword_StarBack_c: public SnippetsQword_c<SnippetsQword_StarBack_c
 {
 	inline bool Match ( const Token_t & tToken, BYTE * sToken )
 	{
-		return ( tToken.m_iLengthBytes >= m_iWordLength ) &&
-			memcmp( m_sDictWord.cstr(), sToken, m_iWordLength ) == 0;
+		return ( tToken.m_iLengthBytes>=m_iWordLength ) &&
+			memcmp ( m_sDictWord.cstr(), sToken, m_iWordLength )==0;
 	}
 };
 
@@ -303,7 +301,7 @@ struct SnippetsQword_StarBoth_c: public SnippetsQword_c<SnippetsQword_StarBoth_c
 {
 	inline bool Match ( const Token_t & tToken, BYTE * sToken )
 	{
-		return FindString ( sToken, (BYTE *)m_sDictWord.cstr(), tToken.m_iLengthBytes ) != NULL;
+		return FindString ( sToken, (BYTE *)m_sDictWord.cstr(), tToken.m_iLengthBytes )!=NULL;
 	}
 };
 
@@ -403,11 +401,11 @@ void ExcerptGen_c::AddJunk ( int iStart, int iLength, int iBoundary )
 	int iSaved = 0;
 
 	for ( int i = iStart; i < iStart+iLength; i++ )
-		if ( sphIsSpace ( m_sBuffer.cstr () [i] ) != sphIsSpace ( m_sBuffer.cstr () [iChunkStart] ) )
+		if ( sphIsSpace ( m_sBuffer.cstr () [i] )!=sphIsSpace ( m_sBuffer.cstr () [iChunkStart] ) )
 		{
 			Token_t & tLast = m_dTokens.Add();
-			tLast.m_eType   = TOK_SPACE;
-			tLast.m_iStart	= iChunkStart;
+			tLast.m_eType = TOK_SPACE;
+			tLast.m_iStart = iChunkStart;
 			tLast.m_iLengthBytes = i - iChunkStart;
 			tLast.m_iWordID = 0;
 			tLast.m_uWords = 0;
@@ -416,7 +414,7 @@ void ExcerptGen_c::AddJunk ( int iStart, int iLength, int iBoundary )
 			iChunkStart = i;
 			iSaved += tLast.m_iLengthBytes;
 
-			if ( iBoundary != -1 && iSaved > iBoundary - iStart )
+			if ( iBoundary!=-1 && iSaved > ( iBoundary-iStart ) )
 			{
 				AddBoundary();
 				iBoundary = -1;
@@ -424,14 +422,15 @@ void ExcerptGen_c::AddJunk ( int iStart, int iLength, int iBoundary )
 		}
 
 	Token_t & tLast = m_dTokens.Add();
-	tLast.m_eType   = TOK_SPACE;
-	tLast.m_iStart	= iChunkStart;
+	tLast.m_eType = TOK_SPACE;
+	tLast.m_iStart = iChunkStart;
 	tLast.m_iLengthBytes = iStart + iLength - iChunkStart;
 	tLast.m_iWordID = 0;
 	tLast.m_uWords = 0;
 	tLast.m_uPosition = 0;
 
-	if ( iBoundary != -1 ) AddBoundary();
+	if ( iBoundary!=-1 )
+		AddBoundary();
 }
 
 
@@ -448,7 +447,7 @@ void ExcerptGen_c::TokenizeQuery ( const ExcerptQuery_t & tQuery, CSphDict * pDi
 	int iKwIndex = 0;
 
 	pTokenizer->SetBuffer ( (BYTE *)tQuery.m_sWords.cstr(), iWordsLength );
-	while ( ( sWord = pTokenizer->GetToken() ) != NULL )
+	while ( ( sWord = pTokenizer->GetToken() )!=NULL )
 	{
 		SphWordID_t iWord = pDict->GetWordID ( sWord );
 		if ( iWord )
@@ -464,9 +463,9 @@ void ExcerptGen_c::TokenizeQuery ( const ExcerptQuery_t & tQuery, CSphDict * pDi
 			kwLast.m_iLength = tLast.m_iLengthCP;
 
 			// find stars
-			bool bStarBack = *pTokenizer->GetTokenEnd() == '*';
-			bool bStarFront = ( pTokenizer->GetTokenStart() != pTokenizer->GetBufferPtr() ) &&
-				pTokenizer->GetTokenStart()[-1] == '*';
+			bool bStarBack = ( *pTokenizer->GetTokenEnd()=='*' );
+			bool bStarFront = ( pTokenizer->GetTokenStart()!=pTokenizer->GetBufferPtr() ) &&
+				( pTokenizer->GetTokenStart()[-1]=='*' );
 			kwLast.m_uStar = ( bStarFront ? STAR_FRONT : 0 ) | ( bStarBack ? STAR_BACK : 0 );
 
 			// store token
@@ -476,7 +475,7 @@ void ExcerptGen_c::TokenizeQuery ( const ExcerptQuery_t & tQuery, CSphDict * pDi
 			strcpy ( &m_dKeywordsBuffer [ iKwIndex ], (const char *)sWord );
 			iKwIndex = iEndIndex;
 
-			if ( m_dWords.GetLength() == MAX_HIGHLIGHT_WORDS )
+			if ( m_dWords.GetLength()==MAX_HIGHLIGHT_WORDS )
 				break;
 		}
 	}
@@ -494,14 +493,14 @@ void ExcerptGen_c::TokenizeDocument ( const ExcerptQuery_t & tQuery, CSphDict * 
 
 	BYTE * sWord;
 	DWORD uPosition = 0; // hit position in document
-	while ( ( sWord = pTokenizer->GetToken() ) != NULL )
+	while ( ( sWord = pTokenizer->GetToken() )!=NULL )
 	{
 		const char * pTokenStart = pTokenizer->GetTokenStart ();
 
-		if ( pTokenStart != pStartPtr )
+		if ( pTokenStart!=pStartPtr )
 			AddJunk ( pLastTokenEnd - pStartPtr,
-					  pTokenStart - pLastTokenEnd,
-					  pTokenizer->GetBoundary() ? pTokenizer->GetBoundaryOffset() : -1 );
+				pTokenStart - pLastTokenEnd,
+				pTokenizer->GetBoundary() ? pTokenizer->GetBoundaryOffset() : -1 );
 
 		SphWordID_t iWord = pDict->GetWordID ( sWord );
 
@@ -511,9 +510,9 @@ void ExcerptGen_c::TokenizeDocument ( const ExcerptQuery_t & tQuery, CSphDict * 
 			uPosition += 100; // FIXME: this should be taken from index settings
 
 		Token_t & tLast = m_dTokens.Add();
-		tLast.m_eType	= iWord ? TOK_WORD : TOK_SPACE;
-		tLast.m_uPosition = iWord ? ++uPosition : 0 ;
-		tLast.m_iStart  = pTokenStart - pStartPtr;
+		tLast.m_eType = iWord ? TOK_WORD : TOK_SPACE;
+		tLast.m_uPosition = iWord ? ++uPosition : 0;
+		tLast.m_iStart = pTokenStart - pStartPtr;
 		tLast.m_iLengthBytes = pLastTokenEnd - pTokenStart;
 		tLast.m_iWordID = iWord;
 		tLast.m_uWords = 0;
@@ -534,22 +533,22 @@ void ExcerptGen_c::TokenizeDocument ( const ExcerptQuery_t & tQuery, CSphDict * 
 				switch ( m_dKeywords[nWord].m_uStar )
 				{
 				case STAR_NONE:
-					bMatch = iWord == tToken.m_iWordID;
+					bMatch = ( iWord==tToken.m_iWordID );
 					break;
 
 				case STAR_FRONT:
 					iOffset = tLast.m_iLengthBytes - tToken.m_iLengthBytes;
-					bMatch = (iOffset >= 0) &&
-						( memcmp( sKeyword, sWord + iOffset, tToken.m_iLengthBytes ) == 0 );
+					bMatch = ( iOffset>=0 ) &&
+						( memcmp ( sKeyword, sWord + iOffset, tToken.m_iLengthBytes )==0 );
 					break;
 
 				case STAR_BACK:
-					bMatch = ( tLast.m_iLengthBytes >= tToken.m_iLengthBytes ) &&
-						( memcmp( sKeyword, sWord, tToken.m_iLengthBytes ) == 0 );
+					bMatch = ( tLast.m_iLengthBytes>=tToken.m_iLengthBytes ) &&
+						( memcmp ( sKeyword, sWord, tToken.m_iLengthBytes )==0 );
 					break;
 
 				case STAR_BOTH:
-					bMatch = strstr( (const char *)sWord, sKeyword ) != NULL;
+					bMatch = strstr ( (const char *)sWord, sKeyword )!=NULL;
 					break;
 				}
 
@@ -563,15 +562,15 @@ void ExcerptGen_c::TokenizeDocument ( const ExcerptQuery_t & tQuery, CSphDict * 
 	}
 
 	// last space if any
-	if ( pLastTokenEnd != pTokenizer->GetBufferEnd () )
+	if ( pLastTokenEnd!=pTokenizer->GetBufferEnd() )
 	{
 		int iOffset = pTokenizer->GetBoundary() ? pTokenizer->GetBoundaryOffset() : -1;
 		AddJunk ( pLastTokenEnd - pStartPtr, pTokenizer->GetBufferEnd () - pLastTokenEnd, iOffset );
 	}
 
 	Token_t & tLast = m_dTokens.Add();
-	tLast.m_eType   = TOK_NONE;
-	tLast.m_iStart  = 0;
+	tLast.m_eType = TOK_NONE;
+	tLast.m_iStart = 0;
 	tLast.m_iLengthBytes = 0;
 	tLast.m_iWordID = 0;
 	tLast.m_uWords = 0;
@@ -596,7 +595,7 @@ void ExcerptGen_c::MarkHits ()
 		while ( k < iMarked && m_dTokens[i].m_uPosition > dMarked[k].m_uPosition )
 			k++;
 
-		if ( k == iMarked ) // no more marked hits, clear tail
+		if ( k==iMarked ) // no more marked hits, clear tail
 		{
 			for ( ; i < iTokens; i++ )
 				m_dTokens[i].m_uWords = 0;
@@ -608,8 +607,8 @@ void ExcerptGen_c::MarkHits ()
 			m_dTokens[i++].m_uWords = 0;
 
 		// skip tokens covered by hit's span
-		assert ( dMarked[k].m_uPosition == m_dTokens[i].m_uPosition );
-		assert ( dMarked[k].m_uSpan >= 1 );
+		assert ( dMarked[k].m_uPosition==m_dTokens[i].m_uPosition );
+		assert ( dMarked[k].m_uSpan>=1 );
 		while ( dMarked[k].m_uSpan-- )
 		{
 			i++;
@@ -628,21 +627,19 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & tQuery, CSphDict *, I
 	int iSourceCodes = 0;
 	ARRAY_FOREACH ( i, m_dTokens )
 	{
-		m_dTokens [i].m_iWeight = 0;
+		m_dTokens[i].m_iWeight = 0;
 
-		if ( m_dTokens [i].m_iLengthBytes )
+		if ( m_dTokens[i].m_iLengthBytes )
 		{
 			if ( bUtf8 )
 			{
 				int iLen = sphUTF8Len ( m_sBuffer.SubString ( m_dTokens[i].m_iStart, m_dTokens[i].m_iLengthBytes ).cstr() );
 				m_dTokens[i].m_iLengthCP = iLen;
-			}
-			else
+			} else
 				m_dTokens[i].m_iLengthCP = m_dTokens[i].m_iLengthBytes;
 			iSourceCodes += m_dTokens[i].m_iLengthCP;
-		}
-		else
-			m_dTokens [i].m_iLengthCP = 0;
+		} else
+			m_dTokens[i].m_iLengthCP = 0;
 	}
 
 	m_bExactPhrase = tQuery.m_bExactPhrase && ( m_dWords.GetLength()>1 );
@@ -693,7 +690,7 @@ void ExcerptGen_c::HighlightPhrase ( const ExcerptQuery_t & q, int iTok, int iEn
 		while ( iWord<m_dWords.GetLength() )
 		{
 			if ( ( iTok > iEnd ) ||
-				 !( m_dTokens[iTok].m_eType==TOK_SPACE || m_dTokens[iTok].m_uWords == ( 1UL<<iWord++ ) ) )
+				 !( m_dTokens[iTok].m_eType==TOK_SPACE || m_dTokens[iTok].m_uWords==( 1UL<<iWord++ ) ) )
 			{
 				bMatch = false;
 				break;
@@ -819,7 +816,7 @@ void ExcerptGen_c::CalcPassageWeight ( const CSphVector<int> & dPassage, Passage
 	tPass.m_iWordCount = 0;
 
 	DWORD uWords = tPass.m_uWords;
-	for ( int iWord=0; uWords; uWords>>=1, iWord++ )
+	for ( int iWord=0; uWords; uWords >>= 1, iWord++ )
 		if ( uWords & 1 )
 	{
 		tPass.m_iWordsWeight += m_dWords[iWord].m_iWeight;
@@ -853,21 +850,21 @@ bool ExcerptGen_c::ExtractPassages ( const ExcerptQuery_t & q )
 		const Token_t & tToken = m_dTokens[i];
 
 		// skip starting whitespace
-		if ( tPass.m_iTokens == 0 && tToken.m_eType != TOK_WORD )
+		if ( tPass.m_iTokens==0 && tToken.m_eType!=TOK_WORD )
 		{
 			tPass.m_iStart++;
 			continue;
 		}
 
 		// stop when the window is large enough
-		if ( tPass.m_iCodes + tToken.m_iLengthCP > q.m_iLimit || dPass.GetLength() == iMaxWords )
+		if ( tPass.m_iCodes + tToken.m_iLengthCP > q.m_iLimit || dPass.GetLength()==iMaxWords )
 			break;
 
 		// got token, update passage
 		tPass.m_iTokens++;
 		tPass.m_iCodes += tToken.m_iLengthCP;
 
-		if ( tToken.m_eType == TOK_WORD )
+		if ( tToken.m_eType==TOK_WORD )
 		{
 			dPass.Add(i);
 			tPass.m_uWords |= tToken.m_uWords;
@@ -880,7 +877,7 @@ bool ExcerptGen_c::ExtractPassages ( const ExcerptQuery_t & q )
 	{
 		// re-weight current passage, and check if it matches
 		CalcPassageWeight ( dPass, tPass, iMaxWords, 0 );
-		if ( tPass.m_uWords && tPass.m_iMaxLCS >= iLCSThresh )
+		if ( tPass.m_uWords && tPass.m_iMaxLCS>=iLCSThresh )
 		{
 			// if it's the very first one, do add
 			if ( !m_dPassages.GetLength() )
@@ -892,31 +889,33 @@ bool ExcerptGen_c::ExtractPassages ( const ExcerptQuery_t & q )
 				if ( tLast.m_uWords!=tPass.m_uWords || tLast.m_iStart + tLast.m_iTokens - 1 < tPass.m_iStart )
 					m_dPassages.Add ( tPass ); // new
 				else if ( tLast.GetWeight() < tPass.GetWeight() )
-					tLast = tPass;  // better
+					tLast = tPass; // better
 			}
 		}
 
 		int iToken = tPass.m_iStart + tPass.m_iTokens;
-		assert ( iToken <= iCount );
-		if ( iToken == iCount ) break;
+		assert ( iToken<=iCount );
+		if ( iToken==iCount )
+			break;
 
 		// add another word
 		for ( ; iToken < iCount; iToken++ )
 		{
 			tPass.m_iTokens++;
 			tPass.m_iCodes += m_dTokens[iToken].m_iLengthCP;
-			if ( m_dTokens[iToken].m_eType == TOK_WORD )
+			if ( m_dTokens[iToken].m_eType==TOK_WORD )
 			{
 				dPass.Add ( iToken );
 				break;
 			}
 		}
-		if ( iToken == iCount ) continue;
+		if ( iToken==iCount )
+			continue;
 
 		// drop front tokens until the window fits into both word and CP limits
-		while ( ( tPass.m_iCodes > q.m_iLimit || dPass.GetLength() > iMaxWords ) && tPass.m_iTokens != 1 )
+		while ( ( tPass.m_iCodes > q.m_iLimit || dPass.GetLength() > iMaxWords ) && tPass.m_iTokens!=1 )
 		{
-			if ( m_dTokens[tPass.m_iStart].m_eType == TOK_WORD )
+			if ( m_dTokens[tPass.m_iStart].m_eType==TOK_WORD )
 				dPass.Remove ( 0 );
 
 			tPass.m_iCodes -= m_dTokens[tPass.m_iStart].m_iLengthCP;
@@ -962,9 +961,8 @@ bool ExcerptGen_c::ExtractPhrases ( const ExcerptQuery_t & )
 				}
 
 				CalcPassageWeight ( dPass, tPass, iMaxWords, 10000 );
-				if ( tPass.m_iMaxLCS >= iLCSThresh )
+				if ( tPass.m_iMaxLCS>=iLCSThresh )
 					m_dPassages.Add ( tPass );
-
 			}
 
 			if ( m_dTokens[iTok].m_eType==TOK_NONE )
@@ -1027,7 +1025,7 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 		if ( uWords==m_uFoundWords && iTotalCodes + tBest.m_iCodes > tQuery.m_iLimit )
 		{
 			// there might be just enough space to partially display this passage
-			if ( iTotalCodes + iKeywordsLength <= tQuery.m_iLimit )
+			if ( ( iTotalCodes + iKeywordsLength )<=tQuery.m_iLimit )
 				dShow.Add ( tBest );
 			break;
 		}
@@ -1053,7 +1051,7 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 			if ( !m_dPassages[i].m_iCodes )
 				continue;
 			DWORD uMask = tBest.m_uWords;
-			for ( int iWord=0; uMask; iWord++, uMask>>=1 )
+			for ( int iWord=0; uMask; iWord++, uMask >>= 1 )
 				if ( ( uMask & 1 ) && ( m_dPassages[i].m_uWords & ( 1UL<<iWord ) ) )
 					m_dPassages[i].m_iWordsWeight -= m_dWords[iWord].m_iWeight;
 			m_dPassages[i].m_uWords &= ~uWords;
@@ -1139,8 +1137,8 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 					tPassage.m_iTokens--;
 					tPassage.m_iCodes -= m_dTokens[iFirst].m_iLengthCP;
 					iTotalCodes -= m_dTokens[iFirst].m_iLengthCP;
-				}
-				else if ( iLast!=tPassage.m_iEndLimit )
+
+				} else if ( iLast!=tPassage.m_iEndLimit )
 				{
 					// drop last
 					if ( ( tQuery.m_bForceAllWords && m_dTokens[tPassage.m_iStart+tPassage.m_iTokens-1].m_uWords==0 )
@@ -1199,8 +1197,7 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 						ResultEmit ( tQuery.m_sBeforeMatch.cstr() );
 						ResultEmit ( m_dTokens[iTok] );
 						ResultEmit ( tQuery.m_sAfterMatch.cstr() );
-					}
-					else
+					} else
 						ResultEmit ( m_dTokens[iTok] );
 				}
 				iTok++;
@@ -1224,7 +1221,7 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 
 	if ( !tOptions.m_bHighlightQuery )
 	{
-		 // legacy highlighting
+		// legacy highlighting
 		ExcerptGen_c tGenerator;
 		tGenerator.TokenizeQuery ( tOptions, pDict, pTokenizer );
 		tGenerator.TokenizeDocument ( tOptions, pDict, pTokenizer, true );

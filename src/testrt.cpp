@@ -121,11 +121,11 @@ void DoIndexing ( CSphSource * pSrc, ISphRtIndex * pIndex )
 		COMMIT_STEP,
 		(int)pSrc->GetStats().m_iTotalDocuments,
 		(int)pSrc->GetStats().m_iTotalBytes,
-		int((tmEnd-tmStart)/1000000), int(((tmEnd-tmStart)%1000000)/1000),
+		(int)((tmEnd-tmStart)/1000000), (int)(((tmEnd-tmStart)%1000000)/1000),
 		fTotalMB*1000000.0f/(tmEnd-tmStart) );
 	printf ( "commit-docs %d, avg %d.%03d msec, max %d.%03d msec\n", COMMIT_STEP,
-		int(tmAvgCommit/1000), int(tmAvgCommit%1000),
-		int(tmMaxCommit/1000), int(tmMaxCommit%1000) );
+		(int)(tmAvgCommit/1000), (int)(tmAvgCommit%1000),
+		(int)(tmMaxCommit/1000), (int)(tmMaxCommit%1000) );
 	g_fTotalMB += fTotalMB;
 }
 
@@ -230,20 +230,20 @@ int main ()
 #endif
 
 	int64_t tmEnd = sphMicroTimer();
-	printf ( "shutdown done in %d.%03d sec\n", int((tmEnd-tmShutdown)/1000000), int(((tmEnd-tmShutdown)%1000000)/1000) );
+	printf ( "shutdown done in %d.%03d sec\n", (int)((tmEnd-tmShutdown)/1000000), (int)(((tmEnd-tmShutdown)%1000000)/1000) );
 	printf ( "total with shutdown %d.%03d sec, %.2f MB/sec\n",
-		int((tmEnd-tmStart)/1000000), int(((tmEnd-tmStart)%1000000)/1000),
+		(int)((tmEnd-tmStart)/1000000), (int)(((tmEnd-tmStart)%1000000)/1000),
 		g_fTotalMB*1000000.0f/(tmEnd-tmStart) );
 
 #if SPH_DEBUG_LEAKS || SPH_ALLOCS_PROFILER
 	sphAllocsStats();
 #endif
 #if USE_WINDOWS
-    PROCESS_MEMORY_COUNTERS pmc;
+	PROCESS_MEMORY_COUNTERS pmc;
 	HANDLE hProcess = OpenProcess ( PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, GetCurrentProcessId() );
 	if ( hProcess && GetProcessMemoryInfo ( hProcess, &pmc, sizeof(pmc)) )
 	{
-		printf ( "--- peak-wss=%d, peak-pagefile=%d\n", (int)pmc.PeakWorkingSetSize, (int)pmc.PeakPagefileUsage  );
+		printf ( "--- peak-wss=%d, peak-pagefile=%d\n", (int)pmc.PeakWorkingSetSize, (int)pmc.PeakPagefileUsage );
 	}
 #endif
 

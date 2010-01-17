@@ -30,7 +30,7 @@ void sphAssert ( const char * sExpr, const char * sFile, int iLine )
 	_snprintf ( sBuffer, sizeof(sBuffer), "%s(%d): assertion %s failed\n", sFile, iLine, sExpr );
 
 	if ( MessageBox ( NULL, sBuffer, "Assert failed! Cancel to debug.",
-		MB_OKCANCEL | MB_TOPMOST | MB_SYSTEMMODAL | MB_ICONEXCLAMATION ) != IDOK )
+		MB_OKCANCEL | MB_TOPMOST | MB_SYSTEMMODAL | MB_ICONEXCLAMATION )!=IDOK )
 	{
 		__debugbreak ();
 	} else
@@ -155,7 +155,7 @@ void sphDebugDelete ( void * pPtr, bool bArray )
 	}
 
 	BYTE * pBlock = (BYTE*) pHeader;
-	if ( *(DWORD*)( pBlock+pHeader->m_iSize+sizeof(CSphMemHeader) ) != MEMORY_MAGIC_END )
+	if ( *(DWORD*)( pBlock+pHeader->m_iSize+sizeof(CSphMemHeader) )!=MEMORY_MAGIC_END )
 		sphDie ( "out-of-bounds write beyond block %d allocated at %s(%d)",
 			pHeader->m_iAllocId, pHeader->m_sFile, pHeader->m_iLine );
 
@@ -251,7 +251,7 @@ void sphAllocsCheck ()
 			sphDie ( "corrupted header in block %d allocated at %s(%d)",
 				pHeader->m_iAllocId, pHeader->m_sFile, pHeader->m_iLine );
 
-		if ( *(DWORD*)( pBlock+pHeader->m_iSize+sizeof(CSphMemHeader) ) != MEMORY_MAGIC_END )
+		if ( *(DWORD*)( pBlock+pHeader->m_iSize+sizeof(CSphMemHeader) )!=MEMORY_MAGIC_END )
 			sphDie ( "out-of-bounds write beyond block %d allocated at %s(%d)",
 				pHeader->m_iAllocId, pHeader->m_sFile, pHeader->m_iLine );
 	}
@@ -441,7 +441,7 @@ static DWORD g_dRngState[5] = { 0x95d3474bUL, 0x035cf1f7UL, 0xfd43995fUL, 0x5dfc
 /// seed
 void sphSrand ( DWORD uSeed )
 {
-	for ( int i=0; i<5; i++)
+	for ( int i=0; i<5; i++ )
 	{
 		uSeed = uSeed*29943829 - 1;
 		g_dRngState[i] = uSeed;
@@ -472,7 +472,7 @@ void sphAutoSrand ()
 
 	uint64_t ts = ( uint64_t(ft.dwHighDateTime)<<32 ) + uint64_t(ft.dwLowDateTime) - 116444736000000000ULL; // Jan 1, 1970 magic
 	ts /= 10; // to microseconds
-	tv.tv_sec  = (DWORD)(ts/1000000);
+	tv.tv_sec = (DWORD)(ts/1000000);
 	tv.tv_usec = (DWORD)(ts%1000000);
 #endif
 
@@ -550,7 +550,7 @@ void CSphProcessSharedMutex::Unlock ()
 
 struct ThreadCall_t
 {
-	void			(*m_pCall)(void*);
+	void			( *m_pCall )(void*);
 	void *			m_pArg;
 	ThreadCall_t *	m_pNext;
 };
@@ -600,7 +600,7 @@ void * sphThreadInit()
 		if ( pthread_attr_init ( &tAttr ) )
 			sphDie ( "FATAL: pthread_attr_init() failed" );
 
-		if ( pthread_attr_setstacksize ( &tAttr, PTHREAD_STACK_MIN + THREAD_STACK_SIZE  ) )
+		if ( pthread_attr_setstacksize ( &tAttr, PTHREAD_STACK_MIN + THREAD_STACK_SIZE ) )
 			sphDie ( "FATAL: pthread_attr_setstacksize() failed" );
 #endif
 		bInit = true;
@@ -629,7 +629,7 @@ bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pA
 		return true;
 #else
 	void * pAttr = sphThreadInit();
-	errno = pthread_create ( pThread, ( pthread_attr_t * ) pAttr, sphThreadProcWrapper, pCall );
+	errno = pthread_create ( pThread, (pthread_attr_t*) pAttr, sphThreadProcWrapper, pCall );
 	if ( !errno )
 		return true;
 #endif
@@ -820,7 +820,7 @@ bool CSphRwlock::Done ()
 bool CSphRwlock::ReadLock ()
 {
 	DWORD uWait = WaitForSingleObject ( m_hWriteMutex, INFINITE );
-	if ( uWait==WAIT_FAILED || uWait==WAIT_TIMEOUT)
+	if ( uWait==WAIT_FAILED || uWait==WAIT_TIMEOUT )
 		return false;
 
 	// got the writer mutex, can't be locked for write

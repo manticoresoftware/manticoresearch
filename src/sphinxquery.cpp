@@ -152,7 +152,7 @@ bool XQNode_t::IsEqualTo ( const XQNode_t * pNode )
 	}
 
 	// two non-plain nodes. let's compare the children
-	if ( pNode->m_dChildren.GetLength() != m_dChildren.GetLength() )
+	if ( pNode->m_dChildren.GetLength()!=m_dChildren.GetLength() )
 		return false;
 
 	if ( !m_dChildren.GetLength() )
@@ -228,7 +228,7 @@ bool XQParser_t::Error ( const char * sTemplate, ... )
 
 	const char * sPrefix = "query error: ";
 	int iPrefix = strlen(sPrefix);
-	strcpy ( sBuf, sPrefix );
+	memcpy ( sBuf, sPrefix, iPrefix );
 
 	va_list ap;
 	va_start ( ap, sTemplate );
@@ -247,7 +247,7 @@ void XQParser_t::Warning ( const char * sTemplate, ... )
 
 	const char * sPrefix = "query warning: ";
 	int iPrefix = strlen(sPrefix);
-	strcpy ( sBuf, sPrefix );
+	memcpy ( sBuf, sPrefix, iPrefix );
 
 	va_list ap;
 	va_start ( ap, sTemplate );
@@ -278,10 +278,9 @@ bool XQParser_t::AddField ( DWORD & uFields, const char * szField, int iLen )
 			return Error ( "no field '%s' found in schema", sField.cstr () );
 		else
 			Warning ( "no field '%s' found in schema", sField.cstr () );
-	}
-	else
+	} else
 	{
-		if ( iField >= 32 )
+		if ( iField>=32 )
 			return Error ( " max 32 fields allowed" );
 
 		uFields |= 1 << iField;
@@ -373,7 +372,7 @@ bool XQParser_t::ParseFields ( DWORD & uFields, int & iMaxFieldPos )
 			{
 				return Error ( "separator without preceding field name in field block operator", *pPtr );
 
-			} if ( *pPtr==',' )
+			} else if ( *pPtr==',' )
 			{
 				if ( !AddField ( uFields, pFieldStart, pPtr-pFieldStart ) )
 					return false;
@@ -403,7 +402,7 @@ bool XQParser_t::ParseFields ( DWORD & uFields, int & iMaxFieldPos )
 	}
 
 	// handle optional position range modifier
-	if ( pPtr[0]=='[' && isdigit(pPtr[1]) )
+	if ( pPtr[0]=='[' && isdigit ( pPtr[1] ) )
 	{
 		// skip '[' and digits
 		const char * p = pPtr+1;
@@ -433,7 +432,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		assert ( m_iPendingNulls==0 );
 
 		if ( m_bWasBlended )
- 			m_iAtomPos += m_pTokenizer->SkipBlended();
+			m_iAtomPos += m_pTokenizer->SkipBlended();
 
 		// tricky stuff
 		// we need to manually check for numbers in certain states (currently, just after proximity or quorum operator)
@@ -443,12 +442,12 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		const char * sEnd = m_pTokenizer->GetBufferEnd ();
 
 		const char * p = m_pLastTokenStart;
-		while ( p<sEnd && isspace(*(BYTE*)p) ) p++; // to avoid CRT assertions on Windows
+		while ( p<sEnd && isspace ( *(BYTE*)p ) ) p++; // to avoid CRT assertions on Windows
 
 		const char * sToken = p;
-		while ( p<sEnd && isdigit(*(BYTE*)p) ) p++;
+		while ( p<sEnd && isdigit ( *(BYTE*)p ) ) p++;
 
-		if ( p>sToken && ( *p=='\0' || isspace(*(BYTE*)p) || IsSpecial(*p) ) )
+		if ( p>sToken && ( *p=='\0' || isspace ( *(BYTE*)p ) || IsSpecial(*p) ) )
 		{
 			// got a number followed by a whitespace or special, handle it
 			char sNumberBuf[16];
@@ -468,7 +467,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			if ( sToken )
 			{
 				m_dIntTokens.Add ( sToken );
-				if ( m_pDict->GetWordID((BYTE*)sToken) )
+				if ( m_pDict->GetWordID ( (BYTE*)sToken ) )
 					m_tPendingToken.tInt.iStrIndex = m_dIntTokens.GetLength()-1;
 				else
 					m_dIntTokens.Pop();
@@ -520,8 +519,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 					// got stray '<', ignore
 					continue;
 				}
-			}
-			else
+			} else
 			{
 				// all the other specials are passed to parser verbatim
 				if ( sToken[0]=='"' )
@@ -545,9 +543,9 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 
 		// information about stars is lost after this point, so was have to save it now
 		DWORD uStarPosition = STAR_NONE;
-		uStarPosition |= *m_pTokenizer->GetTokenEnd() == '*' ? STAR_BACK : 0;
-		uStarPosition |= ( m_pTokenizer->GetTokenStart() != m_pTokenizer->GetBufferPtr() ) &&
-			m_pTokenizer->GetTokenStart()[-1] == '*' ? STAR_FRONT : 0;
+		uStarPosition |= *m_pTokenizer->GetTokenEnd()=='*' ? STAR_BACK : 0;
+		uStarPosition |= ( m_pTokenizer->GetTokenStart()!=m_pTokenizer->GetBufferPtr() ) &&
+			m_pTokenizer->GetTokenStart()[-1]=='*' ? STAR_FRONT : 0;
 
 		m_tPendingToken.pNode = AddKeyword ( sToken, uStarPosition );
 		m_iPendingType = TOK_KEYWORD;
@@ -792,16 +790,16 @@ static void DeleteNodesWOFields ( XQNode_t * pNode )
 
 	for ( int i = 0; i < pNode->m_dChildren.GetLength (); )
 	{
-		if ( pNode->m_dChildren [i]->m_uFieldMask==0 )
+		if ( pNode->m_dChildren[i]->m_uFieldMask==0 )
 		{
 			// this should be a leaf node
-			assert ( pNode->m_dChildren [i]->m_dChildren.GetLength () == 0 );
-			SafeDelete ( pNode->m_dChildren [i] );
+			assert ( pNode->m_dChildren[i]->m_dChildren.GetLength()==0 );
+			SafeDelete ( pNode->m_dChildren[i] );
 			pNode->m_dChildren.RemoveFast ( i );
-		}
-		else
+
+		} else
 		{
-			DeleteNodesWOFields ( pNode->m_dChildren [i] );
+			DeleteNodesWOFields ( pNode->m_dChildren[i] );
 			i++;
 		}
 	}
@@ -819,7 +817,7 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const ISphTok
 	const int OPTION_RELAXED_LEN = strlen ( OPTION_RELAXED );
 
 	m_bStopOnInvalid = true;
-	if ( strncmp ( sQuery, OPTION_RELAXED, OPTION_RELAXED_LEN )==0 && !sphIsAlpha ( sQuery[OPTION_RELAXED_LEN]) )
+	if ( strncmp ( sQuery, OPTION_RELAXED, OPTION_RELAXED_LEN )==0 && !sphIsAlpha ( sQuery[OPTION_RELAXED_LEN] ) )
 	{
 		sQuery += OPTION_RELAXED_LEN;
 		m_bStopOnInvalid = false;
@@ -880,7 +878,7 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const ISphTok
 static void xqIndent ( int iIndent )
 {
 	iIndent *= 2;
-	while ( iIndent--)
+	while ( iIndent-- )
 		printf ( " " );
 }
 
@@ -1267,18 +1265,19 @@ private:
 							{
 								pNode = new XQNode_t;
 								pNode->SetOp ( m_eOp, pTree->m_dChildren[i] );
-								hBranches.Add (pNode, j);
+								hBranches.Add ( pNode, j );
 							} else
 							{
 								pNode = hBranches[j];
 								pNode->m_dChildren.Add ( pTree->m_dChildren[i] );
+
 								// Count essential subtrees (with at least 2 children)
-								if ( pNode->m_dChildren.GetLength() == 2 )
+								if ( pNode->m_dChildren.GetLength()==2 )
 									iOptimizations++;
 							}
 							break;
-						};
-				// another nodes add to the set of "other" children
+						}
+					// another nodes add to the set of "other" children
 				} else
 				{
 					if ( !pOtherChildren )
@@ -1316,7 +1315,7 @@ private:
 				hBranches.IterateStart();
 				while ( hBranches.IterateNext() )
 				{
-					if ( hBranches.IterateGet()->m_dChildren.GetLength() == 1 )
+					if ( hBranches.IterateGet()->m_dChildren.GetLength()==1 )
 					{
 						pTree->m_dChildren.Add ( hBranches.IterateGet()->m_dChildren[0] );
 						hBranches.IterateGet()->m_dChildren.Reset();

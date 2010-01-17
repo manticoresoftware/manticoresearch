@@ -134,7 +134,7 @@ void TestTokenizer ( bool bUTF8 )
 			"2", "U.S. U.S.A. U.S.A.F.",					"US", "USA", "USAF", NULL,
 			"2", "U.S.AB U.S.A. U.S.B.U.S.D.U.S.U.S.A.F.",	"US", "ab", "USA", "USB", "USD", "US", "USAF", NULL,
 			"3", "phon\\e",						"phone", NULL,
-			"3", "\\thephone",					"thephone",  NULL,
+			"3", "\\thephone",					"thephone", NULL,
 			"3", "the\\!phone",					"the", "phone", NULL,
 			"3", "\\!phone",					"phone", NULL,
 			"3", "\\\\phone",					"phone", NULL,						// the correct behavior if '\' is not in charset
@@ -143,10 +143,10 @@ void TestTokenizer ( bool bUTF8 )
 			NULL
 		};
 
-		for ( int iCur=0; dTests[iCur] && atoi(dTests[iCur++])<=iRun; )
+		for ( int iCur=0; dTests[iCur] && atoi ( dTests[iCur++] )<=iRun; )
 		{
 			printf ( "%s, run=%d, line=%s\n", sPrefix, iRun, dTests[iCur] );
-			pTokenizer->SetBuffer ( (BYTE*)dTests[iCur], strlen(dTests[iCur]) );
+			pTokenizer->SetBuffer ( (BYTE*)dTests[iCur], strlen ( dTests[iCur] ) );
 			iCur++;
 
 			for ( BYTE * pToken=pTokenizer->GetToken(); pToken; pToken=pTokenizer->GetToken() )
@@ -167,10 +167,10 @@ void TestTokenizer ( bool bUTF8 )
 			NULL
 		};
 
-		for ( int iCur=0; dTests2[iCur] && atoi(dTests2[iCur++])==int(bUTF8); )
+		for ( int iCur=0; dTests2[iCur] && atoi ( dTests2[iCur++] )==int(bUTF8); )
 		{
 			printf ( "%s, run=%d, line=%s\n", sPrefix, iRun, dTests2[iCur] );
-			pTokenizer->SetBuffer ( (BYTE*)dTests2[iCur], strlen(dTests2[iCur]) );
+			pTokenizer->SetBuffer ( (BYTE*)dTests2[iCur], strlen ( dTests2[iCur] ) );
 			iCur++;
 
 			for ( BYTE * pToken=pTokenizer->GetToken(); pToken; pToken=pTokenizer->GetToken() )
@@ -281,7 +281,7 @@ void TestTokenizer ( bool bUTF8 )
 		printf ( "%s for boundaries handling, run=%d\n", sPrefix, iRun );
 
 		CSphString sError;
-		assert  ( pTokenizer->SetBoundary ( "?", sError ) );
+		assert ( pTokenizer->SetBoundary ( "?", sError ) );
 
 		char sLine5[] = "hello world? testing boundaries?";
 		pTokenizer->SetBuffer ( (BYTE*)sLine5, strlen(sLine5) );
@@ -348,7 +348,7 @@ void BenchTokenizer ( bool bUTF8 )
 		iTokens /= iPasses;
 		tmTime /= iPasses;
 
-		printf ( "run %d: %d bytes, %d tokens, %d.%03d ms, %.3f MB/sec\n", iRun, iData, iTokens, int(tmTime/1000), int(tmTime%1000), float(iData)/tmTime );
+		printf ( "run %d: %d bytes, %d tokens, %d.%03d ms, %.3f MB/sec\n", iRun, iData, iTokens, (int)(tmTime/1000), (int)(tmTime%1000), float(iData)/tmTime );
 		SafeDeleteArray ( sData );
 	}
 }
@@ -434,7 +434,7 @@ void BenchStripper ()
 		tmTime += sphMicroTimer();
 
 		tmTime /= iPasses;
-		printf ( "run %d: %d bytes, %d.%03d ms, %.3f MB/sec\n", iRun, iLen, int(tmTime/1000), int(tmTime%1000), float(iLen)/tmTime );
+		printf ( "run %d: %d bytes, %d.%03d ms, %.3f MB/sec\n", iRun, iLen, (int)(tmTime/1000), (int)(tmTime%1000), float(iLen)/tmTime );
 	}
 
 	SafeDeleteArray ( sBuf );
@@ -563,7 +563,7 @@ void BenchExpr ()
 	struct ExprBench_t
 	{
 		const char *	m_sExpr;
-		float			(*m_pFunc)( const CSphMatch & );
+		float			( *m_pFunc )( const CSphMatch & );
 	};
 	ExprBench_t dBench[] =
 	{
@@ -805,7 +805,7 @@ void BenchLocators ()
 		dStatic[i] = dDynamic[i] = i;
 
 	srand ( 0 );
-	for ( int i=0; i<NUM_MATCHES; i++)
+	for ( int i=0; i<NUM_MATCHES; i++ )
 	{
 		tLoc[i].m_iBitCount = 32;
 		tLoc[i].m_iBitOffset = 32*( rand() % MAX_ITEMS );
@@ -827,7 +827,7 @@ void BenchLocators ()
 	}
 
 	// manually cleanup to avoid automatic delete
-	for ( int i=0; i<NUM_MATCHES; i++)
+	for ( int i=0; i<NUM_MATCHES; i++ )
 		tMatch[i].m_pDynamic = NULL;
 }
 
@@ -978,7 +978,7 @@ void BenchThreads ()
 
 		printf ( "run %d: %d %s threads in %d.%d msec; %d.%d thd/sec\n",
 			iRun, TOTAL_THREADS, sDesc,
-			int(tmThd/1000), int((tmThd%1000)/100),
+			(int)(tmThd/1000), (int)((tmThd%1000)/100),
 			iThdSec10/10, iThdSec10%10 );
 	}
 
@@ -1011,7 +1011,7 @@ void SortDataIdentical ( DWORD * pData, int iCount )
 void SortDataMed3Killer ( DWORD * pData, int iCount )
 {
 	for ( int i=0; i<iCount/2; i++ )
-		pData[i] = 1+i+(i&1)*(iCount/2-1);
+		pData[i] = 1 + i + ( i & 1 )*(iCount/2-1);
 	for ( int i=iCount/2; i<iCount; i++ )
 		pData[i] = 2*(i-iCount/2+1);
 }
@@ -1079,7 +1079,7 @@ void SortDataRevSaw ( DWORD * pData, int iCount )
 void SortDataReverse ( DWORD * pData, int iCount )
 {
 	for ( int i=0; i<iCount; i++ )
-		pData[i] = iCount-i;	
+		pData[i] = iCount-i;
 }
 
 void SortDataStart1000 ( DWORD * pData, int iCount )
@@ -1181,9 +1181,9 @@ struct SortPayload_t
 inline bool operator < ( const CSphWordHit & a, const CSphWordHit & b )
 {
 	return
-		(a.m_iWordID < b.m_iWordID || \
-		(a.m_iWordID == b.m_iWordID && a.m_iDocID < b.m_iDocID) || \
-		(a.m_iWordID == b.m_iWordID && a.m_iDocID == b.m_iDocID && a.m_iWordPos < b.m_iWordPos));
+		( a.m_iWordID<b.m_iWordID || \
+		( a.m_iWordID==b.m_iWordID && a.m_iDocID<b.m_iDocID ) || \
+		( a.m_iWordID==b.m_iWordID && a.m_iDocID==b.m_iDocID && a.m_iWordPos<b.m_iWordPos ) );
 }
 
 template < typename T >
@@ -1232,8 +1232,8 @@ void BenchSort ()
 			tmSort += BenchSort ( pValues, iLen, iRun==0 );
 		}
 
-		printf ( "%-12s 100x%-8d %d.%03d msec\n", g_dSortDataGens[iGen].m_sName, iLen, int(tmSort/1000), int(tmSort%1000) );
-		fprintf ( fpRes, "%s;100x%d;%d,%03d\n", g_dSortDataGens[iGen].m_sName, iLen, int(tmSort/1000), int(tmSort%1000) );
+		printf ( "%-12s 100x%-8d %d.%03d msec\n", g_dSortDataGens[iGen].m_sName, iLen, (int)(tmSort/1000), (int)(tmSort%1000) );
+		fprintf ( fpRes, "%s;100x%d;%d,%03d\n", g_dSortDataGens[iGen].m_sName, iLen, (int)(tmSort/1000), (int)(tmSort%1000) );
 
 		CSphString sFile;
 		sFile.SetSprintf ( "benchsort/%s.%d.txt", g_dSortDataGens[iGen].m_sName, iLen );
@@ -1269,8 +1269,8 @@ void BenchSort ()
 
 	int64_t tmSort = BenchSort ( pHits, HITS, true );
 
-	printf ( "%-12s 100x%-8d %d.%03d msec\n", "hits", HITS, int(tmSort/1000), int(tmSort%1000) );
-	fprintf ( fpRes, "%s;100x%d;%d,%03d\n", "hits", HITS, int(tmSort/1000), int(tmSort%1000) );
+	printf ( "%-12s 100x%-8d %d.%03d msec\n", "hits", HITS, (int)(tmSort/1000), (int)(tmSort%1000) );
+	fprintf ( fpRes, "%s;100x%d;%d,%03d\n", "hits", HITS, (int)(tmSort/1000), (int)(tmSort%1000) );
 
 	SafeDeleteArray ( pHits );
 

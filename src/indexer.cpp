@@ -272,7 +272,7 @@ void ShowProgress ( const CSphIndexProgress * pProgress, bool bPhaseEnd )
 		return;
 
 	fprintf ( stdout, "%s%c", pProgress->BuildMessage(), bPhaseEnd ? '\n' : '\r' );
- 	fflush ( stdout );
+	fflush ( stdout );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -373,7 +373,7 @@ bool ParseMultiAttr ( const char * sBuf, CSphColumnInfo & tAttr, const char * sS
 		_arg = ( hSource[_key].intval()!=0 );
 
 // get array of strings
-#define LOC_GETAS(_arg,_key) \
+#define LOC_GETA(_arg,_key) \
 	for ( CSphVariant * pVal = hSource(_key); pVal; pVal = pVal->m_pNext ) \
 		_arg.Add ( pVal->cstr() );
 
@@ -383,7 +383,7 @@ void SqlAttrsConfigure ( CSphSourceParams_SQL & tParams, const CSphVariant * pHe
 	for ( const CSphVariant * pCur = pHead; pCur; pCur= pCur->m_pNext )
 	{
 		CSphColumnInfo tCol ( pCur->cstr(), uAttrType );
-		char * pColon = strchr ( const_cast<char*>(tCol.m_sName.cstr()), ':' );
+		char * pColon = strchr ( const_cast<char*> ( tCol.m_sName.cstr() ), ':' );
 		if ( pColon )
 		{
 			*pColon = '\0';
@@ -418,7 +418,7 @@ bool ConfigureUnpack ( CSphVariant * pHead, ESphUnpackFormat eFormat, CSphSource
 	for ( CSphVariant * pVal = pHead; pVal; pVal = pVal->m_pNext )
 	{
 		CSphUnpackInfo & tUnpack = tParams.m_dUnpack.Add();
-		tUnpack.m_sName = CSphString( pVal->cstr() );
+		tUnpack.m_sName = CSphString ( pVal->cstr() );
 		tUnpack.m_eFormat = eFormat;
 	}
 	return true;
@@ -481,24 +481,24 @@ bool ParseJoinedField ( const char * sBuf, CSphJoinedField * pField, const char 
 		sBuf++;
 
 	// parse 'query'
-	if ( strncasecmp ( sBuf, "payload-query", 13 ) == 0 )
+	if ( strncasecmp ( sBuf, "payload-query", 13 )==0 )
 	{
 		pField->m_bPayload = true;
 		sBuf += 13;
-	}
-	else if ( strncasecmp ( sBuf, "query", 5 ) == 0 )
+
+	} else if ( strncasecmp ( sBuf, "query", 5 )==0 )
 	{
 		pField->m_bPayload = false;
 		sBuf += 5;
-	}
-	else
+
+	} else
 		LOC_ERR ( "'query'" );
 
 	// parse ';'
 	while ( isspace(*sBuf) && *sBuf!=';' )
 		sBuf++;
 
-	if ( *sBuf!=';')
+	if ( *sBuf!=';' )
 		LOC_ERR ( "';'" );
 	sBuf++;
 
@@ -526,13 +526,13 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 	LOC_GETS ( tParams.m_sUser,				"sql_user" );
 	LOC_GETS ( tParams.m_sPass,				"sql_pass" );
 	LOC_GETS ( tParams.m_sDB,				"sql_db" );
-	LOC_GETI ( tParams.m_iPort,				"sql_port");
+	LOC_GETI ( tParams.m_iPort,				"sql_port" );
 
 	LOC_GETS ( tParams.m_sQuery,			"sql_query" );
-	LOC_GETAS( tParams.m_dQueryPre,			"sql_query_pre" );
-	LOC_GETAS( tParams.m_dQueryPost,		"sql_query_post" );
+	LOC_GETA ( tParams.m_dQueryPre,			"sql_query_pre" );
+	LOC_GETA ( tParams.m_dQueryPost,		"sql_query_post" );
 	LOC_GETS ( tParams.m_sQueryRange,		"sql_query_range" );
-	LOC_GETAS( tParams.m_dQueryPostIndex,	"sql_query_post_index" );
+	LOC_GETA ( tParams.m_dQueryPostIndex,	"sql_query_post_index" );
 	LOC_GETI ( tParams.m_iRangeStep,		"sql_range_step" );
 	LOC_GETS ( tParams.m_sQueryKilllist,	"sql_query_killlist" );
 
@@ -581,7 +581,7 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 		for ( int j = i + 1; j < tParams.m_dAttrs.GetLength(); j++ )
 		{
 			const CSphString & sName = tParams.m_dAttrs[i].m_sName;
-			if ( sName == tParams.m_dAttrs[j].m_sName )
+			if ( sName==tParams.m_dAttrs[j].m_sName )
 			{
 				fprintf ( stdout, "ERROR: duplicate attribute name: %s\n", sName.cstr() );
 				return false;
@@ -716,8 +716,7 @@ CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char 
 #else
 		fprintf ( stdout, "WARNING: source '%s': xmlpipe2 support NOT compiled in. To use xmlpipe2, install missing XML libraries, reconfigure, and rebuild Sphinx\n", sSourceName );
 #endif
-	}
-	else
+	} else
 	{
 		CSphSource_XMLPipe * pXmlPipe = new CSphSource_XMLPipe ( dBuffer, iBufSize, sSourceName );
 		if ( !pXmlPipe->Setup ( pPipe, sCommand.cstr () ) )
@@ -739,20 +738,20 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 	}
 
 	#if USE_PGSQL
-	if ( hSource["type"]=="pgsql")
+	if ( hSource["type"]=="pgsql" )
 		return SpawnSourcePgSQL ( hSource, sSourceName );
 	#endif
 
 	#if USE_MYSQL
-	if ( hSource["type"]=="mysql")
+	if ( hSource["type"]=="mysql" )
 		return SpawnSourceMySQL ( hSource, sSourceName );
 	#endif
 
 	#if USE_ODBC
-	if ( hSource["type"]=="odbc")
+	if ( hSource["type"]=="odbc" )
 		return SpawnSourceODBC ( hSource, sSourceName );
 
-	if ( hSource["type"]=="mssql")
+	if ( hSource["type"]=="mssql" )
 		return SpawnSourceMSSQL ( hSource, sSourceName );
 	#endif
 
@@ -767,8 +766,7 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 #undef LOC_CHECK
 #undef LOC_GETS
 #undef LOC_GETI
-#undef LOC_GETAS
-#undef LOC_GETAA
+#undef LOC_GETA
 
 //////////////////////////////////////////////////////////////////////////
 // INDEXING
@@ -815,7 +813,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 	}
 
 	if ( ( hIndex.GetInt ( "min_prefix_len", 0 ) > 0 || hIndex.GetInt ( "min_infix_len", 0 ) > 0 )
-		&& hIndex.GetInt ( "enable_star" ) == 0 )
+		&& hIndex.GetInt ( "enable_star" )==0 )
 	{
 		const char * szMorph = hIndex.GetStr ( "morphology", "" );
 		if ( szMorph && *szMorph && strcmp ( szMorph, "none" ) )
@@ -871,14 +869,14 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 	if ( hIndex.Exists ( "infix_fields" ) )
 		sInfixFields = hIndex ["infix_fields"].cstr ();
 
-	if ( iPrefix == 0 && !sPrefixFields.IsEmpty () )
+	if ( iPrefix==0 && !sPrefixFields.IsEmpty () )
 		fprintf ( stdout, "WARNING: min_prefix_len = 0. prefix_fields are ignored\n" );
 
-	if ( iInfix == 0 && !sInfixFields.IsEmpty () )
+	if ( iInfix==0 && !sInfixFields.IsEmpty () )
 		fprintf ( stdout, "WARNING: min_infix_len = 0. infix_fields are ignored\n" );
 
 	// boundary
-	bool bInplaceEnable	= hIndex.GetInt ( "inplace_enable", 0 ) != 0;
+	bool bInplaceEnable	= hIndex.GetInt ( "inplace_enable", 0 )!=0;
 	int iHitGap			= hIndex.GetSize ( "inplace_hit_gap", 0 );
 	int iDocinfoGap		= hIndex.GetSize ( "inplace_docinfo_gap", 0 );
 	float fRelocFactor	= hIndex.GetFloat ( "inplace_reloc_factor", 0.1f );
@@ -1030,8 +1028,8 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		tDict.Save ( g_sBuildStops, g_iTopStops, g_bBuildFreqs );
 
 		SafeDelete ( pTokenizer );
-	}
-	else
+
+	} else
 	{
 		//////////
 		// index!
@@ -1114,9 +1112,9 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		fprintf ( stdout, "total %d docs, "INT64_FMT" bytes\n", (int)iTotalDocs, iTotalBytes );
 
 		fprintf ( stdout, "total %d.%03d sec, %d bytes/sec, %d.%02d docs/sec\n",
-			int(tmTime/1000000), int(tmTime%1000000)/1000, // sec
-			int(iTotalBytes*1000000/tmTime), // bytes/sec
-			int(iTotalDocs*1000000/tmTime), int(iTotalDocs*1000000*100/tmTime)%100 ); // docs/sec
+			(int)(tmTime/1000000), (int)(tmTime%1000000)/1000, // sec
+			(int)(iTotalBytes*1000000/tmTime), // bytes/sec
+			(int)(iTotalDocs*1000000/tmTime), (int)(iTotalDocs*1000000*100/tmTime)%100 ); // docs/sec
 	}
 
 	// cleanup and go on
@@ -1164,8 +1162,8 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 		return false;
 	}
 
-	pSrc->SetWordlistPreload ( hSrc.GetInt ( "ondisk_dict" ) == 0 );
-	pDst->SetWordlistPreload ( hDst.GetInt ( "ondisk_dict" ) == 0 );
+	pSrc->SetWordlistPreload ( hSrc.GetInt ( "ondisk_dict" )==0 );
+	pDst->SetWordlistPreload ( hDst.GetInt ( "ondisk_dict" )==0 );
 
 	if ( !pSrc->Lock() && !bRotate )
 	{
@@ -1188,7 +1186,7 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 		fprintf ( stdout, "WARNING: index '%s': %s\n", sDst, pDst->GetLastWarning().cstr() );
 	tmMergeTime = sphMicroTimer() - tmMergeTime;
 	if ( !g_bQuiet )
-		printf ( "merged in %d.%03d sec\n", int(tmMergeTime/1000000), int(tmMergeTime%1000000)/1000 );
+		printf ( "merged in %d.%03d sec\n", (int)(tmMergeTime/1000000), (int)(tmMergeTime%1000000)/1000 );
 
 	// pick up merge result
 	const char * sPath = hDst["path"].cstr();
@@ -1209,7 +1207,7 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 
 		sTo [ sizeof(sTo)-1 ] = '\0';
 
-		if ( !stat( sTo, &tFileInfo ) )
+		if ( !stat ( sTo, &tFileInfo ) )
 		{
 			if ( remove ( sTo ) )
 			{
@@ -1250,15 +1248,15 @@ void ReportIOStats ( const char * sType, int iReads, int64_t iReadTime, int64_t 
 	{
 		fprintf ( stdout, "total %d %s, %d.%03d sec, 0.0 kb/call avg, 0.0 msec/call avg\n",
 			iReads, sType,
-			int(iReadTime/1000000), int(iReadTime%1000000)/1000 );
+			(int)(iReadTime/1000000), (int)(iReadTime%1000000)/1000 );
 	} else
 	{
 		iReadBytes /= iReads;
 		fprintf ( stdout, "total %d %s, %d.%03d sec, %d.%d kb/call avg, %d.%d msec/call avg\n",
 			iReads, sType,
-			int(iReadTime/1000000), int(iReadTime%1000000)/1000,
-			int(iReadBytes/1024), int(iReadBytes%1024)*10/1024,
-			int(iReadTime/iReads/1000), int(iReadTime/iReads/100)%10 );
+			(int)(iReadTime/1000000), (int)(iReadTime%1000000)/1000,
+			(int)(iReadBytes/1024), (int)(iReadBytes%1024)*10/1024,
+			(int)(iReadTime/iReads/1000), (int)(iReadTime/iReads/100)%10 );
 	}
 }
 
@@ -1281,15 +1279,15 @@ int main ( int argc, char ** argv )
 			sOptConfig = argv[++i];
 			if ( !sphIsReadable ( sOptConfig ) )
 				sphDie ( "config file '%s' does not exist or is not readable", sOptConfig );
-		}
-		else if ( strcasecmp ( argv[i], "--merge" )==0 && (i+2)<argc )
+
+		} else if ( strcasecmp ( argv[i], "--merge" )==0 && (i+2)<argc )
 		{
 			bMerge = true;
 			dIndexes.Add ( argv[i+1] );
 			dIndexes.Add ( argv[i+2] );
 			i += 2;
-		}
-		else if ( bMerge && strcasecmp ( argv[i], "--merge-dst-range" )==0 && (i+3)<argc )
+
+		} else if ( bMerge && strcasecmp ( argv[i], "--merge-dst-range" )==0 && (i+3)<argc )
 		{
 			dMergeDstFilters.Add();
 			dMergeDstFilters.Last().m_eType = SPH_FILTER_RANGE;
@@ -1297,8 +1295,8 @@ int main ( int argc, char ** argv )
 			dMergeDstFilters.Last().m_uMinValue = (SphAttr_t) strtoull ( argv[i+2], NULL, 10 );
 			dMergeDstFilters.Last().m_uMaxValue = (SphAttr_t) strtoull ( argv[i+3], NULL, 10 );
 			i += 3;
-		}
-		else if ( strcasecmp ( argv[i], "--buildstops" )==0 && (i+2)<argc )
+
+		} else if ( strcasecmp ( argv[i], "--buildstops" )==0 && (i+2)<argc )
 		{
 			g_sBuildStops = argv[i+1];
 			g_iTopStops = atoi ( argv[i+2] );
@@ -1331,7 +1329,7 @@ int main ( int argc, char ** argv )
 		{
 			bMergeKillLists = true;
 
-		} else if ( sphIsAlpha(argv[i][0]) )
+		} else if ( sphIsAlpha ( argv[i][0] ) )
 		{
 			dIndexes.Add ( argv[i] );
 
@@ -1502,18 +1500,18 @@ int main ( int argc, char ** argv )
 			fclose ( fp );
 
 #if USE_WINDOWS
-			char szPipeName [64];
-			sprintf ( szPipeName, "\\\\.\\pipe\\searchd_%d", iPID );
+			char szPipeName[64];
+			snprintf ( szPipeName, sizeof(szPipeName), "\\\\.\\pipe\\searchd_%d", iPID );
 
 			HANDLE hPipe = INVALID_HANDLE_VALUE;
 
-			while ( hPipe == INVALID_HANDLE_VALUE )
+			while ( hPipe==INVALID_HANDLE_VALUE )
 			{
 				hPipe = CreateFile ( szPipeName, GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL );
 
-				if ( hPipe == INVALID_HANDLE_VALUE )
+				if ( hPipe==INVALID_HANDLE_VALUE )
 				{
-					if ( GetLastError () != ERROR_PIPE_BUSY )
+					if ( GetLastError()!=ERROR_PIPE_BUSY )
 					{
 						fprintf ( stdout, "WARNING: could not open pipe (GetLastError()=%d)\n", GetLastError () );
 						break;
@@ -1527,7 +1525,7 @@ int main ( int argc, char ** argv )
 				}
 			}
 
-			if ( hPipe != INVALID_HANDLE_VALUE )
+			if ( hPipe!=INVALID_HANDLE_VALUE )
 			{
 				DWORD uWritten = 0;
 				BYTE uWrite = 0;

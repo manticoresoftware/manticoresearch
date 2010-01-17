@@ -72,11 +72,12 @@ int CSphConfigSection::GetSize ( const char * sKey, int iDefault ) const
 
 	iLen--;
 	int iScale = 1;
-	if ( toupper(sMemLimit[iLen])=='K' )
+	if ( toupper ( sMemLimit[iLen] )=='K' )
 	{
 		iScale = 1024;
 		sMemLimit[iLen] = '\0';
-	} else if ( toupper(sMemLimit[iLen])=='M' )
+
+	} else if ( toupper ( sMemLimit[iLen] )=='M' )
 	{
 		iScale = 1048576;
 		sMemLimit[iLen] = '\0';
@@ -148,12 +149,12 @@ static KeyDesc_t g_dKeysSource[] =
 	{ "xmlpipe_field",			KEY_LIST, NULL },
 	{ "xmlpipe_attr_uint",		KEY_LIST, NULL },
 	{ "xmlpipe_attr_timestamp",	KEY_LIST, NULL },
-	{ "xmlpipe_attr_str2ordinal",KEY_LIST, NULL },
+	{ "xmlpipe_attr_str2ordinal",	KEY_LIST, NULL },
 	{ "xmlpipe_attr_bool",		KEY_LIST, NULL },
 	{ "xmlpipe_attr_float",		KEY_LIST, NULL },
 	{ "xmlpipe_attr_multi",		KEY_LIST, NULL },
 	{ "xmlpipe_fixup_utf8",		0, NULL },
-	{ "sql_group_column",		KEY_LIST | KEY_DEPRECATED, "sql_attr_uint"  },
+	{ "sql_group_column",		KEY_LIST | KEY_DEPRECATED, "sql_attr_uint" },
 	{ "sql_date_column",		KEY_LIST | KEY_DEPRECATED, "sql_attr_timestamp" },
 	{ "sql_str2ordinal_column",	KEY_LIST | KEY_DEPRECATED, "sql_attr_str2ordinal" },
 	{ "unpack_zlib",			KEY_LIST, NULL },
@@ -164,7 +165,7 @@ static KeyDesc_t g_dKeysSource[] =
 	{ "sql_attr_string",		KEY_LIST, NULL },
 	{ "sql_attr_str2wordcount",	KEY_LIST, NULL },
 	{ "sql_field_string",		KEY_LIST, NULL },
-	{ "sql_field_str2wordcount",KEY_LIST, NULL },
+	{ "sql_field_str2wordcount",	KEY_LIST, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -373,7 +374,7 @@ bool CSphConfigParser::ValidateKey ( const char * sKey )
 		pDesc++;
 	if ( !pDesc->m_sKey )
 	{
-		snprintf  ( m_sError, sizeof(m_sError), "unknown key name '%s'", sKey );
+		snprintf ( m_sError, sizeof(m_sError), "unknown key name '%s'", sKey );
 		return false;
 	}
 
@@ -408,12 +409,12 @@ bool CSphConfigParser::TryToExec ( char * pBuffer, char * pEnd, const char * szF
 
 	pBuffer = trim ( pBuffer );
 
-	int iRead  = dPipe [0];
-	int iWrite = dPipe [1];
+	int iRead = dPipe[0];
+	int iWrite = dPipe[1];
 
 	int iChild = fork();
 
-	if ( iChild == 0 )
+	if ( iChild==0 )
 	{
 		close ( iRead );
 		close ( STDOUT_FILENO );
@@ -439,9 +440,9 @@ bool CSphConfigParser::TryToExec ( char * pBuffer, char * pEnd, const char * szF
 			execl ( pBuffer, pBuffer, szFilename, (char*)NULL );
 
 		exit ( 1 );
-	}
-	else
-		if ( iChild == -1 )
+
+	} else
+		if ( iChild==-1 )
 		{
 			snprintf ( m_sError, sizeof ( m_sError ), "fork failed: [%d] %s", errno, strerror(errno) );
 			return false;
@@ -460,7 +461,7 @@ bool CSphConfigParser::TryToExec ( char * pBuffer, char * pEnd, const char * szF
 		for ( ;; )
 		{
 			iBytesRead = read ( iRead, (void*)&(dResult [iTotalRead]), BUFFER_SIZE );
-			if ( iBytesRead == -1 && errno == EINTR ) // we can get SIGCHLD just before eof
+			if ( iBytesRead==-1 && errno==EINTR ) // we can get SIGCHLD just before eof
 				continue;
 			break;
 		}
@@ -473,13 +474,13 @@ bool CSphConfigParser::TryToExec ( char * pBuffer, char * pEnd, const char * szF
 	{
 		// can be interrupted by pretty much anything (e.g. SIGCHLD from other searchd children)
 		iResult = waitpid ( iChild, &iStatus, 0 );
-		if ( iResult == -1 && errno != EINTR )
+		if ( iResult==-1 && errno!=EINTR )
 		{
 			snprintf ( m_sError, sizeof ( m_sError ), "waitpid() failed: [%d] %s", errno, strerror(errno) );
 			return false;
 		}
 	}
-	while ( iResult != iChild );
+	while ( iResult!=iChild );
 
 	if ( WIFEXITED ( iStatus ) && WEXITSTATUS ( iStatus ) )
 	{
@@ -494,7 +495,7 @@ bool CSphConfigParser::TryToExec ( char * pBuffer, char * pEnd, const char * szF
 		return false;
 	}
 
-	if ( iBytesRead < 0  )
+	if ( iBytesRead < 0 )
 	{
 		snprintf ( m_sError, sizeof ( m_sError ), "pipe read error: [%d] %s", errno, strerror(errno) );
 		return false;
@@ -512,7 +513,7 @@ char * CSphConfigParser::GetBufferString ( char * szDest, int iMax, const char *
 {
 	int nCopied = 0;
 
-	while ( nCopied < iMax-1 && szSource [nCopied] && ( nCopied == 0 || szSource [nCopied-1] != '\n' ) )
+	while ( nCopied < iMax-1 && szSource[nCopied] && ( nCopied==0 || szSource[nCopied-1]!='\n' ) )
 	{
 		szDest [nCopied] = szSource [nCopied];
 		nCopied++;
@@ -609,7 +610,7 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 				{
 					CSphVector<char> dResult;
 					if ( TryToExec ( p+2, pEnd, sFileName, dResult ) )
-						Parse ( sFileName, &dResult [0] );
+						Parse ( sFileName, &dResult[0] );
 					break;
 				} else
 #endif
@@ -669,7 +670,6 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 			if ( *p=='}' )					{ LOC_POP (); continue; }
 			if ( sphIsAlpha(*p) )			{ LOC_PUSH ( S_KEY ); LOC_PUSH ( S_TOK ); LOC_BACK(); iValue = 0; sValue[0] = '\0'; continue; }
 											LOC_ERROR2 ( "section contents: expected token, got '%c'", *p );
-
 		}
 
 		// handle S_KEY state
@@ -707,8 +707,9 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 		// handle S_SECNAME state
 		if ( eState==S_SECNAME )
 		{
-			if ( isspace(*p) )				{ continue; }
-			if ( !sToken[0]&&!sphIsAlpha(*p)){ LOC_ERROR2 ( "named section: expected name, got '%c'", *p ); }
+			if ( isspace(*p) )					{ continue; }
+			if ( !sToken[0]&&!sphIsAlpha(*p))	{ LOC_ERROR2 ( "named section: expected name, got '%c'", *p ); }
+
 			if ( !sToken[0] )				{ LOC_PUSH ( S_TOK ); LOC_BACK(); continue; }
 											if ( !AddSection ( m_sSectionType.cstr(), sToken ) ) break; sToken[0] = '\0';
 			if ( *p==':' )					{ eState = S_SECBASE; continue; }
@@ -719,9 +720,9 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 		// handle S_SECBASE state
 		if ( eState==S_SECBASE )
 		{
-			if ( isspace(*p) )				{ continue; }
-			if ( !sToken[0]&&!sphIsAlpha(*p)){ LOC_ERROR2 ( "named section: expected parent name, got '%c'", *p ); }
-			if ( !sToken[0] )				{ LOC_PUSH ( S_TOK ); LOC_BACK(); continue; }
+			if ( isspace(*p) )					{ continue; }
+			if ( !sToken[0]&&!sphIsAlpha(*p))	{ LOC_ERROR2 ( "named section: expected parent name, got '%c'", *p ); }
+			if ( !sToken[0] )					{ LOC_PUSH ( S_TOK ); LOC_BACK(); continue; }
 
 			// copy the section
 			assert ( m_tConf.Exists ( m_sSectionType ) );
@@ -790,12 +791,12 @@ bool sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSettings 
 	if ( !hIndex("charset_type") || hIndex["charset_type"]=="sbcs" )
 	{
 		tSettings.m_iType = TOKENIZER_SBCS;
-	}
-	else if ( hIndex["charset_type"]=="utf-8" )
+
+	} else if ( hIndex["charset_type"]=="utf-8" )
 	{
 		tSettings.m_iType = hIndex("ngram_chars") ? TOKENIZER_NGRAM : TOKENIZER_UTF8;
-	}
-	else
+
+	} else
 	{
 		sError.SetSprintf ( "unknown charset type '%s'", hIndex["charset_type"].cstr() );
 		return false;
@@ -831,7 +832,7 @@ void sphConfDictionary ( const CSphConfigSection & hIndex, CSphDictSettings & tS
 void sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSettings )
 {
 	tSettings.m_iMinPrefixLen = Max ( hIndex.GetInt ( "min_prefix_len" ), 0 );
-	tSettings.m_iMinInfixLen  = Max ( hIndex.GetInt ( "min_infix_len" ), 0 );
+	tSettings.m_iMinInfixLen = Max ( hIndex.GetInt ( "min_infix_len" ), 0 );
 	tSettings.m_iBoundaryStep = Max ( hIndex.GetInt ( "phrase_boundary_step" ), -1 );
 	tSettings.m_bIndexExactWords = hIndex.GetInt ( "index_exact_words" )!=0;
 	tSettings.m_iOvershortStep = Min ( Max ( hIndex.GetInt ( "overshort_step", 1 ), 0 ), 1 );
@@ -845,7 +846,7 @@ void sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 	}
 
 	tSettings.m_eDocinfo = SPH_DOCINFO_EXTERN;
-	if ( hIndex ("docinfo") )
+	if ( hIndex("docinfo") )
 	{
 		if ( hIndex["docinfo"]=="none" )		tSettings.m_eDocinfo = SPH_DOCINFO_NONE;
 		else if ( hIndex["docinfo"]=="inline" )	tSettings.m_eDocinfo = SPH_DOCINFO_INLINE;
@@ -872,8 +873,7 @@ void sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 			if ( sValue=="all" )
 			{
 				tSettings.m_eHitless = SPH_HITLESS_ALL;
-			}
-			else
+			} else
 			{
 				tSettings.m_eHitless = SPH_HITLESS_SOME;
 				tSettings.m_sHitlessFile = sValue;
@@ -917,7 +917,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 		ISphTokenizer * pTokenizer = pIndex->LeakTokenizer ();
 		ISphTokenizer * pTokenFilter = ISphTokenizer::CreateTokenFilter ( pTokenizer, pIndex->GetDictionary ()->GetMultiWordforms () );
 		pIndex->SetTokenizer ( pTokenFilter ? pTokenFilter : pTokenizer );
- 	}
+	}
 
 	if ( !pIndex->IsStripperInited () )
 	{
@@ -945,12 +945,12 @@ const char * sphLoadConfig ( const char * sOptConfig, bool bQuiet, CSphConfigPar
 	{
 #ifdef SYSCONFDIR
 		sOptConfig = SYSCONFDIR "/sphinx.conf";
-		if ( sphIsReadable(sOptConfig) )
+		if ( sphIsReadable ( sOptConfig ) )
 			break;
 #endif
 
 		sOptConfig = "./sphinx.conf";
-		if ( sphIsReadable(sOptConfig) )
+		if ( sphIsReadable ( sOptConfig ) )
 			break;
 
 		sOptConfig = NULL;
@@ -999,7 +999,7 @@ void sphSetupSignals ()
 	sigfillset ( &tAction.sa_mask );
 	tAction.sa_flags = SA_NOCLDSTOP;
 	tAction.sa_handler = DummyHandler;
-	if ( sigaction ( SIGCHLD, &tAction, NULL ) == -1 )
+	if ( sigaction ( SIGCHLD, &tAction, NULL )==-1 )
 		sphDie ( "sigaction() failed: [%d] %s", errno, strerror(errno) );
 }
 

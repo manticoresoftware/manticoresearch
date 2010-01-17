@@ -30,7 +30,7 @@ const char * myctime ( DWORD uStamp )
 {
 	static char sBuf[256];
 	time_t tStamp = uStamp; // for 64-bit
-	strncpy ( sBuf, ctime(&tStamp), sizeof(sBuf) );
+	strncpy ( sBuf, ctime ( &tStamp ), sizeof(sBuf) );
 
 	char * p = sBuf;
 	while ( (*p) && (*p)!='\n' && (*p)!='\r' ) p++;
@@ -131,9 +131,7 @@ int main ( int argc, char ** argv )
 				tQuery.m_dFilters[0].m_dValues.Add ( uVal );
 				tQuery.m_dFilters[0].m_sAttrName = argv[i+1];
 				i += 2;
-			}
-
-			else break; // unknown option
+			} else						break; // unknown option
 
 		} else if ( strlen(sQuery) + strlen(argv[i]) + 1 < sizeof(sQuery) )
 		{
@@ -389,7 +387,7 @@ int main ( int argc, char ** argv )
 						default:					fprintf ( stdout, "(unknown-type-%d)", tAttr.m_eAttrType );
 					}
 				}
-				fprintf ( stdout,"\n" );
+				fprintf ( stdout, "\n" );
 
 				#if USE_MYSQL
 				if ( sQueryInfo )

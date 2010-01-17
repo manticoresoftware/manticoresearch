@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Test>
+  <Name>extended sort with more than 1 sorter</Name>
+
+<Config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+<Searchd_Settings/>
+}
+
+source srctest
+{
+	type			= mysql
+<Sql_Settings/>
+	sql_query_pre = SET time_zone='+0:00'
+	sql_query = SELECT id, UNIX_TIMESTAMP(date_added) as date_added, text FROM test_table
+	sql_attr_timestamp	= date_added
+}
+
+index test
+{
+	source			= srctest
+	path			= <Data_Path/>/test
+    docinfo			= extern
+}
+</Config>
+
+<DB_Create>
+CREATE TABLE `test_table` (
+  	id int(11) NOT NULL default '0',
+	date_added date not null,
+	text varchar(255) not null default 'text'
+)
+</DB_Create>
+
+<DB_Drop>
+DROP TABLE IF EXISTS `test_table`
+</DB_Drop>
+
+<DB_Insert>
+INSERT INTO `test_table` VALUES
+( 1, '2008-10-01', 'one' ),
+( 2, '2008-10-02', 'one two' ),
+( 3, '2008-10-03', 'one two three' ),
+( 4, '2008-10-01', 'one' ),
+( 5, '2008-10-02', 'one two' ),
+( 6, '2008-10-03', 'one two three' ),
+( 7, '2008-10-07', 'one' ),
+( 8, '2008-10-08', 'one two' ),
+( 9, '2008-10-09', 'one two three' );
+</DB_Insert>
+
+<queries>
+	<query mode="extended2" sortmode="extended" sortby="date_added DESC">one|two|three</query>
+	<query mode="extended2" sortmode="extended" sortby="@weight DESC, date_added DESC">one|two|three</query>
+	<query mode="extended2" sortmode="extended" sortby="@weight DESC, date_added DESC, @id DESC">one|two|three</query>
+</queries>
+
+</Test>

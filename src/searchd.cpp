@@ -730,7 +730,7 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	if ( !g_bLogTty )
 		snprintf ( sBuf, sizeof(sBuf)-1, "[%s] [%5d] %s", sTimeBuf, (int)getpid(), sBanner );
 	else
-		strncpy ( sBuf, sizeof(sBuf), sBanner );
+		strncpy ( sBuf, sBanner, sizeof(sBuf) );
 	int iLen = strlen(sBuf);
 
 	// format the message
@@ -3379,7 +3379,7 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 	switch ( pQuery->m_eMode )
 	{
 	case SPH_MATCH_ALL:		pQuery->m_eRanker = SPH_RANK_PROXIMITY; *szRes='\0'; break;
-	case SPH_MATCH_ANY:		pQuery->m_eRanker = SPH_RANK_MATCHANY; strncpy ( szRes, 8, "\"/1" ); break;
+	case SPH_MATCH_ANY:		pQuery->m_eRanker = SPH_RANK_MATCHANY; strncpy ( szRes, "\"/1", 8 ); break;
 	case SPH_MATCH_PHRASE:	pQuery->m_eRanker = SPH_RANK_PROXIMITY; *szRes++ = '\"'; *szRes='\0'; break;
 	default:				return;
 	}

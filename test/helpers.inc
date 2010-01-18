@@ -269,7 +269,7 @@ class SphinxConfig
 	private $_prereqs;
 	private $_config;				///< config DOM node
 	private $_use_sphinxql;			///< true, if sphinxql queries exist
-	private $_indexdata;                    ///< data for use "insert into" instead of run indexer
+	private $_indexdata;			///< data for use "insert into" instead of run indexer
 	private $_connection;			///< mysql connection (since we cound use mysql ans sqphinxql together)
 	private $_testdir;				///< the path to the directory with current test (namely for accessing data without knowing the test name)
 
@@ -305,7 +305,7 @@ class SphinxConfig
 		$this->_compat098		= false;
 		$this->_skip_indexer	= false;
 		$this->_use_sphinxql	= false;
-		$this->_indexdata       = array ();
+		$this->_indexdata		= array ();
 		$this->_connection		= false;
 		$this->_testdir			= "";
 	}
@@ -338,7 +338,7 @@ class SphinxConfig
 	function GetQuery ( $i )		{ return $this->_queries[$i]; }
 	function IsSkipIndexer ()		{ return $this->_skip_indexer; }
 
-	function SetTestDir ( $dir )    { $this->_testdir = $dir; }
+	function SetTestDir ( $dir )	{ $this->_testdir = $dir; }
 
 	function GetLocal ( $key )
 	{
@@ -444,7 +444,7 @@ class SphinxConfig
 		if ( $node->nodeType != XML_TEXT_NODE && $node->nodeType != XML_DOCUMENT_NODE
 			&& strtolower ( $node->nodeName ) == "dynamic" )
 		{
-			$node->id =  count ( $this->_dynamic_entries );
+			$node->id = count ( $this->_dynamic_entries );
 			array_push ( $this->_dynamic_entries, $node );
 			array_push ( $this->_counters, 0 );
 		}
@@ -475,7 +475,7 @@ class SphinxConfig
 			return false;
 
 		$result = array();
-		preg_match_all ( '/([^\s]+):(\d+)/', $weights, $matches, PREG_SET_ORDER  );
+		preg_match_all ( '/([^\s]+):(\d+)/', $weights, $matches, PREG_SET_ORDER );
 		foreach ( $matches as $match )
 			$result [ $match[1] ] = (int)$match[2];
 
@@ -859,12 +859,7 @@ class SphinxConfig
 					{
 						$bOk = TRUE;
 						if ( $compact )
-						{
-							$results = array ( $n,
-											   $results['total'],
-											   $results['total_found'],
-											   $results['time'] );
-						}
+							$results = array ( $n, $results['total'], $results['total_found'], $results['time'] );
 						else
 							$results ["query"] = $query;
 
@@ -1261,7 +1256,7 @@ class SphinxConfig
 						if ( $row )
 							foreach ( $row as $col_name => $col_content )
 								if ( array_search ( $col_name, $result["fields"] )!==false )
-							   		$str .= " $col_name=\"$col_content\"";
+									$str .= " $col_name=\"$col_content\"";
 					}
 				}
 
@@ -1270,7 +1265,7 @@ class SphinxConfig
 				{
 					if ( is_array($val) )
 						$val = join ( ",", $val );
-			   		$str .= " $attr=\"$val\"";
+					$str .= " $attr=\"$val\"";
 				}
 			}
 			$str .= "\n\n";
@@ -1411,7 +1406,7 @@ class SphinxConfig
 							break;
 						case "sql_attr_uint": $insert_types[$value] = "rt_attr_uint"; break;
 						case "sql_attr_bigint": $insert_types[$value] = "rt_attr_bigint"; break;
-						case "sql_attr_float":  $insert_types[$value] = "rt_attr_float"; break;
+						case "sql_attr_float": $insert_types[$value] = "rt_attr_float"; break;
 						// case "sql_attr_timestamp": //< not yet
 						// case "sql_attr_multi" //< not yet
 						// case "sql_attr_string" //< not yet
@@ -1535,7 +1530,7 @@ class SphinxConfig
 				$config = substr_replace ($config, $idx, $match['body'][1]-$shift,$srclen );
 				$shift += $srclen-strlen($idx);
 			}
-            $this->_indexdata = $indexes;
+			$this->_indexdata = $indexes;
 			$fp = fopen ( $filename, 'w' );
 			if ( !$fp )
 			{
@@ -1588,7 +1583,7 @@ class SphinxConfig
 
 	function InsertIntoIndexer ( &$error )
 	{
-	    	global $sd_address, $sd_sphinxql_port, $action_retries, $action_wait_timeout;
+		global $sd_address, $sd_sphinxql_port, $action_retries, $action_wait_timeout;
 		if ($sd_address == "localhost")
 			$connect_string = "127.0.0.1:$sd_sphinxql_port";
 		else
@@ -1603,8 +1598,8 @@ class SphinxConfig
 			$prefix = "INSERT INTO $name ($cols) VALUES ";
 
 			$accum = "";
-		    foreach ($data['values'] as $row)
-		    {
+			foreach ($data['values'] as $row)
+			{
 				$query = "";
 				foreach ( $row as $column )
 				{
@@ -1888,20 +1883,20 @@ function RunTest ( $test_dir )
 		if ( $config->IsSkipIndexer()===false )
 		{
 			// standard run
-                        if ( !$config->IsRt() )
-                        {
-                            $indexer_ret = RunIndexer ( $error, "--all" );
-                            if ( $indexer_ret==1 )
-                            {
-                                    if ( !HandleFailure ( $config, $report, $error, $nfailed ) )
-                                            $log .= "\tsubtest $subtest: error running indexer; see $report_file\n";
-                                    continue;
+			if ( !$config->IsRt() )
+			{
+				$indexer_ret = RunIndexer ( $error, "--all" );
+				if ( $indexer_ret==1 )
+				{
+					if ( !HandleFailure ( $config, $report, $error, $nfailed ) )
+						$log .= "\tsubtest $subtest: error running indexer; see $report_file\n";
+					continue;
 
-                            } else if ( $indexer_ret==2 )
-                            {
-                                    fwrite ( $report, "$error\n" );
-                            }
-                        }
+				} else if ( $indexer_ret==2 )
+				{
+					fwrite ( $report, "$error\n" );
+				}
+			}
 
 			// additional optional runs (eg for merge tests)
 			$indexer_ret = $config->RunIndexerEx ( $error );
@@ -1941,7 +1936,7 @@ function RunTest ( $test_dir )
 			}
 		}
 		else
-			for ( $i = $config->NumAgents () - 1; $i >= 0  && !$searchd_error; $i-- )
+			for ( $i = $config->NumAgents () - 1; $i >= 0 && !$searchd_error; $i-- )
 			{
 				static $agent_id = 0;
 				$agent_id++;
@@ -1980,7 +1975,7 @@ function RunTest ( $test_dir )
 
 		// in case of RT index - run "insert into" instead of indexer
 		if ( $config->IsRt () )
-		    $config->InsertIntoIndexer ( $error );
+			$config->InsertIntoIndexer ( $error );
 
 		if ( $config->IsQueryTest () )
 		{
@@ -2056,7 +2051,7 @@ function RunTest ( $test_dir )
 
 	fclose ( $report );
 
-	return array ( "tests_total"=>$total, "tests_failed"=>$nfailed,  "tests_skipped"=>0 );
+	return array ( "tests_total"=>$total, "tests_failed"=>$nfailed, "tests_skipped"=>0 );
 }
 
 //

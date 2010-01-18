@@ -15,7 +15,7 @@ array_shift ( $args );
 
 if ( !is_array($args) || empty($args) )
 {
-	print ( "Usage: php -f ubertest.php <MODE> [OPTIONS] [TESTDIR]\n" );
+	print ( "Usage: php -f ubertest.php <MODE> [OPTIONS] [TESTDIRS ...]\n" );
 	print ( "\nModes are:\n" );
 	print ( "g, gen\t\t\tgenerate reference ('model') test results\n" );
 	print ( "t, test\t\t\trun tests and compare results to reference\n" );
@@ -26,14 +26,16 @@ if ( !is_array($args) || empty($args) )
 	print ( "-s, --searchd <PATH>\tpath to searchd\n" );
 	print ( "--strict\t\tterminate on the first failure (for automatic runs)\n" );
 	print ( "--managed\t\tdon't run searchd during test (for debugging)\n" );
-	print ( "--rt\t\t run rt round (all local indexes converted to rt)\n" );
+	print ( "--rt\t\t\ttest RT backend (auto-convert all local indexes)\n" );
 	print ( "\nEnvironment vriables are:\n" );
-	print ( "DBUSER\tuse 'USER' as MySQL user\n" );
-	print ( "DBPASS\tuse 'PASS' as MySQL password\n" );
+	print ( "DBUSER\t\t\tuse 'USER' as MySQL user\n" );
+	print ( "DBPASS\t\t\tuse 'PASS' as MySQL password\n" );
+	print ( "\nTests can be specified by full name, or list of IDs, or range of IDs.\n" );
 	print ( "\nUsage examples:\n" );
 	print ( "php ubertest.php gen\n" );
 	print ( "php ubertest.php t --user test --password test\n" );
-	print ( "php ubertest.php t test_15\n" );
+	print ( "php ubertest.php t test_015\n" );
+	print ( "php ubertest.php t 31 37 41 53-64\n" );
 	print ( "DBPASS=test make check\n" );
 	exit ( 0 );
 }
@@ -49,6 +51,7 @@ if ( array_key_exists ( "DBPASS", $_ENV ) && $_ENV["DBPASS"] )
 
 $run = false;
 $test_dirs = array();
+$test_range = array();
 for ( $i=0; $i<count($args); $i++ )
 {
 	$arg = $args[$i];
@@ -62,10 +65,17 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="-i" || $arg=="--indexer" )		$locals['indexer'] = $args[++$i];
 	else if ( $arg=="-s" || $arg=="--searchd" )		$locals['searchd'] = $args[++$i];
 	else if ( $arg=="--rt" )						$locals['rt_mode'] = true;
-	else if ( is_dir($arg) )						$test_dirs[] = $arg;
-	else if ( is_dir(sprintf("test_%03d", $arg)))	$test_dirs[] = sprintf("test_%03d", $arg);
 	else if ( $arg=="--strict" )					$g_strict = true;
-	else
+	else if ( is_dir($arg) )						$test_dirs[] = $arg;
+	else if ( preg_match ( "/^(\\d+)-(\\d+)$/", $arg, $range ) )
+	{
+		$test_range = array ( $range[1], $range[2] ); // from, to
+
+	} else if ( is_dir(sprintf("test_%03d", $arg)))
+	{
+		$test_dirs[] = sprintf("test_%03d", $arg);
+
+	} else
 	{
 		print ( "ERROR: unknown option '$arg'; run with no arguments for help screen.\n" );
 		exit ( 1 );
@@ -108,11 +118,16 @@ $tests = array ();
 $dh = opendir ( "." );
 while ( $entry=readdir($dh) )
 {
-	if ( substr ( $entry,0,4 )!="test" )
+	if ( substr ( $entry, 0, 5 )!="test_" )
 		continue;
-	if ( !empty($test_dirs) && !in_array ( $entry, $test_dirs ) )
-		continue;
-	$tests[] = $entry;
+	$test_id = (int) substr ( $entry, 5 );
+
+	if ( ( empty($test_dirs) && empty($test_range) )
+		|| in_array ( $entry, $test_dirs )
+		|| ( $test_range && $test_id>=$test_range[0] && $test_id<=$test_range[1] ) )
+	{
+		$tests[] = $entry;
+	}
 }
 sort ( $tests );
 

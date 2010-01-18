@@ -374,7 +374,7 @@ void TestStripper ()
 		{ "this <?php $code = \"must be stripped\"; ?> away", "", "", "this  away" },
 		{ "<a href=\"http://www.com\">content1</a>", "a=title", "", "content1" },
 		{ "<a href=\"http://www.com\" title=\"my test title\">content2</a>", "a=title", "", "my test title content2" },
-		{ "testing <img src=\"g/smth.jpg\" alt=\"nice picture\" rel=anotherattr junk=\"throwaway\">inline tags vs attr indexing", "img=alt,rel", "",  "testing nice picture anotherattr inline tags vs attr indexing" },
+		{ "testing <img src=\"g/smth.jpg\" alt=\"nice picture\" rel=anotherattr junk=\"throwaway\">inline tags vs attr indexing", "img=alt,rel", "", "testing nice picture anotherattr inline tags vs attr indexing" },
 		{ "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\"><html>test</html>", "", "", " test " },
 		{ "<!smth \"that>can<break\"><html>test</html>", "", "", " test " }
 	};
@@ -415,7 +415,7 @@ void BenchStripper ()
 
 	char * sRef = new char [ MAX_SIZE ];
 	sBuf[iLen] = '\0';
-	strcpy ( sRef, sBuf );
+	memcpy ( sRef, sBuf, iLen+1 );
 
 	for ( int iRun=0; iRun<2; iRun++ )
 	{
@@ -429,7 +429,7 @@ void BenchStripper ()
 		for ( int iPass=0; iPass<iPasses; iPass++ )
 		{
 			tStripper.Strip ( (BYTE*)sBuf );
-			strcpy ( sBuf, sRef );
+			memcpy ( sBuf, sRef, iLen+1 );
 		}
 		tmTime += sphMicroTimer();
 

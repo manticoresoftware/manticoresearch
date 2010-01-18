@@ -1127,8 +1127,13 @@ void Shutdown ()
 
 			// stop search threads
 			g_tThdMutex.Lock();
-			ARRAY_FOREACH ( i, g_dThd )
-				sphThreadJoin ( &g_dThd[i]->m_tThd );
+			while ( g_dThd.GetLength() > 0 )
+			{
+				SphThread_t Thread = g_dThd[0]->m_tThd;
+				g_tThdMutex.Unlock();
+				sphThreadJoin ( &Thread );
+				g_tThdMutex.Lock();
+			}
 			g_dThd.Reset();
 			g_tThdMutex.Unlock();
 			g_tThdMutex.Done();

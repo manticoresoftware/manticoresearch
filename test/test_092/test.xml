@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Test>
-  <Name>RT: re-insert deleted row</Name>
+  <Name>RT: re-insert deleted row, keyword weights vs different insert scenarios</Name>
 
 <skip_indexer/>
 <Config>
@@ -15,23 +15,60 @@ searchd
 	workers				= threads
 }
 
-index test
+index test92
 {
 	type			= rt
-	path			= data/test
+	path			= data/test92
 	rt_attr_uint	= idd
 	rt_field		= content
+}
+index test102
+{
+	type			= rt
+	path			= data/test102
+	rt_attr_uint	= idd
+	rt_field		= content
+}
+index test104
+{
+	type	= rt
+	path	= data/test104
+	rt_attr_uint	= idd
+	rt_field	= content
+}
+index test105
+{
+	type	= rt
+	path	= data/test105
+	rt_attr_uint	= idd
+	rt_field	= content
 }
 </Config>
 
 <SPHQueries>
-	<SPHinxQL>insert into test (id,content) values (1,'content'),(2,'you')</SPHinxQL>
-	<SPHinxQL>delete from test where id=1</SPHinxQL>
-	<SPHinxQL>select * from test</SPHinxQL>
-	<SPHinxQL>insert into test (id,content) values (1,'newcontent')</SPHinxQL>
-	<SPHinxQL>select * from test where match('you')</SPHinxQL>
-	<SPHinxQL>select * from test where match('content')</SPHinxQL>
-	<SPHinxQL>select * from test where match('newcontent')</SPHinxQL>
+	<SPHinxQL>insert into test92 (id,content) values (1,'content'),(2,'you')</SPHinxQL>
+	<SPHinxQL>delete from test92 where id=1</SPHinxQL>
+	<SPHinxQL>select * from test92</SPHinxQL>
+	<SPHinxQL>insert into test92 (id,content) values (1,'newcontent')</SPHinxQL>
+	<SPHinxQL>select * from test92 where match('you')</SPHinxQL>
+	<SPHinxQL>select * from test92 where match('content')</SPHinxQL>
+	<SPHinxQL>select * from test92 where match('newcontent')</SPHinxQL>
+	<SPHinxQL>insert into test102 (id,content) values (1,'content'),(2,'newcontent')</SPHinxQL>
+	<SPHinxQL>delete from test102 where id=1</SPHinxQL>
+	<SPHinxQL>insert into test102 (id,content) values (1,'bla')</SPHinxQL>
+	<SPHinxQL>select * from test102 where match('bla')</SPHinxQL>
+	<SPHinxQL>select * from test102 where match('newcontent')</SPHinxQL>
+	<SPHinxQL>insert into test102 (id,content) values (3,'content2')</SPHinxQL>
+	<SPHinxQL>select * from test102 where match('bla')</SPHinxQL>
+	<SPHinxQL>select * from test102 where match('content2')</SPHinxQL>
+	<SPHinxQL>select * from test102 where match('newcontent')</SPHinxQL>
+	<SPHinxQL>insert into test104 (id,content) values (1,'word1'),(2,'word2')</SPHinxQL>
+	<SPHinxQL>insert into test104 (id,content) values (3,'word3')</SPHinxQL>
+	<SPHinxQL>select * from test104 where match('word1|word3')</SPHinxQL>
+	<SPHinxQL>insert into test105 (id,content) values (1,'content'),(2,'newcontent')</SPHinxQL>
+	<SPHinxQL>replace into test105 (id,content) values (1,'contend')</SPHinxQL>
+	<SPHinxQL>select * from test105 where match('contend|newcontent')</SPHinxQL>
+	<SPHinxQL>select * from test105 where match('content')</SPHinxQL>
 </SPHQueries>
 
 </Test>

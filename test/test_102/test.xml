@@ -1,39 +1,77 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Test>
-  <Name>RT: keyword weights vs different insert scenarios (part 1)</Name>
 
-<skip_indexer/>
-<Config>
+<test>
+<name>a rare case of deadlock on exit (may influent on the next tests)</name>
+
+<requires>
+<non-windows/>
+</requires>
+
+<config>
 indexer
 {
-	mem_limit			= 16M
+	mem_limit = 16M
 }
 
 searchd
 {
-<Searchd_Settings/>
-	workers				= threads
+	<searchd_settings/>
+	workers = threads
 }
 
-index test
+source srctest
 {
-	type			= rt
-	path			= data/test
-	rt_attr_uint	= idd
-	rt_field		= content
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT id, t_zlib, at_1, t_mysql, plain, at_2, at_3, t_mysql_2 FROM test_table
+
+	sql_attr_uint = at_1
+	sql_attr_uint = at_2
+	sql_attr_uint = at_3
 }
-</Config>
 
-<SPHQueries>
-	<SPHinxQL>insert into test (id,content) values (1,'content'),(2,'newcontent')</SPHinxQL>
-	<SPHinxQL>delete from test where id=1</SPHinxQL>
-	<SPHinxQL>insert into test (id,content) values (1,'bla')</SPHinxQL>
-	<SPHinxQL>select * from test where match('bla')</SPHinxQL>
-	<SPHinxQL>select * from test where match('newcontent')</SPHinxQL>
-	<SPHinxQL>insert into test (id,content) values (3,'content2')</SPHinxQL>
-	<SPHinxQL>select * from test where match('bla')</SPHinxQL>
-	<SPHinxQL>select * from test where match('content2')</SPHinxQL>
-	<SPHinxQL>select * from test where match('newcontent')</SPHinxQL>
-</SPHQueries>
+index test_idx
+{
+	source				= srctest
+	path				= <data_path/>/test
+}
 
-</Test>
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id integer primary key not null auto_increment,
+	t_zlib blob,
+	t_mysql blob,
+	t_mysql_2 blob,
+	plain varchar(256),
+	at_1 int not null default 1,
+	at_2 int not null default 2,
+	at_3 int not null default 3
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table;
+</db_drop>
+
+<db_insert>
+INSERT INTO test_table (t_zlib, t_mysql, t_mysql_2, plain) VALUES
+( 'zlib', NULL, NULL, 'plain' ),
+( NULL, 'mysql', NULL, NULL ),
+( 'test', 'hello', 'world', '' ),
+( 'malformed', 'broken', NULL, NULL ),
+( '', '', '', '' );
+</db_insert>
+
+<queries>
+<query>zlib</query>
+<query>mysql</query>
+<query>hello world</query>
+<query>plain</query>
+<query>malformed</query>
+<query>broken</query>
+</queries>
+
+</test>

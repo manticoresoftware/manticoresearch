@@ -1374,8 +1374,8 @@ class SphinxConfig
 			$pattern = "/.*?(?<body>source\s+(?<srcname>\S*?)(\s*\:\s*(?<parent>\S*?))?\s*\{(?<content>.*?)\})(?<epilog>.*?)/s";
 			preg_match_all ( $pattern, $config, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE );
 			$schemas = array();
-			$shift=0;
-			$newconfig="";
+			$shift = 0;
+			$newconfig = "";
 
 			// parse sources
 			foreach ( $matches as $match )
@@ -1385,72 +1385,97 @@ class SphinxConfig
 				$insert_types = array();
 				if ( $match['parent'][0] != "" )
 					$insert_types = $schemas[$match['parent'][0]]['types'];
-				$fields = array();
-				foreach ($lines as $line)
+
+				$sql_query_pre = array();
+				$sql_query = "";
+
+				foreach ( $lines as $line )
 				{
 					// skip comment lines (if any)
 					if ( preg_match ( "/\s*#/" , $line ) > 0 )
 						continue;
+
+					// extract config key/value pairs
 					$eq = strpos ( $line,"=" );
 					if ($eq == 0)
 						continue;
 					$key = strtolower ( trim ( substr($line,0,$eq), " \t" ) );
 					$value = trim ( substr($line,$eq+1), " \t" );
+
+					// handle known keys
 					switch ( $key )
 					{
-						case "type": if ( $value != "mysql" )
+						case "type":
+							if ( $value != "mysql" )
 							{
-								$msg = "Source is not mysql. Skipping...";
+								$msg = "non-mysql source (type=$value), skipping...";
 								return FALSE;
 							}
 							break;
-						case "sql_attr_uint": $insert_types[$value] = "rt_attr_uint"; break;
-						case "sql_attr_bigint": $insert_types[$value] = "rt_attr_bigint"; break;
-						case "sql_attr_float": $insert_types[$value] = "rt_attr_float"; break;
-						// case "sql_attr_timestamp": //< not yet
-						// case "sql_attr_multi" //< not yet
-						// case "sql_attr_string" //< not yet
-						case "sql_query":
-						{
-							// extract query values from MySQL (should be already there)
-							$conn = ConnectDB();
-							if ( !$conn )
-							{
-								$msg = "can't connect or select the database";
-								return false;
-							}
 
-							$res = @mysql_query ( $value, $conn );
-							if ( !$res )
-							{
-								mysql_close ( $conn );
-								$msg = "can't fetch test data: " . mysql_error ( $conn );
-								return false;
-							}
+						case "sql_attr_uint":		$insert_types[$value] = "rt_attr_uint"; break;
+						case "sql_attr_bigint":		$insert_types[$value] = "rt_attr_bigint"; break;
+						case "sql_attr_float":		$insert_types[$value] = "rt_attr_float"; break;
+						case "sql_attr_timestamp":	$insert_types[$value] = "rt_attr_timestamp"; break;
+						// case "sql_attr_multi" TBD
+						// case "sql_attr_string" TBD
 
-							$insert_values = array();
-							while ( $row = mysql_fetch_array ( $res, MYSQL_ASSOC ) )
-							{
-								// on the very first row, keep the schema
-								if ( !$insert_values )
-								{
-									$pos = 0;
-									foreach ( $row as $key => $value )
-									{
-										if ( $pos==0 )
-											$key = "id";
-										$insert_schema[$key] = $pos++;
-									}
-								}
-
-								$insert_values[] = array_values ( $row );
-							}
-
-							mysql_free_result ( $res );
-							mysql_close ( $conn );
-						}
+						case "sql_query_pre":		$sql_query_pre[] = $value; break;
+						case "sql_query":			$sql_query = $value; break;
 					}
 				}
+
+				// query is kinda mandatory
+				if ( !$sql_query )
+				{
+					$msg = "missing sql_query";
+					return false;
+				}
+
+				// now let's connect to MySQL, run the query, and fetch the values
+				$conn = ConnectDB();
+				if ( !$conn )
+				{
+					$msg = "can't connect or select the database";
+					return false;
+				}
+
+				// gotta run pre-queries first!
+				foreach ( $sql_query_pre as $q )
+				{
+					if ( @mysql_query ( $q, $conn ) )
+						continue;
+
+					$msg = sprintf ( "sql_query_pre failed (query=%s, error=%s)", $q, mysql_error ( $conn ) );
+					mysql_close ( $conn );
+					return false;
+				}
+
+				// run main query
+				$res = @mysql_query ( $sql_query, $conn );
+				if ( !$res )
+				{
+					$msg = sprintf ( "sql_query failed (query=%s, error=%s)", $sql_query, mysql_error ( $conn ) );
+					$msg = "sql_query can't fetch test data: " . mysql_error ( $conn );
+					mysql_close ( $conn );
+					return false;
+				}
+
+				// fetch fields
+				$insert_schema = array ( "id" => 0 );
+				for ( $i=1; $i < mysql_num_fields($res); $i++ )
+					$insert_schema [ mysql_fetch_field ( $res, $i )->name ] = $i;
+
+				// fetch data
+				$insert_values = array();
+				while ( $row = mysql_fetch_row($res) )
+					$insert_values[] = array_values ( $row );
+
+				// cleanup
+				mysql_free_result ( $res );
+				mysql_close ( $conn );
+
+				// store
 				$schema = array();
 				$schema['types'] = $insert_types;
 				if ( $match['parent'][0] != "" )
@@ -1458,9 +1483,10 @@ class SphinxConfig
 				else
 					$schema['orders'] = $insert_schema;
 				$schema['values'] = $insert_values;
+
 				$schemas[$match['srcname'][0]] = $schema;
 				$srclen = $match['epilog'][1] - $match['body'][1];
-				$config = substr_replace ($config, "", $match['body'][1]-$shift,$srclen );
+				$config = substr_replace ( $config, "", $match['body'][1]-$shift,$srclen );
 				$shift += $srclen;
 			}
 
@@ -1793,13 +1819,13 @@ function CheckConfig ( $config, $path )
 
 	if ( $config->Requires("non-rt") && $config->IsRt() )
 	{
-		printf ( "SKIPPING %s, %s - use non-rt index to run this test\n", $path, $config->Name () );
+		printf ( "SKIPPING %s, %s - explicitly non-RT test skipped in RT mode\n", $path, $config->Name () );
 		return false;
 	}
 
-		if ( $config->NeedIndexerEx() && $config->IsRt() )
+	if ( $config->NeedIndexerEx() && $config->IsRt() )
 	{
-		printf ( "SKIPPING %s, %s - no call to indexer for rt index\n", $path, $config->Name () );
+		printf ( "SKIPPING %s, %s - non-RT test that uses indexer skipped in RT mode\n", $path, $config->Name () );
 		return false;
 	}
 

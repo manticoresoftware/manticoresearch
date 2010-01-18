@@ -5616,6 +5616,7 @@ public:
 		switch ( iTargetType )
 		{
 		case SPH_ATTR_INTEGER:
+		case SPH_ATTR_TIMESTAMP:
 			CSphMatch::SetAttr ( tLoc, ToInt(tVal) );
 			break;
 		case SPH_ATTR_BIGINT:
@@ -8523,9 +8524,9 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		}
 
 		// attrs
-		const int iNumTypes = 3;
-		const char * sTypes[iNumTypes] = { "rt_attr_uint", "rt_attr_bigint", "rt_attr_float" };
-		const int iTypes[iNumTypes] = { SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, SPH_ATTR_FLOAT };
+		const int iNumTypes = 4;
+		const char * sTypes[iNumTypes] = { "rt_attr_uint", "rt_attr_bigint", "rt_attr_float", "rt_attr_timestamp" };
+		const int iTypes[iNumTypes] = { SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, SPH_ATTR_FLOAT, SPH_ATTR_TIMESTAMP };
 
 		for ( int iType=0; iType<iNumTypes; iType++ )
 		{

@@ -55,15 +55,17 @@ DROP TABLE IF EXISTS test_table;
 global $g_locals, $sd_address, $sd_sphinxql_port;
 $results = array();
 $sockStr = "$sd_address:$sd_sphinxql_port";
+if ($sd_address == "localhost")
+	$sockStr = "127.0.0.1:$sd_sphinxql_port";
 $sock = @mysql_connect (
 	$sockStr,
-	"",
-	"",
+	$g_locals['db-user'],
+	$g_locals['db-password'] ,
 	true );
 
 if ( $sock === false )
 {
-	$results[] = "error: cant connect to demon: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+	$results[] = "error: can't connect to demon: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
 	return;
 }
 
@@ -87,7 +89,7 @@ for ( $i=1; $i<480; $i++ )
 	}	
 	else
 	{
-		$results[] = "error: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+		$results[] = "error: insert: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
 		return;
 	}
 }
@@ -105,7 +107,7 @@ for ( $i=0; $i<count ( $queries ); $i++ )
 	else if ($res===false)
 	{
 		$results[] = "query $i: res=$res";
-		$results[] = "error: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+		$results[] = "error: query: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
 		return;
 	}
 	else

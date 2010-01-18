@@ -12,7 +12,7 @@ index test
 {
 	type	= rt
 	path	= <data_path/>/testrt123
-	rt_mem_limit = 128k
+	rt_mem_limit = 128K
 	rt_attr_uint = group_id
 	rt_field = title
 	rt_field = content
@@ -65,7 +65,7 @@ $sock = @mysql_connect (
 
 if ( $sock === false )
 {
-	$results[] = "error: can't connect to demon: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+	$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
 	return;
 }
 

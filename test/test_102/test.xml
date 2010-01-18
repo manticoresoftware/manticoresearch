@@ -1,11 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <test>
-<name>a rare case of deadlock on exit (may influent on the next tests)</name>
-
-<requires>
-<non-windows/>
-</requires>
+<name>deadlock on threaded exit</name>
 
 <config>
 indexer

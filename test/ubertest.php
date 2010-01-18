@@ -6,6 +6,7 @@
 
 require_once ( "settings.inc" );
 $sd_managed_searchd	= false;
+
 //////////////////////
 // parse command line
 //////////////////////
@@ -197,7 +198,7 @@ foreach ( $tests as $test )
 			$total_tests_failed++;
 			$total_subtests_failed++;
 			$failed_tests[] = ShortTestName ( $test );
-    	}
+		}
 	}
 }
 

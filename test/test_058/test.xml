@@ -11,6 +11,12 @@
 searchd
 {
 	<searchd_settings/>
+	<dynamic>
+		<variant>workers = none</variant>
+		<variant>workers = fork</variant>
+		<variant>workers = prefork</variant>
+		<variant>workers = threads</variant>
+	</dynamic>
 }
 
 source sql
@@ -56,37 +62,27 @@ insert into test_table values
 
 <custom_test><![CDATA[
 
-function query ( $client, $words )
-{
-	$result = $client->Query ( $words );
-	if ( $result )
-	{
-		unset ( $result['time'] );
-		return $result;
-	}
-	else
-		return $client->GetLastError();
-}
+$query = create_function('$client,$words','$result = $client->Query ( $words );	if ( $result ) { unset ( $result["time"] ); return $result; } else return $client->GetLastError(); ');
 
 $results = array();
 $errors = '';
 
-$results[] = query ( $client, 'first' );
-$results[] = query ( $client, 'one' );
+$results[] = $query ( $client, 'first' );
+$results[] = $query ( $client, 'one' );
 
 mysql_query ( 'update test_table set mode = 3 where id = 1000' );
 RunIndexer ( $errors, '--all --rotate' );
 sleep(2);
 
-$results[] = query ( $client, 'first' );
-$results[] = query ( $client, 'one' );
+$results[] = $query ( $client, 'first' );
+$results[] = $query ( $client, 'one' );
 
 mysql_query ( 'update test_table set mode = 2 where id = 1000' );
 RunIndexer ( $errors, '--all --rotate' );
 sleep(2);
 
-$results[] = query ( $client, 'first' );
-$results[] = query ( $client, 'one' );
+$results[] = $query ( $client, 'first' );
+$results[] = $query ( $client, 'one' );
 
 ]]></custom_test>
 

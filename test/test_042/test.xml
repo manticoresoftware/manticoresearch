@@ -12,11 +12,17 @@ indexer
 searchd
 {
 	<searchd_settings/>
-
 	<dynamic>
 		<variant>client_timeout = 5</variant>
 		<variant>client_timeout = 1</variant>
 	</dynamic>
+<dynamic>
+<variant>workers = none</variant>
+<variant>workers = fork</variant>
+<variant>workers = prefork</variant>
+<variant>workers = threads</variant>
+</dynamic>
+	
 }
 
 source srctest

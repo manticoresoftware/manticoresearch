@@ -160,6 +160,7 @@ private:
 public:
 	RtDiskKlist_t() { m_tRwLargelock.Init(); m_tRwSmalllock.Init(); }
 	virtual ~RtDiskKlist_t() { m_tRwLargelock.Done(); m_tRwSmalllock.Done(); }
+	void Reset ();
 	void Flush()
 	{
 		if ( m_hSmallKlist.GetLength()==0 )
@@ -186,6 +187,12 @@ public:
 	inline bool KillListLock() const { return m_tRwLargelock.ReadLock(); }
 	inline bool KillListUnlock() const { return m_tRwLargelock.Unlock(); }
 };
+
+void RtDiskKlist_t::Reset()
+{
+	m_dLargeKlist.Reset();
+	m_hSmallKlist.Reset();
+}
 
 void RtDiskKlist_t::NakedFlush()
 {
@@ -2190,6 +2197,7 @@ void RtIndex_t::SaveDiskData ( const char * sFilename ) const
 	DWORD uKlistSize = m_tKlist.GetKillListSize();
 	if ( uKlistSize )
 		wrDummy.PutBytes ( m_tKlist.GetKillList(), uKlistSize*sizeof ( SphAttr_t ) );
+	m_tKlist.Reset();
 	m_tKlist.KillListUnlock();
 	wrDummy.CloseFile ();
 

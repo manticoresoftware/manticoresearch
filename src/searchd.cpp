@@ -8541,11 +8541,12 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 
 		// RAM chunk size
 		DWORD uRamSize = hIndex.GetSize ( "rt_mem_limit", 32*1024*1024 );
-		if ( uRamSize<1024*1024 )
+		if ( uRamSize<128*1024 )
 		{
-			sphWarning ( "index '%s': rt_mem_limit below sanity limit, fixing up to 1M", szIndexName );
-			uRamSize = 1024*1024;
-		}
+			sphWarning ( "index '%s': rt_mem_limit extremely low, using 128K instead", szIndexName );
+			uRamSize = 128*1024;
+		} else if ( uRamSize<8*1024*1024 )
+			sphWarning ( "index '%s': rt_mem_limit very low (under 8 MB)", szIndexName );
 
 		// index
 		ServedIndex_t tIdx;

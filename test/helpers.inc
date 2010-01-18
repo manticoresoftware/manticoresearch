@@ -1668,8 +1668,7 @@ class SphinxConfig
 		else
 		{
 			fwrite ( $fp, "\tlisten		= {$this->_sd_address}:{$this->_sd_port}\n" );
-			if ( $this->_use_sphinxql || $this->IsRt() )
-				fwrite ( $fp, "\tlisten		= {$this->_sd_address}:{$this->_sd_sphinxql_port}:mysql41\n" );
+			fwrite ( $fp, "\tlisten		= {$this->_sd_address}:{$this->_sd_sphinxql_port}:mysql41\n" );
 		}
 		fwrite ( $fp, "\tlog			= $sd_log\n" );
 		fwrite ( $fp, "\tquery_log		= $sd_query_log\n" );

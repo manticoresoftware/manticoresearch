@@ -5481,9 +5481,10 @@ struct SqlStmt_t
 		, m_iSchemaSz ( 0 )
 	{}
 
-	bool AddSchemaItem ( const char* psName )
+	bool AddSchemaItem ( const char * psName )
 	{
 		m_dInsertSchema.Add ( psName );
+		m_dInsertSchema.Last().ToLower();
 		m_iSchemaSz = m_dInsertSchema.GetLength();
 		return true; // stub; check if the given field actually exists in the schema
 	}
@@ -5713,7 +5714,6 @@ bool SqlParser_t::AddSchemaItem ( YYSTYPE * pNode )
 	assert ( m_pStmt );
 	CSphString sItem;
 	sItem.SetBinary ( m_pBuf + pNode->m_iStart, pNode->m_iEnd - pNode->m_iStart );
-	sItem.ToLower ();
 	return m_pStmt->AddSchemaItem ( sItem.cstr() );
 }
 
@@ -6653,13 +6653,17 @@ void SendMysqlFieldPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, const char
 	tOut.SendWord ( 0 ); // filler
 }
 
+
+// from mysqld_error.h
 enum MysqlErrors_e
 {
-	MYSQL_ERR_SYNTAX		= 1064,
-	MYSQL_ERR_SHUTDOWN		= 1053
+	MYSQL_ERR_PARSE_ERROR				= 1064,
+	MYSQL_ERR_SERVER_SHUTDOWN			= 1053,
+	MYSQL_ERR_FIELD_SPECIFIED_TWICE		= 1110
 };
 
-void SendMysqlErrorPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, const char * sError, MysqlErrors_e iErr = MYSQL_ERR_SYNTAX )
+
+void SendMysqlErrorPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, const char * sError, MysqlErrors_e iErr=MYSQL_ERR_PARSE_ERROR )
 {
 	if ( sError==NULL )
 		sError = "(null)";
@@ -6672,15 +6676,10 @@ void SendMysqlErrorPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, const char
 	tOut.SendByte ( 0xff ); // field count, always 0xff for error packet
 	tOut.SendByte ( (BYTE)( iError & 0xff ) );
 	tOut.SendByte ( (BYTE)( iError>>8 ) );
-	switch ( iErr )
-	{
-	case MYSQL_ERR_SHUTDOWN:
+	if ( iErr==MYSQL_ERR_SERVER_SHUTDOWN )
 		tOut.SendBytes ( "#08S01", 6 ); // sqlstate marker (1 byte), sqlstate (5 bytes)
-		break;
-	case MYSQL_ERR_SYNTAX:
-	default:
+	else
 		tOut.SendBytes ( "#42000", 6 ); // sqlstate marker (1 byte), sqlstate (5 bytes)
-	}
 	tOut.SendBytes ( sError, iErrorLen );
 }
 
@@ -6737,6 +6736,7 @@ void * MysqlPack ( void * pBuffer, int iValue )
 	return (void*)pOutput;
 }
 
+
 void SendMysqlOkPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, int iAffectedRows=0, int iWarns=0, const char * sMessage=NULL )
 {
 	DWORD iInsert_id = 0;
@@ -6758,6 +6758,226 @@ void SendMysqlOkPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, int iAffected
 	tOut.SendLSBDword ( iWarns );		// N warnings, 0 status
 	if ( iMsgLen > 0 )
 		tOut.SendBytes ( sMessage, iMsgLen );
+}
+
+
+bool operator < ( const CSphString & a, const CSphString & b )
+{
+	return strcmp ( a.cstr(), b.cstr() ) < 0;
+}
+
+
+void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE uPacketID, bool bReplace, bool bCommit )
+{
+	CSphString sError;
+
+	// get that index
+	ServedIndex_t * pServed = g_hIndexes ( tStmt.m_sInsertIndex );
+	if ( !pServed )
+	{
+		sError.SetSprintf ( "no such index '%s'", tStmt.m_sInsertIndex.cstr() );
+		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		return;
+	}
+
+	if ( !pServed->m_bRT )
+	{
+		sError.SetSprintf ( "index '%s' does not support INSERT", tStmt.m_sInsertIndex.cstr() );
+		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		return;
+	}
+
+	ISphRtIndex * pIndex = dynamic_cast<ISphRtIndex*> ( pServed->m_pIndex ); // FIXME? remove dynamic_cast?
+	assert ( pIndex );
+
+	// get schema, check values count
+	const CSphSchema * pSchema = pIndex->GetSchema();
+	int iSchemaSz = pSchema->GetAttrsCount() + pSchema->m_dFields.GetLength() + 1;
+	int iExp = tStmt.m_iSchemaSz;
+	int iGot = tStmt.m_dInsertValues.GetLength();
+	if ( !tStmt.m_dInsertSchema.GetLength() && ( iSchemaSz!=tStmt.m_iSchemaSz ) )
+	{
+		sError.SetSprintf ( "column count does not match schema (expected %d, got %d)", iSchemaSz, iGot );
+		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		return;
+	}
+
+	if ( ( iGot % iExp )!=0 )
+	{
+		sError.SetSprintf ( "column count does not match value count (expected %d, got %d)", iExp, iGot );
+		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		return;
+	}
+
+	CSphVector<int> dAttrSchema ( pSchema->GetAttrsCount() );
+	CSphVector<int> dFieldSchema ( pSchema->m_dFields.GetLength() );
+	int iIdIndex = 0;
+	if ( !tStmt.m_dInsertSchema.GetLength() )
+	{
+		// no columns list, use index schema
+		ARRAY_FOREACH ( i, dFieldSchema )
+			dFieldSchema[i] = i+1;
+		int iFields = dFieldSchema.GetLength();
+		ARRAY_FOREACH ( j, dAttrSchema )
+			dAttrSchema[j] = j+iFields+1;
+	} else
+	{
+		// got a list of columns, check it for dupes
+		CSphVector<CSphString> dCheck = tStmt.m_dInsertSchema;
+		dCheck.Sort();
+
+		for ( int i=1; i<dCheck.GetLength(); i++ )
+			if ( dCheck[i-1]==dCheck[i] )
+		{
+			sError.SetSprintf ( "column '%s' specified twice", dCheck[i].cstr() );
+			SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr(), MYSQL_ERR_FIELD_SPECIFIED_TWICE );
+			return;
+		}
+
+		// hash column list
+		// OPTIMIZE! hash index columns once (!) instead
+		SmallStringHash_T<int> dInsertSchema;
+		ARRAY_FOREACH ( i, tStmt.m_dInsertSchema )
+			dInsertSchema.Add ( i, tStmt.m_dInsertSchema[i] );
+
+		// get id index
+		if ( !dInsertSchema.Exists("id") )
+		{
+			SendMysqlErrorPacket ( tOut, uPacketID, "column list must contain an 'id' column" );
+			return;
+		}
+		iIdIndex = dInsertSchema["id"];
+
+		// map fields
+		bool bIdDupe = false;
+		ARRAY_FOREACH ( i, dFieldSchema )
+		{
+			if ( dInsertSchema.Exists ( pSchema->m_dFields[i].m_sName ) )
+			{
+				int iField = dInsertSchema[pSchema->m_dFields[i].m_sName];
+				if ( iField==iIdIndex )
+				{
+					bIdDupe = true;
+					break;
+				}
+				dFieldSchema[i] = iField;
+			} else
+				dFieldSchema[i] = -1;
+		}
+		if ( bIdDupe )
+		{
+			SendMysqlErrorPacket ( tOut, uPacketID, "fields must never be named 'id' (fix your config)" );
+			return;
+		}
+
+		// map attrs
+		ARRAY_FOREACH ( j, dAttrSchema )
+		{
+			if ( dInsertSchema.Exists ( pSchema->GetAttr(j).m_sName ) )
+			{
+				int iField = dInsertSchema[pSchema->GetAttr(j).m_sName];
+				if ( iField==iIdIndex )
+				{
+					bIdDupe = true;
+					break;
+				}
+				dAttrSchema[j] = iField;
+			} else
+				dAttrSchema[j] = -1;
+		}
+		if ( bIdDupe )
+		{
+			sError.SetSprintf ( "attributes must never be named 'id' (fix your config)" );
+			SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+			return;
+		}
+	}
+
+	// convert attrs
+	for ( int c=0; c<tStmt.m_iRowsAffected; c++ )
+	{
+		assert ( sError.IsEmpty() );
+
+		CSphMatchVariant tDoc;
+		tDoc.Reset ( pSchema->GetRowSize() );
+		tDoc.m_iDocID = (SphDocID_t)CSphMatchVariant::ToDocid ( tStmt.m_dInsertValues[iIdIndex + c * iExp] );
+
+		for ( int i=0; i<pSchema->GetAttrsCount(); i++ )
+		{
+			// shortcuts!
+			const CSphColumnInfo & tCol = pSchema->GetAttr(i);
+			CSphAttrLocator tLoc = tCol.m_tLocator;
+			tLoc.m_bDynamic = true;
+
+			int iQuerySchemaIdx = dAttrSchema[i];
+			bool bResult;
+			if ( iQuerySchemaIdx < 0 )
+				bResult = tDoc.SetDefaultAttr ( tLoc, tCol.m_eAttrType );
+			else
+			{
+				const SqlInsert_t & tVal = tStmt.m_dInsertValues[iQuerySchemaIdx + c * iExp];
+
+				// sanity checks
+				if ( tVal.m_iType!=TOK_QUOTED_STRING && tVal.m_iType!=TOK_CONST_INT && tVal.m_iType!=TOK_CONST_FLOAT )
+				{
+					sError.SetSprintf ( "raw %d, column %d: internal error: unknown insval type %d", 1+c, 1+iQuerySchemaIdx, tVal.m_iType ); // 1 for human base
+					break;
+				}
+
+				// FIXME? index schema is lawfully static, but our temp match obviously needs to be dynamic
+				bResult = tDoc.SetAttr ( tLoc, tVal, tCol.m_eAttrType );
+			}
+
+			if ( !bResult )
+			{
+				sError.SetSprintf ( "internal error: unknown attribute type in INSERT (typeid=%d)", tCol.m_eAttrType );
+				break;
+			}
+		}
+		if ( !sError.IsEmpty() )
+			break;
+
+		// convert fields
+		CSphVector<const char*> dFields;
+		ARRAY_FOREACH ( i, pSchema->m_dFields )
+		{
+			int iQuerySchemaIdx = dFieldSchema[i];
+			if ( iQuerySchemaIdx < 0 )
+				dFields.Add ( "" ); // default value
+			else
+			{
+				if ( tStmt.m_dInsertValues [ iQuerySchemaIdx + c * iExp ].m_iType!=TOK_QUOTED_STRING )
+				{
+					sError.SetSprintf ( "row %d, column %d: string expected", 1+c, 1+iQuerySchemaIdx ); // 1 for human base
+					break;
+				}
+				dFields.Add ( tStmt.m_dInsertValues[ iQuerySchemaIdx + c * iExp ].m_sVal.cstr() );
+			}
+		}
+		if ( !sError.IsEmpty() )
+			break;
+
+		// do add
+		if ( !pIndex->AddDocument ( dFields.GetLength(), dFields.Begin(), tDoc, bReplace ) )
+			sError = pIndex->GetLastError();
+
+		if ( !sError.IsEmpty() )
+			break;
+	}
+
+	// fire exit
+	if ( !sError.IsEmpty() )
+	{
+		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		return;
+	}
+
+	// no errors so far
+	if ( bCommit )
+		pIndex->Commit ();
+
+	// my OK packet
+	SendMysqlOkPacket ( tOut, uPacketID, tStmt.m_iRowsAffected );
 }
 
 
@@ -6861,7 +7081,7 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 
 			if ( g_bGotSigterm )
 			{
-				SendMysqlErrorPacket ( tOut, uPacketID, "Server shutdown in progress", MYSQL_ERR_SHUTDOWN );
+				SendMysqlErrorPacket ( tOut, uPacketID, "Server shutdown in progress", MYSQL_ERR_SERVER_SHUTDOWN );
 				continue;
 			}
 
@@ -7075,187 +7295,7 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 		case STMT_INSERT:
 		case STMT_REPLACE:
 		{
-			// get that index
-			if ( !g_hIndexes ( tStmt.m_sInsertIndex ) )
-			{
-				sError.SetSprintf ( "no such index '%s'", tStmt.m_sInsertIndex.cstr() );
-				SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
-				continue;
-			}
-
-			ServedIndex_t & tServed = g_hIndexes[tStmt.m_sInsertIndex];
-			ISphRtIndex * pIndex = dynamic_cast<ISphRtIndex*> ( tServed.m_pIndex );
-			if ( !pIndex )
-			{
-				sError.SetSprintf ( "index '%s' does not support INSERT", tStmt.m_sInsertIndex.cstr() );
-				SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
-				continue;
-			}
-
-			// get schema, check values count
-			const CSphSchema * pSchema = pIndex->GetSchema();
-			int iSchemaSz = pSchema->GetAttrsCount() + pSchema->m_dFields.GetLength() + 1;
-			int iExp = tStmt.m_iSchemaSz;
-			int iGot = tStmt.m_dInsertValues.GetLength();
-			if ( !tStmt.m_dInsertSchema.GetLength() && ( iSchemaSz!=tStmt.m_iSchemaSz ) )
-			{
-				sError.SetSprintf ( "column count does not match schema (expected %d, got %d)", iSchemaSz, iGot );
-				SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
-				continue;
-			}
-
-			if ( ( iGot % iExp )!=0 )
-			{
-				sError.SetSprintf ( "column count does not match value count (expected x%d, got %d)", iExp, iGot );
-				SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
-				continue;
-			}
-			CSphVector<int> dAttrSchema ( pSchema->GetAttrsCount() );
-			CSphVector<int> dFieldSchema ( pSchema->m_dFields.GetLength() );
-			int iIdIndex = 0;
-			if ( !tStmt.m_dInsertSchema.GetLength() ) ///< no schema at all, treated as default schema: id, fields, attributes
-			{
-				ARRAY_FOREACH ( i, dFieldSchema )
-					dFieldSchema[i] = i+1;
-				int iFields = dFieldSchema.GetLength();
-				ARRAY_FOREACH ( j, dAttrSchema )
-					dAttrSchema[j] = j+iFields+1;
-			} else
-			{
-				SmallStringHash_T<int> dInsertSchema;
-				ARRAY_FOREACH ( i, tStmt.m_dInsertSchema )
-					dInsertSchema.Add ( i, tStmt.m_dInsertSchema[i] );
-
-				if ( !dInsertSchema.Exists("id") )
-				{
-					sError.SetSprintf ( "'id' identifier not found" );
-					SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
-					continue;
-				}
-
-				iIdIndex = dInsertSchema["id"];
-
-				bool bIdDupe = false;
-				ARRAY_FOREACH ( i, dFieldSchema )
-					if ( dInsertSchema.Exists ( pSchema->m_dFields[i].m_sName ) )
-					{
-						int iField = dInsertSchema[pSchema->m_dFields[i].m_sName];
-						if ( iField==iIdIndex )
-						{
-							bIdDupe = true;
-							break;
-						}
-						dFieldSchema[i] = iField;
-					} else
-						dFieldSchema[i] = -1;
-
-				if ( bIdDupe )
-				{
-					sError.SetSprintf ( "'id' prohibited as the name of a field. Change your config!" );
-					SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
-					continue;
-				}
-
-				ARRAY_FOREACH ( j, dAttrSchema )
-					if ( dInsertSchema.Exists ( pSchema->GetAttr(j).m_sName ) )
-					{
-						int iField = dInsertSchema[pSchema->GetAttr(j).m_sName];
-						if ( iField==iIdIndex )
-						{
-							bIdDupe = true;
-							break;
-						}
-						dAttrSchema[j] = iField;
-					} else
-						dAttrSchema[j] = -1;
-
-				if ( bIdDupe )
-				{
-					sError.SetSprintf ( "'id' prohibited as the name of an attribute. Change your config!" );
-					SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
-					continue;
-				}
-			}
-
-			for ( int c=0; c<tStmt.m_iRowsAffected; c++ )
-			{
-				CSphMatchVariant tDoc;
-				// convert attrs
-				assert ( sError.IsEmpty() );
-				tDoc.Reset ( pSchema->GetRowSize() );
-				tDoc.m_iDocID = (SphDocID_t)CSphMatchVariant::ToDocid ( tStmt.m_dInsertValues[iIdIndex + c * iExp] );
-
-				for ( int i=0; i<pSchema->GetAttrsCount() && sError.IsEmpty(); i++ )
-				{
-					// shortcuts!
-					const CSphColumnInfo & tCol = pSchema->GetAttr(i);
-					CSphAttrLocator tLoc = tCol.m_tLocator;
-					tLoc.m_bDynamic = true;
-
-					int iQuerySchemaIdx = dAttrSchema[i];
-					bool bResult;
-					if ( iQuerySchemaIdx < 0 )
-						bResult = tDoc.SetDefaultAttr ( tLoc, tCol.m_eAttrType );
-					else
-					{
-						const SqlInsert_t & tVal = tStmt.m_dInsertValues[iQuerySchemaIdx + c * iExp];
-
-						// sanity checks
-						if ( tVal.m_iType!=TOK_QUOTED_STRING && tVal.m_iType!=TOK_CONST_INT && tVal.m_iType!=TOK_CONST_FLOAT )
-						{
-							sError.SetSprintf ( "raw %d, column %d: internal error: unknown insval type %d", 1+c, 1+iQuerySchemaIdx, tVal.m_iType ); // 1 for human base
-							break;
-						}
-
-						// FIXME? index schema is lawfully static, but our temp match obviously needs to be dynamic
-						bResult = tDoc.SetAttr ( tLoc, tVal, tCol.m_eAttrType );
-					}
-
-					if ( !bResult )
-					{
-						sError.SetSprintf ( "internal error: unknown attribute type in INSERT (typeid=%d)", tCol.m_eAttrType );
-						break;
-					}
-				}
-
-				// convert fields
-				CSphVector<const char*> dFields;
-				ARRAY_FOREACH ( i, pSchema->m_dFields )
-				{
-					int iQuerySchemaIdx = dFieldSchema[i];
-					if ( iQuerySchemaIdx < 0 )
-						dFields.Add ( "" ); // default value
-					else
-					{
-						if ( tStmt.m_dInsertValues [ iQuerySchemaIdx + c * iExp ].m_iType!=TOK_QUOTED_STRING )
-						{
-							sError.SetSprintf ( "row %d, column %d: string expected", 1+c, 1+iQuerySchemaIdx ); // 1 for human base
-							break;
-						}
-						dFields.Add ( tStmt.m_dInsertValues[ iQuerySchemaIdx + c * iExp ].m_sVal.cstr() );
-					}
-				}
-
-				// do add
-				if ( !pIndex->AddDocument ( dFields.GetLength(), dFields.Begin(), tDoc, eStmt==STMT_REPLACE ) )
-					sError = pIndex->GetLastError();
-
-				// report error
-				if ( !sError.IsEmpty() )
-					break;
-			}
-
-			// report error
-			if ( !sError.IsEmpty() )
-			{
-				SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
-				continue;
-			}
-			if ( bAutoCommit && !bInTransaction )
-				pIndex->Commit ();
-
-			// my OK packet
-			SendMysqlOkPacket ( tOut, uPacketID, tStmt.m_iRowsAffected );
+			HandleMysqlInsert ( tStmt, tOut, uPacketID, eStmt==STMT_REPLACE, bAutoCommit && !bInTransaction );
 			continue;
 		}
 		case STMT_DELETE:

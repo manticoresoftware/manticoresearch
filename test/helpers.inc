@@ -1332,6 +1332,14 @@ class SphinxConfig
 			fwrite ( $fp, $diffed );
 			fwrite ( $fp, "=== query $nquery diff end ===\n" );
 		}
+
+		$nref = count ( array_keys ( $this->_results_model [ $this->SubtestNo() ] ) );
+		$nres = count ( array_keys ( $this->_results ) );
+		if ( $nres > $nref )
+		{
+			$delta = $nres - $nref;
+			fwrite ( $fp, "$delta result set(s) missing from model!\n" );
+		}
 	}
 
 	function EraseIndexFiles ( $path )

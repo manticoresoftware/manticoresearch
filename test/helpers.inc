@@ -1344,7 +1344,7 @@ class SphinxConfig
 		}
 	}
 
-	function WriteConfig ( $filename, $agentid, &$msg )
+	function WriteConfig ( $filename, $agentid, &$msg, $collectdata = true )
 	{
 		global $g_locals;
 		$fp = fopen ( $filename, 'w' );
@@ -1483,6 +1483,7 @@ class SphinxConfig
 				else
 					$schema['orders'] = $insert_schema;
 				$schema['values'] = $insert_values;
+				$schema['sqlport'] = $this->_sd_sphinxql_port;
 
 				$schemas[$match['srcname'][0]] = $schema;
 				$srclen = $match['epilog'][1] - $match['body'][1];
@@ -1527,7 +1528,8 @@ class SphinxConfig
 						case "source";
 							{
 								$idxbody .= "\ttype\t= rt\n";
-								$indexes[$match['idxname'][0]] = $schemas[$value];
+								if ( $collectdata )
+									$indexes[$match['idxname'][0]] = $schemas[$value];
 								foreach ( array_keys( $schemas[$value]['orders'] ) as $key )
 									if ( $key != "id" && $key != "document_id" )
 									{
@@ -1556,7 +1558,9 @@ class SphinxConfig
 				$config = substr_replace ($config, $idx, $match['body'][1]-$shift,$srclen );
 				$shift += $srclen-strlen($idx);
 			}
-			$this->_indexdata = $indexes;
+			if ( $collectdata )
+				foreach ($indexes as $key => $value)
+					$this->_indexdata[$key] = $value;
 			$fp = fopen ( $filename, 'w' );
 			if ( !$fp )
 			{
@@ -1610,16 +1614,25 @@ class SphinxConfig
 	function InsertIntoIndexer ( &$error )
 	{
 		global $sd_address, $sd_sphinxql_port, $action_retries, $action_wait_timeout;
-		if ($sd_address == "localhost")
-			$connect_string = "127.0.0.1:$sd_sphinxql_port";
-		else
-			$connect_string = "$sd_address:$sd_sphinxql_port";
+		$address = $sd_address;
+		if ($address == "localhost")
+			$address = "127.0.0.1";
 
-		$cn = @mysql_connect ( $connect_string );
-		if ( $cn === false )
-			return false;
+		$cn = false;
+		$port = 0;
 		foreach ( $this->_indexdata as $name => $data )
 		{
+			if ( $port != $data["sqlport"] )
+			{
+				$port = $data["sqlport"];
+				$connect_string = "$address:$port";
+				if ( $cn !== false )
+					mysql_close ( $cn );
+				$cn = @mysql_connect ( $connect_string );
+			}
+			if ( $cn === false )
+				return false;
+
 			$cols = join ( ", ", array_keys ( $data["orders"] ) );
 			$prefix = "INSERT INTO $name ($cols) VALUES ";
 
@@ -1660,7 +1673,8 @@ class SphinxConfig
 				}
 			}
 		}
-		mysql_close ( $cn );
+		if ( $cn )
+			mysql_close ( $cn );
 		return true;
 	}
 
@@ -1897,12 +1911,12 @@ function RunTest ( $test_dir )
 
 		$config->SetAgent ( $agents [0] );
 		$msg = '';
-		if (!$config->WriteConfig ( $conf_dir."/"."config_".$config->SubtestNo ().".conf", "all", $msg ))
+		if (!$config->WriteConfig ( $conf_dir."/"."config_".$config->SubtestNo ().".conf", "all", $msg, false))
 		{
 			print ("Interrupted, $msg\n");
 			continue;
 		}
-		$config->WriteConfig ( "config.conf", "all", $msg );
+		$config->WriteConfig ( "config.conf", "all", $msg, $config->NumAgents () < 2 );
 
 		EraseDirContents ( $indexer_data_path );
 

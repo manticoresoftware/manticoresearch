@@ -857,13 +857,27 @@ class SphinxConfig
 					
 					if ( $results )
 					{
-						$bOk = TRUE;
-						if ( $compact )
-							$results = array ( $n, $results['total'], $results['total_found'], $results['time'] );
-						else
-							$results ["query"] = $query;
+						// let also work with "array of arrays" result
+						if ( array_key_exists ( "error",$results ) )
+						{
+							$bOk = TRUE;
+							if ( $compact )
+								$results = array ( $n, $results['total'], $results['total_found'], $results['time'] );
+							else
+								$results ["query"] = $query;
 
-						array_push ( $query_results, $results );
+							array_push ( $query_results, $results );
+						} else
+						foreach ( $results as $result )
+						{
+							$bOk = TRUE;
+							if ( $compact )
+								$result = array ( $n, $result['total'], $result['total_found'], $result['time'] );
+							else
+								$result ["query"] = $query;
+
+							array_push ( $query_results, $result );
+						}
 					}
 					else if ( @$qinfo["expect_error"] && !$cl->IsConnectError() )
 					{
@@ -1136,8 +1150,8 @@ class SphinxConfig
 	}
 
 		// format header
-		$qinfo = $this->_queries[$nquery-1];
-		if ( array_key_exists ( "index", $qinfo ) && $qinfo ["index"] != '*' )
+		$qinfo = @$this->_queries[$nquery-1];
+		if ( @array_key_exists ( "index", $qinfo ) && $qinfo ["index"] != '*' )
 			$str = "--- Query $nquery (mode=$qinfo[mode_s],ranker=$qinfo[ranker_s],index=$qinfo[index]) ---\n";
 		else
 			$str = "--- Query $nquery (mode=$qinfo[mode_s],ranker=$qinfo[ranker_s]) ---\n";

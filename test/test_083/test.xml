@@ -56,14 +56,13 @@ INSERT INTO `test_table` VALUES
 ( 5, 'one two three four five seven' )
 </DB_Insert>
 
-<Custom_test><![CDATA[
+  <Query_Settings><![CDATA[
 $client->SetMatchMode (SPH_MATCH_EXTENDED2);
 $client->AddQuery ("(one two three) |one");
 $client->AddQuery ("(one two three) |six");
 $results = $client->RunQueries ();
-for ( $i=0; $i<=1; $i++ )
-	if ( is_array($results) && is_array($results[$i]) )
-		unset ( $results[$i]["time"] );
-]]></Custom_test>
+]]></Query_Settings>
+
+<Queries><Query/></Queries>
 
 </Test>

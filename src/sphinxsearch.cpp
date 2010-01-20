@@ -3733,7 +3733,7 @@ public:
 	ExtNode_i *						CreateCachedWrapper ( ExtNode_i* pChild, const XQNode_t * pRawChild, const ISphQwordSetup & tSetup );
 
 private:
-	bool							WarmupCache ( ExtNode_i * pChild );
+	bool							WarmupCache ( ExtNode_i * pChild, int iQWords );
 	void							Invalidate();
 };
 
@@ -3751,6 +3751,7 @@ class ExtNodeCached_t : public ExtNode_i
 	int							m_iHitIndex;		///< store the current position in m_Hits for GetHitsChunk()
 	int							m_iDocIndex;		///< store the current position in m_Docs for GetDocsChunk()
 	ExtNode_i *					m_pChild;			///< pointer to donor for the sake of AtomPos procession
+	int							m_iQwords;			///< number of tokens in parent query
 
 	void StepForwardToHitsFor ( SphDocID_t uDocId );
 
@@ -3764,6 +3765,7 @@ class ExtNodeCached_t : public ExtNode_i
 		, m_iHitIndex ( 0 )
 		, m_iDocIndex ( 0 )
 		, m_pChild ( pChild )
+		, m_iQwords ( 0 )
 	{
 		m_iAtomPos = pChild->m_iAtomPos;
 	}
@@ -3801,10 +3803,14 @@ public:
 
 	virtual void SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 	{
-		if ( m_pChild )
-			m_pChild->SetQwordsIDF ( hQwords );
+		m_iQwords = hQwords.GetLength();
 		if ( m_pNode->m_pSetup )
-			m_pNode->WarmupCache ( m_pChild );
+		{
+			if ( m_pChild )
+				m_pChild->SetQwordsIDF ( hQwords );
+
+			m_pNode->WarmupCache ( m_pChild, m_iQwords );
+		}
 	}
 
 	virtual bool GotHitless ()
@@ -3832,7 +3838,7 @@ ExtNode_i * NodeCacheContainer_t::CreateCachedWrapper ( ExtNode_i * pChild, cons
 }
 
 
-bool NodeCacheContainer_t::WarmupCache ( ExtNode_i * pChild )
+bool NodeCacheContainer_t::WarmupCache ( ExtNode_i * pChild, int iQwords )
 {
 	SphDocID_t pMaxID = 0;
 	m_iAtomPos = pChild->m_iAtomPos;
@@ -3850,6 +3856,8 @@ bool NodeCacheContainer_t::WarmupCache ( ExtNode_i * pChild )
 		for ( ; pChunk->m_uDocid!=DOCID_MAX; pChunk++ )
 		{
 			m_Docs.Add ( *pChunk );
+			// exclude number or Qwords from FIDF
+			m_Docs.Last().m_fTFIDF *= iQwords;
 			m_pNodeCache->m_iMaxCachedDocs--;
 			if ( iStride>0 )
 			{
@@ -3958,6 +3966,10 @@ const ExtDoc_t * ExtNodeCached_t::GetDocsChunk ( SphDocID_t * pMaxID )
 	int iDoc = Min ( m_iDocIndex+MAX_DOCS-1, m_pNode->m_Docs.GetLength()-1 ) - m_iDocIndex;
 	memcpy ( &m_dDocs[0], &m_pNode->m_Docs[m_iDocIndex], sizeof(ExtDoc_t)*iDoc );
 	m_iDocIndex += iDoc;
+
+	// funny trick based on the formula of FIDF calculation.
+	for ( int i=0; i<iDoc; i++ )
+		m_dDocs[i].m_fTFIDF /= m_iQwords;
 
 	return ReturnDocsChunk ( iDoc, pMaxID );
 }

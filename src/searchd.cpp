@@ -33,6 +33,9 @@
 #define SEARCHD_BACKLOG			5
 #define SEARCHD_DEFAULT_PORT	9312
 
+// uncomment to switch the watchdog on
+// #define WATCHDOG_FORK	1
+
 #define SPH_ADDRESS_SIZE		sizeof("000.000.000.000")
 
 /////////////////////////////////////////////////////////////////////////////
@@ -160,6 +163,11 @@ static int				g_iMaxChildren	= 0;
 static bool				g_bPreopenIndexes = false;
 static bool				g_bOnDiskDicts	= false;
 static bool				g_bUnlinkOld	= true;
+#ifdef WATCHDOG_FORK
+static bool				g_bWatchdog		= true;
+#else
+static bool				g_bWatchdog		= false;
+#endif
 
 struct Listener_t
 {
@@ -9328,8 +9336,72 @@ int PreforkChild ()
 	g_dChildren.Add ( iRes );
 	return iRes;
 }
-#endif // !USE_WINDOWS
 
+void SetWatchDog()
+{
+	bool bReincarnate = true;
+	bool bShutdown = false;
+	int iRes;
+	for ( ;; )
+	{
+		if ( bReincarnate )
+			iRes = fork();
+
+		if ( iRes==-1 )
+		{
+			Shutdown ();
+			sphFatal ( "fork() failed during watchdog setup (error=%s)", strerror(errno) );
+		}
+
+		// child process; just return
+		if ( iRes==0 )
+			return;
+
+		// parent process, watchdog
+		bReincarnate = false;
+		int iPid, iStatus;
+		while ( ( iPid = wait ( &iStatus ) )>0 )
+		{
+			assert ( iPid==iRes );
+			if ( WIFEXITED ( iStatus ) )
+			{
+				if ( WEXITSTATUS ( iStatus )!=0 )
+				{
+					sphInfo ( "Child process %d has died with code %i, will be restarted", iPid, WEXITSTATUS ( iStatus ) );
+					bReincarnate = true;
+				} else
+				{
+					sphInfo ( "Child process %d has been finished. Watchdog finishes also. Good bye!", iPid );
+					bShutdown = true;
+				}
+			} else if ( WIFSIGNALED ( iStatus ) )
+			{
+				if ( WTERMSIG ( iStatus )==SIGINT || WTERMSIG ( iStatus )==SIGTERM )
+				{
+					sphInfo ( "Child process %d has been killed with kill or sigterm (%i). Watchdog finishes also. Good bye!", iPid, WTERMSIG ( iStatus ) );
+					bShutdown = true;
+				} else
+				{
+					if ( WCOREDUMP ( iStatus ) )
+						sphInfo ( "Child process %i has been killed with signal %i, core dumped, will be restarted", iPid, WTERMSIG ( iStatus ) );
+					else
+						sphInfo ( "Child process %i has been killed with signal %i, will be restarted", iPid, WTERMSIG ( iStatus ) );
+					bReincarnate = true;
+				}
+			} else if ( WIFSTOPPED ( iStatus ) )
+				sphInfo ( "Child %i stopped with signal %i", iPid, WSTOPSIG ( iStatus ) );
+			else if ( WIFCONTINUED ( iStatus ) )
+				sphInfo ( "Child %i resumed", iPid );
+		}
+
+		if ( bShutdown || g_bGotSigterm )
+		{
+			Shutdown();
+			exit ( 0 );
+		}
+	}
+}
+#endif // !USE_WINDOWS
 
 /// check for incoming signals, and react on them
 void CheckSignals ()
@@ -10434,6 +10506,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 				exit ( 0 );
 		}
 	}
+	if ( g_bWatchdog && g_eWorkers==MPM_THREADS )
+		SetWatchDog();
 #endif
 
 	if ( bOptPIDFile )
@@ -10449,6 +10523,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		snprintf ( sPid, sizeof(sPid), "%d\n", (int)getpid() );
 		int iPidLen = strlen(sPid);
 
+		lseek ( g_iPidFD, 0, SEEK_SET );
 		if ( !sphWrite ( g_iPidFD, sPid, iPidLen ) )
 			sphFatal ( "failed to write to pid file '%s' (errno=%d, msg=%s)", g_sPidFile,
 				errno, strerror(errno) );

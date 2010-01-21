@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>xmlpipe2 string and wordcount attributes</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source src
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data.xml
+}
+
+index idx
+{
+	source = src
+	path = <data_path/>/idx
+	charset_type = utf-8
+}
+
+</config>
+
+<queries>
+<query index="idx">test</query>
+</queries>
+
+</test>

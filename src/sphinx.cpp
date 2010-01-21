@@ -1229,7 +1229,7 @@ public:
 	virtual int					DebugCheck ( FILE * fp );
 	template <class Qword> void	DumpHitlist ( FILE * fp, const char * sKeyword, bool bID );
 
-	virtual const CSphSchema *	Prealloc ( bool bMlock, CSphString & sWarning );
+	virtual bool				Prealloc ( bool bMlock, CSphString & sWarning );
 	virtual bool				Mlock ();
 	virtual void				Dealloc ();
 
@@ -10524,18 +10524,17 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 	assert ( pSrcIndex );
 
 	CSphString sWarning;
-
-	const CSphSchema * pDstSchema = Prealloc ( false, sWarning );
-	if ( !pDstSchema || !Preread() )
+	if ( !Prealloc ( false, sWarning ) || !Preread() )
 		return false;
-
-	const CSphSchema * pSrcSchema = pSrcIndex->Prealloc ( false, sWarning );
-	if ( !pSrcSchema || !pSrcIndex->Preread() )
+	if ( !pSrcIndex->Prealloc ( false, sWarning ) || !pSrcIndex->Preread() )
 	{
 		m_sLastError.SetSprintf ( "source index preload failed: %s", pSrcIndex->GetLastError().cstr() );
 		return false;
 	}
-	if ( !pDstSchema->CompareTo ( *pSrcSchema, m_sLastError ) )
+
+	const CSphSchema & tDstSchema = m_tSchema;
+	const CSphSchema & tSrcSchema = pSrcIndex->m_tSchema;
+	if ( !tDstSchema.CompareTo ( tSrcSchema, m_sLastError ) )
 		return false;
 
 	if ( m_tSettings.m_eHitless!=pSrcIndex->m_tSettings.m_eHitless )
@@ -10601,9 +10600,9 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 	/// merging
 	CSphVector<CSphAttrLocator> dMvaLocators;
 	CSphVector<CSphAttrLocator> dStringLocators;
-	for ( int i=0; i<pDstSchema->GetAttrsCount(); i++ )
+	for ( int i=0; i<tDstSchema.GetAttrsCount(); i++ )
 	{
-		const CSphColumnInfo & tInfo = pDstSchema->GetAttr(i);
+		const CSphColumnInfo & tInfo = tDstSchema.GetAttr(i);
 		if ( tInfo.m_eAttrType & SPH_ATTR_MULTI )
 			dMvaLocators.Add ( tInfo.m_tLocator );
 		if ( tInfo.m_eAttrType==SPH_ATTR_STRING )
@@ -11951,7 +11950,7 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 }
 
 
-const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning )
+bool CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning )
 {
 	// reset
 	Dealloc ();
@@ -11960,7 +11959,7 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 	if ( m_bPreread.IsEmpty() )
 	{
 		if ( !m_bPreread.Alloc ( 1, m_sLastError, sWarning ) )
-			return NULL;
+			return false;
 	}
 	m_bPreread.GetWritePtr()[0] = 0;
 
@@ -11973,22 +11972,22 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 
 	// preload schema
 	if ( !LoadHeader ( GetIndexFileName("sph").cstr(), sWarning ) )
-		return NULL;
+		return false;
 
 	if ( m_bUse64!=USE_64BIT )
 	{
 		m_sLastError.SetSprintf ( "'%s' is id%d, and this binary is id%d",
 			GetIndexFileName("sph").cstr(),
 			m_bUse64 ? 64 : 32, USE_64BIT ? 64 : 32 );
-		return NULL;
+		return false;
 	}
 
 	// verify that data files are readable
 	if ( !sphIsReadable ( GetIndexFileName("spd").cstr(), &m_sLastError ) )
-		return NULL;
+		return false;
 
 	if ( m_uVersion>=3 && !sphIsReadable ( GetIndexFileName("spp").cstr(), &m_sLastError ) )
-		return NULL;
+		return false;
 
 	/////////////////////
 	// prealloc docinfos
@@ -12005,12 +12004,12 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 
 		CSphAutofile tDocinfo ( GetIndexFileName("spa"), SPH_O_READ, m_sLastError );
 		if ( tDocinfo.GetFD()<0 )
-			return NULL;
+			return false;
 
 		DWORD iDocinfoSize = DWORD ( tDocinfo.GetSize ( iEntrySize, true, m_sLastError )
 			/ sizeof(DWORD) );
 		if ( iDocinfoSize<0 )
-			return NULL;
+			return false;
 
 		DWORD iRealDocinfoSize = m_uMinMaxIndex ? m_uMinMaxIndex : iDocinfoSize;
 
@@ -12019,7 +12018,7 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 		if ( iRealDocinfoSize!=m_uDocinfo*iStride )
 		{
 			m_sLastError.SetSprintf ( "docinfo size check mismatch (4B document limit hit?)" );
-			return NULL;
+			return false;
 		}
 
 		if ( m_uVersion < 20 )
@@ -12028,7 +12027,7 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 
 			// prealloc docinfo
 			if ( !m_pDocinfo.Alloc ( iDocinfoSize + 2*(1+m_uDocinfoIndex)*iStride, m_sLastError, sWarning ) )
-				return NULL;
+				return false;
 
 			m_pDocinfoIndex = const_cast < DWORD * > ( &m_pDocinfo [ iDocinfoSize ] );
 		} else
@@ -12036,12 +12035,12 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 			if ( iDocinfoSize < iRealDocinfoSize )
 			{
 				m_sLastError.SetSprintf ( "precomputed chunk size check mismatch" );
-				return NULL;
+				return false;
 			}
 
 			// prealloc docinfo
 			if ( !m_pDocinfo.Alloc ( iDocinfoSize, m_sLastError, sWarning ) )
-				return NULL;
+				return false;
 
 			m_uDocinfoIndex = ( ( iDocinfoSize - iRealDocinfoSize ) / iStride / 2 ) - 1;
 			m_pDocinfoIndex = const_cast < DWORD * > ( &m_pDocinfo [ m_uMinMaxIndex ] );
@@ -12050,7 +12049,7 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 		// prealloc docinfo hash but only if docinfo is big enough (in other words if hash is 8x+ less in size)
 		if ( m_pDocinfoHash.IsEmpty() && m_pDocinfo.GetLength() > ( 32 << DOCINFO_HASH_BITS ) )
 			if ( !m_pDocinfoHash.Alloc ( ( 1 << DOCINFO_HASH_BITS )+4, m_sLastError, sWarning ) )
-				return NULL;
+				return false;
 
 		////////////
 		// MVA data
@@ -12061,16 +12060,16 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 			// if index is v4, .spm must always exist, even though length could be 0
 			CSphAutofile fdMva ( GetIndexFileName("spm"), SPH_O_READ, m_sLastError );
 			if ( fdMva.GetFD()<0 )
-				return NULL;
+				return false;
 
 			SphOffset_t iMvaSize = fdMva.GetSize ( 0, true, m_sLastError );
 			if ( iMvaSize<0 )
-				return NULL;
+				return false;
 
 			// prealloc
 			if ( iMvaSize>0 )
 				if ( !m_pMva.Alloc ( DWORD(iMvaSize/sizeof(DWORD)), m_sLastError, sWarning ) )
-					return NULL;
+					return false;
 		}
 
 		///////////////
@@ -12081,16 +12080,16 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 		{
 			CSphAutofile fdStrings ( GetIndexFileName("sps"), SPH_O_READ, m_sLastError );
 			if ( fdStrings.GetFD()<0 )
-				return NULL;
+				return false;
 
 			SphOffset_t iStringsSize = fdStrings.GetSize ( 0, true, m_sLastError );
 			if ( iStringsSize<0 )
-				return NULL;
+				return false;
 
 			// prealloc
 			if ( iStringsSize>0 )
 				if ( !m_pStrings.Alloc ( DWORD(iStringsSize), m_sLastError, sWarning ) )
-					return NULL;
+					return false;
 		}
 	}
 
@@ -12101,11 +12100,11 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 	// try to open wordlist file in all cases
 	CSphAutofile tWordlist ( GetIndexFileName("spi"), SPH_O_READ, m_sLastError );
 	if ( tWordlist.GetFD()<0 )
-		return NULL;
+		return false;
 
 	m_iWordlistSize = tWordlist.GetSize ( 1, true, m_sLastError );
 	if ( m_iWordlistSize<0 )
-		return NULL;
+		return false;
 
 	// make sure checkpoints are loadable
 	// pre-11 indices use different offset type (this is fixed up later during the loading)
@@ -12120,25 +12119,25 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 	if ( ( (int64_t)m_iWordlistSize - (int64_t)m_iCheckpointsPos )!=( (int64_t)m_dWordlistCheckpoints.GetLength() * iCheckpointSize ) )
 	{
 		m_sLastError = "checkpoint segment size mismatch (rebuild the index)";
-		return NULL;
+		return false;
 	}
 
 	// prealloc wordlist
 	if ( m_bPreloadWordlist )
 		if ( !m_pWordlist.Alloc ( DWORD(m_iWordlistSize), m_sLastError, sWarning ) )
-			return NULL;
+			return false;
 
 	// preopen
 	if ( m_bKeepFilesOpen )
 	{
 		if ( m_tDoclistFile.Open ( GetIndexFileName("spd"), SPH_O_READ, m_sLastError ) < 0 )
-			return NULL;
+			return false;
 
 		if ( m_tHitlistFile.Open ( GetIndexFileName ( m_uVersion>=3 ? "spp" : "spd" ), SPH_O_READ, m_sLastError ) < 0 )
-			return NULL;
+			return false;
 
 		if ( !m_bPreloadWordlist && m_tWordlistFile.Open ( GetIndexFileName("spi"), SPH_O_READ, m_sLastError ) < 0 )
-			return NULL;
+			return false;
 	}
 
 	// prealloc killlist
@@ -12146,21 +12145,21 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 	{
 		CSphAutofile fdKillList ( GetIndexFileName("spk"), SPH_O_READ, m_sLastError );
 		if ( fdKillList.GetFD()<0 )
-			return NULL;
+			return false;
 
 		SphOffset_t iSize = fdKillList.GetSize ( 0, true, m_sLastError );
 		if ( iSize<0 )
-			return NULL;
+			return false;
 
 		if ( iSize!=(SphOffset_t)( m_iKillListSize*sizeof(SphAttr_t) ) )
 		{
 			m_sLastError.SetSprintf ( "header killlist size (%d) does not match with spk file size (%d)", m_iKillListSize * sizeof(SphAttr_t), iSize );
-			return NULL;
+			return false;
 		}
 
 		// prealloc
 		if ( iSize>0 && !m_pKillList.Alloc ( m_iKillListSize, m_sLastError, sWarning ) )
-			return NULL;
+			return false;
 	}
 
 	// preload checkpoints (must be done here as they are not shared)
@@ -12201,7 +12200,7 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 	if ( tCheckpointReader.GetErrorFlag() )
 	{
 		m_sLastError.SetSprintf ( "failed to read %s: %s", GetIndexFileName("spi").cstr(), tCheckpointReader.GetErrorMessage().cstr () );
-		return NULL;
+		return false;
 	}
 
 	SphOffset_t uMaxChunk = 0;
@@ -12217,7 +12216,7 @@ const CSphSchema * CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning 
 	// all done
 	m_bPreallocated = true;
 	m_iIndexTag = ++m_iIndexTagSeq;
-	return &m_tSchema;
+	return true;
 }
 
 
@@ -12951,7 +12950,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 
 	// parse query
 	XQQuery_t tParsed;
-	if ( !sphParseExtendedQuery ( tParsed, pQuery->m_sQuery.cstr(), pTokenizer, GetSchema(), pDict ) )
+	if ( !sphParseExtendedQuery ( tParsed, pQuery->m_sQuery.cstr(), pTokenizer, &m_tSchema, pDict ) )
 	{
 		pResult->m_sError = tParsed.m_sParseError;
 		SafeDelete ( pTokenizer );
@@ -13002,7 +13001,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 	{
 		// parse query
 		XQQuery_t tParsed;
-		if ( !sphParseExtendedQuery ( tParsed, pQueries[i].m_sQuery.cstr(), pTokenizer, GetSchema(), pDict ) )
+		if ( !sphParseExtendedQuery ( tParsed, pQueries[i].m_sQuery.cstr(), pTokenizer, &m_tSchema, pDict ) )
 		{
 			ppResults[i]->m_sError = tParsed.m_sParseError;
 			bResult = false;

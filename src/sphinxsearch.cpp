@@ -3557,8 +3557,8 @@ ISphRanker * sphCreateRanker ( const XQNode_t * pRoot, ESphRankMode eRankMode, C
 
 	// fill payload mask
 	DWORD uPayloadMask = 0;
-	ARRAY_FOREACH ( i, pIndex->GetSchema()->m_dFields )
-		uPayloadMask |= pIndex->GetSchema()->m_dFields[i].m_bPayload << i;
+	ARRAY_FOREACH ( i, pIndex->GetMatchSchema().m_dFields )
+		uPayloadMask |= pIndex->GetMatchSchema().m_dFields[i].m_bPayload << i;
 
 	bool bSingleWord = pRoot->m_dChildren.GetLength()==0 && pRoot->m_dWords.GetLength()==1;
 

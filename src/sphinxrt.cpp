@@ -962,7 +962,7 @@ public:
 	virtual int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer ) { return 0; }
 	virtual bool				Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> & dFilters, bool bMergeKillLists ) { return false; }
 
-	virtual const CSphSchema *	Prealloc ( bool bMlock, CSphString & sWarning );
+	virtual bool				Prealloc ( bool bMlock, CSphString & sWarning );
 	virtual void				Dealloc () {}
 	virtual bool				Preread ();
 	virtual void				SetBase ( const char * sNewBase ) {}
@@ -2428,7 +2428,7 @@ CSphIndex * RtIndex_t::LoadDiskChunk ( int iChunk )
 }
 
 
-const CSphSchema * RtIndex_t::Prealloc ( bool, CSphString & )
+bool RtIndex_t::Prealloc ( bool, CSphString & )
 {
 	// locking uber alles
 	// in RT backed case, we just must be multi-threaded
@@ -2456,23 +2456,23 @@ const CSphSchema * RtIndex_t::Prealloc ( bool, CSphString & )
 
 	// no readable meta? no disk part yet
 	if ( !sphIsReadable ( sMeta.cstr() ) )
-		return &m_tSchema;
+		return true;
 
 	// opened and locked, lets read
 	CSphAutoreader rdMeta;
 	if ( !rdMeta.Open ( sMeta, m_sLastError ) )
-		return NULL;
+		return false;
 
 	if ( rdMeta.GetDword()!=META_HEADER_MAGIC )
 	{
 		m_sLastError.SetSprintf ( "invalid meta file %s", sMeta.cstr() );
-		return NULL;
+		return false;
 	}
 	DWORD uVersion = rdMeta.GetDword();
 	if ( uVersion==0 || uVersion>META_VERSION )
 	{
 		m_sLastError.SetSprintf ( "%s is v.%d, binary is v.%d", sMeta.cstr(), uVersion, META_VERSION );
-		return NULL;
+		return false;
 	}
 	m_iDiskChunks = rdMeta.GetDword();
 	m_tStats.m_iTotalDocuments = rdMeta.GetDword();
@@ -2484,15 +2484,15 @@ const CSphSchema * RtIndex_t::Prealloc ( bool, CSphString & )
 	for ( int iChunk=0; iChunk<m_iDiskChunks; iChunk++ )
 	{
 		m_pDiskChunks.Add ( LoadDiskChunk ( iChunk ) );
-		if ( !m_tSchema.CompareTo ( *m_pDiskChunks.Last()->GetSchema(), m_sLastError ) )
-			return NULL;
+
+		// tricky bit
+		// outgoing match schema on disk chunk should be identical to our internal (!) schema
+		if ( !m_tSchema.CompareTo ( m_pDiskChunks.Last()->GetMatchSchema(), m_sLastError ) )
+			return false;
 	}
 
 	// load ram chunk
-	if ( !LoadRamChunk() )
-		return NULL;
-
-	return &m_tSchema;
+	return LoadRamChunk();
 }
 
 
@@ -3002,7 +3002,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 		// parse query
 		XQQuery_t tParsed;
-		if ( !sphParseExtendedQuery ( tParsed, pQuery->m_sQuery.cstr(), GetTokenizer(), GetSchema(), m_pDict ) )
+		if ( !sphParseExtendedQuery ( tParsed, pQuery->m_sQuery.cstr(), GetTokenizer(), &m_tSchema, m_pDict ) )
 		{
 			pResult->m_sError = tParsed.m_sParseError;
 			m_tRwlock.Unlock ();
@@ -4112,9 +4112,9 @@ bool RtBinlog_c::ReplayAddDocument ( const CSphVector < ISphRtIndex * > & dRtInd
 	if ( tReader.GetErrorFlag() )
 		return false;
 
-	if ( pIndex && iRowSize!=pIndex->GetSchema()->GetRowSize() )
+	if ( pIndex && iRowSize!=pIndex->GetMatchSchema().GetRowSize() )
 		sphCallWarningCallback ( "binlog: added attributes row mismatch (loaded=%s, expected=%d, got=%d, pos=%d)",
-			pIndex->GetName(), pIndex->GetSchema()->GetRowSize(), iRowSize, tReader.GetPos() );
+			pIndex->GetName(), pIndex->GetMatchSchema().GetRowSize(), iRowSize, tReader.GetPos() );
 
 	const int iHitCount = tReader.GetDword();
 	if ( tReader.GetErrorFlag() )
@@ -4143,7 +4143,7 @@ bool RtBinlog_c::ReplayAddDocument ( const CSphVector < ISphRtIndex * > & dRtInd
 	if ( tReader.GetErrorFlag() )
 		return false;
 
-	if ( pIndex && iRowSize==pIndex->GetSchema()->GetRowSize()
+	if ( pIndex && iRowSize==pIndex->GetMatchSchema().GetRowSize()
 		&& NeedReplay ( tDesc.m_dRanges[iReplayedIndex].m_sName.cstr(), dCommitedCP[iReplayedIndex] ) )
 	{
 		pIndex->AddDocumentReplayable ( dHits, tDoc );

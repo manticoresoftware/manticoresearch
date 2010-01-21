@@ -263,13 +263,12 @@ int main ( int argc, char ** argv )
 		sError = "could not create index (check that files exist)";
 		for ( ; pIndex; )
 		{
-			const CSphSchema * pSchema = pIndex->Prealloc ( false, sWarning );
-
-			if ( !pSchema || !pIndex->Preread() )
+			if ( !pIndex->Prealloc ( false, sWarning ) || !pIndex->Preread() )
 			{
 				sError = pIndex->GetLastError ();
 				break;
 			}
+			const CSphSchema * pSchema = &pIndex->GetMatchSchema();
 
 			if ( !sWarning.IsEmpty () )
 				fprintf ( stdout, "WARNING: index '%s': %s\n", sIndexName, sWarning.cstr () );
@@ -298,7 +297,7 @@ int main ( int argc, char ** argv )
 			}
 
 			// do querying
-			ISphMatchSorter * pTop = sphCreateQueue ( &tQuery, *pIndex->GetSchema(), sError );
+			ISphMatchSorter * pTop = sphCreateQueue ( &tQuery, pIndex->GetMatchSchema(), sError );
 			if ( !pTop )
 			{
 				sError.SetSprintf ( "failed to create sorting queue: %s", sError.cstr() );

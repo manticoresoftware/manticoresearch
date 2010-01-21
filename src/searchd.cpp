@@ -78,7 +78,6 @@
 struct ServedIndex_t
 {
 	CSphIndex *			m_pIndex;
-	const CSphSchema *	m_pSchema;		///< pointer to index schema, managed by the index itself
 	CSphString			m_sIndexPath;
 	bool				m_bEnabled;		///< to disable index in cases when rotation fails
 	bool				m_bMlock;
@@ -4638,7 +4637,7 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 		const CSphQuery & tQuery = m_dQueries[i+m_iStart];
 
 		assert ( !tQuery.m_iOldVersion || tQuery.m_iOldVersion>=0x102 );
-		ppSorters[i] = sphCreateQueue ( &tQuery, *pServed->m_pSchema, sError );
+		ppSorters[i] = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError );
 		if ( !ppSorters[i] )
 		{
 			// FIXME! submit a failure?
@@ -4736,14 +4735,14 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter )
 			if ( !pLocalSorter )
 			{
 				// fixup old queries
-				if ( !FixupQuery ( &tQuery, pServed->m_pSchema, sLocal, sError ) )
+				if ( !FixupQuery ( &tQuery, &pServed->m_pIndex->GetMatchSchema(), sLocal, sError ) )
 				{
 					m_dFailuresSet[iQuery].SubmitEx ( sLocal, "%s", sError.cstr() );
 					continue;
 				}
 
 				// create queue
-				pSorter = sphCreateQueue ( &tQuery, *pServed->m_pSchema, sError );
+				pSorter = sphCreateQueue ( &tQuery, pServed->m_pIndex->GetMatchSchema(), sError );
 				if ( !pSorter )
 				{
 					m_dFailuresSet[iQuery].SubmitEx ( sLocal, "%s", sError.cstr() );
@@ -5022,7 +5021,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		if ( !pFirstIndex )
 			break;
 
-		const CSphSchema * pFirstSchema = pFirstIndex->m_pSchema;
+		const CSphSchema & tFirstSchema = pFirstIndex->m_pIndex->GetMatchSchema();
 		for ( int i=1; i<m_dLocal.GetLength() && bAllEqual; i++ )
 		{
 			const ServedIndex_t * pNextIndex = g_hIndexes ( m_dLocal[i] );
@@ -5032,7 +5031,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				break;
 			}
 
-			if ( !pFirstSchema->CompareTo ( *pNextIndex->m_pSchema, sError ) )
+			if ( !tFirstSchema.CompareTo ( pNextIndex->m_pIndex->GetMatchSchema(), sError ) )
 				bAllEqual = false;
 
 			if ( bAllEqual && g_eWorkers==MPM_THREADS )
@@ -5043,8 +5042,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 		// we can reuse the very same sorter
 		if ( bAllEqual )
-			if ( FixupQuery ( &m_dQueries[iStart], pFirstSchema, "local-sorter", sError ) )
-				pLocalSorter = sphCreateQueue ( &m_dQueries[iStart], *pFirstSchema, sError );
+			if ( FixupQuery ( &m_dQueries[iStart], &tFirstSchema, "local-sorter", sError ) )
+				pLocalSorter = sphCreateQueue ( &m_dQueries[iStart], tFirstSchema, sError );
 
 		if ( g_eWorkers==MPM_THREADS )
 		{
@@ -5840,14 +5839,16 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	int iFlags = tReq.GetInt ();
 	CSphString sIndex = tReq.GetString ();
 
-	const ServedIndex_t * pIndex = g_hIndexes ( sIndex );
-	if ( !pIndex )
+	const ServedIndex_t * pServed = g_hIndexes ( sIndex );
+	if ( !pServed )
 	{
 		tReq.SendErrorReply ( "unknown local index '%s' in search request", sIndex.cstr() );
 		return;
 	}
-	CSphDict * pDict = pIndex->m_pIndex->GetDictionary ();
-	ISphTokenizer * pTokenizer = pIndex->m_pIndex->GetCleanTokenizer ();
+
+	CSphIndex * pIndex = pServed->m_pIndex;
+	CSphDict * pDict = pIndex->GetDictionary ();
+	ISphTokenizer * pTokenizer = pIndex->GetCleanTokenizer ();
 
 	q.m_sWords = tReq.GetString ();
 	q.m_sBeforeMatch = tReq.GetString ();
@@ -5883,7 +5884,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 			return;
 		}
 
-		const CSphIndexSettings & tSettings = pIndex->m_pIndex->GetSettings ();
+		const CSphIndexSettings & tSettings = pIndex->GetSettings ();
 		if ( tSettings.m_bHtmlStrip )
 		{
 			CSphString sError;
@@ -5900,7 +5901,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 		}
 
 		CSphString sError;
-		char * sResult = sphBuildExcerpt ( q, pDict, pTokenizer, pIndex->m_pSchema, pIndex->m_pIndex, sError );
+		char * sResult = sphBuildExcerpt ( q, pDict, pTokenizer, &pIndex->GetMatchSchema(), pIndex, sError );
 		if ( !sResult )
 		{
 			tReq.SendErrorReply ( "highlighting failed: %s", sError.cstr() );
@@ -6791,8 +6792,8 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 	assert ( pIndex );
 
 	// get schema, check values count
-	const CSphSchema * pSchema = pIndex->GetSchema();
-	int iSchemaSz = pSchema->GetAttrsCount() + pSchema->m_dFields.GetLength() + 1;
+	const CSphSchema & tSchema = pIndex->GetMatchSchema();
+	int iSchemaSz = tSchema.GetAttrsCount() + tSchema.m_dFields.GetLength() + 1;
 	int iExp = tStmt.m_iSchemaSz;
 	int iGot = tStmt.m_dInsertValues.GetLength();
 	if ( !tStmt.m_dInsertSchema.GetLength() && ( iSchemaSz!=tStmt.m_iSchemaSz ) )
@@ -6809,8 +6810,8 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 		return;
 	}
 
-	CSphVector<int> dAttrSchema ( pSchema->GetAttrsCount() );
-	CSphVector<int> dFieldSchema ( pSchema->m_dFields.GetLength() );
+	CSphVector<int> dAttrSchema ( tSchema.GetAttrsCount() );
+	CSphVector<int> dFieldSchema ( tSchema.m_dFields.GetLength() );
 	int iIdIndex = 0;
 	if ( !tStmt.m_dInsertSchema.GetLength() )
 	{
@@ -6852,9 +6853,9 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 		bool bIdDupe = false;
 		ARRAY_FOREACH ( i, dFieldSchema )
 		{
-			if ( dInsertSchema.Exists ( pSchema->m_dFields[i].m_sName ) )
+			if ( dInsertSchema.Exists ( tSchema.m_dFields[i].m_sName ) )
 			{
-				int iField = dInsertSchema[pSchema->m_dFields[i].m_sName];
+				int iField = dInsertSchema[tSchema.m_dFields[i].m_sName];
 				if ( iField==iIdIndex )
 				{
 					bIdDupe = true;
@@ -6873,9 +6874,9 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 		// map attrs
 		ARRAY_FOREACH ( j, dAttrSchema )
 		{
-			if ( dInsertSchema.Exists ( pSchema->GetAttr(j).m_sName ) )
+			if ( dInsertSchema.Exists ( tSchema.GetAttr(j).m_sName ) )
 			{
-				int iField = dInsertSchema[pSchema->GetAttr(j).m_sName];
+				int iField = dInsertSchema[tSchema.GetAttr(j).m_sName];
 				if ( iField==iIdIndex )
 				{
 					bIdDupe = true;
@@ -6899,13 +6900,13 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 		assert ( sError.IsEmpty() );
 
 		CSphMatchVariant tDoc;
-		tDoc.Reset ( pSchema->GetRowSize() );
+		tDoc.Reset ( tSchema.GetRowSize() );
 		tDoc.m_iDocID = (SphDocID_t)CSphMatchVariant::ToDocid ( tStmt.m_dInsertValues[iIdIndex + c * iExp] );
 
-		for ( int i=0; i<pSchema->GetAttrsCount(); i++ )
+		for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
 		{
 			// shortcuts!
-			const CSphColumnInfo & tCol = pSchema->GetAttr(i);
+			const CSphColumnInfo & tCol = tSchema.GetAttr(i);
 			CSphAttrLocator tLoc = tCol.m_tLocator;
 			tLoc.m_bDynamic = true;
 
@@ -6939,7 +6940,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 
 		// convert fields
 		CSphVector<const char*> dFields;
-		ARRAY_FOREACH ( i, pSchema->m_dFields )
+		ARRAY_FOREACH ( i, tSchema.m_dFields )
 		{
 			int iQuerySchemaIdx = dFieldSchema[i];
 			if ( iQuerySchemaIdx < 0 )
@@ -7514,8 +7515,7 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 	ISphTokenizer * pTokenizer = tIndex.m_pIndex->LeakTokenizer ();
 	CSphDict * pDictionary = tIndex.m_pIndex->LeakDictionary ();
 
-	const CSphSchema * pNewSchema = tIndex.m_pIndex->Prealloc ( tIndex.m_bMlock, sWarning );
-	if ( !pNewSchema || !tIndex.m_pIndex->Preread() )
+	if ( !tIndex.m_pIndex->Prealloc ( tIndex.m_bMlock, sWarning ) || !tIndex.m_pIndex->Preread() )
 	{
 		if ( tIndex.m_bOnlyNew )
 		{
@@ -7533,8 +7533,7 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 				TryRename ( sIndex, sPath, g_dOldExts[j], g_dCurExts[j], true );
 			}
 
-			pNewSchema = tIndex.m_pIndex->Prealloc ( tIndex.m_bMlock, sWarning );
-			if ( !pNewSchema || !tIndex.m_pIndex->Preread() )
+			if ( !tIndex.m_pIndex->Prealloc ( tIndex.m_bMlock, sWarning ) || !tIndex.m_pIndex->Preread() )
 			{
 				sphWarning ( "rotating index '%s': .new preload failed; ROLLBACK FAILED; INDEX UNUSABLE", sIndex );
 				tIndex.m_bEnabled = false;
@@ -7590,7 +7589,6 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 		}
 
 	// uff. all done
-	tIndex.m_pSchema = pNewSchema;
 	tIndex.m_bEnabled = true;
 	tIndex.m_bOnlyNew = false;
 	sphInfo ( "rotating index '%s': success", sIndex );
@@ -7854,7 +7852,6 @@ static void RotateIndexMT ( const CSphString & sIndex )
 				tNewIndex.m_pIndex->SetDictionary ( pServed->m_pIndex->LeakDictionary() );
 
 			Swap ( pServed->m_pIndex, tNewIndex.m_pIndex );
-			pServed->m_pSchema = pServed->m_pIndex->GetSchema();
 			pServed->m_bEnabled = true;
 
 			// unlink .old
@@ -8198,7 +8195,6 @@ void HandlePipePreread ( PipeReader_t & tPipe, bool bFailure )
 					g_pPrereading->SetDictionary ( tServed.m_pIndex->LeakDictionary () );
 
 				Swap ( tServed.m_pIndex, g_pPrereading );
-				tServed.m_pSchema = tServed.m_pIndex->GetSchema ();
 				tServed.m_bEnabled = true;
 
 				// unlink .old
@@ -8336,8 +8332,7 @@ bool PrereadNewIndex ( ServedIndex_t & tIdx, const CSphConfigSection & hIndex, c
 {
 	CSphString sWarning;
 
-	tIdx.m_pSchema = tIdx.m_pIndex->Prealloc ( tIdx.m_bMlock, sWarning );
-	if ( !tIdx.m_pSchema || !tIdx.m_pIndex->Preread() )
+	if ( !tIdx.m_pIndex->Prealloc ( tIdx.m_bMlock, sWarning ) || !tIdx.m_pIndex->Preread() )
 	{
 		sphWarning ( "index '%s': preload: %s; NOT SERVING", szIndexName, tIdx.m_pIndex->GetLastError().cstr() );
 		return false;
@@ -8597,7 +8592,6 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		// index
 		ServedIndex_t tIdx;
 		tIdx.m_pIndex = sphCreateIndexRT ( tSchema, szIndexName, uRamSize, hIndex["path"].cstr() );
-		tIdx.m_pSchema = tIdx.m_pIndex->GetSchema();
 		tIdx.m_bEnabled = true;
 		tIdx.m_sIndexPath = hIndex["path"];
 		tIdx.m_bRT = true;

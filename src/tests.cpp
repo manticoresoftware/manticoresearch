@@ -1571,7 +1571,7 @@ void TestRT ()
 		CSphQueryResult tResult;
 		tQuery.m_sQuery = "@title cat";
 
-		ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, *pIndex->GetSchema(), tResult.m_sError, false );
+		ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, pIndex->GetMatchSchema(), tResult.m_sError, false );
 		assert ( pSorter );
 		assert ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, NULL ) );
 		sphFlattenQueue ( pSorter, &tResult, 0 );

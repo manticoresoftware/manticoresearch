@@ -2192,7 +2192,7 @@ public:
 
 	virtual const CSphString &	GetLastError () const { return m_sLastError; }
 	virtual const CSphString &	GetLastWarning () const { return m_sLastWarning; }
-	virtual const CSphSchema *	GetSchema () const { return &m_tSchema; }
+	virtual const CSphSchema &	GetMatchSchema () const { return m_tSchema; }			///< match schema as returned in result set (possibly different from internal storage schema!)
 
 	virtual	void				SetProgressCallback ( ProgressCallback_t * pfnProgress ) { m_pProgress = pfnProgress; }
 	virtual void				SetInplaceSettings ( int iHitGap, int iDocinfoGap, float fRelocFactor, float fWriteFactor );
@@ -2221,7 +2221,7 @@ public:
 
 public:
 	/// check all data files, preload schema, and preallocate enough shared RAM to load memory-cached data
-	virtual const CSphSchema *	Prealloc ( bool bMlock, CSphString & sWarning ) = 0;
+	virtual bool				Prealloc ( bool bMlock, CSphString & sWarning ) = 0;
 
 	/// deallocate all previously preallocated shared data
 	virtual void				Dealloc () = 0;

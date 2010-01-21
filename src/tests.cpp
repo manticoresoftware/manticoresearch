@@ -1383,7 +1383,7 @@ void RandomFill ( DWORD * pData, int iCount, const TestAccCmp_fn & fn, bool bCha
 
 void TestStridedSortPass ( int iStride, int iCount )
 {
-	printf ( "testing sort stride=%d count=%d ...\t", iStride, iCount );
+	printf ( "testing strided sort, stride=%d, count=%d... ", iStride, iCount );
 
 	assert ( iStride && iCount );
 
@@ -1398,31 +1398,25 @@ void TestStridedSortPass ( int iStride, int iCount )
 	// random sort
 	sphSort ( pData, iCount, fnSort, fnSort );
 	assert ( IsSorted ( pData, iCount, fnSort ) );
-	printf ( "ok\n" );
 
 	// already sorted sort
-	printf ( "\t\talready sorted testing...\t" );
 	sphSort ( pData, iCount, fnSort, fnSort );
 	assert ( IsSorted ( pData, iCount, fnSort ) );
-	printf ( "ok\n" );
 
 	// reverse order sort
-	printf ( "\t\treverse sorted testing...\t" );
 	for ( int i = 0; i < iCount; ++i )
 	{
 		::Swap ( pData[i], pData [ iCount - i - 1 ] );
 	}
 	sphSort ( pData, iCount, fnSort, fnSort );
 	assert ( IsSorted ( pData, iCount, fnSort ) );
-	printf ( "ok\n" );
 
 	// random chainsaw sort
-	printf ( "\t\tchainsaw sort testing...\t" );
 	RandomFill ( pData, iCount, fnSort, true );
 	sphSort ( pData, iCount, fnSort, fnSort );
 	assert ( IsSorted ( pData, iCount, fnSort ) );
-	printf ( "ok\n" );
 
+	printf ( "ok\n" );
 	SafeDeleteArray ( pData );
 }
 
@@ -1443,7 +1437,6 @@ void TestStridedSort ()
 	TestStridedSortPass ( 31, 1367 );
 
 	// rand cases
-	printf ( "\nrandom values sort testing...\n" );
 	for ( int i = 0; i < 10; ++i )
 	{
 		const int iRndStride = sphRand() % 64;

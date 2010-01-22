@@ -3613,8 +3613,9 @@ ISphRanker * sphCreateRanker ( const XQNode_t * pRoot, ESphRankMode eRankMode, C
 		float fIDF = 0.0f;
 		if ( tWord.m_iDocs )
 		{
-			float fLogTotal = logf ( float ( 1+tSourceStats.m_iTotalDocuments ) );
-			fIDF = logf ( float ( tSourceStats.m_iTotalDocuments-tWord.m_iDocs+1 )
+			const int iTotalClamped = Max ( tSourceStats.m_iTotalDocuments, tWord.m_iDocs );
+			float fLogTotal = logf ( float ( 1+iTotalClamped ) );
+			fIDF = logf ( float ( iTotalClamped-tWord.m_iDocs+1 )
 				/ float ( tWord.m_iDocs ) )
 				/ ( 2*iQwords*fLogTotal );
 		}

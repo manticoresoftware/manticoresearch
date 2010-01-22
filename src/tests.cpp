@@ -1493,13 +1493,33 @@ static void CheckRT ( int iVal, int iRef, const char * sMsg )
 #endif
 }
 
+static void DeleteIndexFiles ( const char * sIndex )
+{
+	if ( !sIndex )
+		return;
+
+	CSphString sName;
+	sName.SetSprintf( "%s.kill", sIndex );
+	unlink ( sName.cstr() );
+	sName.SetSprintf( "%s.lock", sIndex );
+	unlink ( sName.cstr() );
+	sName.SetSprintf( "%s.meta", sIndex );
+	unlink ( sName.cstr() );
+	sName.SetSprintf( "%s.ram", sIndex );
+	unlink ( sName.cstr() );
+}
+
+
+#define RT_INDEX_FILE_NAME "test_temp"
+#define RT_PASS_COUNT 5
+static const int g_iWeights[RT_PASS_COUNT] = { 1500, 1302, 1252, 1230, 1219 };
 
 void TestRT ()
 {
-	const int iMaxPasses = 5;
-	for ( int iPass = 0; iPass < iMaxPasses; ++iPass )
+	DeleteIndexFiles ( RT_INDEX_FILE_NAME );
+	for ( int iPass = 0; iPass < RT_PASS_COUNT; ++iPass )
 	{
-		printf ( "testing rt indexing, test %d/%d... ", 1+iPass, iMaxPasses );
+		printf ( "testing rt indexing, test %d/%d... ", 1+iPass, RT_PASS_COUNT );
 
 		CSphConfigSection tRTConfig;
 		sphRTInit ( tRTConfig );
@@ -1544,7 +1564,7 @@ void TestRT ()
 		for ( int i=0; i<tSrcSchema.GetAttrsCount(); i++ )
 			tSchema.AddAttr ( tSrcSchema.GetAttr(i), false );
 
-		ISphRtIndex * pIndex = sphCreateIndexRT ( tSchema, "testrt", 32*1024*1024, "test_temp" );
+		ISphRtIndex * pIndex = sphCreateIndexRT ( tSchema, "testrt", 32*1024*1024, RT_INDEX_FILE_NAME );
 
 		pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
 		pIndex->SetDictionary ( pDict );
@@ -1570,7 +1590,7 @@ void TestRT ()
 		sphFlattenQueue ( pSorter, &tResult, 0 );
 		CheckRT ( tResult.m_dMatches.GetLength(), 1, "results found" );
 		CheckRT ( tResult.m_dMatches[0].m_iDocID, 1, "docID" );
-		CheckRT ( tResult.m_dMatches[0].m_iWeight, 1500, "weight" );
+		CheckRT ( tResult.m_dMatches[0].m_iWeight, g_iWeights[iPass], "weight" );
 		SafeDelete ( pSorter );
 		SafeDelete ( pIndex );
 
@@ -1578,6 +1598,7 @@ void TestRT ()
 
 		printf ( "ok\n" );
 	}
+	DeleteIndexFiles ( RT_INDEX_FILE_NAME );
 }
 #endif
 

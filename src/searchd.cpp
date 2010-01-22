@@ -5638,6 +5638,9 @@ public:
 			else if ( tVal.m_iType==TOK_CONST_FLOAT )
 				SetAttrFloat ( tLoc, tVal.m_fVal );
 			break;
+		case SPH_ATTR_STRING:
+			CSphMatch::SetAttr ( tLoc, 0 );
+			break;
 		default:
 			return false;
 		};
@@ -6902,6 +6905,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 		}
 	}
 
+	CSphVector< const char * > dStrings;
 	// convert attrs
 	for ( int c=0; c<tStmt.m_iRowsAffected; c++ )
 	{
@@ -6910,6 +6914,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 		CSphMatchVariant tDoc;
 		tDoc.Reset ( tSchema.GetRowSize() );
 		tDoc.m_iDocID = (SphDocID_t)CSphMatchVariant::ToDocid ( tStmt.m_dInsertValues[iIdIndex + c * iExp] );
+		dStrings.Resize ( 0 );
 
 		for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
 		{
@@ -6921,8 +6926,11 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 			int iQuerySchemaIdx = dAttrSchema[i];
 			bool bResult;
 			if ( iQuerySchemaIdx < 0 )
+			{
 				bResult = tDoc.SetDefaultAttr ( tLoc, tCol.m_eAttrType );
-			else
+				if ( tCol.m_eAttrType==SPH_ATTR_STRING )
+					dStrings.Add ( NULL );
+			} else
 			{
 				const SqlInsert_t & tVal = tStmt.m_dInsertValues[iQuerySchemaIdx + c * iExp];
 
@@ -6935,6 +6943,8 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 
 				// FIXME? index schema is lawfully static, but our temp match obviously needs to be dynamic
 				bResult = tDoc.SetAttr ( tLoc, tVal, tCol.m_eAttrType );
+				if ( tCol.m_eAttrType==SPH_ATTR_STRING )
+					dStrings.Add ( tVal.m_sVal.cstr() );
 			}
 
 			if ( !bResult )
@@ -6967,7 +6977,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 			break;
 
 		// do add
-		if ( !pIndex->AddDocument ( dFields.GetLength(), dFields.Begin(), tDoc, bReplace ) )
+		if ( !pIndex->AddDocument ( dFields.GetLength(), dFields.Begin(), tDoc, bReplace, dStrings.Begin() ) )
 			sError = pIndex->GetLastError();
 
 		if ( !sError.IsEmpty() )
@@ -7121,6 +7131,8 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 					eType = MYSQL_COL_LONG;
 				if ( tCol.m_eAttrType==SPH_ATTR_BIGINT )
 					eType = MYSQL_COL_LONGLONG;
+				if ( tCol.m_eAttrType==SPH_ATTR_STRING )
+					eType = MYSQL_COL_STRING;
 				SendMysqlFieldPacket ( tOut, uPacketID++, tCol.m_sName.cstr(), eType );
 			}
 
@@ -7198,7 +7210,10 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 
 							DWORD uOffset = (DWORD) tMatch.GetAttr ( tLoc );
 							if ( uOffset )
+							{
+								assert ( pStrings );
 								iLen = sphUnpackStr ( pStrings+uOffset, &pStr );
+							}
 
 							// send length
 							iLen = Min ( iLen, sRowMax-p-3 ); // clamp it, buffer size is limited
@@ -7317,13 +7332,14 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 			}
 
 			ServedIndex_t & tServed = g_hIndexes[tStmt.m_sDeleteIndex];
-			ISphRtIndex * pIndex = dynamic_cast<ISphRtIndex*> ( tServed.m_pIndex );
-			if ( !pIndex )
+			if ( !tServed.m_bRT )
 			{
 				sError.SetSprintf ( "index '%s' does not support INSERT", tStmt.m_sDeleteIndex.cstr() );
 				SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
 				continue;
 			}
+
+			ISphRtIndex * pIndex = static_cast<ISphRtIndex *> ( tServed.m_pIndex );
 
 			if ( !pIndex->DeleteDocument ( tStmt.m_iDeleteID ) )
 			{
@@ -8567,9 +8583,9 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		}
 
 		// attrs
-		const int iNumTypes = 4;
-		const char * sTypes[iNumTypes] = { "rt_attr_uint", "rt_attr_bigint", "rt_attr_float", "rt_attr_timestamp" };
-		const int iTypes[iNumTypes] = { SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, SPH_ATTR_FLOAT, SPH_ATTR_TIMESTAMP };
+		const int iNumTypes = 5;
+		const char * sTypes[iNumTypes] = { "rt_attr_uint", "rt_attr_bigint", "rt_attr_float", "rt_attr_timestamp", "rt_attr_string" };
+		const int iTypes[iNumTypes] = { SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, SPH_ATTR_FLOAT, SPH_ATTR_TIMESTAMP, SPH_ATTR_STRING };
 
 		for ( int iType=0; iType<iNumTypes; iType++ )
 		{

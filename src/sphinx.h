@@ -1027,7 +1027,7 @@ struct CSphSchema
 public:
 
 	/// ctor
-							CSphSchema ( const char * sName="(nameless)" ) : m_sName ( sName ), m_iBaseFields ( 0 ) {}
+							CSphSchema ( const char * sName="(nameless)" ) : m_sName ( sName ), m_iBaseFields ( 0 ), m_iStaticSize ( 0 ) {}
 
 	/// get field index by name
 	/// returns -1 if not found
@@ -1048,10 +1048,10 @@ public:
 	void					ResetAttrs ();
 
 	/// get row size (static+dynamic combined)
-	int						GetRowSize () const				{ return m_dStaticUsed.GetLength() + m_dDynamicUsed.GetLength(); }
+	int						GetRowSize () const				{ return m_iStaticSize + m_dDynamicUsed.GetLength(); }
 
 	/// get static row part size
-	int						GetStaticSize () const			{ return m_dStaticUsed.GetLength(); }
+	int						GetStaticSize () const			{ return m_iStaticSize; }
 
 	/// get dynamic row part size
 	int						GetDynamicSize () const			{ return m_dDynamicUsed.GetLength(); }
@@ -1075,6 +1075,7 @@ protected:
 	CSphVector<CSphColumnInfo>		m_dAttrs;			///< all my attributes
 	CSphVector<int>					m_dStaticUsed;		///< static row part map (amount of used bits in each rowitem)
 	CSphVector<int>					m_dDynamicUsed;		///< dynamic row part map
+	int								m_iStaticSize;		///< static row size (can be different from m_dStaticUsed.GetLength() because of gaps)
 };
 
 
@@ -1956,6 +1957,8 @@ public:
 	const DWORD *			m_pMva;				///< pointer to MVA storage
 	const BYTE *			m_pStrings;			///< pointer to strings storage
 
+	CSphTightVector<BYTE>	m_dStrStorage;		/// < external string storage
+
 	int						m_iOffset;			///< requested offset into matches array
 	int						m_iCount;			///< count which will be actually served (computed from total, offset and limit)
 
@@ -2249,8 +2252,8 @@ public:
 	virtual bool						EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const = 0;
 	virtual const CSphSourceStats &		GetStats () const = 0;
 	void						SetCacheSize ( int iMaxCachedDocs, int iMaxCachedHits );
-	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters ) const = 0;
-	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters ) const = 0;
+	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag=0 ) const = 0;
+	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag=0 ) const = 0;
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, CSphString & sError ) const = 0;
 
 public:

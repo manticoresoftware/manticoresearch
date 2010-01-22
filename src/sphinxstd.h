@@ -690,6 +690,12 @@ public:
 		return m_iLength ? m_pData : NULL;
 	}
 
+	/// get first entry ptr
+	const T * Begin () const
+	{
+		return m_iLength ? m_pData : NULL;
+	}
+
 	/// get last entry
 	T & Last ()
 	{
@@ -866,7 +872,7 @@ public:
 	}
 
 	/// swap
-	void SwapData ( CSphVector<T> & rhs )
+	void SwapData ( CSphVector<T, POLICY> & rhs )
 	{
 		Swap ( m_iLength, rhs.m_iLength );
 		Swap ( m_iLimit, rhs.m_iLimit );

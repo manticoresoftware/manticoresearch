@@ -1242,8 +1242,8 @@ public:
 	virtual bool				Lock ();
 	virtual void				Unlock ();
 
-	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters ) const;
-	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters ) const;
+	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag ) const;
+	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag ) const;
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, CSphString & sError ) const;
 	template <class Qword> bool	DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, CSphString & sError ) const;
 
@@ -1358,9 +1358,9 @@ private:
 	void						WriteSchemaColumn ( CSphWriter & fdInfo, const CSphColumnInfo & tCol );
 	void						ReadSchemaColumn ( CSphReader & rdInfo, CSphColumnInfo & tCol );
 
-	bool						ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQNode_t * pRoot, CSphDict * pDict, const CSphVector<CSphFilterSettings> * pExtraFilters, CSphQueryNodeCache * pNodeCache ) const;
-	bool						MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters ) const;
-	bool						MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, ISphRanker * pRanker ) const;
+	bool						ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQNode_t * pRoot, CSphDict * pDict, const CSphVector<CSphFilterSettings> * pExtraFilters, CSphQueryNodeCache * pNodeCache, int iTag ) const;
+	bool						MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag ) const;
+	bool						MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, ISphRanker * pRanker, int iTag ) const;
 
 	const DWORD *				FindDocinfo ( SphDocID_t uDocID ) const;
 	void						CopyDocinfo ( CSphQueryContext * pCtx, CSphMatch & tMatch, const DWORD * pFound ) const;
@@ -1820,6 +1820,7 @@ const DWORD * CSphMatch::GetAttrMVA ( const CSphAttrLocator & tLoc, const DWORD 
 	if ( uIndex & MVA_ARENA_FLAG )
 		return g_pMvaArena + ( uIndex & MVA_OFFSET_MASK );
 
+	assert ( pPool );
 	return pPool + uIndex;
 }
 
@@ -4695,6 +4696,7 @@ void CSphSchema::ResetAttrs ()
 	m_dAttrs.Reset();
 	m_dStaticUsed.Reset();
 	m_dDynamicUsed.Reset();
+	m_iStaticSize = 0;
 }
 
 
@@ -4721,7 +4723,11 @@ void CSphSchema::AddAttr ( const CSphColumnInfo & tCol, bool bDynamic )
 
 		int iItems = (iBits+ROWITEM_BITS-1) / ROWITEM_BITS;
 		for ( int i=0; i<iItems; i++ )
+		{
 			dUsed.Add ( ROWITEM_BITS );
+			if ( !bDynamic )
+				m_iStaticSize++;
+		}
 
 	} else
 	{
@@ -4730,7 +4736,11 @@ void CSphSchema::AddAttr ( const CSphColumnInfo & tCol, bool bDynamic )
 			if ( dUsed[iItem]+iBits<=ROWITEM_BITS )
 				break;
 		if ( iItem==dUsed.GetLength() )
-			dUsed.Add(0);
+		{
+			dUsed.Add ( 0 );
+			if ( !bDynamic )
+				m_iStaticSize++;
+		}
 
 		tLoc.m_iBitOffset = iItem*ROWITEM_BITS + dUsed[iItem];
 		dUsed[iItem] += iBits;
@@ -4740,7 +4750,28 @@ void CSphSchema::AddAttr ( const CSphColumnInfo & tCol, bool bDynamic )
 
 void CSphSchema::RemoveAttr ( int iIndex )
 {
-	assert ( !m_dAttrs[iIndex].m_tLocator.m_bDynamic );
+	// adjust size
+	CSphAttrLocator & tLoc = m_dAttrs[iIndex].m_tLocator;
+	assert ( !tLoc.m_bDynamic );
+
+	int iItem = tLoc.m_iBitOffset / ROWITEM_BITS;
+	if ( tLoc.m_iBitCount>=ROWITEM_BITS )
+	{
+		for ( int i=0; i<tLoc.m_iBitCount/ROWITEM_BITS; i++ )
+		{
+			m_dStaticUsed[i+iItem] = 0;
+			m_iStaticSize--;
+		}
+	} else
+	{
+		m_dStaticUsed[iItem] -= tLoc.m_iBitCount;
+		assert ( m_dStaticUsed[iItem]>=0 );
+
+		if ( m_dStaticUsed[iItem]<=0 )
+			m_iStaticSize--;
+	}
+
+	// do remove
 	m_dAttrs.Remove ( iIndex );
 }
 
@@ -11206,7 +11237,7 @@ void CSphQueryContext::LateCalc ( CSphMatch & tMatch ) const
 }
 
 
-bool CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, ISphRanker * pRanker ) const
+bool CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, ISphRanker * pRanker, int iTag ) const
 {
 	bool bRandomize = ppSorters[0]->m_bRandomize;
 	int iCutoff = pQuery->m_iCutoff;
@@ -11233,6 +11264,8 @@ bool CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 			if ( pCtx->m_pWeightFilter && !pCtx->m_pWeightFilter->Eval ( pMatch[i] ) )
 				continue;
 
+			pMatch[i].m_iTag = iTag;
+
 			bool bNewMatch = false;
 			for ( int iSorter=0; iSorter<iSorters; iSorter++ )
 				bNewMatch |= ppSorters[iSorter]->Push ( pMatch[i] );
@@ -11250,7 +11283,7 @@ bool CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 
 //////////////////////////////////////////////////////////////////////////
 
-bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters ) const
+bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag ) const
 {
 	assert ( pQuery->m_sQuery.IsEmpty() );
 
@@ -11357,6 +11390,8 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 			tCtx.LateCalc ( tMatch );
 			if ( bRandomize )
 				tMatch.m_iWeight = ( sphRand() & 0xffff );
+
+			tMatch.m_iTag = iTag;
 
 			bool bNewMatch = false;
 			for ( int iSorter=0; iSorter<iSorters; iSorter++ )
@@ -12932,13 +12967,13 @@ static XQNode_t * ExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & t
 
 
 /// one regular query vs many sorters
-bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters ) const
+bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag ) const
 {
 	assert ( pQuery );
 
 	// fast path for scans
 	if ( pQuery->m_sQuery.IsEmpty() )
-		return MultiScan ( pQuery, pResult, iSorters, ppSorters, pExtraFilters );
+		return MultiScan ( pQuery, pResult, iSorters, ppSorters, pExtraFilters, iTag );
 
 	ISphTokenizer * pTokenizer = m_pTokenizer->Clone ( false );
 
@@ -12966,7 +13001,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	int iCommonSubtrees = sphMarkCommonSubtrees ( dTrees );
 
 	CSphQueryNodeCache tNodeCache ( iCommonSubtrees, m_iMaxCachedDocs, m_iMaxCachedHits );
-	bool bResult = ParsedMultiQuery ( pQuery, pResult, iSorters, ppSorters, tParsed.m_pRoot, pDict, pExtraFilters, &tNodeCache );
+	bool bResult = ParsedMultiQuery ( pQuery, pResult, iSorters, ppSorters, tParsed.m_pRoot, pDict, pExtraFilters, &tNodeCache, iTag );
 
 	SafeDelete ( pTokenizer );
 
@@ -12975,11 +13010,11 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 
 
 /// many regular queries with one sorter attached to each query
-bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters ) const
+bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag ) const
 {
 	// ensure we have multiple queries
 	if ( iQueries==1 )
-		return MultiQuery ( pQueries, ppResults[0], 1, ppSorters, pExtraFilters );
+		return MultiQuery ( pQueries, ppResults[0], 1, ppSorters, pExtraFilters, iTag );
 
 	assert ( pQueries );
 	assert ( ppResults );
@@ -13022,7 +13057,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 	CSphQueryNodeCache tNodeCache ( iCommonSubtrees, m_iMaxCachedDocs, m_iMaxCachedHits );
 	ARRAY_FOREACH ( j, dTrees )
 	{
-		bResult &= ParsedMultiQuery ( &pQueries[j], ppResults[j], 1, &ppSorters[j], dTrees[j], pDict, pExtraFilters, &tNodeCache );
+		bResult &= ParsedMultiQuery ( &pQueries[j], ppResults[j], 1, &ppSorters[j], dTrees[j], pDict, pExtraFilters, &tNodeCache, iTag );
 		ppResults[j]->m_iMultiplier = iCommonSubtrees ? iQueries : 1;
 	}
 
@@ -13034,7 +13069,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 	return bResult;
 }
 
-bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQNode_t * pRoot, CSphDict * pDict, const CSphVector<CSphFilterSettings> * pExtraFilters, CSphQueryNodeCache * pNodeCache ) const
+bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQNode_t * pRoot, CSphDict * pDict, const CSphVector<CSphFilterSettings> * pExtraFilters, CSphQueryNodeCache * pNodeCache, int iTag ) const
 {
 	assert ( pQuery );
 	assert ( pResult );
@@ -13165,7 +13200,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 		case SPH_MATCH_EXTENDED:
 		case SPH_MATCH_EXTENDED2:
 		case SPH_MATCH_BOOLEAN:
-			if ( !MatchExtended ( &tCtx, pQuery, iSorters, ppSorters, pRanker.Ptr() ) )
+			if ( !MatchExtended ( &tCtx, pQuery, iSorters, ppSorters, pRanker.Ptr(), iTag ) )
 				return false;
 			break;
 

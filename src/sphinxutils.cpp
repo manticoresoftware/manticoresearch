@@ -223,6 +223,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "rt_attr_bigint",			KEY_LIST, NULL },
 	{ "rt_attr_float",			KEY_LIST, NULL },
 	{ "rt_attr_timestamp",		KEY_LIST, NULL },
+	{ "rt_attr_string",			KEY_LIST, NULL },
 	{ "rt_mem_limit",			0, NULL },
 	{ NULL,						0, NULL }
 };

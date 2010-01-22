@@ -766,7 +766,8 @@ class SphinxClient:
 		if opts.get('single_passage'):	flags |= 4
 		if opts.get('use_boundaries'):	flags |= 8
 		if opts.get('weight_order'):	flags |= 16
-		if opts.get('query_mode'):		flags |= 32
+		if opts.get('query_mode'):	flags |= 32
+		if opts.get('force_all_words'):	flags |= 64
 		
 		# mode=0, flags
 		req = [pack('>2L', 0, flags)]

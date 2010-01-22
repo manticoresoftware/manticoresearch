@@ -1,6 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <sphinx:docset>
 
+<sphinx:schema>
+<sphinx:field name="title"/>
+<sphinx:field name="content"/>
+<sphinx:attr name="gid" type="int" default="1"/>
+<sphinx:attr name="sgid" type="string" default=""/>
+<sphinx:attr name="ordd" type="wordcount" default=""/>
+<sphinx:field name="sgidf" attr="string"/>
+<sphinx:field name="orddf" attr="wordcount"/>
+</sphinx:schema>
+
 <sphinx:document id="1">
 <title>test one</title>
 <sgid>here is string attribute</sgid>

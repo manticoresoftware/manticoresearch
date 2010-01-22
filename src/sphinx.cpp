@@ -18518,10 +18518,15 @@ bool CSphSource_XMLPipe2::Setup ( FILE * pPipe, const CSphConfigSection & hSourc
 	ConfigureAttrs ( hSource("xmlpipe_attr_bigint"),		SPH_ATTR_BIGINT );
 	ConfigureAttrs ( hSource("xmlpipe_attr_multi"),			SPH_ATTR_MULTI );
 	ConfigureAttrs ( hSource("xmlpipe_attr_string"),		SPH_ATTR_STRING );
+	ConfigureAttrs ( hSource("xmlpipe_attr_wordcount"),		SPH_ATTR_WORDCOUNT );
+	ConfigureAttrs ( hSource("xmlpipe_field_string"),		SPH_ATTR_STRING );
+	ConfigureAttrs ( hSource("xmlpipe_field_wordcount"),	SPH_ATTR_WORDCOUNT );
 
 	m_tDocInfo.Reset ( m_tSchema.GetRowSize () );
 
 	ConfigureFields ( hSource("xmlpipe_field") );
+	ConfigureFields ( hSource("xmlpipe_field_string") );
+	ConfigureFields ( hSource("xmlpipe_field_wordcount") );
 
 	m_dStrAttrs.Resize ( m_tSchema.GetAttrsCount() );
 
@@ -18990,13 +18995,35 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 		}
 
 		const char ** dAttrs = pAttrs;
+		CSphColumnInfo Info;
+		CSphString sDefault;
+		bool bIsAttr = false;
 
 		while ( dAttrs[0] && dAttrs[1] && dAttrs[0][0] && dAttrs[1][0] )
 		{
-			if ( !strcmp ( dAttrs[0], "name" ) )
+			if ( !strcmp ( *dAttrs, "name" ) )
+			{
 				AddFieldToSchema ( dAttrs[1] );
+				Info.m_sName = dAttrs[1];
+			} else if ( !strcmp ( *dAttrs, "attr" ) )
+			{
+				bIsAttr = true;
+				if ( !strcmp ( dAttrs[1], "string" ) )
+					Info.m_eAttrType = SPH_ATTR_STRING;
+				else if ( !strcmp ( dAttrs[1], "wordcount" ) )
+					Info.m_eAttrType = SPH_ATTR_WORDCOUNT;
+
+			} else if ( !strcmp ( *dAttrs, "default" ) )
+				sDefault = dAttrs[1];
 
 			dAttrs += 2;
+		}
+
+		if ( bIsAttr )
+		{
+			Info.m_iIndex = m_tSchema.GetAttrsCount ();
+			m_tSchema.AddAttr ( Info, true ); // all attributes are dynamic at indexing time
+			m_dDefaultAttrs.Add ( sDefault );
 		}
 		return;
 	}
@@ -19129,7 +19156,7 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 				if ( m_tSchema.m_dFields[i].m_sName==szName )
 					m_iCurField = i;
 
-			for ( int i = 0; i < m_tSchema.GetAttrsCount () && m_iCurAttr==-1 && m_iCurField==-1; i++ )
+			for ( int i = 0; i < m_tSchema.GetAttrsCount () && m_iCurAttr==-1; i++ )
 				if ( m_tSchema.GetAttr(i).m_sName==szName )
 					m_iCurAttr = i;
 
@@ -19194,8 +19221,8 @@ void CSphSource_XMLPipe2::EndElement ( const char * szName )
 			{
 				assert ( m_pCurDocument );
 				m_pCurDocument->m_dFields [m_iCurField].SetBinary ( (char*)m_pFieldBuffer, m_iFieldBufferLen );
-
-			} else if ( m_iCurAttr!=-1 )
+			}
+			if ( m_iCurAttr!=-1 )
 			{
 				assert ( m_pCurDocument );
 				m_pCurDocument->m_dAttrs [m_iCurAttr].SetBinary ( (char*)m_pFieldBuffer, m_iFieldBufferLen );

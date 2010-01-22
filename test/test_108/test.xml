@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <test>
-<name>xmlpipe2 string and wordcount attributes</name>
+<name>xmlpipe2 string and wordcount attributes, defined in schema or in config</name>
 
 <config>
 indexer
@@ -18,6 +18,19 @@ source src
 {
 	type = xmlpipe2
 	xmlpipe_command = cat <this_test/>/data.xml
+	xmlpipe_field = title
+	xmlpipe_field = content
+	xmlpipe_attr_uint = gid
+	xmlpipe_attr_string = sgid
+	xmlpipe_attr_wordcount = ordd
+	xmlpipe_field_string = sgidf
+	xmlpipe_field_wordcount = orddf
+}
+
+source src2
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data2.xml
 }
 
 index idx
@@ -27,10 +40,24 @@ index idx
 	charset_type = utf-8
 }
 
+index idx2
+{
+	source = src2
+	path = <data_path/>/idx2
+	charset_type = utf-8
+}
+
 </config>
 
 <queries>
 <query index="idx">test</query>
+<query index="idx">ord2</query>
+<query index="idx">orddf</query>
+<query index="idx">test2</query>
+<query index="idx2">test</query>
+<query index="idx2">ord2</query>
+<query index="idx2">orddf</query>
+<query index="idx2">test2</query>
 </queries>
 
 </test>

@@ -5859,7 +5859,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 
 	CSphIndex * pIndex = pServed->m_pIndex;
 	CSphDict * pDict = pIndex->GetDictionary ();
-	ISphTokenizer * pTokenizer = pIndex->GetCleanTokenizer ();
+	CSphScopedPtr<ISphTokenizer> pTokenizer ( pIndex->GetTokenizer()->Clone ( true ) );
 
 	q.m_sWords = tReq.GetString ();
 	q.m_sBeforeMatch = tReq.GetString ();
@@ -5912,7 +5912,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 		}
 
 		CSphString sError;
-		char * sResult = sphBuildExcerpt ( q, pDict, pTokenizer, &pIndex->GetMatchSchema(), pIndex, sError );
+		char * sResult = sphBuildExcerpt ( q, pDict, pTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, sError );
 		if ( !sResult )
 		{
 			tReq.SendErrorReply ( "highlighting failed: %s", sError.cstr() );

@@ -2203,7 +2203,6 @@ public:
 	virtual void				SetWordlistPreload ( bool bValue ) { m_bPreloadWordlist = bValue; }
 	void						SetTokenizer ( ISphTokenizer * pTokenizer );
 	ISphTokenizer *				GetTokenizer () const { return m_pTokenizer; }
-	ISphTokenizer *				GetCleanTokenizer () const { return m_pCleanTokenizer; }
 	ISphTokenizer *				LeakTokenizer ();
 	void						SetDictionary ( CSphDict * pDict );
 	CSphDict *					GetDictionary () const { return m_pDict; }
@@ -2304,7 +2303,6 @@ protected:
 	CSphIndexSettings			m_tSettings;
 
 	ISphTokenizer *				m_pTokenizer;
-	ISphTokenizer *				m_pCleanTokenizer;
 	CSphDict *					m_pDict;
 
 	int							m_iMaxCachedDocs;

@@ -1144,8 +1144,9 @@ bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMat
 		m_tRwlock.Unlock ();
 	}
 
+	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizer->Clone ( false ) ); // avoid race
 	CSphSource_StringVector tSrc ( iFields, ppFields, m_tOutboundSchema );
-	tSrc.SetTokenizer ( m_pTokenizer );
+	tSrc.SetTokenizer ( pTokenizer.Ptr() );
 	tSrc.SetDict ( m_pDict );
 
 	tSrc.m_tDocInfo.Clone ( tDoc, m_tOutboundSchema.GetRowSize() );
@@ -3477,9 +3478,11 @@ bool RtIndex_t::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const cha
 
 	RtQword_t tQword;
 	CSphString sBuffer ( sQuery );
-	m_pTokenizer->SetBuffer ( (BYTE *)sBuffer.cstr(), sBuffer.Length() );
 
-	while ( BYTE * pToken = m_pTokenizer->GetToken() )
+	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizer->Clone ( false ) ); // avoid race
+	pTokenizer->SetBuffer ( (BYTE *)sBuffer.cstr(), sBuffer.Length() );
+
+	while ( BYTE * pToken = pTokenizer->GetToken() )
 	{
 		const char * sToken = (const char *)pToken;
 		CSphString sWord ( sToken );

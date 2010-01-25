@@ -6386,7 +6386,6 @@ CSphIndex::CSphIndex ( const char * sName )
 	, m_bPreloadWordlist ( true )
 	, m_bStripperInited ( true )
 	, m_pTokenizer ( NULL )
-	, m_pCleanTokenizer ( NULL )
 	, m_pDict ( NULL )
 	, m_iMaxCachedDocs ( 0 )
 	, m_iMaxCachedHits ( 0 )
@@ -6397,7 +6396,6 @@ CSphIndex::CSphIndex ( const char * sName )
 CSphIndex::~CSphIndex ()
 {
 	SafeDelete ( m_pTokenizer );
-	SafeDelete ( m_pCleanTokenizer );
 	SafeDelete ( m_pDict );
 }
 
@@ -6416,11 +6414,6 @@ void CSphIndex::SetTokenizer ( ISphTokenizer * pTokenizer )
 {
 	if ( m_pTokenizer!=pTokenizer )
 		SafeDelete ( m_pTokenizer );
-
-	// save pristine copy of my tokenizer
-	SafeDelete ( m_pCleanTokenizer );
-	m_pCleanTokenizer = pTokenizer->Clone ( true );
-
 	m_pTokenizer = pTokenizer;
 }
 
@@ -12748,11 +12741,13 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 	CSphScopedPtr <CSphAutofile> pDoclist ( NULL );
 	CSphScopedPtr <CSphAutofile> pHitlist ( NULL );
 
+	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizer->Clone ( false ) ); // avoid race
+
 	CSphScopedPtr<CSphDict> tDict ( NULL );
-	CSphDict * pDict = SetupStarDict ( tDict, *m_pTokenizer );
+	CSphDict * pDict = SetupStarDict ( tDict, *pTokenizer.Ptr() );
 
 	CSphScopedPtr<CSphDict> tDict2 ( NULL );
-	pDict = SetupExactDict ( tDict2, pDict, *m_pTokenizer );
+	pDict = SetupExactDict ( tDict2, pDict, *pTokenizer.Ptr() );
 
 	// prepare for setup
 	CSphAutofile tDummy1, tDummy2, tDummy3, tWordlist;
@@ -12773,9 +12768,9 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 	int nWords = 0;
 
 	CSphString sQbuf ( szQuery );
-	m_pTokenizer->SetBuffer ( (BYTE*)sQbuf.cstr(), strlen(szQuery) );
+	pTokenizer->SetBuffer ( (BYTE*)sQbuf.cstr(), strlen(szQuery) );
 
-	while ( ( sWord = m_pTokenizer->GetToken() )!=NULL )
+	while ( ( sWord = pTokenizer->GetToken() )!=NULL )
 	{
 		sTokenized = (const char*)sWord;
 

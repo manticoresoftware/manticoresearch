@@ -17,6 +17,12 @@ indexer
 searchd
 {
 	<searchd_settings/>
+	<dynamic>
+	<variant>workers = none</variant>
+	<variant>workers = threads</variant>
+	<variant>workers = fork</variant>
+	<variant>workers = prefork</variant>
+	</dynamic>
 }
 
 source test1

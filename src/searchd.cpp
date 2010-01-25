@@ -6507,7 +6507,9 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD )
 
 		// in "persistent connection" mode, we want interruptable waits
 		// so that the worker child could be forcibly restarted
-		tBuf.ReadFrom ( 8, iTimeout, bPersist );
+		if ( !tBuf.ReadFrom ( 8, iTimeout, bPersist ) && g_bGotSigterm )
+			break;
+
 		if ( bPersist && tBuf.IsIntr() )
 		{
 			// SIGHUP means restart

@@ -328,6 +328,8 @@ class SphinxConfig
 	function IsRt()
 	{
 		global $g_locals;
+		if ( !array_key_exists ('rt_mode', $g_locals) )
+			return false;
 		return $g_locals['rt_mode'];
 	}
 	function NeedIndexerEx ()

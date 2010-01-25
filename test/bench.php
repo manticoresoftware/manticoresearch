@@ -205,8 +205,9 @@ function sphBenchmark ( $name, $locals, $force_reindex )
 	printf ( "benchmarking: %s\n", $config->Name() );
 
 	// grab index names and paths
+	$msg = '';
 	$config->EnableCompat098 ();
-	$config->WriteConfig ( 'config.conf', 'all' );
+	$config->WriteConfig ( 'config.conf', 'all', $msg );
 	$indexes = array();
 	$text = file_get_contents('config.conf');
 	preg_match_all ( '/index\s+(\S+)\s+{[^}]+path\s*=\s*(.*)[^}]+}/m', $text, $matches );

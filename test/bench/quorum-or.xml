@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>quorum vs or</name>
+
+<config>
+indexer
+{
+	mem_limit = 128M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source lj
+{
+	type = mysql
+	<sql_settings sql_db="ljsearch" />
+
+	sql_query = select id, \
+		title, uncompress(content) content, \
+		unix_timestamp(published) published, channel_id \
+		from posting \
+		where id &lt;= 1000000;
+
+	sql_attr_uint = channel_id
+	sql_attr_timestamp = published
+}
+
+index lj
+{
+	source	= lj
+	path	= <local>data</local>/lj
+}
+</config>
+
+<queries>
+	<query index="lj" mode="extended2" tag="or">one|two|three|four</query>
+	<query index="lj" mode="extended2" tag="or">nine|ten</query>
+	<query index="lj" mode="extended2" tag="or">five|six|seven|eight</query>
+	<query index="lj" mode="extended2" tag="quorum">"one two three four five six seven eight"/1</query>
+	<query index="lj" mode="extended2" tag="quorum">"nine ten"/1</query>
+	<query index="lj" mode="extended2" tag="quorum">"five six seven eight"/1</query>
+</queries>
+
+</test>

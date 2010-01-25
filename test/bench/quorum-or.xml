@@ -40,7 +40,7 @@ index lj
 	<query index="lj" mode="extended2" tag="or">one|two|three|four</query>
 	<query index="lj" mode="extended2" tag="or">nine|ten</query>
 	<query index="lj" mode="extended2" tag="or">five|six|seven|eight</query>
-	<query index="lj" mode="extended2" tag="quorum">"one two three four five six seven eight"/1</query>
+	<query index="lj" mode="extended2" tag="quorum">"one two three four"/1</query>
 	<query index="lj" mode="extended2" tag="quorum">"nine ten"/1</query>
 	<query index="lj" mode="extended2" tag="quorum">"five six seven eight"/1</query>
 </queries>

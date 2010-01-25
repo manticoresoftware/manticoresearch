@@ -175,10 +175,10 @@ public:
 	void SetOp ( XQOperator_e eOp, XQNode_t * pArg1, XQNode_t * pArg2=NULL );
 
 	/// setup new operator and args
-	void SetOp ( XQOperator_e eOp, const CSphVector<XQNode_t*> & dArgs )
+	void SetOp ( XQOperator_e eOp, CSphVector<XQNode_t*> & dArgs )
 	{
 		m_eOp = eOp;
-		m_dChildren = dArgs;
+		m_dChildren.SwapData(dArgs);
 	}
 };
 

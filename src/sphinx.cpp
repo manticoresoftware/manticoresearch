@@ -12909,7 +12909,6 @@ static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tS
 	return pExpand;
 }
 
-
 static XQNode_t * ExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & tSettings )
 {
 	// only if expansion makes sense at all
@@ -12960,6 +12959,26 @@ static XQNode_t * ExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & t
 	return ExpandKeyword ( pNode, tSettings );
 }
 
+// transform the "one two three"/1 quorum into one|two|three (~40% faster)
+static void TransformQuorum ( XQNode_t ** ppNode )
+{
+	XQNode_t *& pNode = *ppNode;
+	if ( !pNode->m_bQuorum || ( pNode->m_iMaxDistance!=1 ) )
+		return;
+
+	assert ( pNode->m_dChildren.GetLength()==0 );
+	pNode->m_bQuorum = false;
+	pNode->m_iMaxDistance = -1;
+	CSphVector<XQNode_t*> params;
+	ARRAY_FOREACH ( i, pNode->m_dWords )
+	{
+		XQNode_t * pAnd = new XQNode_t();
+		pAnd->m_dWords.Add ( pNode->m_dWords[i] );
+		params.Add ( pAnd );
+	}
+	pNode->m_dWords.Reset();
+	pNode->SetOp ( SPH_QUERY_OR, params );
+}
 
 /// one regular query vs many sorters
 bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag ) const
@@ -12986,10 +13005,12 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 		SafeDelete ( pTokenizer );
 		return false;
 	}
-	// transform query if needed
-	// for now, just do keyword expansion based on settings
+	// transform query if needed (quorum transform, keyword expansion, etc.)
+	TransformQuorum ( &tParsed.m_pRoot );
 	if ( m_bExpandKeywords )
 		tParsed.m_pRoot = ExpandKeywords ( tParsed.m_pRoot, m_tSettings );
+
+
 
 	CSphVector<XQNode_t*> dTrees;
 	dTrees.Add ( tParsed.m_pRoot );
@@ -13038,8 +13059,8 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 			break; // we can't simply return false at this stage because we need to handle other queries
 		}
 
-		// transform query if needed
-		// for now, just do keyword expansion based on settings
+		// transform query if needed (quorum transform, keyword expansion, etc.)
+		TransformQuorum ( &tParsed.m_pRoot );
 		if ( m_bExpandKeywords )
 			tParsed.m_pRoot = ExpandKeywords ( tParsed.m_pRoot, m_tSettings );
 

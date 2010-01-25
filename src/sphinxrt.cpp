@@ -3346,11 +3346,9 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 	bool m_bKlistLocked = false;
 	CSphVector<CSphFilterSettings> dExtra;
-	CSphVector<const BYTE *> dDiskStrings ( m_pDiskChunks.GetLength() );
+	// first, collect all the killlists into a vector
 	for ( int iChunk = m_pDiskChunks.GetLength()-1; iChunk>=0; iChunk-- )
 	{
-		const CSphIndex * pDiskChunk = m_pDiskChunks[iChunk];
-
 		if ( iChunk==m_pDiskChunks.GetLength()-1 )
 		{
 			// For the topmost chunk we add the killlist from the ram-index
@@ -3362,13 +3360,25 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 				m_bKlistLocked = true;
 				AddKillListFilter ( &dExtra, m_tKlist.GetKillList(), m_tKlist.GetKillListSize() );
 			} else
-			m_tKlist.KillListUnlock();
+				m_tKlist.KillListUnlock();
+		} else if ( iChunk != 0 )
+		{
+			const CSphIndex * pDiskChunk = m_pDiskChunks[iChunk];
+			if ( pDiskChunk->GetKillListSize () )
+				AddKillListFilter ( &dExtra, pDiskChunk->GetKillList(), pDiskChunk->GetKillListSize() );
+			else
+				// add an empty filter if no killlist available.
+				dExtra.Add();
 		}
+	}
 
+	CSphVector<const BYTE *> dDiskStrings ( m_pDiskChunks.GetLength() );
+	ARRAY_FOREACH (iChunk, m_pDiskChunks)
+	{
 		CSphQueryResult tChunkResult;
 		// storing index in matches tag for finding strings attrs offset later, biased against default zero and segments
 		const int iTag = m_pSegments.GetLength()+iChunk+1;
-		if ( !pDiskChunk->MultiQuery ( pQuery, &tChunkResult, iSorters, ppSorters, &dExtra, iTag ) )
+		if ( !m_pDiskChunks[iChunk]->MultiQuery ( pQuery, &tChunkResult, iSorters, ppSorters, &dExtra, iTag ) )
 		{
 			// FIXME? maybe handle this more gracefully (convert to a warning)?
 			pResult->m_sError = tChunkResult.m_sError;
@@ -3379,10 +3389,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		}
 
 		dDiskStrings[iChunk] = tChunkResult.m_pStrings;
-
-		// add the killlist from the from current chunk into the common filter - to be applied to all chunks in deeper layers.
-		if ( iChunk!=0 && pDiskChunk->GetKillListSize () )
-			AddKillListFilter ( &dExtra, pDiskChunk->GetKillList(), pDiskChunk->GetKillListSize() );
+		dExtra.Pop();
 	}
 
 	if ( m_bKlistLocked )

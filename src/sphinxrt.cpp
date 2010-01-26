@@ -3361,7 +3361,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 				AddKillListFilter ( &dExtra, m_tKlist.GetKillList(), m_tKlist.GetKillListSize() );
 			} else
 				m_tKlist.KillListUnlock();
-		} else if ( iChunk != 0 )
+		} else if ( iChunk!=0 )
 		{
 			const CSphIndex * pDiskChunk = m_pDiskChunks[iChunk];
 			if ( pDiskChunk->GetKillListSize () )
@@ -3373,7 +3373,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	}
 
 	CSphVector<const BYTE *> dDiskStrings ( m_pDiskChunks.GetLength() );
-	ARRAY_FOREACH (iChunk, m_pDiskChunks)
+	ARRAY_FOREACH ( iChunk, m_pDiskChunks )
 	{
 		CSphQueryResult tChunkResult;
 		// storing index in matches tag for finding strings attrs offset later, biased against default zero and segments

@@ -279,7 +279,7 @@ static void sphinx_free_results ( sphinx_client * client )
 }
 
 
-void sock_close ( int sock );
+static void sock_close ( int sock );
 
 void sphinx_destroy ( sphinx_client * client )
 {

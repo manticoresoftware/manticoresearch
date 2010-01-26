@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <test>
-<name>persistent connections</name>
+<name>persistent connections - *nix only</name>
+
+<requires>
+<non-windows/>
+</requires>
 
 <config>
 indexer
@@ -17,8 +21,8 @@ searchd
 		<variant>client_timeout = 1</variant>
 	</dynamic>
 <dynamic>
-<variant>workers = none</variant>
-<variant>workers = threads</variant>
+<variant>workers = fork</variant>
+<variant>workers = prefork</variant>
 </dynamic>
 	
 }

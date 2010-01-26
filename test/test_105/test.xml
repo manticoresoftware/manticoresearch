@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <test>
-<name>rotation</name>
+<name>rotation - *nix only</name>
 
 <requires>
 <non-rt/>
+<non-windows/>
 </requires>
 
 <config>
@@ -12,8 +13,8 @@ searchd
 {
 	<searchd_settings/>
 	<dynamic>
-		<variant>workers = none</variant>
-		<variant>workers = threads</variant>
+		<variant>workers = fork</variant>
+		<variant>workers = prefork</variant>
 	</dynamic>
 }
 

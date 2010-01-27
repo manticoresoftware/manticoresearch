@@ -911,7 +911,6 @@ private:
 
 	int64_t						m_iRamSize;
 	CSphString					m_sPath;
-	int							m_iDiskChunks;
 	CSphVector<CSphIndex*>		m_pDiskChunks;
 	int							m_iLockFD;
 	mutable RtDiskKlist_t		m_tKlist;
@@ -1021,7 +1020,6 @@ RtIndex_t::RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int6
 	, m_iStride ( DOCINFO_IDSIZE + tSchema.GetRowSize() )
 	, m_iRamSize ( iRamSize )
 	, m_sPath ( sPath )
-	, m_iDiskChunks ( 0 )
 	, m_iLockFD ( -1 )
 	, m_sIndexName ( sIndexName )
 	, m_iTID ( 0 )
@@ -1060,7 +1058,7 @@ RtIndex_t::RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int6
 RtIndex_t::~RtIndex_t ()
 {
 	SaveRamChunk ();
-	SaveMeta ( m_iDiskChunks );
+	SaveMeta ( m_pDiskChunks.GetLength() );
 
 	Verify ( m_tWriterMutex.Done() );
 	Verify ( m_tRwlock.Done() );
@@ -2571,15 +2569,15 @@ void RtIndex_t::SaveDiskChunk ()
 
 	// dump it
 	CSphString sNewChunk;
-	sNewChunk.SetSprintf ( "%s.%d", m_sPath.cstr(), m_iDiskChunks );
+	sNewChunk.SetSprintf ( "%s.%d", m_sPath.cstr(), m_pDiskChunks.GetLength() );
 	SaveDiskData ( sNewChunk.cstr() );
 
 	// bring new disk chunk online
-	CSphIndex * pDiskChunk = LoadDiskChunk ( m_iDiskChunks );
+	CSphIndex * pDiskChunk = LoadDiskChunk ( m_pDiskChunks.GetLength() );
 	assert ( pDiskChunk );
 
 	// save updated meta
-	SaveMeta ( m_iDiskChunks+1 );
+	SaveMeta ( m_pDiskChunks.GetLength()+1 );
 
 	// FIXME! add binlog cleanup here once we have binlogs
 
@@ -2588,7 +2586,6 @@ void RtIndex_t::SaveDiskChunk ()
 	ARRAY_FOREACH ( i, m_pSegments )
 		SafeDelete ( m_pSegments[i] );
 	m_pSegments.Reset();
-	m_iDiskChunks++;
 	m_pDiskChunks.Add ( pDiskChunk );
 	Verify ( m_tRwlock.Unlock() );
 }
@@ -2658,14 +2655,14 @@ bool RtIndex_t::Prealloc ( bool, CSphString & )
 		m_sLastError.SetSprintf ( "%s is v.%d, binary is v.%d", sMeta.cstr(), uVersion, META_VERSION );
 		return false;
 	}
-	m_iDiskChunks = rdMeta.GetDword();
+	const int iDiskChunks = rdMeta.GetDword();
 	m_tStats.m_iTotalDocuments = rdMeta.GetDword();
 	m_tStats.m_iTotalBytes = rdMeta.GetOffset();
 	if ( uVersion>=2 )
 		m_iTID = rdMeta.GetOffset();
 
 	// load disk chunks, if any
-	for ( int iChunk=0; iChunk<m_iDiskChunks; iChunk++ )
+	for ( int iChunk=0; iChunk<iDiskChunks; iChunk++ )
 	{
 		m_pDiskChunks.Add ( LoadDiskChunk ( iChunk ) );
 

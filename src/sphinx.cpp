@@ -12810,6 +12810,9 @@ bool CSphQueryContext::CreateFilters ( bool bFullscan, const CSphVector<CSphFilt
 	ARRAY_FOREACH ( i, (*pdFilters) )
 	{
 		const CSphFilterSettings & tFilter = (*pdFilters)[i];
+		if ( tFilter.m_sAttrName.IsEmpty() )
+			continue;
+
 		if ( bFullscan && tFilter.m_sAttrName=="@weight" )
 			continue; // @weight is not avaiable in fullscan mode
 

@@ -9748,7 +9748,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		}
 		tMinMax.FinishCollect();
 		sphWriteThrottled ( iDocinfoFD, &dMinMaxBuffer[0],
-			sizeof(DWORD) * dMinMaxBuffer.GetLength(), "minmax_docinfo", m_sLastError );
+			sizeof(DWORD) * tMinMax.GetActualSize(), "minmax_docinfo", m_sLastError );
 
 		// clean up readers
 		ARRAY_FOREACH ( i, dBins )
@@ -12069,8 +12069,14 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning )
 			// prealloc docinfo
 			if ( !m_pDocinfo.Alloc ( iDocinfoSize, m_sLastError, sWarning ) )
 				return false;
-
+		
 			m_uDocinfoIndex = ( ( iDocinfoSize - iRealDocinfoSize ) / iStride / 2 ) - 1;
+
+#if PARANOID
+			DWORD uDocinfoIndex = ( m_uDocinfo+DOCINFO_INDEX_FREQ-1 ) / DOCINFO_INDEX_FREQ;
+			assert ( uDocinfoIndex==m_uDocinfoIndex );
+#endif
+
 			m_pDocinfoIndex = const_cast < DWORD * > ( &m_pDocinfo [ m_uMinMaxIndex ] );
 		}
 

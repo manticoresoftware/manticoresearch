@@ -102,6 +102,29 @@ function RunIndexer ( &$error, $params )
 }
 
 
+function CheckSearchdLog ( $error_file, &$retval )
+{
+	$rawlog = file ( $error_file );
+	$error = "";
+
+	foreach ( $rawlog as $line )
+	{
+		foreach ( array ( "WARNING", "ERROR", "FATAL" ) as $tag )
+		{
+			$t = stristr ( $line, $tag );
+			if ( $t )
+			{
+				$error .= $t;
+				if ( $tag!="WARNING" )
+					$retval = 1;
+			}
+		}
+	}
+
+	return $error;
+}
+
+
 function StartSearchd ( $config_file, $error_file, $pidfile, &$error )
 {
 	global $g_locals, $windows, $action_retries, $action_wait_timeout;
@@ -142,10 +165,13 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error )
 		return 1;
 	}
 
+	// check for early crash
+	$error = CheckSearchdLog ( $error_file, &$retval );
+
 	// on windows, searchd starts *fully* async
 	// so lets also wait until pidfile gets real data
 	// (meaning that index precaching is actually done)
-	if ( $windows )
+	if ( $retval!=1 && $windows )
 	{
 		$STARTUP_TRIES = 1000;
 		$STARTUP_TICK = 50000; // msec
@@ -160,26 +186,9 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error )
 		}
 	}
 
-	// we've got a pid file; but lets check the log file for startup errors
-	for ( $i=0; $i<$action_retries && !file_exists($error_file); $i++ )
-		usleep ( $action_wait_timeout );
-
-	$rawlog = file ( $error_file );
-	$error = "";
-
-	foreach ( $rawlog as $line )
-	{
-		foreach ( array ( "WARNING", "ERROR", "FATAL" ) as $tag )
-		{
-			$t = stristr ( $line, $tag );
-			if ( $t )
-			{
-				$error .= $t;
-				if ( $tag!="WARNING" )
-					$retval = 1;
-			}
-		}
-	}
+//	// we've got a pid file; but lets check the log file for startup errors
+//	for ( $i=0; $i<$action_retries && !file_exists($error_file); $i++ )
+//		usleep ( $action_wait_timeout );
 
 	if ( $retval==0 && !empty($error) )
 		$retval = 2; // no errors, but there were warnings
@@ -192,7 +201,7 @@ function StopSearchd ( $config, $pidfile )
 {
 	global $g_locals, $action_retries, $action_wait_timeout;
 
-	if ( file_exists($pidfile) )
+	if ( file_exists($pidfile) && count(file($pidfile)) )
 	{
 		$path = $g_locals['searchd'];
 		exec ( "$path --config $config --stop" );

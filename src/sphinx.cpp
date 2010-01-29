@@ -12069,7 +12069,7 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning )
 			// prealloc docinfo
 			if ( !m_pDocinfo.Alloc ( iDocinfoSize, m_sLastError, sWarning ) )
 				return false;
-		
+
 			m_uDocinfoIndex = ( ( iDocinfoSize - iRealDocinfoSize ) / iStride / 2 ) - 1;
 
 #if PARANOID

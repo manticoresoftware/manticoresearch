@@ -6836,12 +6836,21 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 			dAttrSchema[j] = j+iFields+1;
 	} else
 	{
-		// got a list of columns, check it for dupes
+		// got a list of columns, check for 1) existance, 2) dupes
 		CSphVector<CSphString> dCheck = tStmt.m_dInsertSchema;
+		ARRAY_FOREACH ( i, dCheck )
+		// OPTIMIZE! GetAttrIndex and GetFieldIndex use the linear searching. M.b. hash instead?
+		if ( dCheck[i]!="id" && tSchema.GetAttrIndex ( dCheck[i].cstr() )==-1 && tSchema.GetFieldIndex ( dCheck[i].cstr() )==-1 )
+		{
+			sError.SetSprintf ( "unknown column: '%s'", dCheck[i].cstr() );
+			SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr(), MYSQL_ERR_PARSE_ERROR );
+			return;
+		}
+
 		dCheck.Sort();
 
-		for ( int i=1; i<dCheck.GetLength(); i++ )
-			if ( dCheck[i-1]==dCheck[i] )
+		ARRAY_FOREACH ( i, dCheck )
+		if ( i>0 && dCheck[i-1]==dCheck[i] )
 		{
 			sError.SetSprintf ( "column '%s' specified twice", dCheck[i].cstr() );
 			SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr(), MYSQL_ERR_FIELD_SPECIFIED_TWICE );

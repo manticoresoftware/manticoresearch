@@ -13069,6 +13069,17 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 	bool bResult = true;
 	for ( int i=0; i<iQueries; i++ )
 	{
+		// fast path for scans
+		if ( pQueries[i].m_sQuery.IsEmpty() )
+		{
+			bResult &= MultiScan ( pQueries + i, ppResults[i], 1, &ppSorters[i], pExtraFilters, iTag );
+			if ( !bResult )
+				break;
+
+			dTrees.Add ( NULL );
+			continue;
+		}
+
 		// parse query
 		XQQuery_t tParsed;
 		if ( !sphParseExtendedQuery ( tParsed, pQueries[i].m_sQuery.cstr(), pTokenizer, &m_tSchema, pDict ) )
@@ -13091,10 +13102,11 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 
 	CSphQueryNodeCache tNodeCache ( iCommonSubtrees, m_iMaxCachedDocs, m_iMaxCachedHits );
 	ARRAY_FOREACH ( j, dTrees )
-	{
-		bResult &= ParsedMultiQuery ( &pQueries[j], ppResults[j], 1, &ppSorters[j], dTrees[j], pDict, pExtraFilters, &tNodeCache, iTag );
-		ppResults[j]->m_iMultiplier = iCommonSubtrees ? iQueries : 1;
-	}
+		if ( dTrees[j] )
+		{
+			bResult &= ParsedMultiQuery ( &pQueries[j], ppResults[j], 1, &ppSorters[j], dTrees[j], pDict, pExtraFilters, &tNodeCache, iTag );
+			ppResults[j]->m_iMultiplier = iCommonSubtrees ? iQueries : 1;
+		}
 
 	ARRAY_FOREACH ( k, dTrees )
 		SafeDelete ( dTrees[k] );

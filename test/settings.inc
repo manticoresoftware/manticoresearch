@@ -49,6 +49,11 @@ $g_site_defaults = array
 	'db-port'			=> 3306
 );
 
+// localsettings could include dev's own parameters
+// which is not to be commited into the public repo (in opposite to this settings.inc)
+if ( file_exists ('localsettings.inc') )
+	require_once ( 'localsettings.inc' );
+
 function GetBanner ()
 {
 	global $g_locals;

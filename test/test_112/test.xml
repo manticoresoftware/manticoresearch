@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>fullscan on empty multiquery with @geodist</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+source srctest
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT id, best_seller, attributes_id, lng, lat, text FROM test_table
+
+	sql_attr_uint = best_seller
+	sql_attr_uint = attributes_id
+	
+	sql_attr_float	= lng
+	sql_attr_float	= lat
+}
+
+index products
+{
+	source				= srctest
+	path				= <data_path/>/test
+}
+
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id integer primary key not null auto_increment,
+	best_seller int not null default 0,
+	attributes_id int not null default 0,
+	`lng` float NOT NULL default '0',
+	`lat` float NOT NULL default '0',
+	text varchar(256)
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table;
+</db_drop>
+
+<db_insert>
+INSERT INTO test_table (best_seller, attributes_id, lng, lat, text) VALUES
+( 1, 1, -0.0798578, 0.937717,'text1' ),
+( 2, 1,  -0.0799989, 0.891975, 'text2' ),
+( 3, 2,  -0.0721455, 0.926761, 'text3' ),
+( 4, 2,  -0.0721455, 0.926761, 'text4' );
+</db_insert>
+
+  <query_settings><![CDATA[
+  $client->SetArrayResult (true);
+$index = 'products';
+$query = "";
+$client->SetMatchMode (SPH_MATCH_EXTENDED2);
+
+// First query
+$client->SetSortMode (SPH_SORT_EXTENDED, 'best_seller ASC');
+$client->AddQuery ($query, $index);
+
+//Second query
+$client->SetGeoAnchor ('lng','lat',-0.0798578,0.937717 );
+$client->SetSortMode (SPH_SORT_EXTENDED, '@geodist DESC' );
+$client->AddQuery ($query, $index);
+
+//Run queries
+$results = $client->RunQueries(); 
+]]></query_settings>
+
+<queries><query /></queries>
+
+</test>

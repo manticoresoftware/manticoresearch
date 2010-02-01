@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <test>
-<name>deadlock on threaded exit</name>
+<name>fullscan on different result's schemas</name>
 
 <config>
 indexer
@@ -62,11 +62,10 @@ $client->SetSortMode (SPH_SORT_EXTENDED, 'best_seller ASC');
 $index = 'products';
 $query = "";
 
-// First Query
+// First Query - contains only usual attrs in the schema
 $client->AddQuery ($query, $index);
 
-
-//Second query
+//Second query - contains usual attrs, and also @group_by and @count attrs in the schema
 $client->SetGroupBy ('attributes_id', SPH_GROUPBY_ATTR, 'attributes_id desc');
 $client->AddQuery ($query, $index);
 

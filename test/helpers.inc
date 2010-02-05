@@ -1173,7 +1173,7 @@ class SphinxConfig
 		if ( @$qinfo["sortmode"] == SPH_SORT_EXPR )
 			$str .= "Sort: expr: ".$qinfo["sortby"]."\n";
 
-		$str .= "Query '$result[query]': retrieved $result[total_found] of $result[total] matches in $result[time] sec.\n";
+		$str .= @"Query '$result[query]': retrieved $result[total_found] of $result[total] matches in $result[time] sec.\n";
 		if ( $result["error"] )
 			$str .= "Error: $result[error]\n";
 		if ( $result["warning"] )

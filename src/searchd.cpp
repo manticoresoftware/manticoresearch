@@ -4577,6 +4577,14 @@ void SearchHandler_c::RunLocalSearchesMT ()
 			if ( m_bMultiQueue )
 				iResultIndex = iSorterIndex;
 
+			// check per-query failures of MultiQueryEx
+			else if ( dResults[iResultIndex].m_iMultiplier==-1 )
+			{
+				iResultIndex += iQuery - m_iStart;
+				m_dFailuresSet[iQuery].SubmitEx ( sLocal, "%s", dResults[iResultIndex].m_sError.cstr() );
+				continue;
+			}
+
 			ISphMatchSorter * pSorter = pSorters[iSorterIndex];
 			if ( !pSorter )
 				continue;
@@ -4828,10 +4836,6 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter )
 
 				// this one seems OK
 				AggrResult_t & tRes = m_dResults[iQuery];
-				tRes.m_iSuccesses++;
-				tRes.m_tSchema = pSorter->GetSchema();
-				tRes.m_iTotalMatches += pSorter->GetTotalCount();
-
 				// multi-queue only returned one result set meta, so we need to replicate it
 				if ( m_bMultiQueue )
 				{
@@ -4841,7 +4845,15 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter )
 					tRes.m_pMva = tStats.m_pMva;
 					tRes.m_dWordStats = tStats.m_dWordStats;
 					tRes.m_iMultiplier = m_iEnd-m_iStart+1;
+				} else if ( tRes.m_iMultiplier==-1 )
+				{
+					m_dFailuresSet[iQuery].SubmitEx ( sLocal, "%s", tRes.m_sError.cstr() );
+					continue;
 				}
+
+				tRes.m_iSuccesses++;
+				tRes.m_tSchema = pSorter->GetSchema();
+				tRes.m_iTotalMatches += pSorter->GetTotalCount();
 
 				// extract matches from sorter
 				assert ( pSorter );

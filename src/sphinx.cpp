@@ -11235,7 +11235,6 @@ void CSphQueryContext::LateCalc ( CSphMatch & tMatch ) const
 
 bool CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, ISphRanker * pRanker, int iTag ) const
 {
-	bool bRandomize = ppSorters[0]->m_bRandomize;
 	int iCutoff = pQuery->m_iCutoff;
 	if ( iCutoff<=0 )
 		iCutoff = -1;
@@ -11254,17 +11253,27 @@ bool CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 				CopyDocinfo ( pCtx, pMatch[i], FindDocinfo ( pMatch[i].m_iDocID ) );
 			pCtx->LateCalc ( pMatch[i] );
 
-			if ( bRandomize )
-				pMatch[i].m_iWeight = ( sphRand() & 0xffff );
-
 			if ( pCtx->m_pWeightFilter && !pCtx->m_pWeightFilter->Eval ( pMatch[i] ) )
 				continue;
 
 			pMatch[i].m_iTag = iTag;
 
+			bool bRand = false;
 			bool bNewMatch = false;
 			for ( int iSorter=0; iSorter<iSorters; iSorter++ )
+			{
+				// all non-random sorters are in the beginning,
+				// so we can avoid the simple 'first-element' assertion
+				if ( !bRand && ppSorters[iSorter]->m_bRandomize )
+				{
+					bRand = true;
+					pMatch[i].m_iWeight = ( sphRand() & 0xffff );
+
+					if ( pCtx->m_pWeightFilter && !pCtx->m_pWeightFilter->Eval ( pMatch[i] ) )
+						break;
+				}
 				bNewMatch |= ppSorters[iSorter]->Push ( pMatch[i] );
+			}
 
 			if ( bNewMatch )
 				if ( --iCutoff==0 )
@@ -13002,14 +13011,41 @@ static void TransformQuorum ( XQNode_t ** ppNode )
 	pNode->SetOp ( SPH_QUERY_OR, params );
 }
 
+struct CmpPSortersByRandom_fn
+{
+	inline bool IsLess ( const ISphMatchSorter * a, const ISphMatchSorter * b ) const
+	{
+		assert ( a );
+		assert ( b );
+		return a->m_bRandomize < b->m_bRandomize;
+	}
+};
+
+
 /// one regular query vs many sorters
 bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag ) const
 {
 	assert ( pQuery );
 
+	// to avoid the checking of a ppSorters's element for NULL on every next step, just filter out all nulls right here
+	CSphVector<ISphMatchSorter*> dSorters;
+	dSorters.Reserve ( iSorters );
+	for ( int i=0; i<iSorters; i++ )
+		if ( ppSorters[i] )
+			dSorters.Add ( ppSorters[i] );
+
+	iSorters = dSorters.GetLength();
+
+	// if we have anything to work with
+	if ( iSorters==0 )
+		return false;
+
+	// non-random at the start, random at the end
+	dSorters.Sort ( CmpPSortersByRandom_fn() );
+
 	// fast path for scans
 	if ( pQuery->m_sQuery.IsEmpty() )
-		return MultiScan ( pQuery, pResult, iSorters, ppSorters, pExtraFilters, iTag );
+		return MultiScan ( pQuery, pResult, iSorters, &dSorters[0], pExtraFilters, iTag );
 
 	ISphTokenizer * pTokenizer = m_pTokenizer->Clone ( false );
 
@@ -13039,7 +13075,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	int iCommonSubtrees = sphMarkCommonSubtrees ( dTrees );
 
 	CSphQueryNodeCache tNodeCache ( iCommonSubtrees, m_iMaxCachedDocs, m_iMaxCachedHits );
-	bool bResult = ParsedMultiQuery ( pQuery, pResult, iSorters, ppSorters, tParsed.m_pRoot, pDict, pExtraFilters, &tNodeCache, iTag );
+	bool bResult = ParsedMultiQuery ( pQuery, pResult, iSorters, &dSorters[0], tParsed.m_pRoot, pDict, pExtraFilters, &tNodeCache, iTag );
 
 	SafeDelete ( pTokenizer );
 
@@ -13047,7 +13083,8 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 }
 
 
-/// many regular queries with one sorter attached to each query
+/// many regular queries with one sorter attached to each query.
+/// returns true if at least one query succeeded. The failed queries indicated with pResult->m_iMultiplier==-1
 bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> * pExtraFilters, int iTag ) const
 {
 	// ensure we have multiple queries
@@ -13069,15 +13106,25 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 	CSphVector<XQNode_t*> dTrees;
 	dTrees.Reserve ( iQueries );
 
-	bool bResult = true;
+	bool bResult = false;
+	bool bResultScan = false;
 	for ( int i=0; i<iQueries; i++ )
 	{
+		// nothing to do without a sorter
+		if ( !ppSorters[i] )
+		{
+			ppResults[i]->m_iMultiplier = -1; ///< show that this particular query failed
+			dTrees.Add ( NULL );
+			continue;
+		}
+
 		// fast path for scans
 		if ( pQueries[i].m_sQuery.IsEmpty() )
 		{
-			bResult &= MultiScan ( pQueries + i, ppResults[i], 1, &ppSorters[i], pExtraFilters, iTag );
-			if ( !bResult )
-				break;
+			if ( MultiScan ( pQueries + i, ppResults[i], 1, &ppSorters[i], pExtraFilters, iTag ) )
+				bResultScan = true;
+			else
+				ppResults[i]->m_iMultiplier = -1; ///< show that this particular query failed
 
 			dTrees.Add ( NULL );
 			continue;
@@ -13085,38 +13132,46 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 
 		// parse query
 		XQQuery_t tParsed;
-		if ( !sphParseExtendedQuery ( tParsed, pQueries[i].m_sQuery.cstr(), pTokenizer, &m_tSchema, pDict ) )
+		if ( sphParseExtendedQuery ( tParsed, pQueries[i].m_sQuery.cstr(), pTokenizer, &m_tSchema, pDict ) )
+		{
+			// transform query if needed (quorum transform, keyword expansion, etc.)
+			TransformQuorum ( &tParsed.m_pRoot );
+			if ( m_bExpandKeywords )
+				tParsed.m_pRoot = ExpandKeywords ( tParsed.m_pRoot, m_tSettings );
+
+			dTrees.Add ( tParsed.m_pRoot );
+			tParsed.m_pRoot = NULL;
+			bResult = true;
+		} else
 		{
 			ppResults[i]->m_sError = tParsed.m_sParseError;
-			bResult = false;
-			break; // we can't simply return false at this stage because we need to handle other queries
+			ppResults[i]->m_iMultiplier = -1;
 		}
-
-		// transform query if needed (quorum transform, keyword expansion, etc.)
-		TransformQuorum ( &tParsed.m_pRoot );
-		if ( m_bExpandKeywords )
-			tParsed.m_pRoot = ExpandKeywords ( tParsed.m_pRoot, m_tSettings );
-
-		dTrees.Add ( tParsed.m_pRoot );
-		tParsed.m_pRoot = NULL;
 	}
 
-	int iCommonSubtrees = sphMarkCommonSubtrees ( dTrees );
+	// continue only if we have at least one non-failed
+	if ( bResult )
+	{
+		int iCommonSubtrees = sphMarkCommonSubtrees ( dTrees );
 
-	CSphQueryNodeCache tNodeCache ( iCommonSubtrees, m_iMaxCachedDocs, m_iMaxCachedHits );
-	ARRAY_FOREACH ( j, dTrees )
-		if ( dTrees[j] )
-		{
-			bResult &= ParsedMultiQuery ( &pQueries[j], ppResults[j], 1, &ppSorters[j], dTrees[j], pDict, pExtraFilters, &tNodeCache, iTag );
-			ppResults[j]->m_iMultiplier = iCommonSubtrees ? iQueries : 1;
-		}
+		CSphQueryNodeCache tNodeCache ( iCommonSubtrees, m_iMaxCachedDocs, m_iMaxCachedHits );
+		bResult = false;
+		ARRAY_FOREACH ( j, dTrees )
+			if ( dTrees[j] && ppSorters[j]
+					&& ParsedMultiQuery ( &pQueries[j], ppResults[j], 1, &ppSorters[j], dTrees[j], pDict, pExtraFilters, &tNodeCache, iTag ) )
+			{
+				bResult = true;
+				ppResults[j]->m_iMultiplier = iCommonSubtrees ? iQueries : 1;
+			} else
+				ppResults[j]->m_iMultiplier = -1;
+	}
 
 	ARRAY_FOREACH ( k, dTrees )
 		SafeDelete ( dTrees[k] );
 
 	SafeDelete ( pTokenizer );
 
-	return bResult;
+	return bResult | bResultScan;
 }
 
 bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQNode_t * pRoot, CSphDict * pDict, const CSphVector<CSphFilterSettings> * pExtraFilters, CSphQueryNodeCache * pNodeCache, int iTag ) const

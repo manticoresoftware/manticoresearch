@@ -1937,7 +1937,7 @@ class CSphQueryResultMeta
 public:
 	int						m_iQueryTime;		///< query time, milliseconds
 	int64_t					m_iCpuTime;			///< user time, microseconds
-	int						m_iMultiplier;		///< multi-query multiplier
+	int						m_iMultiplier;		///< multi-query multiplier, 0 to indicate error
 
 	struct WordStat_t
 	{

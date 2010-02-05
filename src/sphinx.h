@@ -129,8 +129,14 @@ inline SphDocID_t		DOCINFO2ID ( const DWORD * pDocinfo )					{ return *(SphDocID
 inline void				DOCINFOSETID ( DWORD * pDocinfo, SphDocID_t uValue )	{ *(SphDocID_t*)pDocinfo = uValue; }
 #endif
 
+#if PARANOID
+inline DWORD *			DOCINFO2ATTRS ( DWORD * pDocinfo )		{ assert(pDocinfo); return pDocinfo+DOCINFO_IDSIZE; }
+inline const DWORD *	DOCINFO2ATTRS ( const DWORD * pDocinfo ){ assert(pDocinfo); return pDocinfo+DOCINFO_IDSIZE; }
+#else
 inline DWORD *			DOCINFO2ATTRS ( DWORD * pDocinfo )		{ return pDocinfo+DOCINFO_IDSIZE; }
 inline const DWORD *	DOCINFO2ATTRS ( const DWORD * pDocinfo ){ return pDocinfo+DOCINFO_IDSIZE; }
+#endif
+
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -655,6 +661,7 @@ struct CSphAttrLocator
 /// getter
 inline SphAttr_t sphGetRowAttr ( const CSphRowitem * pRow, const CSphAttrLocator & tLoc )
 {
+	assert (pRow);
 	int iItem = tLoc.m_iBitOffset>>ROWITEM_SHIFT;
 
 	if ( tLoc.m_iBitCount==ROWITEM_BITS )
@@ -671,6 +678,7 @@ inline SphAttr_t sphGetRowAttr ( const CSphRowitem * pRow, const CSphAttrLocator
 /// setter
 inline void sphSetRowAttr ( CSphRowitem * pRow, const CSphAttrLocator & tLoc, SphAttr_t uValue )
 {
+	assert(pRow);
 	int iItem = tLoc.m_iBitOffset>>ROWITEM_SHIFT;
 	if ( tLoc.m_iBitCount==2*ROWITEM_BITS )
 	{

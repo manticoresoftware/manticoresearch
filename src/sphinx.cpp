@@ -10231,7 +10231,10 @@ public:
 					if ( pInline )
 						tMatch.m_pDynamic = pInline;
 					else
-						tMatch.m_pStatic = DOCINFO2ATTRS ( pSourceIndex->FindDocinfo ( tQword.m_tDoc.m_iDocID ) );
+					{
+						const DWORD * pInfo = pSourceIndex->FindDocinfo ( tQword.m_tDoc.m_iDocID );
+						tMatch.m_pStatic = pInfo?DOCINFO2ATTRS ( pInfo ):NULL;
+					}
 					bool bResult = pFilter->Eval ( tMatch );
 					tMatch.m_pDynamic = NULL;
 					if ( !bResult )

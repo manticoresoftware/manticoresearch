@@ -18,6 +18,7 @@
 #include "sphinxutils.h"
 #include "sphinxquery.h"
 #include "sphinxrt.h"
+#include "sphinxint.h"
 #include <math.h>
 
 //////////////////////////////////////////////////////////////////////////
@@ -1600,6 +1601,33 @@ void TestRT ()
 	}
 	DeleteIndexFiles ( RT_INDEX_FILE_NAME );
 }
+
+void TestWriter()
+{
+	printf ( "testing CSphWriter... " );
+	const CSphString sTmpWriteout = "__writeout.tmp";
+	CSphString sErr;
+
+#define WRITE_OUT_DATA_SIZE 0x40000
+	BYTE * pData = new BYTE[WRITE_OUT_DATA_SIZE];
+	memset ( pData, 0xfe, WRITE_OUT_DATA_SIZE );
+
+	{
+		CSphWriter tWrDef;
+		tWrDef.OpenFile ( sTmpWriteout, sErr );
+		tWrDef.PutBytes ( pData, WRITE_OUT_DATA_SIZE );
+		tWrDef.PutByte ( 0xff );
+	}
+	{
+		CSphWriter tWr;
+		tWr.SetBufferSize ( WRITE_OUT_DATA_SIZE );
+		tWr.OpenFile ( sTmpWriteout, sErr );
+		tWr.PutBytes ( pData, WRITE_OUT_DATA_SIZE );
+		tWr.PutByte ( 0xff );
+	}
+	unlink ( sTmpWriteout.cstr() );
+	printf ( "ok\n" );
+}
 #endif
 
 //////////////////////////////////////////////////////////////////////////
@@ -1630,6 +1658,7 @@ int main ()
 	TestCleanup ();
 	TestStridedSort ();
 	TestRT ();
+	TestWriter();
 #endif
 
 	unlink ( g_sTmpfile );

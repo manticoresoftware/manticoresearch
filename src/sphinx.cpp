@@ -4875,10 +4875,10 @@ void CSphWriter::CloseFile ( bool bTruncate )
 
 void CSphWriter::PutByte ( int data )
 {
-	*m_pPool++ = BYTE ( data & 0xff );
-	m_iPoolUsed++;
 	if ( m_iPoolUsed==m_iBufferSize )
 		Flush ();
+	*m_pPool++ = BYTE ( data & 0xff );
+	m_iPoolUsed++;
 	m_iPos++;
 }
 

@@ -2128,8 +2128,14 @@ const ExtHit_t * ExtPhrase_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t 
 					pHit = m_pHits = m_pNode->GetHitsChunk ( m_pDocs, m_uDocsMaxID );
 					if ( !pHit )
 					{
-						m_uMatchedDocid = 0;
-						pMyDoc++;
+						// no tail hits, no more matching
+						if ( !iMyHit )
+						{
+							m_uMatchedDocid = 0;
+							pMyDoc++;
+						}
+
+						// escape from tail matching loop
 						break;
 					}
 				}
@@ -2225,7 +2231,7 @@ const ExtHit_t * ExtPhrase_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t 
 			// adjust pointers, keep returning hits until the end
 			// FIXME! check what happens when we get more than MAX_HITS for this trailing doc
 			m_dMyHits[iMyHit].m_uDocid = DOCID_MAX;
-			m_pMyHit = m_dMyHits;
+			pMyHit = m_pMyHit = m_dMyHits;
 		}
 	}
 

@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>phrase matching vs hit buffer boundary</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source main
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = select * from test_table
+}
+
+index main
+{
+	source = main
+	path = <data_path/>/main
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER AUTO_INCREMENT PRIMARY KEY NOT NULL,
+	title VARCHAR(255) NOT NULL,
+	content VARCHAR(255) NOT NULL
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table;
+</db_drop>
+
+<custom_insert><![CDATA[
+
+for ( $i=0; $i<510; $i++ )
+	mysql_query ( "INSERT INTO test_table VALUES ( 0, 'die antwoord', '' )" );
+mysql_query ( "INSERT INTO test_table VALUES ( 0, 'die antwoord', 'die antwoord' )" );
+
+]]></custom_insert>
+
+<queries>
+<query mode="extended2">"die antwoord"</query>
+</queries>
+
+</test>

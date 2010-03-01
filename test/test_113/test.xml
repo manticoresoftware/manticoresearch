@@ -66,7 +66,7 @@ $query = "";
 $client->AddQuery ($query, $index);
 
 
-//Second query - note that manufacturers_id is absend in the schema, so it must fail the query, but *NOT* crash the searchd.
+//Second query - note that manufacturers_id is absent in the schema, so it must fail the query, but *NOT* crash the searchd.
 $client->SetSelect('manufacturers_id');
 $client->SetGroupBy ('manufacturers_id', SPH_GROUPBY_ATTR, 'manufacturers_id desc');
 $client->AddQuery ($query, $index);

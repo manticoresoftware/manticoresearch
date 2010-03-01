@@ -2031,6 +2031,7 @@ const ExtDoc_t * ExtPhrase_c::GetDocsChunk ( SphDocID_t * pMaxID )
 	// emit markes and return found matches
 	assert ( iMyHit>=0 && iMyHit<MAX_HITS );
 	m_dMyHits[iMyHit].m_uDocid = DOCID_MAX; // end marker
+	m_uMatchedDocid = 0;
 
 	return ReturnDocsChunk ( iDoc, pMaxID );
 }
@@ -2109,7 +2110,8 @@ const ExtHit_t * ExtPhrase_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t 
 		} else if ( pMyHit->m_uDocid==DOCID_MAX && m_pHit && iHit<MAX_HITS-1 )
 		{
 			// the trickiest part; handle the end of my (phrase) hitlist chunk
-			// phrase doclist chunk was built from it; so it must be the end of doclist as well
+			// phrase doclist chunk was built from it; so it must be the end of doclist as well.
+			// Covered by test 114.
 			assert ( pMyDoc[1].m_uDocid==DOCID_MAX );
 
 			// keep scanning and-node hits while there are hits for the last matched document
@@ -2119,8 +2121,7 @@ const ExtHit_t * ExtPhrase_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t 
 			m_uExpID = m_uMatchedDocid;
 
 			const ExtHit_t * pHit = m_pHit;
-			int iMyHit = 0;
-			while ( iMyHit<MAX_HITS-1 )
+			while ( iHit<MAX_HITS-1 )
 			{
 				// and-node hits chunk end reached? get some more
 				if ( pHit->m_uDocid==DOCID_MAX )
@@ -2128,14 +2129,8 @@ const ExtHit_t * ExtPhrase_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t 
 					pHit = m_pHits = m_pNode->GetHitsChunk ( m_pDocs, m_uDocsMaxID );
 					if ( !pHit )
 					{
-						// no tail hits, no more matching
-						if ( !iMyHit )
-						{
-							m_uMatchedDocid = 0;
-							pMyDoc++;
-						}
-
-						// escape from tail matching loop
+						m_uMatchedDocid = 0;
+						pMyDoc++;
 						break;
 					}
 				}
@@ -2191,15 +2186,13 @@ const ExtHit_t * ExtPhrase_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t 
 						assert ( pHit->m_uQuerypos==m_uExpQpos );
 
 						DWORD uSpanlen = m_uMaxQpos - m_uMinQpos;
-						m_dMyHits[iMyHit].m_uDocid = pHit->m_uDocid;
-						m_dMyHits[iMyHit].m_uHitpos = HIT2LCS ( pHit->m_uHitpos ) - uSpanlen;
-						m_dMyHits[iMyHit].m_uQuerypos = m_uMinQpos;
-						m_dMyHits[iMyHit].m_uSpanlen = uSpanlen + 1;
-						m_dMyHits[iMyHit].m_uWeight = m_uWords;
-						iMyHit++;
-
-						m_uExpID = m_uExpPos = m_uExpQpos = 0;
-
+						// emit directly into m_dHits, this is no need to disturb m_dMyHits here.
+						m_dHits[iHit].m_uDocid = pHit->m_uDocid;
+						m_dHits[iHit].m_uHitpos = HIT2LCS ( pHit->m_uHitpos ) - uSpanlen;
+						m_dHits[iHit].m_uQuerypos = m_uMinQpos;
+						m_dHits[iHit].m_uSpanlen = uSpanlen + 1;
+						m_dHits[iHit++].m_uWeight = m_uWords;
+						m_uExpPos = m_uExpQpos = 0;
 					} else
 					{
 						// intermediate expected position; keep looking
@@ -2226,12 +2219,6 @@ const ExtHit_t * ExtPhrase_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t 
 
 			// save shortcut
 			m_pHit = pHit;
-
-			// at this point, we have more hits for the trailing document in m_dMyHits
-			// adjust pointers, keep returning hits until the end
-			// FIXME! check what happens when we get more than MAX_HITS for this trailing doc
-			m_dMyHits[iMyHit].m_uDocid = DOCID_MAX;
-			pMyHit = m_pMyHit = m_dMyHits;
 		}
 	}
 

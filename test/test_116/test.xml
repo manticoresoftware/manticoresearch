@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>Bound cases of the proximity node</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source src
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT * FROM test_table
+}
+
+index idx
+{
+	source			= src
+	path			= <data_path/>/main
+    charset_type 	= utf-8
+}
+
+</config>
+
+<queries>
+	<!-- expect 3 matches -->
+	<query index="idx" mode="extended2" ranker="wordcount" >"a b"~3</query>
+	<!-- expect 513 matches, the first with the weithg=3 -->
+	<query index="idx" mode="extended2" ranker="wordcount" >"e f"~2</query>
+	<!-- expect 1 match, the first with the weithg=532 -->
+	<query index="idx" mode="extended2" ranker="wordcount" >"i j"~2</query>
+</queries>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER AUTO_INCREMENT PRIMARY KEY NOT NULL,
+	title VARCHAR(25000) NOT NULL
+);
+</db_create>
+
+<custom_insert><![CDATA[
+
+$line = "";
+for ( $i=0; $i<10; ++$i )
+{
+	mysql_query ( "INSERT INTO test_table VALUES ( 0, 'a $line b')" );
+	$line .="x ";
+}
+
+for ( $i=0; $i<510; ++$i )
+	mysql_query ( "INSERT INTO test_table VALUES ( 0, 'e x f')" );
+mysql_query ( "INSERT INTO test_table VALUES ( 0, 'e x f x x x e x f x x e x f x x')" );
+
+$line = "";
+for ( $i=0; $i<532; ++$i )
+	$line .= " y y i x j";
+mysql_query ( "INSERT INTO test_table VALUES ( 0, '$line')" );
+
+]]></custom_insert>
+<db_drop>DROP TABLE test_table</db_drop>
+
+</test>

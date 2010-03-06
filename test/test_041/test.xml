@@ -41,18 +41,14 @@ index test
 <queries>
 <query mode="extended2">work</query>
 <query mode="extended2">worked</query>
-<query mode="extended2">working</query>
-<query mode="extended2">workings</query>
 <query mode="extended2">worker</query>
-<query mode="extended2">works</query>
-<query mode="extended2">workers</query>
 <query mode="extended2">=work</query>
 <query mode="extended2">=worked</query>
-<query mode="extended2">=working</query>
-<query mode="extended2">=workings</query>
 <query mode="extended2">=worker</query>
-<query mode="extended2">=works</query>
-<query mode="extended2">=workers</query>
+<query mode="extended2">run</query>
+<query mode="extended2">runs</query>
+<query mode="extended2">=run</query>
+<query mode="extended2">=runs</query>
 </queries>
 
 <db_create>
@@ -69,7 +65,10 @@ DROP TABLE IF EXISTS `test_table`
 
 <db_insert>
 INSERT INTO `test_table` VALUES
-( 1, 'work worked working workings worker works workers' )
+( 1, 'work worked working workings worker works workers' ),
+( 2, 'run' ),
+( 3, 'runs' ),
+( 4, 'running' )
 </db_insert>
 
 </test>

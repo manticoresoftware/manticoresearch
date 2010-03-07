@@ -3,7 +3,7 @@
 
 <name>aggregate functions</name>
 
-<num_agents>2</num_agents>
+<num_agents>3</num_agents>
 
 <config>
 indexer
@@ -57,6 +57,13 @@ index dist
 	local			= test
 	agent			= <agent_address/>:test2
 }
+
+index dist2
+{
+	type			= distributed
+	agent			= <agent1_address/>:test2
+	agent			= <agent2_address/>:testr
+}
 </agent0>
 <agent1>
 index test2
@@ -66,6 +73,14 @@ index test2
 	docinfo			= extern
 }
 </agent1>
+<agent2>
+index testr
+{
+	source			= srctest
+	path			= <data_path/>/testr
+	docinfo			= extern
+}
+</agent2>
 </config>
 
 <queries>
@@ -74,6 +89,8 @@ index test2
 <query index="test" select="*,sum(views) as sumviews, avg(price) as avgprice" groupattr="gid"/>
 <query index="dist" select="*,avg(price) as avgprice" groupattr="gid"/>
 <query index="dist" select="*,sum(views) as sumviews, avg(price) as avgprice" groupattr="gid"/>
+<query index="dist2" select="*,avg(price) as avgprice" groupattr="gid"/>
+<query index="dist2" select="*,sum(views) as sumviews, avg(price) as avgprice" groupattr="gid"/>
 <query index="test" select="gid, sum(views) as sumviews, avg(price) as avgprice" groupattr="gid"/>
 <query index="test3" select="gid, sum(views) as sumviews, avg(price) as avgprice" groupattr="gid"/>
 <query index="test,test3" select="gid, sum(views) as sumviews, avg(price) as avgprice" groupattr="gid"/>

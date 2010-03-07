@@ -158,7 +158,7 @@ foreach ( $tests as $test )
 		$agents	= array (
 			array ( "address" => $sd_address, "port" => $sd_port, "sqlport" => $sd_sphinxql_port ),
 			array ( "address" => $agent_address, "port" => $agent_port, "sqlport" => $agent_port_sql ),
-
+			array ( "address" => $agent_address, "port" => $agent_port+1, "sqlport" => $agent_port_sql+1 )
 		);
 	}
 

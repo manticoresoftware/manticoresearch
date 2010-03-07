@@ -4093,7 +4093,7 @@ struct TaggedMatchSorter_fn : public SphAccessor_T<CSphMatch>
 };
 
 
-bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery )
+bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHadLocalIndexes )
 {
 	// sanity check
 	int iExpected = 0;
@@ -4154,6 +4154,27 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery )
 		{
 			tRes.m_tSchema = tItems;
 			bAllEqual = false;
+		}
+	}
+
+	// tricky bit
+	// in purely distributed case, all schemas are received from the wire, and miss aggregate functions info
+	// thus, we need to re-assign that info
+	if ( !bHadLocalIndexes )
+		ARRAY_FOREACH ( i, tQuery.m_dItems )
+	{
+		const CSphQueryItem & tItem = tQuery.m_dItems[i];
+		if ( tItem.m_eAggrFunc==SPH_AGGR_NONE )
+			continue;
+
+		for ( int j=0; j<tRes.m_tSchema.GetAttrsCount(); j++ )
+		{
+			CSphColumnInfo & tCol = const_cast<CSphColumnInfo&> ( tRes.m_tSchema.GetAttr(j) );
+			if ( tCol.m_sName==tItem.m_sAlias )
+			{
+				assert ( tCol.m_eAggrFunc==SPH_AGGR_NONE );
+				tCol.m_eAggrFunc = tItem.m_eAggrFunc;
+			}
 		}
 	}
 
@@ -5252,7 +5273,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			tRes.m_tSchema = tRes.m_dSchemas[0];
 
 		if ( tRes.m_iSuccesses>1 || tQuery.m_dItems.GetLength() )
-			if ( !MinimizeAggrResult ( tRes, tQuery ) )
+			if ( !MinimizeAggrResult ( tRes, tQuery, m_dLocal.GetLength()!=0 ) )
 				return;
 
 		if ( !m_dFailuresSet[iRes].IsEmpty() )

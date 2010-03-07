@@ -1764,7 +1764,7 @@ class SphinxConfig
 
 	function Dump ( $node, $fp, $dynamic_only, $agentid )
 	{
-		global $index_data_path, $agent_address, $agent_port;
+		global $index_data_path, $agents;
 
 		$nodename = strtolower ( $node->nodeName );
 
@@ -1775,7 +1775,9 @@ class SphinxConfig
 			case "static":				fwrite ( $fp, $node->nodeValue ); return;
 			case "searchd_settings":	$this->WriteSearchdSettings ( $fp ); return;
 			case "sql_settings":		$this->WriteSqlSettings ( $fp, $node->attributes ); return;
-			case "agent_address":		fwrite ( $fp, $agent_address.":".$agent_port ); return;
+			case "agent_address":
+			case "agent1_address":		fwrite ( $fp, $agents[1]["address"].":".$agents[1]["port"] ); return;
+			case "agent2_address":		fwrite ( $fp, $agents[2]["address"].":".$agents[2]["port"] ); return;
 			case "data_path":			fwrite ( $fp, $index_data_path ); return;
 			case "local":				fwrite ( $fp, $this->GetLocal ( $node->nodeValue ) ); return;
 			case "test_root":			fwrite ( $fp, dirname(__FILE__) ); return;

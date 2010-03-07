@@ -43,7 +43,7 @@ index idx
 CREATE TABLE test_table
 (
 	id INTEGER AUTO_INCREMENT PRIMARY KEY NOT NULL,
-	title VARCHAR(25000) NOT NULL
+	title TEXT NOT NULL
 );
 </db_create>
 

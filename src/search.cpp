@@ -116,7 +116,7 @@ int main ( int argc, char ** argv )
 			OPT ( "-c", "--config" )	sOptConfig = argv[++i];
 			OPT ( "-i", "--index" )		sIndex = argv[++i];
 			OPT ( "-g", "--group" )		{ tQuery.m_eGroupFunc = SPH_GROUPBY_ATTR; tQuery.m_sGroupBy = argv[++i]; }
-			OPT ( "-gs","--groupsort" )	{ tQuery.m_sGroupSortBy = argv[++i]; }
+			OPT ( "-gs","--groupsort" )	{ tQuery.m_sGroupSortBy = argv[++i]; } // NOLINT
 			OPT ( "-s", "--sortby" )	{ tQuery.m_eSort = SPH_SORT_EXTENDED; tQuery.m_sSortBy = argv[++i]; }
 			OPT ( "-S", "--sortexpr" )	{ tQuery.m_eSort = SPH_SORT_EXPR; tQuery.m_sSortBy = argv[++i]; }
 
@@ -136,8 +136,8 @@ int main ( int argc, char ** argv )
 		} else if ( strlen(sQuery) + strlen(argv[i]) + 1 < sizeof(sQuery) )
 		{
 			// this is a search term
-			strcat ( sQuery, argv[i] );
-			strcat ( sQuery, " " );
+			strcat ( sQuery, argv[i] ); // NOLINT
+			strcat ( sQuery, " " ); // NOLINT
 		}
 	}
 	iStart = Max ( iStart, 0 );

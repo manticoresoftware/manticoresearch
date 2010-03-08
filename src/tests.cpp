@@ -809,8 +809,8 @@ void BenchLocators ()
 	for ( int i=0; i<NUM_MATCHES; i++ )
 	{
 		tLoc[i].m_iBitCount = 32;
-		tLoc[i].m_iBitOffset = 32*( rand() % MAX_ITEMS );
-		tLoc[i].m_bDynamic = ( rand() % 2 )==1;
+		tLoc[i].m_iBitOffset = 32*( rand() % MAX_ITEMS ); // NOLINT
+		tLoc[i].m_bDynamic = ( rand() % 2 )==1; // NOLINT
 		tMatch[i].m_pStatic = dStatic;
 		tMatch[i].m_pDynamic = dDynamic;
 	}
@@ -1500,13 +1500,13 @@ static void DeleteIndexFiles ( const char * sIndex )
 		return;
 
 	CSphString sName;
-	sName.SetSprintf( "%s.kill", sIndex );
+	sName.SetSprintf ( "%s.kill", sIndex );
 	unlink ( sName.cstr() );
-	sName.SetSprintf( "%s.lock", sIndex );
+	sName.SetSprintf ( "%s.lock", sIndex );
 	unlink ( sName.cstr() );
-	sName.SetSprintf( "%s.meta", sIndex );
+	sName.SetSprintf ( "%s.meta", sIndex );
 	unlink ( sName.cstr() );
-	sName.SetSprintf( "%s.ram", sIndex );
+	sName.SetSprintf ( "%s.ram", sIndex );
 	unlink ( sName.cstr() );
 }
 

@@ -234,6 +234,7 @@ static bool IsGroupbyMagic ( const CSphString & s )
 		virtual SphGroupKey_t KeyFromMatch ( const CSphMatch & tMatch ) const { return KeyFromValue ( tMatch.GetAttr ( m_tLocator ) ); } \
 		virtual SphGroupKey_t KeyFromValue ( SphAttr_t uValue ) const \
 		{
+// NOLINT
 
 #define GROUPER_END \
 		} \
@@ -1445,7 +1446,7 @@ struct MatchCustom_fn : public ISphMatchComparator
 #define MATCH_ATTR(_idx)			1.0f
 #define MATCH_DECLARE_ATTR(_name)	if ( !SetupAttr ( tSchema, tState, sError, iAttr++, _name ) ) return false;
 #include "sphinxcustomsort.inl"
-;
+; // NOLINT
 
 		return true;
 	}
@@ -1458,7 +1459,7 @@ struct MatchCustom_fn : public ISphMatchComparator
 #undef MATCH_WEIGHT
 #undef MATCH_NOW
 #undef MATCH_ATTR
-#define MATCH_DECLARE_ATTR(_name)	;
+#define MATCH_DECLARE_ATTR(_name)	; // NOLINT
 #define MATCH_WEIGHT				float(MATCH_VAR.m_iWeight)
 #define MATCH_NOW					float(t.m_iNow)
 #define MATCH_ATTR(_idx)			float(sphGetCompAttr<BITS>(t,MATCH_VAR,_idx))
@@ -1469,15 +1470,15 @@ struct MatchCustom_fn : public ISphMatchComparator
 #undef MATCH_VAR
 #define MATCH_FUNCTION aa
 #define MATCH_VAR a
-#include "sphinxcustomsort.inl"
-;
+#include "sphinxcustomsort.inl" // NOLINT
+; // NOLINT
 
 #undef MATCH_FUNCTION
 #undef MATCH_VAR
 #define MATCH_FUNCTION bb
 #define MATCH_VAR b
-#include "sphinxcustomsort.inl"
-;
+#include "sphinxcustomsort.inl" // NOLINT
+; // NOLINT
 
 		return aa<bb;
 	}

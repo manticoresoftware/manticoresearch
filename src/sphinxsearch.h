@@ -33,7 +33,7 @@
 #define HIT2FIELD(_hit)			((_hit)>>24)
 
 /// prepare hit for LCS counting
-#define HIT2LCS(_hit)			(_hit&0xff7fffffUL)
+#define HIT2LCS(_hit)			(_hit & 0xff7fffffUL)
 
 /// field end flag
 #define HIT_FIELD_END			0x800000UL
@@ -64,7 +64,7 @@ public:
 	// setup by QwordSetup()
 	int				m_iDocs;		///< document count, from wordlist
 	int				m_iHits;		///< hit count, from wordlist
-	bool			m_bHasHitlist;	///< hitlist  presence flag
+	bool			m_bHasHitlist;	///< hitlist presence flag
 
 	// iterator state
 	DWORD			m_uFields;		///< current match fields

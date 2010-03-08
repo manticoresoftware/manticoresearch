@@ -22,7 +22,7 @@
 class ISphRtIndex : public CSphIndex
 {
 public:
-	explicit ISphRtIndex ( const char * sName ) : CSphIndex ( sName) {}
+	explicit ISphRtIndex ( const char * sName ) : CSphIndex ( sName ) {}
 
 	/// insert/update document in current txn
 	/// fails in case of two open txns to different indexes

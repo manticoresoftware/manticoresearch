@@ -156,7 +156,7 @@ private:
 	void		UpdateCache ();
 };
 
-/// scoped reader 
+/// scoped reader
 class CSphAutoreader : public CSphReader
 {
 public:

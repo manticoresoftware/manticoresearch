@@ -25,9 +25,9 @@ struct ISphFilter
 	virtual void SetRangeFloat ( float, float ) {}
 	virtual void SetValues ( const SphAttr_t *, int ) {}
 	virtual void SetMVAStorage ( const DWORD * ) {}
-	
+
 	virtual ~ISphFilter () {}
-	
+
 	/// evaluate filter for a given match
 	/// returns true if match satisfies the filter critertia (i.e. in range, found in values list etc)
 	virtual bool Eval ( const CSphMatch & tMatch ) const = 0;

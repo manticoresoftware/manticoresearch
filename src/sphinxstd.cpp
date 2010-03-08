@@ -57,7 +57,6 @@ void sphAssert ( const char * sExpr, const char * sFile, int iLine )
 #include <io.h>
 #else
 #include <unistd.h>
-#include <sys/time.h>
 #endif
 
 const DWORD MEMORY_MAGIC_PLAIN		= 0xbbbbbbbbUL;
@@ -550,7 +549,7 @@ void CSphProcessSharedMutex::Unlock ()
 
 struct ThreadCall_t
 {
-	void			( *m_pCall )(void*);
+	void			( *m_pCall )( void * pArg );
 	void *			m_pArg;
 	ThreadCall_t *	m_pNext;
 };

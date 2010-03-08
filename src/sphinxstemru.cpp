@@ -114,7 +114,7 @@ struct RussianAlphabetUTF8_t
 #define LOC_PREFIX(_a)		_a##_utf8
 #define RUS					RussianAlphabetUTF8_t
 
-#include "sphinxstemru.inl"
+#include "sphinxstemru.inl" // NOLINT 2nd include
 
 /////////////////////////////////////////////////////////////////////////////
 

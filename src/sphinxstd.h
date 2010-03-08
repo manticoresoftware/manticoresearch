@@ -21,7 +21,7 @@
 #define _CRT_NONSTDC_NO_DEPRECATE 1
 #endif
 
-#if (_MSC_VER >= 1000) && !defined(__midl) && defined(_PREFAST_)
+#if (_MSC_VER>=1000) && !defined(__midl) && defined(_PREFAST_)
 typedef int __declspec("SAL_nokernel") __declspec("SAL_nodriver") __prefast_flag_kernel_driver_mode;
 #endif
 
@@ -212,10 +212,10 @@ inline int sphBitCount ( DWORD n )
 	// fix last line for 64-bit numbers
 	register DWORD tmp;
 	tmp = n - ((n >> 1) & 033333333333) - ((n >> 2) & 011111111111);
-	return ((tmp + (tmp >> 3)) & 030707070707) % 63;
+	return ( (tmp + (tmp >> 3) ) & 030707070707) % 63;
 }
 
-typedef			bool (* SphDieCallback_t) ( const char * );
+typedef			bool ( *SphDieCallback_t ) ( const char * );
 
 /// crash with an error message
 void			sphDie ( const char * sMessage, ... );
@@ -342,13 +342,13 @@ struct SphMemberLess_T
 
 	inline bool IsLess ( const C & a, const C & b ) const
 	{
-		return ((&a)->*m_pMember) < ((&b)->*m_pMember);
+		return ( (&a)->*m_pMember ) < ( (&b)->*m_pMember );
 	}
 };
 
 template < typename T, typename C >
 inline SphMemberLess_T<T,C>
-sphMemberLess ( T C::* pMember)
+sphMemberLess ( T C::* pMember )
 {
 	return SphMemberLess_T<T,C> ( pMember );
 }
@@ -456,16 +456,16 @@ void sphSort ( T * pData, int iCount, U COMP, V ACC )
 		{
 			if ( !--iDepthLimit )
 			{
-				sphHeapSort ( a, ACC.Sub(b,a)+1, COMP, ACC );
+				sphHeapSort ( a, ACC.Sub ( b, a )+1, COMP, ACC );
 				return;
 			}
 		}
 
 		// for tiny arrays, switch to insertion sort
-		int iLen = ACC.Sub(b,a);
+		int iLen = ACC.Sub ( b, a );
 		if ( iLen<=SMALL_THRESH )
 		{
-			for ( i=ACC.Add(a,1); i<=b; i=ACC.Add(i,1) )
+			for ( i=ACC.Add ( a, 1 ); i<=b; i=ACC.Add ( i, 1 ) )
 			{
 				for ( j=i; j>a; )
 				{
@@ -496,7 +496,7 @@ void sphSort ( T * pData, int iCount, U COMP, V ACC )
 				}
 			}
 
-			if ( ACC.Sub(j,a)>=ACC.Sub(b,i) )
+			if ( ACC.Sub ( j, a )>=ACC.Sub ( b, i ) )
 			{
 				if ( a<j ) { st0[k] = a; st1[k] = j; k++; }
 				a = i;
@@ -531,7 +531,7 @@ struct SphMemberFunctor_T
 {
 	const T CLASS::*	m_pMember;
 
-						SphMemberFunctor_T ( T CLASS::* pMember )	: m_pMember ( pMember ) {}
+	explicit			SphMemberFunctor_T ( T CLASS::* pMember )	: m_pMember ( pMember ) {}
 	const T &			operator () ( const CLASS & arg ) const		{ return (&arg)->*m_pMember; }
 };
 
@@ -962,12 +962,14 @@ public:
 /// swap-vector
 template < typename T >
 class CSphSwapVector : public CSphVector < T, CSphSwapVectorPolicy<T> >
-{};
+{
+};
 
 /// tight-vector
 template < typename T >
 class CSphTightVector : public CSphVector < T, CSphTightVectorPolicy<T> >
-{};
+{
+};
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -1303,14 +1305,14 @@ public:
 		return strcmp ( m_sValue, t )!=0;
 	}
 
-	CSphString ( const char * sString )
+	CSphString ( const char * sString ) // NOLINT
 	{
 		if ( sString )
 		{
 			int iLen = 1+strlen(sString);
 			m_sValue = new char [ iLen+SAFETY_GAP ];
 
-			strcpy ( m_sValue, sString );
+			strcpy ( m_sValue, sString ); // NOLINT
 			memset ( m_sValue+iLen, 0, SAFETY_GAP );
 		} else
 		{
@@ -1326,7 +1328,7 @@ public:
 			int iLen = 1+strlen(rhs.m_sValue);
 			m_sValue = new char [ iLen+SAFETY_GAP ];
 
-			strcpy ( m_sValue, rhs.m_sValue );
+			strcpy ( m_sValue, rhs.m_sValue ); // NOLINT
 			memset ( m_sValue+iLen, 0, SAFETY_GAP );
 		}
 		return *this;
@@ -1439,8 +1441,8 @@ public:
 		{
 			const char * sStart = m_sValue;
 			const char * sEnd = m_sValue + strlen(m_sValue) - 1;
-			while ( sStart<=sEnd && isspace((unsigned char)*sStart) ) sStart++;
-			while ( sStart<=sEnd && isspace((unsigned char)*sEnd) ) sEnd--;
+			while ( sStart<=sEnd && isspace ( (unsigned char)*sStart ) ) sStart++;
+			while ( sStart<=sEnd && isspace ( (unsigned char)*sEnd ) ) sEnd--;
 			memmove ( m_sValue, sStart, sEnd-sStart+1 );
 			m_sValue [ sEnd-sStart+1 ] = '\0';
 		}
@@ -1483,7 +1485,7 @@ public:
 	}
 
 	/// ctor from C string
-	CSphVariant ( const char * sString )
+	CSphVariant ( const char * sString ) // NOLINT desired implicit conversion
 		: CSphString ( sString )
 		, m_iValue ( atoi ( m_sValue ) )
 		, m_fValue ( (float)atof ( m_sValue ) )

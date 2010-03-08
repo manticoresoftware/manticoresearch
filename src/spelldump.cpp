@@ -341,7 +341,7 @@ bool CISpellAffixRule::StripAppendSuffix ( CSphString & sWord ) const
 	szTmp [m_iWordLen - m_iStripLen] = '\0';
 
 	if ( !m_sAppend.IsEmpty () )
-		strcat ( szTmp, m_sAppend.cstr () );
+		strcat ( szTmp, m_sAppend.cstr () ); // NOLINT
 
 	sWord = szTmp;
 
@@ -395,7 +395,7 @@ bool CISpellAffixRule::StripAppendPrefix ( CSphString & sWord ) const
 	}
 
 	if ( !m_sAppend.IsEmpty () )
-		strcpy ( szTmp, m_sAppend.cstr() );
+		strcpy ( szTmp, m_sAppend.cstr() ); // NOLINT
 
 	strncpy ( szTmp + m_iAppendLen, sWord.cstr () + m_iStripLen, m_iWordLen - m_iStripLen );
 	szTmp [m_iWordLen - m_iStripLen + m_iAppendLen] = '\0';
@@ -652,7 +652,7 @@ bool CISpellAffix::LoadISpell ( FILE * pFile )
 		szStrip[0] = '\0';
 		szAppend[0] = '\0';
 
-		int nFields = sscanf ( szBuffer, "%[^>\n]>%[^,\n],%[^\n]", szCondition, szStrip, szAppend );
+		int nFields = sscanf ( szBuffer, "%[^>\n]>%[^,\n],%[^\n]", szCondition, szStrip, szAppend ); // NOLINT
 
 		Strip ( szCondition );
 		Strip ( szStrip );
@@ -661,7 +661,7 @@ bool CISpellAffix::LoadISpell ( FILE * pFile )
 		switch ( nFields )
 		{
 		case 2: // no optional strip-string
-			strcpy ( szAppend, szStrip );
+			strcpy ( szAppend, szStrip ); // NOLINT
 			szStrip[0] = '\0';
 			break;
 		case 3:	// all read
@@ -722,7 +722,7 @@ bool CISpellAffix::LoadMySpell ( FILE * pFile )
 				if ( iCount )
 					printf ( "WARNING: Line %d: Premature end of entries.\n", iLine );
 
-				if ( sscanf ( sLine, "%c %c %d", &cFlag, &cCombine, &iCount )!=3 )
+				if ( sscanf ( sLine, "%c %c %d", &cFlag, &cCombine, &iCount )!=3 ) // NOLINT
 					printf ( "WARNING; Line %d: Malformed %s header\n", iLine, sMode );
 
 				eRule = eNewRule;
@@ -731,7 +731,7 @@ bool CISpellAffix::LoadMySpell ( FILE * pFile )
 			{
 				*sRemove = *sAppend = 0;
 				char cNewFlag;
-				if ( sscanf ( sLine, "%c %s %s %s", &cNewFlag, sRemove, sAppend, sCondition )==4 )
+				if ( sscanf ( sLine, "%c %s %s %s", &cNewFlag, sRemove, sAppend, sCondition )==4 ) // NOLINT
 				{
 					if ( cNewFlag!=cFlag )
 						printf ( "WARNING: Line %d: Flag character mismatch\n", iLine );
@@ -1037,15 +1037,13 @@ int main ( int iArgs, char ** dArgs )
 			break;
 		default:
 			printf ( "Usage: spelldump [options] <dictionary> <affix> [result] [locale-name]\n\n"
-					 "Options:\n"
-					 "-c <file>\tuse case convertion defined in <file>\n"
-					 "-m <mode>\toutput (conflict resolution) mode:\n"
-					 "\t\tdefault - try to guess the best way to resolve a conflict\n"
-					 "\t\tlast - choose last entry\n"
-					 "\t\tdebug - dump all mappings (with rules)\n"
-					 "\t\tduplicates - dump duplicate mappings only (with rules)\n"
-				);
-
+				"Options:\n"
+				"-c <file>\tuse case convertion defined in <file>\n"
+				"-m <mode>\toutput (conflict resolution) mode:\n"
+				"\t\tdefault - try to guess the best way to resolve a conflict\n"
+				"\t\tlast - choose last entry\n"
+				"\t\tdebug - dump all mappings (with rules)\n"
+				"\t\tduplicates - dump duplicate mappings only (with rules)\n" );
 			if ( iArgs>1 )
 			{
 				printf ( "\n"

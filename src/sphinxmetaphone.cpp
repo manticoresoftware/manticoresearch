@@ -148,8 +148,8 @@ static bool StrAt ( const CurrentWord_t & Word, int iStart, int iLength, const c
 
 static void MetaphAdd ( BYTE * pPrimary, BYTE * pSecondary, const char * szAddPrimary, const char * szAddSecondary )
 {
-	strcat ( (char*)pPrimary, szAddPrimary );
-	strcat ( (char*)pSecondary, szAddSecondary );
+	strcat ( (char*)pPrimary, szAddPrimary ); // NOLINT
+	strcat ( (char*)pSecondary, szAddSecondary ); // NOLINT
 }
 
 #define ADD_RET(prim,sec,adv)\
@@ -367,8 +367,8 @@ static int ProcessCode ( int iCode, int iCur, CurrentWord_t & Word, BYTE * sPrim
 
 		// -ger-, -gy-
 		if ( ( StrAt ( Word, iCur+1, 2, "ER" ) || pWord[iCur+1]=='Y' ) && !StrAt ( Word, 0, 6, "DANGER", "RANGER", "MANGER" )
-			 && !StrAt ( Word, iCur-1, 1, "E", "I" ) && !StrAt ( Word, iCur-1, 3, "RGY", "OGY" ) )
-				ADD_RET ( "K", "J", 2 )
+			&& !StrAt ( Word, iCur-1, 1, "E", "I" ) && !StrAt ( Word, iCur-1, 3, "RGY", "OGY" ) )
+			ADD_RET ( "K", "J", 2 )
 
 		// italian e.g, 'biaggi'
 		if ( StrAt ( Word, iCur+1, 1, "E", "I", "Y" ) || StrAt ( Word, iCur-1, 4, "AGGI", "OGGI" ) )
@@ -637,7 +637,7 @@ void stem_dmetaphone ( BYTE * pWord, bool bUTF8 )
 		++pStart;
 	}
 
-	strcat ( (char *) sOriginal, "          " );
+	strcat ( (char *) sOriginal, "          " ); // NOLINT
 
 	int iAdvance = 0;
 
@@ -695,7 +695,7 @@ void stem_dmetaphone ( BYTE * pWord, bool bUTF8 )
 	}
 
 	if ( !pWord[0] || sPrimary [0] )
-		strcpy ( (char*)pWord, (char*)sPrimary );
+		strcpy ( (char*)pWord, (char*)sPrimary ); // NOLINT
 
 	// TODO: handle secondary too
 }

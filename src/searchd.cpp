@@ -693,7 +693,7 @@ void sphLogEntry ( ESphLogLevel eLevel, char * sBuf )
 	} else
 #endif
 	{
-		strcat ( sBuf, "\n" );
+		strcat ( sBuf, "\n" ); // NOLINT
 
 		lseek ( g_iLogFile, 0, SEEK_END );
 		sphWrite ( g_iLogFile, sBuf, strlen(sBuf) );
@@ -4945,7 +4945,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		if (
 			( qCheck.m_sRawQuery!=qFirst.m_sRawQuery ) || // query string
 			( qCheck.m_iWeights!=qFirst.m_iWeights ) || // weights count
-			( qCheck.m_pWeights && memcmp ( qCheck.m_pWeights, qFirst.m_pWeights, sizeof(int)*qCheck.m_iWeights ) ) || // weights
+			( qCheck.m_pWeights && memcmp ( qCheck.m_pWeights, qFirst.m_pWeights, sizeof(int)*qCheck.m_iWeights ) ) || // weights; NOLINT
 			( qCheck.m_eMode!=qFirst.m_eMode ) || // search mode
 			( qCheck.m_eRanker!=qFirst.m_eRanker ) || // ranking mode
 			( qCheck.m_dFilters.GetLength()!=qFirst.m_dFilters.GetLength() ) || // attr filters count
@@ -4963,7 +4963,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		ARRAY_FOREACH ( i, qCheck.m_dItems )
 		{
 			if ( qCheck.m_dItems[i].m_sExpr!=qFirst.m_dItems[i].m_sExpr ||
-				 qCheck.m_dItems[i].m_eAggrFunc!=qFirst.m_dItems[i].m_eAggrFunc )
+				qCheck.m_dItems[i].m_eAggrFunc!=qFirst.m_dItems[i].m_eAggrFunc )
 			{
 				m_bMultiQueue = false;
 				break;
@@ -6570,7 +6570,7 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD )
 
 		// check request
 		if ( iCommand<0 || iCommand>=SEARCHD_COMMAND_TOTAL
-			 || iLength<0 || iLength>g_iMaxPacketSize )
+			|| iLength<0 || iLength>g_iMaxPacketSize )
 		{
 			// unknown command, default response header
 			tBuf.SendErrorReply ( "unknown command (code=%d)", iCommand );
@@ -10689,7 +10689,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		else
 			TickHead ( pAcceptMutex );
 	}
-}
+} // NOLINT function length
 
 
 bool DieCallback ( const char * sMessage )

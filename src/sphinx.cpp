@@ -196,7 +196,7 @@ static const char * const g_dTimerNames [ TIMERS_TOTAL ] =
 	"root",
 
 	#define DECLARE_TIMER(_arg) #_arg,
-	#include "sphinxtimers.h"
+	#include "sphinxtimers.h" // NOLINT
 	#undef DECLARE_TIMER
 };
 
@@ -1234,7 +1234,7 @@ public:
 	virtual void				Dealloc ();
 
 	virtual bool				Preread ();
-	template<typename T> bool	PrereadSharedBuffer ( CSphSharedBuffer<T> & pBuffer, const char * sExt, size_t uExpected=0 ); //NOLINT
+	template<typename T> bool	PrereadSharedBuffer ( CSphSharedBuffer<T> & pBuffer, const char * sExt, size_t uExpected=0 );
 
 	virtual void				SetBase ( const char * sNewBase );
 	virtual bool				Rename ( const char * sNewBase );
@@ -1454,7 +1454,7 @@ static int64_t	g_tmLastIOTime	= 0;
 
 void sphSetThrottling ( int iMaxIOps, int iMaxIOSize )
 {
-	g_iMaxIOps	 = iMaxIOps;
+	g_iMaxIOps = iMaxIOps;
 	g_iMaxIOSize = iMaxIOSize;
 }
 
@@ -1611,13 +1611,13 @@ char * sphStrMacro ( const char * sTemplate, const char * sMacro, SphDocID_t uVa
 	while ( ( sCur = strstr ( sCur, sMacro ) )!=NULL )
 	{
 		strncpy ( sOut, sLast, sCur-sLast ); sOut += sCur-sLast;
-		strcpy ( sOut, sExp ); sOut += iExp;
+		strcpy ( sOut, sExp ); sOut += iExp; // NOLINT
 		sCur += iMacro;
 		sLast = sCur;
 	}
 
 	if ( *sLast )
-		strcpy ( sOut, sLast );
+		strcpy ( sOut, sLast ); // NOLINT
 
 	assert ( (int)strlen(sRes)==iRes );
 	return sRes;
@@ -2138,7 +2138,7 @@ void CSphLowercaser::SetRemap ( const CSphLowercaser * pLC )
 
 	m_iChunks = pLC->m_iChunks;
 	m_pData = new int [ m_iChunks*CHUNK_SIZE ];
-	memcpy ( m_pData, pLC->m_pData, sizeof(int)*m_iChunks*CHUNK_SIZE );
+	memcpy ( m_pData, pLC->m_pData, sizeof(int)*m_iChunks*CHUNK_SIZE ); // NOLINT sizeof(int)
 
 	for ( int i=0; i<CHUNK_COUNT; i++ )
 		m_pChunk[i] = pLC->m_pChunk[i]
@@ -2185,7 +2185,7 @@ void CSphLowercaser::AddRemaps ( const CSphVector<CSphRemapRange> & dRemaps, DWO
 	if ( iNewChunks>m_iChunks )
 	{
 		int * pData = new int [ iNewChunks*CHUNK_SIZE ];
-		memset ( pData, 0, sizeof(int)*iNewChunks*CHUNK_SIZE );
+		memset ( pData, 0, sizeof(int)*iNewChunks*CHUNK_SIZE ); // NOLINT sizeof(int)
 
 		int * pChunk = pData;
 		for ( int i=0; i<CHUNK_COUNT; i++ )
@@ -2201,7 +2201,7 @@ void CSphLowercaser::AddRemaps ( const CSphVector<CSphRemapRange> & dRemaps, DWO
 
 			// copy old data
 			if ( dUsed[i]==1 )
-				memcpy ( m_pChunk[i], pOldChunk, sizeof(int)*CHUNK_SIZE );
+				memcpy ( m_pChunk[i], pOldChunk, sizeof(int)*CHUNK_SIZE ); // NOLINT sizeof(int)
 		}
 		assert ( pChunk-pData==iNewChunks*CHUNK_SIZE );
 
@@ -2854,8 +2854,8 @@ ISphTokenizer * ISphTokenizer::Create ( const CSphTokenizerSettings & tSettings,
 
 	switch ( tSettings.m_iType )
 	{
-		case TOKENIZER_SBCS:	pTokenizer = sphCreateSBCSTokenizer ();		 break;
-		case TOKENIZER_UTF8:	pTokenizer = sphCreateUTF8Tokenizer ();		 break;
+		case TOKENIZER_SBCS:	pTokenizer = sphCreateSBCSTokenizer (); break;
+		case TOKENIZER_UTF8:	pTokenizer = sphCreateUTF8Tokenizer (); break;
 		case TOKENIZER_NGRAM:	pTokenizer = sphCreateUTF8NgramTokenizer (); break;
 		default:
 			sError.SetSprintf ( "failed to create tokenizer (unknown charset type '%d')", tSettings.m_iType );
@@ -3459,7 +3459,7 @@ BYTE * CSphTokenizerTraits<IS_UTF8>::GetTokenSyn ()
 			{ \
 				m_pTokenEnd = pCur; \
 				if ( bJustSpecial ) m_pCur = pCur; \
-				strcpy ( (char*)m_sAccum, m_dSynonyms[_idx].m_sTo.cstr() ); \
+				strncpy ( (char*)m_sAccum, m_dSynonyms[_idx].m_sTo.cstr(), sizeof(m_sAccum) ); \
 				m_iLastTokenLen = m_dSynonyms[_idx].m_iToLen; \
 				return m_sAccum; \
 			}
@@ -4248,7 +4248,7 @@ BYTE * CSphTokenizer_Filter::GetToken ()
 	if ( !m_iStoredLen )
 	{
 		FillTokenInfo ( &m_dStoredTokens[m_iStoredStart] );
-		strcpy ( (char *)m_dStoredTokens[m_iStoredStart].m_sToken, (const char *)pToken );
+		strcpy ( (char *)m_dStoredTokens[m_iStoredStart].m_sToken, (const char *)pToken ); // NOLINT
 		m_iStoredLen++;
 	}
 
@@ -4262,7 +4262,7 @@ BYTE * CSphTokenizer_Filter::GetToken ()
 
 		int iIndex = (m_iStoredStart+m_iStoredLen) % iSize;
 		FillTokenInfo ( &(m_dStoredTokens[iIndex]) );
-		strcpy ( (char *)m_dStoredTokens[iIndex].m_sToken, (const char *)pToken );
+		strcpy ( (char *)m_dStoredTokens[iIndex].m_sToken, (const char *)pToken ); // NOLINT
 		m_iStoredLen++;
 	}
 
@@ -5894,10 +5894,10 @@ bool CSphArena::Init ( int uMaxBytes )
 	m_iPages = ( uMaxBytes+PAGE_SIZE-1 ) / PAGE_SIZE;
 
 	int iData = m_iPages*PAGE_SIZE; // data size, bytes
-	int iMyTaglist = sizeof(int) + MAX_TAGS*sizeof(TagDesc_t); // int length, TagDesc_t[] tags
-	int iMy = m_iPages*sizeof(PageDesc_t) + NUM_SIZES*sizeof(int) + iMyTaglist; // my internal structures size, bytes
+	int iMyTaglist = sizeof(int) + MAX_TAGS*sizeof(TagDesc_t); // int length, TagDesc_t[] tags; NOLINT
+	int iMy = m_iPages*sizeof(PageDesc_t) + NUM_SIZES*sizeof(int) + iMyTaglist; // my internal structures size, bytes; NOLINT
 #if ARENADEBUG
-	iMy += 2*sizeof(int); // debugging counters
+	iMy += 2*sizeof(int); // debugging counters; NOLINT
 #endif
 
 	assert ( iData%sizeof(DWORD)==0 );
@@ -5981,7 +5981,7 @@ int CSphArena::RawAlloc ( int iBytes )
 	if ( iBytes<=0 || iBytes>( ( 1 << MAX_BITS ) - (int)sizeof(int) ) )
 		return -1;
 
-	int iSizeBits = sphLog2 ( iBytes+sizeof(int)-1 ); // always reserve sizeof(int) for the tag
+	int iSizeBits = sphLog2 ( iBytes+sizeof(int)-1 ); // always reserve sizeof(int) for the tag; NOLINT
 	iSizeBits = Max ( iSizeBits, MIN_BITS );
 	assert ( iSizeBits>=MIN_BITS && iSizeBits<=MAX_BITS );
 
@@ -7798,7 +7798,7 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWOR
 
 			// start aggregating if we're skipping all hits or this word is in a list of ignored words
 			if ( ( m_tSettings.m_eHitless==SPH_HITLESS_ALL ) ||
-				 ( m_tSettings.m_eHitless==SPH_HITLESS_SOME && m_dHitlessWords.BinarySearch ( pHit->m_iWordID ) ) )
+				( m_tSettings.m_eHitless==SPH_HITLESS_SOME && m_dHitlessWords.BinarySearch ( pHit->m_iWordID ) ) )
 			{
 				uHitCount = 1;
 				uHitFieldMask |= 1 << HIT2FIELD ( pHit->m_iWordPos );
@@ -10005,7 +10005,8 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	PROFILER_DONE ();
 	PROFILE_SHOW ();
 	return 1;
-}
+} // NOLINT function length
+
 
 static bool CopyFile ( const char * sSrc, const char * sDst, CSphString & sErrStr )
 {
@@ -10201,7 +10202,7 @@ public:
 		: m_pOutputIndex ( pOutputIndex )
 	{}
 	template < typename QWORD > static inline
-	void PrepareQword ( QWORD & tQword, const CSphDictReader & tReader, int iDynamic, SphDocID_t iMinID ) //NOLINT
+	void PrepareQword ( QWORD & tQword, const CSphDictReader & tReader, int iDynamic, SphDocID_t iMinID )
 	{
 		tQword.m_tDoc.Reset ( iDynamic );
 		tQword.m_iMinID = iMinID;
@@ -12276,8 +12277,7 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning )
 }
 
 
-template < typename T > bool CSphIndex_VLN::PrereadSharedBuffer ( CSphSharedBuffer<T> & pBuffer,
-																 const char * sExt, size_t uExpected )
+template < typename T > bool CSphIndex_VLN::PrereadSharedBuffer ( CSphSharedBuffer<T> & pBuffer, const char * sExt, size_t uExpected )
 {
 	if ( !pBuffer.GetLength() )
 		return true;
@@ -14107,7 +14107,8 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 	fprintf ( fp, ", %d.%d sec elapsed\n", (int)(tmCheck/1000000), (int)((tmCheck/100000)%10) );
 
 	return Min ( iFails, 255 ); // this is the exitcode; so cap it
-}
+} // NOLINT function length
+
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -14482,24 +14483,18 @@ bool CSphDictCRC::ToNormalForm ( BYTE * pWord )
 	if ( !m_pWordforms )
 		return false;
 
-	if ( m_pWordforms )
-	{
-		int * pIndex = m_pWordforms->m_dHash ( (char *)pWord );
-		if ( !pIndex )
-			return false;
+	int * pIndex = m_pWordforms->m_dHash ( (char *)pWord );
+	if ( !pIndex )
+		return false;
 
-		if ( *pIndex<0 || *pIndex>=m_pWordforms->m_dNormalForms.GetLength () )
-			return false;
+	if ( *pIndex<0 || *pIndex>=m_pWordforms->m_dNormalForms.GetLength () )
+		return false;
 
-		if ( m_pWordforms->m_dNormalForms [*pIndex].IsEmpty () )
-			return false;
+	if ( m_pWordforms->m_dNormalForms [*pIndex].IsEmpty () )
+		return false;
 
-		strcpy ( (char *)pWord, m_pWordforms->m_dNormalForms[*pIndex].cstr() );
-
-		return true;
-	}
-
-	return false;
+	strcpy ( (char *)pWord, m_pWordforms->m_dNormalForms[*pIndex].cstr() ); // NOLINT
+	return true;
 }
 
 bool CSphDictCRC::ParseMorphology ( const char * szMorph, bool bUseUTF8, CSphString & sError )
@@ -14721,7 +14716,7 @@ void CSphDictCRC::LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenize
 	m_dSWFileInfos.Resize ( 0 );
 
 	char * sList = new char [ 1+strlen(sFiles) ];
-	strcpy ( sList, sFiles );
+	strcpy ( sList, sFiles ); // NOLINT
 
 	char * pCur = sList;
 	char * sName = NULL;
@@ -16580,7 +16575,7 @@ bool CSphSource_SQL::RunQueryStep ( const char * sQuery, CSphString & sError )
 			for ( i=0; i<MACRO_COUNT; i++ )
 				if ( strncmp ( MACRO_VALUES[i], sCur, strlen ( MACRO_VALUES[i] ) )==0 )
 			{
-				strcpy ( sDst, sValues[i] );
+				strcpy ( sDst, sValues[i] ); // NOLINT
 				sCur += strlen ( MACRO_VALUES[i] );
 				sDst += strlen ( sValues[i] );
 				break;
@@ -17820,7 +17815,7 @@ bool CSphSource_XMLPipe::Connect ( CSphString & )
 
 	m_tDocInfo.Reset ( m_tSchema.GetRowSize() );
 
-	m_pBuffer	 = m_iInitialBufLen > 0 ? m_sBuffer : NULL;
+	m_pBuffer = m_iInitialBufLen > 0 ? m_sBuffer : NULL;
 	m_pBufferEnd = m_pBuffer ? m_pBuffer + m_iInitialBufLen : NULL;
 
 	char sBuf [ 1024 ];
@@ -19670,7 +19665,7 @@ void CSphSource_ODBC::SqlDisconnect ()
 	}
 
 	if ( m_hEnv )
-		 SQLFreeHandle ( SQL_HANDLE_ENV, m_hEnv );
+		SQLFreeHandle ( SQL_HANDLE_ENV, m_hEnv );
 }
 
 

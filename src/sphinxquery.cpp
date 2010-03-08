@@ -920,7 +920,7 @@ static void xqDump ( XQNode_t * pNode, const CSphSchema & tSch, int iIndent )
 #endif
 
 
-bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict ) // NOLINT
+bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict )
 {
 	XQParser_t qp;
 	bool bRes = qp.Parse ( tParsed, sQuery, pTokenizer, pSchema, pDict );

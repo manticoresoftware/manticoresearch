@@ -130,7 +130,7 @@ static void Palatalize ( BYTE * word )
 		if ( iWordLength>=Rule.m_iRemoveLength && !strncmp ( (char*)word + iWordLength - Rule.m_iRemoveLength, (char*)Rule.m_szSuffix, Rule.m_iRemoveLength ) )
 		{
 			word [iWordLength - Rule.m_iRemoveLength] = '\0';
-			strcat ( (char*)word, (char*)Rule.m_szAppend );
+			strcat ( (char*)word, (char*)Rule.m_szAppend ); // NOLINT strcat
 			return;
 		}
 	}

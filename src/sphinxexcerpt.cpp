@@ -472,7 +472,7 @@ void ExcerptGen_c::TokenizeQuery ( const ExcerptQuery_t & tQuery, CSphDict * pDi
 			const int iEndIndex = iKwIndex + tLast.m_iLengthBytes + 1;
 			m_dKeywordsBuffer.Resize ( iEndIndex );
 			kwLast.m_iWord = iKwIndex;
-			strcpy ( &m_dKeywordsBuffer [ iKwIndex ], (const char *)sWord );
+			strcpy ( &m_dKeywordsBuffer [ iKwIndex ], (const char *)sWord ); // NOLINT
 			iKwIndex = iEndIndex;
 
 			if ( m_dWords.GetLength()==MAX_HIGHLIGHT_WORDS )
@@ -690,7 +690,7 @@ void ExcerptGen_c::HighlightPhrase ( const ExcerptQuery_t & q, int iTok, int iEn
 		while ( iWord<m_dWords.GetLength() )
 		{
 			if ( ( iTok > iEnd ) ||
-				 !( m_dTokens[iTok].m_eType==TOK_SPACE || m_dTokens[iTok].m_uWords==( 1UL<<iWord++ ) ) )
+				!( m_dTokens[iTok].m_eType==TOK_SPACE || m_dTokens[iTok].m_uWords==( 1UL<<iWord++ ) ) )
 			{
 				bMatch = false;
 				break;

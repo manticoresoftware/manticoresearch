@@ -5106,14 +5106,17 @@ void CSphReader::SkipBytes ( int iCount )
 }
 
 
-#if !HAVE_PREAD
 #if USE_WINDOWS
 
-// my pread for Windows
-int pread ( int iFD, void * pBuf, int iBytes, SphOffset_t iOffset )
+// atomic seek+read for Windows
+int sphPread ( int iFD, void * pBuf, int iBytes, SphOffset_t iOffset )
 {
 	if ( iBytes==0 )
 		return 0;
+
+	int64_t tmStart = 0;
+	if ( g_bIOStats )
+		tmStart = sphMicroTimer();
 
 	HANDLE hFile;
 	hFile = (HANDLE) _get_osfhandle ( iFD );
@@ -5135,13 +5138,38 @@ int pread ( int iFD, void * pBuf, int iBytes, SphOffset_t iOffset )
 		errno = uErr; // FIXME! should remap from Win to POSIX
 		return -1;
 	}
+
+	if ( g_bIOStats )
+	{
+		g_IOStats.m_iReadTime += sphMicroTimer() - tmStart;
+		g_IOStats.m_iReadOps++;
+		g_IOStats.m_iReadBytes += iBytes;
+	}
+
 	return uRes;
 }
 
 #else
+#if HAVE_PREAD
 
-// generic fallback; prone to races
-int pread ( int iFD, void * pBuf, int iBytes, SphOffset_t iOffset )
+// atomic seek+read for non-Windows systems with pread() call
+int sphPread ( int iFD, void * pBuf, int iBytes, SphOffset_t iOffset )
+{
+	if ( !g_bIOStats )
+		return ::pread ( iFD, pBuf, iBytes, iOffset );
+
+	int64_t tmStart = sphMicroTimer();
+	int iRes = (int) ::pread ( iFD, pBuf, iBytes, iOffset );
+	g_IOStats.m_iReadTime += sphMicroTimer() - tmStart;
+	g_IOStats.m_iReadOps++;
+	g_IOStats.m_iReadBytes += iBytes;
+	return iRes;
+}
+
+#else
+
+// generic fallback; prone to races between seek and read
+int sphPread ( int iFD, void * pBuf, int iBytes, SphOffset_t iOffset )
 {
 	if ( sphSeek ( iFD, iOffset, SEEK_SET )==-1 )
 		return -1;
@@ -5149,8 +5177,8 @@ int pread ( int iFD, void * pBuf, int iBytes, SphOffset_t iOffset )
 	return sphReadThrottled ( iFD, pBuf, iBytes );
 }
 
+#endif // HAVE_PREAD
 #endif // USE_WINDOWS
-#endif // !HAVE_PREAD
 
 
 void CSphReader::UpdateCache ()
@@ -5177,7 +5205,7 @@ void CSphReader::UpdateCache ()
 	int iReadLen = Min ( m_iSizeHint, m_iBufSize );
 
 	m_iBuffPos = 0;
-	m_iBuffUsed = (int) pread ( m_iFD, m_pBuff, iReadLen, iNewPos ); // FIXME! what about throttling?
+	m_iBuffUsed = sphPread ( m_iFD, m_pBuff, iReadLen, iNewPos ); // FIXME! what about throttling?
 
 	if ( m_iBuffUsed<0 )
 	{
@@ -11542,7 +11570,7 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 		else
 			iChunkLength = pIndex->m_iWordlistSize - uWordlistOffset;
 
-		if ( (int)pread ( m_tWordlist.GetFD (), pIndex->m_pWordlistChunkBuf, (size_t)iChunkLength, uWordlistOffset )!=iChunkLength )
+		if ( sphPread ( m_tWordlist.GetFD (), pIndex->m_pWordlistChunkBuf, (size_t)iChunkLength, uWordlistOffset )!=iChunkLength )
 			return false;
 
 		pBuf = pIndex->m_pWordlistChunkBuf;

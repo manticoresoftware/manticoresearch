@@ -1401,8 +1401,7 @@ struct MarkedNode_t
 typedef CSphOrderedHash < MarkedNode_t, uint64_t, IdentityHash_fn, 128, 117 > CSubtreeHash;
 
 /// check hashes, then check subtrees, then flag
-static void FlagCommonSubtrees ( XQNode_t * pTree,
-	CSubtreeHash & hSubTrees, bool bFlag=true, bool bMarkIt=true )
+static void FlagCommonSubtrees ( XQNode_t * pTree, CSubtreeHash & hSubTrees, bool bFlag=true, bool bMarkIt=true )
 {
 	if ( !IsAppropriate ( pTree ) )
 		return;

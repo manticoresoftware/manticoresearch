@@ -1464,10 +1464,10 @@ const ExtDoc_t * ExtAnd_c::GetDocsChunk ( SphDocID_t * pMaxID )
 		{
 			// find next matching docid
 			while ( pCur0->m_uDocid < pCur1->m_uDocid ) pCur0++;
-			if ( pCur0->m_uDocid==DOCID_MAX ) { pCur0=NULL; break; }
+			if ( pCur0->m_uDocid==DOCID_MAX ) { pCur0 = NULL; break; }
 
 			while ( pCur1->m_uDocid < pCur0->m_uDocid ) pCur1++;
-			if ( pCur1->m_uDocid==DOCID_MAX ) { pCur1=NULL; break; }
+			if ( pCur1->m_uDocid==DOCID_MAX ) { pCur1 = NULL; break; }
 
 			if ( pCur0->m_uDocid!=pCur1->m_uDocid ) continue;
 
@@ -4030,7 +4030,7 @@ bool NodeCacheContainer_t::WarmupCache ( ExtNode_i * pChild, int iQwords )
 
 		const ExtHit_t * pHits = NULL;
 		if ( iHasDocs )
-			while (	( pHits=pChild->GetHitsChunk ( pChunkHits, pChild->m_uMaxID ) )!=NULL )
+			while (	( pHits = pChild->GetHitsChunk ( pChunkHits, pChild->m_uMaxID ) )!=NULL )
 			{
 				for ( ; pHits->m_uDocid!=DOCID_MAX; pHits++ )
 				{

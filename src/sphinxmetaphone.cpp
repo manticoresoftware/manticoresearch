@@ -642,9 +642,9 @@ void stem_dmetaphone ( BYTE * pWord, bool bUTF8 )
 	int iAdvance = 0;
 
 	CurrentWord_t Word;
-	Word.pWord			= sOriginal;
-	Word.iLength		= iLength;
-	Word.iLengthPadded	= strlen ( (const char *)sOriginal );
+	Word.pWord = sOriginal;
+	Word.iLength = iLength;
+	Word.iLengthPadded = strlen ( (const char *)sOriginal );
 
 	// skip these when at start of word
 	if ( StrAt ( Word, 0, 2, "GN", "KN", "PN", "WR", "PS" ) )

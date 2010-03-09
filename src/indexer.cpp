@@ -876,11 +876,11 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		fprintf ( stdout, "WARNING: min_infix_len = 0. infix_fields are ignored\n" );
 
 	// boundary
-	bool bInplaceEnable	= hIndex.GetInt ( "inplace_enable", 0 )!=0;
-	int iHitGap			= hIndex.GetSize ( "inplace_hit_gap", 0 );
-	int iDocinfoGap		= hIndex.GetSize ( "inplace_docinfo_gap", 0 );
-	float fRelocFactor	= hIndex.GetFloat ( "inplace_reloc_factor", 0.1f );
-	float fWriteFactor	= hIndex.GetFloat ( "inplace_write_factor", 0.1f );
+	bool bInplaceEnable = hIndex.GetInt ( "inplace_enable", 0 )!=0;
+	int iHitGap = hIndex.GetSize ( "inplace_hit_gap", 0 );
+	int iDocinfoGap = hIndex.GetSize ( "inplace_docinfo_gap", 0 );
+	float fRelocFactor = hIndex.GetFloat ( "inplace_reloc_factor", 0.1f );
+	float fWriteFactor = hIndex.GetFloat ( "inplace_write_factor", 0.1f );
 
 	if ( bInplaceEnable )
 	{

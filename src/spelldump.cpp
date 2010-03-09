@@ -252,7 +252,7 @@ CISpellAffixRule::CISpellAffixRule ( RuleType_e eRule, char cFlag, bool bCrossPr
 	, m_sAppend			( szAppend )
 	, m_iWordLen		( 0 )
 {
-	m_iCondLen	= szCondition ? strlen ( szCondition ) : 0;
+	m_iCondLen = szCondition ? strlen ( szCondition ) : 0;
 	m_iStripLen = szStrip ? strlen ( szStrip ) : 0;
 	m_iAppendLen = szAppend ? strlen ( szAppend ) : 0;
 }

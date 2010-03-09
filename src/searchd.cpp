@@ -452,17 +452,17 @@ ServedIndex_t::ServedIndex_t ()
 
 void ServedIndex_t::Reset ()
 {
-	m_pIndex	= NULL;
-	m_bEnabled	= true;
-	m_bMlock	= false;
-	m_bPreopen	= false;
+	m_pIndex = NULL;
+	m_bEnabled = true;
+	m_bMlock = false;
+	m_bPreopen = false;
 	m_bOnDiskDict = false;
-	m_bStar		= false;
-	m_bExpand	= false;
-	m_bToDelete	= false;
-	m_bOnlyNew	= false;
-	m_iUpdateTag= 0;
-	m_bRT		= false;
+	m_bStar = false;
+	m_bExpand = false;
+	m_bToDelete = false;
+	m_bOnlyNew = false;
+	m_iUpdateTag = 0;
+	m_bRT = false;
 
 	m_tLock = CSphRwlock();
 	if ( g_eWorkers==MPM_THREADS )
@@ -3390,9 +3390,9 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 
 	switch ( pQuery->m_eMode )
 	{
-	case SPH_MATCH_ALL:		pQuery->m_eRanker = SPH_RANK_PROXIMITY; *szRes='\0'; break;
+	case SPH_MATCH_ALL:		pQuery->m_eRanker = SPH_RANK_PROXIMITY; *szRes = '\0'; break;
 	case SPH_MATCH_ANY:		pQuery->m_eRanker = SPH_RANK_MATCHANY; strncpy ( szRes, "\"/1", 8 ); break;
-	case SPH_MATCH_PHRASE:	pQuery->m_eRanker = SPH_RANK_PROXIMITY; *szRes++ = '\"'; *szRes='\0'; break;
+	case SPH_MATCH_PHRASE:	pQuery->m_eRanker = SPH_RANK_PROXIMITY; *szRes++ = '\"'; *szRes = '\0'; break;
 	default:				return;
 	}
 }
@@ -9971,17 +9971,17 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	//////////////////////
 
 	CSphConfig		conf;
-	bool			bOptStop		= false;
-	bool			bOptStopWait	= false;
-	bool			bOptStatus		= false;
-	bool			bOptPIDFile		= false;
-	const char *	sOptIndex		= NULL;
+	bool			bOptStop = false;
+	bool			bOptStopWait = false;
+	bool			bOptStatus = false;
+	bool			bOptPIDFile = false;
+	const char *	sOptIndex = NULL;
 
-	int				iOptPort		= 0;
-	bool			bOptPort		= false;
+	int				iOptPort = 0;
+	bool			bOptPort = false;
 
 	CSphString		sOptListen;
-	bool			bOptListen		= false;
+	bool			bOptListen = false;
 
 	#define OPT(_a1,_a2)	else if ( !strcmp(argv[i],_a1) || !strcmp(argv[i],_a2) )
 	#define OPT1(_a1)		else if ( !strcmp(argv[i],_a1) )

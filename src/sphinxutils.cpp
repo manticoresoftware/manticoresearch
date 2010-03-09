@@ -808,15 +808,15 @@ bool sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSettings 
 		return false;
 	}
 
-	tSettings.m_sCaseFolding	= hIndex.GetStr ( "charset_table" );
-	tSettings.m_iMinWordLen		= Max ( hIndex.GetInt ( "min_word_len" ), 0 );
-	tSettings.m_sNgramChars		= hIndex.GetStr ( "ngram_chars" );
-	tSettings.m_iNgramLen		= Max ( hIndex.GetInt ( "ngram_len" ), 0 );
-	tSettings.m_sSynonymsFile	= hIndex.GetStr ( "exceptions" ); // new option name
+	tSettings.m_sCaseFolding = hIndex.GetStr ( "charset_table" );
+	tSettings.m_iMinWordLen = Max ( hIndex.GetInt ( "min_word_len" ), 0 );
+	tSettings.m_sNgramChars = hIndex.GetStr ( "ngram_chars" );
+	tSettings.m_iNgramLen = Max ( hIndex.GetInt ( "ngram_len" ), 0 );
+	tSettings.m_sSynonymsFile = hIndex.GetStr ( "exceptions" ); // new option name
 	if ( tSettings.m_sSynonymsFile.IsEmpty() )
 		tSettings.m_sSynonymsFile = hIndex.GetStr ( "synonyms" ); // deprecated option name
-	tSettings.m_sIgnoreChars	= hIndex.GetStr ( "ignore_chars" );
-	tSettings.m_sBlendChars		= hIndex.GetStr ( "blend_chars" );
+	tSettings.m_sIgnoreChars = hIndex.GetStr ( "ignore_chars" );
+	tSettings.m_sBlendChars = hIndex.GetStr ( "blend_chars" );
 
 	// phrase boundaries
 	int iBoundaryStep = Max ( hIndex.GetInt ( "phrase_boundary_step" ), -1 );
@@ -829,9 +829,9 @@ bool sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSettings 
 void sphConfDictionary ( const CSphConfigSection & hIndex, CSphDictSettings & tSettings )
 {
 	tSettings.m_sMorphology = hIndex.GetStr ( "morphology" );
-	tSettings.m_sStopwords	= hIndex.GetStr ( "stopwords" );
-	tSettings.m_sWordforms	= hIndex.GetStr ( "wordforms" );
-	tSettings.m_iMinStemmingLen	= hIndex.GetInt ( "min_stemming_len", 1 );
+	tSettings.m_sStopwords = hIndex.GetStr ( "stopwords" );
+	tSettings.m_sWordforms = hIndex.GetStr ( "wordforms" );
+	tSettings.m_iMinStemmingLen = hIndex.GetInt ( "min_stemming_len", 1 );
 }
 
 
@@ -846,9 +846,9 @@ void sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 
 	if ( hIndex ( "html_strip" ) )
 	{
-		tSettings.m_bHtmlStrip			= hIndex.GetInt ( "html_strip" )!=0;
-		tSettings.m_sHtmlIndexAttrs		= hIndex.GetStr ( "html_index_attrs" );
-		tSettings.m_sHtmlRemoveElements	= hIndex.GetStr ( "html_remove_elements" );
+		tSettings.m_bHtmlStrip = hIndex.GetInt ( "html_strip" )!=0;
+		tSettings.m_sHtmlIndexAttrs = hIndex.GetStr ( "html_index_attrs" );
+		tSettings.m_sHtmlRemoveElements = hIndex.GetStr ( "html_remove_elements" );
 	}
 
 	tSettings.m_eDocinfo = SPH_DOCINFO_EXTERN;
@@ -931,9 +931,9 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 
 		if ( hIndex ( "html_strip" ) )
 		{
-			tSettings.m_bHtmlStrip			= hIndex.GetInt ( "html_strip" )!=0;
-			tSettings.m_sHtmlIndexAttrs		= hIndex.GetStr ( "html_index_attrs" );
-			tSettings.m_sHtmlRemoveElements	= hIndex.GetStr ( "html_remove_elements" );
+			tSettings.m_bHtmlStrip = hIndex.GetInt ( "html_strip" )!=0;
+			tSettings.m_sHtmlIndexAttrs = hIndex.GetStr ( "html_index_attrs" );
+			tSettings.m_sHtmlRemoveElements = hIndex.GetStr ( "html_remove_elements" );
 		}
 
 		pIndex->Setup ( tSettings );

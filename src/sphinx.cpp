@@ -265,9 +265,7 @@ void sphProfilerPush ( ESphTimer eTimer )
 
 	// search for match timer in current timer's children list
 	int iTimer;
-	for ( iTimer=g_dTimers[g_iTimer].m_iChild;
-		iTimer>0;
-		iTimer=g_dTimers[iTimer].m_iNext )
+	for ( iTimer=g_dTimers[g_iTimer].m_iChild; iTimer>0; iTimer=g_dTimers[iTimer].m_iNext )
 	{
 		if ( g_dTimers[iTimer].m_eTimer==eTimer )
 			break;
@@ -1173,9 +1171,9 @@ void Swap ( OrdinalEntry_t & a, OrdinalEntry_t & b )
 //////////////////////////////////////////////////////////////////////////
 static void ReadFileInfo ( CSphReader & tReader, const char * szFilename, CSphString & sWarning )
 {
-	SphOffset_t uSize	= tReader.GetOffset ();
-	SphOffset_t uCTime	= tReader.GetOffset ();
-	SphOffset_t uMTime	= tReader.GetOffset ();
+	SphOffset_t uSize = tReader.GetOffset ();
+	SphOffset_t uCTime = tReader.GetOffset ();
+	SphOffset_t uMTime = tReader.GetOffset ();
 	DWORD uCRC32 = tReader.GetDword ();
 
 	if ( szFilename && *szFilename )
@@ -2611,7 +2609,7 @@ int sphUTF8Len ( const char * pStr )
 	BYTE * pBuf = (BYTE*) pStr;
 	int iRes = 0, iCode;
 
-	while ( ( iCode=sphUTF8Decode(pBuf) )!=0 )
+	while ( ( iCode = sphUTF8Decode(pBuf) )!=0 )
 		if ( iCode>0 )
 			iRes++;
 
@@ -2641,15 +2639,15 @@ static void LoadTokenizerSettings ( CSphReader & tReader, CSphTokenizerSettings 
 	if ( uVersion<9 )
 		return;
 
-	tSettings.m_iType			= tReader.GetByte ();
-	tSettings.m_sCaseFolding	= tReader.GetString ();
-	tSettings.m_iMinWordLen		= tReader.GetDword ();
-	tSettings.m_sSynonymsFile	= tReader.GetString ();
+	tSettings.m_iType = tReader.GetByte ();
+	tSettings.m_sCaseFolding = tReader.GetString ();
+	tSettings.m_iMinWordLen = tReader.GetDword ();
+	tSettings.m_sSynonymsFile = tReader.GetString ();
 	ReadFileInfo ( tReader, tSettings.m_sSynonymsFile.cstr (), sWarning );
-	tSettings.m_sBoundary		= tReader.GetString ();
-	tSettings.m_sIgnoreChars	= tReader.GetString ();
-	tSettings.m_iNgramLen		= tReader.GetDword ();
-	tSettings.m_sNgramChars		= tReader.GetString ();
+	tSettings.m_sBoundary = tReader.GetString ();
+	tSettings.m_sIgnoreChars = tReader.GetString ();
+	tSettings.m_iNgramLen = tReader.GetDword ();
+	tSettings.m_sNgramChars = tReader.GetString ();
 	if ( uVersion>=15 )
 		tSettings.m_sBlendChars = tReader.GetString ();
 }
@@ -2678,9 +2676,9 @@ void LoadDictionarySettings ( CSphReader & tReader, CSphDictSettings & tSettings
 	if ( uVersion<9 )
 		return;
 
-	tSettings.m_sMorphology	= tReader.GetString ();
-	tSettings.m_sStopwords	= tReader.GetString ();
-	int nFiles				= tReader.GetDword ();
+	tSettings.m_sMorphology = tReader.GetString ();
+	tSettings.m_sStopwords = tReader.GetString ();
+	int nFiles = tReader.GetDword ();
 
 	CSphString sFile;
 	for ( int i = 0; i < nFiles; i++ )
@@ -2689,7 +2687,7 @@ void LoadDictionarySettings ( CSphReader & tReader, CSphDictSettings & tSettings
 		ReadFileInfo ( tReader, sFile.cstr (), sWarning );
 	}
 
-	tSettings.m_sWordforms	= tReader.GetString ();
+	tSettings.m_sWordforms = tReader.GetString ();
 	ReadFileInfo ( tReader, tSettings.m_sWordforms.cstr (), sWarning );
 
 	if ( uVersion>=13 )
@@ -4204,12 +4202,12 @@ CSphTokenizer_Filter::~CSphTokenizer_Filter ()
 
 void CSphTokenizer_Filter::FillTokenInfo ( StoredToken_t * pToken )
 {
-	pToken->m_bBoundary		= m_pTokenizer->GetBoundary ();
-	pToken->m_bSpecial		= m_pTokenizer->WasTokenSpecial ();
-	pToken->m_iOvershortCount= m_pTokenizer->GetOvershortCount ();
-	pToken->m_iTokenLen		= m_pTokenizer->GetLastTokenLen ();
-	pToken->m_szTokenStart	= m_pTokenizer->GetTokenStart ();
-	pToken->m_szTokenEnd	= m_pTokenizer->GetTokenEnd ();
+	pToken->m_bBoundary = m_pTokenizer->GetBoundary ();
+	pToken->m_bSpecial = m_pTokenizer->WasTokenSpecial ();
+	pToken->m_iOvershortCount = m_pTokenizer->GetOvershortCount ();
+	pToken->m_iTokenLen = m_pTokenizer->GetLastTokenLen ();
+	pToken->m_szTokenStart = m_pTokenizer->GetTokenStart ();
+	pToken->m_szTokenEnd = m_pTokenizer->GetTokenEnd ();
 }
 
 
@@ -4302,12 +4300,12 @@ BYTE * CSphTokenizer_Filter::GetToken ()
 		{
 			int iTokensPerForm = 1+pCurForm->m_dTokens.GetLength();
 
-			m_tLastToken.m_bBoundary		= false;
-			m_tLastToken.m_bSpecial			= false;
-			m_tLastToken.m_iOvershortCount	= m_dStoredTokens[m_iStoredStart].m_iOvershortCount;
-			m_tLastToken.m_iTokenLen		= pCurForm->m_iNormalTokenLen;
-			m_tLastToken.m_szTokenStart		= m_dStoredTokens[m_iStoredStart].m_szTokenStart;
-			m_tLastToken.m_szTokenEnd		= m_dStoredTokens[ ( m_iStoredStart+iTokensPerForm-1 ) % iSize ].m_szTokenEnd;
+			m_tLastToken.m_bBoundary = false;
+			m_tLastToken.m_bSpecial = false;
+			m_tLastToken.m_iOvershortCount = m_dStoredTokens[m_iStoredStart].m_iOvershortCount;
+			m_tLastToken.m_iTokenLen = pCurForm->m_iNormalTokenLen;
+			m_tLastToken.m_szTokenStart = m_dStoredTokens[m_iStoredStart].m_szTokenStart;
+			m_tLastToken.m_szTokenEnd = m_dStoredTokens[ ( m_iStoredStart+iTokensPerForm-1 ) % iSize ].m_szTokenEnd;
 			m_pLastToken = &m_tLastToken;
 
 			m_iStoredStart = ( m_iStoredStart+iTokensPerForm ) % iSize;
@@ -7690,9 +7688,9 @@ int CSphIndex_VLN::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWOR
 
 	BYTE *pBuf, *maxP;
 	int n = 0, w;
-	SphWordID_t d1, l1=0;
-	SphDocID_t d2, l2=0;
-	DWORD d3, l3=0;
+	SphWordID_t d1, l1 = 0;
+	SphDocID_t d2, l2 = 0;
+	DWORD d3, l3 = 0;
 
 	pBuf = m_pWriteBuffer;
 	maxP = m_pWriteBuffer + m_iWriteBuffer - 128;
@@ -12705,7 +12703,7 @@ void CSphIndex_VLN::LoadSettings ( CSphReader & tReader )
 	if ( m_uVersion>=8 )
 	{
 		m_tSettings.m_iMinPrefixLen = tReader.GetDword ();
-		m_tSettings.m_iMinInfixLen	= tReader.GetDword ();
+		m_tSettings.m_iMinInfixLen = tReader.GetDword ();
 
 	} else if ( m_uVersion>=6 )
 	{
@@ -14375,9 +14373,9 @@ static void GetFileStats ( const char * szFilename, CSphSavedFile & tInfo )
 	if ( stat ( szFilename, &tStat ) < 0 )
 		memset ( &tStat, 0, sizeof ( tStat ) );
 
-	tInfo.m_uSize	= tStat.st_size;
-	tInfo.m_uCTime	= tStat.st_ctime;
-	tInfo.m_uMTime	= tStat.st_mtime;
+	tInfo.m_uSize = tStat.st_size;
+	tInfo.m_uCTime = tStat.st_ctime;
+	tInfo.m_uMTime = tStat.st_mtime;
 
 	DWORD uCRC32 = 0;
 	sphCalcFileCRC32 ( szFilename, uCRC32 );
@@ -14850,7 +14848,7 @@ CSphDictCRC::WordformContainer * CSphDictCRC::LoadWordformContainer ( const char
 	int iLen;
 	bool bSeparatorFound = false;
 	CSphString sFrom;
-	while ( ( iLen=rdWordforms.GetLine ( sBuffer, sizeof(sBuffer) ) )>=0 )
+	while ( ( iLen = rdWordforms.GetLine ( sBuffer, sizeof(sBuffer) ) )>=0 )
 	{
 		// parse the line
 		pMyTokenizer->SetBuffer ( (BYTE*)sBuffer, iLen );
@@ -16257,8 +16255,8 @@ void CSphSource_Document::BuildHits ( BYTE ** dFields, int iFieldIndex, int iSta
 
 				// restore word
 				memcpy ( sBuf + 1, sWord, iBytes );
-				sBuf [iBytes + 1]	= MAGIC_WORD_TAIL;
-				sBuf [iBytes + 2]	= '\0';
+				sBuf[iBytes+1] = MAGIC_WORD_TAIL;
+				sBuf[iBytes+2] = '\0';
 
 				// if there are no infixes, that's it
 				if ( iMinInfixLen > iLen )
@@ -17020,7 +17018,7 @@ void CSphSource_SQL::PostIndex ()
 
 	assert ( !m_bSqlConnected );
 
-	#define LOC_SQL_ERROR(_msg) { sSqlError= _msg; break; }
+	#define LOC_SQL_ERROR(_msg) { sSqlError = _msg; break; }
 
 	const char * sSqlError = NULL;
 	for ( ;; )
@@ -17757,12 +17755,12 @@ CSphSource_XMLPipe::CSphSource_XMLPipe ( BYTE * dInitialBuf, int iBufLen, const 
 {
 	assert ( m_iBufferSize > iBufLen );
 
-	m_pTag			= NULL;
-	m_iTagLength	= 0;
-	m_pPipe			= NULL;
-	m_pBuffer		= NULL;
-	m_pBufferEnd	= NULL;
-	m_sBuffer		= new BYTE [m_iBufferSize];
+	m_pTag = NULL;
+	m_iTagLength = 0;
+	m_pPipe = NULL;
+	m_pBuffer = NULL;
+	m_pBufferEnd = NULL;
+	m_sBuffer = new BYTE [m_iBufferSize];
 
 	if ( iBufLen )
 		memcpy ( m_sBuffer, dInitialBuf, iBufLen );
@@ -17801,8 +17799,8 @@ bool CSphSource_XMLPipe::Setup ( FILE * pPipe, const char * sCommand )
 
 bool CSphSource_XMLPipe::Connect ( CSphString & )
 {
-	m_bEOF		= false;
-	m_bWarned	= false;
+	m_bEOF = false;
+	m_bWarned = false;
 
 	m_tSchema.m_dFields.Reset ();
 	m_tSchema.m_dFields.Add ( CSphColumnInfo ( "title" ) );
@@ -18698,14 +18696,14 @@ bool CSphSource_XMLPipe2::Connect ( CSphString & sError )
 	m_dKillList.Resize ( 0 );
 
 	m_bRemoveParsed = false;
-	m_bInDocset	= false;
-	m_bInSchema	= false;
+	m_bInDocset = false;
+	m_bInSchema = false;
 	m_bInDocument = false;
 	m_bInKillList = false;
 	m_bInId = false;
 	m_bFirstTagAfterDocset = false;
-	m_iCurField	= -1;
-	m_iCurAttr	= -1;
+	m_iCurField = -1;
+	m_iCurAttr = -1;
 	m_iElementDepth = 0;
 
 	m_dParsedDocuments.Reset ();
@@ -19581,7 +19579,7 @@ bool CSphSource_ODBC::SqlQuery ( const char * sQuery )
 
 	m_nResultCols = nCols;
 
-	const int MAX_NAME_LEN=512;
+	const int MAX_NAME_LEN = 512;
 	char szColumnName[MAX_NAME_LEN];
 
 	m_dColumns.Resize ( m_nResultCols );

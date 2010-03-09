@@ -9836,7 +9836,8 @@ void HandlerThread ( void * pArg )
 void TickHead ( CSphProcessSharedMutex * pAcceptMutex )
 {
 	CheckSignals ();
-	CheckLeaks ();
+	if ( g_dThd.GetLength ()==0 ) // checking if no running threads
+		CheckLeaks ();
 	CheckPipes ();
 	CheckDelete ();
 	CheckRotate ();
@@ -10666,6 +10667,9 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 		if ( g_bSeamlessRotate && !sphThreadCreate ( &g_tRotateThread, RotationThreadFunc , 0 ) )
 			sphDie ( "failed to create rotation thread" );
+
+		// reserving max to keep memory consumption constant between frames
+		g_dThd.Reserve ( g_iMaxChildren );
 	}
 
 	// prepare data and replay last binlog

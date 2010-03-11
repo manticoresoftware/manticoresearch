@@ -111,6 +111,15 @@ if ( IsModelGenMode () )
 else
 	print ( "PERFORMING AUTOMATED TESTING\n\n" );
 
+$testconn = ConnectDB();
+if ( !$testconn )
+{
+	print ( "ERROR: failed to connect to MySQL: " . mysql_error() . "\n" );
+	exit ( 1 );
+} else
+{
+	mysql_close ( $testconn );
+}
 
 $t = MyMicrotime ();
 

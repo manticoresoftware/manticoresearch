@@ -128,10 +128,10 @@ void XQNode_t::ClearFieldMask ()
 
 bool XQNode_t::IsEqualTo ( const XQNode_t * pNode )
 {
-	if ( !pNode || pNode->GetHash()!=GetHash() || pNode->GetOp()!=GetOp() || pNode->IsPlain()!=IsPlain() )
+	if ( !pNode || pNode->GetHash()!=GetHash() || pNode->GetOp()!=GetOp() )
 		return false;
 
-	if ( IsPlain() )
+	if ( m_dWords.GetLength() )
 	{
 		// two plain nodes. let's compare the keywords
 		if ( pNode->m_dWords.GetLength()!=m_dWords.GetLength() )
@@ -600,8 +600,7 @@ XQNode_t * XQParser_t::AddKeyword ( XQNode_t * pLeft, XQNode_t * pRight )
 	if ( !pLeft || !pRight )
 		return pLeft ? pLeft : pRight;
 
-	assert ( pLeft->IsPlain() );
-	assert ( pRight->IsPlain() );
+	assert ( pLeft->m_dWords.GetLength()>0 );
 	assert ( pRight->m_dWords.GetLength()==1 );
 
 	pLeft->m_dWords.Add ( pRight->m_dWords[0] );
@@ -638,7 +637,7 @@ XQNode_t * XQParser_t::AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pR
 
 	// build a new node
 	XQNode_t * pResult = NULL;
-	if ( !pLeft->IsPlain() && pLeft->GetOp()==eOp )
+	if ( pLeft->m_dChildren.GetLength() && pLeft->GetOp()==eOp )
 	{
 		pLeft->m_dChildren.Add ( pRight );
 		pResult = pLeft;
@@ -668,7 +667,7 @@ XQNode_t * XQParser_t::SweepNulls ( XQNode_t * pNode )
 		return NULL;
 
 	// sweep plain node
-	if ( pNode->IsPlain() )
+	if ( pNode->m_dWords.GetLength() )
 	{
 		ARRAY_FOREACH ( i, pNode->m_dWords )
 			if ( pNode->m_dWords[i].m_sWord.cstr()==NULL )
@@ -718,7 +717,7 @@ XQNode_t * XQParser_t::SweepNulls ( XQNode_t * pNode )
 bool XQParser_t::FixupNots ( XQNode_t * pNode )
 {
 	// no processing for plain nodes
-	if ( !pNode || pNode->IsPlain() )
+	if ( !pNode || pNode->m_dWords.GetLength() )
 		return true;
 
 	// process 'em children
@@ -806,6 +805,22 @@ static void DeleteNodesWOFields ( XQNode_t * pNode )
 }
 
 
+static void FixupDegenerates ( XQNode_t * pNode )
+{
+	if ( !pNode )
+		return;
+
+	if ( pNode->m_dWords.GetLength()==1 && ( pNode->GetOp()==SPH_QUERY_PHRASE || pNode->GetOp()==SPH_QUERY_PROXIMITY || pNode->GetOp()==SPH_QUERY_QUORUM ) )
+	{
+		pNode->SetOp ( SPH_QUERY_AND );
+		return;
+	}
+
+	ARRAY_FOREACH ( i, pNode->m_dChildren )
+		FixupDegenerates ( pNode->m_dChildren[i] );
+}
+
+
 bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict )
 {
 	CSphScopedPtr<ISphTokenizer> pMyTokenizer ( pTokenizer->Clone ( true ) );
@@ -847,6 +862,7 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const ISphTok
 	}
 
 	DeleteNodesWOFields ( m_pRoot );
+	FixupDegenerates ( m_pRoot );
 	m_pRoot = SweepNulls ( m_pRoot );
 
 	if ( !FixupNots ( m_pRoot ) )
@@ -885,7 +901,7 @@ static void xqIndent ( int iIndent )
 
 static void xqDump ( XQNode_t * pNode, const CSphSchema & tSch, int iIndent )
 {
-	if ( !pNode->IsPlain() )
+	if ( pNode->m_dChildren.GetLength() )
 	{
 		xqIndent ( iIndent );
 		switch ( pNode->GetOp() )
@@ -902,7 +918,7 @@ static void xqDump ( XQNode_t * pNode, const CSphSchema & tSch, int iIndent )
 	} else
 	{
 		xqIndent ( iIndent );
-		printf ( "MATCH(%d,%d):", pNode->m_uFieldMask, pNode->m_iMaxDistance );
+		printf ( "MATCH(%d,%d):", pNode->m_uFieldMask, pNode->m_iOpArg );
 
 		ARRAY_FOREACH ( i, pNode->m_dWords )
 		{
@@ -924,6 +940,11 @@ bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const ISp
 {
 	XQParser_t qp;
 	bool bRes = qp.Parse ( tParsed, sQuery, pTokenizer, pSchema, pDict );
+
+#ifndef NDEBUG
+	if ( bRes && tParsed.m_pRoot )
+		tParsed.m_pRoot->Check ( true );
+#endif
 
 #if XQDEBUG
 	if ( bRes )
@@ -948,7 +969,7 @@ static bool IsAppropriate ( XQNode_t * pTree )
 	if ( !pTree ) return false;
 
 	// skip nodes that actually are leaves (eg. "AND smth" node instead of merely "smth")
-	return !( pTree->IsPlain() && pTree->m_dWords.GetLength()==1 && pTree->GetOp()!=SPH_QUERY_NOT );
+	return !( pTree->m_dWords.GetLength()==1 && pTree->GetOp()!=SPH_QUERY_NOT );
 }
 
 typedef CSphOrderedHash < DWORD, uint64_t, IdentityHash_fn, 128, 117 > CDwordHash;

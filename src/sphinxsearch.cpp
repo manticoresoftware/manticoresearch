@@ -666,8 +666,8 @@ static ExtNode_i * CreatePhraseNode ( const XQNode_t * pQueryNode, const ISphQwo
 	{
 		// at least two words have hitlists, creating phrase node
 		assert ( pQueryNode );
-		assert ( pQueryNode->IsPlain() );
-		assert ( pQueryNode->m_iMaxDistance>=0 );
+		assert ( pQueryNode->m_dWords.GetLength() );
+		assert ( pQueryNode->GetOp()==SPH_QUERY_PHRASE || pQueryNode->GetOp()==SPH_QUERY_PROXIMITY || pQueryNode->GetOp()==SPH_QUERY_QUORUM );
 
 		// create nodes
 		CSphVector<ExtNode_i *> dNodes;
@@ -776,7 +776,7 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 	if ( pNode->IsEmpty() )
 		return NULL;
 
-	if ( pNode->IsPlain() )
+	if ( pNode->m_dWords.GetLength() )
 	{
 		const int iWords = pNode->m_bVirtuallyPlain
 			? pNode->m_dChildren.GetLength()
@@ -790,38 +790,46 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 				return Create ( pNode->m_dWords[0], pNode->m_uFieldMask, pNode->m_iFieldMaxPos, tSetup );
 		}
 
-		assert ( pNode->m_iMaxDistance>=0 );
-		if ( pNode->m_iMaxDistance==0 )
-			return CreatePhraseNode<ExtPhrase_c> ( pNode, tSetup, true );
-
-		if ( pNode->m_bQuorum )
+		switch ( pNode->GetOp() )
 		{
-			if ( pNode->m_iMaxDistance>=pNode->m_dWords.GetLength() )
+			case SPH_QUERY_PHRASE:
+				return CreatePhraseNode<ExtPhrase_c> ( pNode, tSetup, true );
+
+			case SPH_QUERY_PROXIMITY:
+				return CreatePhraseNode<ExtProximity_c> ( pNode, tSetup, true );
+
+			case SPH_QUERY_QUORUM:
 			{
-				// threshold is too high
-				if ( tSetup.m_pWarning && pNode->m_iMaxDistance>pNode->m_dWords.GetLength() )
-					tSetup.m_pWarning->SetSprintf ( "quorum threshold too high (words=%d, thresh=%d); replacing quorum operator with AND operator",
-						pNode->m_dWords.GetLength(), pNode->m_iMaxDistance );
+				if ( pNode->m_iOpArg>=pNode->m_dWords.GetLength() )
+				{
+					// threshold is too high
+					if ( tSetup.m_pWarning && pNode->m_iOpArg>pNode->m_dWords.GetLength() )
+						tSetup.m_pWarning->SetSprintf ( "quorum threshold too high (words=%d, thresh=%d); replacing quorum operator with AND operator",
+							pNode->m_dWords.GetLength(), pNode->m_iOpArg );
 
-			} else if ( pNode->m_dWords.GetLength()>32 )
-			{
-				// right now quorum can only handle 32 words
-				if ( tSetup.m_pWarning )
-					tSetup.m_pWarning->SetSprintf ( "too many words (%d) for quorum; replacing with an AND", pNode->m_dWords.GetLength() );
+				} else if ( pNode->m_dWords.GetLength()>32 )
+				{
+					// right now quorum can only handle 32 words
+					if ( tSetup.m_pWarning )
+						tSetup.m_pWarning->SetSprintf ( "too many words (%d) for quorum; replacing with an AND", pNode->m_dWords.GetLength() );
 
-			} else // everything is ok; create quorum node
-				return CreatePhraseNode<ExtQuorum_c> ( pNode, tSetup, false );
+				} else // everything is ok; create quorum node
+					return CreatePhraseNode<ExtQuorum_c> ( pNode, tSetup, false );
 
-			// couldn't create quorum, make an AND node instead
-			const CSphVector<XQKeyword_t> & dWords = pNode->m_dWords;
-			ExtNode_i * pCur = Create ( dWords[0], pNode->m_uFieldMask, pNode->m_iFieldMaxPos, tSetup );
-			for ( int i=1; i<dWords.GetLength(); i++ )
-				pCur = new ExtAnd_c ( pCur, Create ( dWords[i], pNode->m_uFieldMask, pNode->m_iFieldMaxPos, tSetup ), tSetup );
-			if ( pNode->GetCount() )
-				return tSetup.m_pNodeCache->CreateProxy ( pCur, pNode, tSetup );
-			return pCur;
-		} else
-			return CreatePhraseNode<ExtProximity_c> ( pNode, tSetup, true );
+				// couldn't create quorum, make an AND node instead
+				const CSphVector<XQKeyword_t> & dWords = pNode->m_dWords;
+				ExtNode_i * pCur = Create ( dWords[0], pNode->m_uFieldMask, pNode->m_iFieldMaxPos, tSetup );
+				for ( int i=1; i<dWords.GetLength(); i++ )
+					pCur = new ExtAnd_c ( pCur, Create ( dWords[i], pNode->m_uFieldMask, pNode->m_iFieldMaxPos, tSetup ), tSetup );
+				if ( pNode->GetCount() )
+					return tSetup.m_pNodeCache->CreateProxy ( pCur, pNode, tSetup );
+				return pCur;
+			}
+
+			default:
+				assert ( 0 && "unexpected plain node type" );
+				return NULL;
+		}
 
 	} else
 	{
@@ -2265,7 +2273,7 @@ void ExtPhrase_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 
 ExtProximity_c::ExtProximity_c ( CSphVector<ExtNode_i *> & dQwords, DWORD uDupeMask, const XQNode_t & tNode, const ISphQwordSetup & tSetup )
 	: ExtPhrase_c ( dQwords, uDupeMask, tNode, tSetup )
-	, m_iMaxDistance ( tNode.m_iMaxDistance )
+	, m_iMaxDistance ( tNode.m_iOpArg )
 	, m_iNumWords ( dQwords.GetLength() )
 {
 	assert ( m_iMaxDistance>0 );
@@ -2607,9 +2615,9 @@ bool ExtProximity_c::EmitTail ( int & iHit )
 
 ExtQuorum_c::ExtQuorum_c ( CSphVector<ExtNode_i*> & dQwords, DWORD uDupeMask, const XQNode_t & tNode, const ISphQwordSetup & )
 {
-	assert ( tNode.m_bQuorum );
+	assert ( tNode.GetOp()==SPH_QUERY_QUORUM );
 
-	m_iThresh = tNode.m_iMaxDistance;
+	m_iThresh = tNode.m_iOpArg;
 	m_bDone = false;
 
 	assert ( dQwords.GetLength()>1 ); // use TERM instead

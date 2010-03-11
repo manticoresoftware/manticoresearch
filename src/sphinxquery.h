@@ -61,7 +61,10 @@ enum XQOperator_e
 	SPH_QUERY_OR,
 	SPH_QUERY_NOT,
 	SPH_QUERY_ANDNOT,
-	SPH_QUERY_BEFORE
+	SPH_QUERY_BEFORE,
+	SPH_QUERY_PHRASE,
+	SPH_QUERY_PROXIMITY,
+	SPH_QUERY_QUORUM
 };
 
 
@@ -88,8 +91,7 @@ public:
 	int						m_iFieldMaxPos;	///< max position within field (spec part)
 
 	CSphVector<XQKeyword_t>	m_dWords;		///< query words (plain node)
-	int						m_iMaxDistance;	///< proximity distance or quorum length; 0 or less if not proximity/quorum node
-	bool					m_bQuorum;		///< quorum node flag
+	int						m_iOpArg;		///< operator argument (proximity distance, quorum count)
 	int						m_iAtomPos;		///< atom position override (currently only used within expanded nodes)
 	bool					m_bVirtuallyPlain;	///< "virtually plain" flag (currently only used by expanded nodes)
 
@@ -104,8 +106,6 @@ public:
 		, m_bFieldSpec ( false )
 		, m_uFieldMask ( 0xFFFFFFFFUL )
 		, m_iFieldMaxPos ( 0 )
-		, m_iMaxDistance ( -1 )
-		, m_bQuorum ( false )
 		, m_iAtomPos ( -1 )
 		, m_bVirtuallyPlain ( false )
 	{}
@@ -122,15 +122,6 @@ public:
 	{
 		assert ( m_dWords.GetLength()==0 || m_dChildren.GetLength()==0 );
 		return m_dWords.GetLength()==0 && m_dChildren.GetLength()==0;
-	}
-
-	/// check if i'm plain
-	bool IsPlain () const
-	{
-		// case 1: got words, no children (regular plain node, emitted by parser)
-		// case 2: got children, no words (regular non-plain node, emitted by parser)
-		// case 3: got flag
-		return ( m_dWords.GetLength() || m_bVirtuallyPlain );
 	}
 
 	/// setup field limits
@@ -180,6 +171,25 @@ public:
 		m_eOp = eOp;
 		m_dChildren.SwapData(dArgs);
 	}
+
+	/// setup new operator (careful parser/transform use only)
+	void SetOp ( XQOperator_e eOp )
+	{
+		m_eOp = eOp;
+	}
+
+#ifndef NDEBUG
+	/// consistency check
+	void Check ( bool bRoot )
+	{
+		assert ( bRoot || !IsEmpty() ); // empty leaves must be removed from the final tree; empty root is allowed
+		assert (!( m_dWords.GetLength() && m_eOp!=SPH_QUERY_AND && m_eOp!=SPH_QUERY_PHRASE && m_eOp!=SPH_QUERY_PROXIMITY && m_eOp!=SPH_QUERY_QUORUM )); // words are only allowed in these node types
+		assert (!( m_dWords.GetLength()==1 && m_eOp!=SPH_QUERY_AND )); // 1-word leaves must be of AND type
+
+		ARRAY_FOREACH ( i, m_dChildren )
+			m_dChildren[i]->Check ( false );
+	}
+#endif
 };
 
 

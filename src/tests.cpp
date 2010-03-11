@@ -622,7 +622,7 @@ CSphString ReconstructNode ( const XQNode_t * pNode, const CSphSchema & tSchema 
 {
 	CSphString sRes ( "" );
 
-	if ( pNode->IsPlain() )
+	if ( pNode->m_dWords.GetLength() )
 	{
 		// say just words to me
 		const CSphVector<XQKeyword_t> & dWords = pNode->m_dWords;
@@ -630,15 +630,13 @@ CSphString ReconstructNode ( const XQNode_t * pNode, const CSphSchema & tSchema 
 			sRes.SetSprintf ( "%s %s", sRes.cstr(), dWords[i].m_sWord.cstr() );
 		sRes.Chop ();
 
-		if ( pNode->m_bQuorum || pNode->m_iMaxDistance>0 )
+		switch ( pNode->GetOp() )
 		{
-			sRes.SetSprintf ( "\"%s\"%c%d", sRes.cstr(), pNode->m_bQuorum ? '/' : '~', pNode->m_iMaxDistance ); // quorum or proximity
-		} else if ( dWords.GetLength()>1 )
-		{
-			if ( pNode->m_iMaxDistance==0 )
-				sRes.SetSprintf ( "\"%s\"", sRes.cstr() ); // phrase
-			else
-				sRes.SetSprintf ( "%s", sRes.cstr() ); // just bag of words
+			case SPH_QUERY_AND:			break;
+			case SPH_QUERY_PHRASE:		sRes.SetSprintf ( "\"%s\"", sRes.cstr() ); break;
+			case SPH_QUERY_PROXIMITY:	sRes.SetSprintf ( "\"%s\"~%d", sRes.cstr(), pNode->m_iOpArg ); break;
+			case SPH_QUERY_QUORUM:		sRes.SetSprintf ( "\"%s\"/%d", sRes.cstr(), pNode->m_iOpArg ); break;
+			default:					assert ( 0 && "unexpected op in ReconstructNode()" ); break;
 		}
 
 		if ( pNode->m_uFieldMask!=0xFFFFFFFFUL )
@@ -651,7 +649,7 @@ CSphString ReconstructNode ( const XQNode_t * pNode, const CSphSchema & tSchema 
 			sRes.SetSprintf ( "( @%s: %s )", sFields.cstr()+1, sRes.cstr() );
 		} else
 		{
-			if ( !pNode->m_bQuorum && pNode->m_iMaxDistance<0 && dWords.GetLength()>1 )
+			if ( pNode->GetOp()==SPH_QUERY_AND && dWords.GetLength()>1 )
 				sRes.SetSprintf ( "( %s )", sRes.cstr() ); // wrap bag of words
 		}
 
@@ -671,6 +669,7 @@ CSphString ReconstructNode ( const XQNode_t * pNode, const CSphSchema & tSchema 
 					case SPH_QUERY_NOT:		sOp = "NOT"; break;
 					case SPH_QUERY_ANDNOT:	sOp = "AND NOT"; break;
 					case SPH_QUERY_BEFORE:	sOp = "BEFORE"; break;
+					default:				assert ( 0 && "unexpected op in ReconstructNode()" ); break;
 				}
 				sRes.SetSprintf ( "%s %s %s", sRes.cstr(), sOp, ReconstructNode ( pNode->m_dChildren[i], tSchema ).cstr() );
 			}

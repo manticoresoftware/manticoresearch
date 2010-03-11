@@ -12931,7 +12931,6 @@ bool CSphQueryContext::SetupOverrides ( const CSphQuery * pQuery, CSphQueryResul
 static XQNode_t * CloneKeyword ( const XQNode_t * pNode )
 {
 	assert ( pNode );
-	assert ( pNode->IsPlain() );
 	assert ( pNode->m_dWords.GetLength()==1 );
 
 	XQNode_t * pRes = new XQNode_t;
@@ -12973,7 +12972,7 @@ static XQNode_t * ExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & t
 		return pNode;
 
 	// process children for composite nodes
-	if ( !pNode->IsPlain() )
+	if ( pNode->m_dChildren.GetLength() )
 	{
 		ARRAY_FOREACH ( i, pNode->m_dChildren )
 			pNode->m_dChildren[i] = ExpandKeywords ( pNode->m_dChildren[i], tSettings );
@@ -12981,8 +12980,9 @@ static XQNode_t * ExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & t
 	}
 
 	// if that's a phrase/proximity node, create a very special, magic phrase/proximity node
-	if ( pNode->m_dWords.GetLength()>1 && pNode->m_iMaxDistance>=0 )
+	if ( pNode->GetOp()==SPH_QUERY_PHRASE || pNode->GetOp()==SPH_QUERY_PROXIMITY || pNode->GetOp()==SPH_QUERY_QUORUM )
 	{
+		assert ( pNode->m_dWords.GetLength()>1 );
 		ARRAY_FOREACH ( i, pNode->m_dWords )
 		{
 			XQNode_t * pWord = new XQNode_t;
@@ -13000,7 +13000,6 @@ static XQNode_t * ExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & t
 		return pNode;
 
 	// process keywords for plain nodes
-	assert ( pNode->IsPlain() );
 	assert ( pNode->m_dWords.GetLength()==1 );
 
 	XQKeyword_t & tKeyword = pNode->m_dWords[0];
@@ -13020,21 +13019,19 @@ static XQNode_t * ExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & t
 static void TransformQuorum ( XQNode_t ** ppNode )
 {
 	XQNode_t *& pNode = *ppNode;
-	if ( !pNode->m_bQuorum || ( pNode->m_iMaxDistance!=1 ) )
+	if ( pNode->GetOp()!=SPH_QUERY_QUORUM || pNode->m_iOpArg!=1 )
 		return;
 
 	assert ( pNode->m_dChildren.GetLength()==0 );
-	pNode->m_bQuorum = false;
-	pNode->m_iMaxDistance = -1;
-	CSphVector<XQNode_t*> params;
+	CSphVector<XQNode_t*> dArgs;
 	ARRAY_FOREACH ( i, pNode->m_dWords )
 	{
 		XQNode_t * pAnd = new XQNode_t();
 		pAnd->m_dWords.Add ( pNode->m_dWords[i] );
-		params.Add ( pAnd );
+		dArgs.Add ( pAnd );
 	}
 	pNode->m_dWords.Reset();
-	pNode->SetOp ( SPH_QUERY_OR, params );
+	pNode->SetOp ( SPH_QUERY_OR, dArgs );
 }
 
 struct CmpPSortersByRandom_fn
@@ -13089,13 +13086,13 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 		SafeDelete ( pTokenizer );
 		return false;
 	}
+
 	// transform query if needed (quorum transform, keyword expansion, etc.)
 	TransformQuorum ( &tParsed.m_pRoot );
 	if ( m_bExpandKeywords )
 		tParsed.m_pRoot = ExpandKeywords ( tParsed.m_pRoot, m_tSettings );
 
-
-
+	// flag common subtrees
 	CSphVector<XQNode_t*> dTrees;
 	dTrees.Add ( tParsed.m_pRoot );
 	int iCommonSubtrees = sphMarkCommonSubtrees ( dTrees );

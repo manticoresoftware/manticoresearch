@@ -1011,6 +1011,53 @@ void sphSetupSignals ()
 
 #endif
 
+typedef void ( * pLogger ) ( ESphLogLevel, const char *, va_list );
+static pLogger g_pLogger = NULL;
+
+inline void Log ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
+{
+	if ( !g_pLogger ) return;
+	( *g_pLogger ) ( eLevel, sFmt, ap );
+}
+
+void sphWarning ( const char * sFmt, ... )
+{
+	va_list ap;
+	va_start ( ap, sFmt );
+	Log ( LOG_WARNING, sFmt, ap );
+	va_end ( ap );
+}
+
+
+void sphInfo ( const char * sFmt, ... )
+{
+	va_list ap;
+	va_start ( ap, sFmt );
+	Log ( LOG_INFO, sFmt, ap );
+	va_end ( ap );
+}
+
+void sphLogFatal ( const char * sFmt, ... )
+{
+	va_list ap;
+	va_start ( ap, sFmt );
+	Log ( LOG_FATAL, sFmt, ap );
+	va_end ( ap );
+}
+
+void sphLogDebug ( const char * sFmt, ... )
+{
+	va_list ap;
+	va_start ( ap, sFmt );
+	Log ( LOG_DEBUG, sFmt, ap );
+	va_end ( ap );
+}
+
+void sphSetLogger ( const void * pVoid )
+{
+	g_pLogger = (pLogger) pVoid;
+}
+
 //
 // $Id$
 //

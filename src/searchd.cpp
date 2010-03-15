@@ -117,14 +117,6 @@ enum ESphAddIndex
 };
 
 
-enum ESphLogLevel
-{
-	LOG_FATAL	= 0,
-	LOG_WARNING	= 1,
-	LOG_INFO	= 2,
-	LOG_DEBUG	= 3
-};
-
 enum ProtocolType_e
 {
 	PROTO_SPHINX,
@@ -786,7 +778,6 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	sphLogEntry ( eLevel, sBuf );
 }
 
-
 void sphFatal ( const char * sFmt, ... )
 {
 	va_list ap;
@@ -795,40 +786,6 @@ void sphFatal ( const char * sFmt, ... )
 	va_end ( ap );
 	Shutdown ();
 	exit ( 1 );
-}
-
-
-void sphWarning ( const char * sFmt, ... )
-{
-	va_list ap;
-	va_start ( ap, sFmt );
-	sphLog ( LOG_WARNING, sFmt, ap );
-	va_end ( ap );
-}
-
-
-void sphInfo ( const char * sFmt, ... )
-{
-	va_list ap;
-	va_start ( ap, sFmt );
-	sphLog ( LOG_INFO, sFmt, ap );
-	va_end ( ap );
-}
-
-void sphLogFatal ( const char * sFmt, ... )
-{
-	va_list ap;
-	va_start ( ap, sFmt );
-	sphLog ( LOG_FATAL, sFmt, ap );
-	va_end ( ap );
-}
-
-void sphLogDebug ( const char * sFmt, ... )
-{
-	va_list ap;
-	va_start ( ap, sFmt );
-	sphLog ( LOG_DEBUG, sFmt, ap );
-	va_end ( ap );
 }
 
 void LogInternalError ( const char * sError )
@@ -7523,8 +7480,10 @@ bool HasFiles ( const ServedIndex_t & tIndex, const char ** dExts )
 /// returns true if any version of the index (old or new one) has been preread
 bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 {
+	sphLogDebug ( "RotateIndexGreedy for '%s' invoked", sIndex );
 	char sFile [ SPH_MAX_FILENAME_LEN ];
 	const char * sPath = tIndex.m_sIndexPath.cstr();
+
 
 	for ( int i=0; i<EXT_COUNT; i++ )
 	{
@@ -7541,6 +7500,7 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 			return false;
 		}
 	}
+	sphLogDebug ( "RotateIndexGreedy: new index is readable" );
 
 	if ( !tIndex.m_bOnlyNew )
 	{
@@ -7557,6 +7517,7 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 			sphWarning ( "rotating index '%s': rename to .old failed; using old index", sIndex );
 			return false;
 		}
+		sphLogDebug ( "RotateIndexGreedy: Current index renamed to .old" );
 	}
 
 	// rename new to current
@@ -7570,11 +7531,13 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 			TryRename ( sIndex, sPath, g_dCurExts[j], g_dNewExts[j], true );
 
 		// rollback old ones
-		for ( int j=0; j<EXT_COUNT; j++ )
-			TryRename ( sIndex, sPath, g_dOldExts[j], g_dCurExts[j], true );
+		if ( !tIndex.m_bOnlyNew )
+			for ( int j=0; j<EXT_COUNT; j++ )
+				TryRename ( sIndex, sPath, g_dOldExts[j], g_dCurExts[j], true );
 
 		return false;
 	}
+	sphLogDebug ( "RotateIndexGreedy: New renamed to current" );
 
 	bool bPreread = false;
 
@@ -7600,6 +7563,7 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 				TryRename ( sIndex, sPath, g_dCurExts[j], g_dNewExts[j], true );
 				TryRename ( sIndex, sPath, g_dOldExts[j], g_dCurExts[j], true );
 			}
+			sphLogDebug ( "RotateIndexGreedy: has recovered" );
 
 			if ( !tIndex.m_pIndex->Prealloc ( tIndex.m_bMlock, sWarning ) || !tIndex.m_pIndex->Preread() )
 			{
@@ -7610,11 +7574,11 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 			{
 				tIndex.m_bEnabled = true;
 				bPreread = true;
-
 				sphWarning ( "rotating index '%s': .new preload failed; using old index", sIndex );
-				if ( !sWarning.IsEmpty() )
-					sphWarning ( "rotating index '%s': %s", sIndex, sWarning.cstr() );
 			}
+
+			if ( !sWarning.IsEmpty() )
+				sphWarning ( "rotating index '%s': %s", sIndex, sWarning.cstr() );
 
 			if ( !tIndex.m_pIndex->GetTokenizer () )
 				tIndex.m_pIndex->SetTokenizer ( pTokenizer );
@@ -7655,6 +7619,8 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 			if ( ::unlink ( sFile ) )
 				sphWarning ( "rotating index '%s': unable to unlink '%s': %s", sIndex, sFile, strerror(errno) );
 		}
+
+	sphLogDebug ( "RotateIndexGreedy: the old index unlinked" );
 
 	// uff. all done
 	tIndex.m_bEnabled = true;
@@ -7990,7 +7956,9 @@ void IndexRotationDone ()
 
 
 void SeamlessTryToForkPrereader ()
+
 {
+	sphLogDebug ( "Invoked SeamlessTryToForkPrereader" );
 	// next in line
 	const char * sPrereading = g_dRotating.Pop ();
 	if ( !sPrereading || !g_hIndexes ( sPrereading ) )
@@ -8015,12 +7983,18 @@ void SeamlessTryToForkPrereader ()
 	g_pPrereading->SetBase ( sNewPath );
 
 	// prealloc enough RAM and lock new index
+	sphLogDebug ( "prealloc enough RAM and lock new index" );
 	CSphString sWarn, sError;
 	if ( !g_pPrereading->Prealloc ( tServed.m_bMlock, sWarn ) )
 	{
 		sphWarning ( "rotating index '%s': prealloc: %s; using old index", sPrereading, g_pPrereading->GetLastError().cstr() );
+		if ( !sWarn.IsEmpty() )
+			sphWarning ( "rotating index: %s", sWarn.cstr() );
 		return;
 	}
+	if ( !sWarn.IsEmpty() )
+		sphWarning ( "rotating index: %s: %s", sPrereading, sWarn.cstr() );
+
 	if ( !g_pPrereading->Lock() )
 	{
 		sphWarning ( "rotating index '%s': lock: %s; using old index", sPrereading, g_pPrereading->GetLastError().cstr() );
@@ -8042,6 +8016,7 @@ void SeamlessTryToForkPrereader ()
 	}
 
 	// fork async reader
+	sphLogDebug ( "fork async reader" );
 	g_sPrereading = sPrereading;
 	int iPipeFD = PipeAndFork ( true, SPH_PIPE_PREREAD );
 
@@ -8053,7 +8028,6 @@ void SeamlessTryToForkPrereader ()
 	bool bRes = g_pPrereading->Preread ();
 	if ( !bRes )
 		sphWarning ( "rotating index '%s': preread failed: %s; using old index", g_sPrereading, g_pPrereading->GetLastError().cstr() );
-
 	// report and exit
 	DWORD uTmp = SPH_PIPE_PREREAD;
 	sphWrite ( iPipeFD, &uTmp, sizeof(DWORD) ); // FIXME? add buffering/checks?
@@ -8062,12 +8036,14 @@ void SeamlessTryToForkPrereader ()
 	sphWrite ( iPipeFD, &uTmp, sizeof(DWORD) );
 
 	::close ( iPipeFD );
+	sphLogDebug ( "SeamlessTryToForkPrereader: finishing the fork and invoking exit ( 0 )" );
 	exit ( 0 );
 }
 
 
 void SeamlessForkPrereader ()
 {
+	sphLogDebug ( "Invoked SeamlessForkPrereader" );
 	// sanity checks
 	if ( !g_bDoRotate )
 	{
@@ -8866,6 +8842,8 @@ void CheckRotate ()
 	if ( !g_bDoRotate )
 		return;
 
+	sphLogDebug ( "CheckRotate invoked" );
+
 	/////////////////////
 	// RAM-greedy rotate
 	/////////////////////
@@ -8952,7 +8930,10 @@ void CheckRotate ()
 		CSphString sTmp;
 		sTmp.SetSprintf ( "%s.sph", sNewPath.cstr() );
 		if ( !sphIsReadable ( sTmp.cstr() ) )
+		{
+			sphLogDebug ( "%s.sph is not readable. Skipping", sNewPath.cstr() );
 			continue;
+		}
 
 		if ( g_eWorkers==MPM_THREADS )
 		{
@@ -10706,6 +10687,7 @@ bool DieCallback ( const char * sMessage )
 int main ( int argc, char **argv )
 {
 	sphSetDieCallback ( DieCallback );
+	sphSetLogger ( ( const void* ) ( &sphLog ) );
 
 #if USE_WINDOWS
 	int iNameIndex = -1;

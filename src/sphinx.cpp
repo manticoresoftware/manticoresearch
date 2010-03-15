@@ -6537,6 +6537,9 @@ CSphIndex_VLN::~CSphIndex_VLN ()
 #endif
 		g_MvaArena.TaggedFreeTag ( m_iIndexTag );
 
+#if !USE_WINDOWS
+	if ( g_bHeadProcess )
+#endif
 	Unlock();
 }
 
@@ -11639,6 +11642,7 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 bool CSphIndex_VLN::Lock ()
 {
 	CSphString sName = GetIndexFileName("spl");
+	sphLogDebug ( "Locking the index via file %s", sName.cstr() );
 
 	if ( m_iLockFD<0 )
 	{
@@ -11646,6 +11650,7 @@ bool CSphIndex_VLN::Lock ()
 		if ( m_iLockFD<0 )
 		{
 			m_sLastError.SetSprintf ( "failed to open %s: %s", sName.cstr(), strerror(errno) );
+			sphLogDebug ( "failed to open %s: %s", sName.cstr(), strerror(errno) );
 			return false;
 		}
 	}
@@ -11657,17 +11662,20 @@ bool CSphIndex_VLN::Lock ()
 		m_iLockFD = -1;
 		return false;
 	}
-
+	sphLogDebug ( "lock %s success", sName.cstr() );
 	return true;
 }
 
 
 void CSphIndex_VLN::Unlock()
 {
+	CSphString sName = GetIndexFileName("spl");
+	sphLogDebug ( "Unlocking the index (lock %s)", sName.cstr() );
 	if ( m_iLockFD>=0 )
 	{
+		sphLogDebug ( "File ID ok, closing lock FD %d, unlinking %s", m_iLockFD, sName.cstr() );
 		::close ( m_iLockFD );
-		::unlink ( GetIndexFileName("spl").cstr() );
+		::unlink ( sName.cstr() );
 		m_iLockFD = -1;
 	}
 }
@@ -12321,6 +12329,7 @@ template < typename T > bool CSphIndex_VLN::PrereadSharedBuffer ( CSphSharedBuff
 
 bool CSphIndex_VLN::Preread ()
 {
+	sphLogDebug ( "CSphIndex_VLN::Preread invoked" );
 	if ( !m_bPreallocated )
 	{
 		m_sLastError = "INTERNAL ERROR: not preallocated";
@@ -12342,16 +12351,20 @@ bool CSphIndex_VLN::Preread ()
 	if ( m_bPreloadWordlist )
 		m_tProgress.m_iBytesTotal += m_pWordlist.GetLength();
 
+	sphLogDebug ( "Prereading .spa" );
 	if ( !PrereadSharedBuffer ( m_pDocinfo, "spa",
 		( m_uVersion<20 )? m_uDocinfo * ( DOCINFO_IDSIZE + m_tSchema.GetRowSize() ) * sizeof(DWORD) : 0 ) )
 		return false;
 
+	sphLogDebug ( "Prereading .spm" );
 	if ( !PrereadSharedBuffer ( m_pMva, "spm" ) )
 		return false;
 
+	sphLogDebug ( "Prereading .sps" );
 	if ( !PrereadSharedBuffer ( m_pStrings, "sps" ) )
 		return false;
 
+	sphLogDebug ( "Prereading .spk" );
 	if ( !PrereadSharedBuffer ( m_pKillList, "spk" ) )
 		return false;
 
@@ -12363,8 +12376,11 @@ bool CSphIndex_VLN::Preread ()
 	// preload wordlist
 	// FIXME! OPTIMIZE! can skip checkpoints
 	if ( m_bPreloadWordlist )
+	{
+		sphLogDebug ( "Prereading .spi" );
 		if ( !PrereadSharedBuffer ( m_pWordlist, "spi" ) )
 			return false;
+	}
 
 	if ( m_pProgress )
 		m_pProgress ( &m_tProgress, true );
@@ -12449,6 +12465,7 @@ bool CSphIndex_VLN::Preread ()
 	#endif // PARANOID
 
 	m_bPreread.GetWritePtr()[0] = 1;
+	sphLogDebug ( "Preread successfully finished" );
 	return true;
 }
 
@@ -12495,6 +12512,7 @@ bool CSphIndex_VLN::Rename ( const char * sNewBase )
 			{
 				::close ( m_iLockFD );
 				::unlink ( GetIndexFileName("spl").cstr() );
+				sphLogDebug ( "lock %s unlinked, file with ID %d closed", GetIndexFileName("spl").cstr(), m_iLockFD );
 				m_iLockFD = -1;
 			}
 			continue;
@@ -12506,6 +12524,7 @@ bool CSphIndex_VLN::Rename ( const char * sNewBase )
 
 #if USE_WINDOWS
 		::unlink ( sTo );
+		sphLogDebug ( "%s unlinked", sTo );
 #endif
 
 		if ( ::rename ( sFrom, sTo ) )
@@ -12522,6 +12541,7 @@ bool CSphIndex_VLN::Rename ( const char * sNewBase )
 	if ( iExt==EXT_COUNT )
 	{
 		SetBase ( sNewBase );
+		sphLogDebug ( "Base set to %s", sNewBase );
 		return true;
 	}
 
@@ -12536,6 +12556,7 @@ bool CSphIndex_VLN::Rename ( const char * sNewBase )
 		snprintf ( sTo, sizeof(sTo), "%s.%s", m_sFilename.cstr(), sExt );
 		if ( ::rename ( sFrom, sTo ) )
 		{
+			sphLogDebug ( "Rollback failure when renaming %s to %s", sFrom, sTo );
 			// !COMMIT should handle rollback failures somehow
 		}
 	}

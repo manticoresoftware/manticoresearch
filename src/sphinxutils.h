@@ -145,6 +145,21 @@ bool			sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIn
 
 void			sphSetupSignals ();
 
+enum ESphLogLevel
+{
+	LOG_FATAL	= 0,
+	LOG_WARNING	= 1,
+	LOG_INFO	= 2,
+	LOG_DEBUG	= 3
+};
+
+
+void sphWarning ( const char * sFmt, ... );
+void sphInfo ( const char * sFmt, ... );
+void sphLogFatal ( const char * sFmt, ... );
+void sphLogDebug ( const char * sFmt, ... );
+void sphSetLogger ( const void * );
+
 #endif // _sphinxutils_
 
 //

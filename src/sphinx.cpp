@@ -203,13 +203,18 @@ static const char * const g_dTimerNames [ TIMERS_TOTAL ] =
 
 struct CSphTimer
 {
-	int64_t			m_iMicroSec;
+	int64_t			m_iMicroSec;		///< time as clocked raw
+	int				m_iCalls;			///< number of times this timer was called
+
+	int				m_iChildrenCalls;	///< number of times all subtimers (children, grandchildren etc) of this timer were called
+	int64_t			m_iMicroSecAdj;		///< guessed (!) time after timer costs adjustment, including subtimer costs
+	int64_t			m_iMicroSecSelf;	///< guessed (!) self time
+
 	ESphTimer		m_eTimer;
 	int				m_iParent;
 	int				m_iChild;
 	int				m_iNext;
 	int				m_iPrev;
-	int				m_iCalls;
 
 	CSphTimer ()
 	{
@@ -224,7 +229,9 @@ struct CSphTimer
 		m_iPrev = -1;
 		m_eTimer = eTimer;
 		m_iMicroSec = 0;
+		m_iMicroSecAdj = 0;
 		m_iCalls = 0;
+		m_iChildrenCalls = 0;
 	}
 
 	void Start ()
@@ -240,10 +247,12 @@ struct CSphTimer
 };
 
 static const int	SPH_MAX_TIMERS					= 128;
+static const int	SPH_TIMER_TRIALS				= 16384;
+
 static int			g_iTimer						= -1;
 static int			g_iTimers						= 0;
 static CSphTimer	g_dTimers [ SPH_MAX_TIMERS ];
-
+static int64_t		g_iTimerTrialsWall				= 0;
 
 void sphProfilerInit ()
 {
@@ -305,6 +314,32 @@ void sphProfilerPop ( ESphTimer eTimer )
 }
 
 
+static void sphProfilerAdjust ( int iTimer )
+{
+	CSphTimer & tTimer = g_dTimers[iTimer];
+	tTimer.m_iChildrenCalls = 0;
+
+	// adjust all my children first
+	// count the subtimer call totals along the way, too
+	for ( int iChild=tTimer.m_iChild; iChild>0; iChild=g_dTimers[iChild].m_iNext )
+	{
+		sphProfilerAdjust ( iChild );
+		tTimer.m_iChildrenCalls += g_dTimers[iChild].m_iCalls + g_dTimers[iChild].m_iChildrenCalls;
+	}
+
+	// adjust my raw time, remove all the timer costs from it
+	// my own costs are 1x sphMicroTimer() call per start/stop cycle
+	// subtimer costs are 2x sphMicroTimer() calls per start/stop cycle
+	tTimer.m_iMicroSecAdj = tTimer.m_iMicroSec - ( ( tTimer.m_iCalls + 2*tTimer.m_iChildrenCalls )*g_iTimerTrialsWall / SPH_TIMER_TRIALS );
+
+	// now calculate self time
+	// as adjusted time (all subtimer costs removed) minus all subtimer self time
+	tTimer.m_iMicroSecSelf = tTimer.m_iMicroSecAdj;
+	for ( int iChild=tTimer.m_iChild; iChild>0; iChild=g_dTimers[iChild].m_iNext )
+		tTimer.m_iMicroSecSelf -= g_dTimers[iChild].m_iMicroSecSelf;
+}
+
+
 void sphProfilerDone ()
 {
 	assert ( g_iTimers>0 );
@@ -314,6 +349,23 @@ void sphProfilerDone ()
 	g_iTimers = 0;
 	g_iTimer = -1;
 	g_dTimers[0].Stop ();
+
+	// bench adjustments
+	for ( int iRun=0; iRun<3; iRun++ )
+	{
+		int64_t iTrial = sphMicroTimer();
+		for ( int i=0; i<SPH_TIMER_TRIALS-1; i++ )
+			sphMicroTimer();
+		iTrial = sphMicroTimer()-iTrial;
+
+		if ( iRun!=0 )
+			g_iTimerTrialsWall = Min ( g_iTimerTrialsWall, iTrial );
+		else
+			g_iTimerTrialsWall = iTrial;
+	}
+
+	// apply those adjustments
+	sphProfilerAdjust ( 0 );
 }
 
 
@@ -325,16 +377,8 @@ void sphProfilerShow ( int iTimer=0, int iLevel=0 )
 	if ( iTimer==0 )
 		fprintf ( stdout, "--- PROFILE ---\n" );
 
+	// show this timer
 	CSphTimer & tTimer = g_dTimers[iTimer];
-	int iChild;
-
-	// calc me
-	int iChildren = 0;
-	int64_t tmSelf = tTimer.m_iMicroSec;
-	for ( iChild=tTimer.m_iChild; iChild>0; iChild=g_dTimers[iChild].m_iNext, iChildren++ )
-		tmSelf -= g_dTimers[iChild].m_iMicroSec;
-
-	// dump me
 	if ( tTimer.m_iMicroSec<50 )
 		return;
 
@@ -346,12 +390,12 @@ void sphProfilerShow ( int iTimer=0, int iLevel=0 )
 
 	fprintf ( stdout, "%-32s | %6d.%02d ms | %6d.%02d ms self | %d calls\n",
 		sName,
-		(int)(tTimer.m_iMicroSec/1000), (int)(tTimer.m_iMicroSec%1000)/10,
-		(int)(tmSelf/1000), (int)(tmSelf%1000)/10,
+		(int)(tTimer.m_iMicroSecAdj/1000), (int)(tTimer.m_iMicroSecAdj%1000)/10,
+		(int)(tTimer.m_iMicroSecSelf/1000), (int)(tTimer.m_iMicroSecSelf%1000)/10,
 		tTimer.m_iCalls );
 
 	// dump my children
-	iChild = tTimer.m_iChild;
+	int iChild = tTimer.m_iChild;
 	while ( iChild>0 && g_dTimers[iChild].m_iNext>0 )
 		iChild = g_dTimers[iChild].m_iNext;
 

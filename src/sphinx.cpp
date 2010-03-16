@@ -16249,12 +16249,14 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 	m_dHits.Reserve ( 1024 );
 	m_dHits.Resize ( 0 );
 
-	BuildHits ( dFields, -1, 0 );
+	if ( !BuildHits ( dFields, -1, 0, sError ) )
+		return false;
+
 	return true;
 }
 
 
-void CSphSource_Document::BuildHits ( BYTE ** dFields, int iFieldIndex, int iStartPos )
+bool CSphSource_Document::BuildHits ( BYTE ** dFields, int iFieldIndex, int iStartPos, CSphString & sError )
 {
 	bool bGlobalPartialMatch = m_iMinPrefixLen > 0 || m_iMinInfixLen > 0;
 
@@ -16269,16 +16271,63 @@ void CSphSource_Document::BuildHits ( BYTE ** dFields, int iFieldIndex, int iSta
 		iEndField = iFieldIndex+1;
 	}
 
+	CSphAutofile	tFileSource;
 	for ( int iField=iStartField; iField<iEndField; iField++ )
 	{
 		BYTE * sField = dFields[iField-iStartField];
 		if ( !sField || !(*sField) )
 			continue;
 
-		if ( m_bStripHTML )
-			m_pStripper->Strip ( sField );
+		int iFieldBytes = 0;
 
-		int iFieldBytes = (int) strlen ( (char*)sField );
+		// get data from file source
+		if ( m_tSchema.m_dFields[iField].m_bFilename )
+		{
+			if ( tFileSource.Open ( (const char *)sField, SPH_O_READ, sError )==-1 )
+				return false;
+			else
+			{
+				iFieldBytes = tFileSource.GetSize();
+
+				if ( iFieldBytes > m_iMaxFileBufferSize )
+				{
+					sError.SetSprintf ( "file '%s' too big for a field (size="INT64_FMT", max_file_field_buffer="INT64_FMT")", (const char *)sField, (int64_t)iFieldBytes, (int64_t)m_iMaxFileBufferSize );
+					return false;
+				}
+
+				int iBufSize = m_iReadFileBufferSize;
+
+				while ( iBufSize < iFieldBytes ) iBufSize <<= 1;
+
+				if ( m_iReadFileBufferSize < iBufSize )
+					SafeDeleteArray ( m_pReadFileBuffer );
+
+				if ( !m_pReadFileBuffer )
+				{
+					m_pReadFileBuffer = new char[iBufSize];
+					m_iReadFileBufferSize = iBufSize;
+				}
+
+				assert ( m_pReadFileBuffer );
+
+				if ( tFileSource.Read ( m_pReadFileBuffer, iFieldBytes, sError ) )
+				{
+					sField = (BYTE*)m_pReadFileBuffer;
+					tFileSource.Close();
+				} else
+				{
+					sError.SetSprintf ( "failed to read file '%s'", (const char *)sField );
+					return false;
+				}
+			}
+		} else
+		{
+			if ( m_bStripHTML )
+				m_pStripper->Strip ( sField );
+
+			iFieldBytes = (int) strlen ( (char*)sField );
+		}
+
 		m_tStats.m_iTotalBytes += iFieldBytes;
 
 		m_pTokenizer->SetBuffer ( sField, iFieldBytes );
@@ -16438,6 +16487,8 @@ void CSphSource_Document::BuildHits ( BYTE ** dFields, int iFieldIndex, int iSta
 		if ( m_dHits.GetLength() )
 			m_dHits.Last().m_iWordPos |= HIT_FIELD_END;
 	}
+
+	return true;
 }
 
 
@@ -16530,6 +16581,7 @@ bool CSphSource_Document::IsFieldInStr ( const char * szField, const char * szSt
 CSphSourceParams_SQL::CSphSourceParams_SQL ()
 	: m_iRangeStep ( 1024 )
 	, m_iRangedThrottle ( 0 )
+	, m_iMaxFileBufferSize ( 0 )
 	, m_iPort ( 0 )
 {
 }
@@ -16592,6 +16644,9 @@ bool CSphSource_SQL::Setup ( const CSphSourceParams_SQL & tParams )
 		m_tParams.m_sUser.cstr(), m_tParams.m_sHost.cstr(),
 		m_tParams.m_iPort, m_tParams.m_sDB.cstr() );
 	m_sSqlDSN = sBuf;
+
+	if ( m_tParams.m_iMaxFileBufferSize > 0 )
+		m_iMaxFileBufferSize = m_tParams.m_iMaxFileBufferSize;
 
 	return true;
 }
@@ -16857,6 +16912,12 @@ bool CSphSource_SQL::IterateHitsStart ( CSphString & sError )
 			tCol = tAttr;
 			dFound[j] = true;
 			break;
+		}
+
+		ARRAY_FOREACH ( j, m_tParams.m_dFileFields )
+		{
+			if ( !strcasecmp ( tCol.m_sName.cstr(), m_tParams.m_dFileFields[j].cstr() ) )
+				tCol.m_bFilename = true;
 		}
 
 		tCol.m_iIndex = i+1;
@@ -17450,10 +17511,12 @@ bool CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 			if ( m_tSchema.m_dFields[m_iJoinedHitField].m_bPayload )
 			{
 				DWORD uPosition = sphToDword ( SqlColumn(2) );
-				BuildHits ( &pText, m_iJoinedHitField, uPosition );
+				if ( !BuildHits ( &pText, m_iJoinedHitField, uPosition, sError ) )
+					return false;
 			} else
 			{
-				BuildHits ( &pText, m_iJoinedHitField, m_iJoinedHitPos );
+				if ( !BuildHits ( &pText, m_iJoinedHitField, m_iJoinedHitPos, sError ) )
+					return false;
 
 				// update current position
 				if ( m_dHits.GetLength() )

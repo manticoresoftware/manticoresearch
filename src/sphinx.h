@@ -996,6 +996,7 @@ struct CSphColumnInfo
 	ESphAggrFunc					m_eAggrFunc;	///< aggregate function on top of expression (for GROUP BY)
 	ESphEvalStage					m_eStage;		///< column evaluation stage (who and how computes this column)
 	bool							m_bPayload;
+	bool							m_bFilename;	///< column is a file name
 
 	/// handy ctor
 	CSphColumnInfo ( const char * sName=NULL, DWORD eType=SPH_ATTR_NONE )
@@ -1009,6 +1010,7 @@ struct CSphColumnInfo
 		, m_eAggrFunc ( SPH_AGGR_NONE )
 		, m_eStage ( SPH_EVAL_STATIC )
 		, m_bPayload ( false )
+		, m_bFilename ( false )
 	{
 		m_sName.ToLower ();
 	}
@@ -1274,11 +1276,19 @@ class CSphSource_Document : public CSphSource
 {
 public:
 	/// ctor
-	explicit				CSphSource_Document ( const char * sName ) : CSphSource ( sName ) {}
+	explicit				CSphSource_Document ( const char * sName )
+							: CSphSource ( sName )
+							, m_pReadFileBuffer ( NULL )
+							, m_iReadFileBufferSize ( 256 * 1024 )
+							, m_iMaxFileBufferSize ( 2 * 1024 * 1024 )
+							{}
+
+	/// dtor
+	virtual					~CSphSource_Document () { SafeDeleteArray ( m_pReadFileBuffer ); }
 
 	/// my generic tokenizer
 	virtual bool			IterateHitsNext ( CSphString & sError );
-	void					BuildHits ( BYTE ** dFields, int iFieldIndex, int iStartPos );
+	bool					BuildHits ( BYTE ** dFields, int iFieldIndex, int iStartPos, CSphString & sError );
 
 	/// field data getter
 	/// to be implemented by descendants
@@ -1291,6 +1301,11 @@ protected:
 	bool					IsInfixMatch ( const char * szField ) const;
 
 	void					ParseFieldMVA ( CSphVector < CSphVector < DWORD > > & dFieldMVAs, int iFieldMVA, const char * szValue );
+
+protected:
+	char *					m_pReadFileBuffer;
+	int						m_iReadFileBufferSize;	///< size of read buffer for the 'slq_file_field' fields
+	int						m_iMaxFileBufferSize;	///< max size of read buffer for the 'slq_file_field' fields
 
 private:
 	CSphString				m_sPrefixFields;
@@ -1325,8 +1340,10 @@ struct CSphSourceParams_SQL
 	CSphVector<CSphString>			m_dQueryPost;
 	CSphVector<CSphString>			m_dQueryPostIndex;
 	CSphVector<CSphColumnInfo>		m_dAttrs;
+	CSphVector<CSphString>			m_dFileFields;
 
 	int								m_iRangedThrottle;
+	int								m_iMaxFileBufferSize;
 
 	CSphVector<CSphUnpackInfo>		m_dUnpack;
 	DWORD							m_uUnpackMemoryLimit;

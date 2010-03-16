@@ -636,6 +636,7 @@ CSphString ReconstructNode ( const XQNode_t * pNode, const CSphSchema & tSchema 
 			case SPH_QUERY_PHRASE:		sRes.SetSprintf ( "\"%s\"", sRes.cstr() ); break;
 			case SPH_QUERY_PROXIMITY:	sRes.SetSprintf ( "\"%s\"~%d", sRes.cstr(), pNode->m_iOpArg ); break;
 			case SPH_QUERY_QUORUM:		sRes.SetSprintf ( "\"%s\"/%d", sRes.cstr(), pNode->m_iOpArg ); break;
+			case SPH_QUERY_NEAR:		sRes.SetSprintf ( "\"%s\"NEAR/%d", sRes.cstr(), pNode->m_iOpArg ); break;
 			default:					assert ( 0 && "unexpected op in ReconstructNode()" ); break;
 		}
 
@@ -669,6 +670,7 @@ CSphString ReconstructNode ( const XQNode_t * pNode, const CSphSchema & tSchema 
 					case SPH_QUERY_NOT:		sOp = "NOT"; break;
 					case SPH_QUERY_ANDNOT:	sOp = "AND NOT"; break;
 					case SPH_QUERY_BEFORE:	sOp = "BEFORE"; break;
+					case SPH_QUERY_NEAR:	sOp = "NEAR"; break;
 					default:				assert ( 0 && "unexpected op in ReconstructNode()" ); break;
 				}
 				sRes.SetSprintf ( "%s %s %s", sRes.cstr(), sOp, ReconstructNode ( pNode->m_dChildren[i], tSchema ).cstr() );

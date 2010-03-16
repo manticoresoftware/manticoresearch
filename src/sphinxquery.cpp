@@ -489,6 +489,14 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		m_iPendingNulls = m_pTokenizer->GetOvershortCount ();
 		m_iAtomPos += 1+m_iPendingNulls;
 
+		// NEAR is case-sensitive
+		if ( sToken && p && !m_pTokenizer->m_bPhrase && strlen(sToken)==4 && strncmp ( p, "NEAR", 4 )==0 )
+		{
+			m_iPendingType = TOK_NEAR;
+			m_iAtomPos-=2; // one for NEAR, one for integer after it
+		}
+
+
 		if ( m_pTokenizer->WasTokenSpecial() )
 		{
 			// specials must not affect pos
@@ -548,7 +556,9 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			m_pTokenizer->GetTokenStart()[-1]=='*' ? STAR_FRONT : 0;
 
 		m_tPendingToken.pNode = AddKeyword ( sToken, uStarPosition );
-		m_iPendingType = TOK_KEYWORD;
+		if ( m_iPendingType!=TOK_NEAR )
+			m_iPendingType = TOK_KEYWORD;
+
 
 		if ( m_pTokenizer->TokenIsBlended() )
 			m_iAtomPos--;

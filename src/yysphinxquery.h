@@ -30,15 +30,17 @@
       know about them.  */
    enum yytokentype {
      TOK_KEYWORD = 258,
-     TOK_INT = 259,
-     TOK_FIELDLIMIT = 260,
-     TOK_BEFORE = 261
+     TOK_NEAR = 259,
+     TOK_INT = 260,
+     TOK_FIELDLIMIT = 261,
+     TOK_BEFORE = 262
    };
 #endif
 #define TOK_KEYWORD 258
-#define TOK_INT 259
-#define TOK_FIELDLIMIT 260
-#define TOK_BEFORE 261
+#define TOK_NEAR 259
+#define TOK_INT 260
+#define TOK_FIELDLIMIT 261
+#define TOK_BEFORE 262
 
 
 

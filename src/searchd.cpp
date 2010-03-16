@@ -2286,6 +2286,14 @@ public:
 	int				m_iFamily;
 	DWORD			m_uAddr;
 
+	// statistic
+	int64_t			m_iTimeoutsQuery;				///< number of time-outed queries
+	int64_t			m_iTimeoutsConnect;				///< number of time-outed connections
+	int64_t			m_iConnectFailures;				///< failed to connect
+	int64_t			m_iNetworkErrors;				///< network error
+	int64_t			m_iWrongReplies;				///< incomplete reply
+	int64_t			m_iUnexpectedClose;				///< agent closed the connection
+
 public:
 	Agent_t ()
 		: m_iPort ( -1 )
@@ -2298,6 +2306,12 @@ public:
 		, m_iReplyRead ( 0 )
 		, m_pReplyBuf ( NULL )
 		, m_uAddr ( 0 )
+		, m_iTimeoutsQuery ( 0 )
+		, m_iTimeoutsConnect ( 0 )
+		, m_iConnectFailures ( 0 )
+		, m_iNetworkErrors ( 0 )
+		, m_iWrongReplies ( 0 )
+		, m_iUnexpectedClose ( 0 )
 	{
 	}
 
@@ -2429,6 +2443,7 @@ void ConnectToRemoteAgents ( CSphVector<Agent_t> & dAgents, bool bRetryOnly )
 				tAgent.Close ();
 				tAgent.m_sFailure.SetSprintf ( "connect() failed: %s", sphSockError(iErr) );
 				tAgent.m_eState = AGENT_RETRY; // do retry on connect() failures
+				tAgent.m_iConnectFailures++;
 				return;
 
 			} else
@@ -2509,6 +2524,7 @@ int QueryRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, const IRequ
 					// connect() failure
 					tAgent.m_sFailure.SetSprintf ( "connect() failed: %s", sphSockError(iErr) );
 					tAgent.Close ();
+					tAgent.m_iConnectFailures++;
 				} else
 				{
 					// connect() success
@@ -2531,11 +2547,13 @@ int QueryRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, const IRequ
 						// network error
 						int iErr = sphSockGetErrno();
 						tAgent.m_sFailure.SetSprintf ( "handshake failure (errno=%d, msg=%s)", iErr, sphSockError(iErr) );
+						tAgent.m_iNetworkErrors++;
 
 					} else if ( iRes>0 )
 					{
 						// incomplete reply
 						tAgent.m_sFailure.SetSprintf ( "handshake failure (exp=%d, recv=%d)", sizeof(iRemoteVer), iRes );
+						tAgent.m_iWrongReplies++;
 
 					} else
 					{
@@ -2543,6 +2561,7 @@ int QueryRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, const IRequ
 						// this might happen in out-of-sync connect-accept case; so let's retry
 						tAgent.m_sFailure.SetSprintf ( "handshake failure (connection was closed)", iRes );
 						tAgent.m_eState = AGENT_RETRY;
+						tAgent.m_iUnexpectedClose++;
 					}
 					continue;
 				}
@@ -2551,6 +2570,7 @@ int QueryRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, const IRequ
 				if (!( iRemoteVer==SPHINX_SEARCHD_PROTO || iRemoteVer==0x01000000UL ) ) // workaround for all the revisions that sent it in host order...
 				{
 					tAgent.m_sFailure.SetSprintf ( "handshake failure (unexpected protocol version=%d)", iRemoteVer );
+					tAgent.m_iWrongReplies++;
 					tAgent.Close ();
 					continue;
 				}
@@ -2573,7 +2593,15 @@ int QueryRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, const IRequ
 		if ( tAgent.m_eState!=AGENT_QUERY && tAgent.m_eState!=AGENT_UNUSED && tAgent.m_eState!=AGENT_RETRY )
 		{
 			tAgent.Close ();
-			tAgent.m_sFailure.SetSprintf ( "%s() timed out", tAgent.m_eState==AGENT_HELLO ? "read" : "connect" );
+			if ( tAgent.m_eState==AGENT_HELLO )
+			{
+				tAgent.m_sFailure.SetSprintf ( "read() timed out" );
+				tAgent.m_iTimeoutsQuery++;
+			} else
+			{
+				tAgent.m_sFailure.SetSprintf ( "connect() timed out" );
+				tAgent.m_iTimeoutsConnect++;
+			}
 			tAgent.m_eState = AGENT_RETRY; // do retry on connect() failures
 		}
 	}
@@ -2660,6 +2688,7 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, IReplyPar
 					{
 						// bail out if failed
 						tAgent.m_sFailure.SetSprintf ( "failed to receive reply header" );
+						tAgent.m_iNetworkErrors++;
 						break;
 					}
 
@@ -2671,6 +2700,7 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, IReplyPar
 					if ( tReplyHeader.m_iLength<0 || tReplyHeader.m_iLength>g_iMaxPacketSize ) // FIXME! add reasonable max packet len too
 					{
 						tAgent.m_sFailure.SetSprintf ( "invalid packet size (status=%d, len=%d, max_packet_size=%d)", tReplyHeader.m_iStatus, tReplyHeader.m_iLength, g_iMaxPacketSize );
+						tAgent.m_iWrongReplies++;
 						break;
 					}
 
@@ -2702,6 +2732,7 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, IReplyPar
 					if ( iRes<0 )
 					{
 						tAgent.m_sFailure.SetSprintf ( "failed to receive reply body: %s", sphSockError() );
+						tAgent.m_iNetworkErrors++;
 						break;
 					}
 
@@ -2744,6 +2775,7 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, IReplyPar
 					if ( tReq.GetError() )
 					{
 						tAgent.m_sFailure.SetSprintf ( "incomplete reply" );
+						tAgent.m_iWrongReplies++;
 						break;
 					}
 
@@ -2778,6 +2810,7 @@ int WaitForRemoteAgents ( CSphVector<Agent_t> & dAgents, int iTimeout, IReplyPar
 			assert ( !tAgent.m_bSuccess );
 			tAgent.Close ();
 			tAgent.m_sFailure.SetSprintf ( "query timed out" );
+			tAgent.m_iTimeoutsQuery++;
 		}
 	}
 
@@ -6309,6 +6342,22 @@ void BuildStatus ( CSphVector<CSphString> & dStatus )
 	dStatus.Add ( "queries" );					dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iQueries );
 	dStatus.Add ( "dist_queries" );				dStatus.Add().SetSprintf ( FMT64, g_pStats->m_iDistQueries );
 
+	g_hDistIndexes.IterateStart();
+	while ( g_hDistIndexes.IterateNext() )
+	{
+		const char* sIdx = g_hDistIndexes.IterateGetKey().cstr();
+		CSphVector<Agent_t> & dAgents = g_hDistIndexes.IterateGet().m_dAgents;
+		ARRAY_FOREACH ( i, dAgents )
+		{
+			dStatus.Add().SetSprintf ( "ag_%s_%d_query_timeouts", sIdx, i );		dStatus.Add().SetSprintf ( FMT64, dAgents[i].m_iTimeoutsQuery );
+			dStatus.Add().SetSprintf ( "ag_%s_%d_connect_timeouts", sIdx, i );		dStatus.Add().SetSprintf ( FMT64, dAgents[i].m_iTimeoutsConnect );
+			dStatus.Add().SetSprintf ( "ag_%s_%d_connect_failures", sIdx, i );		dStatus.Add().SetSprintf ( FMT64, dAgents[i].m_iConnectFailures );
+			dStatus.Add().SetSprintf ( "ag_%s_%d_network_errors", sIdx, i );		dStatus.Add().SetSprintf ( FMT64, dAgents[i].m_iNetworkErrors );
+			dStatus.Add().SetSprintf ( "ag_%s_%d_wrong_replies", sIdx, i );			dStatus.Add().SetSprintf ( FMT64, dAgents[i].m_iWrongReplies );
+			dStatus.Add().SetSprintf ( "ag_%s_%d_unexpected_closings", sIdx, i );	dStatus.Add().SetSprintf ( FMT64, dAgents[i].m_iUnexpectedClose );
+		}
+	}
+
 	dStatus.Add ( "query_wall" );				FormatMsec ( dStatus.Add(), g_pStats->m_iQueryTime );
 
 	dStatus.Add ( "query_cpu" );
@@ -7806,6 +7855,7 @@ static void RotateIndexMT ( const CSphString & sIndex )
 	pRotating = NULL;
 
 	// prealloc enough RAM and lock new index
+	sphLogDebug ( "prealloc enough RAM and lock new index" );
 	CSphString sWarn, sError;
 	if ( !tNewIndex.m_pIndex->Prealloc ( tNewIndex.m_bMlock, sWarn ) )
 	{
@@ -7820,6 +7870,7 @@ static void RotateIndexMT ( const CSphString & sIndex )
 	}
 
 	// fixup settings if needed
+	sphLogDebug ( "fixup settings if needed" );
 	g_tRotateConfigMutex.Lock ();
 	if ( tNewIndex.m_bOnlyNew && g_pCfg && g_pCfg->m_tConf ( "index" ) && g_pCfg->m_tConf["index"]( sIndex.cstr() ) )
 	{
@@ -7847,6 +7898,7 @@ static void RotateIndexMT ( const CSphString & sIndex )
 	//////////////////////
 	// activate new index
 	//////////////////////
+	sphLogDebug ( "activate new index" );
 
 	ServedIndex_t * pServed = g_hIndexes ( sIndex, true );
 	if ( !CheckServedEntry ( pServed, sIndex.cstr() ) )
@@ -7868,6 +7920,7 @@ static void RotateIndexMT ( const CSphString & sIndex )
 	} else
 	{
 		// FIXME! at this point there's no cur lock file; ie. potential race
+		sphLogDebug ( "no cur lock file; ie. potential race" );
 		if ( !pNew->Rename ( pServed->m_sIndexPath.cstr() ) )
 		{
 			sphWarning ( "rotating index '%s': new to cur rename failed: %s", sIndex.cstr(), pNew->GetLastError().cstr() );
@@ -7879,6 +7932,7 @@ static void RotateIndexMT ( const CSphString & sIndex )
 		} else
 		{
 			// all went fine; swap them
+			sphLogDebug ( "all went fine; swap them" );
 			if ( !tNewIndex.m_pIndex->GetTokenizer() )
 				tNewIndex.m_pIndex->SetTokenizer ( pServed->m_pIndex->LeakTokenizer() );
 
@@ -7889,6 +7943,7 @@ static void RotateIndexMT ( const CSphString & sIndex )
 			pServed->m_bEnabled = true;
 
 			// unlink .old
+			sphLogDebug ( "unlink .old" );
 			if ( g_bUnlinkOld && !pServed->m_bOnlyNew )
 			{
 				char sFile [ SPH_MAX_FILENAME_LEN ];

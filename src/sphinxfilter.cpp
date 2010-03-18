@@ -233,6 +233,11 @@ struct Filter_IdValues: public IFilter_Values
 
 		return EvalBlockValues ( uBlockMin, uBlockMax );
 	}
+
+	Filter_IdValues ()
+	{
+		m_bUsesAttrs = false;
+	}
 };
 
 struct Filter_IdRange: public IFilter_Range
@@ -241,6 +246,11 @@ struct Filter_IdRange: public IFilter_Range
 	{
 		const SphDocID_t uID = tMatch.m_iDocID;
 		return uID>=(SphDocID_t)m_uMinValue && uID<=(SphDocID_t)m_uMaxValue;
+	}
+
+	Filter_IdRange ()
+	{
+		m_bUsesAttrs = false;
 	}
 };
 
@@ -252,6 +262,11 @@ struct Filter_WeightValues: public IFilter_Values
 	{
 		return EvalValues ( tMatch.m_iWeight );
 	}
+
+	Filter_WeightValues ()
+	{
+		m_bUsesAttrs = false;
+	}
 };
 
 struct Filter_WeightRange: public IFilter_Range
@@ -260,6 +275,11 @@ struct Filter_WeightRange: public IFilter_Range
 	virtual bool Eval ( const CSphMatch & tMatch ) const
 	{
 		return EvalRange ( tMatch.m_iWeight );
+	}
+	
+	Filter_WeightRange ()
+	{
+		m_bUsesAttrs = false;
 	}
 };
 
@@ -342,6 +362,7 @@ struct Filter_And: public ISphFilter
 	void Add ( ISphFilter * pFilter )
 	{
 		m_dFilters.Add ( pFilter );
+		m_bUsesAttrs |= pFilter->UsesAttrs();
 	}
 
 	virtual bool Eval ( const CSphMatch & tMatch ) const
@@ -365,6 +386,11 @@ struct Filter_And: public ISphFilter
 		Add ( pFilter );
 		return this;
 	}
+
+	Filter_And ()
+	{
+		m_bUsesAttrs = false;
+	}
 };
 
 // not
@@ -377,6 +403,7 @@ struct Filter_Not: public ISphFilter
 		: m_pFilter ( pFilter )
 	{
 		assert ( pFilter );
+		m_bUsesAttrs = pFilter->UsesAttrs();
 	}
 
 	~Filter_Not ()

@@ -10302,13 +10302,14 @@ public:
 				{
 					CSphMatch tMatch;
 					tMatch.m_iDocID = tQword.m_tDoc.m_iDocID;
-					if ( pInline )
-						tMatch.m_pDynamic = pInline;
-					else
-					{
-						const DWORD * pInfo = pSourceIndex->FindDocinfo ( tQword.m_tDoc.m_iDocID );
-						tMatch.m_pStatic = pInfo?DOCINFO2ATTRS ( pInfo ):NULL;
-					}
+					if ( pFilter->UsesAttrs() )
+						if ( pInline )
+							tMatch.m_pDynamic = pInline;
+						else
+						{
+							const DWORD * pInfo = pSourceIndex->FindDocinfo ( tQword.m_tDoc.m_iDocID );
+							tMatch.m_pStatic = pInfo?DOCINFO2ATTRS ( pInfo ):NULL;
+						}
 					bool bResult = pFilter->Eval ( tMatch );
 					tMatch.m_pDynamic = NULL;
 					if ( !bResult )
@@ -10817,7 +10818,6 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 				pSrcRow += iStride;
 				iSrcCount++;
 				iTotalDocuments++;
-				dPhantomKiller.Add ( iSrcDocID );
 				if ( bNeedInfinum )
 				{
 					bNeedInfinum = false;
@@ -10826,6 +10826,7 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 
 				if ( iDstDocID==iSrcDocID )
 				{
+					dPhantomKiller.Add ( iSrcDocID );
 					pDstRow += iStride;
 					iDstCount++;
 				}

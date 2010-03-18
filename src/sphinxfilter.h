@@ -42,6 +42,14 @@ struct ISphFilter
 	}
 
 	virtual ISphFilter * Join ( ISphFilter * pFilter );
+
+	bool UsesAttrs() const { return m_bUsesAttrs; }
+
+	ISphFilter() : m_bUsesAttrs ( true ) {}
+
+protected :
+
+	bool m_bUsesAttrs;
 };
 
 ISphFilter * sphCreateFilter ( const CSphFilterSettings &, const CSphSchema &, const DWORD * pMva, CSphString & sError );

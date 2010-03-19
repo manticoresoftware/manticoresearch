@@ -13678,6 +13678,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 				LOC_FAIL(( fp, "docid decreased (wordid="UINT64_FMT", docid="DOCID_FMT", lastid="DOCID_FMT")",
 					uint64_t(uWordid), tDoc.m_iDocID, uLastDocid ));
 
+			uLastDocid = tDoc.m_iDocID;
 			iDoclistDocs++;
 			iDoclistHits += pQword->m_uMatchHits;
 

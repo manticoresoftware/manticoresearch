@@ -1231,7 +1231,7 @@ class SphinxConfig
 			while ( $row = mysql_fetch_assoc($r) )
 			{
 				$idcand = strtolower ( $row["Field"] );
-				if ( array_search ( $idcand, array ( "id", "document_id" ) ) )
+				if ( in_array ( $idcand, array ( "id", "document_id" ) ) )
 				{
 					$idcol = $idcand;
 					break;
@@ -1271,7 +1271,7 @@ class SphinxConfig
 				if ( $idcol )
 				{
 					if ( $this->IsNeedDB() )
-						$query_res = mysql_query ( "select * from test_table where document_id = $doc_id",
+						$query_res = mysql_query ( "select * from test_table where $idcol = $doc_id",
 							$this->_connection);
 					else
 						$query_res = false;

@@ -7027,8 +7027,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 			break;
 
 		// do add
-		if ( !pIndex->AddDocument ( dFields.GetLength(), dFields.Begin(), tDoc, bReplace, dStrings.Begin() ) )
-			sError = pIndex->GetLastError();
+		pIndex->AddDocument ( dFields.GetLength(), dFields.Begin(), tDoc, bReplace, dStrings.Begin(), sError );
 
 		if ( !sError.IsEmpty() )
 			break;
@@ -7391,9 +7390,8 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 
 			ISphRtIndex * pIndex = static_cast<ISphRtIndex *> ( tServed.m_pIndex );
 
-			if ( !pIndex->DeleteDocument ( tStmt.m_iDeleteID ) )
+			if ( !pIndex->DeleteDocument ( tStmt.m_iDeleteID, sError ) )
 			{
-				sError = pIndex->GetLastError();
 				SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
 				continue;
 			}

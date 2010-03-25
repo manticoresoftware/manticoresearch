@@ -1574,7 +1574,7 @@ void TestRT ()
 
 		while ( pSrc->IterateHitsNext ( sError ) && pSrc->m_tDocInfo.m_iDocID )
 		{
-			pIndex->AddDocument ( pSrc->m_dHits, pSrc->m_tDocInfo );
+			pIndex->AddDocument ( pSrc->m_dHits, pSrc->m_tDocInfo, NULL, sError );
 			pIndex->Commit ();
 		}
 

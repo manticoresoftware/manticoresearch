@@ -82,7 +82,7 @@ void DoIndexing ( CSphSource * pSrc, ISphRtIndex * pIndex )
 			sphDie ( "iterate-next failed: %s", sError.cstr() );
 
 		if ( pSrc->m_tDocInfo.m_iDocID )
-			pIndex->AddDocument ( pSrc->m_dHits, pSrc->m_tDocInfo );
+			pIndex->AddDocument ( pSrc->m_dHits, pSrc->m_tDocInfo, NULL, sError );
 
 		if ( ( pSrc->GetStats().m_iTotalDocuments % COMMIT_STEP )==0 || !pSrc->m_tDocInfo.m_iDocID )
 		{

@@ -922,14 +922,14 @@ public:
 	explicit					RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath );
 	virtual						~RtIndex_t ();
 
-	bool						AddDocument ( int iFields, const char ** ppFields, const CSphMatch & tDoc, bool bReplace, const char ** ppStr );
-	bool						AddDocument ( const CSphVector<CSphWordHit> & dHits, const CSphMatch & tDoc, const char ** ppStr );
-	bool						DeleteDocument ( SphDocID_t uDoc );
+	bool						AddDocument ( int iFields, const char ** ppFields, const CSphMatch & tDoc, bool bReplace, const char ** ppStr, CSphString & sError );
+	bool						AddDocument ( const CSphVector<CSphWordHit> & dHits, const CSphMatch & tDoc, const char ** ppStr, CSphString & sError );
+	bool						DeleteDocument ( SphDocID_t uDoc, CSphString & sError );
 	void						Commit ();
 	void						RollBack ();
 
-	bool						AddDocumentReplayable ( const CSphVector<CSphWordHit> & dHits, const CSphMatch & tDoc, const char ** ppStr );
-	bool						DeleteDocumentReplayable ( SphDocID_t uDoc );
+	bool						AddDocumentReplayable ( const CSphVector<CSphWordHit> & dHits, const CSphMatch & tDoc, const char ** ppStr, CSphString * sError=NULL );
+	bool						DeleteDocumentReplayable ( SphDocID_t uDoc, CSphString * sError=NULL );
 	void						CommitReplayable ();
 
 	void						DumpToDisk ( const char * sFilename );
@@ -940,7 +940,7 @@ public:
 private:
 	/// acquire thread-local indexing accumulator
 	/// returns NULL if another index already uses it in an open txn
-	RtAccum_t *					AcquireAccum ();
+	RtAccum_t *					AcquireAccum ( CSphString * sError=NULL );
 
 	RtSegment_t *				MergeSegments ( const RtSegment_t * pSeg1, const RtSegment_t * pSeg2 );
 	const RtWord_t *			CopyWord ( RtSegment_t * pDst, RtWordWriter_t & tOutWord, const RtSegment_t * pSrc, const RtWord_t * pWord, RtWordReader_t & tInWord );
@@ -1121,7 +1121,7 @@ CSphSource_StringVector::CSphSource_StringVector ( int iFields, const char ** pp
 	m_dFields [ iFields ] = NULL;
 }
 
-bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMatch & tDoc, bool bReplace, const char ** ppStr )
+bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMatch & tDoc, bool bReplace, const char ** ppStr, CSphString & sError )
 {
 	assert ( g_bRTChangesAllowed );
 
@@ -1136,7 +1136,7 @@ bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMat
 				&& !m_pSegments[i]->m_dKlist.BinarySearch ( tDoc.m_iDocID ) )
 		{
 			m_tRwlock.Unlock ();
-			m_sLastError.SetSprintf ( "duplicate id '%d'", tDoc.m_iDocID );
+			sError.SetSprintf ( "duplicate id '%d'", tDoc.m_iDocID );
 			return false; // already exists and not deleted; INSERT fails
 		}
 		m_tRwlock.Unlock ();
@@ -1148,10 +1148,10 @@ bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMat
 	tSrc.SetDict ( m_pDict );
 
 	tSrc.m_tDocInfo.Clone ( tDoc, m_tOutboundSchema.GetRowSize() );
-	if ( !tSrc.IterateHitsNext ( m_sLastError ) )
+	if ( !tSrc.IterateHitsNext ( sError ) )
 		return false;
 
-	return AddDocument ( tSrc.m_dHits, tDoc, ppStr );
+	return AddDocument ( tSrc.m_dHits, tDoc, ppStr, sError );
 }
 
 
@@ -1162,7 +1162,7 @@ void AccumCleanup ( void * pArg )
 }
 
 
-RtAccum_t * RtIndex_t::AcquireAccum ()
+RtAccum_t * RtIndex_t::AcquireAccum ( CSphString * sError )
 {
 	RtAccum_t * pAcc = NULL;
 
@@ -1174,7 +1174,8 @@ RtAccum_t * RtIndex_t::AcquireAccum ()
 		pAcc = (RtAccum_t*) sphThreadGet ( g_tTlsAccumKey );
 		if ( pAcc && pAcc->m_pIndex!=NULL && pAcc->m_pIndex!=this )
 		{
-			m_sLastError.SetSprintf ( "current txn is working with another index ('%s')", pAcc->m_pIndex->m_tSchema.m_sName.cstr() );
+			if ( sError )
+				sError->SetSprintf ( "current txn is working with another index ('%s')", pAcc->m_pIndex->m_tSchema.m_sName.cstr() );
 			return NULL;
 		}
 
@@ -1199,15 +1200,15 @@ RtAccum_t * RtIndex_t::GetAccum () const
 		return (RtAccum_t*) sphThreadGet ( g_tTlsAccumKey );
 }
 
-bool RtIndex_t::AddDocument ( const CSphVector<CSphWordHit> & dHits, const CSphMatch & tDoc, const char ** ppStr )
+bool RtIndex_t::AddDocument ( const CSphVector<CSphWordHit> & dHits, const CSphMatch & tDoc, const char ** ppStr, CSphString & sError )
 {
 	assert ( g_bRTChangesAllowed );
-	return AddDocumentReplayable ( dHits, tDoc, ppStr );
+	return AddDocumentReplayable ( dHits, tDoc, ppStr, &sError );
 }
 
-bool RtIndex_t::AddDocumentReplayable ( const CSphVector<CSphWordHit> & dHits, const CSphMatch & tDoc, const char ** ppStr )
+bool RtIndex_t::AddDocumentReplayable ( const CSphVector<CSphWordHit> & dHits, const CSphMatch & tDoc, const char ** ppStr, CSphString * sError )
 {
-	RtAccum_t * pAcc = AcquireAccum();
+	RtAccum_t * pAcc = AcquireAccum ( sError );
 	if ( pAcc )
 	{
 		pAcc->AddDocument ( dHits, tDoc, m_tOutboundSchema.GetRowSize(), ppStr );
@@ -2081,15 +2082,15 @@ void RtIndex_t::RollBack ()
 	pAcc->m_dAccumKlist.Reset();
 }
 
-bool RtIndex_t::DeleteDocument ( SphDocID_t uDoc )
+bool RtIndex_t::DeleteDocument ( SphDocID_t uDoc, CSphString & sError )
 {
 	assert ( g_bRTChangesAllowed );
-	return DeleteDocumentReplayable ( uDoc );
+	return DeleteDocumentReplayable ( uDoc, &sError );
 }
 
-bool RtIndex_t::DeleteDocumentReplayable ( SphDocID_t uDoc )
+bool RtIndex_t::DeleteDocumentReplayable ( SphDocID_t uDoc, CSphString * sError )
 {
-	RtAccum_t * pAcc = AcquireAccum();
+	RtAccum_t * pAcc = AcquireAccum ( sError );
 	if ( pAcc )
 	{
 		pAcc->m_dAccumKlist.Add ( uDoc );
@@ -2543,9 +2544,10 @@ void RtIndex_t::SaveMeta ( int iDiskChunks )
 	sMeta.SetSprintf ( "%s.meta", m_sPath.cstr() );
 	sMetaNew.SetSprintf ( "%s.meta.new", m_sPath.cstr() );
 
+	CSphString sError;
 	CSphWriter wrMeta;
-	if ( !wrMeta.OpenFile ( sMetaNew, m_sLastError ) )
-		sphDie ( "failed to serialize meta: %s", m_sLastError.cstr() ); // !COMMIT handle this gracefully
+	if ( !wrMeta.OpenFile ( sMetaNew, sError ) )
+		sphDie ( "failed to serialize meta: %s", sError.cstr() ); // !COMMIT handle this gracefully
 	wrMeta.PutDword ( META_HEADER_MAGIC );
 	wrMeta.PutDword ( META_VERSION );
 	wrMeta.PutDword ( iDiskChunks );
@@ -2563,7 +2565,6 @@ void RtIndex_t::SaveMeta ( int iDiskChunks )
 
 void RtIndex_t::SaveDiskChunk ()
 {
-	CSphString sError;
 	if ( !m_pSegments.GetLength() )
 		return;
 

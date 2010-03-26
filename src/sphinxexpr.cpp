@@ -497,6 +497,7 @@ private:
 	void					WalkTree ( int iRoot, T & FUNCTOR );
 
 	void					Optimize ( int iNode );
+	void					Dump ( int iNode );
 
 	ISphExpr *				CreateTree ( int iNode );
 	ISphExpr *				CreateIntervalNode ( int iArgsNode, CSphVector<ISphExpr *> & dArgs );
@@ -675,6 +676,12 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 	return -1;
 }
 
+/// is add/sub?
+static inline bool IsAddSub ( const ExprNode_t * pNode )
+{
+	return pNode->m_iToken=='+' || pNode->m_iToken=='-';
+}
+
 /// is arithmetic?
 static inline bool IsAri ( const ExprNode_t * pNode )
 {
@@ -686,6 +693,15 @@ static inline bool IsAri ( const ExprNode_t * pNode )
 static inline bool IsConst ( const ExprNode_t * pNode )
 {
 	return pNode->m_iToken==TOK_CONST_INT || pNode->m_iToken==TOK_CONST_FLOAT;
+}
+
+/// float value of a constant
+static inline float FloatVal ( const ExprNode_t * pNode )
+{
+	assert ( IsConst(pNode) );
+	return pNode->m_iToken==TOK_CONST_INT
+		? (float)pNode->m_iConst
+		: pNode->m_fConst;
 }
 
 /// optimize subtree
@@ -701,7 +717,160 @@ void ExprParser_t::Optimize ( int iNode )
 	ExprNode_t * pLeft = ( pRoot->m_iLeft>=0 ) ? &m_dNodes[pRoot->m_iLeft] : NULL;
 	ExprNode_t * pRight = ( pRoot->m_iRight>=0 ) ? &m_dNodes[pRoot->m_iRight] : NULL;
 
+	// arithmetic expression with constants
+	if ( IsAri(pRoot) )
+	{
+		// optimize fully-constant expressions
+		if ( IsConst(pLeft) && IsConst(pRight) )
+		{
+			if ( pLeft->m_iToken==TOK_CONST_INT && pRight->m_iToken==TOK_CONST_INT && pRoot->m_iToken!='/' )
+			{
+				switch ( pRoot->m_iToken )
+				{
+					case '+':	pRoot->m_iConst = pLeft->m_iConst + pRight->m_iConst; break;
+					case '-':	pRoot->m_iConst = pLeft->m_iConst - pRight->m_iConst; break;
+					case '*':	pRoot->m_iConst = pLeft->m_iConst * pRight->m_iConst; break;
+					default:	assert ( 0 && "internal error: unhandled arithmetic token during const-int optimization" );
+				}
+				pRoot->m_iToken = TOK_CONST_INT;
+
+			} else
+			{
+				float fLeft = FloatVal(pLeft);
+				float fRight = FloatVal(pRight);
+				switch ( pRoot->m_iToken )
+				{
+					case '+':	pRoot->m_fConst = fLeft + fRight; break;
+					case '-':	pRoot->m_fConst = fLeft - fRight; break;
+					case '*':	pRoot->m_fConst = fLeft * fRight; break;
+					case '/':	pRoot->m_fConst = fLeft / fRight; break;
+					default:	assert ( 0 && "internal error: unhandled arithmetic token during const-float optimization" );
+				}
+				pRoot->m_iToken = TOK_CONST_FLOAT;
+			}
+			return;
+		}
+
+		// canonize (expr op const), move const to the left
+		if ( IsConst(pRight) )
+		{
+			assert ( !IsConst(pLeft) );
+			Swap ( pRoot->m_iLeft, pRoot->m_iRight );
+			Swap ( pLeft, pRight );
+
+			// fixup (expr-const) to ((-const)+expr) 
+			if ( pRoot->m_iToken=='-' )
+			{
+				pRoot->m_iToken = '+';
+				if ( pLeft->m_iToken==TOK_CONST_INT )
+					pLeft->m_iConst *= -1;
+				else
+					pLeft->m_fConst *= -1;
+			}
+
+			// fixup (expr/const) to ((1/const)*expr)
+			if ( pRoot->m_iToken=='/' )
+		 	{
+				pRoot->m_iToken = '*';
+				pLeft->m_fConst = 1.0f / FloatVal(pLeft);
+				pLeft->m_iToken = TOK_CONST_FLOAT;
+			}
+		}
+
+		// optimize compatible operations with constants
+		if ( IsConst(pLeft) && IsAri(pRight) && IsAddSub(pRoot)==IsAddSub(pRight) && IsConst ( &m_dNodes[pRight->m_iLeft] ) )
+		{
+			ExprNode_t * pConst = &m_dNodes[pRight->m_iLeft];
+			ExprNode_t * pExpr = &m_dNodes[pRight->m_iRight];
+			assert ( !IsConst(pExpr) ); // must had been optimized
+
+			// optimize (left op (const op2 expr)) to ((left op const) op*op2 expr)
+			if ( IsAddSub(pRoot) )
+			{
+				// fold consts
+				int iSign = ( ( pRoot->m_iToken=='+' ) ? 1 : -1 );
+				if ( pLeft->m_iToken==TOK_CONST_INT && pConst->m_iToken==TOK_CONST_INT )
+				{
+					pLeft->m_iConst += iSign*pConst->m_iConst;
+				} else
+				{
+					pLeft->m_fConst = FloatVal(pLeft) + iSign*FloatVal(pConst);
+					pLeft->m_iToken = TOK_CONST_FLOAT;
+				}
+
+				// fold ops
+				pRoot->m_iToken = ( pRoot->m_iToken==pRight->m_iToken ) ? '+' : '-';
+
+			} else
+			{
+				// fols consts
+				if ( pRoot->m_iToken=='*' && pLeft->m_iToken==TOK_CONST_INT && pConst->m_iToken==TOK_CONST_INT )
+				{
+					pLeft->m_iConst *= pConst->m_iConst;
+				} else
+				{
+					if ( pRoot->m_iToken=='*' )
+						pLeft->m_fConst = FloatVal(pLeft) * FloatVal(pConst);
+					else
+						pLeft->m_fConst = FloatVal(pLeft) / FloatVal(pConst);
+					pLeft->m_iToken = TOK_CONST_FLOAT;
+				}
+
+				// fold ops
+				pRoot->m_iToken = ( pRoot->m_iToken==pRight->m_iToken ) ? '*' : '/';
+			}
+
+			// promote expr arg
+			pRoot->m_iRight = pRight->m_iRight;
+			pRight = pExpr;
+		}
+
+		// promote children constants
+		if ( IsAri(pLeft) && IsAddSub(pLeft)==IsAddSub(pRoot) && IsConst ( &m_dNodes[pLeft->m_iLeft] ) )
+		{
+			// ((const op lr) op2 right) gets replaced with (const op (lr op2/op right))
+			// constant gets promoted one level up
+			int iConst = pLeft->m_iLeft;
+			pLeft->m_iLeft = pLeft->m_iRight;
+			pLeft->m_iRight = pRoot->m_iRight; // (c op lr) -> (lr ... r)
+
+			switch ( pLeft->m_iToken )
+			{
+				case '+':
+				case '*':
+					// (c + lr) op r -> c + (lr op r)
+					// (c * lr) op r -> c * (lr op r)
+					Swap ( pLeft->m_iToken, pRoot->m_iToken );
+					break;
+
+				case '-':
+					// (c - lr) + r -> c - (lr - r)
+					// (c - lr) - r -> c - (lr + r)
+					pLeft->m_iToken = ( pRoot->m_iToken=='+' ? '-' : '+' );
+					pRoot->m_iToken = '-';
+					break; 
+
+				case '/':
+					// (c / lr) * r -> c * (r / lr)
+					// (c / lr) / r -> c / (r * lr)
+					Swap ( pLeft->m_iLeft, pLeft->m_iRight );
+					pLeft->m_iToken = ( pRoot->m_iToken=='*' ) ? '/' : '*';
+					break;
+
+				default:
+					assert ( 0 && "internal error: unhandled op in left-const promotion" );
+			}
+
+			pRoot->m_iRight = pRoot->m_iLeft;
+			pRoot->m_iLeft = iConst;
+
+			pLeft = &m_dNodes[pRoot->m_iLeft];
+			pRight = &m_dNodes[pRoot->m_iRight];
+		}
+	}
+
 	// madd, mul3
+	// FIXME! separate pass for these? otherwise (2+(a*b))+3 won't get const folding
 	if ( ( pRoot->m_iToken=='+' || pRoot->m_iToken=='*' ) && ( pLeft->m_iToken=='*' || pRight->m_iToken=='*' ) )
 	{
 		if ( pLeft->m_iToken!='*' )
@@ -726,40 +895,6 @@ void ExprParser_t::Optimize ( int iNode )
 		tArgs.m_iLeft = iLeft;
 		tArgs.m_iRight = iRight;
 		return;
-	}
-
-	// constant arithmetic expression
-	if ( IsAri(pRoot) )
-	{
-		if ( IsConst(pLeft) && IsConst(pRight) )
-		{
-			if ( pLeft->m_iToken==TOK_CONST_INT && pRight->m_iToken==TOK_CONST_INT && pRoot->m_iToken!='/' )
-			{
-				switch ( pRoot->m_iToken )
-				{
-					case '+':	pRoot->m_iConst = pLeft->m_iConst + pRight->m_iConst; break;
-					case '-':	pRoot->m_iConst = pLeft->m_iConst - pRight->m_iConst; break;
-					case '*':	pRoot->m_iConst = pLeft->m_iConst * pRight->m_iConst; break;
-					default:	assert ( 0 && "internal error: unhandled arithmetic token during const-int optimization" );
-				}
-				pRoot->m_iToken = TOK_CONST_INT;
-
-			} else
-			{
-				float fLeft = ( pLeft->m_iToken==TOK_CONST_FLOAT ) ? pLeft->m_fConst : float(pLeft->m_iConst);
-				float fRight = ( pRight->m_iToken==TOK_CONST_FLOAT ) ? pRight->m_fConst : float(pRight->m_iConst);
-				switch ( pRoot->m_iToken )
-				{
-					case '+':	pRoot->m_fConst = fLeft + fRight; break;
-					case '-':	pRoot->m_fConst = fLeft - fRight; break;
-					case '*':	pRoot->m_fConst = fLeft * fRight; break;
-					case '/':	pRoot->m_fConst = fLeft / fRight; break;
-					default:	assert ( 0 && "internal error: unhandled arithmetic token during const-float optimization" );
-				}
-				pRoot->m_iToken = TOK_CONST_FLOAT;
-			}
-			return;
-		}
 	}
 
 	// division by a constant (replace with multiplication by inverse)
@@ -805,6 +940,39 @@ void ExprParser_t::Optimize ( int iNode )
 	{
 		pRoot->m_iToken = TOK_ATTR_SINT;
 		pRoot->m_tLocator = pLeft->m_tLocator;
+	}
+}
+
+
+// debug dump
+void ExprParser_t::Dump ( int iNode )
+{
+	if ( iNode<0 )
+		return;
+
+	ExprNode_t & tNode = m_dNodes[iNode];
+	switch ( tNode.m_iToken )
+	{
+		case TOK_CONST_INT:
+			printf ( "%d", tNode.m_iConst );
+			break;
+
+		case TOK_CONST_FLOAT:
+			printf ( "%f", tNode.m_fConst );
+			break;
+
+		case TOK_ATTR_INT:
+		case TOK_ATTR_SINT:
+			printf ( "row[%d]", tNode.m_tLocator.m_iBitOffset/32 );
+			break;
+
+		default:
+			printf ( "(" );
+			Dump ( tNode.m_iLeft );
+			printf ( ( tNode.m_iToken<256 ) ? " %c " : " op-%d ", tNode.m_iToken );
+			Dump ( tNode.m_iRight );
+			printf ( ")" );
+			break;
 	}
 }
 
@@ -1738,6 +1906,9 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const CSphSchema & tSchema,
 
 	// perform optimizations
 	Optimize ( m_iParsed );
+#if 0
+	Dump ( m_iParsed );
+#endif
 
 	// create evaluator
 	ISphExpr * pRes = CreateTree ( m_iParsed );

@@ -496,6 +496,12 @@ void TestExpr ()
 		{ "-10*-10",						100.0f },
 		{ "aaa+-bbb*-5",					11.0f },
 		{ "-aaa>-bbb",						1.0f },
+		{ "1-aaa+2-3+4",					3.0f },
+		{ "bbb/1*2/6*3",					2.0f },
+		{ "(aaa+bbb)/sqrt(3)/sqrt(3)",		1.0f },
+		{ "aaa-bbb-2",						-3.0f },
+		{ "ccc/2*4/bbb",					3.0f },
+		{ "(2+(aaa*bbb))+3",				7.0f }
 	};
 
 	const int nTests = sizeof(dTests)/sizeof(dTests[0]);

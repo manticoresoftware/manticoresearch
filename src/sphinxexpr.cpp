@@ -676,15 +676,16 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 }
 
 /// is arithmetic?
-static inline bool IsAri ( int iTok )
+static inline bool IsAri ( const ExprNode_t * pNode )
 {
+	int iTok = pNode->m_iToken;
 	return iTok=='+' || iTok=='-' || iTok=='*' || iTok=='/';
 }
 
 /// is constant?
-static inline bool IsConst ( int iTok )
+static inline bool IsConst ( const ExprNode_t * pNode )
 {
-	return iTok==TOK_CONST_INT || iTok==TOK_CONST_FLOAT;
+	return pNode->m_iToken==TOK_CONST_INT || pNode->m_iToken==TOK_CONST_FLOAT;
 }
 
 /// optimize subtree
@@ -697,56 +698,56 @@ void ExprParser_t::Optimize ( int iNode )
 	Optimize ( m_dNodes[iNode].m_iRight );
 
 	ExprNode_t * pRoot = &m_dNodes[iNode];
+	ExprNode_t * pLeft = ( pRoot->m_iLeft>=0 ) ? &m_dNodes[pRoot->m_iLeft] : NULL;
+	ExprNode_t * pRight = ( pRoot->m_iRight>=0 ) ? &m_dNodes[pRoot->m_iRight] : NULL;
 
 	// madd, mul3
-	if ( ( pRoot->m_iToken=='+' || pRoot->m_iToken=='*' )
-		&& ( m_dNodes[pRoot->m_iLeft].m_iToken=='*' || m_dNodes[pRoot->m_iRight].m_iToken=='*' ) )
+	if ( ( pRoot->m_iToken=='+' || pRoot->m_iToken=='*' ) && ( pLeft->m_iToken=='*' || pRight->m_iToken=='*' ) )
 	{
-		if ( m_dNodes[pRoot->m_iLeft].m_iToken!='*' )
+		if ( pLeft->m_iToken!='*' )
+		{
 			Swap ( pRoot->m_iLeft, pRoot->m_iRight );
-		assert ( m_dNodes[pRoot->m_iLeft].m_iToken=='*' );
+			Swap ( pLeft, pRight );
+		}
 
-		m_dNodes.Add();
-		pRoot = &m_dNodes[iNode];
+		pLeft->m_iToken = ',';
 
-		m_dNodes[pRoot->m_iLeft].m_iToken = ',';
-
-		m_dNodes.Last().m_iToken = ',';
-		m_dNodes.Last().m_iLeft = pRoot->m_iLeft;
-		m_dNodes.Last().m_iRight = pRoot->m_iRight;
+		int iLeft = pRoot->m_iLeft;
+		int iRight = pRoot->m_iRight;
 
 		pRoot->m_iFunc = ( pRoot->m_iToken=='+' ) ? FUNC_MADD : FUNC_MUL3;
 		pRoot->m_iToken = TOK_FUNC;
+		pRoot->m_iLeft = m_dNodes.GetLength();
+		pRoot->m_iRight = -1;
 		assert ( g_dFuncs[pRoot->m_iFunc].m_eFunc==pRoot->m_iFunc );
 
-		pRoot->m_iLeft = m_dNodes.GetLength()-1;
-		pRoot->m_iRight = -1;
+		ExprNode_t & tArgs = m_dNodes.Add(); // invalidates all pointers!
+		tArgs.m_iToken = ',';
+		tArgs.m_iLeft = iLeft;
+		tArgs.m_iRight = iRight;
 		return;
 	}
 
 	// constant arithmetic expression
-	if ( IsAri ( pRoot->m_iToken ) )
+	if ( IsAri(pRoot) )
 	{
-		const ExprNode_t & tLeft = m_dNodes[pRoot->m_iLeft];
-		const ExprNode_t & tRight = m_dNodes[pRoot->m_iRight];
-
-		if ( IsConst ( tLeft.m_iToken ) && IsConst ( tRight.m_iToken ) )
+		if ( IsConst(pLeft) && IsConst(pRight) )
 		{
-			if ( tLeft.m_iToken==TOK_CONST_INT && tRight.m_iToken==TOK_CONST_INT && pRoot->m_iToken!='/' )
+			if ( pLeft->m_iToken==TOK_CONST_INT && pRight->m_iToken==TOK_CONST_INT && pRoot->m_iToken!='/' )
 			{
 				switch ( pRoot->m_iToken )
 				{
-					case '+':	pRoot->m_iConst = tLeft.m_iConst + tRight.m_iConst; break;
-					case '-':	pRoot->m_iConst = tLeft.m_iConst - tRight.m_iConst; break;
-					case '*':	pRoot->m_iConst = tLeft.m_iConst * tRight.m_iConst; break;
+					case '+':	pRoot->m_iConst = pLeft->m_iConst + pRight->m_iConst; break;
+					case '-':	pRoot->m_iConst = pLeft->m_iConst - pRight->m_iConst; break;
+					case '*':	pRoot->m_iConst = pLeft->m_iConst * pRight->m_iConst; break;
 					default:	assert ( 0 && "internal error: unhandled arithmetic token during const-int optimization" );
 				}
 				pRoot->m_iToken = TOK_CONST_INT;
 
 			} else
 			{
-				float fLeft = ( tLeft.m_iToken==TOK_CONST_FLOAT ) ? tLeft.m_fConst : float(tLeft.m_iConst);
-				float fRight = ( tRight.m_iToken==TOK_CONST_FLOAT ) ? tRight.m_fConst : float(tRight.m_iConst);
+				float fLeft = ( pLeft->m_iToken==TOK_CONST_FLOAT ) ? pLeft->m_fConst : float(pLeft->m_iConst);
+				float fRight = ( pRight->m_iToken==TOK_CONST_FLOAT ) ? pRight->m_fConst : float(pRight->m_iConst);
 				switch ( pRoot->m_iToken )
 				{
 					case '+':	pRoot->m_fConst = fLeft + fRight; break;
@@ -762,36 +763,32 @@ void ExprParser_t::Optimize ( int iNode )
 	}
 
 	// division by a constant (replace with multiplication by inverse)
-	if ( pRoot->m_iToken=='/' && m_dNodes[pRoot->m_iRight].m_iToken==TOK_CONST_FLOAT )
+	if ( pRoot->m_iToken=='/' && pRight->m_iToken==TOK_CONST_FLOAT )
 	{
-		m_dNodes[pRoot->m_iRight].m_fConst = 1.0f / m_dNodes[pRoot->m_iRight].m_fConst;
+		pRight->m_fConst = 1.0f / pRight->m_fConst;
 		pRoot->m_iToken = '*';
 		return;
 	}
 
 	// unary function from a constant
-	if ( pRoot->m_iToken==TOK_FUNC && g_dFuncs[pRoot->m_iFunc].m_iArgs==1 )
+	if ( pRoot->m_iToken==TOK_FUNC && g_dFuncs[pRoot->m_iFunc].m_iArgs==1 && IsConst(pLeft) )
 	{
-		const ExprNode_t & tArg = m_dNodes[pRoot->m_iLeft];
-		if ( tArg.m_iToken==TOK_CONST_FLOAT || tArg.m_iToken==TOK_CONST_INT )
+		float fArg = pLeft->m_iToken==TOK_CONST_FLOAT ? pLeft->m_fConst : float(pLeft->m_iConst);
+		switch ( g_dFuncs[pRoot->m_iFunc].m_eFunc )
 		{
-			float fArg = tArg.m_iToken==TOK_CONST_FLOAT ? tArg.m_fConst : float(tArg.m_iConst);
-			switch ( g_dFuncs[pRoot->m_iFunc].m_eFunc )
-			{
-				case FUNC_ABS:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_fConst = fabs(fArg); break;
-				case FUNC_CEIL:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_fConst = float(ceil(fArg)); break;
-				case FUNC_FLOOR:	pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_fConst = float(floor(fArg)); break;
-				case FUNC_SIN:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_fConst = float(sin(fArg)); break;
-				case FUNC_COS:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_fConst = float(cos(fArg)); break;
-				case FUNC_LN:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_fConst = float(log(fArg)); break;
-				case FUNC_LOG2:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_fConst = float(log(fArg)*M_LOG2E); break;
-				case FUNC_LOG10:	pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_fConst = float(log(fArg)*M_LOG10E); break;
-				case FUNC_EXP:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_fConst = float(exp(fArg)); break;
-				case FUNC_SQRT:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_fConst = float(sqrt(fArg)); break;
-				default:			break;
-			}
-			return;
+			case FUNC_ABS:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_fConst = fabs(fArg); break;
+			case FUNC_CEIL:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_fConst = float(ceil(fArg)); break;
+			case FUNC_FLOOR:	pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_fConst = float(floor(fArg)); break;
+			case FUNC_SIN:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_fConst = float(sin(fArg)); break;
+			case FUNC_COS:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_fConst = float(cos(fArg)); break;
+			case FUNC_LN:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_fConst = float(log(fArg)); break;
+			case FUNC_LOG2:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_fConst = float(log(fArg)*M_LOG2E); break;
+			case FUNC_LOG10:	pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_fConst = float(log(fArg)*M_LOG10E); break;
+			case FUNC_EXP:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_fConst = float(exp(fArg)); break;
+			case FUNC_SQRT:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_fConst = float(sqrt(fArg)); break;
+			default:			break;
 		}
+		return;
 	}
 
 	// constant function (such as NOW())
@@ -803,14 +800,11 @@ void ExprParser_t::Optimize ( int iNode )
 	}
 
 	// SINT(int-attr)
-	if ( pRoot->m_iToken==TOK_FUNC && pRoot->m_iFunc==FUNC_SINT )
+	if ( pRoot->m_iToken==TOK_FUNC && pRoot->m_iFunc==FUNC_SINT
+		&& ( pLeft->m_iToken==TOK_ATTR_INT || pLeft->m_iToken==TOK_ATTR_BITS ) )
 	{
-		int iArgTok = m_dNodes[pRoot->m_iLeft].m_iToken;
-		if ( iArgTok==TOK_ATTR_INT || iArgTok==TOK_ATTR_BITS )
-		{
-			pRoot->m_iToken = TOK_ATTR_SINT;
-			pRoot->m_tLocator = m_dNodes[pRoot->m_iLeft].m_tLocator;
-		}
+		pRoot->m_iToken = TOK_ATTR_SINT;
+		pRoot->m_tLocator = pLeft->m_tLocator;
 	}
 }
 
@@ -1400,8 +1394,8 @@ ISphExpr * ExprParser_t::CreateGeodistNode ( int iArgs )
 	GatherArgNodes ( iArgs, dArgs );
 	assert ( dArgs.GetLength()==4 );
 
-	bool bConst1 = ( IsConst ( m_dNodes[dArgs[0]].m_iToken ) && IsConst ( m_dNodes[dArgs[1]].m_iToken ) );
-	bool bConst2 = ( IsConst ( m_dNodes[dArgs[2]].m_iToken ) && IsConst ( m_dNodes[dArgs[3]].m_iToken ) );
+	bool bConst1 = ( IsConst ( &m_dNodes[dArgs[0]] ) && IsConst ( &m_dNodes[dArgs[1]] ) );
+	bool bConst2 = ( IsConst ( &m_dNodes[dArgs[2]] ) && IsConst ( &m_dNodes[dArgs[3]] ) );
 
 	if ( bConst1 && bConst2 )
 	{

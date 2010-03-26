@@ -1,5 +1,4 @@
 DROP TABLE IF EXISTS test.documents;
-
 CREATE TABLE test.documents
 (
 	id			INTEGER PRIMARY KEY NOT NULL AUTO_INCREMENT,
@@ -17,7 +16,6 @@ REPLACE INTO test.documents ( id, group_id, group_id2, date_added, title, conten
 	( 4, 2, 8, NOW(), 'doc number four', 'this is to test groups' );
 
 DROP TABLE IF EXISTS test.tags;
-
 CREATE TABLE test.tags
 (
 	docid INTEGER NOT NULL,

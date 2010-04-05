@@ -1262,8 +1262,8 @@ protected:
 	bool								m_bStripHTML;	///< whether to strip HTML
 	CSphHTMLStripper *					m_pStripper;	///< my HTML stripper
 
-	bool		m_bWarnedNull;
-	bool		m_bWarnedMax;
+	int			m_iNullIds;
+	int			m_iMaxIds;
 
 	SphDocID_t	VerifyID ( SphDocID_t uID );
 	void		AddHitFor ( SphWordID_t iWordID, DWORD iWordPos );
@@ -2191,6 +2191,8 @@ struct CSphIndexSettings : public CSphSourceSettings
 
 	ESphHitless		m_eHitless;
 	CSphString		m_sHitlessFile;
+
+	bool			m_bVerbose;
 
 					CSphIndexSettings ();
 };

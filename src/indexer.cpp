@@ -776,7 +776,7 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 // INDEXING
 //////////////////////////////////////////////////////////////////////////
 
-bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const CSphConfigType & hSources )
+bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const CSphConfigType & hSources, bool bVerbose )
 {
 	// check index type
 	bool bPlain = true;
@@ -1056,6 +1056,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 
 		CSphIndexSettings tSettings;
 		sphConfIndex ( hIndex, tSettings );
+		tSettings.m_bVerbose = bVerbose;
 
 		if ( tSettings.m_bIndexExactWords && !tDictSettings.HasMorphology () )
 		{
@@ -1274,6 +1275,7 @@ int main ( int argc, char ** argv )
 	CSphVector<const char *> dIndexes;
 	bool bIndexAll = false;
 	bool bMergeKillLists = false;
+	bool bVerbose = false;
 
 	int i;
 	for ( i=1; i<argc; i++ )
@@ -1329,11 +1331,15 @@ int main ( int argc, char ** argv )
 		{
 			bIndexAll = true;
 
-		} else if ( strcasecmp ( argv[i], "--merge-killlists" )==0 )
+		} else if ( strcasecmp ( argv[i], "--merge-killlists" )==0 || strcasecmp ( argv[i], "--merge-klists" )==0 )
 		{
 			bMergeKillLists = true;
 
-		} else if ( sphIsAlpha ( argv[i][0] ) )
+		} else if ( strcasecmp ( argv[i], "--verbose" )==0 )
+		{
+			bVerbose = true;
+
+		} else if ( ( argv[i][0]>='a' && argv[i][0]<='z' ) || ( argv[i][0]>='A' && argv[i][0]<='Z' ) )
 		{
 			dIndexes.Add ( argv[i] );
 
@@ -1365,6 +1371,7 @@ int main ( int argc, char ** argv )
 				"\t\t\t(default is sphinx.conf)\n"
 				"--all\t\t\treindex all configured indexes\n"
 				"--quiet\t\t\tbe quiet, only print errors\n"
+				"--verbose\t\tverbose indexing issues report\n"
 				"--noprogress\t\tdo not display progress\n"
 				"\t\t\t(automatically on if output is not to a tty)\n"
 #if !USE_WINDOWS
@@ -1382,8 +1389,9 @@ int main ( int argc, char ** argv )
 				"--merge-dst-range <attr> <min> <max>\n"
 				"\t\t\tfilter 'dst-index' on merge, keep only those documents\n"
 				"\t\t\twhere 'attr' is between 'min' and 'max' (inclusive)\n"
-				"--merge-killlists"
-				"\t\t\tmerge src and dst killlists instead of applying src killlist to dst"
+				"--merge-klists\n"
+				"--merge-killlists\tmerge src and dst kill-lists (default is to\n"
+				"\t\t\tapply src kill-list to dst index)\n"
 				"\n"
 				"Examples:\n"
 				"indexer --quiet myidx1\treindex 'myidx1' defined in 'sphinx.conf'\n"
@@ -1444,7 +1452,7 @@ int main ( int argc, char ** argv )
 	{
 		hConf["index"].IterateStart ();
 		while ( hConf["index"].IterateNext() )
-			bIndexedOk |= DoIndex ( hConf["index"].IterateGet (), hConf["index"].IterateGetKey().cstr(), hConf["source"] );
+			bIndexedOk |= DoIndex ( hConf["index"].IterateGet (), hConf["index"].IterateGetKey().cstr(), hConf["source"], bVerbose );
 	} else
 	{
 		ARRAY_FOREACH ( i, dIndexes )
@@ -1452,7 +1460,7 @@ int main ( int argc, char ** argv )
 			if ( !hConf["index"](dIndexes[i]) )
 				fprintf ( stdout, "WARNING: no such index '%s', skipping.\n", dIndexes[i] );
 			else
-				bIndexedOk |= DoIndex ( hConf["index"][dIndexes[i]], dIndexes[i], hConf["source"] );
+				bIndexedOk |= DoIndex ( hConf["index"][dIndexes[i]], dIndexes[i], hConf["source"], bVerbose );
 		}
 	}
 

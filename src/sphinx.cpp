@@ -9602,8 +9602,9 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			return 0;
 	}
 
-	bool bWarnAboutDupes = false;
+	int iDupes = 0;
 	int iMinBlock = -1;
+
 	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && dHitBlocks.GetLength() )
 	{
 		// initialize readers
@@ -9688,6 +9689,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		CSphDocMVA tCurInfo ( dMvaIndexes.GetLength() );
 		tMinMax.Prepare ( &dMinMaxBuffer[0], &dMinMaxBuffer[0] + dMinMaxBuffer.GetLength() );
 
+		SphDocID_t uLastDupe = 0;
 		while ( qDocinfo.GetLength() )
 		{
 			// obtain bin index and next entry
@@ -9695,9 +9697,18 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			DWORD * pEntry = dDocinfoQueue + iBin*iDocinfoStride;
 
 			// skip duplicates
-			bool bDuplicate = DOCINFO2ID ( pEntry )==uLastId;
-			if ( !bDuplicate )
+			if ( DOCINFO2ID ( pEntry )==uLastId )
 			{
+				// dupe, report it
+				if ( m_tSettings.m_bVerbose && uLastDupe!=uLastId )
+					sphWarn ( "duplicated document id="DOCID_FMT, uLastId );
+
+				uLastDupe = uLastId;
+				iDupes++;
+
+			} else
+			{
+				// new unique document, handle it
 				// update ordinals
 				ARRAY_FOREACH ( i, dOrdinalAttrs )
 				{
@@ -9789,8 +9800,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 					iDocinfoWritePos += iLen;
 					pDocinfo = dDocinfos;
 				}
-			} else
-				bWarnAboutDupes = true;
+			}
 
 			// pop its index, update it, push its index again
 			qDocinfo.Pop ();
@@ -10036,7 +10046,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 		if ( m_pProgress )
 		{
-			m_tProgress.m_iHits += iHitsSorted;
+			m_tProgress.m_iHits = m_tProgress.m_iHitsTotal; // sum might be less than total because of dupes!
 			m_pProgress ( &m_tProgress, true );
 		}
 
@@ -10062,8 +10072,8 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		}
 	}
 
-	if ( bWarnAboutDupes )
-		sphWarn ( "duplicate document ids found" );
+	if ( iDupes )
+		sphWarn ( "%d duplicate document id pairs found", iDupes );
 
 	PROFILE_END ( invert_hits );
 
@@ -16120,8 +16130,8 @@ CSphSource::CSphSource ( const char * sName )
 	, m_pDict ( NULL )
 	, m_tSchema ( sName )
 	, m_bStripHTML ( false )
-	, m_bWarnedNull ( false )
-	, m_bWarnedMax ( false )
+	, m_iNullIds ( 0 )
+	, m_iMaxIds ( 0 )
 {
 	m_pStripper = new CSphHTMLStripper ();
 }
@@ -16195,26 +16205,19 @@ SphDocID_t CSphSource::VerifyID ( SphDocID_t uID )
 {
 	if ( uID==0 )
 	{
-		if ( !m_bWarnedNull )
-		{
-			sphWarn ( "zero/NULL document_id, skipping" );
-			m_bWarnedNull = true;
-		}
+		m_iNullIds++;
 		return 0;
 	}
 
 	if ( uID==DOCID_MAX )
 	{
-		if ( !m_bWarnedMax )
-		{
-			sphWarn ( "DOCID_MAX document_id, skipping" );
-			m_bWarnedMax = true;
-		}
+		m_iMaxIds++;
 		return 0;
 	}
 
 	return uID;
 }
+
 
 void CSphSource::AddHitFor ( SphWordID_t iWordID, DWORD iWordPos )
 {
@@ -16225,6 +16228,7 @@ void CSphSource::AddHitFor ( SphWordID_t iWordID, DWORD iWordPos )
 	tHit.m_iWordID = iWordID;
 	tHit.m_iWordPos = iWordPos;
 }
+
 
 bool CSphSource::IterateJoinedHits ( CSphString & )
 {
@@ -16838,8 +16842,8 @@ bool CSphSource_SQL::IterateHitsStart ( CSphString & sError )
 {
 	assert ( m_bSqlConnected );
 
-	m_bWarnedNull = false;
-	m_bWarnedMax = false;
+	m_iNullIds = false;
+	m_iMaxIds = false;
 
 	// run pre-queries
 	ARRAY_FOREACH ( i, m_tParams.m_dQueryPre )
@@ -17031,6 +17035,15 @@ bool CSphSource_SQL::IterateHitsStart ( CSphString & sError )
 
 void CSphSource_SQL::Disconnect ()
 {
+	if ( m_iNullIds )
+		sphWarn ( "source %s: skipped %d document(s) with zero/NULL ids", m_tSchema.m_sName.cstr(), m_iNullIds );
+
+	if ( m_iMaxIds )
+		sphWarn ( "source %s: skipped %d document(s) with DOCID_MAX ids", m_tSchema.m_sName.cstr(), m_iMaxIds );
+
+	m_iNullIds = 0;
+	m_iMaxIds = 0;
+
 	if ( m_bSqlConnected )
 		SqlDisconnect ();
 	m_bSqlConnected = false;

@@ -1655,7 +1655,11 @@ static int CopyPackedString ( const BYTE * pSource, CSphTightVector<BYTE> & dDes
 	return iOff;
 }
 
+#ifndef NDEBUG
 static void DoFixupStrAttr ( const BYTE * pStrBase, int iOffMax, const CSphSchema & tSchema, CSphRowitem * pRow, CSphWriter & tWriter )
+#else
+static void DoFixupStrAttr ( const BYTE * pStrBase, int , const CSphSchema & tSchema, CSphRowitem * pRow, CSphWriter & tWriter )
+#endif
 {
 	// store string\mva attr for this row
 	DWORD * pAttr = DOCINFO2ATTRS ( pRow );
@@ -1685,7 +1689,11 @@ static void DoFixupStrAttr ( const BYTE * pStrBase, int iOffMax, const CSphSchem
 	}
 }
 
+#ifndef NDEBUG
 void DoFixupStrAttr ( const BYTE * pStrBase, int iOffMax, const CSphSchema & tSchema, CSphRowitem * pRow, CSphTightVector<BYTE> & dStrings )
+#else
+void DoFixupStrAttr ( const BYTE * pStrBase, int , const CSphSchema & tSchema, CSphRowitem * pRow, CSphTightVector<BYTE> & dStrings )
+#endif
 {
 	// store string\mva attr for this row
 	DWORD * pAttr = DOCINFO2ATTRS(pRow);
@@ -1978,7 +1986,7 @@ void RtIndex_t::CommitReplayable ()
 				bKilled = true;
 				SphAttr_t uRef = uDocid;
 				for ( int k=j+1; k<m_pDiskChunks.GetLength(); k++ )
-					if ( sphBinarySearch ( m_pDiskChunks[k]->GetKillList(), m_pDiskChunks[k]->GetKillList() + m_pDiskChunks[j]->GetKillListSize(), uRef ) )
+					if ( sphBinarySearch ( m_pDiskChunks[k]->GetKillList(), m_pDiskChunks[k]->GetKillList() + m_pDiskChunks[k]->GetKillListSize(), uRef ) )
 				{
 					bKilled = false;
 					break;
@@ -3130,7 +3138,11 @@ static void AddKillListFilter ( CSphVector<CSphFilterSettings> * pExtra, const S
 // FIXME? missing enable_star, legacy match modes support
 // FIXME? any chance to factor out common backend agnostic code?
 // FIXME? do we need to support pExtraFilters?
+#ifndef NDEBUG
 bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> *, int iTag ) const
+#else
+bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> *, int ) const
+#endif
 {
 	// FIXME! too early (how low can you go?)
 	m_tRwlock.ReadLock ();

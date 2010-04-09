@@ -405,10 +405,9 @@ class MemCategoryStack_t // NOLINT
 
 public:
 
-	/// ctor
-	MemCategoryStack_t ()
-		: m_iDepth ( 0 )
+	void Reset ()
 	{
+		m_iDepth = 0;
 		m_dStack[0] = Memory::SPH_MEM_CORE;
 	}
 
@@ -464,7 +463,7 @@ void sphMemStatThdCleanup ( void * pArg )
 void sphMemStatThdInit ()
 {
 	MemCategoryStack_t * pTLS = (MemCategoryStack_t *)sphDebugNew ( sizeof ( MemCategoryStack_t ) );
-	pTLS->MemCategoryStack_t::MemCategoryStack_t();
+	pTLS->Reset();
 
 	Verify ( sphThreadSet ( g_tTLSMemCategory, pTLS ) );
 	sphThreadOnExit ( sphMemStatThdCleanup, pTLS );

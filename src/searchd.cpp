@@ -1162,6 +1162,11 @@ void Shutdown ()
 		::unlink ( g_sPidFile );
 	}
 
+#if SPH_ALLOCS_PROFILER
+	if ( g_bHeadDaemon )
+		sphMemStatDone();
+#endif
+
 	if ( g_bHeadDaemon )
 		sphInfo ( "shutdown complete" );
 }
@@ -5410,6 +5415,8 @@ void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int 
 
 void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq )
 {
+	MEMORY ( SPH_MEM_SEARCH_NONSQL );
+
 	if ( !CheckCommandVersion ( iVer, VER_COMMAND_SEARCH, tReq ) )
 		return;
 
@@ -5801,6 +5808,8 @@ SqlStmt_e ParseSqlQuery ( const CSphString & sQuery, SqlStmt_t * pStmt, CSphStri
 
 void HandleCommandQuery ( int iSock, int iVer, InputBuffer_c & tReq )
 {
+	MEMORY ( SPH_MEM_QUERY_NONSQL );
+
 	if ( !CheckCommandVersion ( iVer, VER_COMMAND_QUERY, tReq ) )
 		return;
 
@@ -6525,6 +6534,8 @@ void HandleCommandFlush ( int iSock, int iVer, InputBuffer_c & tReq )
 
 void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD )
 {
+	MEMORY ( SPH_MEM_HANDLE_NONSQL );
+
 	bool bPersist = false;
 	int iTimeout = g_iReadTimeout;
 	NetInputBuffer_c tBuf ( iSock );
@@ -6822,6 +6833,8 @@ bool operator < ( const CSphString & a, const CSphString & b )
 
 void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE uPacketID, bool bReplace, bool bCommit )
 {
+	MEMORY ( SPH_MEM_INSERT_SQL );
+
 	CSphString sError;
 
 	// get that index
@@ -7051,6 +7064,8 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 
 void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 {
+	MEMORY ( SPH_MEM_HANDLE_SQL );
+
 	// handshake
 	char sHandshake[] =
 		"\x00\x00\x00" // packet length
@@ -7137,6 +7152,8 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 		}
 		case STMT_SELECT:
 		{
+			MEMORY ( SPH_MEM_SELECT_SQL );
+
 			CheckQuery ( tHandler.m_dQueries[0], sError );
 			if ( !sError.IsEmpty() )
 			{
@@ -7373,6 +7390,8 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 		}
 		case STMT_DELETE:
 		{
+			MEMORY ( SPH_MEM_DELETE_SQL );
+
 			if ( !g_hIndexes ( tStmt.m_sDeleteIndex ) )
 			{
 				sError.SetSprintf ( "no such index '%s'", tStmt.m_sDeleteIndex.cstr() );
@@ -7404,6 +7423,8 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 		}
 		case STMT_SET:
 			{
+				MEMORY ( SPH_MEM_COMMIT_SET_SQL );
+
 				tStmt.m_sSetName.ToLower();
 				if ( tStmt.m_sSetName=="autocommit" )
 				{
@@ -7429,6 +7450,8 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 			}
 		case STMT_STARTTRANSACTION:
 			{
+				MEMORY ( SPH_MEM_COMMIT_START_T_SQL );
+
 				bInTransaction = true;
 				ISphRtIndex * pIndex = sphGetCurrentIndexRT();
 				if ( pIndex )
@@ -7439,6 +7462,8 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 		case STMT_COMMIT:
 		case STMT_ROLLBACK:
 			{
+				MEMORY ( SPH_MEM_COMMIT_SQL );
+
 				bInTransaction = false;
 				ISphRtIndex * pIndex = sphGetCurrentIndexRT();
 				if ( pIndex )
@@ -7759,6 +7784,7 @@ int PipeAndFork ( bool bFatal, int iHandler )
 
 #endif // !USE_WINDOWS
 
+#pragma warning(disable:4127) // conditional expr is const for MSVC
 
 /// check and report if there were any leaks since last call
 void CheckLeaks ()
@@ -7767,7 +7793,7 @@ void CheckLeaks ()
 	static int iHeadAllocs = sphAllocsCount ();
 	static int iHeadCheckpoint = sphAllocsLastID ();
 
-	if ( iHeadAllocs!=sphAllocsCount() )
+	if ( g_dThd.GetLength()==0 && iHeadAllocs!=sphAllocsCount() )
 	{
 		lseek ( g_iLogFile, 0, SEEK_END );
 		sphAllocsDump ( g_iLogFile, iHeadCheckpoint );
@@ -7776,8 +7802,27 @@ void CheckLeaks ()
 		iHeadCheckpoint = sphAllocsLastID ();
 	}
 #endif
+
+#if SPH_ALLOCS_PROFILER
+	const int iAllocLogPeriod = 60 * 1000000;
+	static int64_t tmLastLog = -iAllocLogPeriod*10;
+
+	const int iAllocCount = sphAllocsCount();
+	const int iMemTotal = sphAllocBytes();
+
+	if ( iAllocLogPeriod>0 && tmLastLog+iAllocLogPeriod<sphMicroTimer() )
+	{
+		tmLastLog = sphMicroTimer ();
+		const int iThdsCount = g_dThd.GetLength ();
+		const int iMB = 1024*1024;
+		sphInfo ( "--- allocs-count=%d, mem-total=%d.%dMb, active-threads=%d", iAllocCount, iMemTotal/iMB, iMemTotal%iMB, iThdsCount );
+		sphMemStatDump();
+		sphLog ( LOG_INFO, NULL, NULL );
+	}
+#endif
 }
 
+#pragma warning(default:4127) // conditional expr is const for MSVC
 
 bool CheckIndex ( const CSphIndex * pIndex, CSphString & sError )
 {
@@ -9842,6 +9887,10 @@ void FailClient ( int iSock, SearchdStatus_e eStatus, const char * sMessage )
 
 void HandlerThread ( void * pArg )
 {
+#if SPH_ALLOCS_PROFILER
+	sphMemStatThdInit ();
+#endif
+
 	// handle that client
 	ThdDesc_t * pThd = (ThdDesc_t*) pArg;
 	HandleClient ( pThd->m_eProto, pThd->m_iClientSock, pThd->m_sClientName.cstr(), -1 );
@@ -9870,8 +9919,7 @@ void HandlerThread ( void * pArg )
 void TickHead ( CSphProcessSharedMutex * pAcceptMutex )
 {
 	CheckSignals ();
-	if ( g_dThd.GetLength ()==0 ) // checking if no running threads
-		CheckLeaks ();
+	CheckLeaks ();
 	CheckPipes ();
 	CheckDelete ();
 	CheckRotate ();
@@ -10000,6 +10048,10 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	if ( !g_bService )
 		fprintf ( stdout, SPHINX_BANNER );
+
+#if SPH_ALLOCS_PROFILER
+	sphMemStatInit();
+#endif
 
 	//////////////////////
 	// parse command line
@@ -10703,7 +10755,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			sphDie ( "failed to create rotation thread" );
 
 		// reserving max to keep memory consumption constant between frames
-		g_dThd.Reserve ( g_iMaxChildren );
+		g_dThd.Reserve ( g_iMaxChildren*2 );
 	}
 
 	// prepare data and replay last binlog

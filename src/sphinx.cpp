@@ -12092,6 +12092,8 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 
 bool CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning )
 {
+	MEMORY ( SPH_MEM_IDX_DISK );
+
 	// reset
 	Dealloc ();
 
@@ -12384,6 +12386,8 @@ template < typename T > bool CSphIndex_VLN::PrereadSharedBuffer ( CSphSharedBuff
 
 bool CSphIndex_VLN::Preread ()
 {
+	MEMORY ( SPH_MEM_IDX_DISK );
+
 	sphLogDebug ( "CSphIndex_VLN::Preread invoked" );
 	if ( !m_bPreallocated )
 	{
@@ -13126,6 +13130,8 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 {
 	assert ( pQuery );
 
+	MEMORY ( SPH_MEM_IDX_DISK_MULTY_QUERY );
+
 	// to avoid the checking of a ppSorters's element for NULL on every next step, just filter out all nulls right here
 	CSphVector<ISphMatchSorter*> dSorters;
 	dSorters.Reserve ( iSorters );
@@ -13189,6 +13195,8 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 	// ensure we have multiple queries
 	if ( iQueries==1 )
 		return MultiQuery ( pQueries, ppResults[0], 1, ppSorters, pExtraFilters, iTag );
+
+	MEMORY ( SPH_MEM_IDX_DISK_MULTY_QUERY_EX );
 
 	assert ( pQueries );
 	assert ( ppResults );
@@ -16293,7 +16301,7 @@ bool CSphSource_Document::BuildHits ( BYTE ** dFields, int iFieldIndex, int iSta
 				return false;
 			else
 			{
-				iFieldBytes = tFileSource.GetSize();
+				iFieldBytes = (int)tFileSource.GetSize();
 
 				if ( iFieldBytes > m_iMaxFileBufferSize )
 				{

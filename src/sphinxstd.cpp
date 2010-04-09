@@ -14,6 +14,7 @@
 //
 
 #include "sphinx.h"
+#include "sphinxint.h"
 
 #if !USE_WINDOWS
 #include <sys/time.h> // for gettimeofday
@@ -298,11 +299,32 @@ static int				g_iTotalAllocs	= 0;
 static int				g_iPeakAllocs	= 0;
 static int				g_iPeakBytes	= 0;
 
+struct MemCategorized_t
+{
+	int m_iSize;
+	int m_iCount;
+
+	MemCategorized_t()
+		: m_iSize ( 0 )
+		, m_iCount ( 0 )
+	{
+	}
+};
+
+static MemCategorized_t g_dMemCategoryStat[Memory::SPH_MEM_TOTAL];
+static Memory::Category_e sphMemStatGet ();
+
+//////////////////////////////////////////////////////////////////////////////
+// ALLOCACTIONS COUNT/SIZE PROFILER
+
 void * sphDebugNew ( size_t iSize )
 {
-	BYTE * pBlock = (BYTE*) ::malloc ( iSize+sizeof(size_t) );
+	BYTE * pBlock = (BYTE*) ::malloc ( iSize+sizeof(size_t)*2 );
 	if ( !pBlock )
 		sphDie ( "out of memory (unable to allocate %"PRIu64" bytes)", (uint64_t)iSize ); // FIXME! this may fail with malloc error too
+
+	const int iMemType = sphMemStatGet();
+	assert ( iMemType>=0 && iMemType<Memory::SPH_MEM_TOTAL );
 
 	g_tAllocsMutex.Lock ();
 	g_iCurAllocs++;
@@ -310,10 +332,17 @@ void * sphDebugNew ( size_t iSize )
 	g_iTotalAllocs++;
 	g_iPeakAllocs = Max ( g_iCurAllocs, g_iPeakAllocs );
 	g_iPeakBytes = Max ( g_iCurBytes, g_iPeakBytes );
+
+	g_dMemCategoryStat[iMemType].m_iSize += (int)iSize;
+	g_dMemCategoryStat[iMemType].m_iCount++;
+
 	g_tAllocsMutex.Unlock ();
 
-	*(size_t*) pBlock = iSize;
-	return pBlock + sizeof(size_t);
+	size_t * pData = (size_t *)pBlock;
+	pData[0] = iSize;
+	pData[1] = iMemType;
+
+	return pBlock + sizeof(size_t)*2;
 }
 
 void sphDebugDelete ( void * pPtr )
@@ -322,11 +351,19 @@ void sphDebugDelete ( void * pPtr )
 		return;
 
 	size_t * pBlock = (size_t*) pPtr;
-	pBlock--;
+	pBlock -= 2;
+
+	const int iSize = pBlock[0];
+	const int iMemType = pBlock[1];
+	assert ( iMemType>=0 && iMemType<Memory::SPH_MEM_TOTAL );
 
 	g_tAllocsMutex.Lock ();
 	g_iCurAllocs--;
-	g_iCurBytes -= *pBlock;
+	g_iCurBytes -= iSize;
+
+	g_dMemCategoryStat[iMemType].m_iSize -= iSize;
+	g_dMemCategoryStat[iMemType].m_iCount--;
+
 	g_tAllocsMutex.Unlock ();
 
 	::free ( pBlock );
@@ -350,6 +387,138 @@ void * operator new ( size_t iSize, const char *, int )		{ return sphDebugNew ( 
 void * operator new [] ( size_t iSize, const char *, int )	{ return sphDebugNew ( iSize ); }
 void operator delete ( void * pPtr )						{ sphDebugDelete ( pPtr ); }
 void operator delete [] ( void * pPtr )						{ sphDebugDelete ( pPtr ); }
+
+
+//////////////////////////////////////////////////////////////////////////////
+// MEMORY STATISTICS
+
+/// TLS mem category (we keep Memory category stack here)
+SphThreadKey_t g_tTLSMemCategory;
+
+STATIC_ASSERT ( Memory::SPH_MEM_TOTAL<255, MEMORY_CATEGORY_EXCEED_LIMIT );
+
+class MemCategoryStack_t // NOLINT
+{
+#define MEM_STACK_MAX_DEPHT 1024
+	BYTE m_dStack[MEM_STACK_MAX_DEPHT];
+	int m_iDepth;
+
+public:
+
+	/// ctor
+	MemCategoryStack_t ()
+		: m_iDepth ( 0 )
+	{
+		m_dStack[0] = Memory::SPH_MEM_CORE;
+	}
+
+	void Push ( Memory::Category_e eCategory )
+	{
+		assert ( eCategory>=0 && eCategory<Memory::SPH_MEM_TOTAL );
+		assert ( m_iDepth+1<MEM_STACK_MAX_DEPHT );
+		m_dStack[++m_iDepth] = (BYTE)eCategory;
+	}
+
+#ifndef NDEBUG
+	void Pop ( Memory::Category_e eCategory )
+	{
+		assert ( eCategory>=0 && eCategory<Memory::SPH_MEM_TOTAL );
+#else
+	void Pop ( Memory::Category_e )
+	{
+#endif
+
+		assert ( m_iDepth-1>=0 );
+		assert ( m_dStack[m_iDepth]==eCategory );
+		m_iDepth--;
+	}
+
+	Memory::Category_e Top () const
+	{
+		assert ( m_iDepth>= 0 && m_iDepth<MEM_STACK_MAX_DEPHT );
+		assert ( m_dStack[m_iDepth]>=0 && m_dStack[m_iDepth]<Memory::SPH_MEM_TOTAL );
+		return Memory::Category_e ( m_dStack[m_iDepth] );
+	}
+};
+
+void sphMemStatInit ()
+{
+	Verify ( sphThreadKeyCreate ( &g_tTLSMemCategory ) );
+
+	// main thread statictic creation
+	sphMemStatThdInit();
+}
+
+void sphMemStatDone ()
+{
+	sphThreadKeyDelete ( g_tTLSMemCategory );
+}
+
+void sphMemStatThdCleanup ( void * pArg )
+{
+	MemCategoryStack_t * pTLS = (MemCategoryStack_t *)pArg;
+	sphDebugDelete ( pTLS );
+}
+
+// memory statistics should be created first \ deleted last
+void sphMemStatThdInit ()
+{
+	MemCategoryStack_t * pTLS = (MemCategoryStack_t *)sphDebugNew ( sizeof ( MemCategoryStack_t ) );
+	pTLS->MemCategoryStack_t::MemCategoryStack_t();
+
+	Verify ( sphThreadSet ( g_tTLSMemCategory, pTLS ) );
+	sphThreadOnExit ( sphMemStatThdCleanup, pTLS );
+}
+
+void sphMemStatPush ( Memory::Category_e eCategory )
+{
+	MemCategoryStack_t * pTLS = (MemCategoryStack_t*) sphThreadGet ( g_tTLSMemCategory );
+	if ( pTLS )
+		pTLS->Push ( eCategory );
+};
+
+void sphMemStatPop ( Memory::Category_e eCategory )
+{
+	MemCategoryStack_t * pTLS = (MemCategoryStack_t*) sphThreadGet ( g_tTLSMemCategory );
+	if ( pTLS )
+		pTLS->Pop ( eCategory );
+};
+
+static Memory::Category_e sphMemStatGet ()
+{
+	MemCategoryStack_t * pTLS = (MemCategoryStack_t*) sphThreadGet ( g_tTLSMemCategory );
+	return pTLS ? pTLS->Top() : Memory::SPH_MEM_CORE;
+}
+
+static const char* g_dMemCategoryName[] = {
+	"core"
+	, "index_disk", "index_rt", "index_rt_accum"
+	, "binlog"
+	, "hnd_disk", "hnd_sql"
+	, "search_disk", "query_disk", "insert_sql", "select_sql", "delete_sql", "commit_set_sql", "commit_start_t_sql", "commit_sql"
+	, "mquery_disk", "mqueryex_disk", "mquery_rt"
+	};
+STATIC_ASSERT ( sizeof(g_dMemCategoryName)/sizeof(g_dMemCategoryName[0])==Memory::SPH_MEM_TOTAL, MEM_STAT_NAME_MISMATCH );
+
+extern void sphInfo ( const char * sFmt, ... );
+
+void sphMemStatDump ()
+{
+	const int iMB = 1024*1024;
+	int iSize = 0;
+	int iCount = 0;
+	for ( int i=0; i<Memory::SPH_MEM_TOTAL; i++ )
+	{
+		iSize += g_dMemCategoryStat[i].m_iSize;
+		iCount += g_dMemCategoryStat[i].m_iCount;
+	}
+	sphInfo ( "%-24s allocs-count=%d, mem-total=%d.%dMb", "(total)", iCount, iSize/iMB, iSize%iMB );
+
+	for ( int i=0; i<Memory::SPH_MEM_TOTAL; i++ )
+		if ( g_dMemCategoryStat[i].m_iCount>0 )
+			sphInfo ( "%-24s allocs-count=%d, mem-total=%d.%dMb"
+				, g_dMemCategoryName[i], g_dMemCategoryStat[i].m_iCount, g_dMemCategoryStat[i].m_iSize/iMB, g_dMemCategoryStat[i].m_iSize%iMB );
+}
 
 //////////////////////////////////////////////////////////////////////////////
 // PRODUCTION MEMORY MANAGER

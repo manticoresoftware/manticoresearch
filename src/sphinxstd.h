@@ -190,6 +190,12 @@ void			sphAllocsStats ();
 /// check all exitsing allocs; raises assertion failure in cases of errors
 void			sphAllocsCheck ();
 
+void			sphMemStatInit ();
+void			sphMemStatDone ();
+void			sphMemStatDump ();
+
+void			sphMemStatThdInit ();
+
 #undef new
 #define new		new(__FILE__,__LINE__)
 

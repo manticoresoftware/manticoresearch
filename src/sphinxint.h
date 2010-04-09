@@ -221,6 +221,76 @@ bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const char 
 
 void SafeClose ( int & iFD );
 
+//////////////////////////////////////////////////////////////////////////
+
+/// memory tracker
+
+
+namespace Memory
+{
+	enum Category_e
+	{
+		SPH_MEM_CORE,
+
+		SPH_MEM_IDX_DISK,
+		SPH_MEM_IDX_RT,
+		SPH_MEM_IDX_RT_ACCUM,
+
+		SPH_MEM_BINLOG,
+
+		SPH_MEM_HANDLE_NONSQL,
+		SPH_MEM_HANDLE_SQL,
+
+		SPH_MEM_SEARCH_NONSQL,
+		SPH_MEM_QUERY_NONSQL,
+		SPH_MEM_INSERT_SQL,
+		SPH_MEM_SELECT_SQL,
+		SPH_MEM_DELETE_SQL,
+		SPH_MEM_COMMIT_SET_SQL,
+		SPH_MEM_COMMIT_START_T_SQL,
+		SPH_MEM_COMMIT_SQL,
+
+		SPH_MEM_IDX_DISK_MULTY_QUERY,
+		SPH_MEM_IDX_DISK_MULTY_QUERY_EX,
+		SPH_MEM_IDX_RT_MULTY_QUERY,
+
+		SPH_MEM_TOTAL
+	};
+}
+
+#if SPH_ALLOCS_PROFILER
+
+void sphMemStatPush ( Memory::Category_e eCategory );
+void sphMemStatPop ( Memory::Category_e eCategory );
+
+// memory tracker
+struct MemTracker_c : ISphNoncopyable
+{
+	const Memory::Category_e m_eCategory; ///< category
+
+	/// ctor
+	explicit MemTracker_c ( Memory::Category_e eCategory )
+		: m_eCategory ( eCategory )
+	{
+		sphMemStatPush ( m_eCategory );
+	}
+
+	/// dtor
+	~MemTracker_c ()
+	{
+		sphMemStatPop ( m_eCategory );
+	}
+};
+
+#define MEMORY(name) MemTracker_c tracker_##__LINE__(Memory::name);
+
+#else // SPH_ALLOCS_PROFILER 0
+
+#define MEMORY(name)
+
+#endif // if SPH_ALLOCS_PROFILER
+
+
 #endif // _sphinxint_
 
 //

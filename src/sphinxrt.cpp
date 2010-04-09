@@ -2867,6 +2867,11 @@ public:
 		m_tMatch.Reset ( 0 );
 	}
 
+	virtual ~RtQword_t ()
+	{
+		SafeDelete ( m_pDocReader );
+	}
+
 	virtual const CSphMatch & GetNextDoc ( DWORD * )
 	{
 		for ( ;; )

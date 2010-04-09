@@ -211,6 +211,8 @@ XQParser_t::XQParser_t ()
 /// cleanup spawned nodes (for bailing out on errors)
 void XQParser_t::Cleanup ()
 {
+	m_dSpawned.Uniq(); // FIXME! should eliminate this by testing
+
 	ARRAY_FOREACH ( i, m_dSpawned )
 	{
 		m_dSpawned[i]->m_dChildren.Reset ();
@@ -630,6 +632,7 @@ XQNode_t * XQParser_t::AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pR
 	{
 		XQNode_t * pNode = new XQNode_t();
 		pNode->SetOp ( SPH_QUERY_NOT, pLeft );
+		m_dSpawned.Add ( pNode );
 		return pNode;
 	}
 
@@ -655,6 +658,7 @@ XQNode_t * XQParser_t::AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pR
 	{
 		XQNode_t * pNode = new XQNode_t();
 		pNode->SetOp ( eOp, pLeft, pRight );
+		m_dSpawned.Add ( pNode );
 		pResult = pNode;
 	}
 
@@ -883,6 +887,7 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const ISphTok
 
 	if ( m_pRoot && m_pRoot->GetOp()==SPH_QUERY_NOT )
 	{
+		Cleanup ();
 		m_pParsed->m_sParseError.SetSprintf ( "query is non-computable (single NOT operator)" );
 		return false;
 	}

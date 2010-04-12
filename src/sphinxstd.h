@@ -176,7 +176,7 @@ void *			operator new [] ( size_t iSize, const char * sFile, int iLine );
 int				sphAllocsCount ();
 
 /// total allocated bytes
-int				sphAllocBytes ();
+int64_t			sphAllocBytes ();
 
 /// get last alloc id
 int				sphAllocsLastID ();

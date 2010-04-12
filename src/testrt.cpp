@@ -222,11 +222,11 @@ int main ()
 	int64_t tmShutdown = sphMicroTimer();
 
 #if SPH_ALLOCS_PROFILER
-	printf ( "pre-shutdown allocs=%d, bytes=%d\n", sphAllocsCount(), sphAllocBytes() );
+	printf ( "pre-shutdown allocs=%d, bytes="INT64_FMT"\n", sphAllocsCount(), sphAllocBytes() );
 #endif
 	SafeDelete ( pIndex );
 #if SPH_ALLOCS_PROFILER
-	printf ( "post-shutdown allocs=%d, bytes=%d\n", sphAllocsCount(), sphAllocBytes() );
+	printf ( "post-shutdown allocs=%d, bytes="INT64_FMT"\n", sphAllocsCount(), sphAllocBytes() );
 #endif
 
 	int64_t tmEnd = sphMicroTimer();

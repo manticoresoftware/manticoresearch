@@ -82,10 +82,10 @@ static CSphStaticMutex	g_tAllocsMutex;
 static int				g_iCurAllocs	= 0;
 static int				g_iAllocsId		= 0;
 static CSphMemHeader *	g_pAllocs		= NULL;
-static int				g_iCurBytes		= 0;
+static int64_t			g_iCurBytes		= 0;
 static int				g_iTotalAllocs	= 0;
 static int				g_iPeakAllocs	= 0;
-static int				g_iPeakBytes	= 0;
+static int64_t			g_iPeakBytes	= 0;
 
 void * sphDebugNew ( size_t iSize, const char * sFile, int iLine, bool bArray )
 {
@@ -191,7 +191,7 @@ void sphDebugDelete ( void * pPtr, bool bArray )
 }
 
 
-int	sphAllocBytes ()
+int64_t	sphAllocBytes ()
 {
 	return g_iCurBytes;
 }
@@ -235,7 +235,7 @@ void sphAllocsDump ( int iFile, int iSinceID )
 
 void sphAllocsStats ()
 {
-	fprintf ( stdout, "--- total-allocs=%d, peak-allocs=%d, peak-bytes=%d\n",
+	fprintf ( stdout, "--- total-allocs=%d, peak-allocs=%d, peak-bytes="INT64_FMT"\n",
 		g_iTotalAllocs, g_iPeakAllocs, g_iPeakBytes );
 }
 
@@ -294,15 +294,15 @@ void operator delete [] ( void * pPtr )
 
 static CSphStaticMutex	g_tAllocsMutex;
 static int				g_iCurAllocs	= 0;
-static int				g_iCurBytes		= 0;
+static int64_t			g_iCurBytes		= 0;
 static int				g_iTotalAllocs	= 0;
 static int				g_iPeakAllocs	= 0;
-static int				g_iPeakBytes	= 0;
+static int64_t			g_iPeakBytes	= 0;
 
 struct MemCategorized_t
 {
-	int m_iSize;
-	int m_iCount;
+	int64_t	m_iSize;
+	int		m_iCount;
 
 	MemCategorized_t()
 		: m_iSize ( 0 )
@@ -328,7 +328,7 @@ void * sphDebugNew ( size_t iSize )
 
 	g_tAllocsMutex.Lock ();
 	g_iCurAllocs++;
-	g_iCurBytes += (int)iSize;
+	g_iCurBytes += iSize;
 	g_iTotalAllocs++;
 	g_iPeakAllocs = Max ( g_iCurAllocs, g_iPeakAllocs );
 	g_iPeakBytes = Max ( g_iCurBytes, g_iPeakBytes );
@@ -372,12 +372,12 @@ void sphDebugDelete ( void * pPtr )
 void sphAllocsStats ()
 {
 	g_tAllocsMutex.Lock ();
-	fprintf ( stdout, "--- total-allocs=%d, peak-allocs=%d, peak-bytes=%d\n",
+	fprintf ( stdout, "--- total-allocs=%d, peak-allocs=%d, peak-bytes="INT64_FMT"\n",
 		g_iTotalAllocs, g_iPeakAllocs, g_iPeakBytes );
 	g_tAllocsMutex.Unlock ();
 }
 
-int	sphAllocBytes ()			{ return g_iCurBytes; }
+int64_t sphAllocBytes ()		{ return g_iCurBytes; }
 int sphAllocsCount ()			{ return g_iCurAllocs; }
 int sphAllocsLastID ()			{ return -1; }
 void sphAllocsDump ( int, int )	{}
@@ -503,19 +503,19 @@ extern void sphInfo ( const char * sFmt, ... );
 
 void sphMemStatDump ()
 {
-	const int iMB = 1024*1024;
-	int iSize = 0;
+	const int64_t iMB = 1024*1024;
+	int64_t	iSize = 0;
 	int iCount = 0;
 	for ( int i=0; i<Memory::SPH_MEM_TOTAL; i++ )
 	{
 		iSize += g_dMemCategoryStat[i].m_iSize;
 		iCount += g_dMemCategoryStat[i].m_iCount;
 	}
-	sphInfo ( "%-24s allocs-count=%d, mem-total=%d.%dMb", "(total)", iCount, iSize/iMB, iSize%iMB );
+	sphInfo ( "%-24s allocs-count=%d, mem-total="INT64_FMT"."INT64_FMT"Mb", "(total)", iCount, iSize/iMB, iSize%iMB );
 
 	for ( int i=0; i<Memory::SPH_MEM_TOTAL; i++ )
 		if ( g_dMemCategoryStat[i].m_iCount>0 )
-			sphInfo ( "%-24s allocs-count=%d, mem-total=%d.%dMb"
+			sphInfo ( "%-24s allocs-count=%d, mem-total="INT64_FMT"."INT64_FMT"Mb"
 				, g_dMemCategoryName[i], g_dMemCategoryStat[i].m_iCount, g_dMemCategoryStat[i].m_iSize/iMB, g_dMemCategoryStat[i].m_iSize%iMB );
 }
 

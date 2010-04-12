@@ -4780,7 +4780,6 @@ void sphRTInit ( const CSphConfigSection & hSearchd )
 	MEMORY ( SPH_MEM_BINLOG );
 
 	g_bRTChangesAllowed = false;
-	sphThreadInit();
 	Verify ( RtSegment_t::m_tSegmentSeq.Init() );
 	Verify ( sphThreadKeyCreate ( &g_tTlsAccumKey ) );
 	g_pBinlog = new RtBinlog_c();

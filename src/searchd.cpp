@@ -10049,6 +10049,9 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( !g_bService )
 		fprintf ( stdout, SPHINX_BANNER );
 
+	// threads should be initialized before memory tracker
+	sphThreadInit();
+
 #if SPH_ALLOCS_PROFILER
 	sphMemStatInit();
 #endif

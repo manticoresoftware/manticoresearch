@@ -327,13 +327,14 @@ void * sphDebugNew ( size_t iSize )
 	assert ( iMemType>=0 && iMemType<Memory::SPH_MEM_TOTAL );
 
 	g_tAllocsMutex.Lock ();
+
 	g_iCurAllocs++;
 	g_iCurBytes += iSize;
 	g_iTotalAllocs++;
 	g_iPeakAllocs = Max ( g_iCurAllocs, g_iPeakAllocs );
 	g_iPeakBytes = Max ( g_iCurBytes, g_iPeakBytes );
 
-	g_dMemCategoryStat[iMemType].m_iSize += (int)iSize;
+	g_dMemCategoryStat[iMemType].m_iSize += iSize;
 	g_dMemCategoryStat[iMemType].m_iCount++;
 
 	g_tAllocsMutex.Unlock ();
@@ -358,6 +359,7 @@ void sphDebugDelete ( void * pPtr )
 	assert ( iMemType>=0 && iMemType<Memory::SPH_MEM_TOTAL );
 
 	g_tAllocsMutex.Lock ();
+
 	g_iCurAllocs--;
 	g_iCurBytes -= iSize;
 
@@ -469,6 +471,35 @@ void sphMemStatThdInit ()
 	sphThreadOnExit ( sphMemStatThdCleanup, pTLS );
 }
 
+void sphMemStatMMapAdd ( int64_t iSize )
+{
+	g_tAllocsMutex.Lock ();
+
+	g_iCurAllocs++;
+	g_iCurBytes += iSize;
+	g_iTotalAllocs++;
+	g_iPeakAllocs = Max ( g_iCurAllocs, g_iPeakAllocs );
+	g_iPeakBytes = Max ( g_iCurBytes, g_iPeakBytes );
+
+	g_dMemCategoryStat[Memory::SPH_MEM_MMAPED].m_iSize += iSize;
+	g_dMemCategoryStat[Memory::SPH_MEM_MMAPED].m_iCount++;
+
+	g_tAllocsMutex.Unlock ();
+}
+
+void sphMemStatMMapDel ( int64_t iSize )
+{
+	g_tAllocsMutex.Lock ();
+
+	g_iCurAllocs--;
+	g_iCurBytes -= iSize;
+
+	g_dMemCategoryStat[Memory::SPH_MEM_MMAPED].m_iSize -= iSize;
+	g_dMemCategoryStat[Memory::SPH_MEM_MMAPED].m_iCount--;
+
+	g_tAllocsMutex.Unlock ();
+}
+
 void sphMemStatPush ( Memory::Category_e eCategory )
 {
 	MemCategoryStack_t * pTLS = (MemCategoryStack_t*) sphThreadGet ( g_tTLSMemCategory );
@@ -492,7 +523,7 @@ static Memory::Category_e sphMemStatGet ()
 static const char* g_dMemCategoryName[] = {
 	"core"
 	, "index_disk", "index_rt", "index_rt_accum"
-	, "binlog"
+	, "mmaped", "binlog"
 	, "hnd_disk", "hnd_sql"
 	, "search_disk", "query_disk", "insert_sql", "select_sql", "delete_sql", "commit_set_sql", "commit_start_t_sql", "commit_sql"
 	, "mquery_disk", "mqueryex_disk", "mquery_rt"
@@ -503,20 +534,20 @@ extern void sphInfo ( const char * sFmt, ... );
 
 void sphMemStatDump ()
 {
-	const int64_t iMB = 1024*1024;
-	int64_t	iSize = 0;
+	const float fMB = 1024.0f*1024.0f;
+	float fSize = 0;
 	int iCount = 0;
 	for ( int i=0; i<Memory::SPH_MEM_TOTAL; i++ )
 	{
-		iSize += g_dMemCategoryStat[i].m_iSize;
+		fSize += (float)g_dMemCategoryStat[i].m_iSize;
 		iCount += g_dMemCategoryStat[i].m_iCount;
 	}
-	sphInfo ( "%-24s allocs-count=%d, mem-total="INT64_FMT"."INT64_FMT"Mb", "(total)", iCount, iSize/iMB, iSize%iMB );
+	sphInfo ( "%-24s allocs-count=%d, mem-total=%.4f Mb", "(total)", iCount, fSize/fMB );
 
 	for ( int i=0; i<Memory::SPH_MEM_TOTAL; i++ )
 		if ( g_dMemCategoryStat[i].m_iCount>0 )
-			sphInfo ( "%-24s allocs-count=%d, mem-total="INT64_FMT"."INT64_FMT"Mb"
-				, g_dMemCategoryName[i], g_dMemCategoryStat[i].m_iCount, g_dMemCategoryStat[i].m_iSize/iMB, g_dMemCategoryStat[i].m_iSize%iMB );
+			sphInfo ( "%-24s allocs-count=%d, mem-total=%.4f Mb"
+				, g_dMemCategoryName[i], g_dMemCategoryStat[i].m_iCount, (float)g_dMemCategoryStat[i].m_iSize/fMB );
 }
 
 //////////////////////////////////////////////////////////////////////////////

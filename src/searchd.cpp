@@ -7808,14 +7808,14 @@ void CheckLeaks ()
 	static int64_t tmLastLog = -iAllocLogPeriod*10;
 
 	const int iAllocCount = sphAllocsCount();
-	const int64_t iMemTotal = sphAllocBytes();
+	const float fMemTotal = (float)sphAllocBytes();
 
 	if ( iAllocLogPeriod>0 && tmLastLog+iAllocLogPeriod<sphMicroTimer() )
 	{
 		tmLastLog = sphMicroTimer ();
 		const int iThdsCount = g_dThd.GetLength ();
-		const int64_t iMB = 1024*1024;
-		sphInfo ( "--- allocs-count=%d, mem-total="INT64_FMT"."INT64_FMT"Mb, active-threads=%d", iAllocCount, iMemTotal/iMB, iMemTotal%iMB, iThdsCount );
+		const float fMB = 1024.0f*1024.0f;
+		sphInfo ( "--- allocs-count=%d, mem-total=%.4f Mb, active-threads=%d", iAllocCount, fMemTotal/fMB, iThdsCount );
 		sphMemStatDump();
 		sphLog ( LOG_INFO, NULL, NULL );
 	}

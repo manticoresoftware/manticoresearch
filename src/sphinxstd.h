@@ -196,6 +196,9 @@ void			sphMemStatDump ();
 
 void			sphMemStatThdInit ();
 
+void			sphMemStatMMapAdd ( int64_t iSize );
+void			sphMemStatMMapDel ( int64_t iSize );
+
 #undef new
 #define new		new(__FILE__,__LINE__)
 
@@ -1666,6 +1669,11 @@ public:
 		if ( m_bMlock )
 			if ( -1==mlock ( m_pData, m_iLength ) )
 				sWarning.SetSprintf ( "mlock() failed: %s", strerror(errno) );
+
+#if SPH_ALLOCS_PROFILER
+		sphMemStatMMapAdd ( m_iLength );
+#endif
+
 #endif // USE_WINDOWS
 
 		assert ( m_pData );
@@ -1712,6 +1720,11 @@ public:
 			int iRes = munmap ( m_pData, m_iLength );
 			if ( iRes )
 				sphWarn ( "munmap() failed: %s", strerror(errno) );
+
+#if SPH_ALLOCS_PROFILER
+			sphMemStatMMapDel ( m_iLength );
+#endif
+
 		}
 #endif // USE_WINDOWS
 

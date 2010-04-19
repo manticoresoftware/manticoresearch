@@ -207,8 +207,8 @@ struct ThdDesc_t
 	CSphString		m_sClientName;
 };
 
-static CSphStaticMutex				g_tThdMutex;
-static CSphVector<ThdDesc_t*>	g_dThd;			///< existing threads tables
+static CSphStaticMutex			g_tThdMutex;
+static CSphVector<ThdDesc_t*>	g_dThd;			///< existing threads table
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -9902,6 +9902,10 @@ void HandlerThread ( void * pArg )
 		if ( g_dThd[i]==pThd )
 	{
 		g_dThd.RemoveFast(i);
+#if USE_WINDOWS
+		// FIXME? this is sort of automatic on UNIX (pthread_exit() gets implicitly called on return)
+		CloseHandle ( pThd->m_tThd );
+#endif
 		SafeDelete ( pThd );
 		break;
 	}
@@ -9911,6 +9915,10 @@ void HandlerThread ( void * pArg )
 	if ( pThd )
 	{
 		sphWarning ( "thread missing from thread table" );
+#if USE_WINDOWS
+		// FIXME? this is sort of automatic on UNIX (pthread_exit() gets implicitly called on return)
+		CloseHandle ( pThd->m_tThd );
+#endif
 		SafeDelete ( pThd );
 	}
 }

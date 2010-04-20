@@ -187,14 +187,10 @@ void			sphAllocsDump ( int iFile, int iSinceID );
 /// dump stats to stdout
 void			sphAllocsStats ();
 
-/// check all exitsing allocs; raises assertion failure in cases of errors
+/// check all existing allocs; raises assertion failure in cases of errors
 void			sphAllocsCheck ();
 
-void			sphMemStatInit ();
-void			sphMemStatDone ();
 void			sphMemStatDump ();
-
-void			sphMemStatThdInit ();
 
 void			sphMemStatMMapAdd ( int64_t iSize );
 void			sphMemStatMMapDel ( int64_t iSize );
@@ -1724,7 +1720,6 @@ public:
 #if SPH_ALLOCS_PROFILER
 			sphMemStatMMapDel ( m_iLength );
 #endif
-
 		}
 #endif // USE_WINDOWS
 
@@ -1801,10 +1796,13 @@ typedef pthread_key_t SphThreadKey_t;
 #endif
 
 /// my threading initialize routine
-void * sphThreadInit();
+void * sphThreadInit ( bool bDetached=false );
+
+/// my threading deinitialize routine
+void sphThreadDone();
 
 /// my create thread wrapper
-bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pArg );
+bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pArg, bool bDetached=false );
 
 /// my join thread wrapper
 bool sphThreadJoin ( SphThread_t * pThread );

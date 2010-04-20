@@ -258,6 +258,9 @@ void sphAllocsCheck ()
 	g_tAllocsMutex.Unlock();
 }
 
+void sphMemStatInit () {}
+void sphMemStatDone () {}
+
 //////////////////////////////////////////////////////////////////////////
 
 void * operator new ( size_t iSize, const char * sFile, int iLine )
@@ -299,6 +302,7 @@ static int				g_iTotalAllocs	= 0;
 static int				g_iPeakAllocs	= 0;
 static int64_t			g_iPeakBytes	= 0;
 
+// statictic's per memory category
 struct MemCategorized_t
 {
 	int64_t	m_iSize;
@@ -311,8 +315,10 @@ struct MemCategorized_t
 	}
 };
 
-static MemCategorized_t g_dMemCategoryStat[Memory::SPH_MEM_TOTAL];
 static Memory::Category_e sphMemStatGet ();
+
+// memory categories storage
+static MemCategorized_t g_dMemCategoryStat[Memory::SPH_MEM_TOTAL];
 
 //////////////////////////////////////////////////////////////////////////////
 // ALLOCACTIONS COUNT/SIZE PROFILER
@@ -394,11 +400,12 @@ void operator delete [] ( void * pPtr )						{ sphDebugDelete ( pPtr ); }
 //////////////////////////////////////////////////////////////////////////////
 // MEMORY STATISTICS
 
-/// TLS mem category (we keep Memory category stack here)
+/// TLS key of memory category stack
 SphThreadKey_t g_tTLSMemCategory;
 
 STATIC_ASSERT ( Memory::SPH_MEM_TOTAL<255, MEMORY_CATEGORY_EXCEED_LIMIT );
 
+// stack of memory categories as we move deeper and deeper
 class MemCategoryStack_t // NOLINT
 {
 #define MEM_STACK_MAX_DEPHT 1024
@@ -407,6 +414,7 @@ class MemCategoryStack_t // NOLINT
 
 public:
 
+	// ctor ( cross platform )
 	void Reset ()
 	{
 		m_iDepth = 0;
@@ -442,35 +450,45 @@ public:
 	}
 };
 
-void sphMemStatInit ()
-{
-	Verify ( sphThreadKeyCreate ( &g_tTLSMemCategory ) );
+static MemCategoryStack_t * g_pMainTLS = NULL; // category stack of main thread
 
-	// main thread statictic creation
-	sphMemStatThdInit();
-}
-
-void sphMemStatDone ()
-{
-	sphThreadKeyDelete ( g_tTLSMemCategory );
-}
-
-void sphMemStatThdCleanup ( void * pArg )
-{
-	MemCategoryStack_t * pTLS = (MemCategoryStack_t *)pArg;
-	sphDebugDelete ( pTLS );
-}
-
-// memory statistics should be created first \ deleted last
-void sphMemStatThdInit ()
+// memory statistic's per thread factory
+static MemCategoryStack_t * sphMemStatThdInit ()
 {
 	MemCategoryStack_t * pTLS = (MemCategoryStack_t *)sphDebugNew ( sizeof ( MemCategoryStack_t ) );
 	pTLS->Reset();
 
 	Verify ( sphThreadSet ( g_tTLSMemCategory, pTLS ) );
-	sphThreadOnExit ( sphMemStatThdCleanup, pTLS );
+	return pTLS;
 }
 
+// per thread cleanup of memory statistic's
+static void sphMemStatThdCleanup ( MemCategoryStack_t * pTLS )
+{
+	sphDebugDelete ( pTLS );
+}
+
+// init of memory statistic's data
+static void sphMemStatInit ()
+{
+	Verify ( sphThreadKeyCreate ( &g_tTLSMemCategory ) );
+
+	// main thread statistic's creation
+	assert ( g_pMainTLS==NULL );
+	g_pMainTLS = sphMemStatThdInit();
+	assert ( g_pMainTLS!=NULL );
+}
+
+// cleanup of memory statistic's data
+static void sphMemStatDone ()
+{
+	assert ( g_pMainTLS!=NULL );
+	sphMemStatThdCleanup ( g_pMainTLS );
+
+	sphThreadKeyDelete ( g_tTLSMemCategory );
+}
+
+// direct access for special category
 void sphMemStatMMapAdd ( int64_t iSize )
 {
 	g_tAllocsMutex.Lock ();
@@ -500,6 +518,7 @@ void sphMemStatMMapDel ( int64_t iSize )
 	g_tAllocsMutex.Unlock ();
 }
 
+// push new category on arrival
 void sphMemStatPush ( Memory::Category_e eCategory )
 {
 	MemCategoryStack_t * pTLS = (MemCategoryStack_t*) sphThreadGet ( g_tTLSMemCategory );
@@ -507,6 +526,7 @@ void sphMemStatPush ( Memory::Category_e eCategory )
 		pTLS->Push ( eCategory );
 };
 
+// restore last category
 void sphMemStatPop ( Memory::Category_e eCategory )
 {
 	MemCategoryStack_t * pTLS = (MemCategoryStack_t*) sphThreadGet ( g_tTLSMemCategory );
@@ -514,12 +534,14 @@ void sphMemStatPop ( Memory::Category_e eCategory )
 		pTLS->Pop ( eCategory );
 };
 
+// get current category
 static Memory::Category_e sphMemStatGet ()
 {
 	MemCategoryStack_t * pTLS = (MemCategoryStack_t*) sphThreadGet ( g_tTLSMemCategory );
 	return pTLS ? pTLS->Top() : Memory::SPH_MEM_CORE;
 }
 
+// human readable category names
 static const char* g_dMemCategoryName[] = {
 	"core"
 	, "index_disk", "index_rt", "index_rt_accum"
@@ -530,10 +552,11 @@ static const char* g_dMemCategoryName[] = {
 	};
 STATIC_ASSERT ( sizeof(g_dMemCategoryName)/sizeof(g_dMemCategoryName[0])==Memory::SPH_MEM_TOTAL, MEM_STAT_NAME_MISMATCH );
 
-extern void sphInfo ( const char * sFmt, ... );
-
+// output of memory statistic's
 void sphMemStatDump ()
 {
+extern void sphInfo ( const char * sFmt, ... );
+
 	const float fMB = 1024.0f*1024.0f;
 	float fSize = 0;
 	int iCount = 0;
@@ -765,6 +788,10 @@ SPH_THDFUNC sphThreadProcWrapper ( void * pArg )
 {
 	assert ( sphThreadGet ( g_tThreadCleanupKey )==NULL );
 
+#if SPH_ALLOCS_PROFILER
+	MemCategoryStack_t * pTLS = sphMemStatThdInit();
+#endif
+
 	ThreadCall_t * pCall = (ThreadCall_t*) pArg;
 	pCall->m_pCall ( pCall->m_pArg );
 	SafeDelete ( pCall );
@@ -778,39 +805,70 @@ SPH_THDFUNC sphThreadProcWrapper ( void * pArg )
 		SafeDelete ( pCall );
 	}
 
+#if SPH_ALLOCS_PROFILER
+	sphMemStatThdCleanup ( pTLS );
+#endif
+
 	return 0;
 }
 
-void * sphThreadInit()
+#if !USE_WINDOWS
+void * sphThreadInit ( bool bDetached )
+#else
+void * sphThreadInit ( bool )
+#endif
 {
 	static bool bInit = false;
 #if !USE_WINDOWS
-	static pthread_attr_t tAttr;
+	static pthread_attr_t tJoinableAttr;
+	static pthread_attr_t tDetachedAttr;
 #endif
 
 	if ( !bInit )
 	{
+#if SPH_DEBUG_LEAKS || SPH_ALLOCS_PROFILER
+		sphMemStatInit();
+#endif
+
 		// we're single-threaded yet, right?!
 		if ( !sphThreadKeyCreate ( &g_tThreadCleanupKey ) )
 			sphDie ( "FATAL: sphThreadKeyCreate() failed" );
 
 #if !USE_WINDOWS
-		if ( pthread_attr_init ( &tAttr ) )
-			sphDie ( "FATAL: pthread_attr_init() failed" );
+		if ( pthread_attr_init ( &tJoinableAttr ) )
+			sphDie ( "FATAL: pthread_attr_init( joinable ) failed" );
 
-		if ( pthread_attr_setstacksize ( &tAttr, PTHREAD_STACK_MIN + THREAD_STACK_SIZE ) )
-			sphDie ( "FATAL: pthread_attr_setstacksize() failed" );
+		if ( pthread_attr_init ( &tDetachedAttr ) )
+			sphDie ( "FATAL: pthread_attr_init( detached ) failed" );
+
+		if ( pthread_attr_setdetachstate ( &tDetachedAttr, PTHREAD_CREATE_DETACHED ) )
+			sphDie ( "FATAL: pthread_attr_setdetachstate( detached ) failed" );
+
+		if ( pthread_attr_setstacksize ( &tJoinableAttr, PTHREAD_STACK_MIN + THREAD_STACK_SIZE ) )
+			sphDie ( "FATAL: pthread_attr_setstacksize( joinable ) failed" );
+
+		if ( pthread_attr_setstacksize ( &tDetachedAttr, PTHREAD_STACK_MIN + THREAD_STACK_SIZE ) )
+			sphDie ( "FATAL: pthread_attr_setstacksize( detached ) failed" );
 #endif
 		bInit = true;
 	}
 #if !USE_WINDOWS
-	return &tAttr;
+	return bDetached ? &tDetachedAttr : &tJoinableAttr;
 #else
 	return NULL;
 #endif
 }
 
-bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pArg )
+
+void sphThreadDone()
+{
+#if SPH_DEBUG_LEAKS || SPH_ALLOCS_PROFILER
+	sphMemStatDone();
+#endif
+}
+
+
+bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pArg, bool bDetached )
 {
 	// we can not merely put this on current stack
 	// as it might get destroyed before wrapper sees it
@@ -821,12 +879,12 @@ bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pA
 
 	// create thread
 #if USE_WINDOWS
-	sphThreadInit();
+	sphThreadInit ( bDetached );
 	*pThread = CreateThread ( NULL, THREAD_STACK_SIZE, sphThreadProcWrapper, pCall, 0, NULL );
 	if ( *pThread )
 		return true;
 #else
-	void * pAttr = sphThreadInit();
+	void * pAttr = sphThreadInit ( bDetached );
 	errno = pthread_create ( pThread, (pthread_attr_t*) pAttr, sphThreadProcWrapper, pCall );
 	if ( !errno )
 		return true;

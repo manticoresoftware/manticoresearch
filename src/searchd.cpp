@@ -1090,14 +1090,10 @@ void Shutdown ()
 			g_tRotateConfigMutex.Done();
 
 			// stop search threads
-			g_tThdMutex.Lock();
 			while ( g_dThd.GetLength() > 0 )
-			{
-				SphThread_t Thread = g_dThd[0]->m_tThd;
-				g_tThdMutex.Unlock();
-				sphThreadJoin ( &Thread );
-				g_tThdMutex.Lock();
-			}
+				sphSleepMsec ( 0 );
+
+			g_tThdMutex.Lock();
 			g_dThd.Reset();
 			g_tThdMutex.Unlock();
 			g_tThdMutex.Done();
@@ -1152,9 +1148,6 @@ void Shutdown ()
 
 	sphRTDone();
 
-	if ( g_eWorkers==MPM_THREADS )
-		g_tThdMutex.Done();
-
 	// remove pid
 	if ( g_bHeadDaemon && g_sPidFile )
 	{
@@ -1162,13 +1155,11 @@ void Shutdown ()
 		::unlink ( g_sPidFile );
 	}
 
-#if SPH_ALLOCS_PROFILER
-	if ( g_bHeadDaemon )
-		sphMemStatDone();
-#endif
-
 	if ( g_bHeadDaemon )
 		sphInfo ( "shutdown complete" );
+
+	if ( g_bHeadDaemon )
+		sphThreadDone();
 }
 
 
@@ -9887,10 +9878,6 @@ void FailClient ( int iSock, SearchdStatus_e eStatus, const char * sMessage )
 
 void HandlerThread ( void * pArg )
 {
-#if SPH_ALLOCS_PROFILER
-	sphMemStatThdInit ();
-#endif
-
 	// handle that client
 	ThdDesc_t * pThd = (ThdDesc_t*) pArg;
 	HandleClient ( pThd->m_eProto, pThd->m_iClientSock, pThd->m_sClientName.cstr(), -1 );
@@ -9994,7 +9981,7 @@ void TickHead ( CSphProcessSharedMutex * pAcceptMutex )
 
 		g_tThdMutex.Lock ();
 		g_dThd.Add ( pThd );
-		if ( !sphThreadCreate ( &pThd->m_tThd, HandlerThread, pThd ) )
+		if ( !sphThreadCreate ( &pThd->m_tThd, HandlerThread, pThd, true ) )
 		{
 			g_dThd.Pop();
 			SafeDelete ( pThd );
@@ -10056,13 +10043,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	if ( !g_bService )
 		fprintf ( stdout, SPHINX_BANNER );
-
-	// threads should be initialized before memory tracker
-	sphThreadInit();
-
-#if SPH_ALLOCS_PROFILER
-	sphMemStatInit();
-#endif
 
 	//////////////////////
 	// parse command line
@@ -10802,6 +10782,9 @@ bool DieCallback ( const char * sMessage )
 
 int main ( int argc, char **argv )
 {
+	// threads should be initialized before memory allocations
+	sphThreadInit();
+
 	sphSetDieCallback ( DieCallback );
 	sphSetLogger ( ( const void* ) ( &sphLog ) );
 

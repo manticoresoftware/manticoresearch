@@ -9987,7 +9987,7 @@ void TickHead ( CSphProcessSharedMutex * pAcceptMutex )
 			SafeDelete ( pThd );
 
 			FailClient ( iClientSock, SEARCHD_RETRY, "failed to create worker thread" );
-			sphWarning ( "failed to create worker thread" );
+			sphWarning ( "failed to create worker thread, threads(%d), error[%d] %s", g_dThd.GetLength(), errno, strerror(errno) );
 		}
 		g_tThdMutex.Unlock ();
 		return;

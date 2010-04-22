@@ -1404,7 +1404,12 @@ class SphinxConfig
 		// and make the new config, making the index as rt instead
 		if ( $this->IsRt() )
 		{
-			$pattern = "/.*?(?<body>source\s+(?<srcname>\S*?)(\s*\:\s*(?<parent>\S*?))?\s*\{(?<content>.*?)\})(?<epilog>.*?)/s";
+			$body = 1;
+			$srcname = 2;
+			$parent = 4;
+			$content = 5;
+			$epilog = 6;
+			$pattern = "/.*?(source\s+(\S*?)(\s*\:\s*(\S*?))?\s*\{(.*?)\})(.*?)/s";
 			preg_match_all ( $pattern, $config, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE );
 			$schemas = array();
 			$shift = 0;
@@ -1413,11 +1418,11 @@ class SphinxConfig
 			// parse sources
 			foreach ( $matches as $match )
 			{
-				$lines = explode("\n", $match['content'][0]);
+				$lines = explode("\n", $match[$content][0]);
 				$insert_schema = array();
 				$insert_types = array();
-				if ( $match['parent'][0] != "" )
-					$insert_types = $schemas[$match['parent'][0]]['types'];
+				if ( $match[$parent][0] != "" )
+					$insert_types = $schemas[$match[$parent][0]]['types'];
 
 				$sql_query_pre = array();
 				$sql_query = "";
@@ -1511,32 +1516,37 @@ class SphinxConfig
 				// store
 				$schema = array();
 				$schema['types'] = $insert_types;
-				if ( $match['parent'][0] != "" )
-					$schema['orders'] = $schemas[$match['parent'][0]]['orders'];
+				if ( $match[$parent][0] != "" )
+					$schema['orders'] = $schemas[$match[$parent][0]]['orders'];
 				else
 					$schema['orders'] = $insert_schema;
 				$schema['values'] = $insert_values;
 				$schema['sqlport'] = $this->_sd_sphinxql_port;
 
-				$schemas[$match['srcname'][0]] = $schema;
-				$srclen = $match['epilog'][1] - $match['body'][1];
-				$config = substr_replace ( $config, "", $match['body'][1]-$shift,$srclen );
+				$schemas[$match[$srcname][0]] = $schema;
+				$srclen = $match[$epilog][1] - $match[$body][1];
+				$config = substr_replace ( $config, "", $match[$body][1]-$shift,$srclen );
 				$shift += $srclen;
 			}
 
-			$pattern = "/.*?(?<body>index\s+(?<idxname>\S*?)(\s*\:\s*(?<parent>\S*?))?\s*\{(?<content>.*?)\})(?<epilog>.*?)/s";
+			$body = 1;
+			$idxname = 2;
+			$parent = 4;
+			$content = 5;
+			$epilog = 6;
+			$pattern = "/.*?(index\s+(\S*?)(\s*\:\s*(\S*?))?\s*\{(.*?)\})(.*?)/s";
 			preg_match_all ( $pattern, $config, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE );
 			$shift = 0;
 			// parse indexes
 			$indexes = array();
 			foreach ( $matches as $match )
 			{
-				$idx = "index ".$match['idxname'][0];
-				if ( $match['parent'][0] != "" )
-					$idx .= " : ".$match['parent'][0];
+				$idx = "index ".$match[$idxname][0];
+				if ( $match[$parent][0] != "" )
+					$idx .= " : ".$match[$parent][0];
 				$idx .= "\n{\n";
 
-				$lines = explode("\n", $match['content'][0]);
+				$lines = explode("\n", $match[$content][0]);
 				$justcopy = false;
 				$rtcopy = false;
 				$idxbody = "";
@@ -1562,7 +1572,7 @@ class SphinxConfig
 							{
 								$idxbody .= "\ttype\t= rt\n";
 								if ( $collectdata )
-									$indexes[$match['idxname'][0]] = $schemas[$value];
+									$indexes[$match[$idxname][0]] = $schemas[$value];
 								foreach ( array_keys( $schemas[$value]['orders'] ) as $key )
 									if ( $key != "id" && $key != "document_id" )
 									{
@@ -1582,13 +1592,13 @@ class SphinxConfig
 					}
 					if ( $justcopy ) // explicitly defined type, don't transform to rt.
 					{
-						$idxbody = $match['content'][0];
+						$idxbody = $match[$content][0];
 						break;
 					}
 				}
 				$idx .= "$idxbody\n}\n";
-				$srclen = $match['epilog'][1] - $match['body'][1];
-				$config = substr_replace ($config, $idx, $match['body'][1]-$shift,$srclen );
+				$srclen = $match[$epilog][1] - $match[$body][1];
+				$config = substr_replace ($config, $idx, $match[$body][1]-$shift,$srclen );
 				$shift += $srclen-strlen($idx);
 			}
 			if ( $collectdata )

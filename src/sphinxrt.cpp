@@ -3327,8 +3327,8 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 					tMatch.m_iTag = iSeg+1;
 
 					bool bNewMatch = false;
-					ARRAY_FOREACH ( i, dSorters )
-						bNewMatch |= dSorters[i]->Push ( tMatch );
+					ARRAY_FOREACH ( iSorter, dSorters )
+						bNewMatch |= dSorters[iSorter]->Push ( tMatch );
 
 					// handle cutoff
 					if ( bNewMatch )
@@ -3374,8 +3374,8 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 						pMatch[i].m_iTag = iSeg+1;
 
 						bool bNewMatch = false;
-						ARRAY_FOREACH ( i, dSorters )
-							bNewMatch |= dSorters[i]->Push ( pMatch[i] );
+						ARRAY_FOREACH ( iSorter, dSorters )
+							bNewMatch |= dSorters[iSorter]->Push ( pMatch[i] );
 
 						if ( bNewMatch )
 							if ( --iCutoff==0 )
@@ -3480,9 +3480,9 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		if ( !dStorage.GetLength() ) // handle dummy offset
 			dStorage.Add ( 0 );
 
-		ARRAY_FOREACH ( i, dSorters )
+		ARRAY_FOREACH ( iSorter, dSorters )
 		{
-			ISphMatchSorter * pSorter = dSorters[i];
+			ISphMatchSorter * pSorter = dSorters[iSorter];
 
 			const int iMatchesCount = pSorter->GetLength();
 			CSphMatch * pMatches = pSorter->First();

@@ -21,8 +21,8 @@
 	<Configurations>
 		<Configuration
 			Name="Debug|Win32"
-			OutputDirectory="$(SolutionDir)/bin/$(PlatformName)/$(ConfigurationName)"
-			IntermediateDirectory="$(SolutionDir)/junk/$(PlatformName)/$(ConfigurationName)"
+			OutputDirectory="$(SolutionDir)/bin/$(ConfigurationName)"
+			IntermediateDirectory="$(SolutionDir)/junk/$(ConfigurationName)"
 			ConfigurationType="1"
 			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC71.vsprops"
 			CharacterSet="2"
@@ -101,8 +101,8 @@
 		</Configuration>
 		<Configuration
 			Name="Release|Win32"
-			OutputDirectory="$(SolutionDir)/bin/$(PlatformName)/$(ConfigurationName)"
-			IntermediateDirectory="$(SolutionDir)/junk/$(PlatformName)/$(ConfigurationName)"
+			OutputDirectory="$(SolutionDir)/bin/$(ConfigurationName)"
+			IntermediateDirectory="$(SolutionDir)/junk/$(ConfigurationName)"
 			ConfigurationType="1"
 			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC71.vsprops"
 			CharacterSet="2"

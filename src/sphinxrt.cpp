@@ -3173,12 +3173,27 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphVector<CSphFilterSettings> *, int ) const
 #endif
 {
+	assert ( ppSorters );
+
+	// to avoid the checking of a ppSorters's element for NULL on every next step, just filter out all nulls right here
+	CSphVector<ISphMatchSorter*> dSorters;
+	dSorters.Reserve ( iSorters );
+	for ( int i=0; i<iSorters; i++ )
+		if ( ppSorters[i] )
+			dSorters.Add ( ppSorters[i] );
+
+	// if we have anything to work with
+	if ( dSorters.GetLength()==0 )
+	{
+		pResult->m_iQueryTime = 0;
+		return false;
+	}
+
 	// FIXME! too early (how low can you go?)
 	m_tRwlock.ReadLock ();
 
 	assert ( pQuery );
 	assert ( pResult );
-	assert ( ppSorters );
 	assert ( iTag==0 );
 
 	// empty index, empty result
@@ -3267,13 +3282,13 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		tCtx.m_bLateLookup = true;
 
 		// FIXME! setup sorters vs. MVA
-		for ( int i=0; i<iSorters; i++ )
-			(ppSorters[i])->SetMVAPool ( NULL );
+		ARRAY_FOREACH ( i, dSorters )
+			dSorters[i]->SetMVAPool ( NULL );
 
 		// FIXME! setup overrides
 
 		// do searching
-		bool bRandomize = ppSorters[0]->m_bRandomize;
+		bool bRandomize = dSorters[0]->m_bRandomize;
 		int iCutoff = pQuery->m_iCutoff;
 		if ( iCutoff<=0 )
 			iCutoff = -1;
@@ -3312,8 +3327,8 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 					tMatch.m_iTag = iSeg+1;
 
 					bool bNewMatch = false;
-					for ( int iSorter=0; iSorter<iSorters; iSorter++ )
-						bNewMatch |= ppSorters[iSorter]->Push ( tMatch );
+					ARRAY_FOREACH ( i, dSorters )
+						bNewMatch |= dSorters[i]->Push ( tMatch );
 
 					// handle cutoff
 					if ( bNewMatch )
@@ -3359,8 +3374,8 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 						pMatch[i].m_iTag = iSeg+1;
 
 						bool bNewMatch = false;
-						for ( int iSorter=0; iSorter<iSorters; iSorter++ )
-							bNewMatch |= ppSorters[iSorter]->Push ( pMatch[i] );
+						ARRAY_FOREACH ( i, dSorters )
+							bNewMatch |= dSorters[i]->Push ( pMatch[i] );
 
 						if ( bNewMatch )
 							if ( --iCutoff==0 )
@@ -3465,9 +3480,9 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		if ( !dStorage.GetLength() ) // handle dummy offset
 			dStorage.Add ( 0 );
 
-		for ( int iSorter=0; iSorter<iSorters; iSorter++ )
+		ARRAY_FOREACH ( i, dSorters )
 		{
-			ISphMatchSorter * pSorter = ppSorters[iSorter];
+			ISphMatchSorter * pSorter = dSorters[i];
 
 			const int iMatchesCount = pSorter->GetLength();
 			CSphMatch * pMatches = pSorter->First();

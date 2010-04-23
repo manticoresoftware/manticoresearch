@@ -8,6 +8,7 @@
 searchd
 {
 	<searchd_settings/>
+	workers=threads	
 }
 
 index rt0

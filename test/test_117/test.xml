@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <test>
-<name>ram vs disk chunk search</name>
+<name>RT: ram vs disk chunk search</name>
 
 <skip_indexer/>
 <config>

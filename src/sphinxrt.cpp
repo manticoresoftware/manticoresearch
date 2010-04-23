@@ -3281,9 +3281,19 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 	if ( m_pSegments.GetLength() )
 	{
+		// select the sorter with max schema
+		int iMaxSchemaSize = -1;
+		int iMaxSchemaIndex = -1;
+		ARRAY_FOREACH ( i, dSorters )
+			if ( dSorters[i]->GetSchema().GetRowSize() > iMaxSchemaSize )
+			{
+				iMaxSchemaSize = dSorters[i]->GetSchema().GetRowSize();
+				iMaxSchemaIndex = i;
+			}
+
 		// setup calculations and result schema
 		CSphQueryContext tCtx;
-		if ( !tCtx.SetupCalc ( pResult, ppSorters[0]->GetSchema(), m_tOutboundSchema, NULL ) )
+		if ( !tCtx.SetupCalc ( pResult, dSorters[iMaxSchemaIndex]->GetSchema(), m_tOutboundSchema, NULL ) )
 		{
 			m_tRwlock.Unlock ();
 			return false;

@@ -3214,6 +3214,67 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	// FIXME! eliminate this const breakage
 	const_cast<CSphQuery*> ( pQuery )->m_eMode = SPH_MATCH_EXTENDED2;
 
+	// FIXME! slow disk searches could lock out concurrent writes for too long
+	// FIXME! each result will point to its own MVA and string pools
+	// !COMMIT need to setup disk K-list here
+
+	//////////////////////
+	// search disk chunks
+	//////////////////////
+
+	bool m_bKlistLocked = false;
+	CSphVector<CSphFilterSettings> dExtra;
+	// first, collect all the killlists into a vector
+	for ( int iChunk = m_pDiskChunks.GetLength()-1; iChunk>=0; iChunk-- )
+	{
+		const int iOldLength = dExtra.GetLength();
+		if ( iChunk==m_pDiskChunks.GetLength()-1 )
+		{
+			// For the topmost chunk we add the killlist from the ram-index
+			m_tKlist.Flush();
+			m_tKlist.KillListLock();
+			if ( m_tKlist.GetKillListSize() )
+			{
+				// we don't lock in vain...
+				m_bKlistLocked = true;
+				AddKillListFilter ( &dExtra, m_tKlist.GetKillList(), m_tKlist.GetKillListSize() );
+			} else
+				m_tKlist.KillListUnlock();
+		} else
+		{
+			const CSphIndex * pDiskChunk = m_pDiskChunks[iChunk+1];
+			if ( pDiskChunk->GetKillListSize () )
+				AddKillListFilter ( &dExtra, pDiskChunk->GetKillList(), pDiskChunk->GetKillListSize() );
+		}
+
+		if ( dExtra.GetLength()==iOldLength )
+			dExtra.Add();
+	}
+
+	assert ( dExtra.GetLength()==m_pDiskChunks.GetLength() );
+	CSphVector<const BYTE *> dDiskStrings ( m_pDiskChunks.GetLength() );
+	ARRAY_FOREACH ( iChunk, m_pDiskChunks )
+	{
+		CSphQueryResult tChunkResult;
+		// storing index in matches tag for finding strings attrs offset later, biased against default zero and segments
+		const int iTag = m_pSegments.GetLength()+iChunk+1;
+		if ( !m_pDiskChunks[iChunk]->MultiQuery ( pQuery, &tChunkResult, iSorters, ppSorters, &dExtra, iTag ) )
+		{
+			// FIXME? maybe handle this more gracefully (convert to a warning)?
+			pResult->m_sError = tChunkResult.m_sError;
+			m_tRwlock.Unlock ();
+			if ( m_bKlistLocked )
+				m_tKlist.KillListUnlock();
+			return false;
+		}
+
+		dDiskStrings[iChunk] = tChunkResult.m_pStrings;
+		dExtra.Pop();
+	}
+
+	if ( m_bKlistLocked )
+		m_tKlist.KillListUnlock();
+
 	////////////////////
 	// search RAM chunk
 	////////////////////
@@ -3391,67 +3452,6 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			}
 		}
 	}
-
-	// FIXME! slow disk searches could lock out concurrent writes for too long
-	// FIXME! each result will point to its own MVA and string pools
-	// !COMMIT need to setup disk K-list here
-
-	//////////////////////
-	// search disk chunks
-	//////////////////////
-
-	bool m_bKlistLocked = false;
-	CSphVector<CSphFilterSettings> dExtra;
-	// first, collect all the killlists into a vector
-	for ( int iChunk = m_pDiskChunks.GetLength()-1; iChunk>=0; iChunk-- )
-	{
-		const int iOldLength = dExtra.GetLength();
-		if ( iChunk==m_pDiskChunks.GetLength()-1 )
-		{
-			// For the topmost chunk we add the killlist from the ram-index
-			m_tKlist.Flush();
-			m_tKlist.KillListLock();
-			if ( m_tKlist.GetKillListSize() )
-			{
-				// we don't lock in vain...
-				m_bKlistLocked = true;
-				AddKillListFilter ( &dExtra, m_tKlist.GetKillList(), m_tKlist.GetKillListSize() );
-			} else
-				m_tKlist.KillListUnlock();
-		} else
-		{
-			const CSphIndex * pDiskChunk = m_pDiskChunks[iChunk+1];
-			if ( pDiskChunk->GetKillListSize () )
-				AddKillListFilter ( &dExtra, pDiskChunk->GetKillList(), pDiskChunk->GetKillListSize() );
-		}
-
-		if ( dExtra.GetLength()==iOldLength )
-			dExtra.Add();
-	}
-
-	assert ( dExtra.GetLength()==m_pDiskChunks.GetLength() );
-	CSphVector<const BYTE *> dDiskStrings ( m_pDiskChunks.GetLength() );
-	ARRAY_FOREACH ( iChunk, m_pDiskChunks )
-	{
-		CSphQueryResult tChunkResult;
-		// storing index in matches tag for finding strings attrs offset later, biased against default zero and segments
-		const int iTag = m_pSegments.GetLength()+iChunk+1;
-		if ( !m_pDiskChunks[iChunk]->MultiQuery ( pQuery, &tChunkResult, iSorters, ppSorters, &dExtra, iTag ) )
-		{
-			// FIXME? maybe handle this more gracefully (convert to a warning)?
-			pResult->m_sError = tChunkResult.m_sError;
-			m_tRwlock.Unlock ();
-			if ( m_bKlistLocked )
-				m_tKlist.KillListUnlock();
-			return false;
-		}
-
-		dDiskStrings[iChunk] = tChunkResult.m_pStrings;
-		dExtra.Pop();
-	}
-
-	if ( m_bKlistLocked )
-		m_tKlist.KillListUnlock();
 
 	//////////////////////
 	// fixing string offset and data in resulting matches

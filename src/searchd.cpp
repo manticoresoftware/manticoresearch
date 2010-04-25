@@ -1748,7 +1748,7 @@ public:
 	int			GetSentCount () { return m_iSent; }
 
 protected:
-	BYTE		m_dBuffer[8192];	///< my buffer
+	BYTE		m_dBuffer[16384];	///< my buffer
 	BYTE *		m_pBuffer;			///< my current buffer position
 	int			m_iSock;			///< my socket
 	bool		m_bError;			///< if there were any write errors
@@ -7074,7 +7074,7 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 
 	const int INTERACTIVE_TIMEOUT = 900;
 	NetInputBuffer_c tIn ( iSock );
-	NetOutputBuffer_c tOut ( iSock );
+	NetOutputBuffer_c tOut ( iSock ); // OPTIMIZE? looks like buffer size matters a lot..
 
 	sHandshake[0] = sizeof(sHandshake)-5;
 	if ( sphSockSend ( iSock, sHandshake, sizeof(sHandshake)-1 )!=sizeof(sHandshake)-1 )

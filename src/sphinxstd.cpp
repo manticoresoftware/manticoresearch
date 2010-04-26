@@ -549,6 +549,7 @@ static const char* g_dMemCategoryName[] = {
 	, "hnd_disk", "hnd_sql"
 	, "search_disk", "query_disk", "insert_sql", "select_sql", "delete_sql", "commit_set_sql", "commit_start_t_sql", "commit_sql"
 	, "mquery_disk", "mqueryex_disk", "mquery_rt"
+	, "rt_res_matches", "rt_res_strings"
 	};
 STATIC_ASSERT ( sizeof(g_dMemCategoryName)/sizeof(g_dMemCategoryName[0])==Memory::SPH_MEM_TOTAL, MEM_STAT_NAME_MISMATCH );
 

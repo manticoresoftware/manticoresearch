@@ -3464,8 +3464,71 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	}
 
 	//////////////////////
+	// coping match's attributes to external storage in result set
+	//////////////////////
+
+	const int iSegmentsTotal = m_pSegments.GetLength();
+	const int iStaticSize = m_tSchema.GetStaticSize();
+	if ( iStaticSize>0 && iSegmentsTotal>0 )
+	{
+		MEMORY ( SPH_MEM_IDX_RT_RES_MATCHES );
+
+		// we need to count matches for allocating arena
+		// as we are going to fix match's m_pStatic pointers later
+		// and copy real match's data to arena
+
+		int iFixupCount = 0;
+
+		ARRAY_FOREACH ( iSorter, dSorters )
+		{
+			ISphMatchSorter * pSorter = dSorters[iSorter];
+
+			const int iMatchesCount = pSorter->GetLength();
+			const CSphMatch * pMatches = pSorter->First();
+
+			for ( int i=0; i<iMatchesCount; i++ )
+			{
+				const int iMatchSegment = pMatches[i].m_iTag-1;
+				if ( iMatchSegment>=0 && iMatchSegment< iSegmentsTotal )
+					iFixupCount++;
+			}
+		}
+
+		if ( iFixupCount>0 )
+		{
+			CSphRowitem * pAttr = new CSphRowitem [ iFixupCount * iStaticSize ];
+			pResult->m_pAttrs = pAttr;
+
+			ARRAY_FOREACH ( iSorter, dSorters )
+			{
+				ISphMatchSorter * pSorter = dSorters[iSorter];
+
+				const int iMatchesCount = pSorter->GetLength();
+				CSphMatch * pMatches = pSorter->First();
+
+				for ( int i=0; i<iMatchesCount; i++ )
+				{
+					const int iMatchSegment = pMatches[i].m_iTag-1;
+					if ( iMatchSegment>=0 && iMatchSegment< iSegmentsTotal )
+					{
+						assert ( pAttr<( pResult->m_pAttrs + ( iFixupCount * iStaticSize ) ) );
+						assert ( ( pAttr + iStaticSize )<=( pResult->m_pAttrs + ( iFixupCount * iStaticSize ) ) );
+
+						memcpy ( pAttr, pMatches[i].m_pStatic, sizeof(CSphRowitem)*iStaticSize );
+						pMatches[i].m_pStatic = pAttr;
+						pAttr += iStaticSize;
+					}
+				}
+			}
+		}
+	}
+
+
+	//////////////////////
 	// fixing string offset and data in resulting matches
 	//////////////////////
+
+	MEMORY ( SPH_MEM_IDX_RT_RES_STRINGS );
 
 	CSphVector<CSphAttrLocator> dStringGetLoc;
 	CSphVector<CSphAttrLocator> dStringSetLoc;

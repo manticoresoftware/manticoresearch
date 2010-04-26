@@ -256,6 +256,9 @@ namespace Memory
 		SPH_MEM_IDX_DISK_MULTY_QUERY_EX,
 		SPH_MEM_IDX_RT_MULTY_QUERY,
 
+		SPH_MEM_IDX_RT_RES_MATCHES,
+		SPH_MEM_IDX_RT_RES_STRINGS,
+
 		SPH_MEM_TOTAL
 	};
 }
@@ -284,7 +287,7 @@ struct MemTracker_c : ISphNoncopyable
 	}
 };
 
-#define MEMORY(name) MemTracker_c tracker_##__LINE__(Memory::name);
+#define MEMORY(name) MemTracker_c tracker_##__LINE__##name(Memory::name);
 
 #else // SPH_ALLOCS_PROFILER 0
 

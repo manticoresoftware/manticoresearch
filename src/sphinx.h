@@ -1983,6 +1983,7 @@ public:
 	const BYTE *			m_pStrings;			///< pointer to strings storage
 
 	CSphTightVector<BYTE>	m_dStrStorage;		/// < external string storage
+	CSphRowitem *			m_pAttrs;			/// < external attributes storage
 
 	int						m_iOffset;			///< requested offset into matches array
 	int						m_iCount;			///< count which will be actually served (computed from total, offset and limit)

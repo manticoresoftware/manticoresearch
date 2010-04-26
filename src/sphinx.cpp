@@ -5528,6 +5528,7 @@ CSphQueryResult::CSphQueryResult ()
 	m_iTotalMatches = 0;
 	m_pMva = NULL;
 	m_pStrings = NULL;
+	m_pAttrs = NULL;
 	m_iOffset = 0;
 	m_iCount = 0;
 	m_iSuccesses = 0;
@@ -5536,6 +5537,7 @@ CSphQueryResult::CSphQueryResult ()
 
 CSphQueryResult::~CSphQueryResult ()
 {
+	SafeDeleteArray ( m_pAttrs );
 }
 
 /////////////////////////////////////////////////////////////////////////////

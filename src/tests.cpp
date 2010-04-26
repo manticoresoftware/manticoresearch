@@ -1515,6 +1515,23 @@ static void DeleteIndexFiles ( const char * sIndex )
 	unlink ( sName.cstr() );
 	sName.SetSprintf ( "%s.ram", sIndex );
 	unlink ( sName.cstr() );
+
+	sName.SetSprintf ( "%s.0.spa", sIndex );
+	unlink ( sName.cstr() );
+	sName.SetSprintf ( "%s.0.spd", sIndex );
+	unlink ( sName.cstr() );
+	sName.SetSprintf ( "%s.0.sph", sIndex );
+	unlink ( sName.cstr() );
+	sName.SetSprintf ( "%s.0.spi", sIndex );
+	unlink ( sName.cstr() );
+	sName.SetSprintf ( "%s.0.spk", sIndex );
+	unlink ( sName.cstr() );
+	sName.SetSprintf ( "%s.0.spm", sIndex );
+	unlink ( sName.cstr() );
+	sName.SetSprintf ( "%s.0.spp", sIndex );
+	unlink ( sName.cstr() );
+	sName.SetSprintf ( "%s.0.sps", sIndex );
+	unlink ( sName.cstr() );
 }
 
 
@@ -1522,7 +1539,7 @@ static void DeleteIndexFiles ( const char * sIndex )
 #define RT_PASS_COUNT 5
 static const int g_iWeights[RT_PASS_COUNT] = { 1500, 1302, 1252, 1230, 1219 };
 
-void TestRT ()
+void TestRTWeightBoundary ()
 {
 	DeleteIndexFiles ( RT_INDEX_FILE_NAME );
 	for ( int iPass = 0; iPass < RT_PASS_COUNT; ++iPass )
@@ -1635,6 +1652,149 @@ void TestWriter()
 	unlink ( sTmpWriteout.cstr() );
 	printf ( "ok\n" );
 }
+
+class SphDocRandomizer_c : public CSphSource_Document
+{
+	static const int m_iMaxFields = 2;
+	static const int m_iMaxFieldLen = 512;
+	char m_dFields[m_iMaxFields][m_iMaxFieldLen];
+	BYTE * m_ppFields[m_iMaxFields];
+public:
+	explicit SphDocRandomizer_c ( const CSphSchema & tSchema ) : CSphSource_Document ( "test_doc" )
+	{
+		m_tSchema = tSchema;
+		for ( int i=0; i<m_iMaxFields; i++ )
+			m_ppFields[i] = (BYTE *)&m_dFields[i];
+	}
+
+	virtual BYTE ** NextDocument ( CSphString & )
+	{
+		if ( m_tDocInfo.m_iDocID>800 )
+			return NULL;
+
+		m_tDocInfo.m_iDocID++;
+
+		m_tDocInfo.SetAttr ( m_tSchema.GetAttr(0).m_tLocator, m_tDocInfo.m_iDocID+1000 );
+		m_tDocInfo.SetAttr ( m_tSchema.GetAttr(1).m_tLocator, 1313 );
+
+		snprintf ( m_dFields[0], m_iMaxFieldLen, "cat title%d title%d title%d title%d title%d"
+			, sphRand(), sphRand(), sphRand(), sphRand(), sphRand() );
+
+		snprintf ( m_dFields[1], m_iMaxFieldLen, "dog contentwashere%d contentwashere%d contentwashere%d contentwashere%d contentwashere%d"
+			, sphRand(), sphRand(), sphRand(), sphRand(), sphRand() );
+
+		return &m_ppFields[0];
+	}
+
+	bool Connect ( CSphString & ) { return true; }
+	void Disconnect () {}
+	bool HasAttrsConfigured () { return true; }
+	bool IterateHitsStart ( CSphString & ) { m_tDocInfo.Reset ( m_tSchema.GetRowSize() ); return true; }
+	bool IterateMultivaluedStart ( int, CSphString & ) { return false; }
+	bool IterateMultivaluedNext () { return false; }
+	bool IterateFieldMVAStart ( int, CSphString & ) { return false; }
+	bool IterateFieldMVANext () { return false; }
+	bool IterateKillListStart ( CSphString & ) { return false; }
+	bool IterateKillListNext ( SphDocID_t & ) { return false; }
+};
+
+void TestRTSendVsMerge ()
+{
+	DeleteIndexFiles ( RT_INDEX_FILE_NAME );
+	printf ( "testing rt send result during merge... " );
+
+	CSphConfigSection tRTConfig;
+	sphRTInit ( tRTConfig );
+	CSphVector< ISphRtIndex * > dTemp;
+	sphReplayBinlog ( dTemp );
+
+	CSphString sError;
+	CSphDictSettings tDictSettings;
+
+	ISphTokenizer * pTok = sphCreateUTF8Tokenizer();
+	CSphDict * pDict = sphCreateDictionaryCRC ( tDictSettings, pTok, sError );
+
+	CSphColumnInfo tCol;
+	CSphSchema tSrcSchema;
+
+	CSphSourceSettings tParams;
+	tSrcSchema.Reset();
+
+	tCol.m_sName = "title";
+	tSrcSchema.m_dFields.Add ( tCol );
+
+	tCol.m_sName = "content";
+	tSrcSchema.m_dFields.Add ( tCol );
+
+	tCol.m_sName = "tag1";
+	tCol.m_eAttrType = SPH_ATTR_INTEGER;
+	tSrcSchema.AddAttr ( tCol, true );
+
+	tCol.m_sName = "tag2";
+	tCol.m_eAttrType = SPH_ATTR_INTEGER;
+	tSrcSchema.AddAttr ( tCol, true );
+
+	SphDocRandomizer_c * pSrc = new SphDocRandomizer_c ( tSrcSchema );
+
+	pSrc->SetTokenizer ( pTok );
+	pSrc->SetDict ( pDict );
+
+	pSrc->Setup ( tParams );
+	assert ( pSrc->Connect ( sError ) );
+	assert ( pSrc->IterateHitsStart ( sError ) );
+
+	assert ( pSrc->UpdateSchema ( &tSrcSchema, sError ) );
+
+	CSphSchema tSchema; // source schema must be all dynamic attrs; but index ones must be static
+	tSchema.m_dFields = tSrcSchema.m_dFields;
+	for ( int i=0; i<tSrcSchema.GetAttrsCount(); i++ )
+		tSchema.AddAttr ( tSrcSchema.GetAttr(i), false );
+
+	ISphRtIndex * pIndex = sphCreateIndexRT ( tSchema, "testrt", 128*1024, RT_INDEX_FILE_NAME );
+
+	pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
+	pIndex->SetDictionary ( pDict );
+	assert ( pIndex->Prealloc ( false, sError ) );
+
+	CSphQuery tQuery;
+	CSphQueryResult tResult;
+	tQuery.m_sQuery = "@title cat";
+
+	ISphMatchSorter * pSorter = sphCreateQueue ( &tQuery, pIndex->GetMatchSchema(), tResult.m_sError, false );
+	assert ( pSorter );
+
+	while ( pSrc->IterateHitsNext ( sError ) && pSrc->m_tDocInfo.m_iDocID )
+	{
+		pIndex->AddDocument ( pSrc->m_dHits, pSrc->m_tDocInfo, NULL, sError );
+		if ( pSrc->m_tDocInfo.m_iDocID==350 )
+		{
+			pIndex->Commit ();
+			assert ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, NULL ) );
+			sphFlattenQueue ( pSorter, &tResult, 0 );
+		}
+	}
+	pIndex->Commit ();
+
+	pSrc->Disconnect();
+
+	for ( int i=0; i<tResult.m_dMatches.GetLength(); i++ )
+	{
+		const SphDocID_t tID = tResult.m_dMatches[i].m_iDocID;
+		const SphAttr_t tTag1 = tResult.m_dMatches[i].GetAttr ( tResult.m_tSchema.GetAttr ( 0 ).m_tLocator );
+		const SphAttr_t tTag2 = tResult.m_dMatches[i].GetAttr ( tResult.m_tSchema.GetAttr ( 1 ).m_tLocator );
+		assert ( tTag1==tID+1000 );
+		assert ( tTag2==1313 );
+	}
+	SafeDelete ( pSorter );
+	SafeDelete ( pIndex );
+
+	sphRTDone ();
+
+	printf ( "ok\n" );
+
+	DeleteIndexFiles ( RT_INDEX_FILE_NAME );
+}
+
 #endif
 
 //////////////////////////////////////////////////////////////////////////
@@ -1664,8 +1824,9 @@ int main ()
 	TestRwlock ();
 	TestCleanup ();
 	TestStridedSort ();
-	TestRT ();
+	TestRTWeightBoundary ();
 	TestWriter();
+	TestRTSendVsMerge ();
 #endif
 
 	unlink ( g_sTmpfile );

@@ -20,6 +20,9 @@
 #include <sys/time.h> // for gettimeofday
 #endif
 
+
+#define THREAD_STACK_SIZE 65536
+
 //////////////////////////////////////////////////////////////////////////
 
 #if USE_WINDOWS
@@ -768,8 +771,6 @@ void CSphProcessSharedMutex::Unlock ()
 // THREADING FUNCTIONS
 //////////////////////////////////////////////////////////////////////////
 
-#define THREAD_STACK_SIZE 65536
-
 struct ThreadCall_t
 {
 	void			( *m_pCall )( void * pArg );
@@ -777,6 +778,7 @@ struct ThreadCall_t
 	ThreadCall_t *	m_pNext;
 };
 SphThreadKey_t g_tThreadCleanupKey;
+SphThreadKey_t g_tMyThreadStack;
 
 
 #if USE_WINDOWS
@@ -787,13 +789,16 @@ SphThreadKey_t g_tThreadCleanupKey;
 
 SPH_THDFUNC sphThreadProcWrapper ( void * pArg )
 {
+	// this is the first local variable in the new thread. So, it's address is the top of the stack.
+	char	cTopOfMyStack;
 	assert ( sphThreadGet ( g_tThreadCleanupKey )==NULL );
+	assert ( sphThreadGet ( g_tMyThreadStack )==NULL );
 
 #if SPH_ALLOCS_PROFILER
 	MemCategoryStack_t * pTLS = sphMemStatThdInit();
 #endif
-
 	ThreadCall_t * pCall = (ThreadCall_t*) pArg;
+	sphThreadSet ( g_tMyThreadStack, & cTopOfMyStack );
 	pCall->m_pCall ( pCall->m_pArg );
 	SafeDelete ( pCall );
 
@@ -835,6 +840,9 @@ void * sphThreadInit ( bool )
 		if ( !sphThreadKeyCreate ( &g_tThreadCleanupKey ) )
 			sphDie ( "FATAL: sphThreadKeyCreate() failed" );
 
+		if ( !sphThreadKeyCreate ( &g_tMyThreadStack ) )
+			sphDie ( "FATAL: sphThreadKeyCreate() failed" );
+
 #if !USE_WINDOWS
 		if ( pthread_attr_init ( &tJoinableAttr ) )
 			sphDie ( "FATAL: pthread_attr_init( joinable ) failed" );
@@ -845,10 +853,10 @@ void * sphThreadInit ( bool )
 		if ( pthread_attr_setdetachstate ( &tDetachedAttr, PTHREAD_CREATE_DETACHED ) )
 			sphDie ( "FATAL: pthread_attr_setdetachstate( detached ) failed" );
 
-		if ( pthread_attr_setstacksize ( &tJoinableAttr, PTHREAD_STACK_MIN + THREAD_STACK_SIZE ) )
+		if ( pthread_attr_setstacksize ( &tJoinableAttr, sphMyStackSize() ) )
 			sphDie ( "FATAL: pthread_attr_setstacksize( joinable ) failed" );
 
-		if ( pthread_attr_setstacksize ( &tDetachedAttr, PTHREAD_STACK_MIN + THREAD_STACK_SIZE ) )
+		if ( pthread_attr_setstacksize ( &tDetachedAttr, sphMyStackSize() ) )
 			sphDie ( "FATAL: pthread_attr_setstacksize( detached ) failed" );
 #endif
 		bInit = true;
@@ -881,7 +889,7 @@ bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pA
 	// create thread
 #if USE_WINDOWS
 	sphThreadInit ( bDetached );
-	*pThread = CreateThread ( NULL, THREAD_STACK_SIZE, sphThreadProcWrapper, pCall, 0, NULL );
+	*pThread = CreateThread ( NULL, sphMyStackSize(), sphThreadProcWrapper, pCall, 0, NULL );
 	if ( *pThread )
 		return true;
 #else
@@ -950,6 +958,20 @@ void * sphThreadGet ( SphThreadKey_t tKey )
 #endif
 }
 
+void * sphMyStack ()
+{
+	return sphThreadGet ( g_tMyThreadStack );
+}
+
+int sphMyStackSize ()
+{
+#if USE_WINDOWS
+	return THREAD_STACK_SIZE;
+#else
+	return PTHREAD_STACK_MIN + THREAD_STACK_SIZE;
+#endif
+}
+
 
 bool sphThreadSet ( SphThreadKey_t tKey, void * pValue )
 {
@@ -959,6 +981,22 @@ bool sphThreadSet ( SphThreadKey_t tKey, void * pValue )
 	return pthread_setspecific ( tKey, pValue )==0;
 #endif
 }
+
+#if !USE_WINDOWS
+bool sphIsLtLib()
+{
+#ifndef _CS_GNU_LIBPTHREAD_VERSION
+	return false;
+#endif
+
+	char buff[64];
+	confstr ( _CS_GNU_LIBPTHREAD_VERSION, buff, 64 );
+
+	if ( !strncasecmp ( buff, "linuxthreads", 12 ) )
+		return true;
+	return false;
+}
+#endif
 
 //////////////////////////////////////////////////////////////////////////
 // MUTEX

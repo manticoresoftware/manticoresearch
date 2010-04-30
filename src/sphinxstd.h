@@ -1819,8 +1819,19 @@ void sphThreadKeyDelete ( SphThreadKey_t tKey );
 /// get thread-local key value
 void * sphThreadGet ( SphThreadKey_t tKey );
 
+/// get the pointer to my thread's stack
+void * sphMyStack ();
+
+/// get the size of my thread's stack
+int sphMyStackSize ();
+
 /// set thread-local key value
 bool sphThreadSet ( SphThreadKey_t tKey, void * pValue );
+
+#if !USE_WINDOWS
+/// what kind of threading lib do we have? The number of frames in the stack depends from it
+bool sphIsLtLib();
+#endif
 
 //////////////////////////////////////////////////////////////////////////
 

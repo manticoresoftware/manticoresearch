@@ -1165,8 +1165,71 @@ void Shutdown ()
 
 #if !USE_WINDOWS
 
+void StackTraceDump()
+{
+	void * pMyStack = sphMyStack();
+	int iStackSize = sphMyStackSize();
+	BYTE ** pFramePointer = NULL;
+
+	int iFrameCount = 0;
+	int iReturnFrameCount = sphIsLtLib() ? 2 : 1;
+
+#ifdef __i386__
+#define SIGRETURN_FRAME_OFFSET 17
+	__asm __volatile__ ( "movl %%ebp,%0":"=r"(pFramePointer):"r"(pFramePointer) );
+#endif
+
+#ifdef __x86_64__
+#define SIGRETURN_FRAME_OFFSET 23
+	__asm __volatile__ ( "movq %%rbp,%0":"=r"(pFramePointer):"r"(pFramePointer) );
+#endif
+
+	if ( !pFramePointer )
+	{
+		sphLogFatal ( "Frame pointer is null. Unable to backtrace the stack. Did you build the searchd with -fomit-frame-pointer?" );
+		return;
+	}
+
+	if ( !pMyStack || (BYTE*) pMyStack > (BYTE*) &pFramePointer )
+	{
+		int iRound = Min ( 65536, iStackSize );
+		pMyStack = (void *) ( ( (size_t) &pFramePointer + iRound ) & ~(size_t)65535 );
+		sphWarning ( "Something wrong with thread's stack, the trace may be incorrect (FramePointer=%p)", pFramePointer );
+
+		if ( pFramePointer > (BYTE**) pMyStack || pFramePointer < (BYTE**) pMyStack - iStackSize )
+		{
+			sphLogFatal ( "Wrong stack limit or frame pointer (fp=%p, stack=%p, stack size=%d). Unable to backtrace", pFramePointer, pMyStack, iStackSize );
+			return;
+		}
+	}
+
+	sphInfo ( "Stack is OK. Backtrace:" );
+
+	BYTE** pNewFP;
+	bool bOk = true;
+	while ( pFramePointer < (BYTE**) pMyStack )
+	{
+		pNewFP = (BYTE**) *pFramePointer;
+		sphInfo ( "%p", iFrameCount==iReturnFrameCount? *(pFramePointer + SIGRETURN_FRAME_OFFSET) : *(pFramePointer + 1) );
+
+		bOk = pNewFP > pFramePointer;
+		if ( !bOk ) break;
+
+		pFramePointer = pNewFP;
+		iFrameCount++;
+	}
+
+	if ( !bOk )
+		sphWarning ( "Something wrong in frame pointers. BackTrace failed (failed FP was %p)", pNewFP );
+	else
+		sphInfo ( "Stack trace seems to be succesfull. Now you have to resolve the numbers above and attach resolved values to the bugreport. See the section about resolving in the documentation" );
+}
+
 void HandleCrash ( int )
 {
+
+	StackTraceDump();
+
 	if ( !g_pCrashLog_LastQuery )
 		return;
 
@@ -1217,7 +1280,6 @@ void sigusr1 ( int )
 }
 
 #endif // !USE_WINDOWS
-
 
 void SetSignalHandlers ()
 {

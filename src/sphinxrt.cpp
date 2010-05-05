@@ -186,6 +186,12 @@ public:
 	inline int	GetKillListSize () const { return m_dLargeKlist.GetLength(); }
 	inline bool KillListLock() const { return m_tRwLargelock.ReadLock(); }
 	inline bool KillListUnlock() const { return m_tRwLargelock.Unlock(); }
+
+	// NOT THREAD SAFE
+	bool Exists ( SphDocID_t uDoc )
+	{
+		return ( m_hSmallKlist.Exists ( uDoc ) || m_dLargeKlist.BinarySearch ( SphAttr_t(uDoc))!=NULL );
+	}
 };
 
 void RtDiskKlist_t::Reset()
@@ -1976,36 +1982,48 @@ void RtIndex_t::CommitReplayable ()
 
 		// update totals
 		// work the original (!) segments, and before (!) updating their K-lists
-		ARRAY_FOREACH ( i, pAcc->m_dAccumKlist )
+		int iDiskLiveKLen = pAcc->m_dAccumKlist.GetLength();
+		for ( int i=0; i<iDiskLiveKLen; i++ )
 		{
-			SphDocID_t uDocid = pAcc->m_dAccumKlist[i];
-			bool bKilled = false;
+			const SphDocID_t uDocid = pAcc->m_dAccumKlist[i];
 
 			// check RAM chunk
-			for ( int j=0; j<m_pSegments.GetLength() && !bKilled; j++ )
-				if ( m_pSegments[j]->HasDocid ( uDocid ) && !m_pSegments[j]->m_dKlist.BinarySearch ( uDocid ) )
-					bKilled = true;
+			bool bRamKilled = false;
+			for ( int j=0; j<m_pSegments.GetLength() && !bRamKilled; j++ )
+				bRamKilled = ( m_pSegments[j]->HasDocid ( uDocid ) && !m_pSegments[j]->m_dKlist.BinarySearch ( uDocid ) );
+
+			bool bDiskKilled = m_tKlist.Exists ( uDocid );
 
 			// check disk chunks
-			if ( !bKilled )
-				for ( int j=m_pDiskChunks.GetLength()-1; j>=0; j-- )
-					if ( m_pDiskChunks[j]->HasDocid ( uDocid ) )
+			bool bKeep = false;
+			if ( !bRamKilled || !bDiskKilled )
 			{
-				// we just found the most recent chunk with our suspect docid
-				// let's check whether it's already killed by subsequent chunks, or gets killed now
-				bKilled = true;
-				SphAttr_t uRef = uDocid;
-				for ( int k=j+1; k<m_pDiskChunks.GetLength(); k++ )
-					if ( sphBinarySearch ( m_pDiskChunks[k]->GetKillList(), m_pDiskChunks[k]->GetKillList() + m_pDiskChunks[k]->GetKillListSize(), uRef ) )
+				for ( int j=m_pDiskChunks.GetLength()-1; j>=0 && !bKeep; j-- )
 				{
-					bKilled = false;
-					break;
+					if ( m_pDiskChunks[j]->HasDocid ( uDocid ) )
+					{
+						// we just found the most recent chunk with our suspect docid
+						// let's check whether it's already killed by subsequent chunks, or gets killed now
+						SphAttr_t uRef = uDocid;
+						bKeep = true;
+						for ( int k=j+1; k<m_pDiskChunks.GetLength() && bKeep; k++ )
+						{
+							const CSphIndex * pIndex = m_pDiskChunks[k];
+							bKeep &= ( sphBinarySearch ( pIndex->GetKillList(), pIndex->GetKillList() + pIndex->GetKillListSize(), uRef )==NULL );
+						}
+					}
 				}
-				break;
 			}
 
-			if ( bKilled )
+			if ( bRamKilled || bKeep )
 				iTotalKilled++;
+
+			if ( bDiskKilled || !bKeep )
+			{
+				Swap ( pAcc->m_dAccumKlist[i], pAcc->m_dAccumKlist[iDiskLiveKLen-1] );
+				iDiskLiveKLen--;
+				i--;
+			}
 		}
 
 		// update K-lists on survivors
@@ -2036,7 +2054,8 @@ void RtIndex_t::CommitReplayable ()
 		}
 
 		// update disk K-list
-		ARRAY_FOREACH ( i, pAcc->m_dAccumKlist )
+		// after iDiskLiveKLen are ids already stored on disk - just skip them
+		for ( int i=0; i<iDiskLiveKLen; i++ )
 			m_tKlist.Delete ( pAcc->m_dAccumKlist[i] );
 	}
 

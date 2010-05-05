@@ -15,6 +15,7 @@
 
 #include "sphinx.h"
 #include "sphinxutils.h"
+#include "sphinxint.h"
 #include <time.h>
 
 
@@ -44,6 +45,7 @@ void StripStdin ( const char * sIndexAttrs, const char * sRemoveElements )
 	fprintf ( stdout, "dumping stripped results...\n%s\n", &dBuffer[0] );
 }
 
+void DoOptimization ( const CSphString & sIndex, const CSphConfig & hConfig );
 
 int main ( int argc, char ** argv )
 {
@@ -63,6 +65,8 @@ int main ( int argc, char ** argv )
 			"--check <INDEXNAME>\t\tperform index consistency check\n"
 			"--htmlstrip <INDEXNAME>\t\tfilter stdin usng HTML stripper settings\n"
 			"\t\t\t\tfor a given index (taken from sphinx.conf)\n"
+			"--optimize-rt-klists <INDEXNAME>\tperform kill list opimization in rt's disk chunks\n"
+			"\t\t\t\tfor a given index (taken from sphinx.conf) or --all\n"
 			"\n"
 			"Options are:\n"
 			"-c, --config <file>\t\tuse given config file instead of defaults\n"
@@ -88,7 +92,8 @@ int main ( int argc, char ** argv )
 		CMD_DUMPDOCIDS,
 		CMD_DUMPHITLIST,
 		CMD_CHECK,
-		CMD_STRIP
+		CMD_STRIP,
+		CMD_OPTIMIZE
 	} eCommand = CMD_NOTHING;
 
 	int i;
@@ -104,6 +109,13 @@ int main ( int argc, char ** argv )
 		OPT1 ( "--dumpdocids" )		{ eCommand = CMD_DUMPDOCIDS; sIndex = argv[++i]; }
 		OPT1 ( "--check" )			{ eCommand = CMD_CHECK; sIndex = argv[++i]; }
 		OPT1 ( "--htmlstrip" )		{ eCommand = CMD_STRIP; sIndex = argv[++i]; }
+		OPT1 ( "--optimize-rt-klists" )
+		{
+			eCommand = CMD_OPTIMIZE;
+			sIndex = argv[++i];
+			if ( sIndex=="--all" )
+				sIndex = "";
+		}
 
 		// options with 2 args
 		else if ( (i+2)>=argc )
@@ -152,7 +164,7 @@ int main ( int argc, char ** argv )
 
 	// common part for several commands, check and preload index
 	CSphIndex * pIndex = NULL;
-	while ( !sIndex.IsEmpty() )
+	while ( !sIndex.IsEmpty() && eCommand!=CMD_OPTIMIZE )
 	{
 		// check config
 		if ( !hConf["index"](sIndex) )
@@ -226,11 +238,283 @@ int main ( int argc, char ** argv )
 			}
 			break;
 
+		case CMD_OPTIMIZE:
+			DoOptimization ( sIndex, hConf );
+			break;
+
 		default:
 			sphDie ( "INTERNAL ERROR: unhandled command (id=%d)", (int)eCommand );
 	}
 
 	return 0;
+}
+
+#if USE_WINDOWS
+#include <io.h> // for open()
+#define sphSeek		_lseeki64
+#else
+#define sphSeek		lseek
+#endif
+
+bool FixupFiles ( const CSphVector<CSphString> & dFiles, CSphString & sError )
+{
+	ARRAY_FOREACH ( i, dFiles )
+	{
+		const CSphString & sPath = dFiles[i];
+		CSphString sKlistOld, sKlistNew, sHeader;
+		sKlistOld.SetSprintf ( "%s.spk", sPath.cstr() );
+		sKlistNew.SetSprintf ( "%s.new.spk", sPath.cstr() );
+		sHeader.SetSprintf ( "%s.sph", sPath.cstr() );
+
+		DWORD iCount = 0;
+		{
+			CSphAutoreader rdHeader, rdKlistNew, rdKlistOld;
+			if ( !rdHeader.Open ( sHeader, sError ) || !rdKlistNew.Open ( sKlistNew, sError ) || !rdKlistOld.Open ( sKlistOld, sError ) )
+				return false;
+
+			const SphOffset_t iSize = rdKlistNew.GetFilesize();
+			iCount = (DWORD)( iSize / sizeof(SphAttr_t) );
+		}
+
+		if ( ::unlink ( sKlistOld.cstr() )!=0 )
+		{
+			sError.SetSprintf ( "file: '%s', error: '%s'", sKlistOld.cstr(), strerror(errno) );
+			return false;
+		}
+
+		if ( ::rename ( sKlistNew.cstr(), sKlistOld.cstr() )!=0 )
+		{
+			sError.SetSprintf ( "files: '%s'->'%s', error: '%s'", sKlistNew.cstr(), sKlistOld.cstr(), strerror(errno) );
+			return false;
+		}
+
+		int iFD = ::open ( sHeader.cstr(), SPH_O_BINARY | O_RDWR, 0644 );
+		if ( iFD<0 )
+		{
+			sError.SetSprintf ( "file: '%s', error: '%s'", sHeader.cstr(), strerror(errno) );
+			return false;
+		}
+
+		if ( sphSeek ( iFD, -4, SEEK_END )==-1L )
+		{
+			sError.SetSprintf ( "file: '%s', error: '%s'", sHeader.cstr(), strerror(errno) );
+			SafeClose ( iFD );
+			return false;
+		}
+
+		if ( ::write ( iFD, &iCount, 4 )==-1 )
+		{
+			sError.SetSprintf ( "file: '%s', error: '%s'", sHeader.cstr(), strerror(errno) );
+			SafeClose ( iFD );
+			return false;
+		}
+
+		SafeClose ( iFD );
+	}
+
+	return true;
+}
+
+bool DoKlistsOptimization ( int iRowSize, const char * sPath, int iChunkCount, CSphVector<CSphString> & dFiles )
+{
+	CSphTightVector<SphDocID_t> dLiveID;
+
+	CSphString sError;
+
+	for ( int iChunk=0; iChunk<iChunkCount; iChunk++ )
+	{
+		const int64_t tmStart = sphMicroTimer();
+
+		fprintf ( stdout, "\nprocessing '%s.%d'...", sPath, iChunk );
+
+		CSphString sKlist, sAttr, sNew;
+		sKlist.SetSprintf ( "%s.%d.spk", sPath, iChunk );
+		sAttr.SetSprintf ( "%s.%d.spa", sPath, iChunk );
+		sNew.SetSprintf ( "%s.%d.new.spk", sPath, iChunk );
+
+		CSphAutoreader rdKList, rdAttr;
+		CSphWriter wrNew;
+		if ( !rdKList.Open ( sKlist, sError ) || !rdAttr.Open ( sAttr, sError ) || !wrNew.OpenFile ( sNew, sError ) )
+		{
+			fprintf ( stdout, "\n%s\n", sError.cstr() );
+			return false;
+		}
+
+		CSphTightVector<SphAttr_t> dKlist;
+
+		if ( dLiveID.GetLength()>0 )
+		{
+			assert ( rdKList.GetFilesize()<INT_MAX );
+
+			dKlist.Resize ( (int)( rdKList.GetFilesize()/sizeof(SphAttr_t) ) );
+			rdKList.GetBytes ( dKlist.Begin(), (int)rdKList.GetFilesize() );
+
+			// 1nd step kill all k-list ids not in live ids
+
+			ARRAY_FOREACH ( i, dKlist )
+			{
+				SphDocID_t uid = (SphDocID_t)dKlist[i];
+				SphDocID_t * pInLive = sphBinarySearch ( dLiveID.Begin(), &dLiveID.Last(), uid );
+				if ( !pInLive )
+					dKlist.RemoveFast ( i-- );
+			}
+			dKlist.Sort();
+
+			// 2nd step kill all prev ids by this fresh k-list
+
+			SphDocID_t * pFirstLive = dLiveID.Begin();
+			SphDocID_t * pLastLive = &dLiveID.Last();
+
+			ARRAY_FOREACH ( i, dKlist )
+			{
+				SphDocID_t uID = (SphDocID_t)dKlist[i];
+				SphDocID_t * pKilled = sphBinarySearch ( pFirstLive, pLastLive, uID );
+
+				assert ( pKilled );
+				pFirstLive = pKilled+1;
+				*pKilled = 0;
+			}
+
+			const int iWasLive = dLiveID.GetLength();
+
+			if ( dKlist.GetLength()>0 )
+				ARRAY_FOREACH ( i, dLiveID )
+				if ( dLiveID[i]==0 )
+					dLiveID.RemoveFast ( i-- );
+
+			assert ( dLiveID.GetLength()+dKlist.GetLength()==iWasLive );
+
+			dLiveID.Sort();
+		}
+
+		// 3d step write new k-list
+
+		if ( dKlist.GetLength()>0 )
+			wrNew.PutBytes ( dKlist.Begin(), dKlist.GetLength()*sizeof(SphAttr_t) );
+
+		dKlist.Reset();
+		wrNew.CloseFile();
+
+		// 4th step merge ID from this segment into live ids
+		if ( iChunk!=iChunkCount-1 )
+		{
+			const int iWasLive = Max ( dLiveID.GetLength()-1, 0 );
+			const int iRowCount = (int)( rdAttr.GetFilesize() / ( (DOCINFO_IDSIZE+iRowSize)*4 ) );
+
+			for ( int i=0; i<iRowCount; i++ )
+			{
+				SphDocID_t uID = 0;
+				rdAttr.GetBytes ( &uID, DOCINFO_IDSIZE*4 );
+				rdAttr.SkipBytes ( iRowSize*4 );
+
+				if ( sphBinarySearch ( dLiveID.Begin(), dLiveID.Begin()+iWasLive, uID )==NULL )
+					dLiveID.Add ( uID );
+			}
+
+			dLiveID.Sort();
+		}
+
+		CSphString & sFile = dFiles.Add();
+		sFile.SetSprintf ( "%s.%d", sPath, iChunk );
+
+		const int64_t tmEnd = sphMicroTimer();
+		fprintf ( stdout, "\rprocessed '%s.%d' in %.3f sec", sPath, iChunk, float(tmEnd-tmStart )/1000000.0f );
+	}
+
+	return true;
+}
+
+void DoOptimization ( const CSphString & sIndex, const CSphConfig & hConf )
+{
+	const int64_t tmStart = sphMicroTimer();
+
+	int iDone = 0;
+	CSphVector<CSphString> dFiles;
+
+	hConf["index"].IterateStart ();
+	while ( hConf["index"].IterateNext () )
+	{
+		CSphString sError;
+
+		const CSphConfigSection & hIndex = hConf["index"].IterateGet ();
+		const char * sIndexName = hConf["index"].IterateGetKey().cstr();
+
+		if ( hIndex("type") && hIndex["type"]!="rt" )
+			continue;
+
+		if ( !sIndex.IsEmpty() && sIndex!=sIndexName )
+			continue;
+
+		if ( !hIndex.Exists ( "path" ) )
+		{
+			fprintf ( stdout, "key 'path' not found in index '%s' - skiped\n", sIndexName );
+			continue;
+		}
+
+		const int64_t tmIndexStart = sphMicroTimer();
+
+		CSphSchema tSchema ( sIndexName );
+		CSphColumnInfo tCol;
+
+		// fields
+		for ( CSphVariant * v=hIndex("rt_field"); v; v=v->m_pNext )
+		{
+			tCol.m_sName = v->cstr();
+			tSchema.m_dFields.Add ( tCol );
+		}
+		if ( !tSchema.m_dFields.GetLength() )
+		{
+			fprintf ( stdout, "index '%s': no fields configured (use rt_field directive) - skiped\n", sIndexName );
+			continue;
+		}
+
+		// attrs
+		const int iNumTypes = 5;
+		const char * sTypes[iNumTypes] = { "rt_attr_uint", "rt_attr_bigint", "rt_attr_float", "rt_attr_timestamp", "rt_attr_string" };
+		const int iTypes[iNumTypes] = { SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, SPH_ATTR_FLOAT, SPH_ATTR_TIMESTAMP, SPH_ATTR_STRING };
+
+		for ( int iType=0; iType<iNumTypes; iType++ )
+		{
+			for ( CSphVariant * v = hIndex ( sTypes[iType] ); v; v = v->m_pNext )
+			{
+				tCol.m_sName = v->cstr();
+				tCol.m_eAttrType = iTypes[iType];
+				tSchema.AddAttr ( tCol, false );
+			}
+		}
+
+		const char * sPath = hIndex["path"].cstr();
+
+		CSphString sMeta;
+		sMeta.SetSprintf ( "%s.meta", sPath );
+		CSphAutoreader rdMeta;
+		if ( !rdMeta.Open ( sMeta.cstr(), sError ) )
+		{
+			fprintf ( stdout, "%s\n", sError.cstr() );
+			continue;
+		}
+
+		rdMeta.SeekTo ( 8, 4 );
+		const int iDiskCunkCount = rdMeta.GetDword();
+
+		if ( !DoKlistsOptimization ( tSchema.GetRowSize(), sPath, iDiskCunkCount, dFiles ) )
+			sphDie ( "can't cook k-list '%s'", sPath );
+
+		const int64_t tmIndexDone = sphMicroTimer();
+		fprintf ( stdout, "\nindex '%s' done in %.3f sec\n", sIndexName, float(tmIndexDone-tmIndexStart )/1000000.0f );
+		iDone++;
+		break;
+	}
+
+	const int64_t tmIndexesDone = sphMicroTimer();
+	fprintf ( stdout, "\ntotal processed=%d in %.3f sec\n", iDone, float(tmIndexesDone-tmStart )/1000000.0f );
+
+	CSphString sError("none");
+	if ( !FixupFiles ( dFiles, sError ) )
+		fprintf ( stdout, "error during files fixup: %s\n", sError.cstr() );
+
+	const int64_t tmDone = sphMicroTimer();
+	fprintf ( stdout, "\nfinished in %.3f sec\n", float(tmDone-tmStart )/1000000.0f );
 }
 
 //

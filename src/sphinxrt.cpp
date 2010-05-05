@@ -182,7 +182,7 @@ public:
 			NakedFlush();
 		m_tRwSmalllock.Unlock();
 	}
-	inline const SphAttr_t * GetKillList () const { return & m_dLargeKlist[0]; }
+	inline const SphAttr_t * GetKillList () const { return m_dLargeKlist.Begin(); }
 	inline int	GetKillListSize () const { return m_dLargeKlist.GetLength(); }
 	inline bool KillListLock() const { return m_tRwLargelock.ReadLock(); }
 	inline bool KillListUnlock() const { return m_tRwLargelock.Unlock(); }

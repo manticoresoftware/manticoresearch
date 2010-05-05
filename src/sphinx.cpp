@@ -16250,6 +16250,71 @@ bool CSphSource::IterateJoinedHits ( CSphString & )
 // DOCUMENT SOURCE
 /////////////////////////////////////////////////////////////////////////////
 
+static void FormatEscaped ( FILE * fp, const char * sLine )
+{
+	// handle empty lines
+	if ( !sLine || !*sLine )
+	{
+		fprintf ( fp, ", ''" );
+		return;
+	}
+
+	// pass one, count the needed buffer size
+	int iLen = strlen(sLine);
+	int iOut = 0;
+	for ( int i=0; i<iLen; i++ )
+		switch ( sLine[i] )
+	{
+		case '\r':
+		case '\n':
+		case '\t':
+		case '\'':
+			iOut += 2;
+			break;
+
+		default:
+			iOut++;
+			break;
+	}
+	iOut += 4; // comma, spaces, quotes
+
+	// allocate the buffer
+	char sMinibuffer[8192];
+	char * sMaxibuffer = NULL;
+	char * sBuffer = sMinibuffer;
+
+	if ( iOut>sizeof(sMinibuffer) )
+	{
+		sMaxibuffer = new char [ iOut+4 ]; // 4 is just my safety gap
+		sBuffer = sMaxibuffer;
+	}
+
+	// pass two, escape it
+	char * sOut = sBuffer;
+
+	strncpy ( sOut, ", '", 3 );
+	sOut += 3;
+
+	for ( int i=0; i<iLen; i++ )
+		switch ( sLine[i] )
+	{
+		case '\r':	*sOut++ = '\\'; *sOut++ = 'r'; break;
+		case '\n':	*sOut++ = '\\'; *sOut++ = 'n'; break;
+		case '\t':	*sOut++ = '\\'; *sOut++ = 't'; break;
+		case '\'':	*sOut++ = '\\'; *sOut++ = '\''; break;
+		default:	*sOut++ = sLine[i];
+	}
+	*sOut++ = '\'';
+
+	// print!
+	assert ( sOut==sBuffer+iOut );
+	fwrite ( sBuffer, 1, iOut, fp );
+
+	// cleanup
+	SafeDeleteArray ( sMaxibuffer );
+}
+
+
 bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 {
 	assert ( m_pTokenizer );
@@ -16260,6 +16325,38 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 		return true;
 	if ( !dFields )
 		return false;
+
+	if ( m_fpDumpRows )
+	{
+		fprintf ( m_fpDumpRows, "INSERT INTO rows VALUES (" DOCID_FMT, m_tDocInfo.m_iDocID );
+		for ( int iAttr=0; iAttr<m_tSchema.GetAttrsCount(); iAttr++ )
+		{
+			const CSphColumnInfo & tCol = m_tSchema.GetAttr(iAttr);
+			switch ( tCol.m_eAttrType )
+			{
+				case SPH_ATTR_INTEGER | SPH_ATTR_MULTI:
+					fprintf ( m_fpDumpRows, ", ''" );
+					break;
+
+				case SPH_ATTR_STRING:
+					FormatEscaped ( m_fpDumpRows, m_dStrAttrs[iAttr].cstr() );
+					break;
+
+				case SPH_ATTR_BIGINT:
+					fprintf ( m_fpDumpRows, ", " INT64_FMT, m_tDocInfo.GetAttr(tCol.m_tLocator) );
+					break;
+
+				default:
+					fprintf ( m_fpDumpRows, ", %u", (DWORD)m_tDocInfo.GetAttr(tCol.m_tLocator) );
+					break;
+			}
+		}
+
+		ARRAY_FOREACH ( i, m_tSchema.m_dFields )
+			FormatEscaped ( m_fpDumpRows, (const char*) dFields[i] );
+
+		fprintf ( m_fpDumpRows, ");\n");
+	}
 
 	m_tStats.m_iTotalDocuments++;
 	m_dHits.Reserve ( 1024 );

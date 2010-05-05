@@ -776,7 +776,7 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 // INDEXING
 //////////////////////////////////////////////////////////////////////////
 
-bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const CSphConfigType & hSources, bool bVerbose )
+bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const CSphConfigType & hSources, bool bVerbose, FILE * fpDumpRows )
 {
 	// check index type
 	bool bPlain = true;
@@ -982,6 +982,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName, const 
 		}
 
 		pSource->SetTokenizer ( pTokenizer );
+		pSource->SetDumpRows ( fpDumpRows );
 		dSources.Add ( pSource );
 	}
 
@@ -1276,6 +1277,7 @@ int main ( int argc, char ** argv )
 	bool bIndexAll = false;
 	bool bMergeKillLists = false;
 	bool bVerbose = false;
+	CSphString sDumpRows;
 
 	int i;
 	for ( i=1; i<argc; i++ )
@@ -1343,6 +1345,10 @@ int main ( int argc, char ** argv )
 		{
 			dIndexes.Add ( argv[i] );
 
+		} else if ( strcasecmp ( argv[i], "--dump-rows" )==0 && (i+1)<argc )
+		{
+			sDumpRows = argv[++i];
+
 		} else
 		{
 			break;
@@ -1392,6 +1398,7 @@ int main ( int argc, char ** argv )
 				"--merge-klists\n"
 				"--merge-killlists\tmerge src and dst kill-lists (default is to\n"
 				"\t\t\tapply src kill-list to dst index)\n"
+				"--dump-rows <FILE>\tdump indexed rows into FILE\n"
 				"\n"
 				"Examples:\n"
 				"indexer --quiet myidx1\treindex 'myidx1' defined in 'sphinx.conf'\n"
@@ -1431,6 +1438,14 @@ int main ( int argc, char ** argv )
 	// index each index
 	////////////////////
 
+	FILE * fpDumpRows = NULL;
+	if ( !bMerge && !sDumpRows.IsEmpty() )
+	{
+		fpDumpRows = fopen ( sDumpRows.cstr(), "wb+" );
+		if ( !fpDumpRows )
+			sphDie ( "failed to open %s: %s", sDumpRows.cstr(), strerror(errno) );
+	}
+
 	sphStartIOStats ();
 
 	bool bIndexedOk = false; // if any of the indexes are ok
@@ -1452,7 +1467,7 @@ int main ( int argc, char ** argv )
 	{
 		hConf["index"].IterateStart ();
 		while ( hConf["index"].IterateNext() )
-			bIndexedOk |= DoIndex ( hConf["index"].IterateGet (), hConf["index"].IterateGetKey().cstr(), hConf["source"], bVerbose );
+			bIndexedOk |= DoIndex ( hConf["index"].IterateGet (), hConf["index"].IterateGetKey().cstr(), hConf["source"], bVerbose, fpDumpRows );
 	} else
 	{
 		ARRAY_FOREACH ( i, dIndexes )
@@ -1460,7 +1475,7 @@ int main ( int argc, char ** argv )
 			if ( !hConf["index"](dIndexes[i]) )
 				fprintf ( stdout, "WARNING: no such index '%s', skipping.\n", dIndexes[i] );
 			else
-				bIndexedOk |= DoIndex ( hConf["index"][dIndexes[i]], dIndexes[i], hConf["source"], bVerbose );
+				bIndexedOk |= DoIndex ( hConf["index"][dIndexes[i]], dIndexes[i], hConf["source"], bVerbose, fpDumpRows );
 		}
 	}
 

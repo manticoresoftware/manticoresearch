@@ -1179,6 +1179,9 @@ public:
 	/// set tokenizer
 	void								SetTokenizer ( ISphTokenizer * pTokenizer );
 
+	/// set rows dump file
+	virtual void						SetDumpRows ( FILE * ) {}
+
 	/// get stats
 	virtual const CSphSourceStats &		GetStats ();
 
@@ -1281,6 +1284,7 @@ public:
 							, m_pReadFileBuffer ( NULL )
 							, m_iReadFileBufferSize ( 256 * 1024 )
 							, m_iMaxFileBufferSize ( 2 * 1024 * 1024 )
+							, m_fpDumpRows ( NULL )
 							{}
 
 	/// dtor
@@ -1295,6 +1299,7 @@ public:
 	virtual BYTE **			NextDocument ( CSphString & sError ) = 0;
 
 	virtual void			SetupFieldMatch ( const char * szPrefixFields, const char * szInfixFields );
+	virtual void			SetDumpRows ( FILE * fpDumpRows ) { m_fpDumpRows = fpDumpRows; }
 
 protected:
 	bool					IsPrefixMatch ( const char * szField ) const;
@@ -1306,6 +1311,7 @@ protected:
 	char *					m_pReadFileBuffer;
 	int						m_iReadFileBufferSize;	///< size of read buffer for the 'slq_file_field' fields
 	int						m_iMaxFileBufferSize;	///< max size of read buffer for the 'slq_file_field' fields
+	FILE *					m_fpDumpRows;
 
 private:
 	CSphString				m_sPrefixFields;

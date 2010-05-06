@@ -221,6 +221,9 @@ bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const char 
 
 void SafeClose ( int & iFD );
 
+struct XQNode_t;
+void sphDoStatsOrder ( const XQNode_t * pNode, CSphQueryResultMeta & tResult );
+
 //////////////////////////////////////////////////////////////////////////
 
 /// memory tracker

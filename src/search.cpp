@@ -430,13 +430,16 @@ int main ( int argc, char ** argv )
 		}
 
 		fprintf ( stdout, "\nwords:\n" );
-		ARRAY_FOREACH ( i, pResult->m_dWordStats )
+		pResult->m_hWordStats.IterateStart();
+		int iWord = 1;
+		while ( pResult->m_hWordStats.IterateNext() )
 		{
 			fprintf ( stdout, "%d. '%s': %d documents, %d hits\n",
-				1+i,
-				pResult->m_dWordStats[i].m_sWord.cstr(),
-				pResult->m_dWordStats[i].m_iDocs,
-				pResult->m_dWordStats[i].m_iHits );
+				iWord,
+				pResult->m_hWordStats.IterateGetKey().cstr(),
+				pResult->m_hWordStats.IterateGet().m_iDocs,
+				pResult->m_hWordStats.IterateGet().m_iHits );
+			iWord++;
 		}
 		fprintf ( stdout, "\n" );
 

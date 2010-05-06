@@ -1964,17 +1964,18 @@ public:
 
 	struct WordStat_t
 	{
-		CSphString			m_sWord;			///< i-th search term (normalized word form)
 		int					m_iDocs;			///< document count for this term
 		int					m_iHits;			///< hit count for this term
 	};
-	CSphVector<WordStat_t>	m_dWordStats;
+	SmallStringHash_T<WordStat_t> m_hWordStats; ///< hash of i-th search term (normalized word form)
 
 	int						m_iMatches;			///< total matches returned (upto MAX_MATCHES)
 	int						m_iTotalMatches;	///< total matches found (unlimited)
 
 	CSphString				m_sError;			///< error message
 	CSphString				m_sWarning;			///< warning message
+
+	void					AddStat ( const CSphString & sWord, int iDocs, int iHits );
 };
 
 

@@ -36,21 +36,6 @@ inline bool sphIsSpace ( int iCode )
 
 /////////////////////////////////////////////////////////////////////////////
 
-/// string hash function
-struct CSphStrHashFunc
-{
-	static inline int Hash ( const CSphString & sKey )
-	{
-		return sKey.IsEmpty() ? 0 : sphCRC32 ( (const BYTE *)sKey.cstr() );
-	}
-};
-
-/// small hash with string keys
-template < typename T >
-class SmallStringHash_T : public CSphOrderedHash < T, CSphString, CSphStrHashFunc, 256, 13 > {};
-
-/////////////////////////////////////////////////////////////////////////////
-
 /// config section (hash of variant values)
 class CSphConfigSection : public SmallStringHash_T < CSphVariant >
 {

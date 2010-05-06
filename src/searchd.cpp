@@ -3178,7 +3178,7 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, Agent_t & tAgent
 		int iRetrieved = tReq.GetInt ();
 		tRes.m_iTotalMatches = tReq.GetInt ();
 		tRes.m_iQueryTime = tReq.GetInt ();
-		tRes.m_dWordStats.Resize ( tReq.GetInt () ); // FIXME! sanity check?
+		const int iWordsCount = tReq.GetInt (); // FIXME! sanity check?
 		if ( iRetrieved!=iMatches )
 		{
 			tAgent.m_sFailure.SetSprintf ( "expected %d retrieved documents, got %d", iMatches, iRetrieved );
@@ -3186,15 +3186,13 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, Agent_t & tAgent
 		}
 
 		// read per-word stats
-		ARRAY_FOREACH ( i, tRes.m_dWordStats )
+		for ( int i=0; i<iWordsCount; i++ )
 		{
 			CSphString sWord = tReq.GetString ();
 			int iDocs = tReq.GetInt ();
 			int iHits = tReq.GetInt ();
 
-			tRes.m_dWordStats[i].m_sWord = sWord;
-			tRes.m_dWordStats[i].m_iDocs = iDocs;
-			tRes.m_dWordStats[i].m_iHits = iHits;
+			tRes.AddStat ( sWord, iDocs, iHits );
 		}
 
 		// mark this result as ok
@@ -3889,8 +3887,9 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 		iRespLen += 4*pRes->m_iCount*iWideAttrs; // extra 4 bytes per attr per match
 	}
 
-	ARRAY_FOREACH ( i, pRes->m_dWordStats ) // per-word stats
-		iRespLen += 12 + strlen ( pRes->m_dWordStats[i].m_sWord.cstr() ); // wordlen, word, docs, hits
+	pRes->m_hWordStats.IterateStart();
+	while ( pRes->m_hWordStats.IterateNext() ) // per-word stats
+		iRespLen += 12 + strlen ( pRes->m_hWordStats.IterateGetKey().cstr() ); // wordlen, word, docs, hits
 
 	// MVA and string values
 	CSphVector<CSphAttrLocator> dMvaItems;
@@ -4090,13 +4089,15 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 	tOut.SendInt ( pRes->m_dMatches.GetLength() );
 	tOut.SendInt ( pRes->m_iTotalMatches );
 	tOut.SendInt ( Max ( pRes->m_iQueryTime, 0 ) );
-	tOut.SendInt ( pRes->m_dWordStats.GetLength() );
+	tOut.SendInt ( pRes->m_hWordStats.GetLength() );
 
-	ARRAY_FOREACH ( i, pRes->m_dWordStats )
+	pRes->m_hWordStats.IterateStart();
+	while ( pRes->m_hWordStats.IterateNext() )
 	{
-		tOut.SendString ( pRes->m_dWordStats[i].m_sWord.cstr() );
-		tOut.SendInt ( pRes->m_dWordStats[i].m_iDocs );
-		tOut.SendInt ( pRes->m_dWordStats[i].m_iHits );
+		const CSphQueryResult::WordStat_t & tStat = pRes->m_hWordStats.IterateGet();
+		tOut.SendString ( pRes->m_hWordStats.IterateGetKey().cstr() );
+		tOut.SendInt ( tStat.m_iDocs );
+		tOut.SendInt ( tStat.m_iHits );
 	}
 }
 
@@ -4534,44 +4535,18 @@ void LocalSearchThreadFunc ( void * pArg )
 }
 
 
-void MergeWordStats ( CSphVector<CSphQueryResultMeta::WordStat_t> & dDst, const CSphVector<CSphQueryResultMeta::WordStat_t> & dSrc, SearchFailuresLog_c & tLog )
+static void MergeWordStats ( CSphQueryResultMeta & tDstResult, const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hSrc )
 {
-	if ( !dDst.GetLength() )
+	if ( !tDstResult.m_hWordStats.GetLength() )
 	{
 		// nothing has been set yet; just copy
-		dDst = dSrc;
+		tDstResult.m_hWordStats = hSrc;
 		return;
 	}
 
-	if ( dDst.GetLength()!=dSrc.GetLength() )
-	{
-		// word count mismatch
-		tLog.Submit ( "query words mismatch (%d local, %d remote)", dDst.GetLength(), dSrc.GetLength() );
-		return;
-	}
-
-	// check for word contents mismatch
-	assert ( dDst.GetLength()>0 && dDst.GetLength()==dSrc.GetLength() );
-
-	int iMismatch = -1;
-	for ( int i=0; i<dSrc.GetLength() && iMismatch<0; i++ )
-		if ( dDst[i].m_sWord!=dSrc[i].m_sWord )
-			iMismatch = i;
-
-	if ( iMismatch<0 )
-	{
-		// everything matches, update stats
-		ARRAY_FOREACH ( i, dSrc )
-		{
-			dDst[i].m_iDocs += dSrc[i].m_iDocs;
-			dDst[i].m_iHits += dSrc[i].m_iHits;
-		}
-	} else
-	{
-		// there are mismatches, warn
-		tLog.Submit ( "query words mismatch (word %d, '%s' local vs '%s' remote)",
-			iMismatch, dDst[iMismatch].m_sWord.cstr(), dSrc[iMismatch].m_sWord.cstr() );
-	}
+	hSrc.IterateStart();
+	while ( hSrc.IterateNext() )
+		tDstResult.AddStat ( hSrc.IterateGetKey(), hSrc.IterateGet().m_iDocs, hSrc.IterateGet().m_iHits );
 }
 
 void SearchHandler_c::RunLocalSearchesMT ()
@@ -4668,7 +4643,7 @@ void SearchHandler_c::RunLocalSearchesMT ()
 
 			tRes.m_pMva = tRaw.m_pMva;
 			tRes.m_pStrings = tRaw.m_pStrings;
-			MergeWordStats ( tRes.m_dWordStats, tRaw.m_dWordStats, m_dFailuresSet[iQuery] );
+			MergeWordStats ( tRes, tRaw.m_hWordStats );
 
 			tRes.m_iMultiplier = m_bMultiQueue ? iQueries : 1;
 			tRes.m_iCpuTime += tRaw.m_iCpuTime / tRes.m_iMultiplier;
@@ -4912,7 +4887,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter )
 					tRes.m_iQueryTime += tStats.m_iQueryTime / ( m_iEnd-m_iStart+1 );
 					tRes.m_iCpuTime += tStats.m_iCpuTime / ( m_iEnd-m_iStart+1 );
 					tRes.m_pMva = tStats.m_pMva;
-					tRes.m_dWordStats = tStats.m_dWordStats;
+					tRes.m_hWordStats = tStats.m_hWordStats;
 					tRes.m_iMultiplier = m_iEnd-m_iStart+1;
 				} else if ( tRes.m_iMultiplier==-1 )
 				{
@@ -5258,7 +5233,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 					tRes.m_iQueryTime += tRemoteResult.m_iQueryTime;
 
 					// merge this agent's words
-					MergeWordStats ( tRes.m_dWordStats, tRemoteResult.m_dWordStats, m_dFailuresSet[iRes] );
+					MergeWordStats ( tRes, tRemoteResult.m_hWordStats );
 				}
 
 				// dismissed
@@ -6490,16 +6465,22 @@ void BuildMeta ( CSphVector<CSphString> & dStatus, const CSphQueryResultMeta & t
 	dStatus.Add ( "time" );
 	dStatus.Add().SetSprintf ( "%d.%03d", tMeta.m_iQueryTime/1000, tMeta.m_iQueryTime%1000 );
 
-	ARRAY_FOREACH ( i, tMeta.m_dWordStats )
+	int iWord = 0;
+	tMeta.m_hWordStats.IterateStart();
+	while ( tMeta.m_hWordStats.IterateNext() )
 	{
-		dStatus.Add().SetSprintf ( "keyword[%d]", i );
-		dStatus.Add ( tMeta.m_dWordStats[i].m_sWord );
+		const CSphQueryResultMeta::WordStat_t & tStat = tMeta.m_hWordStats.IterateGet();
 
-		dStatus.Add().SetSprintf ( "docs[%d]", i );
-		dStatus.Add().SetSprintf ( "%d", tMeta.m_dWordStats[i].m_iDocs );
+		dStatus.Add().SetSprintf ( "keyword[%d]", iWord );
+		dStatus.Add ( tMeta.m_hWordStats.IterateGetKey() );
 
-		dStatus.Add().SetSprintf ( "hits[%d]", i );
-		dStatus.Add().SetSprintf ( "%d", tMeta.m_dWordStats[i].m_iHits );
+		dStatus.Add().SetSprintf ( "docs[%d]", iWord );
+		dStatus.Add().SetSprintf ( "%d", tStat.m_iDocs );
+
+		dStatus.Add().SetSprintf ( "hits[%d]", iWord );
+		dStatus.Add().SetSprintf ( "%d", tStat.m_iHits );
+
+		iWord++;
 	}
 }
 

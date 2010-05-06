@@ -3287,6 +3287,11 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			return false;
 		}
 
+		tChunkResult.m_hWordStats.IterateStart();
+		while ( tChunkResult.m_hWordStats.IterateNext() )
+			pResult->AddStat ( tChunkResult.m_hWordStats.IterateGetKey()
+				, tChunkResult.m_hWordStats.IterateGet().m_iDocs, tChunkResult.m_hWordStats.IterateGet().m_iHits );
+
 		dDiskStrings[iChunk] = tChunkResult.m_pStrings;
 		dExtra.Pop();
 	}
@@ -3341,6 +3346,9 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			m_tRwlock.Unlock ();
 			return false;
 		}
+
+		// fixup stat's order
+		sphDoStatsOrder ( tParsed.m_pRoot, *pResult );
 
 		// setup query
 		// must happen before index-level reject, in order to build proper keyword stats

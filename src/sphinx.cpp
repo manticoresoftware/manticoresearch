@@ -13009,6 +13009,17 @@ bool CSphQueryContext::SetupOverrides ( const CSphQuery * pQuery, CSphQueryResul
 	return true;
 }
 
+void sphDoStatsOrder ( const XQNode_t * pNode, CSphQueryResultMeta & tResult )
+{
+	if ( !pNode )
+		return;
+
+	ARRAY_FOREACH ( i, pNode->m_dWords )
+		tResult.AddStat ( pNode->m_dWords[i].m_sWord, 0, 0 );
+
+	ARRAY_FOREACH ( i, pNode->m_dChildren )
+		sphDoStatsOrder ( pNode->m_dChildren[i], tResult );
+}
 
 static XQNode_t * CloneKeyword ( const XQNode_t * pNode )
 {
@@ -13171,6 +13182,9 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 		return false;
 	}
 
+	// fixup stat's order
+	sphDoStatsOrder ( tParsed.m_pRoot, *pResult );
+
 	// transform query if needed (quorum transform, keyword expansion, etc.)
 	TransformQuorum ( &tParsed.m_pRoot );
 	if ( m_bExpandKeywords )
@@ -13243,6 +13257,9 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 		XQQuery_t tParsed;
 		if ( sphParseExtendedQuery ( tParsed, pQueries[i].m_sQuery.cstr(), pTokenizer, &m_tSchema, pDict ) )
 		{
+			// fixup stat's order
+			sphDoStatsOrder ( tParsed.m_pRoot, *ppResults[i] );
+
 			// transform query if needed (quorum transform, keyword expansion, etc.)
 			TransformQuorum ( &tParsed.m_pRoot );
 			if ( m_bExpandKeywords )
@@ -20191,6 +20208,28 @@ const char * CSphIndexProgress::BuildMessage() const
 
 	sBuf[sizeof(sBuf)-1] = '\0';
 	return sBuf;
+}
+
+int CSphStrHashFunc::Hash ( const CSphString & sKey )
+{
+	return sKey.IsEmpty() ? 0 : sphCRC32 ( (const BYTE *)sKey.cstr() );
+}
+
+
+void CSphQueryResultMeta::AddStat ( const CSphString & sWord, int iDocs, int iHits )
+{
+	WordStat_t * pStats = m_hWordStats ( sWord );
+	if ( !pStats )
+	{
+		CSphQueryResult::WordStat_t tStats;
+		tStats.m_iDocs = iDocs;
+		tStats.m_iHits = iHits;
+		m_hWordStats.Add ( tStats, sWord );
+	} else
+	{
+		pStats->m_iDocs += iDocs;
+		pStats->m_iHits += iHits;
+	}
 }
 
 //

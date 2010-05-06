@@ -4186,11 +4186,8 @@ ISphRanker * sphCreateRanker ( const XQNode_t * pRoot, ESphRankMode eRankMode, C
 	pRanker->GetQwords ( hQwords );
 
 	const int iQwords = hQwords.GetLength ();
-	pResult->m_dWordStats.Resize ( Max ( pResult->m_dWordStats.GetLength(), iQwords ) );
-
 	const CSphSourceStats & tSourceStats = pIndex->GetStats();
 
-	int iQword = 0;
 	hQwords.IterateStart ();
 	while ( hQwords.IterateNext() )
 	{
@@ -4209,18 +4206,7 @@ ISphRanker * sphCreateRanker ( const XQNode_t * pRoot, ESphRankMode eRankMode, C
 		tWord.m_fIDF = fIDF;
 
 		// update word stats
-		CSphQueryResult::WordStat_t & tStats = pResult->m_dWordStats[iQword++];
-		if ( tStats.m_sWord.cstr() )
-		{
-			assert ( tStats.m_sWord==tWord.m_sDictWord );
-			tStats.m_iDocs += tWord.m_iDocs;
-			tStats.m_iHits += tWord.m_iHits;
-		} else
-		{
-			tStats.m_sWord = tWord.m_sDictWord;
-			tStats.m_iDocs = tWord.m_iDocs;
-			tStats.m_iHits = tWord.m_iHits;
-		}
+		pResult->AddStat ( tWord.m_sDictWord, tWord.m_iDocs, tWord.m_iHits );
 	}
 
 	pRanker->SetQwordsIDF ( hQwords );

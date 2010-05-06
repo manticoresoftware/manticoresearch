@@ -1542,6 +1542,18 @@ public:
 	}
 };
 
+/////////////////////////////////////////////////////////////////////////////
+
+/// string hash function
+struct CSphStrHashFunc
+{
+	static int Hash ( const CSphString & sKey );
+};
+
+/// small hash with string keys
+template < typename T >
+class SmallStringHash_T : public CSphOrderedHash < T, CSphString, CSphStrHashFunc, 256, 13 > {};
+
 //////////////////////////////////////////////////////////////////////////
 
 /// pointer with automatic safe deletion when going out of scope

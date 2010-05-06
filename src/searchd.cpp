@@ -5396,6 +5396,22 @@ void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int 
 	NetOutputBuffer_c tOut ( iSock );
 	int iReplyLen = 0;
 
+	CSphVector<CSphString> dUntouched;
+
+	ARRAY_FOREACH ( i, tHandler.m_dResults )
+	{
+		dUntouched.Resize ( 0 );
+
+		AggrResult_t & tRes = tHandler.m_dResults[i];
+		tRes.m_hWordStats.IterateStart();
+		while ( tRes.m_hWordStats.IterateNext() )
+			if ( tRes.m_hWordStats.IterateGet().m_bUntouched )
+				dUntouched.Add ( tRes.m_hWordStats.IterateGetKey() );
+
+		ARRAY_FOREACH ( i, dUntouched )
+			tRes.m_hWordStats.Delete ( dUntouched[i] );
+	}
+
 	if ( iVer<=0x10C )
 	{
 		assert ( tHandler.m_dQueries.GetLength()==1 );

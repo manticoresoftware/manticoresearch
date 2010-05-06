@@ -1966,6 +1966,7 @@ public:
 	{
 		int					m_iDocs;			///< document count for this term
 		int					m_iHits;			///< hit count for this term
+		bool				m_bUntouched;
 	};
 	SmallStringHash_T<WordStat_t> m_hWordStats; ///< hash of i-th search term (normalized word form)
 
@@ -1975,7 +1976,7 @@ public:
 	CSphString				m_sError;			///< error message
 	CSphString				m_sWarning;			///< warning message
 
-	void					AddStat ( const CSphString & sWord, int iDocs, int iHits );
+	void					AddStat ( const CSphString & sWord, int iDocs, int iHits, bool bUntouched=false );
 };
 
 

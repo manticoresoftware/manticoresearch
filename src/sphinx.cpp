@@ -13015,7 +13015,7 @@ void sphDoStatsOrder ( const XQNode_t * pNode, CSphQueryResultMeta & tResult )
 		return;
 
 	ARRAY_FOREACH ( i, pNode->m_dWords )
-		tResult.AddStat ( pNode->m_dWords[i].m_sWord, 0, 0 );
+		tResult.AddStat ( pNode->m_dWords[i].m_sWord, 0, 0, true );
 
 	ARRAY_FOREACH ( i, pNode->m_dChildren )
 		sphDoStatsOrder ( pNode->m_dChildren[i], tResult );
@@ -20216,7 +20216,7 @@ int CSphStrHashFunc::Hash ( const CSphString & sKey )
 }
 
 
-void CSphQueryResultMeta::AddStat ( const CSphString & sWord, int iDocs, int iHits )
+void CSphQueryResultMeta::AddStat ( const CSphString & sWord, int iDocs, int iHits, bool bUntouched )
 {
 	WordStat_t * pStats = m_hWordStats ( sWord );
 	if ( !pStats )
@@ -20224,11 +20224,13 @@ void CSphQueryResultMeta::AddStat ( const CSphString & sWord, int iDocs, int iHi
 		CSphQueryResult::WordStat_t tStats;
 		tStats.m_iDocs = iDocs;
 		tStats.m_iHits = iHits;
+		tStats.m_bUntouched = bUntouched;
 		m_hWordStats.Add ( tStats, sWord );
 	} else
 	{
 		pStats->m_iDocs += iDocs;
 		pStats->m_iHits += iHits;
+		pStats->m_bUntouched = bUntouched;
 	}
 }
 

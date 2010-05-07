@@ -11986,10 +11986,16 @@ void CSphIndex_VLN::DebugDumpDocids ( FILE * fp )
 		return;
 	}
 
-	int iRowStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
-	DWORD uNumRows = m_pDocinfo.GetNumEntries() / iRowStride; // all 32bit, as we don't expect 2 billion documents per single physical index
+	const int iRowStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 
-	fprintf ( fp, "docinfo-bytes: "UINT64_FMT"\n", (uint64_t)m_pDocinfo.GetLength() );
+	const DWORD uNumMinMaxRow = ( m_uVersion>=20 ) ? ( 2*(1+m_uDocinfoIndex)*iRowStride ) : 0;
+	const DWORD uNumRows = (m_pDocinfo.GetNumEntries()-uNumMinMaxRow) / iRowStride; // all 32bit, as we don't expect 2 billion documents per single physical index
+
+	const uint64_t uDocinfoSize = iRowStride*size_t(m_uDocinfo)*sizeof(DWORD);
+	const uint64_t uMinmaxSize = uNumMinMaxRow*sizeof(CSphRowitem);
+
+	fprintf ( fp, "docinfo-bytes: docinfo="UINT64_FMT", min-max="UINT64_FMT", total="UINT64_FMT"\n"
+		, uDocinfoSize, uMinmaxSize, (uint64_t)m_pDocinfo.GetLength() );
 	fprintf ( fp, "docinfo-stride: %d\n", (int)(iRowStride*sizeof(DWORD)) );
 	fprintf ( fp, "docinfo-rows: %d\n", uNumRows );
 

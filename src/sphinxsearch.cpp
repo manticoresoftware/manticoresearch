@@ -94,6 +94,7 @@ public:
 	virtual void				GetQwords ( ExtQwordsHash_t & hQwords ) = 0;
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords ) = 0;
 	virtual bool				GotHitless () = 0;
+	virtual int					GetDocsCount () { return INT_MAX; }
 
 	void DebugIndent ( int iLevel )
 	{
@@ -164,6 +165,7 @@ public:
 	virtual void				GetQwords ( ExtQwordsHash_t & hQwords );
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
 	virtual bool				GotHitless () { return false; }
+	virtual int					GetDocsCount () { return m_pQword->m_iDocs; }
 
 	virtual void DebugDump ( int iLevel )
 	{
@@ -819,6 +821,14 @@ ExtNode_i * ExtNode_i::Create ( ISphQword * pQword, DWORD uFields, int iMaxField
 	}
 }
 
+struct ExtNodeTF_fn
+{
+	bool IsLess ( ExtNode_i * pA, ExtNode_i * pB ) const
+	{
+		return pA->GetDocsCount() < pB->GetDocsCount();
+	}
+};
+
 ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & tSetup )
 {
 	// empty node?
@@ -885,9 +895,35 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 		int iChildren = pNode->m_dChildren.GetLength ();
 		assert ( iChildren>0 );
 
+		// special case, operator BEFORE
 		if ( pNode->GetOp()==SPH_QUERY_BEFORE )
 			return CreateOrderNode ( pNode, tSetup );
 
+		// special case, AND over terms (internally reordered for speed)
+		bool bAndTerms = ( pNode->GetOp()==SPH_QUERY_AND );
+		for ( int i=0; i<iChildren && bAndTerms; i++ )
+		{
+			const XQNode_t * pChildren = pNode->m_dChildren[i];
+			bAndTerms = ( pChildren->m_dWords.GetLength()==1 );
+		}
+		if ( bAndTerms )
+		{
+			CSphVector<ExtNode_i*> dTerms;
+			for ( int i=0; i<iChildren; i++ )
+			{
+				const XQNode_t * pChild = pNode->m_dChildren[i];
+				dTerms.Add ( Create ( pChild->m_dWords[0], pChild->m_uFieldMask, pChild->m_iFieldMaxPos, tSetup ) );
+			}
+
+			dTerms.Sort ( ExtNodeTF_fn() );
+
+			ExtNode_i * pCur = dTerms[0];
+			for ( int i=1; i<iChildren; i++ )
+				pCur = new ExtAnd_c ( pCur, dTerms[i], tSetup );
+			return pCur;
+		}
+
+		// generic create
 		ExtNode_i * pCur = NULL;
 		for ( int i=0; i<iChildren; i++ )
 		{

@@ -375,7 +375,9 @@ bool DoKlistsOptimization ( int iRowSize, const char * sPath, int iChunkCount, C
 				*pKilled = 0;
 			}
 
+#ifndef NDEBUG
 			const int iWasLive = dLiveID.GetLength();
+#endif
 
 			if ( dKlist.GetLength()>0 )
 				ARRAY_FOREACH ( i, dLiveID )
@@ -439,7 +441,7 @@ void DoOptimization ( const CSphString & sIndex, const CSphConfig & hConf )
 		const CSphConfigSection & hIndex = hConf["index"].IterateGet ();
 		const char * sIndexName = hConf["index"].IterateGetKey().cstr();
 
-		if ( hIndex("type") && hIndex["type"]!="rt" )
+		if ( !hIndex("type") || hIndex["type"]!="rt" )
 			continue;
 
 		if ( !sIndex.IsEmpty() && sIndex!=sIndexName )
@@ -503,7 +505,6 @@ void DoOptimization ( const CSphString & sIndex, const CSphConfig & hConf )
 		const int64_t tmIndexDone = sphMicroTimer();
 		fprintf ( stdout, "\nindex '%s' done in %.3f sec\n", sIndexName, float(tmIndexDone-tmIndexStart )/1000000.0f );
 		iDone++;
-		break;
 	}
 
 	const int64_t tmIndexesDone = sphMicroTimer();

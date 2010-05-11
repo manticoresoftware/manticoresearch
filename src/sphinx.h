@@ -1976,6 +1976,7 @@ public:
 	CSphString				m_sError;			///< error message
 	CSphString				m_sWarning;			///< warning message
 
+	virtual					~CSphQueryResultMeta () {} /// <dtor
 	void					AddStat ( const CSphString & sWord, int iDocs, int iHits, bool bUntouched=false );
 };
 

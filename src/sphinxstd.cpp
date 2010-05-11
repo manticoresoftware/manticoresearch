@@ -872,6 +872,7 @@ void * sphThreadInit ( bool )
 void sphThreadDone()
 {
 #if SPH_DEBUG_LEAKS || SPH_ALLOCS_PROFILER
+	sphMemStatDump();
 	sphMemStatDone();
 #endif
 }

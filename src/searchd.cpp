@@ -1091,7 +1091,7 @@ void Shutdown ()
 
 			// stop search threads
 			while ( g_dThd.GetLength() > 0 )
-				sphSleepMsec ( 0 );
+				sphSleepMsec ( 50 );
 
 			g_tThdMutex.Lock();
 			g_dThd.Reset();
@@ -1227,7 +1227,6 @@ void StackTraceDump()
 
 void HandleCrash ( int )
 {
-
 	StackTraceDump();
 
 	if ( !g_pCrashLog_LastQuery )
@@ -4110,6 +4109,8 @@ struct AggrResult_t : CSphQueryResult
 	CSphVector<int>				m_dMatchCounts;		///< aggregated resultsets lengths (for schema minimization)
 	CSphVector<int>				m_dIndexWeights;	///< aggregated resultsets per-index weights (optional)
 	CSphVector<PoolPtrs_t>		m_dTag2Pools;		///< tag to MVA and strings storage pools mapping
+
+	virtual ~AggrResult_t () {} // <dtor
 };
 
 
@@ -4889,6 +4890,11 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter )
 					tRes.m_pMva = tStats.m_pMva;
 					tRes.m_hWordStats = tStats.m_hWordStats;
 					tRes.m_iMultiplier = m_iEnd-m_iStart+1;
+
+					// move external attributes storage from tStats to actual result
+					assert ( tRes.m_pAttrs==NULL );
+					tRes.m_pAttrs = tStats.m_pAttrs;
+					tStats.m_pAttrs = NULL;
 				} else if ( tRes.m_iMultiplier==-1 )
 				{
 					m_dFailuresSet[iQuery].SubmitEx ( sLocal, "%s", tRes.m_sError.cstr() );

@@ -3334,6 +3334,8 @@ ExtOrder_c::ExtOrder_c ( const CSphVector<ExtNode_i *> & dChildren, const ISphQw
 
 void ExtOrder_c::Reset ( const ISphQwordSetup & tSetup )
 {
+	m_bDone = false;
+
 	ARRAY_FOREACH ( i, m_dChildren )
 	{
 		assert ( m_dChildren[i] );

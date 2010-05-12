@@ -331,6 +331,7 @@ public:
 								ExtAndNot_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const ISphQwordSetup & tSetup );
 	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID );
+	virtual void				Reset ( const ISphQwordSetup & tSetup );
 
 	void DebugDump ( int iLevel ) { DebugDumpT ( "ExtAndNot", iLevel ); }
 
@@ -2294,6 +2295,12 @@ const ExtHit_t * ExtAndNot_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t 
 {
 	return m_pChildren[0]->GetHitsChunk ( pDocs, uMaxID );
 };
+
+void ExtAndNot_c::Reset ( const ISphQwordSetup & tSetup )
+{
+	m_bPassthrough = false;
+	ExtTwofer_c::Reset ( tSetup );
+}
 
 //////////////////////////////////////////////////////////////////////////
 

@@ -4109,8 +4109,17 @@ struct AggrResult_t : CSphQueryResult
 	CSphVector<int>				m_dMatchCounts;		///< aggregated resultsets lengths (for schema minimization)
 	CSphVector<int>				m_dIndexWeights;	///< aggregated resultsets per-index weights (optional)
 	CSphVector<PoolPtrs_t>		m_dTag2Pools;		///< tag to MVA and strings storage pools mapping
+	CSphVector<CSphRowitem *>	m_dAttrs;			///< aggregated externall result attributes from rt indexes
 
-	virtual ~AggrResult_t () {} // <dtor
+	// <dtor
+	virtual ~AggrResult_t ()
+	{
+		m_dAttrs.Uniq();
+		ARRAY_FOREACH ( i, m_dAttrs )
+		{
+			SafeDeleteArray ( m_dAttrs[i] );
+		}
+	}
 };
 
 
@@ -4646,6 +4655,13 @@ void SearchHandler_c::RunLocalSearchesMT ()
 			tRes.m_pStrings = tRaw.m_pStrings;
 			MergeWordStats ( tRes, tRaw.m_hWordStats );
 
+			// move external attributes storage from tRaw to actual result
+			if ( tRaw.m_pAttrs )
+			{
+				tRes.m_dAttrs.Add ( tRaw.m_pAttrs );
+				tRaw.m_pAttrs = NULL;
+			}
+
 			tRes.m_iMultiplier = m_bMultiQueue ? iQueries : 1;
 			tRes.m_iCpuTime += tRaw.m_iCpuTime / tRes.m_iMultiplier;
 
@@ -4884,17 +4900,12 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter )
 				// multi-queue only returned one result set meta, so we need to replicate it
 				if ( m_bMultiQueue )
 				{
-					// these times will be overriden below, but let's be clean
+					// these times will be overridden below, but let's be clean
 					tRes.m_iQueryTime += tStats.m_iQueryTime / ( m_iEnd-m_iStart+1 );
 					tRes.m_iCpuTime += tStats.m_iCpuTime / ( m_iEnd-m_iStart+1 );
 					tRes.m_pMva = tStats.m_pMva;
 					tRes.m_hWordStats = tStats.m_hWordStats;
 					tRes.m_iMultiplier = m_iEnd-m_iStart+1;
-
-					// move external attributes storage from tStats to actual result
-					assert ( tRes.m_pAttrs==NULL );
-					tRes.m_pAttrs = tStats.m_pAttrs;
-					tStats.m_pAttrs = NULL;
 				} else if ( tRes.m_iMultiplier==-1 )
 				{
 					m_dFailuresSet[iQuery].SubmitEx ( sLocal, "%s", tRes.m_sError.cstr() );
@@ -4917,6 +4928,13 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter )
 					tPoolPtrs.m_pMva = tRes.m_pMva;
 					tPoolPtrs.m_pStrings = tRes.m_pStrings;
 					sphFlattenQueue ( pSorter, &tRes, tRes.m_iTag++ );
+				}
+
+				// move external attributes storage from tStats to actual result
+				if ( tStats.m_pAttrs )
+				{
+					tRes.m_dAttrs.Add ( tStats.m_pAttrs );
+					tStats.m_pAttrs = NULL;
 				}
 			}
 

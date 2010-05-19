@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>select expressions vs eval stages</name>
+
+<config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+<searchd_settings/>
+	workers			= threads
+}
+
+source srctest
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT * FROM test_table
+	sql_attr_uint	= ival
+	sql_attr_float	= fval
+}
+
+index test
+{
+	source			= srctest
+	path			= <data_path/>/test
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER NOT NULL,
+	ival INTEGER NOT NULL,
+	fval INTEGER NOT NULL,
+	title VARCHAR(255) NOT NULL
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 11, 10, 'test one' ),
+( 2, 11, 20, 'test two' ),
+( 3, 11, -30, 'test three' ),
+( 4, 22, -40, 'test four' )
+</db_insert>
+
+<sphqueries>
+<sphinxql>select * from test where match('test') order by fval asc</sphinxql>
+<sphinxql>select *, fval+1 as f1 from test where match('test') order by f1 desc</sphinxql>
+<sphinxql>select * from test group by fval</sphinxql>
+<sphinxql>select *, ival-1 as i1 from test group by i1</sphinxql>
+<sphinxql>select *, @weight+ival as i1 from test where match('test')</sphinxql>
+</sphqueries>
+
+</test>

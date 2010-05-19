@@ -2977,11 +2977,11 @@ bool RtQwordSetup_t::QwordSetup ( ISphQword * pQword ) const
 
 bool RtIndex_t::EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const
 {
-	// early calc might be needed even when we do not have a filter
-	if ( pCtx->m_bEarlyLookup )
+	// might be needed even when we do not have a filter!
+	if ( pCtx->m_bLookupFilter )
 		CopyDocinfo ( tMatch, FindDocinfo ( (RtSegment_t*)pCtx->m_pIndexData, tMatch.m_iDocID ) );
 
-	pCtx->EarlyCalc ( tMatch );
+	pCtx->CalcFilter ( tMatch );
 	return pCtx->m_pFilter ? !pCtx->m_pFilter->Eval ( tMatch ) : false;
 }
 
@@ -3376,8 +3376,8 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		// post-sort lookup is complicated (because of many segments)
 		// pre-sort lookup is cheap now anyway, and almost always anyway
 		// (except maybe by stupid relevance-sorting-only benchmarks!!)
-		tCtx.m_bEarlyLookup = ( pQuery->m_dFilters.GetLength() || tCtx.m_dEarlyCalc.GetLength() );
-		tCtx.m_bLateLookup = true;
+		tCtx.m_bLookupFilter = ( pQuery->m_dFilters.GetLength() || tCtx.m_dCalcFilter.GetLength() );
+		tCtx.m_bLookupSort = true;
 
 		// FIXME! setup sorters vs. MVA
 		ARRAY_FOREACH ( i, dSorters )
@@ -3415,11 +3415,12 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 					tMatch.m_iDocID = DOCINFO2ID(pRow);
 					tMatch.m_pStatic = DOCINFO2ATTRS(pRow); // FIXME! overrides
 
-					tCtx.EarlyCalc ( tMatch );
+					tCtx.CalcFilter ( tMatch );
 					if ( tCtx.m_pFilter && !tCtx.m_pFilter->Eval ( tMatch ) )
 						continue;
 
-					tCtx.LateCalc ( tMatch );
+					tCtx.CalcSort ( tMatch );
+					tCtx.CalcFinal ( tMatch ); // OPTIMIZE? could be possibly done later
 
 					// storing segment in matches tag for finding strings attrs offset later, biased against default zero
 					tMatch.m_iTag = iSeg+1;
@@ -3458,9 +3459,10 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 					for ( int i=0; i<iMatches; i++ )
 					{
-						if ( tCtx.m_bLateLookup )
+						if ( tCtx.m_bLookupSort )
 							CopyDocinfo ( pMatch[i], FindDocinfo ( m_pSegments[iSeg], pMatch[i].m_iDocID ) );
-						tCtx.LateCalc ( pMatch[i] );
+						tCtx.CalcSort ( pMatch[i] );
+						tCtx.CalcFinal ( pMatch[i] ); // OPTIMIZE? could be possibly done later
 
 						if ( bRandomize )
 							pMatch[i].m_iWeight = ( sphRand() & 0xffff );

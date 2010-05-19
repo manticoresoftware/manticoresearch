@@ -1011,7 +1011,7 @@ public:
 		// FIXME! manual bitwise copying.. yuck
 		for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
 		{
-			m_tGroupSorter.m_iAttr[i] = tState.m_iAttr[i];
+			m_tGroupSorter.m_eKeypart[i] = tState.m_eKeypart[i];
 			m_tGroupSorter.m_tLocator[i] = tState.m_tLocator[i];
 		}
 		m_tGroupSorter.m_uAttrDesc = tState.m_uAttrDesc;
@@ -1286,22 +1286,22 @@ struct MatchExpr_fn : public ISphMatchComparator
 
 
 #define SPH_TEST_KEYPART(_idx) \
-	switch ( t.m_iAttr[_idx] ) \
+	switch ( t.m_eKeypart[_idx] ) \
 	{ \
-		case SPH_VATTR_ID:			SPH_TEST_PAIR ( a.m_iDocID, b.m_iDocID, _idx ); break; \
-		case SPH_VATTR_RELEVANCE:	SPH_TEST_PAIR ( a.m_iWeight, b.m_iWeight, _idx ); break; \
-		case SPH_VATTR_FLOAT: \
-		{ \
-			register float aa = a.GetAttrFloat ( t.m_tLocator[_idx] ); \
-			register float bb = b.GetAttrFloat ( t.m_tLocator[_idx] ); \
-			SPH_TEST_PAIR ( aa, bb, _idx ) \
-			break; \
-		} \
-		default: \
+		case SPH_KEYPART_ID:		SPH_TEST_PAIR ( a.m_iDocID, b.m_iDocID, _idx ); break; \
+		case SPH_KEYPART_WEIGHT:	SPH_TEST_PAIR ( a.m_iWeight, b.m_iWeight, _idx ); break; \
+		case SPH_KEYPART_INT: \
 		{ \
 			register SphAttr_t aa = a.GetAttr ( t.m_tLocator[_idx] ); \
 			register SphAttr_t bb = b.GetAttr ( t.m_tLocator[_idx] ); \
 			SPH_TEST_PAIR ( aa, bb, _idx ); \
+			break; \
+		} \
+		case SPH_KEYPART_FLOAT: \
+		{ \
+			register float aa = a.GetAttrFloat ( t.m_tLocator[_idx] ); \
+			register float bb = b.GetAttrFloat ( t.m_tLocator[_idx] ); \
+			SPH_TEST_PAIR ( aa, bb, _idx ) \
 			break; \
 		} \
 	}
@@ -1402,7 +1402,7 @@ struct MatchCustom_fn : public ISphMatchComparator
 		}
 
 		const CSphColumnInfo & tAttr = tSchema.GetAttr(iAttr);
-		tState.m_iAttr[iIdx] = iAttr;
+		tState.m_eKeypart[iIdx] = tAttr.m_eAttrType==SPH_ATTR_FLOAT ? SPH_KEYPART_FLOAT : SPH_KEYPART_INT;
 		tState.m_tLocator[iIdx] = tAttr.m_tLocator;
 		return true;
 	}
@@ -1540,8 +1540,12 @@ public:
 
 
 static ESortClauseParseResult sphParseSortClause ( const char * sClause, const CSphSchema & tSchema,
-	ESphSortFunc & eFunc, CSphMatchComparatorState & tState, CSphString & sError )
+	ESphSortFunc & eFunc, CSphMatchComparatorState & tState, int * dAttrs, CSphString & sError )
 {
+	assert ( dAttrs );
+	for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
+		dAttrs[i] = -1;
+
 	// mini parser
 	SortClauseTokenizer_t tTok ( sClause );
 
@@ -1592,11 +1596,11 @@ static ESortClauseParseResult sphParseSortClause ( const char * sClause, const C
 			|| !strcasecmp ( pTok, "@rank" )
 			|| !strcasecmp ( pTok, "@weight" ) )
 		{
-			tState.m_iAttr[iField] = SPH_VATTR_RELEVANCE;
+			tState.m_eKeypart[iField] = SPH_KEYPART_WEIGHT;
 
 		} else if ( !strcasecmp ( pTok, "@id" ) )
 		{
-			tState.m_iAttr[iField] = SPH_VATTR_ID;
+			tState.m_eKeypart[iField] = SPH_KEYPART_ID;
 
 		} else
 		{
@@ -1617,8 +1621,10 @@ static ESortClauseParseResult sphParseSortClause ( const char * sClause, const C
 				return SORT_CLAUSE_ERROR;
 			}
 
-			tState.m_iAttr[iField] = ( eType==SPH_ATTR_FLOAT ) ? SPH_VATTR_FLOAT : iAttr;
+			tState.m_eKeypart[iField] = ( eType==SPH_ATTR_FLOAT ) ? SPH_KEYPART_FLOAT : SPH_KEYPART_INT;
 			tState.m_tLocator[iField] = tSchema.GetAttr(iAttr).m_tLocator;
+
+			dAttrs[iField] = iAttr;
 		}
 	}
 
@@ -1629,7 +1635,7 @@ static ESortClauseParseResult sphParseSortClause ( const char * sClause, const C
 	}
 
 	if ( iField==1 )
-		tState.m_iAttr[iField++] = SPH_VATTR_ID; // add "id ASC"
+		tState.m_eKeypart[iField++] = SPH_KEYPART_ID; // add "id ASC"
 
 	switch ( iField )
 	{
@@ -1834,6 +1840,17 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const CSphSchema & 
 }
 
 
+static inline void FixupStage ( CSphSchema & tSchema, int iAttr )
+{
+	if ( iAttr<0 )
+		return;
+
+	CSphColumnInfo & tCol = const_cast < CSphColumnInfo & > ( tSchema.GetAttr ( iAttr ) );
+	if ( tCol.m_eStage==SPH_EVAL_FINAL )
+		tCol.m_eStage = SPH_EVAL_PRESORT;
+}
+
+
 ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sError, bool bComputeItems )
 {
 	// prepare for descent
@@ -1899,9 +1916,9 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 	CSphVector<CSphColumnInfo> dAggregates;
 
 	if ( bComputeItems )
-		ARRAY_FOREACH ( i, pQuery->m_dItems )
+		ARRAY_FOREACH ( iItem, pQuery->m_dItems )
 	{
-		const CSphQueryItem & tItem = pQuery->m_dItems[i];
+		const CSphQueryItem & tItem = pQuery->m_dItems[iItem];
 		const CSphString & sExpr = tItem.m_sExpr;
 
 		// for now, just always pass "plain" attrs from index to sorter; they will be filtered on searchd level
@@ -1920,7 +1937,7 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		}
 
 		// tricky part
-		// we might be we're fed with precomputed matches, but it's all or nothing
+		// we might be fed with precomputed matches, but it's all or nothing
 		// the incoming match either does not have anything computed, or it has everything
 		if ( tSchema.GetAttrsCount()==tSorterSchema.GetAttrsCount() )
 		{
@@ -1972,8 +1989,26 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		// postpone aggregates, add non-aggregates
 		if ( tExprCol.m_eAggrFunc==SPH_AGGR_NONE )
 		{
-			tExprCol.m_eStage = bUsesWeight ? SPH_EVAL_PRESORT : SPH_EVAL_PREFILTER;
+			// by default, lets be lazy and compute expressions as late as possible
+			tExprCol.m_eStage = SPH_EVAL_FINAL;
+
+			// is this expression used in filter?
+			// OPTIMIZE? hash filters and do hash lookups?
+			ARRAY_FOREACH ( i, pQuery->m_dFilters )
+				if ( pQuery->m_dFilters[i].m_sAttrName==tExprCol.m_sName )
+			{
+				if ( bUsesWeight )
+					tExprCol.m_eStage = SPH_EVAL_PRESORT; // special, weight filter
+				else
+					tExprCol.m_eStage = SPH_EVAL_PREFILTER;
+				break;
+			}
+
+			// add it!
+			// NOTE, "final" stage might need to be fixed up later
+			// we'll do that when parsing sorting clause
 			tSorterSchema.AddAttr ( tExprCol, true );
+
 		} else
 		{
 			tExprCol.m_eStage = SPH_EVAL_PRESORT; // sorter expects computed expression
@@ -2054,8 +2089,8 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 	// matches sorting function
 	if ( pQuery->m_eSort==SPH_SORT_EXTENDED )
 	{
-		ESortClauseParseResult eRes = sphParseSortClause ( pQuery->m_sSortBy.cstr(), tSorterSchema, eMatchFunc, tStateMatch, sError );
-
+		int dAttrs [ CSphMatchComparatorState::MAX_ATTRS ];
+		ESortClauseParseResult eRes = sphParseSortClause ( pQuery->m_sSortBy.cstr(), tSorterSchema, eMatchFunc, tStateMatch, dAttrs, sError );
 		if ( eRes==SORT_CLAUSE_ERROR )
 			return NULL;
 
@@ -2063,14 +2098,17 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 			bRandomize = true;
 
 		for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
-			if ( tStateMatch.m_iAttr[i]>=0 )
+		{
+			FixupStage ( tSorterSchema, dAttrs[i] );
+			if ( tStateMatch.m_eKeypart[i]==SPH_KEYPART_INT || tStateMatch.m_eKeypart[i]==SPH_KEYPART_FLOAT )
 				bUsesAttrs = true;
+		}
 
 	} else if ( pQuery->m_eSort==SPH_SORT_EXPR )
 	{
-		tStateMatch.m_iAttr[0] = tSorterSchema.GetAttrIndex ( "@expr" );
-		tStateMatch.m_tLocator[0] = tSorterSchema.GetAttr ( tStateMatch.m_iAttr[0] ).m_tLocator;
-		tStateMatch.m_iAttr[1] = SPH_VATTR_ID;
+		tStateMatch.m_eKeypart[0] = SPH_KEYPART_INT;
+		tStateMatch.m_tLocator[0] = tSorterSchema.GetAttr ( tSorterSchema.GetAttrIndex ( "@expr" ) ).m_tLocator;
+		tStateMatch.m_eKeypart[1] = SPH_KEYPART_ID;
 		tStateMatch.m_uAttrDesc = 1;
 		eMatchFunc = FUNC_EXPR;
 		bUsesAttrs = true;
@@ -2080,14 +2118,15 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 		// check sort-by attribute
 		if ( pQuery->m_eSort!=SPH_SORT_RELEVANCE )
 		{
-			tStateMatch.m_iAttr[0] = tSorterSchema.GetAttrIndex ( pQuery->m_sSortBy.cstr() );
-			if ( tStateMatch.m_iAttr[0]<0 )
+			int iSortAttr = tSorterSchema.GetAttrIndex ( pQuery->m_sSortBy.cstr() );
+			if ( iSortAttr<0 )
 			{
 				sError.SetSprintf ( "sort-by attribute '%s' not found", pQuery->m_sSortBy.cstr() );
 				return NULL;
 			}
 
-			const CSphColumnInfo & tAttr = tSorterSchema.GetAttr ( tStateMatch.m_iAttr[0] );
+			const CSphColumnInfo & tAttr = tSorterSchema.GetAttr ( iSortAttr );
+			tStateMatch.m_eKeypart[0] = ( tAttr.m_eAttrType==SPH_ATTR_FLOAT ) ? SPH_KEYPART_FLOAT : SPH_KEYPART_INT;
 			tStateMatch.m_tLocator[0] = tAttr.m_tLocator;
 		}
 
@@ -2108,7 +2147,8 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 	// groups sorting function
 	if ( bGotGroupby )
 	{
-		ESortClauseParseResult eRes = sphParseSortClause ( pQuery->m_sGroupSortBy.cstr(), tSorterSchema, eGroupFunc, tStateGroup, sError );
+		int dAttrs [ CSphMatchComparatorState::MAX_ATTRS ];
+		ESortClauseParseResult eRes = sphParseSortClause ( pQuery->m_sGroupSortBy.cstr(), tSorterSchema, eGroupFunc, tStateGroup, dAttrs, sError );
 
 		if ( eRes==SORT_CLAUSE_ERROR || eRes==SORT_CLAUSE_RANDOM )
 		{
@@ -2116,6 +2156,10 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 				sError.SetSprintf ( "groups can not be sorted by @random" );
 			return NULL;
 		}
+
+		FixupStage ( tSorterSchema, tSorterSchema.GetAttrIndex ( pQuery->m_sGroupBy.cstr() ) );
+		for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
+			FixupStage ( tSorterSchema, dAttrs[i] );
 	}
 
 	///////////////////

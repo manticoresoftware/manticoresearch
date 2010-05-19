@@ -973,7 +973,8 @@ enum ESphEvalStage
 	SPH_EVAL_OVERRIDE,			///< static but possibly overridden
 	SPH_EVAL_PREFILTER,			///< expression needed for full-text candidate matches filtering
 	SPH_EVAL_PRESORT,			///< expression needed for final matches sorting
-	SPH_EVAL_SORTER				///< expression evaluated by sorter object
+	SPH_EVAL_SORTER,			///< expression evaluated by sorter object
+	SPH_EVAL_FINAL				///< expression not (!) used in filters/sorting; can be postponed until final result set cooking
 };
 
 
@@ -2070,12 +2071,22 @@ struct CSphIndexProgress
 };
 
 
+/// sorting key part types
+enum ESphSortKeyPart
+{
+	SPH_KEYPART_ID,
+	SPH_KEYPART_WEIGHT,
+	SPH_KEYPART_INT,
+	SPH_KEYPART_FLOAT
+};
+
+
 /// match comparator state
 struct CSphMatchComparatorState
 {
 	static const int	MAX_ATTRS = 5;
 
-	int					m_iAttr[MAX_ATTRS];			///< sort-by attr index
+	ESphSortKeyPart		m_eKeypart[MAX_ATTRS];		///< sort-by key part type
 	CSphAttrLocator		m_tLocator[MAX_ATTRS];		///< sort-by attr locator
 
 	DWORD				m_uAttrDesc;				///< sort order mask (if i-th bit is set, i-th attr order is DESC)
@@ -2087,16 +2098,15 @@ struct CSphMatchComparatorState
 		, m_iNow ( 0 )
 	{
 		for ( int i=0; i<MAX_ATTRS; i++ )
-			m_iAttr[i] = -1;
+			m_eKeypart[i] = SPH_KEYPART_ID;
 	}
 
 	/// check if any of my attrs are bitfields
 	bool UsesBitfields ()
 	{
 		for ( int i=0; i<MAX_ATTRS; i++ )
-			if ( m_iAttr[i]>=0 )
-				if ( m_tLocator[i].IsBitfield() )
-					return true;
+			if ( m_eKeypart[i]==SPH_KEYPART_INT && m_tLocator[i].IsBitfield() )
+				return true;
 		return false;
 	}
 };

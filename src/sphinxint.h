@@ -183,8 +183,8 @@ public:
 	int							m_iWeights;						///< search query field weights count
 	int							m_dWeights [ SPH_MAX_FIELDS ];	///< search query field weights
 
-	bool						m_bEarlyLookup;			///< whether early attr value lookup is needed
-	bool						m_bLateLookup;			///< whether late attr value lookup is needed
+	bool						m_bLookupFilter;		///< row data lookup required at filtering stage
+	bool						m_bLookupSort;			///< row data lookup required at sorting stage
 
 	ISphFilter *				m_pFilter;
 	ISphFilter *				m_pWeightFilter;
@@ -195,8 +195,9 @@ public:
 		DWORD					m_uType;				///< result type
 		ISphExpr *				m_pExpr;				///< evaluator (non-owned)
 	};
-	CSphVector<CalcItem_t>		m_dEarlyCalc;			///< early-calc evaluators
-	CSphVector<CalcItem_t>		m_dLateCalc;			///< late-calc evaluators
+	CSphVector<CalcItem_t>		m_dCalcFilter;			///< items to compute for filtering
+	CSphVector<CalcItem_t>		m_dCalcSort;			///< items to compute for sorting/grouping
+	CSphVector<CalcItem_t>		m_dCalcFinal;			///< items to compute when finalizing result set
 
 	const CSphVector<CSphAttrOverride> *	m_pOverrides;		///< overridden attribute values
 	CSphVector<CSphAttrLocator>				m_dOverrideIn;
@@ -213,8 +214,9 @@ public:
 	bool						CreateFilters ( bool bFullscan, const CSphVector<CSphFilterSettings> * pdFilters, const CSphSchema & tSchema, const DWORD * pMvaPool, CSphString & sError );
 	bool						SetupOverrides ( const CSphQuery * pQuery, CSphQueryResult * pResult, const CSphSchema & tIndexSchema );
 
-	void						EarlyCalc ( CSphMatch & tMatch ) const;
-	void						LateCalc ( CSphMatch & tMatch ) const;
+	void						CalcFilter ( CSphMatch & tMatch ) const;
+	void						CalcSort ( CSphMatch & tMatch ) const;
+	void						CalcFinal ( CSphMatch & tMatch ) const;
 };
 
 bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const char * sName, CSphString & sError );

@@ -11184,10 +11184,10 @@ inline bool sphGroupMatch ( SphAttr_t iGroup, const SphAttr_t * pGroups, int iGr
 
 bool CSphIndex_VLN::EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const
 {
-	// early calc might be needed even when we do not have a filter
-	if ( pCtx->m_bEarlyLookup )
+	// might be needed even when we do not have a filter
+	if ( pCtx->m_bLookupFilter )
 		CopyDocinfo ( pCtx, tMatch, FindDocinfo ( tMatch.m_iDocID ) );
-	pCtx->EarlyCalc ( tMatch );
+	pCtx->CalcFilter ( tMatch );
 
 	return pCtx->m_pFilter ? !pCtx->m_pFilter->Eval ( tMatch ) : false;
 }
@@ -11291,11 +11291,12 @@ void CSphIndex_VLN::CopyDocinfo ( CSphQueryContext * pCtx, CSphMatch & tMatch, c
 	}
 }
 
-void CSphQueryContext::EarlyCalc ( CSphMatch & tMatch ) const
+
+static inline void CalcContextItems ( CSphMatch & tMatch, const CSphVector<CSphQueryContext::CalcItem_t> & dItems )
 {
-	ARRAY_FOREACH ( i, m_dEarlyCalc )
+	ARRAY_FOREACH ( i, dItems )
 	{
-		const CalcItem_t & tCalc = m_dEarlyCalc[i];
+		const CSphQueryContext::CalcItem_t & tCalc = dItems[i];
 		if ( tCalc.m_uType==SPH_ATTR_INTEGER )
 			tMatch.SetAttr ( tCalc.m_tLoc, tCalc.m_pExpr->IntEval(tMatch) );
 		else if ( tCalc.m_uType==SPH_ATTR_BIGINT )
@@ -11305,18 +11306,22 @@ void CSphQueryContext::EarlyCalc ( CSphMatch & tMatch ) const
 	}
 }
 
-void CSphQueryContext::LateCalc ( CSphMatch & tMatch ) const
+
+void CSphQueryContext::CalcFilter ( CSphMatch & tMatch ) const
 {
-	ARRAY_FOREACH ( i, m_dLateCalc )
-	{
-		const CalcItem_t & tCalc = m_dLateCalc[i];
-		if ( tCalc.m_uType==SPH_ATTR_INTEGER )
-			tMatch.SetAttr ( tCalc.m_tLoc, tCalc.m_pExpr->IntEval(tMatch) );
-		else if ( tCalc.m_uType==SPH_ATTR_BIGINT )
-			tMatch.SetAttr ( tCalc.m_tLoc, tCalc.m_pExpr->Int64Eval(tMatch) );
-		else
-			tMatch.SetAttrFloat ( tCalc.m_tLoc, tCalc.m_pExpr->Eval(tMatch) );
-	}
+	CalcContextItems ( tMatch, m_dCalcFilter );
+}
+
+
+void CSphQueryContext::CalcSort ( CSphMatch & tMatch ) const
+{
+	CalcContextItems ( tMatch, m_dCalcSort );
+}
+
+
+void CSphQueryContext::CalcFinal ( CSphMatch & tMatch ) const
+{
+	CalcContextItems ( tMatch, m_dCalcFinal );
 }
 
 
@@ -11336,9 +11341,9 @@ bool CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 
 		for ( int i=0; i<iMatches; i++ )
 		{
-			if ( pCtx->m_bLateLookup )
+			if ( pCtx->m_bLookupSort )
 				CopyDocinfo ( pCtx, pMatch[i], FindDocinfo ( pMatch[i].m_iDocID ) );
-			pCtx->LateCalc ( pMatch[i] );
+			pCtx->CalcSort ( pMatch[i] );
 
 			if ( pCtx->m_pWeightFilter && !pCtx->m_pWeightFilter->Eval ( pMatch[i] ) )
 				continue;
@@ -11436,8 +11441,8 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	}
 
 	// setup lookup
-	tCtx.m_bEarlyLookup = false;
-	tCtx.m_bLateLookup = true;
+	tCtx.m_bLookupFilter = false;
+	tCtx.m_bLookupSort = true;
 
 	// setup sorters vs. MVA
 	for ( int i=0; i<iSorters; i++ )
@@ -11484,12 +11489,12 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 			CopyDocinfo ( &tCtx, tMatch, pDocinfo );
 
 			// early filter only (no late filters in full-scan because of no @weight)
-			tCtx.EarlyCalc ( tMatch );
+			tCtx.CalcFilter ( tMatch );
 			if ( tCtx.m_pFilter && !tCtx.m_pFilter->Eval ( tMatch ) )
 				continue;
 
 			// submit match to sorters
-			tCtx.LateCalc ( tMatch );
+			tCtx.CalcSort ( tMatch );
 			if ( bRandomize )
 				tMatch.m_iWeight = ( sphRand() & 0xffff );
 
@@ -11509,6 +11514,21 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 		}
 		if ( iCutoff==0 )
 			break;
+	}
+
+	// do final expression calculations
+	if ( tCtx.m_dCalcFinal.GetLength() )
+		for ( int iSorter=0; iSorter<iSorters; iSorter++ )
+	{
+		ISphMatchSorter * pTop = ppSorters[iSorter];
+		const int iCount = pTop->GetLength ();
+		if ( !iCount )
+			continue;
+
+		CSphMatch * const pHead = pTop->First();
+		CSphMatch * const pTail = pHead + iCount;
+		for ( CSphMatch * pCur=pHead; pCur<pTail; pCur++ )
+			tCtx.CalcFinal ( *pCur );
 	}
 
 	// done
@@ -12635,8 +12655,8 @@ bool CSphIndex_VLN::Rename ( const char * sNewBase )
 CSphQueryContext::CSphQueryContext ()
 {
 	m_iWeights = 0;
-	m_bEarlyLookup = false;
-	m_bLateLookup = false;
+	m_bLookupFilter = false;
+	m_bLookupSort = false;
 	m_pFilter = false;
 	m_pWeightFilter = false;
 	m_pIndexData = NULL;
@@ -12680,8 +12700,9 @@ void CSphQueryContext::BindWeights ( const CSphQuery * pQuery, const CSphSchema 
 
 bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const CSphSchema & tInSchema, const CSphSchema & tSchema, const DWORD * pMvaPool )
 {
-	m_dEarlyCalc.Resize ( 0 );
-	m_dLateCalc.Resize ( 0 );
+	m_dCalcFilter.Resize ( 0 );
+	m_dCalcSort.Resize ( 0 );
+	m_dCalcFinal.Resize ( 0 );
 
 	// quickly verify that all my real attributes can be stashed there
 	if ( tInSchema.GetAttrsCount() < tSchema.GetAttrsCount() )
@@ -12733,6 +12754,7 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const CSphSchema &
 
 			case SPH_EVAL_PREFILTER:
 			case SPH_EVAL_PRESORT:
+			case SPH_EVAL_FINAL:
 			{
 				if ( !tIn.m_pExpr.Ptr() )
 				{
@@ -12748,10 +12770,12 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const CSphSchema &
 				tCalc.m_pExpr = tIn.m_pExpr.Ptr();
 				tCalc.m_pExpr->SetMVAPool ( pMvaPool );
 
-				if ( tIn.m_eStage==SPH_EVAL_PRESORT )
-					m_dLateCalc.Add ( tCalc );
-				else
-					m_dEarlyCalc.Add ( tCalc );
+				switch ( tIn.m_eStage )
+				{
+					case SPH_EVAL_PREFILTER:	m_dCalcFilter.Add ( tCalc ); break;
+					case SPH_EVAL_PRESORT:		m_dCalcSort.Add ( tCalc ); break;
+					case SPH_EVAL_FINAL:		m_dCalcFinal.Add ( tCalc ); break;
+				}
 				break;
 			}
 
@@ -13404,15 +13428,17 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	}
 
 	// setup lookup
-	tCtx.m_bEarlyLookup = ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN ) && pQuery->m_dFilters.GetLength();
-	if ( tCtx.m_dEarlyCalc.GetLength() )
-		tCtx.m_bEarlyLookup = true;
+	tCtx.m_bLookupFilter = ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN ) && pQuery->m_dFilters.GetLength();
+	if ( tCtx.m_dCalcFilter.GetLength() )
+		tCtx.m_bLookupFilter = true; // suboptimal in case of attr-independent expressions, but we don't care
 
-	tCtx.m_bLateLookup = false;
-	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && !tCtx.m_bEarlyLookup )
-		for ( int iSorter=0; iSorter<iSorters && !tCtx.m_bLateLookup; iSorter++ )
+	tCtx.m_bLookupSort = false;
+	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && !tCtx.m_bLookupFilter )
+		for ( int iSorter=0; iSorter<iSorters && !tCtx.m_bLookupSort; iSorter++ )
 			if ( ppSorters[iSorter]->UsesAttrs() )
-				tCtx.m_bLateLookup = true;
+				tCtx.m_bLookupSort = true;
+	if ( tCtx.m_dCalcSort.GetLength() )
+		tCtx.m_bLookupSort = true; // suboptimal in case of attr-independent expressions, but we don't care
 
 	// setup sorters vs. MVA
 	for ( int i=0; i<iSorters; i++ )
@@ -13455,16 +13481,20 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	{
 		ISphMatchSorter * pTop = ppSorters[iSorter];
 
-		// final lookup
-		bool bNeedLookup = !tCtx.m_bEarlyLookup && !tCtx.m_bLateLookup;
-		if ( pTop->GetLength() && bNeedLookup )
+		// final lookup and/or calc
+		bool bFinalLookup = !tCtx.m_bLookupFilter && !tCtx.m_bLookupSort;
+		if ( pTop->GetLength() && ( bFinalLookup || tCtx.m_dCalcFinal.GetLength() ) )
 		{
 			const int iCount = pTop->GetLength ();
 			CSphMatch * const pHead = pTop->First();
 			CSphMatch * const pTail = pHead + iCount;
 
 			for ( CSphMatch * pCur=pHead; pCur<pTail; pCur++ )
-				CopyDocinfo ( &tCtx, *pCur, FindDocinfo ( pCur->m_iDocID ) );
+			{
+				if ( bFinalLookup )
+					CopyDocinfo ( &tCtx, *pCur, FindDocinfo ( pCur->m_iDocID ) );
+				tCtx.CalcFinal ( *pCur );
+			}
 		}
 
 		// mva and string pools ptrs

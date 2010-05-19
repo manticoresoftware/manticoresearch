@@ -750,11 +750,7 @@ class SphinxConfig
 			{
 				$query_result["total_rows"] = mysql_num_rows($result);
 				while ($row = mysql_fetch_array($result, MYSQL_ASSOC))
-				{
-					foreach ($row as $key => $value)
-						$foo[$key] = $value;
-					$query_result["rows"][] = $foo;
-				}
+					$query_result["rows"][] = $row;
 				mysql_free_result($result);
 			}
 			$query_results[] = $query_result;

@@ -27,24 +27,6 @@
 // TRAITS
 //////////////////////////////////////////////////////////////////////////
 
-/// helper to get i-th sorter attr from match
-template<bool BITS>
-inline SphAttr_t sphGetCompAttr ( const CSphMatchComparatorState & t, const CSphMatch & m, int i );
-
-template<>
-inline SphAttr_t sphGetCompAttr<false> ( const CSphMatchComparatorState & t, const CSphMatch & m, int i )
-{
-	return m.GetAttr ( t.m_tLocator[i] ); // FIXME! OPTIMIZE!!! we can go the short route here
-}
-
-template<>
-inline SphAttr_t sphGetCompAttr<true> ( const CSphMatchComparatorState & t, const CSphMatch & m, int i )
-{
-	return m.GetAttr ( t.m_tLocator[i] );
-}
-
-//////////////////////////////////////////////////////////////////////////
-
 /// groupby key type
 typedef int64_t				SphGroupKey_t;
 
@@ -1176,7 +1158,6 @@ public:
 //////////////////////////////////////////////////////////////////////////
 
 /// match sorter
-template < bool BITS >
 struct MatchRelevanceLt_fn : public ISphMatchComparator
 {
 	virtual bool VirtualIsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t ) const
@@ -1195,7 +1176,6 @@ struct MatchRelevanceLt_fn : public ISphMatchComparator
 
 
 /// match sorter
-template < bool BITS >
 struct MatchAttrLt_fn : public ISphMatchComparator
 {
 	virtual bool VirtualIsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t ) const
@@ -1205,8 +1185,8 @@ struct MatchAttrLt_fn : public ISphMatchComparator
 
 	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
 	{
-		SphAttr_t aa = sphGetCompAttr<BITS> ( t, a, 0 );
-		SphAttr_t bb = sphGetCompAttr<BITS> ( t, b, 0 );
+		SphAttr_t aa = a.GetAttr ( t.m_tLocator[0] );
+		SphAttr_t bb = b.GetAttr ( t.m_tLocator[0] );
 		if ( aa!=bb )
 			return aa<bb;
 
@@ -1219,7 +1199,6 @@ struct MatchAttrLt_fn : public ISphMatchComparator
 
 
 /// match sorter
-template < bool BITS >
 struct MatchAttrGt_fn : public ISphMatchComparator
 {
 	virtual bool VirtualIsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t ) const
@@ -1229,8 +1208,8 @@ struct MatchAttrGt_fn : public ISphMatchComparator
 
 	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
 	{
-		SphAttr_t aa = sphGetCompAttr<BITS> ( t, a, 0 );
-		SphAttr_t bb = sphGetCompAttr<BITS> ( t, b, 0 );
+		SphAttr_t aa = a.GetAttr ( t.m_tLocator[0] );
+		SphAttr_t bb = b.GetAttr ( t.m_tLocator[0] );
 		if ( aa!=bb )
 			return aa>bb;
 
@@ -1243,7 +1222,6 @@ struct MatchAttrGt_fn : public ISphMatchComparator
 
 
 /// match sorter
-template < bool BITS >
 struct MatchTimeSegments_fn : public ISphMatchComparator
 {
 	virtual bool VirtualIsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t ) const
@@ -1253,8 +1231,8 @@ struct MatchTimeSegments_fn : public ISphMatchComparator
 
 	static inline bool IsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t )
 	{
-		SphAttr_t aa = sphGetCompAttr<BITS> ( t, a, 0 );
-		SphAttr_t bb = sphGetCompAttr<BITS> ( t, b, 0 );
+		SphAttr_t aa = a.GetAttr ( t.m_tLocator[0] );
+		SphAttr_t bb = b.GetAttr ( t.m_tLocator[0] );
 		int iA = GetSegment ( aa, t.m_iNow );
 		int iB = GetSegment ( bb, t.m_iNow );
 		if ( iA!=iB )
@@ -1321,15 +1299,14 @@ struct MatchExpr_fn : public ISphMatchComparator
 		} \
 		default: \
 		{ \
-			register SphAttr_t aa = sphGetCompAttr<BITS> ( t, a, _idx ); \
-			register SphAttr_t bb = sphGetCompAttr<BITS> ( t, b, _idx ); \
+			register SphAttr_t aa = a.GetAttr ( t.m_tLocator[_idx] ); \
+			register SphAttr_t bb = b.GetAttr ( t.m_tLocator[_idx] ); \
 			SPH_TEST_PAIR ( aa, bb, _idx ); \
 			break; \
 		} \
 	}
 
 
-template < bool BITS >
 struct MatchGeneric2_fn : public ISphMatchComparator
 {
 	virtual bool VirtualIsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t ) const
@@ -1346,7 +1323,6 @@ struct MatchGeneric2_fn : public ISphMatchComparator
 };
 
 
-template < bool BITS >
 struct MatchGeneric3_fn : public ISphMatchComparator
 {
 	virtual bool VirtualIsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t ) const
@@ -1364,7 +1340,6 @@ struct MatchGeneric3_fn : public ISphMatchComparator
 };
 
 
-template < bool BITS >
 struct MatchGeneric4_fn : public ISphMatchComparator
 {
 	virtual bool VirtualIsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t ) const
@@ -1383,7 +1358,6 @@ struct MatchGeneric4_fn : public ISphMatchComparator
 };
 
 
-template < bool BITS >
 struct MatchGeneric5_fn : public ISphMatchComparator
 {
 	virtual bool VirtualIsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t ) const
@@ -1404,7 +1378,6 @@ struct MatchGeneric5_fn : public ISphMatchComparator
 
 //////////////////////////////////////////////////////////////////////////
 
-template < bool BITS >
 struct MatchCustom_fn : public ISphMatchComparator
 {
 	virtual bool VirtualIsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & t ) const
@@ -1462,7 +1435,7 @@ struct MatchCustom_fn : public ISphMatchComparator
 #define MATCH_DECLARE_ATTR(_name)	; // NOLINT
 #define MATCH_WEIGHT				float(MATCH_VAR.m_iWeight)
 #define MATCH_NOW					float(t.m_iNow)
-#define MATCH_ATTR(_idx)			float(sphGetCompAttr<BITS>(t,MATCH_VAR,_idx))
+#define MATCH_ATTR(_idx)			float(MATCH_VAR.GetAttr(t.m_tLocator[_idx]))
 
 		float aa, bb;
 
@@ -1587,7 +1560,7 @@ static ESortClauseParseResult sphParseSortClause ( const char * sClause, const C
 		if ( iField==0 && bField && strcmp ( pTok, "@custom" )==0 )
 		{
 			eFunc = FUNC_CUSTOM;
-			return MatchCustom_fn<false>::Setup ( tSchema, tState, sError ) ? SORT_CLAUSE_OK : SORT_CLAUSE_ERROR;
+			return MatchCustom_fn::Setup ( tSchema, tState, sError ) ? SORT_CLAUSE_OK : SORT_CLAUSE_ERROR;
 		}
 
 		// handle sort order
@@ -1692,73 +1665,40 @@ static ISphMatchSorter * sphCreateSorter3rd ( const ISphMatchComparator * pComp,
 }
 
 
-static ISphMatchSorter * sphCreateSorter2nd ( ESphSortFunc eGroupFunc, bool bGroupBits, const ISphMatchComparator * pComp, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings )
+static ISphMatchSorter * sphCreateSorter2nd ( ESphSortFunc eGroupFunc, const ISphMatchComparator * pComp, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings )
 {
-	if ( bGroupBits )
+	switch ( eGroupFunc )
 	{
-		switch ( eGroupFunc )
-		{
-			case FUNC_GENERIC2:		return sphCreateSorter3rd<MatchGeneric2_fn<true> >	( pComp, pQuery, tSettings ); break;
-			case FUNC_GENERIC3:		return sphCreateSorter3rd<MatchGeneric3_fn<true> >	( pComp, pQuery, tSettings ); break;
-			case FUNC_GENERIC4:		return sphCreateSorter3rd<MatchGeneric4_fn<true> >	( pComp, pQuery, tSettings ); break;
-			case FUNC_GENERIC5:		return sphCreateSorter3rd<MatchGeneric5_fn<true> >	( pComp, pQuery, tSettings ); break;
-			case FUNC_CUSTOM:		return sphCreateSorter3rd<MatchCustom_fn<true> >	( pComp, pQuery, tSettings ); break;
-			default:				return NULL;
-		}
-	} else
-	{
-		switch ( eGroupFunc )
-		{
-			case FUNC_GENERIC2:		return sphCreateSorter3rd<MatchGeneric2_fn<false> >	( pComp, pQuery, tSettings ); break;
-			case FUNC_GENERIC3:		return sphCreateSorter3rd<MatchGeneric3_fn<false> >	( pComp, pQuery, tSettings ); break;
-			case FUNC_GENERIC4:		return sphCreateSorter3rd<MatchGeneric4_fn<false> >	( pComp, pQuery, tSettings ); break;
-			case FUNC_GENERIC5:		return sphCreateSorter3rd<MatchGeneric5_fn<false> >	( pComp, pQuery, tSettings ); break;
-			case FUNC_CUSTOM:		return sphCreateSorter3rd<MatchCustom_fn<false> >	( pComp, pQuery, tSettings ); break;
-			case FUNC_EXPR:			return sphCreateSorter3rd<MatchExpr_fn>				( pComp, pQuery, tSettings ); break;
-			default:				return NULL;
-		}
+		case FUNC_GENERIC2:		return sphCreateSorter3rd<MatchGeneric2_fn>	( pComp, pQuery, tSettings ); break;
+		case FUNC_GENERIC3:		return sphCreateSorter3rd<MatchGeneric3_fn>	( pComp, pQuery, tSettings ); break;
+		case FUNC_GENERIC4:		return sphCreateSorter3rd<MatchGeneric4_fn>	( pComp, pQuery, tSettings ); break;
+		case FUNC_GENERIC5:		return sphCreateSorter3rd<MatchGeneric5_fn>	( pComp, pQuery, tSettings ); break;
+		case FUNC_CUSTOM:		return sphCreateSorter3rd<MatchCustom_fn>	( pComp, pQuery, tSettings ); break;
+		case FUNC_EXPR:			return sphCreateSorter3rd<MatchExpr_fn>		( pComp, pQuery, tSettings ); break;
+		default:				return NULL;
 	}
 }
 
 
-static ISphMatchSorter * sphCreateSorter1st ( ESphSortFunc eMatchFunc, bool bMatchBits, ESphSortFunc eGroupFunc, bool bGroupBits, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings )
+static ISphMatchSorter * sphCreateSorter1st ( ESphSortFunc eMatchFunc, ESphSortFunc eGroupFunc, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings )
 {
 	ISphMatchComparator * pComp = NULL;
-	if ( bMatchBits )
+	switch ( eMatchFunc )
 	{
-		switch ( eMatchFunc )
-		{
-			case FUNC_REL_DESC:		pComp = new MatchRelevanceLt_fn<true>(); break;
-			case FUNC_ATTR_DESC:	pComp = new MatchAttrLt_fn<true>(); break;
-			case FUNC_ATTR_ASC:		pComp = new MatchAttrGt_fn<true>(); break;
-			case FUNC_TIMESEGS:		pComp = new MatchTimeSegments_fn<true>(); break;
-			case FUNC_GENERIC2:		pComp = new MatchGeneric2_fn<true>(); break;
-			case FUNC_GENERIC3:		pComp = new MatchGeneric3_fn<true>(); break;
-			case FUNC_GENERIC4:		pComp = new MatchGeneric4_fn<true>(); break;
-			case FUNC_GENERIC5:		pComp = new MatchGeneric5_fn<true>(); break;
-			case FUNC_CUSTOM:		pComp = new MatchCustom_fn<true>(); break;
-			case FUNC_EXPR:			pComp = NULL; break; // expr can't be bitfield
-		}
-	} else
-	{
-		switch ( eMatchFunc )
-		{
-			case FUNC_REL_DESC:		pComp = new MatchRelevanceLt_fn<false>(); break;
-			case FUNC_ATTR_DESC:	pComp = new MatchAttrLt_fn<false>(); break;
-			case FUNC_ATTR_ASC:		pComp = new MatchAttrGt_fn<false>(); break;
-			case FUNC_TIMESEGS:		pComp = new MatchTimeSegments_fn<false>(); break;
-			case FUNC_GENERIC2:		pComp = new MatchGeneric2_fn<false>(); break;
-			case FUNC_GENERIC3:		pComp = new MatchGeneric3_fn<false>(); break;
-			case FUNC_GENERIC4:		pComp = new MatchGeneric4_fn<false>(); break;
-			case FUNC_GENERIC5:		pComp = new MatchGeneric5_fn<false>(); break;
-			case FUNC_CUSTOM:		pComp = new MatchCustom_fn<false>(); break;
-			case FUNC_EXPR:			pComp = new MatchExpr_fn(); break; // only for non-bitfields, obviously
-		}
+		case FUNC_REL_DESC:		pComp = new MatchRelevanceLt_fn(); break;
+		case FUNC_ATTR_DESC:	pComp = new MatchAttrLt_fn(); break;
+		case FUNC_ATTR_ASC:		pComp = new MatchAttrGt_fn(); break;
+		case FUNC_TIMESEGS:		pComp = new MatchTimeSegments_fn(); break;
+		case FUNC_GENERIC2:		pComp = new MatchGeneric2_fn(); break;
+		case FUNC_GENERIC3:		pComp = new MatchGeneric3_fn(); break;
+		case FUNC_GENERIC4:		pComp = new MatchGeneric4_fn(); break;
+		case FUNC_GENERIC5:		pComp = new MatchGeneric5_fn(); break;
+		case FUNC_CUSTOM:		pComp = new MatchCustom_fn(); break;
+		case FUNC_EXPR:			pComp = new MatchExpr_fn(); break; // only for non-bitfields, obviously
 	}
 
-	return pComp
-		? sphCreateSorter2nd ( eGroupFunc, bGroupBits, pComp, pQuery, tSettings )
-		: NULL;
+	assert ( pComp );
+	return sphCreateSorter2nd ( eGroupFunc, pComp, pQuery, tSettings );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -2182,47 +2122,25 @@ ISphMatchSorter * sphCreateQueue ( const CSphQuery * pQuery, const CSphSchema & 
 	// spawn the queue
 	///////////////////
 
-	bool bMatchBits = tStateMatch.UsesBitfields ();
-	bool bGroupBits = tStateGroup.UsesBitfields ();
-
 	if ( !bGotGroupby )
 	{
-		if ( bMatchBits )
+		switch ( eMatchFunc )
 		{
-			switch ( eMatchFunc )
-			{
-				case FUNC_REL_DESC:	pTop = new CSphMatchQueue<MatchRelevanceLt_fn<true> >	( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_ATTR_DESC:pTop = new CSphMatchQueue<MatchAttrLt_fn<true> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_ATTR_ASC:	pTop = new CSphMatchQueue<MatchAttrGt_fn<true> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_TIMESEGS:	pTop = new CSphMatchQueue<MatchTimeSegments_fn<true> >	( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_GENERIC2:	pTop = new CSphMatchQueue<MatchGeneric2_fn<true> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_GENERIC3:	pTop = new CSphMatchQueue<MatchGeneric3_fn<true> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_GENERIC4:	pTop = new CSphMatchQueue<MatchGeneric4_fn<true> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_GENERIC5:	pTop = new CSphMatchQueue<MatchGeneric5_fn<true> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_CUSTOM:	pTop = new CSphMatchQueue<MatchCustom_fn<true> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				default:			pTop = NULL;
-			}
-		} else
-		{
-			switch ( eMatchFunc )
-			{
-				case FUNC_REL_DESC:	pTop = new CSphMatchQueue<MatchRelevanceLt_fn<false> >	( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_ATTR_DESC:pTop = new CSphMatchQueue<MatchAttrLt_fn<false> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_ATTR_ASC:	pTop = new CSphMatchQueue<MatchAttrGt_fn<false> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_TIMESEGS:	pTop = new CSphMatchQueue<MatchTimeSegments_fn<false> >	( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_GENERIC2:	pTop = new CSphMatchQueue<MatchGeneric2_fn<false> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_GENERIC3:	pTop = new CSphMatchQueue<MatchGeneric3_fn<false> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_GENERIC4:	pTop = new CSphMatchQueue<MatchGeneric4_fn<false> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_GENERIC5:	pTop = new CSphMatchQueue<MatchGeneric5_fn<false> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_CUSTOM:	pTop = new CSphMatchQueue<MatchCustom_fn<false> >		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				case FUNC_EXPR:		pTop = new CSphMatchQueue<MatchExpr_fn>					( pQuery->m_iMaxMatches, bUsesAttrs ); break;
-				default:			pTop = NULL;
-			}
+			case FUNC_REL_DESC:	pTop = new CSphMatchQueue<MatchRelevanceLt_fn>	( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+			case FUNC_ATTR_DESC:pTop = new CSphMatchQueue<MatchAttrLt_fn>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+			case FUNC_ATTR_ASC:	pTop = new CSphMatchQueue<MatchAttrGt_fn>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+			case FUNC_TIMESEGS:	pTop = new CSphMatchQueue<MatchTimeSegments_fn>	( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+			case FUNC_GENERIC2:	pTop = new CSphMatchQueue<MatchGeneric2_fn>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+			case FUNC_GENERIC3:	pTop = new CSphMatchQueue<MatchGeneric3_fn>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+			case FUNC_GENERIC4:	pTop = new CSphMatchQueue<MatchGeneric4_fn>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+			case FUNC_GENERIC5:	pTop = new CSphMatchQueue<MatchGeneric5_fn>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+			case FUNC_CUSTOM:	pTop = new CSphMatchQueue<MatchCustom_fn>		( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+			case FUNC_EXPR:		pTop = new CSphMatchQueue<MatchExpr_fn>			( pQuery->m_iMaxMatches, bUsesAttrs ); break;
+			default:			pTop = NULL;
 		}
-
 	} else
 	{
-		pTop = sphCreateSorter1st ( eMatchFunc, bMatchBits, eGroupFunc, bGroupBits, pQuery, tSettings );
+		pTop = sphCreateSorter1st ( eMatchFunc, eGroupFunc, pQuery, tSettings );
 	}
 
 	if ( !pTop )

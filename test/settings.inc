@@ -1,6 +1,6 @@
 <?php
 
-$sd_address 		= "localhost";
+$sd_address 		= "127.0.0.1";
 $sd_port 			= 6712;
 $sd_sphinxql_port	= 6706;
 $sd_log				= "searchd.log";
@@ -10,7 +10,7 @@ $sd_max_children	= 30;
 $sd_pid_file		= "searchd.pid";
 $sd_max_matches		= 100000;
 
-$agent_address		= "localhost";
+$agent_address		= "127.0.0.1";
 $agent_port			= 6713;
 $agent_port_sql		= 6707;
 

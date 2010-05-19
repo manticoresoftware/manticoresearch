@@ -276,7 +276,7 @@ struct Filter_WeightRange: public IFilter_Range
 	{
 		return EvalRange ( tMatch.m_iWeight );
 	}
-	
+
 	Filter_WeightRange ()
 	{
 		m_bUsesAttrs = false;

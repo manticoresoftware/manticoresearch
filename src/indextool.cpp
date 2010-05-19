@@ -118,7 +118,7 @@ int main ( int argc, char ** argv )
 		}
 
 		// options with 2 args
-		else if ( (i+2)>=argc )
+		else if ( (i+2)>=argc ) // NOLINT
 		{
 			// not enough args
 			break;

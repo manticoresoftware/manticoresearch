@@ -758,7 +758,7 @@ void ExprParser_t::Optimize ( int iNode )
 			Swap ( pRoot->m_iLeft, pRoot->m_iRight );
 			Swap ( pLeft, pRight );
 
-			// fixup (expr-const) to ((-const)+expr) 
+			// fixup (expr-const) to ((-const)+expr)
 			if ( pRoot->m_iToken=='-' )
 			{
 				pRoot->m_iToken = '+';
@@ -770,7 +770,7 @@ void ExprParser_t::Optimize ( int iNode )
 
 			// fixup (expr/const) to ((1/const)*expr)
 			if ( pRoot->m_iToken=='/' )
-		 	{
+			{
 				pRoot->m_iToken = '*';
 				pLeft->m_fConst = 1.0f / FloatVal(pLeft);
 				pLeft->m_iToken = TOK_CONST_FLOAT;
@@ -848,7 +848,7 @@ void ExprParser_t::Optimize ( int iNode )
 					// (c - lr) - r -> c - (lr + r)
 					pLeft->m_iToken = ( pRoot->m_iToken=='+' ? '-' : '+' );
 					pRoot->m_iToken = '-';
-					break; 
+					break;
 
 				case '/':
 					// (c / lr) * r -> c * (r / lr)

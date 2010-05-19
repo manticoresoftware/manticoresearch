@@ -16396,11 +16396,11 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 					break;
 
 				case SPH_ATTR_BIGINT:
-					fprintf ( m_fpDumpRows, ", " INT64_FMT, m_tDocInfo.GetAttr(tCol.m_tLocator) );
+					fprintf ( m_fpDumpRows, ", " INT64_FMT, m_tDocInfo.GetAttr ( tCol.m_tLocator ) );
 					break;
 
 				default:
-					fprintf ( m_fpDumpRows, ", %u", (DWORD)m_tDocInfo.GetAttr(tCol.m_tLocator) );
+					fprintf ( m_fpDumpRows, ", %u", (DWORD)m_tDocInfo.GetAttr ( tCol.m_tLocator ) );
 					break;
 			}
 		}
@@ -16408,7 +16408,7 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 		ARRAY_FOREACH ( i, m_tSchema.m_dFields )
 			FormatEscaped ( m_fpDumpRows, (const char*) dFields[i] );
 
-		fprintf ( m_fpDumpRows, ");\n");
+		fprintf ( m_fpDumpRows, ");\n" );
 	}
 
 	m_tStats.m_iTotalDocuments++;

@@ -954,7 +954,7 @@ private:
 	void						CopyDoc ( RtSegment_t * pSeg, RtDocWriter_t & tOutDoc, RtWord_t * pWord, const RtSegment_t * pSrc, const RtDoc_t * pDoc );
 
 	void						SaveMeta ( int iDiskChunks );
-	void						SaveDiskHeader ( const char * sFilename, int iCheckpoints, SphOffset_t iCheckpointsPosition, DWORD uKillListSize ) const;
+	void						SaveDiskHeader ( const char * sFilename, int iCheckpoints, SphOffset_t iCheckpointsPosition, DWORD uKillListSize, DWORD uMinMaxSize ) const;
 	void						SaveDiskData ( const char * sFilename ) const;
 	void						SaveDiskChunk ();
 	CSphIndex *					LoadDiskChunk ( int iChunk );
@@ -2351,6 +2351,15 @@ void RtIndex_t::SaveDiskData ( const char * sFilename ) const
 	ARRAY_FOREACH ( i, pRowIterators )
 		pRows[i] = pRowIterators[i]->GetNextAliveRow();
 
+	// prepare to build min-max index for attributes too
+	int iTotalDocs = 0;
+	ARRAY_FOREACH ( i, m_pSegments )
+		iTotalDocs += m_pSegments[i]->m_iAliveRows;
+	AttrIndexBuilder_c tMinMaxBuilder ( m_tSchema );
+	CSphVector<DWORD> dMinMaxBuffer ( tMinMaxBuilder.GetExpectedSize ( iTotalDocs ) );
+	tMinMaxBuilder.Prepare ( &dMinMaxBuffer[0], &dMinMaxBuffer[0] + dMinMaxBuffer.GetLength() );
+	DWORD uMinMaxIndex = 0;
+
 	sName.SetSprintf ( "%s.sps", sFilename );
 	CSphWriter tStrWriter;
 	tStrWriter.OpenFile ( sName.cstr(), sError );
@@ -2402,11 +2411,19 @@ void RtIndex_t::SaveDiskData ( const char * sFilename ) const
 		// emit it
 		wrRows.PutBytes ( pRow, m_iStride*sizeof(CSphRowitem) );
 
+		// collect min-max data
+		tMinMaxBuilder.CollectWithoutMvas ( pRow, false );
+		uMinMaxIndex += m_iStride;
+
 		// fast forward
 		pRows[iMinRow] = pRowIterators[iMinRow]->GetNextAliveRow();
 	}
 
 	SafeDeleteArray ( pFixedRow );
+
+	tMinMaxBuilder.FinishCollect ( false );
+	if ( tMinMaxBuilder.GetActualSize() )
+		wrRows.PutBytes ( dMinMaxBuffer.Begin(), sizeof(DWORD) * tMinMaxBuilder.GetActualSize() );
 
 	tStrWriter.CloseFile ();
 
@@ -2428,7 +2445,7 @@ void RtIndex_t::SaveDiskData ( const char * sFilename ) const
 	sName.SetSprintf ( "%s.spm", sFilename ); wrDummy.OpenFile ( sName.cstr(), sError ); wrDummy.CloseFile ();
 
 	// header
-	SaveDiskHeader ( sFilename, dCheckpoints.GetLength(), iCheckpointsPosition, uKlistSize );
+	SaveDiskHeader ( sFilename, dCheckpoints.GetLength(), iCheckpointsPosition, uKlistSize, uMinMaxIndex );
 
 	// cleanup
 	ARRAY_FOREACH ( i, pWordReaders )
@@ -2474,10 +2491,10 @@ static void WriteSchemaColumn ( CSphWriter & tWriter, const CSphColumnInfo & tCo
 }
 
 
-void RtIndex_t::SaveDiskHeader ( const char * sFilename, int iCheckpoints, SphOffset_t iCheckpointsPosition, DWORD uKillListSize ) const
+void RtIndex_t::SaveDiskHeader ( const char * sFilename, int iCheckpoints, SphOffset_t iCheckpointsPosition, DWORD uKillListSize, DWORD uMinMaxSize ) const
 {
 	static const DWORD INDEX_MAGIC_HEADER	= 0x58485053;	///< my magic 'SPHX' header
-	static const DWORD INDEX_FORMAT_VERSION	= 19;			///< my format version
+	static const DWORD INDEX_FORMAT_VERSION	= 20;			///< my format version
 
 	CSphWriter tWriter;
 	CSphString sName, sError;
@@ -2556,6 +2573,9 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, int iCheckpoints, SphOf
 
 	// kill-list size
 	tWriter.PutDword ( uKillListSize );
+
+	// min-max count
+	tWriter.PutDword ( uMinMaxSize );
 
 	// done
 	tWriter.CloseFile ();

@@ -219,18 +219,17 @@ public:
 	void						CalcFinal ( CSphMatch & tMatch ) const;
 };
 
+//////////////////////////////////////////////////////////////////////////
+
 bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const char * sName, CSphString & sError );
 
 void SafeClose ( int & iFD );
 
-struct XQNode_t;
-void sphDoStatsOrder ( const XQNode_t * pNode, CSphQueryResultMeta & tResult );
+void sphDoStatsOrder ( const struct XQNode_t * pNode, CSphQueryResultMeta & tResult );
 
 //////////////////////////////////////////////////////////////////////////
 
 /// memory tracker
-
-
 namespace Memory
 {
 	enum Category_e
@@ -300,6 +299,71 @@ struct MemTracker_c : ISphNoncopyable
 
 #endif // if SPH_ALLOCS_PROFILER
 
+//////////////////////////////////////////////////////////////////////////
+
+///
+#define DOCINFO_INDEX_FREQ 128 // FIXME? make this configurable
+
+/// attr min-max builder
+class AttrIndexBuilder_c : ISphNoncopyable
+{
+private:
+	CSphVector<CSphAttrLocator>	m_dIntAttrs;
+	CSphVector<CSphAttrLocator>	m_dFloatAttrs;
+	CSphVector<CSphAttrLocator>	m_dMvaAttrs;
+	CSphVector<SphAttr_t>		m_dIntMin;
+	CSphVector<SphAttr_t>		m_dIntMax;
+	CSphVector<SphAttr_t>		m_dIntIndexMin;
+	CSphVector<SphAttr_t>		m_dIntIndexMax;
+	CSphVector<float>			m_dFloatMin;
+	CSphVector<float>			m_dFloatMax;
+	CSphVector<float>			m_dFloatIndexMin;
+	CSphVector<float>			m_dFloatIndexMax;
+	CSphVector<DWORD>			m_dMvaMin;
+	CSphVector<DWORD>			m_dMvaMax;
+	CSphVector<DWORD>			m_dMvaIndexMin;
+	CSphVector<DWORD>			m_dMvaIndexMax;
+	DWORD						m_uStride;		// size of attribute's chunk (in DWORDs)
+	DWORD						m_uElements;	// counts total number of collected min/max pairs
+	int							m_iLoop;		// loop inside one set
+	DWORD *						m_pOutBuffer;	// storage for collected min/max
+	DWORD *						m_pOutMax;		// storage max for bound checking
+	SphDocID_t					m_uStart;		// first and last docids of current chunk
+	SphDocID_t					m_uLast;
+	SphDocID_t					m_uIndexStart;	// first and last docids of whole index
+	SphDocID_t					m_uIndexLast;
+
+private:
+	void ResetLocal();
+	void FlushComputed ( bool bUseAttrs, bool bUseMvas );
+	void UpdateMinMaxDocids ( SphDocID_t uDocID );
+
+public:
+	explicit AttrIndexBuilder_c ( const CSphSchema & tSchema );
+
+	void Prepare ( DWORD * pOutBuffer, DWORD * pOutMax );
+
+	void CollectWithoutMvas ( const DWORD * pCur, bool bUseMvas );
+	bool Collect ( const DWORD * pCur, const CSphSharedBuffer<DWORD> & pMvas, CSphString & sError );
+	void Collect ( const DWORD * pCur, const struct CSphDocMVA & dMvas );
+	void CollectMVA ( SphDocID_t uDocID, const CSphVector< CSphVector<DWORD> > & dCurInfo );
+
+	void FinishCollect ( bool bMvaOnly = false );
+
+	/// actually used part of output buffer, only used with index merge
+	/// (we reserve space for rows from both indexes, but might kill some rows)
+	inline DWORD GetActualSize() const
+	{
+		return 2 * m_uElements * m_uStride;
+	}
+
+	/// how many DWORDs will we need for block index
+	inline DWORD GetExpectedSize ( DWORD uMaxDocs ) const
+	{
+		DWORD uDocinfoIndex = ( uMaxDocs + DOCINFO_INDEX_FREQ - 1 ) / DOCINFO_INDEX_FREQ;
+		return 2 * ( 1 + uDocinfoIndex ) * m_uStride;
+	}
+};
 
 #endif // _sphinxint_
 

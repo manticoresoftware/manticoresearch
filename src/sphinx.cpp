@@ -1354,7 +1354,6 @@ private:
 private:
 	// searching-only, per-index
 	static const int			DOCINFO_HASH_BITS	= 18;	// FIXME! make this configurable
-	static const int			DOCINFO_INDEX_FREQ	= 128;	// FIXME! make this configurable
 
 	CSphSharedBuffer<DWORD>		m_pDocinfo;				///< my docinfo cache
 	DWORD						m_uDocinfo;				///< my docinfo cache size
@@ -6816,134 +6815,109 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 	return iUpdated;
 }
 
-class AttrIndexBuilder_c : ISphNoncopyable
+//////////////////////////////////////////////////////////////////////////
+// ATTRIBUTE BLOCK INDEX BUILDER
+//////////////////////////////////////////////////////////////////////////
+
+void AttrIndexBuilder_c::ResetLocal()
 {
-private:
-	CSphVector<CSphAttrLocator>	m_dIntAttrs;
-	CSphVector<CSphAttrLocator>	m_dFloatAttrs;
-	CSphVector<CSphAttrLocator>	m_dMvaAttrs;
-	CSphVector<SphAttr_t>		m_dIntMin;
-	CSphVector<SphAttr_t>		m_dIntMax;
-	CSphVector<SphAttr_t>		m_dIntIndexMin;
-	CSphVector<SphAttr_t>		m_dIntIndexMax;
-	CSphVector<float>			m_dFloatMin;
-	CSphVector<float>			m_dFloatMax;
-	CSphVector<float>			m_dFloatIndexMin;
-	CSphVector<float>			m_dFloatIndexMax;
-	CSphVector<DWORD>			m_dMvaMin;
-	CSphVector<DWORD>			m_dMvaMax;
-	CSphVector<DWORD>			m_dMvaIndexMin;
-	CSphVector<DWORD>			m_dMvaIndexMax;
-	DWORD						m_uStride;		// size of attribute's chunk (in DWORDs)
-	DWORD						m_uElements;	// counts total number of collected min/max pairs
-	int							m_iLoop;		// loop inside one set
-	DWORD *						m_pOutBuffer;	// storage for collected min/max
-	DWORD *						m_pOutMax;		// storage max for bound checking
-	SphDocID_t					m_uStart;		// first and last docids of current chunk
-	SphDocID_t					m_uLast;
-	SphDocID_t					m_uIndexStart;	// first and last docids of whole index
-	SphDocID_t					m_uIndexLast;
-
-private:
-	void ResetLocal()
+	ARRAY_FOREACH ( i, m_dIntMin )
 	{
-		ARRAY_FOREACH ( i, m_dIntMin )
+		m_dIntMin[i] = UINT_MAX;
+		m_dIntMax[i] = 0;
+	}
+	ARRAY_FOREACH ( i, m_dFloatMin )
+	{
+		m_dFloatMin[i] = FLT_MAX;
+		m_dFloatMax[i] = -FLT_MAX;
+	}
+	ARRAY_FOREACH ( i, m_dMvaMin )
+	{
+		m_dMvaMin[i] = UINT_MAX;
+		m_dMvaMax[i] = 0;
+	}
+	m_uStart = m_uLast = 0;
+	m_iLoop = 0;
+}
+
+void AttrIndexBuilder_c::FlushComputed ( bool bUseAttrs, bool bUseMvas )
+{
+	assert ( m_pOutBuffer );
+	DWORD * pMinEntry = m_pOutBuffer + 2 * m_uElements * m_uStride;
+	DWORD * pMinAttrs = DOCINFO2ATTRS ( pMinEntry );
+	DWORD * pMaxEntry = pMinEntry + m_uStride;
+	DWORD * pMaxAttrs = pMinAttrs + m_uStride;
+
+	assert ( pMaxEntry+m_uStride-1 < m_pOutMax );
+	assert ( pMaxAttrs+m_uStride-1 < m_pOutMax );
+
+	m_uIndexLast = m_uLast;
+
+	DOCINFOSETID ( pMinEntry, m_uStart );
+	DOCINFOSETID ( pMaxEntry, m_uLast );
+
+	if ( bUseAttrs )
+	{
+		ARRAY_FOREACH ( i, m_dIntAttrs )
 		{
-			m_dIntMin[i] = UINT_MAX;
-			m_dIntMax[i] = 0;
+			m_dIntIndexMin[i] = Min ( m_dIntIndexMin[i], m_dIntMin[i] );
+			m_dIntIndexMax[i] = Max ( m_dIntIndexMax[i], m_dIntMax[i] );
+			sphSetRowAttr ( pMinAttrs, m_dIntAttrs[i], m_dIntMin[i] );
+			sphSetRowAttr ( pMaxAttrs, m_dIntAttrs[i], m_dIntMax[i] );
 		}
-		ARRAY_FOREACH ( i, m_dFloatMin )
+		ARRAY_FOREACH ( i, m_dFloatAttrs )
 		{
-			m_dFloatMin[i] = FLT_MAX;
-			m_dFloatMax[i] = -FLT_MAX;
+			m_dFloatIndexMin[i] = Min ( m_dFloatIndexMin[i], m_dFloatMin[i] );
+			m_dFloatIndexMax[i] = Max ( m_dFloatIndexMax[i], m_dFloatMax[i] );
+			sphSetRowAttr ( pMinAttrs, m_dFloatAttrs[i], sphF2DW ( m_dFloatMin[i] ) );
+			sphSetRowAttr ( pMaxAttrs, m_dFloatAttrs[i], sphF2DW ( m_dFloatMax[i] ) );
 		}
-		ARRAY_FOREACH ( i, m_dMvaMin )
-		{
-			m_dMvaMin[i] = UINT_MAX;
-			m_dMvaMax[i] = 0;
-		}
-		m_uStart = m_uLast = 0;
-		m_iLoop = 0;
 	}
 
-	void FlushComputed ( bool bUseAttrs, bool bUseMvas )
+	if ( bUseMvas )
+		ARRAY_FOREACH ( i, m_dMvaAttrs )
 	{
-		assert ( m_pOutBuffer );
-		DWORD * pMinEntry = m_pOutBuffer + 2 * m_uElements * m_uStride;
-		DWORD * pMinAttrs = DOCINFO2ATTRS ( pMinEntry );
-		DWORD * pMaxEntry = pMinEntry + m_uStride;
-		DWORD * pMaxAttrs = pMinAttrs + m_uStride;
+		m_dMvaIndexMin[i] = Min ( m_dMvaIndexMin[i], m_dMvaMin[i] );
+		m_dMvaIndexMax[i] = Max ( m_dMvaIndexMax[i], m_dMvaMax[i] );
+		sphSetRowAttr ( pMinAttrs, m_dMvaAttrs[i], m_dMvaMin[i] );
+		sphSetRowAttr ( pMaxAttrs, m_dMvaAttrs[i], m_dMvaMax[i] );
+	}
 
-		assert ( pMaxEntry+m_uStride-1 < m_pOutMax );
-		assert ( pMaxAttrs+m_uStride-1 < m_pOutMax );
+	m_uElements++;
+	ResetLocal();
+}
 
-		m_uIndexLast = m_uLast;
+void AttrIndexBuilder_c::UpdateMinMaxDocids ( SphDocID_t uDocID )
+{
+	if ( !m_uStart )
+		m_uStart = uDocID;
+	if ( !m_uIndexStart )
+		m_uIndexStart = uDocID;
+	m_uLast = uDocID;
+}
 
-		DOCINFOSETID ( pMinEntry, m_uStart );
-		DOCINFOSETID ( pMaxEntry, m_uLast );
-
-		if ( bUseAttrs )
+AttrIndexBuilder_c::AttrIndexBuilder_c ( const CSphSchema & tSchema )
+	: m_uStride ( DOCINFO_IDSIZE + tSchema.GetRowSize() )
+	, m_uElements ( 0 )
+	, m_iLoop ( 0 )
+	, m_pOutBuffer ( NULL )
+	, m_pOutMax ( NULL )
+	, m_uStart ( 0 )
+	, m_uLast ( 0 )
+	, m_uIndexStart ( 0 )
+	, m_uIndexLast ( 0 )
+{
+	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
+	{
+		const CSphColumnInfo & tCol = tSchema.GetAttr(i);
+		if ( tCol.m_eAttrType & SPH_ATTR_MULTI )
 		{
-			ARRAY_FOREACH ( i, m_dIntAttrs )
-			{
-				m_dIntIndexMin[i] = Min ( m_dIntIndexMin[i], m_dIntMin[i] );
-				m_dIntIndexMax[i] = Max ( m_dIntIndexMax[i], m_dIntMax[i] );
-				sphSetRowAttr ( pMinAttrs, m_dIntAttrs[i], m_dIntMin[i] );
-				sphSetRowAttr ( pMaxAttrs, m_dIntAttrs[i], m_dIntMax[i] );
-			}
-			ARRAY_FOREACH ( i, m_dFloatAttrs )
-			{
-				m_dFloatIndexMin[i] = Min ( m_dFloatIndexMin[i], m_dFloatMin[i] );
-				m_dFloatIndexMax[i] = Max ( m_dFloatIndexMax[i], m_dFloatMax[i] );
-				sphSetRowAttr ( pMinAttrs, m_dFloatAttrs[i], sphF2DW ( m_dFloatMin[i] ) );
-				sphSetRowAttr ( pMaxAttrs, m_dFloatAttrs[i], sphF2DW ( m_dFloatMax[i] ) );
-			}
+			m_dMvaAttrs.Add ( tCol.m_tLocator );
+			continue;
 		}
-		if ( bUseMvas )
-			ARRAY_FOREACH ( i, m_dMvaAttrs )
-			{
-				m_dMvaIndexMin[i] = Min ( m_dMvaIndexMin[i], m_dMvaMin[i] );
-				m_dMvaIndexMax[i] = Max ( m_dMvaIndexMax[i], m_dMvaMax[i] );
-				sphSetRowAttr ( pMinAttrs, m_dMvaAttrs[i], m_dMvaMin[i] );
-				sphSetRowAttr ( pMaxAttrs, m_dMvaAttrs[i], m_dMvaMax[i] );
-			}
-		m_uElements++;
-		ResetLocal();
-	}
 
-	void UpdateMinMaxDocids ( SphDocID_t uDocID )
-	{
-		if ( !m_uStart )
-			m_uStart = uDocID;
-		if ( !m_uIndexStart )
-			m_uIndexStart = uDocID;
-		m_uLast = uDocID;
-	}
-
-public:
-	explicit AttrIndexBuilder_c ( const CSphSchema & tSchema )
-		: m_uStride ( DOCINFO_IDSIZE + tSchema.GetRowSize() )
-		, m_uElements ( 0 )
-		, m_iLoop ( 0 )
-		, m_pOutBuffer ( NULL )
-		, m_pOutMax ( NULL )
-		, m_uStart ( 0 )
-		, m_uLast ( 0 )
-		, m_uIndexStart ( 0 )
-		, m_uIndexLast ( 0 )
-	{
-		for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
+		switch ( tCol.m_eAttrType )
 		{
-			const CSphColumnInfo & tCol = tSchema.GetAttr(i);
-
-			if ( tCol.m_eAttrType & SPH_ATTR_MULTI )
-			{
-				m_dMvaAttrs.Add ( tCol.m_tLocator );
-				continue;
-			}
-
-			switch ( tCol.m_eAttrType )
-			{
 			case SPH_ATTR_INTEGER:
 			case SPH_ATTR_TIMESTAMP:
 			case SPH_ATTR_BOOL:
@@ -6957,194 +6931,190 @@ public:
 
 			default:
 				break;
-			}
 		}
-		m_dIntMin.Resize ( m_dIntAttrs.GetLength() );
-		m_dIntMax.Resize ( m_dIntAttrs.GetLength() );
-		m_dIntIndexMin.Resize ( m_dIntAttrs.GetLength() );
-		m_dIntIndexMax.Resize ( m_dIntAttrs.GetLength() );
-		m_dFloatMin.Resize ( m_dFloatAttrs.GetLength() );
-		m_dFloatMax.Resize ( m_dFloatAttrs.GetLength() );
-		m_dFloatIndexMin.Resize ( m_dFloatAttrs.GetLength() );
-		m_dFloatIndexMax.Resize ( m_dFloatAttrs.GetLength() );
-		m_dMvaMin.Resize ( m_dMvaAttrs.GetLength() );
-		m_dMvaMax.Resize ( m_dMvaAttrs.GetLength() );
-		m_dMvaIndexMin.Resize ( m_dMvaAttrs.GetLength() );
-		m_dMvaIndexMax.Resize ( m_dMvaAttrs.GetLength() );
 	}
 
-	void Prepare ( DWORD * pOutBuffer, DWORD * pOutMax )
+	m_dIntMin.Resize ( m_dIntAttrs.GetLength() );
+	m_dIntMax.Resize ( m_dIntAttrs.GetLength() );
+	m_dIntIndexMin.Resize ( m_dIntAttrs.GetLength() );
+	m_dIntIndexMax.Resize ( m_dIntAttrs.GetLength() );
+	m_dFloatMin.Resize ( m_dFloatAttrs.GetLength() );
+	m_dFloatMax.Resize ( m_dFloatAttrs.GetLength() );
+	m_dFloatIndexMin.Resize ( m_dFloatAttrs.GetLength() );
+	m_dFloatIndexMax.Resize ( m_dFloatAttrs.GetLength() );
+	m_dMvaMin.Resize ( m_dMvaAttrs.GetLength() );
+	m_dMvaMax.Resize ( m_dMvaAttrs.GetLength() );
+	m_dMvaIndexMin.Resize ( m_dMvaAttrs.GetLength() );
+	m_dMvaIndexMax.Resize ( m_dMvaAttrs.GetLength() );
+}
+
+void AttrIndexBuilder_c::Prepare ( DWORD * pOutBuffer, DWORD * pOutMax )
+{
+	m_pOutBuffer = pOutBuffer;
+	m_pOutMax = pOutMax;
+	m_uElements = 0;
+	m_uIndexStart = m_uIndexLast = 0;
+	ARRAY_FOREACH ( i, m_dIntIndexMin )
 	{
-		m_pOutBuffer = pOutBuffer;
-		m_pOutMax = pOutMax;
-		m_uElements = 0;
-		m_uIndexStart = m_uIndexLast = 0;
-		ARRAY_FOREACH ( i, m_dIntIndexMin )
-		{
-			m_dIntIndexMin[i] = UINT_MAX;
-			m_dIntIndexMax[i] = 0;
-		}
-		ARRAY_FOREACH ( i, m_dFloatIndexMin )
-		{
-			m_dFloatIndexMin[i] = FLT_MAX;
-			m_dFloatIndexMax[i] = -FLT_MAX;
-		}
-		ARRAY_FOREACH ( i, m_dMvaIndexMin )
-		{
-			m_dMvaIndexMin[i] = UINT_MAX;
-			m_dMvaIndexMax[i] = 0;
-		}
-		ResetLocal();
+		m_dIntIndexMin[i] = UINT_MAX;
+		m_dIntIndexMax[i] = 0;
+	}
+	ARRAY_FOREACH ( i, m_dFloatIndexMin )
+	{
+		m_dFloatIndexMin[i] = FLT_MAX;
+		m_dFloatIndexMax[i] = -FLT_MAX;
+	}
+	ARRAY_FOREACH ( i, m_dMvaIndexMin )
+	{
+		m_dMvaIndexMin[i] = UINT_MAX;
+		m_dMvaIndexMax[i] = 0;
+	}
+	ResetLocal();
+}
+
+void AttrIndexBuilder_c::CollectWithoutMvas ( const DWORD * pCur, bool bUseMvas )
+{
+	// check if it is time to flush already collected values
+	if ( m_iLoop>=DOCINFO_INDEX_FREQ )
+		FlushComputed ( true, bUseMvas );
+
+	const DWORD * pRow = DOCINFO2ATTRS(pCur);
+	UpdateMinMaxDocids ( DOCINFO2ID(pCur) );
+	m_iLoop++;
+
+	// ints
+	ARRAY_FOREACH ( i, m_dIntAttrs )
+	{
+		SphAttr_t uVal = sphGetRowAttr ( pRow, m_dIntAttrs[i] );
+		m_dIntMin[i] = Min ( m_dIntMin[i], uVal );
+		m_dIntMax[i] = Max ( m_dIntMax[i], uVal );
 	}
 
-	void CollectWithoutMvas ( const DWORD * pCur, bool bUseMvas )
+	// floats
+	ARRAY_FOREACH ( i, m_dFloatAttrs )
 	{
-		// check if it is time to flush already collected values
-		if ( m_iLoop>=CSphIndex_VLN::DOCINFO_INDEX_FREQ )
-			FlushComputed ( true, bUseMvas );
-		const DWORD * pRow = DOCINFO2ATTRS(pCur);
-		UpdateMinMaxDocids ( DOCINFO2ID(pCur) );
-		m_iLoop++;
+		float fVal = sphDW2F ( (DWORD)sphGetRowAttr ( pRow, m_dFloatAttrs[i] ) );
+		m_dFloatMin[i] = Min ( m_dFloatMin[i], fVal );
+		m_dFloatMax[i] = Max ( m_dFloatMax[i], fVal );
+	}
+}
 
-		// ints
+bool AttrIndexBuilder_c::Collect ( const DWORD * pCur, const CSphSharedBuffer<DWORD> & pMvas, CSphString & sError )
+{
+	CollectWithoutMvas ( pCur, true );
+
+	const DWORD * pRow = DOCINFO2ATTRS(pCur);
+	SphDocID_t uDocID = DOCINFO2ID(pCur);
+
+	// MVAs
+	ARRAY_FOREACH ( i, m_dMvaAttrs )
+	{
+		SphAttr_t uOff = sphGetRowAttr ( pRow, m_dMvaAttrs[i] );
+		if ( !uOff )
+			continue;
+
+		// sanity checks
+		if ( uOff>=pMvas.GetNumEntries() )
+		{
+			sError.SetSprintf ( "broken index: mva offset out of bounds, id=" DOCID_FMT, uDocID );
+			return false;
+		}
+
+		const DWORD * pMva = &pMvas [ MVA_DOWNSIZE ( uOff ) ]; // don't care about updates at this point
+
+		if ( i==0 && DOCINFO2ID ( pMva-DOCINFO_IDSIZE )!=uDocID )
+		{
+			sError.SetSprintf ( "broken index: mva docid verification failed, id=" DOCID_FMT, uDocID );
+			return false;
+		}
+		if ( uOff+pMva[0]>=pMvas.GetNumEntries() )
+		{
+			sError.SetSprintf ( "broken index: mva list out of bounds, id=" DOCID_FMT, uDocID );
+			return false;
+		}
+
+		// walk and calc
+		for ( DWORD uCount = *pMva++; uCount>0; uCount--, pMva++ )
+		{
+			m_dMvaMin[i] = Min ( m_dMvaMin[i], *pMva );
+			m_dMvaMax[i] = Max ( m_dMvaMax[i], *pMva );
+		}
+	}
+	return true;
+}
+
+void AttrIndexBuilder_c::Collect ( const DWORD * pCur, const CSphDocMVA & dMvas )
+{
+	CollectWithoutMvas ( pCur, true );
+	ARRAY_FOREACH ( i, m_dMvaAttrs )
+		ARRAY_FOREACH ( j, dMvas.m_dMVA[i] )
+	{
+		m_dMvaMin[i] = Min ( m_dMvaMin[i], dMvas.m_dMVA[i][j] );
+		m_dMvaMax[i] = Max ( m_dMvaMax[i], dMvas.m_dMVA[i][j] );
+	}
+}
+
+void AttrIndexBuilder_c::CollectMVA ( SphDocID_t uDocID, const CSphVector< CSphVector<DWORD> > & dCurInfo )
+{
+	// check if it is time to flush already collected values
+	if ( m_iLoop>=DOCINFO_INDEX_FREQ )
+		FlushComputed ( false, true );
+
+	UpdateMinMaxDocids ( uDocID );
+	m_iLoop++;
+
+	ARRAY_FOREACH ( i, dCurInfo )
+		ARRAY_FOREACH ( j, dCurInfo[i] )
+	{
+		m_dMvaMin[i] = Min ( m_dMvaMin[i], dCurInfo[i][j] );
+		m_dMvaMax[i] = Max ( m_dMvaMax[i], dCurInfo[i][j] );
+	}
+}
+
+void AttrIndexBuilder_c::FinishCollect ( bool bMvaOnly )
+{
+	assert ( m_pOutBuffer );
+	if ( m_iLoop )
+		FlushComputed ( !bMvaOnly, true );
+
+	DWORD * pMinEntry = m_pOutBuffer + 2 * m_uElements * m_uStride;
+	DWORD * pMaxEntry = pMinEntry + m_uStride;
+	CSphRowitem * pMinAttrs = DOCINFO2ATTRS ( pMinEntry );
+	CSphRowitem * pMaxAttrs = DOCINFO2ATTRS ( pMaxEntry );
+
+	assert ( pMaxEntry < m_pOutMax );
+	assert ( pMaxAttrs < m_pOutMax );
+
+	DOCINFOSETID ( pMinEntry, m_uIndexStart );
+	DOCINFOSETID ( pMaxEntry, m_uIndexLast );
+
+	ARRAY_FOREACH ( i, m_dMvaAttrs )
+	{
+		sphSetRowAttr ( pMinAttrs, m_dMvaAttrs[i], m_dMvaIndexMin[i] );
+		sphSetRowAttr ( pMaxAttrs, m_dMvaAttrs[i], m_dMvaIndexMax[i] );
+	}
+
+	if ( !bMvaOnly )
+	{
 		ARRAY_FOREACH ( i, m_dIntAttrs )
 		{
-			SphAttr_t uVal = sphGetRowAttr ( pRow, m_dIntAttrs[i] );
-			m_dIntMin[i] = Min ( m_dIntMin[i], uVal );
-			m_dIntMax[i] = Max ( m_dIntMax[i], uVal );
+			sphSetRowAttr ( pMinAttrs, m_dIntAttrs[i], m_dIntIndexMin[i] );
+			sphSetRowAttr ( pMaxAttrs, m_dIntAttrs[i], m_dIntIndexMax[i] );
 		}
-
-		// floats
 		ARRAY_FOREACH ( i, m_dFloatAttrs )
 		{
-			float fVal = sphDW2F ( (DWORD)sphGetRowAttr ( pRow, m_dFloatAttrs[i] ) );
-			m_dFloatMin[i] = Min ( m_dFloatMin[i], fVal );
-			m_dFloatMax[i] = Max ( m_dFloatMax[i], fVal );
+			sphSetRowAttr ( pMinAttrs, m_dFloatAttrs[i], sphF2DW ( m_dFloatIndexMin[i] ) );
+			sphSetRowAttr ( pMaxAttrs, m_dFloatAttrs[i], sphF2DW ( m_dFloatIndexMax[i] ) );
 		}
-	}
+		m_uElements++;
 
-	bool Collect ( const DWORD * pCur, const CSphSharedBuffer<DWORD> & pMvas, CSphString & sError )
+	} else
 	{
-		CollectWithoutMvas ( pCur, true );
-
-		const DWORD * pRow = DOCINFO2ATTRS(pCur);
-		SphDocID_t uDocID = DOCINFO2ID(pCur);
-
-		// MVAs
-		ARRAY_FOREACH ( i, m_dMvaAttrs )
-		{
-			SphAttr_t uOff = sphGetRowAttr ( pRow, m_dMvaAttrs[i] );
-			if ( !uOff )
-				continue;
-
-			// sanity checks
-			if ( uOff>=pMvas.GetNumEntries() )
-			{
-				sError.SetSprintf ( "broken index: mva offset out of bounds, id=" DOCID_FMT, uDocID );
-				return false;
-			}
-
-			const DWORD * pMva = &pMvas [ MVA_DOWNSIZE ( uOff ) ]; // don't care about updates at this point
-
-			if ( i==0 && DOCINFO2ID ( pMva-DOCINFO_IDSIZE )!=uDocID )
-			{
-				sError.SetSprintf ( "broken index: mva docid verification failed, id=" DOCID_FMT, uDocID );
-				return false;
-			}
-			if ( uOff+pMva[0]>=pMvas.GetNumEntries() )
-			{
-				sError.SetSprintf ( "broken index: mva list out of bounds, id=" DOCID_FMT, uDocID );
-				return false;
-			}
-
-			// walk and calc
-			for ( DWORD uCount = *pMva++; uCount>0; uCount--, pMva++ )
-			{
-				m_dMvaMin[i] = Min ( m_dMvaMin[i], *pMva );
-				m_dMvaMax[i] = Max ( m_dMvaMax[i], *pMva );
-			}
-		}
-		return true;
+		m_uElements = 0; // rewind back for collecting the rest of attributes.
 	}
+}
 
-	void Collect ( const DWORD * pCur, const CSphDocMVA & dMvas )
-	{
-		CollectWithoutMvas ( pCur, true );
-		ARRAY_FOREACH ( i, m_dMvaAttrs )
-			ARRAY_FOREACH ( j, dMvas.m_dMVA[i] )
-			{
-				m_dMvaMin[i] = Min ( m_dMvaMin[i], dMvas.m_dMVA[i][j] );
-				m_dMvaMax[i] = Max ( m_dMvaMax[i], dMvas.m_dMVA[i][j] );
-			}
-	}
-
-	void CollectMVA ( SphDocID_t uDocID, const CSphVector< CSphVector<DWORD> > & dCurInfo )
-	{
-		// check if it is time to flush already collected values
-		if ( m_iLoop>=CSphIndex_VLN::DOCINFO_INDEX_FREQ )
-			FlushComputed ( false, true );
-		UpdateMinMaxDocids(uDocID);
-		m_iLoop++;
-		ARRAY_FOREACH ( i, dCurInfo )
-			ARRAY_FOREACH ( j, dCurInfo[i] )
-		{
-			m_dMvaMin[i] = Min ( m_dMvaMin[i], dCurInfo[i][j] );
-			m_dMvaMax[i] = Max ( m_dMvaMax[i], dCurInfo[i][j] );
-		}
-	}
-
-	void FinishCollect ( bool bMvaOnly = false )
-	{
-		assert ( m_pOutBuffer );
-		if ( m_iLoop )
-			FlushComputed ( !bMvaOnly, true );
-		DWORD * pMinEntry = m_pOutBuffer + 2 * m_uElements * m_uStride;
-		DWORD * pMaxEntry = pMinEntry + m_uStride;
-		CSphRowitem * pMinAttrs = DOCINFO2ATTRS ( pMinEntry );
-		CSphRowitem * pMaxAttrs = DOCINFO2ATTRS ( pMaxEntry );
-
-		assert ( pMaxEntry < m_pOutMax );
-		assert ( pMaxAttrs < m_pOutMax );
-
-		DOCINFOSETID ( pMinEntry, m_uIndexStart );
-		DOCINFOSETID ( pMaxEntry, m_uIndexLast );
-
-		ARRAY_FOREACH ( i, m_dMvaAttrs )
-		{
-			sphSetRowAttr ( pMinAttrs, m_dMvaAttrs[i], m_dMvaIndexMin[i] );
-			sphSetRowAttr ( pMaxAttrs, m_dMvaAttrs[i], m_dMvaIndexMax[i] );
-		}
-
-		if ( !bMvaOnly )
-		{
-			ARRAY_FOREACH ( i, m_dIntAttrs )
-			{
-				sphSetRowAttr ( pMinAttrs, m_dIntAttrs[i], m_dIntIndexMin[i] );
-				sphSetRowAttr ( pMaxAttrs, m_dIntAttrs[i], m_dIntIndexMax[i] );
-			}
-			ARRAY_FOREACH ( i, m_dFloatAttrs )
-			{
-				sphSetRowAttr ( pMinAttrs, m_dFloatAttrs[i], sphF2DW ( m_dFloatIndexMin[i] ) );
-				sphSetRowAttr ( pMaxAttrs, m_dFloatAttrs[i], sphF2DW ( m_dFloatIndexMax[i] ) );
-			}
-			m_uElements++;
-		} else
-			m_uElements = 0; // rewind back for collecting the rest of attributes.
-	}
-	// actually used part of output buffer - used only in merge() because
-	// we just reserve the sum of both index, but might use not all of reserved.
-	inline DWORD GetActualSize() const { return 2 * m_uElements * m_uStride; }
-
-	// just calculate the number of DWORDs wee need
-	// to store our data for our schema and given number of documents
-	inline DWORD GetExpectedSize ( DWORD uMaxDocs ) const
-	{
-		DWORD uDocinfoIndex = ( uMaxDocs + CSphIndex_VLN::DOCINFO_INDEX_FREQ - 1 )
-			/ CSphIndex_VLN::DOCINFO_INDEX_FREQ;
-		return 2 * ( 1 + uDocinfoIndex ) * m_uStride;
-	}
-};
-
+//////////////////////////////////////////////////////////////////////////
 
 bool CSphIndex_VLN::PrecomputeMinMax()
 {
@@ -7165,6 +7135,7 @@ bool CSphIndex_VLN::PrecomputeMinMax()
 		if ( !tBuilder.Collect ( &m_pDocinfo[uIndexEntry*uStride], m_pMva, m_sLastError ) )
 			return false;
 		m_uMinMaxIndex += uStride;
+
 		// show progress
 		if ( uIndexEntry==uProgressEntry )
 		{
@@ -12025,6 +11996,9 @@ void CSphIndex_VLN::DebugDumpDocids ( FILE * fp )
 	DWORD * pDocinfo = m_pDocinfo.GetWritePtr();
 	for ( DWORD uRow=0; uRow<uNumRows; uRow++, pDocinfo+=iRowStride )
 		printf ( "%u. id=" DOCID_FMT "\n", uRow+1, DOCINFO2ID ( pDocinfo ) );
+	printf ( "--- min-max=%d ---\n", uNumMinMaxRow );
+	for ( DWORD uRow=0; uRow<2*(1+m_uDocinfoIndex); uRow++, pDocinfo+=iRowStride )
+		printf ( "id=" DOCID_FMT "\n", DOCINFO2ID ( pDocinfo ) );
 }
 
 

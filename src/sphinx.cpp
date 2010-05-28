@@ -16282,7 +16282,7 @@ static void FormatEscaped ( FILE * fp, const char * sLine )
 	// handle empty lines
 	if ( !sLine || !*sLine )
 	{
-		fprintf ( fp, ", ''" );
+		fprintf ( fp, "''" );
 		return;
 	}
 
@@ -16292,10 +16292,9 @@ static void FormatEscaped ( FILE * fp, const char * sLine )
 	for ( int i=0; i<iLen; i++ )
 		switch ( sLine[i] )
 	{
-		case '\r':
-		case '\n':
 		case '\t':
 		case '\'':
+		case '\\':
 			iOut += 2;
 			break;
 
@@ -16303,7 +16302,7 @@ static void FormatEscaped ( FILE * fp, const char * sLine )
 			iOut++;
 			break;
 	}
-	iOut += 4; // comma, spaces, quotes
+	iOut += 2; // quotes
 
 	// allocate the buffer
 	char sMinibuffer[8192];
@@ -16318,17 +16317,14 @@ static void FormatEscaped ( FILE * fp, const char * sLine )
 
 	// pass two, escape it
 	char * sOut = sBuffer;
-
-	strncpy ( sOut, ", '", 3 );
-	sOut += 3;
+	*sOut++ = '\'';
 
 	for ( int i=0; i<iLen; i++ )
 		switch ( sLine[i] )
 	{
-		case '\r':	*sOut++ = '\\'; *sOut++ = 'r'; break;
-		case '\n':	*sOut++ = '\\'; *sOut++ = 'n'; break;
-		case '\t':	*sOut++ = '\\'; *sOut++ = 't'; break;
-		case '\'':	*sOut++ = '\\'; *sOut++ = '\''; break;
+		case '\t':
+		case '\'':
+		case '\\':	*sOut++ = '\\'; // no break intended
 		default:	*sOut++ = sLine[i];
 	}
 	*sOut++ = '\'';
@@ -16352,38 +16348,6 @@ bool CSphSource_Document::IterateHitsNext ( CSphString & sError )
 		return true;
 	if ( !dFields )
 		return false;
-
-	if ( m_fpDumpRows )
-	{
-		fprintf ( m_fpDumpRows, "INSERT INTO rows VALUES (" DOCID_FMT, m_tDocInfo.m_iDocID );
-		for ( int iAttr=0; iAttr<m_tSchema.GetAttrsCount(); iAttr++ )
-		{
-			const CSphColumnInfo & tCol = m_tSchema.GetAttr(iAttr);
-			switch ( tCol.m_eAttrType )
-			{
-				case SPH_ATTR_INTEGER | SPH_ATTR_MULTI:
-					fprintf ( m_fpDumpRows, ", ''" );
-					break;
-
-				case SPH_ATTR_STRING:
-					FormatEscaped ( m_fpDumpRows, m_dStrAttrs[iAttr].cstr() );
-					break;
-
-				case SPH_ATTR_BIGINT:
-					fprintf ( m_fpDumpRows, ", " INT64_FMT, m_tDocInfo.GetAttr ( tCol.m_tLocator ) );
-					break;
-
-				default:
-					fprintf ( m_fpDumpRows, ", %u", (DWORD)m_tDocInfo.GetAttr ( tCol.m_tLocator ) );
-					break;
-			}
-		}
-
-		ARRAY_FOREACH ( i, m_tSchema.m_dFields )
-			FormatEscaped ( m_fpDumpRows, (const char*) dFields[i] );
-
-		fprintf ( m_fpDumpRows, ");\n" );
-	}
 
 	m_tStats.m_iTotalDocuments++;
 	m_dHits.Reserve ( 1024 );
@@ -16744,6 +16708,7 @@ CSphSource_SQL::CSphSource_SQL ( const char * sName )
 	, m_uCurrentID			( 0 )
 	, m_uMaxFetchedID		( 0 )
 	, m_iMultiAttr			( -1 )
+	, m_iSqlFields			( 0 )
 	, m_iFieldMVA			( 0 )
 	, m_iFieldMVAIterator	( 0 )
 	, m_bCanUnpack			( false )
@@ -17025,6 +16990,7 @@ bool CSphSource_SQL::IterateHitsStart ( CSphString & sError )
 	for ( int i=0; i<SPH_MAX_FIELDS; i++ )
 		m_dUnpack[i] = SPH_UNPACK_NONE;
 
+	m_iSqlFields = SqlNumFields(); // for rowdump
 	int iCols = SqlNumFields() - 1; // skip column 0, which must be the id
 
 	CSphVector<bool> dFound;
@@ -17160,6 +17126,42 @@ bool CSphSource_SQL::IterateHitsStart ( CSphString & sError )
 	if ( m_tSchema.m_dFields.GetLength()>SPH_MAX_FIELDS )
 		LOC_ERROR2 ( "too many fields (fields=%d, max=%d)",
 			m_tSchema.m_dFields.GetLength(), SPH_MAX_FIELDS );
+
+	// log it
+	if ( m_fpDumpRows )
+	{
+		const char * sTable = m_tSchema.m_sName.cstr();
+
+		time_t iNow = time ( NULL );
+		fprintf ( m_fpDumpRows, "#\n# === source %s ts %d\n# %s#\n", sTable, (int)iNow, ctime(&iNow) );
+		ARRAY_FOREACH ( i, m_tSchema.m_dFields )
+			fprintf ( m_fpDumpRows, "# field %d: %s\n", i, m_tSchema.m_dFields[i].m_sName.cstr() );
+
+		for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
+		{
+			const CSphColumnInfo & tCol = m_tSchema.GetAttr(i);
+			const char * sType = "unknown";
+			switch ( tCol.m_eAttrType )
+			{
+				case SPH_ATTR_NONE:							sType = "none"; break;
+				case SPH_ATTR_INTEGER:						sType = "uint"; break;
+				case SPH_ATTR_TIMESTAMP:					sType = "timestamp"; break;
+				case SPH_ATTR_ORDINAL:						sType = "str2ordinal"; break;
+				case SPH_ATTR_BOOL:							sType = "bool"; break;
+				case SPH_ATTR_FLOAT:						sType = "float"; break;
+				case SPH_ATTR_BIGINT:						sType = "bigint"; break;
+				case SPH_ATTR_STRING:						sType = "string"; break;
+				case SPH_ATTR_INTEGER | SPH_ATTR_MULTI:		sType = "mva"; break;
+			}
+			fprintf ( m_fpDumpRows, "# sql_attr_%s = %s # attr %d\n", sType, tCol.m_sName.cstr(), i );
+		}
+
+		fprintf ( m_fpDumpRows, "#\n\nDROP TABLE IF EXISTS rows_%s;\nCREATE TABLE rows_%s (\n  id VARCHAR(32) NOT NULL,\n",
+			sTable, sTable );
+		for ( int i=1; i<m_iSqlFields; i++ )
+			fprintf ( m_fpDumpRows, "  %s VARCHAR(4096) NOT NULL,\n", SqlFieldName(i) );
+		fprintf ( m_fpDumpRows, "  KEY(id) );\n\n" );
+	}
 
 	return true;
 }
@@ -17307,6 +17309,19 @@ BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 				m_tDocInfo.SetAttr ( tAttr.m_tLocator, sphToDword ( SqlColumn ( tAttr.m_iIndex ) ) ); // FIXME? report conversion errors maybe?
 				break;
 		}
+	}
+
+	// log it
+	if ( m_fpDumpRows )
+	{
+		fprintf ( m_fpDumpRows, "INSERT INTO rows_%s VALUES (", m_tSchema.m_sName.cstr() );
+		for ( int i=0; i<m_iSqlFields; i++ )
+		{
+			if ( i )
+				fprintf ( m_fpDumpRows, ", " );
+			FormatEscaped ( m_fpDumpRows, SqlColumn(i) );
+		}
+		fprintf ( m_fpDumpRows, ");\n" );
 	}
 
 	return m_dFields;

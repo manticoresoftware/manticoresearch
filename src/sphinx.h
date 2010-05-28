@@ -1411,6 +1411,7 @@ protected:
 	SphDocID_t			m_uCurrentID;		///< current min ID
 	SphDocID_t			m_uMaxFetchedID;	///< max actually fetched ID
 	int					m_iMultiAttr;		///< multi-valued attr being currently fetched
+	int					m_iSqlFields;		///< field count (for row dumper)
 
 	int					m_iFieldMVA;
 	int					m_iFieldMVAIterator;

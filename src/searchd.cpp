@@ -6718,36 +6718,37 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, int iPipeFD )
 // MYSQLD PRETENDER
 //////////////////////////////////////////////////////////////////////////
 
-/// our copy of enum_field_types
-/// we can't rely on mysql_com.h because it might be unavailable
-///
-/// MYSQL_TYPE_DECIMAL = 0
-/// MYSQL_TYPE_TINY = 1
-/// MYSQL_TYPE_SHORT = 2
-/// MYSQL_TYPE_LONG = 3
-/// MYSQL_TYPE_FLOAT = 4
-/// MYSQL_TYPE_DOUBLE = 5
-/// MYSQL_TYPE_NULL = 6
-/// MYSQL_TYPE_TIMESTAMP = 7
-/// MYSQL_TYPE_LONGLONG = 8
-/// MYSQL_TYPE_INT24 = 9
-/// MYSQL_TYPE_DATE = 10
-/// MYSQL_TYPE_TIME = 11
-/// MYSQL_TYPE_DATETIME = 12
-/// MYSQL_TYPE_YEAR = 13
-/// MYSQL_TYPE_NEWDATE = 14
-/// MYSQL_TYPE_VARCHAR = 15
-/// MYSQL_TYPE_BIT = 16
-/// MYSQL_TYPE_NEWDECIMAL = 246
-/// MYSQL_TYPE_ENUM = 247
-/// MYSQL_TYPE_SET = 248
-/// MYSQL_TYPE_TINY_BLOB = 249
-/// MYSQL_TYPE_MEDIUM_BLOB = 250
-/// MYSQL_TYPE_LONG_BLOB = 251
-/// MYSQL_TYPE_BLOB = 252
-/// MYSQL_TYPE_VAR_STRING = 253
-/// MYSQL_TYPE_STRING = 254
-/// MYSQL_TYPE_GEOMETRY = 255
+// our copy of enum_field_types
+// we can't rely on mysql_com.h because it might be unavailable
+//
+// MYSQL_TYPE_DECIMAL = 0
+// MYSQL_TYPE_TINY = 1
+// MYSQL_TYPE_SHORT = 2
+// MYSQL_TYPE_LONG = 3
+// MYSQL_TYPE_FLOAT = 4
+// MYSQL_TYPE_DOUBLE = 5
+// MYSQL_TYPE_NULL = 6
+// MYSQL_TYPE_TIMESTAMP = 7
+// MYSQL_TYPE_LONGLONG = 8
+// MYSQL_TYPE_INT24 = 9
+// MYSQL_TYPE_DATE = 10
+// MYSQL_TYPE_TIME = 11
+// MYSQL_TYPE_DATETIME = 12
+// MYSQL_TYPE_YEAR = 13
+// MYSQL_TYPE_NEWDATE = 14
+// MYSQL_TYPE_VARCHAR = 15
+// MYSQL_TYPE_BIT = 16
+// MYSQL_TYPE_NEWDECIMAL = 246
+// MYSQL_TYPE_ENUM = 247
+// MYSQL_TYPE_SET = 248
+// MYSQL_TYPE_TINY_BLOB = 249
+// MYSQL_TYPE_MEDIUM_BLOB = 250
+// MYSQL_TYPE_LONG_BLOB = 251
+// MYSQL_TYPE_BLOB = 252
+// MYSQL_TYPE_VAR_STRING = 253
+// MYSQL_TYPE_STRING = 254
+// MYSQL_TYPE_GEOMETRY = 255
+
 enum MysqlColumnType_e
 {
 	MYSQL_COL_DECIMAL	= 0,
@@ -6795,8 +6796,9 @@ void SendMysqlFieldPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, const char
 // from mysqld_error.h
 enum MysqlErrors_e
 {
-	MYSQL_ERR_PARSE_ERROR				= 1064,
+	MYSQL_ERR_UNKNOWN_COM_ERROR			= 1047,
 	MYSQL_ERR_SERVER_SHUTDOWN			= 1053,
+	MYSQL_ERR_PARSE_ERROR				= 1064,
 	MYSQL_ERR_FIELD_SPECIFIED_TWICE		= 1110
 };
 
@@ -6814,7 +6816,7 @@ void SendMysqlErrorPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, const char
 	tOut.SendByte ( 0xff ); // field count, always 0xff for error packet
 	tOut.SendByte ( (BYTE)( iError & 0xff ) );
 	tOut.SendByte ( (BYTE)( iError>>8 ) );
-	if ( iErr==MYSQL_ERR_SERVER_SHUTDOWN )
+	if ( iErr==MYSQL_ERR_SERVER_SHUTDOWN || iErr==MYSQL_ERR_UNKNOWN_COM_ERROR )
 		tOut.SendBytes ( "#08S01", 6 ); // sqlstate marker (1 byte), sqlstate (5 bytes)
 	else
 		tOut.SendBytes ( "#42000", 6 ); // sqlstate marker (1 byte), sqlstate (5 bytes)
@@ -7136,6 +7138,48 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 }
 
 
+// our copy of enum_server_command
+// we can't rely on mysql_com.h because it might be unavailable
+//
+// MYSQL_COM_SLEEP = 0
+// MYSQL_COM_QUIT = 1
+// MYSQL_COM_INIT_DB = 2
+// MYSQL_COM_QUERY = 3
+// MYSQL_COM_FIELD_LIST = 4
+// MYSQL_COM_CREATE_DB = 5
+// MYSQL_COM_DROP_DB = 6
+// MYSQL_COM_REFRESH = 7
+// MYSQL_COM_SHUTDOWN = 8
+// MYSQL_COM_STATISTICS = 9
+// MYSQL_COM_PROCESS_INFO = 10
+// MYSQL_COM_CONNECT = 11
+// MYSQL_COM_PROCESS_KILL = 12
+// MYSQL_COM_DEBUG = 13
+// MYSQL_COM_PING = 14
+// MYSQL_COM_TIME = 15
+// MYSQL_COM_DELAYED_INSERT = 16
+// MYSQL_COM_CHANGE_USER = 17
+// MYSQL_COM_BINLOG_DUMP = 18
+// MYSQL_COM_TABLE_DUMP = 19
+// MYSQL_COM_CONNECT_OUT = 20
+// MYSQL_COM_REGISTER_SLAVE = 21
+// MYSQL_COM_STMT_PREPARE = 22
+// MYSQL_COM_STMT_EXECUTE = 23
+// MYSQL_COM_STMT_SEND_LONG_DATA = 24
+// MYSQL_COM_STMT_CLOSE = 25
+// MYSQL_COM_STMT_RESET = 26
+// MYSQL_COM_SET_OPTION = 27
+// MYSQL_COM_STMT_FETCH = 28
+
+enum
+{
+	MYSQL_COM_QUIT		= 1,
+	MYSQL_COM_INIT_DB	= 2,
+	MYSQL_COM_QUERY		= 3,
+	MYSQL_COM_PING		= 14
+};
+
+
 void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 {
 	MEMORY ( SPH_MEM_HANDLE_SQL );
@@ -7181,6 +7225,8 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 
 	for ( ;; )
 	{
+		CSphString sError;
+
 		// send the packet formed on the previous cycle
 		if ( !tOut.Flush() )
 			break;
@@ -7205,12 +7251,33 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 			continue;
 		}
 
+		// get command, handle special packets
+		const BYTE uMysqlCmd = tIn.GetByte ();
+		if ( uMysqlCmd==MYSQL_COM_QUIT )
+		{
+			// client is done
+			break;
+
+		} if ( uMysqlCmd==MYSQL_COM_PING || uMysqlCmd==MYSQL_COM_INIT_DB )
+		{
+			// client wants a pong
+			SendMysqlOkPacket ( tOut, uPacketID );
+			continue;
+
+		} else if ( uMysqlCmd!=MYSQL_COM_QUERY )
+		{
+			// default case, unknown command
+			// (and query is handled just below)
+			sError.SetSprintf ( "unknown command (code=%d)", uMysqlCmd );
+			SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr(), MYSQL_ERR_UNKNOWN_COM_ERROR );
+			continue;
+		}
+
 		// handle query packet
-		tIn.GetByte (); // skip command
+		assert ( uMysqlCmd==MYSQL_COM_QUERY );
 		CSphString sQuery = tIn.GetRawString ( iPacketLen-1 );
 
 		// parse SQL query
-		CSphString sError;
 		SearchHandler_c tHandler ( 1 );
 		SqlStmt_t tStmt;
 		tStmt.m_pQuery = &tHandler.m_dQueries[0];

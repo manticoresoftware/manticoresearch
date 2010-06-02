@@ -279,7 +279,7 @@ static void sphinx_free_results ( sphinx_client * client )
 }
 
 
-static void sock_close ( int sock );
+void sock_close ( int sock );
 
 void sphinx_destroy ( sphinx_client * client )
 {
@@ -1215,7 +1215,7 @@ static int sock_set_blocking ( int sock )
 }
 
 
-static void sock_close ( int sock )
+void sock_close ( int sock )
 {
 #if _WIN32
 	closesocket ( sock );
@@ -1295,7 +1295,7 @@ static int net_connect ( sphinx_client * client )
 	struct sockaddr_in sa;
 	struct timeval timeout;
 	fd_set fds_write;
-	int sock, to_wait, res, err, my_proto;
+	int sock, to_wait, res, err, my_proto, optval;
 
 	if ( client->sock>=0 )
 		return client->sock;
@@ -1324,6 +1324,15 @@ static int net_connect ( sphinx_client * client )
 		set_error ( client, "sock_set_nonblocking() failed: %s", sock_error() );
 		return -1;
 	}
+
+	optval = 1;
+#ifndef _WIN32
+	if ( setsockopt ( sock, SOL_SOCKET, SO_NOSIGPIPE, (void *)&optval, (socklen_t)sizeof(optval) ) < 0 )
+	{
+		set_error ( client, "setsockopt() failed: %s", sock_error() );
+		return -1;
+	}
+#endif
 
 	res = connect ( sock, (struct sockaddr*)&sa, sizeof(sa) );
 	if ( res==0 )

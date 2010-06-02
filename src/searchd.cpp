@@ -3813,7 +3813,9 @@ void LogQuery ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 	// query
 	if ( !tQuery.m_sRawQuery.IsEmpty() )
 	{
-		*p++ = ' ';
+		if ( p < pMax-1 )
+			*p++ = ' ';
+
 		for ( const char * q = tQuery.m_sRawQuery.cstr(); p<pMax && *q; p++, q++ )
 			*p = ( *q=='\n' ) ? ' ' : *q;
 	}

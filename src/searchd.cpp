@@ -7260,7 +7260,7 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 			// client is done
 			break;
 
-		} if ( uMysqlCmd==MYSQL_COM_PING || uMysqlCmd==MYSQL_COM_INIT_DB )
+		} else if ( uMysqlCmd==MYSQL_COM_PING || uMysqlCmd==MYSQL_COM_INIT_DB )
 		{
 			// client wants a pong
 			SendMysqlOkPacket ( tOut, uPacketID );

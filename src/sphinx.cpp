@@ -16399,7 +16399,10 @@ bool CSphSource_Document::BuildHits ( BYTE ** dFields, int iFieldIndex, int iSta
 
 		// process the field
 		if ( m_bStripHTML )
+		{
 			m_pStripper->Strip ( sField );
+			iFieldBytes = (int) strlen ( (char*)sField );
+		}
 
 		m_tStats.m_iTotalBytes += iFieldBytes;
 

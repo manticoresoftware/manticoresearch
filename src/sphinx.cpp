@@ -1393,6 +1393,7 @@ private:
 	int							AdjustMemoryLimit ( int iMemoryLimit );
 
 	int							cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWORD * pDocinfo, int Docinfos, int iStride );
+	void						cidxFinishDoclistEntry ( DWORD uLastPos );
 	void						cidxHit ( CSphAggregateHit * pHit, CSphRowitem * pDocinfos );
 	bool						cidxDone ( const char * sHeaderExtension );
 
@@ -7293,6 +7294,43 @@ CSphString CSphIndex_VLN::GetIndexFileName ( const char * sExt ) const
 }
 
 
+void CSphIndex_VLN::cidxFinishDoclistEntry ( DWORD uLastPos )
+{
+	if ( m_tSettings.m_eHitFormat==SPH_HIT_FORMAT_INLINE )
+	{
+		bool bIgnoreHits =
+			( m_tSettings.m_eHitless==SPH_HITLESS_ALL ) ||
+			( m_tSettings.m_eHitless==SPH_HITLESS_SOME && ( m_iLastWordDocs & 0x80000000 ) );
+
+		// inline the only hit into doclist (unless it is completely discarded)
+		// and finish doclist entry
+		m_wrDoclist.ZipInt ( m_uLastDocHits );
+		if ( m_uLastDocHits==1 && !bIgnoreHits )
+		{
+			m_wrHitlist.SeekTo ( m_iLastHitlistPos );
+			m_wrDoclist.ZipInt ( uLastPos & 0x7FFFFF );
+			m_wrDoclist.ZipInt ( uLastPos >> 23 );
+			m_iLastHitlistPos -= m_iLastHitlistDelta;
+			assert ( m_iLastHitlistPos>=0 );
+
+		} else
+		{
+			m_wrDoclist.ZipInt ( m_uLastDocFields );
+			m_wrDoclist.ZipOffset ( m_iLastHitlistDelta );
+		}
+
+	} else // plain format - finish doclist entry
+	{
+		assert ( m_tSettings.m_eHitFormat==SPH_HIT_FORMAT_PLAIN );
+		m_wrDoclist.ZipOffset ( m_iLastHitlistDelta );
+		m_wrDoclist.ZipInt ( m_uLastDocFields );
+		m_wrDoclist.ZipInt ( m_uLastDocHits );
+	}
+	m_uLastDocFields = 0;
+	m_uLastDocHits = 0;
+}
+
+
 void CSphIndex_VLN::cidxHit ( CSphAggregateHit * hit, CSphRowitem * pAttrs )
 {
 	assert (
@@ -7303,9 +7341,12 @@ void CSphIndex_VLN::cidxHit ( CSphAggregateHit * hit, CSphRowitem * pAttrs )
 	// next word
 	/////////////
 
-	if ( m_tLastHit.m_iWordID!=hit->m_iWordID )
+	bool bNextWord = ( m_tLastHit.m_iWordID!=hit->m_iWordID );
+	bool bNextDoc = bNextWord || ( m_tLastHit.m_iDocID!=hit->m_iDocID );
+
+	if ( bNextDoc )
 	{
-		// close prev hitlist, if any
+		// finish hitlist, if any
 		DWORD uLastPos = m_tLastHit.m_iWordPos;
 		if ( m_tLastHit.m_iWordPos )
 		{
@@ -7313,50 +7354,24 @@ void CSphIndex_VLN::cidxHit ( CSphAggregateHit * hit, CSphRowitem * pAttrs )
 			m_tLastHit.m_iWordPos = 0;
 		}
 
-		// flush prev doclist, if any
+		// finish doclist entry, if any
+		if ( m_tLastHit.m_iDocID )
+			cidxFinishDoclistEntry ( uLastPos );
+	}
+
+	if ( bNextWord )
+	{
+		// finish doclist, if any
 		if ( m_tLastHit.m_iDocID )
 		{
+			// emit end-of-doclist marker
+			m_wrDoclist.ZipInt ( 0 );
+
 			// finish wordlist entry
 			assert ( m_iLastWordDocs );
 			assert ( m_iLastWordHits );
 			m_wrWordlist.ZipInt ( m_iLastWordDocs );
 			m_wrWordlist.ZipInt ( m_iLastWordHits );
-
-			if ( m_tSettings.m_eHitFormat==SPH_HIT_FORMAT_INLINE )
-			{
-				bool bIgnoreHits =
-					( m_tSettings.m_eHitless==SPH_HITLESS_ALL ) ||
-					( m_tSettings.m_eHitless==SPH_HITLESS_SOME && ( m_iLastWordDocs & 0x80000000 ) );
-
-				// inline the only hit into doclist (unless it is completely discarded)
-				// and finish doclist entry
-				m_wrDoclist.ZipInt ( m_uLastDocHits );
-				if ( m_uLastDocHits==1 && !bIgnoreHits )
-				{
-					m_wrHitlist.SeekTo ( m_iLastHitlistPos );
-					m_wrDoclist.ZipInt ( uLastPos & 0x7FFFFF );
-					m_wrDoclist.ZipInt ( uLastPos >> 23 );
-					m_iLastHitlistPos -= m_iLastHitlistDelta;
-					assert ( m_iLastHitlistPos>=0 );
-
-				} else
-				{
-					m_wrDoclist.ZipInt ( m_uLastDocFields );
-					m_wrDoclist.ZipOffset ( m_iLastHitlistDelta );
-				}
-
-			} else // plain format - finish doclist entry
-			{
-				assert ( m_tSettings.m_eHitFormat==SPH_HIT_FORMAT_PLAIN );
-				m_wrDoclist.ZipOffset ( m_iLastHitlistDelta );
-				m_wrDoclist.ZipInt ( m_uLastDocFields );
-				m_wrDoclist.ZipInt ( m_uLastDocHits );
-			}
-			m_uLastDocFields = 0;
-			m_uLastDocHits = 0;
-
-			// emit end-of-doclist marker
-			m_wrDoclist.ZipInt ( 0 );
 
 			// reset trackers
 			m_iLastWordDocs = 0;
@@ -7410,58 +7425,9 @@ void CSphIndex_VLN::cidxHit ( CSphAggregateHit * hit, CSphRowitem * pAttrs )
 		m_iLastDoclistPos = m_wrDoclist.GetPos();
 	}
 
-	////////////
-	// next doc
-	////////////
-
-	if ( m_tLastHit.m_iDocID!=hit->m_iDocID )
+	if ( bNextDoc )
 	{
-		// close prev hitlist, if any
-		DWORD uLastPos = m_tLastHit.m_iWordPos;
-		if ( m_tLastHit.m_iWordPos )
-		{
-			m_wrHitlist.ZipInt ( 0 );
-			m_tLastHit.m_iWordPos = 0;
-		}
-
-		// close prev doc, if any
-		if ( m_tLastHit.m_iDocID )
-		{
-			if ( m_tSettings.m_eHitFormat==SPH_HIT_FORMAT_INLINE )
-			{
-				bool bIgnoreHits =
-					( m_tSettings.m_eHitless==SPH_HITLESS_ALL ) ||
-					( m_tSettings.m_eHitless==SPH_HITLESS_SOME && ( m_iLastWordDocs & 0x80000000 ) );
-
-				// inline the only hit into doclist (unless it is completely discarded)
-				// and finish doclist entry
-				m_wrDoclist.ZipInt ( m_uLastDocHits );
-				if ( m_uLastDocHits==1 && !bIgnoreHits )
-				{
-					m_wrHitlist.SeekTo ( m_iLastHitlistPos );
-					m_wrDoclist.ZipInt ( uLastPos & 0x7FFFFF );
-					m_wrDoclist.ZipInt ( uLastPos >> 23 );
-					m_iLastHitlistPos -= m_iLastHitlistDelta;
-					assert ( m_iLastHitlistPos>=0 );
-
-				} else
-				{
-					m_wrDoclist.ZipInt ( m_uLastDocFields );
-					m_wrDoclist.ZipOffset ( m_iLastHitlistDelta );
-				}
-
-			} else // plain format - finish doclist entry
-			{
-				assert ( m_tSettings.m_eHitFormat==SPH_HIT_FORMAT_PLAIN );
-				m_wrDoclist.ZipOffset ( m_iLastHitlistDelta );
-				m_wrDoclist.ZipInt ( m_uLastDocFields );
-				m_wrDoclist.ZipInt ( m_uLastDocHits );
-			}
-			m_uLastDocFields = 0;
-			m_uLastDocHits = 0;
-		}
-
-		// add new doclist entry for new doc id
+		// begin new doclist entry for new doc id
 		assert ( hit->m_iDocID>m_tLastHit.m_iDocID );
 		assert ( m_wrHitlist.GetPos()>=m_iLastHitlistPos );
 

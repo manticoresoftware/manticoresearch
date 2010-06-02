@@ -14824,6 +14824,8 @@ void CSphDictCRC::LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenize
 	char * pCur = sList;
 	char * sName = NULL;
 
+	CSphVector<SphWordID_t> dStop;
+
 	for ( ;; )
 	{
 		// find next name start
@@ -14861,24 +14863,12 @@ void CSphDictCRC::LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenize
 		}
 
 		// tokenize file
-		CSphVector<SphWordID_t> dStop;
 		int iLength = (int)fread ( pBuffer, 1, (size_t)st.st_size, fp );
 
 		BYTE * pToken;
 		pTokenizer->SetBuffer ( pBuffer, iLength );
 		while ( ( pToken = pTokenizer->GetToken() )!=NULL )
 			dStop.Add ( GetWordID ( pToken ) );
-
-		// sort stopwords
-		dStop.Sort();
-
-		// store IDs
-		if ( dStop.GetLength() )
-		{
-			m_iStopwords = dStop.GetLength ();
-			m_pStopwords = new SphWordID_t [ m_iStopwords ];
-			memcpy ( m_pStopwords, &dStop[0], sizeof(SphWordID_t)*m_iStopwords );
-		}
 
 		// close file
 		fclose ( fp );
@@ -14887,6 +14877,17 @@ void CSphDictCRC::LoadStopwords ( const char * sFiles, ISphTokenizer * pTokenize
 	}
 
 	SafeDeleteArray ( sList );
+
+	// sort stopwords
+	dStop.Uniq();
+
+	// store IDs
+	if ( dStop.GetLength() )
+	{
+		m_iStopwords = dStop.GetLength ();
+		m_pStopwords = new SphWordID_t [ m_iStopwords ];
+		memcpy ( m_pStopwords, &dStop[0], sizeof(SphWordID_t)*m_iStopwords );
+	}
 }
 
 

@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>multiply stopwords source</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT * FROM test_table
+}
+
+index test
+{
+	source			= srctest
+	path			= <data_path/>/test
+    charset_type 	= utf-8
+	stopwords		= stopwords.txt stopwords_121.txt
+}
+</config>
+
+<queries>
+<query>the</query>
+<query>very</query>
+<query>add</query>
+<query>adds</query>
+</queries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1,  'the add' ),
+( 2,  'add' ),
+( 3,  'add is very plus' ),
+( 4,  'the adds is very good' )
+</db_insert>
+
+</test>

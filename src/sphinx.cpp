@@ -17103,7 +17103,7 @@ bool CSphSource_SQL::IterateHitsStart ( CSphString & sError )
 		const char * sTable = m_tSchema.m_sName.cstr();
 
 		time_t iNow = time ( NULL );
-		fprintf ( m_fpDumpRows, "#\n# === source %s ts %d\n# %s#\n", sTable, (int)iNow, ctime(&iNow) );
+		fprintf ( m_fpDumpRows, "#\n# === source %s ts %d\n# %s#\n", sTable, (int)iNow, ctime ( &iNow ) );
 		ARRAY_FOREACH ( i, m_tSchema.m_dFields )
 			fprintf ( m_fpDumpRows, "# field %d: %s\n", i, m_tSchema.m_dFields[i].m_sName.cstr() );
 

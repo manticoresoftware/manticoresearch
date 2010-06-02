@@ -263,6 +263,7 @@ void sphAllocsCheck ()
 
 void sphMemStatInit () {}
 void sphMemStatDone () {}
+void sphMemStatDump () {}
 
 //////////////////////////////////////////////////////////////////////////
 

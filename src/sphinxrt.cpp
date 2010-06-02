@@ -2339,8 +2339,11 @@ void RtIndex_t::SaveDiskData ( const char * sFilename ) const
 	wrDict.ZipOffset ( wrDocs.GetPos() - uLastDocpos ); // store last doclist length
 
 	SphOffset_t iCheckpointsPosition = wrDict.GetPos();
-	if ( dCheckpoints.GetLength() )
-		wrDict.PutBytes ( &dCheckpoints[0], dCheckpoints.GetLength()*sizeof(Checkpoint_t) );
+	ARRAY_FOREACH ( i, dCheckpoints )
+	{
+		wrDict.PutOffset ( dCheckpoints[i].m_uWord );
+		wrDict.PutOffset ( dCheckpoints[i].m_uOffset );
+	}
 
 	// write attributes
 	CSphVector<RtRowIterator_t*> pRowIterators ( m_pSegments.GetLength() );
@@ -2505,7 +2508,7 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, int iCheckpoints, SphOf
 	tWriter.PutDword ( INDEX_MAGIC_HEADER );
 	tWriter.PutDword ( INDEX_FORMAT_VERSION );
 
-	tWriter.PutDword ( 0 ); // use-64bit
+	tWriter.PutDword ( USE_64BIT ); // use-64bit
 	tWriter.PutDword ( SPH_DOCINFO_EXTERN );
 
 	// schema

@@ -1080,6 +1080,7 @@ public:
 	void					AddAttr ( const CSphColumnInfo & tAttr, bool bDynamic );
 
 	/// remove static attr (but do NOT recompute locations; for overrides)
+	/// WARNING, THIS IS A HACK THAT WILL LIKELY BREAK THE SCHEMA, DO NOT USE THIS UNLESS ABSOLUTELY SURE!
 	void					RemoveAttr ( int iIndex );
 
 protected:

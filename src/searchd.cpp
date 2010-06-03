@@ -6935,7 +6935,7 @@ void HandleMysqlInsert ( const SqlStmt_t & tStmt, NetOutputBuffer_c & tOut, BYTE
 	assert ( pIndex );
 
 	// get schema, check values count
-	const CSphSchema & tSchema = pIndex->GetMatchSchema();
+	const CSphSchema & tSchema = pIndex->GetInternalSchema();
 	int iSchemaSz = tSchema.GetAttrsCount() + tSchema.m_dFields.GetLength() + 1;
 	int iExp = tStmt.m_iSchemaSz;
 	int iGot = tStmt.m_dInsertValues.GetLength();

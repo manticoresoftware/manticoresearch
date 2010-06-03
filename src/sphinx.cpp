@@ -4642,6 +4642,7 @@ static CSphString sphDumpAttr ( const CSphColumnInfo & tAttr )
 		case SPH_ATTR_BOOL:							sType = "bool"; break;
 		case SPH_ATTR_FLOAT:						sType = "float"; break;
 		case SPH_ATTR_BIGINT:						sType = "bigint"; break;
+		case SPH_ATTR_STRING:						sType = "string"; break;
 		case SPH_ATTR_INTEGER | SPH_ATTR_MULTI:		sType = "mva"; break;
 	}
 

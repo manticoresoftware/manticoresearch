@@ -1008,7 +1008,7 @@ public:
 	static bool					RtQwordSetupSegment ( RtQword_t * pQword, RtSegment_t * pSeg, bool bSetup );
 
 	virtual const CSphSchema &	GetMatchSchema () const { return m_tOutboundSchema; }
-	virtual const CSphSchema &	GetInternallSchema () const { return m_tSchema; }
+	virtual const CSphSchema &	GetInternalSchema () const { return m_tSchema; }
 
 protected:
 	CSphSourceStats				m_tStats;
@@ -1255,7 +1255,7 @@ void RtAccum_t::AddDocument ( const CSphVector<CSphWordHit> & dHits, const CSphM
 	for ( int i=0; i<iRowSize; i++ )
 		pAttrs[i] = tDoc.m_pDynamic[i];
 
-	const CSphSchema & pSchema = m_pIndex->GetInternallSchema();
+	const CSphSchema & pSchema = m_pIndex->GetInternalSchema();
 	int iAttr = 0;
 	for ( int i=0; i<pSchema.GetAttrsCount(); i++ )
 	{

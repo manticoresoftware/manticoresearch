@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>RT: string attrs</name>
+
+<skip_indexer/>
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+index rt
+{
+	type = rt
+	path = data/rt
+	rt_attr_uint = gid
+	rt_attr_string = author
+	rt_field = title
+} 
+</config>
+
+<sphqueries>
+<!--
+<sphinxql>insert into rt values (1, 123, 'Lewis Carrol', 'Alice\'s adventures in Wonderland')</sphinxql>
+-->
+<sphinxql>insert into rt (id, gid, author, title) values (2, 123, 'Lewis Carrol', 'Through the looking glass')</sphinxql>
+<sphinxql>insert into rt (id, gid, author, title) values (3, 234, 'O.Henry', 'Cabbages and Kings')</sphinxql>
+<sphinxql>select * from rt</sphinxql>
+</sphqueries>
+
+</test>

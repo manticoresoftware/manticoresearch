@@ -3811,12 +3811,17 @@ void LogQuery ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 		p += snprintf ( p, pMax-p, " [%s]", tQuery.m_sComment.cstr() );
 
 	// query
-	if ( !tQuery.m_sRawQuery.IsEmpty() )
+	// (m_sRawQuery is empty when using MySQL handler)
+	const CSphString & sQuery = tQuery.m_sRawQuery.IsEmpty()
+		? tQuery.m_sQuery
+		: tQuery.m_sRawQuery;
+
+	if ( !sQuery.IsEmpty() )
 	{
 		if ( p < pMax-1 )
 			*p++ = ' ';
 
-		for ( const char * q = tQuery.m_sRawQuery.cstr(); p<pMax && *q; p++, q++ )
+		for ( const char * q = sQuery.cstr(); p<pMax && *q; p++, q++ )
 			*p = ( *q=='\n' ) ? ' ' : *q;
 	}
 

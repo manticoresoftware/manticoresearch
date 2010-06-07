@@ -2,6 +2,10 @@
 <Test>
 <Name>html_stripper vs sql_file_field</Name>
 
+<requires>
+<non-rt/>
+</requires>
+
 <Config>
 indexer
 {

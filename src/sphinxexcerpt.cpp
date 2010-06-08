@@ -397,6 +397,10 @@ void ExcerptGen_c::AddBoundary()
 
 void ExcerptGen_c::AddJunk ( int iStart, int iLength, int iBoundary )
 {
+	assert ( iLength>0 );
+	assert ( iLength<=m_sBuffer.Length() );
+	assert ( iStart+iLength<=m_sBuffer.Length() );
+
 	int iChunkStart = iStart;
 	int iSaved = 0;
 
@@ -497,7 +501,7 @@ void ExcerptGen_c::TokenizeDocument ( const ExcerptQuery_t & tQuery, CSphDict * 
 	{
 		const char * pTokenStart = pTokenizer->GetTokenStart ();
 
-		if ( pTokenStart!=pStartPtr )
+		if ( pTokenStart!=pStartPtr && pTokenStart>pLastTokenEnd )
 			AddJunk ( pLastTokenEnd - pStartPtr,
 				pTokenStart - pLastTokenEnd,
 				pTokenizer->GetBoundary() ? pTokenizer->GetBoundaryOffset() : -1 );

@@ -16356,42 +16356,41 @@ bool CSphSource_Document::BuildHits ( BYTE ** dFields, int iFieldIndex, int iSta
 		if ( m_tSchema.m_dFields[iField].m_bFilename )
 		{
 			if ( tFileSource.Open ( (const char *)sField, SPH_O_READ, sError )==-1 )
-				return false;
+			{
+				sphCallWarningCallback ( "failed to open file '%s', error '%s'", (const char *)sField, sError.cstr() );
+				continue;
+			}
 
 			int64_t iFileSize = tFileSource.GetSize();
 			if ( iFileSize+16 > m_iMaxFileBufferSize )
 			{
-				sError.SetSprintf ( "file '%s' too big for a field (size="INT64_FMT", max_file_field_buffer=%d)",
+				sphCallWarningCallback ( "file '%s' too big for a field (size="INT64_FMT", max_file_field_buffer=%d)",
 					(const char *)sField, iFileSize, m_iMaxFileBufferSize );
-				return false;
+				continue;
 			}
 
 			iFieldBytes = (int)iFileSize;
 			if ( !iFieldBytes )
+				continue;
+
+			int iBufSize = Max ( m_iReadFileBufferSize, 1 << sphLog2 ( iFieldBytes-1 ) );
+			if ( m_iReadFileBufferSize < iBufSize )
+				SafeDeleteArray ( m_pReadFileBuffer );
+
+			if ( !m_pReadFileBuffer )
 			{
-				sField = (BYTE*) "";
-
-			} else
-			{
-				int iBufSize = Max ( m_iReadFileBufferSize, 1 << sphLog2 ( iFieldBytes-1 ) );
-				if ( m_iReadFileBufferSize < iBufSize )
-					SafeDeleteArray ( m_pReadFileBuffer );
-
-				if ( !m_pReadFileBuffer )
-				{
-					m_pReadFileBuffer = new char [ iBufSize ];
-					m_iReadFileBufferSize = iBufSize;
-				}
-
-				if ( !tFileSource.Read ( m_pReadFileBuffer, iFieldBytes, sError ) )
-				{
-					sError.SetSprintf ( "failed to read file '%s'", (const char *)sField );
-					return false;
-				}
-
-				sField = (BYTE*)m_pReadFileBuffer;
-				tFileSource.Close();
+				m_pReadFileBuffer = new char [ iBufSize ];
+				m_iReadFileBufferSize = iBufSize;
 			}
+
+			if ( !tFileSource.Read ( m_pReadFileBuffer, iFieldBytes, sError ) )
+			{
+				sphCallWarningCallback ( "failed to read file '%s', error '%s'", (const char *)sField, sError.cstr() );
+				continue;
+			}
+
+			sField = (BYTE*)m_pReadFileBuffer;
+			tFileSource.Close();
 
 		} else
 		{

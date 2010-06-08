@@ -276,6 +276,11 @@ void ShowProgress ( const CSphIndexProgress * pProgress, bool bPhaseEnd )
 	fflush ( stdout );
 }
 
+static void LogWarning ( const char * sWarning )
+{
+	fprintf ( stdout, "WARNING: %s\n", sWarning );
+}
+
 /////////////////////////////////////////////////////////////////////////////
 
 /// parse multi-valued attr definition
@@ -1269,6 +1274,8 @@ void ReportIOStats ( const char * sType, int iReads, int64_t iReadTime, int64_t 
 
 int main ( int argc, char ** argv )
 {
+	sphSetWarningCallback ( LogWarning );
+
 	const char * sOptConfig = NULL;
 	bool bMerge = false;
 	CSphVector<CSphFilterSettings> dMergeDstFilters;

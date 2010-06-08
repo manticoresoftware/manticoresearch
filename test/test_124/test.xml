@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Test>
+<Name>indexing vs sql_file_field failed processing</Name>
+
+<Config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+<Searchd_Settings/>
+}
+
+source srctest
+{
+	type			= mysql
+<Sql_Settings/>
+
+	sql_query = SELECT * FROM test_table
+	sql_attr_uint = idd
+	sql_file_field = title
+}
+
+index test_idx
+{
+	source			= srctest
+	path			= <Data_Path/>/test
+    charset_type	= utf-8
+}
+
+</Config>
+<DB_Create>
+CREATE TABLE test_table
+(
+	id INTEGER NOT NULL,
+	idd INTEGER NOT NULL,
+	title VARCHAR(255) NOT NULL,
+	text VARCHAR(255) NOT NULL
+)
+</DB_Create>
+<DB_Drop>
+DROP TABLE IF EXISTS `test_table`
+</DB_Drop>
+<DB_Insert>
+INSERT INTO `test_table` VALUES
+( 1, 1,  './test_124/field_124_match.txt', 'on all' ),
+( 2, 2,  './test_124/field_124_match.txt', 'on none' ),
+( 3, 3,  './test_124/field_124_matching.txt', 'on empty' ),
+( 4, 4,  './test_124/field_124_match.txt', 'on empty' )
+</DB_Insert>
+
+<queries>
+<query>all</query>
+<query>none</query>
+<query>match</query>
+<query>on</query>
+</queries>
+
+</Test>

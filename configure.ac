@@ -100,7 +100,6 @@ AC_SEARCH_LIBS([XML_Parse],[expat],[have_libexpat=yes],[have_libexpat=no])
 AC_SEARCH_LIBS([iconv],[iconv],[have_libiconv=yes],[have_libiconv=no])
 AC_SEARCH_LIBS([inflate],[z],[have_lz=yes],[have_lz=no])
 AC_SEARCH_LIBS([logf],[m])
-AC_SEARCH_LIBS([SQLConnect],[odbc],[have_libodbc=yes],[have_libodbc=no])
 AC_CHECK_FUNCS([dup2 gethostbyname gettimeofday memmove memset select socket strcasecmp strchr strerror strncasecmp strstr strtol logf pread])
 
 # most systems require the program be linked with librt library to use
@@ -222,6 +221,22 @@ else
 fi
 AM_CONDITIONAL(USE_MYSQL, test x$ac_cv_use_mysql != xno)
 
+# check if we should statically link the mysql library
+AC_ARG_WITH([static-mysql], 
+            AC_HELP_STRING([--with-static-mysql], [link statically with MySQL library (default is no)]),
+            [ac_cv_use_static_mysql=$withval], [ac_cv_use_static_mysql=no]
+)
+AC_MSG_CHECKING([whether to link statically with MySQL support])
+if test x$ac_cv_use_mysql != xno; then
+if test x$ac_cv_use_static_mysql != xno; then
+	AC_CHECK_MYSQL([$ac_cv_use_static_mysql])
+	MYSQL_LIBS=`echo $MYSQL_LIBS | sed -e 's/\-Bdynamic/\-Bstatic/g'`
+	MYSQL_LIBS="-Wl,-Bstatic $MYSQL_LIBS -Wl,-Bdynamic"
+	AC_MSG_RESULT([yes])
+else
+	AC_MSG_RESULT([no])
+fi
+fi
 
 # check if we should compile with PostgreSQL support
 AC_ARG_WITH([pgsql],
@@ -364,12 +379,15 @@ AC_ARG_WITH([unixodbc],
 )
 AC_MSG_CHECKING([for UnixODBC])
 if test [ $ac_cv_use_unixodbc != no ]; then
-	if test [ $have_sql_h = yes -a $have_libodbc = yes ]; then
-		AC_DEFINE([USE_ODBC],1,[define to use ODBC library])
-		AC_MSG_RESULT([found])
-	else
-		AC_MSG_RESULT([not found])
-		AC_MSG_WARN([ODBC source support will NOT be available])
+	if test [ $have_sql_h = yes ]; then
+		AC_SEARCH_LIBS([SQLConnect],[odbc iodbc],[have_libodbc=yes],[have_libodbc=no])
+		if test [ $have_libodbc = yes ]; then
+			AC_DEFINE([USE_ODBC],1,[define to use ODBC library])
+			AC_MSG_RESULT([found])
+		else
+			AC_MSG_RESULT([not found])
+			AC_MSG_WARN([ODBC source support will NOT be available])
+		fi
 	fi
 else
 	AC_MSG_RESULT([disabled])

@@ -1837,6 +1837,9 @@ void * sphMyStack ();
 /// get the size of my thread's stack
 int sphMyStackSize ();
 
+/// store the address in the TLS
+void MemorizeStack ( void* PStack );
+
 /// set thread-local key value
 bool sphThreadSet ( SphThreadKey_t tKey, void * pValue );
 

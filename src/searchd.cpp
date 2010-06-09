@@ -1165,7 +1165,7 @@ void Shutdown ()
 
 #if !USE_WINDOWS
 
-void StackTraceDump()
+void StackTraceDump ( int )
 {
 	void * pMyStack = sphMyStack();
 	int iStackSize = sphMyStackSize();
@@ -1227,7 +1227,7 @@ void StackTraceDump()
 
 void HandleCrash ( int )
 {
-	StackTraceDump();
+	StackTraceDump(0);
 
 	if ( !g_pCrashLog_LastQuery )
 		return;
@@ -1304,6 +1304,14 @@ void SetSignalHandlers ()
 			sa.sa_handler = HandleCrash;	if ( sigaction ( SIGABRT, &sa, NULL )!=0 ) break;
 			sa.sa_handler = HandleCrash;	if ( sigaction ( SIGILL, &sa, NULL )!=0 ) break;
 			sa.sa_handler = HandleCrash;	if ( sigaction ( SIGFPE, &sa, NULL )!=0 ) break;
+		} else
+		{
+			sa.sa_flags |= SA_RESETHAND;
+			sa.sa_handler = StackTraceDump;	if ( sigaction ( SIGSEGV, &sa, NULL )!=0 ) break;
+			sa.sa_handler = StackTraceDump;	if ( sigaction ( SIGBUS, &sa, NULL )!=0 ) break;
+			sa.sa_handler = StackTraceDump;	if ( sigaction ( SIGABRT, &sa, NULL )!=0 ) break;
+			sa.sa_handler = StackTraceDump;	if ( sigaction ( SIGILL, &sa, NULL )!=0 ) break;
+			sa.sa_handler = StackTraceDump;	if ( sigaction ( SIGFPE, &sa, NULL )!=0 ) break;
 		}
 		bSignalsSet = true;
 		break;
@@ -10940,8 +10948,9 @@ bool DieCallback ( const char * sMessage )
 int main ( int argc, char **argv )
 {
 	// threads should be initialized before memory allocations
+	char cTopOfMainStack;
 	sphThreadInit();
-
+	MemorizeStack ( &cTopOfMainStack );
 	sphSetDieCallback ( DieCallback );
 	sphSetLogger ( ( const void* ) ( &sphLog ) );
 

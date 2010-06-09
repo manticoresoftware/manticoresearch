@@ -800,7 +800,7 @@ SPH_THDFUNC sphThreadProcWrapper ( void * pArg )
 	MemCategoryStack_t * pTLS = sphMemStatThdInit();
 #endif
 	ThreadCall_t * pCall = (ThreadCall_t*) pArg;
-	sphThreadSet ( g_tMyThreadStack, & cTopOfMyStack );
+	MemorizeStack ( & cTopOfMyStack );
 	pCall->m_pCall ( pCall->m_pArg );
 	SafeDelete ( pCall );
 
@@ -973,6 +973,11 @@ int sphMyStackSize ()
 #else
 	return PTHREAD_STACK_MIN + THREAD_STACK_SIZE;
 #endif
+}
+
+void MemorizeStack ( void* PStack )
+{
+	sphThreadSet ( g_tMyThreadStack, PStack );
 }
 
 

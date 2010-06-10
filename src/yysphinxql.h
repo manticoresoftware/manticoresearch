@@ -75,10 +75,10 @@
      TOK_FALSE = 301,
      TOK_OR = 302,
      TOK_AND = 303,
-     TOK_NOT = 304,
-     TOK_NE = 305,
-     TOK_GTE = 306,
-     TOK_LTE = 307,
+     TOK_NE = 304,
+     TOK_GTE = 305,
+     TOK_LTE = 306,
+     TOK_NOT = 307,
      TOK_NEG = 308
    };
 #endif
@@ -128,10 +128,10 @@
 #define TOK_FALSE 301
 #define TOK_OR 302
 #define TOK_AND 303
-#define TOK_NOT 304
-#define TOK_NE 305
-#define TOK_GTE 306
-#define TOK_LTE 307
+#define TOK_NE 304
+#define TOK_GTE 305
+#define TOK_LTE 306
+#define TOK_NOT 307
 #define TOK_NEG 308
 
 

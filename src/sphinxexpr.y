@@ -31,12 +31,13 @@
 %type <iNode>			constlist
 %type <iNode>			function
 
-%left TOK_AND TOK_OR
-%nonassoc TOK_NOT
+%left TOK_OR
+%left TOK_AND
 %left TOK_EQ TOK_NE
 %left '<' '>' TOK_LTE TOK_GTE
 %left '+' '-'
 %left '*' '/'
+%nonassoc TOK_NOT
 %nonassoc TOK_NEG
 
 %%

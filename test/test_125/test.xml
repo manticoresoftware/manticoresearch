@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>SphinxQL: arithmetic expressions</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT * FROM test_table
+	sql_attr_uint = aa
+}
+
+index test
+{
+	source	= test
+	path	= <data_path/>/test
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INT NOT NULL,
+	aa INT NOT NULL,
+	title VARCHAR(255) NOT NULL
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table;
+</db_drop>
+
+<db_insert>
+INSERT INTO test_table ( id, aa, title ) VALUES ( 1, 2, 'dummy' );
+</db_insert>
+
+<sphqueries>
+<sphinxql>SELECT 0 AND 0 OR 1 AS a, 0 AND 1 OR 1 AS b, 1 OR 0 AND 0 AS c, 1 OR 1 AND 0 AS d FROM test</sphinxql>
+</sphqueries>
+
+</test>

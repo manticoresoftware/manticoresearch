@@ -60,6 +60,8 @@
 
 %left TOK_OR
 %left TOK_AND
+%left '|'
+%left '&'
 %left '=' TOK_NE
 %left '<' '>' TOK_LTE TOK_GTE
 %left '+' '-'
@@ -368,6 +370,8 @@ expr:
 	| expr '/' expr				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| expr '<' expr				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| expr '>' expr				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
+	| expr '&' expr				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
+	| expr '|' expr				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| expr TOK_LTE expr			{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| expr TOK_GTE expr			{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| expr '=' expr				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }

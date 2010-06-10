@@ -253,6 +253,8 @@ DECLARE_BINARY_INT ( Expr_Sub_c,	FIRST - SECOND,						INTFIRST - INTSECOND,				I
 DECLARE_BINARY_INT ( Expr_Mul_c,	FIRST * SECOND,						INTFIRST * INTSECOND,				INT64FIRST * INT64SECOND )
 DECLARE_BINARY_FLT ( Expr_Div_c,	FIRST / SECOND )
 DECLARE_BINARY_INT ( Expr_Idiv_c,	(float)(int(FIRST)/int(SECOND)),	INTFIRST / INTSECOND,				INT64FIRST / INT64SECOND )
+DECLARE_BINARY_INT ( Expr_BitAnd_c,	(float)(int(FIRST)&int(SECOND)),	INTFIRST & INTSECOND,				INT64FIRST & INT64SECOND )
+DECLARE_BINARY_INT ( Expr_BitOr_c,	(float)(int(FIRST)|int(SECOND)),	INTFIRST | INTSECOND,				INT64FIRST | INT64SECOND )
 
 DECLARE_BINARY_POLY ( Expr_Lt,		IFFLT ( FIRST<SECOND ),					IFINT ( INTFIRST<INTSECOND ),		IFINT ( INT64FIRST<INT64SECOND ) )
 DECLARE_BINARY_POLY ( Expr_Gt,		IFFLT ( FIRST>SECOND ),					IFINT ( INTFIRST>INTSECOND ),		IFINT ( INT64FIRST>INT64SECOND ) )
@@ -323,6 +325,7 @@ enum Func_e
 
 	FUNC_INTERVAL,
 	FUNC_IN,
+	FUNC_BITDOT,
 
 	FUNC_GEODIST
 };
@@ -364,6 +367,7 @@ static FuncDesc_t g_dFuncs[] =
 
 	{ "interval",	-2,	FUNC_INTERVAL },
 	{ "in",			-1, FUNC_IN },
+	{ "bitdot",		-1, FUNC_BITDOT },
 
 	{ "geodist",	4,	FUNC_GEODIST }
 };
@@ -503,6 +507,7 @@ private:
 	ISphExpr *				CreateIntervalNode ( int iArgsNode, CSphVector<ISphExpr *> & dArgs );
 	ISphExpr *				CreateInNode ( int iNode );
 	ISphExpr *				CreateGeodistNode ( int iArgs );
+	ISphExpr *				CreateBitdotNode ( int iArgsNode, CSphVector<ISphExpr *> & dArgs );
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -643,6 +648,8 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 		case '(':
 		case ')':
 		case ',':
+		case '&':
+		case '|':
 			return *m_pCur++;
 
 		case '<':
@@ -1046,6 +1053,8 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case '-':				return new Expr_Sub_c ( pLeft, pRight ); break;
 		case '*':				return new Expr_Mul_c ( pLeft, pRight ); break;
 		case '/':				return new Expr_Div_c ( pLeft, pRight ); break;
+		case '&':				return new Expr_BitAnd_c ( pLeft, pRight ); break;
+		case '|':				return new Expr_BitOr_c ( pLeft, pRight ); break;
 
 		case '<':				LOC_SPAWN_POLY ( Expr_Lt ); break;
 		case '>':				LOC_SPAWN_POLY ( Expr_Gt ); break;
@@ -1108,6 +1117,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 
 					case FUNC_INTERVAL:	return CreateIntervalNode ( tNode.m_iLeft, dArgs );
 					case FUNC_IN:		return CreateInNode ( iNode );
+					case FUNC_BITDOT:	return CreateBitdotNode ( tNode.m_iLeft, dArgs );
 
 					case FUNC_GEODIST:	return CreateGeodistNode ( tNode.m_iLeft );
 				}
@@ -1221,7 +1231,7 @@ public:
 };
 
 
-/// INTERVAL() evaluator for generic case
+/// generic INTERVAL() evaluator
 template < typename T >
 class Expr_Interval_c : public Expr_ArgVsSet_c<T>
 {
@@ -1341,6 +1351,68 @@ public:
 protected:
 	CSphAttrLocator	m_tLocator;
 	const DWORD *	m_pMvaPool;
+};
+
+//////////////////////////////////////////////////////////////////////////
+
+/// generic BITDOT() evaluator
+template < typename T >
+class Expr_Bitdot_c : public Expr_ArgVsSet_c<T>
+{
+protected:
+	CSphVector<ISphExpr *> m_dBitWeights;
+
+public:
+	/// take ownership of arg and turn points
+	explicit Expr_Bitdot_c ( const CSphVector<ISphExpr *> & dArgs )
+		: Expr_ArgVsSet_c<T> ( dArgs[0] )
+	{
+		for ( int i=1; i<dArgs.GetLength(); i++ )
+			m_dBitWeights.Add ( dArgs[i] );
+	}
+
+protected:
+	/// generic evaluate
+	virtual T DoEval ( const CSphMatch & tMatch ) const
+	{
+		int64_t uArg = this->m_pArg->Int64Eval ( tMatch ); // 'this' fixes gcc braindamage
+		T tRes = 0;
+
+		int iBit = 0;
+		while ( uArg && iBit<m_dBitWeights.GetLength() )
+		{
+			if ( uArg & 1 )
+				tRes += Expr_ArgVsSet_c<T>::ExprEval ( m_dBitWeights[iBit], tMatch );
+			uArg >>= 1;
+			iBit++;
+		}
+
+		return tRes;
+	}
+
+public:
+	virtual float Eval ( const CSphMatch & tMatch ) const
+	{
+		return (float) DoEval ( tMatch );
+	}
+		 
+	virtual int IntEval ( const CSphMatch & tMatch ) const
+	{
+		return (int) DoEval ( tMatch );
+	}
+
+	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const
+	{
+		return (int64_t) DoEval ( tMatch );
+	}
+
+	/// set MVA pool
+	virtual void SetMVAPool ( const DWORD * pMvaPool )
+	{
+		this->m_pArg->SetMVAPool ( pMvaPool );
+		ARRAY_FOREACH ( i, m_dBitWeights )
+			m_dBitWeights[i]->SetMVAPool ( pMvaPool );
+	}
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1556,6 +1628,7 @@ ISphExpr * ExprParser_t::CreateInNode ( int iNode )
 	}
 }
 
+
 ISphExpr * ExprParser_t::CreateGeodistNode ( int iArgs )
 {
 	CSphVector<int> dArgs;
@@ -1602,6 +1675,20 @@ ISphExpr * ExprParser_t::CreateGeodistNode ( int iArgs )
 	FoldArglist ( CreateTree ( iArgs ), dExpr );
 	assert ( dExpr.GetLength()==4 );
 	return new Expr_Geodist_c ( dExpr[0], dExpr[1], dExpr[2], dExpr[3] );
+}
+
+
+ISphExpr * ExprParser_t::CreateBitdotNode ( int iArgsNode, CSphVector<ISphExpr *> & dArgs )
+{
+	assert ( dArgs.GetLength()>=1 );
+
+	DWORD uAttrType = m_dNodes[iArgsNode].m_uRetType;
+	switch ( uAttrType )
+	{
+		case SPH_ATTR_INTEGER:	return new Expr_Bitdot_c<int> ( dArgs ); break;
+		case SPH_ATTR_BIGINT:	return new Expr_Bitdot_c<int64_t> ( dArgs ); break;
+		default:				return new Expr_Bitdot_c<float> ( dArgs ); break;
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1728,19 +1815,21 @@ int ExprParser_t::AddNodeOp ( int iOp, int iLeft, int iRight )
 
 	} else if ( iOp==TOK_LTE || iOp==TOK_GTE || iOp==TOK_EQ || iOp==TOK_NE
 		|| iOp=='<' || iOp=='>' || iOp==TOK_AND || iOp==TOK_OR
-		|| iOp=='+' || iOp=='-' || iOp=='*' || iOp==',' )
+		|| iOp=='+' || iOp=='-' || iOp=='*' || iOp==',' 
+		|| iOp=='&' || iOp=='|' )
 	{
 		tNode.m_uArgType = GetWidestRet ( iLeft, iRight );
 
 		// arithmetical operations return arg type, logical return int
-		tNode.m_uRetType = ( iOp=='+' || iOp=='-' || iOp=='*' || iOp==',' )
+		tNode.m_uRetType = ( iOp=='+' || iOp=='-' || iOp=='*' || iOp==',' || iOp=='&' || iOp=='|' )
 			? tNode.m_uArgType
 			: SPH_ATTR_INTEGER;
 
-		// AND/OR can only be over ints
-		if ( ( iOp==TOK_AND || iOp==TOK_OR ) && !( tNode.m_uArgType==SPH_ATTR_INTEGER || tNode.m_uArgType==SPH_ATTR_BIGINT ))
+		// both logical and bitwise AND/OR can only be over ints
+		if ( ( iOp==TOK_AND || iOp==TOK_OR || iOp=='&' || iOp=='|' )
+			&& !( tNode.m_uArgType==SPH_ATTR_INTEGER || tNode.m_uArgType==SPH_ATTR_BIGINT ))
 		{
-			m_sParserError.SetSprintf ( "%s arguments must be integer", ( iOp==TOK_AND ) ? "AND" : "OR" );
+			m_sParserError.SetSprintf ( "%s arguments must be integer", ( iOp==TOK_AND || iOp=='&' ) ? "AND" : "OR" );
 			return -1;
 		}
 
@@ -1786,6 +1875,21 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 		}
 	}
 
+	// check arg type
+	if ( iFunc==FUNC_BITDOT )
+	{
+		int iLeftmost = iLeft;
+		while ( m_dNodes[iLeftmost].m_iToken==',' )
+			iLeftmost = m_dNodes[iLeftmost].m_iLeft;
+
+		DWORD uArg = m_dNodes[iLeftmost].m_uRetType;
+		if ( uArg!=SPH_ATTR_INTEGER && uArg!=SPH_ATTR_BIGINT )
+		{
+			m_sParserError.SetSprintf ( "first BITDOT() argument must be integer" );
+			return -1;
+		}
+	}
+
 	// do add
 	ExprNode_t & tNode = m_dNodes.Add ();
 	tNode.m_iToken = TOK_FUNC;
@@ -1809,7 +1913,7 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 		if ( eFunc==FUNC_BIGINT && tNode.m_uRetType!=SPH_ATTR_FLOAT )
 			tNode.m_uRetType = SPH_ATTR_BIGINT; // enforce if we can; FIXME! silently ignores BIGINT() on floats; should warn or raise an error
 
-	} else if ( eFunc==FUNC_IF )
+	} else if ( eFunc==FUNC_IF || eFunc==FUNC_BITDOT )
 	{
 		tNode.m_uRetType = GetWidestRet ( iLeft, iRight );
 

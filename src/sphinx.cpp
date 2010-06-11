@@ -451,56 +451,7 @@ protected:
 
 /////////////////////////////////////////////////////////////////////////////
 
-#if USE_WINDOWS
-
-INT64 sphClocks ()
-{
-	return __rdtsc();
-}
-
-
-INT64 sphClocksSec ()
-{
-	static INT64 tSEC = 0;
-	if ( tSEC )
-		return tSEC;
-
-	clock_t t, tt;
-
-	// wait til the begining of a new second
-	t = clock();
-	do {
-		tt = clock();
-	} while ( t==tt );
-
-	// measure one
-	tSEC = sphClocks();
-	while ( clock()-tt<CLK_TCK );
-	tSEC = sphClocks() - tSEC;
-
-	return tSEC;
-}
-
-
-class CSphClocker
-{
-public:
-	explicit CSphClocker ( INT64 * pTarget )
-		: m_pTarget ( pTarget )
-	{
-		*m_pTarget -= sphClocks();
-	}
-
-	~CSphClocker ()
-	{
-		*m_pTarget += sphClocks();
-	}
-
-protected:
-	INT64 *		m_pTarget;
-};
-
-#else
+#if !USE_WINDOWS
 
 bool g_bHeadProcess = true;
 

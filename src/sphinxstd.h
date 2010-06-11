@@ -54,11 +54,7 @@ typedef int __declspec("SAL_nokernel") __declspec("SAL_nodriver") __prefast_flag
 #include <sys/types.h>
 #endif
 
-#if USE_WINDOWS
-// for intrinsic __rdtsc()
-// must be included here, otherwise it breaks our assert macro
-#include <intrin.h>
-#else
+#if !USE_WINDOWS
 #include <sys/mman.h>
 #include <errno.h>
 #include <pthread.h>

@@ -14,6 +14,7 @@ type sphinx.xml ^
 	| perl -pe "s/\xA0/\&nbsp;/g" ^
 	| perl -pe "s/\xA9/\&copy;/g" ^
 	| perl -pe "s/((<\/(li|dt|dt|head|div)>)+)/\1\n/g" ^
+	| perl -pe "s/<a name=\"id\d+\"><\/a>//g" ^
 	> sphinx.html
 
 perl html2txt.pl < sphinx.html > sphinx.txt

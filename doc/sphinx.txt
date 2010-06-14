@@ -1059,11 +1059,18 @@ Example 3. xmlpipe2 document stream
    | <misc>some undeclared element</misc>
    | </sphinx:document>
    | 
-   | <!-- ... more documents here ... -->
+   | <sphinx:document id="1235">
+   | <subject>another subject</subject>
+   | <content>here comes another document, and i am given to understand,
+   | that in-document field order must not matter, sir</content>
+   | <published>1012325467</published>
+   | </sphinx:document>
+   | 
+   | <!-- ... even more sphinx:document entries here ... -->
    | 
    | <sphinx:killlist>
    | <id>1234</id>
-   | <id>4567/id>
+   | <id>4567</id>
    | </sphinx:killlist>
    | 
    | </sphinx:docset>

@@ -615,7 +615,7 @@ static yyconst flex_int16_t yy_chk[495] =
 #endif
 
 // warning, lexer generator dependent!
-// this macros relies on that in flex yytext points to the actual location in the buffer
+// this macro relies on that in flex yytext points to the actual location in the buffer
 #define YYSTOREBOUNDS \
 	{ \
 		lvalp->m_iStart = yytext - pParser->m_pBuf; \
@@ -2337,6 +2337,20 @@ void yyfree (void * ptr , yyscan_t yyscanner)
 #line 92 "sphinxql.l"
 
 
+
+// warning, lexer generator dependent!
+// flex inserts trailing zero as needed into the buffer when lexing
+// but we need that rolled back when doing error reporting from yyerror
+void yylex_unhold ( yyscan_t yyscanner )
+{
+	struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;
+	if ( YY_CURRENT_BUFFER )
+	{
+		*yyg->yy_c_buf_p = yyg->yy_hold_char;
+		YY_CURRENT_BUFFER_LVALUE->yy_buf_pos = yyg->yy_c_buf_p;
+		YY_CURRENT_BUFFER_LVALUE->yy_n_chars = yyg->yy_n_chars;
+	}
+}
 
 #if USE_WINDOWS
 #pragma warning(pop)

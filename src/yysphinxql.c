@@ -1953,7 +1953,7 @@ yyerrlab:
 	      char *yyp = yystpcpy (yymsg, "syntax error, unexpected ");
 	      yyp = yystpcpy (yyp, yytname[yytype]);
 
-	      if (yycount < 5)
+	      if (yycount < 4)
 		{
 		  yycount = 0;
 		  for (yyx = yyn < 0 ? -yyn : 0;
@@ -1967,6 +1967,19 @@ yyerrlab:
 			yycount++;
 		      }
 		}
+	      else
+		{
+		  for (yyx = yyn < 0 ? -yyn : 0;
+		       yyx < (int) (sizeof (yytname) / sizeof (char *));
+		       yyx++)
+		    if (yycheck[yyx + yyn] == yyx && yyx != YYTERROR)
+		      {
+			snprintf (yyp, (int)(yysize - (yyp - yymsg)), ", expecting %s (or %d other tokens)", yytname[yyx], yycount - 1);
+			while (*yyp++);
+			break;
+		      }
+		}
+
 	      yyerror (pParser, yymsg);
 	      YYSTACK_FREE (yymsg);
 	    }

@@ -5685,10 +5685,28 @@ void SqlUnescape ( CSphString & sRes, const char * sEscaped, int iLen )
 #endif
 #include "llsphinxql.c"
 
+
 void yyerror ( SqlParser_t * pParser, const char * sMessage )
 {
+	// flex put a zero at last token boundary; make it undo that
+	yylex_unhold ( pParser->m_pScanner );
+
+	// create our error message
 	pParser->m_pParseError->SetSprintf ( "%s near '%s'", sMessage, pParser->m_pLastTokenStart ? pParser->m_pLastTokenStart : "(null)" );
+
+	// fixup TOK_xxx thingies
+	char * s = const_cast<char*> ( pParser->m_pParseError->cstr() );
+	char * d = s;
+	while ( *s )
+	{
+		if ( strncmp ( s, "TOK_", 4 )==0 )
+			s += 4;
+		else
+			*d++ = *s++;
+	}
+	*d = '\0';
 }
+
 
 #ifndef NDEBUG
 // using a proxy to be possible to debug inside yylex

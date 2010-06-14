@@ -1,0 +1,40 @@
+--- yysphinxql.c.orig	Mon Jun 14 05:20:39 2010
++++ yysphinxql.c	Mon Jun 14 05:13:37 2010
+@@ -1953,7 +1953,7 @@
+ 	      char *yyp = yystpcpy (yymsg, "syntax error, unexpected ");
+ 	      yyp = yystpcpy (yyp, yytname[yytype]);
+ 
+-	      if (yycount < 5)
++	      if (yycount < 4)
+ 		{
+ 		  yycount = 0;
+ 		  for (yyx = yyn < 0 ? -yyn : 0;
+@@ -1967,6 +1967,19 @@
+ 			yycount++;
+ 		      }
+ 		}
++	      else
++		{
++		  for (yyx = yyn < 0 ? -yyn : 0;
++		       yyx < (int) (sizeof (yytname) / sizeof (char *));
++		       yyx++)
++		    if (yycheck[yyx + yyn] == yyx && yyx != YYTERROR)
++		      {
++			snprintf (yyp, (int)(yysize - (yyp - yymsg)), ", expecting %s (or %d other tokens)", yytname[yyx], yycount - 1);
++			while (*yyp++);
++			break;
++		      }
++		}
++
+ 	      yyerror (pParser, yymsg);
+ 	      YYSTACK_FREE (yymsg);
+ 	    }
+@@ -2019,7 +2032,7 @@
+   /* Suppress GCC warning that yyerrlab1 is unused when no action
+      invokes YYERROR.  */
+ #if defined (__GNUC_MINOR__) && 2093 <= (__GNUC__ * 1000 + __GNUC_MINOR__)
+-  __attribute__ ((__unused__))
++//  __attribute__ ((__unused__))
+ #endif
+ 
+ 

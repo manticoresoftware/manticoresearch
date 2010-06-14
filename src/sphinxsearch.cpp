@@ -836,7 +836,7 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 	if ( pNode->IsEmpty() )
 		return NULL;
 
-	if ( pNode->m_dWords.GetLength() )
+	if ( pNode->m_dWords.GetLength() || pNode->m_bVirtuallyPlain )
 	{
 		const int iWords = pNode->m_bVirtuallyPlain
 			? pNode->m_dChildren.GetLength()

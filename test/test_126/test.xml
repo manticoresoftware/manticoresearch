@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>expand keywords</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT * FROM test_table
+}
+
+index test
+{
+	source			= srctest
+	path			= <data_path/>/test
+    charset_type 	= utf-8
+	morphology		= stem_en
+	index_exact_words	= 1
+	expand_keywords	= 1
+}
+</config>
+
+<queries>
+<query mode="extended2">dog run</query>
+<query mode="extended2">=dog =run</query>
+<query mode="phrase">dog run</query>
+<query mode="phrase">=dog =run</query>
+<query mode="phrase">dog* run</query>
+</queries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1,  'dog runs' ),
+( 2,  'dogs run' ),
+( 3,  'dogs running' ),
+( 4,  'dog run' )
+</db_insert>
+
+</test>

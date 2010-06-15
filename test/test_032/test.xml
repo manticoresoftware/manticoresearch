@@ -90,6 +90,6 @@ CREATE TABLE `test_table`
 <db_insert>DELETE FROM test_table WHERE document_id>200</db_insert>
 <db_insert>UPDATE test_table SET tag=200 WHERE document_id=1</db_insert>
 
-<db_drop>DROP TABLE test_table</db_drop>
+<db_drop>DROP TABLE IF EXISTS test_table</db_drop>
 
 </test>

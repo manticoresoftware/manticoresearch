@@ -59,6 +59,6 @@ CREATE TABLE `test_table`
 <!-- There must be at least 128 empty values to force the block index to be 1 item less -->
 <db_insert>INSERT INTO test_table VALUES ( 200,200,'one' ), ( 201,201,'one two' ), ( 202,202,'one three' ), ( 203,203,'one four' )</db_insert>
 
-<db_drop>DROP TABLE test_table</db_drop>
+<db_drop>DROP TABLE IF EXISTS test_table</db_drop>
 
 </test>

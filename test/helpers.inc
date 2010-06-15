@@ -1906,6 +1906,12 @@ function RunTest ( $test_dir )
 	if ( !CheckConfig ( $config, $test_dir ) )
 		return array ( "tests_total"=>0, "tests_failed"=>0, "tests_skipped"=>1 );
 
+	if ( !$config->LoadModel ( $model_file ) )
+	{
+		printf ( "$prefix FAILED, error loading model\n" );
+		return;
+	}
+
 	if ( $config->IsNeedDB() )
 	{
 		$connection = CreateDB ( $config->DB_Drop(), $config->DB_Create(), $config->DB_Insert(), $config->DB_CustomInsert() );
@@ -1915,12 +1921,6 @@ function RunTest ( $test_dir )
 			return;
 		}
 		$config->SetConnection($connection);
-	}
-
-	if ( !$config->LoadModel ( $model_file ) )
-	{
-		printf ( "$prefix FAILED, error loading model\n" );
-		return;
 	}
 
 	if ( !file_exists ( $conf_dir ) )
@@ -2131,6 +2131,11 @@ function RunTest ( $test_dir )
 		printf ( "$prefix done; %d/%d subtests FAILED:\n%s", $nfailed, $nsubtests, $log );
 
 	fclose ( $report );
+
+	// cleanup DB after ourselves
+	if ( isset($connection) )
+		foreach ( $config->DB_Drop() as $q )
+			@mysql_query ( $q, $connection );
 
 	return array ( "tests_total"=>$total, "tests_failed"=>$nfailed, "tests_skipped"=>0 );
 }

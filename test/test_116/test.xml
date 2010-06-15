@@ -66,6 +66,6 @@ for ( $i=0; $i<532; ++$i )
 mysql_query ( "INSERT INTO test_table VALUES ( 0, '$line')" );
 
 ]]></custom_insert>
-<db_drop>DROP TABLE test_table</db_drop>
+<db_drop>DROP TABLE IF EXISTS test_table</db_drop>
 
 </test>

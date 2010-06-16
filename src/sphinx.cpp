@@ -6801,8 +6801,8 @@ void AttrIndexBuilder_c::FlushComputed ( bool bUseAttrs, bool bUseMvas )
 	DWORD * pMaxEntry = pMinEntry + m_uStride;
 	DWORD * pMaxAttrs = pMinAttrs + m_uStride;
 
-	assert ( pMaxEntry+m_uStride-1 < m_pOutMax );
-	assert ( pMaxAttrs+m_uStride-1 < m_pOutMax );
+	assert ( pMaxEntry+m_uStride<=m_pOutMax );
+	assert ( pMaxAttrs+m_uStride-DOCINFO_IDSIZE<=m_pOutMax );
 
 	m_uIndexLast = m_uLast;
 
@@ -7035,8 +7035,8 @@ void AttrIndexBuilder_c::FinishCollect ( bool bMvaOnly )
 	CSphRowitem * pMinAttrs = DOCINFO2ATTRS ( pMinEntry );
 	CSphRowitem * pMaxAttrs = DOCINFO2ATTRS ( pMaxEntry );
 
-	assert ( pMaxEntry < m_pOutMax );
-	assert ( pMaxAttrs < m_pOutMax );
+	assert ( pMaxEntry+m_uStride<=m_pOutMax );
+	assert ( pMaxAttrs+m_uStride-DOCINFO_IDSIZE<=m_pOutMax );
 
 	DOCINFOSETID ( pMinEntry, m_uIndexStart );
 	DOCINFOSETID ( pMaxEntry, m_uIndexLast );
@@ -9578,7 +9578,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		AttrIndexBuilder_c tMinMax ( m_tSchema );
 		CSphVector<DWORD> dMinMaxBuffer ( tMinMax.GetExpectedSize ( m_tStats.m_iTotalDocuments ) );
 		CSphDocMVA tCurInfo ( dMvaIndexes.GetLength() );
-		tMinMax.Prepare ( &dMinMaxBuffer[0], &dMinMaxBuffer[0] + dMinMaxBuffer.GetLength() );
+		tMinMax.Prepare ( dMinMaxBuffer.Begin(), dMinMaxBuffer.Begin() + dMinMaxBuffer.GetLength() );
 
 		SphDocID_t uLastDupe = 0;
 		while ( qDocinfo.GetLength() )
@@ -10628,7 +10628,7 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 		AttrIndexBuilder_c tMinMax ( m_tSchema );
 		CSphVector<DWORD> dMinMaxBuffer ( tMinMax.GetExpectedSize (
 			m_tStats.m_iTotalDocuments + pSrcIndex->GetStats().m_iTotalDocuments ) );
-		tMinMax.Prepare ( &dMinMaxBuffer[0], &dMinMaxBuffer[0] + dMinMaxBuffer.GetLength() );
+		tMinMax.Prepare ( dMinMaxBuffer.Begin(), dMinMaxBuffer.Begin() + dMinMaxBuffer.GetLength() );
 		m_uMinMaxIndex = 0;
 
 		DWORD * pSrcRow = pSrcIndex->m_pDocinfo.GetWritePtr(); // they *can* be null if the respective index is empty

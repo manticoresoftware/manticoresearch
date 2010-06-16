@@ -329,19 +329,12 @@ public:
 		return m_iRows;
 	}
 
-	bool					HasDocid ( SphDocID_t uDocid ) const;
 	const CSphRowitem *		FindRow ( SphDocID_t uDocid ) const;
 	const CSphRowitem *		FindAliveRow ( SphDocID_t uDocid ) const;
 };
 
 int RtSegment_t::m_iSegments = 0;
 CSphStaticMutex RtSegment_t::m_tSegmentSeq;
-
-
-bool RtSegment_t::HasDocid ( SphDocID_t uDocid ) const
-{
-	return FindRow ( uDocid )!=NULL;
-}
 
 
 const CSphRowitem * RtSegment_t::FindRow ( SphDocID_t uDocid ) const
@@ -1990,7 +1983,7 @@ void RtIndex_t::CommitReplayable ()
 			// check RAM chunk
 			bool bRamKilled = false;
 			for ( int j=0; j<m_pSegments.GetLength() && !bRamKilled; j++ )
-				bRamKilled = ( m_pSegments[j]->HasDocid ( uDocid ) && !m_pSegments[j]->m_dKlist.BinarySearch ( uDocid ) );
+				bRamKilled = ( m_pSegments[j]->FindAliveRow ( uDocid )!=NULL );
 
 			bool bDiskKilled = m_tKlist.Exists ( uDocid );
 
@@ -2038,10 +2031,11 @@ void RtIndex_t::CommitReplayable ()
 			ARRAY_FOREACH ( j, pAcc->m_dAccumKlist )
 			{
 				SphDocID_t uDocid = pAcc->m_dAccumKlist[j];
-				if ( pSeg->HasDocid ( uDocid ) )
+				if ( pSeg->FindAliveRow ( uDocid ) )
 				{
 					pSeg->m_dKlist.Add ( uDocid );
 					pSeg->m_iAliveRows--;
+					assert ( pSeg->m_iAliveRows>=0 );
 				}
 			}
 
@@ -2057,6 +2051,17 @@ void RtIndex_t::CommitReplayable ()
 		// after iDiskLiveKLen are ids already stored on disk - just skip them
 		for ( int i=0; i<iDiskLiveKLen; i++ )
 			m_tKlist.Delete ( pAcc->m_dAccumKlist[i] );
+	}
+
+	ARRAY_FOREACH ( i, dSegments )
+	{
+		RtSegment_t * pSeg = dSegments[i];
+		if ( pSeg->m_iAliveRows==0 )
+		{
+			dToKill.Add ( pSeg );
+			dSegments.RemoveFast ( i );
+			i--;
+		}
 	}
 
 	// go live!
@@ -2360,8 +2365,7 @@ void RtIndex_t::SaveDiskData ( const char * sFilename ) const
 		iTotalDocs += m_pSegments[i]->m_iAliveRows;
 	AttrIndexBuilder_c tMinMaxBuilder ( m_tSchema );
 	CSphVector<DWORD> dMinMaxBuffer ( tMinMaxBuilder.GetExpectedSize ( iTotalDocs ) );
-	tMinMaxBuilder.Prepare ( &dMinMaxBuffer[0], &dMinMaxBuffer[0] + dMinMaxBuffer.GetLength() );
-	DWORD uMinMaxIndex = 0;
+	tMinMaxBuilder.Prepare ( dMinMaxBuffer.Begin(), dMinMaxBuffer.Begin() + dMinMaxBuffer.GetLength() );
 
 	sName.SetSprintf ( "%s.sps", sFilename );
 	CSphWriter tStrWriter;
@@ -2369,6 +2373,10 @@ void RtIndex_t::SaveDiskData ( const char * sFilename ) const
 	tStrWriter.PutByte ( 0 ); // dummy byte, to reserve magic zero offset
 
 	CSphRowitem * pFixedRow = new CSphRowitem[m_iStride];
+
+#ifndef NDEBUG
+	int iStoredDocs = 0;
+#endif
 
 	for ( ;; )
 	{
@@ -2416,13 +2424,17 @@ void RtIndex_t::SaveDiskData ( const char * sFilename ) const
 
 		// collect min-max data
 		tMinMaxBuilder.CollectWithoutMvas ( pRow, false );
-		uMinMaxIndex += m_iStride;
 
 		// fast forward
 		pRows[iMinRow] = pRowIterators[iMinRow]->GetNextAliveRow();
+#ifndef NDEBUG
+		iStoredDocs++;
+#endif
 	}
 
 	SafeDeleteArray ( pFixedRow );
+
+	assert ( iStoredDocs==iTotalDocs );
 
 	tMinMaxBuilder.FinishCollect ( false );
 	if ( tMinMaxBuilder.GetActualSize() )
@@ -2448,7 +2460,7 @@ void RtIndex_t::SaveDiskData ( const char * sFilename ) const
 	sName.SetSprintf ( "%s.spm", sFilename ); wrDummy.OpenFile ( sName.cstr(), sError ); wrDummy.CloseFile ();
 
 	// header
-	SaveDiskHeader ( sFilename, dCheckpoints.GetLength(), iCheckpointsPosition, uKlistSize, uMinMaxIndex );
+	SaveDiskHeader ( sFilename, dCheckpoints.GetLength(), iCheckpointsPosition, uKlistSize, iTotalDocs*m_iStride );
 
 	// cleanup
 	ARRAY_FOREACH ( i, pWordReaders )

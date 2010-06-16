@@ -7958,8 +7958,6 @@ int PipeAndFork ( bool bFatal, int iHandler )
 
 #endif // !USE_WINDOWS
 
-#pragma warning(disable:4127) // conditional expr is const for MSVC
-
 /// check and report if there were any leaks since last call
 void CheckLeaks ()
 {
@@ -7995,8 +7993,6 @@ void CheckLeaks ()
 	}
 #endif
 }
-
-#pragma warning(default:4127) // conditional expr is const for MSVC
 
 bool CheckIndex ( const CSphIndex * pIndex, CSphString & sError )
 {

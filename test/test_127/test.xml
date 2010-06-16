@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>RT: repeated delete</name>
+
+<skip_indexer/>
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+index rt
+{
+	type = rt
+	path = data/rt
+	rt_attr_uint = id1
+	rt_field = title
+} 
+</config>
+
+<sphqueries>
+<sphinxql>insert into rt (id, id1, title) values (1, 1, 'test text')</sphinxql>
+<sphinxql>delete from rt where id=1</sphinxql>
+<sphinxql>delete from rt where id=1</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (2, 2, 'test text')</sphinxql>
+<sphinxql>delete from rt where id=2</sphinxql>
+<sphinxql>delete from rt where id=2</sphinxql>
+
+<sphinxql>set autocommit=0</sphinxql>
+
+<sphinxql>insert into rt (id, id1, title) values (10, 10, 'test text all')</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (110, 110, 'test text all')</sphinxql>
+<sphinxql>commit</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (11, 11, 'test text all')</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (111, 111, 'test text all')</sphinxql>
+<sphinxql>commit</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (12, 12, 'test text all')</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (112, 112, 'test text all')</sphinxql>
+<sphinxql>commit</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (13, 13, 'test text all')</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (113, 113, 'test text all')</sphinxql>
+<sphinxql>commit</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (14, 14, 'test text all')</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (114, 114, 'test text all')</sphinxql>
+<sphinxql>commit</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (15, 15, 'test text all')</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (115, 115, 'test text all')</sphinxql>
+<sphinxql>commit</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (16, 16, 'test text all')</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (116, 116, 'test text all')</sphinxql>
+<sphinxql>commit</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (17, 17, 'test text all')</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (117, 117, 'test text all')</sphinxql>
+<sphinxql>commit</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (18, 18, 'test text all')</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (118, 118, 'test text all')</sphinxql>
+<sphinxql>commit</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (19, 19, 'test text all')</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (119, 119, 'test text all')</sphinxql>
+<sphinxql>commit</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (20, 20, 'test text all')</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (120, 120, 'test text all')</sphinxql>
+<sphinxql>commit</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (21, 21, 'test text all')</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (121, 121, 'test text all')</sphinxql>
+<sphinxql>commit</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (22, 22, 'test text all')</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (122, 122, 'test text all')</sphinxql>
+<sphinxql>commit</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (23, 23, 'test text all')</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (123, 123, 'test text all')</sphinxql>
+<sphinxql>commit</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (24, 24, 'test text all')</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (124, 124, 'test text all')</sphinxql>
+<sphinxql>commit</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (25, 25, 'test text all')</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (125, 125, 'test text all')</sphinxql>
+<sphinxql>commit</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (26, 26, 'test text all')</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (126, 126, 'test text all')</sphinxql>
+<sphinxql>commit</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (27, 27, 'test text all')</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (127, 127, 'test text all')</sphinxql>
+<sphinxql>commit</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (28, 28, 'test text all')</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (128, 128, 'test text all')</sphinxql>
+<sphinxql>commit</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (29, 29, 'test text all')</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (129, 129, 'test text all')</sphinxql>
+<sphinxql>commit</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (30, 30, 'test text all')</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (130, 130, 'test text all')</sphinxql>
+<sphinxql>commit</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (31, 31, 'test text all')</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (131, 131, 'test text all')</sphinxql>
+<sphinxql>commit</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (32, 32, 'test text all')</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (132, 132, 'test text all')</sphinxql>
+<sphinxql>commit</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (33, 33, 'test text all')</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (133, 133, 'test text all')</sphinxql>
+<sphinxql>commit</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (34, 34, 'test text all')</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (134, 134, 'test text all')</sphinxql>
+<sphinxql>commit</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (35, 35, 'test text all')</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (135, 135, 'test text all')</sphinxql>
+<sphinxql>commit</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (36, 36, 'test text all')</sphinxql>
+<sphinxql>insert into rt (id, id1, title) values (136, 136, 'test text all')</sphinxql>
+<sphinxql>commit</sphinxql>
+<sphinxql>select * from rt</sphinxql>
+</sphqueries>
+
+</test>

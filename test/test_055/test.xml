@@ -32,14 +32,15 @@ index test
 <query mode="extended2">^one two</query>
 <query mode="extended2">^other three</query>
 <query mode="extended2">three$</query>
+<query mode="extended2">^badger</query>
 </queries>
 
 <db_create>
 CREATE TABLE `test_table`
 (
 	`document_id` int(11) NOT NULL default '0',
-	`title` varchar(255) NOT NULL default '',
-	`body` varchar(255) NOT NULL default ''
+	`title` varchar(5120) NOT NULL default '',
+	`body` varchar(256) NOT NULL default ''
 )
 </db_create>
 
@@ -72,6 +73,7 @@ INSERT INTO `test_table` VALUES
 <db_insert>INSERT INTO test_table SELECT document_id+80, title, body FROM test_table WHERE document_id>=10</db_insert>
 <db_insert>INSERT INTO test_table SELECT document_id+160, title, body FROM test_table WHERE document_id>=10</db_insert>
 <db_insert>INSERT INTO test_table SELECT document_id+320, title, body FROM test_table WHERE document_id>=10</db_insert>
+<db_insert>INSERT INTO test_table VALUES ( 2000, REPEAT('badger ',600), 'badger badger mushroom' )</db_insert>
 <db_insert>
 INSERT INTO `test_table` VALUES
 ( 1000, '', 'other' ),

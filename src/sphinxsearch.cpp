@@ -1314,7 +1314,7 @@ const ExtDoc_t * ExtTermPos_c<T>::GetDocsChunk ( SphDocID_t * pMaxID )
 
 	const ExtDoc_t * pDoc = m_pRawDoc; // just a shortcut
 	const ExtHit_t * pHit = m_pRawHit;
-	m_uLastID = 0;
+	SphDocID_t uLastID = m_uLastID = 0;
 
 	CSphRowitem * pDocinfo = m_pDocinfo;
 	for ( ;; )
@@ -1350,8 +1350,9 @@ const ExtDoc_t * ExtTermPos_c<T>::GetDocsChunk ( SphDocID_t * pMaxID )
 		while ( pDoc->m_uDocid<pHit->m_uDocid ) pDoc++; // FIXME? unsafe in broken cases
 		assert ( pDoc->m_uDocid==pHit->m_uDocid );
 
-		SphDocID_t uLastID = pDoc->m_uDocid;
-		CopyExtDoc ( m_dMyDocs[iMyDoc++], *pDoc, &pDocinfo, m_iStride );
+		if ( uLastID!=pDoc->m_uDocid)
+			CopyExtDoc ( m_dMyDocs[iMyDoc++], *pDoc, &pDocinfo, m_iStride );
+		uLastID = pDoc->m_uDocid;
 
 		// copy acceptable hits for this document
 		while ( iMyHit<MAX_HITS-1 && pHit->m_uDocid==uLastID )

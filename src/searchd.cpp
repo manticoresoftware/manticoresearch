@@ -6880,7 +6880,7 @@ void * MysqlPack ( void * pBuffer, int iValue )
 		return (void*)pOutput;
 	}
 
-	if ( iValue < 0xFFFF )
+	if ( iValue <= 0xFFFF )
 	{
 		*pOutput++ = '\xFC';
 		*pOutput++ = (char)iValue;
@@ -6888,7 +6888,7 @@ void * MysqlPack ( void * pBuffer, int iValue )
 		return (void*)pOutput;
 	}
 
-	if ( iValue < 0xFFFFFF )
+	if ( iValue <= 0xFFFFFF )
 	{
 		*pOutput++ = '\xFD';
 		*pOutput++ = (char)iValue;
@@ -7435,8 +7435,12 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 								}
 							}
 
+							// manually pack length, forcibly into exactly 3 bytes
 							iLen = (BYTE*)p - pLen - 4;
-							MysqlPack ( pLen, iLen );
+							pLen[0] = 0xfd;
+							pLen[1] = (BYTE)( iLen & 0xff );
+							pLen[2] = (BYTE)( ( iLen>>8 ) & 0xff );
+							pLen[3] = (BYTE)( ( iLen>>16 ) & 0xff );
 							break;
 						}
 

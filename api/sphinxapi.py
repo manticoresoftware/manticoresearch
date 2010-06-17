@@ -482,6 +482,7 @@ class SphinxClient:
 		assert(len(self._reqs)==0)
 		self.AddQuery(query,index,comment)
 		results = self.RunQueries()
+		self._reqs = [] # we won't re-run erroneous batch
 
 		if not results or len(results)==0:
 			return None

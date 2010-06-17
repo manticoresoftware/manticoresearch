@@ -16802,10 +16802,7 @@ bool CSphSource_SQL::SetupRanges ( const char * sRangeQuery, const char * sQuery
 		LOC_ERROR ( "sql_range_step=%d: must be positive", m_tParams.m_iRangeStep );
 
 	if ( m_tParams.m_iRangeStep<128 )
-	{
-		sphWarn ( "sql_range_step=%d: too small; increased to 128", m_tParams.m_iRangeStep );
-		m_tParams.m_iRangeStep = 128;
-	}
+		sphWarn ( "sql_range_step=%d: too small; might hurt indexing performance!", m_tParams.m_iRangeStep );
 
 	// check query for macros
 	for ( int i=0; i<MACRO_COUNT; i++ )
@@ -17684,8 +17681,27 @@ void CSphSource_MySQL::SqlDismissResult ()
 	if ( !m_pMysqlResult )
 		return;
 
-	mysql_free_result ( m_pMysqlResult );
-	m_pMysqlResult = NULL;
+	while ( m_pMysqlResult )
+	{
+		mysql_free_result ( m_pMysqlResult );
+		m_pMysqlResult = NULL;
+
+		// stored procedures might return multiple result sets
+		// FIXME? we might want to index all of them
+		// but for now, let's simply dismiss additional result sets
+		if ( mysql_next_result ( &m_tMysqlDriver )==0 )
+		{
+			m_pMysqlResult = mysql_use_result ( &m_tMysqlDriver );
+
+			static bool bOnce = false;
+			if ( !bOnce && m_pMysqlResult && mysql_num_rows ( m_pMysqlResult ) )
+			{
+				sphWarn ( "indexing of multiple result sets is not supported yet; some results sets were dismissed!" );
+				bOnce = true;
+			}
+		}
+	}
+
 	m_pMysqlFields = NULL;
 	m_pMysqlLengths = NULL;
 }
@@ -17721,6 +17737,7 @@ bool CSphSource_MySQL::SqlConnect ()
 	if ( !m_sSslKey.IsEmpty() || !m_sSslCert.IsEmpty() || !m_sSslCA.IsEmpty() )
 		mysql_ssl_set ( &m_tMysqlDriver, m_sSslKey.cstr(), m_sSslCert.cstr(), m_sSslCA.cstr(), NULL, NULL );
 
+	m_iMysqlConnectFlags |= CLIENT_MULTI_RESULTS; // we now know how to handle this
 	return NULL!=mysql_real_connect ( &m_tMysqlDriver,
 		m_tParams.m_sHost.cstr(), m_tParams.m_sUser.cstr(), m_tParams.m_sPass.cstr(),
 		m_tParams.m_sDB.cstr(), m_tParams.m_iPort, m_sMysqlUsock.cstr(), m_iMysqlConnectFlags );

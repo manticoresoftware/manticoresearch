@@ -1213,7 +1213,7 @@ public:
 
 	virtual int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer );
 
-	virtual bool				LoadHeader ( const char * sHeaderName, CSphString & sWarning );
+	virtual bool				LoadHeader ( const char * sHeaderName, bool bStripPath, CSphString & sWarning );
 	virtual bool				WriteHeader ( CSphWriter & fdInfo, SphOffset_t iCheckpointsPos, DWORD iCheckpointCount );
 
 	virtual void				DebugDumpHeader ( FILE * fp, const char * sHeaderName );
@@ -1222,7 +1222,7 @@ public:
 	virtual int					DebugCheck ( FILE * fp );
 	template <class Qword> void	DumpHitlist ( FILE * fp, const char * sKeyword, bool bID );
 
-	virtual bool				Prealloc ( bool bMlock, CSphString & sWarning );
+	virtual bool				Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarning );
 	virtual bool				Mlock ();
 	virtual void				Dealloc ();
 
@@ -10527,9 +10527,9 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> 
 	assert ( pSrcIndex );
 
 	CSphString sWarning;
-	if ( !Prealloc ( false, sWarning ) || !Preread() )
+	if ( !Prealloc ( false, false, sWarning ) || !Preread() )
 		return false;
-	if ( !pSrcIndex->Prealloc ( false, sWarning ) || !pSrcIndex->Preread() )
+	if ( !pSrcIndex->Prealloc ( false, false, sWarning ) || !pSrcIndex->Preread() )
 	{
 		m_sLastError.SetSprintf ( "source index preload failed: %s", pSrcIndex->GetLastError().cstr() );
 		return false;
@@ -11696,7 +11696,27 @@ void CSphIndex_VLN::Dealloc ()
 }
 
 
-bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, CSphString & sWarning )
+static void StripPath ( CSphString & sPath )
+{
+	if ( sPath.IsEmpty() )
+		return;
+
+	const char * s = sPath.cstr();
+	if ( *s!='/' )
+		return;
+
+	const char * sLastSlash = s;
+	for ( ; *s; s++ )
+		if ( *s=='/' )
+			sLastSlash = s;
+
+	int iPos = (int)( sLastSlash - sPath.cstr() + 1 );
+	int iLen = (int)( s - sPath.cstr() );
+	sPath = sPath.SubString ( iPos, iLen - iPos );
+}
+
+
+bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSphString & sWarning )
 {
 	const int MAX_HEADER_SIZE = 32768;
 	CSphAutoArray<BYTE> dCacheInfo ( MAX_HEADER_SIZE );
@@ -11774,6 +11794,10 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, CSphString & sWarning
 		// tokenizer stuff
 		CSphTokenizerSettings tSettings;
 		LoadTokenizerSettings ( rdInfo, tSettings, m_uVersion, sWarning );
+
+		if ( bStripPath )
+			StripPath ( tSettings.m_sSynonymsFile );
+
 		ISphTokenizer * pTokenizer = ISphTokenizer::Create ( tSettings, m_sLastError );
 		if ( !pTokenizer )
 			return false;
@@ -11781,6 +11805,13 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, CSphString & sWarning
 		// dictionary stuff
 		CSphDictSettings tDictSettings;
 		LoadDictionarySettings ( rdInfo, tDictSettings, m_uVersion, sWarning );
+
+		if ( bStripPath )
+		{
+			StripPath ( tDictSettings.m_sStopwords );
+			StripPath ( tDictSettings.m_sWordforms );
+		}
+
 		CSphDict * pDict = sphCreateDictionaryCRC ( tDictSettings, pTokenizer, m_sLastError );
 		if ( !pDict )
 			return false;
@@ -11807,7 +11838,7 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, CSphString & sWarning
 void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName )
 {
 	CSphString sWarning;
-	if ( !LoadHeader ( sHeaderName, sWarning ) )
+	if ( !LoadHeader ( sHeaderName, false, sWarning ) )
 	{
 		fprintf ( fp, "FATAL: failed to load header: %s.\n", m_sLastError.cstr() );
 		return;
@@ -12010,7 +12041,7 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 }
 
 
-bool CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning )
+bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarning )
 {
 	MEMORY ( SPH_MEM_IDX_DISK );
 
@@ -12033,7 +12064,7 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, CSphString & sWarning )
 	m_pKillList.SetMlock ( bMlock );
 
 	// preload schema
-	if ( !LoadHeader ( GetIndexFileName("sph").cstr(), sWarning ) )
+	if ( !LoadHeader ( GetIndexFileName("sph").cstr(), bStripPath, sWarning ) )
 		return false;
 
 	if ( m_bUse64!=USE_64BIT )

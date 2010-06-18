@@ -195,7 +195,7 @@ int main ()
 	ISphRtIndex * pIndex = sphCreateIndexRT ( tSchema, "testrt", 32*1024*1024, "data/dump" );
 	pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
 	pIndex->SetDictionary ( pDict );
-	if ( !pIndex->Prealloc ( false, sError ) )
+	if ( !pIndex->Prealloc ( false, false, sError ) )
 		sphDie ( "prealloc failed: %s", pIndex->GetLastError().cstr() );
 	g_pIndex = pIndex;
 

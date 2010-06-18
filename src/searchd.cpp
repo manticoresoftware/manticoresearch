@@ -7818,7 +7818,7 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 	ISphTokenizer * pTokenizer = tIndex.m_pIndex->LeakTokenizer ();
 	CSphDict * pDictionary = tIndex.m_pIndex->LeakDictionary ();
 
-	if ( !tIndex.m_pIndex->Prealloc ( tIndex.m_bMlock, sWarning ) || !tIndex.m_pIndex->Preread() )
+	if ( !tIndex.m_pIndex->Prealloc ( tIndex.m_bMlock, false, sWarning ) || !tIndex.m_pIndex->Preread() )
 	{
 		if ( tIndex.m_bOnlyNew )
 		{
@@ -7837,7 +7837,7 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 			}
 			sphLogDebug ( "RotateIndexGreedy: has recovered" );
 
-			if ( !tIndex.m_pIndex->Prealloc ( tIndex.m_bMlock, sWarning ) || !tIndex.m_pIndex->Preread() )
+			if ( !tIndex.m_pIndex->Prealloc ( tIndex.m_bMlock, false, sWarning ) || !tIndex.m_pIndex->Preread() )
 			{
 				sphWarning ( "rotating index '%s': .new preload failed; ROLLBACK FAILED; INDEX UNUSABLE", sIndex );
 				tIndex.m_bEnabled = false;
@@ -8096,7 +8096,7 @@ static void RotateIndexMT ( const CSphString & sIndex )
 	// prealloc enough RAM and lock new index
 	sphLogDebug ( "prealloc enough RAM and lock new index" );
 	CSphString sWarn, sError;
-	if ( !tNewIndex.m_pIndex->Prealloc ( tNewIndex.m_bMlock, sWarn ) )
+	if ( !tNewIndex.m_pIndex->Prealloc ( tNewIndex.m_bMlock, false, sWarn ) )
 	{
 		sphWarning ( "rotating index '%s': prealloc: %s; using old index", sIndex.cstr(), tNewIndex.m_pIndex->GetLastError().cstr() );
 		return;
@@ -8279,7 +8279,7 @@ void SeamlessTryToForkPrereader ()
 	// prealloc enough RAM and lock new index
 	sphLogDebug ( "prealloc enough RAM and lock new index" );
 	CSphString sWarn, sError;
-	if ( !g_pPrereading->Prealloc ( tServed.m_bMlock, sWarn ) )
+	if ( !g_pPrereading->Prealloc ( tServed.m_bMlock, false, sWarn ) )
 	{
 		sphWarning ( "rotating index '%s': prealloc: %s; using old index", sPrereading, g_pPrereading->GetLastError().cstr() );
 		if ( !sWarn.IsEmpty() )
@@ -8670,7 +8670,7 @@ bool PrereadNewIndex ( ServedIndex_t & tIdx, const CSphConfigSection & hIndex, c
 {
 	CSphString sWarning;
 
-	if ( !tIdx.m_pIndex->Prealloc ( tIdx.m_bMlock, sWarning ) || !tIdx.m_pIndex->Preread() )
+	if ( !tIdx.m_pIndex->Prealloc ( tIdx.m_bMlock, false, sWarning ) || !tIdx.m_pIndex->Preread() )
 	{
 		sphWarning ( "index '%s': preload: %s; NOT SERVING", szIndexName, tIdx.m_pIndex->GetLastError().cstr() );
 		return false;

@@ -263,7 +263,7 @@ int main ( int argc, char ** argv )
 		sError = "could not create index (check that files exist)";
 		for ( ; pIndex; )
 		{
-			if ( !pIndex->Prealloc ( false, sWarning ) || !pIndex->Preread() )
+			if ( !pIndex->Prealloc ( false, false, sWarning ) || !pIndex->Preread() )
 			{
 				sError = pIndex->GetLastError ();
 				break;

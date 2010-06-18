@@ -2272,7 +2272,7 @@ public:
 
 public:
 	/// check all data files, preload schema, and preallocate enough shared RAM to load memory-cached data
-	virtual bool				Prealloc ( bool bMlock, CSphString & sWarning ) = 0;
+	virtual bool				Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarning ) = 0;
 
 	/// deallocate all previously preallocated shared data
 	virtual void				Dealloc () = 0;

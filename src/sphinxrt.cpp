@@ -966,7 +966,7 @@ public:
 	virtual int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer ) { return 0; }
 	virtual bool				Merge ( CSphIndex * pSource, CSphVector<CSphFilterSettings> & dFilters, bool bMergeKillLists ) { return false; }
 
-	virtual bool				Prealloc ( bool bMlock, CSphString & sWarning );
+	virtual bool				Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarning );
 	virtual void				Dealloc () {}
 	virtual bool				Preread ();
 	virtual void				SetBase ( const char * sNewBase ) {}
@@ -2680,7 +2680,7 @@ CSphIndex * RtIndex_t::LoadDiskChunk ( int iChunk )
 	CSphIndex * pDiskChunk = sphCreateIndexPhrase ( sChunk.cstr() );
 	if ( pDiskChunk )
 	{
-		if ( !pDiskChunk->Prealloc ( false, sError ) || !pDiskChunk->Preread() )
+		if ( !pDiskChunk->Prealloc ( false, false, sError ) || !pDiskChunk->Preread() )
 			SafeDelete ( pDiskChunk );
 	}
 	if ( !pDiskChunk )
@@ -2690,7 +2690,7 @@ CSphIndex * RtIndex_t::LoadDiskChunk ( int iChunk )
 }
 
 
-bool RtIndex_t::Prealloc ( bool, CSphString & )
+bool RtIndex_t::Prealloc ( bool, bool, CSphString & )
 {
 	MEMORY ( SPH_MEM_IDX_RT );
 

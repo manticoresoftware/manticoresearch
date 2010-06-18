@@ -65,11 +65,14 @@ int main ( int argc, char ** argv )
 			"--check <INDEXNAME>\t\tperform index consistency check\n"
 			"--htmlstrip <INDEXNAME>\t\tfilter stdin usng HTML stripper settings\n"
 			"\t\t\t\tfor a given index (taken from sphinx.conf)\n"
-			"--optimize-rt-klists <INDEXNAME>\tperform kill list opimization in rt's disk chunks\n"
+			"--optimize-rt-klists <INDEXNAME>\n"
+			"\t\t\t\tperform kill list opimization in rt's disk chunks\n"
 			"\t\t\t\tfor a given index (taken from sphinx.conf) or --all\n"
 			"\n"
 			"Options are:\n"
 			"-c, --config <file>\t\tuse given config file instead of defaults\n"
+			"--strip-path\t\t\tstrip path from filenames referenced by index\n"
+			"\t\t\t\t(eg. stopwords, exceptions, etc)\n"
 		);
 		exit ( 0 );
 	}
@@ -84,6 +87,7 @@ int main ( int argc, char ** argv )
 	const char * sOptConfig = NULL;
 	CSphString sDumpHeader, sIndex, sKeyword;
 	bool bWordid = false;
+	bool bStripPath = false;
 
 	enum
 	{
@@ -109,6 +113,7 @@ int main ( int argc, char ** argv )
 		OPT1 ( "--dumpdocids" )		{ eCommand = CMD_DUMPDOCIDS; sIndex = argv[++i]; }
 		OPT1 ( "--check" )			{ eCommand = CMD_CHECK; sIndex = argv[++i]; }
 		OPT1 ( "--htmlstrip" )		{ eCommand = CMD_STRIP; sIndex = argv[++i]; }
+		OPT1 ( "--strip-path" )		{ bStripPath = true; }
 		OPT1 ( "--optimize-rt-klists" )
 		{
 			eCommand = CMD_OPTIMIZE;
@@ -182,7 +187,7 @@ int main ( int argc, char ** argv )
 			sphDie ( "index '%s': failed to create", sIndex.cstr() );
 
 		CSphString sWarn;
-		if ( !pIndex->Prealloc ( false, sWarn ) )
+		if ( !pIndex->Prealloc ( false, bStripPath, sWarn ) )
 			sphDie ( "index '%s': prealloc failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
 
 		if ( !pIndex->Preread() )

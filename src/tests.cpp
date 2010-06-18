@@ -1593,7 +1593,7 @@ void TestRTWeightBoundary ()
 
 		pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
 		pIndex->SetDictionary ( pDict );
-		assert ( pIndex->Prealloc ( false, sError ) );
+		assert ( pIndex->Prealloc ( false, false, sError ) );
 
 		while ( pSrc->IterateHitsNext ( sError ) && pSrc->m_tDocInfo.m_iDocID )
 		{
@@ -1754,7 +1754,7 @@ void TestRTSendVsMerge ()
 
 	pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
 	pIndex->SetDictionary ( pDict );
-	assert ( pIndex->Prealloc ( false, sError ) );
+	assert ( pIndex->Prealloc ( false, false, sError ) );
 
 	CSphQuery tQuery;
 	CSphQueryResult tResult;

@@ -29,6 +29,9 @@
 #include <time.h>
 #include <stdarg.h>
 #include <limits.h>
+#if HAVE_EXECINFO_H
+#include <execinfo.h>
+#endif
 
 #define SEARCHD_BACKLOG			5
 #define SEARCHD_DEFAULT_PORT	9312
@@ -1169,6 +1172,25 @@ void StackTraceDump ( int )
 {
 	void * pMyStack = sphMyStack();
 	int iStackSize = sphMyStackSize();
+	sphInfo ( "Stack bottom = %p, thread stack size = 0x%x", pMyStack, iStackSize );
+	bool bOk = true;
+
+#if HAVE_BACKTRACE
+	void *pAddresses [128];
+	char **pszStrings = NULL;
+	int iDepth = backtrace ( pAddresses, 128 );
+#if HAVE_BACKTRACE_SYMBOLS
+	pszStrings = backtrace_symbols ( pAddresses, iDepth );
+	for ( int i=0; i<iDepth; i++ )
+		sphInfo ( "%s", pszStrings[i] );
+	free ( pszStrings );
+#elif !HAVE_BACKTRACE_SYMBOLS
+	for ( int i=0; i<Depth; i++ )
+		sphInfo ( "%p", pAddresses[i] );
+#endif
+
+#elif !HAVE_BACKTRACE
+
 	BYTE ** pFramePointer = NULL;
 
 	int iFrameCount = 0;
@@ -1206,7 +1228,6 @@ void StackTraceDump ( int )
 	sphInfo ( "Stack is OK. Backtrace:" );
 
 	BYTE** pNewFP;
-	bool bOk = true;
 	while ( pFramePointer < (BYTE**) pMyStack )
 	{
 		pNewFP = (BYTE**) *pFramePointer;
@@ -1222,6 +1243,7 @@ void StackTraceDump ( int )
 	if ( !bOk )
 		sphWarning ( "Something wrong in frame pointers. BackTrace failed (failed FP was %p)", pNewFP );
 	else
+#endif
 		sphInfo ( "Stack trace seems to be succesfull. Now you have to resolve the numbers above and attach resolved values to the bugreport. See the section about resolving in the documentation" );
 }
 

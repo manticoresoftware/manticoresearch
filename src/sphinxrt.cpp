@@ -1092,6 +1092,8 @@ RtIndex_t::RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int6
 
 RtIndex_t::~RtIndex_t ()
 {
+	int64_t tmSave = sphMicroTimer();
+
 	SaveRamChunk ();
 	SaveMeta ( m_pDiskChunks.GetLength() );
 
@@ -1108,6 +1110,13 @@ RtIndex_t::~RtIndex_t ()
 		::close ( m_iLockFD );
 
 	g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, true );
+
+	tmSave = sphMicroTimer() - tmSave;
+	if ( tmSave>=1000 )
+	{
+		sphInfo ( "rt: index %s: ramchunk saved in %d.%03d sec",
+			m_sIndexName.cstr(), (int)(tmSave/1000000), (int)((tmSave/1000)%1000) );
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////

@@ -693,7 +693,7 @@ static bool sphWrite ( int iFD, const void * pBuf, size_t iSize )
 
 /// physically emit log entry
 /// buffer must have 1 extra byte for linefeed
-void sphLogEntry ( ESphLogLevel eLevel, char * sBuf )
+void sphLogEntry ( ESphLogLevel eLevel, char * sBuf, char * sTtyBuf )
 {
 #if USE_WINDOWS
 	if ( g_bService && g_iLogFile==STDOUT_FILENO )
@@ -734,12 +734,13 @@ void sphLogEntry ( ESphLogLevel eLevel, char * sBuf )
 		strcat ( sBuf, "\n" ); // NOLINT
 
 		lseek ( g_iLogFile, 0, SEEK_END );
-		sphWrite ( g_iLogFile, sBuf, strlen(sBuf) );
+		if ( g_bLogTty )
+			sphWrite ( g_iLogFile, sTtyBuf, strlen(sTtyBuf) );
+		else
+			sphWrite ( g_iLogFile, sBuf, strlen(sBuf) );
 
 		if ( g_bLogStdout && g_iLogFile!=STDOUT_FILENO )
-		{
-			sphWrite ( STDOUT_FILENO, sBuf, strlen(sBuf) );
-		}
+			sphWrite ( STDOUT_FILENO, sTtyBuf, strlen(sTtyBuf) );
 	}
 }
 
@@ -772,10 +773,11 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	if ( eLevel==LOG_DEBUG ) sBanner = "DEBUG: ";
 
 	char sBuf [ 1024 ];
-	if ( !g_bLogTty )
-		snprintf ( sBuf, sizeof(sBuf)-1, "[%s] [%5d] %s", sTimeBuf, (int)getpid(), sBanner );
-	else
-		strncpy ( sBuf, sBanner, sizeof(sBuf) );
+	snprintf ( sBuf, sizeof(sBuf)-1, "[%s] [%5d] ", sTimeBuf, (int)getpid() );
+
+	char * sTtyBuf = sBuf + strlen(sBuf);
+	strcpy ( sTtyBuf, sBanner );
+
 	int iLen = strlen(sBuf);
 
 	// format the message
@@ -803,7 +805,7 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 		char sLast[256];
 		strncpy ( sLast, sBuf, iLen );
 		snprintf ( sLast+iLen, sizeof(sLast)-iLen, "last message repeated %d times", iLastRepeats );
-		sphLogEntry ( eLastLevel, sLast );
+		sphLogEntry ( eLastLevel, sLast, sLast + ( sTtyBuf-sBuf ) );
 
 		tmLastStamp = tmNow;
 		iLastRepeats = 0;
@@ -821,7 +823,7 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	uLastEntry = uEntry;
 
 	// do the logging
-	sphLogEntry ( eLevel, sBuf );
+	sphLogEntry ( eLevel, sBuf, sTtyBuf );
 }
 
 void sphFatal ( const char * sFmt, ... )
@@ -10812,6 +10814,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		}
 
 		g_sLogFile = sLog;
+		g_bLogTty = isatty ( g_iLogFile )!=0;
 
 		// create query log if required
 		if ( hSearchd.Exists ( "query_log" ) )
@@ -10993,13 +10996,11 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			dRtIndices.Add ( pRt );
 		}
 	}
+
 	sphReplayBinlog ( dRtIndices );
 
 	if ( !g_bOptNoDetach )
-	{
-		g_bLogTty = isatty ( g_iLogFile )!=0;
 		g_bLogStdout = false;
-	}
 
 	sphInfo ( "accepting connections" );
 

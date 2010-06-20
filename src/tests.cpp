@@ -1537,7 +1537,7 @@ static void DeleteIndexFiles ( const char * sIndex )
 
 #define RT_INDEX_FILE_NAME "test_temp"
 #define RT_PASS_COUNT 5
-static const int g_iWeights[RT_PASS_COUNT] = { 1500, 1302, 1252, 1230, 1219 };
+static const int g_iWeights[RT_PASS_COUNT] = { 1500, 1500, 1500, 1500, 1500 }; // { 1500, 1302, 1252, 1230, 1219 };
 
 void TestRTWeightBoundary ()
 {

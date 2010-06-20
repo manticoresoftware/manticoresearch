@@ -1,0 +1,12 @@
+Building MySQL 5.0.91 with SphinxSE from source on Windows
+-----------------------------------------------------------
+
+tar zxvf mysql-5.0.91.tar.gz
+cp -R mysqlse mysql-5.0.91/sql/sphinx
+cd mysql-5.0.91
+
+patch -p1 -i sql/sphinx/sphinx.5.0.91.diff
+win/configure.js WITH_SPHINX_STORAGE_ENGINE
+win/build-vs8
+
+--eof--

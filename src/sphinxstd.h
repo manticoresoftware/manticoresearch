@@ -150,6 +150,9 @@ typedef unsigned long long uint64_t;
 #define UINT64_FMT "%" PRIu64
 #define INT64_FMT "%" PRIi64
 
+#define UINT64_MAX U64C(0xffffffffffffffff)
+#define INT64_MAX I64C(0x7fffffffffffffff)
+
 STATIC_SIZE_ASSERT ( uint64_t, 8 );
 STATIC_SIZE_ASSERT ( int64_t, 8 );
 

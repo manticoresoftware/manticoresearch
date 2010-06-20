@@ -1400,41 +1400,40 @@ void sphWarn ( const char * sTemplate, ... )
 
 //////////////////////////////////////////////////////////////////////////
 
-/// timer initializer
-static int64_t g_tmInitTimer = sphMicroTimer();
-
-/// time since startup, in microseconds
+/// microsecond precision timestamp
 int64_t sphMicroTimer()
 {
 #if USE_WINDOWS
 	// Windows time query
+	static int64_t iBase = 0;
 	static int64_t iStart = 0;
 	static int64_t iFreq = 0;
 
 	LARGE_INTEGER iLarge;
-	if ( !iFreq )
+	if ( !iBase )
 	{
+		// get start QPC value
 		QueryPerformanceFrequency ( &iLarge ); iFreq = iLarge.QuadPart;
 		QueryPerformanceCounter ( &iLarge ); iStart = iLarge.QuadPart;
+
+		// get start UTC timestamp
+		// assuming it's still approximately the same moment as iStart, give or take a msec or three
+		FILETIME ft;
+		GetSystemTimeAsFileTime ( &ft );
+
+		iBase = ( int64_t(ft.dwHighDateTime)<<32 ) + int64_t(ft.dwLowDateTime);
+		iBase = ( iBase - 116444736000000000ULL ) / 10; // rebase from 01 Jan 1601 to 01 Jan 1970, and rescale to 1 usec from 100 ns
 	}
 
+	// we can't easily drag iBase into parens because iBase*iFreq/1000000 overflows 64bit int!
 	QueryPerformanceCounter ( &iLarge );
-	return ( iLarge.QuadPart-iStart )*1000000/iFreq;
+	return iBase + ( iLarge.QuadPart - iStart )*1000000/iFreq;
 
 #else
 	// UNIX time query
-	static int s_sec = -1, s_usec = -1;
 	struct timeval tv;
-
-	if ( s_sec==-1 )
-	{
-		gettimeofday ( &tv, NULL );
-		s_sec = tv.tv_sec;
-		s_usec = tv.tv_usec;
-	}
-
 	gettimeofday ( &tv, NULL );
-	return (int64_t)(tv.tv_sec-s_sec)*int64_t(1000000) + (int64_t)(tv.tv_usec-s_usec);
+	return int64_t(tv.tv_sec)*int64_t(1000000) + int64_t(tv.tv_usec);
 #endif // USE_WINDOWS
 }
 
@@ -13983,11 +13982,11 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 				if ( pStr+iLen-1>=m_pStrings.GetWritePtr()+m_pStrings.GetLength() )
 					LOC_FAIL(( fp, "string length out of bounds (row=%u, stringattr=%d, docid="DOCID_FMT", index=%u)",
-						uRow, iItem, uLastID, pStr-m_pStrings.GetWritePtr()+iLen-1 ));
+						uRow, iItem, uLastID, (unsigned int)( pStr-m_pStrings.GetWritePtr()+iLen-1 ) ));
 
 				if ( pStrLast>=pStr )
 					LOC_FAIL(( fp, "overlapping string values (row=%u, stringattr=%d, docid="DOCID_FMT", last_end=%u, cur_start=%u)",
-						uRow, iItem, uLastID, pStrLast-m_pStrings.GetWritePtr(), pStr-m_pStrings.GetWritePtr() ));
+						uRow, iItem, uLastID, (unsigned int)( pStrLast-m_pStrings.GetWritePtr() ), (unsigned int)( pStr-m_pStrings.GetWritePtr() ) ));
 
 				pStrLast = pStr + iLen;
 			}
@@ -14294,7 +14293,7 @@ CSphVector <CSphDictCRC::WordformContainer*> CSphDictCRC::m_dWordformContainers;
 
 /////////////////////////////////////////////////////////////////////////////
 
-static const DWORD g_dSphinxCRC32 [ 256 ] =
+DWORD g_dSphinxCRC32 [ 256 ] =
 {
 	0x00000000, 0x77073096, 0xee0e612c, 0x990951ba,
 	0x076dc419, 0x706af48f, 0xe963a535, 0x9e6495a3,
@@ -14372,11 +14371,19 @@ DWORD sphCRC32 ( const BYTE * pString )
 	return ~crc;
 }
 
-
 DWORD sphCRC32 ( const BYTE * pString, int iLen )
 {
 	// calc CRC
 	DWORD crc = ~((DWORD)0);
+	for ( int i=0; i<iLen; i++ )
+		crc = (crc >> 8) ^ g_dSphinxCRC32 [ (crc ^ pString[i]) & 0xff ];
+	return ~crc;
+}
+
+DWORD sphCRC32 ( const BYTE * pString, int iLen, DWORD uPrevCRC )
+{
+	// calc CRC
+	DWORD crc = ~((DWORD)uPrevCRC);
 	for ( int i=0; i<iLen; i++ )
 		crc = (crc >> 8) ^ g_dSphinxCRC32 [ (crc ^ pString[i]) & 0xff ];
 	return ~crc;

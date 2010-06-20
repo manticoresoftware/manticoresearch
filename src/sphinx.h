@@ -156,11 +156,14 @@ inline const DWORD *	DOCINFO2ATTRS ( const DWORD * pDocinfo )	{ return pDocinfo+
 
 /////////////////////////////////////////////////////////////////////////////
 
-/// time since startup, in microseconds
+/// microsecond precision timestamp
+/// current UNIX timestamp in seconds multiplied by 1000000, plus microseconds since the beginning of current second
 int64_t			sphMicroTimer ();
 
 /// Sphinx CRC32 implementation
 DWORD			sphCRC32 ( const BYTE * pString );
+DWORD			sphCRC32 ( const BYTE * pString, int iLen );
+DWORD			sphCRC32 ( const BYTE * pString, int iLen, DWORD uPrevCRC );
 
 /// Sphinx FNV64 implementation
 uint64_t		sphFNV64 ( const BYTE * pString );

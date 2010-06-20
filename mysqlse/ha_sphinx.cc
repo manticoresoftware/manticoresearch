@@ -502,6 +502,7 @@ private:
 	float			m_fGeoLongitude;
 
 	char *			m_sComment;
+	char *			m_sSelect;
 
 	struct Override_t
 	{
@@ -1177,6 +1178,7 @@ CSphSEQuery::CSphSEQuery ( const char * sQuery, int iLength, const char * sIndex
 	, m_fGeoLatitude ( 0.0f )
 	, m_fGeoLongitude ( 0.0f )
 	, m_sComment ( "" )
+	, m_sSelect ( "" )
 
 	, m_pBuf ( NULL )
 	, m_pCur ( NULL )
@@ -1341,6 +1343,7 @@ bool CSphSEQuery::ParseField ( char * sField )
 	else if ( !strcmp ( sName, "distinct" ) )	m_sGroupDistinct = sValue;
 	else if ( !strcmp ( sName, "cutoff" ) )		m_iCutoff = iValue;
 	else if ( !strcmp ( sName, "comment" ) )	m_sComment = sValue;
+	else if ( !strcmp ( sName, "select" ) )		m_sSelect = sValue;
 
 	else if ( !strcmp ( sName, "mode" ) )
 	{
@@ -1745,7 +1748,8 @@ int CSphSEQuery::BuildRequest ( char ** ppBuffer )
 		+ strlen ( m_sGroupBy )
 		+ strlen ( m_sGroupSortBy )
 		+ strlen ( m_sGroupDistinct )
-		+ strlen ( m_sComment );
+		+ strlen ( m_sComment )
+		+ strlen ( m_sSelect );
 	for ( int i=0; i<m_iFilters; i++ )
 	{
 		const CSphSEFilter & tFilter = m_dFilters[i];
@@ -1888,7 +1892,7 @@ int CSphSEQuery::BuildRequest ( char ** ppBuffer )
 	}
 
 	// select
-	SendString ( "" );
+	SendString ( m_sSelect );
 
 	// detect buffer overruns and underruns, and report internal error
 	if ( m_bBufOverrun || m_iBufLeft!=0 || m_pCur-m_pBuf!=iReqSize )

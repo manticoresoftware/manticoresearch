@@ -4357,6 +4357,18 @@ to use when searching through several indexes:
 ... WHERE query='test;indexweights=idx_exact,2,idx_stemmed,1;';
 </programlisting>
 </listitem>
+<listitem>comment - a string to mark this query in query log
+(mapping to $comment parameter in <link linkend="api-func-query">Query()</link> API call):
+<programlisting>
+... WHERE query='test;comment=marker001;';
+</programlisting>
+</listitem>
+<listitem>select - a string with expressions to compute
+(mapping to <link linkend="api-func-setselect">SetSelect()</link> API call):
+<programlisting>
+... WHERE query='test;select=2*a+3*b as myexpr;';
+</programlisting>
+</listitem>
 </itemizedlist>
 </para>
 <para>

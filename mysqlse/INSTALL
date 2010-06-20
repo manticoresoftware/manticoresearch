@@ -1,5 +1,24 @@
-Building MySQL 5.0.91 with SphinxSE from source on Windows
------------------------------------------------------------
+Building MySQL with SphinxSE
+=============================
+
+MySQL 5.1.x on Linux
+---------------------
+
+tar zxvf mysql-5.1.47.tar.gz
+cp -R -p mysqlse mysql-5.1.47/storage/sphinx
+cd mysql-5.1.47
+
+sh BUILD/autorun.sh
+./configure --with-plugins=sphinx
+
+Note: BUILD/autorun.sh might malfunction with some versions of automake;
+autorun.sh will not fail but the build will.  automake 1.9.6 is known
+to work.
+
+
+
+MySQL 5.0.x on Windows
+-----------------------
 
 tar zxvf mysql-5.0.91.tar.gz
 cp -R mysqlse mysql-5.0.91/sql/sphinx

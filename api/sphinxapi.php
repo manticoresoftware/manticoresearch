@@ -1323,6 +1323,7 @@ class SphinxClient
 		if ( !isset($opts["force_all_words"]) )		$opts["force_all_words"] = false;
 		if ( !isset($opts["start_passage_id"]) )	$opts["start_passage_id"] = 1;
 		if ( !isset($opts["load_files"]) )			$opts["load_files"] = false;
+		if ( !isset($opts["html_strip_mode"]) )		$opts["html_strip_mode"] = "none";
 
 		/////////////////
 		// build request
@@ -1347,6 +1348,7 @@ class SphinxClient
 		$req .= pack ( "N", strlen($opts["chunk_separator"]) ) . $opts["chunk_separator"];
 		$req .= pack ( "NN", (int)$opts["limit"], (int)$opts["around"] );
 		$req .= pack ( "NNN", (int)$opts["limit_passages"], (int)$opts["limit_words"], (int)$opts["start_passage_id"] ); // v.1.2
+		$req .= pack ( "N", strlen($opts["html_strip_mode"]) ) . $opts["html_strip_mode"];
 
 		// documents
 		$req .= pack ( "N", count($docs) );

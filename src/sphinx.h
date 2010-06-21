@@ -474,7 +474,7 @@ public:
 	/// start buffer point of last token
 	virtual const char *			GetTokenStart () const = 0;
 
-	/// end buffer point of last token
+	/// end buffer point of last token (exclusive, ie. *GetTokenEnd() is already NOT part of a token!)
 	virtual const char *			GetTokenEnd () const = 0;
 
 	/// current buffer ptr

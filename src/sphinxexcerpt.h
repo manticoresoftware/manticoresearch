@@ -39,6 +39,7 @@ struct ExcerptQuery_t
 	bool			m_bForceAllWords;	///< whether to ignore limit until all needed keywords are highlighted (#448)
 	int				m_iPassageId;		///< current %PASSAGE_ID% counter value (must start at 1)
 	bool			m_bLoadFiles;		///< whether to interpret source as text or file name
+	CSphString		m_sStripMode;		///< strip mode
 
 public:
 	ExcerptQuery_t ()
@@ -57,6 +58,7 @@ public:
 		, m_bForceAllWords ( false )
 		, m_iPassageId ( 1 )
 		, m_bLoadFiles ( false )
+		, m_sStripMode ( "index" )
 	{
 	}
 };

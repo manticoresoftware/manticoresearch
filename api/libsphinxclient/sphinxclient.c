@@ -1856,6 +1856,7 @@ void sphinx_init_excerpt_options ( sphinx_excerpt_options * opts )
 	opts->before_match		= NULL;
 	opts->after_match		= NULL;
 	opts->chunk_separator	= NULL;
+	opts->html_strip_mode	= "index";
 
 	opts->limit				= 0;
 	opts->limit_passages	= 0;
@@ -1893,6 +1894,7 @@ char ** sphinx_build_excerpts ( sphinx_client * client, int num_docs, const char
 		opt.before_match		= opts->before_match ? opts->before_match : "<b>";
 		opt.after_match			= opts->after_match ? opts->after_match : "</b>";
 		opt.chunk_separator		= opts->chunk_separator ? opts->chunk_separator : " ... ";
+		opt.html_strip_mode		= opts->html_strip_mode ? opts->html_strip_mode : "index";
 
 		opt.limit				= opts->limit>0 ? opts->limit : 256;
 		opt.limit_passages		= opts->limit_passages;
@@ -1917,7 +1919,8 @@ char ** sphinx_build_excerpts ( sphinx_client * client, int num_docs, const char
 	}
 
 	// alloc buffer
-	req_len = (int)( 52 + strlen(index) + strlen(words) + strlen(opt.before_match) + strlen(opt.after_match) + strlen(opt.chunk_separator) );
+	req_len = (int)( 56 + strlen(index) + strlen(words) + strlen(opt.before_match)
+		+ strlen(opt.after_match) + strlen(opt.chunk_separator) + strlen(opt.html_strip_mode) );
 	for ( i=0; i<num_docs; i++ )
 		req_len += (int)( 4 + safestrlen(docs[i]) );
 
@@ -1958,6 +1961,7 @@ char ** sphinx_build_excerpts ( sphinx_client * client, int num_docs, const char
 	send_int ( &req, opt.limit_passages ); // v1.2
 	send_int ( &req, opt.limit_words );
 	send_int ( &req, opt.start_passage_id );
+	send_str ( &req, opt.html_strip_mode );
 
 	send_int ( &req, num_docs );
 	for ( i=0; i<num_docs; i++ )

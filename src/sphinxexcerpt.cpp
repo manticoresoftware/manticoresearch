@@ -39,7 +39,7 @@ public:
 	char *	BuildExcerpt ( ExcerptQuery_t &, CSphDict * pDict, ISphTokenizer * pTokenizer );
 
 	void	TokenizeQuery ( const ExcerptQuery_t &, CSphDict * pDict, ISphTokenizer * pTokenizer );
-	void	TokenizeDocument ( char * pData, CSphDict * pDict, ISphTokenizer * pTokenizer, bool bFillMasks );
+	void	TokenizeDocument ( char * pData, CSphDict * pDict, ISphTokenizer * pTokenizer, bool bFillMasks, bool bRetainHtml );
 
 	void	SetMarker ( CSphHitMarker * pMarker ) { m_pMarker = pMarker; }
 
@@ -66,13 +66,13 @@ public:
 
 	struct Passage_t
 	{
-		int					m_iStart;		///< start token index
-		int					m_iTokens;		///< token count
-		int					m_iCodes;		///< codepoints count
-		int					m_iWords;		///< words count
-		DWORD				m_uQwords;		///< matching query words mask
-		int					m_iQwordsWeight;///< passage weight factor
-		int					m_iQwordCount;	///< passage weight factor
+		int					m_iStart;			///< start token index
+		int					m_iTokens;			///< token count
+		int					m_iCodes;			///< codepoints count
+		int					m_iWords;			///< words count
+		DWORD				m_uQwords;			///< matching query words mask
+		int					m_iQwordsWeight;	///< passage weight factor
+		int					m_iQwordCount;		///< passage weight factor
 		union
 		{
 			struct
@@ -487,7 +487,31 @@ void ExcerptGen_c::TokenizeQuery ( const ExcerptQuery_t & tQuery, CSphDict * pDi
 	}
 }
 
-void ExcerptGen_c::TokenizeDocument ( char * pData, CSphDict * pDict, ISphTokenizer * pTokenizer, bool bFillMasks )
+static int FindTagEnd ( const char * sData )
+{
+	assert ( *sData=='<' );
+	const char * s = sData+1;
+
+	// we just scan until EOLN or tag end
+	while ( *s && *s!='>' )
+	{
+		// exit on duplicate
+		if ( *s=='<' )
+			return -1;
+
+		if ( *s=='\'' || *s=='"' )
+			s = (const char *)SkipQuoted ( (const BYTE *)s );
+		else
+			s++;
+	}
+
+	if ( !*s )
+		return -1;
+
+	return s-sData;
+}
+
+void ExcerptGen_c::TokenizeDocument ( char * pData, CSphDict * pDict, ISphTokenizer * pTokenizer, bool bFillMasks, bool bRetainHtml )
 {
 	m_dTokens.Reserve ( 1024 );
 	m_sBuffer = pData;
@@ -496,6 +520,9 @@ void ExcerptGen_c::TokenizeDocument ( char * pData, CSphDict * pDict, ISphTokeni
 
 	const char * pStartPtr = pTokenizer->GetBufferPtr ();
 	const char * pLastTokenEnd = pStartPtr;
+
+	if ( bRetainHtml )
+		pTokenizer->AddSpecials ( "<" );
 
 	BYTE * sWord;
 	DWORD uPosition = 0; // hit position in document
@@ -508,7 +535,20 @@ void ExcerptGen_c::TokenizeDocument ( char * pData, CSphDict * pDict, ISphTokeni
 				pTokenStart - pLastTokenEnd,
 				pTokenizer->GetBoundary() ? pTokenizer->GetBoundaryOffset() : -1 );
 
-		SphWordID_t iWord = pDict->GetWordID ( sWord );
+		if ( bRetainHtml && *pTokenStart=='<' )
+		{
+			int iTagEnd = FindTagEnd ( pTokenStart );
+			if ( iTagEnd!=-1 )
+			{
+				assert ( pTokenStart+iTagEnd<pTokenizer->GetBufferEnd() );
+				AddJunk ( pTokenStart-pStartPtr, iTagEnd+1, pTokenizer->GetBoundary() ? pTokenizer->GetBoundaryOffset() : -1 );
+				pTokenizer->SetBufferPtr ( pTokenStart+iTagEnd+1 );
+				pLastTokenEnd = pTokenStart+iTagEnd+1; // fix it up to prevent adding last chunk on exit
+				continue;
+			}
+		}
+
+		SphWordID_t iWord = iWord = pDict->GetWordID ( sWord );
 
 		pLastTokenEnd = pTokenizer->GetTokenEnd ();
 
@@ -789,7 +829,6 @@ void ExcerptGen_c::ResultEmit ( const char * sLine, int iPassageId )
 					m_iResultLen++;
 				}
 				sLine += 12; // skip zee macro
-		
 			} else
 			{
 				assert ( (*(BYTE*)sLine)<128 );
@@ -1052,7 +1091,7 @@ bool ExcerptGen_c::HighlightBestPassages ( ExcerptQuery_t & tQuery )
 	ARRAY_FOREACH ( i, m_dPassages )
 		dWeights[i] = m_dPassages[i].m_iQwordsWeight;
 
-	int iMaxPassages = tQuery.m_iLimitPassages 
+	int iMaxPassages = tQuery.m_iLimitPassages
 		? Min ( m_dPassages.GetLength(), tQuery.m_iLimitPassages )
 		: m_dPassages.GetLength();
 
@@ -1270,6 +1309,13 @@ bool ExcerptGen_c::HighlightBestPassages ( ExcerptQuery_t & tQuery )
 
 char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphIndex *pIndex, CSphString & sError )
 {
+	if ( tOptions.m_sStripMode=="retain"
+		&& !( tOptions.m_iLimit==0 && tOptions.m_iLimitPassages==0 && tOptions.m_iLimitWords==0 ) )
+	{
+		sError = "html_strip_mode=retain requires that all limits are zero";
+		return NULL;
+	}
+
 	if ( !tOptions.m_sWords.cstr()[0] )
 		tOptions.m_bHighlightQuery = false;
 
@@ -1305,7 +1351,7 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 		// legacy highlighting
 		ExcerptGen_c tGenerator;
 		tGenerator.TokenizeQuery ( tOptions, pDict, pTokenizer );
-		tGenerator.TokenizeDocument ( pData, pDict, pTokenizer, true );
+		tGenerator.TokenizeDocument ( pData, pDict, pTokenizer, true, tOptions.m_sStripMode=="retain" );
 		return tGenerator.BuildExcerpt ( tOptions, pDict, pTokenizer );
 	}
 
@@ -1321,7 +1367,7 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 	SnippetsQwordSetup tSetup ( &tGenerator, pTokenizer );
 	CSphString sWarning;
 
-	tGenerator.TokenizeDocument ( pData, pDict, pTokenizer, false );
+	tGenerator.TokenizeDocument ( pData, pDict, pTokenizer, false, tOptions.m_sStripMode=="retain" );
 
 	tSetup.m_pDict = pDict;
 	tSetup.m_pIndex = pIndex;

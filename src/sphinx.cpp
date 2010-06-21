@@ -3892,6 +3892,7 @@ BYTE * CSphTokenizer_SBCS::GetToken ()
 				m_iLastTokenLen = m_iAccum;
 				m_sAccum[m_iAccum] = '\0';
 				m_pCur--;
+				m_pTokenEnd--;
 			}
 
 			m_iAccum = 0;

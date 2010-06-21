@@ -256,6 +256,8 @@ void SafeClose ( int & iFD );
 
 void sphDoStatsOrder ( const struct XQNode_t * pNode, CSphQueryResultMeta & tResult );
 
+const BYTE * SkipQuoted ( const BYTE * p );
+
 //////////////////////////////////////////////////////////////////////////
 
 /// memory tracker

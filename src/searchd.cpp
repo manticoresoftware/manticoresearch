@@ -6073,6 +6073,13 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 		q.m_iLimitPassages = tReq.GetInt();
 		q.m_iLimitWords = tReq.GetInt();
 		q.m_iPassageId = tReq.GetInt();
+		q.m_sStripMode = tReq.GetString();
+		if ( q.m_sStripMode!="none" && q.m_sStripMode!="index" && q.m_sStripMode!="strip" && q.m_sStripMode!="retain" )
+		{
+			tReq.SendErrorReply ( "unknown html_strip_mode=%s", q.m_sStripMode.cstr() );
+			pServed->Unlock();
+			return;
+		}
 	}
 
 	q.m_bRemoveSpaces = ( iFlags & EXCERPT_FLAG_REMOVESPACES )!=0;
@@ -6105,17 +6112,21 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 		}
 
 		const CSphIndexSettings & tSettings = pIndex->GetSettings ();
-		if ( tSettings.m_bHtmlStrip )
+		if ( q.m_sStripMode=="strip"
+			|| ( q.m_sStripMode=="index" && tSettings.m_bHtmlStrip ) )
 		{
 			CSphString sError;
 			CSphHTMLStripper tStripper;
-			if (
-				!tStripper.SetIndexedAttrs ( tSettings.m_sHtmlIndexAttrs.cstr (), sError ) ||
-				!tStripper.SetRemovedElements ( tSettings.m_sHtmlRemoveElements.cstr (), sError ) )
+			if ( q.m_sStripMode=="index" )
 			{
-				tReq.SendErrorReply ( "HTML stripper config error: %s", sError.cstr() );
-				pServed->Unlock();
-				return;
+				if (
+					!tStripper.SetIndexedAttrs ( tSettings.m_sHtmlIndexAttrs.cstr (), sError ) ||
+					!tStripper.SetRemovedElements ( tSettings.m_sHtmlRemoveElements.cstr (), sError ) )
+				{
+					tReq.SendErrorReply ( "HTML stripper config error: %s", sError.cstr() );
+					pServed->Unlock();
+					return;
+				}
 			}
 			tStripper.Strip ( (BYTE*)q.m_sSource.cstr() );
 		}
@@ -6948,7 +6959,7 @@ void * MysqlPack ( void * pBuffer, int iValue )
 		return (void*)pOutput;
 	}
 
-	if ( iValue <= 0xFFFF )
+	if ( iValue<=0xFFFF )
 	{
 		*pOutput++ = '\xFC';
 		*pOutput++ = (char)iValue;
@@ -6956,7 +6967,7 @@ void * MysqlPack ( void * pBuffer, int iValue )
 		return (void*)pOutput;
 	}
 
-	if ( iValue <= 0xFFFFFF )
+	if ( iValue<=0xFFFFFF )
 	{
 		*pOutput++ = '\xFD';
 		*pOutput++ = (char)iValue;

@@ -145,6 +145,7 @@ typedef struct st_sphinx_excerpt_options
 	const char *			before_match;
 	const char *			after_match;
 	const char *			chunk_separator;
+	const char *			html_strip_mode;
 
 	int						limit;
 	int						limit_passages;

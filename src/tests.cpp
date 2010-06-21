@@ -292,6 +292,22 @@ void TestTokenizer ( bool bUTF8 )
 		assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "testing" ) ); assert ( pTokenizer->GetBoundary() );
 		assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "boundaries" ) ); assert ( !pTokenizer->GetBoundary() );
 
+		// test specials vs token start/end ptrs
+		char sLine6[] = "abc!def";
+		pTokenizer->SetBuffer ( (BYTE*)sLine6, strlen(sLine6) );
+
+		assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "abc" ) );
+		assert ( *pTokenizer->GetTokenStart()=='a' );
+		assert ( *pTokenizer->GetTokenEnd()=='!' );
+
+		assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "!" ) );
+		assert ( *pTokenizer->GetTokenStart()=='!' );
+		assert ( *pTokenizer->GetTokenEnd()=='d' );
+
+		assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "def" ) );
+		assert ( *pTokenizer->GetTokenStart()=='d' );
+		assert ( *pTokenizer->GetTokenEnd()=='\0' );
+
 		// done
 		SafeDelete ( pTokenizer );
 	}

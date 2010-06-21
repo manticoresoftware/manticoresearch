@@ -18,6 +18,7 @@
 #include "sphinxutils.h"
 #include "sphinxsearch.h"
 #include "sphinxquery.h"
+#include "sphinxint.h"
 
 #include <ctype.h>
 
@@ -38,7 +39,7 @@ public:
 	char *	BuildExcerpt ( ExcerptQuery_t &, CSphDict * pDict, ISphTokenizer * pTokenizer );
 
 	void	TokenizeQuery ( const ExcerptQuery_t &, CSphDict * pDict, ISphTokenizer * pTokenizer );
-	void	TokenizeDocument ( const ExcerptQuery_t &, CSphDict * pDict, ISphTokenizer * pTokenizer, bool bFillMasks );
+	void	TokenizeDocument ( char * pData, CSphDict * pDict, ISphTokenizer * pTokenizer, bool bFillMasks );
 
 	void	SetMarker ( CSphHitMarker * pMarker ) { m_pMarker = pMarker; }
 
@@ -486,12 +487,12 @@ void ExcerptGen_c::TokenizeQuery ( const ExcerptQuery_t & tQuery, CSphDict * pDi
 	}
 }
 
-void ExcerptGen_c::TokenizeDocument ( const ExcerptQuery_t & tQuery, CSphDict * pDict, ISphTokenizer * pTokenizer, bool bFillMasks )
+void ExcerptGen_c::TokenizeDocument ( char * pData, CSphDict * pDict, ISphTokenizer * pTokenizer, bool bFillMasks )
 {
 	m_dTokens.Reserve ( 1024 );
-	m_sBuffer = tQuery.m_sSource;
+	m_sBuffer = pData;
 
-	pTokenizer->SetBuffer ( (BYTE *)tQuery.m_sSource.cstr (), strlen ( tQuery.m_sSource.cstr () ) );
+	pTokenizer->SetBuffer ( (BYTE*)pData, strlen(pData) );
 
 	const char * pStartPtr = pTokenizer->GetBufferPtr ();
 	const char * pLastTokenEnd = pStartPtr;
@@ -1272,12 +1273,39 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 	if ( !tOptions.m_sWords.cstr()[0] )
 		tOptions.m_bHighlightQuery = false;
 
+	char * pData = const_cast<char*> ( tOptions.m_sSource.cstr() );
+	CSphScopedPtr<BYTE> pBuffer ( NULL );
+
+	if ( tOptions.m_bLoadFiles )
+	{
+		CSphAutofile tFile;
+		if ( tFile.Open ( tOptions.m_sSource.cstr(), SPH_O_READ, sError )<0 )
+			return NULL;
+
+		// will this ever trigger? time will tell; email me if it does!
+		if ( tFile.GetSize() >= (SphOffset_t)INT_MAX )
+		{
+			sError.SetSprintf ( "%s too big for snippet (over 2 GB)", pData );
+			return NULL;
+		}
+
+		int iFileSize = (int)tFile.GetSize();
+		if ( iFileSize<=0 )
+			return "";
+
+		pBuffer = new BYTE [ iFileSize ];
+		if ( !tFile.Read ( pBuffer.Ptr(), iFileSize, sError ) )
+			return NULL;
+
+		pData = (char*) pBuffer.Ptr();
+	}
+
 	if ( !tOptions.m_bHighlightQuery )
 	{
 		// legacy highlighting
 		ExcerptGen_c tGenerator;
 		tGenerator.TokenizeQuery ( tOptions, pDict, pTokenizer );
-		tGenerator.TokenizeDocument ( tOptions, pDict, pTokenizer, true );
+		tGenerator.TokenizeDocument ( pData, pDict, pTokenizer, true );
 		return tGenerator.BuildExcerpt ( tOptions, pDict, pTokenizer );
 	}
 
@@ -1293,7 +1321,7 @@ char * sphBuildExcerpt ( ExcerptQuery_t & tOptions, CSphDict * pDict, ISphTokeni
 	SnippetsQwordSetup tSetup ( &tGenerator, pTokenizer );
 	CSphString sWarning;
 
-	tGenerator.TokenizeDocument ( tOptions, pDict, pTokenizer, false );
+	tGenerator.TokenizeDocument ( pData, pDict, pTokenizer, false );
 
 	tSetup.m_pDict = pDict;
 	tSetup.m_pIndex = pIndex;

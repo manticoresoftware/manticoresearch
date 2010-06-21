@@ -86,8 +86,37 @@ protected:
 	virtual void	Flush ();
 };
 
-/// forward ref
-class CSphAutofile;
+
+
+/// file which closes automatically when going out of scope
+class CSphAutofile : ISphNoncopyable
+{
+protected:
+	int			m_iFD;			///< my file descriptior
+	CSphString	m_sFilename;	///< my file name
+	bool		m_bTemporary;	///< whether to unlink this file on Close()
+
+	CSphIndex::ProgressCallback_t *		m_pProgress; ///< for displaying progress
+	CSphIndexProgress *					m_pStat;
+
+public:
+					CSphAutofile ();
+					CSphAutofile ( const CSphString & sName, int iMode, CSphString & sError, bool bTemp=false );
+					~CSphAutofile ();
+
+	int				Open ( const CSphString & sName, int iMode, CSphString & sError, bool bTemp=false );
+	void			Close ();
+
+public:
+	int				GetFD () const { return m_iFD; }
+	const char *	GetFilename () const;
+	SphOffset_t		GetSize ( SphOffset_t iMinSize, bool bCheckSizeT, CSphString & sError );
+	SphOffset_t		GetSize ();
+
+	bool			Read ( void * pBuf, size_t uCount, CSphString & sError );
+	void			SetProgressCallback ( CSphIndex::ProgressCallback_t * pfnProgress, CSphIndexProgress * pStat );
+};
+
 
 /// file reader with read buffering and int decoder
 class CSphReader

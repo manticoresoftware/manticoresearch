@@ -6041,6 +6041,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	const int EXCERPT_FLAG_WEIGHTORDER		= 16;
 	const int EXCERPT_FLAG_QUERY			= 32;
 	const int EXCERPT_FLAG_FORCE_ALL_WORDS	= 64;
+	const int EXCERPT_FLAG_LOAD_FILES		= 128;
 
 	// v.1.1
 	ExcerptQuery_t q;
@@ -6082,6 +6083,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	q.m_bForceAllWords = ( iFlags & EXCERPT_FLAG_FORCE_ALL_WORDS )!=0;
 	if ( iFlags & EXCERPT_FLAG_SINGLEPASSAGE )
 		q.m_iLimitPassages = 1;
+	q.m_bLoadFiles = ( iFlags & EXCERPT_FLAG_LOAD_FILES )!=0;
 
 	int iCount = tReq.GetInt ();
 	if ( iCount<0 || iCount>EXCERPT_MAX_ENTRIES )

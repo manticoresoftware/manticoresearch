@@ -147,12 +147,18 @@ typedef struct st_sphinx_excerpt_options
 	const char *			chunk_separator;
 
 	int						limit;
+	int						limit_passages;
+	int						limit_words;
 	int						around;
+	int						start_passage_id;
 
 	sphinx_bool				exact_phrase;
 	sphinx_bool				single_passage;
 	sphinx_bool				use_boundaries;
 	sphinx_bool				weight_order;
+	sphinx_bool				query_mode;
+	sphinx_bool				force_all_words;
+	sphinx_bool				load_files;
 } sphinx_excerpt_options;
 
 

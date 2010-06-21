@@ -505,154 +505,144 @@ static void GetFileStats ( const char * szFilename, CSphSavedFile & tInfo );
 // INTERNAL SPHINX CLASSES DECLARATIONS
 /////////////////////////////////////////////////////////////////////////////
 
-/// file which closes automatically when going out of scope
-class CSphAutofile : ISphNoncopyable
+CSphAutofile::CSphAutofile ()
+	: m_iFD ( -1 )
+	, m_bTemporary ( false )
+	, m_pProgress ( NULL )
+	, m_pStat ( NULL )
 {
-protected:
-	int			m_iFD;			///< my file descriptior
-	CSphString	m_sFilename;	///< my file name
-	bool		m_bTemporary;	///< whether to unlink this file on Close()
+}
 
-	CSphIndex::ProgressCallback_t *		m_pProgress; ///< for displaying progress
-	CSphIndexProgress *					m_pStat;
 
-public:
-	CSphAutofile ()
-		: m_iFD ( -1 )
-		, m_bTemporary ( false )
-		, m_pProgress ( NULL )
-		, m_pStat ( NULL )
+CSphAutofile::CSphAutofile ( const CSphString & sName, int iMode, CSphString & sError, bool bTemp )
+	: m_iFD ( -1 )
+	, m_bTemporary ( false )
+	, m_pProgress ( NULL )
+	, m_pStat ( NULL )
+{
+	Open ( sName, iMode, sError, bTemp );
+}
+
+
+CSphAutofile::~CSphAutofile ()
+{
+	Close ();
+}
+
+
+int CSphAutofile::Open ( const CSphString & sName, int iMode, CSphString & sError, bool bTemp )
+{
+	assert ( m_iFD==-1 && m_sFilename.IsEmpty () );
+	assert ( !sName.IsEmpty() );
+
+	m_iFD = ::open ( sName.cstr(), iMode, 0644 );
+	m_sFilename = sName; // not exactly sure why is this uncoditional. for error reporting later, i suppose
+
+	if ( m_iFD<0 )
+		sError.SetSprintf ( "failed to open %s: %s", sName.cstr(), strerror(errno) );
+	else
+		m_bTemporary = bTemp; // only if we managed to actually open it
+
+	return m_iFD;
+}
+
+
+void CSphAutofile::Close ()
+{
+	if ( m_iFD>=0 )
 	{
+		::close ( m_iFD );
+		if ( m_bTemporary )
+			::unlink ( m_sFilename.cstr() );
 	}
 
-	CSphAutofile ( const CSphString & sName, int iMode, CSphString & sError, bool bTemp=false )
-		: m_iFD ( -1 )
-		, m_bTemporary ( false )
-		, m_pProgress ( NULL )
-		, m_pStat ( NULL )
+	m_iFD = -1;
+	m_sFilename = "";
+	m_bTemporary = false;
+}
+
+
+const char * CSphAutofile::GetFilename () const
+{
+	assert ( m_sFilename.cstr() );
+	return m_sFilename.cstr();
+}
+
+
+SphOffset_t CSphAutofile::GetSize ( SphOffset_t iMinSize, bool bCheckSizeT, CSphString & sError )
+{
+	struct_stat st;
+	if ( stat ( GetFilename(), &st )<0 )
 	{
-		Open ( sName, iMode, sError, bTemp );
+		sError.SetSprintf ( "failed to stat %s: %s", GetFilename(), strerror(errno) );
+		return -1;
 	}
-
-	~CSphAutofile ()
+	if ( st.st_size<iMinSize )
 	{
-		Close ();
+		sError.SetSprintf ( "failed to load %s: bad size "INT64_FMT" (at least "INT64_FMT" bytes expected)",
+			GetFilename(), (int64_t)st.st_size, (int64_t)iMinSize );
+		return -1;
 	}
-
-	int Open ( const CSphString & sName, int iMode, CSphString & sError, bool bTemp=false )
+	if ( bCheckSizeT )
 	{
-		assert ( m_iFD==-1 && m_sFilename.IsEmpty () );
-		assert ( !sName.IsEmpty() );
-
-		m_iFD = ::open ( sName.cstr(), iMode, 0644 );
-		m_sFilename = sName; // not exactly sure why is this uncoditional. for error reporting later, i suppose
-
-		if ( m_iFD<0 )
-			sError.SetSprintf ( "failed to open %s: %s", sName.cstr(), strerror(errno) );
-		else
-			m_bTemporary = bTemp; // only if we managed to actually open it
-
-		return m_iFD;
-	}
-
-	void Close ()
-	{
-		if ( m_iFD>=0 )
+		size_t sCheck = (size_t)st.st_size;
+		if ( st.st_size!=SphOffset_t(sCheck) )
 		{
-			::close ( m_iFD );
-			if ( m_bTemporary )
-				::unlink ( m_sFilename.cstr() );
-		}
-
-		m_iFD = -1;
-		m_sFilename = "";
-		m_bTemporary = false;
-	}
-
-public:
-	int GetFD () const
-	{
-		return m_iFD;
-	}
-
-	const char * GetFilename () const
-	{
-		assert ( m_sFilename.cstr() );
-		return m_sFilename.cstr();
-	}
-
-	SphOffset_t GetSize ( SphOffset_t iMinSize, bool bCheckSizeT, CSphString & sError )
-	{
-		struct_stat st;
-		if ( stat ( GetFilename(), &st )<0 )
-		{
-			sError.SetSprintf ( "failed to stat %s: %s", GetFilename(), strerror(errno) );
+			sError.SetSprintf ( "failed to load %s: bad size "INT64_FMT" (out of size_t; 4 GB limit on 32-bit machine hit?)",
+				GetFilename(), (int64_t)st.st_size );
 			return -1;
 		}
-		if ( st.st_size<iMinSize )
-		{
-			sError.SetSprintf ( "failed to load %s: bad size "INT64_FMT" (at least "INT64_FMT" bytes expected)",
-				GetFilename(), (int64_t)st.st_size, (int64_t)iMinSize );
-			return -1;
-		}
-		if ( bCheckSizeT )
-		{
-			size_t sCheck = (size_t)st.st_size;
-			if ( st.st_size!=SphOffset_t(sCheck) )
-			{
-				sError.SetSprintf ( "failed to load %s: bad size "INT64_FMT" (out of size_t; 4 GB limit on 32-bit machine hit?)",
-					GetFilename(), (int64_t)st.st_size );
-				return -1;
-			}
-		}
-		return st.st_size;
 	}
+	return st.st_size;
+}
 
-	SphOffset_t GetSize ()
+
+SphOffset_t CSphAutofile::GetSize ()
+{
+	CSphString sTmp;
+	return GetSize ( 0, false, sTmp );
+}
+
+
+bool CSphAutofile::Read ( void * pBuf, size_t uCount, CSphString & sError )
+{
+	int64_t iCount = (int64_t) uCount;
+	int64_t iToRead = iCount;
+	BYTE * pCur = (BYTE *)pBuf;
+	while ( iToRead>0 )
 	{
-		CSphString sTmp;
-		return GetSize ( 0, false, sTmp );
-	}
+		int64_t iToReadOnce = ( m_pProgress && m_pStat )
+			? Min ( SPH_READ_PROGRESS_CHUNK, iToRead )
+			: Min ( SPH_READ_NOPROGRESS_CHUNK, iToRead );
+		int64_t iGot = (int64_t) sphRead ( GetFD(), pCur, (size_t)iToReadOnce );
+		if ( iGot<=0 )
+			break;
 
-	bool Read ( void * pBuf, size_t uCount, CSphString & sError )
-	{
-		int64_t iCount = (int64_t) uCount;
-		int64_t iToRead = iCount;
-		BYTE * pCur = (BYTE *)pBuf;
-		while ( iToRead>0 )
+		iToRead -= iGot;
+		pCur += iGot;
+
+		if ( m_pProgress && m_pStat )
 		{
-			int64_t iToReadOnce = ( m_pProgress && m_pStat )
-				? Min ( SPH_READ_PROGRESS_CHUNK, iToRead )
-				: Min ( SPH_READ_NOPROGRESS_CHUNK, iToRead );
-			int64_t iGot = (int64_t) sphRead ( GetFD(), pCur, (size_t)iToReadOnce );
-			if ( iGot<=0 )
-				break;
-
-			iToRead -= iGot;
-			pCur += iGot;
-
-			if ( m_pProgress && m_pStat )
-			{
-				m_pStat->m_iBytes += iGot;
-				m_pProgress ( m_pStat, false );
-			}
+			m_pStat->m_iBytes += iGot;
+			m_pProgress ( m_pStat, false );
 		}
-
-		if ( iToRead!=0 )
-		{
-			sError.SetSprintf ( "read error in %s; "INT64_FMT" of "INT64_FMT" bytes read",
-				GetFilename(), iCount-iToRead, iCount );
-			return false;
-		}
-		return true;
 	}
 
-	void SetProgressCallback ( CSphIndex::ProgressCallback_t * pfnProgress, CSphIndexProgress * pStat )
+	if ( iToRead!=0 )
 	{
-		m_pProgress = pfnProgress;
-		m_pStat = pStat;
+		sError.SetSprintf ( "read error in %s; "INT64_FMT" of "INT64_FMT" bytes read",
+			GetFilename(), iCount-iToRead, iCount );
+		return false;
 	}
-};
+	return true;
+}
+
+
+void CSphAutofile::SetProgressCallback ( CSphIndex::ProgressCallback_t * pfnProgress, CSphIndexProgress * pStat )
+{
+	m_pProgress = pfnProgress;
+	m_pStat = pStat;
+}
 
 /////////////////////////////////////////////////////////////////////////////
 

@@ -70,7 +70,7 @@ enum
 
 enum
 {
-	VER_COMMAND_EXCERPT			= 0x100,
+	VER_COMMAND_EXCERPT			= 0x102,
 	VER_COMMAND_UPDATE			= 0x101,
 	VER_COMMAND_KEYWORDS		= 0x100,
 	VER_COMMAND_STATUS			= 0x100
@@ -1858,12 +1858,16 @@ void sphinx_init_excerpt_options ( sphinx_excerpt_options * opts )
 	opts->chunk_separator	= NULL;
 
 	opts->limit				= 0;
+	opts->limit_passages	= 0;
+	opts->limit_words		= 0;
 	opts->around			= 0;
+	opts->start_passage_id	= 1;
 
 	opts->exact_phrase		= SPH_FALSE;
 	opts->single_passage	= SPH_FALSE;
 	opts->use_boundaries	= SPH_FALSE;
 	opts->weight_order		= SPH_FALSE;
+	opts->load_files		= SPH_FALSE;
 }
 
 
@@ -1891,13 +1895,19 @@ char ** sphinx_build_excerpts ( sphinx_client * client, int num_docs, const char
 		opt.chunk_separator		= opts->chunk_separator ? opts->chunk_separator : " ... ";
 
 		opt.limit				= opts->limit>0 ? opts->limit : 256;
+		opt.limit_passages		= opts->limit_passages;
+		opt.limit_words			= opts->limit_words;
 		opt.around				= opts->around>0 ? opts->around : 5;
+		opt.start_passage_id	= opts->start_passage_id;
 
 		opt.exact_phrase		= opts->exact_phrase;
 		opt.single_passage		= opts->single_passage;
 		opt.use_boundaries		= opts->use_boundaries;
 		opt.weight_order		= opts->weight_order;
-	} else {
+		opt.load_files			= opts->load_files;
+
+	} else
+	{
 		opt.before_match		= "<b>";
 		opt.after_match			= "</b>";
 		opt.chunk_separator		= " ... ";
@@ -1907,7 +1917,7 @@ char ** sphinx_build_excerpts ( sphinx_client * client, int num_docs, const char
 	}
 
 	// alloc buffer
-	req_len = (int)( 40 + strlen(index) + strlen(words) + strlen(opt.before_match) + strlen(opt.after_match) + strlen(opt.chunk_separator) );
+	req_len = (int)( 52 + strlen(index) + strlen(words) + strlen(opt.before_match) + strlen(opt.after_match) + strlen(opt.chunk_separator) );
 	for ( i=0; i<num_docs; i++ )
 		req_len += (int)( 4 + safestrlen(docs[i]) );
 
@@ -1930,6 +1940,9 @@ char ** sphinx_build_excerpts ( sphinx_client * client, int num_docs, const char
 	if ( opt.single_passage )	flags |= 4;
 	if ( opt.use_boundaries )	flags |= 8;
 	if ( opt.weight_order )		flags |= 16;
+	if ( opt.query_mode )		flags |= 32;
+	if ( opt.force_all_words )	flags |= 64;
+	if ( opt.load_files )		flags |= 128;
 
 	send_int ( &req, 0 );
 	send_int ( &req, flags );
@@ -1941,6 +1954,10 @@ char ** sphinx_build_excerpts ( sphinx_client * client, int num_docs, const char
 	send_str ( &req, opt.chunk_separator );
 	send_int ( &req, opt.limit );
 	send_int ( &req, opt.around );
+
+	send_int ( &req, opt.limit_passages ); // v1.2
+	send_int ( &req, opt.limit_words );
+	send_int ( &req, opt.start_passage_id );
 
 	send_int ( &req, num_docs );
 	for ( i=0; i<num_docs; i++ )

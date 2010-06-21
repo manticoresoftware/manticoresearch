@@ -22,7 +22,7 @@
 /// everything string is expected to be UTF-8
 struct ExcerptQuery_t
 {
-	CSphString		m_sSource;			///< source text
+	CSphString		m_sSource;			///< source text (or file name, see m_bLoadFiles)
 	CSphString		m_sWords;			///< words themselves
 	CSphString		m_sBeforeMatch;		///< string to insert before each match
 	CSphString		m_sAfterMatch;		///< string to insert after each match
@@ -38,6 +38,7 @@ struct ExcerptQuery_t
 	bool			m_bHighlightQuery;	///< whether try to highlight the whole query, or always word-by-word
 	bool			m_bForceAllWords;	///< whether to ignore limit until all needed keywords are highlighted (#448)
 	int				m_iPassageId;		///< current %PASSAGE_ID% counter value (must start at 1)
+	bool			m_bLoadFiles;		///< whether to interpret source as text or file name
 
 public:
 	ExcerptQuery_t ()
@@ -55,6 +56,7 @@ public:
 		, m_bHighlightQuery ( false )
 		, m_bForceAllWords ( false )
 		, m_iPassageId ( 1 )
+		, m_bLoadFiles ( false )
 	{
 	}
 };

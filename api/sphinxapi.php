@@ -31,7 +31,7 @@ define ( "SEARCHD_COMMAND_FLUSHATTRS",	7 );
 
 /// current client-side command implementation versions
 define ( "VER_COMMAND_SEARCH",		0x117 );
-define ( "VER_COMMAND_EXCERPT",		0x101 );
+define ( "VER_COMMAND_EXCERPT",		0x102 );
 define ( "VER_COMMAND_UPDATE",		0x102 );
 define ( "VER_COMMAND_KEYWORDS",	0x100 );
 define ( "VER_COMMAND_STATUS",		0x100 );
@@ -1312,6 +1312,8 @@ class SphinxClient
 		if ( !isset($opts["after_match"]) )			$opts["after_match"] = "</b>";
 		if ( !isset($opts["chunk_separator"]) )		$opts["chunk_separator"] = " ... ";
 		if ( !isset($opts["limit"]) )				$opts["limit"] = 256;
+		if ( !isset($opts["limit_passages"]) )		$opts["limit_passages"] = 0;
+		if ( !isset($opts["limit_words"]) )			$opts["limit_words"] = 0;
 		if ( !isset($opts["around"]) )				$opts["around"] = 5;
 		if ( !isset($opts["exact_phrase"]) )		$opts["exact_phrase"] = false;
 		if ( !isset($opts["single_passage"]) )		$opts["single_passage"] = false;
@@ -1319,12 +1321,13 @@ class SphinxClient
 		if ( !isset($opts["weight_order"]) )		$opts["weight_order"] = false;
 		if ( !isset($opts["query_mode"]) )			$opts["query_mode"] = false;
 		if ( !isset($opts["force_all_words"]) )		$opts["force_all_words"] = false;
+		if ( !isset($opts["start_passage_id"]) )	$opts["start_passage_id"] = 1;
 
 		/////////////////
 		// build request
 		/////////////////
 
-		// v.1.01 req
+		// v.1.2 req
 		$flags = 1; // remove spaces
 		if ( $opts["exact_phrase"] )	$flags |= 2;
 		if ( $opts["single_passage"] )	$flags |= 4;
@@ -1340,8 +1343,8 @@ class SphinxClient
 		$req .= pack ( "N", strlen($opts["before_match"]) ) . $opts["before_match"];
 		$req .= pack ( "N", strlen($opts["after_match"]) ) . $opts["after_match"];
 		$req .= pack ( "N", strlen($opts["chunk_separator"]) ) . $opts["chunk_separator"];
-		$req .= pack ( "N", (int)$opts["limit"] );
-		$req .= pack ( "N", (int)$opts["around"] );
+		$req .= pack ( "NN", (int)$opts["limit"], (int)$opts["around"] );
+		$req .= pack ( "NNN", (int)$opts["limit_passages"], (int)$opts["limit_words"], (int)$opts["start_passage_id"] ); // v.1.2
 
 		// documents
 		$req .= pack ( "N", count($docs) );

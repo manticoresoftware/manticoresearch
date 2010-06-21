@@ -35,7 +35,7 @@ public:
 							ExcerptGen_c ();
 							~ExcerptGen_c () {}
 
-	char *	BuildExcerpt ( const ExcerptQuery_t &, CSphDict * pDict, ISphTokenizer * pTokenizer );
+	char *	BuildExcerpt ( ExcerptQuery_t &, CSphDict * pDict, ISphTokenizer * pTokenizer );
 
 	void	TokenizeQuery ( const ExcerptQuery_t &, CSphDict * pDict, ISphTokenizer * pTokenizer );
 	void	TokenizeDocument ( const ExcerptQuery_t &, CSphDict * pDict, ISphTokenizer * pTokenizer, bool bFillMasks );
@@ -68,9 +68,10 @@ public:
 		int					m_iStart;		///< start token index
 		int					m_iTokens;		///< token count
 		int					m_iCodes;		///< codepoints count
-		DWORD				m_uWords;		///< matching query words mask
-		int					m_iWordsWeight;	///< passage weight factor
-		int					m_iWordCount;	///< passage weight factor
+		int					m_iWords;		///< words count
+		DWORD				m_uQwords;		///< matching query words mask
+		int					m_iQwordsWeight;///< passage weight factor
+		int					m_iQwordCount;	///< passage weight factor
 		union
 		{
 			struct
@@ -90,16 +91,16 @@ public:
 			m_iStart = 0;
 			m_iTokens = 0;
 			m_iCodes = 0;
-			m_uWords = 0;
-			m_iWordsWeight = 0;
-			m_iWordCount = 0;
+			m_uQwords = 0;
+			m_iQwordsWeight = 0;
+			m_iQwordCount = 0;
 			m_iMaxLCS = 0;
 			m_iMinGap = 0;
 		}
 
 		inline int GetWeight () const
 		{
-			return m_iWordCount + m_iWordsWeight*m_iMaxLCS + m_iMinGap;
+			return m_iQwordCount + m_iQwordsWeight*m_iMaxLCS + m_iMinGap;
 		}
 	};
 
@@ -132,7 +133,7 @@ protected:
 	bool					m_bExactPhrase;
 
 	DWORD					m_uFoundWords;	///< found words mask
-	int						m_iWordCount;
+	int						m_iQwordCount;
 	int						m_iLastWord;
 	CSphHitMarker *			m_pMarker;
 
@@ -144,12 +145,12 @@ protected:
 	bool					ExtractPassages ( const ExcerptQuery_t & q );
 	bool					ExtractPhrases ( const ExcerptQuery_t & q );
 
-	void					HighlightPhrase ( const ExcerptQuery_t & q, int iStart, int iEnd );
-	void					HighlightAll ( const ExcerptQuery_t & q );
-	void					HighlightStart ( const ExcerptQuery_t & q );
-	bool					HighlightBestPassages ( const ExcerptQuery_t & q );
+	void					HighlightPhrase ( ExcerptQuery_t & q, int iStart, int iEnd );
+	void					HighlightAll ( ExcerptQuery_t & q );
+	void					HighlightStart ( ExcerptQuery_t & q );
+	bool					HighlightBestPassages ( ExcerptQuery_t & q );
 
-	void					ResultEmit ( const char * sLine );
+	void					ResultEmit ( const char * sLine, int iPassageId=0 );
 	void					ResultEmit ( const Token_t & sTok );
 
 	void					AddJunk ( int iStart, int iLength, int iBoundary );
@@ -341,7 +342,7 @@ bool SnippetsQwordSetup::QwordSetup ( ISphQword * pQword ) const
 		assert ( "query word setup failed" && 0 );
 
 	pWord->m_iLastIndex = m_pGenerator->m_iLastWord;
-	pWord->m_uWordMask = 1 << (m_pGenerator->m_iWordCount++);
+	pWord->m_uWordMask = 1 << (m_pGenerator->m_iQwordCount++);
 	pWord->m_iWordLength = strlen ( pWord->m_sDictWord.cstr() );
 	pWord->m_dTokens = &(m_pGenerator->m_dTokens);
 	pWord->m_sBuffer = &(m_pGenerator->m_sBuffer);
@@ -378,7 +379,7 @@ inline bool operator < ( const ExcerptGen_c::Passage_t & a, const ExcerptGen_c::
 
 ExcerptGen_c::ExcerptGen_c ()
 {
-	m_iWordCount = 0;
+	m_iQwordCount = 0;
 	m_bExactPhrase = false;
 	m_pMarker = NULL;
 	m_uFoundWords = 0;
@@ -621,7 +622,7 @@ void ExcerptGen_c::MarkHits ()
 	}
 }
 
-char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & tQuery, CSphDict *, ISphTokenizer * pTokenizer )
+char * ExcerptGen_c::BuildExcerpt ( ExcerptQuery_t & tQuery, CSphDict *, ISphTokenizer * pTokenizer )
 {
 	if ( tQuery.m_bHighlightQuery )
 		MarkHits();
@@ -658,7 +659,8 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & tQuery, CSphDict *, I
 	m_iResultLen = 0;
 
 	// do highlighting
-	if ( tQuery.m_iLimit<=0 || tQuery.m_iLimit>iSourceCodes )
+	if ( ( tQuery.m_iLimit<=0 || tQuery.m_iLimit>iSourceCodes )
+		&& ( tQuery.m_iLimitWords<=0 || tQuery.m_iLimitWords>m_dWords.GetLength() ) )
 	{
 		HighlightAll ( tQuery );
 
@@ -678,7 +680,7 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & tQuery, CSphDict *, I
 }
 
 
-void ExcerptGen_c::HighlightPhrase ( const ExcerptQuery_t & q, int iTok, int iEnd )
+void ExcerptGen_c::HighlightPhrase ( ExcerptQuery_t & q, int iTok, int iEnd )
 {
 	while ( iTok<=iEnd )
 	{
@@ -709,15 +711,15 @@ void ExcerptGen_c::HighlightPhrase ( const ExcerptQuery_t & q, int iTok, int iEn
 			continue;
 		}
 
-		ResultEmit ( q.m_sBeforeMatch.cstr() );
+		ResultEmit ( q.m_sBeforeMatch.cstr(), q.m_iPassageId );
 		while ( iStart<iTok )
 			ResultEmit ( m_dTokens [ iStart++ ] );
-		ResultEmit ( q.m_sAfterMatch.cstr() );
+		ResultEmit ( q.m_sAfterMatch.cstr(), q.m_iPassageId++ );
 	}
 }
 
 
-void ExcerptGen_c::HighlightAll ( const ExcerptQuery_t & q )
+void ExcerptGen_c::HighlightAll ( ExcerptQuery_t & q )
 {
 	bool bOpen = false;
 	const int iMaxTok = m_dTokens.GetLength()-1; // skip last one, it's TOK_NONE
@@ -731,18 +733,21 @@ void ExcerptGen_c::HighlightAll ( const ExcerptQuery_t & q )
 		{
 			if ( ( m_dTokens[iTok].m_uWords!=0 ) ^ bOpen )
 			{
-				ResultEmit ( bOpen ? q.m_sAfterMatch.cstr() : q.m_sBeforeMatch.cstr() );
+				if ( bOpen )
+					ResultEmit ( q.m_sAfterMatch.cstr(), q.m_iPassageId++ );
+				else
+					ResultEmit ( q.m_sBeforeMatch.cstr(), q.m_iPassageId );
 				bOpen = !bOpen;
 			}
 			ResultEmit ( m_dTokens[iTok] );
 		}
 		if ( bOpen )
-			ResultEmit ( q.m_sAfterMatch.cstr() );
+			ResultEmit ( q.m_sAfterMatch.cstr(), q.m_iPassageId++ );
 	}
 }
 
 
-void ExcerptGen_c::HighlightStart ( const ExcerptQuery_t & q )
+void ExcerptGen_c::HighlightStart ( ExcerptQuery_t & q )
 {
 	// no matches found. just show the starting tokens
 	int i = 0;
@@ -755,13 +760,42 @@ void ExcerptGen_c::HighlightStart ( const ExcerptQuery_t & q )
 	ResultEmit ( q.m_sChunkSeparator.cstr() );
 }
 
-void ExcerptGen_c::ResultEmit ( const char * sLine )
+
+void ExcerptGen_c::ResultEmit ( const char * sLine, int iPassageId )
 {
-	while ( *sLine )
+	if ( !iPassageId )
 	{
-		assert ( (*(BYTE*)sLine)<128 );
-		m_dResult.Add ( *sLine++ );
-		m_iResultLen++;
+		// plain old emit
+		while ( *sLine )
+		{
+			assert ( (*(BYTE*)sLine)<128 );
+			m_dResult.Add ( *sLine++ );
+			m_iResultLen++;
+		}
+
+	} else
+	{
+		// emit with (our only) macro expansion
+		while ( *sLine )
+		{
+			if ( *sLine=='%' && strncmp ( sLine, "%PASSAGE_ID%", 12 )==0 )
+			{
+				char sBuf[16];
+				snprintf ( sBuf, sizeof(sBuf), "%d", iPassageId );
+				for ( const char * s = sBuf; *s; s++ )
+				{
+					m_dResult.Add ( *s );
+					m_iResultLen++;
+				}
+				sLine += 12; // skip zee macro
+		
+			} else
+			{
+				assert ( (*(BYTE*)sLine)<128 );
+				m_dResult.Add ( *sLine++ );
+				m_iResultLen++;
+			}
+		}
 	}
 }
 
@@ -783,7 +817,7 @@ void ExcerptGen_c::CalcPassageWeight ( const CSphVector<int> & dPassage, Passage
 	tPass.m_iMaxLCS = 1;
 
 	// calc everything
-	tPass.m_uWords = 0;
+	tPass.m_uQwords = 0;
 	tPass.m_iMinGap = iMaxWords-1;
 
 	ARRAY_FOREACH ( i, dPassage )
@@ -792,7 +826,7 @@ void ExcerptGen_c::CalcPassageWeight ( const CSphVector<int> & dPassage, Passage
 		assert ( tTok.m_eType==TOK_WORD );
 
 		// update mask
-		tPass.m_uWords |= tTok.m_uWords;
+		tPass.m_uQwords |= tTok.m_uWords;
 
 		// update LCS
 		uLast = tTok.m_uWords & ( uLast<<1 );
@@ -816,19 +850,19 @@ void ExcerptGen_c::CalcPassageWeight ( const CSphVector<int> & dPassage, Passage
 	assert ( tPass.m_iMinGap>=0 );
 
 	// calc final weight
-	tPass.m_iWordsWeight = 0;
-	tPass.m_iWordCount = 0;
+	tPass.m_iQwordsWeight = 0;
+	tPass.m_iQwordCount = 0;
 
-	DWORD uWords = tPass.m_uWords;
+	DWORD uWords = tPass.m_uQwords;
 	for ( int iWord=0; uWords; uWords >>= 1, iWord++ )
 		if ( uWords & 1 )
 	{
-		tPass.m_iWordsWeight += m_dWords[iWord].m_iWeight;
-		tPass.m_iWordCount++;
+		tPass.m_iQwordsWeight += m_dWords[iWord].m_iWeight;
+		tPass.m_iQwordCount++;
 	}
 
 	tPass.m_iMaxLCS *= iMaxWords;
-	tPass.m_iWordCount *= iWordCountCoeff;
+	tPass.m_iQwordCount *= iWordCountCoeff;
 }
 
 
@@ -871,7 +905,7 @@ bool ExcerptGen_c::ExtractPassages ( const ExcerptQuery_t & q )
 		if ( tToken.m_eType==TOK_WORD )
 		{
 			dPass.Add(i);
-			tPass.m_uWords |= tToken.m_uWords;
+			tPass.m_uQwords |= tToken.m_uWords;
 		}
 	}
 
@@ -881,17 +915,20 @@ bool ExcerptGen_c::ExtractPassages ( const ExcerptQuery_t & q )
 	{
 		// re-weight current passage, and check if it matches
 		CalcPassageWeight ( dPass, tPass, iMaxWords, 0 );
-		if ( tPass.m_uWords && tPass.m_iMaxLCS>=iLCSThresh )
+		tPass.m_iWords = dPass.GetLength();
+
+		if ( tPass.m_uQwords && tPass.m_iMaxLCS>=iLCSThresh )
 		{
 			// if it's the very first one, do add
 			if ( !m_dPassages.GetLength() )
+			{
 				m_dPassages.Add ( tPass );
-			else
+			} else
 			{
 				// check if it's new or better
 				Passage_t & tLast = m_dPassages.Last();
-				if ( tLast.m_uWords!=tPass.m_uWords || tLast.m_iStart + tLast.m_iTokens - 1 < tPass.m_iStart )
-					m_dPassages.Add ( tPass ); // new
+				if ( tLast.m_uQwords!=tPass.m_uQwords || tLast.m_iStart + tLast.m_iTokens - 1 < tPass.m_iStart )
+					m_dPassages.Add ( tPass );
 				else if ( tLast.GetWeight() < tPass.GetWeight() )
 					tLast = tPass; // better
 			}
@@ -966,7 +1003,10 @@ bool ExcerptGen_c::ExtractPhrases ( const ExcerptQuery_t & )
 
 				CalcPassageWeight ( dPass, tPass, iMaxWords, 10000 );
 				if ( tPass.m_iMaxLCS>=iLCSThresh )
+				{
+					tPass.m_iWords = dPass.GetLength();
 					m_dPassages.Add ( tPass );
+				}
 			}
 
 			if ( m_dTokens[iTok].m_eType==TOK_NONE )
@@ -994,7 +1034,7 @@ struct PassageOrder_fn
 };
 
 
-bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
+bool ExcerptGen_c::HighlightBestPassages ( ExcerptQuery_t & tQuery )
 {
 	assert ( m_dPassages.GetLength() );
 
@@ -1009,11 +1049,18 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 
 	CSphVector<int> dWeights ( m_dPassages.GetLength() );
 	ARRAY_FOREACH ( i, m_dPassages )
-		dWeights[i] = m_dPassages[i].m_iWordsWeight;
+		dWeights[i] = m_dPassages[i].m_iQwordsWeight;
 
-	bool bAll = false;
-	int iCount = tQuery.m_bSinglePassage ? 1 : m_dPassages.GetLength();
-	for ( int iPassage = 0; iPassage<iCount; iPassage++ )
+	int iMaxPassages = tQuery.m_iLimitPassages 
+		? Min ( m_dPassages.GetLength(), tQuery.m_iLimitPassages )
+		: m_dPassages.GetLength();
+
+	int iMaxWords = tQuery.m_iLimitWords ? tQuery.m_iLimitWords : INT_MAX;
+
+	bool bAll = false; // whether we displayed all the keywords
+	int iPassage = 0;
+	int iWords = 0;
+	for ( ; iPassage<iMaxPassages && iWords<iMaxWords; iPassage++ )
 	{
 		// get next best passage
 		int iBest = -1;
@@ -1036,7 +1083,8 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 
 		// save it
 		dShow.Add ( tBest );
-		uWords |= tBest.m_uWords;
+		uWords |= tBest.m_uQwords;
+		iWords += tBest.m_iWords;
 		iTotalCodes += tBest.m_iCodes;
 		tBest.m_iCodes = 0; // no longer needed here, abusing to mark displayed passages
 
@@ -1044,9 +1092,10 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 		{
 			bAll = true;
 			ARRAY_FOREACH ( i, m_dPassages )
-				m_dPassages[i].m_iWordsWeight = dWeights[i];
+				m_dPassages[i].m_iQwordsWeight = dWeights[i];
 		}
-		if ( bAll ) continue;
+		if ( bAll )
+			continue;
 
 		// re-weight passages, as we will show some of the query words, displaying other
 		// passages containing them is less significant
@@ -1054,11 +1103,11 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 		{
 			if ( !m_dPassages[i].m_iCodes )
 				continue;
-			DWORD uMask = tBest.m_uWords;
+			DWORD uMask = tBest.m_uQwords;
 			for ( int iWord=0; uMask; iWord++, uMask >>= 1 )
-				if ( ( uMask & 1 ) && ( m_dPassages[i].m_uWords & ( 1UL<<iWord ) ) )
-					m_dPassages[i].m_iWordsWeight -= m_dWords[iWord].m_iWeight;
-			m_dPassages[i].m_uWords &= ~uWords;
+				if ( ( uMask & 1 ) && ( m_dPassages[i].m_uQwords & ( 1UL<<iWord ) ) )
+					m_dPassages[i].m_iQwordsWeight -= m_dWords[iWord].m_iWeight;
+			m_dPassages[i].m_uQwords &= ~uWords;
 		}
 	}
 
@@ -1198,9 +1247,9 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 				{
 					if ( m_dTokens[iTok].m_uWords )
 					{
-						ResultEmit ( tQuery.m_sBeforeMatch.cstr() );
+						ResultEmit ( tQuery.m_sBeforeMatch.cstr(), tQuery.m_iPassageId );
 						ResultEmit ( m_dTokens[iTok] );
-						ResultEmit ( tQuery.m_sAfterMatch.cstr() );
+						ResultEmit ( tQuery.m_sAfterMatch.cstr(), tQuery.m_iPassageId++ );
 					} else
 						ResultEmit ( m_dTokens[iTok] );
 				}

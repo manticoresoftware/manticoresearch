@@ -357,7 +357,7 @@ enum SearchdCommand_e
 enum
 {
 	VER_COMMAND_SEARCH		= 0x117,
-	VER_COMMAND_EXCERPT		= 0x101,
+	VER_COMMAND_EXCERPT		= 0x102,
 	VER_COMMAND_UPDATE		= 0x102,
 	VER_COMMAND_KEYWORDS	= 0x100,
 	VER_COMMAND_STATUS		= 0x100,
@@ -6042,7 +6042,7 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	const int EXCERPT_FLAG_QUERY			= 32;
 	const int EXCERPT_FLAG_FORCE_ALL_WORDS	= 64;
 
-	// v.1.0
+	// v.1.1
 	ExcerptQuery_t q;
 
 	tReq.GetInt (); // mode field is for now reserved and ignored
@@ -6067,13 +6067,21 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq )
 	q.m_iLimit = tReq.GetInt ();
 	q.m_iAround = tReq.GetInt ();
 
+	if ( iVer>=0x102 )
+	{
+		q.m_iLimitPassages = tReq.GetInt();
+		q.m_iLimitWords = tReq.GetInt();
+		q.m_iPassageId = tReq.GetInt();
+	}
+
 	q.m_bRemoveSpaces = ( iFlags & EXCERPT_FLAG_REMOVESPACES )!=0;
 	q.m_bExactPhrase = ( iFlags & EXCERPT_FLAG_EXACTPHRASE )!=0;
-	q.m_bSinglePassage = ( iFlags & EXCERPT_FLAG_SINGLEPASSAGE )!=0;
 	q.m_bUseBoundaries = ( iFlags & EXCERPT_FLAG_USEBOUNDARIES )!=0;
 	q.m_bWeightOrder = ( iFlags & EXCERPT_FLAG_WEIGHTORDER )!=0;
 	q.m_bHighlightQuery = ( iFlags & EXCERPT_FLAG_QUERY )!=0;
 	q.m_bForceAllWords = ( iFlags & EXCERPT_FLAG_FORCE_ALL_WORDS )!=0;
+	if ( iFlags & EXCERPT_FLAG_SINGLEPASSAGE )
+		q.m_iLimitPassages = 1;
 
 	int iCount = tReq.GetInt ();
 	if ( iCount<0 || iCount>EXCERPT_MAX_ENTRIES )

@@ -36,7 +36,7 @@ public:
 							ExcerptGen_c ();
 							~ExcerptGen_c () {}
 
-	char *	BuildExcerpt ( ExcerptQuery_t &, CSphDict * pDict, ISphTokenizer * pTokenizer );
+	char *	BuildExcerpt ( const ExcerptQuery_t &, CSphDict * pDict, ISphTokenizer * pTokenizer );
 
 	void	TokenizeQuery ( const ExcerptQuery_t &, CSphDict * pDict, ISphTokenizer * pTokenizer );
 	void	TokenizeDocument ( char * pData, CSphDict * pDict, ISphTokenizer * pTokenizer, bool bFillMasks, bool bRetainHtml );
@@ -123,6 +123,8 @@ public:
 protected:
 	CSphVector<Token_t>		m_dTokens;		///< source text tokens
 	CSphVector<Token_t>		m_dWords;		///< query words tokens
+	int						m_iDocumentWords;
+	int						m_iPassageId;
 
 	CSphString				m_sBuffer;
 
@@ -146,10 +148,10 @@ protected:
 	bool					ExtractPassages ( const ExcerptQuery_t & q );
 	bool					ExtractPhrases ( const ExcerptQuery_t & q );
 
-	void					HighlightPhrase ( ExcerptQuery_t & q, int iStart, int iEnd );
-	void					HighlightAll ( ExcerptQuery_t & q );
-	void					HighlightStart ( ExcerptQuery_t & q );
-	bool					HighlightBestPassages ( ExcerptQuery_t & q );
+	void					HighlightPhrase ( const ExcerptQuery_t & q, int iStart, int iEnd );
+	void					HighlightAll ( const ExcerptQuery_t & q );
+	void					HighlightStart ( const ExcerptQuery_t & q );
+	bool					HighlightBestPassages ( const ExcerptQuery_t & q );
 
 	void					ResultEmit ( const char * sLine, int iPassageId=0 );
 	void					ResultEmit ( const Token_t & sTok );
@@ -513,6 +515,7 @@ static int FindTagEnd ( const char * sData )
 
 void ExcerptGen_c::TokenizeDocument ( char * pData, CSphDict * pDict, ISphTokenizer * pTokenizer, bool bFillMasks, bool bRetainHtml )
 {
+	m_iDocumentWords = 0;
 	m_dTokens.Reserve ( 1024 );
 	m_sBuffer = pData;
 
@@ -562,6 +565,8 @@ void ExcerptGen_c::TokenizeDocument ( char * pData, CSphDict * pDict, ISphTokeni
 		tLast.m_iLengthBytes = pLastTokenEnd - pTokenStart;
 		tLast.m_iWordID = iWord;
 		tLast.m_uWords = 0;
+		if ( iWord )
+			m_iDocumentWords++;
 
 		m_iLastWord = iWord ? m_dTokens.GetLength() - 1 : m_iLastWord;
 
@@ -663,8 +668,10 @@ void ExcerptGen_c::MarkHits ()
 	}
 }
 
-char * ExcerptGen_c::BuildExcerpt ( ExcerptQuery_t & tQuery, CSphDict *, ISphTokenizer * pTokenizer )
+char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & tQuery, CSphDict *, ISphTokenizer * pTokenizer )
 {
+	m_iPassageId = tQuery.m_iPassageId;
+
 	if ( tQuery.m_bHighlightQuery )
 		MarkHits();
 
@@ -701,7 +708,7 @@ char * ExcerptGen_c::BuildExcerpt ( ExcerptQuery_t & tQuery, CSphDict *, ISphTok
 
 	// do highlighting
 	if ( ( tQuery.m_iLimit<=0 || tQuery.m_iLimit>iSourceCodes )
-		&& ( tQuery.m_iLimitWords<=0 || tQuery.m_iLimitWords>m_dWords.GetLength() ) )
+		&& ( tQuery.m_iLimitWords<=0 || tQuery.m_iLimitWords>m_iDocumentWords ) )
 	{
 		HighlightAll ( tQuery );
 
@@ -721,7 +728,7 @@ char * ExcerptGen_c::BuildExcerpt ( ExcerptQuery_t & tQuery, CSphDict *, ISphTok
 }
 
 
-void ExcerptGen_c::HighlightPhrase ( ExcerptQuery_t & q, int iTok, int iEnd )
+void ExcerptGen_c::HighlightPhrase ( const ExcerptQuery_t & q, int iTok, int iEnd )
 {
 	while ( iTok<=iEnd )
 	{
@@ -752,15 +759,15 @@ void ExcerptGen_c::HighlightPhrase ( ExcerptQuery_t & q, int iTok, int iEnd )
 			continue;
 		}
 
-		ResultEmit ( q.m_sBeforeMatch.cstr(), q.m_iPassageId );
+		ResultEmit ( q.m_sBeforeMatch.cstr(), m_iPassageId );
 		while ( iStart<iTok )
 			ResultEmit ( m_dTokens [ iStart++ ] );
-		ResultEmit ( q.m_sAfterMatch.cstr(), q.m_iPassageId++ );
+		ResultEmit ( q.m_sAfterMatch.cstr(), m_iPassageId++ );
 	}
 }
 
 
-void ExcerptGen_c::HighlightAll ( ExcerptQuery_t & q )
+void ExcerptGen_c::HighlightAll ( const ExcerptQuery_t & q )
 {
 	bool bOpen = false;
 	const int iMaxTok = m_dTokens.GetLength()-1; // skip last one, it's TOK_NONE
@@ -775,20 +782,20 @@ void ExcerptGen_c::HighlightAll ( ExcerptQuery_t & q )
 			if ( ( m_dTokens[iTok].m_uWords!=0 ) ^ bOpen )
 			{
 				if ( bOpen )
-					ResultEmit ( q.m_sAfterMatch.cstr(), q.m_iPassageId++ );
+					ResultEmit ( q.m_sAfterMatch.cstr(), m_iPassageId++ );
 				else
-					ResultEmit ( q.m_sBeforeMatch.cstr(), q.m_iPassageId );
+					ResultEmit ( q.m_sBeforeMatch.cstr(), m_iPassageId );
 				bOpen = !bOpen;
 			}
 			ResultEmit ( m_dTokens[iTok] );
 		}
 		if ( bOpen )
-			ResultEmit ( q.m_sAfterMatch.cstr(), q.m_iPassageId++ );
+			ResultEmit ( q.m_sAfterMatch.cstr(), m_iPassageId++ );
 	}
 }
 
 
-void ExcerptGen_c::HighlightStart ( ExcerptQuery_t & q )
+void ExcerptGen_c::HighlightStart ( const ExcerptQuery_t & q )
 {
 	// no matches found. just show the starting tokens
 	int i = 0;
@@ -919,8 +926,9 @@ bool ExcerptGen_c::ExtractPassages ( const ExcerptQuery_t & q )
 	Passage_t tPass;
 	tPass.Reset ();
 
-	int iMaxWords = 2*q.m_iAround+1;
+	int iMaxWords = Min ( 2*q.m_iAround+1, q.m_iLimitWords );
 	int iLCSThresh = m_bExactPhrase ? m_dWords.GetLength()*iMaxWords : 0;
+	int iCpLimit = q.m_iLimit ? q.m_iLimit : INT_MAX;
 
 	// setup initial window
 	ARRAY_FOREACH ( i, m_dTokens )
@@ -935,7 +943,7 @@ bool ExcerptGen_c::ExtractPassages ( const ExcerptQuery_t & q )
 		}
 
 		// stop when the window is large enough
-		if ( tPass.m_iCodes + tToken.m_iLengthCP > q.m_iLimit || dPass.GetLength()==iMaxWords )
+		if ( ( tPass.m_iCodes + tToken.m_iLengthCP > iCpLimit ) || dPass.GetLength()==iMaxWords )
 			break;
 
 		// got token, update passage
@@ -994,7 +1002,7 @@ bool ExcerptGen_c::ExtractPassages ( const ExcerptQuery_t & q )
 			continue;
 
 		// drop front tokens until the window fits into both word and CP limits
-		while ( ( tPass.m_iCodes > q.m_iLimit || dPass.GetLength() > iMaxWords ) && tPass.m_iTokens!=1 )
+		while ( ( tPass.m_iCodes > iCpLimit || dPass.GetLength() > iMaxWords ) && tPass.m_iTokens!=1 )
 		{
 			if ( m_dTokens[tPass.m_iStart].m_eType==TOK_WORD )
 				dPass.Remove ( 0 );
@@ -1074,33 +1082,34 @@ struct PassageOrder_fn
 };
 
 
-bool ExcerptGen_c::HighlightBestPassages ( ExcerptQuery_t & tQuery )
+bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 {
 	assert ( m_dPassages.GetLength() );
 
-	/// select best passages
+	// needed for "slightly outta limit" check below
 	int iKeywordsLength = 0;
 	ARRAY_FOREACH ( i, m_dKeywords )
 		iKeywordsLength += m_dKeywords[i].m_iLength;
 
+	// our limits
+	int iMaxPassages = tQuery.m_iLimitPassages
+		? Min ( m_dPassages.GetLength(), tQuery.m_iLimitPassages )
+		: m_dPassages.GetLength();
+	int iMaxWords = tQuery.m_iLimitWords ? tQuery.m_iLimitWords : INT_MAX;
+	int iMaxCp = tQuery.m_iLimit ? tQuery.m_iLimit : INT_MAX;
+
+	// our best passages
 	CSphVector<Passage_t> dShow;
-	DWORD uWords = 0;
-	int iTotalCodes = 0;
+	DWORD uWords = 0; // mask of words in dShow so far
+	int iTotalCodes = 0; // 
+	int iTotalWords = 0;
 
 	CSphVector<int> dWeights ( m_dPassages.GetLength() );
 	ARRAY_FOREACH ( i, m_dPassages )
 		dWeights[i] = m_dPassages[i].m_iQwordsWeight;
 
-	int iMaxPassages = tQuery.m_iLimitPassages
-		? Min ( m_dPassages.GetLength(), tQuery.m_iLimitPassages )
-		: m_dPassages.GetLength();
-
-	int iMaxWords = tQuery.m_iLimitWords ? tQuery.m_iLimitWords : INT_MAX;
-
 	bool bAll = false; // whether we displayed all the keywords
-	int iPassage = 0;
-	int iWords = 0;
-	for ( ; iPassage<iMaxPassages && iWords<iMaxWords; iPassage++ )
+	while ( dShow.GetLength() < iMaxPassages )
 	{
 		// get next best passage
 		int iBest = -1;
@@ -1112,33 +1121,52 @@ bool ExcerptGen_c::HighlightBestPassages ( ExcerptQuery_t & tQuery )
 		assert ( iBest!=-1 );
 		Passage_t & tBest = m_dPassages[iBest];
 
-		// all words will be shown and we're outta limit
-		if ( uWords==m_uFoundWords && iTotalCodes + tBest.m_iCodes > tQuery.m_iLimit )
-		{
-			// there might be just enough space to partially display this passage
-			if ( ( iTotalCodes + iKeywordsLength )<=tQuery.m_iLimit )
-				dShow.Add ( tBest );
+		// does this passage fit the limits?
+		bool bFits = ( iTotalCodes + tBest.m_iCodes <= iMaxCp ) && ( iTotalWords + tBest.m_iWords <= iMaxWords );
+
+		// all words are already in the snippet, and we're starting to hit limits? just bail
+		if ( uWords==m_uFoundWords && !bFits )
 			break;
+
+		// not all words shown yet, so we want that next passage (must contain some words)
+		//
+		// if current passage is slightly outta limits and can possibly be stuffed into the final snippet,
+		// and is so good that it covers all missing words, bend the rules, show it, and bail
+		//
+		// if it just fits the limits, just show it, and keep looping
+		bool bShowAndBail = !bFits
+			&& uWords!=m_uFoundWords
+			&& ( uWords | tBest.m_uQwords )==m_uFoundWords
+			&& ( ( iTotalCodes + iKeywordsLength )<=iMaxCp );
+
+		// plain old fits? add it
+		if ( bFits || bShowAndBail )
+		{
+			dShow.Add ( tBest );
+			uWords |= tBest.m_uQwords;
+			iTotalWords += tBest.m_iWords;
+			iTotalCodes += tBest.m_iCodes;
 		}
 
-		// save it
-		dShow.Add ( tBest );
-		uWords |= tBest.m_uQwords;
-		iWords += tBest.m_iWords;
-		iTotalCodes += tBest.m_iCodes;
+		if ( bShowAndBail )
+			break;
+
+		// processed and must be forgotten now
 		tBest.m_iCodes = 0; // no longer needed here, abusing to mark displayed passages
 
+		// we just managed to show all words? do one final re-weighting run
 		if ( !bAll && uWords==m_uFoundWords )
 		{
 			bAll = true;
 			ARRAY_FOREACH ( i, m_dPassages )
 				m_dPassages[i].m_iQwordsWeight = dWeights[i];
 		}
+
+		// if we're already showing all words, re-weighting is not needed any more
 		if ( bAll )
 			continue;
 
-		// re-weight passages, as we will show some of the query words, displaying other
-		// passages containing them is less significant
+		// re-weight passages, adjust for new mask of shown words
 		ARRAY_FOREACH ( i, m_dPassages )
 		{
 			if ( !m_dPassages[i].m_iCodes )
@@ -1156,7 +1184,7 @@ bool ExcerptGen_c::HighlightBestPassages ( ExcerptQuery_t & tQuery )
 	// this step is skipped when use_boundaries is enabled, because
 	// each passage must be a separate sentence (delimited by
 	// boundaries) and we don't want to split them
-	if ( iTotalCodes > tQuery.m_iLimit && !tQuery.m_bUseBoundaries )
+	if ( ( iTotalCodes > iMaxCp || iTotalWords > iMaxWords ) && !tQuery.m_bUseBoundaries )
 	{
 		const int iKeepAround = ( tQuery.m_iAround + 1 ) / 2;
 		// find limits for trimming.
@@ -1240,7 +1268,7 @@ bool ExcerptGen_c::HighlightBestPassages ( ExcerptQuery_t & tQuery )
 					tPassage.m_iCodes -= m_dTokens[iLast].m_iLengthCP;
 					iTotalCodes -= m_dTokens[iLast].m_iLengthCP;
 				}
-				if ( iTotalCodes<=tQuery.m_iLimit )
+				if ( iTotalCodes<=iMaxCp )
 				{
 					bDone = true;
 					break;
@@ -1254,9 +1282,10 @@ bool ExcerptGen_c::HighlightBestPassages ( ExcerptQuery_t & tQuery )
 	}
 
 	// if passages still don't fit start dropping least significant ones, limit is sacred.
-	while ( iTotalCodes > tQuery.m_iLimit && !tQuery.m_bForceAllWords )
+	while ( ( iTotalCodes > iMaxCp || iTotalWords > iMaxWords ) && !tQuery.m_bForceAllWords )
 	{
 		iTotalCodes -= dShow.Last().m_iCodes;
+		iTotalWords -= dShow.Last().m_iWords;
 		dShow.RemoveFast ( dShow.GetLength()-1 );
 	}
 
@@ -1287,9 +1316,9 @@ bool ExcerptGen_c::HighlightBestPassages ( ExcerptQuery_t & tQuery )
 				{
 					if ( m_dTokens[iTok].m_uWords )
 					{
-						ResultEmit ( tQuery.m_sBeforeMatch.cstr(), tQuery.m_iPassageId );
+						ResultEmit ( tQuery.m_sBeforeMatch.cstr(), m_iPassageId );
 						ResultEmit ( m_dTokens[iTok] );
-						ResultEmit ( tQuery.m_sAfterMatch.cstr(), tQuery.m_iPassageId++ );
+						ResultEmit ( tQuery.m_sAfterMatch.cstr(), m_iPassageId++ );
 					} else
 						ResultEmit ( m_dTokens[iTok] );
 				}

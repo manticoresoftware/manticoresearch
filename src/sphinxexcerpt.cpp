@@ -926,7 +926,9 @@ bool ExcerptGen_c::ExtractPassages ( const ExcerptQuery_t & q )
 	Passage_t tPass;
 	tPass.Reset ();
 
-	int iMaxWords = Min ( 2*q.m_iAround+1, q.m_iLimitWords );
+	int iMaxWords = 2*q.m_iAround+1;
+	if ( q.m_iLimitWords )
+		iMaxWords = Min ( iMaxWords, q.m_iLimitWords );
 	int iLCSThresh = m_bExactPhrase ? m_dWords.GetLength()*iMaxWords : 0;
 	int iCpLimit = q.m_iLimit ? q.m_iLimit : INT_MAX;
 
@@ -1118,7 +1120,8 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 			if ( m_dPassages[i].m_iCodes && ( iBest==-1 || m_dPassages[iBest] < m_dPassages[i] ) )
 				iBest = i;
 		}
-		assert ( iBest!=-1 );
+		if ( iBest<0 )
+			break;
 		Passage_t & tBest = m_dPassages[iBest];
 
 		// does this passage fit the limits?
@@ -1134,13 +1137,16 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 		// and is so good that it covers all missing words, bend the rules, show it, and bail
 		//
 		// if it just fits the limits, just show it, and keep looping
+		//
+		// if it doesn't fit the limits, but force_all_words is in effect, show it and keep looping
 		bool bShowAndBail = !bFits
+			&& !tQuery.m_bForceAllWords
 			&& uWords!=m_uFoundWords
 			&& ( uWords | tBest.m_uQwords )==m_uFoundWords
 			&& ( ( iTotalCodes + iKeywordsLength )<=iMaxCp );
 
 		// plain old fits? add it
-		if ( bFits || bShowAndBail )
+		if ( bFits || tQuery.m_bForceAllWords || bShowAndBail )
 		{
 			dShow.Add ( tBest );
 			uWords |= tBest.m_uQwords;

@@ -1110,7 +1110,9 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 	ARRAY_FOREACH ( i, m_dPassages )
 		dWeights[i] = m_dPassages[i].m_iQwordsWeight;
 
-	bool bAll = false; // whether we displayed all the keywords
+	// collect enough best passages to show all keywords and max out the limits
+	// don't care much if we're going over limits in this loop, it will be tightened below
+	bool bAll = false;
 	while ( dShow.GetLength() < iMaxPassages )
 	{
 		// get next best passage
@@ -1127,37 +1129,20 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 		// does this passage fit the limits?
 		bool bFits = ( iTotalCodes + tBest.m_iCodes <= iMaxCp ) && ( iTotalWords + tBest.m_iWords <= iMaxWords );
 
-		// all words are already in the snippet, and we're starting to hit limits? just bail
+		// all words will be shown and we're outta limit
 		if ( uWords==m_uFoundWords && !bFits )
-			break;
-
-		// not all words shown yet, so we want that next passage (must contain some words)
-		//
-		// if current passage is slightly outta limits and can possibly be stuffed into the final snippet,
-		// and is so good that it covers all missing words, bend the rules, show it, and bail
-		//
-		// if it just fits the limits, just show it, and keep looping
-		//
-		// if it doesn't fit the limits, but force_all_words is in effect, show it and keep looping
-		bool bShowAndBail = !bFits
-			&& !tQuery.m_bForceAllWords
-			&& uWords!=m_uFoundWords
-			&& ( uWords | tBest.m_uQwords )==m_uFoundWords
-			&& ( ( iTotalCodes + iKeywordsLength )<=iMaxCp );
-
-		// plain old fits? add it
-		if ( bFits || tQuery.m_bForceAllWords || bShowAndBail )
 		{
-			dShow.Add ( tBest );
-			uWords |= tBest.m_uQwords;
-			iTotalWords += tBest.m_iWords;
-			iTotalCodes += tBest.m_iCodes;
+			// there might be just enough space to partially display this passage
+			if ( ( iTotalCodes + iKeywordsLength )<=tQuery.m_iLimit )
+				dShow.Add ( tBest );
+			break;
 		}
 
-		if ( bShowAndBail )
-			break;
-
-		// processed and must be forgotten now
+		// save it, despite limits or whatever, we'll tighten everything in the loop below
+		dShow.Add ( tBest );
+		uWords |= tBest.m_uQwords;
+		iTotalWords += tBest.m_iWords;
+		iTotalCodes += tBest.m_iCodes;
 		tBest.m_iCodes = 0; // no longer needed here, abusing to mark displayed passages
 
 		// we just managed to show all words? do one final re-weighting run

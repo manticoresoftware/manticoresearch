@@ -24,7 +24,7 @@
 };
 
 %token <pNode>			TOK_KEYWORD
-%token <pNode>			TOK_NEAR
+%token <tInt>			TOK_NEAR
 %token <tInt>			TOK_INT
 %token <tFieldLimit>	TOK_FIELDLIMIT
 %token					TOK_BEFORE
@@ -40,6 +40,7 @@
 %type <pNode>			expr
 
 %left TOK_BEFORE TOK_NEAR
+
 %%
 
 query:
@@ -104,7 +105,7 @@ orlistf:
 beforelist:
 	orlistf
 	| beforelist TOK_BEFORE orlistf		{ $$ = pParser->AddOp ( SPH_QUERY_BEFORE, $1, $3 ); }
-	| beforelist TOK_NEAR '/' TOK_INT orlistf	{ $$ = pParser->AddOp ( SPH_QUERY_NEAR, $1, $5 ); $$->m_iOpArg = $4.iValue; }
+	| beforelist TOK_NEAR orlistf		{ $$ = pParser->AddOp ( SPH_QUERY_NEAR, $1, $3 ); $$->m_iOpArg = $2.iValue; }
 	;
 
 expr:

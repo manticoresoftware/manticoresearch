@@ -1193,7 +1193,9 @@ bool ExcerptGen_c::HighlightBestPassages ( const ExcerptQuery_t & tQuery )
 			{
 				if ( m_dTokens[j].m_uWords )
 				{
-					( iFirst==-1 ? iFirst : iLast ) = j;
+					if ( iFirst==-1 )
+						iFirst = j;
+					iLast = j;
 					iQueryWords++;
 				}
 			}

@@ -252,6 +252,9 @@ int main ()
 	sphinx_open ( client );
 	test_update ( client );
 	test_update ( client );
+	test_query ( client, SPH_FALSE );
+	sphinx_cleanup ( client );
+	test_query ( client, SPH_FALSE );
 	sphinx_close ( client );
 
 	test_status ( client );

@@ -176,6 +176,7 @@ typedef struct st_sphinx_keyword_info
 //////////////////////////////////////////////////////////////////////////
 
 sphinx_client *				sphinx_create	( sphinx_bool copy_args );
+void						sphinx_cleanup	( sphinx_client * client );
 void						sphinx_destroy	( sphinx_client * client );
 
 const char *				sphinx_error	( sphinx_client * client );

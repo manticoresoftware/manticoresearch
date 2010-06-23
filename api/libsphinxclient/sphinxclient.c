@@ -14,8 +14,12 @@
 //
 
 #if _MSC_VER>=1400
+// VS 2005 and above
 #define _CRT_SECURE_NO_DEPRECATE 1
 #define _CRT_NONSTDC_NO_DEPRECATE 1
+#else
+// VS 2003 and below
+#define vsnprintf _vsnprintf
 #endif
 
 #include <stdlib.h>
@@ -282,25 +286,46 @@ static void sphinx_free_results ( sphinx_client * client )
 
 void sock_close ( int sock );
 
-void sphinx_destroy ( sphinx_client * client )
+
+#define safe_free(_ptr) \
+	if ( _ptr ) \
+	{ \
+		free ( _ptr ); \
+		_ptr = NULL; \
+}
+
+
+void sphinx_cleanup ( sphinx_client * client )
 {
 	int i;
-
 	if ( !client )
 		return;
 
 	for ( i=0; i<client->num_reqs; i++ )
-		free ( client->reqs[i] );
+		safe_free ( client->reqs[i] );
+	client->num_reqs = 0;
 
 	sphinx_free_results ( client );
+	client->num_results = 0;
 
+	client->num_results = 0;
+	safe_free ( client->response_buf );
+}
+
+
+void sphinx_destroy ( sphinx_client * client )
+{
+	int i;
+	if ( !client )
+		return;
+
+	for ( i=0; i<client->num_reqs; i++ )
+		safe_free ( client->reqs[i] );
+
+	sphinx_free_results ( client );
 	unchain_all ( client );
-
-	if ( client->filters )
-		free ( client->filters );
-
-	if ( client->response_buf )
-		free ( client->response_buf );
+	safe_free ( client->filters );
+	safe_free ( client->response_buf );
 
 	if ( client->sock>=0 )
 		sock_close ( client->sock );
@@ -1864,28 +1889,30 @@ void sphinx_init_excerpt_options ( sphinx_excerpt_options * opts )
 	if ( !opts )
 		return;
 
-	opts->before_match		= NULL;
-	opts->after_match		= NULL;
-	opts->chunk_separator	= NULL;
+	opts->before_match		= "<b>";
+	opts->after_match		= "</b>";
+	opts->chunk_separator	= " ... ";
 	opts->html_strip_mode	= "index";
 
-	opts->limit				= 0;
+	opts->limit				= 256;
 	opts->limit_passages	= 0;
 	opts->limit_words		= 0;
-	opts->around			= 0;
+	opts->around			= 5;
 	opts->start_passage_id	= 1;
 
 	opts->exact_phrase		= SPH_FALSE;
 	opts->single_passage	= SPH_FALSE;
 	opts->use_boundaries	= SPH_FALSE;
 	opts->weight_order		= SPH_FALSE;
+	opts->query_mode		= SPH_FALSE;
+	opts->force_all_words	= SPH_FALSE;
 	opts->load_files		= SPH_FALSE;
 }
 
 
 char ** sphinx_build_excerpts ( sphinx_client * client, int num_docs, const char ** docs, const char * index, const char * words, sphinx_excerpt_options * opts )
 {
-	sphinx_excerpt_options opt;
+	sphinx_excerpt_options def_opt;
 	int i, req_len, flags;
 	char *buf, *req, *p, *pmax, **result;
 
@@ -1899,39 +1926,20 @@ char ** sphinx_build_excerpts ( sphinx_client * client, int num_docs, const char
 	}
 
 	// fixup options
-	sphinx_init_excerpt_options ( &opt );
-	if ( opts )
+	if ( !opts )
 	{
-		opt.before_match		= opts->before_match ? opts->before_match : "<b>";
-		opt.after_match			= opts->after_match ? opts->after_match : "</b>";
-		opt.chunk_separator		= opts->chunk_separator ? opts->chunk_separator : " ... ";
-		opt.html_strip_mode		= opts->html_strip_mode ? opts->html_strip_mode : "index";
-
-		opt.limit				= opts->limit>0 ? opts->limit : 256;
-		opt.limit_passages		= opts->limit_passages;
-		opt.limit_words			= opts->limit_words;
-		opt.around				= opts->around>0 ? opts->around : 5;
-		opt.start_passage_id	= opts->start_passage_id;
-
-		opt.exact_phrase		= opts->exact_phrase;
-		opt.single_passage		= opts->single_passage;
-		opt.use_boundaries		= opts->use_boundaries;
-		opt.weight_order		= opts->weight_order;
-		opt.load_files			= opts->load_files;
-
-	} else
-	{
-		opt.before_match		= "<b>";
-		opt.after_match			= "</b>";
-		opt.chunk_separator		= " ... ";
-
-		opt.limit				= 256;
-		opt.around				= 5;
+		sphinx_init_excerpt_options ( &def_opt );
+		opts = &def_opt;
 	}
 
 	// alloc buffer
-	req_len = (int)( 56 + strlen(index) + strlen(words) + strlen(opt.before_match)
-		+ strlen(opt.after_match) + strlen(opt.chunk_separator) + strlen(opt.html_strip_mode) );
+	req_len = (int)( 56
+		+ strlen(index)
+		+ strlen(words)
+		+ safestrlen(opts->before_match)
+		+ safestrlen(opts->after_match)
+		+ safestrlen(opts->chunk_separator)
+		+ safestrlen(opts->html_strip_mode) );
 	for ( i=0; i<num_docs; i++ )
 		req_len += (int)( 4 + safestrlen(docs[i]) );
 
@@ -1950,29 +1958,29 @@ char ** sphinx_build_excerpts ( sphinx_client * client, int num_docs, const char
 	send_int ( &req, req_len );
 
 	flags = 1; // remove spaces
-	if ( opt.exact_phrase )		flags |= 2;
-	if ( opt.single_passage )	flags |= 4;
-	if ( opt.use_boundaries )	flags |= 8;
-	if ( opt.weight_order )		flags |= 16;
-	if ( opt.query_mode )		flags |= 32;
-	if ( opt.force_all_words )	flags |= 64;
-	if ( opt.load_files )		flags |= 128;
+	if ( opts->exact_phrase )		flags |= 2;
+	if ( opts->single_passage )		flags |= 4;
+	if ( opts->use_boundaries )		flags |= 8;
+	if ( opts->weight_order )		flags |= 16;
+	if ( opts->query_mode )			flags |= 32;
+	if ( opts->force_all_words )	flags |= 64;
+	if ( opts->load_files )			flags |= 128;
 
 	send_int ( &req, 0 );
 	send_int ( &req, flags );
 	send_str ( &req, index );
 	send_str ( &req, words );
 
-	send_str ( &req, opt.before_match );
-	send_str ( &req, opt.after_match );
-	send_str ( &req, opt.chunk_separator );
-	send_int ( &req, opt.limit );
-	send_int ( &req, opt.around );
+	send_str ( &req, opts->before_match );
+	send_str ( &req, opts->after_match );
+	send_str ( &req, opts->chunk_separator );
+	send_int ( &req, opts->limit );
+	send_int ( &req, opts->around );
 
-	send_int ( &req, opt.limit_passages ); // v1.2
-	send_int ( &req, opt.limit_words );
-	send_int ( &req, opt.start_passage_id );
-	send_str ( &req, opt.html_strip_mode );
+	send_int ( &req, opts->limit_passages ); // v1.2
+	send_int ( &req, opts->limit_words );
+	send_int ( &req, opts->start_passage_id );
+	send_str ( &req, opts->html_strip_mode );
 
 	send_int ( &req, num_docs );
 	for ( i=0; i<num_docs; i++ )

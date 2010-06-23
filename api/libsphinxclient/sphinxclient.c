@@ -71,7 +71,7 @@ enum
 enum
 {
 	VER_COMMAND_EXCERPT			= 0x102,
-	VER_COMMAND_UPDATE			= 0x101,
+	VER_COMMAND_UPDATE			= 0x102,
 	VER_COMMAND_KEYWORDS		= 0x100,
 	VER_COMMAND_STATUS			= 0x100
 };
@@ -97,6 +97,7 @@ union un_attr_value
 	sphinx_int64_t			int_value;
 	float					float_value;
 	unsigned int *			mva_value;
+	const char *			string;
 };
 
 
@@ -191,7 +192,7 @@ sphinx_client * sphinx_create ( sphinx_bool copy_args )
 		return NULL;
 
 	// initialize defaults and return
-	client->ver_search				= 0x116; // 0x113 for 0.9.8, 0x116 for 0.9.9rc2
+	client->ver_search				= 0x117; // 0x113 for 0.9.8, 0x116 for 0.9.9rc2
 	client->copy_args				= copy_args;
 	client->head_alloc				= NULL;
 
@@ -1736,6 +1737,8 @@ sphinx_result * sphinx_run_queries ( sphinx_client * client )
 						break;
 
 					case SPH_ATTR_FLOAT:	pval->float_value = unpack_float ( &p ); break;
+					case  SPH_ATTR_BIGINT:	pval->int_value = unpack_qword ( &p ); break;
+					case SPH_ATTR_STRING:	pval->string = unpack_str ( &p ); break;
 					default:				pval->int_value = unpack_int ( &p ); break;
 				}
 				pval++;
@@ -1818,6 +1821,14 @@ unsigned int * sphinx_get_mva ( sphinx_result * result, int match, int attr )
 	union un_attr_value * pval;
 	pval = result->values_pool;
 	return pval [ (2+result->num_attrs)*match+2+attr ].mva_value;
+}
+
+const char * sphinx_get_string ( sphinx_result * result, int match, int attr )
+{
+	// FIXME! add safety and type checks
+	union un_attr_value * pval;
+	pval = result->values_pool;
+	return pval [ (2+result->num_attrs)*match+2+attr ].string;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -2058,6 +2069,63 @@ int sphinx_update_attributes ( sphinx_client * client, const char * index, int n
 		for ( j=0; j<num_attrs; j++ )
 			send_int ( &req, (unsigned int)( *values++ ) );
 	}
+
+	// send query, get response
+	if ( !net_simple_query ( client, buf, req_len ) )
+		return -1;
+
+	// parse response
+	if ( client->response_len<4 )
+	{
+		set_error ( client, "incomplete reply" );
+		return -1;
+	}
+
+	p = client->response_start;
+	return unpack_int ( &p );
+}
+
+int sphinx_update_attributes_mva	( sphinx_client * client, const char * index, const char * attr, sphinx_uint64_t docid, int num_values, const unsigned int * values )
+{
+	int i, req_len;
+	char *buf, *req, *p;
+
+	// check args
+	if ( !client || !index || !attr || num_values<=0 || !values )
+	{
+		if ( !index )			set_error ( client, "invalid arguments (index must not be empty)" );
+		else if ( !attr )		set_error ( client, "invalid arguments (attr must not empty)" );
+		else if ( num_values<=0 )	set_error ( client, "invalid arguments (num_values must be positive)" );
+		else if ( !values )		set_error ( client, "invalid arguments (values must not be empty)" );
+	}
+
+	// alloc buffer
+	req_len = (int)( 38 + safestrlen(index) + safestrlen(attr) + num_values*4 );
+
+	buf = malloc ( 12+req_len ); // request body length plus 12 header bytes
+	if ( !buf )
+	{
+		set_error ( client, "malloc() failed (bytes=%d)", req_len );
+		return -1;
+	}
+
+	// build request
+	req = buf;
+
+	send_word	( &req, SEARCHD_COMMAND_UPDATE );
+	send_word	( &req, VER_COMMAND_UPDATE );
+	send_int	( &req, req_len );
+
+	send_str	( &req, index );
+	send_int	( &req, 1 );
+	send_str	( &req, attr );
+	send_int	( &req, 1 ); // SPH_ATTR_MULTI flag
+
+	send_int	( &req, 1 );
+	send_qword	( &req, docid );
+	send_int	( &req, num_values );
+	for ( i=0; i<num_values; i++ )
+		send_int ( &req, values[i] );
 
 	// send query, get response
 	if ( !net_simple_query ( client, buf, req_len ) )

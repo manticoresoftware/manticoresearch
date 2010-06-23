@@ -109,6 +109,7 @@ void test_query ( sphinx_client * client, sphinx_bool test_extras )
 				break;
 
 			case SPH_ATTR_FLOAT:	printf ( "%f", sphinx_get_float ( res, i, j ) ); break;
+			case SPH_ATTR_STRING:	printf ( "%s", sphinx_get_string ( res, i, j ) ); break;
 			default:				printf ( "%u", (unsigned int)sphinx_get_int ( res, i, j ) ); break;
 			}
 		}
@@ -165,6 +166,20 @@ void test_update ( sphinx_client * client )
 	res = sphinx_update_attributes ( client, "test1", 1, &attr, 1, &id, &val );
 	if ( res<0 )
 		printf ( "update failed: %s\n\n", sphinx_error(client) );
+	else
+		printf ( "update success, %d rows updated\n\n", res );
+}
+
+void test_update_mva ( sphinx_client * client )
+{
+	const char * attr = "mva";
+	const sphinx_uint64_t id = 75;
+	const unsigned int vals[] = { 333, 431, 555 };
+	int res;
+
+	res = sphinx_update_attributes_mva ( client, "test1", attr, id, sizeof(vals)/sizeof(vals[0]), vals );
+	if ( res<0 )
+		printf ( "update mva failed: %s\n\n", sphinx_error(client) );
 	else
 		printf ( "update success, %d rows updated\n\n", res );
 }
@@ -229,6 +244,7 @@ int main ()
 	test_query ( client, SPH_FALSE );
 	test_excerpt ( client );
 	test_update ( client );
+	test_update_mva ( client );
 	test_query ( client, SPH_FALSE );
 	test_keywords ( client );
 	test_query ( client, SPH_TRUE );

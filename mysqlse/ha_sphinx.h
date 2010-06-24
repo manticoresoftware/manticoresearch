@@ -121,7 +121,7 @@ public:
 	int				rename_table ( const char * from, const char * to );
 	int				create ( const char * name, TABLE * form, HA_CREATE_INFO * create_info );
 
-	THR_LOCK_DATA **store_lock ( THD * thd, THR_LOCK_DATA ** to, enum thr_lock_type lock_type );
+	THR_LOCK_DATA **		store_lock ( THD * thd, THR_LOCK_DATA ** to, enum thr_lock_type lock_type );
 
 public:
 	virtual const COND *	cond_push ( const COND *cond );
@@ -138,7 +138,9 @@ private:
 	int *			m_dUnboundFields;
 
 private:
-	int				ConnectToSearchd ( const char * sQueryHost, int iQueryPort );
+	int				Connect ( const char * sQueryHost, ushort uPort );
+	int				ConnectAPI ( const char * sQueryHost, int iQueryPort );
+	int				HandleMysqlError ( struct st_mysql * pConn, int iErrCode );
 
 	uint32			UnpackDword ();
 	char *			UnpackString ();

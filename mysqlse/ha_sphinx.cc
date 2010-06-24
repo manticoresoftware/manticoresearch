@@ -22,6 +22,7 @@
 
 #include <mysys_err.h>
 #include <my_sys.h>
+#include <mysql.h> // include client for INSERT table (sort of redoing federated..)
 
 #ifndef __WIN__
 	// UNIX-specific
@@ -112,9 +113,11 @@ void sphUnalignedWrite ( void * pPtr, const T & tVal )
 // FIXME! make this all dynamic
 #define SPHINXSE_MAX_FILTERS		32
 
-#define SPHINXSE_DEFAULT_HOST		"127.0.0.1"
-#define SPHINXSE_DEFAULT_PORT		9312
-#define SPHINXSE_DEFAULT_INDEX		"*"
+#define SPHINXAPI_DEFAULT_HOST		"127.0.0.1"
+#define SPHINXAPI_DEFAULT_PORT		9312
+#define SPHINXAPI_DEFAULT_INDEX		"*"
+
+#define SPHINXQL_DEFAULT_PORT		9306
 
 #define SPHINXSE_SYSTEM_COLUMNS		3
 
@@ -249,18 +252,19 @@ inline void SPH_DEBUG ( const char *, ... ) {}
 
 //////////////////////////////////////////////////////////////////////////////
 
-/// a structure that will be shared among all open Sphinx SE handlers
+/// per-table structure that will be shared among all open Sphinx SE handlers
 struct CSphSEShare
 {
 	pthread_mutex_t	m_tMutex;
 	THR_LOCK		m_tLock;
 
 	char *			m_sTable;
-	char *			m_sScheme;
-	char *			m_sHost;	///< points into m_sScheme buffer, DO NOT FREE EXPLICITLY
-	char *			m_sSocket;	///< points into m_sScheme buffer, DO NOT FREE EXPLICITLY
-	char *			m_sIndex;	///< points into m_sScheme buffer, DO NOT FREE EXPLICITLY
+	char *			m_sScheme;		///< our connection string
+	char *			m_sHost;		///< points into m_sScheme buffer, DO NOT FREE EXPLICITLY
+	char *			m_sSocket;		///< points into m_sScheme buffer, DO NOT FREE EXPLICITLY
+	char *			m_sIndex;		///< points into m_sScheme buffer, DO NOT FREE EXPLICITLY
 	ushort			m_iPort;
+	bool			m_bSphinxQL;	///< is this read-only SphinxAPI table, or write-only SphinxQL table?
 	uint			m_iTableNameLen;
 	uint			m_iUseCount;
 	CHARSET_INFO *	m_pTableQueryCharset;
@@ -276,6 +280,7 @@ struct CSphSEShare
 		, m_sSocket ( NULL )
 		, m_sIndex ( NULL )
 		, m_iPort ( 0 )
+		, m_bSphinxQL ( false )
 		, m_iTableNameLen ( 0 )
 		, m_iUseCount ( 1 )
 		, m_pTableQueryCharset ( NULL )
@@ -603,7 +608,7 @@ handlerton sphinx_hton =
 	NULL,	// create_cursor_read_view
 	NULL,	// set_cursor_read_view
 	NULL,	// close_cursor_read_view
-	HTON_CAN_RECREATE
+	HTON_CAN_RECREATE | HTON_ALTER_NOT_SUPPORTED
 };
 #else
 static handlerton * sphinx_hton_ptr = NULL;
@@ -656,7 +661,7 @@ static int sphinx_init_func ( void * p )
 		hton->close_connection	= sphinx_close_connection;
 		hton->show_status		= sphinx_show_status;
 		hton->panic				= sphinx_panic;
-		hton->flags				= HTON_CAN_RECREATE;
+		hton->flags				= HTON_CAN_RECREATE | HTON_ALTER_NOT_SUPPORTED;
 		#endif
 	}
 	SPH_RET(0);
@@ -749,9 +754,16 @@ bool sphinx_show_status ( THD * thd )
 	buf1[0] = '\0';
 	buf2[0] = '\0';
 
+
 #if MYSQL_VERSION_ID>50100
+	// 5.1.x style stats
 	CSphSEThreadData * pTls = (CSphSEThreadData*) ( *thd_ha_data ( thd, hton ) );
+
+#define LOC_STATS(_key,_keylen,_val,_vallen) \
+	stat_print ( thd, sphinx_hton_name, strlen(sphinx_hton_name), _key, _keylen, _val, _vallen );
+
 #else
+	// 5.0.x style stats
 	if ( have_sphinx_db!=SHOW_OPTION_YES )
 	{
 		my_message ( ER_NOT_SUPPORTED_YET,
@@ -760,8 +772,25 @@ bool sphinx_show_status ( THD * thd )
 		SPH_RET(TRUE);
 	}
 	CSphSEThreadData * pTls = (CSphSEThreadData*) thd->ha_data[sphinx_hton.slot];
+
+	field_list.push_back ( new Item_empty_string ( "Type",10 ) );
+	field_list.push_back ( new Item_empty_string ( "Name",FN_REFLEN ) );
+	field_list.push_back ( new Item_empty_string ( "Status",10 ) );
+	if ( protocol->send_fields ( &field_list, Protocol::SEND_NUM_ROWS | Protocol::SEND_EOF ) )
+		SPH_RET(TRUE);
+
+#define LOC_STATS(_key,_keylen,_val,_vallen) \
+	protocol->prepare_for_resend (); \
+	protocol->store ( "SPHINX", 6, system_charset_info ); \
+	protocol->store ( _key, _keylen, system_charset_info ); \
+	protocol->store ( _val, _vallen, system_charset_info ); \
+	if ( protocol->write() ) \
+		SPH_RET(TRUE);
+
 #endif
 
+
+	// show query stats
 	if ( pTls && pTls->m_bStats )
 	{
 		const CSphSEStats * pStats = &pTls->m_tStats;
@@ -769,23 +798,7 @@ bool sphinx_show_status ( THD * thd )
 			"total: %d, total found: %d, time: %d, words: %d", 
 			pStats->m_iMatchesTotal, pStats->m_iMatchesFound, pStats->m_iQueryMsec, pStats->m_iWords );
 
-#if MYSQL_VERSION_ID>50100
-		stat_print ( thd, sphinx_hton_name, strlen(sphinx_hton_name),
-			STRING_WITH_LEN("stats"), buf1, buf1len );
-#else
-		field_list.push_back ( new Item_empty_string ( "Type",10 ) );
-		field_list.push_back ( new Item_empty_string ( "Name",FN_REFLEN ) );
-		field_list.push_back ( new Item_empty_string ( "Status",10 ) );
-		if ( protocol->send_fields ( &field_list, Protocol::SEND_NUM_ROWS | Protocol::SEND_EOF ) )
-			SPH_RET(TRUE);
-
-		protocol->prepare_for_resend ();
-		protocol->store ( STRING_WITH_LEN("SPHINX"), system_charset_info );
-		protocol->store ( STRING_WITH_LEN("stats"), system_charset_info );
-		protocol->store ( buf1, buf1len, system_charset_info );
-		if ( protocol->write() )
-			SPH_RET(TRUE);
-#endif
+		LOC_STATS ( "stats", 5, buf1, buf1len );
 
 		if ( pStats->m_iWords )
 		{
@@ -809,58 +822,30 @@ bool sphinx_show_status ( THD * thd )
 				iWord = sBuf3.length();
 			}
 
-#if MYSQL_VERSION_ID>50100
-			stat_print ( thd, sphinx_hton_name, strlen(sphinx_hton_name),
-				STRING_WITH_LEN("words"), sWord, iWord );
-#else
-			protocol->prepare_for_resend ();
-			protocol->store ( STRING_WITH_LEN("SPHINX"), system_charset_info );
-			protocol->store ( STRING_WITH_LEN("words"), system_charset_info );
-			protocol->store ( sWord, iWord, system_charset_info );
-			if ( protocol->write() )
-				SPH_RET(TRUE);
-#endif
+			LOC_STATS ( "words", 5, sWord, iWord );
 		}
+	}
 
-		// send last error or warning
-		if ( pStats->m_sLastMessage && pStats->m_sLastMessage[0] )
-		{
-			const char * sMessageType = pStats->m_bLastError ? "error" : "warning";
+	// show last error or warning (either in addition to stats, or on their own)
+	if ( pTls && pTls->m_tStats.m_sLastMessage && pTls->m_tStats.m_sLastMessage[0] )
+	{
+		const char * sMessageType = pTls->m_tStats.m_bLastError ? "error" : "warning";
 
-#if MYSQL_VERSION_ID>50100
-			stat_print ( thd, sphinx_hton_name, strlen(sphinx_hton_name),
-				sMessageType, strlen(sMessageType), pStats->m_sLastMessage, strlen(pStats->m_sLastMessage) );
-#else
-			protocol->prepare_for_resend ();
-			protocol->store ( STRING_WITH_LEN("SPHINX"), system_charset_info );
-			protocol->store ( sMessageType, strlen(sMessageType), system_charset_info );
-			protocol->store ( pStats->m_sLastMessage, strlen(pStats->m_sLastMessage), system_charset_info );
-			if ( protocol->write() )
-				SPH_RET(TRUE);
-#endif
-		}
+		LOC_STATS (
+			sMessageType, strlen ( sMessageType ),
+			pTls->m_tStats.m_sLastMessage, strlen ( pTls->m_tStats.m_sLastMessage ) );
 
 	} else
 	{
-		#if MYSQL_VERSION_ID < 50100
-		field_list.push_back ( new Item_empty_string ( "Type", 10 ) );
-		field_list.push_back ( new Item_empty_string ( "Name", FN_REFLEN ) );
-		field_list.push_back ( new Item_empty_string ( "Status", 10 ) );
-		if ( protocol->send_fields ( &field_list, Protocol::SEND_NUM_ROWS | Protocol::SEND_EOF ) )
-			SPH_RET(TRUE);
-
-		protocol->prepare_for_resend ();
-		protocol->store ( STRING_WITH_LEN("SPHINX"), system_charset_info );
-		protocol->store ( STRING_WITH_LEN("stats"), system_charset_info );
-		protocol->store ( STRING_WITH_LEN("no query has been executed yet"), system_charset_info );
-		if ( protocol->write() )
-			SPH_RET(TRUE);
-		#endif
+		// well, nothing to show just yet
+#if MYSQL_VERSION_ID < 50100
+		LOC_STATS ( "stats", 5, "no query has been executed yet", sizeof("no query has been executed yet")-1 );
+#endif
 	}
 
-	#if MYSQL_VERSION_ID < 50100
+#if MYSQL_VERSION_ID < 50100
 	send_eof(thd);
-	#endif
+#endif
 
 	SPH_RET(FALSE);
 }
@@ -927,10 +912,9 @@ static void sphLogError ( const char * sFmt, ... )
 
 // the following scheme variants are recognized
 //
-// sphinx://host/index
-// sphinx://host:port/index
-// unix://unix/domain/socket:index
-// unix://unix/domain/socket
+// sphinx://host[:port]/index
+// sphinxql://host[:port]/index
+// unix://unix/domain/socket[:index]
 static bool ParseUrl ( CSphSEShare * share, TABLE * table, bool bCreate )
 {
 	SPH_ENTER_FUNC();
@@ -967,69 +951,121 @@ static bool ParseUrl ( CSphSEShare * share, TABLE * table, bool bCreate )
 		}
 	}
 
-	char * sScheme = NULL;
-	char * sHost = SPHINXSE_DEFAULT_HOST;
-	char * sIndex = SPHINXSE_DEFAULT_INDEX;
-	int iPort = SPHINXSE_DEFAULT_PORT;
-
+	// defaults
 	bool bOk = true;
+	bool bQL = false;
+	char * sScheme = NULL;
+	char * sHost = SPHINXAPI_DEFAULT_HOST;
+	char * sIndex = SPHINXAPI_DEFAULT_INDEX;
+	int iPort = SPHINXAPI_DEFAULT_PORT;
+
+	// parse connection string, if any
 	while ( table->s->connect_string.length!=0 )
 	{
-		bOk = false;
 		sScheme = sphDup ( table->s->connect_string.str, table->s->connect_string.length );
 
 		sHost = strstr ( sScheme, "://" );
 		if ( !sHost )
+		{
+			bOk = false;
 			break;
+		}
 		sHost[0] = '\0';
-		sHost += 2;
+		sHost += 3;
+
+		/////////////////////////////
+		// sphinxapi via unix socket
+		/////////////////////////////
 
 		if ( !strcmp ( sScheme, "unix" ) )
 		{
-			// unix-domain socket
+			sHost--; // reuse last slash
 			iPort = 0;
 			if (!( sIndex = strrchr ( sHost, ':' ) ))
-				sIndex = SPHINXSE_DEFAULT_INDEX;
+				sIndex = SPHINXAPI_DEFAULT_INDEX;
 			else
 			{
 				*sIndex++ = '\0';
 				if ( !*sIndex )
-					sIndex = SPHINXSE_DEFAULT_INDEX;
+					sIndex = SPHINXAPI_DEFAULT_INDEX;
 			}
 			bOk = true;
 			break;
 		}
-		if( strcmp ( sScheme, "sphinx" )!=0 && strcmp ( sScheme, "inet" )!=0 )
-			break;
 
-		// tcp
-		sHost++;
-		char * sPort = strchr ( sHost, ':' );
-		if ( sPort )
+		/////////////////////
+		// sphinxapi via tcp
+		/////////////////////
+
+		if ( !strcmp ( sScheme, "sphinx" ) )
 		{
-			*sPort++ = '\0';
-			if ( *sPort )
+			char * sPort = strchr ( sHost, ':' );
+			if ( sPort )
 			{
-				sIndex = strchr ( sPort, '/' );
+				*sPort++ = '\0';
+				if ( *sPort )
+				{
+					sIndex = strchr ( sPort, '/' );
+					if ( sIndex )
+						*sIndex++ = '\0'; 
+					else
+						sIndex = SPHINXAPI_DEFAULT_INDEX;
+
+					iPort = atoi(sPort);
+					if ( !iPort )
+						iPort = SPHINXAPI_DEFAULT_PORT;
+				}
+			} else
+			{
+				sIndex = strchr ( sHost, '/' );
 				if ( sIndex )
-					*sIndex++ = '\0'; 
+					*sIndex++ = '\0';
 				else
-					sIndex = SPHINXSE_DEFAULT_INDEX;
+					sIndex = SPHINXAPI_DEFAULT_INDEX;
+			}
+			bOk = true;
+			break;
+		}
+
+		////////////
+		// sphinxql
+		////////////
+
+		if ( !strcmp ( sScheme, "sphinxql" ) )
+		{
+			bQL = true;
+			iPort = SPHINXQL_DEFAULT_PORT;
+
+			// handle port
+			char * sPort = strchr ( sHost, ':' );
+			sIndex = sHost; // starting point for index name search
+
+			if ( sPort )
+			{
+				*sPort++ = '\0';
+				sIndex = sPort;
 
 				iPort = atoi(sPort);
 				if ( !iPort )
-					iPort = SPHINXSE_DEFAULT_PORT;
+				{
+					bOk = false; // invalid port; can report ER_FOREIGN_DATA_STRING_INVALID
+					break;
+				}
 			}
-		} else
-		{
-			sIndex = strchr ( sHost, '/' );
+
+			// find index
+			sIndex = strchr ( sIndex, '/' );
 			if ( sIndex )
 				*sIndex++ = '\0';
-			else
-				sIndex = SPHINXSE_DEFAULT_INDEX;
+
+			// final checks
+			// host and index names are required
+			bOk = ( sHost && *sHost && sIndex && *sIndex );
+			break;
 		}
 
-		bOk = true;
+		// unknown case
+		bOk = false;
 		break;
 	}
 
@@ -1046,6 +1082,7 @@ static bool ParseUrl ( CSphSEShare * share, TABLE * table, bool bCreate )
 			share->m_sHost = sHost;
 			share->m_sIndex = sIndex;
 			share->m_iPort = (ushort)iPort;
+			share->m_bSphinxQL = bQL;
 		}
 	}
 	if ( !bOk && !share )
@@ -1089,12 +1126,14 @@ static CSphSEShare * get_share ( const char * table_name, TABLE * table )
 			break;
 
 		// try to setup it
-		pShare->m_pTableQueryCharset = table->field[2]->charset();
 		if ( !ParseUrl ( pShare, table, false ) )
 		{
 			SafeDelete ( pShare );
 			break;
 		}
+
+		if ( !pShare->m_bSphinxQL )
+			pShare->m_pTableQueryCharset = table->field[2]->charset();
 
 		// try to hash it
 		pShare->m_iTableNameLen = strlen(table_name);
@@ -1974,10 +2013,8 @@ int ha_sphinx::open ( const char * name, int, uint )
 }
 
 
-int ha_sphinx::ConnectToSearchd ( const char * sQueryHost, int iQueryPort )
+int ha_sphinx::Connect ( const char * sHost, ushort uPort )
 {
-	SPH_ENTER_METHOD();
-
 	struct sockaddr_in sin;
 #ifndef __WIN__
 	struct sockaddr_un saun;
@@ -1988,13 +2025,8 @@ int ha_sphinx::ConnectToSearchd ( const char * sQueryHost, int iQueryPort )
 	struct sockaddr * pSockaddr = NULL;
 
 	in_addr_t ip_addr;
-	int version;
-	uint uClientVersion = htonl ( SPHINX_SEARCHD_PROTO );
 
-	const char * sHost = ( sQueryHost && *sQueryHost ) ? sQueryHost : m_pShare->m_sHost;
-	ushort iPort = iQueryPort ? (ushort)iQueryPort : m_pShare->m_iPort;
-
-	if ( iPort )
+	if ( uPort )
 	{
 		iDomain = AF_INET;
 		iSockaddrSize = sizeof(sin);
@@ -2002,8 +2034,8 @@ int ha_sphinx::ConnectToSearchd ( const char * sQueryHost, int iQueryPort )
 
 		memset ( &sin, 0, sizeof(sin) );
 		sin.sin_family = AF_INET;
-		sin.sin_port = htons(iPort);
-		
+		sin.sin_port = htons(uPort);
+
 		// prepare host address
 		if ( (int)( ip_addr=inet_addr(sHost) ) != (int)INADDR_NONE )
 		{ 
@@ -2013,20 +2045,20 @@ int ha_sphinx::ConnectToSearchd ( const char * sQueryHost, int iQueryPort )
 			int tmp_errno;
 			struct hostent tmp_hostent, *hp;
 			char buff2 [ GETHOSTBYNAME_BUFF_SIZE ];
-			
+
 			hp = my_gethostbyname_r ( sHost, &tmp_hostent,
 				buff2, sizeof(buff2), &tmp_errno );
 			if ( !hp )
 			{ 
 				my_gethostbyname_r_free();
-				
+
 				char sError[256];
 				my_snprintf ( sError, sizeof(sError), "failed to resolve searchd host (name=%s)", sHost );
-				
+
 				my_error ( ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), sError );
 				SPH_RET(-1);
 			}
-			
+
 			memcpy ( &sin.sin_addr, hp->h_addr,
 				Min ( sizeof(sin.sin_addr), (size_t)hp->h_length ) );
 			my_gethostbyname_r_free();
@@ -2060,25 +2092,44 @@ int ha_sphinx::ConnectToSearchd ( const char * sQueryHost, int iQueryPort )
 	{
 		sphSockClose ( iSocket );
 		my_snprintf ( sError, sizeof(sError), "failed to connect to searchd (host=%s, errno=%d, port=%d)",
-			sHost, errno, iPort );
+			sHost, errno, (int)uPort );
 		my_error ( ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), sError );
 		SPH_RET(-1);
 	}
 
+	return iSocket;
+}
+
+
+int ha_sphinx::ConnectAPI ( const char * sQueryHost, int iQueryPort )
+{
+	SPH_ENTER_METHOD();
+
+	const char * sHost = ( sQueryHost && *sQueryHost ) ? sQueryHost : m_pShare->m_sHost;
+	ushort uPort = iQueryPort ? (ushort)iQueryPort : m_pShare->m_iPort;
+
+	int iSocket = Connect ( sHost, uPort );
+	if ( iSocket<0 )
+		SPH_RET ( iSocket);
+
+	char sError[512];
+
+	int version;
 	if ( ::recv ( iSocket, (char *)&version, sizeof(version), 0 )!=sizeof(version) )
 	{
 		sphSockClose ( iSocket );
 		my_snprintf ( sError, sizeof(sError), "failed to receive searchd version (host=%s, port=%d)",
-			sHost, iPort );
+			sHost, (int)uPort );
 		my_error ( ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), sError );
 		SPH_RET(-1);
 	}
 
+	uint uClientVersion = htonl ( SPHINX_SEARCHD_PROTO );
 	if ( ::send ( iSocket, (char*)&uClientVersion, sizeof(uClientVersion), 0 )!=sizeof(uClientVersion) )
 	{
 		sphSockClose ( iSocket );
 		my_snprintf ( sError, sizeof(sError), "failed to send client version (host=%s, port=%d)",
-			sHost, iPort );
+			sHost, (int)uPort );
 		my_error ( ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), sError );
 		SPH_RET(-1);
 	}
@@ -2102,10 +2153,100 @@ int ha_sphinx::close()
 }
 
 
+int ha_sphinx::HandleMysqlError ( MYSQL * pConn, int iErrCode )
+{
+	CSphSEThreadData * pTls = GetTls ();
+	if ( pTls )
+	{
+		strncpy ( pTls->m_tStats.m_sLastMessage, mysql_error ( pConn ), sizeof ( pTls->m_tStats.m_sLastMessage ) );
+		pTls->m_tStats.m_bLastError = true;
+	}
+
+	mysql_close ( pConn );
+
+	my_error ( iErrCode, MYF(0), pTls->m_tStats.m_sLastMessage );
+	return -1;
+}
+
+
 int ha_sphinx::write_row ( uchar * )
 {
 	SPH_ENTER_METHOD();
-	SPH_RET ( HA_ERR_WRONG_COMMAND );
+	if ( !m_pShare || !m_pShare->m_bSphinxQL )
+		SPH_RET ( HA_ERR_WRONG_COMMAND );
+
+	// SphinxQL inserts only, pretty much similar to abandoned federated
+	char sQueryBuf[1024];
+	char sValueBuf[1024];
+
+	String sQuery ( sQueryBuf, sizeof(sQueryBuf), &my_charset_bin );
+	String sValue ( sValueBuf, sizeof(sQueryBuf), &my_charset_bin );
+	sQuery.length ( 0 );
+	sValue.length ( 0 );
+
+	sQuery.append ( "INSERT INTO " );
+	sQuery.append ( m_pShare->m_sIndex );
+	sQuery.append ( " (" );
+
+	for ( Field ** ppField = table->field; *ppField; ppField++ )
+	{
+		sQuery.append ( (*ppField)->field_name );
+		if ( ppField[1] )
+			sQuery.append ( ", ");
+	}
+	sQuery.append ( ") VALUES (" );
+
+	for ( Field ** ppField = table->field; *ppField; ppField++ )
+	{
+		if ( (*ppField)->is_null() )
+		{
+			sQuery.append ( "''" );
+
+		} else
+		{
+			if ( (*ppField)->type()==MYSQL_TYPE_TIMESTAMP )
+			{
+				Item_field * pWrap = new Item_field ( *ppField ); // autofreed by query arena, I assume
+				Item_func_unix_timestamp * pConv = new Item_func_unix_timestamp ( pWrap );
+				pConv->quick_fix_field() ;
+				unsigned int uTs = (unsigned int) pConv->val_int();
+
+				snprintf ( sValueBuf, sizeof(sValueBuf), "'%u'", uTs );
+				sQuery.append ( sValueBuf );
+
+			} else
+			{
+				(*ppField)->val_str ( &sValue );
+				sQuery.append ( "'" );
+				sValue.print ( &sQuery );
+				sQuery.append ( "'" );
+				sValue.length(0);
+			}
+		}
+
+		if ( ppField[1] )
+			sQuery.append ( ", ");
+	}
+	sQuery.append ( ")" );
+
+	// FIXME? pretty inefficient to reconnect every time under high load,
+	// but this was intentionally written for a low load scenario..
+	MYSQL * pConn = mysql_init ( NULL );
+	if ( !pConn )
+		SPH_RET ( ER_OUT_OF_RESOURCES );
+
+	unsigned int uTimeout = 1;
+	mysql_options ( pConn, MYSQL_OPT_CONNECT_TIMEOUT, (const char*)&uTimeout );
+
+	if ( !mysql_real_connect ( pConn, m_pShare->m_sHost, "root", "", "", m_pShare->m_iPort, m_pShare->m_sSocket, 0 ) )
+		SPH_RET ( HandleMysqlError ( pConn, ER_CONNECT_TO_FOREIGN_DATA_SOURCE ) );
+
+	if ( mysql_real_query ( pConn, sQuery.ptr(), sQuery.length() ) )
+		SPH_RET ( HandleMysqlError ( pConn, ER_QUERY_ON_FOREIGN_DATA_SOURCE ) );
+
+	// all ok!
+	mysql_close ( pConn );
+	SPH_RET(0);
 }
 
 
@@ -2468,7 +2609,7 @@ int ha_sphinx::index_read ( byte * buf, const byte * key, uint key_len, enum ha_
 	}
 
 	// do connect
-	int iSocket = ConnectToSearchd ( q.m_sHost, q.m_iPort );
+	int iSocket = ConnectAPI ( q.m_sHost, q.m_iPort );
 	if ( iSocket<0 )
 		SPH_RET ( HA_ERR_END_OF_FILE );
 
@@ -2922,10 +3063,12 @@ int ha_sphinx::create ( const char * name, TABLE * table, HA_CREATE_INFO * )
 	SPH_ENTER_METHOD();
 	char sError[256];
 
-	if ( !ParseUrl ( NULL, table, true ) )
+	CSphSEShare tInfo;
+	if ( !ParseUrl ( &tInfo, table, true ) )
 		SPH_RET(-1);
 
-	for ( ;; )
+	// check SphinxAPI table
+	for ( ; !tInfo.m_bSphinxQL; )
 	{
 		// check system fields (count and types)
 		if ( table->s->fields<SPHINXSE_SYSTEM_COLUMNS )
@@ -2986,6 +3129,40 @@ int ha_sphinx::create ( const char * name, TABLE * table, HA_CREATE_INFO * )
 		sError[0] = '\0';
 		break;
 	}
+
+	// check SphinxQL table
+	for ( ; tInfo.m_bSphinxQL; )
+	{
+		sError[0] = '\0';
+		bool bId = false;
+
+		// check column types, and also for presence of an id column
+		for ( int i=0; i<(int)table->s->fields; i++ )
+		{
+			enum_field_types eType = table->field[i]->type();
+			if ( eType!=MYSQL_TYPE_TIMESTAMP && !IsIntegerFieldType(eType) && eType!=MYSQL_TYPE_VARCHAR && eType!=MYSQL_TYPE_FLOAT )
+			{
+				my_snprintf ( sError, sizeof(sError), "%s: column %s is of unsupported type (use int/bigint/timestamp/varchar/float)",
+					name, i+1, table->field[i]->field_name );
+				break;
+			}
+			if ( strcmp ( table->field[i]->field_name, "id" )==0 )
+				bId = true;
+		}
+		if ( sError[0] )
+			break;
+
+		if ( !bId )
+		{
+			my_snprintf ( sError, sizeof(sError), "%s: id column not found", name );
+			break;
+		}
+
+		// all good
+		break;
+	}
+
+	// report and bail
 	if ( sError[0] )
 	{
 		my_error ( ER_CANT_CREATE_TABLE, MYF(0), sError, -1 );

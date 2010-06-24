@@ -86,8 +86,8 @@ public class SphinxClient
 	/* searchd command versions */
 	private final static int VER_MAJOR_PROTO		= 0x1;
 	private final static int VER_COMMAND_SEARCH		= 0x117;
-	private final static int VER_COMMAND_EXCERPT	= 0x100;
-	private final static int VER_COMMAND_UPDATE		= 0x101;
+	private final static int VER_COMMAND_EXCERPT	= 0x102;
+	private final static int VER_COMMAND_UPDATE		= 0x102;
 	private final static int VER_COMMAND_KEYWORDS	= 0x100;
 	private final static int VER_COMMAND_FLUSHATTRS	= 0x100;
 
@@ -1098,12 +1098,17 @@ public class SphinxClient
 		if (!opts.containsKey("before_match")) opts.put("before_match", "<b>");
 		if (!opts.containsKey("after_match")) opts.put("after_match", "</b>");
 		if (!opts.containsKey("chunk_separator")) opts.put("chunk_separator", "...");
+		if (!opts.containsKey("html_strip_mode")) opts.put("html_strip_mode", "index");
 		if (!opts.containsKey("limit")) opts.put("limit", new Integer(256));
+		if (!opts.containsKey("limit_passages")) opts.put("limit_passages", new Integer(0));
+		if (!opts.containsKey("limit_words")) opts.put("limit_words", new Integer(0));
 		if (!opts.containsKey("around")) opts.put("around", new Integer(5));
+		if (!opts.containsKey("start_passage_id")) opts.put("start_passage_id", new Integer(1));
 		if (!opts.containsKey("exact_phrase")) opts.put("exact_phrase", new Integer(0));
 		if (!opts.containsKey("single_passage")) opts.put("single_passage", new Integer(0));
 		if (!opts.containsKey("use_boundaries")) opts.put("use_boundaries", new Integer(0));
 		if (!opts.containsKey("weight_order")) opts.put("weight_order", new Integer(0));
+		if (!opts.containsKey("load_files")) opts.put("load_files", new Integer(0));
 
 		/* build request */
 		ByteArrayOutputStream reqBuf = new ByteArrayOutputStream();
@@ -1116,6 +1121,9 @@ public class SphinxClient
 			if ( ((Integer)opts.get("single_passage")).intValue()!=0 )	iFlags |= 4;
 			if ( ((Integer)opts.get("use_boundaries")).intValue()!=0 )	iFlags |= 8;
 			if ( ((Integer)opts.get("weight_order")).intValue()!=0 )	iFlags |= 16;
+			if ( ((Integer)opts.get("query_mode")).intValue()!=0 )		iFlags |= 32;
+			if ( ((Integer)opts.get("force_all_words")).intValue()!=0 )	iFlags |= 64;
+			if ( ((Integer)opts.get("load_files")).intValue()!=0 )		iFlags |= 128;
 			req.writeInt ( iFlags );
 			writeNetUTF8 ( req, index );
 			writeNetUTF8 ( req, words );
@@ -1126,6 +1134,11 @@ public class SphinxClient
 			writeNetUTF8 ( req, (String) opts.get("chunk_separator") );
 			req.writeInt ( ((Integer) opts.get("limit")).intValue() );
 			req.writeInt ( ((Integer) opts.get("around")).intValue() );
+			
+			req.writeInt ( ((Integer) opts.get("limit_passages")).intValue() );
+			req.writeInt ( ((Integer) opts.get("limit_words")).intValue() );
+			req.writeInt ( ((Integer) opts.get("start_passage_id")).intValue() );
+			writeNetUTF8 ( req, (String) opts.get("html_strip_mode") );
 
 			/* send documents */
 			req.writeInt ( docs.length );
@@ -1205,7 +1218,10 @@ public class SphinxClient
 
 			req.writeInt ( attrs.length );
 			for ( int i=0; i<attrs.length; i++ )
+			{
 				writeNetUTF8 ( req, attrs[i] );
+				req.writeInt ( 0 ); // not MVA attr
+			}
 
 			req.writeInt ( values.length );
 			for ( int i=0; i<values.length; i++ )
@@ -1238,6 +1254,91 @@ public class SphinxClient
 		}
 	}
 
+	
+	
+	/**
+	 * Connect to searchd server and update given MVA attributes on given document in given indexes.
+	 * Sample code that will set group_id=(123, 456, 789) where id=10
+	 *
+	 * <pre>
+	 * String[] attrs = new String[1];
+	 *
+	 * attrs[0] = "group_id";
+	 * int[][] values = new int[1][3];
+	 *
+	 * values[0] = new int[3]; values[0][0] = 123; values[0][1] = 456; values[0][2] = 789
+	 *
+	 * int res = cl.UpdateAttributesMVA ( "test1", 10, attrs, values );
+	 * </pre>
+	 *
+	 * @param index		index name(s) to update; might be distributed
+	 * @param docid		id of document to update
+	 * @param attrs		array with the names of the attributes to update
+	 * @param values		array of updates; each int[] entry must contains all new attribute values
+	 * @return			-1 on failure, amount of actually found and updated documents (might be 0) on success
+	 *
+	 * @throws			SphinxException on invalid parameters
+	 */
+	public int UpdateAttributesMVA ( String index, long docid, String[] attrs, int[][] values ) throws SphinxException
+	{
+		/* check args */
+		myAssert ( index!=null && index.length()>0, "no index name provided" );
+		myAssert ( docid>0, "invalid document id" );
+		myAssert ( attrs!=null && attrs.length>0, "no attribute names provided" );
+		myAssert ( values!=null && values.length>0, "no update entries provided" );
+		myAssert ( values.length==attrs.length, "update entry has wrong length" );
+		for ( int i=0; i<values.length; i++ )
+		{
+			myAssert ( values[i]!=null, "update entry #" + i + " is null" );
+		}
+
+		/* build and send request */
+		ByteArrayOutputStream reqBuf = new ByteArrayOutputStream();
+		DataOutputStream req = new DataOutputStream ( reqBuf );
+		try
+		{
+			writeNetUTF8 ( req, index );
+
+			req.writeInt ( attrs.length );
+			for ( int i=0; i<attrs.length; i++ )
+			{
+				writeNetUTF8 ( req, attrs[i] );
+				req.writeInt ( 1 ); // MVA attr
+			}
+
+			req.writeInt ( 1 );
+			req.writeLong ( docid ); /* send docid as 64bit value */
+			
+			for ( int i=0; i<values.length; i++ )
+			{
+				req.writeInt ( values[i].length ); /* send MVA's count */
+				for ( int j=0; j<values[i].length; j++ ) /* send MVAs itself*/
+					req.writeInt ( values[i][j] );
+			}
+
+			req.flush();
+
+		} catch ( Exception e )
+		{
+			_error = "internal error: failed to build request: " + e;
+			return -1;
+		}
+
+		/* get and parse response */
+		DataInputStream in = _DoRequest ( SEARCHD_COMMAND_UPDATE, VER_COMMAND_UPDATE, reqBuf );
+		if ( in==null )
+			return -1;
+
+		try
+		{
+			return in.readInt ();
+		} catch ( Exception e )
+		{
+			_error = "incomplete reply";
+			return -1;
+		}
+	}
+	
 
 
 	/**

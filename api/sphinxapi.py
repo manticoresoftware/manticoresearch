@@ -30,9 +30,9 @@ SEARCHD_COMMAND_PERSIST		= 4
 SEARCHD_COMMAND_FLUSHATTRS	= 7
 
 # current client-side command implementation versions
-VER_COMMAND_SEARCH		= 0x116
-VER_COMMAND_EXCERPT		= 0x100
-VER_COMMAND_UPDATE		= 0x101
+VER_COMMAND_SEARCH		= 0x117
+VER_COMMAND_EXCERPT		= 0x102
+VER_COMMAND_UPDATE		= 0x102
 VER_COMMAND_KEYWORDS	= 0x100
 VER_COMMAND_FLUSHATTRS	= 0x100
 
@@ -83,6 +83,7 @@ SPH_ATTR_ORDINAL		= 3
 SPH_ATTR_BOOL			= 4
 SPH_ATTR_FLOAT			= 5
 SPH_ATTR_BIGINT			= 6
+SPH_ATTR_STRING			= 7
 SPH_ATTR_MULTI			= 0X40000000L
 
 SPH_ATTR_TYPES = (SPH_ATTR_NONE,
@@ -92,6 +93,7 @@ SPH_ATTR_TYPES = (SPH_ATTR_NONE,
 				  SPH_ATTR_BOOL,
 				  SPH_ATTR_FLOAT,
 				  SPH_ATTR_BIGINT,
+				  SPH_ATTR_STRING,
 				  SPH_ATTR_MULTI)
 
 # known grouping functions
@@ -698,6 +700,13 @@ class SphinxClient:
 					elif attrs[i][1] == SPH_ATTR_BIGINT:
 						match['attrs'][attrs[i][0]] = unpack('>q', response[p:p+8])[0]
 						p += 4
+					elif attrs[i][1] == SPH_ATTR_STRING:
+						slen = unpack('>L', response[p:p+4])[0]
+						p += 4
+						match['attrs'][attrs[i][0]] = ''
+						if slen>0:
+							match['attrs'][attrs[i][0]] = response[p:p+slen]
+						p += slen-4
 					elif attrs[i][1] == (SPH_ATTR_MULTI | SPH_ATTR_INTEGER):
 						match['attrs'][attrs[i][0]] = []
 						nvals = unpack('>L', response[p:p+4])[0]
@@ -756,8 +765,12 @@ class SphinxClient:
 		opts.setdefault('before_match', '<b>')
 		opts.setdefault('after_match', '</b>')
 		opts.setdefault('chunk_separator', ' ... ')
+		opts.setdefault('html_strip_mode', 'index')
 		opts.setdefault('limit', 256)
+		opts.setdefault('limit_passages', 0)
+		opts.setdefault('limit_words', 0)
 		opts.setdefault('around', 5)
+		opts.setdefault('start_passage_id', 1)
 
 		# build request
 		# v.1.0 req
@@ -767,8 +780,9 @@ class SphinxClient:
 		if opts.get('single_passage'):	flags |= 4
 		if opts.get('use_boundaries'):	flags |= 8
 		if opts.get('weight_order'):	flags |= 16
-		if opts.get('query_mode'):	flags |= 32
+		if opts.get('query_mode'):		flags |= 32
 		if opts.get('force_all_words'):	flags |= 64
+		if opts.get('load_files'):		flags |= 128
 		
 		# mode=0, flags
 		req = [pack('>2L', 0, flags)]
@@ -793,6 +807,12 @@ class SphinxClient:
 
 		req.append(pack('>L', int(opts['limit'])))
 		req.append(pack('>L', int(opts['around'])))
+		
+		req.append(pack('>L', int(opts['limit_passages'])))
+		req.append(pack('>L', int(opts['limit_words'])))
+		req.append(pack('>L', int(opts['start_passage_id'])))
+		req.append(pack('>L', len(opts['html_strip_mode'])))
+		req.append((opts['html_strip_mode']))
 
 		# documents
 		req.append(pack('>L', len(docs)))
@@ -835,13 +855,16 @@ class SphinxClient:
 		return res
 
 
-	def UpdateAttributes ( self, index, attrs, values ):
+	def UpdateAttributes ( self, index, attrs, values, mva=False ):
 		"""
 		Update given attribute values on given documents in given indexes.
 		Returns amount of updated documents (0 or more) on success, or -1 on failure.
 
 		'attrs' must be a list of strings.
 		'values' must be a dict with int key (document ID) and list of int values (new attribute values).
+		optional boolean parameter 'mva' points that there is update of MVA attributes.
+		In this case the 'values' must be a dict with int key (document ID) and list of lists of int values
+		(new MVA attribute values).
 
 		Example:
 			res = cl.UpdateAttributes ( 'test1', [ 'group_id', 'date_added' ], { 2:[123,1000000000], 4:[456,1234567890] } )
@@ -856,7 +879,12 @@ class SphinxClient:
 			assert ( isinstance ( entry, list ) )
 			assert ( len(attrs)==len(entry) )
 			for val in entry:
-				assert ( isinstance ( val, int ) )
+				if mva:
+					assert ( isinstance ( val, list ) )
+					for vals in val:
+						assert ( isinstance ( vals, int ))
+				else:
+					assert ( isinstance ( val, int ) )
 
 		# build request
 		req = [ pack('>L',len(index)), index ]
@@ -864,12 +892,16 @@ class SphinxClient:
 		req.append ( pack('>L',len(attrs)) )
 		for attr in attrs:
 			req.append ( pack('>L',len(attr)) + attr )
+			req.append ( pack('>L', 1 if mva else 0 ) )
 
 		req.append ( pack('>L',len(values)) )
 		for docid, entry in values.items():
 			req.append ( pack('>Q',docid) )
 			for val in entry:
-				req.append ( pack('>L',val) )
+				req.append ( pack('>L',count(val) if mva else val) )
+				if mva:
+					for vals in val:
+						req.append ( pack ('>L',vals) )
 
 		# connect, send query, get response
 		sock = self._Connect()

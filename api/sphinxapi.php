@@ -1323,7 +1323,7 @@ class SphinxClient
 		if ( !isset($opts["force_all_words"]) )		$opts["force_all_words"] = false;
 		if ( !isset($opts["start_passage_id"]) )	$opts["start_passage_id"] = 1;
 		if ( !isset($opts["load_files"]) )			$opts["load_files"] = false;
-		if ( !isset($opts["html_strip_mode"]) )		$opts["html_strip_mode"] = "none";
+		if ( !isset($opts["html_strip_mode"]) )		$opts["html_strip_mode"] = "index";
 
 		/////////////////
 		// build request

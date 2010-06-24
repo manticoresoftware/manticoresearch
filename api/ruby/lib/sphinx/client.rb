@@ -57,9 +57,9 @@ module Sphinx
     # Current client-side command implementation versions
     
     # search command version
-    VER_COMMAND_SEARCH   = 0x116
+    VER_COMMAND_SEARCH   = 0x117
     # excerpt command version
-    VER_COMMAND_EXCERPT  = 0x100
+    VER_COMMAND_EXCERPT  = 0x102
     # update command version
     VER_COMMAND_UPDATE   = 0x102
     # keywords command version
@@ -147,6 +147,8 @@ module Sphinx
     SPH_ATTR_FLOAT     = 5
     # signed 64-bit integer
     SPH_ATTR_BIGINT    = 6
+	# string
+	SPH_ATTR_STRING		= 7
     # this attr has multiple values (0 or more)
     SPH_ATTR_MULTI     = 0x40000000
     
@@ -758,6 +760,9 @@ module Sphinx
                 when SPH_ATTR_FLOAT
                   # handle floats
                   r['attrs'][a] = response.get_float
+				when SPH_ATTR_STRING
+				  # handle string
+				  r['attrs'][a] = response.get_string
                 else
                   # handle everything else as unsigned ints
                   val = response.get_int
@@ -825,12 +830,17 @@ module Sphinx
       opts['before_match'] ||= '<b>';
       opts['after_match'] ||= '</b>';
       opts['chunk_separator'] ||= ' ... ';
+	  opts['html_strip_mode'] ||= 'index';
       opts['limit'] ||= 256;
+	  opts['limit_passages'] ||= 0;
+	  opts['limit_words'] ||= 0;
       opts['around'] ||= 5;
+	  opts['start_passage_id'] ||= 1;
       opts['exact_phrase'] ||= false
       opts['single_passage'] ||= false
       opts['use_boundaries'] ||= false
       opts['weight_order'] ||= false
+	  opts['load_files'] ||= false
       
       # build request
       
@@ -840,6 +850,9 @@ module Sphinx
       flags |= 4  if opts['single_passage']
       flags |= 8  if opts['use_boundaries']
       flags |= 16 if opts['weight_order']
+	  flags |= 32 if opts['query_mode']
+	  flags |= 64 if opts['force_all_words']
+	  flags |= 128 if opts['load_files']
       
       request = Request.new
       request.put_int 0, flags # mode=0, flags=1 (remove spaces)
@@ -853,6 +866,12 @@ module Sphinx
       request.put_string opts['after_match']
       request.put_string opts['chunk_separator']
       request.put_int opts['limit'].to_i, opts['around'].to_i
+	  
+	  # options v1.2
+	  request.put_int opts['limit_passages'].to_i
+	  request.put_int opts['limit_words'].to_i
+	  request.put_int opts['start_passage_id'].to_i
+	  request.put_string opts['html_strip_mode']
       
       # documents
       request.put_int docs.size

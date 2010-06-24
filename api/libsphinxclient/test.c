@@ -156,10 +156,9 @@ void test_excerpt ( sphinx_client * client )
 }
 
 
-void test_update ( sphinx_client * client )
+void test_update ( sphinx_client * client, sphinx_uint64_t id )
 {
 	const char * attr = "group_id";
-	const sphinx_uint64_t id = 2;
 	const sphinx_int64_t val = 123;
 	int res;
 
@@ -243,18 +242,19 @@ int main ()
 
 	test_query ( client, SPH_FALSE );
 	test_excerpt ( client );
-	test_update ( client );
+	test_update ( client, 75 );
 	test_update_mva ( client );
 	test_query ( client, SPH_FALSE );
 	test_keywords ( client );
 	test_query ( client, SPH_TRUE );
 
 	sphinx_open ( client );
-	test_update ( client );
-	test_update ( client );
+	test_update ( client, 688 );
+	test_update ( client, 252 );
 	test_query ( client, SPH_FALSE );
 	sphinx_cleanup ( client );
 	test_query ( client, SPH_FALSE );
+
 	sphinx_close ( client );
 
 	test_status ( client );

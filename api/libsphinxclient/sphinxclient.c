@@ -2047,7 +2047,7 @@ int sphinx_update_attributes ( sphinx_client * client, const char * index, int n
 	}
 
 	// alloc buffer
-	req_len = (int)( 12 + safestrlen(index) + (8+4*num_attrs)*num_docs );
+	req_len = (int)( 12 + safestrlen(index) + (12+4*num_attrs)*num_docs );
 	for ( i=0; i<num_attrs; i++ )
 		req_len += (int)( 4 + safestrlen(attrs[i]) );
 
@@ -2068,7 +2068,10 @@ int sphinx_update_attributes ( sphinx_client * client, const char * index, int n
 	send_str ( &req, index );
 	send_int ( &req, num_attrs );
 	for ( i=0; i<num_attrs; i++ )
+	{
 		send_str ( &req, attrs[i] );
+		send_int ( &req, 0 ); // not SPH_ATTR_MULTI flag
+	}
 
 	send_int ( &req, num_docs );
 	for ( i=0; i<num_docs; i++ )

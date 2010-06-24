@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>MVA persistent attribute updates</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source src
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query = SELECT id, text, section, mva1 FROM test_table
+	sql_attr_uint	= section
+	sql_attr_multi = uint mva1 from field mva1
+}
+
+index idx
+{
+	source			= src
+	path			= <data_path/>/main
+    charset_type 	= utf-8
+    docinfo			= extern
+}
+
+</config>
+
+<custom_test><![CDATA[
+$results = array ();
+
+// update that block
+for ( $i = 0; $i < 4; $i++)
+{
+	$results[] = sprintf( "iteration=%d", $i );
+	
+	$up = $client->UpdateAttributes ( "idx", array("mva1"), array(1=>array(array(2,3,4)), 3=>array(array(6,7,8))),true);
+	if ( $up >= 0 )
+		$results[] = sprintf("up.ok=%d", $up);
+	else	
+		$results[] = sprintf("up.err=%s", $client->GetLastError());
+		
+	StopSearchd ( 'config.conf', 'searchd.pid' );
+	
+	usleep ( 50000 );
+	
+	$error = "";
+	$startSta = StartSearchd ( 'config.conf', 'error.txt', 'searchd.pid', $error );
+	if ( $startSta == 0 || $startSta == 2 )
+		$results[] = "started=ok";
+	else
+		$results[] = sprintf("start.err=%d local=%s client=%s", $startSta, $error, $client->GetLastError());
+}
+
+// find the updated match
+$results[] = $client->Query ( "test3");
+
+// final fixup; we don't want to compare times
+for ( $i=0; $i<count($results); $i++ )
+	if ( is_array($results[$i]) )
+		unset ( $results[$i]["time"] );
+
+]]></custom_test>
+
+  <DB_Create>
+CREATE TABLE `test_table` (
+  `id` int(11) DEFAULT NULL,
+  `text` varchar (255) NOT NULL,
+  `section` int(11) DEFAULT NULL,
+  `mva1` varchar(255) NOT NULL  
+)
+  </DB_Create>
+
+  <DB_Drop>
+DROP TABLE IF EXISTS `test_table`
+  </DB_Drop>
+
+  <DB_Insert>
+INSERT INTO `test_table` (`id`, `text`, `section`, `mva1`) VALUES 
+(1, 'test1', 101, '1001'),
+(2, 'test2', 102, '1002 1023 4456'),
+(3, 'test3', 103, '1003 1008 1010'),
+(4, 'test4', 104, '1004 1005 1006');
+  </DB_Insert>
+  
+</test>

@@ -5,8 +5,8 @@
 #endif
 %}
 
-%lex-param		{ SqlParser_t * pParser }
-%parse-param	{ SqlParser_t * pParser }
+%lex-param		{ SqlParser_c * pParser }
+%parse-param	{ SqlParser_c * pParser }
 %pure-parser
 %error-verbose
 
@@ -59,6 +59,7 @@
 %type	<m_tInsval>		const_int
 %type	<m_tInsval>		const_float
 %type	<m_tInsval>		insert_val
+%type	<m_iValue>		named_const_list
 
 %left TOK_OR
 %left TOK_AND
@@ -75,7 +76,7 @@
 // some helpers
 #include <float.h> // for FLT_MAX
 
-static void AddFloatRangeFilter ( SqlParser_t * pParser, const CSphString & sAttr, float fMin, float fMax )
+static void AddFloatRangeFilter ( SqlParser_c * pParser, const CSphString & sAttr, float fMin, float fMax )
 {
 	CSphFilterSettings tFilter;
 	tFilter.m_sAttrName = sAttr;
@@ -85,7 +86,7 @@ static void AddFloatRangeFilter ( SqlParser_t * pParser, const CSphString & sAtt
 	pParser->m_pQuery->m_dFilters.Add ( tFilter );
 }
 
-static void AddUintRangeFilter ( SqlParser_t * pParser, const CSphString & sAttr, DWORD uMin, DWORD uMax )
+static void AddUintRangeFilter ( SqlParser_c * pParser, const CSphString & sAttr, DWORD uMin, DWORD uMax )
 {
 	CSphFilterSettings tFilter;
 	tFilter.m_sAttrName = sAttr;
@@ -364,8 +365,52 @@ option_list:
 	;
 
 option_item:
-	TOK_IDENT '=' TOK_IDENT			{ if ( !pParser->AddOption ( $1, $3 ) ) YYERROR; }
-	| TOK_IDENT '=' TOK_CONST_INT	{ if ( !pParser->AddOption ( $1, $3 ) ) YYERROR; }
+	TOK_IDENT '=' TOK_IDENT
+		{
+			if ( !pParser->AddOption ( $1, $3 ) )
+				YYERROR;
+		}
+	| TOK_IDENT '=' TOK_CONST_INT
+		{
+			if ( !pParser->AddOption ( $1, $3 ) )
+				YYERROR;
+		}
+	| TOK_IDENT '=' '(' named_const_list ')'
+		{
+			if ( !pParser->AddOption ( $1, pParser->GetNamedVec ( $4 ) ) )
+				YYERROR;
+			pParser->FreeNamedVec ( $4 );
+		}
+	;
+
+named_const_list:
+	named_const
+		{
+			$$ = pParser->AllocNamedVec ();
+			CSphVector<CSphNamedInt> & dVec = pParser->GetNamedVec ( $$ );
+
+			assert ( !dVec.GetLength() );
+			dVec.Add();
+			dVec.Last().m_sName = $1.m_sValue;
+			dVec.Last().m_iValue = $1.m_iValue;
+		}
+	| named_const_list ',' named_const
+		{
+			CSphVector<CSphNamedInt> & dVec = pParser->GetNamedVec ( $$ );
+
+			assert ( dVec.GetLength() );
+			dVec.Add();
+			dVec.Last().m_sName = $3.m_sValue;
+			dVec.Last().m_iValue = $3.m_iValue;
+		}
+	;
+
+named_const:
+	TOK_IDENT '=' const_int
+		{
+			$$.m_sValue = $1.m_sValue;
+			$$.m_iValue = $3.m_iVal 
+		}
 	;
 
 //////////////////////////////////////////////////////////////////////////

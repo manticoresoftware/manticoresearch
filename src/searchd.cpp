@@ -5689,8 +5689,9 @@ struct SqlStmt_t
 };
 
 
-struct SqlParser_t
+struct SqlParser_c
 {
+public:
 	void *			m_pScanner;
 	const char *	m_pBuf;
 	const char *	m_pLastTokenStart;
@@ -5698,11 +5699,23 @@ struct SqlParser_t
 	CSphQuery *		m_pQuery;
 	bool			m_bGotQuery;
 	SqlStmt_t *		m_pStmt;
+	
+public:
+					SqlParser_c () : m_bNamedVecBusy ( false ) {}
 
 	bool			AddOption ( SqlNode_t tIdent, SqlNode_t tValue );
+	bool			AddOption ( SqlNode_t tIdent, CSphVector<CSphNamedInt> & dNamed );
 	void			AddItem ( YYSTYPE * pExpr, YYSTYPE * pAlias, ESphAggrFunc eFunc=SPH_AGGR_NONE );
 	bool			AddSchemaItem ( YYSTYPE * pNode );
 	void			SetValue ( const char * sName, YYSTYPE tValue );
+
+	int							AllocNamedVec ();
+	CSphVector<CSphNamedInt> &	GetNamedVec ( int iIndex );
+	void						FreeNamedVec ( int iIndex );
+
+protected:
+	bool						m_bNamedVecBusy;
+	CSphVector<CSphNamedInt>	m_dNamedVec;
 };
 
 
@@ -5745,14 +5758,14 @@ void SqlUnescape ( CSphString & sRes, const char * sEscaped, int iLen )
 // unused parameter, simply to avoid type clash between all my yylex() functions
 #define YYLEX_PARAM pParser->m_pScanner, pParser
 #ifdef NDEBUG
-#define YY_DECL int yylex ( YYSTYPE * lvalp, void * yyscanner, SqlParser_t * pParser )
+#define YY_DECL int yylex ( YYSTYPE * lvalp, void * yyscanner, SqlParser_c * pParser )
 #else
-#define YY_DECL int yylexd ( YYSTYPE * lvalp, void * yyscanner, SqlParser_t * pParser )
+#define YY_DECL int yylexd ( YYSTYPE * lvalp, void * yyscanner, SqlParser_c * pParser )
 #endif
 #include "llsphinxql.c"
 
 
-void yyerror ( SqlParser_t * pParser, const char * sMessage )
+void yyerror ( SqlParser_c * pParser, const char * sMessage )
 {
 	// flex put a zero at last token boundary; make it undo that
 	yylex_unhold ( pParser->m_pScanner );
@@ -5776,7 +5789,7 @@ void yyerror ( SqlParser_t * pParser, const char * sMessage )
 
 #ifndef NDEBUG
 // using a proxy to be possible to debug inside yylex
-int yylex ( YYSTYPE * lvalp, void * yyscanner, SqlParser_t * pParser )
+int yylex ( YYSTYPE * lvalp, void * yyscanner, SqlParser_c * pParser )
 {
 	int res = yylexd ( lvalp, yyscanner, pParser );
 	return res;
@@ -5852,13 +5865,12 @@ public:
 	}
 };
 
-bool SqlParser_t::AddOption ( SqlNode_t tIdent, SqlNode_t tValue )
+bool SqlParser_c::AddOption ( SqlNode_t tIdent, SqlNode_t tValue )
 {
 	CSphString & sOpt = tIdent.m_sValue;
 	CSphString & sVal = tValue.m_sValue;
 	sOpt.ToLower ();
 	sVal.ToLower ();
-
 
 	if ( sOpt=="ranker" )
 	{
@@ -5898,14 +5910,36 @@ bool SqlParser_t::AddOption ( SqlNode_t tIdent, SqlNode_t tValue )
 
 	} else
 	{
-		m_pParseError->SetSprintf ( "unknown option '%s'", tIdent.m_sValue.cstr() );
+		m_pParseError->SetSprintf ( "unknown option '%s' (or bad argument type)", tIdent.m_sValue.cstr() );
 		return false;
 	}
 
 	return true;
 }
 
-void SqlParser_t::AddItem ( YYSTYPE * pExpr, YYSTYPE * pAlias, ESphAggrFunc eFunc )
+bool SqlParser_c::AddOption ( SqlNode_t tIdent, CSphVector<CSphNamedInt> & dNamed )
+{
+	CSphString & sOpt = tIdent.m_sValue;
+	sOpt.ToLower ();
+
+	if ( sOpt=="field_weights" )
+	{
+		m_pQuery->m_dFieldWeights.SwapData ( dNamed );
+
+	} else if ( sOpt=="index_weights" )
+	{
+		m_pQuery->m_dIndexWeights.SwapData ( dNamed );
+
+	} else
+	{
+		m_pParseError->SetSprintf ( "unknown option '%s' (or bad argument type)", tIdent.m_sValue.cstr() );
+		return false;
+	}
+
+	return true;
+}
+
+void SqlParser_c::AddItem ( YYSTYPE * pExpr, YYSTYPE * pAlias, ESphAggrFunc eFunc )
 {
 	CSphQueryItem tItem;
 	tItem.m_sExpr.SetBinary ( m_pBuf + pExpr->m_iStart, pExpr->m_iEnd - pExpr->m_iStart );
@@ -5916,7 +5950,7 @@ void SqlParser_t::AddItem ( YYSTYPE * pExpr, YYSTYPE * pAlias, ESphAggrFunc eFun
 	m_pQuery->m_dItems.Add ( tItem );
 }
 
-bool SqlParser_t::AddSchemaItem ( YYSTYPE * pNode )
+bool SqlParser_c::AddSchemaItem ( YYSTYPE * pNode )
 {
 	assert ( m_pStmt );
 	CSphString sItem;
@@ -5924,12 +5958,34 @@ bool SqlParser_t::AddSchemaItem ( YYSTYPE * pNode )
 	return m_pStmt->AddSchemaItem ( sItem.cstr() );
 }
 
+int SqlParser_c::AllocNamedVec ()
+{
+	// we only allow one such vector at a time, right now
+	assert ( !m_bNamedVecBusy );
+	m_bNamedVecBusy = true;
+	m_dNamedVec.Resize ( 0 );
+	return 0;
+}
+
+CSphVector<CSphNamedInt> & SqlParser_c::GetNamedVec ( int iIndex )
+{
+	assert ( m_bNamedVecBusy && iIndex==0 );
+	return m_dNamedVec;
+}
+
+void SqlParser_c::FreeNamedVec ( int iIndex )
+{
+	assert ( m_bNamedVecBusy && iIndex==0 );
+	m_bNamedVecBusy = false;
+	m_dNamedVec.Resize ( 0 );
+}
+
 SqlStmt_e ParseSqlQuery ( const CSphString & sQuery, SqlStmt_t * pStmt, CSphString & sError )
 {
 	assert ( pStmt );
 	assert ( pStmt->m_pQuery );
 
-	SqlParser_t tParser;
+	SqlParser_c tParser;
 	tParser.m_pBuf = sQuery.cstr();
 	tParser.m_pLastTokenStart = NULL;
 	tParser.m_pParseError = &sError;

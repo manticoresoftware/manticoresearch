@@ -1598,7 +1598,7 @@ static ESortClauseParseResult sphParseSortClause ( const char * sClause, const C
 		{
 			tState.m_eKeypart[iField] = SPH_KEYPART_WEIGHT;
 
-		} else if ( !strcasecmp ( pTok, "@id" ) )
+		} else if ( !strcasecmp ( pTok, "@id" ) || !strcasecmp ( pTok, "id" ) )
 		{
 			tState.m_eKeypart[iField] = SPH_KEYPART_ID;
 

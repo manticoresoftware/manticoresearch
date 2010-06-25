@@ -327,9 +327,14 @@ order_items_list:
 	;
 
 order_item:
-	TOK_IDENT
-	| TOK_IDENT TOK_ASC					{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
-	| TOK_IDENT TOK_DESC				{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
+	ident_or_id
+	| ident_or_id TOK_ASC				{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
+	| ident_or_id TOK_DESC				{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
+	;
+
+ident_or_id:
+	TOK_ID
+	| TOK_IDENT
 	;
 
 opt_limit_clause:
@@ -523,10 +528,8 @@ opt_insert_cols_list:
 	;
 
 schema_list:
-	TOK_IDENT					{ if ( !pParser->AddSchemaItem ( &$1 ) ) { yyerror ( pParser, "unknown field" ); YYERROR; } }
-	| TOK_ID					{ if ( !pParser->AddSchemaItem ( &$1 ) ) { yyerror ( pParser, "unknown field" ); YYERROR; } }
-	| schema_list ',' TOK_IDENT			{ if ( !pParser->AddSchemaItem ( &$3 ) ) { yyerror ( pParser, "unknown field" ); YYERROR; } }
-	| schema_list ',' TOK_ID			{ if ( !pParser->AddSchemaItem ( &$3 ) ) { yyerror ( pParser, "unknown field" ); YYERROR; } }
+	ident_or_id						{ if ( !pParser->AddSchemaItem ( &$1 ) ) { yyerror ( pParser, "unknown field" ); YYERROR; } }
+	| schema_list ',' ident_or_id	{ if ( !pParser->AddSchemaItem ( &$3 ) ) { yyerror ( pParser, "unknown field" ); YYERROR; } }
 	;
 
 opt_insert_cols_set:

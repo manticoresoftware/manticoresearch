@@ -1137,10 +1137,14 @@ class SphinxConfig
 		{
 			$str = "sphinxql> $result[sphinxql];\n";
 			if ( array_key_exists ("total_affected", $result) )
+			{
 				$str .= "Query OK, $result[total_affected] rows affected\n";
-			else if ( array_key_exists ("error", $result) )
+
+			} else if ( array_key_exists ("error", $result) )
+			{
 				$str .= "ERROR $result[errno]: $result[error]\n";
-			else if (array_key_exists ("rows", $result) )
+
+			} else if (array_key_exists ("rows", $result) )
 			{
 				foreach ( $result["rows"][0] as $key=>$s )
 					$str .= "\t$key";
@@ -1152,9 +1156,13 @@ class SphinxConfig
 					$str .="\n";
 				}
 				$str .="$result[total_rows] rows in set\n";
-		}
+
+			} else if ( isset($result["total_rows"]) )
+			{
+				$str .= "$result[total_rows] rows in set\n";
+			}
 			return $str."\n";
-	}
+		}
 
 		// format header
 		$qinfo = @$this->_queries[$nquery-1];

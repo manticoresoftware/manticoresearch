@@ -1,33 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Test>
-  <Name>SphinxQL: floats without leading zero</Name>
+<test>
+<name>SphinxQL: floats without leading zero</name>
 
 <skip_indexer/>
-<Config>
+<config>
 indexer
 {
-	mem_limit			= 16M
+	mem_limit = 16M
 }
 
 searchd
 {
-<Searchd_Settings/>
-	workers				= threads
+	<searchd_settings/>
+	workers = threads
 }
 
 index test
 {
-	type	= rt
-	path	= data/test
-	rt_attr_float	= flt
-	rt_field	= title
+	type = rt
+	path = data/test
+	rt_attr_float = flt
+	rt_field = title
 }
-</Config>
+</config>
 
-<SPHQueries>
-	<SPHinxQL>insert into test (id,flt,title) values (1,0.3,'zero'),(2,.3,'no zero')</SPHinxQL>
-	<SPHinxQL>select .1 as zz, flt from test where match('zero')</SPHinxQL>
-	<SPHinxQL>select 0.1 as zz, flt from test where match('zero')</SPHinxQL>
-</SPHQueries>
+<sphqueries>
+<sphinxql>insert into test (id,flt,title) values (1,0.3,'zero'),(2,.3,'no zero')</sphinxql>
+<sphinxql>select .1 as zz, flt from test where match('zero')</sphinxql>
+<sphinxql>select 0.1 as zz, flt from test where match('zero')</sphinxql>
+<sphinxql>insert into test (id,flt,title) values (10,-123,'neg')</sphinxql>
+<sphinxql>select * from test where id=-10</sphinxql>
+<sphinxql>select * from test where id=10</sphinxql>
+</sphqueries>
 
-</Test>
+</test>

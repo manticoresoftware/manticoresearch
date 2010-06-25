@@ -56,6 +56,8 @@
 %token	TOK_TRUE
 %token	TOK_FALSE
 
+%type	<m_tInsval>		const_int
+%type	<m_tInsval>		const_float
 %type	<m_tInsval>		insert_val
 
 %left TOK_OR
@@ -182,28 +184,28 @@ where_item:
 				pParser->m_bGotQuery = true;
 			}
 		}
-	| TOK_ID '=' TOK_CONST_INT
+	| TOK_ID '=' const_int
 		{
 			CSphFilterSettings tFilter;
 			tFilter.m_sAttrName = "@id";
 			tFilter.m_eType = SPH_FILTER_VALUES;
-			tFilter.m_dValues.Add ( $3.m_iValue );
+			tFilter.m_dValues.Add ( $3.m_iVal );
 			pParser->m_pQuery->m_dFilters.Add ( tFilter );
 		}
-	| TOK_IDENT '=' TOK_CONST_INT
+	| TOK_IDENT '=' const_int
 		{
 			CSphFilterSettings tFilter;
 			tFilter.m_sAttrName = $1.m_sValue;
 			tFilter.m_eType = SPH_FILTER_VALUES;
-			tFilter.m_dValues.Add ( $3.m_iValue );
+			tFilter.m_dValues.Add ( $3.m_iVal );
 			pParser->m_pQuery->m_dFilters.Add ( tFilter );
 		}
-	| TOK_IDENT TOK_NE TOK_CONST_INT
+	| TOK_IDENT TOK_NE const_int
 		{
 			CSphFilterSettings tFilter;
 			tFilter.m_sAttrName = $1.m_sValue;
 			tFilter.m_eType = SPH_FILTER_VALUES;
-			tFilter.m_dValues.Add ( $3.m_iValue );
+			tFilter.m_dValues.Add ( $3.m_iVal );
 			tFilter.m_bExclude = true;
 			pParser->m_pQuery->m_dFilters.Add ( tFilter );
 		}
@@ -224,51 +226,61 @@ where_item:
 			tFilter.m_bExclude = true;
 			pParser->m_pQuery->m_dFilters.Add ( tFilter );
 		}
-	| TOK_IDENT TOK_BETWEEN TOK_CONST_INT TOK_AND TOK_CONST_INT
+	| TOK_IDENT TOK_BETWEEN const_int TOK_AND const_int
 		{
-			AddUintRangeFilter ( pParser, $1.m_sValue, $3.m_iValue, $5.m_iValue );
+			AddUintRangeFilter ( pParser, $1.m_sValue, $3.m_iVal, $5.m_iVal );
 		}
-	| TOK_IDENT '>' TOK_CONST_INT
+	| TOK_IDENT '>' const_int
 		{
-			AddUintRangeFilter ( pParser, $1.m_sValue, $3.m_iValue+1, UINT_MAX );
+			AddUintRangeFilter ( pParser, $1.m_sValue, $3.m_iVal+1, UINT_MAX );
 		}
-	| TOK_IDENT '<' TOK_CONST_INT
+	| TOK_IDENT '<' const_int
 		{
-			AddUintRangeFilter ( pParser, $1.m_sValue, 0, $3.m_iValue-1 );
+			AddUintRangeFilter ( pParser, $1.m_sValue, 0, $3.m_iVal-1 );
 		}
-	| TOK_IDENT TOK_GTE TOK_CONST_INT
+	| TOK_IDENT TOK_GTE const_int
 		{
-			AddUintRangeFilter ( pParser, $1.m_sValue, $3.m_iValue, UINT_MAX );
+			AddUintRangeFilter ( pParser, $1.m_sValue, $3.m_iVal, UINT_MAX );
 		}
-	| TOK_IDENT TOK_LTE TOK_CONST_INT
+	| TOK_IDENT TOK_LTE const_int
 		{
-			AddUintRangeFilter ( pParser, $1.m_sValue, 0, $3.m_iValue );
+			AddUintRangeFilter ( pParser, $1.m_sValue, 0, $3.m_iVal );
 		}
-	| TOK_IDENT '=' TOK_CONST_FLOAT
-	| TOK_IDENT TOK_NE TOK_CONST_FLOAT
-	| TOK_IDENT '>' TOK_CONST_FLOAT
-	| TOK_IDENT '<' TOK_CONST_FLOAT
+	| TOK_IDENT '=' const_float
+	| TOK_IDENT TOK_NE const_float
+	| TOK_IDENT '>' const_float
+	| TOK_IDENT '<' const_float
 		{
 			yyerror ( pParser, "only >=, <=, and BETWEEN floating-point filter types are supported in this version" );
 			YYERROR;
 		}
-	| TOK_IDENT TOK_BETWEEN TOK_CONST_FLOAT TOK_AND TOK_CONST_FLOAT
+	| TOK_IDENT TOK_BETWEEN const_float TOK_AND const_float
 		{
-			AddFloatRangeFilter ( pParser, $1.m_sValue, $3.m_fValue, $5.m_fValue );
+			AddFloatRangeFilter ( pParser, $1.m_sValue, $3.m_fVal, $5.m_fVal );
 		}
-	| TOK_IDENT TOK_GTE TOK_CONST_FLOAT
+	| TOK_IDENT TOK_GTE const_float
 		{
-			AddFloatRangeFilter ( pParser, $1.m_sValue, $3.m_fValue, FLT_MAX );
+			AddFloatRangeFilter ( pParser, $1.m_sValue, $3.m_fVal, FLT_MAX );
 		}
-	| TOK_IDENT TOK_LTE TOK_CONST_FLOAT
+	| TOK_IDENT TOK_LTE const_float
 		{
-			AddFloatRangeFilter ( pParser, $1.m_sValue, -FLT_MAX, $3.m_fValue );
+			AddFloatRangeFilter ( pParser, $1.m_sValue, -FLT_MAX, $3.m_fVal );
 		}
 	;
 
+const_int:
+	TOK_CONST_INT			{ $$.m_iType = TOK_CONST_INT; $$.m_iVal = $1.m_iValue; }
+	| '-' TOK_CONST_INT		{ $$.m_iType = TOK_CONST_INT; $$.m_iVal = -$2.m_iValue; }
+	;
+
+const_float:
+	TOK_CONST_FLOAT		{ $$.m_iType = TOK_CONST_FLOAT; $$.m_fVal = $1.m_fValue; }
+	| '-' TOK_CONST_FLOAT	{ $$.m_iType = TOK_CONST_FLOAT; $$.m_fVal = -$2.m_fValue; }
+	;
+
 const_list:
-	TOK_CONST_INT							{ $$.m_dValues.Add ( $1.m_iValue ); }
-	| const_list ',' TOK_CONST_INT			{ $$.m_dValues.Add ( $3.m_iValue ); }
+	const_int					{ $$.m_dValues.Add ( $1.m_iVal ); }
+	| const_list ',' const_int	{ $$.m_dValues.Add ( $3.m_iVal ); }
 	;
 
 opt_group_clause:
@@ -421,9 +433,9 @@ set_clause:
 boolean_value:
 	TOK_TRUE			{ $$.m_iValue = 1; }
 	| TOK_FALSE			{ $$.m_iValue = 0; }
-	| TOK_CONST_INT			
+	| const_int
 		{
-			$$ = $1;
+			$$.m_iValue = $1.m_iVal;
 			if ( $$.m_iValue!=0 && $$.m_iValue!=1 )
 			{
 				yyerror ( pParser, "only 0 and 1 could be used as boolean values" );
@@ -487,19 +499,19 @@ insert_vals_list:
 	;
 
 insert_val:
-	TOK_CONST_INT		{ $$.m_iType = TOK_CONST_INT; $$.m_iVal = $1.m_iValue; }
-	| TOK_CONST_FLOAT	{ $$.m_iType = TOK_CONST_FLOAT; $$.m_fVal = $1.m_fValue; }
-	| TOK_QUOTED_STRING	{ $$.m_iType = TOK_QUOTED_STRING; $$.m_sVal = $1.m_sValue; }
+	const_int
+	| const_float
+	| TOK_QUOTED_STRING		{ $$.m_iType = TOK_QUOTED_STRING; $$.m_sVal = $1.m_sValue; }
 	;
 
 //////////////////////////////////////////////////////////////////////////
 
 delete_from:
-	TOK_DELETE TOK_FROM TOK_IDENT TOK_WHERE TOK_ID '=' TOK_CONST_INT
+	TOK_DELETE TOK_FROM TOK_IDENT TOK_WHERE TOK_ID '=' const_int
 		{
 			pParser->m_pStmt->m_eStmt = STMT_DELETE;
 			pParser->m_pStmt->m_sDeleteIndex = $3.m_sValue;
-			pParser->m_pStmt->m_iDeleteID = $7.m_iValue;
+			pParser->m_pStmt->m_iDeleteID = $7.m_iVal;
 		}
 	;
 

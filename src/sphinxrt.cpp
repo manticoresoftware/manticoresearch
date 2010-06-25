@@ -1190,6 +1190,7 @@ bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMat
 
 	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizer->Clone ( false ) ); // avoid race
 	CSphSource_StringVector tSrc ( iFields, ppFields, m_tOutboundSchema );
+	tSrc.Setup ( m_tSettings );
 	tSrc.SetTokenizer ( pTokenizer.Ptr() );
 	tSrc.SetDict ( m_pDict );
 

@@ -9004,6 +9004,13 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		tIdx.m_sIndexPath = hIndex["path"];
 		tIdx.m_bRT = true;
 
+		// pick config settings
+		// they should be overriden later by Preload() if needed
+		CSphIndexSettings tSettings;
+		sphConfIndex ( hIndex, tSettings );
+		tIdx.m_pIndex->Setup ( tSettings );
+
+		// hash it
 		if ( !g_pIndexes->Add ( tIdx, szIndexName ) )
 		{
 			sphWarning ( "INTERNAL ERROR: index '%s': hash add failed - NOT SERVING", szIndexName );

@@ -18,19 +18,22 @@
 %token	TOK_AS
 %token	TOK_ASC
 %token	TOK_AVG
+%token	TOK_BEGIN
 %token	TOK_BETWEEN
 %token	TOK_BY
+%token	TOK_COMMIT
 %token	TOK_COUNT
-%token	TOK_DESC
 %token	TOK_DELETE
+%token	TOK_DESC
 %token	TOK_DISTINCT
+%token	TOK_FALSE
 %token	TOK_FROM
 %token	TOK_GROUP
-%token	TOK_LIMIT
+%token	TOK_ID
 %token	TOK_IN
 %token	TOK_INSERT
 %token	TOK_INTO
-%token	TOK_ID
+%token	TOK_LIMIT
 %token	TOK_MATCH
 %token	TOK_MAX
 %token	TOK_META
@@ -38,23 +41,20 @@
 %token	TOK_OPTION
 %token	TOK_ORDER
 %token	TOK_REPLACE
+%token	TOK_ROLLBACK
 %token	TOK_SELECT
+%token	TOK_SET
 %token	TOK_SHOW
+%token	TOK_START
 %token	TOK_STATUS
 %token	TOK_SUM
+%token	TOK_TRANSACTION
+%token	TOK_TRUE
 %token	TOK_VALUES
 %token	TOK_WARNINGS
 %token	TOK_WEIGHT
-%token	TOK_WITHIN
 %token	TOK_WHERE
-%token	TOK_SET
-%token	TOK_COMMIT
-%token	TOK_ROLLBACK
-%token	TOK_START
-%token	TOK_TRANSACTION
-%token	TOK_BEGIN
-%token	TOK_TRUE
-%token	TOK_FALSE
+%token	TOK_WITHIN
 
 %type	<m_iValue>		named_const_list
 
@@ -463,8 +463,8 @@ show_clause:
 	;
 
 show_variable:
-	TOK_WARNINGS			{ pParser->m_pStmt->m_eStmt = STMT_SHOW_WARNINGS; }
-	| TOK_STATUS			{ pParser->m_pStmt->m_eStmt = STMT_SHOW_STATUS; }
+	TOK_WARNINGS		{ pParser->m_pStmt->m_eStmt = STMT_SHOW_WARNINGS; }
+	| TOK_STATUS		{ pParser->m_pStmt->m_eStmt = STMT_SHOW_STATUS; }
 	| TOK_META			{ pParser->m_pStmt->m_eStmt = STMT_SHOW_META; }
 	;
 
@@ -497,8 +497,8 @@ boolean_value:
 
 transact_op:
 	TOK_COMMIT				{ pParser->m_pStmt->m_eStmt = STMT_COMMIT; }
-	| TOK_ROLLBACK				{ pParser->m_pStmt->m_eStmt = STMT_ROLLBACK; }
-	| start_transaction			{ pParser->m_pStmt->m_eStmt = STMT_STARTTRANSACTION; }
+	| TOK_ROLLBACK			{ pParser->m_pStmt->m_eStmt = STMT_ROLLBACK; }
+	| start_transaction		{ pParser->m_pStmt->m_eStmt = STMT_BEGIN; }
 	;
 
 start_transaction:
@@ -508,35 +508,35 @@ start_transaction:
 
 //////////////////////////////////////////////////////////////////////////
 
-insert_or_replace_tok:
-	TOK_INSERT				{ $$ = $1; $$.m_eStmt = STMT_INSERT; }
-	| TOK_REPLACE				{ $$ = $1; $$.m_eStmt = STMT_REPLACE; }
-	;
-
 insert_into:
-	insert_or_replace_tok TOK_INTO TOK_IDENT opt_insert_cols_list TOK_VALUES opt_insert_cols_set
+	insert_or_replace TOK_INTO TOK_IDENT opt_column_list TOK_VALUES insert_rows_list
 		{
-			pParser->m_pStmt->m_eStmt = $$.m_eStmt;
+			// everything else is pushed directly into parser within the rules
 			pParser->m_pStmt->m_sInsertIndex = $3.m_sValue;
 		}
 	;
 
-opt_insert_cols_list:
+insert_or_replace:
+	TOK_INSERT		{ pParser->m_pStmt->m_eStmt = STMT_INSERT; }
+	| TOK_REPLACE	{ pParser->m_pStmt->m_eStmt = STMT_REPLACE; }
+	;
+
+opt_column_list:
 	// empty
-	| '(' schema_list ')'
+	| '(' column_list ')'
 	;
 
-schema_list:
-	ident_or_id						{ if ( !pParser->AddSchemaItem ( &$1 ) ) { yyerror ( pParser, "unknown field" ); YYERROR; } }
-	| schema_list ',' ident_or_id	{ if ( !pParser->AddSchemaItem ( &$3 ) ) { yyerror ( pParser, "unknown field" ); YYERROR; } }
+column_list:
+	ident_or_id							{ if ( !pParser->AddSchemaItem ( &$1 ) ) { yyerror ( pParser, "unknown field" ); YYERROR; } }
+	| column_list ',' ident_or_id		{ if ( !pParser->AddSchemaItem ( &$3 ) ) { yyerror ( pParser, "unknown field" ); YYERROR; } }
 	;
 
-opt_insert_cols_set:
-	opt_insert_cols
-	| opt_insert_cols_set ',' opt_insert_cols
+insert_rows_list:
+	insert_row
+	| insert_rows_list ',' insert_row
 	;
 
-opt_insert_cols:
+insert_row:
 	'(' insert_vals_list ')'			{ if ( !pParser->m_pStmt->CheckInsertIntegrity() ) { yyerror ( pParser, "wrong number of values here" ); YYERROR; } }
 	;
 

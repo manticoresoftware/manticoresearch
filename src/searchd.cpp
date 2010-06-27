@@ -5605,7 +5605,7 @@ enum SqlStmt_e
 	STMT_SHOW_STATUS,
 	STMT_SHOW_META,
 	STMT_SET,
-	STMT_STARTTRANSACTION,
+	STMT_BEGIN,
 	STMT_COMMIT,
 	STMT_ROLLBACK
 };
@@ -5630,7 +5630,6 @@ struct SqlNode_t
 	int64_t					m_iValue;
 	float					m_fValue;
 	CSphVector<SphAttr_t>	m_dValues;
-	SqlStmt_e				m_eStmt;
 	int						m_iInstype;	// REMOVE? should not we know this somehow else?
 
 	SqlNode_t() : m_iValue ( 0 ) {}
@@ -7776,9 +7775,9 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 				SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
 				continue;
 			}
-		case STMT_STARTTRANSACTION:
+		case STMT_BEGIN:
 			{
-				MEMORY ( SPH_MEM_COMMIT_START_T_SQL );
+				MEMORY ( SPH_MEM_COMMIT_BEGIN_SQL );
 
 				bInTransaction = true;
 				ISphRtIndex * pIndex = sphGetCurrentIndexRT();

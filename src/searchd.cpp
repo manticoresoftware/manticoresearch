@@ -1773,7 +1773,7 @@ int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr 
 
 	while ( iLeftBytes>0 )
 	{
-		const int64_t tmMicroLeft = tmMaxTimer - sphMicroTimer();
+		int64_t tmMicroLeft = tmMaxTimer - sphMicroTimer();
 		if ( tmMicroLeft<=0 )
 			break; // timed out
 
@@ -1784,6 +1784,14 @@ int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr 
 		fd_set fdExcept;
 		FD_ZERO ( &fdExcept );
 		sphFDSet ( iSock, &fdExcept );
+
+#if USE_WINDOWS
+		// Windows EINTR emulation
+		// Ctrl-C will not interrupt select on Windows, so let's handle that manually
+		// forcibly limit select() to 100 ms, and check flag afterwards
+		if ( bIntr )
+			tmMicroLeft = Min ( tmMicroLeft, 100000 );
+#endif
 
 		struct timeval tv;
 		tv.tv_sec = (int)( tmMicroLeft / 1000000 );
@@ -1805,6 +1813,22 @@ int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr 
 		// if there was a timeout, report it as an error
 		if ( iRes==0 )
 		{
+#if USE_WINDOWS
+			// Windows EINTR emulation
+			if ( bIntr )
+			{
+				// got that SIGTERM
+				if ( g_bGotSigterm )
+				{
+					sphSockSetErrno ( EINTR );
+					return -1;
+				}
+
+				// timeout might not be fully over just yet, so re-loop
+				continue;
+			}
+#endif
+
 			sphSockSetErrno ( ETIMEDOUT );
 			return -1;
 		}
@@ -7626,12 +7650,13 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 			break;
 
 		// get next packet
-		if ( !tIn.ReadFrom ( 4, INTERACTIVE_TIMEOUT ) )
+		// we want interruptible calls here, so that shutdowns could be honoured
+		if ( !tIn.ReadFrom ( 4, INTERACTIVE_TIMEOUT, true ) )
 			break;
 
 		DWORD uPacketHeader = tIn.GetLSBDword ();
 		int iPacketLen = ( uPacketHeader & 0xffffffUL );
-		if ( !tIn.ReadFrom ( iPacketLen, INTERACTIVE_TIMEOUT ) )
+		if ( !tIn.ReadFrom ( iPacketLen, INTERACTIVE_TIMEOUT, true ) )
 			break;
 
 		// handle it!

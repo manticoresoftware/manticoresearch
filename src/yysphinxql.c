@@ -162,35 +162,33 @@
 
 
 /* Copy the first part of user declarations.  */
-#line 1 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
 
 #if USE_WINDOWS
 #pragma warning(push,1)
 #pragma warning(disable:4702) // unreachable code
 #endif
-#line 72 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
 
 // some helpers
 #include <float.h> // for FLT_MAX
 
 static void AddFloatRangeFilter ( SqlParser_c * pParser, const CSphString & sAttr, float fMin, float fMax )
 {
-	CSphFilterSettings tFilter;
+	CSphFilterSettings & tFilter = pParser->m_pQuery->m_dFilters.Add();
 	tFilter.m_sAttrName = sAttr;
 	tFilter.m_eType = SPH_FILTER_FLOATRANGE;
 	tFilter.m_fMinValue = fMin;
 	tFilter.m_fMaxValue = fMax;
-	pParser->m_pQuery->m_dFilters.Add ( tFilter );
 }
 
 static void AddUintRangeFilter ( SqlParser_c * pParser, const CSphString & sAttr, DWORD uMin, DWORD uMax )
 {
-	CSphFilterSettings tFilter;
+	CSphFilterSettings & tFilter = pParser->m_pQuery->m_dFilters.Add();
 	tFilter.m_sAttrName = sAttr;
 	tFilter.m_eType = SPH_FILTER_RANGE;
 	tFilter.m_uMinValue = uMin;
 	tFilter.m_uMaxValue = uMax;
-	pParser->m_pQuery->m_dFilters.Add ( tFilter );
 }
 
 static void AddInsval ( SqlParser_c * pParser, const SqlNode_t & tNode )
@@ -229,7 +227,7 @@ typedef int YYSTYPE;
 
 
 /* Line 214 of yacc.c.  */
-#line 232 "yysphinxql.c"
+
 
 #if ! defined (yyoverflow) || YYERROR_VERBOSE
 
@@ -458,20 +456,20 @@ static const yysigned_char yyrhs[] =
 /* YYRLINE[YYN] -- source line where rule number YYN was defined.  */
 static const unsigned short yyrline[] =
 {
-       0,   109,   109,   110,   111,   112,   113,   114,   120,   135,
-     136,   140,   141,   142,   143,   144,   145,   146,   147,   162,
-     163,   166,   168,   172,   176,   177,   181,   194,   202,   210,
-     219,   227,   236,   240,   244,   248,   252,   256,   257,   258,
-     259,   264,   268,   272,   279,   280,   284,   285,   289,   290,
-     293,   295,   299,   306,   308,   312,   318,   320,   324,   331,
-     332,   336,   337,   338,   342,   343,   346,   348,   352,   357,
-     364,   366,   370,   374,   375,   379,   384,   389,   398,   408,
-     420,   430,   431,   432,   433,   434,   435,   436,   437,   438,
-     439,   440,   441,   442,   443,   444,   445,   446,   447,   448,
-     449,   450,   454,   455,   456,   457,   458,   462,   463,   469,
-     473,   474,   475,   481,   490,   491,   492,   506,   507,   508,
-     512,   513,   519,   520,   524,   531,   533,   537,   538,   542,
-     543,   547,   551,   552,   556,   557,   558,   564
+       0,   107,   107,   108,   109,   110,   111,   112,   118,   133,
+     134,   138,   139,   140,   141,   142,   143,   144,   145,   160,
+     161,   164,   166,   170,   174,   175,   179,   192,   199,   206,
+     214,   221,   229,   233,   237,   241,   245,   249,   250,   251,
+     252,   257,   261,   265,   272,   273,   277,   278,   282,   283,
+     286,   288,   292,   299,   301,   305,   311,   313,   317,   324,
+     325,   329,   330,   331,   335,   336,   339,   341,   345,   350,
+     357,   359,   363,   367,   368,   372,   377,   382,   391,   401,
+     413,   423,   424,   425,   426,   427,   428,   429,   430,   431,
+     432,   433,   434,   435,   436,   437,   438,   439,   440,   441,
+     442,   443,   447,   448,   449,   450,   451,   455,   456,   462,
+     466,   467,   468,   474,   483,   484,   485,   499,   500,   501,
+     505,   506,   512,   513,   517,   524,   526,   530,   531,   535,
+     536,   540,   544,   545,   549,   550,   551,   557
 };
 #endif
 
@@ -1398,7 +1396,7 @@ yyreduce:
   switch (yyn)
     {
         case 8:
-#line 128 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     {
 			pParser->m_pStmt->m_eStmt = STMT_SELECT;
 			pParser->m_pQuery->m_sIndexes.SetBinary ( pParser->m_pBuf+yyvsp[-6].m_iStart, yyvsp[-6].m_iEnd-yyvsp[-6].m_iStart );
@@ -1406,42 +1404,42 @@ yyreduce:
     break;
 
   case 11:
-#line 140 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { pParser->AddItem ( &yyvsp[0], NULL ); ;}
     break;
 
   case 12:
-#line 141 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { pParser->AddItem ( &yyvsp[-2], &yyvsp[0] ); ;}
     break;
 
   case 13:
-#line 142 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { pParser->AddItem ( &yyvsp[-3], &yyvsp[0], SPH_AGGR_AVG ); ;}
     break;
 
   case 14:
-#line 143 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { pParser->AddItem ( &yyvsp[-3], &yyvsp[0], SPH_AGGR_MAX ); ;}
     break;
 
   case 15:
-#line 144 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { pParser->AddItem ( &yyvsp[-3], &yyvsp[0], SPH_AGGR_MIN ); ;}
     break;
 
   case 16:
-#line 145 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { pParser->AddItem ( &yyvsp[-3], &yyvsp[0], SPH_AGGR_SUM ); ;}
     break;
 
   case 17:
-#line 146 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { pParser->AddItem ( &yyvsp[0], NULL ); ;}
     break;
 
   case 18:
-#line 148 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     {
 			if ( !pParser->m_pQuery->m_sGroupDistinct.IsEmpty() )
 			{
@@ -1456,12 +1454,12 @@ yyreduce:
     break;
 
   case 20:
-#line 163 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
     break;
 
   case 26:
-#line 182 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     {
 			if ( pParser->m_bGotQuery )
 			{
@@ -1477,99 +1475,94 @@ yyreduce:
     break;
 
   case 27:
-#line 195 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     {
-			CSphFilterSettings tFilter;
+			CSphFilterSettings & tFilter = pParser->m_pQuery->m_dFilters.Add();
 			tFilter.m_sAttrName = "@id";
 			tFilter.m_eType = SPH_FILTER_VALUES;
 			tFilter.m_dValues.Add ( yyvsp[0].m_iValue );
-			pParser->m_pQuery->m_dFilters.Add ( tFilter );
 		;}
     break;
 
   case 28:
-#line 203 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     {
-			CSphFilterSettings tFilter;
+			CSphFilterSettings & tFilter = pParser->m_pQuery->m_dFilters.Add();
 			tFilter.m_sAttrName = yyvsp[-2].m_sValue;
 			tFilter.m_eType = SPH_FILTER_VALUES;
 			tFilter.m_dValues.Add ( yyvsp[0].m_iValue );
-			pParser->m_pQuery->m_dFilters.Add ( tFilter );
 		;}
     break;
 
   case 29:
-#line 211 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     {
-			CSphFilterSettings tFilter;
+			CSphFilterSettings & tFilter = pParser->m_pQuery->m_dFilters.Add();
 			tFilter.m_sAttrName = yyvsp[-2].m_sValue;
 			tFilter.m_eType = SPH_FILTER_VALUES;
 			tFilter.m_dValues.Add ( yyvsp[0].m_iValue );
 			tFilter.m_bExclude = true;
-			pParser->m_pQuery->m_dFilters.Add ( tFilter );
 		;}
     break;
 
   case 30:
-#line 220 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     {
-			CSphFilterSettings tFilter;
+			CSphFilterSettings & tFilter = pParser->m_pQuery->m_dFilters.Add();
 			tFilter.m_sAttrName = yyvsp[-4].m_sValue;
 			tFilter.m_eType = SPH_FILTER_VALUES;
 			tFilter.m_dValues = yyvsp[-1].m_dValues;
-			pParser->m_pQuery->m_dFilters.Add ( tFilter );
 		;}
     break;
 
   case 31:
-#line 228 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     {
-			CSphFilterSettings tFilter;
+			CSphFilterSettings & tFilter = pParser->m_pQuery->m_dFilters.Add();
 			tFilter.m_sAttrName = yyvsp[-5].m_sValue;
 			tFilter.m_eType = SPH_FILTER_VALUES;
 			tFilter.m_dValues = yyvsp[-2].m_dValues;
 			tFilter.m_bExclude = true;
-			pParser->m_pQuery->m_dFilters.Add ( tFilter );
 		;}
     break;
 
   case 32:
-#line 237 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     {
 			AddUintRangeFilter ( pParser, yyvsp[-4].m_sValue, yyvsp[-2].m_iValue, yyvsp[0].m_iValue );
 		;}
     break;
 
   case 33:
-#line 241 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     {
 			AddUintRangeFilter ( pParser, yyvsp[-2].m_sValue, yyvsp[0].m_iValue+1, UINT_MAX );
 		;}
     break;
 
   case 34:
-#line 245 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     {
 			AddUintRangeFilter ( pParser, yyvsp[-2].m_sValue, 0, yyvsp[0].m_iValue-1 );
 		;}
     break;
 
   case 35:
-#line 249 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     {
 			AddUintRangeFilter ( pParser, yyvsp[-2].m_sValue, yyvsp[0].m_iValue, UINT_MAX );
 		;}
     break;
 
   case 36:
-#line 253 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     {
 			AddUintRangeFilter ( pParser, yyvsp[-2].m_sValue, 0, yyvsp[0].m_iValue );
 		;}
     break;
 
   case 40:
-#line 260 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     {
 			yyerror ( pParser, "only >=, <=, and BETWEEN floating-point filter types are supported in this version" );
 			YYERROR;
@@ -1577,58 +1570,58 @@ yyreduce:
     break;
 
   case 41:
-#line 265 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     {
 			AddFloatRangeFilter ( pParser, yyvsp[-4].m_sValue, yyvsp[-2].m_fValue, yyvsp[0].m_fValue );
 		;}
     break;
 
   case 42:
-#line 269 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     {
 			AddFloatRangeFilter ( pParser, yyvsp[-2].m_sValue, yyvsp[0].m_fValue, FLT_MAX );
 		;}
     break;
 
   case 43:
-#line 273 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     {
 			AddFloatRangeFilter ( pParser, yyvsp[-2].m_sValue, -FLT_MAX, yyvsp[0].m_fValue );
 		;}
     break;
 
   case 44:
-#line 279 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval.m_iInstype = TOK_CONST_INT; yyval.m_iValue = yyvsp[0].m_iValue; ;}
     break;
 
   case 45:
-#line 280 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval.m_iInstype = TOK_CONST_INT; yyval.m_iValue = -yyvsp[0].m_iValue; ;}
     break;
 
   case 46:
-#line 284 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval.m_iInstype = TOK_CONST_FLOAT; yyval.m_fValue = yyvsp[0].m_fValue; ;}
     break;
 
   case 47:
-#line 285 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval.m_iInstype = TOK_CONST_FLOAT; yyval.m_fValue = -yyvsp[0].m_fValue; ;}
     break;
 
   case 48:
-#line 289 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval.m_dValues.Add ( yyvsp[0].m_iValue ); ;}
     break;
 
   case 49:
-#line 290 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval.m_dValues.Add ( yyvsp[0].m_iValue ); ;}
     break;
 
   case 52:
-#line 300 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     {
 			pParser->m_pQuery->m_eGroupFunc = SPH_GROUPBY_ATTR;
 			pParser->m_pQuery->m_sGroupBy = yyvsp[0].m_sValue;
@@ -1636,36 +1629,36 @@ yyreduce:
     break;
 
   case 55:
-#line 313 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     {
 			pParser->m_pQuery->m_sSortBy.SetBinary ( pParser->m_pBuf+yyvsp[0].m_iStart, yyvsp[0].m_iEnd-yyvsp[0].m_iStart );
 		;}
     break;
 
   case 58:
-#line 325 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     {
 			pParser->m_pQuery->m_sOrderBy.SetBinary ( pParser->m_pBuf+yyvsp[0].m_iStart, yyvsp[0].m_iEnd-yyvsp[0].m_iStart );
 		;}
     break;
 
   case 60:
-#line 332 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
     break;
 
   case 62:
-#line 337 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval = yyvsp[-1]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
     break;
 
   case 63:
-#line 338 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval = yyvsp[-1]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
     break;
 
   case 68:
-#line 353 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     {
 			pParser->m_pQuery->m_iOffset = 0;
 			pParser->m_pQuery->m_iLimit = yyvsp[0].m_iValue;
@@ -1673,7 +1666,7 @@ yyreduce:
     break;
 
   case 69:
-#line 358 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     {
 			pParser->m_pQuery->m_iOffset = yyvsp[-2].m_iValue;
 			pParser->m_pQuery->m_iLimit = yyvsp[0].m_iValue;
@@ -1681,7 +1674,7 @@ yyreduce:
     break;
 
   case 75:
-#line 380 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     {
 			if ( !pParser->AddOption ( yyvsp[-2], yyvsp[0] ) )
 				YYERROR;
@@ -1689,7 +1682,7 @@ yyreduce:
     break;
 
   case 76:
-#line 385 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     {
 			if ( !pParser->AddOption ( yyvsp[-2], yyvsp[0] ) )
 				YYERROR;
@@ -1697,7 +1690,7 @@ yyreduce:
     break;
 
   case 77:
-#line 390 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     {
 			if ( !pParser->AddOption ( yyvsp[-4], pParser->GetNamedVec ( yyvsp[-1].m_iValue ) ) )
 				YYERROR;
@@ -1706,7 +1699,7 @@ yyreduce:
     break;
 
   case 78:
-#line 399 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     {
 			yyval.m_iValue = pParser->AllocNamedVec ();
 			CSphVector<CSphNamedInt> & dVec = pParser->GetNamedVec ( yyval.m_iValue );
@@ -1719,7 +1712,7 @@ yyreduce:
     break;
 
   case 79:
-#line 409 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     {
 			CSphVector<CSphNamedInt> & dVec = pParser->GetNamedVec ( yyval.m_iValue );
 
@@ -1731,7 +1724,7 @@ yyreduce:
     break;
 
   case 80:
-#line 421 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     {
 			yyval.m_sValue = yyvsp[-2].m_sValue;
 			yyval.m_iValue = yyvsp[0].m_iValue;
@@ -1739,132 +1732,132 @@ yyreduce:
     break;
 
   case 84:
-#line 433 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval = yyvsp[-1]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
     break;
 
   case 85:
-#line 434 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval = yyvsp[-1]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
     break;
 
   case 86:
-#line 435 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
     break;
 
   case 87:
-#line 436 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
     break;
 
   case 88:
-#line 437 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
     break;
 
   case 89:
-#line 438 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
     break;
 
   case 90:
-#line 439 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
     break;
 
   case 91:
-#line 440 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
     break;
 
   case 92:
-#line 441 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
     break;
 
   case 93:
-#line 442 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
     break;
 
   case 94:
-#line 443 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
     break;
 
   case 95:
-#line 444 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
     break;
 
   case 96:
-#line 445 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
     break;
 
   case 97:
-#line 446 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
     break;
 
   case 98:
-#line 447 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
     break;
 
   case 99:
-#line 448 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
     break;
 
   case 100:
-#line 449 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
     break;
 
   case 102:
-#line 454 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval = yyvsp[-3]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
     break;
 
   case 103:
-#line 455 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval = yyvsp[-3]; yyval.m_iEnd = yyvsp[0].m_iEnd; ;}
     break;
 
   case 104:
-#line 456 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval = yyvsp[-2]; yyval.m_iEnd = yyvsp[0].m_iEnd ;}
     break;
 
   case 105:
-#line 457 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval = yyvsp[-5]; yyval.m_iEnd = yyvsp[0].m_iEnd ;}
     break;
 
   case 106:
-#line 458 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval = yyvsp[-5]; yyval.m_iEnd = yyvsp[0].m_iEnd ;}
     break;
 
   case 110:
-#line 473 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { pParser->m_pStmt->m_eStmt = STMT_SHOW_WARNINGS; ;}
     break;
 
   case 111:
-#line 474 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { pParser->m_pStmt->m_eStmt = STMT_SHOW_STATUS; ;}
     break;
 
   case 112:
-#line 475 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { pParser->m_pStmt->m_eStmt = STMT_SHOW_META; ;}
     break;
 
   case 113:
-#line 482 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     {
 			pParser->m_pStmt->m_eStmt = STMT_SET;
 			pParser->m_pStmt->m_sSetName = yyvsp[-2].m_sValue;
@@ -1873,17 +1866,17 @@ yyreduce:
     break;
 
   case 114:
-#line 490 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval.m_iValue = 1; ;}
     break;
 
   case 115:
-#line 491 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval.m_iValue = 0; ;}
     break;
 
   case 116:
-#line 493 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     {
 			yyval.m_iValue = yyvsp[0].m_iValue;
 			if ( yyval.m_iValue!=0 && yyval.m_iValue!=1 )
@@ -1895,32 +1888,32 @@ yyreduce:
     break;
 
   case 117:
-#line 506 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { pParser->m_pStmt->m_eStmt = STMT_COMMIT; ;}
     break;
 
   case 118:
-#line 507 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { pParser->m_pStmt->m_eStmt = STMT_ROLLBACK; ;}
     break;
 
   case 119:
-#line 508 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { pParser->m_pStmt->m_eStmt = STMT_STARTTRANSACTION; ;}
     break;
 
   case 122:
-#line 519 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval = yyvsp[0]; yyval.m_eStmt = STMT_INSERT; ;}
     break;
 
   case 123:
-#line 520 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval = yyvsp[0]; yyval.m_eStmt = STMT_REPLACE; ;}
     break;
 
   case 124:
-#line 525 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     {
 			pParser->m_pStmt->m_eStmt = yyval.m_eStmt;
 			pParser->m_pStmt->m_sInsertIndex = yyvsp[-3].m_sValue;
@@ -1928,47 +1921,47 @@ yyreduce:
     break;
 
   case 127:
-#line 537 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { if ( !pParser->AddSchemaItem ( &yyvsp[0] ) ) { yyerror ( pParser, "unknown field" ); YYERROR; } ;}
     break;
 
   case 128:
-#line 538 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { if ( !pParser->AddSchemaItem ( &yyvsp[0] ) ) { yyerror ( pParser, "unknown field" ); YYERROR; } ;}
     break;
 
   case 131:
-#line 547 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { if ( !pParser->m_pStmt->CheckInsertIntegrity() ) { yyerror ( pParser, "wrong number of values here" ); YYERROR; } ;}
     break;
 
   case 132:
-#line 551 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { AddInsval ( pParser, yyvsp[0] ); ;}
     break;
 
   case 133:
-#line 552 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { AddInsval ( pParser, yyvsp[0] ); ;}
     break;
 
   case 134:
-#line 556 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval.m_iInstype = TOK_CONST_INT; yyval.m_iValue = yyvsp[0].m_iValue; ;}
     break;
 
   case 135:
-#line 557 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval.m_iInstype = TOK_CONST_FLOAT; yyval.m_fValue = yyvsp[0].m_fValue; ;}
     break;
 
   case 136:
-#line 558 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     { yyval.m_iInstype = TOK_QUOTED_STRING; yyval.m_sValue = yyvsp[0].m_sValue; ;}
     break;
 
   case 137:
-#line 565 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
     {
 			pParser->m_pStmt->m_eStmt = STMT_DELETE;
 			pParser->m_pStmt->m_sDeleteIndex = yyvsp[-4].m_sValue;
@@ -1980,7 +1973,7 @@ yyreduce:
     }
 
 /* Line 991 of yacc.c.  */
-#line 1983 "yysphinxql.c"
+
 
   yyvsp -= yylen;
   yyssp -= yylen;
@@ -2202,7 +2195,7 @@ yyreturn:
 }
 
 
-#line 572 "Z:\\work\\sphinx\\sphinx\\src\\sphinxql.y"
+
 
 
 #if USE_WINDOWS

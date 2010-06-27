@@ -75,22 +75,20 @@
 
 static void AddFloatRangeFilter ( SqlParser_c * pParser, const CSphString & sAttr, float fMin, float fMax )
 {
-	CSphFilterSettings tFilter;
+	CSphFilterSettings & tFilter = pParser->m_pQuery->m_dFilters.Add();
 	tFilter.m_sAttrName = sAttr;
 	tFilter.m_eType = SPH_FILTER_FLOATRANGE;
 	tFilter.m_fMinValue = fMin;
 	tFilter.m_fMaxValue = fMax;
-	pParser->m_pQuery->m_dFilters.Add ( tFilter );
 }
 
 static void AddUintRangeFilter ( SqlParser_c * pParser, const CSphString & sAttr, DWORD uMin, DWORD uMax )
 {
-	CSphFilterSettings tFilter;
+	CSphFilterSettings & tFilter = pParser->m_pQuery->m_dFilters.Add();
 	tFilter.m_sAttrName = sAttr;
 	tFilter.m_eType = SPH_FILTER_RANGE;
 	tFilter.m_uMinValue = uMin;
 	tFilter.m_uMaxValue = uMax;
-	pParser->m_pQuery->m_dFilters.Add ( tFilter );
 }
 
 static void AddInsval ( SqlParser_c * pParser, const SqlNode_t & tNode )
@@ -193,45 +191,40 @@ where_item:
 		}
 	| TOK_ID '=' const_int
 		{
-			CSphFilterSettings tFilter;
+			CSphFilterSettings & tFilter = pParser->m_pQuery->m_dFilters.Add();
 			tFilter.m_sAttrName = "@id";
 			tFilter.m_eType = SPH_FILTER_VALUES;
 			tFilter.m_dValues.Add ( $3.m_iValue );
-			pParser->m_pQuery->m_dFilters.Add ( tFilter );
 		}
 	| TOK_IDENT '=' const_int
 		{
-			CSphFilterSettings tFilter;
+			CSphFilterSettings & tFilter = pParser->m_pQuery->m_dFilters.Add();
 			tFilter.m_sAttrName = $1.m_sValue;
 			tFilter.m_eType = SPH_FILTER_VALUES;
 			tFilter.m_dValues.Add ( $3.m_iValue );
-			pParser->m_pQuery->m_dFilters.Add ( tFilter );
 		}
 	| TOK_IDENT TOK_NE const_int
 		{
-			CSphFilterSettings tFilter;
+			CSphFilterSettings & tFilter = pParser->m_pQuery->m_dFilters.Add();
 			tFilter.m_sAttrName = $1.m_sValue;
 			tFilter.m_eType = SPH_FILTER_VALUES;
 			tFilter.m_dValues.Add ( $3.m_iValue );
 			tFilter.m_bExclude = true;
-			pParser->m_pQuery->m_dFilters.Add ( tFilter );
 		}
 	| TOK_IDENT TOK_IN '(' const_list ')'
 		{
-			CSphFilterSettings tFilter;
+			CSphFilterSettings & tFilter = pParser->m_pQuery->m_dFilters.Add();
 			tFilter.m_sAttrName = $1.m_sValue;
 			tFilter.m_eType = SPH_FILTER_VALUES;
 			tFilter.m_dValues = $4.m_dValues;
-			pParser->m_pQuery->m_dFilters.Add ( tFilter );
 		}
 	| TOK_IDENT TOK_NOT TOK_IN '(' const_list ')'
 		{
-			CSphFilterSettings tFilter;
+			CSphFilterSettings & tFilter = pParser->m_pQuery->m_dFilters.Add();
 			tFilter.m_sAttrName = $1.m_sValue;
 			tFilter.m_eType = SPH_FILTER_VALUES;
 			tFilter.m_dValues = $4.m_dValues;
 			tFilter.m_bExclude = true;
-			pParser->m_pQuery->m_dFilters.Add ( tFilter );
 		}
 	| TOK_IDENT TOK_BETWEEN const_int TOK_AND const_int
 		{

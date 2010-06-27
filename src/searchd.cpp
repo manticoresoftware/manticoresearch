@@ -5631,7 +5631,7 @@ struct SqlNode_t
 	float					m_fValue;
 	CSphVector<SphAttr_t>	m_dValues;
 	SqlStmt_e				m_eStmt;
-	SqlInsert_t				m_tInsval;	// OPTIMIZE? generic node is way too fat
+	int						m_iInstype;	// REMOVE? should not we know this somehow else?
 
 	SqlNode_t() : m_iValue ( 0 ) {}
 };

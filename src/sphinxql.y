@@ -21,6 +21,7 @@
 %token	TOK_BEGIN
 %token	TOK_BETWEEN
 %token	TOK_BY
+%token	TOK_CALL
 %token	TOK_COMMIT
 %token	TOK_COUNT
 %token	TOK_DELETE
@@ -91,9 +92,9 @@ static void AddUintRangeFilter ( SqlParser_c * pParser, const CSphString & sAttr
 	tFilter.m_uMaxValue = uMax;
 }
 
-static void AddInsval ( SqlParser_c * pParser, const SqlNode_t & tNode )
+static void AddInsval ( CSphVector<SqlInsert_t> & dVec, const SqlNode_t & tNode )
 {
-	SqlInsert_t & tIns = pParser->m_pStmt->m_dInsertValues.Add();
+	SqlInsert_t & tIns = dVec.Add();
 	tIns.m_iType = tNode.m_iInstype;
 	tIns.m_iVal = tNode.m_iValue; // OPTIMIZE? copy conditionally based on type?
 	tIns.m_fVal = tNode.m_fValue;
@@ -110,6 +111,7 @@ statement:
 	| delete_from
 	| set_clause
 	| transact_op
+	| call_proc
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -541,8 +543,8 @@ insert_row:
 	;
 
 insert_vals_list:
-	insert_val							{ AddInsval ( pParser, $1 ); }
-	| insert_vals_list ',' insert_val	{ AddInsval ( pParser, $3 ); }
+	insert_val							{ AddInsval ( pParser->m_pStmt->m_dInsertValues, $1 ); }
+	| insert_vals_list ',' insert_val	{ AddInsval ( pParser->m_pStmt->m_dInsertValues, $3 ); }
 	;
 
 insert_val:
@@ -560,6 +562,43 @@ delete_from:
 			pParser->m_pStmt->m_sDeleteIndex = $3.m_sValue;
 			pParser->m_pStmt->m_iDeleteID = $7.m_iValue;
 		}
+	;
+
+//////////////////////////////////////////////////////////////////////////
+
+call_proc:
+	TOK_CALL TOK_IDENT '(' insert_vals_list opt_call_opts_list ')'
+		{
+			pParser->m_pStmt->m_eStmt = STMT_CALL;
+			pParser->m_pStmt->m_sCallProc = $2.m_sValue;
+		}
+	;
+
+opt_call_opts_list:
+	// empty
+	| ',' call_opts_list
+	;
+
+call_opts_list:
+	call_opt
+		{
+			assert ( pParser->m_pStmt->m_dCallOptNames.GetLength()==1 );
+			assert ( pParser->m_pStmt->m_dCallOptValues.GetLength()==1 );
+		}
+	| call_opts_list ',' call_opt
+	;
+
+call_opt:
+	insert_val TOK_AS call_opt_name
+		{
+			pParser->m_pStmt->m_dCallOptNames.Add ( $3.m_sValue );
+			AddInsval ( pParser->m_pStmt->m_dCallOptValues, $1 );
+		}
+	;
+
+call_opt_name:
+	TOK_IDENT
+	| TOK_LIMIT		{ $$.m_sValue = "limit"; }
 	;
 
 %%

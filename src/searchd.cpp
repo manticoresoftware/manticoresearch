@@ -776,7 +776,7 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	snprintf ( sBuf, sizeof(sBuf)-1, "[%s] [%5d] ", sTimeBuf, (int)getpid() );
 
 	char * sTtyBuf = sBuf + strlen(sBuf);
-	strcpy ( sTtyBuf, sBanner );
+	strncpy ( sTtyBuf, sBanner, 32 ); // 32 is arbitrary; just something that is enough and keeps lint happy
 
 	int iLen = strlen(sBuf);
 
@@ -1874,8 +1874,6 @@ public:
 #endif
 
 	bool		SendString ( const char * sStr );
-
-	static int	GetMysqlPacklen ( const char * sStr );
 	bool		SendMysqlString ( const char * sStr );
 
 	bool		Flush ();
@@ -2010,12 +2008,60 @@ bool NetOutputBuffer_c::SendString ( const char * sStr )
 }
 
 
-int NetOutputBuffer_c::GetMysqlPacklen ( const char * sStr )
+int MysqlPackedLen ( const char * sStr )
 {
 	int iLen = strlen(sStr);
-	if ( iLen<251 )		return 1+iLen;
-	if ( iLen<=0xffff )	return 3+iLen;
-	return 5+iLen;
+	if ( iLen<251 )
+		return 1 + iLen;
+	if ( iLen<=0xffff )
+		return 3 + iLen;
+	if ( iLen<=0xffffff )
+		return 4 + iLen;
+	return 9 + iLen;
+}
+
+
+
+// encodes Mysql Length-coded binary
+void * MysqlPack ( void * pBuffer, int iValue )
+{
+	char * pOutput = (char*)pBuffer;
+	if ( iValue<0 )
+		return (void*)pOutput;
+
+	if ( iValue<251 )
+	{
+		*pOutput++ = (char)iValue;
+		return (void*)pOutput;
+	}
+
+	if ( iValue<=0xFFFF )
+	{
+		*pOutput++ = '\xFC';
+		*pOutput++ = (char)iValue;
+		*pOutput++ = (char)( iValue>>8 );
+		return (void*)pOutput;
+	}
+
+	if ( iValue<=0xFFFFFF )
+	{
+		*pOutput++ = '\xFD';
+		*pOutput++ = (char)iValue;
+		*pOutput++ = (char)( iValue>>8 );
+		*pOutput++ = (char)( iValue>>16 );
+		return (void *) pOutput;
+	}
+
+	*pOutput++ = '\xFE';
+	*pOutput++ = (char)iValue;
+	*pOutput++ = (char)( iValue>>8 );
+	*pOutput++ = (char)( iValue>>16 );
+	*pOutput++ = (char)( iValue>>24 );
+	*pOutput++ = 0;
+	*pOutput++ = 0;
+	*pOutput++ = 0;
+	*pOutput++ = 0;
+	return (void*)pOutput;
 }
 
 
@@ -2025,16 +2071,10 @@ bool NetOutputBuffer_c::SendMysqlString ( const char * sStr )
 		return false;
 
 	int iLen = strlen(sStr);
-	if ( iLen<251 )
-	{
-		SendByte ( BYTE(iLen) );
-	} else
-	{
-		assert ( iLen<=0xffff );
-		SendByte ( 252 );
-		SendByte ( (BYTE)( iLen & 0xff ) );
-		SendByte ( (BYTE)( iLen>>8 ) );
-	}
+
+	BYTE dBuf[12];
+	BYTE * pBuf = (BYTE*) MysqlPack ( dBuf, iLen );
+	SendBytes ( dBuf, (int)( pBuf-dBuf ) );
 	return SendBytes ( sStr, iLen );
 }
 
@@ -5607,7 +5647,8 @@ enum SqlStmt_e
 	STMT_SET,
 	STMT_BEGIN,
 	STMT_COMMIT,
-	STMT_ROLLBACK
+	STMT_ROLLBACK,
+	STMT_CALL
 };
 
 
@@ -5638,6 +5679,7 @@ struct SqlNode_t
 
 
 /// parsing result
+/// one day, we will start subclassing this
 struct SqlStmt_t
 {
 	SqlStmt_e				m_eStmt;
@@ -5646,9 +5688,9 @@ struct SqlStmt_t
 	// SELECT specific
 	CSphQuery *				m_pQuery;
 
-	// INSERT specific
+	// INSERT (and CALL) specific
 	CSphString				m_sInsertIndex;
-	CSphVector<SqlInsert_t>	m_dInsertValues;
+	CSphVector<SqlInsert_t>	m_dInsertValues; // reused by CALL
 	CSphVector<CSphString>	m_dInsertSchema;
 	int						m_iSchemaSz;
 
@@ -5659,6 +5701,11 @@ struct SqlStmt_t
 	// SET specific
 	CSphString				m_sSetName;
 	int						m_iSetValue;
+
+	// CALL specific
+	CSphString				m_sCallProc;
+	CSphVector<CSphString>	m_dCallOptNames;
+	CSphVector<SqlInsert_t>	m_dCallOptValues;
 
 
 	SqlStmt_t()
@@ -5698,7 +5745,7 @@ public:
 	CSphQuery *		m_pQuery;
 	bool			m_bGotQuery;
 	SqlStmt_t *		m_pStmt;
-	
+
 public:
 					SqlParser_c () : m_bNamedVecBusy ( false ) {}
 
@@ -5966,13 +6013,21 @@ int SqlParser_c::AllocNamedVec ()
 	return 0;
 }
 
+#ifndef NDEBUG
 CSphVector<CSphNamedInt> & SqlParser_c::GetNamedVec ( int iIndex )
+#else
+CSphVector<CSphNamedInt> & SqlParser_c::GetNamedVec ( int )
+#endif
 {
 	assert ( m_bNamedVecBusy && iIndex==0 );
 	return m_dNamedVec;
 }
 
+#ifndef NDEBUG
 void SqlParser_c::FreeNamedVec ( int iIndex )
+#else
+void SqlParser_c::FreeNamedVec ( int )
+#endif
 {
 	assert ( m_bNamedVecBusy && iIndex==0 );
 	m_bNamedVecBusy = false;
@@ -6930,7 +6985,7 @@ void SendMysqlFieldPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, const char
 	const char * sDB = "";
 	const char * sTable = "";
 
-	int iLen = 17 + tOut.GetMysqlPacklen(sDB) + 2*( tOut.GetMysqlPacklen(sTable) + tOut.GetMysqlPacklen(sCol) );
+	int iLen = 17 + MysqlPackedLen(sDB) + 2*( MysqlPackedLen(sTable) + MysqlPackedLen(sCol) );
 
 	int iColLen = 0;
 	switch ( eType )
@@ -6999,48 +7054,6 @@ void SendMysqlEofPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, int iWarns )
 	tOut.SendLSBDword ( (uPacketID<<24) + 5 );
 	tOut.SendByte ( 0xfe );
 	tOut.SendLSBDword ( iWarns ); // N warnings, 0 status
-}
-
-// encodes Mysql Length-coded binary
-void * MysqlPack ( void * pBuffer, int iValue )
-{
-	char * pOutput = (char*)pBuffer;
-	if ( iValue<0 )
-		return (void*)pOutput;
-
-	if ( iValue<251 )
-	{
-		*pOutput++ = (char)iValue;
-		return (void*)pOutput;
-	}
-
-	if ( iValue<=0xFFFF )
-	{
-		*pOutput++ = '\xFC';
-		*pOutput++ = (char)iValue;
-		*pOutput++ = (char)( iValue>>8 );
-		return (void*)pOutput;
-	}
-
-	if ( iValue<=0xFFFFFF )
-	{
-		*pOutput++ = '\xFD';
-		*pOutput++ = (char)iValue;
-		*pOutput++ = (char)( iValue>>8 );
-		*pOutput++ = (char)( iValue>>16 );
-		return (void *) pOutput;
-	}
-
-	*pOutput++ = '\xFE';
-	*pOutput++ = (char)iValue;
-	*pOutput++ = (char)( iValue>>8 );
-	*pOutput++ = (char)( iValue>>16 );
-	*pOutput++ = (char)( iValue>>24 );
-	*pOutput++ = 0;
-	*pOutput++ = 0;
-	*pOutput++ = 0;
-	*pOutput++ = 0;
-	return (void*)pOutput;
 }
 
 
@@ -7358,6 +7371,209 @@ enum
 };
 
 
+void HandleCallSnippets ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt_t & tStmt )
+{
+	CSphString sError;
+
+	// string data, string index, string query, [named opts]
+	if ( tStmt.m_dInsertValues.GetLength()!=3
+		|| tStmt.m_dInsertValues[0].m_iType!=TOK_QUOTED_STRING
+		|| tStmt.m_dInsertValues[1].m_iType!=TOK_QUOTED_STRING
+		|| tStmt.m_dInsertValues[2].m_iType!=TOK_QUOTED_STRING )
+	{
+		SendMysqlErrorPacket ( tOut, uPacketID, "bad argument count or types in SNIPPETS() call" );
+		return;
+	}
+
+	const ServedIndex_t * pServed = g_pIndexes->GetRlockedEntry ( tStmt.m_dInsertValues[1].m_sVal );
+	if ( !pServed || !pServed->m_bEnabled || !pServed->m_pIndex )
+	{
+		sError.SetSprintf ( "no such index %s", tStmt.m_dInsertValues[1].m_sVal.cstr() );
+		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		return;
+	}
+
+	ExcerptQuery_t q;
+	q.m_sSource = tStmt.m_dInsertValues[0].m_sVal; // OPTIMIZE?
+	q.m_sWords = tStmt.m_dInsertValues[2].m_sVal;
+
+	ARRAY_FOREACH ( i, tStmt.m_dCallOptNames )
+	{
+		CSphString & sOpt = tStmt.m_dCallOptNames[i];
+		const SqlInsert_t & v = tStmt.m_dCallOptValues[i];
+
+		sOpt.ToLower();
+		int iExpType = -1;
+
+		if ( sOpt=="before_match" )				{ q.m_sBeforeMatch = v.m_sVal; iExpType = TOK_QUOTED_STRING; }
+		else if ( sOpt=="after_match" )			{ q.m_sAfterMatch = v.m_sVal; iExpType = TOK_QUOTED_STRING; }
+		else if ( sOpt=="chunk_separator" )		{ q.m_sChunkSeparator = v.m_sVal; iExpType = TOK_QUOTED_STRING; }
+		else if ( sOpt=="html_strip_mode" )		{ q.m_sStripMode = v.m_sVal; iExpType = TOK_QUOTED_STRING; }
+
+		else if ( sOpt=="limit" )				{ q.m_iLimit = (int)v.m_iVal; iExpType = TOK_CONST_INT; }
+		else if ( sOpt=="limit_words" )			{ q.m_iLimitWords = (int)v.m_iVal; iExpType = TOK_CONST_INT; }
+		else if ( sOpt=="limit_passages" )		{ q.m_iLimitPassages = (int)v.m_iVal; iExpType = TOK_CONST_INT; }
+		else if ( sOpt=="around" )				{ q.m_iAround = (int)v.m_iVal; iExpType = TOK_CONST_INT; }
+		else if ( sOpt=="start_passage_id" )	{ q.m_iPassageId = (int)v.m_iVal; iExpType = TOK_CONST_INT; }
+
+		else if ( sOpt=="exact_phrase" )		{ q.m_bExactPhrase = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
+		else if ( sOpt=="use_boundaries" )		{ q.m_bUseBoundaries = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
+		else if ( sOpt=="weight_order" )		{ q.m_bWeightOrder = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
+		else if ( sOpt=="query_mode" )			{ q.m_bHighlightQuery = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
+		else if ( sOpt=="force_all_words" )		{ q.m_bForceAllWords = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
+		else if ( sOpt=="load_files" )			{ q.m_bLoadFiles = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
+
+		else
+		{
+			sError.SetSprintf ( "unknown option %s", sOpt.cstr() );
+			break;
+		}
+
+		// post-conf type check
+		if ( iExpType!=v.m_iType )
+		{
+			sError.SetSprintf ( "unexpected option %s type", sOpt.cstr() );
+			break;
+		}
+	}
+	if ( !sError.IsEmpty() )
+	{
+		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		return;
+	}
+
+	CSphIndex * pIndex = pServed->m_pIndex;
+	CSphDict * pDict = pIndex->GetDictionary ();
+	CSphScopedPtr<ISphTokenizer> pTokenizer ( pIndex->GetTokenizer()->Clone ( true ) );
+
+	// FIXME? cut-paste
+	const CSphIndexSettings & tSettings = pIndex->GetSettings ();
+	if ( q.m_sStripMode=="strip"
+		|| ( q.m_sStripMode=="index" && tSettings.m_bHtmlStrip ) )
+	{
+		CSphString sError;
+		CSphHTMLStripper tStripper;
+		if ( q.m_sStripMode=="index" )
+		{
+			if (
+				!tStripper.SetIndexedAttrs ( tSettings.m_sHtmlIndexAttrs.cstr (), sError ) ||
+				!tStripper.SetRemovedElements ( tSettings.m_sHtmlRemoveElements.cstr (), sError ) )
+			{
+				sError.SetSprintf ( "HTML stripper config error: %s", sError.cstr() );
+				SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+				pServed->Unlock();
+				return;
+			}
+		}
+		tStripper.Strip ( (BYTE*)q.m_sSource.cstr() );
+	}
+
+	char * sResult = sphBuildExcerpt ( q, pDict, pTokenizer.Ptr(), &pIndex->GetMatchSchema(), pIndex, sError );
+	if ( !sResult )
+	{
+		sError.SetSprintf ( "highlighting failed: %s", sError.cstr() );
+		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		pServed->Unlock();
+		return;
+	}
+
+	// all ok, ship it
+	pServed->Unlock ();
+
+	// result set header packet
+	tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
+	tOut.SendByte ( 1 ); // field count (snippet)
+	tOut.SendByte ( 0 ); // extra
+
+	// fields
+	SendMysqlFieldPacket ( tOut, uPacketID++, "snippet", MYSQL_COL_STRING );
+	SendMysqlEofPacket ( tOut, uPacketID++, 0 );
+
+	// data
+	tOut.SendLSBDword ( ((uPacketID++)<<24) + MysqlPackedLen ( sResult ) );
+	tOut.SendMysqlString ( sResult );
+
+	SendMysqlEofPacket ( tOut, uPacketID++, 0 );
+	SafeDeleteArray ( sResult );
+}
+
+
+void HandleCallKeywords ( NetOutputBuffer_c & tOut, BYTE uPacketID, SqlStmt_t & tStmt )
+{
+	CSphString sError;
+
+	// string query, string index, [bool hits]
+	int iArgs = tStmt.m_dInsertValues.GetLength();
+	if ( iArgs<2
+		|| iArgs>3
+		|| tStmt.m_dInsertValues[0].m_iType!=TOK_QUOTED_STRING
+		|| tStmt.m_dInsertValues[1].m_iType!=TOK_QUOTED_STRING
+		|| ( iArgs==3 && tStmt.m_dInsertValues[2].m_iType!=TOK_CONST_INT ) )
+	{
+		SendMysqlErrorPacket ( tOut, uPacketID, "bad argument count or types in KEYWORDS() call" );
+		return;
+	}
+
+	const ServedIndex_t * pServed = g_pIndexes->GetRlockedEntry ( tStmt.m_dInsertValues[1].m_sVal );
+	if ( !pServed || !pServed->m_bEnabled || !pServed->m_pIndex )
+	{
+		sError.SetSprintf ( "no such index %s", tStmt.m_dInsertValues[1].m_sVal.cstr() );
+		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		return;
+	}
+
+	CSphVector<CSphKeywordInfo> dKeywords;
+	bool bStats = ( iArgs==3 && tStmt.m_dInsertValues[2].m_iVal!=0 );
+	bool bRes = pServed->m_pIndex->GetKeywords ( dKeywords, tStmt.m_dInsertValues[0].m_sVal.cstr(), bStats, sError );
+	pServed->Unlock ();
+
+	if ( !bRes )
+	{
+		sError.SetSprintf ( "keyword extraction failed: %s", sError.cstr() );
+		SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+		return;
+	}
+
+	// result set header packet
+	tOut.SendLSBDword ( ((uPacketID++)<<24) + 2 );
+	tOut.SendByte ( 2 + ( bStats ? 2 : 0 ) ); // field count (tokenized, normalized, docs, hits)
+	tOut.SendByte ( 0 ); // extra
+
+	// fields
+	SendMysqlFieldPacket ( tOut, uPacketID++, "tokenized", MYSQL_COL_STRING );
+	SendMysqlFieldPacket ( tOut, uPacketID++, "normalized", MYSQL_COL_STRING );
+	if ( bStats )
+	{
+		SendMysqlFieldPacket ( tOut, uPacketID++, "docs", MYSQL_COL_STRING );
+		SendMysqlFieldPacket ( tOut, uPacketID++, "hits", MYSQL_COL_STRING );
+	}
+	SendMysqlEofPacket ( tOut, uPacketID++, 0 );
+
+	// data
+	ARRAY_FOREACH ( i, dKeywords )
+	{
+		char sDocs[16], sHits[16];
+		snprintf ( sDocs, sizeof(sDocs), "%d", dKeywords[i].m_iDocs );
+		snprintf ( sHits, sizeof(sHits), "%d", dKeywords[i].m_iHits );
+
+		int iPacketLen = MysqlPackedLen ( dKeywords[i].m_sTokenized.cstr() ) + MysqlPackedLen ( dKeywords[i].m_sNormalized.cstr() );
+		if ( bStats )
+			iPacketLen += MysqlPackedLen ( sDocs ) + MysqlPackedLen ( sHits );
+
+		tOut.SendLSBDword ( ((uPacketID++)<<24) + iPacketLen );
+		tOut.SendMysqlString ( dKeywords[i].m_sTokenized.cstr() );
+		tOut.SendMysqlString ( dKeywords[i].m_sNormalized.cstr() );
+		if ( bStats )
+		{
+			tOut.SendMysqlString ( sDocs );
+			tOut.SendMysqlString ( sHits );
+		}
+	}
+
+	SendMysqlEofPacket ( tOut, uPacketID++, 0 );
+}
+
+	
 void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 {
 	MEMORY ( SPH_MEM_HANDLE_SQL );
@@ -7801,6 +8017,20 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, int iPipeFD )
 						pIndex->RollBack();
 				}
 				SendMysqlOkPacket ( tOut, uPacketID );
+				continue;
+			}
+		case STMT_CALL:
+			{
+				tStmt.m_sCallProc.ToUpper();
+				if ( tStmt.m_sCallProc=="SNIPPETS" )
+					HandleCallSnippets ( tOut, uPacketID, tStmt );
+				else if ( tStmt.m_sCallProc=="KEYWORDS" )
+					HandleCallKeywords ( tOut, uPacketID, tStmt );
+				else
+				{
+					sError.SetSprintf ( "no such builtin procedure %s", tStmt.m_sCallProc.cstr() );
+					SendMysqlErrorPacket ( tOut, uPacketID, sError.cstr() );
+				}
 				continue;
 			}
 		default:

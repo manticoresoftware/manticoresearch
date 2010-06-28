@@ -8786,6 +8786,12 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		return 0;
 	}
 
+	if ( dStringAttrs.GetLength() && m_tSettings.m_eDocinfo!=SPH_DOCINFO_EXTERN )
+	{
+		m_sLastError.SetSprintf ( "string attributes require docinfo=extern (fix your config file)" );
+		return 0;
+	}
+
 	////////////////////////////////////////////////
 	// collect and partially sort hits and docinfos
 	////////////////////////////////////////////////

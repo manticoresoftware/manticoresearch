@@ -715,7 +715,8 @@ char * ExcerptGen_c::BuildExcerpt ( const ExcerptQuery_t & tQuery, CSphDict *, I
 	} else
 	{
 		if ( !( ExtractPassages ( tQuery ) && HighlightBestPassages ( tQuery ) ) )
-			HighlightStart ( tQuery );
+			if ( !tQuery.m_bAllowEmpty )
+				HighlightStart ( tQuery );
 	}
 
 	// alloc, fill and return the result

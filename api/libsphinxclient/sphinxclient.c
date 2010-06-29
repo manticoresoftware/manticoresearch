@@ -1907,6 +1907,7 @@ void sphinx_init_excerpt_options ( sphinx_excerpt_options * opts )
 	opts->query_mode		= SPH_FALSE;
 	opts->force_all_words	= SPH_FALSE;
 	opts->load_files		= SPH_FALSE;
+	opts->allow_empty		= SPH_FALSE;
 }
 
 
@@ -1965,6 +1966,7 @@ char ** sphinx_build_excerpts ( sphinx_client * client, int num_docs, const char
 	if ( opts->query_mode )			flags |= 32;
 	if ( opts->force_all_words )	flags |= 64;
 	if ( opts->load_files )			flags |= 128;
+	if ( opts->allow_empty )		flags |= 256;
 
 	send_int ( &req, 0 );
 	send_int ( &req, flags );

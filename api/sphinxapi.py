@@ -783,6 +783,7 @@ class SphinxClient:
 		if opts.get('query_mode'):		flags |= 32
 		if opts.get('force_all_words'):	flags |= 64
 		if opts.get('load_files'):		flags |= 128
+		if opts.get('allow_empty'):		flags |= 256
 		
 		# mode=0, flags
 		req = [pack('>2L', 0, flags)]

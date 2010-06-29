@@ -27,38 +27,40 @@ struct ExcerptQuery_t
 	CSphString		m_sBeforeMatch;		///< string to insert before each match
 	CSphString		m_sAfterMatch;		///< string to insert after each match
 	CSphString		m_sChunkSeparator;	///< string to insert between matching chunks (in limited mode only)
+	CSphString		m_sStripMode;		///< strip mode
 	int				m_iLimit;			///< max chars in snippet (0 if unlimited)
 	int				m_iLimitWords;		///< max words in snippet
 	int				m_iLimitPassages;	///< max passages in snippet
 	int				m_iAround;			///< how much words to highlight around each match
+	int				m_iPassageId;		///< current %PASSAGE_ID% counter value (must start at 1)
 	bool			m_bRemoveSpaces;	///< whether to collapse whitespace
 	bool			m_bExactPhrase;		///< whether to highlight exact phrase matches only
 	bool			m_bUseBoundaries;	///< whether to extract passages by phrase boundaries setup in tokenizer
 	bool			m_bWeightOrder;		///< whether to order best passages in document (default) or weight order
 	bool			m_bHighlightQuery;	///< whether try to highlight the whole query, or always word-by-word
 	bool			m_bForceAllWords;	///< whether to ignore limit until all needed keywords are highlighted (#448)
-	int				m_iPassageId;		///< current %PASSAGE_ID% counter value (must start at 1)
 	bool			m_bLoadFiles;		///< whether to interpret source as text or file name
-	CSphString		m_sStripMode;		///< strip mode
+	bool			m_bAllowEmpty;		///< whether to allow empty snippets (by default, return something from the start)
 
 public:
 	ExcerptQuery_t ()
 		: m_sBeforeMatch ( "<b>" )
 		, m_sAfterMatch ( "</b>" )
 		, m_sChunkSeparator ( " ... " )
+		, m_sStripMode ( "index" )
 		, m_iLimit ( 256 )
 		, m_iLimitWords ( 0 )
 		, m_iLimitPassages ( 0 )
 		, m_iAround ( 5 )
+		, m_iPassageId ( 1 )
 		, m_bRemoveSpaces ( false )
 		, m_bExactPhrase ( false )
 		, m_bUseBoundaries ( false )
 		, m_bWeightOrder ( false )
 		, m_bHighlightQuery ( false )
 		, m_bForceAllWords ( false )
-		, m_iPassageId ( 1 )
 		, m_bLoadFiles ( false )
-		, m_sStripMode ( "index" )
+		, m_bAllowEmpty ( false )
 	{
 	}
 };

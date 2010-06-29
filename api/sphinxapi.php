@@ -1324,6 +1324,7 @@ class SphinxClient
 		if ( !isset($opts["start_passage_id"]) )	$opts["start_passage_id"] = 1;
 		if ( !isset($opts["load_files"]) )			$opts["load_files"] = false;
 		if ( !isset($opts["html_strip_mode"]) )		$opts["html_strip_mode"] = "index";
+		if ( !isset($opts["allow_empty"]) )			$opts["allow_empty"] = false;
 
 		/////////////////
 		// build request
@@ -1338,6 +1339,7 @@ class SphinxClient
 		if ( $opts["query_mode"] )		$flags |= 32;
 		if ( $opts["force_all_words"] )	$flags |= 64;
 		if ( $opts["load_files"] )		$flags |= 128;
+		if ( $opts["allow_empty"] )		$flags |= 256;
 		$req = pack ( "NN", 0, $flags ); // mode=0, flags=$flags
 		$req .= pack ( "N", strlen($index) ) . $index; // req index
 		$req .= pack ( "N", strlen($words) ) . $words; // req words

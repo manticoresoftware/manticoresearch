@@ -162,6 +162,7 @@ typedef struct st_sphinx_excerpt_options
 	sphinx_bool				query_mode;
 	sphinx_bool				force_all_words;
 	sphinx_bool				load_files;
+	sphinx_bool				allow_empty;
 } sphinx_excerpt_options;
 
 

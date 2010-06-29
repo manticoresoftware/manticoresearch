@@ -1109,6 +1109,7 @@ public class SphinxClient
 		if (!opts.containsKey("use_boundaries")) opts.put("use_boundaries", new Integer(0));
 		if (!opts.containsKey("weight_order")) opts.put("weight_order", new Integer(0));
 		if (!opts.containsKey("load_files")) opts.put("load_files", new Integer(0));
+		if (!opts.containsKey("allow_empty")) opts.put("allow_empty", new Integer(0));
 
 		/* build request */
 		ByteArrayOutputStream reqBuf = new ByteArrayOutputStream();
@@ -1124,6 +1125,7 @@ public class SphinxClient
 			if ( ((Integer)opts.get("query_mode")).intValue()!=0 )		iFlags |= 32;
 			if ( ((Integer)opts.get("force_all_words")).intValue()!=0 )	iFlags |= 64;
 			if ( ((Integer)opts.get("load_files")).intValue()!=0 )		iFlags |= 128;
+			if ( ((Integer)opts.get("allow_empty")).intValue()!=0 )		iFlags |= 256;
 			req.writeInt ( iFlags );
 			writeNetUTF8 ( req, index );
 			writeNetUTF8 ( req, words );

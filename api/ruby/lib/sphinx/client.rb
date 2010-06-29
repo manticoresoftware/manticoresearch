@@ -841,6 +841,7 @@ module Sphinx
       opts['use_boundaries'] ||= false
       opts['weight_order'] ||= false
 	  opts['load_files'] ||= false
+	  opts['allow_empty'] ||= false
       
       # build request
       
@@ -853,6 +854,7 @@ module Sphinx
 	  flags |= 32 if opts['query_mode']
 	  flags |= 64 if opts['force_all_words']
 	  flags |= 128 if opts['load_files']
+	  flags |= 256 if opts['allow_empty']
       
       request = Request.new
       request.put_int 0, flags # mode=0, flags=1 (remove spaces)

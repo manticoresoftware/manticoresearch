@@ -135,8 +135,10 @@ void sphUnalignedWrite ( void * pPtr, const T & tVal )
 #define SPHINXSE_MAX_ALLOC			(16*1024*1024)
 #define SPHINXSE_MAX_KEYWORDSTATS	4096
 
-// FIXME! all the following is cut-n-paste from sphinx.h and searchd.cpp
-#define SPHINX_VERSION		"0.9.9"
+#define SPHINXSE_VERSION			"0.9.9 (r$Id$)"
+
+// FIXME? the following is cut-n-paste from sphinx.h and searchd.cpp
+// cut-n-paste is somewhat simpler that adding dependencies however..
 
 enum
 {
@@ -591,7 +593,7 @@ bool				sphinx_show_status ( THD * thd );
 //////////////////////////////////////////////////////////////////////////////
 
 static const char	sphinx_hton_name[]		= "SPHINX";
-static const char	sphinx_hton_comment[]	= "Sphinx storage engine " SPHINX_VERSION;
+static const char	sphinx_hton_comment[]	= "Sphinx storage engine " SPHINXSE_VERSION;
 
 #if MYSQL_VERSION_ID<50100
 handlerton sphinx_hton =

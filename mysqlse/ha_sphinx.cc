@@ -2180,7 +2180,7 @@ int ha_sphinx::HandleMysqlError ( MYSQL * pConn, int iErrCode )
 }
 
 
-int ha_sphinx::write_row ( uchar * )
+int ha_sphinx::write_row ( byte * )
 {
 	SPH_ENTER_METHOD();
 	if ( !m_pShare || !m_pShare->m_bSphinxQL )
@@ -2261,14 +2261,14 @@ int ha_sphinx::write_row ( uchar * )
 }
 
 
-int ha_sphinx::update_row ( const uchar *, uchar * )
+int ha_sphinx::update_row ( const byte *, byte * )
 {
 	SPH_ENTER_METHOD();
 	SPH_RET ( HA_ERR_WRONG_COMMAND );
 }
 
 
-int ha_sphinx::delete_row ( const uchar * )
+int ha_sphinx::delete_row ( const byte * )
 {
 	SPH_ENTER_METHOD();
 	SPH_RET ( HA_ERR_WRONG_COMMAND );

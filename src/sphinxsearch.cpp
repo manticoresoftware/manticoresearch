@@ -1350,7 +1350,7 @@ const ExtDoc_t * ExtTermPos_c<T>::GetDocsChunk ( SphDocID_t * pMaxID )
 		while ( pDoc->m_uDocid<pHit->m_uDocid ) pDoc++; // FIXME? unsafe in broken cases
 		assert ( pDoc->m_uDocid==pHit->m_uDocid );
 
-		if ( uLastID!=pDoc->m_uDocid)
+		if ( uLastID!=pDoc->m_uDocid )
 			CopyExtDoc ( m_dMyDocs[iMyDoc++], *pDoc, &pDocinfo, m_iStride );
 		uLastID = pDoc->m_uDocid;
 
@@ -2021,8 +2021,8 @@ const ExtHit_t * ExtNear_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uM
 
 void ExtNear_c::Reset ( const ISphQwordSetup & tSetup )
 {
-	m_pNodeLeft->Reset ( tSetup );
-	m_pNodeRight->Reset ( tSetup );
+	assert ( m_pNode );
+	m_pNode->Reset ( tSetup );
 	m_pHitsLeft = NULL;
 	m_pHitsRight = NULL;
 	m_uMatchedDocid = 0;
@@ -2031,8 +2031,6 @@ void ExtNear_c::Reset ( const ISphQwordSetup & tSetup )
 	m_pMyHit = NULL;
 	m_uDocsMaxID = 0;
 	m_uExpID = 0;
-	assert ( m_pNode );
-	m_pNode->Reset ( tSetup );
 }
 
 void ExtNear_c::GetQwords ( ExtQwordsHash_t & hQwords )

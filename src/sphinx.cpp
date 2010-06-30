@@ -17126,6 +17126,8 @@ bool CSphSource_SQL::IterateHitsStart ( CSphString & sError )
 
 void CSphSource_SQL::Disconnect ()
 {
+	SafeDeleteArray ( m_pReadFileBuffer );
+
 	if ( m_iNullIds )
 		sphWarn ( "source %s: skipped %d document(s) with zero/NULL ids", m_tSchema.m_sName.cstr(), m_iNullIds );
 
